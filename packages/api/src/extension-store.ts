@@ -24,7 +24,14 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Clock, Iso8601, PersonId, WorkspaceId } from '@agentsws/contracts'
 
 /** 插件令牌上允许出现的全部动作（只加不删；加一个要同时改工作台的说明文案）。 */
-export const EXTENSION_SCOPES = ['kol.observe', 'kol.capture', 'kol.read', 'ads.act'] as const
+export const EXTENSION_SCOPES = [
+  'kol.observe',
+  'kol.capture',
+  'kol.read',
+  'ads.act',
+  // WP328：读品牌号自己的 Reddit 收件箱与自家版块（只读），交回给本机
+  'reddit.read',
+] as const
 
 export type ExtensionScope = (typeof EXTENSION_SCOPES)[number]
 

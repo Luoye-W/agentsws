@@ -110,8 +110,8 @@ export function redditReadRequestOf(
   return { capability, input: picked }
 }
 
-/** 接口中台那一跳的错误 → 路由认的两种（没配 / 走了没成）。 */
-function hubOf(call: NonNullable<ResearchToolsOptions['callData']>): RedditHubPort {
+/** 接口中台那一跳的错误 → 路由认的两种（没配 / 走了没成）。WP328 的外部关键词巡查也用它。 */
+export function redditHubOf(call: NonNullable<ResearchToolsOptions['callData']>): RedditHubPort {
   return {
     async call(capability, input) {
       try {
@@ -141,7 +141,7 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
     route: options.route,
     limits: options.limits,
     ...(options.limiter === undefined ? {} : { limiter: options.limiter }),
-    ...(options.callData === undefined ? {} : { hub: hubOf(options.callData) }),
+    ...(options.callData === undefined ? {} : { hub: redditHubOf(options.callData) }),
     ...(browserOf === undefined ? {} : { browser: () => browserOf() }),
     nowMs: options.nowMs,
     ...(options.onRecord === undefined ? {} : { onRecord: options.onRecord }),

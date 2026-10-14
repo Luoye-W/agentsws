@@ -54,6 +54,7 @@ import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
+import type { RedditWatchAssembly } from './reddit-watch/index.js'
 import type { RedditWeeklyService } from './reddit-weekly.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
@@ -277,6 +278,8 @@ export interface BrandModuleSet {
    * 上传表、截图。托管实例不装（云上没有用户的浏览器）。
    */
   adsActions?: AdsActionsService
+  /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
+  redditWatch?: RedditWatchAssembly
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */

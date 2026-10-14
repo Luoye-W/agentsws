@@ -64,6 +64,7 @@ import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
+import { normalizeSubreddit } from '@agentsws/browser-action'
 import type { CatalogNote } from '@agentsws/catalog'
 import type {
   DingtalkHttp,
@@ -195,7 +196,7 @@ import {
   splitFrontmatter,
 } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
-import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
+import { createRedditReadRouter, scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -557,6 +558,13 @@ import {
   createRedditOfficialBrowser,
   type RedditOfficialBrowserOptions,
 } from './reddit-official-browser/index.js'
+// WP328：Reddit 每日巡查
+import {
+  createRedditWatch,
+  createRedditWatchStore,
+  redditWatchPort,
+  redditWeekSourceOf,
+} from './reddit-watch/index.js'
 import {
   createRedditWeeklyService,
   EMPTY_REDDIT_WEEK_SOURCE,
@@ -565,7 +573,7 @@ import {
 } from './reddit-weekly.js'
 import { createRedditWeeklyStore } from './reddit-weekly-store.js'
 import { createRedditWeeklyToolExecutor } from './reddit-weekly-tools.js'
-import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
+import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
   createFileRoleRuleBackend,
@@ -602,6 +610,7 @@ import {
   registerPrMonitor,
   registerRawPrune,
   registerReconcileDeliveries,
+  registerRedditPatrol,
   registerRedditWeekly,
   registerReview,
   registerSeo,
@@ -1733,6 +1742,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const outboundTz = new Map<WorkspaceId, number>()
   const outboundStore = createOutboundStore(
     dbDir === undefined ? undefined : join(dbDir, 'outbound.sqlite'),
+  )
+  // WP328：Reddit 每日巡查的条目 / 巡查 / 设置（一台机器一个库，每行钉品牌）
+  const redditWatchStore = createRedditWatchStore(
+    dbDir === undefined ? undefined : join(dbDir, 'reddit-watch.sqlite'),
   )
   const outboundLog: OutboundLog = createOutboundLog({
     store: outboundStore,
@@ -3187,6 +3200,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       setPostalAddress: (address) => onboardingRef?.setPostalAddress(ws, address) ?? false,
     }))
       assembly.registerTarget(target)
+    // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
+    const rw = brand.redditWatch
+    if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -3199,6 +3215,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const r = await (await siteThemeOf(ws))?.readiness({ fresh: true }).catch(() => undefined)
       return r === undefined ? undefined : r.applicable && r.next === undefined
     }
+    // WP328：插件里连上 Reddit、登着品牌号（不知道就回 undefined：人说好了就信人）
+    if (need.kind === 'reddit_session')
+      return (
+        await brandModules.forWorkspace(ws).catch(() => undefined)
+      )?.redditWatch?.sessionReady()
     if (need.service === 'shop_admin') {
       const shop = await shopOf(ws)
       return shop === undefined
@@ -4173,7 +4194,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       assignments: () => roles.assignments.listByWorkspace(ws),
       approvals,
       store: redditWeeklyStore,
-      source: () => options.redditWeekSource?.(ws) ?? EMPTY_REDDIT_WEEK_SOURCE,
+      // WP328：没注入就用这个品牌的巡查库（下面装的那一份；只在出周报时才取，不怕先后）
+      source: () =>
+        options.redditWeekSource?.(ws) ??
+        (redditWatch === undefined ? EMPTY_REDDIT_WEEK_SOURCE : redditWeekSourceOf(redditWatch)),
       outbound: outboundLog,
     })
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
@@ -6437,6 +6461,103 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
 
+    /*
+     * WP328（docs/102，Luoye 10-14 定）：Reddit 每日巡查——收件箱 / 自家版块走用户日常 Chrome 里的插件（只读），
+     * 外部关键词走与 `read_reddit` 同一条取数路由（接口中台 → 只读浏览器）。托管实例不装（云上没有用户的浏览器）。
+     * AI 判断用这个品牌的默认模型、记在持有「Reddit」那条社媒职责的人头上；没人持有就只按规则、也不出卡。
+     */
+    const redditHolder = () =>
+      roles.assignments
+        .listByRole('social.reddit')
+        .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+    const redditSearch = createRedditReadRouter({
+      route: () => ownCloud.redditReadRoute(),
+      limits: () => ownCloud.redditBrowserReadLimits(),
+      hub: redditHubOf((capability, input) =>
+        createDataService(ownCloud).call(capability, { input }),
+      ),
+      ...(readonlyBrowser === undefined
+        ? {}
+        : {
+            browser: () => redditReadBrowserOf(readonlyBrowser, readAccount),
+            limiter: redditReadLimiterOf(readonlyBrowser),
+          }),
+      nowMs: () => Date.parse(clock.now()),
+    })
+    const redditWatch =
+      hostedBoot !== undefined
+        ? undefined
+        : createRedditWatch({
+            workspace_id: ws,
+            store: redditWatchStore,
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            brandName: () => brandNameOfWorkspace(ws),
+            search: async ({ query, time_window, limit }) => {
+              const got = await redditSearch.read({
+                capability: 'social.reddit.search',
+                input: { query, time_window, sort: 'new', limit },
+              })
+              return got.ok ? { ok: true, items: got.items } : { ok: false, message: got.message }
+            },
+            complete: () => {
+              const models = effectiveModels()
+              const ref = models.configured() ? models.defaultRef() : undefined
+              const holder = redditHolder()
+              if (ref === undefined || ref.provider === 'stub' || holder === undefined)
+                return undefined
+              return async (prompt: string) =>
+                (
+                  await gatewayProxy.complete({
+                    messages: [{ role: 'user', content: prompt }],
+                    meta: {
+                      workspace_id: ws,
+                      assignment_id: holder.id as never,
+                      role_id: holder.role_id as never,
+                      run_id: `reddit_watch_${nextReplyDraft()}` as never,
+                      purpose: 'extraction',
+                    },
+                    model: ref,
+                    max_output_tokens: 1500,
+                    thinking: 'off',
+                  })
+                ).text
+            },
+            // 配置卡预填：连接里登记的自家版、品牌号（WP249）
+            suggestions: () => {
+              const accounts = social.accounts({ channel: 'reddit' })
+              const subs = accounts
+                .filter((a) => a.own_subreddit === true)
+                .map((a) => normalizeSubreddit(a.external_id) ?? normalizeSubreddit(a.handle))
+                .filter((x): x is string => x !== undefined)
+              const user =
+                redditOfficial?.officialUsernames()[0] ??
+                accounts.find((a) => a.own_subreddit !== true)?.handle
+              return {
+                own_subreddits: subs,
+                ...(user === undefined ? {} : { brand_username: user.replace(/^\/?u\//iu, '') }),
+              }
+            },
+            setupCards: () => setupCardsOf(ws),
+            actor: () => {
+              const h = redditHolder()
+              return h === undefined
+                ? undefined
+                : { person_id: h.person_id, assignment_id: h.id, role_id: h.role_id }
+            },
+            outbound: () => outboundLog,
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'reddit_watch' },
+                correlation: { trace_id: `trc_rw_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+
     return {
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
@@ -6482,6 +6603,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adsService,
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
+      ...(redditWatch === undefined ? {} : { redditWatch }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -7111,6 +7233,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     registerRedditWeekly(s, { run: async ({ late }) => (await of()).redditWeekly.run({ late }) })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
+    // WP328：Reddit 每日巡查（这个品牌的插件、版块、关键词）；没装（托管）就什么都不做
+    registerRedditPatrol(s, {
+      tick: async () =>
+        (await (await of()).redditWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
+    })
     // WP73：社媒定时发布与群发（这个品牌的号发这个品牌的内容）
     registerSocialPublish(s, {
       sweep: async () => {
@@ -7199,6 +7326,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
         weeklyReview: held('common.owner'),
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
+        // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
+        redditPatrol: held('social.reddit'),
         // WP330：有人担 Reddit 运营（自家版 / 别人的版）才出周报
         redditWeekly: REDDIT_WEEKLY_ROLES.some((r) => held(r)),
       },
@@ -7233,6 +7362,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       held: (ws) => SOCIAL_ROLE_IDS.some((r) => roleHeldIn(ws, r)),
     },
     { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
+    // WP328
+    { ids: ['sched_reddit_patrol'], held: (ws) => roleHeldIn(ws, 'social.reddit') },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
     // WP224
@@ -10809,6 +10940,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               return svc
             },
           }),
+          // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
+          redditWatch: redditWatchPort(async (ws) => {
+            const rw = (await brandModules.forWorkspace(ws)).redditWatch
+            if (rw === undefined)
+              throw new ApiError('not_implemented', '这个品牌没有装 Reddit 巡查。')
+            return rw
+          }),
         }
       : {}),
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
@@ -11241,6 +11379,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await deepseekAccount.close()
       outboundLog.close()
       outboundStore.close()
+      redditWatchStore.close()
       redditWeeklyStore.close()
       secrets.close()
       txnStore?.close()
