@@ -190,12 +190,22 @@ export interface MatterLiveRun {
 
 /** WP251（决策 91）：一轮运行卡在哪。 */
 export interface MatterRunBlock {
-  /** `not_connected` = 没连上；`missing_credential` = 连接 / 账号缺凭据（钥匙没填、过期、被拒）。 */
-  reason: 'not_connected' | 'missing_credential'
+  /**
+   * `not_connected` = 没连上；`missing_credential` = 连接 / 账号缺凭据（钥匙没填、过期、被拒）；
+   * `needs_setup`（WP324）= 缺一步设置（建站工具没装 / 没登录、还不知道是哪家店、公司地址没填…）。
+   */
+  reason: 'not_connected' | 'missing_credential' | 'needs_setup'
   /** 缺的连接（人话名，如「Shopify 店铺后台」）；认不出是哪一个就是空数组。 */
   connections: string[]
   /** 撞上的工具（裸名，给排障用；界面不显示）。 */
   tools: string[]
+  /**
+   * WP324（决策 690）：为这一轮出的那张**连接卡 / 配置卡**（`connect_request` / `setup_request`）。
+   * 有它界面就不再出「去连接」那张红卡——卡本身就在时间线上，补完自动接着做。老事件没有这一格。
+   */
+  card_id?: string
+  /** WP324：缺的那几样能就地连的接法（连接页 service / 渠道 id），界面「去连接」据此在第三栏开连接卡。 */
+  services?: string[]
 }
 
 export interface MatterContext {

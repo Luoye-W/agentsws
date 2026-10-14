@@ -164,6 +164,17 @@ export type ApprovalKind =
    * 买成了下载、核 sha256、推一份未发布预览。驳回什么都不花。payload = `ThemePurchasePayload`。
    */
   | 'theme_purchase'
+  /**
+   * WP324（决策 690）：**连接卡**——任务要先连上什么（店铺后台、GA4、广告账户、消息渠道、插件配对…）。
+   * 卡上就地连（OAuth 授权页 / 本机原生表单 / 配对码），连好原任务自动接着做；口令不进卡、不经 AI。
+   * payload = `ConnectRequestPayload`。
+   */
+  | 'connect_request'
+  /**
+   * WP324（决策 690）：**配置卡**——任务要先设好几项（不是秘密的）设置：就地填 / 选（带建议值），
+   * 保存后原任务自动接着做。payload = `SetupRequestPayload`。
+   */
+  | 'setup_request'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

@@ -119,6 +119,9 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   theme_choice: 'choice',
   // WP304：买高级主题——「这家店一次 560 积分，买下？」一道是非题（「花钱」家族）
   theme_purchase: 'policy',
+  // WP324（决策 690）：连接卡 / 配置卡——主体是就地连 / 就地填的那一块（卡里自带主按钮），排版借「策略」那一种的是非题骨架
+  connect_request: 'policy',
+  setup_request: 'policy',
 }
 
 /**
