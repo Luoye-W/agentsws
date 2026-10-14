@@ -3539,6 +3539,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             return link === undefined ? undefined : { store: link.shop }
           },
           reader: async () => (await shopOf(ws))?.auth.reader(),
+          // WP333（决策 633）：授权里有 `read_inventory` 才读库存（「库存告急数」）
+          access: async () => (await shopOf(ws))?.auth.access(),
         },
       })
       liveDataByWs.set(ws, liveData)

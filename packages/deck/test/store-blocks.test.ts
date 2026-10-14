@@ -131,10 +131,21 @@ describe('51 §2.1 库存：阈值来自职责 yml', () => {
     expect(new Set(tile.spark)).toEqual(new Set([2]))
   })
 
-  it('这个数据集不带库存 → 一行都不出（不当成 0 报一堆断货）', () => {
-    const r = runQuery('inventory.low_stock', queryContext({ role_id: 'dtc.store' }), 'yesterday')
-    if (r.status !== 'ok') throw new Error('unreachable')
-    expect(rowsOf(r.data)).toEqual([])
+  it('WP333（决策 633）：这个数据集不带库存 → 照实没连，不出 0（店铺照样连着）', () => {
+    const c = queryContext({ role_id: 'dtc.store' })
+    expect(runQuery('inventory.low_stock', c, 'yesterday').status).toBe('not_connected')
+    expect(runQuery('inventory.low_count', c, 'yesterday').status).toBe('not_connected')
+    const tile = computeTile(tileSpec('low_stock_count'), c, 'yesterday')
+    expect(tile.status).toBe('not_connected')
+    expect(tile.value).toBeUndefined()
+    // 销售额那几块不受影响（同一个「店铺后台」源）
+    expect(computeTile(tileSpec('sales_total'), c, 'yesterday').status).toBe('ok')
+  })
+
+  it('WP333：库存读到了、一条都不告急 → 是真的 0（连着）', () => {
+    const c = queryContext({ role_id: 'dtc.store', inventory: [] })
+    const tile = computeTile(tileSpec('low_stock_count'), c, 'yesterday')
+    expect(tile).toMatchObject({ status: 'ok', value: 0 })
   })
 })
 

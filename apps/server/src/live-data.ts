@@ -24,7 +24,13 @@ import {
   storefrontServiceMatches,
   storefrontUnsupportedNote,
 } from '@agentsws/contracts'
-import type { ConnectionLike, DataSourceStatus, OrderLineItem, OrderRow } from '@agentsws/deck'
+import type {
+  ConnectionLike,
+  DataSourceStatus,
+  InventoryRow,
+  OrderLineItem,
+  OrderRow,
+} from '@agentsws/deck'
 import { dataSourcesFromConnections } from '@agentsws/deck'
 import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
@@ -36,7 +42,7 @@ import {
   scopedOrders,
 } from './order-scope.js'
 import { AUTH_PROBLEM_CODES, type ShopAdminError, type ShopifyAdminReader } from './shop-admin.js'
-import { LIVE_ORDERS } from './shop-graphql.js'
+import { LIVE_INVENTORY, LIVE_ORDERS } from './shop-graphql.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 刷新周期默认 5 分钟；`AGENTSWS_LIVE_DATA_REFRESH_SECONDS` 可调。 */
@@ -58,6 +64,13 @@ export const ORDER_MAX_PAGES = 4
  * 一次刷新最多多打 60 个请求，够 15 人公司一周的量，也不至于把上游的额度打光。
  */
 export const ORDER_LINE_ITEM_MAX_FETCH = 60
+/**
+ * WP333（决策 633）：库存只拉可售数不高于这个数的规格（面板阈值默认 5，职责里可调高；留足余量），
+ * 一页 250、最多 4 页。
+ */
+export const INVENTORY_LOW_CEILING = 100
+export const INVENTORY_PAGE_LIMIT = 250
+export const INVENTORY_MAX_PAGES = 4
 
 const DAY = 86_400_000
 
@@ -124,6 +137,11 @@ export interface LiveShopAdmin {
   peek(): { store: string } | undefined
   /** 现在能不能读：能就回只读那一半；没授权 / 过期回 undefined 或抛。 */
   reader(): Promise<ShopifyAdminReader | undefined>
+  /**
+   * WP333（决策 633）：授权里有哪些权限（有 `read_inventory` 才读库存）。不给 = 不读库存，
+   * 「库存告急数」照实算没连（老行为里那个假 0 不再出）。
+   */
+  access?(): Promise<{ scopes: readonly string[] } | undefined>
 }
 
 /** 一次刷新的结论（只有计数与原因码，没有任何订单内容）。 */
@@ -514,6 +532,45 @@ function detailOf(e: unknown): string {
   return raw.length > 200 ? `${raw.slice(0, 200)}…` : raw
 }
 
+/**
+ * WP333（决策 633）：`productVariants` 回包 → 库存行。
+ *
+ * 不跟踪库存的规格（`tracked: false`）丢掉——它的数是 0，但不是「告急」；
+ * 下架 / 草稿的商品（`status` 不是 ACTIVE）也丢掉。标题 = 商品名（规格名不是默认那个时带上）。
+ */
+export function inventoryRowsOf(payload: unknown): InventoryRow[] {
+  const conn = isRecord(payload) ? payload.productVariants : undefined
+  const nodes = isRecord(conn) && Array.isArray(conn.nodes) ? conn.nodes : []
+  const rows: InventoryRow[] = []
+  for (const node of nodes) {
+    if (!isRecord(node)) continue
+    const quantity = numberOf(node.inventoryQuantity)
+    const id = stringOf(node.id)
+    if (quantity === undefined || id === undefined) continue
+    const item = isRecord(node.inventoryItem) ? node.inventoryItem : {}
+    if (item.tracked === false) continue
+    const product = isRecord(node.product) ? node.product : {}
+    const status = stringOf(product.status)
+    if (status !== undefined && status.toUpperCase() !== 'ACTIVE') continue
+    const productTitle = stringOf(product.title) ?? ''
+    const variantTitle = stringOf(node.title)
+    const title =
+      variantTitle === undefined || variantTitle === 'Default Title' || productTitle === ''
+        ? productTitle || (variantTitle ?? '')
+        : `${productTitle} / ${variantTitle}`
+    const productId = stringOf(product.id)
+    const sku = stringOf(node.sku)
+    rows.push({
+      id: stringOf(item.id) ?? id,
+      title,
+      quantity,
+      ...(productId === undefined ? {} : { product_id: productId }),
+      ...(sku === undefined || sku === '' ? {} : { sku }),
+    })
+  }
+  return rows
+}
+
 export function refreshSecondsOf(env: Record<string, string | undefined>): number {
   const raw = env[REFRESH_SECONDS_ENV]?.trim()
   if (raw === undefined || raw === '') return DEFAULT_REFRESH_SECONDS
@@ -543,6 +600,8 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
   let last: LiveRefreshReport | undefined
   let inflight: Promise<LiveRefreshReport> | undefined
   let dirty = true
+  /** WP333（决策 633）：库存行（只在内存里）；`undefined` = 读不到库存，面板那几块算没连。 */
+  let inventory: InventoryRow[] | undefined
 
   /**
    * 后台作业自成一条 trace 的根。
@@ -621,6 +680,74 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       return await options.shopAdmin?.reader()
     } catch {
       return undefined
+    }
+  }
+
+  /** WP333：经店铺管理授权拉一轮库存（只要可售数不高的规格；只读 Admin GraphQL）。 */
+  const pullInventory = async (reader: ShopifyAdminReader): Promise<InventoryRow[]> => {
+    const rows: InventoryRow[] = []
+    const ids = new Set<string>()
+    let after: string | undefined
+    for (let page = 0; page < INVENTORY_MAX_PAGES; page += 1) {
+      const data = await reader.query<unknown>({
+        name: 'inventory',
+        document: LIVE_INVENTORY,
+        variables: {
+          first: INVENTORY_PAGE_LIMIT,
+          query: `inventory_quantity:<=${INVENTORY_LOW_CEILING}`,
+          ...(after === undefined ? {} : { after }),
+        },
+      })
+      const got = inventoryRowsOf(data)
+      for (const row of got) {
+        if (ids.has(row.id)) continue
+        ids.add(row.id)
+        rows.push(row)
+      }
+      const conn = isRecord(data) ? data.productVariants : undefined
+      after = cursorOf(conn)
+      if (after === undefined) break
+    }
+    return rows
+  }
+
+  /**
+   * WP333（决策 633）：订单拉完之后，店铺管理授权里有 `read_inventory` 就顺手拉一轮库存。
+   * 没授权 / 没这个权限 / 撞上授权问题 = 没连（`inventory()` 回 undefined，面板不出假 0）；
+   * 断网之类留上一份。**永不抛**；库存行不进事件、不进日志，事件里只有条数。
+   */
+  const refreshInventory = async (reader?: ShopifyAdminReader): Promise<void> => {
+    const access = options.shopAdmin?.access
+    if (!adminApplies() || access === undefined) {
+      inventory = undefined
+      return
+    }
+    let scopes: readonly string[] | undefined
+    try {
+      scopes = (await access())?.scopes
+    } catch {
+      scopes = undefined
+    }
+    if (scopes?.includes('read_inventory') !== true) {
+      inventory = undefined
+      return
+    }
+    const r = reader ?? (await adminReader())
+    if (r === undefined) {
+      inventory = undefined
+      return
+    }
+    try {
+      inventory = await pullInventory(r)
+      emit('data.refreshed', { source: 'inventory', via: r.via, rows: inventory.length })
+    } catch (e) {
+      if (isAdminAuthProblem(e)) inventory = undefined
+      emit('data.refresh_failed', {
+        source: 'inventory',
+        via: r.via,
+        reason: adminCodeOf(e),
+        kept_cached_rows: inventory?.length ?? 0,
+      })
     }
   }
 
@@ -889,9 +1016,16 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       if (shop === undefined) {
         // WP319：连接器里没有，再看店铺管理授权（云端一键授权 / CLI 店铺授权）——查商品用的就是它
         const admin = await adminReader()
-        if (admin !== undefined) return runAdmin(admin, started)
+        if (admin !== undefined) {
+          const report = await runAdmin(admin, started)
+          // WP333：订单读成了才顺手读库存；授权出问题那一下库存一起算没连
+          if (report.status === 'ok') await refreshInventory(admin)
+          else if (adminDenied) inventory = undefined
+          return report
+        }
         // 断开了：缓存当场作废，`orders()` 回空，界面显示「去连接」
         cache = undefined
+        inventory = undefined
         stale = false
         dirty = false
         adminStore = undefined
@@ -934,6 +1068,8 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
             // 下推的是**判据**（tag / vendor / 集合 id），不是任何订单内容
             ...(pulled.pushdown === undefined ? {} : { pushdown: true }),
           })
+          // WP333：连接器那条不读库存——库存经店铺管理授权读（有就读，没有照实没连）
+          await refreshInventory()
           return {
             status: 'ok',
             orders: pulled.orders.length,
@@ -1041,6 +1177,9 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
     // 44 G2：给了岗位视角就按它的产品线切一刀（没给 / 挂整店的原样回）
     orders: (view?: OrderView) =>
       !shopConnected() ? [] : scopedOrders(cache?.orders ?? [], options.scope, view),
+
+    // WP333（决策 633）：读不到库存就是 undefined（面板「库存告急数」照实没连，不出 0）
+    inventory: () => (shopConnected() ? inventory : undefined),
 
     sources: (): DataSourceStatus[] => {
       // WP62（51 §1 N0 ③）：平台我们还没接 → 「店铺后台」带一句"还没接"，不出「去连接」

@@ -199,7 +199,15 @@ export interface QueryDef {
   /** 返回形状；`GET /blocks/{id}/data` 用它对着组件的 payload_schema 校验 */
   returns: 'scalar' | 'table' | 'series' | 'records'
   run: Runner
+  /**
+   * WP333（决策 633）：数据源连着、但这一块要的那份数据这台机器读不到（比如店铺连着、
+   * 库存没授权）——回 false 就照「没连」出，不出一个假的 0。不给 = 只看数据源。
+   */
+  available?: (ctx: QueryContext) => boolean
 }
+
+/** WP333（决策 633）：库存那几块——没有库存来源（`ctx.inventory` 没给）就是没连，不是 0。 */
+const inventoryAvailable = (ctx: QueryContext): boolean => ctx.inventory !== undefined
 
 function orderPoints(
   ctx: QueryContext,
@@ -1819,6 +1827,7 @@ const QUERY_LIST: QueryDef[] = [
     name: 'inventory.low_stock',
     source: 'shop',
     returns: 'table',
+    available: inventoryAvailable,
     run: (ctx) => {
       const floor = thresholdOf(ctx, 'low_stock_quantity')
       const rows = (ctx.inventory ?? [])
@@ -1849,6 +1858,7 @@ const QUERY_LIST: QueryDef[] = [
     name: 'inventory.low_count',
     source: 'shop',
     returns: 'scalar',
+    available: inventoryAvailable,
     run: (ctx) => {
       const floor = thresholdOf(ctx, 'low_stock_quantity')
       const value = (ctx.inventory ?? []).filter((r) => r.quantity <= floor).length
@@ -1968,7 +1978,11 @@ const QUERY_LIST: QueryDef[] = [
         w.current,
       )
       const floor = thresholdOf(ctx, 'low_stock_quantity')
-      const low = (ctx.inventory ?? []).filter((r) => r.quantity <= floor).length
+      // WP333（决策 633）：没有库存来源就说没连，不写「0 个 SKU」
+      const low =
+        ctx.inventory === undefined
+          ? undefined
+          : ctx.inventory.filter((r) => r.quantity <= floor).length
       const pending = ctx.approvals.filter(
         (i) => i.kind === 'staged_change' && PENDING.includes(i.state),
       ).length
@@ -1984,7 +1998,7 @@ const QUERY_LIST: QueryDef[] = [
           { item: '销售额', value: money(sales) },
           { item: '环比', value: deltaText },
           { item: '订单数', value: String(orders) },
-          { item: '库存告急', value: `${low} 个 SKU` },
+          { item: '库存告急', value: low === undefined ? '没连' : `${low} 个 SKU` },
           { item: '待审改动', value: `${pending} 条` },
         ],
       }
@@ -2668,6 +2682,8 @@ export function sourceStatus(ctx: QueryContext, source: DataSourceId): boolean {
 export function runQuery(name: string, ctx: QueryContext, range: RangeName): QueryResult {
   const def = queryDef(name)
   if (!sourceStatus(ctx, def.source)) return { status: 'not_connected', source: def.source }
+  if (def.available !== undefined && !def.available(ctx))
+    return { status: 'not_connected', source: def.source }
   const windows = rangeWindows(range, ctx.now, ctx.tz_offset_minutes)
   return { status: 'ok', source: def.source, data: def.run(ctx, windows, range) }
 }
