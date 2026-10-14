@@ -35,6 +35,8 @@ import {
   pushdownQueryOf,
   scopedOrders,
 } from './order-scope.js'
+import { AUTH_PROBLEM_CODES, type ShopAdminError, type ShopifyAdminReader } from './shop-admin.js'
+import { LIVE_ORDERS } from './shop-graphql.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 刷新周期默认 5 分钟；`AGENTSWS_LIVE_DATA_REFRESH_SECONDS` 可调。 */
@@ -108,6 +110,20 @@ export interface LiveDataOptions {
    * 存量装配一个字节不变。它决定"活跃店铺连接"到底认哪个 service。
    */
   storefrontPlatform?: () => StorefrontPlatform | undefined
+  /**
+   * WP319（Luoye 10-14 Windows 真机）：**店铺管理授权**那一份（连接页 Shopify 卡的云端一键授权，
+   * 或岗位页的 CLI 店铺授权——运营工具「查商品」用的就是它）。连接器里没有活跃的店铺连接时面板认它：
+   * 有就算「店铺后台」连上，订单经它的只读 Admin GraphQL 拉。不给 = 只认连接器（老行为）。
+   */
+  shopAdmin?: LiveShopAdmin
+}
+
+/** WP319：面板认的「店铺管理授权」。 */
+export interface LiveShopAdmin {
+  /** 同步看一眼（面板的连接状态是同步算的）：云端连着哪家店（上次问到的）；不知道 = undefined。 */
+  peek(): { store: string } | undefined
+  /** 现在能不能读：能就回只读那一半；没授权 / 过期回 undefined 或抛。 */
+  reader(): Promise<ShopifyAdminReader | undefined>
 }
 
 /** 一次刷新的结论（只有计数与原因码，没有任何订单内容）。 */
@@ -261,7 +277,7 @@ export function toOrderRow(
         'presentment_currency',
       ]),
     ) ??
-    moneyOf(pick(row, ['totalPriceSet', 'total_price_set'])).currency ??
+    moneyOf(pick(row, ['totalPriceSet', 'total_price_set', 'currentTotalPriceSet'])).currency ??
     fallbackCurrency
   const customer = row.customer
   const email =
@@ -472,6 +488,19 @@ function codedError(code: string, message: string): Error {
   return err
 }
 
+/** WP319：店铺管理授权那一路撞上的是不是「授权问题」（失效 / 被收回 / 缺权限）。 */
+function isAdminAuthProblem(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    e.name === 'ShopAdminError' &&
+    AUTH_PROBLEM_CODES.has((e as ShopAdminError).code)
+  )
+}
+
+function adminCodeOf(e: unknown): string {
+  return e instanceof Error && e.name === 'ShopAdminError' ? (e as ShopAdminError).code : codeOf(e)
+}
+
 function codeOf(e: unknown): string {
   if (isRecord(e) && typeof (e as { code?: unknown }).code === 'string') {
     return (e as { code: string }).code
@@ -562,6 +591,91 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
     return options.connections
       .liveConnections()
       .find((c) => storefrontServiceMatches(want, c.service) && c.status === 'active')
+  }
+
+  // ── WP319：店铺管理授权那一路（连接器里没有店铺连接时才走） ──────────────
+  /** 上一轮经店铺管理授权读成了哪家店（读成过才有）。 */
+  let adminStore: string | undefined
+  /** 上一轮店铺管理授权撞上授权问题（失效 / 缺权限）：面板照实算没连，直到下一轮读成。 */
+  let adminDenied = false
+  /** 上一轮「没有店」是什么时候判的（没有店时也别每次读面板都去问一遍授权）。 */
+  let skippedAt: number | undefined
+
+  /** 这个工作区的平台是 Shopify、而且给了店铺管理授权那一份。 */
+  const adminApplies = (): boolean =>
+    options.shopAdmin !== undefined && shopService() === 'shopify_admin'
+
+  /** 面板算「店铺后台连上了」：连接器里有，或店铺管理授权连着（读成过 / 云端说连着），且没撞上授权问题。 */
+  const adminConnected = (): boolean =>
+    activeShop() === undefined &&
+    adminApplies() &&
+    !adminDenied &&
+    (adminStore !== undefined || options.shopAdmin?.peek() !== undefined)
+
+  const shopConnected = (): boolean => activeShop() !== undefined || adminConnected()
+
+  /** 现在能不能经店铺管理授权读（问不到 / 没授权 = undefined，**不抛**）。 */
+  const adminReader = async (): Promise<ShopifyAdminReader | undefined> => {
+    if (!adminApplies()) return undefined
+    try {
+      return await options.shopAdmin?.reader()
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 经店铺管理授权拉近 30 天订单（只读 Admin GraphQL；不带顾客个人信息）。 */
+  const pullAdmin = async (
+    reader: ShopifyAdminReader,
+  ): Promise<{ orders: OrderRow[]; pages: number; currency?: string; tz?: number }> => {
+    const lines = (options.scope?.productLines().length ?? 0) > 0
+    // 带行项目时一页少拉几张：Shopify 单次查询成本上限 1000（40 × 20 行项目 ≈ 840）
+    const first = lines ? 40 : ORDER_PAGE_LIMIT
+    const maxPages = Math.ceil((ORDER_PAGE_LIMIT * ORDER_MAX_PAGES) / first)
+    const cutoff = Date.parse(clock.now()) - ORDER_WINDOW_DAYS * DAY
+    const pushdown = pushdownQueryOf(options.scope)
+    const window = `created_at:>=${new Date(cutoff).toISOString().slice(0, 10)}`
+    const rows: OrderRow[] = []
+    const ids = new Set<string>()
+    let currency: string | undefined
+    let tz: number | undefined
+    let after: string | undefined
+    let pages = 0
+    while (pages < maxPages) {
+      const data = await reader.query<unknown>({
+        name: 'orders',
+        document: LIVE_ORDERS,
+        variables: {
+          first,
+          lines,
+          query: pushdown === undefined ? window : `${window} (${pushdown})`,
+          ...(after === undefined ? {} : { after }),
+        },
+      })
+      pages += 1
+      const shopNode = isRecord(data) ? data.shop : undefined
+      if (pages === 1 && shopNode !== undefined) {
+        currency = shopCurrencyOf(shopNode)
+        tz = shopTimezoneOffsetOf(shopNode, Date.parse(clock.now()))
+      }
+      const ordersNode = isRecord(data) ? data.orders : undefined
+      const raw = ordersArrayOf(ordersNode)
+      for (const item of raw) {
+        const row = toOrderRow(item, currency ?? defaultCurrency)
+        if (row === undefined || ids.has(row.id)) continue
+        if (Date.parse(row.created_at) < cutoff) continue
+        ids.add(row.id)
+        rows.push(row)
+      }
+      after = cursorOf(ordersNode)
+      if (after === undefined || raw.length === 0) break
+    }
+    return {
+      orders: rows,
+      pages,
+      ...(currency === undefined ? {} : { currency }),
+      ...(tz === undefined ? {} : { tz }),
+    }
   }
 
   /**
@@ -704,16 +818,85 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
     }
   }
 
+  /** WP319：经店铺管理授权拉一轮（连接器里没有店铺连接时）。 */
+  const runAdmin = async (
+    reader: ShopifyAdminReader,
+    started: number,
+  ): Promise<LiveRefreshReport> => {
+    const connection_id = `shop_admin:${reader.store}`
+    try {
+      const pulled = await pullAdmin(reader)
+      cache = {
+        orders: pulled.orders,
+        connection_id,
+        fetched_at: started,
+        ...(pulled.currency === undefined ? {} : { base_currency: pulled.currency }),
+        ...(pulled.tz === undefined ? {} : { tz_offset_minutes: pulled.tz }),
+      }
+      stale = false
+      dirty = false
+      adminStore = reader.store
+      adminDenied = false
+      // 事件里只有条数与耗时、走的哪一路——**订单原文不进事件、不进日志**
+      emit('data.refreshed', {
+        source: 'shop',
+        connection_id,
+        via: reader.via,
+        orders: pulled.orders.length,
+        pages: pulled.pages,
+        duration_ms: Date.now() - started,
+      })
+      return {
+        status: 'ok',
+        orders: pulled.orders.length,
+        pages: pulled.pages,
+        duration_ms: Date.now() - started,
+      }
+    } catch (e) {
+      // 授权失效 / 缺读订单的权限：面板照实算没连（去连接页重新授权），不留一排旧数
+      const denied = isAdminAuthProblem(e)
+      if (denied) {
+        adminDenied = true
+        adminStore = undefined
+        cache = undefined
+        skippedAt = Date.now()
+      }
+      stale = cache !== undefined
+      dirty = false
+      emit('data.refresh_failed', {
+        source: 'shop',
+        connection_id,
+        via: reader.via,
+        reason: adminCodeOf(e),
+        detail: detailOf(e),
+        kept_cached_orders: cache?.orders.length ?? 0,
+      })
+      return {
+        status: 'failed',
+        reason: adminCodeOf(e),
+        orders: cache?.orders.length ?? 0,
+        duration_ms: Date.now() - started,
+        ...(cache === undefined ? {} : { stale: true }),
+      }
+    }
+  }
+
   const refresh = async (): Promise<LiveRefreshReport> => {
     if (inflight !== undefined) return inflight
     const started = Date.now()
     const run = async (): Promise<LiveRefreshReport> => {
       const shop = activeShop()
       if (shop === undefined) {
+        // WP319：连接器里没有，再看店铺管理授权（云端一键授权 / CLI 店铺授权）——查商品用的就是它
+        const admin = await adminReader()
+        if (admin !== undefined) return runAdmin(admin, started)
         // 断开了：缓存当场作废，`orders()` 回空，界面显示「去连接」
         cache = undefined
         stale = false
         dirty = false
+        adminStore = undefined
+        adminDenied = false
+        skippedAt = Date.now()
         // WP62：分清"你还没连"与"我们还没做"——后者点「去连接」也没有卡可点。
         // WP79 再分出第三档"你还没搭网站"：既不是你没连，也不是我们没做。
         const platform = options.storefrontPlatform?.()
@@ -821,15 +1004,27 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
   /** 首屏与每次读之前：缓存过期或连接刚变过就先拉一轮（**永不抛**）。 */
   const ensureFresh = async (): Promise<void> => {
     const shop = activeShop()
+    const window = Math.max(intervalMs, 1000)
     if (shop === undefined) {
-      if (cache !== undefined) cache = undefined
+      if (!adminApplies()) {
+        if (cache !== undefined) cache = undefined
+        return
+      }
+      // WP319：没有连接器那条，就看店铺管理授权——读成过的照常按周期刷；没有店的一分钟内不再问
+      const fresh =
+        !dirty &&
+        (cache !== undefined
+          ? cache.connection_id.startsWith('shop_admin:') && Date.now() - cache.fetched_at < window
+          : skippedAt !== undefined && Date.now() - skippedAt < Math.min(window, 60_000))
+      if (fresh) return
+      await refresh()
       return
     }
     const fresh =
       cache !== undefined &&
       cache.connection_id === shop.id &&
       !dirty &&
-      Date.now() - cache.fetched_at < Math.max(intervalMs, 1000)
+      Date.now() - cache.fetched_at < window
     if (fresh) return
     await refresh()
   }
@@ -845,12 +1040,16 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
   return {
     // 44 G2：给了岗位视角就按它的产品线切一刀（没给 / 挂整店的原样回）
     orders: (view?: OrderView) =>
-      activeShop() === undefined ? [] : scopedOrders(cache?.orders ?? [], options.scope, view),
+      !shopConnected() ? [] : scopedOrders(cache?.orders ?? [], options.scope, view),
 
     sources: (): DataSourceStatus[] => {
       // WP62（51 §1 N0 ③）：平台我们还没接 → 「店铺后台」带一句"还没接"，不出「去连接」
       const note = storefrontUnsupportedNote(options.storefrontPlatform?.())
-      return dataSourcesFromConnections(connectionsOf(), {
+      // WP319：店铺管理授权连着（云端一键授权 / CLI 店铺授权）也算店铺后台连上——与「查商品」认同一份
+      const viaAdmin: ConnectionLike[] = adminConnected()
+        ? [{ service: 'shopify_admin', status: 'active' }]
+        : []
+      return dataSourcesFromConnections([...connectionsOf(), ...viaAdmin], {
         ...(note === undefined ? {} : { storefrontNote: note }),
       })
     },
@@ -871,7 +1070,7 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       dirty = true
     },
     status: (): LiveDataStatus => ({
-      shop_connected: activeShop() !== undefined,
+      shop_connected: shopConnected(),
       mail_connected: options.connections
         .liveConnections()
         .some((c) => MAIL_SERVICES.has(c.service) && c.status === 'active'),

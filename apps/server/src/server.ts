@@ -3068,10 +3068,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 与运营工具（优先云端、没有才回退 CLI 授权）按它认；连接页卡上每看一次、连上 / 断开都顺手更新。
    * 云客户端是品牌模块里的那一份——晚绑定（`brandModules` 在下面才建好）。
    */
+  /** WP319：各品牌的面板活数据源（云端连店 / 断店时让它下一次读之前重拉）。 */
+  const liveDataByWs = new Map<WorkspaceId, LiveDataSource>()
   const cloudShopLinks = createCloudShopLinks({
     cloudOf: (ws) => brandModules.cloud(ws),
     startupBrand: workspace.id,
     clock,
+    onChange: (ws) => liveDataByWs.get(ws)?.invalidate(),
     // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
     ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
@@ -3151,7 +3154,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(options.liveDataIntervalMs === undefined
           ? {}
           : { refreshIntervalMs: options.liveDataIntervalMs }),
+        /*
+         * WP319（Luoye 10-14 Windows 真机）：店铺已经在连接页一键授权（或岗位页 CLI 授权）连上、
+         * 「查商品」查得到，面板却说「还没连接店铺后台」——面板以前只认连接器里那条老连接。
+         * 现在与运营工具认同一份（云端优先、没有才 CLI 授权），订单经它的只读 Admin GraphQL 拉。
+         */
+        shopAdmin: {
+          peek: () => {
+            const link = cloudShopLinks.peek(ws)
+            return link === undefined ? undefined : { store: link.shop }
+          },
+          reader: async () => (await shopOf(ws))?.auth.reader(),
+        },
       })
+      liveDataByWs.set(ws, liveData)
     }
     const baseWorkData: WorkstationDataSource =
       liveData ?? connections.wrapDataSource(injected ?? emptyDataSource())

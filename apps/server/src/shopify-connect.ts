@@ -493,7 +493,7 @@ export function createCloudShopLinks(options: {
   startupBrand: WorkspaceId
   clock: Clock
   ttlMs?: number
-  /** 某个品牌的「云端连着没有」变了（就绪、工具面跟着重算）。 */
+  /** 某个品牌的「云端连着没有」变了，或缓存被作废（就绪、工具面、岗位面板跟着重算）。 */
   onChange?: (ws: WorkspaceId) => void
   /**
    * 落盘的那一份（只有店与权限名，没有令牌）：重启之后不打云也知道「上次连着哪家」，
@@ -562,6 +562,8 @@ export function createCloudShopLinks(options: {
     invalidate(ws) {
       const hit = cache.get(ws)
       if (hit !== undefined) cache.set(ws, { at: 0, link: hit.link })
+      // WP319：刚连上 / 撞上授权问题——跟着它算的（岗位面板的活数据）下一次读之前也重问
+      options.onChange?.(ws)
     },
   }
 }
