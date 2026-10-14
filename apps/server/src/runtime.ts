@@ -21,6 +21,7 @@
 
 import type {
   ApprovalItem,
+  ConnectNeed,
   ApprovalKind,
   AssignmentId,
   Clock,
@@ -124,7 +125,13 @@ import {
 import { cardRefOf, type Work } from '@agentsws/work'
 import { type RememberItem, type RunMemoryActor, splitRememberTags } from './auto-memory.js'
 import type { ComputerUseAssembly } from './computer-use.js'
-import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
+import {
+  blockedByTool,
+  blockedLine,
+  blockReasonOf,
+  RunBlockLog,
+  setupNeedOf,
+} from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
 import { PartialRunLog, stoppedLine } from './run-stop.js'
@@ -267,6 +274,25 @@ export interface RuntimeOptions {
    * 工具回 `not_connected` / 缺凭据时，运行时拿它说清「缺哪个连接」。不给 = 只记卡住了、不说缺哪个。
    */
   missingConnections?(role_id: string): string[]
+  /**
+   * WP324（决策 690）：同上，但说的是**能就地连的接法**（连接页 service）——出连接卡用。
+   * 不给 = 只能说缺哪个，卡上没有就地连的按钮（连接卡也就不出）。
+   */
+  missingConnectionNeeds?(role_id: string): ConnectNeed[]
+  /**
+   * WP324（决策 690）：一轮卡在缺连接 / 缺设置上时，出一张**连接卡 / 配置卡**（同一缺项不重复出）；
+   * 人补完由宿主按原话接着跑。回出的（或已经在等的）那张卡；出不了回 `undefined`（照老样子只记一句）。
+   */
+  setupCards?: {
+    onRunBlocked(input: {
+      run_id: string
+      matter_id: string
+      actor: RunRequest['actor']
+      block: MatterRunBlock
+      needs: ConnectNeed[]
+      targets: string[]
+    }): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
+  }
   /** seed 化的随机（运行时的确定性）；不给按 `random` 起一个 */
   seed?: number
   /** 运行时的名字；缺省按有没有模型 provider 配置自动选 */
@@ -675,12 +701,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   ): void => {
     if (blocks === undefined) return
     let connections: string[] = []
+    let needs: ConnectNeed[] = []
     try {
       connections = options.missingConnections?.(role_id) ?? []
+      needs = options.missingConnectionNeeds?.(role_id) ?? []
     } catch {
       // 连接目录还没装好：只记卡住了，不说缺哪个
     }
-    blocks.note(tool, reason, connections)
+    blocks.note(tool, reason, connections, needs)
   }
 
   /** WP236：这条职责这一次的时长线（职责阈值 → 设置 → 缺省）。 */
@@ -1173,6 +1201,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           const why = blockedByTool(res)
           if (why !== undefined)
             noteBlocked(watch?.blocks, bareOf(call.name), why, call.request.actor.role_id)
+          // WP324：缺一步设置 / 缺一样能就地连的（结构化：`needs_setup` / `needs_connection` / 建站与管店的 `needs`）
+          const setupNeed = why === undefined ? setupNeedOf(bareOf(call.name), res) : undefined
+          if (setupNeed !== undefined) watch?.blocks.noteSetup(bareOf(call.name), setupNeed)
           watch?.log.hostTool({
             tool: bareOf(call.name),
             input: call.input,
@@ -1905,16 +1936,47 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
     }
     /** WP251：这一轮卡住了就在时间线上记一条带结构化标记的（收尾时调一次）。 */
-    const recordBlocked = (): void => {
-      const block = runBlocks.block()
-      if (block === undefined) return
-      work?.appendEvent(input.matter.id, {
-        kind: 'status',
-        text: blockedLine(block),
-        actor: { kind: 'system', id: 'runtime' },
-        run_id,
-        blocked: block,
-      })
+    const recordBlocked = async (): Promise<void> => {
+      const raw = runBlocks.block()
+      if (raw === undefined) return
+      // WP324（决策 690）：出一张连接卡 / 配置卡（同一缺项不重复出），补完由宿主按原话接着跑
+      let out: { item: ApprovalItem; attach: boolean } | undefined
+      try {
+        out = await options.setupCards?.onRunBlocked({
+          run_id,
+          matter_id: input.matter.id,
+          actor: request.actor,
+          block: raw,
+          needs: runBlocks.connectNeeds(),
+          targets: runBlocks.setupTargets(),
+        })
+      } catch {
+        // 出卡没成：照老样子只记一句（人仍能在第三栏 / 连接页补上）
+      }
+      const card = out?.item
+      const block = card === undefined ? raw : { ...raw, card_id: card.id }
+      try {
+        work?.appendEvent(input.matter.id, {
+          kind: 'status',
+          text: blockedLine(block),
+          actor: { kind: 'system', id: 'runtime' },
+          run_id,
+          blocked: block,
+        })
+      } catch {
+        // 事项已经没了
+      }
+      // 卡挂进事项时间线（排在那一句后面）；这件事已经挂着这张卡就不再挂
+      if (card === undefined || out?.attach !== true) return
+      if (card.subject.matter_id === input.matter.id) backfill(card)
+      else
+        work?.appendEvent(input.matter.id, {
+          kind: 'card',
+          text: card.title,
+          actor: { kind: 'agent', id: run_id },
+          approval_item_id: card.id,
+          run_id,
+        })
     }
     let cancelledReason: RunCancelReason | undefined
     /** WP287：运行时报的失败（`run.failed`）——收尾时据此在时间线上说「没跑成」，不再写「跑完了」。 */
@@ -1947,6 +2009,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         const why = blockReasonOf(e.reason)
         if (why !== undefined)
           noteBlocked(runBlocks, callTools.get(e.call_id) ?? 'tool', why, request.actor.role_id)
+        else {
+          const tool = callTools.get(e.call_id) ?? 'tool'
+          const setupNeed = setupNeedOf(tool, {
+            status: e.status,
+            ...(e.reason === undefined ? {} : { reason: e.reason }),
+          })
+          if (setupNeed !== undefined) runBlocks.noteSetup(tool, setupNeed)
+        }
       }
       if (e.type === 'run.cancelled')
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
@@ -2066,7 +2136,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             stopped: { reason: stoppedReason },
           })
         }
-        recordBlocked()
+        await recordBlocked()
         work?.onRunCompleted({
           matter_id: input.matter.id,
           run_id,
@@ -2085,7 +2155,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (result.status === 'failed') {
         const error = failure ?? { code: 'internal', message: result.summary, retryable: true }
         recordFailure(error)
-        recordBlocked()
+        await recordBlocked()
         // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带
         // 参数表 / 堆栈，换成通用人话。会话引用照落，「接着跑」续得上
         work?.onRunCompleted({
@@ -2119,7 +2189,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           ...(next === undefined ? {} : { next_suggestion: next }),
         })
       }
-      recordBlocked()
+      await recordBlocked()
       work?.onRunCompleted({
         matter_id: input.matter.id,
         run_id,
@@ -2169,7 +2239,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // 事件日志写不进去也不影响给人看的那一句
       }
       recordFailure(raw)
-      recordBlocked()
+      await recordBlocked()
     } finally {
       watchdog.stop()
       scope = undefined

@@ -77,6 +77,7 @@ import type {
   ApprovalItem,
   Assignment,
   Clock,
+  ConnectNeed,
   ContentPublicKey,
   DataSourceLevel,
   EventEnvelope,
@@ -607,6 +608,8 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { builtinSetupTargets } from './setup-targets.js'
+import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
@@ -2929,6 +2932,84 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return assembly
   }
   /*
+   * WP324（决策 690）：**连接卡 / 配置卡**——一个品牌一份（懒建）。运行时一轮卡在缺连接 / 缺设置上时出卡，
+   * 人在卡上（或第三栏 / 连接页）补完，卡上等着的事项按原话接着跑。设置目标在这里登记（选店、公司地址）。
+   */
+  const setupCards = new Map<WorkspaceId, SetupCardsAssembly>()
+  const setupCardsOf = async (ws: WorkspaceId): Promise<SetupCardsAssembly | undefined> => {
+    const cached = setupCards.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brands?.forWorkspace(ws)
+    if (brand === undefined) return undefined
+    const assembly = createSetupCards({
+      workspace_id: ws,
+      clock,
+      ...(brand.dir === undefined ? {} : { dir: brand.dir }),
+      approvals: () => txn.approvals,
+      onCard: (item) => brand.work.onCard(cardRefOf(item)),
+      isConnected: (need) => setupNeedConnected(ws, need),
+      resume: async ({ matter_id, person_id, assignment_id, text }) => {
+        const matter = brand.work.getMatter(matter_id as never)
+        if (matter === undefined || matter.status === 'closed') return
+        const said = brand.work.store
+          .listMatterEvents(matter_id as never, { limit: 200 })
+          .find((e) => e.kind === 'human_message')?.text
+        await brand.work.run(matter_id as never, {
+          person_id: person_id as never,
+          assignment_id: assignment_id as never,
+          brief: said ?? matter.title,
+          text,
+        })
+      },
+      note: (matter_id, text) => {
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'setup_cards' },
+        })
+      },
+      emit: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'setup_cards' },
+          correlation: { trace_id: `trc_setup_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
+    for (const target of builtinSetupTargets({
+      theme: () => siteThemeOf(ws),
+      postalAddress: () => onboardingRef?.brandProfile(ws).postal_address,
+      setPostalAddress: (address) => onboardingRef?.setPostalAddress(ws, address) ?? false,
+    }))
+      assembly.registerTarget(target)
+    setupCards.set(ws, assembly)
+    return assembly
+  }
+  /** WP324：连接卡上的一样现在连上了没有（认不出回 `undefined`：人说连好了就信人）。 */
+  const setupNeedConnected = async (
+    ws: WorkspaceId,
+    need: ConnectNeed,
+  ): Promise<boolean | undefined> => {
+    if (need.service === 'site_theme') {
+      const r = await (await siteThemeOf(ws))?.readiness({ fresh: true }).catch(() => undefined)
+      return r === undefined ? undefined : r.applicable && r.next === undefined
+    }
+    if (need.service === 'shop_admin') {
+      const shop = await shopOf(ws)
+      return shop === undefined
+        ? undefined
+        : (await shop.auth.access().catch(() => undefined)) !== undefined
+    }
+    const dir = directoryAssemblies.get(ws)?.directory()
+    const hit = dir?.find(
+      (d) =>
+        d.kind === need.kind || (need.service !== undefined && d.connect_service === need.service),
+    )
+    return hit === undefined ? undefined : hit.state === 'connected'
+  }
+  /*
    * WP261（决策 175 第 1 步）：店铺授权 + 独立站运营——**一个品牌一份**（懒建）。CLI 的检测 / 起法 / 一键安装
    * 在后面（平台工具包那一段）才建出来，经 `shopCli` 晚绑定；授权的回调端口整机一个，所以授权跑法是进程级的一份。
    */
@@ -4377,6 +4458,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               const required = gaps.filter((g) => g.required)
               return (required.length > 0 ? required : gaps).map((g) => g.name.zh)
             },
+            // WP324（决策 690）：同上，但给的是能就地连的接法（连接页 service）——出连接卡用
+            missingConnectionNeeds: (role_id) => {
+              const gaps = (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? []).filter(
+                (g) => !g.connected,
+              )
+              const required = gaps.filter((g) => g.required)
+              return (required.length > 0 ? required : gaps).map((g) => ({
+                kind: g.kind,
+                ...(g.connect_service === undefined ? {} : { service: g.connect_service }),
+                name: g.name.zh,
+                required: g.required,
+              }))
+            },
+            // WP324：一轮卡在缺连接 / 缺设置上 → 出连接卡 / 配置卡（补完由这里接着跑）
+            setupCards: {
+              onRunBlocked: async (input) => (await setupCardsOf(ws))?.onRunBlocked(input),
+            },
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -4778,6 +4876,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     connections.onConnectionChange(() => {
       void storeMarkets.check()
+    })
+    // WP324（决策 690）：连接清单变了（在连接页 / 第三栏连好了）→ 还在等的连接卡复查一遍，缺的都连上了就接着做
+    connections.onConnectionChange(() => {
+      void setupCardsOf(ws)
+        .then((cards) => cards?.recheck())
+        .catch(() => undefined)
     })
     /*
      * WP159 / WP169：内容与搜索用的模型口（写初稿、翻买家问题）——这个品牌的模型网关，用量照常记账。
@@ -6019,6 +6123,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP296 的旧主题升级卡（`upstream_upgrade`，upstream_id = agentsws-theme）被点了 → WP301 起不升，只记一句作废了
     if (isThemeUpgradeCard(item))
       return (await siteThemeOf(item.workspace_id))?.onUpgradeDecided(item)
+    // WP324（决策 690）：连接卡 / 配置卡被决定（接着做 / 保存 / 先不连）→ 复核、存、按原话接着做（后台跑）
+    if (item.kind === 'connect_request' || item.kind === 'setup_request') {
+      const cards = await setupCardsOf(item.workspace_id)
+      void cards?.onDecided(item).catch(() => undefined)
+      return
+    }
     // WP304（决策 445）：选主题卡 / 买高级主题卡被决定 → 起底（复制 / 买 / 下载）、按原话接着做。
     // 要跑 CLI、下载，放到后台（这一次决定不等它；结果记进事项时间线）
     if (item.kind === 'theme_choice' || item.kind === 'theme_purchase') {
@@ -10601,6 +10711,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'image_budget' ||
           // WP304：选主题卡 / 买高级主题卡
           out.kind === 'theme_choice' ||
+          // WP324：连接卡 / 配置卡
+          out.kind === 'connect_request' ||
+          out.kind === 'setup_request' ||
           out.kind === 'theme_purchase' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
           isRouteChoice(out) ||

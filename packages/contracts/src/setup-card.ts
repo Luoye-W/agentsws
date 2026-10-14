@@ -53,8 +53,6 @@ export interface ConnectRequestPayload {
   risk?: string
   /** 连好之后接着做的第一件事（同一缺项还在等的别的事项由服务端记着）。 */
   resume?: SetupResumeTarget
-  /** 还有几件事在等这张卡（含 `resume` 那一件）；没有就是 0。 */
-  waiting?: number
 }
 
 /** 配置卡上一格的样子（只收不是秘密的设置）。 */
@@ -87,7 +85,6 @@ export interface SetupRequestPayload {
   /** 人填好的值：保存时随决定（`approve` + `edited_payload`）带回；没带就用建议值。 */
   values?: Record<string, string>
   resume?: SetupResumeTarget
-  waiting?: number
 }
 
 export type SetupCardPayload = ConnectRequestPayload | SetupRequestPayload

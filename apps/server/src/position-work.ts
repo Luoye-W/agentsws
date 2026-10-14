@@ -209,18 +209,23 @@ export function openMatterPhase(
    */
   const block = state.blocked
   if (block !== undefined) {
-    const named = block.connections.length > 0 ? block.connections : missing
+    const named =
+      block.connections.length > 0 || block.reason === 'needs_setup' ? block.connections : missing
     const what = named.length > 0 ? named.join('、') : undefined
     return {
       group: 'stuck',
       stuck_reason:
-        block.reason === 'missing_credential'
+        block.reason === 'needs_setup'
           ? what === undefined
-            ? '缺凭据'
-            : `${what}缺凭据`
-          : what === undefined
-            ? '缺连接'
-            : `缺${what}连接`,
+            ? '缺一步设置'
+            : `缺${what}`
+          : block.reason === 'missing_credential'
+            ? what === undefined
+              ? '缺凭据'
+              : `${what}缺凭据`
+            : what === undefined
+              ? '缺连接'
+              : `缺${what}连接`,
     }
   }
   if (outcome === 'failed' || outcome === 'stopped')
