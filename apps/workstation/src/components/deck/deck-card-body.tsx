@@ -21,6 +21,12 @@ import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
+import {
+  FaqBatchBody,
+  FaqImportBody,
+  isFaqBatchPayload,
+  isFaqImportPayload,
+} from './faq-import-body'
 import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
@@ -304,6 +310,8 @@ export function DeckCardBody({
         if (isOwnSubPayload(payload)) return <OwnSubCardBody payload={payload} />
         // WP254：别的社群的版务卡——将执行什么、原话、依据（批了才经渠道适配器去做）
         if (isModerationPayload(payload)) return <ModerationCardBody payload={payload} />
+        // WP322：FAQ 导入 ③ 交负责人的整批卡——几条 + 一两行预览（不出改之前 / 改之后双格）
+        if (isFaqBatchPayload(payload)) return <FaqBatchBody payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />
@@ -331,6 +339,8 @@ export function DeckCardBody({
               <Note testId="deck-reason">{reasonText}</Note>
             </div>
           )
+        // WP322：「这份表按问答导入」——列对照、一两行预览、几条（按钮就是选项）
+        if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
         // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
         if (payload.form === 'instruction_rule') {
@@ -605,7 +615,9 @@ export function DeckCardBody({
     // WP277：开公司模式时同事那张「知道了 / 我要退出」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'company_notice' ||
     // WP284：「以后都这样」那张「记进规矩 / 不用」
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'instruction_rule'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'instruction_rule' ||
+    // WP322：FAQ 导入那张「记下 / 只加新的 / 不用」
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'faq_import'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (
