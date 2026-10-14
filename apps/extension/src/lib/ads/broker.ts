@@ -7,7 +7,7 @@ import { adsConsent } from '../local-client'
 import type { AdsPanelStatus } from '../messages'
 import type { KeyValueStore } from '../storage'
 import { readSettings } from '../storage'
-import { ADS_PLATFORMS, adsConnected, type PermissionsLike } from './permissions'
+import { ACTION_PLATFORMS, adsConnected, type PermissionsLike } from './permissions'
 import { readAdsStatus } from './poller'
 
 /** 风险告知文案的版本（决策 562；真源在公共模块，与本机服务同一个串）。 */
@@ -22,7 +22,7 @@ export interface AdsBrokerDeps {
 export async function adsPanelStatus(deps: AdsBrokerDeps): Promise<AdsPanelStatus> {
   const settings = await readSettings(deps.store)
   const connected = {} as Record<ActionPlatform, boolean>
-  for (const p of ADS_PLATFORMS) connected[p] = await adsConnected(deps.perms, p)
+  for (const p of ACTION_PLATFORMS) connected[p] = await adsConnected(deps.perms, p)
   const s = await readAdsStatus(deps.store)
   return {
     paired: settings.token !== undefined,

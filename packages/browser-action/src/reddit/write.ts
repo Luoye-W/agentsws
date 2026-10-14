@@ -1,0 +1,250 @@
+/**
+ * WP329（docs/102 §2.3「写」、决策 663）：Reddit 的三种写——**插件填草稿，人点发送**。
+ *
+ * | 写 | 做什么 | 插件动的 |
+ * |---|---|---|
+ * | `reply` | 回一条评论（楼中楼；收件箱里的回复 / @ 也是它） | 点那条评论下的 reply、往冒出来的框里填草稿 |
+ * | `comment` | 在帖子下面回一条（自家版的帖子、别人版里的帖子） | 往帖子下面那个评论框里填草稿 |
+ * | `submit` | 发新帖（自家版 / 别人的版） | 往发帖页的标题框、正文框里填 |
+ *
+ * 发送 / 保存那个按钮**不在任何白名单里**（测试钉住）：填好之后停在 `await_sent`，等人自己点，
+ * 认出页面上新出现的那一条才算发出去，并读回它的编号与链接（之后对方回复挂回原行就靠这个编号）。
+ *
+ * 选择器按 **old.reddit**（docs/102 §2.3「打开 old.reddit 上对应的帖子或评论」）的公开写法整理，
+ * 按纪律**没有对真站核过**；对不上会停在「等页面」并交给人，不会乱点。真机首跑要核（报告）。
+ */
+
+import type { ActionAccount, ActionJob, ActionPlan, ActionStep } from '../types.js'
+
+/** 写在哪个站上（测试指向本地假页面）。 */
+export const REDDIT_WRITE_ORIGIN = 'https://old.reddit.com'
+
+/**
+ * 插件连接 Reddit 时申请的可选站点权限（docs/102 §2.3 第 1 条）。与 WP328「读」那一份**同一个值**
+ * （它叫 `REDDIT_HOST_PERMISSIONS`，在 `reddit/read.ts`）；两单合到一起后只留一份。
+ */
+export const REDDIT_WRITE_HOST_PERMISSIONS: readonly string[] = [
+  'https://old.reddit.com/*',
+  'https://www.reddit.com/*',
+]
+
+/** 自动化页面能开的站。 */
+export const REDDIT_WRITE_HOSTS: readonly string[] = ['old.reddit.com', 'www.reddit.com']
+
+/** 选择器一张表（真站首跑对不上只改这里）。`{t1}` / 编号由下面的函数填。 */
+export const REDDIT_WRITE_SELECTORS = {
+  /** 某条评论（`#thing_t1_xxx`）自己的「reply」链接（不含它下面楼层的）。 */
+  replyLink: (t1: string): string => `#thing_${t1} > .entry .buttons .reply-button > a`,
+  /** 点了 reply 之后，那条评论下面冒出来的回复框。 */
+  replyBox: (t1: string): string => `#thing_${t1} > .child > form.usertext textarea[name="text"]`,
+  /** 那条评论直接的下一层回复（发出去的那条会出现在这里）。 */
+  replyItems: (t1: string): string => `#thing_${t1} > .child > .sitetable > .thing.comment`,
+  /** 帖子页最上面那个评论框（顶层评论）。 */
+  commentBox: '.commentarea > form.usertext textarea[name="text"]',
+  /** 帖子下面的顶层评论。 */
+  commentItems: '.commentarea > .sitetable > .thing.comment',
+  /** 一条评论自己的正文（不含它下面楼层的）。 */
+  commentBody: ':scope > .entry .usertext-body',
+  /** 发帖页：标题、正文。 */
+  submitTitle: '#title-field textarea[name="title"]',
+  submitText: '#text-field textarea[name="text"]',
+  /** 发出去之后落到的帖子页：那条帖子与它的标题。 */
+  postItem: '#siteTable > .thing.link',
+  postTitle: ':scope > .entry a.title',
+} as const
+
+/** 一次写。 */
+export type RedditWrite =
+  /** 回一条评论（`parent` 是 `t1_…`；`permalink` 是那条评论的链接，打开它才找得到回复框）。 */
+  | { kind: 'reply'; parent: string; permalink: string }
+  /** 在帖子下面回一条（`post` 是 `t3_…`；有链接用链接，没有用 `/comments/<id>/`）。 */
+  | { kind: 'comment'; post: string; permalink?: string }
+  /** 发新帖（文字帖；正文 = `text`）。 */
+  | { kind: 'submit'; subreddit: string; title: string }
+
+export interface RedditWriteAction {
+  write: RedditWrite
+  /** 卡上批过的那段正文（插件只填这一段）。 */
+  text: string
+}
+
+export class RedditPlanError extends Error {}
+
+const T1 = /^t1_[a-z0-9]+$/u
+const T3 = /^t3_[a-z0-9]+$/u
+const SUB = /^[A-Za-z0-9_]{2,32}$/u
+const COMMENTS_PATH = /^\/r\/[A-Za-z0-9_]{2,32}\/comments\/[a-z0-9]+\//u
+
+/** `t1_abc` / `abc` → `t1_abc`。 */
+export function redditThing(prefix: 't1' | 't3', id: string): string {
+  const v = id.trim().toLowerCase()
+  return v.startsWith(`${prefix}_`) ? v : `${prefix}_${v}`
+}
+
+/** 链接（绝对的或站内的）→ 站内路径，只认 `/r/<版>/comments/<id>/…`；别的回 `undefined`。 */
+export function redditCommentsPath(permalink: string): string | undefined {
+  let path = permalink.trim()
+  try {
+    if (/^https?:/iu.test(path)) path = new URL(path).pathname
+  } catch {
+    return undefined
+  }
+  path = path.split(/[?#]/u)[0] ?? ''
+  if (!path.endsWith('/')) path = `${path}/`
+  return COMMENTS_PATH.test(path) ? path : undefined
+}
+
+const base = (origin: string): string => origin.replace(/\/+$/u, '')
+
+/** 白名单站点：Reddit 本身 + 给了假站点时那一个。 */
+function hostsFor(origin: string): string[] {
+  const hosts = [...REDDIT_WRITE_HOSTS]
+  try {
+    const h = new URL(origin).hostname
+    if (!hosts.includes(h)) hosts.push(h)
+  } catch {}
+  return hosts
+}
+
+const SEND_PROMPT = '草稿已填好，看一眼，自己点发送'
+
+/** 一次写 → 计划（步骤 + 白名单）。对不上形状就抛 {@link RedditPlanError}（进队前拦下）。 */
+export function redditWritePlan(
+  action: RedditWriteAction,
+  origin = REDDIT_WRITE_ORIGIN,
+): ActionPlan {
+  const text = action.text.trim()
+  if (text === '') throw new RedditPlanError('正文是空的，不填。')
+  const o = base(origin)
+  const S = REDDIT_WRITE_SELECTORS
+  const w = action.write
+  let steps: ActionStep[]
+  let click: string[] = []
+  let fill: string[]
+  let values: string[] = [text]
+  switch (w.kind) {
+    case 'reply': {
+      const t1 = redditThing('t1', w.parent)
+      if (!T1.test(t1)) throw new RedditPlanError('要回的那条评论编号不对。')
+      const path = redditCommentsPath(w.permalink)
+      if (path === undefined) throw new RedditPlanError('要回的那条评论没有链接，找不到回复框。')
+      steps = [
+        { op: 'goto', url: `${o}${path}` },
+        { op: 'wait', selector: S.replyLink(t1), timeout_ms: 20_000 },
+        { op: 'click', selector: S.replyLink(t1) },
+        { op: 'wait', selector: S.replyBox(t1), timeout_ms: 10_000 },
+        { op: 'fill', selector: S.replyBox(t1), value: text },
+        {
+          op: 'await_sent',
+          selector: S.replyItems(t1),
+          body: S.commentBody,
+          text,
+          prompt: SEND_PROMPT,
+        },
+      ]
+      click = [S.replyLink(t1)]
+      fill = [S.replyBox(t1)]
+      break
+    }
+    case 'comment': {
+      const t3 = redditThing('t3', w.post)
+      if (!T3.test(t3)) throw new RedditPlanError('要回的那个帖子编号不对。')
+      const path = w.permalink === undefined ? undefined : redditCommentsPath(w.permalink)
+      const url = path === undefined ? `${o}/comments/${t3.slice(3)}/` : `${o}${path}`
+      steps = [
+        { op: 'goto', url },
+        { op: 'wait', selector: S.commentBox, timeout_ms: 20_000 },
+        { op: 'fill', selector: S.commentBox, value: text },
+        {
+          op: 'await_sent',
+          selector: S.commentItems,
+          body: S.commentBody,
+          text,
+          prompt: SEND_PROMPT,
+        },
+      ]
+      fill = [S.commentBox]
+      break
+    }
+    case 'submit': {
+      const sub = w.subreddit.replace(/^\/?r\//u, '').trim()
+      if (!SUB.test(sub)) throw new RedditPlanError('版块名不对。')
+      const title = w.title.trim().slice(0, 300)
+      if (title === '') throw new RedditPlanError('新帖没有标题。')
+      steps = [
+        { op: 'goto', url: `${o}/r/${sub}/submit?selftext=true` },
+        { op: 'wait', selector: S.submitTitle, timeout_ms: 20_000 },
+        { op: 'fill', selector: S.submitTitle, value: title },
+        { op: 'fill', selector: S.submitText, value: text },
+        {
+          op: 'await_sent',
+          selector: S.postItem,
+          body: S.postTitle,
+          text: title,
+          prompt: SEND_PROMPT,
+        },
+      ]
+      fill = [S.submitTitle, S.submitText]
+      values = [title, text]
+      break
+    }
+  }
+  return {
+    kind: `reddit_${w.kind}`,
+    platform: 'reddit',
+    pace: 'write',
+    steps,
+    allow: {
+      hosts: hostsFor(o),
+      click,
+      fill,
+      values,
+      wait: steps.flatMap((s) => (s.op === 'wait' ? [s.selector] : [])),
+    },
+    // 读回在 `await_sent` 里（认出新出现的那一条才算发出去）
+    verify: { op: 'none' },
+    zones: [],
+    needs_sheet: false,
+  }
+}
+
+/** 横条 / 工作台上的一句话（卡上没给标题时用）。 */
+export function redditWriteTitle(write: RedditWrite): string {
+  switch (write.kind) {
+    case 'reply':
+      return '回复一条评论'
+    case 'comment':
+      return '在帖子下回一条'
+    case 'submit':
+      return `在 r/${write.subreddit.replace(/^\/?r\//u, '')} 发帖`
+  }
+}
+
+export interface RedditJobInput {
+  id: string
+  workspace_id: string
+  /** 品牌号（用户名；不知道就用品牌 id）。每天写 ≤ 20 按它算。 */
+  account_id: string
+  action: RedditWriteAction
+  approval_id: string
+  approval_level?: 'L1' | 'L2' | 'L3'
+  title?: string
+  created_at: string
+  origin?: string
+}
+
+/** 拼一件活（本机服务在卡批了之后调）。 */
+export function buildRedditJob(input: RedditJobInput): ActionJob {
+  const account: ActionAccount = { platform: 'reddit', id: input.account_id }
+  return {
+    id: input.id,
+    workspace_id: input.workspace_id,
+    account,
+    plan: redditWritePlan(input.action, input.origin),
+    approval_id: input.approval_id,
+    ...(input.approval_level === undefined ? {} : { approval_level: input.approval_level }),
+    zones_allowed: [],
+    title: input.title ?? redditWriteTitle(input.action.write),
+    created_at: input.created_at,
+  }
+}
