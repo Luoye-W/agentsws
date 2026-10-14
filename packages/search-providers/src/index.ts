@@ -10,21 +10,36 @@
  * 不碰钱；计费、缓存、路由都不在这里。
  */
 export {
+  type AnswerAnalysis,
+  analyzeAnswer,
+  type ClassifiedCitation,
+  citationsOf,
   domainMatches,
   domainOf,
+  type EntityMatch,
   excerptOf,
+  firstDomainMention,
+  firstMention,
+  GEO_RULES_VERSION,
   judgeAnswer,
+  matchEntities,
   mentions,
   normalizeProbe,
   normalizeSerpQuery,
+  normalizeUrl,
+  prepareAnswerText,
   redact,
   SearchDataError,
+  siteKindOf,
   uniqueUrls,
+  type WatchEntity,
+  watchEntities,
 } from './analyze.js'
 export {
   AI_ANSWER_TIMEOUT_MS,
   type AiAnswerInput,
   type ProviderAnswer,
+  type ProviderCitation,
   type ProviderSerp,
   SERP_TIMEOUT_MS,
   type SearchFetch,
@@ -32,3 +47,4 @@ export {
   type SearchResponseLike,
 } from './provider.js'
 export { SEARCH_PROVIDERS, searchProviderOf } from './providers/index.js'
+export { BUILTIN_SITE_KINDS, builtinSiteKind } from './site-kinds.js'
