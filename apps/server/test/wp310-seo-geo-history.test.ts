@@ -3,7 +3,7 @@
  * 品牌目录的 `geo.sqlite`（老文件原样不动、只搬一次），导出 / 删除走同一份。
  * 替身沿用 seo-markets 那一组（官方数据接口的替身，不联网）。
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AiAnswerProbe, AiAnswerResult, EventEnvelope } from '@agentsws/contracts'
@@ -94,8 +94,6 @@ function setup(markets: string[] | undefined, over: Partial<SeoServiceOptions> =
     appendEvent: (e) => events.push(e as EventEnvelope),
     ...over,
   })
-  // 每周只问 2 个（估算好算：2 问 × 3 平台 × 市场数 × 0.2）
-  service.setGeoSettings({ max_questions: 2 })
   return { service, txn, probes: o.probes }
 }
 
@@ -105,19 +103,26 @@ afterEach(() => {
 })
 
 describe('WP310 · seo-state.json → geo.sqlite', () => {
-  it('第一次用时搬：问题与开关一条不丢、老文件不动；再用不重搬；导出带上搬来的 Prompt；按品牌删连设置', async () => {
+  it('第一次用时搬：问题与开关一条不丢、老文件不动；再用不重搬；WP321（决策 532）一律按新设置；导出带上搬来的 Prompt；按品牌删连设置', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'seo-geo-'))
     dirs.push(dir)
+    // 老版（WP154 / 166）面板写下的那一份
+    const legacy = Array.from({ length: 7 }, (_, i) => ({
+      id: `gq_${i}`,
+      text: i === 0 ? 'Is NordVolt worth it?' : `What is the best power bank number ${i}?`,
+      origin: i === 1 ? ('human' as const) : ('brand' as const),
+      enabled: i !== 2,
+    }))
+    const stateFile = join(dir, 'seo-state.json')
+    writeFileSync(
+      stateFile,
+      `${JSON.stringify({ geo_settings: { enabled: true, max_questions: 6, markets_off: ['DE'] }, geo_questions: legacy }, null, 2)}\n`,
+    )
+    const raw = readFileSync(stateFile, 'utf8')
     const { service } = setup(['US', 'DE'], {
       dir,
       geoStore: () => createGeoStore(join(dir, 'geo.sqlite')),
     })
-    service.setGeoSettings({ markets_off: ['DE'] })
-    const before = await service.geoQuestions()
-    expect(before.length).toBeGreaterThan(2)
-    const stateFile = join(dir, 'seo-state.json')
-    const raw = readFileSync(stateFile, 'utf8')
-
     const store = await service.geoHistory()
     expect(existsSync(join(dir, 'geo.sqlite'))).toBe(true)
     expect(readFileSync(stateFile, 'utf8')).toBe(raw)
@@ -126,21 +131,24 @@ describe('WP310 · seo-state.json → geo.sqlite', () => {
     expect(w.brand).toEqual({ name: 'NordVolt', aliases: [], domains: ['nordvolt.example'] })
     expect(w.markets).toEqual(['US', 'DE'])
     expect(w.markets_off).toEqual(['DE'])
-    expect(w.prompt_limit).toBe(2)
+    // 决策 532：不留老默认 6 条、不留老三家
+    expect(w.prompt_limit).toBe(5)
+    expect(w.platforms).toEqual(['chatgpt', 'gemini', 'claude', 'google_ai_overview'])
     const ids = [...w.prompts, ...w.prompt_candidates].map((p) => p.id).sort()
-    expect(ids).toEqual(before.map((q) => q.id).sort())
-    expect(w.prompts).toHaveLength(2)
+    expect(ids).toEqual(legacy.map((q) => q.id).sort())
+    expect(w.prompts.map((p) => p.id)).toEqual(['gq_0', 'gq_1', 'gq_3', 'gq_4', 'gq_5'])
     // 带品牌名的问题（「NordVolt 值得买吗」那一句）记成 branded
-    expect([...w.prompts, ...w.prompt_candidates].some((p) => p.branded === true)).toBe(true)
+    expect(store.prompt('gq_0')?.branded).toBe(true)
 
-    // 再用：不重搬（老面板之后再改，O2 接上之前不同步）
-    service.setGeoQuestions([])
-    expect((await service.geoHistory()).prompts()).toHaveLength(before.length)
+    // 面板读的是新设置（老问题一条不丢）；再用不重搬
+    expect((await service.geoQuestions()).map((q) => q.id).sort()).toEqual(ids)
+    await service.setGeoQuestions([])
+    expect((await service.geoHistory()).prompts({ archived: true })).toHaveLength(legacy.length)
 
     const exp = await service.geoHistoryExport({ format: 'json' })
-    expect(exp.tables?.watch?.prompts).toHaveLength(2)
+    expect(exp.tables?.watch?.prompts).toHaveLength(0)
     const csv = await service.geoHistoryExport({ format: 'csv' })
-    expect(csv.csv?.prompts?.split('\r\n').length).toBe(before.length + 2)
+    expect(csv.csv?.prompts?.split('\r\n').length).toBe(legacy.length + 2)
 
     await service.geoHistoryDelete({ scope: 'brand', include_settings: true })
     expect((await service.geoHistory()).watch()).toBeUndefined()
@@ -149,6 +157,7 @@ describe('WP310 · seo-state.json → geo.sqlite', () => {
 
   it('没给存储工厂（内存档）也能用', async () => {
     const { service } = setup(['US'])
+    await service.geoView()
     const store = await service.geoHistory()
     expect(store.watch()?.markets).toEqual(['US'])
     service.close()

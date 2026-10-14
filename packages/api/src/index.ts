@@ -359,6 +359,13 @@ export {
   KOL_SETUP_PATH,
   REVEAL_FREE_WINDOW_DAYS,
 } from './routes/extension.js'
+// WP313：插件动作通道（广告后台）
+export type {
+  ActionEnqueueInput,
+  ActionEnqueueResult,
+  ExtensionActionsPort,
+} from './routes/extension-actions.js'
+export { extensionActionRoutes } from './routes/extension-actions.js'
 // WP188：随便聊
 export type {
   FreeChatActor,

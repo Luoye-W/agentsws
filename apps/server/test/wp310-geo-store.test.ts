@@ -119,7 +119,7 @@ describe('WP310 geo.sqlite：迁移与老数据', () => {
     })
   })
 
-  it('seo-state.json 搬进来：问题一条不丢（含关掉的、人改的）；真在问的前 N 条是已选；开关照旧；只搬一次', () => {
+  it('seo-state.json 搬进来：问题一条不丢（含关掉的、人改的）；开着的前 5 条是已选；开关照旧；只搬一次（WP321 决策 532：一律按新设置）', () => {
     const s = open()
     const out = importSeoState(
       s,
@@ -133,12 +133,12 @@ describe('WP310 geo.sqlite：迁移与老数据', () => {
     const w = s.watch()
     if (w === undefined) throw new Error('没搬出关注设置')
     expect(w.enabled).toBe(false)
-    expect(w.prompt_limit).toBe(2)
+    // WP321（决策 532，Luoye 10-14 改）：不留老版「问几个」与老三家——兜底 5 条、默认四家
+    expect(w.prompt_limit).toBe(5)
     expect(w.markets_off).toEqual(['DE'])
-    // 老用户的 AI 仍是老三家（Claude 不替他悄悄打开）
-    expect(w.platforms).toEqual(['chatgpt', 'gemini', 'google_ai_overview'])
-    expect(w.prompts.map((p) => p.id)).toEqual(['gq_h1', 'gq_b1'])
-    expect(w.prompt_candidates.map((p) => p.id)).toEqual(['gq_off', 'gq_t1', 'gq_t2'])
+    expect(w.platforms).toEqual(['chatgpt', 'gemini', 'claude', 'google_ai_overview'])
+    expect(w.prompts.map((p) => p.id)).toEqual(['gq_h1', 'gq_b1', 'gq_t1', 'gq_t2'])
+    expect(w.prompt_candidates.map((p) => p.id)).toEqual(['gq_off'])
     const all = s.prompts({ archived: true })
     expect(all.map((p) => [p.id, p.text, p.origin, p.enabled])).toEqual(
       LEGACY.map((q) => [q.id, q.text, q.origin, q.enabled]),
@@ -154,7 +154,7 @@ describe('WP310 geo.sqlite：迁移与老数据', () => {
     })
   })
 
-  it('老数据只有问题没有开关：按老版默认 6 条选', () => {
+  it('老数据只有问题没有开关：WP321（决策 532）不留老默认 6 条，按兜底 5 条选', () => {
     const s = open()
     const many = Array.from({ length: 8 }, (_, i) => ({
       id: `gq_${i}`,
@@ -163,8 +163,9 @@ describe('WP310 geo.sqlite：迁移与老数据', () => {
       enabled: true,
     }))
     importSeoState(s, { geo_questions: many }, { at: AT, brand: BRAND, markets: ['US'] })
-    expect(s.watch()?.prompts).toHaveLength(6)
-    expect(s.watch()?.prompt_limit).toBe(6)
+    expect(s.watch()?.prompts).toHaveLength(5)
+    expect(s.watch()?.prompt_limit).toBe(5)
+    expect(s.prompts()).toHaveLength(8)
   })
 
   it('什么老数据都没有：不建关注设置，只记搬过', () => {
@@ -424,7 +425,16 @@ describe('WP310 geo.sqlite：导出与删除（决策 473）', () => {
     seed(s)
     const csv = s.exportHistory('csv', AT).csv ?? {}
     expect(Object.keys(csv).sort()).toEqual(
-      ['answers', 'brand_gsc', 'citations', 'mentions', 'prompts', 'ranks', 'runs'].sort(),
+      [
+        'answers',
+        'brand_gsc',
+        'citations',
+        'mentions',
+        'other_brands',
+        'prompts',
+        'ranks',
+        'runs',
+      ].sort(),
     )
     const answers = csv.answers ?? ''
     expect(answers.startsWith('﻿id,run_id,prompt_id,')).toBe(true)

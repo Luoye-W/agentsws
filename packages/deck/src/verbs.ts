@@ -242,6 +242,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP304（决策 445）
   theme_choice: 'theme_choice',
   theme_purchase: 'theme_purchase',
+  // WP321
+  geo_watch: 'geo_watch',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

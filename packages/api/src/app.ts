@@ -45,6 +45,8 @@ import { economicsRoutes } from './routes/economics.js'
 import { eventRoutes } from './routes/events.js'
 // WP119（68）：浏览器插件的本地一面 `/v1/extension/*`（配对、观测、状态）
 import { extensionRoutes } from './routes/extension.js'
+// WP313：插件动作通道（广告后台）`/v1/extension/actions/*` 与工作台 `/v1/ads-actions/*`
+import { extensionActionRoutes } from './routes/extension-actions.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { haltRoutes } from './routes/halt.js'
 import { handoffRoutes } from './routes/handoff.js'
@@ -270,6 +272,8 @@ export function collectRoutes(): Route[] {
      * `pairings` / `tokens` / `pair` / `hello` / `observations` 全是定值段。
      */
     ...extensionRoutes(),
+    // WP313：插件动作通道。`/v1/extension/actions/*`、`/v1/extension/ads-consent`、`/v1/ads-actions/*` 都是新路径
+    ...extensionActionRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
     // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径

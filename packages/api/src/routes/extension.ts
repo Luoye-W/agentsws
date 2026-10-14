@@ -511,6 +511,14 @@ function portOf(deps: GatewayDeps): ExtensionPort {
  * 都是同一句）——区分等于给人一台探测机。
  */
 function sessionOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
+  return extensionSessionOf(c, deps)
+}
+
+/** WP313（只加）：同一道闸给动作通道那几条路由用（`routes/extension-actions.ts`）。 */
+export function extensionSessionOf(
+  c: Parameters<Route['handler']>[0],
+  deps: GatewayDeps,
+): ExtensionSession {
   const raw = c.req.header('Authorization') ?? ''
   // WP201：Sec-Fetch-Site 一并交给闸（真 Chrome 的扩展 GET 不带 Origin，见 browserSaysExtensionRequest）
   const session = portOf(deps).store.authenticate(

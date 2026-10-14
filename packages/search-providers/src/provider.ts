@@ -78,6 +78,11 @@ export interface SearchProviderAdapter {
    * 通了什么都不回，没通抛 `SearchDataError`。
    */
   test(key: string, fetch: SearchFetch): Promise<void>
+  /**
+   * WP321（决策 534）：这家某个平台能用的模型清单（免费的口；写错模型名的失败任务上游照样收钱，
+   * 所以问之前先对一下）。不给 = 这家不用查。
+   */
+  models?(platform: AiPlatform, key: string, fetch: SearchFetch): Promise<string[]>
   /** 成本表里的键（`cost-table.json` 的 `unit_prices`）：SERP 一次 / 某平台问答一次。 */
   costKey(kind: 'serp' | AiPlatform): string
 }

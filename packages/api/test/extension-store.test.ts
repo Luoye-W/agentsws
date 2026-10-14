@@ -146,11 +146,11 @@ describe('令牌', () => {
     expect(store.list('ws_other' as WorkspaceId)).toHaveLength(0)
   })
 
-  it('scope 只有三个，没有第四个', () => {
+  it('scope 只有四个（WP313 加了 ads.act），没有第五个', () => {
     const store = storeOf(fakeClock())
     const { code } = store.createPairing({ workspace_id: WS, person_id: PERSON })
     const issued = store.redeem({ code, origin: ORIGIN })
     if (!issued.ok) throw new Error('unreachable')
-    expect(issued.issued.scopes).toEqual(['kol.observe', 'kol.capture', 'kol.read'])
+    expect(issued.issued.scopes).toEqual(['kol.observe', 'kol.capture', 'kol.read', 'ads.act'])
   })
 })

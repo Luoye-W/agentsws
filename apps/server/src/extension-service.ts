@@ -802,7 +802,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   return {
     store: options.store,
 
-    hello: (): ExtensionHello => {
+    hello: (session): ExtensionHello => {
       const linked = options.publicLibrary?.linked() === true
       const workbench = options.workbenchUrl?.()
       const held = options.kolRoleHeld?.()
@@ -812,7 +812,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         cloud_linked: linked,
         // 登录了就共享，**没有第二个开关**（Luoye 09-19）。
         shares_to_public_library: linked,
-        scopes: ['kol.observe', 'kol.capture', 'kol.read'],
+        // WP313：照令牌上真有的说（新令牌多一个 ads.act；老令牌还是那三个）
+        scopes: [...session.scopes],
         server_version: options.serverVersion,
         ...(workbench === undefined ? {} : { workbench_url: workbench }),
         ...(held === undefined ? {} : { kol_role_held: held }),
