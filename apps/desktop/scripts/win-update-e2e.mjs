@@ -233,13 +233,15 @@ async function main() {
   // CI 的 runner 不一定有交互桌面（窗口画不出来），所以按小窗自己写的心跳认：起来了（starting / shown / headless）
   const pendingFile = join(userData, 'update-pending.json')
   const beatFile = join(userData, 'update-splash.json')
+  // CI 上 N 在停服务、CPU 正忙，PowerShell 冷启动可能要十几秒：等到 60 秒，并记下第一笔心跳晚了几秒
   let beat
-  for (let i = 0; i < 30 && beat === undefined; i += 1) {
+  for (let i = 0; i < 120 && beat === undefined; i += 1) {
     beat = readBeat(beatFile)
     if (beat === undefined) await sleep(500)
   }
+  const firstBeatSec = Math.round((Date.now() - clicked) / 1000)
   step(
-    `「正在更新」小窗：${beat === undefined ? '没起来' : `起来了（${describeBeat(beat)}）`}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
+    `「正在更新」小窗：${beat === undefined ? '60 秒内没起来' : `点了之后约 ${firstBeatSec} 秒起来（${describeBeat(beat)}）`}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
   )
   if (beat === undefined) {
     const scripts = readdirSync(tmpdir()).filter((n) => n.startsWith('agentsws-update-'))
@@ -258,7 +260,9 @@ async function main() {
     step(
       `诊断（小窗输出）：${existsSync(own) ? readFileSync(own, 'utf8').slice(0, 1500) || '空' : '没有这个文件'}`,
     )
-    throw new Error('点了「重启并更新」15 秒内「正在更新」小窗没起来（没有心跳）')
+    const late = readBeat(beatFile)
+    step(`诊断（再看一眼心跳）：${late === undefined ? '还是没有' : describeBeat(late)}`)
+    throw new Error('点了「重启并更新」60 秒内「正在更新」小窗没起来（没有心跳）')
   }
   const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
   step(`N 退出：${code === 'timeout' ? '90 秒没退' : `退出码 ${describeExit(code, null)}`}`)
