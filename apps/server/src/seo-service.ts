@@ -156,6 +156,8 @@ export interface SeoBrandInfo extends BrandProfileLike {
   markets?: string[]
   /** WP169：档案里按市场覆盖的探测语言（国家码 → ISO 639-1）。 */
   market_languages?: Record<string, string>
+  /** WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）。 */
+  one_liner?: string
 }
 
 export interface SeoServiceOptions {
@@ -1170,6 +1172,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         country: b.country,
         ...(b.markets === undefined ? {} : { markets: b.markets }),
         ...(b.category === undefined ? {} : { category: b.category }),
+        ...(b.one_liner === undefined ? {} : { one_liner: b.one_liner }),
       }
     },
     searchData: () => options.searchData(),

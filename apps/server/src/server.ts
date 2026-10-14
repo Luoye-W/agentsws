@@ -4839,6 +4839,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             const market_languages = onboardingRef?.brandProfile(ws).market_languages
             return market_languages === undefined ? {} : { market_languages }
           })(),
+          // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
+          ...(() => {
+            const one_liner = onboardingRef?.brandProfile(ws).one_liner
+            return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
+          })(),
         }
       },
       knowledge: async (actor) => {
