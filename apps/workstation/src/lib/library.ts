@@ -157,6 +157,8 @@ export function skillsForScope(
 // ── 知识 ────────────────────────────────────────────────────────────────
 
 export const KNOWLEDGE_GROUPS = [
+  // WP322：FAQ 表导入的一行一张卡（`subject.type = 'faq'`）单独一组
+  'faq',
   'product',
   'policy',
   'logistics',
@@ -223,6 +225,8 @@ export function policyKindOf(card: KnowledgeCardRow): PolicyKind | undefined {
  */
 export function knowledgeGroupOf(card: KnowledgeCardRow): Exclude<KnowledgeGroupId, 'uploads'> {
   if (card.subject.key.startsWith('b2b:') || card.subject.type === 'b2b_fact') return 'b2b'
+  // WP322：FAQ 表导入的卡归「常见问答」（不按里面的词再分去物流 / 政策——它们是一张表里来的）
+  if (card.subject.type === 'faq') return 'faq'
   if (card.layer === 'historical_case') return 'other'
   const k = keyOf(card)
   if (card.layer === 'phrasing' || BRAND_VOICE.test(k)) return 'brand_voice'
@@ -342,10 +346,10 @@ export function countByStatus(
  * 职责层用它所属岗位的那一份；认不出的岗位给全部。
  */
 const POSITION_KNOWLEDGE: Readonly<Record<string, readonly KnowledgeGroupId[]>> = {
-  'customer-care': ['policy', 'logistics', 'product', 'brand_voice', 'uploads'],
+  'customer-care': ['faq', 'policy', 'logistics', 'product', 'brand_voice', 'uploads'],
   b2b: ['b2b', 'product', 'logistics', 'uploads'],
   'kol-marketing': ['brand_voice', 'product', 'uploads'],
-  'social-media': ['brand_voice', 'product', 'policy', 'uploads'],
+  'social-media': ['faq', 'brand_voice', 'product', 'policy', 'uploads'],
   ads: ['brand_voice', 'product', 'uploads'],
   design: ['brand_voice', 'product', 'uploads'],
   pr: ['brand_voice', 'policy', 'uploads'],

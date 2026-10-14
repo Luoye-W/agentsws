@@ -21,6 +21,7 @@ export const LIBRARY_ZH: Record<string, string> = {
   'skills.roles.none': '还没有职责在用',
 
   'knowledge.library': '知识',
+  'knowledge.group.faq': '常见问答',
   'knowledge.group.product': '产品事实',
   'knowledge.group.policy': '政策',
   'knowledge.group.logistics': '物流与时效',
@@ -79,6 +80,7 @@ export const LIBRARY_EN: Record<string, string> = {
   'skills.roles.none': 'No duty uses it yet',
 
   'knowledge.library': 'Knowledge',
+  'knowledge.group.faq': 'FAQ',
   'knowledge.group.product': 'Product facts',
   'knowledge.group.policy': 'Policies',
   'knowledge.group.logistics': 'Shipping & timing',

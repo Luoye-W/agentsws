@@ -198,7 +198,8 @@ const BatchDecideBody = z.object({
  * 有人申请加入、改动、报价这些问的是别人或公司的事，不在里面。
  */
 export const SELF_CARD_FORMS: Readonly<Partial<Record<ApprovalKind, readonly string[]>>> = {
-  policy_change: ['company_notice'],
+  // WP322：「这份表按问答导入」——问的是他自己传的那份表怎么对（③ 里内容生效仍交负责人批）
+  policy_change: ['company_notice', 'faq_import'],
   claim: ['handoff'],
 }
 

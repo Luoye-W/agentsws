@@ -711,6 +711,9 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     input: DecideInput,
   ): Promise<void> => {
     if (!CARD_KINDS.has(item.kind)) return
+    // WP322：FAQ 导入那张整批卡（`form: 'faq_batch'`）由导入器自己施行（卡早就建好了，批了只是激活）
+    const form = (item.payload as { form?: unknown } | null | undefined)?.form
+    if (item.kind === 'knowledge_update' && form === 'faq_batch') return
     const decided =
       item.state === 'approved' || item.state === 'approved_edited' || item.state === 'rejected'
     if (!decided) return

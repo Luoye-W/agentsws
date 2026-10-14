@@ -194,7 +194,8 @@ describe('知识按类型分组', () => {
 
   it('第三栏：岗位挑自己先看的几类，认不出的给全部', () => {
     expect(knowledgeGroupsForPosition('b2b')[0]).toBe('b2b')
-    expect(knowledgeGroupsForPosition('nope')).toHaveLength(7)
+    // WP322：多了「常见问答」一组
+    expect(knowledgeGroupsForPosition('nope')).toHaveLength(8)
   })
 })
 

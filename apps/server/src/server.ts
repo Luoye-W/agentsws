@@ -366,6 +366,13 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
+// WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
+import {
+  createFaqImporter,
+  type FaqImporter,
+  isFaqBatchCard,
+  isFaqImportCard,
+} from './faq-import.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGeoStore } from './geo-store.js'
@@ -1306,6 +1313,8 @@ export interface Server {
   onboarding: OnboardingAssembly
   /** WP65 组织与品牌（52 O1：公司 = 组织，品牌 = 工作区；品牌一览 / 加品牌 / 切品牌）。 */
   organizations: OrganizationsAssembly
+  /** WP322：FAQ 表导入（上传表格后台认列、出定规矩卡、卡批了一行一张知识卡）。 */
+  faqImport: FaqImporter
   /**
    * WP66（52 O1）：这个进程里的**多套品牌模块**。
    *
@@ -2471,6 +2480,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP144：最外一层——`computer_use` 授权卡批了就记一次授权、带着它重跑这件事
   // WP154：选题卡批了 → 按卡片所属品牌开事项（钩子在品牌模块建好之后才挂上）
   const seoDecidedHook: SeoDecidedHook = {}
+  /** WP322：FAQ 导入器（知识口装好时才建；决定发生时现取）。 */
+  let faqImporter: FaqImporter | undefined
 
   /*
    * WP219（docs/90 §6）：已审的第三方内容更新。只在**开着**（桌面安装包给 `AGENTSWS_CONTENT_UPDATES=on`，
@@ -6466,6 +6477,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP322：「按问答导入」定规矩卡 / ③ 的整批卡被点了 → 一行一张知识卡（或整批生效 / 作废）
+    if (isFaqImportCard(item) || isFaqBatchCard(item)) {
+      await faqImporter?.onDecided(item)
+      return
+    }
     // WP323：记录去处的「定规矩」卡被决定 → 生效 / 换成新对照 / 不留（第一次就说不用）
     if (isRecordSinkCard(item)) return outboundLog.onDecided(item)
     // WP284（决策 275）：「以后都这样」批了（选「按提议改」）→ 这条职责的规矩里多一句；没批 / 维持现状什么都不落
@@ -7980,6 +7996,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onLeft: (person_id, by) => org.onMemberLeft(person_id, by),
   })
 
+  /*
+   * WP322（docs/102 §5.4，决策 670）：FAQ 表导入。上传一份表格 → 后台认列（常见列名先认，
+   * 认不出才问 AI：这个品牌的模型网关、`extraction` 档、不思考、封住输出）→ 出一张定规矩卡；
+   * 卡批了一行一张知识卡（① ② 当场生效，③ 交负责人一张整批卡）。
+   */
+  faqImporter = createFaqImporter({
+    clock,
+    knowledge,
+    approvals,
+    readSource: async (source) =>
+      (
+        await knowledgeSourceFile(source, {
+          ...(dbDir === undefined ? {} : { dataDir: dbDir }),
+          ...(blobs === undefined ? {} : { blobs }),
+        })
+      )?.bytes,
+    approvalFlow: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
+    approverOf: async (ws) => (await identity.getWorkspace(ws))?.owner_id,
+    mapper: async (actor, prompt) => {
+      const ws = actor.workspace_id
+      const own = ws === workspace.id
+      const models = own ? boot.ownModels : await brandModules.models(ws)
+      const ref = models.configured() ? models.defaultRef() : undefined
+      // 没接真模型（只有 stub）就只按规则认：stub 回的是确定性假话，不拿它当映射
+      if (ref === undefined || ref.provider === 'stub') return undefined
+      const gateway = own ? boot.ownGateway : await brandModules.gateway(ws)
+      const completion = await gateway.complete({
+        messages: [{ role: 'user', content: prompt }],
+        meta: {
+          workspace_id: ws,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+          run_id: `faq_map_${suggestSha(prompt).slice(0, 16)}` as never,
+          purpose: 'extraction',
+        },
+        model: ref,
+        max_output_tokens: SUGGEST_MAX_OUTPUT_TOKENS,
+        thinking: 'off',
+      })
+      return completion.text
+    },
+  })
+  const faqImport = faqImporter
+
   const knowledgePort: KnowledgePort = {
     search: (q) => knowledge.retrieval.search(q),
     cards: (filter, actor) => knowledge.store.list(filter, actor),
@@ -8033,7 +8093,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         subject_ref: uploadSubjectRef(actor.workspace_id),
         workspace_id: actor.workspace_id,
       })
-      return knowledge.intake.addSource({
+      const added = knowledge.intake.addSource({
         workspace_id: actor.workspace_id,
         kind: 'upload',
         ref: blobUri(key),
@@ -8048,6 +8108,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           size: checked.size,
         },
       })
+      // WP322：表格（xlsx / xls / csv）放到后台认一遍是不是问答表——不拖慢上传；认出来了出一张定规矩卡
+      faqImport.schedule(
+        {
+          person_id: actor.person_id,
+          workspace_id: actor.workspace_id,
+          assignment_id: actor.assignment_id,
+          role_id: actor.role_id,
+        },
+        added,
+        input.bytes,
+      )
+      return added
     },
     /*
      * WP99：删一个导入源。**先删字节，再立墓碑**——反过来的话，中间崩一次
@@ -10881,6 +10953,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     txn,
     outbound: outboundLog,
     approvals,
+    faqImport,
     work,
     meetings,
     /*
@@ -11019,6 +11092,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       for (const t of contentTimers) clearTimeout(t)
       // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写
       await background.settled()
+      // WP322：后台还在认的表先认完（别在关库之后再写卡）
+      await faqImport.settled()
       if (unmountWs) {
         // 先把 WS 收掉：否则还开着的连接会让 http.Server 的 close 一直挂着
         await unmountWs()
@@ -11118,6 +11193,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isInstructionRuleCard(out) ||
           // WP296 的旧主题升级卡（WP301 起点了只记一句作废了）
           isThemeUpgradeCard(out) ||
+          // WP322：FAQ 导入的定规矩卡 / 整批卡
+          isFaqImportCard(out) ||
+          isFaqBatchCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out)
         ) {

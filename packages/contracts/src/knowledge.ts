@@ -405,3 +405,63 @@ export interface MemoryStore {
 export const ROLE_SCOPED_FACT_SUBJECTS: Readonly<Record<string, readonly string[]>> = {
   [GROSS_MARGIN_SUBJECT_TYPE]: GROSS_MARGIN_VISIBLE_ROLES,
 }
+
+/* ── WP322（docs/102 §5.4，决策 670）：FAQ 表导入。**只加不删** ──────────── */
+
+/** FAQ 卡的 `subject.type`（一行问答一张卡；`subject.key` = `faq:<归一化后的问题>`）。 */
+export const FAQ_SUBJECT_TYPE = 'faq'
+
+/** 表里认的五种列。 */
+export type FaqField = 'question' | 'answer' | 'category' | 'product' | 'language'
+
+/** 一张工作表怎么对：哪一行是表头、每种列在第几列（0 起）。 */
+export interface FaqSheetMapping {
+  /** 工作表名（csv 是空串）。 */
+  sheet: string
+  /** 表头在第几行（Excel 行号，1 起）。 */
+  header_row: number
+  columns: { field: FaqField; col: number; header: string }[]
+  /** 这张表里能导的行数（有问题也有答案的）。 */
+  rows: number
+  /** 谁对的：规则一眼认出来的，还是 AI 读表头判的。 */
+  by: 'rules' | 'ai'
+}
+
+/** 「定规矩」卡（`policy_change` + `form: 'faq_import'`）上的选项：记下 / 只加新的 / 不用；只删了行时是撤下 / 留着。 */
+export type FaqImportOption = 'all' | 'new_only' | 'skip' | 'retire'
+
+/**
+ * 「这份表按问答导入」那张卡的载荷：映射 + 一两行预览 + 和库里比的结果。
+ * 行本身不进载荷——批了服务端按 `source_id` 重读原件（载荷不背整张表）。
+ */
+export interface FaqImportPayload {
+  form: 'faq_import'
+  source_id: string
+  filename: string
+  sheets: FaqSheetMapping[]
+  counts: { new: number; changed: number; same: number; removed: number; skipped: number }
+  preview: { question: string; answer: string }[]
+  /** 答案变了的前几条（改之前 / 改之后）。 */
+  changes: { question: string; before: string; after: string }[]
+  /** 上一次从同名表导入、这次表里没有了的前几条问题（卡不动，只提示）。 */
+  removed: string[]
+  options: { id: FaqImportOption; label: string }[]
+}
+
+/**
+ * ③ 公司模式：导入的卡落成 `proposed` 之后，给负责人的那一张「改东西」卡
+ * （`knowledge_update` + `form: 'faq_batch'`）。通过 = 整批生效（答案变了的顶掉旧的）；不要 = 整批作废。
+ */
+export interface FaqBatchPayload {
+  form: 'faq_batch'
+  source_id: string
+  filename: string
+  /** 这一批新建的卡（都是 `proposed`）。 */
+  card_ids: string[]
+  /** 通过之后要退役的旧卡（新卡 id → 被它顶掉的旧卡 id）。 */
+  replaces: Record<string, string>
+  counts: { new: number; changed: number }
+  preview: { question: string; answer: string }[]
+  before: null
+  after: string
+}
