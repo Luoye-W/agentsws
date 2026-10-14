@@ -20,7 +20,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpFromLine, Check, ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,8 @@ import { cn } from '@/lib/utils'
 const TIERS = ['package', 'company', 'department', 'position', 'role', 'personal'] as const
 
 function originLabel(entry: MemoryEntryData, t: (k: string) => string): string {
+  // WP320：AI 随工作自己记的
+  if (entry.written_by === 'ai') return t('memory.source.ai')
   if (entry.source === 'manual') return t('memory.source.manual')
   if (entry.origin === 'learned') return t('memory.source.learned')
   return t('memory.source.promoted')
@@ -60,11 +63,17 @@ function Entry({
   scope,
   canEdit,
   onChanged,
+  highlight = false,
+  promotable = true,
 }: {
   entry: MemoryEntryData
   scope: RailScope
   canEdit: boolean
   onChanged: () => void
+  /** WP320：从「记住了」小提醒点过来的那几条：高亮、滚到眼前。 */
+  highlight?: boolean
+  /** WP320：品牌层那几条没有「再上一层」。 */
+  promotable?: boolean
 }): React.ReactNode {
   const { lang } = useApp()
   const { t, mode } = useMode()
@@ -107,8 +116,22 @@ function Entry({
   })
 
   const when = entry.added_at ?? entry.learned_from?.at
+  const self = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (highlight) self.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [highlight])
   return (
-    <li className="rounded-md border p-2" data-testid="memory-entry" data-source={entry.source}>
+    <li
+      ref={self}
+      className={cn(
+        'rounded-md border p-2 transition-shadow',
+        highlight && 'ring-2 ring-primary/60',
+      )}
+      data-testid="memory-entry"
+      data-source={entry.source}
+      data-written-by={entry.written_by}
+      data-highlight={highlight ? 'true' : undefined}
+    >
       {editing ? (
         <div className="flex flex-col gap-1">
           <Textarea
@@ -149,10 +172,24 @@ function Entry({
         <>
           <p className="whitespace-pre-wrap break-words text-sm">{entry.body}</p>
           <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-            {entry.origin === 'learned' ? <Sparkles aria-hidden className="size-3" /> : null}
+            {entry.origin === 'learned' || entry.written_by === 'ai' ? (
+              <Sparkles aria-hidden className="size-3" />
+            ) : null}
             <span data-testid="memory-origin">{originLabel(entry, t)}</span>
-            {entry.added_by === undefined ? null : <span>· {entry.added_by}</span>}
+            {entry.added_by === undefined || entry.written_by === 'ai' ? null : (
+              <span>· {entry.added_by}</span>
+            )}
             {when === undefined ? null : <span>· {formatDate(when, lang)}</span>}
+            {/* WP320：AI 记的那条是从哪件事来的——点了回到那件事 */}
+            {entry.matter_id === undefined ? null : (
+              <Link
+                to={`/matters/${encodeURIComponent(entry.matter_id)}`}
+                className="underline-offset-2 hover:underline"
+                data-testid="memory-source-link"
+              >
+                · {t('memory.source.from')}
+              </Link>
+            )}
           </p>
         </>
       )}
@@ -181,20 +218,22 @@ function Entry({
             {t('memory.delete')}
           </Button>
           {/* 职责层往上是岗位层，岗位层往上是公司层——两层之上还有层，所以这个按钮总在 */}
-          <Button
-            size="xs"
-            variant="ghost"
-            data-testid="memory-promote"
-            disabled={promote.isPending}
-            onClick={() => {
-              // WP275：① ② 当场生效——二次确认
-              if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm'))) return
-              promote.mutate()
-            }}
-          >
-            <ArrowUpFromLine aria-hidden className="size-3.5" />
-            {t('memory.promote.up')}
-          </Button>
+          {promotable ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              data-testid="memory-promote"
+              disabled={promote.isPending}
+              onClick={() => {
+                // WP275：① ② 当场生效——二次确认
+                if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm'))) return
+                promote.mutate()
+              }}
+            >
+              <ArrowUpFromLine aria-hidden className="size-3.5" />
+              {t('memory.promote.up')}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {promote.data === undefined ? null : (
@@ -300,9 +339,72 @@ function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
   )
 }
 
+/** WP320：高亮多久（毫秒）——看见了就够，不一直亮着。 */
+const HIGHLIGHT_MS = 5000
+
+/** WP320：地址栏 `?memory=<条目 id,…>`（「记住了」小提醒点过来带的）→ 要高亮的那几条。 */
+function useFocusedMemory(): ReadonlySet<string> {
+  const [params] = useSearchParams()
+  const raw = params.get('memory') ?? ''
+  const [live, setLive] = useState(raw)
+  useEffect(() => {
+    setLive(raw)
+    if (raw === '') return
+    const timer = setTimeout(() => {
+      setLive('')
+    }, HIGHLIGHT_MS)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [raw])
+  return new Set(live.split(',').filter((x) => x !== ''))
+}
+
+/**
+ * WP320：品牌层那几条——只在小提醒点过来、要看的正好是品牌层时出（平时它在「上面继承的」里只数条数）。
+ * 能不能改照样由服务端说（品牌层只有负责人改得动）。
+ */
+function BrandMemory({
+  scope,
+  focused,
+  onChanged,
+}: {
+  scope: RailScope
+  focused: ReadonlySet<string>
+  onChanged: () => void
+}): React.ReactNode {
+  const { t } = useMode()
+  const brand = useQuery({
+    queryKey: ['layer-memory', 'company', ''],
+    queryFn: () => getLayerMemory('company'),
+  })
+  const entries = brand.data?.entries ?? []
+  if (entries.length === 0) return null
+  return (
+    <div className="flex flex-col gap-1" data-testid="memory-brand">
+      <p className="text-xs font-medium">{t('rail.tier.company')}</p>
+      <ul className="flex flex-col gap-2">
+        {entries.map((e) => (
+          <Entry
+            key={e.id ?? `${e.skill}:${e.section_id}`}
+            entry={e}
+            scope={scope}
+            canEdit={brand.data?.can_edit === true}
+            onChanged={onChanged}
+            highlight={e.id !== undefined && focused.has(e.id)}
+            promotable={false}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function MemoryPanel({ scope }: { scope: RailScope }): React.ReactNode {
   const { t } = useMode()
   const client = useQueryClient()
+  const focused = useFocusedMemory()
+  const brandFocused = [...focused].some((id) => id.split(':')[1] === 'company')
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -417,10 +519,13 @@ export function MemoryPanel({ scope }: { scope: RailScope }): React.ReactNode {
               scope={scope}
               canEdit={canEdit}
               onChanged={invalidate}
+              highlight={e.id !== undefined && focused.has(e.id)}
             />
           ))}
         </ul>
       )}
+
+      {brandFocused ? <BrandMemory scope={scope} focused={focused} onChanged={invalidate} /> : null}
 
       <Inherited scope={scope} />
       <TierCard tier={scope.tier} />

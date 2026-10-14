@@ -18,6 +18,7 @@ import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
 import { ArchiveSetting, HandoffDaysSetting } from '@/components/settings/archive-setting'
+import { AutoMemorySetting } from '@/components/settings/auto-memory-setting'
 import { BackgroundCard } from '@/components/settings/background-card'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
@@ -257,6 +258,8 @@ export function SettingsPage({
             {mode === 'solo' ? null : <HandoffDaysSetting />}
             {/* WP236：一次运行多久没动静算卡死、最多跑多久 */}
             <RunLimitsSetting />
+            {/* WP320：AI 边干活边记（默认开；关了只在说「记住」时记） */}
+            <AutoMemorySetting />
             {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
             <ContentUpdatesSetting />
             {identity === undefined ? null : (
