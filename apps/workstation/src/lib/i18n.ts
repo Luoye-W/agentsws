@@ -1654,6 +1654,7 @@ const zh: Table = {
   'kind.seo_report': '搜索报告',
   'kind.weekly_review': '经营一页纸',
   'kind.seo_topic': '新页面选题',
+  'kind.geo_watch': 'AI 回答监测设置',
   'kind.b2b_sender_choice': '发信邮箱',
   'seo.geo.title': '买家会问的问题（每周拿去问各 AI 平台）',
   'seo.geo.cost': '每周问 {n} 个 × {p} 个平台，约 {c} 积分',
@@ -1812,6 +1813,7 @@ const zh: Table = {
   'weekly.not_connected': '没接',
   'weekly.source': '出处：{source}',
   'category.seo_topic': '新页面选题',
+  'category.geo_watch': 'AI 回答监测设置',
   // WP171（docs/84）：B2B 那十四种卡的类别
   'category.inquiry_reply': '回询盘',
   'category.cold_outreach': '开发信',
@@ -5649,6 +5651,7 @@ const en: Table = {
   'kind.seo_report': 'Search report',
   'kind.weekly_review': 'Weekly one-pager',
   'kind.seo_topic': 'New page topic',
+  'kind.geo_watch': 'AI answer watch setup',
   'kind.b2b_sender_choice': 'Sending mailbox',
   'seo.geo.title': 'Questions buyers ask (asked to AI platforms weekly)',
   'seo.geo.cost': '{n} questions × {p} platforms a week, about {c} credits',
@@ -5801,6 +5804,7 @@ const en: Table = {
   'weekly.not_connected': 'Not connected',
   'weekly.source': 'Source: {source}',
   'category.seo_topic': 'New page topic',
+  'category.geo_watch': 'AI answer watch setup',
   // WP171（docs/84）
   'category.inquiry_reply': 'Inquiry reply',
   'category.cold_outreach': 'Cold email',

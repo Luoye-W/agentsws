@@ -293,6 +293,12 @@ export interface SeoWeeklyGeoPayload {
   estimate?: GeoCostEstimate
   /** WP166：每个市场各自的可见度（按市场分开算，不混在一起）。 */
   markets?: GeoMarketSummary[]
+  /** WP321：这一轮在历史表里的轮次 id（指标、前后对比都从历史表算）。 */
+  run_id?: string
+  /** WP321：这一周的几个数（规则算，数不经模型手；覆盖不足 90% 不出变化）。 */
+  metrics?: GeoWeekPoint
+  /** WP321：排队档还没回来的格数（回来后这张卡按同一周重出）。 */
+  pending_cells?: number
 }
 
 /** WP166：一个市场这一周的 AI 可见度小结。 */
@@ -566,6 +572,8 @@ export interface WatchRun {
   credits: number
   started_at: Iso8601
   finished_at?: Iso8601
+  /** WP321：这一轮的几句人话（没查成的、跳过 Claude 的……）。 */
+  notes?: string[]
 }
 
 /** 一次问答（Prompt × AI × 市场 × 那一轮）——**全文是真源**，指标都从它算、可重算。 */
@@ -666,6 +674,8 @@ export interface GeoHistoryExport {
     mentions: GeoMentionRecord[]
     ranks: SeoRankSnapshot[]
     brand_gsc: SeoBrandGscWeek[]
+    /** WP321：模型从回答里认出的其他品牌（只用来建议加竞品，不进指标）。 */
+    other_brands?: { answer_id: string; name: string }[]
   }
   /** `csv`：表名 → CSV 正文（UTF-8，带表头）。 */
   csv?: Record<string, string>
@@ -687,4 +697,295 @@ export interface GeoHistoryDeleteResult {
   mentions: number
   ranks: number
   brand_gsc: number
+}
+
+/* ------------------------------------------------------------------ */
+/* WP321（docs/99 §7 O2）：策略设定、每周监测、指标                        */
+/* ------------------------------------------------------------------ */
+
+/** 品牌在搜索上的阶段（AI 按品牌档案与 Search Console 判；决定追几条、带品牌名几条）。 */
+export type GeoBrandStage = 'new' | 'growing' | 'established'
+
+/**
+ * 决策 531（Luoye 10-14 改）：「带品牌名几条」**不预设**——策略设定时 AI 按品类 / 阶段 / 市场建议、
+ * 用户确认。只留这一个兜底值：没模型或模型没给出像样的建议时追几条。
+ */
+export const GEO_STRATEGY_FALLBACK_PROMPTS = 5
+
+/** 一个方向追几条（策略里的「各方向占多少」）。 */
+export interface GeoStrategyTopicShare {
+  topic: GeoPromptTopic
+  count: number
+}
+
+/**
+ * WP321：一份「GEO 关注设置」的策略建议（首次 / 改策略时出；用户确认或改了才落成 `BrandWatch`）。
+ * `by: 'ai'` = 模型按品牌档案给的；`'rules'` = 没模型时的兜底（追 5 条）。
+ */
+export interface GeoWatchStrategy {
+  by: 'ai' | 'rules'
+  /** 品类（模型从档案里认出来的；认不出不写）。 */
+  category?: string
+  stage?: GeoBrandStage
+  /** 建议追几条（已选）。 */
+  prompt_limit: number
+  /** 其中带品牌名的几条（不预设，按品类 / 阶段建议）。 */
+  branded: number
+  /** 各方向占几条（合计 = `prompt_limit`）。 */
+  topic_mix: GeoStrategyTopicShare[]
+  /** 建议已选的 Prompt（`selected: true`）。 */
+  prompts: GeoQuestion[]
+  /** 其余候选（`selected: false`，按方向分组展示）。 */
+  candidates: GeoQuestion[]
+  /** 建议的竞品（3–5 个；首次出「改东西」卡）。 */
+  competitors: BrandWatchCompetitor[]
+  /** 建议的关注关键词（SEO 排名用）。 */
+  keywords: BrandWatchKeyword[]
+  /** 关注的 AI（决策 460 / 530：默认四家，各自可关）。 */
+  platforms: AiPlatform[]
+  /** 几句为什么（人话、短）。 */
+  why: string[]
+  created_at: Iso8601
+}
+
+/** 云上没给价时估算用的兜底价（积分 / 次；界面标「估」）。真价以云上价目为准。 */
+export const GEO_ESTIMATE_FALLBACK_PRICES = {
+  ai_answer: 0.2,
+  claude: 3.6,
+  rank_check: 0.1,
+} as const
+/** 单格 ≥ 这个积分（Claude）时，「现在跑一轮」要一轮合并确认一次（docs/75，不逐格弹）。 */
+export const GEO_CONFIRM_UNIT_CREDITS = 1
+/** 每月按几轮折算（每周 4.33、每两周 2.17、每月 1、只手动 0）。 */
+export const GEO_RUNS_PER_MONTH: Readonly<Record<BrandWatchFrequency, number>> = {
+  weekly: 4.33,
+  biweekly: 2.17,
+  monthly: 1,
+  manual: 0,
+}
+
+/** WP321（决策 460 / 469）：一轮大概花多少——按 AI 分开、Claude 单列。 */
+export interface GeoRunEstimate {
+  route: 'official' | 'byo' | 'none'
+  prompts: number
+  markets: number
+  /** 每个 AI 这一轮问几格（Prompt × 市场）、单价、小计。 */
+  platforms: { platform: AiPlatform; cells: number; unit_credits?: number; credits?: number }[]
+  /** 关注词排名这一轮查几格（词 × 市场 × 设备）。 */
+  rank?: { cells: number; unit_credits?: number; credits?: number }
+  /** 这一轮合计（官方那条路按单价；自带 key 是 0；没价不写）。 */
+  credits?: number
+  /** 按频率折算的每月（只手动 = 0）。 */
+  credits_per_month?: number
+  /** 决策 460：Claude 那一格旁写清每月大概多少。 */
+  claude_credits_per_month?: number
+  /** 有单价是兜底估的（云上没给价）。 */
+  estimated_prices?: boolean
+  /** 单格 ≥ {@link GEO_CONFIRM_UNIT_CREDITS}（Claude）：「现在跑一轮」先合并确认一次。 */
+  needs_confirm: boolean
+}
+
+/** `geo_watch` 卡（改东西家族：通过 / 改 / 不要）的 payload。 */
+export type GeoWatchCardPayload =
+  | {
+      form: 'geo_watch_setup'
+      strategy: GeoWatchStrategy
+      estimate: GeoRunEstimate
+      /** 第一次设定（不是改策略）。 */
+      first: boolean
+    }
+  | {
+      form: 'geo_watch_competitors'
+      /** 回答里反复出现、还没在竞品名单里的品牌（≥ 3 条回答）。 */
+      competitors: (BrandWatchCompetitor & { answers: number })[]
+      week_of: string
+    }
+
+/** 指标的几条硬规矩（docs/99 §5.3，借 open-seo）。 */
+export const GEO_TREND_WEEKS = 4
+/** 任一期覆盖（拿到回答的格 ÷ 计划的格）不到这个数，就不出变化。 */
+export const GEO_TREND_MIN_COVERAGE = 0.9
+
+/**
+ * WP321：一周（或一段）的 GEO 几个数——**规则算，数不经模型手**。分母只算拿到回答的
+ * （失败 / 空回答不算「没提到」）。没有拿到回答时比率不写（不出 0）。
+ */
+export interface GeoWeekPoint {
+  /** 周一日期（`YYYY-MM-DD`）。 */
+  week: string
+  /** 计划几格 / 拿到回答几格（`ok`）。 */
+  planned: number
+  ok: number
+  mentioned: number
+  cited: number
+  /** 提及率 / 引用率（0–1）。 */
+  mention_rate?: number
+  citation_rate?: number
+  /** 平均名次（只在提到我们的回答里平均；在已知品牌里排）。 */
+  avg_rank?: number
+  /** 声量份额：我们被提到的次数 ÷（我们 + 各竞品被提到的次数）。 */
+  sov?: number
+  /** 覆盖 = ok ÷ planned。 */
+  coverage?: number
+  /** 近 4 周滚动的提及率。 */
+  mention_rate_4w?: number
+  /** 与上一周比的提及率变化（百分点，只比两期都拿到回答的格；任一期覆盖 < 90% 不写）。 */
+  change_pp?: number
+}
+
+/** 一条趋势线：全部 / 某个 AI / 某个市场 / 带不带品牌名。 */
+export interface GeoTrendLine {
+  kind: 'all' | 'platform' | 'market' | 'branded'
+  /** `all`、平台名、国家码、`branded` / `unbranded`。 */
+  key: string
+  points: GeoWeekPoint[]
+}
+
+/** 一个品牌（我们 / 竞品）这一周被提到几次与声量份额。 */
+export interface GeoBrandShare {
+  entity: string
+  name: string
+  mentioned: number
+  sov?: number
+}
+
+/** 被引用的一个站（按域名）或一页（按 `url_norm`）。 */
+export interface GeoCitedSource {
+  domain: string
+  /** 按页面看时才有。 */
+  url_norm?: string
+  url?: string
+  title?: string
+  site_kind: CitedSiteKind
+  /** 我们 / 竞品 / 站外。 */
+  group: 'ours' | 'competitor' | 'offsite'
+  /** 这一段被引用几次、出现在几条 Prompt、哪几个 AI。 */
+  citations: number
+  prompts: number
+  platforms: AiPlatform[]
+  /** 上一段（同样长）被引用几次；上一段没有、这一段有 = `new`。 */
+  previous: number
+  new: boolean
+}
+
+/** 同一格（Prompt × AI × 市场）这周与上周比（只比两期都拿到回答的格，有变化才列）。 */
+export interface GeoCellChange {
+  prompt_id: string
+  prompt_text: string
+  platform: AiPlatform
+  market: string
+  mentioned: { before: boolean; after: boolean }
+  rank?: { before?: number; after?: number }
+  sentiment?: { before?: GeoMentionRecord['sentiment']; after?: GeoMentionRecord['sentiment'] }
+  /** 引用来源的增减（按域名）。 */
+  sources_added: string[]
+  sources_removed: string[]
+  /** 全文一字没变。 */
+  same_text: boolean
+}
+
+/** 一个关注词的排名行（每个市场 × 设备分开）。 */
+export interface RankKeywordRow {
+  keyword: string
+  market: string
+  device: 'mobile' | 'desktop'
+  /** 这周第几（20 名外不写）。 */
+  rank?: number
+  previous?: number
+  four_weeks_ago?: number
+  /** 与上周比（正 = 升了几名；上周没数不写）。 */
+  change?: number
+  url?: string
+  features: SerpFeatures
+  aio_mentions_us: boolean
+  aio_cites_us: boolean
+  /** Search Console 的平均排名（真实，同一个词；没有就不写）。 */
+  gsc_position?: number
+}
+
+export interface RankMetricsView {
+  week?: string
+  rows: RankKeywordRow[]
+  /** 只平均进了前 20 的词。 */
+  avg_rank?: number
+  in_top20: number
+  out_of_20: number
+  entered_top10: number
+  left_top10: number
+}
+
+/** WP321：看板要的全部 GEO / SEO 数（O3 用组件画；这里只给数）。 */
+export interface GeoMetricsView {
+  /** 最新一周（周一日期）；还没有历史不写。 */
+  week?: string
+  trends: GeoTrendLine[]
+  /** 最新一周：我们与各竞品被提到几次、声量份额。 */
+  brands: GeoBrandShare[]
+  /** 最新一周提到我们的回答的情感（AI 判断，附原话）。 */
+  sentiment: { positive: number; neutral: number; negative: number; by: 'ai' }
+  /** 近 4 周被引用最多的站 / 页（各前 10），我们自己的页、竞品的页单列。 */
+  top_domains: GeoCitedSource[]
+  top_pages: GeoCitedSource[]
+  our_pages: GeoCitedSource[]
+  competitor_pages: GeoCitedSource[]
+  changes: GeoCellChange[]
+  rank: RankMetricsView
+  brand_gsc: {
+    connected: boolean
+    weeks: { week: string; impressions: number; clicks: number; position?: number }[]
+  }
+  notes: string[]
+}
+
+/** WP321：「GEO 关注设置」面板 / 设定卡要的一份读视图。 */
+export interface GeoWatchView {
+  watch: BrandWatch
+  /** 这一轮（按现在的设置）大概花多少。 */
+  estimate: GeoRunEstimate
+  /** 策略定没定：`needed` = 还没定（出设定卡）；`pending_card` = 卡在等人；`done` = 定过了。 */
+  setup: 'needed' | 'pending_card' | 'done'
+  setup_card_id?: string
+  /** 最近几轮（每种最多 3 轮，新的在前）。 */
+  last_runs: WatchRun[]
+  /** 排队档还没回来的任务数。 */
+  pending_tasks: number
+  search_data: 'configured' | 'not_configured'
+  /** 没连 Search Console：品牌词那一块不显示，提示去连（决策 468）。 */
+  gsc_connected: boolean
+  /** 几句人话（跳过 Claude 的原因……）。 */
+  notes: string[]
+}
+
+/** WP321：改「GEO 关注设置」（用户确认 / 改策略；每样都可以单给）。 */
+export interface GeoWatchPatch {
+  /** 整份采用一份策略（设定卡「通过」/「改」走这里）。 */
+  strategy?: GeoWatchStrategy
+  brand_aliases?: string[]
+  competitors?: BrandWatchCompetitor[]
+  keywords?: BrandWatchKeyword[]
+  platforms?: AiPlatform[]
+  markets_off?: string[]
+  frequency?: BrandWatchFrequency
+  rank_device?: BrandWatch['rank_device']
+  enabled?: boolean
+  /** 已选几条（5 / 10 / 20，不超过上限）。 */
+  prompt_limit?: number
+  /** 已选 = 这几条（其余变候选）。 */
+  select?: string[]
+  /** 加几条（人加的，`origin: 'human'`）。 */
+  add_prompts?: { text: string; topic?: GeoPromptTopic; selected?: boolean }[]
+  /** 改字 = 归档旧的 + 新建一条。 */
+  edit_prompts?: { id: string; text: string }[]
+  archive_prompts?: string[]
+}
+
+/** WP321：「现在跑一轮」的结果。要合并确认时不跑、只回估算。 */
+export interface GeoWatchRunResult {
+  started: boolean
+  /** 单格 ≥ 1 积分（Claude）还没确认：带上 `confirm: true` 再来一次。 */
+  needs_confirm?: boolean
+  estimate: GeoRunEstimate
+  runs: WatchRun[]
+  pending_tasks: number
+  notes: string[]
 }

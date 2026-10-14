@@ -72,6 +72,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   theme_choice: ['approve', 'snooze', 'open'],
   // WP304：买下 / 先不买
   theme_purchase: ['approve', 'reject', 'snooze', 'open'],
+  // WP321：GEO 关注设置——通过 / 改（在卡上改了再批）/ 不要
+  geo_watch: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -105,6 +107,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   image_budget: { approve: '继续出', reject: '不出了', snooze: '稍后' },
   theme_choice: { approve: '就用这个', snooze: '稍后' },
   theme_purchase: { approve: '买下', reject: '先不买', snooze: '稍后' },
+  geo_watch: { approve: '就这样', reject: '不要', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -151,6 +154,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   // WP304：选主题只在店里多一份未发布副本（线上不动）；买主题花 560 积分
   theme_choice: 'low',
   theme_purchase: 'medium',
+  // WP321：只改本机的关注设置；Claude 那份每月积分在卡上写清
+  geo_watch: 'low',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -199,6 +204,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   image_budget: 1,
   theme_choice: 1,
   theme_purchase: 1,
+  geo_watch: 2,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,
