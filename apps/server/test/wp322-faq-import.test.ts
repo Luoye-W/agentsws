@@ -243,10 +243,9 @@ describe('WP322 ① 个人：一张定规矩卡，记下当场生效', () => {
       addCsv('f.csv', '问题,答案\n几天到？,3–5 天。\n保修多久？,一年。\n'),
     )
     expect(fewer?.title).toBe('「f.csv」里删了 1 条问答')
-    expect((fewer?.payload as FaqImportPayload).options.map((o) => o.label)).toEqual([
-      '撤下',
-      '留着',
-    ])
+    expect(
+      ((fewer as ApprovalItem).payload as FaqImportPayload).options.map((o) => o.label),
+    ).toEqual(['撤下', '留着'])
     await imp.onDecided(decided(fewer as ApprovalItem, UP, { option: 'retire' }))
     expect(Object.keys(answers()).sort()).toEqual(['保修多久？', '几天到？'])
   })
@@ -263,7 +262,10 @@ describe('WP322 ③ 公司：内容交负责人一张整批卡', () => {
     expect(faqCardsOf(knowledge, WS).every((c) => c.status === 'proposed')).toBe(true)
     const batch = bus.items.find((i) => i.kind === 'knowledge_update')
     expect(batch?.routing.recipients.map((r) => r.person)).toEqual([OWNER])
-    expect((batch?.payload as FaqBatchPayload).counts).toEqual({ new: 3, changed: 0 })
+    expect(((batch as ApprovalItem).payload as FaqBatchPayload).counts).toEqual({
+      new: 3,
+      changed: 0,
+    })
     await imp.onDecided(decided(batch as ApprovalItem, OWNER, {}))
     expect(active()).toHaveLength(3)
   })
