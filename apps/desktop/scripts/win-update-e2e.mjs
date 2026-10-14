@@ -16,6 +16,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import {
+  copyFileSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -255,24 +256,15 @@ function registeredVersion() {
   ).trim()
 }
 
-/** 模拟一个任务栏固定（老的平铺布局下它指 `<安装目录>\agentsws.exe`），迁移后要被改指 current。 */
-function fakePin(lnk, target) {
+/**
+ * 模拟一个任务栏固定：把老版本建的开始菜单快捷方式（指 `<安装目录>\agentsws.exe`）抄一份到任务栏固定目录
+ * ——迁移后它要被改指 current。
+ */
+function fakePin(from, lnk) {
+  if (!existsSync(from)) return '没有可抄的开始菜单快捷方式'
   mkdirSync(dirname(lnk), { recursive: true })
-  const out = spawnSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:AGENTSWS_LNK); $s.TargetPath = $env:AGENTSWS_TARGET; $s.Save()',
-    ],
-    {
-      encoding: 'utf8',
-      windowsHide: true,
-      env: { ...process.env, AGENTSWS_LNK: lnk, AGENTSWS_TARGET: target },
-    },
-  )
-  return `${out.status}${out.stderr ? `：${out.stderr.trim().slice(0, 300)}` : ''}`
+  copyFileSync(from, lnk)
+  return '抄好了'
 }
 
 async function main() {
@@ -310,7 +302,7 @@ async function main() {
   const yml = join(dirname(oldExe), 'resources', 'app-update.yml')
   writeFileSync(yml, patchAppUpdateYml(readFileSync(yml, 'utf8'), `${feedUrl}/beta`))
   const pins = shortcutPaths()
-  const pinOut = fakePin(pins.pinned, oldExe)
+  const pinOut = fakePin(pins.startMenu, pins.pinned)
   step(`A 模拟了一个任务栏固定（${pinOut}）→ ${shortcutTarget(pins.pinned)}`)
 
   const userData = defaultUserData(process.env.APPDATA ?? tmpdir(), pkgOf(oldExe).name)

@@ -19,6 +19,7 @@ import {
   computedImports,
   entryNameFor,
   exportTargets,
+  inStringOrComment,
   isBrowserFile,
   isCommonJsFile,
   literalRequires,
@@ -95,6 +96,19 @@ describe('纯函数', () => {
     const out = rewriteLocation('class A { async import(a) { return import(a) } }', 'r.js')
     expect(out).toContain('async import(a)')
     expect(out).toContain('return __aw_import(__aw_m_url, a)')
+  })
+
+  it('字符串与行注释里的不改（那是数据：给子进程 node -e 跑的脚本之类）', () => {
+    const out = rewriteLocation(
+      'const s = \'await import(process.argv[1])\'\nconst t = import(x) // import(y)\nconst u = "import.meta.url" + import.meta.url\n',
+      'r.js',
+    )
+    expect(out).toContain("const s = 'await import(process.argv[1])'")
+    expect(out).toContain('const t = __aw_import(__aw_m_url, x) // import(y)')
+    expect(out).toContain('const u = "import.meta.url" + __aw_m_url')
+    expect(inStringOrComment('a = "x" + y', 9)).toBe(false)
+    expect(inStringOrComment('a = "x\\" y" + z', 8)).toBe(true)
+    expect(computedImports("const s = 'import(a)'").computedImport).toBe(false)
   })
 
   it('运行时按名字 require 的包、CJS 文件里的字面量 require', () => {

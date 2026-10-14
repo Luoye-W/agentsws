@@ -290,6 +290,45 @@ export const BANNER = [
 /** 算出来的动态 import（`import(x)`，不是字面量；`obj.import(...)` 这种方法调用不算）。 */
 const COMPUTED_IMPORT = /(?<![\w$.])import\s*\(\s*(?![\s'"`)])/g
 
+/**
+ * `offset` 处是不是在同一行的字符串 / 模板字符串 / 行注释里（只看这一行，从行首数引号）。
+ * 10-14 CI 实测：桌面壳把一段要交给子进程 `node -e` 跑的脚本写成字符串，里面的 `import(...)` 被当成代码改了，
+ * 子进程报 `__aw_import is not defined`。字符串里的东西是数据，不改。
+ */
+export function inStringOrComment(text, offset) {
+  const start = text.lastIndexOf('\n', offset - 1) + 1
+  let quote = ''
+  for (let i = start; i < offset; i += 1) {
+    const c = text[i]
+    if (quote !== '') {
+      if (c === '\\') i += 1
+      else if (c === quote) quote = ''
+      continue
+    }
+    if (c === '/' && text[i + 1] === '/') return true
+    if (c === "'" || c === '"' || c === '`') quote = c
+  }
+  return quote !== ''
+}
+
+/** 只在代码里（不在字符串 / 注释里）替换。 */
+function replaceInCode(text, re, replacement) {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`)
+  return text.replace(g, (...args) => {
+    const match = args[0]
+    const offset = args[args.length - 2]
+    if (inStringOrComment(text, offset)) return match
+    return typeof replacement === 'function' ? replacement(match, offset) : replacement
+  })
+}
+
+/** 代码里（不算字符串 / 注释）有没有匹配。 */
+function testInCode(text, re) {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`)
+  for (const m of text.matchAll(g)) if (!inStringOrComment(text, m.index)) return true
+  return false
+}
+
 /** `async import(…) {` 这种叫 import 的方法定义不是动态 import。 */
 const METHOD_NAMED_IMPORT = /(?:\basync\s+|^\s*)import\s*\([^()]*\)\s*\{/gm
 
@@ -302,6 +341,7 @@ export function computedImports(code) {
   const constSpecs = []
   let computedImport = false
   for (const m of stripped.matchAll(new RegExp(`${COMPUTED_IMPORT.source}([^)]*)\\)?`, 'g'))) {
+    if (inStringOrComment(stripped, m.index)) continue
     const arg = (m[1] ?? '').trim()
     const id = /^[A-Za-z_$][\w$]*$/.test(arg) ? arg : undefined
     const lit =
@@ -392,18 +432,17 @@ export function rewriteLocation(code, rel) {
   let body = code.startsWith('#!') ? code.slice(code.indexOf('\n') + 1) : code
   const lit = JSON.stringify(rel)
   const head = []
-  const meta = /import\.meta\.(url|dirname|filename|main|resolve)\b/.test(body)
+  const meta = testInCode(body, /import\.meta\.(url|dirname|filename|main|resolve)\b/)
   const dyn = computedImports(body)
   const computed = dyn.computedImport || dyn.constSpecs.length > 0
   if (meta || computed) {
-    body = body
-      .replace(/import\.meta\.url\b/g, '__aw_m_url')
-      .replace(/import\.meta\.dirname\b/g, '__aw_m_dirname')
-      .replace(/import\.meta\.filename\b/g, '__aw_m_filename')
-      .replace(/import\.meta\.resolve\s*\(/g, '__aw_resolve(__aw_m_url, ')
-    const usesMain = /import\.meta\.main\b/.test(body)
+    body = replaceInCode(body, /import\.meta\.url\b/, '__aw_m_url')
+    body = replaceInCode(body, /import\.meta\.dirname\b/, '__aw_m_dirname')
+    body = replaceInCode(body, /import\.meta\.filename\b/, '__aw_m_filename')
+    body = replaceInCode(body, /import\.meta\.resolve\s*\(/, '__aw_resolve(__aw_m_url, ')
+    const usesMain = testInCode(body, /import\.meta\.main\b/)
     if (usesMain) {
-      body = body.replace(/import\.meta\.main\b/g, '__aw_m_main')
+      body = replaceInCode(body, /import\.meta\.main\b/, '__aw_m_main')
       head.push(`const __aw_m_main = __aw_main(${lit});`)
     }
     if (computed) body = replaceComputedImports(body)
@@ -425,7 +464,7 @@ function replaceComputedImports(body) {
     const at = m.index + m[0].indexOf('import')
     keep.add(at)
   }
-  return body.replace(new RegExp(COMPUTED_IMPORT.source, 'g'), (match, offset) =>
+  return replaceInCode(body, COMPUTED_IMPORT, (match, offset) =>
     keep.has(offset) ? match : '__aw_import(__aw_m_url, ',
   )
 }

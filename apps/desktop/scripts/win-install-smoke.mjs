@@ -34,7 +34,7 @@ import {
 } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // ── 纯函数（单测覆盖，mac 上也能跑）─────────────────────────────────────
@@ -298,18 +298,17 @@ export function installLayout(dir) {
   return { link, target, apps, flatExe: existsSync(join(dir, 'agentsws.exe')) }
 }
 
-/** 快捷方式（.lnk）指向哪（PowerShell 的 WScript.Shell；路径经环境变量传，不进命令行）。 */
+/**
+ * 快捷方式（.lnk）指向哪。用 Shell.Application 读（WScript.Shell 在带中文的路径上抛「Value does not fall within
+ * the expected range」，10-14 CI 实测）；目录与文件名经环境变量传，不进命令行。
+ */
 export function shortcutTarget(lnk) {
   if (!existsSync(lnk)) return undefined
-  return (
-    powershell(
-      '(New-Object -ComObject WScript.Shell).CreateShortcut($env:AGENTSWS_LNK).TargetPath',
-      {
-        ...process.env,
-        AGENTSWS_LNK: lnk,
-      },
-    ).trim() || undefined
-  )
+  const out = powershell(
+    '$f = (New-Object -ComObject Shell.Application).Namespace($env:AGENTSWS_LNK_DIR).ParseName($env:AGENTSWS_LNK_NAME); if ($f) { $f.GetLink.Path }',
+    { ...process.env, AGENTSWS_LNK_DIR: dirname(lnk), AGENTSWS_LNK_NAME: basename(lnk) },
+  ).trim()
+  return out === '' ? `（读不出：${lnk}）` : out
 }
 
 /** 安装器建的那几个快捷方式（开始菜单、桌面、任务栏固定）的位置。 */
