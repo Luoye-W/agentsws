@@ -17,6 +17,8 @@ export function firstUrl(job: ActionJob): string | undefined {
 }
 
 export async function openAdsTab(job: ActionJob): Promise<TabDriver | { why: string }> {
+  // WP329：Reddit 的活一律新开一个标签页（用户可能正在别的 Reddit 页面上看东西，不抢他那一页）
+  if (job.plan.platform === 'reddit') return openNewTab(job)
   const hosts = job.plan.allow.hosts
   const tabs = await chrome.tabs.query({})
   const mine = tabs.filter((t) => t.id !== undefined && hostMatches(hostOfUrl(t.url ?? ''), hosts))
@@ -25,9 +27,13 @@ export async function openAdsTab(job: ActionJob): Promise<TabDriver | { why: str
     await chrome.tabs.update(pick.id, { active: true })
     return chromeTabDriver(pick.id)
   }
+  return openNewTab(job)
+}
+
+async function openNewTab(job: ActionJob): Promise<TabDriver | { why: string }> {
   const url = firstUrl(job)
   if (url === undefined) return { why: '这件活没写从哪一页开始。' }
   const made = await chrome.tabs.create({ url, active: true })
-  if (made.id === undefined) return { why: '没能打开广告后台的标签页。' }
+  if (made.id === undefined) return { why: '没能打开要操作的那个标签页。' }
   return chromeTabDriver(made.id)
 }

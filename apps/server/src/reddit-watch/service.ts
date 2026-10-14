@@ -14,8 +14,10 @@
  * 没有任何冷却 / 占比 / 身份声明之类的规矩。
  */
 import {
+  normalizeSubreddit,
   Pace,
   REDDIT_PACE_LIMITS,
+  REDDIT_READ_MAX_PARTS,
   type RedditListingItem,
   type RedditReadJob,
   type RedditReadNextResponse,
@@ -129,7 +131,19 @@ export interface RedditWatchAssembly {
   sweep(): void
   /** Reddit 号的节奏（WP329 写也记在这一本上：同一个号一次一件）。 */
   readonly pace: Pace
+  /**
+   * WP329（决策 764）：这个版最近读到的版规（插件借品牌号会话读 `about/rules.json`，巡查时顺手读；
+   * 自家版块每轮都读，别的版要先 {@link wantRules}）。没读过回 `undefined`。
+   */
+  rules(subreddit: string): { rules: string[]; at: Iso8601 } | undefined
+  /** WP329：下一轮巡查顺手读这几个版的版规（起草时读不到就记一笔，下次就有了）。 */
+  wantRules(subreddit: string): void
 }
+
+/** WP329：版规多久算旧（旧了下一轮再读一次）。 */
+export const RULES_FRESH_MS = 7 * 86_400_000
+/** WP329：一轮巡查最多顺手读几个版的版规（一件活最多 12 路）。 */
+const RULES_PER_RUN = 3
 
 /** `sweepNow` 默认最多等插件多久。 */
 export const WEEKLY_WAIT_MS = 10 * 60_000
@@ -390,6 +404,21 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
           }),
         )
       }
+    // WP329（决策 764）：顺手读版规——自家版块与起草时要过的版，旧了（7 天）才读，一轮最多 3 个
+    if (want.includes('inbox') || want.includes('own_sub')) {
+      const wanted = store.kv<string[]>(ws, 'rules_wanted') ?? []
+      const subs = [...new Set([...s.own_subreddits, ...wanted].map((x) => x.toLowerCase()))]
+      let n = 0
+      for (const sub of subs) {
+        if (n >= RULES_PER_RUN || out.length >= REDDIT_READ_MAX_PARTS) break
+        const have = store.kv<{ rules: string[]; at: Iso8601 }>(ws, `rules:${sub}`)
+        if (have !== undefined && nowMs() - ms(have.at) < RULES_FRESH_MS) continue
+        const norm = normalizeSubreddit(sub)
+        if (norm === undefined) continue
+        out.push({ key: `rules:${sub}`, kind: 'sub_rules', subreddit: norm, max_pages: 1 })
+        n += 1
+      }
+    }
     return out
   }
 
@@ -522,6 +551,16 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       { fetched: number; fresh: number; bad: string[]; gap: boolean }
     >()
     for (const part of res.parts) {
+      // WP329：版规那几路不是条目，记下就走（读不成不算这一块失败）
+      if (part.key.startsWith('rules:')) {
+        const sub = part.key.slice('rules:'.length)
+        if (part.ok && part.rules !== undefined) {
+          store.setKv(ws, `rules:${sub}`, { rules: part.rules, at: options.now() })
+          const left = (store.kv<string[]>(ws, 'rules_wanted') ?? []).filter((x) => x !== sub)
+          store.setKv(ws, 'rules_wanted', left)
+        }
+        continue
+      }
       const p = partOfKey(part.key)
       const st = stats.get(p) ?? { fetched: 0, fresh: 0, bad: [], gap: false }
       stats.set(p, st)
@@ -737,6 +776,17 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       }
     },
     settings,
+    rules: (subreddit) =>
+      store.kv<{ rules: string[]; at: Iso8601 }>(
+        ws,
+        `rules:${subreddit.replace(/^\/?r\//u, '').toLowerCase()}`,
+      ),
+    wantRules: (subreddit) => {
+      const sub = normalizeSubreddit(subreddit)?.toLowerCase()
+      if (sub === undefined) return
+      const now = store.kv<string[]>(ws, 'rules_wanted') ?? []
+      if (!now.includes(sub)) store.setKv(ws, 'rules_wanted', [...now, sub].slice(-20))
+    },
     updateSettings: (patch) => writeSettings(store, ws, patch),
     items: (query) => store.list(ws, query),
     runs: (query) => store.runs(ws, query),

@@ -158,6 +158,7 @@ export function Options(): React.ReactNode {
       )}
 
       <AdsSection paired={status?.paired === true} />
+      {/* WP328 读 + WP329 写共用一行：连上了读写都用 */}
       <RedditSection paired={status?.paired === true} />
 
       <section className="ws-card">

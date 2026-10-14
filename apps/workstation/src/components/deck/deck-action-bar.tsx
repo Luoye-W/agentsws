@@ -42,7 +42,9 @@ export function quickActions(card: DeckCard): DeckAction[] {
     a === verbs.primary ? 0 : 1 + (verbs.secondary as readonly DeckAction[]).indexOf(a)
   // WP324：连接卡 / 配置卡的主按钮（连接 / 保存）在卡身里——底下那排不再出一个点不对的「接着做」
   const form = (card.detail.payload as { form?: unknown } | undefined)?.form
-  const bodyPrimary = form === 'connect_request' || form === 'setup_request'
+  // WP329：Reddit「发出去」卡的「发送」也在卡身里（要带上卡上改过的字）
+  const bodyPrimary =
+    form === 'connect_request' || form === 'setup_request' || form === 'reddit_write'
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
     .filter((a) => !(bodyPrimary && a === 'approve'))

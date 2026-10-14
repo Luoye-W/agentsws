@@ -31,6 +31,8 @@ export type RedditReadKind =
   | 'sub_comments'
   /** 某一帖下面的评论（平铺）。 */
   | 'post_comments'
+  /** WP329（决策 764）：某个版块的版规（起草时当上下文；只读，一页）。 */
+  | 'sub_rules'
 
 export interface RedditReadRequest {
   /** 这一路的键（本机服务按它记「上次读到哪」）：`inbox`、`sub_new:inmoxr`… */
@@ -92,6 +94,10 @@ export function redditReadUrl(req: RedditReadRequest, after?: string): string {
       path = `/comments/${req.post_id ?? ''}/.json`
       q.set('sort', 'new')
       break
+    case 'sub_rules':
+      path = `/r/${req.subreddit ?? ''}/about/rules.json`
+      q.delete('limit')
+      break
   }
   return `${REDDIT_READ_ORIGIN}${path}?${q.toString()}`
 }
@@ -104,6 +110,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   /^\/r\/[A-Za-z0-9_]{2,21}\/new\/\.json$/u,
   /^\/r\/[A-Za-z0-9_]{2,21}\/comments\/\.json$/u,
   /^\/comments\/[a-z0-9]{3,12}\/\.json$/u,
+  // WP329：版规（只读）
+  /^\/r\/[A-Za-z0-9_]{2,21}\/about\/rules\.json$/u,
   /^\/api\/me\.json$/u,
 ]
 
@@ -130,7 +138,7 @@ export function checkRedditReadUrl(url: string): string | undefined {
 export function checkRedditReadRequest(req: RedditReadRequest): string | undefined {
   if (typeof req.key !== 'string' || req.key === '' || req.key.length > 80) return '这一路没有键。'
   if (
-    (req.kind === 'sub_new' || req.kind === 'sub_comments') &&
+    (req.kind === 'sub_new' || req.kind === 'sub_comments' || req.kind === 'sub_rules') &&
     !SUB_NAME.test(req.subreddit ?? '')
   )
     return '版块名不对。'

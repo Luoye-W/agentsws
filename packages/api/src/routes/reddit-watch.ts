@@ -130,6 +130,8 @@ const resultSchema = z
             pages: z.number().int().min(0).max(10),
             reached_stop: z.boolean(),
             message: z.string().max(600).optional(),
+            // WP329（决策 764）：`sub_rules` 那一路读到的版规
+            rules: z.array(z.string().max(600)).max(30).optional(),
           })
           .strict(),
       )

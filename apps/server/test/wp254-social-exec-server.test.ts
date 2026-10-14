@@ -98,6 +98,10 @@ describe('WP254 回帖卡批了就发（Reddit：没有 OAuth → 官方号浏�
         own_subreddit: true,
       }),
     )
+    // WP329（决策 761）：Reddit 回帖默认走插件（人点发送）；这里打开「插件不在线时直发」开关，钉住官方号浏览器那条备用路
+    ;(await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWrites.setSettings({
+      direct_fallback: true,
+    })
     // 官方号：用户自己在窗口里登录
     await post('/v1/social/reddit-browser/login')
     site.loggedIn = true

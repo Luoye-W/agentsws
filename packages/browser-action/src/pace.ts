@@ -24,6 +24,11 @@ export const STEP_GAP_MS = 1_500
 
 /** 账户的键：`google_ads:1234567890`（客户 id 里的横杠去掉，免得同一个号记成两本账）。 */
 export function accountKey(account: Pick<ActionAccount, 'platform' | 'id'>): string {
+  // WP329：Reddit 号与 WP328 的 `redditPaceKey` 同一个键（读写一本账）；`ws:<品牌>` 是没配品牌号时的兜底
+  if (account.platform === 'reddit')
+    return account.id.startsWith('ws:')
+      ? `reddit:${account.id}`
+      : `reddit:${account.id.trim().replace(/^u\//iu, '').toLowerCase()}`
   return `${account.platform}:${account.id.replace(/[\s-]/gu, '').replace(/^act_/iu, '')}`
 }
 
