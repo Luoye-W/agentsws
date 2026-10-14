@@ -89,6 +89,8 @@ export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗
 export * from './run-limits.js'
+// WP323（docs/102 §5）：发出记录与记录去处（去处的种类是藏在通用机制后面的适配器）
+export * from './outbound.js'
 export * from './schedule.js'
 // 59 §1 / §2 建站那一侧的三类对象（WP77）。与 social.ts 同一条理由：
 // 面板、`/v1/site/*`、模拟世界与记录源四处要认同一个形状。
