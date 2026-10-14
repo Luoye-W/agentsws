@@ -1406,7 +1406,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       }))
 
   /**
-   * 改关注设置（用户确认 / 改策略都走这里；人改过就算「定了」，之后定时那几轮问 Claude）。
+   * 改关注设置（用户确认 / 改策略都走这里；人改过就算「定了」，设定卡不再自动出）。
    * Prompt 原句不可改：改字 = 归档旧的 + 新建一条；归档过的同一句不以「新的」身份回来。
    */
   async function apply(

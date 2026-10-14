@@ -1581,7 +1581,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   }
 
   /**
-   * `geo_watch` 卡被决定之后：设定卡批了 / 改了 → 落成关注设置（之后定时那几轮问 Claude）；
+   * `geo_watch` 卡被决定之后：设定卡批了 / 改了 → 落成关注设置；
    * 不要 → 先按现在的（兜底）设置跑、不再自动出卡。竞品卡批了 → 加进竞品；不要 → 记下不再问。
    */
   const decideWatchCard = async (item: ApprovalItem): Promise<void> => {
