@@ -10185,6 +10185,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               question: input.question,
               assignment_id: input.assignment_id,
               mode: input.mode,
+              // WP311（决策 507）：链接带上品牌，工作台开着别的品牌时先切过去
+              workspace_id: input.workspace_id,
             },
           ),
         )
