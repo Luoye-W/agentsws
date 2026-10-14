@@ -54,6 +54,7 @@ import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
+import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
@@ -276,6 +277,10 @@ export interface BrandModuleSet {
    * 上传表、截图。托管实例不装（云上没有用户的浏览器）。
    */
   adsActions?: AdsActionsService
+  /**
+   * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
+   */
+  redditWrites: RedditWriteService
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */

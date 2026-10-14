@@ -18,6 +18,7 @@ import {
   type ActionJobView,
   type ActionPlatform,
   ActionQueue,
+  type ActionResult,
   ADS_CONSENT_TEXT_VERSION,
   type AdsActionSettings,
   type AdsConsentRecord,
@@ -52,12 +53,15 @@ interface StateFile {
   zones: GuardedZoneSettings
   consent: Partial<Record<ActionPlatform, AdsConsentRecord>>
   downloads: Record<string, ActionDownloadInput[]>
+  /** WP329：插件最近一次带着这家来领活是什么时候（毫秒）。判「插件连着 Reddit 没有」用。 */
+  seen?: Partial<Record<ActionPlatform, number>>
 }
 
 /** 上层要知道的几件事（WP316 接：作废了重出卡、做完了记账本、截图挂到账本上）。 */
 export type AdsActionEvent =
   | { type: 'expired'; job: ActionJob }
-  | { type: 'finished'; job: ActionJob; view: ActionJobView }
+  /** `result` 是插件交回的原样结局（WP329：Reddit 写的读回编号 / 链接在 `result.reads` 里）。 */
+  | { type: 'finished'; job: ActionJob; view: ActionJobView; result?: ActionResult }
   | { type: 'evidence'; job: ActionJob; evidence_id: string; tag: string }
   | { type: 'download'; job: ActionJob; file: ActionDownloadInput }
 
@@ -121,6 +125,8 @@ export interface AdsActionsService {
   ): Promise<{ ok: true; job: ActionJobView } | { ok: false; why: string }>
   /** 到点清理（作废、断了音讯的记失败、截图过期）。服务端定时调。 */
   sweep(): Promise<void>
+  /** WP329：插件最近一次带着这家来领活的时间（毫秒；没来过 = undefined）。 */
+  lastSeen(platform: ActionPlatform): number | undefined
   downloads(id: string): ActionDownloadInput[]
   close(): void
 }
@@ -173,6 +179,7 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
   let zones = normalizeZoneSettings(loaded?.zones)
   const consent: Partial<Record<ActionPlatform, AdsConsentRecord>> = { ...(loaded?.consent ?? {}) }
   const downloads: Record<string, ActionDownloadInput[]> = { ...(loaded?.downloads ?? {}) }
+  const seen: Partial<Record<ActionPlatform, number>> = { ...(loaded?.seen ?? {}) }
   /** 没有目录时上传表放内存里。 */
   const sheetsInMemory = new Map<string, Uint8Array>()
   let waiters: (() => void)[] = []
@@ -186,6 +193,7 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
       zones,
       consent,
       downloads,
+      seen,
     }
     mkdirSync(dir, { recursive: true })
     const tmp = `${stateFile}.tmp`
@@ -223,7 +231,12 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
 
   const settings = (): AdsActionSettings => ({ zones: { ...zones }, consent: { ...consent } })
 
-  const consented = (p: ActionPlatform): boolean => consent[p]?.text_version === consentVersion
+  /**
+   * 广告后台要在插件里勾过风险告知（562）；Reddit 不要（WP329：插件只填草稿、人自己点发送，
+   * 没有「替你点了一个改钱的按钮」那一类风险，连接时浏览器的权限弹窗就是那一下同意）。
+   */
+  const consented = (p: ActionPlatform): boolean =>
+    p === 'reddit' || consent[p]?.text_version === consentVersion
 
   /** 这件活属于这个品牌、还没结束。 */
   const live = (id: string): QueuedJob | undefined => {
@@ -235,7 +248,13 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
     for (const row of changed) {
       dropSheet(row.job.id)
       if (row.status === 'expired') options.onEvent?.({ type: 'expired', job: row.job })
-      else options.onEvent?.({ type: 'finished', job: row.job, view: viewOf(row) })
+      else
+        options.onEvent?.({
+          type: 'finished',
+          job: row.job,
+          view: viewOf(row),
+          ...(row.result === undefined ? {} : { result: row.result }),
+        })
     }
   }
 
@@ -261,6 +280,15 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
     workspace_id: options.workspace_id,
 
     async next(platforms, wait_ms) {
+      const now = options.nowMs()
+      // 一分钟内只落一次盘（插件每分钟来一次）
+      let touched = false
+      for (const p of platforms)
+        if ((seen[p] ?? 0) < now - 60_000) {
+          seen[p] = now
+          touched = true
+        }
+      if (touched) save()
       const needs = platforms.filter((p) => !consented(p))
       const extra = needs.length === 0 ? {} : { needs_consent: needs }
       let job = tryClaim(platforms)
@@ -412,6 +440,10 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
 
     downloads(id) {
       return [...(downloads[id] ?? [])]
+    },
+
+    lastSeen(platform) {
+      return seen[platform]
     },
 
     close() {

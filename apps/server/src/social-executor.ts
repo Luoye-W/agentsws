@@ -63,6 +63,18 @@ export interface SocialExecutorOptions {
   cancelWindowMs?: number
   /** WP323：回帖发出去了 → 记进发出记录（带平台 id，之后挂后续用）。 */
   onSent?(input: OutboundRecordInput): void
+  /**
+   * WP329（docs/102 §2.3）：Reddit 的回帖卡改走「插件填草稿、人点发送」那条路（`reddit-write/`）。
+   * 接得住就回结果（交给插件 = ok；发没发出去、记发出记录、线程标已回都等插件读回再做），
+   * 接不住（比如评论没有链接）回 `undefined`，退回这条渠道原来的出口（OAuth 接口 / 官方号浏览器）。
+   */
+  redditFill?(input: {
+    item: ApprovalItem
+    thread: CommunityThread
+    account_external_id: string
+    text: string
+    record: OutboundRecordInput
+  }): Promise<SocialExecResult | undefined>
 }
 
 export interface SocialExecutor {
@@ -221,6 +233,33 @@ export function createSocialExecutor(options: SocialExecutorOptions): SocialExec
     if (text === undefined || text === '') return fail('回帖卡上没有正文，没发。')
     const account = store.account(thread.account_id)
     if (account === undefined) return fail('这个号 / 群已经不在社媒库里了，没发。')
+    if (thread.channel === 'reddit' && options.redditFill !== undefined) {
+      const by = item.decision?.by
+      const filled = await options.redditFill({
+        item,
+        thread,
+        account_external_id: account.external_id,
+        text,
+        record: {
+          source_key: `approval:${item.id}`,
+          channel: thread.channel,
+          action: 'reply',
+          kind: 'social_reply',
+          destination: account.display_name,
+          counterpart: thread.author_handle,
+          counterpart_text: thread.text.slice(0, 1000),
+          content: text,
+          parent_external_id: thread.external_id,
+          approval_item_id: item.id,
+          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+          role_id: item.role_id,
+          ...(by === undefined ? {} : { approved_by: by === 'mandate' ? '自动' : by }),
+          ...(item.decision?.at === undefined ? {} : { approved_at: item.decision.at }),
+        },
+      })
+      if (filled !== undefined)
+        return filled.status === 'ok' ? filled : fail(filled.error?.message ?? '没发出去。')
+    }
     const adapter = options.adapter(thread.channel)
     if (adapter?.reply === undefined)
       return fail(`${label(thread.channel)} 还没有能回帖的出口，这一条没发。`)

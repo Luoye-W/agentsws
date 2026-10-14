@@ -92,7 +92,11 @@ export interface RedditWritePayload {
   channel: 'reddit'
   /** 卡上一行：「Reddit · r/inmoxr」。 */
   channel_label: string
-  target: RedditWriteTarget
+  /**
+   * 写到哪。**不叫 `target`**：审批总线把 `payload.target` 当成「改的是哪个对象」（`ObjectRef`）
+   * 算执行快照，叫这个名字会让批完施行时快照对不上。
+   */
+  reddit: RedditWriteTarget
   /** 正文（批的时候改过就按改过的发：`finalPayload`）。发新帖时 `subject` 是标题。 */
   body: { text: string; subject?: string }
   /** 回的是谁、哪一句（卡上给人看；外部文本，只上卡不进事件）。 */
