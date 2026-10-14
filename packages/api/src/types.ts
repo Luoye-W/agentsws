@@ -53,6 +53,7 @@ import type {
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
+import type { AdCreativePort } from './routes/ad-creative.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
@@ -90,6 +91,7 @@ import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
+import type { OutboundPort } from './routes/outbound.js'
 import type { PersonaPort } from './routes/personas.js'
 import type { PlatformKitPort } from './routes/platform-kit.js'
 import type { PositionEntryPort } from './routes/positions.js'
@@ -870,6 +872,11 @@ export interface GatewayDeps {
    */
   roleRules?: RoleRulesPort
   /**
+   * WP323（docs/102 §5）：发出记录与记录去处 `/v1/outbound/*`。
+   * 没装配时回 not_implemented。
+   */
+  outbound?: OutboundPort
+  /**
    * WP284（docs/95 §5）：「以后都这样」那张策略卡发给谁批。③ 回老板（与改职责规矩同一条路）；
    * ① ② 回 `undefined` = 写指导的本人自己点。不给 = 一律本人（老行为）。
    */
@@ -915,6 +922,11 @@ export interface GatewayDeps {
    * ——**不是** 404：路由在那儿，只是这台机器上没有广告库。
    */
   ads?: AdsPort
+  /**
+   * WP317（docs/101 §5.1④）：素材流水线那一面（`/v1/ads/creative/*`）。
+   * 不给 = 没装配，那几条路由回 `not_implemented`。
+   */
+  adCreative?: AdCreativePort
   /**
    * WP78（60 §5）：本地公关库。没装配时 `/v1/pr/*` 回 not_implemented——
    * 公共关系那四条职责要它才动得了。

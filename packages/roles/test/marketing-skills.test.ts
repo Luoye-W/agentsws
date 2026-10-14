@@ -61,3 +61,17 @@ describe('WP160 五个营销技能：职责拿得到', () => {
     }
   })
 })
+
+describe('WP317（docs/101 §5.1④）：素材流水线的两个子 Agent 技能', () => {
+  for (const roleId of ['ads.meta', 'ads.google']) {
+    it(`${roleId} 登记了 ad-headlines / ad-descriptions，按需加载，正文都在`, () => {
+      const skills = loadBundledRole(roleId).skills
+      for (const name of ['ad-headlines', 'ad-descriptions']) {
+        const ref = skills.find((s) => s.name === name)
+        expect(ref, `${roleId} 缺 ${name}`).toBeDefined()
+        expect(ref?.load).toBe('on_demand')
+        expect(existsSync(join(BUNDLED_SKILLS_DIR, name, 'SKILL.md')), name).toBe(true)
+      }
+    })
+  }
+})

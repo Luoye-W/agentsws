@@ -12,6 +12,7 @@ import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
+import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
@@ -66,6 +67,7 @@ import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
+import { outboundRoutes } from './routes/outbound.js'
 import { personaRoutes } from './routes/personas.js'
 import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
@@ -182,6 +184,8 @@ export function collectRoutes(): Route[] {
     ...personaRoutes(),
     // WP284（决策 275）：职责规矩里那几句「以后都这样」
     ...roleRuleRoutes(),
+    // WP323（docs/102 §5）：发出记录与记录去处
+    ...outboundRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
@@ -253,6 +257,8 @@ export function collectRoutes(): Route[] {
     ...siteRoutes(),
     // WP75（57 §5）：广告库 `/v1/ads/*`（读两条、写五条；写全部先出卡）
     ...adsRoutes(),
+    // WP317（docs/101 §5.1④）：素材流水线（导出表 → 两个子 Agent → 上传表 / 批量出图单 / 实验记录）
+    ...adCreativeRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
     ...seoRoutes(),

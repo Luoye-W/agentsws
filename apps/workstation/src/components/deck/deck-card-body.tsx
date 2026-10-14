@@ -343,6 +343,23 @@ export function DeckCardBody({
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
         // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
+        // WP323：记录去处的「定规矩」——一行预览（列 → 这一条会写成什么）+ 一句之后怎样；不出双格
+        if (payload.form === 'record_sink') {
+          const rows = (Array.isArray(payload.preview) ? payload.preview : [])
+            .filter(
+              (r): r is [string, string] =>
+                Array.isArray(r) && typeof r[0] === 'string' && typeof r[1] === 'string',
+            )
+            .map(([k, v]): [string, string] => [k, v === '' ? '—' : v])
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-record-sink">
+              <KeyValues rows={rows} testId="deck-record-sink-preview" />
+              <p className="text-xs text-ws-muted-fg" data-testid="deck-reason">
+                {reasonText}
+              </p>
+            </div>
+          )
+        }
         if (payload.form === 'instruction_rule') {
           const rule = str((payload.after as { rule?: unknown } | undefined)?.rule)
           return (
@@ -617,7 +634,9 @@ export function DeckCardBody({
     // WP284：「以后都这样」那张「记进规矩 / 不用」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'instruction_rule' ||
     // WP322：FAQ 导入那张「记下 / 只加新的 / 不用」
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'faq_import'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'faq_import' ||
+    // WP323：记录去处那张「记下 / 不用」
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

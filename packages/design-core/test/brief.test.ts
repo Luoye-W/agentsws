@@ -160,3 +160,60 @@ describe('需求原文的切法：切不出来就留空，不猜', () => {
     expect(readNeed('图上写“省一半电”和「四档调速」').copy).toEqual(['省一半电', '四档调速'])
   })
 })
+
+describe('WP317（决策 559）：广告设计那一条的批量单', () => {
+  const adsReq = {
+    duty: 'ads' as const,
+    from_role_id: 'ads.google',
+    spec_ids: [] as string[],
+    need: '批量出图。目标：测哪句标题点击率高。图上文字按下面轮：「出门一整天不找插座」「磁吸不滑落」「通勤党的充电宝」',
+  }
+
+  it('额度按职责取：广告单要 40 版 → 截到 30；别的职责仍是 6', () => {
+    const ads = draftBrief({
+      request: request(adsReq),
+      brand_cards: [brandCard],
+      variants: 40,
+      id: 'brief_ads',
+      at: '2026-10-14T10:00:00Z',
+    })
+    expect(ads.brief.variant_plan).toHaveLength(30)
+    const social = draftBrief({
+      request: request(),
+      brand_cards: [brandCard],
+      variants: 40,
+      id: 'brief_social',
+      at: '2026-10-14T10:00:00Z',
+    })
+    expect(social.brief.variant_plan).toHaveLength(6)
+  })
+
+  it('需求单里引号括起来的文案一版一句轮着上图（角度与提示词里都有，一字不改）', () => {
+    const { brief } = draftBrief({
+      request: request(adsReq),
+      brand_cards: [brandCard],
+      variants: 6,
+      id: 'brief_ads',
+      at: '2026-10-14T10:00:00Z',
+    })
+    const lines = ['出门一整天不找插座', '磁吸不滑落', '通勤党的充电宝']
+    brief.variant_plan.forEach((item, i) => {
+      const line = lines[i % lines.length] as string
+      expect(item.angle_zh).toContain(`「${line}」`)
+      expect(item.prompt).toContain(`「${line}」`)
+    })
+  })
+
+  it('需求单自己带着想要几版：出 brief 时没另给就用它（仍按额度截）', () => {
+    const at = '2026-10-14T10:00:00Z'
+    const three = draftBrief({ request: request({ ...adsReq, variants: 3 }), id: 'b', at })
+    expect(three.brief.variant_plan).toHaveLength(3)
+    const big = draftBrief({ request: request({ ...adsReq, variants: 45 }), id: 'b', at })
+    expect(big.brief.variant_plan).toHaveLength(30)
+  })
+
+  it('不是广告单的不带文案（别的职责行为不变）', () => {
+    const { brief } = draft()
+    for (const item of brief.variant_plan) expect(item.angle_zh).not.toContain('图上文字')
+  })
+})

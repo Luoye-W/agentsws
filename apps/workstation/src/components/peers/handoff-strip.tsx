@@ -51,7 +51,9 @@ export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unkno
       // WP284：「以后都这样」那张——「记进规矩 / 不用」也直接是两个按钮
       form === 'instruction_rule' ||
       // WP322：FAQ 导入那张——「记下 / 只加新的 / 不用」（或「撤下 / 留着」）
-      form === 'faq_import')
+      form === 'faq_import' ||
+      // WP323：记录去处那张——「记下 / 不用」
+      form === 'record_sink')
   )
 }
 

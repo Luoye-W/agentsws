@@ -512,6 +512,31 @@ export const DESIGN_CAPS = {
   max_brief_per_day: 10,
 } as const
 
+/** 额度三格的形状（{@link designCapsOf} 回的就是它）。 */
+export interface DesignCaps {
+  max_variants_per_brief: number
+  max_generations_per_day: number
+  max_brief_per_day: number
+}
+
+/**
+ * WP317（决策 559）：**广告设计那一条**单独放宽——每单 6 → 30 个变体、每天 30 → 100 次生成。
+ *
+ * 只放宽「给人挑的候选图」：出变体仍是 L2（人挑），入库仍是 L1（`HARD_L1` 的
+ * `asset_publish` 不动）。另四条职责照旧是 {@link DESIGN_CAPS}——一张详情页出 30 版没有意义，
+ * 而广告是拿去跑 A/B 的，一批几十张才够 Austin 那种量。
+ */
+export const DESIGN_ADS_CAPS: DesignCaps = {
+  max_variants_per_brief: 30,
+  max_generations_per_day: 100,
+  max_brief_per_day: DESIGN_CAPS.max_brief_per_day,
+}
+
+/** 这条设计职责的默认额度（面板、brief 截断、出图计划读同一个数；guardrail 读职责 yml）。 */
+export function designCapsOf(duty: DesignDuty): DesignCaps {
+  return duty === 'ads' ? DESIGN_ADS_CAPS : DESIGN_CAPS
+}
+
 /* ── 三个对象（58 §5 WP76 那一行）────────────────────────────────── */
 
 /**
@@ -560,6 +585,11 @@ export interface DesignRequest {
   product_refs?: readonly string[]
   /** 参考图（素材库里的 {@link DesignAsset} id）。 */
   reference_asset_ids?: readonly string[]
+  /**
+   * WP317：下单方想要几版（投放的批量出图单）。出 brief 时没另给就用它；
+   * 上限照旧按这条职责的额度截（广告 30，其余 6）。
+   */
+  variants?: number
   status: DesignRequestStatus
   created_at: Iso8601
   updated_at?: Iso8601

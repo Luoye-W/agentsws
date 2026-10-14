@@ -4,6 +4,7 @@
  * 装配顺序：kernel → data → roles → knowledge → skills → model-gateway → txn → identity → api。
  * 只监听 127.0.0.1；一个进程一个端口（`AGENTSWS_PORT`，默认 4317）。
  */
+import { randomBytes } from 'node:crypto'
 import { promises as dnsPromises } from 'node:dns'
 import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
@@ -13,10 +14,12 @@ import type { Duplex } from 'node:stream'
 import {
   adDesignPrompt,
   breakEvenView,
+  buildAdUploadBundle,
   resolveGrossMargin,
   summarizeLineCompare,
 } from '@agentsws/ads-core'
 import type {
+  AdsActor,
   AskPort,
   ChatPort,
   ConnectionDirectoryPort,
@@ -188,6 +191,7 @@ import {
   type OverlayEx,
   readBundledSkill,
   type Skills,
+  splitFrontmatter,
 } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
@@ -197,6 +201,7 @@ import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/wor
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
+import { createAdCreativeService } from './ad-creative.js'
 import {
   adsAttribution,
   adsDeckData,
@@ -250,6 +255,7 @@ import {
 } from './brand-modules.js'
 // WP66：按 `actor.workspace_id` 取模块的**那一处**适配层（不散落到每条路由）
 import {
+  brandAdCreativePort,
   brandAdsPort,
   brandAskPort,
   brandB2bOutboundPort,
@@ -384,7 +390,7 @@ import { type ImAskCandidate, imAskLabels, pickImAssignment } from './im-ask-rou
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { askPositionAgent } from './im-position-ask.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
-import { createTeamBotManagerCheck } from './im-team-bots.js'
+import { createTeamBotManagerCheck, feishuSecretId } from './im-team-bots.js'
 import { createImagePlacer } from './image-place.js'
 import { createImageService, type ImageService } from './image-tools.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -460,6 +466,18 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import {
+  createSinkAdapters,
+  dingtalkPlaceholder,
+  googleSheetsPlaceholder,
+} from './outbound/adapters.js'
+import { recordFromApproval, recordsFromChange } from './outbound/capture.js'
+import { recordSinkCardInput } from './outbound/card.js'
+import { createFeishuSinkAdapter, type FeishuFetch } from './outbound/feishu.js'
+import { createOutboundLog, isRecordSinkCard, type OutboundLog } from './outbound/log.js'
+import { createOutboundPort } from './outbound/port.js'
+import { createOutboundStore } from './outbound/store.js'
+import { createRecordSinkToolExecutor } from './outbound/tools.js'
 import { isOwnSubApproval } from './own-sub-queue.js'
 import { alignOwnerEmail } from './owner-email.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
@@ -895,6 +913,10 @@ export interface ServerOptions {
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
   clientErrorLog?: (line: string) => void
+  /**
+   * WP323：记录去处的飞书适配器发请求用的 `fetch`（测试注入替身飞书；不给用全局 `fetch`）。
+   */
+  outboundFetch?: FeishuFetch
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -1239,6 +1261,8 @@ export interface Server {
   autoMemory: AutoMemory
   models: ModelGatewayApi
   txn: Txn
+  /** WP323：发出记录与记录去处（测试直接看它；界面走 `/v1/outbound/*`）。 */
+  outbound: OutboundLog
   /**
    * WP276：服务进程里各模块出卡用的那条审批总线（`txn.approvals` 外面套了学习回路、目录、
    * ② 没主人的卡改发给做那条职责的人等几层）。测试与模拟拿它看「出卡那一刻」的路由。
@@ -1678,6 +1702,71 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const secrets = createSecretStore({ dbPath: file('secrets.sqlite'), clock, env })
 
   /*
+   * WP323（docs/102 §5，决策 665 / 666 / 667）：**发出记录** + **记录去处**。一台机器一个库，行上钉品牌。
+   * 写入点在下面执行器装配的出站那一跳（`deliverOutbound` / `backendApply` 回 ok）与社媒服务（发帖 / 群发）。
+   * 去处的种类是藏在通用机制后面的适配器：本单只接飞书（用「消息渠道」里已接的那个飞书应用，凭据现取不留），
+   * Google 表格 / 钉钉只认链接、照实说还接不上。建「定规矩」卡要审批总线，晚绑定。
+   */
+  let outboundCard:
+    | ((
+        input: Parameters<NonNullable<Parameters<typeof createOutboundLog>[0]['stageCard']>>[0],
+      ) => Promise<string | undefined>)
+    | undefined
+  let outboundWithdraw: ((card_id: string) => Promise<void>) | undefined
+  const outboundTz = new Map<WorkspaceId, number>()
+  const outboundStore = createOutboundStore(
+    dbDir === undefined ? undefined : join(dbDir, 'outbound.sqlite'),
+  )
+  const outboundLog: OutboundLog = createOutboundLog({
+    store: outboundStore,
+    adapters: createSinkAdapters([
+      createFeishuSinkAdapter({
+        credentials: (ws) => {
+          const fields = namespaceSecrets(
+            secrets,
+            secretsPrefixOf(ws, bootstrapWorkspace ?? ws),
+          ).get(feishuSecretId(ws))
+          return fields?.app_id === undefined || fields.app_secret === undefined
+            ? undefined
+            : {
+                app_id: fields.app_id,
+                app_secret: fields.app_secret,
+                ...(fields.domain === undefined ? {} : { domain: fields.domain }),
+              }
+        },
+        fetch: (options.outboundFetch ?? ((url, init) => fetch(url, init))) as FeishuFetch,
+      }),
+      googleSheetsPlaceholder,
+      dingtalkPlaceholder,
+    ]),
+    now: () => clock.now(),
+    newId: (prefix) => `${prefix}${randomBytes(6).toString('hex')}`,
+    tzOffsetMinutes: (ws) => outboundTz.get(ws) ?? 0,
+    emit: (ws, type, payload) => {
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: type as EventEnvelope['type'],
+        actor: { kind: 'system', id: 'outbound' },
+        subject: { type: 'outbound', id: String(payload.record_id ?? payload.sink_id ?? '') },
+        correlation: { trace_id: `tr_outbound_${Date.parse(clock.now()).toString(36)}` },
+        payload,
+      })
+    },
+    stageCard: (input) => outboundCard?.(input) ?? Promise.resolve(undefined),
+    withdrawCard: (id) => outboundWithdraw?.(id) ?? Promise.resolve(),
+  })
+  // 每分钟看一次到点的写入（退避重试）；记一条时也会当场写
+  outboundLog.start()
+  /** 批的人叫什么（发出记录上写人名，不写 id）。 */
+  const outboundNames = new Map<string, string>()
+  const outboundApprover = async (by: string | undefined): Promise<void> => {
+    if (by === undefined || by === 'mandate' || outboundNames.has(by)) return
+    const name = (await identity.getPerson(by as PersonId).catch(() => undefined))?.name
+    if (name !== undefined && name !== '') outboundNames.set(by, name)
+  }
+
+  /*
    * WP82（55 §3 末段）：浏览器设置——**一台机器一份**，不按品牌分。
    *
    * 与连接、模型那些"按品牌各一份"的东西不同：attach 接的是用户自己电脑上那个
@@ -2050,6 +2139,43 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     dbDir === undefined
       ? undefined
       : new SqliteTxnStore({ dbPath: join(dbDir, 'txn.sqlite'), clock })
+  /**
+   * WP323：发出去了（执行器回 ok）→ 记进发出记录。**演练**（发给演练红人、进内存收件箱）与**内存桩**
+   * （没接渠道时 `MemoryBackend` 回的 `dlv_N` / `exec_N`，什么都没发出去）的不记；记失败不影响发送结果。
+   */
+  const sandboxed = (res: { execution_id?: string } | undefined): boolean => {
+    const id = res?.execution_id ?? ''
+    return id.startsWith('ex_sandbox_') || /^(dlv|exec)_\d+$/.test(id)
+  }
+  type TxnOptions = Parameters<typeof createTxn>[0]
+  const recordingChange =
+    (fn: NonNullable<TxnOptions['backendApply']>): NonNullable<TxnOptions['backendApply']> =>
+    async (change, opts) => {
+      const res = await fn(change, opts)
+      if (res.status === 'ok' && !sandboxed(res))
+        try {
+          await outboundApprover(change.approval?.by)
+          for (const row of recordsFromChange(change, (id) => outboundNames.get(id)))
+            outboundLog.record(change.workspace_id, row)
+        } catch {
+          // 记不上不挡施行结果
+        }
+      return res
+    }
+  const recordingDelivery =
+    (fn: NonNullable<TxnOptions['deliverOutbound']>): NonNullable<TxnOptions['deliverOutbound']> =>
+    async (item, opts) => {
+      const res = await fn(item, opts)
+      if (res.status === 'ok' && !sandboxed(res))
+        try {
+          await outboundApprover(item.decision?.by)
+          const row = recordFromApproval(item, (id) => outboundNames.get(id))
+          if (row !== undefined) outboundLog.record(item.workspace_id, row)
+        } catch {
+          // 记不上不挡发送结果
+        }
+      return res
+    }
   const txn = createTxn({
     clock,
     random,
@@ -2085,7 +2211,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * `kolOutreachApply` 只认两种情况：不是开发信 → `undefined`；
      * 收件人不是演练红人 → `undefined`。两种都掉回原来那条路，一个字节不变。
      */
-    backendApply: async (change, opts) => {
+    backendApply: recordingChange(async (change, opts) => {
       const brand = await brands?.forWorkspace(change.workspace_id)
       const sandboxed =
         kolOutreachApply(brand, change) ??
@@ -2123,10 +2249,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const shopped = await (await shopOf(change.workspace_id))?.ops.apply(change)
       if (shopped !== undefined) return shopped
       return backend.apply(change, opts)
-    },
+    }),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
-    deliverOutbound: async (item, opts) => {
+    deliverOutbound: recordingDelivery(async (item, opts) => {
       // WP66：卡片自己写着属于哪个品牌，就从那个品牌的渠道发——**不是**进程装配的那一套
       const brand = await brands?.forWorkspace(item.workspace_id)
       /*
@@ -2148,7 +2274,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (await brand?.channels.deliver(item, opts)) ??
         backend.deliver(item, opts)
       )
-    },
+    }),
   })
 
   const identity: LocalIdentityService =
@@ -2416,6 +2542,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
+  /*
+   * WP323：记录去处的「定规矩」卡由这条总线出（① ② 交代的人自己点；③ 发给老板，与改职责规矩同一条路）。
+   * 删去处时还没定的卡撤掉（到期作废，不算谁拒的）。
+   */
+  let outboundCardSeq = 0
+  outboundCard = async (input) => {
+    const approver = hasApprovalFlow((await modeOfWorkspace?.(input.workspace_id)) ?? 'company')
+      ? (await identity.getWorkspace(input.workspace_id))?.owner_id
+      : undefined
+    outboundCardSeq += 1
+    const item = await approvals.create(
+      recordSinkCardInput(input, {
+        ...(approver === undefined ? {} : { approver }),
+        seq: `${Date.parse(clock.now()).toString(36)}_${outboundCardSeq}`,
+      }),
+    )
+    return item.state === 'blocked' ? undefined : item.id
+  }
+  outboundWithdraw = async (id) => {
+    if (approvals.expireNow !== undefined) await approvals.expireNow(id, '记录去处已删')
+  }
   // 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器
   const contentTimers: ReturnType<typeof setTimeout>[] = []
   if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule !== false) {
@@ -3654,6 +3801,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const nextReplyDraft = (): string => `${Date.parse(clock.now()).toString(36)}_${++replyDrafts}`
     const socialService = createSocialService({
       workspace_id: ws,
+      // WP323：回帖 / 到点发帖 / 群发发出去了 → 记进发出记录
+      onSent: (input) => {
+        outboundLog.record(ws, input)
+      },
       routeScopeManager,
       store: social,
       // WP73：到点真发出去那一跳走这九条适配器
@@ -3743,7 +3894,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
       // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）
-      tzOffsetMinutes: workData.tz_offset_minutes,
+      tzOffsetMinutes: (() => {
+        // WP323：记录去处写日期也按这个时区
+        outboundTz.set(ws, workData.tz_offset_minutes)
+        return workData.tz_offset_minutes
+      })(),
       clock,
       approvals: txn.approvals,
       ledger: txn.ledger,
@@ -3963,6 +4118,153 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         ]
       },
+    })
+
+    /**
+     * WP317（docs/101 §5.1④，决策 559）：**广告素材流水线**（`/v1/ads/creative/*`）。
+     *
+     * 两个子 Agent 用这个品牌真在用的那份模型（跟随公司默认就是公司那份；替身档照实说「没接上」）；
+     * 技能叠过公司层；批量出图单经设计岗的 `createRequest`（L3）；实验记录存这个品牌的广告库，
+     * 同步一条进投放岗记忆。**没有一处碰广告平台**。
+     */
+    const adCreativeSkillText = async (
+      actor: AdsActor,
+      name: string,
+    ): Promise<string | undefined> => {
+      const position_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+      try {
+        const resolved = await skills.registry.resolve(name, {
+          person_id: actor.person_id,
+          workspace_id: ws,
+          role_id: actor.role_id,
+          ...(position_id === undefined ? {} : { position_id }),
+        })
+        if (resolved !== undefined) return splitFrontmatter(resolved.markdown).body
+      } catch {
+        // 解析不了就退回随软件带的那一份
+      }
+      try {
+        return splitFrontmatter(readBundledSkill(name).markdown).body
+      } catch {
+        return undefined
+      }
+    }
+    const adCreativeService = createAdCreativeService({
+      workspace_id: ws,
+      clock,
+      random,
+      store: ads,
+      appendEvent,
+      complete: (actor) => {
+        const models = effectiveModels()
+        if (!models.configured()) return undefined
+        const ref = models.purposeRef('run')
+        if (ref.provider === 'stub') return undefined
+        return async (req) => {
+          const completion = await gatewayProxy.complete({
+            messages: [
+              { role: 'system', content: req.system },
+              { role: 'user', content: req.user },
+            ],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id,
+              role_id: actor.role_id,
+              run_id: `adcopy_${req.agent}_${Date.parse(clock.now()).toString(36)}` as never,
+              purpose: 'run',
+            },
+            model: ref,
+            max_output_tokens: 2000,
+            thinking: 'off',
+          })
+          return completion.text
+        }
+      },
+      skillText: adCreativeSkillText,
+      brandVoice: (actor) => adCreativeSkillText(actor, 'brand-voice'),
+      facts: async (actor, row) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text: [row.campaign, row.ad_group, ...row.headlines.slice(0, 3)].join(' '),
+          k: 5,
+          actor: {
+            person_id: actor.person_id,
+            workspace_id: ws,
+            assignment_id: actor.assignment_id,
+            role_id: actor.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.length === 0
+          ? undefined
+          : hits.map((h) => `- ${h.statement_redacted}（事实卡 ${h.fact_card_id}）`).join('\n')
+      },
+      designPrompt: () => adDesignPrompt(brandDesignRef?.context(ws, 'ads')),
+      requestDesign: async (actor, input) => {
+        const out = await designService.port.createRequest(actor, {
+          title: input.title,
+          need: input.need,
+          spec_ids: input.spec_ids,
+          variants: input.variants,
+        })
+        return {
+          request_id: out.request.id,
+          staged: {
+            staged: out.staged.staged,
+            ...(out.staged.level === undefined ? {} : { level: out.staged.level }),
+            ...(out.staged.message === undefined ? {} : { message: out.staged.message }),
+          },
+        }
+      },
+      designGeneratedToday: () => {
+        const day = clock.now().slice(0, 10)
+        return design.assets({ duty: 'ads' }).filter((a) => a.created_at.slice(0, 10) === day)
+          .length
+      },
+      /*
+       * 实验记录的真源：**这个品牌**的投放岗位那一层记忆（WP320 起落盘、按品牌读写），
+       * 挂在 `ad-copywriting` 技能下（决策 625）——普通投放运行加载这个技能时也带着本品牌的实验。
+       */
+      memory: {
+        list: (actor) => {
+          const scope_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+          if (scope_id === undefined) return undefined
+          return learning
+            .memoryAt({ tier: 'position', scope_id, workspace_id: ws })
+            .filter((e) => e.skill === 'ad-copywriting')
+            .map((e) => ({
+              id: e.id,
+              ...(e.heading === undefined ? {} : { heading: e.heading }),
+              body: e.body,
+            }))
+        },
+        add: async (actor, entry) => {
+          const scope_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+          if (scope_id === undefined) return undefined
+          const added = await learning.addMemory({
+            tier: 'position',
+            scope_id,
+            workspace_id: ws,
+            heading: entry.heading,
+            text: entry.text,
+            skill: 'ad-copywriting',
+            by: actor.person_id,
+            written_by: 'person',
+          })
+          return added.id
+        },
+        update: async (actor, id, entry) => {
+          await learning.updateMemory(id, {
+            text: entry.text,
+            heading: entry.heading,
+            by: actor.person_id,
+            workspace_id: ws,
+          })
+        },
+      },
+      // WP314 的上传表生成器（决策 626）
+      uploadSheet: buildAdUploadBundle,
     })
 
     /*
@@ -4506,6 +4808,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 连接读这个品牌的连接目录（`directoryPortFor` 懒建，与连接页同一份）。
              * 两样都比运行时晚建——取值函数只在真调工具那一刻才碰它们。
              */
+            // WP323：记录去处的三个工具（所有职责；配置只出「定规矩」卡）
+            recordSinkTools: createRecordSinkToolExecutor({ log: () => outboundLog }),
             ownerTools: createOwnerToolExecutor({
               positions: async (actor) =>
                 org.port.positions({
@@ -6009,6 +6313,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       siteService,
       ads,
       adsService,
+      adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
@@ -6073,6 +6378,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await faqImporter?.onDecided(item)
       return
     }
+    // WP323：记录去处的「定规矩」卡被决定 → 生效 / 换成新对照 / 不留（第一次就说不用）
+    if (isRecordSinkCard(item)) return outboundLog.onDecided(item)
     // WP284（决策 275）：「以后都这样」批了（选「按提议改」）→ 这条职责的规矩里多一句；没批 / 维持现状什么都不落
     if (isInstructionRuleCard(item)) {
       roleRules.onDecided(item)
@@ -9396,6 +9703,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).adsService.port,
   )
+  /** WP317（docs/101 §5.1④）：素材流水线 `/v1/ads/creative/*`（跟着这个品牌的广告库走）。 */
+  const adCreativePortOf = brandAdCreativePort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).adCreativeService.port,
+  )
   /** WP77（59 §2）：建站数据面 `/v1/site/*`（一个品牌一张库）。 */
   const sitePortOf = brandSitePort(brandModules, async (ws) => {
     const base = (await brandModules.forWorkspace(ws)).siteService.port
@@ -10265,6 +10577,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     personas: personaPort,
     // WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）
     roleRules: roleRules.port,
+    // WP323：发出记录与记录去处（按请求人所在品牌）
+    outbound: createOutboundPort(outboundLog),
     // WP284（docs/95 §5）：③ 里「以后都这样」那张卡发给老板（与改职责规矩同一条路：品牌所有者），① ② 本人
     instructionRuleApprover: async (ws) =>
       hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company')
@@ -10295,6 +10609,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     site: sitePortOf,
     // WP75（57 §5）：本地广告库 `/v1/ads/*`（同上；五个写口子全部先出卡）
     ads: adsPortOf,
+    // WP317（docs/101 §5.1④）：素材流水线（导出表 → 两个子 Agent → 上传表 / 批量出图单 / 实验记录）
+    adCreative: adCreativePortOf,
     // WP78（60 §5）：本地公关库 `/v1/pr/*`
     pr: prPortOf,
     // WP172（docs/84）：本地 B2B 库 `/v1/b2b/*`
@@ -10525,6 +10841,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     autoMemory,
     models,
     txn,
+    outbound: outboundLog,
     approvals,
     faqImport,
     work,
@@ -10712,6 +11029,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       offboard.close()
       await subscription.close()
       await deepseekAccount.close()
+      outboundLog.close()
+      outboundStore.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()
@@ -10763,7 +11082,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isThemeUpgradeCard(out) ||
           // WP322：FAQ 导入的定规矩卡 / 整批卡
           isFaqImportCard(out) ||
-          isFaqBatchCard(out)
+          isFaqBatchCard(out) ||
+          // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
+          isRecordSinkCard(out)
         ) {
           try {
             await hook.current?.(out)

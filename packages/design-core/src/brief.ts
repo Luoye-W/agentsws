@@ -19,7 +19,7 @@ import type {
   DesignSpec,
   DesignVariantPlanItem,
 } from '@agentsws/contracts'
-import { DESIGN_CAPS } from '@agentsws/contracts'
+import { designCapsOf } from '@agentsws/contracts'
 import type { BrandSystemCard } from './brand.js'
 import { type ResolvedBrandSystem, resolveBrandSystem } from './brand.js'
 import { resolveSpec, specNoteZh, specsForDuty } from './specs.js'
@@ -28,7 +28,7 @@ export interface DraftBriefInput {
   request: DesignRequest
   /** 公司层技能里的品牌系统卡（`brand.ts` 挑一张）。空数组 = 还没设。 */
   brand_cards?: readonly BrandSystemCard[]
-  /** 这次要出几版（默认 58 §6 的 `max_variants_per_brief`，6）。 */
+  /** 这次要出几版（默认这条职责的 `max_variants_per_brief`：广告 30，其余 6）。 */
   variants?: number
   /** brief 的 id 与时间由调用方给（这个模块不生成、不看表）。 */
   id: string
@@ -79,8 +79,16 @@ export function draftBrief(input: DraftBriefInput): DraftBriefResult {
   if (brand.system === undefined)
     questions.push('这个品牌还没设品牌系统（色 / 字 / 版式 / 禁忌）——出图会每张一个风格。')
 
-  const wanted = input.variants ?? DESIGN_CAPS.max_variants_per_brief
-  const variant_plan = planVariants(specs, Math.min(wanted, DESIGN_CAPS.max_variants_per_brief))
+  // WP317（决策 559）：额度按职责取——广告设计每单 30，另四条仍是 6
+  const perBrief = designCapsOf(request.duty).max_variants_per_brief
+  const wanted = input.variants ?? request.variants ?? perBrief
+  // 广告那条：需求单里引号括起来的那几句是要上图的文案（投放的批量单就是这么写的），
+  // 一版配一句轮着来——Austin 的 Figma 插件做的就是「同一版式，换标题换描述」
+  const variant_plan = planVariants(
+    specs,
+    Math.min(wanted, perBrief),
+    request.duty === 'ads' ? parsed.copy : undefined,
+  )
 
   const brief: DesignBrief = {
     id: input.id,
@@ -196,22 +204,42 @@ export function readNeed(need: string): {
 export function planVariants(
   specs: readonly DesignSpec[],
   total: number,
+  /**
+   * WP317：要上图的文案（广告批量单）。给了就一版配一句轮着来，写进角度与提示词——
+   * 同一个版式换标题出几十张，正是广告要拿去跑 A/B 的那一批。不给就照旧只按角度出。
+   */
+  copy?: readonly string[],
 ): readonly DesignVariantPlanItem[] {
   if (specs.length === 0 || total <= 0) return []
   const plan: DesignVariantPlanItem[] = []
+  const lines = (copy ?? []).filter((c) => c.trim() !== '')
+  const withCopy = (item: DesignVariantPlanItem): DesignVariantPlanItem => {
+    if (lines.length === 0) return item
+    const line = lines[plan.length % lines.length] ?? ''
+    return {
+      ...item,
+      angle_zh: `${item.angle_zh}；图上文字：「${line}」`,
+      ...(item.angle_en === undefined
+        ? {}
+        : { angle_en: `${item.angle_en}; on-image copy: "${line}"` }),
+      prompt: `${item.prompt}\n图上文字（一字不改）：「${line}」`,
+    }
+  }
   const per = Math.max(1, Math.floor(total / specs.length))
   for (const spec of specs) {
     for (let i = 0; i < per && plan.length < total; i += 1) {
       const angle = ANGLES[i % ANGLES.length] ?? ANGLES[0]
       if (angle === undefined) continue
-      plan.push({
-        id: `${spec.id}#${i + 1}`,
-        spec_id: spec.id,
-        angle_zh: angle.zh,
-        angle_en: angle.en,
-        // 提示词在这里只是**骨架**：品牌系统与禁忌由 `variants.ts` 注入
-        prompt: `${angle.zh}。${specNoteZh(spec)}`,
-      })
+      plan.push(
+        withCopy({
+          id: `${spec.id}#${i + 1}`,
+          spec_id: spec.id,
+          angle_zh: angle.zh,
+          angle_en: angle.en,
+          // 提示词在这里只是**骨架**：品牌系统与禁忌由 `variants.ts` 注入
+          prompt: `${angle.zh}。${specNoteZh(spec)}`,
+        }),
+      )
     }
   }
   // 摊不匀剩下的，补在第一个规格上
@@ -221,13 +249,15 @@ export function planVariants(
     if (spec === undefined) break
     const angle = ANGLES[i % ANGLES.length] ?? ANGLES[0]
     if (angle === undefined) break
-    plan.push({
-      id: `${spec.id}#${i + 1}`,
-      spec_id: spec.id,
-      angle_zh: angle.zh,
-      angle_en: angle.en,
-      prompt: `${angle.zh}。${specNoteZh(spec)}`,
-    })
+    plan.push(
+      withCopy({
+        id: `${spec.id}#${i + 1}`,
+        spec_id: spec.id,
+        angle_zh: angle.zh,
+        angle_en: angle.en,
+        prompt: `${angle.zh}。${specNoteZh(spec)}`,
+      }),
+    )
     i += 1
   }
   return plan

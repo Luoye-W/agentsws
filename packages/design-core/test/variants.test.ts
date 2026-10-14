@@ -62,6 +62,16 @@ describe('58 §2 变体计划与提示词组装', () => {
     expect(plan.quota_notes.join(' ')).toContain('还剩 2 张')
   })
 
+  it('WP317（决策 559）：广告那条的 brief 默认按 30 / 100 截', () => {
+    const ads = { ...brief(40), duty: 'ads' as const }
+    const plan = planGeneration({ brief: ads, brand })
+    expect(plan.n).toBe(30)
+    expect(plan.quota_notes.join(' ')).toContain('最多出 30 张')
+    const late = planGeneration({ brief: ads, brand, generated_today: 90 })
+    expect(late.n).toBe(10)
+    expect(late.quota_notes.join(' ')).toContain('一天 100 张')
+  })
+
   it('今天的额度用完了：一张都不出，并说明天再来', () => {
     const plan = planGeneration({ brief: brief(6), brand, generated_today: 30 })
     expect(plan.n).toBe(0)

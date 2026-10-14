@@ -15,6 +15,7 @@
  */
 
 import type {
+  AdCreativePort,
   AdsPort,
   AskPort,
   B2bOutboundPort,
@@ -482,6 +483,14 @@ export function brandAdsPort(
   make: (workspace_id: WorkspaceId) => Promise<AdsPort>,
 ): AdsPort {
   return scopedPort<AdsPort>(make, () => brands.bootstrap)
+}
+
+/** WP317（docs/101 §5.1④）：素材流水线按品牌取（导入的表、每一轮、实验记录都在这个品牌的广告库里）。 */
+export function brandAdCreativePort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<AdCreativePort>,
+): AdCreativePort {
+  return scopedPort<AdCreativePort>(make, () => brands.bootstrap)
 }
 
 /** WP77（59 §2）：建站数据面按品牌取（检查单、邮件模板与 App 三张表各在各的品牌下）。 */
