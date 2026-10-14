@@ -143,15 +143,18 @@ jobs:
         shell: bash
         run: ls -laR apps/desktop/release || true
 
-  # WP225（WP218 遗留）：两个真实版本之间点一次「更新」。打 N 与 N+1 两个包（更新源都指到本机回环端口），
-  # 装 N → 本机起更新源只喂 N+1 → 左下角按钮「有新版」→ 下载 → 重启并更新 → 新版本起来、数据还在。
-  # 与上面那个作业并行跑；同样不发布、不上传到任何下载站。
+  # WP225 → WP327：真实版本之间点「更新」三段（见 scripts/win-update-e2e.mjs）：
+  #   A 迁移：发布过的老版本（平铺，GitHub Releases 上的 v0.2.0-beta.5）→ V1（走安装程序，变成版本目录 + current 联接）
+  #   B 回滚演练：V1 → V2，V2 假装起不来 → 60 秒后切回 V1
+  #   C 只切换：V1 → V2，量「点了 → 新版起来」秒数
+  # V1 / V2 打包时更新源指到本机回环端口。与上面那个作业并行跑；不发布、不上传到任何下载站。
   update-e2e:
-    name: 两个版本之间点更新（N → N+1，本机更新源）
+    name: 版本之间点更新（迁移 / 回滚演练 / 只切换）
     runs-on: windows-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     env:
       FEED_PORT: '47613'
+      OLD_TAG: v0.2.0-beta.5
     steps:
       - uses: actions/checkout@v4
 
@@ -175,7 +178,7 @@ jobs:
         run: pnpm --filter @agentsws/workstation build
 
       # 回环上的 http 更新源只为这个测试放行（src/update-feed.ts 的 normalizeBaseUrl）
-      - name: 打 N 与 N+1（更新源指到 http://127.0.0.1:${{ env.FEED_PORT }}）
+      - name: 打 V1 与 V2（更新源指到 http://127.0.0.1:${{ env.FEED_PORT }}）
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -190,20 +193,29 @@ jobs:
               fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n')
             " "$1"
           }
-          set_version "0.0.0-ci.${{ github.run_number }}"
+          mkdir -p update-e2e/v1 update-e2e/v2
+          set_version "0.2.1-ci.${{ github.run_number }}"
           (cd apps/desktop && node scripts/dist.mjs --win --x64)
-          mkdir -p update-e2e/n update-e2e/n1
-          cp apps/desktop/release/Agents-Workshop-Setup-0.0.0-ci.*-x64.exe update-e2e/n/
-          set_version "0.0.1-ci.${{ github.run_number }}"
+          cp apps/desktop/release/latest.yml apps/desktop/release/Agents-Workshop-Setup-0.2.1-ci.*-x64.exe* update-e2e/v1/
+          set_version "0.2.2-ci.${{ github.run_number }}"
           (cd apps/desktop && node scripts/dist.mjs --win --x64)
-          cp apps/desktop/release/latest.yml apps/desktop/release/Agents-Workshop-Setup-0.0.1-ci.*-x64.exe* update-e2e/n1/
-          ls -la update-e2e/n update-e2e/n1
+          cp apps/desktop/release/latest.yml apps/desktop/release/Agents-Workshop-Setup-0.2.2-ci.*-x64.exe* update-e2e/v2/
+          ls -la update-e2e/v1 update-e2e/v2
 
-      - name: 两个版本之间点更新（装 N → 下载 → 重启并更新 → N+1 起来、数据还在）
+      - name: 取发布过的老版本（${{ env.OLD_TAG }}，平铺布局）
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p update-e2e/old
+          gh release download "$OLD_TAG" -R "${{ github.repository }}" -p 'Agents-Workshop-Setup-*-x64.exe' -D update-e2e/old
+          ls -la update-e2e/old
+
+      - name: 版本之间点更新（迁移 → 回滚演练 → 只切换）
         shell: pwsh
         run: |
-          $old = Get-ChildItem update-e2e/n/Agents-Workshop-Setup-*.exe | Select-Object -First 1
-          node apps/desktop/scripts/win-update-e2e.mjs --old $old.FullName --new-dir update-e2e/n1 --port $env:FEED_PORT --out win-update
+          $old = Get-ChildItem update-e2e/old/Agents-Workshop-Setup-*.exe | Select-Object -First 1
+          node apps/desktop/scripts/win-update-e2e.mjs --old $old.FullName --v1-dir update-e2e/v1 --v2-dir update-e2e/v2 --port $env:FEED_PORT --out win-update
           $code = $LASTEXITCODE
           if ($code -ne 0) { Write-Host ("更新端到端没过，退出码 {0}（0x{0:X8}）" -f $code); exit 1 }
 

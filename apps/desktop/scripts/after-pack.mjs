@@ -627,6 +627,27 @@ export function sizeOfTree(root) {
   return { files, bytes }
 }
 
+// ── ⑫ WP327：Windows 安装器挪进版本目录的条目清单 ───────────────────────────
+
+/** 生成到 `build/` 里、由 `build/installer.nsh` include 的那份（只给 NSIS 用；不进仓库）。 */
+export const APP_ENTRIES_NSH = 'agentsws-app-entries.nsh'
+
+/**
+ * win-unpacked 根上的每个条目 → NSIS 宏 `agentswsAppEntries CMD`（对每个条目各展开一次 CMD）。
+ * 安装器只挪 / 只删这些名字，安装目录里别的东西（用户自己放的、卸载程序、版本目录、联接）一个不碰。
+ */
+export function appEntriesNsh(names) {
+  const bad = names.find((n) => /["$\r\n]/.test(n) || n === 'current' || n.startsWith('app-'))
+  if (bad !== undefined) throw new Error(`win-unpacked 根上有安装器处理不了的名字：${bad}`)
+  return [
+    '; WP327：afterPack 按这一版 win-unpacked 根上的条目生成（scripts/after-pack.mjs），不要手改。',
+    '!macro agentswsAppEntries CMD',
+    ...[...names].sort().map((n) => `  !insertmacro \${CMD} "${n}"`),
+    '!macroend',
+    '',
+  ].join('\r\n')
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -689,6 +710,13 @@ export default async function afterPack(context) {
     `第三方许可证：${notice.packages} 个包，原生二进制 ${natives.length} 个包` +
       `（libvips：${notice.libvips.join(', ') || '无'}）；Electron / Chromium：${electronLicenses.join(', ') || '没找到'}`,
   )
+
+  // ⑫ WP327：Windows 安装器要挪进 app-<版本> 的条目（build/installer.nsh include 它）
+  if (platformName === 'win32') {
+    const entries = readdirSync(context.appOutDir)
+    writeFileSync(join(DESKTOP_ROOT, 'build', APP_ENTRIES_NSH), appEntriesNsh(entries))
+    log(`安装器的版本目录条目：${entries.length} 个`)
+  }
 
   // ⑪ WP327：打成 bundle（放在许可证之后——许可证清单按打包前的依赖算；放在冒烟之前——打完照样要 import 得动）
   const beforeBundle = sizeOfTree(appDir)

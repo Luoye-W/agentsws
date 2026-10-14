@@ -67,6 +67,8 @@ export interface Strings {
   updateReady: string
   /** WP218：「重启并更新」前，有任务在跑时那个确认框。 */
   updateRestartMessage: string
+  /** WP327：新版没起来、已回到这一版（{version} = 没装成的那一版）。 */
+  updateRolledBack: string
   updateRestartDetail: string
   updateRestartConfirm: string
   updateRestartLater: string
@@ -149,6 +151,7 @@ const ZH: Strings = {
   updateDownloading: '正在下载新版本… {percent}%',
   updateReady: '重启并更新到 {version}',
   updateRestartMessage: '有任务在跑，确定现在重启？',
+  updateRolledBack: '{version} 没能打开，已回到原来的版本，数据都在',
   updateRestartDetail:
     '重启会打断岗位 AI 手上的活、官方场景和正在操作电脑的 AI，更新完自动重新打开。',
   updateRestartConfirm: '重启并更新',
@@ -230,6 +233,8 @@ const EN: Strings = {
   updateDownloading: 'Downloading the update… {percent}%',
   updateReady: 'Restart to update to {version}',
   updateRestartMessage: 'Something is still running. Restart now?',
+  updateRolledBack:
+    '{version} did not start, so you are back on the previous version. Your data is safe.',
   updateRestartDetail:
     'Restarting interrupts what your AI teammates are working on, the official scenes and any AI using the computer. The app reopens by itself after the update.',
   updateRestartConfirm: 'Restart and update',
