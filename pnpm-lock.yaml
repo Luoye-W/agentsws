@@ -694,6 +694,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/browser-action:
+    devDependencies:
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+
   packages/catalog:
     dependencies:
       '@agentsws/contracts':
