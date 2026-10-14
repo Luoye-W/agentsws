@@ -135,7 +135,7 @@ export interface RedditWriteView {
 }
 
 /**
- * WP328「待处理」条目里起草要用的那几格（结构上与 `RedditWatchItem` 对齐：同名同义，
+ * WP328「待处理」条目里起草要用的那几格（结构上与 WP328 的 `RedditWatchEntry` 对齐：同名同义，
  * 这样两单合到一起后条目可以直接交进来，不用改形状）。
  */
 export interface RedditPendingLike {
