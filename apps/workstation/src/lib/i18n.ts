@@ -15,6 +15,7 @@ import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
+import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
@@ -8219,6 +8220,8 @@ const TABLES: Record<Lang, Table> = {
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
+    // WP323：「发出记录」面板与记录去处
+    ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
     ...NPM_REGISTRY_ZH,
     // WP254：版务卡（批准执行 / 不做）与回帖卡
@@ -8255,6 +8258,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
+    ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
     ...SHOPIFY_CONNECT_EN,

@@ -70,6 +70,8 @@ export * from './messages.js'
 export * from './model.js'
 // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装）与配置写回
 export * from './official-plugins.js'
+// WP323（docs/102 §5）：发出记录与记录去处（去处的种类是藏在通用机制后面的适配器）
+export * from './outbound.js'
 // WP249（决策 81 / 89）：自家版待处理（版务队列 + Reddit 官方号浏览器通道的状态）
 export * from './own-sub.js'
 export * from './packages.js'

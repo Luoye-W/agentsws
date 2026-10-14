@@ -25,6 +25,7 @@ import {
   isWebTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
+  RECORD_SINK_TOOL_DEF_BY_NAME,
   renderThemeRead,
   renderTrustedToolResult,
   SHOP_TOOL_DEF_BY_NAME,
@@ -346,7 +347,9 @@ function themeParams(name: string): Record<string, unknown> | undefined {
   const def =
     THEME_TOOL_DEF_BY_NAME.get(name) ??
     SHOP_TOOL_DEF_BY_NAME.get(name) ??
-    IMAGE_TOOL_DEF_BY_NAME.get(name)
+    IMAGE_TOOL_DEF_BY_NAME.get(name) ??
+    // WP323：记录去处的三个工具同一个转法（定义在 stand-ins 的 `runtime/record-sink.ts`）
+    RECORD_SINK_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
   const schema = def.input_schema as {
     properties?: Record<string, Record<string, unknown>>
@@ -494,6 +497,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       SHOP_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP268：生图 / 改图 / 素材库（出图进素材库、出挑图卡；不直接定稿）
       IMAGE_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP323：记录去处（读表头只读；配置只出「定规矩」卡）
+      RECORD_SINK_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

@@ -54,6 +54,7 @@ import type {
   Iso8601,
   Mandate,
   ObjectRef,
+  OutboundRecordInput,
   ProvenanceState,
   Recipient,
   SocialAccount,
@@ -239,6 +240,11 @@ export interface SocialServiceOptions {
   tagReviewer?(channel: SocialChannel): TagReviewer | undefined
   /** WP257：这台接没接上真模型（「模型复核」开关旁照实说）。 */
   modelReady?(): boolean
+  /**
+   * WP323：发出去了一条（回帖、到点发帖、群发）→ 记进发出记录。不给 = 不记。
+   * 记失败不影响发送结果。
+   */
+  onSent?(input: OutboundRecordInput): void
 }
 
 export interface SocialServiceAssembly {
@@ -551,6 +557,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   /** WP254（决策 117）：别的社群的版务卡与回帖卡批了之后经渠道出口去做。 */
   const executor = createSocialExecutor({
     ...options.executor,
+    ...(options.onSent === undefined ? {} : { onSent: options.onSent }),
     workspace_id,
     store,
     clock,
@@ -1317,6 +1324,15 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
    * 3. **没装适配器就照实说**。排期、草稿、审批照常，只是最后那一跳说
    *    "这条渠道还没接上"。
    */
+  /** WP323：发出去了一条 → 记进发出记录（记不上不挡发送结果）。 */
+  const recordSent = (input: OutboundRecordInput): void => {
+    try {
+      options.onSent?.(input)
+    } catch {
+      // 记不上不挡发送结果
+    }
+  }
+
   const publishDue = async (): Promise<SocialPublishSweep> => {
     // WP254：顺手补扫批了、过了取消窗口还没施行的版务卡与回帖卡（批准那一刻排的那一次可能随进程重启丢了）
     await executor.sweep().catch(() => 0)
@@ -1404,6 +1420,15 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           post_id: post.id,
           channel: post.channel,
           external_id: result.data.external_id,
+        })
+        recordSent({
+          source_key: `post:${post.id}`,
+          channel: post.channel,
+          action: 'post',
+          kind: 'social_post',
+          destination: account.display_name,
+          content: post.body,
+          ...(result.data.external_id === '' ? {} : { external_id: result.data.external_id }),
         })
         continue
       }
@@ -1505,6 +1530,14 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         continue
       }
       store.savePost({ ...post, status: 'published', published_at: clock.now() })
+      recordSent({
+        source_key: `post:${post.id}`,
+        channel: post.channel,
+        action: 'broadcast',
+        kind: 'community_broadcast',
+        destination: `${account.display_name} · ${sent} 人`,
+        content: after.body ?? post.body,
+      })
       out.sent += 1
       out.recipients += sent
       emit('social.broadcast_sent', 'system' as never, {
