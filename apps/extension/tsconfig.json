@@ -20,6 +20,9 @@
   "references": [
     {
       "path": "../../packages/brand"
+    },
+    {
+      "path": "../../packages/browser-action"
     }
   ]
 }
