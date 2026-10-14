@@ -106,6 +106,7 @@ describe('WP310 契约：Claude 与全文 / 引用', () => {
     expect(n.ok).toBe(true)
     if (n.ok)
       expect(Object.keys(n.input).sort()).toEqual(['country', 'device', 'keywords', 'language'])
+    expect(rank.input.find((f) => f.name === 'depth')).toMatchObject({ min: 10, max: 20 })
     expect(RANK_CHECK_DEPTH).toBe(20)
     expect(RANK_CHECK_DEFAULT_DEVICE).toBe('mobile')
   })
@@ -289,5 +290,47 @@ describe('WP310 契约：关注设置与回答历史', () => {
       },
     }
     expect(roundtrip(exp)).toEqual(exp)
+  })
+})
+
+describe('WP310 × WP309 对齐', () => {
+  it('批量 AI 问答三项：异步按条、≤ 100 个问题、每个 ≤ 500 字', () => {
+    for (const p of ['chatgpt', 'gemini', 'google_ai_overview']) {
+      const spec = dataCapabilitySpec(`ai_answer_batch.${p}`)
+      if (spec === undefined) throw new Error(`缺 ai_answer_batch.${p}`)
+      expect(spec).toMatchObject({ mode: 'async', unit: 'item', max_items: 100, group: 'search' })
+      expect(spec.input.find((f) => f.name === 'questions')).toMatchObject({
+        type: 'string[]',
+        required: true,
+        max: 500,
+        max_count: 100,
+      })
+      expect(spec.input.map((f) => f.name)).toEqual(['questions', 'country', 'language'])
+    }
+    expect(dataCapabilitySpec('ai_answer_batch.claude')).toBeUndefined()
+  })
+
+  it('AI 回答条目多两格可选：backup / question', () => {
+    const r: AiAnswerResult = {
+      platform: 'gemini',
+      answer_excerpt: '',
+      brand_mentioned: false,
+      our_domain_cited: false,
+      cited_urls: [],
+      competitors_mentioned: [],
+      fetched_at: AT,
+      source: 'official',
+      backup: true,
+      question: 'best power bank?',
+    }
+    const item: AiAnswerDataItem = {
+      platform: 'gemini',
+      text: 'x',
+      cited_urls: [],
+      backup: false,
+      question: 'q',
+    }
+    expect(roundtrip(r)).toEqual(r)
+    expect(roundtrip(item)).toEqual(item)
   })
 })

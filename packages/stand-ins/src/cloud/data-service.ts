@@ -43,6 +43,9 @@ export const SAMPLE_DATA_PRICES: Readonly<Record<string, number>> = {
   // WP310：决策 462 / 465 的价（真价仍以云上为准）
   'ai_answer.claude': 3.6,
   'seo.rank_check': 0.1,
+  'ai_answer_batch.chatgpt': 0.2,
+  'ai_answer_batch.gemini': 0.2,
+  'ai_answer_batch.google_ai_overview': 0.2,
   'amazon.keyword_research': 1,
   'amazon.asin_keywords': 1,
   'seo.backlinks': 0.01,
@@ -158,6 +161,31 @@ export function sampleDataItem(
             : platform === 'google_ai_overview'
               ? 'serp'
               : 'web_ui',
+      }
+    }
+    case 'ai_answer_batch.chatgpt':
+    case 'ai_answer_batch.gemini':
+    case 'ai_answer_batch.google_ai_overview': {
+      // 一个问题一条（带 `question`）
+      const platform = capability.slice('ai_answer_batch.'.length)
+      const question = first('questions')
+      const text = `（示例回答）关于「${question}」……`
+      return {
+        platform,
+        question,
+        text,
+        cited_urls: ['https://example-1.test/'],
+        answer_markdown: text,
+        citations: [
+          {
+            position: 1,
+            url: 'https://example-1.test/',
+            domain: 'example-1.test',
+            where: 'listed',
+          },
+        ],
+        model: 'web',
+        via: platform === 'google_ai_overview' ? 'serp' : 'web_ui',
       }
     }
     case 'seo.rank_check': {

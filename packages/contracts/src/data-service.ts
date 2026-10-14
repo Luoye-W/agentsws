@@ -306,6 +306,13 @@ const REDDIT_LIMIT: DataInputField = {
   label_zh: '最多几条',
 }
 
+/** 批量 AI 问答那三项的平台名（标签用）。 */
+const AI_BATCH_LABEL = {
+  chatgpt: 'ChatGPT ',
+  gemini: 'Gemini ',
+  google_ai_overview: 'Google AI 概览',
+} as const
+
 /** WP192 第一批能力（WP220 追加 Reddit 三项）。 */
 export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
   {
@@ -397,9 +404,36 @@ export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
       COUNTRY,
       LANGUAGE,
       { name: 'device', type: 'string', enum: ['mobile', 'desktop'], label_zh: '设备' },
-      { name: 'depth', type: 'number', min: 10, max: 100, label_zh: '查前几名' },
+      // WP309 对齐：价按前 20 定，云端只认 10 / 20
+      { name: 'depth', type: 'number', min: 10, max: 20, label_zh: '查前几名' },
     ],
   },
+  // WP310 / WP309 对齐：定时任务用的批量 AI 问答（排队档，决策 469）——一个问题一条结果
+  // （`AiAnswerDataItem`，带 `question`），价目沿用 `data.search.ai_answer`（0.2 / 条）
+  ...(['chatgpt', 'gemini', 'google_ai_overview'] as const).map(
+    (p): DataCapabilitySpec => ({
+      id: `ai_answer_batch.${p}`,
+      label_zh: `${AI_BATCH_LABEL[p]}回答探测（批量）`,
+      label_en: `${AI_BATCH_LABEL[p]} answer probe (batch)`,
+      group: 'search',
+      mode: 'async',
+      unit: 'item',
+      max_items: 100,
+      default_items: 20,
+      input: [
+        {
+          name: 'questions',
+          type: 'string[]',
+          required: true,
+          max: 500,
+          max_count: 100,
+          label_zh: '问题',
+        },
+        COUNTRY,
+        LANGUAGE,
+      ],
+    }),
+  ),
   {
     id: 'amazon.keyword_research',
     label_zh: 'Amazon 关键词挖掘',

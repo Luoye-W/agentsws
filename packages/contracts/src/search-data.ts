@@ -107,6 +107,10 @@ export interface AiAnswerResult {
   model?: string
   /** WP310 可选：这条回答怎么取得的（界面不写，只在问号里照实说 Claude 那一列）。 */
   via?: AiAnswerVia
+  /** WP310 / WP309 可选：云端走了备用渠道（界面不显示，只对账用）。 */
+  backup?: boolean
+  /** WP310 / WP309 可选：问的是哪一句（批量问答 `ai_answer_batch.*` 每条结果带上）。 */
+  question?: string
 }
 
 /**
@@ -300,6 +304,10 @@ export interface AiAnswerDataItem {
   via?: AiAnswerVia
   /** WP310：开了联网却一条引用都没有（Claude 偶尔这样，照收但标出，docs/99 §7 C1）。 */
   no_citations?: boolean
+  /** WP309 对齐：走了备用渠道（界面不显示）。 */
+  backup?: boolean
+  /** WP309 对齐：批量问答（`ai_answer_batch.*`）每条带上问的是哪一句。 */
+  question?: string
 }
 
 /** 决策 465 / 466：关注词排名查前几名、默认设备。 */
