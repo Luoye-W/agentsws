@@ -5,7 +5,7 @@ name: Release
 #   推 tag（v1.2.3 = stable，v1.2.3-beta.4 = beta）
 #     → 每个平台在自己的机器上打（Windows 在 windows runner、mac 在 mac runner）
 #     → Windows 包装起来真跑一遍（不过不发）
-#     → 收拢：两份 latest-mac.yml 合成一份、产物结构自检、生成官网 downloads.json
+#     → 收拢：latest-mac.yml 收成一份、产物结构自检、生成官网 downloads.json
 #     → 同一套产物传到 **R2（dl.agentsws.com/<渠道>/）** 和 **GitHub Releases**
 #     → 更新 downloads.json（官网下载页与首页「下载」按钮读它）
 #
@@ -21,6 +21,8 @@ name: Release
 # 3. **版本号只有一个出处：tag。** 打包前反写进 apps/desktop/package.json。
 # 4. **先传安装包、最后传 latest*.yml。** 客户端看到新的 latest.yml 时，它指的文件一定已经在了。
 # 5. **每个平台在自己的机器上打。** 交叉打出来的包我们验不了（afterPack 的 import 冒烟只在同平台跑得起来）。
+# 6. **Mac 只出 Apple 芯片版（WP326，决策 731）。** Intel 版不再打；收拢自检也只认 arm64，
+#    latest-mac.yml 里混进别的架构就红。装着旧 Intel 版的机器查更新看到的是「没有适合你的更新」，不报错。
 
 on:
   push:
@@ -81,15 +83,11 @@ jobs:
             label: Windows x64（NSIS）
             target: win32-x64
             builder: --win --x64
+          # WP326（决策 731）：Mac 只出 Apple 芯片版，原来那台 Intel 的 mac runner 去掉了
           - os: macos-14
             label: macOS arm64（Apple 芯片）
             target: darwin-arm64
             builder: --mac --arm64
-          # macos-13 已下线；Intel mac 用 macos-15-intel
-          - os: macos-15-intel
-            label: macOS x64（Intel）
-            target: darwin-x64
-            builder: --mac --x64
 
     steps:
       # 推 tag：打那个 tag；手动真发：打输入的那个 tag；dry_run：打当前分支
@@ -155,7 +153,7 @@ jobs:
             --installer "apps/desktop/release/Agents-Workshop-Setup-${AGENTSWS_RELEASE_VERSION}-x64.exe" \
             --out win-smoke
 
-      # 两台 mac 各出一份 latest-mac.yml，改名带上架构，publish 那一步再合并
+      # mac 那台的 latest-mac.yml 改名带上架构，publish 那一步再收成一份（WP326 起只有 arm64 一份）
       - name: 收产物
         shell: bash
         run: |
@@ -263,7 +261,7 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: 收拢（合并 latest-mac.yml、自检产物结构、生成 downloads.json）
+      - name: 收拢（收 latest-mac.yml、自检产物结构、生成 downloads.json）
         shell: bash
         env:
           SITE_CHANNEL: ${{ vars.SITE_DOWNLOAD_CHANNEL || 'beta' }}
@@ -272,8 +270,12 @@ jobs:
           eval "$(node apps/desktop/scripts/release-manifest.mjs tag "$RELEASE_TAG")"
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "CHANNEL=$channel" >> "$GITHUB_ENV"
-          node apps/desktop/scripts/release-manifest.mjs merge-mac --out artifacts/latest-mac.yml artifacts/latest-mac-*.yml
-          rm artifacts/latest-mac-*.yml
+          # WP326（决策 731）：只认 Apple 芯片那一份；别的架构的 latest-mac-*.yml 出现就红（有人又加回了 Intel 作业）
+          for f in artifacts/latest-mac-*.yml; do
+            [ "$f" = artifacts/latest-mac-darwin-arm64.yml ] || { echo "Mac 只出 Apple 芯片版，不该有 $f"; exit 1; }
+          done
+          node apps/desktop/scripts/release-manifest.mjs merge-mac --out artifacts/latest-mac.yml artifacts/latest-mac-darwin-arm64.yml
+          rm artifacts/latest-mac-darwin-arm64.yml
           node apps/desktop/scripts/release-manifest.mjs check --dir artifacts --version "$version"
           node apps/desktop/scripts/release-manifest.mjs downloads --dir artifacts --version "$version" \
             --base "$DOWNLOAD_BASE" --released "$(date -u +%F)" --out downloads.json

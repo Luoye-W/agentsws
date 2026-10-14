@@ -22,6 +22,8 @@ import type { FetchLike } from './ports.js'
 import type { UpdateBackend } from './update-controller.js'
 import {
   type FeedConfig,
+  fileUrlsFromUpdateInfo,
+  macUpdateFits,
   type UpdateChannel,
   updateInfoFile,
   versionFromUpdateInfo,
@@ -152,6 +154,21 @@ interface GithubRelease {
   draft?: unknown
   prerelease?: unknown
   html_url?: unknown
+  /** WP326：附件（只看 `name`）。 */
+  assets?: unknown
+}
+
+/** WP326：这次发布里要看的附件名（给 {@link ReleaseCheckerOptions.fits} 用）。 */
+function assetNames(raw: GithubRelease): string[] {
+  if (!Array.isArray(raw?.assets)) return []
+  return (raw.assets as Array<{ name?: unknown }>)
+    .map((a) => (typeof a?.name === 'string' ? a.name : undefined))
+    .filter((n): n is string => n !== undefined)
+}
+
+/** mac 的安装包附件（dmg 与 electron-builder 出的 `-mac.zip`）。 */
+export function isMacPackage(name: string): boolean {
+  return /\.dmg$|-mac\.zip$/i.test(name)
 }
 
 /**
@@ -160,8 +177,12 @@ interface GithubRelease {
  * 为什么不用 `electron-updater` 查：mac 上它连查都过不去（要校验运行中应用的签名）。
  * 这里只是一次匿名 GET + 一次版本比较，**没有任何凭据，也不下载任何东西**。
  */
-export function pickLatestBeta(body: unknown, current: string): UpdateInfo | undefined {
-  return pickLatest(body, current, (tag) => tag.includes('-beta.'))
+export function pickLatestBeta(
+  body: unknown,
+  current: string,
+  fits?: (assetNames: string[]) => boolean,
+): UpdateInfo | undefined {
+  return pickLatest(body, current, (tag) => tag.includes('-beta.'), fits)
 }
 
 /**
@@ -172,9 +193,15 @@ export function pickLatestRelease(
   body: unknown,
   current: string,
   channel: UpdateChannel,
+  /** WP326：按附件再筛一道（Intel Mac 跳过只有 Apple 芯片包的发布）；不给 = 不筛。 */
+  fits?: (assetNames: string[]) => boolean,
 ): UpdateInfo | undefined {
-  return pickLatest(body, current, (tag) =>
-    channel === 'stable' ? !tag.includes('-') : !tag.includes('-') || tag.includes('-beta.'),
+  return pickLatest(
+    body,
+    current,
+    (tag) =>
+      channel === 'stable' ? !tag.includes('-') : !tag.includes('-') || tag.includes('-beta.'),
+    fits,
   )
 }
 
@@ -182,6 +209,7 @@ function pickLatest(
   body: unknown,
   current: string,
   accept: (tag: string) => boolean,
+  fits?: (assetNames: string[]) => boolean,
 ): UpdateInfo | undefined {
   if (!Array.isArray(body)) return undefined
   let best: UpdateInfo | undefined
@@ -191,6 +219,7 @@ function pickLatest(
     if (tag === undefined || !accept(tag)) continue
     const version = tag.replace(/^v/, '')
     if (!isNewer(current, version)) continue
+    if (fits !== undefined && !fits(assetNames(raw))) continue
     if (best !== undefined && !isNewer(best.version, version)) continue
     best = {
       version,
@@ -206,6 +235,8 @@ export interface ReleaseCheckerOptions {
   repo?: string
   /** WP218：按渠道挑；不给 = 旧行为（只认 beta）。 */
   channel?: UpdateChannel
+  /** WP326：按这次发布的附件名再筛一道（Intel Mac 跳过只有 Apple 芯片包的发布）；不给 = 不筛。 */
+  fits?: (assetNames: string[]) => boolean
   timeoutMs?: number
   abort?: (timeoutMs: number) => { signal: AbortSignal; done: () => void }
 }
@@ -225,8 +256,8 @@ export function createReleaseChecker(options: ReleaseCheckerOptions): UpdaterPor
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const body: unknown = JSON.parse(await res.text())
         return options.channel === undefined
-          ? pickLatestBeta(body, options.currentVersion)
-          : pickLatestRelease(body, options.currentVersion, options.channel)
+          ? pickLatestBeta(body, options.currentVersion, options.fits)
+          : pickLatestRelease(body, options.currentVersion, options.channel, options.fits)
       } finally {
         guard?.done()
       }
@@ -321,6 +352,12 @@ export interface FeedCheckerOptions {
   feed: FeedConfig
   /** `process.platform`：决定读 `latest.yml` 还是 `latest-mac.yml`。 */
   platform: string
+  /**
+   * WP326（决策 731）：这台电脑的芯片（`x64` / `arm64`；Rosetta 下跑着 Intel 版的算 `arm64`）。
+   * mac 上给了 `x64`、而新版只有 Apple 芯片的包时，当作没有适合这台电脑的更新（不提示、不报错）。
+   * 不给 = 不看芯片，只比版本号（WP326 之前的行为）。
+   */
+  arch?: string
   timeoutMs?: number
   abort?: (timeoutMs: number) => { signal: AbortSignal; done: () => void }
 }
@@ -333,12 +370,16 @@ export interface FeedCheckerOptions {
 export function createFeedChecker(options: FeedCheckerOptions): UpdateBackend {
   const { feed } = options
   const refuse = (): Promise<never> => Promise.reject(new Error('这个平台不做应用内下载'))
+  const macArch = options.platform === 'darwin' ? options.arch : undefined
   if (feed.provider === 'github') {
     const checker = createReleaseChecker({
       fetchImpl: options.fetchImpl,
       currentVersion: options.currentVersion,
       repo: `${feed.owner}/${feed.repo}`,
       channel: feed.channel,
+      ...(macArch === undefined
+        ? {}
+        : { fits: (names: string[]) => macUpdateFits(names.filter(isMacPackage), macArch) }),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
       ...(options.abort === undefined ? {} : { abort: options.abort }),
     })
@@ -353,8 +394,12 @@ export function createFeedChecker(options: FeedCheckerOptions): UpdateBackend {
           ...(guard === undefined ? {} : { signal: guard.signal }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const latest = versionFromUpdateInfo(await res.text())
+        const text = await res.text()
+        const latest = versionFromUpdateInfo(text)
         if (latest === undefined || !isNewer(options.currentVersion, latest)) return undefined
+        // WP326：新版只有 Apple 芯片的包，这台 Intel Mac 装不了——当作没有适合它的更新
+        if (macArch !== undefined && !macUpdateFits(fileUrlsFromUpdateInfo(text), macArch))
+          return undefined
         return { version: latest, url: DOWNLOAD_PAGE }
       } finally {
         guard?.done()
