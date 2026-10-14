@@ -252,7 +252,10 @@ export interface SocialServiceOptions {
    * WP329：Reddit 写的三个口（起草 / 出卡 / 进度），由 `reddit-write/` 那一份接（装配期晚绑定）。
    * 不给 = 路由照实说没装配。
    */
-  reddit?: Pick<SocialPort, 'redditDraft' | 'redditStage' | 'redditWrites'>
+  reddit?: Pick<
+    SocialPort,
+    'redditDraft' | 'redditStage' | 'redditWrites' | 'redditRefill' | 'redditDismiss'
+  >
 }
 
 export interface SocialServiceAssembly {
@@ -639,6 +642,13 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     ...(options.reddit?.redditWrites === undefined
       ? {}
       : { redditWrites: options.reddit.redditWrites }),
+    // WP332（决策 762）：没发出去的「再填一次」与收起提醒
+    ...(options.reddit?.redditRefill === undefined
+      ? {}
+      : { redditRefill: options.reddit.redditRefill }),
+    ...(options.reddit?.redditDismiss === undefined
+      ? {}
+      : { redditDismiss: options.reddit.redditDismiss }),
 
     accounts: (_actor, filter) => ({
       rows: store.accounts(

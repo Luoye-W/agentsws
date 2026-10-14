@@ -48,6 +48,7 @@ In the extension settings, click “Reddit · Connect”. Chrome will ask for ac
 - For each Reddit reply, comment or post you approved in Agents Workshop, the extension **opens a new tab** and fills the draft into the reply box (or the submit page). A bar at the top says it is waiting for you to send.
 - **You always click send yourself.** Once you do and the post shows up, Agents Workshop logs it (with a link). If you do not send it, Reddit blocks it, or you are logged out, the extension stops and nothing is logged as sent.
 - **If the extension is offline, it waits**: approved posts stay queued until you open Chrome (up to 24 hours). Nothing is posted for you automatically.
+- **Not posted? Fill it again**: the social media position page shows a “Not posted” line with the reason. Click “Fill again” to hand the same approved draft to the extension, with no new approval. You can also dismiss the line.
 - To stop, click “Stop” on the bar. The draft stays on the page, unsent.
 - An extension paired before this update has to be **paired again** to do Reddit posting.
 

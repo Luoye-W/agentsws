@@ -200,6 +200,11 @@ export interface PrExternalPostInput {
   body: string
   flair?: string | undefined
   parent_external_id?: string | undefined
+  /**
+   * WP332：被回那一条的链接（`https://www.reddit.com/r/x/comments/…/` 或站内路径）。Reddit 上回一条**评论**
+   * 要它，插件才找得到回复框；不给就从巡查条目 / 社群线程 / 提及里补，补不到不出卡。
+   */
+  parent_permalink?: string | undefined
 }
 
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
@@ -349,6 +354,7 @@ const ExternalPostBody = z.object({
   body: z.string().min(1).max(50_000),
   flair: z.string().min(1).max(100).optional(),
   parent_external_id: z.string().min(1).max(200).optional(),
+  parent_permalink: z.string().min(1).max(500).optional(),
 })
 
 export function prRoutes(): Route[] {

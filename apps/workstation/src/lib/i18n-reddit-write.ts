@@ -13,6 +13,17 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.facts': '依据',
   'redditw.rules': '版规 {n} 条',
   'redditw.failed': '没交出去：{message}',
+  // WP332（决策 762）：岗位页「没发出去」提醒条
+  'redditw.notice.title': '没发出去：{what}',
+  'redditw.notice.refill': '再填一次',
+  'redditw.notice.refill.hint':
+    '同一份批过的草稿再交给 Chrome 里的插件填好，你自己点发送。不用重批。',
+  'redditw.notice.dismiss': '收起',
+  'redditw.notice.more': '还有 {n} 条',
+  'redditw.notice.kind.reply': '回复（r/{sub}）',
+  'redditw.notice.kind.comment': '回帖（r/{sub}）',
+  'redditw.notice.kind.submit': '发帖（r/{sub}）',
+  'redditw.parent': '原评论',
 }
 
 export const REDDIT_WRITE_EN: Record<string, string> = {
@@ -24,4 +35,14 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.facts': 'Based on',
   'redditw.rules': '{n} sub rules',
   'redditw.failed': 'Not handed over: {message}',
+  'redditw.notice.title': 'Not posted: {what}',
+  'redditw.notice.refill': 'Fill again',
+  'redditw.notice.refill.hint':
+    'Hands the same approved draft to the helper in Chrome again. You click send yourself. No new approval needed.',
+  'redditw.notice.dismiss': 'Dismiss',
+  'redditw.notice.more': '{n} more',
+  'redditw.notice.kind.reply': 'Reply (r/{sub})',
+  'redditw.notice.kind.comment': 'Comment (r/{sub})',
+  'redditw.notice.kind.submit': 'Post (r/{sub})',
+  'redditw.parent': 'Original comment',
 }

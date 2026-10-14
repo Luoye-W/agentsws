@@ -568,6 +568,7 @@ import {
   redditWatchSourceOf,
 } from './reddit-watch/index.js'
 import { modelRedditDrafter } from './reddit-write/draft.js'
+import { redditParentLinker } from './reddit-write/parent-link.js'
 import {
   createRedditWriteService,
   isRedditWriteCard,
@@ -3977,6 +3978,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return redditWrites.stage(actor, input)
         },
         redditWrites: () => ({ rows: redditWrites?.writes() ?? [] }),
+        // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
+        redditRefill: async (_actor, job_id) => {
+          if (redditWrites === undefined)
+            throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
+          const out = await redditWrites.refill(job_id)
+          if (!out.ok) throw new ApiError('conflict', out.message)
+          return out.view
+        },
+        redditDismiss: (_actor, job_id) => {
+          const view = redditWrites?.dismiss(job_id)
+          if (view === undefined) throw new ApiError('not_found', '找不到这一条。')
+          return view
+        },
       },
       routeScopeManager,
       store: social,
@@ -4182,6 +4196,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       appendEvent,
       random,
+      /*
+       * WP332：公关在别人帖子下回一条评论——找那条评论的链接（插件靠它找到回复框）：巡查条目 → 社群线程 →
+       * 提及 → 出卡前补读所在帖子的评论（与 `read_reddit` 同一条只读取数路由；下面才建，晚绑定）。补不到不出卡。
+       */
+      redditParent: redditParentLinker({
+        watchEntries: (fullname) => redditWatchStore.byFullname(ws, fullname),
+        threads: () => social.threads({ channel: 'reddit' }),
+        mentions: () => pr.mentions(),
+        readComments: async (post_url) => {
+          const got = await redditSearch.read({
+            capability: 'social.reddit.comments',
+            input: { post_url, limit: 100 },
+          })
+          return got.ok
+            ? {
+                ok: true,
+                items: got.items.map((it) => ({
+                  url: it.url,
+                  ...(it.id === undefined ? {} : { id: it.id }),
+                })),
+              }
+            : { ok: false, message: got.message }
+        },
+      }),
     })
     /**
      * WP75（57 §5）：广告库的 `/v1` 面。

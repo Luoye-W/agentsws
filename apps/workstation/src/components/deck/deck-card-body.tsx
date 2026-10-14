@@ -12,6 +12,7 @@
  */
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
+import { ExternalLink } from 'lucide-react'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
@@ -400,6 +401,8 @@ export function DeckCardBody({
         const preview = str(payload.preview_image) ?? str(payload.image_url)
         const scheduled = highlightText(card, 'scheduled')
         const audience = highlightText(card, 'audience')
+        // WP332：公关在别人帖子下回一条评论——被回的那一条点得开（插件也按它找回复框）
+        const parentUrl = isRecord(payload.after) ? str(payload.after.parent_url) : undefined
         return (
           <div className="mt-2.5 flex gap-3" data-testid="deck-layout-publish">
             <div
@@ -420,6 +423,19 @@ export function DeckCardBody({
                   {t('deck.publish.audience', { n: audience ?? '—' })}
                 </span>
               </div>
+              {parentUrl === undefined ? null : (
+                <a
+                  href={parentUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={parentUrl}
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-ws-muted-fg hover:text-ws-fg"
+                  data-testid="deck-parent-link"
+                >
+                  {t('redditw.parent')}
+                  <ExternalLink className="size-3" aria-hidden />
+                </a>
+              )}
               <DesignNoteLine card={card} />
             </div>
           </div>

@@ -82,6 +82,15 @@ export interface RedditWriteEntry extends RedditWriteView {
   fullname?: string
   /** 写进发出记录的那一行（发出去之后补上编号与链接）。 */
   record: OutboundRecordInput
+  /**
+   * WP332（决策 762）：交给插件的那一份（写到哪 + 批过的正文 / 标题），「再填一次」原样再交——不用重批。
+   * WP332 之前的老进度没有这几格，那几条不能再填。
+   */
+  write?: RedditWrite
+  text?: string
+  title?: string
+  /** 之前几次交给插件的活（再填一次换了新的 `job_id`）。 */
+  previous_jobs?: string[]
 }
 
 export interface RedditWriteServiceOptions {
@@ -155,6 +164,15 @@ export interface RedditWriteService {
   send(input: RedditSendInput): Promise<RedditWriteResult>
   /** 插件动作通道的事件（只认 Reddit 的活）。 */
   onActionEvent(event: AdsActionEvent): void
+  /**
+   * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件（新的一件活），
+   * **不出新卡、不用重批**；人照样自己点发送。只有没发出去的、走插件的、记着草稿的才能再填。
+   */
+  refill(
+    job_id: string,
+  ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
+  /** WP332：人看过、收起岗位页那一行提醒（这一条再填一次又没发出去时重新出）。 */
+  dismiss(job_id: string): RedditWriteView | undefined
   writes(): RedditWriteView[]
   /** 插件最近一周来过、连着 Reddit。 */
   extensionReady(): boolean
@@ -242,6 +260,10 @@ export interface RedditWriteSettings {
   /** 插件不在线时走程序直发（不是人点）。默认关：等插件、等你打开 Chrome。 */
   direct_fallback: boolean
 }
+
+/** WP332：能不能「再填一次」：走插件的、记着草稿的（直发那条路不再填：761 默认关）。 */
+const canRefill = (e: RedditWriteEntry): boolean =>
+  e.via === 'extension' && e.write !== undefined && e.text !== undefined
 
 /** 插件不在线时进度里那一句。 */
 export const PLUGIN_OFFLINE = '插件不在线，等你打开 Chrome（24 小时内来领都行）。'
@@ -337,6 +359,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     entry.state = 'failed'
     entry.finished_at = now()
     entry.message = message
+    entry.outcome = outcome
     options.emit('reddit.write_failed', 'system', {
       approval_item_id: entry.approval_item_id,
       job_id: entry.job_id,
@@ -344,6 +367,31 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       outcome,
     })
     settle(entry)
+  }
+
+  /** 交给插件动作通道（一件新活）。 */
+  const toPlugin = async (
+    input: Pick<RedditSendInput, 'write' | 'text' | 'approval_item_id' | 'label'>,
+  ): Promise<{ ok: true; job: { id: string } } | { ok: false; why: string }> => {
+    const actions = options.actions
+    if (actions === undefined)
+      return {
+        ok: false,
+        why: 'Reddit 还没接上：在 Chrome 的「Agents 工坊助手」插件里连接 Reddit（或填已有的 OAuth 开发者应用）。',
+      }
+    const job = buildRedditJob({
+      id: nextId('rdw'),
+      workspace_id: ws,
+      account_id: options.account?.() ?? `ws:${ws}`,
+      action: { write: input.write, text: input.text },
+      approval_id: input.approval_item_id,
+      approval_level: 'L1',
+      ...(input.label === undefined ? {} : { title: input.label }),
+      created_at: now(),
+      ...(options.origin === undefined ? {} : { origin: options.origin }),
+    })
+    const queued = await actions.enqueue(job)
+    return queued.ok ? { ok: true, job } : queued
   }
 
   const send = async (input: RedditSendInput): Promise<RedditWriteResult> => {
@@ -393,30 +441,19 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         }
       }
     }
-    const actions = options.actions
-    if (actions === undefined)
-      return failed(
-        'Reddit 还没接上：在 Chrome 的「Agents 工坊助手」插件里连接 Reddit（或填已有的 OAuth 开发者应用）。',
-      )
-    const job = buildRedditJob({
-      id: nextId('rdw'),
-      workspace_id: ws,
-      account_id: options.account?.() ?? `ws:${ws}`,
-      action: { write: input.write, text: input.text },
-      approval_id: input.approval_item_id,
-      approval_level: 'L1',
-      ...(input.label === undefined ? {} : { title: input.label }),
-      created_at: now(),
-      ...(options.origin === undefined ? {} : { origin: options.origin }),
-    })
-    const queued = await actions.enqueue(job)
+    const queued = await toPlugin(input)
     if (!queued.ok) return failed(queued.why)
+    const job = queued.job
     const entry: RedditWriteEntry = {
       ...base,
       job_id: job.id,
       state: 'queued',
       via: 'extension',
       ...(extensionReady() ? {} : { message: PLUGIN_OFFLINE }),
+      write: input.write,
+      text: input.text,
+      ...(input.title === undefined ? {} : { title: input.title }),
+      ...(input.label === undefined ? {} : { label: input.label }),
     }
     entries.push(entry)
     save()
@@ -744,6 +781,55 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       )
     },
 
+    async refill(job_id) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return { ok: false, message: '找不到这一条。' }
+      if (entry.state !== 'failed')
+        return {
+          ok: false,
+          message:
+            entry.state === 'sent' ? '这一条已经发出去了。' : '这一条还在插件那边，等它做完。',
+        }
+      if (!canRefill(entry) || entry.write === undefined || entry.text === undefined)
+        return { ok: false, message: '这一条没记下草稿，不能再填；从卡片流里重新起草一张。' }
+      const queued = await toPlugin({
+        write: entry.write,
+        text: entry.text,
+        approval_item_id: entry.approval_item_id,
+        ...(entry.label === undefined ? {} : { label: entry.label }),
+      })
+      if (!queued.ok) return { ok: false, message: queued.why }
+      entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
+      entry.job_id = queued.job.id
+      entry.state = 'queued'
+      entry.queued_at = now()
+      entry.refills = (entry.refills ?? 0) + 1
+      delete entry.finished_at
+      delete entry.outcome
+      delete entry.dismissed
+      if (extensionReady()) delete entry.message
+      else entry.message = PLUGIN_OFFLINE
+      save()
+      options.emit('reddit.write_refilled', 'system', {
+        approval_item_id: entry.approval_item_id,
+        job_id: entry.job_id,
+        kind: entry.kind,
+        refills: entry.refills,
+      })
+      const view = service.writes().find((w) => w.job_id === entry.job_id)
+      return view === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view }
+    },
+
+    dismiss(job_id) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return undefined
+      if (entry.state === 'failed' && entry.dismissed !== true) {
+        entry.dismissed = true
+        save()
+      }
+      return service.writes().find((w) => w.job_id === job_id)
+    },
+
     writes() {
       const running = new Map((options.actions?.jobs() ?? []).map((j) => [j.id, j.status] as const))
       return [...entries].reverse().map((e): RedditWriteView => {
@@ -759,6 +845,11 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           subreddit: e.subreddit,
           state,
           ...(e.message === undefined ? {} : { message: e.message }),
+          ...(e.outcome === undefined || e.state !== 'failed' ? {} : { outcome: e.outcome }),
+          ...(e.label === undefined ? {} : { label: e.label }),
+          ...(e.state === 'failed' && canRefill(e) ? { can_refill: true } : {}),
+          ...(e.refills === undefined || e.refills === 0 ? {} : { refills: e.refills }),
+          ...(e.dismissed === true ? { dismissed: true } : {}),
           ...(e.link === undefined ? {} : { link: e.link }),
           ...(e.record_id === undefined ? {} : { record_id: e.record_id }),
           queued_at: e.queued_at,
