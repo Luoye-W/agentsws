@@ -538,6 +538,7 @@ import {
 } from './role-rules.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
+import { repairStuckRuns } from './run-repair.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -3103,10 +3104,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 与运营工具（优先云端、没有才回退 CLI 授权）按它认；连接页卡上每看一次、连上 / 断开都顺手更新。
    * 云客户端是品牌模块里的那一份——晚绑定（`brandModules` 在下面才建好）。
    */
+  /** WP319：各品牌的面板活数据源（云端连店 / 断店时让它下一次读之前重拉）。 */
+  const liveDataByWs = new Map<WorkspaceId, LiveDataSource>()
   const cloudShopLinks = createCloudShopLinks({
     cloudOf: (ws) => brandModules.cloud(ws),
     startupBrand: workspace.id,
     clock,
+    onChange: (ws) => liveDataByWs.get(ws)?.invalidate(),
     // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
     ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
@@ -3186,7 +3190,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(options.liveDataIntervalMs === undefined
           ? {}
           : { refreshIntervalMs: options.liveDataIntervalMs }),
+        /*
+         * WP319（Luoye 10-14 Windows 真机）：店铺已经在连接页一键授权（或岗位页 CLI 授权）连上、
+         * 「查商品」查得到，面板却说「还没连接店铺后台」——面板以前只认连接器里那条老连接。
+         * 现在与运营工具认同一份（云端优先、没有才 CLI 授权），订单经它的只读 Admin GraphQL 拉。
+         */
+        shopAdmin: {
+          peek: () => {
+            const link = cloudShopLinks.peek(ws)
+            return link === undefined ? undefined : { store: link.shop }
+          },
+          reader: async () => (await shopOf(ws))?.auth.reader(),
+        },
       })
+      liveDataByWs.set(ws, liveData)
     }
     const baseWorkData: WorkstationDataSource =
       liveData ?? connections.wrapDataSource(injected ?? emptyDataSource())
@@ -4677,6 +4694,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       soleOwner: () => soleOwnerOf?.(ws),
     })
     runtime?.bind(work)
+    /*
+     * WP319 ③：开机自检——这个品牌还没有运行在跑，最近一轮没收尾的事项（老版本没跑成只记了「跑完了」、
+     * 跑到一半应用被关 / 被更新重启）按本机事件日志补一句「没跑成」+ 重试，不再一直挂在「进行中」。
+     */
+    try {
+      repairStuckRuns({
+        openMatters: () => work.listMatters({ status: ['open', 'waiting'], archived: false }),
+        timeline: (id) => work.store.listMatterEvents(id, { limit: 40 }),
+        runEvents: (run_id) => kernel.eventLog.readSync({ workspace_id: ws, run_id }),
+        append: (id, e) => {
+          work.appendEvent(id, e)
+        },
+        setSummary: (m, summary) => {
+          work.store.putMatter({ ...m, context: { ...m.context, summary } })
+        },
+      })
+    } catch {
+      // 自检失败不挡开机：最坏就是老事项照旧挂着
+    }
     /**
      * WP154「内容与搜索」：这个品牌的 SEO / GEO 那一层。
      *
