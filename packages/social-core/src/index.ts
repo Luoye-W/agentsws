@@ -17,7 +17,7 @@
  * | `moderation` | 群规匹配与分级（封禁要人点） |
  * | `channels` | 各渠道适配器（WP191 起加了 FB 主页 / IG / Threads / LinkedIn 四条，老的 `meta` 留着） |
  * | `platform` | WP191：各平台的硬限制一张表（字数、标签、@、链接、轮播张数、每日上限） |
- * | `reddit-weekly` | WP330：Reddit 周报——窗口、计数、话题归组、Markdown（分节与措辞可配置） |
+ * | `watch-query` | WP331：报告积木的纯计算——时间窗、巡查条目筛选 / 计数 / 按话题归组、发出记录计数（不认平台） |
 | `research` | WP220：研究技能的取数白名单、Reddit 两路取数、趋势排序、爆款帖、报告与卡 |
  *
  * **不在这里的东西**（各有去处，免得有人在这里找）：
@@ -33,9 +33,9 @@ export * from './channels/index.js'
 export * from './moderation.js'
 export * from './own-sub-queue.js'
 export * from './platform.js'
-// WP330：Reddit 周报（纯函数：窗口、计数、话题归组、Markdown）
-export * from './reddit-weekly.js'
 export * from './research/index.js'
 export * from './thread-tags.js'
 export * from './triage.js'
 export * from './voice.js'
+// WP331：报告积木的纯计算（时间窗、巡查条目查询 / 归组、发出记录计数）
+export * from './watch-query.js'

@@ -10,7 +10,7 @@ import {
   createRedditWatchStore,
   keywordHit,
   type RedditWatchOptions,
-  redditWeekSourceOf,
+  redditWatchSourceOf,
   topicKey,
 } from '../src/reddit-watch/index.js'
 
@@ -378,7 +378,7 @@ describe('什么时候巡查（一天一次起步）', () => {
     s.setNow('2026-10-15T01:30:00.000Z') // 第二天 09:30
     expect(await s.watch.tick()).toMatchObject({ ran: true })
   })
-  it('一天一次的定时里没有「周五最后一次」（那一次由周报调 sweepNow）', async () => {
+  it('一天一次的定时里没有「周五最后一次」（要最新数据由 AI 调立即巡查）', async () => {
     const s = setup({}, '2026-10-16T09:05:00.000Z') // 周五 17:05（东八区）
     s.watch.next({ connected: true })
     s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
@@ -389,7 +389,7 @@ describe('什么时候巡查（一天一次起步）', () => {
   })
 })
 
-describe('给周报（WP330）：sweepNow 与 RedditWeekSource', () => {
+describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
   const routes = {
     '/message/inbox/.json?mark=false': listing([
       t('c9', 't1', { type: 'comment_reply', body: 'iPhone?' }),
@@ -398,7 +398,7 @@ describe('给周报（WP330）：sweepNow 与 RedditWeekSource', () => {
     '/r/inmoxr/new/.json': listing([t('p2', 't3', { title: 'My Air3 unboxing' })]),
     '/r/inmoxr/comments/.json': listing([t('c9', 't1', { body: 'iPhone?' })]),
   }
-  it('sweepNow：起「本周最后一次」，等插件交回再回；做完通知 onFinal', async () => {
+  it('sweepNow：现在巡查一次，等插件交回再回（正在跑的那一轮直接等它）', async () => {
     // 替身插件：sweepNow 在「等」的时候（每次 sleep）来领活、读替身 Reddit、交回
     const reddit = fakeReddit(routes, 'inmo_official')
     let handed = false
@@ -414,22 +414,20 @@ describe('给周报（WP330）：sweepNow 与 RedditWeekSource', () => {
     )
     ref.w = s.watch
     s.watch.updateSettings({ own_subreddits: ['inmoxr'], keywords: ['INMO'] })
-    const onFinal = vi.fn()
-    s.watch.onFinal(onFinal)
     s.watch.next({ connected: true })
-    // 刚连上会马上补跑一轮；它还没做完时周报来了 → 这一轮直接算作本周最后一次
+    // 刚连上会马上补跑一轮；它还没做完时 AI 要「立即巡查」→ 直接等这一轮
     const run = await s.watch.sweepNow({ pollMs: 1, timeoutMs: 50 })
     expect(handed).toBe(true)
-    expect(run).toMatchObject({ final: true })
+    expect(run).toMatchObject({ final: false })
     expect(run.finished_at).toBeDefined()
-    expect(onFinal).toHaveBeenCalledTimes(1)
 
-    const src = redditWeekSourceOf(s.watch)
+    const src = redditWatchSourceOf(s.watch)
+    expect(src.platform).toBe('reddit')
     expect(await src.configured()).toBe(true)
-    expect(await src.subreddits()).toEqual(['inmoxr'])
+    expect(await src.ownPlaces()).toEqual(['inmoxr'])
     const w = { since: '2026-10-10T16:00:00.000Z', until: '2026-10-16T10:00:00.000Z' }
     const items = await src.items(w)
-    // 同一条评论在收件箱和版块里都有 → 只算一次；别处版块里回我们的不进周报
+    // 同一条评论在收件箱和版块里都有 → 只算一次；别处版块里回我们的不算
     expect(items.filter((x) => x.id === 't1_c9')).toHaveLength(1)
     expect(items.some((x) => x.id === 't1_m1')).toBe(false)
     expect(items.find((x) => x.id === 't3_p2')).toMatchObject({ scope: 'own', kind: 'post' })
@@ -438,7 +436,7 @@ describe('给周报（WP330）：sweepNow 与 RedditWeekSource', () => {
     expect(ext.every((x) => x.topic?.key.startsWith('t:') === true)).toBe(true)
     expect((await src.sweeps(w)).length).toBe(1)
   })
-  it('插件一直没来交：sweepNow 到时抛一句人话（周报照样出）', async () => {
+  it('插件一直没来交：sweepNow 到时抛一句人话（报告照样用已入库的出）', async () => {
     const s = setup({ sleep: async () => {} }, '2026-10-16T09:05:00.000Z')
     s.watch.next({ connected: true })
     s.watch.updateSettings({ own_subreddits: ['inmoxr'] })

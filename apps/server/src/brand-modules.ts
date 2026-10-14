@@ -55,7 +55,6 @@ import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
-import type { RedditWeeklyService } from './reddit-weekly.js'
 import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
@@ -293,8 +292,6 @@ export interface BrandModuleSet {
   weeklyReview: WeeklyReviewService
   /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
   lineCompareSnapshot(): Promise<{ rows: number; date: string }>
-  /** WP330（docs/102 附）：这个品牌的 Reddit 周报（每周五下班前出；分节与措辞可配置）。 */
-  redditWeekly: RedditWeeklyService
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

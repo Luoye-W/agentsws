@@ -3,7 +3,7 @@
  *
  * - **一天一次起步**：隔 `every_hours` 小时；一天一次（≥ 24）时，当天到了 `day_start_hour` 才跑；
  * - 关机期间错过的**只补一次**，不连读好几轮；一块失败了，隔一小时再试（不连着撞）。
- * - **每周最后一次不在这里排**：周五周报（WP330）出之前调 `sweepNow` 做（与 WP330 对齐，免得两边各跑一次）。
+ * - 只管自己的节奏；出报告前要最新数据由 AI 调「立即巡查」（`sweepNow`，WP331）。
  */
 import type { Iso8601, RedditWatchPart, RedditWatchSettings } from '@agentsws/contracts'
 

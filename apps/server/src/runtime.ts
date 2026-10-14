@@ -114,7 +114,7 @@ import {
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
   RECORD_SINK_TOOL_NAMES,
-  REDDIT_WEEKLY_TOOL_NAMES,
+  REPORT_TOOL_NAMES,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
   SHOP_TOOL_NAMES,
@@ -122,6 +122,7 @@ import {
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
   themeWorkSection,
+  WATCH_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
@@ -179,13 +180,10 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...IMAGE_TOOL_NAMES,
     // WP323：记录去处——读表头只读外部；配置只出「定规矩」卡（本机执行器）
     ...RECORD_SINK_TOOL_NAMES,
-    // WP330：Reddit 周报的分节与措辞——只动我们自己的周报怎么写（本机）
-    ...REDDIT_WEEKLY_TOOL_NAMES,
+    // WP331：报告积木——查巡查 / 查发出记录只读本机库；立即巡查读外部（只读）；发布只进本岗位报表区
+    ...REPORT_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
-
-/** WP330：有周报那两个工具的职责（周报发给担它们的人）。 */
-const REDDIT_WEEKLY_TOOL_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit'])
 
 /** ObjectRef.type → ContextItem.kind；不认识的按摘要注入。 */
 const KIND_BY_REF: Record<string, ContextItem['kind']> = {
@@ -424,10 +422,10 @@ export interface RuntimeOptions {
    */
   recordSinkTools?: ToolExecutor
   /**
-   * WP330：Reddit 周报分节与措辞的两个工具（`reddit-weekly-tools.ts` 建的那一份）。只给担 Reddit 运营的
-   * 职责（`social.reddit` / `pr.reddit`）——周报发给他们。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   * WP331（决策 691）：报告积木的四个工具（`report-tools.ts` 建的那一份）。查发出记录 / 发布报告给所有职责；
+   * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
-  redditWeeklyTools?: ToolExecutor
+  reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1114,7 +1112,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const dev = options.devTools
     const automation = options.automation
     const sinkTools = options.recordSinkTools
-    const weeklyTools = options.redditWeeklyTools
+    const reportTools = options.reportTools?.execute
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1143,7 +1141,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       readSkill === undefined &&
       automation === undefined &&
       sinkTools === undefined &&
-      weeklyTools === undefined
+      reportTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1185,9 +1183,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (sinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bareOf(call.name))) {
         return sinkTools(call)
       }
-      // WP330：Reddit 周报的分节与措辞（名字与别处不重名）
-      if (weeklyTools !== undefined && REDDIT_WEEKLY_TOOL_NAMES.includes(bareOf(call.name))) {
-        return weeklyTools(call)
+      // WP331：报告积木（名字与别处不重名）
+      if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
+        return reportTools(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1228,8 +1226,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
-    if (options.redditWeeklyTools !== undefined && REDDIT_WEEKLY_TOOL_NAMES.includes(bare))
-      return true
+    if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1655,10 +1652,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
         // WP323：记录去处（所有职责；接了发出记录才有）
         ...(options.recordSinkTools === undefined ? [] : RECORD_SINK_TOOL_NAMES),
-        // WP330：Reddit 周报的分节与措辞（担 Reddit 运营的职责；接了周报才有）
-        ...(options.redditWeeklyTools !== undefined && REDDIT_WEEKLY_TOOL_ROLES.has(config.role_id)
-          ? REDDIT_WEEKLY_TOOL_NAMES
-          : []),
+        // WP331：报告积木（查发出记录 / 发布报告所有职责；查巡查 / 立即巡查只给担巡查的职责）
+        ...(options.reportTools === undefined
+          ? []
+          : REPORT_TOOL_NAMES.filter(
+              (n) =>
+                !WATCH_TOOL_NAMES.includes(n) ||
+                options.reportTools?.watchRoles.has(config.role_id) === true,
+            )),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))

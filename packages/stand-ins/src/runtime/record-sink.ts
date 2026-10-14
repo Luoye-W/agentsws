@@ -83,7 +83,7 @@ export const RECORD_SINK_TOOL_DEFS: readonly ToolDef[] = [
           type: 'array',
           items: { type: 'string' },
           description:
-            '只记这些动作（reply / comment / post …）。每周的 Reddit 周报是 weekly_report，只有列了它才记',
+            '只记这些动作（reply / comment / post …）。发布的报告（周报、日报…）是 report，只有列了它才记',
         },
         sink_id: { type: 'string', description: '要改的那个去处（list_record_sinks 里的 id）' },
       },

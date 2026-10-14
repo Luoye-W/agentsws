@@ -64,12 +64,22 @@ import {
   recordSinkDataOf,
   renderRecordSinkAnswer,
 } from './record-sink.js'
-import { REDDIT_WEEKLY_TOOL_DEF_BY_NAME } from './reddit-weekly.js'
+import { PUBLISH_REPORT_TOOL, REPORT_TOOL_DEF_BY_NAME } from './report.js'
+import {
+  composeStubReport,
+  type ReportNeed,
+  reorderAsk,
+  reorderNumbered,
+  reportPlan,
+  splitNumbered,
+} from './report-playbook.js'
 import { researchToolDef } from './research.js'
 import {
   renderScheduleAnswer,
   SCHEDULE_CREATE_TOOL,
+  SCHEDULE_LIST_TOOL,
   SCHEDULE_TOOL_DEF_BY_NAME,
+  SCHEDULE_UPDATE_TOOL,
   scheduleBranch,
 } from './schedule.js'
 import {
@@ -342,8 +352,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       IMAGE_TOOL_DEF_BY_NAME.get(name) ??
       // WP323：记录去处的三个工具（服务端接了发出记录的运行才有）
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
-      // WP330：Reddit 周报的分节与措辞（服务端接了周报、担 Reddit 运营的运行才有）
-      REDDIT_WEEKLY_TOOL_DEF_BY_NAME.get(name) ?? {
+      // WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告；服务端接了才有）
+      REPORT_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -843,6 +853,118 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         // 摘要：回话的第一句（与 direct / dsh 同一份拼法，WP153 §2）
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP331：**报告剧本**（两段，见 `report-playbook.ts`）。都放在定时那一段前面：
+       * 到点那次运行（外框 `[SCHEDULE REMINDER`）在要报告 → 取数 → 按提示词里的顺序拼 → 发布；
+       * 「把第三节放最前面」→ 列这件事里的定时 → 改那条的提示词（下一次就按新顺序出）。
+       * 工具面里没有 `publish_report` / `schedule_update` 的运行一个字节不变。
+       */
+      const plan = reportPlan(req.tools.allow, threadText)
+      const reorder =
+        plan === undefined &&
+        req.tools.allow.includes(SCHEDULE_UPDATE_TOOL) &&
+        req.tools.allow.includes(SCHEDULE_LIST_TOOL)
+          ? reorderAsk(threadText)
+          : undefined
+      if (
+        (plan !== undefined && req.tools.allow.includes(PUBLISH_REPORT_TOOL)) ||
+        reorder !== undefined
+      ) {
+        const callTool = async (
+          tool: string,
+          input: Record<string, unknown>,
+        ): Promise<ToolExecution> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            return { status: 'blocked', reason: 'budget_exhausted' }
+          }
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status === 'ok') readTools.push(tool)
+          return res
+        }
+        let answer: string
+        if (plan !== undefined) {
+          const results = new Map<ReportNeed, unknown>()
+          for (const c of plan.calls) {
+            if (signal.aborted) {
+              sink(cancelledEvent(signal))
+              return finish('cancelled', '运行被中断')
+            }
+            const res = await callTool(c.tool, c.input)
+            if (res.status === 'ok' && c.need !== undefined) results.set(c.need, res.data)
+          }
+          const doc = composeStubReport(plan, results)
+          const res = await callTool(PUBLISH_REPORT_TOOL, { ...doc })
+          const data = (res.data ?? {}) as { version?: unknown }
+          answer =
+            res.status === 'ok'
+              ? `已发布「${doc.title}」${typeof data.version === 'number' && data.version > 1 ? `（第 ${data.version} 版）` : ''}，在报表区。`
+              : `报告没发出去：${res.reason ?? '这一步没走通'}`
+        } else {
+          const ask = reorder as { from: number; to: 'first' | 'last' }
+          const listed = await callTool(SCHEDULE_LIST_TOOL, {})
+          const views = Array.isArray(listed.data)
+            ? (listed.data as { id?: unknown; title?: unknown; prompt?: unknown }[])
+            : []
+          const target = views.find(
+            (v) =>
+              typeof v.prompt === 'string' &&
+              (splitNumbered(v.prompt)?.items.length ?? 0) > ask.from,
+          )
+          const prompt = typeof target?.prompt === 'string' ? target.prompt : undefined
+          const count = prompt === undefined ? 0 : (splitNumbered(prompt)?.items.length ?? 0)
+          const next =
+            prompt === undefined
+              ? undefined
+              : reorderNumbered(prompt, ask.from, ask.to === 'first' ? 0 : count - 1)
+          if (target === undefined || next === undefined) {
+            answer = '这件事里没找到能改顺序的那条定时（要有编了号的几节）。'
+          } else {
+            const res = await callTool(SCHEDULE_UPDATE_TOOL, { id: target.id, prompt: next })
+            const order = splitNumbered(next)?.items ?? []
+            answer =
+              res.status === 'ok'
+                ? `改好了，以后按这个顺序出：\n${order.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+                : `没改成：${res.reason ?? '这一步没走通'}`
+          }
+        }
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = describeRun({
           readTools,
           drafted: false,
