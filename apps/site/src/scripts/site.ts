@@ -3,6 +3,8 @@
  * 动效本身全是 CSS；这里只挂类名。系统开了「减少动态效果」时点亮逻辑不挂，页面显示的就是最后一帧。
  * 时长不在这里写：由页面在 <body> 上带过来（出自 `@agentsws/brand`）。
  */
+import { looksLikeIntelMac } from '../lib/downloads.js'
+
 const root = document.documentElement
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 const assembleMs = Number(document.body.dataset.awAssembleMs ?? 1500)
@@ -116,8 +118,24 @@ if (primary) {
   }
 }
 
+// WP326（决策 731）：只出 Apple 芯片版——认得出是 Intel Mac 就在首屏按钮下面说一句（认不出就不说）
+const intelNote = document.querySelector<HTMLElement>('[data-intel-mac]')
+// 先看是不是 Mac 再去问显卡：别的系统上不建 WebGL
+if (intelNote && /Macintosh/i.test(navigator.userAgent))
+  intelNote.hidden = !looksLikeIntelMac(navigator.userAgent, gpuName())
+
+function gpuName(): string | null {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl')
+    const ext = gl?.getExtension('WEBGL_debug_renderer_info')
+    return gl && ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : null
+  } catch {
+    return null
+  }
+}
+
 // WP218：首页「下载」按钮——Windows 访客直接拿下载站上最新的安装包（构建时取的清单里有链接才换），
-// mac 分不清 Apple 芯片还是 Intel，照旧去下载页挑
+// mac 照旧去下载页（那里有首次打开的说明）
 if (/Windows/i.test(navigator.userAgent)) {
   for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-dl-win]')) {
     const url = a.getAttribute('data-dl-win')

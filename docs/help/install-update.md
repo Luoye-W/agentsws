@@ -4,7 +4,7 @@ roles: []
 ---
 # 安装与更新
 
-Agents 工坊是一个桌面应用，Windows 和 Mac 都有。装好之后它会自己检查新版本，有新版时点一下就能更新，不用重新下载、不用卸载重装。
+Agents 工坊是一个桌面应用，Windows 和 Mac（Apple 芯片）都有。装好之后它会自己检查新版本，有新版时点一下就能更新，不用重新下载、不用卸载重装。
 
 ## 下载
 
@@ -12,9 +12,8 @@ Agents 工坊是一个桌面应用，Windows 和 Mac 都有。装好之后它会
 
 - **Windows**：`Agents-Workshop-Setup-版本号-x64.exe`
 - **Mac（Apple 芯片，M1 及以后）**：`Agents-Workshop-版本号-arm64.dmg`
-- **Mac（Intel 芯片）**：`Agents-Workshop-版本号-x64.dmg`
 
-不知道自己的 Mac 是哪种芯片：点屏幕左上角苹果图标 →「关于本机」，写着 Apple M 开头的就是 Apple 芯片。
+目前只支持 Apple 芯片的 Mac，Intel 芯片的 Mac 暂时没有安装包。不知道自己的 Mac 是哪种芯片：点屏幕左上角苹果图标 →「关于本机」，写着 Apple M 开头的就是 Apple 芯片。
 
 ## Windows：第一次安装
 
@@ -56,6 +55,8 @@ Agents 工坊打开后会自己检查新版本，之后大约每 4 小时再查�
 ### Mac 上的更新
 
 目前 Mac 版还没有签名，系统不允许它自己替换自己。所以在 Mac 上，有新版本时按钮写的是「有新版本」，点了会打开下载页，下载新的 `.dmg` 拖进「应用程序」覆盖旧的就行，数据同样保留。等 Mac 版签了名，就和 Windows 一样点一下更新。
+
+以前装过 Intel 版的 Mac 不会再收到更新提示（新版只有 Apple 芯片的），旧版照常能用。
 
 ## 正式版和测试版
 

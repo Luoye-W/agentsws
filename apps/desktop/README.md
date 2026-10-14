@@ -229,9 +229,9 @@ git tag v0.2.0 && git push origin v0.2.0                 # stable
 
 `.github/workflows/release.yml` 接手：
 
-1. 三台机器各打自己那一份（windows-latest / macos-14 / macos-15-intel）；Windows 那份**装起来真跑一遍**
+1. 两台机器各打自己那一份（windows-latest / macos-14；WP326 起 Mac 只出 Apple 芯片版，不再打 Intel）；Windows 那份**装起来真跑一遍**
    （`scripts/win-install-smoke.mjs`），不过就不发；
-2. 收拢：两份 `latest-mac.yml` 合成一份、`check` 产物结构、生成官网 `downloads.json`；
+2. 收拢：`latest-mac.yml`（只认 arm64 那一份）、`check` 产物结构（latest-mac.yml 里混进别的架构就红）、生成官网 `downloads.json`；
 3. **同一套产物**传到自有下载站（R2，`dl.agentsws.com/<渠道>/`，**先安装包后 `latest*.yml`**）和
    GitHub Releases（beta 标 prerelease）；
 4. 更新根目录的 `downloads.json`（官网读它；哪个渠道上官网由仓库变量 `SITE_DOWNLOAD_CHANNEL` 定，没设 = beta）。
