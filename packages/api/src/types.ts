@@ -356,6 +356,41 @@ export interface SkillMemoryEntry {
   source?: 'manual' | 'promoted'
   added_by?: string
   added_at?: string
+  /** WP320：人写的还是 AI 随工作自己记的（没有 = 早于 WP320，按人写的算）。 */
+  written_by?: 'person' | 'ai'
+  /** WP320：AI 记的那条从哪次运行 / 哪件事来的。 */
+  run_id?: string
+  matter_id?: string
+  /** WP320：为什么记（asked / preference / correction / fact / manual / merge …）。 */
+  reason?: string
+}
+
+/**
+ * WP320：记忆账上的一笔（新增 / 改动 / 合并 / 删除）。界面上「记住了：……」小提醒就读它。
+ * `text` 是这条记忆现在的样子（截短）；删掉的是删之前的样子。
+ */
+export interface MemoryChangeView {
+  id: string
+  at: string
+  kind: 'added' | 'updated' | 'merged' | 'removed'
+  entry_id: string
+  tier: SkillTier
+  scope_id: string
+  text: string
+  by: string
+  written_by: 'person' | 'ai'
+  run_id?: string
+  matter_id?: string
+  reason?: string
+}
+
+/** WP320：「设置 → 通用」的「自动记忆」——每个人在每个品牌里一份，默认开。 */
+export interface AutoMemoryPort {
+  get(actor: { person_id: PersonId; workspace_id: WorkspaceId }): MaybePromise<{ enabled: boolean }>
+  set(
+    actor: { person_id: PersonId; workspace_id: WorkspaceId },
+    enabled: boolean,
+  ): MaybePromise<{ enabled: boolean }>
 }
 
 /** 写个人层 overlay 的入参（24 §1 OverlayOp）。 */
@@ -465,6 +500,15 @@ export interface SkillsPort {
     scope_id?: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
   }): Promise<{ read: boolean; write: boolean; reason?: string }>
+  /**
+   * WP320：记忆账上最近几笔（`since` 之后；`by: 'ai'` 只要 AI 记的）。**只回本人的**——
+   * AI 替你记的、你自己改的；别人那几笔不出现在你的小提醒里。看不见的那几层也不回。
+   */
+  memoryChanges?(input: {
+    since?: string
+    written_by?: 'person' | 'ai'
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<MemoryChangeView[]>
   /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
   proposals?(actor: {
     person_id: PersonId
@@ -928,6 +972,8 @@ export interface GatewayDeps {
    * 运行照缺省（空闲 3 分钟、总时长 20 分钟）。
    */
   runLimits?: RunLimitsPort
+  /** WP320：「自动记忆」开关。没装配时 `/v1/settings/auto-memory` 回 not_implemented。 */
+  autoMemory?: AutoMemoryPort
   /**
    * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。

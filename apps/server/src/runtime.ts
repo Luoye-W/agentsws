@@ -32,6 +32,8 @@ import type {
   GateDecision,
   Matter,
   MatterRunBlock,
+  MaybePromise,
+  MemoryFact,
   ModelRef,
   ObjectRef,
   PersonId,
@@ -39,6 +41,7 @@ import type {
   RunBrowser,
   RunConnection,
   RunEvent,
+  RunId,
   RunProduce,
   RunRequest,
   RunTimeLimits,
@@ -119,6 +122,7 @@ import {
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
 import { cardRefOf, type Work } from '@agentsws/work'
+import { type RememberItem, type RunMemoryActor, splitRememberTags } from './auto-memory.js'
 import type { ComputerUseAssembly } from './computer-use.js'
 import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
@@ -234,6 +238,25 @@ export interface RuntimeOptions {
   roles: RoleStore
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   source?: MatterRecordSource
+  /**
+   * WP320：记忆。`section` = 提示词里「记忆」那一段（这次运行这几层现有的记忆 + 记忆规矩，每次现取，
+   * 人删掉的下一次就没有）；`afterRun` = 跑完之后自动记（`auto-memory.ts`）。答复里的
+   * `<remember>…</remember>` 进时间线之前拿掉（同 `<next>`）。不给 = 与 WP320 之前逐字相同。
+   */
+  memory?: {
+    section(
+      actor: RunMemoryActor,
+      loaded_skills: readonly string[],
+    ): MaybePromise<PromptSection | undefined>
+    afterRun(input: {
+      run_id: RunId
+      matter_id?: string
+      actor: RunMemoryActor
+      brief: string
+      items: readonly RememberItem[]
+      runtime?: readonly MemoryFact[]
+    }): Promise<unknown>
+  }
   /**
    * WP236：「设置 → 通用」里的运行时长线（空闲超时 / 总时长上限，秒）。每次运行现问；
    * 职责阈值 `run_idle_timeout_seconds` / `run_max_duration_seconds` 优先，都没有走缺省（3 / 20 分钟）。
@@ -1480,6 +1503,23 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             registry: options.skills,
           })
     skillActors.set(input.run_id, skillActor)
+    /** WP320：「记忆」那一段（技能正文里已有的不重复列；取不到就不出，不让整次运行失败）。 */
+    const memorySection =
+      options.memory === undefined
+        ? undefined
+        : await Promise.resolve(
+            options.memory.section(
+              {
+                person_id: input.person_id,
+                workspace_id,
+                ...(positionHit.position_id === undefined
+                  ? {}
+                  : { position_id: positionHit.position_id }),
+                role_id: config.role_id,
+              },
+              config.skills.filter((s) => s.load !== 'on_demand').map((s) => s.name),
+            ),
+          ).catch(() => undefined)
     /*
      * WP179：这条职责的官方网页工具（职责 YAML 的 `web_tools`）。三件事都成立才给：
      * 服务端接了网页那一层、有模型（没模型的替身档驱动不了它）、职责挂了；
@@ -1655,6 +1695,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。
            */
           houseRulesSection('zh'),
+          // WP320：记忆（这几层现有的 + 记忆规矩，order 26）。没装配记忆就一个字节不多
+          ...(memorySection === undefined ? [] : [memorySection]),
           /*
            * WP264（决策 179）：**下一步建议**——交代末尾有明确下一步就单独一行 `<next>…</next>`，
            * 宿主进时间线前取出来记在 `next_suggestion` 上（事项页按 Tab 收下）。所有职责同一份，紧跟公共段。
@@ -1810,10 +1852,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * 不改成只认其中一边：哪一边都有适配器可能不给（回放档只走事件、直连档只给返回值）。
      * 收口在这里：**逐字相同的一段只留第一次**。
      */
-    const addAnswer = (text: string): void => {
+    /** WP320：答复里模型写的 `<remember>`（进时间线之前从正文里拿掉，跑完交给自动记忆）。 */
+    const remembered: RememberItem[] = []
+    const addAnswer = (raw: string): void => {
+      const split = options.memory === undefined ? { text: raw, items: [] } : splitRememberTags(raw)
+      for (const item of split.items)
+        if (!remembered.some((r) => r.text === item.text)) remembered.push(item)
+      const text = split.text
       if (answers.includes(text)) return
       answers.push(text)
     }
+    /** WP320：摘要里也不留 `<remember>`（摘要会落到事项的「到哪了」上）。 */
+    const cleanSummary = (raw: string): string =>
+      options.memory === undefined ? raw : splitRememberTags(raw).text
     let summary = ''
     /*
      * WP236：**没动静才停**。三个运行时档都认 `signal`，所以看门狗放在这一层统一管：每个事件、
@@ -1916,7 +1967,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           if (!seen.some((r) => refKey(r) === refKey(ref))) seen.push(ref)
       }
       if (e.type === 'run.completed') {
-        summary = e.summary
+        summary = cleanSummary(e.summary)
         for (const out of e.outputs) if (out.kind === 'answer') addAnswer(out.text)
       }
     }
@@ -1966,7 +2017,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         options.computerUse?.deactivate(run_id)
         watchdog.stop()
       }
-      summary = result.summary
+      summary = cleanSummary(result.summary)
       for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
       /*
        * WP236：**停下来要让人看见、已经干的不丢**。原因按看门狗 → 运行时报的 → signal 的顺序认；
@@ -2075,6 +2126,36 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         summary: splitNextSuggestion(summary).text,
         session_ref: result.session_ref,
       })
+      /*
+       * WP320：跑完了才记（停下 / 失败的不记）。记忆写不进去不影响这次运行的结果——
+       * 小提醒那边照实没有，事件日志里也没有那一条。
+       */
+      const memoryActor = skillActors.get(run_id)
+      if (
+        options.memory !== undefined &&
+        memoryActor !== undefined &&
+        result.status === 'completed'
+      )
+        await options.memory
+          .afterRun({
+            run_id,
+            matter_id: input.matter.id,
+            actor: {
+              person_id: memoryActor.person_id,
+              workspace_id: memoryActor.workspace_id,
+              ...(memoryActor.position_id === undefined
+                ? {}
+                : { position_id: memoryActor.position_id }),
+              role_id: memoryActor.role_id ?? request.actor.role_id,
+            },
+            brief: input.brief,
+            items: remembered,
+            // 替身 / 回放档可能根本不给这一格
+            ...(Array.isArray(result.memory_candidates) && result.memory_candidates.length > 0
+              ? { runtime: result.memory_candidates }
+              : {}),
+          })
+          .catch(() => undefined)
     } catch (err) {
       // WP287：原始错误进本机事件日志（排障用），时间线上只说人话 + 重试
       const raw = {

@@ -35,8 +35,10 @@ import {
   dirAliases,
   freePort,
   normalizeWinPath,
+  powershell,
   processesUnder,
   processTable,
+  psRows,
   reporter,
   silentInstall,
   sleep,
@@ -75,6 +77,14 @@ export function defaultUserData(appData, packageName) {
 }
 
 // ── 真跑（只在 Windows 上）─────────────────────────────────────────────
+
+/** WP319：「正在更新」小窗那几个 PowerShell 进程（按命令行里的脚本名认）。 */
+function splashProcesses() {
+  const json = powershell(
+    'Get-CimInstance Win32_Process -Filter "Name=\'powershell.exe\'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress',
+  )
+  return psRows(json).filter((r) => String(r.CommandLine ?? '').includes('agentsws-update-'))
+}
 
 function arg(name) {
   const i = process.argv.indexOf(name)
@@ -186,10 +196,22 @@ async function main() {
   await waitUpdate(page, ['ready'], 600, step)
   const proc = app.process()
   const exited = new Promise((r) => proc.once('exit', (code) => r(code)))
+  const clicked = Date.now()
   const outcome = await page
     .evaluate(() => window.agentsws.update.install())
     .catch((e) => `（连接断开：${e.message.split('\n')[0]}）`)
   step(`点了「重启并更新」：${outcome}`)
+  // WP319：「正在更新到 x.y.z」小窗（系统 PowerShell，不在安装目录里）要在 N 退出前后就起来
+  const pendingFile = join(userData, 'update-pending.json')
+  let splashSeen = false
+  for (let i = 0; i < 20 && !splashSeen; i += 1) {
+    splashSeen = splashProcesses().length > 0
+    if (!splashSeen) await sleep(500)
+  }
+  step(
+    `「正在更新」小窗：${splashSeen ? '起来了' : '没看到'}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
+  )
+  if (!splashSeen) throw new Error('点了「重启并更新」10 秒内没看到「正在更新」小窗')
   const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
   step(`N 退出：${code === 'timeout' ? '90 秒没退' : `退出码 ${describeExit(code, null)}`}`)
   await app.close().catch(() => undefined)
@@ -202,7 +224,17 @@ async function main() {
     if (v2 !== toVersion) await sleep(1000)
   }
   if (v2 !== toVersion) throw new Error(`5 分钟内新版本没起来（服务报 ${v2 ?? '连不上'}）`)
-  step(`新版本起来了：服务报 ${v2}`)
+  step(
+    `新版本起来了：服务报 ${v2}（从点「重启并更新」到这里 ${Math.round((Date.now() - clicked) / 1000)} 秒）`,
+  )
+  // WP319：新版一启动就收掉单子，小窗跟着关
+  let splashGone = false
+  for (let i = 0; i < 20 && !splashGone; i += 1) {
+    splashGone = !existsSync(pendingFile) && splashProcesses().length === 0
+    if (!splashGone) await sleep(500)
+  }
+  step(`「正在更新」小窗：${splashGone ? '关了，单子收掉了' : '还在'}`)
+  if (!splashGone) throw new Error('新版起来 10 秒后「正在更新」小窗还在 / 单子没收掉')
   if (pkgOf().version !== toVersion)
     throw new Error(`安装目录里的版本是 ${pkgOf().version}，不是 ${toVersion}`)
   step(`安装目录里也是 ${toVersion}`)

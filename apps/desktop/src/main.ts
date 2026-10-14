@@ -4,8 +4,10 @@
  * 这个文件只做**装配**——所有判定（状态机、退避、URL 拦截、菜单模型、配置、密钥）
  * 都在旁边那些不 import electron 的模块里，那些才是被测试覆盖的部分。
  */
-import { existsSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { existsSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -135,6 +137,7 @@ import {
   githubFallbackFeed,
   parseAppUpdateYml,
 } from './update-feed.js'
+import { beginUpdate, finishPendingUpdate } from './update-splash.js'
 import { createFeedChecker, DOWNLOAD_PAGE, isNewer, updatePolicy } from './updater.js'
 import {
   canRestore,
@@ -294,6 +297,15 @@ async function bootstrap(): Promise<void> {
   })
   const version = app.getVersion()
   logger.info('桌面壳启动', { version, userData: paths.userData })
+  // WP319：刚由「重启并更新」装上来的——收掉「正在更新」单（那个小窗跟着关），记一行用了多久
+  finishPendingUpdate({
+    files,
+    userData: paths.userData,
+    version,
+    now: () => new Date(),
+    logger,
+    platform: process.platform,
+  })
 
   const configStore = createConfigStore(files, paths.configFile)
   let config: DesktopConfig = configStore.load()
@@ -1788,6 +1800,35 @@ async function bootstrap(): Promise<void> {
       download: async (onProgress) => (await primary()).download(onProgress),
       install: () => {
         void primary().then(async (b) => {
+          /*
+           * WP319：窗口一关到新版起来要好一会儿（安装程序挪旧文件、解新文件），这期间桌面上什么都没有。
+           * 先起一个不在安装目录里的「正在更新到 x.y.z」小窗，新版一启动就关（见 update-splash.ts）。
+           */
+          const s = updates.status()
+          if (policy.mode === 'auto' && 'version' in s)
+            beginUpdate({
+              files,
+              userData: paths.userData,
+              tempDir: tmpdir(),
+              from: version,
+              to: s.version,
+              language: config.language,
+              now: () => new Date(),
+              logger,
+              platform: process.platform,
+              launcher: {
+                // PowerShell 5.1 按本地码页读不带 BOM 的脚本，中文会乱
+                writeScript: (path, text) => writeFileSync(path, `\uFEFF${text}`, 'utf8'),
+                // 脱离父进程（DETACHED_PROCESS：没有控制台窗口）；不设 windowsHide——设了小窗也会被藏起来
+                spawnDetached: (command, args) => {
+                  const child = spawn(command, [...args], { detached: true, stdio: 'ignore' })
+                  child.on('error', (e) =>
+                    logger.warn('「正在更新」小窗没起来', { error: String(e) }),
+                  )
+                  child.unref()
+                },
+              },
+            })
           await stopEverythingForInstall()
           b.install()
         })
