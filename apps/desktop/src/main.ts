@@ -5,7 +5,7 @@
  * 都在旁边那些不 import electron 的模块里，那些才是被测试覆盖的部分。
  */
 import { spawn } from 'node:child_process'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, openSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -1829,9 +1829,27 @@ async function bootstrap(): Promise<void> {
                 writeScript: (path, text) => writeFileSync(path, `\uFEFF${text}`, 'utf8'),
                 // 脱离父进程（DETACHED_PROCESS：没有控制台窗口）；不设 windowsHide——设了小窗也会被藏起来
                 spawnDetached: (command, args) => {
-                  const child = spawn(command, [...args], { detached: true, stdio: 'ignore' })
+                  // WP325：小窗的输出 / 报错写进日志目录（CI 带得出来），退了也记一笔退出码
+                  let out: number | 'ignore' = 'ignore'
+                  try {
+                    out = openSync(join(paths.logDir, 'update-splash.log'), 'a')
+                  } catch {
+                    out = 'ignore'
+                  }
+                  const t0 = Date.now()
+                  const child = spawn(command, [...args], {
+                    detached: true,
+                    stdio: ['ignore', out, out],
+                  })
                   child.on('error', (e) =>
                     logger.warn('「正在更新」小窗没起来', { error: String(e) }),
+                  )
+                  child.on('exit', (code, signal) =>
+                    logger.warn('「正在更新」小窗进程退了', {
+                      code: code ?? 'none',
+                      signal: signal ?? 'none',
+                      ms: Date.now() - t0,
+                    }),
                   )
                   logger.info('「正在更新」小窗进程', { pid: child.pid ?? 'none' })
                   child.unref()

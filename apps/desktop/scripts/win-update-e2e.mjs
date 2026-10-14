@@ -246,6 +246,18 @@ async function main() {
     step(
       `诊断：临时目录里的小窗脚本 ${scripts.join('、') || '没有'}；PowerShell 小窗进程 ${splashProcesses().length} 个`,
     )
+    // WP325：桌面壳记下的小窗进程（pid / 退出码）与小窗自己的输出（等 N 退了日志才写全）
+    await Promise.race([exited, sleep(30_000)])
+    const logDir = join(userData, 'logs')
+    const desk = existsSync(join(logDir, 'desktop.log'))
+      ? readFileSync(join(logDir, 'desktop.log'), 'utf8')
+      : ''
+    for (const line of desk.split('\n').filter((l) => l.includes('小窗')))
+      step(`诊断（桌面壳）：${line.slice(0, 240)}`)
+    const own = join(logDir, 'update-splash.log')
+    step(
+      `诊断（小窗输出）：${existsSync(own) ? readFileSync(own, 'utf8').slice(0, 1500) || '空' : '没有这个文件'}`,
+    )
     throw new Error('点了「重启并更新」15 秒内「正在更新」小窗没起来（没有心跳）')
   }
   const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
