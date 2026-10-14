@@ -205,7 +205,7 @@ export const THEME_WORK_RULES = [
   '3. 只改商店层文件：templates/index.json（放哪些分区、什么顺序、每块的设置）、页头页尾、config/settings_data.json（颜色、字体等主题设置）、locales 店面文案；.liquid / CSS / JS 是主题的核心代码，不改，要一小段自定义代码用现成的 custom-liquid。写完回话里有 problems 就照着改。',
   '4. 跑官方检查，有错误就改，改到 0 个错误。',
   '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
-  '工具回话里说这份是旧的自带主题（agentsws-theme）：照实跟人说一句「工坊已改用 Shopify 官方 Horizon」，先起底在 Horizon 上新起一份再做；旧的那份不删、不迁、不再改。',
+  '工具回话里说这份是旧的自带主题（agentsws-theme）：照实跟人说一句「工坊已改用 Shopify 官方 Horizon」，先起底新起一份再做（照第 1 条：没说用哪套就出选主题卡）；旧的那份不删、不迁、不再改。',
   '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（美国店就写英文）。',
 ].join('\n')
 
@@ -379,7 +379,8 @@ export interface ThemeStep {
  * - 说「用 Horizon 搭」→ 起底（`source: 'store'`，在店里复制一份 Horizon）→ 检查 → 推未发布副本；
  * - WP304：说「从头搭 / 换主题」没点名用哪套 → 起底不给 source：出选主题卡就停（人选了服务端起底、按原话再跑一次，
  *   那一次起底回 `reused`，接着检查、推）；说「高级主题」→ `source: 'premium'`；
- * - 工具回话说这份是旧的自带主题（WP301）→ 剧本在当场插一步起底，在 Horizon 上新起一份再接着做；
+ * - 工具回话说这份是旧的自带主题（WP301）→ 剧本在当场插一步起底（WP311：不给 source → 出选主题卡就停；
+ *   没接审批总线时服务端照老路在 Horizon 上新起一份）再接着做；
  * - 别的主题活 → 检查 → 推未发布副本（stub 不会写 Liquid，改文件那一步留给真模型）。
  */
 export function themeBranch(req: RunRequest, text: string): ThemeStep[] | undefined {
@@ -460,6 +461,14 @@ export function latestCopyOf(data: unknown): { id: string; name: string } | unde
     : { id: String(last.id), name: String(last.name ?? last.id) }
 }
 
+/** WP311：旧目录挪开后新起的那一份叫什么（Horizon / 高级主题 / 店里别的免费主题）。 */
+const legacyNewBase = (init: ThemeInitData | undefined): string =>
+  init?.premium === true
+    ? '我们的高级主题'
+    : init?.theme?.name === undefined || /horizon/i.test(init.theme.name)
+      ? ' Horizon '
+      : `「${init.theme.name}」`
+
 /** stub 给网页模板的那段回话（markdown）。没走通的那一步照实说，不编。 */
 export function renderThemeAnswer(input: {
   initialized?: boolean
@@ -486,8 +495,10 @@ export function renderThemeAnswer(input: {
     lines.push(
       `这份主题工作目录是旧的自带主题（agentsws-theme${old.version === undefined ? '' : ` v${old.version}`}），工坊已改用 Shopify 官方的 Horizon。` +
         (input.initialized === true
-          ? '这次在 Horizon 上新起了一份；旧的那份原样留着，没删、没迁。'
-          : '旧的那份原样留着，没删、没迁；下次在 Horizon 上新起一份再做。'),
+          ? `这次在${legacyNewBase(input.init)}上新起了一份；旧的那份原样留着，没删、没迁。`
+          : input.choice !== undefined
+            ? '旧的那份原样留着，没删、没迁；选好主题我新起一份再做。'
+            : '旧的那份原样留着，没删、没迁；下次新起一份再做。'),
     )
   if (input.initialized === true) {
     const src = input.init?.source
