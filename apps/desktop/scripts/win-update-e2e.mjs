@@ -78,6 +78,34 @@ export function defaultUserData(appData, packageName) {
 
 // ── 真跑（只在 Windows 上）─────────────────────────────────────────────
 
+/** WP325：读小窗的心跳（它自己写的 JSON；没有 / 坏的回 undefined）。 */
+export function readBeat(file) {
+  try {
+    const raw = readFileSync(file, 'utf8').replace(/^\uFEFF/, '')
+    const j = JSON.parse(raw)
+    return typeof j?.state === 'string' && typeof j?.at === 'string' ? j : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 心跳给人看的那几个字。 */
+export function describeBeat(beat) {
+  const what =
+    beat.state === 'shown'
+      ? '窗口画出来了'
+      : beat.state === 'headless'
+        ? `没有交互桌面，后台在等${beat.error ? `：${String(beat.error).slice(0, 80)}` : ''}`
+        : beat.state === 'closed'
+          ? '关了'
+          : beat.state
+  const env =
+    beat.interactive === undefined
+      ? ''
+      : `，${beat.interactive ? '交互会话' : '非交互会话'} ${beat.session ?? '?'}`
+  return `${what}，pid ${beat.pid ?? '?'}${env}`
+}
+
 /** WP319：「正在更新」小窗那几个 PowerShell 进程（按命令行里的脚本名认）。 */
 function splashProcesses() {
   const json = powershell(
@@ -201,21 +229,38 @@ async function main() {
     .evaluate(() => window.agentsws.update.install())
     .catch((e) => `（连接断开：${e.message.split('\n')[0]}）`)
   step(`点了「重启并更新」：${outcome}`)
-  // WP319：「正在更新到 x.y.z」小窗（系统 PowerShell，不在安装目录里）要在 N 退出前后就起来
+  // WP319 / WP325：「正在更新到 x.y.z」小窗（系统 PowerShell，不在安装目录里）要在 N 退出前后就起来。
+  // CI 的 runner 不一定有交互桌面（窗口画不出来），所以按小窗自己写的心跳认：起来了（starting / shown / headless）
   const pendingFile = join(userData, 'update-pending.json')
-  let splashSeen = false
-  for (let i = 0; i < 20 && !splashSeen; i += 1) {
-    splashSeen = splashProcesses().length > 0
-    if (!splashSeen) await sleep(500)
+  const beatFile = join(userData, 'update-splash.json')
+  let beat
+  for (let i = 0; i < 30 && beat === undefined; i += 1) {
+    beat = readBeat(beatFile)
+    if (beat === undefined) await sleep(500)
   }
   step(
-    `「正在更新」小窗：${splashSeen ? '起来了' : '没看到'}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
+    `「正在更新」小窗：${beat === undefined ? '没起来' : `起来了（${describeBeat(beat)}）`}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
   )
-  if (!splashSeen) throw new Error('点了「重启并更新」10 秒内没看到「正在更新」小窗')
+  if (beat === undefined) {
+    const scripts = readdirSync(tmpdir()).filter((n) => n.startsWith('agentsws-update-'))
+    step(
+      `诊断：临时目录里的小窗脚本 ${scripts.join('、') || '没有'}；PowerShell 小窗进程 ${splashProcesses().length} 个`,
+    )
+    throw new Error('点了「重启并更新」15 秒内「正在更新」小窗没起来（没有心跳）')
+  }
   const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
   step(`N 退出：${code === 'timeout' ? '90 秒没退' : `退出码 ${describeExit(code, null)}`}`)
   await app.close().catch(() => undefined)
   if (code === 'timeout') throw new Error('点了「重启并更新」90 秒 N 还没退')
+  // N 退了、安装程序在装：小窗得还活着（心跳还在走）
+  await sleep(3000)
+  const during = readBeat(beatFile)
+  const alive =
+    during !== undefined && during.state !== 'closed' && Date.now() - Date.parse(during.at) < 5000
+  step(
+    `安装中：小窗${alive ? '还在' : '不在了'}（${during === undefined ? '没有心跳' : describeBeat(during)}）`,
+  )
+  if (!alive) throw new Error('N 退出后「正在更新」小窗没撑到安装程序装完')
 
   // 5. 安装程序静默装 N+1、自动重开：等服务报 N+1
   let v2
@@ -227,14 +272,18 @@ async function main() {
   step(
     `新版本起来了：服务报 ${v2}（从点「重启并更新」到这里 ${Math.round((Date.now() - clicked) / 1000)} 秒）`,
   )
-  // WP319：新版一启动就收掉单子，小窗跟着关
-  let splashGone = false
-  for (let i = 0; i < 20 && !splashGone; i += 1) {
-    splashGone = !existsSync(pendingFile) && splashProcesses().length === 0
-    if (!splashGone) await sleep(500)
+  // WP319 / WP325：新版一启动就收掉单子，小窗跟着关（心跳最后一笔是 closed）
+  let gone = false
+  let last
+  for (let i = 0; i < 30 && !gone; i += 1) {
+    last = readBeat(beatFile)
+    gone = !existsSync(pendingFile) && last?.state === 'closed'
+    if (!gone) await sleep(500)
   }
-  step(`「正在更新」小窗：${splashGone ? '关了，单子收掉了' : '还在'}`)
-  if (!splashGone) throw new Error('新版起来 10 秒后「正在更新」小窗还在 / 单子没收掉')
+  step(
+    `「正在更新」小窗：${gone ? '关了，单子收掉了' : `还在（${last === undefined ? '没有心跳' : describeBeat(last)}）`}`,
+  )
+  if (!gone) throw new Error('新版起来 15 秒后「正在更新」小窗还在 / 单子没收掉')
   if (pkgOf().version !== toVersion)
     throw new Error(`安装目录里的版本是 ${pkgOf().version}，不是 ${toVersion}`)
   step(`安装目录里也是 ${toVersion}`)

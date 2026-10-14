@@ -1816,6 +1816,14 @@ async function bootstrap(): Promise<void> {
               now: () => new Date(),
               logger,
               platform: process.platform,
+              // 系统自带那一份，不靠 PATH
+              powershell: join(
+                process.env.SystemRoot ?? 'C:\\Windows',
+                'System32',
+                'WindowsPowerShell',
+                'v1.0',
+                'powershell.exe',
+              ),
               launcher: {
                 // PowerShell 5.1 按本地码页读不带 BOM 的脚本，中文会乱
                 writeScript: (path, text) => writeFileSync(path, `\uFEFF${text}`, 'utf8'),
@@ -1825,6 +1833,7 @@ async function bootstrap(): Promise<void> {
                   child.on('error', (e) =>
                     logger.warn('「正在更新」小窗没起来', { error: String(e) }),
                   )
+                  logger.info('「正在更新」小窗进程', { pid: child.pid ?? 'none' })
                   child.unref()
                 },
               },

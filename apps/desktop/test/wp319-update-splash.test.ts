@@ -50,6 +50,7 @@ describe('WP319 ② 「正在更新」小窗', () => {
     expect(scripts[0]?.path).toBe('C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1')
     expect(scripts[0]?.text).toContain("'正在更新到 0.2.0-beta.6'")
     expect(scripts[0]?.text).toContain(`$pending = '${PENDING}'`)
+    expect(scripts[0]?.text).toContain(`$beat = '${USER_DATA}\\update-splash.json'`)
     // 不在安装目录里：系统自带的 PowerShell，脚本在临时目录
     expect(spawned).toEqual([
       {
@@ -124,6 +125,7 @@ describe('WP319 ② 「正在更新」小窗', () => {
       logger: silentLogger(),
       platform: 'win32' as const,
     }
+    files.writeText(`${USER_DATA}\\update-splash.json`, JSON.stringify({ state: 'headless' }))
     expect(finishPendingUpdate(base)).toBe(9)
     expect(files.exists(PENDING)).toBe(false)
     expect(finishPendingUpdate(base)).toBeUndefined()
@@ -135,6 +137,7 @@ describe('WP319 ② 「正在更新」小窗', () => {
   it('小窗脚本：单子没了或超时就关；单引号转义；英文界面说英文', () => {
     const script = splashScript({
       pendingFile: "C:\\Users\\O'Neil\\x.json",
+      heartbeatFile: 'C:\\h.json',
       text: splashText('en', '1.0.0'),
     })
     expect(script).toContain("$pending = 'C:\\Users\\O''Neil\\x.json'")
@@ -142,6 +145,13 @@ describe('WP319 ② 「正在更新」小窗', () => {
     expect(script).toContain('Test-Path -LiteralPath $pending')
     expect(script).toContain("'Updating to 1.0.0'")
     expect(script).toContain('$form.TopMost = $true')
+    // WP325：不用 ShowDialog（没有交互桌面时它直接抛），出错进 catch，画不出来就在后台照样等、写心跳
+    expect(script).not.toContain('ShowDialog')
+    expect(script).toContain('[System.Windows.Forms.Application]::Run($form)')
+    expect(script).toContain("$ErrorActionPreference = 'Stop'")
+    expect(script).toContain("$beat = 'C:\\h.json'")
+    for (const state of ['starting', 'shown', 'headless', 'closed'])
+      expect(script).toContain(`'${state}'`)
     // Windows 换行（PowerShell 5.1 读 CRLF 最稳）
     expect(script.includes('\r\n')).toBe(true)
     expect(splashText('zh-CN', '1.0.0').hint).toBe('装好会自动打开')

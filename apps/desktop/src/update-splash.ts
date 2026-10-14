@@ -19,6 +19,8 @@ import type { Logger } from './logging.js'
 import type { FileStore } from './ports.js'
 
 export const UPDATE_PENDING_FILE = 'update-pending.json'
+/** WP325：小窗的心跳（它自己写；CI 与新版启动时读它，知道小窗起没起来、画没画出来）。 */
+export const UPDATE_SPLASH_FILE = 'update-splash.json'
 /** 小窗最多挂多久（秒）：装不上 / 新版起不来时别一直挂着。 */
 export const SPLASH_TIMEOUT_SECONDS = 15 * 60
 
@@ -53,53 +55,77 @@ const psQuote = (s: string): string => `'${s.replace(/'/g, "''")}'`
  */
 export function splashScript(input: {
   pendingFile: string
+  /** WP325：心跳文件（小窗自己写：起来了 / 窗口画出来了 / 没有桌面只在后台等 / 关了）。 */
+  heartbeatFile: string
   text: SplashText
   timeoutSeconds?: number
 }): string {
   const timeout = input.timeoutSeconds ?? SPLASH_TIMEOUT_SECONDS
   return [
-    "$ErrorActionPreference = 'SilentlyContinue'",
+    // WP325：出错要进 catch（以前 SilentlyContinue 把 ShowDialog 的异常吞了，进程悄悄就退了）
+    "$ErrorActionPreference = 'Stop'",
     `$pending = ${psQuote(input.pendingFile)}`,
+    `$beat = ${psQuote(input.heartbeatFile)}`,
     `$timeout = ${String(Math.max(10, Math.round(timeout)))}`,
-    'Add-Type -AssemblyName System.Windows.Forms',
-    'Add-Type -AssemblyName System.Drawing',
-    '[System.Windows.Forms.Application]::EnableVisualStyles()',
-    '$form = New-Object System.Windows.Forms.Form',
-    `$form.Text = ${psQuote(input.text.title)}`,
-    "$form.FormBorderStyle = 'FixedDialog'",
-    '$form.ControlBox = $false',
-    "$form.StartPosition = 'CenterScreen'",
-    '$form.TopMost = $true',
-    '$form.ShowInTaskbar = $true',
-    '$form.ClientSize = New-Object System.Drawing.Size(360, 112)',
-    '$line = New-Object System.Windows.Forms.Label',
-    `$line.Text = ${psQuote(input.text.line)}`,
-    "$line.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 11)",
-    '$line.Location = New-Object System.Drawing.Point(20, 16)',
-    '$line.Size = New-Object System.Drawing.Size(320, 26)',
-    '$bar = New-Object System.Windows.Forms.ProgressBar',
-    "$bar.Style = 'Marquee'",
-    '$bar.MarqueeAnimationSpeed = 30',
-    '$bar.Location = New-Object System.Drawing.Point(20, 50)',
-    '$bar.Size = New-Object System.Drawing.Size(320, 12)',
-    '$hint = New-Object System.Windows.Forms.Label',
-    `$hint.Text = ${psQuote(input.text.hint)}`,
-    "$hint.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)",
-    '$hint.ForeColor = [System.Drawing.Color]::Gray',
-    '$hint.Location = New-Object System.Drawing.Point(20, 74)',
-    '$hint.Size = New-Object System.Drawing.Size(320, 22)',
-    '$form.Controls.AddRange(@($line, $bar, $hint))',
     '$start = Get-Date',
-    '$timer = New-Object System.Windows.Forms.Timer',
-    '$timer.Interval = 500',
-    '$timer.Add_Tick({',
-    '  if (-not (Test-Path -LiteralPath $pending) -or ((Get-Date) - $start).TotalSeconds -gt $timeout) {',
-    '    $timer.Stop()',
-    '    $form.Close()',
-    '  }',
-    '})',
-    '$timer.Start()',
-    '[void]$form.ShowDialog()',
+    'function Beat([string]$state, [string]$err) {',
+    '  try {',
+    "    $o = @{ pid = $PID; state = $state; error = $err; interactive = [Environment]::UserInteractive; session = (Get-Process -Id $PID).SessionId; at = (Get-Date).ToUniversalTime().ToString('o') }",
+    '    [System.IO.File]::WriteAllText($beat, ($o | ConvertTo-Json -Compress))',
+    '  } catch {}',
+    '}',
+    'function Done() {',
+    '  return (-not (Test-Path -LiteralPath $pending)) -or (((Get-Date) - $start).TotalSeconds -gt $timeout)',
+    '}',
+    "Beat 'starting' ''",
+    'try {',
+    '  Add-Type -AssemblyName System.Windows.Forms',
+    '  Add-Type -AssemblyName System.Drawing',
+    '  [System.Windows.Forms.Application]::EnableVisualStyles()',
+    '  $form = New-Object System.Windows.Forms.Form',
+    `  $form.Text = ${psQuote(input.text.title)}`,
+    "  $form.FormBorderStyle = 'FixedDialog'",
+    '  $form.ControlBox = $false',
+    "  $form.StartPosition = 'CenterScreen'",
+    '  $form.TopMost = $true',
+    '  $form.ShowInTaskbar = $true',
+    '  $form.ClientSize = New-Object System.Drawing.Size(360, 112)',
+    '  $line = New-Object System.Windows.Forms.Label',
+    `  $line.Text = ${psQuote(input.text.line)}`,
+    "  $line.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 11)",
+    '  $line.Location = New-Object System.Drawing.Point(20, 16)',
+    '  $line.Size = New-Object System.Drawing.Size(320, 26)',
+    '  $bar = New-Object System.Windows.Forms.ProgressBar',
+    "  $bar.Style = 'Marquee'",
+    '  $bar.MarqueeAnimationSpeed = 30',
+    '  $bar.Location = New-Object System.Drawing.Point(20, 50)',
+    '  $bar.Size = New-Object System.Drawing.Size(320, 12)',
+    '  $hint = New-Object System.Windows.Forms.Label',
+    `  $hint.Text = ${psQuote(input.text.hint)}`,
+    "  $hint.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)",
+    '  $hint.ForeColor = [System.Drawing.Color]::Gray',
+    '  $hint.Location = New-Object System.Drawing.Point(20, 74)',
+    '  $hint.Size = New-Object System.Drawing.Size(320, 22)',
+    '  $form.Controls.AddRange(@($line, $bar, $hint))',
+    "  $form.Add_Shown({ Beat 'shown' '' })",
+    '  $timer = New-Object System.Windows.Forms.Timer',
+    '  $timer.Interval = 500',
+    '  $timer.Add_Tick({',
+    '    if (Done) { $timer.Stop(); $form.Close() }',
+    "    elseif ($form.Visible) { Beat 'shown' '' }",
+    '  })',
+    '  $timer.Start()',
+    // WP325：不用 ShowDialog——没有交互桌面时它直接抛「不在 UserInteractive 模式」；Application.Run 不查这个
+    '  [System.Windows.Forms.Application]::Run($form)',
+    '} catch {',
+    "  Beat 'headless' $_.Exception.Message",
+    '}',
+    // 窗口画不出来（没有交互桌面 / WinForms 起不来）：照样等到单子收掉或超时，外面靠心跳知道我们在
+    'while (-not (Done)) {',
+    "  Beat 'headless' ''",
+    '  Start-Sleep -Milliseconds 1000',
+    '}',
+    "Beat 'closed' ''",
     '',
   ].join('\r\n')
 }
@@ -151,7 +177,11 @@ export function beginUpdate(input: BeginUpdateInput): { pendingFile: string; spl
     const script = joinPath(input.tempDir, `agentsws-update-${input.to}.ps1`, sep)
     input.launcher.writeScript(
       script,
-      splashScript({ pendingFile, text: splashText(input.language, input.to) }),
+      splashScript({
+        pendingFile,
+        heartbeatFile: joinPath(input.userData, UPDATE_SPLASH_FILE, sep),
+        text: splashText(input.language, input.to),
+      }),
     )
     input.launcher.spawnDetached(input.powershell ?? 'powershell.exe', [
       '-NoProfile',
@@ -192,12 +222,26 @@ export function finishPendingUpdate(input: {
     const started = Date.parse(raw.started_at ?? '')
     if (Number.isFinite(started))
       seconds = Math.max(0, Math.round((input.now().getTime() - started) / 1000))
+    // WP325：小窗那边的心跳（画出来了 / 没有桌面只在后台等 / 起不来的原因）一起记下
+    let splash: string | undefined
+    try {
+      const beat = JSON.parse(
+        input.files.readText(joinPath(input.userData, UPDATE_SPLASH_FILE, sep)) ?? '{}',
+      ) as { state?: string; error?: string }
+      splash =
+        beat.state === undefined
+          ? undefined
+          : `${beat.state}${beat.error ? `（${beat.error.slice(0, 120)}）` : ''}`
+    } catch {
+      splash = undefined
+    }
     input.logger.info('更新用时', {
       from: raw.from,
       to: raw.to,
       now: input.version,
       seconds,
       ok: raw.to === input.version,
+      splash: splash ?? 'none',
     })
   } catch {
     // 坏单子：照样收掉
