@@ -26,6 +26,7 @@ import {
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
   RECORD_SINK_TOOL_DEF_BY_NAME,
+  REDDIT_WEEKLY_TOOL_DEF_BY_NAME,
   renderThemeRead,
   renderTrustedToolResult,
   SHOP_TOOL_DEF_BY_NAME,
@@ -349,7 +350,9 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     SHOP_TOOL_DEF_BY_NAME.get(name) ??
     IMAGE_TOOL_DEF_BY_NAME.get(name) ??
     // WP323：记录去处的三个工具同一个转法（定义在 stand-ins 的 `runtime/record-sink.ts`）
-    RECORD_SINK_TOOL_DEF_BY_NAME.get(name)
+    RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
+    // WP330：Reddit 周报的分节与措辞（定义在 stand-ins 的 `runtime/reddit-weekly.ts`）
+    REDDIT_WEEKLY_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
   const schema = def.input_schema as {
     properties?: Record<string, Record<string, unknown>>
@@ -499,6 +502,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       IMAGE_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP323：记录去处（读表头只读；配置只出「定规矩」卡）
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP330：Reddit 周报的分节与措辞（看只读；改只动我们自己的周报怎么写）
+      REDDIT_WEEKLY_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

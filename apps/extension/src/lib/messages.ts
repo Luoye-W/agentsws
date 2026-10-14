@@ -40,6 +40,11 @@ export type ExtensionMessage =
   /** 广告后台页面顶上的横条：停止 / 确认提交 / 不提交。 */
   | { type: 'ads-stop' }
   | { type: 'ads-confirm'; answer: 'yes' | 'no' }
+  /* ── WP328：Reddit 只读（只加）──────────────────────────────────── */
+  /** 设置页：连上 Reddit 没有、上次读的结局。 */
+  | { type: 'reddit-status' }
+  /** 设置页：刚连上 / 断开，马上问一次本机。 */
+  | { type: 'reddit-poll' }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {
@@ -80,8 +85,19 @@ export interface AdsPanelStatus {
   last_result?: { title: string; outcome: string; message: string; at: string } | undefined
 }
 
+/** WP328：设置页「Reddit」那一节要的状态。 */
+export interface RedditPanelStatus {
+  paired: boolean
+  connected: boolean
+  last_poll_at?: string | undefined
+  note?: string | undefined
+  user?: string | undefined
+  last_result?: { outcome: string; message: string; items: number; at: string } | undefined
+}
+
 export type ExtensionResponse =
   | { type: 'status'; status: ExtensionStatus }
+  | { type: 'reddit-status'; reddit: RedditPanelStatus }
   | { type: 'ads-status'; ads: AdsPanelStatus }
   | { type: 'ads-consent'; ok: boolean; message: string; ads: AdsPanelStatus }
   | { type: 'observe'; outcome: ObserveOutcome }

@@ -64,6 +64,7 @@ import {
   recordSinkDataOf,
   renderRecordSinkAnswer,
 } from './record-sink.js'
+import { REDDIT_WEEKLY_TOOL_DEF_BY_NAME } from './reddit-weekly.js'
 import { researchToolDef } from './research.js'
 import {
   renderScheduleAnswer,
@@ -340,7 +341,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP268：生图 / 改图 / 素材库（只有设计岗与网页模板、而且配了生图的运行才有）
       IMAGE_TOOL_DEF_BY_NAME.get(name) ??
       // WP323：记录去处的三个工具（服务端接了发出记录的运行才有）
-      RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ?? {
+      RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
+      // WP330：Reddit 周报的分节与措辞（服务端接了周报、担 Reddit 运营的运行才有）
+      REDDIT_WEEKLY_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },

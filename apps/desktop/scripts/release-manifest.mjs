@@ -2,9 +2,9 @@
 /**
  * WP218：发版时把几台机器打出来的东西收拢成「一套」（release.yml 的 publish 那一步用；不联网）。
  *
- *   node release-manifest.mjs merge-mac --out latest-mac.yml a.yml b.yml
- *       两台 mac（arm64 / x64）各打一份 latest-mac.yml，各自只列自己那个架构——合成一份再上传，
- *       不然后传的那份把先传的盖掉，另一种 mac 就查不到更新。
+ *   node release-manifest.mjs merge-mac --out latest-mac.yml a.yml [b.yml …]
+ *       几份 latest-mac.yml 合成一份（文件取并集）。WP326（决策 731）起 Mac 只出 Apple 芯片版，
+ *       release.yml 只给一份 arm64 的；合并逻辑留着，将来哪天再多一台 mac 也不用改。
  *
  *   node release-manifest.mjs downloads --version 0.2.0-beta.1 --base https://dl.agentsws.com \
  *       --dir <产物目录> --out downloads.json [--released 2026-10-05]
@@ -13,6 +13,7 @@
  *
  *   node release-manifest.mjs check --dir <产物目录> --version 0.2.0-beta.1
  *       产物结构自检：该有的文件都在、latest*.yml 里的版本与文件名对得上（dry-run 也跑这一步）。
+ *       WP326：mac 只认 Apple 芯片（arm64）；latest-mac.yml 里混进别的架构也算毛病。
  */
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -21,10 +22,10 @@ import { fileURLToPath } from 'node:url'
 
 // ── 产物名（与 electron-builder.yml 的 artifactName 同一套）────────────────
 
+/** WP326（决策 731）：Mac 只出 Apple 芯片版，Intel 版不再打。 */
 export function artifactNames(version) {
   return {
     'mac-arm64': `Agents-Workshop-${version}-arm64.dmg`,
-    'mac-x64': `Agents-Workshop-${version}-x64.dmg`,
     'win-x64': `Agents-Workshop-Setup-${version}-x64.exe`,
   }
 }
@@ -139,7 +140,6 @@ export function buildDownloads({ version, channel, base, released, files, extens
     released: released ?? null,
     desktop: [
       { id: 'mac-arm64', os: 'mac', arch: 'arm64', ...item(names['mac-arm64']) },
-      { id: 'mac-x64', os: 'mac', arch: 'x64', ...item(names['mac-x64']) },
       { id: 'win-x64', os: 'win', arch: 'x64', ...item(names['win-x64']) },
     ],
     extension: {
@@ -156,7 +156,7 @@ export function buildDownloads({ version, channel, base, released, files, extens
 
 /**
  * 产物结构自检：返回问题清单（空 = 没毛病）。
- * Windows 那一份是主路径，缺了就是问题；mac 两份缺哪份报哪份。
+ * Windows 那一份是主路径，缺了就是问题；mac 只认 Apple 芯片那一份（WP326）。
  */
 export function checkArtifacts(names, version, read) {
   const problems = []
@@ -173,15 +173,19 @@ export function checkArtifacts(names, version, read) {
     if (!info.files.some((f) => f.url === want['win-x64']))
       problems.push(`latest.yml 里没有 ${want['win-x64']}`)
   }
-  for (const id of ['mac-arm64', 'mac-x64'])
-    if (!has.has(want[id])) problems.push(`缺 ${id} 的 ${want[id]}`)
+  if (!has.has(want['mac-arm64'])) problems.push(`缺 mac-arm64 的 ${want['mac-arm64']}`)
   if (has.has('latest-mac.yml')) {
     const info = parseUpdateInfo(read('latest-mac.yml'))
     if (info.version !== version)
       problems.push(`latest-mac.yml 的版本是 ${info.version}，不是 ${version}`)
-    for (const id of ['mac-arm64', 'mac-x64'])
-      if (has.has(want[id]) && !info.files.some((f) => f.url === want[id]))
-        problems.push(`latest-mac.yml 里没有 ${want[id]}（两份没合并？）`)
+    if (has.has(want['mac-arm64']) && !info.files.some((f) => f.url === want['mac-arm64']))
+      problems.push(`latest-mac.yml 里没有 ${want['mac-arm64']}`)
+    // 决策 731：Intel 版不再发；混进来说明有人又打了一台 Intel mac
+    const stray = info.files.filter((f) => !String(f.url).includes('arm64')).map((f) => f.url)
+    if (stray.length > 0)
+      problems.push(
+        `latest-mac.yml 里有不是 Apple 芯片的包（Mac 只出 Apple 芯片版）：${stray.join('、')}`,
+      )
   } else problems.push('缺 latest-mac.yml')
   return problems
 }

@@ -20,6 +20,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
@@ -1857,6 +1858,18 @@ const zh: Table = {
   'weekly.next_steps': '下一步',
   'weekly.not_connected': '没接',
   'weekly.source': '出处：{source}',
+  // WP330：Reddit 周报卡
+  'rw.fig.posts': '帖子',
+  'rw.fig.comments': '评论',
+  'rw.fig.follow_up': '需跟进',
+  'rw.fig.replies': '我们回复',
+  'rw.posts_comments': '帖子 {posts} · 评论 {comments}',
+  'rw.replies': '回帖子 {posts} · 回评论 {comments}',
+  'rw.new_posts': '发帖 {n}',
+  'rw.none': '本周没有',
+  'rw.copy': '复制整份',
+  'rw.export': '导出 .md',
+  'rw.no_sweep': '这段时间没有巡查记录',
   'category.seo_topic': '新页面选题',
   'category.geo_watch': 'AI 回答监测设置',
   // WP171（docs/84）：B2B 那十四种卡的类别
@@ -5932,6 +5945,18 @@ const en: Table = {
   'weekly.next_steps': 'Next steps',
   'weekly.not_connected': 'Not connected',
   'weekly.source': 'Source: {source}',
+  // WP330: Reddit weekly report card
+  'rw.fig.posts': 'Posts',
+  'rw.fig.comments': 'Comments',
+  'rw.fig.follow_up': 'Follow up',
+  'rw.fig.replies': 'Our replies',
+  'rw.posts_comments': '{posts} posts · {comments} comments',
+  'rw.replies': '{posts} replies to posts · {comments} to comments',
+  'rw.new_posts': '{n} new posts',
+  'rw.none': 'Nothing this week',
+  'rw.copy': 'Copy all',
+  'rw.export': 'Export .md',
+  'rw.no_sweep': 'No sweeps recorded in this window',
   'category.seo_topic': 'New page topic',
   'category.geo_watch': 'AI answer watch setup',
   // WP171（docs/84）
@@ -8247,6 +8272,7 @@ const TABLES: Record<Lang, Table> = {
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
+    ...REDDIT_WATCH_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8286,6 +8312,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
+    ...REDDIT_WATCH_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,

@@ -15,6 +15,7 @@ import { send } from '@/lib/messages'
 import { DEFAULT_PORT } from '@/lib/storage'
 import { AdsSection } from './ads-section'
 import { BrandMark } from './brand-mark'
+import { RedditSection } from './reddit-section'
 
 export function Options(): React.ReactNode {
   const [status, setStatus] = useState<ExtensionStatus | undefined>(undefined)
@@ -157,6 +158,7 @@ export function Options(): React.ReactNode {
       )}
 
       <AdsSection paired={status?.paired === true} />
+      <RedditSection paired={status?.paired === true} />
 
       <section className="ws-card">
         <h2>本机服务端口</h2>

@@ -74,6 +74,9 @@ import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { readRoutesRoutes } from './routes/read-routes.js'
+// WP328：Reddit 每日巡查（插件只读 `/v1/extension/reddit/*` 与工作台 `/v1/reddit-watch*`）
+import { redditWatchRoutes } from './routes/reddit-watch.js'
+import { redditWeeklyRoutes } from './routes/reddit-weekly.js'
 import { roleRuleRoutes } from './routes/role-rules.js'
 import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
@@ -186,6 +189,8 @@ export function collectRoutes(): Route[] {
     ...roleRuleRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
+    // WP330（docs/102 附）：Reddit 周报
+    ...redditWeeklyRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
@@ -297,6 +302,8 @@ export function collectRoutes(): Route[] {
     ...shopAdminRoutes(),
     // WP268：品牌素材库（列 / 取原图 / 传一张）
     ...brandAssetRoutes(),
+    // WP328：Reddit 每日巡查。`/v1/extension/reddit/*`、`/v1/reddit-watch*` 都是新路径（放在最后）
+    ...redditWatchRoutes(),
   ]
 }
 
