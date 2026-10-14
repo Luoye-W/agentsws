@@ -27402,7 +27402,7 @@ export interface operations {
   listMemoryChanges: {
     parameters: {
       query?: {
-        /** @description ISO 时间；只要这之后的 */
+        /** @description ISO 时间；这之后（含这一刻）的，按 id 去重 */
         since?: string
         /** @description ai | person */
         written_by?: string

@@ -77,7 +77,10 @@ export interface MemoryBook {
   setProvenance(entry_id: string, p: MemoryProvenance): void
   dropProvenance(entry_id: string): void
   record(change: Omit<MemoryChange, 'id'>): MemoryChange
-  /** 按时间正序；`since` 不含等于。 */
+  /**
+   * 按时间正序；`since` **含等于**——同一毫秒里可能记了好几笔（模拟世界的钟还是停着的），
+   * 不含等于就会漏掉；调用方按 `id` 去重。
+   */
   changes(filter?: {
     since?: Iso8601
     workspace_id?: WorkspaceId
@@ -152,7 +155,7 @@ export function createMemoryBook(
       const since = filter.since === undefined ? undefined : Date.parse(filter.since)
       const out = journal.filter(
         (c) =>
-          (since === undefined || Number.isNaN(since) || Date.parse(c.at) > since) &&
+          (since === undefined || Number.isNaN(since) || Date.parse(c.at) >= since) &&
           (filter.workspace_id === undefined || c.workspace_id === filter.workspace_id) &&
           (filter.by === undefined || c.by === filter.by) &&
           (filter.written_by === undefined || c.written_by === filter.written_by),

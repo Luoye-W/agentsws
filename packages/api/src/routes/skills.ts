@@ -474,7 +474,7 @@ export function skillRoutes(): Route[] {
         // 只回本人的、且只回本人看得见的那几层（判据在实现里，同 `GET /v1/memory`）
         authzBypass: () => true,
         params: [
-          { name: 'since', in: 'query', description: 'ISO 时间；只要这之后的' },
+          { name: 'since', in: 'query', description: 'ISO 时间；这之后（含这一刻）的，按 id 去重' },
           { name: 'written_by', in: 'query', description: 'ai | person' },
         ],
         returns: 'MemoryChangeView[]',

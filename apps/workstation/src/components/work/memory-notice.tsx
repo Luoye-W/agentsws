@@ -13,7 +13,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { isTypingNow, NoticeToast, useLastTypedAt } from '@/components/design'
 import { useRailState } from '@/components/rail/rail-state'
 import { getMemoryChanges, type MemoryChangeData, type PositionInstanceData } from '@/lib/api'
@@ -85,6 +85,18 @@ export function MemoryNotice({
   const [pending, setPending] = useState<MemoryChangeData[]>([])
   const [shown, setShown] = useState<MemoryChangeData[]>([])
   const [recheck, setRecheck] = useState(0)
+  /**
+   * 第三栏的开合按页面分桶记（岗位页一份、事项页一份）：先换页、换完桶再开「记忆」，
+   * 不然开的是刚离开那一页的面板。
+   */
+  const location = useLocation()
+  const openAfterNav = useRef(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在换页之后看一眼
+  useEffect(() => {
+    if (!openAfterNav.current) return
+    openAfterNav.current = false
+    rail.show('memory')
+  }, [location.key])
 
   const changes = useQuery({
     queryKey: ['memory-changes'],
@@ -144,8 +156,11 @@ export function MemoryNotice({
       onDismiss={dismiss}
       onOpen={() => {
         const path = memoryNoticePath(shown, instances ?? [], position)
-        if (path !== undefined) navigate(path)
-        rail.show('memory')
+        if (path === undefined) rail.show('memory')
+        else {
+          openAfterNav.current = true
+          navigate(path)
+        }
         setShown([])
       }}
     />

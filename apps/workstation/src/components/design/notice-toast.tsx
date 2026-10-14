@@ -9,7 +9,7 @@
  * - **人在打字时不弹**：输入框有焦点、最近两秒内按过键，就先压着，停手了再出（{@link isTypingNow}）；
  * - **几秒后自己收起**（默认 6 秒），鼠标停在上面时不走；
  * - **点它 = 去看那件事**（`onOpen`），旁边一个小叉只是收起；
- * - 放在右上角（输入框都在下面，不会盖住正在写的字）。
+ * - 放在右上角、第三栏图标轨的左边（输入框都在下面，不会盖住正在写的字）。
  */
 import { X } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -84,7 +84,7 @@ export function NoticeToast({
       aria-live="polite"
       data-testid={testId}
       className={cn(
-        'fixed top-16 right-4 z-50 flex max-w-sm items-center gap-1 rounded-lg border bg-popover',
+        'fixed top-16 right-14 z-50 flex max-w-sm items-center gap-1 rounded-lg border bg-popover',
         'py-1 pr-1 pl-3 text-sm text-popover-foreground shadow-md',
         'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2',
       )}
