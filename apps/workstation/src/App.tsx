@@ -26,6 +26,8 @@ import { connectRealtime } from '@/lib/realtime'
 import { BrandAssetsPage } from '@/pages/brand-assets'
 import { BrandDesignPage } from '@/pages/brand-design'
 import { CalendarPage } from '@/pages/calendar'
+// WP333（决策 584）：一张卡自己的页面（个人微信卡片链接）
+import { CardPage } from '@/pages/card'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
 import { ChatWindowPage } from '@/pages/chat-window'
@@ -221,6 +223,8 @@ function Workspace(): ReactNode {
         <Route path="/positions/:assignment/duties/:role_id" element={<DutyPage />} />
         {/* 37 工作模型：事项 / 待办 / 日历 / 目标 */}
         <Route path="/matters/:id" element={<MatterPage />} />
+        {/* WP333（决策 584）：个人微信卡片里的链接 `/cards/<卡号>`，打开就是那一张 */}
+        <Route path="/cards/:id" element={<CardPage />} />
         <Route path="/todos" element={<TodosPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         {/*
