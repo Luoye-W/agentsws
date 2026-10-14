@@ -117,7 +117,7 @@ const server = createServer(async (req, res) => {
         workspace_name: '假品牌',
         cloud_linked: false,
         shares_to_public_library: false,
-        scopes: ['reddit.act'],
+        scopes: ['reddit.write'],
         server_version: 'e2e',
       })
     if (p === '/v1/extension/actions/next') {

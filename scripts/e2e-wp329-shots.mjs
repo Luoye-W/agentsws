@@ -108,7 +108,10 @@ async function main() {
   page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
   // 新装的空品牌首页是初始化设置：先跳过，去岗位页（卡在那条职责的卡片流里）
-  await page.getByText('先跳过').click({ timeout: 5_000 }).catch(() => undefined)
+  await page
+    .getByText('先跳过')
+    .click({ timeout: 5_000 })
+    .catch(() => undefined)
   await page.getByText('社媒运营').first().click()
   await page.waitForLoadState('networkidle')
   const card = page.locator('[data-testid="deck-reddit-write"]').first()

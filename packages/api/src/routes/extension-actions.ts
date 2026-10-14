@@ -122,12 +122,12 @@ function portOf(deps: GatewayDeps): ExtensionActionsPort {
 }
 
 /**
- * 插件这一侧：令牌 + Origin，再要 `ads.act`（广告）或 `reddit.act`（WP329：Reddit 写）其中一个。
+ * 插件这一侧：令牌 + Origin，再要 `ads.act`（广告）或 `reddit.write`（WP329：Reddit 写）其中一个。
  * 老令牌没有——重新配一次对就有了。领活时再按令牌上真有的那一个筛平台（{@link platformsAllowed}）。
  */
 function actorOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
   const session = extensionSessionOf(c, deps)
-  if (!session.scopes.includes('ads.act') && !session.scopes.includes('reddit.act'))
+  if (!session.scopes.includes('ads.act') && !session.scopes.includes('reddit.write'))
     throw new ApiError(
       'forbidden',
       '这把配对还没有动作权限。在工作台重新生成配对码、插件里再配一次。',
@@ -135,12 +135,14 @@ function actorOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): Extensi
   return session
 }
 
-/** 令牌上有哪个 scope 就只领哪类活：广告要 `ads.act`，Reddit 要 `reddit.act`。 */
+/** 令牌上有哪个 scope 就只领哪类活：广告要 `ads.act`，Reddit 要 `reddit.write`。 */
 export function platformsAllowed(
   session: Pick<ExtensionSession, 'scopes'>,
   platforms: readonly ActionPlatform[],
 ): ActionPlatform[] {
-  return platforms.filter((p) => session.scopes.includes(p === 'reddit' ? 'reddit.act' : 'ads.act'))
+  return platforms.filter((p) =>
+    session.scopes.includes(p === 'reddit' ? 'reddit.write' : 'ads.act'),
+  )
 }
 
 const PLATFORMS = ['google_ads', 'meta_ads', 'reddit'] as const
