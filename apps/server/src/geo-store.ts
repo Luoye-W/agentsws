@@ -36,9 +36,8 @@ import type {
 } from '@agentsws/contracts'
 import {
   BRAND_WATCH_DEFAULT_PLATFORMS,
-  GEO_DEFAULT_PLATFORMS,
   GEO_PROMPT_CAP_DEFAULT,
-  GEO_PROMPT_DEFAULT_SELECTED,
+  GEO_STRATEGY_FALLBACK_PROMPTS,
   RANK_CHECK_DEFAULT_DEVICE,
 } from '@agentsws/contracts'
 import Database from 'better-sqlite3'
@@ -170,6 +169,38 @@ CREATE TABLE IF NOT EXISTS domain_kinds (
   updated_at TEXT NOT NULL
 );
 `,
+  // WP321（O2）：一轮的几句人话；排队档任务（提交了、还没取回的）；模型认出的其他品牌；
+  // 每周指标的快照（决策 473：周指标长期保存）
+  `
+ALTER TABLE watch_runs ADD COLUMN notes TEXT;
+CREATE TABLE IF NOT EXISTS watch_tasks (
+  task_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  platform TEXT,
+  market TEXT NOT NULL,
+  language TEXT NOT NULL,
+  device TEXT,
+  items TEXT NOT NULL,
+  status TEXT NOT NULL,
+  submitted_at TEXT NOT NULL,
+  collected_at TEXT
+);
+CREATE INDEX IF NOT EXISTS watch_tasks_status ON watch_tasks (status, run_id);
+CREATE TABLE IF NOT EXISTS geo_other_brands (
+  answer_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (answer_id, name)
+);
+CREATE TABLE IF NOT EXISTS watch_weekly (
+  period TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (period, kind)
+);
+`,
 ]
 
 /** 现在的表结构版本。 */
@@ -190,6 +221,26 @@ export type StoredPrompt = GeoQuestion & { created_at: Iso8601; replaces?: strin
 export interface GeoRange {
   from?: Iso8601 | undefined
   to?: Iso8601 | undefined
+}
+
+/**
+ * WP321：一个排队档任务（`ai_answer_batch.*` / `seo.rank_check`）——提交时记下问的是哪几条，
+ * 取回时按它对回 Prompt / 关键词。
+ */
+export interface WatchTask {
+  task_id: string
+  run_id: string
+  kind: 'geo' | 'rank'
+  capability: string
+  platform?: AiPlatform
+  market: string
+  language: string
+  device?: 'mobile' | 'desktop'
+  /** geo：每条问的 Prompt（id、原句、真问出去的那句）；rank：关键词。 */
+  items: { prompt_id?: string; prompt_text?: string; asked?: string; keyword?: string }[]
+  status: 'pending' | 'collected' | 'failed'
+  submitted_at: Iso8601
+  collected_at?: Iso8601
 }
 
 export interface GeoStore {
@@ -221,7 +272,9 @@ export interface GeoStore {
   startRun(run: WatchRun): void
   finishRun(
     id: string,
-    patch: Partial<Pick<WatchRun, 'status' | 'planned' | 'answered' | 'credits' | 'finished_at'>>,
+    patch: Partial<
+      Pick<WatchRun, 'status' | 'planned' | 'answered' | 'credits' | 'finished_at' | 'notes'>
+    >,
   ): void
   runs(filter?: { kind?: WatchRun['kind']; range?: GeoRange | undefined }): WatchRun[]
 
@@ -268,6 +321,23 @@ export interface GeoStore {
   exportHistory(format: 'json' | 'csv', at: Iso8601, range?: GeoRange | undefined): GeoHistoryExport
   /** 决策 473：删除（按品牌 = 全部历史，可连设置一起；按时间段 = `[from, to)`）。 */
   deleteHistory(input: GeoHistoryDeleteInput): GeoHistoryDeleteResult
+  /** WP321：排队档任务。 */
+  addTask(t: WatchTask): void
+  tasks(filter?: { status?: WatchTask['status']; run_id?: string }): WatchTask[]
+  finishTask(task_id: string, status: 'collected' | 'failed', at: Iso8601): void
+  /** WP321：模型从一条回答里认出的其他品牌（整条换）。 */
+  setOtherBrands(answer_id: string, names: readonly string[]): void
+  otherBrands(answer_ids?: readonly string[]): { answer_id: string; name: string }[]
+  /** WP321（决策 473）：每周指标的快照（同一周同一种新算的覆盖旧的）。 */
+  saveWeekly(
+    period: string,
+    kind: 'geo' | 'rank' | 'brand_gsc',
+    payload: unknown,
+    at: Iso8601,
+  ): void
+  weekly(
+    kind: 'geo' | 'rank' | 'brand_gsc',
+  ): { period: string; payload: unknown; computed_at: Iso8601 }[]
   /** 一个事务里做完（迁移老数据用）。 */
   tx<T>(fn: () => T): T
   close(): void
@@ -316,6 +386,27 @@ function runOf(r: Row): WatchRun {
     credits: Number(r.credits),
     started_at: String(r.started_at),
     ...opt('finished_at', r.finished_at as string | null),
+    ...(() => {
+      const notes = pj<string[] | undefined>(r.notes, undefined)
+      return notes === undefined || notes.length === 0 ? {} : { notes }
+    })(),
+  }
+}
+
+function taskOf(r: Row): WatchTask {
+  return {
+    task_id: String(r.task_id),
+    run_id: String(r.run_id),
+    kind: r.kind as WatchTask['kind'],
+    capability: String(r.capability),
+    ...opt('platform', r.platform as AiPlatform | null),
+    market: String(r.market),
+    language: String(r.language),
+    ...opt('device', r.device as WatchTask['device'] | null),
+    items: pj(r.items, []),
+    status: r.status as WatchTask['status'],
+    submitted_at: String(r.submitted_at),
+    ...opt('collected_at', r.collected_at as string | null),
   }
 }
 
@@ -501,7 +592,12 @@ export function createGeoStore(dbPath?: string): GeoStore {
     for (let i = 0; i < ids.length; i += 500) {
       const chunk = ids.slice(i, i + 500)
       const marks = chunk.map(() => '?').join(',')
-      const order = table === 'geo_citations' ? 'answer_id, position' : 'answer_id, entity'
+      const order =
+        table === 'geo_citations'
+          ? 'answer_id, position'
+          : table === 'geo_other_brands'
+            ? 'answer_id, name'
+            : 'answer_id, entity'
       out.push(
         ...all(
           `SELECT * FROM ${table} WHERE answer_id IN (${marks}) ORDER BY ${order}`,
@@ -645,8 +741,8 @@ export function createGeoStore(dbPath?: string): GeoStore {
 
     startRun: (r) => {
       db.prepare(
-        `INSERT INTO watch_runs (id, kind, trigger, period, status, planned, answered, credits, started_at, finished_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO watch_runs (id, kind, trigger, period, status, planned, answered, credits, started_at, finished_at, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         r.id,
         r.kind,
@@ -658,6 +754,7 @@ export function createGeoStore(dbPath?: string): GeoStore {
         r.credits,
         r.started_at,
         r.finished_at ?? null,
+        r.notes === undefined ? null : j(r.notes),
       )
     },
     finishRun: (id, patch) => {
@@ -665,8 +762,16 @@ export function createGeoStore(dbPath?: string): GeoStore {
       if (cur === undefined) return
       const next = { ...runOf(cur), ...patch }
       db.prepare(
-        'UPDATE watch_runs SET status = ?, planned = ?, answered = ?, credits = ?, finished_at = ? WHERE id = ?',
-      ).run(next.status, next.planned, next.answered, next.credits, next.finished_at ?? null, id)
+        'UPDATE watch_runs SET status = ?, planned = ?, answered = ?, credits = ?, finished_at = ?, notes = ? WHERE id = ?',
+      ).run(
+        next.status,
+        next.planned,
+        next.answered,
+        next.credits,
+        next.finished_at ?? null,
+        next.notes === undefined ? null : j(next.notes),
+        id,
+      )
     },
     runs: (filter) => {
       const w = where([
@@ -835,6 +940,7 @@ export function createGeoStore(dbPath?: string): GeoStore {
         mentions: forAnswers('geo_mentions', ids, mentionOf),
         ranks: store.ranks({ range }),
         brand_gsc: store.brandGscWeeks({ range: weekRange(range) }),
+        other_brands: store.otherBrands(ids),
       }
       const head = {
         format,
@@ -859,6 +965,7 @@ export function createGeoStore(dbPath?: string): GeoStore {
           mentions: toCsv(tables.mentions),
           ranks: toCsv(tables.ranks),
           brand_gsc: toCsv(tables.brand_gsc),
+          other_brands: toCsv(tables.other_brands),
         },
       }
     },
@@ -885,6 +992,7 @@ export function createGeoStore(dbPath?: string): GeoStore {
           const w = where([rangeSql(col, r)])
           return db.prepare(`DELETE FROM ${table}${w.sql}`).run(...w.args).changes
         }
+        drop('geo_other_brands')
         const out: GeoHistoryDeleteResult = {
           citations: drop('geo_citations'),
           mentions: drop('geo_mentions'),
@@ -893,6 +1001,9 @@ export function createGeoStore(dbPath?: string): GeoStore {
           ranks: del('seo_rank_snapshots', 'fetched_at', range),
           brand_gsc: del('seo_brand_gsc_weekly', 'week', weekRange(range)),
         }
+        // WP321：排队档任务与每周快照跟着走（快照是从删掉的那段算出来的）
+        del('watch_tasks', 'submitted_at', range)
+        del('watch_weekly', 'period', weekRange(range))
         if (input.scope === 'brand' && input.include_settings === true) {
           // 迁移标记留着：删了设置之后不会再从 seo-state.json 把老问题搬回来
           db.prepare('DELETE FROM watch_settings').run()
@@ -901,6 +1012,65 @@ export function createGeoStore(dbPath?: string): GeoStore {
         }
         return out
       })(),
+    addTask: (t) => {
+      db.prepare(
+        `INSERT OR REPLACE INTO watch_tasks (task_id, run_id, kind, capability, platform, market, language,
+           device, items, status, submitted_at, collected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        t.task_id,
+        t.run_id,
+        t.kind,
+        t.capability,
+        t.platform ?? null,
+        t.market,
+        t.language,
+        t.device ?? null,
+        j(t.items),
+        t.status,
+        t.submitted_at,
+        t.collected_at ?? null,
+      )
+    },
+    tasks: (filter) => {
+      const eq = (col: string, v: string | undefined) =>
+        v === undefined ? { sql: '', args: [] } : { sql: `${col} = ?`, args: [v] }
+      const w = where([eq('status', filter?.status), eq('run_id', filter?.run_id)])
+      return all(`SELECT * FROM watch_tasks${w.sql} ORDER BY submitted_at, task_id`, ...w.args).map(
+        taskOf,
+      )
+    },
+    finishTask: (task_id, status, at) => {
+      db.prepare('UPDATE watch_tasks SET status = ?, collected_at = ? WHERE task_id = ?').run(
+        status,
+        at,
+        task_id,
+      )
+    },
+    setOtherBrands: (answer_id, names) =>
+      db.transaction(() => {
+        db.prepare('DELETE FROM geo_other_brands WHERE answer_id = ?').run(answer_id)
+        const put = db.prepare(
+          'INSERT OR IGNORE INTO geo_other_brands (answer_id, name) VALUES (?, ?)',
+        )
+        for (const n of names) put.run(answer_id, n)
+      })(),
+    otherBrands: (answer_ids) =>
+      (answer_ids === undefined
+        ? all('SELECT * FROM geo_other_brands ORDER BY answer_id, name')
+        : forAnswers('geo_other_brands', answer_ids, (r) => r)
+      ).map((r) => ({ answer_id: String(r.answer_id), name: String(r.name) })),
+    saveWeekly: (period, kind, payload, at) => {
+      db.prepare(
+        `INSERT INTO watch_weekly (period, kind, payload, computed_at) VALUES (?,?,?,?)
+         ON CONFLICT(period, kind) DO UPDATE SET payload = excluded.payload, computed_at = excluded.computed_at`,
+      ).run(period, kind, j(payload), at)
+    },
+    weekly: (kind) =>
+      all('SELECT * FROM watch_weekly WHERE kind = ? ORDER BY period', kind).map((r) => ({
+        period: String(r.period),
+        payload: pj(r.payload, null),
+        computed_at: String(r.computed_at),
+      })),
     tx: (fn) => db.transaction(fn)(),
     close: () => db.close(),
   }
@@ -950,13 +1120,11 @@ export interface LegacySeoGeoState {
 /** 搬过一次就记这个键（值是搬的时刻）；之后不再搬，删了设置也不会把老问题搬回来。 */
 export const SEO_STATE_IMPORTED_KEY = 'seo_state_imported_at'
 
-/** 老版每周默认问几个（WP159：6 个）。 */
-const LEGACY_DEFAULT_QUESTIONS = 6
-
 /**
- * 一份新的关注设置。新品牌按决策 460 / 463 / 466 的默认（四个 AI、选 5 条、每周、手机）；
- * 从老数据搬来的品牌（`legacy`）保留老版的开关、问几个、关掉的市场，**AI 仍是老的三家**——
- * Claude 一次 3.6 积分，不替老用户悄悄打开（决策 530 待定）。
+ * 一份新的关注设置：按决策 460 / 466 / 530–532（Luoye 10-14 改）的默认——**所有品牌一样**（没有真实
+ * 用户，不分新老）：四个 AI（ChatGPT、Gemini、Claude、Google AI 概览，各自可关）、先按兜底追
+ * {@link GEO_STRATEGY_FALLBACK_PROMPTS} 条（追几条 / 带品牌名几条在策略设定时由 AI 建议、人确认）、
+ * 每周、手机。从老数据搬来的（`legacy`）只留老版的总开关与关掉的市场（不留老默认 6 条、不留老三家）。
  */
 export function defaultWatchSettings(input: {
   brand: { name: string; domains: readonly string[]; aliases?: readonly string[] | undefined }
@@ -973,15 +1141,12 @@ export function defaultWatchSettings(input: {
       domains: [...input.brand.domains],
     },
     competitors: [],
-    prompt_limit:
-      legacy === undefined
-        ? GEO_PROMPT_DEFAULT_SELECTED
-        : (legacy.geo_settings?.max_questions ?? LEGACY_DEFAULT_QUESTIONS),
+    prompt_limit: GEO_STRATEGY_FALLBACK_PROMPTS,
     prompt_cap: GEO_PROMPT_CAP_DEFAULT,
     keywords: [],
     markets: input.markets.map((m) => m.toUpperCase()),
     ...(markets_off === undefined ? {} : { markets_off: markets_off.map((m) => m.toUpperCase()) }),
-    platforms: [...(legacy === undefined ? BRAND_WATCH_DEFAULT_PLATFORMS : GEO_DEFAULT_PLATFORMS)],
+    platforms: [...BRAND_WATCH_DEFAULT_PLATFORMS],
     frequency: 'weekly',
     rank_device: RANK_CHECK_DEFAULT_DEVICE,
     enabled: legacy?.geo_settings?.enabled ?? true,
@@ -992,9 +1157,9 @@ export function defaultWatchSettings(input: {
 /**
  * 把 `seo-state.json` 里的问题清单与开关搬进 `geo.sqlite`（只搬一次；`seo-state.json` 原样不动）。
  *
- * - 开关 / 问几个 / 关掉的市场 → 关注设置（已经有关注设置就不覆盖）；
- * - 每个问题 → 一条 Prompt（id、原句、来路、开没开都照旧）；老版真在问的那几条（开着的前
- *   `max_questions` 条）记为「已选」，其余是候选；
+ * - 开关 / 关掉的市场 → 关注设置（已经有关注设置就不覆盖；决策 532：不留老默认 6 条、不留老三家）；
+ * - 每个问题 → 一条 Prompt（id、原句、来路、开没开都照旧，**一条不丢**）；老版真在问的那几条里
+ *   开着的前 {@link GEO_STRATEGY_FALLBACK_PROMPTS} 条记为「已选」，其余是候选；
  * - `branded` 按品牌名 / 别名判（给了 `isBranded` 才判）。
  */
 export function importSeoState(
@@ -1020,7 +1185,10 @@ export function importSeoState(
           legacy: state,
         }),
       )
-    const limit = state.geo_settings?.max_questions ?? LEGACY_DEFAULT_QUESTIONS
+    const limit = Math.min(
+      state.geo_settings?.max_questions ?? GEO_STRATEGY_FALLBACK_PROMPTS,
+      GEO_STRATEGY_FALLBACK_PROMPTS,
+    )
     let picked = 0
     let added = 0
     for (const q of questions) {
@@ -1040,5 +1208,34 @@ export function importSeoState(
     }
     store.setMeta(SEO_STATE_IMPORTED_KEY, ctx.at)
     return { imported: true, prompts: added }
+  })
+}
+
+/** WP321：迁到新设置做过一次就记这个键（值是做的时刻）。 */
+export const WATCH_V321_KEY = 'watch_v321_at'
+
+/**
+ * WP321（决策 532，Luoye 10-14 改）：已有的关注设置**一律迁到新设置**——关注的 AI 换成默认四家、
+ * 追几条回到兜底 {@link GEO_STRATEGY_FALLBACK_PROMPTS}（不留老默认 6 条、不留老三家）；已选里超出的
+ * 那几条变回候选（按原来的先后留前几条），**老问题与老数据一条不动**。只做一次；之后人改的照人改的。
+ * 回是否真迁了。
+ */
+export function upgradeWatchTo321(store: GeoStore, at: Iso8601): boolean {
+  if (store.meta(WATCH_V321_KEY) !== undefined) return false
+  return store.tx(() => {
+    const w = store.watch()
+    if (w !== undefined) {
+      const { prompt_candidates: _c, prompts: selected, ...settings } = w
+      store.saveSettings({
+        ...settings,
+        platforms: [...BRAND_WATCH_DEFAULT_PLATFORMS],
+        prompt_limit: GEO_STRATEGY_FALLBACK_PROMPTS,
+        updated_at: at,
+      })
+      if (selected.length > GEO_STRATEGY_FALLBACK_PROMPTS)
+        store.selectPrompts(selected.slice(0, GEO_STRATEGY_FALLBACK_PROMPTS).map((p) => p.id))
+    }
+    store.setMeta(WATCH_V321_KEY, at)
+    return w !== undefined
   })
 }
