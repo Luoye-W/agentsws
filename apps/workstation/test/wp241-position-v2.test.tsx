@@ -652,10 +652,12 @@ describe('lib/position-work', () => {
       { role_id: 'dtc.live-chat', role_name: '在线客服', assignment_id: 'a4' },
     ])
     // WP249：自家版运营多一个「自家版待处理」，排在它的群发后面；WP255：再跟一个「群里的帖子」
+    // WP328：「Reddit 巡查」排在自家版待处理前面
     expect(views.map((v) => v.kind)).toEqual([
       'schedule',
       'kol',
       'broadcast',
+      'reddit_watch',
       'modqueue',
       'threads',
       'outbound',

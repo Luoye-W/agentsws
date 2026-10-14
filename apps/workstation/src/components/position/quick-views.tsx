@@ -13,6 +13,7 @@ import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { OwnSubQueue } from '@/components/social/own-sub-queue'
+import { RedditWatch } from '@/components/social/reddit-watch'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { SocialThreads } from '@/components/social/social-threads'
@@ -99,6 +100,8 @@ function QuickBody({ view }: { view: QuickView }): ReactNode {
         <KolPanel assignment={view.assignment_id} channel={channel} />
       )
     }
+    case 'reddit_watch':
+      return <RedditWatch assignment={view.assignment_id} />
     case 'modqueue':
       return <OwnSubQueue assignment={view.assignment_id} />
     case 'threads':
