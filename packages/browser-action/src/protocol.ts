@@ -88,6 +88,12 @@ export interface ActionJobView {
   waiting?: string
 }
 
+/**
+ * 连接时那段白话风险告知（决策 562）的版本号。插件与本机服务共用这一个串：
+ * 文案（WP318）一改就升它，老的同意不再算数、要重新勾一次。
+ */
+export const ADS_CONSENT_TEXT_VERSION = '2026-10-14.1'
+
 /** 连接时的白话风险告知（决策 562）：同意过的记录。文案在 WP318。 */
 export interface AdsConsentRecord {
   platform: ActionPlatform

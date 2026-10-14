@@ -69,7 +69,7 @@ function render(url: string, s: FakeState): string {
          <span data-column="status"><span role="button">${s.status[id] ?? 'Enabled'}</span></span>
          <span data-column="budget">$${s.budget[id] ?? '0'}.00/day<button aria-label="Edit budget">e</button></span>
        </div>
-       <div role="menu"><div role="menuitem">Enabled</div><div role="menuitem">Paused</div></div>
+       <div role="menu"><div role="menuitem">Enabled</div><div role="menuitem">Paused</div><div role="menuitem">.csv</div></div>
        <div role="dialog"><input aria-label="Budget"><material-button>Save</material-button></div>`,
     )
   }
@@ -82,7 +82,7 @@ function render(url: string, s: FakeState): string {
     const published = s.applied ? '<div data-publish="status">Published</div>' : ''
     return html(
       `<div role="button">Export</div><div role="button">Export &amp; import</div>
-       <div role="menuitem">Import ads in bulk</div>
+       <div role="menuitem">Import ads in bulk</div><div role="menuitem">.csv</div>
        <div role="dialog"><div role="tab">Paste text</div><textarea></textarea>
          <div role="button">Import</div><div role="button">Publish</div></div>
        <div role="button">Review and publish</div>

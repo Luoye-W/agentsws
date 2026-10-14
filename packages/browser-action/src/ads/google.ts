@@ -77,7 +77,8 @@ export function googleAdsPlan(
         ...(snapshot
           ? ([
               { op: 'goto', url: `${origin}/aw/campaigns?${q}` },
-              { op: 'download', selector: S.downloadMenu, tag: 'snapshot' },
+              { op: 'click', selector: S.downloadMenu },
+              { op: 'download', selector: S.downloadCsv, tag: 'snapshot' },
             ] as ActionStep[])
           : []),
         { op: 'goto', url: uploads },
@@ -104,11 +105,16 @@ export function googleAdsPlan(
         steps,
         allow: {
           hosts,
-          click: [S.uploadNew, S.previewButton, S.applyButton],
+          click: [
+            ...(snapshot ? [S.downloadMenu] : []),
+            S.uploadNew,
+            S.previewButton,
+            S.applyButton,
+          ],
           fill: [],
           values: [],
           upload: [S.uploadFile],
-          download: snapshot ? [S.downloadMenu] : [],
+          download: snapshot ? [S.downloadCsv] : [],
         },
         verify: { op: 'present', selector: S.appliedStatus, text: 'Applied' },
       }
@@ -120,9 +126,10 @@ export function googleAdsPlan(
         needs_sheet: false,
         steps: [
           { op: 'goto', url: `${origin}/aw/reporting/reporteditor?${q}` },
-          { op: 'download', selector: S.downloadMenu, tag: 'report' },
+          { op: 'click', selector: S.downloadMenu },
+          { op: 'download', selector: S.downloadCsv, tag: 'report' },
         ],
-        allow: { hosts, click: [], fill: [], values: [], download: [S.downloadMenu] },
+        allow: { hosts, click: [S.downloadMenu], fill: [], values: [], download: [S.downloadCsv] },
         verify: { op: 'none' },
       }
     case 'pause':

@@ -18,6 +18,7 @@ import {
   type ActionJobView,
   type ActionPlatform,
   ActionQueue,
+  ADS_CONSENT_TEXT_VERSION,
   type AdsActionSettings,
   type AdsConsentRecord,
   base64ToBytes,
@@ -35,8 +36,8 @@ import {
   validateJob,
 } from '@agentsws/browser-action'
 
-/** 告知文案的版本（文案在 WP318；改了文案就升这个号，老的同意不再算数）。 */
-export const ADS_CONSENT_TEXT_VERSION = '2026-10-14.1'
+/** 告知文案的版本（真源在公共模块；文案在 WP318，改了文案就升这个号，老的同意不再算数）。 */
+export { ADS_CONSENT_TEXT_VERSION }
 
 /** 完结的活在排队表里留多久（账本里另有记录）。 */
 const KEEP_FINISHED_MS = 7 * 24 * 60 * 60 * 1000

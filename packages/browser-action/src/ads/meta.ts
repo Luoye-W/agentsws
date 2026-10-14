@@ -81,7 +81,10 @@ export function metaAdsPlan(
       const steps: ActionStep[] = [
         { op: 'goto', url: manage('campaign') },
         ...(snapshot
-          ? ([{ op: 'download', selector: S.exportButton, tag: 'snapshot' }] as ActionStep[])
+          ? ([
+              { op: 'click', selector: S.exportButton },
+              { op: 'download', selector: S.exportCsv, tag: 'snapshot' },
+            ] as ActionStep[])
           : []),
         { op: 'click', selector: S.importMenu },
         { op: 'click', selector: S.importItem },
@@ -114,6 +117,7 @@ export function metaAdsPlan(
         allow: {
           hosts,
           click: [
+            ...(snapshot ? [S.exportButton] : []),
             S.importMenu,
             S.importItem,
             ...(paste ? [S.pasteTab] : []),
@@ -124,7 +128,7 @@ export function metaAdsPlan(
           fill: [],
           values: [],
           ...(paste ? { paste: [S.pasteBox] } : { upload: [S.uploadFile] }),
-          download: snapshot ? [S.exportButton] : [],
+          download: snapshot ? [S.exportCsv] : [],
         },
         verify: { op: 'present', selector: S.publishedNote, text: 'Published' },
       }
@@ -136,9 +140,10 @@ export function metaAdsPlan(
         needs_sheet: false,
         steps: [
           { op: 'goto', url: `${origin}/adsmanager/reporting/manage?${q}` },
-          { op: 'download', selector: S.exportButton, tag: 'report' },
+          { op: 'click', selector: S.exportButton },
+          { op: 'download', selector: S.exportCsv, tag: 'report' },
         ],
-        allow: { hosts, click: [], fill: [], values: [], download: [S.exportButton] },
+        allow: { hosts, click: [S.exportButton], fill: [], values: [], download: [S.exportCsv] },
         verify: { op: 'none' },
       }
     case 'pause':

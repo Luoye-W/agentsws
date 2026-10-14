@@ -143,7 +143,8 @@ describe('被拦就停、不碰的区域', () => {
     const out = await run(await uploadJob(), fakeState({ captchaOn: /bulk\/uploads/u }))
     expect(out.result.outcome).toBe('handover')
     expect(out.result.message).toContain('验证')
-    expect(out.page.clicks).toEqual([])
+    // 改前快照那一下点过「下载」，上传页上一下都没点
+    expect(out.page.clicks).toEqual(['[aria-label="Download"]'])
   })
 
   it('页面被跳进了账单 → 默认不碰，停下', async () => {
