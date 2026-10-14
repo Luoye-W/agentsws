@@ -232,7 +232,7 @@ describe('每周：收入小结与 AI 可见度', () => {
     const { service } = setup()
     const auto = await service.geoQuestions()
     expect(auto.some((q) => q.text === 'Is NordVolt worth it?')).toBe(true)
-    const mine = service.setGeoQuestions([
+    const mine = await service.setGeoQuestions([
       { id: 'q1', text: 'Is a 65W charger enough for a MacBook?', origin: 'brand', enabled: true },
     ])
     expect(mine[0]?.origin).toBe('human')
@@ -437,10 +437,10 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
     }
   }
 
-  it('默认每周问 6 个 × 3 个平台（ChatGPT / Gemini / AI 概览）× 0.2 = 3.6 积分；Perplexity、Copilot 不问（WP159）', async () => {
+  it('WP321：默认追 5 条（兜底）× 这条路能问的 AI × 0.2；Claude 没接能力口不问；Perplexity、Copilot 不问（WP159）', async () => {
     const o = official()
     const { service } = setup({ searchData: () => o.port as never })
-    service.setGeoQuestions(
+    await service.setGeoQuestions(
       Array.from({ length: 8 }, (_, i) => ({
         id: `q${i}`,
         text: `question number ${i}`,
@@ -449,10 +449,10 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
       })),
     )
     const view = await service.geoView()
-    expect(view.settings).toEqual({ enabled: true, max_questions: 6 })
+    expect(view.settings).toEqual({ enabled: true, max_questions: 5 })
     expect(view.estimate.platforms).toBe(3)
-    expect(view.estimate.questions).toBe(6)
-    expect(view.estimate.credits_per_week).toBe(3.6)
+    expect(view.estimate.questions).toBe(5)
+    expect(view.estimate.credits_per_week).toBe(3)
     await service.weeklyGeo()
     expect(o.calls.every((c) => !c.includes('copilot') && !c.includes('perplexity'))).toBe(true)
     expect(o.calls.every((c) => c.endsWith('|chatgpt,gemini,google_ai_overview'))).toBe(true)
@@ -462,10 +462,10 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
   it('调成 2 个就只问 2 个；关掉就一次都不问', async () => {
     const o = official()
     const { service } = setup({ searchData: () => o.port as never })
-    service.setGeoSettings({ max_questions: 2 })
+    await service.setGeoSettings({ max_questions: 2 })
     await service.weeklyGeo()
     expect(o.calls).toHaveLength(2)
-    service.setGeoSettings({ enabled: false })
+    await service.setGeoSettings({ enabled: false })
     await service.weeklyGeo()
     expect(o.calls).toHaveLength(2)
     expect((await service.geoView()).estimate.questions).toBe(0)

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ExtensionStatus } from '@/lib/messages'
 import { send } from '@/lib/messages'
 import { DEFAULT_PORT } from '@/lib/storage'
+import { AdsSection } from './ads-section'
 import { BrandMark } from './brand-mark'
 
 export function Options(): React.ReactNode {
@@ -59,7 +60,7 @@ export function Options(): React.ReactNode {
     <div className="ws-page">
       <header className="ws-head">
         <BrandMark />
-        <h1>Agents 工坊 · 红人助手</h1>
+        <h1>Agents 工坊助手</h1>
       </header>
 
       <section className="ws-card">
@@ -154,6 +155,8 @@ export function Options(): React.ReactNode {
           )}
         </section>
       )}
+
+      <AdsSection paired={status?.paired === true} />
 
       <section className="ws-card">
         <h2>本机服务端口</h2>

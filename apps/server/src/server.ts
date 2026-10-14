@@ -208,6 +208,9 @@ import {
   seedDemoAds,
   snapshotLineCompare,
 } from './ads.js'
+import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
+import { brandAdsActionsPort } from './ads-actions/port.js'
+import { createAdsActionsService } from './ads-actions/service.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -3592,6 +3595,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP249（决策 89）：Reddit 官方号浏览器通道（每品牌一份，目录 `<品牌目录>/reddit-official-browser/`，
      * 与只读读号那份分开）。托管实例不装（云上没有浏览器、也不该有谁的登录态）。
      */
+    /*
+     * WP313（docs/101 §5.4）：插件动作通道（广告后台）。每品牌一份，目录 `<品牌目录>/ads-actions/`。
+     * 托管实例不装（云上没有用户的浏览器）。进队只由审批执行器调（WP316 接线），没有 HTTP 入口。
+     */
+    const adsActions =
+      hostedBoot !== undefined
+        ? undefined
+        : createAdsActionsService({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir: join(dir, 'ads-actions') }),
+            nowMs: () => Date.parse(clock.now()),
+            evidence:
+              dir === undefined
+                ? memoryEvidenceStore({ nowMs: () => Date.parse(clock.now()) })
+                : fileEvidenceStore({
+                    dir: join(dir, 'ads-actions', 'evidence'),
+                    nowMs: () => Date.parse(clock.now()),
+                  }),
+          })
+    // 排队 24 小时作废、断了音讯的记失败、截图过 180 天删——十分钟扫一次（不挡进程退出）
+    const adsActionsSweep =
+      adsActions === undefined
+        ? undefined
+        : setInterval(() => void adsActions.sweep().catch(() => {}), 10 * 60 * 1000)
+    adsActionsSweep?.unref?.()
     const robOptions = options.redditOfficialBrowser
     const redditOfficial =
       robOptions === undefined || robOptions === false || hostedBoot !== undefined
@@ -5027,6 +5055,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             const market_languages = onboardingRef?.brandProfile(ws).market_languages
             return market_languages === undefined ? {} : { market_languages }
           })(),
+          // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
+          ...(() => {
+            const one_liner = onboardingRef?.brandProfile(ws).one_liner
+            return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
+          })(),
         }
       },
       knowledge: async (actor) => {
@@ -5106,6 +5139,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 语言只翻一次）。没配模型 → undefined，按原语言问、面板注明。
        */
       translator: ({ actor, run_id }) => seoModel(actor, run_id),
+      /*
+       * WP321（docs/99 §7 O2）：监测要的官方数据能力口（排队档批量问答、Claude、关注词排名）——
+       * 这个品牌的云客户端；没关联账号时它自己回「没配」。模型口同上（策略建议、情感、站点分类）。
+       */
+      dataService: () => createDataService(ownCloud),
+      // 决策 534：自带 key 那档问 Claude 前查一次免费的模型清单（注入的替身不查）
+      claudeModelCheck: async () =>
+        options.searchDataFor?.(ws) === undefined ? searchData.claudeModelCheck() : { ok: true },
+      watchModel: ({ actor, run_id }) => seoModel(actor, run_id),
       /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
@@ -6109,6 +6151,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ads,
       adsService,
       adCreativeService,
+      ...(adsActions === undefined ? {} : { adsActions }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -6142,6 +6185,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         socialService.ownSub?.close()
         socialService.executor.close()
         await redditOfficial?.close()
+        // WP313：插件动作通道（放掉挂着的长轮询、停掉定时扫）
+        if (adsActionsSweep !== undefined) clearInterval(adsActionsSweep)
+        adsActions?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
         rosterSync.close()
@@ -9347,7 +9393,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     setGeoQuestions: async (actor, input) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
       if (input.questions !== undefined)
-        svc.setGeoQuestions(
+        await svc.setGeoQuestions(
           input.questions.map((q, i) => ({
             id: q.id ?? `gq_h${i}_${Date.parse(clock.now()).toString(36)}`,
             text: q.text,
@@ -9355,9 +9401,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             enabled: q.enabled,
           })),
         )
-      if (input.settings !== undefined) svc.setGeoSettings(input.settings)
+      if (input.settings !== undefined) await svc.setGeoSettings(input.settings)
       return svc.geoView()
     },
+    // WP321（docs/99 §7 O2）：GEO 关注设置、策略建议、现在跑一轮、看板要的数（请求人所在品牌）
+    watchView: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchView(),
+    watchSuggest: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchSuggest(input),
+    watchApply: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchApply(input),
+    watchRun: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchRun(input),
+    watchMetrics: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchMetrics(input),
     // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
     geoHistoryExport: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),
@@ -9404,7 +9461,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       }
       const revenue = await svc.weeklyRevenue()
-      const geo = await svc.weeklyGeo()
+      // WP321（决策 469）：「现在跑一轮」走即时；Claude 要先确认（新面板走 /v1/seo/watch/run）
+      const geo = await svc.weeklyGeo('manual')
       return {
         what,
         approval_item_ids: [revenue.approval_item_id, geo.approval_item_id].filter(
@@ -10302,6 +10360,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
     extension: extensionPortOf,
+    // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
+    ...(hostedBoot === undefined
+      ? {
+          extensionActions: brandAdsActionsPort({
+            serviceOf: async (ws) => {
+              const svc = (await brandModules.forWorkspace(ws)).adsActions
+              if (svc === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装插件动作通道。')
+              return svc
+            },
+          }),
+        }
+      : {}),
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
     // WP76（58 §5）：本地设计库 `/v1/design/*`（同上；素材按品牌进 blob store）

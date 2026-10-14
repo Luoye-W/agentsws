@@ -61,6 +61,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   // WP304（决策 445）：选主题卡与买高级主题卡
   'theme_choice',
   'theme_purchase',
+  // WP321：GEO 关注设置卡（批了 / 改了才落成关注设置）
+  'geo_watch',
 ])
 
 export function isKnownKind(kind: string): boolean {

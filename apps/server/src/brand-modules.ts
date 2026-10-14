@@ -30,6 +30,7 @@ import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
 import type { AdCreativeServiceAssembly } from './ad-creative.js'
 import type { AdsStore } from './ads.js'
+import type { AdsActionsService } from './ads-actions/service.js'
 import type { AdsServiceAssembly } from './ads-service.js'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bSalesAssembly } from './b2b-sales.js'
@@ -270,6 +271,11 @@ export interface BrandModuleSet {
   adsService: AdsServiceAssembly
   /** WP317（docs/101 §5.1④）：素材流水线（`/v1/ads/creative/*`）。数据在上面那张广告库里。 */
   adCreativeService: AdCreativeServiceAssembly
+  /**
+   * WP313（docs/101 §5.4）：插件动作通道（广告后台）——排队、节奏、「默认不碰」开关、同意记录、
+   * 上传表、截图。托管实例不装（云上没有用户的浏览器）。
+   */
+  adsActions?: AdsActionsService
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
