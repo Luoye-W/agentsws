@@ -55,7 +55,11 @@ const view = (over: Partial<RedditWatchView> = {}): RedditWatchView => ({
   ...over,
 })
 
-const state = { view: view(), status: vi.fn(async () => ({})), run: vi.fn(async () => ({})) }
+const state = {
+  view: view(),
+  status: vi.fn(async (..._a: unknown[]) => ({})),
+  run: vi.fn(async (..._a: unknown[]) => ({})),
+}
 
 vi.mock('@/lib/reddit-watch-api', () => ({
   REDDIT_WATCH_KEY: ['reddit-watch'],
