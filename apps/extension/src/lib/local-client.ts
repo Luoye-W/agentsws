@@ -25,6 +25,8 @@ import type {
   ActionResultInput,
   ActionSheetResponse,
   AdsActionSettings,
+  RedditReadNextResponse,
+  RedditReadResultInput,
 } from '@agentsws/browser-action'
 import type {
   ExtensionHello,
@@ -215,4 +217,31 @@ export function adsConsent(
     method: 'POST',
     body: input,
   })
+}
+
+/* ── WP328：Reddit 只读（每日巡查）────────────────────────────────────── */
+
+/** 来问有没有要读的（`connected` = 插件里连上 Reddit 了）。 */
+export function redditNext(
+  options: LocalClientOptions,
+  connected: boolean,
+): Promise<LocalCallResult<RedditReadNextResponse>> {
+  return call<RedditReadNextResponse>(
+    options,
+    `/v1/extension/reddit/next?connected=${connected ? '1' : '0'}`,
+    { method: 'GET' },
+  )
+}
+
+/** 读完交回（没登录 / 号不对 / 被拦也照实交）。 */
+export function redditResult(
+  options: LocalClientOptions,
+  id: string,
+  input: RedditReadResultInput,
+): Promise<LocalCallResult<{ accepted: true }>> {
+  return call<{ accepted: true }>(
+    { ...options, timeoutMs: Math.max(options.timeoutMs ?? LOCAL_TIMEOUT_MS, 30_000) },
+    `/v1/extension/reddit/${encodeURIComponent(id)}/result`,
+    { method: 'POST', body: input },
+  )
 }
