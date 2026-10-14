@@ -85,7 +85,16 @@ export interface AdCopyLine {
 export interface AdCopyRejection {
   field: AdCopyField
   text: string
-  rule: 'too_long' | 'empty' | 'duplicate' | 'over_count' | 'forbidden' | 'evasion' | 'commitment'
+  rule:
+    | 'too_long'
+    | 'empty'
+    | 'duplicate'
+    | 'over_count'
+    | 'forbidden'
+    | 'evasion'
+    | 'commitment'
+    /** 以 `=` / `@` 开头（表格软件会当公式执行）、或夹了换行与制表符。 */
+    | 'format'
   /** 一句人话：为什么挡、该怎么重写（**不替它改**）。 */
   reason: string
 }
