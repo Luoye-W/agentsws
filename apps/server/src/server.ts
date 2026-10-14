@@ -204,6 +204,9 @@ import {
   seedDemoAds,
   snapshotLineCompare,
 } from './ads.js'
+import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
+import { brandAdsActionsPort } from './ads-actions/port.js'
+import { createAdsActionsService } from './ads-actions/service.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -3535,6 +3538,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP249（决策 89）：Reddit 官方号浏览器通道（每品牌一份，目录 `<品牌目录>/reddit-official-browser/`，
      * 与只读读号那份分开）。托管实例不装（云上没有浏览器、也不该有谁的登录态）。
      */
+    /*
+     * WP313（docs/101 §5.4）：插件动作通道（广告后台）。每品牌一份，目录 `<品牌目录>/ads-actions/`。
+     * 托管实例不装（云上没有用户的浏览器）。进队只由审批执行器调（WP316 接线），没有 HTTP 入口。
+     */
+    const adsActions =
+      hostedBoot !== undefined
+        ? undefined
+        : createAdsActionsService({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir: join(dir, 'ads-actions') }),
+            nowMs: () => Date.parse(clock.now()),
+            evidence:
+              dir === undefined
+                ? memoryEvidenceStore({ nowMs: () => Date.parse(clock.now()) })
+                : fileEvidenceStore({
+                    dir: join(dir, 'ads-actions', 'evidence'),
+                    nowMs: () => Date.parse(clock.now()),
+                  }),
+          })
+    // 排队 24 小时作废、断了音讯的记失败、截图过 180 天删——十分钟扫一次（不挡进程退出）
+    const adsActionsSweep =
+      adsActions === undefined
+        ? undefined
+        : setInterval(() => void adsActions.sweep().catch(() => {}), 10 * 60 * 1000)
+    adsActionsSweep?.unref?.()
     const robOptions = options.redditOfficialBrowser
     const redditOfficial =
       robOptions === undefined || robOptions === false || hostedBoot !== undefined
@@ -5874,6 +5902,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       siteService,
       ads,
       adsService,
+      ...(adsActions === undefined ? {} : { adsActions }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -5907,6 +5936,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         socialService.ownSub?.close()
         socialService.executor.close()
         await redditOfficial?.close()
+        // WP313：插件动作通道（放掉挂着的长轮询、停掉定时扫）
+        if (adsActionsSweep !== undefined) clearInterval(adsActionsSweep)
+        adsActions?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
         rosterSync.close()
@@ -10019,6 +10051,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
     extension: extensionPortOf,
+    // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
+    ...(hostedBoot === undefined
+      ? {
+          extensionActions: brandAdsActionsPort({
+            serviceOf: async (ws) => {
+              const svc = (await brandModules.forWorkspace(ws)).adsActions
+              if (svc === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装插件动作通道。')
+              return svc
+            },
+          }),
+        }
+      : {}),
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
     // WP76（58 §5）：本地设计库 `/v1/design/*`（同上；素材按品牌进 blob store）

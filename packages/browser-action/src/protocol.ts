@@ -23,6 +23,8 @@ export interface ActionNextResponse {
   job?: ActionJob
   /** 没活时多久再来问（毫秒）。 */
   retry_after_ms: number
+  /** 这几家还没在插件里勾过「看过风险告知，同意」（或文案改版了要重新同意）：这几家的活不发。 */
+  needs_consent?: ActionPlatform[]
 }
 
 export interface ActionProgressInput {

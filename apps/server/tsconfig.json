@@ -8,6 +8,9 @@
   "include": ["src", "src/**/*.json"],
   "references": [
     {
+      "path": "../../packages/browser-action"
+    },
+    {
       "path": "../../packages/ads-core"
     },
     {

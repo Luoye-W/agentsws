@@ -330,6 +330,9 @@ importers:
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../../packages/brand-intake
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../../packages/browser-action
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
@@ -627,6 +630,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../browser-action
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
