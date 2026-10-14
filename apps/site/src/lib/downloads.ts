@@ -31,6 +31,12 @@ export interface DownloadManifest {
   extension: ExtensionItem
 }
 
+/**
+ * 官网列的桌面安装包（按这个顺序）。WP326（决策 731）：Mac 只出 Apple 芯片版，Intel 版不再列。
+ * 下载站上旧的清单里可能还带着 `mac-x64`——不算毛病，页面上不显示就是了（见 {@link visibleDesktop}）。
+ */
+export const DESKTOP_IDS = ['mac-arm64', 'win-x64'] as const
+
 /** 清单的毛病（空数组 = 没毛病）。给了链接就必须同时给 sha256（64 位十六进制）与大小，且只认 https。 */
 export function manifestProblems(m: DownloadManifest): string[] {
   const out: string[] = []
@@ -47,9 +53,25 @@ export function manifestProblems(m: DownloadManifest): string[] {
     if (it.size === null || !Number.isInteger(it.size) || it.size <= 0)
       out.push(`${it.id}：有链接就要有大小（字节）`)
   }
-  for (const want of ['mac-arm64', 'mac-x64', 'win-x64'])
-    if (!m.desktop.some((d) => d.id === want)) out.push(`缺 ${want}`)
+  for (const want of DESKTOP_IDS) if (!m.desktop.some((d) => d.id === want)) out.push(`缺 ${want}`)
   return out
+}
+
+/** 页面上要列的那几项（按 {@link DESKTOP_IDS} 的顺序；清单里别的项——比如旧的 Intel 版——不列）。 */
+export function visibleDesktop(m: DownloadManifest): DesktopItem[] {
+  return DESKTOP_IDS.flatMap((id) => m.desktop.filter((d) => d.id === id))
+}
+
+/**
+ * WP326：猜访客是不是 Intel 芯片的 Mac（给一句「目前只支持 Apple 芯片的 Mac」）。
+ * 浏览器不直接说芯片：Mac 上的 UA 一律写 Intel，只能看显卡名（WebGL 的 renderer）——
+ * Apple 芯片的显卡名里带 Apple；Intel Mac 是 Intel / AMD 显卡。Safari 把显卡名统一报成「Apple GPU」，
+ * 那就认不出来，按 Apple 芯片算（宁可漏说，不要冤枉）。
+ */
+export function looksLikeIntelMac(userAgent: string, gpu: string | null | undefined): boolean {
+  if (!/Macintosh|Mac OS X/i.test(userAgent) || /iPhone|iPad|iPod/i.test(userAgent)) return false
+  if (gpu === null || gpu === undefined || gpu.trim() === '') return false
+  return !/Apple/i.test(gpu)
 }
 
 /** 字节 → 「128 MB」。 */

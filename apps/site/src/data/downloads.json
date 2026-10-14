@@ -14,15 +14,6 @@
       "size": null
     },
     {
-      "id": "mac-x64",
-      "os": "mac",
-      "arch": "x64",
-      "file": "Agents-Workshop-0.1.0-beta-x64.dmg",
-      "url": null,
-      "sha256": null,
-      "size": null
-    },
-    {
       "id": "win-x64",
       "os": "win",
       "arch": "x64",

@@ -15,6 +15,7 @@ import {
   type DownloadManifest,
   formatSize,
   manifestProblems,
+  visibleDesktop,
 } from '../lib/downloads.js'
 import { docHref } from '../lib/markdown.js'
 import '../styles/pages.css'
@@ -48,6 +49,7 @@ const attrs = (it: DownloadItem) =>
           return <a class="btn btn-primary btn-lg" {...attrs(d)}><Icon name={osIcon(d)} />{d.url === null ? `${t.primary['mac-arm64']} · ${t.soon}` : t.primary['mac-arm64']}</a>
         })()}
       </div>
+      <p class="intel-note" data-intel-mac hidden>{t.intelMac}</p>
       {primaryIds.slice(1).map((id) => {
         const d = byId(id)
         return <template data-os={id}><a class="btn btn-primary btn-lg" {...attrs(d)}><Icon name={osIcon(d)} />{d.url === null ? `${t.primary[id]} · ${t.soon}` : t.primary[id]}</a></template>
@@ -66,7 +68,7 @@ const attrs = (it: DownloadItem) =>
     <div class="wrap center">
       <h2 class="h2" id="os-h">{t.osTitle}</h2>
       <ul class="oses">
-        {m.desktop.map((d) => {
+        {visibleDesktop(m).map((d) => {
           const o = t.os[d.id as keyof typeof t.os]
           return (
             <li class:list={['os', { sel: d.id === 'mac-arm64' }]} data-os-card={d.id}>
