@@ -28,6 +28,9 @@ const THIRD_PARTY = [
 const B2B_OWN = ['b2b-inquiry', 'export-docs', 'quotation', 'trade-show']
 /** WP162：Agents 工坊自己写的（本仓库的 Apache-2.0）；WP170 加上 B2B 的四个。 */
 const OWN = [
+  // WP317（docs/101 §5.1④）：素材流水线的两个子 Agent
+  'ad-descriptions',
+  'ad-headlines',
   'brand-voice',
   'chargeback-evidence',
   'policy-review',
