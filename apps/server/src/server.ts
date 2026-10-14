@@ -534,6 +534,7 @@ import {
 } from './role-rules.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
+import { repairStuckRuns } from './run-repair.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -4653,6 +4654,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       soleOwner: () => soleOwnerOf?.(ws),
     })
     runtime?.bind(work)
+    /*
+     * WP319 ③：开机自检——这个品牌还没有运行在跑，最近一轮没收尾的事项（老版本没跑成只记了「跑完了」、
+     * 跑到一半应用被关 / 被更新重启）按本机事件日志补一句「没跑成」+ 重试，不再一直挂在「进行中」。
+     */
+    try {
+      repairStuckRuns({
+        openMatters: () => work.listMatters({ status: ['open', 'waiting'], archived: false }),
+        timeline: (id) => work.store.listMatterEvents(id, { limit: 40 }),
+        runEvents: (run_id) => kernel.eventLog.readSync({ workspace_id: ws, run_id }),
+        append: (id, e) => {
+          work.appendEvent(id, e)
+        },
+        setSummary: (m, summary) => {
+          work.store.putMatter({ ...m, context: { ...m.context, summary } })
+        },
+      })
+    } catch {
+      // 自检失败不挡开机：最坏就是老事项照旧挂着
+    }
     /**
      * WP154「内容与搜索」：这个品牌的 SEO / GEO 那一层。
      *
