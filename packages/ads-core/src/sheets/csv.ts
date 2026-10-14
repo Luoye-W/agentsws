@@ -30,7 +30,7 @@ export function encodeDelimited(
     .join('\r\n')
 }
 
-/** 去掉 UTF-8 BOM（`﻿`）。 */
+/** 去掉 UTF-8 BOM（U+FEFF）。 */
 export function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
 }

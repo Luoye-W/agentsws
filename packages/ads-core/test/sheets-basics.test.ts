@@ -13,6 +13,8 @@ import {
   writeXlsx,
 } from '../src/index.js'
 
+const BOM = String.fromCharCode(0xfeff)
+
 describe('CSV / 制表符', () => {
   it('带逗号、引号、换行的格子来回一趟不变', () => {
     const rows = [
@@ -31,7 +33,7 @@ describe('CSV / 制表符', () => {
   })
 
   it('去 BOM、丢空行', () => {
-    expect(parseDelimited('﻿a,b\r\n\r\n1,2\r\n')).toEqual([
+    expect(parseDelimited(`${BOM}a,b\r\n\r\n1,2\r\n`)).toEqual([
       ['a', 'b'],
       ['1', '2'],
     ])
@@ -48,7 +50,7 @@ describe('CSV / 制表符', () => {
       bytes[3 + i * 2] = c >> 8
     }
     expect(decodeExportBytes(bytes)).toBe(s)
-    expect(decodeExportBytes(new TextEncoder().encode(`﻿${s}`))).toBe(s)
+    expect(decodeExportBytes(new TextEncoder().encode(`${BOM}${s}`))).toBe(s)
   })
 })
 
