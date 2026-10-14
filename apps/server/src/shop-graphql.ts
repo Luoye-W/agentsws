@@ -87,6 +87,23 @@ export const DISCOUNT_BY_CODE = `query AgentswsDiscountByCode($code: String!) {
   codeDiscountNodeByCode(code: $code) { id codeDiscount { __typename ... on DiscountCodeBasic { title status startsAt endsAt usageLimit } } }
 }`
 
+/**
+ * WP319：岗位面板（总销售额 / 订单数）经「店铺管理授权」（云端一键授权 / CLI 店铺授权）拉近 30 天订单。
+ * 不带顾客那几格（受保护数据）；行项目只在要按产品线切时才带（`$lines`），带的时候一页少拉几张，免得超查询成本。
+ */
+export const LIVE_ORDERS = `query AgentswsLiveOrders($first: Int!, $after: String, $query: String, $lines: Boolean!) {
+  shop { currencyCode ianaTimezone }
+  orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+    pageInfo { hasNextPage endCursor }
+    nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus
+      currentTotalPriceSet { shopMoney { amount currencyCode } }
+      totalRefundedSet { shopMoney { amount currencyCode } }
+      lineItems(first: 20) @include(if: $lines) { nodes { id title sku quantity variant { id }
+        product { id vendor productType } originalTotalSet { shopMoney { amount } } } }
+    }
+  }
+}`
+
 export const RECENT_ORDERS = `query AgentswsRecentOrders($first: Int!) {
   orders(first: $first, sortKey: CREATED_AT, reverse: true) {
     nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus

@@ -46,6 +46,17 @@ export function longestPaths(root, top = 5, list = listFiles) {
     .slice(0, top)
 }
 
+/**
+ * WP319：安装目录有多少个文件、多大（NSIS 装 / 更新的时间几乎和文件数成正比：旧文件一个个挪走删掉、
+ * 新文件一个个解出来、杀毒逐个扫）。报告里记一行，下一版对比用。
+ */
+export function installFootprint(root, list = listFiles, sizeOf = (p) => statSync(p).size) {
+  const files = list(root)
+  let bytes = 0
+  for (const f of files) bytes += sizeOf(f)
+  return { files: files.length, mb: Math.round(bytes / 1e5) / 10 }
+}
+
 function listFiles(root) {
   const out = []
   const walk = (dir) => {
@@ -414,8 +425,12 @@ async function main() {
   // 1. 静默安装到带中文和空格的目录（模拟中文用户名 / 用户自己挑的目录）
   const local = process.env.LOCALAPPDATA ?? tmpdir()
   const dir = join(local, 'Programs', '智能体 工坊 测试')
+  const t0 = Date.now()
   const exe = silentInstall(installer, dir)
-  step(`装好了：${exe}`)
+  const foot = installFootprint(dir)
+  step(
+    `装好了：${exe}（静默装 ${Math.round((Date.now() - t0) / 1000)} 秒；安装目录 ${foot.files} 个文件、${foot.mb} MB）`,
+  )
 
   // 2. 最长路径
   const longest = longestPaths(dir)
