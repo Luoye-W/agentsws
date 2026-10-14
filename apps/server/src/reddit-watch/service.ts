@@ -506,7 +506,10 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   const ingest = async (rec: JobRec, res: RedditReadResultInput): Promise<void> => {
     const run = store.run(ws, rec.run_id)
     if (run === undefined) return
-    const s = settings()
+    let s = settings()
+    // 没配品牌号：第一次读到就把登着的号记成品牌号（决策 758）——之后换了号插件一条都不读
+    if (s.brand_username === undefined && res.outcome === 'done' && res.user !== undefined)
+      s = writeSettings(store, ws, { brand_username: res.user })
     const brandUser = s.brand_username ?? res.user
     const fresh: RedditWatchItem[] = []
     const stats = new Map<

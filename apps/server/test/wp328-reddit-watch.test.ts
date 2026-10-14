@@ -332,6 +332,8 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
       ),
     )
     expect(complete).toHaveBeenCalledTimes(1)
+    // 没配品牌号：第一次读到就记下登着的号（之后换号就一条都不读）
+    expect(s.watch.settings().brand_username).toBe('inmo_official')
     const d = s.watch.digest({
       since: '2026-10-11T00:00:00.000Z',
       until: '2026-10-17T00:00:00.000Z',
