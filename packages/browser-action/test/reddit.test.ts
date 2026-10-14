@@ -237,3 +237,42 @@ describe('WP329 Reddit 写在假 old.reddit 上', () => {
     expect(r.message).toContain('没发')
   })
 })
+
+describe('WP329（决策 764）：插件只读版规', () => {
+  it('sub_rules：白名单里、一页、解析成一条一行', async () => {
+    const { checkRedditReadRequest, redditReadUrl, redditRulesOf, runRedditRead } = await import(
+      '../src/index.js'
+    )
+    const req = {
+      key: 'rules:inmoxr',
+      kind: 'sub_rules' as const,
+      subreddit: 'inmoxr',
+      max_pages: 1,
+    }
+    expect(checkRedditReadRequest(req)).toBeUndefined()
+    expect(redditReadUrl(req)).toBe('https://old.reddit.com/r/inmoxr/about/rules.json?raw_json=1')
+    expect(checkRedditReadRequest({ ...req, subreddit: '../x' })).toBe('版块名不对。')
+    expect(
+      redditRulesOf({
+        rules: [{ short_name: 'Be civil', description: 'Be civil', violation_reason: 'Rude' }],
+      }),
+    ).toEqual(['Be civil：Rude'])
+    const res = await runRedditRead(
+      { id: 'j', workspace_id: 'ws', reads: [req], title: 't', created_at: 'x' },
+      {
+        fetch: async (url) => ({
+          status: 200,
+          url,
+          content_type: 'application/json',
+          body: url.includes('/api/me.json')
+            ? JSON.stringify({ kind: 't2', data: { name: 'inmo_official' } })
+            : JSON.stringify({ rules: [{ short_name: 'No links' }] }),
+        }),
+        sleep: async () => {},
+        stopped: () => false,
+        gapMs: 0,
+      },
+    )
+    expect(res.parts[0]).toMatchObject({ key: 'rules:inmoxr', ok: true, rules: ['No links'] })
+  })
+})

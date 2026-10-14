@@ -75185,6 +75185,7 @@ export interface operations {
             pages: number
             reached_stop: boolean
             message?: string
+            rules?: string[]
           }[]
         }
       }

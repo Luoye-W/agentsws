@@ -122,6 +122,7 @@ import {
   PR_ROLE_IDS,
   platformKitOf,
   REDDIT_READ_HOSTS,
+  redditTargetFromItem,
   resolveDataCreditBudget,
   SOCIAL_ROLE_IDS,
   skillOnPlatform,
@@ -3937,6 +3938,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             workspace_id: ws,
             // WP329：Reddit 的活做完了 → 读回确认、记发出记录（广告那一半的接线在 WP316）
             onEvent: (event) => redditWrites?.onActionEvent(event),
+            // WP329：Reddit 的写活记在 WP328 巡查那一本账上（同一个号读写一次一件；巡查在下面才建，晚绑定）
+            paceFor: (job) => (job.plan.platform === 'reddit' ? redditWatch?.pace : undefined),
             ...(dir === undefined ? {} : { dir: join(dir, 'ads-actions') }),
             nowMs: () => Date.parse(clock.now()),
             evidence:
@@ -4548,7 +4551,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return hits.map((h) => ({ id: h.fact_card_id, text: h.statement_redacted }))
       },
       voice: (actor) => adCreativeSkillText(actor as never, 'brand-voice'),
+      // WP329：品牌号用 WP328 巡查设置里的那一个（没配按品牌算）
+      account: () => redditWatch?.settings().brand_username,
       rules: async (sub) => {
+        // 决策 764：先用插件借品牌号会话只读到的版规（WP328 巡查顺手读）；没读过就记一笔，下一轮读
+        const viaPlugin = redditWatch?.rules(sub)
+        if (viaPlugin !== undefined) return viaPlugin.rules
+        redditWatch?.wantRules(sub)
         const adapter = socialChannels.adapters.reddit
         if (
           adapter.communityRules === undefined ||
@@ -4579,8 +4588,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await outboundApprover(id)
         return outboundNames.get(id)
       },
+      // WP328：出了卡 → 待处理条目标「起草中」
+      onStaged: (source, _approval) => {
+        if (source.type === 'reddit_watch_item') redditWatch?.setStatus(source.id, 'drafting')
+      },
       onSettled: (entry) =>
         settleRedditWrite(entry, {
+          // WP328：发出去了 → 条目标「回过了」并挂上发出记录那一行
+          setWatchStatus: (id, record_id) =>
+            redditWatch?.setStatus(id, 'done', {
+              ...(record_id === undefined ? {} : { outbound_record_id: record_id }),
+            }),
           thread: (id) => social.thread(id),
           saveThread: (row) => social.saveThread(row),
           post: (id) => pr.post(id),
@@ -6732,6 +6750,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 payload,
               }),
           })
+    /*
+     * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
+     * 起草的人 = 担「自家版运营」的那个人（没人担就不起草，条目留在待处理里）。
+     */
+    redditWatch?.onPending((entries) => {
+      const holder = redditHolder()
+      if (holder === undefined || redditWrites === undefined) return
+      const actor = {
+        workspace_id: ws,
+        person_id: holder.person_id,
+        assignment_id: holder.id,
+        role_id: holder.role_id,
+      }
+      void (async () => {
+        for (const entry of entries) {
+          if (entry.status !== 'open') continue
+          const target = redditTargetFromItem(entry)
+          if (target === undefined) continue
+          await redditWrites
+            ?.draftAndStage(actor, {
+              target,
+              ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
+            })
+            .catch(() => undefined)
+        }
+      })()
+    })
 
     return {
       workspace_id: ws,

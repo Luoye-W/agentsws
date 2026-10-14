@@ -141,8 +141,24 @@ describe('WP329 起草提示', () => {
 })
 
 describe('WP329 交出去', () => {
-  it('插件没来过、有直发的路：直发，记发出记录（带编号与链接）', async () => {
+  it('决策 761：直发默认关——插件没来过也不走程序直发，排着等插件', async () => {
     const m = make({ direct: true })
+    expect(m.svc.settings().direct_fallback).toBe(false)
+    const r = await m.svc.send({
+      approval_item_id: 'ap_1',
+      write: replyWrite,
+      text: 'Hi Alice',
+      subreddit: 'inmoxr',
+      record,
+    })
+    expect(r.execution_id).toMatch(/^reddit_fill_/u)
+    expect(m.svc.writes()[0]?.message).toContain('插件不在线')
+    expect(m.records).toEqual([])
+  })
+
+  it('开关打开后：插件没来过、有直发的路就直发，记发出记录（带编号与链接）', async () => {
+    const m = make({ direct: true })
+    m.svc.setSettings({ direct_fallback: true })
     const r = await m.svc.send({
       approval_item_id: 'ap_1',
       write: replyWrite,
@@ -161,6 +177,7 @@ describe('WP329 交出去', () => {
 
   it('直发失败：照实回失败、不重试、不记发出记录', async () => {
     const m = make({ direct: true, directFails: true })
+    m.svc.setSettings({ direct_fallback: true })
     const r = await m.svc.send({
       approval_item_id: 'ap_1',
       write: replyWrite,
@@ -175,8 +192,9 @@ describe('WP329 交出去', () => {
     expect(m.records).toEqual([])
   })
 
-  it('插件最近来过：不走直发，交给插件；24 小时没人领 → 作废、照实说', async () => {
+  it('插件最近来过：开关开着也不走直发，交给插件；24 小时没人领 → 作废、照实说', async () => {
     const m = make({ direct: true })
+    m.svc.setSettings({ direct_fallback: true })
     await m.actions.next(['reddit'], 0)
     const r = await m.svc.send({
       approval_item_id: 'ap_1',

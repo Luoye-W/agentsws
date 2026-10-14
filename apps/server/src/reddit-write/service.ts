@@ -158,6 +158,9 @@ export interface RedditWriteService {
   writes(): RedditWriteView[]
   /** 插件最近一周来过、连着 Reddit。 */
   extensionReady(): boolean
+  /** 决策 761：直发开关（默认关）。 */
+  settings(): RedditWriteSettings
+  setSettings(patch: Partial<RedditWriteSettings>): RedditWriteSettings
   /** 卡被决定了（批了 → 过了取消窗口施行）。不是 Reddit 写卡什么都不做。 */
   onDecided(item: ApprovalItem): Promise<void>
   /** 补扫：批了、过了取消窗口、还没施行的那几张。回施行了几张。 */
@@ -230,7 +233,18 @@ interface StateFile {
   version: 1
   entries: RedditWriteEntry[]
   seq: number
+  /** 决策 761：插件不在线时要不要走程序直发（OAuth 应用 / 官方号浏览器）。默认关。 */
+  direct_fallback?: boolean
 }
+
+/** Reddit 写的设置（决策 761）。 */
+export interface RedditWriteSettings {
+  /** 插件不在线时走程序直发（不是人点）。默认关：等插件、等你打开 Chrome。 */
+  direct_fallback: boolean
+}
+
+/** 插件不在线时进度里那一句。 */
+export const PLUGIN_OFFLINE = '插件不在线，等你打开 Chrome（24 小时内来领都行）。'
 
 export function createRedditWriteService(options: RedditWriteServiceOptions): RedditWriteService {
   const ws = options.workspace_id
@@ -246,6 +260,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   })()
   const entries: RedditWriteEntry[] = [...(loaded?.entries ?? [])]
   let seq = loaded?.seq ?? 0
+  let directFallback = loaded?.direct_fallback === true
   /** 起草时查到的知识卡（出卡时按 id 带上那句话；只在内存里留最近的）。 */
   const factCache = new Map<string, RedditDraftFact>()
 
@@ -258,7 +273,15 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     while (entries.length > KEEP) entries.shift()
     mkdirSync(options.dir, { recursive: true })
     const tmp = `${stateFile}.tmp`
-    writeFileSync(tmp, JSON.stringify({ version: 1, entries, seq } satisfies StateFile))
+    writeFileSync(
+      tmp,
+      JSON.stringify({
+        version: 1,
+        entries,
+        seq,
+        ...(directFallback ? { direct_fallback: true } : {}),
+      } satisfies StateFile),
+    )
     renameSync(tmp, stateFile)
   }
 
@@ -342,7 +365,8 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       record: input.record,
     }
     // 插件最近没来过、有直发的路：先走直发（OAuth 应用 / 官方号浏览器；WP249 留作备用）
-    if (!extensionReady() && options.direct !== undefined) {
+    // 决策 761：直发是开关、默认关——关着就一律等插件（人点发送）
+    if (directFallback && !extensionReady() && options.direct !== undefined) {
       const direct = await options.direct({
         write: input.write,
         text: input.text,
@@ -392,12 +416,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       job_id: job.id,
       state: 'queued',
       via: 'extension',
-      ...(extensionReady()
-        ? {}
-        : {
-            message:
-              '排着等插件：在 Chrome 的「Agents 工坊助手」里连接 Reddit，24 小时内来领都行。',
-          }),
+      ...(extensionReady() ? {} : { message: PLUGIN_OFFLINE }),
     }
     entries.push(entry)
     save()
@@ -441,6 +460,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   const service: RedditWriteService = {
     extensionReady,
     send,
+    settings: () => ({ direct_fallback: directFallback }),
+    setSettings(patch) {
+      if (patch.direct_fallback !== undefined) directFallback = patch.direct_fallback
+      save()
+      return { direct_fallback: directFallback }
+    },
 
     async onDecided(item) {
       if (item.workspace_id !== ws || !APPROVED.has(item.state) || !isRedditWriteCard(item)) return
@@ -536,6 +561,8 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       const scan = checkOutbound(`${title ?? ''}\n${text}`)
       if (!scan.ok) return { staged: false, message: replyBlockedReason(scan) }
       const facts = (input.fact_ids ?? []).map((id) => factCache.get(id) ?? { id, text: '' })
+      // 卡上「版规 N 条」（原文进问号）：与起草时同一个来源（插件只读读回的那一份）
+      const rules = await options.rules?.(subOf(target.subreddit)).catch(() => undefined)
       const ref: ObjectRef = {
         type: actor.role_id.startsWith('pr.') ? 'external_post' : 'community_thread',
         id: `reddit:${target.parent_fullname ?? `r/${subOf(target.subreddit)}`}`,
@@ -552,6 +579,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           ? {}
           : { in_reply_to: (target.parent_text ?? target.post_title ?? '').slice(0, 300) }),
         ...(facts.length === 0 ? {} : { facts }),
+        ...(rules === undefined || rules.length === 0 ? {} : { rules }),
         ...(input.reason === undefined ? {} : { reason: input.reason }),
       }
       const item = await options.approvals.create({

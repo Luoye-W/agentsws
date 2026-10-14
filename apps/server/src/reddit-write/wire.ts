@@ -231,12 +231,19 @@ export function settleRedditWrite(
     saveThread?(row: CommunityThread): void
     post?(id: string): ExternalPost | undefined
     savePost?(row: ExternalPost): void
+    /** WP328：待处理条目回过了（挂上发出记录那一行）。 */
+    setWatchStatus?(id: string, record_id: string | undefined): void
     emit(type: string, payload: Record<string, unknown>): void
     now(): string
   },
 ): void {
   const src = entry.source
   if (src === undefined) return
+  if (src.type === 'reddit_watch_item') {
+    // 没发出去：条目留在「起草中」，人能在卡片流 / 待处理里再来
+    if (entry.state === 'sent') deps.setWatchStatus?.(src.id, entry.record_id)
+    return
+  }
   if (src.type === 'community_thread') {
     const thread = deps.thread?.(src.id)
     if (thread === undefined) return

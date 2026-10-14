@@ -97056,6 +97056,14 @@
                         "message": {
                           "type": "string",
                           "maxLength": 600
+                        },
+                        "rules": {
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 600
+                          }
                         }
                       },
                       "required": ["key", "ok", "items", "pages", "reached_stop"],

@@ -74,6 +74,8 @@ export interface AdsActionsServiceOptions {
   onEvent?(event: AdsActionEvent): void
   /** 当前告知文案的版本（默认 {@link ADS_CONSENT_TEXT_VERSION}）。 */
   consentTextVersion?: string
+  /** WP329：某类活记在另一本账上（Reddit 写记在 WP328 巡查那一本）。回 `undefined` 用这里自己那一本。 */
+  paceFor?(job: ActionJob): Pace | undefined
   /** 测试用：长轮询的等待（默认真的等）。 */
   wait?(ms: number, wake: Promise<void>): Promise<void>
 }
@@ -175,7 +177,11 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
   })()
 
   const pace = new Pace({ state: loaded?.pace ?? {} })
-  const queue = new ActionQueue({ pace, state: loaded?.queue ?? [] })
+  const queue = new ActionQueue({
+    pace,
+    state: loaded?.queue ?? [],
+    ...(options.paceFor === undefined ? {} : { paceFor: (job) => options.paceFor?.(job) }),
+  })
   let zones = normalizeZoneSettings(loaded?.zones)
   const consent: Partial<Record<ActionPlatform, AdsConsentRecord>> = { ...(loaded?.consent ?? {}) }
   const downloads: Record<string, ActionDownloadInput[]> = { ...(loaded?.downloads ?? {}) }

@@ -44,6 +44,27 @@ export interface RedditReadPart {
   /** 读到了上次那一条（或比 `since_utc` 更早的）——中间没有漏。 */
   reached_stop: boolean
   message?: string
+  /** WP329（决策 764）：`sub_rules` 那一路读到的版规（一条一行，原文）。 */
+  rules?: string[]
+}
+
+/** 版规 `.json` → 一条一行（短名 + 违规理由 + 正文，同 `pr-core` 那一份合法）；认不出回 `undefined`。 */
+export function redditRulesOf(json: unknown): string[] | undefined {
+  if (json === null || typeof json !== 'object') return undefined
+  const rules = (json as { rules?: unknown }).rules
+  if (!Array.isArray(rules)) return undefined
+  return rules
+    .map((r) => {
+      const o = (r ?? {}) as Record<string, unknown>
+      return [o.short_name, o.violation_reason, o.description]
+        .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+        .map((x) => x.trim())
+        .filter((x, i, all) => all.indexOf(x) === i)
+        .join('：')
+        .slice(0, 600)
+    })
+    .filter((x) => x !== '')
+    .slice(0, 30)
 }
 
 export interface RedditReadJobResult {
@@ -182,6 +203,16 @@ export async function runRedditRead(
             user,
             parts,
           }
+        break
+      }
+      if (req.kind === 'sub_rules') {
+        part.pages += 1
+        part.reached_stop = true
+        const rules = redditRulesOf(safeJson(got.res.body))
+        if (rules === undefined) {
+          part.ok = false
+          part.message = '读回来的版规认不出。'
+        } else part.rules = rules
         break
       }
       const page = parseRedditListing(safeJson(got.res.body), req.kind === 'inbox')

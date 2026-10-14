@@ -217,11 +217,11 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     expect(await data<OutboundRecord[]>(await api('/v1/outbound/records'))).toEqual([])
   })
 
-  it('插件从没连过、也没有别的路：照样排着等插件，进度里照实说去连', async () => {
+  it('插件从没连过：不走程序直发（决策 761 关），排着等插件，进度里说插件不在线', async () => {
     await stageAndApprove('Hi Alice, INMO here. The anti-fog insert in the box helps.')
     const writes = await data<{ rows: RedditWriteView[] }>(await api('/v1/social/reddit/writes'))
     expect(writes.rows[0]?.state).toBe('queued')
-    expect(writes.rows[0]?.message).toContain('连接 Reddit')
+    expect(writes.rows[0]?.message).toContain('插件不在线')
   })
 
   it('WP328 交过来的「待处理」条目：起草一份、直接出卡（人在卡上改字再批）；私信不回', async () => {

@@ -59,6 +59,7 @@ const plugin = (path: string, token: string, init: { method?: string; body?: unk
 const NOW_S = Math.floor(Date.now() / 1000)
 const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
 const ROUTES: Record<string, unknown> = {
+  '/r/inmoxr/about/rules.json': { rules: [{ short_name: 'Be civil', description: 'No insults' }] },
   '/api/me.json': { kind: 't2', data: { name: 'inmo_official' } },
   '/message/inbox/.json': listing([
     {
@@ -166,7 +167,13 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     }
     const job = got.job
     if (job === undefined) throw new Error('没领到活')
-    expect(job.reads.map((r) => r.key)).toEqual(['inbox', 'sub_new:inmoxr', 'sub_comments:inmoxr'])
+    // WP329（决策 764）：顺手读自家版块的版规（起草时当上下文）
+    expect(job.reads.map((r) => r.key)).toEqual([
+      'inbox',
+      'sub_new:inmoxr',
+      'sub_comments:inmoxr',
+      'rules:inmoxr',
+    ])
     const res = await runRedditRead(job, {
       fetch: fakeFetch,
       sleep: async () => {},
@@ -179,6 +186,10 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
       body: res,
     })
     expect(accepted.status).toBe(200)
+    expect(
+      (await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWatch?.rules('inmoxr')
+        ?.rules,
+    ).toEqual(['Be civil：No insults'])
 
     const view = await data<RedditWatchView>(
       await call('GET', '/v1/reddit-watch', undefined, reddit?.id),
