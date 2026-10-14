@@ -72,6 +72,12 @@ function perms(granted: string[]): PermissionsLike & { removed: unknown[] } {
   }
 }
 
+function click(root: ShadowRoot | null | undefined, selector: string): void {
+  const el = root?.querySelector<HTMLElement>(selector)
+  if (el === null || el === undefined) throw new Error(`没有 ${selector}`)
+  el.click()
+}
+
 describe('横条', () => {
   it('看得见、停得住；要确认时多两个按钮；做完整条拿掉', () => {
     const doc = new JSDOM('<!doctype html><html><body></body></html>').window.document
@@ -80,11 +86,11 @@ describe('横条', () => {
     renderBanner(doc, { title: '暂停「春季」', step: 3, of: 7, label: '点按钮' }, h)
     const root = doc.getElementById('agentsws-ads-banner')?.shadowRoot
     expect(root?.querySelector('.text')?.textContent).toBe('AI 正在操作 · 3/7 · 点按钮')
-    ;(root?.querySelector('[data-testid="ads-banner-stop"]') as HTMLButtonElement).click()
+    click(root, '[data-testid="ads-banner-stop"]')
     renderBanner(doc, { title: 't', step: 9, of: 12, label: '等你确认', confirm: '确认提交？' }, h)
     const root2 = doc.getElementById('agentsws-ads-banner')?.shadowRoot
-    ;(root2?.querySelector('[data-testid="ads-banner-yes"]') as HTMLButtonElement).click()
-    ;(root2?.querySelector('[data-testid="ads-banner-no"]') as HTMLButtonElement).click()
+    click(root2, '[data-testid="ads-banner-yes"]')
+    click(root2, '[data-testid="ads-banner-no"]')
     expect(seen).toEqual(['stop', 'yes', 'no'])
     expect(doc.querySelectorAll('#agentsws-ads-banner')).toHaveLength(1)
     renderBanner(doc, null, h)
