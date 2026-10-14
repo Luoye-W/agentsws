@@ -14,9 +14,10 @@ const zh = {
   sub: '双击就装。不用 Node，不用 Docker，不用数据库。',
   primary: {
     'mac-arm64': '下载 macOS 版（Apple 芯片）',
-    'mac-x64': '下载 macOS 版（Intel）',
     'win-x64': '下载 Windows 版',
   },
+  /** WP326：认出是 Intel Mac 时首屏按钮下面那一句。 */
+  intelMac: '目前只支持 Apple 芯片的 Mac',
   soon: '即将提供',
   soonHint: '安装包的下载地址还没定，内测期间先从 GitHub 获取或从源码跑。',
   beta: '内测版',
@@ -26,8 +27,7 @@ const zh = {
   shotAlt: '初始化设置第三步：勾选要上岗的岗位',
   osTitle: '选你的电脑',
   os: {
-    'mac-arm64': { h: 'macOS · Apple 芯片', p: 'M 系列芯片', btn: '下载 .dmg' },
-    'mac-x64': { h: 'macOS · Intel', p: 'Intel 处理器', btn: '下载 .dmg' },
+    'mac-arm64': { h: 'macOS · Apple 芯片', p: 'M1 及以后 · 暂不支持 Intel', btn: '下载 .dmg' },
     'win-x64': { h: 'Windows · x64', p: '64 位 Windows', btn: '下载 .exe' },
   },
   firstOpen: {
@@ -81,9 +81,9 @@ const en: DownloadCopy = {
   sub: 'Double-click to install. No Node, no Docker, no database.',
   primary: {
     'mac-arm64': 'Download for macOS (Apple silicon)',
-    'mac-x64': 'Download for macOS (Intel)',
     'win-x64': 'Download for Windows',
   },
+  intelMac: 'Only Macs with Apple silicon are supported for now',
   soon: 'Coming soon',
   soonHint:
     'The download location isn’t set yet. During the beta, get builds from GitHub or run from source.',
@@ -94,8 +94,11 @@ const en: DownloadCopy = {
   shotAlt: 'Setup, step three: tick the roles you want to start with',
   osTitle: 'Pick your computer',
   os: {
-    'mac-arm64': { h: 'macOS · Apple silicon', p: 'M-series chips', btn: 'Download .dmg' },
-    'mac-x64': { h: 'macOS · Intel', p: 'Intel processors', btn: 'Download .dmg' },
+    'mac-arm64': {
+      h: 'macOS · Apple silicon',
+      p: 'M1 and later · Intel not supported yet',
+      btn: 'Download .dmg',
+    },
     'win-x64': { h: 'Windows · x64', p: '64-bit Windows', btn: 'Download .exe' },
   },
   firstOpen: {
