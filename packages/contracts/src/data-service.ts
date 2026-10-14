@@ -364,6 +364,43 @@ export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
     input: AI_QUESTION,
   },
   {
+    // WP310（决策 461 / 462）：Claude 联网回答（模型接口 + 强制联网、输出上限 1024）；单独定价，
+    // 结果形状 = `AiAnswerDataItem`（全文 + 结构化引用原样带回）
+    id: 'ai_answer.claude',
+    label_zh: 'Claude 回答探测',
+    label_en: 'Claude answer probe',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: AI_QUESTION,
+  },
+  {
+    // WP310（决策 465 / 466）：关注词排名——Google 前 20 + AI 概览，排队档；一个词一条结果
+    // （`SeoRankCheckItem`），按条计价；「我们排第几」在本机算
+    id: 'seo.rank_check',
+    label_zh: '关注词排名',
+    label_en: 'Keyword rank check',
+    group: 'seo',
+    mode: 'async',
+    unit: 'item',
+    max_items: 100,
+    default_items: 20,
+    input: [
+      {
+        name: 'keywords',
+        type: 'string[]',
+        required: true,
+        max: 200,
+        max_count: 100,
+        label_zh: '关注的关键词',
+      },
+      COUNTRY,
+      LANGUAGE,
+      { name: 'device', type: 'string', enum: ['mobile', 'desktop'], label_zh: '设备' },
+      { name: 'depth', type: 'number', min: 10, max: 100, label_zh: '查前几名' },
+    ],
+  },
+  {
     id: 'amazon.keyword_research',
     label_zh: 'Amazon 关键词挖掘',
     label_en: 'Amazon keyword research',
