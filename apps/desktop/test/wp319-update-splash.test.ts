@@ -15,6 +15,7 @@ import {
   splashScript,
   splashText,
   UPDATE_PENDING_FILE,
+  viaCmdStart,
 } from '../src/update-splash.js'
 
 const USER_DATA = 'C:\\Users\\a\\AppData\\Roaming\\@agentsws\\desktop'
@@ -50,22 +51,37 @@ describe('WP319 ② 「正在更新」小窗', () => {
     expect(scripts[0]?.path).toBe('C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1')
     expect(scripts[0]?.text).toContain("'正在更新到 0.2.0-beta.6'")
     expect(scripts[0]?.text).toContain(`$pending = '${PENDING}'`)
+    expect(scripts[0]?.text).toContain(`$beat = '${USER_DATA}\\update-splash.json'`)
     // 不在安装目录里：系统自带的 PowerShell，脚本在临时目录
+    // WP325：不直接脱离起 PowerShell（没有控制台它一行不跑就退），经 cmd 的 start 开一个最小化控制台
     expect(spawned).toEqual([
       {
-        command: 'powershell.exe',
+        command: 'cmd.exe',
         args: [
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-WindowStyle',
-          'Hidden',
-          '-File',
-          'C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1',
+          '/d',
+          '/s',
+          '/c',
+          '"start "" /min powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1"',
         ],
       },
     ])
+  })
+
+  it('WP325：cmd start 那一行——带空格 / 中文的路径加引号', () => {
+    const out = viaCmdStart(
+      'C:\\Windows\\System32\\cmd.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-File', 'C:\\Users\\智能体 工坊\\AppData\\Local\\Temp\\a (1).ps1'],
+    )
+    expect(out).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '"start "" /min C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -File "C:\\Users\\智能体 工坊\\AppData\\Local\\Temp\\a (1).ps1""',
+      ],
+    })
   })
 
   it('起不来不挡更新；不是 Windows 只写单子', () => {
@@ -124,6 +140,7 @@ describe('WP319 ② 「正在更新」小窗', () => {
       logger: silentLogger(),
       platform: 'win32' as const,
     }
+    files.writeText(`${USER_DATA}\\update-splash.json`, JSON.stringify({ state: 'headless' }))
     expect(finishPendingUpdate(base)).toBe(9)
     expect(files.exists(PENDING)).toBe(false)
     expect(finishPendingUpdate(base)).toBeUndefined()
@@ -135,6 +152,7 @@ describe('WP319 ② 「正在更新」小窗', () => {
   it('小窗脚本：单子没了或超时就关；单引号转义；英文界面说英文', () => {
     const script = splashScript({
       pendingFile: "C:\\Users\\O'Neil\\x.json",
+      heartbeatFile: 'C:\\h.json',
       text: splashText('en', '1.0.0'),
     })
     expect(script).toContain("$pending = 'C:\\Users\\O''Neil\\x.json'")
@@ -142,6 +160,13 @@ describe('WP319 ② 「正在更新」小窗', () => {
     expect(script).toContain('Test-Path -LiteralPath $pending')
     expect(script).toContain("'Updating to 1.0.0'")
     expect(script).toContain('$form.TopMost = $true')
+    // WP325：不用 ShowDialog（没有交互桌面时它直接抛），出错进 catch，画不出来就在后台照样等、写心跳
+    expect(script).not.toContain('ShowDialog')
+    expect(script).toContain('[System.Windows.Forms.Application]::Run($form)')
+    expect(script).toContain("$ErrorActionPreference = 'Stop'")
+    expect(script).toContain("$beat = 'C:\\h.json'")
+    for (const state of ['starting', 'shown', 'headless', 'closed'])
+      expect(script).toContain(`'${state}'`)
     // Windows 换行（PowerShell 5.1 读 CRLF 最稳）
     expect(script.includes('\r\n')).toBe(true)
     expect(splashText('zh-CN', '1.0.0').hint).toBe('装好会自动打开')

@@ -1,7 +1,15 @@
 /** WP225：「两个版本之间点更新」端到端脚本里的纯函数（真跑只在 CI 的 windows-latest 上）。 */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { defaultUserData, feedFileFor, versionOfLatestYml } from '../scripts/win-update-e2e.mjs'
+import {
+  defaultUserData,
+  describeBeat,
+  feedFileFor,
+  readBeat,
+  versionOfLatestYml,
+} from '../scripts/win-update-e2e.mjs'
 
 describe('win-update-e2e 纯函数', () => {
   it('latest.yml 的版本号', () => {
@@ -31,5 +39,25 @@ describe('win-update-e2e 纯函数', () => {
       join('/appdata', '@agentsws', 'desktop'),
     )
     expect(defaultUserData('/appdata', 'agentsws')).toBe(join('/appdata', 'agentsws'))
+  })
+
+  it('WP325：小窗心跳（带 BOM 也认；没有 / 坏的回 undefined）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp325-beat-'))
+    try {
+      const f = join(dir, 'update-splash.json')
+      expect(readBeat(f)).toBeUndefined()
+      writeFileSync(
+        f,
+        '\uFEFF{"pid":42,"state":"headless","error":"not interactive","at":"2026-10-14T10:24:34.000Z"}',
+      )
+      const beat = readBeat(f)
+      expect(beat).toMatchObject({ pid: 42, state: 'headless' })
+      expect(describeBeat(beat)).toBe('没有交互桌面，后台在等：not interactive，pid 42')
+      expect(describeBeat({ pid: 7, state: 'shown', at: 'x' })).toBe('窗口画出来了，pid 7')
+      writeFileSync(f, '{坏')
+      expect(readBeat(f)).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
