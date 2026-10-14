@@ -570,6 +570,15 @@ export type {
   SetOrganizationModeInput,
 } from './routes/organizations.js'
 export { organizationRoutes } from './routes/organizations.js'
+// WP323：发出记录与记录去处
+export type {
+  OutboundActor,
+  OutboundExportView,
+  OutboundFollowUpInput,
+  OutboundListQuery,
+  OutboundPort,
+} from './routes/outbound.js'
+export { outboundRoutes } from './routes/outbound.js'
 export type { PersonaActor, PersonaPort } from './routes/personas.js'
 export { personaRoutes } from './routes/personas.js'
 export {

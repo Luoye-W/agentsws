@@ -64,6 +64,7 @@ import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
+import { outboundRoutes } from './routes/outbound.js'
 import { personaRoutes } from './routes/personas.js'
 import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
@@ -180,6 +181,8 @@ export function collectRoutes(): Route[] {
     ...personaRoutes(),
     // WP284（决策 275）：职责规矩里那几句「以后都这样」
     ...roleRuleRoutes(),
+    // WP323（docs/102 §5）：发出记录与记录去处
+    ...outboundRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),

@@ -89,6 +89,7 @@ import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
+import type { OutboundPort } from './routes/outbound.js'
 import type { PersonaPort } from './routes/personas.js'
 import type { PlatformKitPort } from './routes/platform-kit.js'
 import type { PositionEntryPort } from './routes/positions.js'
@@ -868,6 +869,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/roles/:id/rules*` 回 not_implemented。
    */
   roleRules?: RoleRulesPort
+  /**
+   * WP323（docs/102 §5）：发出记录与记录去处 `/v1/outbound/*`。
+   * 没装配时回 not_implemented。
+   */
+  outbound?: OutboundPort
   /**
    * WP284（docs/95 §5）：「以后都这样」那张策略卡发给谁批。③ 回老板（与改职责规矩同一条路）；
    * ① ② 回 `undefined` = 写指导的本人自己点。不给 = 一律本人（老行为）。
