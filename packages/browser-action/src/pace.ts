@@ -27,6 +27,15 @@ export function accountKey(account: Pick<ActionAccount, 'platform' | 'id'>): str
   return `${account.platform}:${account.id.replace(/[\s-]/gu, '').replace(/^act_/iu, '')}`
 }
 
+/**
+ * WP328：Reddit 品牌号的键（`reddit:inmo_official`）。读（每日巡查）与写（WP329 填草稿）共用一本账：
+ * 同一个号一次一件，读写不会同时开。还不知道用户名时用品牌 id 凑一个（`reddit:ws:<id>`）。
+ */
+export function redditPaceKey(user: string | undefined, workspaceId: string): string {
+  const u = (user ?? '').trim().replace(/^u\//iu, '').toLowerCase()
+  return u === '' ? `reddit:ws:${workspaceId}` : `reddit:${u}`
+}
+
 /** 本地日期（`2026-10-14`）。按这台电脑的时区算「一天」——用户说的「今天」就是这个。 */
 export function localDay(ms: number): string {
   const d = new Date(ms)
@@ -81,7 +90,15 @@ export class Pace {
 
   /** 现在能不能开始这件。 */
   check(account: ActionAccount, pace: ActionPace, nowMs: number): PaceVerdict {
-    const l = this.ledger(accountKey(account), nowMs)
+    return this.checkKey(accountKey(account), pace, nowMs)
+  }
+
+  /**
+   * WP328：按账户键算（Reddit 品牌号用 {@link redditPaceKey}；广告账户仍走 {@link check}）。
+   */
+  checkKey(key: string, pace: ActionPace, nowMs: number): PaceVerdict {
+    const l = this.ledger(key, nowMs)
+    if (key.startsWith('reddit:')) return redditVerdict(l, pace, this.limits)
     if (l.busy !== undefined)
       return { ok: false, reason: 'busy', why: '这个广告账户上一件还没做完，一次只做一件。' }
     if (pace === 'write' && l.writes >= this.limits.writes_per_day)
@@ -104,9 +121,14 @@ export class Pace {
    * 做了一半被停下的写操作，也已经在后台里动过了。
    */
   begin(account: ActionAccount, pace: ActionPace, jobId: string, nowMs: number): PaceVerdict {
-    const v = this.check(account, pace, nowMs)
+    return this.beginKey(accountKey(account), pace, jobId, nowMs)
+  }
+
+  /** WP328：{@link begin} 的按键版。 */
+  beginKey(key: string, pace: ActionPace, jobId: string, nowMs: number): PaceVerdict {
+    const v = this.checkKey(key, pace, nowMs)
     if (!v.ok) return v
-    const l = this.ledger(accountKey(account), nowMs)
+    const l = this.ledger(key, nowMs)
     l.busy = jobId
     if (pace === 'write') l.writes += 1
     else l.reads += 1
@@ -115,13 +137,23 @@ export class Pace {
 
   /** 做完（不管结局）：放开账户。只放自己占的那一件。 */
   end(account: ActionAccount, jobId: string): void {
-    const l = this.state[accountKey(account)]
+    this.endKey(accountKey(account), jobId)
+  }
+
+  /** WP328：{@link end} 的按键版。 */
+  endKey(key: string, jobId: string): void {
+    const l = this.state[key]
     if (l !== undefined && l.busy === jobId) delete l.busy
   }
 
   /** 今天还剩几次。 */
   left(account: ActionAccount, nowMs: number): { writes: number; reads: number } {
-    const l = this.ledger(accountKey(account), nowMs)
+    return this.leftKey(accountKey(account), nowMs)
+  }
+
+  /** WP328：{@link left} 的按键版。 */
+  leftKey(key: string, nowMs: number): { writes: number; reads: number } {
+    const l = this.ledger(key, nowMs)
     return {
       writes: Math.max(0, this.limits.writes_per_day - l.writes),
       reads: Math.max(0, this.limits.reads_per_day - l.reads),
@@ -132,3 +164,27 @@ export class Pace {
     return structuredClone(this.state)
   }
 }
+
+function redditVerdict(l: AccountLedger, pace: ActionPace, limits: PaceLimits): PaceVerdict {
+  if (l.busy !== undefined)
+    return { ok: false, reason: 'busy', why: '这个 Reddit 号上一件还没做完，一次只做一件。' }
+  if (pace === 'write' && l.writes >= limits.writes_per_day)
+    return {
+      ok: false,
+      reason: 'daily_cap',
+      why: `这个 Reddit 号今天已经发了 ${l.writes} 次，到上限了。`,
+    }
+  if (pace === 'read' && l.reads >= limits.reads_per_day)
+    return {
+      ok: false,
+      reason: 'daily_cap',
+      why: `这个 Reddit 号今天已经读了 ${l.reads} 次，到上限了。`,
+    }
+  return { ok: true }
+}
+
+/**
+ * WP328：Reddit 品牌号的节奏。读 = 一次巡查（收件箱 + 自家版块一起算一次）；一天一次起步，用户改得再密也不超过 24 次。
+ * 写沿用 WP313 的每天 20 次（WP329 用）。
+ */
+export const REDDIT_PACE_LIMITS: PaceLimits = { writes_per_day: 20, reads_per_day: 24 }
