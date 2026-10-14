@@ -138,6 +138,30 @@ export interface PrServiceOptions {
   >
   /** 监控那一轮用谁的分配去提（定时任务没有"当前用户"）。 */
   monitorActor?(): PrActor | undefined
+  /**
+   * WP332：Reddit 上回**一条评论**（`t1_`）时，找那条评论的链接（插件靠它打开评论、找到回复框）。
+   * 装配那一侧按顺序找：调用方给的 → 巡查条目 / 社群线程 / 提及里记着的 → 出卡前补读一次。
+   * 找不到回 `{ ok: false, message }`：**不出能发的卡**，照实说。不给 = 只认调用方给的那一个。
+   */
+  redditParent?(input: {
+    fullname: string
+    venue: string
+    permalink?: string
+  }): Promise<{ ok: true; permalink: string } | { ok: false; message: string }>
+}
+
+/** WP332：站内路径（`https://www.reddit.com/r/x/comments/…?context=3` → `/r/x/comments/…/`）。 */
+export function redditSitePath(url: string | undefined): string | undefined {
+  if (url === undefined || url.trim() === '') return undefined
+  let path = url.trim()
+  try {
+    if (/^https?:/iu.test(path)) path = new URL(path).pathname
+  } catch {
+    return undefined
+  }
+  path = path.split(/[?#]/u)[0] ?? ''
+  if (!/^\/r\/[^/]+\/comments\//u.test(path)) return undefined
+  return path.endsWith('/') ? path : `${path}/`
 }
 
 /** {@link PrServiceAssembly.monitorSweep} 回的那一份。 */
@@ -617,6 +641,37 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         now,
       })
       const explained = explainRuleCheck(rules_checked, input.venue)
+      /*
+       * WP332：Reddit 上回一条**评论**要那条评论的链接（插件靠它找到回复框）。调用方没给就从来源补、
+       * 补不到就照实说——稿子留着（草稿），**不出能发的卡**。
+       */
+      const replyToComment =
+        input.platform.trim().toLowerCase() === 'reddit' &&
+        input.parent_external_id !== undefined &&
+        /^t1_/u.test(input.parent_external_id)
+      let parent_permalink = redditSitePath(input.parent_permalink)
+      let parentMissing: string | undefined
+      if (replyToComment) {
+        const found =
+          options.redditParent === undefined
+            ? parent_permalink === undefined
+              ? { ok: false as const, message: '没有被回那条评论的链接。' }
+              : { ok: true as const, permalink: parent_permalink }
+            : await options
+                .redditParent({
+                  fullname: input.parent_external_id as string,
+                  venue: input.venue,
+                  ...(parent_permalink === undefined ? {} : { permalink: parent_permalink }),
+                })
+                .catch((err: unknown) => ({
+                  ok: false as const,
+                  message: err instanceof Error ? err.message : String(err),
+                }))
+        if (found.ok) parent_permalink = redditSitePath(found.permalink)
+        if (!found.ok) parentMissing = found.message
+        else if (parent_permalink === undefined)
+          parentMissing = '找到的不是一条 Reddit 评论的链接。'
+      }
       // 承诺扫描（全仓那一份词表，经 social-core 的 checkOutbound）
       const scan = checkOutbound(input.body)
 
@@ -634,9 +689,25 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         ...(input.parent_external_id === undefined
           ? {}
           : { parent_external_id: input.parent_external_id }),
+        ...(parent_permalink === undefined ? {} : { parent_permalink }),
         created_at: now,
       }
       store.savePost(post)
+      if (parentMissing !== undefined) {
+        const message = `没出卡：找不到被回那条评论的链接，插件找不到回复框（${parentMissing.replace(/[。.]$/u, '')}）。稿子留着；从巡查的待处理里点那一条重新起草。`
+        emit('pr.external_post_unlinked', actor.person_id, {
+          post_id: post.id,
+          platform: input.platform,
+          venue: input.venue,
+        })
+        return {
+          staged: false,
+          message,
+          post_id: post.id,
+          rules_checked,
+          rules_explained: explained,
+        }
+      }
 
       const staged = await stageOne({
         actor,
@@ -657,6 +728,13 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
           ...(input.parent_external_id === undefined
             ? {}
             : { parent_external_id: input.parent_external_id }),
+          // WP332：被回那一条的链接（卡上「原评论」点得开；插件靠它找到回复框）
+          ...(parent_permalink === undefined
+            ? {}
+            : {
+                parent_permalink,
+                parent_url: `https://www.reddit.com${parent_permalink}`,
+              }),
         },
         notes: [
           explained,

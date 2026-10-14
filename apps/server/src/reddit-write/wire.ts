@@ -166,9 +166,9 @@ export async function applyExternalPost(
   const body = str(after.body) ?? post.body
   let write: RedditWrite
   let title: string | undefined
-  if (post.parent_external_id !== undefined) {
-    // 回帖子（顶层评论）；回评论要那条评论的链接，公关这张卡上没有
-    if (!post.parent_external_id.startsWith('t3_') && /^t1_/u.test(post.parent_external_id))
+  if (post.parent_external_id !== undefined && /^t1_/u.test(post.parent_external_id)) {
+    // WP332：回一条评论（楼中楼）——出卡前已补齐那条评论的链接（插件靠它找到回复框）
+    if (post.parent_permalink === undefined)
       return {
         status: 'failed',
         error: {
@@ -177,7 +177,14 @@ export async function applyExternalPost(
           retryable: false,
         },
       }
-    write = { kind: 'comment', post: redditFullname(post.parent_external_id, 't3') }
+    write = { kind: 'reply', parent: post.parent_external_id, permalink: post.parent_permalink }
+  } else if (post.parent_external_id !== undefined) {
+    // 回帖子（顶层评论）
+    write = {
+      kind: 'comment',
+      post: redditFullname(post.parent_external_id, 't3'),
+      ...(post.parent_permalink === undefined ? {} : { permalink: post.parent_permalink }),
+    }
   } else {
     // 卡上没单独写标题：第一行当标题、其余当正文（与社媒发帖那一侧同一个拆法）
     const lines = body.split('\n')
@@ -204,7 +211,7 @@ export async function applyExternalPost(
     record: {
       source_key: `change:${change.id}`,
       channel: 'reddit',
-      action: write.kind === 'submit' ? 'post' : 'comment',
+      action: write.kind === 'submit' ? 'post' : write.kind === 'reply' ? 'reply' : 'comment',
       kind: change.kind,
       destination: `r/${sub}`,
       ...(title === undefined ? {} : { subject: title }),
@@ -212,6 +219,9 @@ export async function applyExternalPost(
       ...(post.parent_external_id === undefined
         ? {}
         : { parent_external_id: post.parent_external_id }),
+      ...(post.parent_permalink === undefined
+        ? {}
+        : { thread_url: `https://www.reddit.com${post.parent_permalink}` }),
       change_id: change.id,
       approval_item_id: approval_id,
       role_id: change.role_id,
