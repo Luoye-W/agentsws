@@ -7,7 +7,7 @@ export const REDDIT_WATCH_ZH: Record<string, string> = {
   'rwatch.last': '上次 {at}',
   'rwatch.never': '还没巡查过',
   'rwatch.hint':
-    '每天一次（可改），周五 17:00 做本周最后一次。收件箱和自家版块用 Chrome 插件只读，不改已读；外部社区按关键词搜。',
+    '每天一次（可改），周五出周报前再巡查一次。收件箱和自家版块用 Chrome 插件只读，不改已读；外部社区按关键词搜。',
   'rwatch.part.inbox': '收件箱',
   'rwatch.part.own_sub': '自家版块',
   'rwatch.part.external': '外部社区',
@@ -32,7 +32,7 @@ export const REDDIT_WATCH_EN: Record<string, string> = {
   'rwatch.last': 'Last {at}',
   'rwatch.never': 'Not run yet',
   'rwatch.hint':
-    'Daily by default; the last run of the week is Friday 17:00. Inbox and own subreddits are read read-only through the Chrome extension (read state untouched); other communities are searched by keyword.',
+    'Daily by default, plus one more run right before the Friday weekly report. Inbox and own subreddits are read read-only through the Chrome extension (read state untouched); other communities are searched by keyword.',
   'rwatch.part.inbox': 'Inbox',
   'rwatch.part.own_sub': 'Own subs',
   'rwatch.part.external': 'Elsewhere',

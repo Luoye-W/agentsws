@@ -18,7 +18,7 @@ import { formatDateTime } from '@/lib/format'
 import {
   getRedditWatch,
   REDDIT_WATCH_KEY,
-  type RedditWatchItem,
+  type RedditWatchEntry,
   runRedditWatch,
   setRedditWatchStatus,
 } from '@/lib/reddit-watch-api'
@@ -89,7 +89,7 @@ export function RedditWatch({ assignment }: { assignment: string }): ReactNode {
   )
 }
 
-function Row({ item, onDismiss }: { item: RedditWatchItem; onDismiss(): void }): ReactNode {
+function Row({ item, onDismiss }: { item: RedditWatchEntry; onDismiss(): void }): ReactNode {
   const { t } = useApp()
   const line = (item.title ?? item.text).replace(/\s+/g, ' ').slice(0, 140)
   return (

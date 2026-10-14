@@ -95751,7 +95751,7 @@
     "/v1/reddit-watch/settings": {
       "put": {
         "operationId": "updateRedditWatchSettings",
-        "summary": "改巡查设置（自家版块、关键词、品牌号、频率、周最后一次的时刻）",
+        "summary": "改巡查设置（自家版块、关键词、品牌号、频率）",
         "tags": ["social"],
         "parameters": [
           {
@@ -95885,15 +95885,6 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 23
-                  },
-                  "final_weekday": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 6
-                  },
-                  "final_time": {
-                    "type": "string",
-                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
                   },
                   "keyword_limit": {
                     "type": "integer",
@@ -96104,7 +96095,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items: RedditWatchItem[] }",
+            "description": "{ items: RedditWatchEntry[] }",
             "content": {
               "application/json": {
                 "schema": {
@@ -96185,7 +96176,7 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "{ items: RedditWatchItem[] }"
+        "x-returns": "{ items: RedditWatchEntry[] }"
       }
     },
     "/v1/reddit-watch/items/{id}/status": {
@@ -96224,7 +96215,7 @@
         ],
         "responses": {
           "200": {
-            "description": "RedditWatchItem",
+            "description": "RedditWatchEntry",
             "content": {
               "application/json": {
                 "schema": {
@@ -96325,7 +96316,7 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "RedditWatchItem",
+        "x-returns": "RedditWatchEntry",
         "requestBody": {
           "required": true,
           "content": {

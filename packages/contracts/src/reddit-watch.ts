@@ -5,7 +5,7 @@
  *   借已登录的品牌号会话读（只读、`mark=false`、按编号判新）；
  * - **外部社区**（自家版块以外）：全站关键词走第三方数据渠道（现有 `social.reddit.search`）。
  *
- * 一天一次起步（用户可改），每周五 17:00 左右做本周最后一次（周报 WP330 接在它后面）。
+ * 一天一次起步（用户可改）。每周五周报（WP330）出之前，由周报调 `sweepNow` 做本周最后一次巡查。
  * 每条有一句 AI 判断「要不要回 / 为什么」；要回的进「待处理」，交给 WP329 起草（本单不起草、不发）。
  * 统计、VOC / UGC、舆情话题结构化存下，给周报（周日—周五窗口）用。
  *
@@ -56,7 +56,7 @@ export interface RedditWatchJudgement {
 export type RedditWatchItemStatus = 'open' | 'drafting' | 'done' | 'dismissed'
 
 /** 巡查到的一条（帖子 / 评论 / 私信）。正文是**外部文本**：进模型上下文要围栏。 */
-export interface RedditWatchItem {
+export interface RedditWatchEntry {
   /** 本机 id（`rw_…`）。 */
   id: string
   workspace_id: WorkspaceId
@@ -110,9 +110,6 @@ export interface RedditWatchSettings {
   every_hours: number
   /** 一天一次时几点开始（本地时间小时，默认 9）。 */
   day_start_hour: number
-  /** 每周最后一次巡查：周几（0 = 周日…5 = 周五，默认 5）与几点（`17:00`）。 */
-  final_weekday: number
-  final_time: string
   /** 每个关键词每次最多取几条（第三方数据渠道按条计费）。 */
   keyword_limit: number
   /** 总开关（关了就不巡查）。 */
@@ -124,8 +121,6 @@ export const REDDIT_WATCH_DEFAULTS: Readonly<
 > = {
   every_hours: 24,
   day_start_hour: 9,
-  final_weekday: 5,
-  final_time: '17:00',
   keyword_limit: 10,
   enabled: true,
 }
@@ -162,10 +157,10 @@ export interface RedditWatchRun {
   workspace_id: WorkspaceId
   started_at: Iso8601
   finished_at?: Iso8601
-  /** 本周最后一次（周五那一次）：做完后周报接着出（WP330 听 `onFinal`）。 */
+  /** 本周最后一次（周报 WP330 出之前调 `sweepNow` 起的那一次）。 */
   final: boolean
-  /** 谁让跑的：定时 / 人点「现在巡查」。 */
-  trigger: 'schedule' | 'manual'
+  /** 谁让跑的：定时 / 人点「现在巡查」/ 周报前那一次（WP330 调 `sweepNow`）。 */
+  trigger: 'schedule' | 'manual' | 'weekly'
   parts: RedditWatchRunPart[]
   /** 这次新出的「待处理」几条。 */
   pending: number
@@ -188,7 +183,7 @@ export interface RedditWatchView {
   }
   last_run?: RedditWatchRun
   /** 要回、还没处理的（新的在前）。 */
-  pending: RedditWatchItem[]
+  pending: RedditWatchEntry[]
 }
 
 /** 周报那一组外部话题。 */
@@ -198,7 +193,7 @@ export interface RedditWatchTopicGroup {
   posts: number
   comments: number
   /** 原文引用（作者、时间、链接都在条目上）。 */
-  items: RedditWatchItem[]
+  items: RedditWatchEntry[]
 }
 
 /**
@@ -218,8 +213,8 @@ export interface RedditWatchDigest {
     ours: { posts: number; comments: number }
   }
   /** 自家版块（与收件箱）里有效的 VOC / UGC（只列有效的）。 */
-  voc: RedditWatchItem[]
-  ugc: RedditWatchItem[]
+  voc: RedditWatchEntry[]
+  ugc: RedditWatchEntry[]
   /** 外部社区按话题归组（需跟进的在前）。 */
   external: RedditWatchTopicGroup[]
   /** 收件箱：窗口内进来几条、其中要回的几条。 */

@@ -14,8 +14,6 @@ const view = (over: Partial<RedditWatchView> = {}): RedditWatchView => ({
     keywords: ['INMO'],
     every_hours: 24,
     day_start_hour: 9,
-    final_weekday: 5,
-    final_time: '17:00',
     keyword_limit: 10,
     enabled: true,
   },

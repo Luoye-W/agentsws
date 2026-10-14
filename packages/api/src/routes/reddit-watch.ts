@@ -11,7 +11,7 @@ import type {
   Iso8601,
   MaybePromise,
   RedditWatchDigest,
-  RedditWatchItem,
+  RedditWatchEntry,
   RedditWatchItemStatus,
   RedditWatchRun,
   RedditWatchSettings,
@@ -54,12 +54,12 @@ export interface RedditWatchPort {
     patch: Partial<RedditWatchSettings>,
   ): MaybePromise<RedditWatchSettings>
   runNow(workspace_id: WorkspaceId): Promise<RedditWatchRun>
-  items(workspace_id: WorkspaceId, query: RedditWatchItemsQuery): MaybePromise<RedditWatchItem[]>
+  items(workspace_id: WorkspaceId, query: RedditWatchItemsQuery): MaybePromise<RedditWatchEntry[]>
   setStatus(
     workspace_id: WorkspaceId,
     id: string,
     status: RedditWatchItemStatus,
-  ): MaybePromise<RedditWatchItem | undefined>
+  ): MaybePromise<RedditWatchEntry | undefined>
   digest(
     workspace_id: WorkspaceId,
     window?: { since: Iso8601; until: Iso8601 },
@@ -144,11 +144,6 @@ const settingsSchema = z
     brand_username: z.string().max(40).optional(),
     every_hours: z.number().int().min(1).max(168).optional(),
     day_start_hour: z.number().int().min(0).max(23).optional(),
-    final_weekday: z.number().int().min(0).max(6).optional(),
-    final_time: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/u)
-      .optional(),
     keyword_limit: z.number().int().min(1).max(50).optional(),
     enabled: z.boolean().optional(),
   })
@@ -233,7 +228,7 @@ export function redditWatchRoutes(): Route[] {
         method: 'put',
         path: '/v1/reddit-watch/settings',
         operationId: 'updateRedditWatchSettings',
-        summary: '改巡查设置（自家版块、关键词、品牌号、频率、周最后一次的时刻）',
+        summary: '改巡查设置（自家版块、关键词、品牌号、频率）',
         tag: 'social',
         auth: 'bearer',
         assignment: true,
@@ -278,7 +273,7 @@ export function redditWatchRoutes(): Route[] {
           { name: 'until', in: 'query', description: 'ISO 时间（不含）' },
           { name: 'limit', in: 'query', description: '最多几条（默认 200）' },
         ],
-        returns: '{ items: RedditWatchItem[] }',
+        returns: '{ items: RedditWatchEntry[] }',
       },
       async (c, deps) => {
         const q: RedditWatchItemsQuery = {}
@@ -314,7 +309,7 @@ export function redditWatchRoutes(): Route[] {
         assignment: true,
         authz: STAGE,
         body: statusSchema,
-        returns: 'RedditWatchItem',
+        returns: 'RedditWatchEntry',
       },
       async (c, deps) => {
         const input = await body(c, statusSchema)

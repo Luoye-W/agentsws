@@ -8,9 +8,9 @@
  *
  * 读回来的按全名去重入库；收件箱里回的是我们发过的那条 → 挂到发出记录那一行下（WP323）；对方删了原话 → 我们也清掉。
  * 新的每条交给 AI 判「要不要回 / 为什么」（没有模型按规则兜底）；要回的进「待处理」，通知 WP329 起草（`onPending`）。
- * 周五那一次做完通知 WP330 出周报（`onFinal`）。本单不起草、不发。
+ * 周报（WP330）出之前调 `sweepNow` 做本周最后一次、等它做完；周汇总给 `RedditWeekSource`（`week-source.ts`）。本单不起草、不发。
  *
- * 频率：一天一次起步，用户可改；每周五 17:00 左右做本周最后一次。没有任何冷却 / 占比 / 身份声明之类的规矩。
+ * 频率：一天一次起步，用户可改；周五那一次由周报触发。没有任何冷却 / 占比 / 身份声明之类的规矩。
  */
 import {
   Pace,
@@ -26,7 +26,7 @@ import {
   type ConnectNeed,
   type Iso8601,
   type RedditWatchDigest,
-  type RedditWatchItem,
+  type RedditWatchEntry,
   type RedditWatchItemStatus,
   type RedditWatchPart,
   type RedditWatchRun,
@@ -85,24 +85,33 @@ export interface RedditWatchOptions {
   emit?(type: string, payload: Record<string, unknown>): void
   /** Reddit 号的节奏（与 WP329 写共用一本账；不给就自己建一本）。 */
   pace?: Pace
+  /** `sweepNow` 等插件交回时怎么等（测试给假的）。 */
+  sleep?(ms: number): Promise<void>
 }
 
 export interface RedditWatchAssembly {
   view(): RedditWatchView
   settings(): RedditWatchSettings
   updateSettings(patch: Partial<RedditWatchSettings>): RedditWatchSettings
-  items(query?: RedditWatchItemQuery): RedditWatchItem[]
-  item(id: string): RedditWatchItem | undefined
+  items(query?: RedditWatchItemQuery): RedditWatchEntry[]
+  /** 巡查记录（新的在前）。 */
+  runs(query?: { since?: Iso8601; limit?: number }): RedditWatchRun[]
+  item(id: string): RedditWatchEntry | undefined
   /** WP329：起草中 / 回过了（挂上发出记录那一行）/ 人说不回。 */
   setStatus(
     id: string,
     status: RedditWatchItemStatus,
     extra?: { outbound_record_id?: string },
-  ): RedditWatchItem | undefined
+  ): RedditWatchEntry | undefined
   /** 人点「现在巡查」。正在跑的那一轮没结束就回那一轮。 */
   runNow(): Promise<RedditWatchRun>
   /** 定时一拍（每小时）：到点了才跑。 */
-  tick(): Promise<{ ran: boolean; run_id?: string; final?: boolean; skipped?: string }>
+  tick(): Promise<{ ran: boolean; run_id?: string; skipped?: string }>
+  /**
+   * WP330：周报出之前做本周最后一次巡查，等这一轮做完再回；有哪块没读成就抛一句人话（周报照样出）。
+   * `timeoutMs` 默认 10 分钟（等插件交回）。
+   */
+  sweepNow(options?: { timeoutMs?: number; pollMs?: number }): Promise<RedditWatchRun>
   /** 周报用的一周汇总（不给窗口 = 本周日 00:00 到现在）。 */
   digest(window?: { since: Iso8601; until: Iso8601 }): RedditWatchDigest
   /** 插件来领活（`connected` = 插件里连上 Reddit 了）。 */
@@ -110,8 +119,8 @@ export interface RedditWatchAssembly {
   /** 插件交回；不是在等的那一件回 `undefined`。 */
   result(id: string, input: RedditReadResultInput): Promise<{ accepted: true } | undefined>
   /** WP329：新出的要回的几条。回注销函数。 */
-  onPending(listener: (items: RedditWatchItem[]) => void): () => void
-  /** WP330：本周最后一次做完了。回注销函数。 */
+  onPending(listener: (items: RedditWatchEntry[]) => void): () => void
+  /** 本周最后一次（`sweepNow` 起的那一轮）做完了。回注销函数（WP330 用 `sweepNow` 就够，这个留给别的听众）。 */
   onFinal(listener: (run: RedditWatchRun, digest: RedditWatchDigest) => void): () => void
   /** 配置卡的设置目标（`reddit.watch`），由宿主登记到 WP324。 */
   setupTarget(): SetupTarget
@@ -123,6 +132,13 @@ export interface RedditWatchAssembly {
   readonly pace: Pace
 }
 
+/** 周报前那一次最多等插件多久。 */
+export const WEEKLY_WAIT_MS = 10 * 60_000
+const PART_ZH: Record<RedditWatchPart, string> = {
+  inbox: '收件箱',
+  own_sub: '自家版块',
+  external: '外部社区',
+}
 /** 插件多久没来问就算「没开」。 */
 export const EXT_FRESH_MS = 15 * 60_000
 /** 排着的活多久没人领就作废（Chrome 没开）。 */
@@ -158,7 +174,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   const ws = options.workspace_id
   const store = options.store
   const pace = options.pace ?? new Pace({ limits: REDDIT_PACE_LIMITS })
-  const pendingListeners = new Set<(items: RedditWatchItem[]) => void>()
+  const pendingListeners = new Set<(items: RedditWatchEntry[]) => void>()
   const finalListeners = new Set<(run: RedditWatchRun, digest: RedditWatchDigest) => void>()
   const ms = (t: Iso8601 | undefined): number => (t === undefined ? 0 : Date.parse(t))
   const nowMs = (): number => Date.parse(options.now())
@@ -238,6 +254,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     if (patch.status === 'ok') touchPart(p, { last_ok_at: options.now() })
   }
   const finishIfDone = (run: RedditWatchRun): void => {
+    // 周报来要「最后一次」时这一轮还在跑：记在杂项里（这一轮的对象可能还握在别的调用手里）
+    if (!run.final && store.kv<string | null>(ws, 'final_run') === run.id) run.final = true
     store.putRun(run)
     if (run.finished_at !== undefined || run.parts.some((p) => p.status === 'waiting')) return
     run.finished_at = options.now()
@@ -250,7 +268,6 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       parts: run.parts.map((p) => `${p.part}:${p.status}`),
     })
     if (!run.final) return
-    store.setKv(ws, 'last_final_at', run.finished_at)
     const digest = buildDigest({
       store,
       workspace_id: ws,
@@ -261,7 +278,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   }
 
   /** 新条目判一遍、存、要回的通知 WP329。 */
-  const judgeAndStore = async (run: RedditWatchRun, fresh: RedditWatchItem[]): Promise<void> => {
+  const judgeAndStore = async (run: RedditWatchRun, fresh: RedditWatchEntry[]): Promise<void> => {
     const todo = fresh.filter((x) => x.ours !== true && x.deleted !== true)
     if (todo.length === 0) return
     const s = settings()
@@ -285,7 +302,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       },
       options.complete?.(),
     )
-    const pending: RedditWatchItem[] = []
+    const pending: RedditWatchEntry[] = []
     for (const it of todo) {
       const j = verdicts.get(it.id)
       if (j === undefined) continue
@@ -316,7 +333,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       return
     }
     const own = new Set(s.own_subreddits.map((x) => x.toLowerCase()))
-    const fresh: RedditWatchItem[] = []
+    const fresh: RedditWatchEntry[] = []
     const failures: string[] = []
     let fetched = 0
     for (const keyword of s.keywords) {
@@ -478,7 +495,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   }
 
   /** 回的是我们发过的那条 → 挂到发出记录那一行下。全名与去掉前缀的 id 都试（WP329 记哪种都认）。 */
-  const followUp = (it: RedditWatchItem): void => {
+  const followUp = (it: RedditWatchEntry): void => {
     const log = options.outbound?.()
     const parent = it.parent_fullname
     if (log === undefined || parent === undefined) return
@@ -511,7 +528,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     if (s.brand_username === undefined && res.outcome === 'done' && res.user !== undefined)
       s = writeSettings(store, ws, { brand_username: res.user })
     const brandUser = s.brand_username ?? res.user
-    const fresh: RedditWatchItem[] = []
+    const fresh: RedditWatchEntry[] = []
     const stats = new Map<
       RedditWatchPart,
       { fetched: number; fresh: number; bad: string[]; gap: boolean }
@@ -613,18 +630,57 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       await askSetup()
       return { ran: false, skipped: 'needs_setup' }
     }
-    const lastFinal = store.kv<Iso8601>(ws, 'last_final_at')
     const due = dueParts({
       now: options.now(),
       tz_offset_minutes: options.tzOffsetMinutes(),
       settings: s,
       parts: parts(),
       applicable: applicable(s),
-      ...(lastFinal === undefined ? {} : { last_final_at: lastFinal }),
     })
-    if (due.parts.length === 0) return { ran: false, skipped: 'not_due' }
-    const run = await start('schedule', due.final, due.parts)
-    return { ran: true, run_id: run.id, final: due.final }
+    if (due.length === 0) return { ran: false, skipped: 'not_due' }
+    const run = await start('schedule', false, due)
+    return { ran: true, run_id: run.id }
+  }
+
+  /**
+   * WP330 对齐：周报出之前调——做本周最后一次巡查，**等这一轮做完**（插件那两块交回或超时）再回。
+   * 有哪一块没读成就抛一句人话（周报照样出、把原因写进去）；正在跑的那一轮直接算作最后一次。
+   */
+  const sweepNow: RedditWatchAssembly['sweepNow'] = async (o = {}) => {
+    sweep()
+    let run = activeRun()
+    if (run === undefined) {
+      const s = settings()
+      if (!isConfigured(s)) throw new Error('没配 Reddit 巡查（自家版块、外部关键词都没有）。')
+      run = await start('weekly', true, applicable(s))
+    } else if (!run.final) {
+      store.setKv(ws, 'final_run', run.id)
+      run.final = true
+      store.putRun(run)
+    }
+    const poll = o.pollMs ?? 5_000
+    const timeout = o.timeoutMs ?? WEEKLY_WAIT_MS
+    const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    for (let waited = 0; ; waited += poll) {
+      const cur = store.run(ws, run.id)
+      if (cur?.finished_at !== undefined) {
+        run = cur
+        break
+      }
+      if (waited >= timeout)
+        throw new Error('插件还没交回这一轮（Chrome 没开着？），周报先用已经读到的。')
+      await sleep(poll)
+      sweep()
+    }
+    const bad = run.parts.filter((p) => p.status !== 'ok' && p.status !== 'skipped')
+    if (bad.length > 0)
+      throw new Error(
+        bad
+          .map((p) => `${PART_ZH[p.part]}：${p.message ?? '没读成'}`)
+          .join('；')
+          .slice(0, 400),
+      )
+    return run
   }
 
   const runNow = async (): Promise<RedditWatchRun> => {
@@ -699,11 +755,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     settings,
     updateSettings: (patch) => writeSettings(store, ws, patch),
     items: (query) => store.list(ws, query),
+    runs: (query) => store.runs(ws, query),
     item: (id) => store.get(ws, id),
     setStatus: (id, status, extra) => {
       const it = store.get(ws, id)
       if (it === undefined) return undefined
-      const next: RedditWatchItem = { ...it, status, status_at: options.now() }
+      const next: RedditWatchEntry = { ...it, status, status_at: options.now() }
       if (extra?.outbound_record_id !== undefined)
         next.outbound_record_id = extra.outbound_record_id
       store.put(next)
@@ -712,6 +769,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     },
     runNow,
     tick,
+    sweepNow,
     digest: (window) => {
       const w = window ?? redditWeekWindow(options.now(), options.tzOffsetMinutes())
       return buildDigest({

@@ -5,7 +5,7 @@
  */
 import type {
   Iso8601,
-  RedditWatchItem,
+  RedditWatchEntry,
   RedditWatchItemStatus,
   RedditWatchRun,
   RedditWatchSource,
@@ -56,13 +56,13 @@ export interface RedditWatchItemQuery {
 
 export interface RedditWatchStore {
   /** 新的才记（同一来源同一全名已有 → 回 false，不动它：可能已经处理过）。 */
-  insert(item: RedditWatchItem): boolean
-  put(item: RedditWatchItem): void
-  get(workspace_id: WorkspaceId, id: string): RedditWatchItem | undefined
+  insert(item: RedditWatchEntry): boolean
+  put(item: RedditWatchEntry): void
+  get(workspace_id: WorkspaceId, id: string): RedditWatchEntry | undefined
   /** 任一来源里的这一条（挂后续 / 对方删了用）。 */
-  byFullname(workspace_id: WorkspaceId, fullname: string): RedditWatchItem[]
+  byFullname(workspace_id: WorkspaceId, fullname: string): RedditWatchEntry[]
   /** 新的在前（按发帖时间）。 */
-  list(workspace_id: WorkspaceId, query?: RedditWatchItemQuery): RedditWatchItem[]
+  list(workspace_id: WorkspaceId, query?: RedditWatchItemQuery): RedditWatchEntry[]
   putRun(run: RedditWatchRun): void
   run(workspace_id: WorkspaceId, id: string): RedditWatchRun | undefined
   /** 新的在前。 */
@@ -77,9 +77,9 @@ export function createRedditWatchStore(dbPath?: string): RedditWatchStore {
   const db = new Database(dbPath ?? ':memory:')
   if (dbPath !== undefined) db.pragma('journal_mode = WAL')
   db.exec(SCHEMA)
-  const parse = (r: { json: string } | undefined): RedditWatchItem | undefined =>
-    r === undefined ? undefined : (JSON.parse(r.json) as RedditWatchItem)
-  const row = (i: RedditWatchItem): unknown[] => [
+  const parse = (r: { json: string } | undefined): RedditWatchEntry | undefined =>
+    r === undefined ? undefined : (JSON.parse(r.json) as RedditWatchEntry)
+  const row = (i: RedditWatchEntry): unknown[] => [
     i.id,
     i.workspace_id,
     i.source,
@@ -116,7 +116,7 @@ export function createRedditWatchStore(dbPath?: string): RedditWatchStore {
         db
           .prepare('SELECT json FROM rw_items WHERE workspace_id = ? AND fullname = ?')
           .all(ws, fullname) as { json: string }[]
-      ).map((r) => JSON.parse(r.json) as RedditWatchItem),
+      ).map((r) => JSON.parse(r.json) as RedditWatchEntry),
     list: (ws, q = {}) => {
       const where = ['workspace_id = ?']
       const args: unknown[] = [ws]
@@ -147,7 +147,7 @@ export function createRedditWatchStore(dbPath?: string): RedditWatchStore {
             `SELECT json FROM rw_items WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ${limit}`,
           )
           .all(...args) as { json: string }[]
-      ).map((r) => JSON.parse(r.json) as RedditWatchItem)
+      ).map((r) => JSON.parse(r.json) as RedditWatchEntry)
     },
     putRun: (r) => {
       db.prepare(

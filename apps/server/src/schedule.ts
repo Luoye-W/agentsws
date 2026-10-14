@@ -139,7 +139,7 @@ export const HANDLERS = {
   weeklyReview: 'owner.weekly_review',
   /** WP224（docs/91 §7 #2）：每天夜里记一行两条止损线的对照（只记账，不改止损）。 */
   adsLineCompare: 'ads.line_compare',
-  /** WP328（docs/102）：Reddit 每日巡查（每小时看一眼到点没有；默认一天一次、周五 17:00 收尾）。 */
+  /** WP328（docs/102）：Reddit 每日巡查（每小时看一眼到点没有；默认一天一次；周五那次由周报调）。 */
   redditPatrol: 'social.reddit_patrol',
 } as const
 
@@ -1041,7 +1041,7 @@ export function registerPrMonitor(scheduler: Scheduler, deps: PrMonitorDeps): vo
 }
 
 /**
- * WP328：Reddit 巡查一小时一拍——到没到点由巡查服务自己按设置判（一天一次起步、用户可改、周五 17:00 收尾），
+ * WP328：Reddit 巡查一小时一拍——到没到点由巡查服务自己按设置判（一天一次起步、用户可改；周五那次由周报 WP330 调 `sweepNow`），
  * 这样改频率不用改定时任务；没到点的那一拍什么都不读。
  */
 export const REDDIT_PATROL_INTERVAL_MS = 60 * 60_000
@@ -1599,7 +1599,7 @@ export async function ensureSystemTasks(
     await add(
       'sched_reddit_patrol',
       systemTask(base, {
-        title: '巡查 Reddit（默认每天一次，周五 17:00 收尾）',
+        title: '巡查 Reddit（默认每天一次）',
         handler: HANDLERS.redditPatrol,
         trigger: { kind: 'interval', every_ms: REDDIT_PATROL_INTERVAL_MS },
         misfire_policy: 'skip',

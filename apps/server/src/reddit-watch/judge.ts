@@ -9,7 +9,7 @@
  * 话题概括（周报归组用，尽量沿用已有话题）；有效的 VOC / UGC（不是就不填）。
  */
 import type {
-  RedditWatchItem,
+  RedditWatchEntry,
   RedditWatchJudgement,
   RedditWatchSentiment,
   RedditWatchVerdict,
@@ -51,10 +51,10 @@ export function keywordHit(text: string, keyword: string): boolean {
   return new RegExp(`(^|[^\\p{L}\\p{N}])${esc}($|[^\\p{L}\\p{N}])`, 'u').test(t)
 }
 
-const fullText = (i: RedditWatchItem): string => [i.title ?? '', i.text].join('\n')
+const fullText = (i: RedditWatchEntry): string => [i.title ?? '', i.text].join('\n')
 
 /** 没有模型时的兜底。 */
-export function ruleJudge(item: RedditWatchItem, ctx: JudgeContext): RedditWatchJudgement {
+export function ruleJudge(item: RedditWatchEntry, ctx: JudgeContext): RedditWatchJudgement {
   const text = fullText(item)
   if (item.source === 'external') {
     const kw = item.keyword ?? ''
@@ -101,13 +101,13 @@ export function ruleJudge(item: RedditWatchItem, ctx: JudgeContext): RedditWatch
   return { verdict: 'no_action', reply: false, reason: '日常讨论', by: 'rule' }
 }
 
-const SOURCE_ZH: Record<RedditWatchItem['source'], string> = {
+const SOURCE_ZH: Record<RedditWatchEntry['source'], string> = {
   inbox: '我们的收件箱',
   own_sub: '我们自己的版块',
   external: '外部社区（关键词命中）',
 }
 
-export function judgePrompt(items: RedditWatchItem[], ctx: JudgeContext): string {
+export function judgePrompt(items: RedditWatchEntry[], ctx: JudgeContext): string {
   const lines = items.map((it, n) => {
     const meta = [
       `#${n + 1}`,
@@ -187,7 +187,7 @@ export function parseJudgements(text: string, count: number): Map<number, Reddit
 
 /** 判一批（按 id 回）。模型调不通 / 回话认不出就按规则。 */
 export async function judgeItems(
-  items: RedditWatchItem[],
+  items: RedditWatchEntry[],
   ctx: JudgeContext,
   complete?: JudgeComplete,
 ): Promise<Map<string, RedditWatchJudgement>> {

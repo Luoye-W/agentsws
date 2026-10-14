@@ -1,5 +1,5 @@
 export { buildDigest } from './digest.js'
-export { dueParts, finalDue } from './due.js'
+export { dueParts } from './due.js'
 export { judgeItems, keywordHit, ruleJudge } from './judge.js'
 export { redditWatchPort } from './port.js'
 export * from './service.js'
@@ -9,3 +9,10 @@ export {
   type RedditWatchItemQuery,
   type RedditWatchStore,
 } from './store.js'
+export {
+  type RedditWeekItem,
+  type RedditWeekSourceLike,
+  redditWeekSourceOf,
+  topicKey,
+  weekItemOf,
+} from './week-source.js'

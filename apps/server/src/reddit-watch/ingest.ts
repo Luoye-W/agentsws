@@ -2,7 +2,7 @@
  * WP328：读回来的一条 → 巡查条目（插件那一路 / 第三方数据渠道那一路各一个翻法）。
  */
 import type { RedditListingItem } from '@agentsws/browser-action'
-import type { Iso8601, RedditWatchItem, RedditWatchSource, WorkspaceId } from '@agentsws/contracts'
+import type { Iso8601, RedditWatchEntry, RedditWatchSource, WorkspaceId } from '@agentsws/contracts'
 import type { RedditItem } from '@agentsws/social-core'
 
 export interface IngestContext {
@@ -22,8 +22,8 @@ export function watchItemOf(
   source: Exclude<RedditWatchSource, 'external'>,
   ctx: IngestContext,
   brandUser: string | undefined,
-): RedditWatchItem {
-  const item: RedditWatchItem = {
+): RedditWatchEntry {
+  const item: RedditWatchEntry = {
     id: ctx.newId('rw'),
     workspace_id: ctx.workspace_id,
     source,
@@ -69,10 +69,10 @@ export function externalItemOf(
   r: RedditItem,
   keyword: string,
   ctx: IngestContext,
-): RedditWatchItem | undefined {
+): RedditWatchEntry | undefined {
   const fullname = externalFullname(r)
   if (fullname === undefined) return undefined
-  const item: RedditWatchItem = {
+  const item: RedditWatchEntry = {
     id: ctx.newId('rw'),
     workspace_id: ctx.workspace_id,
     source: 'external',

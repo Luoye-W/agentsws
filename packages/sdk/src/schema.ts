@@ -10335,7 +10335,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    /** 改巡查设置（自家版块、关键词、品牌号、频率、周最后一次的时刻） */
+    /** 改巡查设置（自家版块、关键词、品牌号、频率） */
     put: operations['updateRedditWatchSettings']
     post?: never
     delete?: never
@@ -74224,8 +74224,6 @@ export interface operations {
           brand_username?: string
           every_hours?: number
           day_start_hour?: number
-          final_weekday?: number
-          final_time?: string
           keyword_limit?: number
           enabled?: boolean
         }
@@ -74410,7 +74408,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { items: RedditWatchItem[] } */
+      /** @description { items: RedditWatchEntry[] } */
       200: {
         headers: {
           [name: string]: unknown
@@ -74499,7 +74497,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description RedditWatchItem */
+      /** @description RedditWatchEntry */
       200: {
         headers: {
           [name: string]: unknown

@@ -10,6 +10,8 @@ import {
   createRedditWatchStore,
   keywordHit,
   type RedditWatchOptions,
+  redditWeekSourceOf,
+  topicKey,
 } from '../src/reddit-watch/index.js'
 
 const t = (id: string, kind: 't1' | 't3', over: Record<string, unknown> = {}) => ({
@@ -344,7 +346,7 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
   })
 })
 
-describe('什么时候巡查（一天一次起步；周五 17:00 本周最后一次）', () => {
+describe('什么时候巡查（一天一次起步）', () => {
   const empty = fakeReddit(
     {
       '/message/inbox/.json?mark=false': listing([]),
@@ -369,34 +371,87 @@ describe('什么时候巡查（一天一次起步；周五 17:00 本周最后一
     s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
     expect(await s.watch.tick()).toMatchObject({ ran: false, skipped: 'not_due' })
     s.setNow('2026-10-14T02:00:00.000Z') // 10:00
-    expect(await s.watch.tick()).toMatchObject({ ran: true, final: false })
+    expect(await s.watch.tick()).toMatchObject({ ran: true })
     await extensionRound(s.watch, empty)
     s.setNow('2026-10-14T07:00:00.000Z') // 15:00
     expect(await s.watch.tick()).toMatchObject({ ran: false, skipped: 'not_due' })
     s.setNow('2026-10-15T01:30:00.000Z') // 第二天 09:30
     expect(await s.watch.tick()).toMatchObject({ ran: true })
   })
-  it('周五 17:00 后跑本周最后一次，做完通知周报；同一周不再来一次', async () => {
+  it('一天一次的定时里没有「周五最后一次」（那一次由周报调 sweepNow）', async () => {
     const s = setup({}, '2026-10-16T09:05:00.000Z') // 周五 17:05（东八区）
     s.watch.next({ connected: true })
     s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    expect(await s.watch.tick()).toMatchObject({ ran: true })
+    await extensionRound(s.watch, empty)
+    s.setNow('2026-10-16T10:30:00.000Z')
+    expect(await s.watch.tick()).toMatchObject({ ran: false, skipped: 'not_due' })
+  })
+})
+
+describe('给周报（WP330）：sweepNow 与 RedditWeekSource', () => {
+  const routes = {
+    '/message/inbox/.json?mark=false': listing([
+      t('c9', 't1', { type: 'comment_reply', body: 'iPhone?' }),
+      t('m1', 't1', { type: 'comment_reply', subreddit: 'other_sub' }),
+    ]),
+    '/r/inmoxr/new/.json': listing([t('p2', 't3', { title: 'My Air3 unboxing' })]),
+    '/r/inmoxr/comments/.json': listing([t('c9', 't1', { body: 'iPhone?' })]),
+  }
+  it('sweepNow：起「本周最后一次」，等插件交回再回；做完通知 onFinal', async () => {
+    // 替身插件：sweepNow 在「等」的时候（每次 sleep）来领活、读替身 Reddit、交回
+    const reddit = fakeReddit(routes, 'inmo_official')
+    let handed = false
+    const ref: { w?: ReturnType<typeof setup>['watch'] } = {}
+    const s = setup(
+      {
+        search: SEARCH,
+        sleep: async () => {
+          if (!handed && ref.w !== undefined) handed = await extensionRound(ref.w, reddit)
+        },
+      },
+      '2026-10-16T09:05:00.000Z',
+    )
+    ref.w = s.watch
+    s.watch.updateSettings({ own_subreddits: ['inmoxr'], keywords: ['INMO'] })
     const onFinal = vi.fn()
     s.watch.onFinal(onFinal)
-    expect(await s.watch.tick()).toMatchObject({ ran: true, final: true })
-    expect(onFinal).not.toHaveBeenCalled()
-    await extensionRound(s.watch, empty)
+    s.watch.next({ connected: true })
+    // 刚连上会马上补跑一轮；它还没做完时周报来了 → 这一轮直接算作本周最后一次
+    const run = await s.watch.sweepNow({ pollMs: 1, timeoutMs: 50 })
+    expect(handed).toBe(true)
+    expect(run).toMatchObject({ final: true })
+    expect(run.finished_at).toBeDefined()
     expect(onFinal).toHaveBeenCalledTimes(1)
-    const digest = onFinal.mock.calls[0]?.[1]
-    expect(digest.since).toBe('2026-10-10T16:00:00.000Z')
-    expect(digest.final_done).toBe(true)
-    s.setNow('2026-10-17T02:00:00.000Z') // 周六 10:00
-    expect(await s.watch.tick()).toMatchObject({ final: false })
+
+    const src = redditWeekSourceOf(s.watch)
+    expect(await src.configured()).toBe(true)
+    expect(await src.subreddits()).toEqual(['inmoxr'])
+    const w = { since: '2026-10-10T16:00:00.000Z', until: '2026-10-16T10:00:00.000Z' }
+    const items = await src.items(w)
+    // 同一条评论在收件箱和版块里都有 → 只算一次；别处版块里回我们的不进周报
+    expect(items.filter((x) => x.id === 't1_c9')).toHaveLength(1)
+    expect(items.some((x) => x.id === 't1_m1')).toBe(false)
+    expect(items.find((x) => x.id === 't3_p2')).toMatchObject({ scope: 'own', kind: 'post' })
+    const ext = items.filter((x) => x.scope === 'external')
+    expect(ext.map((x) => x.id).sort()).toEqual(['t3_aa1', 't3_aa2'])
+    expect(ext.every((x) => x.topic?.key.startsWith('t:') === true)).toBe(true)
+    expect((await src.sweeps(w)).length).toBe(1)
   })
-  it('周五关机了：周六开机补一次本周最后一次', async () => {
-    const s = setup({}, '2026-10-17T02:00:00.000Z') // 周六 10:00
+  it('插件一直没来交：sweepNow 到时抛一句人话（周报照样出）', async () => {
+    const s = setup({ sleep: async () => {} }, '2026-10-16T09:05:00.000Z')
     s.watch.next({ connected: true })
     s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
-    expect(await s.watch.tick()).toMatchObject({ ran: true, final: true })
+    s.watch.next({ connected: true }) // 把「刚连上补跑」那一件领走、不交
+    await expect(s.watch.sweepNow({ pollMs: 1, timeoutMs: 3 })).rejects.toThrow('插件还没交回')
+  })
+  it('没配：sweepNow 直接说没配', async () => {
+    const s = setup({ sleep: async () => {} })
+    await expect(s.watch.sweepNow()).rejects.toThrow('没配')
+  })
+  it('话题键跨天一致（大小写 / 空白 / 标点不算不同）', () => {
+    expect(topicKey(' Battery Life ')).toBe(topicKey('battery  life'))
+    expect(topicKey('续航，问题')).toBe(topicKey('续航 问题'))
   })
 })
 

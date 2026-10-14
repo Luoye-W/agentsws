@@ -17,7 +17,6 @@ import type { RedditWatchStore } from './store.js'
 export const REDDIT_WATCH_TARGET = 'reddit.watch'
 const KEY = 'settings'
 const USER = /^[A-Za-z0-9_-]{3,20}$/u
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/u
 
 export const MAX_KEYWORDS = 30
 export const MAX_SUBS = 5
@@ -58,8 +57,6 @@ export function normalizeSettings(
     keywords,
     every_hours: clampInt(raw?.every_hours, 1, 168, d.every_hours),
     day_start_hour: clampInt(raw?.day_start_hour, 0, 23, d.day_start_hour),
-    final_weekday: clampInt(raw?.final_weekday, 0, 6, d.final_weekday),
-    final_time: TIME.test(String(raw?.final_time ?? '')) ? String(raw?.final_time) : d.final_time,
     keyword_limit: clampInt(raw?.keyword_limit, 1, 50, d.keyword_limit),
     enabled: raw?.enabled ?? d.enabled,
   }

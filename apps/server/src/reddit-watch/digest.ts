@@ -9,7 +9,7 @@
 import type {
   Iso8601,
   RedditWatchDigest,
-  RedditWatchItem,
+  RedditWatchEntry,
   RedditWatchPart,
   RedditWatchSettings,
   RedditWatchTopicGroup,
@@ -34,7 +34,7 @@ export function buildDigest(input: {
   const own = store.list(ws, { ...q, source: 'own_sub' })
   const inbox = store.list(ws, { ...q, source: 'inbox' })
   const external = store.list(ws, { ...q, source: 'external' })
-  const count = (xs: RedditWatchItem[], kind: RedditWatchItem['kind']): number =>
+  const count = (xs: RedditWatchEntry[], kind: RedditWatchEntry['kind']): number =>
     xs.filter((x) => x.kind === kind).length
   const ownOurs = own.filter((x) => x.ours === true)
   const voices = [...own, ...inbox].filter((x) => x.ours !== true && x.deleted !== true)
