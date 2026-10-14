@@ -53,6 +53,8 @@ export const HELP_SLUGS = [
   'archive',
   // WP218：桌面版安装（Windows SmartScreen / Mac 右键打开）与应用内一键更新
   'install-update',
+  // WP323：发出记录，和用说话把它写进你自己的表格（通用，不为哪一家表格单写）
+  'sent-log',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -157,6 +159,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   archive: { positions: [], roles: [] },
   // WP218：通用
   'install-update': { positions: [], roles: [] },
+  // WP323：通用
+  'sent-log': { positions: [], roles: [] },
 }
 
 /**
