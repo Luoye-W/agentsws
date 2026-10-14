@@ -97,6 +97,13 @@ jobs:
           "
           cd apps/desktop && node scripts/dist.mjs --win --x64
 
+      # WP327：安装包里的服务进程已打成 bundle（scripts/bundle-app.mjs）。用打好的那一份（win-unpacked）再把
+      # 每个岗位走一遍真 dsh——确认 bundle 与桩在 Windows 上照样跑得通（CI 的 Node 22 与捆绑 Node 同一个 ABI）
+      - name: 打好的包再冒烟一次（win-unpacked × 真 dsh × 每个岗位）
+        shell: bash
+        run: |
+          node scripts/preinstall-smoke.mjs --app apps/desktop/release/win-unpacked --json win-smoke/packed-smoke.json | tee win-smoke/packed-smoke.md
+
       # WP225：用 pwsh 跑——Git Bash 把 node 崩溃时的 Windows 退出码（NTSTATUS）一律报成 127，
       # 这里把原始退出码按十六进制打出来（0xC0000409 / 0xC0000005 …）
       - name: 装起来真跑（静默安装 → 启动 → health → 工作台首页 → 退出 → 卸载）

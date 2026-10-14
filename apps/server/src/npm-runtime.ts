@@ -11,12 +11,15 @@
  * 3. 都没有：从 npm 官方源下**钉死的那一版**（{@link NPM_RUNTIME}），**校验 sha512**（与 registry 上
  *    `dist.integrity` 逐字相同）后解到上面那个目录。校验不过就不解、不留文件。
  *
+ * WP327：安装包里不再带解开的 npm（2009 个文件拖慢安装 / 更新），只带它的 tgz（`<node 旁边>/npm-<版本>.tgz` +
+ * `npm.json` 记版本与 sha512）。第 1 条找不到时先看有没有这份 tgz：有就校验后解到第 2 条那个目录，**不联网**。
+ *
  * 之后一律用「我们自己的 node + npm-cli.js」起 npm（`node npm-cli.js …`），不经 `npm.cmd` 壳、
  * 不看系统 PATH 上有没有 npm、不要管理员。解包用纯 JS（gzip 走 `node:zlib`），不依赖系统 `tar`
  * ——Windows 上中文用户名路径与 Git 带的 GNU tar 都不是问题。
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 
@@ -179,6 +182,21 @@ export async function ensureNpmCli(options: EnsureNpmOptions): Promise<string> {
   for (const candidate of bundledNpmCandidates(options.nodeExec, options.platform)) {
     if (exists(candidate)) return candidate
   }
+  // WP327：安装包里随 node 带的 npm tgz（解一次，之后走缓存那一份）
+  const packed = bundledNpmTarball(options.nodeExec, exists)
+  if (packed !== undefined) {
+    const cli = cachedNpmCli(options.toolsDir, packed.version)
+    if (exists(cli)) return cli
+    try {
+      const bytes = new Uint8Array(readFileSync(packed.file))
+      if (integrityOk(bytes, packed.integrity)) {
+        installNpmTgz(bytes, dirname(dirname(dirname(cli))))
+        return cli
+      }
+    } catch {
+      // 读不了 / 解不开：照旧往下走（下载那一路）
+    }
+  }
   const pin = options.pin ?? NPM_RUNTIME
   const cached = cachedNpmCli(options.toolsDir, pin.version)
   if (exists(cached)) return cached
@@ -195,7 +213,44 @@ export async function ensureNpmCli(options: EnsureNpmOptions): Promise<string> {
   }
   if (!integrityOk(bytes, pin.integrity))
     throw new NpmRuntimeError('integrity', '下载的 npm 校验不对（sha512 不一致），没有安装')
-  const finalDir = dirname(dirname(dirname(cached)))
+  installNpmTgz(bytes, dirname(dirname(dirname(cached))))
+  return cached
+}
+
+/** 安装包里随 node 带的 npm tgz（`npm.json` 写着版本与 sha512）；没有回 undefined。 */
+export function bundledNpmTarball(
+  nodeExec: string,
+  exists: (path: string) => boolean = existsSync,
+): { file: string; version: string; integrity: string } | undefined {
+  const dir = dirname(nodeExec)
+  for (const base of [dir, dirname(dir)]) {
+    const meta = join(base, 'npm.json')
+    if (!exists(meta)) continue
+    try {
+      const raw = JSON.parse(readFileSync(meta, 'utf8')) as {
+        version?: unknown
+        integrity?: unknown
+        file?: unknown
+      }
+      if (
+        typeof raw.version !== 'string' ||
+        typeof raw.integrity !== 'string' ||
+        typeof raw.file !== 'string' ||
+        raw.file.includes('/') ||
+        raw.file.includes('\\')
+      )
+        continue
+      const file = join(base, raw.file)
+      if (exists(file)) return { file, version: raw.version, integrity: raw.integrity }
+    } catch {
+      // 坏的 npm.json：当没有
+    }
+  }
+  return undefined
+}
+
+/** 把 npm 的 tgz 解到 `finalDir`（先解到旁边的临时目录、核对有 npm-cli.js 再换上去）。 */
+function installNpmTgz(bytes: Uint8Array, finalDir: string): void {
   const staging = `${finalDir}.part-${process.pid}-${Date.now().toString(36)}`
   try {
     mkdirSync(staging, { recursive: true })
@@ -210,5 +265,4 @@ export async function ensureNpmCli(options: EnsureNpmOptions): Promise<string> {
     if (err instanceof NpmRuntimeError) throw err
     throw new NpmRuntimeError('disk', `npm 解不到 ${finalDir}`, { cause: err })
   }
-  return cached
 }
