@@ -89,6 +89,8 @@ export * from './premium-theme.js'
 export * from './pricing-catalog.js'
 // WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
 export * from './read-routes.js'
+// WP330（docs/102 附）：Reddit 周报（WP328 巡查入库的条目 → 按周汇总；分节与措辞可配置）
+export * from './reddit-weekly.js'
 export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗

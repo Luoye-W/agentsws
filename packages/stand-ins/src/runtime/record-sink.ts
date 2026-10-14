@@ -79,7 +79,12 @@ export const RECORD_SINK_TOOL_DEFS: readonly ToolDef[] = [
           },
         },
         channels: { type: 'array', items: { type: 'string' }, description: '只记这些渠道' },
-        actions: { type: 'array', items: { type: 'string' }, description: '只记这些动作' },
+        actions: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            '只记这些动作（reply / comment / post …）。每周的 Reddit 周报是 weekly_report，只有列了它才记',
+        },
         sink_id: { type: 'string', description: '要改的那个去处（list_record_sinks 里的 id）' },
       },
       required: ['url', 'instruction'],

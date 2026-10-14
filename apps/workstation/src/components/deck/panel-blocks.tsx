@@ -16,6 +16,7 @@ import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 import { fieldLabel, fieldValue } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
+import { isRedditWeekly, RedditWeeklyBody } from './reddit-weekly-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -64,7 +65,18 @@ export function ReportBlocks({
            * WP224：本周经营一页纸**整张摊开**——它就是那一页，没有「进详情」可言
            * （它不属于任何事项，点进去只会回到这一页）。数带出处 tooltip。
            */
-          isWeeklyReview(r.detail.payload) ? (
+          /* WP330：Reddit 周报同样整张摊开（几节收着，原文点开才见；右上复制 / 导出） */
+          isRedditWeekly(r.detail.payload) ? (
+            <WsCard
+              key={r.id}
+              data-testid="report-block"
+              data-kind={r.kind}
+              className="flex flex-col gap-1 px-4 py-3"
+            >
+              <p className="text-sm font-medium">{r.title}</p>
+              <RedditWeeklyBody payload={r.detail.payload} />
+            </WsCard>
+          ) : isWeeklyReview(r.detail.payload) ? (
             <WsCard
               key={r.id}
               data-testid="report-block"

@@ -139,6 +139,8 @@ export const HANDLERS = {
   weeklyReview: 'owner.weekly_review',
   /** WP224（docs/91 §7 #2）：每天夜里记一行两条止损线的对照（只记账，不改止损）。 */
   adsLineCompare: 'ads.line_compare',
+  /** WP330（docs/102 附）：每周五下班前出 Reddit 周报（先做本周最后一次巡查；按品牌各一份）。 */
+  redditWeekly: 'social.reddit_weekly',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -1084,6 +1086,23 @@ export function registerEconomics(scheduler: Scheduler, deps: EconomicsScheduleD
   scheduler.register(HANDLERS.adsLineCompare, () => deps.lineCompare())
 }
 
+/**
+ * WP330（docs/102 文末「Luoye 10-14 定」）：Reddit 周报——每周五 17:00（工作区时区；设置里可改）。
+ *
+ * 错过了**补跑一次**（`run_once_now`）：周五没开机、周六开机照样出这一周的；跨到下一周才开机，
+ * 服务端按「上一周」出（见 `reddit-weekly.ts` 的 `late`）。
+ */
+export const REDDIT_WEEKLY_CRON = '0 17 * * 5'
+
+export interface RedditWeeklyScheduleDeps {
+  /** 这个品牌出一份 Reddit 周报（`late` = 关机错过、这是补跑）。 */
+  run(options: { late: boolean }): Promise<unknown>
+}
+
+export function registerRedditWeekly(scheduler: Scheduler, deps: RedditWeeklyScheduleDeps): void {
+  scheduler.register(HANDLERS.redditWeekly, (ctx) => deps.run({ late: ctx.misfired }))
+}
+
 export function registerSeo(scheduler: Scheduler, deps: SeoDeps): void {
   scheduler.register(HANDLERS.seoDaily, () => deps.daily())
   scheduler.register(HANDLERS.seoWeekly, () => deps.weekly())
@@ -1275,6 +1294,8 @@ export interface SchedulePlanOptions {
     weeklyReview?: boolean
     /** WP224：有人持有投放四条之一才建两条止损线对照那一条。 */
     adsLineCompare?: boolean
+    /** WP330：有人担 Reddit 运营（`social.reddit` / `pr.reddit`）才建每周五的 Reddit 周报那一条。 */
+    redditWeekly?: boolean
   }
 }
 
@@ -1558,6 +1579,18 @@ export async function ensureSystemTasks(
         title: '每周一早上推一份本周经营一页纸',
         handler: HANDLERS.weeklyReview,
         trigger: { kind: 'cron', expr: WEEKLY_REVIEW_CRON, tz },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // WP330：Reddit 周报（每周五下班前；先做本周最后一次巡查再出）
+  if (options.has.redditWeekly === true) {
+    await add(
+      'sched_reddit_weekly',
+      systemTask(base, {
+        title: '每周五下班前出一份 Reddit 周报',
+        handler: HANDLERS.redditWeekly,
+        trigger: { kind: 'cron', expr: REDDIT_WEEKLY_CRON, tz },
         misfire_policy: 'run_once_now',
       }),
     )

@@ -642,6 +642,12 @@ export {
   type ReadRoutesApiPort,
   readRoutesRoutes,
 } from './routes/read-routes.js'
+export type {
+  RedditWeeklyActor,
+  RedditWeeklyPort,
+  RedditWeeklyRunView,
+} from './routes/reddit-weekly.js'
+export { redditWeeklyRoutes } from './routes/reddit-weekly.js'
 export type { RoleRulesActor, RoleRulesPort } from './routes/role-rules.js'
 export { roleRuleRoutes } from './routes/role-rules.js'
 // WP236：运行时长线
