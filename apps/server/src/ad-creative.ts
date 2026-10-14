@@ -7,23 +7,27 @@
  * 2. **两个子 Agent 写新文案**：标题、描述各一个，各读各的技能（`ad-headlines` /
  *    `ad-descriptions`，公司层改过以公司层为准）；本地按平台条数 / 字数 / 禁用词过一遍。
  *    实验记录里最近几笔带进上下文。
- * 3. **上传表**：WP314 合并前用 `ads-core` 的最小版本（{@link AdCreativeServiceOptions.uploadSheet}
- *    是对接口）。新建一律暂停，人自己去后台传；接插件执行在 WP316。
+ * 3. **上传表**：WP314 的 `buildAdUploadBundle` 生成（{@link AdCreativeServiceOptions.uploadSheet}）。
+ *    新建一律暂停，人自己去后台传；接插件执行在 WP316。
  * 4. **批量出图单**：经设计岗的 `createRequest` 开一张 `request_design`（L3）；
  *    设计岗出变体 L2、入库 L1，那两步都不在这个文件里。
- * 5. **实验记录**：存在本品牌广告库（重启不丢），同步一条进投放岗记忆（docs/54，记忆面板里看得到；
- *    岗位记忆没有落盘层，丢了就在下次列清单时补回去）。
+ * 5. **实验记录**：**以这个品牌的投放岗记忆为准**（WP320 起岗位记忆落盘、按品牌分）。
+ *    广告库里只留一行索引（什么时候记的、出自哪一轮）；人在记忆面板里改了 / 删了那条，
+ *    这里读到的就是改后的 / 没了。没有岗位面（单测、没装岗位的进程）时退回广告库。
  *
  * **这个文件里没有一处碰广告平台**：不读后台、不传表、不改在跑的广告。
  */
 
 import {
-  type AdUploadSheetGenerator,
+  type AdUploadBundleBuilder,
+  buildAdUploadBundle,
   type CopyComplete,
   checkExperiment,
+  creativeUploadSheet,
+  decodeExportBytes,
   experimentContext,
+  experimentFromMemory,
   experimentMemoryText,
-  minimalUploadSheet,
   nextExperimentRound,
   parsePerformanceExport,
   pickWeakAds,
@@ -60,11 +64,14 @@ export type AdCreativeDesignRequester = (
   input: { title: string; need: string; spec_ids: string[]; variants: number },
 ) => Promise<{ request_id: string; staged: { staged: boolean; level?: string; message?: string } }>
 
-/** 投放岗记忆那一侧（docs/54 §3）。不给就不同步（单测与没装岗位面的进程）。 */
+/**
+ * 投放岗记忆那一侧（docs/54 §3；WP320 起落盘、按品牌分）。实验记录的**真源**。
+ * `list` 回 `undefined` = 这个品牌里找不到投放岗位那一层（退回广告库）。
+ */
 export interface AdCreativeMemoryPort {
+  list(actor: AdsActor): { id: string; heading?: string; body: string }[] | undefined
   add(actor: AdsActor, entry: { heading: string; text: string }): Promise<string | undefined>
-  update(id: string, entry: { heading: string; text: string }): Promise<boolean>
-  exists(id: string): boolean
+  update(actor: AdsActor, id: string, entry: { heading: string; text: string }): Promise<void>
 }
 
 export interface AdCreativeServiceOptions {
@@ -85,13 +92,12 @@ export interface AdCreativeServiceOptions {
   designPrompt?: () => string | undefined
   /** 品牌禁用词。 */
   bannedTerms?: () => readonly string[]
-  brandName?: () => string
   requestDesign?: AdCreativeDesignRequester
   /** 设计岗广告那条今天已经出了几张。 */
   designGeneratedToday?: () => number
   memory?: AdCreativeMemoryPort
-  /** 上传表生成器（WP314 对接口）。不给就用 `ads-core` 的最小版本。 */
-  uploadSheet?: AdUploadSheetGenerator
+  /** 上传表生成器：WP314 的 `buildAdUploadBundle`（不给也是它；测试里可以换）。 */
+  uploadSheet?: AdUploadBundleBuilder
 }
 
 export interface AdCreativeServiceAssembly {
@@ -146,25 +152,31 @@ export function createAdCreativeService(
     if (found === undefined) throw new ApiError('not_found', `没有这一轮：${id}`)
     return found
   }
-  const experimentOr404 = (id: string): AdExperimentEntry => {
-    const found = store.experiment(id)
+  /**
+   * 这个品牌的实验记录：岗位记忆里「广告实验」开头的那几条为准，广告库那一行只补「什么时候记的、
+   * 出自哪一轮」。记忆面不在就读广告库。
+   */
+  const readExperiments = (actor: AdsActor): AdExperimentEntry[] => {
+    const memory = options.memory?.list(actor)
+    if (memory === undefined) return store.experiments()
+    const rows: AdExperimentEntry[] = []
+    for (const m of memory) {
+      const e = experimentFromMemory(m)
+      if (e === undefined) continue
+      const meta = store.experiment(e.id)
+      rows.push({
+        ...e,
+        at: meta?.at ?? '',
+        ...(meta?.round_id === undefined ? {} : { round_id: meta.round_id }),
+        ...(meta?.updated_at === undefined ? {} : { updated_at: meta.updated_at }),
+      })
+    }
+    return rows.sort((a, b) => a.round - b.round)
+  }
+  const experimentOr404 = (actor: AdsActor, id: string): AdExperimentEntry => {
+    const found = readExperiments(actor).find((e) => e.id === id)
     if (found === undefined) throw new ApiError('not_found', `没有这笔实验：${id}`)
     return found
-  }
-
-  /** 同步一笔进投放岗记忆；记忆面那边不在就跳过（不因为它失败而丢这笔）。 */
-  const mirror = async (actor: AdsActor, entry: AdExperimentEntry): Promise<string | undefined> => {
-    if (options.memory === undefined) return entry.memory_id
-    const text = experimentMemoryText(entry, options.brandName?.() ?? '这个品牌')
-    try {
-      if (entry.memory_id !== undefined && options.memory.exists(entry.memory_id)) {
-        await options.memory.update(entry.memory_id, text)
-        return entry.memory_id
-      }
-      return (await options.memory.add(actor, text)) ?? entry.memory_id
-    } catch {
-      return entry.memory_id
-    }
   }
 
   const importView = (imp: AdCreativeImport): AdCreativeImportView => ({
@@ -180,7 +192,13 @@ export function createAdCreativeService(
     importExport: (actor, input) => {
       assertAds(actor)
       const metric = input.metric ?? 'ctr'
-      const parsed = parsePerformanceExport(input.platform, input.text)
+      // 字节进来的先用 WP314 的 `decodeExportBytes` 解（UTF-16 的 Excel CSV 也认），再走解析
+      const text =
+        input.base64 !== undefined
+          ? decodeExportBytes(new Uint8Array(Buffer.from(input.base64, 'base64')))
+          : (input.text ?? '')
+      if (text.trim() === '') throw new ApiError('invalid_input', '这张表是空的。')
+      const parsed = parsePerformanceExport(input.platform, text)
       const weak = pickWeakAds(parsed.rows, metric)
       const notes = [...parsed.notes]
       if (parsed.rows.length > 0 && weak.every((w) => w.verdict === 'thin'))
@@ -226,7 +244,7 @@ export function createAdCreativeService(
           `一轮最多写 ${AD_CREATIVE_MAX_ADS_PER_ROUND} 条广告，先写最差的 ${picked.length} 条，剩下的下一轮。`,
         )
       const complete = options.complete?.(actor)
-      const exp = experimentContext(store.experiments(), { platform: imp.platform })
+      const exp = experimentContext(readExperiments(actor), { platform: imp.platform })
       const skills: Partial<Record<AdCopyField, string>> = {}
       for (const field of ['headline', 'description'] as const) {
         const text = await options.skillText?.(actor, SKILL_OF[field])
@@ -297,7 +315,7 @@ export function createAdCreativeService(
       return roundOr404(id)
     },
 
-    sheet: (actor, round_id) => {
+    sheet: (actor, round_id, input = {}) => {
       assertAds(actor)
       const round = roundOr404(round_id)
       const imp = store.creativeImport(round.import_id)
@@ -308,6 +326,8 @@ export function createAdCreativeService(
           return {
             campaign: r.campaign,
             ad_group: r.ad_group,
+            ...(row?.campaign_id === undefined ? {} : { campaign_id: row.campaign_id }),
+            ...(row?.ad_group_id === undefined ? {} : { ad_group_id: row.ad_group_id }),
             ...(row?.final_url === undefined ? {} : { final_url: row.final_url }),
             headlines: r.headlines.map((h) => h.text),
             descriptions: r.descriptions.map((d) => d.text),
@@ -315,9 +335,24 @@ export function createAdCreativeService(
         })
       if (ads.length === 0)
         throw new ApiError('invalid_input', '这一轮一条收下的文案都没有，出不了上传表。')
-      const generate = options.uploadSheet ?? minimalUploadSheet
-      const sheet = generate({ platform: round.platform, ads, date: clock.now().slice(0, 10) })
-      emit(actor, 'ads.creative_sheet', { round_id, format: sheet.format, rows: sheet.rows })
+      const banned = options.bannedTerms?.()
+      const sheet = creativeUploadSheet(
+        {
+          platform: round.platform,
+          ads,
+          ...(round.platform === 'meta'
+            ? { meta: { page_id: input.meta_page_id, image_hash: input.meta_image_hash } }
+            : {}),
+          ...(banned === undefined ? {} : { banned_terms: banned }),
+        },
+        options.uploadSheet ?? buildAdUploadBundle,
+      )
+      emit(actor, 'ads.creative_sheet', {
+        round_id,
+        ok: sheet.ok,
+        ads: sheet.ads,
+        fingerprint: sheet.fingerprint,
+      })
       return sheet
     },
 
@@ -356,18 +391,9 @@ export function createAdCreativeService(
       return { ...view, requested: true, request_id: out.request_id, staged: out.staged }
     },
 
-    experiments: async (actor) => {
+    experiments: (actor) => {
       assertAds(actor)
-      const rows = store.experiments()
-      // 岗位记忆没有落盘层：重启后那一条没了就补回去（这里是唯一的真源）
-      if (options.memory !== undefined)
-        for (const row of rows) {
-          if (row.memory_id !== undefined && options.memory.exists(row.memory_id)) continue
-          const memory_id = await mirror(actor, row)
-          if (memory_id !== undefined && memory_id !== row.memory_id)
-            store.saveExperiment({ ...row, memory_id })
-        }
-      return { rows: store.experiments() }
+      return { rows: readExperiments(actor) }
     },
 
     addExperiment: async (actor, input) => {
@@ -376,7 +402,7 @@ export function createAdCreativeService(
       if (problems.length > 0) throw new ApiError('invalid_input', problems.join(' '))
       const entry: AdExperimentEntry = {
         id: nextId('adexp'),
-        round: nextExperimentRound(store.experiments()),
+        round: nextExperimentRound(readExperiments(actor)),
         hypothesis: input.hypothesis.trim(),
         change: input.change.trim(),
         ...(input.result === undefined || input.result.trim() === ''
@@ -386,8 +412,13 @@ export function createAdCreativeService(
         ...(input.round_id === undefined ? {} : { round_id: input.round_id }),
         at: clock.now(),
       }
-      const memory_id = await mirror(actor, entry)
-      const saved = memory_id === undefined ? entry : { ...entry, memory_id }
+      // 真源是这个品牌的投放岗记忆；记忆面不在才只存广告库（广告库那一行同时是索引）
+      const memory = options.memory
+      const memory_id =
+        memory === undefined || memory.list(actor) === undefined
+          ? undefined
+          : await memory.add(actor, experimentMemoryText(entry))
+      const saved = memory_id === undefined ? entry : { ...entry, id: memory_id, memory_id }
       store.saveExperiment(saved)
       emit(actor, 'ads.experiment_recorded', { experiment_id: saved.id, round: saved.round })
       return saved
@@ -395,7 +426,7 @@ export function createAdCreativeService(
 
     updateExperiment: async (actor, id, input) => {
       assertAds(actor)
-      const found = experimentOr404(id)
+      const found = experimentOr404(actor, id)
       const next: AdExperimentEntry = {
         ...found,
         ...(input.hypothesis === undefined ? {} : { hypothesis: input.hypothesis.trim() }),
@@ -409,8 +440,9 @@ export function createAdCreativeService(
         ...(next.result === undefined ? {} : { result: next.result }),
       })
       if (problems.length > 0) throw new ApiError('invalid_input', problems.join(' '))
-      const memory_id = await mirror(actor, next)
-      const saved = memory_id === undefined ? next : { ...next, memory_id }
+      if (next.memory_id !== undefined && options.memory !== undefined)
+        await options.memory.update(actor, next.memory_id, experimentMemoryText(next))
+      const saved = next
       store.saveExperiment(saved)
       emit(actor, 'ads.experiment_updated', {
         experiment_id: id,

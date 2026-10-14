@@ -13,6 +13,7 @@ import type { Duplex } from 'node:stream'
 import {
   adDesignPrompt,
   breakEvenView,
+  buildAdUploadBundle,
   resolveGrossMargin,
   summarizeLineCompare,
 } from '@agentsws/ads-core'
@@ -4011,7 +4012,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : hits.map((h) => `- ${h.statement_redacted}（事实卡 ${h.fact_card_id}）`).join('\n')
       },
       designPrompt: () => adDesignPrompt(brandDesignRef?.context(ws, 'ads')),
-      brandName: () => brandNameOfWorkspace(ws),
       requestDesign: async (actor, input) => {
         const out = await designService.port.createRequest(actor, {
           title: input.title,
@@ -4033,30 +4033,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return design.assets({ duty: 'ads' }).filter((a) => a.created_at.slice(0, 10) === day)
           .length
       },
+      /*
+       * 实验记录的真源：**这个品牌**的投放岗位那一层记忆（WP320 起落盘、按品牌读写），
+       * 挂在 `ad-copywriting` 技能下（决策 625）——普通投放运行加载这个技能时也带着本品牌的实验。
+       */
       memory: {
+        list: (actor) => {
+          const scope_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+          if (scope_id === undefined) return undefined
+          return learning
+            .memoryAt({ tier: 'position', scope_id, workspace_id: ws })
+            .filter((e) => e.skill === 'ad-copywriting')
+            .map((e) => ({
+              id: e.id,
+              ...(e.heading === undefined ? {} : { heading: e.heading }),
+              body: e.body,
+            }))
+        },
         add: async (actor, entry) => {
           const scope_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
           if (scope_id === undefined) return undefined
           const added = await learning.addMemory({
             tier: 'position',
             scope_id,
+            workspace_id: ws,
             heading: entry.heading,
             text: entry.text,
             skill: 'ad-copywriting',
             by: actor.person_id,
+            written_by: 'person',
           })
           return added.id
         },
-        update: async (id, entry) => {
-          await learning.updateMemory(id, { text: entry.text, heading: entry.heading })
-          return true
-        },
-        exists: (id) => {
-          const ref = parseMemoryRef(id)
-          if (ref === undefined) return false
-          return learning.memoryAt({ tier: ref.tier, scope_id: ref.owner }).some((e) => e.id === id)
+        update: async (actor, id, entry) => {
+          await learning.updateMemory(id, {
+            text: entry.text,
+            heading: entry.heading,
+            by: actor.person_id,
+            workspace_id: ws,
+          })
         },
       },
+      // WP314 的上传表生成器（决策 626）
+      uploadSheet: buildAdUploadBundle,
     })
 
     /*

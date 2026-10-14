@@ -69840,12 +69840,17 @@
                     "minLength": 1,
                     "maxLength": 2000000
                   },
+                  "base64": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 6000000
+                  },
                   "metric": {
                     "type": "string",
                     "enum": ["ctr", "cvr", "cpa", "roas"]
                   }
                 },
-                "required": ["platform", "text"]
+                "required": ["platform"]
               }
             }
           }
@@ -70125,7 +70130,7 @@
     "/v1/ads/creative/rounds/{id}/sheet": {
       "get": {
         "operationId": "getAdCreativeSheet",
-        "summary": "这一轮的上传表（Google CSV / Meta 可粘贴文字；新建一律暂停，人自己去后台传）",
+        "summary": "这一轮的上传表（WP314 生成：Google 按官方模板的 CSV、Meta 导入表；新建一律暂停，人自己去后台传）",
         "tags": ["ads"],
         "parameters": [
           {
@@ -70133,6 +70138,24 @@
             "in": "path",
             "required": true,
             "description": "轮次 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "meta_page_id",
+            "in": "query",
+            "required": false,
+            "description": "Meta：主页编号（纯数字）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "meta_image_hash",
+            "in": "query",
+            "required": false,
+            "description": "Meta：图片哈希",
             "schema": {
               "type": "string"
             }

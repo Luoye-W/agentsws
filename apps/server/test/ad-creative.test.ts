@@ -26,13 +26,13 @@ const CSV = [
   'PB,Gift,103,Gift idea,,Nice.,https://s.example/b,9000,250',
 ].join('\n')
 
-function setup(over: { complete?: CopyComplete | undefined } = {}) {
+function setup(over: { complete?: CopyComplete | undefined; noPosition?: boolean } = {}) {
   let t = Date.parse('2026-10-14T09:00:00Z')
   const clock = { now: () => new Date(t).toISOString() }
   const store = createAdsStore({ workspace_id: WS })
   const prompts: { agent: string; system: string; user: string }[] = []
   const designCalls: { title: string; need: string; spec_ids: string[]; variants: number }[] = []
-  const memory = new Map<string, { heading: string; text: string }>()
+  const memory = new Map<string, { heading: string; body: string }>()
   let mseq = 0
   const complete: CopyComplete =
     over.complete ??
@@ -61,24 +61,25 @@ function setup(over: { complete?: CopyComplete | undefined } = {}) {
     appendEvent: () => undefined,
     ...('complete' in over && over.complete === undefined ? {} : { complete: () => complete }),
     skillText: async (_a, name) => `# ${name} 技能正文`,
-    brandName: () => '磁吸小铺',
     requestDesign: async (_a, input) => {
       designCalls.push(input)
       return { request_id: 'dreq_1', staged: { staged: true, level: 'L3' } }
     },
     designGeneratedToday: () => 0,
     memory: {
+      list: () =>
+        over.noPosition === true
+          ? undefined
+          : [...memory.entries()].map(([id, m]) => ({ id, heading: m.heading, body: m.body })),
       add: async (_a, entry) => {
         mseq += 1
         const id = `m:position:pos_ads:ad-copywriting:${mseq}`
-        memory.set(id, entry)
+        memory.set(id, { heading: entry.heading, body: entry.text })
         return id
       },
-      update: async (id, entry) => {
-        memory.set(id, entry)
-        return true
+      update: async (_a, id, entry) => {
+        memory.set(id, { heading: entry.heading, body: entry.text })
       },
-      exists: (id) => memory.has(id),
     },
   })
   return {
@@ -117,19 +118,28 @@ describe('WP317 素材流水线（服务层）', () => {
     )
   })
 
-  it('上传表：只出收下的文案，新建一律 Paused，带上原来的最终到达网址', async () => {
+  it('上传表：走 WP314 生成器，只出收下的文案，新建一律 Paused，带上原来的最终到达网址', async () => {
     const { port } = setup()
     const imp = await port.importExport(actor, { platform: 'google', text: CSV })
     const round = await port.rewrite(actor, { import_id: imp.id })
     const sheet = await port.sheet(actor, round.id)
-    expect(sheet.format).toBe('google_csv')
-    expect(sheet.rows).toBe(1)
-    const row = sheet.text.split('\r\n')[1] ?? ''
-    expect(row.startsWith('Add,PB,Commute,Responsive search ad,Paused,https://s.example/a,')).toBe(
-      true,
-    )
-    expect(row).toContain('出门一整天不找插座')
-    expect(row).not.toContain('全 网 最 低')
+    expect(sheet.ok).toBe(true)
+    expect(sheet.ads).toBe(1)
+    const ads = sheet.files.find((f) => f.text?.includes('Headline 1'))?.text ?? ''
+    expect(ads).toContain('Paused')
+    expect(ads).toContain('https://s.example/a')
+    expect(ads).toContain('出门一整天不找插座')
+    expect(ads).not.toContain('全 网 最 低')
+  })
+
+  it('导出表按字节传：UTF-16（Excel CSV）也认', async () => {
+    const { port } = setup()
+    const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(CSV, 'utf16le')])
+    const imp = await port.importExport(actor, {
+      platform: 'google',
+      base64: bytes.toString('base64'),
+    })
+    expect(imp.rows).toBe(3)
   })
 
   it('没接真模型：不编文案，整轮写一句「没接上」；出不了上传表', async () => {
@@ -154,8 +164,8 @@ describe('WP317 素材流水线（服务层）', () => {
     expect(designCalls[1]?.variants).toBe(30)
   })
 
-  it('实验记录：前两格不能空；按品牌存，同步进岗位记忆；下一轮带进两个子 Agent 的上下文', async () => {
-    const { port, prompts, memory, store } = setup()
+  it('实验记录以岗位记忆为准：前两格不能空；记进记忆；下一轮带进两个子 Agent 的上下文', async () => {
+    const { port, prompts, memory } = setup()
     await expect(port.addExperiment(actor, { hypothesis: '', change: 'x' })).rejects.toThrow(/假设/)
     const e1 = await port.addExperiment(actor, {
       hypothesis: '标题带价格点击率更高',
@@ -163,11 +173,11 @@ describe('WP317 素材流水线（服务层）', () => {
       platform: 'google',
     })
     expect(e1.round).toBe(1)
-    expect(e1.memory_id).toBeDefined()
-    expect(memory.get(e1.memory_id as string)?.heading).toContain('磁吸小铺')
+    expect(e1.id).toBe(e1.memory_id)
+    expect(memory.get(e1.id)?.heading).toContain('第 1 轮')
     const done = await port.updateExperiment(actor, e1.id, { result: '带价格 CTR 2.1% vs 1.4%' })
-    expect(memory.get(done.memory_id as string)?.text).toContain('结果：带价格 CTR 2.1% vs 1.4%')
-    expect(store.experiments()).toHaveLength(1)
+    expect(done.result).toBe('带价格 CTR 2.1% vs 1.4%')
+    expect(memory.get(e1.id)?.body).toContain('结果：带价格 CTR 2.1% vs 1.4%')
 
     const imp = await port.importExport(actor, { platform: 'google', text: CSV })
     const round = await port.rewrite(actor, { import_id: imp.id })
@@ -175,14 +185,25 @@ describe('WP317 素材流水线（服务层）', () => {
     expect(prompts.every((p) => p.user.includes('标题带价格点击率更高'))).toBe(true)
   })
 
-  it('岗位记忆丢了（没有落盘层）：列清单时补回去', async () => {
+  it('人在记忆面板里改了 / 删了那条：流水线读到的跟着变', async () => {
     const { port, memory } = setup()
     const e = await port.addExperiment(actor, { hypothesis: '短标题更好', change: '全写 15 字内' })
-    memory.clear()
-    const { rows } = await port.experiments(actor)
-    expect(rows[0]?.memory_id).toBeDefined()
-    expect(rows[0]?.memory_id).not.toBe(e.memory_id)
-    expect(memory.size).toBe(1)
+    const m = memory.get(e.id)
+    memory.set(e.id, {
+      heading: m?.heading ?? '',
+      body: (m?.body ?? '').replace('短标题更好', '短标题更好（面板里改的）'),
+    })
+    expect((await port.experiments(actor)).rows[0]?.hypothesis).toBe('短标题更好（面板里改的）')
+    memory.delete(e.id)
+    expect((await port.experiments(actor)).rows).toEqual([])
+  })
+
+  it('没有岗位那一层（记忆面不在）：退回广告库', async () => {
+    const { port, store } = setup({ noPosition: true })
+    const e = await port.addExperiment(actor, { hypothesis: '带价格', change: '6 条' })
+    expect(e.memory_id).toBeUndefined()
+    expect(store.experiments()).toHaveLength(1)
+    expect((await port.experiments(actor)).rows).toHaveLength(1)
   })
 
   it('不是投放职责：一律 403；一轮最多写 20 条', async () => {

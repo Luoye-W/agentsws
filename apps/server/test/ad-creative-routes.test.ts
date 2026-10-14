@@ -161,7 +161,9 @@ describe('WP317 素材流水线路由', () => {
     )
     expect(e.round).toBe(1)
     // 同步进投放岗记忆（docs/54）：记忆面板里看得到这一条，标题带品牌名
+    // 真源是这个品牌的投放岗记忆（WP320 起落盘、按品牌分）：实验的 id 就是那条记忆的 id
     expect(e.memory_id).toMatch(/^m:position:/)
+    expect(e.id).toBe(e.memory_id)
     const mem = await data<{ entries: { id: string; heading?: string; body: string }[] }>(
       await api(`/v1/memory?tier=position&scope_id=${e.memory_id?.split(':')[2]}`),
     )
@@ -169,7 +171,7 @@ describe('WP317 素材流水线路由', () => {
     expect(hit?.heading).toContain('第 1 轮')
     expect(hit?.body).toContain('假设：标题带价格点击率更高')
     const patched = await data<{ result: string }>(
-      await api(`/v1/ads/creative/experiments/${e.id}`, {
+      await api(`/v1/ads/creative/experiments/${encodeURIComponent(e.id)}`, {
         method: 'PATCH',
         body: JSON.stringify({ result: 'CTR 2.1% vs 1.4%' }),
       }),
@@ -180,7 +182,15 @@ describe('WP317 素材流水线路由', () => {
     )
     expect(list.rows).toEqual([expect.objectContaining({ round: 1, result: 'CTR 2.1% vs 1.4%' })])
     const brand = await server.brands.forWorkspace(server.bootstrap.workspace.id)
+    // 广告库里只留索引那一行
     expect(brand.ads.experiments()).toHaveLength(1)
+    // 记忆面板里那一条也跟着回填了结果
+    const after = await data<{ entries: { id: string; body: string }[] }>(
+      await api(`/v1/memory?tier=position&scope_id=${e.memory_id?.split(':')[2]}`),
+    )
+    expect(after.entries.find((x) => x.id === e.memory_id)?.body).toContain(
+      '结果：CTR 2.1% vs 1.4%',
+    )
     // 前两格不能空
     expect(
       (await post('/v1/ads/creative/experiments', { hypothesis: '  ', change: 'x' })).status,

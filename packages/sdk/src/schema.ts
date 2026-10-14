@@ -7376,7 +7376,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 这一轮的上传表（Google CSV / Meta 可粘贴文字；新建一律暂停，人自己去后台传） */
+    /** 这一轮的上传表（WP314 生成：Google 按官方模板的 CSV、Meta 导入表；新建一律暂停，人自己去后台传） */
     get: operations['getAdCreativeSheet']
     put?: never
     post?: never
@@ -56617,7 +56617,8 @@ export interface operations {
         'application/json': {
           /** @enum {string} */
           platform: 'google' | 'meta'
-          text: string
+          text?: string
+          base64?: string
           /** @enum {string} */
           metric?: 'ctr' | 'cvr' | 'cpa' | 'roas'
         }
@@ -56884,7 +56885,12 @@ export interface operations {
   }
   getAdCreativeSheet: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Meta：主页编号（纯数字） */
+        meta_page_id?: string
+        /** @description Meta：图片哈希 */
+        meta_image_hash?: string
+      }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
         'X-Assignment': string

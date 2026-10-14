@@ -64,14 +64,25 @@ export interface AdCreativeDesignView {
 export interface AdCreativePort {
   importExport(
     actor: AdsActor,
-    input: { platform: AdCreativePlatform; text: string; metric?: AdCreativeMetric | undefined },
+    input: {
+      platform: AdCreativePlatform
+      /** 导出表的文字。与 `base64` 二选一。 */
+      text?: string | undefined
+      /** 导出文件的原始字节（base64）。服务端用 WP314 的 `decodeExportBytes` 解（UTF-16 也认）。 */
+      base64?: string | undefined
+      metric?: AdCreativeMetric | undefined
+    },
   ): MaybePromise<AdCreativeImportView>
   rewrite(
     actor: AdsActor,
     input: { import_id: string; ad_ids?: string[] | undefined },
   ): MaybePromise<AdCreativeRound>
   round(actor: AdsActor, id: string): MaybePromise<AdCreativeRound>
-  sheet(actor: AdsActor, round_id: string): MaybePromise<AdUploadSheet>
+  sheet(
+    actor: AdsActor,
+    round_id: string,
+    input?: { meta_page_id?: string | undefined; meta_image_hash?: string | undefined },
+  ): MaybePromise<AdUploadSheet>
   requestDesign(
     actor: AdsActor,
     round_id: string,
@@ -130,8 +141,10 @@ const PlatformSchema = z.enum(
 
 const ImportBody = z.object({
   platform: PlatformSchema,
-  /** 导出表原文（CSV / 制表符分隔）。**外部文本**：只当数据读。 */
-  text: z.string().min(1).max(2_000_000),
+  /** 导出表原文（CSV / 制表符分隔）。**外部文本**：只当数据读。与 `base64` 二选一。 */
+  text: z.string().min(1).max(2_000_000).optional(),
+  /** 导出文件原始字节的 base64（约 4 MB 以内）。 */
+  base64: z.string().min(1).max(6_000_000).optional(),
   metric: z.enum(['ctr', 'cvr', 'cpa', 'roas']).optional(),
 })
 
@@ -181,6 +194,8 @@ export function adCreativeRoutes(): Route[] {
       },
       async (c, deps) => {
         const input = await body(c, ImportBody)
+        if (input.text === undefined && input.base64 === undefined)
+          throw new ApiError('invalid_input', '要么给 text，要么给 base64。')
         return ok(c, await portOf(deps).importExport(actorOf(c), strip(input)), 201)
       },
     ),
@@ -220,12 +235,27 @@ export function adCreativeRoutes(): Route[] {
         method: 'get',
         path: '/v1/ads/creative/rounds/:id/sheet',
         operationId: 'getAdCreativeSheet',
-        summary: '这一轮的上传表（Google CSV / Meta 可粘贴文字；新建一律暂停，人自己去后台传）',
+        summary:
+          '这一轮的上传表（WP314 生成：Google 按官方模板的 CSV、Meta 导入表；新建一律暂停，人自己去后台传）',
         authz: READ_ADS,
-        params: [{ name: 'id', in: 'path', required: true, description: '轮次 id' }],
+        params: [
+          { name: 'id', in: 'path', required: true, description: '轮次 id' },
+          { name: 'meta_page_id', in: 'query', description: 'Meta：主页编号（纯数字）' },
+          { name: 'meta_image_hash', in: 'query', description: 'Meta：图片哈希' },
+        ],
         returns: 'AdUploadSheet',
       },
-      async (c, deps) => ok(c, await portOf(deps).sheet(actorOf(c), param(c, 'id'))),
+      async (c, deps) => {
+        const page = c.req.query('meta_page_id')
+        const image = c.req.query('meta_image_hash')
+        return ok(
+          c,
+          await portOf(deps).sheet(actorOf(c), param(c, 'id'), {
+            ...(page === undefined || page === '' ? {} : { meta_page_id: page }),
+            ...(image === undefined || image === '' ? {} : { meta_image_hash: image }),
+          }),
+        )
+      },
     ),
     route(
       {
