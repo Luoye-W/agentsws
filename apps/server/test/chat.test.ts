@@ -88,7 +88,9 @@ interface Rig {
   emails: { session_id: string }[]
 }
 
-function rig(over: { models?: boolean; answer?: string; rules?: string } = {}): Rig {
+function rig(
+  over: { models?: boolean; answer?: string; rules?: string; voice?: string } = {},
+): Rig {
   const clock = new StepClock()
   const approvals = new RecordingApprovals()
   const events: (Omit<EventEnvelope, 'id' | 'at'> & { at?: string })[] = []
@@ -114,6 +116,7 @@ function rig(over: { models?: boolean; answer?: string; rules?: string } = {}): 
     ],
     position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
     ...(over.rules === undefined ? {} : { roleRules: () => over.rules }),
+    ...(over.voice === undefined ? {} : { brandVoice: async () => over.voice }),
     emailFollowUp: async ({ session }) => {
       emails.push({ session_id: session.id })
       return { sent: true }
@@ -172,6 +175,17 @@ describe('实时车道：五种动作各走一遍', () => {
     const user = r.models.calls[0]?.user ?? ''
     expect(user).toContain('退款超过 50 美元先问我')
     expect(user.indexOf('退款超过')).toBeLessThan(user.indexOf('美国订单满'))
+  })
+
+  it('WP333：answer 的材料里带品牌话术（品牌自己写过才有）；没写过一个字不多', async () => {
+    const r = rig({ voice: '【品牌话术｜brand-voice】\n像老朋友聊天，不用感叹号。' })
+    const s = await open(r)
+    await say(r, s.id, 'how much is shipping to the US?')
+    expect(r.models.calls[0]?.user ?? '').toContain('像老朋友聊天，不用感叹号。')
+    const bare = rig()
+    const s2 = await open(bare)
+    await say(bare, s2.id, 'how much is shipping to the US?')
+    expect(bare.models.calls[0]?.user ?? '').not.toContain('品牌话术')
   })
 
   it('collect_info：查订单没给单号 → 追问，且不花模型', async () => {

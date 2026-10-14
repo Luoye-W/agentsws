@@ -341,6 +341,23 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
           ],
         },
       }
+    // WP333（决策 633）：面板「库存告急数」经店铺管理授权读库存
+    case 'AgentswsLiveInventory':
+      return {
+        productVariants: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          nodes: shop.products.flatMap((p) =>
+            p.variants.map((v) => ({
+              id: v.id,
+              title: v.title,
+              sku: v.sku,
+              inventoryQuantity: v.inventoryQuantity,
+              inventoryItem: { id: v.id.replace('ProductVariant', 'InventoryItem'), tracked: true },
+              product: { id: p.id, title: p.title, status: p.status },
+            })),
+          ),
+        },
+      }
     case 'AgentswsRecentOrders':
       return {
         orders: {

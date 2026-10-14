@@ -104,6 +104,19 @@ export const LIVE_ORDERS = `query AgentswsLiveOrders($first: Int!, $after: Strin
   }
 }`
 
+/**
+ * WP333（决策 633）：面板「库存告急数」经店铺管理授权读库存（要 `read_inventory`）。
+ * 只要可售数不高的那些规格（`inventory_quantity:<=N`），不带任何顾客数据；
+ * 不跟踪库存的规格（`tracked: false`）数是 0 但不算告急，读回来再丢掉。
+ */
+export const LIVE_INVENTORY = `query AgentswsLiveInventory($first: Int!, $after: String, $query: String) {
+  productVariants(first: $first, after: $after, query: $query) {
+    pageInfo { hasNextPage endCursor }
+    nodes { id title sku inventoryQuantity inventoryItem { id tracked }
+      product { id title status } }
+  }
+}`
+
 export const RECENT_ORDERS = `query AgentswsRecentOrders($first: Int!) {
   orders(first: $first, sortKey: CREATED_AT, reverse: true) {
     nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus

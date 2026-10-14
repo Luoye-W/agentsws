@@ -151,6 +151,11 @@ export interface ChatLaneOptions {
    * 每一轮现取——改了 / 删了下一句就跟着变。不给 = 聊天里不带规矩。
    */
   roleRules?(): string | undefined
+  /**
+   * WP333：品牌话术（与社媒同一个 `voicePrompt` 拼好的那一段；这个品牌没写过话术 = undefined，照旧）。
+   * 每一轮现取。
+   */
+  brandVoice?(): Promise<string | undefined>
   /** 这条会话挂谁名下。 */
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
@@ -417,6 +422,9 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     // WP289（决策 318）：人定过的规矩排在知识前面（和运行提示词里一样：一律照做）
     const rules = options.roleRules?.()
     if (rules !== undefined && rules !== '') parts.push(rules)
+    // WP333：品牌话术（这个品牌自己写过才有）
+    const voice = await options.brandVoice?.().catch(() => undefined)
+    if (voice !== undefined && voice !== '') parts.push(voice)
     const hits = (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS)) ?? []
     if (hits.length > 0) {
       parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)

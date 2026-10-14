@@ -43,9 +43,9 @@ export interface WorkstationDataSource {
   orders(view?: { assignment_id?: string }): OrderRow[]
   /**
    * WP63：库存行（库存告急表、「库存告急数」、断货异常卡都从它算）。
-   * 不给 = 这台机器还拉不到库存，那几块自己就是空的——不编数。
+   * 不给 / 回 undefined = 这台机器还拉不到库存，那几块照实出「没连」（WP333 决策 633）——不编数、不出 0。
    */
-  inventory?(view?: { assignment_id?: string }): InventoryRow[]
+  inventory?(view?: { assignment_id?: string }): InventoryRow[] | undefined
   /**
    * WP63：评价行。评价应用连接器待增加，所以它今天一定不存在——
    * 差评那一块照 36 §3 出"还没连"而不是空表。
