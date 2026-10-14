@@ -2,7 +2,7 @@
  * WP333（决策 584）：个人微信卡片链接 `/cards/<卡号>` 打开就是那一张卡。
  *
  * - 还没定的：照常能定，决定带这张卡所在职责的分配；
- * - 已经定过的：照实说一句，卡还能看；
+ * - 已经定过的：卡还能看（状态签说已处理）；
  * - 找不到（404）：一句人话 + 回首页。
  */
 import type { ApprovalItem } from '@agentsws/contracts'
@@ -94,7 +94,7 @@ describe('WP333 卡片链接页', () => {
     open()
     expect(await screen.findByText('回复：小蓝灯什么时候到')).toBeTruthy()
     expect(screen.getByTestId('card-page').getAttribute('data-card')).toBe('apr_1')
-    expect(screen.queryByTestId('card-page-settled')).toBeNull()
+    expect(screen.getByTestId('card-page').getAttribute('data-settled')).toBeNull()
     const approve = screen
       .getByTestId('card-page')
       .querySelector('button[data-action="approve"]') as HTMLButtonElement
@@ -109,10 +109,11 @@ describe('WP333 卡片链接页', () => {
     expect((await screen.findByTestId('card-page-receipt')).textContent).toBe('处理好了')
   })
 
-  it('已经定过的：照实说一句，卡还能看、没有「发送」', async () => {
+  it('已经定过的：卡还能看（状态签说已处理）、没有「发送」', async () => {
     state.item = approval({ state: 'approved' })
     open()
-    expect(await screen.findByTestId('card-page-settled')).toBeTruthy()
+    await screen.findByText('回复：小蓝灯什么时候到')
+    expect(screen.getByTestId('card-page').getAttribute('data-settled')).toBe('true')
     expect(screen.getByText('回复：小蓝灯什么时候到')).toBeTruthy()
     expect(
       screen.getByTestId('card-page').querySelector('button[data-action="approve"]'),

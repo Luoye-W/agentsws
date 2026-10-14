@@ -3,8 +3,8 @@
  *
  * 个人微信里推来的卡只带一个深链（`去工作台处理：…/cards/<卡号>?brand=…`，见
  * `packages/channels/src/im-cards.ts`）。以前工作台没有这条路由，点开落到首页、
- * 还得自己在牌堆里翻。现在直接打开那一张：还没定的照常能定；已经定过的照实说一句，
- * 卡还能看（只剩「打开」）。品牌那一格由外壳的 `useBrandLink` 先处理（WP311）。
+ * 还得自己在牌堆里翻。现在直接打开那一张：还没定的照常能定；已经定过的卡还能看
+ * （状态签是「已处理」，只剩「打开」）。品牌那一格由外壳的 `useBrandLink` 先处理（WP311）。
  *
  * 卡的长相与首页牌堆同一个 `DeckCardView`；决定走同一个 `decide`。
  */
@@ -120,15 +120,13 @@ export function CardPage(): ReactNode {
       className={`flex flex-col gap-3 ${DECK_MAX_WIDTH_CLASS}`}
       data-testid="card-page"
       data-card={card.id}
+      // 定过的卡：卡上那个状态签（「已处理」）就说清了，不再多写一行字
+      data-settled={settled ? 'true' : undefined}
     >
       {back}
       {receipt !== '' ? (
         <p role="status" className="text-xs text-ws-good" data-testid="card-page-receipt">
           {receipt}
-        </p>
-      ) : settled ? (
-        <p data-testid="card-page-settled" className="text-xs text-ws-muted-fg">
-          {t('cardPage.settled')}
         </p>
       ) : null}
       <DeckCardView
