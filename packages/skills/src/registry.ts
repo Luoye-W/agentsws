@@ -165,6 +165,9 @@ export class MemorySkillRegistry {
   readonly #excluded = new Map<PersonId, Set<string>>()
   readonly #sidecar: SidecarStore
   readonly #nextId: IdFactory
+  /** WP320：包基础层以外变了就叫一声（落盘用）。装快照时静音。 */
+  readonly #listeners = new Set<() => void>()
+  #muted = false
 
   constructor(sidecar: SidecarStore, nextId: IdFactory) {
     this.#sidecar = sidecar
@@ -190,6 +193,7 @@ export class MemorySkillRegistry {
     hist.push(stored)
     this.#history.set(key, hist)
     this.#writeSidecar(skill.name, sections)
+    if (skill.tier !== 'package') this.#changed()
   }
 
   /** 解析 markdown 并入库；段 id 与该 skill 已有各层 + sidecar 对齐。 */
@@ -262,6 +266,7 @@ export class MemorySkillRegistry {
       version: (prev?.version ?? 0) + 1,
     }
     this.#overlays.set(key, next)
+    if (overlay.tier !== 'package') this.#changed()
     return next
   }
 
@@ -277,7 +282,9 @@ export class MemorySkillRegistry {
   drop(name: string, tier: SkillTier, scope: SkillScopeRef = {}): boolean {
     const key = this.#keyOf(name, tier, scope)
     this.#frontmatter.delete(key)
-    return this.#skills.delete(key)
+    const dropped = this.#skills.delete(key)
+    if (dropped && tier !== 'package') this.#changed()
+    return dropped
   }
 
   /**
@@ -302,6 +309,76 @@ export class MemorySkillRegistry {
 
   listOverlays(skill: string): OverlayEx[] {
     return [...this.#overlays.values()].filter((o) => o.skill === skill)
+  }
+
+  // ---------- WP320：上层落盘 ----------
+  //
+  // 这个库一直是内存的（WP36 / WP71 记过「重启即失」）：手动加的记忆、提升批下来的、
+  // AI 自己记的，进程一重启全没了。包基础层每次启动从软件里重新种，不用存；
+  // 上面几层（公司 / 部门 / 岗位 / 职责 / 个人）的记录与 overlay 才是人和 AI 攒下来的东西。
+
+  /** WP320：包基础层以外的记录或 overlay 变了就叫一声。回注销函数。 */
+  onChange(listener: () => void): () => void {
+    this.#listeners.add(listener)
+    return () => {
+      this.#listeners.delete(listener)
+    }
+  }
+
+  /** WP320：包基础层以外的全部记录与 overlay（落盘快照；深拷贝）。 */
+  exportUpperLayers(): SkillUpperLayers {
+    return {
+      records: [...this.#skills.values()]
+        .filter((s) => s.tier !== 'package')
+        .map((s) => ({ ...s, sections: s.sections.map((x) => ({ ...x })) })),
+      overlays: [...this.#overlays.values()]
+        .filter((o) => o.tier !== 'package')
+        .map((o) => ({ ...o, ops: o.ops.map((op) => ({ ...op })) })),
+    }
+  }
+
+  /**
+   * WP320：启动时把快照装回来。同一个位置已有的被快照盖掉；包基础层的条目一律跳过
+   * （那一层归软件，不归快照）。装的过程不叫 {@link onChange}——装回来不是"变了"。
+   */
+  importUpperLayers(snapshot: SkillUpperLayers): { records: number; overlays: number } {
+    let records = 0
+    let overlays = 0
+    this.#muted = true
+    try {
+      for (const skill of snapshot.records) {
+        if (skill.tier === 'package') continue
+        const stored: Skill = { ...skill, sections: skill.sections.map((x) => ({ ...x })) }
+        const key = this.#keyOf(stored.name, stored.tier, stored)
+        this.#skills.set(key, stored)
+        this.#history.set(key, [...(this.#history.get(key) ?? []), stored])
+        this.#writeSidecar(stored.name, stored.sections)
+        records += 1
+      }
+      for (const overlay of snapshot.overlays) {
+        if (overlay.tier !== 'package') {
+          this.#overlays.set(this.#overlayKey(overlay.skill, overlay.tier, overlay.owner), {
+            ...overlay,
+            ops: overlay.ops.map((op) => ({ ...op })),
+          })
+          overlays += 1
+        }
+      }
+    } finally {
+      this.#muted = false
+    }
+    return { records, overlays }
+  }
+
+  #changed(): void {
+    if (this.#muted) return
+    for (const listener of this.#listeners) {
+      try {
+        listener()
+      } catch {
+        // 听的人出错不该让写记忆的那一下失败
+      }
+    }
   }
 
   /** 下沉：上游出新版 → overlay 的 base_version 更新到上游当前版本，冲突段收集。 */
