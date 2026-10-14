@@ -94,21 +94,32 @@ const SerpBody = z.object({
   language: z.string().min(2).max(16),
   device: z.enum(['desktop', 'mobile']).optional(),
 })
-const Platform = z.enum(['chatgpt', 'perplexity', 'gemini', 'google_ai_overview', 'copilot'])
+// WP310：加 claude（只加）
+const Platform = z.enum([
+  'chatgpt',
+  'perplexity',
+  'gemini',
+  'google_ai_overview',
+  'copilot',
+  'claude',
+])
+const Aliases = z.array(z.string().min(1).max(200)).max(20)
 const ProbeBody = z.object({
   question: z.string().min(1).max(1000),
-  platforms: z.array(Platform).min(1).max(5),
+  platforms: z.array(Platform).min(1).max(6),
   country: z.string().min(2).max(8),
   language: z.string().min(2).max(16),
   brand: z.object({
     name: z.string().min(1).max(200),
     domains: z.array(z.string().max(253)).max(20),
+    aliases: Aliases.optional(),
   }),
   competitors: z
     .array(
       z.object({
         name: z.string().min(1).max(200),
         domains: z.array(z.string().max(253)).max(20).optional(),
+        aliases: Aliases.optional(),
       }),
     )
     .max(30)

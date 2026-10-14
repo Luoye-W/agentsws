@@ -357,6 +357,7 @@ import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
+import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
 import {
@@ -4948,6 +4949,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       appendEvent,
       ...(dir === undefined ? {} : { dir }),
+      // WP310：GEO / 排名历史落在品牌目录的 geo.sqlite（第一次用时才打开）
+      geoStore: () => {
+        if (dir === undefined) return createGeoStore()
+        mkdirSync(dir, { recursive: true })
+        return createGeoStore(join(dir, 'geo.sqlite'))
+      },
     })
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
@@ -5950,6 +5957,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         site.close()
         ads.close()
         pr.close()
+        seoService.close()
       },
     }
   }
@@ -9128,6 +9136,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (input.settings !== undefined) svc.setGeoSettings(input.settings)
       return svc.geoView()
     },
+    // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
+    geoHistoryExport: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),
+    geoHistoryDelete: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryDelete(input),
     // WP159：知识库里那张「违规宣称规则」表（按请求人所在品牌的目标市场开组）
     claimRules: async (actor) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.claimRules(actor),
@@ -10208,6 +10221,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               question: input.question,
               assignment_id: input.assignment_id,
               mode: input.mode,
+              // WP311（决策 507）：链接带上品牌，工作台开着别的品牌时先切过去
+              workspace_id: input.workspace_id,
             },
           ),
         )

@@ -13,6 +13,8 @@
  * 3. 不重试：限流重试只会更糟；照实说（`rate_limited`），让上层决定。
  */
 import type {
+  AiAnswerVia,
+  AiCitationWhere,
   AiPlatform,
   SearchDataProvider,
   SearchEngine,
@@ -37,6 +39,21 @@ export type ProviderSerp = Pick<SerpResult, 'items' | 'ai_overview' | 'people_al
 export interface ProviderAnswer {
   text: string
   cited_urls: string[]
+  /** WP310：全文 markdown（适配器拿得到就给；不给时全文就是 `text`）。 */
+  markdown?: string
+  /** WP310：结构化引用（顺序即回答里的顺序；编号与去重由 `citationsOf` 做）。 */
+  citations?: ProviderCitation[]
+  /** WP310：回答它的模型（网页端抓取写 `web`）。 */
+  model?: string
+  via?: AiAnswerVia
+}
+
+/** WP310：适配器翻出来的一条引用（还没编号、没归一）。 */
+export interface ProviderCitation {
+  url: string
+  title?: string
+  snippet?: string
+  where: AiCitationWhere
 }
 
 export interface AiAnswerInput {

@@ -139,6 +139,20 @@ export interface ImIdentity {
   authenticate(bearer: string): Promise<Principal | undefined>
 }
 
+/**
+ * WP311（决策 507）：工作台链接带上品牌（`?brand=<workspace_id>`）。工作台打开时当前开着别的品牌，
+ * 就先切到链接里的品牌再开那一页。只加这一格，别的不动；拼不成 URL 的原样回。
+ */
+export function withBrandParam(link: string, brand: string): string {
+  try {
+    const url = new URL(link)
+    url.searchParams.set('brand', brand)
+    return url.toString()
+  } catch {
+    return link
+  }
+}
+
 /** 要投进 IM 的一张卡。 */
 export interface ImCard {
   id: string
@@ -693,7 +707,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     | 'internal'
 
   const link = (): string => options.deepLinkBase()
-  const failText = (head: string): string => `${head}${link()}`
+  /** WP311（决策 507）：知道是哪个品牌的就带上 `?brand=`（工作台开着别的品牌时先切过去）。 */
+  const failText = (head: string, brand?: string): string =>
+    `${head}${brand === undefined ? link() : withBrandParam(link(), brand)}`
 
   /** 记一条「没答成」：只有原因码与错误码，正文、错误原文都不进事件（21 §5）。 */
   const failed = (
@@ -848,7 +864,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       pick?.note === undefined ? answer : `${answer}\n${pick.note}`
     if (first === 'timeout') {
       failed(channel, person_id, 'timeout')
-      await say(channel, person_id, reply, failText(IM_TEXT.timeout), { keep: true })
+      await say(channel, person_id, reply, failText(IM_TEXT.timeout, pick.workspace_id), {
+        keep: true,
+      })
       // 答案晚到了照样补给他（不阻塞这一跳；补发失败也会记 reply_failed）
       void outcome.then(async (late) => {
         if ('error' in late) {
@@ -862,7 +880,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     }
     if ('error' in first) {
       failed(channel, person_id, reasonOf(first.error), first.error)
-      await say(channel, person_id, reply, failText(IM_TEXT.failed))
+      await say(channel, person_id, reply, failText(IM_TEXT.failed, pick.workspace_id))
       return
     }
     answered(first, false)
@@ -1142,7 +1160,10 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     status,
 
     async deliverCard(person_id, card): Promise<boolean> {
-      const text = renderCardForIm(card, imCardDeepLink(options.deepLinkBase(), card.id))
+      const text = renderCardForIm(
+        card,
+        withBrandParam(imCardDeepLink(options.deepLinkBase(), card.id), options.workspace_id),
+      )
       const adapter = wechat.get(person_id)
       if (adapter !== undefined) {
         const fields = wechatBinding(person_id)

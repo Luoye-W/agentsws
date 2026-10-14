@@ -58,6 +58,7 @@ Setup guides: [Feishu](help:im-feishu), [DingTalk](help:im-dingtalk).
 - **Questions about a position's work** (name the position, e.g. "Anything Reddit Ops needs from me today?"): that position's AI answers in one line — cards waiting for you, to-dos, what it's working on — with a "Handle it in the workbench" link. Work questions that don't name a position go to your main position.
 - **Handing over a job** ("reply to this email for me"): it's logged as a task in that position and you get "Logged as a task — confirm it in the workbench". Nothing is sent from the chat.
 - **Small talk, your schedule, colleagues**: still answered by your personal agent.
+- **Links open in their own brand**: if the workbench is on another brand, the link switches over first; if you can't open that brand, you stay put and are told why.
 
 ## FAQ
 

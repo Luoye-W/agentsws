@@ -2763,6 +2763,9 @@ const zh: Table = {
     '换一个品牌 = 整个工作台换一套：首页、岗位、连接、知识、设置。两边的数据互相看不见。',
   'brand.switch.manage': '管理品牌…',
   'brand.switch.failed': '切不过去：你可能不在这个品牌里。',
+  // WP311（决策 507）：IM 里带品牌的链接，打开时自动切品牌；切不过去照实说一句
+  'brand.link.missing': '链接里的品牌你进不去（不存在或没有权限），先留在「{brand}」。',
+  'brand.link.failed': '没切到链接里的品牌，再点一次链接试试。',
   // WP215：每个品牌一套后台——切换器与「品牌一览」那一格的 tooltip（36 §7 第四档）
   'brand.bg.label': '后台',
   'brand.bg.running': '后台在跑 · {n} 条定时任务',
@@ -6754,6 +6757,10 @@ const en: Table = {
     'Switching swaps the whole workstation: home, positions, connections, knowledge, settings. Neither side can see the other brand\u2019s data.',
   'brand.switch.manage': 'Manage brands…',
   'brand.switch.failed': 'Could not switch: you may not be in that brand.',
+  // WP311 (decision 507): IM links carry the brand; opening one switches brands first
+  'brand.link.missing':
+    'You can\u2019t open the brand in that link (it doesn\u2019t exist or you have no access). Staying in \u201c{brand}\u201d.',
+  'brand.link.failed': 'Couldn\u2019t switch to the brand in that link. Try the link again.',
   // WP215: every brand runs its own background — tooltip on the switcher / brand list (doc 36 §7 tier 4)
   'brand.bg.label': 'Background',
   'brand.bg.running': 'Background running · {n} scheduled tasks',

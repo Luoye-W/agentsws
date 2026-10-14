@@ -37,6 +37,7 @@ import { isTaskBrief, splitAnswer, taskTextOf } from '@agentsws/contracts'
 import { isQueueCard, isRouteChoiceItem } from '@agentsws/deck'
 import {
   bundledPositionIcon,
+  classifyEntryIntent,
   classifyEntryKind,
   type EntryClassifyComplete,
   type EntryKind,
@@ -83,6 +84,8 @@ const POSITION_ERROR = (
 export const taskLine = (role_name: string): string => `记成了任务，按「${role_name}」做`
 /** WP287：问的那一句答的时候要动手（出了卡），转成任务时线程里那一句。 */
 export const PROMOTED_LINE = '这件事要动手，转成了任务，在岗位「工作」里看进展'
+/** WP311（决策 390）：只读问题「当成任务做」——用上面的回答，不重跑。 */
+export const PROMOTED_AS_IS_LINE = '转成了任务，用的是上面这段回答，在岗位「工作」里跟进'
 
 /** 还等着人定的卡（与工作台面同一个口径）。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
@@ -936,12 +939,17 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     if (matter === undefined || !matter.context.participants.includes(person_id))
       throw POSITION_ERROR('not_found', `没有这个事项：${matter_id}`)
     const was = matter.ask
+    /*
+     * WP311（决策 390）：当场答过的只读问题，「当成任务做」直接把已有回答转成事项、不重跑
+     * （以前重跑一遍，事项里同一段回答出现两次）；原话要动手的、或当场那次没答成的才重跑。
+     */
+    const reuse = opts?.run === true && was?.quick === true && answeredReadOnly(matter)
     const next = work.promoteAsk(matter_id, {
-      text: '转成了任务，在岗位「工作」里跟进',
+      text: reuse ? PROMOTED_AS_IS_LINE : '转成了任务，在岗位「工作」里跟进',
       actor: { kind: 'person', id: person_id },
     })
     // WP291：「当成任务做」——按原话当任务再跑一次（当场问答那一次只查只答）
-    if (opts?.run !== true || was === undefined) return { matter: next }
+    if (opts?.run !== true || was === undefined || reuse) return { matter: next }
     const own =
       next.position_id === undefined
         ? undefined
@@ -957,6 +965,19 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       matter: work.getMatter(matter_id) ?? next,
       ...(ran.run_id === undefined ? {} : { run_id: ran.run_id }),
     }
+  }
+
+  /**
+   * WP311（决策 390）：这件当场问答是不是「只读、而且答成了」——原话按 WP287 规则不是交办
+   * （没有要动手的词、不是一大段需求），时间线上有回答、没有失败 / 停下。
+   */
+  const answeredReadOnly = (matter: Matter): boolean => {
+    if (classifyEntryIntent(briefOf(matter)).intent === 'task') return false
+    const events = work.store.listMatterEvents(matter.id, { limit: 500 })
+    if (events.some((e) => e.failed !== undefined)) return false
+    if (events.some((e) => e.run_digest !== undefined && e.run_digest.outcome !== 'completed'))
+      return false
+    return events.some((e) => e.kind === 'agent_message' && e.text.trim() !== '')
   }
 
   /** WP291：「接着聊」——当场问答变成一段会话。只有参与者能转。 */

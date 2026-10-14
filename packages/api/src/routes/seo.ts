@@ -8,6 +8,8 @@
  *   带出处）；闸走**知识库**那一套（读 = knowledge.read，改 = knowledge.stage，工作区范围），
  *   因为这张表就放在知识库里——实现落在内容与搜索那一层（它管质检）。
  * - `GET / PUT /v1/seo/google-sources`（WP158）：Search Console 选哪个站点、GA4 选哪个媒体资源。
+ * - WP310 `GET /v1/seo/geo-history/export`、`POST /v1/seo/geo-history/delete`：GEO / 排名历史
+ *   （回答全文、引用、判定、周数据）导出成 JSON / CSV、按品牌或按时间段删（决策 473）。
  *
  * 闸：`content` 域（`dtc.content` 的 scopes 里有 read / stage）。别的职责进不来，
  * 路由里一行 if 都不用写（同 `pr.ts` 文件头第 1 条）。判断与出卡全在服务端的
@@ -18,6 +20,9 @@ import type {
   ClaimMarketGroup,
   ClaimRulesView,
   GeoCostEstimate,
+  GeoHistoryDeleteInput,
+  GeoHistoryDeleteResult,
+  GeoHistoryExport,
   GeoQuestion,
   GeoSettings,
   MaybePromise,
@@ -127,6 +132,16 @@ export interface SeoPort {
     actor: SeoActor,
     input: { gsc_site?: string | undefined; ga4_property?: string | undefined },
   ): MaybePromise<GoogleSourcesView>
+  /** WP310（决策 473）：导出这个品牌的 GEO / 排名历史（没装 = 501）。 */
+  geoHistoryExport?(
+    actor: SeoActor,
+    input: { format: 'json' | 'csv'; from?: string | undefined; to?: string | undefined },
+  ): MaybePromise<GeoHistoryExport>
+  /** WP310（决策 473）：删历史——按品牌（全部，可连设置）/ 按时间段 `[from, to)`。 */
+  geoHistoryDelete?(
+    actor: SeoActor,
+    input: GeoHistoryDeleteInput,
+  ): MaybePromise<GeoHistoryDeleteResult>
 }
 
 /** WP159：改规则表（三件事一次给一件就行）。 */
@@ -229,6 +244,42 @@ const QuestionsBody = z.object({
 
 const RunBody = z.object({ what: z.enum(['daily', 'weekly']) })
 
+const IsoTime = z.string().datetime({ offset: true })
+const GeoHistoryDeleteBody = z
+  .object({
+    scope: z.enum(['brand', 'range']),
+    from: IsoTime.optional(),
+    to: IsoTime.optional(),
+    include_settings: z.boolean().optional(),
+  })
+  .refine((b) => b.scope === 'brand' || b.from !== undefined || b.to !== undefined, {
+    message: '按时间段删要给 from 或 to',
+  })
+
+function geoHistoryPortOf(
+  deps: GatewayDeps,
+): Required<Pick<SeoPort, 'geoHistoryExport' | 'geoHistoryDelete'>> {
+  const p = portOf(deps)
+  if (p.geoHistoryExport === undefined || p.geoHistoryDelete === undefined)
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配 GEO 历史那一层（SeoPort.geoHistory*）。',
+    )
+  return {
+    geoHistoryExport: p.geoHistoryExport.bind(p),
+    geoHistoryDelete: p.geoHistoryDelete.bind(p),
+  }
+}
+
+/** 查询串里的时刻（不合法就 400）。 */
+function isoParam(c: Parameters<typeof principalOf>[0], name: string): string | undefined {
+  const v = c.req.query(name)
+  if (v === undefined || v === '') return undefined
+  if (!IsoTime.safeParse(v).success)
+    throw new ApiError('invalid_input', `${name} 要是带时区的 ISO 时刻（如 2026-10-01T00:00:00Z）`)
+  return v
+}
+
 const GoogleSourcesBody = z.object({
   gsc_site: z.string().min(1).max(300).optional(),
   ga4_property: z.string().min(1).max(40).optional(),
@@ -293,6 +344,69 @@ export function seoRoutes(): Route[] {
         returns: 'SeoRunView',
       },
       async (c, deps) => ok(c, await portOf(deps).run(actorOf(c), (await body(c, RunBody)).what)),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/geo-history/export',
+        operationId: 'exportGeoHistory',
+        summary:
+          'WP310：导出这个品牌的 AI 回答监测与排名历史（回答全文、引用、判定、排名、品牌词周数据）——JSON 一份或 CSV 每张表一份',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        params: [
+          { name: 'format', in: 'query', description: 'json | csv，默认 json' },
+          { name: 'from', in: 'query', description: '从这个时刻起（含），ISO 时刻' },
+          { name: 'to', in: 'query', description: '到这个时刻止（不含），ISO 时刻' },
+        ],
+        returns: 'GeoHistoryExport',
+      },
+      async (c, deps) => {
+        const format = c.req.query('format') ?? 'json'
+        if (format !== 'json' && format !== 'csv')
+          throw new ApiError('invalid_input', 'format 只能是 json / csv')
+        const from = isoParam(c, 'from')
+        const to = isoParam(c, 'to')
+        return ok(
+          c,
+          await geoHistoryPortOf(deps).geoHistoryExport(actorOf(c), {
+            format,
+            ...(from === undefined ? {} : { from }),
+            ...(to === undefined ? {} : { to }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/geo-history/delete',
+        operationId: 'deleteGeoHistory',
+        summary:
+          'WP310：删这个品牌的 AI 回答监测与排名历史——按品牌（全部，可连关注设置一起）或按时间段 [from, to)',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: GeoHistoryDeleteBody,
+        returns: 'GeoHistoryDeleteResult',
+      },
+      async (c, deps) => {
+        const input = await body(c, GeoHistoryDeleteBody)
+        return ok(
+          c,
+          await geoHistoryPortOf(deps).geoHistoryDelete(actorOf(c), {
+            scope: input.scope,
+            ...(input.from === undefined ? {} : { from: input.from }),
+            ...(input.to === undefined ? {} : { to: input.to }),
+            ...(input.include_settings === undefined
+              ? {}
+              : { include_settings: input.include_settings }),
+          }),
+        )
+      },
     ),
     route(
       {

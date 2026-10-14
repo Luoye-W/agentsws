@@ -6,13 +6,22 @@
  * | SERP（Google / Bing） | `/v3/serp/{google,bing}/organic/live/advanced`，Google 带 `load_async_ai_overview` |
  * | AI 概览 | 同 Google SERP，取 `ai_overview` 那一项 |
  * | ChatGPT / Gemini | `/v3/ai_optimization/{chat_gpt,gemini}/llm_scraper/live/advanced`（网页端真看到的回答） |
+ * | Claude（WP310，决策 461） | `/v3/ai_optimization/claude/llm_responses/live`（模型接口 + **强制联网**，`claude-sonnet-5`，输出上限 1024）——claude.ai 网页端谁都抓不了 |
  * | Perplexity | `/v3/ai_optimization/perplexity/llm_responses/live`（sonar 模型 API + 联网搜索）。**WP159 起登记为不用**：代码留着，不进 `platforms` |
  * | Copilot | **没有**（docs/81 §1.1）；不列进 `platforms` |
+ *
+ * WP310：回答**全文**与**结构化引用**（网址 / 标题 / 摘要 / 在正文里还是只列在来源里）原样带回，
+ * 不再只留节选与网址（docs/99 §5.5）；判断仍在 `judgeAnswer` / `analyzeAnswer`。
  *
  * 鉴权：HTTP Basic，key 就是 `login:password` 这一串。形状照官方文档示例（出处见 docs/81 §3），
  * 替身响应在 `test/fixtures/search/dataforseo-*.json`。
  */
 import type { SerpItem, SerpQuery } from '@agentsws/contracts'
+import {
+  AI_ANSWER_MODEL_WEB,
+  CLAUDE_GEO_MAX_OUTPUT_TOKENS,
+  CLAUDE_GEO_MODEL,
+} from '@agentsws/contracts'
 import { domainOf, SearchDataError, uniqueUrls } from '../analyze.js'
 import {
   AI_ANSWER_TIMEOUT_MS,
@@ -21,6 +30,7 @@ import {
   callProvider,
   obj,
   type ProviderAnswer,
+  type ProviderCitation,
   type ProviderSerp,
   renumber,
   SERP_TIMEOUT_MS,
@@ -111,19 +121,62 @@ async function post(
   )
 }
 
-/** `ai_overview` 那一项 → 文字 + 引用（元素级与整块顶层的 references 都收）。 */
+/** 一条来源 → 结构化引用（各家字段名：title / snippet / text / description）。 */
+function citationOf(
+  el: Record<string, unknown>,
+  where: ProviderCitation['where'],
+  url = str(el.url),
+): ProviderCitation | undefined {
+  if (url === undefined) return undefined
+  const title = str(el.title) ?? str(el.source_name) ?? str(el.source)
+  const snippet = str(el.snippet) ?? str(el.text) ?? str(el.description)
+  return {
+    url,
+    ...(title === undefined ? {} : { title }),
+    ...(snippet === undefined || /^[.\s…]*$/u.test(snippet) ? {} : { snippet }),
+    where,
+  }
+}
+
+const present = <T>(x: T | undefined): x is T => x !== undefined
+
+/** 占位的 markdown（文档示例里是 "..."）不当全文。 */
+const realMarkdown = (v: unknown): string | undefined => {
+  const m = str(v)
+  return m === undefined || /^[.\s…]*$/u.test(m) ? undefined : m
+}
+
+/**
+ * `ai_overview` 那一项 → 文字 + 引用（元素级与整块顶层的 references 都收）。
+ * WP310：元素里的链接与引用算「正文里引用的」，整块顶层的算「列在来源里」；带全文与结构化引用。
+ */
 export function aiOverviewOf(item: Record<string, unknown>): ProviderAnswer | undefined {
   const parts: string[] = []
   const urls: (string | undefined)[] = []
+  const citations: (ProviderCitation | undefined)[] = []
   for (const el of arr(item.items).map(obj)) {
     const text = str(el.text) ?? str(el.markdown)
     if (text !== undefined) parts.push(text)
-    for (const r of arr(el.references).map(obj)) urls.push(str(r.url))
+    for (const r of arr(el.references).map(obj)) {
+      urls.push(str(r.url))
+      citations.push(citationOf(r, 'inline'))
+    }
+    for (const l of arr(el.links).map(obj)) citations.push(citationOf(l, 'inline'))
   }
-  for (const r of arr(item.references).map(obj)) urls.push(str(r.url))
+  for (const r of arr(item.references).map(obj)) {
+    urls.push(str(r.url))
+    citations.push(citationOf(r, 'listed'))
+  }
   const text = parts.length > 0 ? parts.join('\n') : (str(item.markdown) ?? '')
   if (text.trim() === '') return undefined
-  return { text, cited_urls: uniqueUrls(urls) }
+  return {
+    text,
+    cited_urls: uniqueUrls(urls),
+    markdown: realMarkdown(item.markdown) ?? text,
+    citations: citations.filter(present),
+    model: AI_ANSWER_MODEL_WEB,
+    via: 'serp',
+  }
 }
 
 /** 一页结果 → 契约的 items / AI 概览 / 大家还在问。 */
@@ -180,35 +233,76 @@ export function parseDataForSeoSerp(result: Record<string, unknown> | undefined)
   }
 }
 
-/** LLM Scraper（ChatGPT / Gemini）→ 回答 + 引用。 */
+/**
+ * LLM Scraper（ChatGPT / Gemini，网页端真看到的回答）→ 回答 + 引用。
+ * WP310：全文 markdown；正文段落里的来源 = `inline`，回答下面列的 `sources` = `listed`，
+ * ChatGPT 搜到却没用上的 `search_results` = `searched`；模型名回包里有就带（没有写 `web`）。
+ */
 export function parseLlmScraper(result: Record<string, unknown> | undefined): ProviderAnswer {
   if (result === undefined) return { text: '', cited_urls: [] }
   const urls: (string | undefined)[] = []
-  for (const s of arr(result.sources).map(obj)) urls.push(str(s.url))
-  for (const s of arr(result.search_results).map(obj)) urls.push(str(s.url))
+  const inline: (ProviderCitation | undefined)[] = []
+  const listed: (ProviderCitation | undefined)[] = []
+  const searched: (ProviderCitation | undefined)[] = []
+  for (const s of arr(result.sources).map(obj)) {
+    urls.push(str(s.url))
+    listed.push(citationOf(s, 'listed'))
+  }
+  for (const s of arr(result.search_results).map(obj)) {
+    urls.push(str(s.url))
+    searched.push(citationOf(s, 'searched'))
+  }
   const fromItems: string[] = []
   for (const it of arr(result.items).map(obj)) {
-    const t = str(it.markdown) ?? str(it.original_text)
+    const t = str(it.markdown) ?? str(it.original_text) ?? str(it.text)
     if (t !== undefined) fromItems.push(t)
-    for (const s of arr(it.sources).map(obj)) urls.push(str(s.url))
+    for (const s of arr(it.sources).map(obj)) {
+      urls.push(str(s.url))
+      inline.push(citationOf(s, 'inline'))
+    }
   }
-  return { text: str(result.markdown) ?? fromItems.join('\n'), cited_urls: uniqueUrls(urls) }
+  const text = str(result.markdown) ?? fromItems.join('\n')
+  return {
+    text,
+    cited_urls: uniqueUrls(urls),
+    ...(text === '' ? {} : { markdown: text }),
+    citations: [...inline, ...listed, ...searched].filter(present),
+    model: str(result.model) ?? AI_ANSWER_MODEL_WEB,
+    via: 'web_ui',
+  }
 }
 
-/** LLM Responses（Perplexity）→ 回答 + 引用（Gemini 那一家的真网址在 `direct_url`，一起认）。 */
+/**
+ * LLM Responses（Claude / Perplexity，模型接口 + 联网）→ 回答 + 引用（Gemini 那一家的真网址在
+ * `direct_url`，一起认）。WP310：标注都算 `inline`（模型接口只给正文里的标注），带标题与模型名。
+ */
 export function parseLlmResponses(result: Record<string, unknown> | undefined): ProviderAnswer {
   if (result === undefined) return { text: '', cited_urls: [] }
   const parts: string[] = []
   const urls: (string | undefined)[] = []
+  const citations: (ProviderCitation | undefined)[] = []
   for (const it of arr(result.items).map(obj)) {
     if (it.type !== 'message') continue
     for (const sec of arr(it.sections).map(obj)) {
       const t = str(sec.text)
       if (t !== undefined) parts.push(t)
-      for (const a of arr(sec.annotations).map(obj)) urls.push(str(a.direct_url) ?? str(a.url))
+      for (const a of arr(sec.annotations).map(obj)) {
+        const url = str(a.direct_url) ?? str(a.url)
+        urls.push(url)
+        citations.push(citationOf(a, 'inline', url))
+      }
     }
   }
-  return { text: parts.join('\n'), cited_urls: uniqueUrls(urls) }
+  const text = parts.join('\n')
+  const model = str(result.model_name)
+  return {
+    text,
+    cited_urls: uniqueUrls(urls),
+    ...(text === '' ? {} : { markdown: text }),
+    citations: citations.filter(present),
+    ...(model === undefined ? {} : { model }),
+    via: 'model_api',
+  }
 }
 
 function serpTask(q: SerpQuery): Record<string, unknown> {
@@ -227,7 +321,8 @@ export const dataforseo: SearchProviderAdapter = {
   id: 'dataforseo',
   engines: ['google', 'bing'],
   // WP159（Luoye 09-27）：Perplexity 不再考虑——下面 `case 'perplexity'` 的代码留着，登记为不用
-  platforms: ['chatgpt', 'gemini', 'google_ai_overview'],
+  // WP310（决策 460 / 461）：加 Claude（模型接口 + 强制联网；自带 key 那档也能用）
+  platforms: ['chatgpt', 'gemini', 'google_ai_overview', 'claude'],
   unused_platforms: ['perplexity'],
   async serp(q, key, fetch) {
     const body = await post(
@@ -256,6 +351,25 @@ export const dataforseo: SearchProviderAdapter = {
           AI_ANSWER_TIMEOUT_MS,
         )
         return parseLlmScraper(taskOf(body).result)
+      }
+      case 'claude': {
+        // 决策 461：`web_search: true` 只是「允许」，模型常常不搜、于是没有引用——一定加 `force_web_search`
+        // （借 open-seo）；输出上限 1024（省钱，回答够判提及与引用）
+        const body = await post(
+          '/ai_optimization/claude/llm_responses/live',
+          {
+            user_prompt: input.question.slice(0, 500),
+            model_name: CLAUDE_GEO_MODEL,
+            web_search: true,
+            force_web_search: true,
+            web_search_country_iso_code: input.country.toUpperCase(),
+            max_output_tokens: CLAUDE_GEO_MAX_OUTPUT_TOKENS,
+          },
+          key,
+          fetch,
+          AI_ANSWER_TIMEOUT_MS,
+        )
+        return parseLlmResponses(taskOf(body).result)
       }
       case 'perplexity': {
         const body = await post(
