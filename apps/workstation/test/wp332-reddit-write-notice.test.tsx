@@ -10,20 +10,23 @@ import { renderWithProviders } from './helpers'
 
 const at = (): string => new Date(Date.now() - 60_000).toISOString()
 
-const row = (over: Partial<RedditWriteView> = {}): RedditWriteView => ({
-  approval_item_id: 'ap_1',
-  job_id: 'rdw_1',
-  kind: 'reply',
-  subreddit: 'inmoxr',
-  state: 'failed',
-  message: '你点了停止，已停下。',
-  outcome: 'stopped',
-  can_refill: true,
-  label: '回复 alice（Reddit · r/inmoxr）',
-  queued_at: at(),
-  finished_at: at(),
-  ...over,
-})
+const row = (
+  over: { [K in keyof RedditWriteView]?: RedditWriteView[K] | undefined } = {},
+): RedditWriteView =>
+  ({
+    approval_item_id: 'ap_1',
+    job_id: 'rdw_1',
+    kind: 'reply',
+    subreddit: 'inmoxr',
+    state: 'failed',
+    message: '你点了停止，已停下。',
+    outcome: 'stopped',
+    can_refill: true,
+    label: '回复 alice（Reddit · r/inmoxr）',
+    queued_at: at(),
+    finished_at: at(),
+    ...over,
+  }) as RedditWriteView
 
 const state = {
   rows: [] as RedditWriteView[],
