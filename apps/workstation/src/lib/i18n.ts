@@ -20,6 +20,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
@@ -8276,6 +8277,8 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
+    // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
+    ...REDDIT_WRITE_ZH,
   },
   en: {
     ...en,
@@ -8301,6 +8304,7 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_EN,
     ...PEERS_EN,
     ...COMPANY_EN,
+    ...REDDIT_WRITE_EN,
   },
 }
 

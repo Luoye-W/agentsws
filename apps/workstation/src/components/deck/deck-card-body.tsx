@@ -16,6 +16,7 @@ import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
+import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
@@ -616,6 +617,8 @@ export function DeckCardBody({
 
       // ① 出站文案（也是兜底）
       default:
+        // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
+        if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
         return (
           <div data-testid="deck-layout-outbound">
             <OutboundBody card={card} mode={mode} />
