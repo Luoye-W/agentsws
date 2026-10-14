@@ -6,6 +6,7 @@
  */
 
 import type { DomOpResult } from '@agentsws/browser-action'
+import { waitForActionClick } from './capture-grant'
 import type { AdsDomRequest, AdsDomResponse, BannerState } from './dom-messages'
 import type { DownloadDone, TabDriver, TabFacts } from './tab-page'
 
@@ -46,6 +47,9 @@ export function chromeTabDriver(tabId: number): TabDriver {
     },
     capture(windowId) {
       return chrome.tabs.captureVisibleTab(windowId, { format: 'png' })
+    },
+    waitCaptureGrant(timeoutMs) {
+      return waitForActionClick(tabId, timeoutMs)
     },
     downloadsAllowed() {
       return chrome.permissions.contains({ permissions: ['downloads'] })

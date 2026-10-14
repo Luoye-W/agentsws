@@ -207,3 +207,29 @@ h1 {
   margin: 8px 0 0;
   padding-left: 18px;
 }
+
+/* WP313：设置页「广告后台」一节 */
+.ws-ads li {
+  align-items: center;
+}
+
+.ws-ads li > span:first-child {
+  flex: 1;
+}
+
+.ws-ads .ws-btn {
+  padding: 6px 12px;
+}
+
+.ws-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-check input {
+  margin-top: 3px;
+}

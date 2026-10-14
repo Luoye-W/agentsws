@@ -59,6 +59,7 @@ export async function executeJob(job: ActionJob, deps: ExecutorDeps): Promise<Ac
     driver: deps.driver,
     hosts: job.plan.allow.hosts,
     bannerState: () => banner,
+    stopped: () => deps.control.stop,
   })
   const setBanner = async (next: BannerState | null): Promise<void> => {
     banner = next

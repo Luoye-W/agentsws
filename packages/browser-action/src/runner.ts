@@ -188,6 +188,8 @@ export async function runAction(
           step.timeout_ms ?? hooks.waitTimeoutMs ?? DEFAULT_WAIT_MS,
         )
         if (ok) return undefined
+        const halted = stoppedMeanwhile()
+        if (halted !== undefined) return halted
         const stop = await pageCheck()
         return (
           stop ??
@@ -203,13 +205,13 @@ export async function runAction(
       }
       case 'capture': {
         const shot = await page.capture()
-        if (!shot.ok) return end('handover', shot.why)
+        if (!shot.ok) return stoppedMeanwhile() ?? end('handover', shot.why)
         await hooks.evidence(step.tag, shot.png_base64, await page.url())
         return undefined
       }
       case 'download': {
         const got = await page.download(step.selector)
-        if (!got.ok) return end('handover', got.why)
+        if (!got.ok) return stoppedMeanwhile() ?? end('handover', got.why)
         await hooks.downloaded(step.tag, {
           path: got.path,
           name: got.name,
@@ -243,6 +245,11 @@ export async function runAction(
 
   function fromDom(out: DomOpResult): ActionResult | undefined {
     return out.ok ? undefined : end('handover', out.why)
+  }
+
+  /** 等的时候（等页面 / 等授权截图 / 等下载）用户点了停止：算「停了」，不算「交给人」。 */
+  function stoppedMeanwhile(): ActionResult | undefined {
+    return hooks.stopped() ? end('stopped', '你点了停止，已停下。') : undefined
   }
 
   async function sheetChecked(): Promise<SheetFile | ActionResult> {

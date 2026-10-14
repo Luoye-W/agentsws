@@ -46,6 +46,11 @@ export interface TabDriver {
   banner(state: BannerState | null): Promise<void>
   /** `captureVisibleTab`：回 data URL。没权限会抛。 */
   capture(windowId: number): Promise<string>
+  /**
+   * 截不到时等用户点一下工具栏上的插件图标（点了 = 这个标签页拿到 activeTab）。
+   * 没有这一项就不等，直接照实说截不到。
+   */
+  waitCaptureGrant?(timeoutMs: number): Promise<boolean>
   downloadsAllowed(): Promise<boolean>
   /** 先开始盯下载，再调 `click`，等它下完。 */
   watchDownload(
@@ -58,6 +63,11 @@ export interface TabDriver {
 const LOAD_TIMEOUT_MS = 60_000
 const POLL_MS = 250
 const DOWNLOAD_TIMEOUT_MS = 120_000
+/** 等用户点插件图标授权截图最多等多久。 */
+export const CAPTURE_GRANT_WAIT_MS = 10 * 60 * 1000
+const GRANT_SLICE_MS = 2_000
+export const ASK_GRANT = '点右上角插件图标，允许截图'
+const NO_CAPTURE = '截图没被浏览器允许（要点一下右上角的插件图标）。已停下，没往下做。'
 
 export interface TabPageOptions {
   driver: TabDriver
@@ -65,6 +75,8 @@ export interface TabPageOptions {
   hosts: readonly string[]
   /** 横条当前的样子（截图后恢复用）。 */
   bannerState(): BannerState | null
+  /** 用户点了停止没有（等页面 / 等授权的时候也要停得住）。 */
+  stopped?(): boolean
 }
 
 export class TabPage implements ActionPage {
@@ -105,7 +117,7 @@ export class TabPage implements ActionPage {
   async waitFor(selector: string, timeoutMs: number): Promise<boolean> {
     for (let waited = 0; ; waited += POLL_MS) {
       if ((await this.count(selector)) > 0) return true
-      if (waited >= timeoutMs) return false
+      if (waited >= timeoutMs || this.o.stopped?.() === true) return false
       await this.o.driver.sleep(POLL_MS)
     }
   }
@@ -158,19 +170,36 @@ export class TabPage implements ActionPage {
     if (!hostMatches(hostOfUrl(f.url), this.o.hosts))
       return { ok: false, why: '当前页面不在广告后台，不截。' }
     if (!f.active) await d.activate()
+    const first = await this.shoot(f.windowId)
+    if (first !== undefined || d.waitCaptureGrant === undefined)
+      return first === undefined ? { ok: false, why: NO_CAPTURE } : { ok: true, png_base64: first }
+    // 截不到：请用户点一下插件图标（给这个标签页 activeTab），点了再截一次
+    const state = this.o.bannerState()
+    if (state !== null) await d.banner({ ...state, label: ASK_GRANT })
+    // 一小段一小段地等：中间点了停止要停得住
+    let granted = false
+    for (let waited = 0; waited < CAPTURE_GRANT_WAIT_MS && !granted; waited += GRANT_SLICE_MS) {
+      if (this.o.stopped?.() === true) break
+      granted = await d.waitCaptureGrant(GRANT_SLICE_MS)
+    }
+    await d.banner(state)
+    if (!granted) return { ok: false, why: NO_CAPTURE }
+    const second = await this.shoot(f.windowId)
+    return second === undefined ? { ok: false, why: NO_CAPTURE } : { ok: true, png_base64: second }
+  }
+
+  /** 截一张（截的时候横条先藏起来）。截不到回 `undefined`。 */
+  private async shoot(windowId: number): Promise<string | undefined> {
+    const d = this.o.driver
     const state = this.o.bannerState()
     await d.banner(state === null ? null : { ...state, hidden: true })
     try {
-      const dataUrl = await d.capture(f.windowId)
+      const dataUrl = await d.capture(windowId)
       const b64 = dataUrl.replace(/^data:image\/png;base64,/u, '')
-      // 解得开才算截到了
       base64ToBytes(b64)
-      return { ok: true, png_base64: b64 }
+      return b64
     } catch {
-      return {
-        ok: false,
-        why: '截图没被浏览器允许。点一下浏览器右上角的插件图标授权截图，再让它接着做。',
-      }
+      return undefined
     } finally {
       await d.banner(state)
     }

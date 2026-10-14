@@ -12,7 +12,7 @@ import { ADS_CONSENT_TEXT_VERSION } from '../src/lib/ads/broker'
 import { executeJob, type RunControl } from '../src/lib/ads/executor'
 import { connectedPlatforms, type PermissionsLike, removeAds } from '../src/lib/ads/permissions'
 import { pollAdsOnce, readAdsStatus } from '../src/lib/ads/poller'
-import { TabPage } from '../src/lib/ads/tab-page'
+import { ASK_GRANT, TabPage } from '../src/lib/ads/tab-page'
 import { memoryStore, SETTINGS_KEY } from '../src/lib/storage'
 import { FakeTab, fakeLocal } from './ads-fakes'
 
@@ -127,6 +127,40 @@ describe('标签页那只手', () => {
     expect(denied).toMatchObject({ ok: false, why: expect.stringContaining('插件图标') })
     tab.load('https://evil.example.com/')
     expect(await page.capture()).toMatchObject({ ok: false })
+  })
+
+  it('截不到时请人点插件图标（activeTab）；点了再截一次；等的时候点停止停得住', async () => {
+    const tab = new FakeTab()
+    tab.captureThrows = true
+    const driver = tab.driver()
+    driver.waitCaptureGrant = async () => {
+      tab.captureThrows = false
+      return true
+    }
+    const page = new TabPage({
+      driver,
+      hosts: ['ads.google.com'],
+      bannerState: () => ({ title: 't', step: 1, of: 2, label: '截图' }),
+    })
+    expect((await page.capture()).ok).toBe(true)
+    expect(tab.banners.some((b) => b?.label === ASK_GRANT)).toBe(true)
+
+    const stuck = new FakeTab()
+    stuck.captureThrows = true
+    const d2 = stuck.driver()
+    let asked = 0
+    d2.waitCaptureGrant = async () => {
+      asked += 1
+      return false
+    }
+    const stopped = new TabPage({
+      driver: d2,
+      hosts: ['ads.google.com'],
+      bannerState: () => null,
+      stopped: () => asked >= 2,
+    })
+    expect((await stopped.capture()).ok).toBe(false)
+    expect(asked).toBe(2)
   })
 
   it('下载：没有下载权限照实说', async () => {

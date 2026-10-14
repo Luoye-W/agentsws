@@ -14,6 +14,7 @@
 
 import { defineBackground } from 'wxt/utils/define-background'
 import { adsPanelStatus, recordAdsConsent } from '@/lib/ads/broker'
+import { noteActionClick } from '@/lib/ads/capture-grant'
 import type { RunControl } from '@/lib/ads/executor'
 import { openAdsTab } from '@/lib/ads/open-tab'
 import { chromePermissions } from '@/lib/ads/permissions'
@@ -62,6 +63,8 @@ export default defineBackground(() => {
   // 工具栏图标：没有 popup，按一下是让页面上那块面板开 / 关。
   chrome.action.onClicked.addListener((tab) => {
     if (tab.id === undefined) return
+    // WP313：执行器正在这个标签页上等截图授权——这一下点击就是授权（activeTab），不开红人面板
+    if (noteActionClick(tab.id)) return
     chrome.tabs.sendMessage(tab.id, { type: 'toggle-panel' }).catch(() => {
       // 不是三个平台的页面 = 没有 content script 在听。静默。
     })

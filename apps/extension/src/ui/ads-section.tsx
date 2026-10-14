@@ -82,7 +82,7 @@ export function AdsSection(props: { paired: boolean }): React.ReactNode {
   return (
     <section className="ws-card" data-testid="ws-ads">
       <h2>广告后台</h2>
-      <ul className="ws-facts">
+      <ul className="ws-facts ws-ads">
         {ADS_PLATFORMS.map((p) => {
           const on = ads?.connected[p] === true
           const waitingConsent = on && ads?.needs_consent?.includes(p) === true
@@ -115,7 +115,7 @@ export function AdsSection(props: { paired: boolean }): React.ReactNode {
           )
         })}
       </ul>
-      <label className="ws-row">
+      <label className="ws-check">
         <input
           type="checkbox"
           checked={agreed}
