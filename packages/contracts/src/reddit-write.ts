@@ -132,6 +132,40 @@ export interface RedditWriteView {
   record_id?: string
   queued_at: Iso8601
   finished_at?: Iso8601
+  /** WP332：卡上那一行（「回复 alice（Reddit · r/inmoxr）」）；岗位页提醒条用它说是哪一条。 */
+  label?: string
+  /** WP332：没发出去的那一类（`handover` 停下交给人 / `stopped` 点了停止 / `expired` 没人来领 / `failed`…）。 */
+  outcome?: string
+  /** WP332（决策 762）：能「再填一次」（同一份已批的草稿再交给插件，不用重批）。 */
+  can_refill?: boolean
+  /** WP332：再填过几次。 */
+  refills?: number
+  /** WP332：人看过、收起了提醒（再填一次之后又没发出去会重新出）。 */
+  dismissed?: boolean
+}
+
+/** WP332：没发出去的提醒在岗位页留多久（天）；更早的进度里还在，不再占一行。 */
+export const REDDIT_WRITE_NOTICE_DAYS = 7
+
+/**
+ * WP332（决策 762，docs/96 出现规则）：岗位页「没发出去」提醒条该出哪几条——
+ * 只出**没发出去、没收起、最近 {@link REDDIT_WRITE_NOTICE_DAYS} 天内**的；同一条写只一行（按 `job` 那一条算，
+ * 再填一次不另起一行）。正常（排着 / 填好等你点 / 发出去了）一条都不出。
+ */
+export function redditWriteNotices(
+  rows: readonly RedditWriteView[],
+  now: Iso8601,
+): RedditWriteView[] {
+  const nowMs = Date.parse(now)
+  const seen = new Set<string>()
+  return rows.filter((r) => {
+    if (r.state !== 'failed' || r.dismissed === true) return false
+    const at = Date.parse(r.finished_at ?? r.queued_at)
+    if (Number.isFinite(at) && nowMs - at > REDDIT_WRITE_NOTICE_DAYS * 86_400_000) return false
+    if (seen.has(r.approval_item_id)) return false
+    seen.add(r.approval_item_id)
+    return true
+  })
 }
 
 /**

@@ -461,6 +461,13 @@ export interface SocialPort {
   redditStage?(actor: SocialActor, input: RedditStageInput): MaybePromise<RedditStageResult>
   /** WP329：最近批过的 Reddit 写做到哪了（排着 / 填好等你点发送 / 发出去了 / 没发出去 + 原因）。 */
   redditWrites?(actor: SocialActor): MaybePromise<{ rows: RedditWriteView[] }>
+  /**
+   * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件，**不用重批**；
+   * 人照样自己点发送。已经发出去 / 还在插件那边 / 没记下草稿的回 `conflict` + 一句人话。
+   */
+  redditRefill?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
+  /** WP332：收起岗位页那一行「没发出去」提醒（人看过了）。 */
+  redditDismiss?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -1277,6 +1284,43 @@ export function socialRoutes(): Route[] {
         returns: '{ rows: RedditWriteView[] }',
       },
       async (c, deps) => ok(c, await need(portOf(deps), 'redditWrites')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/writes/:job_id/refill',
+        operationId: 'refillRedditWrite',
+        summary:
+          'WP332：没发出去的 Reddit 写「再填一次」——同一份已批的草稿原样再交给插件（不出新卡、不用重批），人照样自己点发送',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [
+          { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
+        ],
+        returns: 'RedditWriteView',
+      },
+      async (c, deps) =>
+        ok(c, await need(portOf(deps), 'redditRefill')(actorOf(c), param(c, 'job_id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/writes/:job_id/dismiss',
+        operationId: 'dismissRedditWrite',
+        summary: 'WP332：收起岗位页那一行「没发出去」提醒（人看过了；再填一次又没发出去会重新出）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        params: [
+          { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
+        ],
+        returns: 'RedditWriteView',
+      },
+      async (c, deps) =>
+        ok(c, await need(portOf(deps), 'redditDismiss')(actorOf(c), param(c, 'job_id'))),
     ),
   ]
 }
