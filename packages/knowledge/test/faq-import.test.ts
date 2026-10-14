@@ -11,7 +11,7 @@ import {
   planFaqImport,
   ruleMapping,
 } from '../src/faq-import.js'
-import { createKnowledge } from '../src/index.js'
+import { createKnowledge, downgradeOf, stateWordSkipFor } from '../src/index.js'
 import { readSpreadsheet, type SheetGrid } from '../src/sheet.js'
 import { aftersales } from './fixtures.js'
 import { buildXlsx } from './sheet-fixtures.js'
@@ -266,5 +266,51 @@ describe('WP322 去重与成卡', () => {
     const listed = await k.store.list({ workspace_id: 'ws_t' }, actor)
     expect(listed.map(existingFaqOf).filter((e) => e !== undefined)).toHaveLength(3)
     k.close()
+  })
+})
+
+describe('WP333 决策 700：FAQ 表导入的卡不按金额降', () => {
+  const ctx = {
+    workspace_id: 'ws_t',
+    owner: 'p_owner',
+    by: 'p_up',
+    at: '2026-10-14T00:00:00.000Z',
+    source_ref: 'blob://knowledge/ws_t/abc.xlsx',
+    filename: '小蓝灯FAQ.xlsx',
+  }
+  const propose = async (question: string, answer: string) => {
+    const k = createKnowledge({ workspace_id: 'ws_t' })
+    const card = await k.store.propose(faqCard({ sheet: '售后', row: 2, question, answer }, ctx))
+    k.close()
+    return card
+  }
+
+  it('答案带金额（$ / 元 / USD）还是事实层', async () => {
+    for (const answer of ['满 $50 包邮。', '运费 9.9 元。', 'Orders over USD 50 ship free.']) {
+      const card = await propose('包邮吗？', answer)
+      expect(card.layer, answer).toBe('fact')
+      expect(card.downgraded_from).toBeUndefined()
+      expect(card.as_of).toBeUndefined()
+    }
+  })
+
+  it('订单号、物流状态、库存数照旧降（金额同在也降）', async () => {
+    const cases: [string, string][] = [
+      ['我的单呢？', '订单 #1001 已发货。'],
+      ['到了吗？', 'The package was delivered on Friday.'],
+      ['有货吗？', '库存还有 3 件，$29。'],
+    ]
+    for (const [q, a] of cases) {
+      const card = await propose(q, a)
+      expect(card.layer, a).toBe('historical_case')
+      expect(card.downgraded_from).toBe('fact')
+    }
+  })
+
+  it('别的卡带金额照旧降；跳过只认 FAQ 那一类', () => {
+    expect(downgradeOf('fact', '给客户退了 129 美元')).toBeDefined()
+    expect(stateWordSkipFor('faq')).toEqual(['money'])
+    expect(stateWordSkipFor('policy')).toBeUndefined()
+    expect(downgradeOf('fact', '满 $50 包邮', undefined, ['money'])).toBeUndefined()
   })
 })
