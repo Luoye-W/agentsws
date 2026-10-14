@@ -167,8 +167,23 @@ describe('56 §2 社群组五条（群发永远 L1）', () => {
       expect(role.automation.approve_member?.ceiling, role.id).toBe('L2')
       // 封禁那一档由 guardrail 按 `after.action` 升 L1，职责这一层只写到 L2
       expect(role.automation.moderate?.ceiling, role.id).toBe('L2')
+      // Reddit 那一条永远逐条人批（决策 663 / WP329），别的社群 L2 → L3
+      if (role.id === 'social.reddit') {
+        expect(role.automation.reply_thread?.ceiling, role.id).toBe('L1')
+        expect(role.automation.reply_thread?.hard_ceiling, role.id).toBe(true)
+        continue
+      }
       expect(role.automation.reply_thread?.initial, role.id).toBe('L2')
       expect(role.automation.reply_thread?.ceiling, role.id).toBe('L3')
+    }
+  })
+
+  it('WP329（决策 663）：Reddit 两条职责的回帖永远 L1，升不上去', () => {
+    for (const id of ['social.reddit', 'pr.reddit']) {
+      const spec = loadBundledRole(id).automation.reply_thread
+      expect(spec?.ceiling, id).toBe('L1')
+      expect(spec?.initial, id).toBe('L1')
+      expect(spec?.hard_ceiling, id).toBe(true)
     }
   })
 

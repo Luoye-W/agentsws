@@ -9,8 +9,14 @@
  * 这一份类型插件与本机服务共用，所以这里一个 `node:` 都不许出现。
  */
 
-/** 哪家后台。 */
-export type ActionPlatform = 'google_ads' | 'meta_ads'
+/** 两家广告后台（WP313）。 */
+export type AdsPlatform = 'google_ads' | 'meta_ads'
+
+/**
+ * 哪家后台。WP329 加了 `reddit`：Reddit 的回复 / 评论 / 发帖也走这条插件动作通道
+ * （docs/102 §2.3：插件把草稿填进用户已登录的 Reddit 页面，**人自己点发送**）。
+ */
+export type ActionPlatform = AdsPlatform | 'reddit'
 
 /** 这个动作算读还是写（限速分开算：决策 555）。 */
 export type ActionPace = 'read' | 'write'
@@ -41,6 +47,21 @@ export type ActionStep =
   | { op: 'expect_none'; selector: string; why: string }
   /** 停下来等人再确认一次（横条上的「确认提交」，或工坊卡上的同一个按钮）。 */
   | { op: 'confirm'; prompt: string }
+  /**
+   * WP329：**等人自己点发送，再读回**。插件从不点发送（Reddit 写一律人点：决策 663、docs/102 §2.2）：
+   * 草稿填好后停在这一步，盯着页面上出没出现一条**新的**、正文含 `text` 的 `selector`
+   * （`body` 是它里面放正文的那一块，相对它自己写，可以用 `:scope`）。出现了就把它的
+   * `data-fullname` / `data-permalink` 记进结果（`reads.fullname` / `reads.permalink`）。
+   * 等不到（人没点 / 被版规或频率拦了）就停下照实报，**不重试、不代点**。
+   */
+  | {
+      op: 'await_sent'
+      selector: string
+      body: string
+      text: string
+      prompt: string
+      timeout_ms?: number
+    }
 
 export type ActionStepOp = ActionStep['op']
 

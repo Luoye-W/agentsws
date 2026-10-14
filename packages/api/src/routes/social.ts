@@ -31,7 +31,12 @@ import type {
   MaybePromise,
   OwnSubQueueView,
   OwnSubStageInput,
+  RedditDraftInput,
+  RedditDraftView,
   RedditOfficialBrowserStatus,
+  RedditStageInput,
+  RedditStageResult,
+  RedditWriteView,
   SocialAccount,
   SocialChannel,
   SocialPost,
@@ -443,6 +448,26 @@ export interface SocialPort {
   /** 「我登录好了」：体检看登着谁。 */
   redditBrowserCheck?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
   redditBrowserClose?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
+
+  /**
+   * WP329（docs/102 §2.3 / §4）：Reddit 写的起草——Reddit 专用提示（版规原文、FAQ 命中、品牌语气、
+   * 原帖 / 原评论）。**只起草**：不出卡、不落库；没接上模型给一句模板并照实说。
+   */
+  redditDraft?(actor: SocialActor, input: RedditDraftInput): MaybePromise<RedditDraftView>
+  /**
+   * WP329：出一张「发出去」卡（`outbound_draft` + `form: 'reddit_write'`，**永远人批**：决策 663）。
+   * 批了由插件把草稿填进用户已登录的 Reddit 页面、人自己点发送、插件读回。带承诺词打回（不出卡）。
+   */
+  redditStage?(actor: SocialActor, input: RedditStageInput): MaybePromise<RedditStageResult>
+  /** WP329：最近批过的 Reddit 写做到哪了（排着 / 填好等你点发送 / 发出去了 / 没发出去 + 原因）。 */
+  redditWrites?(actor: SocialActor): MaybePromise<{ rows: RedditWriteView[] }>
+  /**
+   * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件，**不用重批**；
+   * 人照样自己点发送。已经发出去 / 还在插件那边 / 没记下草稿的回 `conflict` + 一句人话。
+   */
+  redditRefill?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
+  /** WP332：收起岗位页那一行「没发出去」提醒（人看过了）。 */
+  redditDismiss?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -588,6 +613,49 @@ const IngestIntervalBody = z.object({
     .min(5)
     .max(24 * 60),
 })
+
+/** WP329：Reddit 写到哪（起草 / 出卡共用）。正文是外部文本：只限长，不改写。 */
+const RedditTargetBody = z
+  .object({
+    kind: z.enum(['reply', 'comment', 'submit']),
+    subreddit: z.string().trim().min(1).max(60),
+    parent_fullname: z
+      .string()
+      .regex(/^t[13]_[a-z0-9]+$/u)
+      .optional(),
+    permalink: z.string().max(500).optional(),
+    post_title: z.string().max(400).optional(),
+    post_text: z.string().max(8000).optional(),
+    parent_author: z.string().max(60).optional(),
+    parent_text: z.string().max(8000).optional(),
+    inbox_type: z.enum(['comment_reply', 'post_reply', 'username_mention']).optional(),
+    source: z
+      .object({
+        type: z.enum(['reddit_watch_item', 'community_thread', 'external_post', 'manual']),
+        id: z.string().min(1).max(120),
+      })
+      .optional(),
+  })
+  .strict()
+
+const RedditDraftBody = z
+  .object({ target: RedditTargetBody, instruction: z.string().trim().max(1000).optional() })
+  .strict()
+
+const RedditStageBody = z
+  .object({
+    target: RedditTargetBody,
+    text: z.string().trim().min(1).max(10_000),
+    title: z.string().trim().min(1).max(300).optional(),
+    fact_ids: z.array(z.string().min(1).max(120)).max(20).optional(),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .strict()
+
+/** 去掉 zod 解析出来值为 `undefined` 的格子（exactOptionalPropertyTypes）。 */
+function defined<T extends Record<string, unknown>>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
+}
 
 /** WP257：自动进帖判类要不要请模型复核。 */
 const TagReviewBody = z.object({ model_review: z.boolean() })
@@ -1148,6 +1216,111 @@ export function socialRoutes(): Route[] {
         returns: 'RedditOfficialBrowserStatus',
       },
       async (c, deps) => ok(c, await need(portOf(deps), 'redditBrowserClose')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/draft',
+        operationId: 'draftRedditWrite',
+        summary:
+          'WP329：Reddit 写的起草（回评论 / 回帖子 / 发新帖）——查 FAQ 知识卡、品牌语气、版规原文与原帖上下文。**只起草**：不出卡、不落库',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        body: RedditDraftBody,
+        returns: 'RedditDraftView',
+      },
+      async (c, deps) => {
+        const input = await body(c, RedditDraftBody)
+        return ok(
+          c,
+          await need(portOf(deps), 'redditDraft')(actorOf(c), {
+            target: defined(input.target) as RedditDraftInput['target'],
+            ...(input.instruction === undefined ? {} : { instruction: input.instruction }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/stage',
+        operationId: 'stageRedditWrite',
+        summary:
+          'WP329：出一张 Reddit「发出去」卡（永远人批）；批了由插件把草稿填进已登录的 Reddit 页面、人点发送、读回拿链接、记发出记录。带承诺词打回',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        body: RedditStageBody,
+        returns: 'RedditStageResult',
+      },
+      async (c, deps) => {
+        const input = await body(c, RedditStageBody)
+        return ok(
+          c,
+          await need(portOf(deps), 'redditStage')(
+            actorOf(c),
+            defined({
+              ...input,
+              target: defined(input.target) as RedditStageInput['target'],
+            }) as RedditStageInput,
+          ),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/reddit/writes',
+        operationId: 'listRedditWrites',
+        summary: 'WP329：最近批过的 Reddit 写做到哪了（排着 / 等你点发送 / 发出去了 / 没发出去）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        returns: '{ rows: RedditWriteView[] }',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'redditWrites')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/writes/:job_id/refill',
+        operationId: 'refillRedditWrite',
+        summary:
+          'WP332：没发出去的 Reddit 写「再填一次」——同一份已批的草稿原样再交给插件（不出新卡、不用重批），人照样自己点发送',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [
+          { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
+        ],
+        returns: 'RedditWriteView',
+      },
+      async (c, deps) =>
+        ok(c, await need(portOf(deps), 'redditRefill')(actorOf(c), param(c, 'job_id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/writes/:job_id/dismiss',
+        operationId: 'dismissRedditWrite',
+        summary: 'WP332：收起岗位页那一行「没发出去」提醒（人看过了；再填一次又没发出去会重新出）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        params: [
+          { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
+        ],
+        returns: 'RedditWriteView',
+      },
+      async (c, deps) =>
+        ok(c, await need(portOf(deps), 'redditDismiss')(actorOf(c), param(c, 'job_id'))),
     ),
   ]
 }

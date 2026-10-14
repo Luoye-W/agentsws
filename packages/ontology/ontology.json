@@ -59,7 +59,8 @@
     "packages/contracts/src/pricing-catalog.ts",
     "packages/contracts/src/read-routes.ts",
     "packages/contracts/src/reddit-watch.ts",
-    "packages/contracts/src/reddit-weekly.ts",
+    "packages/contracts/src/reddit-write.ts",
+    "packages/contracts/src/report.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
@@ -128,7 +129,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "48fedf8acaa4ebb8f867acd039537120",
+  "source_digest": "9a2b4b324f0d961c3a90c1a97060640c",
   "objects": [
     {
       "id": "ad",
@@ -1653,6 +1654,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "permalink",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": ["list_community_threads"],
@@ -2484,6 +2491,12 @@
         },
         {
           "name": "parent_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "parent_permalink",
           "type": "string",
           "sensitivity": "internal",
           "optional": true

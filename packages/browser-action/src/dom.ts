@@ -149,3 +149,71 @@ export function domLook(doc: Document, url: string): PageLook {
     passwordInputs: doc.querySelectorAll('input[type="password"]').length,
   }
 }
+
+/** WP329：页面上认出来的「发出去的那一条」。 */
+export interface PostedHit {
+  /** `t1_…`（评论）/ `t3_…`（帖子）。 */
+  fullname?: string
+  /** 站内相对链接（`/r/x/comments/…`）。 */
+  permalink?: string
+}
+
+/**
+ * 比对用的键：只留字母和数字、转小写。Reddit 会把 Markdown 渲染掉（`**粗**`、`[字](链接)`、换行变段落），
+ * 页面上的字和草稿原文不会一字不差；去掉符号与空白之后再比「包含」，渲染前后才对得上。
+ */
+export function postedKey(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/**
+ * 草稿 → 用来认「发出去的那一条」的那一截：去掉 Markdown 记号，取第一段非空的字，最多 80 个字母数字。
+ * 太短（少于 4 个）就整段用（一句「谢谢」也认得出来）。
+ */
+export function sentSnippet(draft: string): string {
+  const plain = draft
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/gu, '$1')
+    .replace(/[*_~`>#|]/gu, ' ')
+    .split(/\n\s*\n|\n/u)
+    .map((line) => postedKey(line))
+    .find((line) => line !== '')
+  const key = plain ?? postedKey(draft)
+  return key.slice(0, 80)
+}
+
+/**
+ * 找页面上正文含这段字的那几条（插件的页面脚本调；`body` 相对每一条自己）。
+ * 回它们的编号与链接（`data-fullname` / `data-permalink`，old.reddit 每一条都带）。
+ */
+export function domFindPosted(
+  doc: Document,
+  selector: string,
+  body: string,
+  text: string,
+): PostedHit[] {
+  const want = sentSnippet(text)
+  if (want === '') return []
+  let items: Element[]
+  try {
+    items = Array.from(doc.querySelectorAll(selector))
+  } catch {
+    return []
+  }
+  const out: PostedHit[] = []
+  for (const item of items) {
+    let part: Element | null = null
+    try {
+      part = item.querySelector(body)
+    } catch {
+      part = null
+    }
+    if (part === null || !postedKey(part.textContent ?? '').includes(want)) continue
+    const fullname = item.getAttribute('data-fullname') ?? undefined
+    const permalink = item.getAttribute('data-permalink') ?? undefined
+    out.push({
+      ...(fullname === undefined || fullname === '' ? {} : { fullname }),
+      ...(permalink === undefined || permalink === '' ? {} : { permalink }),
+    })
+  }
+  return out
+}

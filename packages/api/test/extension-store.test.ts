@@ -157,6 +157,7 @@ describe('令牌', () => {
       'kol.read',
       'ads.act',
       'reddit.read',
+      'reddit.write',
     ])
   })
 })

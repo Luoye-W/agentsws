@@ -85,6 +85,8 @@ export function checkStep(step: ActionStep, allow: ActionAllowlist, kind: string
         : notListed('这个导出按钮', kind)
     case 'capture':
     case 'confirm':
+    // 只看不动：等人自己点发送、读回那一条（插件不点发送）
+    case 'await_sent':
       return { ok: true }
   }
 }

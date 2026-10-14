@@ -3354,110 +3354,6 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/v1/reddit-weekly': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 存着的 Reddit 周报（不给 week_of = 最近一份；没有 = null） */
-    get: operations['getRedditWeekly']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/reddit-weekly/preview': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 现在拼一份 Reddit 周报（不巡查、不出卡、不存；没配巡查 = null） */
-    get: operations['previewRedditWeekly']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/reddit-weekly/run': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 现在出一份 Reddit 周报（先巡查一次；同一周再出 = 同一张卡的新一版） */
-    post: operations['runRedditWeekly']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/reddit-weekly/export': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 导出 Reddit 周报（Markdown；飞书 / Notion / Google 文档都能直接贴） */
-    get: operations['exportRedditWeekly']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/reddit-weekly/format': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Reddit 周报的分节与措辞（这个品牌的；没改过 = 默认） */
-    get: operations['getRedditWeeklyFormat']
-    /** 改 Reddit 周报的分节与措辞（只给要改的；reset 先回默认；认不出的照实回） */
-    put: operations['setRedditWeeklyFormat']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/reddit-weekly/schedule': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Reddit 周报每周几、几点出（工作区时区；默认周五 17:00） */
-    get: operations['getRedditWeeklySchedule']
-    /** 改 Reddit 周报每周几、几点出（只改这个品牌那一条定时） */
-    put: operations['setRedditWeeklySchedule']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
   '/v1/roles': {
     parameters: {
       query?: never
@@ -7242,6 +7138,91 @@ export interface paths {
     put?: never
     /** 关掉官方号浏览器窗口（登录态留在这台电脑的独立目录里，下次不用重登） */
     post: operations['closeRedditBrowser']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/social/reddit/draft': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP329：Reddit 写的起草（回评论 / 回帖子 / 发新帖）——查 FAQ 知识卡、品牌语气、版规原文与原帖上下文。**只起草**：不出卡、不落库 */
+    post: operations['draftRedditWrite']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/social/reddit/stage': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP329：出一张 Reddit「发出去」卡（永远人批）；批了由插件把草稿填进已登录的 Reddit 页面、人点发送、读回拿链接、记发出记录。带承诺词打回 */
+    post: operations['stageRedditWrite']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/social/reddit/writes': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP329：最近批过的 Reddit 写做到哪了（排着 / 等你点发送 / 发出去了 / 没发出去） */
+    get: operations['listRedditWrites']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/social/reddit/writes/{job_id}/refill': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP332：没发出去的 Reddit 写「再填一次」——同一份已批的草稿原样再交给插件（不出新卡、不用重批），人照样自己点发送 */
+    post: operations['refillRedditWrite']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/social/reddit/writes/{job_id}/dismiss': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP332：收起岗位页那一行「没发出去」提醒（人看过了；再填一次又没发出去会重新出） */
+    post: operations['dismissRedditWrite']
     delete?: never
     options?: never
     head?: never
@@ -30860,655 +30841,6 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  getRedditWeekly: {
-    parameters: {
-      query?: {
-        /** @description 哪一周（窗口起始那天） */
-        week_of?: string
-      }
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description RedditWeeklyPayload | null */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  previewRedditWeekly: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description RedditWeeklyPayload | null */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  runRedditWeekly: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
-        'Idempotency-Key'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description RedditWeeklyRunView */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      409: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  exportRedditWeekly: {
-    parameters: {
-      query?: {
-        /** @description 哪一周（窗口起始那天） */
-        week_of?: string
-      }
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description { filename: string; content: string } | null */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  getRedditWeeklyFormat: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description RedditWeeklyFormat */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  setRedditWeeklyFormat: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': {
-          patch: {
-            [key: string]: unknown
-          }
-          reset?: boolean
-        }
-      }
-    }
-    responses: {
-      /** @description { format: RedditWeeklyFormat; problems: string[] } */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  getRedditWeeklySchedule: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description WeeklyReviewScheduleView */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      429: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      503: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  setRedditWeeklySchedule: {
-    parameters: {
-      query?: never
-      header: {
-        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
-        'X-Assignment': string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': {
-          weekday: number
-          time: string
-        }
-      }
-    }
-    responses: {
-      /** @description WeeklyReviewScheduleView */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
         headers: {
           [name: string]: unknown
         }
@@ -56631,6 +55963,510 @@ export interface operations {
       }
     }
   }
+  draftRedditWrite: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          target: {
+            /** @enum {string} */
+            kind: 'reply' | 'comment' | 'submit'
+            subreddit: string
+            parent_fullname?: string
+            permalink?: string
+            post_title?: string
+            post_text?: string
+            parent_author?: string
+            parent_text?: string
+            /** @enum {string} */
+            inbox_type?: 'comment_reply' | 'post_reply' | 'username_mention'
+            source?: {
+              /** @enum {string} */
+              type: 'reddit_watch_item' | 'community_thread' | 'external_post' | 'manual'
+              id: string
+            }
+          }
+          instruction?: string
+        }
+      }
+    }
+    responses: {
+      /** @description RedditDraftView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  stageRedditWrite: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          target: {
+            /** @enum {string} */
+            kind: 'reply' | 'comment' | 'submit'
+            subreddit: string
+            parent_fullname?: string
+            permalink?: string
+            post_title?: string
+            post_text?: string
+            parent_author?: string
+            parent_text?: string
+            /** @enum {string} */
+            inbox_type?: 'comment_reply' | 'post_reply' | 'username_mention'
+            source?: {
+              /** @enum {string} */
+              type: 'reddit_watch_item' | 'community_thread' | 'external_post' | 'manual'
+              id: string
+            }
+          }
+          text: string
+          title?: string
+          fact_ids?: string[]
+          reason?: string
+        }
+      }
+    }
+    responses: {
+      /** @description RedditStageResult */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  listRedditWrites: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { rows: RedditWriteView[] } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  refillRedditWrite: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 进度里那一条的 job_id */
+        job_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description RedditWriteView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  dismissRedditWrite: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 进度里那一条的 job_id */
+        job_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description RedditWriteView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   listDesignSpecs: {
     parameters: {
       query?: never
@@ -60113,6 +59949,7 @@ export interface operations {
           body: string
           flair?: string
           parent_external_id?: string
+          parent_permalink?: string
         }
       }
     }
@@ -65581,7 +65418,7 @@ export interface operations {
   extensionActionNext: {
     parameters: {
       query: {
-        /** @description google_ads,meta_ads */
+        /** @description google_ads,meta_ads,reddit */
         platforms: string
         /** @description 最多挂几秒（0–25） */
         wait?: string
@@ -65983,7 +65820,7 @@ export interface operations {
       content: {
         'application/json': {
           /** @enum {string} */
-          platform: 'google_ads' | 'meta_ads'
+          platform: 'google_ads' | 'meta_ads' | 'reddit'
           text_version: string
         }
       }
@@ -74830,6 +74667,7 @@ export interface operations {
             pages: number
             reached_stop: boolean
             message?: string
+            rules?: string[]
           }[]
         }
       }

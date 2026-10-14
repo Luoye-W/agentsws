@@ -295,6 +295,11 @@ export interface ExternalPost {
   rules_checked: ExternalPostRuleCheck
   /** 回在哪条下面（`kind: 'comment' | 'answer'` 才有）。 */
   parent_external_id?: string
+  /**
+   * WP332：被回那一条的链接（站内路径 `/r/x/comments/…/`）。Reddit 回**评论**（`t1_`）必须有：
+   * 插件靠它打开那条评论、找到回复框。出卡前从来源（巡查条目 / 社群线程 / 提及）补齐，补不到不出卡。
+   */
+  parent_permalink?: string
   /** 平台那一侧的 id（发出去之后才有）。 */
   external_id?: string
   url?: string

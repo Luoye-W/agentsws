@@ -12,10 +12,12 @@
  */
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
+import { ExternalLink } from 'lucide-react'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
+import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
@@ -28,7 +30,7 @@ import {
   isFaqBatchPayload,
   isFaqImportPayload,
 } from './faq-import-body'
-import { isRedditWeekly, RedditWeeklyBody } from './reddit-weekly-body'
+import { isReport, ReportBody } from './report-body'
 import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
@@ -399,6 +401,8 @@ export function DeckCardBody({
         const preview = str(payload.preview_image) ?? str(payload.image_url)
         const scheduled = highlightText(card, 'scheduled')
         const audience = highlightText(card, 'audience')
+        // WP332：公关在别人帖子下回一条评论——被回的那一条点得开（插件也按它找回复框）
+        const parentUrl = isRecord(payload.after) ? str(payload.after.parent_url) : undefined
         return (
           <div className="mt-2.5 flex gap-3" data-testid="deck-layout-publish">
             <div
@@ -419,6 +423,19 @@ export function DeckCardBody({
                   {t('deck.publish.audience', { n: audience ?? '—' })}
                 </span>
               </div>
+              {parentUrl === undefined ? null : (
+                <a
+                  href={parentUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={parentUrl}
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-ws-muted-fg hover:text-ws-fg"
+                  data-testid="deck-parent-link"
+                >
+                  {t('redditw.parent')}
+                  <ExternalLink className="size-3" aria-hidden />
+                </a>
+              )}
               <DesignNoteLine card={card} />
             </div>
           </div>
@@ -490,8 +507,8 @@ export function DeckCardBody({
       case 'aftermath': {
         // WP224：本周经营一页纸是一张五段的卡（数带出处 tooltip），不是一排键值
         if (isWeeklyReview(payload)) return <WeeklyReviewBody payload={payload} />
-        // WP330：Reddit 周报同一类（报表），几节 + 复制 / 导出
-        if (isRedditWeekly(payload)) return <RedditWeeklyBody payload={payload} />
+        // WP331：AI 发布的报告同一类（报表）：周期 + 正文 + 复制 / 导出
+        if (isReport(payload)) return <ReportBody payload={payload} />
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
@@ -619,6 +636,8 @@ export function DeckCardBody({
 
       // ① 出站文案（也是兜底）
       default:
+        // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
+        if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
         return (
           <div data-testid="deck-layout-outbound">
             <OutboundBody card={card} mode={mode} />

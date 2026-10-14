@@ -46,6 +46,20 @@ import type { SocialStore } from './social.js'
 import { ruleTagged } from './social-tags.js'
 
 /** 这一类卡在 `after.source` 上的记号（执行器靠它认出来）。 */
+
+/** WP329：Reddit 链接 → 站内路径（`/r/x/comments/…/`）；不是帖子 / 评论链接回 `undefined`。 */
+function permalinkOf(url: string | undefined): string | undefined {
+  if (url === undefined || url === '') return undefined
+  let path = url
+  try {
+    if (/^https?:/iu.test(path)) path = new URL(path).pathname
+  } catch {
+    return undefined
+  }
+  path = path.split(/[?#]/u)[0] ?? ''
+  if (!/^\/r\/[^/]+\/comments\//u.test(path)) return undefined
+  return path.endsWith('/') ? path : `${path}/`
+}
 export const OWN_SUB_SOURCE = 'own_sub_queue'
 
 /** 与 `social-service.ts` 的 `stageOne` 同形（由它注入，审批与额度只有那一处）。 */
@@ -190,6 +204,7 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
       store.thread(`ct_reddit_${entry.id}`) ??
       store.threads({ account_id: account.id }).find((t) => t.external_id === entry.id)
     if (known !== undefined) return { thread_id: known.id, created: false }
+    const permalink = permalinkOf(entry.url)
     const row: CommunityThread = {
       id: `ct_reddit_${entry.id}`,
       account_id: account.id,
@@ -202,6 +217,8 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
       text: `${entry.title === undefined ? '' : `${entry.title}\n`}${entry.excerpt}`,
       created_at: entry.created_at ?? clock.now(),
       status: 'open',
+      // WP329：楼中楼要靠这条链接打开那条评论、找到回复框
+      ...(permalink === undefined ? {} : { permalink }),
     }
     // WP257（决策 152）：入库就按规则判类打标签（自家版里的帖子本来就是冲着我们来的）；不出卡
     store.saveThread(ruleTagged(row, { own_community: true }))

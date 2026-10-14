@@ -41,6 +41,17 @@ Paired browsers are listed under “Browser extension”, each with its extensio
 
 Only what the platform already shows publicly is shared: channel, handle, profile link, avatar; follower / view counts as printed on the page; public business contacts and the page they came from. **Your notes, shortlists and lists, deals and campaigns, and emails with creators never go to the public library.**
 
+## Reddit: the extension fills in the draft, you click send
+
+In the extension settings, click “Reddit · Connect”. Chrome will ask for access to old.reddit.com / www.reddit.com. You log in to Reddit yourself in this Chrome; the extension never touches your password.
+
+- For each Reddit reply, comment or post you approved in Agents Workshop, the extension **opens a new tab** and fills the draft into the reply box (or the submit page). A bar at the top says it is waiting for you to send.
+- **You always click send yourself.** Once you do and the post shows up, Agents Workshop logs it (with a link). If you do not send it, Reddit blocks it, or you are logged out, the extension stops and nothing is logged as sent.
+- **If the extension is offline, it waits**: approved posts stay queued until you open Chrome (up to 24 hours). Nothing is posted for you automatically.
+- **Not posted? Fill it again**: the social media position page shows a “Not posted” line with the reason. Click “Fill again” to hand the same approved draft to the extension, with no new approval. You can also dismiss the line.
+- To stop, click “Stop” on the bar. The draft stays on the page, unsent.
+- An extension paired before this update has to be **paired again** to do Reddit posting.
+
 ## FAQ
 
 - **“Can’t reach Agents Workshop on this computer”**: the desktop app is closed, or it is not on the default port 4317. Open the app; if the port really differs, change it at the bottom of the extension’s settings.

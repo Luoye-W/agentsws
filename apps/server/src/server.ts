@@ -122,6 +122,7 @@ import {
   PR_ROLE_IDS,
   platformKitOf,
   REDDIT_READ_HOSTS,
+  redditTargetFromItem,
   resolveDataCreditBudget,
   SOCIAL_ROLE_IDS,
   skillOnPlatform,
@@ -164,6 +165,7 @@ import {
   stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
+import { createPrRedditAdapter } from '@agentsws/pr-core'
 import {
   changeKindOf,
   createRoleStore,
@@ -563,16 +565,22 @@ import {
   createRedditWatch,
   createRedditWatchStore,
   redditWatchPort,
-  redditWeekSourceOf,
+  redditWatchSourceOf,
 } from './reddit-watch/index.js'
+import { modelRedditDrafter } from './reddit-write/draft.js'
+import { redditParentLinker } from './reddit-write/parent-link.js'
 import {
-  createRedditWeeklyService,
-  EMPTY_REDDIT_WEEK_SOURCE,
-  REDDIT_WEEKLY_ROLES,
-  type RedditWeekSource,
-} from './reddit-weekly.js'
-import { createRedditWeeklyStore } from './reddit-weekly-store.js'
-import { createRedditWeeklyToolExecutor } from './reddit-weekly-tools.js'
+  createRedditWriteService,
+  isRedditWriteCard,
+  type RedditWriteService,
+} from './reddit-write/service.js'
+import {
+  applyExternalPost,
+  redditDirectWriter,
+  settleRedditWrite,
+  socialRedditFill,
+} from './reddit-write/wire.js'
+import { createReportToolExecutor, type WatchSource } from './report-tools.js'
 import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
@@ -611,7 +619,6 @@ import {
   registerRawPrune,
   registerReconcileDeliveries,
   registerRedditPatrol,
-  registerRedditWeekly,
   registerReview,
   registerSeo,
   registerSkillsWeekly,
@@ -914,6 +921,12 @@ export interface MountedWorld {
   people?: { id: PersonId; name: string }[]
 }
 
+/**
+ * WP331：担巡查的职责（报告积木里「查巡查数据 / 立即巡查」只给它们）。现在只有 Reddit 巡查（WP328）：
+ * 自家版运营与别人的版两条。
+ */
+const REPORT_WATCH_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit'])
+
 export interface ServerOptions {
   /**
    * SQLite 目录；不给则全部内存档（测试与一次性任务）。
@@ -939,10 +952,10 @@ export interface ServerOptions {
    */
   outboundFetch?: FeishuFetch
   /**
-   * WP330：Reddit 周报的数据源（WP328 的巡查入库，一个品牌一份）。不给 = 没配（周报不出）；
-   * 测试注入替身。WP328 合进来后由它在这里接上自己的存储。
+   * WP331：报告积木「查巡查数据 / 立即巡查」读的巡查库（一个品牌一份）。不给 = 这个品牌的 Reddit 巡查库
+   * （WP328）；测试 / 评测注入替身数据。
    */
-  redditWeekSource?: (workspace_id: WorkspaceId) => RedditWeekSource
+  watchSource?: (workspace_id: WorkspaceId) => WatchSource | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -1788,10 +1801,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // 每分钟看一次到点的写入（退避重试）；记一条时也会当场写
   outboundLog.start()
-  /** WP330：Reddit 周报的分节与措辞、出过的周报（一台机器一个库，行上钉品牌）。 */
-  const redditWeeklyStore = createRedditWeeklyStore(
-    dbDir === undefined ? undefined : join(dbDir, 'reddit-weekly.sqlite'),
-  )
   /** 批的人叫什么（发出记录上写人名，不写 id）。 */
   const outboundNames = new Map<string, string>()
   const outboundApprover = async (by: string | undefined): Promise<void> => {
@@ -2080,30 +2089,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       paused: task.state === 'paused',
     }
   }
-  /** WP330：Reddit 周报那条定时的 id（同一页纸：第一个品牌不带后缀，别的品牌 `__<ws>`）。 */
-  const redditWeeklyTaskId = (ws: string): string =>
-    ws === workspace.id ? 'sched_reddit_weekly' : `sched_reddit_weekly__${ws}`
-  /** WP330：周报那条定时 → 每周几、几点（还没建 = 默认周五 17:00、`missing`）。 */
-  const redditWeeklySchedule = (ws: string) => {
-    const task = schedule.scheduler.get(redditWeeklyTaskId(ws))
-    return task === undefined
-      ? { weekday: 5, time: '17:00', paused: false, missing: true as const }
-      : weeklyReviewScheduleView(task)
-  }
-  /** WP330：改周报每周几、几点（只改这个品牌那一条；还没建就照实说）。 */
-  const setRedditWeeklySchedule = async (ws: string, input: { weekday: number; time: string }) => {
-    const id = redditWeeklyTaskId(ws)
-    const task = schedule.scheduler.get(id)
-    if (task === undefined)
-      throw new ApiError('conflict', '这个品牌还没有周报那条定时（先有人担 Reddit 运营）')
-    const [hh, mm] = input.time.split(':').map(Number)
-    const tz = task.trigger.kind === 'cron' ? task.trigger.tz : 'UTC'
-    return weeklyReviewScheduleView(
-      await schedule.scheduler.update(id, {
-        trigger: { kind: 'cron', expr: `${mm} ${hh} * * ${input.weekday}`, tz },
-      }),
-    )
-  }
   /** WP224：读写毛利率事实卡用的身份（这条分配自己的授权，05：不做跨分配并集）。 */
   const economicsReader = (actor: {
     workspace_id: string
@@ -2203,7 +2188,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const sandboxed = (res: { execution_id?: string } | undefined): boolean => {
     const id = res?.execution_id ?? ''
-    return id.startsWith('ex_sandbox_') || /^(dlv|exec)_\d+$/.test(id)
+    return (
+      id.startsWith('ex_sandbox_') ||
+      /^(dlv|exec)_\d+$/.test(id) ||
+      // WP329：Reddit 写交给了插件 / 已由 Reddit 写那一份自己记过（带编号与链接）——这里不再记一行
+      id.startsWith('reddit_fill_') ||
+      id.startsWith('reddit_direct_')
+    )
   }
   type TxnOptions = Parameters<typeof createTxn>[0]
   const recordingChange =
@@ -2278,6 +2269,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kolSampleApply(brand, change, () => clock.now()) ??
         kolPaymentApply(brand, change, () => clock.now())
       if (sandboxed !== undefined) return sandboxed
+      // WP329：公关的 Reddit 外部发帖卡批了 → 插件填发帖页、人点发送（以前批了也发不出去）
+      const externalPosted = await applyExternalPost(change, {
+        writes: brand?.redditWrites,
+        post: (id) => brand?.pr.post(id),
+        approverName: async (id) => {
+          await outboundApprover(id)
+          return outboundNames.get(id)
+        },
+      })
+      if (externalPosted !== undefined) return externalPosted
       // WP249：自家版版务卡批了 → 经 Reddit 出口（接口优先、官方号浏览器兜底）执行卡上那一个动作
       const ownSubApplied = await brand?.socialService.ownSub?.apply(change)
       if (ownSubApplied !== undefined) return ownSubApplied
@@ -2323,6 +2324,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       const sandboxed = kolSandboxIntercept(brand, item)
       if (sandboxed !== undefined) return sandboxed
+      // WP329：Reddit「发出去」卡批了 → 交给插件填进页面、人点发送（读回之后才记发出记录）
+      const redditSent = await brand?.redditWrites?.deliver(item)
+      if (redditSent !== undefined) return redditSent
       // WP254（决策 117）：社媒回帖卡批了就发——经这条渠道的出口（Reddit：接口优先、官方号浏览器兜底）
       const socialReply = await brand?.socialService.executor.deliverReply(item)
       if (socialReply !== undefined) return socialReply
@@ -3896,11 +3900,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP313（docs/101 §5.4）：插件动作通道（广告后台）。每品牌一份，目录 `<品牌目录>/ads-actions/`。
      * 托管实例不装（云上没有用户的浏览器）。进队只由审批执行器调（WP316 接线），没有 HTTP 入口。
      */
+    /** WP329：Reddit 写（下面建；插件动作通道的事件与社媒回帖要先引用它，所以晚绑定）。 */
+    let redditWrites: RedditWriteService | undefined
     const adsActions =
       hostedBoot !== undefined
         ? undefined
         : createAdsActionsService({
             workspace_id: ws,
+            // WP329：Reddit 的活做完了 → 读回确认、记发出记录（广告那一半的接线在 WP316）
+            onEvent: (event) => redditWrites?.onActionEvent(event),
+            // WP329：Reddit 的写活记在 WP328 巡查那一本账上（同一个号读写一次一件；巡查在下面才建，晚绑定）
+            paceFor: (job) => (job.plan.platform === 'reddit' ? redditWatch?.pace : undefined),
             ...(dir === undefined ? {} : { dir: join(dir, 'ads-actions') }),
             nowMs: () => Date.parse(clock.now()),
             evidence:
@@ -3949,6 +3959,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       onSent: (input) => {
         outboundLog.record(ws, input)
       },
+      // WP329：Reddit 写的起草 / 出卡 / 进度（下面建的那一份）
+      reddit: {
+        redditDraft: async (actor, input) => {
+          if (redditWrites === undefined)
+            throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
+          try {
+            return await redditWrites.draft(actor, input)
+          } catch (err) {
+            if (err instanceof Error && err.name === 'RedditPlanError')
+              throw new ApiError('invalid_input', err.message)
+            throw err
+          }
+        },
+        redditStage: (actor, input) => {
+          if (redditWrites === undefined)
+            throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
+          return redditWrites.stage(actor, input)
+        },
+        redditWrites: () => ({ rows: redditWrites?.writes() ?? [] }),
+        // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
+        redditRefill: async (_actor, job_id) => {
+          if (redditWrites === undefined)
+            throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
+          const out = await redditWrites.refill(job_id)
+          if (!out.ok) throw new ApiError('conflict', out.message)
+          return out.view
+        },
+        redditDismiss: (_actor, job_id) => {
+          const view = redditWrites?.dismiss(job_id)
+          if (view === undefined) throw new ApiError('not_found', '找不到这一条。')
+          return view
+        },
+      },
       routeScopeManager,
       store: social,
       // WP73：到点真发出去那一跳走这九条适配器
@@ -3964,6 +4007,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       executor: {
         applyApproval: (id) => txn.executor.applyApproval(id),
         cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+        // WP329：Reddit 回帖卡改走插件（填草稿、人点发送、读回）；评论没有链接时退回原来的出口
+        redditFill: socialRedditFill(() => redditWrites),
         approvedItems: () =>
           txn.runtime.store.listApprovals({
             workspace_id: ws,
@@ -4151,6 +4196,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       appendEvent,
       random,
+      /*
+       * WP332：公关在别人帖子下回一条评论——找那条评论的链接（插件靠它找到回复框）：巡查条目 → 社群线程 →
+       * 提及 → 出卡前补读所在帖子的评论（与 `read_reddit` 同一条只读取数路由；下面才建，晚绑定）。补不到不出卡。
+       */
+      redditParent: redditParentLinker({
+        watchEntries: (fullname) => redditWatchStore.byFullname(ws, fullname),
+        threads: () => social.threads({ channel: 'reddit' }),
+        mentions: () => pr.mentions(),
+        readComments: async (post_url) => {
+          const got = await redditSearch.read({
+            capability: 'social.reddit.comments',
+            input: { post_url, limit: 100 },
+          })
+          return got.ok
+            ? {
+                ok: true,
+                items: got.items.map((it) => ({
+                  url: it.url,
+                  ...(it.id === undefined ? {} : { id: it.id }),
+                })),
+              }
+            : { ok: false, message: got.message }
+        },
+      }),
     })
     /**
      * WP75（57 §5）：广告库的 `/v1` 面。
@@ -4181,24 +4250,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals,
       port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
       brandName: () => brandNameOfWorkspace(ws),
-    })
-    /**
-     * WP330（docs/102 附）：Reddit 周报——每周五下班前，先让 WP328 做最后一次巡查再出；
-     * 我们的回复从发出记录数；点名要周报的记录去处记一行。
-     */
-    const redditWeekly = createRedditWeeklyService({
-      workspace_id: ws,
-      clock,
-      tzOffsetMinutes: () => workData.tz_offset_minutes,
-      brandName: () => brandNameOfWorkspace(ws),
-      assignments: () => roles.assignments.listByWorkspace(ws),
-      approvals,
-      store: redditWeeklyStore,
-      // WP328：没注入就用这个品牌的巡查库（下面装的那一份；只在出周报时才取，不怕先后）
-      source: () =>
-        options.redditWeekSource?.(ws) ??
-        (redditWatch === undefined ? EMPTY_REDDIT_WEEK_SOURCE : redditWeekSourceOf(redditWatch)),
-      outbound: outboundLog,
     })
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
     const lineCompareSnapshot = async () => {
@@ -4428,6 +4479,138 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP314 的上传表生成器（决策 626）
       uploadSheet: buildAdUploadBundle,
     })
+
+    /*
+     * WP329（docs/102 §2.3 / §4，决策 663 / 669 / 708）：Reddit 写——起草（FAQ 知识卡 + 品牌话术 + 帖子上下文 +
+     * 版规原文）→「发出去」卡（永远人批）→ 插件把草稿填进用户已登录的 Reddit 页面、人点发送 → 读回 → 发出记录。
+     * 插件没连、有 OAuth 应用 / 官方号浏览器登着时走那条直发（WP249 留作备用）。目录 `<品牌目录>/reddit-writes/`。
+     */
+    let redditDrafts = 0
+    const prRedditAdapter = createPrRedditAdapter(socialChannels.transport)
+    redditWrites = createRedditWriteService({
+      workspace_id: ws,
+      clock,
+      approvals: txn.approvals,
+      emit: (type, actor, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: actor === 'system' ? 'system' : 'person', id: actor as never },
+          correlation: { trace_id: `tr_reddit_${clock.now()}` },
+          payload,
+        })
+      },
+      brand: () => brandNameOfWorkspace(ws),
+      drafter: (actor) => {
+        const models = effectiveModels()
+        const ref = models.configured() ? models.defaultRef() : undefined
+        if (ref === undefined || ref.provider === 'stub') return undefined
+        return modelRedditDrafter(async (prompt) => {
+          const completion = await gatewayProxy.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id as never,
+              role_id: actor.role_id as never,
+              run_id:
+                `reddit_draft_${Date.parse(clock.now()).toString(36)}_${++redditDrafts}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 1200,
+            thinking: 'off',
+          })
+          return completion.text
+        })
+      },
+      facts: async (actor, query) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text: query,
+          k: 5,
+          actor: {
+            person_id: actor.person_id,
+            workspace_id: ws,
+            assignment_id: actor.assignment_id,
+            role_id: actor.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        } as never)
+        return hits.map((h) => ({ id: h.fact_card_id, text: h.statement_redacted }))
+      },
+      voice: (actor) => adCreativeSkillText(actor as never, 'brand-voice'),
+      // WP329：品牌号用 WP328 巡查设置里的那一个（没配按品牌算）
+      account: () => redditWatch?.settings().brand_username,
+      rules: async (sub) => {
+        // 决策 764：先用插件借品牌号会话只读到的版规（WP328 巡查顺手读）；没读过就记一笔，下一轮读
+        const viaPlugin = redditWatch?.rules(sub)
+        if (viaPlugin !== undefined) return viaPlugin.rules
+        redditWatch?.wantRules(sub)
+        const adapter = socialChannels.adapters.reddit
+        if (
+          adapter.communityRules === undefined ||
+          !(socialChannels.transport.connected('reddit') || redditOfficial?.port.ready() === true)
+        )
+          return undefined
+        const r = await adapter.communityRules(sub)
+        return r.ok ? r.data : undefined
+      },
+      ...(adsActions === undefined ? {} : { actions: adsActions }),
+      direct: redditDirectWriter({
+        adapter: () => socialChannels.adapters.reddit,
+        prAdapter: () => prRedditAdapter,
+        apiConnected: () => socialChannels.transport.connected('reddit'),
+        officialReady: () => redditOfficial?.port.ready() === true,
+      }),
+      record: (input) => outboundLog.record(ws, input),
+      // 批了过取消窗口由执行器施行（交给插件）；每分钟补扫一遍（重启后 / 定时器丢了也接得上）
+      applyApproval: (id) => txn.executor.applyApproval(id),
+      cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+      approvedItems: () =>
+        txn.runtime.store.listApprovals({
+          workspace_id: ws,
+          kind: 'outbound_draft',
+          state: ['approved', 'approved_edited'],
+        }),
+      approverName: async (id) => {
+        await outboundApprover(id)
+        return outboundNames.get(id)
+      },
+      // WP328：出了卡 → 待处理条目标「起草中」
+      onStaged: (source, _approval) => {
+        if (source.type === 'reddit_watch_item') redditWatch?.setStatus(source.id, 'drafting')
+      },
+      onSettled: (entry) =>
+        settleRedditWrite(entry, {
+          // WP328：发出去了 → 条目标「回过了」并挂上发出记录那一行
+          setWatchStatus: (id, record_id) =>
+            redditWatch?.setStatus(id, 'done', {
+              ...(record_id === undefined ? {} : { outbound_record_id: record_id }),
+            }),
+          thread: (id) => social.thread(id),
+          saveThread: (row) => social.saveThread(row),
+          post: (id) => pr.post(id),
+          savePost: (row) => pr.savePost(row),
+          emit: (type, payload) =>
+            appendEvent({
+              schema_version: 1,
+              workspace_id: ws,
+              type,
+              actor: { kind: 'system', id: 'system' as never },
+              correlation: { trace_id: `tr_reddit_${clock.now()}` },
+              payload,
+            }),
+          now: () => clock.now(),
+        }),
+      ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+    })
+    const redditWritesSweep = setInterval(
+      () => void redditWrites?.sweep().catch(() => undefined),
+      60 * 1000,
+    )
+    redditWritesSweep.unref?.()
 
     /*
      * WP268（决策 213）：品牌素材库（设计库那张素材表 + 对象存储）与生图 / 改图工具。
@@ -4989,12 +5172,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP323：记录去处的三个工具（所有职责；配置只出「定规矩」卡）
             recordSinkTools: createRecordSinkToolExecutor({ log: () => outboundLog }),
-            // WP330：Reddit 周报的分节与措辞（担 Reddit 运营的职责；改了直接生效，只动周报怎么写）
-            redditWeeklyTools: createRedditWeeklyToolExecutor({
-              service: async () => redditWeekly,
-              schedule: (w) => redditWeeklySchedule(w),
-              setSchedule: (w, input) => setRedditWeeklySchedule(w, input),
-            }),
+            /*
+             * WP331（决策 691）：报告积木——查巡查数据 / 立即巡查（只给担巡查的职责）、查发出记录 / 发布报告（所有职责）。
+             * 周报不是固定功能：AI 用官方「自动化任务」建定时，到点用这四个取数、出报告。巡查库只在调工具那一刻才取。
+             */
+            reportTools: {
+              execute: createReportToolExecutor({
+                clock,
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
+                watch: (w) =>
+                  options.watchSource !== undefined
+                    ? options.watchSource(w)
+                    : redditWatch === undefined
+                      ? undefined
+                      : redditWatchSourceOf(redditWatch),
+                watchRoles: REPORT_WATCH_ROLES,
+                outbound: () => outboundLog,
+                approvals: () => approvals,
+                publishedCount: (w, dedupe_key) =>
+                  txn.runtime.store.listApprovals({
+                    workspace_id: w,
+                    kind: 'weekly_review',
+                    dedupe_key,
+                  }).length,
+              }),
+              watchRoles: REPORT_WATCH_ROLES,
+            },
             ownerTools: createOwnerToolExecutor({
               positions: async (actor) =>
                 org.port.positions({
@@ -6557,6 +6760,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 payload,
               }),
           })
+    /*
+     * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
+     * 起草的人 = 担「自家版运营」的那个人（没人担就不起草，条目留在待处理里）。
+     */
+    redditWatch?.onPending((entries) => {
+      const holder = redditHolder()
+      if (holder === undefined || redditWrites === undefined) return
+      const actor = {
+        workspace_id: ws,
+        person_id: holder.person_id,
+        assignment_id: holder.id,
+        role_id: holder.role_id,
+      }
+      void (async () => {
+        for (const entry of entries) {
+          if (entry.status !== 'open') continue
+          const target = redditTargetFromItem(entry)
+          if (target === undefined) continue
+          await redditWrites
+            ?.draftAndStage(actor, {
+              target,
+              ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
+            })
+            .catch(() => undefined)
+        }
+      })()
+    })
 
     return {
       workspace_id: ws,
@@ -6603,13 +6833,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adsService,
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
+      // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
+      redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
       lineCompareSnapshot,
-      // WP330：Reddit 周报
-      redditWeekly,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -6641,6 +6871,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await redditOfficial?.close()
         // WP313：插件动作通道（放掉挂着的长轮询、停掉定时扫）
         if (adsActionsSweep !== undefined) clearInterval(adsActionsSweep)
+        clearInterval(redditWritesSweep)
+        redditWrites?.close()
         adsActions?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
@@ -6721,6 +6953,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
     // WP249：自家版版务卡批了 → 过了取消窗口施行（读队列时也会补扫一遍）
     if (isOwnSubApproval(item)) return brand?.socialService.ownSub?.onDecided(item)
+    // WP329：Reddit「发出去」卡批了 → 过了取消窗口交给插件（每分钟也会补扫）
+    if (isRedditWriteCard(item)) return brand?.redditWrites.onDecided(item)
     // WP254：别的社群的版务卡 / 回帖卡批了 → 过了取消窗口施行（定时发布那一轮也会补扫）
     if (isSocialExecutableApproval(item)) return brand?.socialService.executor.onDecided(item)
     if (item.kind === 'inbound_dead_letter') {
@@ -7229,8 +7463,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       weeklyReview: async () => (await of()).weeklyReview.run(),
       lineCompare: async () => (await of()).lineCompareSnapshot(),
     })
-    // WP330：Reddit 周报（每周五下班前；关机错过补跑一次）
-    registerRedditWeekly(s, { run: async ({ late }) => (await of()).redditWeekly.run({ late }) })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
     // WP328：Reddit 每日巡查（这个品牌的插件、版块、关键词）；没装（托管）就什么都不做
@@ -7328,8 +7560,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
         // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
         redditPatrol: held('social.reddit'),
-        // WP330：有人担 Reddit 运营（自家版 / 别人的版）才出周报
-        redditWeekly: REDDIT_WEEKLY_ROLES.some((r) => held(r)),
       },
     })
   }
@@ -7343,6 +7573,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     await wireBrand(ws)
     await ensureBrandTasks(ws)
     await applyRoleGates(ws)
+    await retireTasks(ws)
+  }
+
+  /**
+   * WP331（决策 691）：退役的系统定时——WP330 的「每周五出 Reddit 周报」。周报改成用户说一句、AI 用官方
+   * 「自动化任务」自己配出来，老数据目录里那一条取消掉（任务记录留着，不再到点）。
+   */
+  const RETIRED_TASK_IDS = ['sched_reddit_weekly']
+  async function retireTasks(ws: WorkspaceId): Promise<void> {
+    const suffix = ws === workspace.id ? '' : `__${ws}`
+    for (const id of RETIRED_TASK_IDS) {
+      const task = schedule.scheduler.get(`${id}${suffix}`)
+      if (task !== undefined && task.state !== 'cancelled') await schedule.scheduler.cancel(task.id)
+    }
   }
 
   /*
@@ -7368,11 +7612,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
     // WP224
     { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },
-    // WP330
-    {
-      ids: ['sched_reddit_weekly'],
-      held: (ws) => REDDIT_WEEKLY_ROLES.some((r) => roleHeldIn(ws, r)),
-    },
     {
       ids: ['sched_ads_line_compare'],
       held: (ws) => ADS_PLATFORMS.some((p) => roleHeldIn(ws, `ads.${p.id}`)),
@@ -10671,32 +10910,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
       },
     },
-    // WP330（docs/102 附）：Reddit 周报（按主体所在品牌）
-    redditWeekly: {
-      report: async (actor, week_of) =>
-        (await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)).redditWeekly.report(
-          week_of,
-        ) ?? null,
-      preview: async (actor) =>
-        (await (
-          await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)
-        ).redditWeekly.build()) ?? null,
-      run: async (actor) =>
-        (await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)).redditWeekly.run(),
-      export: async (actor, week_of) =>
-        (await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)).redditWeekly.exportDoc(
-          week_of,
-        ) ?? null,
-      format: async (actor) =>
-        (await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)).redditWeekly.format(),
-      setFormat: async (actor, input) =>
-        (await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)).redditWeekly.setFormat(
-          input.patch,
-          input.reset === undefined ? {} : { reset: input.reset },
-        ),
-      schedule: (actor) => redditWeeklySchedule(actor.workspace_id),
-      setSchedule: (actor, input) => setRedditWeeklySchedule(actor.workspace_id, input),
-    },
     // WP215：每个品牌一套后台——状态、全进程并发上限、品牌急停
     background: {
       settings: async (actor) => background.settings(backgroundRowsOf(actor)),
@@ -11380,7 +11593,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       outboundLog.close()
       outboundStore.close()
       redditWatchStore.close()
-      redditWeeklyStore.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()

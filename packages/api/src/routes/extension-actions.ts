@@ -121,18 +121,31 @@ function portOf(deps: GatewayDeps): ExtensionActionsPort {
   return p
 }
 
-/** 插件这一侧：令牌 + Origin，再要 `ads.act`。老令牌没有它——重新配一次对就有了。 */
+/**
+ * 插件这一侧：令牌 + Origin，再要 `ads.act`（广告）或 `reddit.write`（WP329：Reddit 写）其中一个。
+ * 老令牌没有——重新配一次对就有了。领活时再按令牌上真有的那一个筛平台（{@link platformsAllowed}）。
+ */
 function actorOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
   const session = extensionSessionOf(c, deps)
-  if (!session.scopes.includes('ads.act'))
+  if (!session.scopes.includes('ads.act') && !session.scopes.includes('reddit.write'))
     throw new ApiError(
       'forbidden',
-      '这把配对还没有广告权限。在工作台重新生成配对码、插件里再配一次。',
+      '这把配对还没有动作权限。在工作台重新生成配对码、插件里再配一次。',
     )
   return session
 }
 
-const PLATFORMS = ['google_ads', 'meta_ads'] as const
+/** 令牌上有哪个 scope 就只领哪类活：广告要 `ads.act`，Reddit 要 `reddit.write`。 */
+export function platformsAllowed(
+  session: Pick<ExtensionSession, 'scopes'>,
+  platforms: readonly ActionPlatform[],
+): ActionPlatform[] {
+  return platforms.filter((p) =>
+    session.scopes.includes(p === 'reddit' ? 'reddit.write' : 'ads.act'),
+  )
+}
+
+const PLATFORMS = ['google_ads', 'meta_ads', 'reddit'] as const
 
 const platformSchema = z.enum(PLATFORMS)
 
@@ -185,7 +198,7 @@ function parsePlatforms(raw: string | undefined): ActionPlatform[] {
     .map((s) => s.trim())
     .filter((s): s is ActionPlatform => (PLATFORMS as readonly string[]).includes(s))
   if (out.length === 0)
-    throw new ApiError('invalid_input', 'platforms 至少要一家（google_ads / meta_ads）')
+    throw new ApiError('invalid_input', 'platforms 至少要一家（google_ads / meta_ads / reddit）')
   return [...new Set(out)]
 }
 
@@ -213,14 +226,24 @@ export function extensionActionRoutes(): Route[] {
         // 急停（outbound）时一件都不发：广告写操作就是对外动作
         outbound: true,
         params: [
-          { name: 'platforms', in: 'query', required: true, description: 'google_ads,meta_ads' },
+          {
+            name: 'platforms',
+            in: 'query',
+            required: true,
+            description: 'google_ads,meta_ads,reddit',
+          },
           { name: 'wait', in: 'query', description: '最多挂几秒（0–25）' },
         ],
         returns: 'ActionNextResponse',
       },
       async (c, deps) => {
         const session = actorOf(c, deps)
-        const platforms = parsePlatforms(c.req.query('platforms'))
+        const platforms = platformsAllowed(session, parsePlatforms(c.req.query('platforms')))
+        if (platforms.length === 0)
+          throw new ApiError(
+            'forbidden',
+            '这把配对没有这几类活的权限。在工作台重新生成配对码、插件里再配一次。',
+          )
         return ok(
           c,
           await portOf(deps).next(session, { platforms, wait_ms: waitMs(c.req.query('wait')) }),

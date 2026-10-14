@@ -1,5 +1,5 @@
 /**
- * 设置页「Reddit」一节（WP328）。一行：连上没有 + 一个按钮 + 上次读到什么。
+ * 设置页「Reddit」一节（WP328 读 + WP329 写共用一行）。一行：连上没有 + 一个按钮 + 上次读到什么。
  * 连接 = 浏览器弹窗给 Reddit 的站点权限（可选权限）；登录由你自己在这个 Chrome 里做（插件从不碰口令）。
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -35,6 +35,8 @@ export function RedditSection(props: { paired: boolean }): React.ReactNode {
       .then(async (granted) => {
         if (!granted) setNote('浏览器里没有给权限，没连上。')
         await send({ type: 'reddit-poll' })
+        // WP329：连上了也马上问一次有没有批好的回复要填
+        if (granted) await send({ type: 'ads-poll' })
       })
       .finally(refresh)
   }, [refresh])
@@ -70,8 +72,11 @@ export function RedditSection(props: { paired: boolean }): React.ReactNode {
           )}
         </li>
       </ul>
-      <p className="ws-note" title="只读收件箱与自家版块，不改已读；登录你自己在这个 Chrome 里做">
-        只读，不改已读。
+      <p
+        className="ws-note"
+        title="读：只读收件箱与自家版块，不改已读。写：批过的回复由插件新开标签页填好，你自己点发送。登录你自己在这个 Chrome 里做"
+      >
+        读不改已读 · 写由你点发送
       </p>
       {props.paired ? null : <p className="ws-note ws-note--warn">先配对，再连接。</p>}
       {last === undefined ? null : (

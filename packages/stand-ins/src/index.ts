@@ -57,9 +57,10 @@ export * from './runtime/playbook.js'
 export * from './runtime/produce.js'
 // WP323：记录去处的三个工具（通用能力：用户几句话交代，AI 配好，出「定规矩」卡）
 export * from './runtime/record-sink.js'
-// WP330：Reddit 周报的分节与措辞（用户几句话交代，AI 用这两个工具改）
-export * from './runtime/reddit-weekly.js'
 export * from './runtime/replay.js'
+// WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告）与 stub 的报告剧本
+export * from './runtime/report.js'
+export * from './runtime/report-playbook.js'
 export * from './runtime/research.js'
 export * from './runtime/schedule.js'
 export * from './runtime/shop.js'

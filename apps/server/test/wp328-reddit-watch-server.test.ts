@@ -5,7 +5,7 @@
  * - 品牌里有人担「Reddit」那条社媒职责 → 建了每日巡查的定时任务；
  * - 现在巡查一次 → 排一件只读活 → 插件领走、用真执行器读替身 Reddit、交回 → 入库、判断、待处理；
  * - 工作台用「Reddit」那条职责看得到待处理、能标「不回」、拿得到一周汇总；
- * - 巡查数据 → 周报（WP330）出得来（周报的数据源兜底就是这个品牌的巡查库）。
+ * - 巡查数据 → 报告积木「查巡查数据」读得到（WP331：数据源兜底就是这个品牌的巡查库）。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,7 +16,9 @@ import {
   runRedditRead,
 } from '@agentsws/browser-action'
 import type { RedditWatchDigest, RedditWatchView } from '@agentsws/contracts'
+import { queryWatchItems } from '@agentsws/social-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { redditWatchSourceOf } from '../src/reddit-watch/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import { createServer, type Server } from '../src/server.js'
 
@@ -59,6 +61,7 @@ const plugin = (path: string, token: string, init: { method?: string; body?: unk
 const NOW_S = Math.floor(Date.now() / 1000)
 const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
 const ROUTES: Record<string, unknown> = {
+  '/r/inmoxr/about/rules.json': { rules: [{ short_name: 'Be civil', description: 'No insults' }] },
   '/api/me.json': { kind: 't2', data: { name: 'inmo_official' } },
   '/message/inbox/.json': listing([
     {
@@ -166,7 +169,13 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     }
     const job = got.job
     if (job === undefined) throw new Error('没领到活')
-    expect(job.reads.map((r) => r.key)).toEqual(['inbox', 'sub_new:inmoxr', 'sub_comments:inmoxr'])
+    // WP329（决策 764）：顺手读自家版块的版规（起草时当上下文）
+    expect(job.reads.map((r) => r.key)).toEqual([
+      'inbox',
+      'sub_new:inmoxr',
+      'sub_comments:inmoxr',
+      'rules:inmoxr',
+    ])
     const res = await runRedditRead(job, {
       fetch: fakeFetch,
       sleep: async () => {},
@@ -179,6 +188,10 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
       body: res,
     })
     expect(accepted.status).toBe(200)
+    expect(
+      (await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWatch?.rules('inmoxr')
+        ?.rules,
+    ).toEqual(['Be civil：No insults'])
 
     const view = await data<RedditWatchView>(
       await call('GET', '/v1/reddit-watch', undefined, reddit?.id),
@@ -202,14 +215,19 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     expect(digest.own_sub.posts).toBe(1)
     expect(digest.inbox.total).toBe(1)
 
-    // 巡查数据 → 周报（WP330）出得来：没注入 redditWeekSource 时用的就是这个品牌的巡查库
-    const weekly = (await server.brands.forWorkspace(ws)).redditWeekly
-    const out = await weekly.run({ sweep: false })
-    expect(out.skipped).toBeUndefined()
-    expect(out.approval_item_id).toBeDefined()
-    const report = weekly.report()
-    expect(report?.totals).toMatchObject({ posts: 1, comments: 1 })
-    expect(report?.sweeps.count).toBeGreaterThanOrEqual(1)
-    expect(report?.markdown).toContain('inmoxr')
+    // 巡查数据 → 报告积木「查巡查数据」读得到（WP331：没注入 watchSource 时用的就是这个品牌的巡查库）
+    const src = redditWatchSourceOf(rw)
+    const w = {
+      since: '2000-01-01T00:00:00.000Z',
+      until: new Date(Date.now() + 60_000).toISOString(),
+    }
+    const q = queryWatchItems({
+      items: await src.items(w),
+      ownPlaces: await src.ownPlaces(),
+      window: w,
+    })
+    expect(q.totals.own).toEqual({ posts: 1, comments: 1 })
+    expect((await src.sweeps(w)).length).toBeGreaterThanOrEqual(1)
+    expect(q.items.some((x) => x.place === 'inmoxr')).toBe(true)
   })
 })

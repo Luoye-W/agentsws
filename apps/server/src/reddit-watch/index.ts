@@ -9,10 +9,4 @@ export {
   type RedditWatchItemQuery,
   type RedditWatchStore,
 } from './store.js'
-export {
-  type RedditWeekItem,
-  type RedditWeekSourceLike,
-  redditWeekSourceOf,
-  topicKey,
-  weekItemOf,
-} from './week-source.js'
+export { redditWatchSourceOf, topicKey, watchItemOfEntry } from './watch-source.js'

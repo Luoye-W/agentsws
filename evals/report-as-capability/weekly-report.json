@@ -1,0 +1,294 @@
+{
+  "id": "report-cap-01",
+  "title": "一句话配出周报，再一句话改格式（WP331 / 决策 691）",
+  "note": "周报不是固定功能：用户一句话 → AI 用官方自动化任务建每周五 17:00 的定时 → 到点用通用积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告）出报告；再说一句改格式 → AI 改那条定时的提示词 → 下一次报告顺序跟着变。数据全是替身（不开 Reddit）。stub 运行时由 apps/server/test/wp331-report-scenario.test.ts 跑；真模型由 scripts/eval-report-capability.mjs --live 跑。",
+  "state": {
+    "now": "2026-10-15T02:00:00.000Z",
+    "tz_note": "品牌时区东八区（工作区默认）；now = 周四 10:00，fire = 周五 17:00",
+    "role_id": "social.reddit",
+    "watch": {
+      "platform": "reddit",
+      "own_places": ["inmoxr"],
+      "sweeps": ["2026-10-15T01:30:00.000Z"],
+      "items": [
+        {
+          "id": "t3_p1",
+          "platform": "reddit",
+          "kind": "post",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_p1",
+          "created_at": "2026-10-12T03:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/p1/",
+          "text": "First week with the Air3, the display is gorgeous. Pics inside.",
+          "title": "My Air3 first week",
+          "signals": {
+            "ugc": true,
+            "note": "开箱体验分享"
+          }
+        },
+        {
+          "id": "t3_p2",
+          "platform": "reddit",
+          "kind": "post",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_p2",
+          "created_at": "2026-10-13T04:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+          "text": "Battery drains in about 2 hours when streaming. Is that normal?",
+          "title": "Battery drains fast?",
+          "signals": {
+            "voc": true,
+            "note": "续航抱怨"
+          }
+        },
+        {
+          "id": "t3_p3",
+          "platform": "reddit",
+          "kind": "post",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_p3",
+          "created_at": "2026-10-14T05:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/p3/",
+          "text": "",
+          "title": "(deleted)",
+          "deleted": true
+        },
+        {
+          "id": "t1_c1",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_c1",
+          "created_at": "2026-10-13T06:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/c1/",
+          "text": "Wish it had a wider field of view, otherwise great.",
+          "title": "Battery drains fast?",
+          "signals": {
+            "voc": true,
+            "note": "想要更大视场角"
+          }
+        },
+        {
+          "id": "t1_c2",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_c2",
+          "created_at": "2026-10-14T07:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/c2/",
+          "text": "Same here, mine lasts about 2.5h.",
+          "title": "Battery drains fast?"
+        },
+        {
+          "id": "t1_c3",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_c3",
+          "created_at": "2026-10-15T01:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/c3/",
+          "text": "Nice photos!",
+          "title": "My Air3 first week"
+        },
+        {
+          "id": "t1_c4",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_c4",
+          "created_at": "2026-10-16T05:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/c4/",
+          "text": "Ordered mine today.",
+          "title": "My Air3 first week"
+        },
+        {
+          "id": "t1_old",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "own",
+          "place": "inmoxr",
+          "author": "user_ld",
+          "created_at": "2026-10-10T15:00:00.000Z",
+          "url": "https://www.reddit.com/r/inmoxr/comments/old/",
+          "text": "last week's comment",
+          "title": "Old thread"
+        },
+        {
+          "id": "t3_x1",
+          "platform": "reddit",
+          "kind": "post",
+          "scope": "external",
+          "place": "augmentedreality",
+          "author": "ext_x1",
+          "created_at": "2026-10-13T08:00:00.000Z",
+          "url": "https://www.reddit.com/r/augmentedreality/comments/x1/",
+          "text": "INMO Air3 vs XREAL One — which one for travel?",
+          "topic": {
+            "key": "t:inmo-vs-xreal",
+            "label": "和 XREAL 对比"
+          },
+          "assessment": "follow_up",
+          "keyword": "INMO"
+        },
+        {
+          "id": "t1_x2",
+          "platform": "reddit",
+          "kind": "comment",
+          "scope": "external",
+          "place": "smartglasses",
+          "author": "ext_x2",
+          "created_at": "2026-10-14T09:00:00.000Z",
+          "url": "https://www.reddit.com/r/smartglasses/comments/x2/",
+          "text": "I picked the INMO because of the built-in OS.",
+          "topic": {
+            "key": "t:inmo-vs-xreal",
+            "label": "和 XREAL 对比"
+          },
+          "assessment": "no_action",
+          "keyword": "INMO"
+        },
+        {
+          "id": "t3_x3",
+          "platform": "reddit",
+          "kind": "post",
+          "scope": "external",
+          "place": "China",
+          "author": "ext_x3",
+          "created_at": "2026-10-15T03:00:00.000Z",
+          "url": "https://www.reddit.com/r/China/comments/x3/",
+          "text": "影目的眼镜在国内卖多少钱？",
+          "topic": {
+            "key": "t:price-cn",
+            "label": "国内价格讨论"
+          },
+          "assessment": "low_relevance",
+          "keyword": "影目"
+        }
+      ]
+    },
+    "sent": [
+      {
+        "source_key": "eval:1",
+        "sent_at": "2026-10-13T05:00:00.000Z",
+        "channel": "reddit",
+        "action": "reply",
+        "kind": "outbound_draft",
+        "destination": "r/inmoxr",
+        "thread_title": "Battery drains fast?",
+        "thread_url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+        "content": "About 2–3 hours is expected while streaming; a firmware update next week improves it.",
+        "link": "https://www.reddit.com/r/inmoxr/comments/p2/x/our1/",
+        "external_id": "t1_our1",
+        "parent_external_id": "t3_p2"
+      },
+      {
+        "source_key": "eval:2",
+        "sent_at": "2026-10-13T07:00:00.000Z",
+        "channel": "reddit",
+        "action": "comment",
+        "kind": "outbound_draft",
+        "destination": "r/inmoxr",
+        "thread_title": "Battery drains fast?",
+        "thread_url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+        "content": "Thanks for the feedback on FOV — passed it to the product team.",
+        "link": "https://www.reddit.com/r/inmoxr/comments/p2/x/our2/",
+        "external_id": "t1_our2",
+        "parent_external_id": "t1_c1"
+      },
+      {
+        "source_key": "eval:3",
+        "sent_at": "2026-10-09T05:00:00.000Z",
+        "channel": "reddit",
+        "action": "reply",
+        "kind": "outbound_draft",
+        "destination": "r/inmoxr",
+        "content": "last week's reply",
+        "link": "https://www.reddit.com/r/inmoxr/comments/old/x/our0/",
+        "parent_external_id": "t3_old"
+      },
+      {
+        "source_key": "eval:4",
+        "sent_at": "2026-10-14T05:00:00.000Z",
+        "channel": "email",
+        "action": "email",
+        "kind": "outbound_draft",
+        "destination": "buyer@example.test",
+        "content": "Thanks for your order."
+      }
+    ]
+  },
+  "sections": {
+    "external": "外部|舆情|话题",
+    "voc_ugc": "VOC|UGC",
+    "replies": "回复|回帖|我们",
+    "own_counts": "帖子|评论|数据|统计"
+  },
+  "turns": [
+    {
+      "say": "每周五下午 5 点给我出一份 r/inmoxr 周报，数据周日到周五：①帖子数评论数 ②有效 VOC / UGC ③外部舆情按话题归组带判断和原文链接 ④我们本周回复数和链接",
+      "expect": {
+        "tools_called": ["schedule_create"],
+        "schedule": {
+          "count": 1,
+          "weekly": {
+            "weekdays": [5],
+            "time": "17:00"
+          }
+        }
+      }
+    },
+    {
+      "fire_at": "2026-10-16T09:00:00.000Z",
+      "expect": {
+        "tools_called": ["query_watch_items", "query_sent_records", "publish_report"],
+        "report": {
+          "version": 1,
+          "sections_in_order": ["own_counts", "voc_ugc", "external", "replies"],
+          "contains": {
+            "own_counts": ["3", "4"],
+            "voc_ugc": ["https://www.reddit.com/r/inmoxr/comments/p2/"],
+            "external": ["https://www.reddit.com/r/augmentedreality/comments/x1/"],
+            "replies": [
+              "https://www.reddit.com/r/inmoxr/comments/p2/x/our1/",
+              "https://www.reddit.com/r/inmoxr/comments/p2/x/our2/"
+            ]
+          },
+          "omits": ["https://www.reddit.com/r/inmoxr/comments/old/x/our0/", "last week's comment"]
+        }
+      }
+    },
+    {
+      "say": "把第三节放最前面",
+      "expect": {
+        "tools_called": ["schedule_update"],
+        "tools_not_called": ["schedule_create"],
+        "schedule": {
+          "count": 1,
+          "same_task": true,
+          "prompt_changed": true
+        }
+      }
+    },
+    {
+      "fire_at": "2026-10-16T09:30:00.000Z",
+      "expect": {
+        "tools_called": ["publish_report"],
+        "report": {
+          "version": 2,
+          "sections_in_order": ["external", "own_counts", "voc_ugc", "replies"],
+          "contains": {
+            "external": ["https://www.reddit.com/r/augmentedreality/comments/x1/"],
+            "replies": ["https://www.reddit.com/r/inmoxr/comments/p2/x/our1/"]
+          }
+        }
+      }
+    }
+  ]
+}

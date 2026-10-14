@@ -9,7 +9,7 @@
  * 别的按钮全不在白名单里。三条以上的改动一律走上传表——那一条在审批那一侧判（WP314 / WP316）。
  */
 
-import type { ActionAccount, ActionPlan, ActionPlatform, SheetRef } from '../types.js'
+import type { ActionAccount, ActionPlan, AdsPlatform, SheetRef } from '../types.js'
 
 /** 实体层级（暂停 / 启用 / 改预算按编号筛出这一条）。Meta 的「广告组」叫 ad set。 */
 export type AdsEntityLevel = 'campaign' | 'ad_group' | 'ad'
@@ -52,13 +52,13 @@ export const ADS_ORIGINS: AdsOrigins = {
 }
 
 /** 插件要申请的可选权限（连接时才申请：决策 551 / docs/101 §1.4）。 */
-export const ADS_HOST_PERMISSIONS: Record<ActionPlatform, string[]> = {
+export const ADS_HOST_PERMISSIONS: Record<AdsPlatform, string[]> = {
   google_ads: ['https://ads.google.com/*'],
   meta_ads: ['https://adsmanager.facebook.com/*', 'https://business.facebook.com/*'],
 }
 
 /** 自动化页面能开的站。 */
-export const ADS_HOSTS: Record<ActionPlatform, string[]> = {
+export const ADS_HOSTS: Record<AdsPlatform, string[]> = {
   google_ads: ['ads.google.com'],
   meta_ads: ['adsmanager.facebook.com', 'business.facebook.com'],
 }
@@ -80,7 +80,7 @@ export function accountQuery(account: ActionAccount): string {
 }
 
 /** 拼计划时共用的：白名单站点（真站 + 给了假站点时那一个）。 */
-export function hostsFor(platform: ActionPlatform, origin: string): string[] {
+export function hostsFor(platform: AdsPlatform, origin: string): string[] {
   const hosts = [...ADS_HOSTS[platform]]
   try {
     const h = new URL(origin).hostname
