@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REDDIT_WATCH_VERDICT_ZH, redditWeekWindow } from '../src/index.js'
 
-describe('Reddit 周报窗口（周日 00:00 本地 — 现在）', () => {
+describe('Reddit 一周窗口（周日 00:00 本地 — 现在）', () => {
   it('东八区周五 17:00 → 本周日 00:00', () => {
     // 2026-10-16 是周五；东八区 17:00 = 09:00Z
     const w = redditWeekWindow('2026-10-16T09:00:00.000Z', 480)

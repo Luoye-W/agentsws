@@ -91,10 +91,10 @@ export * from './pricing-catalog.js'
 export * from './read-routes.js'
 // WP328：Reddit 每日巡查（收件箱 / 自家版块 / 外部关键词）、待处理、周报汇总
 export * from './reddit-watch.js'
-// WP330（docs/102 附）：Reddit 周报（WP328 巡查入库的条目 → 按周汇总；分节与措辞可配置）
-export * from './reddit-weekly.js'
 // WP329（docs/102 §2.3）：Reddit 写——AI 起草 → 发出去卡 → 插件填草稿、人点发送 → 读回 → 发出记录
 export * from './reddit-write.js'
+// WP331（决策 691）：报告积木的共用形状（巡查条目、发布出来的报告；不认平台、不认客户）
+export * from './report.js'
 export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗

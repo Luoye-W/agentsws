@@ -156,7 +156,21 @@ export type Env = Record<string, string | undefined>
  * 第 2 层是 `--max-cost-base` 能拦得住人的前提：拿 DeepSeek 的美元价去算百炼的人民币
  * 花费，预算上限会差出好几倍。
  */
-export function resolveSimModel(env: Env = process.env): ResolvedSimModel | undefined {
+/**
+ * WP331：真模型那一头**接在哪**（不含 key 的值，只有装 key 的环境变量名）。与 {@link resolveSimModel} 同一份认法——
+ * 给要把模型配进服务进程的评测脚本用（`scripts/eval-report-capability.mjs`：经 `PUT /v1/models/providers` 配一条
+ * OpenAI 兼容的模型，key 由脚本在进程里现取、不打印）。没有 key 回 `undefined`。
+ */
+export function resolveSimEndpoint(env: Env = process.env):
+  | {
+      provider: string
+      model: string
+      baseUrl: string
+      region: 'cn' | 'global'
+      /** 装 key 的那个环境变量叫什么。 */
+      keyEnv: string
+    }
+  | undefined {
   const keyEnv = env[SIM_MODEL_ENV.keyEnv] ?? SIM_MODEL_ENV.key
   const hasOwnKey = (env[keyEnv] ?? '').trim().length > 0
   const hasDeepseek = (env.DEEPSEEK_API_KEY ?? '').trim().length > 0
@@ -171,10 +185,21 @@ export function resolveSimModel(env: Env = process.env): ResolvedSimModel | unde
   const preset = plan ?? (isBailian ? BAILIAN : DEEPSEEK)
   // 百炼那几个别名一律归成 `qwen`——22 §1 的 `ModelRef.provider` 是个固定小表，
   // 记账与报表按它归类，不该因为用户写了 `bailian` 还是 `dashscope` 分成两家
-  const provider = named === '' || isBailian ? preset.provider : named
-  const model = env[SIM_MODEL_ENV.model] ?? preset.model
-  const baseUrl = env[SIM_MODEL_ENV.baseUrl] ?? preset.baseUrl
-  const region = (env[SIM_MODEL_ENV.region] ?? preset.region) as 'cn' | 'global'
+  return {
+    provider: named === '' || isBailian ? preset.provider : named,
+    model: env[SIM_MODEL_ENV.model] ?? preset.model,
+    baseUrl: env[SIM_MODEL_ENV.baseUrl] ?? preset.baseUrl,
+    region: (env[SIM_MODEL_ENV.region] ?? preset.region) as 'cn' | 'global',
+    keyEnv: hasOwnKey ? keyEnv : 'DEEPSEEK_API_KEY',
+  }
+}
+
+export function resolveSimModel(env: Env = process.env): ResolvedSimModel | undefined {
+  const endpoint = resolveSimEndpoint(env)
+  if (endpoint === undefined) return undefined
+  const { provider, model, baseUrl, region } = endpoint
+  const hasOwnKey = endpoint.keyEnv !== 'DEEPSEEK_API_KEY'
+  const keyEnv = endpoint.keyEnv
   const num = (raw: string | undefined, fallback: number): number => {
     const v = Number.parseFloat(raw ?? '')
     return Number.isFinite(v) ? v : fallback

@@ -159,12 +159,10 @@ export function renderRow(
 export function matchesFilter(record: OutboundRecord, filter: SinkFilter): boolean {
   const hit = (list: string[] | undefined, v: string): boolean =>
     list === undefined || list.length === 0 || list.includes(v)
-  // WP330：「只有点名才记」的动作（周报那一行）——筛选里没明确列它就不写
-  if (
-    OUTBOUND_OPT_IN_ACTIONS.includes(record.action) &&
-    filter.actions?.includes(record.action) !== true
-  )
-    return false
+  // WP330 / WP331：「只有点名才记」的动作（发布的报告那一行）——筛选里没明确列它就不写；
+  // 点名了就记，不再看渠道（报告不属于哪个渠道）
+  if (OUTBOUND_OPT_IN_ACTIONS.includes(record.action))
+    return filter.actions?.includes(record.action) === true
   return (
     hit(filter.channels, record.channel) &&
     hit(filter.actions, record.action) &&
