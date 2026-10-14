@@ -99,6 +99,7 @@ import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { ReadRoutesApiPort } from './routes/read-routes.js'
 import type { RedditWatchPort } from './routes/reddit-watch.js'
+import type { RedditWeeklyPort } from './routes/reddit-weekly.js'
 import type { RoleRulesPort } from './routes/role-rules.js'
 import type { RunLimitsPort } from './routes/run-limits.js'
 import type { SearchDataApiPort } from './routes/search-data.js'
@@ -877,6 +878,8 @@ export interface GatewayDeps {
    * 没装配时回 not_implemented。
    */
   outbound?: OutboundPort
+  /** WP330（docs/102 附）：Reddit 周报 `/v1/reddit-weekly/*`。没装配时回 not_implemented。 */
+  redditWeekly?: RedditWeeklyPort
   /**
    * WP284（docs/95 §5）：「以后都这样」那张策略卡发给谁批。③ 回老板（与改职责规矩同一条路）；
    * ① ② 回 `undefined` = 写指导的本人自己点。不给 = 一律本人（老行为）。

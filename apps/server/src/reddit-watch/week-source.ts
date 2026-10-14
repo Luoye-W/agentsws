@@ -1,46 +1,23 @@
 /**
  * WP328 → WP330：把巡查库交成周报要的那一份（WP330 的 `RedditWeekSource`，`apps/server/src/reddit-weekly.ts`）。
  *
- * 形状照 WP330 契约 `RedditWatchItem`（`packages/contracts/src/reddit-weekly.ts`）逐格写在这里（结构类型）；
- * WP330 合进 main 之后，`server.ts` 里 `options.redditWeekSource?.(ws) ?? …` 那一处兜底换成
- * `redditWeekSourceOf(brand.redditWatch)` 就接上了（见报告 §3）。
+ * 条目形状是 WP330 契约 `RedditWatchItem`（`packages/contracts/src/reddit-weekly.ts`）；
+ * `server.ts` 里周报的 `source` 没注入时就用它（`redditWeekSourceOf(redditWatch)`）。
  *
  * 三点对齐：
  * 1. 周五那次巡查由周报调 `sweepNow` 触发（巡查这边不再单独排「周五 17:00 最后一次」）；
  * 2. 话题 `key` 跨天一致：由话题名规范化得来（AI 判的时候带着本周已有话题、能归就用原名）；
  * 3. 巡查失败不挡周报：`sweepNow` 有哪块没读成就抛一句人话，周报照样出、把原因带上。
  */
-import type { Iso8601, RedditWatchEntry, RedditWatchVerdict } from '@agentsws/contracts'
+import type { Iso8601, RedditWatchEntry, RedditWatchItem } from '@agentsws/contracts'
+import type { RedditWeekSource } from '../reddit-weekly.js'
 import type { RedditWatchAssembly } from './service.js'
 
-/** 与 WP330 `RedditWatchItem` 同形。 */
-export interface RedditWeekItem {
-  id: string
-  kind: 'post' | 'comment'
-  scope: 'own' | 'external'
-  subreddit: string
-  author?: string
-  created_at: Iso8601
-  permalink: string
-  title?: string
-  text: string
-  deleted?: boolean
-  signals?: { voc?: boolean; ugc?: boolean; note?: string }
-  topic?: { key: string; label: string }
-  assessment?: RedditWatchVerdict
-  keyword?: string
-}
+/** WP330 契约里的那一条（`packages/contracts/src/reddit-weekly.ts`）。 */
+export type RedditWeekItem = RedditWatchItem
 
-type MaybePromise<T> = T | Promise<T>
-
-/** 与 WP330 `RedditWeekSource` 同形。 */
-export interface RedditWeekSourceLike {
-  configured(): MaybePromise<boolean>
-  subreddits(): MaybePromise<string[]>
-  items(window: { since: Iso8601; until: Iso8601 }): MaybePromise<RedditWeekItem[]>
-  sweeps(window: { since: Iso8601; until: Iso8601 }): MaybePromise<Iso8601[]>
-  sweepNow?(): Promise<unknown>
-}
+/** WP330 的 `RedditWeekSource`（`apps/server/src/reddit-weekly.ts`）。 */
+export type RedditWeekSourceLike = RedditWeekSource
 
 /** 话题名 → 跨天稳定的键（大小写、空白、全半角标点不算不同）。 */
 export function topicKey(label: string): string {

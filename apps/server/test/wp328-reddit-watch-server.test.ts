@@ -4,7 +4,8 @@
  * - 新配的插件令牌带 `reddit.read`；插件来问（connected=1）→ 本机记下「插件在、连着 Reddit」；
  * - 品牌里有人担「Reddit」那条社媒职责 → 建了每日巡查的定时任务；
  * - 现在巡查一次 → 排一件只读活 → 插件领走、用真执行器读替身 Reddit、交回 → 入库、判断、待处理；
- * - 工作台用「Reddit」那条职责看得到待处理、能标「不回」、拿得到一周汇总。
+ * - 工作台用「Reddit」那条职责看得到待处理、能标「不回」、拿得到一周汇总；
+ * - 巡查数据 → 周报（WP330）出得来（周报的数据源兜底就是这个品牌的巡查库）。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -200,5 +201,15 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     )
     expect(digest.own_sub.posts).toBe(1)
     expect(digest.inbox.total).toBe(1)
+
+    // 巡查数据 → 周报（WP330）出得来：没注入 redditWeekSource 时用的就是这个品牌的巡查库
+    const weekly = (await server.brands.forWorkspace(ws)).redditWeekly
+    const out = await weekly.run({ sweep: false })
+    expect(out.skipped).toBeUndefined()
+    expect(out.approval_item_id).toBeDefined()
+    const report = weekly.report()
+    expect(report?.totals).toMatchObject({ posts: 1, comments: 1 })
+    expect(report?.sweeps.count).toBeGreaterThanOrEqual(1)
+    expect(report?.markdown).toContain('inmoxr')
   })
 })
