@@ -35,7 +35,8 @@ const V = '0.2.0-beta.1'
 const tmp = (p) => mkdtempSync(join(tmpdir(), `wp292-${p}-`))
 const EXE = `Agents-Workshop-Setup-${V}-x64.exe`
 const ARM = `Agents-Workshop-${V}-arm64.dmg`
-const X64 = `Agents-Workshop-${V}-x64.dmg`
+/** WP326（决策 731）：Mac 只出 Apple 芯片版，产物里没有 Intel 的 dmg。 */
+const ZIP = `Agents-Workshop-${V}-arm64-mac.zip`
 const yml = (version, files) =>
   `version: ${version}\nfiles:\n${files.map((f) => `  - url: ${f}\n    sha512: x\n    size: 3\n`).join('')}path: ${files[0]}\nsha512: x\nreleaseDate: '2026-10-10T00:00:00.000Z'\n`
 
@@ -48,11 +49,10 @@ function fakeBundle({ version = V, meta = {}, drop = [] } = {}) {
     [EXE]: 'exe',
     [`${EXE}.blockmap`]: 'bm',
     [ARM]: 'dmg',
-    [X64]: 'dmg',
-    [`Agents-Workshop-${V}-arm64-mac.zip`]: 'zip',
+    [ZIP]: 'zip',
     [`agents-workshop-extension-${V}.zip`]: 'zip',
     'latest.yml': yml(version, [EXE]),
-    'latest-mac.yml': yml(version, [ARM, X64]),
+    'latest-mac.yml': yml(version, [ARM, ZIP]),
   }
   for (const [n, body] of Object.entries(files))
     if (!drop.includes(n)) writeFileSync(join(art, n), body)
@@ -100,9 +100,8 @@ describe('上传计划', () => {
     expect(plan.map((p) => [p.key, p.contentType, p.cacheControl])).toEqual([
       [`beta/${EXE}`, 'application/vnd.microsoft.portable-executable', LONG],
       [`beta/${ARM}`, 'application/x-apple-diskimage', LONG],
-      [`beta/${X64}`, 'application/x-apple-diskimage', LONG],
       [`beta/${EXE}.blockmap`, 'application/octet-stream', LONG],
-      [`beta/Agents-Workshop-${V}-arm64-mac.zip`, 'application/zip', LONG],
+      [`beta/${ZIP}`, 'application/zip', LONG],
       [`beta/agents-workshop-extension-${V}.zip`, 'application/zip', LONG],
       ['beta/latest-mac.yml', 'text/yaml', SHORT],
       ['beta/latest.yml', 'text/yaml', SHORT],
@@ -147,6 +146,13 @@ describe('上传计划', () => {
       JSON.stringify({ version: '0.1.0', channel: 'beta' }),
     )
     expect(() => resolveRelease(readBundle(root))).toThrow('downloads.json 的版本是 0.1.0')
+    // WP326（决策 731）：latest-mac.yml 里混进 Intel 包 = 有人又打了 Intel 版，不传
+    const intel = fakeBundle()
+    writeFileSync(
+      join(intel, 'artifacts', 'latest-mac.yml'),
+      yml(V, [ARM, `Agents-Workshop-${V}-x64.dmg`]),
+    )
+    expect(() => resolveRelease(readBundle(intel))).toThrow('不是 Apple 芯片的包')
   })
 })
 
@@ -227,9 +233,8 @@ describe('端到端（假 gh / wrangler / curl）', () => {
     expect(puts.map((c) => c.a[3])).toEqual([
       `agentsws-downloads/beta/${EXE}`,
       `agentsws-downloads/beta/${ARM}`,
-      `agentsws-downloads/beta/${X64}`,
       `agentsws-downloads/beta/${EXE}.blockmap`,
-      `agentsws-downloads/beta/Agents-Workshop-${V}-arm64-mac.zip`,
+      `agentsws-downloads/beta/${ZIP}`,
       `agentsws-downloads/beta/agents-workshop-extension-${V}.zip`,
       'agentsws-downloads/beta/latest-mac.yml',
       'agentsws-downloads/beta/latest.yml',
@@ -251,7 +256,7 @@ describe('端到端（假 gh / wrangler / curl）', () => {
     const t = fakeTools()
     const r = cli(['--run', '42', '--upload'], t, {
       FAKE_BUNDLE: fakeBundle(),
-      FAKE_FAIL_ON: `beta/${X64}`,
+      FAKE_FAIL_ON: `beta/${ARM}`,
     })
     expect(r.status).toBe(1)
     expect(r.stderr).toContain('没成')
@@ -269,7 +274,7 @@ describe('端到端（假 gh / wrangler / curl）', () => {
     await expect(
       run(['--dir', fakeBundle(), '--upload'], { env, exec, log: (s) => logs.push(s) }),
     ).rejects.toThrow('beta/latest.yml 上的版本是 0.1.9')
-    expect(t.calls().filter((c) => c.tool === 'wrangler')).toHaveLength(10)
+    expect(t.calls().filter((c) => c.tool === 'wrangler')).toHaveLength(9)
   })
   it('有对象超过 wrangler 的 300 MiB 上限：一个都不传，dry-run 也报', async () => {
     const root = fakeBundle()
