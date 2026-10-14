@@ -15,9 +15,11 @@
  */
 import type {
   MaybePromise,
+  PersonId,
   RedditWeeklyFormat,
   RedditWeeklyPayload,
   WeeklyReviewScheduleView,
+  WorkspaceId,
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -33,6 +35,21 @@ const WRITE = {
   sensitivity: 'internal',
 } as const
 const TAG = 'reddit-weekly'
+
+/** 改分节与措辞 / 时间：担 Reddit 运营的人（周报发给他）、本品牌负责人、② 的同事。 */
+const WRITE_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit', 'common.owner'])
+const writeBypass = (
+  _c: Parameters<typeof principalOf>[0],
+  rctx: { principal?: { person_id: PersonId; workspace_id: WorkspaceId } },
+  deps: GatewayDeps,
+): boolean => {
+  const p = rctx.principal
+  if (p === undefined) return false
+  if (deps.peerAccess?.(p.workspace_id) === true) return true
+  return deps.roles
+    .listAssignments(p.person_id, { workspace_id: p.workspace_id })
+    .some((a) => WRITE_ROLES.has(a.role_id) && a.revoked_at === undefined)
+}
 
 export interface RedditWeeklyActor {
   workspace_id: string
@@ -176,6 +193,7 @@ export function redditWeeklyRoutes(): Route[] {
         operationId: 'setRedditWeeklyFormat',
         summary: '改 Reddit 周报的分节与措辞（只给要改的；reset 先回默认；认不出的照实回）',
         authz: WRITE,
+        authzBypass: writeBypass,
         body: FormatBody,
         returns: '{ format: RedditWeeklyFormat; problems: string[] }',
       },
@@ -210,6 +228,7 @@ export function redditWeeklyRoutes(): Route[] {
         operationId: 'setRedditWeeklySchedule',
         summary: '改 Reddit 周报每周几、几点出（只改这个品牌那一条定时）',
         authz: WRITE,
+        authzBypass: writeBypass,
         body: ScheduleBody,
         returns: 'WeeklyReviewScheduleView',
       },
