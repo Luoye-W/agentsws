@@ -516,4 +516,9 @@ export interface CommunityThread {
   routed_approval_id?: string
   /** 回过的话，回的那条在平台上的 id。 */
   reply_external_id?: string
+  /**
+   * WP329：这一条在平台上的站内链接（Reddit：`/r/x/comments/<帖>/<slug>/<评论>/`）。
+   * Reddit 回评论（楼中楼）要靠它打开那条评论、找到回复框；没有就照实说回不了。
+   */
+  permalink?: string
 }
