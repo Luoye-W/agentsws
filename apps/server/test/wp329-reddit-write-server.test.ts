@@ -224,6 +224,38 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     expect(writes.rows[0]?.message).toContain('连接 Reddit')
   })
 
+  it('WP328 交过来的「待处理」条目：起草一份、直接出卡（人在卡上改字再批）；私信不回', async () => {
+    const b = await brand()
+    const out = await b.redditWrites.draftAndStage(
+      {
+        workspace_id: server.bootstrap.workspace.id,
+        person_id: server.bootstrap.person.id,
+        assignment_id: reddit.id,
+        role_id: reddit.role_id,
+      },
+      { target: replyTarget as never, reason: '有人追问我们的回复' },
+    )
+    expect(out.staged).toBe(true)
+    const card = await server.txn.approvals.get(
+      (out as { approval_item_id: string }).approval_item_id,
+    )
+    expect(card?.payload).toMatchObject({
+      form: 'reddit_write',
+      reason: '有人追问我们的回复',
+      body: { text: 'Hi alice, thanks for sharing this!' },
+    })
+    const dm = await b.redditWrites.draftAndStage(
+      {
+        workspace_id: server.bootstrap.workspace.id,
+        person_id: server.bootstrap.person.id,
+        assignment_id: reddit.id,
+        role_id: reddit.role_id,
+      },
+      { target: { ...replyTarget, parent_fullname: 't4_x' } as never },
+    )
+    expect(dm.staged).toBe(false)
+  })
+
   it('社媒线程的 Reddit 回帖卡（评论、带链接）也走插件：做完线程标已回', async () => {
     await pluginSeen()
     const account = await data<{ id: string }>(

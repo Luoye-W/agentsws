@@ -140,6 +140,15 @@ export interface RedditSendInput {
 export interface RedditWriteService {
   draft(actor: SocialActor, input: RedditDraftInput): Promise<RedditDraftView>
   stage(actor: SocialActor, input: RedditStageInput): Promise<RedditStageResult>
+  /**
+   * WP328 → WP329 的接口：「待处理」里一条要回的（`redditTargetFromItem(item)` 转成写到哪）——
+   * 起草一份、直接出一张「发出去」卡（人在卡上改字、批）。起草出来是空的、或过不了承诺扫描就不出卡、照实回。
+   * 发新帖不走这里（要人给要点）。
+   */
+  draftAndStage(
+    actor: SocialActor,
+    input: { target: RedditWriteTarget; reason?: string },
+  ): Promise<RedditStageResult>
   /** 执行器调：是 Reddit 写卡就交出去并回结果，不是回 undefined。 */
   deliver(item: ApprovalItem): Promise<RedditWriteResult | undefined>
   /** 社媒回帖卡 / 公关外部帖也从这里交出去（同一条插件通道、同一份进度与记录）。 */
@@ -429,7 +438,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     }
   }
 
-  return {
+  const service: RedditWriteService = {
     extensionReady,
     send,
 
@@ -606,6 +615,24 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       return { staged: true, approval_item_id: item.id }
     },
 
+    async draftAndStage(actor, input) {
+      if (input.target.kind === 'submit')
+        return { staged: false, message: '发新帖要你给一句要点，不自动起草。' }
+      let draft: RedditDraftView
+      try {
+        draft = await service.draft(actor, { target: input.target })
+      } catch (err) {
+        return { staged: false, message: err instanceof Error ? err.message : String(err) }
+      }
+      if (draft.text.trim() === '') return { staged: false, message: '起草出来是空的，没出卡。' }
+      return service.stage(actor, {
+        target: input.target,
+        text: draft.text,
+        ...(draft.facts.length === 0 ? {} : { fact_ids: draft.facts.map((f) => f.id) }),
+        ...(input.reason === undefined ? {} : { reason: input.reason }),
+      })
+    },
+
     async deliver(item) {
       if (item.workspace_id !== ws || item.kind !== 'outbound_draft') return undefined
       const fp = finalPayload(item)
@@ -712,4 +739,5 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       })
     },
   }
+  return service
 }
