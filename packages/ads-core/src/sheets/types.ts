@@ -221,13 +221,15 @@ export interface AdUploadFile {
   content: string | Uint8Array
   /**
    * Google 是按表分开传的（广告系列 / 广告组 / 广告 / 关键词各一张，按这个顺序）；
-   * Meta 是一张平表，每行一条广告。
+   * Meta 是平表（每行一条广告，带着它的广告组与广告系列），新建与改已有分两张。
    */
-  sheet: 'campaigns' | 'ad_groups' | 'ads' | 'keywords' | 'meta_ads' | 'editor'
+  sheet: 'campaigns' | 'ad_groups' | 'ads' | 'keywords' | 'meta_new' | 'meta_edit' | 'editor'
   /** 在后台哪里上传，一句白话（插件步骤表与帮助文档用）。 */
   upload_from: string
   headers: readonly string[]
   rows: readonly (readonly string[])[]
+  /** Meta：同一张表的制表符文字，可直接粘贴进「批量导入广告 → 复制粘贴」框。 */
+  paste_text?: string
 }
 
 /** 审批卡上表格预览的一行。 */
@@ -261,10 +263,12 @@ export interface AdUploadBundle {
   /** 没有 `error` 级问题。为假时 `files` 为空——**有错的表不出**。 */
   ok: boolean
   problems: SheetProblem[]
-  /** Google：1–4 个 CSV，按上传顺序；Meta：一个 .xlsx（另有 `paste_text`）。 */
+  /**
+   * Google：1–4 个 CSV，按上传顺序。
+   * Meta：新建一张、改已有一张（各一个 .xlsx，带 `paste_text`），**分开导入**——
+   * 改已有的那张照官方做法用改前导出的原行改（见 meta.ts 文件头）。
+   */
   files: AdUploadFile[]
-  /** Meta：可直接粘贴进「批量导入广告 → 复制粘贴」框的文字（制表符分隔）。 */
-  paste_text?: string
   summary: SheetSummary
   /** 审批级别：上传表一律 L1（docs/101 §5.3：表里可能夹带新建）。 */
   approval_level: 'L1'

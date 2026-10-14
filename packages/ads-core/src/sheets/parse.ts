@@ -273,55 +273,85 @@ export function splitGoogleKeyword(
   }
 }
 
-/** 把解析好的每一行认成一个对象（层级按「最细的那一格有没有值」定）。 */
+/**
+ * 把解析好的行认成对象。Meta 的导出一行同时带着广告系列、广告组、广告三层，
+ * 所以**一行可以拆出好几个对象**（每层一个，按编号或名字去重）；各层用各自的状态列。
+ * 花费等指标只记在这一行最细的那一层上（记在每一层就重复算了）。
+ */
 export function exportEntities(parsed: ParsedAdsExport): ExportEntity[] {
-  return parsed.rows.map((row) => {
+  const out: ExportEntity[] = []
+  const seen = new Map<string, ExportEntity>()
+  for (const row of parsed.rows) {
     const v = row.values
-    const level: ExportEntity['level'] =
-      v.keyword !== undefined
-        ? 'keyword'
-        : v.ad_id !== undefined || v.ad !== undefined || v.headline_1 !== undefined
-          ? 'ad'
-          : v.ad_group !== undefined || v.ad_group_id !== undefined
-            ? 'ad_group'
-            : 'campaign'
-    const ownStatus =
-      level === 'campaign'
-        ? (v.campaign_status ?? v.status)
-        : level === 'ad_group'
-          ? (v.ad_group_status ?? v.status)
-          : level === 'ad'
-            ? (v.ad_status ?? v.status)
-            : v.status
-    const budget =
-      parseExportNumber(v.ad_group_daily_budget) ??
-      (level === 'campaign' || parsed.platform === 'google'
-        ? parseExportNumber(v.budget)
-        : undefined)
+    const has: Record<ExportEntity['level'], boolean> = {
+      campaign: v.campaign !== undefined || v.campaign_id !== undefined,
+      ad_group: v.ad_group !== undefined || v.ad_group_id !== undefined,
+      ad: v.ad_id !== undefined || v.ad !== undefined || v.headline_1 !== undefined,
+      keyword: v.keyword !== undefined,
+    }
+    const levels = (['campaign', 'ad_group', 'ad', 'keyword'] as const).filter((l) => has[l])
+    const finest = levels[levels.length - 1]
     const metrics: ExportEntity['metrics'] = {}
     for (const k of ['cost', 'impressions', 'clicks', 'conversions', 'conversion_value'] as const) {
       const n = parseExportNumber(v[k])
       if (n !== undefined) metrics[k] = n
     }
     const kw = v.keyword === undefined ? undefined : splitGoogleKeyword(v.keyword, v.match_type)
-    const e: ExportEntity = { level, status: normalizeStatus(ownStatus), metrics }
-    const copy = {
-      campaign: v.campaign,
-      campaign_id: v.campaign_id,
-      ad_group: v.ad_group,
-      ad_group_id: v.ad_group_id,
-      ad: v.ad,
-      ad_id: v.ad_id,
-      final_url: v.final_url,
-      headline_1: v.headline_1 ?? v.title,
+    for (const level of levels) {
+      const own =
+        level === 'campaign'
+          ? v.campaign_status
+          : level === 'ad_group'
+            ? v.ad_group_status
+            : level === 'ad'
+              ? v.ad_status
+              : undefined
+      const status = normalizeStatus(own ?? (level === finest ? v.status : undefined))
+      const e: ExportEntity = { level, status, metrics: level === finest ? metrics : {} }
+      const put = (k: keyof ExportEntity, val: string | undefined): void => {
+        if (val !== undefined) (e as unknown as Record<string, string>)[k] = val
+      }
+      put('campaign', v.campaign)
+      put('campaign_id', v.campaign_id)
+      if (level !== 'campaign') {
+        put('ad_group', v.ad_group)
+        put('ad_group_id', v.ad_group_id)
+      }
+      if (level === 'ad') {
+        put('ad', v.ad)
+        put('ad_id', v.ad_id)
+        put('final_url', v.final_url)
+        put('headline_1', v.headline_1 ?? v.title)
+      }
+      if (level === 'keyword' && kw !== undefined) {
+        e.keyword = kw.text
+        e.match = kw.match
+      }
+      const budget =
+        level === 'campaign'
+          ? parseExportNumber(v.budget)
+          : level === 'ad_group'
+            ? parseExportNumber(v.ad_group_daily_budget)
+            : undefined
+      if (budget !== undefined) e.budget = budget
+      const key = [
+        level,
+        e.campaign_id ?? e.campaign,
+        e.ad_group_id ?? e.ad_group,
+        e.ad_id ?? e.ad ?? e.headline_1,
+        e.keyword,
+        e.match,
+      ].join('\u0000')
+      const prev = seen.get(key)
+      if (prev === undefined) {
+        seen.set(key, e)
+        out.push(e)
+      } else if (level === finest) {
+        // 同一个对象出现在多行（按天拆的报表）：指标累加
+        for (const [k, n] of Object.entries(metrics) as [keyof ExportEntity['metrics'], number][])
+          prev.metrics[k] = (prev.metrics[k] ?? 0) + n
+      }
     }
-    for (const [k, val] of Object.entries(copy))
-      if (val !== undefined) (e as unknown as Record<string, string>)[k] = val
-    if (kw !== undefined) {
-      e.keyword = kw.text
-      e.match = kw.match
-    }
-    if (budget !== undefined) e.budget = budget
-    return e
-  })
+  }
+  return out
 }
