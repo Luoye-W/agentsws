@@ -7,6 +7,11 @@
  * - 前端不引入任何模型 SDK：卡片按钮只打 decide（29 §5 动作不经模型）。
  */
 import type {
+  AdCreativePlatform,
+  AdCreativeRound,
+  AdCreativeWeakAd,
+  AdExperimentEntry,
+  AdUploadSheet,
   AllocationAuditList,
   AllocationLimitChanged,
   AllocationLimitRequest,
@@ -7642,3 +7647,74 @@ export interface ModelImageUsing {
   /** 改图认不认遮罩（按型号能力表判；经 Agents 工坊云的型号都不认）。 */
   edit_mask?: boolean
 }
+
+/* ── WP317（docs/101 §5.1④）：广告素材流水线 ───────────────────────────────── */
+
+export interface AdCreativeImportData {
+  id: string
+  platform: AdCreativePlatform
+  metric: string
+  rows: number
+  weak: AdCreativeWeakAd[]
+  notes: string[]
+}
+
+export interface AdCreativeDesignData {
+  requested: boolean
+  request_id?: string
+  staged?: { staged: boolean; level?: string; message?: string }
+  title: string
+  variants: number
+  spec_ids: string[]
+  notes: string[]
+}
+
+export const importAdCreativeExport = (
+  input: { platform: AdCreativePlatform; text: string },
+  assignment?: string,
+): Promise<AdCreativeImportData> =>
+  api('/v1/ads/creative/imports', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const rewriteAdCreative = (
+  input: { import_id: string; ad_ids?: string[] },
+  assignment?: string,
+): Promise<AdCreativeRound> =>
+  api('/v1/ads/creative/rounds', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const getAdCreativeSheet = (round_id: string, assignment?: string): Promise<AdUploadSheet> =>
+  api(`/v1/ads/creative/rounds/${encodeURIComponent(round_id)}/sheet`, withAssignment(assignment))
+
+export const requestAdCreativeDesign = (
+  round_id: string,
+  input: { variants?: number },
+  assignment?: string,
+): Promise<AdCreativeDesignData> =>
+  api(`/v1/ads/creative/rounds/${encodeURIComponent(round_id)}/design`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const listAdExperiments = (assignment?: string): Promise<{ rows: AdExperimentEntry[] }> =>
+  api('/v1/ads/creative/experiments', withAssignment(assignment))
+
+export const addAdExperiment = (
+  input: { hypothesis: string; change: string; result?: string; round_id?: string },
+  assignment?: string,
+): Promise<AdExperimentEntry> =>
+  api('/v1/ads/creative/experiments', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const updateAdExperiment = (
+  id: string,
+  input: { result?: string },
+  assignment?: string,
+): Promise<AdExperimentEntry> =>
+  api(`/v1/ads/creative/experiments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: input,
+    ...withAssignment(assignment),
+  })
