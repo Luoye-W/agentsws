@@ -7,6 +7,7 @@
  * | AI 概览 | 同 Google SERP，取 `ai_overview` 那一项 |
  * | ChatGPT / Gemini | `/v3/ai_optimization/{chat_gpt,gemini}/llm_scraper/live/advanced`（网页端真看到的回答） |
  * | Claude（WP310，决策 461） | `/v3/ai_optimization/claude/llm_responses/live`（模型接口 + **强制联网**，`claude-sonnet-5`，输出上限 1024）——claude.ai 网页端谁都抓不了 |
+ * | Claude 模型清单（WP321，决策 534） | `/v3/ai_optimization/claude/llm_responses/models`（免费；问之前对一下模型名） |
  * | Perplexity | `/v3/ai_optimization/perplexity/llm_responses/live`（sonar 模型 API + 联网搜索）。**WP159 起登记为不用**：代码留着，不进 `platforms` |
  * | Copilot | **没有**（docs/81 §1.1）；不列进 `platforms` |
  *
@@ -418,6 +419,25 @@ export const dataforseo: SearchProviderAdapter = {
       },
     )
     taskOf(body)
+  },
+  // WP321（决策 534）：Claude 的模型清单口是免费的——问 Claude 前对一下模型名还在不在
+  async models(platform, key, fetch) {
+    if (platform !== 'claude') return []
+    const body = await callProvider(
+      fetch,
+      `${DATAFORSEO_BASE}/ai_optimization/claude/llm_responses/models`,
+      { method: 'GET', headers: { authorization: basic(key) } },
+      {
+        key,
+        timeoutMs: SERP_TIMEOUT_MS,
+        label: LABEL,
+        errorText: (b) => str(obj(b).status_message),
+      },
+    )
+    taskOf(body)
+    return arr(obj(arr(obj(body).tasks)[0]).result)
+      .map((r) => str(obj(r).model_name) ?? str(obj(r).name))
+      .filter((m): m is string => m !== undefined)
   },
   costKey: (kind) => `dataforseo:${kind}`,
 }

@@ -7475,6 +7475,75 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/seo/watch': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP321：AI 回答监测的关注设置（品牌 / 竞品 / 已选与候选 Prompt / 关注词 / 关注的 AI / 频率）+ 一轮与每月大概多少积分 + 策略定没定 + 最近几轮 */
+    get: operations['getGeoWatch']
+    /** WP321：改关注设置——整份采用一份策略，或单改竞品 / 关注词 / 关注的 AI / 频率 / 已选几条；Prompt 改字 = 归档旧的 + 新建一条 */
+    put: operations['setGeoWatch']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/seo/watch/strategy': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP321：AI 按品牌档案（品类、阶段、市场）给一份策略——追几条、各方向占多少、带品牌名几条、候选 Prompt、竞品、关注词；card=true 时同时出一张设定卡 */
+    post: operations['suggestGeoWatch']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/seo/watch/run': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP321：现在跑一轮（即时）——Claude 单格约 3.6 积分：不带 confirm 只回这一轮的估算（needs_confirm），带 confirm=true 才跑 */
+    post: operations['runGeoWatch']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/seo/watch/metrics': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP321：看板要的数——提及率 / 引用率 / 平均名次 / 声量份额（按 AI、按市场、带不带品牌名，4 周滚动、覆盖 < 90% 不出变化）、被引用最多的站与页、前后对比、关注词排名、品牌词周数据 */
+    get: operations['getGeoWatchMetrics']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/knowledge/claim-rules': {
     parameters: {
       query?: never
@@ -57858,6 +57927,549 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getGeoWatch: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description GeoWatchView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  setGeoWatch: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          strategy?: {
+            /** @enum {string} */
+            by: 'ai' | 'rules'
+            category?: string
+            /** @enum {string} */
+            stage?: 'new' | 'growing' | 'established'
+            prompt_limit: number
+            branded: number
+            topic_mix: {
+              /** @enum {string} */
+              topic:
+                | 'category'
+                | 'buying_guide'
+                | 'comparison'
+                | 'use_case'
+                | 'price_value'
+                | 'reviews'
+                | 'branded'
+                | 'other'
+              count: number
+            }[]
+            prompts: {
+              id: string
+              text: string
+              /** @enum {string} */
+              origin: 'brand' | 'top_query' | 'human' | 'ai_suggest'
+              enabled: boolean
+              /** @enum {string} */
+              topic?:
+                | 'category'
+                | 'buying_guide'
+                | 'comparison'
+                | 'use_case'
+                | 'price_value'
+                | 'reviews'
+                | 'branded'
+                | 'other'
+              branded?: boolean
+              selected?: boolean
+            }[]
+            candidates: {
+              id: string
+              text: string
+              /** @enum {string} */
+              origin: 'brand' | 'top_query' | 'human' | 'ai_suggest'
+              enabled: boolean
+              /** @enum {string} */
+              topic?:
+                | 'category'
+                | 'buying_guide'
+                | 'comparison'
+                | 'use_case'
+                | 'price_value'
+                | 'reviews'
+                | 'branded'
+                | 'other'
+              branded?: boolean
+              selected?: boolean
+            }[]
+            competitors: {
+              id: string
+              name: string
+              aliases: string[]
+              domains: string[]
+            }[]
+            keywords: {
+              keyword: string
+              branded: boolean
+              enabled: boolean
+            }[]
+            platforms: ('chatgpt' | 'gemini' | 'claude' | 'google_ai_overview')[]
+            why: string[]
+            created_at: string
+          }
+          brand_aliases?: string[]
+          competitors?: {
+            id: string
+            name: string
+            aliases: string[]
+            domains: string[]
+          }[]
+          keywords?: {
+            keyword: string
+            branded: boolean
+            enabled: boolean
+          }[]
+          platforms?: ('chatgpt' | 'gemini' | 'claude' | 'google_ai_overview')[]
+          markets_off?: string[]
+          /** @enum {string} */
+          frequency?: 'weekly' | 'biweekly' | 'monthly' | 'manual'
+          /** @enum {string} */
+          rank_device?: 'mobile' | 'desktop' | 'both'
+          enabled?: boolean
+          prompt_limit?: number
+          select?: string[]
+          add_prompts?: {
+            id?: string
+            text: string
+            /** @enum {string} */
+            topic?:
+              | 'category'
+              | 'buying_guide'
+              | 'comparison'
+              | 'use_case'
+              | 'price_value'
+              | 'reviews'
+              | 'branded'
+              | 'other'
+            selected?: boolean
+          }[]
+          edit_prompts?: {
+            id: string
+            text: string
+          }[]
+          archive_prompts?: string[]
+        }
+      }
+    }
+    responses: {
+      /** @description GeoWatchView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  suggestGeoWatch: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          card?: boolean
+        }
+      }
+    }
+    responses: {
+      /** @description GeoWatchSuggestion */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  runGeoWatch: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          confirm?: boolean
+          kinds?: ('geo' | 'rank')[]
+        }
+      }
+    }
+    responses: {
+      /** @description GeoWatchRunResult */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getGeoWatchMetrics: {
+    parameters: {
+      query?: {
+        /** @description 看近几周（1–52，默认 12） */
+        weeks?: string
+      }
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description GeoMetricsView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
         headers: {
           [name: string]: unknown
         }

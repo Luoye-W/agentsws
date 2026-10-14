@@ -44,6 +44,19 @@ function official() {
       return p.platforms.map((platform) => ({
         platform,
         answer_excerpt: '',
+        // WP321：判定在本机按全文重算（数不经云上判断的那几格）
+        answer_markdown:
+          p.country === 'gb' && platform === 'chatgpt'
+            ? 'NordVolt makes a solid pick here.'
+            : 'Anker and Belkin are popular picks.',
+        citations: [
+          {
+            position: 1,
+            url: 'https://review.example/x',
+            domain: 'review.example',
+            where: 'listed' as const,
+          },
+        ],
         brand_mentioned: p.country === 'gb' && platform === 'chatgpt',
         our_domain_cited: false,
         cited_urls: ['https://review.example/x'],
@@ -56,7 +69,7 @@ function official() {
   return { port, probes }
 }
 
-function setup(markets: string[] | undefined, over: Partial<SeoServiceOptions> = {}) {
+async function setup(markets: string[] | undefined, over: Partial<SeoServiceOptions> = {}) {
   const events: EventEnvelope[] = []
   const txn = createTxn({
     clock: { now: () => NOW },
@@ -92,13 +105,13 @@ function setup(markets: string[] | undefined, over: Partial<SeoServiceOptions> =
     ...over,
   })
   // 每周只问 2 个（估算好算：2 问 × 3 平台 × 市场数 × 0.2）
-  service.setGeoSettings({ max_questions: 2 })
+  await service.setGeoSettings({ max_questions: 2 })
   return { service, txn, probes: o.probes }
 }
 
 describe('WP166 · 每个目标市场分别探', () => {
   it('只选了美国：只探美国；估算 = 问题 × 平台 × 1', async () => {
-    const { service, probes } = setup(['US'])
+    const { service, probes } = await setup(['US'])
     const view = await service.geoView()
     expect(view.markets).toEqual([{ code: 'US', probing: true, language: 'en' }])
     expect(view.markets_from).toBe('brand_profile')
@@ -109,7 +122,7 @@ describe('WP166 · 每个目标市场分别探', () => {
   })
 
   it('美国 + 英国：每个市场各问一遍、估算乘 2；结果按市场分开算可见度', async () => {
-    const { service, txn, probes } = setup(['US', 'GB'])
+    const { service, txn, probes } = await setup(['US', 'GB'])
     const view = await service.geoView()
     expect(view.estimate).toMatchObject({ markets: 2, market_codes: ['US', 'GB'] })
     expect(view.estimate.credits_per_week).toBe(2.4)
@@ -132,12 +145,12 @@ describe('WP166 · 每个目标市场分别探', () => {
     expect(payload.gaps.find((g) => g.market === 'US')?.platforms).toContain('chatgpt')
     expect(card?.summary).toContain('美国：2 问里 0 个')
     expect(card?.summary).toContain('英国：2 问里 2 个')
-    expect(card?.summary).toContain('× 2 个市场')
+    expect(card?.summary).toContain('这一轮 2.4 积分')
   })
 
   it('面板上关掉英国：只探美国、估算跟着降；档案里的市场不动', async () => {
-    const { service, probes } = setup(['US', 'GB'])
-    const settings = service.setGeoSettings({ markets_off: ['gb'] })
+    const { service, probes } = await setup(['US', 'GB'])
+    const settings = await service.setGeoSettings({ markets_off: ['gb'] })
     expect(settings.markets_off).toEqual(['GB'])
     const view = await service.geoView()
     expect(view.markets).toEqual([
@@ -148,11 +161,11 @@ describe('WP166 · 每个目标市场分别探', () => {
     await service.weeklyGeo()
     expect(new Set(probes.map((p) => p.country))).toEqual(new Set(['us']))
     // 再打开：空数组 = 都探
-    expect(service.setGeoSettings({ markets_off: [] }).markets_off).toBeUndefined()
+    expect((await service.setGeoSettings({ markets_off: [] })).markets_off).toBeUndefined()
   })
 
   it('档案里没写市场：按品牌 country 那一个，界面写明按默认', async () => {
-    const { service, probes } = setup(undefined)
+    const { service, probes } = await setup(undefined)
     const view = await service.geoView()
     expect(view.markets).toEqual([{ code: 'US', probing: true, language: 'en' }])
     expect(view.markets_from).toBe('default')
@@ -162,7 +175,7 @@ describe('WP166 · 每个目标市场分别探', () => {
 
   it('每日判断的人群核对也按市场：两个市场各查一次', async () => {
     const serpCountries: string[] = []
-    const { service } = setup(['US', 'DE'], {
+    const { service } = await setup(['US', 'DE'], {
       searchData: () =>
         ({
           status: async () => ({ configured: true, route: 'official' }),
@@ -193,7 +206,7 @@ describe('WP169 · 按市场的主要语言探测', () => {
 
   it('德国用德语问：问题由模型翻过去，行上留原句与译句；美国照旧英语、不翻', async () => {
     const t = fakeTranslator()
-    const { service, txn, probes } = setup(['US', 'DE'], { translator: t.translator })
+    const { service, txn, probes } = await setup(['US', 'DE'], { translator: t.translator })
     const view = await service.geoView()
     expect(view.markets).toEqual([
       { code: 'US', probing: true, language: 'en' },
@@ -228,7 +241,7 @@ describe('WP169 · 按市场的主要语言探测', () => {
 
   it('翻过的缓存起来：每个问题每种语言只翻一次（下一周不再调模型）', async () => {
     const t = fakeTranslator()
-    const { service } = setup(['FR', 'DE'], { translator: t.translator })
+    const { service } = await setup(['FR', 'DE'], { translator: t.translator })
     await service.weeklyGeo()
     expect(t.prompts).toHaveLength(4)
     await service.weeklyGeo()
@@ -236,7 +249,7 @@ describe('WP169 · 按市场的主要语言探测', () => {
   })
 
   it('没配模型：按原语言问，报告卡与面板都注明', async () => {
-    const { service, txn, probes } = setup(['US', 'JP'])
+    const { service, txn, probes } = await setup(['US', 'JP'])
     const view = await service.geoView()
     expect(view.markets.find((m) => m.code === 'JP')).toEqual({
       code: 'JP',
@@ -261,7 +274,7 @@ describe('WP169 · 按市场的主要语言探测', () => {
   it('档案里覆盖：加拿大按法语问；SERP 的 language 也按市场', async () => {
     const t = fakeTranslator()
     const serp: { country: string; language: string }[] = []
-    const { service, probes } = setup(['CA', 'DE'], {
+    const { service, probes } = await setup(['CA', 'DE'], {
       translator: t.translator,
       brand: () => ({
         name: 'NordVolt',
@@ -278,7 +291,7 @@ describe('WP169 · 按市场的主要语言探测', () => {
     expect(new Set(probes.filter((p) => p.country === 'ca').map((p) => p.language))).toEqual(
       new Set(['fr']),
     )
-    const daily = setup(['US', 'DE'], {
+    const daily = await setup(['US', 'DE'], {
       searchData: () =>
         ({
           status: async () => ({ configured: true, route: 'official' }),
