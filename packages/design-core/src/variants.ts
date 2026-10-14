@@ -21,7 +21,7 @@ import type {
   DesignSpec,
   DesignVariantPlanItem,
 } from '@agentsws/contracts'
-import { DESIGN_CAPS } from '@agentsws/contracts'
+import { designCapsOf } from '@agentsws/contracts'
 import { brandPrompt, type ResolvedBrandSystem } from './brand.js'
 import { canvasOf, resolveSpec, specNoteZh } from './specs.js'
 
@@ -89,8 +89,10 @@ export interface PlanGenerationInput {
  * 而他想要的东西（多看几版）本身并不过分。
  */
 export function planGeneration(input: PlanGenerationInput): GenerationPlan {
-  const perBrief = input.caps?.max_variants_per_brief ?? DESIGN_CAPS.max_variants_per_brief
-  const daily = input.caps?.max_generations_per_day ?? DESIGN_CAPS.max_generations_per_day
+  // WP317（决策 559）：不给就按这份 brief 的职责取（广告 30 / 100，其余 6 / 30）
+  const defaults = designCapsOf(input.brief.duty)
+  const perBrief = input.caps?.max_variants_per_brief ?? defaults.max_variants_per_brief
+  const daily = input.caps?.max_generations_per_day ?? defaults.max_generations_per_day
   const usedToday = input.generated_today ?? 0
 
   const wanted = input.brief.variant_plan.filter(
