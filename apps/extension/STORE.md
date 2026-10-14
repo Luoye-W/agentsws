@@ -11,9 +11,9 @@ WP119（68）。**这是草稿，上架前要 Luoye 过一遍**——尤其是�
 
 ## 名称
 
-Agents 工坊 · 红人助手
+Agents 工坊助手
 
-（英文商店：Agents Workshop · Influencer Assistant）
+（英文商店：Agents Workshop Assistant。WP313 / 决策 551 起改名：红人与广告都是它的功能。）
 
 ## 简短说明（132 字符以内）
 
@@ -54,8 +54,12 @@ Agents 工坊 · 红人助手
 | `https://*.instagram.com/*` | 同上（Instagram 主页）。 |
 | `https://*.tiktok.com/*` | 同上（TikTok 主页）。 |
 | `http://127.0.0.1/*` | 把你收下的数据送到**你自己这台电脑上**运行的 Agents 工坊。这是插件唯一会发请求的地方。 |
+| `scripting` | （WP313）执行一件你批过的广告动作时，把「手」放进那个**已经授权的**广告后台标签页。没有站点权限它进不了任何页面。 |
+| 可选：`https://ads.google.com/*`、`https://adsmanager.facebook.com/*`、`https://business.facebook.com/*` | （WP313）**装插件时不要**。你在设置页点「连接 Google 广告 / Meta 广告」时才弹窗申请，用来在你自己的后台里执行你批过的动作（上传官方格式的表、暂停 / 启用、改预算、点导出）。 |
+| 可选：`downloads` | （WP313）同上，连接时才申请。点后台的「导出」之后，知道文件下到了哪，交给你电脑上的 Agents 工坊去读。 |
 
-**没有**：`<all_urls>`、`tabs`、`history`、`webRequest`、`cookies`、`downloads`、远程加载脚本。
+**没有**：`<all_urls>`、`tabs`、`history`、`webRequest`、`cookies`、`debugger`、远程加载脚本。
+截图用 `captureVisibleTab`，只截正在执行的那个广告后台标签页；浏览器要你点一下插件图标才给截（`activeTab`）。
 
 ## 数据使用情况（商店后台的那张表）
 

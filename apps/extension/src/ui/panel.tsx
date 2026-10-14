@@ -53,7 +53,7 @@ export function Panel(props: PanelProps): React.ReactNode {
     <div className="ws-root" data-testid="ws-panel">
       <div className="ws-head">
         <BrandMark />
-        <span className="ws-title">Agents 工坊 · 红人助手</span>
+        <span className="ws-title">Agents 工坊助手 · 红人</span>
         <button type="button" className="ws-close" onClick={props.onClose} aria-label="关闭">
           ×
         </button>

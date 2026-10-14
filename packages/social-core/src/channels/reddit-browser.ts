@@ -19,7 +19,7 @@
  * 核过**（本单纪律不许访问 reddit.com）。首次真机前要用官方号对一次（报告里列为要定的事）。
  */
 
-import { hostAllowed } from '@agentsws/contracts'
+import { checkStep } from '@agentsws/browser-action'
 
 /** 读和写都走 old.reddit（版务页面结构稳；新版页面是一层层 web component，一改版就全换）。 */
 export const OLD_REDDIT_ORIGIN = 'https://old.reddit.com'
@@ -296,31 +296,23 @@ function allowedValues(w: RedditBrowserWrite): string[] {
   }
 }
 
-/** 这一步在不在这个动作的白名单里。不在就回一句人话（执行器停下、照实报）。 */
+/**
+ * 这一步在不在这个动作的白名单里。不在就回一句人话（执行器停下、照实报）。
+ *
+ * WP313：判断本身抽进了公共执行模块（`@agentsws/browser-action` 的 `checkStep`），
+ * 广告插件通道用的是同一道闸；这里只把 Reddit 这个动作的白名单交过去。
+ */
 export function stepAllowed(
   w: RedditBrowserWrite,
   step: BrowserStep,
   allowedHosts: readonly string[] = REDDIT_OFFICIAL_HOSTS,
 ): { ok: true } | { ok: false; why: string } {
-  if (step.op === 'goto') {
-    let host = ''
-    try {
-      host = new URL(step.url).hostname
-    } catch {}
-    return hostAllowed(host, allowedHosts)
-      ? { ok: true }
-      : { ok: false, why: `要打开的页面不在白名单里：${host || step.url}` }
-  }
   const allowed = allowedSelectors(w)
-  if (step.op === 'click')
-    return allowed.click.includes(step.selector)
-      ? { ok: true }
-      : { ok: false, why: `这一下点击不在「${w.kind}」这个动作的白名单里，已拦下。` }
-  if (!allowed.fill.includes(step.selector))
-    return { ok: false, why: `这个输入框不在「${w.kind}」这个动作的白名单里，已拦下。` }
-  return allowedValues(w).includes(step.value)
-    ? { ok: true }
-    : { ok: false, why: '要填的字和审批卡上的不一样，已拦下。' }
+  return checkStep(
+    step,
+    { hosts: allowedHosts, click: allowed.click, fill: allowed.fill, values: allowedValues(w) },
+    w.kind,
+  )
 }
 
 /** 网络层：这个写请求（非 GET）放不放。只放这个动作需要的那几个路径。 */

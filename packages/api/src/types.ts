@@ -76,6 +76,7 @@ import type { DesignPort } from './routes/design.js'
 import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
+import type { ExtensionActionsPort } from './routes/extension-actions.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { HandoffPort } from './routes/handoff.js'
 import type { ReconcilePort } from './routes/health.js'
@@ -885,6 +886,11 @@ export interface GatewayDeps {
    * 其余一切照常。插件的数据**只走本机**：它连的是 `127.0.0.1`，不是云。
    */
   extension?: ExtensionPort
+  /**
+   * WP313（docs/101 §5.4）：插件动作通道（广告后台）。没装配时那几条路由回 not_implemented，
+   * 插件照实说「这个版本还没有」。插件的会话仍由 {@link extension} 那一套令牌判。
+   */
+  extensionActions?: ExtensionActionsPort
   /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），

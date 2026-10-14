@@ -30,6 +30,7 @@
     "@agentsws/blob": "workspace:*",
     "@agentsws/brand-design": "workspace:*",
     "@agentsws/brand-intake": "workspace:*",
+    "@agentsws/browser-action": "workspace:*",
     "@agentsws/catalog": "workspace:*",
     "@agentsws/channels": "workspace:*",
     "@agentsws/chat-relay": "workspace:*",
