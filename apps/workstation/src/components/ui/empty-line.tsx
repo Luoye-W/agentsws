@@ -20,7 +20,14 @@ export function EmptyLine({
    * 去处按钮（站内地址）；不给就只有那一行字。
    * WP324：也可以是就地动作（`onClick`，如「去连接」在第三栏开连接卡），给了它就不跳页。
    */
-  action?: { label: string; to?: string; onClick?: () => void; testId?: string }
+  action?: {
+    label: string
+    to?: string
+    onClick?: () => void
+    testId?: string
+    /** WP324：就地连的是哪一样（`data-connect`，给测试与排障看）。 */
+    connect?: string | undefined
+  }
   testId?: string
 }): ReactNode {
   return (
@@ -37,6 +44,7 @@ export function EmptyLine({
           variant="outline"
           onClick={action.onClick}
           {...(action.testId === undefined ? {} : { 'data-testid': action.testId })}
+          {...(action.connect === undefined ? {} : { 'data-connect': action.connect })}
         >
           {action.label}
         </Button>

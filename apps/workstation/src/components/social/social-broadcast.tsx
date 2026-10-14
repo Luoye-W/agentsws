@@ -19,7 +19,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Megaphone, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
-import { connectPathForChannel } from '@/components/connections/links'
+import { connectServiceForChannel } from '@/components/connections/links'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyLine } from '@/components/ui/empty-line'
@@ -46,6 +47,7 @@ export function SocialBroadcast({
   channel: SocialChannelId
 }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const [audience, setAudience] = useState<Audience>('all')
   const [tag, setTag] = useState('')
   const [body, setBody] = useState('')
@@ -86,7 +88,11 @@ export function SocialBroadcast({
         text={t('social.broadcast.no_account')}
         action={{
           label: t('social.empty.connect'),
-          to: connectPathForChannel(channel),
+          // WP324：第三栏就地连
+          connect: connectServiceForChannel(channel),
+          onClick: () => {
+            openConnect(connectServiceForChannel(channel))
+          },
           testId: 'social-broadcast-connect',
         }}
         testId="social-broadcast-no-account"

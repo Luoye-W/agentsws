@@ -592,6 +592,8 @@ import {
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
+import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
+import { builtinSetupTargets } from './setup-targets.js'
 import { ShopAdminError } from './shop-admin.js'
 import {
   createShopAdmin,
@@ -608,8 +610,6 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
-import { builtinSetupTargets } from './setup-targets.js'
-import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'

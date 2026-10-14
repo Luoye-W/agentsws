@@ -18,7 +18,6 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Link2Off, TriangleAlert } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -89,6 +88,7 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                   size="sm"
                   variant="outline"
                   data-testid="position-connection-go"
+                  data-connect={item.connect_service}
                   onClick={() => {
                     openConnect(item.connect_service)
                   }}

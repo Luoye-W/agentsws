@@ -9,7 +9,6 @@
  */
 import type { StatTile as StatTileData } from '@agentsws/deck'
 import { Link2Off, TrendingUp } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { connectServiceFor } from '@/components/connections/links'
 import type { Direction, Tone } from '@/components/design'
 import { StatTile } from '@/components/design'
@@ -78,6 +77,7 @@ export function StatTileView({ tile }: { tile: StatTileData }): React.ReactNode 
                 }}
                 className="flex items-center gap-1.5 text-sm underline-offset-4 hover:underline"
                 data-testid="tile-connect-link"
+                data-connect={connectServiceFor(tile.source)}
               >
                 <Link2Off className="size-3.5" aria-hidden />
                 <span>{t('tile.not_connected')}</span>

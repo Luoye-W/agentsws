@@ -798,6 +798,7 @@ export function BlockedCard({
             size="sm"
             className="gap-1.5"
             data-testid="matter-blocked-connect"
+            data-connect={event.blocked?.services?.join('+') ?? ''}
             onClick={onConnect}
           >
             <Plug aria-hidden />

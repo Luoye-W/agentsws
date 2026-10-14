@@ -17,8 +17,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Mail, MessageSquare, MessagesSquare, Plug } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import { connectPathForChannel } from '@/components/connections/links'
+import { connectServiceForChannel } from '@/components/connections/links'
 import { WsTag } from '@/components/design'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { ReplyButton } from '@/components/social/reply-button'
 import { Button } from '@/components/ui/button'
 import { EmptyLine } from '@/components/ui/empty-line'
@@ -214,6 +215,7 @@ function Empty({
   onRegistered: () => void
 }): ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const icon = <MessagesSquare className="size-4" aria-hidden />
   // 状态没读到（老服务进程 / 出错）：只说没有新帖，不猜原因
   if (ingest === undefined)
@@ -228,7 +230,11 @@ function Empty({
         text={t('threads.empty.not_connected')}
         action={{
           label: t('threads.empty.connect'),
-          to: connectPathForChannel(channel),
+          // WP324：第三栏就地连
+          connect: connectServiceForChannel(channel),
+          onClick: () => {
+            openConnect(connectServiceForChannel(channel))
+          },
           testId: 'threads-connect',
         }}
         testId="threads-empty"

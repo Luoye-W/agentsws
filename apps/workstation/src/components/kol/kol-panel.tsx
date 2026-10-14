@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -118,6 +119,7 @@ function Discovery({
   onClearBatch?: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const client = useQueryClient()
   const [q, setQ] = useState('')
   const [found, setFound] = useState<KolSearchData | undefined>(undefined)
@@ -239,18 +241,35 @@ function Discovery({
             {/* WP142（docs/78 第 15 步）：真正要做的两件事各是一个按钮，不埋在字里 */}
             {(found.entry_points ?? []).length === 0 ? null : (
               <div className="flex flex-wrap items-center gap-2">
-                {(found.entry_points ?? []).map((entry) => (
-                  <Button
-                    key={entry.id}
-                    asChild
-                    size="sm"
-                    variant={entry.id === 'link_account' ? 'default' : 'outline'}
-                    title={entry.note}
-                    data-testid={`kol-search-entry-${entry.id}`}
-                  >
-                    <Link to={entryHref(entry.id, channel)}>{entry.label}</Link>
-                  </Button>
-                ))}
+                {(found.entry_points ?? []).map((entry) =>
+                  // WP324：接自己的数据接口 = 第三栏就地连那个渠道（不跳连接页）；关联账号仍去账号页
+                  entry.id === 'byo' ? (
+                    <Button
+                      key={entry.id}
+                      size="sm"
+                      variant="outline"
+                      title={entry.note}
+                      data-testid={`kol-search-entry-${entry.id}`}
+                      data-connect={CHANNEL_SERVICE[channel]}
+                      onClick={() => {
+                        openConnect(CHANNEL_SERVICE[channel])
+                      }}
+                    >
+                      {entry.label}
+                    </Button>
+                  ) : (
+                    <Button
+                      key={entry.id}
+                      asChild
+                      size="sm"
+                      variant="default"
+                      title={entry.note}
+                      data-testid={`kol-search-entry-${entry.id}`}
+                    >
+                      <Link to={entryHref(entry.id, channel)}>{entry.label}</Link>
+                    </Button>
+                  ),
+                )}
               </div>
             )}
           </div>

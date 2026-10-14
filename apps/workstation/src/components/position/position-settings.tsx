@@ -143,6 +143,7 @@ function ConnectionRow({
       }}
       className="inline-flex h-7 items-center rounded-md border px-2 text-xs hover:bg-accent"
       data-testid="settings-connection-go"
+      data-connect={item.connect_service}
     >
       {t('pos2.set.conn.go')}
     </button>

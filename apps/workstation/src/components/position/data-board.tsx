@@ -146,6 +146,7 @@ function SectionStatus({ section }: { section: Section }): ReactNode {
             // WP324（决策 690）：在第三栏就地连，不跳到连接页
             action: {
               label: t('view.connect'),
+              connect: connectServiceFor(section.source),
               onClick: () => {
                 openConnect(connectServiceFor(section.source))
               },

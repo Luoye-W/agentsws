@@ -87,12 +87,13 @@ describe('WP238 岗位面板：数据从哪来、空状态一行', () => {
     expect(rows).toHaveLength(2)
     const discord = rows[0] as HTMLElement
     expect(discord.textContent).toContain('还没连接Discord')
-    expect(within(discord).getAllByRole('link')).toHaveLength(1)
+    // WP324：去处是一个就地连的按钮（第三栏连接卡），不是跳页的链接
+    expect(within(discord).getAllByRole('button')).toHaveLength(1)
     // 不再是一张带标题的卡
     expect(discord.querySelector('[data-slot="card"], [data-slot="card-title"]')).toBeNull()
     const tracking = rows[1] as HTMLElement
     expect(tracking.textContent).toContain('这个连接器还没做')
-    expect(within(tracking).queryByRole('link')).toBeNull()
+    expect(within(tracking).queryByRole('button')).toBeNull()
   })
 
   it('什么都不缺：顶上那张「连上这 N 个就能开工」不出', async () => {
@@ -107,8 +108,8 @@ describe('WP238 社媒空状态：一行灰字 + 去处', () => {
     renderWithProviders(<SocialCalendar assignment="asg_1" channel="reddit" />)
     const line = await screen.findByTestId('social-calendar-no-account')
     expect(line.textContent).toContain('还没登记号')
-    expect(screen.getByTestId('social-calendar-connect').getAttribute('href')).toBe(
-      '/connections?service=reddit',
+    expect(screen.getByTestId('social-calendar-connect').getAttribute('data-connect')).toBe(
+      'reddit',
     )
     expect(screen.queryByTestId('social-calendar')).toBeNull()
   })
@@ -117,8 +118,8 @@ describe('WP238 社媒空状态：一行灰字 + 去处', () => {
     renderWithProviders(<SocialBroadcast assignment="asg_1" channel="reddit" />)
     const line = await screen.findByTestId('social-broadcast-no-account')
     expect(line.textContent).toContain('群发')
-    expect(screen.getByTestId('social-broadcast-connect').getAttribute('href')).toBe(
-      '/connections?service=reddit',
+    expect(screen.getByTestId('social-broadcast-connect').getAttribute('data-connect')).toBe(
+      'reddit',
     )
     expect(screen.queryByTestId('social-broadcast')).toBeNull()
   })

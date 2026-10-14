@@ -15,8 +15,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, KeyRound, Loader2, Store } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -80,7 +80,7 @@ export function ShopAdminBanner({
   variant?: 'page' | 'settings'
 }): ReactNode {
   const { t, lang } = useApp()
-  const navigate = useNavigate()
+  const openConnect = useOpenConnect()
   const client = useQueryClient()
   const q = shopAdminQuery(duties)
   const { roles, assignment } = q
@@ -184,7 +184,8 @@ export function ShopAdminBanner({
   )
   /** WP265：云端一键授权那一路的（重新）授权在连接页 Shopify 卡上做，不起 CLI。 */
   const reauthorize = (): void => {
-    if (v?.via === 'cloud') navigate('/connections?service=shopify_admin')
+    // WP324：云端那一路在第三栏连接卡上就地重新授权（不跳连接页）
+    if (v?.via === 'cloud') openConnect('shopify_admin')
     else run.mutate('authorize')
   }
   const authorizeButton = (label: string): ReactNode => (

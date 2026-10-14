@@ -21,7 +21,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
@@ -350,6 +350,7 @@ export function PositionPage(): React.ReactNode {
               }}
               className="shrink-0 rounded-md bg-card px-2 py-0.5 text-xs font-medium shadow-xs hover:bg-accent"
               data-testid="position-missing-go"
+              data-connect={missingItems.flatMap((i) => i.connect_service ?? []).join('+')}
             >
               {t('pos2.banner.go')}
             </button>

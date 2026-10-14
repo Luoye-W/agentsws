@@ -72,6 +72,7 @@ import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
 import { UnclaimedView } from '@/components/messages/unclaimed-view'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -1546,6 +1547,7 @@ function MailboxFailure({ accounts }: { accounts: readonly MessageAccountView[] 
 /** 一只邮箱都没连：照实说，并指向连接页——**不新增凭据入口**（63 §2）。 */
 function NoMailbox(): ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   return (
     <div className="flex max-w-lg flex-col gap-3" data-testid="messages-no-mailbox">
       <h1 className="text-base font-semibold">{t('nav.messages')}</h1>
@@ -1553,13 +1555,18 @@ function NoMailbox(): ReactNode {
         {t('messages.no_mailbox')}
         <Hint text={t('messages.no_mailbox.hint')} />
       </p>
-      <Link
-        to="/connections?service=email"
+      {/* WP324：第三栏就地连一只邮箱（原来跳 `?service=email`，连接页认的是 `imap_smtp`，落不到那张卡上） */}
+      <button
+        type="button"
+        onClick={() => {
+          openConnect('imap_smtp')
+        }}
         className="w-fit rounded-[10px] bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"
         data-testid="messages-connect"
+        data-connect="imap_smtp"
       >
         {t('messages.connect')}
-      </Link>
+      </button>
     </div>
   )
 }

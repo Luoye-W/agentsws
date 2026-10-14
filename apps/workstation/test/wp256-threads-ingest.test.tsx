@@ -59,7 +59,8 @@ describe('WP256 群里的帖子：空态照实说', () => {
     expect((await screen.findByTestId('threads-empty')).textContent).toContain('还没连上')
     const link = screen.getByTestId('threads-connect')
     expect(link.textContent).toBe('去连接页')
-    expect(link.getAttribute('href')).toContain('/connections')
+    // WP324：第三栏就地连这条渠道
+    expect(link.getAttribute('data-connect')).toBe('discord_bot')
     expect(screen.queryByTestId('threads-every')).toBeNull()
   })
 

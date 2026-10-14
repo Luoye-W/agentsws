@@ -81,7 +81,6 @@ export * from './position-work.js'
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
 export * from './premium-theme.js'
-export * from './setup-card.js'
 // WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
 export * from './pricing-catalog.js'
 // WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
@@ -97,6 +96,7 @@ export * from './schedule.js'
 export * from './search-data.js'
 // WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
 export * from './seo.js'
+export * from './setup-card.js'
 // WP265：云端 Shopify 一键授权（私有云 WP263）在本机这一侧的约定（不进 CloudApi，决策 191）
 export * from './shopify-cloud.js'
 export * from './site.js'

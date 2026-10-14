@@ -23,7 +23,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
-import { connectPathForChannel } from '@/components/connections/links'
+import { connectServiceForChannel } from '@/components/connections/links'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyLine } from '@/components/ui/empty-line'
@@ -67,6 +68,7 @@ export function SocialCalendar({
   channel: SocialChannelId
 }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const client = useQueryClient()
   /** 往前 / 往后翻几周（0 = 本周）。 */
   const [offset, setOffset] = useState(0)
@@ -112,7 +114,11 @@ export function SocialCalendar({
         text={t('social.calendar.no_account')}
         action={{
           label: t('social.empty.connect'),
-          to: connectPathForChannel(channel),
+          // WP324：第三栏就地连
+          connect: connectServiceForChannel(channel),
+          onClick: () => {
+            openConnect(connectServiceForChannel(channel))
+          },
           testId: 'social-calendar-connect',
         }}
         testId="social-calendar-no-account"
