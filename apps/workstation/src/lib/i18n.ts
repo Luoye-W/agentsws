@@ -20,6 +20,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
@@ -8272,6 +8273,7 @@ const TABLES: Record<Lang, Table> = {
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
+    ...REDDIT_WATCH_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8313,6 +8315,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
+    ...REDDIT_WATCH_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,

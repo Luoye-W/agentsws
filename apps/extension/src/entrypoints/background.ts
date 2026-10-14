@@ -22,7 +22,10 @@ import { pollAdsOnce } from '@/lib/ads/poller'
 import type { BrokerDeps } from '@/lib/broker'
 import { flush, observe, pair, status, unpair } from '@/lib/broker'
 import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
-import { chromeStore, clearQueue, writeSettings } from '@/lib/storage'
+import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
+import { redditConnected } from '@/lib/reddit/permissions'
+import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
+import { chromeStore, clearQueue, readSettings, writeSettings } from '@/lib/storage'
 
 /** 多久试一次补传。5 分钟：够快，也不至于在应用没开时一直空打。 */
 const FLUSH_ALARM = 'agentsws-flush'
@@ -30,6 +33,9 @@ const FLUSH_PERIOD_MINUTES = 5
 /** WP313：多久问一次有没有批好的广告活（每次最多挂 25 秒）。 */
 const ADS_ALARM = 'agentsws-ads-poll'
 const ADS_PERIOD_MINUTES = 1
+/** WP328：多久问一次有没有要读的 Reddit（巡查一天一次起步；问是本机回环，很便宜）。 */
+const REDDIT_ALARM = 'agentsws-reddit-poll'
+const REDDIT_PERIOD_MINUTES = 1
 
 export default defineBackground(() => {
   const deps: BrokerDeps = { store: chromeStore(), now: () => new Date().toISOString() }
@@ -48,17 +54,36 @@ export default defineBackground(() => {
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     }).catch(() => undefined)
   chrome.alarms.create(ADS_ALARM, { periodInMinutes: ADS_PERIOD_MINUTES })
+  // WP328：Reddit 只读（每日巡查）——借这个 Chrome 里已登录的会话读，只读、不改已读
+  const redditControl = { stop: false }
+  const pollReddit = (): Promise<unknown> =>
+    pollRedditOnce({
+      store: deps.store,
+      perms,
+      readFetch: () => sessionFetch(backgroundFetch(), chromeRedditTabs()),
+      now: deps.now,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      control: redditControl,
+    }).catch(() => undefined)
+  chrome.alarms.create(REDDIT_ALARM, { periodInMinutes: REDDIT_PERIOD_MINUTES })
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ADS_ALARM) {
       void pollAds()
       return
     }
+    if (alarm.name === REDDIT_ALARM) {
+      void pollReddit()
+      return
+    }
     if (alarm.name !== FLUSH_ALARM) return
     void flush(deps)
   })
   // 用户在设置页里给了 / 收回了广告后台的权限：马上问一次
-  chrome.permissions.onAdded.addListener(() => void pollAds())
+  chrome.permissions.onAdded.addListener(() => {
+    void pollAds()
+    void pollReddit()
+  })
 
   // 工具栏图标：没有 popup，按一下是让页面上那块面板开 / 关。
   chrome.action.onClicked.addListener((tab) => {
@@ -116,6 +141,30 @@ export default defineBackground(() => {
           }
           case 'ads-poll':
             void pollAds()
+            reply({ type: 'ack' })
+            return
+          case 'reddit-status': {
+            const st = await readRedditStatus(deps.store)
+            reply({
+              type: 'reddit-status',
+              reddit: {
+                paired: (await readSettings(deps.store)).token !== undefined,
+                connected: await redditConnected(perms),
+                last_poll_at: st.last_poll_at,
+                note: st.note,
+                user: st.user,
+                last_result: st.last_result,
+              },
+            })
+            return
+          }
+          case 'reddit-poll':
+            // 断开 / 刚连上：不等半小时，马上告诉本机
+            {
+              const { last_poll_at: _drop, ...rest } = await readRedditStatus(deps.store)
+              await deps.store.set({ [REDDIT_STATUS_KEY]: rest })
+            }
+            void pollReddit()
             reply({ type: 'ack' })
             return
           case 'ads-stop':

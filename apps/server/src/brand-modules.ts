@@ -54,6 +54,7 @@ import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
+import type { RedditWatchAssembly } from './reddit-watch/index.js'
 import type { RedditWeeklyService } from './reddit-weekly.js'
 import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
@@ -278,6 +279,8 @@ export interface BrandModuleSet {
    * 上传表、截图。托管实例不装（云上没有用户的浏览器）。
    */
   adsActions?: AdsActionsService
+  /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
+  redditWatch?: RedditWatchAssembly
   /**
    * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
    */

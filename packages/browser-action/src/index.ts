@@ -13,6 +13,8 @@ export * from './guard.js'
 export * from './pace.js'
 export * from './protocol.js'
 export * from './queue.js'
+// WP328：Reddit 只读（插件读收件箱与自家版块）
+export * from './reddit/index.js'
 // WP329：Reddit 写（插件填草稿、人点发送）
 export * from './reddit/write.js'
 export * from './runner.js'

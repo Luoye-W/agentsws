@@ -1,57 +1,59 @@
 /**
- * 设置页「Reddit」一节（WP329；docs/102 §2.3 第 1 条）。
- *
- * 一行：连上没有 + 一个按钮。连接 = 浏览器弹窗给 Reddit 的站点权限（可选权限，用户点了才申请）。
- * 连上之后，工坊里批过的 Reddit 回复 / 评论 / 发帖会在一个新标签页里把草稿填好，**你自己点发送**。
- * 没有风险告知勾选：插件不替你点发送（那一下是你的），连接那一下浏览器的权限弹窗就是同意。
- * 界面少字：说明放在问号里。
+ * 设置页「Reddit」一节（WP328 读 + WP329 写共用一行）。一行：连上没有 + 一个按钮 + 上次读到什么。
+ * 连接 = 浏览器弹窗给 Reddit 的站点权限（可选权限）；登录由你自己在这个 Chrome 里做（插件从不碰口令）。
  */
-
 import { useCallback, useEffect, useState } from 'react'
-import { chromePermissions, removeAds, requestAds } from '@/lib/ads/permissions'
-import type { AdsPanelStatus } from '@/lib/messages'
+import { chromePermissions } from '@/lib/ads/permissions'
+import type { RedditPanelStatus } from '@/lib/messages'
 import { send } from '@/lib/messages'
+import { removeReddit, requestReddit } from '@/lib/reddit/permissions'
 
-export const REDDIT_HINT = '批过的回复由插件填进 Reddit 页面，你自己点发送。'
+const OUTCOME: Record<string, string> = {
+  done: '读完了',
+  not_logged_in: '没登录 Reddit',
+  wrong_user: '登的不是品牌号',
+  blocked: '被 Reddit 拦了，已停',
+  failed: '没读成',
+  stopped: '已停止',
+}
 
 export function RedditSection(props: { paired: boolean }): React.ReactNode {
-  const [ads, setAds] = useState<AdsPanelStatus | undefined>(undefined)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | undefined>(undefined)
+  const [st, setSt] = useState<RedditPanelStatus | undefined>(undefined)
+  const [note, setNote] = useState<string | undefined>(undefined)
 
   const refresh = useCallback(() => {
-    void send({ type: 'ads-status' }).then((r) => {
-      if (r?.type === 'ads-status') setAds(r.ads)
+    void send({ type: 'reddit-status' }).then((r) => {
+      if (r?.type === 'reddit-status') setSt(r.reddit)
     })
   }, [])
   useEffect(refresh, [refresh])
 
   const connect = useCallback(() => {
-    setBusy(true)
-    setMessage(undefined)
+    setNote(undefined)
     // 申请权限必须在点击的这一拍里调（浏览器只认用户手势）
-    void requestAds(chromePermissions(), 'reddit')
-      .then((granted) => {
-        if (!granted) setMessage('浏览器里没有给权限，没连上。')
-        else void send({ type: 'ads-poll' })
+    void requestReddit(chromePermissions())
+      .then(async (granted) => {
+        if (!granted) setNote('浏览器里没有给权限，没连上。')
+        await send({ type: 'reddit-poll' })
+        // WP329：连上了也马上问一次有没有批好的回复要填
+        if (granted) await send({ type: 'ads-poll' })
       })
-      .finally(() => {
-        setBusy(false)
-        refresh()
-      })
+      .finally(refresh)
   }, [refresh])
-
   const disconnect = useCallback(() => {
-    void removeAds(chromePermissions(), 'reddit').finally(refresh)
+    void removeReddit(chromePermissions())
+      .then(() => send({ type: 'reddit-poll' }))
+      .finally(refresh)
   }, [refresh])
 
-  const on = ads?.connected.reddit === true
+  const on = st?.connected === true
+  const last = st?.last_result
   return (
     <section className="ws-card" data-testid="ws-reddit">
-      <h2 title={REDDIT_HINT}>Reddit</h2>
+      <h2>Reddit</h2>
       <ul className="ws-facts">
         <li>
-          <span title={REDDIT_HINT}>填草稿 · 你点发送</span>
+          <span>{st?.user === undefined ? '品牌号' : `u/${st.user}`}</span>
           <b data-testid="ws-reddit-state">{on ? '已连接' : '未连接'}</b>
           {on ? (
             <button type="button" className="ws-btn ws-btn--ghost" onClick={disconnect}>
@@ -61,17 +63,30 @@ export function RedditSection(props: { paired: boolean }): React.ReactNode {
             <button
               type="button"
               className="ws-btn ws-btn--primary"
-              disabled={!props.paired || busy}
+              disabled={!props.paired}
               onClick={connect}
               data-testid="ws-reddit-connect"
             >
-              {busy ? '连接中…' : '连接'}
+              连接
             </button>
           )}
         </li>
       </ul>
+      <p
+        className="ws-note"
+        title="读：只读收件箱与自家版块，不改已读。写：批过的回复由插件新开标签页填好，你自己点发送。登录你自己在这个 Chrome 里做"
+      >
+        读不改已读 · 写由你点发送
+      </p>
       {props.paired ? null : <p className="ws-note ws-note--warn">先配对，再连接。</p>}
-      {message === undefined ? null : <p className="ws-note ws-note--bad">{message}</p>}
+      {last === undefined ? null : (
+        <p className={last.outcome === 'done' ? 'ws-note' : 'ws-note ws-note--warn'}>
+          上次：{OUTCOME[last.outcome] ?? last.outcome}
+          {last.outcome === 'done' ? `（${last.items} 条）` : ''}
+        </p>
+      )}
+      {st?.note === undefined ? null : <p className="ws-note ws-note--warn">{st.note}</p>}
+      {note === undefined ? null : <p className="ws-note ws-note--bad">{note}</p>}
     </section>
   )
 }

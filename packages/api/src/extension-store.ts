@@ -30,6 +30,8 @@ export const EXTENSION_SCOPES = [
   'kol.capture',
   'kol.read',
   'ads.act',
+  // WP328：读品牌号自己的 Reddit 收件箱与自家版块（只读），交回给本机
+  'reddit.read',
   // WP329：领 Reddit 的写活（把批过的草稿填进页面、人点发送、回报读回）。老令牌没有，要用就重新配一次对
   'reddit.write',
 ] as const

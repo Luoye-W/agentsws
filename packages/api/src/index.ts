@@ -642,6 +642,9 @@ export {
   type ReadRoutesApiPort,
   readRoutesRoutes,
 } from './routes/read-routes.js'
+// WP328：Reddit 每日巡查
+export type { RedditWatchItemsQuery, RedditWatchPort } from './routes/reddit-watch.js'
+export { redditWatchRoutes } from './routes/reddit-watch.js'
 export type {
   RedditWeeklyActor,
   RedditWeeklyPort,

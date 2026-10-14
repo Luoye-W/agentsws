@@ -16,17 +16,8 @@
 
 import type { ActionAccount, ActionJob, ActionPlan, ActionStep } from '../types.js'
 
-/** 写在哪个站上（测试指向本地假页面）。 */
+/** 写在哪个站上（测试指向本地假页面）。插件的可选站点权限用 WP328 那一份 `REDDIT_HOST_PERMISSIONS`。 */
 export const REDDIT_WRITE_ORIGIN = 'https://old.reddit.com'
-
-/**
- * 插件连接 Reddit 时申请的可选站点权限（docs/102 §2.3 第 1 条）。与 WP328「读」那一份**同一个值**
- * （它叫 `REDDIT_HOST_PERMISSIONS`，在 `reddit/read.ts`）；两单合到一起后只留一份。
- */
-export const REDDIT_WRITE_HOST_PERMISSIONS: readonly string[] = [
-  'https://old.reddit.com/*',
-  'https://www.reddit.com/*',
-]
 
 /** 自动化页面能开的站。 */
 export const REDDIT_WRITE_HOSTS: readonly string[] = ['old.reddit.com', 'www.reddit.com']

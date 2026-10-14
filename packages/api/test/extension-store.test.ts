@@ -146,7 +146,7 @@ describe('令牌', () => {
     expect(store.list('ws_other' as WorkspaceId)).toHaveLength(0)
   })
 
-  it('scope 只有四个（WP313 加了 ads.act），没有第五个', () => {
+  it('scope 只有五个（WP313 加了 ads.act，WP328 加了 reddit.read），没有第六个', () => {
     const store = storeOf(fakeClock())
     const { code } = store.createPairing({ workspace_id: WS, person_id: PERSON })
     const issued = store.redeem({ code, origin: ORIGIN })
@@ -156,6 +156,7 @@ describe('令牌', () => {
       'kol.capture',
       'kol.read',
       'ads.act',
+      'reddit.read',
       'reddit.write',
     ])
   })

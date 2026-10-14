@@ -21,6 +21,8 @@ import { defineConfig } from 'wxt'
  *    不要，用户在设置页点「连接」时才弹窗申请；`scripting` 只用来把执行器的「手」放进已经授权的
  *    那个后台标签页（没有站点权限它什么页面都进不去）。截图用 `captureVisibleTab`，只截正在
  *    执行的那个后台标签页。
+ * 6. WP328（Reddit）：`old.reddit.com` / `www.reddit.com` 也是可选权限，设置页点「连接 Reddit」才申请；
+ *    只用来借你已登录的会话读品牌号自己的收件箱与自家版块的 `.json`（只读、不改已读）。
  */
 export default defineConfig({
   // WXT 把 `@` 指向 srcDir，所以 srcDir 就是 `src/`——这样 `@/lib/*`、`@/ui/*`
@@ -44,7 +46,7 @@ export default defineConfig({
       'https://ads.google.com/*',
       'https://adsmanager.facebook.com/*',
       'https://business.facebook.com/*',
-      // WP329：Reddit（连接时才申请；与 WP328 读同一份）——批过的回复由插件填进页面，人自己点发送
+      // WP328：Reddit（读品牌号自己的收件箱与自家版块；WP329 填草稿也用这两个）
       'https://old.reddit.com/*',
       'https://www.reddit.com/*',
     ],

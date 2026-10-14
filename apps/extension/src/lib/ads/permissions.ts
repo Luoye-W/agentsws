@@ -13,7 +13,7 @@ import {
   type ActionPlatform,
   ADS_HOST_PERMISSIONS,
   type AdsPlatform,
-  REDDIT_WRITE_HOST_PERMISSIONS,
+  REDDIT_HOST_PERMISSIONS,
 } from '@agentsws/browser-action'
 
 export const ADS_PLATFORMS: readonly AdsPlatform[] = ['google_ads', 'meta_ads']
@@ -35,9 +35,7 @@ export interface PermissionsLike {
 
 /** 这一家要的站点权限。 */
 export function originsOf(platform: ActionPlatform): string[] {
-  return platform === 'reddit'
-    ? [...REDDIT_WRITE_HOST_PERMISSIONS]
-    : [...ADS_HOST_PERMISSIONS[platform]]
+  return platform === 'reddit' ? [...REDDIT_HOST_PERMISSIONS] : [...ADS_HOST_PERMISSIONS[platform]]
 }
 
 const want = (platform: ActionPlatform): chrome.permissions.Permissions =>

@@ -247,6 +247,8 @@ export type QuickKind =
   | 'modqueue'
   // WP255：群里的帖子（社群组五条：线程列表 + 每条「回复」）
   | 'threads'
+  // WP328：Reddit 巡查（只有 `social.reddit`：待处理 + 现在巡查）
+  | 'reddit_watch'
 
 export interface QuickView {
   /** `quick:<kind>:<role_id>`——记在偏好里的就是它 */
@@ -287,6 +289,7 @@ export function quickViewsOf(
   for (const d of duties) {
     const social = socialChannelOfRole(d.role_id)
     if (social !== undefined && COMMUNITY_CHANNELS.includes(social)) add('broadcast', d)
+    if (d.role_id === 'social.reddit') add('reddit_watch', d)
     if (d.role_id === 'social.reddit') add('modqueue', d)
     if (social !== undefined && COMMUNITY_CHANNELS.includes(social)) add('threads', d)
     if (channelOfRole(d.role_id) !== undefined) add('kol', d)
