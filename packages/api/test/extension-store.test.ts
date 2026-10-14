@@ -151,6 +151,12 @@ describe('令牌', () => {
     const { code } = store.createPairing({ workspace_id: WS, person_id: PERSON })
     const issued = store.redeem({ code, origin: ORIGIN })
     if (!issued.ok) throw new Error('unreachable')
-    expect(issued.issued.scopes).toEqual(['kol.observe', 'kol.capture', 'kol.read', 'ads.act'])
+    expect(issued.issued.scopes).toEqual([
+      'kol.observe',
+      'kol.capture',
+      'kol.read',
+      'ads.act',
+      'reddit.act',
+    ])
   })
 })

@@ -17,14 +17,22 @@
  *    `revoked_at` 而不是删行——用户要看得见「这把是什么时候撤的」。
  * 4. **scope 是白名单里的四个**（`kol.observe` / `kol.capture` / `kol.read`，
  *    WP313 加了 `ads.act`：领广告后台的活、回报结果），没有第五个。老令牌没有 `ads.act`，
- *    要用广告得重新配一次对。插件拿不到别的东西，不是因为路由没写，是因为令牌上没有。
+ *    要用广告得重新配一次对；WP329 加了 `reddit.act`（领 Reddit 的写活），同理。
+ *    插件拿不到别的东西，不是因为路由没写，是因为令牌上没有。
  */
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Clock, Iso8601, PersonId, WorkspaceId } from '@agentsws/contracts'
 
 /** 插件令牌上允许出现的全部动作（只加不删；加一个要同时改工作台的说明文案）。 */
-export const EXTENSION_SCOPES = ['kol.observe', 'kol.capture', 'kol.read', 'ads.act'] as const
+export const EXTENSION_SCOPES = [
+  'kol.observe',
+  'kol.capture',
+  'kol.read',
+  'ads.act',
+  // WP329：领 Reddit 的写活（把批过的草稿填进页面、人点发送、回报读回）。老令牌没有，要用就重新配一次对
+  'reddit.act',
+] as const
 
 export type ExtensionScope = (typeof EXTENSION_SCOPES)[number]
 
