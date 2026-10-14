@@ -266,10 +266,13 @@ async function main() {
   }
   const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
   step(`N 退出：${code === 'timeout' ? '90 秒没退' : `退出码 ${describeExit(code, null)}`}`)
-  await app.close().catch(() => undefined)
-  if (code === 'timeout') throw new Error('点了「重启并更新」90 秒 N 还没退')
-  // N 退了、安装程序在装：小窗得还活着（心跳还在走）
-  await sleep(3000)
+  if (code === 'timeout') {
+    await app.close().catch(() => undefined)
+    throw new Error('点了「重启并更新」90 秒 N 还没退')
+  }
+  // N 退了、安装程序在装：小窗得还活着（心跳还在走）。在 app.close() 之前看——
+  // WP325 实测 Playwright 的 close 在 N 已退出后还会挂几分钟，等它回来安装早装完了
+  await sleep(2000)
   const during = readBeat(beatFile)
   const alive =
     during !== undefined && during.state !== 'closed' && Date.now() - Date.parse(during.at) < 5000
@@ -277,6 +280,7 @@ async function main() {
     `安装中：小窗${alive ? '还在' : '不在了'}（${during === undefined ? '没有心跳' : describeBeat(during)}）`,
   )
   if (!alive) throw new Error('N 退出后「正在更新」小窗没撑到安装程序装完')
+  void app.close().catch(() => undefined)
 
   // 5. 安装程序静默装 N+1、自动重开：等服务报 N+1
   let v2
@@ -300,6 +304,11 @@ async function main() {
     `「正在更新」小窗：${gone ? '关了，单子收掉了' : `还在（${last === undefined ? '没有心跳' : describeBeat(last)}）`}`,
   )
   if (!gone) throw new Error('新版起来 15 秒后「正在更新」小窗还在 / 单子没收掉')
+  // 小窗关掉那一刻 = 新版桌面壳启动、收掉单子的那一刻：用户眼里「新版出现」的时间
+  if (last !== undefined)
+    step(
+      `从点「重启并更新」到新版桌面壳启动（小窗关掉）：${Math.round((Date.parse(last.at) - clicked) / 1000)} 秒`,
+    )
   if (pkgOf().version !== toVersion)
     throw new Error(`安装目录里的版本是 ${pkgOf().version}，不是 ${toVersion}`)
   step(`安装目录里也是 ${toVersion}`)
