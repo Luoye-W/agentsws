@@ -32,7 +32,7 @@ export default defineConfig({
     name: 'Agents 工坊助手',
     short_name: '工坊助手',
     description:
-      '在 YouTube / Instagram / TikTok 页面上即时体检红人、一键收进本机红人库；连接广告后台后，替你执行批过的广告动作。',
+      '在 YouTube / Instagram / TikTok 页面上即时体检红人、一键收进本机红人库；连接广告后台后，替你执行批过的广告动作；连接 Reddit 后，把批过的回复填进页面，由你点发送。',
     // 没有 `default_locale`：这一版只有中文，而声明了 `default_locale` 就必须带
     // `_locales/<lang>/messages.json`，否则 Chrome 连装都装不上。
     // `alarms` 是给「应用刚打开，把排着的补上去」那个 5 分钟定时用的；
@@ -44,6 +44,9 @@ export default defineConfig({
       'https://ads.google.com/*',
       'https://adsmanager.facebook.com/*',
       'https://business.facebook.com/*',
+      // WP329：Reddit（连接时才申请；与 WP328 读同一份）——批过的回复由插件填进页面，人自己点发送
+      'https://old.reddit.com/*',
+      'https://www.reddit.com/*',
     ],
     host_permissions: [
       'https://*.youtube.com/*',
