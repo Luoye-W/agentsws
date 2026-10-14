@@ -159,6 +159,26 @@ describe('WP329 Reddit 写在假 old.reddit 上', () => {
     expect(page.state.sent[0]?.parent).toBe('t1_c1')
   })
 
+  it('人填完马上就点了发送（还没开始等）：照样认得出，不当成老的', async () => {
+    const page = fresh()
+    const r = await runAction(job(reply), page, {
+      progress: async (p) => {
+        if (p.label === '填好了，等你点发送') page.humanSend()
+        return { stop: false }
+      },
+      stopped: () => false,
+      confirm: async () => 'yes',
+      evidence: async () => {},
+      downloaded: async () => {},
+      sleep: async () => {},
+      gapMs: 0,
+      sendPollMs: 0,
+      sendTimeoutMs: 1,
+    })
+    expect(r.outcome).toBe('done')
+    expect(r.reads.fullname).toBe('t1_new1')
+  })
+
   it('回帖子（顶层评论）', async () => {
     const page = fresh()
     const r = await run(page, comment, { sendAt: 1 })

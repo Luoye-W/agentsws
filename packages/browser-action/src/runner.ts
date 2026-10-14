@@ -159,6 +159,19 @@ export async function runAction(
     return undefined
   }
 
+  /**
+   * WP329：「发出去的那一条」的底账——**填草稿之前**先记下页面上已经有的同样正文，
+   * 这样人填完马上点发送也不会把刚发的那条当成老的。
+   */
+  const sendStep = plan.steps.find(
+    (s): s is Extract<ActionStep, { op: 'await_sent' }> => s.op === 'await_sent',
+  )
+  let sentBaseline: Set<string> | undefined
+  const takeBaseline = async (): Promise<Set<string>> =>
+    sendStep === undefined || page.findPosted === undefined
+      ? new Set()
+      : new Set((await page.findPosted(sendStep.selector, sendStep.body, sendStep.text)).map(keyOf))
+
   for (const [index, step] of plan.steps.entries()) {
     at = index + 1
     if (hooks.stopped()) return end('stopped', '你点了停止，已停下。')
@@ -175,6 +188,8 @@ export async function runAction(
     }
 
     try {
+      if (step.op === 'fill' && sendStep !== undefined && sentBaseline === undefined)
+        sentBaseline = await takeBaseline()
       const out = await doStep(step)
       if (out !== undefined) return out
     } catch (err) {
@@ -274,7 +289,7 @@ export async function runAction(
   ): Promise<ActionResult | undefined> {
     if (page.findPosted === undefined)
       return end('failed', '这只「手」认不了发出去的那一条，没法读回，已停下。')
-    const seen = new Set((await page.findPosted(step.selector, step.body, step.text)).map(keyOf))
+    const seen = sentBaseline ?? (await takeBaseline())
     const limit = step.timeout_ms ?? hooks.sendTimeoutMs ?? SEND_WAIT_MS
     const pollMs = hooks.sendPollMs ?? SEND_POLL_MS
     for (let looks = 1, waited = 0; ; looks += 1, waited += pollMs) {
@@ -299,7 +314,7 @@ export async function runAction(
           (await pageCheck()) ??
           end(
             'handover',
-            `等了 ${Math.round(limit / 60_000)} 分钟没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。`,
+            `等了 ${limit >= 60_000 ? `${Math.round(limit / 60_000)} 分钟` : `${Math.round(limit / 1000)} 秒`}没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。`,
           )
         )
       await hooks.sleep(pollMs)
