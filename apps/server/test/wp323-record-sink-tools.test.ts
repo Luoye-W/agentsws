@@ -133,7 +133,12 @@ describe('stub 剧本', () => {
       recordSinkBranch({ tools: { allow: [] } } as unknown as RunRequest, `记到 ${URL_A}`),
     ).toBeUndefined()
     const text = renderRecordSinkAnswer({
-      data: { ok: true, name: 'INMO 回复记录', card: true, columns: [{ column: '日期', fill: '发出日期' }] },
+      data: {
+        ok: true,
+        name: 'INMO 回复记录',
+        card: true,
+        columns: [{ column: '日期', fill: '发出日期' }],
+      },
     })
     expect(text).toContain('日期 ← 发出日期')
     expect(text).toContain('记下')
