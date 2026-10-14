@@ -143,7 +143,19 @@ async function main() {
         }
         await new Promise((r) => setTimeout(r, 250))
       }
-      throw new Error(`等不到 ${kind} 卡`)
+      const view = await api(token, theme, 'GET', `/v1/matters/${matter}`)
+      throw new Error(
+        `等不到 ${kind} 卡：\n${view.timeline.map((e) => `  ${e.kind} ${e.text}`).join('\n')}`,
+      )
+    }
+
+    const runOf = async (matter, text) => {
+      for (let i = 0; i < 120; i += 1) {
+        const view = await api(token, theme, 'GET', `/v1/matters/${matter}`)
+        if (view.timeline.some((e) => e.kind === 'run' && e.text === text)) return
+        await new Promise((r) => setTimeout(r, 250))
+      }
+      throw new Error(`等不到「${text}」`)
     }
 
     // ① 建站工具没装 → 连接卡
@@ -188,28 +200,43 @@ async function main() {
     if ((await input.count()) > 0 && (await input.inputValue()) === '') await input.fill(SHOP)
     await shotOf(page.locator('main'), '2-setup-card-in-matter')
     await page.click('[data-testid="setup-fields-save"]')
-    await cardOf(b.matter.id, 'theme_choice')
+    await runOf(b.matter.id, '设好了，接着做')
     await page.goto(`${BASE}/matters/${b.matter.id}`, { waitUntil: 'networkidle' })
-    await page.waitForSelector('[data-testid="matter-card"]', { timeout: 30_000 })
     await shotOf(page.locator('main'), '3-setup-saved-resumed')
 
     // ④ 回到第一件事：连接卡上全绿 → 卡自己「接着做」
     await page.goto(`${BASE}/matters/${a.matter.id}`, { waitUntil: 'networkidle' })
+    await runOf(a.matter.id, '连好了，接着做')
     await cardOf(a.matter.id, 'theme_choice')
     await page.goto(`${BASE}/matters/${a.matter.id}`, { waitUntil: 'networkidle' })
     await page.waitForSelector('[data-testid="matter-card"]', { timeout: 30_000 })
     await shotOf(page.locator('main'), '4-connect-done-resumed')
 
-    // ⑤ 数据看板「去连接」→ 第三栏连接卡
-    await page.goto(`${BASE}/positions/${owner}`, { waitUntil: 'networkidle' })
-    const go = page
-      .locator('[data-testid="connect-card"] button, [data-testid="tile-connect-link"]')
-      .first()
-    if (await go.isVisible({ timeout: 10_000 }).catch(() => false)) {
+    // ⑤ 「去连接」→ 第三栏连接卡（找一个有没连数据源的岗位页；没有就试消息页）
+    const goSel =
+      '[data-testid="connect-card"] button, [data-testid="tile-connect-link"], [data-testid="position-missing-go"], [data-testid="messages-connect"]'
+    const pages = [
+      ...new Set((await api(token, undefined, 'GET', '/v1/me')).assignments.map((x) => x.id)),
+    ]
+      .map((id) => `${BASE}/positions/${id}`)
+      .concat(`${BASE}/messages`)
+    let shot = false
+    for (const url of pages) {
+      await page.goto(url, { waitUntil: 'networkidle' })
+      const go = page.locator(goSel).first()
+      if (!(await go.isVisible({ timeout: 3000 }).catch(() => false))) continue
       await go.click()
-      await page.waitForSelector('[data-testid="connect-panel"]', { timeout: 30_000 })
-      await shotOf(page, '5-rail-connect-card')
-    } else console.log('  （这个岗位页上没有没连的数据源，跳过第三栏那一张）')
+      if (
+        await page
+          .waitForSelector('[data-testid="connect-panel"]', { timeout: 15_000 })
+          .catch(() => null)
+      ) {
+        await shotOf(page, '5-rail-connect-card')
+        shot = true
+        break
+      }
+    }
+    if (!shot) console.log('  （没找到没连的数据源，跳过第三栏那一张）')
     await context.close()
   } finally {
     await browser?.close()

@@ -898,12 +898,19 @@ export function InlineCard({
       </AiShell>
     )
   if (!WAITING.has(card.status)) {
-    const key = APPROVED.has(card.status)
-      ? 'matter.card.approved'
-      : card.status === 'rejected'
-        ? 'matter.card.rejected'
-        : 'matter.card.done'
-    const good = APPROVED.has(card.status)
+    // WP324：连接卡 / 配置卡补完（人点的、或在别处连好自动收起的）说「已连上 / 已设好」，不说「你批了」
+    const setupDone =
+      isSetupCard(card) && (APPROVED.has(card.status) || card.status === 'withdrawn')
+    const key = setupDone
+      ? card.kind === 'setup_request'
+        ? 'setup.card.done.setup'
+        : 'setup.card.done.connect'
+      : APPROVED.has(card.status)
+        ? 'matter.card.approved'
+        : card.status === 'rejected'
+          ? 'matter.card.rejected'
+          : 'matter.card.done'
+    const good = setupDone || APPROVED.has(card.status)
     return (
       <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
         <div

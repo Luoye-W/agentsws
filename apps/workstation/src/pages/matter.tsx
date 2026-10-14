@@ -44,6 +44,7 @@ import {
 } from '@/components/matter/matter-timeline'
 import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { MatterHandoffBar } from '@/components/peers/handoff-strip'
+import { isSetupCard } from '@/components/setup/setup-deck-body'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { archiveBlock } from '@/components/sidebar/matter-menu'
@@ -404,8 +405,9 @@ export function MatterPage(): ReactNode {
     busy: running || queued !== undefined,
     blockedSay: t('matter.blocked.say'),
     // WP268：挑图卡要点一张图，不是说一句「就这张」——不给建议
+    // WP324：连接卡 / 配置卡要在卡上连 / 填，说一句「接着做」没用——也不给
     cardAction:
-      firstWaiting === undefined || isImageCard(firstWaiting)
+      firstWaiting === undefined || isImageCard(firstWaiting) || isSetupCard(firstWaiting)
         ? undefined
         : deckActionLabel(firstWaiting, 'approve', t),
   })
