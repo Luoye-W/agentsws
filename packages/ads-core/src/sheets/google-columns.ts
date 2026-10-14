@@ -60,11 +60,11 @@ export const GOOGLE_BULK_COLUMNS = {
   match_type: v('Match Type'),
   // 关键词模板里有；广告组模板里**没有**这一列，广告组上写出价时用的是同名列（没核实）
   max_cpc: v('Default max. CPC'),
-  // 还没在模板里看到：改单条广告状态要的广告编号；显示路径（广告模板表头在
-  // 「Headline N position」之后的部分我们拿到的摘录被截断了）
+  // 显示路径：RSA 模板完整表头里有（Description N position 之后、Final URL 之前），10-14 核对
+  path1: v('Path 1'),
+  path2: v('Path 2'),
+  // 还没在模板里看到：改单条广告状态要的广告编号
   ad_id: guess('Ad ID'),
-  path1: guess('Path 1'),
-  path2: guess('Path 2'),
 } as const satisfies Record<string, GoogleColumn>
 
 export type GoogleColumnId = keyof typeof GOOGLE_BULK_COLUMNS
