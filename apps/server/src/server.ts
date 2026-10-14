@@ -4880,6 +4880,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       translator: ({ actor, run_id }) => seoModel(actor, run_id),
       /*
+       * WP321（docs/99 §7 O2）：监测要的官方数据能力口（排队档批量问答、Claude、关注词排名）——
+       * 这个品牌的云客户端；没关联账号时它自己回「没配」。模型口同上（策略建议、情感、站点分类）。
+       */
+      dataService: () => createDataService(ownCloud),
+      // 决策 534：自带 key 那档问 Claude 前查一次免费的模型清单（注入的替身不查）
+      claudeModelCheck: async () =>
+        options.searchDataFor?.(ws) === undefined ? searchData.claudeModelCheck() : { ok: true },
+      watchModel: ({ actor, run_id }) => seoModel(actor, run_id),
+      /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
        */
@@ -9089,7 +9098,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     setGeoQuestions: async (actor, input) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
       if (input.questions !== undefined)
-        svc.setGeoQuestions(
+        await svc.setGeoQuestions(
           input.questions.map((q, i) => ({
             id: q.id ?? `gq_h${i}_${Date.parse(clock.now()).toString(36)}`,
             text: q.text,
@@ -9097,9 +9106,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             enabled: q.enabled,
           })),
         )
-      if (input.settings !== undefined) svc.setGeoSettings(input.settings)
+      if (input.settings !== undefined) await svc.setGeoSettings(input.settings)
       return svc.geoView()
     },
+    // WP321（docs/99 §7 O2）：GEO 关注设置、策略建议、现在跑一轮、看板要的数（请求人所在品牌）
+    watchView: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchView(),
+    watchSuggest: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchSuggest(input),
+    watchApply: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchApply(input),
+    watchRun: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchRun(input),
+    watchMetrics: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchMetrics(input),
     // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
     geoHistoryExport: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),
@@ -9146,7 +9166,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       }
       const revenue = await svc.weeklyRevenue()
-      const geo = await svc.weeklyGeo()
+      // WP321（决策 469）：「现在跑一轮」走即时；Claude 要先确认（新面板走 /v1/seo/watch/run）
+      const geo = await svc.weeklyGeo('manual')
       return {
         what,
         approval_item_ids: [revenue.approval_item_id, geo.approval_item_id].filter(

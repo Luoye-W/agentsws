@@ -10,6 +10,9 @@
  * - `GET / PUT /v1/seo/google-sources`（WP158）：Search Console 选哪个站点、GA4 选哪个媒体资源。
  * - WP310 `GET /v1/seo/geo-history/export`、`POST /v1/seo/geo-history/delete`：GEO / 排名历史
  *   （回答全文、引用、判定、周数据）导出成 JSON / CSV、按品牌或按时间段删（决策 473）。
+ * - WP321 `GET / PUT /v1/seo/watch`、`POST /v1/seo/watch/strategy`、`POST /v1/seo/watch/run`、
+ *   `GET /v1/seo/watch/metrics`：「GEO 关注设置」读写、AI 按品牌档案给策略（可同时出设定卡）、
+ *   现在跑一轮（Claude 单格 ≥ 1 积分先回估算、带 `confirm` 才跑）、看板要的数（O3 画）。
  *
  * 闸：`content` 域（`dtc.content` 的 scopes 里有 read / stage）。别的职责进不来，
  * 路由里一行 if 都不用写（同 `pr.ts` 文件头第 1 条）。判断与出卡全在服务端的
@@ -23,8 +26,13 @@ import type {
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
   GeoHistoryExport,
+  GeoMetricsView,
   GeoQuestion,
   GeoSettings,
+  GeoWatchPatch,
+  GeoWatchRunResult,
+  GeoWatchSuggestion,
+  GeoWatchView,
   MaybePromise,
   PersonId,
   RoleId,
@@ -142,6 +150,19 @@ export interface SeoPort {
     actor: SeoActor,
     input: GeoHistoryDeleteInput,
   ): MaybePromise<GeoHistoryDeleteResult>
+  /** WP321：「GEO 关注设置」读视图（没装 = 501）。 */
+  watchView?(actor: SeoActor): MaybePromise<GeoWatchView>
+  /** WP321：AI 按品牌档案给一份策略（`card: true` 同时出一张设定卡）。 */
+  watchSuggest?(actor: SeoActor, input: { card?: boolean }): MaybePromise<GeoWatchSuggestion>
+  /** WP321：改关注设置（确认 / 改策略）。 */
+  watchApply?(actor: SeoActor, input: GeoWatchPatch): MaybePromise<GeoWatchView>
+  /** WP321：现在跑一轮（Claude 单格 ≥ 1 积分：不带 `confirm` 只回估算）。 */
+  watchRun?(
+    actor: SeoActor,
+    input: { confirm?: boolean; kinds?: ('geo' | 'rank')[] },
+  ): MaybePromise<GeoWatchRunResult>
+  /** WP321：看板要的数（默认近 12 周）。 */
+  watchMetrics?(actor: SeoActor, input: { weeks?: number }): MaybePromise<GeoMetricsView>
 }
 
 /** WP159：改规则表（三件事一次给一件就行）。 */
@@ -280,6 +301,124 @@ function isoParam(c: Parameters<typeof principalOf>[0], name: string): string | 
   return v
 }
 
+/* ── WP321：GEO 关注设置 ─────────────────────────────────────────────── */
+
+const Topic = z.enum([
+  'category',
+  'buying_guide',
+  'comparison',
+  'use_case',
+  'price_value',
+  'reviews',
+  'branded',
+  'other',
+])
+const WatchPlatform = z.enum(['chatgpt', 'gemini', 'claude', 'google_ai_overview'])
+const PromptBody = z.object({
+  id: z.string().min(1).max(80),
+  text: z.string().min(1).max(300),
+  origin: z.enum(['brand', 'top_query', 'human', 'ai_suggest']),
+  enabled: z.boolean(),
+  topic: Topic.optional(),
+  branded: z.boolean().optional(),
+  selected: z.boolean().optional(),
+})
+const CompetitorBody = z.object({
+  id: z.string().max(80),
+  name: z.string().min(1).max(80),
+  aliases: z.array(z.string().max(80)).max(10),
+  domains: z.array(z.string().max(120)).max(5),
+})
+const KeywordBody = z.object({
+  keyword: z.string().min(1).max(120),
+  branded: z.boolean(),
+  enabled: z.boolean(),
+})
+const StrategyBody = z.object({
+  by: z.enum(['ai', 'rules']),
+  category: z.string().max(80).optional(),
+  stage: z.enum(['new', 'growing', 'established']).optional(),
+  prompt_limit: z.number().int().min(1).max(50),
+  branded: z.number().int().min(0).max(50),
+  topic_mix: z.array(z.object({ topic: Topic, count: z.number().int().min(0).max(50) })).max(10),
+  prompts: z.array(PromptBody).max(50),
+  candidates: z.array(PromptBody).max(100),
+  competitors: z.array(CompetitorBody).max(10),
+  keywords: z.array(KeywordBody).max(100),
+  platforms: z.array(WatchPlatform).max(4),
+  why: z.array(z.string().max(300)).max(5),
+  created_at: z.string().max(40),
+})
+const WatchPatchBody = z.object({
+  strategy: StrategyBody.optional(),
+  brand_aliases: z.array(z.string().max(80)).max(10).optional(),
+  competitors: z.array(CompetitorBody).max(10).optional(),
+  keywords: z.array(KeywordBody).max(100).optional(),
+  platforms: z.array(WatchPlatform).max(4).optional(),
+  markets_off: z
+    .array(z.string().regex(/^[A-Za-z]{2}$/))
+    .max(60)
+    .optional(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'manual']).optional(),
+  rank_device: z.enum(['mobile', 'desktop', 'both']).optional(),
+  enabled: z.boolean().optional(),
+  prompt_limit: z.number().int().min(1).max(50).optional(),
+  select: z.array(z.string().min(1).max(80)).max(50).optional(),
+  add_prompts: z
+    .array(
+      z.object({
+        text: z.string().min(1).max(300),
+        topic: Topic.optional(),
+        selected: z.boolean().optional(),
+      }),
+    )
+    .max(30)
+    .optional(),
+  edit_prompts: z
+    .array(z.object({ id: z.string().min(1).max(80), text: z.string().min(1).max(300) }))
+    .max(30)
+    .optional(),
+  archive_prompts: z.array(z.string().min(1).max(80)).max(100).optional(),
+})
+const WatchSuggestBody = z.object({ card: z.boolean().optional() })
+const WatchRunBody = z.object({
+  confirm: z.boolean().optional(),
+  kinds: z
+    .array(z.enum(['geo', 'rank']))
+    .min(1)
+    .max(2)
+    .optional(),
+})
+
+/** zod 的可选格出来是 `T | undefined`；契约是「不写」——过一遍 JSON 把 `undefined` 拿掉。 */
+const plain = <T>(v: unknown): T => JSON.parse(JSON.stringify(v)) as T
+
+function watchPortOf(
+  deps: GatewayDeps,
+): Required<
+  Pick<SeoPort, 'watchView' | 'watchSuggest' | 'watchApply' | 'watchRun' | 'watchMetrics'>
+> {
+  const p = portOf(deps)
+  if (
+    p.watchView === undefined ||
+    p.watchSuggest === undefined ||
+    p.watchApply === undefined ||
+    p.watchRun === undefined ||
+    p.watchMetrics === undefined
+  )
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配 AI 回答监测那一层（SeoPort.watch*）。',
+    )
+  return {
+    watchView: p.watchView.bind(p),
+    watchSuggest: p.watchSuggest.bind(p),
+    watchApply: p.watchApply.bind(p),
+    watchRun: p.watchRun.bind(p),
+    watchMetrics: p.watchMetrics.bind(p),
+  }
+}
+
 const GoogleSourcesBody = z.object({
   gsc_site: z.string().min(1).max(300).optional(),
   ga4_property: z.string().min(1).max(40).optional(),
@@ -405,6 +544,115 @@ export function seoRoutes(): Route[] {
               ? {}
               : { include_settings: input.include_settings }),
           }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/watch',
+        operationId: 'getGeoWatch',
+        summary:
+          'WP321：AI 回答监测的关注设置（品牌 / 竞品 / 已选与候选 Prompt / 关注词 / 关注的 AI / 频率）+ 一轮与每月大概多少积分 + 策略定没定 + 最近几轮',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'GeoWatchView',
+      },
+      async (c, deps) => ok(c, await watchPortOf(deps).watchView(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/seo/watch',
+        operationId: 'setGeoWatch',
+        summary:
+          'WP321：改关注设置——整份采用一份策略，或单改竞品 / 关注词 / 关注的 AI / 频率 / 已选几条；Prompt 改字 = 归档旧的 + 新建一条',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchPatchBody,
+        returns: 'GeoWatchView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await watchPortOf(deps).watchApply(
+            actorOf(c),
+            plain<GeoWatchPatch>(await body(c, WatchPatchBody)),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/watch/strategy',
+        operationId: 'suggestGeoWatch',
+        summary:
+          'WP321：AI 按品牌档案（品类、阶段、市场）给一份策略——追几条、各方向占多少、带品牌名几条、候选 Prompt、竞品、关注词；card=true 时同时出一张设定卡',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchSuggestBody,
+        returns: 'GeoWatchSuggestion',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await watchPortOf(deps).watchSuggest(
+            actorOf(c),
+            plain<{ card?: boolean }>(await body(c, WatchSuggestBody)),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/watch/run',
+        operationId: 'runGeoWatch',
+        summary:
+          'WP321：现在跑一轮（即时）——Claude 单格约 3.6 积分：不带 confirm 只回这一轮的估算（needs_confirm），带 confirm=true 才跑',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchRunBody,
+        returns: 'GeoWatchRunResult',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await watchPortOf(deps).watchRun(
+            actorOf(c),
+            plain<{ confirm?: boolean; kinds?: ('geo' | 'rank')[] }>(await body(c, WatchRunBody)),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/watch/metrics',
+        operationId: 'getGeoWatchMetrics',
+        summary:
+          'WP321：看板要的数——提及率 / 引用率 / 平均名次 / 声量份额（按 AI、按市场、带不带品牌名，4 周滚动、覆盖 < 90% 不出变化）、被引用最多的站与页、前后对比、关注词排名、品牌词周数据',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        params: [{ name: 'weeks', in: 'query', description: '看近几周（1–52，默认 12）' }],
+        returns: 'GeoMetricsView',
+      },
+      async (c, deps) => {
+        const raw = c.req.query('weeks')
+        const weeks = raw === undefined || raw === '' ? undefined : Number(raw)
+        if (weeks !== undefined && (!Number.isInteger(weeks) || weeks < 1 || weeks > 52))
+          throw new ApiError('invalid_input', 'weeks 要是 1–52 的整数')
+        return ok(
+          c,
+          await watchPortOf(deps).watchMetrics(actorOf(c), weeks === undefined ? {} : { weeks }),
         )
       },
     ),

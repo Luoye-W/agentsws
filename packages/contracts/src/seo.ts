@@ -989,3 +989,10 @@ export interface GeoWatchRunResult {
   pending_tasks: number
   notes: string[]
 }
+
+/** WP321：`POST /v1/seo/watch/strategy` 的结果（出了设定卡才有卡 id）。 */
+export interface GeoWatchSuggestion {
+  strategy: GeoWatchStrategy
+  estimate: GeoRunEstimate
+  approval_item_id?: string
+}

@@ -145,7 +145,9 @@ export interface GeoMonitorDeps {
     market: string,
   ): Promise<{ asked: string; language: string; untranslated: boolean }>
   /** 一个市场用什么语言查（排名那一跳用；Prompt 的翻译走 `translate`）。 */
-  languageOf(market: string): string
+  languageOf(market: string): string | Promise<string>
+  /** Search Console 连没连（不读数；面板上「品牌词」那一块要不要提示去连）。 */
+  gscConnected?(): boolean
   /** Search Console 近 7 天的行（没连 `connected: false`）。 */
   gsc(): Promise<{ connected: boolean; rows: GscRow[] }>
   /** 等排队档任务时睡多久（测试注入）。 */
@@ -162,13 +164,18 @@ export const WATCH_WAIT_BUDGET_MS = 15 * 60_000
 export const WATCH_JUDGE_CAP = 80
 /** 设定卡批过（策略定了）的时刻。 */
 export const WATCH_SETUP_KEY = 'watch_setup_at'
-/** 还在等人的设定卡 id。 */
+/** 还在等人的设定卡 id（人说了「不要」记 {@link SETUP_DECLINED}）。 */
 export const WATCH_SETUP_CARD_KEY = 'watch_setup_card'
+export const SETUP_DECLINED = 'declined'
+/** 人在「要加进竞品吗」卡上说过「不要」的品牌（JSON 数组；不再问）。 */
+export const DECLINED_RIVALS_KEY = 'declined_competitors'
 /** 决策 534：今天查过 Claude 模型清单没有（`YYYY-MM-DD|ok|一句话`）。 */
 export const CLAUDE_CHECK_KEY = 'claude_model_check'
 
 export const NOTE_CLAUDE_UNCONFIRMED =
   'Claude 这一轮没问：关注设置还没定（Claude 一次约 3.6 积分，定了再问）。'
+export const NOTE_CLAUDE_NOT_CONFIRMED_RUN =
+  'Claude 这一轮没问：一格约 3.6 积分，要先确认这一轮的花费（「现在跑一轮」会先给估算）。'
 export const NOTE_NO_DATA_SERVICE =
   'Claude 与关注词排名要用 Agents 工坊官方数据接口，这台电脑还没接上，这一轮先跳过。'
 
@@ -823,13 +830,11 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
           ? NOTE_NO_DATA_SERVICE
           : 'Claude 这一轮问不了（这条取数的路暂时没开 Claude），先跳过。',
       )
-    if (
-      platforms.includes('claude') &&
-      !setupDone(store) &&
-      !(trigger === 'manual' && opts.confirmed === true)
-    ) {
+    // 定时：策略定了才问 Claude；手动：这一轮合并确认过才问（单格 ≥ 1 积分，docs/75）
+    const claudeOk = trigger === 'scheduled' ? setupDone(store) : opts.confirmed === true
+    if (platforms.includes('claude') && !claudeOk) {
       platforms = platforms.filter((p) => p !== 'claude')
-      notes.push(NOTE_CLAUDE_UNCONFIRMED)
+      notes.push(trigger === 'scheduled' ? NOTE_CLAUDE_UNCONFIRMED : NOTE_CLAUDE_NOT_CONFIRMED_RUN)
     }
     if (platforms.includes('claude') && status.route === 'byo') {
       const ok = await claudeCheck(store)
@@ -1065,7 +1070,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     const submitted: string[] = []
     for (const market of markets)
       for (const device of devices) {
-        const language = deps.languageOf(market)
+        const language = await deps.languageOf(market)
         if (status.route === 'byo') {
           let n = 0
           for (const keyword of keywords)
@@ -1396,7 +1401,10 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
    * 改关注设置（用户确认 / 改策略都走这里；人改过就算「定了」，之后定时那几轮问 Claude）。
    * Prompt 原句不可改：改字 = 归档旧的 + 新建一条；归档过的同一句不以「新的」身份回来。
    */
-  async function apply(patch: GeoWatchPatch): Promise<BrandWatch> {
+  async function apply(
+    patch: GeoWatchPatch,
+    opts: { markSetup?: boolean } = {},
+  ): Promise<BrandWatch> {
     const { store, watch } = await ensureWatch()
     store.tx(() => {
       let s: BrandWatchSettings = { ...settingsOf(watch), updated_at: now() }
@@ -1503,7 +1511,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
               s.prompt_limit,
             ),
       )
-      store.setMeta(WATCH_SETUP_KEY, now())
+      if (opts.markSetup !== false) store.setMeta(WATCH_SETUP_KEY, now())
     })
     return store.watch() as BrandWatch
   }
@@ -1519,7 +1527,9 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         .slice(-3)
         .reverse(),
     )
-    const g = await deps.gsc().catch(() => ({ connected: false, rows: [] as GscRow[] }))
+    const gscConnected =
+      deps.gscConnected?.() ??
+      (await deps.gsc().catch(() => ({ connected: false, rows: [] as GscRow[] }))).connected
     const notes: string[] = []
     if (watch.platforms.includes('claude') && !setupDone(store)) notes.push(NOTE_CLAUDE_UNCONFIRMED)
     const check = store.meta(CLAUDE_CHECK_KEY)
@@ -1527,7 +1537,9 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       notes.push(
         `Claude 今天没问：你自带的搜索数据 key 那边查模型清单没通过${check.split('|')[2] ? `——${check.split('|')[2]}` : ''}。`,
       )
-    const card = store.meta(WATCH_SETUP_CARD_KEY)
+    const raw = store.meta(WATCH_SETUP_CARD_KEY)
+    // `declined` = 人在设定卡上说了「不要」：不再自动出卡，面板上照样显示「还没定」
+    const card = raw === undefined || raw === '' || raw === SETUP_DECLINED ? undefined : raw
     return {
       watch,
       estimate: est,
@@ -1536,7 +1548,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       last_runs: last,
       pending_tasks: store.tasks({ status: 'pending' }).length,
       search_data: status.configured ? 'configured' : 'not_configured',
-      gsc_connected: g.connected,
+      gsc_connected: gscConnected,
       notes,
     }
   }
@@ -1546,6 +1558,20 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     estimate: async () => {
       const { watch } = await ensureWatch()
       return estimate(watch, await deps.searchData().status())
+    },
+    /** 按一份策略（还没落成设置）估一轮 / 每月花多少（设定卡上写清）。 */
+    estimateFor: async (st: GeoWatchStrategy) => {
+      const { watch } = await ensureWatch()
+      return estimate(
+        {
+          ...watch,
+          prompts: st.prompts,
+          prompt_limit: st.prompt_limit,
+          platforms: st.platforms,
+          keywords: st.keywords,
+        },
+        await deps.searchData().status(),
+      )
     },
     view,
     suggest,
