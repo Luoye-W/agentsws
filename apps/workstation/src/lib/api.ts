@@ -7704,7 +7704,8 @@ export interface AdCreativeDesignData {
 }
 
 export const importAdCreativeExport = (
-  input: { platform: AdCreativePlatform; text: string },
+  /** `base64` = 导出文件的原始字节（服务端按 BOM 解，UTF-16 的 Excel CSV 也认）。 */
+  input: { platform: AdCreativePlatform; text?: string; base64?: string },
   assignment?: string,
 ): Promise<AdCreativeImportData> =>
   api('/v1/ads/creative/imports', { method: 'POST', body: input, ...withAssignment(assignment) })
@@ -7715,8 +7716,21 @@ export const rewriteAdCreative = (
 ): Promise<AdCreativeRound> =>
   api('/v1/ads/creative/rounds', { method: 'POST', body: input, ...withAssignment(assignment) })
 
-export const getAdCreativeSheet = (round_id: string, assignment?: string): Promise<AdUploadSheet> =>
-  api(`/v1/ads/creative/rounds/${encodeURIComponent(round_id)}/sheet`, withAssignment(assignment))
+export const getAdCreativeSheet = (
+  round_id: string,
+  meta: { page_id?: string; image_hash?: string } = {},
+  assignment?: string,
+): Promise<AdUploadSheet> => {
+  const q = new URLSearchParams()
+  if (meta.page_id !== undefined && meta.page_id !== '') q.set('meta_page_id', meta.page_id)
+  if (meta.image_hash !== undefined && meta.image_hash !== '')
+    q.set('meta_image_hash', meta.image_hash)
+  const qs = q.toString()
+  return api(
+    `/v1/ads/creative/rounds/${encodeURIComponent(round_id)}/sheet${qs === '' ? '' : `?${qs}`}`,
+    withAssignment(assignment),
+  )
+}
 
 export const requestAdCreativeDesign = (
   round_id: string,

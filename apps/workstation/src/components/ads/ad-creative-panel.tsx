@@ -7,7 +7,13 @@
  * 界面纪律（36 §7「界面少字」）：字数写成「18/30」，挡下来的理由进问号；
  * 没接真模型时那一句照实摆出来。这一块**不碰广告后台**：上传表是人自己下载去传的。
  */
-import type { AdCreativePlatform, AdCreativeRound, AdExperimentEntry } from '@agentsws/contracts'
+import type {
+  AdCreativePlatform,
+  AdCreativeRound,
+  AdExperimentEntry,
+  AdUploadSheet,
+  AdUploadSheetFile,
+} from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FlaskConical, ImagePlus, Sparkles, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -34,19 +40,30 @@ export function adCreativePlatformOf(role_id: string): AdCreativePlatform | unde
   return role_id === 'ads.google' ? 'google' : role_id === 'ads.meta' ? 'meta' : undefined
 }
 
-/** 读用户选的那张表（FileReader：老一点的内核也有）。 */
-function readText(f: File): Promise<string> {
+/**
+ * 读用户选的那张表，原样转成 base64 交给服务端（服务端用 WP314 的 `decodeExportBytes` 按 BOM 解，
+ * Google「Excel CSV」那种 UTF-16 也认）。FileReader：老一点的内核也有。
+ */
+function readBase64(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onload = () => {
+      const url = typeof reader.result === 'string' ? reader.result : ''
+      resolve(url.slice(url.indexOf(',') + 1))
+    }
     reader.onerror = () => reject(reader.error ?? new Error('读不了这个文件'))
-    reader.readAsText(f)
+    reader.readAsDataURL(f)
   })
 }
 
 /** 浏览器里存成文件（不经任何第三方）。 */
-function saveText(filename: string, text: string, type: string): void {
-  const blob = new Blob([text], { type })
+function saveFile(file: AdUploadSheetFile): void {
+  const data =
+    file.base64 === undefined
+      ? (file.text ?? '')
+      : Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0))
+  const blob = new Blob([data], { type: file.content_type })
+  const filename = file.name
   const href = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = href
@@ -214,7 +231,7 @@ export function AdCreativePanel({
   const [design, setDesign] = useState<AdCreativeDesignData | undefined>(undefined)
   const upload = useMutation({
     mutationFn: async (f: File) =>
-      importAdCreativeExport({ platform, text: await readText(f) }, assignment),
+      importAdCreativeExport({ platform, base64: await readBase64(f) }, assignment),
     onSuccess: (data) => {
       setImp(data)
       setRound(undefined)
@@ -228,9 +245,20 @@ export function AdCreativePanel({
       setDesign(undefined)
     },
   })
+  const [pageId, setPageId] = useState('')
+  const [imageHash, setImageHash] = useState('')
+  const [sheetView, setSheetView] = useState<AdUploadSheet | undefined>(undefined)
   const sheet = useMutation({
-    mutationFn: () => getAdCreativeSheet(round?.id ?? '', assignment),
-    onSuccess: (s) => saveText(s.filename, s.text, s.content_type),
+    mutationFn: () =>
+      getAdCreativeSheet(
+        round?.id ?? '',
+        platform === 'meta' ? { page_id: pageId.trim(), image_hash: imageHash.trim() } : {},
+        assignment,
+      ),
+    onSuccess: (s) => {
+      setSheetView(s)
+      if (s.ok) for (const f of s.files) saveFile(f)
+    },
   })
   const toDesign = useMutation({
     mutationFn: () => requestAdCreativeDesign(round?.id ?? '', {}, assignment),
@@ -320,6 +348,22 @@ export function AdCreativePanel({
               {t('ads.creative.sheet')}
             </Button>
             <Hint text={t('ads.creative.sheet.hint')} />
+            {platform === 'meta' ? (
+              <>
+                <Input
+                  className="h-8 w-32"
+                  placeholder={t('ads.creative.meta.page')}
+                  value={pageId}
+                  onChange={(ev) => setPageId(ev.target.value)}
+                />
+                <Input
+                  className="h-8 w-32"
+                  placeholder={t('ads.creative.meta.image')}
+                  value={imageHash}
+                  onChange={(ev) => setImageHash(ev.target.value)}
+                />
+              </>
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -338,6 +382,14 @@ export function AdCreativePanel({
             )}
           </div>
         ) : null}
+        {sheetView === undefined ? null : (
+          <div className="text-sm" data-testid="ad-creative-sheet">
+            <span className={sheetView.ok ? 'text-muted-foreground' : 'text-destructive'}>
+              {sheetView.ok ? sheetView.sentence : t('ads.creative.sheet.blocked')}
+            </span>
+            {sheetView.problems.length > 0 ? <Hint text={sheetView.problems.join('\n')} /> : null}
+          </div>
+        )}
         {error === null || error === undefined ? null : (
           <p className="text-destructive text-sm">
             {error instanceof Error ? error.message : String(error)}

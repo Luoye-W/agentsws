@@ -4,7 +4,7 @@
  * 钉的是：传表 → 「N 条 · 差 M 条」→ 出新文案（字数写成 18/30、挡下的进问号）→
  * 下载上传表 / 交设计岗出图；实验记录前两格填了才能记。
  */
-import type { AdCreativeRound, AdExperimentEntry } from '@agentsws/contracts'
+import type { AdCreativeRound, AdExperimentEntry, AdUploadSheet } from '@agentsws/contracts'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdCreativeDesignData, AdCreativeImportData } from '@/lib/api'
@@ -70,6 +70,7 @@ const rewriteAdCreative = vi.fn<(input: unknown) => Promise<AdCreativeRound>>()
 const requestAdCreativeDesign = vi.fn<() => Promise<AdCreativeDesignData>>()
 const listAdExperiments = vi.fn<() => Promise<{ rows: AdExperimentEntry[] }>>()
 const addAdExperiment = vi.fn<(input: unknown) => Promise<AdExperimentEntry>>()
+const getAdCreativeSheet = vi.fn<(round: string, meta: unknown) => Promise<AdUploadSheet>>()
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -80,10 +81,12 @@ vi.mock('@/lib/api', async () => {
     requestAdCreativeDesign: () => requestAdCreativeDesign(),
     listAdExperiments: () => listAdExperiments(),
     addAdExperiment: (input: unknown) => addAdExperiment(input),
+    getAdCreativeSheet: (round: string, meta: unknown) => getAdCreativeSheet(round, meta),
   }
 })
 
 const { AdCreativePanel, adCreativePlatformOf } = await import('@/components/ads/ad-creative-panel')
+const { AdCreativeEntry } = await import('@/components/ads/ad-creative-entry')
 
 describe('素材流水线面板', () => {
   beforeEach(() => {
@@ -119,9 +122,10 @@ describe('素材流水线面板', () => {
     expect((await screen.findByTestId('ad-creative-summary')).textContent).toBe(
       '3 条 · 差 1 条 · 1 条样本不够',
     )
+    // 原始字节转 base64 交给服务端（服务端用 WP314 的 decodeExportBytes 解）
     expect(importAdCreativeExport).toHaveBeenCalledWith({
       platform: 'google',
-      text: 'Campaign,Ad group\nPB,Commute',
+      base64: btoa('Campaign,Ad group\nPB,Commute'),
     })
     fireEvent.click(screen.getByTestId('ad-creative-rewrite'))
     const round = await screen.findByTestId('ad-creative-round')
@@ -153,5 +157,53 @@ describe('素材流水线面板', () => {
         change: '6 条带价格',
       }),
     )
+  })
+
+  it('Meta 上传表：带上主页编号与图片哈希去要；出不了时说「表还出不了」、原因进问号', async () => {
+    importAdCreativeExport.mockResolvedValue({ ...IMPORT, platform: 'meta' })
+    rewriteAdCreative.mockResolvedValue({ ...ROUND, platform: 'meta' })
+    getAdCreativeSheet.mockResolvedValue({
+      platform: 'meta',
+      ok: false,
+      files: [],
+      sentence: '新建 1 条广告，都先暂停',
+      fingerprint: '0'.repeat(64),
+      problems: ['Meta 广告要写正文、主页和图片'],
+      ads: 1,
+    })
+    renderWithProviders(<AdCreativePanel assignment="asg_m" platform="meta" />)
+    const f = new File(['x'], 'export.csv', { type: 'text/csv' })
+    fireEvent.change(screen.getByTestId('ad-creative-file'), { target: { files: [f] } })
+    fireEvent.click(await screen.findByTestId('ad-creative-rewrite'))
+    await screen.findByTestId('ad-creative-round')
+    fireEvent.change(screen.getByPlaceholderText('主页编号'), { target: { value: '1234567890' } })
+    fireEvent.click(screen.getByRole('button', { name: /下载上传表/ }))
+    expect((await screen.findByTestId('ad-creative-sheet')).textContent).toContain('表还出不了')
+    expect(getAdCreativeSheet).toHaveBeenCalledWith('adround_1', {
+      page_id: '1234567890',
+      image_hash: '',
+    })
+  })
+})
+
+describe('投放岗位页的快捷入口（决策 629）', () => {
+  it('本人持有 Google / Meta 才画，各一个链接到职责页', () => {
+    renderWithProviders(
+      <AdCreativeEntry
+        duties={[
+          { role_id: 'ads.google', assignment_id: 'asg_g' },
+          { role_id: 'ads.tiktok', assignment_id: 'asg_t' },
+        ]}
+      />,
+    )
+    const links = screen.getByTestId('ad-creative-entry').querySelectorAll('a')
+    expect([...links].map((a) => a.getAttribute('href'))).toEqual([
+      '/positions/asg_g/duties/ads.google',
+    ])
+  })
+
+  it('一条都没有就不画', () => {
+    renderWithProviders(<AdCreativeEntry duties={[{ role_id: 'ads.x', assignment_id: 'a' }]} />)
+    expect(screen.queryByTestId('ad-creative-entry')).toBeNull()
   })
 })
