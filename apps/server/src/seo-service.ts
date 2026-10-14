@@ -1439,6 +1439,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       )[0]
     let n = 0
     const newRivals: { name: string; answers: number }[] = []
+    // 同一问已经按「连续缺位」处理的，某个 AI 的那一跌不再为它另开一件
+    const missing = new Set(
+      list.flatMap((a) => (a.kind === 'prompt_missing' ? [`${a.prompt_text}|${a.market}`] : [])),
+    )
     for (const a of list) {
       if (a.kind === 'new_competitor') {
         newRivals.push(a)
@@ -1465,13 +1469,15 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
                 rivals: a.competitors,
               },
             ]
-          : a.lost.map((l) => ({
-              question: l.prompt_text,
-              market: l.market,
-              platforms: [a.platform],
-              cited: [] as string[],
-              rivals: [] as string[],
-            }))
+          : a.lost
+              .filter((l) => !missing.has(`${l.prompt_text}|${l.market}`))
+              .map((l) => ({
+                question: l.prompt_text,
+                market: l.market,
+                platforms: [a.platform],
+                cited: [] as string[],
+                rivals: [] as string[],
+              }))
       for (const it of items) {
         const gap = laneOf(it.question, it.market, it.platforms, it.cited)
         if (gap === undefined) continue

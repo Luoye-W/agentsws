@@ -410,7 +410,11 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         top_queries: top,
       })
       for (const c of candidates) store.addPrompt({ ...c, created_at: now() })
-      store.selectPrompts(pickDefaultPrompts(candidates, watch.prompt_limit))
+      // 兜底先选几条（决策 531：带品牌名几条不预设——不带品牌名的不够就用带的补满）
+      const picked = pickDefaultPrompts(candidates, watch.prompt_limit)
+      for (const c of candidates)
+        if (picked.length < watch.prompt_limit && !picked.includes(c.id)) picked.push(c.id)
+      store.selectPrompts(picked)
     }
     return { store, watch: store.watch() as BrandWatch, brand }
   }
@@ -831,8 +835,12 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
           ? NOTE_NO_DATA_SERVICE
           : 'Claude 这一轮问不了（这条取数的路暂时没开 Claude），先跳过。',
       )
-    // 定时：策略定了才问 Claude；手动：这一轮合并确认过才问（单格 ≥ 1 积分，docs/75）
-    const claudeOk = trigger === 'scheduled' ? setupDone(store) : opts.confirmed === true
+    // 定时：策略定了才问 Claude；手动：官方那条路这一轮合并确认过才问（单格 ≥ 1 积分，docs/75）；
+    // 自带 key 不扣积分，手动照问
+    const claudeOk =
+      trigger === 'scheduled'
+        ? setupDone(store)
+        : opts.confirmed === true || status.route !== 'official'
     if (platforms.includes('claude') && !claudeOk) {
       platforms = platforms.filter((p) => p !== 'claude')
       notes.push(trigger === 'scheduled' ? NOTE_CLAUDE_UNCONFIRMED : NOTE_CLAUDE_NOT_CONFIRMED_RUN)
