@@ -173,7 +173,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     if (file === undefined) return
     try {
       mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`)
+      // 结过的卡不落盘（再收到它的决定 / 连接变化，查不到就什么都不做）——文件不会越攒越大
+      const cards = Object.fromEntries(
+        Object.entries(state.cards).filter(([, rec]) => rec.done !== true),
+      )
+      writeFileSync(file, `${JSON.stringify({ version: 1, cards }, null, 2)}\n`)
     } catch {
       // 写不下只丢「等着的」清单：卡还在，人补完照样能在事项里说「接着做」
     }
