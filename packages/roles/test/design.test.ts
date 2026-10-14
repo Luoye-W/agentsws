@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import {
   DESIGN_CAPS,
   DESIGN_ROLE_IDS,
+  designCapsOf,
   designDutyForSource,
   designDutyOfRole,
 } from '@agentsws/contracts'
@@ -101,16 +102,22 @@ describe('04 §6「视觉决定永远是人」在 yml 里也硬着', () => {
     }
   })
 
-  it('58 §6 的三个额度写在动作上，与契约那份默认值对得上', () => {
+  it('58 §6 的三个额度写在动作上，与契约那份默认值对得上（WP317：按职责取，广告那条 30 / 100）', () => {
     for (const role of roles) {
+      const caps = designCapsOf(
+        role.id.replace(/^design\./, '') as Parameters<typeof designCapsOf>[0],
+      )
       const brief = role.actions.find((a) => a.id === 'draft_brief')
       expect(brief?.mandate.caps.max_brief_per_day).toBe(DESIGN_CAPS.max_brief_per_day)
       const variants = role.actions.find((a) => a.id === 'generate_variants')
-      expect(variants?.mandate.caps.max_variants_per_brief).toBe(DESIGN_CAPS.max_variants_per_brief)
-      expect(variants?.mandate.caps.max_generations_per_day).toBe(
-        DESIGN_CAPS.max_generations_per_day,
-      )
+      expect(variants?.mandate.caps.max_variants_per_brief).toBe(caps.max_variants_per_brief)
+      expect(variants?.mandate.caps.max_generations_per_day).toBe(caps.max_generations_per_day)
+      expect(variants?.mandate.window?.max_count).toBe(caps.max_generations_per_day)
     }
+    const ads = roles.find((r) => r.id === 'design.ads')
+    expect(
+      ads?.actions.find((a) => a.id === 'generate_variants')?.mandate.caps.max_variants_per_brief,
+    ).toBe(30)
   })
 })
 

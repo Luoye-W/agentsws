@@ -49,7 +49,11 @@ export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unkno
     (form === 'peer_change_notice' ||
       form === 'company_notice' ||
       // WP284：「以后都这样」那张——「记进规矩 / 不用」也直接是两个按钮
-      form === 'instruction_rule')
+      form === 'instruction_rule' ||
+      // WP322：FAQ 导入那张——「记下 / 只加新的 / 不用」（或「撤下 / 留着」）
+      form === 'faq_import' ||
+      // WP323：记录去处那张——「记下 / 不用」
+      form === 'record_sink')
   )
 }
 
@@ -66,7 +70,12 @@ export function noticeKeys(card: {
   options?: { id: string; label: string }[] | undefined
 }): { right?: { id: string; label: string }; left?: { id: string; label: string } } | undefined {
   if (!isPeerNoticeCard(card)) return undefined
-  const [first, second] = card.options ?? []
+  const options = card.options ?? []
+  const [first] = options
+  // WP322：FAQ 导入那张有三个选项（记下 / 只加新的 / 不用）——← 是最后那个「不用」，不是中间那个
+  const form = (card.detail.payload as { form?: unknown } | undefined)?.form
+  const second =
+    form === 'faq_import' && options.length > 2 ? options[options.length - 1] : options[1]
   return {
     ...(first === undefined ? {} : { right: first }),
     ...(second === undefined || second.id === 'leave' ? {} : { left: second }),

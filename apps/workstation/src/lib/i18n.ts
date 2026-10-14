@@ -15,6 +15,7 @@ import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
+import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
@@ -1953,6 +1954,19 @@ const zh: Table = {
   'deck.proposer.system': '系',
   'deck.policy.owner_only': '这一条只有工作区 owner 能批；批了才落到在岗同事身上。',
   'deck.publish.when': '排期 · {when}',
+  // ── WP322 FAQ 表导入那两张卡 ──
+  'faq.field.question': '问题',
+  'faq.field.answer': '答案',
+  'faq.field.category': '分类',
+  'faq.field.product': '适用产品',
+  'faq.field.language': '语言',
+  'faq.by_ai': 'AI 认的',
+  'faq.count.new': '新 {n}',
+  'faq.count.changed': '改 {n}',
+  'faq.count.same': '没变 {n}',
+  'faq.count.removed': '表里少了 {n}',
+  'faq.count.skipped': '缺问或答 {n}',
+  'faq.removed': '表里少了：{list}',
   'deck.publish.now': '批了就发',
   'deck.publish.audience': '受众 · {n}',
   'deck.person.unknown': '没写名字',
@@ -3787,6 +3801,8 @@ const zh: Table = {
   'onboarding.plan.none_required': '没有非连不可的，现在就能开工。下面这些连上了能多干点事。',
   'onboarding.plan.skill.unknown': '一个专用技能包',
   'skill.name.ad-copywriting': '广告文案',
+  'skill.name.ad-headlines': '广告标题',
+  'skill.name.ad-descriptions': '广告描述',
   'skill.name.audience-research': '受众研究',
   'skill.name.brand-system': '品牌视觉规范',
   'skill.name.brand-voice': '品牌话术',
@@ -3830,6 +3846,30 @@ const zh: Table = {
   'credits.unit.image': '每张',
   // WP173：主动开发 · 开发信
   'help.b2b-sending-domain.title': '开发信的发信域名与体检',
+  // WP317：投放 · 素材流水线
+  'ads.creative.title': '素材流水线',
+  'ads.creative.hint':
+    '传一张后台导出的广告表，挑出表现差的，标题和描述各一个 AI 写新版本。上传表你自己下载去后台传；要图就交给设计岗。',
+  'ads.creative.upload': '传导出表',
+  'ads.creative.summary': '{rows} 条 · 差 {weak} 条',
+  'ads.creative.thin': '{n} 条样本不够',
+  'ads.creative.rewrite': '出新文案',
+  'ads.creative.writing': '在写…',
+  'ads.creative.rejected': '挡下 {n} 条',
+  'ads.creative.sheet': '下载上传表',
+  'ads.creative.sheet.hint': '新建的广告一律是「已暂停」。在后台上传、检查后再启用。',
+  'ads.creative.sheet.blocked': '表还出不了',
+  'ads.creative.meta.page': '主页编号',
+  'ads.creative.meta.image': '图片哈希',
+  'ads.creative.design': '交设计岗出图',
+  'ads.creative.design.done': '已下单 · {n} 版',
+  'ads.creative.exp.title': '实验记录',
+  'ads.creative.exp.hint': '每一轮记三样：假设、改了什么、结果。下次出文案时最近几笔会带上。',
+  'ads.creative.exp.hypothesis': '假设',
+  'ads.creative.exp.change': '改了什么',
+  'ads.creative.exp.result': '结果',
+  'ads.creative.exp.add': '记一笔',
+  'ads.creative.exp.save': '填上',
   'b2b.out.title': '开发信',
   'b2b.out.sender': '发信邮箱',
   'b2b.out.sender.none': '还没选发信邮箱，待办里有一张卡等你选',
@@ -5988,6 +6028,19 @@ const en: Table = {
   'deck.policy.owner_only':
     'Only the workspace owner can approve this; it lands on teammates once approved.',
   'deck.publish.when': 'Scheduled · {when}',
+  // ── WP322 FAQ import cards ──
+  'faq.field.question': 'Question',
+  'faq.field.answer': 'Answer',
+  'faq.field.category': 'Category',
+  'faq.field.product': 'Product',
+  'faq.field.language': 'Language',
+  'faq.by_ai': 'Read by AI',
+  'faq.count.new': '{n} new',
+  'faq.count.changed': '{n} changed',
+  'faq.count.same': '{n} unchanged',
+  'faq.count.removed': '{n} gone from sheet',
+  'faq.count.skipped': '{n} missing Q or A',
+  'faq.removed': 'Gone from the sheet: {list}',
   'deck.publish.now': 'Sends on approval',
   'deck.publish.audience': 'Audience · {n}',
   'deck.person.unknown': 'No name',
@@ -7889,6 +7942,8 @@ const en: Table = {
     'Nothing is required — you can start now. Connecting these lets it do more.',
   'onboarding.plan.skill.unknown': 'A specialised skill pack',
   'skill.name.ad-copywriting': 'Ad copywriting',
+  'skill.name.ad-headlines': 'Ad headlines',
+  'skill.name.ad-descriptions': 'Ad descriptions',
   'skill.name.audience-research': 'Audience research',
   'skill.name.brand-system': 'Brand visual system',
   'skill.name.brand-voice': 'Brand voice',
@@ -7934,6 +7989,31 @@ const en: Table = {
   'credits.unit.image': 'per image',
   // WP173: Outbound · cold email
   'help.b2b-sending-domain.title': 'Sending domain and health check for cold email',
+  // WP317: Ads · creative pipeline
+  'ads.creative.title': 'Creative pipeline',
+  'ads.creative.hint':
+    'Upload an ads export, pick the weak ones, and let two AIs write new headlines and descriptions. You download the upload sheet and upload it yourself; send to Design for images.',
+  'ads.creative.upload': 'Upload export',
+  'ads.creative.summary': '{rows} ads · {weak} weak',
+  'ads.creative.thin': '{n} too few impressions',
+  'ads.creative.rewrite': 'Write new copy',
+  'ads.creative.writing': 'Writing…',
+  'ads.creative.rejected': '{n} blocked',
+  'ads.creative.sheet': 'Download upload sheet',
+  'ads.creative.sheet.hint': 'New ads are always Paused. Upload, check, then turn them on.',
+  'ads.creative.sheet.blocked': 'Sheet not ready',
+  'ads.creative.meta.page': 'Page ID',
+  'ads.creative.meta.image': 'Image hash',
+  'ads.creative.design': 'Send to Design',
+  'ads.creative.design.done': 'Requested · {n} variants',
+  'ads.creative.exp.title': 'Experiments',
+  'ads.creative.exp.hint':
+    'Each round: hypothesis, what changed, result. The latest ones go into the next round.',
+  'ads.creative.exp.hypothesis': 'Hypothesis',
+  'ads.creative.exp.change': 'What changed',
+  'ads.creative.exp.result': 'Result',
+  'ads.creative.exp.add': 'Log it',
+  'ads.creative.exp.save': 'Save',
   'b2b.out.title': 'Cold email',
   'b2b.out.sender': 'Sending mailbox',
   'b2b.out.sender.none': 'No sending mailbox yet — a card is waiting for you to pick one',
@@ -8166,6 +8246,8 @@ const TABLES: Record<Lang, Table> = {
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
+    // WP323：「发出记录」面板与记录去处
+    ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
     ...NPM_REGISTRY_ZH,
     // WP254：版务卡（批准执行 / 不做）与回帖卡
@@ -8202,6 +8284,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
+    ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
     ...SHOPIFY_CONNECT_EN,

@@ -19,6 +19,8 @@ import { type Embedder, SqliteKnowledgeStore } from './store.js'
 export * from './errors.js'
 export * from './events.js'
 export * from './fact-fingerprint.js'
+// WP322：FAQ 表 → 一行一张知识卡（认列、读行、去重、成卡）
+export * from './faq-import.js'
 // WP125（72 §P0-3）：缺口的「有多少客户在等」闭环（去重、排序、预期 preset）
 export * from './gap-waiting.js'
 export * from './ingest.js'
@@ -31,6 +33,9 @@ export * from './recheck.js'
 export * from './retrieval.js'
 export * from './rows.js'
 export * from './schema.js'
+// WP322：FAQ 表导入（表格读取：xlsx / xls / csv）
+export * from './sheet.js'
+export * from './sheet-xls.js'
 export * from './state-words.js'
 export * from './store.js'
 export * from './text.js'
