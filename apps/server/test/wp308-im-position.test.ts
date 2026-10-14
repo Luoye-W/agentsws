@@ -210,7 +210,9 @@ describe('WP308 / 447：点名岗位直接问岗位 Agent', () => {
     expect(text).toMatch(/^「.+」今天：/)
     expect(text).toContain('1 个待办')
     expect(text).toContain(`${IM_TEXT.goWorkbench}http://127.0.0.1`)
-    expect(text).toMatch(/\/positions\/[^/\s]+$/)
+    // WP311（决策 507）：链接带上品牌，工作台开着别的品牌时先切过去
+    expect(text).toMatch(/\/positions\/[^/\s?]+\?brand=[^&\s]+$/)
+    expect(text).toContain(`?brand=${encodeURIComponent(r.s.bootstrap.workspace.id)}`)
     // 不放任何批准按钮 / 决定动作
     expect(text).not.toMatch(/批准|decision_token/)
     expect(secretary).not.toHaveBeenCalled()
@@ -247,7 +249,7 @@ describe('WP308 / 447：点名岗位直接问岗位 Agent', () => {
     await waitFor(() => r.feishu.replies.length === 2, '回了')
     const text = r.feishu.texts()[1] ?? ''
     expect(text).toMatch(/^已记成「.+」的任务，在工作台确认。/)
-    const matter_id = /\/matters\/([^/\s]+)$/.exec(text)?.[1]
+    const matter_id = /\/matters\/([^/\s?]+)\?brand=[^&\s]+$/.exec(text)?.[1]
     expect(matter_id).toBeDefined()
     const matter = r.s.work.getMatter(decodeURIComponent(matter_id ?? ''))
     expect(matter).toMatchObject({ entry: 'position', role_id: 'social.reddit' })

@@ -75,6 +75,8 @@ const fakeModel: FetchLike = async (url, init) => {
     return reply(JUDGE[said] ?? '{"kind":"quick"}')
   }
   runPrompts.push(all)
+  if (all.includes('上游会挂的问题'))
+    return { ok: false, status: 500, json: async () => ({}), text: async () => 'boom' }
   return reply(all.includes('哪些商品') ? TABLE_ANSWER : '好的，我们一起看看。')
 }
 
@@ -285,9 +287,30 @@ describe('WP291 判错的补救', () => {
     expect(s.work.listMatters().map((x) => x.id)).toContain(out.matter.id)
   })
 
-  it('「当成任务做」：转成任务并按原话再跑一次（这次不带当场问答那段）', async () => {
+  it('「当成任务做」只读问题（WP311，决策 390）：已有回答直接转成任务，不重跑、回答只一段', async () => {
     const s = await boot()
     const out = await open('店里有哪些商品')
+    const before = runPrompts.length
+    const res = await dataOf<{ matter: { id: string }; run_id?: string }>(
+      await call('POST', `/v1/matters/${out.matter.id}/promote`, { run: true }),
+    )
+    expect(res.run_id).toBeUndefined()
+    expect(s.work.getMatter(out.matter.id)?.ask).toBeUndefined()
+    expect(await openMatters()).toBe(1)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(runPrompts.length).toBe(before)
+    const said = timeline(out.matter.id).filter((e) => e.kind === 'agent_message')
+    expect(said).toHaveLength(1)
+    expect(timeline(out.matter.id).map((e) => e.text)).toContain(
+      '转成了任务，用的是上面这段回答，在岗位「工作」里跟进',
+    )
+  })
+
+  it('「当成任务做」要动手的：转成任务并按原话再跑一次（这次不带当场问答那段）', async () => {
+    const s = await boot()
+    // 判断那一次（替身）说 quick，但原话要动手（「降价」）
+    const out = await open('把蓝牙耳机降价 10%')
+    expect(out.mode).toBe('quick')
     const before = runPrompts.length
     const res = await dataOf<{ matter: { id: string }; run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/promote`, { run: true }),
@@ -299,6 +322,15 @@ describe('WP291 判错的补救', () => {
       await new Promise((r) => setTimeout(r, 20))
     expect(runPrompts.length).toBeGreaterThan(before)
     expect(runPrompts.at(-1)).not.toContain('当场问答')
+  })
+
+  it('「当成任务做」当场那次没答成：照旧重跑', async () => {
+    await boot()
+    const out = await open('上游会挂的问题有哪些')
+    expect(out.answer?.outcome).toBe('failed')
+    const res = await call('POST', `/v1/matters/${out.matter.id}/promote`, { run: true })
+    expect(res.status).toBe(200)
+    expect(timeline(out.matter.id).map((e) => e.text)).toContain('转成了任务，在岗位「工作」里跟进')
   })
 
   it('老调用方 promote 不带 body：只转不跑', async () => {
