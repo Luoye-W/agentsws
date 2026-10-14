@@ -316,6 +316,15 @@ export function shortcutPaths(env = process.env, name = 'Agents 工坊') {
   const appData = env.APPDATA ?? ''
   return {
     startMenu: join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${name}.lnk`),
+    // WP327：Electron 为系统通知按产品名在开始菜单补的那一个
+    startMenuProduct: join(
+      appData,
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'agentsws.lnk',
+    ),
     desktop: join(env.USERPROFILE ?? '', 'Desktop', `${name}.lnk`),
     pinned: join(
       appData,
@@ -351,8 +360,6 @@ export function checkVersionedLayout(dir, version, targetOf = shortcutTarget) {
     const found = existsSync(where) ? readdirSync(where).filter((n) => n.endsWith('.lnk')) : []
     lines.push(`（${where} 里的快捷方式：${found.join('、') || '没有'}）`)
     // 开始菜单里我们的其它快捷方式（如迁移后多出来的 agentsws.lnk）也看一眼指哪
-    for (const n of found.filter((x) => /^agents/i.test(x) && join(where, x) !== lnk))
-      lines.push(`（其中 ${n} → ${shortcutTarget(join(where, n))}）`)
   }
   for (const [what, lnk] of Object.entries(shortcutPaths())) {
     const target = targetOf(lnk)

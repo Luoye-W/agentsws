@@ -112,6 +112,8 @@
       !insertmacro agentswsRelink "$newStartMenuLink"
       !insertmacro agentswsRelink "$newDesktopLink"
       !insertmacro agentswsRelink "$QUICKLAUNCH\User Pinned\TaskBar\${SHORTCUT_NAME}.lnk"
+      ; Electron 为系统通知在开始菜单补的那一个（按产品名，老版本建时指平铺的 exe）
+      !insertmacro agentswsRelink "$SMPROGRAMS\${PRODUCT_FILENAME}.lnk"
       System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
       !ifndef UNINSTALLER_ICON
         WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "DisplayIcon" "$appExe,0"
