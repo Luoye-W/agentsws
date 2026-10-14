@@ -14,6 +14,7 @@ import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DeckCardView } from '@/components/deck/deck-card'
 import { noticeKeys } from '@/components/peers/handoff-strip'
+import { knowledgeGroupOf, knowledgeGroupsForPosition } from '@/lib/library'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 
@@ -117,5 +118,19 @@ describe('WP322 FAQ 导入的定规矩卡', () => {
     expect(screen.getByTestId('deck-layout-faq-batch')).toBeDefined()
     expect(screen.getByTestId('faq-counts').textContent).toBe('新 1改 1')
     expect(screen.queryByTestId('deck-before-after')).toBeNull()
+  })
+})
+
+describe('WP322 知识库里那一组', () => {
+  it('FAQ 卡归「常见问答」（不按词再分去物流）；客服先看这一组', () => {
+    const card = {
+      id: 'f1',
+      layer: 'fact',
+      subject: { type: 'faq', key: 'faq:寄到加拿大要几天' },
+      statement: 'Q: 寄到加拿大要几天？\nA: 7–10 个工作日。',
+      status: 'active',
+    }
+    expect(knowledgeGroupOf(card as never)).toBe('faq')
+    expect(knowledgeGroupsForPosition('customer-care')[0]).toBe('faq')
   })
 })

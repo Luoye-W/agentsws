@@ -274,7 +274,8 @@ export function createFaqImporter(deps: FaqImportDeps): FaqImporter {
       filename,
       sheets: analysis.mappings,
       counts,
-      preview: [...plan.fresh, ...plan.changed.map((c) => c.row)]
+      // 预览只给新的；答案变了的那几条在 `changes` 里（问题 + 改前改后），不重复
+      preview: plan.fresh
         .slice(0, 2)
         .map((r) => ({ question: clip(r.question, 120), answer: clip(r.answer, 200) })),
       changes: plan.changed.slice(0, 2).map((c) => ({

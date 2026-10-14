@@ -100,14 +100,17 @@ export function FaqImportBody({ payload }: { payload: FaqImportPayload }): React
       <Preview rows={payload.preview} />
       {change === undefined ? null : (
         <div
-          className="flex items-center gap-2 rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5"
+          className="flex flex-col gap-1 rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5"
           data-testid="faq-change"
         >
-          <span className="min-w-0 flex-1 truncate text-ws-muted-fg line-through">
-            {change.before}
-          </span>
-          <ArrowRight aria-hidden className="size-3.5 flex-none text-ws-muted-fg" />
-          <span className="min-w-0 flex-1 truncate text-ws-ink">{change.after}</span>
+          <p className="truncate font-medium text-ws-ink">{change.question}</p>
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-ws-muted-fg line-through">
+              {change.before}
+            </span>
+            <ArrowRight aria-hidden className="size-3.5 flex-none text-ws-muted-fg" />
+            <span className="min-w-0 flex-1 truncate text-ws-ink">{change.after}</span>
+          </div>
         </div>
       )}
       <Counts counts={payload.counts} />
