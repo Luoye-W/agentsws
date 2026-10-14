@@ -18,7 +18,7 @@ import type {
 import { disconnectedSearchConsole, standInSearchConsole } from '@agentsws/seo-core'
 import { createTxn } from '@agentsws/txn'
 import { describe, expect, it } from 'vitest'
-import { NOTE_CLAUDE_UNCONFIRMED, type WatchDataPort } from '../src/geo-monitor.js'
+import type { WatchDataPort } from '../src/geo-monitor.js'
 import { createGeoStore, SEO_STATE_IMPORTED_KEY } from '../src/geo-store.js'
 import { createSeoService, type SeoServiceOptions } from '../src/seo-service.js'
 
@@ -378,7 +378,7 @@ function setup(w: ReturnType<typeof world>, over: Partial<SeoServiceOptions> = {
 }
 
 describe('WP321 策略设定与每周一轮', () => {
-  it('第一次：AI 按档案给策略出设定卡（不预设带品牌名几条、Claude 每月写清）；定之前照跑但不问 Claude；三家走排队档批量', async () => {
+  it('第一次：AI 按档案给策略出设定卡（不预设带品牌名几条、Claude 每月写清）；决策 650：定之前也问四家（Claude 走能力目录），三家走排队档批量', async () => {
     const w = world()
     const { service, txn, cards, decide } = setup(w)
     // 兜底先选的几条（品牌档案没写品类：只有带品牌名的套句）
@@ -406,18 +406,19 @@ describe('WP321 策略设定与每周一轮', () => {
     expect(card.summary).toContain('带品牌名 1 条')
     expect(card.summary).toContain('其中 Claude 每月')
     expect(card.summary).not.toMatch(/DataForSEO/i)
-    // 定之前：三家走排队档批量，Claude 一格都没问
+    // 决策 650（Luoye 10-14）：定之前定时那一轮也问 Claude；三家走排队档批量
     expect(w.submitted.map((s) => s.capability).sort()).toEqual([
       'ai_answer_batch.chatgpt',
       'ai_answer_batch.gemini',
       'ai_answer_batch.google_ai_overview',
     ])
-    expect(w.called).toHaveLength(0)
+    expect(w.called.map((c) => c.capability)).toEqual(Array(n).fill('ai_answer.claude'))
     expect(w.probes).toHaveLength(0)
     const store = await service.geoHistory()
     const asked = store.answers()
     expect(n).toBeGreaterThan(0)
-    expect(asked.length).toBe(n * 3)
+    expect(asked.length).toBe(n * 4)
+    expect(asked.filter((a) => a.platform === 'claude')).toHaveLength(n)
     expect(asked.every((a) => a.status === 'ok')).toBe(true)
     // 情感：模型判、附原话（原话对得上才算）；站点分类：模型一次、缓存
     const ours = store.mentions(asked[0]?.id ?? '').find((m) => m.entity === 'ours')
@@ -428,15 +429,15 @@ describe('WP321 策略设定与每周一轮', () => {
     const payload = report?.payload as SeoWeeklyGeoPayload
     expect(payload.run_id).toBeDefined()
     expect(payload.metrics).toMatchObject({
-      planned: n * 3,
-      ok: n * 3,
+      planned: n * 4,
+      ok: n * 4,
       mention_rate: 1,
       citation_rate: 1,
     })
-    expect(payload.notes).toContain(NOTE_CLAUDE_UNCONFIRMED)
+    expect(payload.notes.join('')).not.toContain('Claude 这一轮没问')
     expect((await service.watchView()).setup).toBe('pending_card')
 
-    // 批了：落成关注设置；下一周起定时那一轮也问 Claude、查关注词排名（前 20、手机）
+    // 批了：落成关注设置；下一周起按新的 5 条问、查关注词排名（前 20、手机）
     await decide(card.id, 'approve')
     const v = await service.watchView()
     expect(v.setup).toBe('done')
@@ -445,7 +446,7 @@ describe('WP321 策略设定与每周一轮', () => {
     expect(v.watch.keywords.map((k) => k.keyword)).toEqual(['nordvolt', 'travel power bank'])
     w.nextWeek()
     await service.weeklyGeo()
-    expect(w.called.map((c) => c.capability)).toEqual(Array(5).fill('ai_answer.claude'))
+    expect(w.called.map((c) => c.capability)).toEqual(Array(n + 5).fill('ai_answer.claude'))
     const rank = w.submitted.find((s) => s.capability === 'seo.rank_check')
     expect(rank?.input).toMatchObject({
       keywords: ['nordvolt', 'travel power bank'],
@@ -455,7 +456,7 @@ describe('WP321 策略设定与每周一轮', () => {
     })
     const runs = (await service.geoHistory()).runs({ kind: 'geo' })
     expect(runs.map((r) => [r.period, r.planned, r.answered, r.status])).toEqual([
-      ['2026-10-05', n * 3, n * 3, 'done'],
+      ['2026-10-05', n * 4, n * 4, 'done'],
       ['2026-10-12', 20, 20, 'done'],
     ])
     expect(runs[1]?.credits).toBe(21)
@@ -512,7 +513,8 @@ describe('WP321 策略设定与每周一轮', () => {
     w.setNow('2026-10-06T08:00:00.000Z')
     await service.daily()
     expect(store.runs({ kind: 'geo' })[0]?.status).toBe('done')
-    expect(store.answers()).toHaveLength(n)
+    // 排队档那三家 + Claude（即时，当场就存了）
+    expect(store.answers()).toHaveLength(n + n / 3)
     expect(reports()).toHaveLength(2)
     expect(reports()[1]?.pending_cells).toBeUndefined()
     expect(reports()[1]?.run_id).toBe(reports()[0]?.run_id)

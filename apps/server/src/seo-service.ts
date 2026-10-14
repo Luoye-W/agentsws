@@ -1751,7 +1751,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       if (actor === undefined) return { skipped, gaps: 0 }
       // 上一轮排队档没回来的先收（收完一轮就出它的报告卡）
       await collectAndReport(actor)
-      // 策略还没定：出第一张设定卡（定之前每周照跑，但不问 Claude）
+      // 策略还没定：出第一张设定卡（决策 650：定之前每周照跑四家，Claude 也问）
       await ensureSetupCard(actor)
       if (trigger === 'scheduled' && !(await due()))
         return { skipped: '这一周不在监测频率里（关注设置里改）。', gaps: 0 }

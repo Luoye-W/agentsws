@@ -14,7 +14,8 @@
  * | 自带 key | 即时 `aiAnswers` | 同上（每天第一次前查一次免费模型清单，不过就跳过） | 结果页 `serp`（服务商给几条算几条） |
  *
  * 纪律：计费请求不自动重试；失败 / 空回答记「没查成」、不算「没提到」；一轮里一格只问一次；
- * 策略还没定（设定卡没批）之前，每周照跑但**不问 Claude**（一次约 3.6 积分，定了再问）。
+ * 决策 650（Luoye 10-14 定）：Claude 默认就问——策略还没定（设定卡没批）之前，定时那一轮也问四家；
+ * 手动「现在跑一轮」官方档有 Claude 时先合并确认一次。
  * 本文件不打一跳网络——取数口、模型口都是注入的。
  */
 import type {
@@ -173,8 +174,6 @@ export const DECLINED_RIVALS_KEY = 'declined_competitors'
 /** 决策 534：今天查过 Claude 模型清单没有（`YYYY-MM-DD|ok|一句话`）。 */
 export const CLAUDE_CHECK_KEY = 'claude_model_check'
 
-export const NOTE_CLAUDE_UNCONFIRMED =
-  'Claude 这一轮没问：关注设置还没定（Claude 一次约 3.6 积分，定了再问）。'
 export const NOTE_CLAUDE_NOT_CONFIRMED_RUN =
   'Claude 这一轮没问：一格约 3.6 积分，要先确认这一轮的花费（「现在跑一轮」会先给估算）。'
 export const NOTE_NO_DATA_SERVICE =
@@ -837,13 +836,13 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       )
     // 定时：策略定了才问 Claude；手动：官方那条路这一轮合并确认过才问（单格 ≥ 1 积分，docs/75）；
     // 自带 key 不扣积分，手动照问
+    // 决策 650（Luoye 10-14 定）：Claude 默认就问——定时那一轮不等策略定了（关注的 AI 里关掉才不问）；
+    // 手动「现在跑一轮」官方那条路仍要这一轮合并确认过才问（单格 ≥ 1 积分，docs/75），自带 key 照问
     const claudeOk =
-      trigger === 'scheduled'
-        ? setupDone(store)
-        : opts.confirmed === true || status.route !== 'official'
+      trigger === 'scheduled' || opts.confirmed === true || status.route !== 'official'
     if (platforms.includes('claude') && !claudeOk) {
       platforms = platforms.filter((p) => p !== 'claude')
-      notes.push(trigger === 'scheduled' ? NOTE_CLAUDE_UNCONFIRMED : NOTE_CLAUDE_NOT_CONFIRMED_RUN)
+      notes.push(NOTE_CLAUDE_NOT_CONFIRMED_RUN)
     }
     if (platforms.includes('claude') && status.route === 'byo') {
       const ok = await claudeCheck(store)
@@ -1540,7 +1539,6 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       deps.gscConnected?.() ??
       (await deps.gsc().catch(() => ({ connected: false, rows: [] as GscRow[] }))).connected
     const notes: string[] = []
-    if (watch.platforms.includes('claude') && !setupDone(store)) notes.push(NOTE_CLAUDE_UNCONFIRMED)
     const check = store.meta(CLAUDE_CHECK_KEY)
     if (status.route === 'byo' && check?.startsWith(`${today(now())}|0`))
       notes.push(
