@@ -56,6 +56,7 @@ import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
 import type { RedditWeeklyService } from './reddit-weekly.js'
+import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
@@ -280,6 +281,10 @@ export interface BrandModuleSet {
   adsActions?: AdsActionsService
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /**
+   * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
+   */
+  redditWrites: RedditWriteService
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */

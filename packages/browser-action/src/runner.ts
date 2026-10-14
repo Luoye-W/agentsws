@@ -13,7 +13,7 @@
  * 两步之间等一个固定时长（{@link STEP_GAP_MS}）——限速，不是伪装，没有随机数。
  */
 
-import type { DomOpResult } from './dom.js'
+import type { DomOpResult, PostedHit } from './dom.js'
 import { sheetMatches } from './fingerprint.js'
 import { checkStep, hostMatches, hostOfUrl } from './guard.js'
 import { STEP_GAP_MS } from './pace.js'
@@ -46,6 +46,11 @@ export interface ActionPage {
   download(
     selector: string,
   ): Promise<{ ok: true; path: string; name: string; bytes?: number } | { ok: false; why: string }>
+  /**
+   * WP329：页面上正文含这段字的那几条（`await_sent` 用；页面换了 / 还在加载时回空数组，不抛）。
+   * 没实现 = 这只手认不了「发出去的那一条」，`await_sent` 照实失败。
+   */
+  findPosted?(selector: string, body: string, text: string): Promise<PostedHit[]>
 }
 
 export interface SheetFile {
@@ -77,7 +82,17 @@ export interface RunHooks {
   gapMs?: number
   /** `wait` 步骤默认等多久。 */
   waitTimeoutMs?: number
+  /** WP329：`await_sent` 默认等人点发送等多久（默认 {@link SEND_WAIT_MS}）。 */
+  sendTimeoutMs?: number
+  /** WP329：`await_sent` 隔多久看一眼页面（默认 2 秒；测试给 0）。 */
+  sendPollMs?: number
 }
+
+/** WP329：填好草稿后等人点发送最多等多久（30 分钟，与广告「再确认」同一个数）。 */
+export const SEND_WAIT_MS = 30 * 60 * 1000
+const SEND_POLL_MS = 2_000
+/** 等发送时每看这么多眼，问一次工坊那边点没点停、看一次有没有被拦。 */
+const SEND_CHECK_EVERY = 5
 
 /** 横条上那几个字。 */
 export function stepLabel(step: ActionStep): string {
@@ -102,10 +117,15 @@ export function stepLabel(step: ActionStep): string {
       return '核对'
     case 'confirm':
       return '等你确认'
+    case 'await_sent':
+      return '填好了，等你点发送'
   }
 }
 
 const DEFAULT_WAIT_MS = 30_000
+
+/** 一条认出来的「发出去的那一条」的键（编号优先，没有编号用链接）。 */
+const keyOf = (h: PostedHit): string => h.fullname ?? h.permalink ?? ''
 const WRITE_OPS: readonly ActionStep['op'][] = ['click', 'fill', 'upload', 'paste', 'download']
 
 export async function runAction(
@@ -132,12 +152,25 @@ export async function runAction(
         'handover',
         `页面跳去了白名单外的站（${hostOfUrl(look.url) || look.url}），已停下。`,
       )
-    const wall = detectPageWall(look)
+    const wall = detectPageWall(look, plan.platform === 'reddit' ? 'Reddit' : undefined)
     if (wall !== undefined) return end('handover', wall.message)
     const zone = zoneGate(look.url, job.zones_allowed)
     if (!zone.ok) return end('handover', zone.why)
     return undefined
   }
+
+  /**
+   * WP329：「发出去的那一条」的底账——**填草稿之前**先记下页面上已经有的同样正文，
+   * 这样人填完马上点发送也不会把刚发的那条当成老的。
+   */
+  const sendStep = plan.steps.find(
+    (s): s is Extract<ActionStep, { op: 'await_sent' }> => s.op === 'await_sent',
+  )
+  let sentBaseline: Set<string> | undefined
+  const takeBaseline = async (): Promise<Set<string>> =>
+    sendStep === undefined || page.findPosted === undefined
+      ? new Set()
+      : new Set((await page.findPosted(sendStep.selector, sendStep.body, sendStep.text)).map(keyOf))
 
   for (const [index, step] of plan.steps.entries()) {
     at = index + 1
@@ -155,6 +188,8 @@ export async function runAction(
     }
 
     try {
+      if (step.op === 'fill' && sendStep !== undefined && sentBaseline === undefined)
+        sentBaseline = await takeBaseline()
       const out = await doStep(step)
       if (out !== undefined) return out
     } catch (err) {
@@ -240,6 +275,49 @@ export async function runAction(
         if (answer === 'no') return end('rejected', '你没有确认提交，退回去改。')
         return end('handover', '等你确认等太久了，已停下。平台预览还在后台里，回头可以自己看。')
       }
+      case 'await_sent':
+        return awaitSent(step)
+    }
+  }
+
+  /**
+   * WP329：等人自己点发送。先记下页面上**已经有**的同样正文（不把老的那条认成刚发的），
+   * 然后隔一会儿看一眼，出现一条新的就读回它的编号与链接。插件在这一步什么都不点。
+   */
+  async function awaitSent(
+    step: Extract<ActionStep, { op: 'await_sent' }>,
+  ): Promise<ActionResult | undefined> {
+    if (page.findPosted === undefined)
+      return end('failed', '这只「手」认不了发出去的那一条，没法读回，已停下。')
+    const seen = sentBaseline ?? (await takeBaseline())
+    const limit = step.timeout_ms ?? hooks.sendTimeoutMs ?? SEND_WAIT_MS
+    const pollMs = hooks.sendPollMs ?? SEND_POLL_MS
+    for (let looks = 1, waited = 0; ; looks += 1, waited += pollMs) {
+      if (hooks.stopped()) return end('stopped', '你点了停止，已停下。草稿留在页面上，没发。')
+      const hit = (await page.findPosted(step.selector, step.body, step.text)).find(
+        (h) => !seen.has(keyOf(h)),
+      )
+      if (hit !== undefined) {
+        if (hit.fullname !== undefined) reads.fullname = hit.fullname
+        if (hit.permalink !== undefined) reads.permalink = hit.permalink
+        return undefined
+      }
+      if (looks % SEND_CHECK_EVERY === 0) {
+        const remote = await hooks.progress({ step: at, of, label: stepLabel(step) })
+        if (remote.stop || hooks.stopped())
+          return end('stopped', '你点了停止，已停下。草稿留在页面上，没发。')
+        const stop = await pageCheck()
+        if (stop !== undefined) return stop
+      }
+      if (waited >= limit)
+        return (
+          (await pageCheck()) ??
+          end(
+            'handover',
+            `等了 ${limit >= 60_000 ? `${Math.round(limit / 60_000)} 分钟` : `${Math.round(limit / 1000)} 秒`}没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。`,
+          )
+        )
+      await hooks.sleep(pollMs)
     }
   }
 

@@ -12,11 +12,13 @@ import {
   domClick,
   domCount,
   domFill,
+  domFindPosted,
   domLook,
   domPaste,
   domSetFile,
   domText,
   type PageLook,
+  type PostedHit,
 } from '@agentsws/browser-action'
 
 export type AdsDomRequest =
@@ -24,8 +26,10 @@ export type AdsDomRequest =
   | { type: 'ads-dom'; op: 'count' | 'text' | 'click'; selector: string }
   | { type: 'ads-dom'; op: 'fill' | 'paste'; selector: string; value: string }
   | { type: 'ads-dom'; op: 'file'; selector: string; name: string; mime: string; base64: string }
+  /** WP329：认「人点发送之后新出现的那一条」（Reddit 写的读回）。 */
+  | { type: 'ads-dom'; op: 'find-posted'; selector: string; body: string; text: string }
 
-export type AdsDomResponse = PageLook | DomOpResult | number | string
+export type AdsDomResponse = PageLook | DomOpResult | number | string | PostedHit[]
 
 /** 横条上显示什么（`null` = 收起来）。 */
 export interface BannerState {
@@ -59,6 +63,8 @@ export function handleDomRequest(doc: Document, url: string, req: AdsDomRequest)
       return domFill(doc, req.selector, req.value)
     case 'paste':
       return domPaste(doc, req.selector, req.value)
+    case 'find-posted':
+      return domFindPosted(doc, req.selector, req.body, req.text)
     case 'file':
       return domSetFile(doc, req.selector, {
         name: req.name,

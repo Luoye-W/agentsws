@@ -60,6 +60,7 @@
     "packages/contracts/src/read-routes.ts",
     "packages/contracts/src/reddit-watch.ts",
     "packages/contracts/src/reddit-weekly.ts",
+    "packages/contracts/src/reddit-write.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
@@ -128,7 +129,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "48fedf8acaa4ebb8f867acd039537120",
+  "source_digest": "0f89104bf571112e179b03b89af1bb41",
   "objects": [
     {
       "id": "ad",
@@ -1650,6 +1651,12 @@
         },
         {
           "name": "reply_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "permalink",
           "type": "string",
           "sensitivity": "internal",
           "optional": true

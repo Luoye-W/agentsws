@@ -225,7 +225,10 @@ export interface SocialServiceOptions {
    * WP254（决策 117）：别的社群的版务卡与回帖卡批了之后的执行器要的那几样（施行口、取消窗口、
    * 补扫时看哪些卡）。不给 = 只能由执行器被动调（`backendApply` / `deliverOutbound`），没人主动施行。
    */
-  executor?: Pick<SocialExecutorOptions, 'applyApproval' | 'cancelWindowMs' | 'approvedItems'>
+  executor?: Pick<
+    SocialExecutorOptions,
+    'applyApproval' | 'cancelWindowMs' | 'approvedItems' | 'redditFill'
+  >
   /**
    * WP255（决策 144）：「回复」框里那一句的起草引擎（`social-reply-draft.ts` 的 `modelReplyDrafter`，
    * 按点起草那个人这会儿开着的品牌取模型）。不给 / 回 `undefined` = 没接上模型，给一句模板并照实说。
@@ -245,6 +248,11 @@ export interface SocialServiceOptions {
    * 记失败不影响发送结果。
    */
   onSent?(input: OutboundRecordInput): void
+  /**
+   * WP329：Reddit 写的三个口（起草 / 出卡 / 进度），由 `reddit-write/` 那一份接（装配期晚绑定）。
+   * 不给 = 路由照实说没装配。
+   */
+  reddit?: Pick<SocialPort, 'redditDraft' | 'redditStage' | 'redditWrites'>
 }
 
 export interface SocialServiceAssembly {
@@ -620,6 +628,17 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     redditBrowserLogin: () => ownSubOr501().openLogin(),
     redditBrowserCheck: () => ownSubOr501().checkLogin(),
     redditBrowserClose: () => ownSubOr501().closeWindow(),
+
+    // ── WP329：Reddit 写（起草 → 发出去卡 → 插件填草稿、人点发送 → 读回 → 发出记录）──
+    ...(options.reddit?.redditDraft === undefined
+      ? {}
+      : { redditDraft: options.reddit.redditDraft }),
+    ...(options.reddit?.redditStage === undefined
+      ? {}
+      : { redditStage: options.reddit.redditStage }),
+    ...(options.reddit?.redditWrites === undefined
+      ? {}
+      : { redditWrites: options.reddit.redditWrites }),
 
     accounts: (_actor, filter) => ({
       rows: store.accounts(

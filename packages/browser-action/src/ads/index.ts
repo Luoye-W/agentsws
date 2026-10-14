@@ -16,6 +16,9 @@ export function adsPlan(
   action: AdsAction,
   origins: AdsOrigins = ADS_ORIGINS,
 ): ActionPlan {
+  // WP329：Reddit 不是广告后台，它的写走 `buildRedditJob`（`reddit/index.ts`）
+  if (account.platform === 'reddit')
+    throw new Error('Reddit 的写不走广告动作表（用 buildRedditJob）。')
   return account.platform === 'google_ads'
     ? googleAdsPlan(account, action, origins.google_ads)
     : metaAdsPlan(account, action, origins.meta_ads)

@@ -76,14 +76,30 @@ export function isFinal(status: ActionJobStatus): boolean {
 export class ActionQueue {
   private readonly jobs: QueuedJob[]
   private readonly pace: Pace
+  private readonly paceFor: ((job: ActionJob) => Pace | undefined) | undefined
   private readonly ttlMs: number
   private readonly leaseMs: number
 
-  constructor(options: { pace: Pace; state?: QueueState; ttlMs?: number; leaseMs?: number }) {
+  constructor(options: {
+    pace: Pace
+    /**
+     * WP329：某类活改记在另一本账上（Reddit 的写活记在 WP328 巡查那一本：同一个号读写一次一件）。
+     * 回 `undefined` 就用默认那一本。
+     */
+    paceFor?: (job: ActionJob) => Pace | undefined
+    state?: QueueState
+    ttlMs?: number
+    leaseMs?: number
+  }) {
     this.jobs = structuredClone(options.state ?? [])
     this.pace = options.pace
+    this.paceFor = options.paceFor
     this.ttlMs = options.ttlMs ?? QUEUE_TTL_MS
     this.leaseMs = options.leaseMs ?? CLAIM_LEASE_MS
+  }
+
+  private paceOf(job: ActionJob): Pace {
+    return this.paceFor?.(job) ?? this.pace
   }
 
   /** 进队。同一个 id 不进两次（审批执行器重放时不会排出两件）。 */
@@ -126,7 +142,7 @@ export class ActionQueue {
             reads: {},
             finished_at_ms: nowMs,
           }
-          this.pace.end(row.job.account, row.job.id)
+          this.paceOf(row.job).end(row.job.account, row.job.id)
           changed.push(row)
         }
       }
@@ -143,7 +159,7 @@ export class ActionQueue {
     for (const row of this.jobs) {
       if (row.status !== 'queued') continue
       if (!platforms.includes(row.job.plan.platform)) continue
-      const v = this.pace.begin(row.job.account, row.job.plan.pace, row.job.id, nowMs)
+      const v = this.paceOf(row.job).begin(row.job.account, row.job.plan.pace, row.job.id, nowMs)
       if (!v.ok) continue
       row.status = 'running'
       row.claimed_at_ms = nowMs
@@ -158,7 +174,7 @@ export class ActionQueue {
     const out: { id: string; why: string }[] = []
     for (const row of this.jobs) {
       if (row.status !== 'queued') continue
-      const v = this.pace.check(row.job.account, row.job.plan.pace, nowMs)
+      const v = this.paceOf(row.job).check(row.job.account, row.job.plan.pace, nowMs)
       if (!v.ok) out.push({ id: row.job.id, why: v.why })
     }
     return out
@@ -219,7 +235,7 @@ export class ActionQueue {
     if (row === undefined || isFinal(row.status)) return row
     row.status = result.outcome
     row.result = { ...result, finished_at_ms: nowMs }
-    this.pace.end(row.job.account, row.job.id)
+    this.paceOf(row.job).end(row.job.account, row.job.id)
     return row
   }
 

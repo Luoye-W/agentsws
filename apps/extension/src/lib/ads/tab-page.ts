@@ -16,6 +16,7 @@ import {
   hostMatches,
   hostOfUrl,
   type PageLook,
+  type PostedHit,
   type SheetFile,
 } from '@agentsws/browser-action'
 import type { AdsDomRequest, AdsDomResponse, BannerState } from './dom-messages'
@@ -111,7 +112,35 @@ export class TabPage implements ActionPage {
     // 不在白名单站点上就不往里放脚本、不读它（执行器会因为主机对不上停下）
     if (!hostMatches(hostOfUrl(url), this.o.hosts))
       return { url, title: '', text: '', frameSources: [], passwordInputs: 0 }
-    return (await this.o.driver.dom({ type: 'ads-dom', op: 'look' })) as PageLook
+    try {
+      return (await this.o.driver.dom({ type: 'ads-dom', op: 'look' })) as PageLook
+    } catch {
+      // WP329：人点了发送、页面自己换了（发新帖会跳到帖子页）：等它加载完、把脚本放回去再看一次
+      await this.ready()
+      return (await this.o.driver.dom({ type: 'ads-dom', op: 'look' })) as PageLook
+    }
+  }
+
+  /**
+   * WP329：页面上正文含这段字的那几条（等人点发送时一直在看）。页面正在换（脚本被扔掉了）就回空，
+   * 等它加载完把脚本放回去，下一眼接着看——**这里不点任何东西**。
+   */
+  async findPosted(selector: string, body: string, text: string): Promise<PostedHit[]> {
+    try {
+      const out = await this.o.driver.dom({
+        type: 'ads-dom',
+        op: 'find-posted',
+        selector,
+        body,
+        text,
+      })
+      return Array.isArray(out) ? (out as PostedHit[]) : []
+    } catch {
+      const f = await this.o.driver.facts()
+      if (f?.status === 'complete' && hostMatches(hostOfUrl(f.url), this.o.hosts))
+        await this.ready().catch(() => undefined)
+      return []
+    }
   }
 
   async waitFor(selector: string, timeoutMs: number): Promise<boolean> {

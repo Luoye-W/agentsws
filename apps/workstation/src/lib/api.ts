@@ -6459,7 +6459,8 @@ export interface AdsActionSettingsView {
 export interface AdsActionJobView {
   id: string
   title: string
-  platform: AdsPlatform
+  /** WP329：Reddit 的写活也排在同一条通道里（填草稿、人点发送）。 */
+  platform: AdsPlatform | 'reddit'
   account_id: string
   kind: string
   status:
