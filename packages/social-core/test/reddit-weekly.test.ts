@@ -112,6 +112,7 @@ describe('计数与边界', () => {
       item({ signals: { voc: true, note: '续航不够' }, text: 'battery dies in 2 hours' }),
       item({ signals: { ugc: true }, kind: 'post', title: 'My setup', text: 'photo of my setup' }),
       item({ signals: { voc: true }, deleted: true }),
+      item({ signals: { voc: true }, text: '  ' }),
       item({ text: 'nothing special' }),
     ])
     const s = p.sections.find((x) => x.id === 'voc_ugc')

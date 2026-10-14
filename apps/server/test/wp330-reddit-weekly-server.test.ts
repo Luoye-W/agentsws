@@ -114,7 +114,7 @@ describe('Reddit 周报（服务进程）', () => {
     expect((NOT_A_CARD.kinds as readonly string[]).includes(card?.kind ?? '')).toBe(true)
     expect(card?.role_id).toBe('social.reddit')
     expect(card?.routing.recipients[0]?.person).toBe(reddit.person_id)
-    expect((card?.payload as RedditWeeklyPayload).kind).toBe('reddit_weekly')
+    expect((card?.payload as RedditWeeklyPayload | undefined)?.kind).toBe('reddit_weekly')
 
     const latest = await data<RedditWeeklyPayload>(await call('GET', '/v1/reddit-weekly'))
     expect(latest.totals).toMatchObject({ posts: 1, ugc: 1 })

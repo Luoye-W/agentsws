@@ -184,6 +184,9 @@ export function clipQuote(raw: string, max: number): string {
 
 const REPLY_ACTIONS = new Set(['reply', 'comment', 'post'])
 
+/** 原文没了（标了删，或 WP328 已经清空原话）：照样计数，不引用。 */
+const gone = (it: RedditWatchItem): boolean => it.deleted === true || it.text.trim() === ''
+
 /** 发出记录的一行 → 回的是帖子 / 评论 / 我们发的新帖（不是 Reddit 回复的回 undefined）。 */
 export function replyTargetOf(
   r: Pick<OutboundRecord, 'channel' | 'action' | 'parent_external_id' | 'status'>,
@@ -222,8 +225,8 @@ export function composeRedditWeekly(input: ComposeRedditWeeklyInput): RedditWeek
     at: it.created_at,
     url: it.permalink,
     ...(it.title === undefined ? {} : { title: clipQuote(it.title, 120) }),
-    text: it.deleted === true ? '' : clipQuote(it.text, format.quote_max_chars),
-    ...(it.deleted === true ? { deleted: true } : {}),
+    text: gone(it) ? '' : clipQuote(it.text, format.quote_max_chars),
+    ...(gone(it) ? { deleted: true } : {}),
     ...(it.signals?.note === undefined ? {} : { note: clipQuote(it.signals.note, 200) }),
   })
 
@@ -236,7 +239,7 @@ export function composeRedditWeekly(input: ComposeRedditWeeklyInput): RedditWeek
   const posts = ownItems.filter((i) => i.kind === 'post').length
   const comments = ownItems.length - posts
   // ② VOC / UGC：只列判过有效的、原话还在的
-  const live = ownItems.filter((i) => i.deleted !== true)
+  const live = ownItems.filter((i) => !gone(i))
   const voc = live.filter((i) => i.signals?.voc === true).map(quote)
   const ugc = live.filter((i) => i.signals?.ugc === true).map(quote)
   // ③ 外部社区：按话题合并，取最重的那一档
@@ -253,7 +256,7 @@ export function composeRedditWeekly(input: ComposeRedditWeeklyInput): RedditWeek
       (acc, i) => (severity(i.assessment) > severity(acc) ? (i.assessment ?? acc) : acc),
       'no_action',
     )
-    const shown = list.filter((i) => i.deleted !== true)
+    const shown = list.filter((i) => !gone(i))
     const cap = format.max_quotes_per_topic
     const quotes = (cap > 0 ? shown.slice(0, cap) : shown).map(quote)
     return {
