@@ -28,6 +28,7 @@ import {
   isFaqBatchPayload,
   isFaqImportPayload,
 } from './faq-import-body'
+import { isRedditWeekly, RedditWeeklyBody } from './reddit-weekly-body'
 import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
@@ -489,6 +490,8 @@ export function DeckCardBody({
       case 'aftermath': {
         // WP224：本周经营一页纸是一张五段的卡（数带出处 tooltip），不是一排键值
         if (isWeeklyReview(payload)) return <WeeklyReviewBody payload={payload} />
+        // WP330：Reddit 周报同一类（报表），几节 + 复制 / 导出
+        if (isRedditWeekly(payload)) return <RedditWeeklyBody payload={payload} />
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
