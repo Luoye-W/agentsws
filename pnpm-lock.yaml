@@ -1521,6 +1521,9 @@ importers:
 
   packages/social-core:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../browser-action
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
