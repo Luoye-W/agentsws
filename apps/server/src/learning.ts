@@ -61,6 +61,13 @@ import {
   TIER_ORDER,
 } from '@agentsws/skills'
 import type { CreateApprovalInput } from '@agentsws/txn'
+import {
+  createMemoryBook,
+  type MemoryBook,
+  type MemoryChange,
+  type MemoryReason,
+  shortMemoryText,
+} from './memory-book.js'
 import { settleOwnCard } from './mode-gate.js'
 
 /**
@@ -114,12 +121,36 @@ export interface MemoryEntry {
   /** WP71：手动加的那些记得是谁加的、什么时候加的（提升上来的看 `learned_from`）。 */
   added_by?: PersonId
   added_at?: Iso8601
+  /** WP320：人写的还是 AI 随工作自己记的（没有这一格 = 早于 WP320 的条目，按人写的算）。 */
+  written_by?: 'person' | 'ai'
+  /** WP320：从哪次运行 / 哪件事来的（AI 记的才有）。 */
+  run_id?: RunId
+  matter_id?: string
+  /** WP320：为什么记（见 `MemoryReason`）。 */
+  reason?: MemoryReason
+}
+
+/** WP320：一层记忆的地址。`workspace_id` 不给 = 装配时的那个品牌（与 WP320 之前一样）。 */
+export interface MemoryTarget {
+  tier: SkillTier
+  scope_id?: string
+  workspace_id?: WorkspaceId
+}
+
+/** WP320：AI 记 / 改一条时多带的来历。 */
+export interface MemoryOrigin {
+  written_by?: 'person' | 'ai'
+  run_id?: RunId
+  matter_id?: string
+  reason?: MemoryReason
 }
 
 /** WP71：手动加 / 改一条记忆的入参。 */
-export interface MemoryWriteInput {
+export interface MemoryWriteInput extends MemoryOrigin {
   tier: SkillTier
   scope_id?: string
+  /** WP320：哪个品牌；不给 = 装配时的那个（与 WP320 之前一样）。 */
+  workspace_id?: WorkspaceId
   text: string
   heading?: string
   /** 写进哪个技能；不给就是本机自带那一份（`customer-care`）。 */
@@ -298,6 +329,8 @@ export interface LearningOptions {
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 给了数据目录就落盘（重启续跑）。 */
   dbDir?: string
+  /** WP320：记忆的账本（来历 / 变更 / 墓碑）。不给 = 进程内一本（不落盘）。 */
+  book?: MemoryBook
   /** 策略层技能：永不进学习回路（24 §3）。 */
   policySkills?: string[]
   /**
@@ -375,9 +408,9 @@ export interface LearningAssembly {
    * WP69（54 §3）：某一层记忆的一句话（岗位页"记忆"tab 的标题行）。
    * 只数，不出正文——正文由 {@link LearningAssembly.memoryAt} 给。
    */
-  memorySummary(target: { tier: SkillTier; scope_id?: string }): string
+  memorySummary(target: MemoryTarget): string
   /** WP69：某一层记忆里有哪几段。WP71 起每条带 `id`，可改可删。 */
-  memoryAt(target: { tier: SkillTier; scope_id?: string }): MemoryEntry[]
+  memoryAt(target: MemoryTarget): MemoryEntry[]
   /**
    * WP71（36 §10）：**手动加一条**。
    *
@@ -386,10 +419,27 @@ export interface LearningAssembly {
    * 下一次这一层被解析时它作为新的一段并进去（`resolve` 里"base 里没有的段就 push"）。
    */
   addMemory(input: MemoryWriteInput): Promise<MemoryEntry>
-  /** WP71：改一条（正文，可带标题）。只改本层那一条，别的层一个字不动。 */
-  updateMemory(id: string, input: { text: string; heading?: string }): Promise<MemoryEntry>
-  /** WP71：删一条。手动加的从这一层的技能记录里删；提升来的从 overlay 的 ops 里摘掉。 */
-  removeMemory(id: string): Promise<void>
+  /**
+   * WP71：改一条（正文，可带标题）。只改本层那一条，别的层一个字不动。
+   * WP320：`merge: true` = AI 把新说法并进这条（账上记 `merged`）；`by` / 来历给了就记账。
+   */
+  updateMemory(
+    id: string,
+    input: {
+      text: string
+      heading?: string
+      by?: PersonId
+      workspace_id?: WorkspaceId
+      merge?: boolean
+    } & MemoryOrigin,
+  ): Promise<MemoryEntry>
+  /**
+   * WP71：删一条。手动加的从这一层的技能记录里删；提升来的从 overlay 的 ops 里摘掉。
+   * WP320：删的是 AI 记的那条就留一块墓碑——以后 AI 别再把它记回来。
+   */
+  removeMemory(id: string, opts?: { by?: PersonId; workspace_id?: WorkspaceId }): Promise<void>
+  /** WP320：记忆账本（来历 / 变更 / 墓碑）。 */
+  readonly book: MemoryBook
   /**
    * WP234（docs/54 §6.4）：岗位合并时，A 那一层岗位记忆并进 B。
    *
@@ -1056,19 +1106,84 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
    * 与 `applyPromotion` 里那段同一条规则——记忆读写两侧必须对上，否则手动加的那条
    * 与提升上来的那条会落在两个不同的 owner 下。
    */
-  const ownerOf = (target: { tier: SkillTier; scope_id?: string }): string =>
-    target.tier === 'company' ? workspace_id : (target.scope_id ?? '')
+  const ownerOf = (target: MemoryTarget): string =>
+    target.tier === 'company' ? (target.workspace_id ?? workspace_id) : (target.scope_id ?? '')
 
-  /** 技能记录按 `(workspace, scope)` 索引；公司层不带 scope。 */
-  const scopeRefOf = (target: { tier: SkillTier; scope_id?: string }): SkillScopeRef => ({
-    workspace_id,
+  /** 技能记录按 `(workspace, scope)` 索引；公司层不带 scope。WP320：品牌跟着 `target` 走。 */
+  const scopeRefOf = (target: MemoryTarget): SkillScopeRef => ({
+    workspace_id: target.workspace_id ?? workspace_id,
     ...(target.tier === 'company' || target.scope_id === undefined || target.scope_id === ''
       ? {}
       : { scope_id: target.scope_id }),
   })
 
-  /** 手动加的那条是谁、什么时候加的。与 overlay 一样是内存档（`packages/skills` 没有落盘层）。 */
-  const manualMeta = new Map<string, { by: PersonId; at: Iso8601 }>()
+  /**
+   * 手动加 / AI 记的那条是谁、什么时候、从哪次运行来的。WP320 起住在记忆账本里
+   * （装配给了数据目录就跟着落盘，见 `memory-persist.ts`），不再是进程内的一张表。
+   */
+  const book: MemoryBook = options.book ?? createMemoryBook()
+
+  /**
+   * WP320：每一次新增 / 改动 / 合并 / 删除——事件日志落一条（谁、哪一层、哪条、为什么，
+   * **不带正文**），账本记一笔（带短正文，给本人的小提醒用）。
+   */
+  const recordMemory = (input: {
+    kind: MemoryChange['kind']
+    entry_id: string
+    tier: SkillTier
+    scope_id: string
+    workspace_id: WorkspaceId
+    skill: string
+    body: string
+    by?: PersonId
+    origin?: MemoryOrigin
+  }): void => {
+    const by = input.by ?? options.owner
+    const written_by = input.origin?.written_by ?? 'person'
+    const at = clock.now()
+    book.record({
+      at,
+      kind: input.kind,
+      entry_id: input.entry_id,
+      tier: input.tier,
+      scope_id: input.scope_id,
+      workspace_id: input.workspace_id,
+      text: shortMemoryText(input.body),
+      by,
+      written_by,
+      ...(input.origin?.run_id === undefined ? {} : { run_id: input.origin.run_id }),
+      ...(input.origin?.matter_id === undefined ? {} : { matter_id: input.origin.matter_id }),
+      ...(input.origin?.reason === undefined ? {} : { reason: input.origin.reason }),
+    })
+    traceSeq += 1
+    options.appendEvent({
+      schema_version: 1,
+      workspace_id: input.workspace_id,
+      type: `memory.${input.kind}`,
+      at,
+      actor: {
+        kind: written_by === 'ai' ? 'agent' : 'person',
+        id: by,
+        ...(input.origin?.run_id === undefined ? {} : { run_id: input.origin.run_id }),
+      },
+      subject: { type: 'memory', id: input.entry_id },
+      correlation: {
+        trace_id: `tr_learn_${String(traceSeq).padStart(6, '0')}`,
+        ...(input.origin?.run_id === undefined ? {} : { run_id: input.origin.run_id }),
+      },
+      payload: {
+        entry_id: input.entry_id,
+        tier: input.tier,
+        scope_id: input.scope_id,
+        skill: input.skill,
+        by,
+        written_by,
+        ...(input.origin?.reason === undefined ? {} : { reason: input.origin.reason }),
+        ...(input.origin?.run_id === undefined ? {} : { run_id: input.origin.run_id }),
+        ...(input.origin?.matter_id === undefined ? {} : { matter_id: input.origin.matter_id }),
+      },
+    })
+  }
 
   /** 没给标题就从正文头一句里取一截当标题（段落要有标题才在技能文档里立得住）。 */
   const headingOf = (text: string): string => {
@@ -1091,7 +1206,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
           skill: name,
           section_id: section.id,
         }
-        const meta = manualMeta.get(memoryRefId(ref))
+        const meta = book.provenance(memoryRefId(ref))
         out.push({
           id: memoryRefId(ref),
           skill: name,
@@ -1101,7 +1216,16 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
           origin: section.origin,
           ...(section.learned_from === undefined ? {} : { learned_from: section.learned_from }),
           source: 'manual',
-          ...(meta === undefined ? {} : { added_by: meta.by, added_at: meta.at }),
+          ...(meta === undefined
+            ? {}
+            : {
+                added_by: meta.by,
+                added_at: meta.at,
+                written_by: meta.written_by,
+                ...(meta.run_id === undefined ? {} : { run_id: meta.run_id }),
+                ...(meta.matter_id === undefined ? {} : { matter_id: meta.matter_id }),
+                ...(meta.reason === undefined ? {} : { reason: meta.reason }),
+              }),
         })
       }
       // 提升批下来的那些——这一层 overlay 上的 op（WP69 起就是这样）
@@ -1162,7 +1286,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       evals: existing?.evals ?? [],
       sections: [...(existing?.sections ?? []), section],
       ...(existing?.base === undefined ? {} : { base: existing.base }),
-      workspace_id,
+      workspace_id: scope.workspace_id ?? workspace_id,
       ...(scope.scope_id === undefined ? {} : { scope_id: scope.scope_id }),
     })
     const ref: MemoryRef = {
@@ -1173,8 +1297,26 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       section_id: section.id,
     }
     const at = clock.now()
-    manualMeta.set(memoryRefId(ref), { by: input.by, at })
-    emit('memory.added', { tier: input.tier, scope_id: owner, skill: name })
+    const written_by = input.written_by ?? 'person'
+    const reason: MemoryReason = input.reason ?? (written_by === 'ai' ? 'fact' : 'manual')
+    const origin: MemoryOrigin = {
+      written_by,
+      reason,
+      ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+      ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id }),
+    }
+    book.setProvenance(memoryRefId(ref), { by: input.by, at, written_by, ...origin })
+    recordMemory({
+      kind: 'added',
+      entry_id: memoryRefId(ref),
+      tier: input.tier,
+      scope_id: owner,
+      workspace_id: scope.workspace_id ?? workspace_id,
+      skill: name,
+      body: text,
+      by: input.by,
+      origin,
+    })
     return {
       id: memoryRefId(ref),
       skill: name,
@@ -1185,6 +1327,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       source: 'manual',
       added_by: input.by,
       added_at: at,
+      ...origin,
     }
   }
 
@@ -1193,7 +1336,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     if (ref === undefined) throw new Error(`认不出这条记忆：${id}`)
     const text = input.text.trim()
     if (text === '') throw new Error('记忆条目不能是空的')
-    const scope = scopeRefOf({ tier: ref.tier, scope_id: ref.owner })
+    const target: MemoryTarget = {
+      tier: ref.tier,
+      ...(ref.tier === 'company' ? {} : { scope_id: ref.owner }),
+      ...(input.workspace_id === undefined ? {} : { workspace_id: input.workspace_id }),
+    }
+    const scope = scopeRefOf(target)
     if (ref.source === 'manual') {
       const own = skills.registry.peek(ref.skill, ref.tier, scope)
       const hit = own?.sections.find((s) => s.id === ref.section_id)
@@ -1216,38 +1364,102 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         ),
       })
     }
-    emit('memory.updated', { tier: ref.tier, scope_id: ref.owner, skill: ref.skill })
-    const found = memoryAt({
+    /*
+     * WP320：改了谁的来历跟谁走——人改了 AI 记的那条，这条就算人的了（以后 AI 并不进来）；
+     * AI 并进一条（merge）只换「最近从哪次运行来」，作者不变。
+     */
+    const prev = book.provenance(id)
+    const editor = input.by ?? options.owner
+    const written_by = input.written_by ?? 'person'
+    const origin: MemoryOrigin = {
+      written_by,
+      ...(input.reason === undefined ? {} : { reason: input.reason }),
+      ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+      ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id }),
+    }
+    if (ref.source === 'manual')
+      book.setProvenance(
+        id,
+        written_by === 'ai' && prev !== undefined
+          ? {
+              ...prev,
+              at: clock.now(),
+              ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+              ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id }),
+            }
+          : {
+              by: editor,
+              at: clock.now(),
+              ...origin,
+              written_by,
+              reason: input.reason ?? 'manual',
+            },
+      )
+    recordMemory({
+      kind: input.merge === true ? 'merged' : 'updated',
+      entry_id: id,
       tier: ref.tier,
-      ...(ref.tier === 'company' ? {} : { scope_id: ref.owner }),
-    }).find((e) => e.id === id)
+      scope_id: ref.owner,
+      workspace_id: scope.workspace_id ?? workspace_id,
+      skill: ref.skill,
+      body: text,
+      by: editor,
+      origin,
+    })
+    const found = memoryAt(target).find((e) => e.id === id)
     if (found === undefined) throw new Error(`没有这条记忆：${id}`)
     return found
   }
 
-  const removeMemory: LearningAssembly['removeMemory'] = async (id) => {
+  const removeMemory: LearningAssembly['removeMemory'] = async (id, opts = {}) => {
     const ref = parseMemoryRef(id)
     if (ref === undefined) throw new Error(`认不出这条记忆：${id}`)
-    const scope = scopeRefOf({ tier: ref.tier, scope_id: ref.owner })
+    const scope = scopeRefOf({
+      tier: ref.tier,
+      scope_id: ref.owner,
+      ...(opts.workspace_id === undefined ? {} : { workspace_id: opts.workspace_id }),
+    })
+    const ws = scope.workspace_id ?? workspace_id
+    let body = ''
     if (ref.source === 'manual') {
       const own = skills.registry.peek(ref.skill, ref.tier, scope)
-      if (own === undefined || !own.sections.some((s) => s.id === ref.section_id))
-        throw new Error(`没有这条记忆：${id}`)
+      const hit = own?.sections.find((s) => s.id === ref.section_id)
+      if (own === undefined || hit === undefined) throw new Error(`没有这条记忆：${id}`)
+      body = hit.body
       await skills.registry.put({
         ...own,
         sections: own.sections.filter((s) => s.id !== ref.section_id),
       })
-      manualMeta.delete(id)
+      // WP320：人删了 AI 记的那条——留一块墓碑，AI 以后别再把同一句记回来
+      if (book.provenance(id)?.written_by === 'ai')
+        book.tombstone({
+          workspace_id: ws,
+          tier: ref.tier,
+          scope_id: ref.owner,
+          text: body,
+          at: clock.now(),
+        })
+      book.dropProvenance(id)
     } else {
       const overlay = skills.registry.getOverlay(ref.skill, ref.tier, ref.owner)
       if (overlay === undefined || !overlay.ops.some((o) => o.section_id === ref.section_id))
         throw new Error(`没有这条记忆：${id}`)
+      body = overlay.ops.find((o) => o.section_id === ref.section_id)?.body ?? ''
       await skills.registry.setOverlay({
         ...overlay,
         ops: overlay.ops.filter((o) => o.section_id !== ref.section_id),
       })
     }
-    emit('memory.removed', { tier: ref.tier, scope_id: ref.owner, skill: ref.skill })
+    recordMemory({
+      kind: 'removed',
+      entry_id: id,
+      tier: ref.tier,
+      scope_id: ref.owner,
+      workspace_id: ws,
+      skill: ref.skill,
+      body,
+      ...(opts.by === undefined ? {} : { by: opts.by }),
+    })
   }
 
   const mergePositionMemory: LearningAssembly['mergePositionMemory'] = async (input) => {
@@ -1282,10 +1494,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
             skill: name,
             section_id: section.id,
           })
-          const meta = manualMeta.get(oldId)
+          const meta = book.provenance(oldId)
           if (meta !== undefined && same === undefined) {
-            manualMeta.delete(oldId)
-            manualMeta.set(
+            book.dropProvenance(oldId)
+            book.setProvenance(
               memoryRefId({
                 source: 'manual',
                 tier: 'position',
@@ -1407,6 +1619,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     memoryAt,
     memorySummary,
     addMemory,
+    book,
     mergePositionMemory,
     copyPositionMemory,
     updateMemory,

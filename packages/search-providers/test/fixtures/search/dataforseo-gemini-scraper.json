@@ -1,0 +1,8 @@
+{"version":"0.1.20261001","status_code":20000,"status_message":"Ok.","cost":0.004,"tasks_count":1,"tasks_error":0,
+ "tasks":[{"id":"t7","status_code":20000,"status_message":"Ok.","cost":0.004,"result_count":1,"path":["v3","ai_optimization","gemini","llm_scraper","live","advanced"],
+  "result":[{"keyword":"best power bank for travel","location_code":2840,"language_code":"en","model":"gemini-3-flash","check_url":"https://gemini.google.com/","datetime":"2026-10-12 08:31:40 +00:00",
+   "markdown":"## Top travel power banks\n\n- **Anker MagGo** — slim, Qi2.\n- **Voltbrick 20K** — 20,000 mAh, airline friendly.",
+   "sources":[{"type":"gemini_source","title":"The best power banks","snippet":"We tested 40 power banks…","domain":"www.theverge.com","url":"https://www.theverge.com/23300000/best-power-bank","thumbnail":null,"source_name":"The Verge","publication_date":"2026-09-02"},
+    {"type":"gemini_source","title":"Voltbrick 20K","snippet":null,"domain":"voltbrick.com","url":"https://voltbrick.com/products/20k/","thumbnail":null,"source_name":"Voltbrick","publication_date":null}],
+   "items_count":1,
+   "items":[{"type":"gemini_text","rank_group":1,"rank_absolute":1,"markdown":"## Top travel power banks …","sources":[{"type":"gemini_source","title":"YouTube review","domain":"www.youtube.com","url":"https://www.youtube.com/watch?v=xyz&si=abc","source_name":"YouTube"}]}]}]}]}

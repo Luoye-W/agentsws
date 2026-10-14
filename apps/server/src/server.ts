@@ -207,6 +207,7 @@ import {
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
+import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
 import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
@@ -357,6 +358,7 @@ import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
+import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
 import {
@@ -412,6 +414,8 @@ import {
 } from './markets.js'
 import { createMatterTitler } from './matter-title.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
+import { createMemoryBook } from './memory-book.js'
+import { attachMemoryPersistence } from './memory-persist.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import {
@@ -1220,6 +1224,8 @@ export interface Server {
   skills: Skills
   /** WP29 学习回路（lesson 池 / 次日提案 / 采纳落 overlay）。 */
   learning: LearningAssembly
+  /** WP320：AI 随工作自动记（提示词里的「记忆」那一段 + 跑完提炼写入 + 「自动记忆」开关）。 */
+  autoMemory: AutoMemory
   models: ModelGatewayApi
   txn: Txn
   /**
@@ -2223,6 +2229,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
   // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
   await seedDefaultSkill(skills, workspace.id)
+  /*
+   * WP320：记忆落盘——技能库上层（公司 / 部门 / 岗位 / 职责 / 个人）与记忆账本跟着数据目录走，
+   * 在种完自带技能之后装回来（包基础层归软件，不归快照）。没有数据目录就是全内存档。
+   */
+  const memoryBook = createMemoryBook()
+  const memoryPersistence = attachMemoryPersistence({
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    registry: skills.registry,
+    book: memoryBook,
+    now: () => clock.now(),
+    log: (line) => {
+      if (options.quiet !== true) process.stdout.write(`${line}\n`)
+    },
+  })
   /**
    * WP215：一个品牌里替它收卡、挂系统任务的那个人与那条分配。
    *
@@ -2262,6 +2282,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
+    book: memoryBook,
+  })
+  /*
+   * WP320：AI 随工作自动记。写哪一层、能不能写，与记忆面板的 `can_edit` 同一份判据
+   * （`memoryGate` 在下面装 `SkillsPort` 那里；这里只在运行跑完时才调到它，那时早就装好了）。
+   */
+  const autoMemorySettings = createAutoMemorySettings(dbDir === undefined ? {} : { dir: dbDir })
+  const autoMemory = createAutoMemory({
+    learning,
+    settings: autoMemorySettings,
+    canWrite: (actor, target) =>
+      memoryGate(actor, {
+        tier: target.tier,
+        ...(target.scope_id === undefined ? {} : { scope_id: target.scope_id }),
+      }).ok,
   })
   /**
    * 40 §2 工具箱：把定时任务、流程、技能投影成同一张卡片，供"建之前先查"与工具箱页用。
@@ -4309,6 +4344,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(options.runtime?.dshMode === undefined ? {} : { dshMode: options.runtime.dshMode }),
             // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
             runLimits: () => runLimitsSettings.get(),
+            // WP320：「记忆」那一段 + 跑完自动记
+            memory: {
+              section: (actor, loaded) => autoMemory.section(actor, loaded),
+              afterRun: (input) => autoMemory.afterRun(input),
+            },
             /*
              * WP251（决策 91）：工具回「没连上 / 缺凭据」时说清缺哪个——这条职责还没连上的连接
              * （必需的在前；必需的都连上了才列可选的）。连接目录按品牌装好之后才有，没有就不说。
@@ -4912,6 +4952,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       appendEvent,
       ...(dir === undefined ? {} : { dir }),
+      // WP310：GEO / 排名历史落在品牌目录的 geo.sqlite（第一次用时才打开）
+      geoStore: () => {
+        if (dir === undefined) return createGeoStore()
+        mkdirSync(dir, { recursive: true })
+        return createGeoStore(join(dir, 'geo.sqlite'))
+      },
     })
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
@@ -5914,6 +5960,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         site.close()
         ads.close()
         pr.close()
+        seoService.close()
       },
     }
   }
@@ -7736,14 +7783,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return out
     },
     // WP69（54 §3）：第三栏「记忆」面板按层读；WP71 多回一格"能不能改"
+    // WP320：按请求人所在的品牌读（以前一律读装配时那个品牌的）
     memory: async (input) => ({
       summary: learning.memorySummary({
         tier: input.tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+        workspace_id: input.actor.workspace_id,
       }),
       entries: learning.memoryAt({
         tier: input.tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+        workspace_id: input.actor.workspace_id,
       }),
       can_edit: memoryGate(input.actor, {
         tier: input.tier,
@@ -7759,6 +7809,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return learning.addMemory({
         tier: input.tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+        workspace_id: input.actor.workspace_id,
         text: input.text,
         ...(input.heading === undefined ? {} : { heading: input.heading }),
         ...(input.skill === undefined ? {} : { skill: input.skill }),
@@ -7770,12 +7821,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return learning.updateMemory(input.id, {
         text: input.text,
         ...(input.heading === undefined ? {} : { heading: input.heading }),
+        by: input.actor.person_id,
+        workspace_id: input.actor.workspace_id,
       })
     },
     deleteMemory: async (input) => {
       assertMemory(input.actor, refOf(input.id))
-      await learning.removeMemory(input.id)
+      await learning.removeMemory(input.id, {
+        by: input.actor.person_id,
+        workspace_id: input.actor.workspace_id,
+      })
     },
+    /*
+     * WP320：记忆账上最近几笔——只回本人的（AI 替他记的、他自己改的），且只回他看得见的那几层。
+     * 「记住了：……」小提醒读它；正文是截短的那一句，不出这个人自己的界面。
+     */
+    memoryChanges: async (input) =>
+      learning.book
+        .changes({
+          workspace_id: input.actor.workspace_id,
+          by: input.actor.person_id,
+          ...(input.since === undefined ? {} : { since: input.since }),
+          ...(input.written_by === undefined ? {} : { written_by: input.written_by }),
+          limit: 50,
+        })
+        .filter(
+          (c) =>
+            memoryReadGate(input.actor, {
+              tier: c.tier,
+              ...(c.tier === 'company' ? {} : { scope_id: c.scope_id }),
+            }).ok,
+        )
+        .map(({ workspace_id: _ws, ...view }) => view),
     // WP71b：网关问"这一层看不看得见 / 改不改得动"，判据仍是服务端这一份
     memoryAccess: async (input) => {
       const target = {
@@ -9092,6 +9169,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (input.settings !== undefined) svc.setGeoSettings(input.settings)
       return svc.geoView()
     },
+    // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
+    geoHistoryExport: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),
+    geoHistoryDelete: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryDelete(input),
     // WP159：知识库里那张「违规宣称规则」表（按请求人所在品牌的目标市场开组）
     claimRules: async (actor) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.claimRules(actor),
@@ -10004,6 +10086,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     handoff: brandHandoffPort(brandModules, handoffFor),
     // WP236：运行时长线（这台机器一份）
     runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
+    // WP320：「自动记忆」开关（每人每品牌一份，默认开）
+    autoMemory: {
+      get: (actor) => ({ enabled: autoMemorySettings.get(actor.workspace_id, actor.person_id) }),
+      set: (actor, enabled) => ({
+        enabled: autoMemorySettings.set(actor.workspace_id, actor.person_id, enabled),
+      }),
+    },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -10172,6 +10261,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               question: input.question,
               assignment_id: input.assignment_id,
               mode: input.mode,
+              // WP311（决策 507）：链接带上品牌，工作台开着别的品牌时先切过去
+              workspace_id: input.workspace_id,
             },
           ),
         )
@@ -10252,6 +10343,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     knowledge,
     skills,
     learning,
+    autoMemory,
     models,
     txn,
     approvals,
@@ -10415,6 +10507,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP247：正在下载的连接器一并停掉（下了一半的暂存目录由下载器自己清）
       localConnector?.dispose()
       learning.close()
+      // WP320：关之前把记忆再写一次（攒着没写的那一笔不丢）
+      memoryPersistence.close()
       knowledge.close()
       data.close()
       // 接进来的世界由调用方关（它还持有事件日志与替身）

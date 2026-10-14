@@ -243,7 +243,7 @@ describe('真装配线（stub）：Rollout 那份旧目录上说「首页再改�
     server = undefined
   })
 
-  it('照实说一句 → 当场在 Horizon 上新起一份 → 检查 → 推未发布预览；旧的那份原样留着', async () => {
+  it('照实说一句 → 出选主题卡就停（WP311）→ 选了 Horizon → 新起一份、检查、推未发布预览；旧的那份原样留着', async () => {
     const fake = themeCliStandIn()
     const exec: ProbeExec = async (bin) =>
       bin === 'node'
@@ -308,19 +308,37 @@ describe('真装配线（stub）：Rollout 那份旧目录上说「首页再改�
       title: '首页再改一版出预览',
       role_id: 'site.shopify-theme',
     })) as { matter: { id: string }; run_id?: string }
-    const matter = (await call(theme.id, 'GET', `/v1/matters/${out.matter.id}`)) as {
-      timeline: { kind: string; text: string; preview?: { url: string } }[]
+    type Tl = { kind: string; text: string; preview?: { url: string } }[]
+    const timeline = async (): Promise<Tl> =>
+      ((await call(theme.id, 'GET', `/v1/matters/${out.matter.id}`)) as { timeline: Tl }).timeline
+    // WP311（决策 480）：先出选主题卡、这次就停（不再直接复制 Horizon）；旧目录、店里都没动
+    const first = (await timeline()).find((e) => e.kind === 'agent_message')?.text ?? ''
+    expect(first).toContain('旧的自带主题（agentsws-theme v0.10.0）')
+    expect(first).toContain('选主题卡')
+    expect(fake.calls.some((c) => c[1] === 'duplicate')).toBe(false)
+    expect(existsSync(join(dbDir, 'theme-work', ws, 'legacy'))).toBe(false)
+    const queue = await s.txn.approvals.queue({
+      workspace_id: ws,
+      person_id: s.bootstrap.person.id,
+      lane: 'mine',
+    })
+    const card = queue.find((a) => a.kind === 'theme_choice') as ApprovalItem
+    expect(card.state).toBe('pending')
+    // 人在卡上选店里那份 Horizon（工作台那一路：HTTP 决定 → 决定钩子 → 起底 → 按原话接着做）
+    await call(theme.id, 'POST', `/v1/approvals/${card.id}/decide`, {
+      action: 'approve',
+      selected_option_id: 'store:100001',
+      via: 'workstation',
+    })
+    let tl: Tl = []
+    for (let i = 0; i < 200; i++) {
+      tl = await timeline()
+      if (tl.some((e) => e.preview !== undefined)) break
+      await new Promise((r) => setTimeout(r, 25))
     }
-    const reply = matter.timeline.find((e) => e.kind === 'agent_message')?.text ?? ''
-    expect(reply).toContain('旧的自带主题（agentsws-theme v0.10.0）')
-    expect(reply).toContain('这次在 Horizon 上新起了一份')
-    expect(reply).toContain('预览好了')
-    expect(matter.timeline.some((e) => e.text.includes('原样留着（挪到一边了，没删、没迁）'))).toBe(
-      true,
-    )
-    expect(matter.timeline.find((e) => e.preview !== undefined)?.preview?.url).toContain(
-      'preview_theme_id=',
-    )
+    expect(tl.some((e) => e.text.includes('原样留着（挪到一边了，没删、没迁）'))).toBe(true)
+    expect(tl.filter((e) => e.kind === 'agent_message').at(-1)?.text).toContain('预览好了')
+    expect(tl.find((e) => e.preview !== undefined)?.preview?.url).toContain('preview_theme_id=')
     // 旧的那份原样在 legacy/ 下；店里多了一份复制出来的 Horizon（推预览推到它上面），线上没动
     const legacyRoot = join(dbDir, 'theme-work', ws, 'legacy')
     expect(readdirSync(legacyRoot)).toHaveLength(1)

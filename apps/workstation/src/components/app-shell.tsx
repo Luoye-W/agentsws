@@ -67,6 +67,7 @@ import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { DemoBadge } from '@/components/ui/demo-badge'
 import { Separator } from '@/components/ui/separator'
 import { UpdateButton } from '@/components/update-button'
+import { MemoryNotice } from '@/components/work/memory-notice'
 import {
   listMessageAccounts,
   type Me,
@@ -711,6 +712,8 @@ export function AppShell({
 
           {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}
           <RightRail {...(instances === undefined ? {} : { instances })} />
+          {/* WP320：「记住了：……」小提醒（点了跳到那条记忆） */}
+          <MemoryNotice {...(instances === undefined ? {} : { instances })} />
 
           {/* WP207：「已归档（n）」点开的列表（筛好那条职责；筛子都能改） */}
           {archived === undefined ? null : (

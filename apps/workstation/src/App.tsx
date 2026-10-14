@@ -8,6 +8,7 @@ import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
+import { BrandLinkNote } from '@/components/brand-link-note'
 import { PageError } from '@/components/page-error'
 import {
   ensureSession,
@@ -20,6 +21,7 @@ import {
   storedToken,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useBrandLink } from '@/lib/brand-link'
 import { connectRealtime } from '@/lib/realtime'
 import { BrandAssetsPage } from '@/pages/brand-assets'
 import { BrandDesignPage } from '@/pages/brand-design'
@@ -75,6 +77,8 @@ function Workspace(): ReactNode {
   const location = useLocation()
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
+  // WP311（决策 507）：链接带着别的品牌（IM 回复里的）→ 先切过去再开那一页
+  const switchingBrand = useBrandLink(session.data?.workspace.id)
 
   const positions = useQuery({
     queryKey: ['positions', session.data?.person.id],
@@ -182,7 +186,7 @@ function Workspace(): ReactNode {
   // WP112：应用还没起来的那一瞬是**集结**，不是一块灰条——
   // 灰条说的是"这一屏在加载"，而这里整个工作台都还没有。
   // 它自己管住"等够 300ms 才出现"，所以本机几十毫秒回来的时候一个像素都不画。
-  if (positions.data === undefined) return <BootSplash />
+  if (positions.data === undefined || switchingBrand) return <BootSplash />
 
   // 第一次打开 → 直接进四步向导。"先跳过"之后这一次会话里不再拦。
   if (
@@ -205,6 +209,7 @@ function Workspace(): ReactNode {
         addTile.mutate({ position_id, tile_id })
       }}
     >
+      {session.data === undefined ? null : <BrandLinkNote brand={session.data.workspace.name} />}
       <Routes>
         <Route path="/" element={<HomePage />} />
         {/* WP188：随便聊。一条路由带可选的会话 id——发第一句时换地址不重挂页面（流不断） */}
