@@ -48,6 +48,7 @@ import type {
   RunTimeLimits,
   RuntimeAdapter,
   RunWeb,
+  SkillRef,
   StartRun,
   StorefrontPlatform,
   TodoId,
@@ -507,6 +508,17 @@ export interface RuntimeOptions {
    * 真服务进程一定接（`server.ts` 接到 `BrandDesignAssembly.context()` 上）。
    */
   brandDesign?(role_id: string): PromptSection | undefined
+  /**
+   * WP333：**客服回信起草带上品牌语气**（`support-voice.ts`）。按职责与它挂的技能问：
+   * 写客服回信的职责（挂了 `customer-care`、没挂 `brand-voice`）、这个品牌自己写过话术 → 回一段；
+   * 别的一律 `undefined`（整段不出，一个字节不多）。每次现取：话术改了下一次运行就是新的。
+   * 不接 = 老行为。
+   */
+  brandVoice?(input: {
+    role_id: string
+    skills: readonly SkillRef[]
+    actor: SkillPromptActor
+  }): Promise<PromptSection | undefined>
   /**
    * WP144（docs/80）：**电脑操控**（`computer-use.ts` 那一份，一台机器一个）。
    *
@@ -1725,6 +1737,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             : [options.brandDesign(config.role_id)].filter(
                 (s): s is PromptSection => s !== undefined,
               )),
+          // WP333：客服回信起草带上品牌话术（与社媒同一个 `voicePrompt`；没写过话术就不出）
+          ...[
+            await options
+              .brandVoice?.({ role_id: config.role_id, skills: config.skills, actor: skillActor })
+              .catch(() => undefined),
+          ].filter((s): s is PromptSection => s !== undefined),
           /*
            * WP120（69 §3）：**角色定位**——品牌 → 岗位 → 职责，排在技能正文前面。
            *

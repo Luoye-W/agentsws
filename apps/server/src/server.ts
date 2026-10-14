@@ -697,6 +697,12 @@ import {
   type SupportJudgment,
   supportSlaTask,
 } from './support-judgment.js'
+import {
+  BRAND_VOICE_SKILL,
+  brandVoiceCard,
+  needsSupportVoice,
+  supportVoiceSection,
+} from './support-voice.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
@@ -5315,6 +5321,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 出图那条路已在 `design.ts` 逐图注入（WP122），这里只补另外三条。
              */
             brandDesign: (role_id) => brandDesignSectionOf(ws, role_id),
+            /*
+             * WP333：客服回信起草带上品牌话术——这个品牌自己写过 `brand-voice`（公司 / 岗位 / 职责 /
+             * 个人任何一层）才注；只有随软件带的基础版 = 没写过，照旧不注。每次现取。
+             */
+            brandVoice: async ({ role_id, skills: refs, actor }) => {
+              if (!needsSupportVoice(refs)) return undefined
+              const resolved = await skills.registry
+                .resolve(BRAND_VOICE_SKILL, actor)
+                .catch(() => undefined)
+              return supportVoiceSection(role_id, brandVoiceCard(resolved))
+            },
           })
     const baseStartRun =
       typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
@@ -6083,6 +6100,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       position: () => firstPositionOf(ws),
       // WP289（决策 318）：聊天窗里教的「以后都这样」落在客服那几条职责的规矩上；聊天 AI 每一轮照做
       roleRules: () => chatRoleRulesText(ws),
+      // WP333：聊天回复也带上品牌话术（这个品牌自己写过 `brand-voice` 才有；只有基础版 = 照旧）
+      brandVoice: async () => {
+        const position = firstPositionOf(ws)
+        if (position === undefined) return undefined
+        const resolved = await skills.registry
+          .resolve(BRAND_VOICE_SKILL, {
+            person_id: position.person_id,
+            workspace_id: ws,
+            role_id: position.role_id,
+          })
+          .catch(() => undefined)
+        return supportVoiceSection('dtc.live-chat', brandVoiceCard(resolved))?.text
+      },
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
