@@ -350,6 +350,9 @@ export function checkVersionedLayout(dir, version, targetOf = shortcutTarget) {
     const where = dirname(lnk)
     const found = existsSync(where) ? readdirSync(where).filter((n) => n.endsWith('.lnk')) : []
     lines.push(`（${where} 里的快捷方式：${found.join('、') || '没有'}）`)
+    // 开始菜单里我们的其它快捷方式（如迁移后多出来的 agentsws.lnk）也看一眼指哪
+    for (const n of found.filter((x) => /^agents/i.test(x) && join(where, x) !== lnk))
+      lines.push(`（其中 ${n} → ${shortcutTarget(join(where, n))}）`)
   }
   for (const [what, lnk] of Object.entries(shortcutPaths())) {
     const target = targetOf(lnk)
@@ -519,6 +522,7 @@ async function main() {
   // 1. 静默安装到带中文和空格的目录（模拟中文用户名 / 用户自己挑的目录）
   const local = process.env.LOCALAPPDATA ?? tmpdir()
   const dir = join(local, 'Programs', '智能体 工坊 测试')
+  step(`安装包：${Math.round(statSync(installer).size / 1e5) / 10} MB`)
   const t0 = Date.now()
   const exe = silentInstall(installer, dir)
   const foot = installFootprint(dir)
