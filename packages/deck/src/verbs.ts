@@ -254,6 +254,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP324
   connect_request: 'connect_request',
   setup_request: 'setup_request',
+  // WP321
+  geo_watch: 'geo_watch',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

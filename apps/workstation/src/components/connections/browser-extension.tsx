@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AdsActionsPanel } from '@/components/connections/ads-actions'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -217,6 +218,10 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
           ))}
         </ul>
       )}
+      {/* WP313：插件广告动作（默认不碰的开关、连没连、排着 / 在做的活）。没装配就整块不出 */}
+      <AdsActionsPanel
+        {...(props.assignment === undefined ? {} : { assignment: props.assignment })}
+      />
       {/* 安全承诺，按 36 §7 可见（不藏进 tooltip）。 */}
       <SafetyNote text={t('extension.local_only')} />
     </section>

@@ -175,6 +175,15 @@ export type ApprovalKind =
    * 保存后原任务自动接着做。payload = `SetupRequestPayload`。
    */
   | 'setup_request'
+  /**
+   * WP321（docs/99 §7 O2）：**GEO 关注设置卡**（「改东西」家族：通过 / 改 / 不要）。两种 `payload.form`：
+   * - `geo_watch_setup`：第一次（或改策略时）AI 按品牌档案给出的策略——追几条、各方向占多少、
+   *   带品牌名几条（决策 531：不预设）、候选 Prompt、竞品、关注的 AI 与每月大概多少积分；
+   *   批了 / 改了才落成这个品牌的关注设置，不要 = 先按兜底（追 5 条）。
+   * - `geo_watch_competitors`：回答里反复出现、还没在竞品名单里的品牌——批了加进竞品。
+   * payload = `GeoWatchCardPayload`。
+   */
+  | 'geo_watch'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

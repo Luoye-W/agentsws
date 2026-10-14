@@ -64,6 +64,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   // WP324（决策 690）：连接卡 / 配置卡（补上就自动接着做原任务）
   'connect_request',
   'setup_request',
+  // WP321：GEO 关注设置卡（批了 / 改了才落成关注设置）
+  'geo_watch',
 ])
 
 export function isKnownKind(kind: string): boolean {

@@ -75,6 +75,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   // WP324：连好 / 设好接着做（主按钮在卡身里：连接 / 保存）/ 先不连 / 稍后
   connect_request: ['approve', 'reject', 'snooze', 'open'],
   setup_request: ['approve', 'reject', 'snooze', 'open'],
+  // WP321：GEO 关注设置——通过 / 改（在卡上改了再批）/ 不要
+  geo_watch: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -110,6 +112,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   theme_purchase: { approve: '买下', reject: '先不买', snooze: '稍后' },
   connect_request: { approve: '接着做', reject: '先不连', snooze: '稍后' },
   setup_request: { approve: '保存并接着做', reject: '先不设', snooze: '稍后' },
+  geo_watch: { approve: '就这样', reject: '不要', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -159,6 +162,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   // WP324：连 / 设本身不动店里的东西；补完只是让原任务接着做
   connect_request: 'low',
   setup_request: 'low',
+  // WP321：只改本机的关注设置；Claude 那份每月积分在卡上写清
+  geo_watch: 'low',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -209,6 +214,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   theme_purchase: 1,
   connect_request: 1,
   setup_request: 1,
+  geo_watch: 2,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

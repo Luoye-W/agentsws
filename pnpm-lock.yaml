@@ -276,6 +276,9 @@ importers:
       '@agentsws/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../../packages/browser-action
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.3.3(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -330,6 +333,9 @@ importers:
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../../packages/brand-intake
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../../packages/browser-action
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
@@ -627,6 +633,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../browser-action
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -693,6 +702,15 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/browser-action:
+    devDependencies:
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
 
   packages/catalog:
     dependencies:
@@ -1512,6 +1530,9 @@ importers:
 
   packages/social-core:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../browser-action
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts

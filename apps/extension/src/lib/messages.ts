@@ -10,6 +10,7 @@
  * 于是「不开通配 CORS」与「插件能用」这两件事同时成立，靠的就是这一跳。
  */
 
+import type { ActionPlatform } from '@agentsws/browser-action'
 import type { ExtensionHello, ExtensionObservationInput } from './wire.js'
 
 export type ExtensionMessage =
@@ -29,6 +30,16 @@ export type ExtensionMessage =
   | { type: 'toggle-panel' }
   /** 页面上按了「体检并复制一行」，只是让 background 记一次 —— 不上行。 */
   | { type: 'noop' }
+  /* ── WP313：广告（只加）──────────────────────────────────────────── */
+  /** 设置页：两家后台连上没有、上次问活是什么时候、在做什么。 */
+  | { type: 'ads-status' }
+  /** 设置页：权限申请成功之后，把「看过风险告知，同意」记到本机服务（决策 562）。 */
+  | { type: 'ads-consent'; platform: ActionPlatform; text_version: string }
+  /** 设置页：马上问一次有没有活（不等定时）。 */
+  | { type: 'ads-poll' }
+  /** 广告后台页面顶上的横条：停止 / 确认提交 / 不提交。 */
+  | { type: 'ads-stop' }
+  | { type: 'ads-confirm'; answer: 'yes' | 'no' }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {
@@ -58,8 +69,21 @@ export type ObserveOutcome =
   /** 配对失效 / 别的错。 */
   | { kind: 'failed'; message: string }
 
+/** WP313：设置页上「广告」那一节要的状态。 */
+export interface AdsPanelStatus {
+  paired: boolean
+  connected: Record<ActionPlatform, boolean>
+  last_poll_at?: string | undefined
+  note?: string | undefined
+  needs_consent?: ActionPlatform[] | undefined
+  running?: { title: string } | undefined
+  last_result?: { title: string; outcome: string; message: string; at: string } | undefined
+}
+
 export type ExtensionResponse =
   | { type: 'status'; status: ExtensionStatus }
+  | { type: 'ads-status'; ads: AdsPanelStatus }
+  | { type: 'ads-consent'; ok: boolean; message: string; ads: AdsPanelStatus }
   | { type: 'observe'; outcome: ObserveOutcome }
   | { type: 'pair'; ok: boolean; message: string; status: ExtensionStatus }
   | { type: 'ack' }

@@ -33,7 +33,7 @@ import type {
   SerpQuery,
   SerpResult,
 } from '@agentsws/contracts'
-import { SEARCH_DATA_PROVIDERS, searchSourceByo } from '@agentsws/contracts'
+import { CLAUDE_GEO_MODEL, SEARCH_DATA_PROVIDERS, searchSourceByo } from '@agentsws/contracts'
 import {
   judgeAnswer,
   normalizeProbe,
@@ -267,6 +267,11 @@ export interface SearchDataService extends SearchDataPort {
   setChoice(choice: SearchDataRouteChoice): Promise<SearchDataSettingsView>
   setByo(input: { provider: SearchDataProvider; api_key?: string }): Promise<SearchDataSettingsView>
   clearByo(): Promise<{ cleared: boolean }>
+  /**
+   * WP321（决策 534）：自带 key 那档问 Claude 前，查一次服务商免费的模型清单——我们用的那个模型
+   * 不在清单里（或这次查不到）就跳过 Claude。官方那档由云上校验，这里当通过。
+   */
+  claudeModelCheck(): Promise<{ ok: boolean; reason?: string }>
   /** 「测试连接」：用填的（或已存的）key 打一次服务商最便宜的那个口。 */
   testByo(input: {
     provider?: SearchDataProvider
@@ -416,6 +421,19 @@ export function createSearchDataService(options: {
       return results.map((x) => ({ ...x, credits: 0 }))
     },
     settings: view,
+    async claudeModelCheck() {
+      if (route() !== 'byo') return { ok: true }
+      const { adapter, key } = byoAdapter()
+      if (adapter.models === undefined) return { ok: true }
+      try {
+        const list = await adapter.models('claude', key, doFetch)
+        return list.includes(CLAUDE_GEO_MODEL)
+          ? { ok: true }
+          : { ok: false, reason: '清单里没有我们用的那个 Claude 模型' }
+      } catch {
+        return { ok: false, reason: '这次查不到模型清单' }
+      }
+    },
     async setChoice(choice) {
       store.setChoice(choice)
       return view()

@@ -21,7 +21,7 @@ step "tsc（增量）" npx tsc -b
 changed_all="$( { git diff --name-only "$base"...HEAD; git diff --name-only; } | sort -u )"
 if echo "$changed_all" | grep -qx 'pnpm-lock.yaml'; then
   for d in $(echo "$changed_all" | grep -E '^(packages|apps|profiles)/[^/]+/package\.json$' | xargs -n1 dirname 2>/dev/null); do
-    [ -f "$d/tsconfig.json" ] && step "tsc（依赖变了，全量查 $d）" npx tsc -p "$d" --noEmit
+    [ -f "$d/tsconfig.json" ] && step "tsc（依赖变了，全量查 ${d}）" npx tsc -p "$d" --noEmit
   done
 fi
 
