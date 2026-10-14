@@ -139,6 +139,8 @@ export const HANDLERS = {
   weeklyReview: 'owner.weekly_review',
   /** WP224（docs/91 §7 #2）：每天夜里记一行两条止损线的对照（只记账，不改止损）。 */
   adsLineCompare: 'ads.line_compare',
+  /** WP328（docs/102）：Reddit 每日巡查（每小时看一眼到点没有；默认一天一次、周五 17:00 收尾）。 */
+  redditPatrol: 'social.reddit_patrol',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -1038,6 +1040,20 @@ export function registerPrMonitor(scheduler: Scheduler, deps: PrMonitorDeps): vo
   scheduler.register(HANDLERS.prMonitor, () => deps.sweep())
 }
 
+/**
+ * WP328：Reddit 巡查一小时一拍——到没到点由巡查服务自己按设置判（一天一次起步、用户可改、周五 17:00 收尾），
+ * 这样改频率不用改定时任务；没到点的那一拍什么都不读。
+ */
+export const REDDIT_PATROL_INTERVAL_MS = 60 * 60_000
+
+export interface RedditPatrolDeps {
+  tick(): Promise<{ ran: boolean; run_id?: string; final?: boolean; skipped?: string }>
+}
+
+export function registerRedditPatrol(scheduler: Scheduler, deps: RedditPatrolDeps): void {
+  scheduler.register(HANDLERS.redditPatrol, () => deps.tick())
+}
+
 /* ------------------------------------------------------------------ */
 /* ⑲ WP154：内容与搜索——每天早上读一遍 Search Console、每周一小结         */
 /* ------------------------------------------------------------------ */
@@ -1275,6 +1291,8 @@ export interface SchedulePlanOptions {
     weeklyReview?: boolean
     /** WP224：有人持有投放四条之一才建两条止损线对照那一条。 */
     adsLineCompare?: boolean
+    /** WP328：有人持有社媒「Reddit」那条职责才建每日巡查那一条。 */
+    redditPatrol?: boolean
   }
 }
 
@@ -1569,6 +1587,21 @@ export async function ensureSystemTasks(
         title: '每天夜里记一行：两条止损线各会不会停（只记账）',
         handler: HANDLERS.adsLineCompare,
         trigger: { kind: 'cron', expr: ADS_LINE_COMPARE_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * WP328：Reddit 巡查。一小时一拍、到点才读；**错过了不补跑这一拍**（`skip`）——关机期间错过的，
+   * 开机后下一拍按「隔了多久」只补一次，不会连读好几轮。
+   */
+  if (options.has.redditPatrol === true) {
+    await add(
+      'sched_reddit_patrol',
+      systemTask(base, {
+        title: '巡查 Reddit（默认每天一次，周五 17:00 收尾）',
+        handler: HANDLERS.redditPatrol,
+        trigger: { kind: 'interval', every_ms: REDDIT_PATROL_INTERVAL_MS },
         misfire_policy: 'skip',
       }),
     )

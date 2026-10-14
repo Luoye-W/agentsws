@@ -119,6 +119,8 @@ export interface RedditWatchAssembly {
   sessionReady(): boolean | undefined
   /** 到期的活收掉（定时一拍与看视图时都调）。 */
   sweep(): void
+  /** Reddit 号的节奏（WP329 写也记在这一本上：同一个号一次一件）。 */
+  readonly pace: Pace
 }
 
 /** 插件多久没来问就算「没开」。 */
@@ -735,5 +737,6 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       }),
     sessionReady,
     sweep,
+    pace,
   }
 }
