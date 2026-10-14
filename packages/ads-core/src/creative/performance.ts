@@ -20,45 +20,8 @@ import type {
   AdCreativeWeakAd,
   AdPerformanceRow,
 } from '@agentsws/contracts'
-
-/** 解析一段 CSV / TSV（双引号转义、引号里可以有换行）。自动认分隔符。 */
-export function parseDelimited(text: string): string[][] {
-  const src = text.replace(/^﻿/, '')
-  const firstLine = src.split(/\r?\n/, 1)[0] ?? ''
-  const sep =
-    (firstLine.match(/\t/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? '\t' : ','
-  const rows: string[][] = []
-  let row: string[] = []
-  let cell = ''
-  let quoted = false
-  for (let i = 0; i < src.length; i += 1) {
-    const ch = src[i] as string
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') {
-        cell += '"'
-        i += 1
-      } else if (ch === '"') quoted = false
-      else cell += ch
-      continue
-    }
-    if (ch === '"' && cell === '') quoted = true
-    else if (ch === sep) {
-      row.push(cell)
-      cell = ''
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && src[i + 1] === '\n') i += 1
-      row.push(cell)
-      rows.push(row)
-      row = []
-      cell = ''
-    } else cell += ch
-  }
-  if (cell !== '' || row.length > 0) {
-    row.push(cell)
-    rows.push(row)
-  }
-  return rows.filter((r) => r.some((c) => c.trim() !== ''))
-}
+import { parseDelimited } from '../sheets/csv.js'
+import { type ParsedAdsExport, parseAdsExport, parseExportNumber } from '../sheets/parse.js'
 
 /** 一格对应的列名（两家后台的中英文叫法）。小写、去空白后比。 */
 const COLUMNS = {
@@ -99,16 +62,7 @@ const key = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ')
 const GOOGLE_HEADLINE = /^(?:headline|标题)\s*(\d{1,2})$/
 const GOOGLE_DESCRIPTION = /^(?:description|说明|描述|广告内容描述)\s*(\d)$/
 
-function numberOf(raw: string | undefined): number | undefined {
-  if (raw === undefined) return undefined
-  const s = raw
-    .trim()
-    .replace(/[,\s¥$€£%]/g, '')
-    .replace(/^(?:usd|cny|rmb)/i, '')
-  if (s === '' || s === '--' || s === '-' || s === ' --') return undefined
-  const n = Number(s)
-  return Number.isFinite(n) ? n : undefined
-}
+const numberOf = parseExportNumber
 
 export interface ParsePerformanceResult {
   rows: AdPerformanceRow[]
@@ -121,13 +75,9 @@ export interface ParsePerformanceResult {
  * 表头不一定在第一行：Google 后台下载的报表前两行是报表名与日期范围。
  * 取**前 10 行里第一个认得出「广告系列」那一列的**当表头。
  *
- * TODO（WP314）：WP314 的导出解析（含 Meta 的 `< >` 前缀、Editor 列名对照）合并后，
- * 这里改成先走它、认不出再回落到这一份，`AdPerformanceRow` 的形状不变。
+ * 这是**兜底那一份**（认中文列名）。先走的是 WP314 的 `parseAdsExport`，见 {@link parsePerformanceExport}。
  */
-export function parsePerformanceExport(
-  platform: AdCreativePlatform,
-  text: string,
-): ParsePerformanceResult {
+function parseWithLocalColumns(platform: AdCreativePlatform, text: string): ParsePerformanceResult {
   const table = parseDelimited(text)
   const notes: string[] = []
   const headerAt = table
@@ -315,4 +265,77 @@ export function pickWeakAds(
       metric === 'cpa' ? (b.value ?? 0) - (a.value ?? 0) : (a.value ?? 0) - (b.value ?? 0),
     )
   return [...weak, ...out.filter((w) => w.verdict === 'thin')]
+}
+
+/** Google「Headline 3」/ Meta「Title」这类文案列（WP314 只认到 Headline 1，其余按原表头取）。 */
+const HEADLINE_COL = /^(?:headline\s*\d{1,2}|title)$/i
+const DESCRIPTION_COL = /^(?:description\s*\d|body)$/i
+
+/** WP314 的解析结果 → 对齐过的行。认不出广告系列 / 广告组两列回 `undefined`（交给兜底那一份）。 */
+function fromAdsExport(
+  platform: AdCreativePlatform,
+  parsed: ParsedAdsExport,
+): ParsePerformanceResult | undefined {
+  if (!parsed.fields.includes('campaign') || !parsed.fields.includes('ad_group')) return undefined
+  const notes: string[] = []
+  const headlineCols = parsed.headers.filter((h) => HEADLINE_COL.test(h.trim()))
+  const descriptionCols = parsed.headers.filter((h) => DESCRIPTION_COL.test(h.trim()))
+  if (!parsed.fields.includes('impressions'))
+    notes.push('没有「展示次数」那一列，判不了样本够不够。')
+  if (!parsed.fields.includes('clicks')) notes.push('没有「点击」那一列，点击率算不出来。')
+  if (headlineCols.length === 0)
+    notes.push('没有标题那几列：能挑出表现差的，但写新文案时看不到原来写的是什么。')
+  const rows: AdPerformanceRow[] = []
+  let skipped = parsed.skipped.total_rows
+  parsed.rows.forEach((r, n) => {
+    const v = r.values
+    const campaign = v.campaign?.trim() ?? ''
+    if (campaign === '' || /^--/.test(campaign)) {
+      skipped += 1
+      return
+    }
+    const ad_group = v.ad_group?.trim() ?? ''
+    const id = v.ad_id ?? v.ad
+    const texts = (cols: string[]) =>
+      cols.map((h) => (r.raw[h] ?? '').trim()).filter((t) => t !== '' && t !== '--')
+    const conversions = numberOf(v.conversions)
+    const cost = numberOf(v.cost)
+    const conversion_value = numberOf(v.conversion_value)
+    rows.push({
+      ad_id: id === undefined || id === '' ? `${campaign} / ${ad_group} / #${n + 1}` : id,
+      platform,
+      campaign,
+      ad_group,
+      ...(v.campaign_id === undefined ? {} : { campaign_id: v.campaign_id }),
+      ...(v.ad_group_id === undefined ? {} : { ad_group_id: v.ad_group_id }),
+      headlines: texts(headlineCols),
+      descriptions: texts(descriptionCols),
+      ...(v.final_url === undefined || v.final_url === '--' ? {} : { final_url: v.final_url }),
+      impressions: numberOf(v.impressions) ?? 0,
+      clicks: numberOf(v.clicks) ?? 0,
+      ...(conversions === undefined ? {} : { conversions }),
+      ...(cost === undefined ? {} : { cost }),
+      ...(conversion_value === undefined ? {} : { conversion_value }),
+    })
+  })
+  if (skipped > 0) notes.push(`跳过 ${skipped} 行（总计行或没写广告系列的行）。`)
+  if (rows.length === 0) notes.push('表头认出来了，但一行广告都没有。')
+  return { rows, notes }
+}
+
+/**
+ * 导出表 → 对齐过的一行一行。
+ *
+ * **先走 WP314 的 `parseAdsExport`**（两家英文导出、Meta 的 `< >` 前缀、总计行），
+ * 认不出广告系列 / 广告组（比如中文界面导出的表）再退回本文件的那一份。
+ * 字节进来的先用 WP314 的 `decodeExportBytes` 解成文字（UTF-16 的 Excel CSV 也认）。
+ */
+export function parsePerformanceExport(
+  platform: AdCreativePlatform,
+  text: string,
+): ParsePerformanceResult {
+  return (
+    fromAdsExport(platform, parseAdsExport(text, { platform })) ??
+    parseWithLocalColumns(platform, text)
+  )
 }

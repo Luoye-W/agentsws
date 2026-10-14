@@ -4,11 +4,16 @@ import { describe, expect, it } from 'vitest'
 import {
   AD_COPY_RULES,
   adCopyLength,
+  bytesToBase64,
   type CopyComplete,
   checkExperiment,
+  creativeUploadOps,
+  creativeUploadSheet,
+  decodeExportBytes,
   experimentContext,
+  experimentFromMemory,
   experimentMemoryText,
-  minimalUploadSheet,
+  GOOGLE_RSA_LIMITS,
   nextExperimentRound,
   parseCopyCandidates,
   parseDelimited,
@@ -249,6 +254,26 @@ describe('导出表 → 挑出表现差的', () => {
     expect(weak.find((w) => w.ad_id === '101')).toBeUndefined()
   })
 
+  it('英文导出先走 WP314 的 parseAdsExport：Meta 的 < > 前缀去掉、编号留着', () => {
+    const { rows } = parsePerformanceExport(
+      'meta',
+      [
+        'Campaign Name\tCampaign ID\tAd Set Name\tAd Set ID\tAd Name\tTitle\tBody\tImpressions\tLink clicks\tAmount spent (USD)',
+        'C\t120000001\tS\t230000001\tAd 1\t< > +50% longer\tSnaps on.\t2000\t30\t12.5',
+      ].join('\n'),
+    )
+    expect(rows[0]).toMatchObject({
+      ad_id: 'Ad 1',
+      campaign_id: '120000001',
+      ad_group_id: '230000001',
+      headlines: ['+50% longer'],
+      descriptions: ['Snaps on.'],
+      impressions: 2000,
+      clicks: 30,
+      cost: 12.5,
+    })
+  })
+
   it('Meta 中文导出：标题 / 正文 / 花费金额；认不出的表说认不出', () => {
     const meta = parsePerformanceExport(
       'meta',
@@ -275,38 +300,77 @@ const rewrite = (headlines: string[]): AdCreativeRewrite => ({
   notes: [],
 })
 
-describe('上传表（最小版，WP314 对接口）', () => {
-  it('Google CSV：新建一律 Paused；15 + 4 列；引号转义；带 BOM', () => {
-    const sheet = minimalUploadSheet({
+describe('上传表：走 WP314 的 buildAdUploadBundle（决策 626）', () => {
+  it('Google：一条旧广告 → 一条新的自适应搜索广告；新建一律 Paused；带指纹', () => {
+    const sheet = creativeUploadSheet({
       platform: 'google',
-      date: '2026-10-14',
       ads: [
         {
           campaign: 'PB',
           ad_group: 'G',
+          final_url: 'https://s.example/a',
           headlines: ['A, "b"', 'C', 'D'],
           descriptions: ['E', 'F'],
         },
       ],
     })
-    const [head, row] = sheet.text.replace(/^﻿/, '').split('\r\n')
-    expect(head?.split(',')).toHaveLength(6 + 15 + 4)
-    expect(row).toContain('Paused')
-    expect(row).toContain('"A, ""b"""')
-    expect(sheet.filename).toBe('google-rsa-2026-10-14.csv')
-    expect(sheet.notes.join(' ')).toContain('没有最终到达网址')
+    expect(sheet.ok).toBe(true)
+    expect(sheet.ads).toBe(1)
+    expect(sheet.fingerprint).toMatch(/^[0-9a-f]{64}$/)
+    const ads = sheet.files.find((f) => f.text?.includes('Headline 1'))
+    expect(ads?.text).toContain('Paused')
+    expect(ads?.text).toContain('"A, ""b"""')
   })
 
-  it('Meta 文字：一条标题配一段正文，PAUSED', () => {
-    const sheet = minimalUploadSheet({
-      platform: 'meta',
-      date: '2026-10-14',
-      ads: [{ campaign: 'C', ad_group: 'S', headlines: ['H1', 'H2'], descriptions: ['B1'] }],
+  it('落地页没写全：WP314 拦下，不出表，问题照实给人', () => {
+    const sheet = creativeUploadSheet({
+      platform: 'google',
+      ads: [
+        { campaign: 'PB', ad_group: 'G', headlines: ['A', 'B', 'C'], descriptions: ['D', 'E'] },
+      ],
     })
-    const lines = sheet.text.split('\n').filter((l) => l !== '')
-    expect(lines).toHaveLength(3)
-    expect(lines[2]?.split('\t')).toEqual(['C', 'S', 'S · 新文案 2', 'PAUSED', 'H2', 'B1', ''])
-    expect(sheet.rows).toBe(2)
+    expect(sheet.ok).toBe(false)
+    expect(sheet.files).toEqual([])
+    expect(sheet.problems.join(' ')).toContain('https://')
+  })
+
+  it('Meta：一条标题配一段正文成几条新广告；缺主页 / 图片就让人补，不编', () => {
+    const input = {
+      platform: 'meta' as const,
+      ads: [
+        {
+          campaign: 'C',
+          ad_group: 'S',
+          campaign_id: '120000001',
+          ad_group_id: '230000001',
+          final_url: 'https://s.example/m',
+          headlines: ['H1', 'H2'],
+          descriptions: ['B1'],
+        },
+      ],
+    }
+    const ops = creativeUploadOps(input)
+    expect(ops.map((o) => [o.meta?.title, o.meta?.body, o.meta?.ad_name])).toEqual([
+      ['H1', 'B1', 'S · 新文案 1'],
+      ['H2', 'B1', 'S · 新文案 2'],
+    ])
+    expect(creativeUploadSheet(input).ok).toBe(false)
+    const ok = creativeUploadSheet({
+      ...input,
+      meta: { page_id: '1234567890', image_hash: 'a'.repeat(32) },
+    })
+    expect(ok.problems).toEqual([])
+    expect(ok.ok).toBe(true)
+    expect(ok.files[0]?.base64).toBeDefined()
+    expect(ok.files[0]?.paste_text).toContain('PAUSED')
+  })
+
+  it('字数常量只有一份（WP314 的 GOOGLE_RSA_LIMITS）；字节导出表走 decodeExportBytes', () => {
+    expect(AD_COPY_RULES.google.headline.max_chars).toBe(GOOGLE_RSA_LIMITS.headlines.chars)
+    expect(AD_COPY_RULES.google.description.max_items).toBe(GOOGLE_RSA_LIMITS.descriptions.max)
+    expect(bytesToBase64(new Uint8Array([0x4d, 0x61, 0x6e, 0x4d]))).toBe('TWFuTQ==')
+    const utf16 = new Uint8Array([0xff, 0xfe, ...[...'A,B'].flatMap((c) => [c.charCodeAt(0), 0])])
+    expect(decodeExportBytes(utf16)).toBe('A,B')
   })
 })
 
@@ -371,10 +435,20 @@ describe('实验记忆：假设 / 改了什么 / 结果', () => {
     expect(nextExperimentRound([entry(1), entry(7)])).toBe(8)
   })
 
-  it('写进岗位记忆那一条：标题带品牌，正文三格', () => {
-    const m = experimentMemoryText({ ...entry(2), platform: 'google' }, '磁吸小铺')
-    expect(m.heading).toContain('磁吸小铺')
+  it('写进岗位记忆那一条（真源）：标题、正文三格，读得回来', () => {
+    const m = experimentMemoryText({ ...entry(2), platform: 'google' })
     expect(m.heading).toContain('第 2 轮')
     expect(m.text).toBe('假设：假设 2\n改了什么：改了 2\n结果：还没有结果\n平台：Google')
+    // 反方向：记忆里那一条就是真源，读回来是同一笔
+    expect(experimentFromMemory({ id: 'm1', heading: m.heading, body: m.text })).toEqual({
+      id: 'm1',
+      memory_id: 'm1',
+      round: 2,
+      hypothesis: '假设 2',
+      change: '改了 2',
+      platform: 'google',
+    })
+    // 人在面板里改成了别的东西：不再当实验读
+    expect(experimentFromMemory({ id: 'm2', heading: '别的事', body: m.text })).toBeUndefined()
   })
 })

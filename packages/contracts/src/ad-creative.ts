@@ -41,6 +41,9 @@ export interface AdPerformanceRow {
   platform: AdCreativePlatform
   campaign: string
   ad_group: string
+  /** 导出表里带了编号就留着（Meta 在已有广告组下新建广告要它）。 */
+  campaign_id?: string
+  ad_group_id?: string
   headlines: string[]
   descriptions: string[]
   final_url?: string
@@ -160,15 +163,37 @@ export interface AdExperimentEntry {
   updated_at?: Iso8601
 }
 
-/** 上传表（可下载的那一份）。 */
-export interface AdUploadSheet {
-  /** `google_csv`：Google 批量上传 CSV；`meta_tsv`：Meta 导入可粘贴文字（制表符分隔）。 */
-  format: 'google_csv' | 'meta_tsv'
-  filename: string
+/** 上传表里的一个文件（给人下载的那一份；由 WP314 的 `buildAdUploadBundle` 生成）。 */
+export interface AdUploadSheetFile {
+  /** 建议文件名（ASCII）。 */
+  name: string
   content_type: string
-  text: string
-  /** 几行广告。 */
-  rows: number
-  /** 一句提醒（新建一律「已暂停」、列名以 WP314 为准之类）。 */
-  notes: string[]
+  /** 文字文件（Google CSV）的正文。 */
+  text?: string
+  /** 二进制文件（Meta 的 .xlsx）的 base64。 */
+  base64?: string
+  /** Meta：同一张表的制表符文字，可直接粘进「批量导入广告 → 复制粘贴」框。 */
+  paste_text?: string
+  /** 在后台哪里上传，一句白话。 */
+  upload_from: string
+}
+
+/**
+ * 一轮新文案的上传表（WP314 生成器的产物，投影成给人下载的样子）。
+ *
+ * `ok` 为假 = 有阻断问题（Meta 缺主页编号 / 图片、落地页没写全…），`files` 为空，
+ * `problems` 里是那几句人话。新建的一律「已暂停」（决策 553，由生成器写死并复查）。
+ */
+export interface AdUploadSheet {
+  platform: AdCreativePlatform
+  ok: boolean
+  files: AdUploadSheetFile[]
+  /** 一句白话摘要（「新建 3 条广告，都先暂停」）。 */
+  sentence: string
+  /** 表的指纹（SHA-256）。以后插件执行时带着它，表被改过就拒绝上传。 */
+  fingerprint: string
+  /** 阻断与提醒，人话。 */
+  problems: string[]
+  /** 几条新广告。 */
+  ads: number
 }

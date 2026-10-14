@@ -6,8 +6,8 @@
  *
  * 1. **字数按平台的口径数**。Google 的字数上限里，中日韩这类双宽字算 2 个
  *    （Google Ads 帮助「广告字数上限」那一页写的）；按「一个字算一个」数的话，
- *    15 个汉字的标题本地说没事，传上去被拒。Meta 按字符数。上限本身读
- *    `spec.ts` 那张表（全仓唯一），这里不另写数。
+ *    15 个汉字的标题本地说没事，传上去被拒。Meta 按字符数。上限与数法读
+ *    WP314 上传表那一份（`GOOGLE_RSA_LIMITS` / `META_COPY_LIMITS` / `googleTextLength`），这里不另写数。
  * 2. **不许为过审改写敏感词**。`免 费送`、`f.r.e.e`、`史-上-最`、全角字母——
  *    这些拆字、换形的写法在这里归一之后照样命中，而且单独标成「绕过」：
  *    命中了就换个说法（换卖点、换角度），不是换个写法。
@@ -23,7 +23,7 @@ import type {
   AdCreativePlatform,
 } from '@agentsws/contracts'
 import { AD_COPY_FORBIDDEN } from '@agentsws/core'
-import { creativeSpec } from '../spec.js'
+import { GOOGLE_RSA_LIMITS, googleTextLength, META_COPY_LIMITS } from '../sheets/validate.js'
 import { checkAdCopy } from '../variants.js'
 
 /** 一个平台一格文案的规矩。 */
@@ -38,44 +38,38 @@ export interface AdCopyFieldRule {
   zh: string
 }
 
-const google = creativeSpec('google', 'responsive_search')
-const meta = creativeSpec('meta', 'feed_square')
-
 /**
- * 两个平台、两格（标题 / 描述）的规矩。字数读 `spec.ts`：Google 自适应搜索广告
- * 标题 30、描述 90；Meta 信息流标题 40、正文 125（正文过了 125 会被折叠）。
+ * 两个平台、两格（标题 / 描述）的规矩。**数只有一份**：Google 读 WP314 的
+ * `GOOGLE_RSA_LIMITS`（标题 3–15 条 × 30、描述 2–4 条 × 90），Meta 字数读
+ * `META_COPY_LIMITS`（标题 40、正文 125）。Meta 的条数（每轮最多 5 个标题、5 段正文，
+ * 每对配成一条新广告）是流水线自己的，上传表那边一条广告只有一个标题一段正文。
  */
 export const AD_COPY_RULES: Readonly<
   Record<AdCreativePlatform, Readonly<Record<AdCopyField, AdCopyFieldRule>>>
 > = {
   google: {
     headline: {
-      max_items: 15,
-      min_items: 3,
-      max_chars: google?.max_headline_chars ?? 30,
+      max_items: GOOGLE_RSA_LIMITS.headlines.max,
+      min_items: GOOGLE_RSA_LIMITS.headlines.min,
+      max_chars: GOOGLE_RSA_LIMITS.headlines.chars,
       zh: '标题',
     },
     description: {
-      max_items: 4,
-      min_items: 2,
-      max_chars: google?.max_text_chars ?? 90,
+      max_items: GOOGLE_RSA_LIMITS.descriptions.max,
+      min_items: GOOGLE_RSA_LIMITS.descriptions.min,
+      max_chars: GOOGLE_RSA_LIMITS.descriptions.chars,
       zh: '描述',
     },
   },
   meta: {
-    headline: { max_items: 5, min_items: 1, max_chars: meta?.max_headline_chars ?? 40, zh: '标题' },
-    description: { max_items: 5, min_items: 1, max_chars: meta?.max_text_chars ?? 125, zh: '正文' },
+    headline: { max_items: 5, min_items: 1, max_chars: META_COPY_LIMITS.title, zh: '标题' },
+    description: { max_items: 5, min_items: 1, max_chars: META_COPY_LIMITS.body, zh: '正文' },
   },
 }
 
-/** 双宽字（中日韩、全角）。Google 的字数上限里它们算 2 个。 */
-const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/u
-
-/** 按平台口径数字数：Google 双宽字算 2；Meta 一个字符算 1。 */
+/** 按平台口径数字数：Google 用 WP314 的 `googleTextLength`（双宽字算 2）；Meta 一个字符算 1。 */
 export function adCopyLength(platform: AdCreativePlatform, text: string): number {
-  let n = 0
-  for (const ch of text) n += platform === 'google' && WIDE.test(ch) ? 2 : 1
-  return n
+  return platform === 'google' ? googleTextLength(text) : [...text].length
 }
 
 /** 常见的「把字母写成数字 / 符号」。只用在归一化里，不改原文。 */

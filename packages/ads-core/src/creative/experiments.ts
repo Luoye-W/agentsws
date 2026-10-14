@@ -35,27 +35,65 @@ export function checkExperiment(input: AdExperimentInput): string[] {
 
 const LABEL = { hypothesis: '假设', change: '改了什么', result: '结果' } as const
 
+/** 记忆条目标题的前缀：靠它从岗位记忆里认出哪几条是广告实验。 */
+export const AD_EXPERIMENT_HEADING = '广告实验'
+
 /**
- * 一笔 → 投放岗记忆里那一条（标题 + 正文）。
- *
- * 标题带品牌名：岗位记忆不分品牌（docs/54 §3），同一个人管两个品牌时，
- * 记忆面板上要一眼分得开是哪家的实验。
+ * 一笔 → 投放岗记忆里那一条（标题 + 正文）。**这一条就是真源**（WP320 起岗位记忆
+ * 落盘、按品牌分），人在记忆面板里改它，流水线下一轮读到的就是改后的。
  */
 export function experimentMemoryText(
   entry: Pick<AdExperimentEntry, 'round' | 'hypothesis' | 'change' | 'result' | 'platform'>,
-  brand: string,
 ): { heading: string; text: string } {
   const short = [...entry.hypothesis.trim()].slice(0, 16).join('')
   return {
-    heading: `广告实验 · ${brand} · 第 ${entry.round} 轮：${short}`,
+    heading: `${AD_EXPERIMENT_HEADING} · 第 ${entry.round} 轮：${short}`,
     text: [
       `假设：${entry.hypothesis.trim()}`,
       `改了什么：${entry.change.trim()}`,
-      `结果：${entry.result?.trim() || '还没有结果'}`,
+      `结果：${entry.result?.trim() || NO_RESULT}`,
       ...(entry.platform === undefined
         ? []
         : [`平台：${entry.platform === 'google' ? 'Google' : 'Meta'}`]),
     ].join('\n'),
+  }
+}
+
+const NO_RESULT = '还没有结果'
+
+/**
+ * 岗位记忆里的一条 → 一笔实验（{@link experimentMemoryText} 的反方向）。
+ *
+ * 认不出（标题不是「广告实验」开头、或假设 / 改了什么缺了）回 `undefined`——
+ * 人在面板里把它改成了别的东西，就不再当实验读。
+ */
+export function experimentFromMemory(memory: {
+  id: string
+  heading?: string
+  body: string
+}): Omit<AdExperimentEntry, 'at'> | undefined {
+  const heading = memory.heading ?? ''
+  if (!heading.startsWith(AD_EXPERIMENT_HEADING)) return undefined
+  const line = (label: string): string | undefined => {
+    const hit = memory.body.split('\n').find((l) => l.startsWith(`${label}：`))
+    const v = hit?.slice(label.length + 1).trim()
+    return v === undefined || v === '' ? undefined : v
+  }
+  const hypothesis = line('假设')
+  const change = line('改了什么')
+  if (hypothesis === undefined || change === undefined) return undefined
+  const result = line('结果')
+  const platform = line('平台')
+  const round = Number(/第\s*(\d+)\s*轮/.exec(heading)?.[1] ?? '0')
+  return {
+    id: memory.id,
+    memory_id: memory.id,
+    round,
+    hypothesis,
+    change,
+    ...(result === undefined || result === NO_RESULT ? {} : { result }),
+    ...(platform === 'Google' ? { platform: 'google' as const } : {}),
+    ...(platform === 'Meta' ? { platform: 'meta' as const } : {}),
   }
 }
 
