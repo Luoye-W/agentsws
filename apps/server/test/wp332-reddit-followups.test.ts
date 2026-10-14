@@ -19,6 +19,8 @@ import {
 import { describe, expect, it } from 'vitest'
 import { memoryEvidenceStore } from '../src/ads-actions/evidence-store.js'
 import { createAdsActionsService } from '../src/ads-actions/service.js'
+import { createPrStore } from '../src/pr.js'
+import { createPrService } from '../src/pr-service.js'
 import { redditParentLinker } from '../src/reddit-write/parent-link.js'
 import {
   createRedditWriteService,
@@ -94,7 +96,10 @@ async function sendAndEnd(
 
 describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 762）', () => {
   for (const [outcome, message] of [
-    ['handover', '等了 30 分钟没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。'],
+    [
+      'handover',
+      '等了 30 分钟没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。',
+    ],
     ['stopped', '你点了停止，已停下。'],
     ['handover', 'Chrome 里的 Reddit 没登录（或登录掉了）。'],
   ] as const)
@@ -256,7 +261,10 @@ describe('WP332 公关在别人帖子下回一条评论：带上那条评论的�
     const m = make()
     const { parent_permalink: _drop, ...old } = post
     const r = await applyExternalPost(change, { writes: m.svc, post: () => old })
-    expect(r).toMatchObject({ status: 'failed', error: { message: expect.stringContaining('链接') } })
+    expect(r).toMatchObject({
+      status: 'failed',
+      error: { message: expect.stringContaining('链接') },
+    })
     expect((await m.actions.next(['reddit'], 0)).job).toBeUndefined()
   })
 })
@@ -281,7 +289,9 @@ describe('WP332 找被回那条评论的链接', () => {
     expect(
       await redditParentLinker({
         ...none,
-        watchEntries: () => [entry({ url: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/' })],
+        watchEntries: () => [
+          entry({ url: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/' }),
+        ],
       })(ask),
     ).toEqual({ ok: true, permalink: '/r/smartglasses/comments/p9/fog/k7/' })
     expect(
@@ -351,5 +361,114 @@ describe('WP332 找被回那条评论的链接', () => {
         readComments: async () => ({ ok: false, message: '两路都没取到' }),
       })(ask),
     ).toMatchObject({ ok: false, message: expect.stringContaining('两路都没取到') })
+  })
+})
+
+describe('WP332 公关出卡前补齐链接；补不到不出卡', () => {
+  function prMake(link?: (fullname: string) => string | undefined) {
+    const store = createPrStore({ workspace_id: WS })
+    const staged: { after: Record<string, unknown> }[] = []
+    const svc = createPrService({
+      workspace_id: WS,
+      store,
+      clock: { now: () => '2026-10-15T09:00:00.000Z' },
+      approvals: {} as never,
+      ledger: {
+        stage: async (input) => {
+          staged.push(input as never)
+          return {
+            ok: true,
+            change: { id: 'ch_1' },
+            approval: { id: 'ap_1', automation: { level_at_creation: 'L1' } },
+          } as never
+        },
+        list: async () => [],
+      },
+      effectiveConfig: () => {
+        throw new Error('no config')
+      },
+      appendEvent: () => {},
+      random: () => 0.5,
+      holdersOf: () => [],
+      owner: async () => undefined,
+      // 这里只看链接那一道：版规给一份放行的（真版规怎么判不是本单的事）
+      policyOf: ({ venue }) => ({
+        name: venue,
+        no_self_promotion: false,
+        flair_required: false,
+        raw_rules: [],
+        observed_at: '2026-10-15T00:00:00.000Z',
+      }),
+      ...(link === undefined
+        ? {}
+        : {
+            redditParent: async ({ fullname }) => {
+              const p = link(fullname)
+              return p === undefined
+                ? { ok: false as const, message: '巡查、社群线程、提及里都没有这条评论的链接' }
+                : { ok: true as const, permalink: p }
+            },
+          }),
+    })
+    return { svc, store, staged }
+  }
+  const actor = {
+    workspace_id: WS,
+    person_id: 'p_1',
+    assignment_id: 'as_1',
+    role_id: 'pr.reddit',
+  } as never
+  const input = {
+    platform: 'reddit',
+    venue: 'r/smartglasses',
+    kind: 'comment' as const,
+    body: 'We have an anti-fog insert for that.',
+    parent_external_id: 't1_k7',
+  }
+
+  it('从来源补到链接 → 出卡，卡上带被回那条的链接；帖子记下链接（批了插件按它找回复框）', async () => {
+    const m = prMake(() => '/r/smartglasses/comments/p9/fog/k7/')
+    const out = await m.svc.port.proposeExternalPost(actor, input)
+    expect(out.staged).toBe(true)
+    expect(m.staged[0]?.after).toMatchObject({
+      parent_external_id: 't1_k7',
+      parent_permalink: '/r/smartglasses/comments/p9/fog/k7/',
+      parent_url: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/',
+    })
+    expect(m.store.post(out.post_id)?.parent_permalink).toBe('/r/smartglasses/comments/p9/fog/k7/')
+  })
+
+  it('补不到 → 不出卡、照实说；稿子留着', async () => {
+    const m = prMake(() => undefined)
+    const out = await m.svc.port.proposeExternalPost(actor, input)
+    expect(out.staged).toBe(false)
+    expect(out.message).toContain('找不到被回那条评论的链接')
+    expect(m.staged).toEqual([])
+    expect(m.store.post(out.post_id)).toMatchObject({
+      status: 'draft',
+      parent_external_id: 't1_k7',
+    })
+  })
+
+  it('没装找链接的（只认调用方给的）：给了就出卡，没给不出', async () => {
+    const m = prMake()
+    const bad = await m.svc.port.proposeExternalPost(actor, input)
+    expect(bad.staged).toBe(false)
+    const good = await m.svc.port.proposeExternalPost(actor, {
+      ...input,
+      parent_permalink: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/',
+    })
+    expect(good.staged).toBe(true)
+  })
+
+  it('回帖子（t3_）、发新帖、别的平台：不要这条链接', async () => {
+    const m = prMake(() => undefined)
+    expect(
+      (await m.svc.port.proposeExternalPost(actor, { ...input, parent_external_id: 't3_p9' }))
+        .staged,
+    ).toBe(true)
+    expect(
+      (await m.svc.port.proposeExternalPost(actor, { ...input, platform: 'quora' })).staged,
+    ).toBe(true)
   })
 })
