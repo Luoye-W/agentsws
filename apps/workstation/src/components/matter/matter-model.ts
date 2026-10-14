@@ -133,7 +133,10 @@ export function buildItems(
     else if (e.blocked !== undefined)
       item =
         !ctx.closed && !movedOnAfter(timeline, i)
-          ? { kind: 'blocked', key, event: e }
+          ? // WP324：出了连接卡 / 配置卡——卡本身就在下面，这一句缩成一行字，不再出「去连接」红卡
+            e.blocked.card_id === undefined
+            ? { kind: 'blocked', key, event: e }
+            : { kind: 'sys', key, event: e, variant: 'plain' }
           : { kind: 'sys', key, event: e, variant: 'blocked' }
     else if (e.route !== undefined)
       item =

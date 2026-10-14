@@ -10,9 +10,10 @@
 import type { StatTile as StatTileData } from '@agentsws/deck'
 import { Link2Off, TrendingUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { connectPathFor } from '@/components/connections/links'
+import { connectServiceFor } from '@/components/connections/links'
 import type { Direction, Tone } from '@/components/design'
 import { StatTile } from '@/components/design'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { useApp } from '@/lib/app-context'
 import { formatDelta, formatValue } from '@/lib/format'
 
@@ -59,6 +60,7 @@ const TONE_BY_SOURCE: Record<string, Tone> = {
 
 export function StatTileView({ tile }: { tile: StatTileData }): React.ReactNode {
   const { t, lang } = useApp()
+  const openConnect = useOpenConnect()
   if (tile.status === 'not_connected') {
     return (
       <div data-testid="stat-tile" data-tile={tile.id} data-status="not_connected">
@@ -68,15 +70,18 @@ export function StatTileView({ tile }: { tile: StatTileData }): React.ReactNode 
           tone="neutral"
           fallback={
             <>
-              {/* WP20 §C：点它就落到那个数据源对应的 provider 卡片上 */}
-              <Link
-                to={connectPathFor(tile.source)}
+              {/* WP324（决策 690）：点它在第三栏就地连那个数据源（不跳到连接页） */}
+              <button
+                type="button"
+                onClick={() => {
+                  openConnect(connectServiceFor(tile.source))
+                }}
                 className="flex items-center gap-1.5 text-sm underline-offset-4 hover:underline"
                 data-testid="tile-connect-link"
               >
                 <Link2Off className="size-3.5" aria-hidden />
                 <span>{t('tile.not_connected')}</span>
-              </Link>
+              </button>
               <p className="mt-1 text-[11px] text-ws-muted-fg">{t('tile.not_connected.hint')}</p>
             </>
           }

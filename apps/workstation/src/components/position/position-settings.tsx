@@ -19,6 +19,7 @@ import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 import { InfoTip } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { triggerText } from '@/components/schedule-list'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
 import { PlannedTag } from '@/components/ui/planned-tag'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -127,19 +128,24 @@ function ConnectionRow({
   satisfied: boolean
 }): ReactNode {
   const { t, lang } = useApp()
+  const openConnect = useOpenConnect()
   const name = lang === 'en' ? item.name.en : item.name.zh
   const right = item.connected ? (
     <span className="text-xs text-ws-good" data-slot="status">
       {t('pos2.set.conn.ok')}
     </span>
   ) : satisfied ? null : item.status === 'available' && item.connect_service !== undefined ? (
-    <Link
-      to={`/connections?service=${encodeURIComponent(item.connect_service)}`}
+    // WP324：第三栏就地连
+    <button
+      type="button"
+      onClick={() => {
+        openConnect(item.connect_service)
+      }}
       className="inline-flex h-7 items-center rounded-md border px-2 text-xs hover:bg-accent"
       data-testid="settings-connection-go"
     >
       {t('pos2.set.conn.go')}
-    </Link>
+    </button>
   ) : (
     <span className="text-xs text-ws-muted-fg" data-slot="status">
       {t('pos2.set.conn.planned')}

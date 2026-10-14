@@ -19,6 +19,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
@@ -8114,6 +8115,7 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_ZH,
     // WP304：选主题卡、买高级主题卡
     ...THEMES_ZH,
+    ...SETUP_ZH,
     // WP291：岗位页当场回答
     ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
@@ -8141,6 +8143,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
     ...THEMES_EN,
+    ...SETUP_EN,
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,

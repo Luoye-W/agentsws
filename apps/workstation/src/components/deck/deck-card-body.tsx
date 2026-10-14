@@ -13,6 +13,7 @@
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { Label } from '@/components/ui/label'
@@ -321,6 +322,9 @@ export function DeckCardBody({
               {options.some((o) => o.id === 'leave') ? <CompanyNoticeExtras /> : null}
             </div>
           )
+        // WP324（决策 690）：连接卡 / 配置卡——就地连 / 就地填（主按钮在卡身里），补完原任务自动接着做
+        if (payload.form === 'connect_request' || payload.form === 'setup_request')
+          return <SetupDeckBody card={card} />
         // WP304（决策 445）：买高级主题（「花钱」家族）——一个大数（积分）+ 一句这家店一次买断；不出双格、不出「以后都这样」
         if (payload.form === 'theme_purchase')
           return (

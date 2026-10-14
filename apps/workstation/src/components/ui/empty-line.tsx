@@ -16,8 +16,11 @@ export function EmptyLine({
 }: {
   icon?: ReactNode
   text: string
-  /** 去处按钮（站内地址）；不给就只有那一行字。 */
-  action?: { label: string; to: string; testId?: string }
+  /**
+   * 去处按钮（站内地址）；不给就只有那一行字。
+   * WP324：也可以是就地动作（`onClick`，如「去连接」在第三栏开连接卡），给了它就不跳页。
+   */
+  action?: { label: string; to?: string; onClick?: () => void; testId?: string }
   testId?: string
 }): ReactNode {
   return (
@@ -28,7 +31,16 @@ export function EmptyLine({
     >
       {icon}
       <span>{text}</span>
-      {action === undefined ? null : (
+      {action === undefined ? null : action.onClick !== undefined || action.to === undefined ? (
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={action.onClick}
+          {...(action.testId === undefined ? {} : { 'data-testid': action.testId })}
+        >
+          {action.label}
+        </Button>
+      ) : (
         <Button size="xs" variant="outline" asChild>
           <Link
             to={action.to}

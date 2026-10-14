@@ -34,6 +34,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { AnswerComponents } from '@/components/answer/answer-view'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DutyIcon } from '@/components/role-icons/role-icon'
+import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
@@ -929,6 +930,43 @@ export function InlineCard({
       </AiShell>
     )
   }
+  // WP324（决策 690）：连接卡 / 配置卡——就在对话里连 / 填（同一张卡的投影），补完原任务自动接着做
+  if (isSetupCard(card))
+    return (
+      <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
+        <div
+          className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-brand/45 bg-ws-card shadow-ws"
+          data-testid="matter-setup-card"
+          data-card={card.id}
+        >
+          <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+            <Plug aria-hidden className="size-3.5" />
+            {t(card.kind === 'setup_request' ? 'setup.card.head.setup' : 'setup.card.head.connect')}
+          </div>
+          <div className="px-3.5 pt-2 pb-3">
+            <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
+              {card.title}
+            </p>
+            <SetupDeckBody card={card} />
+          </div>
+          {card.available_actions.includes('reject') ? (
+            <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="matter-card-reject"
+                disabled={deciding}
+                onClick={() => {
+                  onDecide(card, 'reject')
+                }}
+              >
+                {deckActionLabel(card, 'reject', t)}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </AiShell>
+    )
   const approve = deckActionLabel(card, 'approve', t)
   const summary = (card.content_variants.zh_summary ?? card.summary)
     .split('\n')

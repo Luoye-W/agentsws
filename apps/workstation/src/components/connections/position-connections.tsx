@@ -19,6 +19,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link2Off, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +29,7 @@ import { useApp } from '@/lib/app-context'
 
 export function PositionConnections({ id }: { id: string }): React.ReactNode {
   const { t, lang } = useApp()
+  const openConnect = useOpenConnect()
   const view = useQuery({
     queryKey: ['position-connections', id],
     queryFn: () => getPositionConnections(id),
@@ -82,13 +84,16 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                 </p>
               </div>
               {item.status === 'available' && item.connect_service !== undefined ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link
-                    to={`/connections?service=${encodeURIComponent(item.connect_service)}`}
-                    data-testid="position-connection-go"
-                  >
-                    {t('position.connections.connect')}
-                  </Link>
+                // WP324：第三栏就地连
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="position-connection-go"
+                  onClick={() => {
+                    openConnect(item.connect_service)
+                  }}
+                >
+                  {t('position.connections.connect')}
                 </Button>
               ) : (
                 <span

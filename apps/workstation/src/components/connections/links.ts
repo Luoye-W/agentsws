@@ -23,8 +23,20 @@ const SERVICE_BY_SOURCE: Partial<Record<DataSourceId, string>> = {
 
 /** 数据源 → 连接页的地址（认不出来的就落到连接页首屏）。 */
 export function connectPathFor(source: string | undefined): string {
-  const service = source === undefined ? undefined : SERVICE_BY_SOURCE[source as DataSourceId]
+  const service = connectServiceFor(source)
   return service === undefined ? '/connections' : `/connections?service=${service}`
+}
+
+/** WP324：数据源 → 要连的那一样（连接页 service；第三栏连接卡用）。认不出回 `undefined`。 */
+export function connectServiceFor(source: string | undefined): string | undefined {
+  return source === undefined ? undefined : SERVICE_BY_SOURCE[source as DataSourceId]
+}
+
+/** WP324：社媒渠道 → 要连的那一样（没有连接器的回 `undefined`）。 */
+export function connectServiceForChannel(channel: string): string | undefined {
+  const source = SOCIAL_SOURCE_BY_CHANNEL[channel]
+  if (source === undefined) return undefined
+  return Object.entries(SOURCES_BY_SERVICE).find(([, sources]) => sources.includes(source))?.[0]
 }
 
 /**
