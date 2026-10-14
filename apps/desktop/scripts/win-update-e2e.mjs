@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * WP225（WP218 遗留）：**两个真实版本之间点一次「更新」**，在 CI 的 windows-latest 上跑。
+ * WP225 → WP327：**真实版本之间点「更新」**，在 CI 的 windows-latest 上跑三段：
  *
- *   本机起一个更新源（http://127.0.0.1:<端口>/<渠道>/，只喂 N+1 的 latest.yml / 安装包 / blockmap）
- *   → 静默装 N（装到带中文和空格的目录）→ 用**默认的**用户数据目录起 N（真用户就是这样；
- *     更新后安装程序重开的那一个拿不到我们给的环境变量）→ 等左下角那颗按钮的状态变「有新版」
- *   → 点「下载」→ 等「重启并更新」→ 点它 → N 自己退出、安装程序静默装 N+1、自动重开
- *   → 新版本起来（/v1/health 报的版本 = N+1、安装目录里的 package.json 也是 N+1）
- *   → 数据还在（N 跑着时放的记号文件、config.json、服务进程的数据目录都在）
+ * A. **迁移**：静默装一个**发布过的老版本**（平铺布局，`--old`）→ 把它的更新源改指本机 → 应用内点更新到 V1
+ *    （老版本走安装程序）→ V1 起来，安装目录变成 `current` 联接 + `app-<V1>`，快捷方式（含模拟的任务栏固定）
+ *    改指 `current\agentsws.exe`，数据都在。
+ * B. **回滚演练**：用户数据目录放 `update-drill.json`（V2 看到就假装起不来）→ V1 点更新：后台下载 + 在旁边
+ *    摆好 `app-<V2>` → 点「重启并更新」只切换 → V2 60 秒没报起来 → V1 切回、重开自己 → V1 重新健康。
+ * C. **只切换**：再点一次更新到 V2 → 量「点了 → 新版桌面壳启动」「点了 → 新版服务健康」秒数；上一版目录留着、
+ *    卸载登记的版本号改了、单实例照常、数据都在。
  *
- * 装 N 的那个包打包时把更新源指到了这个本机端口（`AGENTSWS_UPDATE_BASE_URL=http://127.0.0.1:<端口>`，
- * 回环 http 只为这个测试放行，见 src/update-feed.ts）。
- *
- * 用法：node apps/desktop/scripts/win-update-e2e.mjs --old <N 的 Setup.exe> --new-dir <N+1 的 release 目录>
- *        --port <端口> --out <目录>
+ * 用法：node apps/desktop/scripts/win-update-e2e.mjs --old <老版本 Setup.exe> --v1-dir <V1 的 release 目录>
+ *        --v2-dir <V2 的 release 目录> --port <端口> --out <目录>
+ * （V1 / V2 打包时把更新源指到本机这个端口：`AGENTSWS_UPDATE_BASE_URL=http://127.0.0.1:<端口>`，回环 http 只为测试放行。）
  */
 import { spawnSync } from 'node:child_process'
 import {
+  copyFileSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -27,19 +27,23 @@ import {
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  checkVersionedLayout,
   copyDirSync,
   describeExit,
   dirAliases,
   freePort,
+  installFootprint,
+  installLayout,
   normalizeWinPath,
   powershell,
   processesUnder,
   processTable,
-  psRows,
   reporter,
+  shortcutPaths,
+  shortcutTarget,
   silentInstall,
   sleep,
   waitHealthy,
@@ -106,23 +110,16 @@ export function describeBeat(beat) {
   return `${what}，pid ${beat.pid ?? '?'}${env}`
 }
 
-/** WP319：「正在更新」小窗那几个 PowerShell 进程（按命令行里的脚本名认）。 */
-function splashProcesses() {
-  const json = powershell(
-    'Get-CimInstance Win32_Process -Filter "Name=\'powershell.exe\'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress',
-  )
-  return psRows(json).filter((r) => String(r.CommandLine ?? '').includes('agentsws-update-'))
-}
-
 function arg(name) {
   const i = process.argv.indexOf(name)
   return i < 0 ? undefined : process.argv[i + 1]
 }
 
-/** 本机更新源：记下每一次请求（报告里看得见「真的下了 N+1」）。 */
-function startFeed(dir, port, log) {
-  const files = readdirSync(dir).filter((f) => statSync(join(dir, f)).isFile())
+/** 本机更新源：记下每一次请求（报告里看得见「真的下了新版」）。`dirOf()` 回这一刻要喂的目录（分阶段换）。 */
+function startFeed(dirOf, port, log) {
   const server = createServer((req, res) => {
+    const dir = dirOf()
+    const files = readdirSync(dir).filter((f) => statSync(join(dir, f)).isFile())
     const file = feedFileFor(req.url ?? '/', dir, files)
     log(`更新源：${req.method} ${req.url} → ${file === undefined ? 404 : 200}`)
     if (file === undefined) {
@@ -136,13 +133,27 @@ function startFeed(dir, port, log) {
   return new Promise((res) => server.listen(port, '127.0.0.1', () => res(server)))
 }
 
+/** WP327：把老版本安装包里的更新源（`resources\app-update.yml` 的 `url:`）改指本机更新源。 */
+export function patchAppUpdateYml(text, url) {
+  const lines = text.split(/\r?\n/)
+  let found = false
+  const out = lines.map((line) => {
+    if (/^url:/.test(line)) {
+      found = true
+      return `url: ${url}`
+    }
+    return line
+  })
+  return found ? out.join('\n') : `${text.replace(/\s*$/, '')}\nurl: ${url}\n`
+}
+
 /** 在工作台页面里读 / 点左下角那颗按钮背后的桥（`window.agentsws.update`）。 */
 async function waitUpdate(page, want, seconds, step) {
   let last
   for (let i = 0; i < seconds; i += 1) {
     const s = await page.evaluate(() => window.agentsws?.update?.status())
     const text = JSON.stringify(s)
-    if (text !== last) step(`更新状态：${text}`)
+    if (text !== last && !(s?.state === 'downloading' && i % 10 !== 0)) step(`更新状态：${text}`)
     last = text
     if (s?.state === 'error') throw new Error(`更新出错：${text}`)
     if (want.includes(s?.state)) return s
@@ -153,7 +164,9 @@ async function waitUpdate(page, want, seconds, step) {
 
 async function healthVersion(port) {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/v1/health`)
+    const res = await fetch(`http://127.0.0.1:${port}/v1/health`, {
+      signal: AbortSignal.timeout(2000),
+    })
     if (!res.ok) return undefined
     const body = await res.json()
     return body?.data?.version ?? body?.version
@@ -162,170 +175,243 @@ async function healthVersion(port) {
   }
 }
 
-async function main() {
-  const oldInstaller = arg('--old')
-  const newDir = resolve(arg('--new-dir') ?? '')
-  const feedPort = Number(arg('--port'))
-  const out = resolve(arg('--out') ?? 'win-update')
-  if (process.platform !== 'win32') throw new Error('这个脚本只在 Windows 上跑')
-  if (oldInstaller === undefined || !existsSync(oldInstaller))
-    throw new Error(`没有 N：${oldInstaller}`)
-  const step = reporter(out)
-  const toVersion = versionOfLatestYml(readFileSync(join(newDir, 'latest.yml'), 'utf8'))
-  if (toVersion === undefined) throw new Error(`${newDir}\\latest.yml 里没有 version`)
-
-  const feed = await startFeed(newDir, feedPort, step)
-  step(`本机更新源起来了：http://127.0.0.1:${feedPort}/（喂 ${toVersion}）`)
-
-  // 1. 静默装 N
-  const local = process.env.LOCALAPPDATA ?? tmpdir()
-  const dir = join(local, 'Programs', '智能体 工坊 更新测试')
-  const exe = silentInstall(oldInstaller, dir)
-  const pkgOf = () =>
-    JSON.parse(readFileSync(join(dir, 'resources', 'app', 'package.json'), 'utf8'))
-  const fromVersion = pkgOf().version
-  step(`装好了 N=${fromVersion}：${exe}`)
-
-  // 2. 默认用户数据目录里放配置与记号（端口随机；GitHub 备用源关掉，只认本机这一个源）
-  const userData = defaultUserData(process.env.APPDATA ?? tmpdir(), pkgOf().name)
-  mkdirSync(userData, { recursive: true })
-  const port = await freePort()
-  const config = {
-    port,
-    openInBrowser: false,
-    launchAtLogin: false,
-    language: 'zh-CN',
-    updateGithubFallback: false,
+/** 等服务报某个版本；回用了多少毫秒（等不到抛）。 */
+async function waitVersion(port, want, seconds, what) {
+  const t0 = Date.now()
+  let v
+  for (let i = 0; i < seconds * 2; i += 1) {
+    v = await healthVersion(port)
+    if (v === want) return Date.now() - t0
+    await sleep(500)
   }
-  writeFileSync(join(userData, 'config.json'), JSON.stringify(config))
-  const marker = join(userData, 'wp225-e2e-marker.txt')
-  writeFileSync(marker, `N=${fromVersion}\n`)
+  throw new Error(`${seconds} 秒内${what}没起来（服务报 ${v ?? '连不上'}，应是 ${want}）`)
+}
 
-  // 3. 起 N（不给用户数据目录的环境变量：更新后重开的那一个也拿不到）
+/** 结束安装目录里的全部进程（新版是旧版起的，没有 Playwright 的把手）。 */
+async function killInstalled(dir) {
+  for (let round = 0; round < 10; round += 1) {
+    const left = processesUnder(processTable(), dirAliases(dir))
+    if (left.length === 0) return
+    for (const p of left) spawnSync('taskkill.exe', ['/PID', String(p.ProcessId), '/T', '/F'])
+    await sleep(1000)
+  }
+}
+
+/** Playwright 起装好的 exe（默认用户数据目录）→ 服务健康 → 打开工作台；回 app 与页面。 */
+async function launchInstalled(exe, userData, port, wantVersion, step) {
   const { _electron: electron } = await import('@playwright/test')
   const app = await electron.launch({ executablePath: exe, timeout: 120_000 })
-  const actualUserData = await app.evaluate(({ app: a }) => a.getPath('userData'))
-  if (normalizeWinPath(actualUserData) !== normalizeWinPath(userData))
-    throw new Error(`默认用户数据目录不是 ${userData}，而是 ${actualUserData}`)
-  step(`N 起来了，用户数据目录：${actualUserData}`)
+  const actual = await app.evaluate(({ app: a }) => a.getPath('userData'))
+  if (normalizeWinPath(actual) !== normalizeWinPath(userData))
+    throw new Error(`默认用户数据目录不是 ${userData}，而是 ${actual}`)
   await waitHealthy(app)
-  const v1 = await healthVersion(port)
-  step(`N 的服务健康，版本 ${v1}`)
-  if (v1 !== fromVersion) throw new Error(`服务报的版本 ${v1} ≠ N ${fromVersion}`)
-  const dataBefore = readdirSync(join(userData, 'data'))
-  step(`服务进程数据目录里有：${dataBefore.join('、')}`)
-
-  // 4. 工作台里那颗按钮：等「有新版」→ 下载 → 等「重启并更新」→ 点
+  const v = await healthVersion(port)
+  if (v !== wantVersion) throw new Error(`服务报的版本 ${v} ≠ ${wantVersion}`)
+  step(`起来了：${exe}（服务 ${v}）`)
   await app.evaluate((_e, p) => globalThis.__agentsws__?.openWorkstation(p), '/')
   const page = await app.firstWindow()
   await page.waitForFunction(() => window.agentsws?.update !== undefined, null, { timeout: 60_000 })
+  return { app, page }
+}
+
+/** 等「有新版」→ 点「下载」→ 等「重启并更新」；回从点下载到可以重启用了几秒。 */
+async function downloadUpdate(page, step) {
   await waitUpdate(page, ['available'], 180, step)
+  const t0 = Date.now()
   await page.evaluate(() => window.agentsws.update.download())
-  await waitUpdate(page, ['ready'], 600, step)
+  await waitUpdate(page, ['ready'], 900, step)
+  return Math.round((Date.now() - t0) / 1000)
+}
+
+/** 点「重启并更新」；回点的那一刻与「旧版主进程退了」的 Promise。 */
+async function clickInstall(app, page, step) {
   const proc = app.process()
-  const exited = new Promise((r) => proc.once('exit', (code) => r(code)))
+  const exited = new Promise((r) => proc.once('exit', (code) => r({ code, at: Date.now() })))
   const clicked = Date.now()
   const outcome = await page
     .evaluate(() => window.agentsws.update.install())
     .catch((e) => `（连接断开：${e.message.split('\n')[0]}）`)
   step(`点了「重启并更新」：${outcome}`)
-  // WP319 / WP325：「正在更新到 x.y.z」小窗（系统 PowerShell，不在安装目录里）要在 N 退出前后就起来。
-  // CI 的 runner 不一定有交互桌面（窗口画不出来），所以按小窗自己写的心跳认：起来了（starting / shown / headless）
-  const pendingFile = join(userData, 'update-pending.json')
-  const beatFile = join(userData, 'update-splash.json')
-  // CI 上 N 在停服务、CPU 正忙，PowerShell 冷启动可能要十几秒：等到 60 秒，并记下第一笔心跳晚了几秒
-  let beat
-  for (let i = 0; i < 120 && beat === undefined; i += 1) {
-    beat = readBeat(beatFile)
-    if (beat === undefined) await sleep(500)
-  }
-  const firstBeatSec = Math.round((Date.now() - clicked) / 1000)
-  step(
-    `「正在更新」小窗：${beat === undefined ? '60 秒内没起来' : `点了之后约 ${firstBeatSec} 秒起来（${describeBeat(beat)}）`}；单子：${existsSync(pendingFile) ? '在' : '不在'}`,
-  )
-  if (beat === undefined) {
-    const scripts = readdirSync(tmpdir()).filter((n) => n.startsWith('agentsws-update-'))
-    step(
-      `诊断：临时目录里的小窗脚本 ${scripts.join('、') || '没有'}；PowerShell 小窗进程 ${splashProcesses().length} 个`,
-    )
-    // WP325：桌面壳记下的小窗进程（pid / 退出码）与小窗自己的输出（等 N 退了日志才写全）
-    await Promise.race([exited, sleep(30_000)])
-    const logDir = join(userData, 'logs')
-    const desk = existsSync(join(logDir, 'desktop.log'))
-      ? readFileSync(join(logDir, 'desktop.log'), 'utf8')
-      : ''
-    for (const line of desk.split('\n').filter((l) => l.includes('小窗')))
-      step(`诊断（桌面壳）：${line.slice(0, 240)}`)
-    const own = join(logDir, 'update-splash.log')
-    step(
-      `诊断（小窗输出）：${existsSync(own) ? readFileSync(own, 'utf8').slice(0, 1500) || '空' : '没有这个文件'}`,
-    )
-    const late = readBeat(beatFile)
-    step(`诊断（再看一眼心跳）：${late === undefined ? '还是没有' : describeBeat(late)}`)
-    throw new Error('点了「重启并更新」60 秒内「正在更新」小窗没起来（没有心跳）')
-  }
-  const code = await Promise.race([exited, sleep(90_000).then(() => 'timeout')])
-  step(`N 退出：${code === 'timeout' ? '90 秒没退' : `退出码 ${describeExit(code, null)}`}`)
-  if (code === 'timeout') {
-    await app.close().catch(() => undefined)
-    throw new Error('点了「重启并更新」90 秒 N 还没退')
-  }
-  // N 退了、安装程序在装：小窗得还活着（心跳还在走）。在 app.close() 之前看——
-  // WP325 实测 Playwright 的 close 在 N 已退出后还会挂几分钟，等它回来安装早装完了
-  await sleep(2000)
-  const during = readBeat(beatFile)
-  const alive =
-    during !== undefined && during.state !== 'closed' && Date.now() - Date.parse(during.at) < 5000
-  step(
-    `安装中：小窗${alive ? '还在' : '不在了'}（${during === undefined ? '没有心跳' : describeBeat(during)}）`,
-  )
-  if (!alive) throw new Error('N 退出后「正在更新」小窗没撑到安装程序装完')
-  void app.close().catch(() => undefined)
+  return { clicked, exited }
+}
 
-  // 5. 安装程序静默装 N+1、自动重开：等服务报 N+1
-  let v2
-  for (let i = 0; i < 300 && v2 !== toVersion; i += 1) {
-    v2 = await healthVersion(port)
-    if (v2 !== toVersion) await sleep(1000)
-  }
-  if (v2 !== toVersion) throw new Error(`5 分钟内新版本没起来（服务报 ${v2 ?? '连不上'}）`)
-  step(
-    `新版本起来了：服务报 ${v2}（从点「重启并更新」到这里 ${Math.round((Date.now() - clicked) / 1000)} 秒）`,
-  )
-  // WP319 / WP325：新版一启动就收掉单子，小窗跟着关（心跳最后一笔是 closed）
-  let gone = false
-  let last
-  for (let i = 0; i < 30 && !gone; i += 1) {
-    last = readBeat(beatFile)
-    gone = !existsSync(pendingFile) && last?.state === 'closed'
-    if (!gone) await sleep(500)
-  }
-  step(
-    `「正在更新」小窗：${gone ? '关了，单子收掉了' : `还在（${last === undefined ? '没有心跳' : describeBeat(last)}）`}`,
-  )
-  if (!gone) throw new Error('新版起来 15 秒后「正在更新」小窗还在 / 单子没收掉')
-  // 小窗关掉那一刻 = 新版桌面壳启动、收掉单子的那一刻：用户眼里「新版出现」的时间
-  if (last !== undefined)
-    step(
-      `从点「重启并更新」到新版桌面壳启动（小窗关掉）：${Math.round((Date.parse(last.at) - clicked) / 1000)} 秒`,
-    )
-  if (pkgOf().version !== toVersion)
-    throw new Error(`安装目录里的版本是 ${pkgOf().version}，不是 ${toVersion}`)
-  step(`安装目录里也是 ${toVersion}`)
-
-  // 6. 数据还在
-  if (!existsSync(marker)) throw new Error('更新之后 N 时放的记号文件没了')
+function dataStillThere(userData, marker, port, dataBefore) {
+  if (!existsSync(marker)) throw new Error('更新之后记号文件没了')
   const cfg = JSON.parse(readFileSync(join(userData, 'config.json'), 'utf8'))
   if (cfg.port !== port) throw new Error('更新之后 config.json 被换掉了')
   const dataAfter = readdirSync(join(userData, 'data'))
   const lost = dataBefore.filter((f) => !dataAfter.includes(f))
   if (lost.length > 0) throw new Error(`更新之后数据目录少了：${lost.join('、')}`)
-  step('数据还在：记号文件、config.json、服务进程数据目录都在')
+}
 
-  // 7. 收拾：新版本是安装程序起的（没有 Playwright 的把手），按目录结束进程
-  for (const p of processesUnder(processTable(), dirAliases(dir)))
-    spawnSync('taskkill.exe', ['/PID', String(p.ProcessId), '/T', '/F'])
+function logHas(userData, text) {
+  const file = join(userData, 'logs', 'desktop.log')
+  return existsSync(file) && readFileSync(file, 'utf8').includes(text)
+}
+
+/** 卸载登记里的「已安装版本」（HKCU 下按显示名找）。 */
+function registeredVersion() {
+  return powershell(
+    "Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -like 'Agents*' } | Select-Object -First 1 -ExpandProperty DisplayVersion",
+  ).trim()
+}
+
+/**
+ * 模拟一个任务栏固定：把老版本建的开始菜单快捷方式（指 `<安装目录>\agentsws.exe`）抄一份到任务栏固定目录
+ * ——迁移后它要被改指 current。
+ */
+function fakePin(from, lnk) {
+  if (!existsSync(from)) return '没有可抄的开始菜单快捷方式'
+  mkdirSync(dirname(lnk), { recursive: true })
+  copyFileSync(from, lnk)
+  return '抄好了'
+}
+
+async function main() {
+  const oldInstaller = arg('--old')
+  const v1Dir = resolve(arg('--v1-dir') ?? '')
+  const v2Dir = resolve(arg('--v2-dir') ?? '')
+  const feedPort = Number(arg('--port'))
+  const out = resolve(arg('--out') ?? 'win-update')
+  if (process.platform !== 'win32') throw new Error('这个脚本只在 Windows 上跑')
+  if (oldInstaller === undefined || !existsSync(oldInstaller))
+    throw new Error(`没有老版本安装包：${oldInstaller}`)
+  const step = reporter(out)
+  const v1 = versionOfLatestYml(readFileSync(join(v1Dir, 'latest.yml'), 'utf8'))
+  const v2 = versionOfLatestYml(readFileSync(join(v2Dir, 'latest.yml'), 'utf8'))
+  if (v1 === undefined || v2 === undefined) throw new Error('latest.yml 里没有 version')
+  let feedDir = v1Dir
+  const feed = await startFeed(() => feedDir, feedPort, step)
+  const feedUrl = `http://127.0.0.1:${feedPort}`
+  step(`本机更新源：${feedUrl}/（先喂 ${v1}，后喂 ${v2}）`)
+  const summary = []
+
+  // ── A. 迁移：装发布过的老版本（平铺）→ 应用内更新到 V1（走安装程序）→ 变成版本目录布局 ─────────
+  const local = process.env.LOCALAPPDATA ?? tmpdir()
+  const dir = join(local, 'Programs', '智能体 工坊 更新测试')
+  const t0 = Date.now()
+  const oldExe = silentInstall(oldInstaller, dir)
+  const pkgOf = (exe) =>
+    JSON.parse(readFileSync(join(dirname(exe), 'resources', 'app', 'package.json'), 'utf8'))
+  const fromVersion = pkgOf(oldExe).version
+  const footOld = installFootprint(dir)
+  step(
+    `A 装好了老版本 ${fromVersion}（平铺）：${oldExe}；静默装 ${Math.round((Date.now() - t0) / 1000)} 秒，${footOld.files} 个文件、${footOld.mb} MB`,
+  )
+  if (installLayout(dir).link) throw new Error('老版本不该是版本目录布局')
+  const yml = join(dirname(oldExe), 'resources', 'app-update.yml')
+  writeFileSync(yml, patchAppUpdateYml(readFileSync(yml, 'utf8'), `${feedUrl}/beta`))
+  const pins = shortcutPaths()
+  const pinOut = fakePin(pins.startMenu, pins.pinned)
+  step(`A 模拟了一个任务栏固定（${pinOut}）→ ${shortcutTarget(pins.pinned)}`)
+
+  const userData = defaultUserData(process.env.APPDATA ?? tmpdir(), pkgOf(oldExe).name)
+  mkdirSync(userData, { recursive: true })
+  const port = await freePort()
+  writeFileSync(
+    join(userData, 'config.json'),
+    JSON.stringify({
+      port,
+      openInBrowser: false,
+      launchAtLogin: false,
+      language: 'zh-CN',
+      updateGithubFallback: false,
+    }),
+  )
+  const marker = join(userData, 'wp327-e2e-marker.txt')
+  writeFileSync(marker, `from=${fromVersion}\n`)
+
+  let h = await launchInstalled(oldExe, userData, port, fromVersion, step)
+  const dataBefore = readdirSync(join(userData, 'data'))
+  step(`A 下载用了 ${await downloadUpdate(h.page, step)} 秒`)
+  let click = await clickInstall(h.app, h.page, step)
+  const exitA = await Promise.race([click.exited, sleep(120_000).then(() => undefined)])
+  void h.app.close().catch(() => undefined)
+  if (exitA === undefined) throw new Error('A 点了「重启并更新」120 秒老版本还没退')
+  const msA = await waitVersion(port, v1, 420, 'V1（迁移）')
+  const secA = Math.round((Date.now() - click.clicked) / 1000)
+  step(`A 迁移完成：从点「重启并更新」到 V1 服务健康 ${secA} 秒`)
+  void msA
+  const layoutA = checkVersionedLayout(dir, v1)
+  for (const line of layoutA.lines) step(`A ${line}`)
+  if (layoutA.problems.length > 0)
+    throw new Error(`A 迁移后布局不对：${layoutA.problems.join('；')}`)
+  dataStillThere(userData, marker, port, dataBefore)
+  const footV1 = installFootprint(dir)
+  step(
+    `A 数据都在；安装目录 ${footV1.files} 个文件、${footV1.mb} MB（老版本 ${footOld.files} 个、${footOld.mb} MB）`,
+  )
+  summary.push(`迁移（平铺 ${fromVersion} → 版本目录 ${v1}，走安装程序）：${secA} 秒`)
+
+  // ── B. 回滚演练：V1 → V2，V2 假装起不来 → 60 秒后切回 V1 ─────────────────────────
+  await killInstalled(dir)
+  feedDir = v2Dir
+  const currentExe = join(dir, 'current', 'agentsws.exe')
+  writeFileSync(join(userData, 'update-drill.json'), JSON.stringify({ break: v2 }))
+  h = await launchInstalled(currentExe, userData, port, v1, step)
+  const stageSec = await downloadUpdate(h.page, step)
+  const staged = installLayout(dir)
+  step(`B 下载 + 在旁边摆好 V2 用了 ${stageSec} 秒；版本目录：${staged.apps.join('、')}`)
+  if (!staged.apps.includes(`app-${v2}`)) throw new Error(`B 没在旁边摆好 app-${v2}`)
+  click = await clickInstall(h.app, h.page, step)
+  const exitB = await Promise.race([click.exited, sleep(180_000).then(() => undefined)])
+  void h.app.close().catch(() => undefined)
+  if (exitB === undefined) throw new Error('B 180 秒旧版还没退（回滚没做完？）')
+  step(`B 旧版（看门的那一个）在点了之后 ${Math.round((exitB.at - click.clicked) / 1000)} 秒退出`)
+  await waitVersion(port, v1, 180, '回滚后的 V1')
+  const secB = Math.round((Date.now() - click.clicked) / 1000)
+  const layoutB = installLayout(dir)
+  step(`B 回滚完成：从点「重启并更新」到 V1 重新健康 ${secB} 秒；current → ${layoutB.target}`)
+  if (normalizeWinPath(layoutB.target ?? '') !== normalizeWinPath(join(dir, `app-${v1}`)))
+    throw new Error('B 回滚后 current 没指回 V1')
+  if (!logHas(userData, '回滚演练：这一版假装起不来'))
+    throw new Error('B 日志里没有 V2 的演练记录（V2 没起过？）')
+  if (!logHas(userData, '上次更新新版没起来')) throw new Error('B 重开的 V1 没认出回滚记录')
+  if (existsSync(join(userData, 'update-drill.json'))) throw new Error('B 演练文件没被 V2 用掉')
+  dataStillThere(userData, marker, port, dataBefore)
+  summary.push(`回滚演练（${v2} 假装起不来）：${secB} 秒回到 ${v1}`)
+
+  // ── C. 真更新：V1 → V2，只切换 ───────────────────────────────────────────────
+  await killInstalled(dir)
+  h = await launchInstalled(currentExe, userData, port, v1, step)
+  step(`C 下载 + 准备用了 ${await downloadUpdate(h.page, step)} 秒（已摆好的不再解）`)
+  const pendingFile = join(userData, 'update-pending.json')
+  click = await clickInstall(h.app, h.page, step)
+  let bootMs
+  for (let i = 0; i < 240 && bootMs === undefined; i += 1) {
+    if (!existsSync(pendingFile)) bootMs = Date.now() - click.clicked
+    else await sleep(250)
+  }
+  await waitVersion(port, v2, 180, 'V2')
+  const secC = (Date.now() - click.clicked) / 1000
+  const exitC = await Promise.race([click.exited, sleep(60_000).then(() => undefined)])
+  void h.app.close().catch(() => undefined)
+  step(
+    `C 只切换：从点「重启并更新」到新版桌面壳启动 ${bootMs === undefined ? '（没等到）' : `${(bootMs / 1000).toFixed(1)} 秒`}、` +
+      `到新版服务健康 ${secC.toFixed(1)} 秒；旧版 ${exitC === undefined ? '60 秒内没退' : `在 ${((exitC.at - click.clicked) / 1000).toFixed(1)} 秒退出`}`,
+  )
+  if (exitC === undefined) throw new Error('C 新版起来了旧版还没退')
+  const layoutC = checkVersionedLayout(dir, v2)
+  for (const line of layoutC.lines) step(`C ${line}`)
+  if (layoutC.problems.length > 0)
+    throw new Error(`C 切换后布局不对：${layoutC.problems.join('；')}`)
+  if (!layoutC.layout.apps.includes(`app-${v1}`)) throw new Error('C 上一版（V1）的目录没留着')
+  dataStillThere(userData, marker, port, dataBefore)
+  const reg = registeredVersion()
+  step(`C 卸载登记里的版本：${reg || '（读不到）'}`)
+  if (reg !== '' && reg !== v2) throw new Error(`C 卸载登记里的版本还是 ${reg}`)
+  const second = spawnSync(currentExe, [], { timeout: 30_000 })
+  step(`C 单实例：再起一次退出码 ${describeExit(second.status, second.signal)}`)
+  if (second.status === null) throw new Error('C 第二个实例 30 秒没退出（单实例锁没生效？）')
+  summary.push(
+    `只切换（${v1} → ${v2}）：点了到新版桌面壳 ${bootMs === undefined ? '?' : (bootMs / 1000).toFixed(1)} 秒，到新版服务健康 ${secC.toFixed(1)} 秒`,
+  )
+
+  // ── 收拾 ────────────────────────────────────────────────────────────────
+  await killInstalled(dir)
   copyDirSync(join(userData, 'logs'), join(out, 'logs'))
+  writeFileSync(join(out, 'summary.txt'), `${summary.join('\n')}\n`)
+  for (const line of summary) step(`小结：${line}`)
   feed.close()
   step('全部通过')
 }

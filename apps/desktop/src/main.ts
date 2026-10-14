@@ -4,12 +4,14 @@
  * 这个文件只做**装配**——所有判定（状态机、退避、URL 拦截、菜单模型、配置、密钥）
  * 都在旁边那些不 import electron 的模块里，那些才是被测试覆盖的部分。
  */
-import { spawn } from 'node:child_process'
-import { existsSync, openSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { existsSync, openSync, realpathSync, writeFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { constants as osConstants, setPriority, tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -54,10 +56,25 @@ import {
   humanBytes,
 } from './diagnostics.js'
 import { loadAutoUpdater } from './electron-updater-module.js'
+import {
+  cleanupPlan,
+  confirmSwitch,
+  consumeDrill,
+  DRILL_FILE,
+  detectLayout,
+  INSTALL_INFO_FILE,
+  readLayoutRecord,
+  runFastSwitch,
+  SWITCH_FILE,
+  stageUpdate,
+  takeRollback,
+  uninstallKeyOf,
+} from './fast-update.js'
 import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
+import { nodeLayoutFs } from './layout-fs.js'
 import { createLogger } from './logging.js'
 import {
   buildTrayMenu,
@@ -138,7 +155,7 @@ import {
   macUpdateFits,
   parseAppUpdateYml,
 } from './update-feed.js'
-import { beginUpdate, finishPendingUpdate } from './update-splash.js'
+import { beginUpdate, finishPendingUpdate, splashText } from './update-splash.js'
 import { createFeedChecker, DOWNLOAD_PAGE, isNewer, updatePolicy } from './updater.js'
 import {
   canRestore,
@@ -307,6 +324,26 @@ async function bootstrap(): Promise<void> {
     logger,
     platform: process.platform,
   })
+  /*
+   * WP327：Windows 版本目录布局（`<根>\current` → `<根>\app-<版本>`）。在里面就走「后台准备、重启只切换」，
+   * 不在（老的平铺安装 / 这个盘建不了联接）就照旧走安装程序。
+   */
+  const layoutFs = nodeLayoutFs()
+  const layout =
+    process.platform === 'win32' && app.isPackaged
+      ? detectLayout(process.execPath, layoutFs)
+      : undefined
+  logger.info(
+    '安装布局',
+    layout === undefined
+      ? { layout: 'flat' }
+      : { layout: 'versioned', root: layout.root, current: basename(layout.currentDir) },
+  )
+  const rolledBack = takeRollback({ userData: paths.userData, fs: layoutFs })
+  if (rolledBack !== undefined) logger.warn('上次更新新版没起来，已回到这一版', rolledBack)
+  // 回滚演练（只有 CI 放这个文件）：写着我这一版就假装起不来——不起服务进程，旧版 60 秒等不到就会切回去
+  const drill = consumeDrill({ file: join(paths.userData, DRILL_FILE), version, fs: layoutFs })
+  if (drill) logger.warn('回滚演练：这一版假装起不来（不起服务进程）')
 
   const configStore = createConfigStore(files, paths.configFile)
   let config: DesktopConfig = configStore.load()
@@ -1494,7 +1531,12 @@ async function bootstrap(): Promise<void> {
   /** 未签名 / 非标准位置的应用会被系统拒（"Operation not permitted"）——记一笔就够，不该挡住启动。 */
   function setLoginItem(openAtLogin: boolean): void {
     try {
-      app.setLoginItemSettings({ openAtLogin })
+      // WP327：版本目录布局下开机自启指 `current\agentsws.exe`（版本目录会被清理）
+      app.setLoginItemSettings(
+        layout === undefined
+          ? { openAtLogin }
+          : { openAtLogin, path: join(layout.current, basename(process.execPath)) },
+      )
     } catch (err) {
       logger.warn('设置开机自启失败', { error: String(err) })
     }
@@ -1580,7 +1622,7 @@ async function bootstrap(): Promise<void> {
     refreshTray()
   })
   // 40 §1.3 的那句话落在这一行：`remote` 档**一个进程都不拉**。
-  if (!remote) server.start()
+  if (!remote && !drill) server.start()
   // WP247：本机连接器——没下载就只是每 2 秒看一眼，下好了自己起
   void connectLauncher?.start()
 
@@ -1593,6 +1635,7 @@ async function bootstrap(): Promise<void> {
       abort: nodeAbort,
     })
     refreshTray()
+    if (health.ok) onFirstHealthy()
     // WP111 首启：服务一健康就把工作台端出来一次，落在「初始化设置」那一页
     // （跳转由工作台自己判 `needs_setup`，壳不认识那个路由）。
     if (
@@ -1608,10 +1651,51 @@ async function bootstrap(): Promise<void> {
       void openWorkstation()
     }
   }
+  /*
+   * WP327：服务第一次健康时——这次是「只切换」的更新切过来的，就告诉还在等的旧版「起来了」、改卸载登记里的版本号；
+   * 几分钟后低优先级清掉更早的版本目录（留当前与上一版）。
+   */
+  let firstHealthy = false
+  function onFirstHealthy(): void {
+    if (firstHealthy) return
+    firstHealthy = true
+    if (
+      confirmSwitch({
+        file: join(paths.userData, SWITCH_FILE),
+        version,
+        now: () => new Date(),
+        fs: layoutFs,
+      })
+    ) {
+      logger.info('更新切换：新版起来了（已告诉旧版）', { version })
+      const key = uninstallKeyOf(
+        layout === undefined ? undefined : layoutFs.readText(join(layout.root, INSTALL_INFO_FILE)),
+      )
+      if (key !== undefined)
+        spawnSync('reg.exe', ['add', key, '/v', 'DisplayVersion', '/d', version, '/f'], {
+          windowsHide: true,
+          timeout: 10_000,
+        })
+    }
+    if (layout !== undefined) {
+      const t = setTimeout(() => {
+        void cleanupVersions()
+      }, 3 * 60_000)
+      t.unref?.()
+    }
+  }
   const healthTimer = setInterval(() => {
     void pollHealth()
   }, 5000)
   healthTimer.unref?.()
+  // 刚起来那一阵每秒看一次（更新切换时新版越早报「起来了」，旧版越早退）
+  let fastTicks = 0
+  const fastHealth = setInterval(() => {
+    fastTicks += 1
+    if (health?.ok === true || fastTicks > 180) clearInterval(fastHealth)
+    else void pollHealth()
+  }, 1000)
+  fastHealth.unref?.()
   void pollHealth()
 
   // WP144：AI 正在操作电脑没有——3 秒问一次（托盘要在人还看着的时候就变红）
@@ -1685,6 +1769,99 @@ async function bootstrap(): Promise<void> {
     logger.child('electron-updater'),
     () => updaterChecking,
   )
+  /*
+   * WP327：版本目录布局下，下载完接着把新版摆到旁边（`<根>\app-<新版>\`，低优先级）并冒烟；
+   * 摆好了，「重启并更新」只切换。摆不好（或平铺布局）就照旧走安装程序。
+   */
+  let staged: string | undefined
+  let staging = false
+  const runLow = (
+    command: string,
+    args: readonly string[],
+    timeoutMs: number,
+    verbatim = false,
+  ): Promise<{ code: number | null; stderr: string }> =>
+    new Promise((resolve) => {
+      // 安装包的 `/D=<目录>` 必须不带引号放最后（verbatim）；那时可执行文件自己的路径要我们自己加引号
+      const child = spawn(command, [...args], {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        windowsHide: true,
+        ...(verbatim ? { windowsVerbatimArguments: true, argv0: `"${command}"` } : {}),
+      })
+      try {
+        if (child.pid !== undefined)
+          setPriority(child.pid, osConstants.priority.PRIORITY_BELOW_NORMAL)
+      } catch {
+        // 调不了优先级就照常跑
+      }
+      let stderr = ''
+      child.stderr?.on('data', (d: Buffer) => {
+        stderr = (stderr + d.toString('utf8')).slice(-2000)
+      })
+      const timer = setTimeout(() => child.kill(), timeoutMs)
+      child.on('error', (e) => {
+        clearTimeout(timer)
+        resolve({ code: null, stderr: String(e) })
+      })
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        resolve({ code, stderr })
+      })
+    })
+  /** 用新版自带的 Node 把新版的服务入口 import 一遍（不起服务，只看装得全不全）。 */
+  const smokeStaged = async (dir: string): Promise<string | undefined> => {
+    const node = join(dir, 'resources', 'node', 'node.exe')
+    const entry = join(
+      dir,
+      'resources',
+      'app',
+      'node_modules',
+      '@agentsws',
+      'server',
+      'dist',
+      'index.js',
+    )
+    if (!existsSync(node) || !existsSync(entry)) return '新版里缺服务进程或 Node'
+    const script =
+      "const m = await import(process.argv[1]); if (typeof m.createServer !== 'function') process.exit(3)"
+    const out = await runLow(
+      node,
+      ['--input-type=module', '-e', script, pathToFileURL(entry).href],
+      120_000,
+    )
+    return out.code === 0
+      ? undefined
+      : `import 服务入口退出码 ${String(out.code)}：${out.stderr.trim().split(/\r?\n/).slice(0, 6).join(' / ')}`
+  }
+  const cleanupVersions = async (): Promise<void> => {
+    if (layout === undefined) return
+    let running = ''
+    try {
+      running = realpathSync.native(dirname(process.execPath)).toLowerCase()
+    } catch {
+      running = ''
+    }
+    const plan = cleanupPlan(
+      layoutFs.list(layout.root),
+      basename(layout.currentDir),
+      readLayoutRecord(layout.root, layoutFs),
+      { staging: staging || staged !== undefined },
+    )
+    for (const name of plan) {
+      const dir = join(layout.root, name)
+      if (dir.toLowerCase() === running) continue
+      const t0 = Date.now()
+      try {
+        await rm(dir, { recursive: true, force: true, maxRetries: 2 })
+        logger.info('清掉了旧的版本目录', { dir: name, ms: Date.now() - t0 })
+      } catch (err) {
+        logger.warn('旧的版本目录没清掉（下次再试）', { dir: name, error: String(err) })
+      }
+    }
+  }
+  /** 「重启并更新」那一刻要用的东西（在下面 updates 建好之后才填上）。 */
+  let quiesceForSwitch: () => Promise<void> = async () => undefined
+
   /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
   const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
     // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动。
@@ -1699,6 +1876,7 @@ async function bootstrap(): Promise<void> {
     // WP235：electron-updater 查失败时自己会 logger.error 一段堆栈；源还不存在（域名没绑、GitHub 没发布）
     // 那一类在「查」的时候不写，结论交给状态机记一行 info（见 update-controller.ts 的 electronUpdaterLogger）
     real.logger = updaterLogger
+    let found: string | undefined
     return {
       async check() {
         real.setFeedURL(
@@ -1709,8 +1887,9 @@ async function bootstrap(): Promise<void> {
         updaterChecking = true
         try {
           const result = await real.checkForUpdates()
-          const found = result?.updateInfo.version
-          if (found === undefined || !isNewer(version, found)) return undefined
+          const v = result?.updateInfo.version
+          found = undefined
+          if (v === undefined || !isNewer(version, v)) return undefined
           // WP326：mac 自动档（签了名才开）在 Intel 上遇到只有 Apple 芯片包的新版——不提示，
           // 免得点了「更新」才被 electron-updater 报「没有文件」
           if (
@@ -1720,28 +1899,99 @@ async function bootstrap(): Promise<void> {
               machineArch,
             )
           ) {
-            logger.info('新版只有 Apple 芯片的包，这台 Intel Mac 不提示', { version: found })
+            logger.info('新版只有 Apple 芯片的包，这台 Intel Mac 不提示', { version: v })
             return undefined
           }
+          found = v
           return { version: found }
         } finally {
           updaterChecking = false
         }
       },
       async download(onProgress) {
+        // 版本目录布局：下载占进度条的前 90%，摆到旁边 + 冒烟占最后 10%
+        const share = layout === undefined ? 1 : 0.9
         const listener = (p: { percent: number }): void => {
-          onProgress(p.percent)
+          onProgress(p.percent * share)
         }
         real.on('download-progress', listener)
+        let files: string[]
         try {
-          await real.downloadUpdate()
+          files = await real.downloadUpdate()
         } finally {
           real.removeListener('download-progress', listener)
         }
+        const installer = files.find((f) => /\.exe$/i.test(f))
+        staged = undefined
+        if (layout === undefined || found === undefined || installer === undefined) return
+        onProgress(92)
+        staging = true
+        try {
+          const problem = await stageUpdate({
+            layout,
+            fs: layoutFs,
+            version: found,
+            installer,
+            exeName: basename(process.execPath),
+            run: async (command, args) => (await runLow(command, args, 15 * 60_000, true)).code,
+            smoke: smokeStaged,
+            log: (message, fields) => logger.info(message, fields),
+          })
+          if (problem === undefined) {
+            staged = found
+            logger.info('新版在旁边摆好了，重启只切换', { version: found })
+          } else
+            logger.warn('新版没摆好，点「重启并更新」时照旧走安装程序', { version: found, problem })
+        } finally {
+          staging = false
+        }
       },
       install() {
-        // 静默装、装完自动重开（NSIS 的 /S + --force-run）
-        real.quitAndInstall(true, true)
+        const to = found
+        if (layout === undefined || to === undefined || staged !== to) {
+          // 静默装、装完自动重开（NSIS 的 /S + --force-run）
+          real.quitAndInstall(true, true)
+          return
+        }
+        void runFastSwitch({
+          layout,
+          fs: layoutFs,
+          userData: paths.userData,
+          from: version,
+          to,
+          exeName: basename(process.execPath),
+          token: randomUUID(),
+          now: () => new Date(),
+          sleep,
+          quiesce: () => quiesceForSwitch(),
+          launch: (exe, args) => {
+            const child = spawn(exe, [...args], { detached: true, stdio: 'ignore' })
+            child.unref()
+            return {
+              pid: child.pid,
+              exited: new Promise((resolve) => {
+                child.on('exit', (code) => resolve(code))
+                child.on('error', () => resolve(-1))
+              }),
+            }
+          },
+          killTree: (pid) => {
+            spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+          },
+          probeVersion: async () => {
+            const h = await probeHealth(serverUrl(), {
+              fetchImpl: globalThis.fetch as never,
+              timeoutMs: 1500,
+              abort: nodeAbort,
+            })
+            return h.ok ? h.version : undefined
+          },
+          log: (message, fields) => logger.info(message, fields),
+        }).then((outcome) => {
+          logger.info('更新切换结束', { ...outcome })
+          if (!outcome.ok && outcome.reason === 'switch') real.quitAndInstall(true, true)
+          else app.exit(0)
+        })
       },
     }
   }
@@ -1771,6 +2021,17 @@ async function bootstrap(): Promise<void> {
     server.stop()
     void connectLauncher?.stop()
     await waitServerGone()
+  }
+  /*
+   * WP327：只切换的更新——服务进程已停（上面那一步）；再把窗口与托盘藏起来、放开单实例锁
+   * （新版起来要拿这把锁），旧版自己留在后台等新版报「起来了」。
+   */
+  quiesceForSwitch = async () => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.hide()
+    tray?.destroy()
+    tray = undefined
+    clearInterval(healthTimer)
+    app.releaseSingleInstanceLock()
   }
 
   /** WP225：岗位 AI 正在跑的运行有几次（问服务进程；问不到回 undefined，按「没有」算）。 */
@@ -1962,6 +2223,12 @@ async function bootstrap(): Promise<void> {
   refreshTray()
   app.dock?.hide()
   setLoginItem(config.launchAtLogin)
+  // WP327：上次「只切换」的更新新版没起来、已回到这一版——说一声（只说一次）
+  if (rolledBack !== undefined && Notification.isSupported())
+    new Notification({
+      title: splashText(config.language, rolledBack.to).title,
+      body: strings(config.language).updateRolledBack.replace('{version}', rolledBack.to),
+    }).show()
 
   const handle: TestHandle = {
     hasTray: () => tray !== undefined && !tray.isDestroyed(),

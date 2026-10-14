@@ -24,6 +24,7 @@ import {
   appendFileSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -33,7 +34,7 @@ import {
 } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // ── 纯函数（单测覆盖，mac 上也能跑）─────────────────────────────────────
@@ -62,7 +63,9 @@ function listFiles(root) {
   const walk = (dir) => {
     for (const entry of readdirSync(dir)) {
       const p = join(dir, entry)
-      const st = statSync(p)
+      // WP327：`current` 是指向版本目录的联接——不跟进去，不然每个文件算两遍
+      const st = lstatSync(p)
+      if (st.isSymbolicLink()) continue
       if (st.isDirectory()) walk(p)
       else out.push(p)
     }
@@ -255,16 +258,117 @@ export function reporter(out, name = 'report.txt') {
   }
 }
 
+/**
+ * 装好的 exe：WP327 起在 `<安装目录>\current\agentsws.exe`（`current` 是指向 `app-<版本>` 的联接），
+ * 老的平铺布局在 `<安装目录>\agentsws.exe`。
+ */
+export function installedExe(dir, exists = existsSync) {
+  const versioned = join(dir, 'current', 'agentsws.exe')
+  return exists(versioned) ? versioned : join(dir, 'agentsws.exe')
+}
+
 /** 静默安装到 `dir`，回装好的 exe。 */
 export function silentInstall(installer, dir) {
   const inst = spawnSync(installer, installerArgs(dir), {
     windowsVerbatimArguments: true,
     timeout: 300_000,
   })
-  const exe = join(dir, 'agentsws.exe')
+  const exe = installedExe(dir)
   if (inst.status !== 0 || !existsSync(exe))
     throw new Error(`静默安装失败（退出码 ${describeExit(inst.status, inst.signal)}），${exe} 不在`)
   return exe
+}
+
+/** WP327：安装目录的布局——`current` 联接指向哪一版、根上有哪些版本目录、根上还有没有平铺的 exe。 */
+export function installLayout(dir) {
+  const current = join(dir, 'current')
+  let target
+  let link = false
+  try {
+    link = lstatSync(current).isSymbolicLink()
+    target = realpathSync.native(current)
+  } catch {
+    target = undefined
+  }
+  const apps = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((n) => /^app-/i.test(n))
+        .sort()
+    : []
+  return { link, target, apps, flatExe: existsSync(join(dir, 'agentsws.exe')) }
+}
+
+/**
+ * 快捷方式（.lnk）指向哪。用 Shell.Application 读（WScript.Shell 在带中文的路径上抛「Value does not fall within
+ * the expected range」，10-14 CI 实测）；目录与文件名经环境变量传，不进命令行。
+ */
+export function shortcutTarget(lnk) {
+  if (!existsSync(lnk)) return undefined
+  const out = powershell(
+    '$f = (New-Object -ComObject Shell.Application).Namespace($env:AGENTSWS_LNK_DIR).ParseName($env:AGENTSWS_LNK_NAME); if ($f) { $f.GetLink.Path }',
+    { ...process.env, AGENTSWS_LNK_DIR: dirname(lnk), AGENTSWS_LNK_NAME: basename(lnk) },
+  ).trim()
+  return out === '' ? `（读不出：${lnk}）` : out
+}
+
+/** 安装器建的那几个快捷方式（开始菜单、桌面、任务栏固定）的位置。 */
+export function shortcutPaths(env = process.env, name = 'Agents 工坊') {
+  const appData = env.APPDATA ?? ''
+  return {
+    startMenu: join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${name}.lnk`),
+    // WP327：Electron 为系统通知按产品名在开始菜单补的那一个
+    startMenuProduct: join(
+      appData,
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'agentsws.lnk',
+    ),
+    desktop: join(env.USERPROFILE ?? '', 'Desktop', `${name}.lnk`),
+    pinned: join(
+      appData,
+      'Microsoft',
+      'Internet Explorer',
+      'Quick Launch',
+      'User Pinned',
+      'TaskBar',
+      `${name}.lnk`,
+    ),
+  }
+}
+
+/**
+ * 版本目录布局核对：`current` 是联接、指向 `app-<version>`、根上没有平铺的 exe、快捷方式都指 `current\agentsws.exe`。
+ * 回问题清单（空 = 都对）与给报告看的几行。
+ */
+export function checkVersionedLayout(dir, version, targetOf = shortcutTarget) {
+  const problems = []
+  const lines = []
+  const layout = installLayout(dir)
+  lines.push(
+    `布局：current ${layout.link ? '是联接' : '不是联接'} → ${layout.target ?? '（没有）'}；版本目录 ${layout.apps.join('、') || '没有'}`,
+  )
+  if (!layout.link) problems.push('current 不是目录联接')
+  if (normalizeWinPath(layout.target ?? '') !== normalizeWinPath(join(dir, `app-${version}`)))
+    problems.push(`current 没指向 app-${version}`)
+  if (layout.flatExe) problems.push('安装目录根上还有平铺的 agentsws.exe')
+  const want = normalizeWinPath(join(dir, 'current', 'agentsws.exe'))
+  // 诊断：开始菜单 / 桌面 / 任务栏固定目录里实际有哪些快捷方式
+  for (const lnk of Object.values(shortcutPaths())) {
+    const where = dirname(lnk)
+    const found = existsSync(where) ? readdirSync(where).filter((n) => n.endsWith('.lnk')) : []
+    lines.push(`（${where} 里的快捷方式：${found.join('、') || '没有'}）`)
+    // 开始菜单里我们的其它快捷方式（如迁移后多出来的 agentsws.lnk）也看一眼指哪
+  }
+  for (const [what, lnk] of Object.entries(shortcutPaths())) {
+    const target = targetOf(lnk)
+    if (target === undefined) continue
+    lines.push(`快捷方式（${what}）→ ${target}`)
+    if (normalizeWinPath(target) !== want)
+      problems.push(`快捷方式（${what}）没指向 current\\agentsws.exe`)
+  }
+  return { problems, lines, layout }
 }
 
 /** 等服务健康（壳的测试把手 `__agentsws__`），回服务地址。 */
@@ -425,12 +529,21 @@ async function main() {
   // 1. 静默安装到带中文和空格的目录（模拟中文用户名 / 用户自己挑的目录）
   const local = process.env.LOCALAPPDATA ?? tmpdir()
   const dir = join(local, 'Programs', '智能体 工坊 测试')
+  step(`安装包：${Math.round(statSync(installer).size / 1e5) / 10} MB`)
   const t0 = Date.now()
   const exe = silentInstall(installer, dir)
   const foot = installFootprint(dir)
   step(
     `装好了：${exe}（静默装 ${Math.round((Date.now() - t0) / 1000)} 秒；安装目录 ${foot.files} 个文件、${foot.mb} MB）`,
   )
+  // WP327：版本目录 + current 联接；快捷方式指 current
+  const version = JSON.parse(
+    readFileSync(join(dirname(exe), 'resources', 'app', 'package.json'), 'utf8'),
+  ).version
+  const layoutCheck = checkVersionedLayout(dir, version)
+  for (const line of layoutCheck.lines) step(line)
+  if (layoutCheck.problems.length > 0)
+    throw new Error(`版本目录布局不对：${layoutCheck.problems.join('；')}`)
 
   // 2. 最长路径
   const longest = longestPaths(dir)
@@ -500,6 +613,10 @@ async function main() {
   step(`卸载程序返回：${describeExit(un.status, un.signal)}`)
   for (let i = 0; i < 60 && existsSync(exe); i += 1) await sleep(1000)
   if (existsSync(exe)) throw new Error('静默卸载 60 秒后程序还在')
+  // WP327：联接与版本目录都要删干净
+  for (let i = 0; i < 30 && existsSync(dir); i += 1) await sleep(1000)
+  if (existsSync(dir) && installLayout(dir).apps.length > 0)
+    throw new Error(`卸载后版本目录还在：${installLayout(dir).apps.join('、')}`)
   if (!existsSync(join(userData, 'config.json'))) throw new Error('卸载把用户数据也删了')
   step('卸载干净，用户数据保留')
 

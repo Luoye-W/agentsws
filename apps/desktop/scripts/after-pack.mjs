@@ -21,24 +21,33 @@
  *    冒烟里还用**包里那份**主进程代码取一次 `autoUpdater`（WP218 的包在 Windows 上就坏在这一步）。
  * 7. **npm 随包带**（WP254）：捆绑 Node 旁边按官方布局有那版配套的 npm、版本与锁一致；
  *    本机平台再用捆绑的 Node 真跑一次 `npm --version`。
+ * 8. **打成 bundle**（WP327）：桌面壳主进程、服务进程与 dsh / cordis 那一串用 esbuild 打进 `<resources>/app/bundle/`，
+ *    node_modules 里只留原生模块那几串、按位置读的数据与静态资源、指向 bundle 的桩（见 `bundle-app.mjs`）；
+ *    打完先把 bundle 每个文件解析一遍，再走下面的冒烟。
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stashDirOf } from './after-extract.mjs'
+import { BUNDLE_DIR, bundleApp, checkSyntax } from './bundle-app.mjs'
+import { npmPackageFiles } from './fetch-node.mjs'
 import { findNativeBinaries, NOTICE_FILE, writeNotice } from './third-party-licenses.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -457,6 +466,58 @@ export function bundledNpmProblem(resources, platformName, expectedVersion) {
   return undefined
 }
 
+/** WP327：安装包里 npm 的 tgz 与它的说明（`<resources>/node/npm.json`）。 */
+export const NPM_TARBALL_META = 'npm.json'
+
+/** 删掉漏进包里的「解开的 npm」（两种布局都看）；回删了几个文件。 */
+export function removeUnpackedNpm(resources) {
+  let files = 0
+  for (const rel of [
+    ['node_modules', 'npm'],
+    ['lib', 'node_modules', 'npm'],
+  ]) {
+    const dir = join(resources, 'node', ...rel)
+    if (!existsSync(dir)) continue
+    files += sizeOfTree(dir).files
+    rmSync(dir, { recursive: true, force: true })
+    for (let up = dirname(dir); up !== join(resources, 'node'); up = dirname(up)) {
+      try {
+        rmdirSync(up)
+      } catch {
+        break
+      }
+    }
+  }
+  return files
+}
+
+/** 包里那份 npm tgz 有什么问题（空 = 没问题）：不在 / 版本或 sha512 与 `node-runtime.lock.json` 不一致。 */
+export function bundledNpmTarballProblem(resources, lockNpm) {
+  const meta = readJson(join(resources, 'node', NPM_TARBALL_META))
+  if (meta === undefined)
+    return `安装包里没有 node/${NPM_TARBALL_META}（先跑 fetch-node.mjs；extraResources 没生效？）`
+  if (meta.version !== lockNpm?.version)
+    return `安装包里的 npm 是 ${String(meta.version)}，锁里钉的是 ${String(lockNpm?.version)}`
+  if (meta.integrity !== lockNpm?.integrity) return '安装包里 npm.json 的 sha512 与锁不一致'
+  const file = join(resources, 'node', String(meta.file))
+  if (!existsSync(file)) return `安装包里没有 ${file}`
+  const actual = `sha512-${createHash('sha512').update(readFileSync(file)).digest('base64')}`
+  if (actual !== lockNpm.integrity) return `安装包里的 ${meta.file} 校验不对（sha512 与锁不一致）`
+  return undefined
+}
+
+/** 把包里的 npm tgz 解到 `dest`（`dest/package/…`），回 npm-cli.js 的路径。 */
+export function unpackNpmTarball(resources, dest) {
+  const meta = readJson(join(resources, 'node', NPM_TARBALL_META))
+  const tgz = readFileSync(join(resources, 'node', String(meta?.file)))
+  for (const f of npmPackageFiles(tgz)) {
+    const to = join(dest, 'package', ...f.rel.split('/'))
+    mkdirSync(dirname(to), { recursive: true })
+    writeFileSync(to, f.data)
+  }
+  return join(dest, 'package', 'bin', 'npm-cli.js')
+}
+
 // ── ⑩ 瘦身：删掉运行时用不到的文件（WP319）──────────────────────────────
 
 /**
@@ -566,6 +627,27 @@ export function sizeOfTree(root) {
   return { files, bytes }
 }
 
+// ── ⑫ WP327：Windows 安装器挪进版本目录的条目清单 ───────────────────────────
+
+/** 生成到 `build/` 里、由 `build/installer.nsh` include 的那份（只给 NSIS 用；不进仓库）。 */
+export const APP_ENTRIES_NSH = 'agentsws-app-entries.nsh'
+
+/**
+ * win-unpacked 根上的每个条目 → NSIS 宏 `agentswsAppEntries CMD`（对每个条目各展开一次 CMD）。
+ * 安装器只挪 / 只删这些名字，安装目录里别的东西（用户自己放的、卸载程序、版本目录、联接）一个不碰。
+ */
+export function appEntriesNsh(names) {
+  const bad = names.find((n) => /["$\r\n]/.test(n) || n === 'current' || n.startsWith('app-'))
+  if (bad !== undefined) throw new Error(`win-unpacked 根上有安装器处理不了的名字：${bad}`)
+  return [
+    '; WP327：afterPack 按这一版 win-unpacked 根上的条目生成（scripts/after-pack.mjs），不要手改。',
+    '!macro agentswsAppEntries CMD',
+    ...[...names].sort().map((n) => `  !insertmacro \${CMD} "${n}"`),
+    '!macroend',
+    '',
+  ].join('\r\n')
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -629,6 +711,24 @@ export default async function afterPack(context) {
       `（libvips：${notice.libvips.join(', ') || '无'}）；Electron / Chromium：${electronLicenses.join(', ') || '没找到'}`,
   )
 
+  // ⑫ WP327：Windows 安装器要挪进 app-<版本> 的条目（build/installer.nsh include 它）
+  if (platformName === 'win32') {
+    const entries = readdirSync(context.appOutDir)
+    writeFileSync(join(DESKTOP_ROOT, 'build', APP_ENTRIES_NSH), appEntriesNsh(entries))
+    log(`安装器的版本目录条目：${entries.length} 个`)
+  }
+
+  // ⑪ WP327：打成 bundle（放在许可证之后——许可证清单按打包前的依赖算；放在冒烟之前——打完照样要 import 得动）
+  const beforeBundle = sizeOfTree(appDir)
+  const esbuild = await import('esbuild')
+  await bundleApp({ esbuild, appDir, log })
+  const parsed = checkSyntax(process.execPath, join(appDir, BUNDLE_DIR))
+  const afterBundle = sizeOfTree(appDir)
+  log(
+    `bundle 后 <resources>/app：${beforeBundle.files} → ${afterBundle.files} 个文件、` +
+      `${Math.round(beforeBundle.bytes / 1e6)} → ${Math.round(afterBundle.bytes / 1e6)} MB（bundle 解析过 ${parsed} 个）`,
+  )
+
   // ⑤ WP181：官方插件清单与锁定 patch 在不在（每个平台都要有，放在冒烟之前）
   const missingProfile = missingProfileFiles(resources)
   if (missingProfile.length > 0)
@@ -659,24 +759,23 @@ export default async function afterPack(context) {
   if (!existsSync(nodeExec))
     throw new Error(`安装包里没有捆绑的 Node：${nodeExec}（extraResources 没生效？）`)
 
-  // ⑧ WP254：npm 随包带（每个平台都查；本机平台再用捆绑的 Node 真跑一次 `npm --version`）
-  const npmVersion = readJson(join(DESKTOP_ROOT, 'node-runtime.lock.json'))?.npm?.version
-  if (placeBundledNpm(resources, platformName, join(DESKTOP_ROOT, 'vendor', 'node', target)))
-    log('随包的 npm：extraResources 漏了 node_modules，已从 vendor 补进来')
-  const npmProblem = bundledNpmProblem(resources, platformName, npmVersion)
+  // ⑧ WP254 → WP327：npm 随包带，但只带 tgz（`<resources>/node/npm-<版本>.tgz` + `npm.json`）。
+  // 服务进程第一次要 npm 时校验后解到自己的工具目录（apps/server/src/npm-runtime.ts）。万一解开的那 2009 个文件
+  // 还是进了包（extraResources 的过滤没生效），这里删掉——它们是安装 / 更新慢的大头之一
+  const lockNpm = readJson(join(DESKTOP_ROOT, 'node-runtime.lock.json'))?.npm
+  const npmVersion = lockNpm?.version
+  const strayNpm = removeUnpackedNpm(resources)
+  if (strayNpm > 0) log(`随包的 npm：删了漏进来的解开版 ${strayNpm} 个文件（只留 tgz）`)
+  const npmProblem = bundledNpmTarballProblem(resources, lockNpm)
   if (npmProblem !== undefined) throw new Error(npmProblem)
-  log(`随包的 npm：${npmVersion}`)
+  log(`随包的 npm：${npmVersion}（tgz）`)
 
-  // ⑩ WP319：瘦身（放在冒烟之前——删过之后照样 import 得动、npm 照样跑，才算数）
+  // ⑩ WP319：瘦身（放在冒烟之前——删过之后照样 import 得动，才算数）
   const before = sizeOfTree(context.appOutDir)
   const prunedApp = pruneNonRuntimeFiles(join(appDir, 'node_modules'))
-  const prunedNpm = pruneNonRuntimeFiles(dirname(dirname(bundledNpmCli(resources, platformName))), {
-    extraDirs: ['docs', 'man'],
-  })
   const after = sizeOfTree(context.appOutDir)
   log(
-    `瘦身：删了 ${prunedApp.files + prunedNpm.files} 个运行时用不到的文件` +
-      `（${Math.round((prunedApp.bytes + prunedNpm.bytes) / 1e6)} MB）；` +
+    `瘦身：删了 ${prunedApp.files} 个运行时用不到的文件（${Math.round(prunedApp.bytes / 1e6)} MB）；` +
       `安装目录 ${before.files} → ${after.files} 个文件、${Math.round(after.bytes / 1e6)} MB`,
   )
 
@@ -687,15 +786,22 @@ export default async function afterPack(context) {
       plan.map((p) => p.pkgDir),
     )
     log(`捆绑 Node 冒烟：${out.trim()}`)
-    const npmOut = execFileSync(nodeExec, [bundledNpmCli(resources, platformName), '--version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', npm_config_update_notifier: 'false' },
-    }).trim()
-    if (npmOut !== npmVersion)
-      throw new Error(`捆绑 Node 跑随包的 npm 回的是 ${npmOut}，应是 ${npmVersion}`)
-    log(`随包 npm 冒烟：${npmOut}`)
+    // 照服务进程的做法把 tgz 解到临时目录，用捆绑的 Node 真跑一次 `npm --version`
+    const npmTmp = mkdtempSync(join(tmpdir(), 'agentsws-npm-'))
+    try {
+      const cli = unpackNpmTarball(resources, npmTmp)
+      const npmOut = execFileSync(nodeExec, [cli, '--version'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', npm_config_update_notifier: 'false' },
+      }).trim()
+      if (npmOut !== npmVersion)
+        throw new Error(`捆绑 Node 跑随包的 npm 回的是 ${npmOut}，应是 ${npmVersion}`)
+      log(`随包 npm 冒烟（从 tgz 解开）：${npmOut}`)
+    } finally {
+      rmSync(npmTmp, { recursive: true, force: true })
+    }
   } else {
     log(`跨平台打包（${platformName} ≠ ${hostPlatform()}），冒烟跳过`)
   }

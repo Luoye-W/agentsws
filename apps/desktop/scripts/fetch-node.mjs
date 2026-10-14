@@ -327,7 +327,24 @@ async function fetchNpmTarball(lock, { writeLock }) {
   const bytes = await download(url)
   checkIntegrity(url, lock.npm.integrity, sha512Integrity(bytes))
   if (writeLock) lock.npm.tarball_bytes = bytes.length
-  return { version, files: npmPackageFiles(bytes) }
+  return { version, bytes, files: npmPackageFiles(bytes) }
+}
+
+/**
+ * WP327：npm 的 tgz 原样存一份（`vendor/npm/npm-<版本>.tgz`）。安装包里**只带这一个文件**，不带解开的
+ * 2009 个文件——服务进程第一次要 npm 时从它解到自己的工具目录（`apps/server/src/npm-runtime.ts`）。
+ * 旁边写一份 `npm.json`（版本 + sha512），解之前照它校验。
+ */
+export function npmTarballFile(version) {
+  return join(VENDOR_DIR, 'npm', `npm-${version}.tgz`)
+}
+
+export function writeNpmTarball(npm, integrity) {
+  writeFile(npmTarballFile(npm.version), npm.bytes)
+  writeFile(
+    join(VENDOR_DIR, 'npm', 'npm.json'),
+    `${JSON.stringify({ version: npm.version, integrity, file: `npm-${npm.version}.tgz` }, null, 2)}\n`,
+  )
 }
 
 async function fetchNatives(lock, target, { writeLock }) {
@@ -393,6 +410,8 @@ export async function main(argv = process.argv.slice(2)) {
     if (NODE_DIST_NAME[target] === undefined) throw new Error(`不支持的平台：${target}`)
   // WP254：npm 只下一次（与平台无关），每个平台摆一份
   const npm = await fetchNpmTarball(lock, { writeLock })
+  rmSync(join(VENDOR_DIR, 'npm'), { recursive: true, force: true })
+  writeNpmTarball(npm, lock.npm.integrity)
 
   for (const target of wanted) {
     rmSync(join(VENDOR_DIR, 'node', target), { recursive: true, force: true })

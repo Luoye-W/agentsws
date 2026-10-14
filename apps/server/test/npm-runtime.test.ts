@@ -18,6 +18,7 @@ import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   bundledNpmCandidates,
+  bundledNpmTarball,
   cachedNpmCli,
   ensureNpmCli,
   extractTgz,
@@ -172,6 +173,66 @@ describe('找 npm', () => {
       }) as unknown as typeof fetch,
     }).catch((e: unknown) => e)
     expect(err).toMatchObject({ code: 'network' })
+  })
+})
+
+describe('WP327：安装包里只带 npm 的 tgz', () => {
+  const pack = (version: string): Buffer =>
+    gzipSync(
+      tarOf([
+        { name: 'package/package.json', body: JSON.stringify({ version }) },
+        { name: 'package/bin/npm-cli.js', body: '// npm' },
+      ]),
+    )
+
+  for (const [platform, nodeRel] of [
+    ['win32', ['node', 'node.exe']],
+    ['darwin', ['node', 'bin', 'node']],
+  ] as const) {
+    it(`${platform}：校验后解到 <tools>/npm/<版本>，不联网；第二次直接用解好的`, async () => {
+      const root = tmp()
+      const nodeExec = join(root, ...nodeRel)
+      mkdirSync(join(nodeExec, '..'), { recursive: true })
+      const tgz = pack('10.9.8')
+      writeFileSync(join(root, 'node', 'npm-10.9.8.tgz'), tgz)
+      writeFileSync(
+        join(root, 'node', 'npm.json'),
+        JSON.stringify({ version: '10.9.8', integrity: sri(tgz), file: 'npm-10.9.8.tgz' }),
+      )
+      expect(bundledNpmTarball(nodeExec)?.version).toBe('10.9.8')
+      const tools = join(root, 'tools')
+      const fetchImpl = (): Promise<Response> => Promise.reject(new Error('不该联网'))
+      const cli = await ensureNpmCli({ nodeExec, toolsDir: tools, fetchImpl, platform })
+      expect(cli).toBe(cachedNpmCli(tools, '10.9.8'))
+      expect(readFileSync(cli, 'utf8')).toBe('// npm')
+      expect(await ensureNpmCli({ nodeExec, toolsDir: tools, fetchImpl, platform })).toBe(cli)
+    })
+  }
+
+  it('tgz 校验不对：不用它，照旧走下载那一路', async () => {
+    const root = tmp()
+    const nodeExec = join(root, 'node', 'node.exe')
+    mkdirSync(join(root, 'node'), { recursive: true })
+    writeFileSync(join(root, 'node', 'npm-10.9.8.tgz'), pack('10.9.8'))
+    writeFileSync(
+      join(root, 'node', 'npm.json'),
+      JSON.stringify({ version: '10.9.8', integrity: 'sha512-AAAA', file: 'npm-10.9.8.tgz' }),
+    )
+    const fetchImpl = (): Promise<Response> => Promise.reject(new Error('offline'))
+    await expect(
+      ensureNpmCli({ nodeExec, toolsDir: join(root, 'tools'), fetchImpl, platform: 'win32' }),
+    ).rejects.toMatchObject({ code: 'network' })
+    expect(existsSync(cachedNpmCli(join(root, 'tools'), '10.9.8'))).toBe(false)
+  })
+
+  it('npm.json 里的文件名带路径分隔符：不认', () => {
+    const root = tmp()
+    mkdirSync(join(root, 'node'), { recursive: true })
+    writeFileSync(
+      join(root, 'node', 'npm.json'),
+      JSON.stringify({ version: '1', integrity: 'x', file: '../evil.tgz' }),
+    )
+    expect(bundledNpmTarball(join(root, 'node', 'node.exe'))).toBeUndefined()
   })
 })
 
