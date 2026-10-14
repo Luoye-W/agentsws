@@ -2,5 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist" },
   "include": ["src"],
-  "references": [{ "path": "../browser-action" }, { "path": "../contracts" }, { "path": "../core" }, { "path": "../support-core" }]
+  "references": [
+    { "path": "../browser-action" },
+    { "path": "../contracts" },
+    { "path": "../core" },
+    { "path": "../support-core" }
+  ]
 }
