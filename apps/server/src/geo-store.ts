@@ -1158,8 +1158,8 @@ export function defaultWatchSettings(input: {
  * 把 `seo-state.json` 里的问题清单与开关搬进 `geo.sqlite`（只搬一次；`seo-state.json` 原样不动）。
  *
  * - 开关 / 关掉的市场 → 关注设置（已经有关注设置就不覆盖；决策 532：不留老默认 6 条、不留老三家）；
- * - 每个问题 → 一条 Prompt（id、原句、来路、开没开都照旧，**一条不丢**）；老版真在问的那几条里
- *   开着的前 {@link GEO_STRATEGY_FALLBACK_PROMPTS} 条记为「已选」，其余是候选；
+ * - 每个问题 → 一条 Prompt（id、原句、来路、开没开都照旧，**一条不丢**）；开着的前
+ *   {@link GEO_STRATEGY_FALLBACK_PROMPTS} 条记为「已选」，其余是候选（不看老版「问几个」）；
  * - `branded` 按品牌名 / 别名判（给了 `isBranded` 才判）。
  */
 export function importSeoState(
@@ -1185,10 +1185,8 @@ export function importSeoState(
           legacy: state,
         }),
       )
-    const limit = Math.min(
-      state.geo_settings?.max_questions ?? GEO_STRATEGY_FALLBACK_PROMPTS,
-      GEO_STRATEGY_FALLBACK_PROMPTS,
-    )
+    // 决策 532：一律按新设置（兜底追 5 条）挑已选，不看老版「问几个」
+    const limit = GEO_STRATEGY_FALLBACK_PROMPTS
     let picked = 0
     let added = 0
     for (const q of questions) {

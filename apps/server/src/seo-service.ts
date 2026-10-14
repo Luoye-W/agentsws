@@ -1897,7 +1897,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         {
           add_prompts: clean
             .filter((q) => !byId.has(q.id))
-            .map((q) => ({ text: q.text, selected: q.enabled })),
+            .map((q) => ({ id: q.id, text: q.text, selected: q.enabled })),
           edit_prompts: clean
             .filter((q) => byId.has(q.id) && byId.get(q.id)?.text !== q.text)
             .map((q) => ({ id: q.id, text: q.text })),

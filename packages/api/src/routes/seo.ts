@@ -367,6 +367,7 @@ const WatchPatchBody = z.object({
   add_prompts: z
     .array(
       z.object({
+        id: z.string().min(1).max(80).optional(),
         text: z.string().min(1).max(300),
         topic: Topic.optional(),
         selected: z.boolean().optional(),

@@ -78,6 +78,7 @@ import {
   geoTrends,
   guessPromptTopic,
   judgePrompt,
+  marketName,
   type MetricAnswer,
   mondayOf,
   newPromptCandidates,
@@ -858,7 +859,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       }
     if (untranslated.size > 0)
       notes.push(
-        `还没配模型，${[...untranslated].join('、')} 先按原语言问的（配好模型后按当地语言问）。`,
+        `还没配模型，${[...untranslated].map((m) => marketName(m)).join('、')}先按原语言问的（配好模型后按当地语言问）。`,
       )
     const run: WatchRun = {
       id: deps.nextId('wr'),
@@ -1472,7 +1473,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       for (const t of patch.add_prompts ?? []) {
         const text = t.text.trim().slice(0, 300)
         if (text === '') continue
-        const id = promptId(text)
+        const id = t.id ?? promptId(text)
         const cur = store.prompt(id)
         if (cur !== undefined) {
           if (cur.archived_at === undefined && t.selected !== undefined)

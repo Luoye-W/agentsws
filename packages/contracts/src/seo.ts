@@ -972,8 +972,8 @@ export interface GeoWatchPatch {
   prompt_limit?: number
   /** 已选 = 这几条（其余变候选）。 */
   select?: string[]
-  /** 加几条（人加的，`origin: 'human'`）。 */
-  add_prompts?: { text: string; topic?: GeoPromptTopic; selected?: boolean }[]
+  /** 加几条（人加的，`origin: 'human'`；`id` 不给就按原句算一个稳定的）。 */
+  add_prompts?: { id?: string; text: string; topic?: GeoPromptTopic; selected?: boolean }[]
   /** 改字 = 归档旧的 + 新建一条。 */
   edit_prompts?: { id: string; text: string }[]
   archive_prompts?: string[]
