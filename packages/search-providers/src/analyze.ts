@@ -399,7 +399,11 @@ export function matchEntities(
     let best = -1
     let hit: string | undefined
     const take = (offset: number, what: string): void => {
-      if (offset >= 0 && (best < 0 || offset < best)) {
+      // 同一处被名字与更长的别名同时命中（「Voltbrick」「Voltbrick 20K」）时记更长的那个
+      if (
+        offset >= 0 &&
+        (best < 0 || offset < best || (offset === best && what.length > (hit?.length ?? 0)))
+      ) {
         best = offset
         hit = what
       }
