@@ -1824,6 +1824,9 @@ async function bootstrap(): Promise<void> {
                 'v1.0',
                 'powershell.exe',
               ),
+              comspec:
+                process.env.ComSpec ??
+                join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'),
               launcher: {
                 // PowerShell 5.1 按本地码页读不带 BOM 的脚本，中文会乱
                 writeScript: (path, text) => writeFileSync(path, `\uFEFF${text}`, 'utf8'),
@@ -1840,18 +1843,20 @@ async function bootstrap(): Promise<void> {
                   const child = spawn(command, [...args], {
                     detached: true,
                     stdio: ['ignore', out, out],
+                    // 参数已按 cmd 的规矩拼好引号（见 update-splash.ts 的 viaCmdStart）
+                    windowsVerbatimArguments: true,
                   })
                   child.on('error', (e) =>
                     logger.warn('「正在更新」小窗没起来', { error: String(e) }),
                   )
                   child.on('exit', (code, signal) =>
-                    logger.warn('「正在更新」小窗进程退了', {
+                    logger.info('「正在更新」小窗的启动器（cmd）退了', {
                       code: code ?? 'none',
                       signal: signal ?? 'none',
                       ms: Date.now() - t0,
                     }),
                   )
-                  logger.info('「正在更新」小窗进程', { pid: child.pid ?? 'none' })
+                  logger.info('「正在更新」小窗的启动器', { pid: child.pid ?? 'none' })
                   child.unref()
                 },
               },

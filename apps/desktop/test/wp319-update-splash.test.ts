@@ -15,6 +15,7 @@ import {
   splashScript,
   splashText,
   UPDATE_PENDING_FILE,
+  viaCmdStart,
 } from '../src/update-splash.js'
 
 const USER_DATA = 'C:\\Users\\a\\AppData\\Roaming\\@agentsws\\desktop'
@@ -52,21 +53,35 @@ describe('WP319 ② 「正在更新」小窗', () => {
     expect(scripts[0]?.text).toContain(`$pending = '${PENDING}'`)
     expect(scripts[0]?.text).toContain(`$beat = '${USER_DATA}\\update-splash.json'`)
     // 不在安装目录里：系统自带的 PowerShell，脚本在临时目录
+    // WP325：不直接脱离起 PowerShell（没有控制台它一行不跑就退），经 cmd 的 start 开一个最小化控制台
     expect(spawned).toEqual([
       {
-        command: 'powershell.exe',
+        command: 'cmd.exe',
         args: [
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-WindowStyle',
-          'Hidden',
-          '-File',
-          'C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1',
+          '/d',
+          '/s',
+          '/c',
+          '"start "" /min powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\Temp\\agentsws-update-0.2.0-beta.6.ps1"',
         ],
       },
     ])
+  })
+
+  it('WP325：cmd start 那一行——带空格 / 中文的路径加引号', () => {
+    const out = viaCmdStart(
+      'C:\\Windows\\System32\\cmd.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-File', 'C:\\Users\\智能体 工坊\\AppData\\Local\\Temp\\a (1).ps1'],
+    )
+    expect(out).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '"start "" /min C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -File "C:\\Users\\智能体 工坊\\AppData\\Local\\Temp\\a (1).ps1""',
+      ],
+    })
   })
 
   it('起不来不挡更新；不是 Windows 只写单子', () => {

@@ -134,8 +134,32 @@ export function splashScript(input: {
 export interface SplashLauncher {
   /** 写临时脚本（带 BOM）。 */
   writeScript(path: string, text: string): void
-  /** 脱离父进程起 PowerShell（父进程马上要退）。 */
+  /**
+   * 脱离父进程起一个进程（父进程马上要退）。`args` 已经按 cmd 的规矩拼好引号，
+   * 真起的时候要 `windowsVerbatimArguments: true`，别再让 Node 加一层引号。
+   */
   spawnDetached(command: string, args: readonly string[]): void
+}
+
+/** cmd 的一个参数：带空格 / 引号的包一层双引号（路径里不会有双引号）。 */
+const cmdArg = (a: string): string => (/[\s"&()^|<>]/.test(a) ? `"${a.replace(/"/g, '')}"` : a)
+
+/**
+ * WP325：经 `cmd /c start "" /min` 起 PowerShell。
+ *
+ * 真机 + CI 实测（10-14）：PowerShell 5.1 用 `DETACHED_PROCESS`（Node 的 `detached: true`）直接起，
+ * **没有控制台就一行脚本都不跑、退出码 0、120–200 毫秒就退了**——WP319 的小窗就是这样「起了但没有」的。
+ * 不脱离又会被桌面壳退出时连带结束（Node 把非脱离子进程放进退出即杀的 job）。所以让脱离的 cmd 用 `start`
+ * 给 PowerShell 开一个**新的最小化控制台**（PowerShell 起来就按 `-WindowStyle Hidden` 把它藏起来），
+ * 父进程退了它照样活着。
+ */
+export function viaCmdStart(
+  comspec: string,
+  powershell: string,
+  args: readonly string[],
+): { command: string; args: string[] } {
+  const line = ['start', '""', '/min', cmdArg(powershell), ...args.map(cmdArg)].join(' ')
+  return { command: comspec, args: ['/d', '/s', '/c', `"${line}"`] }
 }
 
 export interface BeginUpdateInput {
@@ -152,6 +176,8 @@ export interface BeginUpdateInput {
   launcher: SplashLauncher
   /** PowerShell 在哪（默认系统目录那一份）。 */
   powershell?: string
+  /** cmd 在哪（默认 `%ComSpec%`）。 */
+  comspec?: string
 }
 
 const joinPath = (dir: string, name: string, sep: string): string =>
@@ -183,7 +209,7 @@ export function beginUpdate(input: BeginUpdateInput): { pendingFile: string; spl
         text: splashText(input.language, input.to),
       }),
     )
-    input.launcher.spawnDetached(input.powershell ?? 'powershell.exe', [
+    const launch = viaCmdStart(input.comspec ?? 'cmd.exe', input.powershell ?? 'powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy',
@@ -193,6 +219,7 @@ export function beginUpdate(input: BeginUpdateInput): { pendingFile: string; spl
       '-File',
       script,
     ])
+    input.launcher.spawnDetached(launch.command, launch.args)
     input.logger.info('「正在更新」小窗起了', { to: input.to })
     return { pendingFile, splash: true }
   } catch (e) {
