@@ -346,6 +346,12 @@ export function checkVersionedLayout(dir, version, targetOf = shortcutTarget) {
     problems.push(`current 没指向 app-${version}`)
   if (layout.flatExe) problems.push('安装目录根上还有平铺的 agentsws.exe')
   const want = normalizeWinPath(join(dir, 'current', 'agentsws.exe'))
+  // 诊断：开始菜单 / 桌面 / 任务栏固定目录里实际有哪些快捷方式
+  for (const lnk of Object.values(shortcutPaths())) {
+    const where = dirname(lnk)
+    const found = existsSync(where) ? readdirSync(where).filter((n) => n.endsWith('.lnk')) : []
+    lines.push(`（${where} 里的快捷方式：${found.join('、') || '没有'}）`)
+  }
   for (const [what, lnk] of Object.entries(shortcutPaths())) {
     const target = targetOf(lnk)
     if (target === undefined) continue

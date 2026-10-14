@@ -1773,11 +1773,11 @@ async function bootstrap(): Promise<void> {
     args: readonly string[],
     timeoutMs: number,
     verbatim = false,
-  ): Promise<number | null> =>
+  ): Promise<{ code: number | null; stderr: string }> =>
     new Promise((resolve) => {
       // 安装包的 `/D=<目录>` 必须不带引号放最后（verbatim）；那时可执行文件自己的路径要我们自己加引号
       const child = spawn(command, [...args], {
-        stdio: 'ignore',
+        stdio: ['ignore', 'ignore', 'pipe'],
         windowsHide: true,
         ...(verbatim ? { windowsVerbatimArguments: true, argv0: `"${command}"` } : {}),
       })
@@ -1787,14 +1787,18 @@ async function bootstrap(): Promise<void> {
       } catch {
         // 调不了优先级就照常跑
       }
-      const timer = setTimeout(() => child.kill(), timeoutMs)
-      child.on('error', () => {
-        clearTimeout(timer)
-        resolve(null)
+      let stderr = ''
+      child.stderr?.on('data', (d: Buffer) => {
+        stderr = (stderr + d.toString('utf8')).slice(-2000)
       })
-      child.on('exit', (code) => {
+      const timer = setTimeout(() => child.kill(), timeoutMs)
+      child.on('error', (e) => {
         clearTimeout(timer)
-        resolve(code)
+        resolve({ code: null, stderr: String(e) })
+      })
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        resolve({ code, stderr })
       })
     })
   /** 用新版自带的 Node 把新版的服务入口 import 一遍（不起服务，只看装得全不全）。 */
@@ -1813,12 +1817,14 @@ async function bootstrap(): Promise<void> {
     if (!existsSync(node) || !existsSync(entry)) return '新版里缺服务进程或 Node'
     const script =
       "const m = await import(process.argv[1]); if (typeof m.createServer !== 'function') process.exit(3)"
-    const code = await runLow(
+    const out = await runLow(
       node,
       ['--input-type=module', '-e', script, pathToFileURL(entry).href],
       120_000,
     )
-    return code === 0 ? undefined : `import 服务入口退出码 ${String(code)}`
+    return out.code === 0
+      ? undefined
+      : `import 服务入口退出码 ${String(out.code)}：${out.stderr.trim().split(/\r?\n/).slice(0, 6).join(' / ')}`
   }
   const cleanupVersions = async (): Promise<void> => {
     if (layout === undefined) return
@@ -1906,7 +1912,7 @@ async function bootstrap(): Promise<void> {
             version: found,
             installer,
             exeName: basename(process.execPath),
-            run: (command, args) => runLow(command, args, 15 * 60_000, true),
+            run: async (command, args) => (await runLow(command, args, 15 * 60_000, true)).code,
             smoke: smokeStaged,
             log: (message, fields) => logger.info(message, fields),
           })

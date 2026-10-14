@@ -258,10 +258,21 @@ function registeredVersion() {
 /** 模拟一个任务栏固定（老的平铺布局下它指 `<安装目录>\agentsws.exe`），迁移后要被改指 current。 */
 function fakePin(lnk, target) {
   mkdirSync(dirname(lnk), { recursive: true })
-  powershell(
-    '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:AGENTSWS_LNK); $s.TargetPath = $env:AGENTSWS_TARGET; $s.Save()',
-    { ...process.env, AGENTSWS_LNK: lnk, AGENTSWS_TARGET: target },
+  const out = spawnSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:AGENTSWS_LNK); $s.TargetPath = $env:AGENTSWS_TARGET; $s.Save()',
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      env: { ...process.env, AGENTSWS_LNK: lnk, AGENTSWS_TARGET: target },
+    },
   )
+  return `${out.status}${out.stderr ? `：${out.stderr.trim().slice(0, 300)}` : ''}`
 }
 
 async function main() {
@@ -299,8 +310,8 @@ async function main() {
   const yml = join(dirname(oldExe), 'resources', 'app-update.yml')
   writeFileSync(yml, patchAppUpdateYml(readFileSync(yml, 'utf8'), `${feedUrl}/beta`))
   const pins = shortcutPaths()
-  fakePin(pins.pinned, oldExe)
-  step(`A 模拟了一个任务栏固定 → ${shortcutTarget(pins.pinned)}`)
+  const pinOut = fakePin(pins.pinned, oldExe)
+  step(`A 模拟了一个任务栏固定（${pinOut}）→ ${shortcutTarget(pins.pinned)}`)
 
   const userData = defaultUserData(process.env.APPDATA ?? tmpdir(), pkgOf(oldExe).name)
   mkdirSync(userData, { recursive: true })
