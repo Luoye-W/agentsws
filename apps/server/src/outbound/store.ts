@@ -57,6 +57,8 @@ export interface OutboundStore {
   put(record: OutboundRecord): void
   sinks(workspace_id: WorkspaceId): RecordSink[]
   sink(id: string): RecordSink | undefined
+  /** 所有品牌里「在记」的去处（定时那一拍补写用）。 */
+  allActiveSinks(): RecordSink[]
   putSink(sink: RecordSink): void
   /** 删去处 + 它的全部写入状态。 */
   removeSink(id: string): boolean
@@ -155,6 +157,10 @@ export function createOutboundStore(dbPath?: string): OutboundStore {
         | undefined
       return r === undefined ? undefined : (JSON.parse(r.json) as RecordSink)
     },
+    allActiveSinks: () =>
+      (db.prepare('SELECT json FROM record_sinks ORDER BY rowid').all() as { json: string }[])
+        .map((r) => JSON.parse(r.json) as RecordSink)
+        .filter((s) => s.state === 'active'),
     putSink: (s) => {
       db.prepare(
         `INSERT INTO record_sinks (id, workspace_id, json) VALUES (?,?,?)
@@ -205,4 +211,3 @@ export function createOutboundStore(dbPath?: string): OutboundStore {
     close: () => db.close(),
   }
 }
-

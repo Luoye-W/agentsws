@@ -42,7 +42,11 @@ const ACTION_ZH: Readonly<Record<string, string>> = {
   message: '消息',
   broadcast: '群发',
 }
-const STATUS_ZH: Readonly<Record<string, string>> = { sent: '已发', failed: '失败', deleted: '已删' }
+const STATUS_ZH: Readonly<Record<string, string>> = {
+  sent: '已发',
+  failed: '失败',
+  deleted: '已删',
+}
 const CHANNEL_ZH: Readonly<Record<string, string>> = {
   reddit: 'Reddit',
   email: '邮件',
@@ -128,8 +132,7 @@ export function renderCell(
   if (src.from === 'const') return { column: col.column, type, text: src.value }
   const raw = fieldValue(record, src.field)
   const fmt = src.format ?? {}
-  if (typeof raw === 'number')
-    return { column: col.column, type, text: String(raw), num: raw }
+  if (typeof raw === 'number') return { column: col.column, type, text: String(raw), num: raw }
   if (TIME_FIELDS.has(src.field) && raw !== '') {
     const pattern = fmt.date ?? (src.field === 'sent_date' ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:mm')
     return {
@@ -167,7 +170,10 @@ export function matchesFilter(record: OutboundRecord, filter: SinkFilter): boole
 /** 每个字段的常见列名（中英；越具体的放越前）。 */
 const SYNONYMS: ReadonlyArray<[OutboundField, readonly string[]]> = [
   ['thread_url', ['原帖链接', '帖子链接', 'post link', 'post url', 'thread url', '原贴链接']],
-  ['link', ['回复链接', '评论链接', '我们的链接', 'reply link', 'comment link', '链接', 'link', 'url']],
+  [
+    'link',
+    ['回复链接', '评论链接', '我们的链接', 'reply link', 'comment link', '链接', 'link', 'url'],
+  ],
   ['thread_title', ['原帖标题', '帖子标题', 'post title', 'thread title', '标题', 'title']],
   [
     'counterpart_text',
@@ -212,9 +218,10 @@ const norm = (s: string): string =>
     .trim()
 
 /** 按列名猜这一列对应哪个字段（猜不到 = undefined）。 */
-export function guessField(column: TargetColumn, taken: ReadonlySet<OutboundField> = new Set()):
-  | OutboundField
-  | undefined {
+export function guessField(
+  column: TargetColumn,
+  taken: ReadonlySet<OutboundField> = new Set(),
+): OutboundField | undefined {
   const name = norm(column.name)
   if (name === '') return undefined
   // 1) 一字不差
@@ -318,9 +325,7 @@ export function buildMapping(
     ? [...byName.keys()].map((name) => ({ name, type: 'text' as const }))
     : header
   const guessed = guessColumns(base.filter((c) => !byName.has(c.name.trim())))
-  const taken = new Set(
-    [...byName.values()].flatMap((s) => (s.from === 'field' ? [s.field] : [])),
-  )
+  const taken = new Set([...byName.values()].flatMap((s) => (s.from === 'field' ? [s.field] : [])))
   const columns = base.map((c): SinkColumn => {
     const given = byName.get(c.name.trim())
     const guess = guessed.find((g) => g.column === c.name)

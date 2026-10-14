@@ -193,7 +193,8 @@ export function createFeishuSinkAdapter(options: FeishuSinkOptions): SinkAdapter
     fresh = false,
   ): Promise<SinkResult<string>> => {
     const cached = tokens.get(c.app_id)
-    if (!fresh && cached !== undefined && cached.until > now()) return { ok: true, data: cached.token }
+    if (!fresh && cached !== undefined && cached.until > now())
+      return { ok: true, data: cached.token }
     let res: { status: number; json(): Promise<unknown> }
     try {
       res = await options.fetch(`${baseOf(c)}/open-apis/auth/v3/tenant_access_token/internal`, {
@@ -243,7 +244,8 @@ export function createFeishuSinkAdapter(options: FeishuSinkOptions): SinkAdapter
       }
       const body = ((await res.json().catch(() => ({}))) ?? {}) as Record<string, unknown>
       const code = typeof body.code === 'number' ? body.code : res.status === 200 ? 0 : -1
-      if (code === 0) return { ok: true, data: (body.data ?? {}) as Record<string, unknown> }
+      if (code === 0 && res.status < 400)
+        return { ok: true, data: (body.data ?? {}) as Record<string, unknown> }
       // 令牌过期 / 失效：重取一次再试
       if ([99991663, 99991664, 99991661, 99991668].includes(code) && attempt === 0) continue
       const kind = classifyFeishuError(res.status, code, String(body.msg ?? ''))
@@ -283,7 +285,10 @@ function createAdapterBody(core: AdapterCore): SinkAdapter {
     const p = parseFeishuUrl(url)
     if (p === undefined) return fail('not_supported')
     if (p.kind !== 'wiki')
-      return { ok: true, data: { kind: p.kind, token: p.token, ...(p.sub === undefined ? {} : { sub: p.sub }) } }
+      return {
+        ok: true,
+        data: { kind: p.kind, token: p.token, ...(p.sub === undefined ? {} : { sub: p.sub }) },
+      }
     const node = await call(ws, 'GET', `/open-apis/wiki/v2/spaces/get_node?token=${enc(p.token)}`)
     if (!node.ok) return node
     const n = asRecord(node.data.node)
@@ -293,7 +298,11 @@ function createAdapterBody(core: AdapterCore): SinkAdapter {
       return fail('not_supported')
     return {
       ok: true,
-      data: { kind: objType as 'bitable' | 'sheet', token: objToken, ...(p.sub === undefined ? {} : { sub: p.sub }) },
+      data: {
+        kind: objType as 'bitable' | 'sheet',
+        token: objToken,
+        ...(p.sub === undefined ? {} : { sub: p.sub }),
+      },
     }
   }
 
@@ -305,7 +314,11 @@ function createAdapterBody(core: AdapterCore): SinkAdapter {
     let table = sub
     let title: string | undefined
     if (table === undefined) {
-      const tables = await call(ws, 'GET', `/open-apis/bitable/v1/apps/${enc(app)}/tables?page_size=20`)
+      const tables = await call(
+        ws,
+        'GET',
+        `/open-apis/bitable/v1/apps/${enc(app)}/tables?page_size=20`,
+      )
       if (!tables.ok) return tables
       const first = asRecord(asArray(tables.data.items)[0])
       if (typeof first.table_id !== 'string') return fail('not_found', '这个多维表格里没有数据表')
@@ -351,7 +364,11 @@ function createAdapterBody(core: AdapterCore): SinkAdapter {
     let sheet = sub
     let title: string | undefined
     if (sheet === undefined) {
-      const q = await call(ws, 'GET', `/open-apis/sheets/v3/spreadsheets/${enc(token)}/sheets/query`)
+      const q = await call(
+        ws,
+        'GET',
+        `/open-apis/sheets/v3/spreadsheets/${enc(token)}/sheets/query`,
+      )
       if (!q.ok) return q
       const first = asRecord(asArray(q.data.sheets)[0])
       if (typeof first.sheet_id !== 'string') return fail('not_found', '这个表格里没有工作表')
@@ -431,7 +448,12 @@ function createAdapterBody(core: AdapterCore): SinkAdapter {
           input.workspace_id,
           'POST',
           `/open-apis/sheets/v2/spreadsheets/${enc(ref.spreadsheet_token)}/values_append?insertDataOption=INSERT_ROWS`,
-          { valueRange: { range: `${ref.sheet_id}!A1:${colLetter(width - 1)}${values.length}`, values } },
+          {
+            valueRange: {
+              range: `${ref.sheet_id}!A1:${colLetter(width - 1)}${values.length}`,
+              values,
+            },
+          },
         )
         if (!res.ok) return res
         const updated = asRecord(res.data.updates).updatedRange
