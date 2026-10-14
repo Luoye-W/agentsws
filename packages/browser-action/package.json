@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/browser-action",
+  "version": "0.0.0",
+  "private": true,
+  "description": "浏览器动作的公共执行模块（WP313，docs/101 §5.4）：写死的步骤表、白名单、读回确认、限速（只限速不伪装）、被拦就停、默认不碰的区域、上传表指纹。纯逻辑，插件与本机服务共用。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "@types/jsdom": "^21.1.7"
+  }
+}

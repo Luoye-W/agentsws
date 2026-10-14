@@ -23,9 +23,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
+  AiPlatform,
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
+  BrandWatch,
   ClaimMarketGroup,
   ClaimRulesView,
   Clock,
@@ -37,8 +39,15 @@ import type {
   GeoHistoryDeleteResult,
   GeoHistoryExport,
   GeoMarketSummary,
+  GeoMetricsView,
   GeoQuestion,
+  GeoRunEstimate,
   GeoSettings,
+  GeoWatchCardPayload,
+  GeoWatchPatch,
+  GeoWatchRunResult,
+  GeoWatchStrategy,
+  GeoWatchView,
   GscRow,
   Mandate,
   ObjectRef,
@@ -46,16 +55,16 @@ import type {
   ProvenanceState,
   RoleId,
   SearchDataPort,
-  SearchDataStatus,
   SeoDailyPayload,
   SeoPick,
   SeoTopicPayload,
   SeoWeeklyGeoPayload,
   SeoWeeklyRevenuePayload,
   SitePage,
+  WatchRun,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { marketLanguage } from '@agentsws/contracts'
+import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
   type BrandProfileLike,
@@ -63,20 +72,18 @@ import {
   CLAIM_MARKET_GROUPS,
   type ClaimRuleCardLike,
   checkContentQuality,
+  competitorId,
   DEFAULT_MODEL_DRAFTS_PER_DAY,
+  estimateLine,
   evidenceText,
   type FactLike,
-  generateGeoQuestions,
   geoGaps,
-  geoPlatformsFor,
   type LandingConversion,
   type LandingOrder,
-  MAX_GEO_QUESTIONS,
   marketName,
   pageBodyText,
   pageRevenue,
   parseSeoDraft,
-  probeRows,
   qualitySummary,
   resolveClaimRules,
   type SearchConsolePort,
@@ -87,10 +94,19 @@ import {
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import {
+  createGeoMonitor,
+  DECLINED_RIVALS_KEY,
+  periodOf,
+  probingMarkets,
+  SETUP_DECLINED,
+  type WatchDataPort,
+} from './geo-monitor.js'
+import {
   createGeoStore,
   type GeoStore,
   importSeoState,
   SEO_STATE_IMPORTED_KEY,
+  upgradeWatchTo321,
 } from './geo-store.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
@@ -140,6 +156,8 @@ export interface SeoBrandInfo extends BrandProfileLike {
   markets?: string[]
   /** WP169：档案里按市场覆盖的探测语言（国家码 → ISO 639-1）。 */
   market_languages?: Record<string, string>
+  /** WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）。 */
+  one_liner?: string
 }
 
 export interface SeoServiceOptions {
@@ -223,6 +241,21 @@ export interface SeoServiceOptions {
    */
   geoStore?: () => GeoStore
   /**
+   * WP321：官方数据能力口（排队档批量问答、Claude、关注词排名）。不给 = 这几样走不了（照实说）。
+   * **每次现取**（账号关联与路由随时会变）。
+   */
+  dataService?(): WatchDataPort | undefined
+  /** WP321（决策 534）：自带 key 那档问 Claude 前查一次免费的模型清单。 */
+  claudeModelCheck?(): Promise<{ ok: boolean; reason?: string }>
+  /**
+   * WP321：监测里交给模型的几件事（策略建议、情感、站点分类）——同 `drafter`，每次现取，没配回
+   * `undefined`（策略按兜底、情感不判、站点按内置表）。
+   */
+  watchModel?(meta: { actor: SeoActor; run_id: string }): SeoDraftModel | undefined
+  /** WP321：等排队档任务（测试注入不睡、等 0 毫秒）。 */
+  watchSleep?(ms: number): Promise<void>
+  watchWaitBudgetMs?: number
+  /**
    * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
@@ -241,9 +274,13 @@ export interface SeoDailyOutcome {
 export interface SeoServiceAssembly {
   daily(): Promise<SeoDailyOutcome>
   weeklyRevenue(): Promise<{ skipped?: string; approval_item_id?: string; rows: number }>
-  weeklyGeo(): Promise<{ skipped?: string; approval_item_id?: string; gaps: number }>
+  /** WP321：`trigger` 默认定时（排队档）；「现在跑一轮」传 `manual`（即时、Claude 要先确认）。 */
+  weeklyGeo(
+    trigger?: 'scheduled' | 'manual',
+  ): Promise<{ skipped?: string; approval_item_id?: string; gaps: number }>
   geoQuestions(): Promise<GeoQuestion[]>
-  setGeoQuestions(list: readonly GeoQuestion[]): GeoQuestion[]
+  /** WP321：改成异步（问题清单落在 geo.sqlite 的关注设置里）。 */
+  setGeoQuestions(list: readonly GeoQuestion[]): Promise<GeoQuestion[]>
   /** 面板上那一块：问题清单 + 开关与问几个 + 每周大概花多少。 */
   geoView(): Promise<GeoView>
   /** 改开关 / 问几个（1–10）/ WP166：关掉哪几个市场的探测（只关探测，不改公司档案）。 */
@@ -251,7 +288,21 @@ export interface SeoServiceAssembly {
     enabled?: boolean | undefined
     max_questions?: number | undefined
     markets_off?: string[] | undefined
-  }): GeoSettings
+  }): Promise<GeoSettings>
+  /** WP321：「GEO 关注设置」读视图（设置 + 一轮花多少 + 策略定没定 + 最近几轮）。 */
+  watchView(): Promise<GeoWatchView>
+  /** WP321：AI 按品牌档案给一份策略（`card: true` 同时出一张设定卡）。 */
+  watchSuggest(input?: {
+    card?: boolean
+  }): Promise<{ strategy: GeoWatchStrategy; estimate: GeoRunEstimate; approval_item_id?: string }>
+  /** WP321：改关注设置（用户确认 / 改策略）。 */
+  watchApply(patch: GeoWatchPatch): Promise<GeoWatchView>
+  /** WP321：现在跑一轮（Claude 单格 ≥ 1 积分：不带 `confirm` 只回估算）。 */
+  watchRun(input: { confirm?: boolean; kinds?: ('geo' | 'rank')[] }): Promise<GeoWatchRunResult>
+  /** WP321：看板要的数。 */
+  watchMetrics(input?: { weeks?: number }): Promise<GeoMetricsView>
+  /** WP321：取回排队档任务（每天早上那一轮顺手做；回记完的那几轮）。 */
+  watchCollect(): Promise<WatchRun[]>
   /** 账本 stage 之前的改写口：`publish_post` 要发出去时跑质检。 */
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
@@ -315,48 +366,18 @@ const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
 const DAY_MS = 86_400_000
-/** 每周默认问几个（WP159：6 个 × 3 个平台 × 0.2 = 一周约 3.6 积分）。 */
-const DEFAULT_GEO_QUESTIONS = Math.min(6, MAX_GEO_QUESTIONS)
-
-const geoSettingsOf = (state: SeoState): GeoSettings =>
-  state.geo_settings ?? { enabled: true, max_questions: DEFAULT_GEO_QUESTIONS }
-
 /**
- * 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。
- * WP166：按「问题 × 平台 × 市场」算（每个目标市场分别探），价目不变。
+ * WP321：新的一轮估算 → 老面板那一格的形状（`GeoCostEstimate`，问题 × 平台 × 市场；积分 / 周 = 一轮）。
  */
-function estimateOf(
-  questions: number,
-  status: SearchDataStatus,
-  markets: readonly string[],
-): GeoCostEstimate {
-  // WP159：默认问 ChatGPT、Gemini、Google AI 概览——再与这条路能探测的取交集
-  const platforms = geoPlatformsFor(status.platforms).length
-  const base = {
-    questions,
-    platforms,
-    route: status.route,
+function legacyEstimate(e: GeoRunEstimate, markets: readonly string[]): GeoCostEstimate {
+  return {
+    questions: e.prompts,
+    platforms: e.platforms.length,
+    route: e.route,
+    ...(e.credits === undefined ? {} : { credits_per_week: e.credits }),
     markets: markets.length,
     market_codes: [...markets],
   }
-  if (!status.configured) return base
-  if (status.route === 'byo') return { ...base, credits_per_week: 0 }
-  const price = status.prices?.ai_answer
-  return price === undefined
-    ? base
-    : {
-        ...base,
-        credits_per_week: Math.round(questions * platforms * markets.length * price * 10) / 10,
-      }
-}
-
-function estimateText(e: GeoCostEstimate): string {
-  if (e.credits_per_week === undefined) return ''
-  if (e.route === 'byo') return '（用你自己的 key，不扣积分）'
-  const m = e.markets ?? 1
-  return m > 1
-    ? `（${e.questions} 问 × ${e.platforms} 个平台 × ${m} 个市场，约 ${e.credits_per_week} 积分）`
-    : `（${e.questions} 问 × ${e.platforms} 个平台，约 ${e.credits_per_week} 积分）`
 }
 
 /** 语言码 → 英文名（给模型的提示词用；认不出就原样）。 */
@@ -558,6 +579,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         },
       )
     }
+    // WP321（决策 532）：已有的关注设置一律迁到新设置（只做一次；老问题与老数据不动）
+    upgradeWatchTo321(store, clock.now())
     return store
   }
 
@@ -608,7 +631,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     from: 'brand_profile' | 'default'
   }> => {
     const { markets, from } = await marketsOf()
-    const off = new Set((geoSettingsOf(loadState()).markets_off ?? []).map((m) => m.toUpperCase()))
+    // WP321：关掉的市场在关注设置里（geo.sqlite）；老的 seo-state.json 只在第一次搬家时读
+    const off = new Set(
+      ((await geoHistory()).watch()?.markets_off ?? []).map((m) => m.toUpperCase()),
+    )
     return { all: markets, probing: markets.filter((m) => !off.has(m)), from }
   }
 
@@ -1128,10 +1154,495 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   const date = (): string => clock.now().slice(0, 10)
   const skipped = '没人持有「内容与搜索」这条职责，这一轮不跑'
 
+  /* ── WP321：监测（关注设置、每周一轮、指标、变化大才出卡）——引擎在 `./geo-monitor.ts` ── */
+
+  const watchActor = (): SeoActor | undefined => options.holderOf('dtc.content')
+  const monitor = createGeoMonitor({
+    clock,
+    nextId,
+    store: geoHistory,
+    brand: async () => {
+      const b = await options.brand()
+      const domains =
+        b.domains.length > 0 ? b.domains : (await brandOf((await readConsole()).pages)).domains
+      return {
+        name: b.name,
+        domains,
+        language: b.language,
+        country: b.country,
+        ...(b.markets === undefined ? {} : { markets: b.markets }),
+        ...(b.category === undefined ? {} : { category: b.category }),
+        ...(b.one_liner === undefined ? {} : { one_liner: b.one_liner }),
+      }
+    },
+    searchData: () => options.searchData(),
+    data: () => options.dataService?.(),
+    ...(options.claudeModelCheck === undefined
+      ? {}
+      : { claudeModelCheck: options.claudeModelCheck }),
+    model: (purpose) => {
+      const actor = watchActor()
+      return actor === undefined
+        ? undefined
+        : options.watchModel?.({ actor, run_id: `run_seo_${nextId(purpose.slice(0, 1))}` })
+    },
+    // WP169：每个市场用它的主要语言问（翻过的不再翻；没模型按原语言问、注明）
+    translate: async (text, market) => {
+      const brand = await options.brand()
+      const want = languageOf(market, brand)
+      if (want === brand.language) return { asked: text, language: want, untranslated: false }
+      const actor = watchActor()
+      const model =
+        actor === undefined
+          ? undefined
+          : options.translator?.({ actor, run_id: `run_seo_${nextId('t')}` })
+      const t = await translateQuestion(text, brand.language, want, model)
+      return t === undefined
+        ? { asked: text, language: brand.language, untranslated: true }
+        : { asked: t, language: want, untranslated: false }
+    },
+    languageOf: async (market) => languageOf(market, await options.brand()),
+    gsc: async () => {
+      const r = await readConsole()
+      return { connected: r.rows !== undefined, rows: r.rows ?? [] }
+    },
+    gscConnected: () => options.searchConsole().connected(),
+    ...(options.watchSleep === undefined ? {} : { sleep: options.watchSleep }),
+    ...(options.watchWaitBudgetMs === undefined ? {} : { waitBudgetMs: options.watchWaitBudgetMs }),
+  })
+
+  const PLATFORM_NAME: Record<string, string> = {
+    chatgpt: 'ChatGPT',
+    gemini: 'Gemini',
+    claude: 'Claude',
+    google_ai_overview: 'Google AI 概览',
+    perplexity: 'Perplexity',
+    copilot: 'Copilot',
+  }
+  const topicName = (t: string): string => GEO_PROMPT_TOPICS.find((x) => x.id === t)?.label_zh ?? t
+
+  /** 设定卡上那几行（人话、少字；不写取数方式）。 */
+  const setupSummary = (st: GeoWatchStrategy, est: GeoRunEstimate): string =>
+    [
+      `追 ${st.prompt_limit} 条（带品牌名 ${st.branded} 条）：${st.topic_mix.map((m) => `${topicName(m.topic)} ${m.count}`).join(' · ')}`,
+      ...(st.competitors.length === 0
+        ? []
+        : [`竞品：${st.competitors.map((c) => c.name).join('、')}`]),
+      `关注的 AI：${st.platforms.map((p) => PLATFORM_NAME[p] ?? p).join('、')}`,
+      ...(st.keywords.length === 0
+        ? []
+        : [`关注词 ${st.keywords.length} 个（查 Google 前 20 名）`]),
+      estimateLine(est),
+      ...st.why,
+    ]
+      .filter((l) => l !== '')
+      .join('\n')
+
+  /** 出一张设定卡（「改东西」家族：通过 / 改 / 不要）。 */
+  const createSetupCard = async (
+    actor: SeoActor,
+    first: boolean,
+  ): Promise<{ id: string; strategy: GeoWatchStrategy; estimate: GeoRunEstimate }> => {
+    const strategy = await monitor.suggest()
+    const estimate = await monitor.estimateFor(strategy)
+    const payload: GeoWatchCardPayload = { form: 'geo_watch_setup', strategy, estimate, first }
+    const item = await options.approvals.create<GeoWatchCardPayload>({
+      workspace_id,
+      schema_version: 1,
+      kind: 'geo_watch',
+      role_id: actor.role_id,
+      subject: { object: { type: 'geo_watch', id: workspace_id } },
+      dedupe_key: `dk_${workspace_id}|geo_watch|setup|${strategy.created_at}`,
+      title: first ? 'AI 回答监测：先定一下追什么' : 'AI 回答监测：新的策略建议',
+      summary: setupSummary(strategy, estimate),
+      payload,
+      evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+      proposer: { kind: 'agent', id: `agent_${actor.role_id}`, assignment_id: actor.assignment_id },
+      automation: { level_at_creation: 'L1' },
+      routing: {
+        recipients: [{ person: actor.person_id, via: 'role_holder' }],
+        rule: 'role_holder',
+        escalation: { after_hours: 72, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+    })
+    await monitor.setSetupCard(item.id)
+    emit('seo.watch_setup_card', actor.assignment_id, {
+      by: strategy.by,
+      prompts: strategy.prompt_limit,
+      branded: strategy.branded,
+      credits_per_month: estimate.credits_per_month ?? null,
+    })
+    return { id: item.id, strategy, estimate }
+  }
+
+  /** 策略还没定、也没有卡在等人、人也没说过「不要」：出第一张设定卡。 */
+  const ensureSetupCard = async (actor: SeoActor): Promise<void> => {
+    if (await monitor.setupDone()) return
+    if ((await monitor.setupCard()) !== undefined) return
+    await createSetupCard(actor, true)
+  }
+
+  /** 关注设置里的频率：这一周该不该定时跑（每两周 / 每月 / 只手动）。 */
+  const due = async (): Promise<boolean> => {
+    const { store, watch } = await monitor.ensureWatch()
+    if (watch.frequency === 'weekly') return true
+    if (watch.frequency === 'manual') return false
+    const last = store
+      .runs({ kind: 'geo' })
+      .filter((r) => r.trigger === 'scheduled')
+      .at(-1)
+    if (last === undefined) return true
+    const days = (Date.parse(periodOf(clock.now())) - Date.parse(last.period)) / DAY_MS
+    return days >= (watch.frequency === 'biweekly' ? 14 : 28)
+  }
+
+  /** 一轮 GEO 的报告卡（看完归档，不进队列）：行、缺位、每个市场的小结、这一周的数。 */
+  const reportGeoRun = async (
+    actor: SeoActor,
+    run: WatchRun,
+    est: GeoRunEstimate | undefined,
+  ): Promise<{ approval_item_id: string; gaps: number }> => {
+    const { pages } = await readConsole()
+    const { store, watch } = await monitor.ensureWatch()
+    const brand = await options.brand()
+    const rows = await monitor.probeRowsOf(run.id)
+    const { probing } = await probeMarketsOf()
+    const many = probing.length > 1
+    const gaps = probing.flatMap((market) =>
+      geoGaps(
+        rows.filter((r) => r.market === market),
+        pages,
+        watch.brand.domains,
+      ).map((g) => ({ ...g, market })),
+    )
+    const summaries: GeoMarketSummary[] = probing.map((market) => {
+      const mine = rows.filter((r) => r.market === market)
+      const want = languageOf(market, brand)
+      const untranslated = want !== brand.language && mine.some((r) => r.language !== want)
+      return {
+        market,
+        language: untranslated ? brand.language : want,
+        ...(untranslated ? { untranslated: true } : {}),
+        questions: new Set(mine.map((r) => r.question)).size,
+        seen: new Set(
+          mine.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
+        ).size,
+        gaps: gaps.filter((g) => g.market === market).length,
+      }
+    })
+    const view = await monitor.metrics({ weeks: 5 })
+    const point = view.trends
+      .find((l) => l.kind === 'all')
+      ?.points.find((p) => p.week === run.period)
+    const pendingCells = store
+      .tasks({ status: 'pending', run_id: run.id })
+      .reduce((a, t) => a + t.items.length, 0)
+    const questions = new Set(store.answers({ run_id: run.id }).map((a) => a.prompt_id)).size
+    const legacy = est === undefined ? undefined : legacyEstimate(est, probing)
+    const payload: SeoWeeklyGeoPayload = {
+      variant: 'weekly_geo',
+      week_of: run.period,
+      search_data: 'configured',
+      questions,
+      rows,
+      gaps,
+      notes: [...(run.notes ?? [])],
+      ...(legacy === undefined ? {} : { estimate: legacy }),
+      ...(rows.length === 0 ? {} : { markets: summaries }),
+      run_id: run.id,
+      ...(point === undefined ? {} : { metrics: point }),
+      ...(pendingCells === 0 ? {} : { pending_cells: pendingCells }),
+    }
+    const seen = new Set(
+      rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
+    )
+    const cost = est === undefined ? '' : estimateLine(est)
+    const line = many
+      ? `${summaries
+          .map(
+            (m) =>
+              `${marketName(m.market)}：${m.questions} 问里 ${m.seen} 个提到或引用了我们，缺位 ${m.gaps} 个`,
+          )
+          .join('；')}。${cost}`
+      : `${questions} 个买家问题，${seen.size} 个在某个 AI 上提到或引用了我们；缺位 ${gaps.length} 个。${cost}`
+    const approval_item_id = await report(
+      actor,
+      'weekly_geo',
+      run.period,
+      `AI 平台可见度（${run.period} 那一周）`,
+      pendingCells === 0 ? line : `${line}还有 ${pendingCells} 格在排队，回来后这张卡会更新。`,
+      payload,
+    )
+    emit('seo.weekly_geo', actor.assignment_id, {
+      questions,
+      markets: probing,
+      probed: rows.length,
+      gaps: gaps.length,
+      search_data: payload.search_data,
+      run_id: run.id,
+      ...(pendingCells === 0 ? {} : { pending_cells: pendingCells }),
+    })
+    return { approval_item_id, gaps: gaps.length }
+  }
+
+  /**
+   * 「变化大才出卡」（docs/99 §5.4）：变化大的那几件并进现有两条路——改页面（本职责的事项）/
+   * 交公关（交给公关的事项）；同一件事 14 天内交过不再交（`openMatter`）。新竞品出一张「改东西」卡。
+   */
+  const landAlerts = async (actor: SeoActor, week: string): Promise<number> => {
+    const list = await monitor.alerts(week)
+    if (list.length === 0) return 0
+    const { pages } = await readConsole()
+    const { store, watch } = await monitor.ensureWatch()
+    const pr = options.holderOf('pr.forums') ?? options.holderOf('pr.reddit')
+    const mine = { position_id: actor.assignment_id, participants: [actor.person_id] }
+    const toContent = (key: string, title: string, summary: string, page?: string) =>
+      openMatter(key, {
+        kind: 'project',
+        title,
+        summary,
+        entry: 'role',
+        role_id: 'dtc.content',
+        ...(page === undefined
+          ? {}
+          : {
+              pinned: pinOf(
+                page,
+                pages.find((p) => p.url === page),
+              ),
+            }),
+        ...mine,
+      })
+    const toPr = (key: string, title: string, summary: string) =>
+      openMatter(key, {
+        kind: 'project',
+        title,
+        summary,
+        entry: 'position',
+        position_template_id: 'pr',
+        ...(pr === undefined
+          ? {}
+          : { position_id: pr.assignment_id, participants: [pr.person_id] }),
+      })
+    const laneOf = (question: string, market: string, platforms: AiPlatform[], cited: string[]) =>
+      geoGaps(
+        platforms.map((platform) => ({
+          question,
+          platform,
+          market,
+          brand_mentioned: false,
+          our_domain_cited: false,
+          cited_domains: cited,
+          competitors_mentioned: [],
+        })),
+        pages,
+        watch.brand.domains,
+      )[0]
+    let n = 0
+    const newRivals: { name: string; answers: number }[] = []
+    // 同一问已经按「连续缺位」处理的，某个 AI 的那一跌不再为它另开一件
+    const missing = new Set(
+      list.flatMap((a) => (a.kind === 'prompt_missing' ? [`${a.prompt_text}|${a.market}`] : [])),
+    )
+    for (const a of list) {
+      if (a.kind === 'new_competitor') {
+        newRivals.push(a)
+        continue
+      }
+      if (a.kind === 'rank_drop') {
+        const id = toContent(
+          `rank_drop|${a.keyword}|${a.market}|${a.device}`,
+          `关注词「${a.keyword}」掉出前 10（上周第 ${a.was}${a.now === undefined ? '，这周 20 名外' : `，这周第 ${a.now}`}）`,
+          `${marketName(a.market)}${a.device === 'mobile' ? '手机' : '电脑'}搜索。先看排在前面的页比我们多写了什么，再改${a.url === undefined ? '那一页' : ` ${a.url}`}（标题、开头、小节）。`,
+          a.url,
+        )
+        if (id !== undefined) n += 1
+        continue
+      }
+      const items =
+        a.kind === 'prompt_missing'
+          ? [
+              {
+                question: a.prompt_text,
+                market: a.market,
+                platforms: a.platforms,
+                cited: a.cited_domains,
+                rivals: a.competitors,
+              },
+            ]
+          : a.lost
+              .filter((l) => !missing.has(`${l.prompt_text}|${l.market}`))
+              .map((l) => ({
+                question: l.prompt_text,
+                market: l.market,
+                platforms: [a.platform],
+                cited: [] as string[],
+                rivals: [] as string[],
+              }))
+      for (const it of items) {
+        const gap = laneOf(it.question, it.market, it.platforms, it.cited)
+        if (gap === undefined) continue
+        const where = `${probingMarkets(watch).length > 1 ? `【${marketName(it.market)}】` : ''}`
+        const why =
+          a.kind === 'prompt_missing'
+            ? `${it.platforms.map((p) => PLATFORM_NAME[p] ?? p).join('、')} 连续两周回答时都没提到我们${it.rivals.length > 0 ? `（提到了 ${it.rivals.join('、')}）` : ''}。`
+            : `${PLATFORM_NAME[a.platform] ?? a.platform} 上提到我们的比例这周跌了 ${Math.abs(a.change_pp)} 个百分点，这一问从「提到」变成了「没提到」。`
+        const id =
+          gap.lane === 'pr_handoff'
+            ? toPr(
+                `geo_pr|${it.question}|${it.market}`,
+                `交公关：AI 回答「${it.question}」时没提我们`,
+                `${where}${why}\n${gap.suggestion}`,
+              )
+            : toContent(
+                `geo_fix|${it.question}|${it.market}`,
+                gap.page === undefined
+                  ? `写一页回答「${it.question}」`
+                  : `改这页，让 AI 回答「${it.question}」时用上它`,
+                `${where}${why}\n${gap.suggestion}`,
+                gap.page,
+              )
+        if (id !== undefined) n += 1
+      }
+    }
+    // 新竞品：没在名单里、人也没说过「不要」的，出一张「改东西」卡（同一周一张）
+    const declined = new Set(
+      (JSON.parse(store.meta(DECLINED_RIVALS_KEY) ?? '[]') as string[]).map((x) => x.toLowerCase()),
+    )
+    const fresh = newRivals.filter((r) => !declined.has(r.name.toLowerCase())).slice(0, 5)
+    if (fresh.length > 0) {
+      const payload: GeoWatchCardPayload = {
+        form: 'geo_watch_competitors',
+        competitors: fresh.map((r) => ({
+          id: competitorId(r.name),
+          name: r.name,
+          aliases: [],
+          domains: [],
+          answers: r.answers,
+        })),
+        week_of: week,
+      }
+      await options.approvals.create<GeoWatchCardPayload>({
+        workspace_id,
+        schema_version: 1,
+        kind: 'geo_watch',
+        role_id: actor.role_id,
+        subject: { object: { type: 'geo_watch', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|geo_watch|competitors|${week}`,
+        title: `AI 回答里常出现的品牌：要加进竞品吗？`,
+        summary: fresh.map((r) => `${r.name}：这周 ${r.answers} 条回答里出现`).join('\n'),
+        payload,
+        evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+        proposer: {
+          kind: 'agent',
+          id: `agent_${actor.role_id}`,
+          assignment_id: actor.assignment_id,
+        },
+        automation: { level_at_creation: 'L1' },
+        routing: {
+          recipients: [{ person: actor.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 72, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      n += 1
+    }
+    emit('seo.watch_alerts', actor.assignment_id, { week, alerts: list.length, landed: n })
+    return n
+  }
+
+  /** 一轮记完：出报告卡；这一轮都回来了才看「变化大」。 */
+  const finishGeoRun = async (
+    actor: SeoActor,
+    run: WatchRun,
+    est?: GeoRunEstimate,
+  ): Promise<{ approval_item_id: string; gaps: number }> => {
+    const out = await reportGeoRun(actor, run, est ?? (await monitor.estimate()))
+    if (run.status === 'done') {
+      const store = await geoHistory()
+      const view = await monitor.metrics({ weeks: 5 })
+      store.saveWeekly(run.period, 'geo', view.trends, clock.now())
+      if (view.rank.week === run.period)
+        store.saveWeekly(run.period, 'rank', view.rank, clock.now())
+      await landAlerts(actor, run.period)
+    }
+    return out
+  }
+
+  /** 收排队档：每天早上那一轮、每周那一轮开头都顺手收；收完一轮就出它的报告卡。 */
+  const collectAndReport = async (actor: SeoActor): Promise<WatchRun[]> => {
+    const done = await monitor.collect()
+    for (const r of done) if (r.kind === 'geo') await finishGeoRun(actor, r)
+    return done
+  }
+
+  /**
+   * `geo_watch` 卡被决定之后：设定卡批了 / 改了 → 落成关注设置；
+   * 不要 → 先按现在的（兜底）设置跑、不再自动出卡。竞品卡批了 → 加进竞品；不要 → 记下不再问。
+   */
+  const decideWatchCard = async (item: ApprovalItem): Promise<void> => {
+    const approved = item.state === 'approved' || item.state === 'approved_edited'
+    const base = item.payload as GeoWatchCardPayload
+    const edited = item.state === 'approved_edited' ? item.decision?.edited_payload : undefined
+    const p = (
+      edited !== null && typeof edited === 'object' && 'form' in edited ? edited : base
+    ) as GeoWatchCardPayload
+    const store = await geoHistory()
+    if (p.form === 'geo_watch_setup') {
+      if (item.state === 'rejected') {
+        if ((await monitor.setupCard()) === item.id) await monitor.setSetupCard(SETUP_DECLINED)
+        return
+      }
+      if (!approved) return
+      const strategy =
+        edited !== null && typeof edited === 'object' && 'strategy' in edited
+          ? (edited as { strategy: GeoWatchStrategy }).strategy
+          : p.strategy
+      await monitor.apply({ strategy })
+      await monitor.setSetupCard(undefined)
+      return
+    }
+    if (item.state === 'rejected') {
+      const was = JSON.parse(store.meta(DECLINED_RIVALS_KEY) ?? '[]') as string[]
+      store.setMeta(
+        DECLINED_RIVALS_KEY,
+        JSON.stringify([...new Set([...was, ...p.competitors.map((c) => c.name)])]),
+      )
+      return
+    }
+    if (!approved) return
+    const { watch } = await monitor.ensureWatch()
+    const have = new Set(watch.competitors.map((c) => c.name.toLowerCase()))
+    await monitor.apply(
+      {
+        competitors: [
+          ...watch.competitors,
+          ...p.competitors
+            .filter((c) => !have.has(c.name.toLowerCase()))
+            .map(({ answers: _a, ...c }) => c),
+        ],
+      },
+      { markSetup: false },
+    )
+  }
+
+  /** 老面板那一格：已选 + 候选（「开着」= 已选，即每周真在问的）。 */
+  const legacyQuestions = (w: BrandWatch): GeoQuestion[] =>
+    [...w.prompts, ...w.prompt_candidates].map((q) => ({
+      ...q,
+      enabled: q.enabled && q.selected === true,
+    }))
+
   return {
     async daily() {
       const actor = options.holderOf('dtc.content')
       if (actor === undefined) return { skipped, picks: 0, changes: 0, topics: 0, matters: 0 }
+      // WP321：上周排队档没回来的顺手收（收完一轮就出它的报告卡）；收不成不挡每日判断
+      await collectAndReport(actor).catch(() => undefined)
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
       // WP166：搜索结果页人群核对按每个目标市场分别看（面板上关掉的市场不看）
@@ -1235,121 +1746,23 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       return { approval_item_id, rows: out.rows.length }
     },
 
-    async weeklyGeo() {
+    async weeklyGeo(trigger = 'scheduled') {
       const actor = options.holderOf('dtc.content')
       if (actor === undefined) return { skipped, gaps: 0 }
-      const { pages } = await readConsole()
-      const brand = await brandOf(pages)
-      const questions = await refreshQuestions()
-      const settings = geoSettingsOf(loadState())
-      const enabled = questions.filter((q) => q.enabled).slice(0, settings.max_questions)
-      const search = options.searchData()
-      const status = await search.status()
-      // WP159：默认只问 ChatGPT、Gemini、Google AI 概览（Perplexity 不再考虑），
-      // 再与这条路能探测的取交集（官方那一侧没有 Copilot）；不在里面的不问、不花钱
-      const platforms = geoPlatformsFor(status.platforms)
-      // WP166：每个目标市场分别探（问题 × 平台 × 市场），面板上关掉的市场不探
-      const { probing } = await probeMarketsOf()
-      const many = probing.length > 1
-      const estimate = estimateOf(enabled.length, status, probing)
-      const notes: string[] = []
-      const rows: SeoWeeklyGeoPayload['rows'] = []
-      const untranslated = new Set<string>()
-      if (!settings.enabled) notes.push('每周 AI 探测在面板里关掉了，这周没有探测。')
-      else if (!status.configured) notes.push('搜索数据接口还没接，这周没有探测各 AI 平台。')
-      else if (probing.length === 0) notes.push('每个市场的探测都在面板上关掉了，这周没有探测。')
-      else {
-        // WP169：每个市场用它的主要语言问——问题由模型从品牌语言翻过来（翻过的不再翻）；
-        // 没配模型就按原语言问，面板与这张报告卡上注明
-        const model = options.translator?.({ actor, run_id: `run_seo_${nextId('t')}` })
-        for (const market of probing) {
-          const want = languageOf(market, brand)
-          for (const q of enabled) {
-            const translated =
-              want === brand.language
-                ? undefined
-                : await translateQuestion(q.text, brand.language, want, model)
-            if (want !== brand.language && translated === undefined) untranslated.add(market)
-            const language = translated === undefined ? brand.language : want
-            try {
-              const answers = await search.aiAnswers({
-                question: translated ?? q.text,
-                platforms,
-                country: market.toLowerCase(),
-                language,
-                brand: { name: brand.name, domains: brand.domains },
-              })
-              rows.push(
-                ...probeRows(q.text, answers, market).map((r) => ({
-                  ...r,
-                  language,
-                  ...(translated === undefined ? {} : { asked: translated }),
-                })),
-              )
-            } catch (err) {
-              notes.push(
-                `${many ? `${marketName(market)}：` : ''}「${q.text}」这一问没查到（${(err instanceof Error ? err.message : String(err)).slice(0, 60)}）`,
-              )
-            }
-          }
-        }
-      }
-      // 可见度与缺位**按市场分开算**（不混在一起）
-      const gaps = probing.flatMap((market) =>
-        geoGaps(
-          rows.filter((r) => r.market === market),
-          pages,
-          brand.domains,
-        ).map((g) => ({ ...g, market })),
-      )
-      if (untranslated.size > 0)
-        notes.push(
-          `还没配模型，${[...untranslated].map((m) => marketName(m)).join('、')}先按原语言问的（配好模型后按当地语言问）。`,
-        )
-      const summaries: GeoMarketSummary[] = probing.map((market) => {
-        const mine = rows.filter((r) => r.market === market)
-        return {
-          market,
-          language: untranslated.has(market) ? brand.language : languageOf(market, brand),
-          ...(untranslated.has(market) ? { untranslated: true } : {}),
-          questions: new Set(mine.map((r) => r.question)).size,
-          seen: new Set(
-            mine.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
-          ).size,
-          gaps: gaps.filter((g) => g.market === market).length,
-        }
-      })
-      const payload: SeoWeeklyGeoPayload = {
-        variant: 'weekly_geo',
-        week_of: date(),
-        search_data: status.configured ? 'configured' : 'not_configured',
-        questions: enabled.length,
-        rows,
-        gaps,
-        notes,
-        ...(settings.enabled ? { estimate } : {}),
-        ...(rows.length === 0 ? {} : { markets: summaries }),
-      }
-      // 缺位里「交公关」的那几条合成一件交给公关的事项
-      const toPr = gaps.filter((g) => g.lane === 'pr_handoff')
-      if (toPr.length > 0) {
-        const pr = options.holderOf('pr.forums') ?? options.holderOf('pr.reddit')
-        openMatter(`geo_pr|${payload.week_of}`, {
-          kind: 'project',
-          title: `交公关：AI 回答里缺我们（${toPr.length} 个问题）`,
-          summary: toPr
-            .map(
-              (g) =>
-                `${many && g.market !== undefined ? `【${marketName(g.market)}】` : ''}「${g.question}」：${g.suggestion}`,
-            )
-            .join('\n'),
-          entry: 'position',
-          position_template_id: 'pr',
-          ...(pr === undefined
-            ? {}
-            : { position_id: pr.assignment_id, participants: [pr.person_id] }),
-        })
-      }
+      // 上一轮排队档没回来的先收（收完一轮就出它的报告卡）
+      await collectAndReport(actor)
+      // 策略还没定：出第一张设定卡（决策 650：定之前每周照跑四家，Claude 也问）
+      await ensureSetupCard(actor)
+      if (trigger === 'scheduled' && !(await due()))
+        return { skipped: '这一周不在监测频率里（关注设置里改）。', gaps: 0 }
+      const out = await monitor.runGeo(trigger)
+      // 关注词排名、品牌词 Search Console 周数据（各自没设 / 没连就跳过）
+      const rank = await monitor.runRank(trigger).catch((err: unknown) => ({
+        notes: [
+          `关注词排名这一轮没查成（${err instanceof Error ? err.message.slice(0, 60) : ''}）。`,
+        ],
+      }))
+      const gsc = await monitor.brandGsc().catch(() => ({ rows: 0 }))
       // 站点门面（llms.txt / 结构化数据 / AI 爬虫）开一次交给建站的事项
       const state = loadState()
       if (state.facade_matter_id === undefined && options.work !== undefined) {
@@ -1367,37 +1780,52 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         })
         saveState({ ...loadState(), facade_matter_id: m.id })
       }
-      const seen = new Set(
-        rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
-      )
-      // WP166：好几个市场时每个市场一句（不混在一起算可见度）
-      const line = many
-        ? `${summaries
-            .map(
-              (m) =>
-                `${marketName(m.market)}：${m.questions} 问里 ${m.seen} 个提到或引用了我们，缺位 ${m.gaps} 个`,
-            )
-            .join('；')}。${estimateText(estimate)}`
-        : `${enabled.length} 个买家问题，${seen.size} 个在某个平台上提到或引用了我们；缺位 ${gaps.length} 个。${estimateText(estimate)}`
+      if (out.run !== undefined) {
+        const extra = [
+          ...rank.notes,
+          ...('note' in gsc && gsc.note !== undefined ? [gsc.note] : []),
+        ]
+        if (extra.length > 0)
+          (await geoHistory()).finishRun(out.run.id, {
+            notes: [...(out.run.notes ?? []), ...extra],
+          })
+        const run = (await geoHistory()).runs().find((r) => r.id === out.run?.id) ?? out.run
+        return finishGeoRun(actor, run, out.estimate)
+      }
+      // 这一轮没问（没接 / 关了 / 都关了市场）：一句人话
+      const { watch } = await monitor.ensureWatch()
+      const { probing } = await probeMarketsOf()
+      const week = periodOf(clock.now())
+      const status = await options.searchData().status()
+      const payload: SeoWeeklyGeoPayload = {
+        variant: 'weekly_geo',
+        week_of: week,
+        search_data: status.configured ? 'configured' : 'not_configured',
+        questions: Math.min(watch.prompts.length, watch.prompt_limit),
+        rows: [],
+        gaps: [],
+        notes: out.notes,
+        ...(watch.enabled ? { estimate: legacyEstimate(out.estimate, probing) } : {}),
+      }
       const approval_item_id = await report(
         actor,
         'weekly_geo',
-        payload.week_of,
-        `AI 平台可见度（${payload.week_of} 那一周）`,
-        status.configured && settings.enabled && probing.length > 0 ? line : (notes[0] ?? ''),
+        week,
+        `AI 平台可见度（${week} 那一周）`,
+        out.notes[0] ?? '',
         payload,
       )
       emit('seo.weekly_geo', actor.assignment_id, {
-        questions: enabled.length,
+        questions: payload.questions,
         markets: probing,
-        probed: rows.length,
-        gaps: gaps.length,
+        probed: 0,
+        gaps: 0,
         search_data: payload.search_data,
       })
-      return { approval_item_id, gaps: gaps.length }
+      return { approval_item_id, gaps: 0 }
     },
 
-    geoQuestions: () => refreshQuestions(),
+    geoQuestions: async () => legacyQuestions((await monitor.ensureWatch()).watch),
     geoHistory,
     geoHistoryExport: async (input) =>
       (await geoHistory()).exportHistory(input.format, clock.now(), {
@@ -1411,10 +1839,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     async geoView() {
-      const questions = await refreshQuestions()
-      const settings = geoSettingsOf(loadState())
-      const status = await options.searchData().status()
-      const n = Math.min(questions.filter((q) => q.enabled).length, settings.max_questions)
+      const { watch } = await monitor.ensureWatch()
+      const estimate = await monitor.estimate()
       const { all, probing, from } = await probeMarketsOf()
       // WP169：每个市场用什么语言问；要翻却没模型、也没翻过的，面板上注明「先按原语言问」
       const brand = await options.brand()
@@ -1422,11 +1848,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const canTranslate =
         holder !== undefined &&
         options.translator?.({ actor: holder, run_id: 'run_seo_view' }) !== undefined
-      const asked = questions.filter((q) => q.enabled).slice(0, settings.max_questions)
+      const asked = watch.prompts.filter((q) => q.enabled).slice(0, watch.prompt_limit)
       return {
-        questions,
-        settings,
-        estimate: estimateOf(settings.enabled ? n : 0, status, probing),
+        questions: legacyQuestions(watch),
+        settings: {
+          enabled: watch.enabled,
+          max_questions: watch.prompt_limit,
+          ...(watch.markets_off === undefined || watch.markets_off.length === 0
+            ? {}
+            : { markets_off: watch.markets_off }),
+        },
+        estimate: legacyEstimate(estimate, watch.enabled ? probing : probing),
         markets: all.map((code) => {
           const language = languageOf(code, brand)
           const untranslated =
@@ -1444,38 +1876,116 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
     },
 
-    setGeoSettings(input) {
-      const cur = geoSettingsOf(loadState())
-      const off =
-        input.markets_off === undefined
-          ? cur.markets_off
-          : [
-              ...new Set(
-                input.markets_off
-                  .map((m) => m.trim().toUpperCase())
-                  .filter((m) => /^[A-Z]{2}$/.test(m)),
-              ),
-            ]
-      const next: GeoSettings = {
-        enabled: input.enabled ?? cur.enabled,
-        max_questions: Math.max(
-          1,
-          Math.min(10, Math.round(input.max_questions ?? cur.max_questions)),
-        ),
-        ...(off === undefined || off.length === 0 ? {} : { markets_off: off }),
+    async setGeoSettings(input) {
+      // 老面板改的不算「定了策略」（Claude 那份花费它没写清）
+      const w = await monitor.apply(
+        {
+          ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+          ...(input.max_questions === undefined ? {} : { prompt_limit: input.max_questions }),
+          ...(input.markets_off === undefined ? {} : { markets_off: input.markets_off }),
+        },
+        { markSetup: false },
+      )
+      return {
+        enabled: w.enabled,
+        max_questions: w.prompt_limit,
+        ...(w.markets_off === undefined || w.markets_off.length === 0
+          ? {}
+          : { markets_off: w.markets_off }),
       }
-      saveState({ ...loadState(), geo_settings: next })
-      return next
     },
 
-    setGeoQuestions(list) {
-      // 人在面板上改过的一律记成 `human`（下一次自动生成不会覆盖它）
-      const clean = list
-        .map((q) => ({ ...q, text: q.text.trim() }))
-        .filter((q) => q.text !== '')
-        .map((q) => ({ ...q, origin: 'human' as const }))
-      saveState({ ...loadState(), geo_questions: clean })
-      return clean
+    async setGeoQuestions(list) {
+      // 老面板：一行一条；「开着」= 已选；改字 = 归档旧的 + 新建一条；没给回来的那几条归档
+      const { watch } = await monitor.ensureWatch()
+      const live = [...watch.prompts, ...watch.prompt_candidates]
+      const byId = new Map(live.map((p) => [p.id, p]))
+      const clean = list.map((q) => ({ ...q, text: q.text.trim() })).filter((q) => q.text !== '')
+      const keep = new Set(clean.map((q) => q.id))
+      await monitor.apply(
+        {
+          add_prompts: clean
+            .filter((q) => !byId.has(q.id))
+            .map((q) => ({ id: q.id, text: q.text, selected: q.enabled })),
+          edit_prompts: clean
+            .filter((q) => byId.has(q.id) && byId.get(q.id)?.text !== q.text)
+            .map((q) => ({ id: q.id, text: q.text })),
+          archive_prompts: live.filter((p) => !keep.has(p.id)).map((p) => p.id),
+        },
+        { markSetup: false },
+      )
+      const after = (await monitor.ensureWatch()).watch
+      const byText = new Map(
+        [...after.prompts, ...after.prompt_candidates].map((p) => [p.text, p.id]),
+      )
+      const select = clean
+        .filter((q) => q.enabled)
+        .map((q) => byText.get(q.text))
+        .filter((id): id is string => id !== undefined)
+      const w = await monitor.apply({ select }, { markSetup: false })
+      return legacyQuestions(w)
+    },
+
+    watchView: () => monitor.view(),
+    async watchSuggest(input) {
+      const actor = options.holderOf('dtc.content')
+      if (input?.card === true && actor !== undefined) {
+        const card = await createSetupCard(actor, !(await monitor.setupDone()))
+        return { strategy: card.strategy, estimate: card.estimate, approval_item_id: card.id }
+      }
+      const strategy = await monitor.suggest()
+      return { strategy, estimate: await monitor.estimateFor(strategy) }
+    },
+    async watchApply(patch) {
+      await monitor.apply(patch)
+      // 人在设置里定了策略：还在等人的设定卡就不用了（卡留着，决定时按「已定」处理）
+      if (patch.strategy !== undefined) await monitor.setSetupCard(undefined)
+      return monitor.view()
+    },
+    async watchRun(input) {
+      const actor = options.holderOf('dtc.content')
+      const estimate = await monitor.estimate()
+      const store = await geoHistory()
+      const kinds = input.kinds ?? ['geo', 'rank']
+      if (kinds.includes('geo') && estimate.needs_confirm && input.confirm !== true)
+        return {
+          started: false,
+          needs_confirm: true,
+          estimate,
+          runs: [],
+          pending_tasks: store.tasks({ status: 'pending' }).length,
+          notes: [estimateLine(estimate)].filter((l) => l !== ''),
+        }
+      const runs: WatchRun[] = []
+      const notes: string[] = []
+      if (kinds.includes('geo')) {
+        const out = await monitor.runGeo('manual', { confirmed: input.confirm === true })
+        notes.push(...out.notes)
+        if (out.run !== undefined) {
+          runs.push(out.run)
+          if (actor !== undefined) await finishGeoRun(actor, out.run, out.estimate)
+        }
+      }
+      if (kinds.includes('rank')) {
+        const r = await monitor.runRank('manual')
+        notes.push(
+          ...r.notes,
+          ...(r.skipped === undefined || r.notes.includes(r.skipped) ? [] : [r.skipped]),
+        )
+        if (r.run !== undefined) runs.push(r.run)
+      }
+      return {
+        started: runs.length > 0,
+        estimate,
+        runs: runs.map((r) => store.runs().find((x) => x.id === r.id) ?? r),
+        pending_tasks: store.tasks({ status: 'pending' }).length,
+        notes,
+      }
+    },
+    watchMetrics: (input) => monitor.metrics(input ?? {}),
+    async watchCollect() {
+      const actor = options.holderOf('dtc.content')
+      return actor === undefined ? monitor.collect() : collectAndReport(actor)
     },
 
     async gatePublish(input) {
@@ -1580,6 +2090,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     async onDecided(item) {
+      if (item.kind === 'geo_watch' && item.workspace_id === workspace_id) {
+        await decideWatchCard(item)
+        return
+      }
       if (item.kind !== 'seo_topic' || item.workspace_id !== workspace_id) return
       if (item.state !== 'approved' && item.state !== 'approved_edited') return
       const p = item.payload as SeoTopicPayload
@@ -1595,23 +2109,6 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           : { position_id: actor.assignment_id, participants: [actor.person_id] }),
       })
     },
-  }
-
-  async function refreshQuestions(): Promise<GeoQuestion[]> {
-    const state = loadState()
-    const { rows } = await readConsole()
-    const top = [...(rows ?? [])]
-      .sort((a, b) => b.impressions - a.impressions)
-      .slice(0, 30)
-      .map((r) => r.query)
-    const brand = await options.brand()
-    const list = generateGeoQuestions({
-      brand,
-      top_queries: top,
-      ...(state.geo_questions === undefined ? {} : { existing: state.geo_questions }),
-    })
-    saveState({ ...state, geo_questions: list })
-    return list
   }
 }
 

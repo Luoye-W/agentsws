@@ -119,6 +119,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   theme_choice: 'choice',
   // WP304：买高级主题——「这家店一次 560 积分，买下？」一道是非题（「花钱」家族）
   theme_purchase: 'policy',
+  // WP321：GEO 关注设置——AI 给的策略（追几条、竞品、关注的 AI 与每月积分），通过 / 改 / 不要（「改东西」家族）
+  geo_watch: 'change',
 }
 
 /**

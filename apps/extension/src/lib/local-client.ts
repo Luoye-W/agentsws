@@ -14,6 +14,19 @@
  */
 
 import type {
+  ActionDownloadInput,
+  ActionEvidenceInput,
+  ActionEvidenceReceipt,
+  ActionJobView,
+  ActionNextResponse,
+  ActionPlatform,
+  ActionProgressInput,
+  ActionProgressResponse,
+  ActionResultInput,
+  ActionSheetResponse,
+  AdsActionSettings,
+} from '@agentsws/browser-action'
+import type {
   ExtensionHello,
   ExtensionIngestResult,
   ExtensionObservationInput,
@@ -112,5 +125,94 @@ export function ingest(
   return call<ExtensionIngestResult>(options, '/v1/extension/observations', {
     method: 'POST',
     body: { observations },
+  })
+}
+
+/* ── WP313：广告动作通道（`/v1/extension/actions/*`）。令牌仍然只在这个文件里出现 ── */
+
+/** 长轮询挂多久（秒）。本机服务那边最多挂 25 秒。 */
+export const ACTION_POLL_WAIT_S = 25
+
+/** 领活。超时比挂的时间长 10 秒（挂满了正常回来，不算「应用没开」）。 */
+export function actionsNext(
+  options: LocalClientOptions,
+  platforms: readonly ActionPlatform[],
+  waitSeconds: number = ACTION_POLL_WAIT_S,
+): Promise<LocalCallResult<ActionNextResponse>> {
+  const q = `platforms=${platforms.map(encodeURIComponent).join(',')}&wait=${waitSeconds}`
+  return call<ActionNextResponse>(
+    {
+      ...options,
+      timeoutMs: Math.max(options.timeoutMs ?? LOCAL_TIMEOUT_MS, (waitSeconds + 10) * 1000),
+    },
+    `/v1/extension/actions/next?${q}`,
+    { method: 'GET' },
+  )
+}
+
+const actionPath = (id: string, tail: string): string =>
+  `/v1/extension/actions/${encodeURIComponent(id)}/${tail}`
+
+export function actionSheet(
+  options: LocalClientOptions,
+  id: string,
+): Promise<LocalCallResult<ActionSheetResponse>> {
+  return call<ActionSheetResponse>(
+    { ...options, timeoutMs: Math.max(options.timeoutMs ?? LOCAL_TIMEOUT_MS, 60_000) },
+    actionPath(id, 'sheet'),
+    { method: 'GET' },
+  )
+}
+
+export function actionProgress(
+  options: LocalClientOptions,
+  id: string,
+  input: ActionProgressInput,
+): Promise<LocalCallResult<ActionProgressResponse>> {
+  return call<ActionProgressResponse>(options, actionPath(id, 'progress'), {
+    method: 'POST',
+    body: input,
+  })
+}
+
+export function actionEvidence(
+  options: LocalClientOptions,
+  id: string,
+  input: ActionEvidenceInput,
+): Promise<LocalCallResult<ActionEvidenceReceipt>> {
+  return call<ActionEvidenceReceipt>(
+    { ...options, timeoutMs: Math.max(options.timeoutMs ?? LOCAL_TIMEOUT_MS, 30_000) },
+    actionPath(id, 'evidence'),
+    { method: 'POST', body: input },
+  )
+}
+
+export function actionDownload(
+  options: LocalClientOptions,
+  id: string,
+  input: ActionDownloadInput,
+): Promise<LocalCallResult<{ recorded: true }>> {
+  return call<{ recorded: true }>(options, actionPath(id, 'download'), {
+    method: 'POST',
+    body: input,
+  })
+}
+
+export function actionResult(
+  options: LocalClientOptions,
+  id: string,
+  input: ActionResultInput,
+): Promise<LocalCallResult<ActionJobView>> {
+  return call<ActionJobView>(options, actionPath(id, 'result'), { method: 'POST', body: input })
+}
+
+/** 连接广告时勾了「看过风险告知，同意」（决策 562）。 */
+export function adsConsent(
+  options: LocalClientOptions,
+  input: { platform: ActionPlatform; text_version: string },
+): Promise<LocalCallResult<AdsActionSettings>> {
+  return call<AdsActionSettings>(options, '/v1/extension/ads-consent', {
+    method: 'POST',
+    body: input,
   })
 }
