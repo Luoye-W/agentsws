@@ -43,7 +43,8 @@ const PERIOD = {
       'this_month',
       'last_month',
     ],
-    description: '时间窗（不给 = 最近 7 天；给了 since / until 就以它们为准）',
+    description:
+      '时间窗（不给 = 最近 7 天；给了 since / until 就以它们为准）。到点提醒是关机后补跑的（提醒里的 occurrence_at 早于现在），按 occurrence_at 用 since / until 定窗口',
   },
   week_start: {
     type: 'integer',
