@@ -427,8 +427,8 @@ export interface FaqSheetMapping {
   by: 'rules' | 'ai'
 }
 
-/** 「定规矩」卡（`policy_change` + `form: 'faq_import'`）上那三个选项。 */
-export type FaqImportOption = 'all' | 'new_only' | 'skip'
+/** 「定规矩」卡（`policy_change` + `form: 'faq_import'`）上的选项：记下 / 只加新的 / 不用；只删了行时是撤下 / 留着。 */
+export type FaqImportOption = 'all' | 'new_only' | 'skip' | 'retire'
 
 /**
  * 「这份表按问答导入」那张卡的载荷：映射 + 一两行预览 + 和库里比的结果。
