@@ -55,7 +55,7 @@ const zh = {
   more: {
     title: '还有这些',
     ext: {
-      h: '浏览器插件 · 红人助手',
+      h: '浏览器插件 · Agents 工坊助手',
       p: '在 YouTube、Instagram、TikTok 主页上点一下，红人就进你的库。只连你这台电脑。',
       btn: '下载插件包（.zip）',
       how: '怎么装',
@@ -124,7 +124,7 @@ const en: DownloadCopy = {
   more: {
     title: 'Also available',
     ext: {
-      h: 'Browser extension · Creator helper',
+      h: 'Browser extension · Agents Workshop assistant',
       p: 'One click on a YouTube, Instagram or TikTok profile and the creator lands in your list. Talks only to this computer.',
       btn: 'Download the extension (.zip)',
       how: 'How to install',

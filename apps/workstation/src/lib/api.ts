@@ -6392,6 +6392,95 @@ export const revokeExtensionToken = (
     ...withAssignment(assignment),
   })
 
+/**
+ * WP313（docs/101 §5.4）：插件广告动作——「默认不碰」十个区域的开关（决策 557）、
+ * 两家后台的同意记录（562）、排着 / 跑着的活（停、在卡上确认提交）。所有者的事，带所有者那条 Assignment。
+ */
+export type AdsGuardedZone =
+  | 'payment'
+  | 'billing'
+  | 'balance'
+  | 'users'
+  | 'business_settings'
+  | 'verification'
+  | 'appeal'
+  | 'new_account'
+  | 'pixel_conversion'
+  | 'delete_campaign'
+
+export type AdsPlatform = 'google_ads' | 'meta_ads'
+
+export interface AdsActionSettingsView {
+  zones: Record<AdsGuardedZone, boolean>
+  consent: Partial<
+    Record<AdsPlatform, { platform: AdsPlatform; accepted_at: string; text_version: string }>
+  >
+}
+
+export interface AdsActionJobView {
+  id: string
+  title: string
+  platform: AdsPlatform
+  account_id: string
+  kind: string
+  status:
+    | 'queued'
+    | 'running'
+    | 'waiting_confirm'
+    | 'done'
+    | 'failed'
+    | 'handover'
+    | 'stopped'
+    | 'rejected'
+    | 'expired'
+  approval_id?: string
+  created_at: string
+  progress?: { step: number; of: number; label: string }
+  result?: { outcome: string; message: string; step: number; finished_at: string }
+  waiting?: string
+}
+
+export const getAdsActionSettings = (assignment?: string): Promise<AdsActionSettingsView> =>
+  api<AdsActionSettingsView>('/v1/ads-actions/settings', withAssignment(assignment))
+
+export const setAdsActionZone = (
+  zone: AdsGuardedZone,
+  enabled: boolean,
+  assignment?: string,
+): Promise<AdsActionSettingsView> =>
+  api<AdsActionSettingsView>(`/v1/ads-actions/zones/${encodeURIComponent(zone)}`, {
+    method: 'PUT',
+    body: { enabled },
+    ...withAssignment(assignment),
+  })
+
+export const revokeAdsActionConsent = (
+  platform: AdsPlatform,
+  assignment?: string,
+): Promise<AdsActionSettingsView> =>
+  api<AdsActionSettingsView>(`/v1/ads-actions/consent/${encodeURIComponent(platform)}/revoke`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
+export const listAdsActionJobs = (assignment?: string): Promise<{ jobs: AdsActionJobView[] }> =>
+  api<{ jobs: AdsActionJobView[] }>('/v1/ads-actions/jobs', withAssignment(assignment))
+
+export const stopAdsActionJob = (id: string, assignment?: string): Promise<AdsActionJobView> =>
+  api<AdsActionJobView>(`/v1/ads-actions/jobs/${encodeURIComponent(id)}/stop`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
+export const confirmAdsActionJob = (id: string, assignment?: string): Promise<AdsActionJobView> =>
+  api<AdsActionJobView>(`/v1/ads-actions/jobs/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
 /* ── WP120（69 §4）：角色定位 ─────────────────────────────────────────────── */
 
 /** 一段 persona 的正文。中英各一份；老的纯字符串写法也认（契约只加不删）。 */
