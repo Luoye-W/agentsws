@@ -9,6 +9,7 @@ import {
   describeExit,
   exposedListeners,
   installerArgs,
+  installFootprint,
   isLoopback,
   longestPaths,
   normalizeWinPath,
@@ -17,6 +18,11 @@ import {
 } from '../scripts/win-install-smoke.mjs'
 
 describe('win-install-smoke 纯函数', () => {
+  it('WP319：安装目录的文件数与大小（MB，一位小数）', () => {
+    const list = () => ['a', 'b', 'c']
+    expect(installFootprint('C:\\x', list, () => 1_250_000)).toEqual({ files: 3, mb: 3.8 })
+  })
+
   it('最长路径排前面', () => {
     const list = () => ['C:\\a\\b', 'C:\\a\\bbbbbbb', 'C:\\a']
     expect(longestPaths('C:\\a', 2, list)).toEqual([

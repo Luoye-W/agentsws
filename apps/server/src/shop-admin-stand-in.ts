@@ -322,6 +322,25 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
               },
       }
     }
+    // WP319：岗位面板经店铺管理授权拉近 30 天订单（总销售额 / 订单数从这里算）
+    case 'AgentswsLiveOrders':
+      return {
+        shop: { currencyCode: 'USD', ianaTimezone: 'Asia/Shanghai' },
+        orders: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          nodes: [
+            {
+              id: 'gid://shopify/Order/1',
+              name: '#1001',
+              createdAt: NOW(),
+              displayFinancialStatus: 'PAID',
+              displayFulfillmentStatus: 'UNFULFILLED',
+              currentTotalPriceSet: { shopMoney: { amount: '49.80', currencyCode: 'USD' } },
+              totalRefundedSet: { shopMoney: { amount: '0.00', currencyCode: 'USD' } },
+            },
+          ],
+        },
+      }
     case 'AgentswsRecentOrders':
       return {
         orders: {

@@ -27,6 +27,7 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -456,6 +457,115 @@ export function bundledNpmProblem(resources, platformName, expectedVersion) {
   return undefined
 }
 
+// ── ⑩ 瘦身：删掉运行时用不到的文件（WP319）──────────────────────────────
+
+/**
+ * 运行时一个都用不上的文件：类型声明、source map、TypeScript 源码（Node 跑的是编好的 .js）、增量编译缓存。
+ * 原因（WP319，Luoye 10-14 真机）：asar 关着，NSIS 装 / 更新的时间几乎和文件数成正比——旧文件一个个挪走删掉、
+ * 新文件一个个解出来、杀毒逐个扫；CI 上从点「重启并更新」到新版起来要 3 分半。
+ */
+const DROP_FILE = /(\.d\.[cm]?ts|\.map|\.tsbuildinfo)$/i
+/**
+ * TypeScript 源码只删**我们自己的包**（`@agentsws/*`，跑的是 dist）。第三方包里的 `src/*.ts` 不碰：
+ * 有的包（dsh / cordis）在 exports 里登记了 `./src/*`，删了万一哪条路要用就是装完起不来。
+ */
+const DROP_OWN_TS = /(?<!\.d)\.[cm]?tsx?$/i
+const OWN_SCOPE = '@agentsws/'
+/** 只在包的根目录（有 package.json 的那一层）删的说明文件。 */
+const DROP_AT_PACKAGE_ROOT = /^(readme|changelog|changes|history)(\.(md|markdown|txt))?$/i
+/** 只在包的根目录删的目录：测试与示例。 */
+const DROP_DIR_AT_PACKAGE_ROOT = new Set([
+  'test',
+  'tests',
+  '__tests__',
+  'example',
+  'examples',
+  '.github',
+])
+
+/**
+ * 在 `root` 下删运行时用不到的文件，回删了几个、多少字节（**只删上面点名的那几类**，别的一个不碰）。
+ * `extraDirs`：包根目录下额外整个删掉的目录名（随包 npm 的 `docs` / `man`）。
+ */
+export function pruneNonRuntimeFiles(root, { extraDirs = [] } = {}) {
+  let files = 0
+  let bytes = 0
+  const dropDirs = new Set([...DROP_DIR_AT_PACKAGE_ROOT, ...extraDirs])
+  const drop = (path, st) => {
+    const size = st.isDirectory() ? sizeOfTree(path) : { files: 1, bytes: st.size }
+    files += size.files
+    bytes += size.bytes
+    rmSync(path, { recursive: true, force: true })
+  }
+  const walk = (dir, own) => {
+    let entries
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    const isPackageRoot = entries.includes('package.json')
+    // 进到一个包里就按它的名字定「是不是我们自己的」（嵌套的 node_modules 里再换）
+    const mine = isPackageRoot
+      ? String(readJson(join(dir, 'package.json'))?.name ?? '').startsWith(OWN_SCOPE)
+      : own
+    for (const name of entries) {
+      const path = join(dir, name)
+      let st
+      try {
+        st = lstatSync(path)
+      } catch {
+        continue
+      }
+      if (st.isSymbolicLink()) continue
+      if (st.isDirectory()) {
+        if (isPackageRoot && dropDirs.has(name)) drop(path, st)
+        else walk(path, name === 'node_modules' ? false : mine)
+        continue
+      }
+      if (
+        DROP_FILE.test(name) ||
+        (mine && DROP_OWN_TS.test(name)) ||
+        (isPackageRoot && DROP_AT_PACKAGE_ROOT.test(name))
+      )
+        drop(path, st)
+    }
+  }
+  walk(root, false)
+  return { files, bytes }
+}
+
+/** 一棵目录里有几个文件、多少字节（不跟符号链接）。 */
+export function sizeOfTree(root) {
+  let files = 0
+  let bytes = 0
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const name of entries) {
+      const path = join(dir, name)
+      let st
+      try {
+        st = lstatSync(path)
+      } catch {
+        continue
+      }
+      if (st.isSymbolicLink()) continue
+      if (st.isDirectory()) walk(path)
+      else {
+        files += 1
+        bytes += st.size
+      }
+    }
+  }
+  walk(root)
+  return { files, bytes }
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -556,6 +666,19 @@ export default async function afterPack(context) {
   const npmProblem = bundledNpmProblem(resources, platformName, npmVersion)
   if (npmProblem !== undefined) throw new Error(npmProblem)
   log(`随包的 npm：${npmVersion}`)
+
+  // ⑩ WP319：瘦身（放在冒烟之前——删过之后照样 import 得动、npm 照样跑，才算数）
+  const before = sizeOfTree(context.appOutDir)
+  const prunedApp = pruneNonRuntimeFiles(join(appDir, 'node_modules'))
+  const prunedNpm = pruneNonRuntimeFiles(dirname(dirname(bundledNpmCli(resources, platformName))), {
+    extraDirs: ['docs', 'man'],
+  })
+  const after = sizeOfTree(context.appOutDir)
+  log(
+    `瘦身：删了 ${prunedApp.files + prunedNpm.files} 个运行时用不到的文件` +
+      `（${Math.round((prunedApp.bytes + prunedNpm.bytes) / 1e6)} MB）；` +
+      `安装目录 ${before.files} → ${after.files} 个文件、${Math.round(after.bytes / 1e6)} MB`,
+  )
 
   if (platformName === hostPlatform()) {
     const out = probeBundled(

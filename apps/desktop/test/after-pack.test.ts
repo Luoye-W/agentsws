@@ -22,6 +22,7 @@ import {
   PROFILE_FILES,
   planNativeSwap,
   probeBundled,
+  pruneNonRuntimeFiles,
   repoLockFiles,
   resourcesDirOf,
   runtimeDependencyNames,
@@ -396,5 +397,79 @@ describe('WP225：冒烟用包里那份代码取 autoUpdater、找钉版本表',
   it('钉版本表没进包：冒烟失败', () => {
     const { appDir } = fakePackage(realShape)
     expect(() => probeBundled(process.execPath, appDir, [])).toThrow(/找不到钉版本表/)
+  })
+})
+
+describe('WP319 ⑩ 瘦身：只删运行时用不到的那几类', () => {
+  const put = (base: string, rel: string, text = 'x'): void => {
+    const p = join(base, rel)
+    mkdirSync(dirname(p), { recursive: true })
+    writeFileSync(p, text)
+  }
+
+  it('类型声明 / map / 增量缓存全删；TS 源码只删我们自己的包；包根的说明与测试目录删；别的不碰', () => {
+    const nm = join(scratch(), 'node_modules')
+    // 我们自己的包：dist 留、src 的 .ts 删、src 里的数据文件留、test 目录删
+    put(nm, '@agentsws/server/package.json', JSON.stringify({ name: '@agentsws/server' }))
+    put(nm, '@agentsws/server/dist/index.js')
+    put(nm, '@agentsws/server/dist/index.d.ts')
+    put(nm, '@agentsws/server/dist/index.js.map')
+    put(nm, '@agentsws/server/src/index.ts')
+    put(nm, '@agentsws/server/src/prompt.md')
+    put(nm, '@agentsws/server/test/a.test.ts')
+    put(nm, '@agentsws/server/tsconfig.tsbuildinfo')
+    // 第三方：src/*.ts 留（exports 里可能登记了 ./src/*）、.d.ts 删、README 删、docs 留
+    put(nm, '@deepseek-ai/cordis/package.json', JSON.stringify({ name: '@deepseek-ai/cordis' }))
+    put(nm, '@deepseek-ai/cordis/lib/index.js')
+    put(nm, '@deepseek-ai/cordis/lib/types/index.d.ts')
+    put(nm, '@deepseek-ai/cordis/src/fiber.ts')
+    put(nm, '@deepseek-ai/cordis/README.md')
+    put(nm, '@deepseek-ai/cordis/docs/guide.md')
+    put(nm, '@deepseek-ai/cordis/examples/demo.js')
+    // 嵌套的 node_modules 里：第三方（哪怕外层是我们的包）的 .ts 留
+    put(nm, '@agentsws/server/node_modules/zod/package.json', JSON.stringify({ name: 'zod' }))
+    put(nm, '@agentsws/server/node_modules/zod/src/index.ts')
+    put(nm, '@agentsws/server/node_modules/zod/index.cjs')
+    // 不是包根的 README（比如数据目录里的）留
+    put(nm, '@agentsws/server/dist/skills/README.md')
+
+    const out = pruneNonRuntimeFiles(nm)
+    const has = (rel: string) => existsSync(join(nm, rel))
+    for (const gone of [
+      '@agentsws/server/dist/index.d.ts',
+      '@agentsws/server/dist/index.js.map',
+      '@agentsws/server/src/index.ts',
+      '@agentsws/server/test',
+      '@agentsws/server/tsconfig.tsbuildinfo',
+      '@deepseek-ai/cordis/lib/types/index.d.ts',
+      '@deepseek-ai/cordis/README.md',
+      '@deepseek-ai/cordis/examples',
+    ])
+      expect(has(gone), gone).toBe(false)
+    for (const kept of [
+      '@agentsws/server/package.json',
+      '@agentsws/server/dist/index.js',
+      '@agentsws/server/src/prompt.md',
+      '@agentsws/server/dist/skills/README.md',
+      '@deepseek-ai/cordis/lib/index.js',
+      '@deepseek-ai/cordis/src/fiber.ts',
+      '@deepseek-ai/cordis/docs/guide.md',
+      '@agentsws/server/node_modules/zod/src/index.ts',
+      '@agentsws/server/node_modules/zod/index.cjs',
+    ])
+      expect(has(kept), kept).toBe(true)
+    expect(out.files).toBe(8)
+  })
+
+  it('随包 npm：额外把 docs / man 整个删掉', () => {
+    const npm = join(scratch(), 'npm')
+    put(npm, 'package.json', JSON.stringify({ name: 'npm', version: '10.9.8' }))
+    put(npm, 'bin/npm-cli.js')
+    put(npm, 'docs/content/a.md')
+    put(npm, 'man/man1/npm.1')
+    const out = pruneNonRuntimeFiles(npm, { extraDirs: ['docs', 'man'] })
+    expect(out.files).toBe(2)
+    expect(existsSync(join(npm, 'bin', 'npm-cli.js'))).toBe(true)
+    expect(existsSync(join(npm, 'docs'))).toBe(false)
   })
 })
