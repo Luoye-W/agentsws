@@ -53,13 +53,12 @@ function redditCard(kind: 'reply' | 'submit'): DeckCard {
 }
 
 describe('WP329 Reddit「发出去」卡', () => {
-  it('卡面：版块、回复谁、原话、能改的正文、依据；「发送」在卡身里，底下那排没有', () => {
+  it('卡面：原话、能改的正文、依据、版规条数；「发送」在卡身里，底下那排没有', () => {
     renderWithProviders(
       <DeckCardView card={redditCard('reply')} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    const body = screen.getByTestId('deck-reddit-write')
-    expect(body.textContent).toContain('Reddit · r/inmoxr')
-    expect(body.textContent).toContain('回复 alice')
+    expect(screen.getByTestId('deck-reddit-write')).toBeTruthy()
+    expect(screen.getByTestId('reddit-write-rules').textContent).toBe('版规 1 条')
     expect(screen.getByTestId('reddit-write-quote').textContent).toBe('Mine fogs up a bit')
     expect((screen.getByTestId('reddit-write-text') as HTMLTextAreaElement).value).toBe(
       'Hi Alice, INMO here.',
