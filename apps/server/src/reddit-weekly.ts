@@ -57,6 +57,9 @@ export const EMPTY_REDDIT_WEEK_SOURCE: RedditWeekSource = {
   sweeps: () => [],
 }
 
+/** 补跑时「已经跨进新的一周」的判据：新的一周开始还不到两天。 */
+const LATE_MS = 2 * 86_400_000
+
 /** 周报发给担这几条职责的人（按先后取第一个担着的）。 */
 export const REDDIT_WEEKLY_ROLES = ['social.reddit', 'pr.reddit'] as const
 
@@ -86,7 +89,14 @@ export interface RedditWeeklyService {
   /** 现在拼一份（不巡查、不出卡、不存；预览用）。没配就是 `undefined`。 */
   build(): Promise<RedditWeeklyPayload | undefined>
   /** 定时那一拍：最后一次巡查 → 拼 → 存 → 出卡 → 记录去处。 */
-  run(options?: { sweep?: boolean }): Promise<RedditWeeklyRunResult>
+  run(options?: {
+    sweep?: boolean
+    /**
+     * 关机错过、这是补跑：已经跨进新的一周头两天了，就出**上一周**的（起始日 00:00 — 下一个起始日 00:00），
+     * 不出一份只有一两天的「这周」。
+     */
+    late?: boolean
+  }): Promise<RedditWeeklyRunResult>
   /** 存着的某一周（不给 = 最近一份）。 */
   report(week_of?: string): RedditWeeklyPayload | undefined
   /** 导出文档（Markdown）。 */
@@ -112,13 +122,25 @@ export function createRedditWeeklyService(
     return undefined
   }
 
-  const build = async (): Promise<RedditWeeklyPayload | undefined> => {
+  const build = async (late = false): Promise<RedditWeeklyPayload | undefined> => {
     const source = options.source()
     if (!(await source.configured())) return undefined
     const format = options.store.format(ws)
     const tz = options.tzOffsetMinutes()
     const now = options.clock.now()
-    const window = redditWeekWindow(now, tz, format.window_start_weekday)
+    let window = redditWeekWindow(now, tz, format.window_start_weekday)
+    if (late && Date.parse(now) - Date.parse(window.since) < LATE_MS) {
+      const prev = redditWeekWindow(
+        new Date(Date.parse(window.since) - 1).toISOString(),
+        tz,
+        format.window_start_weekday,
+      )
+      window = {
+        since: prev.since,
+        until: new Date(Date.parse(window.since) - 1).toISOString(),
+        week_of: prev.week_of,
+      }
+    }
     const range = { since: window.since, until: window.until }
     const [items, sweeps, subreddits] = await Promise.all([
       source.items(range),
@@ -169,7 +191,7 @@ export function createRedditWeeklyService(
   const filenameOf = (p: RedditWeeklyPayload): string => `reddit-weekly-${p.week_of}.md`
 
   return {
-    build,
+    build: () => build(),
     async run(runOptions) {
       const owner = holder()
       if (owner === undefined) return { skipped: '这个品牌没人担 Reddit 运营，周报没人收' }
@@ -184,7 +206,7 @@ export function createRedditWeeklyService(
           sweep_failed = e instanceof Error ? e.message : String(e)
         }
       }
-      const payload = await build()
+      const payload = await build(runOptions?.late === true)
       if (payload === undefined) return { skipped: '没配 Reddit 巡查' }
       options.store.putReport(ws, payload)
       const item = await options.approvals.create<RedditWeeklyPayload>({

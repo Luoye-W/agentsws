@@ -74,6 +74,7 @@ import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { readRoutesRoutes } from './routes/read-routes.js'
+import { redditWeeklyRoutes } from './routes/reddit-weekly.js'
 import { roleRuleRoutes } from './routes/role-rules.js'
 import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
@@ -186,6 +187,8 @@ export function collectRoutes(): Route[] {
     ...roleRuleRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
+    // WP330（docs/102 附）：Reddit 周报
+    ...redditWeeklyRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),

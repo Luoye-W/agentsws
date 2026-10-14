@@ -49,7 +49,7 @@ const watch = (over: Partial<RedditWatchItem>): RedditWatchItem => ({
   ...over,
 })
 
-function setup(opts: { roles?: string[]; source?: RedditWeekSource } = {}) {
+function setup(opts: { roles?: string[]; source?: RedditWeekSource; now?: string } = {}) {
   let n = 0
   const t = Date.parse(NOW)
   const fake = createFakeFeishu()
@@ -108,7 +108,7 @@ function setup(opts: { roles?: string[]; source?: RedditWeekSource } = {}) {
   const created: ApprovalItem[] = []
   const service = createRedditWeeklyService({
     workspace_id: WS,
-    clock: { now: () => NOW } as never,
+    clock: { now: () => opts.now ?? NOW } as never,
     tzOffsetMinutes: () => 480,
     brandName: () => 'INMO',
     assignments: () => (opts.roles ?? ['social.reddit']).map((r) => assignment(r)),
@@ -201,6 +201,21 @@ describe('Reddit 周报服务', () => {
     const r = await s.service.run()
     expect(r).toMatchObject({ approval_item_id: 'apv_1', sweep_failed: '插件没连上' })
     expect(s.service.report()?.markdown).toContain('这段时间没有巡查记录')
+  })
+
+  it('关机错过、跨到下一周头两天才补跑 → 出上一周的；周六补跑照常出这一周', async () => {
+    const sunday = setup({ now: '2026-10-18T02:00:00.000Z' }) // 下周日 10:00
+    expect(await sunday.service.run({ late: true })).toMatchObject({ week_of: '2026-10-11' })
+    expect(sunday.service.report()?.window).toEqual({
+      since: '2026-10-10T16:00:00.000Z',
+      until: '2026-10-17T15:59:59.999Z',
+    })
+    const saturday = setup({ now: '2026-10-17T02:00:00.000Z' })
+    expect(await saturday.service.run({ late: true })).toMatchObject({ week_of: '2026-10-11' })
+    expect(saturday.service.report()?.window.until).toBe('2026-10-17T02:00:00.000Z')
+    // 不是补跑：周日手动点「现在出」就是这一周（刚开始）
+    const manual = setup({ now: '2026-10-18T02:00:00.000Z' })
+    expect(await manual.service.run()).toMatchObject({ week_of: '2026-10-18' })
   })
 
   it('没有 social.reddit 时发给担 pr.reddit 的人', async () => {
