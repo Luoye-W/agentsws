@@ -124,7 +124,10 @@ const OpenBody = z.object({
 })
 
 const PromoteBody = z.object({
-  /** WP291：当场回答下面「当成任务做」——转完按原话当任务再跑一次 */
+  /**
+   * WP291：当场回答下面「当成任务做」——转完按原话当任务再跑一次。
+   * WP311（决策 390）：当场答成了的只读问题不重跑，已有回答直接留在事项里（回包没有 `run_id`）。
+   */
   run: z.boolean().optional(),
 })
 

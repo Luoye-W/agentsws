@@ -18,6 +18,14 @@ export {
   setMotionPref,
   useMotionPref,
 } from './motion-pref'
+// WP320（docs/96 §4.2）：小提醒——一句话、几秒收起、打字时不弹、点了去看
+export {
+  isTypingNow,
+  NOTICE_TOAST_MS,
+  NoticeToast,
+  TYPING_QUIET_MS,
+  useLastTypedAt,
+} from './notice-toast'
 export { PositionCard, type PositionCardHolder } from './position-card'
 export {
   avatarInitial,

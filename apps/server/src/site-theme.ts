@@ -399,8 +399,8 @@ export interface SiteThemeAssembly {
   }>
   /**
    * WP304（决策 445）：要不要先出一张**选主题卡**。第一次起底（工作目录空的）或人说「换主题」（`replace`）时出：
-   * 高级主题排第一，其余是店里已装的、能改的免费主题。出了 → 回这张卡；不该出（已经起过底、旧的自带主题那一份、
-   * 没接审批总线、刚选好还没推过）→ `undefined`，照老路起底。
+   * 高级主题排第一，其余是店里已装的、能改的免费主题。出了 → 回这张卡；不该出（已经起过底、
+   * 没接审批总线、刚选好还没推过）→ `undefined`，照老路起底。WP311（决策 480）：旧的自带主题那一份工作目录也出。
    */
   askThemeChoice?(input: { replace?: boolean; request?: RunRequest }): Promise<
     | {
@@ -1387,7 +1387,12 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       legacy_moved: legacyMoved,
       theme_id: pushed.theme_id,
     })
-    if (legacyMoved) noteAt(input.request, input.matter_id, legacyMovedNote(legacy?.version, name))
+    if (legacyMoved)
+      noteAt(
+        input.request,
+        input.matter_id,
+        legacyMovedNote(legacy?.version, name, { premium: true }),
+      )
     const matter = input.request?.work_item?.id ?? input.matter_id
     if (matter !== undefined)
       options.notePreview?.(matter, {
@@ -1502,9 +1507,13 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     if (bus === undefined || request === undefined) return undefined
     const { shop, spec } = await need('remote')
     const root = rootOf(shop)
-    if (legacyOf(shop) !== undefined) return undefined
+    /*
+     * WP311（决策 480）：旧的自带主题那一份工作目录也出卡（以前照 WP301 直接复制 Horizon）——
+     * 不用说「换主题」，第一次起底就问；选了哪份都在店里新起一份未发布的，旧目录挪开留着。
+     */
+    const legacy = legacyOf(shop) !== undefined
     const state = stateOf(shop)
-    if (themeFiles(root).length > 0 && replace !== true) return undefined
+    if (!legacy && themeFiles(root).length > 0 && replace !== true) return undefined
     // 人刚选好、起好了底，还没推过：接着做，不再问
     if (state.base?.chosen === true && themeFiles(root).length > 0) return undefined
     // 还在等人选的那一张：不重复出
@@ -1890,7 +1899,12 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       from_live: source.live,
       legacy_moved: legacyMoved,
     })
-    if (legacyMoved) noteAt(request, matter_id, legacyMovedNote(legacy?.version, copy.name))
+    if (legacyMoved)
+      noteAt(
+        request,
+        matter_id,
+        legacyMovedNote(legacy?.version, copy.name, { name: info.theme_name }),
+      )
     const sections = catalog.entries.filter((e) => e.kind === 'section').length
     return {
       base: {
