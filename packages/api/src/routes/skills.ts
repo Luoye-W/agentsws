@@ -463,6 +463,46 @@ export function skillRoutes(): Route[] {
     route(
       {
         method: 'get',
+        path: '/v1/memory/changes',
+        operationId: 'listMemoryChanges',
+        summary:
+          'WP320：记忆账上最近几笔（本人的；`written_by=ai` 只要 AI 随工作记的）——「记住了：……」小提醒读它',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        // 只回本人的、且只回本人看得见的那几层（判据在实现里，同 `GET /v1/memory`）
+        authzBypass: () => true,
+        params: [
+          { name: 'since', in: 'query', description: 'ISO 时间；只要这之后的' },
+          { name: 'written_by', in: 'query', description: 'ai | person' },
+        ],
+        returns: 'MemoryChangeView[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.memoryChanges === undefined)
+          throw new ApiError('not_implemented', '记忆面未装配')
+        const since = c.req.query('since')
+        const by = c.req.query('written_by')
+        if (by !== undefined && by !== '' && by !== 'ai' && by !== 'person')
+          throw new ApiError('invalid_input', 'written_by 只能是 ai / person')
+        if (since !== undefined && since !== '' && Number.isNaN(Date.parse(since)))
+          throw new ApiError('invalid_input', 'since 要是 ISO 时间')
+        return ok(
+          c,
+          await deps.skills.memoryChanges({
+            ...(since === undefined || since === '' ? {} : { since }),
+            ...(by === 'ai' || by === 'person' ? { written_by: by } : {}),
+            actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
         path: '/v1/lessons',
         operationId: 'listLessons',
         summary: '教训池（只读；提议不自动写 overlay）',

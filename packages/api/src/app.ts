@@ -16,6 +16,7 @@ import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { autoMemoryRoutes } from './routes/auto-memory.js'
 import { b2bRoutes } from './routes/b2b.js'
 // WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
 import { backgroundRoutes } from './routes/background.js'
@@ -219,6 +220,7 @@ export function collectRoutes(): Route[] {
     ...handoffRoutes(),
     // WP236：运行时长线（空闲超时 / 总时长上限）
     ...runLimitsRoutes(),
+    ...autoMemoryRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）
