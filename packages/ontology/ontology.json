@@ -129,7 +129,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "0f89104bf571112e179b03b89af1bb41",
+  "source_digest": "eafea6f668b000b642aa35ebc1e7b24b",
   "objects": [
     {
       "id": "ad",
@@ -2491,6 +2491,12 @@
         },
         {
           "name": "parent_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "parent_permalink",
           "type": "string",
           "sensitivity": "internal",
           "optional": true
