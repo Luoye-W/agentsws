@@ -645,12 +645,6 @@ export {
 // WP328：Reddit 每日巡查
 export type { RedditWatchItemsQuery, RedditWatchPort } from './routes/reddit-watch.js'
 export { redditWatchRoutes } from './routes/reddit-watch.js'
-export type {
-  RedditWeeklyActor,
-  RedditWeeklyPort,
-  RedditWeeklyRunView,
-} from './routes/reddit-weekly.js'
-export { redditWeeklyRoutes } from './routes/reddit-weekly.js'
 export type { RoleRulesActor, RoleRulesPort } from './routes/role-rules.js'
 export { roleRuleRoutes } from './routes/role-rules.js'
 // WP236：运行时长线
