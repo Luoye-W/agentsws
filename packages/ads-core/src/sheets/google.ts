@@ -6,6 +6,9 @@
  *
  * 新建的每一行：`Action = Add`、状态列写死 `Paused`（决策 553——留空就是启用）。
  * 改已有的：`Action = Edit`，状态列只在暂停 / 启用时写，别的改动留空（= 不动它）。
+ * 关键词照官方「Add Keyword(s)」模板：关键词列写纯文字，匹配方式写在 Match Type 列
+ * （`Exact Match` …）；不再用 `[ ]` / `" "` 写在关键词里——两种写法格式页都认，但
+ * 模板就是分两列的，照模板走少一层「它到底认不认」的猜测。
  */
 
 import { encodeDelimited } from './csv.js'
@@ -13,6 +16,7 @@ import {
   GOOGLE_BULK_COLUMNS as COL,
   descriptionHeader,
   GOOGLE_ACTION,
+  GOOGLE_MATCH_TYPE,
   GOOGLE_STATUS,
   GOOGLE_UPLOAD_FROM,
   headlineHeader,
@@ -22,7 +26,16 @@ import type { AdSheetOp, AdUploadFile, KeywordMatch, SheetContext } from './type
 type Row = Record<string, string>
 type SheetId = 'campaigns' | 'ad_groups' | 'ads' | 'keywords'
 
-/** 关键词按官方写法带上匹配符号：完全匹配 `[ ]`、词组匹配 `" "`、广泛匹配不带。 */
+/** 关键词表 Match Type 列的值（官方模板示例 `Exact Match`）。 */
+export function googleMatchType(match: KeywordMatch): string {
+  return GOOGLE_MATCH_TYPE[match]
+}
+
+/**
+ * 关键词带匹配符号的写法：完全匹配 `[ ]`、词组匹配 `" "`、广泛匹配不带
+ * （[格式页](https://support.google.com/google-ads/answer/10702623?hl=en) 的写法）。
+ * 上传表现在用 Match Type 列，这个留给需要单列文字的地方（如卡面展示）。
+ */
 export function formatGoogleKeyword(text: string, match: KeywordMatch): string {
   const t = text.trim()
   return match === 'exact' ? `[${t}]` : match === 'phrase' ? `"${t}"` : t
@@ -66,8 +79,10 @@ const SHEET_COLUMNS: Record<SheetId, readonly string[]> = {
     COL.action.header,
     COL.ad_status.header,
     COL.customer_id.header,
+    COL.campaign_id.header,
     COL.campaign.header,
     COL.ad_group.header,
+    COL.ad_group_id.header,
     COL.ad_id.header,
     COL.ad_type.header,
     ...HEADLINES,
@@ -80,9 +95,13 @@ const SHEET_COLUMNS: Record<SheetId, readonly string[]> = {
     COL.action.header,
     COL.keyword_status.header,
     COL.customer_id.header,
+    COL.campaign_id.header,
     COL.campaign.header,
+    COL.ad_group_id.header,
     COL.ad_group.header,
+    COL.keyword_id.header,
     COL.keyword.header,
+    COL.match_type.header,
     COL.max_cpc.header,
   ],
 }
@@ -146,8 +165,10 @@ function opToRowPart2(op: AdSheetOp, base: Row): [SheetId, Row] | undefined {
         ...base,
         [COL.action.header]: GOOGLE_ACTION.add,
         [COL.ad_status.header]: GOOGLE_STATUS.paused,
+        [COL.campaign_id.header]: op.campaign_id ?? '',
         [COL.campaign.header]: op.campaign,
         [COL.ad_group.header]: op.ad_group,
+        [COL.ad_group_id.header]: op.ad_group_id ?? '',
         [COL.ad_type.header]: 'Responsive search ad',
         [COL.path1.header]: g?.path1 ?? '',
         [COL.path2.header]: g?.path2 ?? '',
@@ -168,9 +189,12 @@ function opToRowPart2(op: AdSheetOp, base: Row): [SheetId, Row] | undefined {
           ...base,
           [COL.action.header]: GOOGLE_ACTION.add,
           [COL.keyword_status.header]: GOOGLE_STATUS.paused,
+          [COL.campaign_id.header]: op.campaign_id ?? '',
           [COL.campaign.header]: op.campaign,
+          [COL.ad_group_id.header]: op.ad_group_id ?? '',
           [COL.ad_group.header]: op.ad_group,
-          [COL.keyword.header]: formatGoogleKeyword(op.text, op.match),
+          [COL.keyword.header]: op.text.trim(),
+          [COL.match_type.header]: googleMatchType(op.match),
           [COL.max_cpc.header]: op.max_cpc === undefined ? '' : money(op.max_cpc),
         },
       ]
@@ -218,7 +242,9 @@ function opToRowPart2(op: AdSheetOp, base: Row): [SheetId, Row] | undefined {
           'ads',
           {
             ...edit,
+            [COL.campaign_id.header]: r.campaign_id ?? '',
             [COL.ad_group.header]: r.ad_group ?? '',
+            [COL.ad_group_id.header]: r.ad_group_id ?? '',
             [COL.ad_id.header]: r.ad_id ?? '',
             [COL.ad_status.header]: st,
           },
@@ -227,8 +253,12 @@ function opToRowPart2(op: AdSheetOp, base: Row): [SheetId, Row] | undefined {
         'keywords',
         {
           ...edit,
+          [COL.campaign_id.header]: r.campaign_id ?? '',
           [COL.ad_group.header]: r.ad_group ?? '',
-          [COL.keyword.header]: formatGoogleKeyword(r.keyword ?? '', r.match ?? 'broad'),
+          [COL.ad_group_id.header]: r.ad_group_id ?? '',
+          [COL.keyword_id.header]: r.keyword_id ?? '',
+          [COL.keyword.header]: (r.keyword ?? '').trim(),
+          [COL.match_type.header]: googleMatchType(r.match ?? 'broad'),
           [COL.keyword_status.header]: st,
         },
       ]

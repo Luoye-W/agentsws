@@ -96,17 +96,37 @@ describe('新建一整套（553：一律暂停）', () => {
     }
   })
 
-  it('关键词带官方匹配符号；CSV 里引号转义正确', () => {
+  it('关键词照官方「Add Keyword(s)」模板：纯文字 + Match Type 列', () => {
     const f = sheet(b.files, 'keywords')
-    expect(col(f, 'Keyword')).toEqual(['[trail shoes]', '"hiking shoes"', 'shoes'])
+    expect(f.headers).toEqual([
+      'Action',
+      'Keyword status',
+      'Campaign',
+      'Ad group',
+      'Keyword',
+      'Match Type',
+    ])
+    expect(col(f, 'Keyword')).toEqual(['trail shoes', 'hiking shoes', 'shoes'])
+    expect(col(f, 'Match Type')).toEqual(['Exact Match', 'Phrase Match', 'Broad Match'])
     const parsed = parseDelimited(f.content as string, ',')
-    expect(parsed[2]?.[parsed[0]?.indexOf('Keyword') ?? -1]).toBe('"hiking shoes"')
+    expect(parsed[2]?.[parsed[0]?.indexOf('Keyword') ?? -1]).toBe('hiking shoes')
+  })
+
+  it('广告组表照官方「Create Ad Group(s)」模板：状态列叫 Status', () => {
+    const f = sheet(b.files, 'ad_groups')
+    expect(f.headers).toEqual(['Action', 'Status', 'Campaign', 'Ad group', 'Default max. CPC'])
+    expect(col(f, 'Status')).toEqual(['Paused'])
   })
 
   it('广告表：标题 / 描述 / 路径 / 落地页；没用到的标题列不出', () => {
     const f = sheet(b.files, 'ads')
     expect(col(f, 'Headline 3')).toEqual(['Light And Grippy'])
     expect(f.headers).not.toContain('Headline 4')
+    // 官方 RSA 模板：第一条描述叫 Description（没有序号），第二条起 Description 2
+    expect(col(f, 'Description')).toEqual([DESCS[0]])
+    expect(col(f, 'Description 2')).toEqual([DESCS[1]])
+    expect(f.headers).not.toContain('Description 1')
+    expect(col(f, 'Ad status')).toEqual(['Paused'])
     expect(col(f, 'Final URL')).toEqual(['https://shop.example.com/trail'])
     expect(col(f, 'Ad type')).toEqual(['Responsive search ad'])
   })
@@ -222,7 +242,8 @@ describe('改预算 / 暂停（Action=Edit）', () => {
       ],
     })
     const f = sheet(kw.files, 'keywords')
-    expect(col(f, 'Keyword')).toEqual(['"red shoes"'])
+    expect(col(f, 'Keyword')).toEqual(['red shoes'])
+    expect(col(f, 'Match Type')).toEqual(['Phrase Match'])
     expect(col(f, 'Keyword status')).toEqual(['Paused'])
     expect(col(f, 'Action')).toEqual(['Edit'])
   })

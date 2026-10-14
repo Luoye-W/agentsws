@@ -181,7 +181,9 @@ describe('Google Ads Editor（决策 561）', () => {
     const unverified = Object.values(GOOGLE_BULK_COLUMNS)
       .filter((c) => !c.verified)
       .map((c) => c.header)
-    expect(unverified).toContain('Ad group status')
+    // 10-14 对过四份官方模板后，只剩这三列没在模板里看到
+    expect(unverified.sort()).toEqual(['Ad ID', 'Path 1', 'Path 2'])
+    expect(GOOGLE_BULK_COLUMNS.ad_group_status.header).toBe('Status')
     expect(META_COLUMNS.call_to_action.verified).toBe(false)
   })
 })

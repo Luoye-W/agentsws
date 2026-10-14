@@ -1,15 +1,22 @@
 /**
  * Google 广告「批量上传」的列名（docs/101 §2.1）。**全仓只有这一份**。
  *
- * 出处（2026-10-14 读）：
- * - 官方模板「Create New Campaign(s)」（.xlsx，从「模板和示例」页链出）表头逐字照抄：
- *   https://support.google.com/google-ads/answer/10702525?hl=en
- * - 格式规则（状态列留空 = 启用、要删写 Remove、网址写全、`[ ]` 完全匹配、`" "` 词组匹配）：
+ * 出处（四份官方模板都从 [模板和示例](https://support.google.com/google-ads/answer/10702525?hl=en)
+ * 链出，实际是 .xlsx；表头逐字照抄，10-14 核对）：
+ * - 「Create New Campaign(s)」→ 广告系列表。
+ * - 「Create Ad Group(s)」→ 广告组表：Action / Customer ID / Campaign / Campaign ID / Ad group /
+ *   **Status**（广告组的状态列就叫 Status，取值 Enabled / Paused，留空默认 Enabled）/ Ad group type。
+ * - 「Create Responsive Search Ad(s)」→ 广告表：Action / **Ad status** / Customer ID / Campaign ID /
+ *   Campaign / Ad group / Ad group ID / Ad type（`Responsive search ad`）/ Headline 1–15 /
+ *   **Description**（第一条没有序号）/ Description 2–4 / Headline N position / Final URL / Mobile final URL。
+ * - 「Add Keyword(s)」→ 关键词表：Action / **Keyword status**（Enabled / Removed / Paused）/ Account /
+ *   Customer ID / Campaign ID / Campaign / Ad group ID / Ad group / Keyword ID / Keyword /
+ *   **Match Type**（示例值 `Exact Match`）/ Default max. CPC / Final URL …
+ * - 格式规则（状态列留空 = 启用、要删写 Remove、网址写全、Campaign 与 Campaign ID 必填）：
  *   https://support.google.com/google-ads/answer/10702623?hl=en
  *
- * 每一列带 `verified`：为真的是在官方模板或帮助页上逐字看到的；为假的是**按同一套
- * 命名推的**（广告组 / 广告 / 关键词那三张官方模板没下载核对），上真站前要先对一遍
- * （报告「没核实到」一节）。改列名只改这一处。
+ * 每一列带 `verified`：为真的是在上面四份模板或帮助页上逐字看到的；为假的还没看到
+ * （见各行注释），上真站前要先对一遍。改列名只改这一处。
  */
 
 export interface GoogleColumn {
@@ -22,7 +29,7 @@ const guess = (header: string): GoogleColumn => ({ header, verified: false })
 
 /** 列 id → 官方表头。 */
 export const GOOGLE_BULK_COLUMNS = {
-  // 广告系列（官方「Create New Campaign(s)」模板逐字）
+  // 广告系列（「Create New Campaign(s)」模板）
   action: v('Action'),
   campaign_status: v('Campaign status'),
   customer_id: v('Customer ID'),
@@ -36,29 +43,47 @@ export const GOOGLE_BULK_COLUMNS = {
   campaign_end_date: v('Campaign end date'),
   language: v('Language'),
   location: v('Location'),
-  // 格式页上写着「Campaign 与 Campaign ID 都是必填」
+  // 广告组 / 广告 / 关键词三份模板里都有
   campaign_id: v('Campaign ID'),
-  // 格式页：关键词用 Keyword 与 Ad group 两列
   ad_group: v('Ad group'),
-  keyword: v('Keyword'),
+  ad_group_id: v('Ad group ID'),
   final_url: v('Final URL'),
-  // 以下按同一套命名推的，没在官方页面上逐字看到
-  ad_group_id: guess('Ad group ID'),
-  ad_group_status: guess('Ad group status'),
-  max_cpc: guess('Max CPC'),
+  // 广告组（「Create Ad Group(s)」模板）：状态列就叫 Status
+  ad_group_status: v('Status'),
+  // 广告（「Create Responsive Search Ad(s)」模板）
+  ad_status: v('Ad status'),
+  ad_type: v('Ad type'),
+  // 关键词（「Add Keyword(s)」模板）
+  keyword_status: v('Keyword status'),
+  keyword_id: v('Keyword ID'),
+  keyword: v('Keyword'),
+  match_type: v('Match Type'),
+  // 关键词模板里有；广告组模板里**没有**这一列，广告组上写出价时用的是同名列（没核实）
+  max_cpc: v('Default max. CPC'),
+  // 还没在模板里看到：改单条广告状态要的广告编号；显示路径（广告模板表头在
+  // 「Headline N position」之后的部分我们拿到的摘录被截断了）
   ad_id: guess('Ad ID'),
-  ad_status: guess('Ad status'),
-  ad_type: guess('Ad type'),
-  keyword_status: guess('Keyword status'),
   path1: guess('Path 1'),
   path2: guess('Path 2'),
 } as const satisfies Record<string, GoogleColumn>
 
 export type GoogleColumnId = keyof typeof GOOGLE_BULK_COLUMNS
 
-/** 自适应搜索广告的标题 / 描述列（`Headline 1`…`Headline 15`、`Description 1`…`Description 4`）。 */
+/** 自适应搜索广告的标题列（`Headline 1`…`Headline 15`）。 */
 export const headlineHeader = (n: number): string => `Headline ${n}`
-export const descriptionHeader = (n: number): string => `Description ${n}`
+/** 描述列：官方模板第一条叫 `Description`（没有序号），之后是 `Description 2`…`Description 4`。 */
+export const descriptionHeader = (n: number): string =>
+  n === 1 ? 'Description' : `Description ${n}`
+
+/**
+ * 关键词表 Match Type 列的值。官方模板示例只出现了 `Exact Match`；
+ * `Phrase Match` / `Broad Match` 按同一写法推的（没核实）。
+ */
+export const GOOGLE_MATCH_TYPE = {
+  exact: 'Exact Match',
+  phrase: 'Phrase Match',
+  broad: 'Broad Match',
+} as const
 
 /** 官方模板里 Action 列的三个值。 */
 export const GOOGLE_ACTION = { add: 'Add', edit: 'Edit', remove: 'Remove' } as const
@@ -98,21 +123,22 @@ export const GOOGLE_EDITOR_COLUMN_MAP: readonly {
   { bulk: 'Location', editor: 'Location' },
   { bulk: 'Campaign status', editor: 'Campaign Status', note: 'Enabled / Paused / Removed' },
   { bulk: 'Ad group', editor: 'Ad Group' },
-  { bulk: 'Ad group status', editor: 'Ad Group Status' },
-  { bulk: 'Max CPC', editor: 'Max CPC' },
+  { bulk: 'Ad group ID', editor: 'Ad Group ID', note: '对照是推的，没核实' },
+  { bulk: 'Status（广告组表）', editor: 'Ad Group Status' },
+  { bulk: 'Default max. CPC', editor: 'Max CPC' },
+  { bulk: 'Keyword', editor: 'Keyword', note: '两边都是纯关键词，不带 [ ] 和 " "' },
   {
-    bulk: 'Keyword',
-    editor: 'Keyword',
-    note: 'Editor 里不带 [ ] 和 " "，匹配方式写在 Criterion Type',
+    bulk: 'Match Type',
+    editor: 'Criterion Type',
+    note: '网页版写 Exact Match，Editor 写 Exact（Broad / Phrase 同理）',
   },
-  { bulk: '（关键词里的 [ ] / " "）', editor: 'Criterion Type', note: 'Broad / Phrase / Exact' },
   { bulk: 'Keyword status', editor: 'Status' },
   { bulk: 'Ad status', editor: 'Status' },
   { bulk: 'Final URL', editor: 'Final URL' },
   { bulk: 'Path 1', editor: 'Path 1' },
   { bulk: 'Path 2', editor: 'Path 2' },
   { bulk: 'Headline 1…15', editor: 'Headline 1…15' },
-  { bulk: 'Description 1…4', editor: 'Description 1…4' },
+  { bulk: 'Description、Description 2…4', editor: 'Description 1…4' },
   {
     bulk: 'Action',
     editor: '（没有）',

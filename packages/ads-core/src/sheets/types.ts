@@ -36,6 +36,8 @@ export interface AdEntityRef {
   ad_id?: string
   /** Google 关键词正文（不带匹配符号）。 */
   keyword?: string
+  /** Google 关键词编号（官方「Add Keyword(s)」模板有 Keyword ID 列）。 */
+  keyword_id?: string
   match?: KeywordMatch
 }
 
