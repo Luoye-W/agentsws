@@ -784,6 +784,16 @@ const zh: Table = {
   'memory.source.manual': '手动加',
   'memory.source.promoted': '提升上来的',
   'memory.source.learned': '从复盘提升 · 已批准',
+  // WP320：AI 随工作记的那条 / 「记住了」小提醒 / 自动记忆开关
+  'memory.source.ai': 'AI 记的',
+  'memory.source.from': '来自那件事',
+  'memory.notice.one': '记住了：{text}',
+  'memory.notice.many': '记住了 {n} 件事',
+  'memory.notice.merged': '记忆更新了：{text}',
+  'memory.notice.dismiss': '收起',
+  'settings.auto_memory': '自动记忆',
+  'settings.auto_memory.hint':
+    'AI 边干活边记下你的偏好和纠正过的做法，记住时会提醒你；点提醒能看、改、删。关了只在你说「记住…」时才记。',
   'memory.add': '手动加一条',
   'memory.add.placeholder': '一句能照着做的规矩，例如：改价先看竞品同款价，差 10% 以内可以',
   'memory.edit': '改',
@@ -2796,6 +2806,9 @@ const zh: Table = {
     '换一个品牌 = 整个工作台换一套：首页、岗位、连接、知识、设置。两边的数据互相看不见。',
   'brand.switch.manage': '管理品牌…',
   'brand.switch.failed': '切不过去：你可能不在这个品牌里。',
+  // WP311（决策 507）：IM 里带品牌的链接，打开时自动切品牌；切不过去照实说一句
+  'brand.link.missing': '链接里的品牌你进不去（不存在或没有权限），先留在「{brand}」。',
+  'brand.link.failed': '没切到链接里的品牌，再点一次链接试试。',
   // WP215：每个品牌一套后台——切换器与「品牌一览」那一格的 tooltip（36 §7 第四档）
   'brand.bg.label': '后台',
   'brand.bg.running': '后台在跑 · {n} 条定时任务',
@@ -4789,6 +4802,15 @@ const en: Table = {
   'memory.source.manual': 'Added by hand',
   'memory.source.promoted': 'Promoted',
   'memory.source.learned': 'Promoted from a review · approved',
+  'memory.source.ai': 'Remembered by AI',
+  'memory.source.from': 'From that task',
+  'memory.notice.one': 'Remembered: {text}',
+  'memory.notice.many': 'Remembered {n} things',
+  'memory.notice.merged': 'Memory updated: {text}',
+  'memory.notice.dismiss': 'Dismiss',
+  'settings.auto_memory': 'Auto memory',
+  'settings.auto_memory.hint':
+    'AI notes your preferences and corrections as it works and tells you when it does; click the notice to view, edit or delete. Off = only when you say "remember…".',
   'memory.add': 'Add one by hand',
   'memory.add.placeholder': 'One rule someone can act on',
   'memory.edit': 'Edit',
@@ -6820,6 +6842,10 @@ const en: Table = {
     'Switching swaps the whole workstation: home, positions, connections, knowledge, settings. Neither side can see the other brand\u2019s data.',
   'brand.switch.manage': 'Manage brands…',
   'brand.switch.failed': 'Could not switch: you may not be in that brand.',
+  // WP311 (decision 507): IM links carry the brand; opening one switches brands first
+  'brand.link.missing':
+    'You can\u2019t open the brand in that link (it doesn\u2019t exist or you have no access). Staying in \u201c{brand}\u201d.',
+  'brand.link.failed': 'Couldn\u2019t switch to the brand in that link. Try the link again.',
   // WP215: every brand runs its own background — tooltip on the switcher / brand list (doc 36 §7 tier 4)
   'brand.bg.label': 'Background',
   'brand.bg.running': 'Background running · {n} scheduled tasks',

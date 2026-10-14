@@ -9,7 +9,7 @@
  * 是 `@agentsws/seo-core` 里的纯函数，同输入同输出。**只加不删**。
  */
 import type { Iso8601 } from './common.js'
-import type { AiPlatform } from './search-data.js'
+import type { AiAnswerVia, AiCitationWhere, AiPlatform, SerpFeatures } from './search-data.js'
 
 /* ------------------------------------------------------------------ */
 /* Search Console 的一行与六个信号                                        */
@@ -235,10 +235,19 @@ export interface SeoWeeklyRevenuePayload {
 /** 一个买家会问的问题（自动生成，人可在面板里改）。 */
 export interface GeoQuestion {
   id: string
+  /** WP310：进了历史之后**不可改**——改字 = 归档旧的 + 新建一条（历史永远对得上原句）。 */
   text: string
-  /** 从哪来：品牌档案 / 排名前列的查询 / 人加的。 */
-  origin: 'brand' | 'top_query' | 'human'
+  /** 从哪来：品牌档案 / 排名前列的查询 / 人加的 / WP310 AI 按方向推荐的。 */
+  origin: 'brand' | 'top_query' | 'human' | 'ai_suggest'
   enabled: boolean
+  /** WP310（决策 463）：哪个方向（品类推荐 / 选购指南 / 和竞品比……）。老数据没有。 */
+  topic?: GeoPromptTopic
+  /** WP310：Prompt 里带不带我们的品牌名 / 别名（带的与不带的分开看）。 */
+  branded?: boolean
+  /** WP310（决策 463）：是不是「已选」——持续追踪的那几条（默认 5 条）；没选的是候选。 */
+  selected?: boolean
+  /** WP310：归档时刻（改字或不要了）；归档的不再问，历史照留。 */
+  archived_at?: Iso8601
 }
 
 /** 一个问题在一个平台上的结果（从 `AiAnswerResult` 投影来，只留判断要的几格）。 */
@@ -436,4 +445,246 @@ export interface ContentQualityResult {
   checked_at: Iso8601
   /** 规则从哪来：知识库里的那一份，还是知识库里还没有时的默认表。 */
   rules_from: 'knowledge' | 'default'
+}
+
+/* ------------------------------------------------------------------ */
+/* WP310（docs/99 §5.1 / §5.5，O1）：关注设置与回答历史的形状              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 决策 463：AI 从这几个**方向**列候选 Prompt（按方向分组展示）。`branded` 是「带品牌名的直接提问」，
+ * 其余方向默认不塞品牌名（不带的才是真实买家搜索的样子，默认占多数）。
+ */
+export type GeoPromptTopic =
+  | 'category'
+  | 'buying_guide'
+  | 'comparison'
+  | 'use_case'
+  | 'price_value'
+  | 'reviews'
+  | 'branded'
+  | 'other'
+
+/** 方向的展示顺序与中文名（界面分组用）。 */
+export const GEO_PROMPT_TOPICS: readonly { id: GeoPromptTopic; label_zh: string }[] = [
+  { id: 'category', label_zh: '品类推荐' },
+  { id: 'buying_guide', label_zh: '选购指南' },
+  { id: 'comparison', label_zh: '和竞品对比' },
+  { id: 'use_case', label_zh: '使用场景' },
+  { id: 'price_value', label_zh: '价格与性价比' },
+  { id: 'reviews', label_zh: '口碑评价' },
+  { id: 'branded', label_zh: '带品牌名的直接提问' },
+  { id: 'other', label_zh: '其他' },
+]
+
+/** 决策 463：已选 Prompt 的档位（默认 5），上限可配（默认 20，最多 {@link GEO_PROMPT_CAP_MAX}）。 */
+export const GEO_PROMPT_TIERS: readonly number[] = [5, 10, 20]
+export const GEO_PROMPT_DEFAULT_SELECTED = 5
+export const GEO_PROMPT_CAP_DEFAULT = 20
+export const GEO_PROMPT_CAP_MAX = 50
+
+/** docs/99 §5.1：关注的关键词（SEO 排名用）默认 20 个、上限 100。 */
+export const WATCH_KEYWORDS_DEFAULT = 20
+export const WATCH_KEYWORDS_MAX = 100
+
+/** 关注设置里的一个竞品（3–5 个）。`id` 稳定，改名不影响历史（历史里存名字快照）。 */
+export interface BrandWatchCompetitor {
+  id: string
+  name: string
+  aliases: string[]
+  domains: string[]
+}
+
+/** 关注的一个关键词（决策 465：SEO 排名按关键词；GEO 按 Prompt，是另一件事）。 */
+export interface BrandWatchKeyword {
+  keyword: string
+  /** 品牌词（「品牌名」「品牌名 + 品类」「品牌名 reviews」）。 */
+  branded: boolean
+  enabled: boolean
+}
+
+export type BrandWatchFrequency = 'weekly' | 'biweekly' | 'monthly' | 'manual'
+
+/**
+ * WP310（docs/99 §5.1，决策 460–473 含 Luoye 10-14 的改动）：每个品牌一份「关注设置」。
+ * 存在品牌目录的 `geo.sqlite`（`watch_settings` + `geo_prompts`）；老的 `seo-state.json`
+ * 里的问题清单与开关第一次打开时搬进来（老数据不丢）。
+ */
+export interface BrandWatch {
+  /** 我们：品牌名 + 别名（简称、常见拼错、主推商品名）+ 自家域名。 */
+  brand: { name: string; aliases: string[]; domains: string[] }
+  /** 竞品 3–5 个。 */
+  competitors: BrandWatchCompetitor[]
+  /**
+   * 决策 463：候选 Prompt（AI 按方向列的，没选的）与已选 Prompt（持续追踪的，默认 5 条）**分开存**。
+   * 两边都不含已归档的。
+   */
+  prompt_candidates: GeoQuestion[]
+  prompts: GeoQuestion[]
+  /** 已选几条（档位 5 / 10 / 20；默认 5）。 */
+  prompt_limit: number
+  /** 已选上限（默认 20，可配到 {@link GEO_PROMPT_CAP_MAX}）。 */
+  prompt_cap: number
+  /** 关注的关键词（SEO 排名用，默认 20、上限 100）。 */
+  keywords: BrandWatchKeyword[]
+  /** 市场（ISO 国家码，大写；默认取公司档案的目标市场）。 */
+  markets: string[]
+  /** 关掉探测的市场（只关探测，不改公司档案；沿用 `GeoSettings.markets_off`）。 */
+  markets_off?: string[]
+  /** 关注的 AI（决策 460：默认 ChatGPT、Gemini、Claude + Google AI 概览，各自可关）。 */
+  platforms: AiPlatform[]
+  frequency: BrandWatchFrequency
+  /** 决策 466：排名默认手机；`both` = 两份钱。 */
+  rank_device: 'mobile' | 'desktop' | 'both'
+  /** 总开关（沿用 `GeoSettings.enabled`）。 */
+  enabled: boolean
+  next_run_at?: Iso8601
+  updated_at: Iso8601
+}
+
+/** 一条引用指向的站是哪类（docs/99 §5.5；先查内置表，认不出的 O2 交模型判一次并缓存）。 */
+export type CitedSiteKind =
+  | 'ours'
+  | 'competitor'
+  | 'marketplace'
+  | 'media'
+  | 'forum'
+  | 'video'
+  | 'other'
+
+/** 一轮监测（`watch_runs`）。468 改了：品牌词数据从 Search Console 每周取（`brand_gsc`）。 */
+export interface WatchRun {
+  id: string
+  kind: 'geo' | 'rank' | 'brand_gsc'
+  trigger: 'scheduled' | 'manual' | 'baseline'
+  /** 周一日期（`YYYY-MM-DD`）。 */
+  period: string
+  status: 'running' | 'done' | 'failed'
+  /** 计划问几格 / 拿到回答几格。 */
+  planned: number
+  answered: number
+  credits: number
+  started_at: Iso8601
+  finished_at?: Iso8601
+}
+
+/** 一次问答（Prompt × AI × 市场 × 那一轮）——**全文是真源**，指标都从它算、可重算。 */
+export interface GeoAnswerRecord {
+  id: string
+  run_id: string
+  prompt_id: string
+  /** Prompt 原句快照。 */
+  prompt_text: string
+  /** 翻成市场语言后真问出去的那句（没翻就同 `prompt_text`）。 */
+  asked_text: string
+  platform: AiPlatform
+  /** 如 `claude-sonnet-5`；网页端抓取写 `web`。 */
+  model: string
+  via: AiAnswerVia
+  market: string
+  language: string
+  /** `empty` / `failed` 不算「没提到」，不进提及率分母（docs/99 §5.3）。 */
+  status: 'ok' | 'empty' | 'failed'
+  answer_md: string
+  answer_hash: string
+  fetched_at: Iso8601
+  credits: number
+}
+
+/** 回答里的一条引用（`geo_citations`）。 */
+export interface GeoCitationRecord {
+  answer_id: string
+  position: number
+  url: string
+  /** 去跟踪参数（utm / gclid…）、去 `www.`、去尾斜杠之后的网址（反查「按页面」用）。 */
+  url_norm: string
+  domain: string
+  title?: string
+  snippet?: string
+  where: AiCitationWhere
+  site_kind: CitedSiteKind
+}
+
+/** 一条回答里一个品牌（我们 / 某个竞品）的判定（`geo_mentions`；数不经模型手）。 */
+export interface GeoMentionRecord {
+  answer_id: string
+  /** `ours` 或竞品 id。 */
+  entity: string
+  /** 判定那一刻的名字快照（改名不影响历史）。 */
+  name_snapshot: string
+  /** 命中的是哪个名字 / 别名 / 域名（没命中不写）。 */
+  alias_hit?: string
+  mentioned: boolean
+  cited: boolean
+  /** 首次出现的字符位置（去引用标记之后的正文里；没提到不写）。 */
+  first_offset?: number
+  /** 在已知品牌（我们 + 竞品）里按首次出现先后排第几（1 起；没提到不写）。 */
+  rank?: number
+  /** 决策 470：只对我们判，模型判、必须附原话（O2 才有）。 */
+  sentiment?: 'positive' | 'neutral' | 'negative'
+  sentiment_quote?: string
+  rules_version: number
+}
+
+/** 一个关注词一次排名（`seo_rank_snapshots`）。 */
+export interface SeoRankSnapshot {
+  run_id: string
+  keyword: string
+  market: string
+  device: 'mobile' | 'desktop'
+  /** 自然结果第几（20 名外 = 不写）。 */
+  rank?: number
+  url?: string
+  serp_features: SerpFeatures
+  aio_mentions_us: boolean
+  aio_cites_us: boolean
+  fetched_at: Iso8601
+}
+
+/** 决策 468（Luoye 10-14 改）：品牌词在 Search Console 里一周的曝光 / 点击 / 平均排名。 */
+export interface SeoBrandGscWeek {
+  /** 周一日期（`YYYY-MM-DD`）。 */
+  week: string
+  query: string
+  impressions: number
+  clicks: number
+  position: number
+  fetched_at: Iso8601
+}
+
+/** 决策 473：导出（JSON 一份；CSV 每张表一份）。 */
+export interface GeoHistoryExport {
+  format: 'json' | 'csv'
+  exported_at: Iso8601
+  range?: { from?: Iso8601; to?: Iso8601 }
+  /** `json`：每张表的行。 */
+  tables?: {
+    watch: BrandWatch | null
+    runs: WatchRun[]
+    answers: GeoAnswerRecord[]
+    citations: GeoCitationRecord[]
+    mentions: GeoMentionRecord[]
+    ranks: SeoRankSnapshot[]
+    brand_gsc: SeoBrandGscWeek[]
+  }
+  /** `csv`：表名 → CSV 正文（UTF-8，带表头）。 */
+  csv?: Record<string, string>
+}
+
+/** 决策 473：删除（按品牌 = 这个品牌的全部历史；按时间段 = `[from, to)` 之间取到的）。 */
+export interface GeoHistoryDeleteInput {
+  scope: 'brand' | 'range'
+  from?: Iso8601
+  to?: Iso8601
+  /** 按品牌删时连关注设置与 Prompt 一起删（默认只删历史）。 */
+  include_settings?: boolean
+}
+
+export interface GeoHistoryDeleteResult {
+  runs: number
+  answers: number
+  citations: number
+  mentions: number
+  ranks: number
+  brand_gsc: number
 }

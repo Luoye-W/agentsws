@@ -46,7 +46,12 @@ const clip = (s: string, n: number): string => {
   return chars.length <= n ? chars.join('') : `${chars.slice(0, n - 1).join('')}…`
 }
 
-const url = (base: string, path: string): string => `${base.replace(/\/$/, '')}${path}`
+/**
+ * 工作台深链。WP311（决策 507）：带上那条分配所在的品牌（`?brand=`）——工作台当前开着别的品牌时
+ * 先切过去再开这一页（品牌 id 不是个人数据；没有 token、没有动作参数）。
+ */
+const url = (base: string, path: string, brand?: string): string =>
+  `${base.replace(/\/$/, '')}${path}${brand === undefined || brand === '' ? '' : `?brand=${encodeURIComponent(brand)}`}`
 
 /**
  * 这个岗位今天的一句摘要（卡 / 待办 / 进行中 / 卡住了 / 最近记录）。纯函数，测试直接喂。
@@ -129,7 +134,14 @@ async function heldPositionOf(
  */
 export async function askPositionAgent(
   deps: ImPositionAskDeps,
-  input: { viewer: string; question: string; assignment_id: string; mode: 'ask' | 'task' },
+  input: {
+    viewer: string
+    question: string
+    assignment_id: string
+    mode: 'ask' | 'task'
+    /** WP311：这条分配所在的品牌（给了就进链接的 `?brand=`） */
+    workspace_id?: string
+  },
 ): Promise<ImPositionReply> {
   const a = deps.assignment(input.assignment_id)
   if (a === undefined || a.person_id !== input.viewer)
@@ -140,7 +152,8 @@ export async function askPositionAgent(
   if (position_id === undefined) throw codeError('not_found', '这条职责不在任何岗位里')
   const instance = await deps.positions.instance(position_id, input.viewer)
   const name = instance.name.zh
-  const positionLink = url(deps.base, `/positions/${encodeURIComponent(position_id)}`)
+  const brand = input.workspace_id
+  const positionLink = url(deps.base, `/positions/${encodeURIComponent(position_id)}`, brand)
   const split = splitTaskText(input.question)
   const opening = {
     position_id,
@@ -157,7 +170,7 @@ export async function askPositionAgent(
     return {
       kind: 'task',
       answer: `已记成「${name}」的任务，在工作台确认。`,
-      link: url(deps.base, `/matters/${encodeURIComponent(out.matter.id)}`),
+      link: url(deps.base, `/matters/${encodeURIComponent(out.matter.id)}`, brand),
     }
   }
 
@@ -179,7 +192,7 @@ export async function askPositionAgent(
     return {
       kind: 'task',
       answer: `这件事要动手，已记成「${name}」的任务，在工作台确认。`,
-      link: url(deps.base, `/matters/${encodeURIComponent(out.matter.id)}`),
+      link: url(deps.base, `/matters/${encodeURIComponent(out.matter.id)}`, brand),
     }
   const answer = out.answer
   if (answer === undefined || answer.outcome !== 'answered')

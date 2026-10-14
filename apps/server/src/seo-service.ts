@@ -33,6 +33,9 @@ import type {
   EventEnvelope,
   FactCard,
   GeoCostEstimate,
+  GeoHistoryDeleteInput,
+  GeoHistoryDeleteResult,
+  GeoHistoryExport,
   GeoMarketSummary,
   GeoQuestion,
   GeoSettings,
@@ -53,6 +56,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { marketLanguage } from '@agentsws/contracts'
+import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
   type BrandProfileLike,
   buildDaily,
@@ -82,6 +86,12 @@ import {
   seoDraftPrompt,
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
+import {
+  createGeoStore,
+  type GeoStore,
+  importSeoState,
+  SEO_STATE_IMPORTED_KEY,
+} from './geo-store.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 定时那一轮用谁的分配去提。 */
@@ -208,6 +218,11 @@ export interface SeoServiceOptions {
   /** 品牌落盘目录（问题清单与"交出去过哪些"记在这里；内存档没有）。 */
   dir?: string
   /**
+   * WP310：GEO / 排名历史的存储（品牌目录下的 `geo.sqlite`，第一次用时才打开）。
+   * 不给就用内存档（单测与一次性任务）。
+   */
+  geoStore?: () => GeoStore
+  /**
    * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
@@ -241,6 +256,20 @@ export interface SeoServiceAssembly {
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
   onDecided(item: ApprovalItem): Promise<void>
+  /**
+   * WP310：GEO / 排名历史（`geo.sqlite`）。第一次用时把 `seo-state.json` 里的问题清单与开关搬进来
+   * （只搬一次，老文件原样不动——O2 接上之前，面板与每周探测仍读老文件）。
+   */
+  geoHistory(): Promise<GeoStore>
+  /** WP310（决策 473）：导出 / 删除历史。 */
+  geoHistoryExport(input: {
+    format: 'json' | 'csv'
+    from?: string | undefined
+    to?: string | undefined
+  }): Promise<GeoHistoryExport>
+  geoHistoryDelete(input: GeoHistoryDeleteInput): Promise<GeoHistoryDeleteResult>
+  /** 关掉打开过的 `geo.sqlite`（品牌模块收尾时调）。 */
+  close(): void
   /** WP159：知识库里那张「违规宣称规则」表（按市场分组、带出处与开关）。 */
   claimRules(actor: SeoActor): Promise<ClaimRulesView>
   /**
@@ -507,6 +536,29 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     memoryState = state
     if (options.dir === undefined) return
     writeFileSync(join(options.dir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  }
+
+  // ── WP310：GEO / 排名历史（geo.sqlite），第一次用时打开并搬老数据 ─────────────
+  let geo: GeoStore | undefined
+  const geoHistory = async (): Promise<GeoStore> => {
+    const store = geo ?? options.geoStore?.() ?? createGeoStore()
+    geo = store
+    if (store.meta(SEO_STATE_IMPORTED_KEY) === undefined) {
+      const b = await options.brand()
+      const state = loadState()
+      importSeoState(
+        store,
+        { geo_settings: state.geo_settings, geo_questions: state.geo_questions },
+        {
+          at: clock.now(),
+          brand: { name: b.name, domains: b.domains },
+          markets: b.markets !== undefined && b.markets.length > 0 ? b.markets : [b.country],
+          isBranded: (text) =>
+            mentions(text, b.name) || b.domains.some((d) => firstDomainMention(text, d) >= 0),
+        },
+      )
+    }
+    return store
   }
 
   const emit = (type: string, actor: string, payload: Record<string, unknown>): void => {
@@ -1346,6 +1398,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     geoQuestions: () => refreshQuestions(),
+    geoHistory,
+    geoHistoryExport: async (input) =>
+      (await geoHistory()).exportHistory(input.format, clock.now(), {
+        from: input.from,
+        to: input.to,
+      }),
+    geoHistoryDelete: async (input) => (await geoHistory()).deleteHistory(input),
+    close: () => {
+      geo?.close()
+      geo = undefined
+    },
 
     async geoView() {
       const questions = await refreshQuestions()

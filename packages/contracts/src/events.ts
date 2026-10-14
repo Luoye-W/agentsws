@@ -126,6 +126,19 @@ export type KnownEventType =
   | 'automation.requested'
   /** WP181：到点了但这个岗位今天的自动运行次数到了上限，这一次没跑。payload：任务 id、上限、今天第几次。 */
   | 'automation.capped'
+  // memory（54 §3 / WP71 / WP320）
+  /**
+   * WP320：一层记忆里新增 / 改动 / 合并（AI 把新说法并进它以前记的那条）/ 删掉一条。
+   * actor：人写的是 `person`，AI 随工作记的是 `agent`（id 是替谁记的那个人，`run_id` 是那次运行）。
+   * payload：`entry_id` / `tier` / `scope_id` / `skill` / `by` / `written_by` / `reason?` / `run_id?` /
+   * `matter_id?`——**不带正文**。`memory.merged` 另有一种岗位合并时的整层搬家（payload 带 `from` / `into`）。
+   */
+  | 'memory.added'
+  | 'memory.updated'
+  | 'memory.merged'
+  | 'memory.removed'
+  /** WP234：岗位拆出时整层复制一份（payload：`from` / `scope_id` / `copied`）。 */
+  | 'memory.copied'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'

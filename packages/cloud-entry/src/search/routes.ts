@@ -21,6 +21,7 @@
  */
 import type { AiAnswerResult, AiPlatform, SearchDataStatus, SerpResult } from '@agentsws/contracts'
 import {
+  AI_PLATFORMS_PRICED_SEPARATELY,
   SEARCH_AI_ANSWER_CAPABILITY,
   SEARCH_DATA_CLOUD_PATHS,
   SEARCH_SERP_CAPABILITY,
@@ -192,6 +193,14 @@ function costFields(
     : { cost_micros: est.micros, cost_currency: est.currency, provider: est.provider }
 }
 
+/**
+ * 这条路（一个通吃价 `data.search.ai_answer`）能问的平台：适配器能问的，去掉单独定价的那几个
+ * （WP310，决策 461 / 462：Claude 一次的成本是别家的 25 倍，官方那一侧走能力目录 `ai_answer.claude`）。
+ */
+function officialPlatforms(adapter: SearchProviderAdapter): AiPlatform[] {
+  return adapter.platforms.filter((p) => !AI_PLATFORMS_PRICED_SEPARATELY.includes(p))
+}
+
 /** `GET /v1/data/search/status`（不收钱）。 */
 export function officialStatus(deps: EntryDeps): SearchDataStatus {
   const ready = readiness(deps)
@@ -207,7 +216,7 @@ export function officialStatus(deps: EntryDeps): SearchDataStatus {
     configured: true,
     route: 'official',
     engines: [...ready.adapter.engines],
-    platforms: [...ready.adapter.platforms],
+    platforms: officialPlatforms(ready.adapter),
     ...(serp === undefined || ai === undefined ? {} : { prices: { serp, ai_answer: ai } }),
   }
 }
@@ -307,8 +316,9 @@ async function officialAiAnswers(c: Context<EntryEnv>, deps: EntryDeps): Promise
   const ready = readiness(deps)
   if (ready === undefined) throw notConfigured()
   const skipped: SkippedPlatform[] = []
+  const offered = officialPlatforms(ready.adapter)
   const asked = probe.platforms.filter((p) => {
-    if (ready.adapter.platforms.includes(p)) return true
+    if (offered.includes(p)) return true
     skipped.push({
       platform: p,
       code: 'unsupported',
