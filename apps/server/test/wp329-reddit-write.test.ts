@@ -25,12 +25,6 @@ import { applyExternalPost, settleRedditWrite, writeOfThread } from '../src/redd
 
 const WS = 'ws_r' as never
 const T0 = Date.parse('2026-10-14T09:00:00.000Z')
-const actor = {
-  workspace_id: WS,
-  person_id: 'p_1',
-  assignment_id: 'as_1',
-  role_id: 'social.reddit',
-} as never
 
 function make(o: { direct?: boolean; directFails?: boolean; seen?: boolean } = {}) {
   const now = { ms: T0 }

@@ -72,8 +72,6 @@ export * from './model.js'
 export * from './official-plugins.js'
 // WP323（docs/102 §5）：发出记录与记录去处（去处的种类是藏在通用机制后面的适配器）
 export * from './outbound.js'
-// WP329（docs/102 §2.3）：Reddit 写——AI 起草 → 发出去卡 → 插件填草稿、人点发送 → 读回 → 发出记录
-export * from './reddit-write.js'
 // WP249（决策 81 / 89）：自家版待处理（版务队列 + Reddit 官方号浏览器通道的状态）
 export * from './own-sub.js'
 export * from './packages.js'
@@ -91,6 +89,8 @@ export * from './premium-theme.js'
 export * from './pricing-catalog.js'
 // WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
 export * from './read-routes.js'
+// WP329（docs/102 §2.3）：Reddit 写——AI 起草 → 发出去卡 → 插件填草稿、人点发送 → 读回 → 发出记录
+export * from './reddit-write.js'
 export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗

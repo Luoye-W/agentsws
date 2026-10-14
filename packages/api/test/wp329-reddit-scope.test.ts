@@ -11,9 +11,7 @@ describe('WP329：插件领活按令牌上的 scope 筛平台', () => {
     expect(platformsAllowed({ scopes: ['ads.act'] }, ['google_ads', 'reddit'])).toEqual([
       'google_ads',
     ])
-    expect(platformsAllowed({ scopes: ['reddit.act'] }, ['meta_ads', 'reddit'])).toEqual([
-      'reddit',
-    ])
+    expect(platformsAllowed({ scopes: ['reddit.act'] }, ['meta_ads', 'reddit'])).toEqual(['reddit'])
     expect(platformsAllowed({ scopes: ['kol.read'] }, ['reddit'])).toEqual([])
   })
 })
