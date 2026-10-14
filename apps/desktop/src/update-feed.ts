@@ -176,3 +176,21 @@ export function versionFromUpdateInfo(text: string): string | undefined {
   const m = /^version:\s*['"]?([^'"\s]+)['"]?\s*$/m.exec(text)
   return m?.[1]
 }
+
+/** 从 `latest*.yml` 里取 `files:` 下每一项的 `url`（只认 electron-builder 写出来的那种形状）。 */
+export function fileUrlsFromUpdateInfo(text: string): string[] {
+  return [...text.matchAll(/^\s+-\s+url:\s*['"]?([^'"\s]+)['"]?\s*$/gm)].map((m) => m[1] ?? '')
+}
+
+/**
+ * WP326（决策 731）：Mac 只出 Apple 芯片版。这一版里有没有**这台 Mac 能装的**包。
+ *
+ * 认法与 electron-updater 的 `MacUpdater.filterFilesForArch` 一致：文件名里带 `arm64` 的是 Apple 芯片的包。
+ * - Apple 芯片（含 Rosetta 下跑着 Intel 版的）：什么包都能装（Intel 包靠 Rosetta），算有。
+ * - Intel（`x64`）：至少要有一个不带 `arm64` 的包；全是 arm64 = 没有适合这台电脑的更新。
+ * - 列表是空的（读不出来）：按「有」算，与 WP326 之前一样只看版本号。
+ */
+export function macUpdateFits(urls: readonly string[], arch: string): boolean {
+  if (arch !== 'x64' || urls.length === 0) return true
+  return urls.some((u) => !u.includes('arm64'))
+}

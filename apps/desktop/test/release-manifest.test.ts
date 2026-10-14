@@ -1,4 +1,4 @@
-/** WP218：发版收拢——mac 两份 latest-mac.yml 合并、官网 downloads.json、产物结构自检、tag 规则。 */
+/** WP218：发版收拢——latest-mac.yml 合并、官网 downloads.json、产物结构自检、tag 规则。WP326：Mac 只出 Apple 芯片版。 */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -58,7 +58,7 @@ describe('latest*.yml', () => {
     })
   })
 
-  it('两台 mac 的合成一份：文件并集、顶层取第一份、日期取最晚', () => {
+  it('几份合成一份：文件并集、顶层取第一份、日期取最晚（合并逻辑留着备用）', () => {
     const merged = mergeUpdateInfo([
       macYml('arm64', '2026-10-05T01:00:00.000Z'),
       macYml('x64', '2026-10-05T02:00:00.000Z'),
@@ -108,7 +108,8 @@ describe('downloads.json', () => {
       sha256: 'a'.repeat(64),
       size: 100,
     })
-    expect(m.desktop.find((d: { id: string }) => d.id === 'mac-x64')?.url).toBeNull()
+    // WP326（决策 731）：不再列 Intel
+    expect(m.desktop.map((d: { id: string }) => d.id)).toEqual(['mac-arm64', 'win-x64'])
     expect(m.extension.url).toBe(
       'https://dl.agentsws.com/beta/agents-workshop-extension-0.2.0-beta.1.zip',
     )
@@ -146,11 +147,8 @@ describe('产物结构自检', () => {
     [names['win-x64']]: '',
     [`${names['win-x64']}.blockmap`]: '',
     [names['mac-arm64']]: '',
-    [names['mac-x64']]: '',
     'latest.yml': winYml,
-    'latest-mac.yml': serializeUpdateInfo(
-      mergeUpdateInfo([macYml('arm64', 'a'), macYml('x64', 'b')]),
-    ),
+    'latest-mac.yml': serializeUpdateInfo(mergeUpdateInfo([macYml('arm64', 'a')])),
   }
   const read = (n: string) => files[n] ?? ''
 
@@ -158,25 +156,37 @@ describe('产物结构自检', () => {
     expect(checkArtifacts(Object.keys(files), v, read)).toEqual([])
   })
 
-  it('缺东西、版本对不上、mac 没合并：都报出来', () => {
+  it('缺东西、版本对不上、latest-mac.yml 里没有 Apple 芯片包：都报出来', () => {
     expect(checkArtifacts([], v, read)).toEqual([
       `缺 Windows 安装包 ${names['win-x64']}`,
       '缺 Windows 安装包的 .blockmap（差分更新用）',
       '缺 latest.yml（Windows 应用内更新查的就是它）',
       `缺 mac-arm64 的 ${names['mac-arm64']}`,
-      `缺 mac-x64 的 ${names['mac-x64']}`,
       '缺 latest-mac.yml',
     ])
     const wrong = {
       ...files,
       'latest.yml': 'version: 9.9.9\nfiles:\n',
-      'latest-mac.yml': macYml('arm64', 'a', '9.9.9'),
+      'latest-mac.yml': macYml('x64', 'a', '9.9.9'),
     }
     const problems = checkArtifacts(Object.keys(wrong), v, (n) => wrong[n] ?? '')
     expect(problems).toContain('latest.yml 的版本是 9.9.9，不是 0.2.0-beta.1')
     expect(problems).toContain(`latest.yml 里没有 ${names['win-x64']}`)
     expect(problems).toContain('latest-mac.yml 的版本是 9.9.9，不是 0.2.0-beta.1')
-    expect(problems).toContain(`latest-mac.yml 里没有 ${names['mac-x64']}（两份没合并？）`)
+    expect(problems).toContain(`latest-mac.yml 里没有 ${names['mac-arm64']}`)
+  })
+
+  it('WP326：Intel 包不再要求；latest-mac.yml 里混进 Intel 包算毛病', () => {
+    expect(Object.keys(names)).toEqual(['mac-arm64', 'win-x64'])
+    const mixed = {
+      ...files,
+      'latest-mac.yml': serializeUpdateInfo(
+        mergeUpdateInfo([macYml('arm64', 'a'), macYml('x64', 'b')]),
+      ),
+    }
+    expect(checkArtifacts(Object.keys(mixed), v, (n) => mixed[n] ?? '')).toEqual([
+      'latest-mac.yml 里有不是 Apple 芯片的包（Mac 只出 Apple 芯片版）：Agents-Workshop-0.2.0-beta.1-x64.dmg',
+    ])
   })
 })
 
@@ -190,14 +200,8 @@ describe('命令行（真跑脚本）', () => {
     const dir = join(root, 'out')
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(root, 'a.yml'), macYml('arm64', 'a'))
-    writeFileSync(join(root, 'b.yml'), macYml('x64', 'b'))
-    run('merge-mac', '--out', join(dir, 'latest-mac.yml'), join(root, 'a.yml'), join(root, 'b.yml'))
-    for (const n of [
-      names['win-x64'],
-      `${names['win-x64']}.blockmap`,
-      names['mac-arm64'],
-      names['mac-x64'],
-    ])
+    run('merge-mac', '--out', join(dir, 'latest-mac.yml'), join(root, 'a.yml'))
+    for (const n of [names['win-x64'], `${names['win-x64']}.blockmap`, names['mac-arm64']])
       writeFileSync(join(dir, n), 'bin')
     writeFileSync(
       join(dir, 'latest.yml'),
@@ -222,5 +226,19 @@ describe('命令行（真跑脚本）', () => {
     expect(run('tag', 'v1.0.0')).toBe('version=1.0.0\nchannel=stable\n')
     expect(() => run('check', '--dir', root, '--version', v)).toThrow()
     expect(() => run('nope')).toThrow()
+  })
+})
+
+describe('WP326（决策 731）：发版流水线不再打 Intel 版', () => {
+  it('release.yml 里没有 Intel mac 作业；收拢只认 arm64 那一份 latest-mac', () => {
+    const yml = readFileSync(
+      join(dirname(script), '..', '..', '..', '.github', 'workflows', 'release.yml'),
+      'utf8',
+    )
+    expect(yml).not.toMatch(/macos-15-intel|--mac --x64|target: darwin-x64/)
+    expect(yml).toContain('target: darwin-arm64')
+    expect(yml).toContain(
+      'merge-mac --out artifacts/latest-mac.yml artifacts/latest-mac-darwin-arm64.yml',
+    )
   })
 })

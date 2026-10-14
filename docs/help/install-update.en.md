@@ -1,6 +1,6 @@
 # Installing and updating
 
-Agents Workshop is a desktop app for Windows and Mac. Once installed, it checks for new versions by itself. When one is out, you update with one click: no re-downloading, no uninstalling.
+Agents Workshop is a desktop app for Windows and Mac (Apple silicon). Once installed, it checks for new versions by itself. When one is out, you update with one click: no re-downloading, no uninstalling.
 
 ## Download
 
@@ -8,9 +8,8 @@ Get it from the download page at agentsws.com/download. The page offers the righ
 
 - **Windows**: `Agents-Workshop-Setup-<version>-x64.exe`
 - **Mac with Apple silicon (M1 and later)**: `Agents-Workshop-<version>-arm64.dmg`
-- **Mac with an Intel chip**: `Agents-Workshop-<version>-x64.dmg`
 
-Not sure which Mac you have? Click the Apple menu → "About This Mac". If the chip starts with "Apple M", it is Apple silicon.
+Only Macs with Apple silicon are supported for now; there is no installer for Intel Macs. Not sure which Mac you have? Click the Apple menu → "About This Mac". If the chip starts with "Apple M", it is Apple silicon.
 
 ## Windows: first install
 
@@ -52,6 +51,8 @@ If our own download server is unreachable, the app automatically checks the mirr
 ### Updating on a Mac
 
 The Mac version is not signed yet, and macOS does not let an unsigned app replace itself. So on a Mac the button says "Update available" and opens the download page. Download the new `.dmg` and drag it into Applications over the old one. Your data stays. Once the Mac version is signed, it will update with one click just like Windows.
+
+A Mac that has an older Intel build installed won't be offered updates any more (new versions are Apple silicon only). The old build keeps working.
 
 ## Stable and beta
 

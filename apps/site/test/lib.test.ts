@@ -13,7 +13,13 @@ import { HOME } from '../src/i18n/home.js'
 import { PAGES } from '../src/i18n/pages.js'
 import { PRICING } from '../src/i18n/pricing.js'
 import { ROLES, ROLES_PAGE } from '../src/i18n/roles.js'
-import { type DownloadManifest, formatSize, manifestProblems } from '../src/lib/downloads.js'
+import {
+  type DownloadManifest,
+  formatSize,
+  looksLikeIntelMac,
+  manifestProblems,
+  visibleDesktop,
+} from '../src/lib/downloads.js'
 import { linkNames } from '../src/lib/locales.js'
 import {
   blockOf,
@@ -135,6 +141,45 @@ describe('下载清单', () => {
     expect(problems.some((p) => p.includes('大小'))).toBe(true)
     expect(formatSize(null)).toBe('—')
     expect(formatSize(150 * 1024 * 1024)).toBe('150 MB')
+  })
+
+  it('WP326（决策 731）：只列 Apple 芯片的 Mac 与 Windows；下载站上旧清单带着 Intel 也不算错、不显示', () => {
+    const m = manifest as unknown as DownloadManifest
+    expect(m.desktop.map((d) => d.id)).toEqual(['mac-arm64', 'win-x64'])
+    const old = structuredClone(m)
+    old.desktop.splice(1, 0, {
+      id: 'mac-x64',
+      os: 'mac',
+      arch: 'x64',
+      file: 'Agents-Workshop-0.1.0-beta-x64.dmg',
+      url: null,
+      sha256: null,
+      size: null,
+    })
+    expect(manifestProblems(old)).toEqual([])
+    expect(visibleDesktop(old).map((d) => d.id)).toEqual(['mac-arm64', 'win-x64'])
+    const noMac = structuredClone(m)
+    noMac.desktop = noMac.desktop.filter((d) => d.id !== 'mac-arm64')
+    expect(manifestProblems(noMac)).toEqual(['缺 mac-arm64'])
+    for (const lang of ['zh', 'en'] as const) {
+      expect(Object.keys(DOWNLOAD[lang].os)).toEqual(['mac-arm64', 'win-x64'])
+      expect(JSON.stringify(DOWNLOAD[lang].primary)).not.toMatch(/Intel/)
+    }
+  })
+
+  it('WP326：认 Intel Mac 只看显卡名；认不出（Safari 统一报 Apple GPU）就不说', () => {
+    const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+    expect(looksLikeIntelMac(mac, 'ANGLE (Intel Inc., Intel(R) Iris(TM) Plus Graphics 655)')).toBe(
+      true,
+    )
+    expect(looksLikeIntelMac(mac, 'AMD Radeon Pro 5500M OpenGL Engine')).toBe(true)
+    expect(
+      looksLikeIntelMac(mac, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified)'),
+    ).toBe(false)
+    expect(looksLikeIntelMac(mac, 'Apple GPU')).toBe(false)
+    expect(looksLikeIntelMac(mac, null)).toBe(false)
+    expect(looksLikeIntelMac('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Intel UHD')).toBe(false)
+    expect(looksLikeIntelMac('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)', 'Intel')).toBe(false)
   })
 })
 

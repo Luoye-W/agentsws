@@ -135,6 +135,7 @@ import {
   feedFromEnv,
   githubFallbackEnabled,
   githubFallbackFeed,
+  macUpdateFits,
   parseAppUpdateYml,
 } from './update-feed.js'
 import { beginUpdate, finishPendingUpdate } from './update-splash.js'
@@ -1668,6 +1669,12 @@ async function bootstrap(): Promise<void> {
     githubFallback: fallbackFeed !== undefined,
   })
 
+  /**
+   * WP326（决策 731）：这台电脑的芯片。Mac 只出 Apple 芯片版，Intel Mac 查到「只有 arm64 包」的新版时
+   * 当作没有适合它的更新。Rosetta 下跑着 Intel 版的其实是 Apple 芯片，算 arm64（能装 Apple 芯片版）。
+   */
+  const machineArch = app.runningUnderARM64Translation ? 'arm64' : process.arch
+
   /** mac / linux 查到的新版本（托盘上「去下载」那一项用）。 */
   let updateAvailable: string | undefined
   let updateUrl = DOWNLOAD_PAGE
@@ -1703,7 +1710,20 @@ async function bootstrap(): Promise<void> {
         try {
           const result = await real.checkForUpdates()
           const found = result?.updateInfo.version
-          return found !== undefined && isNewer(version, found) ? { version: found } : undefined
+          if (found === undefined || !isNewer(version, found)) return undefined
+          // WP326：mac 自动档（签了名才开）在 Intel 上遇到只有 Apple 芯片包的新版——不提示，
+          // 免得点了「更新」才被 electron-updater 报「没有文件」
+          if (
+            process.platform === 'darwin' &&
+            !macUpdateFits(
+              (result?.updateInfo.files ?? []).map((f) => f.url),
+              machineArch,
+            )
+          ) {
+            logger.info('新版只有 Apple 芯片的包，这台 Intel Mac 不提示', { version: found })
+            return undefined
+          }
+          return { version: found }
         } finally {
           updaterChecking = false
         }
@@ -1733,6 +1753,7 @@ async function bootstrap(): Promise<void> {
           currentVersion: version,
           feed,
           platform: process.platform,
+          arch: machineArch,
           abort: nodeAbort,
         })
   /** 主源懒加载：off 档一次都不建。 */
