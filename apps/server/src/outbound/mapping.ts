@@ -7,6 +7,7 @@
 import {
   isOutboundField,
   OUTBOUND_FIELDS,
+  OUTBOUND_OPT_IN_ACTIONS,
   type OutboundField,
   type OutboundRecord,
   type SinkColumn,
@@ -158,6 +159,12 @@ export function renderRow(
 export function matchesFilter(record: OutboundRecord, filter: SinkFilter): boolean {
   const hit = (list: string[] | undefined, v: string): boolean =>
     list === undefined || list.length === 0 || list.includes(v)
+  // WP330：「只有点名才记」的动作（周报那一行）——筛选里没明确列它就不写
+  if (
+    OUTBOUND_OPT_IN_ACTIONS.includes(record.action) &&
+    filter.actions?.includes(record.action) !== true
+  )
+    return false
   return (
     hit(filter.channels, record.channel) &&
     hit(filter.actions, record.action) &&
