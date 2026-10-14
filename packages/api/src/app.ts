@@ -188,7 +188,6 @@ export function collectRoutes(): Route[] {
     ...roleRuleRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
-    // WP330（docs/102 附）：Reddit 周报
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
