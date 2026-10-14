@@ -7441,6 +7441,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/seo/geo-history/export': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP310：导出这个品牌的 AI 回答监测与排名历史（回答全文、引用、判定、排名、品牌词周数据）——JSON 一份或 CSV 每张表一份 */
+    get: operations['exportGeoHistory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/seo/geo-history/delete': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP310：删这个品牌的 AI 回答监测与排名历史——按品牌（全部，可连关注设置一起）或按时间段 [from, to) */
+    post: operations['deleteGeoHistory']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/knowledge/claim-rules': {
     parameters: {
       query?: never
@@ -16320,16 +16354,25 @@ export interface operations {
       content: {
         'application/json': {
           question: string
-          platforms: ('chatgpt' | 'perplexity' | 'gemini' | 'google_ai_overview' | 'copilot')[]
+          platforms: (
+            | 'chatgpt'
+            | 'perplexity'
+            | 'gemini'
+            | 'google_ai_overview'
+            | 'copilot'
+            | 'claude'
+          )[]
           country: string
           language: string
           brand: {
             name: string
             domains: string[]
+            aliases?: string[]
           }
           competitors?: {
             name: string
             domains?: string[]
+            aliases?: string[]
           }[]
         }
       }
@@ -57373,6 +57416,190 @@ export interface operations {
     }
     responses: {
       /** @description SeoRunView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  exportGeoHistory: {
+    parameters: {
+      query?: {
+        /** @description json | csv，默认 json */
+        format?: string
+        /** @description 从这个时刻起（含），ISO 时刻 */
+        from?: string
+        /** @description 到这个时刻止（不含），ISO 时刻 */
+        to?: string
+      }
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description GeoHistoryExport */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  deleteGeoHistory: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @enum {string} */
+          scope: 'brand' | 'range'
+          /** Format: date-time */
+          from?: string
+          /** Format: date-time */
+          to?: string
+          include_settings?: boolean
+        }
+      }
+    }
+    responses: {
+      /** @description GeoHistoryDeleteResult */
       200: {
         headers: {
           [name: string]: unknown

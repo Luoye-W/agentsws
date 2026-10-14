@@ -289,3 +289,34 @@ describe('AI 问答（每个平台一次，只收成功的）', () => {
     expect(available(h.wallet)).toBeCloseTo(9.6, 6)
   })
 })
+
+describe('WP310：Claude 单独定价、全文与引用原样带回', () => {
+  it('通吃价这条路不问 Claude（跳过、不收钱、一跳不打）；ChatGPT 回包带全文与结构化引用', async () => {
+    const f = fakeFetch([
+      ['/chat_gpt/llm_scraper/', { body: fixture('dataforseo-chatgpt-scraper') }],
+      ['/claude/llm_responses/', { body: {} }],
+    ])
+    const h = harness(f.fetch)
+    const res = await h.post('/v1/data/search/ai-answers', {
+      ...PROBE,
+      platforms: ['chatgpt', 'claude'],
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      results: Record<string, unknown>[]
+      skipped: Record<string, unknown>[]
+      credits: number
+    }
+    expect(body.skipped).toEqual([
+      expect.objectContaining({ platform: 'claude', code: 'unsupported' }),
+    ])
+    expect(f.calls.some((c) => c.url.includes('/claude/'))).toBe(false)
+    expect(body.credits).toBe(0.2)
+    expect(available(h.wallet)).toBeCloseTo(9.8, 6)
+    const chatgpt = body.results[0]
+    expect(chatgpt).toMatchObject({ platform: 'chatgpt', via: 'web_ui', model: 'gpt-4o' })
+    expect(String(chatgpt?.answer_markdown)).toMatch(/Wirecutter also like these/u)
+    expect((chatgpt?.citations as unknown[]).length).toBe(3)
+    expect(JSON.stringify(body)).not.toMatch(/dataforseo/i)
+  })
+})
