@@ -98,6 +98,7 @@ import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { ReadRoutesApiPort } from './routes/read-routes.js'
+import type { RedditWatchPort } from './routes/reddit-watch.js'
 import type { RoleRulesPort } from './routes/role-rules.js'
 import type { RunLimitsPort } from './routes/run-limits.js'
 import type { SearchDataApiPort } from './routes/search-data.js'
@@ -898,6 +899,11 @@ export interface GatewayDeps {
    * 插件照实说「这个版本还没有」。插件的会话仍由 {@link extension} 那一套令牌判。
    */
   extensionActions?: ExtensionActionsPort
+  /**
+   * WP328（docs/102）：Reddit 每日巡查（插件只读 + 工作台看 / 改 / 现在巡查 / 周汇总）。
+   * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。
+   */
+  redditWatch?: RedditWatchPort
   /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），
