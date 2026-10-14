@@ -147,7 +147,8 @@ export function createRedditHybridAdapter(input: {
         return {
           ok: false,
           reason: 'not_implemented',
-          message: '官方号浏览器通道这一版只回帖子（顶层回复），不回评论下面的楼中楼。',
+          message:
+            '官方号浏览器通道只回帖子（顶层回复）。楼中楼走 Chrome 里的「Agents 工坊助手」：在插件设置页连接 Reddit。',
         }
       const res = await run({ kind: 'reply', post_fullname: parent, text: r.text })
       return res.ok ? ok({ external_id: res.data.external_id }) : res
