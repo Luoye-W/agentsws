@@ -131,6 +131,7 @@ export type { AdsActor } from './routes/ads-types.js'
 // WP287：「发给他的卡他必须点得动」那把尺子（只关于本人的卡）——服务端岗位页计数也用它
 export { isSelfCard, SELF_CARD_FORMS } from './routes/approvals.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
+export { autoMemoryRoutes } from './routes/auto-memory.js'
 // WP172（docs/84）：B2B 库的列表 / 详情 / 草稿 / 提交改动卡 / CSV 导入
 export type {
   B2bActor,
@@ -811,6 +812,7 @@ export {
 } from './sqlite-migrations.js'
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
+  AutoMemoryPort,
   ChangesPort,
   ClientErrorEntry,
   ClientErrorPort,
@@ -828,6 +830,7 @@ export type {
   KnowledgeGapStatus,
   KnowledgePort,
   KnowledgeSourceInput,
+  MemoryChangeView,
   ModulesPort,
   PositionSummary,
   Principal,

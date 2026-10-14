@@ -724,7 +724,41 @@ export interface MemoryEntryData {
   source?: 'manual' | 'promoted'
   added_by?: string
   added_at?: string
+  /** WP320：人写的还是 AI 随工作自己记的。 */
+  written_by?: 'person' | 'ai'
+  /** WP320：AI 记的那条从哪件事来的（点了回到那件事）。 */
+  run_id?: string
+  matter_id?: string
+  reason?: string
 }
+
+/** WP320：记忆账上的一笔（「记住了：……」小提醒读它）。 */
+export interface MemoryChangeData {
+  id: string
+  at: string
+  kind: 'added' | 'updated' | 'merged' | 'removed'
+  entry_id: string
+  tier: 'company' | 'department' | 'position' | 'role' | 'package' | 'personal'
+  scope_id: string
+  text: string
+  by: string
+  written_by: 'person' | 'ai'
+  run_id?: string
+  matter_id?: string
+  reason?: string
+}
+
+/** WP320：本人最近被 AI 记下的几条（`since` 之后）。 */
+export const getMemoryChanges = (since?: string): Promise<MemoryChangeData[]> =>
+  api<MemoryChangeData[]>(
+    `/v1/memory/changes?written_by=ai${since === undefined ? '' : `&since=${encodeURIComponent(since)}`}`,
+  )
+
+/** WP320：「自动记忆」开关（本人在这个品牌里的那一份）。 */
+export const getAutoMemory = (): Promise<{ enabled: boolean }> =>
+  api<{ enabled: boolean }>('/v1/settings/auto-memory')
+export const setAutoMemory = (enabled: boolean): Promise<{ enabled: boolean }> =>
+  api<{ enabled: boolean }>('/v1/settings/auto-memory', { method: 'PUT', body: { enabled } })
 
 export interface LayerMemoryData {
   tier: string
