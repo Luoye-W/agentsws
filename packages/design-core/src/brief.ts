@@ -81,7 +81,7 @@ export function draftBrief(input: DraftBriefInput): DraftBriefResult {
 
   // WP317（决策 559）：额度按职责取——广告设计每单 30，另四条仍是 6
   const perBrief = designCapsOf(request.duty).max_variants_per_brief
-  const wanted = input.variants ?? perBrief
+  const wanted = input.variants ?? request.variants ?? perBrief
   // 广告那条：需求单里引号括起来的那几句是要上图的文案（投放的批量单就是这么写的），
   // 一版配一句轮着来——Austin 的 Figma 插件做的就是「同一版式，换标题换描述」
   const variant_plan = planVariants(

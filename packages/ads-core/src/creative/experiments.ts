@@ -14,7 +14,7 @@ import type { AdExperimentEntry } from '@agentsws/contracts'
 export interface AdExperimentInput {
   hypothesis: string
   change: string
-  result?: string
+  result?: string | undefined
 }
 
 /** 三格的长度上限（进上下文的是它们，太长等于往提示词里塞一份报告）。 */

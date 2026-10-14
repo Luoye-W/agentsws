@@ -119,6 +119,8 @@ export interface AdCreativeRound {
   rewrites: AdCreativeRewrite[]
   /** 这一轮带进上下文的实验记录条数（让人知道「上次学到的」用上了没有）。 */
   experiments_used: number
+  /** 整轮的话（只写了前 20 条、模型没接上之类）。 */
+  notes: string[]
   created_at: Iso8601
 }
 

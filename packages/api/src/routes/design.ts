@@ -182,6 +182,8 @@ export interface DesignRequestInput {
   need: string
   spec_ids?: string[] | undefined
   due_at?: Iso8601 | undefined
+  /** WP317：想要几版（投放的批量出图单）。出 brief 时没另给就用它。 */
+  variants?: number | undefined
 }
 
 export interface DesignAssetInput {
@@ -292,6 +294,8 @@ const RequestBody = z.object({
   need: z.string().min(1).max(20_000),
   spec_ids: z.array(z.string().min(1).max(100)).max(20).optional(),
   due_at: z.string().min(1).max(40).optional(),
+  /** WP317：想要几版（批量出图单）。出 brief 时没另给就用它；上限照旧按职责额度截。 */
+  variants: z.number().int().min(1).max(50).optional(),
 })
 
 const BriefBody = z.object({

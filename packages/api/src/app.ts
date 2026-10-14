@@ -12,6 +12,7 @@ import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
+import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
@@ -249,6 +250,8 @@ export function collectRoutes(): Route[] {
     ...siteRoutes(),
     // WP75（57 §5）：广告库 `/v1/ads/*`（读两条、写五条；写全部先出卡）
     ...adsRoutes(),
+    // WP317（docs/101 §5.1④）：素材流水线（导出表 → 两个子 Agent → 上传表 / 批量出图单 / 实验记录）
+    ...adCreativeRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
     ...seoRoutes(),

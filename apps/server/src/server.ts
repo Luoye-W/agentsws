@@ -17,6 +17,7 @@ import {
   summarizeLineCompare,
 } from '@agentsws/ads-core'
 import type {
+  AdsActor,
   AskPort,
   ChatPort,
   ConnectionDirectoryPort,
@@ -188,6 +189,7 @@ import {
   type OverlayEx,
   readBundledSkill,
   type Skills,
+  splitFrontmatter,
 } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
@@ -197,6 +199,7 @@ import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/wor
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
+import { createAdCreativeService } from './ad-creative.js'
 import {
   adsAttribution,
   adsDeckData,
@@ -246,6 +249,7 @@ import {
 } from './brand-modules.js'
 // WP66：按 `actor.workspace_id` 取模块的**那一处**适配层（不散落到每条路由）
 import {
+  brandAdCreativePort,
   brandAdsPort,
   brandAskPort,
   brandB2bOutboundPort,
@@ -3874,6 +3878,135 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
 
+    /**
+     * WP317（docs/101 §5.1④，决策 559）：**广告素材流水线**（`/v1/ads/creative/*`）。
+     *
+     * 两个子 Agent 用这个品牌真在用的那份模型（跟随公司默认就是公司那份；替身档照实说「没接上」）；
+     * 技能叠过公司层；批量出图单经设计岗的 `createRequest`（L3）；实验记录存这个品牌的广告库，
+     * 同步一条进投放岗记忆。**没有一处碰广告平台**。
+     */
+    const adCreativeSkillText = async (
+      actor: AdsActor,
+      name: string,
+    ): Promise<string | undefined> => {
+      const position_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+      try {
+        const resolved = await skills.registry.resolve(name, {
+          person_id: actor.person_id,
+          workspace_id: ws,
+          role_id: actor.role_id,
+          ...(position_id === undefined ? {} : { position_id }),
+        })
+        if (resolved !== undefined) return splitFrontmatter(resolved.markdown).body
+      } catch {
+        // 解析不了就退回随软件带的那一份
+      }
+      try {
+        return splitFrontmatter(readBundledSkill(name).markdown).body
+      } catch {
+        return undefined
+      }
+    }
+    const adCreativeService = createAdCreativeService({
+      workspace_id: ws,
+      clock,
+      random,
+      store: ads,
+      appendEvent,
+      complete: (actor) => {
+        const models = effectiveModels()
+        if (!models.configured()) return undefined
+        const ref = models.purposeRef('run')
+        if (ref.provider === 'stub') return undefined
+        return async (req) => {
+          const completion = await gatewayProxy.complete({
+            messages: [
+              { role: 'system', content: req.system },
+              { role: 'user', content: req.user },
+            ],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id,
+              role_id: actor.role_id,
+              run_id: `adcopy_${req.agent}_${Date.parse(clock.now()).toString(36)}` as never,
+              purpose: 'run',
+            },
+            model: ref,
+            max_output_tokens: 2000,
+            thinking: 'off',
+          })
+          return completion.text
+        }
+      },
+      skillText: adCreativeSkillText,
+      brandVoice: (actor) => adCreativeSkillText(actor, 'brand-voice'),
+      facts: async (actor, row) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text: [row.campaign, row.ad_group, ...row.headlines.slice(0, 3)].join(' '),
+          k: 5,
+          actor: {
+            person_id: actor.person_id,
+            workspace_id: ws,
+            assignment_id: actor.assignment_id,
+            role_id: actor.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.length === 0
+          ? undefined
+          : hits.map((h) => `- ${h.statement_redacted}（事实卡 ${h.fact_card_id}）`).join('\n')
+      },
+      designPrompt: () => adDesignPrompt(brandDesignRef?.context(ws, 'ads')),
+      brandName: () => brandNameOfWorkspace(ws),
+      requestDesign: async (actor, input) => {
+        const out = await designService.port.createRequest(actor, {
+          title: input.title,
+          need: input.need,
+          spec_ids: input.spec_ids,
+          variants: input.variants,
+        })
+        return {
+          request_id: out.request.id,
+          staged: {
+            staged: out.staged.staged,
+            ...(out.staged.level === undefined ? {} : { level: out.staged.level }),
+            ...(out.staged.message === undefined ? {} : { message: out.staged.message }),
+          },
+        }
+      },
+      designGeneratedToday: () => {
+        const day = clock.now().slice(0, 10)
+        return design.assets({ duty: 'ads' }).filter((a) => a.created_at.slice(0, 10) === day)
+          .length
+      },
+      memory: {
+        add: async (actor, entry) => {
+          const scope_id = cloudPositionOf(ws, actor.role_id, actor.assignment_id)
+          if (scope_id === undefined) return undefined
+          const added = await learning.addMemory({
+            tier: 'position',
+            scope_id,
+            heading: entry.heading,
+            text: entry.text,
+            skill: 'ad-copywriting',
+            by: actor.person_id,
+          })
+          return added.id
+        },
+        update: async (id, entry) => {
+          await learning.updateMemory(id, { text: entry.text, heading: entry.heading })
+          return true
+        },
+        exists: (id) => {
+          const ref = parseMemoryRef(id)
+          if (ref === undefined) return false
+          return learning.memoryAt({ tier: ref.tier, scope_id: ref.owner }).some((e) => e.id === id)
+        },
+      },
+    })
+
     /*
      * WP268（决策 213）：品牌素材库（设计库那张素材表 + 对象存储）与生图 / 改图工具。
      * 生图那一档、单价每次现取（设置页改了立刻生效）；挑中带 `place` 的交给 `createImagePlacer`
@@ -5874,6 +6007,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       siteService,
       ads,
       adsService,
+      adCreativeService,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -9148,6 +9282,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).adsService.port,
   )
+  /** WP317（docs/101 §5.1④）：素材流水线 `/v1/ads/creative/*`（跟着这个品牌的广告库走）。 */
+  const adCreativePortOf = brandAdCreativePort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).adCreativeService.port,
+  )
   /** WP77（59 §2）：建站数据面 `/v1/site/*`（一个品牌一张库）。 */
   const sitePortOf = brandSitePort(brandModules, async (ws) => {
     const base = (await brandModules.forWorkspace(ws)).siteService.port
@@ -10027,6 +10166,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     site: sitePortOf,
     // WP75（57 §5）：本地广告库 `/v1/ads/*`（同上；五个写口子全部先出卡）
     ads: adsPortOf,
+    // WP317（docs/101 §5.1④）：素材流水线（导出表 → 两个子 Agent → 上传表 / 批量出图单 / 实验记录）
+    adCreative: adCreativePortOf,
     // WP78（60 §5）：本地公关库 `/v1/pr/*`
     pr: prPortOf,
     // WP172（docs/84）：本地 B2B 库 `/v1/b2b/*`

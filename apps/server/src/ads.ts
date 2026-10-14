@@ -28,6 +28,9 @@ import type {
   Ad,
   AdAccount,
   AdCampaign,
+  AdCreativeImport,
+  AdCreativeRound,
+  AdExperimentEntry,
   AdSet,
   AdsCaps,
   AdsLineCompareRow,
@@ -54,6 +57,10 @@ export type AdsTable =
   | 'ad'
   | 'pixel_event'
   | 'line_compare'
+  // WP317（docs/101 §5.1④）：素材流水线——导入的导出表、每一轮新文案、实验记录（按品牌一张库）
+  | 'creative_import'
+  | 'creative_round'
+  | 'ad_experiment'
 
 export const ADS_TABLES: readonly AdsTable[] = [
   'ad_account',
@@ -62,6 +69,9 @@ export const ADS_TABLES: readonly AdsTable[] = [
   'ad',
   'pixel_event',
   'line_compare',
+  'creative_import',
+  'creative_round',
+  'ad_experiment',
 ]
 
 interface AdsBackend {
@@ -200,6 +210,16 @@ export interface AdsStore {
     missing: string[]
     currency?: string
   }
+
+  /* ── WP317：素材流水线（docs/101 §5.1④）。只存，不判——判断在 `ads-core` 的 `creative/` ── */
+  saveCreativeImport(row: AdCreativeImport): void
+  creativeImport(id: string): AdCreativeImport | undefined
+  saveCreativeRound(row: AdCreativeRound): void
+  creativeRound(id: string): AdCreativeRound | undefined
+  /** 实验记录（Austin 的「简易记忆」）：按品牌一张库，重启不丢。按轮次排。 */
+  saveExperiment(row: AdExperimentEntry): void
+  experiments(): AdExperimentEntry[]
+  experiment(id: string): AdExperimentEntry | undefined
   close(): void
 }
 
@@ -339,6 +359,14 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
       }
     },
 
+    saveCreativeImport: (row) => backend.put('creative_import', row.id, row),
+    creativeImport: (id) => backend.get<AdCreativeImport>('creative_import', id),
+    saveCreativeRound: (row) => backend.put('creative_round', row.id, row),
+    creativeRound: (id) => backend.get<AdCreativeRound>('creative_round', id),
+    saveExperiment: (row) => backend.put('ad_experiment', row.id, row),
+    experiments: () =>
+      backend.all<AdExperimentEntry>('ad_experiment').sort((a, b) => a.round - b.round),
+    experiment: (id) => backend.get<AdExperimentEntry>('ad_experiment', id),
     close: () => backend.close(),
   }
 }

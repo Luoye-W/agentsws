@@ -204,6 +204,14 @@ describe('WP317（决策 559）：广告设计那一条的批量单', () => {
     })
   })
 
+  it('需求单自己带着想要几版：出 brief 时没另给就用它（仍按额度截）', () => {
+    const at = '2026-10-14T10:00:00Z'
+    const three = draftBrief({ request: request({ ...adsReq, variants: 3 }), id: 'b', at })
+    expect(three.brief.variant_plan).toHaveLength(3)
+    const big = draftBrief({ request: request({ ...adsReq, variants: 45 }), id: 'b', at })
+    expect(big.brief.variant_plan).toHaveLength(30)
+  })
+
   it('不是广告单的不带文案（别的职责行为不变）', () => {
     const { brief } = draft()
     for (const item of brief.variant_plan) expect(item.angle_zh).not.toContain('图上文字')

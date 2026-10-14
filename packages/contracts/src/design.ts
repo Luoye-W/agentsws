@@ -585,6 +585,11 @@ export interface DesignRequest {
   product_refs?: readonly string[]
   /** 参考图（素材库里的 {@link DesignAsset} id）。 */
   reference_asset_ids?: readonly string[]
+  /**
+   * WP317：下单方想要几版（投放的批量出图单）。出 brief 时没另给就用它；
+   * 上限照旧按这条职责的额度截（广告 30，其余 6）。
+   */
+  variants?: number
   status: DesignRequestStatus
   created_at: Iso8601
   updated_at?: Iso8601

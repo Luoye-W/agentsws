@@ -28,6 +28,7 @@ import type { Halt, StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { PublicLibraryClient } from '@agentsws/kol-core'
 import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
+import type { AdCreativeServiceAssembly } from './ad-creative.js'
 import type { AdsStore } from './ads.js'
 import type { AdsServiceAssembly } from './ads-service.js'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
@@ -267,6 +268,8 @@ export interface BrandModuleSet {
    * 额度内 L2、开花钱口子永远 L1）在服务进程里的落点就是它。
    */
   adsService: AdsServiceAssembly
+  /** WP317（docs/101 §5.1④）：素材流水线（`/v1/ads/creative/*`）。数据在上面那张广告库里。 */
+  adCreativeService: AdCreativeServiceAssembly
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
