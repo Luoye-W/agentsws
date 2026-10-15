@@ -43,11 +43,11 @@ export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/ARCHITECTURE.md`
 export const CONTRIBUTING_URL = `${GITHUB_URL}/blob/main/CONTRIBUTING.md`
 
 /**
- * 运营主体公司全称与联系邮箱（Luoye 09-29 提供）。英文页也用中文全称——那是注册名，
+ * 运营主体公司全称（Luoye 09-29 提供）与联系邮箱（Luoye 10-15 改为 contact@，不再用 support@）。英文页也用中文全称——那是注册名，
  * 没有登记过的英文名就不自己译一个。
  */
 export const OPERATOR_LEGAL_NAME = '深圳卢耶科技有限公司'
-export const CONTACT_EMAIL = 'support@agentsws.com'
+export const CONTACT_EMAIL = 'contact@agentsws.com'
 
 /**
  * 首页「四级台阶」第三级提到的两款前作（WP227，Luoye 10-05 #4）：名字点了去它们的官网，新窗口打开。
