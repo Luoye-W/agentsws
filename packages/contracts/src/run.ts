@@ -365,7 +365,19 @@ export interface RunRequest {
     outputs: ('draft' | 'staged_change' | 'proposal' | 'answer' | 'dev_result' | 'none')[]
     must_stage_if_change_requested: boolean
   }
-  runtime: { preset: string; profile: string; plugins: string[]; model: ModelRef; seed?: number }
+  runtime: {
+    preset: string
+    profile: string
+    plugins: string[]
+    model: ModelRef
+    seed?: number
+    /**
+     * WP342（决策 853）：`model` 是**这件事 / 这段对话自己选的**（输入框左下角那个 AI 钮），
+     * 不是品牌默认。给了，direct / dsh 每次补全都把 `model` 显式交给网关（不再按 purpose 选）；
+     * stub 只记在 `run.started` 上。不给 = 老行为（网关按默认 / purpose 选），一个字节不变。
+     */
+    model_pinned?: true
+  }
   /**
    * 48 v2 L2（WP54）：这个工作区卖的是什么（`WorkspaceProfile.vertical`）。
    *

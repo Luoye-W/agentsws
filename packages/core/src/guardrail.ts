@@ -109,6 +109,10 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
    * 由 switch 里那道 block 拦死，不靠风险级说话（同 `kol_outreach`）。
    */
   creative_swap: 'low',
+  // WP316（docs/101 §5.3）：上传表 / 开始投放 / 撤销——都动到在跑的账户、可能花钱，按 high（三条都在 `HARD_L1` 里）
+  ads_sheet: 'high',
+  ads_activate: 'high',
+  ads_undo: 'high',
   // WP78（60 §1）：公共关系那三条。
   //
   // 新闻稿按 medium：它不动钱，但发出去收不回来，而且会被媒体**原样登出去**
@@ -231,6 +235,14 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    */
   'theme_install',
   'app_install',
+  /**
+   * WP316（docs/101 §5.3，决策 552 / 553）：**上传表、开始投放、撤销永远人审**。
+   * 上传表里可能夹带新建（开花钱口子）；开始投放就是让它开始花钱；撤销会把停了的再开起来。
+   * 三件事都由插件在用户自己的后台里点，所以门设在这里，不靠职责 yml。
+   */
+  'ads_sheet',
+  'ads_activate',
+  'ads_undo',
   /**
    * WP76（58 §1 / 04 §6）：**素材入库永远人审**。
    *

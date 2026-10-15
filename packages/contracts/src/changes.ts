@@ -265,6 +265,15 @@ export type ChangeKind =
    */
   | 'creative_swap'
   /**
+   * WP316（docs/101 §5.1② / §5.3，决策 552）：**一张官方上传表**（新建 / 一次改 3 条以上 / 换素材）。
+   * 表里可能夹带新建，所以一律 L1（`HARD_L1`）；批了由插件上传、平台预览后人再确认一次才提交。
+   */
+  | 'ads_sheet'
+  /** WP316（决策 553）：**激活 / 开始投放**。新建的一律先暂停，让它开始花钱是单独这一张，永远 L1。 */
+  | 'ads_activate'
+  /** WP316（docs/101 §5.1② 第 9 步）：撤销上一次广告改动（Google 一次性撤销 / 反向改；Meta 用改前表反向导入），永远 L1。 */
+  | 'ads_undo'
+  /**
    * WP78（60 §1 `pr.press`）：一篇新闻稿。
    *
    * **按 `after.distributed` 分档**（同 `publish_post` 按 `after.published`

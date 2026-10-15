@@ -184,6 +184,25 @@ export interface AutomationAssembly {
   ): B
   /** 界面改时间（「每天 / 每周几点」）：按官方校验重算，回新的触发器与 params。 */
   retime(task: ScheduleTask, selector: OfficialSelector): Promise<ScheduleTask>
+  /**
+   * WP315：宿主替一个岗位在一件事里种一条官方定时（第一次有广告数据时种「广告日报」）。与 `schedule_create`
+   * 走同一条路（上限、会往外发的先出卡、批了才开始）；之后用户在那件事里说一句，AI 用官方工具改 / 停。
+   * 回任务编号；建不了（关着 / 到上限 / 时间写法不对）回 `undefined`。
+   */
+  seed(input: AutomationSeedInput): Promise<string | undefined>
+}
+
+export interface AutomationSeedInput {
+  workspace_id: WorkspaceId
+  person_id: PersonId
+  role_id: RoleId
+  assignment_id: string
+  /** 挂在哪件事上（到点接着这件事跑）。 */
+  matter_id: string
+  title: string
+  prompt: string
+  /** 官方时间写法（如 `{ daily: { time: '10:00' } }`）；时区不写按公司时区。 */
+  selector: OfficialSelector
 }
 
 /** 官方那份记录（没有就不是这一层建的任务）。 */
@@ -721,5 +740,26 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
     })
   }
 
-  return { executeTool, enabled, register, wrap, retime }
+  async function seed(input: AutomationSeedInput): Promise<string | undefined> {
+    if (!(await enabled())) return undefined
+    const req = {
+      id: `seed_${input.matter_id}`,
+      workspace_id: input.workspace_id,
+      actor: {
+        person_id: input.person_id,
+        role_id: input.role_id,
+        assignment_id: input.assignment_id,
+      },
+      work_item: { id: input.matter_id, conversation_id: input.matter_id, role_id: input.role_id },
+    } as unknown as RunRequest
+    try {
+      const out = await create(req, { title: input.title, prompt: input.prompt, ...input.selector })
+      const id = (out.data as { id?: unknown } | undefined)?.id
+      return typeof id === 'string' ? id : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  return { executeTool, enabled, register, wrap, retime, seed }
 }

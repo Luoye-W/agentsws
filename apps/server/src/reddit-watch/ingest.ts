@@ -19,7 +19,8 @@ const lower = (s: string | undefined): string =>
 /** 插件读回来的一条。`brandUser` = 品牌号（是它发的记 `ours`）。 */
 export function watchItemOf(
   raw: RedditListingItem,
-  source: Exclude<RedditWatchSource, 'external'>,
+  /** WP340：重点版块读到的记 `external`。 */
+  source: RedditWatchSource,
   ctx: IngestContext,
   brandUser: string | undefined,
 ): RedditWatchEntry {

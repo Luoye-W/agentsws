@@ -55,6 +55,10 @@ export interface WatchItem {
   assessment?: WatchAssessment
   /** 外部：命中的关键词。 */
   keyword?: string
+  /** WP340：命中了告警词（标「优先」）。 */
+  priority?: boolean
+  /** WP340：本地标签（标签词命中的）。 */
+  tags?: string[]
 }
 
 /** 发布出来的一份报告（报表块的 payload；也是复制 / 导出 .md 的来源）。 */

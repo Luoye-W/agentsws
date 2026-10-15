@@ -1,0 +1,4 @@
+Reporting starts,Reporting ends,Campaign name,Ad set name,Ad name,Campaign ID,Ad Set ID,Ad ID,Amount spent (USD),Impressions,Link clicks,Purchases,Purchases conversion value,Purchase ROAS (return on ad spend)
+2026-10-14,2026-10-14,Retargeting,Warm 30d,Video A,900,910,911,30.00,5000,60,2,180.00,6.00
+2026-10-14,2026-10-14,Retargeting,Warm 30d,Video B,900,910,912,25.50,4000,20,0,0,
+2026-10-14,2026-10-14,Prospecting,Broad US,Carousel 1,800,810,811,120.00,30000,90,1,40.00,0.33

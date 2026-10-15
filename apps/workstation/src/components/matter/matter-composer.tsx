@@ -41,6 +41,7 @@ export function MatterComposer({
   placeholderText,
   label,
   testId,
+  modelSlot,
 }: {
   value: string
   onChange: (v: string) => void
@@ -72,6 +73,8 @@ export function MatterComposer({
   label?: string | undefined
   /** WP287：输入框的 `data-testid`（不给就不写） */
   testId?: string | undefined
+  /** WP342（决策 853）：左下角的 AI 钮（`ComposerModelPicker`；不给就不画）。私聊 AI 时不出（那一问不跑运行）。 */
+  modelSlot?: ReactNode
 }): ReactNode {
   const { t } = useApp()
   const area = useRef<HTMLTextAreaElement>(null)
@@ -290,6 +293,7 @@ export function MatterComposer({
           >
             <AtSign aria-hidden className="size-[18px]" />
           </button>
+          {privateMode ? null : modelSlot}
           {!showPrivate ? null : (
             <button
               type="button"

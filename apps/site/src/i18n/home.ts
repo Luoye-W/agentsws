@@ -1,26 +1,35 @@
 /**
  * 首页文案（docs/87 §3，中英）。首屏标题与「为什么」总括句 Luoye 09-29 暂定，候选在 docs/87 §3.1。
+ * WP344（10-15）：正文按 10-15 已合进 main 的能力重写——只写真做到的；不点名客户，也不点名数据商。
  */
 import type { Lang } from './common.js'
 
 const zh = {
+  // WP347（Luoye 10-15，决策 883）：定位「专为跨境电商 / 出海卖家打造的 AI Agents」进 meta 与首屏
   meta: {
-    title: 'Agents 工坊 · 给出海小团队的开源 AI 同事',
+    title: 'Agents 工坊 · 专为跨境电商 / 出海卖家打造的 AI Agents',
     description:
-      '客服、红人、社媒、B2B……按岗位配齐的 AI 同事。活它们干完，出一张卡，你点头才算数。开源、免费、跑在你自己的电脑上。',
+      '专为跨境电商 / 出海卖家打造的 AI Agents：客服、红人、Reddit、广告、建站、B2B 按岗位配齐，不只会聊，还能动手。一键连上各平台，要拍板的出卡给你。个人、团队、整个公司都能用。开源免费，用积分按量付费。',
   },
   hero: {
     pill: '开源 · Apache-2.0 · 跑在你自己的电脑上',
     title: ['面板会吃灰。', '这队 *AI 同事*，', '天天上班。'],
-    lede: '客服、红人、社媒、B2B……给出海公司按岗位配齐。活它们干完，出一张卡，你点头才算数。',
+    position: '专为跨境电商 / 出海卖家打造的 AI Agents。',
+    lede: '客服、红人、Reddit、广告、建站、B2B……按岗位配齐，要拍板的才找你。',
+    // WP347：按访客系统直接给安装包（site.ts 换按钮）；认不出、手机、Intel Mac 照旧去下载页
     download: '免费下载',
+    dlAny: 'Mac / Windows',
+    dlMac: ['下载 Mac 版', 'M 系列芯片'],
+    dlWin: ['下载 Windows 版', '64 位'],
+    dlMore: ['其他版本', '浏览器插件'],
+    macFirstOpen: '第一次打开：右键图标 → 打开',
     // WP225（WP218 决定 ⑤）：Windows 访客点了直接下安装包，旁边一行首次打开提示（只在 Windows 上露出来）
     // WP227 合一份：文案用 WP227 那句（Luoye 10-05 #⑤ 原话「第一次打开点『更多信息 → 仍要运行』」）
     winFirstOpen: '第一次打开若被拦，点「更多信息 → 仍要运行」',
     github: '在 GitHub 上看',
-    checks: ['Mac / Windows', '自带 key 一分不扣', '基于 DeepSeek Harness'],
+    checks: ['Mac / Windows', '一键连上各平台', '按量付费 · 自带 key 免费'],
     frameBar: '127.0.0.1 · 今天',
-    shotAlt: '工作台首页：每个岗位一张卡，几张待你批',
+    shotAlt: '工作台：左栏是岗位，中间是等你定的卡',
     card: {
       chip: '客服 · 回信',
       due: '剩 1 天',
@@ -88,6 +97,60 @@ const zh = {
     moreLink: '看每个岗位管什么 →',
     newBadge: '新',
   },
+  // WP347：三种用法，按 docs/95 里真做到的写（WP271 / 275–278 / 284）
+  modes: {
+    eyebrow: '三种用法',
+    title: '一个人用，团队用，整个公司也能用。',
+    sub: '默认一个人用。有人管人的那一套，只在公司模式里出现。',
+    items: [
+      {
+        key: 'solo',
+        tag: '个人 · 默认',
+        h: '一个人，管几个品牌',
+        p: '装上就用，岗位都归你。要对外的事，你点头才算。',
+      },
+      {
+        key: 'team',
+        tag: '团队',
+        h: '同事互联，平起平坐',
+        p: '各管各的岗位，谁也不批谁。活能交给同事，对方接下才算；你的代理替你答同事、约时间。',
+      },
+      {
+        key: 'company',
+        tag: '整个公司',
+        h: '老板开启，有人管人',
+        p: '一个余额，给每人设每月上限和能看的店铺；要紧的事按上下级审批。',
+      },
+    ],
+    grow: '从一个人用起，往上升级；数据跟着走，不用重装。',
+  },
+  how: {
+    eyebrow: '怎么干活',
+    title: '几句话交代，它自己配好。',
+    sub: '不用学后台，不用画流程。缺什么，它在对话里问你。',
+    items: [
+      {
+        icon: 'plug',
+        h: '一键连上各平台',
+        p: 'Shopify、Amazon、Google / Meta 广告、Reddit……借你浏览器里已登录的账号，或点一下授权。不用申请开发者应用。',
+      },
+      {
+        icon: 'puzzle',
+        h: '缺什么，就地补',
+        p: '少个连接、少个设置，对话里弹一张卡；补完接着做。',
+      },
+      { icon: 'chart', h: '回答就是图表', p: '问数据，直接回图表、表格、数字卡。' },
+      {
+        icon: 'chat',
+        h: '说一句，配起来',
+        p: '周报、记到你自己的表格，这类需求说给它听就行，不用等我们出新功能。',
+      },
+      { icon: 'clock', h: '定时上班', p: '每天巡查、每周出报告，到点就干。' },
+      { icon: 'check', h: '办完留账', p: '发出去的每一条都在本机留记录，谁批的都查得到。' },
+    ],
+    shotAlt: '岗位页：交给它一件事，下面是这个岗位的卡和进度',
+    frameBar: '127.0.0.1 · 岗位',
+  },
   cards: {
     eyebrow: '出卡审批',
     title: 'AI 只提议。点头的，永远是你。',
@@ -109,20 +172,20 @@ const zh = {
         actions: ['发送', '改一下', '不发'],
       },
       {
-        chip: '红人 · 开发信',
+        chip: '社媒 · Reddit 回帖',
         tone: 'good',
-        due: '证据 4',
-        title: '给 @desknoor 的首封信',
-        body: '评分 90 · 受众和你的买家高度重合。样品合作，不谈佣金。',
-        actions: ['批准并发送', '改一下', '不发'],
+        due: 'FAQ 2',
+        title: '回复帖子：充电宝能带上飞机吗？',
+        body: '20000mAh 约 74Wh，低于 100Wh 的限制。批了以后，插件把草稿填进 Reddit，你点发送。',
+        actions: ['批准', '改一下', '不发'],
       },
       {
-        chip: 'B2B · 报价',
+        chip: '投放 · Google 广告',
         tone: 'info',
-        due: '剩 6 天',
-        title: '报价 Q-0929-02 · 超了授权，转负责人批',
-        amount: '18,414 USD',
-        actions: ['批准', '改金额', '驳回'],
+        due: '先预览',
+        title: '换掉 3 条点击率最低的标题',
+        body: '上传表已生成。插件先传到后台预览，你确认了才提交。',
+        actions: ['批准', '改一下', '驳回'],
       },
     ],
     never: '退款、补发、改价、发布，永远人审。采纳率再高，也不自动放行。',
@@ -156,19 +219,20 @@ const zh = {
     rows: [
       ['客服 AI', '按席位月付', '免费，用你自己的 key'],
       ['连店铺、邮箱、社媒', '按连接数收费', '免费，账号是你自己的'],
-      ['红人采集插件', '按条、按次', '免费'],
+      ['浏览器插件（红人、Reddit、广告）', '按条、按次', '免费'],
       ['审批流、带权限的知识库', '企业版才有', '免费'],
       ['多店铺、多品牌', '加钱升级', '免费'],
     ],
     fine: '「别处」指市面上常见的收费方式，不特指某一家；以各家官方信息为准。',
   },
   base: {
-    eyebrow: '为什么基于 DeepSeek Harness',
-    title: ['从 Harness 底层，', '按公司重新组装。'],
-    sub: '在聊天框外套个壳，只能帮一个人聊天。要一队 Agents 替公司干活，得从底层接起。',
+    // WP347：突出「从底层出发，跳出只能对话、不能动手」
+    eyebrow: '基于 DeepSeek Harness',
+    title: ['从底层出发：', '不只会聊，*还能动手*。'],
+    sub: '别的 AI 只会陪你聊。工坊从 Harness 底层接起：查订单、回邮件、发帖、改广告，动手干活；要紧的先问你。',
     stackLabel: '分层示意：从下到上是官方底座、按公司重组的五层、岗位队伍',
     team: '岗位队伍',
-    teamChips: ['负责人', '客服', '红人营销', '社媒运营', 'B2B 外贸', '投放', '……'],
+    teamChips: ['客服', '红人营销', '社媒运营', '网站运营', '投放', 'B2B', '……'],
     rebuilt: '按公司重组',
     layers: [
       ['审批', '要发出去、要花钱的，先出卡给你批，办完留账。'],
@@ -182,9 +246,9 @@ const zh = {
     updTitle2: '我们跟着用上',
     timeline: [
       ['2026-09-24', '官方场景', '在工坊里一键切到 DeepSeek Harness 官方场景。'],
-      ['2026-09-29', '升到 0.2.0 预览版', '先过适配层测试和模拟回路，全绿才合并。'],
       ['2026-09-29', '官方网页搜索', '岗位查资料，用官方的搜索和抓网页。'],
       ['2026-09-29', '官方自动化任务', '定时要做的活，交给官方的自动化。'],
+      ['2026-10-10', '跟上 0.2.1 alpha', '官方一出新版就评估，测试和模拟回路全绿才升。'],
     ],
     oss: ['开源 Apache-2.0。', '代码全部公开，可以 fork，没有付费墙。'],
     star: 'Star on GitHub',
@@ -193,8 +257,9 @@ const zh = {
   },
   credits: {
     eyebrow: '价格',
-    title: '开源版全功能免费。想省事，用积分。',
-    sub: '两条路可以混着用：每项能力一个开关。',
+    // WP347：点明按量付费
+    title: '按量付费，不按席位，不包月。',
+    sub: '开源版全功能免费，自带 key 不花钱；用工坊的积分，用多少扣多少。',
     open: {
       tag: '开源版',
       price: '¥0',
@@ -228,10 +293,13 @@ const zh = {
         '默认全在你电脑上。只有你开了云端服务、或者用积分调模型时，才把那一次需要的内容发出去。',
       ],
       ['AI 会不会自己乱发、乱退款？', '不会。对外发送、退款、改价都先出卡，你点了才办。'],
-      ['要会写代码吗？', '不用。下载安装包双击就装，第一步接上 AI，第二步贴你的官网，就能开工。'],
+      [
+        '要会写代码吗？',
+        '不用。双击安装，接上 AI，贴上你的官网就能开工。连平台借你浏览器里的登录，不用申请开发者应用、不开终端。',
+      ],
       [
         '能连哪些平台？',
-        'Shopify、邮箱、Amazon、TikTok、Meta、YouTube、X、WhatsApp 等，连接页里一个平台一张卡。',
+        'Shopify、邮箱、Amazon、Reddit、Google / Meta 广告、TikTok、YouTube、WhatsApp、飞书、钉钉等。用到哪个还没连，它会在对话里请你连上。',
       ],
       [
         '和 DeepSeek Harness 是什么关系？',
@@ -242,7 +310,6 @@ const zh = {
   final: {
     title: '先交给它一件小事。',
     sub: '装上，接一个 AI，把今天最烦的那封邮件交给客服岗。',
-    download: '免费下载',
     docs: '看教程',
   },
 }
@@ -251,20 +318,30 @@ export type HomeCopy = typeof zh
 
 const en: HomeCopy = {
   meta: {
-    title: 'Agents Workshop · An open-source AI team for cross-border businesses',
+    title: 'Agents Workshop · AI agents built for cross-border e-commerce sellers',
     description:
-      'Support, influencers, social, B2B: AI teammates organised by role. They do the work, then hand you a card. Nothing counts until you say yes. Open source, free, runs on your own computer.',
+      'AI agents built for cross-border e-commerce sellers: support, creators, Reddit, ads, site building and B2B, organised by role. They don’t just chat; they do the work. Connect your platforms in one click; anything that needs your call becomes a card. For one person, a team or a whole company. Open source and free; pay as you go with credits.',
   },
   hero: {
     pill: 'Open source · Apache-2.0 · Runs on your own computer',
     title: ['Dashboards gather dust.', 'This *AI team*', 'shows up every day.'],
-    lede: 'Support, influencers, social, B2B: a full set of roles for your cross-border business. They do the work, then hand you a card. Nothing counts until you say yes.',
+    position: 'AI agents built for cross-border e-commerce sellers.',
+    lede: 'Support, creators, Reddit, ads, site building, B2B: a full set of roles that only come to you when it’s your call.',
     download: 'Download free',
+    dlAny: 'Mac / Windows',
+    dlMac: ['Download for Mac', 'Apple silicon (M-series)'],
+    dlWin: ['Download for Windows', '64-bit'],
+    dlMore: ['Other versions', 'Browser extension'],
+    macFirstOpen: 'First launch: right-click the icon → Open',
     winFirstOpen: 'If Windows blocks it the first time, click “More info → Run anyway”',
     github: 'View on GitHub',
-    checks: ['Mac & Windows', 'Your own API key costs nothing', 'Built on DeepSeek Harness'],
+    checks: [
+      'Mac & Windows',
+      'Connect your platforms in one click',
+      'Pay as you go · free with your own key',
+    ],
     frameBar: '127.0.0.1 · Today',
-    shotAlt: 'The Workshop home screen: one card per role, a few waiting for your approval',
+    shotAlt: 'The Workshop: roles on the left, cards waiting for your call in the middle',
     card: {
       chip: 'Support · Reply',
       due: '1 day left',
@@ -342,6 +419,71 @@ const en: HomeCopy = {
     moreLink: 'See what each role does →',
     newBadge: 'New',
   },
+  modes: {
+    eyebrow: 'Three ways to use it',
+    title: 'For one person, a team, or the whole company.',
+    sub: 'It starts as yours alone. Managers and sign-offs only appear in company mode.',
+    items: [
+      {
+        key: 'solo',
+        tag: 'Solo · default',
+        h: 'Just you, several brands',
+        p: 'Install and go; every role is yours. Nothing goes out until you approve it.',
+      },
+      {
+        key: 'team',
+        tag: 'Team',
+        h: 'Colleagues, side by side',
+        p: 'Everyone runs their own roles and nobody signs off on anybody. Hand work to a colleague; it’s theirs once they accept. Your agent answers colleagues and books time for you.',
+      },
+      {
+        key: 'company',
+        tag: 'Whole company',
+        h: 'The owner turns it on',
+        p: 'One balance, a monthly cap and store access for each member; what matters goes up the chain for approval.',
+      },
+    ],
+    grow: 'Start on your own and move up when you need to. Your data comes along; nothing to reinstall.',
+  },
+  how: {
+    eyebrow: 'How it works',
+    title: 'Tell it in a few sentences. It sets itself up.',
+    sub: 'No admin panels to learn, no workflows to draw. If something’s missing, it asks you in the chat.',
+    items: [
+      {
+        icon: 'plug',
+        h: 'Connect your platforms in one click',
+        p: 'Shopify, Amazon, Google / Meta Ads, Reddit…: through the accounts already signed in to in your browser, or one click to authorize. No developer apps to apply for.',
+      },
+      {
+        icon: 'puzzle',
+        h: 'Fills gaps on the spot',
+        p: 'Missing a connection or a setting? A card pops up in the chat; fill it in and the work carries on.',
+      },
+      {
+        icon: 'chart',
+        h: 'Answers come as charts',
+        p: 'Ask about your numbers and get charts, tables and stat cards back.',
+      },
+      {
+        icon: 'chat',
+        h: 'Say it, and it’s set up',
+        p: 'A weekly report, logging to your own spreadsheet: just tell it. No waiting for us to ship a feature.',
+      },
+      {
+        icon: 'clock',
+        h: 'Shows up on schedule',
+        p: 'Daily checks and weekly reports, right on time.',
+      },
+      {
+        icon: 'check',
+        h: 'Everything on record',
+        p: 'Every message sent is logged on your computer, along with who approved it.',
+      },
+    ],
+    shotAlt: 'A role page: hand it a task; below are this role’s cards and progress',
+    frameBar: '127.0.0.1 · Role',
+  },
   cards: {
     eyebrow: 'Cards, not surprises',
     title: 'AI proposes. You decide. Always.',
@@ -363,20 +505,20 @@ const en: HomeCopy = {
         actions: ['Send', 'Edit', 'Drop'],
       },
       {
-        chip: 'Influencer · Pitch',
+        chip: 'Social · Reddit reply',
         tone: 'good',
-        due: '4 sources',
-        title: 'First email to @desknoor',
-        body: 'Score 90 · audience overlaps strongly with your buyers. Product seeding, no commission.',
-        actions: ['Approve & send', 'Edit', 'Drop'],
+        due: '2 FAQs',
+        title: 'Reply: can I take this power bank on a plane?',
+        body: '20,000 mAh is about 74 Wh, under the 100 Wh limit. Once approved, the extension fills the draft into Reddit and you hit send.',
+        actions: ['Approve', 'Edit', 'Drop'],
       },
       {
-        chip: 'B2B · Quote',
+        chip: 'Ads · Google Ads',
         tone: 'info',
-        due: '6 days left',
-        title: 'Quote Q-0929-02 · over the rep’s limit, sent to the lead',
-        amount: '18,414 USD',
-        actions: ['Approve', 'Change amount', 'Reject'],
+        due: 'Preview first',
+        title: 'Replace the 3 lowest-CTR headlines',
+        body: 'Upload sheet ready. The extension uploads it for a preview in Google Ads; nothing is submitted until you confirm.',
+        actions: ['Approve', 'Edit', 'Reject'],
       },
     ],
     never:
@@ -419,20 +561,20 @@ const en: HomeCopy = {
     rows: [
       ['Support AI', 'Per seat, per month', 'Free, with your own key'],
       ['Connect store, email, social', 'Per connection', 'Free, your own accounts'],
-      ['Creator-scraping extension', 'Per record, per call', 'Free'],
+      ['Browser extension (creators, Reddit, ads)', 'Per record, per call', 'Free'],
       ['Approvals, permissioned knowledge base', 'Enterprise tier only', 'Free'],
       ['Multiple stores and brands', 'Paid upgrade', 'Free'],
     ],
     fine: '"Elsewhere" describes common pricing models, not any specific company. Check each vendor’s official pricing.',
   },
   base: {
-    eyebrow: 'Why DeepSeek Harness',
-    title: ['Rebuilt from inside the Harness,', 'for a company.'],
-    sub: 'A wrapper around a chat box helps one person chat. For a team of agents to work for a company, the wiring has to go deeper.',
+    eyebrow: 'Built on DeepSeek Harness',
+    title: ['Built from the ground up:', 'it doesn’t just chat, it *does the work*.'],
+    sub: 'Most AI only keeps you company in a chat box. The Workshop is wired in from the Harness up: it checks orders, answers email, posts and edits ads, and asks you first when it matters.',
     stackLabel:
       'Layer diagram, bottom up: the official base, five layers rebuilt for a company, your team of roles',
     team: 'Your team',
-    teamChips: ['Lead', 'Support', 'Influencers', 'Social', 'B2B', 'Ads', '…'],
+    teamChips: ['Care', 'Creators', 'Social', 'Web ops', 'Ads', 'B2B', '…'],
     rebuilt: 'Rebuilt for a company',
     layers: [
       ['Approvals', 'Anything that goes out or costs money becomes a card for you, and is logged.'],
@@ -451,15 +593,15 @@ const en: HomeCopy = {
       ['2026-09-24', 'Official scenes', 'Switch to DeepSeek Harness official scenes in one click.'],
       [
         '2026-09-29',
-        'DeepSeek Harness 0.2.0 (preview)',
-        'Merged only after adapter tests and the simulation loop pass.',
-      ],
-      [
-        '2026-09-29',
         'Official web search',
         'Roles look things up with the official search and fetcher.',
       ],
       ['2026-09-29', 'Official automations', 'Recurring work runs on the official automations.'],
+      [
+        '2026-10-10',
+        'Tracking 0.2.1 alpha',
+        'Every new release is evaluated; we upgrade only when tests and the simulation loop pass.',
+      ],
     ],
     oss: ['Apache-2.0.', 'All code public. Fork it. No paywall.'],
     star: 'Star on GitHub',
@@ -471,8 +613,8 @@ const en: HomeCopy = {
   },
   credits: {
     eyebrow: 'Pricing',
-    title: 'Free and complete. Credits if you want it easy.',
-    sub: 'Mix both — every capability has its own switch.',
+    title: 'Pay as you go. No seats, no subscription.',
+    sub: 'The open-source edition is free and complete, and your own key costs nothing. With Workshop credits you pay only for what you use.',
     open: {
       tag: 'Open source',
       price: '¥0',
@@ -519,11 +661,11 @@ const en: HomeCopy = {
       ],
       [
         'Do I need to code?',
-        'No. Download the installer and double-click. Step one: connect an AI. Step two: paste your website. Then you’re working.',
+        'No. Double-click to install, connect an AI, paste your website and you’re working. Platforms connect through your browser logins — no developer apps, no terminal.',
       ],
       [
         'What can it connect to?',
-        'Shopify, email, Amazon, TikTok, Meta, YouTube, X, WhatsApp and more — one card per platform on the Connections page.',
+        'Shopify, email, Amazon, Reddit, Google and Meta Ads, TikTok, YouTube, WhatsApp, Feishu, DingTalk and more. If a task needs one you haven’t connected, it asks you in the chat.',
       ],
       [
         'How does it relate to DeepSeek Harness?',
@@ -534,7 +676,6 @@ const en: HomeCopy = {
   final: {
     title: 'Start with one small task.',
     sub: 'Install it, connect an AI, and hand today’s most annoying email to Support.',
-    download: 'Download free',
     docs: 'Read the guides',
   },
 }

@@ -11,9 +11,13 @@ export const SITE_URL = 'https://agentsws.com'
  */
 export const CLOUD_URL = 'https://cloud.agentsws.com'
 
-/** 账号页的三个入口（WP198 已上线的路径）。 */
+/**
+ * 账号页的入口（WP198 已上线的路径）。WP347：加「注册」——云端注册页是 `/account/signup`
+ * （登录页上「注册新账号」就链到它；`/account/register` 不是注册页，会先跳登录）。
+ */
 export const ACCOUNT_PATHS = {
   login: '/account/login',
+  signup: '/account/signup',
   account: '/account',
   topup: '/account/topup',
 } as const
@@ -43,11 +47,11 @@ export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/ARCHITECTURE.md`
 export const CONTRIBUTING_URL = `${GITHUB_URL}/blob/main/CONTRIBUTING.md`
 
 /**
- * 运营主体公司全称与联系邮箱（Luoye 09-29 提供）。英文页也用中文全称——那是注册名，
+ * 运营主体公司全称（Luoye 09-29 提供）与联系邮箱（Luoye 10-15 改为 contact@，不再用 support@）。英文页也用中文全称——那是注册名，
  * 没有登记过的英文名就不自己译一个。
  */
-export const OPERATOR_LEGAL_NAME = '深圳卢耶科技有限公司'
-export const CONTACT_EMAIL = 'support@agentsws.com'
+export const OPERATOR_LEGAL_NAME = '深圳市卢耶科技有限公司'
+export const CONTACT_EMAIL = 'contact@agentsws.com'
 
 /**
  * 首页「四级台阶」第三级提到的两款前作（WP227，Luoye 10-05 #4）：名字点了去它们的官网，新窗口打开。
@@ -57,5 +61,9 @@ export const SISTER_SITES: Readonly<Record<string, string>> = {
   KefuAgents: 'https://kefuagents.com',
 }
 
-/** 条款三页的生效日期（改条款就改这里）。 */
-export const LEGAL_EFFECTIVE_DATE = '2026-10-05'
+/**
+ * 条款三页的生效日期（改条款就改这里）。
+ * WP344：先写成占位，**上线当天由 Fable 填成部署那天的日期**（YYYY-MM-DD）；
+ * 没填之前页面上照原样显示 `{{EFFECTIVE_DATE}}`，`pnpm -F @agentsws/site launch:check` 也会拦下。
+ */
+export const LEGAL_EFFECTIVE_DATE = '2026-10-15'
