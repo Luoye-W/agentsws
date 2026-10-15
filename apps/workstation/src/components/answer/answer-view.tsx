@@ -13,44 +13,19 @@ import {
   type GenuiSpecLite,
   genuiToAnswerComponents,
 } from '@agentsws/contracts'
-import { Component, lazy, type ReactNode, Suspense } from 'react'
+import type { ReactNode } from 'react'
 import { DeltaPill } from '@/components/design/primitives'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
-import { reportClientError } from '@/lib/client-errors'
-
-/** WP336：dsh-genui 渲染层单独一块，回答里有 genui 才下载。 */
-const GenuiView = lazy(() => import('./genui/genui-view'))
-
-/** 渲染层抛错 → 换成降级的表格 / 数字 / 字（记一条本机日志），不让一整块空掉。 */
-class GenuiBoundary extends Component<
-  { fallback: ReactNode; children: ReactNode },
-  { failed: boolean }
-> {
-  override state = { failed: false }
-
-  static getDerivedStateFromError(): { failed: boolean } {
-    return { failed: true }
-  }
-
-  override componentDidCatch(error: unknown): void {
-    reportClientError('panel', error, { scope: 'answer:genui' })
-  }
-
-  override render(): ReactNode {
-    return this.state.failed ? this.props.fallback : this.props.children
-  }
-}
+import { GenuiBlockView } from './genui/genui-block'
 
 /** 一块 genui：渲染层画；还没下载完 / 画不了 / 抛错都退回降级的那三种组件。 */
 function GenuiAnswer({ spec }: { spec: GenuiSpecLite }): ReactNode {
-  const fallback = <AnswerComponents components={genuiToAnswerComponents(spec)} />
   return (
-    <GenuiBoundary fallback={fallback}>
-      <Suspense fallback={<div className="min-h-[120px]" />}>
-        <GenuiView spec={spec} fallback={fallback} />
-      </Suspense>
-    </GenuiBoundary>
+    <GenuiBlockView
+      spec={spec}
+      fallback={<AnswerComponents components={genuiToAnswerComponents(spec)} />}
+    />
   )
 }
 

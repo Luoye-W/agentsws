@@ -58,6 +58,7 @@ import {
   cancelReasonOf,
   cleanNextSuggestion,
   createRunWatchdog,
+  genuiDisplayRule,
   type MatterLiveRun,
   NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
@@ -1799,6 +1800,18 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一次：只查只答，末尾附 ```answer
            * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
            */
+          /*
+           * WP336（Luoye 10-15 扩大范围）：**所有**事项 / 线程运行都带一段精简的 ```dsh-ui 写法（回给人看的正文
+           * 里可以放组件，对外内容里不用）；当场问答那次换成它自己那段完整的。回退开关切回 answer 时一个字节不多。
+           * 三个运行时拿到同一份字节。
+           */
+          ...(() => {
+            const ui = quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV])
+            const display = genuiDisplayRule(ui)
+            return input.matter.ask?.quick === true || display === undefined
+              ? []
+              : [{ id: 'genui_display', name: '回话里的组件', order: 28, text: display }]
+          })(),
           ...(input.matter.ask?.quick === true
             ? [
                 {

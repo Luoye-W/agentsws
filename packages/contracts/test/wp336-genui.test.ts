@@ -6,9 +6,13 @@ import { describe, expect, it } from 'vitest'
 import {
   filterGenuiSpec,
   GENUI_ALLOWED_TYPES,
+  GENUI_DISPLAY_RULE,
   GENUI_LIMITS,
   type GenuiNodeLite,
+  genuiDisplayRule,
+  genuiFencesToText,
   genuiToAnswerComponents,
+  genuiToMarkdown,
   hasAnswerFence,
   QUICK_ANSWER_GENUI_RULE,
   QUICK_ANSWER_RULE,
@@ -252,5 +256,45 @@ describe('WP336 回退：降级成 ```answer 三种', () => {
     // 例子本身过得了白名单
     const example = /```dsh-ui\n(.*)\n```/u.exec(QUICK_ANSWER_GENUI_RULE)?.[1] ?? ''
     expect(filterGenuiSpec(JSON.parse(example)).dropped).toEqual([])
+  })
+})
+
+describe('WP336 扩大范围：所有对话运行 + 画不了组件的地方', () => {
+  it('所有对话运行那段精简版：教 ```dsh-ui、说清对外内容不用；开关切回 answer 时一个字节不加', () => {
+    expect(genuiDisplayRule('genui')).toBe(GENUI_DISPLAY_RULE)
+    expect(genuiDisplayRule('answer')).toBeUndefined()
+    expect(GENUI_DISPLAY_RULE).toContain('```dsh-ui')
+    expect(GENUI_DISPLAY_RULE).toContain('对外内容')
+    expect(GENUI_DISPLAY_RULE.split('\n').length).toBeLessThanOrEqual(6)
+    const example = /```dsh-ui\n(.*)\n```/u.exec(GENUI_DISPLAY_RULE)?.[1] ?? ''
+    expect(filterGenuiSpec(JSON.parse(example)).dropped).toEqual([])
+  })
+
+  it('genui → markdown：数字一行、表格成 markdown 表', () => {
+    expect(
+      genuiToMarkdown({
+        title: '今天',
+        items: [
+          { type: 'stat', label: '订单', value: '8', delta: '+12%' },
+          { type: 'table', columns: ['商品', '价格'], rows: [['耳机', 129]] },
+        ],
+      }),
+    ).toBe('**今天**\n\n订单 8（+12%）\n\n| 商品 | 价格 |\n| --- | --- |\n| 耳机 | 129 |')
+  })
+
+  it('发到聊天软件前：```dsh-ui 换成几行字，坏的整段去掉，别的字原样', () => {
+    const raw = [
+      '今天 8 单。',
+      fence({
+        items: [
+          { type: 'stat', label: '订单', value: '8' },
+          { type: 'button', label: 'x' },
+        ],
+      }),
+      '还有一段。',
+      '```dsh-ui\n{"items":[\n```',
+    ].join('\n')
+    expect(genuiFencesToText(raw)).toBe('今天 8 单。\n订单 8\n还有一段。')
+    expect(genuiFencesToText('没有组件')).toBe('没有组件')
   })
 })

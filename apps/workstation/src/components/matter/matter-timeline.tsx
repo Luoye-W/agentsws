@@ -6,7 +6,7 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
-import { hasAnswerFence, splitAnswer } from '@agentsws/contracts'
+import { genuiFencesToText, splitAnswer } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -343,12 +343,13 @@ export function AiEntry({
 }): ReactNode {
   const { t } = useApp()
   const raw = item.event?.text ?? ''
-  // WP291：当场问答那段话末尾的 ```answer 组件段——正文照常画，组件按契约画在下面
-  // WP336：```dsh-ui 同样分出来（白名单过滤后交给 genui 渲染层）
-  const answer = hasAnswerFence(raw) ? splitAnswer(raw) : undefined
+  // WP291：当场问答那段话末尾的 ```answer 组件段——正文照常画，组件按契约画在下面（老内容照常）
+  // WP336：```dsh-ui 留在正文里，由 SafeMarkdown 就地交给 genui 渲染层（同所有 AI 回话）
+  const answer = raw.includes('```answer') ? splitAnswer(raw) : undefined
   const text = answer?.text ?? raw
   const shown = (answer?.components ?? []).filter((c) => c.kind !== 'text')
-  const long = replyIsLong(text)
+  // 折叠按画出来的样子算（```dsh-ui 那段 JSON 不算长度）
+  const long = replyIsLong(genuiFencesToText(text))
   const [open, setOpen] = useState(false)
   const preview = item.preview?.preview
   const card =

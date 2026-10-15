@@ -169,8 +169,9 @@ describe('WP336 线程里的 ```dsh-ui', () => {
     const reply = await screen.findByTestId('matter-reply')
     expect(reply.textContent).not.toContain('```')
     expect(reply.textContent).not.toContain('dsh-ui')
-    const block = await screen.findByTestId('answer-genui')
-    await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'))
+    // 渲染层是懒加载的单独一块，机器忙时头一次转换要几秒
+    const block = await screen.findByTestId('answer-genui', {}, { timeout: 30_000 })
+    await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'), { timeout: 30_000 })
     expect(block.textContent).not.toContain('一键上架')
   })
 })

@@ -20,6 +20,7 @@ const WEB_OPS_ROLES = ['dtc.store', 'dtc.content', 'dtc.email-marketing', 'dtc.f
 /** 判断那一次的替身：原话 → 模型回的那段字（`undefined` = 照常回 JSON 里的类别）。 */
 const JUDGE: Record<string, string> = {
   店里有哪些商品: '{"kind":"quick","why":"查一下商品"}',
+  帮我想想详情页怎么优化: '{"kind":"chat","why":"要多轮讨论"}',
 }
 
 const GENUI_ANSWER = [
@@ -231,5 +232,18 @@ describe('WP336 聊天软件里', () => {
       ],
     })
     expect(text).toBe('店里有 2 件商品。\n在卖 2\n· 蓝牙耳机，129')
+  })
+})
+
+describe('WP336 扩大范围：事项 / 线程的运行也教 ```dsh-ui', () => {
+  it('会话（非当场问答）那次运行带精简版「回话里的组件」，不带当场问答那段', async () => {
+    await boot()
+    await open('帮我想想详情页怎么优化', { detach: true })
+    const taught = (p: string): boolean => p.includes('```dsh-ui') && p.includes('对外内容')
+    const deadline = Date.now() + 20_000
+    while (!runPrompts.some(taught) && Date.now() < deadline)
+      await new Promise((r) => setTimeout(r, 50))
+    expect(runPrompts.some(taught)).toBe(true)
+    expect(runPrompts.some((p) => p.includes('当场问答'))).toBe(false)
   })
 })

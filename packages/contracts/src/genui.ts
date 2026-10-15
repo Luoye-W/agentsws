@@ -390,3 +390,17 @@ export const QUICK_ANSWER_GENUI_RULE = [
   '不写按钮、表单、图片、链接、颜色（写了也会被去掉）。表格最多 50 行 8 列，多了只列前 50 行、用 text 说一共几行。',
   '数字照工具读回来的原样填，读不到就不填、照实说读不到。没有清单和数字就不写这一段。',
 ].join('\n')
+
+/**
+ * WP336（Luoye 10-15 扩大范围）：**所有对话运行**（事项 / 线程、随便聊、问 AI）系统提示里带的精简版——
+ * 回给工作台里的人看的正文可以放一段 ```dsh-ui。比 {@link QUICK_ANSWER_GENUI_RULE} 短，不重复「只查只答」那几条。
+ * 对外内容（邮件、帖子、给客户的回复）、卡片与工具参数里一律不用。
+ */
+export const GENUI_DISPLAY_RULE = [
+  '回给工作台里的人看的话里，有清单、关键数字、对比或趋势时，可以在正文里放一段 ```dsh-ui（JSON，工作台画成组件），例如：',
+  '```dsh-ui',
+  '{"items":[{"type":"stat","label":"今天订单","value":"8"},{"type":"table","columns":["商品","价格"],"rows":[["示例商品",129]]}]}',
+  '```',
+  '只能用：text、card、grid、stat、table、list、keyvalue、timeline、steps、callout、badge、progress、chart（kind: bars / line / donut）；漏斗用 echart（preset: funnel）。不写按钮、表单、图片、链接、颜色。',
+  '起草对外内容（邮件、帖子、给客户的回复）、卡片和工具参数里一律不用；数字照工具读回来的原样填。',
+].join('\n')

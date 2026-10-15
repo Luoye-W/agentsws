@@ -12,6 +12,7 @@
  */
 import {
   filterGenuiSpec,
+  GENUI_DISPLAY_RULE,
   GENUI_FENCE,
   type GenuiNodeLite,
   type GenuiSpecLite,
@@ -119,6 +120,13 @@ export function quickAnswerUiOf(value: string | undefined): QuickAnswerUi {
 /** 这一套写法给模型的那段规矩。 */
 export function quickAnswerRule(ui: QuickAnswerUi): string {
   return ui === 'answer' ? QUICK_ANSWER_RULE : QUICK_ANSWER_GENUI_RULE
+}
+
+/**
+ * WP336（扩大范围）：别的对话运行（事项 / 线程、随便聊、问 AI）系统提示里那段；开关切回 `answer` 时一个字节不加。
+ */
+export function genuiDisplayRule(ui: QuickAnswerUi): string | undefined {
+  return ui === 'genui' ? GENUI_DISPLAY_RULE : undefined
 }
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
@@ -293,6 +301,53 @@ export function genuiToAnswerComponents(spec: GenuiSpecLite): AnswerComponent[] 
 
 /** ```dsh-ui 那一段（围栏名同 {@link GENUI_FENCE}）。 */
 const GENUI_FENCE_RE = /```[ \t]*dsh-ui[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?```/giu
+
+/**
+ * WP336：一段 genui 描述压成几行 markdown（表格 → `| a | b |`，数字 → 「标签 值」一行，字照原样）。
+ * 渲染层画不了时的退路、发到聊天软件前的降级都用它。
+ */
+export function genuiToMarkdown(spec: GenuiSpecLite): string {
+  const cell = (c: AnswerCell): string => (c === null ? '—' : String(c).replace(/\|/gu, '/'))
+  const parts = genuiToAnswerComponents(spec).map((c) => {
+    if (c.kind === 'text') return c.text
+    if (c.kind === 'metric')
+      return c.items
+        .map(
+          (m) =>
+            `${m.label} ${String(m.value)}${m.unit ?? ''}${m.delta_pct === undefined ? '' : `（${m.delta_pct > 0 ? '+' : ''}${m.delta_pct}%）`}`,
+        )
+        .join(' · ')
+    if (c.kind === 'table')
+      return [
+        `| ${c.columns.map(cell).join(' | ')} |`,
+        `| ${c.columns.map(() => '---').join(' | ')} |`,
+        ...c.rows.map((r) => `| ${r.map(cell).join(' | ')} |`),
+      ].join('\n')
+    return ''
+  })
+  return [spec.title === undefined ? '' : `**${spec.title}**`, ...parts]
+    .filter((p) => p !== '')
+    .join('\n\n')
+}
+
+/**
+ * WP336：一段话里的 ```dsh-ui 都换成 {@link genuiToMarkdown} 那几行（坏的整段去掉）。
+ * 发到聊天软件（飞书 / 钉钉 / 企业微信…）这类画不了组件的地方前过一遍，不让 JSON 原样出去。
+ */
+export function genuiFencesToText(raw: string): string {
+  if (!raw.includes(`\`\`\`${GENUI_FENCE}`)) return raw
+  return raw
+    .replace(GENUI_FENCE_RE, (_m, body: string) => {
+      try {
+        const { spec } = filterGenuiSpec(JSON.parse(body))
+        return spec === undefined ? '' : genuiToMarkdown(spec)
+      } catch {
+        return ''
+      }
+    })
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
+}
 
 const FENCE_RE = /```[ \t]*answer[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?```/giu
 
