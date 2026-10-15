@@ -6466,8 +6466,8 @@ export const getExtensionInstall = (assignment?: string): Promise<ExtensionInsta
 export const openExtensionInstall = (
   target: 'folder' | 'chrome',
   assignment?: string,
-): Promise<{ opened: boolean; message?: string }> =>
-  api<{ opened: boolean; message?: string }>('/v1/extension/install/open', {
+): Promise<{ opened: boolean; message?: string; address?: string }> =>
+  api<{ opened: boolean; message?: string; address?: string }>('/v1/extension/install/open', {
     method: 'POST',
     body: { target },
     ...withAssignment(assignment),

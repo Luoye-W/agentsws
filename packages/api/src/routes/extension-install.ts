@@ -62,6 +62,12 @@ export interface ExtensionOpenResult {
   opened: boolean
   /** 没打开时的一句人话（没找到 Chrome / 这台电脑上没有插件文件夹）。 */
   message?: string
+  /**
+   * 打开扩展页时：要粘贴到地址栏的那个地址（`chrome://extensions` / `edge://extensions`）。
+   * Chrome 不让从外面直接打开 `chrome://` 页（实测 155：命令行带上它只开一个新标签页），所以卡上把它复制好、
+   * 说一句「地址栏粘贴」。
+   */
+  address?: string
 }
 
 /** 插件报版本的入参。 */

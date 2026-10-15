@@ -11,7 +11,13 @@
  */
 import { spawn } from 'node:child_process'
 
-export async function launchChrome({ executable, userDataDir, args = [], pipe = true }) {
+export async function launchChrome({
+  executable,
+  userDataDir,
+  args = [],
+  pipe = true,
+  url = 'about:blank',
+}) {
   const base = [
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -21,7 +27,7 @@ export async function launchChrome({ executable, userDataDir, args = [], pipe = 
   ]
   const child = spawn(
     executable,
-    [...base, ...(pipe ? ['--remote-debugging-pipe'] : []), ...args, 'about:blank'],
+    [...base, ...(pipe ? ['--remote-debugging-pipe'] : []), ...args, url],
     { stdio: ['ignore', 'ignore', 'pipe', ...(pipe ? ['pipe', 'pipe'] : [])] },
   )
   const stderr = []

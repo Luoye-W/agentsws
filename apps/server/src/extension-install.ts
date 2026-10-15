@@ -124,14 +124,17 @@ export function folderOpener(platform: NodeJS.Platform, dir: string): [string, s
   return ['xdg-open', [dir]]
 }
 
-/** 扩展页地址：Edge 是 `edge://extensions`，Chrome / Chromium 是 `chrome://extensions`。 */
+/**
+ * 扩展页地址：Edge 是 `edge://extensions`，Chrome / Chromium 是 `chrome://extensions`。
+ * 实测（WP345，Chrome 155）：命令行带上它 Chrome 不认，开成一个新标签页——所以连接卡上把这串复制好，请人粘贴。
+ */
 export function extensionsPageFor(executable: string): string {
   return /msedge|microsoft edge/i.test(executable) ? 'edge://extensions' : 'chrome://extensions'
 }
 
 const NO_FOLDER = '这台电脑上还没有插件文件夹（要用桌面版 Agents 工坊）。'
 const NO_CHROME = '没找到 Chrome。装好 Chrome 后，在地址栏输入 chrome://extensions 也能打开扩展页。'
-const LAUNCH_FAILED = '没打开，换个方式：在 Chrome 地址栏输入 chrome://extensions。'
+const LAUNCH_FAILED = '没打开 Chrome：自己打开它，在地址栏粘贴 chrome://extensions。'
 
 export function createExtensionInstall(options: ExtensionInstallOptions): ExtensionInstallPort {
   const running = new Map<string, ExtensionRunningVersion & { workspace_id: WorkspaceId }>()
@@ -169,12 +172,11 @@ export function createExtensionInstall(options: ExtensionInstallOptions): Extens
         options.exists(p),
       )
       if (executable === undefined) return { opened: false, message: NO_CHROME }
-      const opened = await options.launch(
-        executable,
-        [extensionsPageFor(executable)],
-        options.browserEnv(options.env),
-      )
-      return opened ? { opened } : { opened, message: LAUNCH_FAILED }
+      // 带上扩展页地址：Chrome 155 不认（开成新标签页），但把浏览器叫到前面、开好一个新标签页；
+      // 地址交回给卡片复制好，用户在地址栏粘贴（将来 Chrome 放开了就直接是扩展页）
+      const address = extensionsPageFor(executable)
+      const opened = await options.launch(executable, [address], options.browserEnv(options.env))
+      return opened ? { opened, address } : { opened, address, message: LAUNCH_FAILED }
     },
 
     report(session, input) {

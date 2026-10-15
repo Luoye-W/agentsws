@@ -19,6 +19,10 @@ import { Hint } from '@/components/ui/hint'
 import { getExtensionInstall, openExtensionInstall } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
+const copy = (text: string): void => {
+  void globalThis.navigator?.clipboard?.writeText(text).catch(() => undefined)
+}
+
 export function ExtensionInstall(props: {
   assignment?: string | undefined
   /** 这个工作区里有没有还能用的配对（有 = 已经装好了）。 */
@@ -37,7 +41,12 @@ export function ExtensionInstall(props: {
     onSuccess: (out, target) => {
       if (!out.opened) setNote(out.message)
       else if (target === 'folder') setNote(t('extinstall.copied'))
-      else setNote(undefined)
+      else {
+        // Chrome 不让从外面直接打开扩展页（实测开成新标签页）：地址复制好，请人粘贴
+        const address = out.address ?? 'chrome://extensions'
+        copy(address)
+        setNote(t('extinstall.chrome.copied', { address }))
+      }
     },
     onError: (err) => setNote((err as Error).message),
   })
@@ -52,7 +61,7 @@ export function ExtensionInstall(props: {
 
   const openFolder = (): void => {
     // 路径顺手复制：Chrome 的选择窗口里 Mac 按 ⌘⇧G 粘贴、Windows 粘贴到地址栏
-    void globalThis.navigator?.clipboard?.writeText(folder).catch(() => undefined)
+    copy(folder)
     open.mutate('folder')
   }
 
@@ -90,7 +99,11 @@ export function ExtensionInstall(props: {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => open.mutate('chrome')}
+              onClick={() => {
+                // 先复制一份（点的这一下还在用户手势里），本机回来说是 Edge 再换
+                copy('chrome://extensions')
+                open.mutate('chrome')
+              }}
               disabled={open.isPending}
               data-testid="extension-install-chrome"
             >

@@ -116,7 +116,7 @@ function uiStrings() {
 async function extensionsPage(c) {
   const { targetId } = await c.send('Target.createTarget', { url: 'chrome://extensions' })
   await sleep(1500)
-  return { run: (expr) => c.evaluate(targetId, expr) }
+  return { targetId, run: (expr) => c.evaluate(targetId, expr) }
 }
 
 const infoExpr = (id) =>
@@ -166,7 +166,39 @@ try {
       sw2.targetId,
       'chrome.permissions.getAll().then((p) => ({ permissions: p.permissions, origins: p.origins, version_name: chrome.runtime.getManifest().version_name }))',
     )
+
+  // ── 连接卡「打开 Chrome 扩展页」的做法：直接起 Chrome 可执行文件带 chrome://extensions。
+  //    Chrome 已经开着（同一个用户目录）时，新起的进程把网址交给开着的那个就退出——看开着的那个多没多一页扩展页
+  //    扩展页在 Chrome 里只开一个（再开就切过去），所以先把我们自己开的那一页关掉
+  await c.send('Target.closeTarget', { targetId: page.targetId })
+  await sleep(500)
+  const pagesBefore = (await c.targets()).filter((t) =>
+    t.url.startsWith('chrome://extensions'),
+  ).length
+  const handoff = await launchChrome({
+    executable: CHROME,
+    userDataDir: profile,
+    pipe: false,
+    url: 'chrome://extensions',
+  })
+  const handoffExit = await Promise.race([
+    handoff.exited,
+    sleep(10_000).then(() => 'still-running'),
+  ])
+  await sleep(1500)
+  const pagesAfter = (await c.targets()).filter((t) =>
+    t.url.startsWith('chrome://extensions'),
+  ).length
+  result.open_extensions_page_when_running = {
+    handed_over_and_exited: handoffExit !== 'still-running',
+    extensions_pages_before: pagesBefore,
+    extensions_pages_after: pagesAfter,
+  }
+  if (handoffExit === 'still-running') await handoff.close()
   await c.close()
+
+  // ── Chrome 关着时工坊换了新版：下次打开直接读新文件
+  writeVersion('1.0.2')
 
   // ── ② 不带任何调试开关重开同一个用户目录（用户平常打开 Chrome 的样子），开 8 秒、正常关
   const plain = await launchChrome({ executable: CHROME, userDataDir: profile, pipe: false })
@@ -176,6 +208,7 @@ try {
   // 再带管道开一次：插件还在不在、开着没有、开发者模式还开着没有
   c = await launchChrome({ executable: CHROME, userDataDir: profile })
   page = await extensionsPage(c)
+  // 关着时换成的 1.0.2 应该直接生效
   result.after_restart = await page.run(infoExpr(id))
   result.developer_mode_after_restart = await page.run(
     'new Promise((r) => chrome.developerPrivate.getProfileConfiguration((p) => r(p.inDeveloperMode)))',

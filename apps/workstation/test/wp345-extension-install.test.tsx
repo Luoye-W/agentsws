@@ -19,7 +19,7 @@ const FOLDER = '/Users/a/Library/Application Support/@agentsws/desktop/chrome-ex
 const state = {
   view: undefined as ExtensionInstallView | undefined,
   opened: [] as string[],
-  openResult: { opened: true } as { opened: boolean; message?: string },
+  openResult: { opened: true } as { opened: boolean; message?: string; address?: string },
   tokens: [] as ExtensionTokenView[],
 }
 
@@ -90,8 +90,15 @@ describe('还没配上：第一次装', () => {
     await waitFor(() => expect(state.opened).toEqual(['folder']))
     expect(writeText).toHaveBeenCalledWith(FOLDER)
     expect((await screen.findByTestId('extension-install-note')).textContent).toBe('路径已复制')
+    state.openResult = { opened: true, address: 'chrome://extensions' }
     fireEvent.click(screen.getByTestId('extension-install-chrome'))
     await waitFor(() => expect(state.opened).toEqual(['folder', 'chrome']))
+    await waitFor(() =>
+      expect(screen.getByTestId('extension-install-note').textContent).toBe(
+        'chrome://extensions 已复制：在 Chrome 地址栏粘贴、回车',
+      ),
+    )
+    expect(writeText).toHaveBeenLastCalledWith('chrome://extensions')
   })
 
   it('没打开（没找到 Chrome）：照实说那一句', async () => {
@@ -104,7 +111,8 @@ describe('还没配上：第一次装', () => {
   })
 
   it('不是桌面版 / 老本机服务：整块不出', async () => {
-    state.view = view({ can_open: false, folder: undefined } as Partial<ExtensionInstallView>)
+    const { folder: _f, ...rest } = view()
+    state.view = { ...rest, can_open: false }
     const a = renderWithProviders(<ExtensionInstall paired={false} />)
     await new Promise((r) => setTimeout(r, 30))
     expect(screen.queryByTestId('extension-install')).toBeNull()

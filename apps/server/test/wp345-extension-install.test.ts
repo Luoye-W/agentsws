@@ -190,9 +190,9 @@ describe('打开文件夹 / 扩展页', () => {
     ])
   })
 
-  it('打开扩展页：直接起 Chrome 带 chrome://extensions（已开着就交给开着的那个），不带本机密钥', async () => {
+  it('打开扩展页：直接起 Chrome 带 chrome://extensions（已开着就交给开着的那个；Chrome 不认就是个新标签页，地址交回去给卡片复制），不带本机密钥', async () => {
     const { port, launched } = setup()
-    expect(await port.open('chrome')).toEqual({ opened: true })
+    expect(await port.open('chrome')).toEqual({ opened: true, address: 'chrome://extensions' })
     expect(launched[0]?.command).toBe(
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     )

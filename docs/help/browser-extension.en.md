@@ -18,9 +18,9 @@ This covers the Chrome extension “Agents Workshop · Creator helper”: it giv
 
 The extension is not in the Chrome Web Store. It comes with Agents Workshop, in a fixed folder on your computer. Add it to Chrome once; after that it updates whenever the app updates — **no uninstalling, no reinstalling**.
 
-1. In the workstation, under “Connections → Browser extension” (or on the extension card in a chat), press **Open extension folder** (the path is copied for you), then **Open Chrome extensions**.
+1. In the workstation, under “Connections → Browser extension” (or on the extension card in a chat), press **Open Chrome extensions**: Chrome opens a new tab and `chrome://extensions` is already copied — paste it into the address bar and press Enter (Chrome does not let other programs open that page directly).
 2. Turn on **Developer mode** (top right of the extensions page).
-3. Click **Load unpacked** (top left) and pick the folder you just opened. If the picker cannot find it: on Mac press ⌘⇧G and paste the path; on Windows paste it into the address bar. You can also drag the folder into the picker.
+3. Back on the card, press **Open extension folder** (the path is copied for you), then click **Load unpacked** (top left of the extensions page) and pick that folder. If the picker cannot find it: on Mac press ⌘⇧G and paste the path; on Windows paste it into the address bar. You can also drag the folder into the picker.
 4. A new icon appears in the toolbar; press it and the panel shows up at the top right of the page. Open any YouTube channel page — the check-up already works.
 
 **Keep Developer mode on**: Chrome disables extensions added from a folder when it is turned off; turn it back on and the extension returns.
