@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AppWindow,
   Check,
+  ChevronRight,
   ExternalLink,
   Layers,
   Plus,
@@ -89,7 +90,15 @@ function preOpen(): Window | null {
   return globalThis.window?.open('about:blank', '_blank') ?? null
 }
 
-export function SceneSwitcher(): React.ReactNode {
+/**
+ * WP342（决策 853）：`menu` = 收在左下角账号菜单里的一行子菜单（「场景 ›」，面板往右开）；
+ * `rail` = 老样子（左栏账户块上方一行，面板往上开）。
+ */
+export function SceneSwitcher({
+  variant = 'rail',
+}: {
+  variant?: 'rail' | 'menu'
+} = {}): React.ReactNode {
   const { t } = useApp()
   const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
@@ -212,13 +221,30 @@ export function SceneSwitcher(): React.ReactNode {
     <div className="relative" data-testid="scene-switcher">
       <button
         type="button"
+        {...(variant === 'menu' ? { role: 'menuitem', title: t('account.scenes.tip') } : {})}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={t('scenes.title')}
         data-testid="scene-toggle"
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ws-muted-fg hover:bg-sidebar-accent/60"
+        className={cn(
+          'flex w-full items-center gap-2 text-left text-sm',
+          variant === 'menu'
+            ? 'rounded-sm px-2 py-1.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
+            : 'rounded-md px-2 py-1.5 text-ws-muted-fg hover:bg-sidebar-accent/60',
+        )}
         onClick={() => {
           setOpen(!open)
+        }}
+        onKeyDown={(e) => {
+          if (variant === 'menu' && e.key === 'ArrowRight') {
+            e.preventDefault()
+            setOpen(true)
+          }
+          if (open && (e.key === 'Escape' || e.key === 'ArrowLeft')) {
+            e.preventDefault()
+            e.stopPropagation()
+            setOpen(false)
+          }
         }}
       >
         <Layers aria-hidden className="size-4 shrink-0" />
@@ -228,13 +254,23 @@ export function SceneSwitcher(): React.ReactNode {
             {running}
           </span>
         ) : null}
+        {variant === 'menu' ? <ChevronRight aria-hidden className="size-3.5 opacity-60" /> : null}
       </button>
       {open ? (
         <div
           role="dialog"
           aria-label={t('scenes.title')}
           data-testid="scene-panel"
-          className="absolute bottom-full left-0 z-50 mb-1 w-80 rounded-md border bg-popover p-2 shadow-md"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setOpen(false)
+            }
+          }}
+          className={cn(
+            'absolute z-50 w-80 rounded-md border bg-popover p-2 shadow-md',
+            variant === 'menu' ? 'bottom-0 left-full ml-2' : 'bottom-full left-0 mb-1',
+          )}
         >
           <p className="px-1 text-sm font-medium">{t('scenes.title')}</p>
           <p className="px-1 pb-2 text-xs text-muted-foreground">

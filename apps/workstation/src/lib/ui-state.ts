@@ -30,6 +30,9 @@ export const RAIL_EXPANDED_KEY = 'agentsws.rail.expanded'
  *    与 40 §1.2 第一条规则（个人电脑上不存真源）正面冲突。刷新之后各面板拿着
  *    作用域自己重新取，与官方"拿 tab 身份 + 资源地址自己找回来"是同一条。
  */
+/** WP342：左下角账号菜单里「工作内容 / 设置」两组哪组展开着（没记过 = 都收着）。 */
+export const ACCOUNT_GROUPS_KEY = 'agentsws.account.groups'
+
 export const RIGHT_RAIL_LAYOUT_KEY = 'agentsws.rightrail.layout'
 
 /**

@@ -25,6 +25,7 @@ import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
+import { SHELL_EN, SHELL_ZH } from './i18n-shell'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
@@ -8299,6 +8300,8 @@ const TABLES: Record<Lang, Table> = {
     ...CARD_PAGE_ZH,
     // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
     ...GEO_ZH,
+    // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
+    ...SHELL_ZH,
   },
   en: {
     ...en,
@@ -8328,6 +8331,7 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WRITE_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
+    ...SHELL_EN,
   },
 }
 
