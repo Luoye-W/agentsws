@@ -1,0 +1,271 @@
+/**
+ * WP349（Luoye 10-15 改决策 881）：品牌分析那一轮**联网查**——品牌评测 / 媒体 / 社区讨论，
+ * 以及竞品（搜「同类品牌 / alternatives / vs」拿候选，再对前几个各搜一次核实）。
+ *
+ * Luoye 原话：竞品分析包括品牌分析，这些肯定是要联网去查询的，不可能只靠 AI 原生内置的知识。
+ *
+ * 这个包照旧**不联网**：搜索口由调用方注入（服务端给的是官方 web search，带 7 天缓存；测试给替身）。
+ * 这里只管三件事：搜什么、按什么顺序搜（额度装不下时先让品牌评测、再让竞品）、搜到的编上号交给
+ * 同一次 AI 归纳（{@link insightsPrompt}）。没有来源的竞品在 {@link insightFields} 里被丢。
+ */
+import {
+  BRAND_INTAKE_WEB_SEARCH_MAX,
+  type BrandIntakeProfile,
+  type BrandIntakeWebPart,
+} from '@agentsws/contracts'
+
+/** 搜到的一条。 */
+export interface IntakeWebHit {
+  url: string
+  title?: string
+  snippet?: string
+}
+
+/** 搜一句。搜不了 / 出错回 `undefined`（算「没搜成」）。 */
+export type IntakeWebSearch = (query: string) => Promise<IntakeWebHit[] | undefined>
+
+/** 编了号的一条（提示词里按号引用；`part` 是哪一部分搜到的，`about` 是核实哪个竞品时搜到的）。 */
+export interface NumberedHit extends IntakeWebHit {
+  n: number
+  part: BrandIntakeWebPart
+  about?: string
+}
+
+/** 每句搜索取前几条进提示词（再多只烧 token）。 */
+const KEEP: Record<BrandIntakeWebPart, number> = { competitors: 5, verify: 3, brand: 4 }
+
+const clip = (s: string | undefined, n: number): string | undefined => {
+  const t = s?.replace(/\s+/g, ' ').trim()
+  return t === undefined || t === '' ? undefined : t.slice(0, n)
+}
+
+/** 品牌名（没读到就用官网域名的那一段）。 */
+export function brandNameOf(profile: BrandIntakeProfile, url?: string): string | undefined {
+  const name = clip(profile.brand_name?.value, 60)
+  if (name !== undefined) return name
+  try {
+    const host = new URL(url ?? '').hostname.replace(/^www\./, '')
+    const label = host.split('.')[0]
+    return label === undefined || label === '' ? undefined : label
+  } catch {
+    return undefined
+  }
+}
+
+/** 品类那一句（读到了才带；Amazon 面包屑 / 已有档案）。 */
+const whatOf = (profile: BrandIntakeProfile): string =>
+  clip(profile.subcategory?.value ?? profile.category?.value, 40) ?? ''
+
+const q = (...parts: string[]): string => parts.join(' ').replace(/\s+/g, ' ').trim()
+
+/** 品牌本身：评测、社区讨论、媒体报道（最多 3 句）。 */
+export function brandQueries(name: string, profile: BrandIntakeProfile): string[] {
+  const what = whatOf(profile)
+  return [q(name, what, 'review'), q(name, 'reddit'), q(name, 'brand news')].slice(
+    0,
+    BRAND_INTAKE_WEB_SEARCH_MAX.brand,
+  )
+}
+
+/** 竞品发现：同类品牌 / alternatives / vs（最多 2 句）。 */
+export function competitorQueries(name: string, profile: BrandIntakeProfile): string[] {
+  const what = whatOf(profile)
+  return [
+    q(name, 'alternatives', what),
+    what === '' ? q(name, 'vs') : q('best', what, 'brands like', name),
+  ].slice(0, BRAND_INTAKE_WEB_SEARCH_MAX.competitors)
+}
+
+/** 核实一个竞品：官网、价格带、主打卖点。 */
+export function verifyQuery(candidate: string, profile: BrandIntakeProfile): string {
+  return q(candidate, whatOf(profile), 'official site price')
+}
+
+/** 认成候选名时要扔掉的泛词（标题里常见的大写词）。 */
+const GENERIC = new Set(
+  [
+    'best',
+    'top',
+    'the',
+    'a',
+    'an',
+    'review',
+    'reviews',
+    'vs',
+    'versus',
+    'alternative',
+    'alternatives',
+    'amazon',
+    'reddit',
+    'youtube',
+    'which',
+    'why',
+    'how',
+    'what',
+    'guide',
+    'comparison',
+    'compared',
+    'our',
+    'buying',
+    'is',
+    'are',
+    'should',
+    'i',
+    'we',
+    'you',
+    'brands',
+    'brand',
+    'similar',
+    'other',
+    'more',
+    'and',
+    'or',
+    'with',
+    'for',
+    'in',
+    'new',
+  ].map((w) => w.toLowerCase()),
+)
+
+/** 一段的开头 / 结尾那个像品牌名的词组（1–3 个大写开头的词）。 */
+const NAME = "[A-Z0-9][\\w'&.+-]*(?:\\s+[A-Z0-9][\\w'&.+-]*){0,2}"
+const LEADING = new RegExp(`^[\\s"'“(]*(${NAME})`, 'u')
+const TRAILING = new RegExp(`(${NAME})[\\s"'”)?]*$`, 'u')
+
+const tidy = (raw: string | undefined): string | undefined => {
+  if (raw === undefined) return undefined
+  const words = raw
+    .replace(/[.,:;!?]+$/u, '')
+    .split(/\s+/)
+    .filter((w) => w !== '')
+  // 头尾的泛词剥掉（「Best Osprey」→「Osprey」、「Osprey Review」→「Osprey」）
+  while (words.length > 0 && GENERIC.has((words[0] ?? '').toLowerCase())) words.shift()
+  while (words.length > 0 && GENERIC.has((words[words.length - 1] ?? '').toLowerCase())) words.pop()
+  const name = words.join(' ')
+  if (name.length < 2 || /^\d+$/.test(name)) return undefined
+  return name
+}
+
+/** 名字归一（比大小写、空格、标点之外的那一串）。 */
+export const nameKey = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+/**
+ * 从「竞品发现」那几条里认出候选竞品名（只用来决定核实谁；最后收不收由 AI 归纳 + 来源核对定）。
+ * 认法：「A vs B」里另一边、「alternatives: A, B, C」「like / such as A, B」后面那串。按出现次数排。
+ */
+export function competitorCandidates(hits: readonly IntakeWebHit[], self: string): string[] {
+  const me = nameKey(self)
+  const score = new Map<string, { name: string; n: number; first: number }>()
+  let order = 0
+  const add = (raw: string | undefined): void => {
+    const name = tidy(raw)
+    if (name === undefined) return
+    const key = nameKey(name)
+    if (key === '' || key === me || key.includes(me) || me.includes(key)) return
+    if (GENERIC.has(name.toLowerCase())) return
+    const had = score.get(key)
+    if (had === undefined) score.set(key, { name, n: 1, first: order++ })
+    else had.n += 1
+  }
+  for (const hit of hits) {
+    for (const text of [hit.title ?? '', hit.snippet ?? '']) {
+      // 「A vs B」：与自己相邻的另一边是候选；两边都不是自己时两边都算
+      const sides = text.split(/\s+(?:vs\.?|versus)\s+/iu)
+      for (let i = 0; i + 1 < sides.length; i++) {
+        const left = TRAILING.exec(sides[i] ?? '')?.[1]
+        const right = LEADING.exec(sides[i + 1] ?? '')?.[1]
+        add(left)
+        add(right)
+      }
+      // 「alternatives (to X): A, B and C」「like A, B」「such as A, B」
+      const list =
+        /(?:alternatives?(?:\s+to\s+[^:：]{1,40})?\s*[:：]|\blike\b|such as|including)\s*([^.;!?]+)/iu.exec(
+          text,
+        )?.[1]
+      if (list !== undefined)
+        for (const item of list.split(/,|，|、|\band\b|\bor\b|&/u)) add(LEADING.exec(item)?.[1])
+    }
+  }
+  return [...score.values()].sort((a, b) => b.n - a.n || a.first - b.first).map((c) => c.name)
+}
+
+/** 联网查一轮的结果。 */
+export interface WebResearch {
+  hits: NumberedHit[]
+  /** 一共搜了几次（含没搜成的）。 */
+  searches: number
+  /** 搜成了几次。 */
+  ok: number
+  /** 因为额度没查 / 没查全的几部分。 */
+  cut: BrandIntakeWebPart[]
+}
+
+/**
+ * 按顺序搜：竞品发现 → 竞品核实（前几个候选）→ 品牌评测。`allowed` 是这一次额度容得下的次数：
+ * 装不下时从后往前让——先让品牌评测，再让核实，最后才让竞品发现（官网解析在调用方那里已经保住了）。
+ */
+export async function webResearch(input: {
+  name: string
+  profile: BrandIntakeProfile
+  search: IntakeWebSearch
+  allowed: number
+}): Promise<WebResearch> {
+  const { name, profile, search } = input
+  let left = Math.max(0, Math.floor(input.allowed))
+  const out: WebResearch = { hits: [], searches: 0, ok: 0, cut: [] }
+  const seen = new Set<string>()
+  const keep = (part: BrandIntakeWebPart, got: IntakeWebHit[] | undefined, about?: string) => {
+    if (got === undefined) return
+    out.ok += 1
+    for (const h of got.slice(0, KEEP[part])) {
+      if (typeof h?.url !== 'string' || !/^https?:\/\//iu.test(h.url) || seen.has(h.url)) continue
+      seen.add(h.url)
+      const title = clip(h.title, 160)
+      const snippet = clip(h.snippet, 300)
+      out.hits.push({
+        n: out.hits.length + 1,
+        url: h.url,
+        part,
+        ...(title === undefined ? {} : { title }),
+        ...(snippet === undefined ? {} : { snippet }),
+        ...(about === undefined ? {} : { about }),
+      })
+    }
+  }
+  /** 一批（同一部分）一起搜，按原顺序编号。 */
+  const batch = async (
+    part: BrandIntakeWebPart,
+    queries: { query: string; about?: string }[],
+  ): Promise<void> => {
+    const take = queries.slice(0, left)
+    if (take.length < queries.length) out.cut.push(part)
+    left -= take.length
+    out.searches += take.length
+    const got = await Promise.all(take.map((x) => search(x.query).catch(() => undefined)))
+    take.forEach((x, i) => {
+      keep(part, got[i], x.about)
+    })
+  }
+
+  await batch(
+    'competitors',
+    competitorQueries(name, profile).map((query) => ({ query })),
+  )
+  const candidates = competitorCandidates(
+    out.hits.filter((h) => h.part === 'competitors'),
+    name,
+  ).slice(0, BRAND_INTAKE_WEB_SEARCH_MAX.verify)
+  if (out.cut.includes('competitors')) {
+    // 发现都没搜全：核实那一步照实也算没查
+    if (!out.cut.includes('verify')) out.cut.push('verify')
+  } else
+    await batch(
+      'verify',
+      candidates.map((c) => ({ query: verifyQuery(c, profile), about: c })),
+    )
+  await batch(
+    'brand',
+    brandQueries(name, profile).map((query) => ({ query })),
+  )
+  return out
+}
