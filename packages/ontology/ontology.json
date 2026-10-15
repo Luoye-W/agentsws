@@ -32,6 +32,7 @@
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/genui.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
@@ -129,7 +130,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "546a7c7a63422fe085873ea9e1643d67",
+  "source_digest": "cb24fc460cfc7e02b2074c0c665204f5",
   "objects": [
     {
       "id": "ad",
