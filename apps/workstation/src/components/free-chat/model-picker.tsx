@@ -4,7 +4,7 @@
  * - 列所有已接的模型（工坊账号的、DeepSeek 登录态、各家 key），默认是「设置 → 模型」里的默认模型。
  * - 钮上：工坊账号的模型**只画工坊标记**（名字太长，无障碍名称「工坊」）；自接的画服务商图标 + 短名（型号）。
  * - 选了只改**这一次对话 / 这件事**（调用方存在会话 / 事项上）；「设为默认」一项改品牌默认（只有所有者有）。
- * - 一个都没接：钮换成「还没接 AI」，点了去接。
+ * - 一个都没接：钮换成「还没接 AI」，点了在第三栏开「接模型」连接卡（WP334，不跳设置页）。
  *
  * 一个轻量的下拉，不用弹层库：它只有一列按钮。键盘：↑↓ 换、回车选、Esc 收起并回到钮上。
  */
@@ -14,6 +14,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandMark } from '@/components/design'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { getPositions, setModelDefaults } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { type FreeChatModelChoice, getFreeChatModels } from '@/lib/free-chat'
@@ -58,6 +59,7 @@ export function ModelPicker({
   testId?: string
 }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -106,15 +108,20 @@ export function ModelPicker({
     choices.find((c) => c.id === value) ?? choices.find((c) => c.id === defaultId) ?? choices[0]
   if (current === undefined) {
     return (
-      <Link
-        to="/settings?tab=models"
+      // WP334（决策 726）/ WP342（857）：还没接模型——在第三栏就地接（与开工向导第 ① 步同一个件），不跳设置页
+      <button
+        type="button"
         title={t('model.pick.none.tip')}
         data-testid={`${testId}-none`}
+        data-connect="model"
         className="inline-flex h-[30px] items-center gap-1 rounded-full bg-ws-warn-bg px-2.5 text-[12px] font-medium whitespace-nowrap text-ws-warn"
+        onClick={() => {
+          openConnect('model')
+        }}
       >
         <TriangleAlert aria-hidden className="size-3.5" />
         {t('model.pick.none')}
-      </Link>
+      </button>
     )
   }
   const name = current.official ? t('model.pick.workshop') : modelNameOf(current.id)

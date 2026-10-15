@@ -90,14 +90,14 @@ export const DEEPSEEK_ACCOUNT_MODELS: readonly { id: string; name: string; visio
  * 官方同一处的错误码是 `ACCOUNT_TOKEN_INVALID`。
  */
 export const DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE =
-  'DeepSeek 账号的登录过期了（DeepSeek 那边不认这次的登录了），这次没跑成。去「设置 → 模型」点一下重新登录，再让它重做一遍。'
+  'DeepSeek 账号的登录过期了（DeepSeek 那边不认这次的登录了），这次没跑成。重新登录后就接着做。'
 
 /**
  * WP150：取不到账号令牌（没登录、刚登出、或者登录刚失效被清掉）时的失败原因。
  * 官方同一处的错误码是 `ACCOUNT_SIGN_IN_REQUIRED`（不会退回用 API key）。
  */
 export const DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE =
-  'DeepSeek 账号没登录（或者登录已经失效），这次没跑成。去「设置 → 模型」用 DeepSeek 账号登录一下，再让它重做一遍。'
+  'DeepSeek 账号没登录（或者登录已经失效），这次没跑成。登录后就接着做。'
 
 /** Messages 协议版本头（官方适配器发的就是这个值）。 */
 const ANTHROPIC_VERSION = '2023-06-01'

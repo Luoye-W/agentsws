@@ -329,6 +329,11 @@ export interface ModelsOptions {
   /** 记事件要写在哪个工作区。取值函数——身份装在模型面之后。 */
   workspace_id?: () => string | undefined
   /**
+   * WP334（决策 726）：模型配置变了（存 / 删 / 账号登上登出之后网关重配了一次）。
+   * 服务端据此复查还在等的「接模型」连接卡——在设置页接好了，卡也自己收起、接着做。
+   */
+  onChanged?: () => void
+  /**
    * WP165：官方接口的积分价从哪读（云上公开价目 + 本机缓存，`pricing-catalog.ts`）。
    * 同步、只读手上那一份、从不打网；不给 / 手上没有就不显示那个数——不编。
    */
@@ -1798,6 +1803,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       policy: policyOf(),
       images: liveImages,
     })
+    try {
+      options.onChanged?.()
+    } catch {
+      // 复查卡片失败不拦模型配置
+    }
   }
 
   reassemble()

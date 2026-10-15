@@ -11,7 +11,17 @@ export interface BuiltinSetupTargetsOptions {
   theme(): Promise<SiteThemeAssembly | undefined>
   postalAddress(): string | undefined
   setPostalAddress(address: string): boolean
+  /**
+   * WP334（决策 726）：公司档案里给 AI 干活用的那几格（一句话介绍 / 客服邮箱 / 币种）。
+   * 不给 = 不登记「公司档案」这个目标（老装配）。
+   */
+  brandFacts?(): { one_liner?: string; support_email?: string; currency?: string }
+  /** 存那几格（不给的不动）；档案还没建过回 `false`。 */
+  setBrandFacts?(facts: { one_liner?: string; support_email?: string; currency?: string }): boolean
 }
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CNY', 'HKD']
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const SHOP_DOMAIN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i
 
@@ -104,5 +114,69 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
     },
   }
 
-  return [siteStore, companyAddress]
+  /**
+   * WP334（决策 726）：公司档案没填——AI 写文案 / 回客人要用的那几格。设置页「公司档案」仍是总览；
+   * 这里只收不是秘密的三格，AI 要卡时可以带建议值（如从官网读到的一句话介绍）。
+   */
+  const brandFacts = options.brandFacts
+  const setBrandFacts = options.setBrandFacts
+  const companyProfile: SetupTarget | undefined =
+    brandFacts === undefined || setBrandFacts === undefined
+      ? undefined
+      : {
+          id: 'company.profile',
+          name: '公司档案',
+          why: '写文案、回客人要用到公司的这几样，填好我就接着做。',
+          async fields(): Promise<SetupField[]> {
+            const now = brandFacts()
+            return [
+              {
+                key: 'one_liner',
+                label: '一句话介绍',
+                kind: 'text',
+                placeholder: '卖什么、给谁用',
+                ...(now.one_liner === undefined ? {} : { suggested: now.one_liner }),
+                required: true,
+              },
+              {
+                key: 'support_email',
+                label: '客服邮箱',
+                kind: 'text',
+                placeholder: 'support@…',
+                ...(now.support_email === undefined ? {} : { suggested: now.support_email }),
+                required: false,
+              },
+              {
+                key: 'currency',
+                label: '币种',
+                kind: 'select',
+                options: CURRENCIES.map((c) => ({ value: c, label: c })),
+                suggested: now.currency ?? 'USD',
+                required: false,
+              },
+            ]
+          },
+          async satisfied(): Promise<boolean> {
+            const v = brandFacts().one_liner?.trim()
+            return v !== undefined && v !== ''
+          },
+          async apply(values): Promise<void> {
+            const one_liner = values.one_liner?.trim() ?? ''
+            if (one_liner.length < 4)
+              throw new SetupCardError('invalid_input', '一句话介绍太短了，写全一点。')
+            const support_email = values.support_email?.trim()
+            if (support_email !== undefined && support_email !== '' && !EMAIL.test(support_email))
+              throw new SetupCardError('invalid_input', '客服邮箱看着不对。')
+            const ok = setBrandFacts({
+              one_liner,
+              ...(support_email === undefined || support_email === '' ? {} : { support_email }),
+              ...(values.currency === undefined ? {} : { currency: values.currency }),
+            })
+            if (!ok) throw new SetupCardError('invalid_input', '公司档案还没建好，先走完开工向导。')
+          },
+        }
+
+  return companyProfile === undefined
+    ? [siteStore, companyAddress]
+    : [siteStore, companyAddress, companyProfile]
 }

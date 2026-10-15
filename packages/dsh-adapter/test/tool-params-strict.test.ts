@@ -9,6 +9,7 @@ import {
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   IMAGE_TOOL_DEF_BY_NAME,
   OWNER_TOOL_DEF_BY_NAME,
+  SETUP_REQUEST_TOOL_DEF_BY_NAME,
   SHOP_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   THEME_TOOL_DEF_BY_NAME,
@@ -24,6 +25,8 @@ const ALL = [
   ...OWNER_TOOL_DEF_BY_NAME.keys(),
   ...SKILL_TOOL_DEF_BY_NAME.keys(),
   ...B2B_OUTBOUND_TOOL_DEF_BY_NAME.keys(),
+  // WP334：AI 自己要连接卡 / 配置卡（所有职责都有）
+  ...SETUP_REQUEST_TOOL_DEF_BY_NAME.keys(),
   'get_order',
 ]
 
@@ -53,5 +56,16 @@ describe('dsh 参数表：每个工具都过 dsh 的编译', () => {
     }
     expect(schema.properties.images.items.additionalProperties).toBe(false)
     expect(schema.required).toEqual(expect.arrayContaining(['product_id', 'images']))
+  })
+
+  it('WP334 request_setup：建议值的嵌套对象关上，只有 why 必填，描述是写给模型的人话', () => {
+    const def = build().find((d) => d.name === 'request_setup')
+    const schema = def?.parameters as unknown as {
+      properties: { suggestions: { items: { additionalProperties: boolean } } }
+      required: string[]
+    }
+    expect(schema.properties.suggestions.items.additionalProperties).toBe(false)
+    expect(schema.required).toEqual(['why'])
+    expect(def?.description).toContain('不要叫用户去设置页')
   })
 })

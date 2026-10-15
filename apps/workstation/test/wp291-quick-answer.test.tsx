@@ -29,17 +29,25 @@ const VIEW: PositionInstanceData = {
   memory_summary: '',
 }
 
+// WP336（决策 823）：组件是一块 genui（数字 + 表格），交给 dsh-genui 渲染层画
 const COMPONENTS: AnswerComponent[] = [
   {
-    kind: 'table',
-    columns: ['商品', '价格', '状态'],
-    rows: [
-      ['蓝牙耳机', 129, '在卖'],
-      ['手机壳', 29, '草稿'],
-    ],
-    total: 12,
+    kind: 'genui',
+    spec: {
+      items: [
+        { type: 'stat', label: '在卖', value: '11 件', delta: '+10%' },
+        {
+          type: 'table',
+          columns: ['商品', '价格', '状态'],
+          rows: [
+            ['蓝牙耳机', 129, '在卖'],
+            ['手机壳', 29, '草稿'],
+          ],
+        },
+        { type: 'text', content: '一共 12 件，只列了前 2 件。' },
+      ],
+    },
   },
-  { kind: 'metric', items: [{ label: '在卖', value: 11, unit: '件', delta_pct: 10 }] },
 ]
 
 const QUICK: OpenAtPositionData = {
@@ -136,11 +144,13 @@ describe('WP291 岗位页当场回答', () => {
     expect(screen.getByTestId('quick-answer-lead').textContent).toBe(
       '店里有 12 件商品，11 件在卖。',
     )
-    const table = screen.getByTestId('answer-table')
-    expect(table.querySelectorAll('tbody tr')).toHaveLength(2)
-    expect(table.textContent).toContain('蓝牙耳机')
-    expect(screen.getByTestId('answer-table-total').textContent).toBe('列了 2 行，共 12 行')
-    expect(screen.getByTestId('answer-metric').textContent).toContain('11')
+    const block = await screen.findByTestId('answer-genui', {}, { timeout: 30_000 })
+    await waitFor(() => expect(block.querySelectorAll('tbody tr')).toHaveLength(2), {
+      timeout: 30_000,
+    })
+    expect(block.textContent).toContain('蓝牙耳机')
+    expect(block.textContent).toContain('一共 12 件')
+    expect(block.textContent).toContain('在卖11件')
     expect(navigate).not.toHaveBeenCalled()
     // 回答区不加标题、不加说明段
     expect(screen.getByTestId('quick-answer').querySelector('h2, h3, h4')).toBeNull()

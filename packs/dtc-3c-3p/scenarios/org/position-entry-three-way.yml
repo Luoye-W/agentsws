@@ -7,7 +7,8 @@
 # **固定替身**（`judge`）——三个运行时拿到的是同一个判断，比的是判完之后各走各的路对不对：
 #
 # 1. 「店里有哪些商品」→ quick：落在一件隐身的事项里（默认列表找不到它，不进工作、不算在办），
-#    回答是一句话 + 商品表格 + 在卖几件（替身照 mock 店铺现写 ```answer 段，按契约同一份 `splitAnswer` 取出来）；
+#    回答是一句话 + 商品表格 + 在卖几件（替身照 mock 店铺现写，按契约同一份 `splitAnswer` 取出来）；
+#    WP336：替身改写 ```dsh-ui（还故意夹带按钮 / 图片 / 3D / 外链），按契约白名单过滤成一块 genui，只剩数字 + 表格；
 # 2. 「帮我想想详情页怎么优化」→ chat：一段会话（WP287 的会话，进左栏会话历史）；
 # 3. 「上架一个草稿商品」→ task：一件任务，原话后面头一句「记成了任务，按「X」做」。
 #
@@ -42,7 +43,7 @@ events:
     clock.advance: {}
 expected:
   position_entries: [quick, chat, task]
-  position_answer_components: [table, metric]
+  position_answer_components: [genui, 'genui:stat', 'genui:table']
   position_routed_to: [dtc.store]
   event_types:
     - simulation.position_staffed

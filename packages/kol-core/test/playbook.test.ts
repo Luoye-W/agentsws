@@ -284,7 +284,7 @@ describe('摘要', () => {
 })
 
 describe('WP295 找人回话是「一句话 + 表格」（docs/96 P4）', () => {
-  it('岗位页当场回答拆得出：头一句是结论，第一块组件是那张表，后面的话进末尾那块字', () => {
+  it('岗位页当场回答拆得出：头一句是结论，表格与后面的话进那块字', () => {
     const text = describeFindReply({
       channel: 'youtube',
       wanted: 20,
@@ -298,11 +298,12 @@ describe('WP295 找人回话是「一句话 + 表格」（docs/96 P4）', () => 
     }).join('\n')
     const split = splitAnswer(text)
     expect(split.lead).toBe('在 YouTube 上找了一遍，找到 1 个：')
-    expect(split.components[0]).toMatchObject({
-      kind: 'table',
-      columns: ['红人', '粉丝', '互动率', '分'],
-    })
-    expect(split.components[1]?.kind).toBe('text')
+    // WP336（决策 823）：不再把 Markdown 表格拆成表格组件；表格留在后面那块字里，由安全 markdown 画成表
+    expect(split.components).toHaveLength(1)
+    expect(split.components[0]?.kind).toBe('text')
+    expect(split.components[0]?.kind === 'text' && split.components[0].text).toContain(
+      '| 红人 | 粉丝 | 互动率 | 分 |',
+    )
   })
 })
 

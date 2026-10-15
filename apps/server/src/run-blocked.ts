@@ -9,7 +9,7 @@
  * 认的只是**机器码**（工具回执的 `reason` 开头那个词，或回执数据里 `{ ok: false, reason }`），
  * 不认人话——人话是给模型和人看的，机器码才是工具对「为什么做不了」的正式回答。
  */
-import type { ConnectNeed, MatterRunBlock } from '@agentsws/contracts'
+import { BUILTIN_CONNECT_NEEDS, type ConnectNeed, type MatterRunBlock } from '@agentsws/contracts'
 import type { ToolExecution } from '@agentsws/stand-ins'
 
 /** 没连上（`not_connected：这个工作区还没有连上店铺后台…` 这种也认——认的是开头那个码）。 */
@@ -53,7 +53,35 @@ export function blockedByTool(
  * - 管店工具（WP261）：`data.needs` 是 `install_cli` / `authorize` → 连接卡（管店授权）；
  * - 开发信（WP176）：排队原因 `company_address` → 配置卡（公司实体地址）。
  */
-export type SetupNeed = { kind: 'connect'; need: ConnectNeed } | { kind: 'setup'; target: string }
+export type SetupNeed = (
+  | { kind: 'connect'; need: ConnectNeed }
+  | { kind: 'setup'; target: string }
+) & {
+  /** WP334：AI 要卡时给的那一句为什么。 */
+  why?: string
+  /** WP334：AI 给的配置卡建议值（只对 `setup` 有用）。 */
+  suggestions?: Record<string, string>
+}
+
+/** WP334：工坊账号没关联（工具回执里 `reason: 'not_linked'` 的那几处：红人公共库、官方数据接口…）。 */
+const WORKSHOP_ACCOUNT_NEED: ConnectNeed = {
+  ...(BUILTIN_CONNECT_NEEDS.workshop_account as Omit<ConnectNeed, 'required'>),
+  required: true,
+}
+/** WP334：DeepSeek 账号登录过期 / 没登录（用账号跑的那一次以 `unauthenticated` 失败）→ 卡里就地重新登录。 */
+export const DEEPSEEK_ACCOUNT_NEED: ConnectNeed = {
+  ...(BUILTIN_CONNECT_NEEDS.deepseek_account as Omit<ConnectNeed, 'required'>),
+  required: true,
+}
+/** 「用我的 DeepSeek 账号登录」那条模型来源的 id（与 `deepseek-account.ts` 的 `DEEPSEEK_ACCOUNT_PROVIDER_ID` 同一个）。 */
+export const DEEPSEEK_ACCOUNT_RUN_PROVIDER = 'deepseek-account'
+/** WP334：没接发信邮箱（开发信排队原因 `sender_choice`、又没出选邮箱卡 = 一只邮箱都没有）。 */
+const MAILBOX_NEED: ConnectNeed = {
+  kind: 'email',
+  service: 'imap_smtp',
+  name: '发信邮箱',
+  required: true,
+}
 
 /** 建站工具那一路（装 CLI / 登录 Shopify / 选店）在卡上用一整块现成的接法。 */
 export const SITE_THEME_NEED: ConnectNeed = {
@@ -71,6 +99,40 @@ export const SHOP_ADMIN_NEED: ConnectNeed = {
 }
 
 const NEEDS_SETUP = /^\s*needs[_ ]setup:([a-z0-9_.:-]+)/i
+/** WP334：`needs_connection:<service>`（与上面对称；`im:wecom` 这种带冒号的也认）。 */
+const NEEDS_CONNECTION = /^\s*needs[_ ]connection:([a-z0-9_.:-]+)/i
+/** WP334：工坊账号没关联的机器码（`not_linked：…` 开头，或回执数据里 `{ ok: false, reason: 'not_linked' }`）。 */
+const NOT_LINKED = /^\s*not[_ ]linked\b/i
+
+/** 一样「要连的」：内置那几样用内置的名字，连接目录里的按 service 当 kind。 */
+function connectNeedOf(service: string, name: unknown): ConnectNeed {
+  const builtin = BUILTIN_CONNECT_NEEDS[service]
+  return {
+    kind: builtin?.kind ?? service,
+    service,
+    name: typeof name === 'string' && name !== '' ? name : (builtin?.name ?? service),
+    required: true,
+  }
+}
+
+/** WP334：AI 要卡时带的「为什么 / 建议值」（只认字符串）。 */
+function askedOf(
+  data: Record<string, unknown> | undefined,
+): Pick<SetupNeed, 'why' | 'suggestions'> {
+  const why =
+    typeof data?.setup_why === 'string' && data.setup_why !== '' ? data.setup_why : undefined
+  const raw = recOf(data?.suggestions)
+  const suggestions =
+    raw === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string'),
+        )
+  return {
+    ...(why === undefined ? {} : { why }),
+    ...(suggestions === undefined || Object.keys(suggestions).length === 0 ? {} : { suggestions }),
+  }
+}
 
 const recOf = (v: unknown): Record<string, unknown> | undefined =>
   v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -85,18 +147,23 @@ export function setupNeedOf(
   const data = recOf(res.data)
   const fromReason = typeof res.reason === 'string' ? NEEDS_SETUP.exec(res.reason)?.[1] : undefined
   const target = typeof data?.needs_setup === 'string' ? data.needs_setup : fromReason
-  if (target !== undefined && target !== '') return { kind: 'setup', target }
-  const service = data?.needs_connection
+  if (target !== undefined && target !== '') return { kind: 'setup', target, ...askedOf(data) }
+  const connectFromReason =
+    typeof res.reason === 'string' ? NEEDS_CONNECTION.exec(res.reason)?.[1] : undefined
+  const service =
+    typeof data?.needs_connection === 'string' ? data.needs_connection : connectFromReason
   if (typeof service === 'string' && service !== '')
     return {
       kind: 'connect',
-      need: {
-        kind: service,
-        service,
-        name: typeof data?.connection_name === 'string' ? data.connection_name : service,
-        required: true,
-      },
+      need: connectNeedOf(service, data?.connection_name),
+      ...askedOf(data),
     }
+  // WP334（决策 726）：工坊账号没关联 → 连接卡里关联（认码：`not_linked`）
+  if (
+    (typeof res.reason === 'string' && NOT_LINKED.test(res.reason)) ||
+    (data?.ok === false && data.reason === 'not_linked')
+  )
+    return { kind: 'connect', need: WORKSHOP_ACCOUNT_NEED }
   const needs = data?.needs
   if (res.status !== 'ok' && typeof needs === 'string') {
     if (tool.startsWith('theme_')) {
@@ -109,6 +176,13 @@ export function setupNeedOf(
   }
   if (res.status === 'ok' && data?.queued_reason === 'company_address')
     return { kind: 'setup', target: 'company.address' }
+  // WP334（决策 726）：一只邮箱都没有（有邮箱时出的是「用哪只发」选择卡，不归这里）→ 连接卡接一只
+  if (
+    res.status === 'ok' &&
+    data?.queued_reason === 'sender_choice' &&
+    data.approval_item_id === undefined
+  )
+    return { kind: 'connect', need: MAILBOX_NEED }
   return undefined
 }
 
@@ -118,6 +192,8 @@ export class RunBlockLog {
   readonly #connections = new Set<string>()
   readonly #needs = new Map<string, ConnectNeed>()
   readonly #targets = new Set<string>()
+  readonly #suggestions = new Map<string, Record<string, string>>()
+  #why: string | undefined
   #reason: MatterRunBlock['reason'] | undefined
 
   /** 记一笔：哪个工具、哪一种、缺哪几个连接（认不出就给空）。 */
@@ -137,6 +213,13 @@ export class RunBlockLog {
 
   /** WP324：记一笔「缺一步设置 / 缺一样能就地连的」。 */
   noteSetup(tool: string, need: SetupNeed): void {
+    // WP334：AI 要卡时的那一句为什么（第一句为准）与建议值
+    if (need.why !== undefined && this.#why === undefined) this.#why = need.why
+    if (need.kind === 'setup' && need.suggestions !== undefined)
+      this.#suggestions.set(need.target, {
+        ...this.#suggestions.get(need.target),
+        ...need.suggestions,
+      })
     if (need.kind === 'setup') {
       this.#targets.add(need.target)
       this.note(tool, 'needs_setup', [])
@@ -153,6 +236,16 @@ export class RunBlockLog {
   /** WP324：缺的设置目标（出配置卡用）。 */
   setupTargets(): string[] {
     return [...this.#targets]
+  }
+
+  /** WP334：AI 要卡时给的「为什么 / 建议值」（没有就是空对象，出卡用默认那句）。 */
+  asked(): { why?: string; suggestions?: Record<string, Record<string, string>> } {
+    return {
+      ...(this.#why === undefined ? {} : { why: this.#why }),
+      ...(this.#suggestions.size === 0
+        ? {}
+        : { suggestions: Object.fromEntries(this.#suggestions) }),
+    }
   }
 
   /** 这一轮卡住了没有；卡住了回标记。 */

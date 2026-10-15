@@ -1,9 +1,9 @@
 /**
- * WP291 线程那一侧：当场问答「接着聊」之后，线程里那段回答的 ```answer 组件按契约画（不露 JSON）；
+ * WP291 线程那一侧（WP336 起线程里 ```dsh-ui 由正文渲染器就地画，```answer 不再认，见文末）；
  * 一开始就记成任务的，原话后面头一句「记成了任务，按「X」做」，还能换的跟「换一条」。
  */
 import type { MatterView } from '@agentsws/contracts'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from './helpers'
@@ -97,28 +97,7 @@ const renderMatter = () =>
     '/matters/mat_q',
   )
 
-const ANSWER = [
-  '店里现在有 2 件商品。',
-  '',
-  '```answer',
-  '{"components":[{"kind":"table","columns":["商品","价格"],"rows":[["蓝牙耳机",129],["手机壳",29]]}]}',
-  '```',
-].join('\n')
-
 describe('WP291 线程', () => {
-  it('接着聊之后：那段回答画成一句话 + 表格，不露 ```answer', async () => {
-    current = view({ ask: { at: T0 } }, [
-      ASKED,
-      ev({ id: 'mev_a', kind: 'agent_message', text: ANSWER, run_id: 'run_1' }),
-    ])
-    renderMatter()
-    const reply = await screen.findByTestId('matter-reply')
-    expect(reply.textContent).toContain('店里现在有 2 件商品。')
-    expect(reply.textContent).not.toContain('```')
-    expect(reply.textContent).not.toContain('components')
-    expect((await screen.findByTestId('answer-table')).textContent).toContain('蓝牙耳机')
-  })
-
   it('一开始就记成任务：原话后面头一句「记成了任务，按「店铺管理」做」，能换的跟「换一条」', async () => {
     current = view({}, [
       ASKED,
@@ -137,5 +116,41 @@ describe('WP291 线程', () => {
     const row = await screen.findByText('记成了任务，按「店铺管理」做')
     expect(row).toBeDefined()
     expect(screen.getByTestId('matter-route-switch')).toBeDefined()
+  })
+})
+
+describe('WP336 线程里的 ```dsh-ui', () => {
+  it('同样画成 genui 块：表格在、夹带的按钮不在，不露围栏', async () => {
+    const raw = [
+      '店里现在有 2 件商品。',
+      '',
+      '```dsh-ui',
+      JSON.stringify({
+        items: [
+          {
+            type: 'table',
+            columns: ['商品', '价格'],
+            rows: [
+              ['蓝牙耳机', 129],
+              ['手机壳', 29],
+            ],
+          },
+          { type: 'button', label: '一键上架', action: 'publish' },
+        ],
+      }),
+      '```',
+    ].join('\n')
+    current = view({ ask: { at: T0 } }, [
+      ASKED,
+      ev({ id: 'mev_a', kind: 'agent_message', text: raw, run_id: 'run_1' }),
+    ])
+    renderMatter()
+    const reply = await screen.findByTestId('matter-reply')
+    expect(reply.textContent).not.toContain('```')
+    expect(reply.textContent).not.toContain('dsh-ui')
+    // 渲染层是懒加载的单独一块，机器忙时头一次转换要几秒
+    const block = await screen.findByTestId('answer-genui', {}, { timeout: 30_000 })
+    await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'), { timeout: 30_000 })
+    expect(block.textContent).not.toContain('一键上架')
   })
 })
