@@ -537,6 +537,60 @@ async function seedCardGallery(world: World): Promise<void> {
     },
   })
 
+  /**
+   * WP316：② 改动里的上传表卡——一句话 + 预览 + 可下载的原表（批了插件在你自己的后台里传、你再确认一次）。
+   * 只在 `--card-gallery` 时种（摆拍，用来出截图）。
+   */
+  const csv = 'Action,Campaign,Campaign status,Budget\nAdd,Spring sale,Paused,20.00\n'
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'ad_account', id: 'aa_demo_google' } },
+    ...routed(at('ads.google')),
+    evidence: {
+      ...base.evidence,
+      provenance: { seen: [{ type: 'ad_account', id: 'aa_demo_google' }] },
+    },
+    automation: { ...base.automation, level_at_creation: 'L1' },
+    dedupe_key: `gallery_ads_sheet:${world.workspace_id}:1`,
+    title: '改广告（Google Ads）',
+    summary: '新建 1 个广告系列、2 个广告组、6 个关键词，都先暂停；「品牌词」预算从 $120 改到 $140',
+    payload: {
+      kind: 'ads_sheet',
+      before: {},
+      after: {
+        form: 'ads_sheet',
+        platform: 'google',
+        platform_label: 'Google Ads',
+        account_id: 'aa_demo_google',
+        sentence:
+          '新建 1 个广告系列、2 个广告组、6 个关键词，都先暂停；「品牌词」预算从 $120 改到 $140',
+        rows: [
+          { action: '新建', level: '广告系列', name: 'Spring sale' },
+          { action: '新建', level: '广告组', name: 'Spring sale › Bowls' },
+          { action: '新建', level: '广告组', name: 'Spring sale › Gift sets' },
+          { action: '新建', level: '关键词', name: 'Bowls › [glass bowl set]' },
+          { action: '新建', level: '关键词', name: 'Bowls › "clear mixing bowls"' },
+          { action: '改预算', level: '广告系列', name: '品牌词', before: '$120', after: '$140' },
+          { action: '新建', level: '关键词', name: 'Gift sets › [bowl gift set]' },
+          { action: '新建', level: '关键词', name: 'Gift sets › "kitchen gift"' },
+        ],
+        warnings: ['「Gift sets」的落地页没带 utm 参数'],
+        fingerprint: 'demo',
+        _files: [
+          {
+            name: 'agentsws-campaigns.csv',
+            mime: 'text/csv',
+            sheet: 'campaigns',
+            base64: Buffer.from(csv).toString('base64'),
+            fingerprint: 'demo',
+            bytes: csv.length,
+          },
+        ],
+      },
+    },
+  })
+
   /** ③ 发布：左预览右说明 + 排期 + 受众数 */
   await world.txn.approvals.create({
     ...base,

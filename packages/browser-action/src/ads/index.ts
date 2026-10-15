@@ -37,6 +37,10 @@ export function adsActionTitle(action: AdsAction): string {
       return `启用「${action.entity.name ?? action.entity.id}」`
     case 'set_budget':
       return `预算改成 ${action.amount}（「${action.entity.name ?? action.entity.id}」）`
+    case 'export_snapshot':
+      return '导出改前表'
+    case 'undo_upload':
+      return `撤销上传「${action.upload_name}」`
   }
 }
 

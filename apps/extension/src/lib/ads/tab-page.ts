@@ -192,7 +192,9 @@ export class TabPage implements ActionPage {
     return Number(await this.o.driver.dom({ type: 'ads-dom', op: 'count', selector }))
   }
 
-  async capture(): Promise<{ ok: true; png_base64: string } | { ok: false; why: string }> {
+  async capture(opts?: {
+    quick?: boolean
+  }): Promise<{ ok: true; png_base64: string } | { ok: false; why: string }> {
     const d = this.o.driver
     const f = await d.facts()
     if (f === undefined) return { ok: false, why: '广告后台那个标签页被关掉了，没截到图。' }
@@ -200,7 +202,8 @@ export class TabPage implements ActionPage {
       return { ok: false, why: '当前页面不在广告后台，不截。' }
     if (!f.active) await d.activate()
     const first = await this.shoot(f.windowId)
-    if (first !== undefined || d.waitCaptureGrant === undefined)
+    // WP316（决策 600 C）：可选截图（止损）截不到就算了，不请人点图标、不多等
+    if (first !== undefined || d.waitCaptureGrant === undefined || opts?.quick === true)
       return first === undefined ? { ok: false, why: NO_CAPTURE } : { ok: true, png_base64: first }
     // 截不到：请用户点一下插件图标（给这个标签页 activeTab），点了再截一次
     const state = this.o.bannerState()

@@ -46,6 +46,7 @@ export * from './inbound.js'
 export * from './kol-world.js'
 export * from './observations.js'
 export * from './registry.js'
+export * from './runtime/ads.js'
 export * from './runtime/b2b-outbound.js'
 export * from './runtime/dev-stub.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具

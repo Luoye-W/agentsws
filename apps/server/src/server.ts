@@ -217,6 +217,10 @@ import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-s
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { createAdsService } from './ads-service.js'
+import { createAdsToolExecutor } from './ads-tools.js'
+import { createAdsLedger } from './ads-wiring/ledger.js'
+import { adsNoticeCards } from './ads-wiring/notices.js'
+import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
@@ -2320,6 +2324,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP173：开发信那一批卡批了才发（不是 b2b_outreach 回 undefined）
       const outreachSent = await brand?.b2bOutbound.apply(change)
       if (outreachSent !== undefined) return outreachSent
+      // WP316：广告卡批了 → 插件在用户自己的后台里执行（进了队就回 ok，结局记广告变更账本）
+      const adsApplied = await brand?.adsWiring?.apply(change)
+      if (adsApplied !== undefined) return adsApplied
       // WP253：换线上主题那张卡批了 → 由服务端跑 `theme publish`（这是整条路上唯一换线上主题的地方）
       if (change.kind === 'publish_theme') {
         const themed = await (await siteThemeOf(change.workspace_id))?.apply(change)
@@ -3704,6 +3711,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
+          ...adsNoticeCards({
+            rows: adsWiringNow.entries(),
+            now: clock.now(),
+            hrefOf: (platform) => {
+              const role_id = platform === 'google' ? 'ads.google' : 'ads.meta'
+              const a = roles.assignments
+                .listByPerson(actor.person_id, { workspace_id: ws })
+                .find((x) => x.revoked_at === undefined && x.role_id === role_id)
+              return a === undefined
+                ? undefined
+                : {
+                    href: `/positions/${encodeURIComponent(a.id)}/duties/${encodeURIComponent(role_id)}`,
+                    position_id: a.id,
+                    role_id,
+                  }
+            },
+          }),
         ],
       }),
       // WP158：读之前先把 GSC / GA4 拉新（当天有缓存就是空操作；永不抛）
@@ -3972,13 +3997,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     /** WP329：Reddit 写（下面建；插件动作通道的事件与社媒回帖要先引用它，所以晚绑定）。 */
     let redditWrites: RedditWriteService | undefined
+    /** WP316：广告改动的执行那一半（下面建；插件动作通道的事件要先引用它，所以晚绑定）。 */
+    let adsWiring: AdsWiring | undefined
     const adsActions =
       hostedBoot !== undefined
         ? undefined
         : createAdsActionsService({
             workspace_id: ws,
-            // WP329：Reddit 的活做完了 → 读回确认、记发出记录（广告那一半的接线在 WP316）
-            onEvent: (event) => redditWrites?.onActionEvent(event),
+            // WP329：Reddit 的活做完了 → 读回确认、记发出记录；WP316：广告的活 → 读回核对、记广告变更账本
+            onEvent: (event) => {
+              redditWrites?.onActionEvent(event)
+              adsWiring?.onActionEvent(event)
+            },
             // WP329：Reddit 的写活记在 WP328 巡查那一本账上（同一个号读写一次一件；巡查在下面才建，晚绑定）
             paceFor: (job) => (job.plan.platform === 'reddit' ? redditWatch?.pace : undefined),
             ...(dir === undefined ? {} : { dir: join(dir, 'ads-actions') }),
@@ -3991,11 +4021,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                     nowMs: () => Date.parse(clock.now()),
                   }),
           })
+    /*
+     * WP316（docs/101 §5.1② ③）：卡批了 → 拼插件动作进队 → 读回核对 → 广告变更账本
+     * （`<品牌目录>/ads-ledger/`，存 180 天）。托管实例没有插件通道，一律掉回原来那条路。
+     */
+    adsWiring = createAdsWiring({
+      workspace_id: ws,
+      nowMs: () => Date.parse(clock.now()),
+      store: ads,
+      ledger: createAdsLedger({
+        ...(dir === undefined ? {} : { dir: join(dir, 'ads-ledger') }),
+        nowMs: () => Date.parse(clock.now()),
+      }),
+      actions: () => adsActions,
+      appendEvent,
+      id: () =>
+        Math.floor(random() * 0xffffffff).toString(36) + Date.parse(clock.now()).toString(36),
+    })
+    const adsWiringNow: AdsWiring = adsWiring
     // 排队 24 小时作废、断了音讯的记失败、截图过 180 天删——十分钟扫一次（不挡进程退出）
     const adsActionsSweep =
       adsActions === undefined
         ? undefined
-        : setInterval(() => void adsActions.sweep().catch(() => {}), 10 * 60 * 1000)
+        : setInterval(
+            () => {
+              void adsActions.sweep().catch(() => {})
+              // WP316：账本过 180 天的逐条点名删
+              adsWiringNow.sweep()
+            },
+            10 * 60 * 1000,
+          )
     adsActionsSweep?.unref?.()
     const robOptions = options.redditOfficialBrowser
     const redditOfficial =
@@ -4310,6 +4365,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const adsService = createAdsService({
       workspace_id: ws,
       routeScopeManager,
+      // WP316：插件执行那一半（磨合期、插件连没连、上传表 / 开始投放 / 撤销 / 作废重出）
+      wiring: adsWiringNow,
+      changeOf: (id) => txn.ledger.get(id),
       // WP224：止损卡上判据旁边并排一格盈亏线（只显示）
       breakEven: breakEvenNow,
       store: ads,
@@ -4448,6 +4506,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
       store: ads,
       appendEvent,
+      // WP316：这一轮交给插件上传 → 投放那一张上传表卡（没装插件通道的托管实例没有这一步）
+      ...(adsActions === undefined || adsService.port.stageChanges === undefined
+        ? {}
+        : {
+            stageChanges: async (actor, input) =>
+              (await adsService.port.stageChanges?.(actor, input)) ?? {
+                route: 'sheet' as const,
+                reason: '',
+                views: [],
+              },
+          }),
       complete: (actor) => {
         const models = effectiveModels()
         if (!models.configured()) return undefined
@@ -5341,6 +5410,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
             themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            // WP316：改广告的两个工具（提一批只出卡、列广告改动记录）；Google / Meta 两条投放职责才摆
+            ...(adsActions === undefined
+              ? {}
+              : {
+                  adsTools: createAdsToolExecutor({
+                    workspace_id: ws,
+                    port: () => adsService.port,
+                  }),
+                }),
             /*
              * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
@@ -7004,6 +7082,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adsService,
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
+      adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
