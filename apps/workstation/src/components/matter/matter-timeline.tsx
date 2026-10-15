@@ -5,7 +5,12 @@
  * 过程与系统事件缩成居中一行灰字，点开看步骤（决策 182：默认全收起）；正在跑的那次在最底下「正在做…」。
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
-import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
+import {
+  type MatterEvent,
+  type MatterLiveRun,
+  type MatterRunStep,
+  splitGenuiReply,
+} from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -30,6 +35,7 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
+import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
@@ -128,7 +134,8 @@ export function MeBubble({
         )}
         data-testid="matter-bubble"
       >
-        {event.text}
+        {/* WP341：表单交上来的那句只显示摘要（数据段是给 AI 的） */}
+        {splitGenuiReply(event.text).text}
       </div>
       <div className="flex gap-2 text-[11.5px] text-ws-muted-fg">
         {long ? (
@@ -383,7 +390,10 @@ export function AiEntry({
             data-testid="matter-reply"
             data-folded={long && !open ? 'true' : 'false'}
           >
-            <SafeMarkdown text={text} variant="chat" />
+            {/* WP341：这条回话里的工具按钮按出它的那次运行算（「改前必读」看那次读过的） */}
+            <GenuiHostProvider value={{ runId: item.event?.run_id }}>
+              <SafeMarkdown text={text} variant="chat" />
+            </GenuiHostProvider>
           </div>
           {long ? (
             <button

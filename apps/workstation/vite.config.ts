@@ -8,6 +8,12 @@ import { defineConfig } from 'vitest/config'
 
 const here = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
 
+/** WP341：插件包里预先打好的引擎文件（`lib/assets/*.js`，插件的 exports 没开这条路径，按包目录找）。 */
+function genuiAsset(file: string): string {
+  const pkg = realpathSync(here('./node_modules/@changfenhuang/dsh-genui'))
+  return resolvePath(pkg, 'lib/assets', file)
+}
+
 /**
  * WP336：dsh-genui 的 `/embed` 渲染层里两处换成本地的壳（见各文件头注释）——
  * `@deepseek-ai/dsh-client-ui-primitives`（代码 / 差异 / JSON 三种组件，白名单里全关）、
@@ -22,6 +28,9 @@ function genuiShims(): Plugin {
         return here('./src/components/answer/genui/primitives-shim.tsx')
       if (source === 'katex' && importer?.includes('dsh-genui') === true)
         return here('./src/components/answer/genui/katex-shim.ts')
+      // WP341：mermaid / 3D 两个引擎用插件自己打好的那两个文件（本机打包、用到才加载，不插外部 <script>）
+      if (source === 'genui-engine:mermaid' || source === 'genui-engine:three')
+        return genuiAsset(`${source.slice('genui-engine:'.length)}.js`)
       return null
     },
   }

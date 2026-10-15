@@ -23,6 +23,8 @@ import type {
   CloudAllocationView,
   CloudMyAllocationView,
   DailyPlan,
+  GenuiToolInput,
+  GenuiToolOutcome,
   Goal,
   GoalProgress,
   MarketsSource,
@@ -993,6 +995,10 @@ export const postMatterMessage = (
   text: string,
 ): Promise<{ event: MatterEvent; run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/messages`, { method: 'POST', body: { text } })
+
+/** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
+export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/genui-tool`, { method: 'POST', body: input })
 
 export const closeMatter = (
   id: string,

@@ -5,6 +5,7 @@
  * 回复下面一行小字：用了哪个模型、花了多少（积分或 token）；再下面是来源（联网搜索）与出处（公司资料），
  * 以及三个小动作：复制、重新生成（只有最后一条）、交给岗位去做。
  */
+import { splitGenuiReply } from '@agentsws/contracts'
 import { Check, Copy, Forward, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { ChoiceIcon, modelNameOf } from '@/components/free-chat/model-picker'
@@ -33,7 +34,8 @@ export function UserBubble({ message }: { message: FreeChatMessage }): React.Rea
         )}
         {message.text === '' ? null : (
           <p className="rounded-2xl bg-ws-tint px-3.5 py-2 text-[14px] whitespace-pre-wrap text-foreground">
-            {message.text}
+            {/* WP341：表单交上来的那句只显示摘要（数据段是给 AI 的） */}
+            {splitGenuiReply(message.text).text}
           </p>
         )}
       </div>

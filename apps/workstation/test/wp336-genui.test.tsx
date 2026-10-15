@@ -1,7 +1,7 @@
 /**
  * WP336（决策 810–812）工作台那一侧：genui 块交给 dsh-genui 的 `/embed` 渲染层画（React 19 下真渲染）。
- * 只剩白名单里的信息类组件；没有按钮 / 链接 / 图片 / 输入框；线程里的 ```dsh-ui 同样画；
- * 渲染层画不了时退回几行 markdown。
+ * 线程里的 ```dsh-ui 同样画；渲染层画不了时退回几行 markdown。
+ * WP341 起按钮 / 表单 / 媒体 / 链接放开（见 wp341-genui-full.test.tsx），这里只看「只看不点」那一面。
  */
 import { type AnswerComponent, filterGenuiSpec, type GenuiSpecLite } from '@agentsws/contracts'
 import { screen, waitFor } from '@testing-library/react'
@@ -53,7 +53,7 @@ const filtered = (): GenuiSpecLite => {
 }
 
 describe('WP336 genui 块', () => {
-  it('渲染层真画出来：数字、表格行、提示都在；没有链接 / 图片 / 输入框，按钮只有表头排序', async () => {
+  it('渲染层真画出来：数字、表格行、提示都在；只看（没有对话处理器）时按钮禁用、外部图片先不加载（WP341）', async () => {
     const components: AnswerComponent[] = [{ kind: 'genui', spec: filtered() }]
     renderWithProviders(<AnswerComponents components={components} />)
     const block = await screen.findByTestId('answer-genui', {}, SLOW)
@@ -61,14 +61,13 @@ describe('WP336 genui 块', () => {
     const text = block.textContent ?? ''
     for (const s of ['店里的商品', '在卖', '草稿', '手机壳', '充电器', '129', '+100%', '去后台'])
       expect(text).toContain(s)
-    expect(text).not.toContain('一键上架')
     expect(block.querySelectorAll('tbody tr')).toHaveLength(3)
-    for (const tag of ['a', 'img', 'input', 'select', 'textarea', 'iframe', 'video', 'audio'])
-      expect(block.querySelector(tag)).toBeNull()
-    // 唯一的按钮是表头的「按这一列排序」（只在本机排，不回模型）
-    const buttons = [...block.querySelectorAll('button')]
-    expect(buttons.map((b) => b.textContent)).toEqual(['商品', '价格', '状态'])
-    for (const b of buttons) expect(b.closest('thead')).not.toBeNull()
+    const publish = screen.getByRole('button', { name: /一键上架/u })
+    expect((publish as HTMLButtonElement).disabled).toBe(true)
+    // 外部图片不在常见来源里：不加载，先给「点开看 · 域名」
+    expect(block.querySelector('img')).toBeNull()
+    expect(screen.getByTestId('genui-media-gate').textContent).toContain('evil.example')
+    for (const tag of ['iframe', 'video', 'audio']) expect(block.querySelector(tag)).toBeNull()
   })
 
   it('就算漏网一个按钮（没过契约直接喂渲染层），也是禁用的——不给 action 处理器', async () => {
@@ -123,7 +122,7 @@ describe('WP336 扩大范围：所有 AI 回话正文里的 ```dsh-ui', () => {
       '有问题再问我。',
     ].join('\n')
 
-  it('随便聊的回答：就地画成 genui 块（按钮被滤），前后的话照常，不露 JSON', async () => {
+  it('随便聊的回答：就地画成 genui 块（按钮也在），前后的话照常，不露 JSON', async () => {
     const { AssistantMessage } = await import('@/components/free-chat/message')
     const text = fenced({
       items: [
@@ -152,7 +151,7 @@ describe('WP336 扩大范围：所有 AI 回话正文里的 ```dsh-ui', () => {
     const block = await screen.findByTestId('answer-genui', {}, SLOW)
     await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'), SLOW)
     expect(reply.textContent).not.toContain('"items"')
-    expect(reply.textContent).not.toContain('一键上架')
+    expect(reply.textContent).toContain('一键上架')
   })
 
   it('还在往外吐字（JSON 不完整）：那段先不画、一个字符的 JSON 都不露', () => {
