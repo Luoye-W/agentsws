@@ -8,8 +8,9 @@
  * 36 §10 少字：一行一个状态图标 + 几个字；长说明进 tooltip（`title`）。
  * 普通浏览器里（没有桌面壳）、旧壳（桥上没有 `update`）、没有新版本时整行不出现。
  */
-import { AlertCircle, ArrowDownCircle, Loader2, RotateCw } from 'lucide-react'
+import { AlertCircle, ArrowDownCircle, Hourglass, Loader2, RotateCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { type RestartReadinessView, UpdateRestartDialog } from '@/components/update-restart-dialog'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,8 @@ export type UpdateStatusView =
     }
   | { state: 'downloading'; version: string; percent: number; source: 'primary' | 'github' }
   | { state: 'ready'; version: string; source: 'primary' | 'github' }
+  /** WP337：等没有正在输出的就自己重启（点一下取消）。 */
+  | { state: 'waiting'; version: string; source: 'primary' | 'github' }
   | { state: 'installing'; version: string }
   | {
       state: 'error'
@@ -37,7 +40,11 @@ interface UpdateBridge {
   status(): Promise<UpdateStatusView>
   onChange(listener: (status: UpdateStatusView) => void): () => void
   download(): Promise<UpdateStatusView>
-  install(): Promise<'installing' | 'cancelled' | 'blocked' | 'not-ready'>
+  install(): Promise<'installing' | 'cancelled' | 'blocked' | 'not-ready' | 'waiting'>
+  /** WP337：旧壳没有这三样——先判空，退回 `install()`（壳自己弹原生框）。 */
+  readiness?(): Promise<RestartReadinessView>
+  restart?(choice: 'now' | 'idle'): Promise<string>
+  cancelWait?(): Promise<boolean>
 }
 
 function updateBridge(): UpdateBridge | undefined {
@@ -49,6 +56,8 @@ export function UpdateButton(): React.ReactNode {
   const { t } = useApp()
   const [status, setStatus] = useState<UpdateStatusView>({ state: 'idle' })
   const [busy, setBusy] = useState(false)
+  /** WP337：有任务在做时的三选一（开着 = 有值）。 */
+  const [asking, setAsking] = useState<RestartReadinessView | undefined>(undefined)
 
   useEffect(() => {
     const bridge = updateBridge()
@@ -74,6 +83,10 @@ export function UpdateButton(): React.ReactNode {
 
   const act = (): void => {
     if (busy) return
+    if (status.state === 'waiting') {
+      void bridge.cancelWait?.()
+      return
+    }
     const wantsInstall =
       status.state === 'ready' || (status.state === 'error' && status.stage === 'install')
     const wantsDownload =
@@ -83,8 +96,26 @@ export function UpdateButton(): React.ReactNode {
     const done = (): void => {
       setBusy(false)
     }
-    if (wantsInstall) void bridge.install().then(done, done)
-    else
+    if (wantsInstall) {
+      const { readiness, restart } = bridge
+      if (readiness === undefined || restart === undefined) {
+        void bridge.install().then(done, done)
+        return
+      }
+      // WP337：先看一眼在做什么——没有就直接重启，有就三选一
+      void readiness().then(
+        (r) => {
+          if (r.total === 0) void restart.call(bridge, 'now').then(done, done)
+          else {
+            setAsking(r)
+            done()
+          }
+        },
+        () => {
+          void bridge.install().then(done, done)
+        },
+      )
+    } else
       void bridge.download().then((s) => {
         setStatus(s)
         done()
@@ -92,31 +123,49 @@ export function UpdateButton(): React.ReactNode {
   }
 
   const view = describe(status, t)
+  const choose = (choice: 'now' | 'idle'): void => {
+    setAsking(undefined)
+    setBusy(true)
+    const done = (): void => {
+      setBusy(false)
+    }
+    void bridge.restart?.(choice).then(done, done)
+  }
   return (
-    <button
-      type="button"
-      data-testid="update-button"
-      data-state={status.state}
-      title={view.tip}
-      aria-label={view.tip}
-      disabled={view.disabled || busy}
-      onClick={act}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
-        view.tone === 'bad'
-          ? 'text-ws-bad hover:bg-ws-bad-bg'
-          : 'font-medium text-ws-brand hover:bg-sidebar-accent/60',
-        'disabled:cursor-default disabled:opacity-80',
-      )}
-    >
-      <view.Icon aria-hidden className={cn('size-4 shrink-0', view.spin && 'animate-spin')} />
-      <span className="flex-1 truncate">{view.label}</span>
-      {status.state === 'downloading' ? (
-        <span className="ws-num text-[11px] text-ws-muted-fg" data-testid="update-percent">
-          {status.percent}%
-        </span>
-      ) : null}
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid="update-button"
+        data-state={status.state}
+        title={view.tip}
+        aria-label={view.tip}
+        disabled={view.disabled || busy}
+        onClick={act}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
+          view.tone === 'bad'
+            ? 'text-ws-bad hover:bg-ws-bad-bg'
+            : 'font-medium text-ws-brand hover:bg-sidebar-accent/60',
+          'disabled:cursor-default disabled:opacity-80',
+        )}
+      >
+        <view.Icon aria-hidden className={cn('size-4 shrink-0', view.spin && 'animate-spin')} />
+        <span className="flex-1 truncate">{view.label}</span>
+        {status.state === 'downloading' ? (
+          <span className="ws-num text-[11px] text-ws-muted-fg" data-testid="update-percent">
+            {status.percent}%
+          </span>
+        ) : null}
+      </button>
+      <UpdateRestartDialog
+        readiness={asking}
+        busy={busy}
+        onChoose={choose}
+        onClose={() => {
+          setAsking(undefined)
+        }}
+      />
+    </>
   )
 }
 
@@ -159,6 +208,13 @@ function describe(
         Icon: RotateCw,
         label: t('update.ready'),
         tip: t('update.ready.tip', { version: s.version }),
+      }
+    case 'waiting':
+      return {
+        ...base,
+        Icon: Hourglass,
+        label: t('update.waiting'),
+        tip: t('update.waiting.tip'),
       }
     case 'installing':
       return {
