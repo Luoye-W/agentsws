@@ -56,6 +56,8 @@ export type DesktopUpdateStatus =
     }
   | { state: 'downloading'; version: string; percent: number; source: 'primary' | 'github' }
   | { state: 'ready'; version: string; source: 'primary' | 'github' }
+  /** WP337：等没有正在输出的运行就自己重启（按钮显示「等空闲后重启」，点一下取消）。 */
+  | { state: 'waiting'; version: string; source: 'primary' | 'github' }
   | { state: 'installing'; version: string }
   | {
       state: 'error'
@@ -65,7 +67,21 @@ export type DesktopUpdateStatus =
       version: string
     }
 
-export type DesktopInstallOutcome = 'installing' | 'cancelled' | 'blocked' | 'not-ready'
+export type DesktopInstallOutcome = 'installing' | 'cancelled' | 'blocked' | 'not-ready' | 'waiting'
+
+/** WP337：有任务在做时的三个选项（「稍后」页面自己关框，不用告诉壳）。 */
+export type DesktopRestartChoice = 'now' | 'idle'
+
+/** WP337：现在在做什么（弹窗那一句「还有 N 件在做」+ 展开的清单）。 */
+export interface DesktopRestartReadiness {
+  /** 三类加起来几件。 */
+  total: number
+  /** 没有正在输出的。 */
+  idle: boolean
+  counts: { output: number; background: number; scheduled: number }
+  /** 每件一句话；`kind` 决定图标。 */
+  items: { kind: 'output' | 'background' | 'scheduled'; title: string }[]
+}
 
 export interface DesktopUpdateBridge {
   status(): Promise<DesktopUpdateStatus>
@@ -75,6 +91,12 @@ export interface DesktopUpdateBridge {
   download(): Promise<DesktopUpdateStatus>
   /** 点「重启并更新」：有任务在跑会先弹原生确认框。 */
   install(): Promise<DesktopInstallOutcome>
+  /** WP337：点「重启并更新」之前看一眼在做什么（问不到回 total 0）。旧壳没有：先判空。 */
+  readiness?(): Promise<DesktopRestartReadiness>
+  /** WP337：页面上已经三选一了——现在重启 / 空闲时重启（不再弹原生框）。 */
+  restart?(choice: DesktopRestartChoice): Promise<DesktopInstallOutcome>
+  /** WP337：「等空闲后重启」时点一下取消。 */
+  cancelWait?(): Promise<boolean>
 }
 
 /** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
@@ -104,6 +126,10 @@ export const BRIDGE_CHANNELS = {
   updateChanged: 'agentsws:update-changed',
   updateDownload: 'agentsws:update-download',
   updateInstall: 'agentsws:update-install',
+  /** WP337 */
+  updateReadiness: 'agentsws:update-readiness',
+  updateRestart: 'agentsws:update-restart',
+  updateCancelWait: 'agentsws:update-cancel-wait',
 } as const
 
 export interface BridgeInfo {

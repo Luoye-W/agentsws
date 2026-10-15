@@ -11,6 +11,7 @@
  * 2. 只对 `127.0.0.1:<自己起的端口>` 说话——URL 由调用方给，不从网页来。
  * 3. 失败一律是「说清楚为什么」的结构化结果，不抛给 UI；托盘上按一下不该炸掉整个壳。
  */
+import type { DesktopRestartReadiness } from './bridge-types.js'
 import type { TrayScene } from './menu.js'
 import type { ApiFetchLike } from './ports.js'
 
@@ -152,6 +153,48 @@ export interface ApiClient {
    * 「重启并更新」前问一句用。问不到（服务没装配 / 连不上）就是失败——由调用方决定当几。
    */
   activeRuns(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
+  /** WP337：重启并更新前看一眼（`GET /v1/update/readiness`）：三类各几件、每件一句话、空闲没有。 */
+  updateReadiness(
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<DesktopRestartReadiness>>
+  /** WP337：暂停全部（`POST /v1/update/pause`）。运行停在安全点要等它收尾，给足时间。 */
+  pauseForUpdate(
+    session: DesktopSession,
+    assignment: string,
+    to: string,
+  ): Promise<ApiResult<{ output: number; background: number; scheduled: number }>>
+  /** WP337：没重启成，放开（`POST /v1/update/resume`）。 */
+  resumeAfterUpdatePause(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
+}
+
+const count = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0
+const KINDS = new Set(['output', 'background', 'scheduled'])
+
+/** WP337：服务端回的「在做什么」→ 壳 / 页面用的那一份（不认识的条目丢掉）。 */
+export function readinessOf(raw: unknown): DesktopRestartReadiness | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const r = raw as { idle?: unknown; counts?: Record<string, unknown>; items?: unknown }
+  if (typeof r.idle !== 'boolean' || typeof r.counts !== 'object' || r.counts === null)
+    return undefined
+  const counts = {
+    output: count(r.counts.output),
+    background: count(r.counts.background),
+    scheduled: count(r.counts.scheduled),
+  }
+  const items = (Array.isArray(r.items) ? r.items : []).flatMap((i: unknown) => {
+    const it = i as { kind?: unknown; title?: unknown }
+    return typeof it?.kind === 'string' && KINDS.has(it.kind) && typeof it.title === 'string'
+      ? [{ kind: it.kind as 'output' | 'background' | 'scheduled', title: it.title.slice(0, 120) }]
+      : []
+  })
+  return {
+    total: counts.output + counts.background + counts.scheduled,
+    idle: r.idle,
+    counts,
+    items,
+  }
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -390,6 +433,45 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       return typeof runs === 'number' && Number.isFinite(runs) && runs >= 0
         ? { ok: true, value: Math.floor(runs) }
         : { ok: false, reason: '响应里没有 runs' }
+    },
+
+    async updateReadiness(session, assignment) {
+      const out = await call<unknown>('/v1/update/readiness', {
+        method: 'GET',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return out
+      const view = readinessOf(out.value.value)
+      return view === undefined ? { ok: false, reason: '响应不对' } : { ok: true, value: view }
+    },
+
+    async pauseForUpdate(session, assignment, to) {
+      const out = await call<{ paused?: Record<string, unknown> }>('/v1/update/pause', {
+        method: 'POST',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+        body: { to },
+        // 正在输出的要等它停在安全点、在跑的后台要等它收尾（服务端各最多 10 秒）
+        timeoutMs: 45_000,
+      })
+      if (!out.ok) return out
+      const p = out.value.value.paused ?? {}
+      return {
+        ok: true,
+        value: {
+          output: count(p.output),
+          background: count(p.background),
+          scheduled: count(p.scheduled),
+        },
+      }
+    },
+
+    async resumeAfterUpdatePause(session, assignment) {
+      const out = await call<{ runs?: unknown }>('/v1/update/resume', {
+        method: 'POST',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+        timeoutMs: 20_000,
+      })
+      return out.ok ? { ok: true, value: count(out.value.value.runs) } : out
     },
 
     async setBrowserEndpoint(session, assignment, endpoint) {

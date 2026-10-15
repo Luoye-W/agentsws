@@ -30,7 +30,12 @@ import {
 } from 'electron'
 import type { AppUpdater } from 'electron-updater'
 import { type ApiClient, createApiClient, type DesktopSession } from './api-client.js'
-import { BRIDGE_CHANNELS, type BridgeInfo, type SceneOpenOutcome } from './bridge-types.js'
+import {
+  BRIDGE_CHANNELS,
+  type BridgeInfo,
+  type DesktopRestartReadiness,
+  type SceneOpenOutcome,
+} from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   createLocalConnectLauncher,
@@ -111,6 +116,7 @@ import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
 import { createRedactor } from './redact.js'
 import { attachRendererLogging } from './renderer-log.js'
+import { choiceOf, EMPTY_READINESS, mergeReadiness, restartBox } from './restart-choice.js'
 import {
   authenticateSceneHost,
   decideScenePermission,
@@ -140,10 +146,10 @@ import {
 } from './tray-icon.js'
 import { tintBitmap } from './tray-tint.js'
 import {
-  busyBeforeRestart,
   createUpdateController,
   electronUpdaterLogger,
   publicStatus,
+  type RestartChoice,
   type UpdateBackend,
   type UpdateStatus,
 } from './update-controller.js'
@@ -1006,6 +1012,7 @@ async function bootstrap(): Promise<void> {
     restorable: canRestore(upgradeNote()),
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
     ...appUpdateField(),
+    ...(quitWaitTimer === undefined ? {} : { quitWaiting: true }),
     ...(scenes === undefined ? {} : { scenes }),
     officialDesktop,
     sceneInBrowser: config.sceneInBrowser,
@@ -1494,7 +1501,12 @@ async function bootstrap(): Promise<void> {
         void restoreLastBackup()
         break
       case 'open-download-page':
+        // WP337（Mac）：去下载了 = 接下来多半要退出装新版——退出时暂停全部、新版打开后接着做
+        manualUpdate = updateAvailable
         void shell.openExternal(updateUrl)
+        break
+      case 'cancel-update-wait':
+        if (!updates.cancelWait()) cancelQuitWait()
         break
       case 'download-update':
         void updates.download()
@@ -1542,6 +1554,19 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  /** WP337（Mac 只提示那一档）：点过「去下载」的那一版（之后退出 = 多半要装新版）。 */
+  let manualUpdate: string | undefined
+  /** WP337：Mac 更新前退出那一步（装配好更新状态机之后才有）。回 true = 现在退。 */
+  let manualUpdateQuit: (() => Promise<boolean>) | undefined
+  /** WP337（Mac）：「空闲时退出」在等。 */
+  let quitWaitTimer: NodeJS.Timeout | undefined
+  const cancelQuitWait = (): void => {
+    if (quitWaitTimer === undefined) return
+    clearTimeout(quitWaitTimer)
+    quitWaitTimer = undefined
+    logger.info('取消了「空闲时退出」')
+    refreshTray()
+  }
   let quitting = false
   /*
    * WP184：退出前问一句（移植自官方桌面端的 `quit-confirmation.ts`）。官方场景在跑时，退出会把它
@@ -1588,7 +1613,24 @@ async function bootstrap(): Promise<void> {
     for (let i = 0; i < 60 && childAlive(); i += 1) await sleep(250)
   }
   let serverDrained = false
+  /** WP337（Mac）：去下载了新版之后退出——先问 / 先暂停全部（装好新版、打开后接着做）。 */
+  let updateQuitDecided = false
   app.on('before-quit', (event) => {
+    if (
+      !updateQuitDecided &&
+      !quitting &&
+      !quitApproved &&
+      manualUpdateQuit !== undefined &&
+      manualUpdate !== undefined
+    ) {
+      event.preventDefault()
+      void manualUpdateQuit().then((go) => {
+        if (!go) return
+        updateQuitDecided = true
+        app.quit()
+      })
+      return
+    }
     if (!quitApproved && !quitting && officialRunning()) {
       event.preventDefault()
       void quitConfirmation.confirm().then((approved) => {
@@ -2046,33 +2088,60 @@ async function bootstrap(): Promise<void> {
   }
 
   /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问（WP225 加上岗位 AI 正在干活）。 */
-  const confirmRestart = async (): Promise<boolean> => {
-    const aiRuns = await aiRunsNow()
-    logger.info('重启并更新前看一眼', {
-      officialScenes: officialRunning(),
-      computerUse: computerUseActive !== undefined,
-      aiRuns: aiRuns ?? 'unknown',
+  const confirmRestart = async (): Promise<boolean> => (await chooseRestart()) === 'now'
+
+  /** WP337：服务端那一份「在做什么」（远程档 / 服务没起来 / 问不到回 undefined）。 */
+  const serverReadiness = async (): Promise<DesktopRestartReadiness | undefined> => {
+    if (remote || health?.ok !== true) return undefined
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return undefined
+    const out = await api.updateReadiness(s, assignment)
+    if (!out.ok) logger.warn('问不到在做什么', { reason: out.reason })
+    return out.ok ? out.value : undefined
+  }
+  /** WP337：弹窗用的那一份（服务端 + 官方场景；服务端问不到退回运行次数）。 */
+  const restartReadiness = async (): Promise<DesktopRestartReadiness> => {
+    const server = await serverReadiness()
+    return mergeReadiness({
+      server,
+      officialScene: officialRunning(),
+      officialLabel: strings(config.language).updateOfficialScene,
+      ...(server === undefined ? { fallbackRuns: await aiRunsNow() } : {}),
     })
-    if (
-      !busyBeforeRestart({
-        officialScenes: officialRunning(),
-        computerUse: computerUseActive !== undefined,
-        aiRuns,
-      })
-    )
-      return true
+  }
+  /** WP337：托盘 / 旧页面点的「重启并更新」——有任务在做就原生三选一。 */
+  const chooseRestart = async (verb: 'restart' | 'quit' = 'restart'): Promise<RestartChoice> => {
+    const r = await restartReadiness()
+    logger.info('重启并更新前看一眼', { ...r.counts, total: r.total, verb })
+    if (r.total === 0) return 'now'
     const t = strings(config.language)
-    const result = await dialog.showMessageBox({
-      type: process.platform === 'win32' ? 'none' : 'warning',
-      title: t.quitTitle,
-      message: t.updateRestartMessage,
-      detail: t.updateRestartDetail,
-      buttons: [t.updateRestartConfirm, t.updateRestartLater],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    })
-    return result.response === 0
+    const result = await dialog.showMessageBox(
+      restartBox(r, t, { platform: process.platform, verb }),
+    )
+    return choiceOf(result.response)
+  }
+  /** WP337：暂停全部 / 放开（服务进程落盘；新版开机接着做）。 */
+  const pauseAllForUpdate = async (to: string): Promise<void> => {
+    if (remote || health?.ok !== true) return
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) throw new Error('没有会话')
+    const out = await api.pauseForUpdate(s, assignment, to)
+    if (!out.ok) throw new Error(out.reason)
+    logger.info('因更新暂停全部', { to, ...out.value })
+  }
+  const resumeAfterPause = async (): Promise<void> => {
+    if (remote) return
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return
+    const out = await api.resumeAfterUpdatePause(s, assignment)
+    logger.info('没重启成，暂停的放开了', out.ok ? { runs: out.value } : { reason: out.reason })
+  }
+  const outputBusy = async (): Promise<boolean> => {
+    const r = await serverReadiness()
+    return r !== undefined && !r.idle
   }
 
   const updates = createUpdateController({
@@ -2153,7 +2222,14 @@ async function bootstrap(): Promise<void> {
       (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
         .ok,
     confirmRestart,
+    chooseRestart: () => chooseRestart('restart'),
+    outputBusy,
+    pauseAll: (to) => pauseAllForUpdate(to),
+    resumeAll: () => resumeAfterPause(),
     openDownloadPage: (url) => {
+      // WP337（Mac）：去下载了 = 接下来多半要退出装新版
+      const s = updates.status()
+      if (s.state === 'available') manualUpdate = s.version
       void shell.openExternal(url)
     },
     downloadPage: DOWNLOAD_PAGE,
@@ -2169,6 +2245,7 @@ async function bootstrap(): Promise<void> {
     if (s.state === 'downloading')
       return { state: 'downloading', version: s.version, percent: s.percent }
     if (s.state === 'ready') return { state: 'ready', version: s.version }
+    if (s.state === 'waiting') return { state: 'waiting', version: s.version }
     return undefined
   }
 
@@ -2211,6 +2288,56 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.updateInstall, async (event) =>
     fromLocalWindow(event) ? updates.install() : 'not-ready',
   )
+  // WP337：页面上的三选一——先看一眼在做什么，选了再告诉壳（不再弹原生框）
+  ipcMain.handle(BRIDGE_CHANNELS.updateReadiness, async (event) =>
+    fromLocalWindow(event) ? restartReadiness() : EMPTY_READINESS,
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.updateRestart, async (event, choice: unknown) =>
+    fromLocalWindow(event) ? updates.install(choice === 'idle' ? 'idle' : 'now') : 'not-ready',
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.updateCancelWait, (event) =>
+    fromLocalWindow(event) ? updates.cancelWait() : false,
+  )
+
+  /*
+   * WP337（Mac：只提示 → 人自己退出、装新版）：点过「去下载」之后退出——有正在输出的就三选一
+   * （现在退出 / 空闲时退出 / 稍后）；退之前暂停全部，装好新版打开后自动接着做。
+   */
+  manualUpdateQuit = async () => {
+    if (remote || health?.ok !== true || manualUpdate === undefined) return true
+    cancelQuitWait()
+    const to = manualUpdate
+    const r = await restartReadiness()
+    const choice =
+      r.idle && r.total === r.counts.background + r.counts.scheduled
+        ? 'now'
+        : await chooseRestart('quit')
+    if (choice === 'later') return false
+    if (choice === 'idle') {
+      const poll = (): void => {
+        quitWaitTimer = setTimeout(() => {
+          void outputBusy().then(async (busy) => {
+            if (quitWaitTimer === undefined) return
+            if (busy) return poll()
+            quitWaitTimer = undefined
+            await pauseAllForUpdate(to).catch((err: unknown) => {
+              logger.warn('退出前暂停全部没成', { error: String(err) })
+            })
+            updateQuitDecided = true
+            app.quit()
+          })
+        }, 5000)
+      }
+      logger.info('选了空闲时退出', { to })
+      poll()
+      refreshTray()
+      return false
+    }
+    await pauseAllForUpdate(to).catch((err: unknown) => {
+      logger.warn('退出前暂停全部没成', { error: String(err) })
+    })
+    return true
+  }
   updates.start()
 
   // ── 托盘常驻、无主窗口启动（13 §5）。
