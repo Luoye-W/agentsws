@@ -5,6 +5,7 @@
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
     "packages/contracts/src/ad-creative.ts",
+    "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
@@ -129,7 +130,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "546a7c7a63422fe085873ea9e1643d67",
+  "source_digest": "08941db7aea1174d89e32ee9fe4dcec6",
   "objects": [
     {
       "id": "ad",
@@ -10447,6 +10448,42 @@
       "route_to": "role_holder",
       "roles": ["dtc.community-support", "dtc.support"],
       "what": "改收件地址"
+    },
+    {
+      "id": "stage_ads_activate",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "ads_activate",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["ads.google", "ads.meta"],
+      "what": "stage ads activate"
+    },
+    {
+      "id": "stage_ads_sheet",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "ads_sheet",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["ads.google", "ads.meta"],
+      "what": "stage ads sheet"
+    },
+    {
+      "id": "stage_ads_undo",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "ads_undo",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["ads.google", "ads.meta"],
+      "what": "stage ads undo"
     },
     {
       "id": "stage_affiliate_code",
