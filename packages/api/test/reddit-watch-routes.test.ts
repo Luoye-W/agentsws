@@ -41,6 +41,11 @@ async function wired() {
       calls.push(`digest:${w?.since ?? '-'}`)
       return {} as never
     },
+    // WP340：收起「优先」提醒
+    dismissAlert: (_ws, id) => {
+      calls.push(`alert-seen:${id}`)
+      return id === 'rw_1' ? ({ id, alert_seen: true } as never) : undefined
+    },
   }
   // 社媒 Reddit 那条职责读写得到社群线程（community_thread）；测试的通用岗位没有，这里补上
   const roles = {
@@ -172,5 +177,24 @@ describe('工作台这一侧', () => {
     expect(w.calls).toContain('items:{"source":"inbox","reply":true}')
     expect(w.calls).toContain('digest:2026-10-11T00:00:00.000Z')
     expect(w.calls).toContain('settings:{"own_subreddits":["inmoxr"],"every_hours":12}')
+  })
+
+  it('WP340：设置收重点版块 / 各版块一周几次 / 告警词 / 标签词；收起优先提醒', async () => {
+    const w = await wired()
+    const patch = {
+      watch_subreddits: ['SmartGlasses', 'Xreal'],
+      sub_per_week: { xreal: 1 },
+      alert_words: ['recall', 'refund'],
+      tag_words: ['Air3'],
+    }
+    expect((await w.owner('PUT', '/v1/reddit-watch/settings', patch)).status).toBe(200)
+    expect(w.calls).toContain(`settings:${JSON.stringify(patch)}`)
+    // 一周 0 次 / 8 次都不收
+    expect(
+      (await w.owner('PUT', '/v1/reddit-watch/settings', { sub_per_week: { xreal: 8 } })).status,
+    ).toBe(400)
+    expect((await w.owner('POST', '/v1/reddit-watch/items/rw_1/alert-seen')).status).toBe(200)
+    expect((await w.owner('POST', '/v1/reddit-watch/items/rw_9/alert-seen')).status).toBe(404)
+    expect(w.calls).toContain('alert-seen:rw_1')
   })
 })

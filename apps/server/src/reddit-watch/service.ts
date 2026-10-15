@@ -357,11 +357,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
    */
   const notifyAlerts = (fresh: RedditWatchEntry[]): void => {
     const out: RedditWatchEntry[] = []
+    const batch = new Set(fresh.map((x) => x.id))
     for (const it of fresh) {
       if (it.priority !== true || it.alert_seen === true) continue
       const dup =
         out.some((x) => x.fullname === it.fullname) ||
-        store.byFullname(ws, it.fullname).some((x) => x.id !== it.id && x.priority === true)
+        store.byFullname(ws, it.fullname).some((x) => !batch.has(x.id) && x.priority === true)
       if (dup) {
         it.alert_seen = true
         store.put(it)
