@@ -34,7 +34,13 @@ function useColors(theme: string): { grid: string; axis: string; series: string[
     return {
       grid: read('--border', '#e5e5e5'),
       axis: read('--muted-foreground', '#737373'),
-      series: [1, 2, 3, 4].map((i) => read(`--chart-${i}`, '#888')),
+      // 决策 337：固定绿蓝橙紫（`--chart-2` 是品牌浅色，线上看不清，跳过）；紫色没有令牌，取一个两种底色都看得清的
+      series: [
+        read('--chart-1', '#16a34a'),
+        read('--chart-3', '#2563eb'),
+        read('--chart-4', '#d97706'),
+        '#8b5cf6',
+      ],
     }
   }, [theme])
 }

@@ -173,10 +173,11 @@ function Body({ view, assignment }: { view: GeoWatchView; assignment: string }):
       ? t('geo.watch.cost.byo')
       : est.route === 'none' || est.credits === undefined
         ? t('geo.watch.cost.none')
-        : `${est.estimated_prices === true ? '~' : ''}${t('geo.watch.cost', {
+        : // 文案里本来就是「约」，单价是兜底估的也不再多加记号
+          t('geo.watch.cost', {
             c: String(est.credits),
             m: String(est.credits_per_month ?? 0),
-          })}`
+          })
   const platforms = [...new Set([...BRAND_WATCH_DEFAULT_PLATFORMS, ...w.platforms])]
   const selectedIds = w.prompts.map((p) => p.id)
   const full = w.prompts.length >= w.prompt_limit

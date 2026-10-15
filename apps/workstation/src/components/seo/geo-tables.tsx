@@ -146,14 +146,14 @@ export function GeoSites({ view }: { view: GeoMetricsView }): ReactNode {
                 ) : (
                   <ChevronRight className="size-3.5" aria-hidden />
                 )}
-                <span className={`truncate ${s.group === 'ours' ? 'font-semibold' : ''}`}>
+                <span className={`min-w-0 truncate ${s.group === 'ours' ? 'font-semibold' : ''}`}>
                   {s.domain}
                 </span>
                 <KindTag kind={s.site_kind} />
                 <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-ws-muted-fg">
                   <span className="ws-num">{t('geo.sites.count', { n: String(s.citations) })}</span>
-                  <span className="hidden sm:inline">
-                    {s.platforms.map((p) => t(`geo.platform.${p}`)).join(' · ')}
+                  <span title={s.platforms.map((p) => t(`geo.platform.${p}`)).join(' · ')}>
+                    {t('geo.sites.ais', { n: String(s.platforms.length) })}
                   </span>
                   {s.new ? (
                     <span className="font-medium text-ws-info">{t('geo.sites.new')}</span>

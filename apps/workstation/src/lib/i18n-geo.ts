@@ -53,6 +53,7 @@ export const GEO_ZH: Record<string, string> = {
   'geo.sites': '被引用最多的站',
   'geo.sites.hint': '近 4 周各家 AI 回答里引用的站。站外高频的，是公关该去的地方。',
   'geo.sites.count': '{n} 次',
+  'geo.sites.ais': '{n} 个 AI',
   'geo.sites.new': '新',
   'geo.sites.pages': '被引的页',
   'geo.compare': '我们 vs 竞品',
@@ -205,6 +206,7 @@ export const GEO_EN: Record<string, string> = {
   'geo.sites.hint':
     'Sites the AIs cited over the last 4 weeks. Frequently cited outside sites are where PR should go.',
   'geo.sites.count': '{n}×',
+  'geo.sites.ais': '{n} AIs',
   'geo.sites.new': 'New',
   'geo.sites.pages': 'Cited pages',
   'geo.compare': 'Us vs competitors',
