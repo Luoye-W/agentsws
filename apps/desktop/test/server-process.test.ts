@@ -73,6 +73,12 @@ describe('serverSpawnRequest', () => {
     expect(serverSpawnRequest(input()).env.AGENTSWS_STATIC_DIR).toBeUndefined()
   })
 
+  it('WP345：插件固定文件夹经 AGENTSWS_EXTENSION_DIR 给；不给就没有这一条', () => {
+    const dir = '/Users/a/Library/Application Support/@agentsws/desktop/chrome-extension'
+    expect(serverSpawnRequest(input({ extensionDir: dir })).env.AGENTSWS_EXTENSION_DIR).toBe(dir)
+    expect(serverSpawnRequest(input()).env.AGENTSWS_EXTENSION_DIR).toBeUndefined()
+  })
+
   it('WP218：Windows 系统变量与代理往下传，别的照样不传', () => {
     const request = serverSpawnRequest(
       input({

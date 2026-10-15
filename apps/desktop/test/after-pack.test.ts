@@ -12,6 +12,7 @@ import ts from 'typescript'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   ARCH_NAMES,
+  bundledExtensionProblem,
   copyLockFiles,
   fillMissingDependencies,
   findNativeModules,
@@ -245,6 +246,32 @@ describe('runtimeDependencyNames', () => {
       runtimeDependencyNames({ dependencies: { a: '*' }, peerDependencies: { a: '*' } }),
     ).toEqual(['a'])
     expect(runtimeDependencyNames(undefined)).toEqual([])
+  })
+})
+
+describe('WP345：随包的浏览器插件', () => {
+  const desktop = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const put = (resources: string, manifest: unknown): void => {
+    mkdirSync(join(resources, 'chrome-extension'), { recursive: true })
+    writeFileSync(join(resources, 'chrome-extension', 'manifest.json'), JSON.stringify(manifest))
+  }
+
+  it('缺了 / 没有固定 key / 版本不是这一包：都说出来；齐了回 undefined', () => {
+    const resources = scratch()
+    expect(bundledExtensionProblem(resources, '0.2.0-beta.8')).toMatch(/没有 chrome-extension/)
+    put(resources, { version: '0.2.0', version_name: '0.2.0-beta.8' })
+    expect(bundledExtensionProblem(resources, '0.2.0-beta.8')).toMatch(/固定 key/)
+    put(resources, { key: 'MIIB', version: '0.2.0', version_name: '0.2.0-beta.7' })
+    expect(bundledExtensionProblem(resources, '0.2.0-beta.8')).toMatch(/0\.2\.0-beta\.7/)
+    put(resources, { key: 'MIIB', version: '0.2.0', version_name: '0.2.0-beta.8' })
+    expect(bundledExtensionProblem(resources, '0.2.0-beta.8')).toBeUndefined()
+    put(resources, { key: 'MIIB', version: '1.0.0' })
+    expect(bundledExtensionProblem(resources, '1.0.0')).toBeUndefined()
+  })
+
+  it('打包配置把 apps/extension/build/chrome-mv3 摆进 <resources>/chrome-extension', () => {
+    const yml = readFileSync(join(desktop, 'electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/- from: \.\.\/extension\/build\/chrome-mv3\n\s+to: chrome-extension\n/)
   })
 })
 

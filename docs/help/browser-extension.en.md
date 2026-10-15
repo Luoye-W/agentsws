@@ -12,16 +12,24 @@ This covers the Chrome extension “Agents Workshop · Creator helper”: it giv
 ## What you need
 
 - Chrome on this computer;
-- the Agents Workshop desktop app running (the extension looks for it, default port 4317);
-- the package `agentsws-influencer-assistant-<version>-chrome.zip`.
+- the Agents Workshop desktop app running (the extension ships with it and updates with it — nothing to download).
 
-## Install
+## Install (once)
 
-1. Unzip the package somewhere **you will not delete by accident** (for example “Documents/Agents Workshop extension”). A developer-mode extension is loaded from that folder; delete the folder and the extension is gone.
-2. Type `chrome://extensions` in Chrome’s address bar and press Enter.
-3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked** (top left) and pick the `chrome-mv3` folder inside what you unzipped.
-5. A new icon appears in the toolbar; press it and the panel shows up at the top right of the page. Open any YouTube channel page — the check-up already works.
+The extension is not in the Chrome Web Store. It comes with Agents Workshop, in a fixed folder on your computer. Add it to Chrome once; after that it updates whenever the app updates — **no uninstalling, no reinstalling**.
+
+1. In the workstation, under “Connections → Browser extension” (or on the extension card in a chat), press **Open Chrome extensions**: Chrome opens a new tab and `chrome://extensions` is already copied — paste it into the address bar and press Enter (Chrome does not let other programs open that page directly).
+2. Turn on **Developer mode** (top right of the extensions page).
+3. Back on the card, press **Open extension folder** (the path is copied for you), then click **Load unpacked** (top left of the extensions page) and pick that folder. If the picker cannot find it: on Mac press ⌘⇧G and paste the path; on Windows paste it into the address bar. You can also drag the folder into the picker.
+4. A new icon appears in the toolbar; press it and the panel shows up at the top right of the page. Open any YouTube channel page — the check-up already works.
+
+**Keep Developer mode on**: Chrome disables extensions added from a folder when it is turned off; turn it back on and the extension returns.
+
+### Updates
+
+Nothing to do. After the app updates, the extension reloads itself once while it is idle (no ads / Reddit action in progress); pairing, settings and permissions you already granted stay. If Chrome is closed, it simply starts with the new version next time. The extension’s options page shows the current version.
+
+If the connection card says the extension in your browser is still the old version: you probably added another copy earlier (for example from a downloaded zip). Remove that copy on the extensions page and add it again from the app’s folder with the steps above.
 
 ## Pair it (only needed to save into your creator list)
 

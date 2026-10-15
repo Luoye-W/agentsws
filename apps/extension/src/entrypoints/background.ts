@@ -10,6 +10,7 @@
  * - 每隔一会儿把排着的观测补上去（桌面应用可能是刚刚才打开的）。
  * - WP313：广告动作通道——连上了广告后台（可选权限）才每分钟问一次本机「有没有批好的活」，
  *   问到了就在看得见的广告后台标签页上做；页面顶上的横条点了停止 / 确认，消息回到这里。
+ * - WP345：跟着工坊更新——每分钟（和起来时）问一次本机「插件文件夹里是哪一版」，不一样就等空闲后自己重载。
  */
 
 import { defineBackground } from 'wxt/utils/define-background'
@@ -25,6 +26,7 @@ import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
 import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
+import { checkForUpdate, runningVersion } from '@/lib/self-update'
 import { chromeStore, clearQueue, readSettings, writeSettings } from '@/lib/storage'
 
 /** 多久试一次补传。5 分钟：够快，也不至于在应用没开时一直空打。 */
@@ -36,6 +38,9 @@ const ADS_PERIOD_MINUTES = 1
 /** WP328：多久问一次有没有要读的 Reddit（巡查一天一次起步；问是本机回环，很便宜）。 */
 const REDDIT_ALARM = 'agentsws-reddit-poll'
 const REDDIT_PERIOD_MINUTES = 1
+/** WP345：多久问一次「工坊换了新版插件没有」（本机回环，很便宜）。 */
+const UPDATE_ALARM = 'agentsws-update'
+const UPDATE_PERIOD_MINUTES = 1
 
 export default defineBackground(() => {
   const deps: BrokerDeps = { store: chromeStore(), now: () => new Date().toISOString() }
@@ -67,7 +72,23 @@ export default defineBackground(() => {
     }).catch(() => undefined)
   chrome.alarms.create(REDDIT_ALARM, { periodInMinutes: REDDIT_PERIOD_MINUTES })
 
+  // WP345：跟着工坊更新（起来时先问一次：刚重载完的这一刻就把新版本号报上去）
+  const checkUpdate = (): Promise<unknown> =>
+    checkForUpdate({
+      store: deps.store,
+      running: runningVersion(chrome.runtime.getManifest()),
+      reload: () => chrome.runtime.reload(),
+      now: deps.now,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    }).catch(() => undefined)
+  chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: UPDATE_PERIOD_MINUTES })
+  void checkUpdate()
+
   chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === UPDATE_ALARM) {
+      void checkUpdate()
+      return
+    }
     if (alarm.name === ADS_ALARM) {
       void pollAds()
       return
@@ -107,6 +128,8 @@ export default defineBackground(() => {
             return
           case 'pair': {
             const out = await pair(deps, message.code)
+            // WP345：配上就把版本报一次（连接卡上马上看得到）
+            if (out.ok) void checkUpdate()
             reply({ type: 'pair', ...out, status: await status(deps) })
             return
           }
@@ -165,6 +188,10 @@ export default defineBackground(() => {
               await deps.store.set({ [REDDIT_STATUS_KEY]: rest })
             }
             void pollReddit()
+            reply({ type: 'ack' })
+            return
+          case 'update-check':
+            void checkUpdate()
             reply({ type: 'ack' })
             return
           case 'ads-stop':

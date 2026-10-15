@@ -5,7 +5,7 @@
  * 服务进程是 `apps/server` 真起的（不是替身），端口随机，用户数据目录用临时目录。
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -126,6 +126,24 @@ test('托盘常驻，打开工作台能拿到 /v1/health 的 ok', async () => {
       return handle?.menu().find((item) => item.id === 'open-workstation')?.enabled ?? false
     })
     expect(openable).toBe(true)
+
+    // 5.5 WP345：插件放进了数据目录下的固定文件夹（开发期取仓库里构建的那一份；没构建就跳过），
+    //     服务进程经 AGENTSWS_EXTENSION_DIR 认得它（连接卡要的那一条）
+    if (existsSync(join(root, '..', 'extension', 'build', 'chrome-mv3', 'manifest.json'))) {
+      expect(existsSync(join(userData, 'chrome-extension', 'manifest.json'))).toBe(true)
+      const view = await page.evaluate(async () => {
+        const me = (await (await fetch('/v1/me')).json()) as {
+          data: { assignments: { id: string; role_id: string }[] }
+        }
+        const owner = me.data.assignments.find((a) => a.role_id === 'common.owner')
+        const res = await fetch('/v1/extension/install', {
+          headers: { 'X-Assignment': owner?.id ?? '' },
+        })
+        return (await res.json()) as { data?: { folder?: string; can_open?: boolean } }
+      })
+      expect(view.data?.can_open).toBe(true)
+      expect(view.data?.folder).toBe(join(userData, 'chrome-extension'))
+    }
 
     // 6. WP31：托盘「暂停」走 `PUT /v1/halt`（**不重启 sidecar**）。
     //    验的是三件事：health 里 halt.all 变 true、服务进程没被重启（pid 不变）、

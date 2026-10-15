@@ -13,7 +13,7 @@
  * | `model` | 接模型（与开工向导第 ① 步同一个件：工坊接口 / DeepSeek 官方 / 自己的 key 走本机原生表单；WP334） |
  * | `deepseek_account` | DeepSeek 账号登录（与设置页同一个件；WP334） |
  * | `workshop_account` | 关联 Agents 工坊账号（与设置页同一个注册 / 登录表单；WP334） |
- * | `extension` | 浏览器插件配对码 |
+ * | `extension` | 浏览器插件：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步，WP345）+ 配对码 |
  * | 认不出 / 要下载连接器 | 「去连接页 / 消息渠道」一个链接（那一页仍是总览） |
  *
  * 每一样还要说「现在连上了没有」（{@link useNeedConnected}）：`true` / `false`；查不了回 `undefined`。
@@ -139,7 +139,10 @@ export function useNeedConnected(need: ConnectNeed, ctx: ConnectContext): boolea
   if (service === 'workshop_account')
     return cloud.data === undefined ? undefined : cloud.data.linked
   if (service === 'extension')
-    return ext.data === undefined ? undefined : ext.data.tokens.length > 0
+    // WP345：撤掉的那把不算「配上了」（装好并配对之后卡才自己收起）
+    return ext.data === undefined
+      ? undefined
+      : ext.data.tokens.some((t) => t.revoked_at === undefined)
   if (ctx.providers?.some((p) => p.service === service) === true) return ctx.isConnected(service)
   return undefined
 }

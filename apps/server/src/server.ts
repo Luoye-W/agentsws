@@ -6,7 +6,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import { promises as dnsPromises } from 'node:dns'
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -379,6 +379,7 @@ import { createEconomicsService } from './economics.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
+import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -562,6 +563,7 @@ import {
   type LoginWindowLauncher,
   type RedditReadAccount,
 } from './readonly-browser/account.js'
+import { browserEnv } from './readonly-browser/chrome.js'
 import { createReadonlyBrowser, type ReadonlyBrowserOptions } from './readonly-browser/index.js'
 import { redditReadBrowserOf, redditReadLimiterOf } from './readonly-browser/reddit.js'
 import {
@@ -10694,6 +10696,48 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     dbDir === undefined
       ? createMemoryExtensionStore({ clock, random })
       : new SqliteExtensionStore({ dbPath: join(dbDir, 'extension-pairing.sqlite'), clock, random })
+  /**
+   * WP345（决策 871）：插件随工坊安装与更新。桌面壳把插件放在 `AGENTSWS_EXTENSION_DIR`（固定文件夹）；
+   * 插件每分钟来报版本、问文件夹里是哪一版。云上托管档没有（插件只连本机）。
+   */
+  const extensionInstall =
+    hostedBoot === undefined
+      ? createExtensionInstall({
+          dir:
+            env.AGENTSWS_EXTENSION_DIR === undefined || env.AGENTSWS_EXTENSION_DIR === ''
+              ? undefined
+              : env.AGENTSWS_EXTENSION_DIR,
+          platform: process.platform,
+          env,
+          readText: (path) => {
+            try {
+              return readFileSync(path, 'utf8')
+            } catch {
+              return undefined
+            }
+          },
+          exists: (path) => existsSync(path),
+          launch: spawnDetached,
+          browserEnv,
+          now: () => clock.now(),
+          record: (workspace_id, type, payload) => {
+            appendEvent({
+              schema_version: 1,
+              workspace_id,
+              type,
+              actor: { kind: 'system', id: 'browser-extension' },
+              correlation: { trace_id: `tr_ext_${payload.token_id ?? 'x'}_${Date.now()}` },
+              payload,
+            })
+            if (options.quiet !== true)
+              process.stdout.write(
+                type === 'extension.updated'
+                  ? `浏览器插件已换成新版：${payload.from} → ${payload.to}\n`
+                  : `浏览器插件重载了还是旧版 ${payload.running}（工坊这边是 ${payload.wanted}）\n`,
+              )
+          },
+        })
+      : undefined
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
     serviceOf: async (ws) => {
@@ -11762,6 +11806,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
     extension: extensionPortOf,
+    // WP345：插件随工坊安装与更新 `/v1/extension/install*`、`/v1/extension/version`
+    ...(extensionInstall === undefined ? {} : { extensionInstall }),
     // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
     ...(hostedBoot === undefined
       ? {

@@ -1,4 +1,13 @@
 import { defineConfig } from 'wxt'
+import { EXTENSION_PUBLIC_KEY } from './src/lib/identity'
+
+// WP345（决策 871）：固定扩展 id 的公钥，说明见 src/lib/identity.ts
+/**
+ * WP345：版本号跟工坊走。桌面打包（`apps/desktop/scripts/dist.mjs`）构建插件时给 `AGENTSWS_EXTENSION_VERSION`
+ * = 这一包工坊的版本（`0.2.0-beta.8`）；Chrome 的 `version` 只认数字，WXT 自动拆成 `version`（0.2.0）+
+ * `version_name`（完整那串）。插件与工坊比对用的是 `version_name`。不给就照旧取 package.json。
+ */
+const releaseVersion = process.env.AGENTSWS_EXTENSION_VERSION?.trim()
 
 /**
  * 「Agents 工坊助手」的 MV3 清单（WP119 / 68；WP313 / 决策 551 改名：红人与广告都是它的功能）。
@@ -32,6 +41,10 @@ export default defineConfig({
   outDir: 'build',
   manifest: {
     name: 'Agents 工坊助手',
+    key: EXTENSION_PUBLIC_KEY,
+    ...(releaseVersion === undefined || releaseVersion === ''
+      ? {}
+      : { version_name: releaseVersion }),
     short_name: '工坊助手',
     description:
       '在 YouTube / Instagram / TikTok 页面上即时体检红人、一键收进本机红人库；连接广告后台后，替你执行批过的广告动作；连接 Reddit 后，把批过的回复填进页面，由你点发送。',
