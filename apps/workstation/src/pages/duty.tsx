@@ -27,8 +27,8 @@ import { CalendarLink } from '@/components/calendar/calendar-link'
 import { InfoTip, WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { DutyIcon } from '@/components/role-icons/role-icon'
-// WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
-import { GeoQuestions } from '@/components/seo/geo-questions'
+// WP335（docs/99 O3）：「内容与搜索」的 AI 回答监测看板（关注设置在第三栏「设定」里）
+import { GeoBoard } from '@/components/seo/geo-board'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
@@ -307,8 +307,8 @@ export function DutyPage(): React.ReactNode {
           </div>
         )}
         {/*
-            WP154「内容与搜索」：买家会问的问题（每周拿去问各 AI 平台）+ 花多少 + 开关，
-            以及"现在跑一轮"。每日 5 件事与收入表在岗位面板上（那是数，这里是设置）。
+            WP154「内容与搜索」→ WP335：职责页最上面是 AI 回答监测看板（数字 / 趋势 / 方格 / 排名 / 被引的站 /
+            对比）；原来那块手写的问题清单收进第三栏「设定 → 关注设置」。每日 5 件事与收入表在岗位面板上。
           */}
         {/*
             WP173（docs/84 §2）：「主动开发」的开发信——发信邮箱与体检、公司地址、德奥勾选确认、开一轮。
@@ -345,7 +345,7 @@ export function DutyPage(): React.ReactNode {
             {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}
             <GoogleSourcePicker assignment={assignment} source="gsc" />
             <GoogleSourcePicker assignment={assignment} source="ga4" />
-            <GeoQuestions assignment={assignment} />
+            <GeoBoard assignment={here?.my_assignment_id ?? assignment} />
           </div>
         ) : null}
         <OverviewTab role_id={role_id} />

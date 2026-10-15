@@ -299,6 +299,8 @@ export interface SeoWeeklyGeoPayload {
   metrics?: GeoWeekPoint
   /** WP321：排队档还没回来的格数（回来后这张卡按同一周重出）。 */
   pending_cells?: number
+  /** WP335：简报那一行（提及率与周变化 · 关注词平均排名与周变化）；这周没拿到回答不写。 */
+  brief?: string
 }
 
 /** WP166：一个市场这一周的 AI 可见度小结。 */
@@ -935,6 +937,74 @@ export interface GeoMetricsView {
     weeks: { week: string; impressions: number; clicks: number; position?: number }[]
   }
   notes: string[]
+  /** WP335：Prompt × AI 方格（最新一周）。还没有历史不写。 */
+  grid?: GeoGridView
+  /** WP335：简报那一行（「AI 里提到我们 38%（+5）· 关注词平均第 12（−1）」）；这周没跑成不写。 */
+  brief?: string
+}
+
+/* ------------------------------------------------------------------ */
+/* WP335（docs/99 §5.4 / §5.6，O3）：方格与「一条回答」                    */
+/* ------------------------------------------------------------------ */
+
+/** 方格里一格的状态：提到了 / 没提到 / 没查成（失败 / 空回答，不算「没提到」）。 */
+export type GeoCellState = 'mentioned' | 'absent' | 'failed'
+
+/** Prompt × AI 方格里的一格（最新一周；同一周同一格好几条取最新那条）。没问的格不出现。 */
+export interface GeoGridCell {
+  platform: AiPlatform
+  market: string
+  state: GeoCellState
+  /** 在已知品牌里排第几（提到了才有）。 */
+  rank?: number
+  /** 引用来源里有我们的站。 */
+  cited: boolean
+  /** 点开看这条回答（`GET /v1/seo/watch/answers/:id`）。 */
+  answer_id: string
+  /** 和上一期同一格比：`up` 没提到 → 提到 / 名次往前；`down` 反过来。两期有一期没拿到回答不写。 */
+  change?: 'up' | 'down'
+}
+
+export interface GeoGridRow {
+  prompt_id: string
+  prompt_text: string
+  branded?: boolean
+  cells: GeoGridCell[]
+  /** 行尾小箭头：这一行提到我们的格数比上一期多 / 少（只比两期都拿到回答的格）。 */
+  change?: 'up' | 'down'
+}
+
+export interface GeoGridView {
+  /** 哪一周（周一日期）。 */
+  week: string
+  /** 列：这一周问过的 AI（按 `AI_PLATFORMS` 的顺序）。 */
+  platforms: AiPlatform[]
+  /** 这一周问过的市场（≥ 2 个时每格按市场再分）。 */
+  markets: string[]
+  rows: GeoGridRow[]
+}
+
+/** 一条回答的一面（这一期 / 上一期）。 */
+export interface GeoAnswerSide {
+  /** 那一轮的周（周一日期）。 */
+  week: string
+  answer: GeoAnswerRecord
+  /** 按回答里出现的顺序（`position`）。 */
+  citations: GeoCitationRecord[]
+  mentions: GeoMentionRecord[]
+}
+
+/**
+ * WP335：「一条回答」组件要的读视图（`GET /v1/seo/watch/answers/:id`）——全文、编号引用、
+ * 各品牌判定、同一格上一期（「和上周比」）、这一格近 12 周的时间线、高亮用的名字。
+ */
+export interface GeoAnswerDetail extends GeoAnswerSide {
+  /** 同一格（Prompt × AI × 市场）上一期拿到的那条（最近的更早一周）；没有不写。 */
+  previous?: GeoAnswerSide
+  /** 这一格近 12 周：每周一个点（同一周取最新那条），旧的在前。 */
+  history: { week: string; state: GeoCellState; rank?: number; answer_id: string }[]
+  /** 高亮用：我们（`ours`）与各竞品的名字、别名、域名。 */
+  names: { entity: string; name: string; terms: string[] }[]
 }
 
 /** WP321：「GEO 关注设置」面板 / 设定卡要的一份读视图。 */

@@ -4,7 +4,7 @@ roles: [dtc.content]
 ---
 # 搜索数据接口
 
-「内容与搜索」职责查搜索结果页（看你在 Google / Bing 上排第几、AI 概览里有没有你）和问 AI 平台（ChatGPT、Gemini、Perplexity 答题时提不提你）时，要用第三方的搜索数据。「连接 → 搜索数据」那一行决定数据从哪来，三档：
+「内容与搜索」职责查搜索结果页（看你在 Google / Bing 上排第几、AI 概览里有没有你）和问 AI 平台（ChatGPT、Gemini、Claude、Google AI 概览答题时提不提你）时，要用第三方的搜索数据。「连接 → 搜索数据」那一行决定数据从哪来，三档：
 
 | 档 | 谁付钱 | 一句话 |
 |---|---|---|
@@ -24,7 +24,7 @@ roles: [dtc.content]
 
 能选三家：
 
-- **DataForSEO**：一把 key 拿到 Google / Bing 的搜索结果（带 AI 概览与「大家还在问」）和 ChatGPT / Gemini / Perplexity 的回答。
+- **DataForSEO**：一把 key 拿到 Google / Bing 的搜索结果（带 AI 概览与「大家还在问」）和 ChatGPT / Gemini / Claude 的回答。
 - **SerpApi**：Google / Bing + AI 概览 + Copilot。
 - **Serper**：只有 Google 网页结果，最便宜。
 
@@ -37,4 +37,5 @@ key 只存在这台电脑的加密库里，不进日志、不上云。
 ## 常见问题
 
 - **官方那一档用的是哪家**：界面上不说；报错也只说「工坊官方数据接口」。
+- **Claude 为什么贵一些、和网页上看到的不一样**：Claude 的回答是通过 Claude 联网回答取得的，和你在 claude.ai 网页上看到的可能略有不同；问一次比别家贵（约 3.6 积分），「关注设置」里写着它一个月大概多少，不想要可以只关掉 Claude。怎么看这些回答见 [AI 回答监测](help:ai-answer-tracking)。
 - **Copilot 为什么有时探测不到**：官方那一档暂时不含 Copilot；要探测 Copilot 可以自带 SerpApi 的 key。

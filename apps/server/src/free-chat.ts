@@ -30,7 +30,12 @@ import type {
   PricingEntry,
   ToolDef,
 } from '@agentsws/contracts'
-import { DEFAULT_WEB_LIMITS, FIND_ARCHIVED_WORK_TOOL, WEB_SEARCH_TOOL } from '@agentsws/contracts'
+import {
+  DEFAULT_WEB_LIMITS,
+  FIND_ARCHIVED_WORK_TOOL,
+  GENUI_DISPLAY_RULE,
+  WEB_SEARCH_TOOL,
+} from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { FreeChatStore } from './free-chat-store.js'
@@ -289,6 +294,8 @@ function systemPrompt(
     '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
     '- 这里只是聊天：你不能替用户发邮件、改店铺、花钱，也不能开事项或派活。用户想让某个岗位去做，提醒他点回复旁边的「交给岗位去做」。',
   ]
+  // WP336：回答里可以放 ```dsh-ui 组件（所有对话运行同一段精简写法）
+  lines.push(GENUI_DISPLAY_RULE)
   if (web.on) {
     lines.push(
       `- 可以用 \`web_search\` 上网查最新的公开信息，这一轮最多搜 ${web.max} 次。`,
@@ -358,7 +365,8 @@ async function answer(
     choices.find((c) => c.id === `${ref.provider}/${ref.model}`) ??
     choices[0]
   if (choice === undefined)
-    return fail('还没接模型。去「设置 → 模型」接一个（或者启用「Agents 工坊（用积分）」）再来聊。')
+    // WP334（决策 726）：不再叫人去设置页——输入框旁那个「还没接模型，接一个」就地开连接卡
+    return fail('还没接模型，点「接一个」就地接上再来聊。')
   const withModel = {
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },

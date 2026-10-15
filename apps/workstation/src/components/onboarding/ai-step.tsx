@@ -157,8 +157,11 @@ export interface AiStepProps {
   assignment?: string
   /** 接上了：向导据此亮「下一步」。 */
   onConnected: (how: AiChoice) => void
-  /** 「先逛逛演示数据」：不接模型直接往下走（向导完成后顶栏那条黄条才出现）。 */
-  onDemo: () => void
+  /**
+   * 「先逛逛演示数据」：不接模型直接往下走（向导完成后顶栏那条黄条才出现）。
+   * WP334：连接卡里也用这一个件接模型——那里不给，就不出这条旁路。
+   */
+  onDemo?: () => void
 }
 
 export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.ReactNode {
@@ -382,7 +385,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
               <CloudAuthForm
                 {...(assignment === undefined ? {} : { assignment })}
                 testPrefix="ai-official"
-                onDemo={onDemo}
+                {...(onDemo === undefined ? {} : { onDemo })}
                 onDone={() => {
                   void client.invalidateQueries({ queryKey: ['cloud-account'] })
                 }}
@@ -602,15 +605,17 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         </p>
       )}
 
-      {/* 旁路：压成一行小字。它是退路，不是第三个选项 */}
-      <button
-        type="button"
-        data-testid="ai-demo"
-        className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        onClick={onDemo}
-      >
-        {t('onboarding.ai.demo')}
-      </button>
+      {/* 旁路：压成一行小字。它是退路，不是第三个选项（连接卡里没有这条） */}
+      {onDemo === undefined ? null : (
+        <button
+          type="button"
+          data-testid="ai-demo"
+          className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          onClick={onDemo}
+        >
+          {t('onboarding.ai.demo')}
+        </button>
+      )}
     </div>
   )
 }

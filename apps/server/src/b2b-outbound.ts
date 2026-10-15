@@ -1082,9 +1082,9 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         ...(card === undefined ? {} : { approval_item_id: card }),
         message:
           settings.sender_choice === 'separate_pending'
-            ? '你选了单独的发信域名，还没接上那只邮箱：照教程买好、配好，在连接页接上，再回来开。'
+            ? '你选了单独的发信域名，还没接上那只邮箱：照教程买好、配好，在卡上接上就接着发。'
             : card === undefined
-              ? '还没接邮箱：先在连接页接一只（建议用单独的发信域名那一只）。'
+              ? '还没接发信邮箱：在卡上接一只就接着发（建议用单独的发信域名那一只）。'
               : '先在卡上选用哪只邮箱发（强烈建议单独的发信域名）。',
       }
     }
@@ -1095,8 +1095,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         queued_reason: 'company_address',
         picked: 0,
         queued_tomorrow: 0,
-        message:
-          '每封开发信的页脚都要公司实体地址（法规要求），先在「设置 → 公司档案」里填上再发。',
+        message: '每封开发信的页脚都要公司实体地址（法规要求），在卡上填好就接着发。',
       }
     }
     let checked = sender

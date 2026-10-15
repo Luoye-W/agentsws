@@ -111,6 +111,7 @@ import type { SitePort } from './routes/site.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
+import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
 import type { WorkArchivePort } from './routes/work-archive.js'
 import type { WsOptions } from './routes/ws.js'
@@ -1176,6 +1177,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/economics/*` 回 not_implemented。
    */
   economics?: EconomicsPort
+  /**
+   * WP337：重启并更新前看一眼 / 暂停全部 / 没重启成放开。没装配时 `/v1/update/*` 回 not_implemented
+   * （壳当「不知道」：不弹三选一、照旧问一句就重启）。
+   */
+  updatePause?: UpdatePausePort
 }
 
 /**

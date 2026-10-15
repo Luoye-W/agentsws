@@ -55,6 +55,65 @@ export function pnpmLicensesJson(cwd = REPO_ROOT) {
 }
 
 /**
+ * WP336（决策 826）：工作台（界面）打包进去的前端库。`pnpm licenses list` 只看得到桌面壳 / 服务进程的
+ * 依赖树，工作台是先构建成静态文件再带进安装包的，它的依赖不在那棵树上。工作台构建时
+ * （`apps/workstation/vite.config.ts` 的 `bundledPackages`）按 rollup **实际输出**记下真打进去的包
+ * （名字 / 版本 / 许可证），写到 `dist/third-party-packages.json`；这里读它，在本机 pnpm 仓里找到
+ * 每个包的目录（取 LICENSE / NOTICE 原文）。
+ */
+export const WORKSTATION_MANIFEST = join(
+  REPO_ROOT,
+  'apps/workstation/dist/third-party-packages.json',
+)
+
+/** pnpm 仓里 `name@version` 那一份包目录（`.pnpm/<name 里 / 换 +>@<version>[_peer…]/node_modules/<name>`）。 */
+export function pnpmStoreDirOf(name, version, nodeModules = join(REPO_ROOT, 'node_modules')) {
+  const store = join(nodeModules, '.pnpm')
+  const prefix = `${name.replace('/', '+')}@${version}`
+  let entries
+  try {
+    entries = readdirSync(store)
+  } catch {
+    return undefined
+  }
+  for (const e of entries.filter((x) => x === prefix || x.startsWith(`${prefix}_`)).sort()) {
+    const dir = join(store, e, 'node_modules', name)
+    if (existsSync(join(dir, 'package.json'))) return dir
+  }
+  return undefined
+}
+
+/** 工作台打包清单 → 清单行（带包目录）。清单不在就报错：装包前得先构建工作台。 */
+export function workstationRows(manifest = WORKSTATION_MANIFEST, nodeModules = undefined) {
+  const list = readJson(manifest)
+  if (!Array.isArray(list))
+    throw new Error(
+      `没有工作台的打包清单 ${manifest}：先 \`pnpm --filter @agentsws/workstation build\``,
+    )
+  return list
+    .filter((p) => typeof p?.name === 'string' && !isOwnPackage(p.name))
+    .map((p) => {
+      const path = pnpmStoreDirOf(p.name, String(p.version), nodeModules)
+      return {
+        name: p.name,
+        version: String(p.version),
+        license: typeof p.license === 'string' ? p.license : 'UNKNOWN',
+        ...(path === undefined ? {} : { path }),
+      }
+    })
+}
+
+/** 两份清单并起来（同名同版本只留一行，pnpm 那份优先），按名字、版本排序。 */
+export function mergeRows(rows, more) {
+  const seen = new Set(rows.map((r) => `${r.name}@${r.version}`))
+  const out = [...rows, ...more.filter((r) => !seen.has(`${r.name}@${r.version}`))]
+  out.sort((a, b) =>
+    a.name === b.name ? a.version.localeCompare(b.version) : a.name.localeCompare(b.name),
+  )
+  return out
+}
+
+/**
  * `pnpm licenses list --json` 的形状是「许可证 → 包[]」，一个包可能有几个版本 / 几条路径。
  * 摊平成一版一条，按名字排序；去掉我们自己的包。
  */
@@ -291,13 +350,24 @@ export function fullTextSection(rows, textOf = licenseTextOf) {
   return out.join('\n')
 }
 
-export function renderNotice(rows, versions = {}, textOf = licenseTextOf, natives = undefined) {
+export function renderNotice(
+  rows,
+  versions = {},
+  textOf = licenseTextOf,
+  natives = undefined,
+  workstation = undefined,
+) {
   const head = [
     'Agents 工坊 · 第三方软件许可说明（Third-party notices）',
     '',
     'Agents 工坊本身按 Apache-2.0 开源（见 https://github.com/Luoye-W/agentsws 的 LICENSE）。',
     '这个安装包里还带着下面这些别人写的开源软件，它们各自的许可证原样列在这里。',
     `共 ${new Set(rows.map((r) => r.name)).size} 个 npm 包（${rows.length} 个版本），另有下面第一节列的几项。`,
+    ...(workstation === undefined
+      ? []
+      : [
+          `其中工作台（界面）打包进去的前端库 ${new Set(workstation.map((r) => r.name)).size} 个（按工作台构建时实际打进去的算）。`,
+        ]),
     '',
     '',
   ].join('\n')
@@ -306,12 +376,15 @@ export function renderNotice(rows, versions = {}, textOf = licenseTextOf, native
 
 /** 生成并写盘；回写了多少条、有没有 libvips（打包日志里要看得见）。 */
 export function writeNotice(outFile, options = {}) {
-  const rows = flattenLicenses(options.json ?? pnpmLicensesJson())
+  // WP336（决策 826）：桌面壳 / 服务进程那棵树 + 工作台实际打包进去的前端库
+  const workstation = options.workstation ?? workstationRows()
+  const rows = mergeRows(flattenLicenses(options.json ?? pnpmLicensesJson()), workstation)
   const text = renderNotice(
     rows,
     options.versions ?? bundledVersions(),
     licenseTextOf,
     options.natives,
+    workstation,
   )
   mkdirSync(dirname(outFile), { recursive: true })
   writeFileSync(outFile, text, 'utf8')
@@ -319,6 +392,7 @@ export function writeNotice(outFile, options = {}) {
     file: outFile,
     packages: new Set(rows.map((r) => r.name)).size,
     libvips: rows.filter((r) => r.name.startsWith('@img/sharp-libvips-')).map((r) => r.name),
+    workstation: new Set(workstation.map((r) => r.name)).size,
     uncovered: options.natives === undefined ? [] : uncoveredNatives(options.natives, rows),
     bytes: Buffer.byteLength(text, 'utf8'),
   }
@@ -328,6 +402,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const out = resolve(process.argv[2] ?? join(DESKTOP_ROOT, 'release', NOTICE_FILE))
   const r = writeNotice(out)
   process.stdout.write(
-    `${r.file}：${r.packages} 个包，${(r.bytes / 1024).toFixed(0)} KB；libvips：${r.libvips.join(', ') || '无'}\n`,
+    `${r.file}：${r.packages} 个包（工作台 ${r.workstation} 个），${(r.bytes / 1024).toFixed(0)} KB；libvips：${r.libvips.join(', ') || '无'}\n`,
   )
 }

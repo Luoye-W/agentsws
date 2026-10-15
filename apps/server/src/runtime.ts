@@ -58,6 +58,7 @@ import {
   cancelReasonOf,
   cleanNextSuggestion,
   createRunWatchdog,
+  GENUI_DISPLAY_RULE,
   type MatterLiveRun,
   NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
@@ -119,6 +120,7 @@ import {
   REPORT_TOOL_NAMES,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
+  SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
@@ -135,12 +137,14 @@ import {
   blockedByTool,
   blockedLine,
   blockReasonOf,
+  DEEPSEEK_ACCOUNT_NEED,
+  DEEPSEEK_ACCOUNT_RUN_PROVIDER,
   RunBlockLog,
   setupNeedOf,
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
-import { PartialRunLog, stoppedLine } from './run-stop.js'
+import { PartialRunLog, pausedForUpdateLine, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
 /**
@@ -186,6 +190,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...RECORD_SINK_TOOL_NAMES,
     // WP331：报告积木——查巡查 / 查发出记录只读本机库；立即巡查读外部（只读）；发布只进本岗位报表区
     ...REPORT_TOOL_NAMES,
+    // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
+    ...SETUP_REQUEST_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -303,6 +309,10 @@ export interface RuntimeOptions {
       block: MatterRunBlock
       needs: ConnectNeed[]
       targets: string[]
+      /** WP334：AI 要卡时给的那一句为什么（没有就用默认那句）。 */
+      why?: string
+      /** WP334：AI 给的配置卡建议值（按设置目标）。 */
+      suggestions?: Record<string, Record<string, string>>
     }): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
   }
   /** seed 化的随机（运行时的确定性）；不给按 `random` 起一个 */
@@ -435,6 +445,12 @@ export interface RuntimeOptions {
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
+  /**
+   * WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具 `request_setup`（`setup-request-tool.ts` 建的那一份）。
+   * **所有职责都有**；工具只回结构化缺项，卡由这一轮收尾时的 `setupCards.onRunBlocked` 出（同一缺项只一张）。
+   * 不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  setupRequestTool?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -630,6 +646,9 @@ export interface ActiveRunView {
   title: string
   /** 这次运行绑定的模型来源（开跑时的 `purpose: 'run'` 那一条）。 */
   model: ModelRef
+  /** WP337：谁起的这一次（更新重启后按同一个人、同一条分配接着做）。 */
+  person_id?: PersonId
+  assignment_id?: string
 }
 
 export interface RuntimeAssembly {
@@ -641,6 +660,16 @@ export interface RuntimeAssembly {
    * 等它收尾（最多 `waitMs`，缺省 10 秒）。找不到（已经跑完）回 `false`。
    */
   stopRun(run_id: string, reason: string, waitMs?: number): Promise<boolean>
+  /**
+   * WP337：因为「重启并更新」**在安全点停下**一次运行：已经说的话、取回的数据照常作为部分结果挂上，
+   * 时间线那一句换成「因更新暂停」（新版起来后由 `update-pause` 接着做）。找不到回 `false`。
+   */
+  pauseRun?(run_id: string, waitMs?: number): Promise<boolean>
+  /**
+   * WP334（决策 726）：给一次正在跑的运行记一样「缺的、能就地连的」——它收尾时照 WP324 出连接卡
+   * （DeepSeek 账号登录过期、停掉正在用它跑的事之前调）。找不到（已经跑完）就什么都不做。
+   */
+  noteNeed?(run_id: string, need: ConnectNeed): void
   /**
    * WP264：这件事上正在跑的那一次（事项页「正在做…」+ 实时步骤）。没在跑回 `undefined`。
    * 好几次同时在跑时给最近开跑的那一次。
@@ -713,6 +742,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     string,
     { view: ActiveRunView; controller: AbortController; settled: Promise<void> }
   >()
+  /** WP337：因更新暂停的那几次（停下那一句换成「因更新暂停」）。 */
+  const pausing = new Set<string>()
 
   /**
    * WP162：每次运行解析技能用的「我是谁」（带岗位层）。`read_skill` 按它叠六层——
@@ -1123,6 +1154,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const automation = options.automation
     const sinkTools = options.recordSinkTools
     const reportTools = options.reportTools?.execute
+    const setupRequest = options.setupRequestTool
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1151,7 +1183,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       readSkill === undefined &&
       automation === undefined &&
       sinkTools === undefined &&
-      reportTools === undefined
+      reportTools === undefined &&
+      setupRequest === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1201,6 +1234,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
         return reportTools(call)
       }
+      // WP334：AI 自己要卡（名字与别处不重名）
+      if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
+        return setupRequest(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1242,6 +1279,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
+    if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
+      return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1677,6 +1716,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                 !WATCH_TOOL_NAMES.includes(n) ||
                 options.reportTools?.watchRoles.has(config.role_id) === true,
             )),
+        // WP334：AI 自己要连接卡 / 配置卡（所有职责）
+        ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
@@ -1814,8 +1855,23 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一次：只查只答，末尾附 ```answer
            * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
            */
+          /*
+           * WP336（Luoye 10-15 扩大范围）：**所有**事项 / 线程运行都带一段精简的 ```dsh-ui 写法（回给人看的正文
+           * 里可以放组件，对外内容里不用）；当场问答那次换成它自己那段完整的。三个运行时拿到同一份字节。
+           */
           ...(input.matter.ask?.quick === true
-            ? [{ id: 'quick_answer', name: '当场问答', order: 28, text: QUICK_ANSWER_RULE }]
+            ? []
+            : [{ id: 'genui_display', name: '回话里的组件', order: 28, text: GENUI_DISPLAY_RULE }]),
+          ...(input.matter.ask?.quick === true
+            ? [
+                {
+                  id: 'quick_answer',
+                  name: '当场问答',
+                  order: 28,
+                  // WP336：教 ```dsh-ui（dsh-genui 写法；决策 823 不留 ```answer 回退）
+                  text: QUICK_ANSWER_RULE,
+                },
+              ]
             : []),
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
           ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),
@@ -1927,6 +1983,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id,
         matter_id: input.matter.id,
         title: input.matter.title,
+        person_id: input.actor.person_id,
+        assignment_id: input.actor.assignment_id,
         // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
         model: useDirect()
           ? (options.runModelRef?.() ?? request.runtime.model)
@@ -2002,7 +2060,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             outcome === 'completed'
               ? '跑完了'
               : outcome === 'stopped'
-                ? '这次被停下了'
+                ? pausing.has(run_id)
+                  ? '因更新暂停'
+                  : '这次被停下了'
                 : '这次没跑成',
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
@@ -2026,6 +2086,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           block: raw,
           needs: runBlocks.connectNeeds(),
           targets: runBlocks.setupTargets(),
+          ...runBlocks.asked(),
         })
       } catch {
         // 出卡没成：照老样子只记一句（人仍能在第三栏 / 连接页补上）
@@ -2193,7 +2254,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             : extra === ''
               ? digest
               : `${extra}\n\n${digest}`
-        const line = stoppedLine(stoppedReason, limits, partial !== undefined)
+        const line = pausing.has(run_id)
+          ? pausedForUpdateLine(partial !== undefined)
+          : stoppedLine(stoppedReason, limits, partial !== undefined)
         work?.appendEvent(input.matter.id, {
           kind: 'status',
           text: line,
@@ -2231,6 +2294,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        */
       if (result.status === 'failed') {
         const error = failure ?? { code: 'internal', message: result.summary, retryable: true }
+        /*
+         * WP334（决策 726）：用 DeepSeek 账号跑、账号登录过期 / 没登录（`unauthenticated`）→ 出连接卡，
+         * 卡里就地重新登录，登好按原话接着做（不再叫人去「设置 → 模型」）。
+         */
+        if (
+          error.code === 'unauthenticated' &&
+          active.get(run_id)?.view.model.provider === DEEPSEEK_ACCOUNT_RUN_PROVIDER
+        )
+          runBlocks.noteSetup('model', { kind: 'connect', need: DEEPSEEK_ACCOUNT_NEED })
         recordFailure(error)
         await recordBlocked()
         // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带
@@ -2321,6 +2393,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       watchdog.stop()
       scope = undefined
       active.delete(run_id)
+      pausing.delete(run_id)
       skillActors.delete(run_id)
       runWatch.delete(run_id)
       runSteps.delete(run_id)
@@ -2332,6 +2405,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   return {
     adapter,
     activeRuns: () => [...active.values()].map((r) => ({ ...r.view })),
+    noteNeed(run_id, need) {
+      runWatch.get(run_id)?.blocks.noteSetup('model', { kind: 'connect', need })
+    },
     async stopRun(run_id, reason, waitMs = 10_000) {
       const hit = active.get(run_id)
       if (hit === undefined) return false
@@ -2341,6 +2417,22 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         actor: { kind: 'system', id: 'runtime' },
         run_id,
       })
+      hit.controller.abort('user' satisfies RunCancelReason)
+      let timer: NodeJS.Timeout | undefined
+      await Promise.race([
+        hit.settled,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, waitMs)
+          timer.unref()
+        }),
+      ])
+      if (timer !== undefined) clearTimeout(timer)
+      return true
+    },
+    async pauseRun(run_id, waitMs = 10_000) {
+      const hit = active.get(run_id)
+      if (hit === undefined) return false
+      pausing.add(run_id)
       hit.controller.abort('user' satisfies RunCancelReason)
       let timer: NodeJS.Timeout | undefined
       await Promise.race([

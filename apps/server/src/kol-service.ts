@@ -902,7 +902,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         rows: [],
         reason: 'not_linked',
         message:
-          '这条渠道的开关拨到了"用 Agents 工坊的"，但这台机器还没关联 Agents 工坊账号。去"设置 → 账号与积分"关联一次，或者把开关拨回"用我的"。',
+          '这条渠道的开关拨到了"用 Agents 工坊的"，但这台机器还没关联 Agents 工坊账号。关联一次就能用，或者把开关拨回"用我的"。',
       }
     const out = await library.browse({
       channel: input.channel,
@@ -2362,7 +2362,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         return {
           ok: false,
           reason: 'not_linked',
-          message: '还没关联 Agents 工坊账号，用不了公共红人库。去"设置 → 账号与积分"关联一次。',
+          message: '还没关联 Agents 工坊账号，用不了公共红人库。关联一次就能用。',
         }
       const handle = normalizeHandle(input.handle)
       const out = await library.reveal({ public_id: `${input.channel}:${handle}` })

@@ -7,6 +7,15 @@ packages:
 # 链接照着 package.json 建目录，于是插件在自己的 node_modules 里找不到
 # `preact/jsx-runtime`，一 import 就炸。这里替上游补上那三行声明，不改代码、不放宽链接。
 packageExtensions:
+  # WP336（决策 810–812）：dsh-genui 只用它的 `/embed` 渲染层。它把 `dsh-client-ui-primitives`
+  # 写成**必装** peer，但 /embed 只借它的 CodeBlock / DiffBlock / JsonTree（代码 / 差异 / JSON 三种，
+  # 白名单里全关），工作台在打包时换成本地的空壳（vite.config.ts）。这里把它标成可选：
+  # 不然 pnpm 会去 registry 另装一份（`>=0.2.0-rc.1 <0.3.0-0` 与树里的 0.2.1-alpha.2
+  # 按预发布规则不相交，同 WP92 的坑），连带 shiki / simple-icons 一大摞。
+  '@changfenhuang/dsh-genui':
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-client-ui-primitives':
+        optional: true
   '@schedule-x/drag-and-drop':
     peerDependencies:
       preact: '^10.19.2'
@@ -40,6 +49,9 @@ overrides:
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-tools': '0.2.1-alpha.2'
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-llm': '0.2.1-alpha.2'
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-client-ui-primitives': '0.2.1-alpha.2'
+  # WP336：dsh-genui 把 react 写进了 dependencies（^18.3.1），不压就会给它单装一份 React 18，
+  # 同一页上两份 React，hooks 一调就炸。压到工作台用的那一份 19（它的 peer 本来就写了 ^19）。
+  '@changfenhuang/dsh-genui>react': '^19.0.0'
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用

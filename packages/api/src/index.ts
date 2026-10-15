@@ -773,6 +773,16 @@ export {
   type StorageView,
   storageRoutes,
 } from './routes/storage.js'
+// WP337：重启并更新前看一眼 / 暂停全部 / 放开
+export {
+  type UpdateBusyCounts,
+  type UpdateBusyItem,
+  type UpdateBusyKind,
+  type UpdatePausePort,
+  type UpdateReadinessView,
+  type UpdateResumeSummary,
+  updatePauseRoutes,
+} from './routes/update-pause.js'
 export {
   type MatterListFilter,
   type TodoListFilter,

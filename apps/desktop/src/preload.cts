@@ -9,6 +9,8 @@ import type {
   BridgeInfo,
   DesktopBridge,
   DesktopInstallOutcome,
+  DesktopRestartChoice,
+  DesktopRestartReadiness,
   DesktopUpdateStatus,
   NotifyInput,
   SceneOpenOutcome,
@@ -27,6 +29,9 @@ const CHANNELS = {
   updateChanged: 'agentsws:update-changed',
   updateDownload: 'agentsws:update-download',
   updateInstall: 'agentsws:update-install',
+  updateReadiness: 'agentsws:update-readiness',
+  updateRestart: 'agentsws:update-restart',
+  updateCancelWait: 'agentsws:update-cancel-wait',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -63,6 +68,16 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(CHANNELS.updateDownload) as Promise<DesktopUpdateStatus>,
     install: (): Promise<DesktopInstallOutcome> =>
       ipcRenderer.invoke(CHANNELS.updateInstall) as Promise<DesktopInstallOutcome>,
+    // WP337：有任务在做时页面上三选一
+    readiness: (): Promise<DesktopRestartReadiness> =>
+      ipcRenderer.invoke(CHANNELS.updateReadiness) as Promise<DesktopRestartReadiness>,
+    restart: (choice: DesktopRestartChoice): Promise<DesktopInstallOutcome> =>
+      ipcRenderer.invoke(
+        CHANNELS.updateRestart,
+        choice === 'idle' ? 'idle' : 'now',
+      ) as Promise<DesktopInstallOutcome>,
+    cancelWait: (): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.updateCancelWait) as Promise<boolean>,
   },
 }
 
