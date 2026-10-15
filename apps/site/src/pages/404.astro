@@ -1,5 +1,5 @@
 ---
-/** 404：一页中英两句（静态托管只有一个 404.html，不分语言）。 */
+/** 404：一页中英两句（静态托管只有一个 404.html，不分语言）。path 给 "/"：语言切换与页脚去首页（WP344：原来指向不存在的 /404/、/en/404/）。 */
 import Icon from '../components/Icon.astro'
 import Mark from '../components/Mark.astro'
 import { PAGES } from '../i18n/pages.js'
@@ -9,7 +9,7 @@ import '../styles/pages.css'
 const zh = PAGES.zh.notFound
 const en = PAGES.en.notFound
 ---
-<Base lang="zh" path="/404/" title={zh.meta.title} description={zh.meta.description} og="home" noindex>
+<Base lang="zh" path="/" title={zh.meta.title} description={zh.meta.description} og="home" noindex>
   <section class="nf">
     <div class="wrap">
       <Mark id="nf" pose="split" />

@@ -1,11 +1,14 @@
 ---
 /**
- * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 出卡审批 → 本地优先
- * → 别处收费这里免费 → 底座 → 价格 → 公开地做 → 常见问题 → 收尾。
+ * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 怎么干活（WP344）→ 出卡审批
+ * → 本地优先 → 别处收费这里免费 → 底座 → 价格 → 公开地做 → 常见问题 → 收尾。
+ * 工作台截图由 `scripts/app-shots.mjs` 从演示世界重拍（WP344）。
  */
 import { Image } from 'astro:assets'
-import homeShot from '../../../../docs/assets/walkthrough/10-home.png'
-import darkShot from '../../../../docs/assets/walkthrough/48b-dark-kol.png'
+import answerDark from '../assets/app/answer-dark.png'
+import answerLight from '../assets/app/answer-light.png'
+import darkShot from '../assets/app/home-dark.png'
+import homeShot from '../assets/app/home-light.png'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import Mark from '../components/Mark.astro'
@@ -27,7 +30,7 @@ const { lang } = Astro.props
 const t = HOME[lang]
 const roles = ROLES[lang]
 const p = (x: string) => localePath(x, lang)
-const logs = loadChangelog(lang).slice(0, 3)
+const logs = loadChangelog(lang).slice(0, 6)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
 // WP218：「下载」按钮——Windows 访客直接拿最新安装包（site.ts 按系统换 href），其余去下载页
 const winUrl = directWindowsUrl((await buildDownloads()).manifest)
@@ -162,7 +165,31 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec" id="cards" aria-labelledby="cards-h">
+  <section class="sec" id="how" aria-labelledby="how-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.how.eyebrow}</div>
+      <h2 class="h2" id="how-h">{t.how.title}</h2>
+      <p class="sub">{t.how.sub}</p>
+      <ul class="how">
+        {t.how.items.map((it) => (
+          <li class="promise">
+            <div class="role-ic"><Icon name={it.icon as 'globe'} /></div>
+            <h3>{it.h}</h3>
+            <p>{it.p}</p>
+          </li>
+        ))}
+      </ul>
+      <div class="frame how-shot">
+        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.how.frameBar}</span></div>
+        <div class="frame-img">
+          <Image class="only-light" src={answerLight} alt={t.how.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 960px" loading="lazy" />
+          <Image class="only-dark" src={answerDark} alt={t.how.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 960px" loading="lazy" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="cards" aria-labelledby="cards-h">
     <div class="wrap center">
       <div class="eyebrow">{t.cards.eyebrow}</div>
       <h2 class="h2" id="cards-h">{t.cards.title}</h2>
@@ -178,7 +205,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
             <div class="dcard-h"><span class:list={['chip', c.tone]}>{c.chip}</span><span class:list={['chip', i === 1 ? 'plain end' : 'warn']}>{c.due}</span></div>
             <div class="dcard-b">
               <h4>{c.title}</h4>
-              {'amount' in c ? <div class="big-num">{c.amount}</div> : <div class="quote">{'body' in c ? c.body : ''}</div>}
+              <div class="quote">{c.body}</div>
             </div>
             <div class="dcard-f" aria-hidden="true">{c.actions.map((a) => <span>{a}</span>)}</div>
           </div>
@@ -188,7 +215,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec sec-alt" id="local" aria-labelledby="local-h">
+  <section class="sec" id="local" aria-labelledby="local-h">
     <div class="wrap local">
       <div>
         <div class="eyebrow">{t.local.eyebrow}</div>
@@ -207,7 +234,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec" id="free" aria-labelledby="free-h">
+  <section class="sec sec-alt" id="free" aria-labelledby="free-h">
     <div class="wrap center">
       <div class="eyebrow">{t.free.eyebrow}</div>
       <h2 class="h2" id="free-h">{t.free.title}</h2>
