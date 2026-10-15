@@ -18,6 +18,7 @@ import { decide } from '@/lib/api'
 import { RAIL_KEY } from '@/lib/work-archive'
 import { ConnectNeedsBody, useConnectContext } from './connect-card'
 import { SetupFieldsBody } from './setup-card'
+import { SetupPlanBody } from './setup-plan'
 
 /** 这张卡是不是连接卡 / 配置卡（主按钮在卡身里）。 */
 export const isSetupCard = (card: Pick<DeckCard, 'detail'>): boolean =>
@@ -86,6 +87,22 @@ function SetupRequestBody({
   const go = useDecideSetup(card)
   if (!card.available_actions.includes('approve'))
     return <p className="mt-2.5 text-sm text-ws-body">{payload.why}</p>
+  // WP348（决策 887）：方案卡——「就这样」原样存，「改一下」才展开表单
+  if (payload.mode === 'plan' || payload.mode === 'change')
+    return (
+      <div className="mt-2.5" data-testid="deck-layout-setup">
+        <SetupPlanBody
+          payload={payload}
+          saving={go.isPending}
+          onAccept={() => {
+            go.mutate(undefined)
+          }}
+          onSave={(values) => {
+            go.mutate({ ...payload, values })
+          }}
+        />
+      </div>
+    )
   return (
     <div className="mt-2.5" data-testid="deck-layout-setup">
       <SetupFieldsBody

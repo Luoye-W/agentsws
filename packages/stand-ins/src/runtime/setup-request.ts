@@ -26,7 +26,11 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
       '或 model（AI 模型）、deepseek_account（DeepSeek 账号）、workshop_account（Agents 工坊账号）、' +
       'im:wecom（企业微信）、im:wechat（微信）、im:feishu（飞书）、im:dingtalk（钉钉）、extension（浏览器插件）。' +
       'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）等。' +
-      '两个给一个。绝不要在任何参数里写密码、密钥、令牌——那些用户在卡上的本机表单里自己填。',
+      '两个给一个。要设的：卡上是「我打算这样设」的方案——工坊出卡前会自己先查一遍（档案、已连的账号、联网），' +
+      '你在 suggestions 里给的值（每个带一句 why）会压过它查到的，用户点「就这样」就存。' +
+      '已经设好的也能改：setting + suggestions 给新值，出一张「我打算改成这样」的卡（现值 → 新值），用户确认才生效。' +
+      '要人选的账号（如品牌号、广告账户）不要猜，留给卡上标「需要你填」。' +
+      '绝不要在任何参数里写密码、密钥、令牌——那些用户在卡上的本机表单里自己填。',
     input_schema: {
       type: 'object',
       properties: {
@@ -41,6 +45,7 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
             properties: {
               key: { type: 'string', description: '设置项的键' },
               value: { type: 'string', description: '建议值' },
+              why: { type: 'string', description: '一句理由（给用户看，20 个字以内）' },
             },
             required: ['key', 'value'],
           },
@@ -71,6 +76,10 @@ export interface SetupRequestData {
   setup_why?: string
   /** 配置卡的建议值（运行时出卡用；只认登记过的格子）。 */
   suggestions?: Record<string, string>
+  /** WP348：每个建议值的一句理由（按格子）。 */
+  suggestion_why?: Record<string, string>
+  /** WP348：目标已经设好了，这是「改成这样」（出改设置方案卡，人确认才生效）。 */
+  change?: boolean
   /** 给模型的那一句（照实转告用户）。 */
   message: string
 }
@@ -92,7 +101,18 @@ const CONNECT_ASK =
 const SETTING_WORDS: readonly [RegExp, string][] = [
   [/公司(?:实体)?地址/, 'company.address'],
   [/公司档案|品牌档案/, 'company.profile'],
+  // WP348：Reddit 巡查（方案卡演示）
+  [/reddit\s*巡查/i, 'reddit.watch'],
 ]
+/** WP348：「把 X 的〈格子〉改成 …」里那一格（stub 剧本：已设好再改的演示）。 */
+const CHANGE_FIELDS: readonly [RegExp, string][] = [
+  [/重点版块/, 'watch_subreddits'],
+  [/自家版块/, 'own_subreddits'],
+  [/告警词/, 'alert_words'],
+  [/标签词/, 'tag_words'],
+  [/关键词/, 'keywords'],
+]
+const CHANGE_ASK = /改成|改为/
 const SETTING_ASK = /(?:先|得|要|帮我|请)\s*(?:填|设|补)(?:好|上|一下)?/
 
 /**
@@ -112,6 +132,19 @@ export function setupRequestBranch(
         input: { connect: hit[1], why: '这件事要先连上它才做得下去。' },
       }
   }
+  // WP348：「把 Reddit 巡查的重点版块改成 …」→ 带新值要卡（已设好就是「我打算改成这样」）
+  const change = CHANGE_ASK.test(text) ? SETTING_WORDS.find(([re]) => re.test(text)) : undefined
+  const field = change === undefined ? undefined : CHANGE_FIELDS.find(([re]) => re.test(text))
+  const value = /(?:改成|改为)\s*[「"“]?([^」"”。\n]+)/.exec(text)?.[1]?.trim()
+  if (change !== undefined && field !== undefined && value !== undefined && value !== '')
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: change[1],
+        why: '按你说的改。',
+        suggestions: [{ key: field[1], value, why: '你刚才说的' }],
+      },
+    }
   if (SETTING_ASK.test(text)) {
     const hit = SETTING_WORDS.find(([re]) => re.test(text))
     if (hit !== undefined)
@@ -140,7 +173,9 @@ export function renderSetupRequestAnswer(input: {
   if (d.already === true) return d.message
   if (d.needs_connection !== undefined)
     return `要先连上${d.connection_name ?? d.needs_connection}：在下面这张卡上连好，我就接着做。`
+  if (d.needs_setup !== undefined && d.change === true)
+    return `${d.setup_name ?? d.needs_setup}我打算这样改：在下面这张卡上点头就生效。`
   if (d.needs_setup !== undefined)
-    return `要先设好${d.setup_name ?? d.needs_setup}：在下面这张卡上填好，我就接着做。`
+    return `${d.setup_name ?? d.needs_setup}我先定了个方案：在下面这张卡上点头，我就接着做。`
   return d.message
 }

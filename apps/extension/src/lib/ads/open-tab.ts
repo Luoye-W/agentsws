@@ -6,7 +6,13 @@
  * 插件有这几个站点的权限，`tabs.query` 就看得见它们的网址。
  */
 
-import { type ActionJob, hostMatches, hostOfUrl } from '@agentsws/browser-action'
+import {
+  type ActionJob,
+  type AdsAccountHint,
+  adsAccountHintOfUrl,
+  hostMatches,
+  hostOfUrl,
+} from '@agentsws/browser-action'
 import { chromeTabDriver } from './chrome-driver'
 import type { TabDriver } from './tab-page'
 
@@ -36,4 +42,19 @@ async function openNewTab(job: ActionJob): Promise<TabDriver | { why: string }> 
   const made = await chrome.tabs.create({ url, active: true })
   if (made.id === undefined) return { why: '没能打开要操作的那个标签页。' }
   return chromeTabDriver(made.id)
+}
+
+/**
+ * WP348：开着的广告后台标签页里认出的账户（只看网址，不读页面；有站点权限才看得见网址）。
+ * 当前这一页排前面。领活时随手报给本机服务，配置卡「广告账户」的方案就用它。
+ */
+export async function seenAdsAccounts(): Promise<AdsAccountHint[]> {
+  const tabs = await chrome.tabs.query({})
+  const out: AdsAccountHint[] = []
+  for (const t of [...tabs].sort((a, b) => Number(b.active === true) - Number(a.active === true))) {
+    const hint = adsAccountHintOfUrl(t.url ?? '')
+    if (hint !== undefined && !out.some((h) => h.platform === hint.platform && h.id === hint.id))
+      out.push(hint)
+  }
+  return out.slice(0, 6)
 }

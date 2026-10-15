@@ -20,6 +20,7 @@ import {
   ActionQueue,
   type ActionResult,
   ADS_CONSENT_TEXT_VERSION,
+  type AdsAccountHint,
   type AdsActionSettings,
   type AdsConsentRecord,
   base64ToBytes,
@@ -55,6 +56,14 @@ interface StateFile {
   downloads: Record<string, ActionDownloadInput[]>
   /** WP329：插件最近一次带着这家来领活是什么时候（毫秒）。判「插件连着 Reddit 没有」用。 */
   seen?: Partial<Record<ActionPlatform, number>>
+  /** WP348：插件在开着的广告后台网址里认出的账户（新的在前，每家最多 5 个）。 */
+  seen_accounts?: SeenAdsAccount[]
+}
+
+/** WP348：插件在广告后台里看到过的一个账户。 */
+export interface SeenAdsAccount extends AdsAccountHint {
+  /** 最近一次看到（毫秒）。 */
+  at: number
 }
 
 /** 上层要知道的几件事（WP316 接：作废了重出卡、做完了记账本、截图挂到账本上）。 */
@@ -85,6 +94,8 @@ export interface AdsActionsService {
   next(
     platforms: ActionPlatform[],
     wait_ms: number,
+    /** WP348：插件在开着的广告后台网址里认出的账户（顺手记下，配置卡方案用）。 */
+    extra?: { seen_accounts?: AdsAccountHint[] },
   ): Promise<{
     job?: ActionJob
     retry_after_ms: number
@@ -129,6 +140,8 @@ export interface AdsActionsService {
   sweep(): Promise<void>
   /** WP329：插件最近一次带着这家来领活的时间（毫秒；没来过 = undefined）。 */
   lastSeen(platform: ActionPlatform): number | undefined
+  /** WP348：插件在广告后台里看到过的账户（新的在前）。 */
+  seenAccounts(): SeenAdsAccount[]
   downloads(id: string): ActionDownloadInput[]
   /** WP316：读回一张截图（变更账本 / 再确认卡上看；过了 180 天就没了）。 */
   evidenceImage(id: string): Promise<Uint8Array | undefined>
@@ -188,6 +201,7 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
   const consent: Partial<Record<ActionPlatform, AdsConsentRecord>> = { ...(loaded?.consent ?? {}) }
   const downloads: Record<string, ActionDownloadInput[]> = { ...(loaded?.downloads ?? {}) }
   const seen: Partial<Record<ActionPlatform, number>> = { ...(loaded?.seen ?? {}) }
+  let seenAccounts: SeenAdsAccount[] = [...(loaded?.seen_accounts ?? [])]
   /** 没有目录时上传表放内存里。 */
   const sheetsInMemory = new Map<string, Uint8Array>()
   let waiters: (() => void)[] = []
@@ -202,6 +216,7 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
       consent,
       downloads,
       seen,
+      ...(seenAccounts.length === 0 ? {} : { seen_accounts: seenAccounts }),
     }
     mkdirSync(dir, { recursive: true })
     const tmp = `${stateFile}.tmp`
@@ -287,10 +302,26 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
   return {
     workspace_id: options.workspace_id,
 
-    async next(platforms, wait_ms) {
+    async next(platforms, wait_ms, more) {
       const now = options.nowMs()
       // 一分钟内只落一次盘（插件每分钟来一次）
       let touched = false
+      // WP348：插件认出的账户记下（同一个只更新时间；每家最多 5 个，新的在前）
+      for (const h of more?.seen_accounts ?? []) {
+        const old = seenAccounts.find((a) => a.platform === h.platform && a.id === h.id)
+        if (old !== undefined && old.at > now - 60_000) continue
+        seenAccounts = [
+          { ...h, at: now },
+          ...seenAccounts.filter((a) => !(a.platform === h.platform && a.id === h.id)),
+        ]
+        const per = new Map<string, number>()
+        seenAccounts = seenAccounts.filter((a) => {
+          const n = (per.get(a.platform) ?? 0) + 1
+          per.set(a.platform, n)
+          return n <= 5
+        })
+        touched = true
+      }
       for (const p of platforms)
         if ((seen[p] ?? 0) < now - 60_000) {
           seen[p] = now
@@ -452,6 +483,10 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
 
     lastSeen(platform) {
       return seen[platform]
+    },
+
+    seenAccounts() {
+      return seenAccounts.map((a) => ({ ...a }))
     },
 
     evidenceImage: (id) => options.evidence.read(id),

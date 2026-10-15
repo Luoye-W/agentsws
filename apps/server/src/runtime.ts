@@ -321,6 +321,10 @@ export interface RuntimeOptions {
       why?: string
       /** WP334：AI 给的配置卡建议值（按设置目标）。 */
       suggestions?: Record<string, Record<string, string>>
+      /** WP348：每个建议值的一句理由（按设置目标、按格子）。 */
+      reasons?: Record<string, Record<string, string>>
+      /** WP348：这几个目标已经设好了，AI 要的是「改成这样」。 */
+      changes?: string[]
     }): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
   }
   /** seed 化的随机（运行时的确定性）；不给按 `random` 起一个 */

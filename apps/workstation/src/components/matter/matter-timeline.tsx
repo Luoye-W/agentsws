@@ -952,7 +952,7 @@ export function InlineCard({
         >
           <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
             <Plug aria-hidden className="size-3.5" />
-            {t(card.kind === 'setup_request' ? 'setup.card.head.setup' : 'setup.card.head.connect')}
+            {t(setupHeadKey(card))}
           </div>
           <div className="px-3.5 pt-2 pb-3">
             <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
@@ -1063,4 +1063,15 @@ export function InlineCard({
       </div>
     </AiShell>
   )
+}
+
+/** WP324 / WP348：连接卡 / 配置卡头上那一句（方案卡说「你点头就接着做 / 才生效」）。 */
+function setupHeadKey(card: DeckCard): string {
+  if (card.kind !== 'setup_request') return 'setup.card.head.connect'
+  const mode = (card.detail.payload as { mode?: unknown } | undefined)?.mode
+  return mode === 'change'
+    ? 'setup.plan.head_change'
+    : mode === 'plan'
+      ? 'setup.plan.head'
+      : 'setup.card.head.setup'
 }

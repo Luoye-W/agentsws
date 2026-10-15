@@ -25,10 +25,11 @@ import type {
   ActionProgressResponse,
   ActionResultInput,
   ActionSheetResponse,
+  AdsAccountHint,
   AdsActionSettings,
   GuardedZoneId,
 } from '@agentsws/browser-action'
-import { isGuardedZoneId } from '@agentsws/browser-action'
+import { isGuardedZoneId, parseAdsAccountHints } from '@agentsws/browser-action'
 import type { MaybePromise, WorkspaceId } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -51,7 +52,12 @@ export interface ExtensionActionsPort {
   /* ── 插件 ─────────────────────────────────────────────────────────── */
   next(
     session: ExtensionSession,
-    input: { platforms: ActionPlatform[]; wait_ms: number },
+    input: {
+      platforms: ActionPlatform[]
+      wait_ms: number
+      /** WP348：插件在开着的广告后台网址里认出的账户（配置卡方案用；可选）。 */
+      seen_accounts?: AdsAccountHint[]
+    },
   ): Promise<ActionNextResponse>
   sheet(session: ExtensionSession, id: string): MaybePromise<ActionSheetResponse | undefined>
   progress(
@@ -233,6 +239,12 @@ export function extensionActionRoutes(): Route[] {
             description: 'google_ads,meta_ads,reddit',
           },
           { name: 'wait', in: 'query', description: '最多挂几秒（0–25）' },
+          {
+            name: 'accounts',
+            in: 'query',
+            description:
+              'WP348：开着的广告后台里认出的账户（google_ads:1234567890[:ocid],meta_ads:123…；可选）',
+          },
         ],
         returns: 'ActionNextResponse',
       },
@@ -246,7 +258,14 @@ export function extensionActionRoutes(): Route[] {
           )
         return ok(
           c,
-          await portOf(deps).next(session, { platforms, wait_ms: waitMs(c.req.query('wait')) }),
+          await portOf(deps).next(session, {
+            platforms,
+            wait_ms: waitMs(c.req.query('wait')),
+            ...(() => {
+              const seen = parseAdsAccountHints(c.req.query('accounts'))
+              return seen.length === 0 ? {} : { seen_accounts: seen }
+            })(),
+          }),
         )
       },
     ),

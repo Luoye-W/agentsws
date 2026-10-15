@@ -24,10 +24,12 @@ import type {
   ActionProgressResponse,
   ActionResultInput,
   ActionSheetResponse,
+  AdsAccountHint,
   AdsActionSettings,
   RedditReadNextResponse,
   RedditReadResultInput,
 } from '@agentsws/browser-action'
+import { formatAdsAccountHints } from '@agentsws/browser-action'
 import type {
   ExtensionHello,
   ExtensionIngestResult,
@@ -154,8 +156,13 @@ export function actionsNext(
   options: LocalClientOptions,
   platforms: readonly ActionPlatform[],
   waitSeconds: number = ACTION_POLL_WAIT_S,
+  /** WP348：开着的广告后台里认出的账户（配置卡方案用；空就不带）。 */
+  seen: readonly AdsAccountHint[] = [],
 ): Promise<LocalCallResult<ActionNextResponse>> {
-  const q = `platforms=${platforms.map(encodeURIComponent).join(',')}&wait=${waitSeconds}`
+  const accounts = formatAdsAccountHints(seen)
+  const q = `platforms=${platforms.map(encodeURIComponent).join(',')}&wait=${waitSeconds}${
+    accounts === '' ? '' : `&accounts=${encodeURIComponent(accounts)}`
+  }`
   return call<ActionNextResponse>(
     {
       ...options,

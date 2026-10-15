@@ -17,7 +17,7 @@ import { defineBackground } from 'wxt/utils/define-background'
 import { adsPanelStatus, recordAdsConsent } from '@/lib/ads/broker'
 import { noteActionClick } from '@/lib/ads/capture-grant'
 import type { RunControl } from '@/lib/ads/executor'
-import { openAdsTab } from '@/lib/ads/open-tab'
+import { openAdsTab, seenAdsAccounts } from '@/lib/ads/open-tab'
 import { chromePermissions } from '@/lib/ads/permissions'
 import { pollAdsOnce } from '@/lib/ads/poller'
 import type { BrokerDeps } from '@/lib/broker'
@@ -54,6 +54,8 @@ export default defineBackground(() => {
       store: deps.store,
       perms,
       openTab: openAdsTab,
+      // WP348：开着的广告后台里认出的账户，领活时顺手报上去（配置卡方案用）
+      seenAccounts: seenAdsAccounts,
       control,
       now: deps.now,
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),

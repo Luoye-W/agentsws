@@ -106,7 +106,7 @@ export function SetupFieldsBody({
       })}
       <div>
         <Button type="submit" size="sm" disabled={saving} data-testid="setup-fields-save">
-          {t('verb.setup_request.approve')}
+          {t('setup.plan.save')}
         </Button>
       </div>
     </form>

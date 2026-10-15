@@ -22,6 +22,27 @@ import { CLOUD_STAND_IN_BASE_URL } from './cloud-stand-in.js'
 export async function demoWebSearch(
   query: string,
 ): Promise<{ sources: { url: string; title: string; snippet: string }[] }> {
+  // WP348：配置卡出卡前搜 Reddit 上的相关版块（演示数据）
+  if (/site:reddit\.com/i.test(query))
+    return {
+      sources: [
+        {
+          url: 'https://www.reddit.com/r/UsbCHardware/',
+          title: 'r/UsbCHardware（演示）',
+          snippet: '演示数据：65W 氮化镓充电器横评，r/UsbCHardware 讨论最多。',
+        },
+        {
+          url: 'https://www.reddit.com/r/UsbCHardware/comments/demo1/',
+          title: 'Best GaN charger 2026? : r/UsbCHardware（演示）',
+          snippet: '演示数据：大家在比 Anker 与 NordVolt。',
+        },
+        {
+          url: 'https://www.reddit.com/r/anker/comments/demo2/',
+          title: 'Anker 735 vs NordVolt : r/anker（演示）',
+          snippet: '演示数据：也有人在 r/gadgets 问过。',
+        },
+      ],
+    }
   return {
     sources: [
       {

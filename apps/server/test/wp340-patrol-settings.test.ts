@@ -17,6 +17,7 @@ import { formatSubList, normalizeSettings, parseSubList } from '../src/reddit-wa
 import { parseSuggestion } from '../src/reddit-watch/suggest.js'
 import { termHits } from '../src/reddit-watch/terms.js'
 import { SetupCardError } from '../src/setup-cards.js'
+import { createResearchKit, mergePlan } from '../src/setup-research.js'
 
 const WED_10 = '2026-10-14T02:00:00.000Z' // 东八区周三 10:00
 const sec = (iso: string): number => Date.parse(iso) / 1000
@@ -388,22 +389,31 @@ describe('配置卡默认带 AI 建议值', () => {
       brandBrief: () => ({ name: 'INMO', one_liner: 'AR translation glasses', markets: ['US'] }),
     })
     const target = s.watch.setupTarget()
-    const fields = await target.fields()
+    // WP348：AI 的方案由「怎么查」在出卡前给（fields() 只给已存的与事实）
+    const plan = async () =>
+      mergePlan(
+        await target.fields(),
+        (await target.research?.(createResearchKit({ profile: () => ({}) }).kit)) ?? {},
+        { ...(target.noGuess === undefined ? {} : { noGuess: target.noGuess }) },
+      )
+    const fields = await plan()
     const by = (k: string) => fields.find((f) => f.key === k)
     expect(by('own_subreddits')).toMatchObject({
       suggested: 'inmoxr',
-      suggested_why: 'AI 建议：品牌名 + xr',
+      suggested_why: '品牌名 + xr',
     })
     expect(by('watch_subreddits')?.suggested).toBe('SmartGlasses, Xreal（每周）')
     expect(by('keywords')?.suggested).toBe('INMO, AI glasses')
     expect(by('alert_words')).toMatchObject({
       suggested: 'recall, refund',
-      suggested_why: 'AI 建议：售后风险',
+      suggested_why: '售后风险',
     })
     expect(by('tag_words')?.suggested).toBe('Air3, Go2')
+    // 品牌号不让 AI 猜：插件没配对 → 需要你填
+    expect(by('brand_username')?.needs_you).toBe(true)
     // 品牌档案进提示词时包在围栏里
     expect(String(complete.mock.calls[0]?.[0])).toContain('<external_data>')
-    await target.fields()
+    await plan()
     expect(complete).toHaveBeenCalledTimes(1)
 
     // 人确认（不改直接保存 = 用建议值）

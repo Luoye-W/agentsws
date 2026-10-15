@@ -30,6 +30,8 @@ export interface PatrolBrandBrief {
   keywords?: { brand: string[]; category: string[]; scenario: string[] }
   /** 主要竞品名。 */
   competitors?: string[]
+  /** WP348：联网搜到的相关版块与出现次数。 */
+  found_subs?: { name: string; count: number }[]
 }
 
 export type PatrolSuggestionField =
@@ -92,6 +94,12 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
       : `主要竞品：${(brief.competitors ?? [])
           .slice(0, 8)
           .map((c) => fence(c, 80))
+          .join('、')}`,
+    brief.found_subs === undefined || brief.found_subs.length === 0
+      ? ''
+      : `联网搜到的相关版块（次数）：${brief.found_subs
+          .slice(0, 12)
+          .map((f) => `${fence(f.name, 30)}(${f.count})`)
           .join('、')}`,
   ].filter((s) => s !== '')
   return [

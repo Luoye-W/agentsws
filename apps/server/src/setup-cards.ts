@@ -36,6 +36,14 @@ import {
   setupRequestDedupeKey,
 } from '@agentsws/contracts'
 import { finalPayload } from '@agentsws/txn'
+import {
+  changeFields,
+  createResearchKit,
+  mergePlan,
+  type SetupPlan,
+  type SetupResearchHost,
+  type SetupResearchKit,
+} from './setup-research.js'
 
 /** 一个设置目标（某个模块登记的「这几格设好了，我就能接着做」）。 */
 export interface SetupTarget {
@@ -51,6 +59,16 @@ export interface SetupTarget {
   satisfied(): Promise<boolean>
   /** 存下人填的值（只含登记过的格子）；不合法就抛 {@link SetupCardError}（那一句给人看）。 */
   apply(values: Record<string, string>): Promise<void>
+  /**
+   * WP348（决策 887）：「怎么查」——出卡前在这件事的运行里查一遍（档案、已连的数据、限次联网搜索、
+   * 问一次模型），交回每一格的方案值 + 理由 + 来源。不给 = 只用 `fields()` 里已知的。
+   */
+  research?(kit: SetupResearchKit): Promise<SetupPlan>
+  /**
+   * WP348：不让 AI 猜的格子（要人选的账号这类）——只认已存的 / 已连的事实；模型、`request_setup`
+   * 的建议都不填；查不到就标「需要你填」。
+   */
+  noGuess?: readonly string[]
 }
 
 export class SetupCardError extends Error {
@@ -91,6 +109,15 @@ export interface SetupCardsOptions {
   note?(matter_id: string, text: string): void
   /** 审计事件（只有 id / 种类 / 数字，没有任何值）。 */
   emit?(type: string, payload: Record<string, unknown>): void
+  /**
+   * WP348：出卡前查一遍用的宿主那几样（品牌档案、联网搜索、问一次模型；算在 `actor` 头上）。
+   * 不给 = 不查，卡面照样是方案（只用目标自己知道的）。
+   */
+  research?(input: {
+    actor: RunRequest['actor']
+    target: string
+    run_id?: string
+  }): SetupResearchHost | undefined
 }
 
 export interface SetupCardsAssembly {
@@ -108,6 +135,10 @@ export interface SetupCardsAssembly {
     why?: string
     /** WP334：AI 给的配置卡建议值（按设置目标；只认登记过的格子）。 */
     suggestions?: Record<string, Record<string, string>>
+    /** WP348：AI 给每个建议值的一句理由（按设置目标、按格子）。 */
+    reasons?: Record<string, Record<string, string>>
+    /** WP348：这几个目标已经设好了，AI 要的是「改成这样」（出改设置方案卡）。 */
+    changes?: string[]
   }): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
   /**
    * 别的模块直接要一张连接卡（WP322 / WP323 这类「要先接上 X 才能做」的确认流程用）。
@@ -140,9 +171,23 @@ export interface AskSetupInput {
   why?: string
   /** 调用方（模型 / 规则）给的建议值，压过目标自己的建议。只认登记过的格子。 */
   suggestions?: Record<string, string>
+  /** WP348：调用方给每个建议值的一句理由。 */
+  reasons?: Record<string, string>
+  /**
+   * WP348（决策 841 并进来）：目标已经设好了，调用方要的是「改成这样」——出一张现值 → 新值的方案卡，
+   * 人确认才生效。`suggestions` 就是新值；一格都没变就不出。
+   */
+  change?: boolean
   actor: RunRequest['actor']
   matter_id?: string
   run_id?: string
+}
+
+/** 内部：重出一张时直接用上一张的格子（不再查一遍、不再花钱）。 */
+interface AskSetupPrepared {
+  fields: SetupField[]
+  mode: 'plan' | 'change'
+  steps?: SetupRequestPayload['steps']
 }
 
 /** 落盘：哪张卡上等着哪几件事（卡本身在审批总线里）。 */
@@ -156,7 +201,14 @@ interface CardRecord {
 interface StateFile {
   version: 1
   cards: Record<string, CardRecord>
+  /** WP348：查过的搜索 / 模型结果（同一句话 7 天内不再花钱）。 */
+  research?: Record<string, { at: string; value: unknown }>
 }
+
+/** WP348：查过的搜索 / 模型结果留多久。 */
+const RESEARCH_TTL_MS = 7 * 86_400_000
+/** WP348：最多留几条（多了丢最旧的）。 */
+const RESEARCH_MAX = 200
 
 const ACTIVE_STATES = new Set(['pending', 'in_review', 'deferred'])
 
@@ -172,7 +224,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     if (file === undefined) return { version: 1, cards: {} }
     try {
       const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<StateFile>
-      return { version: 1, cards: raw.cards ?? {} }
+      return {
+        version: 1,
+        cards: raw.cards ?? {},
+        ...(raw.research === undefined ? {} : { research: raw.research }),
+      }
     } catch {
       return { version: 1, cards: {} }
     }
@@ -185,7 +241,10 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       const cards = Object.fromEntries(
         Object.entries(state.cards).filter(([, rec]) => rec.done !== true),
       )
-      writeFileSync(file, `${JSON.stringify({ version: 1, cards }, null, 2)}\n`)
+      writeFileSync(
+        file,
+        `${JSON.stringify({ version: 1, cards, ...(state.research === undefined ? {} : { research: state.research }) }, null, 2)}\n`,
+      )
     } catch {
       // 写不下只丢「等着的」清单：卡还在，人补完照样能在事项里说「接着做」
     }
@@ -341,11 +400,8 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     return { item, attach: resume !== undefined }
   }
 
-  /** 目标的格子（查一遍没有秘密格）+ 调用方的建议值。 */
-  const fieldsOf = async (
-    target: SetupTarget,
-    suggestions: Record<string, string> | undefined,
-  ): Promise<SetupField[]> => {
+  /** 目标的格子（查一遍没有秘密格）。 */
+  const fieldsOf = async (target: SetupTarget): Promise<SetupField[]> => {
     const fields = await target.fields()
     for (const f of fields)
       if (isSecretLikeSetupKey(f.key, f.label))
@@ -353,22 +409,79 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
           'secret_field',
           `「${f.label}」像是口令 / 密钥，不能放进配置卡（只能在连接卡的本机表单里填）。`,
         )
-    return fields.map((f) => {
-      const s = suggestions?.[f.key]?.trim()
-      if (s === undefined || s === '') return f
-      // 下拉框只认可选的那几个（AI 给了不在里面的就不用它）
-      if (f.kind === 'select' && f.options !== undefined && !f.options.some((o) => o.value === s))
-        return f
-      const { suggested_why: _why, ...rest } = f
-      return { ...rest, suggested: s }
-    })
+    return fields
   }
 
-  const askSetup: SetupCardsAssembly['askSetup'] = async (input) => {
+  /** WP348：查过的搜索 / 模型结果（同一句话 7 天内不再花钱）。 */
+  const researchCache = {
+    get(key: string): unknown {
+      const hit = state.research?.[key]
+      if (hit === undefined) return undefined
+      if (Date.parse(options.clock.now()) - Date.parse(hit.at) > RESEARCH_TTL_MS) return undefined
+      return hit.value
+    },
+    set(key: string, value: unknown): void {
+      const all = { ...(state.research ?? {}), [key]: { at: options.clock.now(), value } }
+      const keys = Object.keys(all)
+      if (keys.length > RESEARCH_MAX)
+        for (const k of keys
+          .sort((a, b) => Date.parse(all[a]?.at ?? '') - Date.parse(all[b]?.at ?? ''))
+          .slice(0, keys.length - RESEARCH_MAX))
+          delete all[k]
+      state.research = all
+      save()
+    },
+  }
+
+  /**
+   * WP348：出卡前查一遍（目标有「怎么查」、宿主给了工具才查）。查的过程写进这件事的时间线
+   * （几行：查了什么、看到什么），也带在卡上。
+   */
+  const planOf = async (
+    target: SetupTarget,
+    fields: SetupField[],
+    input: AskSetupInput,
+  ): Promise<{ fields: SetupField[]; steps: NonNullable<SetupRequestPayload['steps']> }> => {
+    // 宿主没给工具（老装配 / 测试）：照样查——已连的数据由目标自己读，档案 / 搜索 / 模型就是没有
+    const host: SetupResearchHost | undefined =
+      target.research === undefined
+        ? undefined
+        : (options.research?.({
+            actor: input.actor,
+            target: target.id,
+            ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+          }) ?? { profile: () => ({}) })
+    let plan: SetupPlan = {}
+    let steps: NonNullable<SetupRequestPayload['steps']> = []
+    if (target.research !== undefined && host !== undefined) {
+      const { kit, steps: stepsOf, used } = createResearchKit(host, { cache: researchCache })
+      try {
+        plan = await target.research(kit)
+      } catch {
+        plan = {}
+      }
+      steps = stepsOf()
+      emit('setup_card.researched', { target: target.id, steps: steps.length, ...used() })
+    }
+    const merged = mergePlan(fields, plan, {
+      ...(input.suggestions === undefined ? {} : { suggestions: input.suggestions }),
+      ...(input.reasons === undefined ? {} : { reasons: input.reasons }),
+      ...(target.noGuess === undefined ? {} : { noGuess: target.noGuess }),
+    })
+    if (input.matter_id !== undefined) for (const st of steps) note(input.matter_id, st.text)
+    return { fields: merged, steps }
+  }
+
+  const askSetupWith = async (
+    input: AskSetupInput,
+    prepared?: AskSetupPrepared,
+  ): Promise<{ item: ApprovalItem; attach: boolean } | undefined> => {
     const bus = options.approvals()
     const target = targets.get(input.target)
     if (bus === undefined || target === undefined) return undefined
-    if (await target.satisfied().catch(() => false)) return undefined
+    const change = prepared?.mode === 'change' || input.change === true
+    // 「改成这样」不看设好了没有；别的设好了就不出
+    if (!change && (await target.satisfied().catch(() => false))) return undefined
     const dedupe_key = setupRequestDedupeKey(ws, target.id)
     const resume = resumeOf(input.actor, input.matter_id)
     const prior = await activeCard(bus, dedupe_key)
@@ -377,13 +490,29 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       emit('setup_card.reused', { card_id: prior.id, kind: 'setup_request', attach })
       return { item: prior.item, attach }
     }
-    const fields = await fieldsOf(target, input.suggestions)
+    let fields: SetupField[]
+    let steps: NonNullable<SetupRequestPayload['steps']> = prepared?.steps ?? []
+    if (prepared !== undefined) fields = prepared.fields
+    else if (change) {
+      const next = changeFields(await fieldsOf(target), input.suggestions ?? {}, {
+        ...(input.reasons === undefined ? {} : { reasons: input.reasons }),
+        ...(target.noGuess === undefined ? {} : { noGuess: target.noGuess }),
+      })
+      if (next === undefined) return undefined
+      fields = next
+    } else {
+      const planned = await planOf(target, await fieldsOf(target), input)
+      fields = planned.fields
+      steps = planned.steps
+    }
     if (fields.length === 0) return undefined
     const payload: SetupRequestPayload = {
       form: 'setup_request',
       target: target.id,
       why: input.why ?? target.why,
       fields,
+      mode: change ? 'change' : 'plan',
+      ...(steps.length === 0 ? {} : { steps }),
       ...(resume === undefined ? {} : { resume }),
     }
     const item = await bus.create({
@@ -395,7 +524,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       }),
       kind: 'setup_request',
       dedupe_key,
-      title: `先设好${target.name}`,
+      title: change ? `${target.name}：我打算改成这样` : `${target.name}：我打算这样设`,
       summary: payload.why,
       payload,
     } as never)
@@ -405,9 +534,16 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       waiting: resume === undefined ? [] : [resume],
     }
     save()
-    emit('setup_card.asked', { card_id: item.id, kind: 'setup_request', target: target.id })
+    emit('setup_card.asked', {
+      card_id: item.id,
+      kind: 'setup_request',
+      target: target.id,
+      mode: payload.mode,
+      needs_you: fields.filter((f) => f.needs_you === true).length,
+    })
     return { item, attach: resume !== undefined }
   }
+  const askSetup: SetupCardsAssembly['askSetup'] = (input) => askSetupWith(input)
 
   const onRunBlocked: SetupCardsAssembly['onRunBlocked'] = async (input) => {
     const common = {
@@ -427,10 +563,13 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     }
     for (const target of input.targets) {
       const suggestions = input.suggestions?.[target]
+      const reasons = input.reasons?.[target]
       const out = await askSetup({
         ...common,
         target,
         ...(suggestions === undefined ? {} : { suggestions }),
+        ...(reasons === undefined ? {} : { reasons }),
+        ...(input.changes?.includes(target) === true ? { change: true } : {}),
       })
       if (out !== undefined) return out
     }
@@ -468,6 +607,24 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     return out
   }
 
+  /** WP348：上一张配置卡（带人填过的值）→ 重出一张时的格子（不再查一遍）。 */
+  const preparedFrom = (item: ApprovalItem): AskSetupPrepared | undefined => {
+    const p = finalPayload(item) as SetupRequestPayload
+    if (!Array.isArray(p.fields)) return undefined
+    const given = p.values ?? {}
+    const fields = p.fields.map((f): SetupField => {
+      const v = given[f.key]
+      if (typeof v !== 'string' || v.trim() === '') return f
+      const { needs_you: _n, ...rest } = f
+      return { ...rest, suggested: v.trim() }
+    })
+    return {
+      fields,
+      mode: p.mode === 'change' ? 'change' : 'plan',
+      ...(p.steps === undefined ? {} : { steps: p.steps }),
+    }
+  }
+
   /** 卡没成（还没连上 / 填得不对）：给等着的事项说一句，再出一张新的（把等着的带过去）。 */
   const reask = async (item: ApprovalItem, rec: CardRecord, text: string): Promise<void> => {
     rec.done = true
@@ -488,12 +645,15 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
             why: payload.why,
             ...(first === undefined ? {} : { matter_id: first.matter_id }),
           })
-        : await askSetup({
-            actor,
-            target: payload.target,
-            why: payload.why,
-            ...(first === undefined ? {} : { matter_id: first.matter_id }),
-          })
+        : await askSetupWith(
+            {
+              actor,
+              target: payload.target,
+              why: payload.why,
+              ...(first === undefined ? {} : { matter_id: first.matter_id }),
+            },
+            preparedFrom(item),
+          )
     if (out === undefined) return
     const next = state.cards[out.item.id]
     if (next !== undefined) for (const w of rec.waiting.slice(1)) attachTo(next, w)

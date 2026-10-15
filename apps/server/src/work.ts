@@ -21,6 +21,8 @@ import type {
   CalendarSource,
   ClaimPayload,
   Clock,
+  GenuiSetupInput,
+  GenuiSetupOutcome,
   GenuiToolInput,
   GenuiToolOutcome,
   Goal,
@@ -118,6 +120,12 @@ export interface WorkPortOptions {
   stopRuns?(matter_id: string, reason: string): Promise<number>
   /** WP341：对话里点了「调工具」的 genui 按钮（运行时的工具执行器）；不给 = 不接。 */
   genuiTool?(actor: WorkActor, matter_id: string, input: GenuiToolInput): Promise<GenuiToolOutcome>
+  /** WP348：对话里点了 `setup:目标` 的 genui 按钮（就地出方案卡）；不给 = 不接。 */
+  genuiSetup?(
+    actor: WorkActor,
+    matter_id: string,
+    input: GenuiSetupInput,
+  ): Promise<GenuiSetupOutcome>
   /** 店铺侧订单行；目标指标从它算 */
   orders(): OrderRow[]
   /** ObjectRef → 人话 */
@@ -405,6 +413,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
             if (!m.context.participants.includes(actor.person_id))
               throw new ApiError('forbidden', '这件事不是你的，点不了')
             return options.genuiTool?.(actor, id, input) as Promise<GenuiToolOutcome>
+          },
+        }),
+    // WP348：对话里点了 `setup:目标` 的按钮（只认这件事上的；别人的事项点不了）
+    ...(options.genuiSetup === undefined
+      ? {}
+      : {
+          genuiSetup: (actor: WorkActor, id: string, input: GenuiSetupInput) => {
+            const m = work.requireMatter(id)
+            if (!m.context.participants.includes(actor.person_id))
+              throw new ApiError('forbidden', '这件事不是你的，点不了')
+            return options.genuiSetup?.(actor, id, input) as Promise<GenuiSetupOutcome>
           },
         }),
     // WP264（决策 177）：人改的标题之后不再被自动覆盖

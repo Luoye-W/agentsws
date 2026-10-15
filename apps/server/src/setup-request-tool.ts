@@ -60,6 +60,19 @@ function suggestionsOf(raw: unknown): Record<string, string> {
   return out
 }
 
+/** WP348：每个建议值的一句理由（`[{ key, value, why }]` 那一种才有）。 */
+function reasonsOf(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!Array.isArray(raw)) return out
+  for (const row of raw) {
+    const o = row !== null && typeof row === 'object' ? (row as Record<string, unknown>) : {}
+    const key = str(o.key)
+    const why = str(o.why)
+    if (key !== undefined && why !== undefined) out[key] = why.slice(0, 40)
+  }
+  return out
+}
+
 const SECRET_REFUSED =
   'secret_in_input：参数里像是夹着口令 / 密钥，这一次没收。口令只能由用户在卡上的本机表单里自己填——不要写进任何参数，也不要让用户把它发在对话里。'
 
@@ -75,12 +88,14 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
     const why = str(input.why)
     if (why === undefined) return refuse('invalid_input：why 要写一句为什么（给用户看）。')
     const suggestions = suggestionsOf(input.suggestions)
+    const reasons = reasonsOf(input.suggestions)
     // 纪律：任何一格像秘密，整条拒收（不回显）
     if (
       looksLikeSecretValue(why) ||
       Object.entries(suggestions).some(
         ([k, v]) => isSecretLikeSetupKey(k) || looksLikeSecretValue(v),
-      )
+      ) ||
+      Object.values(reasons).some((v) => looksLikeSecretValue(v))
     )
       return refuse(SECRET_REFUSED)
     if ((connect === undefined) === (setting === undefined))
@@ -124,11 +139,13 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
       const known = await options.targetIds().catch(() => [] as readonly string[])
       return refuse(`invalid_input：认不出设置「${setting}」。能要的：${known.join('、')}。`)
     }
-    if (await target.satisfied().catch(() => false)) {
+    const satisfied = await target.satisfied().catch(() => false)
+    // WP348（决策 841 并进来）：已经设好了、AI 给了新值 → 出「我打算改成这样」的卡（人确认才生效）
+    if (satisfied && Object.keys(suggestions).length === 0) {
       const data: SetupRequestData = {
         ok: true,
         already: true,
-        message: `${target.name}已经设好了，不用卡，直接接着做。`,
+        message: `${target.name}已经设好了，不用卡，直接接着做。要改就带上 suggestions（新值）再调一次。`,
       }
       return { status: 'ok', data }
     }
@@ -138,7 +155,11 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
       setup_name: target.name,
       setup_why: shortWhy,
       ...(Object.keys(suggestions).length === 0 ? {} : { suggestions }),
-      message: `会在这件事下面出一张卡让用户设好${target.name}（建议值已预填），保存后会自动接着做。先停在这儿，跟用户说一声。`,
+      ...(Object.keys(reasons).length === 0 ? {} : { suggestion_why: reasons }),
+      ...(satisfied ? { change: true } : {}),
+      message: satisfied
+        ? `会在这件事下面出一张「我打算改成这样」的卡（现值 → 新值），用户点头才生效。先停在这儿，跟用户说一声。`
+        : `会在这件事下面出一张「我打算这样设」的方案卡（工坊先查过一遍，你给的值压过它查到的），用户点头就存、自动接着做。先停在这儿，跟用户说一声。`,
     }
     return { status: 'ok', data }
   }

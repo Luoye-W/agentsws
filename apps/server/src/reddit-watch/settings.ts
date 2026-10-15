@@ -15,8 +15,8 @@ import {
   type WorkspaceId,
 } from '@agentsws/contracts'
 import { SetupCardError, type SetupTarget } from '../setup-cards.js'
+import type { SetupPlan, SetupResearchKit } from '../setup-research.js'
 import type { RedditWatchStore } from './store.js'
-import type { PatrolSuggestion } from './suggest.js'
 
 export const REDDIT_WATCH_TARGET = 'reddit.watch'
 const KEY = 'settings'
@@ -198,83 +198,70 @@ const EVERY = [
   { value: '6', label: '每 6 小时' },
 ]
 
-const AI_WHY = (why: string | undefined): string | undefined =>
-  why === undefined ? 'AI 按品牌档案建议' : `AI 建议：${why}`
-
-/** 设置目标：版块（带频率）、关键词、告警词、标签词、品牌号、收件箱 / 关键词的频率。 */
+/**
+ * 设置目标：版块（带频率）、关键词、告警词、标签词、品牌号、收件箱 / 关键词的频率。
+ *
+ * WP348（决策 887）：`fields()` 只给已存的与已知的事实（连接里登记的自家版）；AI 的方案由 `research`
+ * 在出卡前查好（档案、插件里登着的号、联网搜索、问一次模型，见 `plan.ts`），卡面是「我打算这样设」。
+ * 品牌号不让 AI 猜（`noGuess`）：只认插件里登着的 / 连接里登记的。
+ */
 export function redditWatchSetupTarget(input: {
   store: RedditWatchStore
   workspace_id: WorkspaceId
   suggestions?(): SettingsSuggestions | undefined
-  /** WP340：AI 按品牌档案给的建议（只在第一次配置时问；没模型回 `undefined`）。 */
-  aiSuggestions?(): Promise<PatrolSuggestion | undefined>
+  /** WP348：出卡前怎么查（不给 = 只用已存的与已知的事实）。 */
+  research?(kit: SetupResearchKit): Promise<SetupPlan>
 }): SetupTarget {
   const ws = input.workspace_id
   return {
     id: REDDIT_WATCH_TARGET,
     name: 'Reddit 巡查',
-    why: '告诉我要巡查哪些版块、盯哪些词，我按频率巡查。',
+    why: '要巡查哪些版块、盯哪些词，我先查了一遍，按这个方案巡查。',
+    noGuess: ['brand_username'],
+    ...(input.research === undefined ? {} : { research: input.research }),
     async fields(): Promise<SetupField[]> {
       const s = readSettings(input.store, ws)
       const hint = input.suggestions?.() ?? {}
-      const first = !isConfigured(s)
-      const ai = first ? await input.aiSuggestions?.().catch(() => undefined) : undefined
       const per = s.sub_per_week ?? {}
-      // 自家版块：已存的 → 连接里登记的（事实）→ AI 建议
+      // 自家版块：已存的 → 连接里登记的（事实）；AI 的方案由 research 给
       let own = formatSubList(s.own_subreddits, per)
       let ownWhy: string | undefined
       if (own === '' && (hint.own_subreddits ?? []).length > 0) {
         own = (hint.own_subreddits ?? []).join(', ')
         ownWhy = '连接里登记的自家版'
-      } else if (own === '' && ai !== undefined && ai.own_subreddits.length > 0) {
-        own = ai.own_subreddits.join(', ')
-        ownWhy = AI_WHY(ai.why.own_subreddits)
       }
-      const watchNow = formatSubList(s.watch_subreddits ?? [], per)
-      const aiWatch =
-        ai === undefined
-          ? ''
-          : formatSubList(
-              ai.watch_subreddits.map((w) => w.name),
-              Object.fromEntries(
-                ai.watch_subreddits
-                  .filter((w) => w.per_week !== undefined)
-                  .map((w) => [w.name.toLowerCase(), w.per_week as number]),
-              ),
-            )
-      const pick = (
-        now: readonly string[],
-        aiList: readonly string[] | undefined,
-        why: string | undefined,
-      ): [string, string | undefined] =>
-        now.length > 0
-          ? [now.join(', '), undefined]
-          : aiList !== undefined && aiList.length > 0
-            ? [aiList.join(', '), AI_WHY(why)]
-            : ['', undefined]
-      const [keywords, keywordsWhy] = pick(s.keywords, ai?.keywords, ai?.why.keywords)
-      const [alerts, alertsWhy] = pick(s.alert_words ?? [], ai?.alert_words, ai?.why.alert_words)
-      const [tags, tagsWhy] = pick(s.tag_words ?? [], ai?.tag_words, ai?.why.tag_words)
-      const user = s.brand_username ?? hint.brand_username
       return [
         textField('own_subreddits', '自家版块', 'inmoxr', own, ownWhy),
         textField(
           'watch_subreddits',
           '重点版块',
           'SmartGlasses, Xreal（每周）',
-          watchNow !== '' ? watchNow : aiWatch,
-          watchNow !== '' || aiWatch === '' ? undefined : AI_WHY(ai?.why.watch_subreddits),
+          formatSubList(s.watch_subreddits ?? [], per),
+          undefined,
         ),
-        textField('keywords', '关键词', '品牌、品类词，逗号分开', keywords, keywordsWhy),
-        textField('alert_words', '告警词', 'recall, refund', alerts, alertsWhy),
-        textField('tag_words', '标签词', '型号写法，如 Air3', tags, tagsWhy),
-        textField('brand_username', '品牌号', 'u/…', user ?? '', undefined),
+        textField('keywords', '关键词', '品牌、品类词，逗号分开', s.keywords.join(', '), undefined),
+        textField(
+          'alert_words',
+          '告警词',
+          'recall, refund',
+          (s.alert_words ?? []).join(', '),
+          undefined,
+        ),
+        textField(
+          'tag_words',
+          '标签词',
+          '型号写法，如 Air3',
+          (s.tag_words ?? []).join(', '),
+          undefined,
+        ),
+        textField('brand_username', '品牌号', 'u/…', s.brand_username ?? '', undefined),
         {
           key: 'every_hours',
           label: '收件箱和关键词',
           kind: 'select',
           options: EVERY,
           suggested: String(s.every_hours),
+          ...(isConfigured(s) ? {} : { suggested_why: '默认每天一次' }),
           required: true,
         },
       ]

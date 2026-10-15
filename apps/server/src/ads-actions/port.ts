@@ -12,7 +12,11 @@ export function brandAdsActionsPort(options: {
   const of = options.serviceOf
   return {
     next: async (session, input) =>
-      (await of(session.workspace_id)).next(input.platforms, input.wait_ms),
+      (await of(session.workspace_id)).next(
+        input.platforms,
+        input.wait_ms,
+        input.seen_accounts === undefined ? undefined : { seen_accounts: input.seen_accounts },
+      ),
     sheet: async (session, id) => (await of(session.workspace_id)).sheet(id),
     progress: async (session, id, input) => (await of(session.workspace_id)).progress(id, input),
     evidence: async (session, id, input) => (await of(session.workspace_id)).evidence(id, input),

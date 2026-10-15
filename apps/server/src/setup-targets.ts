@@ -5,6 +5,16 @@
  */
 import type { SetupField } from '@agentsws/contracts'
 import { SetupCardError, type SetupTarget } from './setup-cards.js'
+import {
+  DEFAULT_SOURCE,
+  fencedHits,
+  hitContaining,
+  jsonOf,
+  MODEL_SOURCE,
+  profileSource,
+  type SetupPlan,
+  webSource,
+} from './setup-research.js'
 import type { SiteThemeAssembly } from './site-theme.js'
 
 export interface BuiltinSetupTargetsOptions {
@@ -24,6 +34,29 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CNY', 'HKD']
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const SHOP_DOMAIN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i
+
+/** WP348：目标市场 → 币种（查不到按 USD 起步，人改）。 */
+const CURRENCY_BY_MARKET: Readonly<Record<string, string>> = {
+  US: 'USD',
+  GB: 'GBP',
+  UK: 'GBP',
+  CA: 'CAD',
+  AU: 'AUD',
+  JP: 'JPY',
+  CN: 'CNY',
+  HK: 'HKD',
+  DE: 'EUR',
+  FR: 'EUR',
+  IT: 'EUR',
+  ES: 'EUR',
+  NL: 'EUR',
+  IE: 'EUR',
+  AT: 'EUR',
+  BE: 'EUR',
+  FI: 'EUR',
+  PT: 'EUR',
+  EU: 'EUR',
+}
 
 export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupTarget[] {
   /** 建站：还不知道是哪家店（WP258：登录后找到几家就给下拉框，官网那家排第一当建议）。 */
@@ -69,6 +102,21 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
       const r = await (await options.theme())?.readiness().catch(() => undefined)
       return r === undefined || !r.applicable || r.store !== undefined
     },
+    // WP348：查什么——Shopify 登录后看得到的店（已连的数据）、官网里读到的店铺地址（档案）
+    async research(kit): Promise<SetupPlan> {
+      const r = await (await options.theme())?.readiness().catch(() => undefined)
+      const stores = r?.store_lookup?.status === 'ok' ? r.store_lookup.stores : []
+      if (stores.length > 0)
+        kit.note(`Shopify 登录后看得到 ${stores.length} 家店`, {
+          kind: 'connected',
+          label: 'Shopify 登录',
+        })
+      if (r?.site_store !== undefined)
+        kit.note(`官网里读到的店：${r.site_store}`, profileSource('官网'))
+      if (stores.length === 0 && r?.site_store === undefined)
+        kit.note('登录后没看到店、官网里也没读到店铺地址')
+      return {}
+    },
     async apply(values): Promise<void> {
       const m = await options.theme()
       const store = values.store?.trim().toLowerCase() ?? ''
@@ -105,6 +153,44 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
     async satisfied(): Promise<boolean> {
       const v = options.postalAddress()?.trim()
       return v !== undefined && v !== ''
+    },
+    // WP348：查什么——官网 / 联网搜到的联系页里写着的地址（模型只摘原文，核对过才用）；查不到要你填
+    async research(kit): Promise<SetupPlan> {
+      const facts = await kit.profile()
+      const who = facts.domain ?? facts.name
+      if (who === undefined) {
+        kit.note('档案里没有官网，没法查地址')
+        return { postal_address: { needs_you: true, why: '没查到，要你填' } }
+      }
+      const hits = (await kit.search(`${who} contact address`)) ?? []
+      if (hits.length === 0) {
+        kit.note('联网没搜到地址')
+        return { postal_address: { needs_you: true, why: '没查到，要你填' } }
+      }
+      const got = jsonOf(
+        await kit.ask(
+          [
+            '从下面的网页摘要里找这家公司的实体地址（收得到信的那种）。只摘原文，不要编；找不到就回空串。',
+            `公司：${who}`,
+            fencedHits(hits),
+            '只回 JSON：{"address":""}',
+          ].join('\n'),
+        ),
+      )
+      const address = typeof got?.address === 'string' ? got.address.trim() : ''
+      const hit = address === '' ? undefined : hitContaining(hits, address)
+      if (hit === undefined) {
+        kit.note('搜了联系页，没找到写明的地址')
+        return { postal_address: { needs_you: true, why: '没查到写明的地址，要你填' } }
+      }
+      kit.note(`在「${hit.title ?? hit.url}」上找到了地址`, webSource(hit))
+      return {
+        postal_address: {
+          value: address,
+          why: '官网上写着的地址',
+          sources: [webSource(hit), MODEL_SOURCE],
+        },
+      }
     },
     async apply(values): Promise<void> {
       const v = values.postal_address?.trim() ?? ''
@@ -151,7 +237,7 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
                 label: '币种',
                 kind: 'select',
                 options: CURRENCIES.map((c) => ({ value: c, label: c })),
-                suggested: now.currency ?? 'USD',
+                ...(now.currency === undefined ? {} : { suggested: now.currency }),
                 required: false,
               },
             ]
@@ -159,6 +245,83 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
           async satisfied(): Promise<boolean> {
             const v = brandFacts().one_liner?.trim()
             return v !== undefined && v !== ''
+          },
+          /*
+           * WP348：查什么——一句话介绍：档案里的定位（WP346）→ 联网搜官网、问一次模型；
+           * 客服邮箱：搜到的网页里原样写着的、官网域名下的邮箱；币种：按目标市场，查不到按 USD 起步。
+           */
+          async research(kit): Promise<SetupPlan> {
+            const facts = await kit.profile()
+            const plan: SetupPlan = {}
+            const markets = facts.markets ?? []
+            const cur = markets.map((m) => CURRENCY_BY_MARKET[m.toUpperCase()]).find((c) => c)
+            plan.currency =
+              cur === undefined
+                ? { value: 'USD', why: '没查到目标市场，先按美元', sources: [DEFAULT_SOURCE] }
+                : {
+                    value: cur,
+                    why: `目标市场是 ${markets.slice(0, 3).join('、')}`,
+                    sources: [profileSource('目标市场')],
+                  }
+            if (facts.positioning !== undefined) {
+              const first = facts.positioning.split(/(?<=[。.!！?？])\s*/u)[0] ?? facts.positioning
+              plan.one_liner = {
+                value: first.slice(0, 120),
+                why: '从品牌定位里摘的',
+                sources: [profileSource('品牌定位')],
+              }
+              kit.note('看了品牌档案里的定位', profileSource('品牌定位'))
+            }
+            const who = facts.domain ?? facts.name
+            if (who === undefined) {
+              kit.note('档案里没有官网，没法联网查')
+              return plan
+            }
+            const hits = (await kit.search(`${who} about support email`)) ?? []
+            const top = hits[0]
+            if (top === undefined) {
+              kit.note('联网没搜到官网的介绍')
+              return plan
+            }
+            kit.note(`联网搜了官网：${hits.length} 条`, webSource(top))
+            const domain = facts.domain?.replace(/^www\./u, '').toLowerCase()
+            const email = hits
+              .flatMap(
+                (h) =>
+                  `${h.title ?? ''} ${h.snippet ?? ''}`.match(/[\w.+-]+@[\w-]+\.[\w.-]+/gu) ?? [],
+              )
+              .find((e) => domain === undefined || e.toLowerCase().endsWith(`@${domain}`))
+            if (email !== undefined) {
+              const hit = hitContaining(hits, email)
+              plan.support_email = {
+                value: email,
+                why: '官网上写着的邮箱',
+                sources: hit === undefined ? [] : [webSource(hit)],
+              }
+            }
+            if (plan.one_liner === undefined) {
+              const got = jsonOf(
+                await kit.ask(
+                  [
+                    '下面是一个品牌官网的搜索摘要。用中文写一句话介绍：卖什么、给谁用，30 个字以内，不要夸张。',
+                    `品牌：${who}`,
+                    fencedHits(hits),
+                    '只回 JSON：{"one_liner":""}',
+                  ].join('\n'),
+                ),
+              )
+              const one =
+                typeof got?.one_liner === 'string' ? got.one_liner.trim().slice(0, 120) : ''
+              if (one.length >= 4) {
+                plan.one_liner = {
+                  value: one,
+                  why: '按官网的介绍整理',
+                  sources: [webSource(top), MODEL_SOURCE],
+                }
+                kit.note('问了一次 AI，整理成一句话介绍', MODEL_SOURCE)
+              }
+            }
+            return plan
           },
           async apply(values): Promise<void> {
             const one_liner = values.one_liner?.trim() ?? ''

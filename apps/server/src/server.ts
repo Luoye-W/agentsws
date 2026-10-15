@@ -668,6 +668,7 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
+import { brandFactsOf } from './setup-research.js'
 import { builtinSetupTargets } from './setup-targets.js'
 import { ShopAdminError } from './shop-admin.js'
 import {
@@ -3266,6 +3267,65 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           correlation: { trace_id: `trc_setup_${Date.parse(clock.now()).toString(36)}` },
           payload,
         }),
+      // WP348（决策 887）：出卡前先查一遍——品牌档案、联网搜索（官方 web search）、问一次模型（品牌默认模型）
+      research: ({ actor, target, run_id }) => {
+        const rid = run_id ?? `setup_${target}_${Date.parse(clock.now()).toString(36)}`
+        const web = webSearchOf(ws)
+        return {
+          profile: () =>
+            brandFactsOf(onboardingRef?.brandProfile(ws) as Record<string, unknown> | undefined, {
+              ...(() => {
+                const name = brandNameOfWorkspace(ws)
+                return name === '' || name === ws ? {} : { name }
+              })(),
+              ...(() => {
+                const domain = onboardingRef?.companyProfile(ws)?.domain?.trim()
+                return domain === undefined || domain === '' ? {} : { domain }
+              })(),
+              ...(() => {
+                const shop = onboardingRef?.shopifyDomainOf(ws)
+                return shop === undefined ? {} : { shopify_domain: shop }
+              })(),
+            }),
+          search: async (query) => {
+            if (!(await web.status()).available) return undefined
+            const found = await web.search(query, {
+              person_id: actor.person_id,
+              assignment_id: actor.assignment_id,
+              role_id: actor.role_id,
+              run_id: rid,
+              entry: 'setup_card',
+            })
+            return found.sources.map((x) => ({
+              url: x.url,
+              ...(x.title === undefined ? {} : { title: x.title }),
+              ...(x.snippet === undefined ? {} : { snippet: x.snippet }),
+            }))
+          },
+          ask: async (prompt) => {
+            const models = await brandModules.models(ws)
+            if (!models.configured()) return undefined
+            const ref = models.defaultRef()
+            if (ref.provider === 'stub') return undefined
+            const gateway = await brandModules.gateway(ws)
+            return (
+              await gateway.complete({
+                messages: [{ role: 'user', content: prompt }],
+                meta: {
+                  workspace_id: ws,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                  run_id: rid as never,
+                  purpose: 'extraction',
+                },
+                model: ref,
+                max_output_tokens: 1500,
+                thinking: 'off',
+              })
+            ).text
+          },
+        }
+      },
     })
     for (const target of builtinSetupTargets({
       theme: () => siteThemeOf(ws),
@@ -9836,6 +9896,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           call,
         })
       },
+      /*
+       * WP348（决策 892）：对话里点了 `setup:目标` 的 genui 按钮——就地查一遍、出同一张方案卡
+       * （与 AI 调 `request_setup` 出的是同一张：同一个设置目标同一时间只有一张），挂进这件事的时间线；
+       * 存好之后按这件事原来那段话接着做。
+       */
+      genuiSetup: async (actor, matter_id, input) => {
+        const cards = await setupCardsOf(ws)
+        const target = cards?.target(input.target)
+        if (cards === undefined || target === undefined)
+          return { status: 'unknown', message: `认不出「${input.target}」这一项设置。` }
+        const label = input.label.trim().slice(0, 80)
+        if (await target.satisfied().catch(() => false)) {
+          brand.work.appendEvent(matter_id as never, {
+            kind: 'status',
+            text: `你点了「${label}」：${target.name}已经设好了。`,
+            actor: { kind: 'person', id: actor.person_id },
+          })
+          return { status: 'already', message: `${target.name}已经设好了。` }
+        }
+        const role_id = roles.assignments.get(actor.assignment_id)?.role_id
+        const out = await cards.askSetup({
+          target: target.id,
+          actor: {
+            person_id: actor.person_id as never,
+            assignment_id: actor.assignment_id as never,
+            role_id: (role_id ?? 'common.owner') as never,
+          },
+          matter_id,
+        })
+        if (out === undefined) return { status: 'already', message: `${target.name}已经设好了。` }
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text: `你点了「${label}」：我先查了一遍，方案在下面这张卡上。`,
+          actor: { kind: 'person', id: actor.person_id },
+        })
+        if (out.attach) {
+          if (out.item.subject.matter_id === matter_id) brand.work.onCard(cardRefOf(out.item))
+          else
+            brand.work.appendEvent(matter_id as never, {
+              kind: 'card',
+              text: out.item.title,
+              actor: { kind: 'system', id: 'setup_cards' },
+              approval_item_id: out.item.id,
+            })
+        }
+        return {
+          status: 'card',
+          message: `${target.name}的方案在下面这张卡上。`,
+          approval_item_id: out.item.id,
+        }
+      },
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**
@@ -9957,6 +10068,109 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 数据接口路由里「用你的 DeepSeek 账号搜索」开着、而且登录了 DeepSeek 账号或填了 DeepSeek 官方 key
    * 才搜得了；每搜一次照 `model.usage{purpose: web_search}` 记一笔、`web.searched` 审计一条（只有查询串）。
    */
+  /**
+   * WP348：联网搜索（官方 web search）——随便聊与配置卡出卡前查一遍共用一份（照 WP179 的规矩：
+   * 数据接口路由里「用你的 DeepSeek 账号搜索」开着、登录了 DeepSeek 账号或填了 DeepSeek 官方 key 才搜得了；
+   * 每搜一次照 `model.usage{purpose: web_search}` 记一笔、`web.searched` 审计一条（只有查询串））。
+   * 测试与 demo 给 `options.freeChatWebSearch` 替身，不连 DeepSeek。
+   */
+  const webSearchOf = (ws: WorkspaceId) => {
+    const searchCredential = async (endpoint: string): Promise<WebCredential | undefined> => {
+      if (deepseekAccount.signedIn()) {
+        const token = await deepseekAccount.resolveToken(endpoint)
+        if (token !== undefined && token !== '') return { kind: 'account', token }
+      }
+      const key = (await brandModules.models(ws)).deepseekSearchKey()
+      return key === undefined ? undefined : { kind: 'api_key', key }
+    }
+    const status = async (): Promise<{ available: boolean; reason?: string }> => {
+      const brand = await brandModules.forWorkspace(ws)
+      if (brand.ownCloud.webSearchRoute().disabled.includes('deepseek_native'))
+        return {
+          available: false,
+          reason: '「用你的 DeepSeek 账号搜索」在设置里关着，这一次先不联网回答。',
+        }
+      if (options.freeChatWebSearch !== undefined) return { available: true }
+      const has =
+        deepseekAccount.signedIn() || (await brandModules.models(ws)).hasDeepseekSearchKey()
+      return has
+        ? { available: true }
+        : {
+            available: false,
+            reason: '联网搜索要先登录 DeepSeek 账号，或者在「设置 → 模型」里填 DeepSeek 官方 key。',
+          }
+    }
+    const search = async (
+      query: string,
+      ctx: {
+        person_id: string
+        assignment_id: string
+        role_id: string
+        run_id: string
+        entry: string
+      },
+      signal?: AbortSignal,
+    ): Promise<{ sources: readonly { url: string; title?: string; snippet?: string }[] }> => {
+      const gateway = await brandModules.gateway(ws)
+      const meta = {
+        workspace_id: ws,
+        assignment_id: ctx.assignment_id as never,
+        role_id: ctx.role_id as never,
+        run_id: ctx.run_id as never,
+        purpose: 'web_search' as const,
+      }
+      const audit = (results: number, ok: boolean, error?: string): void => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type: 'web.searched',
+          actor: { kind: 'person', id: ctx.person_id },
+          correlation: { trace_id: `trc_${ctx.run_id}`, run_id: ctx.run_id as never },
+          payload: {
+            run_id: ctx.run_id,
+            role_id: ctx.role_id,
+            queries: [query],
+            results,
+            ok,
+            entry: ctx.entry,
+            ...(error === undefined ? {} : { error }),
+          },
+        })
+      }
+      try {
+        let found: { sources: readonly { url: string; title?: string; snippet?: string }[] }
+        if (options.freeChatWebSearch !== undefined) {
+          found = await options.freeChatWebSearch(query)
+          gateway.recordExternal?.({
+            meta,
+            model: { provider: 'stand-in', model: 'web-search' },
+          })
+        } else {
+          const { officialWebSearch } = await import('@agentsws/dsh-adapter')
+          const provider = officialWebSearch({
+            credential: searchCredential,
+            onUse: (use) => {
+              if (use.kind !== 'search_usage') return
+              gateway.recordExternal?.({
+                meta,
+                model: {
+                  provider: use.credential === 'deepseek_api_key' ? 'deepseek' : 'deepseek-account',
+                  model: use.model,
+                },
+              })
+            },
+          })
+          found = await provider.search({ query, maxResults: 8 }, signal)
+        }
+        audit(found.sources.length, true)
+        return found
+      } catch (e) {
+        audit(0, false, (e as { code?: string }).code ?? 'error')
+        throw e
+      }
+    }
+    return { status, search }
+  }
   const freeChatPorts = new Map<WorkspaceId, FreeChatPort>()
   const freeChatStores: FreeChatStore[] = []
   const freeChatPortFor = async (ws: WorkspaceId): Promise<FreeChatPort> => {
@@ -9967,14 +10181,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (dir !== undefined) mkdirSync(dir, { recursive: true })
     const store = createFreeChatStore(dir === undefined ? undefined : join(dir, 'free-chat.sqlite'))
     freeChatStores.push(store)
-    const searchCredential = async (endpoint: string): Promise<WebCredential | undefined> => {
-      if (deepseekAccount.signedIn()) {
-        const token = await deepseekAccount.resolveToken(endpoint)
-        if (token !== undefined && token !== '') return { kind: 'account', token }
-      }
-      const key = (await brandModules.models(ws)).deepseekSearchKey()
-      return key === undefined ? undefined : { kind: 'api_key', key }
-    }
+    const web = webSearchOf(ws)
     /*
      * WP343（决策 859）：「我的助理」——问全局（只读）读现有装配，派活走岗位的交办入口
      * （`mode: task`、不等跑完；端口里照旧判「是不是本人名下的那条」），改外部的事由那个岗位出审批。
@@ -10094,83 +10301,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
       credits: (model, usage) => chatCredits(pricingCatalog.current()?.pricing, model, usage),
       web: {
-        status: async () => {
-          if (brand.ownCloud.webSearchRoute().disabled.includes('deepseek_native'))
-            return {
-              available: false,
-              reason: '「用你的 DeepSeek 账号搜索」在设置里关着，这一次先不联网回答。',
-            }
-          if (options.freeChatWebSearch !== undefined) return { available: true }
-          const has =
-            deepseekAccount.signedIn() || (await brandModules.models(ws)).hasDeepseekSearchKey()
-          return has
-            ? { available: true }
-            : {
-                available: false,
-                reason:
-                  '联网搜索要先登录 DeepSeek 账号，或者在「设置 → 模型」里填 DeepSeek 官方 key。',
-              }
-        },
-        search: async (query, ctx, signal) => {
-          const gateway = await brandModules.gateway(ws)
-          const meta = {
-            workspace_id: ws,
-            assignment_id: ctx.actor.assignment_id,
-            role_id: ctx.role_id,
-            run_id: ctx.run_id,
-            purpose: 'web_search' as const,
-          }
-          const audit = (results: number, ok: boolean, error?: string): void => {
-            appendEvent({
-              schema_version: 1,
-              workspace_id: ws,
-              type: 'web.searched',
-              actor: { kind: 'person', id: ctx.actor.person_id },
-              correlation: { trace_id: `trc_${ctx.run_id}`, run_id: ctx.run_id },
-              payload: {
-                run_id: ctx.run_id,
-                role_id: ctx.role_id,
-                queries: [query],
-                results,
-                ok,
-                entry: 'free_chat',
-                ...(error === undefined ? {} : { error }),
-              },
-            })
-          }
-          try {
-            let found: { sources: readonly { url: string; title?: string; snippet?: string }[] }
-            if (options.freeChatWebSearch !== undefined) {
-              found = await options.freeChatWebSearch(query)
-              gateway.recordExternal?.({
-                meta,
-                model: { provider: 'stand-in', model: 'web-search' },
-              })
-            } else {
-              const { officialWebSearch } = await import('@agentsws/dsh-adapter')
-              const provider = officialWebSearch({
-                credential: searchCredential,
-                onUse: (use) => {
-                  if (use.kind !== 'search_usage') return
-                  gateway.recordExternal?.({
-                    meta,
-                    model: {
-                      provider:
-                        use.credential === 'deepseek_api_key' ? 'deepseek' : 'deepseek-account',
-                      model: use.model,
-                    },
-                  })
-                },
-              })
-              found = await provider.search({ query, maxResults: 8 }, signal)
-            }
-            audit(found.sources.length, true)
-            return found
-          } catch (e) {
-            audit(0, false, (e as { code?: string }).code ?? 'error')
-            throw e
-          }
-        },
+        status: web.status,
+        search: (query, ctx, signal) =>
+          web.search(
+            query,
+            {
+              person_id: ctx.actor.person_id,
+              assignment_id: ctx.actor.assignment_id,
+              role_id: ctx.role_id,
+              run_id: ctx.run_id,
+              entry: 'free_chat',
+            },
+            signal,
+          ),
       },
       // WP207：找回归档的对话 / 任务（只读；候选以卡片出现，人点了才恢复）
       archive: {

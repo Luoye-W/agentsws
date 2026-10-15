@@ -39,7 +39,7 @@ import { useNavigate } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { useRailState } from '@/components/rail/rail-state'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
-import { runGenuiTool } from '@/lib/api'
+import { runGenuiSetup, runGenuiTool } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useGenuiHost } from './genui-host'
 import { MediaGateNode, SECRET_DONE_ACTION, SecretNode } from './host-nodes'
@@ -189,9 +189,21 @@ export default function GenuiView({
           openConnect(d.services)
           return
         case 'setup': {
-          // 配置卡由 AI 自己要（request_setup）：把按钮那句话发给它
           const label = typeof payload.label === 'string' ? payload.label : d.target
-          host.say?.(label)
+          // WP348（决策 892）：事项 / 线程里就地出同一张方案卡（工坊先查一遍）；没有事项的地方交给 AI 去要
+          if (host.matterId === undefined) {
+            host.say?.(label)
+            return
+          }
+          setTool({ label })
+          runGenuiSetup(host.matterId, { target: d.target, label }).then(
+            (out) => {
+              setTool(undefined)
+              if (out.status === 'unknown') host.say?.(label)
+              host.onToolDone?.()
+            },
+            (e: unknown) => setTool({ label, error: e instanceof Error ? e.message : String(e) }),
+          )
           return
         }
         case 'tool':

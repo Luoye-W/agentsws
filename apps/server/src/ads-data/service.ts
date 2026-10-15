@@ -656,6 +656,22 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
         wanted: options.wanted,
         get: accounts,
         set: (next) => store.setState(STATE.accounts, next),
+        // WP348：方案只认插件在广告后台里看到的账户（不让 AI 猜）
+        seen: () => {
+          const acts = options.actions?.()
+          if (acts === undefined) return undefined
+          return {
+            plugin: options.wanted().map((p) => ({ platform: p, state: plugin(p) })),
+            accounts: acts.seenAccounts().flatMap((a) => {
+              const p = (Object.keys(ACTION_PLATFORM) as AdsDataPlatform[]).find(
+                (k) => ACTION_PLATFORM[k] === a.platform,
+              )
+              return p === undefined
+                ? []
+                : [{ platform: p, id: a.id, ...(a.ocid === undefined ? {} : { ocid: a.ocid }) }]
+            }),
+          }
+        },
       }),
     status,
     tick,
