@@ -27,7 +27,12 @@ const fetch: FetchLike = async (url, init) => {
   const body =
     typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {}
   if (url.endsWith('/chat/completions')) upstream.push(body)
-  const toolsOffered = Array.isArray(body.tools) && body.tools.length > 0
+  // WP343：助理的只读 / 派活工具总挂着——这里只在挂了 web_search 时才去搜
+  const toolsOffered =
+    Array.isArray(body.tools) &&
+    (body.tools as { function?: { name?: string } }[]).some(
+      (t) => t.function?.name === 'web_search',
+    )
   const alreadySearched = JSON.stringify(body.messages ?? []).includes('"role":"tool"')
   const reply =
     toolsOffered && !alreadySearched
@@ -138,7 +143,11 @@ describe('WP188 /v1/free-chat 端到端', () => {
     const got = await frames(res)
     expect(got.map((f) => f.type)).toEqual(['start', 'delta', 'delta', 'delta', 'done'])
     expect(upstream[0]?.stream).toBe(true)
-    expect(upstream[0]?.tools).toBeUndefined()
+    // WP343：联网没开就不挂 web_search（助理那五个工具照挂）
+    const offered = ((upstream[0]?.tools ?? []) as { function: { name: string } }[]).map(
+      (t) => t.function.name,
+    )
+    expect(offered).not.toContain('web_search')
     const listed = await data<{ role: string; text: string }[]>(
       await call('GET', `/v1/free-chat/sessions/${session.id}/messages`),
     )
@@ -169,7 +178,7 @@ describe('WP188 /v1/free-chat 端到端', () => {
     )
     expect(
       ((upstream[0]?.tools ?? []) as { function: { name: string } }[]).map((t) => t.function.name),
-    ).toEqual(['web_search'])
+    ).toContain('web_search')
     const done = got.find((f) => f.type === 'done')
     expect(done?.type === 'done' ? done.message.sources : undefined).toEqual([
       { url: 'https://example.com/fx', title: '汇率' },

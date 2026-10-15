@@ -115,6 +115,7 @@ import {
   CONTENT_SIGNING_PUBLIC_KEYS,
   contentChannelOf,
   DEFAULT_HANDOFF_RETURN_DAYS,
+  fitTaskTitle,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
@@ -227,6 +228,7 @@ import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
+import { createAssistant } from './assistant.js'
 import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
 import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
@@ -443,7 +445,7 @@ import {
 } from './markets.js'
 import { createMatterTitler } from './matter-title.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
-import { createMemoryBook } from './memory-book.js'
+import { createMemoryBook, type MemoryReason } from './memory-book.js'
 import { attachMemoryPersistence } from './memory-persist.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
@@ -9905,9 +9907,117 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const key = (await brandModules.models(ws)).deepseekSearchKey()
       return key === undefined ? undefined : { kind: 'api_key', key }
     }
+    /*
+     * WP343（决策 859）：「我的助理」——问全局（只读）读现有装配，派活走岗位的交办入口
+     * （`mode: task`、不等跑完；端口里照旧判「是不是本人名下的那条」），改外部的事由那个岗位出审批。
+     */
+    const positionActor = (actor: {
+      workspace_id: string
+      person_id: string
+      assignment_id: string
+    }) => ({
+      workspace_id: actor.workspace_id,
+      person_id: actor.person_id,
+      assignment_id: actor.assignment_id,
+    })
+    const pendingOf = async (person_id: string) =>
+      (await approvals.queue({
+        workspace_id: ws,
+        person_id,
+        lane: 'mine',
+        state: ['pending', 'in_review'],
+      })) as ApprovalItem[]
+    const assistant = createAssistant({
+      clock,
+      positions: async (actor) => (await positionPortFor(ws)).mine(positionActor(actor)),
+      work: async (actor, position_id) => {
+        const port = await positionPortFor(ws)
+        if (port.work === undefined) throw new ApiError('not_implemented', '岗位面没有「工作」视图')
+        return port.work(positionActor(actor), position_id)
+      },
+      cards: async (actor) => pendingOf(actor.person_id),
+      sent: (actor, query) => {
+        // 只给本人在做的职责发出去的（负责人看整个品牌）
+        const held = roles.assignments
+          .listByPerson(actor.person_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined)
+          .map((a) => a.role_id)
+        const all = held.includes('common.owner')
+        return outboundLog
+          .list(ws, {
+            limit: 100,
+            ...(query.channel === undefined ? {} : { channel: query.channel }),
+          })
+          .filter((r) => all || r.role_id === undefined || held.includes(r.role_id))
+          .slice(0, query.limit)
+      },
+      matters: (actor) => brand.work.listMatters({ participant: actor.person_id }),
+      timeline: (matter_id, limit) => brand.work.store.listMatterEvents(matter_id, { limit }),
+      cardPending: async (_actor, id) => {
+        const item = await approvals.get(id)
+        return item !== undefined && (item.state === 'pending' || item.state === 'in_review')
+      },
+      open: async (actor, input) => {
+        const port = await positionPortFor(ws)
+        const out = await port.open(positionActor(actor), input.position_id, {
+          ...fitTaskTitle({ title: input.text.trim() }),
+          ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+          mode: 'task',
+          detach: true,
+        })
+        return {
+          matter_id: out.matter.id,
+          title: out.matter.title,
+          ...(out.picked === undefined
+            ? out.matter.role_id === undefined
+              ? {}
+              : { role_id: out.matter.role_id }
+            : { role_id: out.picked.role_id, role_name: out.picked.role_name }),
+        }
+      },
+    })
     const port = createFreeChatPort({
       clock,
       store,
+      assistant,
+      // WP343：助理这一层的记忆（本人的）——开关与 WP320 同一个；记一条 / 删一条照常进记忆账本（小提醒读它）与事件日志（不带正文）
+      memory: {
+        auto: (actor) => autoMemorySettings.get(actor.workspace_id, actor.person_id),
+        changed: (actor, kind, row) => {
+          const at = clock.now()
+          learning.book.record({
+            at,
+            kind,
+            entry_id: row.id,
+            tier: 'personal',
+            scope_id: actor.person_id,
+            workspace_id: actor.workspace_id,
+            text: row.text.slice(0, 80),
+            by: actor.person_id,
+            written_by: kind === 'removed' ? 'person' : row.written_by,
+            ...(row.reason === undefined ? {} : { reason: row.reason as MemoryReason }),
+          })
+          appendEvent({
+            schema_version: 1,
+            workspace_id: actor.workspace_id,
+            type: `memory.${kind}`,
+            actor:
+              kind === 'added' && row.written_by === 'ai'
+                ? { kind: 'agent', id: 'assistant' }
+                : { kind: 'person', id: actor.person_id },
+            subject: { type: 'memory', id: row.id },
+            correlation: { trace_id: `tr_amem_${row.id}` },
+            payload: {
+              entry_id: row.id,
+              tier: 'personal',
+              scope_id: actor.person_id,
+              skill: 'my-assistant',
+              by: actor.person_id,
+              written_by: kind === 'removed' ? 'person' : row.written_by,
+            },
+          })
+        },
+      },
       gateway: () => brandModules.gateway(ws),
       models: () => brandModules.models(ws),
       roleOf: (id) => roles.assignments.get(id)?.role_id,

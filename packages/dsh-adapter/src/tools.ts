@@ -14,6 +14,7 @@ import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
   ADS_DATA_TOOL_DEF_BY_NAME,
   ADS_TOOL_DEF_BY_NAME,
+  ASSISTANT_TOOL_DEF_BY_NAME,
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
@@ -361,7 +362,9 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
     ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
     // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
-    SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)
+    SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+    // WP343：「我的助理」五个工具
+    ASSISTANT_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
   const schema = def.input_schema as {
     properties?: Record<string, Record<string, unknown>>
@@ -517,6 +520,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP343：「我的助理」的工具（与随便聊那条模型回合同一份）
+      ASSISTANT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,

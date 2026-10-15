@@ -7,6 +7,16 @@
  * - 31 §3.1 完整元组的 Casbin 策略编译与判定
  * - 31 §3.4 采纳率只是体验指标：只有 low 风险才可能被建议升到 L2
  */
+
+// WP343（决策 859）：「我的助理」派活挑岗位 / 职责（服务进程与模拟世界同一份）
+export {
+  PICK_MAX_CANDIDATES,
+  type PickPosition,
+  type PickRequest,
+  type PickResult,
+  pickDispatchTarget,
+  pickKey,
+} from './assistant-pick.js'
 export {
   adoptionLowerBound,
   adoptionRate,

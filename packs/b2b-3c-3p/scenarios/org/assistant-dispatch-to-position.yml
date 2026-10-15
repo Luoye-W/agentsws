@@ -1,0 +1,41 @@
+# WP343（决策 859）：**「我的助理」派活 → 岗位出审批，助理自己没有写操作**（外贸那一份）。
+#
+# 何佳在「我的助理」里说「让 B2B 把英国那封询盘回了」：助理按话挑岗位（`pickDispatchTarget`，与服务进程同一份）、
+# 走岗位的交办入口开一件任务，岗位内路由到业务那一条；回信是**岗位**起草的——首回出 `b2b_reply` 卡，
+# 起订量 / 交期另报 `b2b_commitment`，何佳自己点头才发。助理那一步名下一笔 staged / applied 都没有。
+id: org/assistant-dispatch-to-position
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-15T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.staff: { who: p_he, position: b2b }
+  - at: '+5m'
+    assistant.dispatch: { who: p_he, text: 让 B2B 把英国那封询盘回了 }
+  # 岗位去做：业务那一条照首回规矩起草（数字只取事实卡），出卡
+  - at: '+10m'
+    b2b.inquiry:
+      who: p_he
+      from: anna@volthaus.example
+      subject: GaN 65W chargers for the UK
+      body: We are a distributor in the UK. We need 3,000 pcs of 65W USB-C PD chargers with UKCA, FOB Shenzhen. What is the MOQ and lead time, and your best price?
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  assistant_dispatched_to: [b2b]
+  position_routed_to: [b2b.sales]
+  staged_change_kinds: [b2b_reply]
+  event_types:
+    - simulation.assistant_dispatched
+    - simulation.position_routed
+    - simulation.b2b_staged
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  在「我的助理」里交代「让 B2B 把英国那封询盘回了」，是不是交给了 B2B 岗位、由业务那一条起草回信出卡，
+  而助理自己一笔都没写？
