@@ -21,7 +21,9 @@ const c = COMMON[lang]
 const f = c.footer
 const p = (x: string) => localePath(x, lang)
 const colon = lang === 'zh' ? '：' : ': '
-const cols = [
+type Link = readonly [string, string]
+// WP347（Luoye 10-15）：「产品」一栏补齐下载、GitHub、登录 / 注册、积分与充值、更新日志；别的栏不再重复这几样
+const cols: { h: string; items: (Link | readonly [Link, Link])[] }[] = [
   {
     h: f.product,
     items: [
@@ -29,35 +31,35 @@ const cols = [
       [f.pricing, p('/pricing/')],
       [f.download, p('/download/')],
       [f.extension, `${p('/download/')}#more`],
+      [f.github, GITHUB_URL],
+      [
+        [f.login, accountUrl('login', lang)],
+        [f.signup, accountUrl('signup', lang)],
+      ],
+      [f.topup, accountUrl('topup', lang)],
+      [f.changelog, p('/changelog/')],
     ],
   },
   {
     h: f.resources,
     items: [
       [f.docs, p('/docs/')],
-      [f.changelog, p('/changelog/')],
-    ],
-  },
-  {
-    h: f.openSource,
-    items: [
-      [f.github, GITHUB_URL],
       [f.architecture, ARCHITECTURE_URL],
       [f.contributing, CONTRIBUTING_URL],
       [f.security, SECURITY_URL],
     ],
   },
   {
-    h: f.account,
+    h: f.legal,
     items: [
-      [f.login, accountUrl('login', lang)],
-      [f.topup, accountUrl('topup', lang)],
       [f.terms, p('/terms/')],
       [f.privacy, p('/privacy/')],
       [f.refund, p('/refund/')],
     ],
   },
-] as const
+]
+const isPair = (x: Link | readonly [Link, Link]): x is readonly [Link, Link] => Array.isArray(x[0])
+const rel = (href: string) => (href.startsWith('http') ? 'noopener' : undefined)
 ---
 <footer class="foot">
   <div class="wrap">
@@ -69,7 +71,9 @@ const cols = [
       {cols.map((col) => (
         <div>
           <h2>{col.h}</h2>
-          <ul>{col.items.map(([label, href]) => <li><a href={href} rel={href.startsWith('http') ? 'noopener' : undefined}>{label}</a></li>)}</ul>
+          <ul>{col.items.map((it) => isPair(it)
+            ? <li><a href={it[0][1]} rel={rel(it[0][1])}>{it[0][0]}</a> / <a href={it[1][1]} rel={rel(it[1][1])}>{it[1][0]}</a></li>
+            : <li><a href={it[1]} rel={rel(it[1])}>{it[0]}</a></li>)}</ul>
         </div>
       ))}
     </div>
