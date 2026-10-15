@@ -168,6 +168,11 @@ export interface AdsDataService {
   wanted(): AdsDataPlatform[]
   /** 连接卡复查：插件里连上了担着的那几家后台没有（一家都不担 / 没有插件通道回 undefined）。 */
   backendReady(): boolean | undefined
+  /**
+   * 给 WP316：这家的插件动作账户（`buildAdsJob` 的 `account`：Google 带横杠的客户 ID + `ocid`、Meta 广告账户 ID）。
+   * 没设账户回 `undefined`（WP316 那边回 `needs_setup: 'ads.accounts'` 就出同一张配置卡）。
+   */
+  actionAccount(platform: AdsDataPlatform): ActionAccount | undefined
 }
 
 const STATE = {
@@ -258,13 +263,13 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
 
   /** 建「工坊日报」：先出 L3 告知卡（它的编号就是审批编号），再排给插件。 */
   const startSetup = async (p: AdsDataPlatform): Promise<string | undefined> => {
-    const reports = p === 'google' ? '5 份（广告系列 / 广告组 / 广告 / 关键词 / 搜索字词）' : '1 份'
+    const reports = p === 'google' ? '5' : '1'
     const notice_id =
       (await options
         .notice?.({
           platform: p,
           title: `在你的${PLATFORM_ZH[p]}后台建「工坊日报」`,
-          summary: `插件会在你已登录的后台建 ${reports}保存报表，以后每天 ${exportHour} 点后点一次「下载 CSV」，不改广告。`,
+          summary: `插件在你的后台建 ${reports} 份保存报表，之后每天 ${exportHour} 点后下载一次 CSV。不改广告。`,
         })
         .catch(() => undefined)) ?? `adsrep_notice_${options.newId('n')}`
     const out = await enqueue(p, 'setup', notice_id)
@@ -661,6 +666,7 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     today,
     rows: (f) => store.rows(f),
     wanted: () => options.wanted(),
+    actionAccount,
     backendReady: () => {
       const want = options.wanted()
       if (want.length === 0 || options.actions?.() === undefined) return undefined
