@@ -23,7 +23,7 @@ Data only reaches us in these situations:
 
 | Situation | Data processed | Why |
 |---|---|---|
-| Sign-up and sign-in | Email address; sign-in times; IP address and browser details kept to prevent abuse | Identify your account, send sign-in emails, keep the account secure |
+| Sign-up and sign-in | Name and email address; password (stored only as a one-way hash we cannot read); when you agreed to the Terms and which version; sign-in times; IP address and browser details kept to prevent abuse | Identify your account, send verification codes, keep the account secure |
 | Organisation and members | Organisation name, member emails, roles, the credit limits you set | Let a team share one balance and manage limits per person and role |
 | Credits and top-ups | Balance, the source and expiry of each credit batch, top-up order IDs, amounts, payment status | Bookkeeping, crediting, reconciliation, refunds and chargebacks |
 | Calling models and data APIs with credits | The content and result of that request, usage, charges | Forward the request to the provider, bring the result back, bill it |
@@ -45,7 +45,7 @@ To run the cloud services we share the necessary data with the following kinds o
 | Model providers (e.g. DeepSeek and other LLM providers) | AI chat, drafting, image generation you run with credits | The content of that request |
 | Data API providers (creator data, social data, search, web fetching, transcription, etc.) | Data lookups you run with credits | The parameters of that lookup (e.g. keywords, URLs, handles) |
 | Payment providers (Waffo and others) | Payments, refunds, chargebacks | Order ID, amount, currency, payment status; payment details you enter on their page are handled by them |
-| Email delivery providers | Sending sign-in emails and service notices | Your email address and the email content |
+| Email delivery providers | Sending verification codes, sign-in emails and service notices | Your email address and the email content |
 
 You can see which model or data provider will be used before a call runs, and you can switch any capability back to your own key at any time — then those requests no longer go through us.
 

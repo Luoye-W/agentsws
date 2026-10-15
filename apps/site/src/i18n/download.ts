@@ -27,7 +27,7 @@ const zh = {
   shotAlt: '初始化设置第三步：勾选要上岗的岗位',
   osTitle: '选你的电脑',
   os: {
-    'mac-arm64': { h: 'macOS · Apple 芯片', p: 'M1 及以后 · 暂不支持 Intel', btn: '下载 .dmg' },
+    'mac-arm64': { h: 'macOS · Apple 芯片', p: 'M 系列芯片（M1 及以后）', btn: '下载 .dmg' },
     'win-x64': { h: 'Windows · x64', p: '64 位 Windows', btn: '下载 .exe' },
   },
   firstOpen: {
@@ -56,7 +56,7 @@ const zh = {
     title: '还有这些',
     ext: {
       h: '浏览器插件 · Agents 工坊助手',
-      p: '在 YouTube、Instagram、TikTok 主页上点一下，红人就进你的库。只连你这台电脑。',
+      p: '红人一键进库；Reddit、Google / Meta 广告借你已登录的账号干活。只连你这台电脑。',
       btn: '下载插件包（.zip）',
       how: '怎么装',
     },
@@ -96,7 +96,7 @@ const en: DownloadCopy = {
   os: {
     'mac-arm64': {
       h: 'macOS · Apple silicon',
-      p: 'M1 and later · Intel not supported yet',
+      p: 'M-series chips (M1 and later)',
       btn: 'Download .dmg',
     },
     'win-x64': { h: 'Windows · x64', p: '64-bit Windows', btn: 'Download .exe' },
@@ -128,7 +128,7 @@ const en: DownloadCopy = {
     title: 'Also available',
     ext: {
       h: 'Browser extension · Agents Workshop assistant',
-      p: 'One click on a YouTube, Instagram or TikTok profile and the creator lands in your list. Talks only to this computer.',
+      p: 'Save creators in one click; work in Reddit and Google / Meta Ads through the accounts you’re signed in to. Talks only to this computer.',
       btn: 'Download the extension (.zip)',
       how: 'How to install',
     },

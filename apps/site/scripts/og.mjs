@@ -34,7 +34,7 @@ const TEXT = {
   zh: {
     brand: 'Agents 工坊',
     home: ['面板会吃灰。', '这队 AI 同事，', '天天上班。'],
-    roles: ['十个岗位，', '各管一摊。'],
+    roles: ['九个岗位，', '各管一摊。'],
     pricing: ['开源版免费。', '用积分，按用量。'],
     download: ['下载 Agents 工坊', 'Mac / Windows', '双击就装'],
     docs: ['每一步，', '都有一篇白话教程。'],
@@ -45,7 +45,7 @@ const TEXT = {
   en: {
     brand: 'Agents Workshop',
     home: ['Dashboards gather dust.', 'This AI team', 'shows up every day.'],
-    roles: ['Ten roles,', 'each owning its lane.'],
+    roles: ['Nine roles,', 'each owning its lane.'],
     pricing: ['Open source is free.', 'Credits are pay as you go.'],
     download: ['Download for', 'Mac & Windows'],
     docs: ['A plain-language guide', 'for every step.'],

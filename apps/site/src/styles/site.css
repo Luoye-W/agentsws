@@ -845,11 +845,27 @@ h1 em {
   margin-top: 12px;
   max-width: 22em;
 }
+.foot-operator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.foot-operator a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.foot-operator a:hover {
+  color: var(--ink);
+}
 .foot-bottom {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 40px;
+  margin-top: 16px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
   color: var(--muted);

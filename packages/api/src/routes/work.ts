@@ -152,6 +152,8 @@ const CreateMatterBody = z.object({
    * 「用这条职责开」那几个入口带它；不给 = 老行为（只建事项，不起跑）。
    */
   run: z.boolean().optional(),
+  /** WP342（决策 853）：这件事自己选的 AI（`provider_id/model`；不给 = 跟品牌默认）。 */
+  model: z.string().min(1).max(200).optional(),
 })
 
 const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
@@ -165,6 +167,8 @@ const GenuiToolBody = z.object({
   label: z.string().min(1).max(200),
   run_id: z.string().min(1).max(80).optional(),
 })
+/** WP342（决策 853）：换这件事用的 AI；不给 / `null` = 回到跟品牌默认。 */
+const MatterModelBody = z.object({ model: z.string().min(1).max(200).nullable().optional() })
 
 /** WP264（决策 177）：人在事项页上就地改标题（改过的不再被自动起的标题覆盖）。 */
 const RetitleBody = z.object({ title: z.string().min(1).max(MATTER_TITLE_MAX) })
@@ -340,6 +344,11 @@ export interface WorkPort {
    * （挂进这件事的时间线、卡片流同一张）；直接写外部的不收。
    */
   genuiTool?(actor: WorkActor, id: string, input: GenuiToolInput): Promise<GenuiToolOutcome>
+  /**
+   * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮；`undefined` = 回到跟品牌默认）。
+   * 认不出 / 不能用的模型 id 由实现拒（`invalid_input`）。
+   */
+  setMatterModel?(actor: WorkActor, id: string, model: string | undefined): MaybePromise<Matter>
   /** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。回停了几次。 */
   stopMatter?(actor: WorkActor, id: string): Promise<{ stopped: number }>
   /**
@@ -673,6 +682,31 @@ export function workRoutes(): Route[] {
         const { title } = await body(c, RetitleBody)
         if (title.trim() === '') throw new ApiError('invalid_input', '标题不能是空的')
         return ok(c, { matter: await port.retitleMatter(actorOf(c), param(c, 'id'), title) })
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/matters/:id/model',
+        operationId: 'setMatterModel',
+        summary:
+          '换这件事用的 AI（输入框左下角那个钮，WP342）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: MatterModelBody,
+        returns: '{ matter: Matter }',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.setMatterModel === undefined)
+          throw new ApiError('not_implemented', '这个服务进程换不了这件事用的 AI')
+        const { model } = await body(c, MatterModelBody)
+        return ok(c, {
+          matter: await port.setMatterModel(actorOf(c), param(c, 'id'), model ?? undefined),
+        })
       },
     ),
     route(

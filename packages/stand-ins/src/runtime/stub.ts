@@ -18,6 +18,8 @@ import { staticPrefixHash } from '@agentsws/model-gateway'
 import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
 import { renderReplyBody, replySubject } from '@agentsws/support-core'
+import { ADS_TOOL_DEF_BY_NAME } from './ads.js'
+import { ADS_DATA_TOOL_DEF_BY_NAME } from './ads-data.js'
 import {
   B2B_LIST_SEQUENCES_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
@@ -343,6 +345,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       SKILL_TOOL_DEF_BY_NAME.get(name) ??
       // WP176：主动开发的三个开发信工具（只有那条职责的运行才有它们）
       B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ??
+      // WP316：改广告的两个工具（只有 Google / Meta 投放职责、服务端接了插件执行的运行才有）
+      ADS_TOOL_DEF_BY_NAME.get(name) ??
       // WP179：官方网页工具（只有开了网页工具的运行，工具面里才有这两个名字）
       WEB_TOOL_DEF_BY_NAME.get(name) ??
       // WP220：只读 Reddit（只有 grounding 里挂了它的那几条职责，工具面里才有这个名字）
@@ -360,6 +364,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
       // WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告；服务端接了才有）
       REPORT_TOOL_DEF_BY_NAME.get(name) ??
+      // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
+      ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ?? {
         name,

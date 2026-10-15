@@ -40,8 +40,13 @@ export interface ActionPage {
   paste(selector: string, text: string): Promise<DomOpResult>
   text(selector: string): Promise<string>
   count(selector: string): Promise<number>
-  /** 截当前这个标签页（实现方保证只截广告后台那一个）。 */
-  capture(): Promise<{ ok: true; png_base64: string } | { ok: false; why: string }>
+  /**
+   * 截当前这个标签页（实现方保证只截广告后台那一个）。
+   * WP316：`quick` = 截不到就直接回失败，不请人点插件图标授权（可选截图用）。
+   */
+  capture(opts?: {
+    quick?: boolean
+  }): Promise<{ ok: true; png_base64: string } | { ok: false; why: string }>
   /** 点导出、等下完。回文件存在哪（桌面端去读）。 */
   download(
     selector: string,
@@ -239,7 +244,14 @@ export async function runAction(
         return fromDom(await page.paste(step.selector, new TextDecoder().decode(file.bytes)))
       }
       case 'capture': {
-        const shot = await page.capture()
+        const shot = await page.capture(step.optional === true ? { quick: true } : undefined)
+        if (!shot.ok && step.optional === true) {
+          // WP316（决策 600 C）：截不到也往下做，记一笔「没截到」，账本用前后导出作证
+          const missing = (reads.evidence_missing ?? '').split(',').filter((x) => x !== '')
+          if (!missing.includes(step.tag)) missing.push(step.tag)
+          reads.evidence_missing = missing.join(',')
+          return undefined
+        }
         if (!shot.ok) return stoppedMeanwhile() ?? end('handover', shot.why)
         await hooks.evidence(step.tag, shot.png_base64, await page.url())
         return undefined

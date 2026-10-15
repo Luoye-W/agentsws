@@ -14,10 +14,10 @@
   // 不开 workers.dev 预览域名：官网只从 agentsws.com 访问
   "workers_dev": false,
   "preview_urls": false,
-  // 上线时再打开（会让 Cloudflare 给 agentsws.com / www 建记录，属于「动 DNS」，这一单不做）：
-  // "routes": [
-  //   { "pattern": "agentsws.com", "custom_domain": true },
-  //   { "pattern": "www.agentsws.com", "custom_domain": true }
-  // ],
+  // 10-15 Luoye「上线」：agentsws.com 与 www 绑成 Workers 自定义域名（Cloudflare 自动建记录与证书）
+  "routes": [
+    { "pattern": "agentsws.com", "custom_domain": true },
+    { "pattern": "www.agentsws.com", "custom_domain": true }
+  ],
   "observability": { "enabled": false }
 }

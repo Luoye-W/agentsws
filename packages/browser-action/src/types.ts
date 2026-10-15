@@ -37,8 +37,14 @@ export type ActionStep =
   | { op: 'upload'; selector: string }
   /** 把审批绑定的那张上传表的**文字**粘进文本框（Meta 导入框本来就支持粘贴）。 */
   | { op: 'paste'; selector: string }
-  /** 截一张当前标签页（只截广告后台那个标签页；决策 556）。 */
-  | { op: 'capture'; tag: EvidenceTag }
+  /**
+   * 截一张当前标签页（只截广告后台那个标签页；决策 556）。
+   *
+   * WP316（决策 600 C）：`optional` = 截不到也往下做（止损这类人不在也要先停住的），
+   * 结果里记 `reads.evidence_missing`（逗号隔开的几格），账本用前后导出作证；
+   * 这种截图也不等人去点插件图标授权（不让钱多烧十分钟）。
+   */
+  | { op: 'capture'; tag: EvidenceTag; optional?: boolean }
   /** 点一下导出按钮，等浏览器把文件下完，记下文件存在哪（桌面端去读）。 */
   | { op: 'download'; selector: string; tag: DownloadTag }
   /** 读一段字记进结果（平台报了几个错误 / 警告之类）。读不到不算错。 */

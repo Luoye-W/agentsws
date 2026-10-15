@@ -177,6 +177,10 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   bid_change: 'change',
   negative_keyword: 'change',
   creative_swap: 'change',
+  // WP316：上传表 / 开始投放 / 撤销——卡身是「一句话 + 表格预览 + 下载原表」（工作台 `ads-sheet-body`）
+  ads_sheet: 'change',
+  ads_activate: 'change',
+  ads_undo: 'change',
   segment_edit: 'change',
   flow_edit: 'change',
   social_profile_edit: 'change',

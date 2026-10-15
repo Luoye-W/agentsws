@@ -1,48 +1,51 @@
 /**
  * WP196：用户看得到的地方不露 `agentsws`。
  *
- * 顶栏模型芯片：积分那一路的模型 id 是 `agentsws/型号`（id 不改），芯片上显示成
- * 「Agents 工坊 · 型号」；别家的照原样。
+ * WP342（决策 853）：顶栏模型芯片拿掉了，AI 在输入框左下角选——积分那一路（`agentsws/型号`）
+ * 钮上只画工坊标记、无障碍名称「工坊」，一个字母的 `agentsws` 都不露；别家写型号短名。
  */
-import { screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-import { ModelChip, modelChipLabel } from '@/components/top-chips'
+import { fireEvent, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { ModelPicker } from '@/components/free-chat/model-picker'
 import { translate } from '@/lib/i18n'
 import { renderWithProviders } from './helpers'
 
-const state = { model: 'agentsws/deepseek-flash' }
+const CHOICES = [
+  {
+    id: 'agentsws/deepseek-flash',
+    label: 'Agents 工坊（用积分）',
+    official: true,
+    vision: 'no' as const,
+  },
+  { id: 'deepseek/deepseek-chat', label: 'DeepSeek 官方', official: false, vision: 'ok' as const },
+]
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
-  return {
-    ...actual,
-    getModelDefaults: async () => ({
-      default: state.model,
-      by_purpose: {},
-      choices: [],
-    }),
-  }
-})
-
-describe('WP196：模型芯片不露 agentsws', () => {
-  it('积分那一路显示成「Agents 工坊 · 型号」；别家、没有来源前缀的照原样', () => {
-    expect(modelChipLabel('agentsws/deepseek-flash', 'Agents 工坊')).toBe(
-      'Agents 工坊 · deepseek-flash',
+describe('WP196 / WP342：输入框里的 AI 钮不露 agentsws', () => {
+  it('工坊的模型：钮上只有工坊标记，无障碍名称「工坊」，没有名字', () => {
+    renderWithProviders(
+      <ModelPicker choices={CHOICES} value="agentsws/deepseek-flash" onChange={() => undefined} />,
     )
-    expect(modelChipLabel('agentsws/deepseek-flash', 'Agents Workshop')).toBe(
-      'Agents Workshop · deepseek-flash',
-    )
-    expect(modelChipLabel('deepseek/deepseek-chat', 'Agents 工坊')).toBe('deepseek/deepseek-chat')
-    expect(modelChipLabel('gpt-4o', 'Agents 工坊')).toBe('gpt-4o')
+    const pick = screen.getByTestId('model-pick')
+    expect(pick.textContent).toBe('')
+    expect(pick.getAttribute('aria-label')).toContain('工坊')
+    expect(pick.querySelector('svg rect')).not.toBeNull()
+    for (const seen of [
+      pick.textContent,
+      pick.getAttribute('aria-label'),
+      pick.getAttribute('title'),
+    ])
+      expect(seen ?? '').not.toContain('agentsws')
+    expect(screen.getByRole('button', { name: /工坊/ })).toBe(pick)
   })
 
-  it('顶栏芯片上是品牌名，悬停说明里也是；链接照旧去设置 → 模型', async () => {
-    renderWithProviders(<ModelChip />)
-    const chip = await screen.findByTestId('model-chip')
-    expect(chip.textContent).toBe('Agents 工坊 · deepseek-flash')
-    expect(chip.getAttribute('title')).toContain('Agents 工坊 · deepseek-flash')
-    expect(chip.textContent).not.toContain('agentsws')
-    expect(chip.getAttribute('href')).toContain('/settings?tab=models')
+  it('自接的模型：服务商图标 + 型号短名', () => {
+    renderWithProviders(
+      <ModelPicker choices={CHOICES} value="deepseek/deepseek-chat" onChange={() => undefined} />,
+    )
+    const pick = screen.getByTestId('model-pick')
+    expect(pick.textContent).toBe('deepseek-chat')
+    fireEvent.click(pick)
+    expect(screen.getByTestId('model-pick-menu').textContent).not.toContain('agentsws/')
   })
 })
 

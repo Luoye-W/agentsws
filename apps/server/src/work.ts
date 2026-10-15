@@ -92,6 +92,11 @@ function poolItemView(item: PoolItem): WorkPoolItem {
 }
 
 export interface WorkPortOptions {
+  /**
+   * WP342（决策 853）：这个模型 id（`provider_id/model`）现在能不能选（= 在「设置 → 模型」已接的里面）。
+   * 不给 = 不判（单测里的老装配）。认不出的：开事项时不记、换模型时拒。
+   */
+  knownModel?: (id: string) => boolean | Promise<boolean>
   clock: Clock
   work: Work
   /** 本人可见的审批项（已按 recipient 过滤）——卡片到期叠层与战报四格都从它数 */
@@ -345,10 +350,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      * 分配来，就是指定用那条职责的规矩做。所以它跳过岗位内路由（岗位入口才路由）。
      * 反查不到职责（分配已撤销）时两个字段都不写：存量事项长什么样，它就长什么样。
      */
-    createMatter: (actor, input) => {
+    createMatter: async (actor, { model, ...input }) => {
       const role_id = options.roleOf?.(actor.assignment_id)
+      // WP342：输入框左下角选的 AI；认不出 / 现在不能用的不记（跟品牌默认走）
+      const chosen =
+        model !== undefined &&
+        (options.knownModel === undefined || (await options.knownModel(model)))
+          ? model
+          : undefined
       return work.createMatter({
         ...input,
+        ...(chosen === undefined ? {} : { model: chosen }),
         position_id: actor.assignment_id,
         participants: [actor.person_id],
         entry: 'role',
@@ -397,6 +409,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         }),
     // WP264（决策 177）：人改的标题之后不再被自动覆盖
     retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
+    // WP342（决策 853）：换这件事用的 AI（只这一件；不动品牌默认）
+    setMatterModel: async (_actor, id, model) => {
+      work.requireMatter(id)
+      if (
+        model !== undefined &&
+        options.knownModel !== undefined &&
+        !(await options.knownModel(model))
+      )
+        throw new ApiError('invalid_input', '这个 AI 现在用不了（没接上或已经删了），换一个再试')
+      return work.setModel(id, model)
+    },
     /*
      * WP287：「没跑成」下面的「重试」——按最近那次没跑成之前人说的那句（没有就按事项第一句 / 标题）
      * 再跑一次。用事项钉的那条分配（本人持有时），否则请求头那条；时间线只记「重试了一次」。

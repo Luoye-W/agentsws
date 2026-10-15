@@ -1,25 +1,41 @@
 /**
- * WP71（36 §10，09-16 Luoye 定）：**账号块在左栏最下面**。
+ * WP71（36 §10，09-16 Luoye 定）：**账号块在左栏最下面**。头像 + 名字 + 「角色 · 公司名」一行，点开是一个小菜单。
  *
- * 和 KOLAgents / KefuAgents 一样：头像 + 名字 + 「角色 · 公司名」一行，点开是一个
- * 小菜单——账号与积分 / 设置 / 退出。顶栏因此只剩 ⌘K、模型芯片、积分。
+ * WP342（决策 853，Luoye 10-15「学 Codex / Claude」）：这个菜单现在装得更多——
  *
- * 为什么搬下来：顶栏是"这一屏里正在发生什么"（⌘K、模型、余额），左栏是"我是谁、
- * 我能去哪儿"。账号与品牌属于后者，而且它们一天点不到一次——放在最下面，
- * 眼睛不用每次扫过去。
+ * - **积分**：顶栏那个「积分 96.059」搬进来（菜单第一行：余额 + 充值）；余额低时头像右上角一个小点，
+ *   不在顶栏常驻。没关联工坊账号就只有「账号与积分」一行。
+ * - **两组入口**：原来左栏下半那几页收成两组，默认收着、点开记在本机——
+ *   「工作内容」会议 / 知识库 / 技能；「设置」岗位与品牌 / 连接 / 消息渠道 / 设置。路由一个没动。
+ * - **场景**：原来账户块上方那一行，变成菜单里一行子菜单（「场景 ›」，面板往右开）。
+ * - 深浅色、语言、退出照旧。
  *
- * 深浅色与语言两个开关原来在顶栏，这一版一起收进这个菜单：它们同样是"一次设定、
- * 之后不管"的东西，不该常驻在每一页的右上角。
+ * 键盘：菜单开了焦点进第一项；↑↓ 在各项之间走，Esc 收起并回到账号块上。
+ * 托盘「管理场景…」打开的是 `/?scenes=1`——看到这个参数先把菜单打开，场景那一行自己展开面板。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronsUpDown, Languages, LogOut, Moon, Settings, Sun, Wallet } from 'lucide-react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
+  Coins,
+  Languages,
+  LogOut,
+  Moon,
+  Sun,
+  Wallet,
+} from 'lucide-react'
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { avatarInitial } from '@/components/design'
+import { SceneSwitcher } from '@/components/scene-switcher'
+import { SHELL_PAGES, type ShellPage } from '@/components/shell-pages'
 import { Separator } from '@/components/ui/separator'
-import { clearToken, getPositions, type Me } from '@/lib/api'
+import { clearToken, getCloudCredits, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
+import { ACCOUNT_GROUPS_KEY, readFlags, writeFlags } from '@/lib/ui-state'
+import { cn } from '@/lib/utils'
 
 /**
  * 名字取一个字当头像。
@@ -30,12 +46,36 @@ import { useMode } from '@/lib/mode'
  */
 const initialOf = avatarInitial
 
+const ITEM =
+  'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
+
+/** 积分余额（问不到 / 没关联 = `undefined`，菜单里就只写「账号与积分」）。 */
+function useBalance(): { available?: number; low: boolean; canTopup: boolean } {
+  const credits = useQuery({
+    queryKey: ['cloud-credits', 'chip'],
+    queryFn: () => getCloudCredits(),
+    retry: false,
+  })
+  const balance = credits.data?.linked === true ? credits.data.balance : undefined
+  return {
+    ...(balance === undefined ? {} : { available: balance.available }),
+    low: balance?.low_balance === true,
+    canTopup: credits.data?.linked === true && credits.data.can_topup !== false,
+  }
+}
+
 export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang } = useApp()
   // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
   const { solo, mode, t: tm } = useMode()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [open, setOpen] = useState(false)
+  const [groups, setGroups] = useState<Record<string, boolean>>(() => readFlags(ACCOUNT_GROUPS_KEY))
+  const root = useRef<HTMLDivElement>(null)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const { available, low, canTopup } = useBalance()
 
   /**
    * 「角色」那一格：持有 `common.owner` 就是所有者，否则是成员。
@@ -46,6 +86,24 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions, retry: false })
   const isOwner = (positions.data?.positions ?? []).some((p) => p.role_id === 'common.owner')
 
+  // 托盘「管理场景…」→ `/?scenes=1`：先把菜单打开（场景那一行自己展开面板、再把参数拿掉）
+  useEffect(() => {
+    if (params.get('scenes') === '1') setOpen(true)
+  }, [params])
+
+  // 点外面收起；开了把焦点放进第一项（键盘可达）
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (root.current !== null && !root.current.contains(e.target as Node)) setOpen(false)
+    }
+    globalThis.document?.addEventListener('mousedown', onDown)
+    menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    return () => {
+      globalThis.document?.removeEventListener('mousedown', onDown)
+    }
+  }, [open])
+
   const name = me?.person.name ?? me?.person.email ?? '—'
   const company = me?.workspace.name ?? ''
   /*
@@ -55,14 +113,81 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const role = isOwner ? tm('account.role.owner') : t('account.role.member')
   const plain = solo || (mode === 'peers' && !isOwner)
 
+  const close = (): void => {
+    setOpen(false)
+    toggle.current?.focus()
+  }
   const go = (to: string): void => {
     setOpen(false)
     navigate(to)
   }
+  const flip = (id: string): void => {
+    setGroups((prev) => {
+      const next = { ...prev, [id]: prev[id] !== true }
+      writeFlags(ACCOUNT_GROUPS_KEY, next)
+      return next
+    })
+  }
+  const onMenuKey = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      close()
+      return
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+    const at = items.indexOf(globalThis.document?.activeElement as HTMLElement)
+    const next = (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next]?.focus()
+  }
+  const label = (p: ShellPage): string => (p.mode === true ? tm(p.key) : t(p.key))
+  const group = (id: 'work' | 'settings'): React.ReactNode => {
+    const expanded = groups[id] === true
+    return (
+      <div data-testid={`account-group-${id}`}>
+        <button
+          type="button"
+          role="menuitem"
+          aria-expanded={expanded}
+          data-testid={`account-group-${id}-toggle`}
+          className={cn(ITEM, 'text-ws-muted-fg')}
+          onClick={() => {
+            flip(id)
+          }}
+        >
+          {expanded ? (
+            <ChevronDown aria-hidden className="size-4" />
+          ) : (
+            <ChevronRight aria-hidden className="size-4" />
+          )}
+          {t(`account.group.${id}`)}
+        </button>
+        {expanded
+          ? SHELL_PAGES.filter((p) => p.group === id).map((p) => (
+              <button
+                key={p.to}
+                type="button"
+                role="menuitem"
+                data-testid={p.testId}
+                className={cn(ITEM, 'pl-7')}
+                onClick={() => {
+                  go(p.to)
+                }}
+              >
+                <p.icon aria-hidden className="size-4" />
+                {label(p)}
+              </button>
+            ))
+          : null}
+      </div>
+    )
+  }
 
   return (
-    <div className="relative" data-testid="account-block">
+    <div ref={root} className="relative" data-testid="account-block">
       <button
+        ref={toggle}
         type="button"
         aria-expanded={open}
         aria-haspopup="menu"
@@ -75,9 +200,16 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
       >
         <span
           aria-hidden
-          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
+          className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
         >
           {initialOf(name)}
+          {/* 余额低：头像右上角一个小点（不在顶栏常驻），说法在菜单那一行的悬停里 */}
+          {low ? (
+            <i
+              data-testid="account-low-dot"
+              className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-ws-warn ring-2 ring-sidebar"
+            />
+          ) : null}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium" data-testid="account-name">
@@ -92,40 +224,70 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
       {open ? (
         // 与品牌切换器同一种朴素下拉：一个按钮 + 一张列表，不引浮层引擎
         <div
+          ref={menu}
           role="menu"
+          aria-label={t('account.menu')}
           data-testid="account-menu"
-          className="absolute bottom-full left-0 z-50 mb-1 w-56 rounded-md border bg-popover p-1 shadow-md"
+          onKeyDown={onMenuKey}
+          className="absolute bottom-full left-0 z-50 mb-1 w-60 rounded-md border bg-popover p-1 shadow-md"
         >
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="account-credits"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-            onClick={() => {
-              go('/settings?tab=account')
-            }}
-          >
-            <Wallet aria-hidden className="size-4" />
-            {t('settings.tab.account')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="account-settings"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-            onClick={() => {
-              go('/settings')
-            }}
-          >
-            <Settings aria-hidden className="size-4" />
-            {t('nav.settings')}
-          </button>
+          {/* 积分：余额 + 充值（没关联 = 「账号与积分」一行） */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="account-credits"
+              {...(available === undefined
+                ? {}
+                : { title: low ? t('account.balance.low') : t('account.balance.tip') })}
+              className={cn(ITEM, 'min-w-0 flex-1')}
+              onClick={() => {
+                go('/settings?tab=account')
+              }}
+            >
+              {available === undefined ? (
+                <>
+                  <Wallet aria-hidden className="size-4" />
+                  {t('settings.tab.account')}
+                </>
+              ) : (
+                <>
+                  <Coins aria-hidden className={cn('size-4', low && 'text-ws-warn')} />
+                  <span>{t('account.balance')}</span>
+                  <span
+                    data-testid="account-balance"
+                    className={cn('ws-num ml-auto tabular-nums', low && 'text-ws-warn')}
+                  >
+                    {available.toLocaleString()}
+                  </span>
+                </>
+              )}
+            </button>
+            {canTopup && available !== undefined ? (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="account-topup"
+                className="shrink-0 rounded-sm px-2 py-1 text-xs font-medium text-ws-brand hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                onClick={() => {
+                  go('/settings?tab=account')
+                }}
+              >
+                {t('account.topup')}
+              </button>
+            ) : null}
+          </div>
+          <Separator className="my-1" />
+          {group('work')}
+          {group('settings')}
+          {/* WP136：切到 dsh 的其他场景（只有所有者看得到；这台切不了就整行不出） */}
+          <SceneSwitcher variant="menu" />
           <Separator className="my-1" />
           <button
             type="button"
             role="menuitem"
             data-testid="account-theme"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            className={ITEM}
             onClick={toggleTheme}
           >
             {theme === 'dark' ? (
@@ -139,7 +301,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             type="button"
             role="menuitem"
             data-testid="account-lang"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            className={ITEM}
             onClick={() => {
               setLang(lang === 'zh' ? 'en' : 'zh')
             }}
@@ -152,7 +314,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             type="button"
             role="menuitem"
             data-testid="account-logout"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            className={ITEM}
             onClick={() => {
               // 退出 = 丢掉本机那个 bearer 再整站重载（cookie 档由服务端那一侧管）
               clearToken()

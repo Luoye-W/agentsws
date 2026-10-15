@@ -30,8 +30,13 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
    * 当场问答 → 回答留在岗位页；会话 / 任务 → 马上进它的线程。框里的字发出去就清（不等回答）。
    */
   const open = useMutation({
-    mutationFn: async (input: { title: string }) => {
-      const entry = await askAtPosition({ position: id, text: input.title })
+    mutationFn: async (input: { title: string; model?: string | undefined }) => {
+      const entry = await askAtPosition({
+        position: id,
+        text: input.title,
+        // WP342：输入框左下角选的 AI
+        ...(input.model === undefined ? {} : { model: input.model }),
+      })
       // 没交出去：错误交给框下那一句（WP259，字放回框里），这里不再画一份
       if (entry?.status === 'error') {
         closeQuickAnswer(entry.nonce)

@@ -17,6 +17,7 @@ import {
   accountQuery,
   hostsFor,
   paceOf,
+  safeUploadName,
 } from './actions.js'
 
 const levelPath: Record<AdsEntity['level'], string> = {
@@ -54,6 +55,13 @@ export const GOOGLE_ADS_SELECTORS = {
   /** 统计表右上角的下载。 */
   downloadMenu: '[aria-label="Download"]',
   downloadCsv: '[role="menuitem"] >> text=.csv',
+  /** WP316：提交后当场核「已应用」（读回那一版用）。 */
+  appliedDone: '[data-bulk-upload="status"] >> text=Applied',
+  /** WP316：工具 → 批量操作 → 所有批量操作，按上传文件名找那一行（撤销只能一次）。 */
+  historyRow: (name: string) => `[data-bulk-history-row="${name}"]`,
+  historyUndo: (name: string) => `[data-bulk-history-row="${name}"] [aria-label="Undo"]`,
+  undoConfirm: '[role="dialog"] material-button >> text=Undo',
+  historyStatus: (name: string) => `[data-bulk-history-row="${name}"] [data-column="status"]`,
 } as const
 
 const S = GOOGLE_ADS_SELECTORS
@@ -73,6 +81,7 @@ export function googleAdsPlan(
     case 'upload_sheet': {
       const uploads = `${origin}/aw/bulk/uploads?${q}`
       const snapshot = action.snapshot !== false
+      const readback = action.readback === true
       const steps: ActionStep[] = [
         ...(snapshot
           ? ([
@@ -95,8 +104,16 @@ export function googleAdsPlan(
         },
         { op: 'confirm', prompt: '平台预览没报错。确认提交？' },
         { op: 'click', selector: S.applyButton },
-        { op: 'wait', selector: S.appliedStatus, timeout_ms: 120_000 },
+        { op: 'wait', selector: readback ? S.appliedDone : S.appliedStatus, timeout_ms: 120_000 },
         { op: 'capture', tag: 'after' },
+        // WP316：读回——再导出一份，本机拿它和上传表逐行比对
+        ...(readback
+          ? ([
+              { op: 'goto', url: `${origin}/aw/campaigns?${q}` },
+              { op: 'click', selector: S.downloadMenu },
+              { op: 'download', selector: S.downloadCsv, tag: 'result' },
+            ] as ActionStep[])
+          : []),
       ]
       return {
         ...base,
@@ -106,7 +123,7 @@ export function googleAdsPlan(
         allow: {
           hosts,
           click: [
-            ...(snapshot ? [S.downloadMenu] : []),
+            ...(snapshot || readback ? [S.downloadMenu] : []),
             S.uploadNew,
             S.previewButton,
             S.applyButton,
@@ -114,9 +131,45 @@ export function googleAdsPlan(
           fill: [],
           values: [],
           upload: [S.uploadFile],
-          download: snapshot ? [S.downloadCsv] : [],
+          download: snapshot || readback ? [S.downloadCsv] : [],
         },
-        verify: { op: 'present', selector: S.appliedStatus, text: 'Applied' },
+        // 读回那一版：「已应用」在提交后当场核过，真正的读回是本机拿改后导出逐行比
+        verify: readback
+          ? { op: 'none' }
+          : { op: 'present', selector: S.appliedStatus, text: 'Applied' },
+      }
+    }
+    case 'export_snapshot':
+      return {
+        ...base,
+        kind: 'export_snapshot',
+        needs_sheet: false,
+        steps: [
+          { op: 'goto', url: `${origin}/aw/campaigns?${q}` },
+          { op: 'click', selector: S.downloadMenu },
+          { op: 'download', selector: S.downloadCsv, tag: 'snapshot' },
+        ],
+        allow: { hosts, click: [S.downloadMenu], fill: [], values: [], download: [S.downloadCsv] },
+        verify: { op: 'none' },
+      }
+    case 'undo_upload': {
+      const name = safeUploadName(action.upload_name)
+      const history = `${origin}/aw/bulk/history?${q}`
+      return {
+        ...base,
+        kind: 'undo_upload',
+        needs_sheet: false,
+        steps: [
+          { op: 'goto', url: history },
+          { op: 'wait', selector: S.historyRow(name) },
+          { op: 'capture', tag: 'before' },
+          { op: 'click', selector: S.historyUndo(name) },
+          { op: 'click', selector: S.undoConfirm },
+          { op: 'wait', selector: `${S.historyStatus(name)} >> text=Undone`, timeout_ms: 120_000 },
+          { op: 'capture', tag: 'after' },
+        ],
+        allow: { hosts, click: [S.historyUndo(name), S.undoConfirm], fill: [], values: [] },
+        verify: { op: 'present', url: history, selector: S.historyStatus(name), text: 'Undone' },
       }
     }
     case 'export_report':
@@ -136,19 +189,34 @@ export function googleAdsPlan(
     case 'enable': {
       const id = action.entity.id
       const want = action.kind === 'pause' ? 'Paused' : 'Enabled'
+      // WP316（决策 600 C）：止损——截不到图也先停，停前停后各导出一份作证
+      const stopLoss = action.kind === 'pause' && action.stop_loss === true
+      const exportAs = (tag: 'snapshot' | 'result'): ActionStep[] => [
+        { op: 'goto', url: `${origin}/aw/campaigns?${q}` },
+        { op: 'click', selector: S.downloadMenu },
+        { op: 'download', selector: S.downloadCsv, tag },
+      ]
       return {
         ...base,
         kind: action.kind,
         needs_sheet: false,
         steps: [
+          ...(stopLoss ? exportAs('snapshot') : []),
           { op: 'goto', url: listUrl(action.entity) },
           { op: 'wait', selector: S.row(id) },
-          { op: 'capture', tag: 'before' },
+          { op: 'capture', tag: 'before', ...(stopLoss ? { optional: true } : {}) },
           { op: 'click', selector: S.statusMenu(id) },
           { op: 'click', selector: S.statusOption(want) },
-          { op: 'capture', tag: 'after' },
+          { op: 'capture', tag: 'after', ...(stopLoss ? { optional: true } : {}) },
+          ...(stopLoss ? exportAs('result') : []),
         ],
-        allow: { hosts, click: [S.statusMenu(id), S.statusOption(want)], fill: [], values: [] },
+        allow: {
+          hosts,
+          click: [...(stopLoss ? [S.downloadMenu] : []), S.statusMenu(id), S.statusOption(want)],
+          fill: [],
+          values: [],
+          ...(stopLoss ? { download: [S.downloadCsv] } : {}),
+        },
         verify: {
           op: 'present',
           url: listUrl(action.entity),

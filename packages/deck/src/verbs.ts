@@ -102,6 +102,12 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
   aftermath: {
     pause_ad: 'verb.aftermath.approve.pause_ad',
   },
+  // WP316：「批准」说不清批了什么——上传表 / 开始投放 / 撤销各写各的
+  change: {
+    ads_sheet: 'verb.change.approve.ads_sheet',
+    ads_activate: 'verb.change.approve.ads_activate',
+    ads_undo: 'verb.change.approve.ads_undo',
+  },
 }
 
 /**
@@ -298,6 +304,9 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   bid_change: 'bid_change',
   negative_keyword: 'negative_keyword',
   creative_swap: 'creative_swap',
+  ads_sheet: 'ads_sheet',
+  ads_activate: 'ads_activate',
+  ads_undo: 'ads_undo',
   segment_edit: 'segment_edit',
   flow_edit: 'flow_edit',
   social_profile_edit: 'profile_edit',

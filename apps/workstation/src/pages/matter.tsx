@@ -19,6 +19,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
+import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MaskDialog } from '@/components/matter/mask-dialog'
 import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
@@ -68,6 +69,7 @@ import {
   rerouteMatter,
   retitleMatter,
   retryMatterRun,
+  setMatterModel,
   stopMatterRuns,
   uploadBrandAsset,
 } from '@/lib/api'
@@ -191,6 +193,12 @@ export function MatterPage(): ReactNode {
   const invalidate = (): void => {
     void client.invalidateQueries({ queryKey: ['matter', id] })
   }
+
+  /** WP342（决策 853）：换这件事用的 AI（只这一件；之后接着跑仍用它）。 */
+  const pickModel = useMutation({
+    mutationFn: (model: string) => setMatterModel(id, model),
+    onSuccess: invalidate,
+  })
 
   const archive = useMutation({
     mutationFn: () => archiveMatter(id),
@@ -816,6 +824,14 @@ export function MatterPage(): ReactNode {
           }}
           suggestion={suggestion}
           sending={false}
+          modelSlot={
+            <ComposerModelPicker
+              value={(pickModel.isError ? undefined : pickModel.variables) ?? view?.matter.model}
+              onChange={(next) => {
+                pickModel.mutate(next)
+              }}
+            />
+          }
           attachments={attached.map((a) => ({
             id: a.id,
             url: a.url,
