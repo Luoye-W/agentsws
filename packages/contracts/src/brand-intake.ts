@@ -22,6 +22,7 @@
  * **抓不到就是抓不到**：拿不准的字段不出现在结果里，不填一个像模像样的猜测。
  * 一个空格子用户知道要填，一个填错的格子用户会当它是对的。
  */
+import type { BrandAudience, BrandCompetitor, BrandKeywords } from './brand-insights.js'
 import type { Iso8601, WorkspaceId } from './common.js'
 import type { StorefrontPlatform } from './identity.js'
 
@@ -82,6 +83,26 @@ export interface BrandIntakeProduct {
   asin?: string
   /** 有没有变体（颜色 / 尺码）。抓不到变体明细时只说有没有。 */
   has_variants?: boolean
+  /**
+   * WP346：原价（划线价 / 建议零售价），原样存那串字。只有页面上同时写着原价与售价时才有——
+   * 这时 `price_snapshot` 与 {@link sale_price_snapshot} 是同一个数（卖的那个价）。
+   */
+  list_price_snapshot?: string
+  /** WP346：售价（实际卖的那个价），原样存。有原价时才单独给；没有原价时只看 `price_snapshot`。 */
+  sale_price_snapshot?: string
+  /** WP346：规格（材质、尺寸、重量、容量…）。结构化数据里读的在前，AI 补的标在 {@link model_filled}。 */
+  specs?: BrandIntakeProductSpec[]
+  /**
+   * WP346：这张卡上**哪几样是 AI 从页面文字里补的**（`specs` / `list_price_snapshot` /
+   * `sale_price_snapshot`）。界面据此挂「AI 建议」；价格只收页面上原样出现过的那串字。
+   */
+  model_filled?: ('specs' | 'list_price_snapshot' | 'sale_price_snapshot')[]
+}
+
+/** WP346：一条规格。 */
+export interface BrandIntakeProductSpec {
+  name: string
+  value: string
 }
 
 /** 政策要点（退换货 / 物流 / 保修）。**要点不是全文**：全文进知识库，这里只留一句。 */
@@ -134,7 +155,34 @@ export interface BrandIntakeProfile {
   /** Amazon 专有：评分与评论数（只在 listing 那条路上有）。 */
   rating?: BrandIntakeField<number>
   reviews_count?: BrandIntakeField<number>
+  /*
+   * ── WP346（决策 872）：AI 从抓到的页面文字里归纳的几格 ─────────────────────
+   * 层一律是 `model`（把握度 `low`，界面标「请确认」 + 「AI 建议」）。没接模型就一格都没有。
+   */
+  /** 目标人群：谁买、谁付钱、顾虑。 */
+  audience?: BrandIntakeField<BrandAudience>
+  /** 关键词（品牌 / 品类 / 场景三组）。 */
+  keywords?: BrandIntakeField<BrandKeywords>
+  /** 价格带（「$20–$80」这样一串；从页面上的价归纳，不编）。 */
+  price_band?: BrandIntakeField<string>
+  /** 子品类（比品类细一层：「AR 眼镜」下的「拍照 AR 眼镜」）。 */
+  subcategory?: BrandIntakeField<string>
+  /** 品牌定位一段（两三句；一句话介绍 `one_liner` 照旧保留）。 */
+  positioning?: BrandIntakeField<string>
+  /** 主要竞品（AI 建议 3–6 个，各带一句理由）。 */
+  competitors?: BrandIntakeField<BrandCompetitor[]>
 }
+
+/**
+ * WP346：AI 归纳那一步怎么样了（界面按它说一句：没接模型 / 积分不够 / 模型没答好）。
+ *
+ * - `done`：问过了（回来的格子可能仍有空的——模型拿不准的就不填）；
+ * - `no_model`：这个品牌没接模型，AI 那几格跳过，照旧出解析结果；
+ * - `budget`：页面已经花到封顶，AI 那一步没问；
+ * - `failed`：问了但没答好 / 出错（解析结果照给）；
+ * - `skipped`：一页都没读到 / 空店，没什么可归纳的。
+ */
+export type BrandIntakeInsightsStatus = 'done' | 'no_model' | 'budget' | 'failed' | 'skipped'
 
 /** 一次分析跑到哪一步了。 */
 export type BrandIntakeRunStatus =
@@ -200,6 +248,8 @@ export interface BrandIntakeRun {
    * 第 ③ 步推荐加上建站。
    */
   fresh_store?: boolean
+  /** WP346：AI 归纳那一步怎么样了（没有 = 老 run / 还没跑到）。 */
+  insights?: BrandIntakeInsightsStatus
 }
 
 /**
@@ -254,3 +304,18 @@ export const BRAND_INTAKE_MAX_PAGES = 12
 
 /** 主打商品最多取几个。 */
 export const BRAND_INTAKE_MAX_PRODUCTS = 8
+
+/**
+ * WP346：AI 归纳那一次调用按多少积分算（与一页抽取同价）。
+ *
+ * 封顶照旧是 {@link DEFAULT_BRAND_INTAKE_CAP_CREDITS}：接了模型时先给这一步留出这一份，
+ * 页面预算相应少一份——官网 12 页 × 0.15 + 0.15 = 1.95，仍压在 2 下面。
+ */
+export const BRAND_INTAKE_INSIGHTS_CREDITS = 0.15
+
+/** WP346：「重新分析一次」逐格采纳（设置页）：采纳哪几格，可顺带改值（形状同确认的 `edits`）。 */
+export interface BrandIntakeAdoptInput {
+  run_id: string
+  fields: string[]
+  edits?: Record<string, unknown>
+}
