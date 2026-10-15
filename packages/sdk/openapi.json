@@ -37464,6 +37464,24 @@
                         "url": {
                           "type": "string",
                           "maxLength": 300
+                        },
+                        "sources": {
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "maxLength": 500
+                              },
+                              "title": {
+                                "type": "string",
+                                "maxLength": 200
+                              }
+                            },
+                            "required": ["url"]
+                          }
                         }
                       },
                       "required": ["name", "reason"]
