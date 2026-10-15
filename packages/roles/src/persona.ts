@@ -276,6 +276,19 @@ export interface PersonaBrandContext {
   support_email?: string
   /** WP248（决策 83）：这个品牌卖货的币种（ISO 4217；品牌档案里写过才有，不替人补默认值）。 */
   currency?: string
+  /*
+   * WP346（决策 872）：品牌档案第二版那几格——红人、广告、内容、巡查的建议都先读它们。
+   * 还是「AI 建议」（人没核过）的那几格列在 `unconfirmed` 里，那一行后面注一句「AI 归纳，待人核」。
+   */
+  category?: string
+  subcategory?: string
+  positioning?: string
+  price_band?: string
+  audience?: { buyers: string; payer?: string; concerns?: string[] }
+  keywords?: { brand: string[]; category: string[]; scenario: string[] }
+  /** 竞品名（理由不进提示词：太长，模型要的是「跟谁比」）。 */
+  competitors?: string[]
+  unconfirmed?: string[]
 }
 
 /** WP251：公司全称与品牌名是不是同一个（大小写、空白不算）。没有品牌名 = 不一样。 */
@@ -316,6 +329,70 @@ export function renderBrandContext(
   if (currency) lines.push(zh ? `币种：${currency}` : `Currency: ${currency}`)
   const email = brand.support_email?.trim()
   if (email) lines.push(zh ? `客服邮箱：${email}` : `Support email: ${email}`)
+  // WP346：第二版那几格（AI 归纳、人没核过的注一句）
+  const note = (key: string): string =>
+    brand.unconfirmed?.includes(key) === true
+      ? zh
+        ? '（AI 归纳，待人核）'
+        : ' (AI draft, unconfirmed)'
+      : ''
+  const cat = [brand.category?.trim(), brand.subcategory?.trim()].filter((x) => x).join(' / ')
+  if (cat)
+    lines.push(zh ? `品类：${cat}${note('category')}` : `Category: ${cat}${note('category')}`)
+  const pos = brand.positioning?.trim()
+  if (pos)
+    lines.push(
+      zh
+        ? `品牌定位：${pos}${note('positioning')}`
+        : `Brand positioning: ${pos}${note('positioning')}`,
+    )
+  const band = brand.price_band?.trim()
+  if (band)
+    lines.push(
+      zh ? `价格带：${band}${note('price_band')}` : `Price band: ${band}${note('price_band')}`,
+    )
+  const who = brand.audience
+  if (who !== undefined && who.buyers.trim() !== '') {
+    const parts = [
+      who.buyers.trim(),
+      ...(who.payer?.trim()
+        ? [zh ? `付钱的人：${who.payer.trim()}` : `Payer: ${who.payer.trim()}`]
+        : []),
+      ...((who.concerns ?? []).length > 0
+        ? [
+            zh
+              ? `顾虑：${(who.concerns ?? []).join('、')}`
+              : `Concerns: ${(who.concerns ?? []).join('; ')}`,
+          ]
+        : []),
+    ]
+    lines.push(
+      zh
+        ? `目标人群：${parts.join('；')}${note('audience')}`
+        : `Audience: ${parts.join('; ')}${note('audience')}`,
+    )
+  }
+  const kw = brand.keywords
+  if (kw !== undefined) {
+    const groups = [
+      [zh ? '品牌词' : 'brand', kw.brand],
+      [zh ? '品类词' : 'category', kw.category],
+      [zh ? '场景词' : 'scenario', kw.scenario],
+    ] as const
+    const text = groups
+      .filter(([, list]) => list.length > 0)
+      .map(([label, list]) => `${label} ${list.slice(0, 8).join(zh ? '、' : ', ')}`)
+      .join(zh ? '；' : '; ')
+    if (text)
+      lines.push(zh ? `关键词：${text}${note('keywords')}` : `Keywords: ${text}${note('keywords')}`)
+  }
+  const rivals = (brand.competitors ?? []).filter((c) => c.trim() !== '').slice(0, 8)
+  if (rivals.length > 0)
+    lines.push(
+      zh
+        ? `主要竞品：${rivals.join('、')}${note('competitors')}`
+        : `Main competitors: ${rivals.join(', ')}${note('competitors')}`,
+    )
   const visual = brand.visual_tone?.trim()
   if (visual) lines.push(zh ? `视觉气质：${visual}` : `Visual character: ${visual}`)
   const tone = (brand.tone_samples ?? []).filter((t) => t.trim() !== '').slice(0, MAX_TONE_SAMPLES)

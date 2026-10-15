@@ -47,6 +47,12 @@ export interface StrategyInput {
   top_queries?: readonly string[] | undefined
   /** 已经在名单里的竞品（模型补，不重复）。 */
   competitors?: readonly BrandWatchCompetitor[] | undefined
+  /** WP346（决策 872）：品牌档案里的目标人群（一句话；写问题时照着真实买家的口吻）。 */
+  audience?: string | undefined
+  /**
+   * WP346：品牌档案里的关键词（排在最前，模型只补不换）。不给 = 档案里没有，关注词照旧由模型建议 / 兜底。
+   */
+  profile_keywords?: readonly BrandWatchKeyword[] | undefined
 }
 
 /** 按 Search Console 近 7 天粗判阶段：没连 / 曝光很少 = 新；品牌词曝光占比高且总量大 = 成熟。 */
@@ -100,6 +106,17 @@ export function strategyPrompt(input: StrategyInput): string {
       : []),
     ...(input.competitors?.length
       ? [`known competitors: ${input.competitors.map((c) => fence(c.name)).join(', ')}`]
+      : []),
+    // WP346：品牌档案里的人群与关键词（人确认过 / AI 归纳过的；照它来，别另起炉灶）
+    ...(input.audience
+      ? [`target shoppers (from the brand profile): ${fence(input.audience)}`]
+      : []),
+    ...(input.profile_keywords?.length
+      ? [
+          `keywords already in the brand profile (keep them, only add new ones): ${input.profile_keywords
+            .map((k) => fence(k.keyword))
+            .join(', ')}`,
+        ]
       : []),
     'PROFILE>>>',
   ]
@@ -375,10 +392,20 @@ export function buildStrategy(input: {
       domains: c.domains,
     })
   }
-  const keywords =
+  // WP346：品牌档案里的关键词排最前（模型只补不换），再到模型建议、最后兜底
+  const fromProfile = [...(profile.profile_keywords ?? [])]
+  const suggested =
     reply !== undefined && reply.keywords.length > 0
       ? reply.keywords.map((k) => ({ ...k, enabled: true }))
       : [...(input.keywords ?? [])]
+  const seenKw = new Set<string>()
+  const keywords: BrandWatchKeyword[] = []
+  for (const k of [...fromProfile, ...suggested]) {
+    const n = normalizeQuery(k.keyword)
+    if (n === '' || seenKw.has(n) || keywords.length >= WATCH_KEYWORDS_DEFAULT) continue
+    seenKw.add(n)
+    keywords.push(k)
+  }
   const why =
     reply === undefined
       ? [

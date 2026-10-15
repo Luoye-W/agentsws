@@ -22,8 +22,12 @@ import type {
   AiAnswerDataItem,
   AiAnswerResult,
   AiPlatform,
+  BrandAudience,
+  BrandCompetitor,
+  BrandKeywords,
   BrandWatch,
   BrandWatchCompetitor,
+  BrandWatchKeyword,
   Clock,
   DataCallResult,
   DataCapabilityList,
@@ -73,6 +77,7 @@ import {
   cellHistory,
   citedSources,
   classifyPrompt,
+  competitorId,
   defaultWatchKeywords,
   type GeoAlert,
   type GeoUnitPrices,
@@ -131,6 +136,10 @@ export interface WatchBrand {
   /** 品牌一句话介绍（品类常在这里）。 */
   one_liner?: string | undefined
   category?: string | undefined
+  /** WP346（决策 872）：品牌档案里的目标人群、关键词、竞品（GEO 建议先读它们，读不到再让 AI 猜）。 */
+  audience?: BrandAudience | undefined
+  keywords?: BrandKeywords | undefined
+  competitors?: readonly BrandCompetitor[] | undefined
 }
 
 export interface GeoMonitorDeps {
@@ -1406,10 +1415,40 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 30)
       .map(([q]) => q)
+    // WP346（决策 872）：竞品与关注词先读品牌档案（关注设置里还没有的时候），读不到再让 AI 建议
+    const profileCompetitors: BrandWatchCompetitor[] =
+      watch.competitors.length > 0
+        ? watch.competitors
+        : (brand.competitors ?? []).slice(0, 10).map((c) => ({
+            id: competitorId(c.name),
+            name: c.name,
+            aliases: [],
+            domains: (() => {
+              try {
+                return c.url === undefined ? [] : [new URL(c.url).hostname.replace(/^www\./, '')]
+              } catch {
+                return []
+              }
+            })(),
+          }))
+    const profileKeywords: BrandWatchKeyword[] =
+      watch.keywords.length > 0 || brand.keywords === undefined
+        ? []
+        : [
+            ...brand.keywords.brand.map((k) => ({ keyword: k, branded: true, enabled: true })),
+            ...brand.keywords.category.map((k) => ({ keyword: k, branded: false, enabled: true })),
+            ...brand.keywords.scenario.map((k) => ({ keyword: k, branded: false, enabled: true })),
+          ]
+    const audience =
+      brand.audience === undefined
+        ? undefined
+        : [brand.audience.buyers, ...(brand.audience.concerns ?? [])].join('；')
     const profile = {
       brand: { name: watch.brand.name, aliases: watch.brand.aliases, domains: watch.brand.domains },
       one_liner: brand.one_liner,
       category: brand.category,
+      ...(audience === undefined ? {} : { audience }),
+      ...(profileKeywords.length === 0 ? {} : { profile_keywords: profileKeywords }),
       markets: probingMarkets(watch),
       language: brand.language,
       stage_hint: stageHint(
@@ -1419,7 +1458,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         isBrand,
       ),
       top_queries: top,
-      competitors: watch.competitors,
+      competitors: profileCompetitors,
     }
     const model = deps.model?.('strategy')
     let reply: ReturnType<typeof parseStrategyReply>

@@ -117,11 +117,28 @@ export function brandKnowledgeCards(
         ...(product.asin === undefined ? {} : { id: product.asin }),
         key: `product:${product.title}`,
       },
-      statement: `${brand} 的「${product.title}」标价 ${product.price_snapshot}`,
+      // WP346：原价 / 售价分开写；规格跟在后面（AI 补的规格同样只是「待核」的一条）
+      statement:
+        `${brand} 的「${product.title}」标价 ${product.price_snapshot}` +
+        (product.list_price_snapshot === undefined
+          ? ''
+          : `（原价 ${product.list_price_snapshot}）`) +
+        (product.specs === undefined || product.specs.length === 0
+          ? ''
+          : `；规格：${product.specs.map((x) => `${x.name} ${x.value}`).join('，')}`),
       structured: {
         title: product.title,
         price_snapshot: product.price_snapshot,
         ...(product.currency === undefined ? {} : { currency: product.currency }),
+        ...(product.list_price_snapshot === undefined
+          ? {}
+          : { list_price_snapshot: product.list_price_snapshot }),
+        ...(product.sale_price_snapshot === undefined
+          ? {}
+          : { sale_price_snapshot: product.sale_price_snapshot }),
+        ...(product.specs === undefined || product.specs.length === 0
+          ? {}
+          : { specs: Object.fromEntries(product.specs.map((x) => [x.name, x.value])) }),
       },
       provenance: [
         {

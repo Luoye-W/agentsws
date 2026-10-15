@@ -29,16 +29,13 @@ import type { BrandIntakeActor, BrandIntakePort } from '@agentsws/api'
 import {
   analyzeBrand,
   applyEdits,
-  categoryPrompt,
   classifyUrl,
   estimateCredits,
+  type InsightsModel,
   mergeProfile,
-  modelCategoryField,
   type PageFetch,
-  parseCategoryReply,
   type StorefrontPasswordPost,
   unlockShopifyStorefront,
-  wantsModelCategory,
 } from '@agentsws/brand-intake'
 import type {
   BrandIntakeFailureKind,
@@ -63,7 +60,15 @@ export interface BrandIntakeSinks {
    * WP240：带上**是谁、在哪个品牌**确认的——写的必须是 `actor.workspace_id` 那个品牌，
    * 不是这个进程启动时的那个品牌（第二个品牌的分析写到第一个品牌身上，就是那次事故）。
    */
-  applyProfile(profile: BrandIntakeProfile, actor: BrandIntakeActor): Promise<void> | void
+  applyProfile(
+    profile: BrandIntakeProfile,
+    actor: BrandIntakeActor,
+    /**
+     * WP346：这一次是怎么写的——`website` 是这一轮读的官网（档案记下它，「重新分析一次」默认用）；
+     * `adopt` = 设置页逐格采纳（只写给出的那几格，公司名 / 品牌名不碰）。
+     */
+    meta?: { website?: string; adopt?: true },
+  ): Promise<void> | void
   /**
    * 往知识库里建首批条目（政策要点、商品卡），**标来源「自动分析，待核」**。
    *
@@ -93,7 +98,34 @@ export interface BrandIntakeOptions {
   categoryModel?: (
     actor: BrandIntakeActor,
   ) => ((input: { prompt: string }) => Promise<{ text: string }>) | undefined
+  /**
+   * WP346（决策 872）：AI 归纳那一步用的模型口（这个品牌的默认模型，每次现取；没接模型回 `undefined`
+   * ——人群 / 关键词 / 竞品那几格跳过，照旧出解析结果）。一次分析只问一次，品类也在这一次里问
+   * （不再单独问一次）。不给就退回 `categoryModel`（老装配 / 测试）。
+   */
+  insightsModel?: (
+    actor: BrandIntakeActor,
+  ) => Promise<InsightsModel | undefined> | InsightsModel | undefined
+  /** WP346：人群 / 定位 / 竞品理由用什么语言写（默认中文）。 */
+  insightsLanguage?: 'zh' | 'en'
 }
+
+/**
+ * WP346：设置页逐格采纳能采的那几格。品牌名 / 公司名 / 市场不在里面：它们有各自的改法
+ * （设置页那一格、市场选择器），从一次重跑里「采纳」过去容易把公司名改成品牌名。
+ */
+export const ADOPTABLE_FIELDS = [
+  'one_liner',
+  'category',
+  'support_email',
+  'currency',
+  'subcategory',
+  'positioning',
+  'price_band',
+  'audience',
+  'keywords',
+  'competitors',
+] as const
 
 export interface BrandIntakeAssembly {
   port: BrandIntakePort
@@ -189,7 +221,22 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
     gens.set(id, gen)
     const task = (async () => {
       try {
+        // WP346：这个品牌的模型（没接就是 undefined → AI 那几格跳过）
+        const model =
+          options.insightsModel !== undefined
+            ? await options.insightsModel(actor)
+            : options.categoryModel?.(actor)
         const out = await analyzeBrand(options.fetch, urls, {
+          ...(model === undefined
+            ? {}
+            : {
+                insights: {
+                  model,
+                  ...(options.insightsLanguage === undefined
+                    ? {}
+                    : { language: options.insightsLanguage }),
+                },
+              }),
           capCredits: cap,
           keepHtml: true,
           // WP240：每抓完一页就把进度写回 run（界面「已经读了 N 页」跟着动，不等整轮跑完）
@@ -209,14 +256,9 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         })
         const current = runs.get(id)
         if (current === undefined || gens.get(id) !== gen) return
-        const merged = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
+        // WP335 → WP346：品类并进 AI 归纳那一次（读到的 / 人改过的不动；mergeProfile 管人改过的）
+        const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
-        // WP335（决策 659）：品类——读到的 / 人改过的不动；没有就请模型说一个（标「请确认」）
-        const profile =
-          gotSomething && out.fresh_store !== true
-            ? await withCategory(actor, merged, out.pages.find((p) => p.ok)?.url ?? urls[0] ?? '')
-            : merged
-        if (gens.get(id) !== gen) return
         documents.set(current.workspace_id, out.documents ?? [])
         const {
           failure: _f,
@@ -236,6 +278,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
           budget: out.budget,
           profile,
           updated_at: now(),
+          // WP346：AI 归纳那一步怎么样了（界面按它说一句）
+          insights: out.insights,
           ...(out.password_protected === true ? { password_protected: true } : {}),
           // WP244：空店——界面据此明说「品牌资料请自己填」，推荐里加建站
           ...(out.fresh_store === true ? { fresh_store: true } : {}),
@@ -260,26 +304,6 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
     })()
     inflight.add(task)
     void task.finally(() => inflight.delete(task))
-  }
-
-  /** WP335：请模型认品类（没模型 / 模型没答好 / 出错 → 原样返回，不填）。 */
-  const withCategory = async (
-    actor: BrandIntakeActor,
-    profile: BrandIntakeProfile,
-    url: string,
-  ): Promise<BrandIntakeProfile> => {
-    if (!wantsModelCategory(profile)) return profile
-    const model = options.categoryModel?.(actor)
-    if (model === undefined) return profile
-    try {
-      const category = parseCategoryReply((await model({ prompt: categoryPrompt(profile) })).text)
-      return category === undefined
-        ? profile
-        : { ...profile, category: modelCategoryField(category, url) }
-    } catch (err) {
-      warn(`[brand-intake] 认品类没成：${String(err)}\n`)
-      return profile
-    }
   }
 
   const port: BrandIntakePort = {
@@ -332,7 +356,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         input.edits === undefined
           ? current.profile
           : applyEdits(current.profile, input.edits, now())
-      await options.sinks.applyProfile(profile, actor)
+      const website = current.inputs.find((i) => i.kind === 'website')?.url
+      await options.sinks.applyProfile(profile, actor, website === undefined ? {} : { website })
       await options.sinks.seedKnowledge?.(profile, actor)
       const next: BrandIntakeRun = {
         ...current,
@@ -367,6 +392,39 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(done.id, done)
       return done
+    },
+
+    /*
+     * WP346（决策 872）：设置页「重新分析一次」→ 对比「现在 / 新的」→ **只写人勾的那几格**。
+     * 没勾的一格不动（人改过的格子不会被自动覆盖）；商品 / 政策不在这里（知识库那边有自己的核对）。
+     */
+    async adopt(actor, input) {
+      const current = mine(actor, input.run_id)
+      const allowed = new Set<string>(ADOPTABLE_FIELDS)
+      const fields = input.fields.filter((f) => allowed.has(f))
+      if (fields.length === 0)
+        throw Object.assign(new Error('没有能采纳的格子'), { code: 'invalid_input' })
+      const edited =
+        input.edits === undefined
+          ? current.profile
+          : applyEdits(
+              current.profile,
+              Object.fromEntries(Object.entries(input.edits).filter(([k]) => fields.includes(k))),
+              now(),
+            )
+      const picked = Object.fromEntries(
+        fields
+          .map((f) => [f, (edited as Record<string, unknown>)[f]] as const)
+          .filter(([, v]) => v !== undefined),
+      ) as BrandIntakeProfile
+      const website = current.inputs.find((i) => i.kind === 'website')?.url
+      await options.sinks.applyProfile(picked, actor, {
+        adopt: true,
+        ...(website === undefined ? {} : { website }),
+      })
+      const next: BrandIntakeRun = { ...current, status: 'confirmed', updated_at: now() }
+      runs.set(next.id, next)
+      return next
     },
 
     reanalyze(actor, input) {

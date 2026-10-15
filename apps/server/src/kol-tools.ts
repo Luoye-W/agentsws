@@ -36,6 +36,11 @@ export interface KolToolsOptions {
   port(): KolPort | undefined
   /** 现在几点（登记交付物没给 `due_at` 时按「一周后」兜底）。 */
   now(): Iso8601
+  /**
+   * WP346（决策 872）：模型没给关键词时，按品牌档案里的品类关键词搜（`brandSearchQuery`）。
+   * 读不到回 `undefined`（照旧不带关键词）。
+   */
+  brandQuery?(): string | undefined
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
@@ -151,7 +156,10 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          * 库里那两个 48,000 / 31,000 粉的频道一个都搜不出来。现在没关键词就是
          * 没关键词（这条渠道上的人都算候选），筛人交给粉丝区间。
          */
-        const q = str(input.q)
+        // WP346：模型没给关键词 → 先读品牌档案（品类关键词）；读不到照旧不带关键词
+        const asked = str(input.q)
+        const fromProfile = asked === undefined ? options.brandQuery?.() : undefined
+        const q = asked ?? fromProfile
         const limit = num(input.limit)
         const min_followers = num(input.min_followers)
         const max_followers = num(input.max_followers)
@@ -159,14 +167,22 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           ...(min_followers === undefined ? {} : { min_followers }),
           ...(max_followers === undefined ? {} : { max_followers }),
         }
-        const res = await port.search(actor, {
-          channel,
-          q: q ?? '',
-          ...(limit === undefined ? {} : { limit }),
-          ...band,
-          // WP126：上一级报错后，用户点了"改用官方接口"重发的那一次
-          ...(input.fallback === 'workshop' ? { fallback: 'workshop' as const } : {}),
-        })
+        const searchWith = (query: string) =>
+          port.search(actor, {
+            channel,
+            q: query,
+            ...(limit === undefined ? {} : { limit }),
+            ...band,
+            // WP126：上一级报错后，用户点了"改用官方接口"重发的那一次
+            ...(input.fallback === 'workshop' ? { fallback: 'workshop' as const } : {}),
+          })
+        let res = await searchWith(q ?? '')
+        // 档案关键词一个都没搜到：退回不带关键词（与 WP117b 以前的行为一样，不让档案把人筛没了）
+        let profileUsed = fromProfile !== undefined
+        if (profileUsed && res.ok && res.rows.length === 0) {
+          res = await searchWith('')
+          profileUsed = false
+        }
         if (res.ok) {
           return {
             ...rowsOf(res.rows, 'creator'),
@@ -175,6 +191,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
               object: 'creator',
               source: res.source,
               ...(res.source_label === undefined ? {} : { source_label: res.source_label }),
+              ...(profileUsed ? { criteria: `关键词「${fromProfile}」（品牌档案）` } : {}),
             },
           }
         }

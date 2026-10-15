@@ -18,6 +18,10 @@
  *    读自己的绑定，不要求策略层读权限；真改公司档案、发邀请码、批申请一律 owner 级。
  */
 import type {
+  BrandAudience,
+  BrandCompetitor,
+  BrandInsightField,
+  BrandKeywords,
   MarketsSource,
   MaybePromise,
   MembershipRequestVia,
@@ -103,6 +107,22 @@ export interface WorkspaceProfileInput {
   currency?: string | undefined
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改）。不给 = 不改；给空串 = 清空。 */
   category?: string | undefined
+  /*
+   * WP346（决策 872）：品牌档案第二版那几格。不给 = 不改；空串 / `null` / 空数组 = 清空。
+   * 从 HTTP 来的值一律算人给的（拿掉「AI 建议」标）。
+   */
+  subcategory?: string | undefined
+  positioning?: string | undefined
+  price_band?: string | undefined
+  audience?: BrandAudience | null | undefined
+  keywords?: BrandKeywords | null | undefined
+  competitors?: BrandCompetitor[] | undefined
+  /** WP346：人点了「对」的那几格（值不变，只拿掉「AI 建议」标）。 */
+  confirm_fields?: BrandInsightField[] | undefined
+  /** WP346：服务端内部用（品牌分析确认 / 采纳）：这一次哪几格是 AI 建议的。HTTP 不收。 */
+  ai_suggested?: BrandInsightField[] | undefined
+  /** WP346：服务端内部用：品牌分析读的那个官网。HTTP 不收。 */
+  website?: string | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -132,6 +152,17 @@ export interface WorkspaceProfileView {
   currency?: string
   /** WP335（决策 659）：品类（没写过就没有）。 */
   category?: string
+  /** WP346：第二版那几格（没写过就没有）。 */
+  subcategory?: string
+  positioning?: string
+  price_band?: string
+  audience?: BrandAudience
+  keywords?: BrandKeywords
+  competitors?: BrandCompetitor[]
+  /** WP346：品牌分析读的那个官网（「重新分析一次」默认用它）。 */
+  website?: string
+  /** WP346：哪几格还是 AI 建议（人没改、没点过「对」）。 */
+  ai_suggested?: BrandInsightField[]
   set_at: string
 }
 
@@ -447,6 +478,22 @@ export interface OnboardingPort {
 
 // ── 校验 ───────────────────────────────────────────────────────────────
 
+/** WP346：可以点「对」的那几格（与契约 `BRAND_INSIGHT_FIELDS` 同一组）。 */
+const INSIGHT_FIELDS = [
+  'category',
+  'subcategory',
+  'positioning',
+  'price_band',
+  'audience',
+  'keywords',
+  'competitors',
+] as const satisfies readonly BrandInsightField[]
+
+/** zod 的可选字段在 exactOptionalPropertyTypes 下是 `T | undefined`——去掉没给的那几个键。 */
+function stripUndefined<T extends object>(v: T): { [K in keyof T]: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined)) as never
+}
+
 const ProfileBody = z.object({
   legal_name: z.string().min(1).max(200),
   domain: z.string().max(253).optional(),
@@ -482,6 +529,37 @@ const ProfileBody = z.object({
     .optional(),
   // WP335（决策 659）：品类。不给 = 不改；空串 = 清空
   category: z.string().max(80).optional(),
+  // WP346（决策 872）：第二版那几格。不给 = 不改；空串 / null / 空数组 = 清空
+  subcategory: z.string().max(80).optional(),
+  positioning: z.string().max(800).optional(),
+  price_band: z.string().max(60).optional(),
+  audience: z
+    .object({
+      buyers: z.string().max(400),
+      payer: z.string().max(200).optional(),
+      concerns: z.array(z.string().max(120)).max(6).optional(),
+    })
+    .nullable()
+    .optional(),
+  keywords: z
+    .object({
+      brand: z.array(z.string().max(60)).max(20),
+      category: z.array(z.string().max(60)).max(20),
+      scenario: z.array(z.string().max(60)).max(20),
+    })
+    .nullable()
+    .optional(),
+  competitors: z
+    .array(
+      z.object({
+        name: z.string().max(80),
+        reason: z.string().max(200),
+        url: z.string().max(300).optional(),
+      }),
+    )
+    .max(12)
+    .optional(),
+  confirm_fields: z.array(z.enum(INSIGHT_FIELDS)).max(10).optional(),
 })
 
 const PlannedPositionBody = z.object({
@@ -610,6 +688,18 @@ export function onboardingRoutes(): Route[] {
             ...(input.support_email === undefined ? {} : { support_email: input.support_email }),
             ...(input.currency === undefined ? {} : { currency: input.currency }),
             ...(input.category === undefined ? {} : { category: input.category }),
+            // WP346（决策 872）：第二版那几格 + 人点了「对」的那几格
+            ...(input.subcategory === undefined ? {} : { subcategory: input.subcategory }),
+            ...(input.positioning === undefined ? {} : { positioning: input.positioning }),
+            ...(input.price_band === undefined ? {} : { price_band: input.price_band }),
+            ...(input.audience === undefined
+              ? {}
+              : { audience: input.audience === null ? null : stripUndefined(input.audience) }),
+            ...(input.keywords === undefined ? {} : { keywords: input.keywords }),
+            ...(input.competitors === undefined
+              ? {}
+              : { competitors: input.competitors.map((c) => stripUndefined(c)) }),
+            ...(input.confirm_fields === undefined ? {} : { confirm_fields: input.confirm_fields }),
           }),
         )
       },
