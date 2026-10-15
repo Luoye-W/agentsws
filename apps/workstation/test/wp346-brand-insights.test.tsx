@@ -153,7 +153,7 @@ describe('WP346 重新分析一次：对比「现在 / 新的」', () => {
       profile: {
         positioning: ai('新的定位。'),
         competitors: ai([{ name: 'Gregory', reason: '新' }]),
-        keywords: ai(VIEW.keywords),
+        keywords: ai(VIEW.keywords ?? { brand: [], category: [], scenario: [] }),
         price_band: ai('$119-$189'),
       },
     })
