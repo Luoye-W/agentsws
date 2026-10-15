@@ -30,7 +30,9 @@ const fetch: FetchLike = async (url, init) => {
   // WP343：助理的只读 / 派活工具总挂着——这里只在挂了 web_search 时才去搜
   const toolsOffered =
     Array.isArray(body.tools) &&
-    (body.tools as { function?: { name?: string } }[]).some((t) => t.function?.name === 'web_search')
+    (body.tools as { function?: { name?: string } }[]).some(
+      (t) => t.function?.name === 'web_search',
+    )
   const alreadySearched = JSON.stringify(body.messages ?? []).includes('"role":"tool"')
   const reply =
     toolsOffered && !alreadySearched
