@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  countIn,
   defaultUserData,
   describeBeat,
   feedFileFor,
@@ -59,5 +60,11 @@ describe('win-update-e2e 纯函数', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  it('WP337：服务进程日志里某句出现了几次（「接着做」只许一次）', () => {
+    const log = 'a 更新好了，暂停的接着做 b\nc 更新好了，暂停的接着做\n'
+    expect(countIn(log, '更新好了，暂停的接着做')).toBe(2)
+    expect(countIn('', 'x')).toBe(0)
   })
 })

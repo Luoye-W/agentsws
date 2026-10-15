@@ -52,6 +52,8 @@ export type UpdateStatus =
     }
   | { state: 'downloading'; version: string; percent: number; source: UpdateSource }
   | { state: 'ready'; version: string; source: UpdateSource }
+  /** WP337：用户选了「空闲时重启」——等没有正在输出的运行就自己重启；点一下取消。 */
+  | { state: 'waiting'; version: string; source: UpdateSource }
   | { state: 'installing'; version: string }
   | {
       state: 'error'
@@ -80,6 +82,19 @@ export interface UpdateControllerOptions {
   smoke: () => Promise<boolean>
   /** 装之前问一句；没任务在跑直接回 true。false = 用户点了「再等等」。 */
   confirmRestart: () => Promise<boolean>
+  /**
+   * WP337：有任务在做时三选一（现在重启 / 空闲时重启 / 稍后）；没任务回 `now`。
+   * 给了就不再走 `confirmRestart`。
+   */
+  chooseRestart?: () => Promise<RestartChoice>
+  /** WP337：现在有没有正在输出的运行（「空闲时重启」每隔一会儿问一次）；问不到当没有。 */
+  outputBusy?: () => Promise<boolean>
+  /** WP337：真要重启之前暂停全部（服务进程落盘，新版开机接着做）。失败不拦重启。 */
+  pauseAll?: (version: string) => Promise<void>
+  /** WP337：暂停之后没重启成（安装程序没起来）——放开、接着做。 */
+  resumeAll?: () => Promise<void>
+  /** 「空闲时重启」多久问一次（默认 5 秒）。 */
+  idlePollMs?: number
   /** notify 档：点了按钮打开下载页。 */
   openDownloadPage: (url: string) => void
   /** notify 档默认的下载页（源没给具体页面时）。 */
@@ -92,7 +107,10 @@ export interface UpdateControllerOptions {
   intervalMs?: number
 }
 
-export type InstallOutcome = 'installing' | 'cancelled' | 'blocked' | 'not-ready'
+export type InstallOutcome = 'installing' | 'cancelled' | 'blocked' | 'not-ready' | 'waiting'
+
+/** WP337：有任务在做时点「重启并更新」的三个选项。 */
+export type RestartChoice = 'now' | 'idle' | 'later'
 
 export interface UpdateController {
   status(): UpdateStatus
@@ -101,8 +119,12 @@ export interface UpdateController {
   check(): Promise<UpdateStatus>
   /** 点「更新」：auto 档后台下载；notify 档打开下载页。错误态里点 = 重试。 */
   download(): Promise<UpdateStatus>
-  /** 点「重启并更新」。 */
-  install(): Promise<InstallOutcome>
+  /**
+   * 点「重启并更新」。不给 `choice` = 由壳问（有任务在做时三选一）；页面上已经问过的直接带上选的那个。
+   */
+  install(choice?: RestartChoice): Promise<InstallOutcome>
+  /** WP337：「等空闲后重启」时点一下 = 取消，回到「重启并更新」。没在等回 false。 */
+  cancelWait(): boolean
   start(): void
   stop(): void
 }
@@ -258,7 +280,12 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   }
 
   const busy = (): boolean =>
-    current.state === 'downloading' || current.state === 'ready' || current.state === 'installing'
+    current.state === 'downloading' ||
+    current.state === 'ready' ||
+    current.state === 'waiting' ||
+    current.state === 'installing'
+  /** WP337：「空闲时重启」那个计时器。 */
+  let waitTimer: TimerHandle | undefined
 
   const found = (info: UpdateInfo | undefined, source: UpdateSource): UpdateStatus => {
     if (info === undefined) return set({ state: 'idle' })
@@ -374,15 +401,8 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     return downloading
   }
 
-  const install = async (): Promise<InstallOutcome> => {
-    const from = current
-    const retry = from.state === 'error' && from.stage === 'install'
-    if (from.state !== 'ready' && !retry) return 'not-ready'
-    const version = from.version
-    if (!(await options.confirmRestart())) {
-      log.info('用户选了再等等，先不重启', { version })
-      return 'cancelled'
-    }
+  /** 自检 → 暂停全部 → 退出装。 */
+  const restartNow = async (version: string): Promise<InstallOutcome> => {
     const fail = (code: UpdateErrorCode, detail: string): InstallOutcome => {
       set({ state: 'error', stage: 'install', code, version, detail })
       return 'blocked'
@@ -398,15 +418,93 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       log.warn('更新前自检未通过，保持旧版本', { version })
       return fail('smoke', '自检未通过：GET /v1/health 不 ok')
     }
-    log.info('自检通过，退出并安装新版本', { version })
+    // 按钮先变「正在重启…」：暂停全部要等正在输出的停在安全点（最多十几秒）
     set({ state: 'installing', version })
+    let paused = false
+    if (options.pauseAll !== undefined) {
+      try {
+        await options.pauseAll(version)
+        paused = true
+      } catch (err) {
+        // 暂停不成也照样重启：最坏就是老样子（时间线上「没跑成」+ 重试）
+        log.warn('更新前暂停全部没成，照样重启', { version, error: String(err) })
+      }
+    }
+    log.info('自检通过，退出并安装新版本', { version })
     try {
       active.install()
     } catch (err) {
       log.warn('安装程序没起来', { version, error: String(err) })
+      if (paused) await options.resumeAll?.().catch(() => undefined)
       return fail('install', String(err))
     }
     return 'installing'
+  }
+
+  const stopWaiting = (): void => {
+    if (waitTimer !== undefined) options.timers.clear(waitTimer)
+    waitTimer = undefined
+  }
+
+  /** WP337：等没有正在输出的运行（后台 / 定时的到重启那一刻再暂停）。 */
+  const waitForIdle = (version: string, source: UpdateSource): void => {
+    stopWaiting()
+    set({ state: 'waiting', version, source })
+    const poll = (): void => {
+      waitTimer = options.timers.setTimeout(() => {
+        void (async () => {
+          if (current.state !== 'waiting') return
+          let outputting = false
+          try {
+            outputting = (await options.outputBusy?.()) ?? false
+          } catch {
+            outputting = false
+          }
+          if (current.state !== 'waiting') return
+          if (outputting) {
+            poll()
+            return
+          }
+          waitTimer = undefined
+          log.info('空闲了，重启更新', { version })
+          await restartNow(version)
+        })()
+      }, options.idlePollMs ?? 5000)
+    }
+    poll()
+  }
+
+  const install = async (choice?: RestartChoice): Promise<InstallOutcome> => {
+    const from = current
+    const retry = from.state === 'error' && from.stage === 'install'
+    if (from.state !== 'ready' && !retry) return 'not-ready'
+    const version = from.version
+    const source = activeSource
+    const picked: RestartChoice =
+      choice ??
+      (options.chooseRestart !== undefined
+        ? await options.chooseRestart()
+        : (await options.confirmRestart())
+          ? 'now'
+          : 'later')
+    if (picked === 'later') {
+      log.info('用户选了再等等，先不重启', { version })
+      return 'cancelled'
+    }
+    if (picked === 'idle') {
+      log.info('用户选了空闲时重启', { version })
+      waitForIdle(version, source)
+      return 'waiting'
+    }
+    return restartNow(version)
+  }
+
+  const cancelWait = (): boolean => {
+    if (current.state !== 'waiting') return false
+    stopWaiting()
+    log.info('取消了「空闲时重启」', { version: current.version })
+    set({ state: 'ready', version: current.version, source: current.source })
+    return true
   }
 
   const schedule = (ms: number): void => {
@@ -428,6 +526,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     check,
     download,
     install,
+    cancelWait,
     start() {
       if (options.mode === 'off' || timer !== undefined) return
       schedule(options.firstCheckMs ?? DEFAULT_FIRST_CHECK_MS)
@@ -435,6 +534,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     stop() {
       if (timer !== undefined) options.timers.clear(timer)
       timer = undefined
+      stopWaiting()
     },
   }
 }

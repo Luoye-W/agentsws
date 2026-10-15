@@ -72,6 +72,24 @@ export interface Strings {
   updateRestartDetail: string
   updateRestartConfirm: string
   updateRestartLater: string
+  /** WP337：有任务在做时三选一（一句 + 三个按钮；清单在 detail）。{n} = 几件。 */
+  updateBusyMessage: string
+  /** 清单下面那一句。 */
+  updateBusyHint: string
+  /** 清单列不下时的最后一行。{n} = 还有几件。 */
+  updateBusyMore: string
+  updateRestartNow: string
+  updateRestartIdle: string
+  updateLater: string
+  /** WP337（Mac：只提示 → 人自己退出装）：退出时的三选一。 */
+  updateQuitNow: string
+  updateQuitIdle: string
+  updateQuitHint: string
+  /** 托盘：等空闲后重启 / 退出（点了取消）。 */
+  updateWaiting: string
+  updateQuitWaiting: string
+  /** 官方场景那一件（问不到里面在不在做事；重启会关掉它）。 */
+  updateOfficialScene: string
   /** 升级没成功，但数据一个字节都没动（迁移在事务里，失败整条回滚）。 */
   upgradeFailedIntact: string
   /** 万一真动了（理论上不该出现，出现了就得说实话）。 */
@@ -156,6 +174,18 @@ const ZH: Strings = {
     '重启会打断岗位 AI 手上的活、官方场景和正在操作电脑的 AI，更新完自动重新打开。',
   updateRestartConfirm: '重启并更新',
   updateRestartLater: '再等等',
+  updateBusyMessage: '还有 {n} 件在做',
+  updateBusyHint: '暂停的会在新版打开后自动接着做',
+  updateBusyMore: '…还有 {n} 件',
+  updateRestartNow: '现在重启',
+  updateRestartIdle: '空闲时重启',
+  updateLater: '稍后',
+  updateQuitNow: '现在退出',
+  updateQuitIdle: '空闲时退出',
+  updateQuitHint: '暂停的会在装好新版、重新打开后自动接着做',
+  updateWaiting: '等空闲后重启（点了取消）',
+  updateQuitWaiting: '等空闲后退出（点了取消）',
+  updateOfficialScene: '官方场景（重启会关掉）',
   upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
   upgradeFailedTouched: '升级中断了，数据可能只改了一半——先还原备份，别继续用。',
   upgradeBackupAt: '升级前的备份在：{path}',
@@ -239,6 +269,18 @@ const EN: Strings = {
     'Restarting interrupts what your AI teammates are working on, the official scenes and any AI using the computer. The app reopens by itself after the update.',
   updateRestartConfirm: 'Restart and update',
   updateRestartLater: 'Not now',
+  updateBusyMessage: '{n} things still running',
+  updateBusyHint: 'Paused work picks up again when the new version opens',
+  updateBusyMore: '…and {n} more',
+  updateRestartNow: 'Restart now',
+  updateRestartIdle: 'When idle',
+  updateLater: 'Later',
+  updateQuitNow: 'Quit now',
+  updateQuitIdle: 'Quit when idle',
+  updateQuitHint: 'Paused work picks up again once the new version is installed and opened',
+  updateWaiting: 'Restart when idle (click to cancel)',
+  updateQuitWaiting: 'Quit when idle (click to cancel)',
+  updateOfficialScene: 'Official scene (closes on restart)',
   upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',
   upgradeFailedTouched:
     'The upgrade stopped halfway and your data may be half-changed. Restore the backup before using it again.',
