@@ -578,7 +578,7 @@ describe('WP316 撤销', () => {
     const undo = await data<Changes>(await post(`/v1/ads/ledger/${staged.change_id}/undo`))
     expect(undo.views[0]?.level).toBe('L1')
     const card = await server.txn.approvals.get(undo.views[0]?.approval_item_id as string)
-    expect((card?.payload as { kind: string }).kind).toBe('ads_undo')
+    expect((card?.payload as { kind?: string } | undefined)?.kind).toBe('ads_undo')
     await approveAndApply(undo.views[0]?.approval_item_id as string)
     const run = await pluginRunOnce('google_ads')
     expect(run?.job.plan.steps).toContainEqual({
@@ -669,9 +669,7 @@ describe('WP316 Meta 改已有、作废重出、开始投放', () => {
       .filter((i) => (i.payload as { kind?: string }).kind === 'budget_change')
     expect(again).toHaveLength(2)
     const fresh = again.find((i) => i.id !== staged.approval_item_id)
-    expect((fresh?.payload as { after: { reissued_from?: string } }).after.reissued_from).toBe(
-      staged.change_id,
-    )
+    expect((afterOf(fresh) as { reissued_from?: string }).reissued_from).toBe(staged.change_id)
   })
 
   it('让一条停着的开始投放：L1，插件点开关；它的日预算算进总闸', async () => {
@@ -681,7 +679,7 @@ describe('WP316 Meta 改已有、作废重出、开始投放', () => {
     )
     expect(staged.level).toBe('L1')
     const card = await server.txn.approvals.get(staged.approval_item_id as string)
-    expect((card?.payload as { kind: string }).kind).toBe('ads_activate')
+    expect((card?.payload as { kind?: string } | undefined)?.kind).toBe('ads_activate')
     await approveAndApply(staged.approval_item_id as string)
     const run = await pluginRunOnce('google_ads')
     expect(run?.job.plan.kind).toBe('enable')
