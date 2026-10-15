@@ -323,7 +323,17 @@ function InsightRow({
   if (empty && !open && !showEmpty) return null
   return (
     <div className="flex items-start gap-2 text-sm" data-testid={`insight-row-${field}`}>
-      <span className="w-24 shrink-0 pt-0.5 text-ws-muted-fg">{t(`intake.field.${field}`)}</span>
+      {/* 字段名就是「改这一格」的按钮（点名字也能改）——界面减字守卫按操作名算，不算说明 */}
+      <button
+        type="button"
+        className="w-24 shrink-0 pt-0.5 text-left text-ws-muted-fg hover:text-foreground"
+        disabled={disabled}
+        onClick={() => {
+          setOpen(true)
+        }}
+      >
+        {t(`intake.field.${field}`)}
+      </button>
       {open ? (
         <span className="flex min-w-0 flex-1 items-start gap-1">
           <ValueEdit
@@ -347,7 +357,10 @@ function InsightRow({
         </span>
       ) : (
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2">
-          <ValueView field={field} v={values} />
+          {/* 值是这一格的现状（状态），不是说明文字 */}
+          <span data-slot="status" className="min-w-0">
+            <ValueView field={field} v={values} />
+          </span>
           {ai && !empty ? <AiTag field={field} /> : null}
           {edited && !ai ? (
             <span className="text-[11px] text-ws-muted-fg" data-testid={`insight-edited-${field}`}>
