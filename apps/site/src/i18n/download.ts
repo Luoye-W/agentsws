@@ -31,9 +31,9 @@ const zh = {
     'win-x64': { h: 'Windows · x64', p: '64 位 Windows', btn: '下载 .exe' },
   },
   firstOpen: {
-    mac: '第一次打开：右键 → 打开',
+    mac: '第一次打开：隐私与安全性 → 仍要打开',
     macHint:
-      '我们还没做苹果签名，直接双击会被系统拦下。右键点图标选「打开」，再点一次「打开」就好。',
+      '还没做苹果公证，第一次双击系统会说「无法验证开发者」。点「完成」，打开「系统设置 → 隐私与安全性」，往下找到 agentsws 点「仍要打开」，以后就不再问。',
     win: '蓝框提示：更多信息 → 仍要运行',
     winHint: '还没买代码签名证书，Windows 会先拦一下；文件本身没问题。签名做完这一步就没了。',
   },
@@ -102,9 +102,9 @@ const en: DownloadCopy = {
     'win-x64': { h: 'Windows · x64', p: '64-bit Windows', btn: 'Download .exe' },
   },
   firstOpen: {
-    mac: 'First launch: right-click → Open',
+    mac: 'First launch: Privacy & Security → Open Anyway',
     macHint:
-      'The app isn’t notarized by Apple yet, so a double-click gets blocked. Right-click the icon, choose Open, then Open again.',
+      'The app isn’t notarized by Apple yet, so the first double-click says macOS can’t verify the developer. Click Done, open System Settings → Privacy & Security, scroll to agentsws and click Open Anyway. It won’t ask again.',
     win: 'Blue warning: More info → Run anyway',
     winHint:
       'We haven’t bought a code-signing certificate yet, so Windows asks first. The file itself is fine; this step goes away once it’s signed.',

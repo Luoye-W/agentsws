@@ -500,3 +500,47 @@ describe('WP319 ⑩ 瘦身：只删运行时用不到的那几类', () => {
     expect(existsSync(join(npm, 'docs'))).toBe(false)
   })
 })
+
+describe('10-15 mac 本机自签（ad-hoc）', () => {
+  it('认得出 Mach-O，不把文本当二进制', async () => {
+    const { isMachO } = await import('../scripts/after-pack.mjs')
+    const dir = mkdtempSync(join(tmpdir(), 'adhoc-'))
+    try {
+      writeFileSync(join(dir, 'bin'), Buffer.from('cffaedfe07000001', 'hex'))
+      writeFileSync(join(dir, 'fat'), Buffer.from('cafebabe00000002', 'hex'))
+      writeFileSync(join(dir, 'txt'), 'hello')
+      expect(isMachO(join(dir, 'bin'))).toBe(true)
+      expect(isMachO(join(dir, 'fat'))).toBe(true)
+      expect(isMachO(join(dir, 'txt'))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('先签散装二进制、再整包 --deep、最后严格校验', async () => {
+    const { adhocSignMacApp } = await import('../scripts/after-pack.mjs')
+    const app = mkdtempSync(join(tmpdir(), 'adhoc-app-'))
+    try {
+      const res = join(app, 'Contents', 'Resources', 'node', 'bin')
+      mkdirSync(res, { recursive: true })
+      writeFileSync(join(res, 'node'), Buffer.from('cffaedfe07000001', 'hex'))
+      writeFileSync(join(app, 'Contents', 'Resources', 'readme.txt'), 'x')
+      const calls: string[][] = []
+      const logs: string[] = []
+      adhocSignMacApp(
+        app,
+        (l: string) => logs.push(l),
+        (_cmd: string, args: string[]) => {
+          calls.push(args)
+          return ''
+        },
+      )
+      expect(calls[0]).toEqual(['--force', '--sign', '-', join(res, 'node')])
+      expect(calls[1]).toEqual(['--force', '--deep', '--sign', '-', app])
+      expect(calls[2]).toEqual(['--verify', '--deep', '--strict', app])
+      expect(logs[0]).toContain('散装二进制 1 个')
+    } finally {
+      rmSync(app, { recursive: true, force: true })
+    }
+  })
+})
