@@ -10,7 +10,6 @@ export const ANSWER_ZH: Record<string, string> = {
   'answer.failed': '没跑成：{why}',
   'answer.stopped': '被停下了',
   'answer.pending': '正在查',
-  'answer.table.total': '列了 {shown} 行，共 {total} 行',
   'kind.answer': '问答',
   'matter.sys.task': '记成了任务，按「{role}」做',
 }
@@ -24,7 +23,6 @@ export const ANSWER_EN: Record<string, string> = {
   'answer.failed': "Didn't run: {why}",
   'answer.stopped': 'Stopped',
   'answer.pending': 'Looking it up',
-  'answer.table.total': 'Showing {shown} of {total} rows',
   'kind.answer': 'Q&A',
   'matter.sys.task': 'Logged as a task, done as “{role}”',
 }

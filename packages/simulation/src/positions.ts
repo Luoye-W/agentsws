@@ -17,9 +17,9 @@
  * 4. **三分**（WP291，决策 356）：这句话是当场问答、会话还是任务。服务进程先问便宜模型；模拟里那一次是
  *    **固定替身**（场景写 `judge`），不写就按 WP287 的规则判（与服务进程退回规则时同一份）。
  *    当场问答落在一件**隐身**的事项里（默认列表找不到它），回答是「一句话 + 组件」——模拟里那段回答由
- *    确定性的替身照 mock 店铺的商品现写（带 ```answer 组件段），再按契约同一份 `splitAnswer` 取出来；
+ *    确定性的替身照 mock 店铺的商品现写（带 ```dsh-ui 组件段），再按契约同一份 `splitAnswer` 取出来；
  *    任务那一件原话后面头一句「记成了任务，按「X」做」。
- *    WP336：替身改写 ```dsh-ui（dsh-genui 写法），而且**故意夹带**按钮 / 图片 / 3D / 外链 / 自定义配色
+ *    WP336：替身写 ```dsh-ui（dsh-genui 写法；决策 823 起 ```answer 已删），而且**故意夹带**按钮 / 图片 / 3D / 外链 / 自定义配色
  *    （像一个不守规矩的模型），按契约同一份白名单过滤；事件里记过滤后的节点类型、表格行数、数字，
  *    以及 mock 店铺的真数，测试比两头相等、比夹带的一个都没漏过去。
  */
@@ -218,7 +218,7 @@ export function installPositions(world: World): PositionsLoop {
         route: { picked: picked.role_id, options: [], task: true },
       })
     if (kind === 'quick') {
-      // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```answer），再按契约取「一句话 + 组件」
+      // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```dsh-ui），再按契约取「一句话 + 组件」
       world.work.appendEvent(matter.id, {
         kind: 'agent_message',
         text: quickAnswerStandIn(world, text),

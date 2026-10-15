@@ -33,9 +33,7 @@ import type {
 import {
   DEFAULT_WEB_LIMITS,
   FIND_ARCHIVED_WORK_TOOL,
-  genuiDisplayRule,
-  QUICK_ANSWER_UI_ENV,
-  quickAnswerUiOf,
+  GENUI_DISPLAY_RULE,
   WEB_SEARCH_TOOL,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
@@ -296,9 +294,8 @@ function systemPrompt(
     '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
     '- 这里只是聊天：你不能替用户发邮件、改店铺、花钱，也不能开事项或派活。用户想让某个岗位去做，提醒他点回复旁边的「交给岗位去做」。',
   ]
-  // WP336：回答里可以放 ```dsh-ui 组件（同一段精简写法；回退开关切回 answer 时不加）
-  const genui = genuiDisplayRule(quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV]))
-  if (genui !== undefined) lines.push(genui)
+  // WP336：回答里可以放 ```dsh-ui 组件（所有对话运行同一段精简写法）
+  lines.push(GENUI_DISPLAY_RULE)
   if (web.on) {
     lines.push(
       `- 可以用 \`web_search\` 上网查最新的公开信息，这一轮最多搜 ${web.max} 次。`,

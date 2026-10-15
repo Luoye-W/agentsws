@@ -1,7 +1,7 @@
 /**
  * WP336（决策 810–812）工作台那一侧：genui 块交给 dsh-genui 的 `/embed` 渲染层画（React 19 下真渲染）。
  * 只剩白名单里的信息类组件；没有按钮 / 链接 / 图片 / 输入框；线程里的 ```dsh-ui 同样画；
- * 渲染层画不了时退回降级的表格 / 数字。
+ * 渲染层画不了时退回几行 markdown。
  */
 import { type AnswerComponent, filterGenuiSpec, type GenuiSpecLite } from '@agentsws/contracts'
 import { screen, waitFor } from '@testing-library/react'
@@ -80,7 +80,7 @@ describe('WP336 genui 块', () => {
     expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('渲染层画不了（插件自己判不合格）→ 退回降级的组件', async () => {
+  it('渲染层画不了（插件自己判不合格）→ 退回退路', async () => {
     const broken = { items: [{ type: 'table', columns: 'x', rows: 3 }] } as unknown as GenuiSpecLite
     renderWithProviders(<GenuiView spec={broken} fallback={<p data-testid="fb">降级</p>} />)
     expect(await screen.findByTestId('fb', {}, SLOW)).toBeTruthy()

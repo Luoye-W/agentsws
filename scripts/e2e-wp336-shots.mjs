@@ -3,7 +3,7 @@
  * WP336（决策 810–812）：当场回答新旧两种画法的对比截图，可重跑出处。起一个 demo（演示世界，端口默认 4396，
  * 拍完即停），**同一个问题、同一份数**各拍一张：
  *
- * 1. `wp336-old-answer`：WP291 的 ```answer 画法（表格 + 数字）——回退开关 `AGENTSWS_QUICK_ANSWER_UI=answer` 时就是它；
+ * 1. `wp336-old-answer`：WP291 的 ```answer 画法（表格 + 数字）——**存档**：决策 823 删掉了那一套，本脚本不再拍它；
  * 2. `wp336-new-genui`：```dsh-ui 经契约白名单过滤后交给 dsh-genui 渲染层（数字卡 + 表格 + 柱状图 + 提示）；
  *    模型那段里故意夹了按钮 / 图片 / 外链，截图里看不到它们；
  * 3. `wp336-new-funnel`：漏斗（echart 预设，本机打包的图表引擎）；
@@ -114,22 +114,6 @@ const PRODUCTS = [
   ['桌面充电站（新品）', 159, 0, '草稿'],
 ]
 
-const OLD = {
-  lead: LEAD,
-  components: [
-    {
-      kind: 'metric',
-      items: [
-        { label: '在卖', value: 5, unit: '件' },
-        { label: '今天订单', value: 18, unit: '单', delta_pct: 12.5 },
-        { label: '销售额', value: 2380, unit: '美元', delta_pct: 9.1 },
-      ],
-    },
-    { kind: 'table', columns: ['商品', '价格', '库存', '状态'], rows: PRODUCTS },
-  ],
-  sources: ['店里的商品列表', '最近的订单'],
-}
-
 /** 模型写的那段 ```dsh-ui（夹着按钮 / 图片 / 外链——过滤后看不到）。 */
 const RAW_GENUI = {
   items: [
@@ -185,10 +169,7 @@ const genuiAnswer = (lead, raw) => ({
   raw,
 })
 
-const blockOf = (a) =>
-  a.raw === undefined
-    ? [a.lead, '', '```answer', JSON.stringify({ components: a.components }), '```'].join('\n')
-    : [a.lead, '', '```dsh-ui', JSON.stringify(a.raw), '```'].join('\n')
+const blockOf = (a) => [a.lead, '', '```dsh-ui', JSON.stringify(a.raw), '```'].join('\n')
 
 async function quick(page, asg, question, answer) {
   const { raw: _raw, ...shown } = answer
@@ -257,11 +238,6 @@ async function main() {
       const requests = []
       page.on('request', (r) => requests.push(r.url()))
 
-      if (scheme === 'light') {
-        await quick(page, asg, QUESTION, OLD)
-        await page.waitForSelector('[data-testid="answer-table"]')
-        await shot(page, 'wp336-old-answer', true)
-      }
       await quick(page, asg, QUESTION, genuiAnswer(LEAD, RAW_GENUI))
       await page.waitForSelector('[data-testid="answer-genui"] table')
       await shot(page, scheme === 'light' ? 'wp336-new-genui' : 'wp336-new-genui-dark', true)

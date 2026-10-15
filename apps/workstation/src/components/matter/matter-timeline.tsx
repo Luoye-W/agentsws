@@ -6,7 +6,6 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
-import { splitAnswer } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -31,7 +30,6 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { AnswerComponents } from '@/components/answer/answer-view'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
@@ -343,11 +341,8 @@ export function AiEntry({
 }): ReactNode {
   const { t } = useApp()
   const raw = item.event?.text ?? ''
-  // WP291：当场问答那段话末尾的 ```answer 组件段——正文照常画，组件按契约画在下面（老内容照常）
-  // WP336：```dsh-ui 留在正文里，由 SafeMarkdown 就地交给 genui 渲染层（同所有 AI 回话）
-  const answer = raw.includes('```answer') ? splitAnswer(raw) : undefined
-  const text = answer?.text ?? raw
-  const shown = (answer?.components ?? []).filter((c) => c.kind !== 'text')
+  // WP336：```dsh-ui 留在正文里，由 SafeMarkdown 就地交给 genui 渲染层（同所有 AI 回话；不再认 ```answer）
+  const text = raw
   // 折叠只按字算：```dsh-ui 那段画成组件，不算长度（不然一张表就把整段折起来、组件被截掉）
   const long = replyIsLong(text.replace(/```[ \t]*dsh-ui[\s\S]*?(?:```|$)/gu, ''))
   const [open, setOpen] = useState(false)
@@ -390,11 +385,6 @@ export function AiEntry({
           >
             <SafeMarkdown text={text} variant="chat" />
           </div>
-          {shown.length === 0 ? null : (
-            <div className="mt-3">
-              <AnswerComponents components={shown} />
-            </div>
-          )}
           {long ? (
             <button
               type="button"

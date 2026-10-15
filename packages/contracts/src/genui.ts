@@ -375,8 +375,9 @@ export function filterGenuiSpec(raw: unknown): GenuiFilterResult {
 /**
  * 给模型的规矩（宿主只在**当场问答**那一次运行里加进系统提示）：只查只答、第一句直接回答、
  * 有清单或关键数字时末尾附一段 ```dsh-ui。只教白名单里这几种，不塞插件整份 SKILL.md。
+ * WP336（决策 823）：WP291 那段教 ```answer 的规矩已删，不留回退。
  */
-export const QUICK_ANSWER_GENUI_RULE = [
+export const QUICK_ANSWER_RULE = [
   '这是岗位页上的一次当场问答：只查、只答，不改任何东西、不出卡、不起草对外内容。',
   '第一句话直接回答（不寒暄、不复述问题），整段尽量短。',
   '要列清单（商品、订单、客户…）、给关键数字或画趋势时，在回答最后附一段（JSON，宿主画成组件）：',
@@ -393,7 +394,7 @@ export const QUICK_ANSWER_GENUI_RULE = [
 
 /**
  * WP336（Luoye 10-15 扩大范围）：**所有对话运行**（事项 / 线程、随便聊、问 AI）系统提示里带的精简版——
- * 回给工作台里的人看的正文可以放一段 ```dsh-ui。比 {@link QUICK_ANSWER_GENUI_RULE} 短，不重复「只查只答」那几条。
+ * 回给工作台里的人看的正文可以放一段 ```dsh-ui。比 {@link QUICK_ANSWER_RULE} 短，不重复「只查只答」那几条。
  * 对外内容（邮件、帖子、给客户的回复）、卡片与工具参数里一律不用。
  */
 export const GENUI_DISPLAY_RULE = [

@@ -9,15 +9,9 @@ import {
   GENUI_DISPLAY_RULE,
   GENUI_LIMITS,
   type GenuiNodeLite,
-  genuiDisplayRule,
   genuiFencesToText,
-  genuiToAnswerComponents,
-  genuiToMarkdown,
-  hasAnswerFence,
-  QUICK_ANSWER_GENUI_RULE,
+  genuiToText,
   QUICK_ANSWER_RULE,
-  quickAnswerRule,
-  quickAnswerUiOf,
   splitAnswer,
   validateAnswerComponent,
 } from '../src/index.js'
@@ -54,7 +48,6 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
         ],
       }),
     ].join('\n')
-    expect(hasAnswerFence(raw)).toBe(true)
     const a = splitAnswer(raw)
     expect(a.lead).toBe('店里有 3 件商品，2 件在卖。')
     expect(a.text).not.toContain('```')
@@ -203,66 +196,34 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
   })
 })
 
-describe('WP336 回退：降级成 ```answer 三种', () => {
-  it('genui: false → 数字成一组、表格成表格、字成一段', () => {
-    const raw = [
-      '今天 8 单。',
-      fence({
-        items: [
-          { type: 'stat', label: '订单', value: '8', delta: '+12%' },
-          { type: 'stat', label: '销售额', value: '¥1,280' },
-          { type: 'table', columns: ['商品', '件数'], rows: [['耳机', 3]] },
-          { type: 'callout', tone: 'warning', title: '注意', content: '两件缺货' },
-        ],
-      }),
-    ].join('\n')
-    const a = splitAnswer(raw, { genui: false })
-    expect(a.components.map((c) => c.kind)).toEqual(['metric', 'table', 'text'])
-    expect(a.components[0]).toEqual({
-      kind: 'metric',
-      items: [
-        { label: '订单', value: '8', delta_pct: 12 },
-        { label: '销售额', value: '¥1,280' },
-      ],
-    })
-    expect(a.components[2]).toEqual({ kind: 'text', text: '注意：两件缺货' })
-  })
-
-  it('图表降成两列表格；卡片拆开', () => {
-    const out = genuiToAnswerComponents({
-      items: [
-        {
-          type: 'card',
-          title: '趋势',
-          items: [{ type: 'chart', data: [{ label: '周一', value: 3 }] }],
-        },
-      ],
-    })
-    expect(out.map((c) => c.kind)).toEqual(['text', 'table'])
-  })
-
-  it('开关：只有明写 answer 才切回；两套规矩各教各的围栏', () => {
-    expect(quickAnswerUiOf(undefined)).toBe('genui')
-    expect(quickAnswerUiOf('ANSWER ')).toBe('answer')
-    expect(quickAnswerUiOf('whatever')).toBe('genui')
-    expect(quickAnswerRule('answer')).toBe(QUICK_ANSWER_RULE)
-    expect(quickAnswerRule('genui')).toBe(QUICK_ANSWER_GENUI_RULE)
-    expect(QUICK_ANSWER_GENUI_RULE).toContain('```dsh-ui')
-    expect(QUICK_ANSWER_GENUI_RULE).toContain('不出卡')
-    expect(QUICK_ANSWER_GENUI_RULE).toContain('原样')
-    // 规矩里教的组件都在白名单里
+describe('WP336 给模型的规矩（决策 823：只有 ```dsh-ui 一套）', () => {
+  it('当场问答那段：只查只答、教 ```dsh-ui、数字照原样；例子过得了白名单；没有 ```answer', () => {
+    expect(QUICK_ANSWER_RULE).toContain('```dsh-ui')
+    expect(QUICK_ANSWER_RULE).not.toContain('```answer')
+    expect(QUICK_ANSWER_RULE).toContain('不出卡')
+    expect(QUICK_ANSWER_RULE).toContain('原样')
     for (const t of ['text', 'card', 'grid', 'stat', 'table', 'chart', 'echart'])
       expect(GENUI_ALLOWED_TYPES).toContain(t)
-    // 例子本身过得了白名单
-    const example = /```dsh-ui\n(.*)\n```/u.exec(QUICK_ANSWER_GENUI_RULE)?.[1] ?? ''
+    const example = /```dsh-ui\n(.*)\n```/u.exec(QUICK_ANSWER_RULE)?.[1] ?? ''
     expect(filterGenuiSpec(JSON.parse(example)).dropped).toEqual([])
+  })
+
+  it('老的 ```answer 段不再认：原样留在正文里，不出组件', () => {
+    const a = splitAnswer(
+      '今天 8 单。\n```answer\n{"components":[{"kind":"metric","items":[]}]}\n```',
+    )
+    expect(a.components.every((c) => c.kind !== 'genui')).toBe(true)
+    expect(
+      validateAnswerComponent({ kind: 'table', columns: ['a'], rows: [['x']] }),
+    ).toBeUndefined()
+    expect(
+      validateAnswerComponent({ kind: 'metric', items: [{ label: 'a', value: 1 }] }),
+    ).toBeUndefined()
   })
 })
 
 describe('WP336 扩大范围：所有对话运行 + 画不了组件的地方', () => {
-  it('所有对话运行那段精简版：教 ```dsh-ui、说清对外内容不用；开关切回 answer 时一个字节不加', () => {
-    expect(genuiDisplayRule('genui')).toBe(GENUI_DISPLAY_RULE)
-    expect(genuiDisplayRule('answer')).toBeUndefined()
+  it('所有对话运行那段精简版：教 ```dsh-ui、说清对外内容不用', () => {
     expect(GENUI_DISPLAY_RULE).toContain('```dsh-ui')
     expect(GENUI_DISPLAY_RULE).toContain('对外内容')
     expect(GENUI_DISPLAY_RULE.split('\n').length).toBeLessThanOrEqual(6)
@@ -270,16 +231,34 @@ describe('WP336 扩大范围：所有对话运行 + 画不了组件的地方', (
     expect(filterGenuiSpec(JSON.parse(example)).dropped).toEqual([])
   })
 
-  it('genui → markdown：数字一行、表格成 markdown 表', () => {
-    expect(
-      genuiToMarkdown({
-        title: '今天',
-        items: [
-          { type: 'stat', label: '订单', value: '8', delta: '+12%' },
-          { type: 'table', columns: ['商品', '价格'], rows: [['耳机', 129]] },
-        ],
-      }),
-    ).toBe('**今天**\n\n订单 8（+12%）\n\n| 商品 | 价格 |\n| --- | --- |\n| 耳机 | 129 |')
+  it('genui → 几行字：markdown（退路）表格成表；plain（聊天软件）一行一条、超了说共几行；卡片拆开、图表成标签：值', () => {
+    const spec = {
+      title: '今天',
+      items: [
+        { type: 'stat' as const, label: '订单', value: '8', delta: '+12%' },
+        { type: 'stat' as const, label: '销售额', value: '¥1,280' },
+        {
+          type: 'table' as const,
+          columns: ['商品', '价格'],
+          rows: [
+            ['耳机', 129],
+            ['手机壳', 29],
+          ],
+        },
+        {
+          type: 'card' as const,
+          title: '趋势',
+          items: [{ type: 'chart' as const, data: [{ label: '周一', value: 3 }] }],
+        },
+        { type: 'callout' as const, title: '注意', content: '两件缺货' },
+      ],
+    }
+    expect(genuiToText(spec)).toBe(
+      '**今天**\n\n订单 8（+12%） · 销售额 ¥1,280\n\n| 商品 | 价格 |\n| --- | --- |\n| 耳机 | 129 |\n| 手机壳 | 29 |\n\n**趋势**\n\n- 周一：3\n\n注意：两件缺货',
+    )
+    expect(genuiToText(spec, { style: 'plain', maxRows: 1 })).toBe(
+      '今天\n\n订单 8（+12%） · 销售额 ¥1,280\n\n· 耳机，129\n（共 2 行）\n\n趋势\n\n- 周一：3\n\n注意：两件缺货',
+    )
   })
 
   it('发到聊天软件前：```dsh-ui 换成几行字，坏的整段去掉，别的字原样', () => {

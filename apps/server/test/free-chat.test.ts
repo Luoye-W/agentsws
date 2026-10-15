@@ -316,7 +316,7 @@ describe('WP188 积分估数', () => {
 })
 
 describe('WP336 随便聊也能出 genui 组件', () => {
-  it('系统提示带 ```dsh-ui 精简写法；模型回的 ```dsh-ui 原样存（工作台画），开关切回 answer 时不教', async () => {
+  it('系统提示带 ```dsh-ui 精简写法；模型回的 ```dsh-ui 原样存（工作台画）', async () => {
     const reply =
       '今天 8 单。\n```dsh-ui\n{"items":[{"type":"stat","label":"订单","value":"8"}]}\n```'
     const { port, seen } = setup({ script: [reply] })
@@ -326,15 +326,5 @@ describe('WP336 随便聊也能出 genui 组件', () => {
     expect(String(system)).toContain('```dsh-ui')
     expect(String(system)).toContain('对外内容')
     expect(done?.text).toBe(reply)
-    process.env.AGENTSWS_QUICK_ANSWER_UI = 'answer'
-    try {
-      const off = setup()
-      const s2 = await off.port.create(actor, {})
-      await say(off.port, s2.id)
-      const sys2 = off.seen.at(-1)?.messages.find((m) => m.role === 'system')?.content
-      expect(String(sys2)).not.toContain('dsh-ui')
-    } finally {
-      delete process.env.AGENTSWS_QUICK_ANSWER_UI
-    }
   })
 })

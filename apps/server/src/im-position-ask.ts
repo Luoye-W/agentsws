@@ -15,7 +15,7 @@
 
 import {
   type AnswerComponent,
-  genuiToAnswerComponents,
+  genuiToText,
   type PositionWorkView,
   splitTaskText,
 } from '@agentsws/contracts'
@@ -99,20 +99,10 @@ export function quickAnswerForIm(
   const lines: string[] = []
   const lead = answer.lead.trim() !== '' ? answer.lead : answer.text
   if (lead.trim() !== '') lines.push(lead.trim())
-  // WP336：genui 块在聊天里画不了，先降级成表格 / 数字 / 字
-  const flat = (answer.components as AnswerComponent[]).flatMap((c) =>
-    c.kind === 'genui' ? genuiToAnswerComponents(c.spec) : [c],
-  )
-  for (const c of flat) {
-    if (c.kind === 'metric')
-      lines.push(c.items.map((m) => `${m.label} ${m.value}${m.unit ?? ''}`).join(' · '))
-    if (c.kind === 'table') {
-      for (const row of c.rows.slice(0, IM_TABLE_ROWS))
-        lines.push(`· ${row.map((cell) => (cell === null ? '—' : String(cell))).join('，')}`)
-      const total = c.total ?? c.rows.length
-      if (total > IM_TABLE_ROWS) lines.push(`（共 ${total} 行，全部在工作台看）`)
-    }
-  }
+  // WP336：genui 块在聊天里画不了，压成几行字（数字一行、表格一行一条、超了说共几行）
+  for (const c of answer.components as AnswerComponent[])
+    if (c.kind === 'genui')
+      lines.push(genuiToText(c.spec, { style: 'plain', maxRows: IM_TABLE_ROWS }))
   // 保留换行，只按总字数截
   const all = Array.from(lines.join('\n').trim())
   return all.length <= IM_ANSWER_MAX ? all.join('') : `${all.slice(0, IM_ANSWER_MAX - 1).join('')}…`

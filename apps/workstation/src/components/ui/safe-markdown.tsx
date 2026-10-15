@@ -18,7 +18,7 @@
  *    指向不存在的教程——一律原样当字；
  * 4. 为几种节点不引 `remark` + `sanitize`：手写的这一份天然没有 HTML 这条路。
  */
-import { filterGenuiSpec, genuiToMarkdown } from '@agentsws/contracts'
+import { filterGenuiSpec, genuiToText } from '@agentsws/contracts'
 import { type ReactNode, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { GenuiBlockView } from '@/components/answer/genui/genui-block'
@@ -300,7 +300,7 @@ function GenuiFence({ body }: { body: string }): ReactNode {
     <div data-slot="genui">
       <GenuiBlockView
         spec={spec}
-        fallback={<SafeMarkdown text={genuiToMarkdown(spec)} variant="reply" />}
+        fallback={<SafeMarkdown text={genuiToText(spec)} variant="reply" />}
       />
     </div>
   )

@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import type { AskActor, AskAnswer, AskPort } from '@agentsws/api'
 import type { ApprovalItem, ChatMessage, EventEnvelope, ObjectRef } from '@agentsws/contracts'
-import { genuiDisplayRule, QUICK_ANSWER_UI_ENV, quickAnswerUiOf } from '@agentsws/contracts'
+import { GENUI_DISPLAY_RULE } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, redactOutboundText } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
@@ -89,13 +89,8 @@ export function createAskPort(options: AskOptions): AskPort {
       const assignment = options.roles.assignments.get(actor.assignment_id)
       const run_id = `ask_${sha256(`${actor.person_id}:${input.question}`).slice(0, 16)}`
       const messages: ChatMessage[] = [
-        {
-          role: 'system',
-          // WP336：问 AI 的回答里也可以放 ```dsh-ui 组件（回退开关切回 answer 时不加）
-          content: [SYSTEM, genuiDisplayRule(quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV]))]
-            .filter((x) => x !== undefined)
-            .join('\n'),
-        },
+        // WP336：问 AI 的回答里也可以放 ```dsh-ui 组件
+        { role: 'system', content: `${SYSTEM}\n${GENUI_DISPLAY_RULE}` },
         {
           role: 'user',
           content: `现场材料：\n${parts.join('\n\n')}\n\n我的问题：${input.question}`,

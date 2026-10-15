@@ -58,15 +58,13 @@ import {
   cancelReasonOf,
   cleanNextSuggestion,
   createRunWatchdog,
-  genuiDisplayRule,
+  GENUI_DISPLAY_RULE,
   type MatterLiveRun,
   NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
-  QUICK_ANSWER_UI_ENV,
-  quickAnswerRule,
-  quickAnswerUiOf,
+  QUICK_ANSWER_RULE,
   RUN_IDLE_TIMEOUT_RANGE,
   RUN_MAX_DURATION_RANGE,
   type RunCancelReason,
@@ -1802,24 +1800,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            */
           /*
            * WP336（Luoye 10-15 扩大范围）：**所有**事项 / 线程运行都带一段精简的 ```dsh-ui 写法（回给人看的正文
-           * 里可以放组件，对外内容里不用）；当场问答那次换成它自己那段完整的。回退开关切回 answer 时一个字节不多。
-           * 三个运行时拿到同一份字节。
+           * 里可以放组件，对外内容里不用）；当场问答那次换成它自己那段完整的。三个运行时拿到同一份字节。
            */
-          ...(() => {
-            const ui = quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV])
-            const display = genuiDisplayRule(ui)
-            return input.matter.ask?.quick === true || display === undefined
-              ? []
-              : [{ id: 'genui_display', name: '回话里的组件', order: 28, text: display }]
-          })(),
+          ...(input.matter.ask?.quick === true
+            ? []
+            : [{ id: 'genui_display', name: '回话里的组件', order: 28, text: GENUI_DISPLAY_RULE }]),
           ...(input.matter.ask?.quick === true
             ? [
                 {
                   id: 'quick_answer',
                   name: '当场问答',
                   order: 28,
-                  // WP336：默认教 ```dsh-ui（dsh-genui 写法）；回退开关设成 answer 就仍教 ```answer
-                  text: quickAnswerRule(quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV])),
+                  // WP336：教 ```dsh-ui（dsh-genui 写法；决策 823 不留 ```answer 回退）
+                  text: QUICK_ANSWER_RULE,
                 },
               ]
             : []),

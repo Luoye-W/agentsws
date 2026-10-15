@@ -2,13 +2,12 @@
  * WP336（决策 810–812）：当场回答换 dsh-genui 的 ```dsh-ui 写法。
  *
  * 同 WP291 的真装配线，只把模型上游的 HTTP 换成替身：替身回一句话 + ```dsh-ui，里面故意夹着按钮 /
- * 图片 / 3D / 外链 / 自定义配色。断言回出去的是过滤后的一块 genui；回退开关切到 answer 时，教的是
- * ```answer、回出去的是降级后的表格 / 数字。不联网、不花钱。
+ * 图片 / 3D / 外链 / 自定义配色。断言回出去的是过滤后的一块 genui（决策 823：不留 ```answer 回退）。
+ * 不联网、不花钱。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { QUICK_ANSWER_UI_ENV } from '@agentsws/contracts'
 import type { FetchLike } from '@agentsws/model-gateway'
 import { afterEach, describe, expect, it } from 'vitest'
 import { quickAnswerForIm } from '../src/im-position-ask.js'
@@ -58,7 +57,6 @@ afterEach(async () => {
   if (dir !== undefined) rmSync(dir, { recursive: true, force: true })
   dir = undefined
   runPrompts.length = 0
-  delete process.env[QUICK_ANSWER_UI_ENV]
 })
 
 const reply = (content: string) => {
@@ -198,20 +196,6 @@ describe('WP336 当场回答 ```dsh-ui', () => {
     )
     expect(listed.answers.map((a) => a.lead)).toEqual(['店里现在有 2 件商品，都在卖。'])
   })
-
-  it('回退开关 answer：教 ```answer；模型仍写 ```dsh-ui 的，降级成数字 + 表格 + 一段字', async () => {
-    process.env[QUICK_ANSWER_UI_ENV] = 'answer'
-    await boot()
-    const out = await open('店里有哪些商品', { detach: true })
-    expect(out.answer?.components?.map((c) => c.kind)).toEqual(['metric', 'table', 'text'])
-    expect(out.answer?.components?.[1]?.rows).toEqual([
-      ['蓝牙耳机', 129, '在卖'],
-      ['手机壳', 29, '在卖'],
-    ])
-    const prompt = runPrompts.find((p) => p.includes('当场问答')) ?? ''
-    expect(prompt).toContain('```answer')
-    expect(prompt).not.toContain('```dsh-ui')
-  })
 })
 
 describe('WP336 聊天软件里', () => {
@@ -231,7 +215,7 @@ describe('WP336 聊天软件里', () => {
         },
       ],
     })
-    expect(text).toBe('店里有 2 件商品。\n在卖 2\n· 蓝牙耳机，129')
+    expect(text).toBe('店里有 2 件商品。\n在卖 2\n\n· 蓝牙耳机，129')
   })
 })
 
