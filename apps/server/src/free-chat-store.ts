@@ -24,10 +24,58 @@ CREATE TABLE IF NOT EXISTS free_chat_messages (
   json TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS free_chat_messages_session ON free_chat_messages (session_id, seq);
+CREATE TABLE IF NOT EXISTS assistant_dispatches (
+  matter_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  person_id TEXT NOT NULL,
+  at TEXT NOT NULL,
+  json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS assistant_dispatches_session ON assistant_dispatches (session_id, at);
+CREATE TABLE IF NOT EXISTS assistant_memory (
+  id TEXT PRIMARY KEY,
+  person_id TEXT NOT NULL,
+  at TEXT NOT NULL,
+  json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS assistant_memory_person ON assistant_memory (person_id, at);
+CREATE TABLE IF NOT EXISTS assistant_memory_tombstones (
+  person_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  at TEXT NOT NULL
+);
 `
 
 export interface FreeChatSessionRow extends FreeChatSessionView {
   person_id: string
+}
+
+/**
+ * WP343：助理交给岗位的一件事（对话 ↔ 事项的那根线）。`reported` 是已经回报过的那几步
+ * （`done:<run>` / `failed:<run>` / `card:<卡>`），同一步只报一次。
+ */
+export interface AssistantDispatchRow {
+  matter_id: string
+  session_id: string
+  person_id: string
+  at: string
+  title: string
+  position_id: string
+  position_name: string
+  role_id?: string
+  duty_name?: string
+  reported: string[]
+}
+
+/** WP343：「我的助理」这一层的一条记忆（本人的，只在助理对话里用）。 */
+export interface AssistantMemoryRow {
+  id: string
+  person_id: string
+  at: string
+  text: string
+  written_by: 'ai' | 'person'
+  reason?: string
+  session_id?: string
 }
 
 export interface FreeChatStore {
@@ -38,6 +86,16 @@ export interface FreeChatStore {
   messages(session_id: string): FreeChatMessageView[]
   addMessage(message: FreeChatMessageView): void
   removeMessage(id: string): void
+  /** WP343：记下 / 更新一件交出去的事。 */
+  putDispatch(row: AssistantDispatchRow): void
+  /** WP343：这个人交出去、`since` 之后的事（新的在后）。 */
+  dispatches(person_id: string, since?: string): AssistantDispatchRow[]
+  /** WP343：助理层记忆（本人的，按时间）。 */
+  memories(person_id: string): AssistantMemoryRow[]
+  putMemory(row: AssistantMemoryRow): void
+  removeMemory(id: string): AssistantMemoryRow | undefined
+  /** 删过的那几句（AI 不再记回来，除非人又明说）。 */
+  tombstones(person_id: string): string[]
   close(): void
 }
 
@@ -91,6 +149,51 @@ export function createFreeChatStore(dbPath?: string): FreeChatStore {
     removeMessage: (id) => {
       db.prepare('DELETE FROM free_chat_messages WHERE id = ?').run(id)
     },
+    putDispatch: (row) => {
+      db.prepare(
+        `INSERT INTO assistant_dispatches (matter_id, session_id, person_id, at, json) VALUES (?,?,?,?,?)
+         ON CONFLICT(matter_id) DO UPDATE SET json = excluded.json`,
+      ).run(row.matter_id, row.session_id, row.person_id, row.at, JSON.stringify(row))
+    },
+    dispatches: (person_id, since) =>
+      (
+        db
+          .prepare(
+            'SELECT json FROM assistant_dispatches WHERE person_id = ? AND at >= ? ORDER BY at, matter_id',
+          )
+          .all(person_id, since ?? '') as { json: string }[]
+      ).map((r) => JSON.parse(r.json) as AssistantDispatchRow),
+    memories: (person_id) =>
+      (
+        db
+          .prepare('SELECT json FROM assistant_memory WHERE person_id = ? ORDER BY at, id')
+          .all(person_id) as { json: string }[]
+      ).map((r) => JSON.parse(r.json) as AssistantMemoryRow),
+    putMemory: (row) => {
+      db.prepare(
+        `INSERT INTO assistant_memory (id, person_id, at, json) VALUES (?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET json = excluded.json`,
+      ).run(row.id, row.person_id, row.at, JSON.stringify(row))
+    },
+    removeMemory: (id) =>
+      db.transaction(() => {
+        const got = db.prepare('SELECT json FROM assistant_memory WHERE id = ?').get(id) as
+          | { json: string }
+          | undefined
+        if (got === undefined) return undefined
+        const row = JSON.parse(got.json) as AssistantMemoryRow
+        db.prepare('DELETE FROM assistant_memory WHERE id = ?').run(id)
+        db.prepare(
+          'INSERT INTO assistant_memory_tombstones (person_id, text, at) VALUES (?,?,?)',
+        ).run(row.person_id, row.text, row.at)
+        return row
+      })(),
+    tombstones: (person_id) =>
+      (
+        db
+          .prepare('SELECT text FROM assistant_memory_tombstones WHERE person_id = ?')
+          .all(person_id) as { text: string }[]
+      ).map((r) => r.text),
     close: () => {
       db.close()
     },

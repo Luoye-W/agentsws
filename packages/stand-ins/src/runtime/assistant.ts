@@ -39,8 +39,8 @@ export const ASSISTANT_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: ASSISTANT_OVERVIEW_TOOL,
     description:
-      '看用户的各个岗位 / 职责现在在做什么：每个岗位下面的职责、进行中的事（标题与最近一句进展）、' +
-      '等用户拍板的卡有几张。只读。给了 position 就只看那一个岗位。',
+      '看用户的各个岗位 / 职责在做什么：每个岗位下面的职责、进行中的事（标题与最近一句进展）、' +
+      '最近做完的、等用户拍板的卡有几张。只读。给了 position 就只看那一个岗位。',
     input_schema: {
       type: 'object',
       properties: {
@@ -112,6 +112,8 @@ export interface AssistantPositionRow {
   duties: string[]
   /** 进行中的事（≤ 5 条）：标题 + 最近一句进展 + 归哪条职责。 */
   doing: { title: string; latest?: string; duty?: string }[]
+  /** 最近做完的（≤ 5 条，新的在前）：「今天做了什么」看它。 */
+  done: { title: string; latest?: string; duty?: string; at: string }[]
   /** 进行中的一共几件（可能比 `doing` 多）。 */
   open: number
   /** 等用户拍板的卡几张。 */
