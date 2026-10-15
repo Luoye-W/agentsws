@@ -159,6 +159,10 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
     if (keyword !== undefined) filter.keyword = keyword
     if (signal !== undefined) filter.signal = signal
     if (kind !== undefined) filter.kind = kind
+    // WP340：「优先」（命中告警词）与本地标签
+    if (typeof input.priority === 'boolean') filter.priority = input.priority
+    const tag = str(input.tag)
+    if (tag !== undefined) filter.tag = tag
     const limit = int(input.limit)
     const r = queryWatchItems({
       items,
