@@ -25,3 +25,13 @@ export const setRedditWatchStatus = (
     body: { status },
     assignment,
   })
+
+/** WP340：收起一条「优先」提醒。 */
+export const dismissRedditWatchAlert = (
+  assignment: string,
+  id: string,
+): Promise<RedditWatchEntry> =>
+  api(`/v1/reddit-watch/items/${encodeURIComponent(id)}/alert-seen`, {
+    method: 'POST',
+    assignment,
+  })

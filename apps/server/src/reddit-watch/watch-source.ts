@@ -68,7 +68,8 @@ export function watchItemOfEntry(
   }
   // WP340：「优先」与本地标签（入库时标的 ∪ 按当前设置补算的）
   const now = terms === undefined || e.deleted === true ? undefined : localMarks(e, terms)
-  if (e.ours !== true && (e.priority === true || (now?.alerts.length ?? 0) > 0)) item.priority = true
+  if (e.ours !== true && (e.priority === true || (now?.alerts.length ?? 0) > 0))
+    item.priority = true
   const tags = [...new Set([...(e.tags ?? []), ...(now?.tags ?? [])])]
   if (tags.length > 0) item.tags = tags
   if (scope === 'external') {

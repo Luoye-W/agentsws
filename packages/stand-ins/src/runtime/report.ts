@@ -86,7 +86,10 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
           type: 'boolean',
           description: 'true = 只要命中告警词的「优先」条目（巡查设置里的告警词，本地匹配）',
         },
-        tag: { type: 'string', description: '只要带这个本地标签的（巡查设置里的标签词，如型号写法）' },
+        tag: {
+          type: 'string',
+          description: '只要带这个本地标签的（巡查设置里的标签词，如型号写法）',
+        },
         group_by: { type: 'string', enum: ['topic'], description: '按话题归组' },
         limit: { type: 'number', description: '列几条原文（每组 / 总共；默认 30，最多 200）' },
       },

@@ -35,6 +35,7 @@ import {
 import {
   type ConnectNeed,
   type Iso8601,
+  REDDIT_WATCH_ALERT_DAYS,
   type RedditWatchDigest,
   type RedditWatchEntry,
   type RedditWatchItemStatus,
@@ -43,7 +44,6 @@ import {
   type RedditWatchRunPart,
   type RedditWatchSettings,
   type RedditWatchView,
-  REDDIT_WATCH_ALERT_DAYS,
   type RunRequest,
   redditWeekWindow,
   type WorkspaceId,
@@ -52,10 +52,9 @@ import type { RedditItem } from '@agentsws/social-core'
 import type { OutboundLog } from '../outbound/log.js'
 import type { SetupCardsAssembly, SetupTarget } from '../setup-cards.js'
 import { buildDigest } from './digest.js'
-import { dueParts, type PartClock } from './due.js'
+import { dueParts, dueSubs, type PartClock } from './due.js'
 import { externalItemOf, type IngestContext, watchItemOf } from './ingest.js'
 import { type JudgeComplete, judgeItems } from './judge.js'
-import { dueSubs } from './due.js'
 import {
   isConfigured,
   REDDIT_WATCH_TARGET,

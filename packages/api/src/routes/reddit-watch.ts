@@ -237,7 +237,8 @@ export function redditWatchRoutes(): Route[] {
         method: 'put',
         path: '/v1/reddit-watch/settings',
         operationId: 'updateRedditWatchSettings',
-        summary: '改巡查设置（自家版块、重点版块、各版块频率、关键词、告警词、标签词、品牌号、频率）',
+        summary:
+          '改巡查设置（自家版块、重点版块、各版块频率、关键词、告警词、标签词、品牌号、频率）',
         tag: 'social',
         auth: 'bearer',
         assignment: true,

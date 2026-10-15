@@ -57,7 +57,9 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
   const facts = [
     brief.name === undefined ? '' : `品牌名：${fence(brief.name, 80)}`,
     brief.one_liner === undefined ? '' : `一句话介绍：${fence(brief.one_liner, 300)}`,
-    brief.vertical === undefined ? '' : `卖的是：${brief.vertical === 'digital' ? '数字商品 / 服务' : '实物商品'}`,
+    brief.vertical === undefined
+      ? ''
+      : `卖的是：${brief.vertical === 'digital' ? '数字商品 / 服务' : '实物商品'}`,
     brief.markets === undefined || brief.markets.length === 0
       ? ''
       : `目标市场：${brief.markets.slice(0, 10).join('、')}`,
@@ -107,7 +109,10 @@ export function parseSuggestion(text: string): PatrolSuggestion | undefined {
       const name = normalizeSubreddit(String(o?.name ?? ''))
       if (name === undefined) continue
       const key = name.toLowerCase()
-      if (own.some((x) => x.toLowerCase() === key) || watch.some((x) => x.name.toLowerCase() === key))
+      if (
+        own.some((x) => x.toLowerCase() === key) ||
+        watch.some((x) => x.name.toLowerCase() === key)
+      )
         continue
       const n = Number(o.per_week)
       const per_week = Number.isFinite(n) ? Math.max(1, Math.min(7, Math.round(n))) : undefined

@@ -64,8 +64,7 @@ export function normalizeSettings(
     const n = normalizeSubreddit(String(s))
     if (n === undefined) continue
     const k = n.toLowerCase()
-    if (own.some((x) => x.toLowerCase() === k) || watch.some((x) => x.toLowerCase() === k))
-      continue
+    if (own.some((x) => x.toLowerCase() === k) || watch.some((x) => x.toLowerCase() === k)) continue
     watch.push(n)
   }
   const known = new Set([...own, ...watch].map((x) => x.toLowerCase()))

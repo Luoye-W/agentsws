@@ -30,7 +30,7 @@ export function termHits(text: string, terms: readonly string[], inflect: boolea
   const out: string[] = []
   for (const term of terms) {
     const re = termPattern(term, inflect)
-    if (re !== undefined && re.test(t) && !out.includes(term)) out.push(term)
+    if (re?.test(t) === true && !out.includes(term)) out.push(term)
   }
   return out
 }
