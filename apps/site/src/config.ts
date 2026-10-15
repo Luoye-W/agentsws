@@ -57,5 +57,9 @@ export const SISTER_SITES: Readonly<Record<string, string>> = {
   KefuAgents: 'https://kefuagents.com',
 }
 
-/** 条款三页的生效日期（改条款就改这里）。 */
-export const LEGAL_EFFECTIVE_DATE = '2026-10-05'
+/**
+ * 条款三页的生效日期（改条款就改这里）。
+ * WP344：先写成占位，**上线当天由 Fable 填成部署那天的日期**（YYYY-MM-DD）；
+ * 没填之前页面上照原样显示 `{{EFFECTIVE_DATE}}`，`pnpm -F @agentsws/site launch:check` 也会拦下。
+ */
+export const LEGAL_EFFECTIVE_DATE = '{{EFFECTIVE_DATE}}'

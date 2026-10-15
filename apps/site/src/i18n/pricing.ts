@@ -36,7 +36,7 @@ const zh = {
       '充值的积分永不过期',
       '每项能力随时切回自己的 key',
     ],
-    bonusHint: '点开登录信那一刻到账，90 天内有效；扣的时候先扣快到期的。',
+    bonusHint: '注册时验证完邮箱就到账，90 天内有效；扣的时候先扣快到期的。',
     cta: '充值',
   },
   topup: {
@@ -47,7 +47,7 @@ const zh = {
     cta: '去充值',
     safe: '付款在收银台页面完成，我们碰不到你的卡号。',
     safeHint:
-      '点「去充值」先登录 Agents 工坊账号（邮箱收一封登录信），再跳到收银台；付完回来余额自己刷新。',
+      '点「去充值」先登录 Agents 工坊账号（邮箱验证码或密码），再跳到收银台；付完回来余额自己刷新。',
     none: '充值档位暂时拿不到，登录后在账号页看。',
   },
   blocks: {
@@ -130,7 +130,7 @@ const en: PricingCopy = {
       'Switch any capability back to your own key anytime',
     ],
     bonusHint:
-      'Credited the moment you open the sign-in email; valid for 90 days. Credits closest to expiry are used first.',
+      'Credited as soon as you verify your email at sign-up; valid for 90 days. Credits closest to expiry are used first.',
     cta: 'Top up',
   },
   topup: {
@@ -141,7 +141,7 @@ const en: PricingCopy = {
     cta: 'Top up',
     safe: 'Payment happens on the checkout page. We never see your card number.',
     safeHint:
-      'Clicking "Top up" signs you in to your Agents Workshop account (we email you a link), then opens checkout. Your balance refreshes when you come back.',
+      'Clicking "Top up" signs you in to your Agents Workshop account (email code or password), then opens checkout. Your balance refreshes when you come back.',
     none: 'Packs are unavailable right now — sign in to see them on your account page.',
   },
   blocks: {
