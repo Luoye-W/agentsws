@@ -394,7 +394,7 @@ export function CommandPalette({
               value={`${t('command.new_chat')} ${t('nav.free_chat')} new chat`}
               data-testid="command-new-chat"
               onSelect={() => {
-                go('/free-chat?new=1')
+                go('/assistant?new=1')
               }}
             >
               {t('command.new_chat')}

@@ -32,7 +32,7 @@ export interface DownloadManifest {
 }
 
 /**
- * 官网列的桌面安装包（按这个顺序）。WP326（决策 731）：Mac 只出 Apple 芯片版，Intel 版不再列。
+ * 官网列的桌面安装包（按这个顺序）。WP326（决策 731）：Mac 只出 M 系列芯片版，Intel 版不再列。
  * 下载站上旧的清单里可能还带着 `mac-x64`——不算毛病，页面上不显示就是了（见 {@link visibleDesktop}）。
  */
 export const DESKTOP_IDS = ['mac-arm64', 'win-x64'] as const
@@ -63,10 +63,10 @@ export function visibleDesktop(m: DownloadManifest): DesktopItem[] {
 }
 
 /**
- * WP326：猜访客是不是 Intel 芯片的 Mac（给一句「目前只支持 Apple 芯片的 Mac」）。
+ * WP326：猜访客是不是 Intel 芯片的 Mac（给一句「目前只支持 M 系列芯片的 Mac」）。
  * 浏览器不直接说芯片：Mac 上的 UA 一律写 Intel，只能看显卡名（WebGL 的 renderer）——
- * Apple 芯片的显卡名里带 Apple；Intel Mac 是 Intel / AMD 显卡。Safari 把显卡名统一报成「Apple GPU」，
- * 那就认不出来，按 Apple 芯片算（宁可漏说，不要冤枉）。
+ * M 系列芯片的显卡名里带 Apple；Intel Mac 是 Intel / AMD 显卡。Safari 把显卡名统一报成「Apple GPU」，
+ * 那就认不出来，按 M 系列芯片算（宁可漏说，不要冤枉）。
  */
 export function looksLikeIntelMac(userAgent: string, gpu: string | null | undefined): boolean {
   if (!/Macintosh|Mac OS X/i.test(userAgent) || /iPhone|iPad|iPod/i.test(userAgent)) return false
@@ -132,4 +132,36 @@ export async function loadDownloads(
 /** 首页「下载」按钮：Windows 访客直接拿最新安装包（有链接时），其余去下载页挑（mac 分不清芯片）。 */
 export function directWindowsUrl(m: DownloadManifest): string | null {
   return m.desktop.find((d) => d.id === 'win-x64')?.url ?? null
+}
+
+/** WP347：首页「免费下载」按钮能直接给的两个安装包（清单里没链接的那一项为 null）。 */
+export function directDesktop(m: DownloadManifest): { mac: string | null; win: string | null } {
+  return {
+    mac: m.desktop.find((d) => d.id === 'mac-arm64')?.url ?? null,
+    win: m.desktop.find((d) => d.id === 'win-x64')?.url ?? null,
+  }
+}
+
+export interface VisitorHints {
+  userAgent: string
+  /** `navigator.maxTouchPoints`：iPad 的 Safari 默认报成 Mac，只能靠它认出来。 */
+  maxTouchPoints?: number
+  /** WebGL 显卡名（认 Intel Mac 用，见 {@link looksLikeIntelMac}）。 */
+  gpu?: string | null
+}
+
+/**
+ * WP347（Luoye 10-15）：首页「免费下载」按访客的系统直接给安装包。
+ * Windows → `win`；M 系列芯片的 Mac（认不出芯片也按它算）→ `mac`；
+ * 手机、平板、Linux、认得出是 Intel 的 Mac、认不出的 → `null`（按钮照旧去下载页挑）。
+ */
+export function pickDesktop(v: VisitorHints): 'mac' | 'win' | null {
+  const ua = v.userAgent
+  if (/Android|iPhone|iPad|iPod|Mobile|CrOS/i.test(ua)) return null
+  if (/Windows NT/i.test(ua)) return 'win'
+  if (/Macintosh|Mac OS X/i.test(ua)) {
+    if ((v.maxTouchPoints ?? 0) > 1) return null
+    return looksLikeIntelMac(ua, v.gpu) ? null : 'mac'
+  }
+  return null
 }

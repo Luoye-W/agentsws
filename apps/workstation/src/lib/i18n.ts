@@ -7,6 +7,7 @@
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
+import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
@@ -102,10 +103,10 @@ const zh: Table = {
   'secretary.level.self': '仅本人',
   'secretary.level.colleagues': '同事可见',
   'secretary.level.workspace': '全工作区',
-  'secretary.asked.empty': '还没有人问过你的代理。',
+  'secretary.asked.empty': '还没有同事问过你。',
   'secretary.asked.by': '{who} 问',
   'secretary.asked.fields': '用到了：{fields}',
-  'secretary.asked.refused': '代理拒答了',
+  'secretary.asked.refused': '没替你答（要问你本人）',
   'secretary.meets.empty': '没有等你点头的「约时间」。',
   'secretary.meets.title': '等你点头',
   'secretary.meets.from': '{who} 想约你',
@@ -3998,8 +3999,8 @@ const zh: Table = {
   'b2b.sales.sample.hint': '已寄必须带单号。标已寄的卡批了，会再出一张寄样通知卡。',
   'b2b.sales.handover': '{who} 的 {count} 条交接等老板批',
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
-  'nav.free_chat': '随便聊',
-  'home.free_chat': '想随便问点什么？',
+  'nav.free_chat': '我的助理',
+  'home.free_chat': '有什么要我做的？',
   'command.new_chat': '新对话',
   'command.handoff.title': '交给哪个岗位？',
   'command.handoff.placeholder': '搜岗位…',
@@ -4037,7 +4038,7 @@ const zh: Table = {
   'free_chat.delete': '删除',
   'free_chat.delete.confirm': '删掉这段对话？删了找不回来。',
   'free_chat.session.more': '更多',
-  'models.purpose.free_chat': '随便聊',
+  'models.purpose.free_chat': '我的助理',
   // ── WP207：左栏三级「+」、职责下的对话 / 任务、归档与找回 ──────────────
   'rail.new_position': '新建岗位',
   'rail.add_duty': '给「{name}」加职责',
@@ -4174,10 +4175,10 @@ const en: Table = {
   'secretary.level.self': 'Only me',
   'secretary.level.colleagues': 'Colleagues',
   'secretary.level.workspace': 'Whole workspace',
-  'secretary.asked.empty': 'Nobody has asked your agent yet.',
+  'secretary.asked.empty': 'No colleague has asked you yet.',
   'secretary.asked.by': '{who} asked',
   'secretary.asked.fields': 'Used: {fields}',
-  'secretary.asked.refused': 'The agent declined',
+  'secretary.asked.refused': 'Not answered for you (ask you directly)',
   'secretary.meets.empty': 'No meeting requests waiting for you.',
   'secretary.meets.title': 'Waiting for your nod',
   'secretary.meets.from': '{who} wants to meet',
@@ -8175,8 +8176,8 @@ const en: Table = {
     'Shipped needs a tracking number. Once that card is approved, a shipping notice card follows.',
   'b2b.sales.handover': '{count} handover items from {who} await the owner',
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
-  'nav.free_chat': 'Chat',
-  'home.free_chat': 'Want to ask anything?',
+  'nav.free_chat': 'My assistant',
+  'home.free_chat': 'What can I do for you?',
   'command.new_chat': 'New chat',
   'command.handoff.title': 'Hand to which position?',
   'command.handoff.placeholder': 'Search positions…',
@@ -8214,7 +8215,7 @@ const en: Table = {
   'free_chat.delete': 'Delete',
   'free_chat.delete.confirm': 'Delete this chat? It cannot be recovered.',
   'free_chat.session.more': 'More',
-  'models.purpose.free_chat': 'Chat',
+  'models.purpose.free_chat': 'My assistant',
   // ── WP207 ──────────────────────────────────────────────────────────
   'rail.new_position': 'New position',
   'rail.add_duty': 'Add a duty to “{name}”',
@@ -8346,6 +8347,8 @@ const TABLES: Record<Lang, Table> = {
     ...GEO_ZH,
     // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
     ...SHELL_ZH,
+    // WP343：「我的助理」（原随便聊 + 我的代理）
+    ...ASSISTANT_ZH,
   },
   en: {
     ...en,
@@ -8377,6 +8380,7 @@ const TABLES: Record<Lang, Table> = {
     ...CARD_PAGE_EN,
     ...GEO_EN,
     ...SHELL_EN,
+    ...ASSISTANT_EN,
   },
 }
 

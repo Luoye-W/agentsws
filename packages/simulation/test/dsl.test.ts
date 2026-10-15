@@ -458,6 +458,39 @@ invariants: [prompt_replayable]`,
     expect(s.expected?.position_routed_to).toEqual(['dtc.store'])
   })
 
+  // ── WP343：「我的助理」派活 ──────────────────────────────────────
+  it('assistant.dispatch 与 assistant_dispatched_to 解析得出来；写错键名当场报', () => {
+    const s = parseScenario(
+      MINIMAL.replace(
+        'invariants: [prompt_replayable]',
+        [
+          `  - at: '+3m'`,
+          '    assistant.dispatch: { who: p_wang, text: 让网站运营把 A 商品降价 10%, duty: 店铺管理 }',
+          'expected:',
+          "  assistant_dispatched_to: [web-ops, '-']",
+          'invariants: [prompt_replayable]',
+        ].join('\n'),
+      ),
+      'x.yml',
+    )
+    const d = s.events.find((e) => e.type === 'assistant.dispatch')
+    expect(d?.type === 'assistant.dispatch' ? d.assistant_dispatch : undefined).toEqual({
+      who: 'p_wang',
+      text: '让网站运营把 A 商品降价 10%',
+      duty: '店铺管理',
+    })
+    expect(s.expected?.assistant_dispatched_to).toEqual(['web-ops', '-'])
+    expect(() =>
+      parseScenario(
+        MINIMAL.replace(
+          'invariants: [prompt_replayable]',
+          `  - at: '+2m'\n    assistant.dispatch: { who: p_wang, txt: hi }\ninvariants: [prompt_replayable]`,
+        ),
+        'x.yml',
+      ),
+    ).toThrow()
+  })
+
   it('岗位事件里写错键名会当场报出来（不是悄悄忽略）', () => {
     expect(() =>
       parseScenario(

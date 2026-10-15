@@ -57,6 +57,8 @@ export const HELP_SLUGS = [
   'sent-log',
   // WP335：AI 回答监测（看板怎么读、一条回答、关注设置）
   'ai-answer-tracking',
+  // WP343：我的助理（随便聊 + 问全局 + 交代事情 + 记忆 + 替我答同事）
+  'my-assistant',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -164,6 +166,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   // WP323：通用
   'sent-log': { positions: [], roles: [] },
   'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  // WP343：通用
+  'my-assistant': { positions: [], roles: [] },
 }
 
 /**

@@ -5,21 +5,29 @@
 import type { Lang } from './common.js'
 
 const zh = {
+  // WP347（Luoye 10-15，决策 883）：定位「专为跨境电商 / 出海卖家打造的 AI Agents」进 meta 与首屏
   meta: {
-    title: 'Agents 工坊 · 给出海小团队的开源 AI 同事',
+    title: 'Agents 工坊 · 专为跨境电商 / 出海卖家打造的 AI Agents',
     description:
-      '客服、红人、Reddit、AI 搜索、广告、建站、B2B……按岗位配齐的 AI 同事。借你自己浏览器的登录干活，要拍板的出一张卡，你点头才算数。开源、免费、跑在你自己的电脑上。',
+      '专为跨境电商 / 出海卖家打造的 AI Agents：客服、红人、Reddit、广告、建站、B2B 按岗位配齐，不只会聊，还能动手。一键连上各平台，要拍板的出卡给你。个人、团队、整个公司都能用。开源免费，用积分按量付费。',
   },
   hero: {
     pill: '开源 · Apache-2.0 · 跑在你自己的电脑上',
     title: ['面板会吃灰。', '这队 *AI 同事*，', '天天上班。'],
-    lede: '客服、红人、Reddit、AI 搜索、广告、建站、B2B……按岗位配齐。天天上班，要拍板的才找你。',
+    position: '专为跨境电商 / 出海卖家打造的 AI Agents。',
+    lede: '客服、红人、Reddit、广告、建站、B2B……按岗位配齐，要拍板的才找你。',
+    // WP347：按访客系统直接给安装包（site.ts 换按钮）；认不出、手机、Intel Mac 照旧去下载页
     download: '免费下载',
+    dlAny: 'Mac / Windows',
+    dlMac: ['下载 Mac 版', 'M 系列芯片'],
+    dlWin: ['下载 Windows 版', '64 位'],
+    dlMore: ['其他版本', '浏览器插件'],
+    macFirstOpen: '第一次打开：右键图标 → 打开',
     // WP225（WP218 决定 ⑤）：Windows 访客点了直接下安装包，旁边一行首次打开提示（只在 Windows 上露出来）
     // WP227 合一份：文案用 WP227 那句（Luoye 10-05 #⑤ 原话「第一次打开点『更多信息 → 仍要运行』」）
     winFirstOpen: '第一次打开若被拦，点「更多信息 → 仍要运行」',
     github: '在 GitHub 上看',
-    checks: ['Mac / Windows', '不用申请开发者应用', '自带 key 一分不扣'],
+    checks: ['Mac / Windows', '一键连上各平台', '按量付费 · 自带 key 免费'],
     frameBar: '127.0.0.1 · 今天',
     shotAlt: '工作台：左栏是岗位，中间是等你定的卡',
     card: {
@@ -89,15 +97,42 @@ const zh = {
     moreLink: '看每个岗位管什么 →',
     newBadge: '新',
   },
+  // WP347：三种用法，按 docs/95 里真做到的写（WP271 / 275–278 / 284）
+  modes: {
+    eyebrow: '三种用法',
+    title: '一个人用，团队用，整个公司也能用。',
+    sub: '默认一个人用。有人管人的那一套，只在公司模式里出现。',
+    items: [
+      {
+        key: 'solo',
+        tag: '个人 · 默认',
+        h: '一个人，管几个品牌',
+        p: '装上就用，岗位都归你。要对外的事，你点头才算。',
+      },
+      {
+        key: 'team',
+        tag: '团队',
+        h: '同事互联，平起平坐',
+        p: '各管各的岗位，谁也不批谁。活能交给同事，对方接下才算；你的代理替你答同事、约时间。',
+      },
+      {
+        key: 'company',
+        tag: '整个公司',
+        h: '老板开启，有人管人',
+        p: '一个余额，给每人设每月上限和能看的店铺；要紧的事按上下级审批。',
+      },
+    ],
+    grow: '从一个人用起，往上升级；数据跟着走，不用重装。',
+  },
   how: {
     eyebrow: '怎么干活',
     title: '几句话交代，它自己配好。',
     sub: '不用学后台，不用画流程。缺什么，它在对话里问你。',
     items: [
       {
-        icon: 'globe',
-        h: '用你自己的浏览器',
-        p: '借你 Chrome 里已登录的账号和插件干活。不用申请开发者应用，不开终端。',
+        icon: 'plug',
+        h: '一键连上各平台',
+        p: 'Shopify、Amazon、Google / Meta 广告、Reddit……借你浏览器里已登录的账号，或点一下授权。不用申请开发者应用。',
       },
       {
         icon: 'puzzle',
@@ -191,9 +226,10 @@ const zh = {
     fine: '「别处」指市面上常见的收费方式，不特指某一家；以各家官方信息为准。',
   },
   base: {
-    eyebrow: '为什么基于 DeepSeek Harness',
-    title: ['从 Harness 底层，', '按公司重新组装。'],
-    sub: '在聊天框外套个壳，只能帮一个人聊天。要一队 Agents 替公司干活，得从底层接起。',
+    // WP347：突出「从底层出发，跳出只能对话、不能动手」
+    eyebrow: '基于 DeepSeek Harness',
+    title: ['从底层出发：', '不只会聊，*还能动手*。'],
+    sub: '别的 AI 只会陪你聊。工坊从 Harness 底层接起：查订单、回邮件、发帖、改广告，动手干活；要紧的先问你。',
     stackLabel: '分层示意：从下到上是官方底座、按公司重组的五层、岗位队伍',
     team: '岗位队伍',
     teamChips: ['客服', '红人营销', '社媒运营', '网站运营', '投放', 'B2B', '……'],
@@ -221,8 +257,9 @@ const zh = {
   },
   credits: {
     eyebrow: '价格',
-    title: '开源版全功能免费。想省事，用积分。',
-    sub: '两条路可以混着用：每项能力一个开关。',
+    // WP347：点明按量付费
+    title: '按量付费，不按席位，不包月。',
+    sub: '开源版全功能免费，自带 key 不花钱；用工坊的积分，用多少扣多少。',
     open: {
       tag: '开源版',
       price: '¥0',
@@ -273,7 +310,6 @@ const zh = {
   final: {
     title: '先交给它一件小事。',
     sub: '装上，接一个 AI，把今天最烦的那封邮件交给客服岗。',
-    download: '免费下载',
     docs: '看教程',
   },
 }
@@ -282,18 +318,28 @@ export type HomeCopy = typeof zh
 
 const en: HomeCopy = {
   meta: {
-    title: 'Agents Workshop · An open-source AI team for cross-border businesses',
+    title: 'Agents Workshop · AI agents built for cross-border e-commerce sellers',
     description:
-      'Support, creators, Reddit, AI search, ads, site building, B2B: AI teammates organised by role. They work through your own browser logins, and anything that needs your call becomes a card. Open source, free, runs on your own computer.',
+      'AI agents built for cross-border e-commerce sellers: support, creators, Reddit, ads, site building and B2B, organised by role. They don’t just chat; they do the work. Connect your platforms in one click; anything that needs your call becomes a card. For one person, a team or a whole company. Open source and free; pay as you go with credits.',
   },
   hero: {
     pill: 'Open source · Apache-2.0 · Runs on your own computer',
     title: ['Dashboards gather dust.', 'This *AI team*', 'shows up every day.'],
-    lede: 'Support, creators, Reddit, AI search, ads, site building, B2B: a full set of roles. They work every day and only come to you when it’s your call.',
+    position: 'AI agents built for cross-border e-commerce sellers.',
+    lede: 'Support, creators, Reddit, ads, site building, B2B: a full set of roles that only come to you when it’s your call.',
     download: 'Download free',
+    dlAny: 'Mac / Windows',
+    dlMac: ['Download for Mac', 'Apple silicon (M-series)'],
+    dlWin: ['Download for Windows', '64-bit'],
+    dlMore: ['Other versions', 'Browser extension'],
+    macFirstOpen: 'First launch: right-click the icon → Open',
     winFirstOpen: 'If Windows blocks it the first time, click “More info → Run anyway”',
     github: 'View on GitHub',
-    checks: ['Mac & Windows', 'No developer apps to apply for', 'Your own API key costs nothing'],
+    checks: [
+      'Mac & Windows',
+      'Connect your platforms in one click',
+      'Pay as you go · free with your own key',
+    ],
     frameBar: '127.0.0.1 · Today',
     shotAlt: 'The Workshop: roles on the left, cards waiting for your call in the middle',
     card: {
@@ -373,15 +419,41 @@ const en: HomeCopy = {
     moreLink: 'See what each role does →',
     newBadge: 'New',
   },
+  modes: {
+    eyebrow: 'Three ways to use it',
+    title: 'For one person, a team, or the whole company.',
+    sub: 'It starts as yours alone. Managers and sign-offs only appear in company mode.',
+    items: [
+      {
+        key: 'solo',
+        tag: 'Solo · default',
+        h: 'Just you, several brands',
+        p: 'Install and go; every role is yours. Nothing goes out until you approve it.',
+      },
+      {
+        key: 'team',
+        tag: 'Team',
+        h: 'Colleagues, side by side',
+        p: 'Everyone runs their own roles and nobody signs off on anybody. Hand work to a colleague; it’s theirs once they accept. Your agent answers colleagues and books time for you.',
+      },
+      {
+        key: 'company',
+        tag: 'Whole company',
+        h: 'The owner turns it on',
+        p: 'One balance, a monthly cap and store access for each member; what matters goes up the chain for approval.',
+      },
+    ],
+    grow: 'Start on your own and move up when you need to. Your data comes along; nothing to reinstall.',
+  },
   how: {
     eyebrow: 'How it works',
     title: 'Tell it in a few sentences. It sets itself up.',
     sub: 'No admin panels to learn, no workflows to draw. If something’s missing, it asks you in the chat.',
     items: [
       {
-        icon: 'globe',
-        h: 'Uses your own browser',
-        p: 'Works through the accounts you’re already signed in to in Chrome, plus our extension. No developer apps, no terminal.',
+        icon: 'plug',
+        h: 'Connect your platforms in one click',
+        p: 'Shopify, Amazon, Google / Meta Ads, Reddit…: through the accounts already signed in to in your browser, or one click to authorize. No developer apps to apply for.',
       },
       {
         icon: 'puzzle',
@@ -496,9 +568,9 @@ const en: HomeCopy = {
     fine: '"Elsewhere" describes common pricing models, not any specific company. Check each vendor’s official pricing.',
   },
   base: {
-    eyebrow: 'Why DeepSeek Harness',
-    title: ['Rebuilt from inside the Harness,', 'for a company.'],
-    sub: 'A wrapper around a chat box helps one person chat. For a team of agents to work for a company, the wiring has to go deeper.',
+    eyebrow: 'Built on DeepSeek Harness',
+    title: ['Built from the ground up:', 'it doesn’t just chat, it *does the work*.'],
+    sub: 'Most AI only keeps you company in a chat box. The Workshop is wired in from the Harness up: it checks orders, answers email, posts and edits ads, and asks you first when it matters.',
     stackLabel:
       'Layer diagram, bottom up: the official base, five layers rebuilt for a company, your team of roles',
     team: 'Your team',
@@ -541,8 +613,8 @@ const en: HomeCopy = {
   },
   credits: {
     eyebrow: 'Pricing',
-    title: 'Free and complete. Credits if you want it easy.',
-    sub: 'Mix both — every capability has its own switch.',
+    title: 'Pay as you go. No seats, no subscription.',
+    sub: 'The open-source edition is free and complete, and your own key costs nothing. With Workshop credits you pay only for what you use.',
     open: {
       tag: 'Open source',
       price: '¥0',
@@ -604,7 +676,6 @@ const en: HomeCopy = {
   final: {
     title: 'Start with one small task.',
     sub: 'Install it, connect an AI, and hand today’s most annoying email to Support.',
-    download: 'Download free',
     docs: 'Read the guides',
   },
 }

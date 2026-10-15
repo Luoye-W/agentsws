@@ -1,0 +1,31 @@
+---
+/**
+ * WP347（Luoye 10-15）：首页「免费下载」按钮。默认去下载页；`site.ts` 认出访客系统后换成对应安装包的直链，
+ * 按钮上写系统和版本号（M 系列芯片的 Mac / Windows；认不出、手机、Intel Mac 照旧去下载页）。
+ * 两份换上去的样子放在同一层的 <template> 里，链接在按钮的 data-dl-mac / data-dl-win 上（清单里没链接就不换）。
+ */
+import { buildDownloads } from '../data/downloads-build.js'
+import { type Lang, localePath } from '../i18n/common.js'
+import { HOME } from '../i18n/home.js'
+import { directDesktop } from '../lib/downloads.js'
+import Icon from './Icon.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = HOME[lang].hero
+const { manifest } = await buildDownloads()
+const urls = directDesktop(manifest)
+const v = manifest.version
+---
+<a class="btn btn-primary btn-dl" href={localePath('/download/', lang)} data-dl data-dl-mac={urls.mac} data-dl-win={urls.win}>
+  <Icon name="download" />
+  <span class="dl-txt"><span class="dl-main">{t.download}</span><small class="dl-sub">{t.dlAny} · {v}</small></span>
+</a>
+{urls.mac && (
+  <template data-dl-os="mac"><Icon name="apple" /><span class="dl-txt"><span class="dl-main">{t.dlMac[0]}</span><small class="dl-sub">{t.dlMac[1]} · {v}</small></span></template>
+)}
+{urls.win && (
+  <template data-dl-os="win"><Icon name="windows" /><span class="dl-txt"><span class="dl-main">{t.dlWin[0]}</span><small class="dl-sub">{t.dlWin[1]} · {v}</small></span></template>
+)}
