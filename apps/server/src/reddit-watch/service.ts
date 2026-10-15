@@ -521,7 +521,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       return
     }
     const cur = jobRec()
-    if (cur !== undefined && !(cur.whoami === true && cur.status === 'queued')) {
+    // WP348：「只看登着哪个号」那一件直接被真巡查顶掉（真巡查照样先读登着哪个号）
+    if (cur !== undefined && cur.whoami !== true) {
       for (const p of want) setPart(run, p, { status: 'skipped', message: '上一轮还没读完。' })
       return
     }

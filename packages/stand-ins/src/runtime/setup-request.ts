@@ -101,7 +101,18 @@ const CONNECT_ASK =
 const SETTING_WORDS: readonly [RegExp, string][] = [
   [/公司(?:实体)?地址/, 'company.address'],
   [/公司档案|品牌档案/, 'company.profile'],
+  // WP348：Reddit 巡查（方案卡演示）
+  [/reddit\s*巡查/i, 'reddit.watch'],
 ]
+/** WP348：「把 X 的〈格子〉改成 …」里那一格（stub 剧本：已设好再改的演示）。 */
+const CHANGE_FIELDS: readonly [RegExp, string][] = [
+  [/重点版块/, 'watch_subreddits'],
+  [/自家版块/, 'own_subreddits'],
+  [/告警词/, 'alert_words'],
+  [/标签词/, 'tag_words'],
+  [/关键词/, 'keywords'],
+]
+const CHANGE_ASK = /改成|改为/
 const SETTING_ASK = /(?:先|得|要|帮我|请)\s*(?:填|设|补)(?:好|上|一下)?/
 
 /**
@@ -121,6 +132,19 @@ export function setupRequestBranch(
         input: { connect: hit[1], why: '这件事要先连上它才做得下去。' },
       }
   }
+  // WP348：「把 Reddit 巡查的重点版块改成 …」→ 带新值要卡（已设好就是「我打算改成这样」）
+  const change = CHANGE_ASK.test(text) ? SETTING_WORDS.find(([re]) => re.test(text)) : undefined
+  const field = change === undefined ? undefined : CHANGE_FIELDS.find(([re]) => re.test(text))
+  const value = /(?:改成|改为)\s*[「"“]?([^」"”。\n]+)/.exec(text)?.[1]?.trim()
+  if (change !== undefined && field !== undefined && value !== undefined && value !== '')
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: change[1],
+        why: '按你说的改。',
+        suggestions: [{ key: field[1], value, why: '你刚才说的' }],
+      },
+    }
   if (SETTING_ASK.test(text)) {
     const hit = SETTING_WORDS.find(([re]) => re.test(text))
     if (hit !== undefined)

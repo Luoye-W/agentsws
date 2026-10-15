@@ -442,14 +442,15 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     fields: SetupField[],
     input: AskSetupInput,
   ): Promise<{ fields: SetupField[]; steps: NonNullable<SetupRequestPayload['steps']> }> => {
-    const host =
+    // 宿主没给工具（老装配 / 测试）：照样查——已连的数据由目标自己读，档案 / 搜索 / 模型就是没有
+    const host: SetupResearchHost | undefined =
       target.research === undefined
         ? undefined
-        : options.research?.({
+        : (options.research?.({
             actor: input.actor,
             target: target.id,
             ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
-          })
+          }) ?? { profile: () => ({}) })
     let plan: SetupPlan = {}
     let steps: NonNullable<SetupRequestPayload['steps']> = []
     if (target.research !== undefined && host !== undefined) {

@@ -14,6 +14,7 @@ import type {
   SetupField,
   SetupRequestPayload,
 } from '@agentsws/contracts'
+import { setupRequestBranch } from '@agentsws/stand-ins'
 import { describe, expect, it, vi } from 'vitest'
 import { RunBlockLog, setupNeedOf } from '../src/run-blocked.js'
 import { createSetupCards, type SetupTarget } from '../src/setup-cards.js'
@@ -475,5 +476,20 @@ describe('内置几个目标的「怎么查」', () => {
     const made = await run('{"address":"1 Invented Ave"}')
     expect(made?.suggested).toBeUndefined()
     expect(made?.needs_you).toBe(true)
+  })
+})
+
+describe('stub 剧本（演示用）', () => {
+  it('「先设好 Reddit 巡查」要方案卡；「把 Reddit 巡查的重点版块改成 …」带新值要卡', () => {
+    const on = { tools: { allow: ['request_setup'] } } as never
+    expect(setupRequestBranch(on, '先设好 Reddit 巡查，再每天看看')?.input).toMatchObject({
+      setting: 'reddit.watch',
+    })
+    expect(
+      setupRequestBranch(on, '把 Reddit 巡查的重点版块改成 UsbCHardware, anker（每周2次）')?.input,
+    ).toMatchObject({
+      setting: 'reddit.watch',
+      suggestions: [{ key: 'watch_subreddits', value: 'UsbCHardware, anker（每周2次）' }],
+    })
   })
 })
