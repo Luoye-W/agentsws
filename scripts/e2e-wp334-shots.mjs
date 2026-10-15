@@ -119,8 +119,22 @@ async function main() {
     page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
     const shotOf = async (locator, name) => {
       await page.waitForTimeout(600)
-      await locator.screenshot({ path: join(SHOTS, `${name}.png`) })
-      console.log(`  📷 ${name}.png`)
+      try {
+        await locator.screenshot({
+          path: join(SHOTS, `${name}.png`),
+          animations: 'disabled',
+          timeout: 30_000,
+        })
+        console.log(`  📷 ${name}.png`)
+      } catch (e) {
+        // 卡片流里的卡一直在动（轮询刷新）：拍不稳就整页拍一张
+        await page.screenshot({
+          path: join(SHOTS, `${name}.png`),
+          animations: 'disabled',
+          timeout: 120_000,
+        })
+        console.log(`  📷 ${name}.png（整页：${String(e).split('\n')[0]}）`)
+      }
     }
     const cardOf = async (matter, kind) => {
       for (let i = 0; i < 120; i += 1) {
@@ -163,7 +177,7 @@ async function main() {
     const b = await ask('先扫码绑上微信，以后日报发我微信')
     if ((await cardOf(b.matter.id, 'connect_request')) !== undefined) {
       await page.goto(`${BASE}/matters/${b.matter.id}`, { waitUntil: 'networkidle' })
-      await page.waitForSelector('[data-testid="matter-setup-card"] [data-testid="im-wechat-scan"]', {
+      await page.waitForSelector('[data-testid="matter-setup-card"] [data-service="im:wechat"]', {
         timeout: 30_000,
       })
       await shotOf(page.locator('main'), '3-wechat-card-in-matter')
@@ -187,7 +201,7 @@ async function main() {
       if (
         await page
           .waitForSelector('[data-testid="connect-panel"] [data-testid="onboarding-ai"]', {
-            timeout: 15_000,
+            timeout: 30_000,
           })
           .catch(() => null)
       )
