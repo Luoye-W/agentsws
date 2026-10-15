@@ -6,8 +6,8 @@ Not linking is fine too — your own keys go direct from this computer and cost 
 
 ## Link your account (setup step ① / Settings → Account & credits)
 
-1. Enter the email you use and click "Send sign-in email".
-2. Click the link in the email (valid for 15 minutes). This page picks it up by itself and shows "Linked" and the credits you received.
+1. No account yet? Pick "Sign up": enter your name, email and a password, accept the terms, then type the 6-digit code from your inbox.
+2. Already have one? Pick "Sign in" with an email code (default) or your password. Once verified it shows "Linked" and the credits you received.
 3. If you chose this in setup, we finish three things for you: turn on Agents Workshop models, switch capabilities to "use Agents Workshop's", and put the official data API first for creator channels.
 
 If the network is down it says it couldn't reach Agents Workshop cloud — try again, or look around with demo data first.
