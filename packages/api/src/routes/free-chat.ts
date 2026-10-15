@@ -7,6 +7,12 @@
  * 2. **会话存本机**，和事项分开；只有本人看得见自己的会话；
  * 3. **计量照常**：每一次模型调用都过模型网关（用途 `free_chat`），积分照常扣，不另写扣费。
  *
+ * WP343（决策 334 / 859）：随便聊改名「我的助理」（包名 / 路由 / 事件名不动）。第 1 条边界放宽：
+ * 模型手上多了四个**只读**工具（各岗位在做什么、今天要我处理的卡、最近发出去的、某件事进展）与
+ * 一个**派活**工具——它不自己做，挑好岗位 / 职责、走岗位的交办入口开一件事，那个岗位去办；
+ * 改外部的事照旧由那个岗位出审批，助理自己没有任何对外的写口。交出去的事有结果 / 要拍板时
+ * 回到这段对话里报一句（`report`）。
+ *
  * 发一句（与重新生成）回的是 **SSE**（`text/event-stream`），不是统一信封——与聊天沙盒同一种写法
  * （`fetch` + `ReadableStream`，凭据在头里，不进 URL）。客户端断开 = 停；另有一条 `stop` 兜底。
  */
@@ -75,6 +81,65 @@ export interface FreeChatMessageView {
    * 界面上是一排卡片，**人点了哪张才恢复哪张**；模型自己恢复不了任何东西。
    */
   archived_candidates?: ArchivedWorkCandidate[]
+  /** WP343：用户这句是 `@` 给谁的（「Reddit 运营 · 自家版运营」，只用来显示）。 */
+  to?: string
+  /** WP343：这一轮交给岗位去做的事（对话里那一行「已交给 X · Y」，点了进那件事）。 */
+  dispatches?: FreeChatDispatchView[]
+  /** WP343：这一条是交出去的事回来报的一句（不是模型答的，没有 `model` / `usage`）。 */
+  report?: FreeChatReportView
+}
+
+/** WP343：助理交给岗位的一件事。 */
+export interface FreeChatDispatchView {
+  matter_id: string
+  /** 事项标题。 */
+  title: string
+  position_id: string
+  position_name: string
+  /** 判准了职责才有（岗位里还没分的时候没有）。 */
+  role_id?: string
+  duty_name?: string
+  at: string
+}
+
+/** WP343：交出去的事回来报一句——做完了 / 要你拍板 / 没做成。 */
+export interface FreeChatReportView {
+  matter_id: string
+  kind: 'done' | 'decide' | 'failed'
+  position_name: string
+  duty_name?: string
+  /** `decide` 那一张卡。 */
+  approval_item_id?: string
+}
+
+/** WP343：输入框下面的一个快捷问题（按当前状态生成，不写死）。 */
+export interface AssistantSuggestionView {
+  text: string
+  /** `cards` 有卡要处理 / `position` 某岗位今天做了什么 / `dispatch` 派活例句 / `create_position` 去建岗位 */
+  kind: 'cards' | 'position' | 'dispatch' | 'create_position'
+  /** 点了不发话、直接去这一页（`create_position`）。 */
+  href?: string
+}
+
+/** WP343：输入框里 `@` 能选的一个岗位（与它下面本人持有的职责）。 */
+export interface AssistantTargetView {
+  position_id: string
+  name: string
+  duties: { role_id: string; name: string }[]
+}
+
+/** WP343：「我的助理」这一层记的一条（本人的，只在助理对话里用；AI 记的可删，删了不再记回来）。 */
+export interface AssistantMemoryView {
+  id: string
+  text: string
+  at: string
+  written_by: 'ai' | 'person'
+}
+
+/** WP343：「我的助理」这一页的状态：快捷问题（≤ 4）与 `@` 能选的岗位。 */
+export interface AssistantStateView {
+  suggestions: AssistantSuggestionView[]
+  targets: AssistantTargetView[]
 }
 
 export interface FreeChatModelChoice {
@@ -111,6 +176,8 @@ export type FreeChatFrame =
   | { type: 'notice'; text: string }
   /** WP207：找回归档的候选（卡片，人点选才恢复）。 */
   | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
+  /** WP343：交给了一个岗位（对话里马上出那一行）。 */
+  | { type: 'dispatched'; dispatch: FreeChatDispatchView }
   | { type: 'done'; message: FreeChatMessageView; session: FreeChatSessionView }
   | { type: 'error'; message: string }
 
@@ -123,6 +190,8 @@ export interface FreeChatTurnInput {
   web_search?: boolean
   knowledge?: boolean
   regenerate?: boolean
+  /** WP343：输入框里 `@` 选的岗位 / 职责——这句话直接交给它（不经模型挑）。 */
+  target?: { position_id: string; role_id?: string; label?: string }
 }
 
 export interface FreeChatPort {
@@ -141,6 +210,12 @@ export interface FreeChatPort {
   ): Promise<void>
   /** 停这条会话正在答的那一轮（客户端断开之外的兜底）。 */
   stop(actor: FreeChatActor, id: string): Promise<{ stopped: boolean }>
+  /** WP343：快捷问题与 `@` 能选的岗位。可选：没装就是 `not_implemented`。 */
+  assistant?(actor: FreeChatActor): Promise<AssistantStateView>
+  /** WP343：助理这一层的记忆（本人的）。可选。 */
+  memories?(actor: FreeChatActor): Promise<AssistantMemoryView[]>
+  /** WP343：删一条助理记忆（只能删自己的；删了 AI 不再记回来）。可选。 */
+  forget?(actor: FreeChatActor, id: string): Promise<{ deleted: boolean }>
 }
 
 /** 与「问 AI」同一档：能读自己的队列就能用——随便聊只给本人看，不碰任何对外的东西。 */
@@ -162,6 +237,14 @@ const SendBody = z.object({
   text: z.string().max(20_000),
   images: z.array(Image).max(4).optional(),
   ...TurnOptions,
+  /** WP343：`@` 选的岗位 / 职责（直接派给它）。 */
+  target: z
+    .object({
+      position_id: z.string().min(1).max(200),
+      role_id: z.string().min(1).max(200).optional(),
+      label: z.string().min(1).max(120).optional(),
+    })
+    .optional(),
 })
 const RegenerateBody = z.object(TurnOptions)
 const CreateBody = z.object({ title: z.string().max(80).optional() })
@@ -255,6 +338,56 @@ export function freeChatRoutes(): Route[] {
       {
         ...base,
         method: 'get',
+        path: '/v1/free-chat/assistant',
+        operationId: 'getAssistantState',
+        summary:
+          '「我的助理」（WP343）：输入框下面的快捷问题（按状态生成，最多 4 个）与 `@` 能选的岗位 / 职责（本人的）',
+        returns: 'AssistantStateView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.assistant === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的随便聊没有装「我的助理」')
+        return ok(c, await port.assistant(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'get',
+        path: '/v1/free-chat/memory',
+        operationId: 'listAssistantMemory',
+        summary: '「我的助理」这一层的记忆（WP343；本人的，AI 记的标出来）',
+        returns: 'AssistantMemoryView[]',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.memories === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「我的助理」没有记忆')
+        return ok(c, await port.memories(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'delete',
+        path: '/v1/free-chat/memory/:id',
+        operationId: 'forgetAssistantMemory',
+        summary: '删一条「我的助理」记忆（只能删自己的；删了 AI 不再记回来，除非你又明说）',
+        params: [{ name: 'id', in: 'path' as const, required: true, description: '记忆 id' }],
+        returns: '{ deleted: boolean }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.forget === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「我的助理」没有记忆')
+        return ok(c, await port.forget(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'get',
         path: '/v1/free-chat/sessions',
         operationId: 'listFreeChatSessions',
         summary: '我的随便聊会话（新的在前；只有本人的）',
@@ -339,10 +472,23 @@ export function freeChatRoutes(): Route[] {
         const input = await body(c, SendBody)
         if (input.text.trim() === '' && (input.images ?? []).length === 0)
           throw new ApiError('invalid_input', '说点什么，或者贴一张图')
+        const { target, ...rest } = input
         return turnStream(
           portOf(deps),
           actor,
-          { session_id: param(c, 'id'), ...stripUndefined(input) },
+          {
+            session_id: param(c, 'id'),
+            ...stripUndefined(rest),
+            ...(target === undefined
+              ? {}
+              : {
+                  target: {
+                    position_id: target.position_id,
+                    ...(target.role_id === undefined ? {} : { role_id: target.role_id }),
+                    ...(target.label === undefined ? {} : { label: target.label }),
+                  },
+                }),
+          },
           c.get('rctx').trace_id,
         )
       },

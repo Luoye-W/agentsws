@@ -22,6 +22,10 @@
  *    WP336：替身写 ```dsh-ui（dsh-genui 写法；决策 823 起 ```answer 已删），而且**故意夹带**按钮 / 图片 / 3D / 外链 / 自定义配色
  *    （像一个不守规矩的模型），按契约同一份白名单过滤；事件里记过滤后的节点类型、表格行数、数字，
  *    以及 mock 店铺的真数，测试比两头相等、比夹带的一个都没漏过去。
+ * 5. **「我的助理」派活**（WP343，决策 859）：按那句话挑岗位 / 职责——判据是 `@agentsws/roles` 的
+ *    `pickDispatchTarget`（与服务进程同一份），只在这个人**配过的岗位**里挑；拿不准就不派。派了就走上面
+ *    同一个 `open`（当任务开，职责点了名就钉那条）。助理自己没有任何写口：这一步里它名下的
+ *    staged / applied 一笔都不该有（`assistant_writes`），改外部的事由那个岗位出审批。
  */
 import type {
   AnswerComponent,
@@ -37,6 +41,7 @@ import {
   entryKindByRules,
   loadBundledPosition,
   type Position,
+  pickDispatchTarget,
   type RouteCandidate,
   roleRouteTerms,
   routeWithinPosition,
@@ -68,7 +73,16 @@ export interface PositionsLoop {
     text: string
     /** WP291：判断那一次的固定替身；不给按规则判 */
     judge?: EntryKind
+    /** WP343：助理点了名的那条职责（本人名下才算；跳过岗位内路由，同服务进程的 `role_id`） */
+    role_id?: RoleId
   }): Promise<PositionRouteRecord>
+  /** WP343：「我的助理」交代一件事（挑岗位 → 开任务；拿不准不派）。 */
+  dispatch(input: {
+    who: PersonId
+    text: string
+    position?: string
+    duty?: string
+  }): Promise<PositionRouteRecord | undefined>
   /** 路由记录（场景的 `position_routed_to` 断言读它）。 */
   routed: PositionRouteRecord[]
 }
@@ -94,8 +108,13 @@ export function installPositions(world: World): PositionsLoop {
       .listByPerson(who, { workspace_id: world.workspace_id })
       .filter((a) => a.revoked_at === undefined)
 
+  /** WP343：这个人配过哪几个岗位（助理只在这里面挑）。 */
+  const staffed = new Map<PersonId, string[]>()
+
   const staff: PositionsLoop['staff'] = (who, position_id) => {
     const template = templateOf(position_id)
+    const list = staffed.get(who) ?? []
+    if (!list.includes(position_id)) staffed.set(who, [...list, position_id])
     const out: { role_id: RoleId; assignment_id: string }[] = []
     for (const entry of template.roles) {
       if (!entry.default) continue
@@ -120,7 +139,7 @@ export function installPositions(world: World): PositionsLoop {
     return out
   }
 
-  const open: PositionsLoop['open'] = async ({ who, position_id, text, judge }) => {
+  const open: PositionsLoop['open'] = async ({ who, position_id, text, judge, role_id }) => {
     const template = templateOf(position_id)
     const held = activeOf(who).filter((a) => template.roles.some((r) => r.role === a.role_id))
     const profiles = held
@@ -154,8 +173,11 @@ export function installPositions(world: World): PositionsLoop {
       ),
       ordered,
     )
+    // WP343：点了名的职责（本人名下）直接钉上，不再路由
+    const named = role_id === undefined ? undefined : held.find((a) => a.role_id === role_id)
     const picked =
-      verdict.picked === undefined ? undefined : held.find((a) => a.role_id === verdict.picked)
+      named ??
+      (verdict.picked === undefined ? undefined : held.find((a) => a.role_id === verdict.picked))
 
     // WP291：三分（固定替身 / 规则）。拿不准职责（出选择卡）的那条路照旧当任务
     const decided: { kind: EntryKind; by: 'stand_in' | 'rules' } =
@@ -333,7 +355,76 @@ export function installPositions(world: World): PositionsLoop {
     return item.state === 'blocked' ? undefined : item
   }
 
-  return { staff, open, routed }
+  const dispatch: PositionsLoop['dispatch'] = async ({ who, text, position, duty }) => {
+    const before = world.kernel.eventLog.readSync({ workspace_id: world.workspace_id }).length
+    const mine = (staffed.get(who) ?? []).map((id) => {
+      const template = templateOf(id)
+      const held = activeOf(who)
+      return {
+        id: template.id,
+        name: template.name.zh,
+        aliases: [template.name.en],
+        duties: template.roles
+          .filter((r) => held.some((a) => a.role_id === r.role))
+          .map((r) => ({
+            role_id: r.role,
+            name: world.roles.roles.get(r.role)?.name.zh ?? r.role,
+          })),
+      }
+    })
+    const pick = pickDispatchTarget(mine, {
+      text,
+      ...(position === undefined ? {} : { position }),
+      ...(duty === undefined ? {} : { duty }),
+    })
+    const record = pick.ok
+      ? await open({
+          who,
+          position_id: pick.position_id,
+          text,
+          judge: 'task',
+          ...(pick.role_id === undefined ? {} : { role_id: pick.role_id }),
+        })
+      : undefined
+    // 助理名下的写：一笔都不该有（它只挑岗位、开事项）
+    const assistant_writes = world.kernel.eventLog
+      .readSync({ workspace_id: world.workspace_id })
+      .slice(before)
+      .filter(
+        (e) =>
+          e.actor.id === 'assistant' &&
+          (e.type === 'change.staged' ||
+            e.type.endsWith('.applied') ||
+            e.type === 'approval.created'),
+      ).length
+    const timeline = record === undefined ? [] : world.work.store.listMatterEvents(record.matter_id)
+    world.appendEvent('simulation.assistant_dispatched', {
+      dispatched: pick.ok,
+      ...(pick.ok
+        ? {
+            position_id: pick.position_id,
+            by: pick.by,
+            ...(record?.picked === undefined ? {} : { role_id: record.picked }),
+          }
+        : { candidates: pick.candidates }),
+      assistant_writes,
+      // 回报（服务进程里落进那段对话）：这件事这时候有没有结果
+      ...(record === undefined
+        ? {}
+        : {
+            reported: timeline.some((e) => e.failed !== undefined)
+              ? 'failed'
+              : timeline.some((e) => e.kind === 'card')
+                ? 'decide'
+                : timeline.some((e) => e.kind === 'agent_message')
+                  ? 'done'
+                  : 'pending',
+          }),
+    })
+    return record
+  }
+
+  return { staff, open, routed, dispatch }
 }
 
 const PRODUCTS = /商品|产品|product/iu

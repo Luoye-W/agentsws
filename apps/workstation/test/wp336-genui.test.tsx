@@ -142,7 +142,6 @@ describe('WP336 扩大范围：所有 AI 回话正文里的 ```dsh-ui', () => {
         }}
         last
         onRegenerate={() => {}}
-        onHandoff={() => {}}
       />,
     )
     const reply = screen.getByTestId('free-chat-reply')

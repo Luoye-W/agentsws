@@ -6,6 +6,10 @@
  * - **我的 profile**：岗位与范围（从制度层算，只读）+ 擅长 / 可用时段 / 联系偏好 / 公开级别
  * - **谁问过我**：谁问了什么、代理答了什么——**只有本人看得到**（41 §1.2）
  * - **约时间**：等我点头的那几张卡
+ *
+ * WP343（决策 334 / 859）：左栏不再单独有「我的代理」——它并进「我的助理」，那一页右上角「替我答同事」
+ * 打开的就是这里（`embedded`：谁问过我 / 约时间 / 我的公开资料 / 问同事；「把一件事丢给代理」不要了——
+ * 交代事情直接跟助理说）。`/secretary` 老地址跳到那里。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -111,9 +115,9 @@ function RoutePanel(): React.ReactNode {
   )
 }
 
-export function SecretaryPage(): React.ReactNode {
+export function SecretaryPage({ embedded = false }: { embedded?: boolean } = {}): React.ReactNode {
   const { t } = useApp()
-  const [tab, setTab] = useState('ask')
+  const [tab, setTab] = useState(embedded ? 'asked' : 'ask')
 
   const profile = useQuery({ queryKey: ['secretary', 'profile'], queryFn: getMyProfile })
   const people = useQuery({ queryKey: ['secretary', 'people'], queryFn: listPeople })
@@ -124,17 +128,21 @@ export function SecretaryPage(): React.ReactNode {
   const waiting = (meets.data ?? []).filter((m) => m.state === 'proposed')
 
   return (
-    <div className="flex flex-col gap-4" data-testid="secretary-page">
+    <div className="flex flex-col gap-4" data-testid={embedded ? 'peers-panel' : 'secretary-page'}>
       {/* WP43 ③：一句标题就够，「代理只管四件事」进问号 */}
-      <h1 className="flex items-center gap-1 font-semibold text-base">
-        {t('secretary.title')}
-        <Hint text={t('secretary.intro')} />
-      </h1>
+      {embedded ? null : (
+        <h1 className="flex items-center gap-1 font-semibold text-base">
+          {t('secretary.title')}
+          <Hint text={t('secretary.intro')} />
+        </h1>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="ask">{t('secretary.tab.ask')}</TabsTrigger>
-          <TabsTrigger value="profile">{t('secretary.tab.profile')}</TabsTrigger>
+          {embedded ? null : <TabsTrigger value="ask">{t('secretary.tab.ask')}</TabsTrigger>}
+          {embedded ? null : (
+            <TabsTrigger value="profile">{t('secretary.tab.profile')}</TabsTrigger>
+          )}
           <TabsTrigger value="asked">
             {t('secretary.tab.asked')}
             {(asked.data ?? []).length === 0 ? null : (
@@ -151,6 +159,12 @@ export function SecretaryPage(): React.ReactNode {
               </Badge>
             )}
           </TabsTrigger>
+          {embedded ? (
+            <>
+              <TabsTrigger value="profile">{t('assistant.peers.profile')}</TabsTrigger>
+              <TabsTrigger value="ask">{t('assistant.peers.ask')}</TabsTrigger>
+            </>
+          ) : null}
         </TabsList>
 
         <TabsContent value="ask" className="flex flex-col gap-4 pt-3">
@@ -166,7 +180,7 @@ export function SecretaryPage(): React.ReactNode {
               )}
             </CardContent>
           </Card>
-          <RoutePanel />
+          {embedded ? null : <RoutePanel />}
         </TabsContent>
 
         <TabsContent value="profile" className="pt-3">

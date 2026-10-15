@@ -21,7 +21,6 @@
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Bot,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -70,7 +69,6 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dutyHref } from '@/lib/duty-href'
-import { useMode } from '@/lib/mode'
 import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
@@ -328,7 +326,6 @@ export function AppShell({
 }): ReactNode {
   const { t, position } = useApp()
   // WP271：① 个人里左栏「公司」叫「岗位与品牌」、「我的代理」收起（都是对同事的事）
-  const { solo } = useMode()
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
   const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
@@ -458,8 +455,9 @@ export function AppShell({
               {/*
               WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
               不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
+              WP343（决策 334 / 859）：改名「我的助理」（并进了「我的代理」），仍在最上面。
             */}
-              <NavLink to="/free-chat" className={navClass} data-testid="nav-free-chat">
+              <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
                 <NavIcon icon={MessageCircle} />
                 {t('nav.free_chat')}
               </NavLink>
@@ -579,18 +577,7 @@ export function AppShell({
               WP342（决策 853）：会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置收进了
               左下角账号菜单的两组里（`account-block.tsx`），路由与 ⌘K 照旧。左栏只剩去干活的地方。
             */}
-              {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程。
-                  WP271：① 个人收起——它的四样都是对同事的，「把事丢给代理」与 ⌘K 重复
-                  （WP343 会把它并进「我的助理」，这里先不动） */}
-              {solo ? null : (
-                <>
-                  <Separator className="my-2" />
-                  <NavLink to="/secretary" className={navClass} data-testid="nav-secretary">
-                    <NavIcon icon={Bot} />
-                    {t('nav.secretary')}
-                  </NavLink>
-                </>
-              )}
+              {/* 41 §1 的「我的代理」WP343 起并进「我的助理」（右上角「替我答同事」），左栏不再单独占一行 */}
             </nav>
             {/*
           WP71（36 §10）：品牌与账号在**最下面**。

@@ -381,14 +381,21 @@ export type {
 export { extensionActionRoutes } from './routes/extension-actions.js'
 // WP188：随便聊
 export type {
+  // WP343：「我的助理」
+  AssistantMemoryView,
+  AssistantStateView,
+  AssistantSuggestionView,
+  AssistantTargetView,
   FreeChatActor,
   FreeChatCitation,
+  FreeChatDispatchView,
   FreeChatFrame,
   FreeChatImage,
   FreeChatMessageView,
   FreeChatModelChoice,
   FreeChatModelsView,
   FreeChatPort,
+  FreeChatReportView,
   FreeChatSessionView,
   FreeChatSource,
   FreeChatTurnInput,

@@ -200,6 +200,18 @@ export interface ScenarioPositionOpen {
   judge?: 'quick' | 'chat' | 'task'
 }
 
+/**
+ * WP343（决策 859）：在「我的助理」里交代一件事——助理按话挑岗位 / 职责（`pickDispatchTarget`，与服务进程同一份），
+ * 走岗位的交办入口开一件任务；拿不准就不派。助理自己没有任何写口，改外部的事由那个岗位出审批。
+ * `position` / `duty` 是模型点的名（不给 = 只看那句话里提到了谁）。
+ */
+export interface ScenarioAssistantDispatch {
+  who: string
+  text: string
+  position?: string
+  duty?: string
+}
+
 /** WP44：运营 Agent 改一件商品的价（先查文档 → 过官方 GraphQL 校验 → 提一条变更）。 */
 export interface ScenarioShopPriceChange {
   who: string
@@ -1076,6 +1088,7 @@ export type ScenarioEvent =
   | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
+  | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
   /** WP44：推一份未发布主题副本（造预览）。 */
@@ -1480,6 +1493,11 @@ export interface ScenarioExpected {
    * （默认事项列表里找不到它），否则这一条不过。
    */
   position_entries?: string[]
+  /**
+   * WP343：「我的助理」按顺序把事交给了哪几个岗位（岗位模板 id；拿不准没派的写 `-`）。
+   * 同时钉住：助理那一步自己没有产生任何 staged / applied（只开了事项）。
+   */
+  assistant_dispatched_to?: string[]
   /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
   position_answer_components?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */

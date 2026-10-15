@@ -3,6 +3,9 @@
  * （`fetch` + `ReadableStream`，凭据在头里、不进 URL——与聊天沙盒同一种写法）。
  *
  * 前端仍然不引任何模型 SDK：模型只在服务端的模型网关里。
+ *
+ * WP343：随便聊改名「我的助理」（路由 `/assistant`，老地址跳过来；接口路径不动）——多了派活那一行、
+ * 回报那一条、快捷问题、`@` 岗位与助理记忆。
  */
 import type { ArchivedWorkCandidate } from '@agentsws/contracts'
 import { ApiClientError, type ApiErrorBody, api, assignmentId, storedToken } from '@/lib/api'
@@ -48,6 +51,58 @@ export interface FreeChatMessage {
   error?: string
   /** WP207：模型找回归档时给出的候选（卡片；人点了才恢复）。 */
   archived_candidates?: ArchivedWorkCandidate[]
+  /** WP343：用户这句是 `@` 给谁的（只显示）。 */
+  to?: string
+  /** WP343：这一轮交给岗位去做的事。 */
+  dispatches?: FreeChatDispatch[]
+  /** WP343：交出去的事回来报的一句。 */
+  report?: FreeChatReport
+}
+
+/** WP343：交给岗位的一件事。 */
+export interface FreeChatDispatch {
+  matter_id: string
+  title: string
+  position_id: string
+  position_name: string
+  role_id?: string
+  duty_name?: string
+  at: string
+}
+
+/** WP343：交出去的事回来报一句。 */
+export interface FreeChatReport {
+  matter_id: string
+  kind: 'done' | 'decide' | 'failed'
+  position_name: string
+  duty_name?: string
+  approval_item_id?: string
+}
+
+/** WP343：快捷问题与 `@` 能选的岗位。 */
+export interface AssistantState {
+  suggestions: {
+    text: string
+    kind: 'cards' | 'position' | 'dispatch' | 'create_position'
+    href?: string
+  }[]
+  targets: { position_id: string; name: string; duties: { role_id: string; name: string }[] }[]
+}
+
+/** WP343：输入框里 `@` 选的那个。 */
+export interface AssistantTarget {
+  position_id: string
+  role_id?: string
+  /** 「Reddit 运营 · 自家版运营」 */
+  label: string
+}
+
+/** WP343：助理这一层的一条记忆。 */
+export interface AssistantMemory {
+  id: string
+  text: string
+  at: string
+  written_by: 'ai' | 'person'
 }
 
 export interface FreeChatModelChoice {
@@ -71,6 +126,7 @@ export type FreeChatFrame =
   | { type: 'sources'; sources: FreeChatSource[] }
   | { type: 'notice'; text: string }
   | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
+  | { type: 'dispatched'; dispatch: FreeChatDispatch }
   | { type: 'done'; message: FreeChatMessage; session: FreeChatSession }
   | { type: 'error'; message: string }
 
@@ -95,6 +151,16 @@ export const listFreeChatMessages = (id: string): Promise<FreeChatMessage[]> =>
   api(`${one(id)}/messages`)
 export const stopFreeChat = (id: string): Promise<{ stopped: boolean }> =>
   api(`${one(id)}/stop`, { method: 'POST' })
+/** WP343：快捷问题与 `@` 能选的岗位。 */
+export const getAssistantState = (): Promise<AssistantState> => api(`${base}/assistant`)
+/** WP343：助理这一层的记忆。 */
+export const listAssistantMemory = (): Promise<AssistantMemory[]> => api(`${base}/memory`)
+export const forgetAssistantMemory = (id: string): Promise<{ deleted: boolean }> =>
+  api(`${base}/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** WP343：回答末尾的 `<remember>` 标记不给人看（流式时还没被服务端拿掉）。 */
+export const hideRememberTags = (text: string): string =>
+  text.replace(/<remember\b[^>]*>[\s\S]*?(<\/remember>|$)/giu, '').trimEnd()
 
 /**
  * 说一句（或重新生成）：一帧一帧交给 `onFrame`，流结束时 resolve。
@@ -103,7 +169,12 @@ export const stopFreeChat = (id: string): Promise<{ stopped: boolean }> =>
 export async function streamFreeChat(
   session_id: string,
   input:
-    | ({ text: string; images?: FreeChatImage[] } & FreeChatTurnOptions)
+    | ({
+        text: string
+        images?: FreeChatImage[]
+        /** WP343：`@` 选的岗位 / 职责（直接交给它）。 */
+        target?: AssistantTarget
+      } & FreeChatTurnOptions)
     | ({ regenerate: true } & FreeChatTurnOptions),
   onFrame: (frame: FreeChatFrame) => void,
   signal?: AbortSignal,

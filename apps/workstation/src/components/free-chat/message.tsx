@@ -3,22 +3,35 @@
  *
  * 用户那句靠右、一个浅色气泡（带贴进来的图）；回复靠左、走现有的安全 markdown 渲染（WP157）。
  * 回复下面一行小字：用了哪个模型、花了多少（积分或 token）；再下面是来源（联网搜索）与出处（公司资料），
- * 以及三个小动作：复制、重新生成（只有最后一条）、交给岗位去做。
+ * 以及两个小动作：复制、重新生成（只有最后一条）。
+ *
+ * WP343：「交给岗位去做」按钮去掉了——交代事情直接跟助理说（它交给岗位，回复下面一行「已交给 X」）；
+ * 交出去的事回来报的那一句画成 {@link ReportNote}；用户那句 `@` 给谁的，气泡上方一个小标。
  */
 import { splitGenuiReply } from '@agentsws/contracts'
-import { Check, Copy, Forward, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
+import { AtSign, Check, Copy, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
+import { DispatchLine, ReportNote } from '@/components/free-chat/assistant-bits'
 import { ChoiceIcon, modelNameOf } from '@/components/free-chat/model-picker'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
-import type { FreeChatMessage, FreeChatSource } from '@/lib/free-chat'
+import { type FreeChatMessage, type FreeChatSource, hideRememberTags } from '@/lib/free-chat'
 
 export function UserBubble({ message }: { message: FreeChatMessage }): React.ReactNode {
   return (
     <div className="flex justify-end" data-testid="free-chat-user">
       <div className="flex max-w-[80%] flex-col items-end gap-1.5">
+        {message.to === undefined ? null : (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] text-ws-brand-ink"
+            data-testid="free-chat-user-to"
+          >
+            <AtSign aria-hidden className="size-3" />
+            {message.to}
+          </span>
+        )}
         {(message.images ?? []).length === 0 ? null : (
           <div className="flex flex-wrap justify-end gap-1.5">
             {(message.images ?? []).map((img, i) => (
@@ -98,7 +111,6 @@ export function AssistantMessage({
   status,
   last,
   onRegenerate,
-  onHandoff,
 }: {
   message: FreeChatMessage
   /** 还在往外吐字。 */
@@ -107,29 +119,27 @@ export function AssistantMessage({
   status?: string
   last: boolean
   onRegenerate: () => void
-  onHandoff: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const [copied, setCopied] = useState(false)
+  // WP343：交出去的事回来报的一句——不是模型答的，画成一条小通知
+  if (message.report !== undefined) return <ReportNote message={message} />
+  const text = hideRememberTags(message.text)
   return (
     <div
       className="flex flex-col gap-1.5"
       data-testid="free-chat-assistant"
       data-live={live === true}
     >
-      {message.text === '' && live === true ? (
+      {text === '' && live === true ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
           {status ?? t('free_chat.thinking')}
         </p>
       ) : (
-        <SafeMarkdown
-          text={message.text}
-          className="text-[14px] leading-6"
-          testId="free-chat-reply"
-        />
+        <SafeMarkdown text={text} className="text-[14px] leading-6" testId="free-chat-reply" />
       )}
-      {live === true && message.text !== '' && status !== undefined ? (
+      {live === true && text !== '' && status !== undefined ? (
         <p className="text-xs text-muted-foreground">{status}</p>
       ) : null}
       {message.error === undefined ? null : (
@@ -137,6 +147,7 @@ export function AssistantMessage({
           {message.error}
         </p>
       )}
+      <DispatchLine dispatches={message.dispatches ?? []} />
       <Sources sources={message.sources ?? []} />
       {/* WP207：找回归档的候选卡——点一张放回左栏；不点什么都不恢复 */}
       {(message.archived_candidates ?? []).length === 0 ? null : (
@@ -172,7 +183,7 @@ export function AssistantMessage({
               title={t('free_chat.copy')}
               data-testid="free-chat-copy"
               onClick={() => {
-                void globalThis.navigator?.clipboard?.writeText(message.text).then(() => {
+                void globalThis.navigator?.clipboard?.writeText(text).then(() => {
                   setCopied(true)
                   setTimeout(() => setCopied(false), 1500)
                 })
@@ -192,10 +203,6 @@ export function AssistantMessage({
                 <RotateCcw aria-hidden />
               </Button>
             ) : null}
-            <Button size="xs" variant="ghost" data-testid="free-chat-handoff" onClick={onHandoff}>
-              <Forward aria-hidden />
-              {t('free_chat.handoff')}
-            </Button>
           </span>
         </div>
       )}
