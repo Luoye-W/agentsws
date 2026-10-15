@@ -125,9 +125,11 @@ describe('WP346 AI 归纳：一次调用、只喂抓到的页面文字', () => {
     expect(p.subcategory?.value).toBe('daypacks')
     expect(p.positioning?.value).toContain('家长')
     expect(p.category?.value).toBe('hiking backpacks')
-    expect(p.competitors?.value.map((c) => c.name)).toEqual(['Osprey', 'Deuter'])
-    expect(p.competitors?.value[1]?.url).toBeUndefined()
-    for (const key of ['audience', 'keywords', 'competitors', 'positioning'] as const) {
+    // WP349（决策 881 改）：没联网 → 竞品一个都不收（模型记忆里的不算），联网那一步照实记「没联网」
+    expect(p.competitors).toBeUndefined()
+    expect(out.web.status).toBe('off')
+    expect(m.prompts[0]).toContain('Do NOT output "competitors"')
+    for (const key of ['audience', 'keywords', 'positioning'] as const) {
       expect(p[key]?.confidence).toBe('low')
       expect(p[key]?.evidence[0]?.locator).toBe('model')
       expect(needsConfirm(p[key])).toBe(true)

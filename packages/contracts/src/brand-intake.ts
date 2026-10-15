@@ -184,6 +184,34 @@ export interface BrandIntakeProfile {
  */
 export type BrandIntakeInsightsStatus = 'done' | 'no_model' | 'budget' | 'failed' | 'skipped'
 
+/**
+ * WP349（Luoye 10-15 改决策 881）：品牌分析那一轮**联网查**的几部分。取舍顺序（额度装不下时）：
+ * 先保官网解析，再竞品（`competitors` 发现 + `verify` 逐个核实），最后品牌评测（`brand`）。
+ */
+export type BrandIntakeWebPart = 'brand' | 'competitors' | 'verify'
+
+/**
+ * WP349：联网查那一步怎么样了（界面按它照实说一句）。
+ *
+ * - `done`：至少搜成了一次（结果进了 AI 归纳那一次）；
+ * - `off`：没联网能力（没接搜索 / 设置里关着）——竞品一格留空，说「没联网，查不了竞品」；
+ * - `failed`：搜了但一次都没搜成；
+ * - `skipped`：AI 归纳那一步没跑（没接模型 / 一页没读到 / 空店 / 封顶），联网也就不查。
+ */
+export type BrandIntakeWebStatus = 'done' | 'off' | 'failed' | 'skipped'
+
+export interface BrandIntakeWebReport {
+  status: BrandIntakeWebStatus
+  /** `off` 时为什么（一句人话，例：「联网搜索要先登录 DeepSeek 账号…」）。 */
+  reason?: string
+  /** 这一次一共搜了几次（命中 7 天缓存的也算一次，只是不花钱）。 */
+  searches: number
+  /** 搜索计了多少积分（按 {@link BRAND_INTAKE_SEARCH_CREDITS}；已含在 `budget.spent_credits` 里）。 */
+  credits: number
+  /** 因为额度没查（或没查全）的几部分——界面照实说哪几格因此没查。 */
+  cut?: BrandIntakeWebPart[]
+}
+
 /** 一次分析跑到哪一步了。 */
 export type BrandIntakeRunStatus =
   /** 排上了还没开跑 */
@@ -250,6 +278,8 @@ export interface BrandIntakeRun {
   fresh_store?: boolean
   /** WP346：AI 归纳那一步怎么样了（没有 = 老 run / 还没跑到）。 */
   insights?: BrandIntakeInsightsStatus
+  /** WP349：联网查那一步怎么样了（没有 = 老 run / 还没跑到）。 */
+  web?: BrandIntakeWebReport
 }
 
 /**
@@ -312,6 +342,20 @@ export const BRAND_INTAKE_MAX_PRODUCTS = 8
  * 页面预算相应少一份——官网 12 页 × 0.15 + 0.15 = 1.95，仍压在 2 下面。
  */
 export const BRAND_INTAKE_INSIGHTS_CREDITS = 0.15
+
+/**
+ * WP349：品牌分析那一轮最多联网搜几次——品牌评测 3 + 竞品发现 2 + 竞品核实每个 1 次、最多 4 个 = 9。
+ */
+export const BRAND_INTAKE_WEB_SEARCH_MAX = { brand: 3, competitors: 2, verify: 4 } as const
+
+/**
+ * WP349：一次联网搜索在品牌分析里按多少积分算。
+ *
+ * **0**——按现有价目（WP179）：联网搜索走用户自己的 DeepSeek 账号 / 官方 key，一次搜索 = 一次 DeepSeek
+ * 模型回合，钱由 DeepSeek 那边扣，工坊不收积分；用量页「联网搜索」照常记一笔。封顶的取舍顺序照样做好
+ * （先保官网解析，再竞品，最后品牌评测）：哪天搜索要收积分，改这个数就生效（决策 897）。
+ */
+export const BRAND_INTAKE_SEARCH_CREDITS = 0
 
 /** WP346：「重新分析一次」逐格采纳（设置页）：采纳哪几格，可顺带改值（形状同确认的 `edits`）。 */
 export interface BrandIntakeAdoptInput {

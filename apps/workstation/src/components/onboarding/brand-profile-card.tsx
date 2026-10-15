@@ -16,7 +16,11 @@
  * 重新分析也不会动它（70 §3.4）。
  */
 
-import type { BrandIntakeInsightsStatus, BrandIntakeProfile } from '@agentsws/contracts'
+import type {
+  BrandIntakeInsightsStatus,
+  BrandIntakeProfile,
+  BrandIntakeWebReport,
+} from '@agentsws/contracts'
 import { Check, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { DesignSpecRow } from '@/components/design-md/design-spec-row'
@@ -24,10 +28,13 @@ import {
   AiTag,
   BrandInsightFields,
   INSIGHT_KEYS,
+  type InsightKey,
   type InsightValues,
+  type SourceItem,
 } from '@/components/onboarding/brand-insight-fields'
 import { MarketsPicker, marketLabel } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
 
@@ -110,6 +117,47 @@ export interface BrandProfileCardProps {
   freshStore?: boolean
   /** WP346：AI 归纳那一步怎么样了（没接模型 / 积分封顶 / 没答好时说一句）。 */
   insights?: BrandIntakeInsightsStatus
+  /** WP349：联网查那一步怎么样了（没联网 / 额度没查 / 没搜成时照实说一句）。 */
+  web?: BrandIntakeWebReport
+}
+
+/** WP349：一格的网页来源（证据里层 `web` 的那几条；人改过的格子不挂——那已经是人的话了）。 */
+export function webSourcesOf(
+  profile: BrandIntakeProfile,
+  edits: Record<string, unknown>,
+): Partial<Record<InsightKey, SourceItem[]>> {
+  const out: Partial<Record<InsightKey, SourceItem[]>> = {}
+  for (const key of ['positioning', 'audience', 'price_band', 'subcategory'] as const) {
+    const cell = profile[key]
+    if (cell === undefined || edits[key] !== undefined || cell.edited === true) continue
+    const list = cell.evidence
+      .filter((e) => e.locator === 'web')
+      .map((e) => ({ url: e.url, ...(e.quote === undefined ? {} : { title: e.quote }) }))
+    if (list.length > 0) out[key] = list
+  }
+  return out
+}
+
+/**
+ * WP349：联网那一步照实说的几句（没联网、没搜成、额度没查哪几部分、搜了但没找到有来源的竞品）。
+ * 只在 AI 归纳真跑了时说（没跑时 `insights` 那一句已经说过了）。
+ */
+export function webNotes(
+  web: BrandIntakeWebReport | undefined,
+  competitors: number,
+): { key: string; hint?: string }[] {
+  if (web === undefined) return []
+  if (web.status === 'off')
+    return [{ key: 'intake.web.off', ...(web.reason === undefined ? {} : { hint: web.reason }) }]
+  if (web.status === 'failed') return [{ key: 'intake.web.failed' }]
+  const out: { key: string }[] = []
+  const cut = web.cut ?? []
+  if (cut.includes('competitors')) out.push({ key: 'intake.web.cut.competitors' })
+  else if (cut.includes('verify')) out.push({ key: 'intake.web.cut.verify' })
+  if (cut.includes('brand')) out.push({ key: 'intake.web.cut.brand' })
+  if (web.status === 'done' && competitors === 0 && !cut.includes('competitors'))
+    out.push({ key: 'intake.web.no_competitors' })
+  return out
 }
 
 /** WP346：一格是不是 AI 填的（模型那一层出的、人没改过）。 */
@@ -275,6 +323,7 @@ export function BrandProfileCard({
   confirmed = false,
   freshStore = false,
   insights,
+  web,
 }: BrandProfileCardProps): React.ReactNode {
   const { t, lang } = useApp()
   const currency = currentValue(profile, edits, 'currency')
@@ -357,12 +406,27 @@ export function BrandProfileCard({
           onEdit(field, value)
         }}
         disabled={busy}
+        sources={webSourcesOf(profile, edits)}
       />
       {insights === 'no_model' || insights === 'budget' || insights === 'failed' ? (
         <p className="text-xs text-ws-muted-fg" data-testid="intake-insights-note">
           {t(`intake.insights.${insights}`)}
         </p>
       ) : null}
+      {/* WP349：联网那一步照实说（没联网 / 没搜成 / 额度没查的几部分） */}
+      {insights === 'done'
+        ? webNotes(web, insightValuesOf(profile, edits).competitors?.length ?? 0).map((n) => (
+            <p
+              key={n.key}
+              role="status"
+              className="flex items-center gap-1 text-xs text-ws-muted-fg"
+              data-testid="intake-web-note"
+            >
+              {t(n.key)}
+              {n.hint === undefined ? null : <Hint text={n.hint} />}
+            </p>
+          ))
+        : null}
 
       {/*
         WP166：市场从只读标签改成可增删（国家选择器，中文国名）；出处进问号；

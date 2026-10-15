@@ -62,7 +62,8 @@ describe('WP346 首次设置档案卡：新格子 + AI 建议', () => {
     renderWithProviders(<Harness />)
     expect(screen.getByTestId('insight-value-audience').textContent).toContain('周末带孩子徒步')
     expect(screen.getByTestId('insight-value-keywords').textContent).toContain('hiking daypack')
-    expect(screen.getByTestId('insight-value-competitors').textContent).toBe('Osprey')
+    // WP349：竞品一行一个——名字 + 一句理由
+    expect(screen.getByTestId('insight-value-competitors').textContent).toBe('Osprey同价位')
     for (const f of ['audience', 'keywords', 'competitors', 'positioning'])
       expect(screen.getByTestId(`insight-ai-${f}`).textContent).toBe('AI 建议')
     // 品类（AI 填的）也挂

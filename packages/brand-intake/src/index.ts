@@ -120,12 +120,15 @@ export {
 
 import {
   BRAND_INTAKE_INSIGHTS_CREDITS,
+  BRAND_INTAKE_SEARCH_CREDITS,
+  BRAND_INTAKE_WEB_SEARCH_MAX,
   type BrandIntakeBudget,
   type BrandIntakeFailureKind,
   type BrandIntakeInsightsStatus,
   type BrandIntakePage,
   type BrandIntakeProfile,
   type BrandIntakeSourceKind,
+  type BrandIntakeWebReport,
   DEFAULT_BRAND_INTAKE_CAP_CREDITS,
 } from '@agentsws/contracts'
 import { analyzeAmazonListing, analyzeAmazonStorefront, classifyAmazonUrl } from './amazon.js'
@@ -141,6 +144,16 @@ import {
   parseInsightsReply,
 } from './insights.js'
 import { analyzeSite } from './site.js'
+import { brandNameOf, type IntakeWebSearch, type NumberedHit, webResearch } from './web.js'
+
+/** WP349：一轮最多搜几次（品牌 3 + 竞品发现 2 + 核实 4）。 */
+const WEB_SEARCH_TOTAL =
+  BRAND_INTAKE_WEB_SEARCH_MAX.brand +
+  BRAND_INTAKE_WEB_SEARCH_MAX.competitors +
+  BRAND_INTAKE_WEB_SEARCH_MAX.verify
+
+/** WP349：没联网能力时那一句（调用方没给更具体的原因时用）。 */
+export const WEB_OFF_REASON = '没联网，查不了竞品。'
 
 /**
  * 一个页面按多少积分算。
@@ -195,6 +208,8 @@ export interface AnalyzeBrandResult {
   fresh_store?: boolean
   /** WP346：AI 归纳那一步怎么样了（没给 `insights` 选项就是 `no_model`）。 */
   insights: BrandIntakeInsightsStatus
+  /** WP349：联网查那一步怎么样了。 */
+  web: BrandIntakeWebReport
 }
 
 /**
@@ -220,6 +235,13 @@ export async function analyzeBrand(
      * 沿用封顶（先留出这一份，页面预算相应少一份）；只喂这一轮抓到的页面文字。
      */
     insights?: { model: InsightsModel; language?: 'zh' | 'en' }
+    /**
+     * WP349（Luoye 10-15 改决策 881）：联网查（品牌评测 / 社区 / 媒体 + 竞品发现与核实），结果进同一次
+     * AI 归纳。`search` 不给 = 没联网能力：竞品一格留空，`reason` 是照实说的那一句。
+     * 每次按 `creditsPerSearch`（默认 {@link BRAND_INTAKE_SEARCH_CREDITS}）计入积分；封顶装不下时
+     * 先保官网解析（与 AI 那一次），再竞品，最后品牌评测。
+     */
+    web?: { search?: IntakeWebSearch; reason?: string; creditsPerSearch?: number }
   } = {},
 ): Promise<AnalyzeBrandResult> {
   const cap = options.capCredits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
@@ -316,6 +338,8 @@ export async function analyzeBrand(
 
   // ── WP346：AI 归纳（一次调用；读到页面、不是空店、预算还容得下才问）──────────
   let insights: BrandIntakeInsightsStatus = 'no_model'
+  const webSearch = options.web?.search
+  let web: BrandIntakeWebReport = { status: 'skipped', searches: 0, credits: 0 }
   if (options.insights !== undefined) {
     const read: InsightsPage[] = pages
       .filter((p) => p.ok && seen.has(p.url))
@@ -325,6 +349,34 @@ export async function analyzeBrand(
       insights = 'budget'
     else {
       spent = Math.round((spent + BRAND_INTAKE_INSIGHTS_CREDITS) * 100) / 100
+      // ── WP349：联网查（AI 那一次已经留好；剩下的额度按「竞品 → 品牌评测」的顺序给搜索）──
+      let hits: NumberedHit[] = []
+      const name = brandNameOf(profile, urls[0])
+      if (webSearch === undefined)
+        web = {
+          status: 'off',
+          reason: options.web?.reason ?? WEB_OFF_REASON,
+          searches: 0,
+          credits: 0,
+        }
+      else if (name !== undefined) {
+        const price = options.web?.creditsPerSearch ?? BRAND_INTAKE_SEARCH_CREDITS
+        const allowed =
+          price <= 0
+            ? WEB_SEARCH_TOTAL
+            : Math.min(WEB_SEARCH_TOTAL, Math.floor((cap - spent) / price + 1e-9))
+        const found = await webResearch({ name, profile, search: webSearch, allowed })
+        hits = found.hits
+        const credits = Math.round(found.searches * price * 100) / 100
+        spent = Math.round((spent + credits) * 100) / 100
+        web = {
+          status:
+            found.searches > 0 && found.ok === 0 ? 'failed' : found.ok > 0 ? 'done' : 'skipped',
+          searches: found.searches,
+          credits,
+          ...(found.cut.length === 0 ? {} : { cut: found.cut }),
+        }
+      }
       try {
         const prompt = insightsPrompt({
           profile,
@@ -332,6 +384,7 @@ export async function analyzeBrand(
           ...(options.insights.language === undefined
             ? {}
             : { language: options.insights.language }),
+          ...(hits.length === 0 ? {} : { web: hits }),
         })
         const reply = parseInsightsReply(
           (await options.insights.model({ prompt })).text,
@@ -344,6 +397,7 @@ export async function analyzeBrand(
             ...insightFields(profile, reply, {
               url: read[0]?.url ?? urls[0] ?? '',
               pageText: digestText(read),
+              web: hits,
             }),
           }
           insights = 'done'
@@ -369,6 +423,7 @@ export async function analyzeBrand(
     ...(locked ? { password_protected: true } : {}),
     ...(fresh ? { fresh_store: true } : {}),
     insights,
+    web,
   }
 }
 
@@ -384,16 +439,28 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
 
 export { amazonListPrice, amazonSpecs } from './amazon.js'
 // WP346（决策 872）：AI 归纳那一步（移植自 KOLAgents enrichment.ts）
-export type { InsightsModel, InsightsPage, InsightsReply } from './insights.js'
+export type { InsightsModel, InsightsPage, InsightsReply, SourcedField } from './insights.js'
 export {
   digestText,
   INSIGHTS_MAX_PAGE_CHARS,
   insightFields,
   insightsPrompt,
+  mentions,
   pageDigest,
   parseInsightsReply,
+  sourcedCompetitors,
 } from './insights.js'
-
 // WP246：网页转文字（本机那一级）——任意网页 → 干净正文 markdown
 export type { ReadableResult } from './readable.js'
 export { htmlToReadable, parseHtmlTree, READABLE_MAX_CHARS } from './readable.js'
+// WP349：品牌分析联网查（搜什么、按什么顺序、竞品候选怎么认、没来源的竞品怎么丢）
+export type { IntakeWebHit, IntakeWebSearch, NumberedHit, WebResearch } from './web.js'
+export {
+  brandNameOf,
+  brandQueries,
+  competitorCandidates,
+  competitorQueries,
+  nameKey,
+  verifyQuery,
+  webResearch,
+} from './web.js'

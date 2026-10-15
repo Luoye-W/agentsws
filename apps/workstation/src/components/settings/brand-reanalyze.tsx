@@ -7,11 +7,19 @@
  * - 和现在一样的：不列。
  *
  * 网址默认用档案里记的官网（品牌分析确认时存的），其次最近那一轮分析的链接。
+ *
+ * WP349：「新的」那一列挂来源（🔗 N，点开是联网搜到的网页）；联网那一步没联网 / 额度没查时照实说一句。
  */
-import type { BrandIntakeRun } from '@agentsws/contracts'
+import type { BrandCompetitor, BrandIntakeRun } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import {
+  competitorSources,
+  type SourceItem,
+  SourceLinks,
+} from '@/components/onboarding/brand-insight-fields'
+import { webNotes, webSourcesOf } from '@/components/onboarding/brand-profile-card'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -66,6 +74,8 @@ export interface CompareRow {
   human: boolean
   /** 默认勾不勾。 */
   pick: boolean
+  /** WP349：新值是从哪几个网页看来的（联网搜到的）。 */
+  sources: SourceItem[]
 }
 
 /** 档案 + 一次分析 → 对比行（一样的不列）。 */
@@ -74,6 +84,7 @@ export function compareRows(
   run: Pick<BrandIntakeRun, 'profile'>,
 ): CompareRow[] {
   const rows: CompareRow[] = []
+  const web = webSourcesOf(run.profile, {}) as Partial<Record<string, SourceItem[]>>
   for (const field of FIELDS) {
     const next = (run.profile as Record<string, { value?: unknown } | undefined>)[field]?.value
     if (next === undefined || compactValue(next).trim() === '') continue
@@ -82,7 +93,9 @@ export function compareRows(
     const empty = now === undefined || compactValue(now).trim() === ''
     const ai = (profile?.ai_suggested ?? []).includes(field as never)
     const human = !empty && !ai
-    rows.push({ field, now, next, human, pick: !human })
+    const sources =
+      field === 'competitors' ? competitorSources(next as BrandCompetitor[]) : (web[field] ?? [])
+    rows.push({ field, now, next, human, pick: !human, sources })
   }
   return rows
 }
@@ -201,6 +214,23 @@ export function BrandReanalyze({
           {run.data.failure}
         </p>
       ) : null}
+      {/* WP349：联网那一步照实说（没联网 / 没搜成 / 额度没查的几部分） */}
+      {done && run.data?.insights === 'done'
+        ? webNotes(
+            run.data.web,
+            ((run.data.profile.competitors?.value ?? []) as BrandCompetitor[]).length,
+          ).map((n) => (
+            <p
+              key={n.key}
+              role="status"
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              data-testid="reanalyze-web-note"
+            >
+              {t(n.key)}
+              {n.hint === undefined ? null : <Hint text={n.hint} />}
+            </p>
+          ))
+        : null}
       {done && run.data?.status !== 'failed' && rows.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="reanalyze-nothing">
           {t('reanalyze.nothing')}
@@ -231,7 +261,10 @@ export function BrandReanalyze({
                   </span>
                 ) : null}
               </span>
-              <span className="min-w-0 break-words">{compactValue(r.next)}</span>
+              <span className="flex min-w-0 flex-col items-start gap-0.5 break-words">
+                {compactValue(r.next)}
+                <SourceLinks field={`reanalyze-${r.field}`} items={r.sources} />
+              </span>
               <input
                 type="checkbox"
                 className="mt-1"

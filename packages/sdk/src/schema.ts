@@ -35950,6 +35950,10 @@ export interface operations {
             name: string
             reason: string
             url?: string
+            sources?: {
+              url: string
+              title?: string
+            }[]
           }[]
           confirm_fields?: (
             | 'category'

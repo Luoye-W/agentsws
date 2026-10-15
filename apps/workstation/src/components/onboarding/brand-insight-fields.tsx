@@ -6,9 +6,17 @@
  *
  * 图形化优先（界面少字）：人群三行、关键词三组画成标签、竞品一行一个名字（理由进 tooltip）。
  * 抓不到又没改过的格子整行不出（档案卡那条老规矩）；设置页要能补，所以 `showEmpty` 时空格子也摆出来。
+ *
+ * WP349（Luoye 10-15 改决策 881）：定位 / 人群 / 竞品挂**来源**（联网搜到的哪个网页）——每行一个「🔗 N」，
+ * 点开才列出链接（不铺在卡上）；竞品一行一个：名字 + 一句理由，来源按竞品分组。
  */
-import type { BrandAudience, BrandCompetitor, BrandKeywords } from '@agentsws/contracts'
-import { Check, Pencil, Plus, X } from 'lucide-react'
+import type {
+  BrandAudience,
+  BrandCompetitor,
+  BrandKeywords,
+  BrandSource,
+} from '@agentsws/contracts'
+import { Check, Link2, Pencil, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -129,11 +137,17 @@ function ValueView({ field, v }: { field: InsightKey; v: InsightValues }): React
       )
     }
     case 'competitors':
+      // WP349：一行一个——名字 + 一句理由（来源在行尾「🔗 N」里点开）
       return (
-        <span className="flex flex-wrap gap-1" data-testid="insight-value-competitors">
+        <span className="flex flex-col gap-0.5" data-testid="insight-value-competitors">
           {(v.competitors ?? []).map((c) => (
-            <span key={c.name} className={chip} title={c.reason}>
-              {c.name}
+            <span key={c.name} className="flex flex-wrap items-baseline gap-1.5">
+              <span className={chip} title={c.reason}>
+                {c.name}
+              </span>
+              {c.reason === '' ? null : (
+                <span className="text-xs text-ws-muted-fg">{c.reason}</span>
+              )}
             </span>
           ))}
         </span>
@@ -141,6 +155,114 @@ function ValueView({ field, v }: { field: InsightKey; v: InsightValues }): React
     default:
       return <span data-testid={`insight-value-${field}`}>{v[field]}</span>
   }
+}
+
+/** WP349：一条来源（竞品的来源带上是哪个竞品的）。 */
+export interface SourceItem extends BrandSource {
+  about?: string
+}
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+/** WP349：竞品那一格的来源（按竞品排，同一网页只列一次）。 */
+export function competitorSources(list: readonly BrandCompetitor[] | undefined): SourceItem[] {
+  const out: SourceItem[] = []
+  for (const c of list ?? [])
+    for (const s of c.sources ?? [])
+      if (!out.some((x) => x.url === s.url && x.about === c.name)) out.push({ ...s, about: c.name })
+  return out
+}
+
+/**
+ * WP349：「🔗 N」——点开列出这一格是从哪几个网页看来的（新窗口打开）。收起时不渲染链接，
+ * 卡上不铺外链。
+ */
+export function SourceLinks({
+  field,
+  items,
+}: {
+  field: string
+  items: readonly SourceItem[]
+}): React.ReactNode {
+  const { t } = useApp()
+  const [open, setOpen] = useState(false)
+  if (items.length === 0) return null
+  return (
+    <span className="inline-flex flex-col gap-0.5">
+      <button
+        type="button"
+        className="inline-flex items-center gap-0.5 text-[11px] text-ws-muted-fg hover:text-foreground"
+        aria-label={t('intake.sources', { n: items.length })}
+        aria-expanded={open}
+        title={t('intake.sources', { n: items.length })}
+        data-testid={`insight-sources-${field}`}
+        onClick={() => {
+          setOpen(!open)
+        }}
+      >
+        <Link2 size={12} />
+        {items.length}
+      </button>
+      {open ? (
+        <span className="flex flex-col gap-0.5" data-testid={`insight-source-list-${field}`}>
+          {groupsOf(items).map((g) =>
+            g.about === undefined ? (
+              // 定位 / 人群这类：一条一行，标题 + 域名
+              g.items.map((s) => (
+                <span key={s.url} className="flex items-baseline gap-1 text-xs">
+                  <SourceLink source={s} label={s.title ?? hostOf(s.url)} />
+                  {s.title === undefined ? null : (
+                    <span className="text-[11px] text-ws-muted-fg">{hostOf(s.url)}</span>
+                  )}
+                </span>
+              ))
+            ) : (
+              // 竞品：一个竞品一行，后面是它的几个来源（画域名，标题进 tooltip）
+              <span key={g.about} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                <span className="text-ws-muted-fg">{g.about}</span>
+                {g.items.map((s) => (
+                  <SourceLink key={s.url} source={s} label={hostOf(s.url)} />
+                ))}
+              </span>
+            ),
+          )}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/** 按竞品分组（没有 `about` 的归一组），保持出现顺序。 */
+function groupsOf(items: readonly SourceItem[]): { about?: string; items: SourceItem[] }[] {
+  const out: { about?: string; items: SourceItem[] }[] = []
+  for (const s of items) {
+    const g = out.find((x) => x.about === s.about)
+    if (g === undefined)
+      out.push({ ...(s.about === undefined ? {} : { about: s.about }), items: [s] })
+    else g.items.push(s)
+  }
+  return out
+}
+
+/** 一条来源的链接（新窗口打开、不带来源页）。 */
+function SourceLink({ source, label }: { source: SourceItem; label: string }): React.ReactNode {
+  return (
+    <a
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="max-w-72 truncate underline underline-offset-2"
+      title={source.title === undefined ? source.url : `${source.title}\n${source.url}`}
+    >
+      {label}
+    </a>
+  )
 }
 
 /** 一格的改法。改一下就回调一次（父组件握着值；关掉编辑框就是改完了）。 */
@@ -307,6 +429,7 @@ function InsightRow({
   onAccept,
   showEmpty,
   disabled,
+  sources,
 }: {
   field: InsightKey
   values: InsightValues
@@ -316,6 +439,7 @@ function InsightRow({
   onAccept?: ((field: InsightKey) => void) | undefined
   showEmpty: boolean
   disabled: boolean
+  sources: readonly SourceItem[]
 }): React.ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
@@ -362,6 +486,7 @@ function InsightRow({
             <ValueView field={field} v={values} />
           </span>
           {ai && !empty ? <AiTag field={field} /> : null}
+          {empty ? null : <SourceLinks field={field} items={sources} />}
           {edited && !ai ? (
             <span className="text-[11px] text-ws-muted-fg" data-testid={`insight-edited-${field}`}>
               {t('intake.tag.edited')}
@@ -412,6 +537,7 @@ export function BrandInsightFields({
   onAccept,
   showEmpty = false,
   disabled = false,
+  sources = {},
 }: {
   values: InsightValues
   ai: readonly string[]
@@ -420,6 +546,8 @@ export function BrandInsightFields({
   onAccept?: (field: InsightKey) => void
   showEmpty?: boolean
   disabled?: boolean
+  /** WP349：定位 / 人群 / 价格带这几格的来源（竞品的来源跟着竞品走，不用给）。 */
+  sources?: Partial<Record<InsightKey, readonly SourceItem[]>>
 }): React.ReactNode {
   return (
     <div className="flex flex-col gap-1.5" data-testid="brand-insight-fields">
@@ -434,6 +562,7 @@ export function BrandInsightFields({
           onAccept={onAccept}
           showEmpty={showEmpty}
           disabled={disabled}
+          sources={f === 'competitors' ? competitorSources(values.competitors) : (sources[f] ?? [])}
         />
       ))}
     </div>

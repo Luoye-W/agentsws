@@ -444,6 +444,7 @@ export function BusinessStep({
             confirmed={current.status === 'confirmed'}
             freshStore={current.fresh_store === true}
             {...(current.insights === undefined ? {} : { insights: current.insights })}
+            {...(current.web === undefined ? {} : { web: current.web })}
             onEdit={(field, value) => {
               setEdits((prev) => ({ ...prev, [field]: value }))
             }}
