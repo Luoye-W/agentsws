@@ -10227,6 +10227,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchRun(input),
     watchMetrics: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchMetrics(input),
+    // WP335：「一条回答」（右栏）——按 id 取全文、引用、上一期与时间线
+    watchAnswer: async (actor, id) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchAnswer(id),
     // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
     geoHistoryExport: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),
