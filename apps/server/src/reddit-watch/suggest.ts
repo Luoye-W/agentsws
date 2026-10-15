@@ -7,6 +7,7 @@
  */
 import { normalizeSubreddit } from '@agentsws/browser-action'
 import { EXTERNAL_FENCE } from '@agentsws/core'
+import { getVerticalPack } from '@agentsws/support-core'
 import type { JudgeComplete } from './judge.js'
 
 /** 品牌档案里给建议用的几格（都可能没有）。 */
@@ -59,7 +60,7 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
     brief.one_liner === undefined ? '' : `一句话介绍：${fence(brief.one_liner, 300)}`,
     brief.vertical === undefined
       ? ''
-      : `卖的是：${brief.vertical === 'digital' ? '数字商品 / 服务' : '实物商品'}`,
+      : `卖的是：${getVerticalPack(brief.vertical).labelZh}`,
     brief.markets === undefined || brief.markets.length === 0
       ? ''
       : `目标市场：${brief.markets.slice(0, 10).join('、')}`,
