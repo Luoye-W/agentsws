@@ -181,6 +181,8 @@ const EVENT_KEYS = [
   // WP69 岗位是任务主入口（54）
   'position.staff',
   'position.open',
+  // WP343「我的助理」派活
+  'assistant.dispatch',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -314,6 +316,8 @@ const EXPECTED_KEYS = [
   // WP291：岗位入口三分 + 当场回答的组件
   'position_entries',
   'position_answer_components',
+  // WP343：助理把事交给了哪几个岗位
+  'assistant_dispatched_to',
   'secretary_kinds',
   'scope_disjoint',
   // WP62（51 §1 N0）
@@ -2277,6 +2281,21 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'assistant.dispatch': {
+      known(source, `${path}.${key}`, body, ['who', 'text', 'position', 'duty'])
+      const position = optStr(source, `${path}.${key}.position`, body.position)
+      const duty = optStr(source, `${path}.${key}.duty`, body.duty)
+      return {
+        at,
+        type: 'assistant.dispatch',
+        assistant_dispatch: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          text: str(source, `${path}.${key}.text`, body.text),
+          ...(position === undefined ? {} : { position }),
+          ...(duty === undefined ? {} : { duty }),
+        },
+      }
+    }
     case 'chat.visitor_message': {
       known(source, `${path}.${key}`, body, ['visitor', 'text'])
       return {
@@ -2564,6 +2583,12 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (positionRoutedTo !== undefined) out.position_routed_to = positionRoutedTo
   const positionEntries = optStrList(source, 'expected.position_entries', raw.position_entries)
   if (positionEntries !== undefined) out.position_entries = positionEntries
+  const dispatchedTo = optStrList(
+    source,
+    'expected.assistant_dispatched_to',
+    raw.assistant_dispatched_to,
+  )
+  if (dispatchedTo !== undefined) out.assistant_dispatched_to = dispatchedTo
   const answerComponents = optStrList(
     source,
     'expected.position_answer_components',

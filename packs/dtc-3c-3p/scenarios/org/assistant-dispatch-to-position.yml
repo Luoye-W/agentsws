@@ -1,0 +1,58 @@
+# WP343（决策 859）：**「我的助理」派活 → 岗位出审批，助理自己没有写操作**。
+#
+# Luoye 10-15：随便聊改名「我的助理」——可以随便聊，也可以像对岗位那样交代事情。这条题钉三件事：
+#
+# 1. 「让网站运营把 A 商品降价 10%」→ 助理按话挑岗位（`@agentsws/roles` 的 `pickDispatchTarget`，与服务进程
+#    同一份），走岗位的交办入口开一件任务，岗位内照旧路由到店铺管理；
+# 2. 「帮我把这件事办了」→ 拿不准交给谁：**不派**（服务进程里助理问用户一句，把候选岗位列出来）；
+# 3. 改价这一下是**岗位**做的：店铺管理那条分配真读商品 → 官方校验 → 一张改价卡；王岚点头才施行。
+#    助理那一步名下一笔 staged / applied 都没有（`assistant_dispatched_to` 同时查这一条）。
+id: org/assistant-dispatch-to-position
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-15T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.staff: { who: p_li, position: web-ops }
+  - at: '+1m'
+    position.staff: { who: p_li, position: customer-care }
+  # ① 话里点了岗位名 → 交给网站运营
+  - at: '+5m'
+    assistant.dispatch: { who: p_li, text: 让网站运营把 A 商品降价 10% }
+  # ② 没点名、两个岗位都沾不上 → 不派
+  - at: '+6m'
+    assistant.dispatch: { who: p_li, text: 帮我把这件事办了 }
+  # ③ 岗位去做：店铺管理那条分配提改价（129 → 116，额内），出卡 → 王岚点头 → 施行
+  - at: '+10m'
+    shop.price_change:
+      who: p_li
+      product: prod_1
+      price: 116
+      note: 助理交过来的：降 10%
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  assistant_dispatched_to: [web-ops, '-']
+  position_routed_to: [dtc.store]
+  staged_change_kinds: [price_change]
+  event_types:
+    - simulation.assistant_dispatched
+    - simulation.position_routed
+    - change.staged
+    - change.applied
+  metrics:
+    staged_changes: 1
+    applied_changes: 1
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  在「我的助理」里说一句「让网站运营把 A 商品降价 10%」，是不是交给了网站运营、由店铺管理出改价卡，
+  而助理自己一笔都没改？说「帮我把这件事办了」时有没有忍住不乱派？

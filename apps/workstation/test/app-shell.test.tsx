@@ -92,12 +92,13 @@ describe('左栏（WP43 §1 图标）', () => {
    * 钉两件事：顺序是 首页 / 消息 / 待办 / 日历，而且 `/goals` **不在左栏里**了
    * （路由还在、⌘K 还搜得到、待办页有一个 tab——那几条各自有自己的用例）。
    */
-  it('左栏顺序：随便聊 / 首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
+  it('左栏顺序：我的助理 / 首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
-    // WP188（Luoye 09-29）：「随便聊」在最上面
-    expect(hrefs.slice(0, 5)).toEqual(['/free-chat', '/', '/messages', '/todos', '/calendar'])
+    // WP188（Luoye 09-29）：「随便聊」在最上面；WP343 改名「我的助理」（`/assistant`）
+    expect(hrefs.slice(0, 5)).toEqual(['/assistant', '/', '/messages', '/todos', '/calendar'])
+    expect(screen.getByTestId('nav-free-chat').textContent).toBe('我的助理')
     expect(hrefs).not.toContain('/goals')
   })
 
@@ -171,7 +172,7 @@ describe('WP271 三种模式：左栏与账号块', () => {
     expect(account).not.toContain('所有者')
   })
 
-  it('③ 公司集体：照旧「公司」「我的代理」、账号块「所有者 · 品牌」', async () => {
+  it('③ 公司集体：照旧「公司」、账号块「所有者 · 品牌」；「我的代理」并进「我的助理」不再占左栏', async () => {
     modeState.orgs = [COMPANY_ORG]
     renderWithProviders(
       <AppShell
@@ -187,7 +188,8 @@ describe('WP271 三种模式：左栏与账号块', () => {
     await waitFor(() => {
       expect(screen.getByTestId('account-block').textContent).toContain('所有者 · Nordvolt')
     })
-    expect(screen.getByTestId('nav-secretary')).toBeTruthy()
+    // WP343：「我的代理」并进「我的助理」（右上角「替我答同事」，见 wp343-assistant.test.tsx）
+    expect(screen.queryByTestId('nav-secretary')).toBeNull()
     await openSettingsGroup()
     await waitFor(() => {
       expect(screen.getByTestId('nav-org').textContent).toBe('公司')

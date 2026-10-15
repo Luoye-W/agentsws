@@ -588,6 +588,27 @@ export function checkExpectations(
         (leaked === 0 ? '' : `；${leaked} 个当场问答出现在列表里`),
     )
   }
+  // WP343：「我的助理」按顺序交给了哪几个岗位；助理那一步自己不 stage、不 apply
+  if (expected.assistant_dispatched_to !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.assistant_dispatched')
+      .map((e) => {
+        const p = payloadOf(e)
+        return p.dispatched === true ? String(p.position_id ?? '') : '-'
+      })
+    const writes = evidence.events
+      .filter((e) => e.type === 'simulation.assistant_dispatched')
+      .reduce((n, e) => n + Number(payloadOf(e).assistant_writes ?? 0), 0)
+    const same =
+      got.length === expected.assistant_dispatched_to.length &&
+      got.every((g, i) => g === expected.assistant_dispatched_to?.[i])
+    add(
+      'assistant_dispatched_to',
+      same && writes === 0,
+      `助理交给了 [${got.join(', ')}]，期望 [${expected.assistant_dispatched_to.join(', ')}]` +
+        (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
+    )
+  }
   if (expected.position_answer_components !== undefined) {
     const seen = new Set(
       evidence.events

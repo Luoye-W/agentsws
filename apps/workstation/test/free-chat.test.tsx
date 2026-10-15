@@ -1,6 +1,7 @@
 /**
  * WP188「随便聊」工作台：空态、模型下拉（含「Agents 工坊（用积分）」）、一轮流式对话、
- * 停止、联网开关只在开时带上、交给岗位去做、看不了图的模型不让贴图。全部替身，不联网。
+ * 停止、联网开关只在开时带上、看不了图的模型不让贴图。全部替身，不联网。
+ * WP343：改名「我的助理」（地址 `/assistant`）；「交给岗位去做」按钮去掉，换成回复下面「已交给 X」那一行。
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -15,7 +16,7 @@ import type {
   FreeChatSession,
 } from '@/lib/free-chat'
 import { groupOf } from '@/lib/free-chat'
-import { FreeChatPage, handoffOf } from '@/pages/free-chat'
+import { FreeChatPage } from '@/pages/free-chat'
 import { renderWithProviders } from './helpers'
 
 const T0 = '2026-09-29T08:00:00.000Z'
@@ -50,6 +51,8 @@ vi.mock('@/lib/free-chat', async () => {
   return {
     ...actual,
     getFreeChatModels: async () => state.models,
+    getAssistantState: async () => ({ suggestions: [], targets: [] }),
+    listAssistantMemory: async () => [],
     listFreeChatSessions: async () => state.sessions,
     listFreeChatMessages: async (id: string) => state.messages[id] ?? [],
     createFreeChatSession: async () => {
@@ -119,11 +122,11 @@ function openPicker(): HTMLElement[] {
   return screen.getAllByTestId('model-pick-option')
 }
 
-function renderPage(route = '/free-chat'): void {
+function renderPage(route = '/assistant'): void {
   renderWithProviders(
     <PaletteProvider value={{ open: (h) => opened.push(h) }}>
       <Routes>
-        <Route path="/free-chat/:id?" element={<FreeChatPage />} />
+        <Route path="/assistant/:id?" element={<FreeChatPage />} />
       </Routes>
     </PaletteProvider>,
     route,
@@ -141,9 +144,10 @@ beforeEach(() => {
 })
 
 describe('WP188 随便聊：空态与模型下拉', () => {
-  it('空态：一句「想随便问点什么？」+ 输入框；下拉默认是设置里的默认模型', async () => {
+  it('空态：标题「有什么要我做的？」+ 一行说明 + 输入框；下拉默认是设置里的默认模型', async () => {
     renderPage()
-    expect((await screen.findByTestId('free-chat-empty')).textContent).toContain('想随便问点什么？')
+    expect((await screen.findByTestId('free-chat-empty')).textContent).toContain('有什么要我做的？')
+    expect(screen.getByTestId('assistant-intro').textContent).toContain('直接交代事情')
     // WP195：空态的标记是待机
     expect(
       screen.getByTestId('free-chat-empty').querySelector('svg')?.getAttribute('data-motion'),
@@ -223,16 +227,53 @@ describe('WP188 随便聊：一轮对话', () => {
     await screen.findByTestId('free-chat-send')
   })
 
-  it('「交给岗位去做」带着这一问一答打开 ⌘K', async () => {
-    state.sessions = [{ id: 'fchat_9', title: '退货', created_at: T0, updated_at: T0 }]
+  it('WP343：「交给岗位去做」按钮没有了；交出去的事回复下面一行「已交给 X · Y」，点了进那件事', async () => {
+    state.sessions = [{ id: 'fchat_9', title: '新帖', created_at: T0, updated_at: T0 }]
     state.messages.fchat_9 = [
-      { id: 'u1', session_id: 'fchat_9', role: 'user', text: '帮我想一封退货邮件', at: T0 },
-      { id: 'a1', session_id: 'fchat_9', role: 'assistant', text: '好的，草稿如下……', at: T0 },
+      { id: 'u1', session_id: 'fchat_9', role: 'user', text: '让 Reddit 运营查新帖', at: T0 },
+      {
+        id: 'a1',
+        session_id: 'fchat_9',
+        role: 'assistant',
+        text: '好的，交给了 Reddit 运营。',
+        at: T0,
+        dispatches: [
+          {
+            matter_id: 'mat_7',
+            title: '查新帖',
+            position_id: 'reddit-ops',
+            position_name: 'Reddit 运营',
+            duty_name: '自家版运营',
+            at: T0,
+          },
+        ],
+      },
+      {
+        id: 'a2',
+        session_id: 'fchat_9',
+        role: 'assistant',
+        text: '**Reddit 运营 · 自家版运营** 做完了：查到 3 条新帖',
+        at: T0,
+        report: {
+          matter_id: 'mat_7',
+          kind: 'done',
+          position_name: 'Reddit 运营',
+          duty_name: '自家版运营',
+        },
+      },
     ]
-    renderPage('/free-chat/fchat_9')
-    await userEvent.click(await screen.findByTestId('free-chat-handoff'))
-    expect(opened[0]?.title).toBe('帮我想一封退货邮件')
-    expect(opened[0]?.summary).toContain('好的，草稿如下')
+    renderPage('/assistant/fchat_9')
+    const link = await screen.findByTestId('assistant-dispatch-link')
+    expect(link.textContent).toBe('已交给 Reddit 运营 · 自家版运营')
+    expect(link.getAttribute('href')).toBe('/matters/mat_7')
+    expect(screen.queryByTestId('free-chat-handoff')).toBeNull()
+    const report = screen.getByTestId('assistant-report')
+    expect(report.dataset.kind).toBe('done')
+    expect(report.textContent).toContain('查到 3 条新帖')
+    expect(within(report).getByTestId('assistant-report-open').getAttribute('href')).toBe(
+      '/matters/mat_7',
+    )
+    expect(opened).toEqual([])
   })
 
   it('选了看不了图的模型：贴图按钮是灰的', async () => {
@@ -252,19 +293,5 @@ describe('WP188 小工具', () => {
     expect(groupOf('2026-09-28T23:00:00', now)).toBe('yesterday')
     expect(groupOf('2026-09-25T10:00:00', now)).toBe('week')
     expect(groupOf('2026-08-01T10:00:00', now)).toBe('older')
-  })
-
-  it('交过去的标题是用户那句话，上下文不超过 2000 字', () => {
-    const user = { id: 'u', session_id: 's', role: 'user' as const, text: 'a'.repeat(300), at: T0 }
-    const reply = {
-      id: 'a',
-      session_id: 's',
-      role: 'assistant' as const,
-      text: 'b'.repeat(5000),
-      at: T0,
-    }
-    const h = handoffOf(user, reply)
-    expect(h.title.length).toBeLessThanOrEqual(120)
-    expect(h.summary.length).toBeLessThanOrEqual(2000)
   })
 })

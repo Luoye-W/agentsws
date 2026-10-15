@@ -56,6 +56,8 @@ export function memoryNoticePath(
     const asg = hit === undefined ? undefined : myAssignments(hit)[0]
     return asg === undefined ? undefined : `/positions/${encodeURIComponent(asg)}${query}`
   }
+  // WP343：「我的助理」这一层（本人的）→ 回到助理那一页，右上角「记忆」打开并亮那几条
+  if (first.tier === 'personal') return `/assistant${query}`
   if (first.tier === 'role') {
     for (const p of instances) {
       const r = p.roles.find(
@@ -158,7 +160,8 @@ export function MemoryNotice({
         const path = memoryNoticePath(shown, instances ?? [], position)
         if (path === undefined) rail.show('memory')
         else {
-          openAfterNav.current = true
+          // 助理那一层的记忆在助理页自己的「记忆」里看，不开第三栏
+          openAfterNav.current = !path.startsWith('/assistant')
           navigate(path)
         }
         setShown([])
