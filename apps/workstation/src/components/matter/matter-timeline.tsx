@@ -6,7 +6,7 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
-import { genuiFencesToText, splitAnswer } from '@agentsws/contracts'
+import { splitAnswer } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -348,8 +348,8 @@ export function AiEntry({
   const answer = raw.includes('```answer') ? splitAnswer(raw) : undefined
   const text = answer?.text ?? raw
   const shown = (answer?.components ?? []).filter((c) => c.kind !== 'text')
-  // 折叠按画出来的样子算（```dsh-ui 那段 JSON 不算长度）
-  const long = replyIsLong(genuiFencesToText(text))
+  // 折叠只按字算：```dsh-ui 那段画成组件，不算长度（不然一张表就把整段折起来、组件被截掉）
+  const long = replyIsLong(text.replace(/```[ \t]*dsh-ui[\s\S]*?(?:```|$)/gu, ''))
   const [open, setOpen] = useState(false)
   const preview = item.preview?.preview
   const card =

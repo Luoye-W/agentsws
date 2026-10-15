@@ -7,7 +7,8 @@
  * 2. `wp336-new-genui`：```dsh-ui 经契约白名单过滤后交给 dsh-genui 渲染层（数字卡 + 表格 + 柱状图 + 提示）；
  *    模型那段里故意夹了按钮 / 图片 / 外链，截图里看不到它们；
  * 3. `wp336-new-funnel`：漏斗（echart 预设，本机打包的图表引擎）；
- * 4. `wp336-new-genui-dark`：第 2 张的深色。
+ * 4. `wp336-new-genui-dark`：第 2 张的深色；
+ * 5. `wp336-thread-genui`：点「接着聊」进线程——同一段话里的 ```dsh-ui 由所有 AI 回话共用的正文渲染器就地画。
  *
  * 演示世界没接模型，所以同 WP291 的截图脚本：拦下岗位入口的回包，把回答换成服务端会回的那种形状
  * （genui 那块用契约同一份 `filterGenuiSpec` 现过滤）。服务端那一半由 `apps/server/test/wp336-genui-answer.test.ts` 钉住。
@@ -262,6 +263,13 @@ async function main() {
       await page.waitForSelector('[data-testid="answer-genui"] table')
       await shot(page, scheme === 'light' ? 'wp336-new-genui' : 'wp336-new-genui-dark', true)
       if (scheme === 'light') {
+        // 接着聊 → 线程里同一段话（带 ```dsh-ui）由正文渲染器就地画（所有 AI 回话同一份）
+        await page.click('[data-testid="quick-answer-continue"]')
+        await page.waitForURL(/\/matters\//, { timeout: 30_000 })
+        await page.waitForSelector('[data-testid="matter-reply"] [data-testid="answer-genui"] table', {
+          timeout: 30_000,
+        })
+        await shot(page, 'wp336-thread-genui')
         await quick(page, asg, '这周转化怎么样', genuiAnswer('这周访问 4200，付款 198，转化 4.7%。', RAW_FUNNEL))
         await page.waitForSelector('[data-testid="answer-genui"] canvas', { timeout: 20_000 })
         await page.waitForTimeout(1200)
