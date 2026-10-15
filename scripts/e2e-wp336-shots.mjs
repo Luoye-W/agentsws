@@ -19,8 +19,8 @@
  * ```
  */
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -101,7 +101,6 @@ async function api(token, owner, method, path, body) {
   return json.data
 }
 
-
 const { filterGenuiSpec } = await import(join(ROOT, 'packages/contracts/dist/index.js'))
 
 const QUESTION = '店里有哪些商品，卖得怎么样'
@@ -150,7 +149,12 @@ const RAW_GENUI = {
       horizontal: true,
       data: PRODUCTS.map(([label, , stock]) => ({ label, value: stock })),
     },
-    { type: 'callout', tone: 'warning', title: '注意', content: '「桌面充电站」还是草稿、库存 0，[去后台](https://admin.example.com)上架前先补货。' },
+    {
+      type: 'callout',
+      tone: 'warning',
+      title: '注意',
+      content: '「桌面充电站」还是草稿、库存 0，[去后台](https://admin.example.com)上架前先补货。',
+    },
     { type: 'button', label: '一键上架', action: 'publish' },
     { type: 'image', src: 'https://cdn.example.com/banner.png' },
     { type: 'link', label: '后台', href: 'https://admin.example.com' },
@@ -197,8 +201,7 @@ async function quick(page, asg, question, answer) {
       await page.route(`**/v1/matters/${id}`, async (r) => {
         const got = await r.fetch()
         const view = await got.json()
-        for (const e of view.data.timeline)
-          if (e.kind === 'agent_message') e.text = blockOf(answer)
+        for (const e of view.data.timeline) if (e.kind === 'agent_message') e.text = blockOf(answer)
         await r.fulfill({ response: got, json: view })
       })
     }
@@ -266,17 +269,27 @@ async function main() {
         // 接着聊 → 线程里同一段话（带 ```dsh-ui）由正文渲染器就地画（所有 AI 回话同一份）
         await page.click('[data-testid="quick-answer-continue"]')
         await page.waitForURL(/\/matters\//, { timeout: 30_000 })
-        await page.waitForSelector('[data-testid="matter-reply"] [data-testid="answer-genui"] table', {
-          timeout: 30_000,
-        })
+        await page.waitForSelector(
+          '[data-testid="matter-reply"] [data-testid="answer-genui"] table',
+          {
+            timeout: 30_000,
+          },
+        )
         await shot(page, 'wp336-thread-genui')
-        await quick(page, asg, '这周转化怎么样', genuiAnswer('这周访问 4200，付款 198，转化 4.7%。', RAW_FUNNEL))
+        await quick(
+          page,
+          asg,
+          '这周转化怎么样',
+          genuiAnswer('这周访问 4200，付款 198，转化 4.7%。', RAW_FUNNEL),
+        )
         await page.waitForSelector('[data-testid="answer-genui"] canvas', { timeout: 20_000 })
         await page.waitForTimeout(1200)
         await shot(page, 'wp336-new-funnel', true)
       }
       const outside = requests.filter((u) => !u.startsWith(BASE) && !u.startsWith('data:'))
-      console.log(`  ${scheme}：页面发往别处的请求 ${outside.length} 个${outside.length === 0 ? '' : `：${outside.join(', ')}`}`)
+      console.log(
+        `  ${scheme}：页面发往别处的请求 ${outside.length} 个${outside.length === 0 ? '' : `：${outside.join(', ')}`}`,
+      )
       await context.close()
     }
   } finally {
