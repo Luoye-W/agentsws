@@ -26,3 +26,4 @@ Luoye 提：下载链接要在首屏 banner 按钮里、顶栏要有下载入口
 8. **首屏「免费下载」直接下**：按访客系统给对应安装包（Mac Apple 芯片 dmg / Windows exe，地址读 downloads.json），按钮上写系统和版本号；认不出系统或是手机就去 /download/；按钮下一行小字「其他版本 · 浏览器插件」链到 /download/。
 9. **顶栏**：「下载」做成主按钮（已是就保持）；「登录」旁加「注册」（cloud.agentsws.com/account/register）；GitHub 显示 star 图标；手机宽度（390）下这几个入口都在（收进菜单也行，但下载要露在外面）。
 10. 页脚「产品」一栏补：下载、GitHub、登录 / 注册、积分与充值、更新日志。
+11. **Mac 说法统一成「M 系列芯片」**（Luoye 10-15 指着下载页按钮「下载 macOS 版（Apple 芯片）」）：全站（首页、下载页、价格页 FAQ、文档里官网读的那几篇）凡写「Apple 芯片」的改成「M 系列芯片」，英文写 `Apple silicon (M-series)`。
