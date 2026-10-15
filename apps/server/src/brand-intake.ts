@@ -32,6 +32,7 @@ import {
   classifyUrl,
   estimateCredits,
   type InsightsModel,
+  type IntakeWebSearch,
   mergeProfile,
   type PageFetch,
   type StorefrontPasswordPost,
@@ -108,6 +109,16 @@ export interface BrandIntakeOptions {
   ) => Promise<InsightsModel | undefined> | InsightsModel | undefined
   /** WP346：人群 / 定位 / 竞品理由用什么语言写（默认中文）。 */
   insightsLanguage?: 'zh' | 'en'
+  /**
+   * WP349（Luoye 10-15 改决策 881）：分析时联网查用的搜索口（这个品牌的官方 web search，每次现取，
+   * 带 7 天缓存）。回 `search` = 搜得了；只回 `reason` = 搜不了（竞品一格留空，卡上照实说这一句）。
+   * 不给这个选项 = 这个装配没有联网能力（同样留空、照实说）。
+   */
+  webSearch?: (
+    actor: BrandIntakeActor,
+  ) =>
+    | Promise<{ search?: IntakeWebSearch; reason?: string }>
+    | { search?: IntakeWebSearch; reason?: string }
 }
 
 /**
@@ -226,7 +237,20 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
           options.insightsModel !== undefined
             ? await options.insightsModel(actor)
             : options.categoryModel?.(actor)
+        // WP349：联网查（没接模型就不必问——搜到的没人整理）
+        const web =
+          model === undefined
+            ? undefined
+            : await Promise.resolve(options.webSearch?.(actor)).catch(() => undefined)
         const out = await analyzeBrand(options.fetch, urls, {
+          ...(model === undefined
+            ? {}
+            : {
+                web: {
+                  ...(web?.search === undefined ? {} : { search: web.search }),
+                  ...(web?.reason === undefined ? {} : { reason: web.reason }),
+                },
+              }),
           ...(model === undefined
             ? {}
             : {
@@ -280,6 +304,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
           updated_at: now(),
           // WP346：AI 归纳那一步怎么样了（界面按它说一句）
           insights: out.insights,
+          // WP349：联网查那一步怎么样了（没联网 / 额度没查的照实说）
+          web: out.web,
           ...(out.password_protected === true ? { password_protected: true } : {}),
           // WP244：空店——界面据此明说「品牌资料请自己填」，推荐里加建站
           ...(out.fresh_store === true ? { fresh_store: true } : {}),

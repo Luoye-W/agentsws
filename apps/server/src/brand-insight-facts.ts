@@ -12,12 +12,14 @@ import {
   BRAND_COMPETITORS_MAX,
   BRAND_INSIGHT_FIELDS,
   BRAND_KEYWORDS_PER_GROUP_MAX,
+  BRAND_SOURCES_PER_FIELD_MAX,
   type BrandAudience,
   type BrandCompetitor,
   type BrandInsightField,
   type BrandIntakeField,
   type BrandIntakeProfile,
   type BrandKeywords,
+  type BrandSource,
   type WorkspaceProfile,
 } from '@agentsws/contracts'
 
@@ -106,7 +108,20 @@ export function normalizeCompetitors(v: BrandCompetitor[]): BrandCompetitor[] | 
     if (name === undefined || out.some((x) => x.name.toLowerCase() === name.toLowerCase())) continue
     const reason = line(c.reason, 200) ?? ''
     const url = normalizeWebsite(c.url ?? '')
-    out.push({ name, reason, ...(url === undefined ? {} : { url }) })
+    // WP349：联网查到的来源跟着竞品进档案（设置页可点开）；只认 http(s)，最多几条
+    const sources: BrandSource[] = []
+    for (const x of Array.isArray(c.sources) ? c.sources : []) {
+      const href = typeof x?.url === 'string' ? x.url.trim() : ''
+      if (!/^https?:\/\//iu.test(href) || sources.some((y) => y.url === href)) continue
+      const title = line(x.title, 160)
+      sources.push({ url: href.slice(0, 500), ...(title === undefined ? {} : { title }) })
+    }
+    out.push({
+      name,
+      reason,
+      ...(url === undefined ? {} : { url }),
+      ...(sources.length === 0 ? {} : { sources: sources.slice(0, BRAND_SOURCES_PER_FIELD_MAX) }),
+    })
   }
   return out.length === 0 ? undefined : out.slice(0, BRAND_COMPETITORS_MAX)
 }

@@ -555,6 +555,11 @@ const ProfileBody = z.object({
         name: z.string().max(80),
         reason: z.string().max(200),
         url: z.string().max(300).optional(),
+        // WP349：联网查到的来源（设置页保存时原样带回，不然一改就丢）
+        sources: z
+          .array(z.object({ url: z.string().max(500), title: z.string().max(200).optional() }))
+          .max(6)
+          .optional(),
       }),
     )
     .max(12)
@@ -698,7 +703,14 @@ export function onboardingRoutes(): Route[] {
             ...(input.keywords === undefined ? {} : { keywords: input.keywords }),
             ...(input.competitors === undefined
               ? {}
-              : { competitors: input.competitors.map((c) => stripUndefined(c)) }),
+              : {
+                  competitors: input.competitors.map(({ sources, ...c }) => ({
+                    ...stripUndefined(c),
+                    ...(sources === undefined
+                      ? {}
+                      : { sources: sources.map((x) => stripUndefined(x)) }),
+                  })),
+                }),
             ...(input.confirm_fields === undefined ? {} : { confirm_fields: input.confirm_fields }),
           }),
         )

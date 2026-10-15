@@ -41,6 +41,7 @@ import {
   createResearchKit,
   mergePlan,
   type SetupPlan,
+  type SetupResearchCache,
   type SetupResearchHost,
   type SetupResearchKit,
 } from './setup-research.js'
@@ -155,6 +156,11 @@ export interface SetupCardsAssembly {
   target(id: string): Pick<SetupTarget, 'id' | 'name' | 'satisfied'> | undefined
   /** WP334：登记过的设置目标 id（认不出时列给模型看）。 */
   targetIds(): string[]
+  /**
+   * WP349：这个品牌查过的搜索 / 模型结果缓存（同一句话 7 天内不再花钱）。品牌分析联网查与配置卡
+   * 出卡前查**共用这一份**（键同 `createResearchKit`）。可选：老装配 / 替身没有就不缓存。
+   */
+  researchCache?: SetupResearchCache
 }
 
 export interface AskConnectInput {
@@ -748,6 +754,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     recheck,
     target: (id) => targets.get(id),
     targetIds: () => [...targets.keys()].sort(),
+    researchCache,
   }
 }
 

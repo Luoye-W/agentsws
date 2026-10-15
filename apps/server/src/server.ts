@@ -110,6 +110,7 @@ import {
   AI_IMAGE_EDIT_CAPABILITY,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
+  BRAND_INTAKE_WEB_SEARCH_MAX,
   brandNameOf,
   CONTENT_CHECK_INTERVAL_MS,
   CONTENT_SIGNING_PUBLIC_KEYS,
@@ -668,7 +669,7 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
-import { brandFactsOf } from './setup-research.js'
+import { brandFactsOf, createResearchKit } from './setup-research.js'
 import { builtinSetupTargets } from './setup-targets.js'
 import { ShopAdminError } from './shop-admin.js'
 import {
@@ -8601,6 +8602,47 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         { assignment_id: actor.assignment_id, role_id: actor.role_id },
         `run_intake_${Math.floor(random() * 1e12).toString(36)}`,
       )
+    },
+    /*
+     * WP349（Luoye 10-15 改决策 881）：分析时联网查——复用 WP348 抽出的 `webSearchOf`（官方 web search，
+     * 同一套记账 `model.usage{purpose: web_search}` 与审计 `web.searched{entry: brand_intake}`），
+     * 缓存与配置卡出卡前查共用这个品牌那一份（同一句话 7 天内不再花钱）。搜不了就把原因交回去照实说。
+     */
+    webSearch: async (actor) => {
+      const ws = actor.workspace_id as WorkspaceId
+      const web = webSearchOf(ws)
+      const status = await web.status()
+      if (!status.available)
+        return status.reason === undefined ? {} : { reason: `没联网，查不了竞品：${status.reason}` }
+      const cache = (await setupCardsOf(ws).catch(() => undefined))?.researchCache
+      const run_id = `run_intake_web_${Math.floor(random() * 1e12).toString(36)}`
+      const { kit } = createResearchKit(
+        {
+          profile: () => ({}),
+          search: async (query) =>
+            (
+              await web.search(query, {
+                person_id: actor.person_id,
+                assignment_id: actor.assignment_id,
+                role_id: actor.role_id,
+                run_id,
+                entry: 'brand_intake',
+              })
+            ).sources.map((x) => ({
+              url: x.url,
+              ...(x.title === undefined ? {} : { title: x.title }),
+              ...(x.snippet === undefined ? {} : { snippet: x.snippet }),
+            })),
+        },
+        {
+          ...(cache === undefined ? {} : { cache }),
+          searchMax:
+            BRAND_INTAKE_WEB_SEARCH_MAX.brand +
+            BRAND_INTAKE_WEB_SEARCH_MAX.competitors +
+            BRAND_INTAKE_WEB_SEARCH_MAX.verify,
+        },
+      )
+      return { search: (query) => kit.search(query) }
     },
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
