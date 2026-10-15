@@ -55,6 +55,7 @@ import { buildDigest } from './digest.js'
 import { dueParts, dueSubs, type PartClock } from './due.js'
 import { externalItemOf, type IngestContext, watchItemOf } from './ingest.js'
 import { type JudgeComplete, judgeItems } from './judge.js'
+import { type PatrolPluginState, researchPatrol } from './plan.js'
 import {
   isConfigured,
   REDDIT_WATCH_TARGET,
@@ -154,8 +155,16 @@ export interface RedditWatchAssembly {
   onAlert(listener: (items: RedditWatchEntry[]) => void): () => void
   /** WP340：人收起了这一条的「优先」提醒（找不到回 `undefined`）。 */
   dismissAlert(id: string): RedditWatchEntry | undefined
-  /** WP340：配置卡的 AI 建议（第一次问过就记下；没模型回 `undefined`）。 */
-  aiSuggestions(): Promise<PatrolSuggestion | undefined>
+  /**
+   * WP340：配置卡的 AI 建议（第一次问过就记下；没模型回 `undefined`）。
+   * WP348：`brief` 压过档案那一份（带上搜到的版块）；没有巡查自己的模型口时用 `ask`（配置卡那一次）。
+   */
+  aiSuggestions(input?: {
+    brief?: PatrolBrandBrief
+    ask?(prompt: string): Promise<string | undefined>
+  }): Promise<PatrolSuggestion | undefined>
+  /** WP348：插件那一侧现在怎样（配置卡方案里品牌号只从这里来）。 */
+  pluginState(): PatrolPluginState
 }
 
 /** WP329：版规多久算旧（旧了下一轮再读一次）。 */
@@ -197,6 +206,11 @@ interface JobRec {
   queued_at: Iso8601
   picked_at?: Iso8601
   pace_key: string
+  /**
+   * WP348：只看登着哪个号（一路都不读：插件照例先读 `/api/me.json`）。还没配巡查、插件刚连上 Reddit
+   * 时排一件，配置卡的方案里品牌号就是插件里登着的那个；不占读的次数，真巡查来了直接顶掉它。
+   */
+  whoami?: true
 }
 type Parts = Partial<Record<RedditWatchPart, PartClock>>
 type MaybePromise<T> = T | Promise<T>
@@ -506,7 +520,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       await askConnect(sessionNeed('not_connected'), SESSION_WHY)
       return
     }
-    if (jobRec() !== undefined) {
+    const cur = jobRec()
+    if (cur !== undefined && !(cur.whoami === true && cur.status === 'queued')) {
       for (const p of want) setPart(run, p, { status: 'skipped', message: '上一轮还没读完。' })
       return
     }
@@ -747,7 +762,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     const ttl = rec.status === 'queued' ? JOB_QUEUED_TTL_MS : JOB_RUNNING_TTL_MS
     if (age < ttl) return
     setJob(undefined)
-    if (rec.status === 'running') pace.endKey(rec.pace_key, rec.job.id)
+    if (rec.status === 'running' && rec.whoami !== true) pace.endKey(rec.pace_key, rec.job.id)
     const run = store.run(ws, rec.run_id)
     if (run === undefined) return
     const message =
@@ -767,6 +782,21 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     return e.outcome === 'not_logged_in' || e.outcome === 'wrong_user' ? undefined : true
   }
 
+  /** WP348：插件那一侧（配置卡方案里品牌号只从这里来，不让 AI 猜）。 */
+  const pluginState = (): PatrolPluginState => {
+    const e = ext()
+    const state =
+      e.seen_at === undefined
+        ? 'unpaired'
+        : e.reddit_connected === true
+          ? 'connected'
+          : 'not_connected'
+    return {
+      state,
+      ...(e.user === undefined || e.outcome === 'not_logged_in' ? {} : { user: e.user }),
+    }
+  }
+
   /* ── WP340：「优先」提醒 / 配置卡的 AI 建议 ──────────────────────── */
   /** 最近几天命中告警词、人还没收起的（同一条只一行，新的在前）。 */
   const alertsNow = (): RedditWatchEntry[] => {
@@ -784,12 +814,23 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   }
 
   /** 配置卡的 AI 建议：问过且问成了就记下（不重复花钱）；没模型 / 没问成回 `undefined`、下次再问。 */
-  const aiSuggestions = async (): Promise<PatrolSuggestion | undefined> => {
+  const aiSuggestions: RedditWatchAssembly['aiSuggestions'] = async (input = {}) => {
     const cached = store.kv<{ at: Iso8601; suggestion: PatrolSuggestion } | null>(ws, 'ai_suggest')
     if (cached !== undefined && cached !== null) return cached.suggestion
-    const complete = options.complete?.()
+    const own = options.complete?.()
+    const ask = input.ask
+    const complete =
+      own ??
+      (ask === undefined
+        ? undefined
+        : async (prompt: string) => {
+            const out = await ask(prompt)
+            if (out === undefined) throw new Error('no_model')
+            return out
+          })
     if (complete === undefined) return undefined
-    const brief = await Promise.resolve(options.brandBrief?.()).catch(() => undefined)
+    const brief =
+      input.brief ?? (await Promise.resolve(options.brandBrief?.()).catch(() => undefined))
     const got = await suggestPatrol(brief, complete)
     if (got !== undefined) {
       store.setKv(ws, 'ai_suggest', { at: options.now(), suggestion: got })
@@ -886,9 +927,34 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       void tick().catch(() => undefined)
     }
     sweep()
+    // WP348：还没配巡查、也不知道登着哪个号 → 排一件「只看登着哪个号」（配置卡方案里品牌号就用它）
+    if (
+      input.connected &&
+      jobRec() === undefined &&
+      ext().user === undefined &&
+      !isConfigured(settings())
+    )
+      setJob({
+        job: {
+          id: options.newId('rj'),
+          workspace_id: ws,
+          reads: [],
+          title: '看看 Chrome 里登着哪个 Reddit 号',
+          created_at: options.now(),
+        },
+        run_id: '',
+        status: 'queued',
+        queued_at: options.now(),
+        pace_key: redditPaceKey(undefined, ws),
+        whoami: true,
+      })
     const rec = jobRec()
     if (!input.connected || rec === undefined || rec.status !== 'queued')
       return { retry_after_ms: 60_000 }
+    if (rec.whoami === true) {
+      setJob({ ...rec, status: 'running', picked_at: options.now() })
+      return { job: rec.job, retry_after_ms: 0 }
+    }
     const ok = pace.beginKey(rec.pace_key, 'read', rec.job.id, nowMs())
     if (!ok.ok) {
       setExt({ note: ok.why })
@@ -903,6 +969,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     const rec = jobRec()
     if (rec === undefined || rec.job.id !== id || rec.status !== 'running') return undefined
     setJob(undefined)
+    if (rec.whoami === true) {
+      // 只记登着哪个号（没登录也记下：方案里说清楚）
+      setExt({ outcome: input.outcome, ...(input.user === undefined ? {} : { user: input.user }) })
+      emit('reddit_watch.whoami', { outcome: input.outcome })
+      return { accepted: true }
+    }
     pace.endKey(rec.pace_key, rec.job.id)
     emit('reddit_watch.job_result', {
       job_id: id,
@@ -988,7 +1060,14 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         store,
         workspace_id: ws,
         ...(options.suggestions === undefined ? {} : { suggestions: options.suggestions }),
-        aiSuggestions,
+        // WP348：出卡前先查（档案、插件里登着的号、联网搜索、问一次模型）
+        research: (kit) =>
+          researchPatrol(kit, {
+            registered: () => options.suggestions?.(),
+            plugin: pluginState,
+            brief: async () => await Promise.resolve(options.brandBrief?.()).catch(() => undefined),
+            suggest: (brief, ask) => aiSuggestions({ brief, ask }),
+          }),
       }),
     onAlert: (l) => {
       alertListeners.add(l)
@@ -1004,6 +1083,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       return store.get(ws, id)
     },
     aiSuggestions,
+    pluginState,
     sessionReady,
     sweep,
     pace,

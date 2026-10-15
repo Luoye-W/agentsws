@@ -20,6 +20,16 @@ export interface PatrolBrandBrief {
   domain?: string
   /** 产品（商品卡的一句话），最多取前十条。 */
   products?: string[]
+  /** WP348：品类（档案里的子品类 / 品类）。 */
+  category?: string
+  /** WP348：档案里的关键词（WP346 之后才有）。 */
+  keywords?: string[]
+  /** WP348：档案里的主要竞品名（WP346 之后才有）。 */
+  competitors?: string[]
+  /** WP348：谁买（WP346 之后才有）。 */
+  audience?: string
+  /** WP348：联网搜到的相关版块与出现次数。 */
+  found_subs?: { name: string; count: number }[]
 }
 
 export type PatrolSuggestionField =
@@ -58,14 +68,32 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
   const facts = [
     brief.name === undefined ? '' : `品牌名：${fence(brief.name, 80)}`,
     brief.one_liner === undefined ? '' : `一句话介绍：${fence(brief.one_liner, 300)}`,
-    brief.vertical === undefined
-      ? ''
-      : `卖的是：${getVerticalPack(brief.vertical).labelZh}`,
+    brief.vertical === undefined ? '' : `卖的是：${getVerticalPack(brief.vertical).labelZh}`,
     brief.markets === undefined || brief.markets.length === 0
       ? ''
       : `目标市场：${brief.markets.slice(0, 10).join('、')}`,
     brief.domain === undefined ? '' : `官网：${fence(brief.domain, 80)}`,
     ...(brief.products ?? []).slice(0, 10).map((p, i) => `产品 ${i + 1}：${fence(p, 200)}`),
+    brief.category === undefined ? '' : `品类：${fence(brief.category, 80)}`,
+    brief.keywords === undefined || brief.keywords.length === 0
+      ? ''
+      : `关键词：${brief.keywords
+          .slice(0, 20)
+          .map((k) => fence(k, 60))
+          .join('、')}`,
+    brief.competitors === undefined || brief.competitors.length === 0
+      ? ''
+      : `主要竞品：${brief.competitors
+          .slice(0, 8)
+          .map((k) => fence(k, 60))
+          .join('、')}`,
+    brief.audience === undefined ? '' : `谁买：${fence(brief.audience, 200)}`,
+    brief.found_subs === undefined || brief.found_subs.length === 0
+      ? ''
+      : `联网搜到的相关版块（次数）：${brief.found_subs
+          .slice(0, 12)
+          .map((f) => `${fence(f.name, 30)}(${f.count})`)
+          .join('、')}`,
   ].filter((s) => s !== '')
   return [
     '你在帮一个品牌的社媒运营第一次设置 Reddit 巡查。只给建议，用户会确认 / 改。',
@@ -76,7 +104,7 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
     '',
     '请建议：',
     'own_subreddits：品牌自己的版块（多半是品牌名或品牌名 + xr / official 之类；拿不准就空数组）；',
-    'watch_subreddits：值得盯的别人的版块（品类、竞品、用户聚集的地方），每个带 per_week（一周看几次：7 每天、3、2、1 每周；最相关的每天，其余每周），最多 8 个；',
+    'watch_subreddits：值得盯的别人的版块（品类、竞品、用户聚集的地方），每个带 per_week（一周看几次：7 每天、3、2、1 每周；最相关的每天，其余每周），最多 8 个；档案里有联网搜到的版块就优先从里面挑（确实相关才选）；',
     'keywords：全站搜的外部关键词（品牌名 + 品类词；按条计费，少而准，最多 6 个）；',
     'alert_words：本地告警词（出了就要马上看的：召回、安全、退款、投诉之类，用市场的语言，最多 8 个）；',
     'tag_words：本地标签词（型号、产品线的常见写法，用来给条目分类，最多 10 个）；',

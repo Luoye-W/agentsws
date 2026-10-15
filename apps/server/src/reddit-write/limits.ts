@@ -129,6 +129,16 @@ export function createRedditLimits(options: { nowMs(): number; dir?: string }): 
       },
       // 默认不限 = 不缺什么；只有人说要设 / 改时才出卡
       satisfied: async () => state.wanted !== true,
+      // WP348：没什么要查的——默认不限；方案里每格写明「默认不限」，人说个数才设
+      async research(kit) {
+        kit.note('上限默认不限，空着就是不限')
+        return Object.fromEntries(
+          KEYS.filter((k) => state.limits[k] === undefined).map((k) => [
+            SPEC[k].field,
+            { why: '默认不限' },
+          ]),
+        )
+      },
       async apply(values) {
         const next: RedditLimitValues = {}
         for (const k of KEYS) {

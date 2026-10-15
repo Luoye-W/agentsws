@@ -61,6 +61,10 @@ export type SetupNeed = (
   why?: string
   /** WP334：AI 给的配置卡建议值（只对 `setup` 有用）。 */
   suggestions?: Record<string, string>
+  /** WP348：每个建议值的一句理由。 */
+  reasons?: Record<string, string>
+  /** WP348：目标已经设好了，这是「改成这样」。 */
+  change?: boolean
 }
 
 /** WP334：工坊账号没关联（工具回执里 `reason: 'not_linked'` 的那几处：红人公共库、官方数据接口…）。 */
@@ -118,19 +122,24 @@ function connectNeedOf(service: string, name: unknown): ConnectNeed {
 /** WP334：AI 要卡时带的「为什么 / 建议值」（只认字符串）。 */
 function askedOf(
   data: Record<string, unknown> | undefined,
-): Pick<SetupNeed, 'why' | 'suggestions'> {
+): Pick<SetupNeed, 'why' | 'suggestions' | 'reasons' | 'change'> {
   const why =
     typeof data?.setup_why === 'string' && data.setup_why !== '' ? data.setup_why : undefined
-  const raw = recOf(data?.suggestions)
-  const suggestions =
-    raw === undefined
-      ? undefined
-      : Object.fromEntries(
-          Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string'),
-        )
+  const strMap = (v: unknown): Record<string, string> | undefined => {
+    const raw = recOf(v)
+    if (raw === undefined) return undefined
+    const out = Object.fromEntries(
+      Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string'),
+    )
+    return Object.keys(out).length === 0 ? undefined : out
+  }
+  const suggestions = strMap(data?.suggestions)
+  const reasons = strMap(data?.suggestion_why)
   return {
     ...(why === undefined ? {} : { why }),
-    ...(suggestions === undefined || Object.keys(suggestions).length === 0 ? {} : { suggestions }),
+    ...(suggestions === undefined ? {} : { suggestions }),
+    ...(reasons === undefined ? {} : { reasons }),
+    ...(data?.change === true ? { change: true } : {}),
   }
 }
 
@@ -193,6 +202,8 @@ export class RunBlockLog {
   readonly #needs = new Map<string, ConnectNeed>()
   readonly #targets = new Set<string>()
   readonly #suggestions = new Map<string, Record<string, string>>()
+  readonly #reasons = new Map<string, Record<string, string>>()
+  readonly #changes = new Set<string>()
   #why: string | undefined
   #reason: MatterRunBlock['reason'] | undefined
 
@@ -220,6 +231,10 @@ export class RunBlockLog {
         ...this.#suggestions.get(need.target),
         ...need.suggestions,
       })
+    // WP348：理由与「改成这样」
+    if (need.kind === 'setup' && need.reasons !== undefined)
+      this.#reasons.set(need.target, { ...this.#reasons.get(need.target), ...need.reasons })
+    if (need.kind === 'setup' && need.change === true) this.#changes.add(need.target)
     if (need.kind === 'setup') {
       this.#targets.add(need.target)
       this.note(tool, 'needs_setup', [])
@@ -239,12 +254,19 @@ export class RunBlockLog {
   }
 
   /** WP334：AI 要卡时给的「为什么 / 建议值」（没有就是空对象，出卡用默认那句）。 */
-  asked(): { why?: string; suggestions?: Record<string, Record<string, string>> } {
+  asked(): {
+    why?: string
+    suggestions?: Record<string, Record<string, string>>
+    reasons?: Record<string, Record<string, string>>
+    changes?: string[]
+  } {
     return {
       ...(this.#why === undefined ? {} : { why: this.#why }),
       ...(this.#suggestions.size === 0
         ? {}
         : { suggestions: Object.fromEntries(this.#suggestions) }),
+      ...(this.#reasons.size === 0 ? {} : { reasons: Object.fromEntries(this.#reasons) }),
+      ...(this.#changes.size === 0 ? {} : { changes: [...this.#changes] }),
     }
   }
 
@@ -269,7 +291,7 @@ export function blockedLine(block: MatterRunBlock): string {
   // WP324：出了连接卡 / 配置卡——就在下面那张卡上补，补完自动接着做（不再叫人去连接页）
   if (block.card_id !== undefined) {
     if (block.reason === 'needs_setup' && what === undefined)
-      return '这次缺一步设置：在下面这张卡上填好，我就接着做。'
+      return '这一步我先定了个方案：在下面这张卡上点头，我就接着做。'
     return what === undefined
       ? '这次卡在缺连接上：在下面这张卡上连好，我就接着做。'
       : `这次卡在缺连接上（${what}）：在下面这张卡上连好，我就接着做。`
