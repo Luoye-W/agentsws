@@ -421,7 +421,6 @@ describe('WP207 随便聊里的候选卡与设置', () => {
         }}
         last
         onRegenerate={() => {}}
-        onHandoff={() => {}}
       />,
     )
     const box = screen.getByTestId('free-chat-recall')

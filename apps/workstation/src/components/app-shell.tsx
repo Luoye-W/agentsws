@@ -19,7 +19,6 @@ import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BookOpen,
-  Bot,
   Building2,
   CalendarDays,
   ChevronDown,
@@ -334,7 +333,7 @@ export function AppShell({
 }): ReactNode {
   const { t, position } = useApp()
   // WP271：① 个人里左栏「公司」叫「岗位与品牌」、「我的代理」收起（都是对同事的事）
-  const { t: tm, solo } = useMode()
+  const { t: tm } = useMode()
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
   const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
@@ -464,8 +463,9 @@ export function AppShell({
               {/*
               WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
               不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
+              WP343（决策 334 / 859）：改名「我的助理」（并进了「我的代理」），仍在最上面。
             */}
-              <NavLink to="/free-chat" className={navClass} data-testid="nav-free-chat">
+              <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
                 <NavIcon icon={MessageCircle} />
                 {t('nav.free_chat')}
               </NavLink>
@@ -582,14 +582,7 @@ export function AppShell({
                       </NavLink>
                     ))}
               <Separator className="my-2" />
-              {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程。
-                  WP271：① 个人收起——它的四样都是对同事的，「把事丢给代理」与 ⌘K 重复 */}
-              {solo ? null : (
-                <NavLink to="/secretary" className={navClass} data-testid="nav-secretary">
-                  <NavIcon icon={Bot} />
-                  {t('nav.secretary')}
-                </NavLink>
-              )}
+              {/* 41 §1 的「我的代理」WP343 起并进「我的助理」（右上角「替我答同事」），左栏不再单独占一行 */}
               <NavLink to="/meetings" className={navClass}>
                 <NavIcon icon={Users} />
                 {t('nav.meetings')}

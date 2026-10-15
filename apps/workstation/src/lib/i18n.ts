@@ -6,6 +6,7 @@
  */
 
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
+import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
@@ -3989,8 +3990,8 @@ const zh: Table = {
   'b2b.sales.sample.hint': '已寄必须带单号。标已寄的卡批了，会再出一张寄样通知卡。',
   'b2b.sales.handover': '{who} 的 {count} 条交接等老板批',
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
-  'nav.free_chat': '随便聊',
-  'home.free_chat': '想随便问点什么？',
+  'nav.free_chat': '我的助理',
+  'home.free_chat': '有什么要我做的？',
   'command.new_chat': '新对话',
   'command.handoff.title': '交给哪个岗位？',
   'command.handoff.placeholder': '搜岗位…',
@@ -8158,8 +8159,8 @@ const en: Table = {
     'Shipped needs a tracking number. Once that card is approved, a shipping notice card follows.',
   'b2b.sales.handover': '{count} handover items from {who} await the owner',
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
-  'nav.free_chat': 'Chat',
-  'home.free_chat': 'Want to ask anything?',
+  'nav.free_chat': 'My assistant',
+  'home.free_chat': 'What can I do for you?',
   'command.new_chat': 'New chat',
   'command.handoff.title': 'Hand to which position?',
   'command.handoff.placeholder': 'Search positions…',
@@ -8326,6 +8327,8 @@ const TABLES: Record<Lang, Table> = {
     ...CARD_PAGE_ZH,
     // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
     ...GEO_ZH,
+    // WP343：「我的助理」（原随便聊 + 我的代理）
+    ...ASSISTANT_ZH,
   },
   en: {
     ...en,
@@ -8355,6 +8358,7 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WRITE_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
+    ...ASSISTANT_EN,
   },
 }
 

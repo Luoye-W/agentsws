@@ -34,7 +34,7 @@ import { ChatWindowPage } from '@/pages/chat-window'
 import { ConnectionsPage } from '@/pages/connections'
 import { DutyPage } from '@/pages/duty'
 // WP188：随便聊（像 DeepSeek 网页版的自由对话入口）
-import { FreeChatPage } from '@/pages/free-chat'
+import { ASSISTANT_PATH, FreeChatPage, LegacyFreeChatRedirect } from '@/pages/free-chat'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 // WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
@@ -52,7 +52,6 @@ import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { OrgPage } from '@/pages/org'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
-import { SecretaryPage } from '@/pages/profile'
 import { SettingsPage } from '@/pages/settings'
 import { SkillsPage } from '@/pages/skills'
 import { TodosPage } from '@/pages/todos'
@@ -215,7 +214,9 @@ function Workspace(): ReactNode {
       <Routes>
         <Route path="/" element={<HomePage />} />
         {/* WP188：随便聊。一条路由带可选的会话 id——发第一句时换地址不重挂页面（流不断） */}
-        <Route path="/free-chat/:id?" element={<FreeChatPage />} />
+        {/* WP343：改名「我的助理」，地址 `/assistant`；老的 `/free-chat` 跳过来 */}
+        <Route path={`${ASSISTANT_PATH}/:id?`} element={<FreeChatPage />} />
+        <Route path="/free-chat/:id?" element={<LegacyFreeChatRedirect />} />
         {/* 46 §1：首次设置向导（公司 → 你 → 你做什么 → 要配的东西） */}
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/positions/:id" element={<PositionPage />} />
@@ -245,7 +246,8 @@ function Workspace(): ReactNode {
         {/* 24 技能与学习回路：当前版本、三层 overlay、待审提案 */}
         <Route path="/skills" element={<SkillsPage />} />
         {/* 41 §1 个人代理（原「秘书」）：我的代理（问 / profile 与公开级别 / 谁问过我 / 约时间） */}
-        <Route path="/secretary" element={<SecretaryPage />} />
+        {/* WP343：「我的代理」并进「我的助理」——右上角「替我答同事」；老地址跳过去并打开它 */}
+        <Route path="/secretary" element={<Navigate replace to={`${ASSISTANT_PATH}?peers=1`} />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/people/:id" element={<PersonPage />} />
         {/* WP28 制度面：岗位 / 成员 / 职责 */}

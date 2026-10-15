@@ -1,25 +1,33 @@
 /**
  * WP188「随便聊」（Luoye 09-29：「得留一个入口，用户可以随便问一些问题，就像 DeepSeek 网页版一样」）。
  *
- * 左边会话列表，中间对话流，底部输入框。不开事项、不起岗位运行、没有任何对外动作；
- * 想让岗位去做，每条回复旁边有「交给岗位去做」（带着这段对话打开 ⌘K 的岗位列表）。
+ * 左边会话列表，中间对话流，底部输入框。
+ *
+ * WP343（决策 334 / 859，Luoye 10-15）：改名「我的助理」，与「我的代理」合成一个入口（地址 `/assistant`，
+ * 老的 `/free-chat`、`/secretary` 跳过来）。像 ChatGPT / Claude 网页那个对话框：
+ * - 空状态一个标题 + 一行小字（可以随便聊，也可以直接交代事情）+ 最多 4 个快捷问题（按状态生成，开始对话后收起）；
+ * - 问全局、派活都在对话里：交出去的事回复下面一行「已交给 X」，有结果 / 要拍板时这段对话里再报一句；
+ * - 输入框里 `@` 选岗位 / 职责，直接交给它；
+ * - 右上角「记忆」（助理这一层记的）与「替我答同事」（同事互联 / 公司模式才有）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
+import { MemoryButton, PeersButton, Suggestions } from '@/components/free-chat/assistant-bits'
 import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
 import { AssistantMessage, UserBubble } from '@/components/free-chat/message'
 import { ModelPicker } from '@/components/free-chat/model-picker'
 import { SessionList } from '@/components/free-chat/session-list'
-import { usePalette } from '@/components/palette-context'
 import { useApp } from '@/lib/app-context'
 import {
+  type AssistantTarget,
   createFreeChatSession,
   deleteFreeChatSession,
   type FreeChatFrame,
   type FreeChatImage,
   type FreeChatMessage,
+  getAssistantState,
   getFreeChatModels,
   listFreeChatMessages,
   listFreeChatSessions,
@@ -27,8 +35,23 @@ import {
   stopFreeChat,
   streamFreeChat,
 } from '@/lib/free-chat'
+import { useMode } from '@/lib/mode'
 
 const KEY = ['free-chat'] as const
+/** WP343：「我的助理」的地址（老的 `/free-chat` 跳过来）。 */
+export const ASSISTANT_PATH = '/assistant'
+/** WP343：交出去的事还没回报完时，多久问一次这段对话（回报在服务端读会话时补上）。 */
+export const REPORT_POLL_MS = 5000
+
+/** 这段对话里还有交出去、还没报「做完 / 没做成」的事（要接着问）。 */
+export function awaitingReport(rows: readonly FreeChatMessage[]): boolean {
+  const closed = new Set(
+    rows.flatMap((m) =>
+      m.report !== undefined && m.report.kind !== 'decide' ? [m.report.matter_id] : [],
+    ),
+  )
+  return rows.some((m) => (m.dispatches ?? []).some((d) => !closed.has(d.matter_id)))
+}
 
 interface Live {
   session_id: string
@@ -37,21 +60,13 @@ interface Live {
   status?: string
 }
 
-/** 「交给岗位去做」带过去的那件事：标题是用户那句话，上下文是这一问一答。 */
-export function handoffOf(user: FreeChatMessage | undefined, reply: FreeChatMessage) {
-  const ask = (user?.text ?? '').replace(/\s+/g, ' ').trim()
-  const title =
-    (ask === '' ? reply.text.replace(/\s+/g, ' ').trim() : ask).slice(0, 120) || '随便聊里的一件事'
-  const summary = `从随便聊带过来的：\n问：${user?.text ?? ''}\n答：${reply.text}`.slice(0, 2000)
-  return { title, summary }
-}
-
 export function FreeChatPage(): React.ReactNode {
   const { t } = useApp()
   const { id } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const client = useQueryClient()
-  const palette = usePalette()
+  const [params] = useSearchParams()
+  const { solo, known } = useMode()
   const [model, setModel] = useState<string | undefined>(undefined)
   const [toggles, setToggles] = useState<ComposerToggles>({ web_search: false, knowledge: false })
   const [live, setLive] = useState<Live | undefined>(undefined)
@@ -61,10 +76,19 @@ export function FreeChatPage(): React.ReactNode {
 
   const models = useQuery({ queryKey: [...KEY, 'models'], queryFn: getFreeChatModels })
   const sessions = useQuery({ queryKey: [...KEY, 'sessions'], queryFn: listFreeChatSessions })
+  // WP343：快捷问题与 `@` 能选的岗位（老服务进程没有就当没有）
+  const assistant = useQuery({
+    queryKey: [...KEY, 'assistant'],
+    queryFn: getAssistantState,
+    retry: false,
+  })
   const messages = useQuery({
     queryKey: [...KEY, 'messages', id],
     queryFn: () => listFreeChatMessages(id ?? ''),
     enabled: id !== undefined,
+    // WP343：交出去的事还没回报完就隔几秒问一次（回报落在这段对话里）
+    refetchInterval: (q) =>
+      live === undefined && awaitingReport(q.state.data ?? []) ? REPORT_POLL_MS : false,
   })
 
   const choices = models.data?.choices ?? []
@@ -86,7 +110,9 @@ export function FreeChatPage(): React.ReactNode {
 
   const run = async (
     session_id: string,
-    input: { text: string; images: FreeChatImage[] } | { regenerate: true },
+    input:
+      | { text: string; images: FreeChatImage[]; target?: AssistantTarget }
+      | { regenerate: true },
   ): Promise<void> => {
     setError(undefined)
     const controller = new AbortController()
@@ -107,6 +133,12 @@ export function FreeChatPage(): React.ReactNode {
         if (f.type === 'archived_candidates')
           return { ...prev, reply: { ...prev.reply, archived_candidates: f.candidates } }
         if (f.type === 'notice') return { ...prev, status: f.text }
+        // WP343：交给了一个岗位（回复下面马上出那一行）
+        if (f.type === 'dispatched')
+          return {
+            ...prev,
+            reply: { ...prev.reply, dispatches: [...(prev.reply.dispatches ?? []), f.dispatch] },
+          }
         if (f.type === 'error') return { ...prev, reply: { ...prev.reply, error: f.message } }
         return prev
       })
@@ -139,6 +171,7 @@ export function FreeChatPage(): React.ReactNode {
             text: input.text,
             at: '',
             images: input.images,
+            ...(input.target === undefined ? {} : { to: input.target.label }),
           },
         ])
         await streamFreeChat(
@@ -146,6 +179,7 @@ export function FreeChatPage(): React.ReactNode {
           {
             text: input.text,
             ...(input.images.length === 0 ? {} : { images: input.images }),
+            ...(input.target === undefined ? {} : { target: input.target }),
             ...opts,
           },
           (f) => {
@@ -166,17 +200,23 @@ export function FreeChatPage(): React.ReactNode {
       abort.current = undefined
       setLive(undefined)
       refresh(session_id)
+      // 交了事 / 处理了卡之后快捷问题跟着变
+      void client.invalidateQueries({ queryKey: [...KEY, 'assistant'] })
     }
   }
 
   const send = useMutation({
-    mutationFn: async (input: { text: string; images: FreeChatImage[] }) => {
+    mutationFn: async (input: {
+      text: string
+      images: FreeChatImage[]
+      target?: AssistantTarget
+    }) => {
       let session_id = id
       if (session_id === undefined) {
         const made = await createFreeChatSession()
         session_id = made.id
         client.setQueryData([...KEY, 'messages', made.id], [])
-        navigate(`/free-chat/${made.id}`)
+        navigate(`${ASSISTANT_PATH}/${made.id}`)
       }
       await run(session_id, input)
     },
@@ -191,8 +231,6 @@ export function FreeChatPage(): React.ReactNode {
 
   const busy = live !== undefined
   const lastAssistant = [...rows].reverse().find((m) => m.role === 'assistant')
-  const userBefore = (i: number): FreeChatMessage | undefined =>
-    [...rows.slice(0, i)].reverse().find((m) => m.role === 'user')
 
   const composer = (
     <Composer
@@ -205,12 +243,15 @@ export function FreeChatPage(): React.ReactNode {
         : {})}
       knowledgeAvailable={models.data?.knowledge.available ?? false}
       onToggles={setToggles}
-      onSend={(text, images) => {
-        send.mutate({ text, images })
+      onSend={(text, images, target) => {
+        send.mutate({ text, images, ...(target === undefined ? {} : { target }) })
       }}
       onStop={stop}
+      placeholder={t('assistant.placeholder')}
+      {...(assistant.data === undefined ? {} : { targets: assistant.data.targets })}
     />
   )
+  const lit = (params.get('memory') ?? '').split(',').filter((x) => x !== '')
 
   return (
     <div className="-m-4 flex h-[calc(100vh-57px)] md:-m-7" data-testid="free-chat-page">
@@ -219,10 +260,10 @@ export function FreeChatPage(): React.ReactNode {
           sessions={sessions.data ?? []}
           current={id}
           onNew={() => {
-            navigate('/free-chat')
+            navigate(ASSISTANT_PATH)
           }}
           onPick={(next) => {
-            navigate(`/free-chat/${next}`)
+            navigate(`${ASSISTANT_PATH}/${next}`)
           }}
           onRename={(sid, title) => {
             void renameFreeChatSession(sid, title).then(() => refresh(sid))
@@ -230,7 +271,7 @@ export function FreeChatPage(): React.ReactNode {
           onDelete={(sid) => {
             void deleteFreeChatSession(sid).then(() => {
               refresh(sid)
-              if (sid === id) navigate('/free-chat')
+              if (sid === id) navigate(ASSISTANT_PATH)
             })
           }}
         />
@@ -243,6 +284,11 @@ export function FreeChatPage(): React.ReactNode {
           ) : (
             <ModelPicker choices={choices} value={picked} onChange={setModel} />
           )}
+          {/* WP343：右上角——助理记的几条；同事互联 / 公司模式多一个「替我答同事」（原「我的代理」） */}
+          <span className="ml-auto flex items-center gap-1.5">
+            <MemoryButton highlight={lit} />
+            {known && !solo ? <PeersButton defaultOpen={params.get('peers') === '1'} /> : null}
+          </span>
         </header>
         {id === undefined && live === undefined ? (
           <div
@@ -250,8 +296,22 @@ export function FreeChatPage(): React.ReactNode {
             data-testid="free-chat-empty"
           >
             <BrandMark size={40} motion="idle" />
-            <h2 className="ws-display text-xl">{t('free_chat.empty')}</h2>
+            <div className="flex flex-col items-center gap-1.5 text-center">
+              <h2 className="ws-display text-xl">{t('assistant.empty.title')}</h2>
+              <p
+                className="max-w-xl text-[13px] text-muted-foreground"
+                data-testid="assistant-intro"
+              >
+                {t('assistant.empty.sub')}
+              </p>
+            </div>
             <div className="w-full max-w-2xl">{composer}</div>
+            <Suggestions
+              items={assistant.data?.suggestions ?? []}
+              onPick={(text) => {
+                send.mutate({ text, images: [] })
+              }}
+            />
           </div>
         ) : (
           <>
@@ -260,7 +320,7 @@ export function FreeChatPage(): React.ReactNode {
                 className="mx-auto flex max-w-3xl flex-col gap-5 py-4"
                 data-testid="free-chat-messages"
               >
-                {rows.map((m, i) =>
+                {rows.map((m) =>
                   m.role === 'user' ? (
                     <UserBubble key={m.id} message={m} />
                   ) : (
@@ -270,9 +330,6 @@ export function FreeChatPage(): React.ReactNode {
                       last={m.id === lastAssistant?.id && !busy}
                       onRegenerate={() => {
                         if (id !== undefined) void run(id, { regenerate: true })
-                      }}
-                      onHandoff={() => {
-                        palette.open(handoffOf(userBefore(i), m))
                       }}
                     />
                   ),
@@ -284,7 +341,6 @@ export function FreeChatPage(): React.ReactNode {
                     {...(live.status === undefined ? {} : { status: live.status })}
                     last={false}
                     onRegenerate={() => undefined}
-                    onHandoff={() => undefined}
                   />
                 )}
                 {error === undefined ? null : <p className="text-sm text-destructive">{error}</p>}
@@ -296,4 +352,11 @@ export function FreeChatPage(): React.ReactNode {
       </section>
     </div>
   )
+}
+
+/** WP343：老地址 `/free-chat[/:id]` → `/assistant[/:id]`（书签、⌘K 老链接照样打得开）。 */
+export function LegacyFreeChatRedirect(): React.ReactNode {
+  const { id } = useParams<{ id?: string }>()
+  const { search } = useLocation()
+  return <Navigate replace to={`${ASSISTANT_PATH}${id === undefined ? '' : `/${id}`}${search}`} />
 }
