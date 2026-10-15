@@ -2755,12 +2755,21 @@ const zh: Table = {
   'intake.competitor.remove': '去掉{name}',
   'intake.edit.done': '改好了',
   'intake.tag.ai': 'AI 建议',
-  'intake.tag.ai.hint': 'AI 按你网站上的文字归纳的，还没人核过。改一下或点 ✓ 就算你确认了。',
+  'intake.tag.ai.hint':
+    'AI 按你网站上的文字和联网查到的网页归纳的，还没人核过。改一下或点 ✓ 就算你确认了。',
   'intake.ai.accept': '对，就这样',
   'intake.insights.no_model':
     '还没接模型，人群、关键词、竞品这几格先空着。接上模型后可以在设置里重新分析一次。',
   'intake.insights.budget': '这次的积分封顶用完了，人群、关键词、竞品这几格没归纳。',
   'intake.insights.failed': 'AI 这次没答好，人群、关键词、竞品这几格先空着，可以自己填。',
+  // WP349：联网查——来源、没联网 / 没搜成 / 额度没查时照实说
+  'intake.sources': '来源 {n} 处',
+  'intake.web.off': '没联网，查不了竞品。',
+  'intake.web.failed': '联网没搜成，竞品先空着。',
+  'intake.web.cut.competitors': '这次额度不够，竞品没联网查。',
+  'intake.web.cut.verify': '这次额度不够，竞品没逐个核实。',
+  'intake.web.cut.brand': '这次额度不够，品牌评测没查，定位和人群只按官网写。',
+  'intake.web.no_competitors': '联网没找到有来源的竞品，先空着。',
   'intake.product.list_price': '原价 {price}',
   'intake.product.specs': '规格',
   'reanalyze.open': '重新分析一次',
@@ -6914,7 +6923,7 @@ const en: Table = {
   'intake.edit.done': 'Done',
   'intake.tag.ai': 'AI draft',
   'intake.tag.ai.hint':
-    'Drafted by AI from your site. Not checked yet — edit it or tap ✓ to confirm.',
+    'Drafted by AI from your site and pages found on the web. Not checked yet — edit it or tap ✓ to confirm.',
   'intake.ai.accept': 'Looks right',
   'intake.insights.no_model':
     'No model connected yet, so audience, keywords and competitors are empty. Connect one, then re-analyze in Settings.',
@@ -6922,6 +6931,14 @@ const en: Table = {
     'The credit cap for this run was used up, so audience, keywords and competitors were skipped.',
   'intake.insights.failed':
     'The AI step didn’t come back usable — fill in audience, keywords and competitors yourself.',
+  'intake.sources': 'Sources ({n})',
+  'intake.web.off': 'Not online, so competitors weren’t looked up.',
+  'intake.web.failed': 'Web search didn’t work this time — competitors are empty for now.',
+  'intake.web.cut.competitors': 'Not enough credit left, so competitors weren’t looked up.',
+  'intake.web.cut.verify': 'Not enough credit left, so competitors weren’t each checked.',
+  'intake.web.cut.brand':
+    'Not enough credit left for reviews, so positioning and audience come from your site only.',
+  'intake.web.no_competitors': 'No competitors with a source turned up on the web.',
   'intake.product.list_price': 'Was {price}',
   'intake.product.specs': 'Specs',
   'reanalyze.open': 'Re-analyze',
