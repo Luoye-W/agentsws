@@ -1312,7 +1312,7 @@ const zh: Table = {
   'settings.motion.off': '关',
   'settings.identity': '身份',
   'identity.local_self': '你（本机）',
-  'settings.placeholder': '这台机器上的偏好；连接在左栏的「连接」里。',
+  'settings.placeholder': '这台机器上的偏好；连接在左下角账号菜单的「设置 → 连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
   'connections.dead_letters': '{n} 封信没进来',
@@ -5365,7 +5365,7 @@ const en: Table = {
   'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
   'identity.local_self': 'You (this computer)',
-  'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
+  'settings.placeholder': 'Preferences on this machine. Connections live in the account menu (bottom left) under Settings → Connections.',
   'nav.connections': 'Connections',
   'connections.dead_letters': '{n} message(s) never made it in',
   'connections.dead_letters.hint':

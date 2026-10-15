@@ -25,7 +25,7 @@ If the network is down it says it couldn't reach Agents Workshop cloud — try a
 - **1 credit = ¥1**. Models run on our cloud; tokens are converted into credits.
 - Purchased credits **never expire**; promotional ones reset each period; expiring credits are used first.
 - Top up by picking a tier: US$1 = 7 credits; payment happens on Stripe's page — we never touch your card number.
-- The card warns you when the balance is low. The price list is the final price, no extra service fee; before linking you see the built-in list, and the one shown after linking counts.
+- Check your balance any time: click your name at the bottom left — the first line of the menu is your credits, with "Top up" next to it. When it runs low a small dot appears on your avatar, and the card warns you too. The price list is the final price, no extra service fee; before linking you see the built-in list, and the one shown after linking counts.
 - Owners see usage for the whole organisation, members only their own workspace. Who provides each capability (your key or Agents Workshop's) is set under "Connections".
 
 ## The three things you pay for
