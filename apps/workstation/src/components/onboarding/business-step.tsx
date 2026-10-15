@@ -443,6 +443,7 @@ export function BusinessStep({
             busy={busy}
             confirmed={current.status === 'confirmed'}
             freshStore={current.fresh_store === true}
+            {...(current.insights === undefined ? {} : { insights: current.insights })}
             onEdit={(field, value) => {
               setEdits((prev) => ({ ...prev, [field]: value }))
             }}

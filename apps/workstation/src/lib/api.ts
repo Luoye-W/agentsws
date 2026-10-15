@@ -3680,6 +3680,17 @@ export interface WorkspaceProfileView {
   currency?: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
   category?: string
+  /** WP346（决策 872）：第二版那几格（没写过就没有）。 */
+  subcategory?: string
+  positioning?: string
+  price_band?: string
+  audience?: import('@agentsws/contracts').BrandAudience
+  keywords?: import('@agentsws/contracts').BrandKeywords
+  competitors?: import('@agentsws/contracts').BrandCompetitor[]
+  /** WP346：品牌分析读的那个官网（「重新分析一次」默认用它）。 */
+  website?: string
+  /** WP346：哪几格还是 AI 建议（人没改、没点过「对」）。 */
+  ai_suggested?: import('@agentsws/contracts').BrandInsightField[]
   set_at: string
 }
 
@@ -3884,6 +3895,15 @@ export const setWorkspaceProfile = (
     currency?: string
     /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
     category?: string
+    /** WP346（决策 872）：第二版那几格（不给 = 不改；空串 / null / 空数组 = 清空）。 */
+    subcategory?: string
+    positioning?: string
+    price_band?: string
+    audience?: import('@agentsws/contracts').BrandAudience | null
+    keywords?: import('@agentsws/contracts').BrandKeywords | null
+    competitors?: import('@agentsws/contracts').BrandCompetitor[]
+    /** WP346：人点了「对」的那几格（值不变，只拿掉「AI 建议」标）。 */
+    confirm_fields?: import('@agentsws/contracts').BrandInsightField[]
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
@@ -6359,6 +6379,22 @@ export const manualBrandIntake = (
   api('/v1/brand-intake/manual', {
     method: 'POST',
     body: { edits },
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP346（决策 872）：设置页「重新分析一次」之后逐格采纳——只把勾的那几格写进品牌档案。
+ * `edits` 是采纳时顺手改的值（算人给的，不挂「AI 建议」）。
+ */
+export const adoptBrandIntake = (
+  id: string,
+  fields: string[],
+  edits?: Record<string, unknown>,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/adopt`, {
+    method: 'POST',
+    body: { fields, ...(edits === undefined ? {} : { edits }) },
     ...withAssignment(assignment),
   })
 

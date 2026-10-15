@@ -21,6 +21,13 @@ import {
   suggestCompanyEmailSuffix,
 } from '@agentsws/contracts'
 import { useEffect, useState } from 'react'
+import {
+  AiTag,
+  BrandInsightFields,
+  INSIGHT_KEYS,
+  type InsightKey,
+  type InsightValues,
+} from '@/components/onboarding/brand-insight-fields'
 import { MarketsPicker } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -56,6 +63,29 @@ export interface ProfileDraft {
   currency: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、这里可改；GEO 策略按它认品类）。 */
   category: string
+  /** WP346（决策 872）：第二版那几格（定位 / 子品类 / 价格带 / 人群 / 关键词 / 竞品）。 */
+  insights: InsightValues
+  /** WP346：人点了「对」的那几格（存的时候一起发，拿掉「AI 建议」标）。 */
+  confirm_fields: (InsightKey | 'category')[]
+}
+
+/** WP346：档案里那几格的初值。 */
+export function insightsOfProfile(profile: WorkspaceProfileView | undefined): InsightValues {
+  const out: Record<string, unknown> = {}
+  for (const key of INSIGHT_KEYS) {
+    const v = profile?.[key]
+    if (v !== undefined) out[key] = structuredClone(v)
+  }
+  return out as InsightValues
+}
+
+/** WP346：草稿里这一格和档案里的不一样了吗（改过就算人给的）。 */
+export function insightChanged(
+  key: InsightKey,
+  draft: InsightValues,
+  profile: WorkspaceProfileView | undefined,
+): boolean {
+  return JSON.stringify(draft[key] ?? null) !== JSON.stringify(profile?.[key] ?? null)
 }
 
 export function ProfileForm({
@@ -126,7 +156,16 @@ export function ProfileForm({
     support_email: profile?.support_email ?? '',
     currency: profile?.currency ?? DEFAULT_BRAND_CURRENCY,
     category: profile?.category ?? '',
+    insights: insightsOfProfile(profile),
+    confirm_fields: [],
   })
+  /** WP346：还挂「AI 建议」的那几格（档案里标着、草稿没改、也没点过「对」）。 */
+  const aiStill = (key: InsightKey | 'category'): boolean =>
+    (profile?.ai_suggested ?? []).includes(key) &&
+    !draft.confirm_fields.includes(key) &&
+    (key === 'category'
+      ? draft.category.trim() === (profile?.category ?? '')
+      : !insightChanged(key, draft.insights, profile))
   /**
    * WP233：建议值可能晚到（云账号、品牌分析是各自查回来的）。用户没动过、档案里也没存过、
    * 那一格还空着的时候，补上晚到的建议值；动过一次就再也不替他改。
@@ -465,6 +504,25 @@ export function ProfileForm({
                 <Label htmlFor="brand-category" className="flex items-center gap-1">
                   {t('onboarding.brand.category')}
                   <Hint text={t('onboarding.brand.category.hint')} />
+                  {/* WP346：AI 填的品类挂「AI 建议」，点 ✓ 算确认 */}
+                  {aiStill('category') ? (
+                    <>
+                      <AiTag field="category" />
+                      <button
+                        type="button"
+                        className="text-[11px] text-ws-muted-fg underline hover:text-foreground"
+                        data-testid="insight-accept-category"
+                        onClick={() => {
+                          setDraft({
+                            ...draft,
+                            confirm_fields: [...draft.confirm_fields, 'category'],
+                          })
+                        }}
+                      >
+                        ✓
+                      </button>
+                    </>
+                  ) : null}
                 </Label>
                 <Input
                   id="brand-category"
@@ -506,6 +564,22 @@ export function ProfileForm({
                 />
               </div>
             </div>
+            {/*
+              WP346（决策 872）：品牌分析第二版那几格——每格可改；AI 填的挂「AI 建议」，
+              点 ✓ 不改值只算确认。红人 / GEO / 广告 / 巡查的建议都先读这里。
+            */}
+            <BrandInsightFields
+              values={draft.insights}
+              ai={INSIGHT_KEYS.filter((k) => aiStill(k))}
+              showEmpty
+              disabled={busy}
+              onChange={(field, value) => {
+                setDraft((prev) => ({ ...prev, insights: { ...prev.insights, [field]: value } }))
+              }}
+              onAccept={(field) => {
+                setDraft((prev) => ({ ...prev, confirm_fields: [...prev.confirm_fields, field] }))
+              }}
+            />
           </div>
         )}
       </section>

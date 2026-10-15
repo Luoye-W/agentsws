@@ -16,10 +16,16 @@
  * 重新分析也不会动它（70 §3.4）。
  */
 
-import type { BrandIntakeProfile } from '@agentsws/contracts'
+import type { BrandIntakeInsightsStatus, BrandIntakeProfile } from '@agentsws/contracts'
 import { Check, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { DesignSpecRow } from '@/components/design-md/design-spec-row'
+import {
+  AiTag,
+  BrandInsightFields,
+  INSIGHT_KEYS,
+  type InsightValues,
+} from '@/components/onboarding/brand-insight-fields'
 import { MarketsPicker, marketLabel } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -102,6 +108,34 @@ export interface BrandProfileCardProps {
    * 品牌名 / 一句话两格空着也摆出来（点铅笔就能填），不再整行藏起来。
    */
   freshStore?: boolean
+  /** WP346：AI 归纳那一步怎么样了（没接模型 / 积分封顶 / 没答好时说一句）。 */
+  insights?: BrandIntakeInsightsStatus
+}
+
+/** WP346：一格是不是 AI 填的（模型那一层出的、人没改过）。 */
+function aiCell(profile: BrandIntakeProfile, edits: Record<string, unknown>, key: string): boolean {
+  const cell = (profile as Record<string, { evidence?: { locator: string }[]; edited?: boolean }>)[
+    key
+  ]
+  return (
+    cell !== undefined &&
+    edits[key] === undefined &&
+    cell.edited !== true &&
+    cell.evidence?.[0]?.locator === 'model'
+  )
+}
+
+/** WP346：第二版那几格的当前值（改过的用改过的）。 */
+function insightValuesOf(
+  profile: BrandIntakeProfile,
+  edits: Record<string, unknown>,
+): InsightValues {
+  const out: Record<string, unknown> = {}
+  for (const key of INSIGHT_KEYS) {
+    const v = edits[key] ?? (profile as Record<string, { value?: unknown } | undefined>)[key]?.value
+    if (v !== undefined) out[key] = v
+  }
+  return out as InsightValues
 }
 
 /** WP244：空店时这两格空着也要摆出来（让人自己填）。 */
@@ -212,6 +246,8 @@ function Row({
             {value === '' ? t('intake.empty') : value}
           </span>
           <ConfidenceTag profile={profile} edits={edits} field={field} />
+          {/* WP346：AI 填的（品类）再挂一个「AI 建议」 */}
+          {aiCell(profile, edits, field) ? <AiTag field={field} /> : null}
           <button
             type="button"
             aria-label={t('intake.edit')}
@@ -238,6 +274,7 @@ export function BrandProfileCard({
   busy = false,
   confirmed = false,
   freshStore = false,
+  insights,
 }: BrandProfileCardProps): React.ReactNode {
   const { t, lang } = useApp()
   const currency = currentValue(profile, edits, 'currency')
@@ -303,6 +340,29 @@ export function BrandProfileCard({
           />
         ))}
       </div>
+
+      {/*
+        WP346（决策 872）：AI 归纳的几格（定位 / 子品类 / 价格带 / 人群 / 关键词 / 竞品），
+        每格可改、挂「AI 建议」；没接模型 / 封顶 / 没答好时说一句为什么空着。
+      */}
+      <BrandInsightFields
+        values={insightValuesOf(profile, edits)}
+        ai={INSIGHT_KEYS.filter((k) => aiCell(profile, edits, k))}
+        edited={INSIGHT_KEYS.filter(
+          (k) =>
+            edits[k] !== undefined ||
+            (profile as Record<string, { edited?: boolean } | undefined>)[k]?.edited === true,
+        )}
+        onChange={(field, value) => {
+          onEdit(field, value)
+        }}
+        disabled={busy}
+      />
+      {insights === 'no_model' || insights === 'budget' || insights === 'failed' ? (
+        <p className="text-xs text-ws-muted-fg" data-testid="intake-insights-note">
+          {t(`intake.insights.${insights}`)}
+        </p>
+      ) : null}
 
       {/*
         WP166：市场从只读标签改成可增删（国家选择器，中文国名）；出处进问号；
@@ -373,6 +433,34 @@ export function BrandProfileCard({
               {p.price_snapshot === undefined ? null : (
                 <span className="text-ws-muted-fg" data-testid="intake-price">
                   {priceLabel(p.price_snapshot, currency === '' ? undefined : currency, lang)}
+                </span>
+              )}
+              {/* WP346：原价划线；规格进 tooltip（卡片不铺字） */}
+              {p.list_price_snapshot === undefined ? null : (
+                <span
+                  className="ml-1 text-ws-muted-fg line-through"
+                  data-testid="intake-list-price"
+                  title={t('intake.product.list_price', {
+                    price: priceLabel(
+                      p.list_price_snapshot,
+                      currency === '' ? undefined : currency,
+                      lang,
+                    ),
+                  })}
+                >
+                  {priceLabel(p.list_price_snapshot, currency === '' ? undefined : currency, lang)}
+                </span>
+              )}
+              {(p.specs ?? []).length === 0 ? null : (
+                <span
+                  className="flex items-center gap-1 text-ws-muted-fg"
+                  data-testid="intake-specs"
+                  title={(p.specs ?? []).map((x) => `${x.name}：${x.value}`).join('\n')}
+                >
+                  {t('intake.product.specs')} {(p.specs ?? []).length}
+                  {(p.model_filled ?? []).length > 0 ? (
+                    <AiTag field={`product-${p.title}`} />
+                  ) : null}
                 </span>
               )}
             </figure>
