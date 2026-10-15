@@ -379,6 +379,18 @@ export type {
   ExtensionActionsPort,
 } from './routes/extension-actions.js'
 export { extensionActionRoutes } from './routes/extension-actions.js'
+// WP345：插件随工坊安装与更新
+export type {
+  ExtensionFolderSync,
+  ExtensionInstallPort,
+  ExtensionInstallView,
+  ExtensionOpenResult,
+  ExtensionOpenTarget,
+  ExtensionRunningVersion,
+  ExtensionVersionReply,
+  ExtensionVersionReport,
+} from './routes/extension-install.js'
+export { extensionInstallRoutes } from './routes/extension-install.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」
@@ -401,6 +413,10 @@ export type {
   FreeChatTurnInput,
 } from './routes/free-chat.js'
 export { freeChatRoutes } from './routes/free-chat.js'
+export {
+  type GenuiImageHostsPort,
+  genuiImageHostsRoutes,
+} from './routes/genui-image-hosts.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export {
   type ColleagueView,

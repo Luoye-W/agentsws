@@ -7,7 +7,7 @@
  * 卡面就成了「我打算这样设」，人点「就这样」直接存，「改一下」才展开表单。
  *
  * 工具（一张卡一份，限次）：
- * - `profile()`：品牌档案（WP346 之后有人群 / 关键词 / 竞品——**有就用、没有就跳过**）；
+ * - `profile()`：品牌档案（含 WP346 的定位 / 子品类 / 人群 / 关键词 / 竞品——**有就用、没有就跳过**）；
  * - 已连的数据：由各目标自己读（插件登录态里的账号、店铺、已连渠道），不经这里；
  * - `search(q)`：联网搜索（官方 web search，一张卡最多 {@link SETUP_SEARCH_MAX} 次；搜不了回 `undefined`）；
  * - `ask(prompt)`：问一次模型整理（一张卡最多 {@link SETUP_ASK_MAX} 次；没模型回 `undefined`）；
@@ -94,8 +94,11 @@ const strs = (v: unknown, max = 12): string[] =>
     : []
 
 /**
- * 档案（`brandProfile(ws)` 的样子）→ 查得到的几格。**宽进**：WP346 那几格还没合进来时就是没有；
- * 合进来以后形状对得上就用（人群 `{ buyers, concerns }`、关键词三组、竞品 `{ name, reason }`）。
+ * 档案（`onboarding.brandProfile(ws)`）→ 查得到的几格。WP346 的字段按它在档案上的真名读：
+ * `positioning`、`subcategory`、`audience`（`BrandAudience`：`buyers` / `payer` / `concerns`）、
+ * `keywords`（`BrandKeywords`：`brand` / `category` / `scenario`）、`competitors`（`BrandCompetitor`：
+ * `name` / `reason` / `url`）、`website`（没有公司域名时当官网）。没写过的格子就是没有（有就用、没有就跳过）；
+ * 读的时候仍逐格验形状，老档案 / 人改坏的值不报错。
  */
 export function brandFactsOf(
   raw: Record<string, unknown> | undefined,
@@ -107,7 +110,13 @@ export function brandFactsOf(
     if (v !== undefined) out[k] = v
   }
   set('name', str(extra.name, 80))
-  set('domain', str(extra.domain, 120))
+  set(
+    'domain',
+    str(extra.domain, 120) ??
+      str(r.website, 200)
+        ?.replace(/^https?:\/\//iu, '')
+        .replace(/\/.*$/u, ''),
+  )
   set('shopify_domain', str(extra.shopify_domain, 120))
   for (const k of [
     'one_liner',

@@ -12,6 +12,7 @@
     "packages/contracts/src/b2b.ts",
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/brand-design.ts",
+    "packages/contracts/src/brand-insights.ts",
     "packages/contracts/src/brand-intake.ts",
     "packages/contracts/src/byo-data-source.ts",
     "packages/contracts/src/changes.ts",
@@ -33,6 +34,8 @@
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/genui-host.ts",
+    "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
@@ -131,7 +134,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "c69e27db1ed83b6d23f7f2bb635e6516",
+  "source_digest": "d0f6bfb93540bd4ed475094660ecd8c2",
   "objects": [
     {
       "id": "ad",

@@ -1,0 +1,163 @@
+{
+  "code": 0,
+  "checks": [
+    {
+      "name": "工坊第一次放插件：installed",
+      "ok": true,
+      "detail": "{\"status\":\"installed\",\"at\":\"2026-10-15T09:54:22.178Z\",\"bundled_version\":\"0.9.0-e2e.1\",\"folder_version\":\"0.9.0-e2e.1\"}"
+    },
+    {
+      "name": "扩展 id 是固定 key 算出来的那个",
+      "ok": true,
+      "detail": "chrome-extension://mlbfinfiigagllemohnopbhfdghagijg/background.js"
+    },
+    {
+      "name": "点一下授了一条可选权限（idle，没有警告、不弹窗）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "配上之后插件报了自己的版本",
+      "ok": true,
+      "detail": "{\"version\":\"0.9.0-e2e.1\",\"at\":1792058065899}"
+    },
+    {
+      "name": "设置页显示版本",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "插件正挂着一个领活的长轮询",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "工坊放了新版（多要一条权限）：updated",
+      "ok": true,
+      "detail": "{\"status\":\"updated\",\"at\":\"2026-10-15T09:54:26.006Z\",\"bundled_version\":\"0.9.1-e2e.2\",\"folder_version\":\"0.9.1-e2e.2\",\"previous_version\":\"0.9.0-e2e.1\"}"
+    },
+    {
+      "name": "重载前那件活做完、回了结局（没扔在半路）",
+      "ok": true,
+      "detail": "{\"id\":\"job_during_update\",\"outcome\":\"handover\",\"at\":1792058068418}"
+    },
+    {
+      "name": "重载后报「从 v1 换来」",
+      "ok": true,
+      "detail": "{\"version\":\"0.9.1-e2e.2\",\"reloaded_from\":\"0.9.0-e2e.1\",\"at\":1792058069648}"
+    },
+    {
+      "name": "结局在重载之前（先做完再重载）",
+      "ok": true,
+      "detail": "结局 1792058068418 / 重载后报版本 1792058069648"
+    },
+    {
+      "name": "那件活只领了一次",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重载后插件开着（没被停用）",
+      "ok": true,
+      "detail": "{\"state\":\"ENABLED\",\"disabled_because\":[]}"
+    },
+    {
+      "name": "版本换成 v2",
+      "ok": true,
+      "detail": "0.9.1-e2e.2"
+    },
+    {
+      "name": "id 没变",
+      "ok": true,
+      "detail": "mlbfinfiigagllemohnopbhfdghagijg"
+    },
+    {
+      "name": "配对还在（令牌在）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chrome.storage 的记号还在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "之前授的可选权限还在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "新版多要的权限直接生效（插件照常开着）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重载后新版照常领活做完（队列没丢）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Chrome 关着时工坊放 v3",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "再开 Chrome 直接是 v3",
+      "ok": true,
+      "detail": "0.9.2-e2e.3"
+    },
+    {
+      "name": "配对与记号还在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重载了还是旧版 → 报「放弃了」",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "之后再问也不再重载（只重载了一次）",
+      "ok": true,
+      "detail": "service worker 起了 1 次"
+    }
+  ],
+  "reports": [
+    {
+      "version": "0.9.0-e2e.1",
+      "at": 1792058065899
+    },
+    {
+      "version": "0.9.0-e2e.1",
+      "at": 1792058066016
+    },
+    {
+      "version": "0.9.1-e2e.2",
+      "reloaded_from": "0.9.0-e2e.1",
+      "at": 1792058069648
+    },
+    {
+      "version": "0.9.2-e2e.3",
+      "at": 1792058109336
+    },
+    {
+      "version": "0.9.2-e2e.3",
+      "at": 1792058112418
+    },
+    {
+      "version": "0.9.2-e2e.3",
+      "gave_up": "9.9.9-e2e.99",
+      "at": 1792058113864
+    },
+    {
+      "version": "0.9.2-e2e.3",
+      "gave_up": "9.9.9-e2e.99",
+      "at": 1792058115270
+    },
+    {
+      "version": "0.9.2-e2e.3",
+      "gave_up": "9.9.9-e2e.99",
+      "at": 1792058115308
+    }
+  ]
+}

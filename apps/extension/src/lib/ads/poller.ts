@@ -9,6 +9,7 @@
  */
 
 import type { ActionJob, ActionPlatform, AdsAccountHint } from '@agentsws/browser-action'
+import { actionsHeld, registerBusy } from '../idle-gate'
 import { actionResult, actionsNext } from '../local-client'
 import type { KeyValueStore } from '../storage'
 import { readSettings } from '../storage'
@@ -69,12 +70,17 @@ export type PollOutcome =
   | 'refused'
   | 'idle'
   | 'ran'
+  /** WP345：要重载了，这一轮不领新活。 */
+  | 'held'
 
 let running = false
+// WP345：重载前等它空下来（正在挂着的长轮询、正在做的那一件）
+registerBusy('ads', () => running)
 
 /** 问一轮（定时器每分钟叫一次；正在做就直接回 busy）。 */
 export async function pollAdsOnce(deps: PollerDeps): Promise<PollOutcome> {
   if (running) return 'busy'
+  if (actionsHeld()) return 'held'
   running = true
   try {
     return await pollLoop(deps)
@@ -99,6 +105,8 @@ async function pollLoop(deps: PollerDeps): Promise<PollOutcome> {
     platforms.includes(h.platform),
   )
   for (;;) {
+    // WP345：要重载了——做完的这件算数，不再领下一件
+    if (actionsHeld()) return ran > 0 ? 'ran' : 'held'
     const got = await actionsNext(client, platforms, deps.waitSeconds, seen)
     if (!got.ok) {
       await writeAdsStatus(deps.store, { last_poll_at: deps.now(), note: got.message })

@@ -20,14 +20,16 @@ export interface PatrolBrandBrief {
   domain?: string
   /** 产品（商品卡的一句话），最多取前十条。 */
   products?: string[]
-  /** WP348：品类（档案里的子品类 / 品类）。 */
+  /*
+   * WP346（决策 872）：品牌档案第二版那几格——建议先读它们，读不到再让 AI 自己猜。
+   */
   category?: string
-  /** WP348：档案里的关键词（WP346 之后才有）。 */
-  keywords?: string[]
-  /** WP348：档案里的主要竞品名（WP346 之后才有）。 */
-  competitors?: string[]
-  /** WP348：谁买（WP346 之后才有）。 */
+  /** 目标人群（谁买 + 顾虑，一句话）。 */
   audience?: string
+  /** 档案里的关键词（品牌词 / 品类词 / 场景词）。 */
+  keywords?: { brand: string[]; category: string[]; scenario: string[] }
+  /** 主要竞品名。 */
+  competitors?: string[]
   /** WP348：联网搜到的相关版块与出现次数。 */
   found_subs?: { name: string; count: number }[]
 }
@@ -74,20 +76,25 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
       : `目标市场：${brief.markets.slice(0, 10).join('、')}`,
     brief.domain === undefined ? '' : `官网：${fence(brief.domain, 80)}`,
     ...(brief.products ?? []).slice(0, 10).map((p, i) => `产品 ${i + 1}：${fence(p, 200)}`),
+    // WP346：品牌档案第二版那几格（人确认过 / AI 归纳过的）
     brief.category === undefined ? '' : `品类：${fence(brief.category, 80)}`,
-    brief.keywords === undefined || brief.keywords.length === 0
+    brief.audience === undefined ? '' : `目标人群：${fence(brief.audience, 300)}`,
+    brief.keywords === undefined
       ? ''
-      : `关键词：${brief.keywords
+      : `档案里的关键词：${[
+          ...brief.keywords.brand,
+          ...brief.keywords.category,
+          ...brief.keywords.scenario,
+        ]
           .slice(0, 20)
           .map((k) => fence(k, 60))
           .join('、')}`,
-    brief.competitors === undefined || brief.competitors.length === 0
+    (brief.competitors ?? []).length === 0
       ? ''
-      : `主要竞品：${brief.competitors
+      : `主要竞品：${(brief.competitors ?? [])
           .slice(0, 8)
-          .map((k) => fence(k, 60))
+          .map((c) => fence(c, 80))
           .join('、')}`,
-    brief.audience === undefined ? '' : `谁买：${fence(brief.audience, 200)}`,
     brief.found_subs === undefined || brief.found_subs.length === 0
       ? ''
       : `联网搜到的相关版块（次数）：${brief.found_subs
@@ -104,8 +111,9 @@ export function suggestPrompt(brief: PatrolBrandBrief): string {
     '',
     '请建议：',
     'own_subreddits：品牌自己的版块（多半是品牌名或品牌名 + xr / official 之类；拿不准就空数组）；',
-    'watch_subreddits：值得盯的别人的版块（品类、竞品、用户聚集的地方），每个带 per_week（一周看几次：7 每天、3、2、1 每周；最相关的每天，其余每周），最多 8 个；档案里有联网搜到的版块就优先从里面挑（确实相关才选）；',
-    'keywords：全站搜的外部关键词（品牌名 + 品类词；按条计费，少而准，最多 6 个）；',
+    'watch_subreddits：值得盯的别人的版块（品类、竞品、用户聚集的地方），每个带 per_week（一周看几次：7 每天、3、2、1 每周；最相关的每天，其余每周），最多 8 个；',
+    'keywords：全站搜的外部关键词（品牌名 + 品类词；按条计费，少而准，最多 6 个；档案里有关键词就先从里面挑）；',
+    'watch_subreddits 里竞品与目标人群聚集的版块优先（档案里写了竞品 / 人群就照着找）；',
     'alert_words：本地告警词（出了就要马上看的：召回、安全、退款、投诉之类，用市场的语言，最多 8 个）；',
     'tag_words：本地标签词（型号、产品线的常见写法，用来给条目分类，最多 10 个）；',
     'why：每样一句中文理由（键同上，20 个字以内）。',
@@ -185,8 +193,28 @@ export async function suggestPatrol(
   if (complete === undefined || brief === undefined) return undefined
   if (brief.name === undefined && (brief.products ?? []).length === 0) return undefined
   try {
-    return parseSuggestion(await complete(suggestPrompt(brief)))
+    return withProfileKeywords(parseSuggestion(await complete(suggestPrompt(brief))), brief)
   } catch {
     return undefined
   }
+}
+
+/**
+ * WP346（决策 872）：外部关键词**先用档案里的**（品牌词 + 品类词，最多 6 个），模型给的只补不换。
+ * 档案里没有关键词就原样返回（照旧由模型猜）。
+ */
+export function withProfileKeywords(
+  got: PatrolSuggestion | undefined,
+  brief: PatrolBrandBrief,
+): PatrolSuggestion | undefined {
+  if (got === undefined || brief.keywords === undefined) return got
+  const fromProfile = [...brief.keywords.brand.slice(0, 2), ...brief.keywords.category]
+  const out: string[] = []
+  for (const k of [...fromProfile, ...got.keywords]) {
+    const w = k.trim()
+    if (w === '' || out.some((o) => o.toLowerCase() === w.toLowerCase())) continue
+    out.push(w.slice(0, 60))
+    if (out.length >= 6) break
+  }
+  return { ...got, keywords: out }
 }

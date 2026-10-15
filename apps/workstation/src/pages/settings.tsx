@@ -16,16 +16,27 @@ import { DataMapPanel } from '@/components/data-map'
 import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
-import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
+import {
+  INSIGHT_KEYS,
+  type InsightKey,
+  type InsightValues,
+} from '@/components/onboarding/brand-insight-fields'
+import {
+  insightChanged,
+  type ProfileDraft,
+  ProfileForm,
+} from '@/components/onboarding/profile-form'
 import { ArchiveSetting, HandoffDaysSetting } from '@/components/settings/archive-setting'
 import { AutoMemorySetting } from '@/components/settings/auto-memory-setting'
 import { BackgroundCard } from '@/components/settings/background-card'
+import { BrandReanalyze } from '@/components/settings/brand-reanalyze'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { ContentUpdatesSetting } from '@/components/settings/content-updates-setting'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
+import { ImageHostsSetting } from '@/components/settings/image-hosts-setting'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
@@ -171,6 +182,9 @@ export function SettingsPage({
           (onboarding.data?.profile?.currency ?? DEFAULT_BRAND_CURRENCY)
             ? {}
             : { currency: draft.currency.trim().toUpperCase() }),
+          // WP346（决策 872）：第二版那几格——只发改过的（改过 = 人给的，拿掉「AI 建议」）；点过「对」的一起发
+          ...insightPatch(draft.insights, onboarding.data?.profile),
+          ...(draft.confirm_fields.length === 0 ? {} : { confirm_fields: draft.confirm_fields }),
         },
         ownerId,
       ),
@@ -264,6 +278,8 @@ export function SettingsPage({
             <RunLimitsSetting />
             {/* WP320：AI 边干活边记（默认开；关了只在说「记住」时记） */}
             <AutoMemorySetting />
+            {/* WP341 追加（849）：AI 回话里哪些网站的图直接显示（品牌级白名单） */}
+            <ImageHostsSetting />
             {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
             <ContentUpdatesSetting />
             {identity === undefined ? null : (
@@ -319,6 +335,16 @@ export function SettingsPage({
                 onSave={(draft) => {
                   save.mutate(draft)
                 }}
+              />
+              {/* WP346（决策 872）：老品牌重新分析一次——对比「现在 / 新的」，逐格采纳 */}
+              <BrandReanalyze
+                {...(onboarding.data.profile === undefined
+                  ? {}
+                  : { profile: onboarding.data.profile })}
+                {...(intake.data?.inputs[0]?.url === undefined
+                  ? {}
+                  : { lastUrl: intake.data.inputs[0].url })}
+                {...(ownerId === undefined ? {} : { assignment: ownerId })}
               />
             </CardContent>
           </Card>
@@ -407,4 +433,42 @@ export function SettingsPage({
 /** 两份市场清单一样吗（顺序也算：用户挪过顺序就当改过）。 */
 function sameMarkets(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((m, i) => m === b[i])
+}
+
+/**
+ * WP346：设置页那几格 → 要发的补丁（只发改过的；清空：文字给空串、人群 / 关键词给 null、竞品给空数组）。
+ */
+function insightPatch(
+  draft: InsightValues,
+  profile: Parameters<typeof insightChanged>[2],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of INSIGHT_KEYS as readonly InsightKey[]) {
+    if (!insightChanged(key, draft, profile)) continue
+    const v = draft[key]
+    if (key === 'audience') {
+      const a = draft.audience
+      out.audience =
+        a === undefined || a.buyers.trim() === ''
+          ? null
+          : {
+              buyers: a.buyers.trim(),
+              ...(a.payer === undefined || a.payer.trim() === '' ? {} : { payer: a.payer.trim() }),
+              ...((a.concerns ?? []).length === 0 ? {} : { concerns: a.concerns }),
+            }
+    } else if (key === 'keywords') {
+      const k = draft.keywords
+      out.keywords =
+        k === undefined || k.brand.length + k.category.length + k.scenario.length === 0 ? null : k
+    } else if (key === 'competitors') {
+      out.competitors = (draft.competitors ?? [])
+        .filter((c) => c.name.trim() !== '')
+        .map((c) => ({
+          name: c.name.trim(),
+          reason: c.reason.trim(),
+          ...(c.url === undefined ? {} : { url: c.url }),
+        }))
+    } else out[key] = typeof v === 'string' ? v.trim() : ''
+  }
+  return out
 }

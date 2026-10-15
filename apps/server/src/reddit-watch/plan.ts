@@ -2,7 +2,7 @@
  * WP348（决策 887）：Reddit 巡查配置卡的「怎么查」——出卡前先查、先定方案，人只确认。
  *
  * 查什么（每一步在时间线上留一行）：
- * - **品牌档案**：品牌名、品类、产品；WP346 之后还有关键词、竞品、人群（有就用、没有就跳过）；
+ * - **品牌档案**：品牌名、品类、产品，WP346 的子品类、关键词三组、竞品、人群（有就用、没有就跳过）；
  * - **已连的数据**：插件里登着的 Reddit 号（品牌号**只认它或连接里登记的**，不让 AI 猜）、连接里登记的自家版；
  * - **联网搜索**（限次）：Reddit 上和品牌 / 品类 / 竞品相关的版块，数一数各出现几次；
  * - **问一次模型**：把上面这些整理成五样建议（自家版块、重点版块带频率、关键词、告警词、标签词）。
@@ -89,6 +89,7 @@ export async function researchPatrol(
   const topic =
     facts.subcategory ??
     facts.category ??
+    brief0.category ??
     facts.keywords?.category[0] ??
     brief0.products?.[0]?.slice(0, 40)
   const competitors = facts.competitors ?? []
@@ -185,10 +186,19 @@ export async function researchPatrol(
     ...(brief0.one_liner === undefined && facts.one_liner !== undefined
       ? { one_liner: facts.one_liner }
       : {}),
-    ...(topic === undefined ? {} : { category: topic }),
-    ...(kw === undefined ? {} : { keywords: [...kw.brand, ...kw.category, ...kw.scenario] }),
-    ...(competitors.length === 0 ? {} : { competitors: competitors.map((c) => c.name) }),
-    ...(facts.audience?.buyers === undefined ? {} : { audience: facts.audience.buyers }),
+    // WP346 的档案几格：宿主那份（brief0）已经带上就用它，没有再用通用档案里读到的
+    ...(brief0.category === undefined && topic !== undefined ? { category: topic } : {}),
+    ...(brief0.keywords === undefined && kw !== undefined ? { keywords: kw } : {}),
+    ...(brief0.competitors === undefined && competitors.length > 0
+      ? { competitors: competitors.map((c) => c.name) }
+      : {}),
+    ...(brief0.audience === undefined && facts.audience !== undefined
+      ? {
+          audience: [facts.audience.buyers ?? '', ...(facts.audience.concerns ?? [])]
+            .filter((x) => x !== '')
+            .join('；'),
+        }
+      : {}),
     ...(found.length === 0
       ? {}
       : { found_subs: found.slice(0, 12).map((f) => ({ name: f.name, count: f.count })) }),

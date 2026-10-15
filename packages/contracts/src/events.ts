@@ -398,6 +398,10 @@ export type KnownEventType =
    * payload 只有死信 id、原因、轮数、是不是客户来信——没有正文。
    */
   | 'inbound.dead_letter_gave_up'
+  /** WP345：浏览器插件因为工坊换了新版而自己重载，重载后报上来的新版本（payload：from / to / 扩展 id）。 */
+  | 'extension.updated'
+  /** WP345：插件重载过、还是没换成工坊文件夹里那一版（多半是从别的文件夹加载的；payload：running / wanted）。 */
+  | 'extension.update_failed'
 
 export interface EventLog {
   append<T extends string, P>(

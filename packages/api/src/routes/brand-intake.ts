@@ -85,6 +85,14 @@ export interface BrandIntakePort {
     actor: BrandIntakeActor,
     input: { edits: Record<string, unknown> },
   ): MaybePromise<BrandIntakeRun>
+  /**
+   * WP346（决策 872）：设置页「重新分析一次」之后**逐格采纳**——只把人勾的那几格写进档案，
+   * 其余一格不动（人改过的格子不会被自动覆盖）。`edits` 是采纳时顺手改的值。可选：没装的回 501。
+   */
+  adopt?(
+    actor: BrandIntakeActor,
+    input: { run_id: string; fields: string[]; edits?: Record<string, unknown> },
+  ): MaybePromise<BrandIntakeRun>
   /** 重新分析：带着上一次的结果重跑，**用户改过的格子不动**。 */
   reanalyze(
     actor: BrandIntakeActor,
@@ -138,6 +146,12 @@ const ManualBody = z.object({
         .optional(),
     })
     .refine((e) => Object.values(e).some((v) => v !== undefined), '至少填一格'),
+})
+
+/** WP346：逐格采纳（至少一格）。 */
+const AdoptBody = z.object({
+  fields: z.array(z.string().min(1).max(40)).min(1).max(30),
+  edits: z.record(z.string(), z.unknown()).optional(),
 })
 
 const ReanalyzeBody = z.object({
@@ -271,6 +285,45 @@ export function brandIntakeRoutes(): Route[] {
           c,
           await portOf(deps).confirm(actorOf(c), {
             run_id: param(c, 'id'),
+            ...(input.edits === undefined ? {} : { edits: input.edits }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/brand-intake/runs/:id/adopt',
+        operationId: 'adoptBrandIntake',
+        summary:
+          'WP346：「重新分析一次」后逐格采纳——只把勾选的那几格写进品牌档案（AI 填的标「AI 建议」），其余不动',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        authzBypass: holdsOwnerWrite,
+        params: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '分析 id',
+            schema: { type: 'string' },
+          },
+        ],
+        body: AdoptBody,
+        returns: 'BrandIntakeRun',
+      },
+      async (c, deps) => {
+        const input = await body(c, AdoptBody)
+        const port = portOf(deps)
+        if (port.adopt === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持逐格采纳')
+        return ok(
+          c,
+          await port.adopt(actorOf(c), {
+            run_id: param(c, 'id'),
+            fields: input.fields,
             ...(input.edits === undefined ? {} : { edits: input.edits }),
           }),
         )

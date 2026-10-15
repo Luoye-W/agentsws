@@ -1,3 +1,9 @@
+import type {
+  BrandAudience,
+  BrandCompetitor,
+  BrandInsightField,
+  BrandKeywords,
+} from './brand-insights.js'
 import type { CloudOrgId } from './cloud.js'
 import type { Iso8601, MaybePromise, PersonId, RangeRef, WorkspaceId } from './common.js'
 import type { MarketsSource } from './markets.js'
@@ -509,6 +515,29 @@ export interface WorkspaceProfile {
    * {@link DEFAULT_BRAND_CURRENCY}（读的时候补，不往老档案里回写）。
    */
   currency?: string
+  /*
+   * ── WP346（决策 872）：品牌分析第二版那几格（AI 归纳、人确认；下游四处优先读它们）──────
+   * 没写过就没有。哪几格还是「AI 建议」（人没改、没点过「对」）记在 {@link ai_suggested}。
+   */
+  /** WP346：子品类（比 `category` 细一层）。 */
+  subcategory?: string
+  /** WP346：品牌定位一段（两三句；`one_liner` 照旧是那一句话）。 */
+  positioning?: string
+  /** WP346：价格带（「$20–$80」）。 */
+  price_band?: string
+  /** WP346：目标人群（谁买 / 谁付钱 / 顾虑）。 */
+  audience?: BrandAudience
+  /** WP346：关键词（品牌 / 品类 / 场景三组）。 */
+  keywords?: BrandKeywords
+  /** WP346：主要竞品（各带一句理由）。 */
+  competitors?: BrandCompetitor[]
+  /**
+   * WP346：这几格的值还是 AI 建议的（品牌分析确认时写进来、人还没改过 / 没点过「对」）。
+   * 人在设置页改了或点了「对」就从这里拿掉。下游照样读这些值（比瞎猜强），界面挂「AI 建议」。
+   */
+  ai_suggested?: BrandInsightField[]
+  /** WP346：品牌分析读的那个官网（设置页「重新分析一次」默认用它）。 */
+  website?: string
   /**
    * WP240：建品牌那一刻自动起的那一份（公司级三样的影子 + 建品牌时选的平台），**还没人走过首次设置**。
    * 有它 = 这个品牌仍该进首次设置；走过第 ② 步 / 设置页存过一次就没有了。

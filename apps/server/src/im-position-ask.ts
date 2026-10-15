@@ -15,6 +15,9 @@
 
 import {
   type AnswerComponent,
+  type GenuiNodeLite,
+  type GenuiSpecLite,
+  genuiNodes,
   genuiToText,
   type PositionWorkView,
   splitTaskText,
@@ -99,13 +102,34 @@ export function quickAnswerForIm(
   const lines: string[] = []
   const lead = answer.lead.trim() !== '' ? answer.lead : answer.text
   if (lead.trim() !== '') lines.push(lead.trim())
+  const buttons: GenuiNodeLite[] = []
   // WP336：genui 块在聊天里画不了，压成几行字（数字一行、表格一行一条、超了说共几行）
   for (const c of answer.components as AnswerComponent[])
-    if (c.kind === 'genui')
-      lines.push(genuiToText(c.spec, { style: 'plain', maxRows: IM_TABLE_ROWS }))
+    if (c.kind === 'genui') {
+      const own = genuiNodes(c.spec).filter((n) => n.type === 'button' && n.action !== undefined)
+      buttons.push(...own)
+      const rest = withoutButtons(c.spec)
+      if (rest !== undefined)
+        lines.push(genuiToText(rest, { style: 'plain', maxRows: IM_TABLE_ROWS }))
+    }
   // 保留换行，只按总字数截
   const all = Array.from(lines.join('\n').trim())
-  return all.length <= IM_ANSWER_MAX ? all.join('') : `${all.slice(0, IM_ANSWER_MAX - 1).join('')}…`
+  const text =
+    all.length <= IM_ANSWER_MAX ? all.join('') : `${all.slice(0, IM_ANSWER_MAX - 1).join('')}…`
+  // WP341：「接着问」的按钮留成一段 ```dsh-ui，回出去时由聊天渠道那一层编号（人回编号就当说了那句）
+  return buttons.length === 0
+    ? text
+    : `${text}\n\n\`\`\`dsh-ui\n${JSON.stringify({ items: buttons })}\n\`\`\``
+}
+
+/** 一块 genui 去掉按钮（按钮另外编号）；什么都不剩回 `undefined`。 */
+function withoutButtons(spec: GenuiSpecLite): GenuiSpecLite | undefined {
+  const strip = (items: readonly GenuiNodeLite[]): GenuiNodeLite[] =>
+    items
+      .filter((n) => n.type !== 'button')
+      .map((n) => (Array.isArray(n.items) ? { ...n, items: strip(n.items as GenuiNodeLite[]) } : n))
+  const items = strip(spec.items)
+  return items.length === 0 ? undefined : { ...spec, items }
 }
 
 /**

@@ -71,6 +71,28 @@ import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
+/** WP346：demo 里品牌分析 AI 归纳那一步的写死回复（演示品牌：给露营的人做便携电源与营地灯）。 */
+const DEMO_BRAND_INSIGHTS = {
+  category: '户外电源',
+  subcategory: '露营便携电源',
+  positioning:
+    '给周末露营、自驾出行的人做的便携电源和营地灯：一台能给手机、相机、车载冰箱供电，出门不用再找插座。',
+  price_band: '¥199–¥1,299',
+  audience: {
+    buyers: '25–40 岁、常带家人周末露营或自驾的城市上班族，出发前会认真比容量和重量。',
+    concerns: ['能用多久', '重不重、好不好带', '能不能给车载冰箱供电'],
+  },
+  keywords: {
+    brand: ['诺伏特', 'Trail Power'],
+    category: ['户外电源', '便携储能电源', '露营灯'],
+    scenario: ['露营用电', '自驾游充电', '停电应急'],
+  },
+  competitors: [
+    { name: 'EcoFlow', reason: '同价位最常被拿来比的户外电源牌子' },
+    { name: 'Jackery', reason: '露营圈里口碑最早的便携电源' },
+    { name: 'BLUETTI', reason: '主打大容量、家庭应急' },
+  ],
+}
 /** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
 const DEMO_BANNER_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAoAAAACCAIAAADuA9qHAAAAEUlEQVR4nGPQ78/GgxjwSwMAyvgXNS/YpuQAAAAASUVORK5CYII='
@@ -1478,6 +1500,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       if (body === undefined) return { ok: false, status: 404, text: async () => '' }
       return { ok: true, status: 200, text: async () => body }
     },
+    /*
+     * WP346（决策 872）：品牌分析 AI 归纳那一步在 demo 里是**替身**——回一份写死的归纳（人群 / 关键词 /
+     * 竞品…），不连任何模型。档案卡与设置页那几格、「AI 建议」标、重新分析的对比都演得出来。
+     */
+    brandIntakeModel: async () => ({ text: JSON.stringify(DEMO_BRAND_INSIGHTS) }),
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     /*

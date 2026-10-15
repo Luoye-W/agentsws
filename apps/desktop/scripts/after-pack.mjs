@@ -374,6 +374,26 @@ export function missingWorkstation(resources) {
   return !existsSync(join(resources, WORKSTATION_DIR, 'index.html'))
 }
 
+/**
+ * WP345（决策 871）：随包的浏览器插件（`<resources>/chrome-extension`）。缺了、没有固定 key、版本不是这一包，
+ * 都回一句原因（打包失败）：版本对不上 = 插件是上次构建剩下的，装出去用户的插件就跟不上工坊。
+ */
+export const EXTENSION_DIR = 'chrome-extension'
+
+export function bundledExtensionProblem(resources, appVersion) {
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(join(resources, EXTENSION_DIR, 'manifest.json'), 'utf8'))
+  } catch {
+    return `安装包里没有 ${EXTENSION_DIR}/manifest.json：先构建插件（scripts/dist.mjs 会做）`
+  }
+  if (typeof manifest.key !== 'string' || manifest.key === '')
+    return '随包的插件没有固定 key（apps/extension/src/lib/identity.ts）：id 会跟着路径变，配对会丢'
+  const version = manifest.version_name ?? manifest.version
+  if (version !== appVersion) return `随包的插件版本是 ${String(version)}，这一包是 ${appVersion}`
+  return undefined
+}
+
 /** 必须在包里的两份（`electron-builder.yml` 的 extraResources 带进来）。 */
 export const PROFILE_FILES = ['cordis.patch.yml', 'plugin-allowlist.yml']
 
@@ -743,6 +763,11 @@ export default async function afterPack(context) {
       `安装包里没有 ${WORKSTATION_DIR}/index.html：先 \`pnpm --filter @agentsws/workstation build\``,
     )
   log('工作台产物：在')
+
+  // ⑥bis WP345：随包的浏览器插件（固定 key、版本 = 这一包）
+  const extensionProblem = bundledExtensionProblem(resources, context.packager.appInfo.version)
+  if (extensionProblem !== undefined) throw new Error(extensionProblem)
+  log(`浏览器插件：${context.packager.appInfo.version}`)
 
   // ⑦ WP225：钉版本表（每个平台都要有，放在冒烟之前；冒烟里再用包里服务进程自己的找法验一次）
   const locks = repoLockFiles(REPO_ROOT)

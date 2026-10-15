@@ -17,7 +17,11 @@
  * **抓不到就说抓不到。** Amazon 会对机器人出验证码——出了就如实回
  * "Amazon 挡住了"，不绕、不重试、不编一份数据出来。
  */
-import type { BrandIntakeProduct, BrandIntakeProfile } from '@agentsws/contracts'
+import type {
+  BrandIntakeProduct,
+  BrandIntakeProductSpec,
+  BrandIntakeProfile,
+} from '@agentsws/contracts'
 import { BRAND_INTAKE_MAX_PRODUCTS, type BrandIntakePage } from '@agentsws/contracts'
 import { fetchPage, type PageFetch } from './fetch.js'
 import { field } from './field.js'
@@ -148,6 +152,8 @@ export async function analyzeAmazonListing(
 
   const bullets = featureBullets(html)
   const price = priceOf(html)
+  const listPrice = amazonListPrice(html)
+  const specs = amazonSpecs(html)
   if (title !== undefined && title !== '') {
     const product: BrandIntakeProduct = {
       title: title.slice(0, 200),
@@ -156,6 +162,11 @@ export async function analyzeAmazonListing(
       ...(price === undefined ? {} : { price_snapshot: price }),
       ...(bullets.length === 0 ? {} : { selling_points: bullets }),
       ...(/twister|variationValues/i.test(html) ? { has_variants: true } : {}),
+      // WP346：划线价（List Price / Typical price）与售价分开；规格表
+      ...(listPrice !== undefined && price !== undefined && listPrice !== price
+        ? { list_price_snapshot: listPrice, sale_price_snapshot: price }
+        : {}),
+      ...(specs.length === 0 ? {} : { specs }),
     }
     profile.products = field([product], 'selector', {
       url,
@@ -214,6 +225,56 @@ function priceOf(html: string): string | undefined {
   const symbol = /class=["'][^"']*a-price-symbol[^"']*["'][^>]*>([^<]+)</i.exec(html)?.[1]
   if (whole === undefined) return undefined
   return `${symbol ?? ''}${squash(decodeEntities(whole))}`
+}
+
+/**
+ * WP346：划线价。Amazon 把它放在 `a-text-price`（带 `data-a-strike`）里那个 `a-offscreen`：
+ * 「List Price: $59.99」「Typical price」。没有就是没打折。
+ */
+export function amazonListPrice(html: string): string | undefined {
+  const m =
+    /class=["'][^"']*a-text-price[^"']*["'][^>]*data-a-strike=["']true["'][^>]*>\s*<span[^>]*class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</i.exec(
+      html,
+    ) ??
+    /id=["']listPrice["'][^>]*>([^<]+)</i.exec(html) ??
+    /class=["'][^"']*basisPrice[^"']*["'][\s\S]{0,400}?class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</i.exec(
+      html,
+    )
+  const v = m?.[1] === undefined ? undefined : squash(decodeEntities(m[1]))
+  return v === undefined || v === '' ? undefined : v
+}
+
+/**
+ * WP346：规格。商品概览（`productOverview_feature_div`）与技术参数表（`productDetails_techSpec_*`）
+ * 里的一行行「名 / 值」。最多 12 条。
+ */
+export function amazonSpecs(html: string): BrandIntakeProductSpec[] {
+  const out: BrandIntakeProductSpec[] = []
+  const blocks = [
+    /id=["']productOverview_feature_div["'][\s\S]*?<\/table>/i.exec(html)?.[0],
+    /id=["']productDetails_techSpec_section_1["'][\s\S]*?<\/table>/i.exec(html)?.[0],
+  ]
+  const clean = (s: string): string => squash(decodeEntities(s.replace(/<[^>]*>/g, ' ')))
+  for (const block of blocks) {
+    if (block === undefined) continue
+    for (const row of block.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const cells = [...(row[1] ?? '').matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((c) =>
+        clean(c[1] ?? ''),
+      )
+      const [name, value] = cells
+      if (name === undefined || value === undefined || name === '' || value === '') continue
+      if (out.some((x) => x.name === name)) continue
+      out.push({
+        name: name.slice(0, 40),
+        value: value
+          .replace(/\u200e|&lrm;/g, '')
+          .trim()
+          .slice(0, 80),
+      })
+      if (out.length >= 12) return out
+    }
+  }
+  return out
 }
 
 function breadcrumbCategory(html: string): string | undefined {

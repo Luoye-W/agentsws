@@ -62,6 +62,7 @@ import {
   humanBytes,
 } from './diagnostics.js'
 import { loadAutoUpdater } from './electron-updater-module.js'
+import { bundledExtensionDir, extensionFolder, syncBundledExtension } from './extension-sync.js'
 import {
   cleanupPlan,
   confirmSwitch,
@@ -453,6 +454,24 @@ async function bootstrap(): Promise<void> {
   let boundPort = config.port
   const serverUrl = (): string => runtimeMode.serverUrl ?? `http://127.0.0.1:${boundPort}`
 
+  /*
+   * WP345（决策 871）：安装包里带的浏览器插件放到数据目录下的固定文件夹（变了就整体换，换不成保留旧版）。
+   * 插件自己每分钟问一次「文件夹里是哪一版」，空闲时 reload。远程档不放（插件只连本机，这台电脑上没有服务进程）。
+   */
+  if (!remote) {
+    const synced = await syncBundledExtension({
+      source: bundledExtensionDir(
+        app.isPackaged ? process.resourcesPath : undefined,
+        join(here, '..', '..', 'extension', 'build', 'chrome-mv3'),
+      ),
+      target: extensionFolder(paths.userData),
+      now: () => new Date(),
+    })
+    const line = { ...synced, folder: extensionFolder(paths.userData) }
+    if (synced.status === 'failed') logger.warn('浏览器插件文件夹没换成新版（旧版留着）', line)
+    else logger.info('浏览器插件文件夹', line)
+  }
+
   // ── OpenConnector runtime 的地址。
   //     `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程
   //     拖进主进程的启动路径。WP111：**打包之后一定给一个值**——不给，服务进程会走
@@ -514,6 +533,8 @@ async function bootstrap(): Promise<void> {
         ...(profileDir === undefined ? {} : { profileDir }),
         // WP218：工作台产物（以前安装包里没有，装好打开是 404）
         ...(staticDir === undefined ? {} : { staticDir }),
+        // WP345：浏览器插件的固定文件夹（远程档没有：插件只连本机）
+        ...(remote ? {} : { extensionDir: extensionFolder(paths.userData) }),
         // WP218：不继承 Electron 的工作目录（Windows 开机自启时是 C:\Windows\System32）
         cwd: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,

@@ -24,6 +24,7 @@ import { Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdsActionsPanel } from '@/components/connections/ads-actions'
+import { ExtensionInstall } from '@/components/connections/extension-install'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -31,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   createExtensionPairing,
   type ExtensionTokenView,
+  getExtensionInstall,
   listExtensionTokens,
   revokeExtensionToken,
 } from '@/lib/api'
@@ -107,6 +109,14 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
   })
 
   const rows = tokens.data?.tokens ?? []
+  // WP345：已配上的插件各自正在跑哪一版（插件自己每分钟报一次；老本机服务没有这一条就不显示）
+  const install = useQuery({
+    queryKey: ['extension-install', props.assignment],
+    queryFn: () => getExtensionInstall(props.assignment),
+    retry: false,
+  })
+  const versionOf = (tokenId: string): string | undefined =>
+    install.data?.running.find((r) => r.token_id === tokenId)?.version
 
   return (
     <section className="flex flex-col gap-2" data-testid="extension-section">
@@ -137,6 +147,12 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
           </Link>
         </p>
       ) : null}
+
+      {/* WP345：插件随工坊带着——第一次装（一句 + 两个按钮 + 三步小字）；没跟上新版时照实说一句 */}
+      <ExtensionInstall
+        assignment={props.assignment}
+        paired={rows.some((r) => r.revoked_at === undefined)}
+      />
 
       <div className="rounded-2xl bg-card p-4 shadow-[var(--ws-shadow)]">
         {pairing === undefined ? (
@@ -209,6 +225,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
             <TokenRow
               key={row.id}
               token={row}
+              version={versionOf(row.id)}
               busy={revoke.isPending && revoke.variables === row.id}
               onRevoke={() => {
                 if (!globalThis.confirm(t('extension.revoke.confirm'))) return
@@ -230,6 +247,8 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
 
 function TokenRow(props: {
   token: ExtensionTokenView
+  /** WP345：插件自己报的正在跑的版本。 */
+  version?: string | undefined
   busy: boolean
   onRevoke: () => void
 }): React.ReactNode {
@@ -255,6 +274,9 @@ function TokenRow(props: {
                 when: whenText(props.token.revoked_at, lang, never),
               })
             : ''}
+          {props.version === undefined || revoked
+            ? ''
+            : ` · ${t('extinstall.version', { version: props.version })}`}
         </div>
       </div>
       {revoked ? null : (

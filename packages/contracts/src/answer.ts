@@ -7,6 +7,7 @@
  * 模型不吐 HTML；给模型的规矩见 `genui.ts` 的 `QUICK_ANSWER_RULE` / `GENUI_DISPLAY_RULE`。
  */
 import { filterGenuiSpec, GENUI_FENCE, type GenuiNodeLite, type GenuiSpecLite } from './genui.js'
+import { genuiNodes } from './genui-reply.js'
 
 /** 一段字（一句话之外还有要说的）。 */
 export interface AnswerText {
@@ -76,6 +77,11 @@ export interface GenuiTextOptions {
   style?: 'markdown' | 'plain'
   /** `plain` 时每张表最多列几行（多了写「共 N 行」）。 */
   maxRows?: number
+  /**
+   * WP341：聊天软件里按钮 / 单个选择题画成**编号选项**——编号接着这个数组往后排，选项那句话（人回这个编号时
+   * 当作他说的话）推进来。不给就从 1 编、不收。
+   */
+  choices?: string[]
 }
 
 /**
@@ -96,8 +102,26 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
   const lines = (xs: string[]): void => {
     if (xs.length > 0) blocks.push(xs.join('\n'))
   }
+  const choices = options.choices ?? []
+  /** 有提交按钮的一块是一张表：格子画成「要回答的问题」，不编号。 */
+  const form = JSON.stringify(spec.items).includes('"type":"submit"')
+  let questions = 0
+  let lastButton = -1
+  const asked = new Set<string>()
+  const choice = (label: string, said: string = label): string => {
+    choices.push(said)
+    return `${String(choices.length)}. ${label}`
+  }
+  const ask = (q: string): string => {
+    questions += 1
+    return `${String(questions)}）${q}`
+  }
+  const kids = (x: unknown): void => {
+    for (const c of (x as GenuiNodeLite[] | undefined) ?? []) walk(c)
+  }
   const walk = (n: GenuiNodeLite): void => {
     if (n.type !== 'stat') flush()
+    if (more(n)) return
     switch (n.type) {
       case 'card':
       case 'grid':
@@ -183,6 +207,133 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
         return
     }
   }
+  /** WP341 放开的那些组件：交互的画成编号选项 / 要回答的问题，媒体与图形给一句去处。认得回 `true`。 */
+  function more(n: GenuiNodeLite): boolean {
+    const label = textOf(n.label)
+    switch (n.type) {
+      case 'row':
+      case 'col':
+        kids(n.items)
+        return true
+      case 'tabs':
+      case 'accordion':
+        for (const t of ((n.type === 'tabs' ? n.tabs : n.items) as unknown[] | undefined) ?? []) {
+          const r = recordOf(t)
+          const head = textOf(r.label) || textOf(r.title)
+          if (head !== '') blocks.push(md ? `**${head}**` : head)
+          kids(r.items)
+        }
+        return true
+      case 'hero':
+        blocks.push(
+          [textOf(n.title), textOf(n.value), textOf(n.subtitle)].filter((t) => t !== '').join(' '),
+        )
+        return true
+      case 'button': {
+        if (n.action === undefined) return true
+        // 人回这个编号 = 他说了按钮上那句（`say:一句话` 就是那句话）
+        const action = textOf(n.action)
+        const said = action.startsWith('say:') ? action.slice(4) : label
+        const line = md ? `- ${label}` : choice(label, said)
+        // 挨着的几个按钮排成一组（一行一个）
+        if (lastButton === blocks.length && blocks.length > 0)
+          blocks[blocks.length - 1] += `\n${line}`
+        else blocks.push(line)
+        lastButton = blocks.length
+        return true
+      }
+      case 'radio':
+      case 'select': {
+        const opts = ((n.options as unknown[] | undefined) ?? []).map(textOf)
+        if (form || md)
+          blocks.push(
+            form ? ask(`${label}（${opts.join(' / ')}）`) : `${label}：${opts.join(' / ')}`,
+          )
+        else
+          lines([
+            ...(label === '' ? [] : [label]),
+            ...opts.map((o) => choice(o, label === '' ? o : `${label}：${o}`)),
+          ])
+        return true
+      }
+      case 'quiz': {
+        const q = textOf(n.question)
+        const opts = ((n.options as unknown[] | undefined) ?? []).map((o) =>
+          textOf(recordOf(o).label),
+        )
+        lines([q, ...opts.map((o) => (md ? `- ${o}` : choice(o, `${q}：${o}`)))])
+        return true
+      }
+      case 'input':
+      case 'textarea':
+      case 'slider':
+        if (form) blocks.push(ask(label || textOf(n.placeholder) || textOf(n.id)))
+        return true
+      case 'checkbox':
+      case 'switch': {
+        const group = textOf(n.group)
+        if (form && group !== '') {
+          // 多选组：整组一个问题（只在第一次遇到时出）
+          if (asked.has(group)) return true
+          asked.add(group)
+          const opts = genuiNodes(spec)
+            .filter((x) => x.type === 'checkbox' && x.group === group)
+            .map((x) => textOf(x.label))
+          blocks.push(ask(`${group}（${opts.join(' / ')}，可多选）`))
+          return true
+        }
+        if (form) blocks.push(ask(`${label}（是 / 否）`))
+        else if (n.action !== undefined && !md) blocks.push(choice(label, `选「${label}」`))
+        return true
+      }
+      case 'submit':
+        if (!md) blocks.push('按顺序回答就行，比如「1）… 2）…」。')
+        return true
+      case 'ws-secret':
+        blocks.push(`${label}：请到工坊里填（口令不在聊天里发）`)
+        return true
+      case 'link': {
+        const href = textOf(n.href)
+        blocks.push(href === '' ? label : md ? `[${label}](${href})` : `${label}：${href}`)
+        return true
+      }
+      case 'image':
+      case 'audio':
+      case 'video':
+      case 'ws-media': {
+        const alt = textOf(n.alt)
+        blocks.push(`${alt === '' ? '' : `${alt}：`}${textOf(n.src)}`)
+        return true
+      }
+      case 'code':
+        blocks.push(md ? `\`\`\`\n${textOf(n.code)}\n\`\`\`` : textOf(n.code))
+        return true
+      case 'copy':
+        blocks.push(textOf(n.text))
+        return true
+      case 'avatar':
+        blocks.push(textOf(n.name))
+        return true
+      case 'breadcrumb':
+        blocks.push(((n.items as unknown[] | undefined) ?? []).map(textOf).join(' / '))
+        return true
+      case 'svg':
+      case 'mermaid':
+      case 'scene3d':
+      case 'plot':
+      case 'diagram':
+        blocks.push(`（${textOf(n.title) || '图'}，在工坊里看）`)
+        return true
+      case 'divider':
+      case 'spacer':
+      case 'json':
+      case 'diff':
+      case 'file-tree':
+        return true
+      default:
+        return false
+    }
+  }
   if (spec.title !== undefined) blocks.push(md ? `**${spec.title}**` : spec.title)
   for (const n of spec.items) walk(n)
   flush()
@@ -195,20 +346,41 @@ const GENUI_FENCE_RE = /```[ \t]*dsh-ui[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?```/giu
 /**
  * 一段话里的 ```dsh-ui 都换成几行字（{@link genuiToText} 的 `plain`；坏的整段去掉）。发到聊天软件
  * （飞书 / 钉钉 / 企业微信 / 个人微信）这类画不了组件的地方前过一遍，不让 JSON 原样出去。
+ * WP341：按钮 / 单个选择题成编号选项（`choices[i]` 是人回 `i+1` 时当作他说的那句话），表单成要回答的问题。
  */
-export function genuiFencesToText(raw: string): string {
-  if (!raw.includes(`\`\`\`${GENUI_FENCE}`)) return raw
-  return raw
+export function genuiFencesToIm(raw: string): { text: string; choices: string[] } {
+  const choices: string[] = []
+  if (!raw.includes(`\`\`\`${GENUI_FENCE}`)) return { text: raw, choices }
+  const text = raw
     .replace(GENUI_FENCE_RE, (_m, body: string) => {
       try {
         const { spec } = filterGenuiSpec(JSON.parse(body))
-        return spec === undefined ? '' : genuiToText(spec, { style: 'plain' })
+        return spec === undefined ? '' : genuiToText(spec, { style: 'plain', choices })
       } catch {
         return ''
       }
     })
     .replace(/\n{3,}/gu, '\n\n')
     .trim()
+  return {
+    text: choices.length === 0 ? text : `${text}\n\n回编号就行。`,
+    choices,
+  }
+}
+
+/** 只要字（不管编号选项对应的话）。 */
+export function genuiFencesToText(raw: string): string {
+  return genuiFencesToIm(raw).text
+}
+
+/**
+ * WP341：人在聊天软件里回了一个编号（「2」「2.」「选2」「第2个」）→ 当时那条回复里第几个选项那句话；
+ * 不是编号 / 超了范围回 `undefined`（照原话处理）。
+ */
+export function pickImChoice(reply: string, choices: readonly string[]): string | undefined {
+  const m = /^\s*(?:选|第)?\s*(\d{1,2})\s*(?:个|号|项)?\s*[.。、)）]?\s*$/u.exec(reply)
+  if (m?.[1] === undefined) return undefined
+  return choices[Number(m[1]) - 1]
 }
 
 export interface SplitAnswer {

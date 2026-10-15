@@ -137,6 +137,7 @@ jobs:
           node scripts/preinstall-smoke.mjs --json win-smoke/preinstall-smoke.json | tee win-smoke/preinstall-smoke.md
 
       # 更新源写进安装包的 app-update.yml：generic → $DOWNLOAD_BASE/<渠道>（scripts/dist.mjs 按变量算）
+      # WP345：scripts/dist.mjs 先按这一包的版本号构建浏览器插件（随安装包带、跟着工坊更新；afterPack 查版本与固定 key）
       - name: electron-builder（只打包，不上传）
         shell: bash
         env:

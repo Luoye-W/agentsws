@@ -63,19 +63,11 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
     ])
   })
 
-  it('红线：按钮 / 表单 / 图片 / 音视频 / 链接 / svg / mermaid / 3D 一律丢，卡片里的也丢', () => {
+  it('WP341 起放开：按钮 / 表单 / 媒体 / 链接留下；坏 svg、空 3D、坏链接、自定义配色仍不过', () => {
     const { spec, dropped } = filterGenuiSpec({
       items: [
-        { type: 'button', label: '立即下单', action: 'buy' },
-        { type: 'input', id: 'q', placeholder: '输入' },
-        { type: 'image', src: 'https://evil.example/x.png' },
-        { type: 'video', src: 'https://evil.example/x.mp4' },
-        { type: 'audio', src: 'https://evil.example/x.mp3' },
-        { type: 'link', label: '点这里', href: 'https://evil.example' },
         { type: 'svg', content: '<svg onload="x()"/>' },
-        { type: 'mermaid', source: 'graph TD; A-->B' },
         { type: 'scene3d', meshes: [] },
-        { type: 'submit', label: '提交', action: 'go' },
         {
           type: 'card',
           title: '本周',
@@ -83,30 +75,33 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
           items: [
             {
               type: 'text',
-              content: '看 [这里](https://evil.example) 和 [那里](javascript:alert(1))',
+              content: '看 [这里](https://a.example) 和 [那里](javascript:alert(1))',
             },
             { type: 'button', label: '买', action: 'buy' },
           ],
         },
       ],
     })
-    expect(dropped).toEqual(
-      expect.arrayContaining(['button', 'input', 'image', 'video', 'audio', 'link', 'svg']),
-    )
-    expect(dropped).toEqual(expect.arrayContaining(['mermaid', 'scene3d', 'submit']))
+    expect(dropped).toEqual(['svg', 'scene3d'])
     expect(spec?.items).toEqual([
-      { type: 'card', title: '本周', items: [{ type: 'text', content: '看 这里 和 那里' }] },
+      {
+        type: 'card',
+        title: '本周',
+        items: [
+          { type: 'text', content: '看 [这里](https://a.example) 和 那里' },
+          { type: 'button', label: '买', action: 'say' },
+        ],
+      },
     ])
     expect(
       filterGenuiSpec({ type: 'text', content: '[[套](https://a.example)](https://b.example)' })
         .spec?.items[0]?.content,
-    ).toBe('套')
+    ).toBe('[套](https://a.example)')
     const json = JSON.stringify(spec)
-    for (const bad of ['http', 'javascript', 'action', 'accent', '#ff0000', 'src'])
-      expect(json).not.toContain(bad)
+    for (const bad of ['javascript', 'accent', '#ff0000']) expect(json).not.toContain(bad)
   })
 
-  it('去掉 action、过滤 / 排序 / 导出 / 展开行、自定义配色；echart 只认四种预设、不收 option', () => {
+  it('表格过滤 / 排序 / 导出 / 展开行放开；自定义配色去掉；echart 只认预设、不收 option', () => {
     const { spec, dropped } = filterGenuiSpec({
       items: [
         {
@@ -116,7 +111,7 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
           filter: 'q',
           sortField: 's',
           export: true,
-          details: [[{ type: 'button', label: 'x' }]],
+          details: [[{ type: 'text', content: '明细' }]],
           action: 'open',
         },
         {
@@ -131,13 +126,21 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
           data: [{ label: '访问', value: 100 }],
           palette: ['#f00'],
         },
-        { type: 'echart', preset: 'radar', data: [{ label: 'A', value: 1 }] },
+        { type: 'echart', preset: 'sankey', data: [{ label: 'A', value: 1 }] },
         { type: 'echart', option: { series: [{ type: 'custom' }] } },
         { type: 'badge', label: '新', tone: 'accent', icon: 'https://evil.example/i.png' },
       ],
     })
     expect(spec?.items).toEqual([
-      { type: 'table', columns: ['商品'], rows: [['耳机']] },
+      {
+        type: 'table',
+        columns: ['商品'],
+        rows: [['耳机']],
+        export: true,
+        filter: 'q',
+        sortField: 's',
+        details: [[{ type: 'text', content: '明细' }]],
+      },
       { type: 'chart', data: [{ label: 'A', value: 1 }], kind: 'bars' },
       { type: 'echart', preset: 'funnel', data: [{ label: '访问', value: 100 }] },
       { type: 'badge', label: '新', tone: 'accent' },
@@ -163,7 +166,7 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
     expect(bad.components).toEqual([])
   })
 
-  it('上限：表格 50 行 8 列、最多 4 层、最多 60 个节点', () => {
+  it('上限：表格 50 行 8 列、层数与节点数有上限', () => {
     const rows = Array.from({ length: 80 }, (_, i) => Array.from({ length: 12 }, (_, j) => i * j))
     const table = filterGenuiSpec({
       items: [{ type: 'table', columns: Array.from({ length: 12 }, (_, i) => `c${i}`), rows }],
@@ -173,7 +176,7 @@ describe('WP336 ```dsh-ui 取出与过滤', () => {
     let deep: unknown = { type: 'text', content: '底' }
     for (let i = 0; i < 6; i += 1) deep = { type: 'card', items: [deep] }
     expect(filterGenuiSpec({ items: [deep] }).spec).toBe(undefined)
-    const many = Array.from({ length: 100 }, (_, i) => ({ type: 'text', content: `${i}` }))
+    const many = Array.from({ length: 200 }, (_, i) => ({ type: 'text', content: `${i}` }))
     expect(filterGenuiSpec({ items: many }).spec?.items).toHaveLength(GENUI_LIMITS.nodes)
   })
 
@@ -226,7 +229,7 @@ describe('WP336 扩大范围：所有对话运行 + 画不了组件的地方', (
   it('所有对话运行那段精简版：教 ```dsh-ui、说清对外内容不用', () => {
     expect(GENUI_DISPLAY_RULE).toContain('```dsh-ui')
     expect(GENUI_DISPLAY_RULE).toContain('对外内容')
-    expect(GENUI_DISPLAY_RULE.split('\n').length).toBeLessThanOrEqual(6)
+    expect(GENUI_DISPLAY_RULE.split('\n').length).toBeLessThanOrEqual(10)
     const example = /```dsh-ui\n(.*)\n```/u.exec(GENUI_DISPLAY_RULE)?.[1] ?? ''
     expect(filterGenuiSpec(JSON.parse(example)).dropped).toEqual([])
   })

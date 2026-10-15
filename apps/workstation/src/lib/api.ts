@@ -23,6 +23,9 @@ import type {
   CloudAllocationView,
   CloudMyAllocationView,
   DailyPlan,
+  GenuiImageHostsView,
+  GenuiToolInput,
+  GenuiToolOutcome,
   Goal,
   GoalProgress,
   MarketsSource,
@@ -1007,6 +1010,17 @@ export const postMatterMessage = (
   text: string,
 ): Promise<{ event: MatterEvent; run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/messages`, { method: 'POST', body: { text } })
+
+/** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
+export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/genui-tool`, { method: 'POST', body: input })
+
+/** WP341 追加（849）：外部图片白名单（品牌级）——人加的 + 已连店铺的域名。 */
+export const getImageHosts = (): Promise<GenuiImageHostsView> => api('/v1/settings/image-hosts')
+export const addImageHost = (host: string): Promise<GenuiImageHostsView> =>
+  api('/v1/settings/image-hosts', { method: 'POST', body: { host } })
+export const removeImageHost = (host: string): Promise<GenuiImageHostsView> =>
+  api(`/v1/settings/image-hosts/${encodeURIComponent(host)}`, { method: 'DELETE' })
 
 export const closeMatter = (
   id: string,
@@ -3694,6 +3708,17 @@ export interface WorkspaceProfileView {
   currency?: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
   category?: string
+  /** WP346（决策 872）：第二版那几格（没写过就没有）。 */
+  subcategory?: string
+  positioning?: string
+  price_band?: string
+  audience?: import('@agentsws/contracts').BrandAudience
+  keywords?: import('@agentsws/contracts').BrandKeywords
+  competitors?: import('@agentsws/contracts').BrandCompetitor[]
+  /** WP346：品牌分析读的那个官网（「重新分析一次」默认用它）。 */
+  website?: string
+  /** WP346：哪几格还是 AI 建议（人没改、没点过「对」）。 */
+  ai_suggested?: import('@agentsws/contracts').BrandInsightField[]
   set_at: string
 }
 
@@ -3898,6 +3923,15 @@ export const setWorkspaceProfile = (
     currency?: string
     /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
     category?: string
+    /** WP346（决策 872）：第二版那几格（不给 = 不改；空串 / null / 空数组 = 清空）。 */
+    subcategory?: string
+    positioning?: string
+    price_band?: string
+    audience?: import('@agentsws/contracts').BrandAudience | null
+    keywords?: import('@agentsws/contracts').BrandKeywords | null
+    competitors?: import('@agentsws/contracts').BrandCompetitor[]
+    /** WP346：人点了「对」的那几格（值不变，只拿掉「AI 建议」标）。 */
+    confirm_fields?: import('@agentsws/contracts').BrandInsightField[]
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
@@ -6376,6 +6410,22 @@ export const manualBrandIntake = (
     ...withAssignment(assignment),
   })
 
+/**
+ * WP346（决策 872）：设置页「重新分析一次」之后逐格采纳——只把勾的那几格写进品牌档案。
+ * `edits` 是采纳时顺手改的值（算人给的，不挂「AI 建议」）。
+ */
+export const adoptBrandIntake = (
+  id: string,
+  fields: string[],
+  edits?: Record<string, unknown>,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/adopt`, {
+    method: 'POST',
+    body: { fields, ...(edits === undefined ? {} : { edits }) },
+    ...withAssignment(assignment),
+  })
+
 /** 重新分析（改了网址或换了新品时用）：**用户手改过的格子整格不动**。 */
 export const reanalyzeBrandIntake = (
   id: string,
@@ -6446,6 +6496,44 @@ export const revokeExtensionToken = (
   api<ExtensionTokenView>(`/v1/extension/tokens/${encodeURIComponent(id)}/revoke`, {
     method: 'POST',
     body: {},
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP345（决策 871）：插件随工坊安装与更新——固定文件夹在哪、里面是哪一版、上次换成没有、
+ * 已配上的插件正在跑哪一版。所有者的事，带所有者那条 Assignment。老本机服务没有这条（501）：卡上就不出「装」那一块。
+ */
+export interface ExtensionInstallView {
+  folder?: string
+  folder_version?: string
+  bundled_version?: string
+  sync?: {
+    status: 'installed' | 'updated' | 'unchanged' | 'failed' | 'no_bundle'
+    at: string
+    error?: string
+  }
+  running: {
+    token_id: string
+    extension_id: string
+    version: string
+    at: string
+    /** 重载过还是没换成：想换成的那一版。 */
+    stuck_on?: string
+  }[]
+  can_open: boolean
+}
+
+export const getExtensionInstall = (assignment?: string): Promise<ExtensionInstallView> =>
+  api<ExtensionInstallView>('/v1/extension/install', withAssignment(assignment))
+
+/** 让本机打开插件文件夹 / Chrome 扩展页（网页自己打不开 `chrome://`，也摸不到本机文件夹）。 */
+export const openExtensionInstall = (
+  target: 'folder' | 'chrome',
+  assignment?: string,
+): Promise<{ opened: boolean; message?: string; address?: string }> =>
+  api<{ opened: boolean; message?: string; address?: string }>('/v1/extension/install/open', {
+    method: 'POST',
+    body: { target },
     ...withAssignment(assignment),
   })
 

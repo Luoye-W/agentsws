@@ -60,7 +60,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { genuiFencesToText } from '@agentsws/contracts'
+import { genuiFencesToIm, pickImChoice } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { ImInboundPipeline } from './channels.js'
 import { type ImAskPick, imAskTarget } from './im-ask-route.js'
@@ -557,14 +557,40 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
    * 没人推的队列，一个字没回、事件库里也一条都没有。现在认得出是谁的一句话，
    * 答不上来也回一句人话、记一条 `im.ask_failed`（只有原因码）；重问一次比卡在队列里强。
    */
+  /**
+   * WP341（决策 847）：聊天软件里按钮 / 单个选择题画成编号选项——记下这一会话最近那条回复的选项（只在内存、
+   * 30 分钟），人回一个编号就当他说了那个选项那句话。表单成要回答的问题，人照原话回。
+   */
+  const imChoices = new Map<string, { choices: string[]; at: number }>()
+  const CHOICE_TTL_MS = 30 * 60 * 1000
+  const outText = (key: string, text: string): string => {
+    const im = genuiFencesToIm(text)
+    if (im.choices.length > 0) {
+      imChoices.delete(key)
+      imChoices.set(key, { choices: im.choices, at: Date.parse(options.clock.now()) })
+      if (imChoices.size > 1000) imChoices.delete(imChoices.keys().next().value ?? '')
+    }
+    return im.text
+  }
+  const inText = (key: string, question: string): string => {
+    const hit = imChoices.get(key)
+    if (hit === undefined || Date.parse(options.clock.now()) - hit.at > CHOICE_TTL_MS)
+      return question
+    const picked = pickImChoice(question, hit.choices)
+    if (picked === undefined) return question
+    imChoices.delete(key)
+    return picked
+  }
+
   const answerInbound = async (event: InboundEvent): Promise<void> => {
-    const question = unfence(
+    const raw = unfence(
       event.parts
         .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
         .map((p) => p.text)
         .join('\n'),
     )
     const external = event.actor?.external_id ?? ''
+    const question = inText(`${event.channel}:${external}`, raw)
 
     // 三条团队渠道：认人（或当场绑定）→ 按提问人身份问他自己的代理 → 回原会话
     if (
@@ -593,7 +619,8 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     if (person_id === undefined || adapter === undefined) return
     emit('im.received', { channel: 'wechat', person_id, chars: question.length })
     // WP336：聊天软件画不了组件，```dsh-ui 先换成几行字
-    const reply = async (text: string) => adapter.sendText(external, genuiFencesToText(text))
+    const reply = async (text: string) =>
+      adapter.sendText(external, outText(`${event.channel}:${external}`, text))
     try {
       await askAndReply('wechat', person_id, question, reply, false)
     } catch (e) {
@@ -617,6 +644,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
   /** 这条入站属于哪条团队渠道、怎么回（回复都按入站的去重键找回原消息）。 */
   const teamReplier = (event: InboundEvent): TeamReplier | undefined => {
+    const key = `${event.channel}:${event.actor?.external_id ?? ''}`
     if (event.channel === WECOM_BOT_CHANNEL) {
       const adapter = wecom
       return adapter === undefined
@@ -624,7 +652,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'wecom',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, outText(key, text), opts),
           }
     }
     if (event.channel === 'feishu') {
@@ -634,7 +662,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'feishu',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, outText(key, text), opts),
           }
     }
     if (event.channel === 'dingtalk') {
@@ -644,7 +672,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'dingtalk',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, outText(key, text), opts),
           }
     }
     return undefined

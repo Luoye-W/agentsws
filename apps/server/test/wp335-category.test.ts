@@ -80,7 +80,7 @@ describe('WP335 品类：品牌分析时 AI 填', () => {
     expect(f.written[0]?.category?.value).toBe('leather goods')
   })
 
-  it('没接模型 / 模型答不像样：品类空着（人自己填）；人改过的重新分析也不问模型', async () => {
+  it('没接模型 / 模型答不像样：品类空着（人自己填）；人改过的重新分析也不覆盖', async () => {
     const none = intake(undefined)
     const a = await none.port.start(ACTOR, { urls: [`${SHOP}/`] })
     await none.settle()
@@ -101,7 +101,8 @@ describe('WP335 品类：品牌分析时 AI 填', () => {
       value: '钱包',
       edited: true,
     })
-    expect(f.prompts).toHaveLength(1)
+    // WP346：重新分析会再问一次模型（人群 / 关键词那几格要重归纳），但人改过的品类整格不动
+    expect(f.prompts).toHaveLength(2)
   })
 })
 

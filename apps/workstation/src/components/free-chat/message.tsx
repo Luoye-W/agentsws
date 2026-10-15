@@ -8,6 +8,7 @@
  * WP343：「交给岗位去做」按钮去掉了——交代事情直接跟助理说（它交给岗位，回复下面一行「已交给 X」）；
  * 交出去的事回来报的那一句画成 {@link ReportNote}；用户那句 `@` 给谁的，气泡上方一个小标。
  */
+import { splitGenuiReply } from '@agentsws/contracts'
 import { AtSign, Check, Copy, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { DispatchLine, ReportNote } from '@/components/free-chat/assistant-bits'
@@ -46,7 +47,8 @@ export function UserBubble({ message }: { message: FreeChatMessage }): React.Rea
         )}
         {message.text === '' ? null : (
           <p className="rounded-2xl bg-ws-tint px-3.5 py-2 text-[14px] whitespace-pre-wrap text-foreground">
-            {message.text}
+            {/* WP341：表单交上来的那句只显示摘要（数据段是给 AI 的） */}
+            {splitGenuiReply(message.text).text}
           </p>
         )}
       </div>

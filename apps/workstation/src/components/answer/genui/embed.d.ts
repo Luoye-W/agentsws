@@ -6,7 +6,7 @@
  * 打包（vite）照常用它的源码。签名对照 0.12.0 的 `src/client/{GenuiBlock,guard,blocks/state}.ts`。
  */
 declare module '@changfenhuang/dsh-genui/embed' {
-  import type { ComponentType } from 'react'
+  import type { ComponentType, Context } from 'react'
 
   /** 渲染层认的描述（这里只当不透明对象传；内容由契约 `filterGenuiSpec` 过滤过）。 */
   export interface GenuiSpec {
@@ -30,6 +30,10 @@ declare module '@changfenhuang/dsh-genui/embed' {
 
   export const GenuiBlock: ComponentType<GenuiBlockProps>
 
+  /** WP341：宿主给的动作处理器（插件只把动作名 + 收集到的数据交出来，自己不发请求）。 */
+  export type GenuiActionHandler = (action: string, payload: Record<string, unknown>) => void
+  export const GenuiActionContext: Context<GenuiActionHandler | undefined>
+
   export interface GenuiProcessResult {
     spec: GenuiSpec | null
     errors: string[]
@@ -39,3 +43,7 @@ declare module '@changfenhuang/dsh-genui/embed' {
   export function processGenuiSpec(value: unknown): GenuiProcessResult
   export function isRenderableProcess(processed: GenuiProcessResult): boolean
 }
+
+/** WP341：插件包里预先打好的两个引擎（vite.config.ts 的 `genuiShims` 解析到 `lib/assets/*.js`）。 */
+declare module 'genui-engine:mermaid' {}
+declare module 'genui-engine:three' {}

@@ -16,6 +16,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { Archive, CircleCheck } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
@@ -597,269 +598,299 @@ export function MatterPage(): ReactNode {
     }
   }
 
+  /**
+   * WP341（决策 847）：回话里的按钮 / 表单点了、交了 = 在这里说了一句（正在跑就排在后面）；工具按钮走工具执行器，
+   * 出的卡挂进这条时间线（下面就地批，卡片流里同一张）。事项关了就只看不点。
+   */
+  const genuiHost = {
+    ...(closed
+      ? {}
+      : {
+          say: (value: string) => {
+            if (running) setQueued(value)
+            else say.mutate(value)
+          },
+        }),
+    matterId: id,
+    onToolDone: () => {
+      invalidate()
+      void client.invalidateQueries({ queryKey: ['approval'] })
+      void client.invalidateQueries({ queryKey: ['deck'] })
+      void client.invalidateQueries({ queryKey: RAIL_KEY })
+    },
+  }
+
   return (
-    <div
-      className="mx-auto flex min-h-full w-full max-w-[760px] flex-col"
-      data-testid="matter"
-      data-matter={view.matter.id}
-    >
-      <MatterHeader
-        title={view.matter.title}
-        roleId={roleId}
-        roleName={roleId === undefined ? undefined : roleNameOf(roleId)}
-        duties={duties}
-        rerouting={reroute.isPending}
-        onReroute={(role_id) => {
-          reroute.mutate(role_id)
-        }}
-        state={state}
-        people={view.participant_labels}
-        lastActivity={lastActivity}
-        todos={view.todos}
-        onCheckTodo={(todoId) => {
-          check.mutate(todoId)
-        }}
-        pinned={view.pinned_labels.map((p) => ({
-          key: `${p.ref.type}:${p.ref.id}`,
-          label: p.label,
-        }))}
-        canArchive={!closed && view.matter.archived_at === undefined}
-        archiveWhy={blockedArchive}
-        onArchive={() => {
-          archive.mutate()
-        }}
-        canClose={!closed}
-        onClose={() => {
-          const unfinished = view.todos.some((x) => x.status !== 'done' && x.status !== 'dropped')
-          if (unfinished) setClosing(true)
-          else close.mutate('keep')
-        }}
-        onRetitle={(title) => {
-          retitle.mutate(title)
-        }}
-        onHandOff={
-          canHandOff
-            ? () => {
-                setHandingOff(true)
-              }
-            : undefined
-        }
-        /*
-         * WP287：岗位里问的一句是一段会话（不进「工作」）；要接着跟进就转成任务。
-         * WP288：会话页头不出状态与职责；「转成任务」在「⋯」里（不再单独一排「会话 · 转成任务」）。
-         */
-        ask={view.matter.ask !== undefined}
-        onPromote={
-          view.matter.ask === undefined
-            ? undefined
-            : () => {
-                promote.mutate()
-              }
-        }
-        promoting={promote.isPending}
-      />
-      {/* WP276：等 Y 接 · 撤回 / X 想把这件事交给你 · 接下 · 不接（一个人用时没有） */}
-      {mode === 'solo' ? null : <MatterHandoffBar matterId={view.matter.id} me={me} />}
-      {canHandOff ? (
-        <HandoffDialog
-          kind="matter"
-          id={view.matter.id}
+    <GenuiHostProvider value={genuiHost}>
+      <div
+        className="mx-auto flex min-h-full w-full max-w-[760px] flex-col"
+        data-testid="matter"
+        data-matter={view.matter.id}
+      >
+        <MatterHeader
           title={view.matter.title}
-          open={handingOff}
-          onOpenChange={(open) => {
-            setHandingOff(open)
-            if (!open && search.get('handoff') !== null) {
-              const next = new URLSearchParams(search)
-              next.delete('handoff')
-              setSearch(next, { replace: true })
-            }
+          roleId={roleId}
+          roleName={roleId === undefined ? undefined : roleNameOf(roleId)}
+          duties={duties}
+          rerouting={reroute.isPending}
+          onReroute={(role_id) => {
+            reroute.mutate(role_id)
+          }}
+          state={state}
+          people={view.participant_labels}
+          lastActivity={lastActivity}
+          todos={view.todos}
+          onCheckTodo={(todoId) => {
+            check.mutate(todoId)
+          }}
+          pinned={view.pinned_labels.map((p) => ({
+            key: `${p.ref.type}:${p.ref.id}`,
+            label: p.label,
+          }))}
+          canArchive={!closed && view.matter.archived_at === undefined}
+          archiveWhy={blockedArchive}
+          onArchive={() => {
+            archive.mutate()
+          }}
+          canClose={!closed}
+          onClose={() => {
+            const unfinished = view.todos.some((x) => x.status !== 'done' && x.status !== 'dropped')
+            if (unfinished) setClosing(true)
+            else close.mutate('keep')
+          }}
+          onRetitle={(title) => {
+            retitle.mutate(title)
+          }}
+          onHandOff={
+            canHandOff
+              ? () => {
+                  setHandingOff(true)
+                }
+              : undefined
+          }
+          /*
+           * WP287：岗位里问的一句是一段会话（不进「工作」）；要接着跟进就转成任务。
+           * WP288：会话页头不出状态与职责；「转成任务」在「⋯」里（不再单独一排「会话 · 转成任务」）。
+           */
+          ask={view.matter.ask !== undefined}
+          onPromote={
+            view.matter.ask === undefined
+              ? undefined
+              : () => {
+                  promote.mutate()
+                }
+          }
+          promoting={promote.isPending}
+        />
+        {/* WP276：等 Y 接 · 撤回 / X 想把这件事交给你 · 接下 · 不接（一个人用时没有） */}
+        {mode === 'solo' ? null : <MatterHandoffBar matterId={view.matter.id} me={me} />}
+        {canHandOff ? (
+          <HandoffDialog
+            kind="matter"
+            id={view.matter.id}
+            title={view.matter.title}
+            open={handingOff}
+            onOpenChange={(open) => {
+              setHandingOff(open)
+              if (!open && search.get('handoff') !== null) {
+                const next = new URLSearchParams(search)
+                next.delete('handoff')
+                setSearch(next, { replace: true })
+              }
+            }}
+          />
+        ) : null}
+
+        {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
+        {view.matter.archived_at === undefined ? null : (
+          <div
+            className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-tint/60 px-3 py-2 text-[13px]"
+            data-testid="matter-archived"
+          >
+            <Archive aria-hidden className="size-3.5 text-ws-muted-fg" />
+            <span className="flex-1">{t('matter.archived')}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              data-testid="matter-unarchive"
+              disabled={restore.isPending}
+              onClick={() => {
+                restore.mutate()
+              }}
+            >
+              {t('matter.unarchive')}
+            </Button>
+          </div>
+        )}
+
+        {closing ? (
+          <div
+            className="mt-3 rounded-xl border border-ws-line bg-ws-card p-3 text-sm"
+            role="dialog"
+            aria-label={t('matter.close')}
+            data-testid="close-dialog"
+          >
+            <p>{t('matter.close.question')}</p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="xs"
+                onClick={() => {
+                  close.mutate('close_all')
+                }}
+              >
+                {t('matter.close.all')}
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                onClick={() => {
+                  close.mutate('keep')
+                }}
+              >
+                {t('matter.close.keep')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="flex flex-1 flex-col gap-5 pt-5 pb-7" aria-label={t('matter.timeline')}>
+          {hasMore ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              className="self-center"
+              onClick={() => {
+                setLimit((v) => v + 20)
+              }}
+            >
+              {t('matter.more')}
+            </Button>
+          ) : null}
+          {items.map(renderItem)}
+          {queued === undefined ? null : (
+            <MeBubble
+              queued
+              event={{
+                id: 'queued',
+                matter_id: id,
+                at: new Date().toISOString(),
+                kind: 'human_message',
+                text: queued,
+                actor: { kind: 'person', id: 'me' },
+              }}
+            />
+          )}
+          {running ? <RunningEntry live={live} roleId={roleId} roleName={roleName} /> : null}
+          {asks.map((a) => (
+            <PrivatePair
+              key={a.id}
+              question={a.question}
+              answer={a.answer}
+              error={a.error}
+              onClose={() => {
+                setAsks((xs) => xs.filter((x) => x.id !== a.id))
+              }}
+              onForward={() => {
+                setAsks((xs) => xs.filter((x) => x.id !== a.id))
+                setPrivateMode(false)
+                if (running) setQueued(a.question)
+                else say.mutate(a.question)
+              }}
+            />
+          ))}
+          {closed ? (
+            <div
+              className="flex items-center justify-center gap-2 text-[12.5px] text-ws-muted-fg"
+              data-testid="matter-closed-line"
+            >
+              <CircleCheck aria-hidden className="size-3.5 text-ws-good" />
+              {t('matter.closed')}
+            </div>
+          ) : null}
+        </section>
+
+        <MatterComposer
+          value={text}
+          onChange={setText}
+          onSend={send}
+          onStop={() => {
+            stop.mutate()
+          }}
+          running={running}
+          closed={closed}
+          privateMode={privateMode}
+          onTogglePrivate={() => {
+            setPrivateMode((v) => !v)
+          }}
+          suggestion={suggestion}
+          sending={false}
+          modelSlot={
+            <ComposerModelPicker
+              value={(pickModel.isError ? undefined : pickModel.variables) ?? view?.matter.model}
+              onChange={(next) => {
+                pickModel.mutate(next)
+              }}
+            />
+          }
+          attachments={attached.map((a) => ({
+            id: a.id,
+            url: a.url,
+            masked: a.mask !== undefined,
+          }))}
+          attaching={attaching}
+          onAttach={(files) => {
+            setAttaching(true)
+            void Promise.all(
+              files
+                .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
+                .map((f) => uploadBrandAsset(f, { matter_id: id })),
+            )
+              .then((rows) => {
+                setAttached((xs) => [
+                  ...xs,
+                  ...rows.map((r) => ({ id: r.asset.id, url: r.asset.file_url })),
+                ])
+                if (rows.length > 0) setCanMask(rows.every((r) => r.edit_mask === true))
+              })
+              .catch(() => undefined)
+              .finally(() => {
+                setAttaching(false)
+              })
+          }}
+          onDetach={(aid) => {
+            setAttached((xs) => xs.filter((x) => x.id !== aid))
+          }}
+          {...(canMask ? { onMask: setMasking } : {})}
+        />
+        <MaskDialog
+          src={attached.find((a) => a.id === masking)?.url}
+          busy={savingMask}
+          onClose={() => {
+            setMasking(undefined)
+          }}
+          onSave={(file) => {
+            const target = masking
+            if (target === undefined) return
+            setSavingMask(true)
+            uploadBrandAsset(file, { matter_id: id, tags: ['mask'] })
+              .then((r) => {
+                setAttached((xs) =>
+                  xs.map((x) => (x.id === target ? { ...x, mask: r.asset.id } : x)),
+                )
+                setMasking(undefined)
+              })
+              .catch(() => undefined)
+              .finally(() => {
+                setSavingMask(false)
+              })
           }}
         />
-      ) : null}
-
-      {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
-      {view.matter.archived_at === undefined ? null : (
-        <div
-          className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-tint/60 px-3 py-2 text-[13px]"
-          data-testid="matter-archived"
-        >
-          <Archive aria-hidden className="size-3.5 text-ws-muted-fg" />
-          <span className="flex-1">{t('matter.archived')}</span>
-          <Button
-            size="xs"
-            variant="outline"
-            data-testid="matter-unarchive"
-            disabled={restore.isPending}
-            onClick={() => {
-              restore.mutate()
-            }}
-          >
-            {t('matter.unarchive')}
-          </Button>
-        </div>
-      )}
-
-      {closing ? (
-        <div
-          className="mt-3 rounded-xl border border-ws-line bg-ws-card p-3 text-sm"
-          role="dialog"
-          aria-label={t('matter.close')}
-          data-testid="close-dialog"
-        >
-          <p>{t('matter.close.question')}</p>
-          <div className="mt-2 flex gap-2">
-            <Button
-              size="xs"
-              onClick={() => {
-                close.mutate('close_all')
-              }}
-            >
-              {t('matter.close.all')}
-            </Button>
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={() => {
-                close.mutate('keep')
-              }}
-            >
-              {t('matter.close.keep')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <section className="flex flex-1 flex-col gap-5 pt-5 pb-7" aria-label={t('matter.timeline')}>
-        {hasMore ? (
-          <Button
-            size="xs"
-            variant="ghost"
-            className="self-center"
-            onClick={() => {
-              setLimit((v) => v + 20)
-            }}
-          >
-            {t('matter.more')}
-          </Button>
-        ) : null}
-        {items.map(renderItem)}
-        {queued === undefined ? null : (
-          <MeBubble
-            queued
-            event={{
-              id: 'queued',
-              matter_id: id,
-              at: new Date().toISOString(),
-              kind: 'human_message',
-              text: queued,
-              actor: { kind: 'person', id: 'me' },
-            }}
-          />
+        {say.error === null ? null : (
+          <p role="alert" className="text-center text-[12.5px] text-destructive">
+            {say.error.message}
+          </p>
         )}
-        {running ? <RunningEntry live={live} roleId={roleId} roleName={roleName} /> : null}
-        {asks.map((a) => (
-          <PrivatePair
-            key={a.id}
-            question={a.question}
-            answer={a.answer}
-            error={a.error}
-            onClose={() => {
-              setAsks((xs) => xs.filter((x) => x.id !== a.id))
-            }}
-            onForward={() => {
-              setAsks((xs) => xs.filter((x) => x.id !== a.id))
-              setPrivateMode(false)
-              if (running) setQueued(a.question)
-              else say.mutate(a.question)
-            }}
-          />
-        ))}
-        {closed ? (
-          <div
-            className="flex items-center justify-center gap-2 text-[12.5px] text-ws-muted-fg"
-            data-testid="matter-closed-line"
-          >
-            <CircleCheck aria-hidden className="size-3.5 text-ws-good" />
-            {t('matter.closed')}
-          </div>
-        ) : null}
-      </section>
-
-      <MatterComposer
-        value={text}
-        onChange={setText}
-        onSend={send}
-        onStop={() => {
-          stop.mutate()
-        }}
-        running={running}
-        closed={closed}
-        privateMode={privateMode}
-        onTogglePrivate={() => {
-          setPrivateMode((v) => !v)
-        }}
-        suggestion={suggestion}
-        sending={false}
-        modelSlot={
-          <ComposerModelPicker
-            value={(pickModel.isError ? undefined : pickModel.variables) ?? view?.matter.model}
-            onChange={(next) => {
-              pickModel.mutate(next)
-            }}
-          />
-        }
-        attachments={attached.map((a) => ({ id: a.id, url: a.url, masked: a.mask !== undefined }))}
-        attaching={attaching}
-        onAttach={(files) => {
-          setAttaching(true)
-          void Promise.all(
-            files
-              .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
-              .map((f) => uploadBrandAsset(f, { matter_id: id })),
-          )
-            .then((rows) => {
-              setAttached((xs) => [
-                ...xs,
-                ...rows.map((r) => ({ id: r.asset.id, url: r.asset.file_url })),
-              ])
-              if (rows.length > 0) setCanMask(rows.every((r) => r.edit_mask === true))
-            })
-            .catch(() => undefined)
-            .finally(() => {
-              setAttaching(false)
-            })
-        }}
-        onDetach={(aid) => {
-          setAttached((xs) => xs.filter((x) => x.id !== aid))
-        }}
-        {...(canMask ? { onMask: setMasking } : {})}
-      />
-      <MaskDialog
-        src={attached.find((a) => a.id === masking)?.url}
-        busy={savingMask}
-        onClose={() => {
-          setMasking(undefined)
-        }}
-        onSave={(file) => {
-          const target = masking
-          if (target === undefined) return
-          setSavingMask(true)
-          uploadBrandAsset(file, { matter_id: id, tags: ['mask'] })
-            .then((r) => {
-              setAttached((xs) => xs.map((x) => (x.id === target ? { ...x, mask: r.asset.id } : x)))
-              setMasking(undefined)
-            })
-            .catch(() => undefined)
-            .finally(() => {
-              setSavingMask(false)
-            })
-        }}
-      />
-      {say.error === null ? null : (
-        <p role="alert" className="text-center text-[12.5px] text-destructive">
-          {say.error.message}
-        </p>
-      )}
-    </div>
+      </div>
+    </GenuiHostProvider>
   )
 }

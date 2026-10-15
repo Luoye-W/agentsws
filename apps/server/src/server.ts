@@ -6,7 +6,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import { promises as dnsPromises } from 'node:dns'
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -119,6 +119,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  normalizeGenuiHost,
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   platformKitOf,
@@ -155,7 +156,7 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
-import { brandScoreCriteria } from '@agentsws/kol-core'
+import { brandScoreCriteria, brandSearchQuery } from '@agentsws/kol-core'
 import {
   type AccountFetch,
   createModelGateway,
@@ -173,6 +174,7 @@ import {
   ENTRY_CLASSIFY_MAX_OUTPUT,
   hasApprovalFlow,
   loadBundledRole,
+  type PersonaBrandContext,
   personaTextIn,
   type RangeExpanded,
   type RoleStore,
@@ -257,6 +259,7 @@ import {
   designPageKindOf,
   shopifyThemeSettings,
 } from './brand-design.js'
+import { insightFactsFromIntake } from './brand-insight-facts.js'
 import { createBrandIntake } from './brand-intake.js'
 import { brandKnowledgeCards } from './brand-knowledge.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
@@ -378,6 +381,7 @@ import { createEconomicsService } from './economics.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
+import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -389,6 +393,7 @@ import {
 } from './faq-import.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
+import { createGenuiImageHosts } from './genui-image-hosts.js'
 import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
@@ -560,6 +565,7 @@ import {
   type LoginWindowLauncher,
   type RedditReadAccount,
 } from './readonly-browser/account.js'
+import { browserEnv } from './readonly-browser/chrome.js'
 import { createReadonlyBrowser, type ReadonlyBrowserOptions } from './readonly-browser/index.js'
 import { redditReadBrowserOf, redditReadLimiterOf } from './readonly-browser/reddit.js'
 import {
@@ -1204,6 +1210,11 @@ export interface ServerOptions {
    * 就演不出第 ② 步那张档案卡。
    */
   brandIntakeFetch?: BrandIntakeFetch
+  /**
+   * WP346：品牌分析 AI 归纳那一步的模型**替身**（测试与离线 demo 用）。生产不传——走这个品牌
+   * 自己的默认模型（没接模型就跳过 AI 那几格）。
+   */
+  brandIntakeModel?: (input: { prompt: string }) => Promise<{ text: string }>
   /**
    * WP173：开发信那几跳的**替身**（测试与 demo 用；生产路径一个都不传）。
    *
@@ -1893,6 +1904,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   /** WP236：运行时长线（这台机器一份，`run-limits.json`）。 */
   const runLimitsSettings = createRunLimitsSettings(dbDir === undefined ? {} : { dir: dbDir })
+  /** WP341 追加（849）：AI 回话里外部图片的域名白名单（品牌级，`genui-image-hosts.json`）。 */
+  const imageHosts = createGenuiImageHosts(dbDir === undefined ? {} : { dir: dbDir })
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
     runtimeMode,
@@ -2933,14 +2946,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP248（决策 83）：品牌档案里给 AI 当上下文的三格（一句话介绍、客服邮箱、币种）。
    * 写过才带——币种没写过不替人补 USD（69 §5「别编」：默认值是界面上的缺省，不是这个品牌说过的话）。
    */
-  const brandFactsContextOf = (
-    ws: WorkspaceId,
-  ): { one_liner?: string; support_email?: string; currency?: string } => {
+  const brandFactsContextOf = (ws: WorkspaceId): PersonaBrandContext => {
     const p = onboardingRef?.brandProfile(ws)
     return {
       ...(p?.one_liner === undefined ? {} : { one_liner: p.one_liner }),
       ...(p?.support_email === undefined ? {} : { support_email: p.support_email }),
       ...(p?.currency === undefined ? {} : { currency: p.currency }),
+      // WP346（决策 872）：第二版那几格——红人 / 广告 / 内容 / 巡查的建议都先读档案（AI 建议的注明待核）
+      ...(p?.category === undefined ? {} : { category: p.category }),
+      ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+      ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
+      ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
+      ...(p?.audience === undefined ? {} : { audience: p.audience }),
+      ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+      ...(p?.competitors === undefined ? {} : { competitors: p.competitors.map((c) => c.name) }),
+      ...(p?.ai_suggested === undefined ? {} : { unconfirmed: [...p.ai_suggested] }),
     }
   }
 
@@ -5438,6 +5458,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               now: () => clock.now(),
+              // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
+              brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -5986,6 +6008,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(() => {
             const category = onboardingRef?.brandProfile(ws).category
             return category === undefined || category.trim() === '' ? {} : { category }
+          })(),
+          // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
+          ...(() => {
+            const p = onboardingRef?.brandProfile(ws)
+            return {
+              ...(p?.audience === undefined ? {} : { audience: p.audience }),
+              ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+              ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
+            }
           })(),
         }
       },
@@ -7159,6 +7190,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ...(full?.markets === undefined ? {} : { markets: full.markets }),
                 ...(domain === undefined || domain === '' ? {} : { domain }),
                 ...(products.length === 0 ? {} : { products }),
+                // WP346（决策 872）：品类、人群、关键词、竞品——建议先读档案
+                ...(full?.category === undefined ? {} : { category: full.category }),
+                ...(full?.audience === undefined
+                  ? {}
+                  : {
+                      audience: [full.audience.buyers, ...(full.audience.concerns ?? [])].join(
+                        '；',
+                      ),
+                    }),
+                ...(full?.keywords === undefined ? {} : { keywords: full.keywords }),
+                ...(full?.competitors === undefined
+                  ? {}
+                  : { competitors: full.competitors.map((c) => c.name) }),
               }
             },
             setupCards: () => setupCardsOf(ws),
@@ -8545,14 +8589,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP335（决策 659）：品类一格——这个品牌接了模型就请它说一个（标「请确认」），没接就空着让人填。
      * 模型口每次现取（模型设置改完立刻生效）；只给已读到的几格，不给页面原文。
      */
-    categoryModel: (actor) => async (input) => {
+    /*
+     * WP346（决策 872）：AI 归纳（人群 / 关键词 / 价格带 / 子品类 / 定位 / 竞品 / 品类 / 商品规格）
+     * 用这个品牌的默认模型，一次分析问一次；没接模型（只有 stub）回 undefined → 那几格跳过。
+     * 用量照常记在这个品牌的账上（模型网关）。
+     */
+    insightsModel: async (actor) => {
+      if (options.brandIntakeModel !== undefined) return options.brandIntakeModel
       const mod = await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)
-      const model = mod.textModel?.(
+      return mod.textModel?.(
         { assignment_id: actor.assignment_id, role_id: actor.role_id },
         `run_intake_${Math.floor(random() * 1e12).toString(36)}`,
       )
-      // 没接模型：回空——品类那一格空着，人自己填（不算出错、不记一行警告）
-      return model === undefined ? { text: '' } : model(input)
     },
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
@@ -8564,7 +8612,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 公司加的品牌（公司那一层已经设过）：公司全称不跟着分析结果改；品牌名是建品牌时
        * 起的那个，只有用户在档案卡上亲手改了品牌名才改。
        */
-      applyProfile: async (profile, actor) => {
+      applyProfile: async (profile, actor, meta) => {
         const added = onboarding.isAddedBrand(actor.workspace_id as WorkspaceId)
         // WP251：这个品牌挂的那家公司
         const company = onboarding.companyProfile(actor.workspace_id as WorkspaceId)?.legal_name
@@ -8586,12 +8634,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(support_email === undefined ? {} : { support_email }),
           ...(currency === undefined ? {} : { currency }),
           ...(category === undefined ? {} : { category }),
+          // WP346（决策 872）：第二版那几格 + 哪几格还是 AI 建议（人在卡上改过的不算）
+          ...insightFactsFromIntake(profile),
+          ...(meta?.website === undefined ? {} : { website: meta.website }),
         }
         // WP258：官网里漏出来的 `xxx.myshopify.com` 存进档案（建站岗位登录后找店时拿它对一下）
         const shopDomain = text(profile.shopify_domain)
         const rememberShopDomain = (): void => {
           if (shopDomain !== undefined)
             onboarding.setShopifyDomain(actor.workspace_id as WorkspaceId, shopDomain)
+        }
+        // WP346：设置页逐格采纳——只写给出的那几格（公司名 / 品牌名 / 市场不碰）
+        if (meta?.adopt === true) {
+          onboarding.setBrandFacts(actor.workspace_id as WorkspaceId, facts)
+          return
         }
         if (typeof legal !== 'string' || legal.trim() === '') {
           // 公司名、品牌名都还没有：档案已经在就只补这三格，没有档案不替人建
@@ -9828,6 +9884,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
       sayAt: async (actor, matter_id, text) =>
         (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
+      genuiTool: async (actor, matter_id, call) => {
+        const runtime = brand.runtime?.runHostTool
+        if (runtime === undefined)
+          return { effect: 'refused', status: 'blocked', message: '这里点不了这个。' }
+        return runtime({
+          matter_id,
+          person_id: actor.person_id,
+          fallback_assignment_id: actor.assignment_id,
+          call,
+        })
+      },
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**
@@ -10770,6 +10838,48 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     dbDir === undefined
       ? createMemoryExtensionStore({ clock, random })
       : new SqliteExtensionStore({ dbPath: join(dbDir, 'extension-pairing.sqlite'), clock, random })
+  /**
+   * WP345（决策 871）：插件随工坊安装与更新。桌面壳把插件放在 `AGENTSWS_EXTENSION_DIR`（固定文件夹）；
+   * 插件每分钟来报版本、问文件夹里是哪一版。云上托管档没有（插件只连本机）。
+   */
+  const extensionInstall =
+    hostedBoot === undefined
+      ? createExtensionInstall({
+          dir:
+            env.AGENTSWS_EXTENSION_DIR === undefined || env.AGENTSWS_EXTENSION_DIR === ''
+              ? undefined
+              : env.AGENTSWS_EXTENSION_DIR,
+          platform: process.platform,
+          env,
+          readText: (path) => {
+            try {
+              return readFileSync(path, 'utf8')
+            } catch {
+              return undefined
+            }
+          },
+          exists: (path) => existsSync(path),
+          launch: spawnDetached,
+          browserEnv,
+          now: () => clock.now(),
+          record: (workspace_id, type, payload) => {
+            appendEvent({
+              schema_version: 1,
+              workspace_id,
+              type,
+              actor: { kind: 'system', id: 'browser-extension' },
+              correlation: { trace_id: `tr_ext_${payload.token_id ?? 'x'}_${Date.now()}` },
+              payload,
+            })
+            if (options.quiet !== true)
+              process.stdout.write(
+                type === 'extension.updated'
+                  ? `浏览器插件已换成新版：${payload.from} → ${payload.to}\n`
+                  : `浏览器插件重载了还是旧版 ${payload.running}（工坊这边是 ${payload.wanted}）\n`,
+              )
+          },
+        })
+      : undefined
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
     serviceOf: async (ws) => {
@@ -11790,6 +11900,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     handoff: brandHandoffPort(brandModules, handoffFor),
     // WP236：运行时长线（这台机器一份）
     runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
+    // WP341 追加（849）：外部图片白名单——人加的 + 已连店铺的域名（Shopify 店铺地址、官网 / 公司域名，自动算）
+    imageHosts: (() => {
+      const view = (ws: string) => {
+        const shop = [
+          onboardingRef?.shopifyDomainOf(ws as WorkspaceId),
+          onboardingRef?.companyProfile(ws as WorkspaceId)?.domain,
+        ]
+          .map((d) => (d === undefined ? undefined : normalizeGenuiHost(d)))
+          .filter((d): d is string => d !== undefined)
+        return { hosts: imageHosts.list(ws), shop_hosts: [...new Set(shop)] }
+      }
+      return {
+        view,
+        add: (ws: string, host: string) => {
+          if (imageHosts.add(ws, host, clock.now()) === undefined)
+            throw new ApiError('invalid_input', '这不像一个网站域名')
+          return view(ws)
+        },
+        remove: (ws: string, host: string) => {
+          imageHosts.remove(ws, host)
+          return view(ws)
+        },
+      }
+    })(),
     // WP320：「自动记忆」开关（每人每品牌一份，默认开）
     autoMemory: {
       get: (actor) => ({ enabled: autoMemorySettings.get(actor.workspace_id, actor.person_id) }),
@@ -11814,6 +11948,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
     extension: extensionPortOf,
+    // WP345：插件随工坊安装与更新 `/v1/extension/install*`、`/v1/extension/version`
+    ...(extensionInstall === undefined ? {} : { extensionInstall }),
     // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
     ...(hostedBoot === undefined
       ? {
