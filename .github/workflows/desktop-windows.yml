@@ -74,6 +74,14 @@ jobs:
       - name: 工作台构建（装进安装包的 <resources>/workstation）
         run: pnpm --filter @agentsws/workstation build
 
+      # WP339：主窗口换大小 / 最大化 / 还原后网页要铺满窗口（Luoye 10-15 真机上见过停在左上一块）。
+      # 开发版壳（dist/main.js）+ 真服务进程；每一步的截图进 win-smoke/layout/。
+      - name: 窗口换大小回归（WP339）
+        shell: bash
+        env:
+          AGENTSWS_LAYOUT_SHOTS: ${{ github.workspace }}/win-smoke/layout
+        run: pnpm --filter @agentsws/desktop exec playwright test -c e2e/playwright.config.ts window-layout.spec.ts
+
       # WP290（决策 332）：装包前真机冒烟——用这次的构建、真 dsh、本机假模型，每个岗位走一遍
       # （问一句 / 交办出卡 / 点掉 / 事项状态 / 没跑成）。没过就不打安装包。表与原始错误在 win-smoke/。
       - name: 装包前冒烟（真 dsh × 每个岗位；没过就不出安装包）
