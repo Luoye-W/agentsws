@@ -227,6 +227,8 @@ skills:
   # WP317（docs/101 §5.1④）：素材流水线的两个子 Agent（标题 / 描述各一份，按需加载）
   - { name: ad-headlines, tier: open, load: on_demand }
   - { name: ad-descriptions, tier: open, load: on_demand }
+  # WP316：改广告怎么提（只写意图、出卡分路、新建暂停、开始投放另一张卡、插件提交前人再确认）
+  - { name: ad-changes, tier: open, load: on_demand }
   - { name: audience-research, tier: open, load: on_demand }
   # WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率、毛利瀑布（只并排显示，不改止损线）
   - { name: unit-economics, tier: open, load: on_demand }
