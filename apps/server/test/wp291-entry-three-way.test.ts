@@ -191,7 +191,8 @@ describe('WP291 三分：模型判', () => {
     expect(routedEvents().at(-1)).toMatchObject({
       entry: { kind: 'quick', by: 'model', why: '查一下商品' },
     })
-    expect(runPrompts.some((p) => p.includes('当场问答') && p.includes('```answer'))).toBe(true)
+    // WP336：默认教 ```dsh-ui（模型照旧回 ```answer 也照常画）
+    expect(runPrompts.some((p) => p.includes('当场问答') && p.includes('```dsh-ui'))).toBe(true)
   })
 
   it('chat：进会话线程（detach 立刻回事项 id），会话在左栏会话历史里，不进工作', async () => {

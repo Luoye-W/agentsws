@@ -33,7 +33,13 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { isTaskBrief, splitAnswer, taskTextOf } from '@agentsws/contracts'
+import {
+  isTaskBrief,
+  QUICK_ANSWER_UI_ENV,
+  quickAnswerUiOf,
+  splitAnswer,
+  taskTextOf,
+} from '@agentsws/contracts'
 import { isQueueCard, isRouteChoiceItem } from '@agentsws/deck'
 import {
   bundledPositionIcon,
@@ -672,12 +678,14 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const events = work.store.listMatterEvents(matter_id, { limit: 500 })
     const mine = events.filter((e) => e.run_id === run_id)
     // WP291：回答 = 一句话 + 组件（```answer 那段按契约校验；没有就认正文里的 Markdown 表格）
+    // WP336：```dsh-ui 白名单过滤成一块 genui；回退开关设成 answer 时降级成 ```answer 那三种
     const split = splitAnswer(
       mine
         .filter((e) => e.kind === 'agent_message')
         .map((e) => e.text)
         .join('\n\n')
         .trim(),
+      { genui: quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV]) === 'genui' },
     )
     const said = { text: split.text, lead: split.lead, components: split.components }
     const digest = mine.find((e) => e.run_digest !== undefined)?.run_digest

@@ -63,7 +63,9 @@ import {
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
-  QUICK_ANSWER_RULE,
+  QUICK_ANSWER_UI_ENV,
+  quickAnswerRule,
+  quickAnswerUiOf,
   RUN_IDLE_TIMEOUT_RANGE,
   RUN_MAX_DURATION_RANGE,
   type RunCancelReason,
@@ -1798,7 +1800,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
            */
           ...(input.matter.ask?.quick === true
-            ? [{ id: 'quick_answer', name: '当场问答', order: 28, text: QUICK_ANSWER_RULE }]
+            ? [
+                {
+                  id: 'quick_answer',
+                  name: '当场问答',
+                  order: 28,
+                  // WP336：默认教 ```dsh-ui（dsh-genui 写法）；回退开关设成 answer 就仍教 ```answer
+                  text: quickAnswerRule(quickAnswerUiOf(process.env[QUICK_ANSWER_UI_ENV])),
+                },
+              ]
             : []),
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
           ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),

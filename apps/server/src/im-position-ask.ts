@@ -13,7 +13,12 @@
  * 不放任何批准按钮：决定仍回工作台（13 §4，`im-cards.ts` 同一条纪律）。每一句都附去工作台的链接。
  */
 
-import { type AnswerComponent, type PositionWorkView, splitTaskText } from '@agentsws/contracts'
+import {
+  type AnswerComponent,
+  genuiToAnswerComponents,
+  type PositionWorkView,
+  splitTaskText,
+} from '@agentsws/contracts'
 import { isPositionStatusQuestion } from './im-ask-route.js'
 import type { PositionAnswer, PositionsAssembly } from './positions.js'
 
@@ -94,7 +99,11 @@ export function quickAnswerForIm(
   const lines: string[] = []
   const lead = answer.lead.trim() !== '' ? answer.lead : answer.text
   if (lead.trim() !== '') lines.push(lead.trim())
-  for (const c of answer.components as AnswerComponent[]) {
+  // WP336：genui 块在聊天里画不了，先降级成表格 / 数字 / 字
+  const flat = (answer.components as AnswerComponent[]).flatMap((c) =>
+    c.kind === 'genui' ? genuiToAnswerComponents(c.spec) : [c],
+  )
+  for (const c of flat) {
     if (c.kind === 'metric')
       lines.push(c.items.map((m) => `${m.label} ${m.value}${m.unit ?? ''}`).join(' · '))
     if (c.kind === 'table') {
