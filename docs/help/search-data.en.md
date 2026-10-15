@@ -1,6 +1,6 @@
 # Search data APIs
 
-When the "Content & Search" duty checks search result pages (where you rank on Google / Bing, whether the AI overview mentions you) or asks AI platforms (does ChatGPT, Gemini or Perplexity mention you), it needs third-party search data. The "Connections → Search data" row decides where it comes from — three options:
+When the "Content & Search" duty checks search result pages (where you rank on Google / Bing, whether the AI overview mentions you) or asks AI platforms (do ChatGPT, Gemini, Claude or Google AI Overviews mention you), it needs third-party search data. The "Connections → Search data" row decides where it comes from — three options:
 
 | Option | Who pays | In one line |
 |---|---|---|
@@ -20,7 +20,7 @@ If you never chose, it picks in this order: linked an Agents Workshop account �
 
 Three providers:
 
-- **DataForSEO**: one key for Google / Bing results (with AI overview and "People also ask") plus ChatGPT / Gemini / Perplexity answers.
+- **DataForSEO**: one key for Google / Bing results (with AI overview and "People also ask") plus ChatGPT / Gemini / Claude answers.
 - **SerpApi**: Google / Bing + AI overview + Copilot.
 - **Serper**: Google web results only; the cheapest.
 
@@ -33,4 +33,5 @@ The key stays in this computer's encrypted store — never in logs, never in the
 ## FAQ
 
 - **Which provider does the official option use**: the UI doesn't say; errors only mention "the official data service".
+- **Why Claude costs more and looks different from the website**: Claude's answers are taken from Claude's web-search answers, so they may differ slightly from what you see on claude.ai. Each ask costs more than the others (about 3.6 credits); "Tracking settings" shows roughly how much Claude costs per month, and you can switch off just Claude. To read these answers, see [AI answer tracking](help:ai-answer-tracking).
 - **Why Copilot sometimes can't be checked**: the official option doesn't cover Copilot yet; bring a SerpApi key to check Copilot.

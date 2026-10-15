@@ -480,6 +480,8 @@ export interface OnboardingAssembly {
     one_liner?: string
     support_email?: string
     currency?: string
+    /** WP335（决策 659）：品类（没写过就没有）。 */
+    category?: string
   }
   /**
    * WP248（决策 83）：只改某个品牌档案上的一句话介绍 / 客服邮箱 / 币种（品牌分析确认时公司名还没有、
@@ -1455,7 +1457,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         p.postal_address !== undefined ||
         p.one_liner !== undefined ||
         p.support_email !== undefined ||
-        p.currency !== undefined
+        p.currency !== undefined ||
+        p.category !== undefined
       )
         continue
       const used = roles.assignments
@@ -1568,7 +1571,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     setBrandFacts(ws, facts) {
       const previous = profileOf(ws)
       if (previous === undefined) return false
-      const { one_liner: _o, support_email: _e, currency: _c, ...rest } = previous
+      const { one_liner: _o, support_email: _e, currency: _c, category: _g, ...rest } = previous
       backend.put(ws, { ...rest, ...nextBrandFacts(previous, facts) })
       return true
     },
@@ -1713,23 +1716,28 @@ export interface BrandFactsInput {
   one_liner?: string | undefined
   support_email?: string | undefined
   currency?: string | undefined
+  /** WP335（决策 659）：品类。 */
+  category?: string | undefined
 }
 
-/** 档案上已经写着的那三格（币种没写过就不出现——读的人按 USD 补）。 */
+/** 档案上已经写着的那几格（币种没写过就不出现——读的人按 USD 补）。 */
 function brandFactsOf(
-  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email'>,
-): Pick<WorkspaceProfile, 'one_liner' | 'support_email'> {
+  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category'>,
+): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category'> {
   return {
     ...(p.one_liner === undefined ? {} : { one_liner: p.one_liner }),
     ...(p.support_email === undefined ? {} : { support_email: p.support_email }),
+    ...(p.category === undefined ? {} : { category: p.category }),
   }
 }
 
-/** 下一份档案上的三格：给了的按归一化结果（空 = 去掉），没给的沿用上一次。 */
+/** 下一份档案上的几格：给了的按归一化结果（空 = 去掉），没给的沿用上一次。 */
 export function nextBrandFacts(
-  previous: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency'> | undefined,
+  previous:
+    | Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency' | 'category'>
+    | undefined,
   input: BrandFactsInput,
-): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency'> {
+): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency' | 'category'> {
   const pick = (
     given: string | undefined,
     old: string | undefined,
@@ -1738,11 +1746,19 @@ export function nextBrandFacts(
   const one_liner = pick(input.one_liner, previous?.one_liner, normalizeOneLiner)
   const support_email = pick(input.support_email, previous?.support_email, normalizeSupportEmail)
   const currency = pick(input.currency, previous?.currency, normalizeCurrency)
+  const category = pick(input.category, previous?.category, normalizeCategory)
   return {
     ...(one_liner === undefined ? {} : { one_liner }),
     ...(support_email === undefined ? {} : { support_email }),
     ...(currency === undefined ? {} : { currency }),
+    ...(category === undefined ? {} : { category }),
   }
+}
+
+/** WP335（决策 659）：品类——空白收成一个、去两端，封顶 80 字；空 = 没有。 */
+export function normalizeCategory(value: string): string | undefined {
+  const line = value.replace(/\s+/g, ' ').trim()
+  return line === '' ? undefined : line.slice(0, 80)
 }
 
 /** 一句话介绍：空白收成一个、去两端，封顶 300 字；空 = 没有。 */

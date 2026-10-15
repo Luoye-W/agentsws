@@ -242,6 +242,14 @@ export interface BrandModuleSet {
    * 这个品牌的目录下。
    */
   seoService: SeoServiceAssembly
+  /**
+   * WP335（决策 659）：这个品牌的一次性文字模型口（品牌分析认品类用；用量照常记在这个品牌的账上）。
+   * 没接模型 / 只有 stub → `undefined`。可选：老的装配不给就当没有。
+   */
+  textModel?: (
+    actor: { assignment_id: string; role_id: string },
+    run_id: string,
+  ) => ((input: { prompt: string }) => Promise<{ text: string }>) | undefined
   /** WP158：这个品牌的 Search Console 与 GA4 真读数（按天缓存、令牌只在连接器里）。 */
   googleReads: GoogleReads
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */

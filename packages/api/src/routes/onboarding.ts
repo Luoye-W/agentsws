@@ -101,6 +101,8 @@ export interface WorkspaceProfileInput {
   support_email?: string | undefined
   /** WP248（决策 83）：币种（三位字母，存大写）。不给 = 不改；给空串 = 清空（读时按 USD）。 */
   currency?: string | undefined
+  /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改）。不给 = 不改；给空串 = 清空。 */
+  category?: string | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -128,6 +130,8 @@ export interface WorkspaceProfileView {
   support_email?: string
   /** WP248（决策 83）：币种。服务端总会给——没写过就是 `USD`（`DEFAULT_BRAND_CURRENCY`）。 */
   currency?: string
+  /** WP335（决策 659）：品类（没写过就没有）。 */
+  category?: string
   set_at: string
 }
 
@@ -476,6 +480,8 @@ const ProfileBody = z.object({
     .string()
     .regex(/^([A-Za-z]{3})?$/)
     .optional(),
+  // WP335（决策 659）：品类。不给 = 不改；空串 = 清空
+  category: z.string().max(80).optional(),
 })
 
 const PlannedPositionBody = z.object({
@@ -603,6 +609,7 @@ export function onboardingRoutes(): Route[] {
             ...(input.one_liner === undefined ? {} : { one_liner: input.one_liner }),
             ...(input.support_email === undefined ? {} : { support_email: input.support_email }),
             ...(input.currency === undefined ? {} : { currency: input.currency }),
+            ...(input.category === undefined ? {} : { category: input.category }),
           }),
         )
       },

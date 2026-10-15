@@ -30,6 +30,7 @@ import {
   Globe,
   GraduationCap,
   History,
+  MessageSquareQuote,
   Plug,
   Send,
   SlidersHorizontal,
@@ -45,6 +46,7 @@ import {
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
+import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 
 /**
@@ -54,6 +56,12 @@ import { HELP_ADDRESS_PATTERN } from '@/lib/help'
  * 旧 id 不删：下面 `registerPanelAlias` 把 `memory` / `skills` / … 落到这个面板的对应标签，
  * 职责页头部的按钮、本机存着的旧布局、别处写死的 `show('memory')` 都照旧开得到。
  */
+/** WP335：一条 AI 回答（看板方格点一格开；只按地址开）。 */
+const GeoAnswerBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/geo-answer-panel')
+  return { default: m.GeoAnswerPanel }
+})
+
 const ConnectBody = lazy(async () => {
   const m = await import('@/components/rail/panels/connect-panel')
   return { default: m.ConnectPanel }
@@ -210,7 +218,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     scoped: true,
   })
   registerPanelBody('settings', SettingsBody)
-  for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps'])
+  // WP335：「关注设置」（只在「内容与搜索」职责层出那个标签）也落在「设定」里
+  for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps', 'geo-watch'])
     registerPanelAlias({ id: sub, panel: 'settings', sub })
   /*
    * WP181：**定时任务**。WP208 从「这件事的」挪到这一组：它的数（图标右上角）跟着当前岗位 /
@@ -298,4 +307,15 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('connect', ConnectBody)
+  // WP335（docs/99 §5.6）：一条 AI 回答——看板方格点一格在第三栏开（不占图标，只按地址开）
+  registerPanelType({
+    id: 'geo-answer',
+    label: 'rail.panel.geo-answer',
+    icon: MessageSquareQuote,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${GEO_ANSWER_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('geo-answer', GeoAnswerBody)
 }

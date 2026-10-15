@@ -160,6 +160,10 @@ export function SettingsPage({
           ...(draft.one_liner.trim() === (onboarding.data?.profile?.one_liner ?? '')
             ? {}
             : { one_liner: draft.one_liner.trim() }),
+          // WP335（决策 659）：品类——只在改过时发（空 = 清空）
+          ...(draft.category.trim() === (onboarding.data?.profile?.category ?? '')
+            ? {}
+            : { category: draft.category.trim() }),
           ...(draft.support_email.trim() === (onboarding.data?.profile?.support_email ?? '')
             ? {}
             : { support_email: draft.support_email.trim() }),
