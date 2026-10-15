@@ -1,16 +1,13 @@
-# WP78（60 §1）：**在别人的地盘上，版主说了算。**
+# WP78（60 §1）→ WP338（决策 664 / 783，Luoye 10-15）：**在别人的地盘上，规矩人看、人判。**
 #
 # 两条路各走一遍：
 #
-# ① 版规明写着禁自我推广的版 → **block**，不是转人审。人在一屏卡面上判不出
-#    "这一条会不会让整个品牌被这个版永久赶走"，而那正是他要被保护的地方。
-#    判定走 `@agentsws/pr-core` 的 `checkSubredditRules`，结论原样递给 guardrail
-#    ——**两处是同一份结论**，不是各判一次。
-# ② 允许厂商帖的版 → 提得上去，但**永远人审**（`community_post` 在 `HARD_L1` 里）。
+# ① 版规原文写着禁自我推广的版 → 系统**不替人拦**：照样出一张要人点的卡，卡上带版规原文，
+#    发不发由人看了原文自己定（以前是 block；Luoye 10-15 定不替用户预设推广规矩）。
+# ② 允许厂商帖的版 → 同样提得上去，**永远人审**（`community_post` 在 `HARD_L1` 里）。
 #    场景故意报 L3，看硬顶会不会把它按回来。
 #
-# 第三件事顺带钉住：版规那句话**在卡面上**。批准这一下的人要看见"这个版让不让发、
-# 上一条隔了多久"，而不是只看见一段正文。
+# 顺带钉住：版规原文**在卡面上**（「版规 N 条」，原文进详情）。
 id: pr/external-post-needs-approval-and-rules
 version: 1
 dataset: { pack: dtc-3c-3p, seed: 42 }
@@ -20,7 +17,7 @@ actors:
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
 clock: { start: '2026-09-07T09:00:00+08:00' }
 events:
-  # ① 禁自我推广的版：一条都不发
+  # ① 版规写着禁自我推广的版：照样出卡、版规原文上卡，人判
   - at: '+0m'
     pr.external_post:
       who: p_li
@@ -31,7 +28,7 @@ events:
       rules:
         - 'Rule 1：No self-promotion — 含外链的厂商帖一律删'
         - 'Be civil'
-      # 故意报 L3：这一条连人审都到不了，它在版规那一道就被拦下了
+      # 故意报 L3：硬顶照样把它按回人审
       level: L3
   # ② 允许厂商帖的版：提得上去，但要人点
   - at: '+1h'
@@ -48,7 +45,7 @@ events:
   - at: '+3h'
     clock.advance: {}
 expected:
-  # 断言看的是**最后一条**（允许的那个版）：版规过了，但照样等人点
+  # 断言看的是**最后一条**（允许的那个版）：照样等人点
   pr_external_post:
     blocked: false
     rules_ok: true
@@ -56,12 +53,9 @@ expected:
     # **HARD_L1**：报 L3 也落回人审
     auto_approved: false
     stated_on_card: true
-  # 禁推广那一条是被**版规**拦下的，不是被别的门
-  blocked_rules:
-    - subreddit_rules
-  approval_kinds: { staged_change: 1 }
+  # 两条都进了队列（禁推广那一条不再被系统拦，由人看版规原文判）
+  approval_kinds: { staged_change: 2 }
   event_types:
-    - simulation.pr_external_post_blocked
     - simulation.pr_external_post_staged
   metrics:
     runs_failed: 0
@@ -70,5 +64,4 @@ invariants:
   - provenance_respected
   - fencing_covers_external
 rubric: >-
-  这张卡上"发到哪个版、那个版的规矩是什么、为什么这一条发得了"，
-  点它的人读完心里有数吗？被拦下的那一条，理由说得像人话吗？
+  这张卡上"发到哪个版、那个版的版规原文是什么"，点它的人读完能自己判断发不发吗？
