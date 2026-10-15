@@ -30,7 +30,16 @@ export interface AdsDataToolsOptions {
   port(): AdsPort | undefined
   /** 这条分配上的额度（止损线、日花费总闸）；缺的按 57 §6 默认。 */
   caps(assignment_id: string): Partial<AdsCaps>
+  /**
+   * 出「插件连上广告后台」那张连接卡（WP324 `askConnect`，`kind: ads_backend`、接法是插件配对）。
+   * 只认「配对过」会把卡判成已连上——要的是插件里连上了这家后台（勾过风险告知），所以单独一种。
+   * 不给就退回工具回 `needs_connection: 'extension'`（运行时出插件配对卡）。回出没出卡。
+   */
+  askConnect?(req: RunRequest, why: string): Promise<boolean>
 }
+
+/** 连接卡上这一样的 kind（服务端复查认它：插件里连上了担着的那几家后台没有）。 */
+export const ADS_BACKEND_NEED_KIND = 'ads_backend'
 
 const bare = (name: string): string =>
   name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
@@ -53,6 +62,18 @@ function actorOf(req: RunRequest): AdsActor {
 }
 
 export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExecutor {
+  /** 缺插件：能直接出卡就出（卡上连好了接着做），不能就让运行时出插件配对卡。 */
+  const needPlugin = async (req: RunRequest): Promise<Record<string, unknown>> => {
+    const asked = await options
+      .askConnect?.(
+        req,
+        '每天去你的广告后台导出报表要用插件：在插件设置里点「连接」，勾上风险告知。',
+      )
+      .catch(() => false)
+    return asked === true
+      ? { connection_card: true, message: '已出一张连接卡：在卡上连好插件，我接着做。' }
+      : EXTENSION_NEED
+  }
   const query = async (svc: AdsDataService, req: RunRequest, input: Record<string, unknown>) => {
     const today = svc.today()
     const window = resolveAdsWindow(
@@ -134,7 +155,7 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
       if (status.every((s) => s.account === undefined))
         return ok({ ...data, needs_setup: ADS_ACCOUNTS_TARGET })
       if (status.every((s) => s.plugin === 'not_connected'))
-        return ok({ ...data, ...EXTENSION_NEED })
+        return ok({ ...data, ...(await needPlugin(req)) })
     }
     return ok(data)
   }
@@ -156,7 +177,7 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
         needs !== undefined && 'needs' in needs
           ? needs.needs === 'ads.accounts'
             ? { needs_setup: ADS_ACCOUNTS_TARGET }
-            : EXTENSION_NEED
+            : await needPlugin(req)
           : {}
       return ok({ ok: outcomes.some((o) => o.ok), outcomes, ...extra })
     }

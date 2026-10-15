@@ -313,6 +313,31 @@ describe('三个工具', () => {
     expect((await call('fetch_ads_data_now')).data.needs_connection).toBe('extension')
   })
 
+  it('能直接出卡就出「插件连上广告后台」那张（kind ads_backend）；连上了复查认得出', async () => {
+    const h = make()
+    h.svc.setAccounts({ google: { id: '1234567890' } })
+    const asked: string[] = []
+    const exec = createAdsDataToolExecutor({
+      service: () => h.svc,
+      ads: () => h.ads,
+      port: () => undefined,
+      caps: () => ({}),
+      askConnect: async (_req, why) => {
+        asked.push(why)
+        return true
+      },
+    })
+    const out = (await exec({ name: 'query_ads_data', input: {}, request: req() })) as {
+      data: Record<string, unknown>
+    }
+    expect(out.data).toMatchObject({ connection_card: true })
+    expect(out.data.needs_connection).toBeUndefined()
+    expect(asked[0]).toContain('插件')
+    expect(h.svc.backendReady()).toBe(false)
+    h.plugin.connect('google_ads')
+    expect(h.svc.backendReady()).toBe(true)
+  })
+
   it('查数：合计、按天、按花费排、总闸还剩多少、止损判据；再按判据提止损卡', async () => {
     const h = make()
     h.svc.setAccounts({ google: { id: '1234567890' } })

@@ -166,6 +166,8 @@ export interface AdsDataService {
   rows: AdsDataStore['rows']
   /** 担着哪几家。 */
   wanted(): AdsDataPlatform[]
+  /** 连接卡复查：插件里连上了担着的那几家后台没有（一家都不担 / 没有插件通道回 undefined）。 */
+  backendReady(): boolean | undefined
 }
 
 const STATE = {
@@ -351,18 +353,29 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     return { ok: true, import: parsed.import }
   }
 
-  /** 插件说下到了哪：只认 CSV / 制表符文字，大小有上限；读到就入库。 */
+  /**
+   * 插件说下到了哪：认 CSV / 制表符文字（Excel、PDF、压缩包一律不读——看扩展名，也看文件头），
+   * 大小有上限；读到就入库。扩展名不一定有（自动化浏览器里的下载是随机名），所以没扩展名的也看内容。
+   */
   const readDownload = async (path: string): Promise<Uint8Array | string> => {
-    if (!/\.(csv|tsv|txt)$/iu.test(path)) return '下载的不是 CSV / 文字文件，没读。'
-    if (options.readFile !== undefined) return options.readFile(path)
+    const notText = '下载的不是 CSV / 文字文件（Excel / PDF / 压缩包），没读；导出时选 CSV。'
+    if (/\.(xlsx?|pdf|zip|gz)$/iu.test(path)) return notText
+    let bytes: Uint8Array
     try {
-      const info = await stat(path)
-      if (!info.isFile() || info.size > 20 * 1024 * 1024)
-        return '下载的文件不对（太大或不是文件），没读。'
-      return new Uint8Array(await readFile(path))
+      if (options.readFile !== undefined) bytes = await options.readFile(path)
+      else {
+        const info = await stat(path)
+        if (!info.isFile() || info.size > 20 * 1024 * 1024)
+          return '下载的文件不对（太大或不是文件），没读。'
+        bytes = new Uint8Array(await readFile(path))
+      }
     } catch {
       return '读不到下载的文件（可能被挪走了）。'
     }
+    const head = String.fromCharCode(...bytes.subarray(0, 4))
+    if (head.startsWith('PK') || head === '%PDF' || (bytes[0] === 0x1f && bytes[1] === 0x8b))
+      return notText
+    return bytes
   }
 
   const seedOnce = async (): Promise<void> => {
@@ -648,5 +661,10 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     today,
     rows: (f) => store.rows(f),
     wanted: () => options.wanted(),
+    backendReady: () => {
+      const want = options.wanted()
+      if (want.length === 0 || options.actions?.() === undefined) return undefined
+      return want.every((p) => plugin(p) !== 'not_connected')
+    },
   }
 }

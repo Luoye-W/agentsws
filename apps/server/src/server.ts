@@ -218,7 +218,7 @@ import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
 import { createAdsDataStore } from './ads-data/store.js'
-import { createAdsDataToolExecutor } from './ads-data/tools.js'
+import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
 import { adsMailSourceOf, adsReportSetupNotice, seedAdsDailyReport } from './ads-data/wire.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
@@ -3232,6 +3232,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const r = await (await siteThemeOf(ws))?.readiness({ fresh: true }).catch(() => undefined)
       return r === undefined ? undefined : r.applicable && r.next === undefined
     }
+    // WP315：插件里连上了担着的那几家广告后台（勾过风险告知）
+    if (need.kind === ADS_BACKEND_NEED_KIND)
+      return (await brandModules.forWorkspace(ws).catch(() => undefined))?.adsData?.backendReady()
     // WP328：插件里连上 Reddit、登着品牌号（不知道就回 undefined：人说好了就信人）
     if (need.kind === 'reddit_session')
       return (
@@ -5276,6 +5279,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               service: () => adsDataRef,
               ads: () => ads,
               port: () => adsService.port,
+              // 缺插件：直接出「插件连上广告后台」那张连接卡（卡上就地配对，连好接着做）
+              askConnect: async (req, why) => {
+                const cards = await setupCardsOf(ws)
+                const out = await cards?.askConnect({
+                  needs: [
+                    {
+                      kind: ADS_BACKEND_NEED_KIND,
+                      service: 'extension',
+                      name: 'Chrome 插件（连上广告后台）',
+                      required: true,
+                    },
+                  ],
+                  why,
+                  actor: req.actor,
+                  ...(req.work_item === undefined ? {} : { matter_id: req.work_item.id }),
+                  run_id: req.id,
+                })
+                return out !== undefined
+              },
               caps: (assignment_id) => {
                 try {
                   const actions = roles.effectiveConfig(assignment_id as never).actions
