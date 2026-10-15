@@ -88,7 +88,7 @@ export const DEEPSEEK_SIGN_OUT_STOPPED =
 
 /** WP150：登录失效时被停掉的那几次运行，时间线上写的原因。 */
 export const DEEPSEEK_EXPIRED_STOPPED =
-  'DeepSeek 账号的登录过期了，这件事正在用这个账号跑，所以先停下了。去「设置 → 模型」点一下重新登录，再让它重做一遍。'
+  'DeepSeek 账号的登录过期了，这件事正在用这个账号跑，所以先停下了。在下面这张卡上重新登录，我就接着做。'
 
 /** 登出后官方模块再留多久才摘（让它把后台的远端登出重试做完；官方重试间隔 1+2+4+8+16 秒）。 */
 const SIGN_OUT_GRACE_MS = 4 * 60_000
