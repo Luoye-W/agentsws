@@ -9,6 +9,7 @@
  */
 import { type RedditReadOutcome, runRedditRead } from '@agentsws/browser-action'
 import type { PermissionsLike } from '../ads/permissions'
+import { actionsHeld, registerBusy } from '../idle-gate'
 import { redditNext, redditResult } from '../local-client'
 import type { KeyValueStore } from '../storage'
 import { readSettings } from '../storage'
@@ -58,11 +59,16 @@ export type RedditPollOutcome =
   | 'refused'
   | 'idle'
   | 'ran'
+  /** WP345：要重载了，这一轮不领新活。 */
+  | 'held'
 
 let running = false
+// WP345：重载前等它空下来
+registerBusy('reddit', () => running)
 
 export async function pollRedditOnce(deps: RedditPollerDeps): Promise<RedditPollOutcome> {
   if (running) return 'busy'
+  if (actionsHeld()) return 'held'
   running = true
   try {
     return await pollOnce(deps)

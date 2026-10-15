@@ -2,6 +2,9 @@
 
 **这是「插件开放接口」（`docs/76`）的参考实现，功能精简。官方完整版不开源**——内测用户装的是私有 Release 里的 zip（见 `docs/68`）。
 
+> WP345（决策 871）起：随 Agents 工坊安装包带、跟着工坊更新的就是这一份（「Agents 工坊助手」，红人 + 广告 + Reddit），
+> 不再让人下载 zip。见下面「随工坊安装与更新」。
+
 它示范的是接口怎么用，不是功能上限：
 
 - 本机直连 + 6 位配对码（配对时绑定扩展 Origin 与令牌）；
@@ -20,3 +23,36 @@ pnpm install
 pnpm -F @agentsws/extension build   # wxt build + zip
 pnpm -F @agentsws/extension test
 ```
+
+## 随工坊安装与更新（WP345，决策 871）
+
+插件**不上架商店**。工坊安装包里带着构建好的 `chrome-mv3`，桌面版每次启动把它放到数据目录下一个**固定文件夹**
+（`<用户数据目录>/chrome-extension`：Mac `~/Library/Application Support/@agentsws/desktop/chrome-extension`，
+Windows `%APPDATA%\@agentsws\desktop\chrome-extension`）。用户只在第一次「加载已解压」时动一次手（连接卡上
+「打开插件文件夹」「打开 Chrome 扩展页」两个按钮）；之后：
+
+1. 新版工坊起来后比对文件夹里那一版，变了就先写到旁边的临时目录、逐个文件校验完整，再**整体换掉**旧目录
+   （换失败就保留旧版，记下原因；见 `apps/desktop/src/extension-sync.ts`）；
+2. 插件每分钟问一次本机「文件夹里是哪一版」（`POST /v1/extension/version`，同时报自己正在跑的版本）；
+   不一样就**等空闲**（广告 / Reddit 的领活与执行都停在一件做完之后，不再领新的）再 `chrome.runtime.reload()`；
+3. 重载后插件报新版本号，工坊记一条事件（`extension.updated`）；重载了还是旧版（多半是从别的文件夹加载的）
+   就不再重试，记 `extension.update_failed`，连接卡上照实说一句。Chrome 没开就等下次启动自然读新文件。
+
+### 固定 id
+
+`src/lib/identity.ts` 里的 `key` 是一把 RSA 公钥（只放公钥）。Chrome 对已解压插件默认按路径算 id，写了 `key`
+就按公钥算：id 固定为 `mlbfinfiigagllemohnopbhfdghagijg`，配对（令牌绑扩展 id）、`chrome.storage`、
+已授的可选权限都跟着 id 走，换文件夹、换电脑路径都不丢。私钥只在打 `.crx` 或上架时才用得到，两样都不做，没有留。
+
+### 版本号
+
+桌面打包（`apps/desktop/scripts/dist.mjs`）构建插件时给 `AGENTSWS_EXTENSION_VERSION` = 工坊版本；Chrome 的
+`version` 只认数字（`0.2.0`），完整那串进 `version_name`（`0.2.0-beta.8`），比对用 `version_name`。
+
+### 实测（`node scripts/probe-ext-chrome.mjs`，品牌版 Chrome、临时用户目录）
+
+- 新版多要权限：已解压插件重载后**照常开着、新权限直接生效**，不弹窗、不停用；
+- 开发者模式：Chrome 155 已经没有老的「停用开发者模式扩展程序」启动提示；但**关掉开发者模式，插件就被停用**
+  （再打开就回来）。所以三步小字里只说「打开开发者模式」，帮助文档里多一句「别关」。
+- 打开扩展页：Chrome 155 **不认命令行里的 `chrome://extensions`**（不管 Chrome 开没开着，都只开一个新标签页），
+  网页也打不开 `chrome://`。所以「打开 Chrome 扩展页」= 把 Chrome 叫到前面开好新标签页 + 把地址复制好，请人粘贴回车。

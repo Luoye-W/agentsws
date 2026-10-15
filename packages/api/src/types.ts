@@ -78,6 +78,7 @@ import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { ExtensionActionsPort } from './routes/extension-actions.js'
+import type { ExtensionInstallPort } from './routes/extension-install.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { HandoffPort } from './routes/handoff.js'
 import type { ReconcilePort } from './routes/health.js'
@@ -900,6 +901,11 @@ export interface GatewayDeps {
    * 插件照实说「这个版本还没有」。插件的会话仍由 {@link extension} 那一套令牌判。
    */
   extensionActions?: ExtensionActionsPort
+  /**
+   * WP345（决策 871）：插件随工坊安装与更新（固定文件夹在哪、里面是哪一版；插件报版本、问新版）。
+   * 没装配时那三条路由回 not_implemented——连接卡退回只出配对码那一块。
+   */
+  extensionInstall?: ExtensionInstallPort
   /**
    * WP328（docs/102）：Reddit 每日巡查（插件只读 + 工作台看 / 改 / 现在巡查 / 周汇总）。
    * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。

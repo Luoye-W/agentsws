@@ -12,7 +12,6 @@
     "packages/contracts/src/b2b.ts",
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/brand-design.ts",
-    "packages/contracts/src/brand-insights.ts",
     "packages/contracts/src/brand-intake.ts",
     "packages/contracts/src/byo-data-source.ts",
     "packages/contracts/src/changes.ts",
@@ -132,7 +131,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "0c6e1c7bc4caccde6a6eaa5495bea832",
+  "source_digest": "d0f1bb62964a9f0311f874b2a259e51c",
   "objects": [
     {
       "id": "ad",

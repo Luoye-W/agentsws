@@ -1,5 +1,5 @@
 /** WP225：「两个版本之间点更新」端到端脚本里的纯函数（真跑只在 CI 的 windows-latest 上）。 */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -7,6 +7,7 @@ import {
   countIn,
   defaultUserData,
   describeBeat,
+  extensionFolderState,
   feedFileFor,
   readBeat,
   versionOfLatestYml,
@@ -66,5 +67,34 @@ describe('win-update-e2e 纯函数', () => {
     const log = 'a 更新好了，暂停的接着做 b\nc 更新好了，暂停的接着做\n'
     expect(countIn(log, '更新好了，暂停的接着做')).toBe(2)
     expect(countIn('', 'x')).toBe(0)
+  })
+
+  it('WP345：插件文件夹里是哪一版 + 同步结果；读不到回 undefined', () => {
+    const ud = mkdtempSync(join(tmpdir(), 'wp345-win-'))
+    try {
+      expect(extensionFolderState(ud)).toEqual({
+        version: undefined,
+        status: undefined,
+        previous: undefined,
+        error: undefined,
+      })
+      mkdirSync(join(ud, 'chrome-extension'))
+      writeFileSync(
+        join(ud, 'chrome-extension', 'manifest.json'),
+        JSON.stringify({ version: '0.2.2', version_name: '0.2.2-ci.9' }),
+      )
+      writeFileSync(
+        join(ud, 'chrome-extension.json'),
+        JSON.stringify({ status: 'updated', previous_version: '0.2.1-ci.9' }),
+      )
+      expect(extensionFolderState(ud)).toEqual({
+        version: '0.2.2-ci.9',
+        status: 'updated',
+        previous: '0.2.1-ci.9',
+        error: undefined,
+      })
+    } finally {
+      rmSync(ud, { recursive: true, force: true })
+    }
   })
 })

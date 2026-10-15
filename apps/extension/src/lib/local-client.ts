@@ -119,6 +119,20 @@ export function hello(options: LocalClientOptions): Promise<LocalCallResult<Exte
   return call<ExtensionHello>(options, '/v1/extension/hello', { method: 'GET' })
 }
 
+/**
+ * WP345：报自己正在跑的版本、问工坊文件夹里是哪一版（每分钟一次；重载后带上从哪版换来）。
+ * 老的本机服务没有这一条（501）：当成「不是桌面版」，什么都不做。
+ */
+export function reportVersion(
+  options: LocalClientOptions,
+  input: { version: string; reloaded_from?: string; gave_up?: string },
+): Promise<LocalCallResult<{ folder_version?: string }>> {
+  return call<{ folder_version?: string }>(options, '/v1/extension/version', {
+    method: 'POST',
+    body: input,
+  })
+}
+
 /** 报一批观测。 */
 export function ingest(
   options: LocalClientOptions,

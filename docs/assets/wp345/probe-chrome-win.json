@@ -1,0 +1,88 @@
+{
+ "chrome": "Chrome/155.0.8059.40",
+ "platform": "win32",
+ "ui_strings": {
+  "checked": true,
+  "old_startup_bubble": false,
+  "turn_on_developer_mode_to_use": true,
+  "developer_mode_off_disables": true
+ },
+ "extension_id": "mlbfinfiigagllemohnopbhfdghagijg",
+ "installed": {
+  "state": "ENABLED",
+  "version": "1.0.0-probe",
+  "location": "UNPACKED",
+  "disabled_because": [],
+  "warnings": []
+ },
+ "after_reload_with_more_permissions": {
+  "state": "ENABLED",
+  "version": "1.0.1-probe",
+  "location": "UNPACKED",
+  "disabled_because": [],
+  "warnings": [
+   "Read and change your browsing history on all your signed-in devices",
+   "Read and change your bookmarks"
+  ]
+ },
+ "service_worker_running_after_reload": true,
+ "granted_after_reload": {
+  "permissions": [
+   "activeTab",
+   "alarms",
+   "bookmarks",
+   "history",
+   "storage",
+   "tabs",
+   "scripting"
+  ],
+  "origins": [
+   "http://127.0.0.1/*",
+   "https://*.example.com/*",
+   "https://*.instagram.com/*",
+   "https://*.tiktok.com/*",
+   "https://*.youtube.com/*"
+  ],
+  "version_name": "1.0.1-probe"
+ },
+ "open_extensions_page_when_running": {
+  "handed_over_and_exited": true,
+  "pages_added": [
+   "chrome://newtab/"
+  ],
+  "opened_extensions_page": false
+ },
+ "after_restart": {
+  "state": "ENABLED",
+  "version": "1.0.2-probe",
+  "location": "UNPACKED",
+  "disabled_because": [],
+  "warnings": [
+   "Read and change your browsing history on all your signed-in devices",
+   "Read and change your bookmarks"
+  ]
+ },
+ "developer_mode_after_restart": true,
+ "developer_mode_turned_off": {
+  "state": "DISABLED",
+  "version": "1.0.2-probe",
+  "location": "UNPACKED",
+  "disabled_because": [
+   "unsupportedDeveloperExtension"
+  ],
+  "warnings": [
+   "Read and change your browsing history on all your signed-in devices",
+   "Read and change your bookmarks"
+  ]
+ },
+ "developer_mode_turned_back_on": {
+  "state": "ENABLED",
+  "version": "1.0.2-probe",
+  "location": "UNPACKED",
+  "disabled_because": [],
+  "warnings": [
+   "Read and change your browsing history on all your signed-in devices",
+   "Read and change your bookmarks"
+  ]
+ }
+}

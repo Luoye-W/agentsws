@@ -20,6 +20,10 @@ on:
       - profiles/agentsws/**
       - packages/stand-ins/**
       - scripts/preinstall-smoke*.mjs
+      # WP345：插件随安装包带、跟着工坊更新（品牌 Chrome 实测脚本也在这里跑）
+      - apps/extension/**
+      - scripts/probe-ext-chrome.mjs
+      - scripts/lib/cdp-pipe.mjs
       - pnpm-lock.yaml
       - .github/workflows/desktop-windows.yml
   push:
@@ -32,6 +36,10 @@ on:
       - profiles/agentsws/**
       - packages/stand-ins/**
       - scripts/preinstall-smoke*.mjs
+      # WP345：插件随安装包带、跟着工坊更新（品牌 Chrome 实测脚本也在这里跑）
+      - apps/extension/**
+      - scripts/probe-ext-chrome.mjs
+      - scripts/lib/cdp-pipe.mjs
       - pnpm-lock.yaml
       - .github/workflows/desktop-windows.yml
   workflow_dispatch:
@@ -105,6 +113,17 @@ jobs:
           "
           cd apps/desktop && node scripts/dist.mjs --win --x64
 
+      # WP345：Windows 上的品牌版 Chrome（runner 自带）实测两件事——新版插件多要权限时重载会不会弹窗 / 被停用、
+      # 开发者模式插件启动时有没有提示（看界面文字包里还有没有那句、重开后插件开着没有），顺手量「打开扩展页」与
+      # 「Chrome 关着时换版」。临时用户目录，不碰 runner 上别的东西。只是测量，不挡打包。
+      - name: 插件随工坊更新：品牌 Chrome 实测（WP345）
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p win-smoke
+          node scripts/probe-ext-chrome.mjs > win-smoke/probe-ext-chrome.json
+          cat win-smoke/probe-ext-chrome.json
+
       # WP327：安装包里的服务进程已打成 bundle（scripts/bundle-app.mjs）。用打好的那一份（win-unpacked）再把
       # 每个岗位走一遍真 dsh——确认 bundle 与桩在 Windows 上照样跑得通（CI 的 Node 22 与捆绑 Node 同一个 ABI）
       - name: 打好的包再冒烟一次（win-unpacked × 真 dsh × 每个岗位）
@@ -156,6 +175,7 @@ jobs:
   #   B 回滚演练：V1 → V2，V2 假装起不来 → 60 秒后切回 V1
   #   C 只切换：V1 → V2，量「点了 → 新版起来」秒数
   # V1 / V2 打包时更新源指到本机回环端口。与上面那个作业并行跑；不发布、不上传到任何下载站。
+  # WP345：每一段都核数据目录下的插件文件夹：A 之后是 V1、B 回滚后回到 V1、C 之后换成 V2。
   update-e2e:
     name: 版本之间点更新（迁移 / 回滚演练 / 只切换）
     runs-on: windows-latest
