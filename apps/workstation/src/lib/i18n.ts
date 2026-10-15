@@ -5,6 +5,7 @@
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
 
+import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
@@ -8306,6 +8307,7 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
     ...REDDIT_WRITE_ZH,
+    ...ADS_CHANGES_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
   },
@@ -8335,6 +8337,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
+    ...ADS_CHANGES_EN,
     ...CARD_PAGE_EN,
   },
 }

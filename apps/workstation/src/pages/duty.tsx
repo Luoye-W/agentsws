@@ -19,6 +19,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
 import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
@@ -331,6 +332,12 @@ export function DutyPage(): React.ReactNode {
               assignment={here?.my_assignment_id ?? assignment}
               platform={adCreativePlatformOf(role_id) ?? 'google'}
             />
+          </div>
+        )}
+        {/* WP316（docs/101 §5.1② ③）：批过的广告改动——等你确认的、做完的（读回 / 截图 / 撤销） */}
+        {adCreativePlatformOf(role_id) === undefined ? null : (
+          <div className="mb-4">
+            <AdChangesPanel assignment={here?.my_assignment_id ?? assignment} />
           </div>
         )}
         {role_id === 'dtc.content' ? (

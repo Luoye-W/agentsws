@@ -218,6 +218,7 @@ import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { createAdsService } from './ads-service.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
+import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -3647,6 +3648,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
+          ...adsNoticeCards({
+            rows: adsWiringNow.entries(),
+            now: clock.now(),
+            hrefOf: (platform) => {
+              const role_id = platform === 'google' ? 'ads.google' : 'ads.meta'
+              const a = roles.assignments
+                .listByPerson(actor.person_id, { workspace_id: ws })
+                .find((x) => x.revoked_at === undefined && x.role_id === role_id)
+              return a === undefined
+                ? undefined
+                : {
+                    href: `/positions/${encodeURIComponent(a.id)}/duties/${encodeURIComponent(role_id)}`,
+                    position_id: a.id,
+                    role_id,
+                  }
+            },
+          }),
         ],
       }),
       // WP158：读之前先把 GSC / GA4 拉新（当天有缓存就是空操作；永不抛）

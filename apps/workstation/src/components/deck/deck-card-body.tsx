@@ -13,6 +13,7 @@
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
+import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
@@ -310,6 +311,8 @@ export function DeckCardBody({
 
       // ② 改动：before / after 双格是主体，一句依据放下面
       case 'change':
+        // WP316：上传表 / 开始投放 / 撤销卡——一句话 + 表格预览 + 可下载的原表
+        if (isAdsSheetPayload(payload)) return <AdsSheetBody payload={payload} />
         // WP249：自家版版务卡——原文、举报原因、AI 建议 + 理由、将执行的动作
         if (isOwnSubPayload(payload)) return <OwnSubCardBody payload={payload} />
         // WP254：别的社群的版务卡——将执行什么、原话、依据（批了才经渠道适配器去做）
