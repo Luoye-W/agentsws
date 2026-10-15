@@ -397,6 +397,34 @@ img {
   background: var(--surface);
 }
 
+/* WP347：顶栏 GitHub 带 star；菜单里的 GitHub 一样 */
+.nav-gh .gh-star {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  color: var(--warn);
+}
+.nav-gh .gh-star .ico {
+  width: 15px;
+  height: 15px;
+}
+.menu-gh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.menu-gh .ico:last-child {
+  width: 15px;
+  height: 15px;
+  color: var(--warn);
+}
+.btn-sm .ico {
+  width: 16px;
+  height: 16px;
+}
+
 /* 段落通用 */
 section {
   scroll-margin-top: 80px;
@@ -816,7 +844,7 @@ h1 em {
 }
 .foot-grid {
   display: grid;
-  grid-template-columns: 2fr repeat(4, 1fr);
+  grid-template-columns: 2fr repeat(3, 1fr);
   gap: 32px;
 }
 .foot h2 {

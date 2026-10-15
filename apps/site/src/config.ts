@@ -11,9 +11,13 @@ export const SITE_URL = 'https://agentsws.com'
  */
 export const CLOUD_URL = 'https://cloud.agentsws.com'
 
-/** 账号页的三个入口（WP198 已上线的路径）。 */
+/**
+ * 账号页的入口（WP198 已上线的路径）。WP347：加「注册」——云端注册页是 `/account/signup`
+ * （登录页上「注册新账号」就链到它；`/account/register` 不是注册页，会先跳登录）。
+ */
 export const ACCOUNT_PATHS = {
   login: '/account/login',
+  signup: '/account/signup',
   account: '/account',
   topup: '/account/topup',
 } as const

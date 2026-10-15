@@ -1,6 +1,6 @@
 ---
 /**
- * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 怎么干活（WP344）→ 出卡审批
+ * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 三种用法（WP347）→ 怎么干活（WP344）→ 出卡审批
  * → 本地优先 → 别处收费这里免费 → 底座 → 价格 → 公开地做 → 常见问题 → 收尾。
  * 工作台截图由 `scripts/app-shots.mjs` 从演示世界重拍（WP344）。
  */
@@ -9,17 +9,16 @@ import answerDark from '../assets/app/answer-dark.png'
 import answerLight from '../assets/app/answer-light.png'
 import darkShot from '../assets/app/home-dark.png'
 import homeShot from '../assets/app/home-light.png'
+import DownloadButton from '../components/DownloadButton.astro'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import Mark from '../components/Mark.astro'
 import { ARCHITECTURE_URL, GITHUB_URL, SISTER_SITES } from '../config.js'
-import { buildDownloads } from '../data/downloads-build.js'
 import { type Lang, localePath } from '../i18n/common.js'
 import { HOME } from '../i18n/home.js'
 import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
 import { loadChangelog } from '../lib/changelog.js'
-import { directWindowsUrl } from '../lib/downloads.js'
 import { emph, linkNames } from '../lib/locales.js'
 import '../styles/home.css'
 
@@ -32,8 +31,6 @@ const roles = ROLES[lang]
 const p = (x: string) => localePath(x, lang)
 const logs = loadChangelog(lang).slice(0, 6)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
-// WP218：「下载」按钮——Windows 访客直接拿最新安装包（site.ts 按系统换 href），其余去下载页
-const winUrl = directWindowsUrl((await buildDownloads()).manifest)
 ---
 <Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce>
   <section class="hero">
@@ -41,12 +38,14 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
       <div>
         <span class="pill"><i></i>{t.hero.pill}</span>
         <h1>{t.hero.title.map((line) => <span set:html={emph(line)} />)}</h1>
-        <p class="lede">{t.hero.lede}</p>
+        <p class="lede"><b class="position">{t.hero.position}</b>{t.hero.lede}</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.hero.download}</a>
+          <DownloadButton lang={lang} />
           <a class="btn btn-ghost" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.hero.github}</a>
         </div>
-        {winUrl && <p class="dl-win-note" data-dl-win-note hidden>{t.hero.winFirstOpen}</p>}
+        <p class="dl-more"><a href={`${p('/download/')}#os`}>{t.hero.dlMore[0]}</a> · <a href={`${p('/download/')}#more`}>{t.hero.dlMore[1]}</a></p>
+        <p class="dl-win-note" data-dl-note="mac" hidden>{t.hero.macFirstOpen}</p>
+        <p class="dl-win-note" data-dl-note="win" hidden>{t.hero.winFirstOpen}</p>
         <ul class="checks">
           {t.hero.checks.map((c) => <li><Icon name="check" />{c}</li>)}
         </ul>
@@ -165,7 +164,30 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec" id="how" aria-labelledby="how-h">
+  <section class="sec" id="modes" aria-labelledby="modes-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.modes.eyebrow}</div>
+      <h2 class="h2" id="modes-h">{t.modes.title}</h2>
+      <p class="sub">{t.modes.sub}</p>
+      <ol class="modes">
+        {t.modes.items.map((m, i) => (
+          <li class:list={['mode', `mode-${m.key}`, { sel: i === 0 }]}>
+            <svg class="ppl" viewBox="0 0 120 64" aria-hidden="true">
+              {m.key === 'solo' && <g><circle class="me" cx="60" cy="22" r="9" /><path class="me" d="M45 52a15 15 0 0 1 30 0" /></g>}
+              {m.key === 'team' && <g>{[24, 60, 96].map((x) => <><circle class:list={[x === 60 ? 'me' : 'pal']} cx={x} cy="22" r="8" /><path class:list={[x === 60 ? 'me' : 'pal']} d={`M${x - 13} 50a13 13 0 0 1 26 0`} /></>)}<path class="link" d="M36 30h12M72 30h12" /></g>}
+              {m.key === 'company' && <g><path class="link" d="M60 21v10M30 31h60M30 31v9M60 31v9M90 31v9" /><circle class="me" cx="60" cy="12" r="7" />{[30, 60, 90].map((x) => <circle class="pal" cx={x} cy="48" r="7" />)}</g>}
+            </svg>
+            <span class="mode-tag">{m.tag}</span>
+            <h3>{m.h}</h3>
+            <p>{m.p}</p>
+          </li>
+        ))}
+      </ol>
+      <p class="modes-grow"><Icon name="arrow" />{t.modes.grow}</p>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="how" aria-labelledby="how-h">
     <div class="wrap center">
       <div class="eyebrow">{t.how.eyebrow}</div>
       <h2 class="h2" id="how-h">{t.how.title}</h2>
@@ -189,7 +211,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec sec-alt" id="cards" aria-labelledby="cards-h">
+  <section class="sec" id="cards" aria-labelledby="cards-h">
     <div class="wrap center">
       <div class="eyebrow">{t.cards.eyebrow}</div>
       <h2 class="h2" id="cards-h">{t.cards.title}</h2>
@@ -215,7 +237,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec" id="local" aria-labelledby="local-h">
+  <section class="sec sec-alt" id="local" aria-labelledby="local-h">
     <div class="wrap local">
       <div>
         <div class="eyebrow">{t.local.eyebrow}</div>
@@ -234,7 +256,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     </div>
   </section>
 
-  <section class="sec sec-alt" id="free" aria-labelledby="free-h">
+  <section class="sec" id="free" aria-labelledby="free-h">
     <div class="wrap center">
       <div class="eyebrow">{t.free.eyebrow}</div>
       <h2 class="h2" id="free-h">{t.free.title}</h2>
@@ -255,7 +277,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
     <div class="wrap">
       <div class="base-head">
         <div class="eyebrow">{t.base.eyebrow}</div>
-        <h2 class="h2" id="base-h">{t.base.title.map((l, i) => <>{l}{i === 0 && <br />}</>)}</h2>
+        <h2 class="h2" id="base-h">{t.base.title.map((l, i) => <><span set:html={emph(l)} />{i === 0 && <br />}</>)}</h2>
         <p class="sub">{t.base.sub}</p>
       </div>
       <div class="base-grid">
@@ -337,10 +359,11 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
       <h2>{t.final.title}</h2>
       <p class="sub" style="margin:0 auto">{t.final.sub}</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.final.download}</a>
+        <DownloadButton lang={lang} />
         <a class="btn btn-ghost" href={p('/docs/')}>{t.final.docs}</a>
       </div>
-      {winUrl && <p class="dl-win-note" data-dl-win-note hidden>{t.hero.winFirstOpen}</p>}
+      <p class="dl-win-note" data-dl-note="mac" hidden>{t.hero.macFirstOpen}</p>
+      <p class="dl-win-note" data-dl-note="win" hidden>{t.hero.winFirstOpen}</p>
     </div>
   </section>
 </Base>

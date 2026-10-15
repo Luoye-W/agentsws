@@ -29,17 +29,19 @@ const links = [
       {links.map((l) => <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>)}
     </nav>
     <div class="nav-right">
-      <a class="nav-text nav-hide" href={GITHUB_URL} rel="noopener"><Icon name="github" />{c.github}</a>
+      <a class="nav-text nav-gh nav-hide" href={GITHUB_URL} rel="noopener" title={c.githubStar}><Icon name="github" />{c.github}<span class="gh-star" aria-hidden="true"><Icon name="star" /></span></a>
       <a class="nav-text nav-hide" href={localePath(path, other)} hreflang={other === 'zh' ? 'zh-CN' : 'en'} lang={other === 'zh' ? 'zh-CN' : 'en'}>{c.langSwitch}</a>
       <button class="iconbtn" type="button" data-theme-toggle aria-label={c.theme}><Icon name="sun" /></button>
-      <a class="btn btn-ghost btn-sm nav-hide" href={accountUrl('login', lang)} rel="noopener">{c.login}</a>
-      <a class="btn btn-primary btn-sm" href={localePath('/download/', lang)} aria-current={current === 'download' ? 'page' : undefined}>{c.download}</a>
+      <a class="nav-text nav-hide" href={accountUrl('login', lang)} rel="noopener">{c.login}</a>
+      <a class="btn btn-ghost btn-sm nav-hide" href={accountUrl('signup', lang)} rel="noopener">{c.signup}</a>
+      <a class="btn btn-primary btn-sm" href={localePath('/download/', lang)} aria-current={current === 'download' ? 'page' : undefined}><Icon name="download" />{c.download}</a>
       <details class="menu">
         <summary class="iconbtn" aria-label={c.menu}><Icon name="menu" /></summary>
         <div class="menu-panel">
           {links.map((l) => <a href={l.href}>{l.label}</a>)}
-          <a href={GITHUB_URL} rel="noopener">{c.github}</a>
+          <a class="menu-gh" href={GITHUB_URL} rel="noopener"><Icon name="github" />{c.github}<Icon name="star" /></a>
           <a href={accountUrl('login', lang)} rel="noopener">{c.login}</a>
+          <a href={accountUrl('signup', lang)} rel="noopener">{c.signup}</a>
           <a href={localePath(path, other)} lang={other === 'zh' ? 'zh-CN' : 'en'}>{c.langSwitchLabel}</a>
         </div>
       </details>

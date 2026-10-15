@@ -1466,3 +1466,174 @@
     margin-top: 32px;
   }
 }
+
+/* WP347：首屏定位句、按系统直下的下载按钮、按钮下一行小字 */
+.lede .position {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.btn-dl {
+  height: auto;
+  min-height: 54px;
+  padding: 8px 22px 8px 18px;
+  border-radius: 14px;
+}
+.btn-dl .ico {
+  width: 20px;
+  height: 20px;
+}
+.dl-txt {
+  display: grid;
+  text-align: left;
+  line-height: 1.2;
+}
+.dl-main {
+  font-size: 16px;
+}
+.dl-sub {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.78;
+}
+.cta-row:has(.btn-dl) .btn-ghost {
+  height: auto;
+  min-height: 54px;
+  border-radius: 14px;
+}
+.hero .cta-row {
+  margin-bottom: 10px;
+}
+.dl-more {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dl-more a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dl-more a:hover {
+  color: var(--ink);
+}
+.hero .dl-win-note {
+  margin: -10px 0 18px;
+}
+
+/* WP347：三种用法 */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 48px;
+  list-style: none;
+  padding: 0;
+  text-align: left;
+}
+.mode {
+  position: relative;
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 22px 22px 24px;
+}
+.mode.sel {
+  box-shadow: var(--glow), var(--shadow);
+}
+.ppl {
+  display: block;
+  width: 120px;
+  height: 64px;
+  margin-bottom: 14px;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.ppl .me {
+  stroke: var(--brand);
+}
+.ppl circle.me {
+  fill: var(--tint);
+}
+.ppl .pal {
+  stroke: var(--muted);
+}
+.ppl circle.pal {
+  fill: var(--surface);
+}
+.ppl .link {
+  stroke: var(--line);
+  stroke-dasharray: 3 3;
+}
+.mode-tag {
+  display: inline-block;
+  font: 500 12px / 22px var(--sans);
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--tint);
+  color: var(--brand-ink);
+  margin-bottom: 10px;
+}
+.mode h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.mode p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.modes-grow {
+  margin-top: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--body);
+}
+.modes-grow .ico {
+  color: var(--brand);
+}
+
+/* 段落底色换了以后（WP347 插进「三种用法」），浅底段里的卡片用纸色 */
+.sec-alt .promise,
+.sec-alt .mode {
+  background: var(--paper);
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .modes {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 32px;
+  }
+  .mode {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    column-gap: 14px;
+    padding: 18px;
+  }
+  .ppl {
+    width: 72px;
+    height: 40px;
+    grid-row: span 3;
+    margin: 4px 0 0;
+  }
+  .mode-tag {
+    justify-self: start;
+    margin-bottom: 6px;
+  }
+  .modes-grow {
+    text-align: left;
+    align-items: flex-start;
+  }
+  .modes-grow .ico {
+    margin-top: 2px;
+  }
+  .hero .cta-row .btn-ghost {
+    flex: 0 1 auto;
+  }
+}
