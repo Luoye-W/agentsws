@@ -32,13 +32,30 @@ export interface BrandKeywords {
   scenario: string[]
 }
 
-/** 一个主要竞品。**AI 建议的**（只看了这个品牌自己的页面，没联网另查），界面标「AI 建议」。 */
+/**
+ * WP349（决策 881 改）：一条来源——这一格 / 这个竞品是从**哪个网页**看来的（联网搜到的那一条）。
+ * 界面上可点开；人要能自己去核。
+ */
+export interface BrandSource {
+  url: string
+  /** 网页标题（搜索结果给的；没有就画域名）。 */
+  title?: string
+}
+
+/**
+ * 一个主要竞品。AI 整理的，界面标「AI 建议」。
+ *
+ * WP349（Luoye 10-15 改决策 881）：**竞品必须联网查到、带来源才收**——只出现在模型记忆里的不算；
+ * 没联网能力时竞品一格留空并照实说。人在设置页自己加的竞品可以没有来源（人说了算）。
+ */
 export interface BrandCompetitor {
   name: string
   /** 一句理由（为什么算竞品）。 */
   reason: string
-  /** 官网（模型给得出才有；不核实）。 */
+  /** 官网（WP349 起：搜到的网页里核对得上才留）。 */
   url?: string
+  /** WP349：从哪几个网页看来的（AI 整理的竞品至少一条；人加的可以没有）。 */
+  sources?: BrandSource[]
 }
 
 /** 档案里由 AI 填的那几格（品类是 WP335 起就 AI 填的，一并算在里面）。 */
@@ -66,3 +83,6 @@ export const BRAND_COMPETITORS_MAX = 8
 
 /** 每组关键词最多几个。 */
 export const BRAND_KEYWORDS_PER_GROUP_MAX = 12
+
+/** WP349：一格最多挂几条来源。 */
+export const BRAND_SOURCES_PER_FIELD_MAX = 3
