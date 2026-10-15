@@ -80,7 +80,23 @@ export async function launchChrome({
   const send = (method, params = {}, sessionId) =>
     new Promise((resolve, reject) => {
       const id = nextId++
-      waiting.set(id, { resolve, reject, method })
+      // 一条调用最多等 30 秒（浏览器卡住时别把整个脚本吊死）
+      const timer = setTimeout(() => {
+        if (!waiting.has(id)) return
+        waiting.delete(id)
+        reject(new Error(`${method}: 30 秒没回`))
+      }, 30_000)
+      waiting.set(id, {
+        resolve: (v) => {
+          clearTimeout(timer)
+          resolve(v)
+        },
+        reject: (e) => {
+          clearTimeout(timer)
+          reject(e)
+        },
+        method,
+      })
       writer.write(
         `${JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })}\0`,
       )

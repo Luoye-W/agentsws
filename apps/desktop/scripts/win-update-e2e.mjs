@@ -51,6 +51,27 @@ import {
 
 // ── 纯函数（单测覆盖）──────────────────────────────────────────────────
 
+/**
+ * WP345：数据目录下插件固定文件夹里是哪一版（`version_name` 优先）+ 旁边那份同步结果。读不到回 undefined。
+ */
+export function extensionFolderState(userData) {
+  const folder = join(userData, 'chrome-extension')
+  let version
+  try {
+    const m = JSON.parse(readFileSync(join(folder, 'manifest.json'), 'utf8'))
+    version = m.version_name ?? m.version
+  } catch {
+    version = undefined
+  }
+  let sync
+  try {
+    sync = JSON.parse(readFileSync(`${folder}.json`, 'utf8'))
+  } catch {
+    sync = undefined
+  }
+  return { version, status: sync?.status, previous: sync?.previous_version, error: sync?.error }
+}
+
 /** `latest.yml` 里的 `version:`。 */
 export function versionOfLatestYml(text) {
   const m = /^version:\s*['"]?([^'"\s]+)['"]?\s*$/m.exec(text)
@@ -375,6 +396,10 @@ async function main() {
     `A 数据都在；安装目录 ${footV1.files} 个文件、${footV1.mb} MB（老版本 ${footOld.files} 个、${footOld.mb} MB）`,
   )
   summary.push(`迁移（平铺 ${fromVersion} → 版本目录 ${v1}，走安装程序）：${secA} 秒`)
+  // WP345：老版本没带插件；V1 起来把它放进数据目录的固定文件夹
+  const extA = extensionFolderState(userData)
+  step(`A 插件文件夹：${JSON.stringify(extA)}`)
+  if (extA.version !== v1) throw new Error(`A 插件文件夹里是 ${extA.version}，应是 ${v1}`)
 
   // ── B. 回滚演练：V1 → V2，V2 假装起不来 → 60 秒后切回 V1 ─────────────────────────
   await killInstalled(dir)
@@ -403,6 +428,10 @@ async function main() {
   if (existsSync(join(userData, 'update-drill.json'))) throw new Error('B 演练文件没被 V2 用掉')
   dataStillThere(userData, marker, port, dataBefore)
   summary.push(`回滚演练（${v2} 假装起不来）：${secB} 秒回到 ${v1}`)
+  // WP345：回到 V1，插件文件夹也跟着回到 V1 那一版
+  const extB = extensionFolderState(userData)
+  step(`B 插件文件夹：${JSON.stringify(extB)}`)
+  if (extB.version !== v1) throw new Error(`B 回滚后插件文件夹里是 ${extB.version}，应是 ${v1}`)
 
   // ── C. 真更新：V1 → V2，只切换 ───────────────────────────────────────────────
   await killInstalled(dir)
@@ -455,6 +484,12 @@ async function main() {
   step(`C 单实例：再起一次退出码 ${describeExit(second.status, second.signal)}`)
   if (second.status === null) throw new Error('C 第二个实例 30 秒没退出（单实例锁没生效？）')
   summary.push('有任务时现在重启（WP337）：暂停全部 → 新版接着做 1 次')
+  // WP345：V2 起来把插件文件夹整体换成 V2 那一版
+  const extC = extensionFolderState(userData)
+  step(`C 插件文件夹：${JSON.stringify(extC)}`)
+  if (extC.version !== v2 || extC.status !== 'updated')
+    throw new Error(`C 插件文件夹没换成 ${v2}：${JSON.stringify(extC)}`)
+  summary.push(`插件文件夹（WP345）：${extA.version} → 回滚 ${extB.version} → ${extC.version}`)
   summary.push(
     `只切换（${v1} → ${v2}）：点了到新版桌面壳 ${bootMs === undefined ? '?' : (bootMs / 1000).toFixed(1)} 秒，到新版服务健康 ${secC.toFixed(1)} 秒`,
   )
