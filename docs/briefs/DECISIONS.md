@@ -960,3 +960,8 @@
 | 850 | （WP341）每次对话运行提示多约 170 token | 建议保持，真机看是否滥用按钮（**10-15 Luoye 同意**） | 低 |
 | 851 | （WP341）聊天软件编号选项只记内存 30 分钟，重启丢 | 建议保持（**10-15 Luoye 同意**） | 低 |
 | 852 | （WP341）mermaid / 3D 引擎内含 mermaid、d3、DOMPurify、three 的许可证要补进安装包清单 | 建议另开小单补清单（**10-15 Luoye 同意**） | 低 |
+| 873 | （WP345）安装包随带开源仓「Agents 工坊助手」插件；私有仓完整版红人面板不随包，要随包另开私有构建单 | 待定（建议先这样） | 低 |
+| 874 | （WP345）插件固定文件夹按现有数据目录：Mac `~/Library/Application Support/@agentsws/desktop/chrome-extension`、Windows `%APPDATA%\@agentsws\desktop\chrome-extension` | 待定（建议同意） | 低 |
+| 875 | （WP345）只放公钥固定 id、不留私钥；以前从 zip 手装过的要删掉按新三步重装并重新配对一次 | 待定（建议同意） | 低 |
+| 876 | （WP345）「打开 Chrome 扩展页」只能开新标签页并复制好地址请人粘贴（Chrome 限制） | 待定（建议接受） | 低 |
+| 877 | （WP345）Release 继续发插件 zip 给只要插件的开源用户，官网下载页不再突出 | 待定（建议先继续发） | 低 |
