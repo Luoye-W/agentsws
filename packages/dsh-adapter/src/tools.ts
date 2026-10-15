@@ -12,6 +12,7 @@ import { EXTERNAL_FENCE, redactOutbound, redactOutboundText } from '@agentsws/co
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
+  ADS_DATA_TOOL_DEF_BY_NAME,
   ADS_TOOL_DEF_BY_NAME,
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
@@ -357,6 +358,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
     // WP331：报告积木（定义在 stand-ins 的 `runtime/report.ts`）
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
+    // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
+    ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
     // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
     SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
@@ -512,6 +515,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP331：报告积木（查数据只读；发布只进这个岗位的报表区）
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）
+      ADS_DATA_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,

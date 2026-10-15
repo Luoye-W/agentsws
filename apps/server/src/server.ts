@@ -216,6 +216,10 @@ import {
 import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
+import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
+import { createAdsDataStore } from './ads-data/store.js'
+import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
+import { adsMailSourceOf, adsReportSetupNotice, seedAdsDailyReport } from './ads-data/wire.js'
 import { createAdsService } from './ads-service.js'
 import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
@@ -608,6 +612,7 @@ import {
   ensureTask,
   offsetToTz,
   parkPendingApprovals,
+  registerAdsDailyExport,
   registerAmazonSla,
   registerApprovalHousekeeping,
   registerB2bSequence,
@@ -3258,6 +3263,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
+    if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
     setupCards.set(ws, assembly)
@@ -3272,6 +3279,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const r = await (await siteThemeOf(ws))?.readiness({ fresh: true }).catch(() => undefined)
       return r === undefined ? undefined : r.applicable && r.next === undefined
     }
+    // WP315：插件里连上了担着的那几家广告后台（勾过风险告知）
+    if (need.kind === ADS_BACKEND_NEED_KIND)
+      return (await brandModules.forWorkspace(ws).catch(() => undefined))?.adsData?.backendReady()
     // WP328：插件里连上 Reddit、登着品牌号（不知道就回 undefined：人说好了就信人）
     if (need.kind === 'reddit_session')
       return (
@@ -3997,6 +4007,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     /** WP329：Reddit 写（下面建；插件动作通道的事件与社媒回帖要先引用它，所以晚绑定）。 */
     let redditWrites: RedditWriteService | undefined
+    /** WP315：广告看数据（下面建；插件动作通道的事件要先引用它，所以晚绑定）。 */
+    let adsData: AdsDataService | undefined
     /** WP316：广告改动的执行那一半（下面建；插件动作通道的事件要先引用它，所以晚绑定）。 */
     let adsWiring: AdsWiring | undefined
     const adsActions =
@@ -4008,6 +4020,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onEvent: (event) => {
               redditWrites?.onActionEvent(event)
               adsWiring?.onActionEvent(event)
+              // WP315：「工坊日报」建好了 / 导出的文件下到了 → 读文件入库（只认自己排的那几件）
+              void adsData?.onActionEvent(event).catch(() => {})
             },
             // WP329：Reddit 的写活记在 WP328 巡查那一本账上（同一个号读写一次一件；巡查在下面才建，晚绑定）
             paceFor: (job) => (job.plan.platform === 'reddit' ? redditWatch?.pace : undefined),
@@ -4037,6 +4051,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent,
       id: () =>
         Math.floor(random() * 0xffffffff).toString(36) + Date.parse(clock.now()).toString(36),
+      // WP315：看数据配过的就是这个账户 → 带上 Google 的 ocid（看数据在下面才建，取值时才碰它）
+      ocidFor: (p, external_id) => {
+        const a = adsData?.accounts()[p]
+        return a !== undefined && a.id === external_id ? a.ocid : undefined
+      },
     })
     const adsWiringNow: AdsWiring = adsWiring
     // 排队 24 小时作废、断了音讯的记失败、截图过 180 天删——十分钟扫一次（不挡进程退出）
@@ -4377,6 +4396,58 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent,
       random,
     })
+    /*
+     * WP315（docs/101 §5.1①，决策 560）：广告看数据——插件每天在用户已登录的后台点导出 → 读下载的文件 →
+     * 按天入库（「今天」那份同步进上面的广告库）；插件不在时读邮箱里的定时报表。托管实例不装。
+     */
+    const adsHolder = (p: 'google' | 'meta') =>
+      roles.assignments
+        .listByWorkspace(ws)
+        .find((a) => a.revoked_at === undefined && a.role_id === `ads.${p}`)
+    adsData =
+      hostedBoot !== undefined
+        ? undefined
+        : createAdsDataService({
+            workspace_id: ws,
+            store: createAdsDataStore(dir === undefined ? {} : { dbDir: dir }),
+            ads,
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            wanted: () => (['google', 'meta'] as const).filter((p) => adsHolder(p) !== undefined),
+            actions: () => adsActions,
+            notice: (input) =>
+              adsReportSetupNotice({
+                approvals,
+                workspace_id: ws,
+                holder: adsHolder(input.platform),
+                ...input,
+              }),
+            // 邮箱备用：消息库在下面才建（取信时才碰它）
+            mail: () =>
+              adsMailSourceOf({
+                store: () => messages.store,
+                attachment: async (id, aid) =>
+                  (await messages.port.attachment?.({} as never, id, aid)) ?? undefined,
+              }),
+            seedDailyReport: () =>
+              seedAdsDailyReport({
+                workspace_id: ws,
+                holder: adsHolder('google') ?? adsHolder('meta'),
+                createMatter: (input) => work.createMatter(input as never),
+                automation,
+              }),
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'ads.data' },
+                correlation: { trace_id: `tr_adsdata_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+    const adsDataRef = adsData
     /**
      * WP224（docs/91 §2.2 #1）：本周经营一页纸。面板上下文用的就是工作台那一份端口
      * （同 `workstationPortFor` 的装法，这里直接建一份，免得引用一个还没走到的定义）。
@@ -5371,6 +5442,42 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
               watchRoles: REPORT_WATCH_ROLES,
             },
+            // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
+            adsDataTools: createAdsDataToolExecutor({
+              service: () => adsDataRef,
+              ads: () => ads,
+              port: () => adsService.port,
+              // 缺插件：直接出「插件连上广告后台」那张连接卡（卡上就地配对，连好接着做）
+              askConnect: async (req, why) => {
+                const cards = await setupCardsOf(ws)
+                const out = await cards?.askConnect({
+                  needs: [
+                    {
+                      kind: ADS_BACKEND_NEED_KIND,
+                      service: 'extension',
+                      name: 'Chrome 插件（连上广告后台）',
+                      required: true,
+                    },
+                  ],
+                  why,
+                  actor: req.actor,
+                  ...(req.work_item === undefined ? {} : { matter_id: req.work_item.id }),
+                  run_id: req.id,
+                })
+                return out !== undefined
+              },
+              caps: (assignment_id) => {
+                try {
+                  const actions = roles.effectiveConfig(assignment_id as never).actions
+                  return {
+                    ...(actions.find((x) => x.id === 'stage_budget_change')?.mandate.caps ?? {}),
+                    ...(actions.find((x) => x.id === 'pause_ads')?.mandate.caps ?? {}),
+                  } as never
+                } catch {
+                  return {}
+                }
+              },
+            }),
             ownerTools: createOwnerToolExecutor({
               positions: async (actor) =>
                 org.port.positions({
@@ -7082,6 +7189,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adsService,
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
+      ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
@@ -7781,6 +7889,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       tick: async () =>
         (await (await of()).redditWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
     })
+    // WP315：广告看数据（这个品牌的账户、插件、邮箱）；没装（托管）就什么都不做
+    registerAdsDailyExport(s, {
+      tick: async () =>
+        (await (await of()).adsData?.tick()) ?? {
+          queued: [],
+          imported: 0,
+          skipped: 'not_installed',
+        },
+    })
     // WP73：社媒定时发布与群发（这个品牌的号发这个品牌的内容）
     registerSocialPublish(s, {
       sweep: async () => {
@@ -7871,6 +7988,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
         // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
         redditPatrol: held('social.reddit'),
+        // WP315：有人担 Google / Meta 投放才建看数据那一条
+        adsDailyExport: held('ads.google') || held('ads.meta'),
       },
     })
   }
@@ -7919,6 +8038,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
     // WP328
     { ids: ['sched_reddit_patrol'], held: (ws) => roleHeldIn(ws, 'social.reddit') },
+    // WP315
+    {
+      ids: ['sched_ads_daily_export'],
+      held: (ws) => roleHeldIn(ws, 'ads.google') || roleHeldIn(ws, 'ads.meta'),
+    },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
     // WP224
