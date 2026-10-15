@@ -26,7 +26,11 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
       '或 model（AI 模型）、deepseek_account（DeepSeek 账号）、workshop_account（Agents 工坊账号）、' +
       'im:wecom（企业微信）、im:wechat（微信）、im:feishu（飞书）、im:dingtalk（钉钉）、extension（浏览器插件）。' +
       'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）等。' +
-      '两个给一个。绝不要在任何参数里写密码、密钥、令牌——那些用户在卡上的本机表单里自己填。',
+      '两个给一个。要设的：卡上是「我打算这样设」的方案——工坊出卡前会自己先查一遍（档案、已连的账号、联网），' +
+      '你在 suggestions 里给的值（每个带一句 why）会压过它查到的，用户点「就这样」就存。' +
+      '已经设好的也能改：setting + suggestions 给新值，出一张「我打算改成这样」的卡（现值 → 新值），用户确认才生效。' +
+      '要人选的账号（如品牌号、广告账户）不要猜，留给卡上标「需要你填」。' +
+      '绝不要在任何参数里写密码、密钥、令牌——那些用户在卡上的本机表单里自己填。',
     input_schema: {
       type: 'object',
       properties: {
@@ -41,6 +45,7 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
             properties: {
               key: { type: 'string', description: '设置项的键' },
               value: { type: 'string', description: '建议值' },
+              why: { type: 'string', description: '一句理由（给用户看，20 个字以内）' },
             },
             required: ['key', 'value'],
           },
@@ -71,6 +76,10 @@ export interface SetupRequestData {
   setup_why?: string
   /** 配置卡的建议值（运行时出卡用；只认登记过的格子）。 */
   suggestions?: Record<string, string>
+  /** WP348：每个建议值的一句理由（按格子）。 */
+  suggestion_why?: Record<string, string>
+  /** WP348：目标已经设好了，这是「改成这样」（出改设置方案卡，人确认才生效）。 */
+  change?: boolean
   /** 给模型的那一句（照实转告用户）。 */
   message: string
 }
@@ -140,7 +149,9 @@ export function renderSetupRequestAnswer(input: {
   if (d.already === true) return d.message
   if (d.needs_connection !== undefined)
     return `要先连上${d.connection_name ?? d.needs_connection}：在下面这张卡上连好，我就接着做。`
+  if (d.needs_setup !== undefined && d.change === true)
+    return `${d.setup_name ?? d.needs_setup}我打算这样改：在下面这张卡上点头就生效。`
   if (d.needs_setup !== undefined)
-    return `要先设好${d.setup_name ?? d.needs_setup}：在下面这张卡上填好，我就接着做。`
+    return `${d.setup_name ?? d.needs_setup}我先定了个方案：在下面这张卡上点头，我就接着做。`
   return d.message
 }

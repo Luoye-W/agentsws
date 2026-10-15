@@ -72,6 +72,48 @@ export interface SetupField {
   suggested_why?: string
   required: boolean
   placeholder?: string
+  /**
+   * WP348（决策 887）：方案值从哪来（卡上那一句理由后面可点开：哪条档案、哪个网页、哪个已连的账号）。
+   * 没有 = 老卡 / 人填的。
+   */
+  sources?: SetupSource[]
+  /**
+   * WP348：AI 查不到、或这一格不该 AI 猜（要人选的账号这类）——卡上留空并标「需要你填」。
+   * 凭据从来不在配置卡上（见 {@link isSecretLikeSetupKey}），不靠这一格。
+   */
+  needs_you?: boolean
+  /** WP348「我打算改成这样」：这一格现在的值（与 `suggested` 不同 = 要改；相同 = 不动）。 */
+  current?: string
+}
+
+/** WP348：一个方案值的来源种类。 */
+export type SetupSourceKind =
+  /** 已经存着的设置 */
+  | 'saved'
+  /** 品牌档案 */
+  | 'profile'
+  /** 已连的数据（插件登录态里的账号、店铺、已连渠道） */
+  | 'connected'
+  /** 联网搜到的网页 */
+  | 'web'
+  /** 问了一次 AI 整理 */
+  | 'model'
+  /** 默认值（不替人定规矩时的起步值，如每天一次） */
+  | 'default'
+
+/** WP348：一个来源（卡上点开看；网页才有地址）。 */
+export interface SetupSource {
+  kind: SetupSourceKind
+  /** 一句人话（「品牌档案 · 关键词」「插件里登着的 Reddit 号」「r/SmartGlasses 的搜索结果」）。 */
+  label: string
+  /** 只有网页来源才有：点开的地址（只认 http / https）。 */
+  url?: string
+}
+
+/** WP348：出卡前查了什么（时间线上那几行、卡上「查了几处」点开看）。 */
+export interface SetupPlanStep {
+  text: string
+  source?: SetupSource
 }
 
 /** 配置卡（`setup_request`）的载荷。 */
@@ -85,6 +127,26 @@ export interface SetupRequestPayload {
   /** 人填好的值：保存时随决定（`approve` + `edited_payload`）带回；没带就用建议值。 */
   values?: Record<string, string>
   resume?: SetupResumeTarget
+  /**
+   * WP348（决策 887）：卡面是「方案」不是「表单」。
+   * - `plan`：「我打算这样设」——每格列 AI 定的值 + 一句理由，「就这样」直接存，「改一下」才展开表单；
+   * - `change`：「我打算改成这样」——已设好的目标，列现值 → 新值 + 理由，人确认才生效。
+   * 没有 = 老卡（WP324 那张表单）。
+   */
+  mode?: 'plan' | 'change'
+  /** WP348：出卡前查了什么（几行；没查就没有）。 */
+  steps?: SetupPlanStep[]
+}
+
+/** WP348：一个来源地址能不能点开（只认 http / https，别的一律不给链接）。 */
+export function safeSourceUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export type SetupCardPayload = ConnectRequestPayload | SetupRequestPayload

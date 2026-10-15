@@ -13,6 +13,7 @@ import {
   isAdsReportAction,
 } from './report.js'
 
+export * from './account-hint.js'
 export * from './actions.js'
 export { GOOGLE_ADS_SELECTORS, googleAdsPlan } from './google.js'
 export { META_ADS_SELECTORS, metaAdsPlan } from './meta.js'
