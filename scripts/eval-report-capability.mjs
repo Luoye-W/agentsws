@@ -115,7 +115,9 @@ async function main() {
     for (const name of new Set([endpoint.keyEnv, 'DEEPSEEK_API_KEY', 'AGENTSWS_SIM_MODEL_API_KEY']))
       delete process.env[name]
     const official = endpoint.baseUrl.replace(/\/+$/, '') === 'https://api.deepseek.com'
-    configureModel = async (call) => {
+    // 配模型要「改设置」权限（老板那一份分配）；评测用的岗位分配没有这权限会回 403
+    configureModel = async (call, server) => {
+      const owner = server.bootstrap.ownerAssignment?.id
       const res = await call('PUT', '/v1/models/providers/eval', {
         kind: official ? 'deepseek' : 'openai_compatible',
         label: '评测模型',
@@ -123,7 +125,7 @@ async function main() {
         model: endpoint.model,
         region: endpoint.region,
         api_key: key,
-      })
+      }, owner)
       if (res.status >= 300)
         throw Object.assign(new Error(`配模型失败：HTTP ${res.status} ${res.code ?? ''}`), {
           exit: 2,
