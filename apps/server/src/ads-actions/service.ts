@@ -130,6 +130,8 @@ export interface AdsActionsService {
   /** WP329：插件最近一次带着这家来领活的时间（毫秒；没来过 = undefined）。 */
   lastSeen(platform: ActionPlatform): number | undefined
   downloads(id: string): ActionDownloadInput[]
+  /** WP316：读回一张截图（变更账本 / 再确认卡上看；过了 180 天就没了）。 */
+  evidenceImage(id: string): Promise<Uint8Array | undefined>
   close(): void
 }
 
@@ -451,6 +453,8 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
     lastSeen(platform) {
       return seen[platform]
     },
+
+    evidenceImage: (id) => options.evidence.read(id),
 
     close() {
       wake()

@@ -100,7 +100,7 @@ describe('WP231 注册与登录（本机这一跳）', () => {
     expect(sent.body.data.delivered).toBe('email')
     // 转给云的那一跳带着同意记录与来源
     const forwarded = JSON.parse(sentBodies.at(-1) ?? '{}') as Record<string, unknown>
-    expect(forwarded.consent).toEqual({ accepted: true, terms_version: '2026-10-05' })
+    expect(forwarded.consent).toEqual({ accepted: true, terms_version: '2026-10-15' })
     expect(forwarded.source).toBe('workstation')
 
     const done = await json<{
@@ -200,7 +200,7 @@ describe('WP231 注册与登录（本机这一跳）', () => {
       await api('/v1/cloud/account/auth-config'),
     )
     expect(cfg.body.data.password_min).toBe(8)
-    expect(cfg.body.data.terms_version).toBe('2026-10-05')
+    expect(cfg.body.data.terms_version).toBe('2026-10-15')
   })
 })
 

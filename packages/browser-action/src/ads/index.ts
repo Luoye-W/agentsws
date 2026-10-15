@@ -6,16 +6,30 @@ import type { ActionAccount, ActionJob, ActionPlan } from '../types.js'
 import { ADS_ORIGINS, type AdsAction, type AdsOrigins } from './actions.js'
 import { googleAdsPlan } from './google.js'
 import { metaAdsPlan } from './meta.js'
+import {
+  type AdsReportAction,
+  adsReportActionTitle,
+  adsReportPlan,
+  isAdsReportAction,
+} from './report.js'
 
 export * from './actions.js'
 export { GOOGLE_ADS_SELECTORS, googleAdsPlan } from './google.js'
 export { META_ADS_SELECTORS, metaAdsPlan } from './meta.js'
+export * from './report.js'
 
 export function adsPlan(
   account: ActionAccount,
-  action: AdsAction,
+  action: AdsAction | AdsReportAction,
   origins: AdsOrigins = ADS_ORIGINS,
 ): ActionPlan {
+  // WP315：看数据的两个动作（建「工坊日报」、每天导出）走自己那张步骤表
+  if (isAdsReportAction(action))
+    return adsReportPlan(
+      account,
+      action,
+      account.platform === 'meta_ads' ? origins.meta_ads : origins.google_ads,
+    )
   // WP329：Reddit 不是广告后台，它的写走 `buildRedditJob`（`reddit/index.ts`）
   if (account.platform === 'reddit')
     throw new Error('Reddit 的写不走广告动作表（用 buildRedditJob）。')
@@ -25,7 +39,8 @@ export function adsPlan(
 }
 
 /** 横条 / 工作台上的一句话（卡上没给标题时用）。 */
-export function adsActionTitle(action: AdsAction): string {
+export function adsActionTitle(action: AdsAction | AdsReportAction): string {
+  if (isAdsReportAction(action)) return adsReportActionTitle(action)
   switch (action.kind) {
     case 'upload_sheet':
       return `上传表「${action.sheet.name}」`
@@ -37,6 +52,10 @@ export function adsActionTitle(action: AdsAction): string {
       return `启用「${action.entity.name ?? action.entity.id}」`
     case 'set_budget':
       return `预算改成 ${action.amount}（「${action.entity.name ?? action.entity.id}」）`
+    case 'export_snapshot':
+      return '导出改前表'
+    case 'undo_upload':
+      return `撤销上传「${action.upload_name}」`
   }
 }
 
@@ -44,7 +63,7 @@ export interface AdsJobInput {
   id: string
   workspace_id: string
   account: ActionAccount
-  action: AdsAction
+  action: AdsAction | AdsReportAction
   approval_id?: string
   approval_level?: 'L1' | 'L2' | 'L3'
   title?: string

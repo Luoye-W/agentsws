@@ -16,6 +16,7 @@ import type {
   ChatMessage,
   Completion,
   ModelMeta,
+  ModelRef,
   ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
@@ -303,6 +304,11 @@ export interface GatewayBudget {
 export interface GatewayAdapterOptions {
   gateway: ModelGatewayLike
   meta: ModelMeta
+  /**
+   * WP342（决策 853）：这件事自己选的 AI（`RunRequest.runtime.model_pinned` 时的 `runtime.model`）。
+   * 给了每次补全都显式交给网关；不给 = 网关按 purpose 选（老行为）。
+   */
+  model?: ModelRef
   seed?: number
   max_cost_base?: number
   /** 每次补全的用量都回调出去（运行时据此填 `run.completed.usage`）。 */
@@ -446,6 +452,7 @@ export class GatewayLlmAdapter extends LlmAdapter {
     let completion: Completion
     try {
       completion = await this.options.gateway.complete({
+        ...(this.options.model === undefined ? {} : { model: this.options.model }),
         messages,
         tools,
         meta: this.options.meta,

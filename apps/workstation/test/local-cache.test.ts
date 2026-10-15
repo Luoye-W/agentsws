@@ -36,6 +36,8 @@ const ALLOWED_KEYS = [
   // WP71（36 §9 / §10）：左栏**纯界面折叠态**。存的是"哪几个岗位展开着"——
   // 不是业务对象，丢了最坏的结果是下次打开回默认值。
   'agentsws.rail.expanded',
+  // WP342（决策 853）：左下角账号菜单里「工作内容 / 设置」两组哪组展开着——纯界面折叠态，同上
+  'agentsws.account.groups',
   // WP95（36 §11，`docs/upstream/sidebar-compare.md` #5）：第三栏的**布局**。
   // 它替掉了 WP71 那两个键（`agentsws.rightrail.panel` / `.width`），值的形状是
   // `{ 作用域桶: { open_panel_id, width } }`——**只有结构，没有内容**：

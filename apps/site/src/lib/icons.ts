@@ -6,7 +6,12 @@ export const ICONS = {
   apple:
     '<path d="M12 7c1-2.5 3-3.5 4.5-3.5-.2 1.8-1.3 3.4-3 3.6"/><path d="M16.5 8.2c1.4 0 2.8.8 3.5 2-2.9 1.6-2.4 5.8.5 6.8-.8 2.1-2.2 4-3.8 4-1.2 0-1.8-.7-3.2-.7s-2 .7-3.2.7c-2.3 0-5.3-4.4-5.3-8.6 0-3.4 2.2-4.9 4.2-4.9 1.4 0 2.5.8 3.3.8.8 0 2.2-.9 4-.1Z"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  building:
+    '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-8"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5A8 8 0 1 1 21 12Z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   cloud: '<path d="M17.5 19H8a6 6 0 1 1 5.7-8h1.8a4.5 4.5 0 1 1 0 9Z"/>',
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   crown: '<path d="m2 7 5 5 5-8 5 8 5-5-2 12H4Z"/>',
@@ -27,6 +32,7 @@ export const ICONS = {
   palette:
     '<path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 22Z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>',
   pause: '<circle cx="12" cy="12" r="10"/><path d="M10 9v6M14 9v6"/>',
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a6 6 0 0 1-12 0V8Z"/>',
   puzzle:
     '<path d="M19.4 14.5a2 2 0 1 0 0-3.9V7a1 1 0 0 0-1-1h-3.6a2 2 0 1 0-3.9 0H7.3a1 1 0 0 0-1 1v3.5a2 2 0 1 1 0 4V18a1 1 0 0 0 1 1h3.6a2 2 0 1 1 3.9 0h3.6a1 1 0 0 0 1-1Z"/>',
   share:
@@ -38,6 +44,9 @@ export const ICONS = {
   store:
     '<path d="M3 9 4.5 4h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/><path d="M5 13v8h14v-8"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  users:
+    '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4.5-6.5"/>',
   windows:
     '<path d="M3 5.5 10.5 4.5v7H3ZM13 4.2 21 3v8.5h-8ZM3 13h7.5v6.5L3 18.5ZM13 13h8v8l-8-1.2Z"/>',
 } as const

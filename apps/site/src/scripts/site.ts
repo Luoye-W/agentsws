@@ -3,7 +3,7 @@
  * 动效本身全是 CSS；这里只挂类名。系统开了「减少动态效果」时点亮逻辑不挂，页面显示的就是最后一帧。
  * 时长不在这里写：由页面在 <body> 上带过来（出自 `@agentsws/brand`）。
  */
-import { looksLikeIntelMac } from '../lib/downloads.js'
+import { looksLikeIntelMac, pickDesktop } from '../lib/downloads.js'
 
 const root = document.documentElement
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -105,7 +105,7 @@ if (base && !reduce && 'IntersectionObserver' in window) {
   io.observe(base)
 }
 
-// 下载页：按访客的系统把首屏按钮换成对应那一个（认不出就保持 Apple 芯片）
+// 下载页：按访客的系统把首屏按钮换成对应那一个（认不出就保持 M 系列芯片的 Mac）
 const primary = document.querySelector<HTMLElement>('[data-os-primary]')
 if (primary) {
   const ua = navigator.userAgent
@@ -118,7 +118,7 @@ if (primary) {
   }
 }
 
-// WP326（决策 731）：只出 Apple 芯片版——认得出是 Intel Mac 就在首屏按钮下面说一句（认不出就不说）
+// WP326（决策 731）：只出 M 系列芯片版——认得出是 Intel Mac 就在首屏按钮下面说一句（认不出就不说）
 const intelNote = document.querySelector<HTMLElement>('[data-intel-mac]')
 // 先看是不是 Mac 再去问显卡：别的系统上不建 WebGL
 if (intelNote && /Macintosh/i.test(navigator.userAgent))
@@ -134,14 +134,30 @@ function gpuName(): string | null {
   }
 }
 
-// WP218：首页「下载」按钮——Windows 访客直接拿下载站上最新的安装包（构建时取的清单里有链接才换），
-// mac 照旧去下载页（那里有首次打开的说明）
-if (/Windows/i.test(navigator.userAgent)) {
-  for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-dl-win]')) {
-    const url = a.getAttribute('data-dl-win')
-    if (url) a.href = url
+// WP347（Luoye 10-15）：首页「免费下载」按访客系统直接给安装包（M 系列芯片的 Mac / Windows），按钮上写系统和版本号；
+// 手机、平板、Intel Mac、认不出的照旧去下载页。直链跳过了下载页上的首次打开说明，所以按钮下面补一行（WP225 同理）
+const dlButtons = document.querySelectorAll<HTMLAnchorElement>('a[data-dl]')
+if (dlButtons.length > 0) {
+  const ua = navigator.userAgent
+  const os = pickDesktop({
+    userAgent: ua,
+    maxTouchPoints: navigator.maxTouchPoints,
+    gpu: /Macintosh/i.test(ua) ? gpuName() : null,
+  })
+  let swapped = false
+  if (os) {
+    for (const a of dlButtons) {
+      const url = a.getAttribute(`data-dl-${os}`)
+      const tpl = a.parentElement?.querySelector<HTMLTemplateElement>(
+        `template[data-dl-os="${os}"]`,
+      )
+      if (!url || !tpl) continue
+      a.href = url
+      a.replaceChildren(tpl.content.cloneNode(true))
+      swapped = true
+    }
   }
-  // WP225（WP218 决定 ⑤）：直链跳过了下载页上那句「蓝框：更多信息 → 仍要运行」，按钮旁边补一行
-  for (const note of document.querySelectorAll<HTMLElement>('[data-dl-win-note]'))
-    note.hidden = false
+  if (swapped)
+    for (const note of document.querySelectorAll<HTMLElement>(`[data-dl-note="${os}"]`))
+      note.hidden = false
 }

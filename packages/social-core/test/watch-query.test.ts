@@ -139,6 +139,25 @@ describe('queryWatchItems', () => {
   })
 })
 
+describe('queryWatchItems：WP340 优先 / 本地标签', () => {
+  it('按「优先」与标签筛（标签不分大小写），总数里带优先几条', () => {
+    const window = { since: SUNDAY, until: NOW }
+    const items = [
+      item({ id: 't3_p', kind: 'post', priority: true, tags: ['Air3'] }),
+      item({ id: 't1_q', tags: ['Go2'] }),
+      item({ id: 't1_r' }),
+    ]
+    const q = (filter: { priority?: boolean; tag?: string }) =>
+      queryWatchItems({ items, ownPlaces: ['inmoxr'], window, filter })
+    expect(q({ priority: true }).items.map((x) => [x.id, x.priority, x.tags])).toEqual([
+      ['t3_p', true, ['Air3']],
+    ])
+    expect(q({ priority: false }).items.map((x) => x.id)).toEqual(['t1_q', 't1_r'])
+    expect(q({ tag: 'go2' }).items.map((x) => x.id)).toEqual(['t1_q'])
+    expect(q({}).totals.priority).toBe(1)
+  })
+})
+
 describe('summarizeSent', () => {
   let m = 0
   const rec = (over: Partial<OutboundRecord>): OutboundRecord => {

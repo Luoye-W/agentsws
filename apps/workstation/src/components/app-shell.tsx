@@ -14,13 +14,14 @@
  * 2. **品牌切换器与账号块搬到左栏最下面**；顶栏只剩 ⌘K、模型芯片、积分
  *    （深浅色与语言两个开关收进账号菜单）。
  * 3. **右边多一条 44px 图标轨**（第三栏，36 §9）。
+ *
+ * WP342（决策 853，Luoye 10-15）：左栏只剩 随便聊 / 首页 / 消息 / 待办 / 日历 / 岗位树；下半那几页与「场景」
+ * 收进账号菜单；顶栏的模型与积分芯片拿掉（积分进账号菜单，AI 在每个输入框左下角选）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  BookOpen,
   Bot,
-  Building2,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -30,12 +31,7 @@ import {
   ListTodo,
   type LucideIcon,
   MessageCircle,
-  MessageSquare,
   MessagesSquare,
-  Plug,
-  Settings,
-  Sparkles,
-  Users,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -55,15 +51,13 @@ import {
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
-// WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
-import { SceneSwitcher } from '@/components/scene-switcher'
 import { AddDutyInline } from '@/components/sidebar/add-duty-inline'
 import { ArchivedDialog, type ArchivedScope } from '@/components/sidebar/archived-dialog'
 import { DutyThreads, RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { NewPositionInline } from '@/components/sidebar/new-position-inline'
 import { RailPlus } from '@/components/sidebar/rail-plus'
+// WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { StandbyBadge } from '@/components/standby-badge'
-import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { DemoBadge } from '@/components/ui/demo-badge'
 import { Separator } from '@/components/ui/separator'
 import { UpdateButton } from '@/components/update-button'
@@ -334,7 +328,7 @@ export function AppShell({
 }): ReactNode {
   const { t, position } = useApp()
   // WP271：① 个人里左栏「公司」叫「岗位与品牌」、「我的代理」收起（都是对同事的事）
-  const { t: tm, solo } = useMode()
+  const { solo } = useMode()
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
   const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
@@ -581,46 +575,22 @@ export function AppShell({
                         <span className="truncate">{p.role_name}</span>
                       </NavLink>
                     ))}
-              <Separator className="my-2" />
+              {/*
+              WP342（决策 853）：会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置收进了
+              左下角账号菜单的两组里（`account-block.tsx`），路由与 ⌘K 照旧。左栏只剩去干活的地方。
+            */}
               {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程。
-                  WP271：① 个人收起——它的四样都是对同事的，「把事丢给代理」与 ⌘K 重复 */}
+                  WP271：① 个人收起——它的四样都是对同事的，「把事丢给代理」与 ⌘K 重复
+                  （WP343 会把它并进「我的助理」，这里先不动） */}
               {solo ? null : (
-                <NavLink to="/secretary" className={navClass} data-testid="nav-secretary">
-                  <NavIcon icon={Bot} />
-                  {t('nav.secretary')}
-                </NavLink>
+                <>
+                  <Separator className="my-2" />
+                  <NavLink to="/secretary" className={navClass} data-testid="nav-secretary">
+                    <NavIcon icon={Bot} />
+                    {t('nav.secretary')}
+                  </NavLink>
+                </>
               )}
-              <NavLink to="/meetings" className={navClass}>
-                <NavIcon icon={Users} />
-                {t('nav.meetings')}
-              </NavLink>
-              <NavLink to="/knowledge" className={navClass}>
-                <NavIcon icon={BookOpen} />
-                {t('nav.knowledge')}
-              </NavLink>
-              <NavLink to="/skills" className={navClass}>
-                <NavIcon icon={Sparkles} />
-                {t('nav.skills')}
-              </NavLink>
-              {/* WP28 制度面：岗位 / 成员 / 职责（谁在做什么、能做到哪一步） */}
-              {/* WP271（决策 235）：① 叫「岗位与品牌」/ ② 「团队」/ ③ 「公司」 */}
-              <NavLink to="/org" className={navClass} data-testid="nav-org">
-                <NavIcon icon={Building2} />
-                {tm('nav.org')}
-              </NavLink>
-              <NavLink to="/connections" className={navClass}>
-                <NavIcon icon={Plug} />
-                {t('nav.connections')}
-              </NavLink>
-              {/* WP85（54 §5）：微信 / 企业微信——把代理接到聊天软件上 */}
-              <NavLink to="/im-channels" className={navClass}>
-                <NavIcon icon={MessageSquare} />
-                {t('nav.im')}
-              </NavLink>
-              <NavLink to="/settings" className={navClass}>
-                <NavIcon icon={Settings} />
-                {t('nav.settings')}
-              </NavLink>
             </nav>
             {/*
           WP71（36 §10）：品牌与账号在**最下面**。
@@ -655,8 +625,6 @@ export function AppShell({
               data-testid="rail-bottom"
             >
               <BrandSwitcher />
-              {/* WP136（docs/79）：账户块上方一行「场景」——切到 dsh 的其他场景（只有所有者看得到） */}
-              <SceneSwitcher />
               {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
               <UpdateButton />
               <AccountBlock {...(me === undefined ? {} : { me })} />
@@ -685,7 +653,10 @@ export function AppShell({
                 <span className="truncate">{t('nav.command')}</span>
                 <span className="ws-num ml-auto hidden text-[11px] sm:inline">⌘K</span>
               </button>
-              {/* WP71：顶栏只剩这两个数——现在用哪个模型、还剩多少积分（问不到就不出） */}
+              {/*
+              WP342（决策 853）：模型与积分两个芯片不在顶栏了——积分进左下角账号菜单，
+              用哪个 AI 在每个输入框左下角选（这一次 / 这件事）。顶栏只剩 ⌘K 与两条状态提醒。
+            */}
               {/*
               WP98（09-18 收口）：「还没接模型」原来是首页第一屏一整条黄条。
               它说的是**整个工作区的状态**，不是今天的哪一件事——所以它和模型 / 积分
@@ -699,8 +670,6 @@ export function AppShell({
               {onboarding ? null : <NoModelBanner variant="chip" />}
               {/* WP151：DeepSeek 余额不足（同一类：整个工作区的状态），点了去「设置 → 模型」充值 */}
               {onboarding ? null : <QuotaChip />}
-              <ModelChip />
-              <CreditsChip />
             </header>
             <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
               {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}

@@ -11,6 +11,8 @@
     "preview": "node scripts/astro.mjs preview",
     "og": "node scripts/og.mjs",
     "deploy:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run",
+    "launch:check": "node scripts/launch-check.mjs",
+    "app-shots": "node scripts/app-shots.mjs",
     "test": "vitest run"
   },
   "dependencies": {

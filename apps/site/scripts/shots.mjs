@@ -38,13 +38,16 @@ const SHOTS = [
   ['docs-agentsws-credits-390-dark', '/docs/agentsws-credits/', 390, 'dark', true],
   ['changelog-1440-light', '/changelog/', 1440, 'light', true],
   ['terms-1440-light', '/terms/', 1440, 'light', true],
+  // WP344：条款页底部（页脚的运营方与联系邮箱、三页互链）
+  ['terms-bottom-1440-light', '/terms/', 1440, 'light', false, true],
+  ['refund-bottom-390-dark', '/refund/', 390, 'dark', false, true],
   ['privacy-en-1440-light', '/en/privacy/', 1440, 'light', true],
   ['404-1440-light', '/no-such-page/', 1440, 'light', false],
   ['hero-live-1440-light', '/', 1440, 'light', false],
 ]
 
 const browser = await chromium.launch()
-for (const [name, path, width, scheme, full] of SHOTS) {
+for (const [name, path, width, scheme, full, bottom = false] of SHOTS) {
   const ctx = await browser.newContext({
     viewport: { width, height: width < 600 ? 844 : 900 },
     deviceScaleFactor: 1,
@@ -55,6 +58,7 @@ for (const [name, path, width, scheme, full] of SHOTS) {
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
   await page.goto(base + path, { waitUntil: 'networkidle' })
+  if (bottom) await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
   await page.waitForTimeout(name.startsWith('hero-live') ? 4200 : 300)
   await page.screenshot({ path: join(out, `${name}.png`), fullPage: full })
   if (errors.length > 0) console.error(`${name}: ${errors.join(' | ')}`)

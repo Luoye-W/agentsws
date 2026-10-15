@@ -13,11 +13,11 @@ const zh = {
   title: '下载 Agents 工坊',
   sub: '双击就装。不用 Node，不用 Docker，不用数据库。',
   primary: {
-    'mac-arm64': '下载 macOS 版（Apple 芯片）',
+    'mac-arm64': '下载 macOS 版（M 系列芯片）',
     'win-x64': '下载 Windows 版',
   },
   /** WP326：认出是 Intel Mac 时首屏按钮下面那一句。 */
-  intelMac: '目前只支持 Apple 芯片的 Mac',
+  intelMac: '目前只支持 M 系列芯片的 Mac',
   soon: '即将提供',
   soonHint: '安装包的下载地址还没定，内测期间先从 GitHub 获取或从源码跑。',
   beta: '内测版',
@@ -27,7 +27,7 @@ const zh = {
   shotAlt: '初始化设置第三步：勾选要上岗的岗位',
   osTitle: '选你的电脑',
   os: {
-    'mac-arm64': { h: 'macOS · Apple 芯片', p: 'M1 及以后 · 暂不支持 Intel', btn: '下载 .dmg' },
+    'mac-arm64': { h: 'macOS · M 系列芯片', p: 'M1 及以后', btn: '下载 .dmg' },
     'win-x64': { h: 'Windows · x64', p: '64 位 Windows', btn: '下载 .exe' },
   },
   firstOpen: {
@@ -56,7 +56,7 @@ const zh = {
     title: '还有这些',
     ext: {
       h: '浏览器插件 · Agents 工坊助手',
-      p: '在 YouTube、Instagram、TikTok 主页上点一下，红人就进你的库。只连你这台电脑。',
+      p: '红人一键进库；Reddit、Google / Meta 广告借你已登录的账号干活。只连你这台电脑。',
       btn: '下载插件包（.zip）',
       how: '怎么装',
     },
@@ -80,10 +80,10 @@ const en: DownloadCopy = {
   title: 'Download Agents Workshop',
   sub: 'Double-click to install. No Node, no Docker, no database.',
   primary: {
-    'mac-arm64': 'Download for macOS (Apple silicon)',
+    'mac-arm64': 'Download for macOS · Apple silicon (M-series)',
     'win-x64': 'Download for Windows',
   },
-  intelMac: 'Only Macs with Apple silicon are supported for now',
+  intelMac: 'Only Macs with Apple silicon (M-series) are supported for now',
   soon: 'Coming soon',
   soonHint:
     'The download location isn’t set yet. During the beta, get builds from GitHub or run from source.',
@@ -95,8 +95,8 @@ const en: DownloadCopy = {
   osTitle: 'Pick your computer',
   os: {
     'mac-arm64': {
-      h: 'macOS · Apple silicon',
-      p: 'M1 and later · Intel not supported yet',
+      h: 'macOS · Apple silicon (M-series)',
+      p: 'M1 and later',
       btn: 'Download .dmg',
     },
     'win-x64': { h: 'Windows · x64', p: '64-bit Windows', btn: 'Download .exe' },
@@ -128,7 +128,7 @@ const en: DownloadCopy = {
     title: 'Also available',
     ext: {
       h: 'Browser extension · Agents Workshop assistant',
-      p: 'One click on a YouTube, Instagram or TikTok profile and the creator lands in your list. Talks only to this computer.',
+      p: 'Save creators in one click; work in Reddit and Google / Meta Ads through the accounts you’re signed in to. Talks only to this computer.',
       btn: 'Download the extension (.zip)',
       how: 'How to install',
     },

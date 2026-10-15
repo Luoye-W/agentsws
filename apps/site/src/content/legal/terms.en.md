@@ -24,7 +24,7 @@ Welcome to Agents Workshop. These terms explain your rights and ours when you us
 
 ## 3. Your account
 
-1. You sign in to the cloud services by email: we send you a sign-in link, and opening it signs you in. Keep your mailbox secure.
+1. You sign up for the cloud services with your name, email address and a password, agree to these Terms, then enter the code we email you. After that you sign in with an email code or your password. Keep your mailbox and password secure.
 2. Each account belongs to one organisation (company). The organisation's owner can invite members and set monthly credit limits for members and roles, and is responsible for how members use the account.
 3. The information you give us must be true and accurate. Accounts may not be transferred, lent or sold.
 4. If you notice your account being misused, tell us right away at {{CONTACT_EMAIL}}.

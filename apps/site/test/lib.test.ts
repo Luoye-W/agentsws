@@ -253,15 +253,17 @@ describe('WP227：首页台阶链到 KOLAgents / KefuAgents；Windows 下载旁�
     expect(linkNames('X', { X: 'javascript:alert(1)' })).toBe('X')
   })
 
-  it('「第一次打开若被拦」只有一行（与 WP225 合并），中英都有、默认藏着等 Windows 访客', () => {
+  it('「第一次打开若被拦」只有一行（与 WP225 合并），中英都有、默认藏着等直下的访客', () => {
     // 和 WP225 合成一份：只剩一行（WP225 的显示条件：有直链、Windows 访客），文案用 WP227 那句
     expect(HOME.zh.hero.winFirstOpen).toBe('第一次打开若被拦，点「更多信息 → 仍要运行」')
     expect(HOME.en.hero.winFirstOpen).toContain('More info → Run anyway')
     expect('winHint' in HOME.zh.hero).toBe(false)
     const home = readFileSync(new URL('../src/views/Home.astro', import.meta.url), 'utf8')
-    expect(home.match(/data-dl-win-note hidden/gu)?.length).toBe(2)
+    // WP347：Mac 也直下了，提示按系统各一行（data-dl-note="mac" / "win"），首屏与收尾各一份
+    expect(home.match(/data-dl-note="win" hidden/gu)?.length).toBe(2)
+    expect(home.match(/data-dl-note="mac" hidden/gu)?.length).toBe(2)
     expect(home).not.toContain('data-win-hint')
     const script = readFileSync(new URL('../src/scripts/site.ts', import.meta.url), 'utf8')
-    expect(script).toContain("querySelectorAll<HTMLElement>('[data-dl-win-note]')")
+    expect(script).toContain('[data-dl-note="$' + '{os}"]')
   })
 })

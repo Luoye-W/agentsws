@@ -5,6 +5,7 @@
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
 
+import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
@@ -25,6 +26,7 @@ import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
+import { SHELL_EN, SHELL_ZH } from './i18n-shell'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
@@ -1311,7 +1313,7 @@ const zh: Table = {
   'settings.motion.off': '关',
   'settings.identity': '身份',
   'identity.local_self': '你（本机）',
-  'settings.placeholder': '这台机器上的偏好；连接在左栏的「连接」里。',
+  'settings.placeholder': '这台机器上的偏好；连接在左下角账号菜单的「设置 → 连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
   'connections.dead_letters': '{n} 封信没进来',
@@ -1797,6 +1799,9 @@ const zh: Table = {
   'verb.money.approve.kol_sample': '批准寄样',
   'verb.money.approve.kol_payment': '批准付款',
   'verb.aftermath.approve.pause_ad': '恢复投放',
+  'verb.change.approve.ads_sheet': '批准上传',
+  'verb.change.approve.ads_activate': '开始投放',
+  'verb.change.approve.ads_undo': '撤销',
   'verb.aftermath.approve.community_moderation': '解除禁言',
   'deck.more': '更多',
   // ── WP100：头一行那个**类别写人话**（"网站运营 · 改价"，不是"变更待批"）──
@@ -1892,6 +1897,9 @@ const zh: Table = {
   'category.bid_change': '改出价',
   'category.negative_keyword': '否定词',
   'category.creative_swap': '换素材',
+  'category.ads_sheet': '改广告',
+  'category.ads_activate': '开始投放',
+  'category.ads_undo': '撤销改动',
   'category.segment_edit': '改人群',
   'category.flow_edit': '改流程',
   'category.profile_edit': '改资料',
@@ -3869,6 +3877,7 @@ const zh: Table = {
   'onboarding.plan.skill.unknown': '一个专用技能包',
   'skill.name.ad-copywriting': '广告文案',
   'skill.name.ad-headlines': '广告标题',
+  'skill.name.ad-changes': '改广告',
   'skill.name.ad-descriptions': '广告描述',
   'skill.name.audience-research': '受众研究',
   'skill.name.brand-system': '品牌视觉规范',
@@ -5420,7 +5429,8 @@ const en: Table = {
   'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
   'identity.local_self': 'You (this computer)',
-  'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
+  'settings.placeholder':
+    'Preferences on this machine. Connections live in the account menu (bottom left) under Settings → Connections.',
   'nav.connections': 'Connections',
   'connections.dead_letters': '{n} message(s) never made it in',
   'connections.dead_letters.hint':
@@ -5935,6 +5945,9 @@ const en: Table = {
   'verb.money.approve.kol_sample': 'Approve sample',
   'verb.money.approve.kol_payment': 'Approve payment',
   'verb.aftermath.approve.pause_ad': 'Resume ads',
+  'verb.change.approve.ads_sheet': 'Approve upload',
+  'verb.change.approve.ads_activate': 'Start delivery',
+  'verb.change.approve.ads_undo': 'Undo',
   'verb.aftermath.approve.community_moderation': 'Unmute',
   'deck.more': 'More',
   // WP100：头一行的类别（人话，不是账本枚举名）
@@ -6029,6 +6042,9 @@ const en: Table = {
   'category.bid_change': 'Bid change',
   'category.negative_keyword': 'Negative keyword',
   'category.creative_swap': 'Creative swap',
+  'category.ads_sheet': 'Ad changes',
+  'category.ads_activate': 'Start delivery',
+  'category.ads_undo': 'Undo change',
   'category.segment_edit': 'Segment edit',
   'category.flow_edit': 'Flow edit',
   'category.profile_edit': 'Profile edit',
@@ -8074,6 +8090,7 @@ const en: Table = {
   'onboarding.plan.skill.unknown': 'A specialised skill pack',
   'skill.name.ad-copywriting': 'Ad copywriting',
   'skill.name.ad-headlines': 'Ad headlines',
+  'skill.name.ad-changes': 'Ad changes',
   'skill.name.ad-descriptions': 'Ad descriptions',
   'skill.name.audience-research': 'Audience research',
   'skill.name.brand-system': 'Brand visual system',
@@ -8409,10 +8426,13 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
     ...REDDIT_WRITE_ZH,
+    ...ADS_CHANGES_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
     // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
     ...GEO_ZH,
+    // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
+    ...SHELL_ZH,
   },
   en: {
     ...en,
@@ -8440,8 +8460,10 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
+    ...ADS_CHANGES_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
+    ...SHELL_EN,
   },
 }
 

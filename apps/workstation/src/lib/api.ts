@@ -685,7 +685,14 @@ export const setTodoStatus = (
  */
 export const openMatterAtPosition = (
   id: string,
-  input: { title: string; summary?: string; role_id?: string; mode?: 'quick' | 'chat' | 'task' },
+  input: {
+    title: string
+    summary?: string
+    role_id?: string
+    mode?: 'quick' | 'chat' | 'task'
+    /** WP342：输入框左下角选的 AI（不给 = 品牌默认） */
+    model?: string
+  },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
     method: 'POST',
@@ -977,13 +984,20 @@ export const getMatter = (id: string): Promise<MatterViewWithPeople> =>
  */
 export const createMatterWithRole = (
   assignment: string,
-  input: { title: string; summary?: string; run?: boolean },
+  input: { title: string; summary?: string; run?: boolean; model?: string },
 ): Promise<{ matter: Matter; run_id?: string }> =>
   api(`/v1/matters`, {
     method: 'POST',
     body: { kind: 'adhoc', ...input },
     assignment,
   })
+
+/**
+ * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮）。只改这一件、之后接着跑仍用它；
+ * `null` = 回到跟品牌默认。
+ */
+export const setMatterModel = (id: string, model: string | null): Promise<{ matter: Matter }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/model`, { method: 'PUT', body: { model } })
 
 export const getMatterTimeline = (id: string, limit: number): Promise<TimelineData> =>
   api<TimelineData>(`/v1/matters/${encodeURIComponent(id)}/timeline?limit=${limit}`)

@@ -306,7 +306,17 @@ function adsHighlights(item: ApprovalItem): DeckHighlight[] {
   const after = isRecord(payload.after) ? payload.after : {}
   const out: DeckHighlight[] = []
   const kind = str(payload.kind)
-  const ADS_KINDS = ['create_campaign', 'budget_change', 'bid_change', 'pause_ad', 'creative_swap']
+  const ADS_KINDS = [
+    'create_campaign',
+    'budget_change',
+    'bid_change',
+    'pause_ad',
+    'creative_swap',
+    // WP316：上传表 / 开始投放 / 撤销同样带平台与总闸那两格
+    'ads_sheet',
+    'ads_activate',
+    'ads_undo',
+  ]
   if (kind === undefined || !ADS_KINDS.includes(kind)) return out
 
   // 这条卡对着哪个平台。四条职责的卡长得一样，这一格是唯一分得开它们的东西。

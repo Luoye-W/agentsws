@@ -256,7 +256,7 @@ export interface MagicLinkSent {
  * 条款版本 = 官网条款三页的生效日期（`apps/site/src/config.ts` 的 `LEGAL_EFFECTIVE_DATE`；
  * `packages/contracts/test/wp231-signup.test.ts` 钉着两边一致）。改条款就两处一起改。
  */
-export const LEGAL_TERMS_VERSION = '2026-10-05'
+export const LEGAL_TERMS_VERSION = '2026-10-15'
 
 /** 官网根地址（条款与隐私页在这里）。 */
 export const SITE_BASE_URL = 'https://agentsws.com'

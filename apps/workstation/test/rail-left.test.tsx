@@ -189,14 +189,15 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
     expect(bottom.textContent).toContain('玻璃碗工作室')
   })
 
-  it('点开账号块：账号与积分 / 设置 / 退出都在，深浅色与语言也收在这里', async () => {
+  it('点开账号块：账号与积分 / 两组入口 / 退出都在，深浅色与语言也收在这里', async () => {
     const user = userEvent.setup()
     renderShell()
     await user.click(screen.getByTestId('account-toggle'))
     const menu = screen.getByTestId('account-menu')
     for (const id of [
       'account-credits',
-      'account-settings',
+      'account-group-work',
+      'account-group-settings',
       'account-theme',
       'account-lang',
       'account-logout',
