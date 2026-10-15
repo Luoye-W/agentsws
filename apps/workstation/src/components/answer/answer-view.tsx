@@ -3,12 +3,56 @@
  * 模型不吐 HTML。先做三种：一段字、表格 / 清单、数字；认不得的 `kind` 不画（新组件留口）。
  *
  * 岗位页输入框下面的当场回答、线程里 AI 那段话（带 ```answer 的）都用它。只排版，不算数。
+ *
+ * WP336（决策 810–812）：多一种 `genui`（```dsh-ui 白名单过滤后的那块），交给 dsh-genui 的渲染层画。
  */
-import type { AnswerComponent, AnswerMetric, AnswerTable } from '@agentsws/contracts'
-import type { ReactNode } from 'react'
+import {
+  type AnswerComponent,
+  type AnswerMetric,
+  type AnswerTable,
+  type GenuiSpecLite,
+  genuiToAnswerComponents,
+} from '@agentsws/contracts'
+import { Component, lazy, type ReactNode, Suspense } from 'react'
 import { DeltaPill } from '@/components/design/primitives'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
+import { reportClientError } from '@/lib/client-errors'
+
+/** WP336：dsh-genui 渲染层单独一块，回答里有 genui 才下载。 */
+const GenuiView = lazy(() => import('./genui/genui-view'))
+
+/** 渲染层抛错 → 换成降级的表格 / 数字 / 字（记一条本机日志），不让一整块空掉。 */
+class GenuiBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false }
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+
+  override componentDidCatch(error: unknown): void {
+    reportClientError('panel', error, { scope: 'answer:genui' })
+  }
+
+  override render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
+/** 一块 genui：渲染层画；还没下载完 / 画不了 / 抛错都退回降级的那三种组件。 */
+function GenuiAnswer({ spec }: { spec: GenuiSpecLite }): ReactNode {
+  const fallback = <AnswerComponents components={genuiToAnswerComponents(spec)} />
+  return (
+    <GenuiBoundary fallback={fallback}>
+      <Suspense fallback={<div className="min-h-[120px]" />}>
+        <GenuiView spec={spec} fallback={fallback} />
+      </Suspense>
+    </GenuiBoundary>
+  )
+}
 
 const fmt = (v: number | string, lang: string): string =>
   typeof v === 'number' ? v.toLocaleString(lang === 'en' ? 'en-US' : 'zh-CN') : v
@@ -114,6 +158,7 @@ export function AnswerComponents({
             />
           )
         if (c.kind === 'table') return <TableView key={key} c={c} />
+        if (c.kind === 'genui') return <GenuiAnswer key={key} spec={c.spec} />
         if (c.kind === 'metric')
           return (
             <div key={key} className="flex flex-wrap gap-2.5" data-testid="answer-metrics">

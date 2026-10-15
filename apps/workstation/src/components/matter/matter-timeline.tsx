@@ -6,7 +6,7 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
-import { splitAnswer } from '@agentsws/contracts'
+import { hasAnswerFence, splitAnswer } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -344,7 +344,8 @@ export function AiEntry({
   const { t } = useApp()
   const raw = item.event?.text ?? ''
   // WP291：当场问答那段话末尾的 ```answer 组件段——正文照常画，组件按契约画在下面
-  const answer = raw.includes('```answer') ? splitAnswer(raw) : undefined
+  // WP336：```dsh-ui 同样分出来（白名单过滤后交给 genui 渲染层）
+  const answer = hasAnswerFence(raw) ? splitAnswer(raw) : undefined
   const text = answer?.text ?? raw
   const shown = (answer?.components ?? []).filter((c) => c.kind !== 'text')
   const long = replyIsLong(text)

@@ -3,7 +3,7 @@
  * 一开始就记成任务的，原话后面头一句「记成了任务，按「X」做」，还能换的跟「换一条」。
  */
 import type { MatterView } from '@agentsws/contracts'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from './helpers'
@@ -137,5 +137,40 @@ describe('WP291 线程', () => {
     const row = await screen.findByText('记成了任务，按「店铺管理」做')
     expect(row).toBeDefined()
     expect(screen.getByTestId('matter-route-switch')).toBeDefined()
+  })
+})
+
+describe('WP336 线程里的 ```dsh-ui', () => {
+  it('同样画成 genui 块：表格在、夹带的按钮不在，不露围栏', async () => {
+    const raw = [
+      '店里现在有 2 件商品。',
+      '',
+      '```dsh-ui',
+      JSON.stringify({
+        items: [
+          {
+            type: 'table',
+            columns: ['商品', '价格'],
+            rows: [
+              ['蓝牙耳机', 129],
+              ['手机壳', 29],
+            ],
+          },
+          { type: 'button', label: '一键上架', action: 'publish' },
+        ],
+      }),
+      '```',
+    ].join('\n')
+    current = view({ ask: { at: T0 } }, [
+      ASKED,
+      ev({ id: 'mev_a', kind: 'agent_message', text: raw, run_id: 'run_1' }),
+    ])
+    renderMatter()
+    const reply = await screen.findByTestId('matter-reply')
+    expect(reply.textContent).not.toContain('```')
+    expect(reply.textContent).not.toContain('dsh-ui')
+    const block = await screen.findByTestId('answer-genui')
+    await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'))
+    expect(block.textContent).not.toContain('一键上架')
   })
 })
