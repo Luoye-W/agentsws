@@ -353,6 +353,7 @@ import { createDataService, dataServiceApiPort } from './data-service.js'
 import {
   createDeepSeekAccount,
   DEEPSEEK_ACCOUNT_PROVIDER_ID,
+  DEEPSEEK_EXPIRED_STOPPED,
   type DeepSeekAccountOptions,
 } from './deepseek-account.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
@@ -592,6 +593,7 @@ import {
   type RoleRuleUndo,
   roleRulesFileIn,
 } from './role-rules.js'
+import { DEEPSEEK_ACCOUNT_NEED } from './run-blocked.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { repairStuckRuns } from './run-repair.js'
@@ -649,6 +651,7 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
+import { createSetupRequestTool } from './setup-request-tool.js'
 import { builtinSetupTargets } from './setup-targets.js'
 import { ShopAdminError } from './shop-admin.js'
 import {
@@ -1612,6 +1615,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
     // WP233：刚关联上云账号 → 本机负责人的占位邮箱改成云账号邮箱（不管是哪条关联路走过来的）
+    // WP334（决策 725 / 726）：IM 渠道连上 / 云账号关联上了 → 这个品牌还在等的连接卡复查一遍
+    if (e.type === 'connection.changed' || e.type === 'cloud.account_linked')
+      setupRecheckSink?.(e.workspace_id as WorkspaceId)
     if (e.type === 'cloud.account_linked') {
       cloudLinkedSink?.()
       // WP272：新签的令牌——补签没成的冷却作废
@@ -1620,6 +1626,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   /** WP233：晚绑定——云账号那一套装好之后才挂上（见 `alignOwnerEmail`）。 */
   let cloudLinkedSink: (() => void) | undefined
+  /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
+  let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
   /**
    * WP272：令牌缺动作集时后台自动补签（`scope-auto-upgrade.ts`）。晚绑定：各品牌的云面先建，
    * 账号面后装；没装好之前撞上缺动作集就照实回 403。
@@ -1998,7 +2006,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })),
       stop: async (reason: string) => {
         await Promise.all(
-          deepseekAccountRuns().map(({ brand, run }) => brand.runtime?.stopRun(run.run_id, reason)),
+          deepseekAccountRuns().map(({ brand, run }) => {
+            // WP334（决策 726）：登录过期停下的 → 收尾时出连接卡，卡里就地重新登录、登好接着做
+            if (reason === DEEPSEEK_EXPIRED_STOPPED)
+              brand.runtime?.noteNeed?.(run.run_id, DEEPSEEK_ACCOUNT_NEED)
+            return brand.runtime?.stopRun(run.run_id, reason)
+          }),
         )
       },
     },
@@ -3166,6 +3179,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 人在卡上（或第三栏 / 连接页）补完，卡上等着的事项按原话接着跑。设置目标在这里登记（选店、公司地址）。
    */
   const setupCards = new Map<WorkspaceId, SetupCardsAssembly>()
+  /**
+   * WP334（决策 726）：内置那几样「能就地连的」现在连上了没有——按品牌各一份（装品牌时登记：
+   * 模型面、云账号都在品牌里）。DeepSeek 账号与 IM 渠道另问（整机一份 / 按品牌那一套）。
+   */
+  const setupProbes = new Map<WorkspaceId, { model(): boolean; cloudLinked(): boolean }>()
+  /** WP334：这个品牌还在等的连接卡复查一遍（模型 / 账号 / IM 在别处连好了也接着做）。 */
+  const recheckSetupCards = (ws: WorkspaceId): void => {
+    if (!setupCards.has(ws)) return
+    void setupCardsOf(ws)
+      .then((cards) => cards?.recheck())
+      .catch(() => undefined)
+  }
+  setupRecheckSink = recheckSetupCards
   const setupCardsOf = async (ws: WorkspaceId): Promise<SetupCardsAssembly | undefined> => {
     const cached = setupCards.get(ws)
     if (cached !== undefined) return cached
@@ -3212,6 +3238,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       theme: () => siteThemeOf(ws),
       postalAddress: () => onboardingRef?.brandProfile(ws).postal_address,
       setPostalAddress: (address) => onboardingRef?.setPostalAddress(ws, address) ?? false,
+      // WP334（决策 726）：公司档案（一句话介绍 / 客服邮箱 / 币种）走配置卡
+      brandFacts: () => {
+        const p = onboardingRef?.brandProfile(ws)
+        return {
+          ...(p?.one_liner === undefined ? {} : { one_liner: p.one_liner }),
+          ...(p?.support_email === undefined ? {} : { support_email: p.support_email }),
+          ...(p?.currency === undefined ? {} : { currency: p.currency }),
+        }
+      },
+      setBrandFacts: (facts) => onboardingRef?.setBrandFacts(ws, facts) ?? false,
     }))
       assembly.registerTarget(target)
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
@@ -3241,6 +3277,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return shop === undefined
         ? undefined
         : (await shop.auth.access().catch(() => undefined)) !== undefined
+    }
+    // WP334（决策 725 / 726）：内置那几样——模型、DeepSeek 账号、工坊账号、四条消息渠道
+    if (need.service === 'model') return setupProbes.get(ws)?.model()
+    if (need.service === 'workshop_account') return setupProbes.get(ws)?.cloudLinked()
+    if (need.service === 'deepseek_account') return deepseekAccount.signedIn()
+    // 团队那三条看这个品牌那一套连没连上；个人微信跟人走（查不了：卡上扫完码由卡自己接着做）
+    if (
+      need.service === 'im:wecom' ||
+      need.service === 'im:feishu' ||
+      need.service === 'im:dingtalk'
+    ) {
+      const im = await imOf(ws).catch(() => undefined)
+      if (im === undefined) return undefined
+      const st = im.status(person.id)
+      if (need.service === 'im:wecom') return st.wecom.configured && st.wecom.connected
+      const bot = need.service === 'im:feishu' ? st.feishu : st.dingtalk
+      return bot === undefined ? undefined : bot.state === 'connected'
     }
     const dir = directoryAssemblies.get(ws)?.directory()
     const hit = dir?.find(
@@ -5003,6 +5056,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: () => ws,
       // WP194：官方接口那一条带上「谁 / 哪个岗位」（云上按人按岗位的每月上限）
       cloudAttribution: (meta) => cloudAttributionOf(meta.assignment_id, meta.role_id),
+      // WP334：模型配置变了 → 还在等的「接模型 / DeepSeek 账号」连接卡复查
+      onChanged: () => recheckSetupCards(ws),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
@@ -5036,6 +5091,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : ownModels
     // WP294：首页那一行看的是这个品牌真在用的那份模型设置（跟随公司默认就是公司那份）
     retiredModelsHolder.swaps = () => effectiveModels().retiredSwaps()
+    // WP334（决策 726）：连接卡上「AI 模型」「Agents 工坊账号」那两样连没连上
+    setupProbes.set(ws, {
+      model: () => effectiveModels().configured(),
+      cloudLinked: () => ownCloud.linked(),
+    })
     /*
      * WP215：跟随公司默认时借的是公司默认那一个网关（它挂的是那个品牌的急停）——
      * 这里先按**这个品牌**的急停判一次：B 按了急停，B 的运行与聊天就打不出模型，A 照常。
@@ -5111,6 +5171,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             setupCards: {
               onRunBlocked: async (input) => (await setupCardsOf(ws))?.onRunBlocked(input),
             },
+            /*
+             * WP334（决策 724）：AI 自己要连接卡 / 配置卡（所有职责）。工具只回结构化缺项，
+             * 卡由上面那条在这一轮收尾时出（同一缺项只一张、补完按原话接着做）。
+             */
+            setupRequestTool: createSetupRequestTool({
+              directory: async () =>
+                (directoryAssemblies.get(ws)?.directory() ?? []).flatMap((d) =>
+                  d.connect_service === undefined
+                    ? []
+                    : [{ kind: d.kind, service: d.connect_service, name: d.name.zh }],
+                ),
+              isConnected: (need) => setupNeedConnected(ws, need),
+              target: async (id) => (await setupCardsOf(ws))?.target(id),
+              targetIds: async () => (await setupCardsOf(ws))?.targetIds() ?? [],
+            }),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),

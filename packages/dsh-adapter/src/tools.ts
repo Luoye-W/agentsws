@@ -30,6 +30,7 @@ import {
   REPORT_TOOL_DEF_BY_NAME,
   renderThemeRead,
   renderTrustedToolResult,
+  SETUP_REQUEST_TOOL_DEF_BY_NAME,
   SHOP_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
@@ -354,6 +355,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
     // WP331：报告积木（定义在 stand-ins 的 `runtime/report.ts`）
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
+    // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
+    SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
@@ -509,6 +512,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP343：「我的助理」的工具（与随便聊那条模型回合同一份）
       ASSISTANT_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

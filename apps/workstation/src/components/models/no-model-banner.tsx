@@ -13,7 +13,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { getPositions, listModelProviders } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -23,6 +23,9 @@ import { useApp } from '@/lib/app-context'
  * `banner` 是原样那条黄条（设置页还在用它——那一页本来就是来处理这件事的）；
  * `chip` 是顶栏上的一个黄色小胶囊，与模型 / 积分那两个芯片并排。
  * 判据一个字没改：仍旧只读 `has_key`，问不到就什么都不出。
+ *
+ * WP334（决策 726）：点了不再跳设置页——在第三栏开「接模型」那张连接卡（与开工向导第 ① 步同一个件，
+ * key 走本机原生表单），就地接上；设置页仍在，是总览与管理。
  */
 export type NoModelVariant = 'banner' | 'chip'
 
@@ -32,6 +35,7 @@ export function NoModelBanner({
   variant?: NoModelVariant
 } = {}): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
   const providers = useQuery({
@@ -47,15 +51,19 @@ export function NoModelBanner({
 
   if (variant === 'chip')
     return (
-      <Link
-        to="/settings"
+      <button
+        type="button"
         title={`${t('models.banner')} ${t('models.banner.cta')}`}
         data-testid="no-model-chip"
+        data-connect="model"
         className="flex items-center gap-1 rounded-full bg-ws-warn-bg px-2 py-1 text-xs font-medium text-ws-warn"
+        onClick={() => {
+          openConnect('model')
+        }}
       >
         <TriangleAlert aria-hidden className="size-3.5" />
         <span className="max-w-32 truncate">{t('models.chip')}</span>
-      </Link>
+      </button>
     )
 
   return (
@@ -70,9 +78,16 @@ export function NoModelBanner({
       />
       <span>
         {t('models.banner')}{' '}
-        <Link to="/settings" className="text-primary underline-offset-4 hover:underline">
+        <button
+          type="button"
+          data-connect="model"
+          className="text-primary underline-offset-4 hover:underline"
+          onClick={() => {
+            openConnect('model')
+          }}
+        >
           {t('models.banner.cta')}
-        </Link>
+        </button>
       </span>
     </p>
   )

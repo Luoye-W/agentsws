@@ -31,6 +31,10 @@ export const SETUP_ZH: Record<string, string> = {
   'setup.need.im:dingtalk': '钉钉',
   'setup.need.im:wecom': '企业微信',
   'setup.need.im:wechat': '微信',
+  'setup.need.model': 'AI 模型',
+  'setup.need.deepseek_account': 'DeepSeek 账号',
+  'setup.need.workshop_account': 'Agents 工坊账号',
+  'setup.need.imap_smtp': '发信邮箱',
   'rail.panel.connect': '连接',
 }
 
@@ -63,5 +67,9 @@ export const SETUP_EN: Record<string, string> = {
   'setup.need.im:dingtalk': 'DingTalk',
   'setup.need.im:wecom': 'WeCom',
   'setup.need.im:wechat': 'WeChat',
+  'setup.need.model': 'AI model',
+  'setup.need.deepseek_account': 'DeepSeek account',
+  'setup.need.workshop_account': 'Agents Workshop account',
+  'setup.need.imap_smtp': 'Sending mailbox',
   'rail.panel.connect': 'Connect',
 }

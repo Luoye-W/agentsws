@@ -242,7 +242,10 @@ function Discovery({
             {(found.entry_points ?? []).length === 0 ? null : (
               <div className="flex flex-wrap items-center gap-2">
                 {(found.entry_points ?? []).map((entry) =>
-                  // WP324：接自己的数据接口 = 第三栏就地连那个渠道（不跳连接页）；关联账号仍去账号页
+                  /*
+                   * WP324：接自己的数据接口 = 第三栏就地连那个渠道（不跳连接页）；
+                   * WP334（决策 726）：关联官方账号也在第三栏就地关联（与设置页同一个注册 / 登录表单）
+                   */
                   entry.id === 'byo' ? (
                     <Button
                       key={entry.id}
@@ -260,13 +263,16 @@ function Discovery({
                   ) : (
                     <Button
                       key={entry.id}
-                      asChild
                       size="sm"
                       variant="default"
                       title={entry.note}
                       data-testid={`kol-search-entry-${entry.id}`}
+                      data-connect="workshop_account"
+                      onClick={() => {
+                        openConnect('workshop_account')
+                      }}
                     >
-                      <Link to={entryHref(entry.id, channel)}>{entry.label}</Link>
+                      {entry.label}
                     </Button>
                   ),
                 )}

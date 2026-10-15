@@ -65,6 +65,8 @@ export * from './runtime/report.js'
 export * from './runtime/report-playbook.js'
 export * from './runtime/research.js'
 export * from './runtime/schedule.js'
+// WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具
+export * from './runtime/setup-request.js'
 export * from './runtime/shop.js'
 export * from './runtime/skills.js'
 export * from './runtime/stub.js'

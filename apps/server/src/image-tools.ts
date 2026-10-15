@@ -43,6 +43,7 @@ import {
   IMAGE_PICK_AGAIN,
   IMAGE_PICK_PREFIX,
   imageCredits,
+  needsConnectionReason,
 } from '@agentsws/contracts'
 import { checkPrompt, resolveSpec } from '@agentsws/design-core'
 import { estimateImageUsd, imageSizeFor } from '@agentsws/model-gateway'
@@ -208,10 +209,11 @@ export function createImageService(options: ImageServiceOptions): ImageService {
 
   const providerOr = (operation: 'generate' | 'edit'): ImageProvider => {
     const p = options.images()
+    // WP334（决策 726）：生图没配 → 带上机器码，运行时出连接卡（关联工坊账号就走云上生图，卡里就地关联）
     if (p === undefined || !p.available)
       throw new ImageToolError(
         'error',
-        p?.unavailable_reason ?? '生图还没配：去设置 → 模型 →「生图」那一块选一个。',
+        needsConnectionReason('workshop_account', p?.unavailable_reason ?? '生图还没配。'),
       )
     if (operation === 'edit' && p.edit === undefined)
       throw new ImageToolError(
@@ -822,7 +824,7 @@ export function createImageService(options: ImageServiceOptions): ImageService {
           ? (r.data as { status?: string }).status === 'needs_approval'
             ? '再来一版要超单次上限，出了一张卡问你。'
             : '又出了一版，在下面挑。'
-          : `再来一版没出成：${r.reason ?? ''}`,
+          : `再来一版没出成：${(r.reason ?? '').replace(/^needs_connection:\S+\s*/, '')}`,
       )
       return true
     }

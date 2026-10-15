@@ -37,7 +37,12 @@ import type {
   PricingEntry,
   ToolDef,
 } from '@agentsws/contracts'
-import { DEFAULT_WEB_LIMITS, FIND_ARCHIVED_WORK_TOOL, WEB_SEARCH_TOOL } from '@agentsws/contracts'
+import {
+  DEFAULT_WEB_LIMITS,
+  FIND_ARCHIVED_WORK_TOOL,
+  GENUI_DISPLAY_RULE,
+  WEB_SEARCH_TOOL,
+} from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import { ASSISTANT_DISPATCH_TOOL, isAssistantTool } from '@agentsws/stand-ins'
@@ -460,6 +465,8 @@ function systemPrompt(
           ...assistant.lines,
           ...assistant.memory,
         ]
+  // WP336：回答里可以放 ```dsh-ui 组件（所有对话运行同一段精简写法）
+  lines.push(GENUI_DISPLAY_RULE)
   if (web.on) {
     lines.push(
       `- 可以用 \`web_search\` 上网查最新的公开信息，这一轮最多搜 ${web.max} 次。`,
@@ -530,7 +537,8 @@ async function answer(
     choices.find((c) => c.id === `${ref.provider}/${ref.model}`) ??
     choices[0]
   if (choice === undefined)
-    return fail('还没接模型。去「设置 → 模型」接一个（或者启用「Agents 工坊（用积分）」）再来聊。')
+    // WP334（决策 726）：不再叫人去设置页——输入框旁那个「还没接模型，接一个」就地开连接卡
+    return fail('还没接模型，点「接一个」就地接上再来聊。')
   const withModel = {
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },
