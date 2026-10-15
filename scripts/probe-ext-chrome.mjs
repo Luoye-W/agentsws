@@ -46,7 +46,10 @@ const CHROME =
   (process.platform === 'darwin'
     ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
     : process.platform === 'win32'
-      ? join(process.env.PROGRAMFILES ?? 'C:\\Program Files', 'Google/Chrome/Application/chrome.exe')
+      ? join(
+          process.env.PROGRAMFILES ?? 'C:\\Program Files',
+          'Google/Chrome/Application/chrome.exe',
+        )
       : '/usr/bin/google-chrome')
 const BUILD = join(ROOT, 'apps/extension/build/chrome-mv3')
 if (!existsSync(join(BUILD, 'manifest.json'))) {

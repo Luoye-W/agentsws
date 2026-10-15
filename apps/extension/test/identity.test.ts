@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { EXTENSION_ID, EXTENSION_PUBLIC_KEY } from '../src/lib/identity'
 
 function chromeIdOf(keyBase64: string): string {
-  const hex = createHash('sha256').update(Buffer.from(keyBase64, 'base64')).digest('hex').slice(0, 32)
+  const hex = createHash('sha256')
+    .update(Buffer.from(keyBase64, 'base64'))
+    .digest('hex')
+    .slice(0, 32)
   return [...hex].map((c) => String.fromCharCode(97 + Number.parseInt(c, 16))).join('')
 }
 
