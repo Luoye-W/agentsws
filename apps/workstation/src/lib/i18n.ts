@@ -2289,7 +2289,7 @@ const zh: Table = {
   'models.banner': '还没接模型，Agent 跑不起来。',
   // WP98：首页第一屏那条黄条收进顶栏，成了一个黄色小胶囊
   'models.chip': '还没接模型',
-  'models.banner.cta': '去设置里接一个 →',
+  'models.banner.cta': '接一个 →',
   'models.configured': '已配的',
   'models.empty': '还一个都没配。下面挑一种开始，不会就点「看教程」。',
   // WP156（36 §7）：「加一个」每张厂商卡上那一句（整段介绍在问号里，步骤在教程里）
@@ -3995,7 +3995,7 @@ const zh: Table = {
   'free_chat.sources': '来源',
   'free_chat.cost.credits': '约 {n} 积分',
   'free_chat.cost.tokens': '{n} token',
-  'free_chat.no_model': '还没接模型，去设置',
+  'free_chat.no_model': '还没接模型，接一个',
   'free_chat.model.pick': '用哪个模型',
   'free_chat.model.credits': '按积分扣',
   'free_chat.model.vision': '能看图',
@@ -6373,7 +6373,7 @@ const en: Table = {
   'models.inherit.readonly': 'Read-only while following. Turn the switch off to set your own.',
   'models.banner': 'No model connected yet — agents cannot run.',
   'models.chip': 'No model',
-  'models.banner.cta': 'Connect one in Settings →',
+  'models.banner.cta': 'Connect one →',
   'models.configured': 'Configured',
   'models.empty': 'Nothing configured yet. Pick one below; stuck? Open its tutorial.',
   // WP156 (36 §7): the one line on each provider card in "Add one"
@@ -8151,7 +8151,7 @@ const en: Table = {
   'free_chat.sources': 'Sources',
   'free_chat.cost.credits': '≈ {n} credits',
   'free_chat.cost.tokens': '{n} tokens',
-  'free_chat.no_model': 'No model yet — open settings',
+  'free_chat.no_model': 'No model yet — connect one',
   'free_chat.model.pick': 'Which model',
   'free_chat.model.credits': 'paid in credits',
   'free_chat.model.vision': 'Can see images',
