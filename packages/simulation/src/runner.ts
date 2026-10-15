@@ -1252,6 +1252,15 @@ async function execute(
         await positionOpen(event.open_at_position)
         return
       }
+      // WP343：「我的助理」派活
+      case 'assistant.dispatch': {
+        try {
+          await positionsLoop().dispatch(event.assistant_dispatch)
+        } catch (e) {
+          workBlocked(e, 'assistant_dispatch_failed')
+        }
+        return
+      }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
       case 'shop.price_change': {
         const out = await world.shop.priceChange(event.price_change)

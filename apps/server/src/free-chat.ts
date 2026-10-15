@@ -7,10 +7,17 @@
  * - **会话存本机**（`free-chat-store.ts`），只有本人看得见；正文与图片都不进事件日志；
  * - **计量照常**：每一次模型调用都过这个品牌的模型网关（用途 `free_chat`），积分照常扣，这里不另写扣费。
  *   联网搜索那一次模型回合由宿主照 WP179 记 `model.usage{purpose: web_search}`。
+ *
+ * WP343（决策 334 / 859）：改名「我的助理」。给了 `assistant` 时第一条边界放宽成：模型多了四个**只读**工具
+ * （问全局）与一个**派活**工具（挑岗位 / 职责、走岗位的交办入口开一件事——助理自己不做、没有对外写口，
+ * 改外部的事由那个岗位出审批）；输入框里 `@` 选的岗位直接交（不经模型）；交出去的事有结果 / 要拍板时
+ * 回到这段对话报一句（读会话时、答完一轮时补上，`report`）；助理这一层的记忆照 WP320 接上
+ * （`assistant-memory.ts`）。没给 `assistant` 就是老的随便聊，一个字不变。
  */
 import type {
   FreeChatActor,
   FreeChatCitation,
+  FreeChatDispatchView,
   FreeChatFrame,
   FreeChatMessageView,
   FreeChatModelsView,
@@ -38,7 +45,11 @@ import {
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
-import type { FreeChatStore } from './free-chat-store.js'
+import { ASSISTANT_DISPATCH_TOOL, isAssistantTool } from '@agentsws/stand-ins'
+import { type Assistant, REPORT_WINDOW_MS } from './assistant.js'
+import { assistantMemoryLines, rememberAfterTurn } from './assistant-memory.js'
+import { splitRememberTags } from './auto-memory.js'
+import type { AssistantMemoryRow, FreeChatStore } from './free-chat-store.js'
 import type { ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
@@ -94,7 +105,17 @@ export interface FreeChatOptions {
   /** 一次模型调用没成时给人看的那一句。 */
   humanize(e: unknown): string
   newId(prefix: string): string
+  /** WP343：「我的助理」——问全局（只读）+ 派活 + 回报。不给 = 老的随便聊。 */
+  assistant?: Assistant
+  /** WP343：助理这一层的记忆（「自动记忆」开关与记账 / 提醒）。不给 = 不记。 */
+  memory?: {
+    auto(actor: FreeChatActor): boolean
+    changed(actor: FreeChatActor, kind: 'added' | 'removed', row: AssistantMemoryRow): void
+  }
 }
+
+/** WP343：一轮里最多调几次助理的工具（查 + 派）。 */
+export const MAX_ASSISTANT_CALLS = 6
 
 const WEB_TOOL: ToolDef = {
   name: WEB_SEARCH_TOOL,
@@ -158,7 +179,35 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
     updated_at: row.updated_at,
   })
 
-  const turn = createTurn(options, own, view, inflight)
+  /**
+   * WP343：交出去的事有结果 / 要拍板 / 没做成 → 在那段对话里补一句（同一步只报一次）。
+   * 那段对话正在答的时候先不插（不然插在这一轮回复前面），答完再补。
+   */
+  const flush = async (actor: FreeChatActor, only?: string): Promise<void> => {
+    const assistant = options.assistant
+    if (assistant === undefined) return
+    const since = new Date(Date.parse(clock.now()) - REPORT_WINDOW_MS).toISOString()
+    for (const row of store.dispatches(actor.person_id, since)) {
+      if (only !== undefined && row.session_id !== only) continue
+      if (inflight.has(row.session_id)) continue
+      const reports = await assistant.progressOf(actor, row)
+      const session = store.session(row.session_id)
+      if (reports.length === 0 || session === undefined || inflight.has(row.session_id)) continue
+      for (const r of reports)
+        store.addMessage({
+          id: options.newId('fmsg'),
+          session_id: row.session_id,
+          role: 'assistant',
+          text: r.text,
+          at: clock.now(),
+          report: r.report,
+        })
+      store.putDispatch({ ...row, reported: [...row.reported, ...reports.map((r) => r.key)] })
+      store.putSession({ ...session, updated_at: clock.now() })
+    }
+  }
+
+  const turn = createTurn(options, own, view, inflight, flush)
 
   return {
     async models(): Promise<FreeChatModelsView> {
@@ -182,6 +231,7 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
       }
     },
     async sessions(actor) {
+      await flush(actor).catch(() => undefined)
       return store.sessions(actor.person_id).map(view)
     },
     async create(actor, input) {
@@ -209,6 +259,7 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
     },
     async messages(actor, id) {
       own(actor, id)
+      await flush(actor, id).catch(() => undefined)
       return store.messages(id)
     },
     turn,
@@ -218,6 +269,24 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
       running?.abort()
       return { stopped: running !== undefined }
     },
+    ...(options.assistant === undefined
+      ? {}
+      : {
+          assistant: (actor: FreeChatActor) => (options.assistant as Assistant).state(actor),
+          async memories(actor: FreeChatActor) {
+            return store
+              .memories(actor.person_id)
+              .map((m) => ({ id: m.id, text: m.text, at: m.at, written_by: m.written_by }))
+          },
+          async forget(actor: FreeChatActor, id: string) {
+            // 别人的与不存在的回同一句：不给探测别人记忆 id 的口
+            if (!store.memories(actor.person_id).some((m) => m.id === id))
+              throw new ApiError('not_found', '没有这条记忆（可能已经删了）')
+            const row = store.removeMemory(id)
+            if (row !== undefined) options.memory?.changed(actor, 'removed', row)
+            return { deleted: row !== undefined }
+          },
+        }),
   }
 }
 
@@ -230,6 +299,7 @@ function createTurn(
   own: Own,
   view: View,
   inflight: Map<string, AbortController>,
+  flush: (actor: FreeChatActor, only?: string) => Promise<void>,
 ): FreeChatPort['turn'] {
   const { store, clock } = options
   return async (actor, input, sink, signal) => {
@@ -239,9 +309,12 @@ function createTurn(
     const history = store.messages(session.id)
     let user: FreeChatMessageView | undefined
     let prompt: FreeChatMessageView | undefined
+    /** WP343：重新生成的那一条已经交出去过事 → 这次不再挂派活工具（不重复开事项）。 */
+    let dispatchedBefore = false
     if (input.regenerate === true) {
       const last = history.at(-1)
       if (last?.role === 'assistant') {
+        dispatchedBefore = (last.dispatches ?? []).length > 0
         store.removeMessage(last.id)
         history.pop()
       }
@@ -258,6 +331,7 @@ function createTurn(
         ...(input.images === undefined || input.images.length === 0
           ? {}
           : { images: input.images }),
+        ...(input.target?.label === undefined ? {} : { to: input.target.label }),
       }
       store.addMessage(user)
       history.push(user)
@@ -270,8 +344,35 @@ function createTurn(
     const message_id = options.newId('fmsg')
     sink({ type: 'start', message_id, ...(user === undefined ? {} : { user }) })
     try {
-      const reply = await answer(options, actor, input, history, prompt, message_id, sink, stop)
+      const reply =
+        input.target !== undefined && input.regenerate !== true && options.assistant !== undefined
+          ? await handOver(
+              options,
+              options.assistant,
+              actor,
+              input.target,
+              prompt,
+              message_id,
+              sink,
+            )
+          : await answer(options, actor, input, history, prompt, message_id, sink, stop, {
+              dispatch: !dispatchedBefore,
+            })
       store.addMessage(reply)
+      // WP343：交出去的事记下那根线（之后回报到这段对话）
+      for (const d of reply.dispatches ?? [])
+        options.store.putDispatch({
+          matter_id: d.matter_id,
+          session_id: session.id,
+          person_id: actor.person_id,
+          at: d.at,
+          title: d.title,
+          position_id: d.position_id,
+          position_name: d.position_name,
+          ...(d.role_id === undefined ? {} : { role_id: d.role_id }),
+          ...(d.duty_name === undefined ? {} : { duty_name: d.duty_name }),
+          reported: [],
+        })
       const title = session.title === FREE_CHAT_UNTITLED ? titleFrom(prompt.text) : session.title
       const next = { ...session, title, updated_at: clock.now() }
       store.putSession(next)
@@ -279,6 +380,57 @@ function createTurn(
     } finally {
       inflight.delete(session.id)
     }
+    // WP343：这一轮答的时候交出去的事可能已经有结果了（岗位跑得快）——答完再补上
+    await flush(actor, session.id).catch(() => undefined)
+  }
+}
+
+/** WP343：`@` 选了岗位 / 职责——不经模型，直接交给它，回一句「交给了谁」。 */
+async function handOver(
+  options: FreeChatOptions,
+  assistant: Assistant,
+  actor: FreeChatActor,
+  target: NonNullable<FreeChatTurnInput['target']>,
+  prompt: FreeChatMessageView,
+  message_id: string,
+  sink: (frame: FreeChatFrame) => void,
+): Promise<FreeChatMessageView> {
+  const base: FreeChatMessageView = {
+    id: message_id,
+    session_id: prompt.session_id,
+    role: 'assistant',
+    text: '',
+    at: options.clock.now(),
+  }
+  if (prompt.text.trim() === '') {
+    const text = '说一句要它做什么再交（现在是空的）。'
+    sink({ type: 'error', message: text })
+    return { ...base, error: text }
+  }
+  try {
+    const out = await assistant.direct(
+      actor,
+      {
+        position_id: target.position_id,
+        ...(target.role_id === undefined ? {} : { role_id: target.role_id }),
+      },
+      prompt.text,
+    )
+    if (out.dispatch === undefined) {
+      const text = out.reason ?? '没交出去，换个岗位再试。'
+      sink({ type: 'error', message: text })
+      return { ...base, error: text }
+    }
+    const d = out.dispatch
+    sink({ type: 'dispatched', dispatch: d })
+    const who = `${d.position_name}${d.duty_name === undefined ? '' : ` · ${d.duty_name}`}`
+    const text = `好的，交给了${who}。做完或要你拍板时，我在这里告诉你。`
+    sink({ type: 'delta', text })
+    return { ...base, text, dispatches: [d] }
+  } catch (e) {
+    const text = options.humanize(e)
+    sink({ type: 'error', message: text })
+    return { ...base, error: text }
   }
 }
 
@@ -288,12 +440,31 @@ function systemPrompt(
   web: { on: boolean; max: number },
   facts: FreeChatCitation[] | undefined,
   recall = false,
+  assistant?: { lines: string[]; dispatch: boolean; memory: string[] },
 ): string {
-  const lines = [
-    `你是「Agents 工坊」里的随便聊助手。现在是 ${now}（UTC）。`,
-    '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
-    '- 这里只是聊天：你不能替用户发邮件、改店铺、花钱，也不能开事项或派活。用户想让某个岗位去做，提醒他点回复旁边的「交给岗位去做」。',
-  ]
+  const lines =
+    assistant === undefined
+      ? [
+          `你是「Agents 工坊」里的随便聊助手。现在是 ${now}（UTC）。`,
+          '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
+          '- 这里只是聊天：你不能替用户发邮件、改店铺、花钱，也不能开事项或派活。',
+        ]
+      : [
+          // WP343（决策 859）：「我的助理」——能随便聊，也能像对岗位那样交代事情
+          `你是「Agents 工坊」里用户的「我的助理」。现在是 ${now}（UTC）。`,
+          '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
+          '- 用户可以随便和你聊；也可以像对岗位那样交代事情。只是问问、聊天、写一段字：直接答，不派活。',
+          '- 问到他的岗位 / 职责在做什么、今天要他处理什么、最近发出去了什么、某件事到哪了：先用对应的只读工具查，再照查到的答；别凭印象说。',
+          ...(assistant.dispatch
+            ? [
+                '- 用户交代要岗位真去做的事（发帖、回帖、查新帖、出图、改店铺、跟进客户…）：用派活工具交给对应的岗位，你自己不做，也不改任何外部的东西（要改外部的，那个岗位会出审批给用户）。交出去之后简短说一句交给了谁、做完或要他拍板时会在这里告诉他。',
+                '- 拿不准交给哪个岗位：先别派，问用户一句，把候选岗位列出来让他选。',
+              ]
+            : ['- 这一轮不派活（上一次已经交出去了）；用户想再交一次，让他再说一遍。']),
+          '- 对用户说话时不提工具名、函数名、内部 id。',
+          ...assistant.lines,
+          ...assistant.memory,
+        ]
   // WP336：回答里可以放 ```dsh-ui 组件（所有对话运行同一段精简写法）
   lines.push(GENUI_DISPLAY_RULE)
   if (web.on) {
@@ -341,6 +512,7 @@ async function answer(
   message_id: string,
   sink: (frame: FreeChatFrame) => void,
   signal: AbortSignal,
+  opts: { dispatch: boolean } = { dispatch: true },
 ): Promise<FreeChatMessageView> {
   const at = options.clock.now()
   const base: FreeChatMessageView = {
@@ -398,8 +570,30 @@ async function answer(
     .slice(0, upto + 1)
     .filter((m) => m.error === undefined && (m.text !== '' || (m.images ?? []).length > 0))
     .slice(-FREE_CHAT_HISTORY)
+  // WP343：「我的助理」——岗位清单与助理记忆进系统提示，五个工具挂上（重新生成且上一条交过事就不挂派活）
+  const assistant = options.assistant
+  const memoryAuto = options.memory?.auto(actor) ?? true
+  const assistantPrompt =
+    assistant === undefined
+      ? undefined
+      : {
+          lines: await assistant.promptLines(actor),
+          dispatch: opts.dispatch,
+          memory:
+            options.memory === undefined
+              ? []
+              : assistantMemoryLines(options.store.memories(actor.person_id), memoryAuto),
+        }
+  const assistantTools = (assistant?.tools() ?? []).filter(
+    (t) => opts.dispatch || t.name !== ASSISTANT_DISPATCH_TOOL,
+  )
+  let asks = 0
+  const dispatches: FreeChatDispatchView[] = []
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt(at, { on: webOn, max }, citations, recallOn) },
+    {
+      role: 'system',
+      content: systemPrompt(at, { on: webOn, max }, citations, recallOn, assistantPrompt),
+    },
     ...past.map((m) => toChat(m, m.id === prompt.id)),
   ]
   const [provider, ...rest] = choice.id.split('/')
@@ -419,11 +613,16 @@ async function answer(
   const usage = { input_tokens: 0, output_tokens: 0 }
   let stopped = false
   try {
-    for (let round = 0; round <= max + (recallOn ? MAX_RECALLS : 0); round += 1) {
+    const rounds =
+      max + (recallOn ? MAX_RECALLS : 0) + (assistantTools.length > 0 ? MAX_ASSISTANT_CALLS : 0)
+    for (let round = 0; round <= rounds; round += 1) {
       const tools = [
         ...(webOn && searches < max ? [WEB_TOOL] : []),
         ...(recallOn && recalls < MAX_RECALLS ? [RECALL_TOOL] : []),
+        ...(asks < MAX_ASSISTANT_CALLS ? assistantTools : []),
       ]
+      // 只认这一轮真挂出去的工具（模型点名没挂的——比如联网没开时的 web_search——一律不执行）
+      const offered = new Set(tools.map((t) => t.name))
       const out = await gateway.complete({
         model,
         messages,
@@ -441,25 +640,32 @@ async function answer(
         stopped = true
         break
       }
-      const calls = (out.tool_calls ?? []).filter(
-        (c) =>
-          (c.name === WEB_SEARCH_TOOL && options.web !== undefined) ||
-          (c.name === FIND_ARCHIVED_WORK_TOOL && recallOn),
-      )
+      const calls = (out.tool_calls ?? []).filter((c) => offered.has(c.name))
       if (calls.length === 0) break
       messages.push({ role: 'assistant', content: out.text, tool_calls: out.tool_calls ?? [] })
       for (const call of out.tool_calls ?? []) {
-        const content =
-          call.name === FIND_ARCHIVED_WORK_TOOL && recallOn
-            ? await recallOnce(options, call, { recalls, actor }, sink, candidates)
-            : await searchOnce(
-                options,
-                call,
-                { searches, max, actor, run_id, role_id },
-                sink,
-                sources,
-                signal,
-              )
+        let content: string
+        if (!offered.has(call.name)) content = '这个工具这一轮没有挂，不能用。'
+        else if (call.name === FIND_ARCHIVED_WORK_TOOL)
+          content = await recallOnce(options, call, { recalls, actor }, sink, candidates)
+        else if (assistant !== undefined && isAssistantTool(call.name)) {
+          sink({ type: 'notice', text: ASSISTANT_STATUS[call.name] ?? '在看…' })
+          const got = await assistant.call(actor, call, { user_text: prompt.text })
+          content = got.content
+          asks += 1
+          if (got.dispatch !== undefined) {
+            dispatches.push(got.dispatch)
+            sink({ type: 'dispatched', dispatch: got.dispatch })
+          }
+        } else
+          content = await searchOnce(
+            options,
+            call,
+            { searches, max, actor, run_id, role_id },
+            sink,
+            sources,
+            signal,
+          )
         messages.push({ role: 'tool', tool_call_id: call.id, name: call.name, content })
         if (call.name === WEB_SEARCH_TOOL) searches += 1
         if (call.name === FIND_ARCHIVED_WORK_TOOL) recalls += 1
@@ -475,24 +681,50 @@ async function answer(
       sink({ type: 'error', message: reason })
       return {
         ...withModel,
-        text,
+        text: assistant === undefined ? text : splitRememberTags(text).text,
         error: reason,
         ...(sources.length === 0 ? {} : { sources }),
         ...(candidates.length === 0 ? {} : { archived_candidates: candidates }),
+        ...(dispatches.length === 0 ? {} : { dispatches }),
       }
     }
     stopped = true
   }
   const credits = choice.official ? options.credits?.(model.model, usage) : undefined
+  // WP343：回答末尾的 <remember> 不给人看；正常答完才记（停下的不记）
+  const said = splitRememberTags(text)
+  if (assistant !== undefined && options.memory !== undefined && !stopped) {
+    const written = rememberAfterTurn({
+      store: options.store,
+      actor,
+      user_text: prompt.text,
+      items: said.items,
+      auto: memoryAuto,
+      at: options.clock.now(),
+      session_id: prompt.session_id,
+      newId: options.newId,
+    })
+    for (const row of written) options.memory.changed(actor, 'added', row)
+  }
   return {
     ...withModel,
-    text,
+    text: assistant === undefined ? text : said.text,
+    ...(dispatches.length === 0 ? {} : { dispatches }),
     usage: { ...usage, ...(credits === undefined ? {} : { credits }) },
     ...(sources.length === 0 ? {} : { sources }),
     ...(citations === undefined || citations.length === 0 ? {} : { citations }),
     ...(candidates.length === 0 ? {} : { archived_candidates: candidates }),
     ...(stopped ? { stopped: true } : {}),
   }
+}
+
+/** WP343：助理查东西时输入框上那一行「在做什么」。 */
+const ASSISTANT_STATUS: Readonly<Record<string, string>> = {
+  work_overview: '在看各岗位在做什么…',
+  my_pending_cards: '在看要你处理的卡…',
+  recent_sent: '在看最近发出去的…',
+  matter_progress: '在查那件事到哪了…',
+  hand_to_position: '在交给岗位…',
 }
 
 /** 模型要搜一次：到上限就说"次数用完了"；搜到的来源去重后推给界面，结果以外部数据的样子还给模型。 */
