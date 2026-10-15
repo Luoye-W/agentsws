@@ -81,6 +81,28 @@ describe('WP341 外部图片白名单', () => {
       expect.arrayContaining(['rollout-test.myshopify.com', 'shop.rollout.example']),
     )
 
+    // 对话里的分配是职责那一条（不是负责人）：照样看得到、加得了
+    const duty = s.roles.assignments.create({
+      person_id: s.bootstrap.person.id,
+      workspace_id: s.bootstrap.workspace.id,
+      role_id: 'dtc.store',
+      granted_by: s.bootstrap.person.id,
+      ranges: [{ kind: 'brand', id: s.bootstrap.workspace.id }],
+    })
+    const asDuty = await s.gateway.fetch(
+      new Request('http://127.0.0.1/v1/settings/image-hosts', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${s.bootstrap.internalToken}`,
+          'X-Assignment': duty.id,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ host: 'img.supplier.example' }),
+      }),
+    )
+    expect(asDuty.status).toBe(200)
+    await call(s, 'DELETE', '/v1/settings/image-hosts/img.supplier.example')
+
     // 重启：名单还在（落在数据目录里）
     await s.close()
     server = undefined

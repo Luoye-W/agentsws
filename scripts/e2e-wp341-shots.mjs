@@ -5,7 +5,8 @@
  * 1. `wp341-old-genui`：WP336 的画法（同一个问题、同一份数；按钮 / 图片 / 链接被滤掉）——拷自 `docs/assets/wp336/wp336-new-genui.png`；
  * 2. `wp341-new-genui` / `-dark`：同一个问题，现在按钮（接着问）、外部图片「点开看 · 域名」、链接都在；
  * 3. `wp341-form-prompts`：线程里 AI 给了一张表——在对话里勾 5 条 prompt、选尺寸、填日期；
- * 4. `wp341-form-submitted`：点「就这 5 条」→ 对话里多了一条人话摘要（数据段给 AI，不显示），AI 接着做。
+ * 4. `wp341-form-submitted`：点「就这 5 条」→ 对话里多了一条人话摘要（数据段给 AI，不显示），AI 接着做；
+ * 5. `wp341-settings-image-hosts`：设置里「直接显示图片的网站」那一行（849 白名单）。
  *
  * 演示世界没接模型：同 WP336 的脚本，拦下岗位入口 / 事项的回包，把 AI 那条换成服务端会回的形状
  * （genui 那块用契约同一份 `filterGenuiSpec` 现过滤）。处理器那一半由 `apps/workstation/test/wp341-genui-full.test.tsx` 钉住。
@@ -286,6 +287,17 @@ async function main() {
         })
         await page.waitForTimeout(1500)
         await shot(page, 'wp341-form-submitted')
+        // 849：设置里那一行（点过一次「以后这个网站的图都直接显示」之后）
+        await api(token, owner, 'POST', '/v1/settings/image-hosts', { host: 'cdn.example.com' })
+        await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle', timeout: 120_000 })
+        const hosts = page.locator('[data-testid="settings-image-hosts"]')
+        await hosts.waitFor({ timeout: 30_000 })
+        await hosts.scrollIntoViewIfNeeded()
+        await page.waitForTimeout(400)
+        await hosts.screenshot({ path: join(SHOTS, 'wp341-settings-image-hosts.png') })
+        console.log('  📷 wp341-settings-image-hosts.png')
+        // 删掉，深色那一轮照旧拍「点开看」
+        await api(token, owner, 'DELETE', '/v1/settings/image-hosts/cdn.example.com')
       }
       const outside = requests.filter((u) => !u.startsWith(BASE) && !u.startsWith('data:'))
       console.log(

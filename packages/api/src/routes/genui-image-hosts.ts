@@ -54,6 +54,8 @@ export function genuiImageHostsRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // 品牌里谁在对话里都看得到图、都能加（同看图本身）；不看这条分配有没有店铺设置权
+        authzBypass: () => true,
         returns: 'GenuiImageHostsView',
       },
       async (c, deps) => ok(c, await portOf(deps).view(principalOf(c).workspace_id)),
@@ -68,6 +70,8 @@ export function genuiImageHostsRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // 品牌里谁在对话里都看得到图、都能加（同看图本身）；不看这条分配有没有店铺设置权
+        authzBypass: () => true,
         body: AddBody,
         returns: 'GenuiImageHostsView',
       },
@@ -86,6 +90,8 @@ export function genuiImageHostsRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // 品牌里谁在对话里都看得到图、都能加（同看图本身）；不看这条分配有没有店铺设置权
+        authzBypass: () => true,
         params: [{ name: 'host', in: 'path', required: true, description: '域名' }],
         returns: 'GenuiImageHostsView',
       },
