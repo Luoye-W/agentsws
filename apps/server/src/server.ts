@@ -7122,6 +7122,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ...(full?.markets === undefined ? {} : { markets: full.markets }),
                 ...(domain === undefined || domain === '' ? {} : { domain }),
                 ...(products.length === 0 ? {} : { products }),
+                // WP346（决策 872）：品类、人群、关键词、竞品——建议先读档案
+                ...(full?.category === undefined ? {} : { category: full.category }),
+                ...(full?.audience === undefined
+                  ? {}
+                  : {
+                      audience: [full.audience.buyers, ...(full.audience.concerns ?? [])].join(
+                        '；',
+                      ),
+                    }),
+                ...(full?.keywords === undefined ? {} : { keywords: full.keywords }),
+                ...(full?.competitors === undefined
+                  ? {}
+                  : { competitors: full.competitors.map((c) => c.name) }),
               }
             },
             setupCards: () => setupCardsOf(ws),

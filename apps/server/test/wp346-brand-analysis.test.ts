@@ -20,6 +20,7 @@ import { createGeoMonitor } from '../src/geo-monitor.js'
 import { createGeoStore } from '../src/geo-store.js'
 import { createServer, type Server } from '../src/index.js'
 import { createKolToolExecutor } from '../src/kol-tools.js'
+import { suggestPatrol } from '../src/reddit-watch/suggest.js'
 
 const FIXTURES = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -350,5 +351,33 @@ describe('WP346 下游统一读档案', () => {
       'hiking daypack',
       'best hiking backpack',
     ])
+  })
+
+  it('Reddit 巡查建议：品类 / 人群 / 竞品进提示词；外部关键词先用档案里的，模型只补', async () => {
+    const prompts: string[] = []
+    const got = await suggestPatrol(
+      {
+        name: 'Trailmark',
+        category: 'hiking backpacks',
+        audience: '周末带孩子徒步的家长；背着累不累',
+        keywords: {
+          brand: ['Trailmark'],
+          category: ['hiking daypack'],
+          scenario: ['hiking with kids'],
+        },
+        competitors: ['Osprey'],
+      },
+      async (prompt) => {
+        prompts.push(prompt)
+        return JSON.stringify({
+          watch_subreddits: [{ name: 'hiking', per_week: 7 }],
+          keywords: ['trailmark', 'kids hiking pack'],
+        })
+      },
+    )
+    expect(prompts[0]).toContain('目标人群：周末带孩子徒步的家长')
+    expect(prompts[0]).toContain('主要竞品：Osprey')
+    expect(prompts[0]).toContain('档案里的关键词：Trailmark、hiking daypack、hiking with kids')
+    expect(got?.keywords).toEqual(['Trailmark', 'hiking daypack', 'kids hiking pack'])
   })
 })

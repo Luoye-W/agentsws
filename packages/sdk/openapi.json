@@ -12994,7 +12994,7 @@
                     "const": true
                   },
                   "terms_version": {
-                    "default": "2026-10-05",
+                    "default": "2026-10-15",
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 40

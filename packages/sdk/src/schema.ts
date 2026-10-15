@@ -19673,7 +19673,7 @@ export interface operations {
           password: string
           /** @constant */
           accept_terms: true
-          /** @default 2026-10-05 */
+          /** @default 2026-10-15 */
           terms_version?: string
           /**
            * @default zh
