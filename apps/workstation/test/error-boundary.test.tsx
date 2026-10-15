@@ -72,7 +72,7 @@ describe('页面层错误边界', () => {
       <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <Routes>
           <Route path="/im-channels" element={<Boom />} />
-          <Route path="/connections" element={<p>连接页</p>} />
+          <Route path="/calendar" element={<p>日历页</p>} />
         </Routes>
       </AppShell>,
       '/im-channels',
@@ -87,10 +87,11 @@ describe('页面层错误边界', () => {
     expect(detail).not.toContain('@nordvolt')
     // 左栏照常可用
     const nav = screen.getByTestId('main-nav')
-    const link = nav.querySelector('a[href="/connections"]')
+    // WP342：连接收进了账号菜单，左栏点「日历」
+    const link = nav.querySelector('a[href="/calendar"]')
     expect(link).not.toBeNull()
     fireEvent.click(link as Element)
-    expect(await screen.findByText('连接页')).toBeTruthy()
+    expect(await screen.findByText('日历页')).toBeTruthy()
     expect(screen.queryByTestId('crash-page')).toBeNull()
     // 记了一条（洗过），路径只有 pathname
     expect(sent.length).toBe(1)

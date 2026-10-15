@@ -5,7 +5,6 @@
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
     "packages/contracts/src/ad-creative.ts",
-    "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
@@ -131,7 +130,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "466f00b05b3e3d8b69d0c972585459cb",
+  "source_digest": "e92bbac82db1225e7af3ad9602bdb32b",
   "objects": [
     {
       "id": "ad",
@@ -3056,6 +3055,12 @@
           "type": "Handoff",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -5564,6 +5569,12 @@
         {
           "name": "handoff",
           "type": "Handoff",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "model",
+          "type": "string",
           "sensitivity": "internal",
           "optional": true
         }
@@ -10449,42 +10460,6 @@
       "route_to": "role_holder",
       "roles": ["dtc.community-support", "dtc.support"],
       "what": "改收件地址"
-    },
-    {
-      "id": "stage_ads_activate",
-      "object": "ad_account",
-      "source": "role",
-      "access": "write",
-      "change_kind": "ads_activate",
-      "risk_class": "high",
-      "requires_approval": true,
-      "route_to": "owner",
-      "roles": ["ads.google", "ads.meta"],
-      "what": "stage ads activate"
-    },
-    {
-      "id": "stage_ads_sheet",
-      "object": "ad_account",
-      "source": "role",
-      "access": "write",
-      "change_kind": "ads_sheet",
-      "risk_class": "high",
-      "requires_approval": true,
-      "route_to": "owner",
-      "roles": ["ads.google", "ads.meta"],
-      "what": "stage ads sheet"
-    },
-    {
-      "id": "stage_ads_undo",
-      "object": "ad_account",
-      "source": "role",
-      "access": "write",
-      "change_kind": "ads_undo",
-      "risk_class": "high",
-      "requires_approval": true,
-      "route_to": "role_holder",
-      "roles": ["ads.google", "ads.meta"],
-      "what": "stage ads undo"
     },
     {
       "id": "stage_affiliate_code",

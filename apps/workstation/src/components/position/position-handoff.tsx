@@ -12,6 +12,7 @@
  */
 import { Send } from 'lucide-react'
 import { useState } from 'react'
+import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,8 @@ export function PositionHandoff({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [text, setText] = useState('')
+  /** WP342：这次交出去用哪个 AI（不选 = 品牌默认）；开出来的事项记着它，之后接着跑仍用它。 */
+  const [model, setModel] = useState<string | undefined>(undefined)
   const { open, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
   })
@@ -50,7 +53,7 @@ export function PositionHandoff({
     if (title === '') return
     clearError()
     open.mutate(
-      { title },
+      { title, model },
       {
         // WP259：没交出去，字放回框里（框下说一句人话）
         onError: () => {
@@ -96,6 +99,7 @@ export function PositionHandoff({
         placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
         label={t('position.entry.title')}
         testId="position-entry-input"
+        modelSlot={<ComposerModelPicker value={model} onChange={setModel} />}
       />
       {/* WP259：没发出去就在框下说一句（含服务端那句话），不再静默 */}
       <HandoffError error={error} />

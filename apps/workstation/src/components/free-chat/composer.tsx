@@ -70,6 +70,7 @@ export function Composer({
   onToggles,
   onSend,
   onStop,
+  modelSlot,
 }: {
   busy: boolean
   canSeeImages: boolean
@@ -80,6 +81,8 @@ export function Composer({
   onToggles: (next: ComposerToggles) => void
   onSend: (text: string, images: FreeChatImage[]) => void
   onStop: () => void
+  /** WP342：左下角的 AI 钮（`ComposerModelPicker`；不给就不画）。 */
+  modelSlot?: React.ReactNode
 }): React.ReactNode {
   const { t } = useApp()
   const [text, setText] = useState('')
@@ -173,6 +176,7 @@ export function Composer({
       />
       {problem === undefined ? null : <p className="text-xs text-destructive">{problem}</p>}
       <div className="flex flex-wrap items-center gap-2">
+        {modelSlot}
         <Toggle
           on={toggles.web_search}
           icon={Globe}
