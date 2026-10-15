@@ -889,3 +889,13 @@
 | 814 | （Luoye 10-15 原则）「不经 AI 之手」只适用于密钥 / 口令 / 令牌这类凭据；数字、数据可以经 AI 处理（放宽 docs/96 P2「数字不经模型手」） | **Luoye 定** | 高 |
 | 833 | （Luoye 10-15）安装前检测 Node / 借 Electron 自带 Node 以缩包：**维持现状**（继续随包带独立 Node） | **Luoye 定** | 低 |
 | 834 | （Luoye 10-15）INMO Reddit：自家版块 r/inmoxr、品牌号 u/Arvinw；监测关键词与重点版块由 Fable 调研后给建议、Luoye 确认（产品上配置卡也应默认带 AI 建议值）；飞书记录表由 Fable 用 lark-cli 建在 Luoye 的飞书里 | **Luoye 定** | 中 |
+| 828 | （WP339）窗口与网页尺寸对不上时先只记日志，不自动纠正；真机抓到一次再定做法 | 待 Luoye 定（建议同意） | 低 |
+| 829 | （WP339）不为这个问题专门升 Electron（44.x 后续版本没修） | 待定（建议同意） | 低 |
+| 830 | （WP339）主窗口设最小尺寸 800×560（宽不到 768 时左栏会整个消失） | 待定（建议同意） | 低 |
+| 835 | （Luoye 10-15）dsh-genui 不只用于当场回答：所有 AI 回给人看的正文（随便聊、事项 / 线程回话、岗位当场回答、秘书）都用 genui 渲染（展示类白名单、决定类仍走卡片） | **Luoye 定** | 中 |
+| 836 | （Luoye 10-15）INMO Reddit 监测：外部关键词方案 B（INMO + translation glasses + teleprompter glasses + captions glasses + AI glasses，型号变体只做本地标签）；召回相关词（recall / burn / overheat / refund / return）命中优先推送；每天巡查 r/inmoxr、r/SmartGlasses、r/augmentedreality，其余（MetaRayBanDisplay、RayNeo、EvenRealities、Xreal、AR_MR_XR）每周；u/Arvinw 是 r/inmoxr 版主 | **Luoye 定** | 中 |
+| 795 | （WP335）GEO 设定卡就地「改」（追几条 / 勾哪几条 / 关注哪几家 AI / 去掉竞品），改完带着改过的版本批 | 待 Luoye 定（建议同意） | 低 |
+| 796 | （WP335）「关注设置」放第三栏「设定」里、只在「内容与搜索」职责上出 | 待定（建议同意） | 低 |
+| 797 | （WP335）品类由 AI 用品牌自己的模型填、标「请确认」，档案品类优先于策略里认的 | 待定（建议同意） | 低 |
+| 798 | （WP335）GEO 简报一行先写进每周报告卡摘要第一行，数据留 brief 等简报组件 | 待定（建议同意） | 低 |
+| 799 | （WP335）搜索数据教程「自带 key」一节仍点名 DataForSEO / SerpApi / Serper（用户自己挑的服务商） | 待定（建议保留） | 低 |

@@ -23,6 +23,7 @@ import {
   nativeImage,
   powerMonitor,
   safeStorage,
+  screen,
   session,
   shell,
   systemPreferences,
@@ -164,6 +165,7 @@ import {
   requestRestore,
   type UpgradeFailureNote,
 } from './upgrade.js'
+import { watchWindowFit } from './window-fit.js'
 import { openWorkBrowser } from './work-browser.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -933,6 +935,8 @@ async function bootstrap(): Promise<void> {
       })
       // WP298：页面报错 / 渲染进程崩了 / 没加载出来，都落 desktop.log（以前只在 DevTools 里）
       attachRendererLogging(window.webContents, logger)
+      // WP339：窗口换大小 / 显示器变化之后网页没跟上，落一行（只记，不动窗口）
+      watchWindowFit(window, screen, logger)
       window.once('ready-to-show', () => {
         window?.show()
       })
