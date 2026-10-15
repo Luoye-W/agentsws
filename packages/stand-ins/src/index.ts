@@ -46,6 +46,8 @@ export * from './inbound.js'
 export * from './kol-world.js'
 export * from './observations.js'
 export * from './registry.js'
+// WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告）与 stub 的报告剧本
+export * from './runtime/ads-data.js'
 export * from './runtime/b2b-outbound.js'
 export * from './runtime/dev-stub.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具
@@ -58,7 +60,6 @@ export * from './runtime/produce.js'
 // WP323：记录去处的三个工具（通用能力：用户几句话交代，AI 配好，出「定规矩」卡）
 export * from './runtime/record-sink.js'
 export * from './runtime/replay.js'
-// WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告）与 stub 的报告剧本
 export * from './runtime/report.js'
 export * from './runtime/report-playbook.js'
 export * from './runtime/research.js'
