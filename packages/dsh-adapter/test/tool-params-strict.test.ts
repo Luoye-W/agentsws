@@ -6,6 +6,7 @@
  * 钉住：每一个能摆进运行的工具，参数表都要过 dsh 自己那一道编译。
  */
 import {
+  ASSISTANT_TOOL_DEF_BY_NAME,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   IMAGE_TOOL_DEF_BY_NAME,
   OWNER_TOOL_DEF_BY_NAME,
@@ -24,6 +25,8 @@ const ALL = [
   ...OWNER_TOOL_DEF_BY_NAME.keys(),
   ...SKILL_TOOL_DEF_BY_NAME.keys(),
   ...B2B_OUTBOUND_TOOL_DEF_BY_NAME.keys(),
+  // WP343：「我的助理」五个工具
+  ...ASSISTANT_TOOL_DEF_BY_NAME.keys(),
   'get_order',
 ]
 
@@ -53,5 +56,17 @@ describe('dsh 参数表：每个工具都过 dsh 的编译', () => {
     }
     expect(schema.properties.images.items.additionalProperties).toBe(false)
     expect(schema.required).toEqual(expect.arrayContaining(['product_id', 'images']))
+  })
+
+  it('WP343「我的助理」：派活工具必填落到 text 上，可选的不带 required', () => {
+    const def = build().find((d) => d.name === 'hand_to_position')
+    const schema = def?.parameters as unknown as {
+      properties: Record<string, { required?: boolean }>
+      required?: string[]
+    }
+    const required = schema.required ?? []
+    expect(required.includes('text') || schema.properties.text?.required === true).toBe(true)
+    expect(required).not.toContain('position')
+    expect(def?.description).toContain('拿不准')
   })
 })
