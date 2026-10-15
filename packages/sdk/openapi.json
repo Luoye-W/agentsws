@@ -12994,7 +12994,7 @@
                     "const": true
                   },
                   "terms_version": {
-                    "default": "2026-10-05",
+                    "default": "2026-10-15",
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 40
@@ -84098,6 +84098,15 @@
             "in": "query",
             "required": false,
             "description": "最多挂几秒（0–25）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accounts",
+            "in": "query",
+            "required": false,
+            "description": "WP348：开着的广告后台里认出的账户（google_ads:1234567890[:ocid],meta_ads:123…；可选）",
             "schema": {
               "type": "string"
             }

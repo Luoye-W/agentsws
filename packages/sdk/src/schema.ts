@@ -19656,7 +19656,7 @@ export interface operations {
           password: string
           /** @constant */
           accept_terms: true
-          /** @default 2026-10-05 */
+          /** @default 2026-10-15 */
           terms_version?: string
           /**
            * @default zh
@@ -66700,6 +66700,8 @@ export interface operations {
         platforms: string
         /** @description 最多挂几秒（0–25） */
         wait?: string
+        /** @description WP348：开着的广告后台里认出的账户（google_ads:1234567890[:ocid],meta_ads:123…；可选） */
+        accounts?: string
       }
       header?: never
       path?: never
