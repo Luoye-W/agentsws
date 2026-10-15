@@ -57,6 +57,8 @@ export interface AdsSheetCardAfter {
   /** 广告库里那个账户的 id（`AdAccount.id`）。 */
   account_id: string
   account_name?: string
+  /** 卡的标题（账本那一条也叫这个）。 */
+  title?: string
   /** 一句白话（「新建 2 个广告组、12 条广告，都先暂停」）。 */
   sentence: string
   rows: AdsSheetPreviewRow[]

@@ -16,7 +16,13 @@
  * 4. **钱的单位是元**。适配器那一层各家的「分」「微」在 `@agentsws/ads-core`
  *    里进出各转一次；这条边界上一律是元。
  */
-import type { AdAccount, AdCampaign, AdsPlatform, MaybePromise } from '@agentsws/contracts'
+import type {
+  AdAccount,
+  AdCampaign,
+  AdsLedgerEntryView,
+  AdsPlatform,
+  MaybePromise,
+} from '@agentsws/contracts'
 import { AD_PAUSE_REASONS, ADS_PLATFORM_IDS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -64,6 +70,27 @@ export interface AdsStagedView {
    * "今天还剩多少"，而那个数与他正在批的这一条是同一时刻的。
    */
   spend_gate?: { spent: number; cap: number; remaining: number; note: string }
+  /**
+   * WP316（WP324 连接卡）：这一下要由浏览器插件在你自己的后台里执行，而插件还没配对 / 没连这家后台。
+   * 卡照出（批了排队等插件，决策 558），回执里带上这一格，界面 / 运行就地出连接卡。
+   */
+  needs_connection?: 'extension'
+  connection_name?: string
+}
+
+/**
+ * WP316：一批广告改动提上去之后（决策 552：有新建或 3 条以上走上传表，1–2 条暂停 / 改预算插件直接点）。
+ */
+export interface AdsChangesView {
+  route: 'sheet' | 'form'
+  /** 为什么这样分路（一句）。 */
+  reason: string
+  /** 出了几张卡（上传表一张；直接点的一条一张）。 */
+  views: AdsStagedView[]
+  /** 表出不了时的问题（一条一句人话），改好再提。 */
+  problems?: string[]
+  message?: string
+  needs_connection?: 'extension'
 }
 
 export interface AdsPort {
@@ -115,6 +142,33 @@ export interface AdsPort {
     campaign_id: string,
     input: { reason: string; note?: string | undefined },
   ): MaybePromise<AdsStagedView>
+  /**
+   * WP316：一批改动（`@agentsws/ads-core` 的 `AdSheetOp[]`）→ 按决策 552 分路出卡。
+   * 上传表卡带着要传的原表（可下载）与指纹；批了由插件上传、平台预览后人再确认一次才提交。
+   */
+  stageChanges?(
+    actor: AdsActor,
+    input: { account_id: string; ops: unknown[]; reason?: string | undefined },
+  ): MaybePromise<AdsChangesView>
+  /** WP316（决策 553）：让一条停着的 campaign 开始投放（L1）。 */
+  stageActivation?(actor: AdsActor, campaign_id: string): MaybePromise<AdsStagedView>
+  /** WP316：撤销账本里的一条（L1）。 */
+  stageUndo?(actor: AdsActor, change_id: string): MaybePromise<AdsChangesView>
+  /**
+   * WP316：平台预览看过了——「确认提交」或「不提交」（与插件横条上那两个按钮是同一件事；
+   * 卡上那一处给投放这条职责自己点，不用老板那一把权限）。
+   */
+  confirmChange?(
+    actor: AdsActor,
+    change_id: string,
+    input: { submit: boolean },
+  ): MaybePromise<{ ok: boolean; message: string }>
+  /** WP316：广告变更账本（最近的在前，180 天）。 */
+  ledger?(actor: AdsActor): MaybePromise<{ rows: AdsLedgerEntryView[] }>
+  /** WP316：账本里的一张截图（只截广告后台那个标签页；决策 556）。 */
+  evidence?(actor: AdsActor, id: string): MaybePromise<{ png_base64: string } | undefined>
+  /** WP316：让插件导出一份改前表（读操作；Meta 改已有要它，决策 612）。 */
+  snapshot?(actor: AdsActor, account_id: string): MaybePromise<{ queued: boolean; message: string }>
   /** 换素材 / 换文案（`creative_swap`）：新文案过承诺扫描，受众与账户是受保护字段。 */
   swapCreative(
     actor: AdsActor,
@@ -181,6 +235,67 @@ const PauseBody = z.object({
   reason: z.enum(AD_PAUSE_REASONS),
   note: z.string().max(500).optional(),
 })
+
+/** WP316：一条改动意图（与 `@agentsws/ads-core` 的 `AdSheetOp` 同形；细的校验在那边出表前做）。 */
+const OpRef = z.object({
+  campaign: z.string().min(1).max(300),
+  campaign_id: z.string().max(100).optional(),
+  ad_group: z.string().max(300).optional(),
+  ad_group_id: z.string().max(100).optional(),
+  ad: z.string().max(300).optional(),
+  ad_id: z.string().max(100).optional(),
+  keyword: z.string().max(300).optional(),
+  keyword_id: z.string().max(100).optional(),
+  match: z.enum(['broad', 'phrase', 'exact']).optional(),
+})
+const AdOp = z.discriminatedUnion('kind', [
+  z.looseObject({ kind: z.literal('create_campaign'), campaign: z.string().min(1).max(300) }),
+  z.looseObject({
+    kind: z.literal('create_ad_group'),
+    campaign: z.string().min(1).max(300),
+    ad_group: z.string().min(1).max(300),
+  }),
+  z.looseObject({
+    kind: z.literal('create_ad'),
+    campaign: z.string().min(1).max(300),
+    ad_group: z.string().min(1).max(300),
+    final_url: z.string().min(1).max(2000),
+  }),
+  z.looseObject({
+    kind: z.literal('add_keyword'),
+    campaign: z.string().min(1).max(300),
+    ad_group: z.string().min(1).max(300),
+    text: z.string().min(1).max(300),
+    match: z.enum(['broad', 'phrase', 'exact']),
+  }),
+  z.object({
+    kind: z.literal('set_budget'),
+    ref: OpRef,
+    level: z.enum(['campaign', 'ad_group']),
+    before: z.number().nonnegative(),
+    after: z.number().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal('set_status'),
+    ref: OpRef,
+    level: z.enum(['campaign', 'ad_group', 'ad', 'keyword']),
+    status: z.enum(['paused', 'enabled']),
+  }),
+])
+const ChangesBody = z.object({
+  account_id: z.string().min(1).max(200),
+  ops: z.array(AdOp).min(1).max(500),
+  reason: z.string().max(500).optional(),
+})
+
+const ConfirmBody = z.object({ submit: z.boolean() })
+
+/** WP316：可选的口子没装（老装配 / 测试替身）就 501，不假装做了。 */
+function need<T>(fn: T | undefined, what: string): T {
+  if (fn === undefined)
+    throw new ApiError('not_implemented', `这个服务进程没有装配「${what}」（插件执行那一半）。`)
+  return fn
+}
 
 const CreativeBody = z.object({
   creative_ref: z.string().min(1).max(200).optional(),
@@ -374,6 +489,161 @@ export function adsRoutes(): Route[] {
             ...(input.headline === undefined ? {} : { headline: input.headline }),
             ...(input.primary_text === undefined ? {} : { primary_text: input.primary_text }),
           }),
+          201,
+        )
+      },
+    ),
+    // ── WP316：插件执行那一半 ─────────────────────────────────────────────
+    route(
+      {
+        method: 'post',
+        path: '/v1/ads/changes',
+        operationId: 'stageAdChanges',
+        summary:
+          '提一批广告改动（决策 552：有新建或 3 条以上 → 一张上传表卡 L1；1–2 条暂停 / 改预算 → 逐条出卡、插件直接点）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ADS,
+        body: ChangesBody,
+        returns: 'AdsChangesView',
+      },
+      async (c, deps) => {
+        const input = await body(c, ChangesBody)
+        const port = portOf(deps)
+        return ok(
+          c,
+          await need(port.stageChanges, '提一批广告改动').call(port, actorOf(c), {
+            account_id: input.account_id,
+            ops: input.ops,
+            ...(input.reason === undefined ? {} : { reason: input.reason }),
+          }),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/ads/campaigns/:id/activate',
+        operationId: 'stageAdActivation',
+        summary: '让一条停着的 campaign 开始投放（决策 553：开始花钱永远 L1）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ADS,
+        params: [{ name: 'id', in: 'path', description: 'campaign id', required: true }],
+        returns: 'AdsStagedView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(
+          c,
+          await need(port.stageActivation, '开始投放').call(port, actorOf(c), param(c, 'id')),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/ads/ledger/:id/undo',
+        operationId: 'stageAdUndo',
+        summary:
+          '撤销账本里的一条广告改动（L1：Google 上传用一次性撤销，表单反着点，Meta 用改前表反向导入）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ADS,
+        params: [{ name: 'id', in: 'path', description: '账本那一条的 change id', required: true }],
+        returns: 'AdsChangesView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, await need(port.stageUndo, '撤销').call(port, actorOf(c), param(c, 'id')), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/ads/ledger/:id/confirm',
+        operationId: 'confirmAdChange',
+        summary:
+          '平台预览看过了：确认提交 / 不提交（与插件横条上那两个按钮同一件事；不提交 = 停下，不点应用）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ADS,
+        params: [{ name: 'id', in: 'path', description: '账本那一条的 change id', required: true }],
+        body: ConfirmBody,
+        returns: '{ ok: boolean; message: string }',
+      },
+      async (c, deps) => {
+        const input = await body(c, ConfirmBody)
+        const port = portOf(deps)
+        return ok(
+          c,
+          await need(port.confirmChange, '再确认').call(port, actorOf(c), param(c, 'id'), {
+            submit: input.submit,
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/ads/ledger',
+        operationId: 'listAdsLedger',
+        summary: '广告变更账本：上传表、改前 / 改后导出、截图、审批编号、读回核对（存 180 天）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ADS,
+        returns: '{ rows: AdsLedgerEntryView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, await need(port.ledger, '广告变更账本').call(port, actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/ads/evidence/:id',
+        operationId: 'getAdsEvidence',
+        summary: '账本里的一张截图（只截广告后台那个标签页，存 180 天）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ADS,
+        params: [{ name: 'id', in: 'path', description: '截图 id', required: true }],
+        returns: '{ png_base64: string }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        const got = await need(port.evidence, '账本截图').call(port, actorOf(c), param(c, 'id'))
+        if (got === undefined) throw new ApiError('not_found', '没有这张截图（或已过了 180 天）。')
+        return ok(c, got)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/ads/accounts/:id/snapshot',
+        operationId: 'requestAdSnapshot',
+        summary: '让插件导出一份改前表（读操作；Meta 改已有要一份 24 小时内的，决策 612）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ADS,
+        params: [{ name: 'id', in: 'path', description: '广告账户 id', required: true }],
+        returns: '{ queued: boolean; message: string }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(
+          c,
+          await need(port.snapshot, '导出改前表').call(port, actorOf(c), param(c, 'id')),
           201,
         )
       },
