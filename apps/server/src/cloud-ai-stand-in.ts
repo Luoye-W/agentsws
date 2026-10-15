@@ -48,6 +48,15 @@ const ANSWER = [
   '3. 直接交代一件事（「让客服把今天的工单过一遍」），它交给对应的岗位去做，做完在这里告诉你。',
 ].join('\n')
 
+/** WP343：岗位那边做完时那半句（交过来的话里可能只有一个线程引用，那就不复述）。 */
+function demoDoneOf(asked: string): string {
+  const said = asked
+    .replace(/\[thread:[^\]]*\]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return said === '' ? '' : `：${said.slice(0, 40)}`
+}
+
 /** WP343：演示里助理那几个工具怎么被点到（按用户那句话认）。 */
 function assistantCall(
   asked: string,
@@ -210,13 +219,18 @@ export function cloudAiStandInFetch(
         0,
         init.signal,
       )
+    // WP343：岗位那边的运行（不是助理对话）回一句「做完了」，别把助理的使用说明当成岗位的回答
+    const system = messages.find((m) => m.role === 'system')
+    const fromChat = typeof system?.content !== 'string' || /我的助理|随便聊/u.test(system.content)
     const text = hasImage
       ? VISION_PROBE_WORD
       : assistantDone !== undefined
         ? assistantDone
-        : searched
-          ? `${ANSWER}\n\n（演示）刚才搜了「${asked.slice(0, 20)}」，参考了 [第一条来源](https://example.com/news/usb-c-chargers)。`
-          : ANSWER
+        : !fromChat && !searched
+          ? `（演示）按岗位的规矩做好了${demoDoneOf(asked)}。没有要你拍板的。`
+          : searched
+            ? `${ANSWER}\n\n（演示）刚才搜了「${asked.slice(0, 20)}」，参考了 [第一条来源](https://example.com/news/usb-c-chargers)。`
+            : ANSWER
     const usage = { prompt_tokens: 120, completion_tokens: Math.ceil(text.length / 2) }
     if (body.stream !== true) return reply({ choices: [{ message: { content: text } }], usage })
     if (wantsSearch && wantsAssistant === undefined) {
