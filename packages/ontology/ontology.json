@@ -129,7 +129,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7e3a07b000428a5868c0c8b39520afc0",
+  "source_digest": "91cd2e41702b7329925841fce160e739",
   "objects": [
     {
       "id": "ad",
@@ -3054,6 +3054,12 @@
           "type": "Handoff",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -5562,6 +5568,12 @@
         {
           "name": "handoff",
           "type": "Handoff",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "model",
+          "type": "string",
           "sensitivity": "internal",
           "optional": true
         }

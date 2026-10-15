@@ -20,10 +20,11 @@ import type {
 } from '@agentsws/contracts'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
-import type { Work } from '@agentsws/work'
+import { createWork, type Work } from '@agentsws/work'
 import { describe, expect, it, vi } from 'vitest'
 import { chatModelRefOf } from '../src/models.js'
 import { createRuntime, type RuntimeOptions } from '../src/runtime.js'
+import { createWorkPort } from '../src/work.js'
 
 vi.setConfig({ testTimeout: 120_000 })
 
@@ -125,9 +126,9 @@ describe('WP342 (a) 这件事自己选的 AI：三个运行时都认', () => {
       expect(pinned.started && 'runtime' in pinned.started ? pinned.started.runtime : '').toBe(
         { stub: 'stub', direct: 'direct-llm', dsh: 'dsh' }[mode],
       )
-      expect(pinned.started && 'model' in pinned.started ? pinned.started.model : undefined).toEqual(
-        PICKED,
-      )
+      expect(
+        pinned.started && 'model' in pinned.started ? pinned.started.model : undefined,
+      ).toEqual(PICKED)
       if (mode !== 'stub') {
         expect(pinned.asked.length).toBeGreaterThan(0)
         // 每一次补全都显式交了选的那个（不按 purpose 选）
@@ -135,8 +136,7 @@ describe('WP342 (a) 这件事自己选的 AI：三个运行时都认', () => {
       }
 
       const plain = await runOnce(mode, matterOf('mat_b'))
-      const plainModel =
-        plain.started && 'model' in plain.started ? plain.started.model : undefined
+      const plainModel = plain.started && 'model' in plain.started ? plain.started.model : undefined
       expect(plainModel).not.toEqual(PICKED)
       // 没选：网关一次都没被点名（照旧按品牌默认 / purpose 选）
       for (const m of plain.asked) expect(m).toBeNull()
@@ -155,5 +155,53 @@ describe('WP342 (b) 选的那个后来用不了：退回品牌默认', () => {
     expect(chatModelRefOf(models, 'agentsws-cloud/qwen-max')).toEqual(PICKED)
     expect(chatModelRefOf(models, 'gone/old-model')).toBeUndefined()
     expect(chatModelRefOf(models, 'nonsense')).toBeUndefined()
+  })
+})
+
+describe('WP342 (c) 工作端口：开事项时记下、换模型只改这一件', () => {
+  const actor = { workspace_id: 'ws_1', person_id: 'per_1', assignment_id: 'asg_1' } as never
+  const portOf = () => {
+    const work = createWork({
+      workspace_id: 'ws_1' as never,
+      clock,
+      random: () => 0.5,
+      tz_offset_minutes: 480,
+    })
+    const port = createWorkPort({
+      clock,
+      work,
+      approvals: () => [],
+      orders: () => [],
+      label: () => undefined,
+      knownModel: (id) => CHOICES.some((c) => c.id === id),
+    })
+    return { work, port }
+  }
+
+  it('开事项带着选的 AI 记下；认不出的不记（跟品牌默认）', async () => {
+    const { port } = portOf()
+    const a = await port.createMatter(actor, {
+      kind: 'adhoc',
+      title: '查一下 Anna 的退货',
+      model: 'agentsws-cloud/qwen-max',
+    })
+    expect(a.model).toBe('agentsws-cloud/qwen-max')
+    const b = await port.createMatter(actor, { kind: 'adhoc', title: '另一件', model: 'gone/x' })
+    expect(b.model).toBeUndefined()
+  })
+
+  it('换模型只改这一件；回到默认 = 拿掉；认不出的拒', async () => {
+    const { port, work } = portOf()
+    const a = await port.createMatter(actor, { kind: 'adhoc', title: '一' })
+    const b = await port.createMatter(actor, { kind: 'adhoc', title: '二' })
+    const set = port.setMatterModel
+    if (set === undefined) throw new Error('setMatterModel 没接')
+    expect((await set(actor, a.id, 'agentsws-cloud/qwen-max')).model).toBe(
+      'agentsws-cloud/qwen-max',
+    )
+    expect(work.getMatter(b.id)?.model).toBeUndefined()
+    await expect(set(actor, a.id, 'gone/x')).rejects.toMatchObject({ code: 'invalid_input' })
+    expect(work.getMatter(a.id)?.model).toBe('agentsws-cloud/qwen-max')
+    expect((await set(actor, a.id, undefined)).model).toBeUndefined()
   })
 })

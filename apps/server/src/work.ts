@@ -7,7 +7,13 @@
  * 一条边界：**委托与在事项里说话都要起 Run**，运行时由调用方注入（`startRun`）；
  * 没注入时这两条路回 `not_implemented`，其余照常——工作台仍然能记事项、待办、目标。
  */
-import { ApiError, type WorkActor, type WorkHome, type WorkPoolItem, type WorkPort } from '@agentsws/api'
+import {
+  ApiError,
+  type WorkActor,
+  type WorkHome,
+  type WorkPoolItem,
+  type WorkPort,
+} from '@agentsws/api'
 import type {
   ApprovalItem,
   AssignmentId,
@@ -344,7 +350,8 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const role_id = options.roleOf?.(actor.assignment_id)
       // WP342：输入框左下角选的 AI；认不出 / 现在不能用的不记（跟品牌默认走）
       const chosen =
-        model !== undefined && (options.knownModel === undefined || (await options.knownModel(model)))
+        model !== undefined &&
+        (options.knownModel === undefined || (await options.knownModel(model)))
           ? model
           : undefined
       return work.createMatter({
@@ -390,7 +397,11 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     // WP342（决策 853）：换这件事用的 AI（只这一件；不动品牌默认）
     setMatterModel: async (_actor, id, model) => {
       work.requireMatter(id)
-      if (model !== undefined && options.knownModel !== undefined && !(await options.knownModel(model)))
+      if (
+        model !== undefined &&
+        options.knownModel !== undefined &&
+        !(await options.knownModel(model))
+      )
         throw new ApiError('invalid_input', '这个 AI 现在用不了（没接上或已经删了），换一个再试')
       return work.setModel(id, model)
     },
