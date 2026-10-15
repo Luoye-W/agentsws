@@ -568,6 +568,7 @@ import {
   redditWatchSourceOf,
 } from './reddit-watch/index.js'
 import { modelRedditDrafter } from './reddit-write/draft.js'
+import { createRedditLimits } from './reddit-write/limits.js'
 import { redditParentLinker } from './reddit-write/parent-link.js'
 import {
   createRedditWriteService,
@@ -3214,6 +3215,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
+    if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -3435,6 +3438,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const dir = brandDirOf(dbDir, ws, workspace.id)
     // 新品牌的目录第一次用的时候才建（`better-sqlite3` 不会替我们 mkdir）
     if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    // WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限
+    const redditLimits = createRedditLimits({
+      nowMs: () => Date.parse(clock.now()),
+      ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+    })
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
     // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
@@ -4176,6 +4184,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     const prService = createPrService({
       workspace_id: ws,
+      // WP338（决策 664 / 783）：Reddit 版规原文上卡、不替人判；一天几条由用户设（默认不限）
+      limits: redditLimits,
+      rulesText: async ({ platform, venue }) => {
+        if (platform.trim().toLowerCase() !== 'reddit') return undefined
+        const sub = venue.replace(/^\/?r\//iu, '')
+        const viaPlugin = redditWatch?.rules(sub)
+        if (viaPlugin !== undefined) return viaPlugin.rules
+        redditWatch?.wantRules(sub)
+        return undefined
+      },
       routeScopeManager,
       store: pr,
       clock,
@@ -4497,6 +4515,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     let redditDrafts = 0
     const prRedditAdapter = createPrRedditAdapter(socialChannels.transport)
     redditWrites = createRedditWriteService({
+      // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
+      limits: redditLimits,
       workspace_id: ws,
       clock,
       approvals: txn.approvals,
@@ -6869,6 +6889,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
+      redditLimits,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
