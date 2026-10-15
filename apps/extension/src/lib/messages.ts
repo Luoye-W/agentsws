@@ -45,6 +45,9 @@ export type ExtensionMessage =
   | { type: 'reddit-status' }
   /** 设置页：刚连上 / 断开，马上问一次本机。 */
   | { type: 'reddit-poll' }
+  /* ── WP345：跟着工坊更新（只加）──────────────────────────────────── */
+  /** 马上问一次「工坊换了新版插件没有」（不等定时；换了就等空闲重载）。 */
+  | { type: 'update-check' }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

@@ -49,6 +49,13 @@ extraResources:
       - '!**/*.map'
       # WP327：工作台构建顺手吐出的类型声明（572 个 .d.ts），浏览器用不上
       - '!types/**'
+  # WP345（决策 871）：浏览器插件（WXT 构建出的 chrome-mv3；`scripts/dist.mjs` 按这一包的版本号先构建它）。
+  # 桌面壳每次启动把它放到 `<userData>/chrome-extension`（固定文件夹，用户只「加载已解压」一次），变了就整体换。
+  # afterPack 查 manifest 在不在、版本是不是这一包、有没有固定 key。
+  - from: ../extension/build/chrome-mv3
+    to: chrome-extension
+    filter:
+      - '**/*'
 # 打完包再做四件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
 # 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import、放第三方许可证。
 # WP148：Electron 发行包刚解出来时先存下它自带的两份许可证（mac 上之后会被丢掉），

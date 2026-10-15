@@ -130,6 +130,11 @@ export interface ServerSpawnInput {
    * WP111 起的安装包一直漏了这一项：装好打开工作台是一张 404。
    */
   staticDir?: string
+  /**
+   * WP345：浏览器插件放在哪个固定文件夹（`<userData>/chrome-extension`，`extension-sync.ts` 放的）。
+   * 经 `AGENTSWS_EXTENSION_DIR` 给服务进程：连接卡上「打开插件文件夹」、插件问「文件夹里是哪一版」都读它。
+   */
+  extensionDir?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -156,6 +161,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     ...(input.appDataDir === undefined ? {} : { AGENTSWS_APP_DATA_DIR: input.appDataDir }),
     ...(input.profileDir === undefined ? {} : { AGENTSWS_PROFILE_DIR: input.profileDir }),
     ...(input.staticDir === undefined ? {} : { AGENTSWS_STATIC_DIR: input.staticDir }),
+    ...(input.extensionDir === undefined ? {} : { AGENTSWS_EXTENSION_DIR: input.extensionDir }),
     // WP218：Windows 上没有 SIGTERM，壳靠关 stdin 请它收尾（见 node-runtime 的 kill）
     AGENTSWS_STOP_ON_STDIN_END: '1',
     ...haltEnv(input.halt),

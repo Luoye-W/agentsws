@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ExtensionStatus } from '@/lib/messages'
 import { send } from '@/lib/messages'
+import { runningVersion } from '@/lib/self-update'
 import { DEFAULT_PORT } from '@/lib/storage'
 import { AdsSection } from './ads-section'
 import { BrandMark } from './brand-mark'
@@ -80,6 +81,11 @@ export function Options(): React.ReactNode {
           <li>
             <span>排着没传的</span>
             <b>{status?.queued ?? 0} 条</b>
+          </li>
+          {/* WP345：跟着工坊更新，不用自己装新版 */}
+          <li>
+            <span>版本</span>
+            <b data-testid="ws-version">{runningVersion(chrome.runtime.getManifest())}</b>
           </li>
         </ul>
         {status?.note === undefined ? null : <p className="ws-note ws-note--warn">{status.note}</p>}

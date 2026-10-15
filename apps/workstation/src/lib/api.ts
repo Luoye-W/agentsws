@@ -6450,6 +6450,44 @@ export const revokeExtensionToken = (
   })
 
 /**
+ * WP345（决策 871）：插件随工坊安装与更新——固定文件夹在哪、里面是哪一版、上次换成没有、
+ * 已配上的插件正在跑哪一版。所有者的事，带所有者那条 Assignment。老本机服务没有这条（501）：卡上就不出「装」那一块。
+ */
+export interface ExtensionInstallView {
+  folder?: string
+  folder_version?: string
+  bundled_version?: string
+  sync?: {
+    status: 'installed' | 'updated' | 'unchanged' | 'failed' | 'no_bundle'
+    at: string
+    error?: string
+  }
+  running: {
+    token_id: string
+    extension_id: string
+    version: string
+    at: string
+    /** 重载过还是没换成：想换成的那一版。 */
+    stuck_on?: string
+  }[]
+  can_open: boolean
+}
+
+export const getExtensionInstall = (assignment?: string): Promise<ExtensionInstallView> =>
+  api<ExtensionInstallView>('/v1/extension/install', withAssignment(assignment))
+
+/** 让本机打开插件文件夹 / Chrome 扩展页（网页自己打不开 `chrome://`，也摸不到本机文件夹）。 */
+export const openExtensionInstall = (
+  target: 'folder' | 'chrome',
+  assignment?: string,
+): Promise<{ opened: boolean; message?: string; address?: string }> =>
+  api<{ opened: boolean; message?: string; address?: string }>('/v1/extension/install/open', {
+    method: 'POST',
+    body: { target },
+    ...withAssignment(assignment),
+  })
+
+/**
  * WP313（docs/101 §5.4）：插件广告动作——「默认不碰」十个区域的开关（决策 557）、
  * 两家后台的同意记录（562）、排着 / 跑着的活（停、在卡上确认提交）。所有者的事，带所有者那条 Assignment。
  */
