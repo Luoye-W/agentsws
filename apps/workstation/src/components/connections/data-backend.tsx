@@ -21,6 +21,7 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import { openExternal } from '@/components/connections/bridge'
 // WP60（49 §6 / 48 L7）：在线值守的切档向导（这一档底下那一格）
 import { StandbyWizard } from '@/components/connections/standby-wizard'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -58,6 +59,7 @@ function formatBytes(bytes: number | undefined): string {
 
 export function DataBackend({ assignment }: { assignment?: string }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const client = useQueryClient()
   const prefix = useId()
   const formRef = useRef<HTMLFormElement>(null)
@@ -306,8 +308,8 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           <StandbyWizard
             {...(assignment === undefined ? {} : { assignment })}
             onGoToAccount={() => {
-              // WP58 的「账号与积分」在设置页的一个 tab 上
-              window.location.hash = '#/settings?tab=account'
+              // WP334（决策 726）：在第三栏就地关联工坊账号（设置页「账号与积分」仍在）
+              openConnect('workshop_account')
             }}
           />
         </>

@@ -30,6 +30,7 @@ import {
   REPORT_TOOL_DEF_BY_NAME,
   renderThemeRead,
   renderTrustedToolResult,
+  SETUP_REQUEST_TOOL_DEF_BY_NAME,
   SHOP_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
@@ -355,7 +356,9 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     // WP331：报告积木（定义在 stand-ins 的 `runtime/report.ts`）
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
     // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
-    ADS_DATA_TOOL_DEF_BY_NAME.get(name)
+    ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
+    // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
+    SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
   const schema = def.input_schema as {
     properties?: Record<string, Record<string, unknown>>
@@ -509,6 +512,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

@@ -60,6 +60,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { genuiFencesToText } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { ImInboundPipeline } from './channels.js'
 import { type ImAskPick, imAskTarget } from './im-ask-route.js'
@@ -412,7 +413,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       | 'im.received'
       | 'im.ask_failed'
       | 'im.disconnected'
-      | 'im.reconnected',
+      | 'im.reconnected'
+      // WP334：第一次连上（服务端据此复查还在等的连接卡：在卡上 / 消息渠道页填好，连上就接着做）
+      | 'im.connected',
     payload: object,
   ): void => {
     options.appendEvent({
@@ -589,7 +592,8 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     const adapter = person_id === undefined ? undefined : wechat.get(person_id)
     if (person_id === undefined || adapter === undefined) return
     emit('im.received', { channel: 'wechat', person_id, chars: question.length })
-    const reply = async (text: string) => adapter.sendText(external, text)
+    // WP336：聊天软件画不了组件，```dsh-ui 先换成几行字
+    const reply = async (text: string) => adapter.sendText(external, genuiFencesToText(text))
     try {
       await askAndReply('wechat', person_id, question, reply, false)
     } catch (e) {
@@ -602,6 +606,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
    * 回复函数：`keep` = 这一句不是最后一句。飞书同一条消息能回多次；钉钉同一个 sessionWebhook 有效期内能发多次；
    * 企业微信走流式回复（先开一条、之后刷它）——WP308 起三条都支持。
    */
+  // WP336：三条团队渠道的回复都先把 ```dsh-ui 换成几行字（聊天软件画不了组件）
   type Reply = (text: string, opts?: { keep?: boolean }) => Promise<unknown>
   interface TeamReplier {
     channel: TeamChannel
@@ -619,7 +624,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'wecom',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
           }
     }
     if (event.channel === 'feishu') {
@@ -629,7 +634,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'feishu',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
           }
     }
     if (event.channel === 'dingtalk') {
@@ -639,7 +644,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         : {
             channel: 'dingtalk',
             ack: true,
-            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
+            reply: (text, opts) => adapter.reply(event.dedupe_key, genuiFencesToText(text), opts),
           }
     }
     return undefined
@@ -898,7 +903,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     if (state === 'connected' && down.has(channel)) {
       down.delete(channel)
       emit('im.reconnected', { channel })
+      return
     }
+    if (state === 'connected' && prev !== 'connected') emit('im.connected', { channel })
   }
 
   /* ── 鉴权中间件（网关那一套在 createGateway 里面，挂不到这里来） ──── */

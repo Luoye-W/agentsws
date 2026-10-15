@@ -13,7 +13,12 @@
  * 不放任何批准按钮：决定仍回工作台（13 §4，`im-cards.ts` 同一条纪律）。每一句都附去工作台的链接。
  */
 
-import { type AnswerComponent, type PositionWorkView, splitTaskText } from '@agentsws/contracts'
+import {
+  type AnswerComponent,
+  genuiToText,
+  type PositionWorkView,
+  splitTaskText,
+} from '@agentsws/contracts'
 import { isPositionStatusQuestion } from './im-ask-route.js'
 import type { PositionAnswer, PositionsAssembly } from './positions.js'
 
@@ -94,16 +99,10 @@ export function quickAnswerForIm(
   const lines: string[] = []
   const lead = answer.lead.trim() !== '' ? answer.lead : answer.text
   if (lead.trim() !== '') lines.push(lead.trim())
-  for (const c of answer.components as AnswerComponent[]) {
-    if (c.kind === 'metric')
-      lines.push(c.items.map((m) => `${m.label} ${m.value}${m.unit ?? ''}`).join(' · '))
-    if (c.kind === 'table') {
-      for (const row of c.rows.slice(0, IM_TABLE_ROWS))
-        lines.push(`· ${row.map((cell) => (cell === null ? '—' : String(cell))).join('，')}`)
-      const total = c.total ?? c.rows.length
-      if (total > IM_TABLE_ROWS) lines.push(`（共 ${total} 行，全部在工作台看）`)
-    }
-  }
+  // WP336：genui 块在聊天里画不了，压成几行字（数字一行、表格一行一条、超了说共几行）
+  for (const c of answer.components as AnswerComponent[])
+    if (c.kind === 'genui')
+      lines.push(genuiToText(c.spec, { style: 'plain', maxRows: IM_TABLE_ROWS }))
   // 保留换行，只按总字数截
   const all = Array.from(lines.join('\n').trim())
   return all.length <= IM_ANSWER_MAX ? all.join('') : `${all.slice(0, IM_ANSWER_MAX - 1).join('')}…`

@@ -17,13 +17,17 @@
  * 4. **三分**（WP291，决策 356）：这句话是当场问答、会话还是任务。服务进程先问便宜模型；模拟里那一次是
  *    **固定替身**（场景写 `judge`），不写就按 WP287 的规则判（与服务进程退回规则时同一份）。
  *    当场问答落在一件**隐身**的事项里（默认列表找不到它），回答是「一句话 + 组件」——模拟里那段回答由
- *    确定性的替身照 mock 店铺的商品现写（带 ```answer 组件段），再按契约同一份 `splitAnswer` 取出来；
+ *    确定性的替身照 mock 店铺的商品现写（带 ```dsh-ui 组件段），再按契约同一份 `splitAnswer` 取出来；
  *    任务那一件原话后面头一句「记成了任务，按「X」做」。
+ *    WP336：替身写 ```dsh-ui（dsh-genui 写法；决策 823 起 ```answer 已删），而且**故意夹带**按钮 / 图片 / 3D / 外链 / 自定义配色
+ *    （像一个不守规矩的模型），按契约同一份白名单过滤；事件里记过滤后的节点类型、表格行数、数字，
+ *    以及 mock 店铺的真数，测试比两头相等、比夹带的一个都没漏过去。
  */
 import type {
   AnswerComponent,
   ApprovalItem,
   Assignment,
+  GenuiNodeLite,
   PersonId,
   RoleId,
 } from '@agentsws/contracts'
@@ -214,7 +218,7 @@ export function installPositions(world: World): PositionsLoop {
         route: { picked: picked.role_id, options: [], task: true },
       })
     if (kind === 'quick') {
-      // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```answer），再按契约取「一句话 + 组件」
+      // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```dsh-ui），再按契约取「一句话 + 组件」
       world.work.appendEvent(matter.id, {
         kind: 'agent_message',
         text: quickAnswerStandIn(world, text),
@@ -227,11 +231,27 @@ export function installPositions(world: World): PositionsLoop {
           .map((e) => e.text)
           .join('\n\n'),
       )
+      const genui = answer.components.flatMap((c: AnswerComponent) =>
+        c.kind === 'genui' ? c.spec.items : [],
+      )
+      const products = world.connect.state.products
       world.appendEvent('simulation.position_answered', {
         position_id: template.id,
         role_id: picked.role_id,
-        components: answer.components.map((c: AnswerComponent) => c.kind),
+        // WP336：genui 块再列出里面的节点类型（`genui:table`…），场景按它断言
+        components: answer.components.flatMap((c: AnswerComponent) =>
+          c.kind === 'genui' ? ['genui', ...c.spec.items.map((n) => `genui:${n.type}`)] : [c.kind],
+        ),
         lead: answer.lead !== '',
+        ...(genui.length === 0
+          ? {}
+          : {
+              genui: genuiDigest(genui),
+              mock: {
+                products: Math.min(products.length, 50),
+                live: products.filter((p) => p.status === 'active').length,
+              },
+            }),
       })
     }
     world.appendEvent('simulation.position_entry', {
@@ -318,31 +338,67 @@ export function installPositions(world: World): PositionsLoop {
 
 const PRODUCTS = /商品|产品|product/iu
 
+/** 过滤后的 genui 节点 → 事件里记的那几样：类型、表格行数、数字（测试拿它比 mock 店铺）。 */
+function genuiDigest(items: readonly GenuiNodeLite[]): {
+  types: string[]
+  table_rows: number[]
+  stats: { label: string; value: string }[]
+  text: string
+} {
+  return {
+    types: items.map((n) => n.type),
+    table_rows: items.flatMap((n) =>
+      n.type === 'table' && Array.isArray(n.rows) ? [n.rows.length] : [],
+    ),
+    stats: items.flatMap((n) =>
+      n.type === 'stat' ? [{ label: String(n.label), value: String(n.value) }] : [],
+    ),
+    text: JSON.stringify(items),
+  }
+}
+
 /**
  * WP291：当场回答的确定性替身（模拟不调模型）。问商品 → mock 店铺里的商品列成表 + 在卖几件；
- * 别的 → 一句话（不读数据）。写法与真模型照 `QUICK_ANSWER_RULE` 回的一样：正文 + ```answer 段。
+ * 别的 → 一句话（不读数据）。写法与真模型照规矩回的一样：正文 + 组件段。
+ *
+ * WP336：组件段改写 ```dsh-ui；并且像一个不守规矩的模型那样**夹带**按钮、图片、3D、外链、自定义配色，
+ * 这些必须被契约里的白名单滤掉（红线）。
  */
 function quickAnswerStandIn(world: World, text: string): string {
   if (!PRODUCTS.test(text)) return '这一问不用读数据，直接答：照岗位的规矩来就行。'
   const products = world.connect.state.products
   const live = products.filter((p) => p.status === 'active').length
   const body = {
-    components: [
+    items: [
+      { type: 'stat', label: '在卖', value: String(live), accent: '#ff3366' },
       {
-        kind: 'table',
+        type: 'table',
         columns: ['商品', '价格', '状态'],
         rows: products
           .slice(0, 50)
           .map((p) => [p.title, p.price, p.status === 'active' ? '在卖' : '草稿']),
-        ...(products.length > 50 ? { total: products.length } : {}),
+        export: true,
+        details: [[{ type: 'button', label: '编辑', action: 'edit' }]],
       },
-      { kind: 'metric', items: [{ label: '在卖', value: live, unit: '件' }] },
+      // 以下是夹带：一个都不许过
+      { type: 'button', label: '一键上架', action: 'publish_all' },
+      { type: 'image', src: 'https://cdn.example.com/banner.png' },
+      { type: 'scene3d', meshes: [{ shape: 'box' }] },
+      { type: 'link', label: '去后台', href: 'https://admin.example.com' },
+      ...(products.length > 50
+        ? [
+            {
+              type: 'text',
+              content: `一共 ${products.length} 件，[全部](https://admin.example.com)`,
+            },
+          ]
+        : []),
     ],
   }
   return [
     `店里有 ${products.length} 件商品，${live} 件在卖。`,
     '',
-    '```answer',
+    '```dsh-ui',
     JSON.stringify(body),
     '```',
   ].join('\n')

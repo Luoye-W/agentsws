@@ -125,26 +125,28 @@ describe('quickAnswerForIm：一句话 + 组件压成几行字', () => {
     const text = quickAnswerForIm({
       lead: '上周发了 7 条。',
       text: '上周发了 7 条。',
+      // WP336：组件是一块 genui（数字 + 表格）
       components: [
         {
-          kind: 'metric',
-          items: [
-            { label: '帖子', value: 7, unit: '条' },
-            { label: '评论', value: 31 },
-          ],
-        },
-        {
-          kind: 'table',
-          columns: ['标题', '赞'],
-          rows: Array.from({ length: 7 }, (_, i) => [`帖 ${i + 1}`, i]),
-          total: 7,
+          kind: 'genui',
+          spec: {
+            items: [
+              { type: 'stat', label: '帖子', value: '7条' },
+              { type: 'stat', label: '评论', value: '31' },
+              {
+                type: 'table',
+                columns: ['标题', '赞'],
+                rows: Array.from({ length: 7 }, (_, i) => [`帖 ${i + 1}`, i]),
+              },
+            ],
+          },
         },
       ],
     })
-    const lines = text.split('\n')
+    const lines = text.split('\n').filter((l) => l !== '')
     expect(lines[0]).toBe('上周发了 7 条。')
     expect(lines[1]).toBe('帖子 7条 · 评论 31')
     expect(lines.filter((l) => l.startsWith('· '))).toHaveLength(5)
-    expect(lines.at(-1)).toBe('（共 7 行，全部在工作台看）')
+    expect(lines.at(-1)).toBe('（共 7 行）')
   })
 })

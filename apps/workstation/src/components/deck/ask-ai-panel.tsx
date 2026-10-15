@@ -9,6 +9,7 @@ import { Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { askAi } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -75,12 +76,10 @@ export function AskAiPanel({
         </Button>
       </div>
       {answer === null ? null : (
-        <p
-          className="mt-2 whitespace-pre-wrap rounded-md bg-muted/40 p-2 text-xs"
-          data-testid="ask-ai-answer"
-        >
-          {answer}
-        </p>
+        // WP336：问 AI 的回答也走 AI 回话那份安全 markdown（遇 ```dsh-ui 画成组件）
+        <div className="mt-2 rounded-md bg-muted/40 p-2 text-xs" data-testid="ask-ai-answer">
+          <SafeMarkdown text={answer} variant="reply" />
+        </div>
       )}
       {error === null ? null : (
         <p className="mt-2 text-xs text-destructive" data-testid="ask-ai-error">

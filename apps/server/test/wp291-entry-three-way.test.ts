@@ -2,7 +2,7 @@
  * WP291（决策 356，Luoye 10-10）：岗位入口三分——简单问答当场出组件 / 多轮进会话 / 干活开任务。
  *
  * 真装配线（路由 → 岗位面 → 工作模型 → 运行时 → 模型网关），只把最外面那一跳（模型上游的 HTTP）
- * 换成替身：判断那一次按原话回固定的类别，跑活那一次回一句话 + ```answer 表格。不联网、不花钱。
+ * 换成替身：判断那一次按原话回固定的类别，跑活那一次回一句话 + ```dsh-ui 表格。不联网、不花钱。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,8 +26,9 @@ const JUDGE: Record<string, string> = {
 const TABLE_ANSWER = [
   '店里现在有 2 件商品，都在卖。',
   '',
-  '```answer',
-  '{"components":[{"kind":"table","columns":["商品","价格","状态"],"rows":[["蓝牙耳机",129,"在卖"],["手机壳",29,"在卖"]]},{"kind":"metric","items":[{"label":"在卖","value":2,"unit":"件"}]}]}',
+  // WP336（决策 823）：只有 ```dsh-ui 一套
+  '```dsh-ui',
+  '{"items":[{"type":"table","columns":["商品","价格","状态"],"rows":[["蓝牙耳机",129,"在卖"],["手机壳",29,"在卖"]]},{"type":"stat","label":"在卖","value":"2 件"}]}',
   '```',
 ].join('\n')
 
@@ -138,7 +139,7 @@ interface OpenView {
     outcome: string
     text: string
     lead?: string
-    components?: { kind: string; columns?: string[]; rows?: unknown[][] }[]
+    components?: { kind: string; spec?: { items: { type: string; rows?: unknown[][] }[] } }[]
     sources: string[]
   }
   matter: { id: string; ask?: boolean }
@@ -165,8 +166,9 @@ describe('WP291 三分：模型判', () => {
     expect(out.entry).toEqual({ kind: 'quick', by: 'model' })
     expect(out.answer?.outcome).toBe('answered')
     expect(out.answer?.lead).toBe('店里现在有 2 件商品，都在卖。')
-    expect(out.answer?.components?.map((c) => c.kind)).toEqual(['table', 'metric'])
-    expect(out.answer?.components?.[0]?.rows).toEqual([
+    expect(out.answer?.components?.map((c) => c.kind)).toEqual(['genui'])
+    expect(out.answer?.components?.[0]?.spec?.items.map((n) => n.type)).toEqual(['table', 'stat'])
+    expect(out.answer?.components?.[0]?.spec?.items[0]?.rows).toEqual([
       ['蓝牙耳机', 129, '在卖'],
       ['手机壳', 29, '在卖'],
     ])
@@ -191,7 +193,8 @@ describe('WP291 三分：模型判', () => {
     expect(routedEvents().at(-1)).toMatchObject({
       entry: { kind: 'quick', by: 'model', why: '查一下商品' },
     })
-    expect(runPrompts.some((p) => p.includes('当场问答') && p.includes('```answer'))).toBe(true)
+    // WP336：教 ```dsh-ui
+    expect(runPrompts.some((p) => p.includes('当场问答') && p.includes('```dsh-ui'))).toBe(true)
   })
 
   it('chat：进会话线程（detach 立刻回事项 id），会话在左栏会话历史里，不进工作', async () => {

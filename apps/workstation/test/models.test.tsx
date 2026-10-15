@@ -336,11 +336,11 @@ beforeEach(() => {
 })
 
 describe('WP25 §C 「还没接模型」黄条', () => {
-  it('一个能用的模型都没有：黄条出现，指向设置页', async () => {
+  it('一个能用的模型都没有：黄条出现，点了就地接（WP334：第三栏连接卡，不跳设置页）', async () => {
     renderWithProviders(<NoModelBanner />)
     const banner = await screen.findByTestId('no-model-banner')
     expect(banner.textContent).toContain('还没接模型')
-    expect(within(banner).getByRole('link').getAttribute('href')).toBe('/settings')
+    expect(within(banner).getByRole('button').getAttribute('data-connect')).toBe('model')
   })
 
   it('有 provider 但都没填 key：还是要出现（"配了"不等于"能用"）', async () => {
@@ -357,11 +357,11 @@ describe('WP25 §C 「还没接模型」黄条', () => {
     })
   })
 
-  it('WP98：顶栏那个胶囊走同一份判据，一样指向设置页', async () => {
+  it('WP98：顶栏那个胶囊走同一份判据，一样就地接（WP334）', async () => {
     renderWithProviders(<NoModelBanner variant="chip" />)
     const chip = await screen.findByTestId('no-model-chip')
     expect(chip.textContent).toContain('还没接模型')
-    expect(chip.getAttribute('href')).toBe('/settings')
+    expect(chip.getAttribute('data-connect')).toBe('model')
     // 它是胶囊不是黄条：整条 banner 不在 DOM 里
     expect(screen.queryByTestId('no-model-banner')).toBeNull()
   })

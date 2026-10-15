@@ -1,0 +1,34 @@
+/*
+ * WP336：dsh-genui 渲染层用宿主的 `--dsw-*` 令牌上色；这里把工坊的 `--ws-*` 映射过去（深浅色跟着
+ * `--ws-*` 自己切，这里不分两套）。图表的分类色映射到工坊的 `--chart-*`。
+ * 注意：插件里 `*-secondary` 这一档是**字色**（涨跌胶囊、表格涨跌），不是底色。
+ */
+.ws-genui {
+  --dsw-alias-label-primary: var(--ws-ink);
+  --dsw-alias-label-secondary: var(--ws-body);
+  --dsw-alias-label-tertiary: var(--ws-muted-fg);
+  --dsw-alias-label-caption: var(--ws-muted-fg);
+  --dsw-alias-bg-base: var(--ws-paper);
+  --dsw-alias-bg-layer-1: var(--ws-card);
+  --dsw-alias-bg-layer-2: var(--ws-card);
+  --dsw-alias-bg-layer-3: var(--ws-surface);
+  --dsw-alias-border-l1: var(--ws-line);
+  --dsw-alias-border-l2: var(--ws-line);
+  --dsw-alias-markdown-code-block: var(--ws-surface);
+  --dsw-alias-markdown-hr: var(--ws-line);
+  --dsw-alias-state-business-primary: var(--ws-brand);
+  --dsw-alias-state-success-primary: var(--ws-good);
+  --dsw-alias-state-success-secondary: var(--ws-good);
+  --dsw-alias-state-warn-primary: var(--ws-warn);
+  --dsw-alias-state-warn-secondary: var(--ws-warn);
+  --dsw-alias-state-error-primary: var(--ws-bad);
+  --dsw-static-deepseek-400: var(--chart-1);
+  --dsw-static-green-400: var(--chart-3);
+  --dsw-static-amber-400: var(--chart-4);
+  --dsw-static-red-400: var(--chart-5);
+  --dsw-static-blue-450: var(--chart-2);
+  --dsw-static-deepseek-450: var(--chart-1);
+  --dsw-static-neutral-bluish-400: var(--ws-muted-fg);
+  --dsw-static-deepseek-300: var(--chart-2);
+  color: var(--ws-ink);
+}

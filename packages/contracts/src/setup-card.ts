@@ -134,3 +134,71 @@ export function connectRequestDedupeKey(
 export function setupRequestDedupeKey(workspace_id: string, target: string): string {
   return `setup_request:${target}:${workspace_id}`
 }
+
+/* ── WP334（决策 724 / 725 / 726，Luoye 10-15）：AI 自己要卡 + 内置几样「能就地连的」 ── */
+
+/**
+ * 不在连接目录里、但卡上也能**就地连**的几样（每样一个现成接法，不为谁写专属界面）：
+ *
+ * | service | 卡上的接法 |
+ * |---|---|
+ * | `model` | 接模型（与开工向导第 ① 步同一个件：工坊接口 / DeepSeek 官方 / 自己的 key——key 走本机原生表单） |
+ * | `deepseek_account` | DeepSeek 账号登录（与设置页同一个件） |
+ * | `workshop_account` | 关联 Agents 工坊账号（与设置页同一个注册 / 登录表单） |
+ * | `im:wecom` | 企业微信机器人表单（BotID + Secret，本机原生表单，只有负责人能填） |
+ * | `im:wechat` | 个人微信扫码 |
+ * | `im:feishu` / `im:dingtalk` | 团队机器人卡（WP324 已有） |
+ * | `extension` | 浏览器插件配对码（WP324 已有） |
+ *
+ * 连接目录里的那些（`imap_smtp` 发信邮箱、`ga4`、`meta_ads`…）照 WP324 按目录走，不在这张表里。
+ */
+export const BUILTIN_CONNECT_NEEDS: Readonly<Record<string, Omit<ConnectNeed, 'required'>>> = {
+  model: { kind: 'model', service: 'model', name: 'AI 模型' },
+  deepseek_account: {
+    kind: 'deepseek_account',
+    service: 'deepseek_account',
+    name: 'DeepSeek 账号',
+  },
+  workshop_account: {
+    kind: 'workshop_account',
+    service: 'workshop_account',
+    name: 'Agents 工坊账号',
+  },
+  'im:wecom': { kind: 'im:wecom', service: 'im:wecom', name: '企业微信' },
+  'im:wechat': { kind: 'im:wechat', service: 'im:wechat', name: '微信' },
+  'im:feishu': { kind: 'im:feishu', service: 'im:feishu', name: '飞书' },
+  'im:dingtalk': { kind: 'im:dingtalk', service: 'im:dingtalk', name: '钉钉' },
+  extension: { kind: 'extension', service: 'extension', name: '浏览器插件' },
+}
+
+/** 内置那几样之一 → 一样「要连的」（认不出回 `undefined`）。 */
+export function builtinConnectNeed(service: string, required = true): ConnectNeed | undefined {
+  const hit = BUILTIN_CONNECT_NEEDS[service]
+  return hit === undefined ? undefined : { ...hit, required }
+}
+
+/**
+ * 工具回执里「缺一样能就地连的」的**机器码**写法（与 `needs_setup:<目标>` 对称）：
+ * `reason` 以 `needs_connection:<service>` 开头，后面可以跟一句人话。
+ * 运行时认码不认人话；人话照旧给模型和人看。
+ */
+export function needsConnectionReason(service: string, text = ''): string {
+  return `needs_connection:${service}${text === '' ? '' : ` ${text}`}`
+}
+
+/**
+ * 一段给 AI / 卡面的字里像不像夹着秘密（`sk-…`、长串令牌、`password=…`）。
+ * AI 要卡时的「为什么」「建议值」一律过这一道：像就整条拒收（不回显那段字）——
+ * 口令只能在本机原生表单里填，永不进 AI 上下文、卡的载荷与事件。
+ */
+export function looksLikeSecretValue(text: string): boolean {
+  const longToken = (text.match(/[A-Za-z0-9+_-]{32,}/g) ?? []).some(
+    (t) => /[0-9]/.test(t) && /[A-Za-z]/.test(t),
+  )
+  return (
+    longToken ||
+    /\b(?:sk|pk|rk|ghp|gho|xox[abp]|AKIA)[-_][A-Za-z0-9_-]{8,}/.test(text) ||
+    /(?:password|passwd|secret|token|api[_ -]?key)\s*[:=]\s*\S+/i.test(text) ||
+    /(?:密码|口令|密钥|令牌)\s*[:：=是为]\s*\S+/.test(text)
+  )
+}

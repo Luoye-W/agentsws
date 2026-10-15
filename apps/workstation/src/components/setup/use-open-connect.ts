@@ -23,6 +23,18 @@ export function servicesOfAddress(address: string | undefined): string[] {
     .filter((s) => s !== '')
 }
 
+/**
+ * WP334：第三栏开不出来时退回哪一页——模型 / DeepSeek 账号在设置的模型那一档、工坊账号在账号那一档、
+ * 消息渠道在消息渠道页，其余在连接页那一张。
+ */
+export function connectFallbackPath(first: string | undefined): string {
+  if (first === undefined) return '/connections'
+  if (first.startsWith('im:')) return '/im-channels'
+  if (first === 'model' || first === 'deepseek_account') return '/settings?tab=models'
+  if (first === 'workshop_account') return '/settings?tab=account'
+  return `/connections?service=${encodeURIComponent(first)}`
+}
+
 /** 开连接卡（`undefined` / 空 = 认不出要连哪个：开连接页总览）。 */
 export function useOpenConnect(): (services: string | readonly string[] | undefined) => void {
   const rail = useRailState()
@@ -32,14 +44,7 @@ export function useOpenConnect(): (services: string | readonly string[] | undefi
       const list =
         services === undefined ? [] : typeof services === 'string' ? [services] : [...services]
       if (list.length > 0 && rail.openAddress(connectAddress(list))) return
-      const first = list[0]
-      void navigate(
-        first === undefined
-          ? '/connections'
-          : first.startsWith('im:')
-            ? '/im-channels'
-            : `/connections?service=${encodeURIComponent(first)}`,
-      )
+      void navigate(connectFallbackPath(list[0]))
     },
     [rail, navigate],
   )
