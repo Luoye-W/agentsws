@@ -17,7 +17,7 @@ import { BrandMark } from '@/components/design'
 import { MemoryButton, PeersButton, Suggestions } from '@/components/free-chat/assistant-bits'
 import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
 import { AssistantMessage, UserBubble } from '@/components/free-chat/message'
-import { ModelPicker } from '@/components/free-chat/model-picker'
+import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { SessionList } from '@/components/free-chat/session-list'
 import { useApp } from '@/lib/app-context'
 import {
@@ -67,7 +67,11 @@ export function FreeChatPage(): React.ReactNode {
   const client = useQueryClient()
   const [params] = useSearchParams()
   const { solo, known } = useMode()
-  const [model, setModel] = useState<string | undefined>(undefined)
+  /**
+   * WP342（决策 853）：每段对话自己的 AI（输入框左下角那个钮）。键是会话 id，新对话还没 id 时是 ''。
+   * 没在这次选过：用这段对话上一条回答用的那个（= 存在会话上），再没有就是品牌默认。
+   */
+  const [picks, setPicks] = useState<Record<string, string>>({})
   const [toggles, setToggles] = useState<ComposerToggles>({ web_search: false, knowledge: false })
   const [live, setLive] = useState<Live | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
@@ -92,9 +96,14 @@ export function FreeChatPage(): React.ReactNode {
   })
 
   const choices = models.data?.choices ?? []
-  const picked = model ?? models.data?.default ?? choices[0]?.id
-  const choice = choices.find((c) => c.id === picked)
   const rows = id === undefined ? [] : (messages.data ?? [])
+  const lastUsed = [...rows].reverse().find((m) => m.model !== undefined)?.model?.id
+  const picked =
+    picks[id ?? ''] ??
+    (lastUsed !== undefined && choices.some((c) => c.id === lastUsed) ? lastUsed : undefined) ??
+    models.data?.default ??
+    choices[0]?.id
+  const choice = choices.find((c) => c.id === picked)
 
   // 新的字进来就滚到底
   // biome-ignore lint/correctness/useExhaustiveDependencies: 只按"内容变了"滚
@@ -215,6 +224,13 @@ export function FreeChatPage(): React.ReactNode {
       if (session_id === undefined) {
         const made = await createFreeChatSession()
         session_id = made.id
+        // 新对话里先选的 AI 跟着这段对话走
+        setPicks((prev) => {
+          const first = prev['']
+          if (first === undefined) return prev
+          const { '': _drop, ...rest } = prev
+          return { ...rest, [made.id]: first }
+        })
         client.setQueryData([...KEY, 'messages', made.id], [])
         navigate(`${ASSISTANT_PATH}/${made.id}`)
       }
@@ -249,6 +265,15 @@ export function FreeChatPage(): React.ReactNode {
       onStop={stop}
       placeholder={t('assistant.placeholder')}
       {...(assistant.data === undefined ? {} : { targets: assistant.data.targets })}
+      modelSlot={
+        <ComposerModelPicker
+          value={picked}
+          onChange={(next) => {
+            setPicks((prev) => ({ ...prev, [id ?? '']: next }))
+          }}
+          testId="free-chat-model"
+        />
+      }
     />
   )
   const lit = (params.get('memory') ?? '').split(',').filter((x) => x !== '')
@@ -277,14 +302,8 @@ export function FreeChatPage(): React.ReactNode {
         />
       </aside>
       <section className="flex min-w-0 flex-1 flex-col">
+        {/* WP343：右上角——助理记的几条；同事互联 / 公司模式多一个「替我答同事」（原「我的代理」）。模型钮在输入框里（WP342） */}
         <header className="flex items-center gap-2 px-4 py-2">
-          {/* 清单回来之前不画（不然会先闪一下「还没接模型」） */}
-          {models.data === undefined ? (
-            <span className="h-7" />
-          ) : (
-            <ModelPicker choices={choices} value={picked} onChange={setModel} />
-          )}
-          {/* WP343：右上角——助理记的几条；同事互联 / 公司模式多一个「替我答同事」（原「我的代理」） */}
           <span className="ml-auto flex items-center gap-1.5">
             <MemoryButton highlight={lit} />
             {known && !solo ? <PeersButton defaultOpen={params.get('peers') === '1'} /> : null}

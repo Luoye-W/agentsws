@@ -4,6 +4,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { LEGAL_EFFECTIVE_DATE } from '../src/config.js'
 import { PRICING } from '../src/i18n/pricing.js'
 import { CHANGELOG_DIR, changelogIds, loadChangelog } from '../src/lib/changelog.js'
 import { HELP_DIR, helpFile, helpSlugs, loadHelp, parseHelpSlugs } from '../src/lib/help.js'
@@ -107,18 +108,20 @@ describe('条款三页', () => {
     }
   })
 
-  it('条款页上一个占位都不剩（公司全称与联系邮箱已填）', () => {
+  it('条款正文里公司全称与联系邮箱已填；只许剩生效日期一个占位（WP344：上线当天填）', () => {
     for (const page of LEGAL_PAGES) {
       for (const lang of ['zh', 'en'] as const) {
         const left = new Set(
           [...loadLegal(page, lang, root).html.matchAll(/\{\{([A-Z_]+)\}\}/gu)].map((m) => m[1]),
         )
-        expect([...left]).toEqual([])
+        for (const k of left) expect(k).toBe('EFFECTIVE_DATE')
       }
     }
-    expect(fillPlaceholders('{{EFFECTIVE_DATE}} {{SITE_URL}} {{NOPE}}')).toMatch(
-      /^\d{4}-\d{2}-\d{2} https:\/\/agentsws\.com \{\{NOPE\}\}$/u,
+    expect(fillPlaceholders('{{EFFECTIVE_DATE}} {{SITE_URL}} {{NOPE}}')).toBe(
+      `${LEGAL_EFFECTIVE_DATE} https://agentsws.com {{NOPE}}`,
     )
+    expect(LEGAL_EFFECTIVE_DATE).toMatch(/^(\d{4}-\d{2}-\d{2}|\{\{EFFECTIVE_DATE\}\})$/u)
+    expect(fillPlaceholders('{{CONTACT_EMAIL}}')).toBe('contact@agentsws.com')
   })
 
   it('工作单点名的要点都写到了（中文为准）', () => {
@@ -174,5 +177,46 @@ describe('条款三页', () => {
       ])
         expect(refund + terms + faq).not.toContain(old)
     }
+  })
+})
+
+describe('WP344：岗位与首页同步到 10-15', () => {
+  it('岗位清单 = packages/roles 的出厂岗位（去掉已拆的），中英名字照 yml', async () => {
+    const { ROLES } = await import('../src/i18n/roles.js')
+    const dir = join(root, 'packages/roles/positions')
+    const superseded = ['dtc-ops']
+    const shipped = readdirSync(dir)
+      .filter((f) => f.endsWith('.yml'))
+      .map((f) => readFileSync(join(dir, f), 'utf8'))
+      .map((t) => ({
+        id: /^id:\s*(\S+)/mu.exec(t)?.[1] ?? '',
+        zh: /^name:\s*\{\s*zh:\s*([^,]+),/mu.exec(t)?.[1]?.trim() ?? '',
+        en: /^name:\s*\{[^}]*en:\s*([^}]+)\}/mu.exec(t)?.[1]?.trim() ?? '',
+      }))
+      .filter((p) => !superseded.includes(p.id))
+    expect(ROLES.zh.map((r) => r.position).sort()).toEqual(shipped.map((p) => p.id).sort())
+    for (const p of shipped) {
+      expect(ROLES.zh.find((r) => r.position === p.id)?.name).toBe(p.zh)
+      expect(ROLES.en.find((r) => r.position === p.id)?.name).toBe(p.en)
+    }
+    expect(ROLES.en.map((r) => r.id)).toEqual(ROLES.zh.map((r) => r.id))
+  })
+
+  it('首页中英同形；正文不点名客户与数据商', async () => {
+    const { HOME } = await import('../src/i18n/home.js')
+    const shape = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(shape)
+        : typeof v === 'object' && v !== null
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x)]))
+          : typeof v
+    expect(shape(HOME.en)).toEqual(shape(HOME.zh))
+    const all = [
+      JSON.stringify(HOME),
+      ...readdirSync(join(root, CHANGELOG_DIR)).map((f) =>
+        readFileSync(join(root, CHANGELOG_DIR, f), 'utf8'),
+      ),
+    ].join('\n')
+    expect(all).not.toMatch(/DataForSEO|Apify|INMO|Treg|Hunter|OpenRouter|Rollout/iu)
   })
 })

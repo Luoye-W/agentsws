@@ -30,7 +30,7 @@ const zh = {
   },
   announce: {
     badge: '内测中',
-    text: 'B2B 外贸岗上线：询盘自动分级，报价超授权转负责人批。',
+    text: 'v0.2.0-beta.7：Reddit 天天巡查、AI 回答监测，回答直接出图表。',
     link: '看更新',
   },
   footer: {
@@ -55,6 +55,8 @@ const zh = {
     refund: '退款政策',
     trademark: '商标政策',
     bottom: '© 2026 Agents 工坊 · 代码 Apache-2.0 · 名称与标志见商标政策',
+    operator: '运营方',
+    contact: '联系我们',
   },
 }
 
@@ -82,7 +84,7 @@ const en: Common = {
   },
   announce: {
     badge: 'Beta',
-    text: 'New B2B role: inquiries graded automatically, over-limit quotes go to the lead.',
+    text: 'v0.2.0-beta.7: daily Reddit checks, AI answer tracking, and answers that come as charts.',
     link: "See what's new",
   },
   footer: {
@@ -107,6 +109,8 @@ const en: Common = {
     refund: 'Refund Policy',
     trademark: 'Trademark Policy',
     bottom: '© 2026 Agents Workshop · Code under Apache-2.0 · Name and logo: see Trademark Policy',
+    operator: 'Operated by',
+    contact: 'Contact',
   },
 }
 

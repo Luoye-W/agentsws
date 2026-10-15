@@ -4,7 +4,7 @@
  * 断言的是「每个 NavLink 里有一个 svg」——图标换成别的 lucide 图形不该让测试红，
  * 但漏掉一条就该红。
  */
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/app-shell'
 import type { PositionSummary } from '@/lib/api'
@@ -65,9 +65,21 @@ describe('左栏（WP43 §1 图标）', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const links = Array.from(nav.querySelectorAll('a'))
-    // 固定 12 条（WP85 加了「消息渠道」，WP188 加了「随便聊」，WP343「我的代理」并进「我的助理」）+ 岗位 1 条
+    // WP342（决策 853）：左栏只剩 随便聊 / 首页 / 消息 / 待办 / 日历 + 岗位（+ 公司模式的「我的代理」）；
+    // 会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置收进了账号菜单
     // （WP234：「公司设置与授权」是负责人身份，不在左栏「岗位」里）
-    expect(links).toHaveLength(13)
+    const hrefs = links.map((a) => a.getAttribute('href'))
+    for (const gone of [
+      '/meetings',
+      '/knowledge',
+      '/skills',
+      '/org',
+      '/connections',
+      '/im-channels',
+      '/settings',
+    ])
+      expect(hrefs).not.toContain(gone)
+    expect(links.length).toBeGreaterThanOrEqual(6)
     expect(nav.textContent).not.toContain('公司设置与授权')
     for (const link of links) {
       expect(link.querySelector('svg'), `「${link.textContent ?? ''}」少了图标`).not.toBeNull()
@@ -121,6 +133,14 @@ describe('左栏 / 顶栏新风格（WP96）', () => {
   })
 })
 
+/** WP342：点开账号菜单、展开「设置」那一组。 */
+async function openSettingsGroup(): Promise<void> {
+  fireEvent.click(screen.getByTestId('account-toggle'))
+  const group = await screen.findByTestId('account-group-settings-toggle')
+  // 展开态记在本机：上一条用例展开过就别再点（点了反而收起）
+  if (group.getAttribute('aria-expanded') !== 'true') fireEvent.click(group)
+}
+
 describe('WP271 三种模式：左栏与账号块', () => {
   const me = {
     person: { id: 'per_wang', name: '王岚', email: 'wang@nordvolt.example' },
@@ -141,6 +161,8 @@ describe('WP271 三种模式：左栏与账号块', () => {
         <div>主区</div>
       </AppShell>,
     )
+    // WP342：「岗位与品牌」在账号菜单的「设置」组里
+    await openSettingsGroup()
     await waitFor(() => {
       expect(screen.getByTestId('nav-org').textContent).toBe('岗位与品牌')
     })
@@ -166,8 +188,11 @@ describe('WP271 三种模式：左栏与账号块', () => {
     await waitFor(() => {
       expect(screen.getByTestId('account-block').textContent).toContain('所有者 · Nordvolt')
     })
-    expect(screen.getByTestId('nav-org').textContent).toBe('公司')
-    // WP343：右上角「替我答同事」在助理页里（见 wp343-assistant.test.tsx）
+    // WP343：「我的代理」并进「我的助理」（右上角「替我答同事」，见 wp343-assistant.test.tsx）
     expect(screen.queryByTestId('nav-secretary')).toBeNull()
+    await openSettingsGroup()
+    await waitFor(() => {
+      expect(screen.getByTestId('nav-org').textContent).toBe('公司')
+    })
   })
 })

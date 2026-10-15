@@ -43,7 +43,12 @@ export function buildDigest(input: {
   for (const it of external) {
     if (it.deleted === true) continue
     const topic =
-      it.judgement?.topic ?? (it.keyword === undefined ? '其他' : `关键词：${it.keyword}`)
+      it.judgement?.topic ??
+      (it.keyword !== undefined
+        ? `关键词：${it.keyword}`
+        : it.subreddit !== undefined
+          ? `r/${it.subreddit}`
+          : '其他')
     const verdict = it.judgement?.verdict ?? 'no_action'
     const g = groups.get(topic) ?? { topic, verdict, posts: 0, comments: 0, items: [] }
     if (RANK[verdict] < RANK[g.verdict]) g.verdict = verdict

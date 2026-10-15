@@ -18,10 +18,16 @@
  *    点头这件事就没有内容。
  */
 
-import { daySpendGate, stopLossVerdict } from '@agentsws/ads-core'
+import {
+  type AdSheetOp,
+  buildAdUploadBundle,
+  daySpendGate,
+  stopLossVerdict,
+} from '@agentsws/ads-core'
 import type { AdsActor, AdsCampaignRow, AdsPort, AdsStagedView } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
+  AdAccount,
   AdCampaign,
   AdsCaps,
   AdsPlatform,
@@ -35,11 +41,15 @@ import type {
   ObjectRef,
   ProvenanceState,
   Recipient,
+  StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { ADS_DEFAULT_CAPS, adsPlatformOfRole } from '@agentsws/contracts'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { AdsStore } from './ads.js'
+import { createAdsProposals } from './ads-wiring/propose.js'
+import { type AdsWiring, actionPlatformOf } from './ads-wiring/service.js'
+import { cardFileOf, cardFingerprint } from './ads-wiring/sheet-card.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 export interface AdsServiceOptions {
@@ -63,6 +73,12 @@ export interface AdsServiceOptions {
    * 不给就不写（单测与没装毛利率那一层的进程）。
    */
   breakEven?: () => BreakEvenView
+  /**
+   * WP316：插件执行那一半（广告变更账本、磨合期、插件连没连）。不给 = 只出卡（单测与托管实例）。
+   */
+  wiring?: AdsWiring
+  /** WP316：按 id 读回一条变更（撤销要原来的改前值、作废了要原样重出）。 */
+  changeOf?: (id: string) => Promise<StagedChange | undefined>
 }
 
 export interface AdsServiceAssembly {
@@ -76,6 +92,10 @@ const KIND_OF: Record<string, ChangeKind> = {
   stage_bid_change: 'bid_change',
   pause_ads: 'pause_ad',
   stage_creative_swap: 'creative_swap',
+  // WP316：上传表 / 开始投放 / 撤销
+  stage_ads_sheet: 'ads_sheet',
+  stage_ads_activate: 'ads_activate',
+  stage_ads_undo: 'ads_undo',
 }
 
 export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly {
@@ -211,13 +231,46 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
     rule: 'role_holder' | 'scope_manager' | 'owner'
     /** 这一下会再占掉总闸多少（提预算就是提上去那一截；新建就是它的日预算）。 */
     adding: number
+    /** WP316：去重那一格（同一账户上两张不同的上传表不该被并成一张）。 */
+    field?: string
+    /** WP316：这一下由插件在这个账户上执行（磨合期按它判；也判插件连没连）。 */
+    account?: AdAccount
   }): Promise<AdsStagedView> => {
     const run_id = `run_ads_${nextId('a')}`
-    const { mandate, level } = actionOf(input.actor.assignment_id, input.action)
+    const configured = actionOf(input.actor.assignment_id, input.action)
+    const { mandate } = configured
+    let level = configured.level
     const caps = capsOf(input.actor.assignment_id, input.action)
     const gate = gateOf(caps, input.adding)
     const kind = KIND_OF[input.action]
     if (kind === undefined) throw new ApiError('invalid_input', `不认识这个动作：${input.action}`)
+    /*
+     * WP316（决策 554）：**磨合期**——这个账户由插件做成第一件写操作起 14 天内（还没做成过 = 还在磨合），
+     * 插件执行的 L2 一律升 L1。插件点得准不准要在每个账户上先证明一次。
+     */
+    const extNotes: string[] = []
+    const acct = input.account
+    const actionAccount =
+      acct !== undefined && (acct.platform === 'google' || acct.platform === 'meta')
+        ? { platform: actionPlatformOf(acct.platform), id: acct.external_id }
+        : undefined
+    if (level === 'L2' && options.wiring?.available() === true && actionAccount !== undefined) {
+      const bi = options.wiring.breakIn(actionAccount)
+      if (bi.active) {
+        level = 'L1'
+        extNotes.push(
+          bi.until === undefined
+            ? '磨合期：插件还没在这个账户上做成过一件，先按 L1 等你点（决策 554）。'
+            : `磨合期：这个账户接入不满 2 周（到 ${bi.until.slice(0, 10)}），先按 L1 等你点（决策 554）。`,
+        )
+      }
+    }
+    // WP316：插件没配对 / 没连这家后台 → 卡照出（批了排队等插件，决策 558），回执里带上连接那一格（WP324）
+    const needsExtension =
+      options.wiring?.available() === true &&
+      acct !== undefined &&
+      (acct.platform === 'google' || acct.platform === 'meta') &&
+      !options.wiring.extensionReady(acct.platform)
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -238,8 +291,9 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         platform_label: adsPlatformOfRole(input.actor.role_id)?.zh ?? platformOf(input.actor),
         spend_gate_note: gate.reason,
       },
+      ...(input.field === undefined ? {} : { field: input.field }),
       // 总闸那句话跟着卡走（纪律 3）
-      notes: [...input.notes, gate.reason],
+      notes: [...input.notes, ...extNotes, gate.reason],
       /*
        * **岗位级总闸的分子**（纪律 3）：四个平台加起来今天花了多少。
        *
@@ -267,8 +321,17 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         source_events: [],
       },
     })
+    const extensionNeed = needsExtension
+      ? { needs_connection: 'extension' as const, connection_name: 'Agents 工坊助手（浏览器插件）' }
+      : {}
     if (!outcome.ok)
-      return { staged: false, message: outcome.message, level, spend_gate: gate.view }
+      return {
+        staged: false,
+        message: outcome.message,
+        level,
+        spend_gate: gate.view,
+        ...extensionNeed,
+      }
     appendEvent({
       schema_version: 1,
       workspace_id,
@@ -293,8 +356,73 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
       approval_item_id: outcome.approval.id,
       level: outcome.approval.automation.level_at_creation,
       spend_gate: gate.view,
+      ...(needsExtension
+        ? {
+            ...extensionNeed,
+            message:
+              '卡出好了。插件还没连上这家后台：批了会排队，连上插件才执行（排 24 小时没人领就作废重出）。',
+          }
+        : {}),
     }
   }
+
+  /** WP316：这条 campaign 所在的账户（磨合期、插件连没连按它判）。 */
+  const accountOf = (c: AdCampaign): { account?: AdAccount } => {
+    const a = store.account(c.account_id)
+    return a === undefined ? {} : { account: a }
+  }
+
+  /**
+   * WP316：新建 campaign 卡上带一张上传表（批了插件就传它）。表出不了（Meta 新系列还要广告组那一层、
+   * 缺目标……）就照实写在卡上：批了插件也建不了，改走「改广告」那条路。
+   */
+  const createSheetOf = (
+    account: AdAccount,
+    input: { name: string; daily_budget: number; objective?: string | undefined },
+  ): { after: Record<string, unknown>; notes: string[] } => {
+    if (
+      options.wiring === undefined ||
+      (account.platform !== 'google' && account.platform !== 'meta')
+    )
+      return { after: {}, notes: [] }
+    const op: AdSheetOp =
+      account.platform === 'google'
+        ? { kind: 'create_campaign', campaign: input.name, daily_budget: input.daily_budget }
+        : {
+            kind: 'create_campaign',
+            campaign: input.name,
+            ...(input.objective === undefined ? {} : { meta: { objective: input.objective } }),
+          }
+    const bundle = buildAdUploadBundle({ platform: account.platform, ops: [op] })
+    if (!bundle.ok)
+      return {
+        after: {},
+        notes: [
+          `这张卡的上传表还出不了（${bundle.problems
+            .filter((p) => p.severity === 'error')
+            .map((p) => p.message)
+            .join('；')}）：批了插件也建不了，改走「改广告」那条路出一张带表的卡。`,
+        ],
+      }
+    const files = bundle.files.map(cardFileOf)
+    return {
+      after: { _files: files, _ops: [op], _fingerprint: cardFingerprint(files) },
+      notes: ['批了由插件在你自己的后台里上传；平台先给预览，你再确认一次才提交。'],
+    }
+  }
+
+  /** WP316：出卡那一半（上传表 / 开始投放 / 撤销 / 重出）。没装插件执行那一半就没有。 */
+  const proposals =
+    options.wiring === undefined
+      ? undefined
+      : createAdsProposals({
+          store,
+          wiring: options.wiring,
+          stage: (input) => stageOne(input),
+          capsOf: (assignment_id, action) => capsOf(assignment_id as AssignmentId, action),
+          ...(options.changeOf === undefined ? {} : { changeOf: options.changeOf }),
+        })
+  if (proposals !== undefined) options.wiring?.setFollowUps(proposals)
 
   const port: AdsPort = {
     accounts: (actor, filter) => ({
@@ -315,6 +443,7 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
       const account = store.account(input.account_id)
       if (account === undefined)
         throw new ApiError('not_found', `没有这个广告账户：${input.account_id}`)
+      const sheet = createSheetOf(account, input)
       return stageOne({
         actor,
         action: 'stage_campaign',
@@ -327,17 +456,20 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
           ...(input.audience_summary === undefined
             ? {}
             : { audience_summary: input.audience_summary }),
+          ...sheet.after,
         },
         notes: [
           // 04 §5：新开花钱口子永远人审——这句话写在卡上，不只写在文档里
           '新建一条 campaign 是**开一个新的花钱口子**，永远要人点一下（04 §5）。',
           '批了之后它是**停着**建出来的——让它开始花钱是另一张卡。',
+          ...sheet.notes,
         ],
         title: `新建 campaign：${input.name}`,
         summary: `${account.name}｜日预算 ${input.daily_budget}｜${input.audience_summary ?? '受众没写'}`,
         seen: [{ type: 'ad_account', id: account.id }],
         rule: 'owner',
         adding: input.daily_budget,
+        account,
       })
     },
 
@@ -362,6 +494,7 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         seen: [{ type: 'campaign', id: campaign.id }],
         rule: 'scope_manager',
         adding: Math.max(0, input.value - before),
+        ...accountOf(campaign),
       })
     },
 
@@ -443,6 +576,7 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         rule: 'role_holder',
         // 停掉只会少花钱
         adding: 0,
+        ...accountOf(campaign),
       })
     },
 
@@ -474,6 +608,52 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         adding: 0,
       })
     },
+  }
+
+  if (proposals !== undefined && options.wiring !== undefined) {
+    const wiring = options.wiring
+    /** 账本 / 截图只给这条职责那个平台的（Meta 那条看不见 Google 的）。 */
+    const mine = (actor: AdsActor) => {
+      const p = platformOf(actor)
+      return wiring.entries().filter((e) => e.platform === p)
+    }
+    port.stageChanges = (actor, input) =>
+      proposals.stageChanges(actor, {
+        account_id: input.account_id,
+        ops: input.ops as AdSheetOp[],
+        ...(input.reason === undefined ? {} : { reason: input.reason }),
+      })
+    port.stageActivation = (actor, campaign_id) => proposals.stageActivation(actor, campaign_id)
+    port.stageUndo = (actor, change_id) => {
+      if (!mine(actor).some((e) => e.change_id === change_id))
+        throw new ApiError('not_found', '账本里没有这一条（或不是这个平台的）。')
+      return proposals.stageUndo(actor, change_id)
+    }
+    port.ledger = (actor) => ({ rows: mine(actor) })
+    port.confirmChange = (actor, change_id, input) => {
+      if (!mine(actor).some((e) => e.change_id === change_id))
+        throw new ApiError('not_found', '账本里没有这一条（或不是这个平台的）。')
+      return wiring.confirm(change_id, input.submit)
+    }
+    port.evidence = async (actor, id) => {
+      if (!mine(actor).some((e) => e.evidence.some((x) => x.id === id))) return undefined
+      const png = await wiring.evidenceImage(id)
+      return png === undefined ? undefined : { png_base64: Buffer.from(png).toString('base64') }
+    }
+    port.snapshot = async (actor, account_id) => {
+      const acc = store.account(account_id)
+      if (acc === undefined) throw new ApiError('not_found', `没有这个广告账户：${account_id}`)
+      if (
+        acc.platform !== platformOf(actor) ||
+        (acc.platform !== 'google' && acc.platform !== 'meta')
+      )
+        throw new ApiError('forbidden', '这个账户不归这条职责。')
+      const out = await wiring.requestSnapshot({
+        platform: actionPlatformOf(acc.platform),
+        id: acc.external_id,
+      })
+      return { queued: out.ok, message: out.message }
+    }
   }
 
   return { port }

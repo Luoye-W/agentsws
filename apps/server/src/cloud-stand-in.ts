@@ -44,6 +44,7 @@ import {
   DEFAULT_ALLOCATION_TIMEZONE,
   DEFAULT_CLOUD_SCOPES,
   emptyMemberUsageBlocks,
+  LEGAL_TERMS_VERSION,
   MEMBER_HEADER,
   MEMBER_LEFT_MESSAGE,
   POSITION_HEADER,
@@ -656,7 +657,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         password_min: 8,
         otp_length: 6,
         otp_ttl_seconds: 300,
-        terms_version: '2026-10-05',
+        terms_version: LEGAL_TERMS_VERSION,
       })
     if (method === 'POST' && path === '/v1/cloud/auth/signup') {
       const email = lower(body.email)

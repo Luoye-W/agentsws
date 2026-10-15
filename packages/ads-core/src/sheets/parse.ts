@@ -50,6 +50,11 @@ export type ExportField =
   | 'clicks'
   | 'conversions'
   | 'conversion_value'
+  // WP315（决策 619）：看数据要的几列
+  | 'roas'
+  | 'day_end'
+  | 'account'
+  | 'account_id'
 
 /** 别名（比较前都先归一：小写、去掉空格与标点）。 */
 const ALIASES: Record<ExportField, readonly string[]> = {
@@ -93,15 +98,62 @@ const ALIASES: Record<ExportField, readonly string[]> = {
     'Conversions value',
     'Purchases conversion value',
     'Purchase conversion value',
+    'Website purchases conversion value',
   ],
+  roas: [
+    'Conv. value / cost',
+    'ROAS',
+    'Purchase ROAS (return on ad spend)',
+    'Purchase ROAS',
+    'Website purchase ROAS (return on advertising spend)',
+  ],
+  day_end: ['Reporting ends'],
+  account: ['Account', 'Account name'],
+  account_id: ['Customer ID', 'Account ID'],
 }
 
-const norm = (h: string): string => h.toLowerCase().replace(/[^a-z0-9]/g, '')
+/**
+ * WP315（决策 619）：后台是中文界面时导出的表头（两家都按界面语言出）。**没对真导出核过**——
+ * 照两家中文帮助页与界面常见叫法写；认不出的列照样留在 `raw` 里。真站首跑拿真导出补。
+ */
+const ALIASES_ZH: Partial<Record<ExportField, readonly string[]>> = {
+  campaign: ['广告系列', '广告系列名称'],
+  campaign_id: ['广告系列 ID', '广告系列编号'],
+  campaign_status: ['广告系列状态', '广告系列投放状态'],
+  campaign_type: ['广告系列类型'],
+  budget: ['预算', '广告系列预算', '日预算'],
+  ad_group: ['广告组', '广告组名称'],
+  ad_group_id: ['广告组 ID', '广告组编号'],
+  ad_group_status: ['广告组状态', '广告组投放状态'],
+  ad_group_daily_budget: ['广告组日预算'],
+  ad: ['广告名称'],
+  ad_id: ['广告 ID', '广告编号'],
+  ad_status: ['广告状态', '广告投放状态'],
+  keyword: ['关键字', '搜索关键字', '关键词'],
+  match_type: ['匹配类型', '关键字匹配类型', '搜索字词匹配类型'],
+  status: ['状态'],
+  search_term: ['搜索字词'],
+  day: ['天', '日', '日期', '报告开始日期'],
+  day_end: ['报告结束日期'],
+  currency: ['货币代码', '货币'],
+  cost: ['费用', '花费', '已花费金额', '花费金额'],
+  impressions: ['展示次数'],
+  clicks: ['点击次数', '点击量（全部）', '链接点击量'],
+  conversions: ['转化次数', '转化', '成效', '购物次数'],
+  conversion_value: ['转化价值', '购物转化价值'],
+  roas: ['转化价值/费用', '购物广告花费回报', '广告花费回报'],
+  account: ['账号', '账户', '账户名称'],
+  account_id: ['客户 ID', '账户编号'],
+}
+
+/** 归一：小写、只留字母数字（WP315：中日韩字也留，中文表头才认得出）。 */
+const norm = (h: string): string => h.toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]/g, '')
 
 const ALIAS_INDEX: ReadonlyMap<string, ExportField> = (() => {
   const m = new Map<string, ExportField>()
-  for (const [field, list] of Object.entries(ALIASES) as [ExportField, readonly string[]][])
-    for (const a of list) if (!m.has(norm(a))) m.set(norm(a), field)
+  for (const table of [ALIASES, ALIASES_ZH])
+    for (const [field, list] of Object.entries(table) as [ExportField, readonly string[]][])
+      for (const a of list) if (!m.has(norm(a))) m.set(norm(a), field)
   return m
 })()
 
@@ -111,7 +163,7 @@ const ALIAS_INDEX: ReadonlyMap<string, ExportField> = (() => {
 export function exportFieldOf(header: string): ExportField | undefined {
   const direct = ALIAS_INDEX.get(norm(header))
   if (direct !== undefined) return direct
-  return ALIAS_INDEX.get(norm(header.replace(/\(.*?\)/g, '')))
+  return ALIAS_INDEX.get(norm(header.replace(/[(（].*?[)）]/g, '')))
 }
 
 /** 去掉 Meta 导出加的 `< >` 前缀（只在后面跟着 `+ - = @` 时去）。 */
@@ -157,15 +209,36 @@ const KNOWN_MIN = 2
 
 function guessPlatform(headers: readonly string[]): SheetPlatform | 'unknown' {
   const h = headers.map(norm)
-  if (h.some((x) => x.startsWith('adset') || x.startsWith('amountspent') || x === 'linkobjectid'))
+  if (
+    h.some(
+      (x) =>
+        x.startsWith('adset') ||
+        x.startsWith('amountspent') ||
+        x === 'linkobjectid' ||
+        x.startsWith('已花费金额') ||
+        x === '成效' ||
+        x === '报告开始日期',
+    )
+  )
     return 'meta'
-  if (h.some((x) => x === 'adgroup' || x === 'impr' || x === 'campaignstate' || x === 'adgroupid'))
+  if (
+    h.some(
+      (x) =>
+        x === 'adgroup' ||
+        x === 'impr' ||
+        x === 'campaignstate' ||
+        x === 'adgroupid' ||
+        x === 'searchterm' ||
+        x === '费用' ||
+        x === '搜索字词',
+    )
+  )
     return 'google'
   return 'unknown'
 }
 
 const isTotalRow = (cells: readonly string[]): boolean =>
-  cells.some((c, i) => i < 3 && /^\s*total\b/i.test(c))
+  cells.some((c, i) => i < 3 && /^\s*(total\b|总计|合计)/i.test(c))
 
 /**
  * 解析一份导出（CSV / 制表符文字，Meta「导出为文字」也是它）。
@@ -226,9 +299,9 @@ export type EntityStatus = 'enabled' | 'paused' | 'removed' | 'unknown'
 export function normalizeStatus(value: string | undefined): EntityStatus {
   if (value === undefined || value.trim() === '') return 'unknown'
   const v = value.toLowerCase()
-  if (/pause|inactive|off\b/.test(v)) return 'paused'
-  if (/remov|delet|archiv/.test(v)) return 'removed'
-  if (/enabl|active|eligible|\bon\b|running/.test(v)) return 'enabled'
+  if (/pause|inactive|off\b|暂停|已停|关闭/.test(v)) return 'paused'
+  if (/remov|delet|archiv|移除|删除|归档/.test(v)) return 'removed'
+  if (/enabl|active|eligible|\bon\b|running|启用|投放中|有效|开启/.test(v)) return 'enabled'
   return 'unknown'
 }
 
@@ -269,7 +342,12 @@ export function splitGoogleKeyword(
   const m = (matchColumn ?? '').toLowerCase()
   return {
     text: t,
-    match: m.includes('exact') ? 'exact' : m.includes('phrase') ? 'phrase' : 'broad',
+    match:
+      m.includes('exact') || m.includes('完全')
+        ? 'exact'
+        : m.includes('phrase') || m.includes('词组')
+          ? 'phrase'
+          : 'broad',
   }
 }
 

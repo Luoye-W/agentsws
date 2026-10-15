@@ -141,6 +141,8 @@ export const HANDLERS = {
   adsLineCompare: 'ads.line_compare',
   /** WP328（docs/102）：Reddit 每日巡查（每小时看一眼到点没有；默认一天一次；周五那次由周报调）。 */
   redditPatrol: 'social.reddit_patrol',
+  /** WP315（docs/101 §5.1①）：广告看数据（每小时看一眼：该建「工坊日报」的建、9 点后该导的导、插件不在读邮箱）。 */
+  adsDailyExport: 'ads.daily_export',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -1054,6 +1056,17 @@ export function registerRedditPatrol(scheduler: Scheduler, deps: RedditPatrolDep
   scheduler.register(HANDLERS.redditPatrol, () => deps.tick())
 }
 
+/** WP315：广告看数据也是一小时一拍、到点才导（默认每天本地 9 点后一次；电脑和 Chrome 开着才导得成）。 */
+export const ADS_DAILY_EXPORT_INTERVAL_MS = 60 * 60_000
+
+export interface AdsDailyExportDeps {
+  tick(): Promise<{ queued: string[]; imported: number; skipped?: string }>
+}
+
+export function registerAdsDailyExport(scheduler: Scheduler, deps: AdsDailyExportDeps): void {
+  scheduler.register(HANDLERS.adsDailyExport, () => deps.tick())
+}
+
 /* ------------------------------------------------------------------ */
 /* ⑲ WP154：内容与搜索——每天早上读一遍 Search Console、每周一小结         */
 /* ------------------------------------------------------------------ */
@@ -1293,6 +1306,8 @@ export interface SchedulePlanOptions {
     adsLineCompare?: boolean
     /** WP328：有人持有社媒「Reddit」那条职责才建每日巡查那一条。 */
     redditPatrol?: boolean
+    /** WP315：有人担 Google / Meta 投放才建看数据那一条。 */
+    adsDailyExport?: boolean
   }
 }
 
@@ -1602,6 +1617,21 @@ export async function ensureSystemTasks(
         title: '巡查 Reddit（默认每天一次）',
         handler: HANDLERS.redditPatrol,
         trigger: { kind: 'interval', every_ms: REDDIT_PATROL_INTERVAL_MS },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * WP315：广告看数据。一小时一拍、到点才导；**错过了不补跑这一拍**（`skip`）——关机期间错过的，
+   * 开机后下一拍看「今天导过没有」只导一次。
+   */
+  if (options.has.adsDailyExport === true) {
+    await add(
+      'sched_ads_daily_export',
+      systemTask(base, {
+        title: '导一次广告报表（默认每天一次）',
+        handler: HANDLERS.adsDailyExport,
+        trigger: { kind: 'interval', every_ms: ADS_DAILY_EXPORT_INTERVAL_MS },
         misfire_policy: 'skip',
       }),
     )

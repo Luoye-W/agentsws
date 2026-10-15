@@ -180,6 +180,10 @@ export interface WatchFilter {
   /** 只要判过有效的 VOC / UGC（`any` = 两样有一样）。 */
   signal?: 'voc' | 'ugc' | 'any'
   kind?: 'post' | 'comment'
+  /** WP340：只要命中告警词的「优先」条目（`false` = 只要不优先的）。 */
+  priority?: boolean
+  /** WP340：只要带这个本地标签的（不分大小写）。 */
+  tag?: string
 }
 
 /** 一条原文引用（不截图：原话 + 作者 + 时间 + 链接）。 */
@@ -201,6 +205,10 @@ export interface WatchQuote {
   topic?: string
   assessment?: WatchAssessment
   keyword?: string
+  /** WP340：命中告警词。 */
+  priority?: true
+  /** WP340：本地标签。 */
+  tags?: string[]
 }
 
 export interface WatchGroup {
@@ -224,6 +232,8 @@ export interface WatchQueryResult {
     external: { posts: number; comments: number }
     voc: number
     ugc: number
+    /** WP340：其中「优先」（命中告警词）的条数。 */
+    priority: number
   }
   groups?: WatchGroup[]
   items: WatchQuote[]
@@ -282,6 +292,12 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
         return false
       if (f.keyword !== undefined && it.keyword?.toLowerCase() !== f.keyword.toLowerCase())
         return false
+      if (f.priority !== undefined && (it.priority === true) !== f.priority) return false
+      if (
+        f.tag !== undefined &&
+        !(it.tags ?? []).some((t) => t.toLowerCase() === f.tag?.trim().toLowerCase())
+      )
+        return false
       if (f.signal !== undefined) {
         const s = it.signals
         const ok =
@@ -315,6 +331,8 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
     if (it.scope === 'external') q.topic = topicLabel(it)
     if (it.assessment !== undefined) q.assessment = it.assessment
     if (it.keyword !== undefined) q.keyword = it.keyword
+    if (it.priority === true) q.priority = true
+    if (it.tags !== undefined && it.tags.length > 0) q.tags = [...it.tags]
     return q
   }
   const count = (xs: WatchItem[], scope?: 'own' | 'external') => {
@@ -331,6 +349,7 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
       external: count(hits, 'external'),
       voc: hits.filter((x) => x.signals?.voc === true && !gone(x)).length,
       ugc: hits.filter((x) => x.signals?.ugc === true && !gone(x)).length,
+      priority: hits.filter((x) => x.priority === true).length,
     },
     items: [],
     more: 0,

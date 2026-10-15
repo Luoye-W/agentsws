@@ -17,5 +17,6 @@ export function redditWatchPort(
     items: async (ws, query) => (await of(ws)).items(query),
     setStatus: async (ws, id, status) => (await of(ws)).setStatus(id, status),
     digest: async (ws, window) => (await of(ws)).digest(window),
+    dismissAlert: async (ws, id) => (await of(ws)).dismissAlert(id),
   }
 }

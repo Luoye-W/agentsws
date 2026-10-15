@@ -85,6 +85,7 @@ export function Composer({
   onStop,
   targets,
   placeholder,
+  modelSlot,
 }: {
   busy: boolean
   canSeeImages: boolean
@@ -98,6 +99,8 @@ export function Composer({
   /** WP343：`@` 能选的岗位；不给就没有 `@`。 */
   targets?: AssistantState['targets']
   placeholder?: string
+  /** WP342：左下角的 AI 钮（`ComposerModelPicker`；不给就不画）。 */
+  modelSlot?: React.ReactNode
 }): React.ReactNode {
   const { t } = useApp()
   const hint = placeholder ?? t('free_chat.placeholder')
@@ -244,6 +247,7 @@ export function Composer({
       />
       {problem === undefined ? null : <p className="text-xs text-destructive">{problem}</p>}
       <div className="flex flex-wrap items-center gap-2">
+        {modelSlot}
         <Toggle
           on={toggles.web_search}
           icon={Globe}

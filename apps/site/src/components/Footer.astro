@@ -2,8 +2,10 @@
 import {
   ARCHITECTURE_URL,
   accountUrl,
+  CONTACT_EMAIL,
   CONTRIBUTING_URL,
   GITHUB_URL,
+  OPERATOR_LEGAL_NAME,
   SECURITY_URL,
   TRADEMARK_URL,
 } from '../config.js'
@@ -18,6 +20,7 @@ const { lang, path } = Astro.props
 const c = COMMON[lang]
 const f = c.footer
 const p = (x: string) => localePath(x, lang)
+const colon = lang === 'zh' ? '：' : ': '
 const cols = [
   {
     h: f.product,
@@ -70,6 +73,10 @@ const cols = [
         </div>
       ))}
     </div>
+    <p class="foot-operator">
+      {!OPERATOR_LEGAL_NAME.startsWith('{{') && <span>{f.operator}{colon}{OPERATOR_LEGAL_NAME}</span>}
+      <span>{f.contact}{colon}<a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></span>
+    </p>
     <div class="foot-bottom">
       <span>{f.bottom.split(f.trademark)[0]}<a href={TRADEMARK_URL} rel="noopener">{f.trademark}</a>{f.bottom.split(f.trademark)[1] ?? ''}</span>
       <span><a href={localePath(path, 'zh')} lang="zh-CN">中文</a> · <a href={localePath(path, 'en')} lang="en">English</a></span>

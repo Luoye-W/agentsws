@@ -24,10 +24,12 @@ import { Archive, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
+import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { askAtPosition } from '@/components/position/quick-answer-store'
 import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
+import { SHELL_PAGES } from '@/components/shell-pages'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import {
   Command,
@@ -89,7 +91,7 @@ export function CommandPalette({
   const navigate = useNavigate()
   // WP276：在一件事里打开 ⌘K 时，多一条「把这件事交给同事…」（② 才有）
   const here = useLocation()
-  const { mode: usage } = useMode()
+  const { mode: usage, t: tm } = useMode()
   const matterHere = /^\/matters\/([^/?#]+)/.exec(here.pathname)?.[1]
   const rail = useRailState()
   // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
@@ -117,11 +119,14 @@ export function CommandPalette({
   /** WP207：点了「让 AI 找回」之后，面板换成候选卡那一屏。 */
   const [recall, setRecall] = useState<string | undefined>(undefined)
   const [sentence, setSentence] = useState('')
+  /** WP342：⌘K 交给某个岗位时这次用哪个 AI（不选 = 品牌默认）。 */
+  const [model, setModel] = useState<string | undefined>(undefined)
   useEffect(() => {
     if (!open) {
       setSearch('')
       setRecall(undefined)
       setSentence('')
+      setModel(undefined)
     }
   }, [open])
   useEffect(() => {
@@ -168,9 +173,15 @@ export function CommandPalette({
    * 当场问答就在岗位页上答；会话 / 任务马上进它的线程（岗位页那一块负责跳）。
    */
   const handOver = useMutation({
-    mutationFn: async (input: { assignment: string; handoff: Handoff; role_id?: string }) => {
+    mutationFn: async (input: {
+      assignment: string
+      handoff: Handoff
+      role_id?: string
+      model?: string | undefined
+    }) => {
       void askAtPosition({
         position: input.assignment,
+        ...(input.model === undefined ? {} : { model: input.model }),
         text: input.handoff.title,
         ...(input.handoff.summary === '' ? {} : { summary: input.handoff.summary }),
         // WP207：从职责行的「+」来的，职责已经定了（跳过岗位内路由，与快捷提示同一条路）
@@ -203,6 +214,7 @@ export function CommandPalette({
                 assignment: compose.assignment,
                 handoff: { title: split.title, summary: split.summary ?? '' },
                 role_id: compose.role_id,
+                model,
               },
               {
                 onSuccess: () => {
@@ -212,8 +224,12 @@ export function CommandPalette({
             )
           }}
         >
-          <span className="text-[12px] text-muted-foreground">
-            {t('command.compose.title', { name: compose.label })}
+          <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate">
+              {t('command.compose.title', { name: compose.label })}
+            </span>
+            {/* WP342：这次用哪个 AI（选了只管这一件） */}
+            <ComposerModelPicker value={model} onChange={setModel} placement="down" />
           </span>
           <Input
             autoFocus
@@ -449,20 +465,23 @@ export function CommandPalette({
                     {p.role_name}
                   </CommandItem>
                 ))}
-            <CommandItem
-              onSelect={() => {
-                go('/knowledge')
-              }}
-            >
-              {t('nav.knowledge')}
-            </CommandItem>
-            <CommandItem
-              onSelect={() => {
-                go('/settings')
-              }}
-            >
-              {t('nav.settings')}
-            </CommandItem>
+            {/*
+              WP342（决策 853）：左栏下半那几页收进了账号菜单，⌘K 里照样一搜就到
+              （会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置）
+            */}
+            {SHELL_PAGES.map((p) => (
+              <CommandItem
+                key={p.to}
+                value={`${p.mode ? tm(p.key) : t(p.key)} ${p.to}`}
+                data-testid="command-page"
+                data-to={p.to}
+                onSelect={() => {
+                  go(p.to)
+                }}
+              >
+                {p.mode ? tm(p.key) : t(p.key)}
+              </CommandItem>
+            ))}
           </CommandGroup>
           {/* WP271：一人多品牌也要能搜品牌——只看品牌数，不看 solo */}
           {org_id === undefined || brands.length <= 1 ? null : (

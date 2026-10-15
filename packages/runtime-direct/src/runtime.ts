@@ -4,6 +4,7 @@ import type {
   Completion,
   ContextItem,
   ModelGateway,
+  ModelRef,
   ObjectRef,
   RunEvent,
   RunOutput,
@@ -104,6 +105,8 @@ const COMPACT_HARD_CAP = 12_000
 const DEFAULT_RETURN_WINDOW_DAYS = 14
 
 interface CompleteArgsBase {
+  /** WP342：这件事自己选的 AI（`RunRequest.runtime.model_pinned`）；不给 = 网关按 purpose 选。 */
+  model?: ModelRef
   messages: ChatMessage[]
   tools?: ToolDef[]
   meta: Parameters<ModelGateway['complete']>[0]['meta']
@@ -557,6 +560,8 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         }
 
         const args: CompleteArgsBase = {
+          // WP342：这件事自己选了 AI——显式交给网关（不按 purpose 选）
+          ...(req.runtime.model_pinned === true ? { model: req.runtime.model } : {}),
           messages: [...messages],
           tools,
           meta: {

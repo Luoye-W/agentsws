@@ -118,8 +118,8 @@ function openPicker(): HTMLElement[] {
       onChange={() => undefined}
     />,
   )
-  fireEvent.click(screen.getByTestId('free-chat-model'))
-  return screen.getAllByTestId('free-chat-model-option')
+  fireEvent.click(screen.getByTestId('model-pick'))
+  return screen.getAllByTestId('model-pick-option')
 }
 
 function renderPage(route = '/assistant'): void {
@@ -167,10 +167,14 @@ describe('WP188 随便聊：空态与模型下拉', () => {
     expect(cloud?.querySelector('svg rect')).not.toBeNull()
   })
 
-  it('没接任何模型：下拉换成「还没接模型，去设置」', async () => {
+  it('没接任何模型：输入框里的 AI 钮换成「还没接 AI」，点了开第三栏接模型卡（WP342 / 857）', async () => {
     state.models = { ...MODELS, choices: [] }
     renderPage()
-    expect((await screen.findByTestId('free-chat-no-model')).textContent).toContain('还没接模型')
+    const none = await screen.findByTestId('free-chat-model-none')
+    expect(none.textContent).toContain('还没接 AI')
+    // 857：点了在第三栏开「接模型」连接卡（WP334），不是跳设置页的链接
+    expect(none.tagName).toBe('BUTTON')
+    expect(none.getAttribute('data-connect')).toBe('model')
   })
 })
 

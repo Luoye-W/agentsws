@@ -27,10 +27,30 @@ export type AdsAction =
       sheet: SheetRef
       /** 上传之前先导出一份改前表（撤销底稿）。默认要。 */
       snapshot?: boolean
+      /**
+       * WP316（docs/101 §5.1② 第 7 步）：提交之后再导出一份（`result`），本机拿它和上传表逐行比对。
+       * 开了它，平台「已应用 / 已发布」那一格在提交后当场核（等不到就停），步骤表末尾不再回页面读回。
+       */
+      readback?: boolean
     }
   | { kind: 'export_report' }
-  | { kind: 'pause'; entity: AdsEntity }
+  /** WP316：只导出一份改前表（`snapshot`）——Meta 改已有要它（决策 612），读操作。 */
+  | { kind: 'export_snapshot' }
+  | {
+      kind: 'pause'
+      entity: AdsEntity
+      /**
+       * WP316（决策 600 C）：止损（L3 自动）。前后截图截不到也先停住；
+       * 停之前、停之后各导出一份（`snapshot` / `result`）作证。
+       */
+      stop_loss?: boolean
+    }
   | { kind: 'enable'; entity: AdsEntity }
+  /**
+   * WP316（docs/101 §2.1）：Google「所有批量操作」里对某次上传点「撤销」（只能撤一次）。
+   * Meta 没有这一按钮，撤销用改前表反向导入（另一张上传表）。
+   */
+  | { kind: 'undo_upload'; upload_name: string }
   | {
       kind: 'set_budget'
       entity: AdsEntity
@@ -65,7 +85,13 @@ export const ADS_HOSTS: Record<AdsPlatform, string[]> = {
 
 /** 一个动作是读还是写（读：每账户每天 ≤ 2；写：≤ 20）。 */
 export function paceOf(kind: AdsActionKind): 'read' | 'write' {
-  return kind === 'export_report' ? 'read' : 'write'
+  return kind === 'export_report' || kind === 'export_snapshot' ? 'read' : 'write'
+}
+
+/** 撤销那一行按上传的文件名找（只认文件名里常见的字，别的拒：它要拼进选择器）。 */
+export function safeUploadName(name: string): string {
+  if (!/^[\w.\- ]{1,200}$/u.test(name)) throw new Error(`上传文件名里有不认的字：${name}`)
+  return name
 }
 
 /** 网址里带的账户参数。 */

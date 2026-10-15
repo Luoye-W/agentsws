@@ -29,6 +29,10 @@ export interface FakeState {
   redirect?: { from: RegExp; to: string }
   /** 点了「应用」平台却没生效（读回要对不上）。 */
   applyNoop?: boolean
+  /** WP316：截图授权没拿到（截不到图）。 */
+  captureFails?: boolean
+  /** WP316：Google「所有批量操作」里有哪几次上传、撤销了没有。 */
+  history?: Record<string, 'Applied' | 'Undone'>
 }
 
 export function fakeState(patch: Partial<FakeState> = {}): FakeState {
@@ -60,6 +64,15 @@ function render(url: string, s: FakeState): string {
     return html(
       `<button aria-label="Upload">+</button><input type="file"><material-button>Preview</material-button><material-button>Apply</material-button>${preview}${status}`,
     )
+  }
+  if (p === '/aw/bulk/history') {
+    const rows = Object.entries(s.history ?? {})
+      .map(
+        ([name, st]) =>
+          `<div data-bulk-history-row="${name}"><span data-column="status">${st}</span><button aria-label="Undo">u</button></div>`,
+      )
+      .join('')
+    return html(`${rows}<div role="dialog"><material-button>Undo</material-button></div>`)
   }
   if (p.startsWith('/aw/campaigns') || p.startsWith('/aw/reporting')) {
     const id = u.searchParams.get('campaignId') ?? '111'
@@ -110,6 +123,16 @@ function wire(url: string, doc: Document, s: FakeState, rerender: () => void): v
   })
   on('material-button', 'Apply', () => {
     if (!s.applyNoop) s.applied = true
+  })
+  // WP316：撤销——先点那一行的「Undo」，再在弹窗里确认
+  let undoing: string | undefined
+  for (const el of Array.from(doc.querySelectorAll('[data-bulk-history-row] [aria-label="Undo"]')))
+    el.addEventListener('click', () => {
+      undoing =
+        el.closest('[data-bulk-history-row]')?.getAttribute('data-bulk-history-row') ?? undefined
+    })
+  on('[role="dialog"] material-button', 'Undo', () => {
+    if (undoing !== undefined && s.history !== undefined) s.history[undoing] = 'Undone'
   })
   on('[role="dialog"] [role="button"]', 'Import', () => {
     s.previewed = s.pasted !== undefined || s.uploaded !== undefined
@@ -196,7 +219,10 @@ export class FakePage implements ActionPage {
   async count(selector: string) {
     return domCount(this.doc, selector)
   }
-  async capture() {
+  readonly captureOpts: ({ quick?: boolean } | undefined)[] = []
+  async capture(opts?: { quick?: boolean }) {
+    this.captureOpts.push(opts)
+    if (this.state.captureFails === true) return { ok: false as const, why: '没拿到截图授权。' }
     this.captures.push(this.visited.length)
     return { ok: true as const, png_base64: 'iVBORw0KGgo=' }
   }
