@@ -896,6 +896,33 @@
   color: var(--muted);
 }
 
+/* 怎么干活（WP344）：六格 + 一张工作台截图 */
+.how {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 44px;
+  text-align: left;
+  list-style: none;
+  padding: 0;
+}
+.how-shot {
+  max-width: 960px;
+  margin: 40px auto 0;
+  text-align: left;
+}
+@media (max-width: 900px) {
+  .how {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+@media (max-width: 560px) {
+  .how {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 对照表 */
 .cmp {
   text-align: left;
