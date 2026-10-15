@@ -893,3 +893,4 @@
 | 829 | （WP339）不为这个问题专门升 Electron（44.x 后续版本没修） | 待定（建议同意） | 低 |
 | 830 | （WP339）主窗口设最小尺寸 800×560（宽不到 768 时左栏会整个消失） | 待定（建议同意） | 低 |
 | 835 | （Luoye 10-15）dsh-genui 不只用于当场回答：所有 AI 回给人看的正文（随便聊、事项 / 线程回话、岗位当场回答、秘书）都用 genui 渲染（展示类白名单、决定类仍走卡片） | **Luoye 定** | 中 |
+| 836 | （Luoye 10-15）INMO Reddit 监测：外部关键词方案 B（INMO + translation glasses + teleprompter glasses + captions glasses + AI glasses，型号变体只做本地标签）；召回相关词（recall / burn / overheat / refund / return）命中优先推送；每天巡查 r/inmoxr、r/SmartGlasses、r/augmentedreality，其余（MetaRayBanDisplay、RayNeo、EvenRealities、Xreal、AR_MR_XR）每周；u/Arvinw 是 r/inmoxr 版主 | **Luoye 定** | 中 |
