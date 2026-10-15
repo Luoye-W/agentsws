@@ -8,7 +8,7 @@
  * 状态写一份在 `chrome.storage.local`（设置页上看得见：上次问是什么时候、哪家还没同意、在做什么）。
  */
 
-import type { ActionJob, ActionPlatform } from '@agentsws/browser-action'
+import type { ActionJob, ActionPlatform, AdsAccountHint } from '@agentsws/browser-action'
 import { actionResult, actionsNext } from '../local-client'
 import type { KeyValueStore } from '../storage'
 import { readSettings } from '../storage'
@@ -47,6 +47,8 @@ export interface PollerDeps {
   store: KeyValueStore
   perms: PermissionsLike
   fetch?: typeof globalThis.fetch | undefined
+  /** WP348：开着的广告后台里认出的账户（领活时顺手报上去；不给就不报）。 */
+  seenAccounts?(): Promise<AdsAccountHint[]>
   /** 找（或开）一个看得见的广告后台标签页。找不到回一句人话。 */
   openTab(job: ActionJob): Promise<TabDriver | { why: string }>
   control: RunControl
@@ -92,8 +94,12 @@ async function pollLoop(deps: PollerDeps): Promise<PollOutcome> {
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
   }
   let ran = 0
+  // WP348：只报连上了的那几家后台里认出的账户
+  const seen = ((await deps.seenAccounts?.().catch(() => [])) ?? []).filter((h) =>
+    platforms.includes(h.platform),
+  )
   for (;;) {
-    const got = await actionsNext(client, platforms, deps.waitSeconds)
+    const got = await actionsNext(client, platforms, deps.waitSeconds, seen)
     if (!got.ok) {
       await writeAdsStatus(deps.store, { last_poll_at: deps.now(), note: got.message })
       return got.kind === 'offline' ? 'offline' : 'refused'
