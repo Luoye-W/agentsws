@@ -5365,7 +5365,8 @@ const en: Table = {
   'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
   'identity.local_self': 'You (this computer)',
-  'settings.placeholder': 'Preferences on this machine. Connections live in the account menu (bottom left) under Settings → Connections.',
+  'settings.placeholder':
+    'Preferences on this machine. Connections live in the account menu (bottom left) under Settings → Connections.',
   'nav.connections': 'Connections',
   'connections.dead_letters': '{n} message(s) never made it in',
   'connections.dead_letters.hint':
