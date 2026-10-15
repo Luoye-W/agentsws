@@ -888,3 +888,4 @@
 
 | 814 | （Luoye 10-15 原则）「不经 AI 之手」只适用于密钥 / 口令 / 令牌这类凭据；数字、数据可以经 AI 处理（放宽 docs/96 P2「数字不经模型手」） | **Luoye 定** | 高 |
 | 833 | （Luoye 10-15）安装前检测 Node / 借 Electron 自带 Node 以缩包：**维持现状**（继续随包带独立 Node） | **Luoye 定** | 低 |
+| 834 | （Luoye 10-15）INMO Reddit：自家版块 r/inmoxr、品牌号 u/Arvinw；监测关键词与重点版块由 Fable 调研后给建议、Luoye 确认（产品上配置卡也应默认带 AI 建议值）；飞书记录表由 Fable 用 lark-cli 建在 Luoye 的飞书里 | **Luoye 定** | 中 |
