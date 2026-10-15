@@ -894,3 +894,8 @@
 | 830 | （WP339）主窗口设最小尺寸 800×560（宽不到 768 时左栏会整个消失） | 待定（建议同意） | 低 |
 | 835 | （Luoye 10-15）dsh-genui 不只用于当场回答：所有 AI 回给人看的正文（随便聊、事项 / 线程回话、岗位当场回答、秘书）都用 genui 渲染（展示类白名单、决定类仍走卡片） | **Luoye 定** | 中 |
 | 836 | （Luoye 10-15）INMO Reddit 监测：外部关键词方案 B（INMO + translation glasses + teleprompter glasses + captions glasses + AI glasses，型号变体只做本地标签）；召回相关词（recall / burn / overheat / refund / return）命中优先推送；每天巡查 r/inmoxr、r/SmartGlasses、r/augmentedreality，其余（MetaRayBanDisplay、RayNeo、EvenRealities、Xreal、AR_MR_XR）每周；u/Arvinw 是 r/inmoxr 版主 | **Luoye 定** | 中 |
+| 795 | （WP335）GEO 设定卡就地「改」（追几条 / 勾哪几条 / 关注哪几家 AI / 去掉竞品），改完带着改过的版本批 | 待 Luoye 定（建议同意） | 低 |
+| 796 | （WP335）「关注设置」放第三栏「设定」里、只在「内容与搜索」职责上出 | 待定（建议同意） | 低 |
+| 797 | （WP335）品类由 AI 用品牌自己的模型填、标「请确认」，档案品类优先于策略里认的 | 待定（建议同意） | 低 |
+| 798 | （WP335）GEO 简报一行先写进每周报告卡摘要第一行，数据留 brief 等简报组件 | 待定（建议同意） | 低 |
+| 799 | （WP335）搜索数据教程「自带 key」一节仍点名 DataForSEO / SerpApi / Serper（用户自己挑的服务商） | 待定（建议保留） | 低 |
