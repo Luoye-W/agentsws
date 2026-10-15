@@ -22,7 +22,7 @@ const zh = {
     dlMac: ['下载 Mac 版', 'M 系列芯片'],
     dlWin: ['下载 Windows 版', '64 位'],
     dlMore: ['其他版本', '浏览器插件'],
-    macFirstOpen: '第一次打开：右键图标 → 打开',
+    macFirstOpen: '第一次打开若提示无法验证开发者：系统设置 → 隐私与安全性 → 仍要打开',
     // WP225（WP218 决定 ⑤）：Windows 访客点了直接下安装包，旁边一行首次打开提示（只在 Windows 上露出来）
     // WP227 合一份：文案用 WP227 那句（Luoye 10-05 #⑤ 原话「第一次打开点『更多信息 → 仍要运行』」）
     winFirstOpen: '第一次打开若被拦，点「更多信息 → 仍要运行」',
@@ -332,7 +332,7 @@ const en: HomeCopy = {
     dlMac: ['Download for Mac', 'Apple silicon (M-series)'],
     dlWin: ['Download for Windows', '64-bit'],
     dlMore: ['Other versions', 'Browser extension'],
-    macFirstOpen: 'First launch: right-click the icon → Open',
+    macFirstOpen: 'If macOS can’t verify the developer: System Settings → Privacy & Security → Open Anyway',
     winFirstOpen: 'If Windows blocks it the first time, click “More info → Run anyway”',
     github: 'View on GitHub',
     checks: [

@@ -23,7 +23,8 @@ The first launch takes you straight to setup. Just follow along.
 ## Mac: first install
 
 1. Double-click the `.dmg` and drag Agents Workshop into Applications.
-2. The first time, **right-click it in Applications → "Open" → "Open" again**. A plain double-click gets blocked with "cannot verify the developer". You only need to do this once.
+2. The first double-click says macOS can't verify the developer (we're not notarized by Apple yet). Click Done, open **System Settings → Privacy & Security**, scroll to agentsws and click **Open Anyway**. You only need to do this once.
+   - Older builds (0.2.0-beta.8 and earlier) may say the app "is damaged": download the latest build from the website, or run `xattr -cr /Applications/agentsws.app` in Terminal and open it again.
 3. Once open, it lives as an icon on the right of the menu bar at the top of the screen, not in the Dock.
 
 ## How updates work

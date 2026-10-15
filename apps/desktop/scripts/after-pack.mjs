@@ -28,14 +28,17 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  closeSync,
   copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   rmdirSync,
   rmSync,
   statSync,
@@ -670,6 +673,64 @@ export function appEntriesNsh(names) {
 
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
+/**
+ * 10-15 Luoye：内测用户在 Mac 上下载打开报「agentsws 已损坏，请移到垃圾箱」。
+ * 原因：没有苹果开发者签名（`identity: null`），afterPack 又改了 .app 里的文件，Electron 自带的链接器签名
+ * 对不上了；从浏览器下载带上「来自网络」标记后，M 芯片 Mac 就把它判成「已损坏」，弹窗里没有「仍要打开」。
+ * 在苹果开发者签名 + 公证上线前，先给整个 .app 做一次**本机自签（ad-hoc）**：系统改报「无法验证开发者」，
+ * 用户在「系统设置 → 隐私与安全性」点「仍要打开」即可，不用开终端。
+ *
+ * 先逐个签 Resources 里的散装 Mach-O（捆绑的 node、原生模块 .node / .dylib），再整包 `--deep` 签，最后严格校验。
+ */
+const MACHO_MAGICS = new Set([
+  'feedfacf',
+  'cffaedfe',
+  'feedface',
+  'cefaedfe',
+  'cafebabe',
+  'bebafeca',
+])
+
+export function isMachO(file) {
+  try {
+    const fd = openSync(file, 'r')
+    try {
+      const buf = Buffer.alloc(4)
+      if (readSync(fd, buf, 0, 4, 0) < 4) return false
+      return MACHO_MAGICS.has(buf.toString('hex'))
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    return false
+  }
+}
+
+function looseMachOFiles(dir) {
+  const out = []
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const full = join(d, entry.name)
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) {
+        // 嵌套的 .app / .framework 交给 --deep
+        if (/\.(app|framework)$/.test(entry.name)) continue
+        walk(full)
+      } else if (entry.isFile() && isMachO(full)) out.push(full)
+    }
+  }
+  walk(dir)
+  return out
+}
+
+export function adhocSignMacApp(appPath, log, run = execFileSync) {
+  const loose = looseMachOFiles(join(appPath, 'Contents', 'Resources'))
+  for (const file of loose) run('codesign', ['--force', '--sign', '-', file], { stdio: 'pipe' })
+  run('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'pipe' })
+  run('codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'pipe' })
+  log(`本机自签（ad-hoc）：散装二进制 ${loose.length} 个 + 整包，校验通过`)
+}
+
 export default async function afterPack(context) {
   const platformName = context.electronPlatformName
   const productName = context.packager.appInfo.productName
@@ -829,6 +890,11 @@ export default async function afterPack(context) {
     }
   } else {
     log(`跨平台打包（${platformName} ≠ ${hostPlatform()}），冒烟跳过`)
+  }
+
+  // ⑬ 10-15：mac 整包本机自签（放在最后——之后不能再改 .app 里任何文件）
+  if (platformName === 'darwin' && hostPlatform() === 'darwin') {
+    adhocSignMacApp(join(context.appOutDir, `${productName}.app`), log)
   }
 }
 
