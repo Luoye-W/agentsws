@@ -182,3 +182,20 @@ export interface GenuiToolOutcome {
   data?: unknown
   approval_item_ids?: string[]
 }
+
+/**
+ * WP348（决策 892）：对话里点了 `setup:目标` 的按钮（事项 / 线程里）——工坊就地查一遍、出同一张方案卡
+ * （WP348 那张「我打算这样设」），挂进这件事的时间线、卡片流同一张；不再绕一圈让 AI 调 `request_setup`。
+ */
+export interface GenuiSetupInput {
+  target: string
+  /** 按钮上的字（时间线那一句用）。 */
+  label: string
+}
+
+/** `card` 出了（或已有一张在等）方案卡；`already` 已经设好了；`unknown` 认不出这个设置。 */
+export interface GenuiSetupOutcome {
+  status: 'card' | 'already' | 'unknown'
+  message: string
+  approval_item_id?: string
+}

@@ -18,6 +18,8 @@ import type {
   CalendarItem,
   CalendarSource,
   DailyPlan,
+  GenuiSetupInput,
+  GenuiSetupOutcome,
   GenuiToolInput,
   GenuiToolOutcome,
   Goal,
@@ -166,6 +168,11 @@ const GenuiToolBody = z.object({
   args: z.record(z.string(), z.unknown()).default({}),
   label: z.string().min(1).max(200),
   run_id: z.string().min(1).max(80).optional(),
+})
+/** WP348（决策 892）：对话里点了 `setup:目标` 的按钮。 */
+const GenuiSetupBody = z.object({
+  target: z.string().regex(/^[a-z0-9_.:-]{1,80}$/u),
+  label: z.string().min(1).max(200),
 })
 /** WP342（决策 853）：换这件事用的 AI；不给 / `null` = 回到跟品牌默认。 */
 const MatterModelBody = z.object({ model: z.string().min(1).max(200).nullable().optional() })
@@ -344,6 +351,10 @@ export interface WorkPort {
    * （挂进这件事的时间线、卡片流同一张）；直接写外部的不收。
    */
   genuiTool?(actor: WorkActor, id: string, input: GenuiToolInput): Promise<GenuiToolOutcome>
+  /**
+   * WP348（决策 892）：对话里点了 `setup:目标` 的 genui 按钮——就地查一遍、出同一张方案卡，挂进这件事的时间线。
+   */
+  genuiSetup?(actor: WorkActor, id: string, input: GenuiSetupInput): Promise<GenuiSetupOutcome>
   /**
    * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮；`undefined` = 回到跟品牌默认）。
    * 认不出 / 不能用的模型 id 由实现拒（`invalid_input`）。
@@ -659,6 +670,29 @@ export function workRoutes(): Route[] {
             ...(b.run_id === undefined ? {} : { run_id: b.run_id }),
           }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/genui-setup',
+        operationId: 'runGenuiSetup',
+        summary:
+          '对话里点了「设好 X」的按钮（WP348）：就地查一遍、出同一张方案卡，挂进这件事的时间线',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: GenuiSetupBody,
+        returns: 'GenuiSetupOutcome',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.genuiSetup === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不接对话里的设置按钮')
+        const b = await body(c, GenuiSetupBody)
+        return ok(c, await port.genuiSetup(actorOf(c), param(c, 'id'), b))
       },
     ),
     route(

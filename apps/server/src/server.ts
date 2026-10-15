@@ -9896,6 +9896,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           call,
         })
       },
+      /*
+       * WP348（决策 892）：对话里点了 `setup:目标` 的 genui 按钮——就地查一遍、出同一张方案卡
+       * （与 AI 调 `request_setup` 出的是同一张：同一个设置目标同一时间只有一张），挂进这件事的时间线；
+       * 存好之后按这件事原来那段话接着做。
+       */
+      genuiSetup: async (actor, matter_id, input) => {
+        const cards = await setupCardsOf(ws)
+        const target = cards?.target(input.target)
+        if (cards === undefined || target === undefined)
+          return { status: 'unknown', message: `认不出「${input.target}」这一项设置。` }
+        const label = input.label.trim().slice(0, 80)
+        if (await target.satisfied().catch(() => false)) {
+          brand.work.appendEvent(matter_id as never, {
+            kind: 'status',
+            text: `你点了「${label}」：${target.name}已经设好了。`,
+            actor: { kind: 'person', id: actor.person_id },
+          })
+          return { status: 'already', message: `${target.name}已经设好了。` }
+        }
+        const role_id = roles.assignments.get(actor.assignment_id)?.role_id
+        const out = await cards.askSetup({
+          target: target.id,
+          actor: {
+            person_id: actor.person_id as never,
+            assignment_id: actor.assignment_id as never,
+            role_id: (role_id ?? 'common.owner') as never,
+          },
+          matter_id,
+        })
+        if (out === undefined) return { status: 'already', message: `${target.name}已经设好了。` }
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text: `你点了「${label}」：我先查了一遍，方案在下面这张卡上。`,
+          actor: { kind: 'person', id: actor.person_id },
+        })
+        if (out.attach) {
+          if (out.item.subject.matter_id === matter_id) brand.work.onCard(cardRefOf(out.item))
+          else
+            brand.work.appendEvent(matter_id as never, {
+              kind: 'card',
+              text: out.item.title,
+              actor: { kind: 'system', id: 'setup_cards' },
+              approval_item_id: out.item.id,
+            })
+        }
+        return {
+          status: 'card',
+          message: `${target.name}的方案在下面这张卡上。`,
+          approval_item_id: out.item.id,
+        }
+      },
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**

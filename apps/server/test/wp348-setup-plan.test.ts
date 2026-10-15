@@ -493,3 +493,26 @@ describe('stub 剧本（演示用）', () => {
     })
   })
 })
+
+describe('品牌档案按 WP346 的真名读', () => {
+  it('定位 / 子品类 / 人群 / 关键词三组 / 竞品 / 官网都认；坏值跳过', () => {
+    const f = brandFactsOf({
+      positioning: '给通勤族的翻译眼镜。',
+      subcategory: '翻译眼镜',
+      audience: { buyers: '常出差的人', payer: '公司', concerns: ['续航'] },
+      keywords: { brand: ['INMO'], category: ['AR glasses'], scenario: ['meeting'] },
+      competitors: [{ name: 'Xreal', reason: '同品类', url: 'https://xreal.example' }, { bad: 1 }],
+      website: 'https://www.inmo.example/en',
+      price_band: '$300–$600',
+    })
+    expect(f).toMatchObject({
+      positioning: '给通勤族的翻译眼镜。',
+      subcategory: '翻译眼镜',
+      audience: { buyers: '常出差的人', concerns: ['续航'] },
+      keywords: { brand: ['INMO'], category: ['AR glasses'], scenario: ['meeting'] },
+      competitors: [{ name: 'Xreal', reason: '同品类', url: 'https://xreal.example' }],
+      domain: 'www.inmo.example',
+    })
+    expect(brandFactsOf({ website: 'x' }, { domain: 'inmo.example' }).domain).toBe('inmo.example')
+  })
+})

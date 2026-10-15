@@ -132,4 +132,89 @@ describe('WP348 方案卡（stub，公司档案）', () => {
       currency: 'EUR',
     })
   })
+  it('对话里点「设好 X」（genui `setup:`）：就地出同一张方案卡、挂进这件事；再点不重复出；认不出 / 已设好照实说', async () => {
+    const dbDir = mkdtempSync(join(tmpdir(), 'wp348-plan-'))
+    dirs.push(dbDir)
+    const search = vi.fn(async (query: string) => ({
+      sources: [
+        {
+          url: 'https://nordvolt.example/contact',
+          title: 'Contact NordVolt',
+          snippet: `${query} — write to help@nordvolt.example`,
+        },
+      ],
+    }))
+    server = await createServer({
+      dbDir,
+      quiet: true,
+      env: { [SECRETS_KEY_ENV]: 'c'.repeat(64) },
+      tokenRefreshIntervalMs: 0,
+      scheduleIntervalMs: 0,
+      liveDataIntervalMs: 0,
+      mdns: () => ({ mdns: { publish() {}, browse() {}, stop() {} } }),
+      freeChatWebSearch: search,
+    })
+    const s = server
+    const owner = s.bootstrap.ownerAssignment.id
+    const ws = s.bootstrap.workspace.id
+    await s.onboarding.port.setProfile(
+      { workspace_id: ws, person_id: s.bootstrap.person.id, assignment_id: '', role_id: '' },
+      { legal_name: 'NordVolt GmbH', domain: 'nordvolt.example', markets: ['de'] } as never,
+    )
+    const call = async (method: string, path: string, body?: unknown) =>
+      s.gateway.fetch(
+        new Request(`http://127.0.0.1${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${s.bootstrap.internalToken}`,
+            'X-Assignment': owner,
+            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+    const dataOf = async <T>(res: Response): Promise<T> => ((await res.json()) as { data: T }).data
+    type Tl = { kind: string; text: string; approval_item_id?: string }[]
+    const timeline = async (m: string): Promise<Tl> =>
+      (await dataOf<{ timeline: Tl }>(await call('GET', `/v1/matters/${m}`))).timeline
+    const queue = async (): Promise<ApprovalItem[]> =>
+      s.txn.approvals.queue({ workspace_id: ws, person_id: s.bootstrap.person.id, lane: 'mine' })
+
+    const m = await dataOf<{ matter: { id: string } }>(
+      await call('POST', `/v1/positions/${owner}/matters`, {
+        title: '写一段品牌介绍',
+        role_id: 'common.owner',
+      }),
+    )
+    const press = async (target: string) =>
+      dataOf<{ status: string; approval_item_id?: string; message: string }>(
+        await call('POST', `/v1/matters/${m.matter.id}/genui-setup`, {
+          target,
+          label: '设好公司档案',
+        }),
+      )
+    const one = await press('company.profile')
+    expect(one.status).toBe('card')
+    const card = (await s.txn.approvals.get(
+      one.approval_item_id as string,
+    )) as ApprovalItem<SetupRequestPayload>
+    expect(card.payload.mode).toBe('plan')
+    expect(card.payload.fields.find((f) => f.key === 'currency')?.suggested).toBe('EUR')
+    const tl = await timeline(m.matter.id)
+    expect(tl.some((e) => e.kind === 'card' && e.approval_item_id === card.id)).toBe(true)
+    expect(tl.some((e) => e.text.startsWith('你点了「设好公司档案」'))).toBe(true)
+    expect(tl.some((e) => e.text.startsWith('联网搜了官网'))).toBe(true)
+    // 再点：同一张，不重复出
+    expect((await press('company.profile')).approval_item_id).toBe(card.id)
+    expect((await queue()).filter((c) => c.kind === 'setup_request')).toHaveLength(1)
+    expect((await press('no.such.target')).status).toBe('unknown')
+    // 别人的事项点不了这件事以外的不测；存好之后再点：已经设好了
+    await call('POST', `/v1/approvals/${card.id}/decide`, {
+      action: 'approve',
+      version: card.revision,
+      via: 'workstation',
+      edited_payload: { ...card.payload, values: { one_liner: '给通勤族的电动滑板车' } },
+    })
+    await waitFor(async () => (await press('company.profile')).status === 'already', '已设好')
+  })
 })

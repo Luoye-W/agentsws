@@ -24,6 +24,8 @@ import type {
   CloudMyAllocationView,
   DailyPlan,
   GenuiImageHostsView,
+  GenuiSetupInput,
+  GenuiSetupOutcome,
   GenuiToolInput,
   GenuiToolOutcome,
   Goal,
@@ -1014,6 +1016,10 @@ export const postMatterMessage = (
 /** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
 export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>
   api(`/v1/matters/${encodeURIComponent(id)}/genui-tool`, { method: 'POST', body: input })
+
+/** WP348（决策 892）：对话里点了 `setup:目标` 的 genui 按钮（就地出方案卡、挂进这件事的时间线）。 */
+export const runGenuiSetup = (id: string, input: GenuiSetupInput): Promise<GenuiSetupOutcome> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/genui-setup`, { method: 'POST', body: input })
 
 /** WP341 追加（849）：外部图片白名单（品牌级）——人加的 + 已连店铺的域名。 */
 export const getImageHosts = (): Promise<GenuiImageHostsView> => api('/v1/settings/image-hosts')
