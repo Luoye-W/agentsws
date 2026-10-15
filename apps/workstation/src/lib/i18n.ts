@@ -9,6 +9,7 @@ import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
+import { GEO_EN, GEO_ZH } from './i18n-geo'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -2289,7 +2290,7 @@ const zh: Table = {
   'models.banner': '还没接模型，Agent 跑不起来。',
   // WP98：首页第一屏那条黄条收进顶栏，成了一个黄色小胶囊
   'models.chip': '还没接模型',
-  'models.banner.cta': '去设置里接一个 →',
+  'models.banner.cta': '接一个 →',
   'models.configured': '已配的',
   'models.empty': '还一个都没配。下面挑一种开始，不会就点「看教程」。',
   // WP156（36 §7）：「加一个」每张厂商卡上那一句（整段介绍在问号里，步骤在教程里）
@@ -3506,6 +3507,20 @@ const zh: Table = {
   'update.error.smoke': '更新前自检没过，先不更新，旧版本照常用。点这里重试',
   'update.error.install': '安装程序没起来。点这里重试',
   'update.error.unknown': '没成功。点这里重试',
+  // WP337：有任务在做时点「重启并更新」——一句 + 三个按钮，展开看清单
+  'update.waiting': '等空闲后重启',
+  'update.waiting.tip': '没有正在输出的就自动重启。点一下取消',
+  'update.busy.title': '还有 {n} 件在做',
+  'update.busy.hint': '暂停的会在新版打开后自动接着做',
+  'update.busy.show': '看看是哪些',
+  'update.busy.hide': '收起',
+  'update.busy.more': '…还有 {n} 件',
+  'update.busy.output': '正在输出',
+  'update.busy.background': '后台',
+  'update.busy.scheduled': '定时',
+  'update.restart.now': '现在重启',
+  'update.restart.idle': '空闲时重启',
+  'update.restart.later': '稍后',
   // WP136（docs/79）：dsh 场景切换（左下角账户块上方那一行 + 它的面板）
   'scenes.entry': '场景',
   'scenes.title': '切换场景',
@@ -3995,7 +4010,7 @@ const zh: Table = {
   'free_chat.sources': '来源',
   'free_chat.cost.credits': '约 {n} 积分',
   'free_chat.cost.tokens': '{n} token',
-  'free_chat.no_model': '还没接模型，去设置',
+  'free_chat.no_model': '还没接模型，接一个',
   'free_chat.model.pick': '用哪个模型',
   'free_chat.model.credits': '按积分扣',
   'free_chat.model.vision': '能看图',
@@ -6373,7 +6388,7 @@ const en: Table = {
   'models.inherit.readonly': 'Read-only while following. Turn the switch off to set your own.',
   'models.banner': 'No model connected yet — agents cannot run.',
   'models.chip': 'No model',
-  'models.banner.cta': 'Connect one in Settings →',
+  'models.banner.cta': 'Connect one →',
   'models.configured': 'Configured',
   'models.empty': 'Nothing configured yet. Pick one below; stuck? Open its tutorial.',
   // WP156 (36 §7): the one line on each provider card in "Add one"
@@ -7641,6 +7656,19 @@ const en: Table = {
   'update.error.smoke': 'The pre-update self-check failed, so nothing changed. Click to retry',
   'update.error.install': 'The installer did not start. Click to retry',
   'update.error.unknown': 'That did not work. Click to retry',
+  'update.waiting': 'Restart when idle',
+  'update.waiting.tip': 'Restarts by itself once nothing is running. Click to cancel',
+  'update.busy.title': '{n} things still running',
+  'update.busy.hint': 'Paused work picks up again when the new version opens',
+  'update.busy.show': 'Show them',
+  'update.busy.hide': 'Hide',
+  'update.busy.more': '…and {n} more',
+  'update.busy.output': 'Running',
+  'update.busy.background': 'Background',
+  'update.busy.scheduled': 'Scheduled',
+  'update.restart.now': 'Restart now',
+  'update.restart.idle': 'When idle',
+  'update.restart.later': 'Later',
   // WP136 (docs/79): switching dsh scenes
   'scenes.entry': 'Scenes',
   'scenes.title': 'Switch scene',
@@ -8151,7 +8179,7 @@ const en: Table = {
   'free_chat.sources': 'Sources',
   'free_chat.cost.credits': '≈ {n} credits',
   'free_chat.cost.tokens': '{n} tokens',
-  'free_chat.no_model': 'No model yet — open settings',
+  'free_chat.no_model': 'No model yet — connect one',
   'free_chat.model.pick': 'Which model',
   'free_chat.model.credits': 'paid in credits',
   'free_chat.model.vision': 'Can see images',
@@ -8296,6 +8324,8 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WRITE_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
+    // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
+    ...GEO_ZH,
   },
   en: {
     ...en,
@@ -8324,6 +8354,7 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...CARD_PAGE_EN,
+    ...GEO_EN,
   },
 }
 

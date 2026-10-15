@@ -1,16 +1,9 @@
-# WP78（60 §1 / §6）：**同一个版 72 小时内不重复发。**
+# WP78（60 §1 / §6）→ WP338（决策 664 / 783，Luoye 10-15）：**Reddit 不设冷却。**
 #
-# 这不是额度，是"会被整版赶走"的事：同一个版连着发，多数版会自动删并警告，
-# 严重的直接把这个品牌的域名加进自动删除名单。所以它是 **block** 而不是转人审。
+# 以前同一个版 72 小时 / 版规写的周期内再发一条会被 block；Luoye 定不替用户预设推广规矩，
+# 冷却去掉：12 小时后再发一条照样出卡（永远人审），版规原文（含「Once per 7 days」）在卡上，人看了自己判。
 #
-# 两跳：
-#
-# ① 第一条：这个版允许厂商帖，而且我们没在这里发过 → 提得上去（**永远人审**）。
-#    "没发过"**不等于 0 小时**——把它算成 0 会让每一个新版块的第一帖都被冷却拦下。
-# ② 12 小时之后再发一条：冷却没过 → block。
-#
-# 冷却时长从**版规里读**（`Once per 7 days`），不是我们写死的 72 小时默认值：
-# 在别人的地盘上，规矩是人家定的。
+# 两跳：① 第一条出卡；② 12 小时之后再发一条：也出卡，不拦。
 id: pr/subreddit-cooldown
 version: 1
 dataset: { pack: dtc-15p, seed: 42 }
@@ -29,7 +22,7 @@ events:
       body: 电芯换了型号，循环次数从 500 提到 800。数据来自我们自己的测试。
       rules:
         - 'Vendors welcome. Once per 7 days.'
-  # 12 小时之后又想发一条：这个版的规矩是一周一条
+  # 12 小时之后又想发一条：版规写着一周一条——不替人拦，原文上卡
   - at: '+12h'
     pr.external_post:
       who: p_zheng
@@ -44,18 +37,15 @@ events:
     clock.advance: {}
 expected:
   pr_external_post:
-    # 第二条被冷却拦下（第一条的卡还在队列里）
-    blocked: true
-    rules_ok: false
-    reasons:
-      - cooldown
-  blocked_rules:
-    - cooldown_per_subreddit_hours
-  # 只有第一条进了队列，而且它照样要人点
-  approval_kinds: { staged_change: 1 }
+    # 第二条照样出卡（不设冷却），永远等人点
+    blocked: false
+    rules_ok: true
+    auto_approved: false
+    stated_on_card: true
+  # 两条都进了队列，都要人点
+  approval_kinds: { staged_change: 2 }
   event_types:
     - simulation.pr_external_post_staged
-    - simulation.pr_external_post_blocked
   metrics:
     runs_failed: 0
 invariants:

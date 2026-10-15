@@ -69,6 +69,7 @@ import {
 import { checkOutbound } from '@agentsws/social-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { PrStore, StoredMention } from './pr.js'
+import type { RedditLimits } from './reddit-write/limits.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 动作 id（职责 yml 里那几个）。**只有这一处拼它们**。 */
@@ -127,6 +128,13 @@ export interface PrServiceOptions {
    * 与论坛那条浏览器脚本——它们在装配那一侧递进来，这个文件不打一跳网络。
    */
   policyOf?(input: { platform: string; venue: string }): SubredditPolicy | undefined
+  /**
+   * WP338（决策 783）：这个版的版规原文（插件借品牌号会话只读读回的那一份；读不到 = undefined）。
+   * Reddit 只拿它上卡给人看，**不拿它判能不能发**。
+   */
+  rulesText?(input: { platform: string; venue: string }): Promise<string[] | undefined>
+  /** WP338（决策 783）：一天最多几条（用户设，默认不限）。 */
+  limits?: Pick<RedditLimits, 'check' | 'note'>
   /**
    * 一轮监控要拉的进料（Google Alerts 的 RSS + Reddit 全站搜）。
    *
@@ -617,9 +625,30 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
 
     async proposeExternalPost(actor, input) {
       const now = clock.now()
+      const isReddit = input.platform.trim().toLowerCase() === 'reddit'
       const policy =
         options.policyOf?.({ platform: input.platform, venue: input.venue }) ??
         conservativePolicy(input.venue, now)
+      /*
+       * WP338（决策 664 / 783，Luoye 10-15 确认）：Reddit **不替用户判「这个版让不让推广」、不设冷却**。
+       * 版规原文（插件借品牌号会话只读读回的那一份；没有再用装配给的版规里的原文）放上卡，人看了再批；
+       * 读不到就照实写「没读到版规」，不再按「保守默认」当成禁推广拦下。别的平台（论坛）照旧。
+       */
+      const sub_rules = isReddit
+        ? (
+            (await options
+              .rulesText?.({ platform: input.platform, venue: input.venue })
+              .catch(() => undefined)) ??
+            options.policyOf?.({ platform: input.platform, venue: input.venue })?.raw_rules ??
+            []
+          )
+            .map((r) => r.trim())
+            .filter((r) => r !== '')
+            .slice(0, 30)
+        : []
+      // 一天最多几条：用户自己设（默认不限）；到了就不出卡、照实说
+      const limitKey = input.kind === 'post' ? 'pr_posts' : 'pr_replies'
+      const overLimit = isReddit ? options.limits?.check(limitKey) : undefined
       /*
        * 上一条在**这个版**是什么时候发的（冷却那一道）。
        * 没发过 = 不给这一格，guardrail 那边"没算过就不判"（第一帖不该被拦）。
@@ -634,13 +663,25 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
         now,
       })
-      const rules_checked = checkSubredditRules({
-        policy,
-        ...(input.flair === undefined ? {} : { flair: input.flair }),
-        ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
-        now,
-      })
-      const explained = explainRuleCheck(rules_checked, input.venue)
+      const rules_checked = isReddit
+        ? // 「查过了」照记（guardrail 要这一格）；结论不替人下：不判推广、不判冷却
+          {
+            ok: true,
+            reasons: [],
+            ...(input.flair === undefined ? {} : { flair: input.flair }),
+            checked_at: now,
+          }
+        : checkSubredditRules({
+            policy,
+            ...(input.flair === undefined ? {} : { flair: input.flair }),
+            ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
+            now,
+          })
+      const explained = isReddit
+        ? sub_rules.length === 0
+          ? '没读到版规'
+          : `版规 ${sub_rules.length} 条`
+        : explainRuleCheck(rules_checked, input.venue)
       /*
        * WP332：Reddit 上回一条**评论**要那条评论的链接（插件靠它找到回复框）。调用方没给就从来源补、
        * 补不到就照实说——稿子留着（草稿），**不出能发的卡**。
@@ -693,6 +734,20 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         created_at: now,
       }
       store.savePost(post)
+      if (overLimit !== undefined) {
+        emit('pr.external_post_over_limit', actor.person_id, {
+          post_id: post.id,
+          platform: input.platform,
+          limit: limitKey,
+        })
+        return {
+          staged: false,
+          message: overLimit,
+          post_id: post.id,
+          rules_checked,
+          rules_explained: explained,
+        }
+      }
       if (parentMissing !== undefined) {
         const message = `没出卡：找不到被回那条评论的链接，插件找不到回复框（${parentMissing.replace(/[。.]$/u, '')}）。稿子留着；从巡查的待处理里点那一条重新起草。`
         emit('pr.external_post_unlinked', actor.person_id, {
@@ -722,6 +777,8 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
           body: input.body,
           rules_checked,
           rules_summary: explained,
+          // WP338（决策 783）：版规原文上卡（外部文本，原样给人看、人判）；没读到 = 空 + `rules_read: false`
+          ...(isReddit ? { sub_rules, rules_read: sub_rules.length > 0 } : {}),
           ...(since === undefined ? {} : { hours_since_last_post: since }),
           // 承诺扫描报没报跑过（fail-closed，照 `campaign_send` 的 suppression_checked）
           commitment_checked: true,
@@ -738,6 +795,12 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         },
         notes: [
           explained,
+          // WP338（决策 783）：Reddit 版规原文放进卡的详情（外部文本，原样给人看、人判）
+          ...(isReddit && sub_rules.length > 0
+            ? [
+                `版规原文（r/${input.venue.replace(/^\/?r\//iu, '')}）：\n${sub_rules.join('\n').slice(0, 2000)}`,
+              ]
+            : []),
           ...(scan.ok ? [] : [scan.rewrite_instruction]),
           '我们在别人的地盘上：这一条永远要你点一下才发得出去。',
         ],
@@ -756,6 +819,8 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         staged: staged.staged,
         level: staged.level,
       })
+      // WP338（决策 783）：出了卡才数一次（用户设了上限才有用）
+      if (isReddit && staged.staged) options.limits?.note(limitKey)
       return { ...staged, post_id: post.id, rules_checked, rules_explained: explained }
     },
 

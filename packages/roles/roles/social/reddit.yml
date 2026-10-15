@@ -64,10 +64,9 @@ actions:
     target: community_member
     kind: staged_change
     mandate:
-      # 一周一条（56 §7）。这不是技术上限，是"别让人退群"的那条线
-      caps: { max_broadcasts_per_week: 1 }
+      # 决策 783（Luoye 10-15 确认）：Reddit 不写死一周几条（用户可设，默认不限），每条人批
+      caps: {}
       per_change_limits: { max_items: 1 }
-      window: { max_count: 1, per: week }
     # 群发换收件群 = 发给了另一批人（`@agentsws/core` 的 `PROTECTED_FIELDS`）
     protected_fields: [account_id, external_id]
     review_cannot_be_disabled: true
@@ -76,8 +75,8 @@ actions:
     target: community_thread
     kind: outbound_message
     mandate:
-      caps: { max_dm_per_day: 30 }
-      window: { max_count: 30, per: day }
+      # 决策 783：不写死一天几条（用户可设，默认不限）；Reddit 的回复永远逐条人批（663）
+      caps: {}
     route_to: role_holder
   - id: stage_rules_edit
     target: social_account

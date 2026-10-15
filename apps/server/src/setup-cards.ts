@@ -104,6 +104,10 @@ export interface SetupCardsAssembly {
     block: MatterRunBlock
     needs: ConnectNeed[]
     targets: string[]
+    /** WP334（决策 724）：AI 要卡时给的那一句为什么（压过默认那句）。 */
+    why?: string
+    /** WP334：AI 给的配置卡建议值（按设置目标；只认登记过的格子）。 */
+    suggestions?: Record<string, Record<string, string>>
   }): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
   /**
    * 别的模块直接要一张连接卡（WP322 / WP323 这类「要先接上 X 才能做」的确认流程用）。
@@ -116,6 +120,10 @@ export interface SetupCardsAssembly {
   onDecided(item: ApprovalItem): Promise<void>
   /** 连接清单变了：还在等的连接卡里，缺的都连上了的那几张自动收起、接着做。回接着做了几张。 */
   recheck(): Promise<number>
+  /** WP334：一个登记过的设置目标（AI 要卡时认目标用；没登记回 `undefined`）。 */
+  target(id: string): Pick<SetupTarget, 'id' | 'name' | 'satisfied'> | undefined
+  /** WP334：登记过的设置目标 id（认不出时列给模型看）。 */
+  targetIds(): string[]
 }
 
 export interface AskConnectInput {
@@ -346,8 +354,13 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
           `「${f.label}」像是口令 / 密钥，不能放进配置卡（只能在连接卡的本机表单里填）。`,
         )
     return fields.map((f) => {
-      const s = suggestions?.[f.key]
-      return s === undefined || s.trim() === '' ? f : { ...f, suggested: s.trim() }
+      const s = suggestions?.[f.key]?.trim()
+      if (s === undefined || s === '') return f
+      // 下拉框只认可选的那几个（AI 给了不在里面的就不用它）
+      if (f.kind === 'select' && f.options !== undefined && !f.options.some((o) => o.value === s))
+        return f
+      const { suggested_why: _why, ...rest } = f
+      return { ...rest, suggested: s }
     })
   }
 
@@ -397,7 +410,12 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
   }
 
   const onRunBlocked: SetupCardsAssembly['onRunBlocked'] = async (input) => {
-    const common = { actor: input.actor, matter_id: input.matter_id, run_id: input.run_id }
+    const common = {
+      actor: input.actor,
+      matter_id: input.matter_id,
+      run_id: input.run_id,
+      ...(input.why === undefined ? {} : { why: input.why }),
+    }
     // 缺连接比缺设置根本：两样都有先连
     if (input.needs.length > 0) {
       const needs =
@@ -408,7 +426,12 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       if (out !== undefined) return out
     }
     for (const target of input.targets) {
-      const out = await askSetup({ ...common, target })
+      const suggestions = input.suggestions?.[target]
+      const out = await askSetup({
+        ...common,
+        target,
+        ...(suggestions === undefined ? {} : { suggestions }),
+      })
       if (out !== undefined) return out
     }
     return undefined
@@ -563,6 +586,8 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     askSetup,
     onDecided,
     recheck,
+    target: (id) => targets.get(id),
+    targetIds: () => [...targets.keys()].sort(),
   }
 }
 

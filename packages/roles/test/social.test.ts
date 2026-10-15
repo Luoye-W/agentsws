@@ -149,8 +149,14 @@ describe('56 §2 社群组五条（群发永远 L1）', () => {
       const caps = (id: string): Record<string, unknown> =>
         role.actions.find((a) => a.id === id)?.mandate.caps ?? {}
       // 群发 1 / 周、私信 30 / 天、审核动作 20 / 天
-      expect(caps('stage_broadcast'), role.id).toMatchObject({ max_broadcasts_per_week: 1 })
-      expect(caps('reply_thread'), role.id).toMatchObject({ max_dm_per_day: 30 })
+      // WP338（决策 783，Luoye 10-15）：Reddit 不写死群发 / 回复条数（用户可设，默认不限）；审核动作照旧
+      if (role.id === 'social.reddit') {
+        expect(caps('stage_broadcast'), role.id).not.toHaveProperty('max_broadcasts_per_week')
+        expect(caps('reply_thread'), role.id).not.toHaveProperty('max_dm_per_day')
+      } else {
+        expect(caps('stage_broadcast'), role.id).toMatchObject({ max_broadcasts_per_week: 1 })
+        expect(caps('reply_thread'), role.id).toMatchObject({ max_dm_per_day: 30 })
+      }
       expect(caps('moderate'), role.id).toMatchObject({ max_moderations_per_day: 20 })
     }
   })

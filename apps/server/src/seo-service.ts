@@ -34,6 +34,7 @@ import type {
   ContentClaimRule,
   EventEnvelope,
   FactCard,
+  GeoAnswerDetail,
   GeoCostEstimate,
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
@@ -301,6 +302,8 @@ export interface SeoServiceAssembly {
   watchRun(input: { confirm?: boolean; kinds?: ('geo' | 'rank')[] }): Promise<GeoWatchRunResult>
   /** WP321：看板要的数。 */
   watchMetrics(input?: { weeks?: number }): Promise<GeoMetricsView>
+  /** WP335：「一条回答」（全文、引用、上一期、时间线）；没有这条 = `undefined`。 */
+  watchAnswer(id: string): Promise<GeoAnswerDetail | undefined>
   /** WP321：取回排队档任务（每天早上那一轮顺手做；回记完的那几轮）。 */
   watchCollect(): Promise<WatchRun[]>
   /** 账本 stage 之前的改写口：`publish_post` 要发出去时跑质检。 */
@@ -1333,6 +1336,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
     })
     const view = await monitor.metrics({ weeks: 5 })
+    const brief = view.week === run.period ? view.brief : undefined
     const point = view.trends
       .find((l) => l.kind === 'all')
       ?.points.find((p) => p.week === run.period)
@@ -1354,6 +1358,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       run_id: run.id,
       ...(point === undefined ? {} : { metrics: point }),
       ...(pendingCells === 0 ? {} : { pending_cells: pendingCells }),
+      // WP335：简报那一行（这一周拿到回答才有）
+      ...(brief === undefined ? {} : { brief }),
     }
     const seen = new Set(
       rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
@@ -1367,12 +1373,15 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           )
           .join('；')}。${cost}`
       : `${questions} 个买家问题，${seen.size} 个在某个 AI 上提到或引用了我们；缺位 ${gaps.length} 个。${cost}`
+    const lead = brief === undefined ? '' : `${brief}\n`
     const approval_item_id = await report(
       actor,
       'weekly_geo',
       run.period,
       `AI 平台可见度（${run.period} 那一周）`,
-      pendingCells === 0 ? line : `${line}还有 ${pendingCells} 格在排队，回来后这张卡会更新。`,
+      pendingCells === 0
+        ? `${lead}${line}`
+        : `${lead}${line}还有 ${pendingCells} 格在排队，回来后这张卡会更新。`,
       payload,
     )
     emit('seo.weekly_geo', actor.assignment_id, {
@@ -1983,6 +1992,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
     },
     watchMetrics: (input) => monitor.metrics(input ?? {}),
+    watchAnswer: (id) => monitor.answer(id),
     async watchCollect() {
       const actor = options.holderOf('dtc.content')
       return actor === undefined ? monitor.collect() : collectAndReport(actor)
