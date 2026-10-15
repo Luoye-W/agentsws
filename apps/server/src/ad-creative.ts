@@ -23,6 +23,7 @@ import {
   buildAdUploadBundle,
   type CopyComplete,
   checkExperiment,
+  creativeUploadOps,
   creativeUploadSheet,
   decodeExportBytes,
   experimentContext,
@@ -39,6 +40,7 @@ import type {
   AdCreativeImportView,
   AdCreativePort,
   AdsActor,
+  AdsChangesView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
@@ -98,6 +100,14 @@ export interface AdCreativeServiceOptions {
   memory?: AdCreativeMemoryPort
   /** 上传表生成器：WP314 的 `buildAdUploadBundle`（不给也是它；测试里可以换）。 */
   uploadSheet?: AdUploadBundleBuilder
+  /**
+   * WP316：「交给插件上传」——把这一轮拼成改动意图，走投放那一张上传表卡（批了插件在用户自己的后台里传）。
+   * 不给 = 这台没装插件执行那一半，只能下载表自己去传。
+   */
+  stageChanges?: (
+    actor: AdsActor,
+    input: { account_id: string; ops: unknown[]; reason?: string },
+  ) => Promise<AdsChangesView>
 }
 
 export interface AdCreativeServiceAssembly {
@@ -187,6 +197,28 @@ export function createAdCreativeService(
     weak: imp.weak,
     notes: imp.notes,
   })
+
+  /** 一轮里收下的文案 → 上传表要的那几条广告（带上导出表里的编号与落地页）。 */
+  const adsOfRound = (round: AdCreativeRound) => {
+    const imp = store.creativeImport(round.import_id)
+    const ads = round.rewrites
+      .filter((r) => r.headlines.length > 0 || r.descriptions.length > 0)
+      .map((r) => {
+        const row = imp?.rows.find((x) => x.ad_id === r.ad_id)
+        return {
+          campaign: r.campaign,
+          ad_group: r.ad_group,
+          ...(row?.campaign_id === undefined ? {} : { campaign_id: row.campaign_id }),
+          ...(row?.ad_group_id === undefined ? {} : { ad_group_id: row.ad_group_id }),
+          ...(row?.final_url === undefined ? {} : { final_url: row.final_url }),
+          headlines: r.headlines.map((h) => h.text),
+          descriptions: r.descriptions.map((d) => d.text),
+        }
+      })
+    if (ads.length === 0)
+      throw new ApiError('invalid_input', '这一轮一条收下的文案都没有，出不了上传表。')
+    return ads
+  }
 
   const port: AdCreativePort = {
     importExport: (actor, input) => {
@@ -318,23 +350,7 @@ export function createAdCreativeService(
     sheet: (actor, round_id, input = {}) => {
       assertAds(actor)
       const round = roundOr404(round_id)
-      const imp = store.creativeImport(round.import_id)
-      const ads = round.rewrites
-        .filter((r) => r.headlines.length > 0 || r.descriptions.length > 0)
-        .map((r) => {
-          const row = imp?.rows.find((x) => x.ad_id === r.ad_id)
-          return {
-            campaign: r.campaign,
-            ad_group: r.ad_group,
-            ...(row?.campaign_id === undefined ? {} : { campaign_id: row.campaign_id }),
-            ...(row?.ad_group_id === undefined ? {} : { ad_group_id: row.ad_group_id }),
-            ...(row?.final_url === undefined ? {} : { final_url: row.final_url }),
-            headlines: r.headlines.map((h) => h.text),
-            descriptions: r.descriptions.map((d) => d.text),
-          }
-        })
-      if (ads.length === 0)
-        throw new ApiError('invalid_input', '这一轮一条收下的文案都没有，出不了上传表。')
+      const ads = adsOfRound(round)
       const banned = options.bannedTerms?.()
       const sheet = creativeUploadSheet(
         {
@@ -354,6 +370,29 @@ export function createAdCreativeService(
         fingerprint: sheet.fingerprint,
       })
       return sheet
+    },
+
+    // WP316：这一轮交给插件上传（走投放那一张上传表卡，新建一律暂停）
+    stageSheet: async (actor, round_id, input) => {
+      assertAds(actor)
+      if (options.stageChanges === undefined)
+        throw new ApiError(
+          'not_implemented',
+          '这台机器没装插件执行那一半：下载上传表自己去后台传。',
+        )
+      const round = roundOr404(round_id)
+      const ops = creativeUploadOps({
+        platform: round.platform,
+        ads: adsOfRound(round),
+        ...(round.platform === 'meta'
+          ? { meta: { page_id: input.meta_page_id, image_hash: input.meta_image_hash } }
+          : {}),
+      })
+      return options.stageChanges(actor, {
+        account_id: input.account_id,
+        ops,
+        reason: '素材流水线这一轮的新文案（新建广告，先暂停；跑出数再停旧的）。',
+      })
     },
 
     requestDesign: async (actor, round_id, input) => {

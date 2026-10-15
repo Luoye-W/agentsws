@@ -12,6 +12,7 @@ import { EXTERNAL_FENCE, redactOutbound, redactOutboundText } from '@agentsws/co
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
+  ADS_TOOL_DEF_BY_NAME,
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
@@ -346,6 +347,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
   // WP261：独立站运营工具同一个转法（定义在 stand-ins 的 `runtime/shop.ts`）
   // WP268：生图 / 改图 / 素材库同一个转法（定义在 stand-ins 的 `runtime/image.ts`）
   const def =
+    // WP316：改广告的两个工具（定义在 stand-ins 的 `runtime/ads.ts`）
+    ADS_TOOL_DEF_BY_NAME.get(name) ??
     THEME_TOOL_DEF_BY_NAME.get(name) ??
     SHOP_TOOL_DEF_BY_NAME.get(name) ??
     IMAGE_TOOL_DEF_BY_NAME.get(name) ??
@@ -494,6 +497,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       OWNER_TOOL_DEF_BY_NAME.get(name)?.description ??
       SKILL_TOOL_DEF_BY_NAME.get(name)?.description ??
       B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP316：改广告的两个工具（提一批只出卡；列账本只读）
+      ADS_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP253：网页模板的主题工具（与 stub / direct 同一份描述）
       THEME_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP261：独立站运营工具（查询只读；改动只出卡）

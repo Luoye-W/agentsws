@@ -101,11 +101,13 @@ import {
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
+  ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
+  isAdsWiredRole,
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
@@ -166,6 +168,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
   [
     ...KOL_TOOL_NAMES,
     ...B2B_OUTBOUND_TOOL_NAMES,
+    // WP316：改广告——提一批只出卡（批了插件才去做），列账本只读
+    ...ADS_TOOL_NAMES,
     ...OWNER_TOOL_NAMES,
     READ_SKILL_TOOL,
     // WP220：只读 Reddit（`read_` 开头，本来就判得出「读外部」；列进来是为了表上看得见）
@@ -393,6 +397,11 @@ export interface RuntimeOptions {
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。
    */
   b2bOutboundTools?: ToolExecutor
+  /**
+   * WP316：改广告的两个工具（`ads-tools.ts` 建的那一份）。给了才进 Google / Meta 两条投放职责的工具面；
+   * 执行器里还会再判一次职责。提一批只出卡，批了插件才去用户自己的后台里做。
+   */
+  adsTools?: ToolExecutor
   /**
    * WP253：网页模板的九个受限主题工具（`theme-tools.ts` 建的那一份）。给了才进 `site.shopify-theme`
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。发布只出卡，不直接发。
@@ -1106,6 +1115,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const research = options.researchTools
     const owner = options.ownerTools
     const b2bOut = options.b2bOutboundTools
+    const adsOut = options.adsTools
     const themeOut = options.themeTools
     const shopOut = options.shopTools
     const imageOut = options.imageTools
@@ -1167,6 +1177,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (b2bOut !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bareOf(call.name))) {
         return b2bOut(call)
       }
+      // WP316：改广告的两个工具（名字与别处不重名；职责在执行器里再判一次）
+      if (adsOut !== undefined && ADS_TOOL_NAMES.includes(bareOf(call.name))) {
+        return adsOut(call)
+      }
       // WP253：网页模板的主题工具（名字与别处不重名；职责在执行器里再判一次）
       if (themeOut !== undefined && THEME_TOOL_NAMES.includes(bareOf(call.name))) {
         return themeOut(call)
@@ -1222,6 +1236,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.ownerTools !== undefined && OWNER_TOOL_NAMES.includes(bare)) return true
     if (options.b2bOutboundTools !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bare))
       return true
+    if (options.adsTools !== undefined && ADS_TOOL_NAMES.includes(bare)) return true
     if (options.themeTools !== undefined && THEME_TOOL_NAMES.includes(bare)) return true
     if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
@@ -1636,6 +1651,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isB2bOutboundRole(config.role_id) && options.b2bOutboundTools !== undefined
           ? B2B_OUTBOUND_TOOL_NAMES
           : []),
+        // WP316：Google / Meta 投放职责才有改广告那两个工具（提一批只出卡 / 列账本）
+        ...(isAdsWiredRole(config.role_id) && options.adsTools !== undefined ? ADS_TOOL_NAMES : []),
         // WP253：网页模板才有那九个受限主题工具（不是终端；发布只出卡）
         ...(isThemeRole(config.role_id) && options.themeTools !== undefined
           ? THEME_TOOL_NAMES

@@ -33,3 +33,31 @@ export const undoAdChange = (
 
 export const getAdsEvidence = (assignment: string, id: string): Promise<{ png_base64: string }> =>
   api(`/v1/ads/evidence/${encodeURIComponent(id)}`, { assignment })
+
+/** 这条职责那个平台的广告账户（「交给插件」挑账户用）。 */
+export const listAdAccounts = (
+  assignment: string,
+  platform: string,
+): Promise<{ rows: { id: string; name: string; external_id: string }[] }> =>
+  api(`/v1/ads/accounts?platform=${encodeURIComponent(platform)}`, { assignment })
+
+export interface AdsChangesResult {
+  route: 'sheet' | 'form'
+  reason: string
+  views: { staged: boolean; message?: string; approval_item_id?: string }[]
+  problems?: string[]
+  message?: string
+  needs_connection?: string
+}
+
+/** 素材流水线这一轮交给插件上传（出一张上传表卡，批了插件去传）。 */
+export const stageAdCreativeSheet = (
+  assignment: string,
+  round_id: string,
+  input: { account_id: string; meta_page_id?: string; meta_image_hash?: string },
+): Promise<AdsChangesResult> =>
+  api(`/v1/ads/creative/rounds/${encodeURIComponent(round_id)}/stage`, {
+    method: 'POST',
+    body: input,
+    assignment,
+  })

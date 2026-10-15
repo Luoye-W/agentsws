@@ -217,6 +217,7 @@ import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-s
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { createAdsService } from './ads-service.js'
+import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
@@ -4433,6 +4434,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
       store: ads,
       appendEvent,
+      // WP316：这一轮交给插件上传 → 投放那一张上传表卡（没装插件通道的托管实例没有这一步）
+      ...(adsActions === undefined || adsService.port.stageChanges === undefined
+        ? {}
+        : {
+            stageChanges: async (actor, input) =>
+              (await adsService.port.stageChanges?.(actor, input)) ?? {
+                route: 'sheet' as const,
+                reason: '',
+                views: [],
+              },
+          }),
       complete: (actor) => {
         const models = effectiveModels()
         if (!models.configured()) return undefined
@@ -5302,6 +5314,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
             themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            // WP316：改广告的两个工具（提一批只出卡、列广告改动记录）；Google / Meta 两条投放职责才摆
+            ...(adsActions === undefined
+              ? {}
+              : {
+                  adsTools: createAdsToolExecutor({
+                    workspace_id: ws,
+                    port: () => adsService.port,
+                  }),
+                }),
             /*
              * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。

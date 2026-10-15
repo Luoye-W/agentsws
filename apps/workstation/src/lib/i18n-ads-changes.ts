@@ -38,6 +38,12 @@ export const ADS_CHANGES_ZH: Record<string, string> = {
   'adsc.tag.preview': '预览',
   'adsc.tag.after': '后',
   'adsc.stop_loss': '止损',
+  'adsc.stage': '交给插件',
+  'adsc.stage.hint':
+    '出一张上传表卡（要你点）。批了 Chrome 里的「Agents 工坊助手」在你自己的后台里传，平台预览后你再确认一次。新建的一律先暂停。',
+  'adsc.stage.done': '卡出好了，去卡片流里批',
+  'adsc.stage.blocked': '表还出不了',
+  'adsc.stage.connect': '插件还没连上这家后台：批了先排队',
 }
 
 export const ADS_CHANGES_EN: Record<string, string> = {
@@ -75,4 +81,10 @@ export const ADS_CHANGES_EN: Record<string, string> = {
   'adsc.tag.preview': 'Preview',
   'adsc.tag.after': 'After',
   'adsc.stop_loss': 'Stop-loss',
+  'adsc.stage': 'Send to helper',
+  'adsc.stage.hint':
+    'Creates an upload-sheet card for you to approve. Once approved, the Agents Workshop helper in your Chrome uploads it in your own ad account and you confirm the platform preview once more. Anything new starts paused.',
+  'adsc.stage.done': 'Card created — approve it in your cards',
+  'adsc.stage.blocked': 'Sheet not ready yet',
+  'adsc.stage.connect': 'Helper not connected to this ad account yet: it will wait in the queue',
 }
