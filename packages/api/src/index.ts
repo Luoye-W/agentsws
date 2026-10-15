@@ -132,7 +132,13 @@ export {
   adCreativeRoutes,
 } from './routes/ad-creative.js'
 // WP75（57 §5）：广告库那一面
-export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './routes/ads.js'
+export type {
+  AdsAccountRow,
+  AdsCampaignRow,
+  AdsChangesView,
+  AdsPort,
+  AdsStagedView,
+} from './routes/ads.js'
 export { adsRoutes } from './routes/ads.js'
 export type { AdsActor } from './routes/ads-types.js'
 // WP287：「发给他的卡他必须点得动」那把尺子（只关于本人的卡）——服务端岗位页计数也用它

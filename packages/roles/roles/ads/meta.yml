@@ -114,6 +114,38 @@ actions:
     requires_record_read: true
     route_to: scope_manager
 
+  # ── WP316（docs/101 §5.1② / §5.3，决策 552 / 553）：插件在你自己的后台里执行的三条 ──────────
+  # 上传表（新建 / 一次改 3 条以上 / 换素材）、开始投放、撤销。三条都在 guardrail 的 `HARD_L1` 里，
+  # 这里的 `hard_ceiling` 是把同一件事在职责这一层再写一遍（同 `stage_campaign`）。
+  - id: stage_ads_sheet
+    target: ad_account
+    kind: staged_change
+    mandate:
+      caps: { max_budget_delta_pct: 20, max_daily_spend: 1000, max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: stage_ads_activate
+    target: ad_account
+    kind: staged_change
+    mandate:
+      # 开始投放 = 让它开始花钱：总闸挂在这一条上（决策 614：新预算这时才算进总闸）
+      caps: { max_daily_spend: 1000, max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: stage_ads_undo
+    target: ad_account
+    kind: staged_change
+    mandate:
+      caps: { max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    review_cannot_be_disabled: true
+    route_to: role_holder
+
   # ── WP222（58 §1 / 91 §3.3 第 3 条）：向设计岗下需求单 ─────────────────────
   # 这一条与上面每一条都无关，是**新加的独立段落**：它不改这条职责的任何
   # 既有行为，只多一个出口——要新广告素材 / 改素材的时候，不用人再去设计岗手动开一件事（→ `design.ads`）。
@@ -168,6 +200,26 @@ automation:
     promotion: { adoption_rate_min: 0.9, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
 
+  # ── WP316：上传表 / 开始投放 / 撤销，永远 L1 ─────────────────────────────
+  stage_ads_sheet:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_ads_activate:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_ads_undo:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
   # ── WP222（58 §1）：向设计岗下需求单 ──────────────────────────────────
   # L3 自动：下一张需求单不产生任何外部可见的东西。真正要人点的在设计岗
   # 那一侧（变体 L2 出卡给人挑、入库 L1 永远人定），以及这边的换素材（L2）。
@@ -182,6 +234,8 @@ skills:
   # WP317（docs/101 §5.1④）：素材流水线的两个子 Agent（标题 / 描述各一份，按需加载）
   - { name: ad-headlines, tier: open, load: on_demand }
   - { name: ad-descriptions, tier: open, load: on_demand }
+  # WP316：改广告怎么提（只写意图、出卡分路、新建暂停、开始投放另一张卡、插件提交前人再确认）
+  - { name: ad-changes, tier: open, load: on_demand }
   - { name: audience-research, tier: open, load: on_demand }
   # WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率、毛利瀑布（只并排显示，不改止损线）
   - { name: unit-economics, tier: open, load: on_demand }

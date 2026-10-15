@@ -96,7 +96,15 @@ function Row({ item, onDismiss }: { item: RedditWatchEntry; onDismiss(): void })
     <li className="flex items-start gap-2 py-2 text-sm">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {item.priority === true ? (
+            <WsTag className="bg-ws-warn-bg text-ws-warn" data-testid="reddit-watch-priority">
+              {t('rwatch.priority')}
+            </WsTag>
+          ) : null}
           <WsTag>{t(`rwatch.source.${item.source}`)}</WsTag>
+          {(item.tags ?? []).map((tag) => (
+            <WsTag key={tag}>{tag}</WsTag>
+          ))}
           {item.subreddit === undefined ? null : <span>r/{item.subreddit}</span>}
           {item.author === undefined ? null : <span>u/{item.author}</span>}
         </div>

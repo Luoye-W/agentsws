@@ -34,6 +34,7 @@ import {
   updateAdExperiment,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { StageToPlugin } from './stage-to-plugin'
 
 /** 投放职责 → 平台（这一块只有 Google / Meta 两家有导出表与上传表）。 */
 export function adCreativePlatformOf(role_id: string): AdCreativePlatform | undefined {
@@ -364,6 +365,15 @@ export function AdCreativePanel({
                 />
               </>
             ) : null}
+            {/* WP316：这一轮交给插件上传（出一张上传表卡，批了插件去传） */}
+            <StageToPlugin
+              assignment={assignment}
+              platform={platform}
+              round_id={round.id}
+              {...(platform === 'meta'
+                ? { meta: { page_id: pageId.trim(), image_hash: imageHash.trim() } }
+                : {})}
+            />
             <Button
               size="sm"
               variant="outline"

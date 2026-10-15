@@ -163,6 +163,25 @@ describe('标签页那只手', () => {
     expect(asked).toBe(2)
   })
 
+  it('WP316：可选截图（止损）截不到就直接回失败，不请人点图标、不等', async () => {
+    const tab = new FakeTab()
+    tab.captureThrows = true
+    const driver = tab.driver()
+    let asked = 0
+    driver.waitCaptureGrant = async () => {
+      asked += 1
+      return true
+    }
+    const page = new TabPage({
+      driver,
+      hosts: ['ads.google.com'],
+      bannerState: () => ({ title: 't', step: 1, of: 2, label: '截图' }),
+    })
+    expect((await page.capture({ quick: true })).ok).toBe(false)
+    expect(asked).toBe(0)
+    expect(tab.banners.some((b) => b?.label === ASK_GRANT)).toBe(false)
+  })
+
   it('下载：没有下载权限照实说', async () => {
     const tab = new FakeTab()
     tab.downloads = false

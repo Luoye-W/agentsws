@@ -27,6 +27,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import type { AdsChangesView } from './ads.js'
 import type { AdsActor } from './ads-types.js'
 
 const READ_ADS = {
@@ -36,6 +37,13 @@ const READ_ADS = {
   sensitivity: 'internal',
 } as const
 const STAGE_ADS = { ...READ_ADS, op: 'stage' } as const
+
+/** WP316：这一轮交给插件上传——挑哪个广告账户（Meta 还要主页编号与图片哈希）。 */
+const StageSheetBody = z.object({
+  account_id: z.string().min(1).max(200),
+  meta_page_id: z.string().max(100).optional(),
+  meta_image_hash: z.string().max(200).optional(),
+})
 
 /** 导入之后回来的那一份（行本身不端出去，只给条数与表现差的那几条）。 */
 export interface AdCreativeImportView {
@@ -83,6 +91,19 @@ export interface AdCreativePort {
     round_id: string,
     input?: { meta_page_id?: string | undefined; meta_image_hash?: string | undefined },
   ): MaybePromise<AdUploadSheet>
+  /**
+   * WP316：这一轮交给插件上传——拼成改动意图，出一张投放的上传表卡（L1；批了插件在用户自己的后台里传，
+   * 平台预览后人再确认一次）。没装插件执行那一半的进程没有它。
+   */
+  stageSheet?(
+    actor: AdsActor,
+    round_id: string,
+    input: {
+      account_id: string
+      meta_page_id?: string | undefined
+      meta_image_hash?: string | undefined
+    },
+  ): MaybePromise<AdsChangesView>
   requestDesign(
     actor: AdsActor,
     round_id: string,
@@ -254,6 +275,40 @@ export function adCreativeRoutes(): Route[] {
             ...(page === undefined || page === '' ? {} : { meta_page_id: page }),
             ...(image === undefined || image === '' ? {} : { meta_image_hash: image }),
           }),
+        )
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'post',
+        path: '/v1/ads/creative/rounds/:id/stage',
+        operationId: 'stageAdCreativeSheet',
+        summary:
+          '这一轮交给插件上传（WP316）：出一张投放的上传表卡（L1，新建一律暂停），批了插件在你自己的后台里传、你再确认一次',
+        authz: STAGE_ADS,
+        params: [{ name: 'id', in: 'path', required: true, description: '轮次 id' }],
+        body: StageSheetBody,
+        returns: 'AdsChangesView',
+      },
+      async (c, deps) => {
+        const input = await body(c, StageSheetBody)
+        const port = portOf(deps)
+        if (port.stageSheet === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这台机器没装插件执行那一半：下载上传表自己去后台传。',
+          )
+        return ok(
+          c,
+          await port.stageSheet(actorOf(c), param(c, 'id'), {
+            account_id: input.account_id,
+            ...(input.meta_page_id === undefined ? {} : { meta_page_id: input.meta_page_id }),
+            ...(input.meta_image_hash === undefined
+              ? {}
+              : { meta_image_hash: input.meta_image_hash }),
+          }),
+          201,
         )
       },
     ),

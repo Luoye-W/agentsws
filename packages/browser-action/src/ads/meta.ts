@@ -45,6 +45,8 @@ export const META_ADS_SELECTORS = {
   reviewPublish: '[role="button"] >> text=Review and publish',
   publishButton: '[role="dialog"] [role="button"] >> text=Publish',
   publishedNote: '[data-publish="status"]',
+  /** WP316：发布后当场核「已发布」（读回那一版用）。 */
+  publishedDone: '[data-publish="status"] >> text=Published',
   /** 列表（按编号筛出这一条）。 */
   row: (id: string) => `[data-row-id="${id}"]`,
   toggle: (id: string) => `[data-row-id="${id}"] input[role="switch"]`,
@@ -78,6 +80,7 @@ export function metaAdsPlan(
     case 'upload_sheet': {
       const paste = sheetIsText(action.sheet)
       const snapshot = action.snapshot !== false
+      const readback = action.readback === true
       const steps: ActionStep[] = [
         { op: 'goto', url: manage('campaign') },
         ...(snapshot
@@ -106,8 +109,16 @@ export function metaAdsPlan(
         { op: 'confirm', prompt: '导入成草稿了，没报错。确认发布？' },
         { op: 'click', selector: S.reviewPublish },
         { op: 'click', selector: S.publishButton },
-        { op: 'wait', selector: S.publishedNote, timeout_ms: 120_000 },
+        { op: 'wait', selector: readback ? S.publishedDone : S.publishedNote, timeout_ms: 120_000 },
         { op: 'capture', tag: 'after' },
+        // WP316：读回——回到列表再导出一份，本机拿它和上传表逐行比对
+        ...(readback
+          ? ([
+              { op: 'goto', url: manage('campaign') },
+              { op: 'click', selector: S.exportButton },
+              { op: 'download', selector: S.exportCsv, tag: 'result' },
+            ] as ActionStep[])
+          : []),
       ]
       return {
         ...base,
@@ -117,7 +128,7 @@ export function metaAdsPlan(
         allow: {
           hosts,
           click: [
-            ...(snapshot ? [S.exportButton] : []),
+            ...(snapshot || readback ? [S.exportButton] : []),
             S.importMenu,
             S.importItem,
             ...(paste ? [S.pasteTab] : []),
@@ -128,11 +139,29 @@ export function metaAdsPlan(
           fill: [],
           values: [],
           ...(paste ? { paste: [S.pasteBox] } : { upload: [S.uploadFile] }),
-          download: snapshot ? [S.exportCsv] : [],
+          download: snapshot || readback ? [S.exportCsv] : [],
         },
-        verify: { op: 'present', selector: S.publishedNote, text: 'Published' },
+        verify: readback
+          ? { op: 'none' }
+          : { op: 'present', selector: S.publishedNote, text: 'Published' },
       }
     }
+    case 'export_snapshot':
+      return {
+        ...base,
+        kind: 'export_snapshot',
+        needs_sheet: false,
+        steps: [
+          { op: 'goto', url: manage('campaign') },
+          { op: 'click', selector: S.exportButton },
+          { op: 'download', selector: S.exportCsv, tag: 'snapshot' },
+        ],
+        allow: { hosts, click: [S.exportButton], fill: [], values: [], download: [S.exportCsv] },
+        verify: { op: 'none' },
+      }
+    case 'undo_upload':
+      // Meta 没有「撤销这次导入」的按钮（docs/101 §7 第 3 条）：撤销走改前表反向导入（另一张上传表）
+      throw new Error('Meta 没有一键撤销导入；用改前表反向导入（另一张上传表）。')
     case 'export_report':
       return {
         ...base,
@@ -150,19 +179,34 @@ export function metaAdsPlan(
     case 'enable': {
       const id = action.entity.id
       const on = action.kind === 'enable'
+      // WP316（决策 600 C）：止损——截不到图也先停，停前停后各导出一份作证
+      const stopLoss = action.kind === 'pause' && action.stop_loss === true
+      const exportAs = (tag: 'snapshot' | 'result'): ActionStep[] => [
+        { op: 'goto', url: manage('campaign') },
+        { op: 'click', selector: S.exportButton },
+        { op: 'download', selector: S.exportCsv, tag },
+      ]
       return {
         ...base,
         kind: action.kind,
         needs_sheet: false,
         steps: [
+          ...(stopLoss ? exportAs('snapshot') : []),
           { op: 'goto', url: listUrl(action.entity) },
           // 开关现在必须是「另一头」：已经是想要的状态就不点（点了反而改回去）
           { op: 'wait', selector: S.toggleState(id, !on) },
-          { op: 'capture', tag: 'before' },
+          { op: 'capture', tag: 'before', ...(stopLoss ? { optional: true } : {}) },
           { op: 'click', selector: S.toggle(id) },
-          { op: 'capture', tag: 'after' },
+          { op: 'capture', tag: 'after', ...(stopLoss ? { optional: true } : {}) },
+          ...(stopLoss ? exportAs('result') : []),
         ],
-        allow: { hosts, click: [S.toggle(id)], fill: [], values: [] },
+        allow: {
+          hosts,
+          click: [...(stopLoss ? [S.exportButton] : []), S.toggle(id)],
+          fill: [],
+          values: [],
+          ...(stopLoss ? { download: [S.exportCsv] } : {}),
+        },
         verify: { op: 'present', url: listUrl(action.entity), selector: S.toggleState(id, on) },
       }
     }

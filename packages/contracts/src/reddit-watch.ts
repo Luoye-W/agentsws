@@ -96,6 +96,16 @@ export interface RedditWatchEntry {
   status_at?: Iso8601
   /** 对方删了原话：我们这边正文清空（667）。 */
   deleted?: true
+  /**
+   * WP340：命中了巡查设置里的「告警词」（本地匹配，不额外计费）→ 标「优先」，单独出一条提醒（同一条只一次）。
+   * `alert_hits` 是命中的那几个词。
+   */
+  priority?: true
+  alert_hits?: string[]
+  /** WP340：命中的「本地标签词」（如型号写法；只在本地打标签，不进外部计费）。 */
+  tags?: string[]
+  /** WP340：这一条的「优先」提醒人已经看过 / 收起了（或同一条在别的来源已经提醒过）。 */
+  alert_seen?: true
 }
 
 /** 每品牌的巡查设置（缺版块 / 缺关键词就出配置卡，按 WP324）。 */
@@ -114,7 +124,24 @@ export interface RedditWatchSettings {
   keyword_limit: number
   /** 总开关（关了就不巡查）。 */
   enabled: boolean
+  /**
+   * WP340：**重点版块**（别人的版，不带 `r/`）——插件借品牌号会话只读新帖，进「外部社区」那一类（按话题归组）。
+   * 老设置没有这一格 = 没有。
+   */
+  watch_subreddits?: string[]
+  /**
+   * WP340：按版块分频率（自家版块、重点版块都算；键是小写版块名）：一周几次（7 = 每天、1 = 每周）。
+   * 没写的版块跟 `every_hours` 走（默认每天一次）；收件箱、外部关键词照旧按 `every_hours`。
+   */
+  sub_per_week?: Record<string, number>
+  /** WP340：告警词（本地匹配；命中的条目标「优先」并单独提醒一次）。由用户定，AI 只给建议。 */
+  alert_words?: string[]
+  /** WP340：本地标签词（如型号写法；命中就给条目打这个标签，查巡查数据可按标签筛）。 */
+  tag_words?: string[]
 }
+
+/** WP340：版块一周几次的可选档（每天 / 每周 3 次 / 每周 2 次 / 每周 1 次）。 */
+export const REDDIT_SUB_PER_WEEK_CHOICES: readonly number[] = [7, 3, 2, 1]
 
 export const REDDIT_WATCH_DEFAULTS: Readonly<
   Omit<RedditWatchSettings, 'own_subreddits' | 'keywords'>
@@ -125,8 +152,8 @@ export const REDDIT_WATCH_DEFAULTS: Readonly<
   enabled: true,
 }
 
-/** 巡查里的一块。 */
-export type RedditWatchPart = 'inbox' | 'own_sub' | 'external'
+/** 巡查里的一块（WP340 加 `watch_sub` 重点版块：插件只读新帖）。 */
+export type RedditWatchPart = 'inbox' | 'own_sub' | 'watch_sub' | 'external'
 
 export type RedditWatchPartStatus =
   | 'ok'
@@ -184,7 +211,15 @@ export interface RedditWatchView {
   last_run?: RedditWatchRun
   /** 要回、还没处理的（新的在前）。 */
   pending: RedditWatchEntry[]
+  /**
+   * WP340：「优先」提醒（命中告警词、人还没收起、最近 {@link REDDIT_WATCH_ALERT_DAYS} 天内；同一条只一行，新的在前）。
+   * 没有就不出（docs/96 提醒条：只在有事时出）。
+   */
+  alerts?: RedditWatchEntry[]
 }
+
+/** WP340：「优先」提醒在岗位页留几天。 */
+export const REDDIT_WATCH_ALERT_DAYS = 7
 
 /** 周报那一组外部话题。 */
 export interface RedditWatchTopicGroup {

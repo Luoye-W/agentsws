@@ -36,6 +36,7 @@ import { WorkSection } from '@/components/position/work-section'
 import { useRailState } from '@/components/rail/rail-state'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
+import { RedditWatchAlertNotice } from '@/components/social/reddit-watch-alert'
 import { RedditWriteNotice } from '@/components/social/reddit-write-notice'
 import { Hint } from '@/components/ui/hint'
 import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
@@ -366,6 +367,8 @@ export function PositionPage(): React.ReactNode {
       <ShopAdminBanner duties={duties} />
       {/* WP332（决策 762）：社媒岗位上 Reddit 那一条没发出去 → 一行提醒 +「再填一次」；正常时不画 */}
       <RedditWriteNotice duties={duties} />
+      {/* WP340：巡查抓到命中告警词的 → 一行「优先」提醒（同一条只一次）；没有就不画 */}
+      <RedditWatchAlertNotice duties={duties} />
       {/* WP317（决策 629）：投放岗位上素材流水线的快捷入口（点进 Google / Meta 职责页那一块） */}
       <AdCreativeEntry duties={duties} />
       {/*
