@@ -3,6 +3,9 @@
  *
  * 版块名、关键词、频率都由用户给；缺了就出配置卡（WP324），卡上预填 WP249 已登记的自家版 / 品牌号。
  * 这里不替用户定任何运营规矩。
+ *
+ * WP340：加重点版块、按版块分频率（卡上写在版块名后面：`Xreal（每周）`、`SmartGlasses（每周3次）`）、
+ * 告警词、标签词；第一次出卡时预填 AI 按品牌档案给的建议（每格一句理由），没模型就留空。老设置原样读（新格子为空）。
  */
 import { normalizeSubreddit } from '@agentsws/browser-action'
 import {
@@ -13,6 +16,7 @@ import {
 } from '@agentsws/contracts'
 import { SetupCardError, type SetupTarget } from '../setup-cards.js'
 import type { RedditWatchStore } from './store.js'
+import type { PatrolSuggestion } from './suggest.js'
 
 export const REDDIT_WATCH_TARGET = 'reddit.watch'
 const KEY = 'settings'
@@ -20,6 +24,11 @@ const USER = /^[A-Za-z0-9_-]{3,20}$/u
 
 export const MAX_KEYWORDS = 30
 export const MAX_SUBS = 5
+/** WP340：重点版块最多几个、告警词 / 标签词最多几个、每个多长。 */
+export const MAX_WATCH_SUBS = 10
+export const MAX_ALERT_WORDS = 30
+export const MAX_TAG_WORDS = 50
+const TERM_LEN = 40
 
 /** 用户给的一串（逗号 / 顿号 / 换行分开）→ 去重的几项。 */
 export function splitList(raw: string): string[] {
@@ -49,16 +58,42 @@ export function normalizeSettings(
   const keywords = splitList((raw?.keywords ?? []).map(String).join('\n'))
     .map((k) => k.slice(0, 60))
     .slice(0, MAX_KEYWORDS)
+  const own = subs.slice(0, MAX_SUBS)
+  const watch: string[] = []
+  for (const s of raw?.watch_subreddits ?? []) {
+    const n = normalizeSubreddit(String(s))
+    if (n === undefined) continue
+    const k = n.toLowerCase()
+    if (own.some((x) => x.toLowerCase() === k) || watch.some((x) => x.toLowerCase() === k))
+      continue
+    watch.push(n)
+  }
+  const known = new Set([...own, ...watch].map((x) => x.toLowerCase()))
+  const perWeek: Record<string, number> = {}
+  for (const [k, v] of Object.entries(raw?.sub_per_week ?? {})) {
+    const key = normalizeSubreddit(k)?.toLowerCase()
+    const n = Number(v)
+    if (key !== undefined && known.has(key) && Number.isFinite(n))
+      perWeek[key] = Math.max(1, Math.min(7, Math.round(n)))
+  }
+  const terms = (list: unknown[] | undefined, max: number): string[] =>
+    splitList((list ?? []).map(String).join('\n'))
+      .map((k) => k.slice(0, TERM_LEN))
+      .slice(0, max)
   const user = String(raw?.brand_username ?? '')
     .trim()
     .replace(/^\/?u\//iu, '')
   const out: RedditWatchSettings = {
-    own_subreddits: subs.slice(0, MAX_SUBS),
+    own_subreddits: own,
     keywords,
     every_hours: clampInt(raw?.every_hours, 1, 168, d.every_hours),
     day_start_hour: clampInt(raw?.day_start_hour, 0, 23, d.day_start_hour),
     keyword_limit: clampInt(raw?.keyword_limit, 1, 50, d.keyword_limit),
     enabled: raw?.enabled ?? d.enabled,
+    watch_subreddits: watch.slice(0, MAX_WATCH_SUBS),
+    sub_per_week: perWeek,
+    alert_words: terms(raw?.alert_words, MAX_ALERT_WORDS),
+    tag_words: terms(raw?.tag_words, MAX_TAG_WORDS),
   }
   if (USER.test(user)) out.brand_username = user
   return out
@@ -79,7 +114,61 @@ export function writeSettings(
 }
 
 export const isConfigured = (s: RedditWatchSettings): boolean =>
-  s.own_subreddits.length > 0 || s.keywords.length > 0
+  s.own_subreddits.length > 0 || s.keywords.length > 0 || (s.watch_subreddits ?? []).length > 0
+
+/* ── WP340：版块后面写频率（`Xreal（每周）`）───────────────────────── */
+
+/** 一周几次 → 卡上那几个字（7 每天、1 每周、其余「每周 n 次」）。 */
+export function perWeekLabel(n: number): string {
+  return n >= 7 ? '每天' : n <= 1 ? '每周' : `每周${n}次`
+}
+
+const FREQ_TAIL =
+  /^(.+?)\s*(?:[:：]|[(（])?\s*(每天|天天|daily|每周\s*([1-7])\s*次|([1-7])\s*次\s*\/?\s*周|([1-7])\s*(?:x|times)?\s*\/\s*week|每周|每星期|weekly)\s*[)）]?$/iu
+
+/**
+ * 「inmoxr, SmartGlasses（每周3次）, Xreal 每周」→ 版块 + 各自一周几次（没写的不在表里 = 跟总频率，默认每天）。
+ * 版块名不合法、频率认不出 → `bad` 里回那一项原样。
+ */
+export function parseSubList(raw: string): {
+  subs: string[]
+  per_week: Record<string, number>
+  bad: string[]
+} {
+  const subs: string[] = []
+  const per_week: Record<string, number> = {}
+  const bad: string[] = []
+  for (const item of splitList(raw)) {
+    const m = FREQ_TAIL.exec(item)
+    const name = normalizeSubreddit(m?.[1] ?? item)
+    if (name === undefined) {
+      bad.push(item)
+      continue
+    }
+    const key = name.toLowerCase()
+    if (subs.some((x) => x.toLowerCase() === key)) continue
+    subs.push(name)
+    if (m === null) continue
+    const word = (m[2] ?? '').toLowerCase()
+    const n = Number(m[3] ?? m[4] ?? m[5] ?? Number.NaN)
+    per_week[key] = Number.isFinite(n)
+      ? n
+      : word === '每天' || word === '天天' || word === 'daily'
+        ? 7
+        : 1
+  }
+  return { subs, per_week, bad }
+}
+
+/** 版块 + 频率 → 卡上那一串（没单独设的只写名字）。 */
+export function formatSubList(subs: readonly string[], perWeek: Record<string, number>): string {
+  return subs
+    .map((s) => {
+      const n = perWeek[s.toLowerCase()]
+      return n === undefined ? s : `${s}（${perWeekLabel(n)}）`
+    })
+    .join(', ')
+}
 
 /** 配置卡的建议值从哪来（WP249 登记的 Reddit 号 / 自家版）。 */
 export interface SettingsSuggestions {
@@ -87,58 +176,103 @@ export interface SettingsSuggestions {
   brand_username?: string
 }
 
+const textField = (
+  key: string,
+  label: string,
+  placeholder: string,
+  suggested: string,
+  why: string | undefined,
+): SetupField => ({
+  key,
+  label,
+  kind: 'text',
+  placeholder,
+  ...(suggested === ''
+    ? {}
+    : { suggested, ...(why === undefined || why === '' ? {} : { suggested_why: why }) }),
+  required: false,
+})
+
 const EVERY = [
   { value: '24', label: '每天一次' },
   { value: '12', label: '每 12 小时' },
   { value: '6', label: '每 6 小时' },
 ]
 
-/** 设置目标：版块、关键词、品牌号、频率。 */
+const AI_WHY = (why: string | undefined): string | undefined =>
+  why === undefined ? 'AI 按品牌档案建议' : `AI 建议：${why}`
+
+/** 设置目标：版块（带频率）、关键词、告警词、标签词、品牌号、收件箱 / 关键词的频率。 */
 export function redditWatchSetupTarget(input: {
   store: RedditWatchStore
   workspace_id: WorkspaceId
   suggestions?(): SettingsSuggestions | undefined
+  /** WP340：AI 按品牌档案给的建议（只在第一次配置时问；没模型回 `undefined`）。 */
+  aiSuggestions?(): Promise<PatrolSuggestion | undefined>
 }): SetupTarget {
   const ws = input.workspace_id
   return {
     id: REDDIT_WATCH_TARGET,
     name: 'Reddit 巡查',
-    why: '告诉我自家版块和要盯的关键词，我每天巡查一次。',
+    why: '告诉我要巡查哪些版块、盯哪些词，我按频率巡查。',
     async fields(): Promise<SetupField[]> {
       const s = readSettings(input.store, ws)
       const hint = input.suggestions?.() ?? {}
-      const subs = s.own_subreddits.length > 0 ? s.own_subreddits : (hint.own_subreddits ?? [])
+      const first = !isConfigured(s)
+      const ai = first ? await input.aiSuggestions?.().catch(() => undefined) : undefined
+      const per = s.sub_per_week ?? {}
+      // 自家版块：已存的 → 连接里登记的（事实）→ AI 建议
+      let own = formatSubList(s.own_subreddits, per)
+      let ownWhy: string | undefined
+      if (own === '' && (hint.own_subreddits ?? []).length > 0) {
+        own = (hint.own_subreddits ?? []).join(', ')
+        ownWhy = '连接里登记的自家版'
+      } else if (own === '' && ai !== undefined && ai.own_subreddits.length > 0) {
+        own = ai.own_subreddits.join(', ')
+        ownWhy = AI_WHY(ai.why.own_subreddits)
+      }
+      const watchNow = formatSubList(s.watch_subreddits ?? [], per)
+      const aiWatch =
+        ai === undefined
+          ? ''
+          : formatSubList(
+              ai.watch_subreddits.map((w) => w.name),
+              Object.fromEntries(
+                ai.watch_subreddits
+                  .filter((w) => w.per_week !== undefined)
+                  .map((w) => [w.name.toLowerCase(), w.per_week as number]),
+              ),
+            )
+      const pick = (
+        now: readonly string[],
+        aiList: readonly string[] | undefined,
+        why: string | undefined,
+      ): [string, string | undefined] =>
+        now.length > 0
+          ? [now.join(', '), undefined]
+          : aiList !== undefined && aiList.length > 0
+            ? [aiList.join(', '), AI_WHY(why)]
+            : ['', undefined]
+      const [keywords, keywordsWhy] = pick(s.keywords, ai?.keywords, ai?.why.keywords)
+      const [alerts, alertsWhy] = pick(s.alert_words ?? [], ai?.alert_words, ai?.why.alert_words)
+      const [tags, tagsWhy] = pick(s.tag_words ?? [], ai?.tag_words, ai?.why.tag_words)
       const user = s.brand_username ?? hint.brand_username
       return [
-        {
-          key: 'own_subreddits',
-          label: '自家版块',
-          kind: 'text',
-          placeholder: 'inmoxr',
-          ...(subs.length === 0
-            ? {}
-            : { suggested: subs.join(', '), suggested_why: '连接里登记的自家版' }),
-          required: false,
-        },
-        {
-          key: 'keywords',
-          label: '关键词',
-          kind: 'text',
-          placeholder: '品牌、型号、竞品，逗号分开',
-          ...(s.keywords.length === 0 ? {} : { suggested: s.keywords.join(', ') }),
-          required: false,
-        },
-        {
-          key: 'brand_username',
-          label: '品牌号',
-          kind: 'text',
-          placeholder: 'u/…',
-          ...(user === undefined ? {} : { suggested: user }),
-          required: false,
-        },
+        textField('own_subreddits', '自家版块', 'inmoxr', own, ownWhy),
+        textField(
+          'watch_subreddits',
+          '重点版块',
+          'SmartGlasses, Xreal（每周）',
+          watchNow !== '' ? watchNow : aiWatch,
+          watchNow !== '' || aiWatch === '' ? undefined : AI_WHY(ai?.why.watch_subreddits),
+        ),
+        textField('keywords', '关键词', '品牌、品类词，逗号分开', keywords, keywordsWhy),
+        textField('alert_words', '告警词', 'recall, refund', alerts, alertsWhy),
+        textField('tag_words', '标签词', '型号写法，如 Air3', tags, tagsWhy),
+        textField('brand_username', '品牌号', 'u/…', user ?? '', undefined),
         {
           key: 'every_hours',
-          label: '多久一次',
+          label: '收件箱和关键词',
           kind: 'select',
           options: EVERY,
           suggested: String(s.every_hours),
@@ -150,19 +284,28 @@ export function redditWatchSetupTarget(input: {
       return isConfigured(readSettings(input.store, ws))
     },
     async apply(values): Promise<void> {
-      const subsRaw = splitList(values.own_subreddits ?? '')
-      const subs = subsRaw.map((s) => normalizeSubreddit(s))
-      if (subs.some((s) => s === undefined))
-        throw new SetupCardError('invalid_input', '版块名只能是字母、数字、下划线（如 inmoxr）。')
+      const own = parseSubList(values.own_subreddits ?? '')
+      const watch = parseSubList(values.watch_subreddits ?? '')
+      const bad = [...own.bad, ...watch.bad]
+      if (bad.length > 0)
+        throw new SetupCardError(
+          'invalid_input',
+          `认不出：${bad.slice(0, 3).join('、')}。版块名只能是字母、数字、下划线，频率写在后面（如 Xreal（每周））。`,
+        )
       const keywords = splitList(values.keywords ?? '')
-      if (subs.length === 0 && keywords.length === 0)
+      if (own.subs.length === 0 && keywords.length === 0 && watch.subs.length === 0)
         throw new SetupCardError('invalid_input', '版块和关键词至少填一样。')
       const user = (values.brand_username ?? '').trim().replace(/^\/?u\//iu, '')
       if (user !== '' && !USER.test(user))
         throw new SetupCardError('invalid_input', '品牌号用户名不对（3–20 个字母、数字、_ 或 -）。')
       const patch: Partial<RedditWatchSettings> = {
-        own_subreddits: subs as string[],
+        own_subreddits: own.subs,
+        watch_subreddits: watch.subs,
+        // 卡上写着的就是全部：没写频率的版块回到默认（跟总频率，默认每天）
+        sub_per_week: { ...watch.per_week, ...own.per_week },
         keywords,
+        alert_words: splitList(values.alert_words ?? ''),
+        tag_words: splitList(values.tag_words ?? ''),
         ...(values.every_hours === undefined ? {} : { every_hours: Number(values.every_hours) }),
       }
       if (user !== '') patch.brand_username = user

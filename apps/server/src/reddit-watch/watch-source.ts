@@ -9,9 +9,10 @@
  * 1. 话题 `key` 跨天一致：由话题名规范化得来（AI 判的时候带着本周已有话题、能归就用原名）；
  * 2. `sweepNow` 有哪块没读成就抛一句人话（工具照实转告，报告照样用已入库的出）。
  */
-import type { Iso8601, RedditWatchEntry, WatchItem } from '@agentsws/contracts'
+import type { Iso8601, RedditWatchEntry, RedditWatchSettings, WatchItem } from '@agentsws/contracts'
 import type { WatchSource } from '../report-tools.js'
 import type { RedditWatchAssembly } from './service.js'
+import { localMarks } from './terms.js'
 
 /** 话题名 → 跨天稳定的键（大小写、空白、全半角标点不算不同）。 */
 export function topicKey(label: string): string {
@@ -29,6 +30,8 @@ const LIMIT = 5000
 export function watchItemOfEntry(
   e: RedditWatchEntry,
   ownSubs: ReadonlySet<string>,
+  /** WP340：按当前设置补算告警词 / 标签（后加的词对老条目也生效；不给就只用入库时标的）。 */
+  terms?: Pick<RedditWatchSettings, 'alert_words' | 'tag_words'>,
 ): WatchItem | undefined {
   if (e.kind === 'message' || e.url === undefined || e.subreddit === undefined) return undefined
   const own = ownSubs.has(e.subreddit.toLowerCase())
@@ -63,8 +66,19 @@ export function watchItemOfEntry(
       ...(note === undefined ? {} : { note }),
     }
   }
+  // WP340：「优先」与本地标签（入库时标的 ∪ 按当前设置补算的）
+  const now = terms === undefined || e.deleted === true ? undefined : localMarks(e, terms)
+  if (e.ours !== true && (e.priority === true || (now?.alerts.length ?? 0) > 0)) item.priority = true
+  const tags = [...new Set([...(e.tags ?? []), ...(now?.tags ?? [])])]
+  if (tags.length > 0) item.tags = tags
   if (scope === 'external') {
-    const label = j?.topic ?? (e.keyword === undefined ? '其他' : `关键词：${e.keyword}`)
+    const label =
+      j?.topic ??
+      (e.keyword !== undefined
+        ? `关键词：${e.keyword}`
+        : e.subreddit !== undefined
+          ? `r/${e.subreddit}`
+          : '其他')
     item.topic = { key: topicKey(label), label }
     if (j !== undefined) item.assessment = j.verdict
     if (e.keyword !== undefined) item.keyword = e.keyword
@@ -77,16 +91,21 @@ export function redditWatchSourceOf(rw: RedditWatchAssembly): WatchSource {
     platform: 'reddit',
     configured: () => {
       const s = rw.settings()
-      return s.own_subreddits.length > 0 || s.keywords.length > 0
+      return (
+        s.own_subreddits.length > 0 ||
+        s.keywords.length > 0 ||
+        (s.watch_subreddits ?? []).length > 0
+      )
     },
     ownPlaces: () => rw.settings().own_subreddits,
     items: (w) => {
-      const own = new Set(rw.settings().own_subreddits.map((x) => x.toLowerCase()))
+      const s = rw.settings()
+      const own = new Set(s.own_subreddits.map((x) => x.toLowerCase()))
       const out = new Map<string, WatchItem>()
       // 自家版块那一路先放（同一条在收件箱里也有时以它为准）
       for (const source of ['own_sub', 'inbox', 'external'] as const)
         for (const e of rw.items({ source, since: w.since, until: w.until, limit: LIMIT })) {
-          const it = watchItemOfEntry(e, own)
+          const it = watchItemOfEntry(e, own, s)
           if (it !== undefined && !out.has(it.id)) out.set(it.id, it)
         }
       return [...out.values()]
