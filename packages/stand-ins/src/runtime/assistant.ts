@@ -61,7 +61,10 @@ export const ASSISTANT_TOOL_DEFS: readonly ToolDef[] = [
     input_schema: {
       type: 'object',
       properties: {
-        channel: { type: 'string', description: '只看这个渠道（reddit / email / x …），不填 = 全部' },
+        channel: {
+          type: 'string',
+          description: '只看这个渠道（reddit / email / x …），不填 = 全部',
+        },
         limit: { type: 'integer', description: '最多几条，默认 10，最多 30' },
       },
     },
@@ -89,7 +92,10 @@ export const ASSISTANT_TOOL_DEFS: readonly ToolDef[] = [
       properties: {
         text: { type: 'string', description: '交给岗位的那件事（用用户的原话，必要时补全上下文）' },
         position: { type: 'string', description: '交给哪个岗位（岗位名）' },
-        duty: { type: 'string', description: '岗位里的哪条职责（职责名），不确定就不填，岗位自己分' },
+        duty: {
+          type: 'string',
+          description: '岗位里的哪条职责（职责名），不确定就不填，岗位自己分',
+        },
       },
       required: ['text'],
     },
