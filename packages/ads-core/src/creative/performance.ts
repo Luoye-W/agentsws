@@ -268,8 +268,9 @@ export function pickWeakAds(
 }
 
 /** Google「Headline 3」/ Meta「Title」这类文案列（WP314 只认到 Headline 1，其余按原表头取）。 */
-const HEADLINE_COL = /^(?:headline\s*\d{1,2}|title)$/i
-const DESCRIPTION_COL = /^(?:description\s*\d|body)$/i
+// WP315：WP314 的别名表认得中文表头之后，中文导出也走这一条，所以这里也认中文的标题 / 正文列
+const HEADLINE_COL = /^(?:headline\s*\d{1,2}|title|标题\s*\d{0,2})$/i
+const DESCRIPTION_COL = /^(?:description\s*\d?|body|描述\s*\d?|说明\s*\d?|正文)$/i
 
 /** WP314 的解析结果 → 对齐过的行。认不出广告系列 / 广告组两列回 `undefined`（交给兜底那一份）。 */
 function fromAdsExport(
