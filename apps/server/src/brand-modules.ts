@@ -31,6 +31,7 @@ import type { Work } from '@agentsws/work'
 import type { AdCreativeServiceAssembly } from './ad-creative.js'
 import type { AdsStore } from './ads.js'
 import type { AdsActionsService } from './ads-actions/service.js'
+import type { AdsDataService } from './ads-data/service.js'
 import type { AdsServiceAssembly } from './ads-service.js'
 import type { AdsWiring } from './ads-wiring/service.js'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
@@ -288,6 +289,8 @@ export interface BrandModuleSet {
    * 上传表、截图。托管实例不装（云上没有用户的浏览器）。
    */
   adsActions?: AdsActionsService
+  /** WP315（docs/101 §5.1①）：广告看数据——每日导出入库、邮箱备用、查数工具（托管实例没有）。 */
+  adsData?: AdsDataService
   /** WP316（docs/101 §5.1② ③）：广告卡批了之后的执行那一半 + 广告变更账本。 */
   adsWiring?: AdsWiring
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */

@@ -184,6 +184,8 @@ export interface OpenAtPositionInput {
    * 不给 = 老样子，跑完才回（回答、`run_id` 都在回包里）。
    */
   detach?: boolean
+  /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上。 */
+  model?: string
 }
 
 /** WP287：岗位里问一句，当场的回答（岗位页输入框下面那一段）。 */
@@ -761,6 +763,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         ask: true,
         quick: called === undefined || called === 'quick',
         ...(input.summary === undefined ? {} : { summary: input.summary }),
+        ...(input.model === undefined ? {} : { model: input.model }),
       })
       emit('matter.routed', matter.id, input.person_id, {
         position_id: template.id,
@@ -835,6 +838,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       ...(ask ? { ask: true, ...(quick ? { quick: true } : {}) } : {}),
       position_id: pickedEntry.assignment_id,
       role_id: pickedEntry.role_id,
+      ...(input.model === undefined ? {} : { model: input.model }),
     })
 
     const alternatives = routed.alternatives ?? []

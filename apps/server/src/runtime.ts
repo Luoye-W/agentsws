@@ -102,12 +102,14 @@ import {
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
+  ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
+  isAdsDataRole,
   isAdsWiredRole,
   isB2bOutboundRole,
   isOwnerRole,
@@ -190,6 +192,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...RECORD_SINK_TOOL_NAMES,
     // WP331：报告积木——查巡查 / 查发出记录只读本机库；立即巡查读外部（只读）；发布只进本岗位报表区
     ...REPORT_TOOL_NAMES,
+    // WP315：投放岗看数据——查数只读本机库；现在导一次排给插件（只点导出）；止损只出卡
+    ...ADS_DATA_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
@@ -343,6 +347,13 @@ export interface RuntimeOptions {
    */
   runModelRef?: () => ModelRef
   /**
+   * WP342（决策 853）：事项自己选的 AI（`Matter.model`，`provider_id/model`）→ ModelRef。
+   * 回 `undefined` = 认不出 / 现在不能用（删了、断了）——这次运行退回品牌默认。
+   * 解析出来就进 `RunRequest.runtime.model` 并标 `model_pinned`：三个运行时都按它跑（stub 记在
+   * `run.started` 上，direct / dsh 每次补全把它显式交给网关）。不给这个选项 = 不认事项上的选择（老行为）。
+   */
+  modelOverride?: (id: string) => ModelRef | undefined
+  /**
    * WP147（截图给 AI 看）：现在生效的默认模型**验证过能看图**吗（WP127 三步验证的结论，
    * `ModelsAssembly.visionStatus()`）。只有 `'ok'` 才让 dsh 那条路由声明图片输入——
    * 浏览器 / 电脑操控的截图才进模型；`'no'` / `'unchecked'` / 不接都不声明（截图位置是官方诊断）。
@@ -445,6 +456,11 @@ export interface RuntimeOptions {
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
+  /**
+   * WP315（docs/101 §5.1①）：投放岗看数据的三个工具（`ads-data/tools.ts` 建的那一份）。只给 `ads.*` 职责。
+   * 不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  adsDataTools?: ToolExecutor
   /**
    * WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具 `request_setup`（`setup-request-tool.ts` 建的那一份）。
    * **所有职责都有**；工具只回结构化缺项，卡由这一轮收尾时的 `setupCards.onRunBlocked` 出（同一缺项只一张）。
@@ -1154,6 +1170,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const automation = options.automation
     const sinkTools = options.recordSinkTools
     const reportTools = options.reportTools?.execute
+    const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
@@ -1184,6 +1201,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       automation === undefined &&
       sinkTools === undefined &&
       reportTools === undefined &&
+      adsDataTools === undefined &&
       setupRequest === undefined
     )
       return source.executeTool
@@ -1234,6 +1252,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
         return reportTools(call)
       }
+      // WP315：投放岗看数据（名字与别处不重名；职责在执行器里再判一次）
+      if (adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bareOf(call.name))) {
+        return adsDataTools(call)
+      }
       // WP334：AI 自己要卡（名字与别处不重名）
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
@@ -1279,6 +1301,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
+    if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
@@ -1569,6 +1592,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     assignment_id: AssignmentId
   }): Promise<RunRequest> => {
     const effective = roles.effectiveConfig(input.assignment_id)
+    // WP342：这件事自己选的 AI（输入框左下角那个钮）；认不出就跟品牌默认走
+    const pinnedModel =
+      input.matter.model === undefined ? undefined : options.modelOverride?.(input.matter.model)
     /*
      * WP216：平台专属的官方技能只在品牌平台对得上时留下（每次现取档案）。
      * 一本都没被滤掉时 `config` 就是原来那一份——非平台技能的职责字节一个不变。
@@ -1716,6 +1742,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                 !WATCH_TOOL_NAMES.includes(n) ||
                 options.reportTools?.watchRoles.has(config.role_id) === true,
             )),
+        // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
+        ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
+          ? ADS_DATA_TOOL_NAMES
+          : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
       ]),
@@ -1924,10 +1954,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         preset: config.role_id,
         profile: 'server',
         plugins: [],
-        model: useDirect()
-          ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
-          : { provider: 'stub', model: 'default', region: 'cn' },
+        model:
+          pinnedModel ??
+          (useDirect()
+            ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
+            : { provider: 'stub', model: 'default', region: 'cn' }),
         seed,
+        ...(pinnedModel === undefined ? {} : { model_pinned: true as const }),
       },
       // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
       ...(vertical === undefined ? {} : { vertical }),
@@ -1986,9 +2019,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         person_id: input.actor.person_id,
         assignment_id: input.actor.assignment_id,
         // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
-        model: useDirect()
-          ? (options.runModelRef?.() ?? request.runtime.model)
-          : request.runtime.model,
+        // WP342：这件事自己选了 AI 就是它（不是 purpose 那条）
+        model:
+          useDirect() && request.runtime.model_pinned !== true
+            ? (options.runModelRef?.() ?? request.runtime.model)
+            : request.runtime.model,
       },
       controller,
       settled: new Promise<void>((resolve) => {

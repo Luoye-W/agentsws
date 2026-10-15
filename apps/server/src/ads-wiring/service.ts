@@ -89,6 +89,11 @@ export interface AdsWiringOptions {
   /** 测试指向本地假后台。 */
   origins?: AdsOrigins
   id(): string
+  /**
+   * WP315：看数据那边配过的账户若就是这一个，带上它的 Google `ocid`（后台网址更稳）。
+   * 不给 / 对不上就不带（照旧只用客户编号拼网址）。
+   */
+  ocidFor?(platform: 'google' | 'meta', external_id: string): string | undefined
 }
 
 /** ads-service 那一侧晚绑定进来的两件事（出「开始投放」卡、作废了重出）。 */
@@ -160,7 +165,14 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
     return {
       account_id: acc.id,
       platform: acc.platform,
-      account: { platform: actionPlatformOf(acc.platform), id: acc.external_id },
+      account: (() => {
+        const ocid = options.ocidFor?.(acc.platform, acc.external_id)
+        return {
+          platform: actionPlatformOf(acc.platform),
+          id: acc.external_id,
+          ...(ocid === undefined ? {} : { ocid }),
+        }
+      })(),
     }
   }
 

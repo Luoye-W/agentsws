@@ -4,7 +4,7 @@ Agents Workshop focuses on cross-border e-commerce and marketing. It is **one** 
 
 ## How to switch
 
-1. Click "Scenes" at the bottom of the left sidebar (or "Switch scene" in the tray menu).
+1. Click your name at the bottom left, then "Scenes ›" in the menu (or "Switch scene" in the tray menu).
 2. Find the scene you want and click "Open".
 3. To come back, switch to the Agents Workshop window.
 

@@ -217,6 +217,8 @@ export interface CreateMatterInput {
   ask?: boolean | undefined
   /** WP291：当场问答（`ask.quick`，连左栏会话历史都不进；只在给了 `ask: true` 时有效）。 */
   quick?: boolean | undefined
+  /** WP342：这件事自己选的 AI（`provider_id/model`；不给 = 跟品牌默认，见 `Matter.model`）。 */
+  model?: string | undefined
 }
 
 export interface CreateTodoInput {
@@ -434,6 +436,7 @@ export class Work {
       ...(input.ask === true
         ? { ask: input.quick === true ? { at, quick: true as const } : { at } }
         : {}),
+      ...(input.model === undefined || input.model === '' ? {} : { model: input.model }),
       context: {
         summary: input.summary ?? '',
         pinned: input.pinned ?? [],
@@ -724,6 +727,24 @@ export class Work {
     if (by !== 'user' && matter.title_source === 'user') return matter
     if (next === matter.title && matter.title_source === by) return matter
     const updated: Matter = { ...matter, title: next, title_source: by, updated_at: this.now() }
+    this.store.putMatter(updated)
+    return updated
+  }
+
+  /**
+   * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮）。`undefined` / 空 = 回到跟品牌默认。
+   * 只改这一件：不动品牌默认、不算一次「活动」；模型 id 不是正文，但也不进事件日志（换来换去没人要查）。
+   */
+  setModel(id: MatterId, model: string | undefined): Matter {
+    const matter = this.requireMatter(id)
+    const next = model === undefined || model.trim() === '' ? undefined : model.trim()
+    if (next === matter.model) return matter
+    const { model: _old, ...rest } = matter
+    const updated: Matter = {
+      ...rest,
+      ...(next === undefined ? {} : { model: next }),
+      updated_at: this.now(),
+    }
     this.store.putMatter(updated)
     return updated
   }
