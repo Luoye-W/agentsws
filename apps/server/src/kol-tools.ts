@@ -217,6 +217,12 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             status: 'error',
             reason: `not_connected：${res.message ?? `${channel} 还没连上。`}`,
           }
+        // WP334（决策 726）：工坊账号没关联——带上机器码，运行时出连接卡（卡里就地关联）
+        if (res.reason === 'not_linked')
+          return {
+            status: 'error',
+            reason: `not_linked：${res.message ?? '还没关联 Agents 工坊账号。'}`,
+          }
         return { status: 'error', reason: res.message ?? res.reason ?? '这条渠道这次没答上来。' }
       }
 

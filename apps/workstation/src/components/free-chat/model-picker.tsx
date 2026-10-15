@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandMark } from '@/components/design'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import type { FreeChatModelChoice } from '@/lib/free-chat'
@@ -33,6 +34,7 @@ export function ModelPicker({
   onChange: (id: string) => void
 }): React.ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   // 点外面 / 按 Esc 收起（一个轻量的下拉，不用弹层库：它只有一列按钮）
@@ -55,8 +57,17 @@ export function ModelPicker({
   const current = choices.find((c) => c.id === value) ?? choices[0]
   if (current === undefined) {
     return (
-      <Button size="sm" variant="outline" asChild data-testid="free-chat-no-model">
-        <Link to="/settings">{t('free_chat.no_model')}</Link>
+      // WP334（决策 726）：还没接模型——在第三栏就地接（与开工向导第 ① 步同一个件），不跳设置页
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid="free-chat-no-model"
+        data-connect="model"
+        onClick={() => {
+          openConnect('model')
+        }}
+      >
+        {t('free_chat.no_model')}
       </Button>
     )
   }

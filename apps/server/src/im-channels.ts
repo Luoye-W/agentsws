@@ -412,7 +412,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       | 'im.received'
       | 'im.ask_failed'
       | 'im.disconnected'
-      | 'im.reconnected',
+      | 'im.reconnected'
+      // WP334：第一次连上（服务端据此复查还在等的连接卡：在卡上 / 消息渠道页填好，连上就接着做）
+      | 'im.connected',
     payload: object,
   ): void => {
     options.appendEvent({
@@ -898,7 +900,9 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     if (state === 'connected' && down.has(channel)) {
       down.delete(channel)
       emit('im.reconnected', { channel })
+      return
     }
+    if (state === 'connected' && prev !== 'connected') emit('im.connected', { channel })
   }
 
   /* ── 鉴权中间件（网关那一套在 createGateway 里面，挂不到这里来） ──── */

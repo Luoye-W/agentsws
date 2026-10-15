@@ -358,7 +358,8 @@ async function answer(
     choices.find((c) => c.id === `${ref.provider}/${ref.model}`) ??
     choices[0]
   if (choice === undefined)
-    return fail('还没接模型。去「设置 → 模型」接一个（或者启用「Agents 工坊（用积分）」）再来聊。')
+    // WP334（决策 726）：不再叫人去设置页——输入框旁那个「还没接模型，接一个」就地开连接卡
+    return fail('还没接模型，点「接一个」就地接上再来聊。')
   const withModel = {
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },

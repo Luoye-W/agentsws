@@ -197,6 +197,8 @@ const ICONS: Record<string, IconChoice> = {
   'agentsws-cloud': { kind: 'ours' },
   agentsws_cloud: { kind: 'ours' },
   agentsws: { kind: 'ours' },
+  // WP334：连接卡上「Agents 工坊账号」那一样
+  workshop_account: { kind: 'ours' },
   // WP134：「用我的 DeepSeek 账号登录」——还是 DeepSeek 这一家，戴它自己的标志
   deepseek_account: { kind: 'glyph', glyph: 'deepseek' },
 }

@@ -21,42 +21,22 @@
  * favicon）。三条团队渠道的公司应用凭据只给负责人与公司管理员填 / 改 / 断开（Fable 09-30），别人只看
  * 状态；每人自己的「绑定我的账号」人人可用。
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users } from 'lucide-react'
-import {
-  type FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from 'react'
-import { StatusIcons, useFresh } from '@/components/design'
+import type { ReactNode } from 'react'
+import { StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
-import { Button } from '@/components/ui/button'
+import { WechatBind } from '@/components/im/wechat-bind'
+import { WecomBotForm } from '@/components/im/wecom-bot-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  getImStatus,
-  type ImLoginPoll,
-  pollWechatLogin,
-  saveWecomBot,
-  startWechatLogin,
-  unbindWechat,
-} from '@/lib/api'
+import { getImStatus } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-
-/** 轮询节奏：服务端那一跳自己是长轮询（最长 35s），这里只管别把它打穿。 */
-const POLL_MS = 1200
 
 export function ImChannelsPage(): ReactNode {
   const { t } = useApp()
-  const client = useQueryClient()
   const status = useQuery({
     queryKey: ['im', 'status'],
     queryFn: getImStatus,
@@ -77,90 +57,6 @@ export function ImChannelsPage(): ReactNode {
       return busy ? 1500 : bots.length > 0 ? 30_000 : false
     },
   })
-  const [login, setLogin] = useState<{ id: string; qrcode_url: string } | null>(null)
-  const [poll, setPoll] = useState<ImLoginPoll | null>(null)
-  const [verify, setVerify] = useState('')
-  const [wecomSaved, setWecomSaved] = useState(false)
-  const [wecomError, setWecomError] = useState<string | null>(null)
-  /** WP214：这一次打开里刚扫码连上的时刻——「已连上，去微信里说句话试试」只在两分钟内说。 */
-  const [boundAt, setBoundAt] = useState<number | undefined>(undefined)
-  const justBound = useFresh(boundAt)
-  const formRef = useRef<HTMLFormElement>(null)
-  const botIdId = useId()
-  const secretId = useId()
-
-  const refresh = useCallback(async (): Promise<void> => {
-    await client.invalidateQueries({ queryKey: ['im'] })
-  }, [client])
-
-  const begin = useMutation({
-    mutationFn: startWechatLogin,
-    onSuccess: (out) => {
-      setPoll(null)
-      setVerify('')
-      setLogin({ id: out.login_id, qrcode_url: out.qrcode_url })
-    },
-  })
-
-  const unbind = useMutation({
-    mutationFn: unbindWechat,
-    onSuccess: async () => {
-      setLogin(null)
-      setPoll(null)
-      await refresh()
-    },
-  })
-
-  const saveWecom = useMutation({
-    mutationFn: saveWecomBot,
-    onSuccess: async () => {
-      setWecomError(null)
-      setWecomSaved(true)
-      // 13 §4.3：提交完 DOM 里也不留
-      formRef.current?.reset()
-      await refresh()
-    },
-    onError: (e: Error) => {
-      setWecomError(e.message)
-      formRef.current?.reset()
-    },
-  })
-
-  /** 扫码期间按节奏问状态；连上 / 过期 / 失败就停。 */
-  useEffect(() => {
-    if (login === null) return
-    let alive = true
-    const tick = async (): Promise<void> => {
-      if (!alive) return
-      try {
-        const out = await pollWechatLogin(login.id, verify === '' ? undefined : verify)
-        if (!alive) return
-        setPoll(out)
-        if (out.qrcode_url !== undefined)
-          setLogin((prev) => (prev === null ? prev : { ...prev, qrcode_url: out.qrcode_url ?? '' }))
-        if (out.status === 'confirmed' || out.status === 'already_connected') {
-          setLogin(null)
-          setBoundAt(Date.now())
-          await refresh()
-          return
-        }
-        if (out.status === 'expired' || out.status === 'failed') {
-          setLogin(null)
-          return
-        }
-      } catch {
-        // 一次网络抖动不该把扫码中断；下一拍接着问
-      }
-      if (alive) timer = setTimeout(() => void tick(), POLL_MS)
-    }
-    let timer = setTimeout(() => void tick(), POLL_MS)
-    return () => {
-      alive = false
-      clearTimeout(timer)
-    }
-    // verify 变了要立刻带上去（填了配对码之后）
-  }, [login, verify, refresh])
-
   if (status.isPending) return <Skeleton className="h-96 w-full" />
   if (status.error !== null) {
     return (
@@ -174,15 +70,6 @@ export function ImChannelsPage(): ReactNode {
   const wecom = status.data?.wecom
   // WP211（Fable 09-30）：公司的应用凭据只给负责人与公司管理员；别人只看状态
   const canManage = status.data?.can_manage === true
-
-  const submitWecom = (e: FormEvent<HTMLFormElement>): void => {
-    e.preventDefault()
-    const form = new FormData(e.currentTarget)
-    const bot_id = String(form.get('bot_id') ?? '').trim()
-    const secret = String(form.get('secret') ?? '').trim()
-    if (bot_id === '' || secret === '') return
-    saveWecom.mutate({ bot_id, secret })
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -256,105 +143,8 @@ export function ImChannelsPage(): ReactNode {
             原话一行留在卡上，条款出处在它旁边的问号里。
           */}
           <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
-          {wechat?.allowed === false ? (
-            <p role="alert" className="text-sm text-destructive">
-              {wechat.reason}
-            </p>
-          ) : wechat?.bound === true ? (
-            <div className="flex flex-col gap-2">
-              {/* 「已连上（微信账号 …）。去微信里跟它说句话试试」只在刚扫完码的两分钟内说 */}
-              {justBound ? (
-                <p className="text-sm" data-slot="status" data-testid="im-wechat-bound">
-                  {t('im.wechat.bound', { account: wechat.account_id ?? '' })}
-                </p>
-              ) : null}
-              {wechat.paused_until !== undefined ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {t('im.wechat.stale')}
-                </p>
-              ) : null}
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={begin.isPending}
-                  onClick={() => {
-                    begin.mutate()
-                  }}
-                >
-                  {t('im.wechat.rescan')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={unbind.isPending}
-                  onClick={() => {
-                    unbind.mutate()
-                  }}
-                >
-                  {t('im.wechat.unbind')}
-                </Button>
-                {/* WP214：原来这个问号单独一行、孤零零挂在卡底；挪到它说的「解绑」旁边 */}
-                <Hint
-                  text={t('im.wechat.unbind.why')}
-                  className="self-center"
-                  testId="im-wechat-unbind-why"
-                />
-              </div>
-            </div>
-          ) : login === null ? (
-            <div>
-              <Button
-                size="sm"
-                disabled={begin.isPending}
-                onClick={() => {
-                  begin.mutate()
-                }}
-              >
-                {t('im.wechat.scan')}
-              </Button>
-              {begin.error !== null ? (
-                <p role="alert" className="mt-2 text-sm text-destructive">
-                  {begin.error.message}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <img
-                src={login.qrcode_url}
-                alt={t('im.wechat.qr.alt')}
-                className="size-48 rounded border bg-white p-2"
-              />
-              <p className="text-sm">{poll?.message ?? t('im.wechat.qr.hint')}</p>
-              {poll?.status === 'need_verify_code' ? (
-                <div className="flex max-w-xs items-end gap-2">
-                  <div className="flex-1">
-                    <Label htmlFor="im-verify">{t('im.wechat.verify')}</Label>
-                    <Input
-                      id="im-verify"
-                      value={verify}
-                      inputMode="numeric"
-                      autoComplete="off"
-                      onChange={(e) => {
-                        setVerify(e.target.value)
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setLogin(null)
-                  setPoll(null)
-                }}
-              >
-                {t('im.wechat.cancel')}
-              </Button>
-            </div>
-          )}
+          {/* WP334：扫码那一块与连接卡共用一个件 */}
+          <WechatBind wechat={wechat} />
         </CardContent>
       </Card>
 
@@ -401,49 +191,8 @@ export function ImChannelsPage(): ReactNode {
           />
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {/*
-            13 §4.3 的原生表单：值用 FormData 收，不进 React state、不进任何全局变量，
-            提交完立刻 reset()。全程没有一次 console.*。
-          */}
-          {/* WP211（Fable 09-30）：公司的凭据只有负责人 / 公司管理员能填，别人只看状态 */}
-          {canManage ? (
-            <form ref={formRef} onSubmit={submitWecom} className="flex max-w-md flex-col gap-3">
-              <div>
-                <Label htmlFor={botIdId} className="gap-1.5">
-                  {t('im.wecom.bot_id')}
-                  <Hint text={t('im.wecom.where')} />
-                </Label>
-                <Input id={botIdId} name="bot_id" autoComplete="off" spellCheck={false} required />
-              </div>
-              <div>
-                <Label htmlFor={secretId}>{t('im.wecom.secret')}</Label>
-                <Input
-                  id={secretId}
-                  name="secret"
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  data-1p-ignore
-                  required
-                />
-              </div>
-              <div>
-                <Button type="submit" size="sm" disabled={saveWecom.isPending}>
-                  {t('im.wecom.save')}
-                </Button>
-              </div>
-            </form>
-          ) : null}
-          {wecomError !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              {wecomError}
-            </p>
-          ) : null}
-          {wecomSaved && wecomError === null ? (
-            <p className="text-sm text-muted-foreground" data-slot="status">
-              {t('im.wecom.done')}
-            </p>
-          ) : null}
+          {/* WP334：原生表单与连接卡共用一个件（13 §4.3；只有负责人 / 公司管理员能填） */}
+          <WecomBotForm canManage={canManage} />
           {/* WP211：企业微信也走同一套「绑定我的账号」 */}
           {wecom?.configured === true ? (
             <BindRow channel="wecom" bound={wecom.me_bound === true} />

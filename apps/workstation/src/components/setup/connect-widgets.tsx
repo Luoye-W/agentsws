@@ -8,8 +8,13 @@
  * | `site_theme` | 建站岗位页那一行（一键安装 CLI / 登录 Shopify / 选店） |
  * | `shop_admin` | 管店授权那一行 |
  * | `im:feishu` / `im:dingtalk` | 消息渠道页那张团队机器人卡 |
+ * | `im:wecom` | 企业微信机器人那张本机原生表单（与消息渠道页同一个件；WP334） |
+ * | `im:wechat` | 个人微信扫码（与消息渠道页同一个件；WP334） |
+ * | `model` | 接模型（与开工向导第 ① 步同一个件：工坊接口 / DeepSeek 官方 / 自己的 key 走本机原生表单；WP334） |
+ * | `deepseek_account` | DeepSeek 账号登录（与设置页同一个件；WP334） |
+ * | `workshop_account` | 关联 Agents 工坊账号（与设置页同一个注册 / 登录表单；WP334） |
  * | `extension` | 浏览器插件配对码 |
- * | 认不出 / 要下载连接器 / 企业微信 / 微信 | 「去连接页 / 消息渠道」一个链接（那一页仍是总览） |
+ * | 认不出 / 要下载连接器 | 「去连接页 / 消息渠道」一个链接（那一页仍是总览） |
  *
  * 每一样还要说「现在连上了没有」（{@link useNeedConnected}）：`true` / `false`；查不了回 `undefined`。
  */
@@ -18,15 +23,29 @@ import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { BrowserExtensionSection } from '@/components/connections/browser-extension'
 import { SecureForm } from '@/components/connections/secure-form'
 import { ShopifyConnect } from '@/components/connections/shopify-connect'
 import { TestResultLine } from '@/components/connections/test-result'
 import { TeamBotCard } from '@/components/im/team-bot-card'
+import { WechatBind } from '@/components/im/wechat-bind'
+import { WecomBotForm } from '@/components/im/wecom-bot-form'
+import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
+import { AiStep } from '@/components/onboarding/ai-step'
 import { ShopAdminBanner, shopAdminQuery } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import { Button } from '@/components/ui/button'
-import { getImStatus, getSiteTheme, listExtensionTokens, type ProviderView } from '@/lib/api'
+import { SafetyNote } from '@/components/ui/hint'
+import {
+  getCloudAccount,
+  getDeepSeekAccount,
+  getImStatus,
+  getSiteTheme,
+  listExtensionTokens,
+  listModelProviders,
+  type ProviderView,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useConnectFlow } from './use-connect-flow'
 
@@ -41,7 +60,9 @@ export interface ConnectContext {
   refresh(): void
 }
 
-const SPECIAL = new Set(['site_theme', 'shop_admin', 'extension'])
+const SPECIAL = new Set(['site_theme', 'shop_admin', 'extension', 'im:wechat'])
+/** WP334：消息渠道四条（团队三条 + 个人微信）都问同一个状态。 */
+const IM_SERVICES = new Set(['im:feishu', 'im:dingtalk', 'im:wecom', 'im:wechat'])
 const teamChannel = (service: string | undefined): 'feishu' | 'dingtalk' | undefined =>
   service === 'im:feishu' ? 'feishu' : service === 'im:dingtalk' ? 'dingtalk' : undefined
 
@@ -66,7 +87,29 @@ export function useNeedConnected(need: ConnectNeed, ctx: ConnectContext): boolea
   const im = useQuery({
     queryKey: ['im', 'status'],
     queryFn: getImStatus,
-    enabled: team !== undefined,
+    enabled: IM_SERVICES.has(service ?? ''),
+    refetchInterval: 3000,
+  })
+  // WP334：模型 / DeepSeek 账号 / 工坊账号（模型与账号是所有者的事：问不到就当查不了）
+  const models = useQuery({
+    queryKey: ['model-providers', ctx.owner],
+    queryFn: () => listModelProviders(ctx.owner),
+    enabled: service === 'model' && ctx.owner !== undefined,
+    retry: false,
+    refetchInterval: 3000,
+  })
+  const deepseek = useQuery({
+    queryKey: ['deepseek-account', ctx.owner],
+    queryFn: () => getDeepSeekAccount(ctx.owner),
+    enabled: service === 'deepseek_account' && ctx.owner !== undefined,
+    retry: false,
+    refetchInterval: 3000,
+  })
+  const cloud = useQuery({
+    queryKey: ['cloud-account', ctx.owner],
+    queryFn: () => getCloudAccount(ctx.owner),
+    enabled: service === 'workshop_account' && ctx.owner !== undefined,
+    retry: false,
     refetchInterval: 3000,
   })
   const ext = useQuery({
@@ -86,6 +129,15 @@ export function useNeedConnected(need: ConnectNeed, ctx: ConnectContext): boolea
     const v = im.data?.[team]
     return im.data === undefined ? undefined : v?.state === 'connected'
   }
+  if (service === 'im:wecom')
+    return im.data === undefined ? undefined : im.data.wecom.configured && im.data.wecom.connected
+  if (service === 'im:wechat') return im.data === undefined ? undefined : im.data.wechat.bound
+  if (service === 'model')
+    return models.data === undefined ? undefined : models.data.providers.some((p) => p.active)
+  if (service === 'deepseek_account')
+    return deepseek.data === undefined ? undefined : deepseek.data.signed_in
+  if (service === 'workshop_account')
+    return cloud.data === undefined ? undefined : cloud.data.linked
   if (service === 'extension')
     return ext.data === undefined ? undefined : ext.data.tokens.length > 0
   if (ctx.providers?.some((p) => p.service === service) === true) return ctx.isConnected(service)
@@ -196,6 +248,32 @@ export function ConnectWidget({
     )
   const team = teamChannel(service)
   if (team !== undefined) return <TeamBotWidget channel={team} />
+  // WP334（决策 725）：企业微信表单 / 微信扫码就在卡里（与消息渠道页同一个件）
+  if (service === 'im:wecom') return <WecomWidget />
+  if (service === 'im:wechat') return <WechatWidget />
+  // WP334（决策 726）：接模型 / DeepSeek 账号登录 / 关联工坊账号（与向导、设置页同一个件）
+  if (service === 'model')
+    return (
+      <AiStep
+        {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })}
+        onConnected={ctx.refresh}
+      />
+    )
+  if (service === 'deepseek_account')
+    return (
+      <DeepSeekAccountLogin
+        {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })}
+        onConnected={ctx.refresh}
+      />
+    )
+  if (service === 'workshop_account')
+    return (
+      <CloudAuthForm
+        {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })}
+        testPrefix="setup-cloud"
+        onDone={ctx.refresh}
+      />
+    )
   if (service === 'shopify_admin')
     return (
       <ShopifyConnect
@@ -221,5 +299,38 @@ function TeamBotWidget({ channel }: { channel: 'feishu' | 'dingtalk' }): ReactNo
       accountId={accountId}
       canManage={status.data?.can_manage === true}
     />
+  )
+}
+
+/** WP334：企业微信机器人表单（只有负责人 / 公司管理员能填；别人看到一句「由负责人来连」）。 */
+function WecomWidget(): ReactNode {
+  const { t } = useApp()
+  const status = useQuery({ queryKey: ['im', 'status'], queryFn: getImStatus })
+  if (status.data === undefined) return null
+  const view = status.data.wecom
+  if (view.configured && view.state === 'failed' && view.error !== undefined)
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-ws-bad">{view.error}</p>
+        <WecomBotForm canManage={status.data.can_manage === true} />
+      </div>
+    )
+  if (view.configured) return <p className="text-xs text-ws-muted-fg">{t('im.state.connecting')}</p>
+  return status.data.can_manage === true ? (
+    <WecomBotForm canManage />
+  ) : (
+    <p className="text-xs text-ws-muted-fg">{t('setup.connect.owner_only')}</p>
+  )
+}
+
+/** WP334：个人微信扫码（跟人走：谁的卡谁扫）。条款风险那一句进问号。 */
+function WechatWidget(): ReactNode {
+  const { t } = useApp()
+  const status = useQuery({ queryKey: ['im', 'status'], queryFn: getImStatus })
+  return (
+    <div className="flex flex-col gap-2">
+      <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
+      <WechatBind wechat={status.data?.wechat} compact />
+    </div>
   )
 }
