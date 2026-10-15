@@ -4,9 +4,10 @@
  * - **口令格**（`ws-secret`，决策 814）：模型写的口令 / key / token 格子。值**不**进插件的表单状态、不经处理器、
  *   不经 AI——绑了服务的，就地画那一样的连接卡（本机原生表单，值只打连接面 / 消息渠道那条接口进本机加密库）；
  *   连上后只告诉处理器「这一格已填好」（名字，没有值）。没绑服务的，给一个「去连接」开第三栏。
- * - **「点开看」的外部媒体**（`ws-media`）：不在常见来源里的图片 / 音视频先不加载，标出真实域名，点了才画。
+ * - **「点开看」的外部媒体**（`ws-media`）：不在常见来源里的图片 / 音视频先不加载，标出真实域名，点了才画；
+ *   旁边「以后这个网站的图都直接显示」记进品牌的白名单（849），白名单里的（含已连店铺的域名）直接画。
  */
-import type { ConnectNeed, GenuiNodeLite } from '@agentsws/contracts'
+import { type ConnectNeed, type GenuiNodeLite, genuiHostAllowed } from '@agentsws/contracts'
 import { Image as ImageIcon, Lock } from 'lucide-react'
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { InfoTip } from '@/components/design'
@@ -15,6 +16,7 @@ import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import type { HostGenuiProps } from './primitives-shim'
+import { useImageHosts } from './use-image-hosts'
 
 /** 处理器认的那个动作名：一格口令填好了（只带名字）。 */
 export const SECRET_DONE_ACTION = 'ws-secret:done'
@@ -70,9 +72,12 @@ export function SecretNode({ node, onAction }: HostGenuiProps): ReactNode {
 export function MediaGateNode({ node, renderChildren }: HostGenuiProps): ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
+  const hosts = useImageHosts()
   const src = textOf(node.src)
   const media = textOf(node.media) || 'image'
-  if (open) {
+  const host = textOf(node.host)
+  // WP341 追加（849）：白名单里的网站（人加的 + 已连的店铺）直接画
+  if (open || genuiHostAllowed(src, hosts.allowed)) {
     const real: GenuiNodeLite = {
       type: media as GenuiNodeLite['type'],
       src,
@@ -81,17 +86,32 @@ export function MediaGateNode({ node, renderChildren }: HostGenuiProps): ReactNo
     return <>{renderChildren([real], 'media') as ReactNode}</>
   }
   return (
-    <button
-      type="button"
-      title={src}
-      data-testid="genui-media-gate"
-      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-ws-surface px-3 py-1 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
-      onClick={() => {
-        setOpen(true)
-      }}
-    >
-      <ImageIcon aria-hidden className="size-3.5" />
-      {t('genui.media.open', { host: textOf(node.host) })}
-    </button>
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        title={src}
+        data-testid="genui-media-gate"
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-ws-surface px-3 py-1 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
+        onClick={() => {
+          setOpen(true)
+        }}
+      >
+        <ImageIcon aria-hidden className="size-3.5" />
+        {t('genui.media.open', { host })}
+      </button>
+      {host === '' || hosts.view === undefined ? null : (
+        <button
+          type="button"
+          data-testid="genui-media-always"
+          disabled={hosts.busy}
+          className="text-[12px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
+          onClick={() => {
+            hosts.add(host)
+          }}
+        >
+          {t('genui.media.always')}
+        </button>
+      )}
+    </span>
   )
 }

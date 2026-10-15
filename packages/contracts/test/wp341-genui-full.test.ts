@@ -271,3 +271,16 @@ describe('WP341 给模型的规矩', () => {
       expect(GENUI_DISPLAY_RULE).toContain(word)
   })
 })
+
+describe('WP341 追加（849）外部图片白名单', () => {
+  it('人填的网址 / 域名规范成域名；名单里的域名连子域名都算', async () => {
+    const { normalizeGenuiHost, genuiHostAllowed } = await import('../src/index.js')
+    expect(normalizeGenuiHost('https://WWW.Images.Example.com/a/b.png')).toBe('images.example.com')
+    expect(normalizeGenuiHost('example.com')).toBe('example.com')
+    expect(normalizeGenuiHost('不是域名')).toBeUndefined()
+    expect(normalizeGenuiHost('javascript:alert(1)')).toBeUndefined()
+    expect(genuiHostAllowed('https://cdn.example.com/x.png', ['example.com'])).toBe(true)
+    expect(genuiHostAllowed('https://example.com.evil.net/x.png', ['example.com'])).toBe(false)
+    expect(genuiHostAllowed('https://other.net/x.png', ['example.com'])).toBe(false)
+  })
+})

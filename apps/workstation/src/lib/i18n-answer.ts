@@ -20,6 +20,14 @@ export const ANSWER_ZH: Record<string, string> = {
   'genui.tool.running': '正在做：{label}',
   'genui.tool.staged': '出了 {n} 张卡，批了才做',
   'genui.tool.failed': '没做成：{why}',
+  'genui.media.always': '以后这个网站的图都直接显示',
+  'settings.image_hosts': '直接显示图片的网站',
+  'settings.image_hosts.hint':
+    'AI 回话里别的网站的图默认要点一下才加载（免得不点就让对方知道你在看）。这里的网站和已连的店铺直接显示。',
+  'settings.image_hosts.shop': '已连的店铺',
+  'settings.image_hosts.add': '加',
+  'settings.image_hosts.placeholder': '例如 images.example.com',
+  'settings.image_hosts.remove': '删掉 {host}',
 }
 
 export const ANSWER_EN: Record<string, string> = {
@@ -40,4 +48,12 @@ export const ANSWER_EN: Record<string, string> = {
   'genui.tool.running': 'Working on: {label}',
   'genui.tool.staged': '{n} card(s) to approve first',
   'genui.tool.failed': "Didn't work: {why}",
+  'genui.media.always': 'Always show images from this site',
+  'settings.image_hosts': 'Sites whose images show directly',
+  'settings.image_hosts.hint':
+    'Images from other sites in AI replies load only when you click, so they can’t tell you’re reading. These sites and your connected stores load directly.',
+  'settings.image_hosts.shop': 'Connected store',
+  'settings.image_hosts.add': 'Add',
+  'settings.image_hosts.placeholder': 'e.g. images.example.com',
+  'settings.image_hosts.remove': 'Remove {host}',
 }

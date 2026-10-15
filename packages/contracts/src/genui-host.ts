@@ -156,3 +156,39 @@ export function isGenuiLinkHref(href: unknown): href is string {
   if (href.startsWith('/') && !href.startsWith('//')) return true
   return genuiUrlHost(href) !== undefined || /^mailto:[^\s@]+@[^\s@]+$/iu.test(href)
 }
+
+/**
+ * WP341 追加（849，Luoye 10-15 改）：外部图片按**域名白名单**走——像邮箱里「始终显示这个发件人的图片」。
+ * 「点开看 · 域名」旁边点「以后这个网站的图都直接显示」就记进来；设置里能看、能删、能手动加。
+ * 已连店铺的域名（Shopify 店铺地址、官网自定义域名）自动算在里面（不进名单、删不掉）。名单是**品牌级**的。
+ */
+export interface GenuiImageHost {
+  host: string
+  added_at: string
+}
+
+export interface GenuiImageHostsView {
+  /** 人加的（点了「以后都直接显示」或在设置里手动加）。 */
+  hosts: GenuiImageHost[]
+  /** 已连店铺的域名（自动算在白名单里）。 */
+  shop_hosts: string[]
+}
+
+/** 名单最多记几个。 */
+export const GENUI_IMAGE_HOSTS_MAX = 200
+
+/** 人填的（网址 / 域名 / 带 `www.`）规范成一个域名；不像域名回 `undefined`。 */
+export function normalizeGenuiHost(input: string): string | undefined {
+  const raw = input.trim().toLowerCase()
+  if (raw === '' || raw.length > 300) return undefined
+  const host = genuiUrlHost(raw.includes('://') ? raw : `https://${raw}`)?.replace(/^www\./u, '')
+  if (host === undefined || !/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/u.test(host)) return undefined
+  return host
+}
+
+/** 一个图片地址的域名在不在白名单里（名单里的域名连它的子域名一起算）。 */
+export function genuiHostAllowed(src: string, hosts: readonly string[]): boolean {
+  const host = genuiUrlHost(src)
+  if (host === undefined) return false
+  return hosts.some((h) => host === h || host.endsWith(`.${h}`))
+}

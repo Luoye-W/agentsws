@@ -49,6 +49,7 @@ import { extensionRoutes } from './routes/extension.js'
 // WP313：插件动作通道（广告后台）`/v1/extension/actions/*` 与工作台 `/v1/ads-actions/*`
 import { extensionActionRoutes } from './routes/extension-actions.js'
 import { freeChatRoutes } from './routes/free-chat.js'
+import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
 import { handoffRoutes } from './routes/handoff.js'
 import { healthRoutes } from './routes/health.js'
@@ -229,6 +230,7 @@ export function collectRoutes(): Route[] {
     ...handoffRoutes(),
     // WP236：运行时长线（空闲超时 / 总时长上限）
     ...runLimitsRoutes(),
+    ...genuiImageHostsRoutes(),
     ...autoMemoryRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),

@@ -31,6 +31,21 @@ const runGenuiTool = vi.fn(async (_id: string, input: { tool: string }) =>
       },
 )
 const openExternal = vi.fn((_url: string) => undefined)
+let imageHosts = {
+  hosts: [] as { host: string; added_at: string }[],
+  shop_hosts: ['shop.rollout.example'],
+}
+const addImageHost = vi.fn(async (host: string) => {
+  imageHosts = {
+    ...imageHosts,
+    hosts: [{ host, added_at: '2026-10-15T00:00:00Z' }, ...imageHosts.hosts],
+  }
+  return imageHosts
+})
+const removeImageHost = vi.fn(async (host: string) => {
+  imageHosts = { ...imageHosts, hosts: imageHosts.hosts.filter((h) => h.host !== host) }
+  return imageHosts
+})
 
 vi.mock('@/components/connections/bridge', async () => {
   const actual = await vi.importActual<typeof import('@/components/connections/bridge')>(
@@ -57,10 +72,16 @@ vi.mock('@/lib/api', async () => {
     }),
     saveWecomBot: (input: { bot_id: string; secret: string }) => saveWecomBot(input),
     runGenuiTool: (id: string, input: { tool: string }) => runGenuiTool(id, input),
+    getImageHosts: async () => imageHosts,
+    addImageHost: (host: string) => addImageHost(host),
+    removeImageHost: (host: string) => removeImageHost(host),
   }
 })
 
 beforeEach(() => {
+  imageHosts = { hosts: [], shop_hosts: ['shop.rollout.example'] }
+  addImageHost.mockClear()
+  removeImageHost.mockClear()
   wecomConnected = false
   saveWecomBot.mockClear()
   runGenuiTool.mockClear()
@@ -261,4 +282,56 @@ describe('WP341 mermaid', () => {
     expect(Object.keys(assets ?? {})).toContain('mermaid')
     expect(document.querySelectorAll('script').length).toBe(before)
   }, 60_000)
+})
+
+describe('WP341 追加（849）外部图片白名单', () => {
+  it('已连店铺的域名直接显示；别的网站点「以后都直接显示」就记进名单、马上显示', async () => {
+    renderReply(
+      fenced({
+        items: [
+          { type: 'image', src: 'https://shop.rollout.example/hero.jpg', alt: '店铺首图' },
+          { type: 'image', src: 'https://pics.partner.example/a.jpg', alt: '合作方图' },
+        ],
+      }),
+      { say: vi.fn() },
+    )
+    const block = await screen.findByTestId('answer-genui', {}, SLOW)
+    await waitFor(() => expect(block.querySelectorAll('img')).toHaveLength(1), SLOW)
+    expect(block.querySelector('img')?.getAttribute('src')).toBe(
+      'https://shop.rollout.example/hero.jpg',
+    )
+    fireEvent.click(await screen.findByTestId('genui-media-always'))
+    await waitFor(() => expect(addImageHost).toHaveBeenCalledWith('pics.partner.example'))
+    await waitFor(() => expect(block.querySelectorAll('img')).toHaveLength(2))
+  })
+
+  it('设置里：能看（店铺那几个删不掉）、能删、能手动加', async () => {
+    imageHosts = {
+      hosts: [{ host: 'pics.partner.example', added_at: '2026-10-15T00:00:00Z' }],
+      shop_hosts: ['shop.rollout.example'],
+    }
+    const { ImageHostsSetting } = await import('@/components/settings/image-hosts-setting')
+    renderWithProviders(<ImageHostsSetting />)
+    const row = await screen.findByTestId('settings-image-hosts')
+    expect(row.textContent).toContain('shop.rollout.example')
+    expect(
+      within(row)
+        .getAllByTestId('settings-image-host')
+        .map((e) => e.textContent),
+    ).toEqual(['pics.partner.example'])
+    fireEvent.click(within(row).getByRole('button', { name: /删掉 pics\.partner\.example/u }))
+    await waitFor(() => expect(removeImageHost).toHaveBeenCalledWith('pics.partner.example'))
+    fireEvent.change(within(row).getByTestId('settings-image-hosts-input'), {
+      target: { value: 'img.supplier.example' },
+    })
+    fireEvent.click(within(row).getByRole('button', { name: '加' }))
+    await waitFor(() => expect(addImageHost).toHaveBeenCalledWith('img.supplier.example'))
+    await waitFor(() =>
+      expect(
+        within(row)
+          .getAllByTestId('settings-image-host')
+          .map((e) => e.textContent),
+      ).toEqual(['img.supplier.example']),
+    )
+  })
 })

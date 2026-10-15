@@ -401,6 +401,10 @@ export type {
   FreeChatTurnInput,
 } from './routes/free-chat.js'
 export { freeChatRoutes } from './routes/free-chat.js'
+export {
+  type GenuiImageHostsPort,
+  genuiImageHostsRoutes,
+} from './routes/genui-image-hosts.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export {
   type ColleagueView,

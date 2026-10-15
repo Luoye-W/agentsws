@@ -79,6 +79,7 @@ import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { ExtensionActionsPort } from './routes/extension-actions.js'
 import type { FreeChatPort } from './routes/free-chat.js'
+import type { GenuiImageHostsPort } from './routes/genui-image-hosts.js'
 import type { HandoffPort } from './routes/handoff.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
@@ -991,6 +992,8 @@ export interface GatewayDeps {
    * 运行照缺省（空闲 3 分钟、总时长 20 分钟）。
    */
   runLimits?: RunLimitsPort
+  /** WP341 追加（849）：外部图片白名单（品牌级）。 */
+  imageHosts?: GenuiImageHostsPort
   /** WP320：「自动记忆」开关。没装配时 `/v1/settings/auto-memory` 回 not_implemented。 */
   autoMemory?: AutoMemoryPort
   /**
