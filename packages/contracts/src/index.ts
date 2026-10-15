@@ -48,6 +48,9 @@ export * from './economics.js'
 export * from './events.js'
 // WP336（决策 810–812）：当场回答的 ```dsh-ui 写法（dsh-genui 渲染层）——白名单过滤与给模型的规矩
 export * from './genui.js'
+// WP341（决策 847）：genui 完全融合——动作写法、口令格、媒体来源、表单交上来的结构化回话
+export * from './genui-host.js'
+export * from './genui-reply.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
 // WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）

@@ -120,7 +120,7 @@ describe('WP291 线程', () => {
 })
 
 describe('WP336 线程里的 ```dsh-ui', () => {
-  it('同样画成 genui 块：表格在、夹带的按钮不在，不露围栏', async () => {
+  it('同样画成 genui 块：表格在、按钮也在（WP341），不露围栏', async () => {
     const raw = [
       '店里现在有 2 件商品。',
       '',
@@ -151,6 +151,6 @@ describe('WP336 线程里的 ```dsh-ui', () => {
     // 渲染层是懒加载的单独一块，机器忙时头一次转换要几秒
     const block = await screen.findByTestId('answer-genui', {}, { timeout: 30_000 })
     await waitFor(() => expect(block.textContent).toContain('蓝牙耳机'), { timeout: 30_000 })
-    expect(block.textContent).not.toContain('一键上架')
+    expect(block.textContent).toContain('一键上架')
   })
 })

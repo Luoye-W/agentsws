@@ -26,6 +26,7 @@ import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { ContentUpdatesSetting } from '@/components/settings/content-updates-setting'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
+import { ImageHostsSetting } from '@/components/settings/image-hosts-setting'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
@@ -264,6 +265,8 @@ export function SettingsPage({
             <RunLimitsSetting />
             {/* WP320：AI 边干活边记（默认开；关了只在说「记住」时记） */}
             <AutoMemorySetting />
+            {/* WP341 追加（849）：AI 回话里哪些网站的图直接显示（品牌级白名单） */}
+            <ImageHostsSetting />
             {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
             <ContentUpdatesSetting />
             {identity === undefined ? null : (

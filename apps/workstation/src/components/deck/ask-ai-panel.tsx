@@ -7,6 +7,7 @@
  */
 import { Sparkles } from 'lucide-react'
 import { useState } from 'react'
+import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
@@ -34,9 +35,10 @@ export function AskAiPanel({
     scope !== undefined && (scope.matter_id !== undefined || scope.card_id !== undefined)
   const usable = available && bounded
 
-  const send = (): void => {
-    const text = question.trim()
+  const send = (said?: string): void => {
+    const text = (said ?? question).trim()
     if (!usable || text === '' || busy || scope === undefined) return
+    if (said !== undefined) setQuestion(said)
     setBusy(true)
     setError(null)
     askAi({ scope, question: text })
@@ -71,14 +73,24 @@ export function AskAiPanel({
             if (e.key === 'Enter') send()
           }}
         />
-        <Button size="sm" variant="outline" disabled={!usable || busy} onClick={send}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!usable || busy}
+          onClick={() => {
+            send()
+          }}
+        >
           {busy ? t('card.ask.sending') : t('card.ask.send')}
         </Button>
       </div>
       {answer === null ? null : (
         // WP336：问 AI 的回答也走 AI 回话那份安全 markdown（遇 ```dsh-ui 画成组件）
         <div className="mt-2 rounded-md bg-muted/40 p-2 text-xs" data-testid="ask-ai-answer">
-          <SafeMarkdown text={answer} variant="reply" />
+          {/* WP341：回答里的按钮 / 表单点了，就当在这里接着问一句 */}
+          <GenuiHostProvider value={{ say: send, busy }}>
+            <SafeMarkdown text={answer} variant="reply" />
+          </GenuiHostProvider>
         </div>
       )}
       {error === null ? null : (

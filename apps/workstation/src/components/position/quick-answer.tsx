@@ -13,10 +13,11 @@ import { X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnswerComponents } from '@/components/answer/answer-view'
+import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { HandoffError } from '@/components/work/handoff-error'
-import { continueQuickAnswer, promoteAskMatter } from '@/lib/api'
+import { continueQuickAnswer, postMatterMessage, promoteAskMatter } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { RAIL_KEY } from '@/lib/work-archive'
 import { askAtPosition, closeQuickAnswer, useQuickAnswer } from './quick-answer-store'
@@ -51,6 +52,16 @@ export function QuickAnswer({ position }: { position: string }): ReactNode {
   const chat = useMutation({
     mutationFn: (matter_id: string) => continueQuickAnswer(matter_id),
     onSuccess: (_out, matter_id) => {
+      goThread(matter_id)
+    },
+  })
+  /** WP341（决策 847）：回答里「接着问」的按钮——转进这件事的线程、把那句话说进去，人接着在线程里看。 */
+  const follow = useMutation({
+    mutationFn: async ({ matter_id, text }: { matter_id: string; text: string }) => {
+      await continueQuickAnswer(matter_id)
+      await postMatterMessage(matter_id, text)
+    },
+    onSuccess: (_out, { matter_id }) => {
       goThread(matter_id)
     },
   })
@@ -164,7 +175,20 @@ export function QuickAnswer({ position }: { position: string }): ReactNode {
               testId="quick-answer-lead"
             />
           )}
-          <AnswerComponents components={components} />
+          <GenuiHostProvider
+            value={
+              matter_id === undefined
+                ? {}
+                : {
+                    say: (text: string) => {
+                      follow.mutate({ matter_id, text })
+                    },
+                    busy: busy || follow.isPending,
+                  }
+            }
+          >
+            <AnswerComponents components={components} />
+          </GenuiHostProvider>
           {answer?.outcome === 'stopped' ? (
             <p className="text-xs text-ws-warn">{t('answer.stopped')}</p>
           ) : null}

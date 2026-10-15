@@ -31,6 +31,8 @@ import type {
   EffectiveWeb,
   EventEnvelope,
   GateDecision,
+  GenuiToolInput,
+  GenuiToolOutcome,
   Matter,
   MatterRunBlock,
   MaybePromise,
@@ -99,7 +101,7 @@ import {
   type RoleStore,
   replyLanguageSection,
 } from '@agentsws/roles'
-import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
+import { createDirectRuntime, inAllowlist, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
   ADS_DATA_TOOL_NAMES,
@@ -155,6 +157,8 @@ import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
  */
 export interface ApprovalSink {
   create<P>(input: CreateApprovalInput<P>): Promise<ApprovalItem<P>>
+  /** WP341：查一张卡（genui 按钮出的卡挂时间线前核一下真有）；不给就信执行器回的 id。 */
+  get?(id: string): Promise<ApprovalItem | undefined> | ApprovalItem | undefined
 }
 
 /** 只读目录：没接连接器时 stub / direct 也照样能走完（工具执行器缺席就是一条 error 结果）。 */
@@ -691,6 +695,17 @@ export interface RuntimeAssembly {
    * 好几次同时在跑时给最近开跑的那一次。
    */
   liveRun?(matter_id: string): MatterLiveRun | undefined
+  /**
+   * WP341（决策 847）：对话里点了一个「调工具」的 genui 按钮——走**同一个工具执行器**：只读的当场跑；会改外部的
+   * 由各执行器照旧进账本出审批卡（批了才做），卡挂进这件事的时间线（卡片流同一张）；直接写外部的不收。
+   * 用出这个按钮的那一次运行的身份与「读过」记录（`run_id`；找不到用 `fallback` 那条分配新开一个）。
+   */
+  runHostTool?(input: {
+    matter_id: string
+    person_id: PersonId
+    fallback_assignment_id: AssignmentId
+    call: GenuiToolInput
+  }): Promise<GenuiToolOutcome>
   /** 注入 `createWork`；工作模型与 startRun 互相需要，靠这一步打断环 */
   bind(work: Work): void
   /** WP69：注入岗位面（岗位层技能与岗位层上下文靠它）。 */
@@ -766,6 +781,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 岗位不在 RunRequest 上，所以开跑前登记、收尾摘掉（与 `active` 同一个生命周期）。
    */
   const skillActors = new Map<string, SkillPromptActor>()
+  /** WP341：最近几百次运行的身份（genui 按钮按出它的那次运行算）。 */
+  const runActors = new Map<
+    string,
+    { matter_id: string; person_id: PersonId; assignment_id: AssignmentId }
+  >()
 
   /**
    * WP236：每次运行的看门狗与现场记录（开跑登记、收尾摘掉，与 `active` 同一个生命周期）。
@@ -2011,6 +2031,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      */
     const controller = new AbortController()
     let settle: () => void = () => undefined
+    // WP341：记下这次运行是谁、哪条分配（之后对话里点它出的按钮按这次的身份与读过的算）
+    runActors.set(run_id, {
+      matter_id: input.matter.id,
+      person_id: input.actor.person_id,
+      assignment_id: input.actor.assignment_id,
+    })
+    if (runActors.size > 500) runActors.delete(runActors.keys().next().value ?? '')
     active.set(run_id, {
       view: {
         run_id,
@@ -2437,8 +2464,107 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     return { run_id }
   }
 
+  /** WP341：工具结果里出的审批卡 id（各执行器回的形状不一：顶层 / `data` 里、单个 / 一串）。 */
+  const approvalIdsOf = (x: unknown, depth = 0): string[] => {
+    if (depth > 3 || x === null || typeof x !== 'object') return []
+    const o = x as Record<string, unknown>
+    const own = [o.approval_item_id, o.approval_id, o.card_id].filter(
+      (v): v is string => typeof v === 'string',
+    )
+    const many = Array.isArray(o.approval_item_ids)
+      ? o.approval_item_ids.filter((v): v is string => typeof v === 'string')
+      : []
+    const nested = Object.values(o).flatMap((v) => approvalIdsOf(v, depth + 1))
+    return [...new Set([...own, ...many, ...nested])]
+  }
+
+  const runHostTool: NonNullable<RuntimeAssembly['runHostTool']> = async ({
+    matter_id,
+    person_id,
+    fallback_assignment_id,
+    call,
+  }) => {
+    const refused = (message: string): GenuiToolOutcome => ({
+      effect: 'refused',
+      status: 'blocked',
+      message,
+    })
+    const matter = work?.getMatter(matter_id)
+    if (matter === undefined || executeTool === undefined) return refused('这里点不了这个。')
+    const from = call.run_id === undefined ? undefined : runActors.get(call.run_id)
+    const own = from !== undefined && from.matter_id === matter_id ? from : undefined
+    const run_id = own === undefined ? newId('run') : (call.run_id as string)
+    const assignment_id = own?.assignment_id ?? fallback_assignment_id
+    const request = await buildRequest({
+      run_id,
+      matter,
+      brief: call.label,
+      person_id: own?.person_id ?? person_id,
+      assignment_id,
+    }).finally(() => {
+      if (!active.has(run_id)) skillActors.delete(run_id)
+    })
+    const role_id = request.actor.role_id
+    const bare = bareOf(call.tool)
+    if (!inAllowlist(call.tool, request.tools.allow) || !offerable(call.tool, role_id))
+      return refused('这条职责没有这一步，交给 AI 去做吧。')
+    // 直接写外部的不收（各执行器自己出卡的那些是 local / staged：只动本机或出卡）
+    const effect = HOST_TOOL_EFFECTS[bare] ?? classifySideEffect(bare)
+    if (effect === 'write_external')
+      return refused('这一步会直接改外部，交给 AI 去做（它会先出卡）。')
+    const res = await executeTool({ name: call.tool, input: call.args, request })
+    const found = await Promise.all(
+      approvalIdsOf(res.data).map(async (id) => ({
+        id,
+        item: approvals.get === undefined ? null : await approvals.get(id),
+      })),
+    )
+    const cards = found.filter((f) => f.item !== undefined)
+    const ids = cards.map((f) => f.id)
+    const said = (text: string): void => {
+      try {
+        work?.appendEvent(matter_id, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'runtime' },
+          run_id,
+        })
+      } catch {
+        // 事项已经没了
+      }
+    }
+    if (ids.length > 0) {
+      said(`你点了「${call.label}」：出了 ${String(ids.length)} 张卡，批了才做。`)
+      const onLine = new Set(
+        work?.store
+          .listMatterEvents(matter_id, { limit: 500 })
+          .map((e) => e.approval_item_id)
+          .filter((id) => id !== undefined),
+      )
+      for (const { id, item } of cards) {
+        if (onLine.has(id)) continue
+        work?.appendEvent(matter_id, {
+          kind: 'card',
+          text: item?.title ?? call.label,
+          actor: { kind: 'agent', id: run_id },
+          approval_item_id: id,
+          run_id,
+        })
+      }
+      return { effect: 'staged', status: res.status, approval_item_ids: ids }
+    }
+    if (res.status === 'ok') said(`你点了「${call.label}」，查好了。`)
+    return {
+      effect: 'read',
+      status: res.status,
+      ...(res.data === undefined ? {} : { data: res.data }),
+      ...(res.reason === undefined ? {} : { message: res.reason }),
+    }
+  }
+
   return {
     adapter,
+    runHostTool,
     activeRuns: () => [...active.values()].map((r) => ({ ...r.view })),
     noteNeed(run_id, need) {
       runWatch.get(run_id)?.blocks.noteSetup('model', { kind: 'connect', need })

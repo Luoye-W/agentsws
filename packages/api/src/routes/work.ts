@@ -18,6 +18,8 @@ import type {
   CalendarItem,
   CalendarSource,
   DailyPlan,
+  GenuiToolInput,
+  GenuiToolOutcome,
   Goal,
   GoalLevel,
   GoalProgress,
@@ -158,6 +160,13 @@ const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
 
 const MessageBody = z.object({ text: z.string().min(1).max(4000) })
 
+/** WP341（决策 847）：对话里点了「调工具」的 genui 按钮。 */
+const GenuiToolBody = z.object({
+  tool: z.string().min(1).max(80),
+  args: z.record(z.string(), z.unknown()).default({}),
+  label: z.string().min(1).max(200),
+  run_id: z.string().min(1).max(80).optional(),
+})
 /** WP342（决策 853）：换这件事用的 AI；不给 / `null` = 回到跟品牌默认。 */
 const MatterModelBody = z.object({ model: z.string().min(1).max(200).nullable().optional() })
 
@@ -330,6 +339,11 @@ export interface WorkPort {
   say(actor: WorkActor, id: string, text: string): Promise<{ event: MatterEvent; run_id?: string }>
   /** WP264（决策 177）：人改标题（`title_source: 'user'`，之后不再被自动覆盖）。 */
   retitleMatter?(actor: WorkActor, id: string, title: string): MaybePromise<Matter>
+  /**
+   * WP341（决策 847）：对话里点了「调工具」的 genui 按钮——走同一个工具执行器：只读的当场跑；会改外部的出审批卡
+   * （挂进这件事的时间线、卡片流同一张）；直接写外部的不收。
+   */
+  genuiTool?(actor: WorkActor, id: string, input: GenuiToolInput): Promise<GenuiToolOutcome>
   /**
    * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮；`undefined` = 回到跟品牌默认）。
    * 认不出 / 不能用的模型 id 由实现拒（`invalid_input`）。
@@ -615,6 +629,36 @@ export function workRoutes(): Route[] {
         const actor = actorOf(c)
         const { text } = await body(c, MessageBody)
         return ok(c, await workOf(deps).say(actor, param(c, 'id'), text), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/genui-tool',
+        operationId: 'runGenuiTool',
+        summary: '对话里点了「调工具」的按钮（WP341）：只读的当场跑、会改外部的出审批卡',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: GenuiToolBody,
+        returns: 'GenuiToolOutcome',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.genuiTool === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不接对话里的工具按钮')
+        const b = await body(c, GenuiToolBody)
+        return ok(
+          c,
+          await port.genuiTool(actorOf(c), param(c, 'id'), {
+            tool: b.tool,
+            args: b.args,
+            label: b.label,
+            ...(b.run_id === undefined ? {} : { run_id: b.run_id }),
+          }),
+        )
       },
     ),
     route(

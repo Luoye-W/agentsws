@@ -1,5 +1,6 @@
 /**
- * WP336（决策 810–812）：模拟里当场回答的替身改写 ```dsh-ui，并夹带按钮 / 图片 / 3D / 外链 / 配色。
+ * WP336（决策 810–812）：模拟里当场回答的替身改写 ```dsh-ui，并夹带红线上的东西（WP341 起：不认识的组件、
+ * `javascript:` 图、带事件的 svg、完整 ECharts 配置、空 3D、自定义配色）。
  * 过滤后的节点类型 / 数量 / 数字要等于 mock 店铺；夹带的一个都不许漏过去。
  */
 import { describe, expect, it } from 'vitest'
@@ -31,7 +32,7 @@ describe('WP336 模拟：当场回答 ```dsh-ui', () => {
     expect(answered.mock.products).toBeGreaterThan(0)
     expect(answered.genui.table_rows).toEqual([answered.mock.products])
     expect(answered.genui.stats).toEqual([{ label: '在卖', value: String(answered.mock.live) }])
-    for (const bad of ['button', 'image', 'scene3d', 'link', 'http', 'action', 'accent', 'export'])
+    for (const bad of ['iframe', 'javascript', 'onload', 'option', 'scene3d', 'accent', '#ff3366'])
       expect(answered.genui.text).not.toContain(bad)
   })
 })

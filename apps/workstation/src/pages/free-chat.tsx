@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { BrandMark } from '@/components/design'
 import { MemoryButton, PeersButton, Suggestions } from '@/components/free-chat/assistant-bits'
 import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
@@ -335,35 +336,45 @@ export function FreeChatPage(): React.ReactNode {
         ) : (
           <>
             <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4">
-              <div
-                className="mx-auto flex max-w-3xl flex-col gap-5 py-4"
-                data-testid="free-chat-messages"
+              {/* WP341（决策 847）：回话里的按钮 / 表单点了、交了，就是在这里说了一句（结构化回话也是一句） */}
+              <GenuiHostProvider
+                value={{
+                  say: (text) => {
+                    send.mutate({ text, images: [] })
+                  },
+                  busy,
+                }}
               >
-                {rows.map((m) =>
-                  m.role === 'user' ? (
-                    <UserBubble key={m.id} message={m} />
-                  ) : (
+                <div
+                  className="mx-auto flex max-w-3xl flex-col gap-5 py-4"
+                  data-testid="free-chat-messages"
+                >
+                  {rows.map((m) =>
+                    m.role === 'user' ? (
+                      <UserBubble key={m.id} message={m} />
+                    ) : (
+                      <AssistantMessage
+                        key={m.id}
+                        message={m}
+                        last={m.id === lastAssistant?.id && !busy}
+                        onRegenerate={() => {
+                          if (id !== undefined) void run(id, { regenerate: true })
+                        }}
+                      />
+                    ),
+                  )}
+                  {live === undefined ? null : (
                     <AssistantMessage
-                      key={m.id}
-                      message={m}
-                      last={m.id === lastAssistant?.id && !busy}
-                      onRegenerate={() => {
-                        if (id !== undefined) void run(id, { regenerate: true })
-                      }}
+                      message={live.reply}
+                      live
+                      {...(live.status === undefined ? {} : { status: live.status })}
+                      last={false}
+                      onRegenerate={() => undefined}
                     />
-                  ),
-                )}
-                {live === undefined ? null : (
-                  <AssistantMessage
-                    message={live.reply}
-                    live
-                    {...(live.status === undefined ? {} : { status: live.status })}
-                    last={false}
-                    onRegenerate={() => undefined}
-                  />
-                )}
-                {error === undefined ? null : <p className="text-sm text-destructive">{error}</p>}
-              </div>
+                  )}
+                  {error === undefined ? null : <p className="text-sm text-destructive">{error}</p>}
+                </div>
+              </GenuiHostProvider>
             </div>
             <div className="mx-auto w-full max-w-3xl px-4 pb-4">{composer}</div>
           </>

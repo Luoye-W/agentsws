@@ -119,6 +119,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  normalizeGenuiHost,
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   platformKitOf,
@@ -390,6 +391,7 @@ import {
 } from './faq-import.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
+import { createGenuiImageHosts } from './genui-image-hosts.js'
 import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
@@ -1894,6 +1896,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   /** WP236：运行时长线（这台机器一份，`run-limits.json`）。 */
   const runLimitsSettings = createRunLimitsSettings(dbDir === undefined ? {} : { dir: dbDir })
+  /** WP341 追加（849）：AI 回话里外部图片的域名白名单（品牌级，`genui-image-hosts.json`）。 */
+  const imageHosts = createGenuiImageHosts(dbDir === undefined ? {} : { dir: dbDir })
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
     runtimeMode,
@@ -9770,6 +9774,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
       sayAt: async (actor, matter_id, text) =>
         (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
+      genuiTool: async (actor, matter_id, call) => {
+        const runtime = brand.runtime?.runHostTool
+        if (runtime === undefined)
+          return { effect: 'refused', status: 'blocked', message: '这里点不了这个。' }
+        return runtime({
+          matter_id,
+          person_id: actor.person_id,
+          fallback_assignment_id: actor.assignment_id,
+          call,
+        })
+      },
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**
@@ -11742,6 +11758,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     handoff: brandHandoffPort(brandModules, handoffFor),
     // WP236：运行时长线（这台机器一份）
     runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
+    // WP341 追加（849）：外部图片白名单——人加的 + 已连店铺的域名（Shopify 店铺地址、官网 / 公司域名，自动算）
+    imageHosts: (() => {
+      const view = (ws: string) => {
+        const shop = [
+          onboardingRef?.shopifyDomainOf(ws as WorkspaceId),
+          onboardingRef?.companyProfile(ws as WorkspaceId)?.domain,
+        ]
+          .map((d) => (d === undefined ? undefined : normalizeGenuiHost(d)))
+          .filter((d): d is string => d !== undefined)
+        return { hosts: imageHosts.list(ws), shop_hosts: [...new Set(shop)] }
+      }
+      return {
+        view,
+        add: (ws: string, host: string) => {
+          if (imageHosts.add(ws, host, clock.now()) === undefined)
+            throw new ApiError('invalid_input', '这不像一个网站域名')
+          return view(ws)
+        },
+        remove: (ws: string, host: string) => {
+          imageHosts.remove(ws, host)
+          return view(ws)
+        },
+      }
+    })(),
     // WP320：「自动记忆」开关（每人每品牌一份，默认开）
     autoMemory: {
       get: (actor) => ({ enabled: autoMemorySettings.get(actor.workspace_id, actor.person_id) }),
