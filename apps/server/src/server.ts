@@ -6875,6 +6875,42 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ...(user === undefined ? {} : { brand_username: user.replace(/^\/?u\//iu, '') }),
               }
             },
+            // WP340：配置卡的 AI 建议值看的品牌档案（品牌名、一句话、品类、市场、官网、商品卡）
+            brandBrief: async () => {
+              const full = onboardingRef?.brandProfile(ws)
+              const org = onboardingRef?.companyProfile(ws)
+              const holder = redditHolder()
+              let products: string[] = []
+              if (holder !== undefined) {
+                const config = roles.effectiveConfig(holder.id)
+                products = (
+                  await knowledge.store
+                    .list({ workspace_id: ws, status: 'active' }, {
+                      person_id: holder.person_id,
+                      workspace_id: ws,
+                      assignment_id: holder.id,
+                      role_id: holder.role_id,
+                      grants: config.scopes,
+                      ranges: config.ranges,
+                    } as never)
+                    .catch(() => [])
+                )
+                  .filter((c) => c.subject.type === 'product')
+                  .map((c) => c.statement)
+                  .slice(0, 10)
+              }
+              const name = brandNameOfWorkspace(ws)
+              const one = full?.one_liner
+              const domain = org?.domain?.trim()
+              return {
+                ...(name === '' || name === ws ? {} : { name }),
+                ...(one === undefined || one === '' ? {} : { one_liner: one }),
+                ...(full?.vertical === undefined ? {} : { vertical: full.vertical }),
+                ...(full?.markets === undefined ? {} : { markets: full.markets }),
+                ...(domain === undefined || domain === '' ? {} : { domain }),
+                ...(products.length === 0 ? {} : { products }),
+              }
+            },
             setupCards: () => setupCardsOf(ws),
             actor: () => {
               const h = redditHolder()

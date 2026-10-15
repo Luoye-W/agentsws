@@ -7,9 +7,10 @@ export const REDDIT_WATCH_ZH: Record<string, string> = {
   'rwatch.last': '上次 {at}',
   'rwatch.never': '还没巡查过',
   'rwatch.hint':
-    '每天一次（可改），周五出周报前再巡查一次。收件箱和自家版块用 Chrome 插件只读，不改已读；外部社区按关键词搜。',
+    '默认每天一次，每个版块可单独设一周几次。收件箱和版块用 Chrome 插件只读，不改已读；外部社区按关键词搜。命中告警词的标「优先」。',
   'rwatch.part.inbox': '收件箱',
   'rwatch.part.own_sub': '自家版块',
+  'rwatch.part.watch_sub': '重点版块',
   'rwatch.part.external': '外部社区',
   'rwatch.status.ok': '好了',
   'rwatch.status.waiting': '等插件',
@@ -24,6 +25,10 @@ export const REDDIT_WATCH_ZH: Record<string, string> = {
   'rwatch.source.external': '外部',
   'rwatch.dismiss': '不回',
   'rwatch.open': '打开原帖',
+  'rwatch.priority': '优先',
+  'rwatch.alert.title': '优先：{words}',
+  'rwatch.alert.dismiss': '收起',
+  'rwatch.alert.more': '还有 {n} 条',
 }
 
 export const REDDIT_WATCH_EN: Record<string, string> = {
@@ -32,9 +37,10 @@ export const REDDIT_WATCH_EN: Record<string, string> = {
   'rwatch.last': 'Last {at}',
   'rwatch.never': 'Not run yet',
   'rwatch.hint':
-    'Daily by default, plus one more run right before the Friday weekly report. Inbox and own subreddits are read read-only through the Chrome extension (read state untouched); other communities are searched by keyword.',
+    'Daily by default; each subreddit can have its own times per week. Inbox and subreddits are read read-only through the Chrome extension (read state untouched); other communities are searched by keyword. Items hitting an alert word are marked priority.',
   'rwatch.part.inbox': 'Inbox',
   'rwatch.part.own_sub': 'Own subs',
+  'rwatch.part.watch_sub': 'Watched subs',
   'rwatch.part.external': 'Elsewhere',
   'rwatch.status.ok': 'Done',
   'rwatch.status.waiting': 'Waiting',
@@ -49,4 +55,8 @@ export const REDDIT_WATCH_EN: Record<string, string> = {
   'rwatch.source.external': 'Elsewhere',
   'rwatch.dismiss': 'Skip',
   'rwatch.open': 'Open',
+  'rwatch.priority': 'Priority',
+  'rwatch.alert.title': 'Priority: {words}',
+  'rwatch.alert.dismiss': 'Dismiss',
+  'rwatch.alert.more': '{n} more',
 }

@@ -61,7 +61,7 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
       '查巡查入库的条目：自家版块 / 频道（scope=own）的帖子与评论、外部社区关键词命中（scope=external）。' +
       '按时间窗筛（按平台上的发出时间），回计数（帖子 / 评论、自家 / 外部、有效 VOC / UGC）和原文引用（作者、地点、时间、链接）；' +
       '可按判断档（follow_up 需跟进 / no_action 日常讨论无需处理 / low_relevance 相关度不高不建议回复）、话题、关键词、' +
-      '有效 VOC / UGC 筛，group_by=topic 按话题归组（每组带 post / comment 数和组里最重的判断档）。' +
+      '有效 VOC / UGC、「优先」（命中告警词）、本地标签筛，group_by=topic 按话题归组（每组带 post / comment 数和组里最重的判断档）。' +
       '只读；数字是数出来的，写报告时照抄，不要估。被删的原文照样计数但不引用。结果里的 window.start_date 可作发布报告的 period_start。',
     input_schema: {
       type: 'object',
@@ -82,6 +82,14 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
           description: '只要判过有效的 VOC / UGC（any = 两样有一样）',
         },
         kind: { type: 'string', enum: ['post', 'comment'] },
+        priority: {
+          type: 'boolean',
+          description: 'true = 只要命中告警词的「优先」条目（巡查设置里的告警词，本地匹配）',
+        },
+        tag: {
+          type: 'string',
+          description: '只要带这个本地标签的（巡查设置里的标签词，如型号写法）',
+        },
         group_by: { type: 'string', enum: ['topic'], description: '按话题归组' },
         limit: { type: 'number', description: '列几条原文（每组 / 总共；默认 30，最多 200）' },
       },
