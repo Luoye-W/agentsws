@@ -20,3 +20,9 @@ worktree `../agentsws-wt/wp347-home` · 分支 `wp/347-home`（从 main 拉，ma
 
 ## 验证
 `pnpm -F @agentsws/site build`、`test`、`launch:check`、站内 0 死链；本机 preview 截图首页（浅 / 深、1440 / 390），存 `docs/assets/wp347/`。不部署（Fable 审后部署）。不合 main、不打 tag。报告 `docs/briefs/reports/WP347.md`（决策号 884–886）。
+
+## 追加（Luoye 10-15 同轮补充）
+Luoye 提：下载链接要在首屏 banner 按钮里、顶栏要有下载入口、要有 GitHub 入口、后台账号登录入口都要集成。现状核对（线上 10-15）：顶栏已有「GitHub」「登录（cloud.agentsws.com/account/login）」「下载」；首屏有「免费下载（→ /download/）」「在 GitHub 上看」。本单再做：
+8. **首屏「免费下载」直接下**：按访客系统给对应安装包（Mac Apple 芯片 dmg / Windows exe，地址读 downloads.json），按钮上写系统和版本号；认不出系统或是手机就去 /download/；按钮下一行小字「其他版本 · 浏览器插件」链到 /download/。
+9. **顶栏**：「下载」做成主按钮（已是就保持）；「登录」旁加「注册」（cloud.agentsws.com/account/register）；GitHub 显示 star 图标；手机宽度（390）下这几个入口都在（收进菜单也行，但下载要露在外面）。
+10. 页脚「产品」一栏补：下载、GitHub、登录 / 注册、积分与充值、更新日志。
