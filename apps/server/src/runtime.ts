@@ -140,7 +140,7 @@ import {
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
-import { PartialRunLog, stoppedLine } from './run-stop.js'
+import { PartialRunLog, pausedForUpdateLine, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
 /**
@@ -630,6 +630,9 @@ export interface ActiveRunView {
   title: string
   /** 这次运行绑定的模型来源（开跑时的 `purpose: 'run'` 那一条）。 */
   model: ModelRef
+  /** WP337：谁起的这一次（更新重启后按同一个人、同一条分配接着做）。 */
+  person_id?: PersonId
+  assignment_id?: string
 }
 
 export interface RuntimeAssembly {
@@ -641,6 +644,11 @@ export interface RuntimeAssembly {
    * 等它收尾（最多 `waitMs`，缺省 10 秒）。找不到（已经跑完）回 `false`。
    */
   stopRun(run_id: string, reason: string, waitMs?: number): Promise<boolean>
+  /**
+   * WP337：因为「重启并更新」**在安全点停下**一次运行：已经说的话、取回的数据照常作为部分结果挂上，
+   * 时间线那一句换成「因更新暂停」（新版起来后由 `update-pause` 接着做）。找不到回 `false`。
+   */
+  pauseRun?(run_id: string, waitMs?: number): Promise<boolean>
   /**
    * WP264：这件事上正在跑的那一次（事项页「正在做…」+ 实时步骤）。没在跑回 `undefined`。
    * 好几次同时在跑时给最近开跑的那一次。
@@ -713,6 +721,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     string,
     { view: ActiveRunView; controller: AbortController; settled: Promise<void> }
   >()
+  /** WP337：因更新暂停的那几次（停下那一句换成「因更新暂停」）。 */
+  const pausing = new Set<string>()
 
   /**
    * WP162：每次运行解析技能用的「我是谁」（带岗位层）。`read_skill` 按它叠六层——
@@ -1930,6 +1940,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id,
         matter_id: input.matter.id,
         title: input.matter.title,
+        person_id: input.actor.person_id,
+        assignment_id: input.actor.assignment_id,
         // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
         model: useDirect()
           ? (options.runModelRef?.() ?? request.runtime.model)
@@ -2005,7 +2017,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             outcome === 'completed'
               ? '跑完了'
               : outcome === 'stopped'
-                ? '这次被停下了'
+                ? pausing.has(run_id)
+                  ? '因更新暂停'
+                  : '这次被停下了'
                 : '这次没跑成',
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
@@ -2196,7 +2210,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             : extra === ''
               ? digest
               : `${extra}\n\n${digest}`
-        const line = stoppedLine(stoppedReason, limits, partial !== undefined)
+        const line = pausing.has(run_id)
+          ? pausedForUpdateLine(partial !== undefined)
+          : stoppedLine(stoppedReason, limits, partial !== undefined)
         work?.appendEvent(input.matter.id, {
           kind: 'status',
           text: line,
@@ -2324,6 +2340,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       watchdog.stop()
       scope = undefined
       active.delete(run_id)
+      pausing.delete(run_id)
       skillActors.delete(run_id)
       runWatch.delete(run_id)
       runSteps.delete(run_id)
@@ -2344,6 +2361,22 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         actor: { kind: 'system', id: 'runtime' },
         run_id,
       })
+      hit.controller.abort('user' satisfies RunCancelReason)
+      let timer: NodeJS.Timeout | undefined
+      await Promise.race([
+        hit.settled,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, waitMs)
+          timer.unref()
+        }),
+      ])
+      if (timer !== undefined) clearTimeout(timer)
+      return true
+    },
+    async pauseRun(run_id, waitMs = 10_000) {
+      const hit = active.get(run_id)
+      if (hit === undefined) return false
+      pausing.add(run_id)
       hit.controller.abort('user' satisfies RunCancelReason)
       let timer: NodeJS.Timeout | undefined
       await Promise.race([

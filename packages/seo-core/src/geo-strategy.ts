@@ -88,7 +88,10 @@ export function strategyPrompt(input: StrategyInput): string {
       ? [`domains: ${input.brand.domains.map(fence).join(', ')}`]
       : []),
     ...(input.one_liner ? [`about: ${fence(input.one_liner)}`] : []),
-    ...(input.category ? [`category: ${fence(input.category)}`] : []),
+    // WP335（决策 659）：品类来自品牌档案（人确认过），照它来
+    ...(input.category
+      ? [`category (from the brand profile, use as-is): ${fence(input.category)}`]
+      : []),
     `markets: ${input.markets.join(', ')}`,
     `language: ${input.language}`,
     ...(input.stage_hint ? [`search presence (from Search Console): ${input.stage_hint}`] : []),
@@ -323,7 +326,8 @@ export function buildStrategy(input: {
 }): GeoWatchStrategy {
   const { profile, reply } = input
   const brand = { name: profile.brand.name, aliases: profile.brand.aliases }
-  const category = reply?.category ?? profile.category
+  // WP335（决策 659）：品牌档案里写着品类就用它（人确认过的）；没写才用模型认的
+  const category = profile.category ?? reply?.category
   const seed: PromptSeed = {
     brand,
     category,

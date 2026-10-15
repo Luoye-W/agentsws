@@ -223,13 +223,20 @@ async function downloadUpdate(page, step) {
   return Math.round((Date.now() - t0) / 1000)
 }
 
-/** 点「重启并更新」；回点的那一刻与「旧版主进程退了」的 Promise。 */
-async function clickInstall(app, page, step) {
+/**
+ * 点「重启并更新」；回点的那一刻与「旧版主进程退了」的 Promise。
+ * `choice = 'now'`（WP337）：页面上已经三选一选了「现在重启」——走 `update.restart('now')`。
+ */
+async function clickInstall(app, page, step, choice) {
   const proc = app.process()
   const exited = new Promise((r) => proc.once('exit', (code) => r({ code, at: Date.now() })))
   const clicked = Date.now()
   const outcome = await page
-    .evaluate(() => window.agentsws.update.install())
+    .evaluate(
+      (c) =>
+        c === undefined ? window.agentsws.update.install() : window.agentsws.update.restart(c),
+      choice,
+    )
     .catch((e) => `（连接断开：${e.message.split('\n')[0]}）`)
   step(`点了「重启并更新」：${outcome}`)
   return { clicked, exited }
@@ -247,6 +254,32 @@ function dataStillThere(userData, marker, port, dataBefore) {
 function logHas(userData, text) {
   const file = join(userData, 'logs', 'desktop.log')
   return existsSync(file) && readFileSync(file, 'utf8').includes(text)
+}
+
+/** WP337：服务进程日志里某句出现了几次。 */
+export function countIn(text, needle) {
+  let n = 0
+  for (let i = text.indexOf(needle); i >= 0; i = text.indexOf(needle, i + needle.length)) n += 1
+  return n
+}
+function serverLogCount(userData, text) {
+  const file = join(userData, 'logs', 'server.log')
+  return existsSync(file) ? countIn(readFileSync(file, 'utf8'), text) : 0
+}
+
+/** WP337：在页面里（带着壳的会话 cookie）建一条每分钟一次的定时任务——「定时任务」那一类有一件在做。 */
+async function makeScheduledTask(page, title) {
+  return page.evaluate(async (t) => {
+    const me = await (await fetch('/v1/me', { credentials: 'include' })).json()
+    const asg = (me?.data?.assignments ?? []).find((a) => a.revoked_at === undefined)?.id
+    const res = await fetch('/v1/schedules', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', 'X-Assignment': asg ?? '' },
+      body: JSON.stringify({ title: t, trigger: { kind: 'interval', every_ms: 60_000 } }),
+    })
+    return { status: res.status, text: (await res.text()).slice(0, 200) }
+  }, title)
 }
 
 /** 卸载登记里的「已安装版本」（HKCU 下按显示名找）。 */
@@ -376,7 +409,15 @@ async function main() {
   h = await launchInstalled(currentExe, userData, port, v1, step)
   step(`C 下载 + 准备用了 ${await downloadUpdate(h.page, step)} 秒（已摆好的不再解）`)
   const pendingFile = join(userData, 'update-pending.json')
-  click = await clickInstall(h.app, h.page, step)
+  // WP337：有任务在做时「现在重启」→ 暂停全部 → 新版起来接着做（只一次）
+  const made = await makeScheduledTask(h.page, 'WP337 更新前的定时')
+  if (made.status >= 300) throw new Error(`C 建定时任务没成：${made.status} ${made.text}`)
+  const busy = await h.page.evaluate(() => window.agentsws.update.readiness())
+  step(`C 有任务在做：${busy.total} 件（${JSON.stringify(busy.counts)}）`)
+  if (busy.counts.scheduled < 1) throw new Error('C 看一眼没数到定时任务')
+  const resumedLine = '更新好了，暂停的接着做'
+  const resumedBefore = serverLogCount(userData, resumedLine)
+  click = await clickInstall(h.app, h.page, step, 'now')
   let bootMs
   for (let i = 0; i < 240 && bootMs === undefined; i += 1) {
     if (!existsSync(pendingFile)) bootMs = Date.now() - click.clicked
@@ -397,12 +438,23 @@ async function main() {
     throw new Error(`C 切换后布局不对：${layoutC.problems.join('；')}`)
   if (!layoutC.layout.apps.includes(`app-${v1}`)) throw new Error('C 上一版（V1）的目录没留着')
   dataStillThere(userData, marker, port, dataBefore)
+  if (serverLogCount(userData, '因更新暂停全部') < 1) throw new Error('C 旧版没有因更新暂停全部')
+  let resumed = 0
+  for (let i = 0; i < 60 && resumed === 0; i += 1) {
+    resumed = serverLogCount(userData, resumedLine) - resumedBefore
+    if (resumed === 0) await sleep(500)
+  }
+  if (resumed !== 1) throw new Error(`C 新版「接着做」了 ${resumed} 次（应当 1 次）`)
+  if (existsSync(join(userData, 'data', 'update-pause.json')))
+    throw new Error('C 暂停记录没被新版收掉')
+  step('C 有任务时现在重启：旧版暂停全部 → 新版接着做 1 次、暂停记录已收掉')
   const reg = registeredVersion()
   step(`C 卸载登记里的版本：${reg || '（读不到）'}`)
   if (reg !== '' && reg !== v2) throw new Error(`C 卸载登记里的版本还是 ${reg}`)
   const second = spawnSync(currentExe, [], { timeout: 30_000 })
   step(`C 单实例：再起一次退出码 ${describeExit(second.status, second.signal)}`)
   if (second.status === null) throw new Error('C 第二个实例 30 秒没退出（单实例锁没生效？）')
+  summary.push('有任务时现在重启（WP337）：暂停全部 → 新版接着做 1 次')
   summary.push(
     `只切换（${v1} → ${v2}）：点了到新版桌面壳 ${bootMs === undefined ? '?' : (bootMs / 1000).toFixed(1)} 秒，到新版服务健康 ${secC.toFixed(1)} 秒`,
   )

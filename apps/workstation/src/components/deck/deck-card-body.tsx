@@ -14,6 +14,7 @@ import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import { GeoWatchCardBody, isGeoWatchPayload } from '@/components/seo/geo-watch-card-body'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
@@ -316,6 +317,8 @@ export function DeckCardBody({
         if (isModerationPayload(payload)) return <ModerationCardBody payload={payload} />
         // WP322：FAQ 导入 ③ 交负责人的整批卡——几条 + 一两行预览（不出改之前 / 改之后双格）
         if (isFaqBatchPayload(payload)) return <FaqBatchBody payload={payload} />
+        // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
+        if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />

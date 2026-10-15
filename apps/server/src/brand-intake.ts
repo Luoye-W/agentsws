@@ -29,12 +29,16 @@ import type { BrandIntakeActor, BrandIntakePort } from '@agentsws/api'
 import {
   analyzeBrand,
   applyEdits,
+  categoryPrompt,
   classifyUrl,
   estimateCredits,
   mergeProfile,
+  modelCategoryField,
   type PageFetch,
+  parseCategoryReply,
   type StorefrontPasswordPost,
   unlockShopifyStorefront,
+  wantsModelCategory,
 } from '@agentsws/brand-intake'
 import type {
   BrandIntakeFailureKind,
@@ -82,6 +86,13 @@ export interface BrandIntakeOptions {
    * 填密码（界面照样说「店铺有访问密码」，只是只剩「先跳过」）。
    */
   passwordPost?: StorefrontPasswordPost
+  /**
+   * WP335（决策 659）：认品类用的模型口（这个品牌的模型网关，每次现取；没配模型回 `undefined`
+   * ——品类那一格就空着，人自己填）。只给已经读到的几格（品牌名、一句话、商品名），页面原文不给。
+   */
+  categoryModel?: (
+    actor: BrandIntakeActor,
+  ) => ((input: { prompt: string }) => Promise<{ text: string }>) | undefined
 }
 
 export interface BrandIntakeAssembly {
@@ -161,6 +172,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
    * `previous` 有值就是「重新分析」——合并时用户改过的格子整格不动（70 §3.4）。
    */
   const run = (
+    actor: BrandIntakeActor,
     id: string,
     urls: string[],
     cap: number,
@@ -197,8 +209,14 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         })
         const current = runs.get(id)
         if (current === undefined || gens.get(id) !== gen) return
-        const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
+        const merged = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
+        // WP335（决策 659）：品类——读到的 / 人改过的不动；没有就请模型说一个（标「请确认」）
+        const profile =
+          gotSomething && out.fresh_store !== true
+            ? await withCategory(actor, merged, out.pages.find((p) => p.ok)?.url ?? urls[0] ?? '')
+            : merged
+        if (gens.get(id) !== gen) return
         documents.set(current.workspace_id, out.documents ?? [])
         const {
           failure: _f,
@@ -244,6 +262,26 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
     void task.finally(() => inflight.delete(task))
   }
 
+  /** WP335：请模型认品类（没模型 / 模型没答好 / 出错 → 原样返回，不填）。 */
+  const withCategory = async (
+    actor: BrandIntakeActor,
+    profile: BrandIntakeProfile,
+    url: string,
+  ): Promise<BrandIntakeProfile> => {
+    if (!wantsModelCategory(profile)) return profile
+    const model = options.categoryModel?.(actor)
+    if (model === undefined) return profile
+    try {
+      const category = parseCategoryReply((await model({ prompt: categoryPrompt(profile) })).text)
+      return category === undefined
+        ? profile
+        : { ...profile, category: modelCategoryField(category, url) }
+    } catch (err) {
+      warn(`[brand-intake] 认品类没成：${String(err)}\n`)
+      return profile
+    }
+  }
+
   const port: BrandIntakePort = {
     start(actor, input) {
       const cap = input.cap_credits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
@@ -267,7 +305,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(id, fresh)
       // **不等它**：用户这就可以去第 ③ 步选岗位
-      run(id, input.urls, cap, undefined, input.storefront_password)
+      run(actor, id, input.urls, cap, undefined, input.storefront_password)
       return fresh
     },
 
@@ -345,7 +383,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(next.id, next)
       // 带着上一次的结果进去：用户改过的格子整格不动
-      run(next.id, urls, next.budget.cap_credits, current.profile, input.storefront_password)
+      run(actor, next.id, urls, next.budget.cap_credits, current.profile, input.storefront_password)
       return next
     },
   }

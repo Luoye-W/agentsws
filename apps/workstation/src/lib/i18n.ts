@@ -9,6 +9,7 @@ import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
+import { GEO_EN, GEO_ZH } from './i18n-geo'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -3506,6 +3507,20 @@ const zh: Table = {
   'update.error.smoke': '更新前自检没过，先不更新，旧版本照常用。点这里重试',
   'update.error.install': '安装程序没起来。点这里重试',
   'update.error.unknown': '没成功。点这里重试',
+  // WP337：有任务在做时点「重启并更新」——一句 + 三个按钮，展开看清单
+  'update.waiting': '等空闲后重启',
+  'update.waiting.tip': '没有正在输出的就自动重启。点一下取消',
+  'update.busy.title': '还有 {n} 件在做',
+  'update.busy.hint': '暂停的会在新版打开后自动接着做',
+  'update.busy.show': '看看是哪些',
+  'update.busy.hide': '收起',
+  'update.busy.more': '…还有 {n} 件',
+  'update.busy.output': '正在输出',
+  'update.busy.background': '后台',
+  'update.busy.scheduled': '定时',
+  'update.restart.now': '现在重启',
+  'update.restart.idle': '空闲时重启',
+  'update.restart.later': '稍后',
   // WP136（docs/79）：dsh 场景切换（左下角账户块上方那一行 + 它的面板）
   'scenes.entry': '场景',
   'scenes.title': '切换场景',
@@ -7641,6 +7656,19 @@ const en: Table = {
   'update.error.smoke': 'The pre-update self-check failed, so nothing changed. Click to retry',
   'update.error.install': 'The installer did not start. Click to retry',
   'update.error.unknown': 'That did not work. Click to retry',
+  'update.waiting': 'Restart when idle',
+  'update.waiting.tip': 'Restarts by itself once nothing is running. Click to cancel',
+  'update.busy.title': '{n} things still running',
+  'update.busy.hint': 'Paused work picks up again when the new version opens',
+  'update.busy.show': 'Show them',
+  'update.busy.hide': 'Hide',
+  'update.busy.more': '…and {n} more',
+  'update.busy.output': 'Running',
+  'update.busy.background': 'Background',
+  'update.busy.scheduled': 'Scheduled',
+  'update.restart.now': 'Restart now',
+  'update.restart.idle': 'When idle',
+  'update.restart.later': 'Later',
   // WP136 (docs/79): switching dsh scenes
   'scenes.entry': 'Scenes',
   'scenes.title': 'Switch scene',
@@ -8296,6 +8324,8 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WRITE_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
+    // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
+    ...GEO_ZH,
   },
   en: {
     ...en,
@@ -8324,6 +8354,7 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...CARD_PAGE_EN,
+    ...GEO_EN,
   },
 }
 

@@ -43,6 +43,10 @@ describe('bridge-types', () => {
       updateChanged: 'agentsws:update-changed',
       updateDownload: 'agentsws:update-download',
       updateInstall: 'agentsws:update-install',
+      // WP337：有任务在做时页面上三选一
+      updateReadiness: 'agentsws:update-readiness',
+      updateRestart: 'agentsws:update-restart',
+      updateCancelWait: 'agentsws:update-cancel-wait',
     })
   })
 

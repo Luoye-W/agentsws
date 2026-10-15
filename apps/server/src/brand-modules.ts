@@ -56,6 +56,7 @@ import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
+import type { RedditLimits } from './reddit-write/limits.js'
 import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
@@ -242,6 +243,14 @@ export interface BrandModuleSet {
    * 这个品牌的目录下。
    */
   seoService: SeoServiceAssembly
+  /**
+   * WP335（决策 659）：这个品牌的一次性文字模型口（品牌分析认品类用；用量照常记在这个品牌的账上）。
+   * 没接模型 / 只有 stub → `undefined`。可选：老的装配不给就当没有。
+   */
+  textModel?: (
+    actor: { assignment_id: string; role_id: string },
+    run_id: string,
+  ) => ((input: { prompt: string }) => Promise<{ text: string }>) | undefined
   /** WP158：这个品牌的 Search Console 与 GA4 真读数（按天缓存、令牌只在连接器里）。 */
   googleReads: GoogleReads
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
@@ -283,6 +292,8 @@ export interface BrandModuleSet {
   adsData?: AdsDataService
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
+  redditLimits?: RedditLimits
   /**
    * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
    */
