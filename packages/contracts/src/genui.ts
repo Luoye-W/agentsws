@@ -16,13 +16,12 @@ import {
   isGenuiLinkHref,
   isSecretLikeGenuiField,
   normalizeGenuiAction,
-  parseGenuiAction,
 } from './genui-host.js'
 
 /** 回答里那一段的围栏名（```dsh-ui）。 */
 export const GENUI_FENCE = 'dsh-ui'
 
-/** 白名单：能画的组件类型。`echart` 只开柱 / 线 / 饼 / 漏斗四种预设（{@link GENUI_ECHART_PRESETS}）。 */
+/** 白名单：能画的组件类型。`echart` 只开预设（{@link GENUI_ECHART_PRESETS}），不收完整 option。 */
 export const GENUI_ALLOWED_TYPES = [
   'text',
   'card',
@@ -79,7 +78,16 @@ export const GENUI_ALLOWED_TYPES = [
 
 export type GenuiAllowedType = (typeof GENUI_ALLOWED_TYPES)[number]
 
-export const GENUI_ECHART_PRESETS = ['bar', 'line', 'area', 'pie', 'funnel', 'scatter', 'radar', 'gauge'] as const
+export const GENUI_ECHART_PRESETS = [
+  'bar',
+  'line',
+  'area',
+  'pie',
+  'funnel',
+  'scatter',
+  'radar',
+  'gauge',
+] as const
 
 /** 宿主自己画的组件（不是插件的）：口令格、「点开看」的外部图片 / 媒体。模型写了也不认。 */
 export const GENUI_HOST_TYPES = ['ws-secret', 'ws-media'] as const
@@ -134,7 +142,7 @@ const clip = (s: string, max: number): string => {
   return chars.length <= max ? s : `${chars.slice(0, max - 1).join('')}…`
 }
 
-const LINK_RE = /\[([^\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/gu
+const LINK_RE = /\[([^[\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/gu
 
 /**
  * 正文里的 Markdown 链接 `[字](地址)`：WP341 起 `http(s)` / `mailto` / 站内 `/…` 留着（工作台悬停显示真实域名、
@@ -142,18 +150,18 @@ const LINK_RE = /\[([^\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/gu
  */
 function unlink(s: string): string {
   const kept: string[] = []
-  const token = (i: number): string => `\u0000${String(i)}\u0000`
+  const token = (i: number): string => `\uE000${String(i)}\uE000`
   let out = s
   for (let i = 0; i < 8; i += 1) {
     const next = out.replace(LINK_RE, (_m, text: string, href: string) => {
-      if (text.includes('\u0000') || !isGenuiLinkHref(href) || text.trim() === '') return text
+      if (text.includes('\uE000') || !isGenuiLinkHref(href) || text.trim() === '') return text
       kept.push(`[${text}](${href})`)
       return token(kept.length - 1)
     })
     if (next === out) break
     out = next
   }
-  return out.replace(/\u0000(\d+)\u0000/gu, (_m, i: string) => kept[Number(i)] ?? '')
+  return out.replace(/\uE000(\d+)\uE000/gu, (_m, i: string) => kept[Number(i)] ?? '')
 }
 
 /** 一格字：字符串照收（不安全的链接只留字、截长），数字转成字；别的不要。 */
@@ -284,7 +292,10 @@ function mediaOf(type: 'image' | 'audio' | 'video', x: Record<string, unknown>) 
       poster,
       loop: type !== 'image' && x.loop === true ? true : undefined,
       muted: type === 'video' && x.muted === true ? true : undefined,
-      aspectRatio: type === 'video' ? oneOf(x.aspectRatio, ['16:9', '4:3', '1:1', '9:16'] as const) : undefined,
+      aspectRatio:
+        type === 'video'
+          ? oneOf(x.aspectRatio, ['16:9', '4:3', '1:1', '9:16'] as const)
+          : undefined,
     }),
   }
 }
@@ -577,7 +588,11 @@ function moreFieldsOf(
     case 'json': {
       const v = jsonSafe(type === 'json' ? x.value : x.items)
       if (v === undefined) return undefined
-      return type === 'json' ? { value: v } : Array.isArray(v) && v.length > 0 ? { items: v } : undefined
+      return type === 'json'
+        ? { value: v }
+        : Array.isArray(v) && v.length > 0
+          ? { items: v }
+          : undefined
     }
     case 'code': {
       const code = typeof x.code === 'string' ? clip(x.code, GENUI_LIMITS.code) : undefined
@@ -588,7 +603,8 @@ function moreFieldsOf(
     case 'diff': {
       const diffs = records(x.diffs, 8, (d) => {
         const path = str(d.path, 200)
-        const newText = typeof d.newText === 'string' ? clip(d.newText, GENUI_LIMITS.code) : undefined
+        const newText =
+          typeof d.newText === 'string' ? clip(d.newText, GENUI_LIMITS.code) : undefined
         if (path === undefined || newText === undefined) return undefined
         const oldText = typeof d.oldText === 'string' ? clip(d.oldText, GENUI_LIMITS.code) : null
         return { path, oldText, newText }
@@ -611,7 +627,7 @@ function moreFieldsOf(
       })
     }
     default:
-      return formFieldsOf(type, x, w, depth)
+      return formFieldsOf(type, x, w)
   }
 }
 
@@ -620,7 +636,6 @@ function formFieldsOf(
   type: GenuiAllowedType,
   x: Record<string, unknown>,
   w: Walk,
-  depth: number,
 ): Record<string, unknown> | undefined {
   switch (type) {
     case 'input': {
@@ -691,7 +706,10 @@ function formFieldsOf(
     case 'submit': {
       const label = str(x.label, T) ?? '提交'
       const groups = Array.isArray(x.groups)
-        ? x.groups.map(fieldId).filter((g): g is string => g !== undefined).slice(0, 20)
+        ? x.groups
+            .map(fieldId)
+            .filter((g): g is string => g !== undefined)
+            .slice(0, 20)
         : undefined
       const own = actionOf(x, w)
       return pick({
@@ -756,7 +774,8 @@ function formFieldsOf(
     }
     case 'diagram': {
       const nodes = jsonSafe(x.nodes, 3)
-      if (typeof x.kind !== 'string' || !Array.isArray(nodes) || nodes.length === 0) return undefined
+      if (typeof x.kind !== 'string' || !Array.isArray(nodes) || nodes.length === 0)
+        return undefined
       return pick({
         kind: x.kind.slice(0, 40),
         title: str(x.title, T),
@@ -835,7 +854,9 @@ function hasSubmit(x: unknown, depth: number): boolean {
   if (Array.isArray(x)) return x.some((v) => hasSubmit(v, depth + 1))
   if (!isRecord(x)) return false
   if (x.type === 'submit') return true
-  return Object.values(x).some((v) => typeof v === 'object' && v !== null && hasSubmit(v, depth + 1))
+  return Object.values(x).some(
+    (v) => typeof v === 'object' && v !== null && hasSubmit(v, depth + 1),
+  )
 }
 
 /**

@@ -51,7 +51,8 @@ export function parseGenuiAction(raw: unknown): GenuiHostAction | undefined {
   const at = a.indexOf(':')
   const head = (at < 0 ? a : a.slice(0, at)).toLowerCase()
   const rest = at < 0 ? '' : a.slice(at + 1).trim()
-  if (head === 'say') return rest === '' ? { kind: 'say' } : { kind: 'say', text: rest.slice(0, 200) }
+  if (head === 'say')
+    return rest === '' ? { kind: 'say' } : { kind: 'say', text: rest.slice(0, 200) }
   if (head === 'submit') return { kind: 'submit' }
   if (head === 'open') return isGenuiOpenTarget(rest) ? { kind: 'open', to: rest } : undefined
   if (head === 'tool') {

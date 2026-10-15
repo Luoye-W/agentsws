@@ -62,7 +62,8 @@ export function genuiFieldLabels(spec: GenuiSpecLite): Record<string, string> {
   for (const n of genuiNodes(spec)) {
     const key = textOf(n.id) || textOf(n.group)
     if (key === '' || key in out) continue
-    out[key] = textOf(n.label) || textOf(n.placeholder) || key
+    // 多选组没有自己的标题（每个勾选框的字是选项），用组名
+    out[key] = n.type === 'checkbox' ? key : textOf(n.label) || textOf(n.placeholder) || key
   }
   return out
 }
@@ -147,9 +148,11 @@ export function resolveGenuiAction(
     return { kind: 'tool', tool: parsed.tool, args: isRecord(node.args) ? node.args : {}, label }
   // 发一句话：按钮用写好的那句 / 按钮上的字；单个格子用「标签：值」
   if (parsed.kind === 'say' && parsed.text !== undefined) return { kind: 'say', text: parsed.text }
-  if (type === 'button' || type === '') return label === '' ? { kind: 'none' } : { kind: 'say', text: label }
+  if (type === 'button' || type === '')
+    return label === '' ? { kind: 'none' } : { kind: 'say', text: label }
   if ((type === 'input' || type === 'textarea') && payload.submit !== true) return { kind: 'none' }
-  if (type === 'quiz') return { kind: 'say', text: `${textOf(node.question)}：${textOf(payload.answer)}` }
+  if (type === 'quiz')
+    return { kind: 'say', text: `${textOf(node.question)}：${textOf(payload.answer)}` }
   const name = textOf(node.label)
   if (type === 'checkbox')
     return { kind: 'say', text: `${payload.checked === true ? '选' : '不选'}「${name}」` }

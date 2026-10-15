@@ -7,6 +7,7 @@
  * 模型不吐 HTML；给模型的规矩见 `genui.ts` 的 `QUICK_ANSWER_RULE` / `GENUI_DISPLAY_RULE`。
  */
 import { filterGenuiSpec, GENUI_FENCE, type GenuiNodeLite, type GenuiSpecLite } from './genui.js'
+import { genuiNodes } from './genui-reply.js'
 
 /** 一段字（一句话之外还有要说的）。 */
 export interface AnswerText {
@@ -105,6 +106,8 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
   /** 有提交按钮的一块是一张表：格子画成「要回答的问题」，不编号。 */
   const form = JSON.stringify(spec.items).includes('"type":"submit"')
   let questions = 0
+  let lastButton = -1
+  const asked = new Set<string>()
   const choice = (label: string, said: string = label): string => {
     choices.push(said)
     return `${String(choices.length)}. ${label}`
@@ -226,20 +229,35 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
           [textOf(n.title), textOf(n.value), textOf(n.subtitle)].filter((t) => t !== '').join(' '),
         )
         return true
-      case 'button':
+      case 'button': {
         if (n.action === undefined) return true
-        blocks.push(md ? `- ${label}` : choice(label))
+        const line = md ? `- ${label}` : choice(label)
+        // 挨着的几个按钮排成一组（一行一个）
+        if (lastButton === blocks.length && blocks.length > 0)
+          blocks[blocks.length - 1] += `\n${line}`
+        else blocks.push(line)
+        lastButton = blocks.length
         return true
+      }
       case 'radio':
       case 'select': {
         const opts = ((n.options as unknown[] | undefined) ?? []).map(textOf)
-        if (form || md) blocks.push(form ? ask(`${label}（${opts.join(' / ')}）`) : `${label}：${opts.join(' / ')}`)
-        else lines([...(label === '' ? [] : [label]), ...opts.map((o) => choice(o, label === '' ? o : `${label}：${o}`))])
+        if (form || md)
+          blocks.push(
+            form ? ask(`${label}（${opts.join(' / ')}）`) : `${label}：${opts.join(' / ')}`,
+          )
+        else
+          lines([
+            ...(label === '' ? [] : [label]),
+            ...opts.map((o) => choice(o, label === '' ? o : `${label}：${o}`)),
+          ])
         return true
       }
       case 'quiz': {
         const q = textOf(n.question)
-        const opts = ((n.options as unknown[] | undefined) ?? []).map((o) => textOf(recordOf(o).label))
+        const opts = ((n.options as unknown[] | undefined) ?? []).map((o) =>
+          textOf(recordOf(o).label),
+        )
         lines([q, ...opts.map((o) => (md ? `- ${o}` : choice(o, `${q}：${o}`)))])
         return true
       }
@@ -249,10 +267,22 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
         if (form) blocks.push(ask(label || textOf(n.placeholder) || textOf(n.id)))
         return true
       case 'checkbox':
-      case 'switch':
+      case 'switch': {
+        const group = textOf(n.group)
+        if (form && group !== '') {
+          // 多选组：整组一个问题（只在第一次遇到时出）
+          if (asked.has(group)) return true
+          asked.add(group)
+          const opts = genuiNodes(spec)
+            .filter((x) => x.type === 'checkbox' && x.group === group)
+            .map((x) => textOf(x.label))
+          blocks.push(ask(`${group}（${opts.join(' / ')}，可多选）`))
+          return true
+        }
         if (form) blocks.push(ask(`${label}（是 / 否）`))
         else if (n.action !== undefined && !md) blocks.push(choice(label, `选「${label}」`))
         return true
+      }
       case 'submit':
         if (!md) blocks.push('按顺序回答就行，比如「1）… 2）…」。')
         return true
