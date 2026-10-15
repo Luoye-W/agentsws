@@ -32,6 +32,8 @@
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/genui-host.ts",
+    "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
@@ -130,7 +132,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6bbb517cf6c7172b163921cfcdefdbbe",
+  "source_digest": "d0729d44875d02e29319289379b80a57",
   "objects": [
     {
       "id": "ad",
