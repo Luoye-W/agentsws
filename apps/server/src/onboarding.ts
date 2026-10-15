@@ -42,6 +42,10 @@ import type {
 } from '@agentsws/api'
 import type {
   ApprovalBus,
+  BrandAudience,
+  BrandCompetitor,
+  BrandInsightField,
+  BrandKeywords,
   Clock,
   EventEnvelope,
   MarketsSource,
@@ -69,6 +73,12 @@ import { companyKey, normalizeDomain } from '@agentsws/core'
 import { bundledPositionIcon, type RoleStore } from '@agentsws/roles'
 import { normalizeVertical, verticalChoices } from '@agentsws/support-core'
 import type BetterSqlite3 from 'better-sqlite3'
+import {
+  BRAND_INSIGHT_FACT_KEYS,
+  type BrandInsightFactKey,
+  type BrandInsightFactsInput,
+  nextInsightFacts,
+} from './brand-insight-facts.js'
 import { catalogEntry, ROLE_CONNECTOR_KIND } from './catalog.js'
 import { createDiscovery, type Discovery, type MdnsFactory } from './discovery.js'
 import {
@@ -482,6 +492,15 @@ export interface OnboardingAssembly {
     currency?: string
     /** WP335（决策 659）：品类（没写过就没有）。 */
     category?: string
+    /** WP346：第二版那几格（没写过就没有）——下游四处优先读它们。 */
+    subcategory?: string
+    positioning?: string
+    price_band?: string
+    audience?: BrandAudience
+    keywords?: BrandKeywords
+    competitors?: BrandCompetitor[]
+    website?: string
+    ai_suggested?: BrandInsightField[]
   }
   /**
    * WP248（决策 83）：只改某个品牌档案上的一句话介绍 / 客服邮箱 / 币种（品牌分析确认时公司名还没有、
@@ -1571,8 +1590,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     setBrandFacts(ws, facts) {
       const previous = profileOf(ws)
       if (previous === undefined) return false
-      const { one_liner: _o, support_email: _e, currency: _c, category: _g, ...rest } = previous
-      backend.put(ws, { ...rest, ...nextBrandFacts(previous, facts) })
+      const { one_liner: _o, support_email: _e, currency: _c, category: _g, ...kept } = previous
+      // WP346：第二版那几格同样由 nextBrandFacts 重算（没给的沿用）
+      const rest = { ...kept } as Record<string, unknown>
+      for (const key of BRAND_INSIGHT_FACT_KEYS) delete rest[key]
+      backend.put(ws, { ...(rest as typeof kept), ...nextBrandFacts(previous, facts) })
       return true
     },
     setStorefrontPlatform(ws, platform, source) {
@@ -1711,8 +1733,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   }
 }
 
-/** WP248（决策 83）：品牌三格的写入形状（不给 = 不改；空串 = 清空）。 */
-export interface BrandFactsInput {
+/**
+ * WP248（决策 83）：品牌三格的写入形状（不给 = 不改；空串 = 清空）。
+ * WP346：加上第二版那几格（人群 / 关键词 / 竞品…）与「AI 建议」标记（见 `brand-insight-facts.ts`）。
+ */
+export interface BrandFactsInput extends BrandInsightFactsInput {
   one_liner?: string | undefined
   support_email?: string | undefined
   currency?: string | undefined
@@ -1720,24 +1745,36 @@ export interface BrandFactsInput {
   category?: string | undefined
 }
 
-/** 档案上已经写着的那几格（币种没写过就不出现——读的人按 USD 补）。 */
+/** 档案上已经写着的那几格（币种没写过就不出现——读的人按 USD 补）。WP346：加第二版那几格。 */
 function brandFactsOf(
-  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category'>,
-): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category'> {
-  return {
+  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category' | BrandInsightFactKey>,
+): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category' | BrandInsightFactKey> {
+  const out: Pick<
+    WorkspaceProfile,
+    'one_liner' | 'support_email' | 'category' | BrandInsightFactKey
+  > = {
     ...(p.one_liner === undefined ? {} : { one_liner: p.one_liner }),
     ...(p.support_email === undefined ? {} : { support_email: p.support_email }),
     ...(p.category === undefined ? {} : { category: p.category }),
   }
+  for (const key of BRAND_INSIGHT_FACT_KEYS)
+    if (p[key] !== undefined) (out as Record<string, unknown>)[key] = structuredClone(p[key])
+  return out
 }
 
 /** 下一份档案上的几格：给了的按归一化结果（空 = 去掉），没给的沿用上一次。 */
 export function nextBrandFacts(
   previous:
-    | Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency' | 'category'>
+    | Pick<
+        WorkspaceProfile,
+        'one_liner' | 'support_email' | 'currency' | 'category' | BrandInsightFactKey
+      >
     | undefined,
   input: BrandFactsInput,
-): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency' | 'category'> {
+): Pick<
+  WorkspaceProfile,
+  'one_liner' | 'support_email' | 'currency' | 'category' | BrandInsightFactKey
+> {
   const pick = (
     given: string | undefined,
     old: string | undefined,
@@ -1752,6 +1789,8 @@ export function nextBrandFacts(
     ...(support_email === undefined ? {} : { support_email }),
     ...(currency === undefined ? {} : { currency }),
     ...(category === undefined ? {} : { category }),
+    // WP346：第二版那几格 + 哪几格还是 AI 建议
+    ...nextInsightFacts(previous, input, category),
   }
 }
 

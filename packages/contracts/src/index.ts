@@ -14,6 +14,7 @@ export * from './blocks.js'
 export * from './brand-design.js'
 // 70 §3 贴一个网址自动分析（WP121）。中心是 `BrandIntakeField`：自动填出来的格子
 // 拖着出处、把握度与"用户改过没有"走——与用户自己填的格子不是一回事。
+export * from './brand-insights.js'
 export * from './brand-intake.js'
 export * from './byo-data-source.js'
 export * from './changes.js'

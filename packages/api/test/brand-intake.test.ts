@@ -118,6 +118,8 @@ describe('WP121 网关：品牌接入面', () => {
       'GET /v1/brand-intake/runs/latest',
       'POST /v1/brand-intake/manual',
       'POST /v1/brand-intake/runs',
+      // WP346：设置页「重新分析一次」后逐格采纳
+      'POST /v1/brand-intake/runs/:id/adopt',
       'POST /v1/brand-intake/runs/:id/confirm',
       'POST /v1/brand-intake/runs/:id/reanalyze',
     ])
@@ -280,5 +282,46 @@ describe('WP121 网关：品牌接入面', () => {
     const body = (await res.json()) as { code: string; message: string }
     expect(body.code).toBe('not_implemented')
     expect(body.message).toContain('brandIntake')
+  })
+
+  it('WP346 逐格采纳：没装配回 501；装了就把勾的格子与改的值原样转给端口；一格都没勾 400', async () => {
+    const { call } = await wired()
+    expect(
+      (await call('POST', '/v1/brand-intake/runs/bi_0001/adopt', { fields: ['positioning'] }))
+        .status,
+    ).toBe(501)
+
+    const h = await harness()
+    const port = new FakePort()
+    const seen: unknown[] = []
+    const gateway = createGateway({
+      ...h.deps,
+      brandIntake: Object.assign(port, {
+        adopt: (_a: BrandIntakeActor, input: unknown) => {
+          seen.push(input)
+          return { ...RUN, status: 'confirmed' as const }
+        },
+      }),
+    })
+    const post = (body: unknown) =>
+      Promise.resolve(
+        gateway.fetch(
+          new Request('http://127.0.0.1/v1/brand-intake/runs/bi_0001/adopt', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${h.token}`,
+              'X-Assignment': h.assignment.id,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          }),
+        ),
+      )
+    const ok = await post({ fields: ['positioning', 'keywords'], edits: { positioning: '改过的' } })
+    expect(ok.status).toBe(200)
+    expect(seen).toEqual([
+      { run_id: 'bi_0001', fields: ['positioning', 'keywords'], edits: { positioning: '改过的' } },
+    ])
+    expect((await post({ fields: [] })).status).toBe(400)
   })
 })

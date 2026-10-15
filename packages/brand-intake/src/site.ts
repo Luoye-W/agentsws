@@ -27,6 +27,7 @@ import {
   type BrandIntakePage,
   type BrandIntakePolicy,
   type BrandIntakeProduct,
+  type BrandIntakeProductSpec,
   type BrandIntakeProfile,
   type BrandIntakeSocialLink,
   type StorefrontPlatform,
@@ -259,16 +260,69 @@ function productFromJsonLd(
   const price = o.price
   const currency = o.priceCurrency
   const image = firstImage(node.image)
+  // WP346：原价（划线价 / 建议零售价）——`priceSpecification` 里 `StrikethroughPrice` / `ListPrice` 那一条
+  const listPrice = listPriceOf(o.priceSpecification)
+  const sale = typeof price === 'string' || typeof price === 'number' ? String(price) : undefined
+  const specs = specsFromJsonLd(node)
   return {
     title: title.slice(0, 200),
-    ...(typeof price === 'string' || typeof price === 'number'
-      ? { price_snapshot: String(price) }
-      : {}),
+    ...(sale === undefined ? {} : { price_snapshot: sale }),
     ...(typeof currency === 'string' ? { currency } : {}),
     ...(image === undefined ? {} : { image_url: image }),
     url,
     ...(node.hasVariant !== undefined ? { has_variants: true } : {}),
+    ...(listPrice !== undefined && sale !== undefined && listPrice !== sale
+      ? { list_price_snapshot: listPrice, sale_price_snapshot: sale }
+      : {}),
+    ...(specs.length === 0 ? {} : { specs }),
   }
+}
+
+/** WP346：`priceSpecification` 里那条划线价 / 标价（Google 商品富结果的写法）。 */
+function listPriceOf(spec: unknown): string | undefined {
+  const all = Array.isArray(spec) ? spec : spec === undefined ? [] : [spec]
+  for (const s of all) {
+    if (typeof s !== 'object' || s === null) continue
+    const r = s as Record<string, unknown>
+    if (!/strikethroughprice|listprice|msrp/i.test(String(r.priceType ?? ''))) continue
+    if (typeof r.price === 'string' || typeof r.price === 'number') return String(r.price)
+  }
+  return undefined
+}
+
+/** WP346：商品规格——`additionalProperty`（PropertyValue）+ 几个常见的直写属性。 */
+function specsFromJsonLd(node: Record<string, unknown>): BrandIntakeProductSpec[] {
+  const out: BrandIntakeProductSpec[] = []
+  const add = (name: unknown, value: unknown): void => {
+    const v =
+      typeof value === 'number'
+        ? String(value)
+        : typeof value === 'object' && value !== null
+          ? [
+              (value as Record<string, unknown>).value,
+              (value as Record<string, unknown>).unitText ??
+                (value as Record<string, unknown>).unitCode,
+            ]
+              .filter((x) => typeof x === 'string' || typeof x === 'number')
+              .join(' ')
+          : value
+    if (typeof name !== 'string' || typeof v !== 'string') return
+    const n = squash(name).slice(0, 40)
+    const val = squash(v).slice(0, 80)
+    if (n === '' || val === '' || out.some((x) => x.name === n)) return
+    out.push({ name: n, value: val })
+  }
+  const props = Array.isArray(node.additionalProperty)
+    ? node.additionalProperty
+    : node.additionalProperty === undefined
+      ? []
+      : [node.additionalProperty]
+  for (const p of props)
+    if (typeof p === 'object' && p !== null)
+      add((p as Record<string, unknown>).name, (p as Record<string, unknown>).value)
+  for (const key of ['material', 'color', 'size', 'weight', 'width', 'height', 'depth'])
+    if (node[key] !== undefined) add(key, node[key])
+  return out.slice(0, 12)
 }
 
 function firstImage(image: unknown): string | undefined {

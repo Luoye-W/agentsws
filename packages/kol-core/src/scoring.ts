@@ -339,6 +339,25 @@ export function brandScoreCriteria(
   }
 }
 
+/**
+ * WP346（决策 872）：找红人时的默认关键词——**先读品牌档案**（品类关键词 → 子品类 / 品类），
+ * 读不到回 `undefined`（调用方照旧：没关键词 = 这条渠道上的人都算候选）。
+ * 用「，」连起来：搜索那一层按词拆开、任意一个命中就算（WP117b）。
+ */
+export function brandSearchQuery(profile: {
+  keywords?: { category?: readonly string[] } | undefined
+  subcategory?: string | undefined
+  category?: string | undefined
+}): string | undefined {
+  const words = (profile.keywords?.category ?? [])
+    .map((k) => k.trim())
+    .filter((k) => k !== '')
+    .slice(0, 3)
+  if (words.length > 0) return words.join('，')
+  const fallback = profile.subcategory?.trim() || profile.category?.trim()
+  return fallback === undefined || fallback === '' ? undefined : fallback
+}
+
 const familyZh = (ids: readonly string[]): string =>
   ids.map((id) => CATEGORY_FAMILIES.find((f) => f.id === id)?.zh ?? id).join(' / ')
 

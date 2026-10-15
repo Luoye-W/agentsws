@@ -156,7 +156,7 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
-import { brandScoreCriteria } from '@agentsws/kol-core'
+import { brandScoreCriteria, brandSearchQuery } from '@agentsws/kol-core'
 import {
   type AccountFetch,
   createModelGateway,
@@ -174,6 +174,7 @@ import {
   ENTRY_CLASSIFY_MAX_OUTPUT,
   hasApprovalFlow,
   loadBundledRole,
+  type PersonaBrandContext,
   personaTextIn,
   type RangeExpanded,
   type RoleStore,
@@ -258,6 +259,7 @@ import {
   designPageKindOf,
   shopifyThemeSettings,
 } from './brand-design.js'
+import { insightFactsFromIntake } from './brand-insight-facts.js'
 import { createBrandIntake } from './brand-intake.js'
 import { brandKnowledgeCards } from './brand-knowledge.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
@@ -1207,6 +1209,11 @@ export interface ServerOptions {
    * 就演不出第 ② 步那张档案卡。
    */
   brandIntakeFetch?: BrandIntakeFetch
+  /**
+   * WP346：品牌分析 AI 归纳那一步的模型**替身**（测试与离线 demo 用）。生产不传——走这个品牌
+   * 自己的默认模型（没接模型就跳过 AI 那几格）。
+   */
+  brandIntakeModel?: (input: { prompt: string }) => Promise<{ text: string }>
   /**
    * WP173：开发信那几跳的**替身**（测试与 demo 用；生产路径一个都不传）。
    *
@@ -2938,14 +2945,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP248（决策 83）：品牌档案里给 AI 当上下文的三格（一句话介绍、客服邮箱、币种）。
    * 写过才带——币种没写过不替人补 USD（69 §5「别编」：默认值是界面上的缺省，不是这个品牌说过的话）。
    */
-  const brandFactsContextOf = (
-    ws: WorkspaceId,
-  ): { one_liner?: string; support_email?: string; currency?: string } => {
+  const brandFactsContextOf = (ws: WorkspaceId): PersonaBrandContext => {
     const p = onboardingRef?.brandProfile(ws)
     return {
       ...(p?.one_liner === undefined ? {} : { one_liner: p.one_liner }),
       ...(p?.support_email === undefined ? {} : { support_email: p.support_email }),
       ...(p?.currency === undefined ? {} : { currency: p.currency }),
+      // WP346（决策 872）：第二版那几格——红人 / 广告 / 内容 / 巡查的建议都先读档案（AI 建议的注明待核）
+      ...(p?.category === undefined ? {} : { category: p.category }),
+      ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+      ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
+      ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
+      ...(p?.audience === undefined ? {} : { audience: p.audience }),
+      ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+      ...(p?.competitors === undefined ? {} : { competitors: p.competitors.map((c) => c.name) }),
+      ...(p?.ai_suggested === undefined ? {} : { unconfirmed: [...p.ai_suggested] }),
     }
   }
 
@@ -5384,6 +5398,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               now: () => clock.now(),
+              // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
+              brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -5932,6 +5948,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(() => {
             const category = onboardingRef?.brandProfile(ws).category
             return category === undefined || category.trim() === '' ? {} : { category }
+          })(),
+          // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
+          ...(() => {
+            const p = onboardingRef?.brandProfile(ws)
+            return {
+              ...(p?.audience === undefined ? {} : { audience: p.audience }),
+              ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+              ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
+            }
           })(),
         }
       },
@@ -7105,6 +7130,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ...(full?.markets === undefined ? {} : { markets: full.markets }),
                 ...(domain === undefined || domain === '' ? {} : { domain }),
                 ...(products.length === 0 ? {} : { products }),
+                // WP346（决策 872）：品类、人群、关键词、竞品——建议先读档案
+                ...(full?.category === undefined ? {} : { category: full.category }),
+                ...(full?.audience === undefined
+                  ? {}
+                  : {
+                      audience: [full.audience.buyers, ...(full.audience.concerns ?? [])].join(
+                        '；',
+                      ),
+                    }),
+                ...(full?.keywords === undefined ? {} : { keywords: full.keywords }),
+                ...(full?.competitors === undefined
+                  ? {}
+                  : { competitors: full.competitors.map((c) => c.name) }),
               }
             },
             setupCards: () => setupCardsOf(ws),
@@ -8491,14 +8529,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP335（决策 659）：品类一格——这个品牌接了模型就请它说一个（标「请确认」），没接就空着让人填。
      * 模型口每次现取（模型设置改完立刻生效）；只给已读到的几格，不给页面原文。
      */
-    categoryModel: (actor) => async (input) => {
+    /*
+     * WP346（决策 872）：AI 归纳（人群 / 关键词 / 价格带 / 子品类 / 定位 / 竞品 / 品类 / 商品规格）
+     * 用这个品牌的默认模型，一次分析问一次；没接模型（只有 stub）回 undefined → 那几格跳过。
+     * 用量照常记在这个品牌的账上（模型网关）。
+     */
+    insightsModel: async (actor) => {
+      if (options.brandIntakeModel !== undefined) return options.brandIntakeModel
       const mod = await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)
-      const model = mod.textModel?.(
+      return mod.textModel?.(
         { assignment_id: actor.assignment_id, role_id: actor.role_id },
         `run_intake_${Math.floor(random() * 1e12).toString(36)}`,
       )
-      // 没接模型：回空——品类那一格空着，人自己填（不算出错、不记一行警告）
-      return model === undefined ? { text: '' } : model(input)
     },
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
@@ -8510,7 +8552,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 公司加的品牌（公司那一层已经设过）：公司全称不跟着分析结果改；品牌名是建品牌时
        * 起的那个，只有用户在档案卡上亲手改了品牌名才改。
        */
-      applyProfile: async (profile, actor) => {
+      applyProfile: async (profile, actor, meta) => {
         const added = onboarding.isAddedBrand(actor.workspace_id as WorkspaceId)
         // WP251：这个品牌挂的那家公司
         const company = onboarding.companyProfile(actor.workspace_id as WorkspaceId)?.legal_name
@@ -8532,12 +8574,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(support_email === undefined ? {} : { support_email }),
           ...(currency === undefined ? {} : { currency }),
           ...(category === undefined ? {} : { category }),
+          // WP346（决策 872）：第二版那几格 + 哪几格还是 AI 建议（人在卡上改过的不算）
+          ...insightFactsFromIntake(profile),
+          ...(meta?.website === undefined ? {} : { website: meta.website }),
         }
         // WP258：官网里漏出来的 `xxx.myshopify.com` 存进档案（建站岗位登录后找店时拿它对一下）
         const shopDomain = text(profile.shopify_domain)
         const rememberShopDomain = (): void => {
           if (shopDomain !== undefined)
             onboarding.setShopifyDomain(actor.workspace_id as WorkspaceId, shopDomain)
+        }
+        // WP346：设置页逐格采纳——只写给出的那几格（公司名 / 品牌名 / 市场不碰）
+        if (meta?.adopt === true) {
+          onboarding.setBrandFacts(actor.workspace_id as WorkspaceId, facts)
+          return
         }
         if (typeof legal !== 'string' || legal.trim() === '') {
           // 公司名、品牌名都还没有：档案已经在就只补这三格，没有档案不替人建

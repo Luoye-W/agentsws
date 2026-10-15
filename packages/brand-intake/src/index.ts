@@ -119,8 +119,10 @@ export {
 } from './text-hash.js'
 
 import {
+  BRAND_INTAKE_INSIGHTS_CREDITS,
   type BrandIntakeBudget,
   type BrandIntakeFailureKind,
+  type BrandIntakeInsightsStatus,
   type BrandIntakePage,
   type BrandIntakeProfile,
   type BrandIntakeSourceKind,
@@ -129,6 +131,15 @@ import {
 import { analyzeAmazonListing, analyzeAmazonStorefront, classifyAmazonUrl } from './amazon.js'
 import type { PageFetch } from './fetch.js'
 import { mergeProfile } from './field.js'
+import {
+  digestText,
+  type InsightsModel,
+  type InsightsPage,
+  insightFields,
+  insightsPrompt,
+  pageDigest,
+  parseInsightsReply,
+} from './insights.js'
 import { analyzeSite } from './site.js'
 
 /**
@@ -152,8 +163,11 @@ export function classifyUrl(url: string): BrandIntakeSourceKind {
   }
 }
 
-/** 开跑前给用户看的那个数（界面上"大约 N 积分"）。 */
-export function estimateCredits(urls: string[]): number {
+/**
+ * 开跑前给用户看的那个数（界面上"大约 N 积分"）。
+ * WP346：接了模型（`insights`）再加 AI 归纳那一次（{@link BRAND_INTAKE_INSIGHTS_CREDITS}）。
+ */
+export function estimateCredits(urls: string[], options: { insights?: boolean } = {}): number {
   let pages = 0
   for (const url of urls) {
     const kind = classifyUrl(url)
@@ -161,7 +175,8 @@ export function estimateCredits(urls: string[]): number {
     else if (kind === 'amazon_storefront') pages += 1
     else if (kind === 'amazon_listing') pages += 1
   }
-  return Math.round(pages * CREDITS_PER_PAGE * 100) / 100
+  const extra = options.insights === true && pages > 0 ? BRAND_INTAKE_INSIGHTS_CREDITS : 0
+  return Math.round((pages * CREDITS_PER_PAGE + extra) * 100) / 100
 }
 
 export interface AnalyzeBrandResult {
@@ -178,6 +193,8 @@ export interface AnalyzeBrandResult {
   password_protected?: boolean
   /** WP244：官网是刚开的 Shopify 空店（占位店名 / 默认首页）。 */
   fresh_store?: boolean
+  /** WP346：AI 归纳那一步怎么样了（没给 `insights` 选项就是 `no_model`）。 */
+  insights: BrandIntakeInsightsStatus
 }
 
 /**
@@ -197,9 +214,37 @@ export async function analyzeBrand(
     /** WP240：店铺访问密码与解开它的那一下（见 `SiteIntakeOptions`）。 */
     storefrontPassword?: string
     unlock?: (origin: string, password: string) => Promise<string | undefined>
+    /**
+     * WP346（决策 872）：AI 归纳（人群 / 关键词 / 价格带 / 子品类 / 定位 / 竞品 / 商品规格）。
+     * 不给 = 这个品牌没接模型：那几格跳过，照旧出解析结果。一次分析**只问一次**，计入积分、
+     * 沿用封顶（先留出这一份，页面预算相应少一份）；只喂这一轮抓到的页面文字。
+     */
+    insights?: { model: InsightsModel; language?: 'zh' | 'en' }
   } = {},
 ): Promise<AnalyzeBrandResult> {
   const cap = options.capCredits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
+  // WP346：给 AI 归纳那一步先留出一份（页面花到 cap − reserve 为止）
+  const reserve = options.insights === undefined ? 0 : BRAND_INTAKE_INSIGHTS_CREDITS
+  const pageCap = Math.max(0, cap - reserve)
+  /*
+   * WP346：AI 归纳要读这一轮抓到的页面原文。在抓取口上顺手留一份（官网与 Amazon 两条路都经过它），
+   * 不另抓一遍；只在接了模型时留。
+   */
+  const seen = new Map<string, string>()
+  const doGet: PageFetch =
+    options.insights === undefined
+      ? doFetch
+      : async (url, init) => {
+          const res = await doFetch(url, init)
+          return {
+            ...res,
+            text: async () => {
+              const t = await res.text()
+              if (res.ok) seen.set(url, t)
+              return t
+            },
+          }
+        }
   const pages: BrandIntakePage[] = []
   const documents: NonNullable<AnalyzeBrandResult['documents']> = []
   let profile: BrandIntakeProfile = {}
@@ -210,7 +255,7 @@ export async function analyzeBrand(
   let fresh = false
 
   for (const url of urls) {
-    if (spent >= cap) {
+    if (spent >= pageCap) {
       stopped = true
       break
     }
@@ -220,8 +265,8 @@ export async function analyzeBrand(
     let got: { pages: BrandIntakePage[]; profile: BrandIntakeProfile }
     if (kind === 'website') {
       // 还剩多少页的预算，就最多抓多少页
-      const affordable = Math.max(1, Math.floor((cap - spent) / CREDITS_PER_PAGE))
-      const site = await analyzeSite(doFetch, url, {
+      const affordable = Math.max(1, Math.floor((pageCap - spent + 1e-9) / CREDITS_PER_PAGE))
+      const site = await analyzeSite(doGet, url, {
         maxPages: affordable,
         ...(options.keepHtml === true ? { keepHtml: true } : {}),
         ...(options.onPage === undefined ? {} : { onPage: options.onPage }),
@@ -240,8 +285,8 @@ export async function analyzeBrand(
       if (entry === undefined) continue
       got =
         entry.kind === 'amazon_listing'
-          ? await analyzeAmazonListing(doFetch, url, entry)
-          : await analyzeAmazonStorefront(doFetch, url, entry)
+          ? await analyzeAmazonListing(doGet, url, entry)
+          : await analyzeAmazonStorefront(doGet, url, entry)
     }
 
     pages.push(...got.pages)
@@ -266,14 +311,55 @@ export async function analyzeBrand(
     if (both !== undefined) profile.markets = both
     // 只有真抓着的页面才算钱
     spent = Math.round(pages.filter((p) => p.ok).length * CREDITS_PER_PAGE * 100) / 100
-    if (spent >= cap) stopped = true
+    if (spent >= pageCap) stopped = true
+  }
+
+  // ── WP346：AI 归纳（一次调用；读到页面、不是空店、预算还容得下才问）──────────
+  let insights: BrandIntakeInsightsStatus = 'no_model'
+  if (options.insights !== undefined) {
+    const read: InsightsPage[] = pages
+      .filter((p) => p.ok && seen.has(p.url))
+      .map((p) => ({ url: p.url, kind: p.kind, html: seen.get(p.url) ?? '' }))
+    if (read.length === 0 || fresh) insights = 'skipped'
+    else if (Math.round((spent + BRAND_INTAKE_INSIGHTS_CREDITS) * 100) / 100 > cap)
+      insights = 'budget'
+    else {
+      spent = Math.round((spent + BRAND_INTAKE_INSIGHTS_CREDITS) * 100) / 100
+      try {
+        const prompt = insightsPrompt({
+          profile,
+          digest: pageDigest(read),
+          ...(options.insights.language === undefined
+            ? {}
+            : { language: options.insights.language }),
+        })
+        const reply = parseInsightsReply(
+          (await options.insights.model({ prompt })).text,
+          profile.brand_name?.value,
+        )
+        if (reply === undefined) insights = 'failed'
+        else {
+          profile = {
+            ...profile,
+            ...insightFields(profile, reply, {
+              url: read[0]?.url ?? urls[0] ?? '',
+              pageText: digestText(read),
+            }),
+          }
+          insights = 'done'
+        }
+      } catch {
+        // 模型出错：解析结果照给，AI 那几格空着（调用方按 `failed` 说一句）
+        insights = 'failed'
+      }
+    }
   }
 
   return {
     pages,
     profile,
     budget: {
-      estimated_credits: estimateCredits(urls),
+      estimated_credits: estimateCredits(urls, { insights: options.insights !== undefined }),
       cap_credits: cap,
       spent_credits: spent,
     },
@@ -282,6 +368,7 @@ export async function analyzeBrand(
     ...(failure === undefined ? {} : { failure_kind: failure }),
     ...(locked ? { password_protected: true } : {}),
     ...(fresh ? { fresh_store: true } : {}),
+    insights,
   }
 }
 
@@ -294,6 +381,18 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
   }
   return out as BrandIntakeProfile
 }
+
+export { amazonListPrice, amazonSpecs } from './amazon.js'
+// WP346（决策 872）：AI 归纳那一步（移植自 KOLAgents enrichment.ts）
+export type { InsightsModel, InsightsPage, InsightsReply } from './insights.js'
+export {
+  digestText,
+  INSIGHTS_MAX_PAGE_CHARS,
+  insightFields,
+  insightsPrompt,
+  pageDigest,
+  parseInsightsReply,
+} from './insights.js'
 
 // WP246：网页转文字（本机那一级）——任意网页 → 干净正文 markdown
 export type { ReadableResult } from './readable.js'

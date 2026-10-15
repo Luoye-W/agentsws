@@ -4186,6 +4186,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/brand-intake/runs/{id}/adopt': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP346：「重新分析一次」后逐格采纳——只把勾选的那几格写进品牌档案（AI 填的标「AI 建议」），其余不动 */
+    post: operations['adoptBrandIntake']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/brand-intake/runs/{id}/reanalyze': {
     parameters: {
       query?: never
@@ -35899,6 +35916,33 @@ export interface operations {
           support_email?: '' | string
           currency?: string
           category?: string
+          subcategory?: string
+          positioning?: string
+          price_band?: string
+          audience?: {
+            buyers: string
+            payer?: string
+            concerns?: string[]
+          } | null
+          keywords?: {
+            brand: string[]
+            category: string[]
+            scenario: string[]
+          } | null
+          competitors?: {
+            name: string
+            reason: string
+            url?: string
+          }[]
+          confirm_fields?: (
+            | 'category'
+            | 'subcategory'
+            | 'positioning'
+            | 'price_band'
+            | 'audience'
+            | 'keywords'
+            | 'competitors'
+          )[]
         }
       }
     }
@@ -37214,6 +37258,115 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': {
+          edits?: {
+            [key: string]: unknown
+          }
+        }
+      }
+    }
+    responses: {
+      /** @description BrandIntakeRun */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  adoptBrandIntake: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 分析 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          fields: string[]
           edits?: {
             [key: string]: unknown
           }
