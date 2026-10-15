@@ -361,8 +361,9 @@ function genuiDigest(items: readonly GenuiNodeLite[]): {
  * WP291：当场回答的确定性替身（模拟不调模型）。问商品 → mock 店铺里的商品列成表 + 在卖几件；
  * 别的 → 一句话（不读数据）。写法与真模型照规矩回的一样：正文 + 组件段。
  *
- * WP336：组件段改写 ```dsh-ui；并且像一个不守规矩的模型那样**夹带**按钮、图片、3D、外链、自定义配色，
- * 这些必须被契约里的白名单滤掉（红线）。
+ * WP336：组件段改写 ```dsh-ui；并且像一个不守规矩的模型那样**夹带**东西，必须被契约里的白名单滤掉（红线）。
+ * WP341（决策 847）：按钮 / 图片 / 链接放开了，夹带的换成仍是红线的那几样（不认识的组件、`javascript:` 图、带事件的 svg、
+ * 完整 ECharts 配置、空 3D）和自定义配色。
  */
 function quickAnswerStandIn(world: World, text: string): string {
   if (!PRODUCTS.test(text)) return '这一问不用读数据，直接答：照岗位的规矩来就行。'
@@ -377,19 +378,18 @@ function quickAnswerStandIn(world: World, text: string): string {
         rows: products
           .slice(0, 50)
           .map((p) => [p.title, p.price, p.status === 'active' ? '在卖' : '草稿']),
-        export: true,
-        details: [[{ type: 'button', label: '编辑', action: 'edit' }]],
       },
-      // 以下是夹带：一个都不许过
-      { type: 'button', label: '一键上架', action: 'publish_all' },
-      { type: 'image', src: 'https://cdn.example.com/banner.png' },
-      { type: 'scene3d', meshes: [{ shape: 'box' }] },
-      { type: 'link', label: '去后台', href: 'https://admin.example.com' },
+      // 以下是夹带（WP341 起按钮 / 图片 / 链接放开了；这几样仍是红线）：一个都不许过
+      { type: 'iframe', src: 'https://admin.example.com' },
+      { type: 'image', src: 'javascript:alert(1)' },
+      { type: 'svg', code: '<svg onload="steal()"></svg>' },
+      { type: 'echart', option: { series: [{ type: 'custom' }] } },
+      { type: 'scene3d', meshes: [] },
       ...(products.length > 50
         ? [
             {
               type: 'text',
-              content: `一共 ${products.length} 件，[全部](https://admin.example.com)`,
+              content: `一共 ${products.length} 件`,
             },
           ]
         : []),
