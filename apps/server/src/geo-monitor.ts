@@ -29,6 +29,8 @@ import type {
   DataCapabilityList,
   DataTaskItemsPage,
   DataTaskView,
+  GeoAnswerDetail,
+  GeoAnswerSide,
   GeoCitationRecord,
   GeoMentionRecord,
   GeoMetricsView,
@@ -68,6 +70,7 @@ import {
   brandShares,
   buildStrategy,
   cellChanges,
+  cellHistory,
   citedSources,
   classifyPrompt,
   defaultWatchKeywords,
@@ -75,6 +78,8 @@ import {
   type GeoUnitPrices,
   generatePromptCandidates,
   geoAlerts,
+  geoBriefLine,
+  geoGrid,
   geoRunEstimate,
   geoTrends,
   guessPromptTopic,
@@ -1248,8 +1253,17 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     const pages = range === undefined ? [] : citedSources(rows, range, 'page')
     const notes: string[] = []
     if (rows.length === 0) notes.push('还没有监测历史：跑过第一轮就有。')
+    // WP335：方格（最新一周）与简报那一行（这一周没拿到回答就不出）
+    const grid = week === undefined ? undefined : geoGrid(rows, week)
+    const allLine = trends.find((l) => l.kind === 'all')
+    const brief = geoBriefLine(
+      allLine?.points.find((p) => p.week === week),
+      rank.week === week ? rank : undefined,
+    )
     return {
       ...(week === undefined ? {} : { week }),
+      ...(grid === undefined ? {} : { grid }),
+      ...(brief === undefined ? {} : { brief }),
       trends,
       brands: week === undefined ? [] : brandShares(rows, week, namesOf(watch)),
       sentiment:
@@ -1267,6 +1281,61 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         weeks: g.connected ? brandGscWeeks(store.brandGscWeeks({ range: { from } })) : [],
       },
       notes,
+    }
+  }
+
+  /**
+   * WP335：「一条回答」——全文、编号引用、各品牌判定、同一格上一期（「和上周比」）、
+   * 这一格近 12 周的时间线、高亮用的名字。没有这条 → `undefined`（路由回 404）。
+   */
+  async function answer(id: string): Promise<GeoAnswerDetail | undefined> {
+    const { store, watch } = await ensureWatch()
+    const a = store.answer(id)
+    if (a === undefined) return undefined
+    const runs = new Map(store.runs({ kind: 'geo' }).map((r) => [r.id, r.period]))
+    const weekOf = (x: { run_id: string; fetched_at: string }): string =>
+      runs.get(x.run_id) ?? mondayOf(x.fetched_at)
+    const sideOf = (x: typeof a): GeoAnswerSide => ({
+      week: weekOf(x),
+      answer: x,
+      citations: [...store.citations(x.id)].sort((p, q) => p.position - q.position),
+      mentions: store.mentions(x.id),
+    })
+    const branded = store.prompts({ archived: true }).find((p) => p.id === a.prompt_id)?.branded
+    const same: MetricAnswer[] = store
+      .answers({ prompt_id: a.prompt_id, platform: a.platform, market: a.market })
+      .map((x) => ({
+        answer: x,
+        week: weekOf(x),
+        mentions: store.mentions(x.id),
+        citations: [],
+        branded,
+      }))
+    const week = weekOf(a)
+    const history = cellHistory(
+      same.filter((r) => r.week <= week),
+      { prompt_id: a.prompt_id, platform: a.platform, market: a.market },
+      12,
+    )
+    // 上一期 = 比这一周早、拿到了回答的最近一周（同一周取最新那条）
+    const prevPoint = history.filter((h) => h.week < week && h.state !== 'failed').at(-1)
+    const prev = prevPoint === undefined ? undefined : store.answer(prevPoint.answer_id)
+    return {
+      ...sideOf(a),
+      ...(prev === undefined ? {} : { previous: sideOf(prev) }),
+      history,
+      names: [
+        {
+          entity: 'ours',
+          name: watch.brand.name,
+          terms: [watch.brand.name, ...watch.brand.aliases, ...watch.brand.domains],
+        },
+        ...watch.competitors.map((c) => ({
+          entity: c.id,
+          name: c.name,
+          terms: [c.name, ...c.aliases, ...c.domains],
+        })),
+      ],
     }
   }
 
@@ -1365,7 +1434,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         ? watch.keywords
         : defaultWatchKeywords({
             brand: watch.brand,
-            category: reply?.category ?? brand.category,
+            category: brand.category ?? reply?.category,
             language: brand.language,
             top_queries: top,
             isBrand,
@@ -1588,6 +1657,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     brandGsc,
     collect,
     metrics,
+    answer,
     alerts,
     probeRowsOf,
     setupDone: async () => setupDone(await deps.store()),

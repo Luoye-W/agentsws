@@ -14,4 +14,4 @@ worktree `../agentsws-wt/wp336-genui` · 分支 `wp/336-genui`。先读 `_common
 不读 .env*；不碰 key / token；不调真实付费接口；不连远程机器；不碰本机 4317；不跑批量清理；不用 pkill。界面少字；截图用别的端口、拍完停掉，不写 .review-ready。不合 main、不打 tag、不发版（决策 381）。测试用 `--maxWorkers=2 --testTimeout=120000`。
 
 ## 验证
-`scripts/verify-changed.sh`（LC_ALL=en_US.UTF-8）+ 模拟三包 × stub/direct/dsh + gen 检查 + 装包前冒烟 + 开源仓边界检查（新依赖许可证）；报告 `docs/briefs/reports/WP336.md`（决策号 813–817）。
+`scripts/verify-changed.sh`（LC_ALL=en_US.UTF-8）+ 模拟三包 × stub/direct/dsh + gen 检查 + 装包前冒烟 + 开源仓边界检查（新依赖许可证）；报告 `docs/briefs/reports/WP336.md`（决策号 823–827）。

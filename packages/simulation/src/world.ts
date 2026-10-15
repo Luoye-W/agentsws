@@ -7634,15 +7634,32 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const since =
         last_post_hours_ago ??
         hoursSinceLastPost({ ...(lastAt === undefined ? {} : { last_post_at: lastAt }), now: at })
-      const rules_checked = checkSubredditRules({
-        policy,
-        ...(flair === undefined ? {} : { flair }),
-        ...(since === undefined
-          ? {}
-          : { last_post_at: new Date(Date.parse(at) - since * 3_600_000).toISOString() }),
-        now: at,
-      })
-      const explained = explainRuleCheck(rules_checked, venue)
+      /*
+       * WP338（决策 664 / 783，Luoye 10-15）：Reddit 不替人判「让不让推广」、不设冷却——版规原文上卡、
+       * 人看了再批（永远 L1）。别的平台（论坛）照旧判。与服务进程 `pr-service` 同一口径。
+       */
+      const isReddit = platform.trim().toLowerCase() === 'reddit'
+      const sub_rules = isReddit
+        ? (rules ?? [])
+            .map((r) => r.trim())
+            .filter((r) => r !== '')
+            .slice(0, 30)
+        : []
+      const rules_checked = isReddit
+        ? { ok: true, reasons: [], ...(flair === undefined ? {} : { flair }), checked_at: at }
+        : checkSubredditRules({
+            policy,
+            ...(flair === undefined ? {} : { flair }),
+            ...(since === undefined
+              ? {}
+              : { last_post_at: new Date(Date.parse(at) - since * 3_600_000).toISOString() }),
+            now: at,
+          })
+      const explained = isReddit
+        ? sub_rules.length === 0
+          ? '没读到版规'
+          : `版规 ${sub_rules.length} 条`
+        : explainRuleCheck(rules_checked, venue)
       run.tool('read_subreddit_rules', { platform, venue, rules: (rules ?? []).length })
 
       const outcome = await txn.ledger.stage({
@@ -7662,6 +7679,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           body,
           rules_checked,
           rules_summary: explained,
+          ...(isReddit ? { sub_rules, rules_read: sub_rules.length > 0 } : {}),
           ...(since === undefined ? {} : { hours_since_last_post: since }),
           // 承诺扫描报没报跑过（fail-closed，照 `campaign_send` 的 suppression_checked）
           commitment_checked: true,

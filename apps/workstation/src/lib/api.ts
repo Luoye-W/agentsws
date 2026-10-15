@@ -3678,6 +3678,8 @@ export interface WorkspaceProfileView {
   support_email?: string
   /** WP248（决策 83）：币种（新服务端总会给，没写过 = USD）。 */
   currency?: string
+  /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
+  category?: string
   set_at: string
 }
 
@@ -3880,6 +3882,8 @@ export const setWorkspaceProfile = (
     one_liner?: string
     support_email?: string
     currency?: string
+    /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
+    category?: string
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>

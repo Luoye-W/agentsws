@@ -54,6 +54,8 @@ export interface ProfileDraft {
   one_liner: string
   support_email: string
   currency: string
+  /** WP335（决策 659）：品类（品牌分析时 AI 填、这里可改；GEO 策略按它认品类）。 */
+  category: string
 }
 
 export function ProfileForm({
@@ -123,6 +125,7 @@ export function ProfileForm({
     one_liner: profile?.one_liner ?? '',
     support_email: profile?.support_email ?? '',
     currency: profile?.currency ?? DEFAULT_BRAND_CURRENCY,
+    category: profile?.category ?? '',
   })
   /**
    * WP233：建议值可能晚到（云账号、品牌分析是各自查回来的）。用户没动过、档案里也没存过、
@@ -440,21 +443,40 @@ export function ProfileForm({
         */}
         {firstBrand ? null : (
           <div className="flex flex-col gap-3" data-testid="profile-brand-facts">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="brand-one-liner" className="flex items-center gap-1">
-                {t('onboarding.brand.one_liner')}
-                <Hint text={t('onboarding.brand.facts.hint')} />
-              </Label>
-              <Input
-                id="brand-one-liner"
-                data-testid="brand-one-liner"
-                value={draft.one_liner}
-                maxLength={300}
-                placeholder={t('onboarding.brand.one_liner.placeholder')}
-                onChange={(e) => {
-                  setDraft({ ...draft, one_liner: e.target.value })
-                }}
-              />
+            {/* WP335（决策 659）：品类与一句话并排（品类短，一格就够） */}
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="brand-one-liner" className="flex items-center gap-1">
+                  {t('onboarding.brand.one_liner')}
+                  <Hint text={t('onboarding.brand.facts.hint')} />
+                </Label>
+                <Input
+                  id="brand-one-liner"
+                  data-testid="brand-one-liner"
+                  value={draft.one_liner}
+                  maxLength={300}
+                  placeholder={t('onboarding.brand.one_liner.placeholder')}
+                  onChange={(e) => {
+                    setDraft({ ...draft, one_liner: e.target.value })
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="brand-category" className="flex items-center gap-1">
+                  {t('onboarding.brand.category')}
+                  <Hint text={t('onboarding.brand.category.hint')} />
+                </Label>
+                <Input
+                  id="brand-category"
+                  data-testid="brand-category"
+                  value={draft.category}
+                  maxLength={80}
+                  placeholder={t('onboarding.brand.category.placeholder')}
+                  onChange={(e) => {
+                    setDraft({ ...draft, category: e.target.value })
+                  }}
+                />
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
               <div className="flex flex-col gap-1">

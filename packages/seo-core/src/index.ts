@@ -13,6 +13,7 @@
  * | `attribution` | 点击之后看转化：按页面并排点击 / 订单 / 收入（Shopify `landing_site`） |
  * | `geo` | 买家会问的问题、各 AI 平台的探测小结、缺位建议 |
  * | `geo-strategy` / `geo-metrics` / `geo-cost` / `geo-judge` | WP321：关注策略（AI 建议、兜底 5 条）、指标与「变化大才出卡」、一轮花多少、交给模型的情感与站点分类 |
+ * | `geo-grid` | WP335：看板的 Prompt × AI 方格、一格的时间线、简报那一行 |
  * | `quality` | 发布前质检：事实对得上知识库、数字有出处、没有违规宣称 |
  * | `ports` | Search Console 口与搜索数据口的替身（不联网） |
  * | `google` | WP158：GSC / GA4 真读数的纯逻辑（请求体、返回怎么认、日期窗口、错误的人话） |
@@ -26,6 +27,7 @@ export * from './demo.js'
 export * from './drafts.js'
 export * from './geo.js'
 export * from './geo-cost.js'
+export * from './geo-grid.js'
 export * from './geo-judge.js'
 export * from './geo-metrics.js'
 export * from './geo-prompts.js'

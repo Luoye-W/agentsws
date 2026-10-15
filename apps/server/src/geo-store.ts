@@ -294,6 +294,8 @@ export interface GeoStore {
     platform?: AiPlatform
     market?: string
   }): GeoAnswerRecord[]
+  /** WP335：按 id 取一条回答（「一条回答」组件；没有 = `undefined`）。 */
+  answer(id: string): GeoAnswerRecord | undefined
   citations(answer_id: string): GeoCitationRecord[]
   mentions(answer_id: string): GeoMentionRecord[]
   /** 改了匹配规则 / 关注设置之后，对历史原文重算判定（整条回答的判定一起换）。 */
@@ -845,6 +847,10 @@ export function createGeoStore(dbPath?: string): GeoStore {
       return all(`SELECT * FROM geo_answers${w.sql} ORDER BY fetched_at, id`, ...w.args).map(
         answerOf,
       )
+    },
+    answer: (id) => {
+      const [row] = all('SELECT * FROM geo_answers WHERE id = ?', id)
+      return row === undefined ? undefined : answerOf(row)
     },
     citations: (answer_id) =>
       all('SELECT * FROM geo_citations WHERE answer_id = ? ORDER BY position', answer_id).map(
