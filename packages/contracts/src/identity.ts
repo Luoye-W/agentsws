@@ -492,6 +492,11 @@ export interface WorkspaceProfile {
    * 现在第 ② 步确认分析 / 手填时写进档案，设置页「这个品牌」能改，AI 运行取品牌上下文时带上。没写过就没有。
    */
   one_liner?: string
+  /**
+   * WP335（决策 659）：品类（「AR 眼镜」「宠物饮水机」）。品牌分析时 AI 填、人在设置页可改；
+   * GEO 策略建议按它认品类（不再靠一句话介绍去猜）。没写过就没有。
+   */
+  category?: string
   /** WP248（决策 83）：客服邮箱（给客人写信、话术里留的那一个）。没写过就没有。 */
   support_email?: string
   /**
