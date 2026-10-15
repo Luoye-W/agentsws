@@ -11,6 +11,9 @@
  * 那种「一句话 + 组件」（商品取演示店铺里的），拍的是真界面怎么画它；判断与组件的服务端那一半由
  * `apps/server/test/wp291-entry-three-way.test.ts` 钉住。第 4 张是演示世界原样（没接模型按规则判成任务）。
  *
+ * WP336（决策 823）起 ```answer 写法已删，前三张拍不出当时的样子了（存档截图仍在 docs/assets/wp291/）；
+ * 现在的当场回答截图见 `scripts/e2e-wp336-shots.mjs`。
+ *
  * ```
  * pnpm -F @agentsws/workstation exec vite build
  * node scripts/e2e-wp291-shots.mjs [--port 4391]
@@ -98,7 +101,6 @@ async function api(token, owner, method, path, body) {
   return json.data
 }
 
-
 const TABLE_ANSWER = {
   lead: '店里现在有 6 件商品，5 件在卖、1 件是草稿。',
   components: [
@@ -146,8 +148,7 @@ async function quick(page, asg, question, answer) {
       await page.route(`**/v1/matters/${id}`, async (r) => {
         const got = await r.fetch()
         const view = await got.json()
-        for (const e of view.data.timeline)
-          if (e.kind === 'agent_message') e.text = blockOf(answer)
+        for (const e of view.data.timeline) if (e.kind === 'agent_message') e.text = blockOf(answer)
         await r.fulfill({ response: got, json: view })
       })
     }

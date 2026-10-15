@@ -18,10 +18,13 @@ import {
   findNativeBinaries,
   flattenLicenses,
   licenseTextOf,
+  mergeRows,
   NOTICE_FILE,
+  pnpmStoreDirOf,
   readmeLicenseSection,
   renderNotice,
   uncoveredNatives,
+  workstationRows,
   writeNotice,
 } from '../scripts/third-party-licenses.mjs'
 
@@ -194,7 +197,7 @@ describe('打包后的 app 里真带着的原生二进制', () => {
   it('写盘：第一节多出「原生二进制」那一段，回报漏掉的包', () => {
     const out = join(root, 'out', 'licenses', NOTICE_FILE)
     const natives = findNativeBinaries(app)
-    const r = writeNotice(out, { json: PNPM_JSON, versions: {}, natives })
+    const r = writeNotice(out, { json: PNPM_JSON, versions: {}, natives, workstation: [] })
     const body = readFileSync(out, 'utf8')
     expect(body).toContain('5. 安装包里带原生二进制')
     expect(body).toContain(
@@ -205,6 +208,69 @@ describe('打包后的 app 里真带着的原生二进制', () => {
       libvips: ['@img/sharp-libvips-darwin-arm64'],
       uncovered: ['better-sqlite3', 'mystery'],
     })
+  })
+})
+
+describe('WP336（决策 826）：工作台打包进去的前端库也进清单', () => {
+  // 假的 pnpm 仓：.pnpm/<名字 / 换 +>@<版本>[_peer]/node_modules/<名字>
+  const nm = join(root, 'ws-node_modules')
+  pkg(
+    join(nm, '.pnpm', 'echarts@5.6.0', 'node_modules', 'echarts'),
+    { name: 'echarts', version: '5.6.0' },
+    {
+      LICENSE: 'Apache License 2.0\necharts',
+      NOTICE: 'Apache ECharts\nCopyright The Apache Software Foundation',
+    },
+  )
+  pkg(
+    join(
+      nm,
+      '.pnpm',
+      '@changfenhuang+dsh-genui@0.12.0_react@19.2.8',
+      'node_modules',
+      '@changfenhuang',
+      'dsh-genui',
+    ),
+    { name: '@changfenhuang/dsh-genui', version: '0.12.0' },
+    { LICENSE: 'MIT License\nCopyright (c) 2026 dsh-external' },
+  )
+  const manifest = join(root, 'third-party-packages.json')
+  writeFileSync(
+    manifest,
+    JSON.stringify([
+      { name: '@changfenhuang/dsh-genui', version: '0.12.0', license: 'MIT' },
+      { name: '@agentsws/contracts', version: '0.0.0', license: 'Apache-2.0' },
+      { name: 'echarts', version: '5.6.0', license: 'Apache-2.0' },
+      { name: 'left-pad', version: '1.3.0', license: 'MIT' },
+    ]),
+  )
+
+  it('按工作台打包清单找到 pnpm 仓里的包目录（带 peer 后缀的也认）；自己的包不列', () => {
+    expect(pnpmStoreDirOf('echarts', '5.6.0', nm)).toBe(
+      join(nm, '.pnpm', 'echarts@5.6.0', 'node_modules', 'echarts'),
+    )
+    expect(pnpmStoreDirOf('nope', '1.0.0', nm)).toBeUndefined()
+    const rows = workstationRows(manifest, nm)
+    expect(rows.map((r) => r.name)).toEqual(['@changfenhuang/dsh-genui', 'echarts', 'left-pad'])
+    expect(rows[0]?.path).toContain('dsh-genui')
+    expect(() => workstationRows(join(root, 'missing.json'), nm)).toThrow(/工作台/u)
+  })
+
+  it('并进清单：同名同版本只留一行；echarts 的 LICENSE 与 NOTICE 原文都在；开头说工作台几个', () => {
+    const ws = workstationRows(manifest, nm)
+    const merged = mergeRows(flattenLicenses(PNPM_JSON), ws)
+    expect(merged.filter((r) => r.name === 'left-pad').map((r) => r.version)).toEqual([
+      '1.0.0',
+      '1.3.0',
+    ])
+    const out = join(root, 'out-ws', NOTICE_FILE)
+    const r = writeNotice(out, { json: PNPM_JSON, versions: {}, workstation: ws })
+    const body = readFileSync(out, 'utf8')
+    expect(r.workstation).toBe(3)
+    expect(body).toContain('其中工作台（界面）打包进去的前端库 3 个')
+    expect(body).toContain('echarts@5.6.0  —  Apache-2.0')
+    expect(body).toContain('Copyright The Apache Software Foundation')
+    expect(body).toContain('Copyright (c) 2026 dsh-external')
   })
 })
 

@@ -13,7 +13,8 @@
     "allowImportingTsExtensions": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@changfenhuang/dsh-genui/embed": ["./src/components/answer/genui/embed.d.ts"]
     }
   },
   "include": ["src", "test", "vite.config.ts"],

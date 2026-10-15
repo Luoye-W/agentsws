@@ -18,8 +18,10 @@
  *    指向不存在的教程——一律原样当字；
  * 4. 为几种节点不引 `remark` + `sanitize`：手写的这一份天然没有 HTML 这条路。
  */
-import type { ReactNode } from 'react'
+import { filterGenuiSpec, genuiToText } from '@agentsws/contracts'
+import { type ReactNode, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { GenuiBlockView } from '@/components/answer/genui/genui-block'
 import { useRailState } from '@/components/rail/rail-state'
 import { helpAddress, isHelpSlug } from '@/lib/help'
 import { cn } from '@/lib/utils'
@@ -281,6 +283,30 @@ function Table({ rows }: { rows: string[][] }): ReactNode {
 type Variant = 'reply' | 'article' | 'chat'
 
 /**
+ * WP336（Luoye 10-15 扩大范围）：所有 AI 回话（随便聊、事项 / 线程、当场回答、问 AI）正文里的 ```dsh-ui 段——
+ * 按契约同一份白名单过滤，交给 dsh-genui 渲染层画；JSON 不完整（还在往外吐字）或过滤后什么都不剩就先不画，
+ * 一个字符的 JSON 都不露。渲染层画不了时退回几行 markdown（表格 / 数字 / 字）。
+ */
+function GenuiFence({ body }: { body: string }): ReactNode {
+  const spec = useMemo(() => {
+    try {
+      return filterGenuiSpec(JSON.parse(body)).spec
+    } catch {
+      return undefined
+    }
+  }, [body])
+  if (spec === undefined) return null
+  return (
+    <div data-slot="genui">
+      <GenuiBlockView
+        spec={spec}
+        fallback={<SafeMarkdown text={genuiToText(spec)} variant="reply" />}
+      />
+    </div>
+  )
+}
+
+/**
  * 一段 markdown 安全地画出来。`reply`：时间线里 Agent 的回话；`article`：右栏教程文章。
  */
 export function SafeMarkdown({
@@ -335,6 +361,9 @@ export function SafeMarkdown({
             </ol>
           )
         if (b.kind === 'table') return <Table key={key} rows={b.rows} />
+        // WP336：AI 回话里的 ```dsh-ui → 白名单过滤后交给 genui 渲染层（教程文章不认，照旧当代码）
+        if (b.kind === 'code' && b.lang === 'dsh-ui' && !article)
+          return <GenuiFence key={key} body={b.lines.join('\n')} />
         if (b.kind === 'code')
           return (
             <pre
