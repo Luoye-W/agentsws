@@ -1434,7 +1434,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         ? watch.keywords
         : defaultWatchKeywords({
             brand: watch.brand,
-            category: reply?.category ?? brand.category,
+            category: brand.category ?? reply?.category,
             language: brand.language,
             top_queries: top,
             isBrand,

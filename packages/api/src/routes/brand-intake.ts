@@ -123,6 +123,8 @@ const ManualBody = z.object({
     .object({
       brand_name: z.string().trim().min(1).max(80).optional(),
       one_liner: z.string().trim().min(1).max(200).optional(),
+      // WP335（决策 659）：品类
+      category: z.string().trim().min(1).max(80).optional(),
       support_email: z.string().trim().email('这不像一个邮箱').optional(),
       currency: z
         .string()

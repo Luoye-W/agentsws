@@ -37364,6 +37364,10 @@
                   "currency": {
                     "type": "string",
                     "pattern": "^([A-Za-z]{3})?$"
+                  },
+                  "category": {
+                    "type": "string",
+                    "maxLength": 80
                   }
                 },
                 "required": ["legal_name"]
@@ -39680,6 +39684,11 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 200
+                      },
+                      "category": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
                       },
                       "support_email": {
                         "type": "string",

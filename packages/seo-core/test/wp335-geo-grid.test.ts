@@ -7,11 +7,14 @@ import type {
 } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  buildStrategy,
   cellChangeOf,
   cellHistory,
   geoBriefLine,
   geoGrid,
   type MetricAnswer,
+  parseStrategyReply,
+  strategyPrompt,
 } from '../src/index.js'
 
 const W1 = '2026-09-28'
@@ -197,5 +200,44 @@ describe('WP335 简报那一行', () => {
     expect(geoBriefLine({ ...point, change_pp: -3.4 })).toBe('AI 里提到我们 38%（−3）')
     expect(geoBriefLine({ week: W2, planned: 4, ok: 0, mentioned: 0, cited: 0 })).toBeUndefined()
     expect(geoBriefLine(undefined, rank)).toBeUndefined()
+  })
+})
+
+describe('WP335（决策 659）GEO 策略读品牌档案的品类', () => {
+  const profile = {
+    brand: { name: 'Voltbrick', domains: ['voltbrick.example'] },
+    category: 'power bank',
+    markets: ['US'],
+    language: 'en' as const,
+  }
+  it('档案里写着品类：提示词里照它来，策略用它（不被模型认的盖掉）', () => {
+    expect(strategyPrompt(profile)).toContain(
+      'category (from the brand profile, use as-is): power bank',
+    )
+    const reply = parseStrategyReply(
+      JSON.stringify({ category: 'chargers', prompt_limit: 5, branded: 1 }),
+    )
+    const s = buildStrategy({
+      profile,
+      reply,
+      existing: [],
+      platforms: ['chatgpt'],
+      at: '2026-10-15T00:00:00Z',
+    })
+    expect(s.category).toBe('power bank')
+  })
+  it('档案没写：才用模型认的', () => {
+    const { category: _c, ...bare } = profile
+    const reply = parseStrategyReply(
+      JSON.stringify({ category: 'chargers', prompt_limit: 5, branded: 1 }),
+    )
+    const s = buildStrategy({
+      profile: bare,
+      reply,
+      existing: [],
+      platforms: ['chatgpt'],
+      at: '2026-10-15T00:00:00Z',
+    })
+    expect(s.category).toBe('chargers')
   })
 })

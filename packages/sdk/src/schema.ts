@@ -35523,6 +35523,7 @@ export interface operations {
           one_liner?: string
           support_email?: '' | string
           currency?: string
+          category?: string
         }
       }
     }
@@ -37053,6 +37054,7 @@ export interface operations {
           edits: {
             brand_name?: string
             one_liner?: string
+            category?: string
             /** Format: email */
             support_email?: string
             currency?: string
