@@ -13,7 +13,7 @@
  * 设 `AGENTSWS_LAYOUT_SHOTS=<目录>` 时每一步顺手截一张图（报告用）。
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -191,6 +191,12 @@ test('换窗口大小 / 最大化 / 还原后，网页铺满窗口并重新排�
       }
       console.log(info)
     }
+
+    // 壳自己的体检（window-fit.ts，停 1 秒才量）在这一路上也不该报「对不上」
+    await new Promise((r) => setTimeout(r, 1500))
+    const log = join(userData, 'logs', 'desktop.log')
+    const text = existsSync(log) ? readFileSync(log, 'utf8') : ''
+    expect(text).not.toContain('尺寸对不上')
   } finally {
     await app.close()
     rmSync(userData, { recursive: true, force: true })
