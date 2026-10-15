@@ -439,6 +439,7 @@ import { attachMemoryPersistence } from './memory-persist.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import {
+  chatModelRefOf,
   createModels,
   humanizeGatewayError,
   type ModelsAssembly,
@@ -5133,6 +5134,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             modelRef: () => effectiveModels().defaultRef(),
             // WP150：这次运行的模型请求会落到哪条来源（登出 DeepSeek 账号前据此认出在用账号跑的事）
             runModelRef: () => effectiveModels().purposeRef('run'),
+            // WP342（决策 853）：事项自己选的 AI——还在「已接的」里面才认，否则跟品牌默认走
+            modelOverride: (id) => chatModelRefOf(effectiveModels(), id),
             // WP147：默认模型验证过能看图，浏览器 / 电脑操控的截图才进模型
             modelVision: () => effectiveModels().visionStatus(),
             // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
@@ -9368,6 +9371,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个
+      knownModel: async (id) =>
+        (await brandModules.models(ws)).chatChoices().some((c) => c.id === id),
       // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
       liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
       stopRuns: async (matter_id, reason) => {
@@ -9677,6 +9683,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       work: (actor, id) => assembly.work(resolveId(actor, id), actor.person_id),
       mine: (actor) => assembly.mine(actor.person_id),
       open: async (actor, id, input) => {
+        // WP342：输入框左下角选的 AI（认不出 / 现在不能用的不记，跟品牌默认走）
+        const chosen =
+          input.model !== undefined &&
+          (await brandModules.models(ws)).chatChoices().some((c) => c.id === input.model)
+            ? input.model
+            : undefined
         const out = await assembly.open({
           position_id: resolveId(actor, id),
           person_id: actor.person_id,
@@ -9688,6 +9700,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           // WP287：问还是交办（不给 = 服务端判）
           ...(input.mode === undefined ? {} : { mode: input.mode }),
           ...(input.detach === true ? { detach: true } : {}),
+          // WP342：输入框左下角选的 AI（认不出的不记，跟品牌默认走）
+          ...(chosen === undefined ? {} : { model: chosen }),
         })
         return {
           mode: out.mode,

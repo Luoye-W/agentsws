@@ -2693,6 +2693,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 }
 
+/**
+ * WP342（决策 853）：输入框左下角选的那个 AI（`provider_id/model`）→ ModelRef。
+ * 只认现在「已接的」那几个（`chatChoices`）；认不出回 `undefined`（调用方退回品牌默认）。
+ */
+export function chatModelRefOf(
+  models: Pick<ModelsAssembly, 'chatChoices'>,
+  id: string,
+): ModelRef | undefined {
+  if (!models.chatChoices().some((c) => c.id === id)) return undefined
+  const at = id.indexOf('/')
+  if (at <= 0 || at === id.length - 1) return undefined
+  return { provider: id.slice(0, at), model: id.slice(at + 1) }
+}
+
 // ── 错误 → 人话 ────────────────────────────────────────────────────────
 
 function codeOf(e: unknown): string {

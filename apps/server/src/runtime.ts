@@ -329,6 +329,13 @@ export interface RuntimeOptions {
    */
   runModelRef?: () => ModelRef
   /**
+   * WP342（决策 853）：事项自己选的 AI（`Matter.model`，`provider_id/model`）→ ModelRef。
+   * 回 `undefined` = 认不出 / 现在不能用（删了、断了）——这次运行退回品牌默认。
+   * 解析出来就进 `RunRequest.runtime.model` 并标 `model_pinned`：三个运行时都按它跑（stub 记在
+   * `run.started` 上，direct / dsh 每次补全把它显式交给网关）。不给这个选项 = 不认事项上的选择（老行为）。
+   */
+  modelOverride?: (id: string) => ModelRef | undefined
+  /**
    * WP147（截图给 AI 看）：现在生效的默认模型**验证过能看图**吗（WP127 三步验证的结论，
    * `ModelsAssembly.visionStatus()`）。只有 `'ok'` 才让 dsh 那条路由声明图片输入——
    * 浏览器 / 电脑操控的截图才进模型；`'no'` / `'unchecked'` / 不接都不声明（截图位置是官方诊断）。
@@ -1515,6 +1522,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     assignment_id: AssignmentId
   }): Promise<RunRequest> => {
     const effective = roles.effectiveConfig(input.assignment_id)
+    // WP342：这件事自己选的 AI（输入框左下角那个钮）；认不出就跟品牌默认走
+    const pinnedModel =
+      input.matter.model === undefined ? undefined : options.modelOverride?.(input.matter.model)
     /*
      * WP216：平台专属的官方技能只在品牌平台对得上时留下（每次现取档案）。
      * 一本都没被滤掉时 `config` 就是原来那一份——非平台技能的职责字节一个不变。
@@ -1851,10 +1861,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         preset: config.role_id,
         profile: 'server',
         plugins: [],
-        model: useDirect()
-          ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
-          : { provider: 'stub', model: 'default', region: 'cn' },
+        model:
+          pinnedModel ??
+          (useDirect()
+            ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
+            : { provider: 'stub', model: 'default', region: 'cn' }),
         seed,
+        ...(pinnedModel === undefined ? {} : { model_pinned: true as const }),
       },
       // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
       ...(vertical === undefined ? {} : { vertical }),
@@ -1911,9 +1924,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         matter_id: input.matter.id,
         title: input.matter.title,
         // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
-        model: useDirect()
-          ? (options.runModelRef?.() ?? request.runtime.model)
-          : request.runtime.model,
+        // WP342：这件事自己选了 AI 就是它（不是 purpose 那条）
+        model:
+          useDirect() && request.runtime.model_pinned !== true
+            ? (options.runModelRef?.() ?? request.runtime.model)
+            : request.runtime.model,
       },
       controller,
       settled: new Promise<void>((resolve) => {

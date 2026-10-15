@@ -121,6 +121,8 @@ const OpenBody = z.object({
    * 不给 = 跑完才回（老行为；回答在 `answer` 里）。WP291：当场问答没有线程可进，总是答完才回。
    */
   detach: z.boolean().optional(),
+  /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上；不给 = 品牌默认。 */
+  model: z.string().min(1).max(200).optional(),
 })
 
 const PromoteBody = z.object({
