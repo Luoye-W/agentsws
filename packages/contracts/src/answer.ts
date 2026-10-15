@@ -5,7 +5,18 @@
  * 工作台按 `kind` 渲染，**模型不吐 HTML**：它在回答末尾附一段 ```answer JSON（{@link QUICK_ANSWER_RULE}），
  * 宿主用 {@link splitAnswer} 取出来、按 {@link validateAnswerComponents} 逐格校验，不合格的整格丢掉。
  * 模型没写这一段、却在正文里画了 Markdown 表格的，也收成表格（真模型常这么答）。
+ *
+ * WP336（决策 810–812）：默认改用 dsh-genui 的 ```dsh-ui 写法（{@link QUICK_ANSWER_GENUI_RULE}），
+ * 取出来按 {@link filterGenuiSpec} 白名单过滤成一块 `kind: 'genui'`；```answer 这一套原样保留（回退开关
+ * {@link QUICK_ANSWER_UI_ENV} 切回去、老回答照常能画）。
  */
+import {
+  filterGenuiSpec,
+  GENUI_FENCE,
+  type GenuiNodeLite,
+  type GenuiSpecLite,
+  QUICK_ANSWER_GENUI_RULE,
+} from './genui.js'
 
 /** 一段字（一句话之外还有要说的）。 */
 export interface AnswerText {
@@ -43,12 +54,22 @@ export interface AnswerMetrics {
  * 当场回答里的一块组件。**只加不改**：docs/96 §4.2 的趋势 / 对比 / 图集以后各加一个 `kind`；
  * 工作台认不得的 `kind` 不画（老工作台遇到新组件不会坏）。
  */
-export type AnswerComponent = AnswerText | AnswerTable | AnswerMetrics
+export type AnswerComponent = AnswerText | AnswerTable | AnswerMetrics | AnswerGenui
+
+/**
+ * WP336：一段 ```dsh-ui 画成的组件块（dsh-genui 渲染层）。`spec` 是**过滤后**的描述——只剩白名单里的
+ * 信息类组件，没有 action、没有自定义配色、没有外链。老工作台不认这个 `kind`，不画（不会坏）。
+ */
+export interface AnswerGenui {
+  kind: 'genui'
+  spec: GenuiSpecLite
+}
 
 export const ANSWER_COMPONENT_KINDS: readonly AnswerComponent['kind'][] = [
   'text',
   'table',
   'metric',
+  'genui',
 ]
 
 /** 上限：模型给多了就截，不报错。 */
@@ -80,6 +101,25 @@ export const QUICK_ANSWER_RULE = [
   '表格最多 50 行 8 列（多了只列前 50 行、total 写一共几行），数字块最多 6 个；',
   '数字照工具读回来的原样填，读不到就不填、照实说读不到。没有清单和数字就不写这一段。',
 ].join('\n')
+
+/**
+ * WP336 回退开关：当场回答用哪一套写法。`genui`（默认）= ```dsh-ui + dsh-genui 渲染层；
+ * `answer` = WP291 的 ```answer 三种组件。服务进程读环境变量 {@link QUICK_ANSWER_UI_ENV}。
+ */
+export type QuickAnswerUi = 'genui' | 'answer'
+
+/** 回退开关的环境变量：设成 `answer` 就整体切回 ```answer（给模型的规矩 + 回出去的组件）。 */
+export const QUICK_ANSWER_UI_ENV = 'AGENTSWS_QUICK_ANSWER_UI'
+
+/** 环境变量的值 → 用哪一套；只有明写 `answer` 才切回，别的（含没设）一律 `genui`。 */
+export function quickAnswerUiOf(value: string | undefined): QuickAnswerUi {
+  return value?.trim().toLowerCase() === 'answer' ? 'answer' : 'genui'
+}
+
+/** 这一套写法给模型的那段规矩。 */
+export function quickAnswerRule(ui: QuickAnswerUi): string {
+  return ui === 'answer' ? QUICK_ANSWER_RULE : QUICK_ANSWER_GENUI_RULE
+}
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
   x !== null && typeof x === 'object' && !Array.isArray(x)
@@ -140,6 +180,11 @@ export function validateAnswerComponent(x: unknown): AnswerComponent | undefined
     return text === '' ? undefined : { kind: 'text', text: clip(text, ANSWER_LIMITS.text) }
   }
   if (x.kind === 'table') return tableOf(x)
+  if (x.kind === 'genui') {
+    // 从接口或旧数据来的也再过一遍白名单（过滤是幂等的）
+    const { spec } = filterGenuiSpec(x.spec)
+    return spec === undefined ? undefined : { kind: 'genui', spec }
+  }
   if (x.kind === 'metric') {
     const raw = Array.isArray(x.items) ? x.items : []
     const items = raw
@@ -159,6 +204,95 @@ export function validateAnswerComponents(x: unknown): AnswerComponent[] {
     .filter((c): c is AnswerComponent => c !== undefined)
     .slice(0, ANSWER_LIMITS.components)
 }
+
+/** 带正负号的百分比（"+12%"、"-3.5%"）→ 数；别的写法不认。 */
+function pctOf(delta: unknown): number | undefined {
+  if (typeof delta !== 'string') return undefined
+  const m = /^\s*([+-]?\d+(?:\.\d+)?)\s*%\s*$/u.exec(delta)
+  return m?.[1] === undefined ? undefined : Number(m[1])
+}
+
+const textOf = (x: unknown): string => (typeof x === 'string' || finite(x) ? String(x) : '')
+
+/**
+ * WP336：一段 genui 描述**降级**成 ```answer 那三种组件——回退开关切回 `answer`、聊天软件里压成几行字、
+ * 渲染层出错时都用它。表格 → 表格；相邻的数字 → 一组数字；图表 → 两列表格；字 / 提示 / 清单 / 键值 /
+ * 时间线 / 步骤 → 一段字；卡片 / 网格拆开取里面的。
+ */
+export function genuiToAnswerComponents(spec: GenuiSpecLite): AnswerComponent[] {
+  const out: unknown[] = []
+  const lines: string[] = []
+  let metrics: AnswerMetric[] = []
+  const flushText = (): void => {
+    if (lines.length > 0) out.push({ kind: 'text', text: lines.splice(0).join('\n') })
+  }
+  const flushMetrics = (): void => {
+    if (metrics.length > 0) out.push({ kind: 'metric', items: metrics })
+    metrics = []
+  }
+  const walk = (n: GenuiNodeLite): void => {
+    if (n.type !== 'stat') flushMetrics()
+    if (n.type === 'card' || n.type === 'grid') {
+      if (typeof n.title === 'string') lines.push(`**${n.title}**`)
+      for (const c of (n.items as GenuiNodeLite[] | undefined) ?? []) walk(c)
+      return
+    }
+    if (n.type === 'stat') {
+      flushText()
+      const pct = pctOf(n.delta)
+      metrics.push({
+        label: textOf(n.label),
+        value: textOf(n.value),
+        ...(pct === undefined ? {} : { delta_pct: pct }),
+      })
+      return
+    }
+    if (n.type === 'table' || n.type === 'chart' || n.type === 'echart') {
+      flushText()
+      out.push(
+        n.type === 'table'
+          ? { kind: 'table', columns: n.columns, rows: n.rows }
+          : {
+              kind: 'table',
+              columns: ['项目', '数值'],
+              rows: ((n.data as { label: string; value: number }[] | undefined) ?? []).map((d) => [
+                d.label,
+                d.value,
+              ]),
+            },
+      )
+      return
+    }
+    const rec = (x: unknown): Record<string, unknown> => (isRecord(x) ? x : {})
+    if (n.type === 'text') lines.push(textOf(n.content))
+    if (n.type === 'callout')
+      lines.push([textOf(n.title), textOf(n.content)].filter((t) => t !== '').join('：'))
+    if (n.type === 'progress')
+      lines.push(`${textOf(n.label)} ${textOf(n.valueLabel) || `${textOf(n.value)}%`}`.trim())
+    if (n.type === 'keyvalue')
+      for (const p of (n.pairs as unknown[]) ?? [])
+        lines.push(`${textOf(rec(p).key)}：${textOf(rec(p).value)}`)
+    if (n.type === 'list')
+      for (const it of (n.items as unknown[]) ?? [])
+        if (isRecord(it) && typeof it.type === 'string') walk(it as GenuiNodeLite)
+        else
+          lines.push(
+            `- ${isRecord(it) ? [textOf(it.title), textOf(it.desc)].filter((t) => t !== '').join('：') : textOf(it)}`,
+          )
+    if (n.type === 'timeline' || n.type === 'steps')
+      for (const it of ((n.type === 'steps' ? n.steps : n.items) as unknown[]) ?? [])
+        lines.push(
+          `- ${[textOf(rec(it).time), textOf(rec(it).title), textOf(rec(it).desc)].filter((t) => t !== '').join(' ')}`,
+        )
+  }
+  for (const n of spec.items) walk(n)
+  flushMetrics()
+  flushText()
+  return validateAnswerComponents(out)
+}
+
+/** ```dsh-ui 那一段（围栏名同 {@link GENUI_FENCE}）。 */
+const GENUI_FENCE_RE = /```[ \t]*dsh-ui[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?```/giu
 
 const FENCE_RE = /```[ \t]*answer[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?```/giu
 
@@ -205,16 +339,32 @@ function markdownTables(text: string): { text: string; tables: AnswerTable[] } {
 export interface SplitAnswer {
   /** 一句话（正文的第一段） */
   lead: string
-  /** 组件：```answer 里的那几块；没有就是正文里的 Markdown 表格；正文第一段之后还有话 → 末尾一块 `text` */
+  /**
+   * 组件：```answer / ```dsh-ui 里的那几块（dsh-ui 过滤后是一块 `genui`）；都没有就是正文里的 Markdown 表格；
+   * 正文第一段之后还有话 → 末尾一块 `text`
+   */
   components: AnswerComponent[]
-  /** 去掉 ```answer 那段之后的正文（线程里显示这一份） */
+  /** 去掉 ```answer / ```dsh-ui 那段之后的正文（线程里显示这一份） */
   text: string
+}
+
+export interface SplitAnswerOptions {
+  /**
+   * WP336：`false` = ```dsh-ui 不画成 `genui` 块、降级成 ```answer 那三种（回退开关切到 `answer` 时）。
+   * 缺省 `true`。
+   */
+  genui?: boolean
+}
+
+/** 这段话里有没有要分出来的组件段（```answer 或 ```dsh-ui）。 */
+export function hasAnswerFence(raw: string): boolean {
+  return raw.includes(`\`\`\`${ANSWER_FENCE}`) || raw.includes(`\`\`\`${GENUI_FENCE}`)
 }
 
 /**
  * 从 AI 的一段回答里分出「一句话 + 组件」。宿主与工作台同一份（线程里的那段话也按它画）。
  */
-export function splitAnswer(raw: string): SplitAnswer {
+export function splitAnswer(raw: string, options: SplitAnswerOptions = {}): SplitAnswer {
   let fenced: AnswerComponent[] = []
   let sawFence = false
   const prose = raw
@@ -224,6 +374,22 @@ export function splitAnswer(raw: string): SplitAnswer {
         fenced = [...fenced, ...validateAnswerComponents(JSON.parse(body))]
       } catch {
         // 坏 JSON：这一段整个不要（不画半张表）
+      }
+      return ''
+    })
+    .replace(GENUI_FENCE_RE, (_m, body: string) => {
+      sawFence = true
+      try {
+        const { spec } = filterGenuiSpec(JSON.parse(body))
+        if (spec !== undefined)
+          fenced = [
+            ...fenced,
+            ...(options.genui === false
+              ? genuiToAnswerComponents(spec)
+              : [{ kind: 'genui', spec } as const]),
+          ]
+      } catch {
+        // 坏 JSON：同上，整段不要
       }
       return ''
     })
