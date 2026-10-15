@@ -569,6 +569,7 @@ import {
   redditWatchSourceOf,
 } from './reddit-watch/index.js'
 import { modelRedditDrafter } from './reddit-write/draft.js'
+import { createRedditLimits } from './reddit-write/limits.js'
 import { redditParentLinker } from './reddit-write/parent-link.js'
 import {
   createRedditWriteService,
@@ -3249,6 +3250,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
+    if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -3487,6 +3490,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const dir = brandDirOf(dbDir, ws, workspace.id)
     // 新品牌的目录第一次用的时候才建（`better-sqlite3` 不会替我们 mkdir）
     if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    // WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限
+    const redditLimits = createRedditLimits({
+      nowMs: () => Date.parse(clock.now()),
+      ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+    })
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
     // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
@@ -4228,6 +4236,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     const prService = createPrService({
       workspace_id: ws,
+      // WP338（决策 664 / 783）：Reddit 版规原文上卡、不替人判；一天几条由用户设（默认不限）
+      limits: redditLimits,
+      rulesText: async ({ platform, venue }) => {
+        if (platform.trim().toLowerCase() !== 'reddit') return undefined
+        const sub = venue.replace(/^\/?r\//iu, '')
+        const viaPlugin = redditWatch?.rules(sub)
+        if (viaPlugin !== undefined) return viaPlugin.rules
+        redditWatch?.wantRules(sub)
+        return undefined
+      },
       routeScopeManager,
       store: pr,
       clock,
@@ -4549,6 +4567,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     let redditDrafts = 0
     const prRedditAdapter = createPrRedditAdapter(socialChannels.transport)
     redditWrites = createRedditWriteService({
+      // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
+      limits: redditLimits,
       workspace_id: ws,
       clock,
       approvals: txn.approvals,
@@ -5710,6 +5730,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(() => {
             const one_liner = onboardingRef?.brandProfile(ws).one_liner
             return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
+          })(),
+          // WP335（决策 659）：品牌档案里的「品类」（AI 给 GEO 策略时直接读它，不再从一句话里猜）
+          ...(() => {
+            const category = onboardingRef?.brandProfile(ws).category
+            return category === undefined || category.trim() === '' ? {} : { category }
           })(),
         }
       },
@@ -6928,6 +6953,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       b2bOutbound,
       b2bSales,
       seoService,
+      // WP335：品牌分析认品类用的模型口（与内容与搜索同一个口）
+      textModel: seoModel,
       googleReads,
       social,
       socialService,
@@ -6943,6 +6970,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
+      redditLimits,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -8148,6 +8176,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
     // WP240：Shopify 店铺访问密码那一下（POST /password）。离线替身（测试 / demo）不给——不出网
     ...(options.brandIntakeFetch === undefined ? { passwordPost: globalThis.fetch as never } : {}),
+    /*
+     * WP335（决策 659）：品类一格——这个品牌接了模型就请它说一个（标「请确认」），没接就空着让人填。
+     * 模型口每次现取（模型设置改完立刻生效）；只给已读到的几格，不给页面原文。
+     */
+    categoryModel: (actor) => async (input) => {
+      const mod = await brandModules.forWorkspace(actor.workspace_id as WorkspaceId)
+      const model = mod.textModel?.(
+        { assignment_id: actor.assignment_id, role_id: actor.role_id },
+        `run_intake_${Math.floor(random() * 1e12).toString(36)}`,
+      )
+      // 没接模型：回空——品类那一格空着，人自己填（不算出错、不记一行警告）
+      return model === undefined ? { text: '' } : model(input)
+    },
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
       /*
@@ -8173,10 +8214,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const one_liner = text(profile.one_liner)
         const support_email = text(profile.support_email)
         const currency = text(profile.currency)
+        // WP335（决策 659）：品类（Amazon 面包屑或 AI 读出来的；人在档案卡上可改）
+        const category = text(profile.category)
         const facts = {
           ...(one_liner === undefined ? {} : { one_liner }),
           ...(support_email === undefined ? {} : { support_email }),
           ...(currency === undefined ? {} : { currency }),
+          ...(category === undefined ? {} : { category }),
         }
         // WP258：官网里漏出来的 `xxx.myshopify.com` 存进档案（建站岗位登录后找店时拿它对一下）
         const shopDomain = text(profile.shopify_domain)
@@ -10302,6 +10346,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchRun(input),
     watchMetrics: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchMetrics(input),
+    // WP335：「一条回答」（右栏）——按 id 取全文、引用、上一期与时间线
+    watchAnswer: async (actor, id) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchAnswer(id),
     // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
     geoHistoryExport: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),

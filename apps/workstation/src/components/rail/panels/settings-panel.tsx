@@ -30,9 +30,28 @@ export function isSettingsTab(value: string | undefined): value is SettingsTab {
   return value !== undefined && (SETTINGS_TABS as readonly string[]).includes(value)
 }
 
+/**
+ * WP335：只在某条职责层多出来的标签（「内容与搜索」的「关注设置」）。别的层不出这个标签；
+ * 从别处 `show('geo-watch')` 开到不是那条职责时，落回第一个标签。
+ */
+export const DUTY_TABS: Readonly<Record<string, readonly string[]>> = {
+  'dtc.content': ['geo-watch'],
+}
+
+type TabId = SettingsTab | 'geo-watch'
+
+/** 这一层有哪些标签（五个通用的 + 这条职责自己的）。 */
+export function tabsOf(scope: RailScope): TabId[] {
+  const extra = scope.tier === 'role' ? (DUTY_TABS[scope.scope_id] ?? []) : []
+  return [...SETTINGS_TABS, ...(extra as TabId[])]
+}
+
 type ScopedBody = ComponentType<{ scope: RailScope }>
 
-const BODIES: Record<SettingsTab, LazyExoticComponent<ScopedBody>> = {
+const BODIES: Record<TabId, LazyExoticComponent<ScopedBody>> = {
+  'geo-watch': lazy(async () => ({
+    default: (await import('@/components/seo/geo-watch-settings')).GeoWatchSettingsPanel,
+  })),
   role: lazy(async () => ({ default: (await import('./role-panel')).RolePanel })),
   memory: lazy(async () => ({ default: (await import('./memory-panel')).MemoryPanel })),
   knowledge: lazy(async () => ({ default: (await import('./knowledge-panel')).KnowledgePanel })),
@@ -45,7 +64,8 @@ export function SettingsPanel({ scope, sub }: RailPanelBodyProps): ReactNode {
   const rail = useRailState()
   // 这一格由右栏保证有（`scoped`：定位不到岗位时壳子自己说那一句）
   if (scope === undefined) return null
-  const tab: SettingsTab = isSettingsTab(sub) ? sub : 'role'
+  const tabs = tabsOf(scope)
+  const tab: TabId = sub !== undefined && (tabs as string[]).includes(sub) ? (sub as TabId) : 'role'
   const Body = BODIES[tab]
   return (
     <div className="flex flex-col gap-3" data-testid="settings-panel" data-tab={tab}>
@@ -54,7 +74,7 @@ export function SettingsPanel({ scope, sub }: RailPanelBodyProps): ReactNode {
         aria-label={t('rail.panel.settings')}
         className="-mx-1 flex flex-wrap items-center gap-1 border-b pb-2"
       >
-        {SETTINGS_TABS.map((value) => (
+        {tabs.map((value) => (
           <button
             key={value}
             type="button"

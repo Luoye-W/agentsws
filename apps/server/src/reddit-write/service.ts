@@ -15,6 +15,7 @@
  * 交给插件那一刻，卡的施行结果记 `ok`（`outcome_ref.type = 'reddit_fill'`，与「人自己发」的 `manual_send`
  * 同一个意思：系统这一侧做完了，剩下那一下是人点）；真发没发出去看 {@link RedditWriteService.writes}。
  */
+
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SocialActor } from '@agentsws/api'
@@ -48,6 +49,7 @@ import { finalPayload } from '@agentsws/txn'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
 import { replyBlockedReason } from '../social-reply-draft.js'
 import { factQuery, type RedditDrafter, templateRedditDraft } from './draft.js'
+import type { RedditLimitKey, RedditLimits } from './limits.js'
 
 /** 插件多久没来过就不算「连着 Reddit」（一周：电脑关了几天回来照样能接着做）。 */
 export const EXTENSION_FRESH_MS = 7 * 24 * 60 * 60 * 1000
@@ -96,6 +98,8 @@ export interface RedditWriteEntry extends RedditWriteView {
 export interface RedditWriteServiceOptions {
   workspace_id: WorkspaceId
   clock: Clock
+  /** WP338（决策 783）：每天 / 每周几条由用户自己设（默认不限）；到了就不出卡、照实说。 */
+  limits?: Pick<RedditLimits, 'check' | 'note'>
   approvals: Pick<ApprovalBus, 'create'>
   emit(type: string, actor: string, payload: Record<string, unknown>): void
   /** 品牌名（提示词里用）。 */
@@ -597,6 +601,16 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       }
       const scan = checkOutbound(`${title ?? ''}\n${text}`)
       if (!scan.ok) return { staged: false, message: replyBlockedReason(scan) }
+      // WP338（决策 783）：用户设了上限才数；没设 = 不限
+      const limitKey: RedditLimitKey = actor.role_id.startsWith('pr.')
+        ? shape.kind === 'submit'
+          ? 'pr_posts'
+          : 'pr_replies'
+        : shape.kind === 'submit'
+          ? 'social_broadcasts'
+          : 'social_replies'
+      const overLimit = options.limits?.check(limitKey)
+      if (overLimit !== undefined) return { staged: false, message: overLimit }
       const facts = (input.fact_ids ?? []).map((id) => factCache.get(id) ?? { id, text: '' })
       // 卡上「版规 N 条」（原文进问号）：与起草时同一个来源（插件只读读回的那一份）
       const rules = await options.rules?.(subOf(target.subreddit)).catch(() => undefined)
@@ -677,6 +691,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         ...(target.source === undefined ? {} : { source: target.source.type }),
       })
       if (target.source !== undefined) options.onStaged?.(target.source, item.id)
+      options.limits?.note(limitKey)
       return { staged: true, approval_item_id: item.id }
     },
 

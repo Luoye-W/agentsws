@@ -827,7 +827,7 @@
           "metrics": {
             "adoption_rate": 1,
             "applied_changes": 0,
-            "blocked_proposals": 1,
+            "blocked_proposals": 0,
             "cost_base": 0,
             "escalations": 0,
             "expired_approvals": 0,
@@ -836,10 +836,10 @@
             "judge_rule_score": 1,
             "knowledge_gaps": 0,
             "outbound_sent": 0,
-            "queue_latency_ms": 900000,
+            "queue_latency_ms": 1950000,
             "runs_failed": 0,
             "sampling_reviews": 0,
-            "staged_changes": 1,
+            "staged_changes": 2,
             "tokens_per_item": 0,
             "tool_calls": 2
           }
@@ -2196,7 +2196,7 @@
           "metrics": {
             "adoption_rate": 1,
             "applied_changes": 0,
-            "blocked_proposals": 1,
+            "blocked_proposals": 0,
             "cost_base": 0,
             "escalations": 0,
             "expired_approvals": 0,
@@ -2205,10 +2205,10 @@
             "judge_rule_score": 1,
             "knowledge_gaps": 0,
             "outbound_sent": 0,
-            "queue_latency_ms": 900000,
+            "queue_latency_ms": 1950000,
             "runs_failed": 0,
             "sampling_reviews": 0,
-            "staged_changes": 1,
+            "staged_changes": 2,
             "tokens_per_item": 0,
             "tool_calls": 2
           }
@@ -3649,7 +3649,7 @@
           "metrics": {
             "adoption_rate": 1,
             "applied_changes": 0,
-            "blocked_proposals": 1,
+            "blocked_proposals": 0,
             "cost_base": 0,
             "escalations": 0,
             "expired_approvals": 0,
@@ -3658,10 +3658,10 @@
             "judge_rule_score": 1,
             "knowledge_gaps": 0,
             "outbound_sent": 0,
-            "queue_latency_ms": 900000,
+            "queue_latency_ms": 1950000,
             "runs_failed": 0,
             "sampling_reviews": 0,
-            "staged_changes": 1,
+            "staged_changes": 2,
             "tokens_per_item": 0,
             "tool_calls": 2
           }

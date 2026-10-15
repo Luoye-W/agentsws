@@ -22,6 +22,7 @@ import type {
   AssignmentId,
   ClaimMarketGroup,
   ClaimRulesView,
+  GeoAnswerDetail,
   GeoCostEstimate,
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
@@ -40,7 +41,7 @@ import type {
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { assignmentOf, body, ok, principalOf } from '../helpers.js'
+import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
@@ -163,6 +164,8 @@ export interface SeoPort {
   ): MaybePromise<GeoWatchRunResult>
   /** WP321：看板要的数（默认近 12 周）。 */
   watchMetrics?(actor: SeoActor, input: { weeks?: number }): MaybePromise<GeoMetricsView>
+  /** WP335：「一条回答」——按 id 取全文、编号引用、上一期与时间线（没有 = `undefined` → 404）。 */
+  watchAnswer?(actor: SeoActor, id: string): MaybePromise<GeoAnswerDetail | undefined>
 }
 
 /** WP159：改规则表（三件事一次给一件就行）。 */
@@ -655,6 +658,34 @@ export function seoRoutes(): Route[] {
           c,
           await watchPortOf(deps).watchMetrics(actorOf(c), weeks === undefined ? {} : { weeks }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/watch/answers/:id',
+        operationId: 'getGeoWatchAnswer',
+        summary:
+          'WP335：一条 AI 回答——全文、编号引用（我们 / 竞品 / 站外）、各品牌判定、同一格上一期（和上周比）、这一格近 12 周的时间线、高亮用的名字',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '回答 id（方格里那一格）' },
+        ],
+        returns: 'GeoAnswerDetail',
+      },
+      async (c, deps) => {
+        const p = portOf(deps)
+        if (p.watchAnswer === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个服务进程没有装配 AI 回答监测那一层（SeoPort.watchAnswer）。',
+          )
+        const detail = await p.watchAnswer(actorOf(c), param(c, 'id'))
+        if (detail === undefined) throw new ApiError('not_found', '没有这条回答')
+        return ok(c, detail)
       },
     ),
     route(

@@ -9,6 +9,7 @@ import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
+import { GEO_EN, GEO_ZH } from './i18n-geo'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -8296,6 +8297,8 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WRITE_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
+    // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
+    ...GEO_ZH,
   },
   en: {
     ...en,
@@ -8324,6 +8327,7 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...CARD_PAGE_EN,
+    ...GEO_EN,
   },
 }
 

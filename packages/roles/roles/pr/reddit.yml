@@ -64,11 +64,11 @@ actions:
     target: external_post
     kind: staged_change
     mandate:
-      # 一天两条、同一个版 72 小时（60 §6）。冷却那一条是 **block**，不是额度：
-      # 同一个版连着发，多数版会自动删并警告
-      caps: { max_external_posts_per_day: 2, cooldown_per_subreddit_hours: 72 }
+      # 决策 664 / 783（Luoye 10-15 确认）：不替用户预设推广规矩——没有冷却、不写死一天几条、不替人判
+      # 「这个版禁不禁推广」。版规原文放上卡，人看了再批（永远 L1）。一天最多几条由用户自己设
+      # （配置卡「Reddit 每天上限」，默认不限）。插件动作通道的节奏、被拦就停在插件那一层，不在这里。
+      caps: {}
       per_change_limits: { max_items: 1 }
-      window: { max_count: 2, per: day }
     # 换一个版 = 发到另一个人的地盘上去了（`@agentsws/core` 的 `PROTECTED_FIELDS`）
     protected_fields: [platform, venue, parent_external_id]
     review_cannot_be_disabled: true
@@ -77,10 +77,8 @@ actions:
     target: external_post
     kind: outbound_message
     mandate:
-      # 一天 20 条（60 §6）。答别人的问题比发自己的帖子安全得多——
-      # 多数版欢迎厂商来答疑，讨厌厂商来发广告
-      caps: { max_replies_per_day: 20 }
-      window: { max_count: 20, per: day }
+      # 决策 783：不写死一天几条（用户可设，默认不限）；每条都要人批（永远 L1）
+      caps: {}
     route_to: role_holder
 
 automation:
@@ -185,13 +183,12 @@ notifications:
       recipients: [role_holder, scope_manager],
       escalate_after_hours: 8,
     }
-  # 版规拦下来：立刻说——它意味着我们差一点在一个禁推广的版里发了广告
+  # 版规拦下来（只在有人给了一份结构化版规、并判成不让发时才会有；默认不判，决策 783）
   - {
       event: 'guardrail.hit:subreddit_rules',
       mode: immediate,
       recipients: [role_holder, scope_manager],
     }
-  - { event: 'guardrail.hit:cooldown_per_subreddit_hours', mode: queue, recipients: [role_holder] }
   - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
 
 handover:
@@ -204,15 +201,15 @@ requires: []
 quick_prompts:
   - id: find_subreddits
     label: { zh: "哪些版适合我们", en: "Which subreddits fit us" }
-    prompt: "按我们这个品类搜一圈 subreddit，每个版说清订阅数、版规让不让自我推广、要不要 flair、几小时冷却，分成「能发」「只能答不能发」「别去」三档"
+    prompt: "按我们这个品类搜一圈 subreddit，每个版说清订阅数，把版规里和厂商发帖有关的原话摘出来给我看"
     kind: ask
   - id: check_rules
     label: { zh: "这个版的规矩是什么", en: "What are this sub's rules" }
-    prompt: "把这个版的版规读一遍，告诉我这一条发得了发不了、为什么"
+    prompt: "把这个版的版规原文读一遍给我，和这一条有关的那几句标出来"
     kind: ask
   - id: draft_post
     label: { zh: "在这个版里发一条", en: "Draft a post for this sub" }
-    prompt: "给这个版起草一条帖子。先查版规，禁推广的版直接告诉我别发；能发的话按那个版的习惯写，别写成广告"
+    prompt: "给这个版起草一条帖子。先读版规原文，按那个版的习惯写；发不发我看了版规自己定"
     kind: start_task
   - id: questions_to_answer
     label: { zh: "有哪些问题值得答", en: "Questions worth answering" }
@@ -223,11 +220,11 @@ task_examples:
   - id: promo_ban
     title: { zh: "想去一个禁推广的版发帖", en: "A sub that bans promotion" }
     description: "看到一个很对口的版，想去发一条产品介绍。"
-    expected_output: "提不上去：卡上写着「r/… 的版规明写着禁自我推广——我们在人家的地盘上，这一条不发」，并给你另一条路：去答别人的问题，不发自己的帖子。"
+    expected_output: "一张要你点的卡，卡上带着这个版的版规原文（没读到就写「没读到版规」）。禁不禁推广由你看了原文自己判，系统不替你拦。"
   - id: allowed_post
     title: { zh: "在允许的版里发一条", en: "Post where it's allowed" }
     description: "有个版每周允许一条厂商帖，想发一次拆解。"
-    expected_output: "一张要你点的卡，卡面上带着版规检查的结论（禁不禁推广、要不要 flair、上一条隔了多久）。这一条永远不会自己发出去。"
+    expected_output: "一张要你点的卡，卡上带着版规原文。这一条永远不会自己发出去。"
   - id: answer_thread
     title: { zh: "有人在问我们这类产品", en: "Someone is asking about this category" }
     description: "有个帖子在问「哪个户外电源耐用」。"

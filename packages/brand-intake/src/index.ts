@@ -28,6 +28,14 @@ export {
   isBlocked,
   storefrontCards,
 } from './amazon.js'
+// WP335（决策 659）：品类一格——AI 填、人可改
+export {
+  CATEGORY_MAX_CHARS,
+  categoryPrompt,
+  modelCategoryField,
+  parseCategoryReply,
+  wantsModelCategory,
+} from './category.js'
 export type {
   FetchedPage,
   FetchFailureKind,
