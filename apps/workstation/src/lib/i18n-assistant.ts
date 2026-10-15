@@ -25,6 +25,7 @@ export const ASSISTANT_ZH: Record<string, string> = {
   'assistant.memory.ai': 'AI 记的 · {date}',
   'assistant.memory.mine': '你说的 · {date}',
   'assistant.memory.forget': '删掉这条',
+  'help.my-assistant.title': '我的助理：随便聊，也能替你把事交出去',
 }
 
 export const ASSISTANT_EN: Record<string, string> = {
@@ -48,4 +49,5 @@ export const ASSISTANT_EN: Record<string, string> = {
   'assistant.memory.ai': 'Noted by AI · {date}',
   'assistant.memory.mine': 'You said · {date}',
   'assistant.memory.forget': 'Forget this',
+  'help.my-assistant.title': 'My assistant: chat, or hand things off',
 }

@@ -4029,7 +4029,7 @@ const zh: Table = {
   'free_chat.delete': '删除',
   'free_chat.delete.confirm': '删掉这段对话？删了找不回来。',
   'free_chat.session.more': '更多',
-  'models.purpose.free_chat': '随便聊',
+  'models.purpose.free_chat': '我的助理',
   // ── WP207：左栏三级「+」、职责下的对话 / 任务、归档与找回 ──────────────
   'rail.new_position': '新建岗位',
   'rail.add_duty': '给「{name}」加职责',
@@ -8198,7 +8198,7 @@ const en: Table = {
   'free_chat.delete': 'Delete',
   'free_chat.delete.confirm': 'Delete this chat? It cannot be recovered.',
   'free_chat.session.more': 'More',
-  'models.purpose.free_chat': 'Chat',
+  'models.purpose.free_chat': 'My assistant',
   // ── WP207 ──────────────────────────────────────────────────────────
   'rail.new_position': 'New position',
   'rail.add_duty': 'Add a duty to “{name}”',
