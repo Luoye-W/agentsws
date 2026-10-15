@@ -7,7 +7,13 @@
  * 一条边界：**委托与在事项里说话都要起 Run**，运行时由调用方注入（`startRun`）；
  * 没注入时这两条路回 `not_implemented`，其余照常——工作台仍然能记事项、待办、目标。
  */
-import type { WorkActor, WorkHome, WorkPoolItem, WorkPort } from '@agentsws/api'
+import {
+  ApiError,
+  type WorkActor,
+  type WorkHome,
+  type WorkPoolItem,
+  type WorkPort,
+} from '@agentsws/api'
 import type {
   ApprovalItem,
   AssignmentId,
@@ -15,6 +21,8 @@ import type {
   CalendarSource,
   ClaimPayload,
   Clock,
+  GenuiToolInput,
+  GenuiToolOutcome,
   Goal,
   GoalProgress,
   Iso8601,
@@ -103,6 +111,8 @@ export interface WorkPortOptions {
   holds?(person_id: PersonId, assignment_id: AssignmentId): boolean
   /** WP264：停下这件事上正在跑的运行（回停了几次）；不给 = 停不了。 */
   stopRuns?(matter_id: string, reason: string): Promise<number>
+  /** WP341：对话里点了「调工具」的 genui 按钮（运行时的工具执行器）；不给 = 不接。 */
+  genuiTool?(actor: WorkActor, matter_id: string, input: GenuiToolInput): Promise<GenuiToolOutcome>
   /** 店铺侧订单行；目标指标从它算 */
   orders(): OrderRow[]
   /** ObjectRef → 人话 */
@@ -374,6 +384,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         ...(run_by === undefined ? {} : { run_by }),
       })
     },
+    // WP341：对话里点了「调工具」的按钮（只认这件事上的；别人的事项点不了）
+    ...(options.genuiTool === undefined
+      ? {}
+      : {
+          genuiTool: (actor: WorkActor, id: string, input: GenuiToolInput) => {
+            const m = work.requireMatter(id)
+            if (!m.context.participants.includes(actor.person_id))
+              throw new ApiError('forbidden', '这件事不是你的，点不了')
+            return options.genuiTool?.(actor, id, input) as Promise<GenuiToolOutcome>
+          },
+        }),
     // WP264（决策 177）：人改的标题之后不再被自动覆盖
     retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
     /*

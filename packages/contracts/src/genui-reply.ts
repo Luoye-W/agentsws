@@ -160,3 +160,25 @@ export function resolveGenuiAction(
   if (value.trim() === '') return { kind: 'none' }
   return { kind: 'say', text: name === '' ? value : `${name}：${value}` }
 }
+
+/** WP341：对话里点了一个「调工具」的按钮（事项 / 线程里才有；随便聊等没有工具的地方当一句话发）。 */
+export interface GenuiToolInput {
+  tool: string
+  args: Record<string, unknown>
+  /** 按钮上的字（时间线那一句用）。 */
+  label: string
+  /** 出这个按钮的那一次运行（「改前必读」按那次运行读过的算）。 */
+  run_id?: string
+}
+
+/**
+ * 点了之后：`read` 只读、当场跑了（`data` 就地画）；`staged` 会改外部、出了审批卡（批了才做，卡就地画在对话里、
+ * 卡片流同一张）；`refused` 这个按钮不能直接做（不在这条职责的工具里、或会直接写外部）。
+ */
+export interface GenuiToolOutcome {
+  effect: 'read' | 'staged' | 'refused'
+  status: 'ok' | 'error' | 'blocked'
+  message?: string
+  data?: unknown
+  approval_item_ids?: string[]
+}

@@ -9521,6 +9521,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
       sayAt: async (actor, matter_id, text) =>
         (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
+      genuiTool: async (actor, matter_id, call) => {
+        const runtime = brand.runtime?.runHostTool
+        if (runtime === undefined)
+          return { effect: 'refused', status: 'blocked', message: '这里点不了这个。' }
+        return runtime({
+          matter_id,
+          person_id: actor.person_id,
+          fallback_assignment_id: actor.assignment_id,
+          call,
+        })
+      },
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**

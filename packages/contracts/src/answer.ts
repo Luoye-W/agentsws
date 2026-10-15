@@ -231,7 +231,10 @@ export function genuiToText(spec: GenuiSpecLite, options: GenuiTextOptions = {})
         return true
       case 'button': {
         if (n.action === undefined) return true
-        const line = md ? `- ${label}` : choice(label)
+        // 人回这个编号 = 他说了按钮上那句（`say:一句话` 就是那句话）
+        const action = textOf(n.action)
+        const said = action.startsWith('say:') ? action.slice(4) : label
+        const line = md ? `- ${label}` : choice(label, said)
         // 挨着的几个按钮排成一组（一行一个）
         if (lastButton === blocks.length && blocks.length > 0)
           blocks[blocks.length - 1] += `\n${line}`

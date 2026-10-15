@@ -171,23 +171,27 @@ const open = async (title: string, extra: Record<string, unknown> = {}): Promise
   dataOf<OpenView>(await call('POST', '/v1/positions/web-ops/matters', { title, ...extra }))
 
 describe('WP336 当场回答 ```dsh-ui', () => {
-  it('回出去的是过滤后的一块 genui：按钮 / 图片 / 3D / 外链 / 配色都没了，数字照替身原样', async () => {
+  it('回出去的是过滤后的一块 genui（WP341 起按钮 / 链接留着、外部图片先「点开看」；空 3D、配色没了），数字照替身原样', async () => {
     await boot()
     const out = await open('店里有哪些商品', { detach: true })
     expect(out.mode).toBe('quick')
     expect(out.answer?.lead).toBe('店里现在有 2 件商品，都在卖。')
     expect(out.answer?.components?.map((c) => c.kind)).toEqual(['genui'])
     const items = out.answer?.components?.[0]?.spec?.items ?? []
-    expect(items.map((n) => n.type)).toEqual(['stat', 'table', 'callout'])
+    expect(items.map((n) => n.type)).toEqual(['stat', 'table', 'button', 'ws-media', 'callout'])
     expect(items[0]).toEqual({ type: 'stat', label: '在卖', value: '2', delta: '+100%' })
     expect(items[1]?.rows).toEqual([
       ['蓝牙耳机', 129, '在卖'],
       ['手机壳', 29, '在卖'],
     ])
-    expect(items[2]).toEqual({ type: 'callout', content: '详情见 后台' })
+    expect(items[2]).toEqual({ type: 'button', label: '一键上架', action: 'say' })
+    expect(items[3]).toMatchObject({ type: 'ws-media', host: 'evil.example' })
+    expect(items[4]).toEqual({
+      type: 'callout',
+      content: '详情见 [后台](https://evil.example/admin)',
+    })
     const json = JSON.stringify(out.answer?.components)
-    for (const bad of ['button', 'image', 'scene3d', 'http', 'action', 'export', '#f00'])
-      expect(json).not.toContain(bad)
+    for (const bad of ['scene3d', 'accent', '#f00']) expect(json).not.toContain(bad)
     // 这次运行教的是 ```dsh-ui 子集
     expect(runPrompts.some((p) => p.includes('当场问答') && p.includes('```dsh-ui'))).toBe(true)
     // 「记录」里的那一句照旧

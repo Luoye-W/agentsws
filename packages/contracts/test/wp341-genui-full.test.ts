@@ -247,9 +247,9 @@ describe('WP341 聊天软件出口', () => {
     })}`
     const im = genuiFencesToIm(raw)
     expect(im.text).toBe('挑一个：\n1. 改价\n2. 上新\n\n回编号就行。')
-    expect(im.choices).toEqual(['改价', '上新'])
+    expect(im.choices).toEqual(['先改价', '上新'])
     expect(pickImChoice('2', im.choices)).toBe('上新')
-    expect(pickImChoice('选1', im.choices)).toBe('改价')
+    expect(pickImChoice('选1', im.choices)).toBe('先改价')
     expect(pickImChoice('3', im.choices)).toBeUndefined()
     expect(pickImChoice('改价吧', im.choices)).toBeUndefined()
     const form = genuiFencesToText(fence(FORM))
