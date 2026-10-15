@@ -64,6 +64,8 @@ export interface RedditWatchPort {
     workspace_id: WorkspaceId,
     window?: { since: Iso8601; until: Iso8601 },
   ): MaybePromise<RedditWatchDigest>
+  /** WP340：收起一条「优先」提醒（同一条在别的来源里的一起收起）。老实现没有 = 501。 */
+  dismissAlert?(workspace_id: WorkspaceId, id: string): MaybePromise<RedditWatchEntry | undefined>
 }
 
 const READ = {
@@ -148,6 +150,11 @@ const settingsSchema = z
     day_start_hour: z.number().int().min(0).max(23).optional(),
     keyword_limit: z.number().int().min(1).max(50).optional(),
     enabled: z.boolean().optional(),
+    // WP340：重点版块、按版块分频率（一周几次）、告警词、标签词
+    watch_subreddits: z.array(z.string().max(80)).max(20).optional(),
+    sub_per_week: z.record(z.string().max(30), z.number().int().min(1).max(7)).optional(),
+    alert_words: z.array(z.string().max(40)).max(30).optional(),
+    tag_words: z.array(z.string().max(40)).max(50).optional(),
   })
   .strict()
 
@@ -230,7 +237,7 @@ export function redditWatchRoutes(): Route[] {
         method: 'put',
         path: '/v1/reddit-watch/settings',
         operationId: 'updateRedditWatchSettings',
-        summary: '改巡查设置（自家版块、关键词、品牌号、频率）',
+        summary: '改巡查设置（自家版块、重点版块、各版块频率、关键词、告警词、标签词、品牌号、频率）',
         tag: 'social',
         auth: 'bearer',
         assignment: true,
@@ -320,6 +327,26 @@ export function redditWatchRoutes(): Route[] {
           param(c, 'id'),
           input.status,
         )
+        return ok(c, out ?? missing())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/reddit-watch/items/:id/alert-seen',
+        operationId: 'dismissRedditWatchAlert',
+        summary: '收起一条「优先」提醒（命中告警词的那条；同一条在别的来源里的一起收起）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'RedditWatchEntry',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.dismissAlert === undefined)
+          throw new ApiError('not_implemented', '这个本机服务版本还不能收起提醒。')
+        const out = await port.dismissAlert(principalOf(c).workspace_id, param(c, 'id'))
         return ok(c, out ?? missing())
       },
     ),
