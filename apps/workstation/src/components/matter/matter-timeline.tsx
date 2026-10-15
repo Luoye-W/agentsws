@@ -117,7 +117,9 @@ export function MeBubble({
   queued?: boolean
 }): ReactNode {
   const { t, lang } = useApp()
-  const long = bubbleIsLong(event.text)
+  // WP341：表单交上来的那句只显示摘要（数据段是给 AI 的），长短也按摘要算
+  const said = splitGenuiReply(event.text).text
+  const long = bubbleIsLong(said)
   const [open, setOpen] = useState(false)
   return (
     <div
@@ -134,8 +136,7 @@ export function MeBubble({
         )}
         data-testid="matter-bubble"
       >
-        {/* WP341：表单交上来的那句只显示摘要（数据段是给 AI 的） */}
-        {splitGenuiReply(event.text).text}
+        {said}
       </div>
       <div className="flex gap-2 text-[11.5px] text-ws-muted-fg">
         {long ? (
