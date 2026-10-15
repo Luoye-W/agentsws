@@ -91,6 +91,7 @@ import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
+import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -301,6 +302,8 @@ export function collectRoutes(): Route[] {
     ...brandAssetRoutes(),
     // WP328：Reddit 每日巡查。`/v1/extension/reddit/*`、`/v1/reddit-watch*` 都是新路径（放在最后）
     ...redditWatchRoutes(),
+    // WP337：重启并更新前看一眼 / 暂停全部 / 放开。`/v1/update/*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...updatePauseRoutes(),
   ]
 }
 

@@ -698,6 +698,7 @@ import {
   supportVoiceSection,
 } from './support-voice.js'
 import { createThemeToolExecutor } from './theme-tools.js'
+import { createUpdatePause } from './update-pause.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -7042,6 +7043,65 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
+  /*
+   * WP337：点「重启并更新」时还有任务在做——暂停全部（正在输出的停在安全点、后台与定时挂起、落盘），
+   * 新版开机读回、接着做（只恢复一次）。品牌容器与调度器都比这里晚建，所以惰性取。
+   */
+  const systemHandlers: ReadonlySet<string> = new Set(Object.values(SCHEDULE_HANDLERS))
+  const updatePause = createUpdatePause({
+    clock,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    runs: () =>
+      (brands?.loaded() ?? []).flatMap((brand) =>
+        (brand.runtime?.activeRuns() ?? []).map((run) => ({
+          workspace_id: brand.workspace_id,
+          matter_id: run.matter_id,
+          run_id: run.run_id,
+          title: run.title,
+          person_id: run.person_id ?? person.id,
+          assignment_id: run.assignment_id ?? ownerAssignment.id,
+        })),
+      ),
+    pauseRun: async (run) =>
+      (await brands?.peek(run.workspace_id)?.runtime?.pauseRun?.(run.run_id)) ?? false,
+    resumeRun: async (run, brief, text) => {
+      const brand = await brandModules.forWorkspace(run.workspace_id)
+      if (brand.work.getMatter(run.matter_id) === undefined) throw new Error('这件事已经不在了')
+      const started = brand.work.run(run.matter_id, {
+        person_id: run.person_id,
+        assignment_id: run.assignment_id,
+        brief,
+        text: 'Agent 接着这个事项跑了一次',
+      })
+      // 运行本身在后台跑（跑完 / 停下 / 没跑成都由运行时记在时间线上）；这里只等「起没起来」那一步
+      // （事项交接中 / 找不到在第一步就拒）
+      void started.catch(() => undefined)
+      await Promise.race([
+        started.then(() => undefined),
+        new Promise<void>((resolve) => setImmediate(resolve)),
+      ])
+      brand.work.appendEvent(run.matter_id, {
+        kind: 'status',
+        text,
+        actor: { kind: 'system', id: 'update' },
+      })
+    },
+    note: async (run, text) => {
+      ;(await brandModules.forWorkspace(run.workspace_id)).work.appendEvent(run.matter_id, {
+        kind: 'status',
+        text,
+        actor: { kind: 'system', id: 'update' },
+      })
+    },
+    scheduler: () => scheduleRef?.scheduler,
+    isBackground: (task) => task.handler !== undefined && systemHandlers.has(task.handler),
+    log: (message, fields) => {
+      if (options.quiet !== true)
+        process.stderr.write(
+          `[update-pause] ${message}${fields === undefined ? '' : ` ${JSON.stringify(fields)}`}\n`,
+        )
+    },
+  })
   brands = createBrandModules({
     bootstrap: workspace.id,
     create: (ws) => assembleBrand(ws),
@@ -7267,7 +7327,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
     // WP215：停用 / 急停的品牌到点不跑；品牌之间并行、同品牌串行，全进程最多 N 件（设置里改）
-    hold: (task) => background.hold(task),
+    // WP337：因更新暂停着的时候谁都别触发（放开后按 misfire_policy 补）
+    hold: (task) => background.hold(task) || updatePause.holding(),
     concurrency: () => background.maxConcurrent(),
   })
   scheduleRef = schedule
@@ -10942,6 +11003,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     standby: standby.port,
     // WP225（WP218 决定 ③）：岗位 AI 正在干活没有——跨所有已装起来的品牌数正在跑的运行（含后台定时任务起的）；
     // 没建起来的品牌不会有在跑的运行。只回数量：桌面壳「重启并更新」前问它
+    // WP337：重启并更新前看一眼 / 暂停全部 / 没重启成放开
+    updatePause,
     activity: {
       snapshot: () => {
         const runs = (brands?.loaded() ?? []).reduce(
@@ -11588,8 +11651,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         deps,
         cookieName: deps.options?.sessionCookieName ?? SESSION_COOKIE,
       })
+      // WP337：上一版因更新暂停过——调度器起来之前读回（读到就删，只恢复一次）
+      const afterUpdate = updatePause.boot()
       // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
       schedule.start()
+      // WP337：接着做（正在输出的「接着跑」、被打断 / 错过的后台与定时补一次）
+      if (afterUpdate !== undefined)
+        await afterUpdate.finish().catch((err: unknown) => {
+          process.stderr.write(`[update-pause] 接着做没成：${String(err)}\n`)
+        })
       /*
        * WP85：上次绑好的微信 / 企业微信自己接着跑（游标在库里，不从头拉）。
        * 起不来不拦住整个进程——一条 IM 通道不是服务的前提，界面上会显示成「没连上」。

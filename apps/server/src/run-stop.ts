@@ -109,3 +109,13 @@ export function stoppedLine(
 function minutes(seconds: number): string {
   return seconds % 60 === 0 ? `${seconds / 60} 分钟` : `${seconds} 秒`
 }
+
+/**
+ * WP337：点了「重启并更新」、这一次在安全点停下时的那一句（新版起来后自动接着做）。
+ * 下面照样挂已经做到的部分（不丢）；「接着跑」按钮照旧在——万一没自动接上，人还能自己点。
+ */
+export function pausedForUpdateLine(partial: boolean): string {
+  return partial
+    ? '因更新暂停：已经做到的在下面，新版打开后自动接着做。'
+    : '因更新暂停：还没出结果，新版打开后自动重新做。'
+}

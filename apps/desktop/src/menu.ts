@@ -31,6 +31,8 @@ export type MenuAction =
   /** WP218：Windows 应用内更新——下载 / 重启并更新（与工作台左下角那颗按钮同一个状态机）。 */
   | 'download-update'
   | 'install-update'
+  /** WP337：「等空闲后重启 / 退出」时点一下取消。 */
+  | 'cancel-update-wait'
   /** WP136（docs/79）：切到某个 dsh 场景（`MenuItemModel.scene` 说是哪一个）。 */
   | 'switch-scene'
   /** WP136：打开工作台里的场景面板（新建 / 关闭 / 删除都在那儿）。 */
@@ -105,6 +107,10 @@ export interface TrayModelInput {
     | { state: 'available'; version: string }
     | { state: 'downloading'; version: string; percent: number }
     | { state: 'ready'; version: string }
+    /** WP337：选了「空闲时重启」，在等。 */
+    | { state: 'waiting'; version: string }
+  /** WP337（Mac）：选了「空闲时退出」，在等。 */
+  quitWaiting?: boolean
   /**
    * WP60：这台电脑是不是"值守中的远程窗口"（服务地址是 `https://<云>/w/<ws>`）。
    *
@@ -312,6 +318,15 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
       id: 'install-update',
       type: 'normal',
       label: t.updateReady.replace('{version}', up.version),
+      enabled: true,
+    })
+  else if (up?.state === 'waiting')
+    items.push({ id: 'cancel-update-wait', type: 'normal', label: t.updateWaiting, enabled: true })
+  if (input.quitWaiting === true)
+    items.push({
+      id: 'cancel-update-wait',
+      type: 'normal',
+      label: t.updateQuitWaiting,
       enabled: true,
     })
   items.push(
