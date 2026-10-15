@@ -1504,7 +1504,21 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * WP346（决策 872）：品牌分析 AI 归纳那一步在 demo 里是**替身**——回一份写死的归纳（人群 / 关键词 /
      * 竞品…），不连任何模型。档案卡与设置页那几格、「AI 建议」标、重新分析的对比都演得出来。
      */
-    brandIntakeModel: async () => ({ text: JSON.stringify(DEMO_BRAND_INSIGHTS) }),
+    /*
+     * WP349：联网查之后同一次整理——竞品只认搜到的网页里出现过的（演示搜索替身里有这三家）；
+     * 定位 / 人群挂上搜到的那篇评测（按提示词里它的编号）。
+     */
+    brandIntakeModel: async ({ prompt }: { prompt: string }) => {
+      const review = /\[(\d+)\] \(brand\)/u.exec(prompt)?.[1]
+      return {
+        text: JSON.stringify({
+          ...DEMO_BRAND_INSIGHTS,
+          ...(review === undefined
+            ? {}
+            : { sources: { positioning: [Number(review)], audience: [Number(review)] } }),
+        }),
+      }
+    },
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     /*

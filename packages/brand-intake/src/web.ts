@@ -130,6 +130,8 @@ const GENERIC = new Set(
 /** 一段的开头 / 结尾那个像品牌名的词组（1–3 个大写开头的词）。 */
 const NAME = "[A-Z0-9][\\w'&.+-]*(?:\\s+[A-Z0-9][\\w'&.+-]*){0,2}"
 const LEADING = new RegExp(`^[\\s"'“(]*(${NAME})`, 'u')
+/** 两个以上并列的名字（「A、B、C」「A / B」）。 */
+const LISTED = new RegExp(`${NAME}(?:\\s*[、,，/]\\s*${NAME})+`, 'gu')
 const TRAILING = new RegExp(`(${NAME})[\\s"'”)?]*$`, 'u')
 
 const tidy = (raw: string | undefined): string | undefined => {
@@ -151,24 +153,29 @@ export const nameKey = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p
 
 /**
  * 从「竞品发现」那几条里认出候选竞品名（只用来决定核实谁；最后收不收由 AI 归纳 + 来源核对定）。
- * 认法：「A vs B」里另一边、「alternatives: A, B, C」「like / such as A, B」后面那串。按出现次数排。
+ * 认法：「A vs B」里另一边、「alternatives: A, B, C」「like / such as A, B」后面那串、「A、B、C」并列。
+ * 按出现次数排（同一段字里只算一次）。
  */
 export function competitorCandidates(hits: readonly IntakeWebHit[], self: string): string[] {
   const me = nameKey(self)
   const score = new Map<string, { name: string; n: number; first: number }>()
   let order = 0
+  /** 同一段字里同一个名字只算一次（几种认法可能认出同一个）。 */
+  let here = new Set<string>()
   const add = (raw: string | undefined): void => {
     const name = tidy(raw)
     if (name === undefined) return
     const key = nameKey(name)
     if (key === '' || key === me || key.includes(me) || me.includes(key)) return
-    if (GENERIC.has(name.toLowerCase())) return
+    if (GENERIC.has(name.toLowerCase()) || here.has(key)) return
+    here.add(key)
     const had = score.get(key)
     if (had === undefined) score.set(key, { name, n: 1, first: order++ })
     else had.n += 1
   }
   for (const hit of hits) {
     for (const text of [hit.title ?? '', hit.snippet ?? '']) {
+      here = new Set()
       // 「A vs B」：与自己相邻的另一边是候选；两边都不是自己时两边都算
       const sides = text.split(/\s+(?:vs\.?|versus)\s+/iu)
       for (let i = 0; i + 1 < sides.length; i++) {
@@ -184,6 +191,9 @@ export function competitorCandidates(hits: readonly IntakeWebHit[], self: string
         )?.[1]
       if (list !== undefined)
         for (const item of list.split(/,|，|、|\band\b|\bor\b|&/u)) add(LEADING.exec(item)?.[1])
+      // 中文标题常见的并列：「EcoFlow、Jackery、BLUETTI 横评」（两个以上用顿号 / 逗号 / 斜杠连着的名字）
+      for (const run of text.matchAll(LISTED))
+        for (const item of run[0].split(/[、,，/]/u)) add(item)
     }
   }
   return [...score.values()].sort((a, b) => b.n - a.n || a.first - b.first).map((c) => c.name)

@@ -80,8 +80,9 @@ describe('WP349 档案卡：每格带来源，可点开', () => {
       'https://outdoorgear.example/alt',
       'https://outdoorgear.example/alt',
     ])
-    expect(links[0]?.textContent).toBe('Osprey daypacks')
-    // 没标题的画域名
+    // 竞品的来源画域名（标题进 tooltip），一个竞品一行
+    expect(links[0]?.textContent).toBe('osprey.com')
+    expect(links[0]?.getAttribute('title')).toContain('Osprey daypacks')
     expect(links[1]?.textContent).toBe('outdoorgear.example')
     for (const a of links) {
       expect(a.getAttribute('target')).toBe('_blank')

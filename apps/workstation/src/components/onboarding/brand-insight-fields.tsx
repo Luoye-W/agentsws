@@ -211,26 +211,57 @@ export function SourceLinks({
       </button>
       {open ? (
         <span className="flex flex-col gap-0.5" data-testid={`insight-source-list-${field}`}>
-          {items.map((s) => (
-            <span key={`${s.about ?? ''}|${s.url}`} className="flex items-baseline gap-1 text-xs">
-              {s.about === undefined ? null : <span className="text-ws-muted-fg">{s.about}</span>}
-              <a
-                href={s.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="max-w-72 truncate underline underline-offset-2"
-                title={s.url}
-              >
-                {s.title ?? hostOf(s.url)}
-              </a>
-              {s.title === undefined ? null : (
-                <span className="text-[11px] text-ws-muted-fg">{hostOf(s.url)}</span>
-              )}
-            </span>
-          ))}
+          {groupsOf(items).map((g) =>
+            g.about === undefined ? (
+              // 定位 / 人群这类：一条一行，标题 + 域名
+              g.items.map((s) => (
+                <span key={s.url} className="flex items-baseline gap-1 text-xs">
+                  <SourceLink source={s} label={s.title ?? hostOf(s.url)} />
+                  {s.title === undefined ? null : (
+                    <span className="text-[11px] text-ws-muted-fg">{hostOf(s.url)}</span>
+                  )}
+                </span>
+              ))
+            ) : (
+              // 竞品：一个竞品一行，后面是它的几个来源（画域名，标题进 tooltip）
+              <span key={g.about} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                <span className="text-ws-muted-fg">{g.about}</span>
+                {g.items.map((s) => (
+                  <SourceLink key={s.url} source={s} label={hostOf(s.url)} />
+                ))}
+              </span>
+            ),
+          )}
         </span>
       ) : null}
     </span>
+  )
+}
+
+/** 按竞品分组（没有 `about` 的归一组），保持出现顺序。 */
+function groupsOf(items: readonly SourceItem[]): { about?: string; items: SourceItem[] }[] {
+  const out: { about?: string; items: SourceItem[] }[] = []
+  for (const s of items) {
+    const g = out.find((x) => x.about === s.about)
+    if (g === undefined)
+      out.push({ ...(s.about === undefined ? {} : { about: s.about }), items: [s] })
+    else g.items.push(s)
+  }
+  return out
+}
+
+/** 一条来源的链接（新窗口打开、不带来源页）。 */
+function SourceLink({ source, label }: { source: SourceItem; label: string }): React.ReactNode {
+  return (
+    <a
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="max-w-72 truncate underline underline-offset-2"
+      title={source.title === undefined ? source.url : `${source.title}\n${source.url}`}
+    >
+      {label}
+    </a>
   )
 }
 

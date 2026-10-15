@@ -295,5 +295,12 @@ describe('WP349 品牌分析联网查', () => {
     )
     expect(got.slice(0, 5)).toEqual(['Osprey', 'Deuter', 'Gregory', 'REI Co-op', 'Kelty'])
     expect(got).not.toContain('Trailmark')
+    // 中文标题里的并列
+    expect(
+      competitorCandidates(
+        [{ url: 'https://e.example', title: '便携电源怎么选：EcoFlow、Jackery、BLUETTI 横评' }],
+        'NordVolt',
+      ),
+    ).toEqual(['EcoFlow', 'Jackery', 'BLUETTI'])
   })
 })

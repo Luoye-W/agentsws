@@ -43,6 +43,43 @@ export async function demoWebSearch(
         },
       ],
     }
+  // WP349：品牌分析联网查——竞品发现（alternatives / vs / brands like）与逐个核实、品牌评测（演示数据）
+  if (/alternatives|\bvs\b|brands like/i.test(query))
+    return {
+      sources: [
+        {
+          url: 'https://outdoor-review.example/portable-power-alternatives',
+          title: '便携电源怎么选：EcoFlow、Jackery、BLUETTI 横评（演示）',
+          snippet: '演示数据：露营用户最常拿来比的三家，容量、重量、价格各有侧重。',
+        },
+        {
+          url: 'https://forum.example/t/jackery-vs-bluetti',
+          title: 'Jackery vs BLUETTI 露营实测（演示）',
+          snippet: '演示数据：Jackery 轻，BLUETTI 容量大。',
+        },
+      ],
+    }
+  const brand = /^(EcoFlow|Jackery|BLUETTI)\b/i.exec(query)?.[1]
+  if (brand !== undefined)
+    return {
+      sources: [
+        {
+          url: `https://${brand.toLowerCase()}.example/portable-power`,
+          title: `${brand} 官网 · 便携电源（演示）`,
+          snippet: '演示数据：主打露营与家庭应急，价格 ¥1,999 起。',
+        },
+      ],
+    }
+  if (/\b(review|reddit|brand news)\b/i.test(query))
+    return {
+      sources: [
+        {
+          url: 'https://camping-gear.example/review/trail-power',
+          title: `${query.split(' ')[0]} 露营电源评测（演示）`,
+          snippet: '演示数据：自驾露营的家庭用户评价高，看重续航与重量。',
+        },
+      ],
+    }
   return {
     sources: [
       {
