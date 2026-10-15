@@ -807,6 +807,65 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       /*
+       * WP334（决策 724）：**AI 自己要卡**（演示用剧本）。工具面里有 request_setup、话里明说「先连上 X / 先填好 Y」，
+       * 就要一张卡（运行时收尾出卡、补完按原话接着做）；已经连上 / 设好了，工具说一声、这一轮照实说。
+       * 排在「店主问岗位 / 连接」前面：明说「先连上 X」是要连，不是问连了哪些。
+       */
+      const setupStep = setupRequestBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (setupStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: setupStep.tool, input: setupStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: setupStep.tool,
+                input: setupStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(setupStep.tool)
+        const data = res.status === 'ok' ? setupRequestDataOf(res.data) : undefined
+        const answer = renderSetupRequestAnswer({
+          ...(data === undefined ? {} : { data }),
+          ...(res.status === 'ok'
+            ? {}
+            : {
+                failed: res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+              }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
        * WP153（09-26 真账号冒烟 §3）：**店主问岗位 / 连接**。
        *
        * 店主职责、工具面里有 `list_positions` / `list_connections`、问的又是岗位或连接，
@@ -1138,61 +1197,6 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * WP323：**记录去处**（演示用剧本）。工具面里有它、话里有一张在线表格的链接、说的是「记到 / 写进」，
        * 就调一次 propose_record_sink（按表头自动对列、出「定规矩」卡；不直接生效）。
        */
-      /*
-       * WP334（决策 724）：**AI 自己要卡**（演示用剧本）。工具面里有 request_setup、话里明说「先连上 X / 先填好 Y」，
-       * 就要一张卡（运行时收尾出卡、补完按原话接着做）；已经连上 / 设好了，工具说一声、这一轮照实说。
-       */
-      const setupStep = setupRequestBranch(req, b2bText)
-      if (setupStep !== undefined) {
-        const call_id = `call_${toolCalls + 1}`
-        sink({ type: 'tool.call', call_id, tool: setupStep.tool, input: setupStep.input })
-        const res =
-          options.executeTool === undefined
-            ? { status: 'error' as const, reason: 'no_tool_executor' }
-            : await options.executeTool({
-                name: setupStep.tool,
-                input: setupStep.input,
-                request: req,
-              })
-        toolCalls += 1
-        sink({
-          type: 'tool.result',
-          call_id,
-          status: res.status,
-          ...(res.reason === undefined ? {} : { reason: res.reason }),
-        })
-        if (res.status === 'ok') readTools.push(setupStep.tool)
-        const data = res.status === 'ok' ? setupRequestDataOf(res.data) : undefined
-        const answer = renderSetupRequestAnswer({
-          ...(data === undefined ? {} : { data }),
-          ...(res.status === 'ok'
-            ? {}
-            : {
-                failed: res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
-              }),
-        })
-        outputs.push({ kind: 'answer', text: answer })
-        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
-        const summary = describeRun({
-          readTools,
-          drafted: false,
-          reply: answer,
-          tools: req.tools.allow,
-        })
-        sink({
-          type: 'run.completed',
-          usage: {
-            ...usage,
-            tool_calls: toolCalls,
-            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
-            cost_base: 0,
-          },
-          outputs,
-          summary,
-        })
-        return finish('completed', summary)
-      }
-
       const sinkStep = recordSinkBranch(req, b2bText)
       if (sinkStep !== undefined) {
         const call_id = `call_${toolCalls + 1}`
