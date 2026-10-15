@@ -10,12 +10,7 @@ import type { AdsActor, AdsPort } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type { RunRequest, WorkspaceId } from '@agentsws/contracts'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
-import {
-  ADS_LEDGER_TOOL,
-  ADS_PROPOSE_TOOL,
-  ADS_TOOL_NAMES,
-  isAdsWiredRole,
-} from '@agentsws/stand-ins'
+import { ADS_LEDGER_TOOL, ADS_TOOL_NAMES, isAdsWiredRole } from '@agentsws/stand-ins'
 
 export function createAdsToolExecutor(options: {
   workspace_id: WorkspaceId

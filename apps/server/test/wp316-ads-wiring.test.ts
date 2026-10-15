@@ -491,6 +491,7 @@ describe('WP316 小改动、止损、磨合期', () => {
     )
     expect(two.route).toBe('form')
     expect(two.views).toHaveLength(2)
+    expect(two.views.every((v) => v.staged)).toBe(true)
     const three = await data<Changes>(
       await post('/v1/ads/changes', {
         account_id: 'aa_g',
@@ -565,6 +566,8 @@ describe('WP316 小改动、止损、磨合期', () => {
     expect(entry?.evidence_missing).toEqual(['before', 'after'])
     expect(entry?.files.map((f) => f.tag)).toEqual(['snapshot', 'result'])
     expect(b.ads.stopLosses().length).toBe(before + 1)
+    // 插件读回过了：库里那条跟着停
+    expect(b.ads.campaign('cmp_g1')?.status).toBe('paused')
     expect(events('ads.stop_loss_applied')).toHaveLength(1)
   })
 })
@@ -646,6 +649,10 @@ describe('WP316 Meta 改已有、作废重出、开始投放', () => {
     const snap = await pluginRunOnce('meta_ads', { exports: { snapshot: META_EXPORT } })
     expect(snap?.job.plan.kind).toBe('export_snapshot')
     expect(snap?.job.approval_id).toBeUndefined()
+    // 只读的导出不算「做成第一件写操作」：磨合期还没开始算
+    expect((await brand()).adsWiring?.breakIn({ platform: 'meta_ads', id: 'act_999' })).toEqual({
+      active: true,
+    })
     const second = await data<Changes>(
       await post('/v1/ads/changes', { account_id: 'aa_m', ops }, meta.id),
     )
@@ -683,5 +690,31 @@ describe('WP316 Meta 改已有、作废重出、开始投放', () => {
     await approveAndApply(staged.approval_item_id as string)
     const run = await pluginRunOnce('google_ads')
     expect(run?.job.plan.kind).toBe('enable')
+  })
+})
+
+describe('WP316 分路的边角', () => {
+  it('只有 1 条，但是关键词的开关（插件在列表里点不到）→ 走上传表', async () => {
+    const out = await data<Changes>(
+      await post('/v1/ads/changes', {
+        account_id: 'aa_g',
+        ops: [
+          {
+            kind: 'set_status',
+            level: 'keyword',
+            ref: {
+              campaign: 'Live One',
+              campaign_id: '1001',
+              ad_group: 'G',
+              keyword: 'shoes',
+              match: 'exact',
+            },
+            status: 'paused',
+          },
+        ],
+      }),
+    )
+    expect(out.route).toBe('sheet')
+    expect(out.reason).toContain('点不到')
   })
 })

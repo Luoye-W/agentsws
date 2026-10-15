@@ -301,6 +301,22 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
         change_id: entry.change_id,
         sentence: entry.readback.sentence,
       })
+    // 表单那几下做成了（插件已读回页面）：库里那条 campaign 跟着改，面板不用等下一次导出
+    for (const f of entry.form ?? []) {
+      if ((f.level ?? 'campaign') !== 'campaign' || f.entity_id === undefined) continue
+      const c = store
+        .campaigns({ account_id: entry.account_id })
+        .find((x) => x.external_id === f.entity_id)
+      if (c === undefined) continue
+      if (f.action === 'pause') store.saveCampaign({ ...c, status: 'paused' })
+      else if (f.action === 'enable') store.saveCampaign({ ...c, status: 'active' })
+      else if (
+        f.action === 'set_budget' &&
+        f.amount !== undefined &&
+        Number.isFinite(Number(f.amount))
+      )
+        store.saveCampaign({ ...c, daily_budget: Number(f.amount) })
+    }
     if (entry.stop_loss === true) {
       const c = store.campaigns().find((x) => x.external_id === entry.form?.[0]?.entity_id)
       if (c !== undefined)
@@ -395,7 +411,8 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
           })
           return
         }
-        ledger.noteFirstDone(entry.account, nowIso())
+        // 磨合期从第一件**写操作**做成那天起算（只读的导出不算）
+        if (entry.kind !== 'export_snapshot') ledger.noteFirstDone(entry.account, nowIso())
         entry.next += 1
         if (entry.next < units(entry)) {
           const level = entry.kind === 'pause_ad' && entry.stop_loss === true ? 'L3' : 'L1'

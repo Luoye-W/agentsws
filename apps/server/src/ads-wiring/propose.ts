@@ -187,6 +187,15 @@ export function createAdsProposals(deps: AdsProposalsDeps) {
     }
   }
 
+  /** 这一条插件能不能在列表里直接点（有平台编号的系列 / 组 / 广告的开关与预算）。 */
+  const formable = (acc: AdAccount, op: AdSheetOp): boolean => {
+    if (op.kind !== 'set_budget' && op.kind !== 'set_status') return false
+    if (op.level === 'keyword') return false
+    if (op.level === 'campaign')
+      return (op.ref.campaign_id ?? campaignOf(acc, op.ref)?.external_id) !== undefined
+    return (op.level === 'ad_group' ? op.ref.ad_group_id : op.ref.ad_id) !== undefined
+  }
+
   /** 1–2 条小改动：逐条出卡，插件直接点（552）。 */
   const stageForm = async (
     actor: AdsActor,
@@ -326,7 +335,15 @@ export function createAdsProposals(deps: AdsProposalsDeps) {
     ): Promise<AdsChangesView> {
       const acc = accountOr404(input.account_id)
       if (input.ops.length === 0) throw new ApiError('invalid_input', '没有要改的。')
-      const route = routeAdChange(input.ops)
+      const routed = routeAdChange(input.ops)
+      // 表单只点得了「有平台编号的系列 / 组 / 广告」的开关与预算；关键词、没编号的 → 也走上传表
+      const route =
+        routed.route === 'form' && !input.ops.every((op) => formable(acc, op))
+          ? {
+              route: 'sheet' as const,
+              reason: '这几条插件在列表里点不到（关键词或没有平台编号），走上传表。',
+            }
+          : routed
       if (route.route === 'form') {
         const views: AdsStagedView[] = []
         for (const op of input.ops) views.push(await stageForm(actor, acc, op))
