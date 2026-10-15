@@ -71,6 +71,27 @@ import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
+/** WP346：demo 里品牌分析 AI 归纳那一步的写死回复（演示品牌 NordVolt，旅行充电宝）。 */
+const DEMO_BRAND_INSIGHTS = {
+  subcategory: '旅行充电宝',
+  positioning:
+    '给常出差、常坐长途航班的人做的轻薄充电宝：能带上飞机、一次充满手机和耳机，出门不用再找插座。',
+  price_band: '$39–$89',
+  audience: {
+    buyers: '25–45 岁、一年飞好几趟的上班族和数字游民，出门前会认真比参数。',
+    concerns: ['能不能带上飞机', '重不重', '充得够不够快'],
+  },
+  keywords: {
+    brand: ['NordVolt', 'NordVolt Air'],
+    category: ['power bank', 'portable charger', 'travel power bank'],
+    scenario: ['power bank for flights', 'charger for long trips', 'airline approved power bank'],
+  },
+  competitors: [
+    { name: 'Anker', reason: '同价位最常被拿来比的充电宝牌子', url: 'https://www.anker.com' },
+    { name: 'Belkin', reason: '机场和电子卖场里常见的配件品牌', url: 'https://www.belkin.com' },
+    { name: 'UGREEN', reason: '主打快充、价格更低' },
+  ],
+}
 /** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
 const DEMO_BANNER_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAoAAAACCAIAAADuA9qHAAAAEUlEQVR4nGPQ78/GgxjwSwMAyvgXNS/YpuQAAAAASUVORK5CYII='
@@ -1424,6 +1445,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       if (body === undefined) return { ok: false, status: 404, text: async () => '' }
       return { ok: true, status: 200, text: async () => body }
     },
+    /*
+     * WP346（决策 872）：品牌分析 AI 归纳那一步在 demo 里是**替身**——回一份写死的归纳（人群 / 关键词 /
+     * 竞品…），不连任何模型。档案卡与设置页那几格、「AI 建议」标、重新分析的对比都演得出来。
+     */
+    brandIntakeModel: async () => ({ text: JSON.stringify(DEMO_BRAND_INSIGHTS) }),
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     /*
