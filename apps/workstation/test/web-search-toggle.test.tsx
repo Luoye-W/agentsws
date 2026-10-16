@@ -43,19 +43,18 @@ beforeEach(() => {
   writes.length = 0
 })
 
-describe('WP179 用你的 DeepSeek 账号搜索', () => {
-  it('默认开着；有凭据时说"会上网搜索"', async () => {
-    renderWithProviders(<WebSearchToggle assignment="asg_owner" ready />)
+describe('WP179 / WP353 联网搜索开关', () => {
+  it('默认开着、缺省就能搜（WP353 起不看 DeepSeek 凭据）；状态那句说"内置浏览器上网搜索"', async () => {
+    renderWithProviders(<WebSearchToggle assignment="asg_owner" />)
     const sw = await screen.findByTestId('web-search-switch')
     expect(sw.getAttribute('data-state')).toBe('checked')
     // WP214：开关已经说了开 / 关——状态那句进小图标的 tooltip，卡面上不再常显
     const icon = screen.getByTestId('status-icon')
     expect(icon.dataset.state).toBe('ok')
-    expect(icon.getAttribute('data-hint')).toContain('会上网搜索')
-    expect(screen.getByTestId('web-search-toggle').textContent).not.toContain('会上网搜索')
-    expect(screen.getByTestId('web-search-toggle').textContent).toContain(
-      '用你的 DeepSeek 账号搜索',
-    )
+    expect(icon.getAttribute('data-hint')).toContain('内置浏览器上网搜索')
+    expect(screen.getByTestId('web-search-toggle').textContent).not.toContain('内置浏览器上网搜索')
+    expect(screen.getByTestId('web-search-toggle').textContent).toContain('联网搜索')
+    expect(screen.getByTestId('web-search-toggle').textContent).not.toContain('DeepSeek')
   })
 
   it('拨一下：只改 web.search 那一项路由（关掉官方那一级）', async () => {
@@ -70,9 +69,9 @@ describe('WP179 用你的 DeepSeek 账号搜索', () => {
     )
   })
 
-  it('开着但没登录账号、也没填官方 key：说清暂时搜不了', async () => {
+  it('开着但这里搜不了：说一句', async () => {
     renderWithProviders(<WebSearchToggle assignment="asg_owner" ready={false} />)
     await screen.findByTestId('web-search-switch')
-    expect(screen.getByTestId('web-search-toggle').textContent).toContain('暂时搜不了')
+    expect(screen.getByTestId('web-search-toggle').textContent).toContain('这里搜不了网')
   })
 })

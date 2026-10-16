@@ -241,7 +241,16 @@ export async function analyzeBrand(
      * 每次按 `creditsPerSearch`（默认 {@link BRAND_INTAKE_SEARCH_CREDITS}）计入积分；封顶装不下时
      * 先保官网解析（与 AI 那一次），再竞品，最后品牌评测。
      */
-    web?: { search?: IntakeWebSearch; reason?: string; creditsPerSearch?: number }
+    web?: {
+      search?: IntakeWebSearch
+      reason?: string
+      creditsPerSearch?: number
+      /**
+       * WP353：品牌档案里已经定了的目标市场（人改过 / 确认过的那份）。给了就按它定查法语言
+       * （优先于这一轮从官网看出来的市场）。
+       */
+      markets?: readonly string[]
+    }
   } = {},
 ): Promise<AnalyzeBrandResult> {
   const cap = options.capCredits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
@@ -365,7 +374,16 @@ export async function analyzeBrand(
           price <= 0
             ? WEB_SEARCH_TOTAL
             : Math.min(WEB_SEARCH_TOTAL, Math.floor((cap - spent) / price + 1e-9))
-        const found = await webResearch({ name, profile, search: webSearch, allowed })
+        // WP353：查法语言按档案里定了的市场（有的话），否则按这一轮看出来的
+        const hint = options.web?.markets
+        const queryProfile =
+          hint === undefined || hint.length === 0
+            ? profile
+            : {
+                ...profile,
+                markets: { value: [...hint], confidence: 'high' as const, evidence: [] },
+              }
+        const found = await webResearch({ name, profile: queryProfile, search: webSearch, allowed })
         hits = found.hits
         const credits = Math.round(found.searches * price * 100) / 100
         spent = Math.round((spent + credits) * 100) / 100
@@ -461,6 +479,7 @@ export {
   competitorCandidates,
   competitorQueries,
   nameKey,
+  queryLanguageOf,
   verifyQuery,
   webResearch,
 } from './web.js'

@@ -131,6 +131,8 @@ import {
   sceneWindowTitle,
   withoutSetCookie,
 } from './scene-window.js'
+import { newChannelToken, startSearchBrowserChannel } from './search-browser.js'
+import { createElectronSearchBrowser, type SearchHandover } from './search-browser-electron.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
   inheritEnv,
@@ -519,6 +521,31 @@ async function bootstrap(): Promise<void> {
   }
   await refreshSystemProxy()
   setInterval(() => void refreshSystemProxy(), 5 * 60_000).unref()
+  /*
+   * WP353（决策 912）：应用内搜索浏览器 + 服务进程 → 壳的本机通道。服务进程的联网搜索经它在
+   * 工坊自己的浏览器里开 Google / Bing（不开调试口、不用 CDP、默认静默）。远程档没有：服务进程不在这台电脑上。
+   */
+  let searchWindow: () => BrowserWindow | undefined = () => undefined
+  let searchChanged: (h: SearchHandover | undefined) => void = () => undefined
+  const searchBrowser = remote
+    ? undefined
+    : createElectronSearchBrowser({
+        mainWindow: () => searchWindow(),
+        onChange: (h) => searchChanged(h),
+        log: (message, fields) => logger.info(message, fields ?? {}),
+      })
+  const searchToken = newChannelToken()
+  const searchChannel =
+    searchBrowser === undefined
+      ? undefined
+      : await startSearchBrowserChannel({ driver: searchBrowser, token: searchToken }).catch(
+          (err: unknown) => {
+            logger.warn('搜索浏览器的本机通道没起来（联网搜索会退到云端 / 公开搜索服务）', {
+              error: String(err),
+            })
+            return undefined
+          },
+        )
 
   const server = createSidecar({
     name: 'server',
@@ -553,6 +580,10 @@ async function bootstrap(): Promise<void> {
         // WP345：浏览器插件的固定文件夹（远程档没有：插件只连本机）
         ...(remote ? {} : { extensionDir: extensionFolder(paths.userData) }),
         ...(systemProxy === undefined ? {} : { systemProxy }),
+        // WP353：应用内搜索浏览器的本机通道（地址 + 一次性口令）
+        ...(searchChannel === undefined
+          ? {}
+          : { searchBrowser: { url: searchChannel.url, token: searchToken } }),
         // WP218：不继承 Electron 的工作目录（Windows 开机自启时是 C:\Windows\System32）
         cwd: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,
@@ -880,6 +911,35 @@ async function bootstrap(): Promise<void> {
     await shell.openExternal(raw)
     return true
   })
+  /*
+   * WP353：要人介入的那一页（Google 人机验证 / 网站要登录）——工作台第三栏「浏览器」亮出来，
+   * 给出位置、壳把那一页挂上去；人自己点。窗口没开着就发一条系统通知。
+   */
+  searchWindow = () => (window === undefined || window.isDestroyed() ? undefined : window)
+  searchChanged = (h) => {
+    const win = searchWindow()
+    if (win !== undefined) win.webContents.send(BRIDGE_CHANNELS.searchChanged, h ?? null)
+    else if (h !== undefined && Notification.isSupported())
+      new Notification({ title: 'Agents 工坊', body: h.message }).show()
+  }
+  ipcMain.handle(BRIDGE_CHANNELS.searchPending, (event) =>
+    fromLocalWindow(event) ? (searchBrowser?.pending() ?? null) : null,
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.searchPlace, (event, raw: unknown) => {
+    if (!fromLocalWindow(event) || searchBrowser === undefined) return false
+    const r = raw as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null
+    const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+    if (r === null) searchBrowser.place(null)
+    else if (num(r.x) && num(r.y) && num(r.width) && num(r.height))
+      searchBrowser.place({ x: r.x, y: r.y, width: r.width, height: r.height })
+    return true
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.searchDismiss, (event) => {
+    if (!fromLocalWindow(event) || searchBrowser === undefined) return false
+    searchBrowser.dismiss()
+    return true
+  })
+
   // WP184：工作台左下角「场景」点了一个网页场景——壳自己去拿网址、自己开窗
   ipcMain.handle(
     BRIDGE_CHANNELS.openScene,
@@ -1658,6 +1718,11 @@ async function bootstrap(): Promise<void> {
   let serverDrained = false
   /** WP337（Mac）：去下载了新版之后退出——先问 / 先暂停全部（装好新版、打开后接着做）。 */
   let updateQuitDecided = false
+  app.on('will-quit', () => {
+    // WP353：搜索浏览器的视图与本机通道一并收掉
+    searchBrowser?.close()
+    void searchChannel?.close()
+  })
   app.on('before-quit', (event) => {
     if (
       !updateQuitDecided &&

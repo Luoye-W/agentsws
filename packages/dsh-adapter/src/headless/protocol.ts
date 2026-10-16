@@ -103,6 +103,10 @@ export interface WireRuntimeOptions {
   imageInput?: boolean
   /** WP179：搜索口地址（测试指向本机替身；缺省官方地址）。 */
   webSearchBaseUrl?: string
+  /** WP353：交给内置浏览器抓的主机（数据，过得了线）。 */
+  webFetchHosts?: string[]
+  /** WP353：显式要 DeepSeek 自带搜索（旧路，默认关）。 */
+  webDeepseekSearch?: boolean
   /** 宿主侧是否接了这些回调；子进程据此决定 `options.stage` 之类给不给。 */
   has: {
     executeTool: boolean
@@ -115,6 +119,9 @@ export interface WireRuntimeOptions {
     webCredential?: boolean
     webStandIn?: boolean
     webUse?: boolean
+    /** WP353：宿主接了内置浏览器后端（搜索 / 抓网页经管道问宿主）。 */
+    webBackend?: boolean
+    webBackendFetch?: boolean
   }
 }
 
@@ -236,6 +243,9 @@ export type WebHostParams =
   | { token: string; op: 'credential'; endpoint: string }
   | { token: string; op: 'search'; query: string }
   | { token: string; op: 'fetch'; url: string }
+  /** WP353：内置浏览器后端。 */
+  | { token: string; op: 'backend_search'; query: string; maxResults?: number }
+  | { token: string; op: 'backend_fetch'; url: string }
 export interface WebHostResult extends HostReply {
   /** `op: 'credential'`：没有就不给。 */
   credential?: { kind: 'account'; token: string } | { kind: 'api_key'; key: string }

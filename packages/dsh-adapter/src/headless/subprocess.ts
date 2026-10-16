@@ -162,6 +162,10 @@ function wireOptions(options: DshRuntimeOptions, request?: RunRequest): WireRunt
     ...(options.web?.searchBaseUrl === undefined
       ? {}
       : { webSearchBaseUrl: options.web.searchBaseUrl }),
+    ...(options.web?.backend?.fetchHosts === undefined
+      ? {}
+      : { webFetchHosts: [...options.web.backend.fetchHosts] }),
+    ...(options.web?.deepseekSearch === true ? { webDeepseekSearch: true } : {}),
     has: {
       executeTool: options.executeTool !== undefined,
       stage: options.stage !== undefined,
@@ -172,6 +176,9 @@ function wireOptions(options: DshRuntimeOptions, request?: RunRequest): WireRunt
       ...(options.web?.credential === undefined ? {} : { webCredential: true }),
       ...(options.web?.standIn === undefined ? {} : { webStandIn: true }),
       ...(options.web?.onUse === undefined ? {} : { webUse: true }),
+      // WP353：内置浏览器后端（搜索 / 按主机分流的抓网页）
+      ...(options.web?.backend === undefined ? {} : { webBackend: true }),
+      ...(options.web?.backend?.fetch === undefined ? {} : { webBackendFetch: true }),
     },
   }
 }
@@ -346,6 +353,29 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
         if (p.op === 'credential') {
           const credential = await web?.credential?.(p.endpoint)
           return { now: options.clock.now(), ...(credential === undefined ? {} : { credential }) }
+        }
+        if (p.op === 'backend_search' || p.op === 'backend_fetch') {
+          const backend = web?.backend
+          const missing = (what: string): never => {
+            throw Object.assign(new Error(what), { code: 'WEB_PROVIDER_UNAVAILABLE' })
+          }
+          try {
+            let value: unknown
+            if (backend === undefined) value = missing('宿主没接内置浏览器')
+            else if (p.op === 'backend_search') value = await backend.search(p.query, p.maxResults)
+            else if (backend.fetch === undefined) value = missing('宿主的内置浏览器不抓网页')
+            else value = await backend.fetch(p.url)
+            return { now: options.clock.now(), value }
+          } catch (e) {
+            const code = (e as { code?: unknown }).code
+            return {
+              now: options.clock.now(),
+              error: {
+                code: typeof code === 'string' ? code : 'WEB_PROVIDER_ERROR',
+                message: e instanceof Error ? e.message : String(e),
+              },
+            }
+          }
         }
         const standIn = web?.standIn
         if (standIn === undefined) {

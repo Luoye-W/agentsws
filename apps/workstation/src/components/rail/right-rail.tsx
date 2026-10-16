@@ -26,6 +26,7 @@ import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
+import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
 import { RailPanel } from '@/components/rail/rail-panel'
 import { type RailScope, type RailTier, railContextOf } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
@@ -67,6 +68,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
   const location = useLocation()
   const narrow = useNarrow()
   const rail = useRailState()
+  // WP353：联网搜索被人机验证拦下、要人点时，自动打开第三栏「浏览器」（平时静默，不弹）
+  useOpenBrowserOnHandover()
   const groups = panelGroups()
   // WP208：旧 id（`memory` …）先落到它现在的去处与标签（「设定」的「记忆」）
   const resolved = rail.open === null ? undefined : resolvePanelId(rail.open)

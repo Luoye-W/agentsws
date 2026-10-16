@@ -16,6 +16,8 @@ export default defineConfig({
         'src/wizard-preload.cts',
         'src/ports.ts',
         'src/tray-icon.ts',
+        // WP353：应用内搜索浏览器的 Electron 那一半（WebContentsView / session），由真机端到端覆盖
+        'src/search-browser-electron.ts',
       ],
       thresholds: { lines: 100, functions: 100, statements: 100 },
       reporter: ['text'],

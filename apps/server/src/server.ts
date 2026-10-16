@@ -143,7 +143,7 @@ import {
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
-import type { DshRuntimeMode, WebCredential } from '@agentsws/dsh-adapter'
+import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
 import {
   type OfficialPluginBackend,
   OfficialPluginError,
@@ -723,6 +723,15 @@ import {
 } from './support-voice.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
+import {
+  type BrowserWebSearch,
+  createBrowserWebSearch,
+  createSearchThrottle,
+  type KeylessSearch,
+  type SearchBrowserChannel,
+  searchBrowserChannelFromEnv,
+  searchLocaleLine,
+} from './web-browser/index.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -1192,6 +1201,24 @@ export interface ServerOptions {
    * 不给（或 `false`）= 不出网，两个工具照实说「没装」——测试、模拟、演示不会去敲真网站。
    */
   readNet?: ReadNetOptions | false
+  /**
+   * WP353（决策 912）：联网搜索后端——工坊内置浏览器搜 Google（回退 Bing → 云端 Google → 公开搜索服务），
+   * Reddit / LinkedIn 这类站用同一浏览器读正文。**给了才装**：生产入口给 `{}`（内置浏览器的本机通道
+   * 从环境变量来，只有桌面壳起的服务进程才有；公开搜索服务开着）。测试塞替身通道、关掉公开搜索服务。
+   * 不给（或 `false`）= 不装：职责运行不摆 `web_search`，随便聊照旧只认 `freeChatWebSearch` 替身。
+   */
+  webSearch?:
+    | {
+        /** 内置浏览器的本机通道；不给 = 从环境变量接（`false` = 当作没有桌面壳）。 */
+        channel?: SearchBrowserChannel | false
+        /** 公开搜索服务（免 key 匿名口）那一路；缺省开。测试给 false（不联网）。 */
+        keyless?: boolean | KeylessSearch
+        /** 内置浏览器每小时最多开几页（缺省 60）。 */
+        maxPerHour?: number
+        /** 两次之间随机隔多久（毫秒，缺省 2000–4000；测试给 0）。 */
+        gapMs?: readonly [number, number]
+      }
+    | false
   /**
    * WP68（48 §5.4）：五条渠道适配器打出去用的 fetch。
    *
@@ -3595,6 +3622,47 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
     ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
+  /*
+   * WP353（决策 912）：联网搜索后端的进程级那几样——内置浏览器的本机通道（桌面壳经环境变量给）、
+   * 全进程一条节流队（同一时刻只开一页、随机隔 2–4 秒、每小时上限）、公开搜索服务（懒加载）。
+   */
+  const webSearchSetup =
+    options.webSearch === undefined || options.webSearch === false ? undefined : options.webSearch
+  const webSearchChannel: SearchBrowserChannel | undefined =
+    webSearchSetup === undefined || webSearchSetup.channel === false
+      ? undefined
+      : (webSearchSetup.channel ?? searchBrowserChannelFromEnv(env))
+  const webSearchThrottle = createSearchThrottle({
+    now: () => Date.now(),
+    random,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    ...(webSearchSetup?.maxPerHour === undefined ? {} : { maxPerHour: webSearchSetup.maxPerHour }),
+    ...(webSearchSetup?.gapMs === undefined
+      ? {}
+      : { minGapMs: webSearchSetup.gapMs[0], maxGapMs: webSearchSetup.gapMs[1] }),
+  })
+  let keylessOnce: KeylessSearch | undefined
+  const webSearchKeyless: (() => KeylessSearch | undefined) | undefined =
+    webSearchSetup === undefined || webSearchSetup.keyless === false
+      ? undefined
+      : typeof webSearchSetup.keyless === 'object'
+        ? () => webSearchSetup.keyless as KeylessSearch
+        : () => {
+            keylessOnce ??= {
+              search: async (request, signal) => {
+                const { keylessWebSearch } = await import('@agentsws/dsh-adapter')
+                const provider = keylessWebSearch()
+                if (provider === undefined) throw new Error('公开搜索服务没装上')
+                return provider.search(request, signal)
+              },
+            }
+            return keylessOnce
+          }
+  if (webSearchSetup !== undefined)
+    process.stdout.write(
+      `web search: ${webSearchChannel === undefined ? '没有内置浏览器（没有桌面壳）' : '工坊内置浏览器'}\n`,
+    )
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -4037,6 +4105,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       ...(options.searchFetch === undefined ? {} : { fetch: options.searchFetch }),
     })
+    /*
+     * WP353（决策 912）：这个品牌的联网搜索后端（缓存与暂停记在品牌目录 `web-search/` 下）。
+     * 云端 Google 那一路就是上面这个搜索数据接口（接了才走；官方按积分、自带 key 不扣）。
+     */
+    const webBrowser: BrowserWebSearch | undefined =
+      webSearchSetup === undefined
+        ? undefined
+        : createBrowserWebSearch({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir: join(dir, 'web-search') }),
+            channel: webSearchChannel,
+            throttle: webSearchThrottle,
+            profile: () => onboardingRef?.brandProfile(ws),
+            cloud: {
+              available: async () => (await searchData.status()).route !== 'none',
+              serp: (q) => searchData.serp(q),
+            },
+            keyless: webSearchKeyless,
+            now: () => Date.now(),
+            log: (line) => process.stdout.write(`${line}\n`),
+          })
     // WP176：开发信装配（`b2bOutbound`）比运行时晚建；运行时里的开发信工具经这个盒子懒取
     const b2bOutboundLate: { current?: B2bOutboundAssembly } = {}
     const kolService = createKolService({
@@ -5641,29 +5730,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
             computerUse,
             /*
-             * WP179（Luoye 09-29「官方功能优先」）：官方网页搜索与抓网页。
+             * WP179：官方网页搜索与抓网页（官方 `web_search` / `web_fetch` 工具面不变）。
              *
-             * 搜索凭据照官方：**DeepSeek 账号登录优先**（`deepseekAccount.resolveToken`，只对官方推理源给值），
-             * 其次**用户自己的 DeepSeek 官方 key**（模型设置里那张卡，现取）。数据接口路由里 `web.search`
-             * 那一级（「用你的 DeepSeek 账号搜索」）被用户关了就不给搜索；抓网页不要凭据，职责挂了就给。
-             * 三样都每次现问：登录 / 登出、改设置，下一次运行就生效。
+             * WP353（决策 911 / 912）起后端换成工坊内置浏览器：DeepSeek 自带搜索把 Reddit / LinkedIn 等整体排除，
+             * 不再挂、不再要 DeepSeek 账号或 key。设置里「联网搜索」那个开关（路由键仍是 `deepseek_native`，
+             * 存的形状不改）关了就不给搜索；抓网页不要凭据，职责挂了就给。每次现问，改了下一次运行就生效。
              */
             web: {
               searchEnabled: () => !ownCloud.webSearchRoute().disabled.includes('deepseek_native'),
-              credentialKind: () =>
-                deepseekAccount.signedIn()
-                  ? 'deepseek_account'
-                  : effectiveModels().hasDeepseekSearchKey()
-                    ? 'deepseek_api_key'
-                    : undefined,
-              credential: async (endpoint: string) => {
-                if (deepseekAccount.signedIn()) {
-                  const token = await deepseekAccount.resolveToken(endpoint)
-                  if (token !== undefined && token !== '') return { kind: 'account', token }
-                }
-                const key = effectiveModels().deepseekSearchKey()
-                return key === undefined ? undefined : { kind: 'api_key', key }
-              },
+              // WP353：后端 = 工坊内置浏览器（回退 Bing → 云端 Google → 公开搜索服务）；DeepSeek 自带搜索不再挂
+              ...(webBrowser === undefined ? {} : { browser: webBrowser }),
+              localeLine: () => searchLocaleLine(onboardingRef?.brandProfile(ws)),
             },
             /*
              * WP86（55 §4 第三层）：这条职责登记了哪几台 MCP 服务器。
@@ -7286,6 +7363,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kolSandbox,
       kolPublic,
       searchData,
+      ...(webBrowser === undefined ? {} : { webBrowser }),
       pr,
       prService,
       b2b,
@@ -8652,7 +8730,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             BRAND_INTAKE_WEB_SEARCH_MAX.verify,
         },
       )
-      return { search: (query) => kit.search(query) }
+      // WP353：查法语言按档案里定了的市场（德国品牌用德语查）
+      const markets = onboardingRef?.brandProfile(ws)?.markets
+      return {
+        search: (query) => kit.search(query),
+        ...(markets === undefined || markets.length === 0 ? {} : { markets }),
+      }
     },
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
@@ -10127,29 +10210,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 测试与 demo 给 `options.freeChatWebSearch` 替身，不连 DeepSeek。
    */
   const webSearchOf = (ws: WorkspaceId) => {
-    const searchCredential = async (endpoint: string): Promise<WebCredential | undefined> => {
-      if (deepseekAccount.signedIn()) {
-        const token = await deepseekAccount.resolveToken(endpoint)
-        if (token !== undefined && token !== '') return { kind: 'account', token }
-      }
-      const key = (await brandModules.models(ws)).deepseekSearchKey()
-      return key === undefined ? undefined : { kind: 'api_key', key }
-    }
+    /*
+     * WP353（决策 912）：后端换成这个品牌的工坊内置浏览器（→ 云端 Google → 公开搜索服务），
+     * 不再要 DeepSeek 账号 / key、也不再记 `model.usage{web_search}`（内置浏览器不花模型的钱；
+     * 云端 Google 那一路的积分由搜索数据接口自己记）。`web.searched` 审计照旧（只有查询串）。
+     */
     const status = async (): Promise<{ available: boolean; reason?: string }> => {
       const brand = await brandModules.forWorkspace(ws)
       if (brand.ownCloud.webSearchRoute().disabled.includes('deepseek_native'))
-        return {
-          available: false,
-          reason: '「用你的 DeepSeek 账号搜索」在设置里关着，这一次先不联网回答。',
-        }
+        return { available: false, reason: '「联网搜索」在设置里关着，这一次先不联网回答。' }
       if (options.freeChatWebSearch !== undefined) return { available: true }
-      const has =
-        deepseekAccount.signedIn() || (await brandModules.models(ws)).hasDeepseekSearchKey()
-      return has
+      return brand.webBrowser?.available() === true
         ? { available: true }
         : {
             available: false,
-            reason: '联网搜索要先登录 DeepSeek 账号，或者在「设置 → 模型」里填 DeepSeek 官方 key。',
+            reason: '这里没有工坊的内置浏览器（联网搜索要在桌面版里用），也没接云端搜索。',
           }
     }
     const search = async (
@@ -10161,16 +10236,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         run_id: string
         entry: string
       },
-      signal?: AbortSignal,
-    ): Promise<{ sources: readonly { url: string; title?: string; snippet?: string }[] }> => {
-      const gateway = await brandModules.gateway(ws)
-      const meta = {
-        workspace_id: ws,
-        assignment_id: ctx.assignment_id as never,
-        role_id: ctx.role_id as never,
-        run_id: ctx.run_id as never,
-        purpose: 'web_search' as const,
-      }
+      _signal?: AbortSignal,
+    ): Promise<{
+      sources: readonly { url: string; title?: string; snippet?: string }[]
+      content?: string
+    }> => {
       const audit = (results: number, ok: boolean, error?: string): void => {
         appendEvent({
           schema_version: 1,
@@ -10190,29 +10260,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       }
       try {
-        let found: { sources: readonly { url: string; title?: string; snippet?: string }[] }
+        let found: {
+          sources: readonly { url: string; title?: string; snippet?: string }[]
+          content?: string
+        }
         if (options.freeChatWebSearch !== undefined) {
           found = await options.freeChatWebSearch(query)
-          gateway.recordExternal?.({
-            meta,
+          ;(await brandModules.gateway(ws)).recordExternal?.({
+            meta: {
+              workspace_id: ws,
+              assignment_id: ctx.assignment_id as never,
+              role_id: ctx.role_id as never,
+              run_id: ctx.run_id as never,
+              purpose: 'web_search' as const,
+            },
             model: { provider: 'stand-in', model: 'web-search' },
           })
         } else {
-          const { officialWebSearch } = await import('@agentsws/dsh-adapter')
-          const provider = officialWebSearch({
-            credential: searchCredential,
-            onUse: (use) => {
-              if (use.kind !== 'search_usage') return
-              gateway.recordExternal?.({
-                meta,
-                model: {
-                  provider: use.credential === 'deepseek_api_key' ? 'deepseek' : 'deepseek-account',
-                  model: use.model,
-                },
-              })
-            },
-          })
-          found = await provider.search({ query, maxResults: 8 }, signal)
+          const browser = (await brandModules.forWorkspace(ws)).webBrowser
+          if (browser === undefined)
+            throw Object.assign(new Error('这里没有工坊的内置浏览器'), {
+              code: 'WEB_PROVIDER_UNAVAILABLE',
+            })
+          const r = await browser.search(query, 8)
+          found = { sources: r.sources, content: r.content }
         }
         audit(found.sources.length, true)
         return found
@@ -10361,6 +10432,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       credits: (model, usage) => chatCredits(pricingCatalog.current()?.pricing, model, usage),
       web: {
         status: web.status,
+        // WP353：系统提示「搜索语言」那一行（品牌主市场与各市场语言）
+        localeLine: () => searchLocaleLine(onboardingRef?.brandProfile(ws)),
         search: (query, ctx, signal) =>
           web.search(
             query,

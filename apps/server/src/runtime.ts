@@ -601,14 +601,42 @@ export interface RuntimeOptions {
 
 /** WP179：服务端装配给运行时的网页那一层。 */
 export interface RunWebOptions {
-  /** 数据接口路由里 `web.search` 那一级（「用你的 DeepSeek 账号搜索」）开着没。每次现问。 */
+  /** 数据接口路由里 `web.search` 那一级（设置里「联网搜索」那个开关）开着没。每次现问。 */
   searchEnabled(): boolean
-  /** 现在搜索用哪种凭据：登录了 DeepSeek 账号 → 账号；否则有 DeepSeek 官方 key → key；都没有 → 不给搜索。 */
-  credentialKind(): WebCredentialKind | undefined
-  /** 真要搜的那一刻现取凭据值（账号令牌只对官方推理源给值）。 */
-  credential(endpoint: string): Promise<WebCredential | undefined>
+  /**
+   * WP179 的 DeepSeek 凭据（旧路）。WP353 起 DeepSeek 自带搜索不再挂，这两样只为老调用方留着、不再用。
+   */
+  credentialKind?(): WebCredentialKind | undefined
+  credential?(endpoint: string): Promise<WebCredential | undefined>
+  /**
+   * WP353（决策 912）：联网搜索后端——工坊内置浏览器搜 Google（回退 Bing → 云端 Google → 公开搜索服务），
+   * 以及 Reddit / LinkedIn 这类站用同一浏览器读正文（`apps/server/src/web-browser`）。不给 = 不给搜索。
+   */
+  browser?: RunWebBrowser
+  /** WP353：品牌主市场与各市场语言那一行（系统提示「搜索语言」）。 */
+  localeLine?(): string | undefined
   /** 搜索口地址（测试指向本机替身；缺省官方地址）。 */
   searchBaseUrl?: string
+}
+
+/** WP353：运行时用到的那几样（`BrowserWebSearch` 的子集）。 */
+export interface RunWebBrowser {
+  available(): boolean
+  search(
+    query: string,
+    maxResults?: number,
+  ): Promise<{
+    sources: readonly { url: string; title?: string; snippet?: string }[]
+    content?: string
+    truncated: boolean
+  }>
+  fetch(url: string): Promise<{
+    url: string
+    statusCode: number
+    body: { kind: 'text'; content: string }
+    truncated: boolean
+  }>
+  readonly fetchHosts: readonly string[]
 }
 
 /**
@@ -1411,7 +1439,23 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    *   这笔钱是用户自己的 DeepSeek 账号 / key 付的，**工坊不扣积分**（`cost_base` 0，不动预算）。
    */
   const dshWebOf = (web: RunWebOptions) => ({
-    credential: (endpoint: string) => web.credential(endpoint),
+    // WP353：后端 = 工坊内置浏览器（DeepSeek 自带搜索不再挂，凭据不再往下给）
+    ...(web.browser === undefined
+      ? {}
+      : {
+          backend: {
+            search: async (query: string, maxResults?: number) => {
+              const r = await (web.browser as RunWebBrowser).search(query, maxResults)
+              return {
+                sources: r.sources,
+                truncated: r.truncated,
+                ...(r.content === undefined || r.content === '' ? {} : { content: r.content }),
+              }
+            },
+            fetch: (url: string) => (web.browser as RunWebBrowser).fetch(url),
+            fetchHosts: web.browser.fetchHosts,
+          },
+        }),
     ...(web.searchBaseUrl === undefined ? {} : { searchBaseUrl: web.searchBaseUrl }),
     onUse: (use: WebUse, request: RunRequest) => {
       const actor = { kind: 'agent' as const, id: request.actor.assignment_id, run_id: request.id }
@@ -1594,17 +1638,20 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const webFor = (roleWeb: EffectiveWeb | undefined): RunWeb | undefined => {
     const opt = options.web
     if (roleWeb === undefined || opt === undefined || !useDirect()) return undefined
-    const kind =
-      roleWeb.tools.includes('web_search') && opt.searchEnabled() ? opt.credentialKind() : undefined
-    const search = kind !== undefined
+    // WP353：搜索要有内置浏览器那一套后端（DeepSeek 自带搜索不再挂，没后端就不摆 web_search）
+    const search =
+      roleWeb.tools.includes('web_search') &&
+      opt.searchEnabled() &&
+      opt.browser?.available() === true
     const fetch = roleWeb.tools.includes('web_fetch')
     if (!search && !fetch) return undefined
+    const locale = search ? opt.localeLine?.() : undefined
     return {
       search,
       fetch,
       max_searches: roleWeb.max_searches,
       max_fetches: roleWeb.max_fetches,
-      ...(kind === undefined ? {} : { credential: kind }),
+      ...(locale === undefined ? {} : { search_locale: locale }),
     }
   }
 

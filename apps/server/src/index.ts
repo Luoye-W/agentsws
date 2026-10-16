@@ -536,6 +536,8 @@ export async function main(): Promise<void> {
       redditOfficialBrowser: {},
       // WP246：YouTube 字幕、网页转文字、取数路线体检要出网——同样只在真正的服务进程里装
       readNet: {},
+      // WP353：联网搜索后端（工坊内置浏览器 → 云端 Google → 公开搜索服务）——同样只在真正的服务进程里装
+      webSearch: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

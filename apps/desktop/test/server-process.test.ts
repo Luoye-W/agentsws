@@ -79,6 +79,15 @@ describe('serverSpawnRequest', () => {
     expect(serverSpawnRequest(input()).env.AGENTSWS_EXTENSION_DIR).toBeUndefined()
   })
 
+  it('WP353：应用内搜索浏览器的本机通道经两个环境变量给；不给就没有', () => {
+    const env = serverSpawnRequest(
+      input({ searchBrowser: { url: 'http://127.0.0.1:5555', token: 'tok' } }),
+    ).env
+    expect(env.AGENTSWS_SEARCH_BROWSER_URL).toBe('http://127.0.0.1:5555')
+    expect(env.AGENTSWS_SEARCH_BROWSER_TOKEN).toBe('tok')
+    expect(serverSpawnRequest(input()).env.AGENTSWS_SEARCH_BROWSER_URL).toBeUndefined()
+  })
+
   it('WP218：Windows 系统变量与代理往下传，别的照样不传', () => {
     const request = serverSpawnRequest(
       input({

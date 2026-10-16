@@ -65,6 +65,7 @@ export {
   subprocessAvailable,
 } from './headless/index.js'
 export * from './headless/protocol.js'
+export { KEYLESS_SEARCH_BACKENDS, keylessWebSearch } from './keyless-search.js'
 export type { GatewayAdapterOptions, GatewayBudget, RequestImages } from './llm.js'
 export {
   GATEWAY_PROVIDER,
@@ -210,15 +211,20 @@ export type {
 } from './types.js'
 export type {
   DshWebOptions,
+  WebBackend,
   WebCredential,
   WebCredentialKind,
   WebStandIn,
   WebUse,
 } from './web.js'
 export {
+  BROWSER_SEARCH_PROVIDER_ID,
+  browserSearchProvider,
   HTTP_FETCH_PROVIDER_ID,
   officialSearchProvider,
   officialWebSearch,
+  searchProviderIdOf,
+  splitFetchProvider,
   WEB_SEARCH_TIMEOUT_MS,
   webBrief,
   webWanted,
