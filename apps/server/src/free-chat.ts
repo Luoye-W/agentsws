@@ -44,6 +44,7 @@ import {
   DEFAULT_WEB_LIMITS,
   FIND_ARCHIVED_WORK_TOOL,
   GENUI_DISPLAY_RULE,
+  pricingDiscountOf,
   searchLanguageBrief,
   WEB_SEARCH_TOOL,
 } from '@agentsws/contracts'
@@ -1452,6 +1453,8 @@ export function chatCredits(
   const raw =
     price === undefined
       ? (entry.credits_per_unit * (usage.input_tokens + usage.output_tokens)) / 1000
-      : (usage.input_tokens * price.in + usage.output_tokens * price.out) / 1000
+      : // WP363（决策 954）：有折扣按折后估（云上结算同一个判法，`pricingDiscountOf`）
+        ((usage.input_tokens * price.in + usage.output_tokens * price.out) / 1000) *
+        (pricingDiscountOf(price) ?? 1)
   return Math.round(raw * 10_000) / 10_000
 }

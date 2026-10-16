@@ -11,8 +11,11 @@
  *   再没有就不显示倍率（不编）。
  *
  * 价目里同一个模型可能出现好几行（不同上游）：取第一条价不为 0 的那一行，都为 0 就是限免。
+ *
+ * WP363（决策 954）：价目条目带了 `discount`（`0 < d < 1`，0.1 = 一折）就在倍率上再带一格 `discount`，
+ * AI 钮在倍率旁边写「1 折」；倍率本身仍是原价口径，不乘折扣。限免那一格不带折扣。
  */
-import type { PricingModelEntry } from '@agentsws/contracts'
+import { type PricingModelEntry, pricingDiscountOf } from '@agentsws/contracts'
 
 /** 1x 的那个模型（Luoye 10-16 定）。 */
 export const RATE_BASE_MODEL = 'deepseek-v4-pro'
@@ -22,7 +25,7 @@ export const RATE_NOTE =
   '消耗速率以 DeepSeek v4 Pro 官方原价为 1x，按后台长期统计换算；实际消耗以用量记录为准。'
 
 export type ModelPrice =
-  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price' }
+  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price'; discount?: number }
   | { kind: 'free' }
   | { kind: 'subscription' }
   | { kind: 'own_key' }
@@ -71,13 +74,15 @@ export function cloudRates(
     price(model) {
       const e = byModel.get(model)
       if (e === undefined) return undefined
+      const discount = pricingDiscountOf(e)
+      const off = discount === undefined ? {} : { discount }
       if (e.consumption_rate !== undefined && Number.isFinite(e.consumption_rate))
         return e.consumption_rate <= 0
           ? { kind: 'free' }
-          : { kind: 'rate', rate: e.consumption_rate, source: e.rate_source ?? 'stats' }
+          : { kind: 'rate', rate: e.consumption_rate, source: e.rate_source ?? 'stats', ...off }
       if (blended(e) === 0) return { kind: 'free' }
       if (baseEntry === undefined) return undefined
-      return { kind: 'rate', rate: blended(e) / blended(baseEntry), source: 'list_price' }
+      return { kind: 'rate', rate: blended(e) / blended(baseEntry), source: 'list_price', ...off }
     },
   }
 }

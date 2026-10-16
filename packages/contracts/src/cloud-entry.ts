@@ -195,6 +195,22 @@ export interface PricingModelEntry {
    * `list_price` = 按官方原价折算的。实际消耗以用量记录为准。
    */
   rate_source?: 'stats' | 'list_price'
+  /**
+   * WP363（决策 954，只加）：**折扣**——这个模型现在按原价的几成收，`0.1` = 一折（实收原价的 10%）。
+   * 只认 `0 < discount < 1`；不给 / 越界 = 没有折扣（读的一方用 {@link pricingDiscountOf}）。
+   * 输入框的 AI 钮在消耗速率旁边写「1 折」。`in` / `out` / `cached` 与 {@link consumption_rate} 仍是**原价**
+   * 口径：实扣 = 原价 × 折扣，以用量记录为准。
+   */
+  discount?: number
+}
+
+/**
+ * WP363：这一条的折扣（`0 < d < 1` 才算；不给 / 0 / ≥ 1 / 不是数 = 没有折扣，回 `undefined`）。
+ * 云上结算、本机估价、AI 钮显示都用这一个判法，免得三处对「什么算有折扣」各说各的。
+ */
+export function pricingDiscountOf(entry: Pick<PricingModelEntry, 'discount'>): number | undefined {
+  const d = entry.discount
+  return typeof d === 'number' && Number.isFinite(d) && d > 0 && d < 1 ? d : undefined
 }
 
 /**
