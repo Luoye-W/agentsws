@@ -32,7 +32,12 @@ import {
   envRefSource,
   type SubscriptionRecordSource,
 } from '@agentsws/credentials-openconnector'
-import type { SubscriptionLoginHandle, SubscriptionQuestion } from '@agentsws/dsh-adapter'
+import type {
+  NativeSearchRequest,
+  NativeSearchResult,
+  SubscriptionLoginHandle,
+  SubscriptionQuestion,
+} from '@agentsws/dsh-adapter'
 /*
  * **静态** import 的只有这一行：`subscription-facts` 是一个没有任何 dsh 依赖的
  * 纯常量模块（开哪两家、各能怎么登、风险提示那一段）。真正那棵 dsh 树在
@@ -100,6 +105,15 @@ export interface SubscriptionAssembly {
    * 首页告警区据此出一行。
    */
   retiredSwaps(person_id: string): (RetiredModelSwap & { provider: string })[]
+  /**
+   * WP355（决策 937）：用**这个人**的订阅跑一次那家自带的联网搜索（第一版只有 `openai-codex`）。
+   * 没登录 / 不是个人档 / 没人 → 带 `code` 的错，宿主据此退回 WP353 的链。令牌不出那棵登录树。
+   */
+  nativeSearch(
+    person_id: string | undefined,
+    provider: SubscriptionProviderKind,
+    request: NativeSearchRequest,
+  ): Promise<NativeSearchResult>
   /** 把还开着的登录树收掉（进程退出时）。 */
   close(): Promise<void>
 }
@@ -465,6 +479,26 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
         .filter(([key]) => key.startsWith(prefix))
         .filter(([key, swap]) => retiredSwapLive(swap, saved.chosen[key] ?? '', now))
         .map(([key, swap]) => ({ ...swap, provider: key.slice(prefix.length) }))
+    },
+
+    async nativeSearch(person_id, provider, request) {
+      const fail = (code: string, message: string): never => {
+        throw Object.assign(new Error(message), { code })
+      }
+      if (unavailableReason() !== undefined)
+        fail('WEB_PROVIDER_UNAVAILABLE', '这台机器不能用个人订阅（公司档 / 托管档或没有秘密库）')
+      if (person_id === undefined) fail('WEB_PROVIDER_UNAVAILABLE', '不知道是谁在用，取不了订阅')
+      const who = person_id as string
+      // 先看本机库里这个人有没有那一条（便宜）；没有就不必为一次搜索起一棵登录树
+      if ((await recordsFor(who).read(provider)) === undefined)
+        fail('WEB_PROVIDER_CREDENTIAL_MISSING', '还没用 ChatGPT 订阅登录')
+      const state = await stateOf(who)
+      if (state.handle.nativeSearch === undefined)
+        fail('WEB_PROVIDER_UNAVAILABLE', '这一版订阅登录模块不支持自带搜索')
+      return (state.handle.nativeSearch as NonNullable<SubscriptionLoginHandle['nativeSearch']>)(
+        provider,
+        request,
+      )
     },
 
     async close() {

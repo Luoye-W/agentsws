@@ -622,13 +622,24 @@ export interface RunWebOptions {
 /** WP353：运行时用到的那几样（`BrowserWebSearch` 的子集）。 */
 export interface RunWebBrowser {
   available(): boolean
+  /**
+   * WP355：`who` = 这次运行的模型来源 / 模型 / 人——名单里的来源（ChatGPT 订阅）先用它自带的搜索。
+   * 用了自带搜索就回 `native_usage`，运行时照 `model.usage{purpose: web_search}` 记一笔（`cost_base` 0）。
+   */
   search(
     query: string,
     maxResults?: number,
+    who?: { source?: string; model?: string; person_id?: string },
   ): Promise<{
     sources: readonly { url: string; title?: string; snippet?: string }[]
     content?: string
     truncated: boolean
+    native_usage?: {
+      model: string
+      input_tokens: number
+      output_tokens: number
+      cached_tokens: number
+    }
   }>
   fetch(url: string): Promise<{
     url: string
@@ -1444,8 +1455,41 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ? {}
       : {
           backend: {
-            search: async (query: string, maxResults?: number) => {
-              const r = await (web.browser as RunWebBrowser).search(query, maxResults)
+            search: async (query: string, maxResults?: number, request?: RunRequest) => {
+              /*
+               * WP355（决策 937）：带上这次运行的模型来源——名单里的（ChatGPT 订阅）先用它自带的搜索，
+               * 不行再走 WP353 的链（判名单、退回都在 web-browser 那一层）。
+               */
+              const r = await (web.browser as RunWebBrowser).search(
+                query,
+                maxResults,
+                request === undefined
+                  ? undefined
+                  : {
+                      source: request.runtime.model.provider,
+                      model: request.runtime.model.model,
+                      person_id: request.actor.person_id,
+                    },
+              )
+              const used = r.native_usage
+              if (used !== undefined && request !== undefined) {
+                // 订阅不按 token 收钱：照 WP179 的口径补记一笔（`cost_base` 0、不动预算），用量页看得到
+                options.models.recordExternal?.({
+                  meta: {
+                    workspace_id,
+                    assignment_id: request.actor.assignment_id,
+                    role_id: request.actor.role_id,
+                    run_id: request.id,
+                    purpose: 'web_search',
+                  },
+                  model: { provider: request.runtime.model.provider, model: used.model },
+                  usage: {
+                    input_tokens: used.input_tokens,
+                    output_tokens: used.output_tokens,
+                    cached_tokens: used.cached_tokens,
+                  },
+                })
+              }
               return {
                 sources: r.sources,
                 truncated: r.truncated,
