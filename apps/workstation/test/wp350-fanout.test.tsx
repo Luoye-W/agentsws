@@ -94,6 +94,11 @@ vi.mock('@/lib/free-chat', async () => {
     getAssistantState: async (): Promise<AssistantState> => ({ suggestions: [], targets: [] }),
     listAssistantMemory: async () => [],
     listFreeChatSessions: async () => [],
+    // WP352：只有一条长对话
+    getAssistantThread: async () => ({
+      session: { id: 'fchat_1', title: '助理', created_at: T0, updated_at: T0 },
+      segments: [],
+    }),
     listFreeChatMessages: async () => state.messages,
     createFreeChatSession: async () => ({
       id: 'fchat_1',

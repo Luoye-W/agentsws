@@ -93,6 +93,45 @@ export interface FreeChatMessageView {
   fanout?: FreeChatFanoutView
   /** WP350：方案卡确认之后的那张汇总（派了哪几个岗位几件事、各进了几条知识）。 */
   fanout_summary?: FreeChatFanoutSummaryView
+  /** WP352：这条话属于长对话里的哪一段话题（界面在段与段之间画分隔线 + 一行小结）。 */
+  segment_id?: string
+  /** WP352：这一轮助理翻了以前聊过的，查回来的出处（点了跳到那里）。 */
+  recalled?: AssistantHistoryHitView[]
+}
+
+/** WP352：长对话里的一段话题。 */
+export interface AssistantSegmentView {
+  id: string
+  started_at: string
+  ended_at?: string
+  /** 为什么切的：第一段 / 隔久了 / 跨天 / 话题变了 / 人换的 / 老会话迁来的。 */
+  reason: 'first' | 'gap' | 'day' | 'topic' | 'manual' | 'migrated'
+  /** 一行小结（分隔线上那一行）；还没小结出来就没有。 */
+  title?: string
+  /** 话题小结（谁、要做什么、定了什么、派了哪些事）。 */
+  summary?: string
+  /** 正在聊的这一段。 */
+  current: boolean
+}
+
+/** WP352：助理那一条长对话（老的多条会话第一次打开时按时间拼进来）。 */
+export interface AssistantThreadView {
+  session: FreeChatSessionView
+  segments: AssistantSegmentView[]
+}
+
+/** WP352：在以前聊过的里面搜到的一处（小结或原话），带出处。 */
+export interface AssistantHistoryHitView {
+  segment_id: string
+  /** 原话那一条；命中的是小结时没有（跳到那段开头）。 */
+  message_id?: string
+  kind: 'message' | 'summary'
+  at: string
+  role?: 'user' | 'assistant'
+  /** 那一段的一行小结。 */
+  title?: string
+  /** 命中那一小段（前后几十个字）。 */
+  snippet: string
 }
 
 /** WP350：用户附上的一份文本类资料（.txt / .md / .docx / .pdf / 粘贴的长文本）。 */
@@ -346,6 +385,15 @@ export interface FreeChatPort {
     batch_id: string,
     input: { items?: FreeChatFanoutEditInput[]; dismiss?: boolean },
   ): Promise<{ plan: FreeChatMessageView; summary?: FreeChatMessageView }>
+  /** WP352：助理那一条长对话（没有就建；老的多条会话第一次按时间拼进来）。可选。 */
+  thread?(actor: FreeChatActor): Promise<AssistantThreadView>
+  /** WP352：换个话题——这一段收起来（后台出小结），下一句开新的一段。可选。 */
+  newTopic?(actor: FreeChatActor): Promise<AssistantThreadView>
+  /** WP352：搜以前聊过的（小结与原话），只读。可选。 */
+  searchHistory?(
+    actor: FreeChatActor,
+    query: { q: string; since?: string; until?: string },
+  ): Promise<AssistantHistoryHitView[]>
 }
 
 /** 与「问 AI」同一档：能读自己的队列就能用——随便聊只给本人看，不碰任何对外的东西。 */
@@ -535,6 +583,71 @@ export function freeChatRoutes(): Route[] {
         if (port.forget === undefined)
           throw new ApiError('not_implemented', '这个服务进程的「助理」没有记忆')
         return ok(c, await port.forget(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'get',
+        path: '/v1/free-chat/thread',
+        operationId: 'getAssistantThread',
+        summary:
+          '「助理」那一条长对话（WP352）：会话与各段话题（一行小结、为什么切的）；老的多条会话第一次按时间拼进来',
+        returns: 'AssistantThreadView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.thread === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有长对话')
+        return ok(c, await port.thread(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'post',
+        path: '/v1/free-chat/thread/topic',
+        operationId: 'newAssistantTopic',
+        summary: '「助理」换个话题（WP352）：这一段收起来、后台出小结，下一句开新的一段',
+        returns: 'AssistantThreadView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.newTopic === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有长对话')
+        return ok(c, await port.newTopic(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'get',
+        path: '/v1/free-chat/thread/search',
+        operationId: 'searchAssistantHistory',
+        summary: '在「助理」以前聊过的里面搜（WP352；小结与原话，只读，带出处）',
+        params: [
+          { name: 'q', in: 'query' as const, required: true, description: '关键词（空格隔开）' },
+          { name: 'since', in: 'query' as const, description: '不早于（ISO8601）' },
+          { name: 'until', in: 'query' as const, description: '早于（ISO8601）' },
+        ],
+        returns: 'AssistantHistoryHitView[]',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.searchHistory === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有长对话')
+        const q = (c.req.query('q') ?? '').trim().slice(0, 200)
+        if (q === '') throw new ApiError('invalid_input', '要搜什么？')
+        const since = c.req.query('since')
+        const until = c.req.query('until')
+        return ok(
+          c,
+          await port.searchHistory(actorOf(c), {
+            q,
+            ...(since === undefined || since === '' ? {} : { since }),
+            ...(until === undefined || until === '' ? {} : { until }),
+          }),
+        )
       },
     ),
     route(

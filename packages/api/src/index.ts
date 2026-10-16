@@ -394,10 +394,13 @@ export { extensionInstallRoutes } from './routes/extension-install.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」
+  AssistantHistoryHitView,
   AssistantMemoryView,
+  AssistantSegmentView,
   AssistantStateView,
   AssistantSuggestionView,
   AssistantTargetView,
+  AssistantThreadView,
   FreeChatActor,
   FreeChatAttachment,
   FreeChatCitation,

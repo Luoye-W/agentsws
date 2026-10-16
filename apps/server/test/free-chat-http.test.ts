@@ -204,6 +204,45 @@ describe('WP188 /v1/free-chat 端到端', () => {
     expect((await call('GET', `/v1/free-chat/sessions/${session.id}/messages`)).status).toBe(404)
   })
 
+  it('WP352 一条长对话：老会话拼进来；说一句记 assistant.context（不带正文）；换个话题；搜以前聊过的', async () => {
+    const before = (await data<FreeChatSessionView[]>(await call('GET', '/v1/free-chat/sessions')))
+      .length
+    expect(before).toBeGreaterThan(0)
+    const thread = await data<{
+      session: FreeChatSessionView
+      segments: { id: string; reason: string; current: boolean }[]
+    }>(await call('GET', '/v1/free-chat/thread'))
+    expect(thread.segments.every((s) => s.reason === 'migrated')).toBe(true)
+    expect(
+      (await data<FreeChatSessionView[]>(await call('GET', '/v1/free-chat/sessions'))).map(
+        (s) => s.id,
+      ),
+    ).toEqual([thread.session.id])
+    const log = () =>
+      server.kernel.eventLog.readSync({ workspace_id: server.bootstrap.workspace.id })
+    const n = log().length
+    await frames(
+      await call('POST', `/v1/free-chat/sessions/${thread.session.id}/messages`, {
+        text: '帮我记一下：包邮门槛 99',
+      }),
+    )
+    const ctx = log()
+      .slice(n)
+      .filter((e) => e.type === 'assistant.context')
+    expect(ctx.length).toBe(1)
+    expect(ctx[0]?.payload).toMatchObject({ raw_messages: 1, topics: expect.any(Number) })
+    expect(JSON.stringify(ctx[0]?.payload)).not.toContain('包邮')
+    const topic = await data<{ segments: { reason: string; current: boolean }[] }>(
+      await call('POST', '/v1/free-chat/thread/topic'),
+    )
+    expect(topic.segments.at(-1)).toMatchObject({ reason: 'manual', current: true })
+    const hits = await data<{ kind: string; snippet: string; message_id?: string }[]>(
+      await call('GET', `/v1/free-chat/thread/search?q=${encodeURIComponent('包邮')}`),
+    )
+    expect(hits.some((h) => h.kind === 'message' && h.snippet.includes('包邮门槛'))).toBe(true)
+    expect((await call('GET', '/v1/free-chat/thread/search?q=')).status).toBe(400)
+  })
+
   it('「Agents 工坊（用积分）」模板不让填 key', async () => {
     const view = await data<{ templates: { kind: string; label: string; auth?: string }[] }>(
       await call('GET', '/v1/models/providers'),

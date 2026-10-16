@@ -4067,7 +4067,7 @@ const zh: Table = {
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
   'nav.free_chat': '助理',
   'home.free_chat': '有什么要我做的？',
-  'command.new_chat': '新对话',
+  'command.new_chat': '助理：换个话题',
   'command.handoff.title': '交给哪个岗位？',
   'command.handoff.placeholder': '搜岗位…',
   'free_chat.empty': '想随便问点什么？',
@@ -8306,7 +8306,7 @@ const en: Table = {
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
   'nav.free_chat': 'Assistant',
   'home.free_chat': 'What can I do for you?',
-  'command.new_chat': 'New chat',
+  'command.new_chat': 'Assistant: new topic',
   'command.handoff.title': 'Hand to which position?',
   'command.handoff.placeholder': 'Search positions…',
   'free_chat.empty': 'Want to ask anything?',

@@ -63,6 +63,38 @@ export interface FreeChatMessage {
   fanout?: FreeChatFanout
   /** WP350：方案卡点过之后的汇总。 */
   fanout_summary?: FreeChatFanoutSummary
+  /** WP352：属于长对话里的哪一段话题。 */
+  segment_id?: string
+  /** WP352：这一轮翻了以前聊过的，查回来的出处。 */
+  recalled?: AssistantHistoryHit[]
+}
+
+/** WP352：长对话里的一段话题。 */
+export interface AssistantSegment {
+  id: string
+  started_at: string
+  ended_at?: string
+  reason: 'first' | 'gap' | 'day' | 'topic' | 'manual' | 'migrated'
+  title?: string
+  summary?: string
+  current: boolean
+}
+
+/** WP352：助理那一条长对话。 */
+export interface AssistantThread {
+  session: FreeChatSession
+  segments: AssistantSegment[]
+}
+
+/** WP352：以前聊过的里面搜到的一处（小结或原话）。 */
+export interface AssistantHistoryHit {
+  segment_id: string
+  message_id?: string
+  kind: 'message' | 'summary'
+  at: string
+  role?: 'user' | 'assistant'
+  title?: string
+  snippet: string
 }
 
 /** WP350：附上的一份资料（界面只看名字、字数、读不出的那句、抹掉了几处口令）。 */
@@ -264,9 +296,28 @@ export const confirmFanout = (
 ): Promise<{ plan: FreeChatMessage; summary?: FreeChatMessage }> =>
   api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}`, { method: 'POST', body })
 
-/** WP343：回答末尾的 `<remember>` 标记不给人看（流式时还没被服务端拿掉）。 */
-export const hideRememberTags = (text: string): string =>
-  text.replace(/<remember\b[^>]*>[\s\S]*?(<\/remember>|$)/giu, '').trimEnd()
+/** WP352：助理那一条长对话（老会话第一次拼进来）。 */
+export const getAssistantThread = (): Promise<AssistantThread> => api(`${base}/thread`)
+/** WP352：换个话题。 */
+export const newAssistantTopic = (): Promise<AssistantThread> =>
+  api(`${base}/thread/topic`, { method: 'POST' })
+/** WP352：搜以前聊过的。 */
+export const searchAssistantHistory = (q: string): Promise<AssistantHistoryHit[]> =>
+  api(`${base}/thread/search?q=${encodeURIComponent(q)}`)
+
+/** WP352：回答开头「换话题了」的记号（服务端分段用，不给人看；流式时可能只到一半）。 */
+const TOPIC_TAG = '<new-topic/>'
+
+/**
+ * WP343：回答末尾的 `<remember>` 标记不给人看（流式时还没被服务端拿掉）。
+ * WP352：开头的 `<new-topic/>`（含流到一半的前缀）同样藏掉。
+ */
+export const hideRememberTags = (text: string): string => {
+  let out = text.split(TOPIC_TAG).join('')
+  const lead = out.trimStart()
+  if (lead !== '' && TOPIC_TAG.startsWith(lead)) out = ''
+  return out.replace(/<remember\b[^>]*>[\s\S]*?(<\/remember>|$)/giu, '').trimEnd()
+}
 
 /**
  * 说一句（或重新生成）：一帧一帧交给 `onFrame`，流结束时 resolve。
