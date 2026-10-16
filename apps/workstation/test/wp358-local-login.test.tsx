@@ -119,5 +119,4 @@ describe('WP358 登录页说人话', () => {
     expect(asked).toEqual(['jane@example.com', 'wang@nordvolt.example'])
     expect(email.value).toBe('wang@nordvolt.example')
   })
-
 })

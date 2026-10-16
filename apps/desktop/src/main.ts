@@ -134,7 +134,6 @@ import {
 import { newChannelToken, startSearchBrowserChannel } from './search-browser.js'
 import { createElectronSearchBrowser, type SearchHandover } from './search-browser-electron.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
-import { createSessionKeeper } from './session-keeper.js'
 import {
   inheritEnv,
   resolveServerEntry,
@@ -142,6 +141,7 @@ import {
   type ServerRuntime,
   serverSpawnRequest,
 } from './server-process.js'
+import { createSessionKeeper } from './session-keeper.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { proxyUrlFromResolution } from './system-proxy.js'
 import {
