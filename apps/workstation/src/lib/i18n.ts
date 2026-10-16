@@ -4053,7 +4053,7 @@ const zh: Table = {
   'b2b.sales.sample.hint': '已寄必须带单号。标已寄的卡批了，会再出一张寄样通知卡。',
   'b2b.sales.handover': '{who} 的 {count} 条交接等老板批',
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
-  'nav.free_chat': '我的助理',
+  'nav.free_chat': '助理',
   'home.free_chat': '有什么要我做的？',
   'command.new_chat': '新对话',
   'command.handoff.title': '交给哪个岗位？',
@@ -4092,7 +4092,7 @@ const zh: Table = {
   'free_chat.delete': '删除',
   'free_chat.delete.confirm': '删掉这段对话？删了找不回来。',
   'free_chat.session.more': '更多',
-  'models.purpose.free_chat': '我的助理',
+  'models.purpose.free_chat': '助理',
   // ── WP207：左栏三级「+」、职责下的对话 / 任务、归档与找回 ──────────────
   'rail.new_position': '新建岗位',
   'rail.add_duty': '给「{name}」加职责',
@@ -8286,7 +8286,7 @@ const en: Table = {
     'Shipped needs a tracking number. Once that card is approved, a shipping notice card follows.',
   'b2b.sales.handover': '{count} handover items from {who} await the owner',
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
-  'nav.free_chat': 'My assistant',
+  'nav.free_chat': 'Assistant',
   'home.free_chat': 'What can I do for you?',
   'command.new_chat': 'New chat',
   'command.handoff.title': 'Hand to which position?',
@@ -8325,7 +8325,7 @@ const en: Table = {
   'free_chat.delete': 'Delete',
   'free_chat.delete.confirm': 'Delete this chat? It cannot be recovered.',
   'free_chat.session.more': 'More',
-  'models.purpose.free_chat': 'My assistant',
+  'models.purpose.free_chat': 'Assistant',
   // ── WP207 ──────────────────────────────────────────────────────────
   'rail.new_position': 'New position',
   'rail.add_duty': 'Add a duty to “{name}”',
