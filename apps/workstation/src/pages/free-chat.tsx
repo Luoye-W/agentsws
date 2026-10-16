@@ -41,6 +41,7 @@ import {
   renameFreeChatSession,
   stopFreeChat,
   streamFreeChat,
+  undoFanoutNotes,
 } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 
@@ -302,6 +303,21 @@ export function FreeChatPage(): React.ReactNode {
       void client.invalidateQueries({ queryKey: [...KEY, 'assistant'] })
     }
   }
+  /** WP357（决策 902）：汇总卡上「撤销」→ 换上撤过的那条汇总、知识库刷新。 */
+  const undoNotes = async (batch_id: string): Promise<void> => {
+    if (id === undefined) return
+    setError(undefined)
+    try {
+      const out = await undoFanoutNotes(id, batch_id)
+      client.setQueryData<FreeChatMessage[]>([...KEY, 'messages', id], (old) =>
+        (old ?? []).map((m) => (m.id === out.summary.id ? out.summary : m)),
+      )
+      void client.invalidateQueries({ queryKey: ['knowledge', 'cards'] })
+      void client.invalidateQueries({ queryKey: ['knowledge-cards'] })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
   const lastAssistant = [...rows].reverse().find((m) => m.role === 'assistant')
 
   const composer = (
@@ -422,6 +438,7 @@ export function FreeChatPage(): React.ReactNode {
                             if (id !== undefined) void run(id, { regenerate: true })
                           }}
                           onFanout={fanout}
+                          onUndoNotes={undoNotes}
                         />
                       ),
                     )

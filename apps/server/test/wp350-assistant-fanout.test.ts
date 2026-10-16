@@ -384,9 +384,8 @@ describe('WP350 助理一次拆成多份', () => {
     expect(next.status).toBe('active')
     expect(next.subject.id).toBe('web-ops')
     expect(next.provenance).toEqual(ship.provenance)
-    expect((next.structured?.previous as { statement: string }[])[0]?.statement).toBe(
-      '运费一律满 50 包邮',
-    )
+    const previous = (next.structured?.previous ?? []) as { statement: string }[]
+    expect(previous[0]?.statement).toBe('运费一律满 50 包邮')
     // 空的不行；不存在的 404
     expect((await call('PATCH', `/v1/free-chat/notes/${ship.id}`, { statement: ' ' })).status).toBe(
       400,

@@ -8,15 +8,21 @@
  * **WP209**：再加一行「这一层常用的知识」——与知识库页同一套分组（`KnowledgeGroupCounts`），
  * 按岗位挑类（职责层用它所属的岗位），每类几条。
  *
- * **WP350**：助理把一份资料拆给几个岗位时要记的那几条，在这个岗位这一栏最上面列「待你确认」
- * （正文 + 出处那份资料的名字）；确认在卡片流那张「要记的 N 条」上点。
+ * **WP350**：助理把一份资料拆给几个岗位时要记的那几条，在这个岗位这一栏最上面列出来
+ * （正文 + 出处那份资料的名字）。**WP357（决策 902）**：点「就这样」就生效了，这一块改叫
+ * 「助理记下的 N 条」，每条带改 / 删两个小钮（`AssistantNoteActions`）——这是这一栏里唯一能动知识的地方，
+ * 只动助理记的那几条。
  *
- * **这里不做知识编辑器**。写事实卡要看得见出处、核对状态与复核队列（19 §1.1），
+ * **这里不做知识编辑器**（助理记的那几条除外，见上）。写事实卡要看得见出处、核对状态与复核队列（19 §1.1），
  * 380 宽的抽屉里做那件事只会做残；这一栏回答的是"我这一层看得见什么"。
  */
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import {
+  AssistantNoteActions,
+  isAssistantNote,
+} from '@/components/knowledge/assistant-note-actions'
 import { KnowledgeGroupCounts } from '@/components/library/knowledge-groups'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
@@ -53,14 +59,10 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
   })
   const active = (cards.data ?? []).filter((c) => c.status === 'active').length
 
-  // WP350：这个岗位名下、助理扇出过来还没确认的那几条
+  // WP350 / WP357：这个岗位名下、助理扇出过来还在用的那几条（决策 902 起写进来就生效）
   const positionId = scope.tier === 'position' ? scope.scope_id : scope.parent?.scope_id
-  const pending = (cards.data ?? []).filter(
-    (c) =>
-      c.status === 'proposed' &&
-      c.subject.type === 'assistant_note' &&
-      positionId !== undefined &&
-      c.subject.id === positionId,
+  const noted = (cards.data ?? []).filter(
+    (c) => isAssistantNote(c) && positionId !== undefined && c.subject.id === positionId,
   )
 
   if (duties.isPending) return <Skeleton className="h-40 w-full" />
@@ -68,18 +70,21 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
 
   return (
     <div className="flex flex-col gap-3" data-testid="knowledge-panel" data-scope={scope.scope_id}>
-      {pending.length === 0 ? null : (
+      {noted.length === 0 ? null : (
         <section
-          className="flex flex-col gap-1 rounded-md border border-ws-warn/40 p-2"
-          data-testid="rail-knowledge-pending"
+          className="flex flex-col gap-1 rounded-md border p-2"
+          data-testid="rail-knowledge-notes"
         >
-          <p className="text-xs font-medium text-ws-warn">
-            {t('rail.knowledge.pending', { n: pending.length })}
+          <p className="text-xs font-medium text-ws-body">
+            {t('rail.knowledge.notes', { n: noted.length })}
           </p>
-          <ul className="flex flex-col gap-1">
-            {pending.map((c) => (
-              <li key={c.id} className="text-[12px]" data-testid="rail-knowledge-pending-item">
-                <p className="text-ws-ink">{c.statement}</p>
+          <ul className="flex flex-col gap-1.5">
+            {noted.map((c) => (
+              <li key={c.id} className="text-[12px]" data-testid="rail-knowledge-note">
+                <div className="flex flex-wrap items-start gap-1">
+                  <p className="min-w-0 flex-1 text-ws-ink">{c.statement}</p>
+                  <AssistantNoteActions card={c} />
+                </div>
                 {c.provenance?.[0]?.locator === undefined ? null : (
                   <p
                     className="truncate text-[11px] text-muted-foreground"

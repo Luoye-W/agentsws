@@ -115,6 +115,10 @@ export interface FreeChatFanoutSummary {
   memories: number
   skipped: { dropped: number; unsure: number; secret: number }
   knowledge_card_id?: string
+  /** WP357（决策 902）：写进知识库就生效的那几条（撤销撤的就是它们）。 */
+  note_card_ids?: string[]
+  notes_undone_at?: string
+  notes_undone?: number
   failed?: string[]
   at: string
 }
@@ -247,6 +251,19 @@ export const confirmFanout = (
   body: { items?: FreeChatFanoutEdit[]; dismiss?: boolean },
 ): Promise<{ plan: FreeChatMessage; summary?: FreeChatMessage }> =>
   api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}`, { method: 'POST', body })
+
+/** WP357（决策 902）：汇总卡上「撤销」——这一批写进知识库的口径全部退役。 */
+export const undoFanoutNotes = (
+  session_id: string,
+  batch_id: string,
+): Promise<{ summary: FreeChatMessage }> =>
+  api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}/undo-notes`, { method: 'POST' })
+/** WP357：改一条助理记进知识库的口径（就地改、旧句留痕）。 */
+export const editAssistantNote = (card_id: string, statement: string): Promise<unknown> =>
+  api(`${base}/notes/${encodeURIComponent(card_id)}`, { method: 'PATCH', body: { statement } })
+/** WP357：删一条助理记进知识库的口径（退役留痕）。 */
+export const removeAssistantNote = (card_id: string): Promise<{ retired: boolean }> =>
+  api(`${base}/notes/${encodeURIComponent(card_id)}`, { method: 'DELETE' })
 
 /** WP343：回答末尾的 `<remember>` 标记不给人看（流式时还没被服务端拿掉）。 */
 export const hideRememberTags = (text: string): string =>

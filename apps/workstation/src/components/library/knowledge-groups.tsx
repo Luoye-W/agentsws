@@ -5,11 +5,18 @@
  * 手填）+ 它是哪一份（政策里的退换 / 运费…、B2B 里的价格与 MOQ…）+ 适用范围。
  * 分类、状态、来源的判定都在 `lib/library.ts`（纯函数），这里只管摆。
  *
+ * **WP357（决策 902）**：助理记下的口径（`assistant_note`）这一行多一句「来自「…」」与改 / 删两个小钮
+ * （`AssistantNoteActions`）；别的知识照旧不在这里改。
+ *
  * 「上传的文档」是另一张表（`KnowledgeSource`）：它的那一列由页面自己画（点一份在第三栏预览、
  * 删除按钮），以 `uploads` 插进它该在的位置。空组不显示。
  */
 import type { ReactNode } from 'react'
 import { StatusPill, type Tone, WsTag } from '@/components/design'
+import {
+  AssistantNoteActions,
+  isAssistantNote,
+} from '@/components/knowledge/assistant-note-actions'
 import type { KnowledgeCardRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
@@ -78,6 +85,17 @@ export function KnowledgeRow({
         >
           {parts.body}
         </p>
+        {/* WP357：助理记的那条带出处（来自哪份资料）与改 / 删 */}
+        {isAssistantNote(card) ? (
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-ws-muted-fg">
+            {card.provenance?.[0]?.locator === undefined ? null : (
+              <span className="truncate" title={card.provenance[0].quote}>
+                {t('fanout.batch', { title: card.provenance[0].locator })}
+              </span>
+            )}
+            <AssistantNoteActions card={card} />
+          </div>
+        ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1 sm:max-w-[55%] sm:justify-end">
         {kind === undefined ? null : <WsTag>{kind}</WsTag>}
