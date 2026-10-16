@@ -52,6 +52,8 @@ describe('bridge-types', () => {
       searchChanged: 'agentsws:search-changed',
       searchPlace: 'agentsws:search-place',
       searchDismiss: 'agentsws:search-dismiss',
+      // WP358：会话丢了让壳重换
+      sessionRenew: 'agentsws:session-renew',
     })
   })
 

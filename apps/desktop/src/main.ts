@@ -134,6 +134,7 @@ import {
 import { newChannelToken, startSearchBrowserChannel } from './search-browser.js'
 import { createElectronSearchBrowser, type SearchHandover } from './search-browser-electron.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
+import { createSessionKeeper } from './session-keeper.js'
 import {
   inheritEnv,
   resolveServerEntry,
@@ -962,7 +963,6 @@ async function bootstrap(): Promise<void> {
     abort: nodeAbort,
     timeoutMs: 5000,
   })
-  let sessionCache: DesktopSession | undefined
   let assignmentCache: string | undefined
 
   /**
@@ -971,31 +971,40 @@ async function bootstrap(): Promise<void> {
    * 两条路里选了这一条：**主进程换、`session.cookies.set` 装**。另一条是先开一个
    * `/session` 路由页、由页面自己去换——那样会话密钥必须传进渲染进程，
    * 而「token 一次都不进 URL、不进渲染进程」正是这条接口存在的理由（13 §5 / 20 §3）。
+   *
+   * WP358：换来的那张由保鲜器管——过半寿命就重换，页面撞 401 经桥接 `session.renew` 立刻重换。
+   * 以前缓存一辈子，常驻托盘过 12 小时就落到登录页。
    */
+  const sessions = createSessionKeeper<DesktopSession>({
+    exchange: async () => {
+      const out = await api.session()
+      if (!out.ok) {
+        logger.warn('换会话失败', { reason: out.reason })
+        return undefined
+      }
+      return out.value
+    },
+    install: async (s) => {
+      try {
+        await session.defaultSession.cookies.set({
+          url: serverUrl(),
+          name: s.name,
+          value: s.value,
+          httpOnly: true,
+          sameSite: 'strict',
+        })
+      } catch (err) {
+        // cookie 装不进去不致命：窗口会走登录页
+        logger.warn('写入会话 cookie 失败', { error: String(err) })
+      }
+    },
+    nowMs: () => Date.now(),
+  })
   const ensureSession = async (): Promise<DesktopSession | undefined> => {
     // `remote` 档没有会话密钥可换：登录走公司服务器自己的邀请链接 / magic-link，
     // cookie 由它下发（20 §5）。壳在这里什么都不做，窗口直接落到登录页。
     if (remote) return undefined
-    if (sessionCache !== undefined) return sessionCache
-    const out = await api.session()
-    if (!out.ok) {
-      logger.warn('换会话失败', { reason: out.reason })
-      return undefined
-    }
-    sessionCache = out.value
-    try {
-      await session.defaultSession.cookies.set({
-        url: serverUrl(),
-        name: out.value.name,
-        value: out.value.value,
-        httpOnly: true,
-        sameSite: 'strict',
-      })
-    } catch (err) {
-      // cookie 装不进去不致命：窗口会走登录页
-      logger.warn('写入会话 cookie 失败', { error: String(err) })
-    }
-    return sessionCache
+    return sessions.get()
   }
 
   /** `PUT /v1/halt` 与 `POST /v1/secrets/rotate` 都要 `X-Assignment`。 */
@@ -1012,9 +1021,21 @@ async function bootstrap(): Promise<void> {
 
   /** 服务进程重启（换端口 / 换实例）后，旧 cookie 与旧 assignment 都作废。 */
   const forgetSession = (): void => {
-    sessionCache = undefined
+    sessions.forget()
     assignmentCache = undefined
   }
+
+  /*
+   * WP358：页面撞上 401（会话过期 / 服务进程重启 / 会话被清）→ 问壳要一张新的。
+   * 只认自己的窗口、只在个人档；换到的 cookie 照旧只进 cookie 罐，渲染进程只拿到一个是否。
+   */
+  ipcMain.handle(BRIDGE_CHANNELS.sessionRenew, async (event): Promise<boolean> => {
+    if (!fromLocalWindow(event) || remote) return false
+    assignmentCache = undefined
+    const renewed = await sessions.renew()
+    logger.info('页面要求重换会话', { ok: renewed !== undefined })
+    return renewed !== undefined
+  })
 
   const openWindow = async (path = '/'): Promise<string> => {
     await ensureSession()
@@ -1786,6 +1807,8 @@ async function bootstrap(): Promise<void> {
     })
     refreshTray()
     if (health.ok) onFirstHealthy()
+    // WP358：手上有会话就顺手保鲜（过半寿命才真去换）——窗口里那张 cookie 不会熬到过期
+    if (health.ok && !remote && sessions.issuedAtMs() !== undefined) void ensureSession()
     // WP111 首启：服务一健康就把工作台端出来一次，落在「初始化设置」那一页
     // （跳转由工作台自己判 `needs_setup`，壳不认识那个路由）。
     if (

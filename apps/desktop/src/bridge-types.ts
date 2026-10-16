@@ -46,6 +46,16 @@ export interface DesktopBridge {
    * 有一页要人点时第三栏「浏览器」亮出来，把位置给壳、壳把那一页挂上去。旧壳没有这一项：先判空。
    */
   searchBrowser?: DesktopSearchBridge
+  /**
+   * WP358：会话丢了（过期 / 服务进程重启）→ 让壳用会话密钥给所有者重换一张，cookie 照旧只进
+   * cookie 罐。回 `true` 就再请求一次 `/v1/me`；`remote` 档与旧壳没有这一项或回 `false`，走登录页。
+   */
+  session?: DesktopSessionBridge
+}
+
+/** WP358：页面只拿到「换没换成」，拿不到会话本身。 */
+export interface DesktopSessionBridge {
+  renew(): Promise<boolean>
 }
 
 /** WP353：要人介入的那一页。 */
@@ -167,6 +177,8 @@ export const BRIDGE_CHANNELS = {
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
   searchDismiss: 'agentsws:search-dismiss',
+  /** WP358 */
+  sessionRenew: 'agentsws:session-renew',
 } as const
 
 export interface BridgeInfo {

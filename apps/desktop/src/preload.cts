@@ -37,6 +37,7 @@ const CHANNELS = {
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
   searchDismiss: 'agentsws:search-dismiss',
+  sessionRenew: 'agentsws:session-renew',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -105,6 +106,10 @@ const bridge: DesktopBridge = {
         rect === null ? null : { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       ) as Promise<boolean>,
     dismiss: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.searchDismiss) as Promise<boolean>,
+  },
+  // WP358：会话丢了让壳重换（只回是否；cookie 不经过这里）
+  session: {
+    renew: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.sessionRenew) as Promise<boolean>,
   },
 }
 
