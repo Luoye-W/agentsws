@@ -57,6 +57,12 @@ export const ASSISTANT_ZH: Record<string, string> = {
   'fanout.summary.confirm': '去确认知识',
   'fanout.batch': '来自「{title}」',
   'rail.knowledge.pending': '待你确认 {n} 条',
+  // WP352：一条长对话
+  'assistant.topic.new': '换个话题',
+  'assistant.search': '搜以前聊过的',
+  'assistant.search.placeholder': '搜以前聊过的…',
+  'assistant.search.none': '没搜到',
+  'assistant.recalled': '出处 · {date}',
 }
 
 export const ASSISTANT_EN: Record<string, string> = {
@@ -112,4 +118,10 @@ export const ASSISTANT_EN: Record<string, string> = {
   'fanout.summary.confirm': 'Confirm notes',
   'fanout.batch': 'From "{title}"',
   'rail.knowledge.pending': '{n} to confirm',
+  // WP352: one long conversation
+  'assistant.topic.new': 'New topic',
+  'assistant.search': 'Search past chats',
+  'assistant.search.placeholder': 'Search past chats…',
+  'assistant.search.none': 'Nothing found',
+  'assistant.recalled': 'Source · {date}',
 }

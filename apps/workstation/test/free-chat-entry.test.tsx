@@ -98,7 +98,7 @@ describe('WP188 ⌘K', () => {
         onAddTile={() => {}}
       />,
     )
-    expect((await screen.findByTestId('command-new-chat')).textContent).toBe('新对话')
+    expect((await screen.findByTestId('command-new-chat')).textContent).toBe('助理：换个话题')
   })
 
   it('带着对话打开：只列岗位，选一个就把这件事交过去', async () => {
