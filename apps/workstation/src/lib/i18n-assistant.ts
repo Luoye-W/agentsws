@@ -29,7 +29,7 @@ export const ASSISTANT_ZH: Record<string, string> = {
   // WP350：一次拆成多份
   'assistant.doc.add': '附资料（会议记录、文档）',
   'assistant.doc.remove': '不附了',
-  'assistant.doc.bad': '只收 .txt / .md / .docx / .pdf，每份 5 MB 以内',
+  'assistant.doc.bad': '只收 .txt / .md / .docx / .pdf / .xlsx / .csv，每份 5 MB 以内',
   'assistant.doc.pasted': '粘贴的文字 {n}.txt',
   'assistant.doc.chars': '{n} 字',
   'assistant.doc.redacted': '口令已抹掉',
@@ -84,7 +84,7 @@ export const ASSISTANT_EN: Record<string, string> = {
   // WP350
   'assistant.doc.add': 'Attach notes or a document',
   'assistant.doc.remove': 'Remove',
-  'assistant.doc.bad': 'Only .txt / .md / .docx / .pdf, up to 5 MB each',
+  'assistant.doc.bad': 'Only .txt / .md / .docx / .pdf / .xlsx / .csv, up to 5 MB each',
   'assistant.doc.pasted': 'Pasted text {n}.txt',
   'assistant.doc.chars': '{n} chars',
   'assistant.doc.redacted': 'Secrets removed',

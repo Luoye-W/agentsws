@@ -95,7 +95,7 @@ export interface FreeChatMessageView {
   fanout_summary?: FreeChatFanoutSummaryView
 }
 
-/** WP350：用户附上的一份文本类资料（.txt / .md / .docx / .pdf / 粘贴的长文本）。 */
+/** WP350：用户附上的一份文本类资料（.txt / .md / .docx / .pdf / 粘贴的长文本；WP357 加 .xlsx / .csv，读成表格文字）。 */
 export interface FreeChatAttachment {
   name: string
   /** 读出来多少字（读不出 = 0）。 */
@@ -364,7 +364,7 @@ const FanoutBody = z.object({
 const SendBody = z.object({
   text: z.string().max(20_000),
   images: z.array(Image).max(4).optional(),
-  /** WP350：附上的文本类资料（.txt / .md / .docx / .pdf）。 */
+  /** WP350：附上的文本类资料（.txt / .md / .docx / .pdf；WP357 加 .xlsx / .csv）。 */
   files: z.array(FileBody).max(3).optional(),
   ...TurnOptions,
   /** WP343：`@` 选的岗位 / 职责（直接派给它）。 */

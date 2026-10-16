@@ -4,7 +4,7 @@
  *
  * WP343：打 `@` 弹出岗位 / 职责（↑↓ 选、回车定、Esc 收）——选了输入框上面一个小胶囊，这句话直接交给它。
  *
- * WP350：能附文本类资料（会议记录、文档：.txt / .md / .docx / .pdf，回形针那个钮；拖进来也行）；
+ * WP350：能附文本类资料（会议记录、文档：.txt / .md / .docx / .pdf，WP357 加 .xlsx / .csv；回形针那个钮；拖进来也行）；
  * 粘贴一大段字（超过 {@link PASTE_AS_FILE_CHARS} 字）收成一份「粘贴的文字」附件，不塞满输入框。
  */
 import { ArrowUp, FileText, Globe, ImagePlus, Library, Paperclip, Square, X } from 'lucide-react'

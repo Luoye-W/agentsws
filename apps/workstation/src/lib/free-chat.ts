@@ -358,8 +358,8 @@ export function readImage(file: File): Promise<FreeChatImage> {
   })
 }
 
-/** WP350：能附的文本类资料（扩展名）。 */
-export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf'] as const
+/** WP350：能附的文本类资料（扩展名）；WP357（决策 904）加表格 .xlsx / .csv。 */
+export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf', 'xlsx', 'csv'] as const
 export const isDocFile = (name: string): boolean =>
   (DOC_EXTENSIONS as readonly string[]).includes(name.split('.').pop()?.toLowerCase() ?? '')
 /** WP350：粘贴超过这么多字就收成一份附件（不塞进输入框）。 */
