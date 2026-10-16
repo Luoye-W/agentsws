@@ -1004,3 +1004,8 @@
 | 913 | （WP353）兜底时把搜索词（仅查询串）交给 Exa / Parallel 公开匿名接口；问号里一句说明、不点名 | 待定（建议接受） | 中 |
 | 914 | （WP353）被拦先停 Google 30 分钟；亮给人后最长 6 小时、人点过即恢复；内置浏览器每小时 ≤60 页 | 待定（建议先这样） | 低 |
 | 915 | （WP353）中文查询不带市场参数；品牌分析「品牌名 reddit」那句不翻译 | 待定（建议同意） | 低 |
+| 916 | （WP354）dsh 0.2.1-alpha.4（跟 alpha）合进 main；照常走主线合并关口与 Windows 真机复测 | **10-16 Luoye 同意（按建议）** | 中 |
+| 917 | （WP354 上游扫描）安全四件马上开：本机连接器 nodemailer 覆盖到 10.1.0、我们自己 channels / cloud 的 nodemailer 升 10.1.x 并补登、随包 Node 22.23.3 + npm 10.9.9、MCP SDK 1.32.1 | **10-16 Luoye 同意（按建议）** | 高 |
+| 918 | （WP354 上游扫描）OpenConnector 1.9.0（`shopify_admin` 并进 `shopify`）与 BrowserSkill 0.3.3（工具改名 `bsk_*`）各单独开单；前者排在下一轮 Shopify 功能之前，后者这周或下周 | **10-16 Luoye 同意（按建议）** | 中 |
+| 919 | （WP354）官方「插件市场」可选包不进官方插件清单（B 类，测试钉住）；DeepSeek 账号模型下拉另开小单跟官方从账号模型列表取，取不到退回写死的两个 | **10-16 Luoye 同意（按建议）** | 低 |
+| 920 | （WP354 上游扫描）知识库解析接 anydoc 时原生包随安装包带（每平台约 7 MB），Windows ARM 退浏览器版；`--ocr hosted` 必须关 | **10-16 Luoye 同意（按建议）**；顺带：KOLAgents / KefuAgent 照 btobagents 登记（待给本机路径与提交）、Cloudflare 容器快照先出只读评估、MCP SDK v2 迁移 12 月排 | 低 |
