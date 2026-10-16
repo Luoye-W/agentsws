@@ -189,6 +189,26 @@ export interface RunWeb {
    * 这里只有"哪种"，**没有值**——值由宿主在每次搜索的那一刻现取（13 §4）。
    */
   credential?: 'deepseek_account' | 'deepseek_api_key'
+  /**
+   * WP353：这次运行所属品牌的主市场与各市场语言（一行，`品牌主市场：US；各市场语言：US=en，DE=de`）。
+   * 给模型看的上下文，配合 {@link searchLanguageBrief} 那段规矩；没有市场就不给。
+   */
+  search_locale?: string
+}
+
+/**
+ * WP353（Luoye 10-16「搜索语言」）：所有带联网搜索的对话运行、随便聊 / 助理的系统提示里那一小段。
+ * 规矩的另一半在后端（按品牌主市场自动带 `gl` / `hl`），这里只管「查询词用什么语言写」。
+ */
+export function searchLanguageBrief(localeLine?: string): string[] {
+  return [
+    '### 搜索语言',
+    '- 搜海外市场的信息，用目标市场的语言写查询词；用户用中文问，也照样用目标语言搜。',
+    '- 要搜国内 / 中文内容（比如国内竞品）就直接用中文写查询。',
+    '- 需要好几个市场的信息时，按每个市场的语言各搜一次。',
+    '- 回答用用户的语言总结，用到的地方标出原文来源（网址）。',
+    ...(localeLine === undefined || localeLine === '' ? [] : [`- ${localeLine}`]),
+  ]
 }
 
 /** WP179：官方网页工具的名字（`dsh-tool-web` 注册的就是这两个）。 */

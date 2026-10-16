@@ -12,6 +12,7 @@ import {
   BRAND_INTAKE_WEB_SEARCH_MAX,
   type BrandIntakeProfile,
   type BrandIntakeWebPart,
+  marketLanguage,
 } from '@agentsws/contracts'
 
 /** 搜到的一条。 */
@@ -58,10 +59,107 @@ const whatOf = (profile: BrandIntakeProfile): string =>
 
 const q = (...parts: string[]): string => parts.join(' ').replace(/\s+/g, ' ').trim()
 
+/**
+ * WP353（Luoye 10-16「搜索语言」）：查法按**品牌主市场的语言**出（档案 `markets` 第一个 → 那国第一语言），
+ * 不再只有英文一套（WP349 决策 899 留的口子）。表里没有的语言、档案里没市场：英文。
+ * 「reddit」那一句各语言都留着（Reddit 本身以英文为主，带上它是为了找社区讨论）。
+ */
+const QUERY_WORDS: Readonly<
+  Record<
+    string,
+    { review: string; news: string; alt: string; best: string; like: string; official: string }
+  >
+> = {
+  en: {
+    review: 'review',
+    news: 'brand news',
+    alt: 'alternatives',
+    best: 'best',
+    like: 'brands like',
+    official: 'official site price',
+  },
+  de: {
+    review: 'Test',
+    news: 'Marke News',
+    alt: 'Alternativen',
+    best: 'beste',
+    like: 'Marken wie',
+    official: 'offizielle Website Preis',
+  },
+  fr: {
+    review: 'avis',
+    news: 'actualités marque',
+    alt: 'alternatives',
+    best: 'meilleures',
+    like: 'marques comme',
+    official: 'site officiel prix',
+  },
+  es: {
+    review: 'opiniones',
+    news: 'noticias marca',
+    alt: 'alternativas',
+    best: 'mejores',
+    like: 'marcas como',
+    official: 'web oficial precio',
+  },
+  it: {
+    review: 'recensione',
+    news: 'notizie marchio',
+    alt: 'alternative',
+    best: 'migliori',
+    like: 'marchi come',
+    official: 'sito ufficiale prezzo',
+  },
+  pt: {
+    review: 'avaliação',
+    news: 'notícias marca',
+    alt: 'alternativas',
+    best: 'melhores',
+    like: 'marcas como',
+    official: 'site oficial preço',
+  },
+  nl: {
+    review: 'review',
+    news: 'merk nieuws',
+    alt: 'alternatieven',
+    best: 'beste',
+    like: 'merken zoals',
+    official: 'officiële website prijs',
+  },
+  ja: {
+    review: 'レビュー',
+    news: 'ニュース',
+    alt: '代替',
+    best: 'おすすめ',
+    like: '似たブランド',
+    official: '公式サイト 価格',
+  },
+  zh: {
+    review: '测评',
+    news: '品牌 新闻',
+    alt: '同类品牌',
+    best: '推荐',
+    like: '类似品牌',
+    official: '官网 价格',
+  },
+}
+
+/** 这个品牌用哪种语言写查询（主市场的第一语言；认不出 / 没有：英文）。 */
+export function queryLanguageOf(profile: BrandIntakeProfile): string {
+  const market = profile.markets?.value?.[0]
+  const lang = market === undefined ? undefined : marketLanguage(market)?.split('-')[0]
+  return lang !== undefined && QUERY_WORDS[lang] !== undefined ? lang : 'en'
+}
+
+const wordsOf = (profile: BrandIntakeProfile) =>
+  QUERY_WORDS[queryLanguageOf(profile)] ??
+  (QUERY_WORDS.en as NonNullable<(typeof QUERY_WORDS)['en']>)
+
 /** 品牌本身：评测、社区讨论、媒体报道（最多 3 句）。 */
 export function brandQueries(name: string, profile: BrandIntakeProfile): string[] {
   const what = whatOf(profile)
-  return [q(name, what, 'review'), q(name, 'reddit'), q(name, 'brand news')].slice(
+  const w = wordsOf(profile)
+  return [q(name, what, w.review), q(name, 'reddit'), q(name, w.news)].slice(
     0,
     BRAND_INTAKE_WEB_SEARCH_MAX.brand,
   )
@@ -70,15 +168,16 @@ export function brandQueries(name: string, profile: BrandIntakeProfile): string[
 /** 竞品发现：同类品牌 / alternatives / vs（最多 2 句）。 */
 export function competitorQueries(name: string, profile: BrandIntakeProfile): string[] {
   const what = whatOf(profile)
-  return [
-    q(name, 'alternatives', what),
-    what === '' ? q(name, 'vs') : q('best', what, 'brands like', name),
-  ].slice(0, BRAND_INTAKE_WEB_SEARCH_MAX.competitors)
+  const w = wordsOf(profile)
+  return [q(name, w.alt, what), what === '' ? q(name, 'vs') : q(w.best, what, w.like, name)].slice(
+    0,
+    BRAND_INTAKE_WEB_SEARCH_MAX.competitors,
+  )
 }
 
 /** 核实一个竞品：官网、价格带、主打卖点。 */
 export function verifyQuery(candidate: string, profile: BrandIntakeProfile): string {
-  return q(candidate, whatOf(profile), 'official site price')
+  return q(candidate, whatOf(profile), wordsOf(profile).official)
 }
 
 /** 认成候选名时要扔掉的泛词（标题里常见的大写词）。 */

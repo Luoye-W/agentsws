@@ -511,6 +511,15 @@ describe('WP353 内置浏览器后端', () => {
     expect(brief).toContain('内置浏览器')
     expect(brief).toContain('site:reddit.com')
     expect(brief).not.toContain('花一次模型的钱')
+    // 「搜索语言」那一段 + 品牌主市场那一行
+    expect(brief).toContain('### 搜索语言')
+    expect(brief).toContain('用户用中文问，也照样用目标语言搜')
+    const withLocale = webBrief(
+      webRequest({ web: { ...WEB, search_locale: '品牌主市场：US；各市场语言：US=en' } }),
+    )
+    expect(withLocale).toContain('- 品牌主市场：US；各市场语言：US=en')
+    // 只开抓网页、不开搜索：没有这一段
+    expect(webBrief(webRequest({ web: { ...WEB, search: false } }))).not.toContain('搜索语言')
   })
 })
 

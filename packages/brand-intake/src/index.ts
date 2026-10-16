@@ -461,6 +461,7 @@ export {
   competitorCandidates,
   competitorQueries,
   nameKey,
+  queryLanguageOf,
   verifyQuery,
   webResearch,
 } from './web.js'

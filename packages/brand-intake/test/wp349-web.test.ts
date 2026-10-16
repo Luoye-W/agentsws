@@ -3,12 +3,20 @@
  * 结果进同一次 AI 归纳；每格带来源；没来源的竞品不收；额度装不下按「竞品 → 品牌评测」取舍；
  * 没联网能力时竞品留空并照实说。搜索与模型全是替身（不联网、不花钱）。
  */
-import { BRAND_INTAKE_SEARCH_CREDITS, DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
+import {
+  BRAND_INTAKE_SEARCH_CREDITS,
+  type BrandIntakeProfile,
+  DEFAULT_BRAND_INTAKE_CAP_CREDITS,
+} from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   analyzeBrand,
+  brandQueries,
   competitorCandidates,
+  competitorQueries,
   type IntakeWebHit,
+  queryLanguageOf,
+  verifyQuery,
   WEB_OFF_REASON,
 } from '../src/index.js'
 import { replayFetch } from './fixtures.js'
@@ -302,5 +310,35 @@ describe('WP349 品牌分析联网查', () => {
         'NordVolt',
       ),
     ).toEqual(['EcoFlow', 'Jackery', 'BLUETTI'])
+  })
+})
+
+describe('WP353 查法按市场语言出（决策 899 留的口子）', () => {
+  const profile = (markets: string[] | undefined): BrandIntakeProfile =>
+    ({
+      ...(markets === undefined ? {} : { markets: { value: markets } }),
+      category: { value: 'Rucksack' },
+    }) as unknown as BrandIntakeProfile
+
+  it('德国市场：评测 / 同类品牌 / 核实都用德语写；reddit 那句照留', () => {
+    const de = profile(['DE', 'AT'])
+    expect(queryLanguageOf(de)).toBe('de')
+    expect(brandQueries('Trailmark', de)).toEqual([
+      'Trailmark Rucksack Test',
+      'Trailmark reddit',
+      'Trailmark Marke News',
+    ])
+    expect(competitorQueries('Trailmark', de)).toEqual([
+      'Trailmark Alternativen Rucksack',
+      'beste Rucksack Marken wie Trailmark',
+    ])
+    expect(verifyQuery('Deuter', de)).toBe('Deuter Rucksack offizielle Website Preis')
+  })
+
+  it('美国市场 / 没写市场：英文（与 WP349 一样）；表里没有的语言也回英文', () => {
+    expect(brandQueries('Trailmark', profile(['US']))[0]).toBe('Trailmark Rucksack review')
+    expect(queryLanguageOf(profile(undefined))).toBe('en')
+    expect(queryLanguageOf(profile(['KR']))).toBe('en')
+    expect(queryLanguageOf(profile(['JP']))).toBe('ja')
   })
 })
