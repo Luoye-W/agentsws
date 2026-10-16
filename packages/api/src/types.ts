@@ -684,6 +684,17 @@ export interface GatewayOptions {
   sessionCookieName?: string
   /** 本地单机档只有一个人；换会话时不必让调用方报邮箱。 */
   sessionOwnerEmail?: string
+  /**
+   * 决策 945：服务开给局域网（NAS / 任何非回环访问）时，主人第一次进门用的**一次性设置码**。
+   * 码只印在服务日志里（能看日志的人 = 管这台机器的人），对上了就作废、再印一个新的。
+   * 给了就开 `POST /v1/auth/setup-code`；本机档不给。
+   */
+  ownerSetupCode?: OwnerSetupCodePort
+}
+
+/** 决策 945：一次性设置码。对上了返回该以谁的身份进（主人的邮箱，现取），对不上返回 undefined。 */
+export interface OwnerSetupCodePort {
+  redeem(code: string): Promise<string | undefined>
 }
 
 /* ------------------------------------------------------------------ */

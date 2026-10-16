@@ -902,6 +902,7 @@ export type {
   KnowledgeSourceInput,
   MemoryChangeView,
   ModulesPort,
+  OwnerSetupCodePort,
   PositionSummary,
   Principal,
   RateLimitPolicy,

@@ -459,6 +459,13 @@ export interface AcceptedInvitationView {
   person_id: string
   /** 接受后拿到的岗位（按邀请里的岗位模板展开）。 */
   assignments: AssignmentView[]
+  /**
+   * 决策 945：服务开给局域网时登录页不再把一次性 token 交给页面，
+   * 邀请链接本身就是同事的凭据——接受完直接带一张一次性登录 token（拿去 `/v1/auth/verify`）。
+   * 本机档不带（那里照旧用邮箱要链接）。
+   */
+  login_token?: string
+  login_expires_at?: string
 }
 
 // ── 离职（40 §1.2 第三条规则；WP36）────────────────────────────────────
@@ -1665,14 +1672,22 @@ export function orgRoutes(): Route[] {
         auth: 'public',
         params: [{ name: 'token', in: 'path', required: true, description: '邀请 token' }],
         body: AcceptBody,
-        returns: 'AcceptedInvitationView（接受后用邮箱走 magic-link 登录）',
+        returns:
+          'AcceptedInvitationView（本机档接受后用邮箱走 magic-link；局域网 / 托管档直接带 login_token）',
       },
       async (c, deps) => {
         const input = await body(c, AcceptBody)
-        return ok(
-          c,
-          await portOf(deps).accept(param(c, 'token'), { ...optional(input.name, 'name') }),
-        )
+        const accepted = await portOf(deps).accept(param(c, 'token'), {
+          ...optional(input.name, 'name'),
+        })
+        if (deps.options?.exposeMagicLinkToken !== false) return ok(c, accepted)
+        // 决策 945：局域网 / 托管档——邀请链接就是凭据，接受完当场给一张一次性登录 token
+        const issued = await deps.identity.issueLogin(accepted.email)
+        return ok(c, {
+          ...accepted,
+          login_token: issued.token,
+          login_expires_at: issued.expires_at,
+        })
       },
     ),
     route(
