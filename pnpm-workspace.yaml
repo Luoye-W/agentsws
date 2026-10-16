@@ -62,6 +62,25 @@ overrides:
   # 上游（dsh-host-webserver / MCP SDK 的 express）依赖范围已经 ≥ 修好的版本时删掉这两条（docs/42 ③）。
   compression: 1.8.2
   proxy-addr: 2.0.8
+  # WP359：WP358 周报第一次跑查出的两条（09-14 / 10-04 修好），同样先顶到修好的精确版本。
+  # - brace-expansion（高危 GHSA-qhr7-859c-m2p7、GHSA-6j4f-fj2g-mc7p，中危 GHSA-q2hr-2g5m-vwhr，
+  #   嵌套 / 畸形花括号把递归打爆或跑成平方级 → 卡死进程）：树里三个大版本各顶到本线最新的修好版。
+  #   - @5（5.0.9）：`packages/data`、`packages/roles` 的 casbin → minimatch 10。casbin 一 import 就加载它，
+  #     但只有 matcher 里写了 `globMatch(...)` 才调；我们两份 model.conf 都只用 `==` 和自己注册的函数，
+  #     输入（assignment / domain / op）也不是用户写的通配符——加载、不调用。
+  #   - @1（1.1.18）/ @2（2.1.4）：工作台 exceljs 的 Node 版（archiver / unzipper → glob / readdir-glob）。
+  #     工作台打包走 exceljs 的浏览器包（`dist/exceljs.min.js`），里面没有 archiver / glob / minimatch，
+  #     所以装到用户机器上的前端碰不到；只有 vitest 在 Node 里造 xlsx 时加载，也不传通配符。
+  #   顶它们是为了运行时依赖树（casbin 会被 esbuild 打进安装包）里不留高危公告。
+  # - http-cache-semantics 4.2.0（高危 GHSA-ch52-4w7c-c8xp，max-stale 处理不当会把别人的缓存响应交出去）：
+  #   dsh-otel → got → cacheable-request。我们的两档运行时不挂 dsh-otel（profile-lockdown 测试钉着），
+  #   完整 profile 里 `otel` 两行锁成关；只有用户自己开 dsh 官方场景时才加载 got，而 dsh-otel 的
+  #   `got.post` 不带 `cache` 选项，cacheable-request 根本不建缓存——加载、不调用。修好的只有 4.3.0（没有 4.2.1）。
+  # 上游（minimatch / casbin、archiver / unzipper、cacheable-request）依赖范围已经 ≥ 修好的版本时删掉（docs/42 ③）。
+  brace-expansion@1: 1.1.21
+  brace-expansion@2: 2.1.7
+  brace-expansion@5: 5.0.12
+  http-cache-semantics: 4.3.0
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用
