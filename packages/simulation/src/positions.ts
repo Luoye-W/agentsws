@@ -29,7 +29,8 @@
  * 6. **「我的助理」一次拆成多份**（WP350，决策 900）：一份会议记录 → 替身拆法（`@agentsws/stand-ins` 的
  *    `stubFanoutDraft`，demo 云替身同一份）→ 认岗位（`@agentsws/roles` 的 `resolveFanout`，与服务进程同一份）
  *    → 场景里写的勾掉 / 改归属（`applyFanoutEdits`）→ 要做的事走上面同一个 `open` 各开一件（当任务开），
- *    要记的以 `proposed` 写进知识库（`fanoutNoteCard`，出处 = 这份资料）。助理自己仍然零写。
+ *    要记的写进知识库**就生效**（`fanoutNoteCard`，出处 = 这份资料；WP357 决策 902：以点「就这样」的人的
+ *    名义激活，不再出确认卡）。助理自己仍然零写。
  */
 import type {
   AnswerComponent,
@@ -490,11 +491,13 @@ export function installPositions(world: World): PositionsLoop {
           source_kind: 'meeting',
         }),
       )
+      // 决策 902：人点的「就这样」，写进去就生效
+      await world.knowledge.store.activate(card.id, who)
       notes_to.push(item.brand === true ? 'brand' : (item.position_id as string))
       cards.push(card.id)
     }
-    const proposed = cards.filter(
-      (id) => world.knowledge.store.getUnchecked(id)?.status === 'proposed',
+    const active = cards.filter(
+      (id) => world.knowledge.store.getUnchecked(id)?.status === 'active',
     ).length
     world.appendEvent('simulation.assistant_fanout', {
       batch_id,
@@ -502,7 +505,7 @@ export function installPositions(world: World): PositionsLoop {
       tasks_to,
       notes_to,
       matters,
-      notes_proposed: proposed,
+      notes_active: active,
       memories: send.filter((i) => i.kind === 'memory').length,
       skipped: {
         dropped: skipped.filter((x) => x.why_skipped === 'dropped').length,
