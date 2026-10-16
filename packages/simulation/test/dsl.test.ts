@@ -491,6 +491,47 @@ invariants: [prompt_replayable]`,
     ).toThrow()
   })
 
+  // ── WP350：「我的助理」一次拆成多份 ──────────────────────────────
+  it('assistant.fanout 与 assistant_fanout_tasks / notes 解析得出来；move 写错当场报', () => {
+    const s = parseScenario(
+      MINIMAL.replace(
+        'invariants: [prompt_replayable]',
+        [
+          `  - at: '+3m'`,
+          '    assistant.fanout:',
+          '      who: p_wang',
+          '      drop: [i4]',
+          "      move: ['i3=web-ops']",
+          '      source: |',
+          '        - 客服：整理退货话术',
+          'expected:',
+          '  assistant_fanout_tasks: [customer-care]',
+          '  assistant_fanout_notes: [brand]',
+          'invariants: [prompt_replayable]',
+        ].join('\n'),
+      ),
+      'x.yml',
+    )
+    const f = s.events.find((e) => e.type === 'assistant.fanout')
+    expect(f?.type === 'assistant.fanout' ? f.assistant_fanout : undefined).toEqual({
+      who: 'p_wang',
+      source: '- 客服：整理退货话术\n',
+      drop: ['i4'],
+      move: [{ item: 'i3', position: 'web-ops' }],
+    })
+    expect(s.expected?.assistant_fanout_tasks).toEqual(['customer-care'])
+    expect(s.expected?.assistant_fanout_notes).toEqual(['brand'])
+    expect(() =>
+      parseScenario(
+        MINIMAL.replace(
+          'invariants: [prompt_replayable]',
+          `  - at: '+2m'\n    assistant.fanout: { who: p_wang, source: x, move: [i3] }\ninvariants: [prompt_replayable]`,
+        ),
+        'x.yml',
+      ),
+    ).toThrow()
+  })
+
   it('岗位事件里写错键名会当场报出来（不是悄悄忽略）', () => {
     expect(() =>
       parseScenario(

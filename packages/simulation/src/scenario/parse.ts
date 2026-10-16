@@ -183,6 +183,7 @@ const EVENT_KEYS = [
   'position.open',
   // WP343「我的助理」派活
   'assistant.dispatch',
+  'assistant.fanout',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -318,6 +319,8 @@ const EXPECTED_KEYS = [
   'position_answer_components',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
+  'assistant_fanout_tasks',
+  'assistant_fanout_notes',
   'secretary_kinds',
   'scope_disjoint',
   // WP62（51 §1 N0）
@@ -2296,6 +2299,26 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'assistant.fanout': {
+      known(source, `${path}.${key}`, body, ['who', 'source', 'drop', 'move'])
+      const drop = optStrList(source, `${path}.${key}.drop`, body.drop)
+      const move = optStrList(source, `${path}.${key}.move`, body.move)?.map((m) => {
+        const [item, position] = m.split('=').map((x) => x.trim())
+        if (item === undefined || position === undefined || item === '' || position === '')
+          fail(source, `${path}.${key}.move`, '写成「i3=web-ops」')
+        return { item, position }
+      })
+      return {
+        at,
+        type: 'assistant.fanout',
+        assistant_fanout: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          source: str(source, `${path}.${key}.source`, body.source),
+          ...(drop === undefined ? {} : { drop }),
+          ...(move === undefined ? {} : { move }),
+        },
+      }
+    }
     case 'chat.visitor_message': {
       known(source, `${path}.${key}`, body, ['visitor', 'text'])
       return {
@@ -2589,6 +2612,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.assistant_dispatched_to,
   )
   if (dispatchedTo !== undefined) out.assistant_dispatched_to = dispatchedTo
+  const fanoutTasks = optStrList(
+    source,
+    'expected.assistant_fanout_tasks',
+    raw.assistant_fanout_tasks,
+  )
+  if (fanoutTasks !== undefined) out.assistant_fanout_tasks = fanoutTasks
+  const fanoutNotes = optStrList(
+    source,
+    'expected.assistant_fanout_notes',
+    raw.assistant_fanout_notes,
+  )
+  if (fanoutNotes !== undefined) out.assistant_fanout_notes = fanoutNotes
   const answerComponents = optStrList(
     source,
     'expected.position_answer_components',

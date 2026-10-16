@@ -26,6 +26,10 @@
  *    `pickDispatchTarget`（与服务进程同一份），只在这个人**配过的岗位**里挑；拿不准就不派。派了就走上面
  *    同一个 `open`（当任务开，职责点了名就钉那条）。助理自己没有任何写口：这一步里它名下的
  *    staged / applied 一笔都不该有（`assistant_writes`），改外部的事由那个岗位出审批。
+ * 6. **「我的助理」一次拆成多份**（WP350，决策 900）：一份会议记录 → 替身拆法（`@agentsws/stand-ins` 的
+ *    `stubFanoutDraft`，demo 云替身同一份）→ 认岗位（`@agentsws/roles` 的 `resolveFanout`，与服务进程同一份）
+ *    → 场景里写的勾掉 / 改归属（`applyFanoutEdits`）→ 要做的事走上面同一个 `open` 各开一件（当任务开），
+ *    要记的以 `proposed` 写进知识库（`fanoutNoteCard`，出处 = 这份资料）。助理自己仍然零写。
  */
 import type {
   AnswerComponent,
@@ -37,18 +41,24 @@ import type {
 } from '@agentsws/contracts'
 import { splitAnswer } from '@agentsws/contracts'
 import {
+  applyFanoutEdits,
   type EntryKind,
   entryKindByRules,
+  type FanoutEdit,
+  fanoutNoteCard,
   loadBundledPosition,
+  type PickPosition,
   type Position,
   pickDispatchTarget,
   type RouteCandidate,
+  resolveFanout,
   roleRouteTerms,
   routeWithinPosition,
   settleAlways,
   settleCloseCall,
   settleNoHit,
 } from '@agentsws/roles'
+import { stubFanoutDraft } from '@agentsws/stand-ins'
 import type { World } from './world.js'
 
 export interface PositionRouteRecord {
@@ -83,6 +93,13 @@ export interface PositionsLoop {
     position?: string
     duty?: string
   }): Promise<PositionRouteRecord | undefined>
+  /** WP350：「我的助理」把一份资料拆给几个岗位（场景里写好勾掉 / 改归属）。 */
+  fanout(input: {
+    who: PersonId
+    source: string
+    drop?: string[]
+    move?: { item: string; position: string }[]
+  }): Promise<void>
   /** 路由记录（场景的 `position_routed_to` 断言读它）。 */
   routed: PositionRouteRecord[]
 }
@@ -355,9 +372,9 @@ export function installPositions(world: World): PositionsLoop {
     return item.state === 'blocked' ? undefined : item
   }
 
-  const dispatch: PositionsLoop['dispatch'] = async ({ who, text, position, duty }) => {
-    const before = world.kernel.eventLog.readSync({ workspace_id: world.workspace_id }).length
-    const mine = (staffed.get(who) ?? []).map((id) => {
+  /** 这个人配过的岗位（助理只在这里面挑；职责只算本人名下的）。 */
+  const mineOf = (who: PersonId): PickPosition[] =>
+    (staffed.get(who) ?? []).map((id) => {
       const template = templateOf(id)
       const held = activeOf(who)
       return {
@@ -372,6 +389,23 @@ export function installPositions(world: World): PositionsLoop {
           })),
       }
     })
+
+  /** 助理名下的写（一笔都不该有）。 */
+  const assistantWrites = (before: number): number =>
+    world.kernel.eventLog
+      .readSync({ workspace_id: world.workspace_id })
+      .slice(before)
+      .filter(
+        (e) =>
+          e.actor.id === 'assistant' &&
+          (e.type === 'change.staged' ||
+            e.type.endsWith('.applied') ||
+            e.type === 'approval.created'),
+      ).length
+
+  const dispatch: PositionsLoop['dispatch'] = async ({ who, text, position, duty }) => {
+    const before = world.kernel.eventLog.readSync({ workspace_id: world.workspace_id }).length
+    const mine = mineOf(who)
     const pick = pickDispatchTarget(mine, {
       text,
       ...(position === undefined ? {} : { position }),
@@ -387,16 +421,7 @@ export function installPositions(world: World): PositionsLoop {
         })
       : undefined
     // 助理名下的写：一笔都不该有（它只挑岗位、开事项）
-    const assistant_writes = world.kernel.eventLog
-      .readSync({ workspace_id: world.workspace_id })
-      .slice(before)
-      .filter(
-        (e) =>
-          e.actor.id === 'assistant' &&
-          (e.type === 'change.staged' ||
-            e.type.endsWith('.applied') ||
-            e.type === 'approval.created'),
-      ).length
+    const assistant_writes = assistantWrites(before)
     const timeline = record === undefined ? [] : world.work.store.listMatterEvents(record.matter_id)
     world.appendEvent('simulation.assistant_dispatched', {
       dispatched: pick.ok,
@@ -424,7 +449,71 @@ export function installPositions(world: World): PositionsLoop {
     return record
   }
 
-  return { staff, open, routed, dispatch }
+  const fanout: PositionsLoop['fanout'] = async ({ who, source, drop, move }) => {
+    const before = world.kernel.eventLog.readSync({ workspace_id: world.workspace_id }).length
+    const mine = mineOf(who)
+    const draft = stubFanoutDraft(
+      source,
+      mine.map((p) => p.name),
+    )
+    const items = resolveFanout(mine, draft.items)
+    const edits: FanoutEdit[] = [
+      ...(drop ?? []).map((id) => ({ id, drop: true })),
+      ...(move ?? []).map((m) => ({ id: m.item, position_id: m.position })),
+    ]
+    const { send, skipped } = applyFanoutEdits(mine, items, edits)
+    const batch_id = `fan_${before.toString(36)}`
+    const title = draft.title ?? '会议记录'
+    const tasks_to: string[] = []
+    const matters: string[] = []
+    for (const item of send.filter((i) => i.kind === 'task')) {
+      const record = await open({
+        who,
+        position_id: item.position_id as string,
+        text: item.text,
+        judge: 'task',
+        ...(item.role_id === undefined ? {} : { role_id: item.role_id as RoleId }),
+      })
+      tasks_to.push(item.position_id as string)
+      matters.push(record.matter_id)
+    }
+    const notes_to: string[] = []
+    const cards: string[] = []
+    for (const item of send.filter((i) => i.kind === 'note')) {
+      const card = await world.knowledge.store.propose(
+        fanoutNoteCard(item, {
+          workspace_id: world.workspace_id,
+          owner: who,
+          at: world.clock.now(),
+          batch_id,
+          source_name: title,
+          source_kind: 'meeting',
+        }),
+      )
+      notes_to.push(item.brand === true ? 'brand' : (item.position_id as string))
+      cards.push(card.id)
+    }
+    const proposed = cards.filter(
+      (id) => world.knowledge.store.getUnchecked(id)?.status === 'proposed',
+    ).length
+    world.appendEvent('simulation.assistant_fanout', {
+      batch_id,
+      items: items.length,
+      tasks_to,
+      notes_to,
+      matters,
+      notes_proposed: proposed,
+      memories: send.filter((i) => i.kind === 'memory').length,
+      skipped: {
+        dropped: skipped.filter((x) => x.why_skipped === 'dropped').length,
+        unsure: skipped.filter((x) => x.why_skipped === 'unsure').length,
+        secret: skipped.filter((x) => x.why_skipped === 'secret').length,
+      },
+      assistant_writes: assistantWrites(before),
+    })
+  }
+
+  return { staff, open, routed, dispatch, fanout }
 }
 
 const PRODUCTS = /商品|产品|product/iu
