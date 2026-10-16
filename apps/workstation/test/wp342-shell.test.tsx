@@ -31,7 +31,7 @@ const MODELS: FreeChatModels = {
 
 const SCENES: DshScenesData = {
   available: true,
-  dsh_version: '0.2.1-alpha.2',
+  dsh_version: '0.2.1-alpha.4',
   scenes: [
     {
       name: 'agentsws',

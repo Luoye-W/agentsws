@@ -142,6 +142,25 @@ describe('WP143 推理块多轮原样回传', () => {
     ])
     expect(wire.messages[3]?.content).toEqual([{ type: 'text', text: 'b' }])
   })
+  it('WP354 跟官方 alpha.4：空文本块不发；一条消息一块不剩就整条跳过', () => {
+    const wire = toMessagesRequest([
+      { role: 'user', content: 'x' },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        tool_calls: [{ id: 'c1', name: 'get_order', input: {} }],
+      },
+      { role: 'tool', tool_call_id: 'c1', content: 'ok' },
+      { role: 'assistant', content: [{ type: 'text', text: '' }] },
+      { role: 'user', content: [{ type: 'text', text: '' }, { type: 'text', text: 'y' }] },
+    ])
+    expect(JSON.stringify(wire.messages)).not.toContain('"text":""')
+    expect(wire.messages[1]?.content).toEqual([
+      { type: 'tool_use', id: 'c1', name: 'get_order', input: {} },
+    ])
+    // 第二条空的 assistant 整条没了：tool_result 与后面那句 user 合进同一条
+    expect(wire.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
+  })
 })
 
 describe('WP143 用量口径：Messages 的缓存命中加回 input_tokens', () => {

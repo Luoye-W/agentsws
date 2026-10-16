@@ -2,7 +2,7 @@
  * WP181：官方「自动化任务」的四个工具（`schedule_create` / `schedule_list` / `schedule_update` /
  * `schedule_delete`）在三个运行时里的共用定义。
  *
- * **名字、描述、参数一个字不改**，照抄 `@deepseek-ai/dsh-tool-schedule@0.2.1-alpha.2`（MIT，Copyright (c) 2026
+ * **名字、描述、参数一个字不改**，照抄 `@deepseek-ai/dsh-tool-schedule@0.2.1-alpha.4`（MIT，Copyright (c) 2026
  * DeepSeek）`lib/index.js` 里 `apply` 注册的那四份（WP293 之前在 `dsh-schedule` 的 `registerScheduleTools` 里）——stub / direct 用这里的 JSON Schema，
  * dsh 那一档直接用官方注册出来的定义（`dsh-adapter` 的 `official-schedule.ts`）。两份逐字相等由
  * `packages/dsh-adapter/test/official-schedule.test.ts` 钉住：上游改了描述或参数，那里先红。
@@ -121,7 +121,12 @@ export const SCHEDULE_TOOL_DEFS: readonly ToolDef[] = [
         title: {
           type: 'string',
           description:
-            'Task name of at most 120 characters, shown on the task card and in task lists.',
+            "Concise task name in the user's language, at most 120 characters. " +
+            'Name only the core action and subject; keep essential target identifiers such as PR numbers and branch names. ' +
+            'Do not include execution frequency (e.g. daily, hourly), scheduled dates/times, time zones, task status, ' +
+            'or configuration and execution details (e.g. read-only mode, profile-tag filters), even when embedded in the requested or existing title. ' +
+            'Do not append parenthetical notes. ' +
+            'Put scheduling information in the timing parameters and execution instructions in prompt.',
         },
         after_seconds: { type: 'number', description: 'Delay in whole seconds.' },
         ...SELECTOR_PROPERTIES,
@@ -153,7 +158,8 @@ export const SCHEDULE_TOOL_DEFS: readonly ToolDef[] = [
       type: 'object',
       properties: {
         id: ID,
-        title: { type: 'string', description: 'New task name of at most 120 characters.' },
+        // WP354（dsh 0.2.1-alpha.4，官方提交 9f5bc9669b「简化自动化任务标题，去除时间与执行备注」）：两处 title 说明换了
+        title: { type: 'string', description: 'New task name; follow the schedule_create title rules.' },
         prompt: { type: 'string', description: 'New reminder content.' },
         ...SELECTOR_PROPERTIES,
       },

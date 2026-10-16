@@ -119,7 +119,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         const mod = await import('@deepseek-ai/dsh-agent')
         const ok = typeof mod.default === 'function'
         return ok
-          ? { ok: true, detail: 'dsh 0.2.1-alpha.2 Agent 层可解析；运行走同进程 headless 组合' }
+          ? { ok: true, detail: 'dsh 0.2.1-alpha.4 Agent 层可解析；运行走同进程 headless 组合' }
           : { ok: false, detail: 'dsh-agent 没有默认导出的插件' }
       } catch (e) {
         return { ok: false, detail: e instanceof Error ? e.message : String(e) }

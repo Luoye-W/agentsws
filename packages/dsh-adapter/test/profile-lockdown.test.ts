@@ -50,7 +50,7 @@
  * WP134：`deepseek-account` 从"永远关"改成"**默认关、选了才开**"（Luoye 09-24：做成第三种模型来源）。
  * 走的是路线 (b)：profile 层那一行 `disabled: true` **原样不动**，另有一份只打开它的运行时 patch
  * （`profiles/agentsws/deepseek-account.on.patch.yml`），用户选了「用我的 DeepSeek 账号登录」才
- * `--patch` 叠上。这里对应改成 {@link OPT_IN} 那一组：不叠 → 组合树里一定是关的；叠上 → 只有这一行
+ * `--patch` 叠上。这里对应改成 {@link OPT_IN} 那一组：不叠 → 组合树里一定是关的；叠上 → 只有它那几行
  * 被打开、别的锁定一行不动；opt-in 文件里的 id 同样走「id 存在、指向的还是那个插件」的校验。
  * 两档运行时的模块图里仍然**没有**它（`FORBIDDEN` 不变）：服务进程只从
  * `@agentsws/dsh-adapter/deepseek-account` 子路径懒加载，主入口不 re-export。
@@ -206,10 +206,22 @@ const INSERTED_OFF: readonly { id: string; name: string }[] = [
  * 或 `INSERTED_OFF` 里的一行（没选时由 profile 层关死），再由 `file` 那份运行时 patch 打开。
  * WP144 起一份文件可以打开几行（电脑操控是服务 + 提供方两行，要一起开）。
  */
+/**
+ * WP354（dsh 0.2.1-alpha.4）：官方 headless 组合自己关掉的行（`@deepseek-ai/dsh-headless` 的 `cordis.patch.yml`
+ * 写着 `disabled: true`，我们这层不写）。账号模块 inject 的就是这两个服务，所以选了账号登录时它们跟着一起开。
+ */
+const OFFICIAL_HEADLESS_OFF: readonly { id: string; name: string }[] = [
+  { id: 'credentials', name: '@deepseek-ai/dsh-credentials-local' },
+  { id: 'authorization', name: '@deepseek-ai/dsh-authorization' },
+]
+
 const OPT_IN: readonly { file: string; rows: readonly { id: string; name: string }[] }[] = [
   {
     file: 'deepseek-account.on.patch.yml',
-    rows: [{ id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform' }],
+    rows: [
+      { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform' },
+      ...OFFICIAL_HEADLESS_OFF,
+    ],
   },
   { file: 'computer-use.on.patch.yml', rows: INSERTED_OFF },
 ]
@@ -713,7 +725,18 @@ describe('WP134 DeepSeek 账号登录：没选时一定是关的、选了才开�
   it('每一行 opt-in 在 profile 层仍是锁死的（LOCKDOWN / INSERTED_OFF 里关着，文件里也是）', () => {
     const rows = parsePatch(readFileSync(PATCH, 'utf8'))
     const all = [...lockRows(rows), ...insertedRows(rows)]
-    for (const want of OPT_IN_ROWS) {
+    // WP354：官方 headless 自己关的那两行，"关着"由官方 bundle 的 patch 保证（我们这层不写，也就不在 LOCKDOWN 里）
+    const headless = parsePatch(
+      readFileSync(
+        join(dirname(require.resolve('@deepseek-ai/dsh-headless/package.json')), 'cordis.patch.yml'),
+        'utf8',
+      ),
+    )
+    for (const want of OFFICIAL_HEADLESS_OFF) {
+      expect(lockRows(headless).find((r) => r?.id === want.id)?.disabled, want.id).toBe(true)
+      expect(all.find((r) => r?.id === want.id), `${want.id} 我们这层不该写`).toBeUndefined()
+    }
+    for (const want of OPT_IN_ROWS.filter((r) => !OFFICIAL_HEADLESS_OFF.some((o) => o.id === r.id))) {
       const locked =
         LOCKDOWN.find((l) => l.id === want.id)?.disabled === true ||
         INSERTED_OFF.some((l) => l.id === want.id)

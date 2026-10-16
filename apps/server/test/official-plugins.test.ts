@@ -111,7 +111,7 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     expect(card.payload).toMatchObject({
       action: 'install',
       name: SAMPLE,
-      version: '0.2.1-alpha.2',
+      version: '0.2.1-alpha.4',
       source: 'shipped',
       license: 'MIT',
       network: false,
@@ -121,7 +121,7 @@ describe('WP180 官方插件：出卡、批了才做', () => {
 
     const decided = await post(`/v1/approvals/${card.id}/decide`, { action: 'approve' })
     expect(decided.status).toBe(200)
-    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.4' })
     const now = await data<OfficialPluginsView>(await api('/v1/settings/official-plugins'))
     expect(now.plugins.find((p) => p.name === SAMPLE)?.state).toBe('installed')
     expect(events('official_plugin.changed').map((e) => e.payload)).toEqual([
@@ -134,7 +134,7 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     )
     const offId = off.plugins.find((p) => p.name === SAMPLE)?.pending?.approval_item_id
     await post(`/v1/approvals/${offId}/decide`, { action: 'reject', reason: '先留着' })
-    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.4' })
   })
 
   it('清单外的直接拒（403），记 official_plugin.rejected；已装的再点装 → 409', async () => {
