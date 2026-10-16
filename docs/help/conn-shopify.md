@@ -11,7 +11,7 @@ roles: [dtc.store, dtc.store-config, dtc.catalog, dtc.support, site.shopify-buil
 不用建开发者应用、不用填任何密钥。
 
 1. 先登录 Agents 工坊账号——是你在 Agents 工坊注册的账号（积分、云端功能都在上面），**不是 Shopify 后台的账号**。卡上点「去登录」会跳到「设置 → 账号」，登完自动回来。
-2. 在连接页的「Shopify 店铺」卡上点 **连接 Shopify**。店铺域名会自动带上（品牌档案、建站岗位找到的店）；没有就填一格 `xxx.myshopify.com`。
+2. 在「设置 → 账号连接」的「Shopify 店铺」卡上点 **连接 Shopify**。店铺域名会自动带上（品牌档案、建站岗位找到的店）；没有就填一格 `xxx.myshopify.com`。
 3. 浏览器会打开 Shopify 自己的授权页，用店主账号点 **安装**。
 4. 回到工坊，卡上变成「已连接」：店名、能管哪些东西。点「测试连接」能确认一下。
 

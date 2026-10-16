@@ -6,7 +6,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Hint } from '@/components/ui/hint'
+import { SettingRow } from '@/components/settings-panel/setting-row'
 import { Switch } from '@/components/ui/switch'
 import { getAutoMemory, setAutoMemory } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -25,20 +25,22 @@ export function AutoMemorySetting(): ReactNode {
   })
   if (current.data === undefined) return null
   return (
-    <div className="flex items-center justify-between" data-testid="settings-auto-memory">
-      <span className="flex items-center gap-1">
-        {t('settings.auto_memory')}
-        <Hint text={t('settings.auto_memory.hint')} />
-      </span>
-      <Switch
-        aria-label={t('settings.auto_memory')}
-        data-testid="settings-auto-memory-switch"
-        checked={current.data.enabled}
-        disabled={save.isPending}
-        onCheckedChange={(v) => {
-          save.mutate(v)
-        }}
-      />
-    </div>
+    <SettingRow
+      testId="settings-auto-memory"
+      title={t('settings.auto_memory')}
+      desc={t('sp.auto_memory.desc')}
+      hint={t('settings.auto_memory.hint')}
+      control={
+        <Switch
+          aria-label={t('settings.auto_memory')}
+          data-testid="settings-auto-memory-switch"
+          checked={current.data.enabled}
+          disabled={save.isPending}
+          onCheckedChange={(v) => {
+            save.mutate(v)
+          }}
+        />
+      }
+    />
   )
 }

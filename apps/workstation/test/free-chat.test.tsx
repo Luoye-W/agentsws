@@ -54,6 +54,16 @@ vi.mock('@/lib/free-chat', async () => {
     getAssistantState: async () => ({ suggestions: [], targets: [] }),
     listAssistantMemory: async () => [],
     listFreeChatSessions: async () => state.sessions,
+    // WP352：只有一条长对话
+    getAssistantThread: async () => ({
+      session: state.sessions[0] ?? {
+        id: 'fchat_1',
+        title: '助理',
+        created_at: T0,
+        updated_at: T0,
+      },
+      segments: [],
+    }),
     listFreeChatMessages: async (id: string) => state.messages[id] ?? [],
     createFreeChatSession: async () => {
       const s = { id: 'fchat_1', title: '新对话', created_at: T0, updated_at: T0 }
@@ -262,7 +272,7 @@ describe('WP188 随便聊：一轮对话', () => {
         },
       },
     ]
-    renderPage('/assistant/fchat_9')
+    renderPage()
     const link = await screen.findByTestId('assistant-dispatch-link')
     expect(link.textContent).toBe('已交给 Reddit 运营 · 自家版运营')
     expect(link.getAttribute('href')).toBe('/matters/mat_7')

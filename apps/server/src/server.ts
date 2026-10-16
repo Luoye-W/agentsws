@@ -10498,6 +10498,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
+      observe: (actor, type, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: actor.workspace_id as WorkspaceId,
+          type,
+          actor: { kind: 'person', id: actor.person_id },
+          subject: { type: 'free_chat', id: String(payload.segment_id ?? '') },
+          correlation: {
+            trace_id: `tr_${String(payload.run_id ?? payload.segment_id ?? 'assistant')}`,
+          },
+          payload: { ...payload, person_id: actor.person_id },
+        })
+      },
       // WP343：助理这一层的记忆（本人的）——开关与 WP320 同一个；记一条 / 删一条照常进记忆账本（小提醒读它）与事件日志（不带正文）
       memory: {
         auto: (actor) => autoMemorySettings.get(actor.workspace_id, actor.person_id),

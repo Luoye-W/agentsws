@@ -133,12 +133,10 @@ describe('左栏 / 顶栏新风格（WP96）', () => {
   })
 })
 
-/** WP342：点开账号菜单、展开「设置」那一组。 */
-async function openSettingsGroup(): Promise<void> {
+/** WP342 / WP356：点开账号菜单（「设置」那一组 WP356 起是一行，点了开设置弹窗）。 */
+async function openAccountMenu(): Promise<void> {
   fireEvent.click(screen.getByTestId('account-toggle'))
-  const group = await screen.findByTestId('account-group-settings-toggle')
-  // 展开态记在本机：上一条用例展开过就别再点（点了反而收起）
-  if (group.getAttribute('aria-expanded') !== 'true') fireEvent.click(group)
+  await screen.findByTestId('account-menu')
 }
 
 describe('WP271 三种模式：左栏与账号块', () => {
@@ -161,11 +159,10 @@ describe('WP271 三种模式：左栏与账号块', () => {
         <div>主区</div>
       </AppShell>,
     )
-    // WP342：「岗位与品牌」在账号菜单的「设置」组里
-    await openSettingsGroup()
-    await waitFor(() => {
-      expect(screen.getByTestId('nav-org').textContent).toBe('岗位与品牌')
-    })
+    // WP356：「岗位与品牌」收进设置弹窗（品牌 → 岗位与职责）；账号菜单里只一行「设置」
+    await openAccountMenu()
+    expect(screen.getByTestId('nav-settings').textContent).toContain('设置')
+    expect(screen.queryByTestId('nav-org')).toBeNull()
     expect(screen.queryByTestId('nav-secretary')).toBeNull()
     const account = screen.getByTestId('account-block').textContent ?? ''
     expect(account).toContain('Nordvolt')
@@ -190,9 +187,7 @@ describe('WP271 三种模式：左栏与账号块', () => {
     })
     // WP343：「我的代理」并进「我的助理」（右上角「替我答同事」，见 wp343-assistant.test.tsx）
     expect(screen.queryByTestId('nav-secretary')).toBeNull()
-    await openSettingsGroup()
-    await waitFor(() => {
-      expect(screen.getByTestId('nav-org').textContent).toBe('公司')
-    })
+    await openAccountMenu()
+    expect(screen.getByTestId('nav-settings')).toBeTruthy()
   })
 })

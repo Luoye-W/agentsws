@@ -7,7 +7,7 @@ How to plug your Shopify store into Agents Workshop.
 No developer app, no keys to paste.
 
 1. Sign in to your Agents Workshop account — the one you registered with Agents Workshop (credits and cloud features live there), **not your Shopify admin login**. “Sign in” on the card takes you to Settings → Account and brings you back afterwards.
-2. On the Connections page, click **Connect Shopify** on the "Shopify store" card. The store domain is filled in for you (from the brand profile or the store the site position found); if not, type `xxx.myshopify.com`.
+2. In Settings → Account connections, click **Connect Shopify** on the "Shopify store" card. The store domain is filled in for you (from the brand profile or the store the site position found); if not, type `xxx.myshopify.com`.
 3. Your browser opens Shopify's own approval page — click **Install** with the store owner account.
 4. Back in the Workshop, the card shows "Connected": the store name and what it can manage. "Test" double-checks it.
 

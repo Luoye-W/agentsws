@@ -13,7 +13,7 @@ If you never chose, it picks in this order: linked an Agents Workshop account �
 ## Use the official option (credits)
 
 1. Link your Agents Workshop account in [Settings → Account & credits](/settings/credits) first (see [Agents Workshop models and credits](help:agentsws-credits)).
-2. Open "Connections" (your name at the bottom left → Settings → Connections) and click "Official (credits)" on the "Search data" row.
+2. Open Settings (⌘, or your name at the bottom left → Settings) → Brand → Data sources and click "Official (credits)" on the "Search data" row.
 3. Once it says "Ready" with the unit prices (per search-results query, per AI platform), you're done.
 
 ## Bring your own key
@@ -25,7 +25,7 @@ Three providers:
 - **Serper**: Google web results only; the cheapest.
 
 1. Sign up with the provider and get a key (for DataForSEO write it as `login:password`).
-2. Open "Connections", click "My own key" on the "Search data" row, pick the provider, paste the key and click "Save".
+2. Open "Settings → Data sources", click "My own key" on the "Search data" row, pick the provider, paste the key and click "Save".
 3. Click "Test connection". Fill it again to replace; "Remove" to drop it.
 
 The key stays in this computer's encrypted store — never in logs, never in the cloud.

@@ -13,8 +13,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, CircleDashed, Puzzle } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ExtensionPairingCode } from '@/components/connections/browser-extension'
 import { ExtensionInstall } from '@/components/connections/extension-install'
+import { settingsHref } from '@/components/settings-panel/route'
 import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -71,6 +73,7 @@ export function ExtensionOnboardCard(props: {
 }): React.ReactNode {
   const { t, lang } = useApp()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   // 配对、装插件是所有者的事（与连接卡同一把尺子）
   const owner = useConnectAssignment().assignment
   const key = [EXTENSION_NEEDS_KEY, props.assignment, props.roleIds.join(',')]
@@ -183,7 +186,18 @@ export function ExtensionOnboardCard(props: {
               {t(`extonboard.step.${s.step}`)}
             </li>
           ))}
-          <li className="text-xs text-ws-muted-fg">{t('extonboard.step.hint')}</li>
+          <li className="flex flex-wrap items-center gap-2 text-xs text-ws-muted-fg">
+            {t('extonboard.step.hint')}
+            {/* WP356 起连接页收进了设置弹窗：插件那一节（配对、广告后台的同意与开关）在「设置 → 浏览器插件」 */}
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => navigate(settingsHref('extension', 'extension'))}
+              data-testid="extension-onboard-settings"
+            >
+              {t('extonboard.settings')}
+            </Button>
+          </li>
         </ul>
       ) : null}
       {phase === 'plan' && nextPlan !== undefined ? (

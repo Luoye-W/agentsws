@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, type RenderResult, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
+import type { SettingsTarget } from '@/components/settings-panel/route'
+import { SettingsDialog } from '@/components/settings-panel/settings-dialog'
 import { AppProvider } from '@/lib/app-context'
 
 export function renderWithProviders(
@@ -29,4 +31,17 @@ export function renderWithProviders(
 export async function openSettingsTab(tab: string): Promise<void> {
   fireEvent.click(screen.getByTestId('rail-icon-settings'))
   fireEvent.click(await screen.findByTestId(`settings-tab-${tab}`))
+}
+
+/** WP356：设置弹窗开在某一节（原来测 `SettingsPage` 的题改测这里）。 */
+export function renderSettings(
+  target: SettingsTarget,
+  route = '/settings',
+  position = 'asg_1',
+): RenderResult {
+  return renderWithProviders(
+    <SettingsDialog target={target} onNavigate={() => {}} onClose={() => {}} />,
+    route,
+    position,
+  )
 }

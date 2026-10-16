@@ -17,6 +17,7 @@ export const EXT_ONBOARD_ZH: Record<string, string> = {
   'extonboard.step.hint': '点浏览器右上角的拼图图标 → Agents 工坊助手 → 设置',
   'extonboard.plan': '下一步：{name}',
   'extonboard.later': '稍后',
+  'extonboard.settings': '插件设置',
   'extonboard.later.hint': '今天先不提醒，明天再出来',
   'extonboard.onboarding.later': '稍后再装',
   'extonboard.onboarding.later.line': '可以先完成设置，回头在岗位页顶上那张卡里装。',
@@ -39,6 +40,7 @@ export const EXT_ONBOARD_EN: Record<string, string> = {
   'extonboard.step.hint': 'Puzzle icon (top right of the browser) → Agents Workshop → Settings',
   'extonboard.plan': 'Next: {name}',
   'extonboard.later': 'Later',
+  'extonboard.settings': 'Extension settings',
   'extonboard.later.hint': 'No reminder today; it comes back tomorrow',
   'extonboard.onboarding.later': 'Install later',
   'extonboard.onboarding.later.line':

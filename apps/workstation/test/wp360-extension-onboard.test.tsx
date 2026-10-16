@@ -8,12 +8,19 @@
  * 5. 阶段判断（纯函数）。
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExtensionOnboardCard, onboardPhase } from '@/components/connections/extension-onboard-card'
 import { PlanList } from '@/components/onboarding/plan-list'
 import { type ConnectContext, ConnectWidget } from '@/components/setup/connect-widgets'
 import type { ExtensionNeedsView, OnboardingPlanView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
+
+/** 现在在哪个地址（点「插件设置」之后看）。 */
+function Where(): React.ReactNode {
+  const loc = useLocation()
+  return <span data-testid="where">{`${loc.pathname}${loc.hash}`}</span>
+}
 
 const base = (over: Partial<ExtensionNeedsView> = {}): ExtensionNeedsView => ({
   needed: true,
@@ -97,12 +104,20 @@ describe('岗位页顶上那张卡', () => {
   it('配上了：还差一步（连 Reddit）→ 做完、方案没设 → 下一步出方案卡 → 不画', async () => {
     state.needs = base({ paired: true })
     const view = renderWithProviders(
-      <ExtensionOnboardCard roleIds={['social.reddit']} assignment="asg_reddit" mode="position" />,
+      <>
+        <ExtensionOnboardCard roleIds={['social.reddit']} assignment="asg_reddit" mode="position" />
+        <Where />
+      </>,
     )
     const card = await screen.findByTestId('extension-onboard')
     expect(card.getAttribute('data-phase')).toBe('steps')
     expect(screen.getByTestId('extension-onboard-step').textContent).toContain('连接 Reddit')
     expect(screen.queryByTestId('extension-generate')).toBeNull()
+    // 插件设置在设置弹窗里那一项（WP356）
+    fireEvent.click(screen.getByTestId('extension-onboard-settings'))
+    await waitFor(() =>
+      expect(screen.getByTestId('where').textContent).toBe('/settings/extension#extension'),
+    )
     view.unmount()
 
     state.needs = base({ paired: true, steps: [{ step: 'reddit', done: true }] })
