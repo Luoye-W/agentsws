@@ -105,7 +105,8 @@ export interface TrayModelInput {
    */
   appUpdate?:
     | { state: 'available'; version: string }
-    | { state: 'downloading'; version: string; percent: number }
+    /** WP351：`percent` 0 = 没收到进度（只说「正在下载…」）；`phase: 'prepare'` = 在摆新版。 */
+    | { state: 'downloading'; version: string; percent: number; phase?: 'prepare' }
     | { state: 'ready'; version: string }
     /** WP337：选了「空闲时重启」，在等。 */
     | { state: 'waiting'; version: string }
@@ -310,7 +311,12 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     items.push({
       id: 'download-update',
       type: 'normal',
-      label: t.updateDownloading.replace('{percent}', String(up.percent)),
+      label:
+        up.phase === 'prepare'
+          ? t.updatePreparing
+          : up.percent > 0
+            ? t.updateDownloading.replace('{percent}', String(up.percent))
+            : t.updateDownloadingPlain,
       enabled: false,
     })
   else if (up?.state === 'ready')

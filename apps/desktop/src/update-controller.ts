@@ -50,7 +50,18 @@ export type UpdateStatus =
       /** notify 档要把人送去的那一页。 */
       url?: string
     }
-  | { state: 'downloading'; version: string; percent: number; source: UpdateSource }
+  | {
+      state: 'downloading'
+      version: string
+      /** 0 = 还没收到进度事件（增量下载不发进度）：界面只说「正在下载…」，不写 0%。 */
+      percent: number
+      source: UpdateSource
+      /**
+       * WP351：下完了、正在把新版摆到旁边（解压 + 冒烟，Windows 版本目录那一档要十来秒）。
+       * 界面说「正在准备新版…」。没有这个字段 = 还在下。
+       */
+      phase?: 'prepare'
+    }
   | { state: 'ready'; version: string; source: UpdateSource }
   /** WP337：用户选了「空闲时重启」——等没有正在输出的运行就自己重启；点一下取消。 */
   | { state: 'waiting'; version: string; source: UpdateSource }
@@ -67,7 +78,14 @@ export type UpdateStatus =
 /** 一个更新源能做的三件事（electron-updater 包一层；notify 档只会 `check`）。 */
 export interface UpdateBackend {
   check(): Promise<UpdateInfo | undefined>
-  download(onProgress: (percent: number) => void): Promise<void>
+  /**
+   * 下载。`onPhase('prepare')`（WP351，可选）= 下完了、在摆新版（解压 / 冒烟）——
+   * 增量下载往往几秒就完，真正花时间的是这一步，界面要能说出来。
+   */
+  download(
+    onProgress: (percent: number) => void,
+    onPhase?: (phase: 'prepare') => void,
+  ): Promise<void>
   /** 退出、装、自动重开。真的那份不会返回（进程退了）。 */
   install(): void
 }
@@ -375,11 +393,18 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     const source = activeSource
     set({ state: 'downloading', version, percent: 0, source })
     try {
-      await active.download((percent) => {
-        if (current.state !== 'downloading') return
-        const clamped = Math.max(0, Math.min(100, Math.round(percent)))
-        if (clamped !== current.percent) set({ ...current, percent: clamped })
-      })
+      await active.download(
+        (percent) => {
+          if (current.state !== 'downloading') return
+          const clamped = Math.max(0, Math.min(100, Math.round(percent)))
+          if (clamped !== current.percent) set({ ...current, percent: clamped })
+        },
+        (phase) => {
+          if (current.state !== 'downloading' || current.phase === phase) return
+          log.info('下完了，正在准备新版', { version })
+          set({ ...current, phase })
+        },
+      )
     } catch (err) {
       log.warn('下载更新失败', { version, error: String(err) })
       return set({

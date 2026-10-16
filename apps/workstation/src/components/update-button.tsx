@@ -24,7 +24,15 @@ export type UpdateStatusView =
       source: 'primary' | 'github'
       url?: string
     }
-  | { state: 'downloading'; version: string; percent: number; source: 'primary' | 'github' }
+  | {
+      state: 'downloading'
+      version: string
+      /** 0 = 还没收到进度事件（增量下载不发进度）：只说「正在下载…」，不写 0%。 */
+      percent: number
+      source: 'primary' | 'github'
+      /** WP351：下完了、在摆新版（解压 / 冒烟）→「正在准备新版…」。 */
+      phase?: 'prepare'
+    }
   | { state: 'ready'; version: string; source: 'primary' | 'github' }
   /** WP337：等没有正在输出的就自己重启（点一下取消）。 */
   | { state: 'waiting'; version: string; source: 'primary' | 'github' }
@@ -46,6 +54,9 @@ interface UpdateBridge {
   restart?(choice: 'now' | 'idle'): Promise<string>
   cancelWait?(): Promise<boolean>
 }
+
+/** WP351：更新状态补拉的间隔。 */
+export const UPDATE_POLL_MS = 10_000
 
 function updateBridge(): UpdateBridge | undefined {
   const w = globalThis.window as unknown as { agentsws?: { update?: UpdateBridge } } | undefined
@@ -72,8 +83,21 @@ export function UpdateButton(): React.ReactNode {
     const off = bridge.onChange((s) => {
       setStatus(s)
     })
+    /*
+     * WP351：每 10 秒补拉一次。事件漏了（窗口刚开、渲染进程重载那一瞬）按钮会一直停在旧状态——
+     * Windows 真机上「正在下载 0%」停住，其实壳里早就 ready 了。
+     */
+    const poll = setInterval(() => {
+      void bridge.status().then(
+        (s) => {
+          if (live) setStatus(s)
+        },
+        () => undefined,
+      )
+    }, UPDATE_POLL_MS)
     return () => {
       live = false
+      clearInterval(poll)
       off()
     }
   }, [])
@@ -151,7 +175,7 @@ export function UpdateButton(): React.ReactNode {
       >
         <view.Icon aria-hidden className={cn('size-4 shrink-0', view.spin && 'animate-spin')} />
         <span className="flex-1 truncate">{view.label}</span>
-        {status.state === 'downloading' ? (
+        {status.state === 'downloading' && status.phase === undefined && status.percent > 0 ? (
           <span className="ws-num text-[11px] text-ws-muted-fg" data-testid="update-percent">
             {status.percent}%
           </span>
@@ -194,13 +218,16 @@ function describe(
         }),
       }
     case 'downloading':
+      // WP351：下完了在摆新版 →「正在准备新版…」；没进度事件时只说「正在下载…」（百分比另画，0 不画）
       return {
         ...base,
         Icon: Loader2,
         spin: true,
         disabled: true,
-        label: t('update.downloading'),
-        tip: t('update.downloading.tip', { version: s.version }),
+        label: t(s.phase === 'prepare' ? 'update.preparing' : 'update.downloading'),
+        tip: t(s.phase === 'prepare' ? 'update.preparing.tip' : 'update.downloading.tip', {
+          version: s.version,
+        }),
       }
     case 'ready':
       return {

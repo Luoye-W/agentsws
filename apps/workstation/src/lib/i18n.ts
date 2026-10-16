@@ -3554,8 +3554,10 @@ const zh: Table = {
   'update.available': '有新版本',
   'update.available.tip': '新版本 {version}，点一下在后台下载',
   'update.available.notify': '新版本 {version}，点一下去下载页（这台 Mac 不能自动更新）',
-  'update.downloading': '正在下载',
+  'update.downloading': '正在下载…',
   'update.downloading.tip': '正在后台下载 {version}，下完会变成「重启并更新」',
+  'update.preparing': '正在准备新版…',
+  'update.preparing.tip': '{version} 下好了，正在解压、自检，好了会变成「重启并更新」',
   'update.ready': '重启并更新',
   'update.ready.tip': '{version} 已下载好。点一下退出、更新、自动重新打开；你的数据和设置都在',
   'update.installing': '正在重启…',
@@ -7760,7 +7762,10 @@ const en: Table = {
   'update.available.tip': 'Version {version} is out. Click to download it in the background',
   'update.available.notify':
     'Version {version} is out. Click to open the download page (this Mac cannot update itself)',
-  'update.downloading': 'Downloading',
+  'update.downloading': 'Downloading…',
+  'update.preparing': 'Getting it ready…',
+  'update.preparing.tip':
+    '{version} is downloaded; unpacking and checking it. It turns into “Restart to update” when done',
   'update.downloading.tip':
     'Downloading {version} in the background. It turns into “Restart to update” when done',
   'update.ready': 'Restart to update',
