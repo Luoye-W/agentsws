@@ -249,6 +249,8 @@ describe('WP352 翻旧账与搜索', () => {
     expect((await t.port.messages(actor, sid)).length).toBe(before + 2)
     const hits = (await t.port.searchHistory?.(actor, { q: '退货' })) ?? []
     expect(hits.some((h) => h.kind === 'summary' && h.title === '退货口径')).toBe(true)
+    // 小结的节标题不进片段
+    expect(hits.find((h) => h.kind === 'summary')?.snippet).not.toContain('##')
     const msg = hits.find((h) => h.kind === 'message')
     expect(msg?.snippet).toContain('退货')
     expect(msg?.segment_id).toBeDefined()

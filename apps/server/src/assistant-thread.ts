@@ -253,6 +253,16 @@ export interface HistoryHit {
   score: number
 }
 
+/** 小结是分节的 markdown：去掉节标题与「无」，条目用「；」连起来再截。 */
+const plainSummary = (text: string): string =>
+  text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'))
+    .map((l) => l.replace(/^[-*]\s*/u, ''))
+    .filter((l) => l !== '无')
+    .join('；')
+
 const snippetAround = (text: string, words: readonly string[]): string => {
   const flat = text.replace(/\s+/gu, ' ').trim()
   const lower = flat.toLowerCase()
@@ -295,7 +305,7 @@ export function searchHistory(
         kind: 'summary',
         at: seg.started_at,
         ...(title === undefined ? {} : { title }),
-        snippet: snippetAround(seg.summary ?? seg.title ?? '', words),
+        snippet: snippetAround(plainSummary(seg.summary ?? seg.title ?? ''), words),
         score: s + 0.5,
       })
     if (seg.id === q.skip) continue
