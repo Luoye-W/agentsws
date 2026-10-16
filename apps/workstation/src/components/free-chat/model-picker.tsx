@@ -20,6 +20,7 @@ import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandMark } from '@/components/design'
 import { hasVendorIcon, VendorIcon } from '@/components/models/vendor-icon'
+import { settingsHref } from '@/components/settings-panel/route'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
 import { getCloudCredits, getMyCloudAllocation, getPositions, setModelDefaults } from '@/lib/api'
@@ -408,7 +409,8 @@ export function ModelPicker({
               </button>
             )}
             <Link
-              to="/settings?tab=models"
+              // WP356：设置弹窗「AI → 模型」那一节
+              to={settingsHref('models')}
               data-menu-item
               data-testid={`${testId}-manage`}
               className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"

@@ -94,6 +94,10 @@ describe('WP362 AI 钮：按来源分组、每行右边那一格', () => {
     expect(price('agentsws/deepseek-v4-flash-0731')).toBe('限免')
     expect(price('openai-codex/gpt-5.5')).toBe('订阅额度')
     expect(price('mine/gpt-4o-mini')).toBe('用你自己的 key')
+    // 底部「管理模型…」开设置弹窗的「AI → 模型」（WP356）
+    expect(within(menu).getByTestId('model-pick-manage').getAttribute('href')).toBe(
+      '/settings/models',
+    )
     // 厂商图标（LobeHub 那几张）
     expect(menu.querySelector('[data-testid="vendor-icon"][data-vendor="qwen"]')).not.toBeNull()
   })
