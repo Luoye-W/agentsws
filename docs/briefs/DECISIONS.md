@@ -990,3 +990,4 @@
 | 905 | （WP350）「你的习惯」进助理记忆、业务口径进知识库待确认、像口令的两边都不进 | 待定（建议同意） | 低 |
 | 906 | （Luoye 10-16）左栏学 Claude 收紧：岗位 / 职责不靠缩进分级、去常驻「>」与数字、hover 出「>」；「我的助理」改「助理」；「聊天窗」不并进助理：访客对话并进「消息」作一个来源「网站聊天」，挂件设置挪进「消息渠道」叫「网站聊天窗」（Luoye 10-16 追加）；更新进度显示修（增量下载无进度、解压无提示）。派 WP351 | **Luoye 定**（聊天窗不合并为 Fable 判断） | 中 |
 | 911 | （Luoye 10-16）不再用 DeepSeek 自带联网搜索（实测 Reddit / LinkedIn / YouTube / X / Facebook / TikTok / Quora 全被排除，连 site: 都搜不到），改用**工坊内置浏览器**搜（Electron 应用内浏览器，学 Proma；不拉外部 Chrome，Luoye 10-16 追加「太跳跃，要在工坊里完成」），Google → Bing 回退；默认后台静默搜、不弹面板，只有被人机验证拦下 / 要登录时才把那页亮给人处理（Luoye 10-16 再补），不绕过验证码。派 WP353 | **Luoye 定** | 高 |
+| 921 | （Luoye 10-16「尽量用 Google」+ Fable 实测）搜索走工坊内置浏览器（Electron 隐藏窗口、按品牌持久 partition、UA 去 Electron、不开 CDP）打开 Google：本机同网络连搜 3 条未被拦、能拿到 Reddit 结果；被拦两次亮页给人点验证；没有桌面壳时走云端 Google（/v1/search-data/serp）；最后兜底社区插件 @240xu/dsh-websearch | **Luoye 定方向 / Fable 实测** | 高 |
