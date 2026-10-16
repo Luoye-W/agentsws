@@ -299,7 +299,13 @@ export interface FreeChatModelChoice {
  * `list_price` 按官方原价折算）；`free` = 限免；`subscription` = 订阅额度；`own_key` = 用你自己的 key。
  */
 export type FreeChatModelPrice =
-  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price' }
+  | {
+      kind: 'rate'
+      rate: number
+      source: 'stats' | 'list_price'
+      /** WP363（决策 954）：折扣（`0 < d < 1`，0.1 = 一折）；没有就不给。倍率仍是原价口径。 */
+      discount?: number
+    }
   | { kind: 'free' }
   | { kind: 'subscription' }
   | { kind: 'own_key' }

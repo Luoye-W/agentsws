@@ -38,6 +38,8 @@ export const SHELL_ZH: Record<string, string> = {
   'model.pick.rate.fallback': '这份价目里没有 DeepSeek v4 Pro，这里按 {model} 算 1x。',
   'model.pick.rate.stats': '按后台长期统计',
   'model.pick.rate.list_price': '按官方原价折算',
+  // WP363（决策 954）：倍率旁边的折扣小标签（「1 折」）悬停说明
+  'model.pick.discount.tip': '现在按原价的 {pct}% 收；实际消耗以用量记录为准',
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': '看图',
 }
@@ -74,6 +76,8 @@ export const SHELL_EN: Record<string, string> = {
     'DeepSeek v4 Pro is not in this price list, so {model} counts as 1x here.',
   'model.pick.rate.stats': 'From long-run usage stats',
   'model.pick.rate.list_price': 'From list prices',
+  'model.pick.discount.tip':
+    'Charged at {pct}% of list price for now; your usage log is what counts',
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': 'Images',
 }

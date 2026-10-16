@@ -7,6 +7,7 @@
  *   组标题带图标，右边挂余额（工坊那组：个人 / 同事互联写余额，公司模式写这个人本月还剩多少）；
  * - 每行：厂商图标 + 模型名；右边是消耗速率（DeepSeek v4 Pro 官方原价 = 1x）/ 限免 / 订阅额度 /
  *   用你自己的 key，能不能看图是一个小标签，选中的打勾；
+ * - WP363（决策 954）：价目里这个模型有折扣，就在倍率旁边写「1 折」（没有不显示）；倍率仍是原价口径；
  * - 钮上：「来源 · 模型名」；工坊积分那组沿用只画工坊标记的规矩（决策 853），悬停出全名；
  * - 选了只改**这一次对话 / 这件事**（调用方存）；「设为默认」改品牌默认（只有所有者有）；底部「管理模型…」；
  * - 一个都没接：钮换成「还没接 AI」，点了在第三栏开「接模型」连接卡（WP334，不跳设置页）。
@@ -70,6 +71,21 @@ export function formatRate(rate: number): string {
   return `${Math.max(0.01, Math.round(rate * 100) / 100)}x`
 }
 
+/**
+ * WP363（决策 954）：折扣那一格。中文写「1 折」「8.5 折」（折数 = 折扣 × 10，保留一位小数）；
+ * 英文写「90% off」。只认 `0 < d < 1`（服务端已经按 `pricingDiscountOf` 筛过，这里再兜一次）。
+ */
+export function discountLabel(
+  discount: number,
+  locale: 'zh' | 'en',
+): { text: string; pct: number } | undefined {
+  if (!Number.isFinite(discount) || discount <= 0 || discount >= 1) return undefined
+  const pct = Math.min(99, Math.max(1, Math.round(discount * 100)))
+  if (locale === 'en') return { text: `${String(100 - pct)}% off`, pct }
+  const zhe = Math.min(9.9, Math.max(0.1, Math.round(discount * 100) / 10))
+  return { text: `${String(zhe)} 折`, pct }
+}
+
 const creditsText = (n: number): string =>
   n >= 100 ? String(Math.round(n)) : String(Math.round(n * 100) / 100)
 
@@ -108,7 +124,7 @@ export function ModelPicker({
   /** WP362：工坊积分那组标题右边的余额 / 本月还剩。 */
   balance?: PickerBalance | undefined
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -258,14 +274,19 @@ export function ModelPicker({
   // 读屏念的名字：工坊那组仍是「工坊」（决策 853），别的就是「来源 · 模型名」
   const name = current.official ? t('model.pick.workshop') : full
 
-  const priceOf = (c: FreeChatModelChoice): { text: string; tip?: string } | undefined => {
+  const priceOf = (c: FreeChatModelChoice): RowPrice | undefined => {
     const p = c.price
     if (p === undefined) return undefined
-    if (p.kind === 'rate')
+    if (p.kind === 'rate') {
+      const off = p.discount === undefined ? undefined : discountLabel(p.discount, lang)
       return {
         text: formatRate(p.rate),
         tip: t(p.source === 'stats' ? 'model.pick.rate.stats' : 'model.pick.rate.list_price'),
+        ...(off === undefined
+          ? {}
+          : { discount: { text: off.text, tip: t('model.pick.discount.tip', { pct: off.pct }) } }),
       }
+    }
     if (p.kind === 'free') return { text: t('model.pick.price.free') }
     if (p.kind === 'subscription') return { text: t('model.pick.price.subscription') }
     return { text: t('model.pick.price.own_key') }
@@ -424,6 +445,13 @@ export function ModelPicker({
   )
 }
 
+/** 每行右边那一格（+ WP363 折扣小标签）。 */
+interface RowPrice {
+  text: string
+  tip?: string
+  discount?: { text: string; tip: string }
+}
+
 /** 清单里的一行：厂商图标 + 模型名（+「默认」）｜看图小标签 · 消耗速率 / 订阅额度 / 用你自己的 key · 勾。 */
 function PickerRow({
   choice,
@@ -438,7 +466,7 @@ function PickerRow({
   groupLabel: string
   selected: boolean
   isDefault: boolean
-  price: { text: string; tip?: string } | undefined
+  price: RowPrice | undefined
   testId: string
   onPick: () => void
 }): React.ReactNode {
@@ -472,6 +500,15 @@ function PickerRow({
           >
             <Eye aria-label={t('free_chat.model.vision')} className="size-3" />
             {t('model.pick.vision')}
+          </span>
+        )}
+        {price?.discount === undefined ? null : (
+          <span
+            data-testid={`${testId}-discount`}
+            className="rounded bg-ws-warn-bg px-1 text-[10.5px] text-ws-warn"
+            title={price.discount.tip}
+          >
+            {price.discount.text}
           </span>
         )}
         {price === undefined ? null : (

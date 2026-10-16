@@ -238,7 +238,13 @@ export interface FreeChatModelChoice {
 
 /** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1x）/ 限免 / 订阅额度 / 用你自己的 key。 */
 export type FreeChatModelPrice =
-  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price' }
+  | {
+      kind: 'rate'
+      rate: number
+      source: 'stats' | 'list_price'
+      /** WP363（决策 954）：折扣（`0 < d < 1`，0.1 = 一折）；没有就不给。倍率仍是原价口径。 */
+      discount?: number
+    }
   | { kind: 'free' }
   | { kind: 'subscription' }
   | { kind: 'own_key' }

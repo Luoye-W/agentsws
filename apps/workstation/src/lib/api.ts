@@ -1812,6 +1812,8 @@ export interface PricingModelEntry {
   /** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1）。 */
   consumption_rate?: number
   rate_source?: 'stats' | 'list_price'
+  /** WP363（决策 954）：折扣（`0 < d < 1`，0.1 = 一折）。 */
+  discount?: number
 }
 
 export interface PricingEntry {

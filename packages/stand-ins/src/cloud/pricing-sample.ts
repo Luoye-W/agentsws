@@ -11,6 +11,7 @@
  *
  * WP362：几个模型带了 `consumption_rate` / `rate_source`（消耗速率，DeepSeek v4 Pro 官方原价 = 1）——数字是**示意**，
  * 真的那一份由私有云按用量账本长期统计；其余模型故意不带，好让界面演示「按官方原价折算」那条退路。
+ * WP363：`kimi-k3` 带一格示意折扣 `discount: 0.1`（一折），演示倍率旁边的「1 折」。
  */
 import type { PricingCatalog } from '@agentsws/contracts'
 
@@ -264,6 +265,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             cached: 0.006,
             consumption_rate: 1.3,
             rate_source: 'stats',
+            // WP363（决策 954）：示意折扣（一折），演示 AI 钮倍率旁边的「1 折」
+            discount: 0.1,
           },
           {
             model: 'MiniMax-M2.5',
