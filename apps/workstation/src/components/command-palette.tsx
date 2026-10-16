@@ -25,6 +25,11 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
+import {
+  SITE_CHAT_HREF,
+  SITE_CHAT_SETTINGS_HREF,
+  useHoldsSiteChat,
+} from '@/components/messages/site-chat'
 import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { askAtPosition } from '@/components/position/quick-answer-store'
 import { useRailState } from '@/components/rail/rail-state'
@@ -88,6 +93,7 @@ export function CommandPalette({
   onAddTile: (position_id: string, tile_id: string) => void
 }): React.ReactNode {
   const { t, lang, position } = useApp()
+  const holdsSiteChat = useHoldsSiteChat()
   const navigate = useNavigate()
   // WP276：在一件事里打开 ⌘K 时，多一条「把这件事交给同事…」（② 才有）
   const here = useLocation()
@@ -482,6 +488,32 @@ export function CommandPalette({
                 {p.mode ? tm(p.key) : t(p.key)}
               </CommandItem>
             ))}
+            {/*
+              WP351：原「聊天窗」拆成两处，⌘K 两处都搜得到——访客对话（消息 → 网站聊天）、
+              挂件设置（消息渠道 → 网站聊天窗）。名下有网站在线客服才出。
+            */}
+            {holdsSiteChat
+              ? [
+                  { to: SITE_CHAT_HREF, label: t('messages.source.site_chat'), id: 'site-chat' },
+                  {
+                    to: SITE_CHAT_SETTINGS_HREF,
+                    label: t('nav.chat_window'),
+                    id: 'site-chat-settings',
+                  },
+                ].map((x) => (
+                  <CommandItem
+                    key={x.id}
+                    value={`${x.label} ${t('nav.chat_window')} chat widget ${x.id}`}
+                    data-testid="command-page"
+                    data-to={x.to}
+                    onSelect={() => {
+                      go(x.to)
+                    }}
+                  >
+                    {x.label}
+                  </CommandItem>
+                ))
+              : null}
           </CommandGroup>
           {/* WP271：一人多品牌也要能搜品牌——只看品牌数，不看 solo */}
           {org_id === undefined || brands.length <= 1 ? null : (

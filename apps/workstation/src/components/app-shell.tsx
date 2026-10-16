@@ -31,7 +31,6 @@ import {
   ListTodo,
   type LucideIcon,
   MessageCircle,
-  MessagesSquare,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -40,6 +39,7 @@ import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
 import { BrandMark } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { useSiteChatUnread } from '@/components/messages/site-chat'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import {
@@ -59,7 +59,6 @@ import { RailPlus } from '@/components/sidebar/rail-plus'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { StandbyBadge } from '@/components/standby-badge'
 import { DemoBadge } from '@/components/ui/demo-badge'
-import { Separator } from '@/components/ui/separator'
 import { UpdateButton } from '@/components/update-button'
 import { MemoryNotice } from '@/components/work/memory-notice'
 import {
@@ -70,7 +69,6 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dutyHref } from '@/lib/duty-href'
-import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
@@ -307,7 +305,9 @@ function MessagesUnread(): ReactNode {
     staleTime: 60_000,
   })
   const unread = (accounts.data?.accounts ?? []).reduce((n, a) => n + a.unread, 0)
-  if (unread === 0) return null
+  // WP351：网站访客的对话也是消息——有没看过的也亮这个点
+  const siteChat = useSiteChatUnread()
+  if (unread === 0 && !siteChat) return null
   return (
     <i
       aria-hidden
@@ -490,17 +490,9 @@ export function AppShell({
                 <MessagesUnread />
               </NavLink>
               {/*
-              WP139（docs/78 阻断 #2 第 4 条）：**聊天窗的常驻入口**。以前只能从「网站在线客服」
-              那条职责的面板进，而那块面板一被「还没分配范围」挡住，全站就没有路通到 /chat-window。
-              放在「消息」正下面：网站访客的对话也是消息，左栏是"去哪儿"（36 §9）。
-              只在名下有这条职责时出现——没有它，这一格点进去也什么都做不了。
+              WP351（Luoye 10-16）：左栏不再有「聊天窗」。访客的对话并进「消息」（来源「网站聊天」），
+              挂件设置在账号菜单「设置」组的「消息渠道」页（渠道「网站聊天窗」）；老地址跳到消息里，⌘K 两处都搜得到。
             */}
-              {holdsDuty(me?.assignments ?? [], 'dtc.live-chat') ? (
-                <NavLink to="/chat-window" className={navClass} data-testid="nav-chat-window">
-                  <NavIcon icon={MessagesSquare} />
-                  {t('nav.chat_window')}
-                </NavLink>
-              ) : null}
               {/* 37 工作模型：待办 / 日历 */}
               <NavLink to="/todos" className={navClass}>
                 <NavIcon icon={ListTodo} />

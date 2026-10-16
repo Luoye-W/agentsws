@@ -23,6 +23,9 @@
  *   一件要你决定的事只在卡片流里出现，消息页只管兜底（没人接的）与原件档案（「全部」）。
  *   「全部」就是下面这套文件夹 + 会话 + 阅读区（完整的原件档案是第 3 步），岗位在办的会话挂
  *   「X 在办 · 有 N 张卡等你 →」链到卡片；卡片那头的「看原件 →」落在这里（`?view=all&thread=`）。
+ * - **WP351（Luoye 10-16）：网站访客的对话是和邮箱并列的一个来源「网站聊天」**（`?source=chat`，
+ *   `components/messages/site-chat.tsx`）——原「聊天窗」页的对话那一半并进来；做法同客服 Agent 那几封信：
+ *   顶上「客服 AI 在处理」、右边去工作线程、没有回复框只留「教 AI」。老地址 `/chat-window` 跳到这里。
  */
 import type {
   MessageAttachmentMeta,
@@ -43,6 +46,7 @@ import {
   ListFilter,
   Loader2,
   Mail,
+  MessagesSquare,
   Paperclip,
   PenSquare,
   RefreshCw,
@@ -70,6 +74,7 @@ import {
 } from '@/components/messages/marketing'
 import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
+import { SiteChatSourceItem, SiteChatView, useHoldsSiteChat } from '@/components/messages/site-chat'
 import { UnclaimedView } from '@/components/messages/unclaimed-view'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
@@ -156,8 +161,12 @@ export function MessagesPage(): ReactNode {
   const client = useQueryClient()
   // WP212：`?view=all` = 「全部」（原件档案），缺省 = 「没人接的」；`?thread=` = 打开这条会话
   const [params, setParams] = useSearchParams()
-  const view: 'unclaimed' | 'all' = params.get('view') === 'all' ? 'all' : 'unclaimed'
+  /** WP351：`?source=chat` = 「网站聊天」那个来源（访客对话）；缺省 = 邮箱。 */
+  const source: 'mail' | 'chat' = params.get('source') === 'chat' ? 'chat' : 'mail'
+  const view: 'unclaimed' | 'all' =
+    params.get('view') === 'all' || source === 'chat' ? 'all' : 'unclaimed'
   const threadParam = params.get('thread') ?? undefined
+  const holdsSiteChat = useHoldsSiteChat()
   const overview = useMessageOverview()
   /** 「我自己回」：切到「全部」打开这条会话，信到了就开写信框。 */
   const [replyOnOpen, setReplyOnOpen] = useState<string | undefined>()
@@ -231,6 +240,15 @@ export function MessagesPage(): ReactNode {
     },
     [setParams],
   )
+  /** WP351：在「网站聊天」那个来源里点了文件夹 / 邮箱：回到邮箱（地址栏去掉 `source`）。 */
+  const toMail = useCallback(() => {
+    if (source !== 'chat') return
+    setParams(new URLSearchParams({ view: 'all' }))
+  }, [source, setParams])
+  const toSiteChat = useCallback(() => {
+    setParams(new URLSearchParams({ view: 'all', source: 'chat' }))
+    setSelected(undefined)
+  }, [setParams])
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: ['messages'] })
   }, [client])
@@ -509,7 +527,7 @@ export function MessagesPage(): ReactNode {
         document.querySelector<HTMLInputElement>('[data-testid="messages-search"]')?.focus()
         return
       }
-      if (typing) return
+      if (typing || source === 'chat') return
       if (e.key === 'j' && cursor < rows.length - 1) {
         const next = rows[cursor + 1]
         if (next !== undefined) openThread(next, cursor + 1)
@@ -529,7 +547,7 @@ export function MessagesPage(): ReactNode {
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [rows, cursor, open, me, readOnly, compose, move.isPending, openThread, t])
+  }, [rows, cursor, open, me, readOnly, compose, move.isPending, openThread, t, source])
 
   if (accounts.isPending) return <Skeleton className="h-96 w-full" />
   if (accounts.error !== null)
@@ -539,7 +557,26 @@ export function MessagesPage(): ReactNode {
       </p>
     )
 
-  if (list.length === 0) return <NoMailbox />
+  /*
+   * WP351：一只邮箱都没连时，网站聊天照样看得到——它不靠邮箱。没连邮箱的页面上多一个钮去那边；
+   * 在那个来源里就只画访客对话（没有文件夹那一列）。
+   */
+  if (list.length === 0)
+    return source === 'chat' ? (
+      <div className="flex flex-col gap-3" data-testid="messages-page" data-view="all">
+        <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
+        <div className="flex h-[calc(100vh-10rem)] gap-3">
+          <SiteChatView
+            initial={threadParam}
+            onOfflineMessages={() => {
+              setParams(new URLSearchParams({ view: 'all' }))
+            }}
+          />
+        </div>
+      </div>
+    ) : (
+      <NoMailbox {...(holdsSiteChat ? { onSiteChat: toSiteChat } : {})} />
+    )
 
   const noticeBar =
     notice === undefined ? null : (
@@ -644,20 +681,25 @@ export function MessagesPage(): ReactNode {
             {t('messages.compose.new')}
           </Button>
 
-          {/* WP124：聊天窗的离线留言落在这里（source = 'chat'）。一个开关，不是第二个收件箱。 */}
-          <Button
-            size="sm"
-            variant={filters.account === 'chat' ? 'secondary' : 'outline'}
-            className="w-full"
-            data-testid="messages-source-chat"
-            aria-pressed={filters.account === 'chat'}
-            onClick={() => {
-              setFilters((f) => ({ ...f, account: f.account === 'chat' ? undefined : 'chat' }))
-              setSelected(undefined)
-            }}
-          >
-            {t('messages.source.chat')}
-          </Button>
+          {/*
+            WP124：聊天窗的离线留言落在这里（source = 'chat'）。WP351：入口挪到「网站聊天」列表顶上的
+            「离线留言」；筛着的时候这里留一个钮，点了不筛。
+          */}
+          {filters.account === 'chat' && source === 'mail' ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="w-full"
+              data-testid="messages-source-chat-clear"
+              aria-pressed
+              onClick={() => {
+                setFilters((f) => ({ ...f, account: undefined }))
+                setSelected(undefined)
+              }}
+            >
+              {t('messages.source.chat')}
+            </Button>
+          ) : null}
 
           <nav className="flex flex-col gap-0.5" aria-label={t('messages.folders')}>
             {FOLDERS.filter(
@@ -672,8 +714,12 @@ export function MessagesPage(): ReactNode {
                 .flatMap((a) => a.folders)
                 .filter((f) => f.kind === kind)
                 .reduce((n, f) => n + f.unread, 0)
-              // 搜索时跨全部文件夹，不亮哪一只（亮着像是只在它里面搜）
-              const active = filters.folder_kind === kind && filters.pending !== true && !searching
+              // 搜索时跨全部文件夹，不亮哪一只（亮着像是只在它里面搜）；在网站聊天里时都不亮
+              const active =
+                source === 'mail' &&
+                filters.folder_kind === kind &&
+                filters.pending !== true &&
+                !searching
               return (
                 <button
                   key={kind}
@@ -691,6 +737,7 @@ export function MessagesPage(): ReactNode {
                     // WP204：点文件夹就退出搜索（搜索跨全部文件夹，不清掉的话点了像没反应）
                     setFilters((f) => ({ ...f, folder_kind: kind, pending: false, q: '' }))
                     setSelected(undefined)
+                    toMail()
                   }}
                 >
                   <Icon aria-hidden className="size-4 shrink-0" />
@@ -708,12 +755,21 @@ export function MessagesPage(): ReactNode {
             })}
             {/* WP167：分拣拿不准的信在这里等人点一下（没开事项、没挪） */}
             <PendingNavItem
-              active={filters.pending === true}
+              active={source === 'mail' && filters.pending === true}
               onSelect={() => {
                 setFilters((f) => ({ ...f, pending: true, q: '' }))
                 setSelected(undefined)
+                toMail()
               }}
             />
+            {/* WP351：和邮箱并列的来源——网站访客的对话（名下有网站在线客服才出） */}
+            {holdsSiteChat ? (
+              <SiteChatSourceItem
+                icon={MessagesSquare}
+                active={source === 'chat'}
+                onSelect={toSiteChat}
+              />
+            ) : null}
           </nav>
 
           <div className="flex flex-col gap-1">
@@ -782,353 +838,386 @@ export function MessagesPage(): ReactNode {
           </div>
         </aside>
 
-        {/* ── 会话列表 ────────────────────────────────────────────────── */}
-        <section
-          className={cn(
-            'flex w-full shrink-0 flex-col gap-2 md:w-[320px]',
-            selected !== undefined && 'hidden md:flex',
-          )}
-          data-testid="messages-list"
-        >
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-ws-muted-fg"
-              />
-              <Input
-                className="pl-7"
-                aria-label={t('messages.search')}
-                placeholder={t('messages.search.placeholder')}
-                data-testid="messages-search"
-                value={filters.q}
-                onChange={(e) => {
-                  setFilters((f) => ({ ...f, q: e.target.value }))
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              aria-label={t('messages.sync')}
-              data-testid="messages-sync"
-              disabled={sync.isPending}
-              className="rounded-[10px] p-2 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
-              onClick={() => {
-                sync.mutate()
-              }}
+        {source === 'chat' ? (
+          <SiteChatView
+            initial={threadParam}
+            onOfflineMessages={() => {
+              setFilters((f) => ({
+                ...f,
+                account: 'chat',
+                folder_kind: 'inbox',
+                pending: false,
+                q: '',
+              }))
+              setSelected(undefined)
+              setParams(new URLSearchParams({ view: 'all' }))
+            }}
+          />
+        ) : (
+          <>
+            {/* ── 会话列表 ────────────────────────────────────────────────── */}
+            <section
+              className={cn(
+                'flex w-full shrink-0 flex-col gap-2 md:w-[320px]',
+                selected !== undefined && 'hidden md:flex',
+              )}
+              data-testid="messages-list"
             >
-              <RefreshCw aria-hidden className={cn('size-4', sync.isPending && 'animate-spin')} />
-            </button>
-          </div>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    aria-hidden
+                    className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-ws-muted-fg"
+                  />
+                  <Input
+                    className="pl-7"
+                    aria-label={t('messages.search')}
+                    placeholder={t('messages.search.placeholder')}
+                    data-testid="messages-search"
+                    value={filters.q}
+                    onChange={(e) => {
+                      setFilters((f) => ({ ...f, q: e.target.value }))
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  aria-label={t('messages.sync')}
+                  data-testid="messages-sync"
+                  disabled={sync.isPending}
+                  className="rounded-[10px] p-2 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
+                  onClick={() => {
+                    sync.mutate()
+                  }}
+                >
+                  <RefreshCw
+                    aria-hidden
+                    className={cn('size-4', sync.isPending && 'animate-spin')}
+                  />
+                </button>
+              </div>
 
-          {searching && filters.pending !== true ? (
-            <span className="px-1 text-[11px] text-ws-muted-fg" data-testid="messages-search-all">
-              {t('messages.search.all')}
-            </span>
-          ) : null}
+              {searching && filters.pending !== true ? (
+                <span
+                  className="px-1 text-[11px] text-ws-muted-fg"
+                  data-testid="messages-search-all"
+                >
+                  {t('messages.search.all')}
+                </span>
+              ) : null}
 
-          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-            {threads.error !== null && threads.data === undefined ? (
-              <p role="alert" className="px-2 py-6 text-center text-sm text-destructive">
-                {apiErrorText(threads.error, t)}
-              </p>
-            ) : threads.isPending ? (
-              <Skeleton className="h-40 w-full" />
-            ) : allRows.length === 0 ? (
-              <p className="px-2 py-6 text-center text-sm text-ws-muted-fg">
-                {t('messages.empty')}
-              </p>
-            ) : (
-              rows.map((row, i) => (
-                <Fragment key={row.thread_id}>
-                  {i === listed.length && folded.length > 0 ? (
-                    <MarketingFold
-                      count={folded.length}
-                      open={promoOpen}
-                      onToggle={() => {
-                        setPromoOpen((v) => !v)
+              <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+                {threads.error !== null && threads.data === undefined ? (
+                  <p role="alert" className="px-2 py-6 text-center text-sm text-destructive">
+                    {apiErrorText(threads.error, t)}
+                  </p>
+                ) : threads.isPending ? (
+                  <Skeleton className="h-40 w-full" />
+                ) : allRows.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-sm text-ws-muted-fg">
+                    {t('messages.empty')}
+                  </p>
+                ) : (
+                  rows.map((row, i) => (
+                    <Fragment key={row.thread_id}>
+                      {i === listed.length && folded.length > 0 ? (
+                        <MarketingFold
+                          count={folded.length}
+                          open={promoOpen}
+                          onToggle={() => {
+                            setPromoOpen((v) => !v)
+                          }}
+                        />
+                      ) : null}
+                      {filters.pending === true ? (
+                        <div key={row.thread_id} className="flex flex-col">
+                          <ThreadRow
+                            row={row}
+                            selected={row.thread_id === selected}
+                            onOpen={() => {
+                              openThread(row, i)
+                            }}
+                          />
+                          <PendingActions row={row} onDone={refresh} onError={fail} />
+                        </div>
+                      ) : (
+                        <ThreadRow
+                          row={row}
+                          selected={row.thread_id === selected}
+                          onOpen={() => {
+                            openThread(row, i)
+                          }}
+                        />
+                      )}
+                    </Fragment>
+                  ))
+                )}
+                {/* 那一捆收着时它不在 rows 里，头单独画在最后 */}
+                {!promoOpen && folded.length > 0 ? (
+                  <MarketingFold
+                    count={folded.length}
+                    open={false}
+                    onToggle={() => {
+                      setPromoOpen(true)
+                    }}
+                  />
+                ) : null}
+              </div>
+            </section>
+
+            {/* ── 阅读区 ──────────────────────────────────────────────────── */}
+            <section
+              className={cn(
+                'flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto',
+                selected === undefined && 'hidden md:flex',
+              )}
+              data-testid="messages-reader"
+            >
+              {selected === undefined ? (
+                <p className="m-auto text-sm text-ws-muted-fg">{t('messages.pick')}</p>
+              ) : thread.isPending ? (
+                <Skeleton className="h-64 w-full" />
+              ) : thread.error !== null ? (
+                <p role="alert" className="m-auto text-sm text-destructive">
+                  {apiErrorText(thread.error, t)}
+                </p>
+              ) : (thread.data?.messages.length ?? 0) === 0 ? (
+                // WP212：卡片那头「看原件 →」指的会话不在消息库里（聊天 / 别的邮箱 / 过了保留期）——照实说
+                <p
+                  className="m-auto text-sm text-ws-muted-fg"
+                  data-testid="messages-thread-missing"
+                >
+                  {t('messages.thread.missing')}
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex w-fit items-center gap-1 text-[12px] text-ws-muted-fg md:hidden"
+                    data-testid="messages-back"
+                    onClick={() => {
+                      setSelected(undefined)
+                    }}
+                  >
+                    <ArrowLeft aria-hidden className="size-3.5" />
+                    {t('messages.back')}
+                  </button>
+
+                  {thread.data?.agent_status === undefined ? (
+                    <ClaimBand view={thread.data} />
+                  ) : (
+                    <AgentBand
+                      status={thread.data.agent_status}
+                      cards={thread.data.open_card_count ?? 0}
+                      cardLink={thread.data.card_link}
+                    />
+                  )}
+
+                  <h1 className="text-[15px] font-semibold">{thread.data?.subject}</h1>
+
+                  {(thread.data?.messages ?? []).map((m) => (
+                    <MessageCard
+                      key={m.id}
+                      message={
+                        shown[m.id] === undefined
+                          ? m
+                          : { ...m, ...(shown[m.id] as ShownImages[string]) }
+                      }
+                      starring={star.isPending && star.variables?.id === m.id}
+                      imagesBusy={images.isPending && images.variables === m.id}
+                      onStar={() => {
+                        star.mutate(m)
+                      }}
+                      onImages={() => {
+                        images.mutate(m.id)
+                      }}
+                      onDownload={(a) => {
+                        download.mutate({ id: m.id, attachment: a.id, name: a.name })
                       }}
                     />
-                  ) : null}
-                  {filters.pending === true ? (
-                    <div key={row.thread_id} className="flex flex-col">
-                      <ThreadRow
-                        row={row}
-                        selected={row.thread_id === selected}
-                        onOpen={() => {
-                          openThread(row, i)
+                  ))}
+
+                  {/* WP208：邮件助手从第三栏搬进来——看信时才出现，一块可收起（Luoye 09-30） */}
+                  {/* WP212：兜底助手——只在没人接的信上生成建议，岗位在办的只挂「在办 · 有卡等你」 */}
+                  {open === undefined ? null : (
+                    <MailAiAssistant
+                      message={open}
+                      {...(thread.data === undefined ? {} : { view: thread.data })}
+                      onReplySelf={() => {
+                        if (!readOnly) setCompose(seedFrom('reply', open, me))
+                      }}
+                      onNotice={(n) => {
+                        setNotice(n)
+                      }}
+                    />
+                  )}
+
+                  {readOnly ? (
+                    <p
+                      className="text-[12px] text-ws-muted-fg"
+                      data-testid="messages-readonly"
+                      data-slot="status"
+                    >
+                      {t('messages.readonly')}
+                    </p>
+                  ) : compose === undefined ? (
+                    <div
+                      className="flex flex-wrap items-center gap-2"
+                      data-testid="messages-actions"
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid="messages-reply"
+                        onClick={() => {
+                          setCompose(seedFrom('reply', open, me))
                         }}
-                      />
-                      <PendingActions row={row} onDone={refresh} onError={fail} />
+                      >
+                        <CornerUpLeft aria-hidden className="mr-1 size-3.5" />
+                        {t('messages.reply')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid="messages-reply-all"
+                        onClick={() => {
+                          setCompose(seedFrom('reply_all', open, me))
+                        }}
+                      >
+                        <ReplyAll aria-hidden className="mr-1 size-3.5" />
+                        {t('messages.reply_all')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid="messages-forward"
+                        onClick={() => {
+                          setCompose(seedFrom('forward', open, me))
+                        }}
+                      >
+                        <Forward aria-hidden className="mr-1 size-3.5" />
+                        {t('messages.forward')}
+                      </Button>
+                      {/* WP204：影子模式下归档 / 删除会动邮箱，所以置灰，问号里说为什么 */}
+                      {open === undefined ||
+                      open.folder_kind === 'archive' ||
+                      open.folder_kind === 'trash' ? null : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          data-testid="messages-archive"
+                          disabled={shadow || move.isPending}
+                          title={shadow ? t('messages.shadow.hint') : undefined}
+                          onClick={() => {
+                            moveThread('archive')
+                          }}
+                        >
+                          <Archive aria-hidden className="mr-1 size-3.5" />
+                          {t('messages.archive')}
+                        </Button>
+                      )}
+                      {open?.folder_kind === 'trash' ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          data-testid="messages-restore"
+                          disabled={shadow || move.isPending}
+                          title={shadow ? t('messages.shadow.hint') : undefined}
+                          onClick={() => {
+                            moveThread('restore')
+                          }}
+                        >
+                          <Inbox aria-hidden className="mr-1 size-3.5" />
+                          {t('messages.restore')}
+                        </Button>
+                      ) : confirmDelete ? (
+                        // 「删除」= 移到垃圾箱，绝不永久删除（63 §G）；先问一句，之后还能撤销
+                        <span
+                          className="flex items-center gap-1.5"
+                          data-testid="messages-delete-confirm"
+                        >
+                          <span className="text-[12px] text-ws-muted-fg">
+                            {t('messages.delete.confirm')}
+                          </span>
+                          <Button
+                            size="xs"
+                            variant="destructive"
+                            data-testid="messages-delete-yes"
+                            disabled={move.isPending}
+                            onClick={() => {
+                              moveThread('trash')
+                            }}
+                          >
+                            {t('messages.delete.yes')}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            data-testid="messages-delete-no"
+                            onClick={() => {
+                              setConfirmDelete(false)
+                            }}
+                          >
+                            {t('messages.delete.no')}
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          data-testid="messages-delete"
+                          disabled={shadow || move.isPending}
+                          title={shadow ? t('messages.shadow.hint') : undefined}
+                          onClick={() => {
+                            setConfirmDelete(true)
+                          }}
+                        >
+                          <Trash2 aria-hidden className="mr-1 size-3.5" />
+                          {t('messages.delete')}
+                        </Button>
+                      )}
+                      {shadow ? (
+                        <Hint text={t('messages.shadow.hint')} testId="messages-shadow-hint" />
+                      ) : null}
                     </div>
                   ) : (
-                    <ThreadRow
-                      row={row}
-                      selected={row.thread_id === selected}
-                      onOpen={() => {
-                        openThread(row, i)
+                    <Composer
+                      key={`${compose.mode}|${compose.thread_id ?? 'new'}|${compose.text.length}`}
+                      seed={compose}
+                      busy={send.isPending}
+                      {...(composeError === undefined ? {} : { error: composeError })}
+                      onSend={(input) => {
+                        send.mutate(input)
+                      }}
+                      onSaveDraft={(input) => {
+                        saveMessageDraft({
+                          ...(draftId === undefined ? {} : { id: draftId }),
+                          ...(compose.account === undefined ? {} : { account: compose.account }),
+                          ...(compose.thread_id === undefined
+                            ? {}
+                            : { thread_id: compose.thread_id }),
+                          ...(compose.in_reply_to === undefined
+                            ? {}
+                            : { in_reply_to: compose.in_reply_to }),
+                          ...input,
+                        })
+                          .then((r) => {
+                            setDraftId(r.draft.id)
+                          })
+                          // 草稿没存上也要说（以前这里的失败没人接，写了半天的信可能没存）
+                          .catch(fail)
+                      }}
+                      onClose={() => {
+                        setCompose(undefined)
+                        setComposeError(undefined)
                       }}
                     />
                   )}
-                </Fragment>
-              ))
-            )}
-            {/* 那一捆收着时它不在 rows 里，头单独画在最后 */}
-            {!promoOpen && folded.length > 0 ? (
-              <MarketingFold
-                count={folded.length}
-                open={false}
-                onToggle={() => {
-                  setPromoOpen(true)
-                }}
-              />
-            ) : null}
-          </div>
-        </section>
-
-        {/* ── 阅读区 ──────────────────────────────────────────────────── */}
-        <section
-          className={cn(
-            'flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto',
-            selected === undefined && 'hidden md:flex',
-          )}
-          data-testid="messages-reader"
-        >
-          {selected === undefined ? (
-            <p className="m-auto text-sm text-ws-muted-fg">{t('messages.pick')}</p>
-          ) : thread.isPending ? (
-            <Skeleton className="h-64 w-full" />
-          ) : thread.error !== null ? (
-            <p role="alert" className="m-auto text-sm text-destructive">
-              {apiErrorText(thread.error, t)}
-            </p>
-          ) : (thread.data?.messages.length ?? 0) === 0 ? (
-            // WP212：卡片那头「看原件 →」指的会话不在消息库里（聊天 / 别的邮箱 / 过了保留期）——照实说
-            <p className="m-auto text-sm text-ws-muted-fg" data-testid="messages-thread-missing">
-              {t('messages.thread.missing')}
-            </p>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="flex w-fit items-center gap-1 text-[12px] text-ws-muted-fg md:hidden"
-                data-testid="messages-back"
-                onClick={() => {
-                  setSelected(undefined)
-                }}
-              >
-                <ArrowLeft aria-hidden className="size-3.5" />
-                {t('messages.back')}
-              </button>
-
-              {thread.data?.agent_status === undefined ? (
-                <ClaimBand view={thread.data} />
-              ) : (
-                <AgentBand
-                  status={thread.data.agent_status}
-                  cards={thread.data.open_card_count ?? 0}
-                  cardLink={thread.data.card_link}
-                />
+                </>
               )}
-
-              <h1 className="text-[15px] font-semibold">{thread.data?.subject}</h1>
-
-              {(thread.data?.messages ?? []).map((m) => (
-                <MessageCard
-                  key={m.id}
-                  message={
-                    shown[m.id] === undefined
-                      ? m
-                      : { ...m, ...(shown[m.id] as ShownImages[string]) }
-                  }
-                  starring={star.isPending && star.variables?.id === m.id}
-                  imagesBusy={images.isPending && images.variables === m.id}
-                  onStar={() => {
-                    star.mutate(m)
-                  }}
-                  onImages={() => {
-                    images.mutate(m.id)
-                  }}
-                  onDownload={(a) => {
-                    download.mutate({ id: m.id, attachment: a.id, name: a.name })
-                  }}
-                />
-              ))}
-
-              {/* WP208：邮件助手从第三栏搬进来——看信时才出现，一块可收起（Luoye 09-30） */}
-              {/* WP212：兜底助手——只在没人接的信上生成建议，岗位在办的只挂「在办 · 有卡等你」 */}
-              {open === undefined ? null : (
-                <MailAiAssistant
-                  message={open}
-                  {...(thread.data === undefined ? {} : { view: thread.data })}
-                  onReplySelf={() => {
-                    if (!readOnly) setCompose(seedFrom('reply', open, me))
-                  }}
-                  onNotice={(n) => {
-                    setNotice(n)
-                  }}
-                />
-              )}
-
-              {readOnly ? (
-                <p
-                  className="text-[12px] text-ws-muted-fg"
-                  data-testid="messages-readonly"
-                  data-slot="status"
-                >
-                  {t('messages.readonly')}
-                </p>
-              ) : compose === undefined ? (
-                <div className="flex flex-wrap items-center gap-2" data-testid="messages-actions">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    data-testid="messages-reply"
-                    onClick={() => {
-                      setCompose(seedFrom('reply', open, me))
-                    }}
-                  >
-                    <CornerUpLeft aria-hidden className="mr-1 size-3.5" />
-                    {t('messages.reply')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    data-testid="messages-reply-all"
-                    onClick={() => {
-                      setCompose(seedFrom('reply_all', open, me))
-                    }}
-                  >
-                    <ReplyAll aria-hidden className="mr-1 size-3.5" />
-                    {t('messages.reply_all')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    data-testid="messages-forward"
-                    onClick={() => {
-                      setCompose(seedFrom('forward', open, me))
-                    }}
-                  >
-                    <Forward aria-hidden className="mr-1 size-3.5" />
-                    {t('messages.forward')}
-                  </Button>
-                  {/* WP204：影子模式下归档 / 删除会动邮箱，所以置灰，问号里说为什么 */}
-                  {open === undefined ||
-                  open.folder_kind === 'archive' ||
-                  open.folder_kind === 'trash' ? null : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="messages-archive"
-                      disabled={shadow || move.isPending}
-                      title={shadow ? t('messages.shadow.hint') : undefined}
-                      onClick={() => {
-                        moveThread('archive')
-                      }}
-                    >
-                      <Archive aria-hidden className="mr-1 size-3.5" />
-                      {t('messages.archive')}
-                    </Button>
-                  )}
-                  {open?.folder_kind === 'trash' ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="messages-restore"
-                      disabled={shadow || move.isPending}
-                      title={shadow ? t('messages.shadow.hint') : undefined}
-                      onClick={() => {
-                        moveThread('restore')
-                      }}
-                    >
-                      <Inbox aria-hidden className="mr-1 size-3.5" />
-                      {t('messages.restore')}
-                    </Button>
-                  ) : confirmDelete ? (
-                    // 「删除」= 移到垃圾箱，绝不永久删除（63 §G）；先问一句，之后还能撤销
-                    <span
-                      className="flex items-center gap-1.5"
-                      data-testid="messages-delete-confirm"
-                    >
-                      <span className="text-[12px] text-ws-muted-fg">
-                        {t('messages.delete.confirm')}
-                      </span>
-                      <Button
-                        size="xs"
-                        variant="destructive"
-                        data-testid="messages-delete-yes"
-                        disabled={move.isPending}
-                        onClick={() => {
-                          moveThread('trash')
-                        }}
-                      >
-                        {t('messages.delete.yes')}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        data-testid="messages-delete-no"
-                        onClick={() => {
-                          setConfirmDelete(false)
-                        }}
-                      >
-                        {t('messages.delete.no')}
-                      </Button>
-                    </span>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="messages-delete"
-                      disabled={shadow || move.isPending}
-                      title={shadow ? t('messages.shadow.hint') : undefined}
-                      onClick={() => {
-                        setConfirmDelete(true)
-                      }}
-                    >
-                      <Trash2 aria-hidden className="mr-1 size-3.5" />
-                      {t('messages.delete')}
-                    </Button>
-                  )}
-                  {shadow ? (
-                    <Hint text={t('messages.shadow.hint')} testId="messages-shadow-hint" />
-                  ) : null}
-                </div>
-              ) : (
-                <Composer
-                  key={`${compose.mode}|${compose.thread_id ?? 'new'}|${compose.text.length}`}
-                  seed={compose}
-                  busy={send.isPending}
-                  {...(composeError === undefined ? {} : { error: composeError })}
-                  onSend={(input) => {
-                    send.mutate(input)
-                  }}
-                  onSaveDraft={(input) => {
-                    saveMessageDraft({
-                      ...(draftId === undefined ? {} : { id: draftId }),
-                      ...(compose.account === undefined ? {} : { account: compose.account }),
-                      ...(compose.thread_id === undefined ? {} : { thread_id: compose.thread_id }),
-                      ...(compose.in_reply_to === undefined
-                        ? {}
-                        : { in_reply_to: compose.in_reply_to }),
-                      ...input,
-                    })
-                      .then((r) => {
-                        setDraftId(r.draft.id)
-                      })
-                      // 草稿没存上也要说（以前这里的失败没人接，写了半天的信可能没存）
-                      .catch(fail)
-                  }}
-                  onClose={() => {
-                    setCompose(undefined)
-                    setComposeError(undefined)
-                  }}
-                />
-              )}
-            </>
-          )}
-        </section>
+            </section>
+          </>
+        )}
       </div>
       {noticeBar}
     </div>
@@ -1545,7 +1634,7 @@ function MailboxFailure({ accounts }: { accounts: readonly MessageAccountView[] 
 }
 
 /** 一只邮箱都没连：照实说，并指向连接页——**不新增凭据入口**（63 §2）。 */
-function NoMailbox(): ReactNode {
+function NoMailbox({ onSiteChat }: { onSiteChat?: () => void }): ReactNode {
   const { t } = useApp()
   const openConnect = useOpenConnect()
   return (
@@ -1567,6 +1656,18 @@ function NoMailbox(): ReactNode {
       >
         {t('messages.connect')}
       </button>
+      {/* WP351：网站访客的对话不靠邮箱 */}
+      {onSiteChat === undefined ? null : (
+        <button
+          type="button"
+          onClick={onSiteChat}
+          className="flex w-fit items-center gap-1.5 text-[13px] text-ws-brand hover:underline"
+          data-testid="messages-source-site-chat"
+        >
+          <MessagesSquare aria-hidden className="size-4" />
+          {t('messages.source.site_chat')} →
+        </button>
+      )}
     </div>
   )
 }

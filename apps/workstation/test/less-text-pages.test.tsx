@@ -11,11 +11,11 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { ChatWidgetSettings } from '@/components/chat-window/widget-settings'
 import { StandbyWizard } from '@/components/connections/standby-wizard'
 import type { ConnectionDirectoryItem, ProviderView, RuntimeStatusView } from '@/lib/api'
 import { HELP_BY_SERVICE } from '@/lib/help'
 import { translate } from '@/lib/i18n'
-import { ChatWindowPage } from '@/pages/chat-window'
 import { ConnectionsPage } from '@/pages/connections'
 import { ImChannelsPage } from '@/pages/im-channels'
 import { renderWithProviders } from './helpers'
@@ -379,8 +379,9 @@ describe('WP214：消息渠道的状态是小图标', () => {
 })
 
 describe('网站聊天窗', () => {
-  it('外观、转发方式、预览、对话：每张卡都不超；扣钱的提示看得见', async () => {
-    const { container } = renderWithProviders(<ChatWindowPage />)
+  it('外观、转发方式、预览：每张卡都不超；扣钱的提示看得见', async () => {
+    // WP351：挂件设置在「消息渠道 → 网站聊天窗」（对话那一半在消息里）
+    const { container } = renderWithProviders(<ChatWidgetSettings />)
     await screen.findByTestId('chat-window-page')
     await screen.findByTestId('relay-hosted')
     const cards = [...container.querySelectorAll('[data-slot="card"]')]

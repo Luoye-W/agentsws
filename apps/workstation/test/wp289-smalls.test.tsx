@@ -9,11 +9,11 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SiteChatView } from '@/components/messages/site-chat'
 import { ColleaguesTab } from '@/components/org/colleagues-tab'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import type { CloudCreditsView, OrgMemberView } from '@/lib/api'
 import { BrandAssetsPage } from '@/pages/brand-assets'
-import { ChatWindowPage } from '@/pages/chat-window'
 import { renderWithProviders } from './helpers'
 
 const T0 = '2026-10-09T09:00:00.000Z'
@@ -246,7 +246,8 @@ describe('WP289 素材库「遮罩」签（决策 313）', () => {
 
 describe('WP289 聊天窗教 AI「以后都这样」（决策 318）', () => {
   it('不开：照旧 similar_cases；开着教：global_rule，回执说出了一张卡', async () => {
-    renderWithProviders(<ChatWindowPage />)
+    // WP351：对话那一半并进了「消息 → 网站聊天」
+    renderWithProviders(<SiteChatView onOfflineMessages={() => {}} />)
     fireEvent.click(await screen.findByTestId('chat-conversation'))
     const input = await screen.findByTestId('chat-teach-input')
     fireEvent.change(input, { target: { value: '巴西走 DHL' } })
