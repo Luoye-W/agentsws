@@ -2683,7 +2683,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
-  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——待确认写进知识库 + 一批一张确认卡
+  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——WP357（决策 902）起点「就这样」即生效，可改可删可撤销
   const assistantNotes = createAssistantNotes({
     clock,
     knowledge,
@@ -10355,10 +10355,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const item = await approvals.get(id)
         return item !== undefined && (item.state === 'pending' || item.state === 'in_review')
       },
-      // WP350：拆成多份——来源批次 id、要记的那几条待确认写进知识库
+      // WP350：拆成多份——来源批次 id、要记的那几条写进知识库（WP357 决策 902：直接生效，能撤销）
       newId: (prefix) =>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
-      proposeNotes: assistantNotes.propose,
+      writeNotes: assistantNotes.write,
+      retireNotes: assistantNotes.retireMany,
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
@@ -10385,6 +10386,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
+      notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
       // WP343：助理这一层的记忆（本人的）——开关与 WP320 同一个；记一条 / 删一条照常进记忆账本（小提醒读它）与事件日志（不带正文）
       memory: {
         auto: (actor) => autoMemorySettings.get(actor.workspace_id, actor.person_id),

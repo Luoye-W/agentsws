@@ -16,7 +16,7 @@
  * 发一句（与重新生成）回的是 **SSE**（`text/event-stream`），不是统一信封——与聊天沙盒同一种写法
  * （`fetch` + `ReadableStream`，凭据在头里，不进 URL）。客户端断开 = 停；另有一条 `stop` 兜底。
  */
-import type { ArchivedWorkCandidate } from '@agentsws/contracts'
+import type { ArchivedWorkCandidate, FactCard } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -159,8 +159,13 @@ export interface FreeChatFanoutSummaryView {
   memories: number
   /** 没发的：勾掉的 / 归属待定的 / 像口令的。 */
   skipped: { dropped: number; unsure: number; secret: number }
-  /** 要记的那几条等人确认的那张卡（有要记的才有）。 */
+  /** 要记的那几条等人确认的那张卡（WP350；WP357 决策 902 起不再出这张卡，只有老数据带）。 */
   knowledge_card_id?: string
+  /** WP357（决策 902）：要记的那几条写进知识库后的条目 id（已生效；汇总卡上「撤销」撤的就是它们）。 */
+  note_card_ids?: string[]
+  /** WP357：人在汇总卡上点了「撤销」的时候；撤了几条。 */
+  notes_undone_at?: string
+  notes_undone?: number
   /** 开事项 / 写知识里没成的（人话）。 */
   failed?: string[]
   at: string
@@ -314,7 +319,7 @@ export interface FreeChatPort {
   forget?(actor: FreeChatActor, id: string): Promise<{ deleted: boolean }>
   /**
    * WP350：方案卡上点了「就这样」（带人改过的几条）→ 扇出：要做的事按岗位各开一件（同一来源批次），
-   * 要记的以 `proposed` 写进对应岗位 / 品牌知识库（出处 = 这份资料），个人偏好进助理记忆；
+   * 要记的写进对应岗位 / 品牌知识库（出处 = 这份资料；WP357 决策 902 起直接生效），个人偏好进助理记忆；
    * 回方案那一条（状态已变）与汇总那一条。`dismiss` = 不用了（什么都不发）。可选。
    */
   fanout?(
@@ -323,6 +328,22 @@ export interface FreeChatPort {
     batch_id: string,
     input: { items?: FreeChatFanoutEditInput[]; dismiss?: boolean },
   ): Promise<{ plan: FreeChatMessageView; summary?: FreeChatMessageView }>
+  /**
+   * WP357（决策 902）：汇总卡上「撤销」——这一批写进知识库的口径全部退役（留痕不删）。
+   * 回改过的汇总那一条（带 `notes_undone_at`）。可选。
+   */
+  undoFanoutNotes?(
+    actor: FreeChatActor,
+    session_id: string,
+    batch_id: string,
+  ): Promise<{ summary: FreeChatMessageView }>
+  /**
+   * WP357（决策 902）：改一条助理记进知识库的口径（只认 `assistant_note`、只认让助理记的那个人）。
+   * 就地改正文（id 与出处不变，改之前那句留痕在 `structured.previous`），回改过的那条。可选。
+   */
+  editNote?(actor: FreeChatActor, card_id: string, statement: string): Promise<FactCard>
+  /** WP357：删一条助理记进知识库的口径（退役留痕，不真删）。可选。 */
+  removeNote?(actor: FreeChatActor, card_id: string): Promise<{ retired: boolean }>
 }
 
 /** 与「问 AI」同一档：能读自己的队列就能用——随便聊只给本人看，不碰任何对外的东西。 */
@@ -345,6 +366,8 @@ const FileBody = z.object({
   name: z.string().trim().min(1).max(200),
   data: z.string().min(1).max(MAX_IMAGE_CHARS),
 })
+/** WP357：改一条助理记的口径。 */
+const NoteBody = z.object({ statement: z.string().min(1).max(300) })
 const FanoutBody = z.object({
   items: z
     .array(
@@ -656,7 +679,7 @@ export function freeChatRoutes(): Route[] {
         path: '/v1/free-chat/sessions/:id/fanout/:batch',
         operationId: 'confirmAssistantFanout',
         summary:
-          '「我的助理」方案卡（WP350）：点「就这样」= 按（改过的）方案扇出——要做的事按岗位各开一件（同一来源批次），要记的以待确认写进岗位 / 品牌知识库（出处 = 这份资料），个人偏好进助理记忆；`dismiss` = 不用了',
+          '「我的助理」方案卡（WP350）：点「就这样」= 按（改过的）方案扇出——要做的事按岗位各开一件（同一来源批次），要记的直接生效写进岗位 / 品牌知识库（出处 = 这份资料；WP357 决策 902），个人偏好进助理记忆；`dismiss` = 不用了',
         params: [
           ...ID,
           { name: 'batch', in: 'path' as const, required: true, description: '方案卡的来源批次' },
@@ -678,6 +701,64 @@ export function freeChatRoutes(): Route[] {
             ...(input.dismiss === undefined ? {} : { dismiss: input.dismiss }),
           }),
         )
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'post',
+        path: '/v1/free-chat/sessions/:id/fanout/:batch/undo-notes',
+        operationId: 'undoAssistantFanoutNotes',
+        summary:
+          '「助理」汇总卡上「撤销」（WP357，决策 902）：这一批直接写进知识库的口径全部退役（留痕不删）；回改过的汇总那一条',
+        params: [
+          ...ID,
+          { name: 'batch', in: 'path' as const, required: true, description: '方案卡的来源批次' },
+        ],
+        returns: '{ summary: FreeChatMessageView }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.undoFanoutNotes === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「助理」撤不了要记的口径')
+        return ok(c, await port.undoFanoutNotes(actorOf(c), param(c, 'id'), param(c, 'batch')))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'patch',
+        path: '/v1/free-chat/notes/:id',
+        operationId: 'editAssistantNote',
+        summary:
+          '改一条助理记进知识库的口径（WP357，决策 902；只认助理扇出的条目、只认让助理记的那个人）：就地改正文，id 与出处不变，改之前那句留痕',
+        params: [{ name: 'id', in: 'path' as const, required: true, description: '事实卡 id' }],
+        body: NoteBody,
+        returns: 'FactCard',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.editNote === undefined)
+          throw new ApiError('not_implemented', '这个服务进程改不了助理记的口径')
+        const input = await body(c, NoteBody)
+        return ok(c, await port.editNote(actorOf(c), param(c, 'id'), input.statement))
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'delete',
+        path: '/v1/free-chat/notes/:id',
+        operationId: 'removeAssistantNote',
+        summary: '删一条助理记进知识库的口径（WP357，决策 902）：退役留痕，不真删',
+        params: [{ name: 'id', in: 'path' as const, required: true, description: '事实卡 id' }],
+        returns: '{ retired: boolean }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.removeNote === undefined)
+          throw new ApiError('not_implemented', '这个服务进程删不了助理记的口径')
+        return ok(c, await port.removeNote(actorOf(c), param(c, 'id')))
       },
     ),
     route(

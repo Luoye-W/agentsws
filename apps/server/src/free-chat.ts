@@ -34,6 +34,7 @@ import type {
   ChatContentPart,
   ChatMessage,
   Clock,
+  FactCard,
   FindArchivedWorkInput,
   ModelRef,
   PricingEntry,
@@ -118,6 +119,14 @@ export interface FreeChatOptions {
   newId(prefix: string): string
   /** WP343：「我的助理」——问全局（只读）+ 派活 + 回报。不给 = 老的随便聊。 */
   assistant?: Assistant
+  /**
+   * WP357（决策 902）：助理记进知识库的口径改 / 删（只认 `assistant_note`、只认让助理记的那个人；
+   * 不行的抛带 `code`（`not_found` / `forbidden` / `invalid_input`）的错）。不给 = 改不了。
+   */
+  notes?: {
+    edit(actor: FreeChatActor, card_id: string, statement: string): Promise<FactCard>
+    remove(actor: FreeChatActor, card_id: string): Promise<unknown>
+  }
   /** WP343：助理这一层的记忆（「自动记忆」开关与记账 / 提醒）。不给 = 不记。 */
   memory?: {
     auto(actor: FreeChatActor): boolean
@@ -286,6 +295,24 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
       running?.abort()
       return { stopped: running !== undefined }
     },
+    ...(options.notes === undefined
+      ? {}
+      : {
+          editNote: (actor: FreeChatActor, card_id: string, statement: string) =>
+            noteCall(() =>
+              (options.notes as NonNullable<FreeChatOptions['notes']>).edit(
+                actor,
+                card_id,
+                statement,
+              ),
+            ),
+          removeNote: async (actor: FreeChatActor, card_id: string) => {
+            await noteCall(() =>
+              (options.notes as NonNullable<FreeChatOptions['notes']>).remove(actor, card_id),
+            )
+            return { retired: true }
+          },
+        }),
     ...(options.assistant === undefined
       ? {}
       : {
@@ -302,6 +329,9 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
             batch_id: string,
             input: Parameters<NonNullable<FreeChatPort['fanout']>>[3],
           ) => confirmFanout(options, own, actor, session_id, batch_id, input),
+          // WP357（决策 902）：汇总卡上「撤销」这一批写进知识库的口径
+          undoFanoutNotes: (actor: FreeChatActor, session_id: string, batch_id: string) =>
+            undoFanoutNotes(options, own, actor, session_id, batch_id),
           async forget(actor: FreeChatActor, id: string) {
             // 别人的与不存在的回同一句：不给探测别人记忆 id 的口
             if (!store.memories(actor.person_id).some((m) => m.id === id))
@@ -898,6 +928,49 @@ async function confirmFanout(
   store.addMessage(summary)
   store.putSession({ ...session, updated_at: clock.now() })
   return { plan: publicMessage(sentPlan), summary }
+}
+
+/** WP357：改 / 删助理记的口径时的错误翻成网关错误码（404 / 403 / 400）。 */
+async function noteCall<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    const code = (e as { code?: unknown }).code
+    if (code === 'not_found' || code === 'forbidden' || code === 'invalid_input')
+      throw new ApiError(code, (e as Error).message)
+    throw e
+  }
+}
+
+/**
+ * WP357（决策 902）：汇总卡上「撤销」——这一批直接写进知识库的口径全部退役（留痕不删），
+ * 汇总那一条记上撤销的时候与条数（卡上改成「已撤销」）。撤过的再点回 409。
+ */
+async function undoFanoutNotes(
+  options: FreeChatOptions,
+  own: Own,
+  actor: FreeChatActor,
+  session_id: string,
+  batch_id: string,
+): Promise<{ summary: FreeChatMessageView }> {
+  const { store, clock } = options
+  const session = own(actor, session_id)
+  const assistant = options.assistant
+  if (assistant === undefined) throw new ApiError('not_implemented', '这里没有「助理」')
+  const message = store.messages(session.id).find((m) => m.fanout_summary?.batch_id === batch_id)
+  const summary = message?.fanout_summary
+  if (message === undefined || summary === undefined)
+    throw new ApiError('not_found', '没有这一批的汇总（可能已经删了）')
+  const ids = summary.note_card_ids ?? []
+  if (ids.length === 0) throw new ApiError('conflict', '这一批没有写进知识库的口径')
+  if (summary.notes_undone_at !== undefined) throw new ApiError('conflict', '这一批已经撤销过了')
+  const n = await assistant.fanout.undoNotes(actor, ids)
+  const next: FreeChatMessageView = {
+    ...message,
+    fanout_summary: { ...summary, notes_undone_at: clock.now(), notes_undone: n },
+  }
+  store.putMessage(next)
+  return { summary: publicMessage(next) }
 }
 
 /** 模型要搜一次：到上限就说"次数用完了"；搜到的来源去重后推给界面，结果以外部数据的样子还给模型。 */
