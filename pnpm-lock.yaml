@@ -13,6 +13,7 @@ overrides:
   dsh-web-search-diy>@deepseek-ai/dsh-credentials: 0.2.1-alpha.2
   dsh-web-search-diy>@deepseek-ai/dsh-launch-environment: 0.2.1-alpha.2
   dsh-web-search-diy>@deepseek-ai/dsh-web: 0.2.1-alpha.2
+  dsh-web-search-diy>@deepseek-ai/schemastery: 3.18.5-alpha.1
 
 packageExtensionsChecksum: sha256-uWzYb+Ro97TJzt3Jz3J4brEzH2bckBOjzWMQ12NZNvs=
 
@@ -2314,9 +2315,6 @@ packages:
         optional: true
       '@deepseek-ai/cordis-plugin-loader':
         optional: true
-
-  '@deepseek-ai/cosmokit@1.8.5':
-    resolution: {integrity: sha512-LXsrlem9z8dq4sLflj2yuCuYX7KqhdzF5hZly3eZyuTo8d6oDSOXuEgC5DbQWKW+lksm6zmOutQLsP/ma6wR6A==}
 
   '@deepseek-ai/cosmokit@1.8.6-alpha.1':
     resolution: {integrity: sha512-qtuYVBRu7VrD1jLHvaM5sSShtBVgff/0R5vx57fsHUeeobvvv5TmtnTrs0+h4H263kF3ie25VO70Ija8R1eaow==}
@@ -4770,9 +4768,6 @@ packages:
   '@deepseek-ai/node-addon-system@0.1.2':
     resolution: {integrity: sha512-EFn8K+mXIXiw6s3rxX+cgp2hZTEAQdVIsURhrXnBxycSXvtQ1EQpsSVzoNKtKAQI0I0VqkEcVEjHzS/PeaGsvw==}
     engines: {node: '>=20'}
-
-  '@deepseek-ai/schemastery@3.18.4':
-    resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
 
   '@deepseek-ai/schemastery@3.18.5-alpha.1':
     resolution: {integrity: sha512-HojoBv1wMQn6N8nDgTgWbc/f4EFAlg/ZsIYN2AChnEDoFOmcWd3+MDzhozNffmywywzV7pcouHRR4x37YZfcjA==}
@@ -12469,8 +12464,6 @@ snapshots:
       '@deepseek-ai/cordis-plugin-include': 1.0.10-alpha.1(@deepseek-ai/cordis-plugin-loader@1.0.6-alpha.1)(@deepseek-ai/cordis@4.0.5-alpha.1)
       '@deepseek-ai/cordis-plugin-loader': 1.0.6-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)(node-addon-require-builtin@0.1.9)
 
-  '@deepseek-ai/cosmokit@1.8.5': {}
-
   '@deepseek-ai/cosmokit@1.8.6-alpha.1': {}
 
   '@deepseek-ai/dsh-acp-app@0.2.1-alpha.2(4205a47f83dbdd906c40e79eb088ad02)':
@@ -15845,11 +15838,6 @@ snapshots:
       '@deepseek-ai/node-addon-system-darwin-x64': 0.1.2
       '@deepseek-ai/node-addon-system-linux-arm64': 0.1.2
       '@deepseek-ai/node-addon-system-linux-x64': 0.1.2
-
-  '@deepseek-ai/schemastery@3.18.4':
-    dependencies:
-      '@deepseek-ai/cosmokit': 1.8.5
-      '@standard-schema/spec': 1.1.0
 
   '@deepseek-ai/schemastery@3.18.5-alpha.1':
     dependencies:
@@ -19353,7 +19341,7 @@ snapshots:
       '@deepseek-ai/dsh-credentials': 0.2.1-alpha.2(@deepseek-ai/cordis@4.0.5-alpha.1)
       '@deepseek-ai/dsh-launch-environment': 0.2.1-alpha.2(@deepseek-ai/cordis@4.0.5-alpha.1)
       '@deepseek-ai/dsh-web': 0.2.1-alpha.2(@deepseek-ai/cordis@4.0.5-alpha.1)(@deepseek-ai/dsh-llm@0.2.1-alpha.2(@deepseek-ai/cordis@4.0.5-alpha.1))
-      '@deepseek-ai/schemastery': 3.18.4
+      '@deepseek-ai/schemastery': 3.18.5-alpha.1
 
   dunder-proto@1.0.1:
     dependencies:
