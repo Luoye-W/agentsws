@@ -377,6 +377,9 @@ export function readImage(file: File): Promise<FreeChatImage> {
 
 /** WP350：能附的文本类资料（扩展名）；WP357（决策 904）加表格 .xlsx / .csv。 */
 export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf', 'xlsx', 'csv'] as const
+/** WP357：一份资料最多多大、一次最多几份（助理、岗位页、事项输入框同一道；服务端还会再闸一次）。 */
+export const DOC_MAX_BYTES = 5 * 1024 * 1024
+export const DOC_MAX_COUNT = 3
 export const isDocFile = (name: string): boolean =>
   (DOC_EXTENSIONS as readonly string[]).includes(name.split('.').pop()?.toLowerCase() ?? '')
 /** WP350：粘贴超过这么多字就收成一份附件（不塞进输入框）。 */

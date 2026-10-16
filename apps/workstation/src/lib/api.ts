@@ -697,6 +697,8 @@ export const openMatterAtPosition = (
     mode?: 'quick' | 'chat' | 'task'
     /** WP342：输入框左下角选的 AI（不给 = 品牌默认） */
     model?: string
+    /** WP357：附上的资料（base64；服务端按助理那套读成文字） */
+    files?: { name: string; data: string }[]
   },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
@@ -1010,8 +1012,13 @@ export const getMatterTimeline = (id: string, limit: number): Promise<TimelineDa
 export const postMatterMessage = (
   id: string,
   text: string,
+  /** WP357：这句话附上的资料（base64；服务端按助理那套读成文字） */
+  files?: { name: string; data: string }[],
 ): Promise<{ event: MatterEvent; run_id?: string }> =>
-  api(`/v1/matters/${encodeURIComponent(id)}/messages`, { method: 'POST', body: { text } })
+  api(`/v1/matters/${encodeURIComponent(id)}/messages`, {
+    method: 'POST',
+    body: files === undefined || files.length === 0 ? { text } : { text, files },
+  })
 
 /** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
 export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>

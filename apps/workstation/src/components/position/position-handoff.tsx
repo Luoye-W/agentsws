@@ -8,12 +8,17 @@
  * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
  * - 下面一排快捷建议照旧，点一下填进框。
  *
+ * WP357（Luoye 10-16 真机：Excel 拖进来没反应）：这个框也能附资料（.txt / .md / .docx / .pdf / .xlsx / .csv，
+ * 拖进来、点「+」、粘贴文件都行，与助理同一套）；附件跟着这句话交出去，开出来的事项第一句话上带着它，
+ * 运行拿到「话 + 附件」。只附不说话时用「看一下附上的资料：…」当这句话。
+ *
  * `hero`：新岗位、什么都还没有时（`position-v2-empty.html`），它放大当主角。
  */
 import { Send } from 'lucide-react'
 import { useState } from 'react'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
+import { useAttachedDocs } from '@/components/matter/use-attached-docs'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -39,6 +44,7 @@ export function PositionHandoff({
   const [text, setText] = useState('')
   /** WP342：这次交出去用哪个 AI（不选 = 品牌默认）；开出来的事项记着它，之后接着跑仍用它。 */
   const [model, setModel] = useState<string | undefined>(undefined)
+  const attached = useAttachedDocs()
   const { open, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
   })
@@ -48,16 +54,24 @@ export function PositionHandoff({
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
 
   const submit = (): void => {
-    const title = text.trim().slice(0, TASK_TEXT_MAX)
+    const typed = text.trim().slice(0, TASK_TEXT_MAX)
+    // WP357：只附了资料没说话——这句话就是「看一下附上的资料：…」
+    const docs = attached.docs
+    const title =
+      typed !== '' || docs.length === 0
+        ? typed
+        : t('matter.file.only', { names: docs.map((d) => `「${d.name}」`).join('') })
     // WP291：等回答时不锁框（回答在框下出「…」）
     if (title === '') return
     clearError()
+    const files = attached.take().map((d) => ({ name: d.name, data: d.data }))
     open.mutate(
-      { title, model },
+      { title, model, files },
       {
-        // WP259：没交出去，字放回框里（框下说一句人话）
+        // WP259：没交出去，字放回框里（框下说一句人话）；WP357：附件也放回去
         onError: () => {
-          setText((now) => (now === '' ? title : now))
+          setText((now) => (now === '' ? typed : now))
+          attached.restore(docs)
         },
       },
     )
@@ -100,6 +114,11 @@ export function PositionHandoff({
         label={t('position.entry.title')}
         testId="position-entry-input"
         modelSlot={<ComposerModelPicker value={model} onChange={setModel} />}
+        // WP357：附资料（拖进来 / 「+」/ 粘贴文件）
+        docs={attached.docs}
+        onAttachDocs={attached.add}
+        onDetachDoc={attached.remove}
+        docProblem={attached.problem}
       />
       {/* WP259：没发出去就在框下说一句（含服务端那句话），不再静默 */}
       <HandoffError error={error} />

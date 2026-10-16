@@ -67,6 +67,13 @@ export const ASSISTANT_ZH: Record<string, string> = {
   'knowledge.note.remove': '删掉这条',
   'knowledge.note.save': '保存',
   'knowledge.note.cancel': '算了',
+  // WP357：岗位页 / 事项输入框附资料
+  'matter.file.chars': '{n} 字',
+  'matter.file.redacted': '像口令的 {n} 处已抹掉，没给 AI 看',
+  'matter.file.only': '看一下附上的资料：{names}',
+  'matter.cmp.attach.any': '加图或资料（拖进来、粘贴也行）',
+  'matter.cmp.attach.doc': '附资料：.txt .md .docx .pdf .xlsx .csv（拖进来也行）',
+  'matter.cmp.doc.remove': '去掉这份',
 }
 
 export const ASSISTANT_EN: Record<string, string> = {
@@ -131,4 +138,10 @@ export const ASSISTANT_EN: Record<string, string> = {
   'knowledge.note.remove': 'Remove',
   'knowledge.note.save': 'Save',
   'knowledge.note.cancel': 'Cancel',
+  'matter.file.chars': '{n} chars',
+  'matter.file.redacted': '{n} secret-looking bits removed before the AI saw it',
+  'matter.file.only': 'Please look at the attached: {names}',
+  'matter.cmp.attach.any': 'Add images or files (drag or paste works too)',
+  'matter.cmp.attach.doc': 'Attach files: .txt .md .docx .pdf .xlsx .csv (drag works too)',
+  'matter.cmp.doc.remove': 'Remove',
 }
