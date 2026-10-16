@@ -2330,6 +2330,8 @@ const zh: Table = {
   'models.subscription.model': '用哪个模型',
   'models.subscription.model.pick': '选一个…',
   'models.subscription.price': '订阅',
+  'models.subscription.selectable':
+    '登好了，「默认模型」下拉和输入框的 AI 钮里就有「ChatGPT 订阅」这一组，选它就用订阅干活。',
   'models.subscription.signout': '登出',
   'models.subscription.signout.confirm': '登出？本机存的那条授权记录会被销毁，之后要重新登录一次。',
   'models.save': '保存',
@@ -6499,6 +6501,8 @@ const en: Table = {
   'models.subscription.model': 'Model',
   'models.subscription.model.pick': 'Pick one…',
   'models.subscription.price': 'subscription',
+  'models.subscription.selectable':
+    'Once signed in, “ChatGPT subscription” shows up in the default-model list and in the AI button of every input box.',
   'models.subscription.signout': 'Sign out',
   'models.subscription.signout.confirm':
     'Sign out? The authorization record stored on this machine is destroyed; you will have to sign in again.',

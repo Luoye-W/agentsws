@@ -192,11 +192,27 @@ export interface FreeChatModelChoice {
   label: string
   official: boolean
   vision: 'ok' | 'no' | 'unchecked'
+  /** WP362：哪一组（工坊积分 / ChatGPT 订阅 / 自己接的）；老服务端没有 = 按 `official` 兜。 */
+  group?: 'workshop' | 'subscription' | 'own'
+  /** WP362：厂商（图标用）。 */
+  vendor?: string
+  /** WP362：每行右边那一格。 */
+  price?: FreeChatModelPrice
 }
+
+/** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1x）/ 限免 / 订阅额度 / 用你自己的 key。 */
+export type FreeChatModelPrice =
+  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price' }
+  | { kind: 'free' }
+  | { kind: 'subscription' }
+  | { kind: 'own_key' }
 
 export interface FreeChatModels {
   choices: FreeChatModelChoice[]
   default?: string
+  /** WP362：消耗速率的 1x 是哪个模型（`fallback` = 价目里没有 DeepSeek v4 Pro，退回默认模型）。 */
+  rate_base?: { model: string; fallback: boolean }
+  rate_note?: string
   web_search: { available: boolean; reason?: string; max_searches: number }
   knowledge: { available: boolean }
 }

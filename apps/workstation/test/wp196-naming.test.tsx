@@ -43,7 +43,8 @@ describe('WP196 / WP342：输入框里的 AI 钮不露 agentsws', () => {
       <ModelPicker choices={CHOICES} value="deepseek/deepseek-chat" onChange={() => undefined} />,
     )
     const pick = screen.getByTestId('model-pick')
-    expect(pick.textContent).toBe('deepseek-chat')
+    // WP362：钮上是「来源 · 模型名」，来源取短名，照样不露 agentsws
+    expect(pick.textContent).toBe('DeepSeek 官方 · deepseek-chat')
     fireEvent.click(pick)
     expect(screen.getByTestId('model-pick-menu').textContent).not.toContain('agentsws/')
   })
