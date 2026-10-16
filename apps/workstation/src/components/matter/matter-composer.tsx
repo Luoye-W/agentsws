@@ -5,16 +5,17 @@
  * - 发送是卡内右下角的圆形箭头：空时灰、有字主色；运行中变成「停」，有字时又是箭头（排在这一轮后面）。
  *   悬停「发送（Enter）」；Enter 发送、Shift+Enter 换行，提示只在聚焦或有字时出。
  * - 左下「私聊 AI」开关（替代原来那块「问 AI」）：打开后整张卡变蓝、顶上一行「只你看得见」。
- * - 左下「+」：WP268 起能加图（点选 / 拖进来 / 粘贴），图先进品牌素材库，发出去的话里带上素材 id；「@」仍置灰。
+ * - 左下「+」：WP268 起能加图（点选 / 拖进来 / 粘贴），图先进品牌素材库，发出去的话里带上素材 id。
  *   WP357：同一个「+」 / 拖进来 / 粘贴也收资料（.txt / .md / .docx / .pdf / .xlsx / .csv，与助理同一套，
  *   `isDocFile`）——给了 `onAttachDocs` 才收；收进来是框里一排小签（名字），发出去由调用方带上 `files`。
- *   认不出的文件说一句只收哪几种，不静默。
+ *   认不出的文件说一句只收哪几种，不静默。WP357：去掉了置灰的「@」和「即将推出」那类占位字（Luoye 10-16）；
+ *   「+」只在私聊 AI 时置灰（那一问不跑岗位、不收附件），悬停说清楚为什么。
  *   WP283：现在的改图型号认遮罩时，每张图左下多一个笔刷「圈出要改的地方」（不认的型号不给这个入口）。
  * - 建议输入：框空着、又有合适的下一步时浅灰字直接显示在框里 + 小 Tab 键帽；按 Tab 收下变正文，
  *   打别的字就消失。涉及花钱 / 对外的也只是填进框，仍要人按发送。
  */
 import { cn } from 'cn'
-import { ArrowUp, AtSign, Brush, FileText, Lock, Plus, Square, X } from 'lucide-react'
+import { ArrowUp, Brush, FileText, Lock, Plus, Square, X } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { AuthedImage } from '@/components/images/authed-image'
 import { BRAND_ASSET_ACCEPT } from '@/lib/api'
@@ -356,15 +357,6 @@ export function MatterComposer({
               }}
             />
           ) : null}
-          <button
-            type="button"
-            disabled
-            aria-label={t('matter.cmp.mention')}
-            title={t('matter.cmp.mention')}
-            className="grid size-8 place-items-center rounded-[10px] text-ws-muted-fg/70"
-          >
-            <AtSign aria-hidden className="size-[18px]" />
-          </button>
           {privateMode ? null : modelSlot}
           {!showPrivate ? null : (
             <button

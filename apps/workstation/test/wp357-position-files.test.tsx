@@ -5,6 +5,7 @@
  * 只附不说话 → 这句话是「看一下附上的资料：…」；认不出的文件说一句；没交出去附件放回框里。
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClientError, type OpenAtPositionData, type PositionInstanceData } from '@/lib/api'
 import { renderWithProviders } from './helpers'
@@ -107,6 +108,30 @@ describe('WP357 岗位页输入框附资料', () => {
     })
     expect(navigate).toHaveBeenCalledWith('/matters/mat_1')
     expect(screen.queryByTestId('matter-doc')).toBeNull()
+  })
+
+  it('「+」可用（不是「即将推出」）：点开能选 xlsx，选了就是一个小签、交出去带着它', async () => {
+    renderWithProviders(<PositionHandoff id="asg_theme" view={VIEW} />)
+    const plus = screen.getByTestId('matter-attach') as HTMLButtonElement
+    expect(plus.disabled).toBe(false)
+    expect(plus.getAttribute('title')).not.toMatch(/即将推出|coming soon/iu)
+    const input = screen.getByTestId('matter-attach-input') as HTMLInputElement
+    expect(input.accept).toContain('.xlsx')
+    const clicked = vi.spyOn(input, 'click')
+    fireEvent.click(plus)
+    expect(clicked).toHaveBeenCalled()
+    await userEvent.upload(input, XLSX)
+    expect((await screen.findByTestId('matter-doc')).textContent).toContain('甲方记录表.xlsx')
+    type('照这张表改')
+    submit()
+    await waitFor(() => {
+      expect(openMatterAtPosition).toHaveBeenCalledWith('asg_theme', {
+        title: '照这张表改',
+        files: [{ name: '甲方记录表.xlsx', data: 'UEsDBA==' }],
+      })
+    })
+    // 置灰的「@」占位也没了
+    expect(screen.queryByLabelText(/提及同事/u)).toBeNull()
   })
 
   it('只附不说话：这句话是「看一下附上的资料：…」', async () => {
