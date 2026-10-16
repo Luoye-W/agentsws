@@ -994,3 +994,4 @@
 | 909 | （WP351）「消息渠道 → 网站聊天窗」与消息里的「网站聊天」只给名下有网站在线客服的品牌（与原左栏「聊天窗」同一判据） | 待定（建议同意） | 低 |
 | 910 | （WP351）「客服 Agent 在处理」（邮件）与「客服 AI 在处理」（网站聊天）说法统一成「客服 AI 在处理」，B2B 同理 | 待定（建议同意，下一单顺手改） | 低 |
 | 911 | （Luoye 10-16）不再用 DeepSeek 自带联网搜索（实测 Reddit / LinkedIn / YouTube / X / Facebook / TikTok / Quora 全被排除，连 site: 都搜不到），改用**工坊内置浏览器**搜（Electron 应用内浏览器，学 Proma；不拉外部 Chrome，Luoye 10-16 追加「太跳跃，要在工坊里完成」），Google → Bing 回退；默认后台静默搜、不弹面板，只有被人机验证拦下 / 要登录时才把那页亮给人处理（Luoye 10-16 再补），不绕过验证码。派 WP353 | **Luoye 定** | 高 |
+| 921 | （Luoye 10-16「尽量用 Google」+ Fable 实测）搜索走工坊内置浏览器（Electron 隐藏窗口、按品牌持久 partition、UA 去 Electron、不开 CDP）打开 Google：本机同网络连搜 3 条未被拦、能拿到 Reddit 结果；被拦两次亮页给人点验证；没有桌面壳时走云端 Google（/v1/search-data/serp）；最后兜底社区插件 @240xu/dsh-websearch | **Luoye 定方向 / Fable 实测** | 高 |
