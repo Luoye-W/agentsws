@@ -5,8 +5,8 @@
  * | 场景 | 钉什么 |
  * |---|---|
  * | 没挂网页工具（职责 YAML 没有 `web_tools` / 服务端没接网页那一层） | 仍走 direct，事件序列与改前**逐字相同**（改前录的金样） |
- * | 挂了 | 走到 dsh；官方两个工具在模型面前；搜索凭据照"账号优先、其次 key"现取；审计 `web.searched` / `web.fetched`、用量 `model.usage{purpose:web_search}` |
- * | 设置里把「用你的 DeepSeek 账号搜索」关了 / 没有凭据 | 不给搜索（抓网页照旧给） |
+ * | 挂了 | 走到 dsh；官方两个工具在模型面前；WP353 起搜索走工坊内置浏览器后端（不打 DeepSeek、不记模型用量）；审计 `web.searched` / `web.fetched` |
+ * | 设置里把「联网搜索」关了 / 没有内置浏览器后端 | 不给搜索（抓网页照旧给） |
  *
  * **不联网、不花钱**：搜索口指向本机替身；抓网页只打本机地址（官方抓取在连接之前就拒）。
  */
@@ -140,13 +140,42 @@ afterAll(async () => {
 
 type WebOpt = NonNullable<RuntimeOptions['web']>
 
-/** 网页那一层（服务端装配给的）：账号登录了就用账号，否则用 key。 */
+/** WP353：内置浏览器后端的替身（记下搜过什么）。 */
+const browserSearched: string[] = []
+const browserStub = (available = true): NonNullable<WebOpt['browser']> => ({
+  available: () => available,
+  search: async (query) => {
+    browserSearched.push(query)
+    return {
+      sources: [
+        { url: 'https://example.com/a', title: 'A' },
+        { url: 'https://example.com/b', title: 'B' },
+      ],
+      content: '这次的结果来自 Google（工坊内置浏览器）。',
+      truncated: false,
+    }
+  },
+  fetch: async (url) => ({
+    url,
+    statusCode: 200,
+    body: { kind: 'text', content: 'x' },
+    truncated: false,
+  }),
+  fetchHosts: ['*.reddit.com'],
+})
+
+/**
+ * 网页那一层（服务端装配给的）。WP353 起后端是工坊内置浏览器；DeepSeek 凭据照旧给着（老调用方），
+ * 用来钉「给了也不用、不去打 DeepSeek」。
+ */
 function webOption(over: Partial<WebOpt> = {}): WebOpt {
   return {
     searchEnabled: () => true,
     credentialKind: () => 'deepseek_account',
     credential: async () => ({ kind: 'account', token: 'acct-srv-test' }),
     searchBaseUrl: base,
+    browser: browserStub(),
+    localeLine: () => '品牌主市场：US；各市场语言：US=en',
     ...over,
   }
 }
@@ -217,8 +246,9 @@ describe('没挂网页工具的运行：照旧走 direct，事件序列与改前
 })
 
 describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面前', () => {
-  it('搜一次、抓一次：审计与用量都记下，令牌不进事件', async () => {
+  it('搜一次、抓一次：搜索走内置浏览器后端（不打 DeepSeek、不记模型用量）；审计照记；提示里有「搜索语言」', async () => {
     seenSearch.length = 0
+    browserSearched.length = 0
     const { events, gateway } = await runOnce({
       web: { tools: ['web_search', 'web_fetch'] },
       calls: [
@@ -229,8 +259,11 @@ describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面
     })
     expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
     expect(gateway.seen[0]?.tools).toEqual(expect.arrayContaining(['web_search', 'web_fetch']))
-    expect(seenSearch[0]?.headers['x-dsh-auth-token']).toBe('acct-srv-test')
+    expect(browserSearched).toEqual(['65W GaN 2026'])
+    expect(seenSearch).toHaveLength(0)
+    // 本机地址不在内置浏览器那几家里：照旧官方匿名抓取，连接之前就拒
     expect(payloadsOf(events, 'tool.result').map((r) => r.status)).toEqual(['ok', 'error'])
+    expect(JSON.stringify(gateway.seen[1]?.messages)).toContain('工坊内置浏览器')
     // 审计：查询 / 网址 + 条数 + 成败，没有正文
     expect(payloadsOf(events, 'web.searched')).toEqual([
       expect.objectContaining({
@@ -244,17 +277,16 @@ describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面
     expect(payloadsOf(events, 'web.fetched')).toEqual([
       expect.objectContaining({ url: 'http://127.0.0.1:9/x', ok: false }),
     ])
-    // 用量：一条查询一笔，purpose web_search，provider 标明账号
-    expect(gateway.external).toEqual([
-      expect.objectContaining({
-        meta: expect.objectContaining({ purpose: 'web_search', role_id: 'dtc.content' }),
-        model: { provider: 'deepseek-account', model: 'deepseek-v4-flash' },
-      }),
-    ])
+    // 内置浏览器不花模型的钱：不再补记 model.usage{web_search}
+    expect(gateway.external).toEqual([])
+    // 系统提示：「搜索语言」那一段 + 品牌主市场那一行
+    const system = JSON.stringify(gateway.seen[0]?.messages)
+    expect(system).toContain('### 搜索语言')
+    expect(system).toContain('品牌主市场：US；各市场语言：US=en')
     expect(JSON.stringify(events)).not.toContain('acct-srv-test')
   })
 
-  it('设置里把「用你的 DeepSeek 账号搜索」关了：不给搜索，抓网页照旧', async () => {
+  it('设置里把「联网搜索」关了：不给搜索，抓网页照旧', async () => {
     const { events, gateway } = await runOnce({
       web: { tools: ['web_search', 'web_fetch'] },
       extra: { web: webOption({ searchEnabled: () => false }) } as Partial<RuntimeOptions>,
@@ -264,15 +296,18 @@ describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面
     expect(gateway.seen[0]?.tools).not.toContain('web_search')
   })
 
-  it('没有凭据（没登录账号、也没有 DeepSeek 官方 key）：同样不给搜索', async () => {
-    const { gateway } = await runOnce({
-      web: { tools: ['web_search'] },
-      extra: {
-        web: webOption({ credentialKind: () => undefined }),
-      } as Partial<RuntimeOptions>,
-    })
-    // 只挂了搜索、搜索又给不了 → 整个网页那一层都不挂，照旧 direct
-    expect(gateway.seen[0]?.tools).not.toContain('web_search')
+  it('没有内置浏览器后端（没装 / 这台没有任何一路能搜）：不给搜索——DeepSeek 凭据给了也不用', async () => {
+    for (const web of [
+      webOption({ browser: browserStub(false) }),
+      (({ browser: _drop, ...rest }) => rest)(webOption()),
+    ]) {
+      const { gateway } = await runOnce({
+        web: { tools: ['web_search'] },
+        extra: { web } as Partial<RuntimeOptions>,
+      })
+      // 只挂了搜索、搜索又给不了 → 整个网页那一层都不挂，照旧 direct
+      expect(gateway.seen[0]?.tools).not.toContain('web_search')
+    }
   })
 })
 

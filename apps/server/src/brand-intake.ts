@@ -117,8 +117,8 @@ export interface BrandIntakeOptions {
   webSearch?: (
     actor: BrandIntakeActor,
   ) =>
-    | Promise<{ search?: IntakeWebSearch; reason?: string }>
-    | { search?: IntakeWebSearch; reason?: string }
+    | Promise<{ search?: IntakeWebSearch; reason?: string; markets?: readonly string[] }>
+    | { search?: IntakeWebSearch; reason?: string; markets?: readonly string[] }
 }
 
 /**
@@ -249,6 +249,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
                 web: {
                   ...(web?.search === undefined ? {} : { search: web.search }),
                   ...(web?.reason === undefined ? {} : { reason: web.reason }),
+                  // WP353：查法语言按档案里定了的市场
+                  ...(web?.markets === undefined ? {} : { markets: web.markets }),
                 },
               }),
           ...(model === undefined

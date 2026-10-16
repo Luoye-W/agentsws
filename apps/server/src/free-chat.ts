@@ -92,7 +92,7 @@ export interface FreeChatOptions {
       query: string,
       ctx: { actor: FreeChatActor; run_id: string; role_id: string },
       signal: AbortSignal,
-    ): Promise<{ sources: readonly FreeChatSearchSource[] }>
+    ): Promise<{ sources: readonly FreeChatSearchSource[]; content?: string }>
     /** 一轮最多搜几次；缺省照 WP179 每运行上限。 */
     maxSearches?: number
     /** WP353：品牌主市场与各市场语言那一行（系统提示「搜索语言」用）；没有市场回 `undefined`。 */
@@ -925,7 +925,9 @@ async function searchOnce(
       (s, i) =>
         `${i + 1}. ${s.title ?? s.url} — ${s.url}${s.snippet === undefined ? '' : `\n   ${s.snippet}`}`,
     )
-    return `搜索「${query}」找到 ${found.sources.length} 条：\n${fence(lines.join('\n'))}`
+    // WP353：来自哪一路、前面几路为什么没用上、要不要人点验证（照实交给模型）
+    const note = found.content === undefined || found.content === '' ? '' : `\n${found.content}`
+    return `搜索「${query}」找到 ${found.sources.length} 条：${note}\n${fence(lines.join('\n'))}`
   } catch (e) {
     return `这次没搜成（${e instanceof Error ? e.message : String(e)}）。用你已经知道的回答，并告诉用户没搜到。`
   }

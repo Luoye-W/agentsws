@@ -178,6 +178,8 @@ export interface BrandModuleSet {
    * 时跳过、卡上说一句人话。
    */
   searchData: SearchDataService
+  /** WP353：联网搜索后端（工坊内置浏览器 → 云端 Google → 公开搜索服务）。没装 = 没有。 */
+  webBrowser?: import('./web-browser/index.js').BrowserWebSearch
   /**
    * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
    *

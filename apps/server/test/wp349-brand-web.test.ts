@@ -69,7 +69,12 @@ afterEach(async () => {
   for (const s of servers.splice(0)) await s.close()
 })
 
-async function boot(options: { web?: boolean } = {}) {
+async function boot(
+  options: {
+    web?: boolean
+    channel?: import('../src/web-browser/index.js').SearchBrowserChannel
+  } = {},
+) {
   const asked: string[] = []
   const prompts: string[] = []
   let t = Date.parse('2026-10-15T09:00:00.000Z')
@@ -92,7 +97,11 @@ async function boot(options: { web?: boolean } = {}) {
       prompts.push(prompt)
       return { text: JSON.stringify(REPLY) }
     },
-    ...(options.web === false
+    // WP353：真后端（内置浏览器替身通道，公开搜索服务关掉、不联网）
+    ...(options.channel === undefined
+      ? {}
+      : { webSearch: { channel: options.channel, keyless: false, gapMs: [0, 0] as const } }),
+    ...(options.web === false || options.channel !== undefined
       ? {}
       : {
           freeChatWebSearch: async (query: string) => {
@@ -210,10 +219,57 @@ describe('WP349 品牌分析联网查（服务端）', () => {
     expect(run.insights).toBe('done')
     expect(run.web?.status).toBe('off')
     expect(run.web?.reason).toContain('没联网，查不了竞品')
-    expect(run.web?.reason).toContain('DeepSeek')
+    expect(run.web?.reason).toContain('内置浏览器')
     expect(run.profile.competitors).toBeUndefined()
     expect(run.profile.positioning?.value).toContain('家长')
     expect(b.prompts[0]).toContain('Do NOT output "competitors"')
     expect(b.events().filter((e) => e.type === 'web.searched')).toHaveLength(0)
+  })
+})
+
+describe('WP353 品牌分析联网查走工坊内置浏览器（服务端装配）', () => {
+  it('德国市场品牌：查法用德语、内置浏览器开 Google 带 gl=de&hl=de；审计照记、不记模型用量', async () => {
+    const opened: string[] = []
+    const channel = {
+      open: async (i: { url: string }) => {
+        opened.push(i.url)
+        const q = new URL(i.url).searchParams.get('q') ?? ''
+        return {
+          ok: true as const,
+          status: 200,
+          final_url: i.url,
+          serp: {
+            signals: { title: q, text: '', captcha: false, passwordInputs: 0 },
+            items:
+              HITS.find(([re]) => re.test(q))?.[1].map((h) => ({ ...h, title: h.title ?? '' })) ??
+              [],
+          },
+        }
+      },
+      reveal: async () => false,
+      status: async () => ({ revealed: false }),
+    }
+    const b = await boot({ channel })
+    const saved = await b.call('PUT', '/v1/workspace/profile', {
+      legal_name: 'Trailmark',
+      markets: ['DE'],
+    })
+    expect(saved.status, saved.message).toBe(200)
+    const run = await b.analyze()
+    expect(run.web?.status).not.toBe('off')
+    const google = opened.map((u) => new URL(u)).filter((u) => u.hostname === 'www.google.com')
+    expect(google.length).toBeGreaterThan(0)
+    expect(
+      google.every((u) => u.searchParams.get('gl') === 'de' && u.searchParams.get('hl') === 'de'),
+    ).toBe(true)
+    expect(google.map((u) => u.searchParams.get('q'))).toContain('Trailmark Alternativen')
+    const all = b.events()
+    expect(all.filter((e) => e.type === 'web.searched').length).toBeGreaterThan(0)
+    expect(
+      all.filter(
+        (e) =>
+          e.type === 'model.usage' && (e.payload as { purpose: string }).purpose === 'web_search',
+      ),
+    ).toHaveLength(0)
   })
 })
