@@ -470,7 +470,7 @@ describe('63 消息面路由', () => {
     expect((await t.post('/v1/messages/backfill', { days: 99999 })).status).toBe(400)
   })
 
-  it('会话视图带得出"客服 Agent 在处理"那条状态带（63 §9）', async () => {
+  it('会话视图带得出"客服 AI 在处理"那条状态带（63 §9）', async () => {
     const t = await messageHarness()
     const view = await data(await t.get('/v1/messages/threads/t1'))
     expect(view.agent_status).toMatchObject({ route: 'support', state: 'working' })

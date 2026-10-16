@@ -465,7 +465,7 @@ describe('消息：普通邮箱该有的（63 §7）', () => {
     expect(h.writer.flags.at(-1)?.add).toContain('\\Answered')
   })
 
-  it('会话视图带得出"客服 Agent 在处理"，而且给的是去工作线程的深链', async () => {
+  it('会话视图带得出"客服 AI 在处理"，而且给的是去工作线程的深链', async () => {
     const h = harness({
       folders: { INBOX: letters([{ uid: 13, mime: mime({ uid: 13 }) }]) },
       roles: ['dtc.support'],

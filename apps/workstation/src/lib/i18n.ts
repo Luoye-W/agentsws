@@ -2043,9 +2043,11 @@ const zh: Table = {
   'messages.archive': '归档',
   // 界面上写「删除」，打出去的是"移到垃圾箱"——**绝不永久删除**（63 §7）
   'messages.delete': '删除',
-  'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
-  'messages.agent.working': '客服 Agent 在处理',
-  'messages.agent.working_b2b': 'B2B Agent 在处理',
+  'messages.readonly': 'AI 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
+  // WP357（决策 910）：「X Agent 在处理」统一说「X AI 在处理」（与网站聊天同一句），各岗位一样
+  'messages.agent.working': '客服 AI 在处理',
+  'messages.agent.working_b2b': 'B2B AI 在处理',
+  'messages.agent.working_kol': '红人营销 AI 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
   'messages.agent.route.support': '这条归客服岗位',
@@ -6207,9 +6209,10 @@ const en: Table = {
   'messages.archive': 'Archive',
   'messages.delete': 'Delete',
   'messages.readonly':
-    'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
-  'messages.agent.working': 'Support agent is on it',
-  'messages.agent.working_b2b': 'B2B agent is on it',
+    'The AI is handling this thread; to answer yourself, take it over in the work thread first.',
+  'messages.agent.working': 'Support AI is on it',
+  'messages.agent.working_b2b': 'B2B AI is on it',
+  'messages.agent.working_kol': 'Creator-marketing AI is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
   'messages.agent.route.support': 'Handled by the support position',
