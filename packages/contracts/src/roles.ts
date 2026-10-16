@@ -342,6 +342,77 @@ export interface RoleDefinition {
     revoke_context_on_removal: boolean
   }
   requires?: RoleId[]
+  /**
+   * WP360（决策 947，Luoye 10-16）：这条职责干活要「Agents 工坊助手」浏览器插件——写明拿它做哪几样。
+   *
+   * 「哪些岗位需要插件」**只由这一格推出来**（岗位 = 它那几条职责的并集，见 {@link extensionNeedOf}），
+   * 首次设置第 ④ 步、岗位页顶上那张装插件卡、第一次对话 AI 主动带卡，三处共用。不写 = 不需要插件。
+   * `uses` 还决定配对之后顺带引导哪一步（Reddit → 插件里「连接 Reddit」；广告 → 插件里连上那家后台）。
+   */
+  browser_extension?: { uses: BrowserExtensionUse[] }
+}
+
+/**
+ * WP360：职责拿插件做的事（一样一个词，界面按它说人话）。
+ * - `reddit`：读 Reddit（巡查收件箱 / 版块）、把批过的回复填进页面；
+ * - `kol`：在 YouTube / Instagram / TikTok 页面上看红人、收进红人库；
+ * - `google_ads` / `meta_ads`：在自己的广告后台里执行批过的动作、导数据。
+ */
+export type BrowserExtensionUse = 'reddit' | 'kol' | 'google_ads' | 'meta_ads'
+
+export const BROWSER_EXTENSION_USES: readonly BrowserExtensionUse[] = [
+  'reddit',
+  'kol',
+  'google_ads',
+  'meta_ads',
+]
+
+/**
+ * WP360：配对之后每一样还要在插件里做的那一步（没有 = 配上就能用），以及做完接哪张方案卡（WP348 设置目标）。
+ * 同一步多条职责要只走一次（`google_ads` 与 `meta_ads` 各是一步，账户方案卡是同一张）。
+ */
+export const EXTENSION_USE_FOLLOW: Readonly<
+  Record<BrowserExtensionUse, { step?: 'reddit' | 'google_ads' | 'meta_ads'; plan?: string }>
+> = {
+  reddit: { step: 'reddit', plan: 'reddit.watch' },
+  kol: {},
+  google_ads: { step: 'google_ads', plan: 'ads.accounts' },
+  meta_ads: { step: 'meta_ads', plan: 'ads.accounts' },
+}
+
+/**
+ * WP360：一组职责（一个岗位 / 一个品牌担着的全部 / 首次设置勾的那些）要不要插件。
+ * 不要回 `undefined`；要就回拿它做的几样（按 {@link BROWSER_EXTENSION_USES} 的顺序去重）与是哪几条职责要的。
+ */
+export function extensionNeedOf(
+  roles: readonly { id: string; browser_extension?: { uses: readonly BrowserExtensionUse[] } }[],
+): { uses: BrowserExtensionUse[]; role_ids: string[] } | undefined {
+  const uses = new Set<BrowserExtensionUse>()
+  const role_ids: string[] = []
+  for (const r of roles) {
+    const u = r.browser_extension?.uses ?? []
+    if (u.length === 0) continue
+    if (!role_ids.includes(r.id)) role_ids.push(r.id)
+    for (const x of u) uses.add(x)
+  }
+  if (role_ids.length === 0) return undefined
+  return { uses: BROWSER_EXTENSION_USES.filter((x) => uses.has(x)), role_ids }
+}
+
+/** WP360：这几样配对之后要走的步（去重、按固定顺序）与要接的方案卡（去重）。 */
+export function extensionFollowOf(uses: readonly BrowserExtensionUse[]): {
+  steps: ('reddit' | 'google_ads' | 'meta_ads')[]
+  plans: string[]
+} {
+  const steps: ('reddit' | 'google_ads' | 'meta_ads')[] = []
+  const plans: string[] = []
+  for (const u of BROWSER_EXTENSION_USES) {
+    if (!uses.includes(u)) continue
+    const f = EXTENSION_USE_FOLLOW[u]
+    if (f.step !== undefined && !steps.includes(f.step)) steps.push(f.step)
+    if (f.plan !== undefined && !plans.includes(f.plan)) plans.push(f.plan)
+  }
+  return { steps, plans }
 }
 
 export interface Assignment {

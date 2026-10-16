@@ -328,6 +328,10 @@ handover:
 
 requires: []
 
+# WP360（决策 947）：这条职责要「Agents 工坊助手」浏览器插件——在你自己的 Meta 广告后台里执行批过的改动、每天导数据靠它。
+# 「哪些岗位要插件」只从这一格推（首次设置第 ④ 步、岗位页顶上那张卡、第一次对话都认它）。
+browser_extension: { uses: [meta_ads] }
+
 quick_prompts:
   - id: today_spend
     label: { zh: "今天花了多少", en: "Today's spend" }
