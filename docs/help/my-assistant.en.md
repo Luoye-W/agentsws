@@ -19,6 +19,14 @@
 - The assistant **never changes anything outside by itself**. Posting, replying, changing prices or the store are handed to a position; anything external still comes to you as a card to approve.
 - **When it isn't sure who should do it, it asks** instead of guessing, listing the positions to choose from.
 
+## One conversation, all the way down
+
+The assistant keeps a single conversation — no new chats to start, no list to dig through. Scroll up for everything you've said before: a date marks each new day, and a faint line marks each new topic, with a one-line summary of the topic before it (hover for the full summary).
+
+- **Switch topics**: click "New topic" at the top right, or just say "new topic, …". After a two-hour break, the next day, or when you clearly move on to something else, the assistant starts a new topic by itself.
+- **Find something you said**: click the magnifier at the top left, type a couple of words, and click a result to jump there.
+- **What it keeps in mind**: each reply only reads the current topic word for word, short summaries of the last few topics, and your "Memory" — so a long conversation doesn't get slower or pricier. When you mention something older ("last week's meeting notes"), it looks it up itself and shows "Source" chips under the reply that jump to the original line. Progress on handed-off work is always checked live, never recalled from the chat.
+
 ## One document, several positions
 
 After a meeting, the follow-ups usually belong to several positions, and several positions need to remember new rules. You don't have to tell each one:

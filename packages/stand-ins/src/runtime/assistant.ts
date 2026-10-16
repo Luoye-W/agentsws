@@ -149,8 +149,32 @@ export const ASSISTANT_TOOL_DEFS: readonly ToolDef[] = [
   },
 ]
 
+/**
+ * WP352（决策 931）：「查以前聊过的」——助理只有一条长对话，进模型的只有当前这段原话、最近几段的小结与记忆；
+ * 用户提到更早的事（「上周那份会议记录」）时它自己来翻：按关键词 / 时间搜段落小结与原话，回片段与出处。
+ * 只读；不在 {@link ASSISTANT_TOOL_NAMES} 里（不走 `assistant.call`，由随便聊那条模型回合自己接，它手上有会话存储）。
+ */
+export const ASSISTANT_RECALL_TOOL = 'recall_conversation'
+
+export const ASSISTANT_RECALL_TOOL_DEF: ToolDef = {
+  name: ASSISTANT_RECALL_TOOL,
+  description:
+    '查你和用户以前聊过的（更早的话题小结与原话）。用户提到之前说过的事、以前给过的资料、上次定的东西，' +
+    '而眼前的对话里没有时用。给关键词（可以写几种说法，空格隔开）；用户说了「上周」「昨天」就换算成 since / until（ISO8601）。' +
+    '回的是片段与出处（哪天、哪个话题）；只读。',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: '关键词（空格隔开，可中英文几种说法）' },
+      since: { type: 'string', description: '不早于（ISO8601），可不填' },
+      until: { type: 'string', description: '早于（ISO8601），可不填' },
+    },
+    required: ['query'],
+  },
+}
+
 export const ASSISTANT_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
-  ASSISTANT_TOOL_DEFS.map((d) => [d.name, d]),
+  [...ASSISTANT_TOOL_DEFS, ASSISTANT_RECALL_TOOL_DEF].map((d) => [d.name, d]),
 )
 
 /** `work_overview` 的一行（一个岗位）。 */
