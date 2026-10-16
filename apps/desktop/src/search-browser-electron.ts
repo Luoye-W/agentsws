@@ -15,7 +15,6 @@ import {
   cleanUserAgent,
   type OpenRequest,
   type OpenResult,
-  type RevealRequest,
   type SearchBrowserDriver,
   type SearchBrowserStatus,
   searchPartitionOf,

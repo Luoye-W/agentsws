@@ -1642,8 +1642,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const search =
       roleWeb.tools.includes('web_search') &&
       opt.searchEnabled() &&
-      opt.browser !== undefined &&
-      opt.browser.available()
+      opt.browser?.available() === true
     const fetch = roleWeb.tools.includes('web_fetch')
     if (!search && !fetch) return undefined
     const locale = search ? opt.localeLine?.() : undefined
