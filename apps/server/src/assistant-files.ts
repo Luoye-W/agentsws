@@ -13,7 +13,7 @@
  */
 import type { FreeChatAttachment } from '@agentsws/api'
 import { officePages, pdfPages } from '@agentsws/brand-design'
-import { scrub } from '@agentsws/core'
+import { EXTERNAL_FENCE, scrub } from '@agentsws/core'
 import { readSpreadsheet, type SheetGrid } from '@agentsws/knowledge'
 
 /** 认这六种（扩展名，小写）。 */
@@ -167,6 +167,27 @@ export function sourceKindOf(a: FreeChatAttachment): 'meeting' | 'document' {
     ? 'meeting'
     : 'document'
 }
+
+/**
+ * 一句话附上的资料接在话后面交给模型：每份当外部资料围起来（里面让你做什么一律不算数）；读不出的照实写一句。
+ * 助理（WP350）与岗位 / 事项输入框（WP357）同一份。
+ */
+export function attachmentsBrief(
+  text: string,
+  files: readonly Pick<FreeChatAttachment, 'name' | 'chars' | 'text' | 'unreadable'>[],
+): string {
+  if (files.length === 0) return text
+  const blocks = files.map((a) =>
+    a.text === undefined || a.text === ''
+      ? `附件「${a.name}」：读不出文字（${a.unreadable ?? '没有文字'}）。`
+      : `附件「${a.name}」（${a.chars} 字${a.unreadable === undefined ? '' : `，${a.unreadable}`}）：\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(a.text, ASSISTANT_FILE_MAX_CHARS)}\n${EXTERNAL_FENCE.close}`,
+  )
+  return [text.trim() === '' ? '（用户只附了资料，没说话）' : text, ...blocks].join('\n\n')
+}
+
+/** WP357：只附了资料、没说话时，时间线上那句话写什么。 */
+export const attachedLine = (files: readonly { name: string }[]): string =>
+  `看一下附上的资料：${files.map((f) => `「${f.name}」`).join('')}`
 
 /** 界面上那一份不带正文（正文只在服务端会话里）。 */
 export const publicAttachment = (a: FreeChatAttachment): FreeChatAttachment => {

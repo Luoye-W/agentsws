@@ -130,6 +130,25 @@ export interface MatterEvent {
    * 输入框空着时显示成浅灰建议、按 Tab 收下；只在 `agent_message` 上有。不从正文里猜。
    */
   next_suggestion?: string
+  /**
+   * WP357（Luoye 10-16）：这句话附上的资料（.txt / .md / .docx / .pdf / .xlsx / .csv）——只在
+   * `human_message` 上有。读法与助理同一套（像口令的字抹掉、每份最多 3 万字、表格读成一行一行），
+   * 正文 `text` 只存在本机事项时间线里；运行拿到的是「这句话 + 附件围起来的外部资料」。老事件没有这一格。
+   */
+  attachments?: MatterAttachment[]
+}
+
+/** WP357：事项里一句话附上的一份资料（读出来的文字；读不出的照实写 `unreadable`）。 */
+export interface MatterAttachment {
+  name: string
+  /** 读出来多少字（抹掉口令之后、截断之前）。 */
+  chars: number
+  /** 读出来的文字（读不出就没有）。 */
+  text?: string
+  /** 抹掉了几处像口令的字。 */
+  redacted?: number
+  /** 读不出 / 截断了的那一句人话。 */
+  unreadable?: string
 }
 
 /**

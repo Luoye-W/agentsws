@@ -361,11 +361,15 @@ const TurnOptions = {
   web_search: z.boolean().optional(),
   knowledge: z.boolean().optional(),
 }
-/** WP350：一份资料最多 5MB（base64 约 6.7M 字符），一次最多 3 份。 */
-const FileBody = z.object({
+/**
+ * WP350：一份资料最多 5MB（base64 约 6.7M 字符），一次最多 3 份。
+ * WP357：岗位页与事项 / 线程输入框附的资料同一个形状（`AttachedFileBody`）。
+ */
+export const AttachedFileBody = z.object({
   name: z.string().trim().min(1).max(200),
   data: z.string().min(1).max(MAX_IMAGE_CHARS),
 })
+const FileBody = AttachedFileBody
 /** WP357：改一条助理记的口径。 */
 const NoteBody = z.object({ statement: z.string().min(1).max(300) })
 const FanoutBody = z.object({

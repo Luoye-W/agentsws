@@ -10017,8 +10017,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return a !== undefined && a.person_id === person_id && a.revoked_at === undefined
       },
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
-      sayAt: async (actor, matter_id, text) =>
-        (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      sayAt: async (actor, matter_id, text, attached) =>
+        (await positionsFor(ws)).sayAt({
+          matter_id,
+          person_id: actor.person_id,
+          text,
+          // WP357：附上的资料（已读成文字）与交给运行的那段话
+          ...(attached === undefined ? {} : attached),
+        }),
       // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
       genuiTool: async (actor, matter_id, call) => {
         const runtime = brand.runtime?.runHostTool
@@ -10533,6 +10539,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.detach === true ? { detach: true } : {}),
           // WP342：输入框左下角选的 AI（认不出的不记，跟品牌默认走）
           ...(chosen === undefined ? {} : { model: chosen }),
+          // WP357：附上的资料（宿主按助理那套读成文字）
+          ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
         })
         return {
           mode: out.mode,
