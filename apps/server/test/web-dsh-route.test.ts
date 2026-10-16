@@ -286,6 +286,51 @@ describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面
     expect(JSON.stringify(events)).not.toContain('acct-srv-test')
   })
 
+  it('WP355：搜索后端拿得到这次运行的模型来源 / 模型 / 人；用了模型自带搜索就补记一笔用量（cost 0）', async () => {
+    const who: unknown[] = []
+    const native: NonNullable<WebOpt['browser']> = {
+      ...browserStub(),
+      search: async (_query, _max, w) => {
+        who.push(w)
+        return {
+          sources: [{ url: 'https://example.com/a', title: 'A', snippet: 'S' }],
+          content: '这次的结果来自 ChatGPT 自带搜索（用你的订阅搜的）。',
+          truncated: false,
+          native_usage: {
+            model: 'gpt-5.5',
+            input_tokens: 300,
+            output_tokens: 80,
+            cached_tokens: 0,
+          },
+        }
+      },
+    }
+    const { events, gateway, run_id } = await runOnce({
+      web: { tools: ['web_search'] },
+      calls: [{ name: 'web_search', input: { queries: ['smart glasses'] } }],
+      extra: { web: webOption({ browser: native }) } as Partial<RuntimeOptions>,
+    })
+    expect(who).toEqual([{ source: 'stub', model: 'stub-v1', person_id: 'per_1' }])
+    expect(gateway.external).toEqual([
+      {
+        meta: {
+          workspace_id: 'ws_1',
+          assignment_id: 'asg_1',
+          role_id: 'dtc.content',
+          run_id,
+          purpose: 'web_search',
+        },
+        model: { provider: 'stub', model: 'gpt-5.5' },
+        usage: { input_tokens: 300, output_tokens: 80, cached_tokens: 0 },
+      },
+    ])
+    // 工具面不变：结果照旧按 url / title / snippet 交给模型，审计照记
+    expect(JSON.stringify(gateway.seen[1]?.messages)).toContain('ChatGPT 自带搜索')
+    expect(payloadsOf(events, 'web.searched')).toEqual([
+      expect.objectContaining({ queries: ['smart glasses'], results: 1, ok: true }),
+    ])
+  })
+
   it('设置里把「联网搜索」关了：不给搜索，抓网页照旧', async () => {
     const { events, gateway } = await runOnce({
       web: { tools: ['web_search', 'web_fetch'] },

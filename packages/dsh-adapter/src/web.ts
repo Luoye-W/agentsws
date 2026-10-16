@@ -118,7 +118,11 @@ export interface WebStandIn {
  * 出错照官方的样子抛带 `code` 的错（`WEB_PROVIDER_ERROR` 之类），门禁按 `code` 记审计。
  */
 export interface WebBackend {
-  search(query: string, maxResults?: number): Promise<WebSearchResult>
+  /**
+   * WP355：第三个参数是**这次运行**（宿主据 `runtime.model.provider` 判断这次用不用模型自带的搜索，
+   * 名单在宿主那一层）。老宿主不看它也照样能用。
+   */
+  search(query: string, maxResults?: number, request?: RunRequest): Promise<WebSearchResult>
   fetch?(url: string): Promise<WebFetchResult>
   /** 交给浏览器抓的主机（`hostAllowed` 的写法，`*.reddit.com`）；不给 / 空 = 全走官方匿名抓取。 */
   fetchHosts?: readonly string[]
@@ -192,7 +196,7 @@ export async function mountWebTools(
     if (web.search) ctx.web.registerSearchProvider(standInSearchProvider(standIn))
     if (web.fetch) ctx.web.registerFetchProvider(standInFetchProvider(standIn))
   } else if (backend !== undefined) {
-    if (web.search) ctx.web.registerSearchProvider(browserSearchProvider(backend))
+    if (web.search) ctx.web.registerSearchProvider(browserSearchProvider(backend, request))
     if (web.fetch) {
       const hosts = backend.fetchHosts ?? []
       if (backend.fetch === undefined || hosts.length === 0) {
@@ -320,12 +324,18 @@ export function officialWebSearch(input: {
   }
 }
 
-/** WP353：内置浏览器搜索提供方（结果形状与官方 `WebSearchResult` 一致；截断由官方服务做）。 */
-export function browserSearchProvider(backend: WebBackend): WebSearchProvider {
+/**
+ * WP353：内置浏览器搜索提供方（结果形状与官方 `WebSearchResult` 一致；截断由官方服务做）。
+ * WP355：带上这次运行（`run`），宿主据它判断走不走模型自带的搜索；提供方 id、工具面不变。
+ */
+export function browserSearchProvider(backend: WebBackend, run?: RunRequest): WebSearchProvider {
   return {
     id: BROWSER_SEARCH_PROVIDER_ID,
     available: () => true,
-    search: (request) => backend.search(request.query, request.maxResults),
+    search: (request) =>
+      run === undefined
+        ? backend.search(request.query, request.maxResults)
+        : backend.search(request.query, request.maxResults, run),
   }
 }
 

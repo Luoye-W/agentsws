@@ -77,6 +77,24 @@ export {
   toChatMessages,
   toToolDefs,
 } from './llm.js'
+export type {
+  CodexNativeSearch,
+  CredentialRecordsLike,
+  NativeSearchRequest,
+  NativeSearchResult,
+  NativeSearchSource,
+} from './native-search.js'
+export {
+  CODEX_NATIVE_SEARCH_TIMEOUT_MS,
+  CODEX_SEARCH_DEFAULT_MODEL,
+  cleanCitationUrl,
+  codexSearchInput,
+  createCodexNativeSearch,
+  piCredentialStore,
+  snippetsFromOutput,
+  sourcesFromCodexOutput,
+  withCodexWebSearch,
+} from './native-search.js'
 export {
   type DetectOfficialDesktopDeps,
   detectOfficialDesktop,
