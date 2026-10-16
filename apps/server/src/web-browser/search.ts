@@ -30,6 +30,13 @@ import {
   type SearchLocale,
   searchLocaleOf,
 } from './locale.js'
+import {
+  NATIVE_SEARCH_LABEL,
+  type NativeSearchPort,
+  type NativeSearchSource,
+  nativeSearchSourceOf,
+  type SearchWho,
+} from './native.js'
 
 export interface SearchSource {
   url: string
@@ -37,8 +44,8 @@ export interface SearchSource {
   snippet?: string
 }
 
-/** 结果来自哪一路（审计 / 界面照实标）。 */
-export type SearchVia = 'google' | 'bing' | 'cloud_google' | 'public'
+/** 结果来自哪一路（审计 / 界面照实标）。WP355：`native` = 名单里那家模型自带的搜索。 */
+export type SearchVia = 'google' | 'bing' | 'cloud_google' | 'public' | 'native'
 
 export interface BrowserSearchResult {
   sources: SearchSource[]
@@ -50,6 +57,15 @@ export interface BrowserSearchResult {
   /** 这次把一页亮给人了（第三栏「浏览器」）。 */
   handover?: boolean
   locale: SearchLocale
+  /** WP355：`via: 'native'` 时是哪家（`openai-codex`）。 */
+  native_source?: NativeSearchSource
+  /** WP355：自带搜索这一次用的模型与 token（订阅不按 token 收钱；宿主照 `cost_base: 0` 记一笔用量）。 */
+  native_usage?: {
+    model: string
+    input_tokens: number
+    output_tokens: number
+    cached_tokens: number
+  }
 }
 
 export interface FetchedPage {
@@ -152,7 +168,10 @@ interface EngineState {
 interface StateFile {
   version: 1
   engines: Partial<Record<'google' | 'bing', EngineState>>
-  cache: Record<string, { at: number; via: SearchVia; sources: SearchSource[] }>
+  cache: Record<
+    string,
+    { at: number; via: SearchVia; native?: NativeSearchSource; sources: SearchSource[] }
+  >
 }
 
 function loadState(file: string | undefined): StateFile {
@@ -185,6 +204,13 @@ export interface BrowserWebSearchOptions {
   cloud?: { available(): Promise<boolean>; serp(q: SerpQuery): Promise<SerpResult> } | undefined
   /** 公开搜索服务（免 key 匿名口）。没有 = 不走这一路。 */
   keyless?: (() => KeylessSearch | undefined) | undefined
+  /**
+   * WP355（决策 937）：名单里的模型来源自带的联网搜索（产品里接订阅登录那棵树）。
+   * 不给 = 名单里的来源也照旧走 WP353 的链。
+   */
+  native?: NativeSearchPort | undefined
+  /** WP355：自带搜索的节流（全进程一份；同一时刻只搜一次、每小时上限）。不给 = 不另节流。 */
+  nativeThrottle?: SearchThrottle | undefined
   now(): number
   log?(line: string): void
 }
@@ -199,7 +225,8 @@ export interface KeylessSearch {
 export interface BrowserWebSearch {
   /** 有没有任何一路能搜。 */
   available(): boolean
-  search(query: string, maxResults?: number): Promise<BrowserSearchResult>
+  /** WP355：`who` = 这次是谁、用的哪个模型来源（名单里的来源先走它自带的搜索）。 */
+  search(query: string, maxResults?: number, who?: SearchWho): Promise<BrowserSearchResult>
   fetch(url: string): Promise<FetchedPage>
   /** 交给内置浏览器抓的站（没有桌面壳 = 空，全走官方匿名抓取）。 */
   readonly fetchHosts: readonly string[]
@@ -374,18 +401,82 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
     }
   }
 
-  const VIA_LINE: Record<SearchVia, string> = {
+  /**
+   * WP355：名单里那家模型自带的搜索。搜不成（没登录、出错、超时、到了每小时上限、模型没真的去搜）
+   * 都只记一句，交给后面 WP353 的链接着搜——不让这一次失败。
+   */
+  async function viaNative(
+    source: NativeSearchSource,
+    who: SearchWho,
+    query: string,
+    maxResults: number,
+    locale: SearchLocale,
+  ): Promise<{
+    sources?: SearchSource[]
+    note?: string
+    usage?: BrowserSearchResult['native_usage']
+  }> {
+    const label = NATIVE_SEARCH_LABEL[source]
+    const port = o.native
+    if (port === undefined) return { note: `${label} 在这里没接上` }
+    const task = () =>
+      port
+        .search({
+          source,
+          ...(who.person_id === undefined ? {} : { person_id: who.person_id }),
+          ...(who.model === undefined ? {} : { model: who.model }),
+          query,
+          maxResults,
+          locale: {
+            language: locale.language,
+            ...(locale.market === undefined ? {} : { market: locale.market }),
+          },
+        })
+        .then(
+          (r) => ({ ok: true as const, r }),
+          (e: unknown) => ({ ok: false as const, e }),
+        )
+    const got = o.nativeThrottle === undefined ? await task() : await o.nativeThrottle.run(task)
+    if (got === undefined)
+      return { note: `这一小时 ${label} 已经搜了 ${o.nativeThrottle?.maxPerHour ?? 0} 次（上限）` }
+    if (!got.ok) {
+      const why = got.e instanceof Error ? got.e.message : String(got.e)
+      o.log?.(`web-search: ${label} 没搜成：${why}`)
+      return { note: `${label} 这次没搜成（${why.replace(/[。.]$/u, '')}）` }
+    }
+    const usage = got.r.usage
+    return {
+      sources: [...got.r.sources],
+      ...(usage === undefined
+        ? {}
+        : { usage: { model: got.r.model ?? who.model ?? '', ...usage } }),
+    }
+  }
+
+  const VIA_LINE: Record<Exclude<SearchVia, 'native'>, string> = {
     google: '这次的结果来自 Google（工坊内置浏览器）',
     bing: '这次的结果来自 Bing（工坊内置浏览器）',
     cloud_google: '这次的结果来自云端 Google 搜索',
     public: '这次的结果来自公开搜索服务',
   }
+  const viaLine = (via: SearchVia, native?: NativeSearchSource): string =>
+    via === 'native'
+      ? `这次的结果来自 ${NATIVE_SEARCH_LABEL[native ?? 'openai-codex']}（用你的订阅搜的）`
+      : VIA_LINE[via]
+  const viaName = (via: SearchVia, native?: NativeSearchSource): string =>
+    via === 'native'
+      ? NATIVE_SEARCH_LABEL[native ?? 'openai-codex']
+      : via === 'public'
+        ? '公开搜索服务'
+        : via === 'cloud_google'
+          ? '云端 Google'
+          : ENGINE_NAME[via]
 
   return {
     fetchHosts: o.channel === undefined ? [] : BROWSER_FETCH_HOSTS,
     available: () => o.channel !== undefined || o.cloud !== undefined || o.keyless !== undefined,
 
-    async search(query, maxResults = 10) {
+    async search(query, maxResults = 10, who = {}) {
       const locale = searchLocaleOf(o.profile(), query)
       const key = `${locale.language}|${locale.market ?? ''}|${query.trim().toLowerCase()}`
       const now = o.now()
@@ -393,10 +484,11 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       if (hit !== undefined && hit.at > now - SEARCH_CACHE_TTL_MS) {
         return {
           sources: hit.sources.slice(0, maxResults),
-          content: `${VIA_LINE[hit.via]}（7 天内搜过同一句，用的是上次的结果）。`,
+          content: `${viaLine(hit.via, hit.native)}（7 天内搜过同一句，用的是上次的结果）。`,
           truncated: false,
           via: hit.via,
           cached: true,
+          ...(hit.native === undefined ? {} : { native_source: hit.native }),
           locale,
         }
       }
@@ -404,10 +496,25 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       const notes: string[] = []
       let handover = false
       let anyLoaded = false
+      let nativeUsage: BrowserSearchResult['native_usage']
+      // WP355（决策 937）：名单里的模型来源先走它自带的搜索，不行再走 WP353 的链
+      const native = nativeSearchSourceOf(who.source)
       const steps: [
         SearchVia,
         () => Promise<{ sources?: SearchSource[]; note?: string; handover?: boolean }>,
       ][] = [
+        ...(native === undefined
+          ? []
+          : [
+              [
+                'native',
+                async () => {
+                  const got = await viaNative(native, who, query, maxResults, locale)
+                  nativeUsage = got.usage
+                  return got
+                },
+              ] as [SearchVia, () => Promise<{ sources?: SearchSource[]; note?: string }>],
+            ]),
         ['google', () => viaBrowser('google', query, locale)],
         ['bing', () => viaBrowser('bing', query, locale)],
         ['cloud_google', () => viaCloud(query, locale)],
@@ -426,12 +533,15 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           .filter((s) => /^https?:\/\//.test(s.url))
           .slice(0, maxResults)
         if (sources.length === 0) {
-          notes.push(
-            `${via === 'public' ? '公开搜索服务' : via === 'cloud_google' ? '云端 Google' : ENGINE_NAME[via]} 没搜到相关结果`,
-          )
+          notes.push(`${viaName(via, native)} 没搜到相关结果`)
           continue
         }
-        state.cache[key] = { at: o.now(), via, sources }
+        state.cache[key] = {
+          at: o.now(),
+          via,
+          ...(via === 'native' && native !== undefined ? { native } : {}),
+          sources,
+        }
         const keys = Object.keys(state.cache)
         if (keys.length > CACHE_MAX) {
           for (const k of keys
@@ -443,10 +553,12 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         const before = notes.length === 0 ? '' : `前面没用上的：${notes.join('；')}。`
         return {
           sources,
-          content: `${VIA_LINE[via]}。${before}`,
+          content: `${viaLine(via, native)}。${before}`,
           truncated: false,
           via,
           ...(handover ? { handover: true } : {}),
+          ...(via === 'native' && native !== undefined ? { native_source: native } : {}),
+          ...(nativeUsage === undefined ? {} : { native_usage: nativeUsage }),
           locale,
         }
       }
@@ -461,6 +573,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         content: `没搜到相关结果：${notes.join('；')}。`,
         truncated: false,
         ...(handover ? { handover: true } : {}),
+        ...(nativeUsage === undefined ? {} : { native_usage: nativeUsage }),
         locale,
       }
     },

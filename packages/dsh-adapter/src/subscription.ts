@@ -35,6 +35,13 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { DshAdapterError } from './errors.js'
 import type { GatewayBudget } from './llm.js'
 import { toChatMessages, toToolDefs } from './llm.js'
+import {
+  type CodexNativeSearch,
+  type CredentialRecordsLike,
+  createCodexNativeSearch,
+  type NativeSearchRequest,
+  type NativeSearchResult,
+} from './native-search.js'
 import type { SubscriptionLoginMethod, SubscriptionProviderId } from './subscription-facts.js'
 import {
   SUBSCRIPTION_PROVIDERS,
@@ -258,6 +265,15 @@ export interface SubscriptionLoginHandle {
   cancel(provider: SubscriptionProviderId): void
   /** 登出 = 销毁记录。 */
   signOut(provider: SubscriptionProviderId): Promise<void>
+  /**
+   * WP355（决策 937）：用这个人的订阅跑一次**这家自带的联网搜索**（第一版只有 `openai-codex`；
+   * 别家回 `WEB_PROVIDER_UNAVAILABLE`）。令牌由官方 pi-ai 从这棵树的 `ctx.credentials` 里自己取、自己刷新，
+   * 不经我们的手（见 `native-search.ts`）。老替身没有这一格 = 不支持。
+   */
+  nativeSearch?(
+    provider: SubscriptionProviderId,
+    request: NativeSearchRequest,
+  ): Promise<NativeSearchResult>
   dispose(): Promise<void>
 }
 
@@ -304,6 +320,8 @@ export async function createSubscriptionLogin(
     options.readyTimeoutMs,
   )
   const auth = ctx.authorization as AuthorizationService
+  // WP355：ChatGPT 自带搜索（第一次搜时才建，pi-ai 的模型集合也是那时才懒加载）
+  let codex: CodexNativeSearch | undefined
 
   const readPayload = async (
     provider: SubscriptionProviderId,
@@ -397,6 +415,15 @@ export async function createSubscriptionLogin(
 
     async signOut(provider) {
       await ctx.credentials.deleteRecord(subscriptionRecordKey(provider))
+    },
+
+    async nativeSearch(provider, request) {
+      if (provider !== 'openai-codex')
+        throw Object.assign(new Error(`${subscriptionFactsOf(provider).label}没有接自带搜索。`), {
+          code: 'WEB_PROVIDER_UNAVAILABLE',
+        })
+      codex ??= createCodexNativeSearch(ctx.credentials as unknown as CredentialRecordsLike)
+      return codex.search(request)
     },
 
     async dispose() {

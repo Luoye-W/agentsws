@@ -362,7 +362,12 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
           try {
             let value: unknown
             if (backend === undefined) value = missing('宿主没接内置浏览器')
-            else if (p.op === 'backend_search') value = await backend.search(p.query, p.maxResults)
+            // WP355：带上这次运行（宿主据模型来源判断走不走模型自带的搜索）
+            else if (p.op === 'backend_search')
+              value =
+                req === undefined
+                  ? await backend.search(p.query, p.maxResults)
+                  : await backend.search(p.query, p.maxResults, req)
             else if (backend.fetch === undefined) value = missing('宿主的内置浏览器不抓网页')
             else value = await backend.fetch(p.url)
             return { now: options.clock.now(), value }
