@@ -364,6 +364,16 @@ describe('托盘：只提示那一档', () => {
     expect(
       find({ ...base, appUpdate: { state: 'downloading', version: '0.2.0', percent: 42 } }),
     ).toMatchObject({ id: 'download-update', label: '正在下载新版本… 42%', enabled: false })
+    // WP351：没收到进度（增量下载）不写 0%；下完在摆新版说「正在准备新版…」
+    expect(
+      find({ ...base, appUpdate: { state: 'downloading', version: '0.2.0', percent: 0 } }),
+    ).toMatchObject({ id: 'download-update', label: '正在下载新版本…', enabled: false })
+    expect(
+      find({
+        ...base,
+        appUpdate: { state: 'downloading', version: '0.2.0', percent: 92, phase: 'prepare' },
+      }),
+    ).toMatchObject({ id: 'download-update', label: '正在准备新版…', enabled: false })
     expect(
       find({ ...base, language: 'en-US', appUpdate: { state: 'ready', version: '0.2.0' } }),
     ).toMatchObject({ id: 'install-update', label: 'Restart to update to 0.2.0', enabled: true })

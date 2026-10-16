@@ -1,5 +1,5 @@
 /**
- * WP137：聊天窗设置页「转发方式」自建那一项能填留言密钥。
+ * WP137：聊天窗设置「转发方式」自建那一项能填留言密钥（WP351 起在「消息渠道 → 网站聊天窗」）。
  *
  * 转发器现在「留言密钥没签发就不收留言」，自建 Docker 打印的留言密钥、自建 Worker 的
  * `MESSAGE_KEY` 都得有地方填回本机——否则留言永远收不到、收到了也开不了箱。
@@ -7,7 +7,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ChatWindowPage } from '@/pages/chat-window'
+import { ChatWidgetSettings } from '@/components/chat-window/widget-settings'
 import { renderWithProviders } from './helpers'
 
 const saved: Record<string, unknown>[] = []
@@ -44,7 +44,7 @@ vi.mock('@/lib/api', async () => {
 
 describe('聊天窗 · 自建转发填留言密钥（WP137）', () => {
   it('只填留言密钥也能保存，且只送这一格', async () => {
-    renderWithProviders(<ChatWindowPage />)
+    renderWithProviders(<ChatWidgetSettings />)
     const input = await screen.findByTestId('relay-message-key')
     expect((input as HTMLInputElement).type).toBe('password')
     await userEvent.type(input, 'mkk_from_docker_logs')

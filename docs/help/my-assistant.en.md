@@ -1,6 +1,6 @@
-# My assistant: chat, or hand things off
+# Assistant: chat, or hand things off
 
-"My assistant" at the top of the sidebar works like the chat box on ChatGPT or Claude. The old "Chat" and "My agent" are now this one entry.
+"Assistant" at the top of the sidebar works like the chat box on ChatGPT or Claude. The old "Chat" and "My agent" are now this one entry.
 
 ## What it does
 

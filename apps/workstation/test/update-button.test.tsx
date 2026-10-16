@@ -6,7 +6,7 @@
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UpdateButton, type UpdateStatusView } from '@/components/update-button'
+import { UPDATE_POLL_MS, UpdateButton, type UpdateStatusView } from '@/components/update-button'
 import { renderWithProviders } from './helpers'
 
 function fakeBridge(initial: UpdateStatusView) {
@@ -126,6 +126,55 @@ describe('UpdateButton', () => {
     expect(button.getAttribute('title')).toContain('去下载页')
     await userEvent.click(button)
     expect(bridge.download).toHaveBeenCalledOnce()
+  })
+
+  it('WP351：没进度事件只说「正在下载…」不写 0%；下完在摆新版说「正在准备新版…」', async () => {
+    const bridge = fakeBridge({
+      state: 'downloading',
+      version: '0.2.0',
+      percent: 0,
+      source: 'primary',
+    })
+    renderWithProviders(<UpdateButton />)
+    const button = await screen.findByTestId('update-button')
+    expect(button.textContent).toContain('正在下载…')
+    expect(button.textContent).not.toContain('0%')
+    expect(screen.queryByTestId('update-percent')).toBeNull()
+    bridge.push({
+      state: 'downloading',
+      version: '0.2.0',
+      percent: 92,
+      source: 'primary',
+      phase: 'prepare',
+    })
+    expect(screen.getByTestId('update-button').textContent).toContain('正在准备新版…')
+    expect(screen.queryByTestId('update-percent')).toBeNull()
+    bridge.push({ state: 'ready', version: '0.2.0', source: 'primary' })
+    expect(screen.getByTestId('update-button').textContent).toContain('重启并更新')
+  })
+
+  it('WP351：每 10 秒补拉一次状态——漏了事件也不会一直停在「正在下载」', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const bridge = fakeBridge({
+        state: 'downloading',
+        version: '0.2.0',
+        percent: 0,
+        source: 'primary',
+      })
+      renderWithProviders(<UpdateButton />)
+      await screen.findByTestId('update-button')
+      // 壳里早就 ready 了，但事件没送到
+      bridge.status.mockResolvedValue({ state: 'ready', version: '0.2.0', source: 'primary' })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS)
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('update-button').textContent).toContain('重启并更新')
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('桥问状态失败也不炸（当作没新版本）', async () => {

@@ -54,7 +54,15 @@ export type DesktopUpdateStatus =
       source: 'primary' | 'github'
       url?: string
     }
-  | { state: 'downloading'; version: string; percent: number; source: 'primary' | 'github' }
+  | {
+      state: 'downloading'
+      version: string
+      /** 0 = 还没收到进度事件（增量下载不发进度）。 */
+      percent: number
+      source: 'primary' | 'github'
+      /** WP351：下完了、在摆新版（解压 / 冒烟）。 */
+      phase?: 'prepare'
+    }
   | { state: 'ready'; version: string; source: 'primary' | 'github' }
   /** WP337：等没有正在输出的运行就自己重启（按钮显示「等空闲后重启」，点一下取消）。 */
   | { state: 'waiting'; version: string; source: 'primary' | 'github' }

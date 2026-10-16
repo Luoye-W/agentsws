@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
+import { SITE_CHAT_HREF, SITE_CHAT_SETTINGS_HREF } from '@/components/messages/site-chat'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { OwnSubQueue } from '@/components/social/own-sub-queue'
 import { RedditWatch } from '@/components/social/reddit-watch'
@@ -25,7 +26,8 @@ import type { QuickView } from '@/lib/position-work'
 
 /**
  * WP57（48 §3 L1）：网站在线客服的入口——它的产出在对话里，不在图表里。
- * （WP241 从 `pages/position.tsx` 挪来，长相不变。）
+ * （WP241 从 `pages/position.tsx` 挪来。）WP351：原「聊天窗」页拆成两半，这里两个钮各去一半：
+ * 访客对话（「消息 → 网站聊天」）、挂件设置（「消息渠道 → 网站聊天窗」）。
  */
 export function ChatWindowEntry(): ReactNode {
   const { t } = useApp()
@@ -38,9 +40,16 @@ export function ChatWindowEntry(): ReactNode {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild>
-            <Link to="/chat-window">{t('chat.window.entry.open')}</Link>
+            <Link to={SITE_CHAT_HREF} data-testid="chat-window-entry-chat">
+              {t('chat.window.entry.open')}
+            </Link>
+          </Button>
+          <Button size="sm" variant="ghost" asChild>
+            <Link to={SITE_CHAT_SETTINGS_HREF} data-testid="chat-window-entry-settings">
+              {t('chat.window.entry.settings')}
+            </Link>
           </Button>
         </div>
       </CardContent>

@@ -38,7 +38,7 @@ Anything running, or with a card waiting for your approval, can’t be archived;
 1. **By duty**: the last line under a duty, “Archived (n)”, opens a list you can filter by time, position and duty. Each row has “Restore”.
 2. **Search**: the search box on that list, or ⌘K. Titles, summaries and message text all count. ⌘K marks archived results.
 3. **Ask AI**: if you only remember roughly, describe it — e.g. “bring back the chat about samples with that US creator last week”:
-   - say it in **My assistant**;
+   - say it in **Assistant**;
    - or type it in **⌘K** and pick the last item, “Ask AI to find”;
    - or use the box at the bottom of the Archived list.
 

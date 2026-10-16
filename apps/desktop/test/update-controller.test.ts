@@ -91,6 +91,39 @@ describe('有新版 → 下载 → 重启并更新', () => {
     expect(primary.downloads()).toBe(1)
   })
 
+  it('WP351：增量下载不发进度、下完在摆新版——percent 停在 0，随后 phase=prepare，再 ready', async () => {
+    let release: (() => void) | undefined
+    const primary = backend({
+      download: (_onProgress, onPhase) =>
+        new Promise<void>((resolve) => {
+          onPhase?.('prepare')
+          onPhase?.('prepare') // 同一阶段不重复广播
+          release = resolve
+        }),
+    })
+    const { c, seen } = controller({ primary })
+    await c.check()
+    const done = c.download()
+    await vi.waitFor(() => {
+      expect(release).toBeDefined()
+    })
+    expect(c.status()).toEqual({
+      state: 'downloading',
+      version: '0.2.0',
+      percent: 0,
+      source: 'primary',
+      phase: 'prepare',
+    })
+    release?.()
+    expect(await done).toEqual({ state: 'ready', version: '0.2.0', source: 'primary' })
+    expect(seen.map((s) => (s.state === 'downloading' ? `d:${s.phase ?? '-'}` : s.state))).toEqual([
+      'available',
+      'd:-',
+      'd:prepare',
+      'ready',
+    ])
+  })
+
   it('同时点两次「更新」只下一份', async () => {
     const primary = backend()
     const { c } = controller({ primary })

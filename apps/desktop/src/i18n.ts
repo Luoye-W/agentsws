@@ -63,6 +63,10 @@ export interface Strings {
   updateDownload: string
   /** WP218：正在后台下载（灰着）。 */
   updateDownloading: string
+  /** WP351：还没收到进度事件时（增量下载不发进度），不写 0%。 */
+  updateDownloadingPlain: string
+  /** WP351：下完了、在摆新版（解压 + 冒烟）。 */
+  updatePreparing: string
   /** WP218：下好了。 */
   updateReady: string
   /** WP218：「重启并更新」前，有任务在跑时那个确认框。 */
@@ -167,6 +171,8 @@ const ZH: Strings = {
   updateAvailableTitle: 'Agents 工坊有新版本',
   updateDownload: '下载新版本 {version}',
   updateDownloading: '正在下载新版本… {percent}%',
+  updateDownloadingPlain: '正在下载新版本…',
+  updatePreparing: '正在准备新版…',
   updateReady: '重启并更新到 {version}',
   updateRestartMessage: '有任务在跑，确定现在重启？',
   updateRolledBack: '{version} 没能打开，已回到原来的版本，数据都在',
@@ -261,6 +267,8 @@ const EN: Strings = {
   updateAvailableTitle: 'A new Agents Workshop is available',
   updateDownload: 'Download version {version}',
   updateDownloading: 'Downloading the update… {percent}%',
+  updateDownloadingPlain: 'Downloading the update…',
+  updatePreparing: 'Getting the new version ready…',
   updateReady: 'Restart to update to {version}',
   updateRestartMessage: 'Something is still running. Restart now?',
   updateRolledBack:

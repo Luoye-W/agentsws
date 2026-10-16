@@ -129,6 +129,13 @@ describe('WP138：范围为空只挡店铺数字，不挡红人工作台与聊�
     openPosition()
     expect(await screen.findByTestId('no-range-card')).toBeTruthy()
     expect(screen.getByTestId('chat-window-entry')).toBeTruthy()
+    // WP351：两个钮各去一半——访客对话（消息 → 网站聊天）、挂件设置（消息渠道 → 网站聊天窗）
+    expect(screen.getByTestId('chat-window-entry-chat').getAttribute('href')).toBe(
+      '/messages?view=all&source=chat',
+    )
+    expect(screen.getByTestId('chat-window-entry-settings').getAttribute('href')).toBe(
+      '/im-channels#site-chat',
+    )
     expect(screen.getByTestId('chat-sandbox-entry')).toBeTruthy()
   })
 

@@ -162,28 +162,19 @@ describe('连接页「自带数据接口」挑红人职责', () => {
   })
 })
 
-describe('聊天窗常驻入口（左栏「消息」下面）', () => {
-  const shell = (assignments: Assignment[]): void => {
+describe('WP351：左栏不再有「聊天窗」（对话并进消息、设置进消息渠道）', () => {
+  it('名下有网站在线客服也不出那一格', () => {
     renderWithProviders(
       <AppShell
         positions={[]}
         cards={[]}
         tileLibrary={[]}
-        me={me(assignments)}
+        me={me([OWNER, { ...CHAT, ranges: [] }])}
         onAddTile={() => {}}
       >
         <div>主区</div>
       </AppShell>,
     )
-  }
-
-  it('名下有网站在线客服就出现，点过去是 /chat-window', () => {
-    shell([OWNER, { ...CHAT, ranges: [] }])
-    expect(screen.getByTestId('nav-chat-window').getAttribute('href')).toBe('/chat-window')
-  })
-
-  it('没有（或已撤销）就不出现', () => {
-    shell([OWNER, { ...CHAT, revoked_at: '2026-09-01T00:00:00.000Z' }])
     expect(screen.queryByTestId('nav-chat-window')).toBeNull()
   })
 })

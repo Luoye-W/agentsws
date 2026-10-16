@@ -36,6 +36,12 @@ export const ACCOUNT_GROUPS_KEY = 'agentsws.account.groups'
 export const RIGHT_RAIL_LAYOUT_KEY = 'agentsws.rightrail.layout'
 
 /**
+ * WP351：「消息 → 网站聊天」每段访客对话在这台电脑上看到了哪一刻（会话 id → `updated_at`）。
+ * 只用来画未读小点；值里只有 id 与时间，没有一个字的对话内容。丢了最坏是每段都再亮一次点。
+ */
+export const SITE_CHAT_SEEN_KEY = 'agentsws.site_chat.seen'
+
+/**
  * WP74：日历上开着哪几个图层、用的哪个视图。
  *
  * 与左右栏那三个同一类：**纯界面偏好**。图层不是"哪些事存在"，是"这一屏现在画哪几类"；

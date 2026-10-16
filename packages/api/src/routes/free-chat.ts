@@ -477,7 +477,7 @@ export function freeChatRoutes(): Route[] {
       async (c, deps) => {
         const port = portOf(deps)
         if (port.assistant === undefined)
-          throw new ApiError('not_implemented', '这个服务进程的随便聊没有装「我的助理」')
+          throw new ApiError('not_implemented', '这个服务进程的随便聊没有装「助理」')
         return ok(c, await port.assistant(actorOf(c)))
       },
     ),
@@ -493,7 +493,7 @@ export function freeChatRoutes(): Route[] {
       async (c, deps) => {
         const port = portOf(deps)
         if (port.memories === undefined)
-          throw new ApiError('not_implemented', '这个服务进程的「我的助理」没有记忆')
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有记忆')
         return ok(c, await port.memories(actorOf(c)))
       },
     ),
@@ -510,7 +510,7 @@ export function freeChatRoutes(): Route[] {
       async (c, deps) => {
         const port = portOf(deps)
         if (port.forget === undefined)
-          throw new ApiError('not_implemented', '这个服务进程的「我的助理」没有记忆')
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有记忆')
         return ok(c, await port.forget(actorOf(c), param(c, 'id')))
       },
     ),
@@ -667,7 +667,7 @@ export function freeChatRoutes(): Route[] {
       async (c, deps) => {
         const port = portOf(deps)
         if (port.fanout === undefined)
-          throw new ApiError('not_implemented', '这个服务进程的「我的助理」不能拆成多份')
+          throw new ApiError('not_implemented', '这个服务进程的「助理」不能拆成多份')
         const input = await body(c, FanoutBody)
         return ok(
           c,
