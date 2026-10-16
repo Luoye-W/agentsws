@@ -171,7 +171,8 @@ export function AssistantMessage({
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
           {status ?? t('free_chat.thinking')}
         </p>
-      ) : (
+      ) : message.fanout_summary !== undefined ? null : (
+        // WP350：汇总那一条的字给 AI 看（下一轮记得派了什么），屏上只出汇总卡（界面少字）
         <SafeMarkdown text={text} className="text-[14px] leading-6" testId="free-chat-reply" />
       )}
       {live === true && text !== '' && status !== undefined ? (
