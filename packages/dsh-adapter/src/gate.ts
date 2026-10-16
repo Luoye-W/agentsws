@@ -241,7 +241,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   /** `server_name` → 那台服务器上被人勾成"只读"的工具（`McpServerRecord.read_tools`）。 */
   const mcpReadTools = mcpReadToolMap(request)
   /*
-   * WP92（55 §10）：第二种浏览器（BrowserSkill）的工具是**六个裸名**（`browser_page` …），
+   * WP92（55 §10）：第二种浏览器（BrowserSkill）的工具是**六个裸名**（`bsk_page` …，0.3.3 起，WP356），
    * 没有前缀，所以"是不是浏览器工具"这一问由 `anyBrowserToolName` 回答（两张表各认各的；
    * 一次运行只挂一种，不会同时命中）。这一整组在不在，照旧只取决于 `RunRequest.browser`。
    *
@@ -685,7 +685,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       sink({ type: 'progress', step: 'browser_write', note: exec.name })
     }
     /*
-     * WP92（55 §10「人接管」）：`browser_assist{action:'request-help'}` 是 BrowserSkill
+     * WP92（55 §10「人接管」）：`bsk_assist{action:'request-help'}` 是 BrowserSkill
      * 自带的人接管——它不替用户动手，只是在他自己的浏览器里弹一层"请你来做这一步"。
      * 所以**两档都放行**（公司端也放行：让人来做正是公司端想要的那条路），
      * 但要在时间线上留一行——"AI 卡住了，把活交回给人"这件事，人应该看得见。

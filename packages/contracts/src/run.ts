@@ -324,7 +324,7 @@ export interface RunBrowserView {
   /** 最近一次被门禁拦下来的浏览器调用（白名单外的域、写动作越权…）。 */
   last_blocked?: { at: Iso8601; tool: string; reason: string }
   /**
-   * 正等人接管（`browser_assist{action:'request-help'}` → `progress{browser_handoff}`）。
+   * 正等人接管（`bsk_assist{action:'request-help'}` → `progress{browser_handoff}`）。
    * 有它 = 界面上该出"去接管"，而不是让人盯着一个不动的运行。
    */
   awaiting_handoff?: { at: Iso8601; note?: string }

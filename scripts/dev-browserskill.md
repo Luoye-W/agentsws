@@ -29,7 +29,7 @@ console.log(res)
 "
 ```
 
-期望：打印 `{ path: '…/bin/bsk', version: '0.3.0', sha256: 'f85b2d…' }`。
+期望：打印 `{ path: '…/bin/bsk', version: '0.3.3', sha256: 'e6bb7c…' }`（darwin-arm64；WP356 起锁 0.3.3）。
 
 三件事一件都不能省：
 
@@ -116,9 +116,9 @@ const call = async (name, args) =>
     signal: new AbortController().signal,
   })
 
-console.log(await call('browser_session', { action: 'start', url: 'https://www.youtube.com/' }))
-console.log(await call('browser_inspect', { action: 'observe' }))
-console.log(await call('browser_session', { action: 'stop' }))
+console.log(await call('bsk_session', { action: 'start', url: 'https://www.youtube.com/' }))
+console.log(await call('bsk_inspect', { action: 'observe' }))
+console.log(await call('bsk_session', { action: 'stop' }))
 await scope.dispose()
 process.exit(0)
 "
@@ -126,15 +126,15 @@ process.exit(0)
 
 期望：
 
-- `tools:` 六个名字 —— `browser_assist` / `browser_inspect` / `browser_interact` /
-  `browser_page` / `browser_session` / `browser_tabs`（**`lazyTools: false` 是硬要求**：
+- `tools:` 六个名字 —— `bsk_assist` / `bsk_inspect` / `bsk_interact` /
+  `bsk_page` / `bsk_session` / `bsk_tabs`（**`lazyTools: false` 是硬要求**：
   上游缺省 `true` 时这六个要等 `browser-skill` 这个技能被调用过一次才注册，而我们的
   组合里没有 skill 那一层，于是一个工具都不会有）；
-- `browser_session{start}` 之后你的浏览器里**多出一个 Agent 窗口**（不是抢你现在这个标签）；
-- `browser_inspect{observe}` 回一棵压缩过的页面结构（VOM，带 `@e1` 这样的 ref）；
-- `browser_session{stop}` 之后那个窗口关掉，你原来的标签一个没动。
+- `bsk_session{start}` 之后你的浏览器里**多出一个 Agent 窗口**（不是抢你现在这个标签）；
+- `bsk_inspect{observe}` 回一棵压缩过的页面结构（VOM，带 `@e1` 这样的 ref）；
+- `bsk_session{stop}` 之后那个窗口关掉，你原来的标签一个没动。
 
-> 真要用你已经开着的某个标签：`browser_tabs{action:'borrow', tabId}`，用完
+> 真要用你已经开着的某个标签：`bsk_tabs{action:'borrow', tabId}`，用完
 > `return` 还回去。这会打断你手上的事，所以提示词里写着"先问一句"。
 
 ## 5. 走一遍设置页

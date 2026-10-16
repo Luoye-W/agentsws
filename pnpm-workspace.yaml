@@ -44,6 +44,14 @@ packageExtensions:
 # （`^0.1.0-rc.6` 与 `0.1.6-alpha.2` 无交集 → 去 registry 另找一份）。处理同上：钉到
 # 树里已经有的那一版。另两个（`dsh-client-ui-attachment` / `dsh-client-ui-tool`）仍然
 # 不在树里，所以仍然不写——等它们哪天也被拖进来再说。
+# WP356（插件 0.3.3）：上游把 peer 范围放宽成 `^0.1.5-rc.3 || ^0.2.0-rc.1`，但预发布规则照旧——
+# `0.2.1-alpha.2` 的 major.minor.patch 是 0.2.1，比较符里带预发布的只有 0.1.5 / 0.2.0 两组，
+# 仍然**不相交**（拿 semver 实测过：只有正式版 0.2.1 才满足）。所以四条照留。peer 表本身也变了：
+# `dsh-client-ui-attachment` 从 peer 里删掉了（本来就没为它写过 override，没东西可去）；
+# `dsh-llm` 从 optional 变成必需、`dsh-attachment` 从必需变成 optional——两条 override 都还在，
+# 照样链树里那一份。`dsh-client-ui-tool` 仍是 optional peer：它现在虽然在树里，pnpm 对这条
+# 不相交的 optional peer 是**跳过不链**（lockfile 里插件那一条没有它，与 0.3.0 时一样），
+# 所以仍然不写。
 overrides:
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-attachment': '0.2.1-alpha.2'
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-tools': '0.2.1-alpha.2'
@@ -495,14 +503,18 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-workspace@0.2.1-alpha.2'
   - '@deepseek-ai/dsh-workspace-changes@0.2.1-alpha.2'
   # WP92（55 §10）：腾讯 BrowserSkill 的**官方** dsh 插件（MIT，`Tencent/BrowserSkill`）。
-  # 写死 0.3.0 一个版本：排除的是这一版，不是这个包——下一版出来还得再决定一次。
+  # 写死一个版本：排除的是这一版，不是这个包——下一版出来还得再决定一次。
+  # WP356：0.3.0 → 0.3.3（10-15 发，还在静默期里）。三件重核过：仍然没有 install 类脚本、
+  # 没有原生模块；运行时 import 变成 dsh-tools / schemastery / **dsh-llm**（新加的，只用
+  # `createUserMessage`，dsh-llm 本来就在树里、override 钉着那一份）外加 node 内置；React 那层
+  # 悬浮层（`lib/client.cjs`）仍只给 dsh 自己的 web 客户端用，headless 组合里不加载。
   # 核实过的三件（做的时候逐个看的，不是抄 README）：
   # - 没有 postinstall / install / prepare 脚本，所以**不需要**进 allowBuilds；
   # - 没有原生模块、不下载任何二进制（`bsk` 由我们自己钉版本 + sha256 装，见
   #   `browserskill.lock.json`）；
   # - 运行时只 import `@deepseek-ai/cordis` / `-dsh-tools` / `-schemastery`（都已在树里），
   #   React 那几个 peer 是 optional 的客户端 UI，headless 组合里一个都不加载。
-  - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0'
+  - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.3'
   - miniflare@5.20260917.0-alpha
   - wrangler@4.134.0
   # WP132：`dsh-office-to-pdf` 的依赖从 `@deepseek-ai/libreoffice-kit@0.0.1` 升到 0.1.0（09-22 发，

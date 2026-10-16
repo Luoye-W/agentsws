@@ -288,8 +288,8 @@ API 的 SSE）。**认不出的请求当场抛，CI 一个包都不出网**。�
 | 事项 | 做法 |
 |---|---|
 | 挂法 | `@wxg-prc-cpg/browser-skill-dsh-plugin` 按官方方式挂（它直接注册 6 个工具 + 一个 skill，`lazyTools`）；只在个人档、且用户在设置页选了"我正在用的浏览器"时挂 |
-| 读写分类 | 门禁看 `args.action`：`browser_inspect` 全读；`browser_page` 的 navigate / back / forward / reload / wait 读；`browser_interact` 全写；`browser_session` start 读（带 url 走白名单）、stop 读；`browser_tabs` list / select 读，create（带 url 走白名单）/ close / borrow / return 写；`browser_assist` 读 |
-| 域名白名单 | 拦 `browser_page{url}`、`browser_session start{url}`、`browser_tabs create{url}` 三处，规则与官方 provider 同一套（`browser_scope`） |
+| 读写分类 | 门禁看 `args.action`：`bsk_inspect` 全读；`bsk_page` 的 navigate / back / forward / reload / wait 读；`bsk_interact` 全写；`bsk_session` start 读（带 url 走白名单）、stop 读；`bsk_tabs` list / select 读，create（带 url 走白名单）/ close / borrow / return 写；`bsk_assist` 读 |
+| 域名白名单 | 拦 `bsk_page{url}`、`bsk_session start{url}`、`bsk_tabs create{url}` 三处，规则与官方 provider 同一套（`browser_scope`） |
 | evaluate | dsh 工具面本来没有；`bsk evaluate` 归 shell allowlist（WP89）一并禁 |
 | 隐私 | daemon 的 30 分钟 GitHub 查更新默认关（`BSK_AUTO_UPDATE=off`），更新由我们的上游哨兵盯 |
 | 安装 | 向导两步：装扩展（Chrome / Edge 商店链接或本地加载）+ 装 `bsk`（我们钉版本与 sha256 从 GitHub Releases 下载，不用它的 `install.sh`）；`bsk doctor` 前置检查 |
@@ -306,10 +306,10 @@ API 的 SSE）。**认不出的请求当场抛，CI 一个包都不出网**。�
 |---|---|---|
 | 工具面 | **直接挂腾讯官方插件**（Luoye 拍板：不自写 provider）。`harness.ts` 在 `setup` 里、与 WP82 同一位置同一顺序（mount → installGate → 浏览器）`await agentCtx.plugin(BrowserSkillPlugin, …)`；这一档**不挂** `BrowserUseRegistry`（它不走那个 seam，挂了也没人占槽） | 六个工具照常报上来；`lazyTools` 必须显式关（见下 ①） |
 | 读写分类 | `browserskill.ts` 的 `BROWSERSKILL_READ_ACTIONS`（按 `args.action`）→ `tools.ts` 的 `classifySideEffect` 多一条分支 | 与派工书那张表一致；表外动作与"没给 action"一律按写 |
-| 域名白名单 | `browserskill.ts` 的 `checkBrowserSkillPolicy`，三处：`browser_page{navigate}` / `browser_session{start}` / `browser_tabs{create}`；规则（`hostAllowed` + 人话理由）与官方 provider 同一套 | 三处都拦得住；`navigate` 少给 url 按"打不开这个地址"拒 |
+| 域名白名单 | `browserskill.ts` 的 `checkBrowserSkillPolicy`，三处：`bsk_page{navigate}` / `bsk_session{start}` / `bsk_tabs{create}`；规则（`hostAllowed` + 人话理由）与官方 provider 同一套 | 三处都拦得住；`navigate` 少给 url 按"打不开这个地址"拒 |
 | 公司端禁 evaluate | 工具面里**没有** evaluate，所以这一层不写代码；能跑脚本的是 `bsk evaluate` 这条 CLI，归 shell allowlist（WP89） | 另外我们把 `bsk` **装在数据目录、不进 PATH**，少一条顺手能敲到的路 |
-| 人接管 | `browser_assist{request-help}` 两档都放行，并发 `progress{step:'browser_handoff'}`；提示词里多三条（单独窗口 / 借标签先问 / 卡住了请人接管） | 这是这一种相对官方 provider 真正多出来的东西 |
-| 供应链 | `bsk` 由我们钉版本 + sha256 下载（`browserskill.lock.json` + `apps/server/src/browserskill-install.ts`），**不用上游 `install.sh`**（它校验不了会"只警告"、还会改用户的 `~/.zshrc`）；插件锁死 `0.3.0` 进 `minimumReleaseAgeExclude`（无 postinstall、无原生模块、无 dependencies——逐条核实过） | 本机真装了一次：darwin-arm64 产物 sha256 与 lock 逐字相同 |
+| 人接管 | `bsk_assist{request-help}` 两档都放行，并发 `progress{step:'browser_handoff'}`；提示词里多三条（单独窗口 / 借标签先问 / 卡住了请人接管） | 这是这一种相对官方 provider 真正多出来的东西 |
+| 供应链 | `bsk` 由我们钉版本 + sha256 下载（`browserskill.lock.json` + `apps/server/src/browserskill-install.ts`），**不用上游 `install.sh`**（它校验不了会"只警告"、还会改用户的 `~/.zshrc`）；插件锁死精确版本（现为 `0.3.3`，WP356）进 `minimumReleaseAgeExclude`（无 postinstall、无原生模块、无 dependencies——逐条核实过） | 本机真装了一次：darwin-arm64 产物 sha256 与 lock 逐字相同 |
 | 只在个人档 | `browser-settings.ts`：`browserskill_allowed = runtimeMode() === 'local'`，`forRun()` 还要 `bsk` **真的装了**才给 | 没装就当这次运行没有浏览器（比给一个坏路径安全，见下 ③） |
 
 四件与预判不同的事：
@@ -353,6 +353,23 @@ Agent 会在单独窗口里操作，动你已开的标签会先问你。"
 
 手工验证步骤 `scripts/dev-browserskill.md`；这次实测到第 ③ 步（装扩展要真人点"添加"，
 所以"真的 observe 一次"仍欠着）。
+### 0.3.3 升级（WP356，2026-10-16，决策 918）
+
+上游 0.3.3 是**破坏性改名**：六个工具从 `browser_*` 整体改成 `bsk_*`（`bsk_assist / bsk_inspect / bsk_interact / bsk_page / bsk_session / bsk_tabs`）。门禁是按名字认这六个工具的，改漏一个，那个工具上带网址的动作就绕过了域名白名单——所以上面两张表里的名字已全部换新，`browserskill-seam.test.ts` 逐个工具名、逐个带网址的动作都过一遍，另有一条拿**真插件**比对：每个工具的 action 枚举必须正好等于"读表 ∪ 有意按写的表"，带 `url` 入参的工具必须正好是那四个，上游再加动作或改名，这条当场红。
+
+新动作逐个判过：
+
+| 新动作 | 判定 | 理由 |
+|---|---|---|
+| `bsk_page{wait-for-element}` | 读 | 等某个元素出现 / 消失，只是轮询着看 |
+| `bsk_inspect{extract}` | 读；给了 `output` 按写 | 把页面上已加载的表格 / 列表读成行列，与 `html` 同一种"看"；`output` 是往本机写一个新文件 |
+| `bsk_inspect{debug}` | 看 `debugAction`：抓包开关、钉住、各种看结果是读；`rule_*`、`replay`、`export` 是写 | `rule_*` 能拦截 / 改写 / 伪造真在发的请求，`replay` 会重发请求（上游原话可能改服务器数据），`export` 往本机写文件 |
+| `bsk_inspect{video}` | 整个按写 | 录屏，还能把 MP4 存到本机任意路径 |
+
+域名白名单多了第四处：`bsk_inspect{debug, replay}` 的 `replay` JSON 里给了 `url` 就过白名单。没给 url 时上游照原样重发抓到的那一条（只许同源），那个地址我们看不见，由"replay 按写"兜着（公司端拒）。`bsk_inspect` 另有一个 `url` 入参，那是 debug 翻请求记录用的子串过滤，不打开任何东西，不拦。
+
+其余重核：`lazyTools` 上游缺省仍是 `true`，仍要显式写 `false`；插件仍无 install 类脚本、无原生模块，运行时 import 多了 `dsh-llm`（树里已有）；peer 范围放宽成 `^0.1.5-rc.3 || ^0.2.0-rc.1`，仍不含我们的 `0.2.1-alpha.x`，四条 overrides 照留，`dsh-client-ui-attachment` 已不在 peer 表里；`bsk` 五个平台的 sha256 拿下载下来的文件重算过，与上游 `version.json` 一致。新配置项 `sessionStateDirectory`（启动恢复记录，缺省在 `BSK_HOME/dsh-starts` 下）不用设。
+
 ### 落点（WP89，2026-09-17 已实现）
 
 上面那张表逐行落在哪，以及**实测到的三件与预判不同的事**。

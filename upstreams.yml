@@ -483,9 +483,10 @@ upstreams:
     why: 「我正在用的浏览器」那条腿（个人档）：腾讯官方 dsh 插件 + `bsk` CLI + 用户自己装的 Chrome / Edge 扩展（MIT，docs/55 §10）
     npm: '@wxg-prc-cpg/browser-skill-dsh-plugin'
     repo: Tencent/BrowserSkill
-    locked_version: 0.3.0
+    # WP356（决策 918）：0.3.0 → 0.3.3，插件与 bsk 一起升；0.3.3 把六个工具整体改名 browser_* → bsk_*。
+    locked_version: 0.3.3
     pin: exact
-    bin_version: 0.3.0
+    bin_version: 0.3.3
     bin_tag_prefix: cli-v
     bin_lock_file: browserskill.lock.json
     watch: [versions, releases, readme, wishlist]
@@ -493,10 +494,10 @@ upstreams:
       - packages/dsh-adapter/package.json
     release_age_prefix: '@wxg-prc-cpg/browser-skill-dsh-plugin'
     we_depend_on:
-      - '插件直接在 Agent 的 scoped ctx 上注册 6 个多态工具（动作在 args.action 里），不走 dsh-browser-use seam'
+      - '插件直接在 Agent 的 scoped ctx 上注册 6 个多态工具（bsk_assist / bsk_inspect / bsk_interact / bsk_page / bsk_session / bsk_tabs，动作在 args.action 里），不走 dsh-browser-use seam；工具名再改一次 = 门禁整组失效，测试 (a) 拿真插件比对名字'
       - 'lazyTools 必须显式 false（上游缺省 true 时工具面整个是空的）'
-      - '门禁按 args.action 分读写（packages/dsh-adapter/src/browserskill.ts 的 BROWSERSKILL_READ_ACTIONS）；表外动作一律按写'
-      - '带 url 的三处：browser_page{navigate} / browser_session{start} / browser_tabs{create}（域名白名单拦在这里）'
+      - '门禁按 args.action 分读写（packages/dsh-adapter/src/browserskill.ts 的 BROWSERSKILL_READ_ACTIONS）；表外动作一律按写；bsk_inspect 的 debug 再看 debugAction（BROWSERSKILL_DEBUG_READ_ACTIONS）、extract 看给没给 output'
+      - '带 url 的三处：bsk_page{navigate} / bsk_session{start} / bsk_tabs{create}（域名白名单拦在这里）；外加 bsk_inspect{debug,replay} 的 replay JSON 里的 url'
       - 'bsk 的 release 资产命名 bsk-v<版本>-<target>.tar.gz|zip（browserskill.lock.json 的 url / sha256 逐字抄自上游 version.json）'
       - 'BSK_AUTO_UPDATE=off 只关"装"、不关"查"（docs/55 §10 ④）'
     wishlist:
@@ -504,8 +505,9 @@ upstreams:
       # 写成 `^0.1.0-rc.6`，与我们整棵预发布树在 semver 的预发布规则下**不相交**。每当有一个
       # 那六个之一的包第一次进树，`pnpm install` 就红一次（WP92 撞了三个、WP93 又撞第四个
       # `dsh-client-ui-primitives`），只能一条一条往 `pnpm-workspace.yaml` 的 overrides 里钉。
-      # 还剩 dsh-client-ui-attachment / dsh-client-ui-tool 两个没进树。
-      - dsh plugin 的 peer 范围放宽到能与预发布版相交（现在写死 ^0.1.0-rc.6）
+      # WP356（0.3.3）：范围放宽成 `^0.1.5-rc.3 || ^0.2.0-rc.1`，peer 剩五个（删了
+      # dsh-client-ui-attachment），但仍然不含我们的 0.2.1-alpha.x，四条 override 照留。
+      - dsh plugin 的 peer 范围放宽到能与预发布版相交（0.3.3 写成 ^0.1.5-rc.3 || ^0.2.0-rc.1，仍不含 0.2.1-alpha.x）
     covered_by:
       - packages/dsh-adapter/test/browserskill-seam.test.ts
       - apps/server/test/browserskill-install.test.ts
