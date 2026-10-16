@@ -1524,7 +1524,7 @@ const zh: Table = {
   'connections.never_ai': '这个表单是网页原生表单，填的内容直接存进本机，不经过 AI，也不进日志。',
   'connections.last_tested': '上次测试 {at}',
   // ── WP40 数据后端（41 §2.4）────────────────────────────────────────
-  'storage.title': '数据后端',
+  'storage.title': '数据放在哪',
   'storage.subtitle': '你的数据住在哪。换后端不换功能，随时能搬走。',
   'storage.database': '数据库',
   'storage.blobs': '大文件（附件与录音）',
