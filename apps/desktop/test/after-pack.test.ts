@@ -544,3 +544,34 @@ describe('10-15 mac 本机自签（ad-hoc）', () => {
     }
   })
 })
+
+describe('决策 748：dsh 调试工具前端不进安装包', () => {
+  it('删掉 dsh-experimental-inspector/lib/devtools，别的不动', async () => {
+    const { stripPackagePaths } = await import('../scripts/after-pack.mjs')
+    const nm = mkdtempSync(join(tmpdir(), 'strip-'))
+    try {
+      const dev = join(
+        nm,
+        '@deepseek-ai',
+        'dsh-experimental-inspector',
+        'lib',
+        'devtools',
+        'models',
+      )
+      mkdirSync(dev, { recursive: true })
+      writeFileSync(join(dev, 'a.md'), 'x')
+      writeFileSync(join(nm, '@deepseek-ai', 'dsh-experimental-inspector', 'lib', 'index.js'), 'y')
+      const out = stripPackagePaths(nm)
+      expect(out.files).toBe(1)
+      expect(
+        existsSync(join(nm, '@deepseek-ai', 'dsh-experimental-inspector', 'lib', 'devtools')),
+      ).toBe(false)
+      expect(
+        existsSync(join(nm, '@deepseek-ai', 'dsh-experimental-inspector', 'lib', 'index.js')),
+      ).toBe(true)
+      expect(stripPackagePaths(nm).files).toBe(0)
+    } finally {
+      rmSync(nm, { recursive: true, force: true })
+    }
+  })
+})

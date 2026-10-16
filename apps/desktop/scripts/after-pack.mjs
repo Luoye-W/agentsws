@@ -558,6 +558,27 @@ const OWN_SCOPE = '@agentsws/'
 /** 只在包的根目录（有 package.json 的那一层）删的说明文件。 */
 const DROP_AT_PACKAGE_ROOT = /^(readme|changelog|changes|history)(\.(md|markdown|txt))?$/i
 /** 只在包的根目录删的目录：测试与示例。 */
+/**
+ * 决策 748（Luoye 10-15 同意）：dsh 自带的调试工具前端不进安装包。`dsh-experimental-inspector` 带了一整份
+ * Chrome DevTools 前端（约 24 MB、769 个文件），文件名极长：beta.10 起版本目录名多一位，Windows 上最长路径
+ * 正好到 260 被装包冒烟拦下。运行时用不到（只有手动开实验性检查器时才读）。路径相对 `<resources>/app/node_modules`。
+ */
+export const STRIP_PACKAGE_PATHS = ['@deepseek-ai/dsh-experimental-inspector/lib/devtools']
+
+export function stripPackagePaths(nodeModules, paths = STRIP_PACKAGE_PATHS) {
+  let files = 0
+  let bytes = 0
+  for (const rel of paths) {
+    const target = join(nodeModules, ...rel.split('/'))
+    if (!existsSync(target)) continue
+    const size = sizeOfTree(target)
+    files += size.files
+    bytes += size.bytes
+    rmSync(target, { recursive: true, force: true })
+  }
+  return { files, bytes }
+}
+
 const DROP_DIR_AT_PACKAGE_ROOT = new Set([
   'test',
   'tests',
@@ -859,6 +880,8 @@ export default async function afterPack(context) {
   // ⑩ WP319：瘦身（放在冒烟之前——删过之后照样 import 得动，才算数）
   const before = sizeOfTree(context.appOutDir)
   const prunedApp = pruneNonRuntimeFiles(join(appDir, 'node_modules'))
+  const stripped = stripPackagePaths(join(appDir, 'node_modules'))
+  log(`去掉 dsh 调试工具前端：${stripped.files} 个文件（${Math.round(stripped.bytes / 1e6)} MB）`)
   const after = sizeOfTree(context.appOutDir)
   log(
     `瘦身：删了 ${prunedApp.files} 个运行时用不到的文件（${Math.round(prunedApp.bytes / 1e6)} MB）；` +
