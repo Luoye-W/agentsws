@@ -100,9 +100,12 @@ const CONVO: ChatMessage[] = [
 
 describe('翻译成 pi-ai 的 Context', () => {
   it('开头的 system → systemPrompt；中途的 system 原样；工具调用 / 结果 / 图片都对得上', () => {
-    const ctx = toPiContext(CONVO, [
-      { name: 'read_order', description: '读订单', input_schema: { type: 'object' } },
-    ], 'gpt-5.5', 1)
+    const ctx = toPiContext(
+      CONVO,
+      [{ name: 'read_order', description: '读订单', input_schema: { type: 'object' } }],
+      'gpt-5.5',
+      1,
+    )
     expect(ctx.systemPrompt).toBe('你是店主助理。\n\n[brand:b1]\n品牌：INMO')
     expect(ctx.messages.map((m) => m.role)).toEqual([
       'user',
@@ -112,7 +115,9 @@ describe('翻译成 pi-ai 的 Context', () => {
       'user',
     ])
     expect(ctx.messages[1]).toMatchObject({
-      content: [{ type: 'toolCall', id: 'call_a', name: 'read_order', arguments: { order_id: 'o1' } }],
+      content: [
+        { type: 'toolCall', id: 'call_a', name: 'read_order', arguments: { order_id: 'o1' } },
+      ],
       stopReason: 'toolUse',
     })
     // 工具名缺了从上一条 assistant 里补
@@ -186,7 +191,10 @@ describe('整条（替身 OpenAI，不出网）', () => {
     fakes.push(fake)
     const handle = await loginTree()
     await expect(
-      handle.complete?.('openai-codex', { model: 'gpt-5.5', messages: [{ role: 'user', content: 'x' }] }),
+      handle.complete?.('openai-codex', {
+        model: 'gpt-5.5',
+        messages: [{ role: 'user', content: 'x' }],
+      }),
     ).rejects.toMatchObject({ kind: 'sign_in' })
     expect(fake.responses).toBe(0)
   })

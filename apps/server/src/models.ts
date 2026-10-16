@@ -111,6 +111,13 @@ import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
 import { SECRETS_KEY_ENV } from './secret-store.js'
+import {
+  SUBSCRIPTION_DEFAULT_MODEL,
+  SUBSCRIPTION_SOURCE_ID,
+  SUBSCRIPTION_SOURCE_LABEL,
+  type SubscriptionModelPort,
+  subscriptionModelProvider,
+} from './subscription-model.js'
 
 /** 秘密库里模型 key 的前缀（和连接 id、Shopify 应用凭据分开）。 */
 export const MODEL_KEY_PREFIX = 'model_provider:'
@@ -362,6 +369,11 @@ export interface ModelsOptions {
    * 取值函数：分配表与岗位在模型面之后才装好。不给 = 不带（只受公司余额限制）。
    */
   cloudAttribution?: (meta: ModelMeta) => Attribution
+  /**
+   * WP362（决策 938）：ChatGPT 订阅（只在个人档有；按这台机器上有没有人登录过现算）。
+   * 不给 = 这个进程没装订阅登录，下拉里没有订阅那一组。
+   */
+  subscription?: SubscriptionModelPort
 }
 
 /**
@@ -626,6 +638,8 @@ const DEEPSEEK_API_LEGACY_LABELS: ReadonlySet<string> = new Set([
  */
 export function providerDisplayLabel(config: { kind: string; label: string }): string {
   if (config.kind === 'deepseek_account') return DEEPSEEK_ACCOUNT_LABEL
+  // WP362：订阅那一条一律「ChatGPT 订阅」
+  if (config.kind === 'openai-codex') return SUBSCRIPTION_SOURCE_LABEL
   // WP188（Luoye 09-29）：积分那一路一律叫「Agents 工坊（用积分）」（存量配置里还是老名字）
   if (config.kind === 'agentsws_cloud') return CLOUD_LABEL
   if (config.kind === 'deepseek' && DEEPSEEK_API_LEGACY_LABELS.has(config.label.trim())) {
@@ -1273,6 +1287,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   /** 这条 provider 有没有 key（不读值，只看在不在）。 */
   const hasKey = (id: string): boolean => {
+    // WP362：订阅那一条（虚的，不在 models.json 里）——这台机器上有人登录过就算
+    if (id === SUBSCRIPTION_SOURCE_ID)
+      return options.subscription?.signedIn('openai-codex') === true
     if (isCloud(id)) return hasCloudToken()
     if (isAccount(id)) return options.deepseekAccount?.signedIn() === true
     if (id === ENV_PROVIDER_ID && envKey() !== undefined) return true
@@ -1366,6 +1383,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     if (!hasKey(config.id)) return undefined
     const vision = visionOf(config, model)
     const account = options.deepseekAccount
+    // WP362：ChatGPT 订阅——经服务端的订阅登录树（官方 pi-ai），令牌不经网关
+    if (config.kind === 'openai-codex') {
+      const port = options.subscription
+      return port === undefined ? undefined : subscriptionModelProvider({ port, model, vision })
+    }
     if (config.kind === 'deepseek_account') {
       if (account === undefined) return undefined
       /*
@@ -1439,6 +1461,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 换了模型名，上一次的结论就不算数（回 `undefined` = 没验证过）。
    */
   const visionOf = (config: ModelProviderConfig, model = config.model): boolean | undefined => {
+    // WP362：订阅目录里写着收不收图（pi-ai 的生成目录），就照它
+    if (config.kind === 'openai-codex')
+      return options.subscription?.catalog('openai-codex').find((m) => m.id === model)?.vision
     const test = state.tests[config.id]
     if (test?.vision === undefined) return undefined
     return test.model === `${config.id}/${model}` ? test.vision : undefined
@@ -1714,6 +1739,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 选中的才装。
    */
   const selectedModels = (config: ModelProviderConfig): string[] => {
+    // WP362：订阅目录就那么几个、不花钱建——全挂上，下拉里每个都能点、点了真用它
+    if (config.kind === 'openai-codex') return knownModels(config)
     const picked = new Set([config.model])
     const ids = [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]
     for (const id of ids) {
@@ -1727,9 +1754,38 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 
   const activeConfigs = (): ModelProviderConfig[] => effectiveConfigs().filter((c) => hasKey(c.id))
+  /**
+   * WP362（决策 938）：ChatGPT 订阅那一条**虚的**来源——不在 `models.json` 里（不进「已配的」列表、
+   * 不进设置快照、复制品牌时不带），这台机器上有人登录过就现算出来，挂网关、进默认模型下拉、
+   * 进输入框的 AI 钮。模型清单是订阅目录（pi-ai 的生成目录），价全是 0（订阅不按 token 收钱）。
+   */
+  const subscriptionConfigs = (): ModelProviderConfig[] => {
+    const port = options.subscription
+    if (port === undefined || !port.signedIn('openai-codex')) return []
+    const models = port.catalog('openai-codex').map((m) => m.id)
+    const main = models.includes(SUBSCRIPTION_DEFAULT_MODEL)
+      ? SUBSCRIPTION_DEFAULT_MODEL
+      : (models[0] ?? SUBSCRIPTION_DEFAULT_MODEL)
+    return [
+      {
+        id: SUBSCRIPTION_SOURCE_ID,
+        kind: 'openai-codex',
+        label: SUBSCRIPTION_SOURCE_LABEL,
+        base_url: CHATGPT_SUBSCRIPTION_URL,
+        model: main,
+        ...(models.length === 0 ? {} : { models }),
+        region: 'global',
+        price_in: 0,
+        price_out: 0,
+        price_cached: 0,
+      },
+    ]
+  }
   /** WP274：挂文字模型的那几条（只用来生图的那几条不算）。 */
-  const textConfigs = (): ModelProviderConfig[] =>
-    activeConfigs().filter((c) => c.image_only !== true)
+  const textConfigs = (): ModelProviderConfig[] => [
+    ...activeConfigs().filter((c) => c.image_only !== true),
+    ...subscriptionConfigs(),
+  ]
 
   /** 现在应该用哪个 ModelRef 当默认。一个都没配就是 stub（运行时据此落回 stub）。 */
   const defaultRef = (): ModelRef => {

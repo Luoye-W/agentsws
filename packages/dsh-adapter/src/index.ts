@@ -189,21 +189,6 @@ export type {
   SubscriptionQuestion,
   SubscriptionStatus,
 } from './subscription.js'
-export type {
-  PiContext,
-  SubscriptionCatalogModel,
-  SubscriptionChat,
-  SubscriptionChatRequest,
-  SubscriptionChatResult,
-} from './subscription-chat.js'
-export {
-  createSubscriptionChat,
-  SUBSCRIPTION_CHAT_PROVIDER,
-  SubscriptionChatError,
-  subscriptionCatalog,
-  subscriptionErrorKind,
-  toPiContext,
-} from './subscription-chat.js'
 export {
   createSubscriptionLogin,
   installSubscriptionLlm,
@@ -221,6 +206,21 @@ export {
   subscriptionRecordKey,
   watchSubscriptionCalls,
 } from './subscription.js'
+export type {
+  PiContext,
+  SubscriptionCatalogModel,
+  SubscriptionChat,
+  SubscriptionChatRequest,
+  SubscriptionChatResult,
+} from './subscription-chat.js'
+export {
+  createSubscriptionChat,
+  SUBSCRIPTION_CHAT_PROVIDER,
+  SubscriptionChatError,
+  subscriptionCatalog,
+  subscriptionErrorKind,
+  toPiContext,
+} from './subscription-chat.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
 export {
   BROWSER_DEFAULT_TOOL_NAMES,
@@ -254,6 +254,8 @@ export {
   BROWSER_SEARCH_PROVIDER_ID,
   browserSearchProvider,
   HTTP_FETCH_PROVIDER_ID,
+  NATIVE_SEARCH_RUN_SOURCES,
+  nativeSearchRun,
   officialSearchProvider,
   officialWebSearch,
   searchProviderIdOf,

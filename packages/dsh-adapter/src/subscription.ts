@@ -44,8 +44,8 @@ import {
 } from './native-search.js'
 import {
   createSubscriptionChat,
-  SubscriptionChatError,
   type SubscriptionChat,
+  SubscriptionChatError,
   type SubscriptionChatRequest,
   type SubscriptionChatResult,
 } from './subscription-chat.js'

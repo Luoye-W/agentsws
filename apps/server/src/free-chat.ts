@@ -90,7 +90,8 @@ export interface FreeChatOptions {
     status(): Promise<{ available: boolean; reason?: string }>
     search(
       query: string,
-      ctx: { actor: FreeChatActor; run_id: string; role_id: string },
+      /** WP362：`model` = 这一轮真在用的那个模型（判「用不用它自带的搜索」看它，不看品牌默认）。 */
+      ctx: { actor: FreeChatActor; run_id: string; role_id: string; model?: ModelRef },
       signal: AbortSignal,
     ): Promise<{ sources: readonly FreeChatSearchSource[]; content?: string }>
     /** 一轮最多搜几次；缺省照 WP179 每运行上限。 */
@@ -681,6 +682,8 @@ async function answer(
     role_id,
     run_id,
     purpose: 'free_chat' as const,
+    // WP362：用 ChatGPT 订阅答时按人取那个人自己的订阅
+    person_id: actor.person_id,
   }
 
   let text = ''
@@ -741,7 +744,7 @@ async function answer(
           content = await searchOnce(
             options,
             call,
-            { searches, max, actor, run_id, role_id },
+            { searches, max, actor, run_id, role_id, model },
             sink,
             sources,
             signal,
@@ -904,7 +907,14 @@ async function confirmFanout(
 async function searchOnce(
   options: FreeChatOptions,
   call: { id: string; name: string; input: unknown },
-  ctx: { searches: number; max: number; actor: FreeChatActor; run_id: string; role_id: string },
+  ctx: {
+    searches: number
+    max: number
+    actor: FreeChatActor
+    run_id: string
+    role_id: string
+    model?: ModelRef
+  },
   sink: (frame: FreeChatFrame) => void,
   sources: FreeChatSource[],
   signal: AbortSignal,

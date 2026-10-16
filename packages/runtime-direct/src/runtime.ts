@@ -594,7 +594,10 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           // 摘要直接用它；WP151 的"DeepSeek 余额不足，去充值"同理；别的码照旧（码比上游原文稳，回放也逐字节不变）
           return finish(
             'failed',
-            error.code === 'unauthenticated' || deepseekQuotaKindOf(err) !== undefined
+            // WP362：ChatGPT 订阅被限流（`rate_limited`）那句也是给人看的
+            error.code === 'unauthenticated' ||
+              error.code === 'rate_limited' ||
+              deepseekQuotaKindOf(err) !== undefined
               ? error.message
               : `模型调用失败：${error.code}`,
           )

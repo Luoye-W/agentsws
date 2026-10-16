@@ -75,7 +75,11 @@ export class SubscriptionChatError extends Error {
 export function subscriptionErrorKind(message: string): SubscriptionChatError['kind'] {
   if (/\b429\b|rate.?limit|usage.?limit|too many requests|quota/iu.test(message))
     return 'rate_limited'
-  if (/\b40[13]\b|unauthori[sz]ed|forbidden|expired|invalid.?grant|refresh|oauth|log.?in|sign.?in/iu.test(message))
+  if (
+    /\b40[13]\b|unauthori[sz]ed|forbidden|expired|invalid.?grant|refresh|oauth|log.?in|sign.?in/iu.test(
+      message,
+    )
+  )
     return 'expired'
   return 'other'
 }
@@ -321,9 +325,15 @@ export function createSubscriptionChat(
         // 走 SSE：同一条 `/codex/responses`（与 WP355 自带搜索同一种）
         transport: 'sse',
         ...(request.signal === undefined ? {} : { signal: request.signal }),
-        ...(request.max_output_tokens === undefined ? {} : { maxTokens: request.max_output_tokens }),
+        ...(request.max_output_tokens === undefined
+          ? {}
+          : { maxTokens: request.max_output_tokens }),
         ...(request.thinking === 'off' ? { reasoning: 'minimal' } : {}),
-        ...(choice === 'none' ? { toolChoice: 'none' } : choice === undefined ? {} : { toolChoice: 'auto' }),
+        ...(choice === 'none'
+          ? { toolChoice: 'none' }
+          : choice === undefined
+            ? {}
+            : { toolChoice: 'auto' }),
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
       })
       for await (const event of stream) {
