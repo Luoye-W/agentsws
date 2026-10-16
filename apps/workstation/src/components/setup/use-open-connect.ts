@@ -30,7 +30,8 @@ export function servicesOfAddress(address: string | undefined): string[] {
 export function connectFallbackPath(first: string | undefined): string {
   if (first === undefined) return '/connections'
   if (first.startsWith('im:')) return '/im-channels'
-  if (first === 'model' || first === 'deepseek_account') return '/settings?tab=models'
+  if (first === 'model' || first === 'deepseek_account' || first === 'chatgpt_subscription')
+    return '/settings?tab=models'
   if (first === 'workshop_account') return '/settings?tab=account'
   return `/connections?service=${encodeURIComponent(first)}`
 }
