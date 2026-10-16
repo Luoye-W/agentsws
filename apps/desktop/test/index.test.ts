@@ -21,12 +21,26 @@ describe('bridge-types', () => {
         download: async () => ({ state: 'idle' }),
         install: async () => 'not-ready',
       },
+      searchBrowser: {
+        pending: async () => null,
+        onChange: () => () => undefined,
+        place: async () => true,
+        dismiss: async () => true,
+      },
+      // WP361：开机自启
+      launchAtLogin: {
+        get: async () => false,
+        set: async (on) => on,
+        onChange: () => () => undefined,
+      },
     }
     expect(Object.keys(bridge).sort()).toEqual([
+      'launchAtLogin',
       'notify',
       'openExternal',
       'openScene',
       'platform',
+      'searchBrowser',
       'update',
       'version',
     ])
@@ -52,6 +66,10 @@ describe('bridge-types', () => {
       searchChanged: 'agentsws:search-changed',
       searchPlace: 'agentsws:search-place',
       searchDismiss: 'agentsws:search-dismiss',
+      // WP361：开机自启（设置弹窗里的开关）
+      launchAtLoginGet: 'agentsws:launch-at-login-get',
+      launchAtLoginSet: 'agentsws:launch-at-login-set',
+      launchAtLoginChanged: 'agentsws:launch-at-login-changed',
     })
   })
 
@@ -100,6 +118,9 @@ describe('index 桶文件', () => {
       'serverUrlFrom',
       'configPatchOf',
       'companyLabel',
+      // WP361
+      'createLaunchAtLogin',
+      'loginItemSettings',
     ])
       expect(typeof (desktop as Record<string, unknown>)[name]).toBe('function')
   })

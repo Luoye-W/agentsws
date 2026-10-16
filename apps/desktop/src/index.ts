@@ -4,7 +4,13 @@
  */
 export type { BackoffOptions } from './backoff.js'
 export { backoffDelay, DEFAULT_BACKOFF } from './backoff.js'
-export type { BridgeInfo, DesktopBridge, NotifyInput, SceneOpenOutcome } from './bridge-types.js'
+export type {
+  BridgeInfo,
+  DesktopBridge,
+  DesktopLaunchAtLoginBridge,
+  NotifyInput,
+  SceneOpenOutcome,
+} from './bridge-types.js'
 export { BRIDGE_CHANNELS, BRIDGE_KEY } from './bridge-types.js'
 export type { ConfigStore, DesktopConfig, Language } from './config.js'
 export {
@@ -61,6 +67,12 @@ export type { HealthSnapshot, ProbeOptions, WaitOptions } from './health.js'
 export { healthUrl, parseHealthBody, probeHealth, waitForHealth } from './health.js'
 export type { Strings } from './i18n.js'
 export { strings } from './i18n.js'
+export type {
+  LaunchAtLogin,
+  LaunchAtLoginDeps,
+  LoginItemSettings,
+} from './launch-at-login.js'
+export { createLaunchAtLogin, loginItemSettings } from './launch-at-login.js'
 export type { Logger, LoggerOptions, LogLevel } from './logging.js'
 export { createLogger, formatLine, silentLogger } from './logging.js'
 export type { MenuAction, MenuItemModel, TrayModelInput } from './menu.js'

@@ -81,6 +81,7 @@ import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
+import { createLaunchAtLogin, loginItemSettings } from './launch-at-login.js'
 import { nodeLayoutFs } from './layout-fs.js'
 import { createLogger } from './logging.js'
 import {
@@ -1626,12 +1627,10 @@ async function bootstrap(): Promise<void> {
       case 'open-licenses':
         if (licensesFile !== undefined) void shell.openPath(licensesFile)
         break
-      case 'toggle-launch-at-login': {
-        config = configStore.update({ launchAtLogin: !config.launchAtLogin })
-        setLoginItem(config.launchAtLogin)
-        refreshTray()
+      case 'toggle-launch-at-login':
+        // WP361：和设置弹窗里那个开关是同一份（改完托盘重画、工作台那个开关跟着变）
+        launchAtLogin.toggle()
         break
-      }
       case 'stop-computer-use':
         if (remote) break
         void stopComputerUse()
@@ -1643,15 +1642,31 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  /**
+   * WP361（决策 927）：开机自启一份真源（配置），托盘与设置弹窗两处改的都是它；
+   * 改完托盘重画、本地源的工作台窗口收到一声（那个开关跟着变）。
+   */
+  const launchAtLogin = createLaunchAtLogin({
+    read: () => config.launchAtLogin,
+    save: (on) => {
+      config = configStore.update({ launchAtLogin: on })
+    },
+    apply: (on) => {
+      setLoginItem(on)
+    },
+    changed: (on) => {
+      refreshTray()
+      for (const w of BrowserWindow.getAllWindows())
+        if (!w.isDestroyed() && isLocalOrigin(w.webContents.getURL(), allowedOrigins()))
+          w.webContents.send(BRIDGE_CHANNELS.launchAtLoginChanged, on)
+    },
+  })
+
   /** 未签名 / 非标准位置的应用会被系统拒（"Operation not permitted"）——记一笔就够，不该挡住启动。 */
   function setLoginItem(openAtLogin: boolean): void {
     try {
       // WP327：版本目录布局下开机自启指 `current\agentsws.exe`（版本目录会被清理）
-      app.setLoginItemSettings(
-        layout === undefined
-          ? { openAtLogin }
-          : { openAtLogin, path: join(layout.current, basename(process.execPath)) },
-      )
+      app.setLoginItemSettings(loginItemSettings(openAtLogin, layout?.current, process.execPath))
     } catch (err) {
       logger.warn('设置开机自启失败', { error: String(err) })
     }
@@ -2413,6 +2428,14 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.updateCancelWait, (event) =>
     fromLocalWindow(event) ? updates.cancelWait() : false,
   )
+  // WP361：设置弹窗「这台电脑 → 桌面端」的开机自启开关（只认 true / false）
+  ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginGet, (event) =>
+    fromLocalWindow(event) ? launchAtLogin.get() : false,
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginSet, (event, raw: unknown) => {
+    if (!fromLocalWindow(event) || typeof raw !== 'boolean') return launchAtLogin.get()
+    return launchAtLogin.set(raw)
+  })
 
   /*
    * WP337（Mac：只提示 → 人自己退出、装新版）：点过「去下载」之后退出——有正在输出的就三选一
