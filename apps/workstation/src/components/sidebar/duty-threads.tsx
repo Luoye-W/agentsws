@@ -2,13 +2,13 @@
  * WP207：职责行下面挂着的「正在进行的对话 / 任务」。
  *
  * 一行一件：状态小点 + 标题，点进去就是那件事（`/matters/:id`）。按最近活动排（服务端排好的），
- * 默认 5 条，多的收在「更多」后面；最底下一行「已归档（n）」打开归档列表（筛好这条职责）。
+ * 默认 5 条，多的收在「更多」后面。WP351：「已归档（n）」不再占一行，收进职责行悬停出的归档钮
+ * （`app-shell.tsx`）；这一串挂在职责图标正下方一条细竖线上（Claude「会话下的分支」那样）。
  *
  * 状态小点是**图形不是字**（36 减字）：在跑 = 品牌色、会呼吸；等你批 = 琥珀；
  * 做完待看 = 绿；都不是 = 不画。点的意思写在 `title` 与读屏文字里。
  */
 import { cn } from 'cn'
-import { Archive } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { MatterMenu } from '@/components/sidebar/matter-menu'
@@ -46,24 +46,22 @@ export function DutyThreads({
   duty,
   expanded,
   onMore,
-  onArchived,
   onArchive,
 }: {
   duty: RailDuty
   /** 「更多」点开了没有。 */
   expanded: boolean
   onMore: () => void
-  onArchived: () => void
   /** Fable 09-30：悬停菜单里的「归档」（不给就不出菜单）。 */
   onArchive?: (matter: RailMatter) => void
 }): ReactNode {
   const { t } = useApp()
-  if (duty.matters.length === 0 && duty.archived === 0) return null
+  if (duty.matters.length === 0) return null
   const shown = expanded ? duty.matters : duty.matters.slice(0, RAIL_SHOWN)
   const hidden = duty.matters.length - shown.length + duty.more
   return (
     <ul
-      className="ml-3 flex flex-col gap-px border-l border-ws-line pl-1.5"
+      className="ml-4 flex flex-col gap-px border-l border-ws-line pl-1.5"
       data-testid="rail-threads"
     >
       {shown.map((m) => (
@@ -104,19 +102,6 @@ export function DutyThreads({
             onClick={onMore}
           >
             {expanded ? t('rail.less') : t('rail.more', { n: hidden })}
-          </button>
-        </li>
-      )}
-      {duty.archived === 0 ? null : (
-        <li>
-          <button
-            type="button"
-            data-testid="rail-archived"
-            className="flex w-full items-center gap-1.5 rounded-[8px] px-1.5 py-0.5 text-left text-[12px] text-ws-muted-fg hover:bg-sidebar-accent/60 hover:text-foreground"
-            onClick={onArchived}
-          >
-            <Archive aria-hidden className="size-3 shrink-0" />
-            {t('rail.archived', { n: duty.archived })}
           </button>
         </li>
       )}

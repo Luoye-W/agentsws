@@ -21,6 +21,7 @@
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Archive,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -85,19 +86,20 @@ import {
 /**
  * 左栏一行。
  *
- * WP96（09-18 画布）：圆角从 6 提到 10、行高从 1.5 提到 2，选中态是**浅品牌底 +
- * 品牌深色字**（`--sidebar-accent` / `--sidebar-accent-foreground` 已经指到
- * tint / brand-ink 上），不再是灰底。结构一个字没动。
+ * WP96（09-18 画布）：选中态是**浅品牌底 + 品牌深色字**（`--sidebar-accent` /
+ * `--sidebar-accent-foreground` 已经指到 tint / brand-ink 上），不再是灰底。
+ * WP351（决策 906，Luoye 10-16「学 Claude 左栏更紧凑」）：行高、字号、圆角按 Claude 左栏的密度收
+ * （一行约 30px、13px 字、圆角 8）。
  */
+const ROW = 'flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-[13px] transition-colors'
+const ROW_ACTIVE =
+  'bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-current [--ia:var(--ws-brand)]'
+const ROW_IDLE = 'hover:bg-sidebar-accent/60 [&_svg]:text-ws-muted-fg'
+
 function navClass({ isActive }: { isActive: boolean }): string {
-  return cn(
-    'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors',
-    // 选中态图标跟文字同色（`[&_svg]:text-current`），未选中时图标压成 muted。
-    // WP213：选中行设 `--ia`，岗位 / 职责图标的点睛那一笔换品牌色（docs/36 §8.3）
-    isActive
-      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-current [--ia:var(--ws-brand)]'
-      : 'hover:bg-sidebar-accent/60 [&_svg]:text-ws-muted-fg',
-  )
+  // 选中态图标跟文字同色（`[&_svg]:text-current`），未选中时图标压成 muted。
+  // WP213：选中行设 `--ia`，岗位 / 职责图标的点睛那一笔换品牌色（docs/36 §8.3）
+  return cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)
 }
 
 /** 侧栏图标统一 16px；颜色交给 `navClass` 里的 `[&_svg]` 规则。 */
@@ -115,18 +117,21 @@ export { dutyHref }
 const WORKSPACE_BASE_ROLES: ReadonlySet<string> = new Set(['common.owner', 'common.member'])
 
 /**
- * 左栏「岗位」那一栏的一行：一个岗位（WP70），行首一个展开箭头（WP71）。
+ * 左栏「岗位」那一栏的一行：一个岗位（WP70），点名字进岗位页。
  *
- * 待审数按岗位聚合（"网站运营 3"）——点进去才看得到是哪条职责的（54 §4）。
  * 地址用本人在这个岗位下的第一条分配（36 §3 的"岗位"= 一条 Assignment）。
- *
  * 展开层里只列**本人持有**的职责：别人那条分配不能拿来开事（54 §2 / WP69），
  * 列出来只会让人点进一个进不去的页面。
  *
- * WP207（Luoye 09-30「像 Claude 一样」）：
- * - 岗位行悬停出「+」= 给这个岗位加职责（只有所有者有）；职责行悬停出「+」= 在这条职责下开新事；
- * - 每条职责下挂着它进行中的对话 / 任务（状态小点），默认 5 条 +「更多」，最底下「已归档（n）」；
- * - 右边那个数改成「等你处理的」：等你批的卡 + 做完待你看的（取不到左栏那份时照旧是待审卡数）。
+ * WP207（Luoye 09-30「像 Claude 一样」）：岗位行悬停出「+」= 给这个岗位加职责（只有所有者有）；
+ * 职责行悬停出「+」= 在这条职责下开新事；每条职责下挂着它进行中的对话 / 任务（状态小点）。
+ *
+ * WP351（决策 906，Luoye 10-16）再学一步 Claude：
+ * - **不再有常驻的「>」和数字**：鼠标移上来（或键盘落到这一行）名字右边才出一个「>」（展开时朝下），
+ *   点它展开 / 收起；点名字进岗位页。待处理数在岗位页卡片流标题旁边看（首页卡片流照旧）。
+ * - **职责不缩进**：和岗位左边对齐，只靠字色淡一档分出层次（Claude「项目下的会话」那样）。
+ * - **「已归档（n）」不占一行**：收进职责行悬停出的那个小归档钮。
+ * - 键盘：Tab 落到岗位名，Enter 进页，→ 展开、← 收起。
  */
 function PositionNav({
   instance,
@@ -152,35 +157,33 @@ function PositionNav({
 }): ReactNode {
   const { lang, t } = useApp()
   const palette = usePalette()
+  const { pathname } = useLocation()
   const [adding, setAdding] = useState(false)
   const [more, setMore] = useState<Record<string, boolean>>({})
   const first = myAssignments(instance)[0]
   if (first === undefined) return null
   const name = lang === 'en' ? instance.name.en : instance.name.zh
   const duties = instance.roles.filter((r) => r.my_assignment_id !== undefined)
-  const waiting = rail?.awaiting ?? instance.pending_cards
+  const href = `/positions/${first}`
+  // 只在岗位页本身亮（在它的职责页时亮的是那条职责，不是两行一起亮）
+  const active = pathname === href
+  const Chevron = open ? ChevronDown : ChevronRight
   return (
     <div data-testid="nav-position-row" data-position={instance.position_id}>
-      <div className="group/row flex items-center gap-0.5">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={t('rail.expand', { name })}
-          data-testid="nav-position-toggle"
-          className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
-          onClick={onToggle}
-        >
-          {open ? (
-            <ChevronDown aria-hidden className="size-3.5" />
-          ) : (
-            <ChevronRight aria-hidden className="size-3.5" />
-          )}
-        </button>
+      <div className={cn(ROW, 'gap-1 py-0', active ? ROW_ACTIVE : ROW_IDLE, 'group/row')}>
         <NavLink
-          to={`/positions/${first}`}
-          className={({ isActive }) => cn(navClass({ isActive }), 'min-w-0 flex-1')}
+          to={href}
+          end
+          className="flex min-w-0 items-center gap-2 rounded-[6px] py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="nav-position"
           data-position={instance.position_id}
+          aria-expanded={open}
+          onKeyDown={(e) => {
+            if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
+              e.preventDefault()
+              onToggle()
+            }
+          }}
         >
           <PositionIcon
             position_id={instance.position_id}
@@ -188,20 +191,19 @@ function PositionNav({
             role_ids={instance.roles.map((r) => r.role_id)}
           />
           <span className="truncate">{name}</span>
-          {waiting === 0 ? null : (
-            <span
-              className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums"
-              data-testid="nav-position-pending"
-              title={
-                rail === undefined
-                  ? t('home.positions.cards', { count: instance.pending_cards })
-                  : t('rail.awaiting.hint')
-              }
-            >
-              {waiting}
-            </span>
-          )}
         </NavLink>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={t('rail.expand', { name })}
+          data-testid="nav-position-toggle"
+          className="flex size-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-sidebar-accent focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+          onClick={onToggle}
+        >
+          <Chevron aria-hidden className="size-3.5" />
+        </button>
+        {/* 行里名字右边空着的那一截也能点进岗位页（鼠标用；键盘走上面那个链接） */}
+        <NavLink to={href} end tabIndex={-1} aria-hidden className="min-w-1 flex-1 self-stretch" />
         {owner === undefined || person_id === undefined ? null : (
           <RailPlus
             hover
@@ -229,7 +231,7 @@ function PositionNav({
         />
       ) : null}
       {open && duties.length > 0 ? (
-        <ul className="ml-5 flex flex-col gap-0.5 border-l pl-2" data-testid="nav-duties">
+        <ul className="flex flex-col gap-px" data-testid="nav-duties">
           {duties.map((r) => {
             const threads = rail?.duties.find((d) => d.role_id === r.role_id)
             return (
@@ -237,12 +239,25 @@ function PositionNav({
                 <div className="group/row flex items-center gap-0.5">
                   <NavLink
                     to={dutyHref(r.my_assignment_id ?? '', r.role_id)}
-                    className={({ isActive }) => cn(navClass({ isActive }), 'min-w-0 flex-1')}
+                    className={({ isActive }) =>
+                      cn(navClass({ isActive }), 'min-w-0 flex-1', !isActive && 'text-ws-body')
+                    }
                     data-testid="nav-duty"
                   >
                     <DutyIcon role_id={r.role_id} />
-                    <span className="truncate text-[13px]">{r.role_name}</span>
+                    <span className="truncate">{r.role_name}</span>
                   </NavLink>
+                  {threads === undefined || threads.archived === 0 ? null : (
+                    <RailPlus
+                      hover
+                      icon={Archive}
+                      label={t('rail.archived', { n: threads.archived })}
+                      testId="rail-archived"
+                      onClick={() => {
+                        onArchived(r.role_id)
+                      }}
+                    />
+                  )}
                   <RailPlus
                     hover
                     label={t('rail.new_matter', { name: r.role_name })}
@@ -262,9 +277,6 @@ function PositionNav({
                     expanded={more[r.role_id] === true}
                     onMore={() => {
                       setMore((m) => ({ ...m, [r.role_id]: m[r.role_id] !== true }))
-                    }}
-                    onArchived={() => {
-                      onArchived(r.role_id)
                     }}
                     {...(onArchiveMatter === undefined ? {} : { onArchive: onArchiveMatter })}
                   />
@@ -435,7 +447,7 @@ export function AppShell({
             WP195（Luoye 09-29「静态的 logo 其实不好看」）：改成**待机**——大部分时间一动不动，
             隔几秒轻轻动一下；鼠标移上去播一次「一变一队」再回待机。点了回首页不变。
           */}
-            <div className="px-2 pt-1 pb-4">
+            <div className="px-2 pt-1 pb-3">
               <NavLink
                 to="/"
                 end
@@ -448,7 +460,7 @@ export function AppShell({
               </NavLink>
             </div>
             <nav
-              className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
+              className="flex flex-1 flex-col gap-px overflow-y-auto"
               aria-label={t('nav.main')}
               data-testid="main-nav"
             >
@@ -499,7 +511,7 @@ export function AppShell({
                 {t('nav.calendar')}
               </NavLink>
               {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
-              <div className="flex items-center justify-between px-2.5 pt-4 pb-1.5">
+              <div className="flex items-center justify-between px-2 pt-3 pb-1">
                 <span className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
                   {t('nav.positions')}
                 </span>
