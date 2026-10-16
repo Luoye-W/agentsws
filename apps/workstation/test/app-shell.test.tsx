@@ -98,7 +98,7 @@ describe('左栏（WP43 §1 图标）', () => {
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     // WP188（Luoye 09-29）：「随便聊」在最上面；WP343 改名「我的助理」（`/assistant`）
     expect(hrefs.slice(0, 5)).toEqual(['/assistant', '/', '/messages', '/todos', '/calendar'])
-    expect(screen.getByTestId('nav-free-chat').textContent).toBe('我的助理')
+    expect(screen.getByTestId('nav-free-chat').textContent).toBe('助理')
     expect(hrefs).not.toContain('/goals')
   })
 

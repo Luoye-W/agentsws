@@ -20,23 +20,51 @@
  * WP211：再加飞书 / 钉钉两张团队卡（`components/im/team-bot-card.tsx`，同一套少字样式，图标用官网
  * favicon）。三条团队渠道的公司应用凭据只给负责人与公司管理员填 / 改 / 断开（Fable 09-30），别人只看
  * 状态；每人自己的「绑定我的账号」人人可用。
+ *
+ * WP351（Luoye 10-16）：最下面多一个渠道「网站聊天窗」——装在商家网站上给访客用的挂件
+ * （外观、嵌入代码、转发方式 / 托管档；原「聊天窗」页的设置那一半）。访客的对话在「消息 → 网站聊天」。
+ * 名下有网站在线客服才出；锚点 `#site-chat`（⌘K、客服岗位页、网站聊天列表顶上的齿轮都跳到这里）。
  */
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+import { ChatWidgetSettings } from '@/components/chat-window/widget-settings'
 import { StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
 import { WechatBind } from '@/components/im/wechat-bind'
 import { WecomBotForm } from '@/components/im/wecom-bot-form'
+import { useHoldsSiteChat } from '@/components/messages/site-chat'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getImStatus } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
+/** WP351：「网站聊天窗」这个渠道（挂件设置）。 */
+function SiteChatChannel(): ReactNode {
+  const { t } = useApp()
+  const { hash } = useLocation()
+  // ⌘K / 客服岗位页带着 `#site-chat` 过来：滚到这一块
+  useEffect(() => {
+    if (hash === '#site-chat')
+      globalThis.document?.getElementById('site-chat')?.scrollIntoView?.({ block: 'start' })
+  }, [hash])
+  return (
+    <section id="site-chat" className="flex scroll-mt-4 flex-col gap-3" data-testid="im-site-chat">
+      <h2 className="flex items-center gap-1.5 text-base font-semibold">
+        {t('nav.chat_window')}
+        <Hint text={t('im.site_chat.hint')} testId="im-site-chat-what" />
+      </h2>
+      <ChatWidgetSettings />
+    </section>
+  )
+}
+
 export function ImChannelsPage(): ReactNode {
   const { t } = useApp()
+  const holdsSiteChat = useHoldsSiteChat()
   const status = useQuery({
     queryKey: ['im', 'status'],
     queryFn: getImStatus,
@@ -213,6 +241,9 @@ export function ImChannelsPage(): ReactNode {
         accountId={status.data?.dingtalk?.client_id}
         canManage={canManage}
       />
+
+      {/* ── WP351：网站聊天窗（挂件设置；对话在「消息 → 网站聊天」）──────── */}
+      {holdsSiteChat ? <SiteChatChannel /> : null}
     </div>
   )
 }

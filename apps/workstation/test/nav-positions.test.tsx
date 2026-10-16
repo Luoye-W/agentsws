@@ -6,7 +6,7 @@
  * - 多岗位的人点哪个岗位，当前分配就落在那个岗位下（`assignmentForPosition`）；
  * - 只有一条职责的岗位不出第二层（共用折叠件 `DutyFold`）。
  */
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { AppShell } from '@/components/app-shell'
@@ -118,15 +118,14 @@ describe('左栏：岗位在外，职责不出现（WP70 / 54 §4）', () => {
     }
   })
 
-  it('点岗位进的是本人在这个岗位下的第一条分配；待审数按岗位聚合', () => {
+  it('点岗位进的是本人在这个岗位下的第一条分配；WP351 起左栏不挂待审数（去岗位页看）', () => {
     renderShell(INSTANCES)
     const rows = screen.getAllByTestId('nav-position')
     expect((rows[0] as HTMLElement).getAttribute('href')).toBe('/positions/asg_store')
     expect((rows[1] as HTMLElement).getAttribute('href')).toBe('/positions/asg_support')
-    // 网站运营三条职责的待审加起来是 3（服务端已经按岗位聚合）
-    expect(within(rows[0] as HTMLElement).getByTestId('nav-position-pending').textContent).toBe('3')
-    // 一张都没有就不出角标
-    expect(within(rows[1] as HTMLElement).queryByTestId('nav-position-pending')).toBeNull()
+    // WP351（决策 906）：岗位行右边的数字去掉了
+    expect(screen.queryByTestId('nav-position-pending')).toBeNull()
+    expect((rows[0] as HTMLElement).textContent).toBe('网站运营')
   })
 
   it('没装岗位面的服务进程退回按分配列（老样子，一条都不少）', () => {
@@ -238,5 +237,46 @@ describe('职责按岗位归堆（WP70）', () => {
   it('一条职责都归不进去（历史数据）：只剩未归岗位那一堆', () => {
     const groups = groupDutiesByPosition([{ role_id: 'ads.meta' }], [])
     expect(groups).toEqual([{ duties: [{ role_id: 'ads.meta' }] }])
+  })
+})
+
+describe('WP351 左栏学 Claude 收紧（决策 906）', () => {
+  it('岗位行没有常驻的「>」：箭头只在悬停 / 键盘落上时显出来，放在名字右边', () => {
+    renderShell(INSTANCES)
+    const row = screen.getAllByTestId('nav-position-row')[0] as HTMLElement
+    const toggle = within(row).getByTestId('nav-position-toggle')
+    expect(toggle.className).toContain('opacity-0')
+    expect(toggle.className).toContain('group-hover/row:opacity-100')
+    expect(toggle.className).toContain('focus-visible:opacity-100')
+    // 在名字（链接）后面，不在行首
+    const link = within(row).getByTestId('nav-position')
+    expect(link.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('点名字进岗位页、点「>」展开；键盘 → 展开、← 收起', async () => {
+    const user = userEvent.setup()
+    renderShell(INSTANCES)
+    const row = screen.getAllByTestId('nav-position-row')[0] as HTMLElement
+    expect(within(row).queryByTestId('nav-duties')).toBeNull()
+    await user.click(within(row).getByTestId('nav-position-toggle'))
+    expect(within(row).getByTestId('nav-duties')).toBeDefined()
+    const link = within(row).getByTestId('nav-position')
+    fireEvent.keyDown(link, { key: 'ArrowLeft' })
+    expect(within(row).queryByTestId('nav-duties')).toBeNull()
+    fireEvent.keyDown(link, { key: 'ArrowRight' })
+    expect(within(row).getByTestId('nav-duties')).toBeDefined()
+    expect(link.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('职责行不缩进：和岗位左边对齐，只靠字色淡一档', async () => {
+    const user = userEvent.setup()
+    renderShell(INSTANCES)
+    const row = screen.getAllByTestId('nav-position-row')[0] as HTMLElement
+    await user.click(within(row).getByTestId('nav-position-toggle'))
+    const duties = within(row).getByTestId('nav-duties')
+    expect(duties.className).not.toMatch(/\b(ml|pl)-/)
+    expect(duties.className).not.toContain('border-l')
+    const duty = within(duties).getAllByTestId('nav-duty')[0] as HTMLElement
+    expect(duty.className).toContain('text-ws-body')
   })
 })

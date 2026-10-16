@@ -327,7 +327,7 @@ describe('WP259 ⌘K 一句话交给职责：长文本照收', () => {
 })
 
 describe('WP207 职责下的对话 / 任务', () => {
-  it('状态小点、默认 5 条 + 更多、已归档（n）；岗位数改成「等你处理的」', async () => {
+  it('状态小点、默认 5 条 + 更多、已归档（n）在职责行悬停钮里；岗位行不挂数', async () => {
     const user = userEvent.setup()
     renderShell(true)
     const rows = await screen.findAllByTestId('rail-matter')
@@ -345,13 +345,14 @@ describe('WP207 职责下的对话 / 任务', () => {
       '做完了，待你看',
     ])
     expect(rows[0]?.getAttribute('href')).toBe('/matters/mat_1')
-    expect(screen.getByTestId('nav-position-pending').textContent).toBe('4')
-    expect(screen.getByTestId('nav-position-pending').getAttribute('title')).toBe(
-      '等你处理的：等你批的卡 + 做完待你看的',
-    )
+    // WP351（决策 906）：岗位行不挂数字了（去岗位页看）
+    expect(screen.queryByTestId('nav-position-pending')).toBeNull()
     await user.click(screen.getByTestId('rail-more'))
     expect(screen.getAllByTestId('rail-matter')).toHaveLength(6)
-    expect(screen.getByTestId('rail-archived').textContent).toContain('已归档（2）')
+    // WP351：「已归档（n）」不在树上占一行，收进职责行悬停出的归档钮（说法在 tooltip / 读屏里）
+    const archived = screen.getByTestId('rail-archived')
+    expect(archived.getAttribute('aria-label')).toBe('已归档（2）')
+    expect(archived.closest('[data-testid="rail-threads"]')).toBeNull()
   })
 
   it('已归档列表：筛好这条职责，点「恢复」一次一件（by=user）', async () => {

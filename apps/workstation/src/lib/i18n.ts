@@ -3242,8 +3242,10 @@ const zh: Table = {
   'nav.chat': '聊天沙盒',
   'chat.title': '聊天沙盒',
   'chat.window.entry.title': '网站在线客服',
-  'chat.window.entry.subtitle': '装到网站上的聊天窗：外观、嵌入代码、转发方式与进行中的对话。',
-  'chat.window.entry.open': '去设置聊天窗',
+  'chat.window.entry.subtitle':
+    '访客的对话在「消息 → 网站聊天」；挂件的外观、嵌入代码、转发方式在「消息渠道 → 网站聊天窗」。',
+  'chat.window.entry.open': '看网站聊天',
+  'chat.window.entry.settings': '网站聊天窗设置',
   'chat.window.appearance': '外观',
   'chat.window.accent': '主色',
   'chat.window.greeting': '欢迎语',
@@ -3299,6 +3301,12 @@ const zh: Table = {
   'chat.session.email_follow_up': '已转邮件跟进',
   'chat.session.closed': '已结束',
   'messages.source.chat': '只看聊天留言',
+  // WP351：「消息」里和邮箱并列的来源（访客对话）；挂件设置在「消息渠道」页
+  'messages.source.site_chat': '网站聊天',
+  'site_chat.offline': '离线留言',
+  'site_chat.working': '客服 AI 在处理',
+  'im.site_chat.hint':
+    '装到你网站上给访客用的聊天挂件：外观、嵌入代码、转发方式。访客的对话在「消息 → 网站聊天」里看。',
   'chat.subtitle': '左边扮演访客发一句，右边看在线客服会怎么判、怎么答。',
   'chat.intro':
     '网站聊天窗本身要等托管档（widget 与公网端点）。在那之前，在这里先把 AI 的判断试一遍：哪些它直接答、哪些它要你定、哪些它转人工。',
@@ -3556,8 +3564,10 @@ const zh: Table = {
   'update.available': '有新版本',
   'update.available.tip': '新版本 {version}，点一下在后台下载',
   'update.available.notify': '新版本 {version}，点一下去下载页（这台 Mac 不能自动更新）',
-  'update.downloading': '正在下载',
+  'update.downloading': '正在下载…',
   'update.downloading.tip': '正在后台下载 {version}，下完会变成「重启并更新」',
+  'update.preparing': '正在准备新版…',
+  'update.preparing.tip': '{version} 下好了，正在解压、自检，好了会变成「重启并更新」',
   'update.ready': '重启并更新',
   'update.ready.tip': '{version} 已下载好。点一下退出、更新、自动重新打开；你的数据和设置都在',
   'update.installing': '正在重启…',
@@ -3681,7 +3691,7 @@ const zh: Table = {
   'need.go_onboarding': '用设置向导加',
   'need.no_range': '「{duty}」这条职责还没分配店铺 / 品牌，所以这里还用不了。',
   'need.go_assign': '去分配',
-  'nav.chat_window': '聊天窗',
+  'nav.chat_window': '网站聊天窗',
   // WP144（docs/80）：电脑操控——设置页那张卡、第三栏那一行、授权卡
   'settings.cu': '电脑操控',
   'settings.cu.hint':
@@ -4053,7 +4063,7 @@ const zh: Table = {
   'b2b.sales.sample.hint': '已寄必须带单号。标已寄的卡批了，会再出一张寄样通知卡。',
   'b2b.sales.handover': '{who} 的 {count} 条交接等老板批',
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
-  'nav.free_chat': '我的助理',
+  'nav.free_chat': '助理',
   'home.free_chat': '有什么要我做的？',
   'command.new_chat': '新对话',
   'command.handoff.title': '交给哪个岗位？',
@@ -4092,7 +4102,7 @@ const zh: Table = {
   'free_chat.delete': '删除',
   'free_chat.delete.confirm': '删掉这段对话？删了找不回来。',
   'free_chat.session.more': '更多',
-  'models.purpose.free_chat': '我的助理',
+  'models.purpose.free_chat': '助理',
   // ── WP207：左栏三级「+」、职责下的对话 / 任务、归档与找回 ──────────────
   'rail.new_position': '新建岗位',
   'rail.add_duty': '给「{name}」加职责',
@@ -7426,8 +7436,9 @@ const en: Table = {
   'chat.title': 'Chat sandbox',
   'chat.window.entry.title': 'Website live chat',
   'chat.window.entry.subtitle':
-    'The chat widget on your site: appearance, embed code, relay mode, and ongoing conversations.',
-  'chat.window.entry.open': 'Set up live chat',
+    'Visitor conversations are under Messages → Website chat; the widget’s look, embed code and relay are under Messaging channels → Website chat widget.',
+  'chat.window.entry.open': 'Open website chat',
+  'chat.window.entry.settings': 'Widget settings',
   'chat.window.appearance': 'Appearance',
   'chat.window.accent': 'Accent color',
   'chat.window.greeting': 'Greeting',
@@ -7487,6 +7498,11 @@ const en: Table = {
   'chat.session.email_follow_up': 'Moved to email',
   'chat.session.closed': 'Closed',
   'messages.source.chat': 'Chat messages only',
+  'messages.source.site_chat': 'Website chat',
+  'site_chat.offline': 'Offline messages',
+  'site_chat.working': 'Support AI is on it',
+  'im.site_chat.hint':
+    'The chat widget on your website for visitors: look, embed code, relay. Visitor conversations are under Messages → Website chat.',
   'chat.subtitle': 'Play the visitor on the left; watch what live chat decides on the right.',
   'chat.intro':
     'The website chat widget ships with the hosted tier (widget script and public endpoints). Until then, try the decisions here: what it answers itself, what it hands to you, what it escalates.',
@@ -7762,7 +7778,10 @@ const en: Table = {
   'update.available.tip': 'Version {version} is out. Click to download it in the background',
   'update.available.notify':
     'Version {version} is out. Click to open the download page (this Mac cannot update itself)',
-  'update.downloading': 'Downloading',
+  'update.downloading': 'Downloading…',
+  'update.preparing': 'Getting it ready…',
+  'update.preparing.tip':
+    '{version} is downloaded; unpacking and checking it. It turns into “Restart to update” when done',
   'update.downloading.tip':
     'Downloading {version} in the background. It turns into “Restart to update” when done',
   'update.ready': 'Restart to update',
@@ -7896,7 +7915,7 @@ const en: Table = {
   'need.no_range':
     'The "{duty}" duty has no store or brand assigned yet, so it cannot be used here.',
   'need.go_assign': 'Assign one',
-  'nav.chat_window': 'Live chat',
+  'nav.chat_window': 'Website chat widget',
   // WP144 (docs/80): computer use — settings card, third-column strip, approval card
   'settings.cu': 'Computer use',
   'settings.cu.hint':
@@ -8283,7 +8302,7 @@ const en: Table = {
     'Shipped needs a tracking number. Once that card is approved, a shipping notice card follows.',
   'b2b.sales.handover': '{count} handover items from {who} await the owner',
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
-  'nav.free_chat': 'My assistant',
+  'nav.free_chat': 'Assistant',
   'home.free_chat': 'What can I do for you?',
   'command.new_chat': 'New chat',
   'command.handoff.title': 'Hand to which position?',
@@ -8322,7 +8341,7 @@ const en: Table = {
   'free_chat.delete': 'Delete',
   'free_chat.delete.confirm': 'Delete this chat? It cannot be recovered.',
   'free_chat.session.more': 'More',
-  'models.purpose.free_chat': 'My assistant',
+  'models.purpose.free_chat': 'Assistant',
   // ── WP207 ──────────────────────────────────────────────────────────
   'rail.new_position': 'New position',
   'rail.add_duty': 'Add a duty to “{name}”',

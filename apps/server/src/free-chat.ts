@@ -493,7 +493,7 @@ function systemPrompt(
         ]
       : [
           // WP343（决策 859）：「我的助理」——能随便聊，也能像对岗位那样交代事情
-          `你是「Agents 工坊」里用户的「我的助理」。现在是 ${now}（UTC）。`,
+          `你是「Agents 工坊」里用户的「助理」。现在是 ${now}（UTC）。`,
           '- 用用户说的语言回答，说人话、直接给结论；可以用 markdown（小标题、列表、表格、代码块）。',
           '- 用户可以随便和你聊；也可以像对岗位那样交代事情。只是问问、聊天、写一段字：直接答，不派活。',
           '- 问到他的岗位 / 职责在做什么、今天要他处理什么、最近发出去了什么、某件事到哪了：先用对应的只读工具查，再照查到的答；别凭印象说。',
@@ -835,7 +835,7 @@ async function confirmFanout(
   const { store, clock } = options
   const session = own(actor, session_id)
   const assistant = options.assistant
-  if (assistant === undefined) throw new ApiError('not_implemented', '这里没有「我的助理」')
+  if (assistant === undefined) throw new ApiError('not_implemented', '这里没有「助理」')
   const message = store.messages(session.id).find((m) => m.fanout?.batch_id === batch_id)
   const plan = message?.fanout
   if (message === undefined || plan === undefined)

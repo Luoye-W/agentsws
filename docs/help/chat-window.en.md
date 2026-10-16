@@ -2,6 +2,8 @@
 
 This covers the chat window you install on your website: its look, where the embed code goes, how to choose among the three relay options, and how to “teach the AI” inside visitor conversations.
 
+Where: **visitor conversations** are under Messages → “Website chat” (next to your mailboxes); the **widget settings** (look, embed code, relay) are at the bottom of the account menu → Settings → Messaging channels, under “Website chat widget”.
+
 ## Which relay option
 
 Visitor messages travel through a “relay” to whatever handles them. The relay only forwards: it stores no conversation text and runs no AI. All three options use the same widget and the same embed code; switching only changes who is on the other end.
@@ -16,7 +18,7 @@ With the first two, the support agent on **this computer** handles visitors (the
 
 ## Install it on your site
 
-1. On the “Website live chat” page, set the **look**: accent colour and greeting.
+1. Under Messaging channels → “Website chat widget”, set the **look**: accent colour and greeting.
 2. Under **Allowed websites**, enter your site’s address, comma-separated for several, e.g. `https://shop.example.com`. **Empty means nothing is allowed** (safe by default).
 3. Copy the **embed code** and paste it before `</body>` on every page of your site.
 4. Open your site: the chat window appears at the bottom right. “Live preview” shows it first.
@@ -47,7 +49,7 @@ When credits run short there is a grace period (the cloud keeps minding the chat
 ## Visitor conversations and “teach”
 
 - **Handoff wait time**: for questions the AI cannot settle, the visitor waits at most this long (30 seconds to 10 minutes), then it moves to an email follow-up. Changes only affect new requests.
-- **Teach**: under an active conversation, write how it should be answered and press **Teach**. The visitor never sees your line; the AI rewrites it in the visitor’s language and answers in its own voice, and at the end it can be kept as knowledge.
+- **Teach**: open a conversation under Messages → Website chat; under it, write how it should be answered and press **Teach**. The visitor never sees your line; the AI rewrites it in the visitor’s language and answers in its own voice, and at the end it can be kept as knowledge.
 
 ## FAQ
 

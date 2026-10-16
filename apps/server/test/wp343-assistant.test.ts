@@ -270,7 +270,7 @@ describe('WP343「我的助理」', () => {
       target: { position_id: 'customer-care', label: '客服' },
     })
     // 助理那条模型回合一次都没走（开事项那边起名字之类的调用不算）
-    expect(JSON.stringify(upstream)).not.toContain('我的助理')
+    expect(JSON.stringify(upstream)).not.toContain('用户的「助理」')
     const dispatched = got.find((f) => f.type === 'dispatched')
     expect(dispatched?.type === 'dispatched' ? dispatched.dispatch.position_name : '').toBe('客服')
     const listed = await messagesOf(session)

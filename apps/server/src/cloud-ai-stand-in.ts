@@ -100,7 +100,7 @@ export async function demoWebSearch(
 const ANSWER = [
   '这是**演示环境**里的回答（「Agents 工坊（用积分）」替身，不连真模型）。',
   '',
-  '「我的助理」可以这样用：',
+  '「助理」可以这样用：',
   '',
   '1. 问一个随手的问题，或者让它帮你起草一段文字；',
   '2. 问「各岗位在做什么」「今天有什么要我处理的」，它去查了再答；',
@@ -329,7 +329,8 @@ export function cloudAiStandInFetch(
       )
     // WP343：岗位那边的运行（不是助理对话）回一句「做完了」，别把助理的使用说明当成岗位的回答
     const system = messages.find((m) => m.role === 'system')
-    const fromChat = typeof system?.content !== 'string' || /我的助理|随便聊/u.test(system.content)
+    const fromChat =
+      typeof system?.content !== 'string' || /用户的「助理」|我的助理|随便聊/u.test(system.content)
     const text = hasImage
       ? VISION_PROBE_WORD
       : assistantDone !== undefined

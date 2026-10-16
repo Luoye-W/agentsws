@@ -2041,7 +2041,7 @@ async function bootstrap(): Promise<void> {
           updaterChecking = false
         }
       },
-      async download(onProgress) {
+      async download(onProgress, onPhase) {
         // 版本目录布局：下载占进度条的前 90%，摆到旁边 + 冒烟占最后 10%
         const share = layout === undefined ? 1 : 0.9
         const listener = (p: { percent: number }): void => {
@@ -2058,6 +2058,8 @@ async function bootstrap(): Promise<void> {
         staged = undefined
         if (layout === undefined || found === undefined || installer === undefined) return
         onProgress(92)
+        // WP351：增量下载几秒就完，摆新版（解压 + 冒烟）要十来秒——界面说「正在准备新版…」
+        onPhase?.('prepare')
         staging = true
         try {
           const problem = await stageUpdate({
@@ -2239,7 +2241,7 @@ async function bootstrap(): Promise<void> {
     mode: policy.mode,
     primary: {
       check: async () => (await primary()).check(),
-      download: async (onProgress) => (await primary()).download(onProgress),
+      download: async (onProgress, onPhase) => (await primary()).download(onProgress, onPhase),
       install: () => {
         void primary().then(async (b) => {
           /*
@@ -2334,7 +2336,12 @@ async function bootstrap(): Promise<void> {
     if (s.state === 'available' && s.mode === 'auto')
       return { state: 'available', version: s.version }
     if (s.state === 'downloading')
-      return { state: 'downloading', version: s.version, percent: s.percent }
+      return {
+        state: 'downloading',
+        version: s.version,
+        percent: s.percent,
+        ...(s.phase === undefined ? {} : { phase: s.phase }),
+      }
     if (s.state === 'ready') return { state: 'ready', version: s.version }
     if (s.state === 'waiting') return { state: 'waiting', version: s.version }
     return undefined
