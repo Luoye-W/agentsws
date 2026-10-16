@@ -93,7 +93,7 @@ for (const [kind, query] of QUERIES) {
   const started = Date.now()
   try {
     const out = await provider.search({ query })
-    const results = Array.isArray(out) ? out : (out?.results ?? [])
+    const results = Array.isArray(out) ? out : (out?.sources ?? out?.results ?? [])
     const hosts = results.map((r) => hostOf(r.url))
     const hit = Object.fromEntries(
       Object.entries(WATCH).map(([k, re]) => [k, hosts.filter((h) => re.test(h)).length]),
