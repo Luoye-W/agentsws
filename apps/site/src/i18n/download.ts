@@ -37,6 +37,17 @@ const zh = {
     win: '蓝框提示：更多信息 → 仍要运行',
     winHint: '还没买代码签名证书，Windows 会先拦一下；文件本身没问题。签名做完这一步就没了。',
   },
+  macNote: {
+    h: 'Mac 第一次打开',
+    why: '我们还在办苹果开发者签名和公证，办好之前第一次打开要你点一下放行，只需一次。',
+    steps: [
+      '双击 .dmg，把 agentsws 拖进「应用程序」，再双击打开。',
+      '系统提示「无法验证开发者」时，点「完成」。',
+      '打开「系统设置 → 隐私与安全性」，往下找到 agentsws，点「仍要打开」。',
+    ],
+    old: '0.2.0-beta.8 及更早的版本可能提示「已损坏，请移到垃圾箱」：重新下载上面的最新版即可。',
+    more: '图文步骤',
+  },
   sha: '校验值（SHA-256）',
   size: '大小',
   safe: '升级前自动备份。升级没成功，数据一个字节都不动。',
@@ -108,6 +119,17 @@ const en: DownloadCopy = {
     win: 'Blue warning: More info → Run anyway',
     winHint:
       'We haven’t bought a code-signing certificate yet, so Windows asks first. The file itself is fine; this step goes away once it’s signed.',
+  },
+  macNote: {
+    h: 'Opening on a Mac the first time',
+    why: 'We’re still getting Apple’s developer signing and notarization done. Until then, macOS asks you to allow the app once.',
+    steps: [
+      'Open the .dmg, drag agentsws into Applications, then double-click it.',
+      'When macOS says it can’t verify the developer, click Done.',
+      'Open System Settings → Privacy & Security, scroll to agentsws and click Open Anyway.',
+    ],
+    old: '0.2.0-beta.8 and earlier may say the app “is damaged”: just download the latest build above.',
+    more: 'Step-by-step guide',
   },
   sha: 'Checksum (SHA-256)',
   size: 'Size',

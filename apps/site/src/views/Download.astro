@@ -84,6 +84,12 @@ const attrs = (it: DownloadItem) =>
           )
         })}
       </ul>
+      <div class="mac-note" id="mac-first-open">
+        <h3><Icon name="shield" />{t.macNote.h}</h3>
+        <p class="why">{t.macNote.why}</p>
+        <ol>{t.macNote.steps.map((step) => <li>{step}</li>)}</ol>
+        <p class="old">{t.macNote.old} <a href={docHref('install-update', lang)}>{t.macNote.more} →</a></p>
+      </div>
       <p class="safe"><Icon name="shield" />{t.safe}</p>
     </div>
   </section>

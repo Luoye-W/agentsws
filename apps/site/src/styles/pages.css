@@ -343,6 +343,39 @@
   color: var(--muted);
   margin-bottom: 16px;
 }
+.mac-note {
+  margin: 28px auto 0;
+  max-width: 640px;
+  text-align: left;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.mac-note h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.mac-note h3 .ico {
+  color: var(--brand);
+  width: 16px;
+  height: 16px;
+}
+.mac-note .why,
+.mac-note .old {
+  font-size: 13px;
+  color: var(--muted);
+}
+.mac-note ol {
+  margin: 10px 0 10px 20px;
+  font-size: 14px;
+  color: var(--body);
+  display: grid;
+  gap: 4px;
+}
 .first {
   margin-top: 12px;
   font-size: 13px;
