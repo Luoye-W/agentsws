@@ -1071,6 +1071,8 @@ export interface ServerOptions {
    * `await import('@agentsws/dsh-adapter')`。
    */
   subscriptionLogin?: SubscriptionOptions['createLogin']
+  /** WP362：订阅目录替身（测试用；缺省读 pi-ai 的生成目录）。 */
+  subscriptionCatalog?: SubscriptionOptions['catalog']
   /**
    * WP180：官方插件的注入点（测试用：换清单 / 锁定 patch 的路径、换插件层后端）。生产不传——
    * 清单与锁定 patch 用仓库里那两份，插件层用官方模块建在数据目录下。
@@ -2032,6 +2034,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     runtimeMode,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.subscriptionLogin === undefined ? {} : { createLogin: options.subscriptionLogin }),
+    ...(options.subscriptionCatalog === undefined ? {} : { catalog: options.subscriptionCatalog }),
+    // WP362：有人登上 / 登出 ChatGPT 订阅 → 每个已装配的品牌重装一次网关（下拉跟着变）
+    onChange: () => {
+      for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
+    },
   })
   /*
    * WP134：第三种模型来源「用我的 DeepSeek 账号登录」。也是"一台机器一份"（账号在 dsh 本机凭据库里，
@@ -3433,6 +3440,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (need.service === 'model') return setupProbes.get(ws)?.model()
     if (need.service === 'workshop_account') return setupProbes.get(ws)?.cloudLinked()
     if (need.service === 'deepseek_account') return deepseekAccount.signedIn()
+    /*
+     * WP362：ChatGPT 订阅——过期的那条记录还在库里（官方刷新失败时保留它，等人重登），被限流时也照样
+     * 「登着」，所以服务端判不出「好了没」：回 `undefined`，卡上人登好了点「接着做」（不自动接着跑，
+     * 免得限流时一遍遍重试把额度再耗一轮）。
+     */
+    if (need.service === 'chatgpt_subscription') return undefined
     // 团队那三条看这个品牌那一套连没连上；个人微信跟人走（查不了：卡上扫完码由卡自己接着做）
     if (
       need.service === 'im:wecom' ||
@@ -5424,6 +5437,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
+      // WP362（决策 938）：ChatGPT 订阅（个人档；按这台机器上有没有人登录过现算）
+      subscription: {
+        signedIn: (provider) => subscription.signedIn(provider),
+        catalog: (provider) => subscription.catalog(provider),
+        complete: (person_id, provider, request) =>
+          subscription.complete(person_id, provider, request),
+      },
       // WP134：账号登录那一路（只有"登录了没有"与官方 resolveToken 两样）
       deepseekAccount: {
         signedIn: () => deepseekAccount.signedIn(),
@@ -10326,6 +10346,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         role_id: string
         run_id: string
         entry: string
+        /** WP362：这一次真在用的模型（随便聊 / 助理这一轮选的那个）；不给 = 品牌默认。 */
+        model?: { provider: string; model: string }
       },
       _signal?: AbortSignal,
     ): Promise<{
@@ -10378,7 +10400,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
            * （ChatGPT 订阅）就先用它自带的搜索、用这个人自己的订阅；不行再走 WP353 的链。
            */
           const models = await brandModules.models(ws)
-          const ref = models.configured() ? models.defaultRef() : undefined
+          // WP362：判名单看这一轮真在用的模型（这段对话选了 ChatGPT 订阅就是它），没给才看品牌默认
+          const ref = ctx.model ?? (models.configured() ? models.defaultRef() : undefined)
           const who: SearchWho = {
             ...(ref === undefined ? {} : { source: ref.provider, model: ref.model }),
             person_id: ctx.person_id,
@@ -10579,6 +10602,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               role_id: ctx.role_id,
               run_id: ctx.run_id,
               entry: 'free_chat',
+              ...(ctx.model === undefined ? {} : { model: ctx.model }),
             },
             signal,
           ),

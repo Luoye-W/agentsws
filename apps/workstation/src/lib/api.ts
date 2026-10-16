@@ -1809,6 +1809,9 @@ export interface PricingModelEntry {
   in: number
   out: number
   cached?: number
+  /** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1）。 */
+  consumption_rate?: number
+  rate_source?: 'stats' | 'list_price'
 }
 
 export interface PricingEntry {

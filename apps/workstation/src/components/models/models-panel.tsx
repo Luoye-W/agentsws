@@ -481,7 +481,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           )}
         </section>
 
-        {settings === undefined || active.length === 0 ? null : (
+        {/* WP362：只登了 ChatGPT 订阅（「已配的」列表里没有它）也要有默认模型这一块——按能选的清单判 */}
+        {settings === undefined || (active.length === 0 && settings.choices.length === 0) ? null : (
           <>
             <Separator />
             {/* ③ 默认模型 + 驻留 + 预算 */}

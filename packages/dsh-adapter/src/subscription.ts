@@ -42,6 +42,13 @@ import {
   type NativeSearchRequest,
   type NativeSearchResult,
 } from './native-search.js'
+import {
+  createSubscriptionChat,
+  type SubscriptionChat,
+  SubscriptionChatError,
+  type SubscriptionChatRequest,
+  type SubscriptionChatResult,
+} from './subscription-chat.js'
 import type { SubscriptionLoginMethod, SubscriptionProviderId } from './subscription-facts.js'
 import {
   SUBSCRIPTION_PROVIDERS,
@@ -274,6 +281,15 @@ export interface SubscriptionLoginHandle {
     provider: SubscriptionProviderId,
     request: NativeSearchRequest,
   ): Promise<NativeSearchResult>
+  /**
+   * WP362（决策 938）：用这个人的订阅跑一次**补全**（模型网关那一跳；第一版只有 `openai-codex`，
+   * 别家抛 `SubscriptionChatError('other')`）。令牌照旧只在 pi-ai 与本机加密库里（`subscription-chat.ts`）。
+   * 老替身没有这一格 = 不支持。
+   */
+  complete?(
+    provider: SubscriptionProviderId,
+    request: SubscriptionChatRequest,
+  ): Promise<SubscriptionChatResult>
   dispose(): Promise<void>
 }
 
@@ -322,6 +338,8 @@ export async function createSubscriptionLogin(
   const auth = ctx.authorization as AuthorizationService
   // WP355：ChatGPT 自带搜索（第一次搜时才建，pi-ai 的模型集合也是那时才懒加载）
   let codex: CodexNativeSearch | undefined
+  // WP362：用订阅跑补全（同上，第一次跑时才建）
+  let chat: SubscriptionChat | undefined
 
   const readPayload = async (
     provider: SubscriptionProviderId,
@@ -424,6 +442,16 @@ export async function createSubscriptionLogin(
         })
       codex ??= createCodexNativeSearch(ctx.credentials as unknown as CredentialRecordsLike)
       return codex.search(request)
+    },
+
+    async complete(provider, request) {
+      if (provider !== 'openai-codex')
+        throw new SubscriptionChatError(
+          'other',
+          `${subscriptionFactsOf(provider).label}还不能用来跑活（第一版只接了 ChatGPT 订阅）。`,
+        )
+      chat ??= createSubscriptionChat(ctx.credentials as unknown as CredentialRecordsLike)
+      return chat.complete(request)
     },
 
     async dispose() {

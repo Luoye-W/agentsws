@@ -66,6 +66,15 @@ export interface DshRuntimeOptions {
    * 还是两者的组合（`@agentsws/credentials-openconnector`）。
    */
   credentials?: unknown
+  /**
+   * WP362（决策 938）：订阅来源（`openai-codex` / `anthropic`）的运行**怎么走模型**。
+   *
+   * - `adapter`（缺省，WP90 那条）：这次运行那棵树里挂官方 `dsh-llm-pi-ai`，凭据要经
+   *   {@link credentials} 进树；
+   * - `gateway`：和别的来源一样经模型网关（`GatewayLlmAdapter`）。宿主的网关里接了订阅那一跳，
+   *   凭据只在宿主进程（子进程档也一样：子进程只经 RPC 问宿主要补全），记账 / 预算 / 事件都是网关那一套。
+   */
+  subscriptionRoute?: 'adapter' | 'gateway'
   /** 会话日志根；`session_ref.log_uri` 指向它。 */
   sessionLogRoot?: string
   /**

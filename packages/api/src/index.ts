@@ -421,6 +421,7 @@ export type {
   FreeChatImage,
   FreeChatMessageView,
   FreeChatModelChoice,
+  FreeChatModelPrice,
   FreeChatModelsView,
   FreeChatPort,
   FreeChatReportView,

@@ -77,6 +77,11 @@ export const DEEPSEEK_ACCOUNT_NEED: ConnectNeed = {
   ...(BUILTIN_CONNECT_NEEDS.deepseek_account as Omit<ConnectNeed, 'required'>),
   required: true,
 }
+/** WP362：ChatGPT 订阅没登录 / 过期 / 被限流（用订阅跑的那一次没跑成）→ 卡里就地重新登录。 */
+export const CHATGPT_SUBSCRIPTION_NEED: ConnectNeed = {
+  ...(BUILTIN_CONNECT_NEEDS.chatgpt_subscription as Omit<ConnectNeed, 'required'>),
+  required: true,
+}
 /** 「用我的 DeepSeek 账号登录」那条模型来源的 id（与 `deepseek-account.ts` 的 `DEEPSEEK_ACCOUNT_PROVIDER_ID` 同一个）。 */
 export const DEEPSEEK_ACCOUNT_RUN_PROVIDER = 'deepseek-account'
 /** WP334：没接发信邮箱（开发信排队原因 `sender_choice`、又没出选邮箱卡 = 一只邮箱都没有）。 */

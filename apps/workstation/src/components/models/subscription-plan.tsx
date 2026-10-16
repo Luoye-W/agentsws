@@ -62,6 +62,9 @@ export function SubscriptionPlan({
     void client.invalidateQueries({ queryKey: ['model-subscription', provider] })
     // 登上之后首页那条"还没接模型"的黄条要跟着变
     void client.invalidateQueries({ queryKey: ['home'] })
+    // WP362：订阅进了「默认模型」下拉与输入框的 AI 钮——两份清单跟着刷新
+    void client.invalidateQueries({ queryKey: ['free-chat', 'models'] })
+    void client.invalidateQueries({ queryKey: ['model-defaults'] })
   }
 
   const login = useMutation({
@@ -178,6 +181,13 @@ export function SubscriptionPlan({
                 <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">
                   {t('models.subscription.price')}
                 </span>
+                {provider === 'openai-codex' ? (
+                  <Hint
+                    text={t('models.subscription.selectable')}
+                    className="ml-1 align-middle"
+                    testId="subscription-selectable"
+                  />
+                ) : null}
               </span>
               <select
                 className="h-8 rounded-md border bg-background px-2 text-xs"

@@ -166,6 +166,9 @@ function wireOptions(options: DshRuntimeOptions, request?: RunRequest): WireRunt
       ? {}
       : { webFetchHosts: [...options.web.backend.fetchHosts] }),
     ...(options.web?.deepseekSearch === true ? { webDeepseekSearch: true } : {}),
+    ...(options.subscriptionRoute === undefined
+      ? {}
+      : { subscriptionRoute: options.subscriptionRoute }),
     has: {
       executeTool: options.executeTool !== undefined,
       stage: options.stage !== undefined,

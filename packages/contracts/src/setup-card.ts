@@ -206,6 +206,7 @@ export function setupRequestDedupeKey(workspace_id: string, target: string): str
  * |---|---|
  * | `model` | 接模型（与开工向导第 ① 步同一个件：工坊接口 / DeepSeek 官方 / 自己的 key——key 走本机原生表单） |
  * | `deepseek_account` | DeepSeek 账号登录（与设置页同一个件） |
+ * | `chatgpt_subscription` | ChatGPT 订阅登录（与设置页同一个件；WP362） |
  * | `workshop_account` | 关联 Agents 工坊账号（与设置页同一个注册 / 登录表单） |
  * | `im:wecom` | 企业微信机器人表单（BotID + Secret，本机原生表单，只有负责人能填） |
  * | `im:wechat` | 个人微信扫码 |
@@ -220,6 +221,12 @@ export const BUILTIN_CONNECT_NEEDS: Readonly<Record<string, Omit<ConnectNeed, 'r
     kind: 'deepseek_account',
     service: 'deepseek_account',
     name: 'DeepSeek 账号',
+  },
+  /** WP362：ChatGPT 订阅登录（与设置页那张订阅卡同一个件）。 */
+  chatgpt_subscription: {
+    kind: 'chatgpt_subscription',
+    service: 'chatgpt_subscription',
+    name: 'ChatGPT 订阅',
   },
   workshop_account: {
     kind: 'workshop_account',

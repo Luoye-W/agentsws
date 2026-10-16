@@ -86,6 +86,7 @@ import type {
   AssistantSegmentRow,
   FreeChatStore,
 } from './free-chat-store.js'
+import { RATE_NOTE } from './model-rates.js'
 import type { ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
@@ -109,6 +110,8 @@ export interface FreeChatOptions {
     chatChoices(): ModelChatChoice[]
     defaultRef(): ModelRef
     configured(): boolean
+    /** WP362：消耗速率的 1x 是谁。 */
+    rateBase?(): { model: string; fallback: boolean } | undefined
   }>
   /** 这条分配是哪条职责（记账的 `role_id`）。 */
   roleOf(assignment_id: string): string | undefined
@@ -117,7 +120,8 @@ export interface FreeChatOptions {
     status(): Promise<{ available: boolean; reason?: string }>
     search(
       query: string,
-      ctx: { actor: FreeChatActor; run_id: string; role_id: string },
+      /** WP362：`model` = 这一轮真在用的那个模型（判「用不用它自带的搜索」看它，不看品牌默认）。 */
+      ctx: { actor: FreeChatActor; run_id: string; role_id: string; model?: ModelRef },
       signal: AbortSignal,
     ): Promise<{ sources: readonly FreeChatSearchSource[]; content?: string }>
     /** 一轮最多搜几次；缺省照 WP179 每运行上限。 */
@@ -392,9 +396,12 @@ export function createFreeChatPort(
         options.web === undefined
           ? { available: false, reason: '这个服务进程没有装联网搜索' }
           : await options.web.status()
+      const base = models.rateBase?.()
       return {
         choices,
         ...(choices.some((c) => c.id === def) ? { default: def } : {}),
+        // WP362：消耗速率的 1x 是谁、问号里那句白话
+        ...(base === undefined ? {} : { rate_base: base, rate_note: RATE_NOTE }),
         web_search: {
           available: web.available,
           ...(web.reason === undefined ? {} : { reason: web.reason }),
@@ -1016,6 +1023,8 @@ async function answer(
     role_id,
     run_id,
     purpose: 'free_chat' as const,
+    // WP362：用 ChatGPT 订阅答时按人取那个人自己的订阅
+    person_id: actor.person_id,
   }
 
   let text = ''
@@ -1087,7 +1096,7 @@ async function answer(
           content = await searchOnce(
             options,
             call,
-            { searches, max, actor, run_id, role_id },
+            { searches, max, actor, run_id, role_id, model },
             sink,
             sources,
             signal,
@@ -1341,7 +1350,14 @@ function historyOnce(
 async function searchOnce(
   options: FreeChatOptions,
   call: { id: string; name: string; input: unknown },
-  ctx: { searches: number; max: number; actor: FreeChatActor; run_id: string; role_id: string },
+  ctx: {
+    searches: number
+    max: number
+    actor: FreeChatActor
+    run_id: string
+    role_id: string
+    model?: ModelRef
+  },
   sink: (frame: FreeChatFrame) => void,
   sources: FreeChatSource[],
   signal: AbortSignal,

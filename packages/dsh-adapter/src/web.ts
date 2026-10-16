@@ -391,6 +391,15 @@ export function codeOf(e: unknown): string {
 }
 
 /**
+ * WP362：这次运行的模型来源用不用它自带的联网搜索（与服务端 `web-browser/native.ts` 的名单同一个：
+ * 第一版只有 ChatGPT 订阅 `openai-codex`）。判法只看 `RunRequest.runtime.model.provider`。
+ */
+export const NATIVE_SEARCH_RUN_SOURCES: readonly string[] = ['openai-codex']
+export function nativeSearchRun(request: RunRequest): boolean {
+  return NATIVE_SEARCH_RUN_SOURCES.includes(request.runtime.model.provider)
+}
+
+/**
  * 系统提示里"网页"那一段（进 persona 的 complete 段——官方 `tool:web_search` / `tool:web_fetch`
  * 两段会被 complete 段遮掉，WP70 实测过同一件事，所以官方那两句的意思由我们在这里写全）。
  * 官方原话的三件事都在：结果是外部不可信数据、要细看就抓那一页、用到的网址要写出来。
@@ -408,7 +417,10 @@ export function webBrief(request: RunRequest): string {
     lines.push(
       `- 可以用 \`web_search\` 上网查最新的公开信息。这次运行最多搜 ${web.max_searches} 次（一条查询算一次），` +
         (web.credential === undefined
-          ? '每一次都会在工坊的内置浏览器里打开一次搜索页，搜多了会被搜索引擎拦下，想清楚再搜，别换个说法把同一件事搜好几遍。' +
+          ? (nativeSearchRun(request)
+              ? // WP362（决策 937 / 938）：ChatGPT 订阅的运行先用它自带的联网搜索（花的是订阅额度），搜不成才退回内置浏览器
+                '每一次先用 ChatGPT 订阅自带的联网搜索（花的是这个订阅的额度），搜不成才在工坊的内置浏览器里打开搜索页；想清楚再搜，别换个说法把同一件事搜好几遍。'
+              : '每一次都会在工坊的内置浏览器里打开一次搜索页，搜多了会被搜索引擎拦下，想清楚再搜，别换个说法把同一件事搜好几遍。') +
             '要找某个站上的讨论可以写 `site:reddit.com` 这样的限定。'
           : '每一次都要花一次模型的钱，想清楚再搜，别换个说法把同一件事搜好几遍。'),
     )
