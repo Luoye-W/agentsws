@@ -189,7 +189,7 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
     expect(bottom.textContent).toContain('玻璃碗工作室')
   })
 
-  it('点开账号块：账号与积分 / 工作内容 / 设置 / 退出都在，深浅色与语言也收在这里', async () => {
+  it('点开账号块：账号与积分 / 工作内容 / 设置 / 退出都在，深浅色也收在这里（语言 WP361 起只在设置弹窗）', async () => {
     const user = userEvent.setup()
     renderShell()
     await user.click(screen.getByTestId('account-toggle'))
@@ -199,11 +199,11 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
       'account-group-work',
       'nav-settings',
       'account-theme',
-      'account-lang',
       'account-logout',
     ]) {
       expect(within(menu).getByTestId(id)).toBeDefined()
     }
+    expect(within(menu).queryByTestId('account-lang')).toBeNull()
   })
 
   it('顶栏只剩 ⌘K 与两个芯片：主题 / 语言按钮不在顶栏上了', () => {

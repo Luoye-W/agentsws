@@ -8,10 +8,13 @@
  * - **两组入口**：原来左栏下半那几页收成两组，默认收着、点开记在本机——
  *   「工作内容」会议 / 知识库 / 技能；「设置」岗位与品牌 / 连接 / 消息渠道 / 设置。路由一个没动。
  * - **场景**：原来账户块上方那一行，变成菜单里一行子菜单（「场景 ›」，面板往右开）。
- * - 深浅色、语言、退出照旧。
+ * - 深浅色、退出照旧（语言 WP361 起只在设置弹窗里）。
  *
  * WP356（决策 923）：「设置」那一组换成一行「设置 ⌘,」——点了打开设置弹窗（盖在当前页上，不切走），
  * 岗位与品牌 / 连接 / 消息渠道都在弹窗里；「工作内容」那一组不变。
+ *
+ * WP361：「工作内容」多一项「进行中」（② ③ 才有，决策 925）；「语言」从菜单拿掉，只在设置弹窗 →
+ * 个人 → 通用里改（决策 926）——深浅色、场景是一键切换的事，留在菜单。
  *
  * 键盘：菜单开了焦点进第一项；↑↓ 在各项之间走，Esc 收起并回到账号块上。
  * 托盘「管理场景…」打开的是 `/?scenes=1`——看到这个参数先把菜单打开，场景那一行自己展开面板。
@@ -22,7 +25,6 @@ import {
   ChevronRight,
   ChevronsUpDown,
   Coins,
-  Languages,
   LogOut,
   Moon,
   Settings,
@@ -33,7 +35,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { avatarInitial } from '@/components/design'
 import { SceneSwitcher } from '@/components/scene-switcher'
-import { SHELL_PAGES, type ShellPage } from '@/components/shell-pages'
+import { SHELL_PAGES, type ShellPage, shellPageVisible } from '@/components/shell-pages'
 import { Separator } from '@/components/ui/separator'
 import { clearToken, getCloudCredits, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -69,9 +71,9 @@ function useBalance(): { available?: number; low: boolean; canTopup: boolean } {
 }
 
 export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
-  const { t, theme, toggleTheme, lang, setLang } = useApp()
+  const { t, theme, toggleTheme } = useApp()
   // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
-  const { solo, mode, t: tm } = useMode()
+  const { solo, mode, known, t: tm } = useMode()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -168,21 +170,23 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
           {t(`account.group.${id}`)}
         </button>
         {expanded
-          ? SHELL_PAGES.filter((p) => p.group === id).map((p) => (
-              <button
-                key={p.to}
-                type="button"
-                role="menuitem"
-                data-testid={p.testId}
-                className={cn(ITEM, 'pl-7')}
-                onClick={() => {
-                  go(p.to)
-                }}
-              >
-                <p.icon aria-hidden className="size-4" />
-                {label(p)}
-              </button>
-            ))
+          ? SHELL_PAGES.filter((p) => p.group === id && shellPageVisible(p, { known, solo })).map(
+              (p) => (
+                <button
+                  key={p.to}
+                  type="button"
+                  role="menuitem"
+                  data-testid={p.testId}
+                  className={cn(ITEM, 'pl-7')}
+                  onClick={() => {
+                    go(p.to)
+                  }}
+                >
+                  <p.icon aria-hidden className="size-4" />
+                  {label(p)}
+                </button>
+              ),
+            )
           : null}
       </div>
     )
@@ -312,18 +316,6 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
               <Moon aria-hidden className="size-4" />
             )}
             {theme === 'dark' ? t('theme.light') : t('theme.dark')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="account-lang"
-            className={ITEM}
-            onClick={() => {
-              setLang(lang === 'zh' ? 'en' : 'zh')
-            }}
-          >
-            <Languages aria-hidden className="size-4" />
-            {t('settings.lang')}
           </button>
           <Separator className="my-1" />
           <button

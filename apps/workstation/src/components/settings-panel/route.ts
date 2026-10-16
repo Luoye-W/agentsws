@@ -48,7 +48,6 @@ export const SETTINGS_SECTIONS = [
   'merge',
   'usage',
   'collab',
-  'inprogress',
 ] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]
@@ -98,8 +97,13 @@ const ORG_TABS: Record<string, SettingsSectionId> = {
   invite: 'invite',
   ranges: 'ranges',
   join: 'merge',
-  inprogress: 'inprogress',
 }
+
+/**
+ * WP361（决策 925）：「进行中」看板挪回成页面（`/in-progress`）——这两个老地址不算设置，
+ * 主区那边的路由把它们跳过去。
+ */
+const NOT_SETTINGS = { orgTab: 'inprogress', section: 'inprogress' } as const
 
 /** 地址 → 设置目标；不是设置地址就回 `null`（主区照常路由）。 */
 export function settingsTargetOf(loc: {
@@ -121,6 +125,7 @@ export function settingsTargetOf(loc: {
   }
   if (path.startsWith('/settings/')) {
     const rest = path.slice('/settings/'.length)
+    if (rest === NOT_SETTINGS.section) return null
     if (PLUGIN_DEEP_LINKS.has(rest)) return { section: 'account', item: 'credits' }
     return withItem({ section: isSettingsSection(rest) ? rest : 'general' })
   }
@@ -131,6 +136,7 @@ export function settingsTargetOf(loc: {
   if (path === '/im-channels') return withItem({ section: 'channels' })
   if (path === '/org') {
     const tab = params.get('tab')
+    if (tab === NOT_SETTINGS.orgTab) return null
     return withItem({ section: (tab === null ? undefined : ORG_TABS[tab]) ?? 'positions' })
   }
   return null

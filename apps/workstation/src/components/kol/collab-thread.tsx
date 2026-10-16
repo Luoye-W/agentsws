@@ -559,12 +559,12 @@ export function CollabThread({
               <Coins className="size-3" aria-hidden />
               议价
             </h4>
-            {/* WP157：「永远要你点头 / Agent 报不了价」是安全承诺，用盾牌那一行 */}
+            {/* WP157：「永远要你点头 / AI 报不了价」是安全承诺，用盾牌那一行 */}
             <SafetyNote
               text={
                 (exchanges.data?.rows ?? []).some((x) => x.reply_class === 'wants_quote')
                   ? '他问了价钱。填一个数，出一张卡；这一步永远要你自己点头。'
-                  : '要谈钱就填一个数。合作的预算永远走卡，Agent 报不了价。'
+                  : '要谈钱就填一个数。合作的预算永远走卡，AI 报不了价。'
               }
             />
             <div className="mt-1 flex flex-wrap items-center gap-2">

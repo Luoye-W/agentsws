@@ -682,7 +682,7 @@ export class Work {
     })
     this.appendEvent(matter_id, {
       kind: 'run',
-      text: 'Agent 接着这个事项跑了一次',
+      text: 'AI 接着这个事项跑了一次',
       actor: { kind: 'agent', id: runner.assignment_id },
       run_id,
     })
@@ -716,7 +716,7 @@ export class Work {
     })
     this.appendEvent(matter_id, {
       kind: 'run',
-      text: input.text ?? 'Agent 开始做这件事了',
+      text: input.text ?? 'AI 开始做这件事了',
       actor: { kind: 'agent', id: input.assignment_id },
       run_id,
     })
@@ -1179,7 +1179,7 @@ export class Work {
     this.store.putTodo(next)
     this.appendEvent(matter_id, {
       kind: 'run',
-      text: `把「${todo.title}」交给 Agent 做`,
+      text: `把「${todo.title}」交给 AI 做`,
       actor: { kind: 'person', id: input.by },
       run_id,
       todo_id: todo.id,

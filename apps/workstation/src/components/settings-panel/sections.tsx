@@ -79,6 +79,8 @@ import {
   AppUpdateRow,
   IdentityRow,
   LanguageRow,
+  LaunchAtLoginRow,
+  launchAtLoginBridge,
   MotionRow,
   OrgSummaryRow,
   ShortcutsList,
@@ -102,6 +104,8 @@ export interface SettingsCtx {
   holdsSiteChat: boolean
   /** 在桌面壳里（有 `window.agentsws`）。 */
   desktop: boolean
+  /** WP361：桌面壳的桥上有「开机自启」（旧壳没有就不出那个开关）。 */
+  launchAtLogin: boolean
   brandName: string | undefined
 }
 
@@ -125,6 +129,7 @@ export function useSettingsCtx(): SettingsCtx {
     position,
     holdsSiteChat,
     desktop: w?.agentsws !== undefined,
+    launchAtLogin: launchAtLoginBridge() !== undefined,
     brandName: session.data?.workspace.name,
   }
 }
@@ -589,10 +594,19 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         render: () => <AppUpdateRow />,
       },
       {
+        // WP361（决策 927）：开机自启从「在托盘菜单里」变成这里的开关（托盘那一项照旧、两边同步）
+        id: 'launch-at-login',
+        title: 'sp.launch_at_login',
+        desc: 'sp.launch_at_login.desc',
+        keywords: '开机自启 开机启动 自动启动 登录时打开 launch at login startup',
+        show: (c) => c.launchAtLogin,
+        render: () => <LaunchAtLoginRow />,
+      },
+      {
         id: 'tray',
         title: 'sp.tray',
         desc: 'sp.tray.desc',
-        keywords: '开机自启 暂停 托盘 launch at login',
+        keywords: '暂停 导出诊断 托盘 tray pause',
         render: () => <TrayRow />,
       },
     ],
@@ -775,22 +789,7 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
       },
     ],
   },
-  {
-    id: 'inprogress',
-    group: 'team',
-    title: 'org.tab.inprogress',
-    icon: ClipboardList,
-    show: notSolo,
-    items: [
-      {
-        id: 'inprogress',
-        title: 'org.tab.inprogress',
-        desc: 'sp.inprogress.desc',
-        keywords: '看板 进行中',
-        render: () => <OrgPage only="inprogress" />,
-      },
-    ],
-  },
+  // WP361（决策 925）：「进行中」看板挪到账号菜单「工作内容」（`/in-progress`），不在弹窗里了
 ]
 
 /** 这一节里现在能看到的那几项（节本身不出 = 空）。 */

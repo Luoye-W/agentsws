@@ -37,6 +37,9 @@ const CHANNELS = {
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
   searchDismiss: 'agentsws:search-dismiss',
+  launchAtLoginGet: 'agentsws:launch-at-login-get',
+  launchAtLoginSet: 'agentsws:launch-at-login-set',
+  launchAtLoginChanged: 'agentsws:launch-at-login-changed',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -105,6 +108,21 @@ const bridge: DesktopBridge = {
         rect === null ? null : { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       ) as Promise<boolean>,
     dismiss: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.searchDismiss) as Promise<boolean>,
+  },
+  // WP361：开机自启（设置弹窗里的开关；托盘那一项改了这边跟着变）
+  launchAtLogin: {
+    get: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.launchAtLoginGet) as Promise<boolean>,
+    set: (on: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.launchAtLoginSet, on === true) as Promise<boolean>,
+    onChange: (listener: (on: boolean) => void): (() => void) => {
+      const handler = (_event: unknown, on: unknown): void => {
+        listener(on === true)
+      }
+      ipcRenderer.on(CHANNELS.launchAtLoginChanged, handler)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.launchAtLoginChanged, handler)
+      }
+    },
   },
 }
 

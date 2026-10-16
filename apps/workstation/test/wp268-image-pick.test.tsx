@@ -42,7 +42,7 @@ const ev = (over: Partial<MatterEvent> & Pick<MatterEvent, 'kind' | 'at'>): Matt
 
 const baseTimeline = (): MatterEvent[] => [
   ev({ kind: 'human_message', at: D1, text: BRIEF, actor: { kind: 'person', id: 'per_1' } }),
-  ev({ kind: 'run', at: D1, text: 'Agent 接着这个事项跑了一次', run_id: 'run_1' }),
+  ev({ kind: 'run', at: D1, text: 'AI 接着这个事项跑了一次', run_id: 'run_1' }),
   ev({
     kind: 'status',
     at: D1b,

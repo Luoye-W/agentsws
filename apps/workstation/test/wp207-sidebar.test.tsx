@@ -469,7 +469,7 @@ describe('WP207 手动归档（Fable 09-30）', () => {
     renderShell(true)
     const rows = await screen.findAllByTestId('rail-matter')
     for (const [i, why] of [
-      [0, 'Agent 还在跑这件事，跑完才能归档'],
+      [0, 'AI 还在跑这件事，跑完才能归档'],
       [1, '这件事还有卡等你批，批完才能归档'],
     ] as const) {
       const li = rows[i]?.closest('li') as HTMLElement

@@ -12,7 +12,7 @@
  * else new Notification('有 3 条待审批')       // 普通浏览器里的退化路径
  * ```
  *
- * 桥面只有这几件能力（WP184 加了「打开场景」，WP218 加了「更新」），多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
+ * 桥面只有这几件能力（WP184 加了「打开场景」，WP218 加了「更新」，WP361 加了「开机自启」），多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
  * 这条就越站得住。凭据类的东西一概不走这里（13 §4.3：原生表单直填，不经渲染进程）。
  */
 
@@ -46,6 +46,20 @@ export interface DesktopBridge {
    * 有一页要人点时第三栏「浏览器」亮出来，把位置给壳、壳把那一页挂上去。旧壳没有这一项：先判空。
    */
   searchBrowser?: DesktopSearchBridge
+  /**
+   * WP361（决策 927）：开机自启——设置弹窗「这台电脑 → 桌面端」里的开关。和托盘菜单那一项是同一份，
+   * 哪边改了另一边都跟着变。旧壳没有这一项：先判空（没有就不出这个开关）。
+   */
+  launchAtLogin?: DesktopLaunchAtLoginBridge
+}
+
+/** WP361：开机自启（读 / 写系统登录项；真源是壳的配置）。 */
+export interface DesktopLaunchAtLoginBridge {
+  get(): Promise<boolean>
+  /** 设成开 / 关，回改完的值。 */
+  set(on: boolean): Promise<boolean>
+  /** 别处（托盘）改了时回调；返回取消订阅。 */
+  onChange(listener: (on: boolean) => void): () => void
 }
 
 /** WP353：要人介入的那一页。 */
@@ -167,6 +181,10 @@ export const BRIDGE_CHANNELS = {
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
   searchDismiss: 'agentsws:search-dismiss',
+  /** WP361 */
+  launchAtLoginGet: 'agentsws:launch-at-login-get',
+  launchAtLoginSet: 'agentsws:launch-at-login-set',
+  launchAtLoginChanged: 'agentsws:launch-at-login-changed',
 } as const
 
 export interface BridgeInfo {

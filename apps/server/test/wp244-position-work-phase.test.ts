@@ -33,7 +33,7 @@ type Ev = Pick<MatterEvent, 'kind' | 'text' | 'run_id' | 'stopped'>
 const answered = (text: string, run_id = 'run_1'): Ev[] => [
   { kind: 'human_message', text: '帮我查一下' },
   { kind: 'agent_message', text, run_id },
-  { kind: 'run', text: 'Agent 接着这个事项跑了一次', run_id },
+  { kind: 'run', text: 'AI 接着这个事项跑了一次', run_id },
 ]
 
 const base = {

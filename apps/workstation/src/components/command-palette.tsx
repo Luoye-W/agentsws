@@ -36,7 +36,7 @@ import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { settingsHref } from '@/components/settings-panel/route'
 import { useSettingsCatalog } from '@/components/settings-panel/sections'
-import { SHELL_PAGES } from '@/components/shell-pages'
+import { SHELL_PAGES, shellPageVisible } from '@/components/shell-pages'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import {
   Command,
@@ -101,7 +101,7 @@ export function CommandPalette({
   const navigate = useNavigate()
   // WP276：在一件事里打开 ⌘K 时，多一条「把这件事交给同事…」（② 才有）
   const here = useLocation()
-  const { mode: usage } = useMode()
+  const { mode: usage, known: modeKnown } = useMode()
   const matterHere = /^\/matters\/([^/?#]+)/.exec(here.pathname)?.[1]
   const rail = useRailState()
   // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
@@ -477,9 +477,11 @@ export function CommandPalette({
                 ))}
             {/*
               WP342（决策 853）：左栏下半那几页收进了账号菜单，⌘K 里照样一搜就到
-              （会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置）
+              （会议 / 知识库 / 技能；WP361 起 ② ③ 多一页「进行中」）
             */}
-            {SHELL_PAGES.map((p) => (
+            {SHELL_PAGES.filter((p) =>
+              shellPageVisible(p, { known: modeKnown, solo: usage === 'solo' }),
+            ).map((p) => (
               <CommandItem
                 key={p.to}
                 value={`${t(p.key)} ${p.to}`}
