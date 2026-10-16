@@ -234,6 +234,10 @@ upstreams:
     # sha512）。它不进 package.json / pnpm-lock.yaml，版本钉在 `OPEN_CONNECTOR_PIN` 与锁文件里，
     # `--check` 对账这三处；升级走 docs/42「npm 运行时怎么升」（改钉版本 → 重出锁文件 → 测试）。
     # 发行 / release notes 由上面那条盯（同一个仓库），这一条只盯 npm 版本表。
+    # **例外（WP355，决策 917）**：1.8.0 自己依赖的 nodemailer 9.1.1 有高危公告、上游没出修好的 1.8.x，
+    # 所以 `OPEN_CONNECTOR_PIN.overrides` 用 npm overrides 把它顶到 10.1.1（宿主 package.json 带着它，
+    # 锁文件按它重出、只动了 nodemailer 一个包）。升 OpenConnector 时先看新版自己的 nodemailer 是否 ≥10.1.1，
+    # 是就删掉这条覆盖；`--check` 不查 overrides，靠 local-runtime.test.ts 钉住「锁里只剩覆盖那一版」。
     why: 桌面版的本机连接器（WP247：用户第一次点「连接」时下载、桌面壳当后台服务起停，不要 Docker）
     npm: '@oomol-lab/open-connector'
     repo: oomol-lab/open-connector
@@ -249,6 +253,7 @@ upstreams:
       - '与镜像同一套 HTTP 面：/api/connections、/api/runtime-tokens、/v1/*（connect-adapter 两档共用）'
       - '加固：/v1 静态令牌、加密主密钥、proxy 全封（08 §5；宿主脚本缺一样就拒绝启动）'
       - 'engines.node（1.8.0 要 >=22.18.0；安装包自带的 Node 要满足）'
+      - '传递依赖安全覆盖：nodemailer → 10.1.1（npm overrides；上游用法 createTransport / sendMail、lib/mail-composer、mailparser 里的 lib/addressparser 在 10.x 都还在）'
     covered_by:
       - packages/connect-adapter/test/local-runtime.test.ts
       - apps/server/test/open-connector-installer.test.ts
@@ -335,6 +340,61 @@ upstreams:
     watch: [versions, releases]
     locked_in:
       - apps/server/package.json
+
+  # WP355（10-16 上游扫描补登）：邮件三件。之前没登记，哨兵看不到它们的安全公告——
+  # 10-16 才发现 packages/channels 的 nodemailer 10.0.1、apps/cloud 的 7.0.13 都命中高危。
+  # mailparser 自己**钉死**一版 nodemailer（3.9.23 钉的是 10.0.1），所以三件要一起看：
+  # 升 nodemailer 时 mailparser（以及测试用的 smtp-server）也要升到钉同一版的那一版，pnpm 锁里才只有一份。
+  - id: nodemailer
+    kind: runtime-dep
+    why: 发信——邮箱渠道的 SMTP 发信（packages/channels）与云端登录信（apps/cloud，自建 Node 形态）
+    npm: nodemailer
+    repo: nodemailer/nodemailer
+    locked_version: 10.1.1
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+      - apps/cloud/package.json
+    we_depend_on:
+      - 'default import + createTransport(url | options) / sendMail / verify（10.x 起是 ESM + CJS 双构建，名字没变）'
+      - 'Node >=20（10.0.0 起；安装包自带 Node 22、云端镜像 node:22）'
+    covered_by:
+      - packages/channels/test/servers.test.ts
+      - apps/cloud/test/wp110-mail.test.ts
+
+  - id: imapflow
+    kind: runtime-dep
+    why: 收信——邮箱渠道的 IMAP 客户端（packages/channels/src/email/imap.ts 是唯一 import 处）
+    npm: imapflow
+    repo: postalsys/imapflow
+    locked_version: 2.0.0
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+    we_depend_on:
+      - 'ImapFlow 的 connect / mailboxOpen / fetch / search / 事件（我们只用收窄后的 ImapClientLike）'
+    covered_by:
+      - packages/channels/test/servers.test.ts
+      - packages/channels/test/imap-error-event.test.ts
+
+  - id: mailparser
+    kind: runtime-dep
+    why: 收信——把 IMAP 拿到的原始邮件解析成正文 / 附件 / 地址（packages/channels/src/email/adapter.ts）
+    npm: mailparser
+    repo: nodemailer/mailparser
+    locked_version: 3.9.39
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+    we_depend_on:
+      - 'simpleParser 与 ParsedMail / AddressObject 的形状'
+      - '它钉死的 nodemailer 版本（地址解析 addressparser 在 nodemailer 里）要与 nodemailer 那条一致'
+    covered_by:
+      - packages/channels/test/adapter.test.ts
+      - packages/channels/test/servers.test.ts
 
   # WP216（Luoye 10-05）：建站岗位接的 Shopify 官方 Dev MCP。它不进 package.json——由 `npx` 在用到时
   # 拉**钉死的那一版**（`apps/server/src/shopify-devmcp.ts` 的 DEV_MCP_ARGS），所以没有 locked_in、也不在锁文件里。

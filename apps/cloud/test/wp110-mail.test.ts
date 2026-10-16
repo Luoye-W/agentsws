@@ -126,6 +126,20 @@ describe('WP110 smtpMailSender', () => {
     expect(log).not.toContain('user unknown')
   })
 
+  it('WP355：nodemailer 10 的真 transport 建得起来（失败出在投递，不是 import / createTransport）', async () => {
+    const lines: string[] = []
+    const send = smtpMailSender({
+      from: 'no-reply@example.test',
+      url: 'smtp://127.0.0.1:1',
+      warn: (l) => lines.push(l),
+    })
+    await expect(send({ to: 'a@example.com', subject: 's', text: 'x' })).rejects.toBeInstanceOf(
+      MailDeliveryError,
+    )
+    expect(lines.join('')).toContain('投递失败')
+    expect(lines.join('')).not.toContain('transport 建不起来')
+  })
+
   it('没有 transport 也没有 url = 一句人话，不是 TypeError', async () => {
     const send = smtpMailSender({ from: 'no-reply@example.test' })
     await expect(send({ to: 'a@example.com', subject: 's', text: 'x' })).rejects.toBeInstanceOf(
