@@ -48,6 +48,10 @@ import type {
 import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
+  accountModelRefusalMessage,
+  type DeepSeekAccountModelCatalog,
+} from './deepseek-account-models.js'
+import {
   DEFAULT_FILES_API_TIMEOUT_MS,
   type DeepSeekFileConnection,
   DeepSeekFileStore,
@@ -79,7 +83,11 @@ export const DEEPSEEK_ACCOUNT_BASE_URL = 'https://api.deepseek.com/anthropic'
  */
 export const DEEPSEEK_ACCOUNT_DEFAULT_MODEL = 'deepseek-flash'
 
-/** 官方目录（同上出处）。设置页的模型下拉照它画；`vision` 只是官方声明，验证才算数。 */
+/**
+ * 官方内置目录（同上出处）。WP357（决策 919）起设置页的模型下拉改从账号的 `GET /models` 取
+ * （`./deepseek-account-models.ts`，移植自官方 0.2.1-alpha.4）；**取不到 / 超时 / 没登录时退回这两个**，
+ * 清单里没声明版本要求的模型也只认这里面的 id。`vision` 只是官方声明，验证才算数。
+ */
 export const DEEPSEEK_ACCOUNT_MODELS: readonly { id: string; name: string; vision: boolean }[] = [
   { id: 'deepseek-flash', name: 'DeepSeek-V41-Flash', vision: true },
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', vision: false },
@@ -150,6 +158,12 @@ export interface DeepSeekAccountProviderOptions {
    * 装配方据此在模型卡 / 顶栏上出、收"余额不足，去充值"那一行。
    */
   onBalance?: DeepSeekBalanceListener
+  /**
+   * WP357：账号模型目录（一个进程共用一个）。给了：`listModels` 照账号清单回（没登录回空，官方同款）；
+   * 每次 `complete` 先按清单问一句"这个模型这一版给不给用"，不给就**发请求前**失败；
+   * 单次输出上限取清单声明的与 `maxTokens` 里小的那个。不给 = 内置目录、不做门槛（原来的行为）。
+   */
+  catalog?: DeepSeekAccountModelCatalog
 }
 
 /**
@@ -469,10 +483,48 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
     ref,
     ...(options.capabilities === undefined ? {} : { capabilities: { ...options.capabilities } }),
     async listModels(): Promise<ProviderModelInfo[]> {
-      // 官方目录是写在官方包里的建议性清单，不是上游报的；不为它发请求
-      return DEEPSEEK_ACCOUNT_MODELS.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
+      const catalog = account ? options.catalog : undefined
+      // 没给目录：官方内置那两个，不为它发请求
+      if (catalog === undefined) {
+        return DEEPSEEK_ACCOUNT_MODELS.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
+      }
+      // WP357：照账号清单（拉不到用内置目录）；没登录回空——官方 `discoverModels` 同款
+      const view = await catalog.view()
+      if (!view.signedIn) return []
+      return catalog.resolve(view).offered.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
     },
     async complete(req) {
+      /*
+       * WP357：先按账号清单问一句（官方 `connect` + `admit`）——第一次用某份令牌时等清单
+       * （最多几秒），之后用缓存。清单点了名但这一版不给用的，一个字节都不发就失败；清单没提到的放行。
+       */
+      const catalog = account ? options.catalog : undefined
+      if (catalog !== undefined) {
+        await catalog.view(req.signal)
+        const refusal = catalog.refusal(model)
+        if (refusal !== undefined) {
+          throw new GatewayError(
+            'invalid_input',
+            accountModelRefusalMessage(model, refusal, catalog.clientVersion),
+            {
+              source: 'deepseek_account',
+              reason:
+                refusal.kind === 'upgrade-required'
+                  ? 'client_upgrade_required'
+                  : 'model_unsupported',
+              ...(refusal.kind === 'upgrade-required'
+                ? {
+                    required_version: refusal.requiredVersion,
+                    client_version: catalog.clientVersion,
+                  }
+                : {}),
+            },
+          )
+        }
+      }
+      const listedCap = catalog?.model(model)?.maxOutputTokens
+      const routeMax = options.maxTokens ?? DEFAULT_MAX_TOKENS
+      const maxTokens = listedCap === undefined ? routeMax : Math.min(routeMax, listedCap)
       const names = new Map((req.tools ?? []).map((t) => [wireToolName(t.name), t.name]))
       const bodyOf = (fileIds: Map<string, string> | undefined): string => {
         const wire = toMessagesRequest(
@@ -493,7 +545,7 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         )
         return JSON.stringify({
           model,
-          max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+          max_tokens: maxTokens,
           ...wire,
           ...(req.tools === undefined || req.tools.length === 0
             ? {}

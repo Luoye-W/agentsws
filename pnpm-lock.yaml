@@ -1296,6 +1296,13 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      semver:
+        specifier: ^7.7.0
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.8.0
 
   packages/ontology:
     dependencies:

@@ -19,6 +19,10 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*"
+    "@agentsws/core": "workspace:*",
+    "semver": "^7.7.0"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.7.0"
   }
 }

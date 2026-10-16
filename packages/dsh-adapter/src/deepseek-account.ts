@@ -163,6 +163,12 @@ export interface DeepSeekAccountHostOptions {
 export type DeepSeekLoginSource = 'web' | 'desktop'
 
 export interface DeepSeekAccountHost {
+  /**
+   * WP357：这一版 dsh 账号模块的版本号（就是 {@link DEEPSEEK_ACCOUNT_CLIENT_VERSION}）。模型面拿它比账号
+   * `GET /models` 清单里的 `client_requirements["deepseek-harness"].min_version`。可选：替身可以不给
+   * （不给 = 声明了最低版本的模型一律当"要更新"）。
+   */
+  readonly clientVersion?: string
   /** 现在什么样：登录了没有 + 最近一次登录尝试走到哪一步。**没有令牌。** */
   state(): Promise<AccountView>
   /** 账号资料（名字、平台脱敏过的手机号 / 邮箱）。没登录回 `null`。 */
@@ -275,6 +281,7 @@ export async function createDeepSeekAccountHost(
 
   const locale = options.locale ?? DEEPSEEK_ACCOUNT_DEFAULT_LOCALE
   return {
+    clientVersion: DEEPSEEK_ACCOUNT_CLIENT_VERSION,
     state: () => account.getState(),
     profile: () => account.getProfile(accountClientMetadata(locale)),
     balance: () => account.getBalance(accountClientMetadata(locale)),

@@ -72,6 +72,7 @@ import type {
   AccountFetch,
   CatalogPrice,
   FetchLike,
+  ListingFetch,
   ModelGatewayApi,
   ModelGatewayPolicy,
   PageFetch,
@@ -86,6 +87,7 @@ import {
   DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
   DEEPSEEK_API_QUOTA_MESSAGE,
   DEEPSEEK_PLATFORM_TOP_UP_URL,
+  DeepSeekAccountModelCatalog,
   DeepSeekFileStore,
   deepseekAccountProvider,
   deepseekMessagesProvider,
@@ -345,10 +347,19 @@ export interface ModelsOptions {
   deepseekAccount?: {
     signedIn(): boolean
     resolveToken(url: string): Promise<string | undefined>
+    /** WP357：挂着的那一版 dsh 账号模块的版本号（比账号模型清单里的最低版本）；没挂模块回 `undefined`。 */
+    clientVersion?(): string | undefined
     /** WP150：推理口 401 时把那一次的令牌报回官方（官方判断要不要清登录）。 */
     rejectToken?(token: string): Promise<void>
     /** 测试 / demo 注入的 Messages 口替身（不联网）。 */
     fetch?: AccountFetch
+    /**
+     * WP357：账号模型清单（`GET /models`）的替身。注入了 `fetch` 却没给它 = 不拉清单、用内置的两个
+     * （替身不会顺手让清单请求走到真网络上去）。
+     */
+    modelsFetch?: ListingFetch
+    /** WP357：清单加载 / 失败 / 隐藏了哪几条的诊断日志（只有地址、条数、原因，从不带令牌）。 */
+    modelsLog?: { info(message: string): void; warn(message: string): void }
     /**
      * WP151：账号 provider 报"余额够不够"（推理口余额不足 → `true`；调用成功 → `false`），
      * 与现在那一行"余额不足"提示（模型卡 / 顶栏读它）。按机器一份，不按品牌。
@@ -1161,6 +1172,29 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   )
 
   /**
+   * WP357（决策 919 后半条）：「用我的 DeepSeek 账号登录」那一路的模型目录，照官方 0.2.1-alpha.4
+   * 从**账号的 `GET /models`** 取（`DeepSeekAccountModelCatalog`，移植自官方 MIT 包）。令牌每次现取自
+   * 官方 `resolveToken`，不落变量、不进日志。**取不到 / 超时 / 没登录 → 退回写死的那两个**。
+   * 注入了推理替身却没给清单替身（测试 / demo）就不建——用内置的两个，一个包都不出网。
+   */
+  const accountBridge = options.deepseekAccount
+  const accountModels =
+    accountBridge === undefined ||
+    (accountBridge.fetch !== undefined && accountBridge.modelsFetch === undefined)
+      ? undefined
+      : new DeepSeekAccountModelCatalog({
+          resolveToken: (url) => accountBridge.resolveToken(url),
+          // 没挂模块时拿不到令牌，也就不会有清单；这个兜底号只在那种不可能的组合里起作用
+          clientVersion: () => accountBridge.clientVersion?.() ?? '0.0.0',
+          builtin: DEEPSEEK_ACCOUNT_MODELS,
+          baseUrl: DEEPSEEK_ACCOUNT_BASE_URL,
+          ...(accountBridge.modelsFetch === undefined ? {} : { fetch: accountBridge.modelsFetch }),
+          ...(accountBridge.modelsLog === undefined ? {} : { log: accountBridge.modelsLog }),
+          // 新清单到了（后台刷新也算）：设置页的模型下拉跟着换
+          onLoaded: () => syncAccountModels(),
+        })
+
+  /**
    * WP151：DeepSeek 官方 API key 那几条最近一次说"余额不足"是什么时候（按配置 id；只在内存）。
    * 一次调用成功就清；账号那一条不在这里（按机器一份，在账号那一块）。
    */
@@ -1386,6 +1420,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         baseUrl: config.base_url,
         model,
         provider: config.id,
+        // WP357：发请求前按账号清单判"这一版给不给用"；输出上限取清单声明的
+        ...(accountModels === undefined ? {} : { catalog: accountModels }),
         // WP143：真网络才开 Files 复用；注入了替身（测试 / demo）就照旧内联
         ...(account.fetch === undefined ? { files: deepseekFiles } : { fetch: account.fetch }),
       })
@@ -1819,6 +1855,50 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     ) as ModelSettingsSnapshot
 
   /**
+   * WP357：账号清单解析成"模型下拉"那一份（不带时间）。取到了账号的清单回 `ok: true` + 这一版能用的那几个；
+   * 清单里一个都用不了（全要更新版）回 `ok: false` + 一句人话；没目录 / 没登录 / 还没取到（失败、超时）
+   * 回 `undefined`——调用方退回写死的两个。
+   */
+  const accountListing = async (): Promise<Omit<ModelListing, 'checked_at'> | undefined> => {
+    if (accountModels === undefined) return undefined
+    const view = await accountModels.view().catch(() => undefined)
+    if (view === undefined || !view.signedIn || view.listing === undefined) return undefined
+    const models = accountModels.resolve(view).offered.map((m) => m.id)
+    if (models.length === 0) {
+      return {
+        ok: false,
+        models: [],
+        reason: '你账号里现在开放的模型都要更新版的工坊才能用。等工坊更新后再来选。',
+      }
+    }
+    return { ok: true, models }
+  }
+
+  /**
+   * WP357：新清单到了（第一次加载或后台刷新）→ 账号那一条的模型下拉跟着换。没变就不写盘。
+   * 只认取到的清单；退回内置目录那种情况不在这里改（存的时候已经记过）。
+   */
+  const syncAccountModels = (): void => {
+    if (accountModels === undefined) return
+    const view = accountModels.current()
+    if (!view.signedIn || view.listing === undefined) return
+    const models = accountModels.resolve(view).offered.map((m) => m.id)
+    if (models.length === 0) return
+    let changed = false
+    for (const p of state.providers) {
+      if (p.kind !== 'deepseek_account') continue
+      if (p.last_listing?.ok === true && JSON.stringify(p.models) === JSON.stringify(models))
+        continue
+      p.models = models
+      p.last_listing = { ok: true, models, checked_at: clock.now() }
+      changed = true
+    }
+    if (!changed) return
+    flush()
+    reassemble()
+  }
+
+  /**
    * 去这家的 `/models` 拉一次清单（WP42）。
    *
    * `probe` 是"还没保存就先拉"那条路：用户刚把地址与 key 填进表单、还没点保存，
@@ -1839,14 +1919,17 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   ): Promise<ModelListing> => {
     const checked_at = clock.now()
     /*
-     * WP134：账号登录那一路没有 `/models` 可拉（令牌只对 Messages 口给值）。清单就是官方
-     * `dsh-llm-deepseek` 目录里那两条——`ok: false` 如实说明它不是上游报的（WP88 同一条纪律）。
+     * WP357（决策 919）：账号登录那一路照官方 0.2.1-alpha.4 从**账号的 `GET /models`** 取
+     * （令牌现取自官方 `resolveToken`，只给 api.deepseek.com）。取到了 = `ok: true`，就是这个账号能用的那几个；
+     * 没登录 / 取不到 / 超时 = 退回写死的两个，`ok: false` 如实说明不是上游报的（WP88 同一条纪律）。
      */
     if (fallback?.kind === 'deepseek_account' || isAccount(id)) {
+      const listing = await accountListing()
+      if (listing !== undefined) return { ...listing, checked_at }
       return {
         ok: false,
         models: DEEPSEEK_ACCOUNT_MODELS.map((m) => m.id),
-        reason: `账号登录这一路不去拉清单。下面是 DeepSeek 官方组件自带的目录（${DEEPSEEK_ACCOUNT_DEFAULT_MODEL} 能看图），能不能用以"测试"为准。`,
+        reason: `这次没取到你账号的模型清单，下面是 DeepSeek 官方组件自带的两个（${DEEPSEEK_ACCOUNT_DEFAULT_MODEL} 能看图），能不能用以"测试"为准。`,
         checked_at,
       }
     }
@@ -2090,6 +2173,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const defaultsView = (): ModelDefaultsView => {
     const active = textConfigs()
     const budget = state.defaults.budget ?? {}
+    /*
+     * WP357：有账号那一条就顺手碰一下账号清单——老了（默认 10 分钟）在后台重取，到了由
+     * `syncAccountModels` 换下拉；这一次照手上那一份回，不等网络（官方同款：之后的访问用已加载的）。
+     */
+    if (accountModels !== undefined && active.some((c) => c.kind === 'deepseek_account')) {
+      void accountModels.view().catch(() => undefined)
+    }
     return {
       default: state.defaults.default ?? (active[0] === undefined ? '' : modelIdOf(active[0])),
       by_purpose: { ...state.defaults.by_purpose },
@@ -2274,7 +2364,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       // WP42：保存时顺手拉一次模型清单（还没拉过、或刚换了地址的才拉）。
       // 拉不到不影响保存——它只是让下一次打开表单时"模型名"是个下拉。
       // WP274：只生图的那一条不拉文字模型清单（它的型号在「生图」那一块填）
-      if (config.models === undefined && config.image_only !== true) {
+      // WP357：账号那一条每次存都重取（换了账号，能用的模型可能不一样）
+      if (
+        (config.models === undefined || config.kind === 'deepseek_account') &&
+        config.image_only !== true
+      ) {
         const listing = await refreshListing(config)
         // 模板里的默认模型名不一定还存在（DeepSeek 官网已不列 deepseek-chat）：
         // 接口回的清单才是真的，不在清单里就换成清单第一个，别让用户看到一个接口不认的名字

@@ -27,7 +27,7 @@ import {
   createStandInDeepSeekAccountHost,
   type FakeDeepSeekPlatform,
 } from '@agentsws/dsh-adapter/deepseek-account-stand-in'
-import { type AccountFetch, VISION_PROBE_WORD } from '@agentsws/model-gateway'
+import { type AccountFetch, type ListingFetch, VISION_PROBE_WORD } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createDeepSeekAccount,
@@ -277,9 +277,12 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
   const realFetch = globalThis.fetch
   const bodies: string[] = []
   const logs: string[] = []
+  /** WP357：账号模型清单（`GET /models`）的替身；不给 = 不拉清单、用内置的两个。 */
+  let modelsFetch: ListingFetch | undefined
 
   beforeEach(async () => {
     dir = tempDir()
+    modelsFetch = undefined
     platform = createFakeDeepSeekPlatform({ token: TOKEN })
     messages = fakeMessages()
     forceUnauthorized = false
@@ -318,6 +321,7 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
             config: { platformOrigin: platform.origin },
           }),
         fetch: messages.fetch,
+        ...(modelsFetch === undefined ? {} : { modelsFetch }),
         signOutGraceMs: 0,
       },
     })
@@ -584,5 +588,87 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
       true,
     )
     for (const b of bodies) expect(b).not.toContain(TOKEN)
+  })
+
+  it('WP357 模型下拉从账号的 /models 取：令牌现取自官方模块、只进头；要更新版的隐藏；令牌守卫不退化', async () => {
+    const seen: { url: string; method: string; redirect: string; token: string | undefined }[] = []
+    modelsFetch = async (target, init) => {
+      seen.push({
+        url: target,
+        method: init.method,
+        redirect: init.redirect,
+        token: init.headers['x-dsh-auth-token'],
+      })
+      const row = (id: string, extra: Record<string, unknown> = {}) => ({
+        id,
+        api_capabilities: { anthropic_messages: {} },
+        ...extra,
+      })
+      const body = {
+        data: [
+          row('deepseek-flash', { input_modalities: ['text', 'image'] }),
+          row('deepseek-v4-pro'),
+          row('deepseek-v5-preview', {
+            client_requirements: { 'deepseek-harness': { min_version: '0.2.1-alpha.0' } },
+          }),
+          row('deepseek-v9', {
+            client_requirements: { 'deepseek-harness': { min_version: '9.0.0' } },
+          }),
+        ],
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) }
+    }
+    await server.close()
+    server = await boot()
+    ;({ url } = await server.listen(0))
+
+    await signInAndConnect()
+    // 官方模块的 resolveToken 对 api.deepseek.com/models 给了令牌：清单请求带着它、拒绝重定向
+    expect(seen.length).toBeGreaterThan(0)
+    for (const s of seen) {
+      expect(s).toEqual({
+        url: 'https://api.deepseek.com/models',
+        method: 'GET',
+        redirect: 'error',
+        token: TOKEN,
+      })
+    }
+    // 设置页：这一条的模型清单就是账号的（要 9.0.0 的那个不出现），默认模型下拉也是这几个
+    const row = (await providerRows()).find((p) => p.id === 'deepseek-account')
+    expect(row?.models).toEqual(['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v5-preview'])
+    expect(row?.last_listing?.ok).toBe(true)
+    const defaults = (await api('/v1/models/defaults')) as { choices: { id: string }[] }
+    expect(defaults.choices.map((c) => c.id)).toEqual(
+      expect.arrayContaining([
+        'deepseek-account/deepseek-flash',
+        'deepseek-account/deepseek-v4-pro',
+        'deepseek-account/deepseek-v5-preview',
+      ]),
+    )
+    expect(defaults.choices.some((c) => c.id.endsWith('/deepseek-v9'))).toBe(false)
+
+    // 令牌守卫：不在任何 /v1 响应、我们的库、事件日志、控制台、平台请求体里
+    const credentials = join(dir, 'dsh-home', '.credentials.yaml')
+    for (const b of bodies) expect(b).not.toContain(TOKEN)
+    for (const file of filesUnder(dir)) {
+      if (file === credentials) continue
+      expect(readFileSync(file).includes(TOKEN), file).toBe(false)
+    }
+    expect(JSON.stringify(await allEvents())).not.toContain(TOKEN)
+    expect(logs.join('\n')).not.toContain(TOKEN)
+  })
+
+  it('WP357 清单取不到：退回写死的两个，下拉照常、验证照常', async () => {
+    modelsFetch = async () => {
+      throw new TypeError('fetch failed')
+    }
+    await server.close()
+    server = await boot()
+    ;({ url } = await server.listen(0))
+    await signInAndConnect()
+    const row = (await providerRows()).find((p) => p.id === 'deepseek-account')
+    expect(row?.models).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+    expect(row?.last_listing?.ok).toBe(false)
+    expect(row?.last_listing?.reason).toContain('没取到你账号的模型清单')
   })
 })
