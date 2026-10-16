@@ -18,6 +18,7 @@
  *
  * 退出码：0 全过；1 有一项没过（或超预算停下）；2 起不来（没构建 / 没 key）。
  */
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -25,6 +26,27 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DEFAULT_CASE = join(REPO, 'evals/report-as-capability/weekly-report.json')
+
+// 10-16 Luoye：不再每次手输 key。环境变量里都没有时，从 macOS 钥匙串 agentsws-deepseek 取，只放进本进程环境，不打印。
+if (
+  process.platform === 'darwin' &&
+  !process.env.DEEPSEEK_API_KEY &&
+  !process.env.AGENTSWS_SIM_MODEL_API_KEY
+) {
+  try {
+    const key = execFileSync(
+      'security',
+      ['find-generic-password', '-s', 'agentsws-deepseek', '-w'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim()
+    if (key.length > 0) process.env.DEEPSEEK_API_KEY = key
+  } catch {
+    // 钥匙串里没有：照旧走下面「没有模型 key」的提示
+  }
+}
 
 export function parseArgs(argv) {
   const out = { live: false, runtime: 'dsh', case: DEFAULT_CASE, maxUsd: 1 }
@@ -118,14 +140,19 @@ async function main() {
     // 配模型要「改设置」权限（老板那一份分配）；评测用的岗位分配没有这权限会回 403
     configureModel = async (call, server) => {
       const owner = server.bootstrap.ownerAssignment?.id
-      const res = await call('PUT', '/v1/models/providers/eval', {
-        kind: official ? 'deepseek' : 'openai_compatible',
-        label: '评测模型',
-        base_url: endpoint.baseUrl,
-        model: endpoint.model,
-        region: endpoint.region,
-        api_key: key,
-      }, owner)
+      const res = await call(
+        'PUT',
+        '/v1/models/providers/eval',
+        {
+          kind: official ? 'deepseek' : 'openai_compatible',
+          label: '评测模型',
+          base_url: endpoint.baseUrl,
+          model: endpoint.model,
+          region: endpoint.region,
+          api_key: key,
+        },
+        owner,
+      )
       if (res.status >= 300)
         throw Object.assign(new Error(`配模型失败：HTTP ${res.status} ${res.code ?? ''}`), {
           exit: 2,
