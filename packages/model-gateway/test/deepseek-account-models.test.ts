@@ -153,7 +153,7 @@ describe('WP357 (b) 目录解析：版本门槛 + 内置目录 + 单模型覆盖
     })
     expect(r.source).toBe('builtin')
     expect(r.offered).toEqual([
-      { id: 'deepseek-flash', name: 'DeepSeek-V41-Flash', vision: true },
+      { id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', vision: true },
       { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', vision: false },
     ])
   })

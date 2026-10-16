@@ -76,7 +76,7 @@ export const DEEPSEEK_ACCOUNT_BASE_URL = 'https://api.deepseek.com/anthropic'
  * 账号登录这一路的默认型号：**能看图的那一档**。
  *
  * 出处：官方 `@deepseek-ai/dsh-llm-deepseek@0.1.7-rc.1` 的 `DEFAULT_MODELS`（`lib/index.js`）——
- * `deepseek-flash`（显示名 DeepSeek-V41-Flash，`inputModalities: ["text", "image"]`）与
+ * `deepseek-flash`（`inputModalities: ["text", "image"]`；显示名见下面的目录）与
  * `deepseek-v4-pro`（只收文字）。官方 README 的原话：省略 `models` 时「公布支持文本和图像的
  * `deepseek-flash`，以及仅支持文本的 `deepseek-v4-pro`」，并注明「不探测网关可用性」。
  * **DeepSeek 官网文档这一次没法核**（本单不联网）——能不能看图以三步验证的第 ③ 步为准。
@@ -84,12 +84,14 @@ export const DEEPSEEK_ACCOUNT_BASE_URL = 'https://api.deepseek.com/anthropic'
 export const DEEPSEEK_ACCOUNT_DEFAULT_MODEL = 'deepseek-flash'
 
 /**
- * 官方内置目录（同上出处）。WP357（决策 919）起设置页的模型下拉改从账号的 `GET /models` 取
+ * 官方内置目录（同上出处）。显示名跟官方 `dsh-llm-deepseek@0.2.1-alpha.4` 的 `DEFAULT_MODELS`：
+ * `deepseek-flash` 是「DeepSeek-V4.1-Flash」（rc.1 时写作 DeepSeek-V41-Flash；Luoye 10-16 定改，WP357 §3 C），
+ * `deepseek-v4-pro` 仍是「DeepSeek-V4-Pro」。WP357（决策 919）起设置页的模型下拉改从账号的 `GET /models` 取
  * （`./deepseek-account-models.ts`，移植自官方 0.2.1-alpha.4）；**取不到 / 超时 / 没登录时退回这两个**，
  * 清单里没声明版本要求的模型也只认这里面的 id。`vision` 只是官方声明，验证才算数。
  */
 export const DEEPSEEK_ACCOUNT_MODELS: readonly { id: string; name: string; vision: boolean }[] = [
-  { id: 'deepseek-flash', name: 'DeepSeek-V41-Flash', vision: true },
+  { id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', vision: true },
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', vision: false },
 ]
 
