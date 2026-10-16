@@ -41,6 +41,30 @@ export interface DesktopBridge {
    * 状态由主进程的状态机说了算，页面只看、只点；下载与安装都在主进程里做。
    */
   update?: DesktopUpdateBridge
+  /**
+   * WP353：应用内搜索浏览器「要人介入」的那一页（Google 人机验证 / 网站要登录）。平时静默、不出现；
+   * 有一页要人点时第三栏「浏览器」亮出来，把位置给壳、壳把那一页挂上去。旧壳没有这一项：先判空。
+   */
+  searchBrowser?: DesktopSearchBridge
+}
+
+/** WP353：要人介入的那一页。 */
+export interface DesktopSearchHandover {
+  workspace_id: string
+  reason: 'captcha' | 'login'
+  /** 第三栏上那一句（服务进程定）。 */
+  message: string
+  url: string
+}
+
+export interface DesktopSearchBridge {
+  pending(): Promise<DesktopSearchHandover | null>
+  /** 亮出来 / 收起时回调；返回取消订阅。 */
+  onChange(listener: (handover: DesktopSearchHandover | null) => void): () => void
+  /** 第三栏那块地方在窗口里的位置；`null` = 收起（面板关了 / 切走了）。 */
+  place(rect: { x: number; y: number; width: number; height: number } | null): Promise<boolean>
+  /** 「先不管了」：收起那一页（不算验证过）。 */
+  dismiss(): Promise<boolean>
 }
 
 /** WP218：更新状态（主进程 `update-controller.ts` 的 `UpdateStatus` 去掉原始错误文本）。 */
@@ -130,6 +154,11 @@ export const BRIDGE_CHANNELS = {
   updateReadiness: 'agentsws:update-readiness',
   updateRestart: 'agentsws:update-restart',
   updateCancelWait: 'agentsws:update-cancel-wait',
+  /** WP353 */
+  searchPending: 'agentsws:search-pending',
+  searchChanged: 'agentsws:search-changed',
+  searchPlace: 'agentsws:search-place',
+  searchDismiss: 'agentsws:search-dismiss',
 } as const
 
 export interface BridgeInfo {

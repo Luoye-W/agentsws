@@ -35,9 +35,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/jsdom": "^21.1.7",
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "jsdom": "^25.0.1"
   },
   "author": "agentsws contributors"
 }

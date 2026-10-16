@@ -135,6 +135,11 @@ export interface ServerSpawnInput {
    * 经 `AGENTSWS_EXTENSION_DIR` 给服务进程：连接卡上「打开插件文件夹」、插件问「文件夹里是哪一版」都读它。
    */
   extensionDir?: string
+  /**
+   * WP353：应用内搜索浏览器的本机通道（`search-browser.ts`）。经 `AGENTSWS_SEARCH_BROWSER_URL` /
+   * `AGENTSWS_SEARCH_BROWSER_TOKEN` 交给服务进程——它的联网搜索靠这条去开 Google / Bing。远程档不给。
+   */
+  searchBrowser?: { url: string; token: string }
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -162,6 +167,12 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     ...(input.profileDir === undefined ? {} : { AGENTSWS_PROFILE_DIR: input.profileDir }),
     ...(input.staticDir === undefined ? {} : { AGENTSWS_STATIC_DIR: input.staticDir }),
     ...(input.extensionDir === undefined ? {} : { AGENTSWS_EXTENSION_DIR: input.extensionDir }),
+    ...(input.searchBrowser === undefined
+      ? {}
+      : {
+          AGENTSWS_SEARCH_BROWSER_URL: input.searchBrowser.url,
+          AGENTSWS_SEARCH_BROWSER_TOKEN: input.searchBrowser.token,
+        }),
     // WP218：Windows 上没有 SIGTERM，壳靠关 stdin 请它收尾（见 node-runtime 的 kill）
     AGENTSWS_STOP_ON_STDIN_END: '1',
     ...haltEnv(input.halt),

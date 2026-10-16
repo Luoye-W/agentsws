@@ -11,6 +11,7 @@ import type {
   DesktopInstallOutcome,
   DesktopRestartChoice,
   DesktopRestartReadiness,
+  DesktopSearchHandover,
   DesktopUpdateStatus,
   NotifyInput,
   SceneOpenOutcome,
@@ -32,6 +33,10 @@ const CHANNELS = {
   updateReadiness: 'agentsws:update-readiness',
   updateRestart: 'agentsws:update-restart',
   updateCancelWait: 'agentsws:update-cancel-wait',
+  searchPending: 'agentsws:search-pending',
+  searchChanged: 'agentsws:search-changed',
+  searchPlace: 'agentsws:search-place',
+  searchDismiss: 'agentsws:search-dismiss',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -78,6 +83,28 @@ const bridge: DesktopBridge = {
       ) as Promise<DesktopInstallOutcome>,
     cancelWait: (): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.updateCancelWait) as Promise<boolean>,
+  },
+  // WP353：搜索要人介入的那一页（只转话；位置是几个数字，页面内容不经过这里）
+  searchBrowser: {
+    pending: (): Promise<DesktopSearchHandover | null> =>
+      ipcRenderer.invoke(CHANNELS.searchPending) as Promise<DesktopSearchHandover | null>,
+    onChange: (listener: (h: DesktopSearchHandover | null) => void): (() => void) => {
+      const handler = (_event: unknown, h: DesktopSearchHandover | null): void => {
+        listener(h)
+      }
+      ipcRenderer.on(CHANNELS.searchChanged, handler)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.searchChanged, handler)
+      }
+    },
+    place: (
+      rect: { x: number; y: number; width: number; height: number } | null,
+    ): Promise<boolean> =>
+      ipcRenderer.invoke(
+        CHANNELS.searchPlace,
+        rect === null ? null : { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      ) as Promise<boolean>,
+    dismiss: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.searchDismiss) as Promise<boolean>,
   },
 }
 

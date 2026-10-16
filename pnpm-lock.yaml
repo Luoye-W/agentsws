@@ -258,6 +258,9 @@ importers:
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
       electron:
         specifier: ^44.3.0
         version: 44.3.0(supports-color@10.2.2)
@@ -267,6 +270,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
 
   apps/extension:
     dependencies:
