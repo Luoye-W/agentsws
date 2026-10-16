@@ -152,7 +152,13 @@ describe('WP143 推理块多轮原样回传', () => {
       },
       { role: 'tool', tool_call_id: 'c1', content: 'ok' },
       { role: 'assistant', content: [{ type: 'text', text: '' }] },
-      { role: 'user', content: [{ type: 'text', text: '' }, { type: 'text', text: 'y' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '' },
+          { type: 'text', text: 'y' },
+        ],
+      },
     ])
     expect(JSON.stringify(wire.messages)).not.toContain('"text":""')
     expect(wire.messages[1]?.content).toEqual([

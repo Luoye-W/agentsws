@@ -728,15 +728,23 @@ describe('WP134 DeepSeek 账号登录：没选时一定是关的、选了才开�
     // WP354：官方 headless 自己关的那两行，"关着"由官方 bundle 的 patch 保证（我们这层不写，也就不在 LOCKDOWN 里）
     const headless = parsePatch(
       readFileSync(
-        join(dirname(require.resolve('@deepseek-ai/dsh-headless/package.json')), 'cordis.patch.yml'),
+        join(
+          dirname(require.resolve('@deepseek-ai/dsh-headless/package.json')),
+          'cordis.patch.yml',
+        ),
         'utf8',
       ),
     )
     for (const want of OFFICIAL_HEADLESS_OFF) {
       expect(lockRows(headless).find((r) => r?.id === want.id)?.disabled, want.id).toBe(true)
-      expect(all.find((r) => r?.id === want.id), `${want.id} 我们这层不该写`).toBeUndefined()
+      expect(
+        all.find((r) => r?.id === want.id),
+        `${want.id} 我们这层不该写`,
+      ).toBeUndefined()
     }
-    for (const want of OPT_IN_ROWS.filter((r) => !OFFICIAL_HEADLESS_OFF.some((o) => o.id === r.id))) {
+    for (const want of OPT_IN_ROWS.filter(
+      (r) => !OFFICIAL_HEADLESS_OFF.some((o) => o.id === r.id),
+    )) {
       const locked =
         LOCKDOWN.find((l) => l.id === want.id)?.disabled === true ||
         INSERTED_OFF.some((l) => l.id === want.id)

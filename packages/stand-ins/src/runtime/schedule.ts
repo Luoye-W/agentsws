@@ -159,7 +159,10 @@ export const SCHEDULE_TOOL_DEFS: readonly ToolDef[] = [
       properties: {
         id: ID,
         // WP354（dsh 0.2.1-alpha.4，官方提交 9f5bc9669b「简化自动化任务标题，去除时间与执行备注」）：两处 title 说明换了
-        title: { type: 'string', description: 'New task name; follow the schedule_create title rules.' },
+        title: {
+          type: 'string',
+          description: 'New task name; follow the schedule_create title rules.',
+        },
         prompt: { type: 'string', description: 'New reminder content.' },
         ...SELECTOR_PROPERTIES,
       },
