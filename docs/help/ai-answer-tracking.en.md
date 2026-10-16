@@ -9,7 +9,7 @@ More and more shoppers skip the search results and ask ChatGPT, Gemini or Claude
 3. If it looks right, click "Looks good". To adjust, click "Edit": untick questions, swap in candidates, switch off an AI, remove wrong competitors, then click "Use my edits".
 4. A round then runs automatically every Monday morning. To see results now, click "Run now" on the board; when Claude is on, it first tells you how many credits the round costs and only runs after you confirm.
 
-The "Category" in your brand profile (Settings → Company profile → This brand) is what AI picks questions from. Brand analysis fills one in; fix it if it's off.
+The "Category" in your brand profile (Settings → Brand profile) is what AI picks questions from. Brand analysis fills one in; fix it if it's off.
 
 ## Reading the board
 

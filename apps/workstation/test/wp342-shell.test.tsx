@@ -169,19 +169,19 @@ describe('WP342 顶栏与账号菜单', () => {
     expect(within(menu).getByTestId('account-topup').textContent).toBe('充值')
   })
 
-  it('两组入口默认收着；展开「工作内容」「设置」各是那几页，展开记在本机', async () => {
+  it('「工作内容」默认收着、展开记在本机；「设置」是一行（WP356：点了开设置弹窗）', async () => {
     renderShell()
     fireEvent.click(screen.getByTestId('account-toggle'))
     const menu = screen.getByTestId('account-menu')
     expect(within(menu).queryByTestId('nav-meetings')).toBeNull()
     fireEvent.click(within(menu).getByTestId('account-group-work-toggle'))
-    fireEvent.click(within(menu).getByTestId('account-group-settings-toggle'))
     const work = within(menu).getByTestId('account-group-work')
-    const settings = within(menu).getByTestId('account-group-settings')
     for (const id of ['nav-meetings', 'nav-knowledge', 'nav-skills'])
       expect(within(work).getByTestId(id)).toBeTruthy()
-    for (const id of ['nav-org', 'nav-connections', 'nav-im', 'nav-settings'])
-      expect(within(settings).getByTestId(id)).toBeTruthy()
+    expect(within(menu).getByTestId('nav-settings').textContent).toContain('⌘,')
+    // 岗位与品牌 / 连接 / 消息渠道都进了设置弹窗，菜单里不再有
+    for (const id of ['nav-org', 'nav-connections', 'nav-im'])
+      expect(within(menu).queryByTestId(id)).toBeNull()
     expect(localStorage.getItem('agentsws.account.groups')).toContain('"work":true')
     // 左栏里不再有这些
     const nav = screen.getByTestId('main-nav')
@@ -189,11 +189,10 @@ describe('WP342 顶栏与账号菜单', () => {
     expect(nav.querySelector('a[href="/connections"]')).toBeNull()
   })
 
-  it('点「连接」去连接页，菜单收起', async () => {
+  it('点「设置」菜单收起（去设置地址 = 开弹窗）', async () => {
     renderShell()
     fireEvent.click(screen.getByTestId('account-toggle'))
-    fireEvent.click(screen.getByTestId('account-group-settings-toggle'))
-    fireEvent.click(screen.getByTestId('nav-connections'))
+    fireEvent.click(screen.getByTestId('nav-settings'))
     expect(screen.queryByTestId('account-menu')).toBeNull()
   })
 
@@ -290,7 +289,7 @@ describe('WP342 输入框里的 AI 钮', () => {
 })
 
 describe('WP342 ⌘K 里照样到得了收进菜单的那几页', () => {
-  it('会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置都在', () => {
+  it('会议 / 知识库 / 技能三页 + 一行「设置」（WP356：设置项另有一组，打字才列）', () => {
     renderWithProviders(
       <CommandPalette
         open
@@ -302,14 +301,8 @@ describe('WP342 ⌘K 里照样到得了收进菜单的那几页', () => {
       />,
     )
     const pages = screen.getAllByTestId('command-page').map((el) => el.dataset.to)
-    expect(pages).toEqual([
-      '/meetings',
-      '/knowledge',
-      '/skills',
-      '/org',
-      '/connections',
-      '/im-channels',
-      '/settings',
-    ])
+    expect(pages).toEqual(['/meetings', '/knowledge', '/skills'])
+    const settings = screen.getAllByTestId('command-setting').map((el) => el.dataset.to)
+    expect(settings).toEqual(['/settings'])
   })
 })

@@ -34,6 +34,8 @@ import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { askAtPosition } from '@/components/position/quick-answer-store'
 import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
+import { settingsHref } from '@/components/settings-panel/route'
+import { useSettingsCatalog } from '@/components/settings-panel/sections'
 import { SHELL_PAGES } from '@/components/shell-pages'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import {
@@ -94,10 +96,12 @@ export function CommandPalette({
 }): React.ReactNode {
   const { t, lang, position } = useApp()
   const holdsSiteChat = useHoldsSiteChat()
+  // WP356：设置弹窗的目录（每一节每一项），⌘K 里搜得到
+  const { sections: settingSections } = useSettingsCatalog()
   const navigate = useNavigate()
   // WP276：在一件事里打开 ⌘K 时，多一条「把这件事交给同事…」（② 才有）
   const here = useLocation()
-  const { mode: usage, t: tm } = useMode()
+  const { mode: usage } = useMode()
   const matterHere = /^\/matters\/([^/?#]+)/.exec(here.pathname)?.[1]
   const rail = useRailState()
   // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
@@ -478,14 +482,14 @@ export function CommandPalette({
             {SHELL_PAGES.map((p) => (
               <CommandItem
                 key={p.to}
-                value={`${p.mode ? tm(p.key) : t(p.key)} ${p.to}`}
+                value={`${t(p.key)} ${p.to}`}
                 data-testid="command-page"
                 data-to={p.to}
                 onSelect={() => {
                   go(p.to)
                 }}
               >
-                {p.mode ? tm(p.key) : t(p.key)}
+                {t(p.key)}
               </CommandItem>
             ))}
             {/*
@@ -514,6 +518,43 @@ export function CommandPalette({
                   </CommandItem>
                 ))
               : null}
+          </CommandGroup>
+          {/*
+            WP356（决策 923）：设置的每一节、每一项都搜得到（同设置弹窗里那个搜索，一份清单）；
+            选了打开设置弹窗并定位到那一项。没打字时不列（五十来行会把别的挤下去），只留一行「设置」。
+          */}
+          <CommandGroup heading={t('sp.title')}>
+            {search.trim() === '' ? (
+              <CommandItem
+                value={`${t('nav.settings')} settings`}
+                data-testid="command-setting"
+                data-to="/settings"
+                onSelect={() => {
+                  go('/settings')
+                }}
+              >
+                {t('nav.settings')}
+              </CommandItem>
+            ) : (
+              settingSections.flatMap((sec) =>
+                sec.items.map((i) => (
+                  <CommandItem
+                    key={`${sec.def.id}:${i.def.id}`}
+                    value={`${i.haystack} ${sec.def.id}:${i.def.id}`}
+                    data-testid="command-setting"
+                    data-to={settingsHref(sec.def.id, i.def.id)}
+                    onSelect={() => {
+                      go(settingsHref(sec.def.id, i.def.id))
+                    }}
+                  >
+                    {i.title}
+                    {i.title === sec.title ? null : (
+                      <span className="ml-2 text-xs text-muted-foreground">{sec.title}</span>
+                    )}
+                  </CommandItem>
+                )),
+              )
+            )}
           </CommandGroup>
           {/* WP271：一人多品牌也要能搜品牌——只看品牌数，不看 solo */}
           {org_id === undefined || brands.length <= 1 ? null : (

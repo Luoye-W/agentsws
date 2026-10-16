@@ -40,13 +40,13 @@ import { RuntimeBar } from '@/components/connections/runtime-bar'
 import { SearchDataSection } from '@/components/connections/search-data'
 // WP265：Shopify 卡的「连接 Shopify」一键授权（老的客户端 ID 表单收进卡内「高级」）
 import { ShopifyConnect } from '@/components/connections/shopify-connect'
+import { useConnectAs } from '@/components/connections/use-connect-as'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
 import {
   beginConnect,
   getConnectRuntime,
-  getPositions,
   listConnections,
   listProviders,
   pollConnectRequest,
@@ -72,7 +72,15 @@ interface Wizard {
   auth_option?: string
 }
 
-export function ConnectionsPage(): React.ReactNode {
+/**
+ * WP356（决策 923）：`embedded` = 设置弹窗里的「账号连接」一节——不画页头，搜索数据 / 取数路线 /
+ * 浏览器插件 / 数据后端各归弹窗里自己那一节（数据接口 / 浏览器插件 / 数据与隐私），这里不重复。
+ */
+export function ConnectionsPage({
+  embedded = false,
+}: {
+  embedded?: boolean
+} = {}): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const [params, setParams] = useSearchParams()
@@ -90,18 +98,10 @@ export function ConnectionsPage(): React.ReactNode {
   } | null>(null)
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // 连接由**工作区所有者**管（05 common.owner 的 authorize_connector）。一个人可能同时
-  // 是客服和所有者，网关又是一次请求绑一个 Assignment（31 §3.1），所以这一页显式用
-  // 所有者那条，而不是跟着左栏当前选中的岗位走。
-  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
-  const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
-  /**
-   * WP276（docs/95 §2.1）：② 同事互联里每个人都能进连接页、接自己的连接（谁接的谁管）——
-   * 没有所有者那条就用自己任意一条分配。插件配对、取数路线、数据后端这些家务仍只给发起人。
-   */
+  // 连接用哪条分配去问：所有者那条；② 里没有就用自己任意一条（`useConnectAs`）
+  const { ownerId, asId, pending } = useConnectAs()
   const { mode, t: tm } = useMode()
-  const asId = ownerId ?? (mode === 'peers' ? positions.data?.positions[0]?.position_id : undefined)
-  const ready = positions.data !== undefined && asId !== undefined
+  const ready = !pending && asId !== undefined
 
   const runtime = useQuery({
     queryKey: ['connect-runtime', asId],
@@ -296,7 +296,7 @@ export function ConnectionsPage(): React.ReactNode {
     },
   })
 
-  if (positions.isPending) return <Skeleton className="h-96 w-full" />
+  if (pending) return <Skeleton className="h-96 w-full" />
   if (!ready) {
     // 不是所有者：老实说清楚，而不是给一页 403
     return (
@@ -315,11 +315,15 @@ export function ConnectionsPage(): React.ReactNode {
   return (
     <div className="flex flex-col gap-6" data-testid="connections-page">
       <header className="flex flex-col gap-1">
-        <h2 className="flex items-center gap-2 text-base font-semibold">
-          <Link2 className="size-4" aria-hidden />
-          {t('connections.title')}
-        </h2>
-        <p className="text-sm text-muted-foreground">{t('connections.subtitle')}</p>
+        {embedded ? null : (
+          <>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <Link2 className="size-4" aria-hidden />
+              {t('connections.title')}
+            </h2>
+            <p className="text-sm text-muted-foreground">{t('connections.subtitle')}</p>
+          </>
+        )}
         {/* WP66（52 O1）：连接按品牌各一份——多品牌时说一句这一页管的是谁 */}
         <BrandScopeNote testId="connections-brand-scope" />
       </header>
@@ -467,16 +471,16 @@ export function ConnectionsPage(): React.ReactNode {
       </section>
 
       {/* WP155（docs/81）：SEO / GEO 用的搜索数据从哪来 */}
-      {ownerId === undefined ? null : <SearchDataSection assignment={asId} />}
+      {ownerId === undefined || embedded ? null : <SearchDataSection assignment={asId} />}
 
       {/* WP246（决策 87 / 88）：取数路线——每个平台首选 → 备选、每级通不通、Reddit 读号 */}
-      {ownerId === undefined ? null : <ReadRoutesSection assignment={asId} />}
+      {ownerId === undefined || embedded ? null : <ReadRoutesSection assignment={asId} />}
 
       {/* WP119（68）：浏览器插件——6 位配对码 + 已配上的那几个浏览器 */}
-      {ownerId === undefined ? null : <BrowserExtensionSection assignment={asId} />}
+      {ownerId === undefined || embedded ? null : <BrowserExtensionSection assignment={asId} />}
 
       {/* WP40 / 41 §2.4：数据后端三档（本地 / 接我的云 / 托管）+ 迁移向导 */}
-      {ownerId === undefined ? null : <DataBackend assignment={asId} />}
+      {ownerId === undefined || embedded ? null : <DataBackend assignment={asId} />}
     </div>
   )
 }

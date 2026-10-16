@@ -34,7 +34,7 @@ export const SOCIAL_REPLY_ZH: Record<string, string> = {
   // WP256（决策 147）：空态按渠道照实说
   'threads.empty.no_posts': '这个群还没有新帖',
   'threads.empty.not_connected': '还没连上',
-  'threads.empty.connect': '去连接页',
+  'threads.empty.connect': '去连接',
   'threads.empty.manual': '这条渠道还不会自动拉新帖',
   'threads.empty.no_channel': '还没登记要读的频道',
   'threads.empty.no_own_sub': '还没登记自家版，去「自家版待处理」登记',

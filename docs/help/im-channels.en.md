@@ -1,6 +1,6 @@
 # Message channels: WeChat, WeCom, Feishu and DingTalk
 
-This covers the two channels on the “Message channels” page. They are two different things: **WeChat is a private chat between you and your own agent**; **the WeCom bot is the one for the team**.
+This covers two channels: WeChat lives in Settings → Notifications → WeChat reminders, the team bots in Settings → Chat channels. They are two different things: **WeChat is a private chat between you and your own agent**; **the WeCom bot is the one for the team**.
 
 | Channel | Who uses it | What it does |
 |---|---|---|
@@ -25,7 +25,7 @@ The login credentials stay on this machine — never sent to the AI, never logge
 
 **Connect**
 
-1. On the WeChat card of the “Message channels” page, click **Link WeChat**.
+1. On the WeChat card in Settings → Notifications, click **Link WeChat**.
 2. Scan the code on screen with WeChat on your phone.
 3. If your phone shows a number, type it into “Digits shown on your phone”.
 4. Once it says connected, send it a message in WeChat to try.
@@ -40,7 +40,7 @@ The team channel: @ it in a group and it asks the asker’s own agent as that pe
 
 1. Open the WeCom admin console, go to “Smart bots”, and create a bot (or open an existing one).
 2. Copy its **BotID** and **Secret**. The Secret is shown only once — copy it right away.
-3. Back on the “Message channels” page, fill in both and click **Save and connect**.
+3. Back in Settings → Chat channels, fill in both and click **Save and connect**.
 4. When the card says it is receiving, add the bot to a group and @ it to try.
 
 The Secret goes straight into the local encrypted vault — never sent to the AI, never logged, never shown again.

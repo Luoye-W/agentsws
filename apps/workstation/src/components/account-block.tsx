@@ -10,6 +10,9 @@
  * - **场景**：原来账户块上方那一行，变成菜单里一行子菜单（「场景 ›」，面板往右开）。
  * - 深浅色、语言、退出照旧。
  *
+ * WP356（决策 923）：「设置」那一组换成一行「设置 ⌘,」——点了打开设置弹窗（盖在当前页上，不切走），
+ * 岗位与品牌 / 连接 / 消息渠道都在弹窗里；「工作内容」那一组不变。
+ *
  * 键盘：菜单开了焦点进第一项；↑↓ 在各项之间走，Esc 收起并回到账号块上。
  * 托盘「管理场景…」打开的是 `/?scenes=1`——看到这个参数先把菜单打开，场景那一行自己展开面板。
  */
@@ -22,6 +25,7 @@ import {
   Languages,
   LogOut,
   Moon,
+  Settings,
   Sun,
   Wallet,
 } from 'lucide-react'
@@ -141,8 +145,8 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
     const next = (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
     items[next]?.focus()
   }
-  const label = (p: ShellPage): string => (p.mode === true ? tm(p.key) : t(p.key))
-  const group = (id: 'work' | 'settings'): React.ReactNode => {
+  const label = (p: ShellPage): string => t(p.key)
+  const group = (id: 'work'): React.ReactNode => {
     const expanded = groups[id] === true
     return (
       <div data-testid={`account-group-${id}`}>
@@ -279,7 +283,19 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
           </div>
           <Separator className="my-1" />
           {group('work')}
-          {group('settings')}
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="nav-settings"
+            className={ITEM}
+            onClick={() => {
+              go('/settings')
+            }}
+          >
+            <Settings aria-hidden className="size-4" />
+            {t('nav.settings')}
+            <kbd className="ws-num ml-auto text-[11px] text-ws-muted-fg">⌘,</kbd>
+          </button>
           {/* WP136：切到 dsh 的其他场景（只有所有者看得到；这台切不了就整行不出） */}
           <SceneSwitcher variant="menu" />
           <Separator className="my-1" />

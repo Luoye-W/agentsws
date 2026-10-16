@@ -23,7 +23,7 @@ The number on a position counts what is **waiting on you**: cards to approve plu
 
 ## When things are archived
 
-- By default after **3 days** without activity. Change it in Settings → General → Auto-archive (1–30 days, or never).
+- By default after **3 days** without activity. Change it in Settings → Running tasks → Auto-archive (1–30 days, or never).
 - **Never** archived automatically: anything running, anything with a card waiting for you.
 - Any new activity — you reply, a schedule fires, the agent runs again — brings it **back to the sidebar by itself**.
 

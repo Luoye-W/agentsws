@@ -7,7 +7,7 @@
 import type { RunTimeLimits } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Hint } from '@/components/ui/hint'
+import { SettingRow } from '@/components/settings-panel/setting-row'
 import { api } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -37,53 +37,55 @@ export function RunLimitsSetting(): ReactNode {
   const pick = (values: number[], v: number): number[] =>
     values.includes(v) ? values : [...values, v].sort((a, b) => a - b)
   return (
-    <div className="flex items-center justify-between gap-2" data-testid="settings-run-limits">
-      <span className="flex items-center gap-1">
-        {t('settings.run_limits')}
-        <Hint text={t('settings.run_limits.hint')} />
-      </span>
-      <span className="flex items-center gap-1 text-sm">
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          aria-label={t('settings.run_limits.idle')}
-          data-testid="settings-run-limits-idle"
-          value={String(idle)}
-          disabled={save.isPending}
-          onChange={(e) => {
-            const v = Number(e.target.value) * 60
-            save.mutate({
-              idle_timeout_seconds: Math.min(v, data.max_duration_seconds),
-              max_duration_seconds: data.max_duration_seconds,
-            })
-          }}
-        >
-          {pick(IDLE_MIN, idle).map((n) => (
-            <option key={n} value={String(n)}>
-              {t('settings.run_limits.idle_n', { n })}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          aria-label={t('settings.run_limits.max')}
-          data-testid="settings-run-limits-max"
-          value={String(max)}
-          disabled={save.isPending}
-          onChange={(e) => {
-            const v = Number(e.target.value) * 60
-            save.mutate({
-              idle_timeout_seconds: Math.min(data.idle_timeout_seconds, v),
-              max_duration_seconds: v,
-            })
-          }}
-        >
-          {pick(MAX_MIN, max).map((n) => (
-            <option key={n} value={String(n)}>
-              {t('settings.run_limits.max_n', { n })}
-            </option>
-          ))}
-        </select>
-      </span>
-    </div>
+    <SettingRow
+      testId="settings-run-limits"
+      title={t('settings.run_limits')}
+      desc={t('sp.run_limits.desc')}
+      hint={t('settings.run_limits.hint')}
+      control={
+        <span className="flex items-center gap-1 text-sm">
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            aria-label={t('settings.run_limits.idle')}
+            data-testid="settings-run-limits-idle"
+            value={String(idle)}
+            disabled={save.isPending}
+            onChange={(e) => {
+              const v = Number(e.target.value) * 60
+              save.mutate({
+                idle_timeout_seconds: Math.min(v, data.max_duration_seconds),
+                max_duration_seconds: data.max_duration_seconds,
+              })
+            }}
+          >
+            {pick(IDLE_MIN, idle).map((n) => (
+              <option key={n} value={String(n)}>
+                {t('settings.run_limits.idle_n', { n })}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            aria-label={t('settings.run_limits.max')}
+            data-testid="settings-run-limits-max"
+            value={String(max)}
+            disabled={save.isPending}
+            onChange={(e) => {
+              const v = Number(e.target.value) * 60
+              save.mutate({
+                idle_timeout_seconds: Math.min(data.idle_timeout_seconds, v),
+                max_duration_seconds: v,
+              })
+            }}
+          >
+            {pick(MAX_MIN, max).map((n) => (
+              <option key={n} value={String(n)}>
+                {t('settings.run_limits.max_n', { n })}
+              </option>
+            ))}
+          </select>
+        </span>
+      }
+    />
   )
 }

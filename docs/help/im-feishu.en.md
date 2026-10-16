@@ -18,7 +18,7 @@ It uses Feishu's "long connection": your computer connects out to Feishu, so the
 
 Only **the owner or a company admin** can do this; everyone else only sees the status on the card.
 
-5. On the Messaging channels page, in the **Feishu bot** card, enter the App ID and App Secret (tick "Lark (international)" if that's you) and click **Save and connect**.
+5. In Settings → Chat channels, in the **Feishu bot** card, enter the App ID and App Secret (tick "Lark (international)" if that's you) and click **Save and connect**.
 6. When the card says "Connecting" or "Receiving", you're good.
 
 The App Secret goes straight into the encrypted store on this machine — never sent to the AI, never logged, never shown again.

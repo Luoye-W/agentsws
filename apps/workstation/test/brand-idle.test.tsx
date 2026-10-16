@@ -30,8 +30,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrandMark, setMotionPref } from '@/components/design'
 import { resetMotionPrefForTest } from '@/components/design/motion-pref'
-import { SettingsPage } from '@/pages/settings'
-import { renderWithProviders } from './helpers'
+import { renderSettings } from './helpers'
 
 const CSS = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'index.css'),
@@ -174,7 +173,7 @@ describe('reduce / 设置项', () => {
   })
 
   it('「设置 → 通用」里三选一，默认跟随系统，点了就生效', () => {
-    renderWithProviders(<SettingsPage />, '/settings', '')
+    renderSettings({ section: 'general' }, '/settings', '')
     const group = screen.getByTestId('settings-motion')
     const buttons = [...group.querySelectorAll('button')]
     expect(buttons.map((b) => b.textContent)).toEqual(['跟随系统', '开', '关'])
