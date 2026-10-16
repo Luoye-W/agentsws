@@ -10,10 +10,13 @@
  * - 指定站点：带 site:reddit.com 之类，看是不是一条都搜不到（搜不到 = 很可能被排除）。
  * 另跑两条中文查询作对照。
  *
- * 用法（key 只在你自己的终端里输入，不经任何人 / AI 之手）：
- *   read -s DEEPSEEK_API_KEY && export DEEPSEEK_API_KEY && node scripts/eval-web-search-coverage.mjs
+ * 用法：key 先找环境变量 DEEPSEEK_API_KEY，没有就从 macOS 钥匙串取（服务名 agentsws-deepseek；
+ * Luoye 10-16 存一次：`security add-generic-password -a "$USER" -s agentsws-deepseek -U -w`）。
+ * 取到的值只交给请求头，不打印、不写文件。
+ *   node scripts/eval-web-search-coverage.mjs
  * 结果写到 out/web-search-coverage.json，并在终端打一张表。每条查询约等于一次模型调用，全套 24 条。
  */
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -25,9 +28,22 @@ const require = createRequire(join(root, 'packages', 'dsh-adapter', 'package.jso
 const mod = await import(require.resolve('@deepseek-ai/dsh-web-search-deepseek'))
 const { DeepSeekSearchProvider, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL } = mod
 
-const apiKey = process.env.DEEPSEEK_API_KEY
+const fromKeychain = () => {
+  if (process.platform !== 'darwin') return undefined
+  try {
+    return execFileSync('security', ['find-generic-password', '-s', 'agentsws-deepseek', '-w'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return undefined
+  }
+}
+const apiKey = process.env.DEEPSEEK_API_KEY || fromKeychain()
 if (apiKey === undefined || apiKey.length === 0) {
-  console.error('先在这个终端里：read -s DEEPSEEK_API_KEY && export DEEPSEEK_API_KEY')
+  console.error(
+    '没找到 DeepSeek key：环境变量 DEEPSEEK_API_KEY 和钥匙串 agentsws-deepseek 里都没有',
+  )
   process.exit(2)
 }
 
