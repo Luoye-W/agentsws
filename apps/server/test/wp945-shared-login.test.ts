@@ -62,6 +62,27 @@ const codeIn = (line: string | undefined): string => {
   return m[1]
 }
 
+const inviteAndAccept = async (
+  s: Server,
+  email: string,
+): Promise<{ person_id: string; login_token?: string }> => {
+  const invited = await dataOf<{ url: string }>(
+    await s.gateway.fetch(
+      new Request(`http://127.0.0.1/v1/workspaces/${s.bootstrap.workspace.id}/invitations`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${s.bootstrap.internalToken}`,
+          'x-assignment': s.bootstrap.ownerAssignment.id,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      }),
+    ),
+  )
+  const invite = invited.url.slice(invited.url.lastIndexOf('/') + 1)
+  return dataOf(await post(s, `/v1/invitations/${invite}/accept`, {}))
+}
+
 describe('loginModeOf：只给本机才是本机档', () => {
   it('回环口 = local；0.0.0.0 / :: = shared', () => {
     expect(loginModeOf({}, '127.0.0.1')).toBe('local')
@@ -176,28 +197,27 @@ describe('局域网档（NAS / Docker）', () => {
 
   it('同事：邀请接受完直接带一次性登录 token，换成的是同事自己', async () => {
     const s = await boot({ AGENTSWS_BIND_HOST: '0.0.0.0' }, [])
-    const invited = await dataOf<{ url: string }>(
-      await s.gateway.fetch(
-        new Request(`http://127.0.0.1/v1/workspaces/${s.bootstrap.workspace.id}/invitations`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${s.bootstrap.internalToken}`,
-            'x-assignment': s.bootstrap.ownerAssignment.id,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ email: 'chen@nordvolt.example' }),
-        }),
-      ),
-    )
-    const invite = invited.url.slice(invited.url.lastIndexOf('/') + 1)
-    const accepted = await dataOf<{ person_id: string; login_token?: string }>(
-      await post(s, `/v1/invitations/${invite}/accept`, {}),
-    )
+    const accepted = await inviteAndAccept(s, 'chen@nordvolt.example')
     expect(accepted.login_token).toBeTruthy()
     const session = await dataOf<{ person: { id: string } }>(
       await post(s, '/v1/auth/verify', { token: accepted.login_token }),
     )
     expect(session.person.id).toBe(accepted.person_id)
     expect(session.person.id).not.toBe(s.bootstrap.person.id)
+  })
+
+  it('同事登录过期了：再发一条邀请就能再进，还是同一个人、不重复加成员', async () => {
+    const s = await boot({ AGENTSWS_BIND_HOST: '0.0.0.0' }, [])
+    const first = await inviteAndAccept(s, 'chen@nordvolt.example')
+    const again = await inviteAndAccept(s, 'chen@nordvolt.example')
+    expect(again.person_id).toBe(first.person_id)
+    const session = await dataOf<{ person: { id: string } }>(
+      await post(s, '/v1/auth/verify', { token: again.login_token }),
+    )
+    expect(session.person.id).toBe(first.person_id)
+    const members = await s.identity.members(s.bootstrap.workspace.id)
+    expect(
+      members.filter((m) => m.person_id === first.person_id && m.left_at === undefined),
+    ).toHaveLength(1)
   })
 })
