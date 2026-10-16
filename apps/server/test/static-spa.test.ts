@@ -71,6 +71,21 @@ describe('SPA fallback：导航才回 index.html', () => {
     expect(await boot.json()).toEqual({ demo: true })
   })
 
+  it('WP358：bootstrap 给取值函数时每次现取（所有者邮箱关联云账号后会变）', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-static-'))
+    writeFileSync(join(dir, 'index.html'), INDEX, 'utf8')
+    let email = 'owner@localhost'
+    const h = new Hono()
+    mountStatic(h, { dir, bootstrap: async () => ({ owner_email: email }) })
+    expect(await (await h.request('/app/bootstrap.json')).json()).toEqual({
+      owner_email: 'owner@localhost',
+    })
+    email = 'boss@example.com'
+    expect(await (await h.request('/app/bootstrap.json')).json()).toEqual({
+      owner_email: 'boss@example.com',
+    })
+  })
+
   it('路径穿越拿不到 dir 外面的文件', async () => {
     const res = await app().request('/..%2f..%2fetc%2fpasswd', { headers: NAV })
     // 回 index.html 是对的（导航请求）；要紧的是**没有**把外面的文件读出来
