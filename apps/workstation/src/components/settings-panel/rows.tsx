@@ -1,15 +1,17 @@
 /**
  * WP356：设置弹窗里那几行「小设置」——主题、语言、动效、登录身份、使用方式、快捷键、桌面端。
+ * WP361（决策 927）：桌面端多一行「开机自启」开关（桥上有才出，和托盘那一项是同一份）。
  *
  * 原来主题 / 语言是一个按钮来回切（看不出还有别的选项），这里改成几选一的小胶囊；
  * 行为不变（同一个 `setTheme` / `setLang` / `setMotionPref`）。
  */
 import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CompanyModeEntry } from '@/components/company/company-mode'
 import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
+import { Switch } from '@/components/ui/switch'
 import { UpdateButton } from '@/components/update-button'
 import { ensureSession, listOrganizations } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -208,7 +210,80 @@ export function AppUpdateRow(): ReactNode {
   )
 }
 
-/** 开机自启、暂停、导出诊断这几样在托盘菜单里（工作台改不了，只指个路）。 */
+/** 桌面壳桥上的开机自启（形状同 `@agentsws/desktop/bridge` 的 `DesktopLaunchAtLoginBridge`）。 */
+export interface LaunchAtLoginBridgeLike {
+  get(): Promise<boolean>
+  set(on: boolean): Promise<boolean>
+  onChange(listener: (on: boolean) => void): () => void
+}
+
+/** 旧壳、网页里没有（那就不出这个开关）。 */
+export function launchAtLoginBridge(): LaunchAtLoginBridgeLike | undefined {
+  const w = globalThis.window as unknown as
+    | { agentsws?: { launchAtLogin?: LaunchAtLoginBridgeLike } }
+    | undefined
+  return w?.agentsws?.launchAtLogin
+}
+
+/**
+ * WP361（决策 927）：开机自启——托盘菜单那一项照旧在，两边是同一份：这里一改托盘跟着勾，
+ * 托盘那边一点这里跟着变（壳发一声 `onChange`）。读到之前不画开关（免得先画「关」再跳成「开」）。
+ */
+export function LaunchAtLoginRow(): ReactNode {
+  const { t } = useApp()
+  const [bridge] = useState(launchAtLoginBridge)
+  const [on, setOn] = useState<boolean | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (bridge === undefined) return
+    let alive = true
+    void bridge.get().then(
+      (v) => {
+        if (alive) setOn(v)
+      },
+      () => undefined,
+    )
+    const off = bridge.onChange((v) => {
+      setOn(v)
+    })
+    return () => {
+      alive = false
+      off()
+    }
+  }, [bridge])
+  if (bridge === undefined) return null
+  return (
+    <SettingRow
+      testId="settings-launch-at-login"
+      title={t('sp.launch_at_login')}
+      desc={t('sp.launch_at_login.desc')}
+      control={
+        on === undefined ? null : (
+          <Switch
+            aria-label={t('sp.launch_at_login')}
+            data-testid="settings-launch-at-login-switch"
+            checked={on}
+            disabled={busy}
+            onCheckedChange={(v) => {
+              setBusy(true)
+              setOn(v)
+              void bridge
+                .set(v)
+                .then(setOn, () => {
+                  setOn(!v)
+                })
+                .finally(() => {
+                  setBusy(false)
+                })
+            }}
+          />
+        )
+      }
+    />
+  )
+}
+
+/** 暂停、导出诊断这几样在托盘菜单里（工作台改不了，只指个路；开机自启 WP361 起上面有开关）。 */
 export function TrayRow(): ReactNode {
   const { t } = useApp()
   return <SettingRow title={t('sp.tray')} desc={t('sp.tray.desc')} control={null} />

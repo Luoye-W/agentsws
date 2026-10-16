@@ -38,6 +38,7 @@ import { DutyPage } from '@/pages/duty'
 import { ASSISTANT_PATH, FreeChatPage, LegacyFreeChatRedirect } from '@/pages/free-chat'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
+import { InProgressPage } from '@/pages/in-progress'
 import { InfluencerPage } from '@/pages/influencer'
 import { JoinByCodePage } from '@/pages/join-code'
 import { KnowledgePage } from '@/pages/knowledge'
@@ -246,6 +247,13 @@ function Workspace(): ReactNode {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        {/*
+          WP361（决策 925）：「进行中」看板是一页（账号菜单「工作内容」里）。老地址 `/org?tab=inprogress`
+          与 WP356 那几天的 `/settings/inprogress` 不再算设置（`route.ts` 回 null），落到这里跳过去。
+        */}
+        <Route path="/in-progress" element={<InProgressPage />} />
+        <Route path="/org" element={<Navigate replace to="/in-progress" />} />
+        <Route path="/settings/inprogress" element={<Navigate replace to="/in-progress" />} />
         {/* WP57：聊天沙盒（岗位 dtc.live-chat 的面板入口，48 §4 L3 #11） */}
         <Route path="/chat" element={<ChatSandboxPage />} />
         {/* WP124：聊天窗（设置 / 嵌入 / 转发三选一 / 进行中的对话） */}
