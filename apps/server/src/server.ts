@@ -7603,7 +7603,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         person_id: run.person_id,
         assignment_id: run.assignment_id,
         brief,
-        text: 'Agent 接着这个事项跑了一次',
+        text: 'AI 接着这个事项跑了一次',
       })
       // 运行本身在后台跑（跑完 / 停下 / 没跑成都由运行时记在时间线上）；这里只等「起没起来」那一步
       // （事项交接中 / 找不到在第一步就拒）

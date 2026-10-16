@@ -90,7 +90,7 @@ export const MATTER_ZH: Record<string, string> = {
   'matter.cmp.suggest': '建议：{text}，按 Tab 收下',
   'matter.private.head': '只你看得见 · 不进这件事的记录',
   'matter.private.close': '关掉',
-  'matter.private.forward': '转给 Agent',
+  'matter.private.forward': '转给 AI',
   'matter.private.asking': '正在问…',
 }
 
@@ -179,6 +179,6 @@ export const MATTER_EN: Record<string, string> = {
   'matter.cmp.suggest': 'Suggestion: {text} — press Tab to accept',
   'matter.private.head': 'Only you see this · not saved to the matter',
   'matter.private.close': 'Dismiss',
-  'matter.private.forward': 'Hand to the agent',
+  'matter.private.forward': 'Hand to AI',
   'matter.private.asking': 'Asking…',
 }

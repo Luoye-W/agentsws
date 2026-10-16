@@ -42,7 +42,7 @@ const ev = (over: Partial<MatterEvent> & Pick<MatterEvent, 'kind' | 'at'>): Matt
 
 const baseTimeline = (): MatterEvent[] => [
   ev({ kind: 'human_message', at: D1, text: BRIEF, actor: { kind: 'person', id: 'per_1' } }),
-  ev({ kind: 'run', at: D1, text: 'Agent 接着这个事项跑了一次', run_id: 'run_1' }),
+  ev({ kind: 'run', at: D1, text: 'AI 接着这个事项跑了一次', run_id: 'run_1' }),
   ev({
     kind: 'status',
     at: D1b,
@@ -541,7 +541,7 @@ describe('WP264 输入卡', () => {
     expect(box.getAttribute('placeholder')).toBe('回复，或交代新要求…')
   })
 
-  it('私聊 AI：整卡换模式、问一句只你看得见；关掉就没了；可「转给 Agent」', async () => {
+  it('私聊 AI：整卡换模式、问一句只你看得见；关掉就没了；可「转给 AI」', async () => {
     renderMatter()
     await screen.findByTestId('matter-say')
     const u = user()

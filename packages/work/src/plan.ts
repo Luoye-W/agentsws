@@ -210,7 +210,7 @@ export function draftDailyPlanWithFilter(input: DailyPlanInput): {
         id: `sug_delegate_${todo.id}`,
         kind: 'delegate',
         title: todo.title,
-        reason: '这条有事项上下文，交给 Agent 接着做，问题回来成卡片',
+        reason: '这条有事项上下文，交给 AI 接着做，问题回来成卡片',
         todo_id: todo.id,
         ...(todo.matter_id === undefined ? {} : { matter_id: todo.matter_id }),
         assignment_id: input.delegate_to,

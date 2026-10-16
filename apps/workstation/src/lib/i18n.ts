@@ -45,9 +45,9 @@ const zh: Table = {
   'app.title': 'Agents 工坊',
   // WP112：冷启动那一瞬首屏上的那句话（母品牌「集结」在它上面）
   'app.boot': '正在把工作台装起来…',
-  // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"Agent 正在替你干活"。
+  // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"AI 正在替你干活"。
   // 按钮里那种普通的加载转圈不算（docs/36 §12）。
-  'brand.busy': 'Agent 正在替你干活',
+  'brand.busy': 'AI 正在替你干活',
   // ── 41 §1 个人代理（原「秘书」，09-10 改名）─────────────────────────
   //
   // **只改面向用户的文案**：键名（`secretary.*`）、包名（`@agentsws/secretary`）、
@@ -639,7 +639,7 @@ const zh: Table = {
   'rail.role.edit': '改写',
   'rail.role.revert': '还原成原文',
   'rail.role.readonly': '只有 owner 改得动——角色定位是公司对外的口径，不是个人偏好。',
-  'rail.role.hint': '这段话会进 Agent 的系统提示，改了下一次运行就生效。',
+  'rail.role.hint': '这段话会进 AI 的系统提示，改了下一次运行就生效。',
   'rail.role.position_of': '这条职责所属的岗位',
   'rail.role.no_position': '这条职责挂在多个岗位里（或一个都不挂），所以运行时不带岗位那一段。',
   'rail.role.duties': '这个岗位下的职责（点一条看它自己的定位）',
@@ -647,8 +647,8 @@ const zh: Table = {
   'rail.role.lang.en': '英文',
   'rail.role.untranslated': '未翻译',
   'rail.role.untranslated_tip':
-    '中文改过了，英文还没跟上，这里先显示中文。Agent 读的一直是中文那一份。',
-  'rail.role.edit_source': '改的是中文那一份（Agent 读的就是它）',
+    '中文改过了，英文还没跟上，这里先显示中文。AI 读的一直是中文那一份。',
+  'rail.role.edit_source': '改的是中文那一份（AI 读的就是它）',
   'rail.panel.changes': '变更审阅',
   'rail.panel.browser': '浏览器',
   'rail.panel.files': '文件',
@@ -1234,7 +1234,7 @@ const zh: Table = {
   'skills.excluded': '已排除',
   'skills.exclude': '不用这个技能',
   'skills.include': '重新启用',
-  'skills.learned_from': 'Agent 学来的',
+  'skills.learned_from': 'AI 学来的',
   'knowledge.title': '知识库',
   'knowledge.placeholder': '知识库还没做进工作台。事实卡、话术、策略三层在 /v1/knowledge 上。',
   // ── WP56（48 §4 #6 / #9）──────────────────────────────────────
@@ -1247,7 +1247,7 @@ const zh: Table = {
   'knowledge.cards': '知识清单',
   'knowledge.boundaries': '业务边界',
   'knowledge.boundaries.note':
-    '这些不预先问你。Agent 第一次撞上没答过的那一条时，出一道选择题；答过就不再问。',
+    '这些不预先问你。AI 第一次撞上没答过的那一条时，出一道选择题；答过就不再问。',
   'knowledge.boundaries.answered': '已定',
   'knowledge.boundaries.open': '还没问过',
   'knowledge.gaps': '缺口',
@@ -1256,7 +1256,7 @@ const zh: Table = {
   'knowledge.gap.paste_text': '写句口径',
   'knowledge.gap.submit': '补上',
   'knowledge.gap.cancel': '算了',
-  'knowledge.gap.text_placeholder': '一两句话说清楚就行，Agent 会照着这个答。',
+  'knowledge.gap.text_placeholder': '一两句话说清楚就行，AI 会照着这个答。',
   'knowledge.gap.note': '补进来先变一张卡，你点头才进知识库。',
   'knowledge.recheck.title': '这条要复核',
   'knowledge.recheck.why': '来源页改过了，而且改的正是这条管着的数值。它还在用，只是排到了后面。',
@@ -2290,7 +2290,7 @@ const zh: Table = {
   'connections.reason.invalid_client': '客户端 ID 或密钥不对',
   'connections.reason.invalid_shop': '店铺域名不对',
   'models.title': '模型',
-  'models.subtitle': 'Agent 靠模型说话。',
+  'models.subtitle': 'AI 靠模型说话。',
   'models.subtitle.hint': '填一把 API key，这个品牌的所有岗位就都能用了。',
   // WP66（52 O3）：一个品牌一套模型设置，也可以跟着公司默认走
   'models.inherit': '跟随公司默认',
@@ -2299,7 +2299,7 @@ const zh: Table = {
   'models.inherit.following': '正在跟随「{brand}」的设置',
   'models.inherit.own': '这个品牌单独设了一套',
   'models.inherit.readonly': '跟随期间这一页是只读的。要单独设，把上面的开关关掉。',
-  'models.banner': '还没接模型，Agent 跑不起来。',
+  'models.banner': '还没接模型，AI 跑不起来。',
   // WP98：首页第一屏那条黄条收进顶栏，成了一个黄色小胶囊
   'models.chip': '还没接模型',
   'models.banner.cta': '接一个 →',
@@ -3159,7 +3159,7 @@ const zh: Table = {
   'datamap.freshness.authored': '人写的',
   'datamap.freshness.cached': '缓存 {n} 分钟',
   'datamap.order': '调用顺序',
-  'datamap.order.hint': '这段话与 Agent 看到的那一份是同一处生成的——改了登记表，两边一起变。',
+  'datamap.order.hint': '这段话与 AI 看到的那一份是同一处生成的——改了登记表，两边一起变。',
   // ── WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）────
   'nav.im': '消息渠道',
   'im.title': '消息渠道',
@@ -3506,7 +3506,7 @@ const zh: Table = {
   'models.cloud.month': '本月用了 {month} 积分',
   'models.cloud.balance.ok': '够用',
   'models.text.title': '文字与看图',
-  'models.text.hint': 'Agent 干活用的模型。Agents 工坊要求它能看图——读品牌手册、看图片风格都靠它。',
+  'models.text.hint': 'AI 干活用的模型。Agents 工坊要求它能看图——读品牌手册、看图片风格都靠它。',
   'models.vision.banner.no':
     '当前默认模型「{model}」看不了图。岗位照常干活，但读手册、看图片风格这类要看图的动作会说「当前模型看不了图」。换一个能看图的模型（常见的有：{models}）。',
   'models.vision.banner.unchecked':
@@ -4151,7 +4151,7 @@ const zh: Table = {
   'archive.action': '归档',
   'archive.done': '已归档「{title}」',
   'archive.undo': '撤销',
-  'archive.blocked.running': 'Agent 还在跑这件事，跑完才能归档',
+  'archive.blocked.running': 'AI 还在跑这件事，跑完才能归档',
   'archive.blocked.awaiting': '这件事还有卡等你批，批完才能归档',
   'rail.matter.menu': '「{title}」的更多操作',
   'matter.archived': '这件事已归档。有新动静会自动放回左栏。',
@@ -4184,7 +4184,7 @@ const zh: Table = {
 const en: Table = {
   'app.title': 'Agents Workshop',
   'app.boot': 'Bringing the workstation up…',
-  'brand.busy': 'An agent is working on it',
+  'brand.busy': 'AI is working on it',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
   // WP96: the top-bar search bar (opens the ⌘K palette)
@@ -4780,7 +4780,7 @@ const en: Table = {
   'rail.role.readonly':
     'Only the owner can change this — a role persona is the company’s voice, not a personal preference.',
   'rail.role.hint':
-    'This text goes into the agent’s system prompt; a change takes effect on the next run.',
+    'This text goes into the AI’s system prompt; a change takes effect on the next run.',
   'rail.role.position_of': 'The position this duty belongs to',
   'rail.role.no_position':
     'This duty sits in several positions (or none), so runs carry no position section.',
@@ -4789,8 +4789,8 @@ const en: Table = {
   'rail.role.lang.en': 'English',
   'rail.role.untranslated': 'Not translated yet',
   'rail.role.untranslated_tip':
-    'The Chinese text changed and the English has not caught up, so the Chinese is shown for now. The agent always reads the Chinese.',
-  'rail.role.edit_source': 'You are editing the Chinese text — the one the agent reads.',
+    'The Chinese text changed and the English has not caught up, so the Chinese is shown for now. AI always reads the Chinese.',
+  'rail.role.edit_source': 'You are editing the Chinese text — the one AI reads.',
   'rail.panel.changes': 'Change review',
   'rail.panel.browser': 'Browser',
   'rail.loading': 'Loading this panel…',
@@ -5365,7 +5365,7 @@ const en: Table = {
   'skills.excluded': 'Excluded',
   'skills.exclude': 'Do not use this skill',
   'skills.include': 'Use it again',
-  'skills.learned_from': 'Learned by the Agent',
+  'skills.learned_from': 'Learned by AI',
   'knowledge.title': 'Knowledge',
   'knowledge.placeholder': 'Not in the workstation yet.',
   'knowledge.import': 'Import pack',
@@ -5377,7 +5377,7 @@ const en: Table = {
   'knowledge.cards': 'Knowledge',
   'knowledge.boundaries': 'Business boundaries',
   'knowledge.boundaries.note':
-    'Never asked up front. The first time the Agent hits one you have not answered, it asks a single multiple-choice question — then never again.',
+    'Never asked up front. The first time AI hits one you have not answered, it asks a single multiple-choice question — then never again.',
   'knowledge.boundaries.answered': 'Set',
   'knowledge.boundaries.open': 'Not asked yet',
   'knowledge.gaps': 'Gaps',
@@ -5386,7 +5386,7 @@ const en: Table = {
   'knowledge.gap.paste_text': 'Write the answer',
   'knowledge.gap.submit': 'Fill it in',
   'knowledge.gap.cancel': 'Never mind',
-  'knowledge.gap.text_placeholder': 'A sentence or two is enough — the Agent will follow it.',
+  'knowledge.gap.text_placeholder': 'A sentence or two is enough — AI will follow it.',
   'knowledge.gap.note':
     'Your answer becomes a card first; it enters the knowledge base once approved.',
   'knowledge.recheck.title': 'Needs a recheck',
@@ -6205,7 +6205,7 @@ const en: Table = {
   'messages.archive': 'Archive',
   'messages.delete': 'Delete',
   'messages.readonly':
-    'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
+    'AI is handling this thread; to answer yourself, take it over in the work thread first.',
   'messages.agent.working': 'Support agent is on it',
   'messages.agent.working_b2b': 'B2B agent is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
@@ -6237,7 +6237,7 @@ const en: Table = {
   'messages.pending.refused_b2b': 'B2B is off, or this mailbox does not take B2B mail',
   'messages.no_mailbox': 'No mailbox connected on this machine yet.',
   'messages.no_mailbox.hint':
-    'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',
+    'Once you connect one, your inbox, sent, drafts, trash and the support and creator folders all show up here.',
   'messages.connect': 'Connect a mailbox',
   'messages.compose.new': 'Compose',
   'messages.compose.reply': 'Reply',
@@ -6457,7 +6457,7 @@ const en: Table = {
   'connections.reason.invalid_client': 'Client ID or secret is wrong',
   'connections.reason.invalid_shop': 'Shop domain is wrong',
   'models.title': 'Models',
-  'models.subtitle': 'Agents need a model to speak.',
+  'models.subtitle': 'AI needs a model to speak.',
   'models.subtitle.hint': 'One API key covers every position in this brand.',
   // WP66 (doc 52 O3): each brand gets its own model settings, or follows the company default
   'models.inherit': 'Follow company default',
@@ -6466,7 +6466,7 @@ const en: Table = {
   'models.inherit.following': 'Following \u201c{brand}\u201d',
   'models.inherit.own': 'This brand has its own set',
   'models.inherit.readonly': 'Read-only while following. Turn the switch off to set your own.',
-  'models.banner': 'No model connected yet — agents cannot run.',
+  'models.banner': 'No model connected yet — AI cannot run.',
   'models.chip': 'No model',
   'models.banner.cta': 'Connect one →',
   'models.configured': 'Configured',
@@ -7341,7 +7341,7 @@ const en: Table = {
   'datamap.freshness.cached': 'cached {n} min',
   'datamap.order': 'Call order',
   'datamap.order.hint':
-    'This paragraph and the one the agent sees are generated from the same place — change the registry and both change.',
+    'This paragraph and the one AI sees are generated from the same place — change the registry and both change.',
 
   // ── WP85 (54 §5): messaging channels ───────────────────────────
   'nav.im': 'Messaging',
@@ -7715,7 +7715,7 @@ const en: Table = {
   'models.cloud.balance.ok': 'Enough',
   'models.text.title': 'Text & vision',
   'models.text.hint':
-    'The model agents work with. Agents Workshop needs it to see images — reading brand books and judging image style depend on it.',
+    'The model AI works with. Agents Workshop needs it to see images — reading brand books and judging image style depend on it.',
   'models.vision.banner.no':
     'The default model "{model}" cannot see images. Positions keep working, but steps that need to look at images will say "the current model cannot see images". Switch to one that can (common ones: {models}).',
   'models.vision.banner.unchecked':
@@ -8388,7 +8388,7 @@ const en: Table = {
   'archive.action': 'Archive',
   'archive.done': 'Archived “{title}”',
   'archive.undo': 'Undo',
-  'archive.blocked.running': 'The agent is still running this; archive it once it finishes',
+  'archive.blocked.running': 'AI is still running this; archive it once it finishes',
   'archive.blocked.awaiting': 'A card here is waiting for your approval; decide it first',
   'rail.matter.menu': 'More actions for “{title}”',
   'matter.archived': 'This is archived. Any new activity brings it back to the sidebar.',

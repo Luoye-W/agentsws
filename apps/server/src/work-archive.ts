@@ -417,7 +417,7 @@ export function createWorkArchive(options: WorkArchiveOptions): WorkArchiveAssem
       if (m === undefined || !visibleTo(actor.person_id)(m))
         throw new ApiError('not_found', '没有这件事（可能已经删了）')
       if (options.runningMatters().has(id))
-        throw new ApiError('conflict', 'Agent 还在跑这件事，跑完再归档', {
+        throw new ApiError('conflict', 'AI 还在跑这件事，跑完再归档', {
           details: { reason: 'running' },
         })
       const cards = await options.pendingCards(actor.person_id)

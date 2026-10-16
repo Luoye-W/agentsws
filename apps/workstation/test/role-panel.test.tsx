@@ -183,7 +183,7 @@ describe('角色面板：看（69 §4）', () => {
     const panel = await openRolePanel('/positions/asg_store/duties/dtc.store')
     // 职责与岗位两段各带一句提示，所以是"至少一句"而不是"正好一句"
     expect(
-      within(panel).getAllByText('这段话会进 Agent 的系统提示，改了下一次运行就生效。').length,
+      within(panel).getAllByText('这段话会进 AI 的系统提示，改了下一次运行就生效。').length,
     ).toBeGreaterThan(0)
   })
 
