@@ -152,6 +152,13 @@ function assistantCall(
       if (draft.items.length > 0) return { name: 'plan_fanout', args: draft }
     }
   }
+  // WP352：提到以前聊过的 → 翻旧账（关键词 = 去掉「上次 / 之前…」那几个字）
+  if (tools.includes('recall_conversation') && /上次|上周|之前|以前|那天/u.test(asked)) {
+    const query = asked
+      .replace(/上次|上周|之前|以前|那天|说的|聊的|聊过|说过|的|是|什么|多少|来着|吗|？|\?/gu, ' ')
+      .trim()
+    return { name: 'recall_conversation', args: { query: query === '' ? asked : query } }
+  }
   if (tools.includes('hand_to_position') && /^(让|叫|请)/u.test(asked.trim()))
     return { name: 'hand_to_position', args: { text: asked.trim() } }
   if (tools.includes('my_pending_cards') && /要我处理|要我定|等我/u.test(asked))
@@ -165,6 +172,13 @@ function assistantCall(
 
 /** WP343：演示里拿到助理工具的结果后说的那一句（照结果说，不编）。 */
 function assistantSay(name: string, content: string): string {
+  // WP352：翻旧账回的是一张清单（围起来的），照它说
+  if (name === 'recall_conversation') {
+    const lines = materialOf(content).trim()
+    return lines === '' || !content.includes('翻到')
+      ? '（演示）以前聊过的里面没翻到。'
+      : `（演示）翻到了以前聊过的：\n\n${lines}`
+  }
   let parsed: Record<string, unknown> = {}
   try {
     parsed = JSON.parse(content) as Record<string, unknown>
@@ -283,6 +297,17 @@ export function cloudAiStandInFetch(
     const wantsSearch = !searched && toolNames.includes('web_search')
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
     const asked = typeof lastUser?.content === 'string' ? lastUser.content : '这个问题'
+    // WP352：话题小结 / 段内压缩那一问——照逐字稿第一句用户的话出一份确定的小结
+    const sys = messages.find((m) => m.role === 'system')?.content
+    if (typeof sys === 'string' && /话题小结|压缩前半段/u.test(sys)) {
+      const first = /用户（[^）]*）：(.+)/u.exec(asked)?.[1]?.trim() ?? '聊了几句'
+      const title = first.length > 16 ? `${first.slice(0, 16)}…` : first
+      const text = `${title}\n## 谁\n- 你\n## 要做什么\n- ${first.slice(0, 60)}\n## 定了什么\n- 无\n## 派了哪些事\n- 无\n## 还没完的\n- 无`
+      return reply({
+        choices: [{ message: { content: text } }],
+        usage: { prompt_tokens: 60, completion_tokens: 30 },
+      })
+    }
     // WP343：助理的工具（先点一次，拿到结果照着说）
     const lastTool = messages.at(-1) as
       | { role: string; content: unknown; name?: string }
