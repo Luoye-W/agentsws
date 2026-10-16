@@ -15,7 +15,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, Eye, EyeOff, Search, TriangleAlert } from 'lucide-react'
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandMark } from '@/components/design'
@@ -115,6 +115,29 @@ export function ModelPicker({
   const trigger = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
+  /**
+   * 往哪边开、清单最高多少：按钮上下各剩多少地方现量（输入框在页面中间时往上开会顶出窗口）。
+   * 想往上开但上面不够、下面更宽就往下开；清单高度不超过那一边剩下的地方。
+   */
+  const [layout, setLayout] = useState<{ dir: 'up' | 'down'; max: number }>({
+    dir: placement,
+    max: 420,
+  })
+  useLayoutEffect(() => {
+    if (!open) return
+    const r = trigger.current?.getBoundingClientRect()
+    const vh = globalThis.innerHeight
+    if (r === undefined || vh === undefined || vh === 0) return
+    const above = r.top - 12
+    const below = vh - r.bottom - 12
+    // 搜索框 + 底部两行大约占这么高
+    const chrome = 110
+    let dir = placement
+    if (placement === 'up' && above < 320 && below > above) dir = 'down'
+    if (placement === 'down' && below < 320 && above > below) dir = 'up'
+    const room = (dir === 'up' ? above : below) - chrome
+    setLayout({ dir, max: Math.max(140, Math.min(420, room)) })
+  }, [open, placement])
 
   // 点外面收起
   useEffect(() => {
@@ -286,7 +309,7 @@ export function ModelPicker({
           onKeyDown={onMenuKey}
           className={cn(
             'absolute left-0 z-50 flex w-[340px] max-w-[calc(100vw-32px)] flex-col rounded-lg border bg-popover text-popover-foreground shadow-md',
-            placement === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
+            layout.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
           )}
         >
           <label className="flex items-center gap-2 border-b px-3 py-2">
@@ -304,7 +327,7 @@ export function ModelPicker({
               }}
             />
           </label>
-          <div className="max-h-[min(420px,55vh)] overflow-y-auto p-1">
+          <div className="overflow-y-auto p-1" style={{ maxHeight: layout.max }}>
             {groups.length === 0 ? (
               <p
                 className="px-2 py-3 text-center text-xs text-muted-foreground"
