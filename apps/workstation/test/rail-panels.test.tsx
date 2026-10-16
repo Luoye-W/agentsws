@@ -400,6 +400,31 @@ describe('知识面板（19）', () => {
     expect(screen.getByTestId('rail-knowledge-scope').textContent).toContain('store')
     expect(screen.getByTestId('rail-knowledge-cards').textContent).toContain('0')
     expect(screen.getByTestId('rail-knowledge-more').getAttribute('href')).toBe('/knowledge')
+    expect(screen.queryByTestId('rail-knowledge-pending')).toBeNull()
+  })
+
+  it('WP350：助理扇出到这个岗位、还没确认的几条列在最上面「待你确认」（别的岗位的不列）', async () => {
+    const note = (id: string, position: string, status: string) => ({
+      id,
+      layer: 'fact',
+      subject: { type: 'assistant_note', id: position, key: `fanout:fan_1:${id}` },
+      statement: `第 ${id} 条口径`,
+      status,
+      updated_at: '2026-10-16T00:00:00.000Z',
+      provenance: [{ source: 'meeting', ref: 'assistant:fan_1', locator: '10-16 周会' }],
+    })
+    listKnowledgeCards.mockResolvedValue([
+      note('a', 'web-ops', 'proposed'),
+      note('b', 'customer-care', 'proposed'),
+      note('c', 'web-ops', 'active'),
+    ] as never)
+    renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
+    await openSettingsTab('knowledge')
+    const pending = await screen.findByTestId('rail-knowledge-pending')
+    expect(pending.textContent).toContain('待你确认 1 条')
+    expect(
+      screen.getAllByTestId('rail-knowledge-pending-item').map((li) => li.textContent),
+    ).toEqual(['第 a 条口径来自「10-16 周会」'])
   })
 })
 

@@ -73,6 +73,21 @@ describe('dsh 参数表：每个工具都过 dsh 的编译', () => {
     expect(def?.description).toContain('拿不准')
   })
 
+  it('WP350 拆成多份：items 的嵌套对象关上，kind / text 必填、岗位可不填', () => {
+    const def = build().find((d) => d.name === 'plan_fanout')
+    const schema = def?.parameters as unknown as {
+      properties: { items: { items: { additionalProperties: boolean; required?: string[] } } }
+      required: string[]
+    }
+    expect(schema.required).toContain('items')
+    expect(schema.properties.items.items.additionalProperties).toBe(false)
+    expect(schema.properties.items.items.required ?? []).toEqual(
+      expect.arrayContaining(['kind', 'text']),
+    )
+    expect(schema.properties.items.items.required ?? []).not.toContain('position')
+    expect(def?.description).toContain('就这样')
+  })
+
   it('WP334 request_setup：建议值的嵌套对象关上，只有 why 必填，描述是写给模型的人话', () => {
     const def = build().find((d) => d.name === 'request_setup')
     const schema = def?.parameters as unknown as {

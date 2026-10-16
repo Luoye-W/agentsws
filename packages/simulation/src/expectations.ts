@@ -609,6 +609,31 @@ export function checkExpectations(
         (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
     )
   }
+  // WP350：「我的助理」一次拆成多份——事开到了哪几个岗位、知识写进了哪几个岗位（全部待确认）、同一批、助理零写
+  if (
+    expected.assistant_fanout_tasks !== undefined ||
+    expected.assistant_fanout_notes !== undefined
+  ) {
+    const runs = evidence.events
+      .filter((e) => e.type === 'simulation.assistant_fanout')
+      .map(payloadOf)
+    const tasks = runs.flatMap((p) => (p.tasks_to as string[] | undefined) ?? [])
+    const notes = runs.flatMap((p) => (p.notes_to as string[] | undefined) ?? [])
+    const proposed = runs.reduce((n, p) => n + Number(p.notes_proposed ?? 0), 0)
+    const writes = runs.reduce((n, p) => n + Number(p.assistant_writes ?? 0), 0)
+    const eq = (a: string[], b: string[] | undefined): boolean =>
+      b === undefined || (a.length === b.length && a.every((x, i) => x === b[i]))
+    add(
+      'assistant_fanout',
+      eq(tasks, expected.assistant_fanout_tasks) &&
+        eq(notes, expected.assistant_fanout_notes) &&
+        proposed === notes.length &&
+        writes === 0,
+      `事开到 [${tasks.join(', ')}]，知识写进 [${notes.join(', ')}]（待确认 ${proposed}）` +
+        `，期望 [${(expected.assistant_fanout_tasks ?? []).join(', ')}] / [${(expected.assistant_fanout_notes ?? []).join(', ')}]` +
+        (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
+    )
+  }
   if (expected.position_answer_components !== undefined) {
     const seen = new Set(
       evidence.events

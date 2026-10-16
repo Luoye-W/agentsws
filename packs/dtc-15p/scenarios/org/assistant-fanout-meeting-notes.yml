@@ -1,0 +1,51 @@
+# WP350（决策 900）：**会议记录分派**——一份会议记录交给「我的助理」，按岗位拆给好几个岗位、好几个岗位一起记口径。
+#
+# Luoye 10-16：「并不是说我派出一个任务，就只有一个岗位去工作。」这条题钉四件事：
+#
+# 1. 拆：替身拆法（`stubFanoutDraft`，demo 云替身同一份）把会议记录一行一条拆成要做的事 / 要记的口径 / 个人偏好，
+#    认岗位用 `@agentsws/roles` 的 `resolveFanout`（与服务进程同一份）——「这件事要有人跟进」认不出岗位，标归属待定；
+# 2. 人在方案卡上勾掉一条（`drop: [i4]`）；归属待定的不发；
+# 3. 要做的事按岗位各开一件任务（走岗位交办入口），三个岗位各一件；
+# 4. 要记的两条以 `proposed` 写进两个岗位的知识库（出处 = 这份会议记录），全部待确认；助理自己零写。
+id: org/assistant-fanout-meeting-notes
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-16T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.staff: { who: p_zhao, position: web-ops }
+  - at: '+1m'
+    position.staff: { who: p_zhao, position: customer-care }
+  - at: '+2m'
+    position.staff: { who: p_zhao, position: social-media }
+  - at: '+5m'
+    assistant.fanout:
+      who: p_zhao
+      drop: [i4]
+      source: |
+        # 10-16 周会
+        - 网站运营：把 A 商品的卖点整理一版，周五前
+        - 客服：整理一版退货话术
+        - 社媒运营：下周发两条新品帖
+        - 客服：把上周的工单再过一遍
+        - 这件事要有人跟进
+        - 客服记住：退货期统一 30 天
+        - 网站运营记住：运费一律满 50 包邮
+        - 我喜欢周报用表格
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  assistant_fanout_tasks: [web-ops, customer-care, social-media]
+  assistant_fanout_notes: [customer-care, web-ops]
+  event_types:
+    - simulation.assistant_fanout
+    - simulation.position_routed
+  metrics:
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  把一份周会记录交给「我的助理」，是不是按岗位拆给了 网站运营、客服、社媒运营各一件事，
+  两个岗位各记下一条待确认的口径（带出处），勾掉的那条和认不出归属的那条都没发，而助理自己一笔都没改？

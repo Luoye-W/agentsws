@@ -87,6 +87,93 @@ export interface FreeChatMessageView {
   dispatches?: FreeChatDispatchView[]
   /** WP343：这一条是交出去的事回来报的一句（不是模型答的，没有 `model` / `usage`）。 */
   report?: FreeChatReportView
+  /** WP350：用户这句附上的文本类资料（界面只显示名字与字数；读出来的字只给模型看）。 */
+  attachments?: FreeChatAttachment[]
+  /** WP350：助理拆好的「我打算这样分」方案卡（人点「就这样」才派、才记）。 */
+  fanout?: FreeChatFanoutView
+  /** WP350：方案卡确认之后的那张汇总（派了哪几个岗位几件事、各进了几条知识）。 */
+  fanout_summary?: FreeChatFanoutSummaryView
+}
+
+/** WP350：用户附上的一份文本类资料（.txt / .md / .docx / .pdf / 粘贴的长文本）。 */
+export interface FreeChatAttachment {
+  name: string
+  /** 读出来多少字（读不出 = 0）。 */
+  chars: number
+  /** 读出来的字（只在服务端会话里留着、进模型时当外部资料围起来；列会话时不回给界面）。 */
+  text?: string
+  /** 读不出时的一句人话。 */
+  unreadable?: string
+  /** 像口令 / 密钥的字抹掉了几处（决策 814：只有密钥不经 AI）。 */
+  redacted?: number
+}
+
+/** WP350：方案卡上的一条。 */
+export interface FreeChatFanoutItemView {
+  id: string
+  /** `task` 要做的事 / `note` 要记住的业务口径 / `memory` 本人的偏好（进助理记忆）。 */
+  kind: 'task' | 'note' | 'memory'
+  text: string
+  why?: string
+  due?: string
+  /** 原文出处（资料里那一段）。 */
+  quote?: string
+  position_id?: string
+  position_name?: string
+  role_id?: string
+  duty_name?: string
+  /** 要记的那条进品牌公共知识。 */
+  brand?: boolean
+  /** 归属待定：认不出该归哪个岗位（人在卡上挑；不挑不发）。 */
+  unsure?: { reason: string }
+  /** 像口令：不进知识、不进记忆。 */
+  secret?: boolean
+}
+
+/** WP350：助理拆好的方案卡。 */
+export interface FreeChatFanoutView {
+  /** 这一批的「来源批次」：开出去的事、写进去的知识都带它。 */
+  batch_id: string
+  title: string
+  source: { name: string; kind: 'meeting' | 'document' | 'human' }
+  items: FreeChatFanoutItemView[]
+  /** 改归属能挑的岗位与职责（本人的）。 */
+  positions: { position_id: string; name: string; duties: { role_id: string; name: string }[] }[]
+  /** `proposed` 等人点 / `sent` 派好了 / `dismissed` 人说不用了。 */
+  status: 'proposed' | 'sent' | 'dismissed'
+  at: string
+}
+
+/** WP350：方案卡确认之后的汇总。 */
+export interface FreeChatFanoutSummaryView {
+  batch_id: string
+  title: string
+  /** 按岗位：几件事（开出来的那几件）、几条知识。 */
+  groups: {
+    position_id: string
+    name: string
+    tasks: { matter_id: string; title: string }[]
+    notes: number
+  }[]
+  brand_notes: number
+  memories: number
+  /** 没发的：勾掉的 / 归属待定的 / 像口令的。 */
+  skipped: { dropped: number; unsure: number; secret: number }
+  /** 要记的那几条等人确认的那张卡（有要记的才有）。 */
+  knowledge_card_id?: string
+  /** 开事项 / 写知识里没成的（人话）。 */
+  failed?: string[]
+  at: string
+}
+
+/** WP350：人在方案卡上对一条的改动。 */
+export interface FreeChatFanoutEditInput {
+  id: string
+  drop?: boolean
+  position_id?: string
+  role_id?: string
+  brand?: boolean
+  text?: string
 }
 
 /** WP343：助理交给岗位的一件事。 */
@@ -100,6 +187,8 @@ export interface FreeChatDispatchView {
   role_id?: string
   duty_name?: string
   at: string
+  /** WP350：同一张方案卡派出去的带同一个来源批次。 */
+  batch_id?: string
 }
 
 /** WP343：交出去的事回来报一句——做完了 / 要你拍板 / 没做成。 */
@@ -110,6 +199,9 @@ export interface FreeChatReportView {
   duty_name?: string
   /** `decide` 那一张卡。 */
   approval_item_id?: string
+  /** WP350：这件事是哪一批派出去的（界面按批次聚在一起）。 */
+  batch_id?: string
+  batch_title?: string
 }
 
 /** WP343：输入框下面的一个快捷问题（按当前状态生成，不写死）。 */
@@ -178,6 +270,8 @@ export type FreeChatFrame =
   | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
   /** WP343：交给了一个岗位（对话里马上出那一行）。 */
   | { type: 'dispatched'; dispatch: FreeChatDispatchView }
+  /** WP350：方案卡摆出来了（人点「就这样」才派）。 */
+  | { type: 'fanout'; fanout: FreeChatFanoutView }
   | { type: 'done'; message: FreeChatMessageView; session: FreeChatSessionView }
   | { type: 'error'; message: string }
 
@@ -192,6 +286,8 @@ export interface FreeChatTurnInput {
   regenerate?: boolean
   /** WP343：输入框里 `@` 选的岗位 / 职责——这句话直接交给它（不经模型挑）。 */
   target?: { position_id: string; role_id?: string; label?: string }
+  /** WP350：附上的文本类资料（`data` 是 base64；服务端按扩展名读字）。 */
+  files?: { name: string; data: string }[]
 }
 
 export interface FreeChatPort {
@@ -216,6 +312,17 @@ export interface FreeChatPort {
   memories?(actor: FreeChatActor): Promise<AssistantMemoryView[]>
   /** WP343：删一条助理记忆（只能删自己的；删了 AI 不再记回来）。可选。 */
   forget?(actor: FreeChatActor, id: string): Promise<{ deleted: boolean }>
+  /**
+   * WP350：方案卡上点了「就这样」（带人改过的几条）→ 扇出：要做的事按岗位各开一件（同一来源批次），
+   * 要记的以 `proposed` 写进对应岗位 / 品牌知识库（出处 = 这份资料），个人偏好进助理记忆；
+   * 回方案那一条（状态已变）与汇总那一条。`dismiss` = 不用了（什么都不发）。可选。
+   */
+  fanout?(
+    actor: FreeChatActor,
+    session_id: string,
+    batch_id: string,
+    input: { items?: FreeChatFanoutEditInput[]; dismiss?: boolean },
+  ): Promise<{ plan: FreeChatMessageView; summary?: FreeChatMessageView }>
 }
 
 /** 与「问 AI」同一档：能读自己的队列就能用——随便聊只给本人看，不碰任何对外的东西。 */
@@ -233,9 +340,32 @@ const TurnOptions = {
   web_search: z.boolean().optional(),
   knowledge: z.boolean().optional(),
 }
+/** WP350：一份资料最多 5MB（base64 约 6.7M 字符），一次最多 3 份。 */
+const FileBody = z.object({
+  name: z.string().trim().min(1).max(200),
+  data: z.string().min(1).max(MAX_IMAGE_CHARS),
+})
+const FanoutBody = z.object({
+  items: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(20),
+        drop: z.boolean().optional(),
+        position_id: z.string().min(1).max(200).optional(),
+        role_id: z.string().min(1).max(200).optional(),
+        brand: z.boolean().optional(),
+        text: z.string().max(600).optional(),
+      }),
+    )
+    .max(60)
+    .optional(),
+  dismiss: z.boolean().optional(),
+})
 const SendBody = z.object({
   text: z.string().max(20_000),
   images: z.array(Image).max(4).optional(),
+  /** WP350：附上的文本类资料（.txt / .md / .docx / .pdf）。 */
+  files: z.array(FileBody).max(3).optional(),
   ...TurnOptions,
   /** WP343：`@` 选的岗位 / 职责（直接派给它）。 */
   target: z
@@ -470,7 +600,11 @@ export function freeChatRoutes(): Route[] {
       async (c, deps) => {
         const actor = actorOf(c)
         const input = await body(c, SendBody)
-        if (input.text.trim() === '' && (input.images ?? []).length === 0)
+        if (
+          input.text.trim() === '' &&
+          (input.images ?? []).length === 0 &&
+          (input.files ?? []).length === 0
+        )
           throw new ApiError('invalid_input', '说点什么，或者贴一张图')
         const { target, ...rest } = input
         return turnStream(
@@ -512,6 +646,37 @@ export function freeChatRoutes(): Route[] {
           actor,
           { session_id: param(c, 'id'), regenerate: true, ...stripUndefined(input) },
           c.get('rctx').trace_id,
+        )
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'post',
+        path: '/v1/free-chat/sessions/:id/fanout/:batch',
+        operationId: 'confirmAssistantFanout',
+        summary:
+          '「我的助理」方案卡（WP350）：点「就这样」= 按（改过的）方案扇出——要做的事按岗位各开一件（同一来源批次），要记的以待确认写进岗位 / 品牌知识库（出处 = 这份资料），个人偏好进助理记忆；`dismiss` = 不用了',
+        params: [
+          ...ID,
+          { name: 'batch', in: 'path' as const, required: true, description: '方案卡的来源批次' },
+        ],
+        body: FanoutBody,
+        returns: '{ plan: FreeChatMessageView; summary?: FreeChatMessageView }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.fanout === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「我的助理」不能拆成多份')
+        const input = await body(c, FanoutBody)
+        return ok(
+          c,
+          await port.fanout(actorOf(c), param(c, 'id'), param(c, 'batch'), {
+            ...(input.items === undefined
+              ? {}
+              : { items: input.items.map((i) => stripUndefined(i) as FreeChatFanoutEditInput) }),
+            ...(input.dismiss === undefined ? {} : { dismiss: input.dismiss }),
+          }),
         )
       },
     ),

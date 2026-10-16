@@ -19,6 +19,17 @@
 - The assistant **never changes anything outside by itself**. Posting, replying, changing prices or the store are handed to a position; anything external still comes to you as a card to approve.
 - **When it isn't sure who should do it, it asks** instead of guessing, listing the positions to choose from.
 
+## One document, several positions
+
+After a meeting, the follow-ups usually belong to several positions, and several positions need to remember new rules. You don't have to tell each one:
+
+1. Attach the notes (paperclip at the bottom right of the input: .txt / .md / .docx / .pdf; pasting a long block of text works too — it becomes an attachment) and say "split this up".
+2. The assistant shows "Here's how I'd split it", grouped by position: **to do** items (with due dates and the original line) and **to remember** rules; brand-wide rules get their own group, and your personal habits stay with the assistant.
+3. Click "Looks good" if it's right. "Adjust" lets you untick, reassign or reword any item. Items with an unclear owner are only sent once you pick someone.
+4. A summary follows: how many tasks each position got (click to open) and how many notes. Each task reports back to this conversation, grouped by batch.
+
+New rules start as "to confirm": a card "N notes to remember" shows up in your deck, and positions only use them after you approve; each position's Knowledge panel lists them at the top. Files with no readable text (scans, encrypted PDFs) are reported as such; anything that looks like a password or key is removed before the AI sees it and never goes into the knowledge base.
+
 ## Name someone directly
 
 Type `@` in the box and pick a position (or a duty inside it). The message goes straight to it.

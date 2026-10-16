@@ -3,8 +3,11 @@
  * 两个开关（默认关）：联网搜索、用公司资料回答。答的时候发送键变成停止键。
  *
  * WP343：打 `@` 弹出岗位 / 职责（↑↓ 选、回车定、Esc 收）——选了输入框上面一个小胶囊，这句话直接交给它。
+ *
+ * WP350：能附文本类资料（会议记录、文档：.txt / .md / .docx / .pdf，回形针那个钮；拖进来也行）；
+ * 粘贴一大段字（超过 {@link PASTE_AS_FILE_CHARS} 字）收成一份「粘贴的文字」附件，不塞满输入框。
  */
-import { ArrowUp, Globe, ImagePlus, Library, Square, X } from 'lucide-react'
+import { ArrowUp, FileText, Globe, ImagePlus, Library, Paperclip, Square, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import {
   MentionChip,
@@ -18,14 +21,22 @@ import { useApp } from '@/lib/app-context'
 import {
   type AssistantState,
   type AssistantTarget,
+  DOC_EXTENSIONS,
+  type FreeChatFile,
   type FreeChatImage,
+  isDocFile,
+  PASTE_AS_FILE_CHARS,
+  readDoc,
   readImage,
+  textToBase64,
 } from '@/lib/free-chat'
 import { cn } from '@/lib/utils'
 
 const MAX_IMAGES = 4
 const MAX_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+/** WP350：一次最多附几份资料。 */
+const MAX_DOCS = 3
 
 export interface ComposerToggles {
   web_search: boolean
@@ -94,7 +105,12 @@ export function Composer({
   webReason?: string
   knowledgeAvailable: boolean
   onToggles: (next: ComposerToggles) => void
-  onSend: (text: string, images: FreeChatImage[], target?: AssistantTarget) => void
+  onSend: (
+    text: string,
+    images: FreeChatImage[],
+    target?: AssistantTarget,
+    files?: FreeChatFile[],
+  ) => void
   onStop: () => void
   /** WP343：`@` 能选的岗位；不给就没有 `@`。 */
   targets?: AssistantState['targets']
@@ -128,10 +144,25 @@ export function Composer({
     area.current?.focus()
   }
   const [images, setImages] = useState<FreeChatImage[]>([])
+  const [docs, setDocs] = useState<FreeChatFile[]>([])
   const [problem, setProblem] = useState<string | undefined>(undefined)
   const file = useRef<HTMLInputElement>(null)
+  const docInput = useRef<HTMLInputElement>(null)
 
-  const add = async (files: File[]): Promise<void> => {
+  /** WP350：附资料（不认的扩展名、超过 5 MB 的说一句）。 */
+  const addDocs = async (files: File[]): Promise<void> => {
+    if (files.length === 0) return
+    const ok = files.filter((f) => isDocFile(f.name) && f.size <= MAX_BYTES)
+    if (ok.length < files.length) setProblem(t('assistant.doc.bad'))
+    const read = await Promise.all(ok.map((f) => readDoc(f)))
+    setDocs((prev) => [...prev, ...read].slice(0, MAX_DOCS))
+  }
+
+  const add = async (all: File[]): Promise<void> => {
+    // WP350：拖进来 / 贴进来的资料走资料那一路，图走图
+    const docFiles = all.filter((f) => isDocFile(f.name))
+    if (docFiles.length > 0) void addDocs(docFiles)
+    const files = all.filter((f) => !isDocFile(f.name))
     if (files.length === 0) return
     if (!canSeeImages) {
       setProblem(t('free_chat.image.no_vision'))
@@ -144,10 +175,11 @@ export function Composer({
   }
 
   const send = (): void => {
-    if (busy || (text.trim() === '' && images.length === 0)) return
-    onSend(text.trim(), images, target)
+    if (busy || (text.trim() === '' && images.length === 0 && docs.length === 0)) return
+    onSend(text.trim(), images, target, docs.length === 0 ? undefined : docs)
     setText('')
     setImages([])
+    setDocs([])
     setTarget(undefined)
     setQuery(undefined)
     setProblem(undefined)
@@ -193,6 +225,30 @@ export function Composer({
           ))}
         </div>
       )}
+      {docs.length === 0 ? null : (
+        <div className="flex flex-wrap gap-1.5" data-testid="free-chat-docs">
+          {docs.map((d, i) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: 还没发出去的资料没有 id
+              key={i}
+              className="inline-flex max-w-[240px] items-center gap-1.5 rounded-md border bg-ws-surface px-2 py-1 text-xs"
+              data-testid="free-chat-doc"
+            >
+              <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{d.name}</span>
+              <button
+                type="button"
+                aria-label={t('assistant.doc.remove')}
+                onClick={() => {
+                  setDocs((prev) => prev.filter((_, j) => j !== i))
+                }}
+              >
+                <X aria-hidden className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {target === undefined ? null : (
         <MentionChip target={target} onClear={() => setTarget(undefined)} />
       )}
@@ -218,6 +274,20 @@ export function Composer({
           if (files.length > 0) {
             e.preventDefault()
             void add(files)
+            return
+          }
+          // WP350：一大段字（会议记录、聊天记录）收成一份附件
+          const pasted = e.clipboardData.getData('text/plain')
+          if (pasted.length > PASTE_AS_FILE_CHARS && docs.length < MAX_DOCS) {
+            e.preventDefault()
+            setDocs((prev) => [
+              ...prev,
+              {
+                name: t('assistant.doc.pasted', { n: prev.length + 1 }),
+                data: textToBase64(pasted),
+                size: pasted.length,
+              },
+            ])
           }
         }}
         onKeyDown={(e) => {
@@ -281,6 +351,28 @@ export function Composer({
               e.target.value = ''
             }}
           />
+          <input
+            ref={docInput}
+            type="file"
+            accept={DOC_EXTENSIONS.map((x) => `.${x}`).join(',')}
+            multiple
+            hidden
+            data-testid="free-chat-doc-input"
+            onChange={(e) => {
+              void addDocs([...(e.target.files ?? [])])
+              e.target.value = ''
+            }}
+          />
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t('assistant.doc.add')}
+            title={t('assistant.doc.add')}
+            data-testid="free-chat-attach-doc"
+            onClick={() => docInput.current?.click()}
+          >
+            <Paperclip aria-hidden />
+          </Button>
           <Button
             size="icon-sm"
             variant="ghost"
@@ -306,7 +398,7 @@ export function Composer({
               size="icon-sm"
               aria-label={t('free_chat.send')}
               data-testid="free-chat-send"
-              disabled={text.trim() === '' && images.length === 0}
+              disabled={text.trim() === '' && images.length === 0 && docs.length === 0}
               onClick={send}
             >
               <ArrowUp aria-hidden />

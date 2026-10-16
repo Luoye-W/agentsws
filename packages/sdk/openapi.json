@@ -55677,6 +55677,26 @@
                       "required": ["mime", "data"]
                     }
                   },
+                  "files": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "data": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 7000000
+                        }
+                      },
+                      "required": ["name", "data"]
+                    }
+                  },
                   "model": {
                     "type": "string",
                     "minLength": 1,
@@ -55872,6 +55892,206 @@
                     "type": "boolean"
                   },
                   "knowledge": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/free-chat/sessions/{id}/fanout/{batch}": {
+      "post": {
+        "operationId": "confirmAssistantFanout",
+        "summary": "「我的助理」方案卡（WP350）：点「就这样」= 按（改过的）方案扇出——要做的事按岗位各开一件（同一来源批次），要记的以待确认写进岗位 / 品牌知识库（出处 = 这份资料），个人偏好进助理记忆；`dismiss` = 不用了",
+        "tags": ["free-chat"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "会话 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "batch",
+            "in": "path",
+            "required": true,
+            "description": "方案卡的来源批次",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ plan: FreeChatMessageView; summary?: FreeChatMessageView }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ plan: FreeChatMessageView; summary?: FreeChatMessageView }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "maxItems": 60,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20
+                        },
+                        "drop": {
+                          "type": "boolean"
+                        },
+                        "position_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "role_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "brand": {
+                          "type": "boolean"
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 600
+                        }
+                      },
+                      "required": ["id"]
+                    }
+                  },
+                  "dismiss": {
                     "type": "boolean"
                   }
                 }

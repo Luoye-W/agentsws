@@ -212,6 +212,17 @@ export interface ScenarioAssistantDispatch {
   duty?: string
 }
 
+/**
+ * WP350（决策 900）：「我的助理」把一份资料（会议记录）拆给几个岗位。`drop` 是人在方案卡上勾掉的那几条
+ * （卡内编号 `i1`…），`move` 是人改了归属的那几条（`i3=web-ops`）。
+ */
+export interface ScenarioAssistantFanout {
+  who: string
+  source: string
+  drop?: string[]
+  move?: { item: string; position: string }[]
+}
+
 /** WP44：运营 Agent 改一件商品的价（先查文档 → 过官方 GraphQL 校验 → 提一条变更）。 */
 export interface ScenarioShopPriceChange {
   who: string
@@ -1089,6 +1100,8 @@ export type ScenarioEvent =
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
+  /** WP350：「我的助理」一次拆成多份。 */
+  | { at: string; type: 'assistant.fanout'; assistant_fanout: ScenarioAssistantFanout }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
   /** WP44：推一份未发布主题副本（造预览）。 */
@@ -1498,6 +1511,13 @@ export interface ScenarioExpected {
    * 同时钉住：助理那一步自己没有产生任何 staged / applied（只开了事项）。
    */
   assistant_dispatched_to?: string[]
+  /**
+   * WP350：「我的助理」一次拆成多份——要做的事按顺序开到了哪几个岗位（岗位模板 id），
+   * 同一批（一份资料一个来源批次）；助理自己零写。
+   */
+  assistant_fanout_tasks?: string[]
+  /** WP350：要记的按顺序写进了哪几个岗位的知识库（品牌公共写 `brand`），全部还是 `proposed`。 */
+  assistant_fanout_notes?: string[]
   /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
   position_answer_components?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */

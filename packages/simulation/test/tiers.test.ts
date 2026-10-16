@@ -342,6 +342,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/two-desks-no-union',
       // WP343「我的助理」派活 → 岗位出审批，助理零写
       'org/assistant-dispatch-to-position',
+      // WP350「我的助理」一次拆成多份：会议记录分派给几个岗位、几个岗位记待确认的口径
+      'org/assistant-fanout-meeting-notes',
       // WP47 范围模型（44 G1 / G5）：品牌新开一家店，挂它的岗位自动扩范围并留痕
       'org/brand-adds-store',
       // WP215（52 §4）：眼前切在甲品牌，乙品牌的后台照常巡检、结果只进乙；乙急停只停乙

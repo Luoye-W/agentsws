@@ -94,3 +94,44 @@ export function rememberAfterTurn(input: {
   }
   return written
 }
+
+/**
+ * WP350：方案卡上「本人的偏好」那几条，人点了「就这样」——当成人明说的（`written_by: person`）写进助理记忆；
+ * 同一套过滤（口令 / 敏感 / 太短太长不记）与去重。回写了哪几条。
+ */
+export function rememberFromFanout(input: {
+  store: FreeChatStore
+  actor: FreeChatActor
+  texts: readonly string[]
+  at: string
+  session_id: string
+  newId(prefix: string): string
+}): AssistantMemoryRow[] {
+  const { store, actor } = input
+  const written: AssistantMemoryRow[] = []
+  for (const raw of input.texts) {
+    const screened = screenMemoryText(raw, { asked: true })
+    if (!screened.ok) continue
+    const all = [...store.memories(actor.person_id), ...written]
+    if (
+      all.some(
+        (e) =>
+          normalize(e.text) === normalize(screened.text) ||
+          jaccard(e.text, screened.text) >= AUTO_MEMORY_SAME,
+      )
+    )
+      continue
+    const row: AssistantMemoryRow = {
+      id: input.newId('amem'),
+      person_id: actor.person_id,
+      at: input.at,
+      text: screened.text,
+      written_by: 'person',
+      reason: 'preference',
+      session_id: input.session_id,
+    }
+    store.putMemory(row)
+    written.push(row)
+  }
+  return written
+}

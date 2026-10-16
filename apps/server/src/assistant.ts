@@ -20,6 +20,7 @@ import type {
   AssistantTargetView,
   FreeChatActor,
   FreeChatDispatchView,
+  FreeChatFanoutView,
   FreeChatReportView,
 } from '@agentsws/api'
 import type {
@@ -32,10 +33,11 @@ import type {
   PositionWorkView,
   ToolDef,
 } from '@agentsws/contracts'
-import { type PickPosition, pickDispatchTarget } from '@agentsws/roles'
+import { mentionedPositions, type PickPosition, pickDispatchTarget } from '@agentsws/roles'
 import {
   ASSISTANT_CARDS_TOOL,
   ASSISTANT_DISPATCH_TOOL,
+  ASSISTANT_FANOUT_TOOL,
   ASSISTANT_OVERVIEW_TOOL,
   ASSISTANT_PROGRESS_TOOL,
   ASSISTANT_SENT_TOOL,
@@ -46,6 +48,12 @@ import {
   type AssistantPositionRow,
   type AssistantSentRow,
 } from '@agentsws/stand-ins'
+import {
+  createFanout,
+  type Fanout,
+  type FanoutDeps,
+  type FanoutSource,
+} from './assistant-fanout.js'
 import type { AssistantDispatchRow } from './free-chat-store.js'
 
 /** 快捷问题最多几个。 */
@@ -69,11 +77,15 @@ export interface AssistantDeps {
   timeline(matter_id: string, limit: number): readonly MatterEvent[]
   /** 这张卡还在等人定吗。 */
   cardPending(actor: FreeChatActor, id: string): Promise<boolean>
-  /** 走岗位的交办入口开一件事（`mode: task`、不等跑完）。 */
+  /** 走岗位的交办入口开一件事（`mode: task`、不等跑完）。WP350：`summary` = 事项描述（来源原文）。 */
   open(
     actor: FreeChatActor,
-    input: { position_id: string; role_id?: string; text: string },
+    input: { position_id: string; role_id?: string; text: string; summary?: string },
   ): Promise<{ matter_id: string; title: string; role_id?: string; role_name?: string }>
+  /** WP350：来源批次的 id。不给 = 按时钟现编一个。 */
+  newId?(prefix: string): string
+  /** WP350：要记的那几条以 `proposed` 写进知识库 + 一张确认卡。不给 = 这里写不了知识。 */
+  proposeNotes?: FanoutDeps['proposeNotes']
 }
 
 export interface AssistantCallResult {
@@ -81,6 +93,8 @@ export interface AssistantCallResult {
   content: string
   /** 真交出去了才有。 */
   dispatch?: FreeChatDispatchView
+  /** WP350：拆成多份的方案卡（人点「就这样」才派）。 */
+  fanout?: FreeChatFanoutView
 }
 
 export interface Assistant {
@@ -91,8 +105,10 @@ export interface Assistant {
   call(
     actor: FreeChatActor,
     call: { name: string; input: unknown },
-    ctx: { user_text: string },
+    ctx: { user_text: string; source?: FanoutSource },
   ): Promise<AssistantCallResult>
+  /** WP350：拆成多份（方案卡）与确认后扇出。 */
+  fanout: Fanout
   /** `@` 选了岗位 / 职责：不经模型，直接交给它。 */
   direct(
     actor: FreeChatActor,
@@ -124,12 +140,12 @@ export function waitedText(from: string, now: string): string {
 
 const nameOf = (p: PositionInstance): string => p.name.zh
 /** 本人在这个岗位里持有的职责。 */
-const myDuties = (p: PositionInstance): { role_id: string; name: string }[] =>
+export const myDuties = (p: PositionInstance): { role_id: string; name: string }[] =>
   p.roles
     .filter((r) => r.my_assignment_id !== undefined)
     .map((r) => ({ role_id: r.role_id, name: r.role_name }))
 
-const toPick = (p: PositionInstance): PickPosition => ({
+export const toPick = (p: PositionInstance): PickPosition => ({
   id: p.position_id,
   name: nameOf(p),
   aliases: [p.name.en],
@@ -144,6 +160,20 @@ const isGeneral = (p: PositionInstance): boolean => {
 
 export function createAssistant(deps: AssistantDeps): Assistant {
   const { clock } = deps
+  let seq = 0
+  const fanout = createFanout({
+    clock,
+    newId:
+      deps.newId ??
+      ((prefix) => {
+        seq += 1
+        return `${prefix}_${Date.parse(clock.now()).toString(36)}${seq.toString(36)}`
+      }),
+    mine: async (actor) => mine(actor),
+    toPick,
+    open: (actor, input) => deps.open(actor, input),
+    ...(deps.proposeNotes === undefined ? {} : { proposeNotes: deps.proposeNotes }),
+  })
 
   const mine = async (actor: FreeChatActor): Promise<PositionInstance[]> =>
     (await deps.positions(actor)).filter((p) => myDuties(p).length > 0)
@@ -318,7 +348,19 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         reason: picked.reason,
         candidates: picked.candidates,
       }
-      return { content: json(out) }
+      // WP350（改决策 861）：话里点了好几个岗位——别问，按岗位拆开出方案卡
+      const many =
+        position === undefined ? mentionedPositions(list.map(toPick), `${text} ${user_text}`) : []
+      return {
+        content: json(
+          many.length >= 2
+            ? {
+                ...out,
+                hint: `话里点了 ${many.length} 个岗位：用 ${ASSISTANT_FANOUT_TOOL} 按岗位拆开，出一张方案卡给用户确认`,
+              }
+            : out,
+        ),
+      }
     }
     const p = list.find((x) => x.position_id === picked.position_id) as PositionInstance
     const opened = await deps.open(actor, {
@@ -338,6 +380,7 @@ export function createAssistant(deps: AssistantDeps): Assistant {
 
   return {
     tools: () => ASSISTANT_TOOL_DEFS,
+    fanout,
 
     async promptLines(actor) {
       const list = await mine(actor)
@@ -369,6 +412,8 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           return { content: await progress(actor, String(input.query ?? '').trim()) }
         case ASSISTANT_DISPATCH_TOOL:
           return dispatch(actor, input, ctx.user_text)
+        case ASSISTANT_FANOUT_TOOL:
+          return fanout.plan(actor, input, ctx.source ?? { name: '对话里的一段话', kind: 'human' })
         default:
           return { content: '这个工具不存在。' }
       }
@@ -431,6 +476,9 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         matter_id: row.matter_id,
         position_name: row.position_name,
         ...(row.duty_name === undefined ? {} : { duty_name: row.duty_name }),
+        // WP350：同一张方案卡派出去的，回报带着批次（界面按批次聚在一起）
+        ...(row.batch_id === undefined ? {} : { batch_id: row.batch_id }),
+        ...(row.batch_title === undefined ? {} : { batch_title: row.batch_title }),
       }
       const seen = new Set(row.reported)
       const events = deps.timeline(row.matter_id, 200).filter((e) => e.at >= row.at)

@@ -714,6 +714,8 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     // WP322：FAQ 导入那张整批卡（`form: 'faq_batch'`）由导入器自己施行（卡早就建好了，批了只是激活）
     const form = (item.payload as { form?: unknown } | null | undefined)?.form
     if (item.kind === 'knowledge_update' && form === 'faq_batch') return
+    // WP350：助理扇出的「要记的 N 条」也一样（条目早就以待确认建好了，批了只是生效）
+    if (item.kind === 'knowledge_update' && form === 'assistant_notes') return
     const decided =
       item.state === 'approved' || item.state === 'approved_edited' || item.state === 'rejected'
     if (!decided) return

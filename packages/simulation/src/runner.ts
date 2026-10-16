@@ -1261,6 +1261,21 @@ async function execute(
         }
         return
       }
+      // WP350：「我的助理」一次拆成多份
+      case 'assistant.fanout': {
+        try {
+          const f = event.assistant_fanout
+          await positionsLoop().fanout({
+            who: f.who as never,
+            source: f.source,
+            ...(f.drop === undefined ? {} : { drop: f.drop }),
+            ...(f.move === undefined ? {} : { move: f.move }),
+          })
+        } catch (e) {
+          workBlocked(e, 'assistant_fanout_failed')
+        }
+        return
+      }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
       case 'shop.price_change': {
         const out = await world.shop.priceChange(event.price_change)

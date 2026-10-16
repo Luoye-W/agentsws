@@ -465,3 +465,29 @@ export interface FaqBatchPayload {
   before: null
   after: string
 }
+
+/**
+ * WP350（决策 900）：「我的助理」把一份资料拆给几个岗位时，要记的那几条（已以 `proposed` 写进知识库，
+ * 出处 = 这份资料）等人确认的那**一张**卡（`knowledge_update` + `form: 'assistant_notes'`）。
+ * 通过 = 这一批全部生效；不要 = 这一批全部作废（退役留痕，不删）。
+ */
+export const ASSISTANT_NOTES_FORM = 'assistant_notes'
+
+export interface AssistantNotesPayload {
+  form: 'assistant_notes'
+  /** 来源批次（方案卡那一批）。 */
+  batch_id: string
+  /** 资料叫什么。 */
+  source: string
+  card_ids: string[]
+  /** 按岗位（品牌公共也算一组）：几条、每条正文与原文出处。 */
+  groups: { name: string; notes: { text: string; quote?: string }[] }[]
+  before: null
+  after: string
+}
+
+export const isAssistantNotesPayload = (p: unknown): p is AssistantNotesPayload =>
+  typeof p === 'object' &&
+  p !== null &&
+  (p as { form?: unknown }).form === ASSISTANT_NOTES_FORM &&
+  Array.isArray((p as { card_ids?: unknown }).card_ids)
