@@ -7,19 +7,29 @@
  *
  * WP343：「交给岗位去做」按钮去掉了——交代事情直接跟助理说（它交给岗位，回复下面一行「已交给 X」）；
  * 交出去的事回来报的那一句画成 {@link ReportNote}；用户那句 `@` 给谁的，气泡上方一个小标。
+ *
+ * WP350：用户那句附的资料在气泡上方一排小签（名字 · 字数；读不出的那句、抹掉了口令也标出来）；
+ * 回复里拆出来的方案卡（{@link FanoutCard}）与点过之后的汇总（{@link FanoutSummary}）。
  */
 import { splitGenuiReply } from '@agentsws/contracts'
-import { AtSign, Check, Copy, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
+import { AtSign, Check, Copy, FileText, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { DispatchLine, ReportNote } from '@/components/free-chat/assistant-bits'
+import { FanoutCard, FanoutSummary } from '@/components/free-chat/fanout-card'
 import { ChoiceIcon, modelNameOf } from '@/components/free-chat/model-picker'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
-import { type FreeChatMessage, type FreeChatSource, hideRememberTags } from '@/lib/free-chat'
+import {
+  type FreeChatFanoutEdit,
+  type FreeChatMessage,
+  type FreeChatSource,
+  hideRememberTags,
+} from '@/lib/free-chat'
 
 export function UserBubble({ message }: { message: FreeChatMessage }): React.ReactNode {
+  const { t } = useApp()
   return (
     <div className="flex justify-end" data-testid="free-chat-user">
       <div className="flex max-w-[80%] flex-col items-end gap-1.5">
@@ -31,6 +41,25 @@ export function UserBubble({ message }: { message: FreeChatMessage }): React.Rea
             <AtSign aria-hidden className="size-3" />
             {message.to}
           </span>
+        )}
+        {(message.attachments ?? []).length === 0 ? null : (
+          <div className="flex flex-wrap justify-end gap-1.5" data-testid="free-chat-user-docs">
+            {(message.attachments ?? []).map((a) => (
+              <span
+                key={a.name}
+                className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border bg-ws-card px-2 py-1 text-xs"
+                data-testid="free-chat-user-doc"
+                title={a.unreadable}
+              >
+                <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{a.name}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {a.chars === 0 ? (a.unreadable ?? '') : t('assistant.doc.chars', { n: a.chars })}
+                  {a.redacted === undefined ? '' : ` · ${t('assistant.doc.redacted')}`}
+                </span>
+              </span>
+            ))}
+          </div>
         )}
         {(message.images ?? []).length === 0 ? null : (
           <div className="flex flex-wrap justify-end gap-1.5">
@@ -111,6 +140,7 @@ export function AssistantMessage({
   status,
   last,
   onRegenerate,
+  onFanout,
 }: {
   message: FreeChatMessage
   /** 还在往外吐字。 */
@@ -119,6 +149,11 @@ export function AssistantMessage({
   status?: string
   last: boolean
   onRegenerate: () => void
+  /** WP350：方案卡上点了「就这样」（带改动）/「不用了」。不给 = 只读。 */
+  onFanout?: (
+    batch_id: string,
+    body: { items?: FreeChatFanoutEdit[]; dismiss?: boolean },
+  ) => Promise<void>
 }): React.ReactNode {
   const { t } = useApp()
   const [copied, setCopied] = useState(false)
@@ -147,7 +182,23 @@ export function AssistantMessage({
           {message.error}
         </p>
       )}
-      <DispatchLine dispatches={message.dispatches ?? []} />
+      {message.fanout === undefined ? null : (
+        <FanoutCard
+          plan={message.fanout}
+          {...(onFanout === undefined || live === true
+            ? {}
+            : {
+                onConfirm: (items: FreeChatFanoutEdit[]) =>
+                  onFanout(message.fanout?.batch_id ?? '', { items }),
+                onDismiss: () => onFanout(message.fanout?.batch_id ?? '', { dismiss: true }),
+              })}
+        />
+      )}
+      {message.fanout_summary === undefined ? (
+        <DispatchLine dispatches={message.dispatches ?? []} />
+      ) : (
+        <FanoutSummary summary={message.fanout_summary} />
+      )}
       <Sources sources={message.sources ?? []} />
       {/* WP207：找回归档的候选卡——点一张放回左栏；不点什么都不恢复 */}
       {(message.archived_candidates ?? []).length === 0 ? null : (

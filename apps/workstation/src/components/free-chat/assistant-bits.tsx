@@ -68,6 +68,7 @@ export function ReportNote({ message }: { message: FreeChatMessage }): React.Rea
       className="flex items-start gap-2 rounded-xl border bg-ws-card px-3 py-2 text-[13px]"
       data-testid="assistant-report"
       data-kind={r.kind}
+      {...(r.batch_id === undefined ? {} : { 'data-batch': r.batch_id })}
     >
       <Icon
         aria-hidden

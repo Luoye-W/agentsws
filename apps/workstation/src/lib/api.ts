@@ -4035,7 +4035,8 @@ export const getPositionOntology = (
 export interface KnowledgeCardRow {
   id: string
   layer: 'fact' | 'phrasing' | 'policy' | 'historical_case'
-  subject: { type: string; key: string }
+  /** WP350：`id` 在助理扇出的条目上是岗位 id（`assistant_note`；品牌公共是 `brand`）。 */
+  subject: { type: string; id?: string; key: string }
   statement: string
   status: 'proposed' | 'active' | 'retired'
   stage?: 'both' | 'presales' | 'postsales'
@@ -4048,7 +4049,7 @@ export interface KnowledgeCardRow {
   domain?: string
   /** 适用范围：空 = 整个品牌通用；`brand` / `store` / `product_line` / `market` 一格一条。 */
   scope?: { kind: string; id: string }[]
-  provenance?: { source: string; ref: string; locator?: string }[]
+  provenance?: { source: string; ref: string; locator?: string; quote?: string }[]
   created_by?: { kind: 'agent' | 'person'; id: string }
   conflicts?: { with: string; note: string }[]
   valid?: { from?: string; until?: string }

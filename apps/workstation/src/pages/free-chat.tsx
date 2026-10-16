@@ -9,6 +9,9 @@
  * - 问全局、派活都在对话里：交出去的事回复下面一行「已交给 X」，有结果 / 要拍板时这段对话里再报一句；
  * - 输入框里 `@` 选岗位 / 职责，直接交给它；
  * - 右上角「记忆」（助理这一层记的）与「替我答同事」（同事互联 / 公司模式才有）。
+ *
+ * WP350（决策 900）：能附会议记录 / 文档；助理拆出的「我打算这样分」方案卡就在回复里点（就这样 / 改一下 / 不用了），
+ * 点完回复下面一张汇总；同一批派出去的事回来报的那几句聚在一起（标「来自「…」」）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -23,8 +26,11 @@ import { SessionList } from '@/components/free-chat/session-list'
 import { useApp } from '@/lib/app-context'
 import {
   type AssistantTarget,
+  confirmFanout,
   createFreeChatSession,
   deleteFreeChatSession,
+  type FreeChatFanoutEdit,
+  type FreeChatFile,
   type FreeChatFrame,
   type FreeChatImage,
   type FreeChatMessage,
@@ -52,6 +58,25 @@ export function awaitingReport(rows: readonly FreeChatMessage[]): boolean {
     ),
   )
   return rows.some((m) => (m.dispatches ?? []).some((d) => !closed.has(d.matter_id)))
+}
+
+/**
+ * WP350：同一批派出去的事回来报的那几句聚在一起——把连着的、同一个批次的回报收成一段。
+ * 其余的话一条一段。
+ */
+export function segmentsOf(
+  rows: readonly FreeChatMessage[],
+): { batch?: { id: string; title: string }; rows: FreeChatMessage[] }[] {
+  const out: { batch?: { id: string; title: string }; rows: FreeChatMessage[] }[] = []
+  for (const m of rows) {
+    const batch = m.report?.batch_id
+    const last = out.at(-1)
+    if (batch !== undefined && last?.batch?.id === batch) last.rows.push(m)
+    else if (batch !== undefined)
+      out.push({ batch: { id: batch, title: m.report?.batch_title ?? '' }, rows: [m] })
+    else out.push({ rows: [m] })
+  }
+  return out
 }
 
 interface Live {
@@ -121,7 +146,7 @@ export function FreeChatPage(): React.ReactNode {
   const run = async (
     session_id: string,
     input:
-      | { text: string; images: FreeChatImage[]; target?: AssistantTarget }
+      | { text: string; images: FreeChatImage[]; target?: AssistantTarget; files?: FreeChatFile[] }
       | { regenerate: true },
   ): Promise<void> => {
     setError(undefined)
@@ -149,6 +174,8 @@ export function FreeChatPage(): React.ReactNode {
             ...prev,
             reply: { ...prev.reply, dispatches: [...(prev.reply.dispatches ?? []), f.dispatch] },
           }
+        // WP350：方案卡（边答边出现；点「就这样」要等这一轮答完）
+        if (f.type === 'fanout') return { ...prev, reply: { ...prev.reply, fanout: f.fanout } }
         if (f.type === 'error') return { ...prev, reply: { ...prev.reply, error: f.message } }
         return prev
       })
@@ -182,6 +209,9 @@ export function FreeChatPage(): React.ReactNode {
             at: '',
             images: input.images,
             ...(input.target === undefined ? {} : { to: input.target.label }),
+            ...(input.files === undefined
+              ? {}
+              : { attachments: input.files.map((f) => ({ name: f.name, chars: 0 })) }),
           },
         ])
         await streamFreeChat(
@@ -190,6 +220,9 @@ export function FreeChatPage(): React.ReactNode {
             text: input.text,
             ...(input.images.length === 0 ? {} : { images: input.images }),
             ...(input.target === undefined ? {} : { target: input.target }),
+            ...(input.files === undefined
+              ? {}
+              : { files: input.files.map((f) => ({ name: f.name, data: f.data })) }),
             ...opts,
           },
           (f) => {
@@ -220,6 +253,7 @@ export function FreeChatPage(): React.ReactNode {
       text: string
       images: FreeChatImage[]
       target?: AssistantTarget
+      files?: FreeChatFile[]
     }) => {
       let session_id = id
       if (session_id === undefined) {
@@ -247,6 +281,27 @@ export function FreeChatPage(): React.ReactNode {
   }
 
   const busy = live !== undefined
+
+  /** WP350：方案卡上点了「就这样」/「不用了」→ 换上点过的那张、接上汇总。 */
+  const fanout = async (
+    batch_id: string,
+    body: { items?: FreeChatFanoutEdit[]; dismiss?: boolean },
+  ): Promise<void> => {
+    if (id === undefined) return
+    setError(undefined)
+    try {
+      const out = await confirmFanout(id, batch_id, body)
+      client.setQueryData<FreeChatMessage[]>([...KEY, 'messages', id], (old) => {
+        const next = (old ?? []).map((m) => (m.id === out.plan.id ? out.plan : m))
+        return out.summary === undefined ? next : [...next, out.summary]
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      refresh(id)
+      void client.invalidateQueries({ queryKey: [...KEY, 'assistant'] })
+    }
+  }
   const lastAssistant = [...rows].reverse().find((m) => m.role === 'assistant')
 
   const composer = (
@@ -260,8 +315,13 @@ export function FreeChatPage(): React.ReactNode {
         : {})}
       knowledgeAvailable={models.data?.knowledge.available ?? false}
       onToggles={setToggles}
-      onSend={(text, images, target) => {
-        send.mutate({ text, images, ...(target === undefined ? {} : { target }) })
+      onSend={(text, images, target, files) => {
+        send.mutate({
+          text,
+          images,
+          ...(target === undefined ? {} : { target }),
+          ...(files === undefined ? {} : { files }),
+        })
       }}
       onStop={stop}
       placeholder={t('assistant.placeholder')}
@@ -349,20 +409,41 @@ export function FreeChatPage(): React.ReactNode {
                   className="mx-auto flex max-w-3xl flex-col gap-5 py-4"
                   data-testid="free-chat-messages"
                 >
-                  {rows.map((m) =>
-                    m.role === 'user' ? (
-                      <UserBubble key={m.id} message={m} />
+                  {segmentsOf(rows).map((seg) => {
+                    const items = seg.rows.map((m) =>
+                      m.role === 'user' ? (
+                        <UserBubble key={m.id} message={m} />
+                      ) : (
+                        <AssistantMessage
+                          key={m.id}
+                          message={m}
+                          last={m.id === lastAssistant?.id && !busy}
+                          onRegenerate={() => {
+                            if (id !== undefined) void run(id, { regenerate: true })
+                          }}
+                          onFanout={fanout}
+                        />
+                      ),
+                    )
+                    // WP350：同一批派出去的事回来报的几句聚在一起
+                    return seg.batch === undefined ? (
+                      items
                     ) : (
-                      <AssistantMessage
-                        key={m.id}
-                        message={m}
-                        last={m.id === lastAssistant?.id && !busy}
-                        onRegenerate={() => {
-                          if (id !== undefined) void run(id, { regenerate: true })
-                        }}
-                      />
-                    ),
-                  )}
+                      <div
+                        key={`batch:${seg.rows[0]?.id}`}
+                        className="flex flex-col gap-1.5 border-l-2 border-ws-line pl-2"
+                        data-testid="assistant-report-batch"
+                        data-batch={seg.batch.id}
+                      >
+                        {seg.batch.title === '' ? null : (
+                          <p className="text-[11px] text-muted-foreground">
+                            {t('fanout.batch', { title: seg.batch.title })}
+                          </p>
+                        )}
+                        {items}
+                      </div>
+                    )
+                  })}
                   {live === undefined ? null : (
                     <AssistantMessage
                       message={live.reply}

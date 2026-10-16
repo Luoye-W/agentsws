@@ -10,6 +10,7 @@
  * 纪律照旧：这里只**排版**，不算数也不编。payload 里没有的字段就不出那一格，
  * 绝不用"—"以外的东西填空（14 §2 数字不经模型手）。
  */
+import { isAssistantNotesPayload } from '@agentsws/contracts'
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
@@ -26,6 +27,7 @@ import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
+import { AssistantNotesBody } from './assistant-notes-body'
 import {
   FaqBatchBody,
   FaqImportBody,
@@ -320,6 +322,8 @@ export function DeckCardBody({
         if (isModerationPayload(payload)) return <ModerationCardBody payload={payload} />
         // WP322：FAQ 导入 ③ 交负责人的整批卡——几条 + 一两行预览（不出改之前 / 改之后双格）
         if (isFaqBatchPayload(payload)) return <FaqBatchBody payload={payload} />
+        // WP350：助理扇出的「要记的 N 条」——按岗位列正文与原文出处
+        if (isAssistantNotesPayload(payload)) return <AssistantNotesBody payload={payload} />
         // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
         if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
         return (

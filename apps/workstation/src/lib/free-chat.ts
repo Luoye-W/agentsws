@@ -57,6 +57,83 @@ export interface FreeChatMessage {
   dispatches?: FreeChatDispatch[]
   /** WP343：交出去的事回来报的一句。 */
   report?: FreeChatReport
+  /** WP350：附上的文本类资料（只有名字与字数）。 */
+  attachments?: FreeChatAttachment[]
+  /** WP350：「我打算这样分」方案卡。 */
+  fanout?: FreeChatFanout
+  /** WP350：方案卡点过之后的汇总。 */
+  fanout_summary?: FreeChatFanoutSummary
+}
+
+/** WP350：附上的一份资料（界面只看名字、字数、读不出的那句、抹掉了几处口令）。 */
+export interface FreeChatAttachment {
+  name: string
+  chars: number
+  unreadable?: string
+  redacted?: number
+}
+
+/** WP350：方案卡上的一条。 */
+export interface FreeChatFanoutItem {
+  id: string
+  kind: 'task' | 'note' | 'memory'
+  text: string
+  why?: string
+  due?: string
+  quote?: string
+  position_id?: string
+  position_name?: string
+  role_id?: string
+  duty_name?: string
+  brand?: boolean
+  unsure?: { reason: string }
+  secret?: boolean
+}
+
+/** WP350：「我打算这样分」。 */
+export interface FreeChatFanout {
+  batch_id: string
+  title: string
+  source: { name: string; kind: 'meeting' | 'document' | 'human' }
+  items: FreeChatFanoutItem[]
+  positions: { position_id: string; name: string; duties: { role_id: string; name: string }[] }[]
+  status: 'proposed' | 'sent' | 'dismissed'
+  at: string
+}
+
+/** WP350：派好之后的汇总。 */
+export interface FreeChatFanoutSummary {
+  batch_id: string
+  title: string
+  groups: {
+    position_id: string
+    name: string
+    tasks: { matter_id: string; title: string }[]
+    notes: number
+  }[]
+  brand_notes: number
+  memories: number
+  skipped: { dropped: number; unsure: number; secret: number }
+  knowledge_card_id?: string
+  failed?: string[]
+  at: string
+}
+
+/** WP350：人在方案卡上对一条的改动。 */
+export interface FreeChatFanoutEdit {
+  id: string
+  drop?: boolean
+  position_id?: string
+  role_id?: string
+  brand?: boolean
+  text?: string
+}
+
+/** WP350：要附的一份资料（`data` 是 base64）。 */
+export interface FreeChatFile {
+  name: string
+  data: string
+  size: number
 }
 
 /** WP343：交给岗位的一件事。 */
@@ -68,6 +145,8 @@ export interface FreeChatDispatch {
   role_id?: string
   duty_name?: string
   at: string
+  /** WP350：同一张方案卡派出去的带同一个来源批次。 */
+  batch_id?: string
 }
 
 /** WP343：交出去的事回来报一句。 */
@@ -77,6 +156,9 @@ export interface FreeChatReport {
   position_name: string
   duty_name?: string
   approval_item_id?: string
+  /** WP350：哪一批派出去的（按批次聚在一起）。 */
+  batch_id?: string
+  batch_title?: string
 }
 
 /** WP343：快捷问题与 `@` 能选的岗位。 */
@@ -127,6 +209,7 @@ export type FreeChatFrame =
   | { type: 'notice'; text: string }
   | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
   | { type: 'dispatched'; dispatch: FreeChatDispatch }
+  | { type: 'fanout'; fanout: FreeChatFanout }
   | { type: 'done'; message: FreeChatMessage; session: FreeChatSession }
   | { type: 'error'; message: string }
 
@@ -157,6 +240,13 @@ export const getAssistantState = (): Promise<AssistantState> => api(`${base}/ass
 export const listAssistantMemory = (): Promise<AssistantMemory[]> => api(`${base}/memory`)
 export const forgetAssistantMemory = (id: string): Promise<{ deleted: boolean }> =>
   api(`${base}/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
+/** WP350：方案卡「就这样」（带改动）/「不用了」。 */
+export const confirmFanout = (
+  session_id: string,
+  batch_id: string,
+  body: { items?: FreeChatFanoutEdit[]; dismiss?: boolean },
+): Promise<{ plan: FreeChatMessage; summary?: FreeChatMessage }> =>
+  api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}`, { method: 'POST', body })
 
 /** WP343：回答末尾的 `<remember>` 标记不给人看（流式时还没被服务端拿掉）。 */
 export const hideRememberTags = (text: string): string =>
@@ -174,6 +264,8 @@ export async function streamFreeChat(
         images?: FreeChatImage[]
         /** WP343：`@` 选的岗位 / 职责（直接交给它）。 */
         target?: AssistantTarget
+        /** WP350：附上的文本类资料。 */
+        files?: { name: string; data: string }[]
       } & FreeChatTurnOptions)
     | ({ regenerate: true } & FreeChatTurnOptions),
   onFrame: (frame: FreeChatFrame) => void,
@@ -262,6 +354,35 @@ export function readImage(file: File): Promise<FreeChatImage> {
       resolve({ mime: file.type, data: url.slice(comma + 1) })
     }
     reader.onerror = () => reject(reader.error ?? new Error('读不出这张图'))
+    reader.readAsDataURL(file)
+  })
+}
+
+/** WP350：能附的文本类资料（扩展名）。 */
+export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf'] as const
+export const isDocFile = (name: string): boolean =>
+  (DOC_EXTENSIONS as readonly string[]).includes(name.split('.').pop()?.toLowerCase() ?? '')
+/** WP350：粘贴超过这么多字就收成一份附件（不塞进输入框）。 */
+export const PASTE_AS_FILE_CHARS = 1500
+
+/** WP350：一段字 → base64（UTF-8；分块转，长文不爆栈）。 */
+export function textToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(bin)
+}
+
+/** WP350：附一份资料 → base64（不带 `data:` 前缀）。 */
+export function readDoc(file: File): Promise<FreeChatFile> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const url = String(reader.result)
+      resolve({ name: file.name, data: url.slice(url.indexOf(',') + 1), size: file.size })
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('读不出这份文件'))
     reader.readAsDataURL(file)
   })
 }
