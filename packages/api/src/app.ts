@@ -49,6 +49,7 @@ import { extensionRoutes } from './routes/extension.js'
 // WP313：插件动作通道（广告后台）`/v1/extension/actions/*` 与工作台 `/v1/ads-actions/*`
 import { extensionActionRoutes } from './routes/extension-actions.js'
 import { extensionInstallRoutes } from './routes/extension-install.js'
+import { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
@@ -285,6 +286,8 @@ export function collectRoutes(): Route[] {
     ...extensionActionRoutes(),
     // WP345：插件随工坊安装与更新。`/v1/extension/install*`、`/v1/extension/version` 都是定值段，与别处不撞
     ...extensionInstallRoutes(),
+    // WP360：需要插件的岗位引导装插件。`/v1/extension/needs*` 是定值段，与别处不撞
+    ...extensionOnboardingRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
     // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径

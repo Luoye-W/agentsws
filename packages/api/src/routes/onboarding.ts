@@ -22,6 +22,7 @@ import type {
   BrandCompetitor,
   BrandInsightField,
   BrandKeywords,
+  BrowserExtensionUse,
   MarketsSource,
   MaybePromise,
   MembershipRequestVia,
@@ -343,6 +344,21 @@ export interface OnboardingPlanView {
    * 「建站岗位会用到 Shopify CLI，要现在装吗？」。平台不对 / 没勾那几条职责就没有这一格。
    */
   platform_cli?: OnboardingPlatformCliItem
+  /**
+   * WP360（决策 947）：勾的职责里有要浏览器插件的（职责定义的 `browser_extension` 推出来）——第 ④ 步把
+   * 「装插件 + 配对」放在最前。没有就没有这一格。
+   */
+  extension?: OnboardingExtensionItem
+}
+
+/** WP360：第 ④ 步最前那一项「装插件 + 配对」。 */
+export interface OnboardingExtensionItem {
+  /** 拿插件做哪几样（界面按它说一句为什么）。 */
+  uses: BrowserExtensionUse[]
+  /** 哪几条职责要它（职责中文名，不出 id）。 */
+  needed_by: string[]
+  /** 这个品牌已经有一个插件配上了。 */
+  paired: boolean
 }
 
 /** WP216：向导最后那一句提示要的几格（来自 `PLATFORM_KITS` 那一行，界面不写平台名）。 */

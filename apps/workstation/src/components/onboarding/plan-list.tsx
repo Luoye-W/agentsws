@@ -6,11 +6,14 @@
  * 模型跳 `/settings`。清单只是把勾选的职责要的东西去重汇总了一遍。
  *
  * 模型没接时第一条固定是"接模型"：平台连得再全也没人替你干活。
+ * WP360：勾的职责里有要浏览器插件的，「装插件 + 配对」排在最前（连模型都在它后面——第 ① 步已经接过模型）。
  */
 import { useQuery } from '@tanstack/react-query'
 import { Circle, CircleCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
+import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
 import { getConnectionDirectory, type OnboardingPlanView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -161,6 +164,8 @@ function ConnectorRow({ c }: { c: ConnectorItem }): React.ReactNode {
 export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNode {
   const { t } = useApp()
   const [optionalOpen, setOptionalOpen] = useState(false)
+  // WP360：「装插件 + 配对」问的是所有者那条（首次设置时岗位还没建出来）
+  const owner = useConnectAssignment().assignment
   // WP142：第 ④ 步只列**必需**的；可选的折成「还有 N 个可选」，默认关着
   const required = plan.connectors.filter((c) => c.required)
   const optional = plan.connectors.filter((c) => !c.required)
@@ -172,6 +177,13 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="onboarding-plan">
+      {/*
+        WP360（决策 947）：勾的职责里有要浏览器插件的（职责定义推出来）——「装插件 + 配对」放在最前，
+        一句为什么；可以「稍后再装」，不挡完成首次设置（之后岗位页顶上那张卡接着引导）。
+      */}
+      {plan.extension === undefined ? null : (
+        <ExtensionOnboardCard roleIds={plan.role_ids} assignment={owner} mode="onboarding" />
+      )}
       {plan.model_first ? (
         <div
           className="flex items-start justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3"

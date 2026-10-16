@@ -974,6 +974,10 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       // 只记登着哪个号（没登录也记下：方案里说清楚）
       setExt({ outcome: input.outcome, ...(input.user === undefined ? {} : { user: input.user }) })
       emit('reddit_watch.whoami', { outcome: input.outcome })
+      // WP360（决策 947）：插件刚装好、刚连上 Reddit、知道登着哪个号了 → 不等人开口，接上巡查的方案卡
+      // （品牌号就是插件里登着的那个；一天最多一张，与缺设置时出的是同一张）
+      // 出卡前要查一遍（搜索 / 模型），不让插件这一条请求等着
+      if (!isConfigured(settings())) void askSetup().catch(() => undefined)
       return { accepted: true }
     }
     pace.endKey(rec.pace_key, rec.job.id)

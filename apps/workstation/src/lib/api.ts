@@ -3823,6 +3823,8 @@ export interface OnboardingPlanView {
   role_ids: string[]
   /** WP216：品牌的平台有官方 CLI、勾的职责里有要用它的——向导最后问一句「要现在装吗？」。 */
   platform_cli?: { id: string; label: string; position_id: string; tutorial: string }
+  /** WP360：勾的职责里有要浏览器插件的——第 ④ 步最前「装插件 + 配对」。 */
+  extension?: { uses: BrowserExtensionUseView[]; needed_by: string[]; paired: boolean }
 }
 
 export interface OnboardingApplyView {
@@ -6539,6 +6541,55 @@ export const openExtensionInstall = (
   assignment?: string,
 ): Promise<{ opened: boolean; message?: string; address?: string }> =>
   api<{ opened: boolean; message?: string; address?: string }>('/v1/extension/install/open', {
+    method: 'POST',
+    body: { target },
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP360（决策 947）：需要插件的岗位一开始就引导装好插件。「要不要」由职责定义推（服务端算），
+ * 岗位页顶上那张卡读这一份：要不要、配上没有、配上之后还差哪步、接哪张方案卡、今天点过「稍后」没有。
+ * 带的是**本岗位那条分配**（不是所有者的）；配对码那一块另走所有者那条。
+ */
+export type BrowserExtensionUseView = 'reddit' | 'kol' | 'google_ads' | 'meta_ads'
+export type ExtensionFollowStepView = 'reddit' | 'google_ads' | 'meta_ads'
+
+export interface ExtensionNeedsView {
+  needed: boolean
+  uses: BrowserExtensionUseView[]
+  roles: { role_id: string; name: { zh: string; en: string } }[]
+  paired: boolean
+  steps: { step: ExtensionFollowStepView; done?: boolean }[]
+  plans: { target: string; name: string; satisfied: boolean }[]
+  snoozed: boolean
+}
+
+export const getExtensionNeeds = (
+  roles: readonly string[] | undefined,
+  assignment?: string,
+): Promise<ExtensionNeedsView> =>
+  api<ExtensionNeedsView>(
+    roles === undefined || roles.length === 0
+      ? '/v1/extension/needs'
+      : `/v1/extension/needs?roles=${encodeURIComponent(roles.join(','))}`,
+    withAssignment(assignment),
+  )
+
+export const snoozeExtensionNeeds = (
+  roles: readonly string[] | undefined,
+  assignment?: string,
+): Promise<ExtensionNeedsView> =>
+  api<ExtensionNeedsView>('/v1/extension/needs/snooze', {
+    method: 'POST',
+    body: roles === undefined ? {} : { roles: [...roles] },
+    ...withAssignment(assignment),
+  })
+
+export const askExtensionPlan = (
+  target: string,
+  assignment?: string,
+): Promise<{ card_id?: string }> =>
+  api<{ card_id?: string }>('/v1/extension/needs/plan', {
     method: 'POST',
     body: { target },
     ...withAssignment(assignment),

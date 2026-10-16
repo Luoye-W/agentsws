@@ -170,6 +170,11 @@ export interface AskConnectInput {
   actor: RunRequest['actor']
   matter_id?: string
   run_id?: string
+  /**
+   * WP360：`false` = 卡照样挂进这件事的时间线，但**不**记成「连好就按原话再跑一次」——主动引导装插件那张
+   * （这件事并没有卡在插件上，原话已经照常在跑）。不给 = 照旧（给了 `matter_id` 就等着接着做）。
+   */
+  resume?: false
 }
 
 export interface AskSetupInput {
@@ -360,7 +365,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     }
     if (needs.length === 0) return undefined
     const dedupe_key = connectRequestDedupeKey(ws, needs)
-    const resume = resumeOf(input.actor, input.matter_id)
+    const resume = input.resume === false ? undefined : resumeOf(input.actor, input.matter_id)
     const prior = await activeCard(bus, dedupe_key)
     if (prior !== undefined) {
       const attach = attachTo(prior.rec, resume)

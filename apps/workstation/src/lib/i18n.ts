@@ -12,6 +12,7 @@ import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
+import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
@@ -8471,6 +8472,7 @@ const TABLES: Record<Lang, Table> = {
     ...GEO_ZH,
     // WP345：连接卡上「装插件」那一块（随工坊安装与更新）
     ...EXT_INSTALL_ZH,
+    ...EXT_ONBOARD_ZH,
     // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
     ...SHELL_ZH,
     // WP343：「我的助理」（原随便聊 + 我的代理）
@@ -8508,6 +8510,7 @@ const TABLES: Record<Lang, Table> = {
     ...CARD_PAGE_EN,
     ...GEO_EN,
     ...EXT_INSTALL_EN,
+    ...EXT_ONBOARD_EN,
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
