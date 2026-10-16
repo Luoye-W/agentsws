@@ -140,6 +140,7 @@ import {
   serverSpawnRequest,
 } from './server-process.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
+import { proxyUrlFromResolution } from './system-proxy.js'
 import {
   TRAY_ICON_2X_DATA_URL,
   TRAY_ICON_ACTIVE_2X_DATA_URL,
@@ -503,6 +504,22 @@ async function bootstrap(): Promise<void> {
         })
   logger.info('连接器从哪来', { plan: connectPlan.kind, url: serverConnectUrl ?? '(替身)' })
 
+  // 10-16：系统代理（只写在操作系统设置里、不在环境变量里）转给服务进程；每 5 分钟重查一次，
+  // 服务进程下次重启就用新的（`system-proxy.ts`）
+  let systemProxy: string | undefined
+  const refreshSystemProxy = async (): Promise<void> => {
+    try {
+      const resolution = await session.defaultSession.resolveProxy('https://auth.openai.com')
+      const next = proxyUrlFromResolution(resolution)
+      if (next !== systemProxy) logger.info('系统代理', { resolution, proxy: next ?? '(不走代理)' })
+      systemProxy = next
+    } catch (err) {
+      logger.warn('查系统代理失败', { error: String(err) })
+    }
+  }
+  await refreshSystemProxy()
+  setInterval(() => void refreshSystemProxy(), 5 * 60_000).unref()
+
   const server = createSidecar({
     name: 'server',
     spawner: nodeSpawner(),
@@ -535,6 +552,7 @@ async function bootstrap(): Promise<void> {
         ...(staticDir === undefined ? {} : { staticDir }),
         // WP345：浏览器插件的固定文件夹（远程档没有：插件只连本机）
         ...(remote ? {} : { extensionDir: extensionFolder(paths.userData) }),
+        ...(systemProxy === undefined ? {} : { systemProxy }),
         // WP218：不继承 Electron 的工作目录（Windows 开机自启时是 C:\Windows\System32）
         cwd: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,

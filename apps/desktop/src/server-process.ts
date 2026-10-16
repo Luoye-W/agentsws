@@ -18,6 +18,7 @@ import { haltEnv } from './halt.js'
 import type { SpawnRequest } from './ports.js'
 import type { DesktopSecrets } from './secrets.js'
 import { secretsToEnv } from './secrets.js'
+import { proxyEnvFor } from './system-proxy.js'
 
 /** 子进程唯一需要继承的宿主变量。 */
 export const INHERITED_ENV = [
@@ -135,11 +136,17 @@ export interface ServerSpawnInput {
    * 经 `AGENTSWS_EXTENSION_DIR` 给服务进程：连接卡上「打开插件文件夹」、插件问「文件夹里是哪一版」都读它。
    */
   extensionDir?: string
+  /**
+   * 10-16：操作系统设置里的代理（壳用 Chromium 解析出的 `http://h:p`）。环境里没有代理变量时转成
+   * `HTTP(S)_PROXY` 给服务进程，否则订阅登录换令牌等出境请求会直连被拒（`system-proxy.ts`）。
+   */
+  systemProxy?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
   const env: Record<string, string> = {
     ...inheritEnv(input.baseEnv),
+    ...proxyEnvFor(input.baseEnv, input.systemProxy),
     // 只有借 Electron 的可执行文件当纯 Node 用时才需要这一条。
     ...(input.runtime.kind === 'electron' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     AGENTSWS_PORT: String(input.port),

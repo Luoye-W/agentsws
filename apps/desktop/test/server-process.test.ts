@@ -257,3 +257,19 @@ describe('WP31：共享真源与地址透传', () => {
     expect(serverSpawnRequest(input({ halt: ['all'] })).env.AGENTSWS_HALT).toBe('all')
   })
 })
+
+describe('10-16 系统代理转给服务进程', () => {
+  it('环境里没有代理变量时，壳解析出的系统代理变成 HTTP(S)_PROXY，并打开 Node 内置 fetch 的代理开关', () => {
+    const request = serverSpawnRequest(input({ systemProxy: 'http://127.0.0.1:7897' }))
+    expect(request.env.HTTPS_PROXY).toBe('http://127.0.0.1:7897')
+    expect(request.env.HTTP_PROXY).toBe('http://127.0.0.1:7897')
+    expect(request.env.NO_PROXY).toBe('127.0.0.1,localhost,::1')
+    expect(request.env.NODE_USE_ENV_PROXY).toBe('1')
+  })
+
+  it('没有系统代理也没有环境代理：不加任何代理变量', () => {
+    const request = serverSpawnRequest(input())
+    expect(request.env.HTTPS_PROXY).toBeUndefined()
+    expect(request.env.NODE_USE_ENV_PROXY).toBeUndefined()
+  })
+})
