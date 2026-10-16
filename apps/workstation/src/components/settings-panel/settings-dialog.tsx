@@ -9,7 +9,10 @@
  * 用的是现成的 shadcn `Dialog` 与 `Command`（cmdk：搜索结果的 ↑↓ / 回车）；没有装 shadcn 的整套
  * `Sidebar`（它带 cookie 状态、移动端抽屉、⌘B 快捷键，弹窗里用不上）——只学它「弹窗里一列侧栏」的版式。
  */
+
+import { XIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import {
   Command,
   CommandEmpty,
@@ -17,7 +20,13 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 import type { SettingsGroupId, SettingsSectionId, SettingsTarget } from './route'
@@ -53,6 +62,7 @@ export function SettingsDialog({
     >
       <DialogContent
         data-testid="settings-dialog"
+        showCloseButton={false}
         className="flex h-[min(760px,calc(100dvh-2rem))] w-[min(1080px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
       >
         <DialogTitle className="sr-only">{t('sp.title')}</DialogTitle>
@@ -134,15 +144,16 @@ function SettingsBody({
                   value={`${h.section}:${h.def.id}`}
                   data-testid="settings-search-hit"
                   data-setting={h.def.id}
-                  className="flex-col items-start gap-0"
                   onSelect={() => {
                     setQuery('')
                     onNavigate(h.section, h.def.id)
                   }}
                 >
-                  <span className="text-sm">{h.title}</span>
-                  <span className="text-[11px] text-ws-muted-fg">
-                    {h.sectionTitle === h.title ? h.desc : h.sectionTitle}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm">{h.title}</span>
+                    <span className="truncate text-[11px] text-ws-muted-fg">
+                      {h.sectionTitle === h.title ? h.desc : h.sectionTitle}
+                    </span>
                   </span>
                 </CommandItem>
               ))}
@@ -176,6 +187,10 @@ function NavButton({
         'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ws-body hover:bg-ws-line/60',
         active && 'bg-ws-card font-medium text-ws-ink shadow-ws',
       )}
+      ref={(el) => {
+        // 直接开到靠下的一节（团队那几节）时，左栏也滚到它
+        if (active) el?.scrollIntoView?.({ block: 'nearest' })
+      }}
       onClick={onClick}
     >
       <Icon aria-hidden className="size-4 shrink-0 text-ws-muted-fg" />
@@ -193,6 +208,7 @@ function SectionPane({
   item: string | undefined
   ctx: Parameters<SettingItemView['def']['render']>[0]
 }): ReactNode {
+  const { t } = useApp()
   const scroller = useRef<HTMLDivElement>(null)
   const [flash, setFlash] = useState<string | undefined>(item)
   const single = section.items.length === 1 ? section.items[0] : undefined
@@ -222,11 +238,23 @@ function SectionPane({
       data-testid="settings-pane"
       data-section={section.def.id}
     >
-      <header className="sticky top-0 z-10 border-b border-ws-line bg-popover/95 px-6 pt-5 pb-3 backdrop-blur">
-        <h2 className="text-base font-semibold text-ws-ink">{section.title}</h2>
-        {single === undefined || single.def.heading === true ? null : (
-          <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{single.desc}</p>
-        )}
+      <header className="sticky top-0 z-10 flex items-start gap-3 border-b border-ws-line bg-popover/95 py-3 pr-3 pl-6 backdrop-blur">
+        <div className="min-w-0 flex-1 pt-2">
+          <h2 className="text-base font-semibold text-ws-ink">{section.title}</h2>
+          {single === undefined || single.def.heading === true ? null : (
+            <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{single.desc}</p>
+          )}
+        </div>
+        <DialogClose asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('sp.close')}
+            data-testid="settings-close"
+          >
+            <XIcon />
+          </Button>
+        </DialogClose>
       </header>
       <div className="flex flex-col divide-y divide-ws-line px-6 pb-10">
         {section.items.map((i) => (
@@ -235,9 +263,9 @@ function SectionPane({
             id={`setting-${i.def.id}`}
             data-setting={i.def.id}
             className={cn(
-              'scroll-mt-20 rounded-xl py-2 transition-[box-shadow,background-color] duration-500',
+              'scroll-mt-20 py-1 transition-[box-shadow,background-color] duration-500',
               flash === i.def.id &&
-                'bg-ws-tint/60 ring-2 ring-ws-brand/50 ring-offset-4 ring-offset-popover',
+                'rounded-xl bg-ws-tint/60 ring-2 ring-ws-brand/50 ring-offset-4 ring-offset-popover',
             )}
           >
             {i.def.heading === true ? (

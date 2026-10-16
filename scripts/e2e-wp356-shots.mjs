@@ -165,6 +165,9 @@ async function main() {
       ['after-15-diagnostics', '/settings/diagnostics'],
       ['after-16-shortcuts', '/settings/shortcuts'],
       ['after-17-brands', '/org?tab=brands'],
+      ['after-18-mode', '/settings/mode'],
+      ['after-19-team', '/org?tab=colleagues'],
+      ['after-19b-notifications', '/settings/notifications'],
     ]
     for (const [name, path] of sections) {
       const { context, page } = await open()

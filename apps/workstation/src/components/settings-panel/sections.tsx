@@ -747,7 +747,8 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     group: 'team',
     title: 'sp.usage',
     icon: Bot,
-    show: notSolo,
+    // ② 同事互联里每人用量就在「同事」那一节里（ColleaguesTab 自带），不重复一节
+    show: company,
     items: [
       {
         id: 'usage',

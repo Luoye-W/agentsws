@@ -1318,7 +1318,6 @@ const zh: Table = {
   'settings.motion.off': '关',
   'settings.identity': '身份',
   'identity.local_self': '你（本机）',
-  'settings.placeholder': '这台机器上的偏好；连接在左下角账号菜单的「设置 → 连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
   'connections.dead_letters': '{n} 封信没进来',
@@ -2105,7 +2104,7 @@ const zh: Table = {
   'messages.delete.no': '取消',
   'messages.shadow.tag': '只看不动',
   'messages.shadow.hint':
-    '这只邮箱开着影子模式：归档、删除会动邮箱，所以先关着；已读、星标只在这里标。要改，去连接页那只邮箱卡上关掉影子模式。',
+    '这只邮箱开着影子模式：归档、删除会动邮箱，所以先关着；已读、星标只在这里标。要改，去「设置 → 账号连接」那只邮箱卡上关掉影子模式。',
   'messages.images.loading': '正在取图…',
   'messages.images.partial': '有 {n} 张图没取到（对方没回、不是图片或太大），仍然挡着。',
   'messages.images.none': '图片一张都没取到（对方没回、不是图片或太大）。',
@@ -3466,7 +3465,7 @@ const zh: Table = {
   'onboarding.ai.inherited': '已接上（跟随公司）',
   'onboarding.business.slow': '读得有点慢，还一页都没读着。',
   'onboarding.business.skip': '先跳过，手动填品牌资料',
-  'onboarding.business.later': '品牌资料之后在「设置 → 公司档案」里填。',
+  'onboarding.business.later': '品牌资料之后在「设置 → 品牌档案」里填。',
   'onboarding.business.retry': '再试一次',
   // WP242：读不到网站时换个网址再读 / 就地手填
   'onboarding.business.reread': '换个网址再读',
@@ -5454,8 +5453,6 @@ const en: Table = {
   'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
   'identity.local_self': 'You (this computer)',
-  'settings.placeholder':
-    'Preferences on this machine. Connections live in the account menu (bottom left) under Settings → Connections.',
   'nav.connections': 'Connections',
   'connections.dead_letters': '{n} message(s) never made it in',
   'connections.dead_letters.hint':
@@ -6272,7 +6269,7 @@ const en: Table = {
   'messages.delete.no': 'Cancel',
   'messages.shadow.tag': 'Watch only',
   'messages.shadow.hint':
-    'This mailbox is in shadow mode: archive and delete would change the mailbox, so they are off; read and star are marked here only. Turn shadow mode off on the mailbox card in Connections to change this.',
+    'This mailbox is in shadow mode: archive and delete would change the mailbox, so they are off; read and star are marked here only. Turn shadow mode off on the mailbox card in Settings → Account connections to change this.',
   'messages.images.loading': 'Loading images…',
   'messages.images.partial': '{n} image(s) could not be loaded and stay blocked.',
   'messages.images.none': 'No images could be loaded (no answer, not an image, or too large).',
@@ -7675,7 +7672,7 @@ const en: Table = {
   'onboarding.ai.inherited': 'Connected (company default)',
   'onboarding.business.slow': 'This is slow \u2014 not a single page read yet.',
   'onboarding.business.skip': 'Skip for now, fill in brand details by hand',
-  'onboarding.business.later': 'Fill in brand details later under Settings \u2192 Company profile.',
+  'onboarding.business.later': 'Fill in brand details later under Settings \u2192 Brand profile.',
   'onboarding.business.retry': 'Try again',
   'onboarding.business.reread': 'Try another URL',
   'onboarding.business.manual.title':
