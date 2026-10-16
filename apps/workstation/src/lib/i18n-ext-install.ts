@@ -10,7 +10,7 @@ export const EXT_INSTALL_ZH: Record<string, string> = {
   'extinstall.steps.hint':
     '文件夹路径已经复制好了：Mac 在选择窗口里按 ⌘⇧G 粘贴，Windows 粘贴到地址栏。也可以把文件夹直接拖进选择窗口。装好后别关「开发者模式」，关了插件会被停用。',
   'extinstall.copied': '路径已复制',
-  'extinstall.chrome.copied': '{address} 已复制：在 Chrome 地址栏粘贴、回车',
+  'extinstall.chrome.copied': '{address} 已复制：在要装插件的那个 Chrome 窗口（有好几个 Chrome 用户的，就在那个用户的窗口）地址栏粘贴、回车',
   'extinstall.failed': '插件没换成新版 {version}（旧版照常能用，重开工坊会再试）：{error}',
   'extinstall.stuck':
     '浏览器里的插件还是 {running}，没跟上 {folder}：它是从别的文件夹装的。在扩展页删掉它，按下面三步重装一次。',
@@ -28,7 +28,7 @@ export const EXT_INSTALL_EN: Record<string, string> = {
     'The folder path is already copied: on Mac press ⌘⇧G in the picker and paste; on Windows paste it into the address bar. You can also drag the folder into the picker. Keep Developer mode on — turning it off disables the extension.',
   'extinstall.copied': 'Path copied',
   'extinstall.chrome.copied':
-    '{address} copied: paste it into Chrome’s address bar and press Enter',
+    '{address} copied: paste it into the address bar of the Chrome window you want the extension in (with several Chrome profiles, use that profile’s window) and press Enter',
   'extinstall.failed':
     'Could not switch the extension to {version} (the old one still works; reopening the app retries): {error}',
   'extinstall.stuck':
