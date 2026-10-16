@@ -52,6 +52,8 @@ import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import {
   ASSISTANT_DISPATCH_TOOL,
   ASSISTANT_FANOUT_TOOL,
+  ASSISTANT_RECALL_TOOL,
+  ASSISTANT_RECALL_TOOL_DEF,
   isAssistantTool,
 } from '@agentsws/stand-ins'
 import { type Assistant, REPORT_WINDOW_MS } from './assistant.js'
@@ -63,8 +65,27 @@ import {
   sourceKindOf,
 } from './assistant-files.js'
 import { assistantMemoryLines, rememberAfterTurn, rememberFromFanout } from './assistant-memory.js'
+import { type AssistantContextStats, createSegments, type Segments } from './assistant-segments.js'
+import {
+  dispatchesOf,
+  estimateTokens,
+  type HistoryHit,
+  planRaw,
+  rawBudget,
+  recentTopics,
+  ruleSummary,
+  searchHistory,
+  splitBefore,
+  splitTopicTag,
+  TOPIC_RULE,
+} from './assistant-thread.js'
 import { splitRememberTags } from './auto-memory.js'
-import type { AssistantMemoryRow, FreeChatStore } from './free-chat-store.js'
+import type {
+  AssistantMemoryRow,
+  AssistantSegmentReason,
+  AssistantSegmentRow,
+  FreeChatStore,
+} from './free-chat-store.js'
 import type { ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
@@ -137,6 +158,43 @@ export interface FreeChatOptions {
     auto(actor: FreeChatActor): boolean
     changed(actor: FreeChatActor, kind: 'added' | 'removed', row: AssistantMemoryRow): void
   }
+  /** WP352：模型窗口（token）；不给按 64K。当前段原话最多占一半。 */
+  contextWindow?: number
+  /** WP352：本地时区（分钟，东八区 = 480）；不给按这台电脑的。跨天切段用。 */
+  tzOffsetMin?: number
+  /**
+   * WP352：记一笔（不带正文）——`assistant.context` 每一轮拼进了多少原话 / 小结 / 记忆（token 估算），
+   * `assistant.topic` 一段收起出了小结、或段内压缩了一次。
+   */
+  observe?(
+    actor: FreeChatActor,
+    type: 'assistant.context' | 'assistant.topic',
+    payload: Record<string, unknown>,
+  ): void
+}
+
+/** WP352：助理长对话的名字（会话列表里只剩这一条）。 */
+export const ASSISTANT_THREAD_TITLE = '助理'
+/** WP352：一轮里最多翻几次以前聊过的。 */
+export const MAX_HISTORY_CALLS = 3
+
+/** WP352：开场上下文里长对话那几块（最近几段的小结、这段压过的前半截）与记账用的数。 */
+interface ThreadContext {
+  topics: string
+  compact?: string
+  /** 有更早的段可翻（才挂「查以前聊过的」）。 */
+  recall: boolean
+  stats: Pick<
+    AssistantContextStats,
+    'raw_messages' | 'raw_tokens' | 'compact_tokens' | 'compacted_now' | 'topics' | 'topic_tokens'
+  >
+}
+
+/** WP352：这一轮落在哪一段、为什么切的；答完模型说「换话题了」时回填 `shifted`。 */
+interface TurnSegment {
+  seg: AssistantSegmentRow
+  split?: AssistantSegmentReason
+  shifted?: boolean
 }
 
 /** WP343：一轮里最多调几次助理的工具（查 + 派）。 */
@@ -191,10 +249,27 @@ export function publicMessage(m: FreeChatMessageView): FreeChatMessageView {
   return { ...m, attachments: m.attachments.map(publicAttachment) }
 }
 
-export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
+export function createFreeChatPort(
+  options: FreeChatOptions,
+): FreeChatPort & { idle(): Promise<void> } {
   const { store, clock } = options
   /** 正在答的那一轮（会话 id → 停它用的开关）。 */
   const inflight = new Map<string, AbortController>()
+  /** WP352：助理的长对话分段（没装助理就是老的随便聊，不分段）。 */
+  const segments: Segments | undefined =
+    options.assistant === undefined
+      ? undefined
+      : createSegments({
+          clock,
+          store,
+          newId: options.newId,
+          gateway: options.gateway,
+          models: options.models,
+          roleOf: options.roleOf,
+          ...(options.observe === undefined
+            ? {}
+            : { observe: (actor, type, payload) => options.observe?.(actor, type, payload) }),
+        })
 
   const own = (actor: FreeChatActor, id: string) => {
     const row = store.session(id)
@@ -224,6 +299,7 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
       const reports = await assistant.progressOf(actor, row)
       const session = store.session(row.session_id)
       if (reports.length === 0 || session === undefined || inflight.has(row.session_id)) continue
+      const seg_id = segments?.open(row.session_id)?.id
       for (const r of reports)
         store.addMessage({
           id: options.newId('fmsg'),
@@ -232,13 +308,79 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
           text: r.text,
           at: clock.now(),
           report: r.report,
+          ...(seg_id === undefined ? {} : { segment_id: seg_id }),
         })
       store.putDispatch({ ...row, reported: [...row.reported, ...reports.map((r) => r.key)] })
       store.putSession({ ...session, updated_at: clock.now() })
     }
   }
 
-  const turn = createTurn(options, own, view, inflight, flush)
+  const turn = createTurn(options, own, view, inflight, flush, segments)
+
+  /**
+   * WP352：这个人的那一条长对话；还没有就建——老的多条会话按时间拼进来，每条老会话成一段（规则小结，
+   * 不为迁移调模型），交出去的事那根线跟着挪。还没有真实用户，不做别的兼容（决策 931）。
+   */
+  const ensureThread = (actor: FreeChatActor) => {
+    const known = store.threadOf(actor.person_id)
+    const existing = known === undefined ? undefined : store.session(known)
+    if (existing !== undefined && existing.person_id === actor.person_id) return existing
+    const at = clock.now()
+    const olds = store
+      .sessions(actor.person_id)
+      .map((s) => ({ s, rows: store.messages(s.id) }))
+      .sort((a, b) =>
+        (a.rows[0]?.at ?? a.s.created_at).localeCompare(b.rows[0]?.at ?? b.s.created_at),
+      )
+    const thread = {
+      id: options.newId('fchat'),
+      person_id: actor.person_id,
+      title: ASSISTANT_THREAD_TITLE,
+      created_at: olds[0]?.s.created_at ?? at,
+      updated_at: olds.reduce((m, o) => (o.s.updated_at > m ? o.s.updated_at : m), at),
+    }
+    store.putSession(thread)
+    for (const { s, rows } of olds) {
+      const first = rows[0]
+      const last = rows.at(-1)
+      if (first !== undefined && last !== undefined && !inflight.has(s.id)) {
+        const rule = ruleSummary(rows)
+        const seg_id = options.newId('seg')
+        store.putSegment({
+          id: seg_id,
+          session_id: thread.id,
+          person_id: actor.person_id,
+          started_at: first.at,
+          ended_at: last.at,
+          reason: 'migrated',
+          title: s.title === FREE_CHAT_UNTITLED ? rule.title : s.title,
+          summary: rule.summary,
+          summarized_by: 'rule',
+          dispatches: dispatchesOf(rows),
+        })
+        store.moveMessages(s.id, thread.id, seg_id)
+        store.retargetDispatches(s.id, thread.id)
+      }
+      if (!inflight.has(s.id)) store.removeSession(s.id)
+    }
+    store.setThread(actor.person_id, thread.id)
+    return thread
+  }
+  const threadView = (actor: FreeChatActor) => {
+    const row = ensureThread(actor)
+    return {
+      session: view(row),
+      segments: (segments?.list(row.id) ?? []).map((g) => ({
+        id: g.id,
+        started_at: g.started_at,
+        ...(g.ended_at === undefined ? {} : { ended_at: g.ended_at }),
+        reason: g.reason,
+        ...(g.title === undefined || g.title === '' ? {} : { title: g.title }),
+        ...(g.summary === undefined || g.summary === '' ? {} : { summary: g.summary }),
+        current: g.ended_at === undefined,
+      })),
+    }
+  }
 
   return {
     async models(): Promise<FreeChatModelsView> {
@@ -318,9 +460,35 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
             return { retired: true }
           },
         }),
+    idle: async () => {
+      await segments?.idle()
+    },
     ...(options.assistant === undefined
       ? {}
       : {
+          // WP352：一条长对话 + 换个话题 + 搜以前聊过的
+          thread: async (actor: FreeChatActor) => {
+            await flush(actor).catch(() => undefined)
+            return threadView(actor)
+          },
+          newTopic: async (actor: FreeChatActor) => {
+            const row = ensureThread(actor)
+            const seg = segments?.open(row.id)
+            const rows = seg === undefined ? [] : (segments?.grouped(row.id).at(-1)?.rows ?? [])
+            const last = rows.at(-1)
+            if (seg !== undefined && last !== undefined && !inflight.has(row.id)) {
+              segments?.close(actor, seg, last.at)
+              segments?.start(row, 'manual', clock.now())
+            }
+            return threadView(actor)
+          },
+          searchHistory: async (
+            actor: FreeChatActor,
+            q: { q: string; since?: string; until?: string },
+          ) => {
+            const row = ensureThread(actor)
+            return searchHistory(segments?.grouped(row.id) ?? [], q).map(publicHit)
+          },
           assistant: (actor: FreeChatActor) => (options.assistant as Assistant).state(actor),
           async memories(actor: FreeChatActor) {
             return store
@@ -349,6 +517,9 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
   }
 }
 
+/** WP352：给界面 / 模型的那一处（去掉打分）。 */
+const publicHit = ({ score: _score, ...hit }: HistoryHit) => hit
+
 type Own = (actor: FreeChatActor, id: string) => FreeChatSessionView & { person_id: string }
 type View = (row: FreeChatSessionView) => FreeChatSessionView
 
@@ -359,6 +530,7 @@ function createTurn(
   view: View,
   inflight: Map<string, AbortController>,
   flush: (actor: FreeChatActor, only?: string) => Promise<void>,
+  segments?: Segments,
 ): FreeChatPort['turn'] {
   const { store, clock } = options
   return async (actor, input, sink, signal) => {
@@ -366,6 +538,47 @@ function createTurn(
     if (inflight.has(session.id))
       throw new ApiError('conflict', '这条对话还在答上一句，先停下它或者等它答完')
     const history = store.messages(session.id)
+    /**
+     * WP352 ②：这一句来之前先看要不要切段（说了「换个话题」/ 跨天 / 隔了 2 小时以上）。
+     * 重新生成不切（还是那一句）。切了：旧段收起、后台出小结，新段从这一句开始。
+     */
+    let here: TurnSegment | undefined
+    if (segments !== undefined) {
+      const now = clock.now()
+      const open = segments.open(session.id)
+      const last =
+        open === undefined
+          ? history.at(-1)
+          : segments.grouped(session.id, history).at(-1)?.rows.at(-1)
+      const split =
+        input.regenerate === true
+          ? undefined
+          : splitBefore({
+              last_at: last?.at,
+              now,
+              text: input.text ?? '',
+              ...(options.tzOffsetMin === undefined ? {} : { offsetMin: options.tzOffsetMin }),
+            })
+      if (open !== undefined && split === undefined) here = { seg: open }
+      else if (open !== undefined && last !== undefined && split !== undefined) {
+        segments.close(actor, open, last.at)
+        here = { seg: segments.start(session, split, now), split }
+      } else if (open !== undefined) here = { seg: open }
+      else {
+        const any = segments.list(session.id).length > 0
+        const reason: AssistantSegmentReason = any ? (split ?? 'topic') : 'first'
+        // 老会话（还没分过段）里已有的话算第一段（读的时候没有 segment_id 的归第一段）
+        here = {
+          seg: segments.start(
+            session,
+            reason,
+            any || history.length === 0 ? now : (history[0]?.at ?? now),
+          ),
+          ...(any ? { split: reason } : {}),
+        }
+      }
+    }
+    const segTag = here === undefined ? {} : { segment_id: here.seg.id }
     let user: FreeChatMessageView | undefined
     let prompt: FreeChatMessageView | undefined
     /** WP343：重新生成的那一条已经交出去过事 → 这次不再挂派活工具（不重复开事项）。 */
@@ -394,6 +607,7 @@ function createTurn(
           : { images: input.images }),
         ...(input.target?.label === undefined ? {} : { to: input.target.label }),
         ...(attachments.length === 0 ? {} : { attachments }),
+        ...segTag,
       }
       store.addMessage(user)
       history.push(user)
@@ -429,7 +643,28 @@ function createTurn(
             )
           : await answer(options, actor, input, history, prompt, message_id, sink, stop, {
               dispatch: !dispatchedBefore,
+              ...(here === undefined || segments === undefined ? {} : { here, segments }),
             })
+      // WP352：模型说这一句另起了一个话题 → 这一问一答挪进新的一段，旧段收起出小结
+      if (
+        here !== undefined &&
+        segments !== undefined &&
+        here.shifted === true &&
+        user !== undefined
+      ) {
+        const before = (
+          segments.grouped(session.id).find((g) => g.seg.id === here?.seg.id)?.rows ?? []
+        ).filter((m) => m.id !== user?.id)
+        const last = before.at(-1)
+        if (last !== undefined) {
+          const latest = segments.list(session.id).find((x) => x.id === here?.seg.id) ?? here.seg
+          segments.close(actor, latest, last.at)
+          here = { seg: segments.start(session, 'topic', user.at), split: 'topic' }
+          user = { ...user, segment_id: here.seg.id }
+          store.putMessage(user)
+        }
+      }
+      if (here !== undefined) reply.segment_id = here.seg.id
       store.addMessage(reply)
       // WP343：交出去的事记下那根线（之后回报到这段对话）
       for (const d of reply.dispatches ?? [])
@@ -518,6 +753,7 @@ function systemPrompt(
   facts: FreeChatCitation[] | undefined,
   recall = false,
   assistant?: { lines: string[]; dispatch: boolean; memory: string[] },
+  thread?: ThreadContext,
 ): string {
   const lines =
     assistant === undefined
@@ -544,6 +780,22 @@ function systemPrompt(
           '- 对用户说话时不提工具名、函数名、内部 id。',
           ...assistant.lines,
           ...assistant.memory,
+          // WP352：一条长对话——分段的记号、能翻旧账、最近几段的小结、这段压过的前半截
+          ...(thread === undefined
+            ? []
+            : [
+                TOPIC_RULE,
+                ...(thread.recall
+                  ? [
+                      `- 你只看得到这个话题的原话和下面几段小结；用户提到更早说过的事、给过的资料、定过的东西而这里没有时，用 \`${ASSISTANT_RECALL_TOOL}\` 去翻，照翻到的说并带上是哪天聊的；翻不到就照实说。`,
+                    ]
+                  : []),
+                '- 交出去的事、批次、待确认、各岗位状态都以工具现查为准，小结里的只是当时的编号和一句话。',
+                ...(thread.topics === '' ? [] : [`最近聊过的几个话题（小结）：\n${thread.topics}`]),
+                ...(thread.compact === undefined
+                  ? []
+                  : [`这个话题前面聊过的（已压缩）：\n${thread.compact}`]),
+              ]),
         ]
   // WP336：回答里可以放 ```dsh-ui 组件（所有对话运行同一段精简写法）
   lines.push(GENUI_DISPLAY_RULE)
@@ -602,7 +854,7 @@ async function answer(
   message_id: string,
   sink: (frame: FreeChatFrame) => void,
   signal: AbortSignal,
-  opts: { dispatch: boolean } = { dispatch: true },
+  opts: { dispatch: boolean; here?: TurnSegment; segments?: Segments } = { dispatch: true },
 ): Promise<FreeChatMessageView> {
   const at = options.clock.now()
   const base: FreeChatMessageView = {
@@ -656,14 +908,50 @@ async function answer(
   }
 
   const upto = history.findIndex((m) => m.id === prompt.id)
-  const past = history
-    .slice(0, upto + 1)
-    .filter(
-      (m) =>
-        m.error === undefined &&
-        (m.text !== '' || (m.images ?? []).length > 0 || (m.attachments ?? []).length > 0),
-    )
-    .slice(-FREE_CHAT_HISTORY)
+  const usable = (m: FreeChatMessageView): boolean =>
+    m.error === undefined &&
+    (m.text !== '' || (m.images ?? []).length > 0 || (m.attachments ?? []).length > 0)
+  /**
+   * WP352 四层：① 当前段原话（超预算先压段内前半截）② 最近几段的话题小结 ③ 记忆（下面照旧）
+   * ④ 更早的不带——要用时模型自己调「查以前聊过的」。没装助理（老的随便聊）照旧带最近 30 条。
+   */
+  let past: FreeChatMessageView[]
+  let thread: ThreadContext | undefined
+  if (opts.here !== undefined && opts.segments !== undefined) {
+    const { here, segments } = opts
+    const groups = segments.grouped(prompt.session_id, history.slice(0, upto + 1))
+    const at = groups.findIndex((g) => g.seg.id === here.seg.id)
+    const rows = (groups[at]?.rows ?? []).filter(usable)
+    let seg = segments.list(prompt.session_id).find((x) => x.id === here.seg.id) ?? here.seg
+    let plan = planRaw(seg, rows, rawBudget(options.contextWindow))
+    let compactedNow = false
+    if (plan.fold !== undefined) {
+      sink({ type: 'notice', text: '在整理前面聊的…' })
+      seg = await segments.compact(actor, seg, plan.fold)
+      here.seg = seg
+      compactedNow = true
+      plan = { raw: plan.raw, tokens: plan.tokens }
+    }
+    past = plan.raw
+    const topics = recentTopics(groups.slice(0, Math.max(0, at)).filter((g) => g.rows.length > 0))
+    thread = {
+      topics: topics.text,
+      ...(seg.compact === undefined ? {} : { compact: seg.compact.text }),
+      recall: groups.some((g, i) => i !== at && g.rows.length > 0),
+      stats: {
+        raw_messages: plan.raw.length,
+        raw_tokens: plan.tokens,
+        compact_tokens: seg.compact === undefined ? 0 : estimateTokens(seg.compact.text),
+        compacted_now: compactedNow,
+        topics: topics.count,
+        topic_tokens: topics.tokens,
+      },
+    }
+  } else
+    past = history
+      .slice(0, upto + 1)
+      .filter(usable)
+      .slice(-FREE_CHAT_HISTORY)
   // WP343：「我的助理」——岗位清单与助理记忆进系统提示，五个工具挂上（重新生成且上一条交过事就不挂派活）
   const assistant = options.assistant
   const memoryAuto = options.memory?.auto(actor) ?? true
@@ -683,6 +971,9 @@ async function answer(
       opts.dispatch || (t.name !== ASSISTANT_DISPATCH_TOOL && t.name !== ASSISTANT_FANOUT_TOOL),
   )
   let asks = 0
+  let historyAsks = 0
+  /** WP352：这一轮翻以前聊过的查回来的出处（回复下面一排小签，点了跳过去）。 */
+  const recalled: HistoryHit[] = []
   const dispatches: FreeChatDispatchView[] = []
   /** WP350：这一轮拆出来的方案卡（同一轮拆了两次就留后一次）。 */
   let fanout: FreeChatFanoutView | undefined
@@ -696,10 +987,26 @@ async function answer(
         citations,
         recallOn,
         assistantPrompt,
+        thread,
       ),
     },
     ...past.map((m) => toChat(m, m.id === prompt.id)),
   ]
+  // WP352：这一轮拼进了多少（token 估算，不带正文），以后调预算看它
+  if (thread !== undefined && opts.here !== undefined) {
+    const memory = assistantPrompt?.memory ?? []
+    const stats: AssistantContextStats = {
+      run_id,
+      segment_id: opts.here.seg.id,
+      ...(opts.here.split === undefined ? {} : { split: opts.here.split }),
+      ...thread.stats,
+      // 条目数（去掉末尾那行「怎么记」的规矩）
+      memory: Math.max(0, memory.filter((l) => l.startsWith('- ')).length - 1),
+      memory_tokens: estimateTokens(memory.join('\n')),
+      system_tokens: estimateTokens(String(messages[0]?.content ?? '')),
+    }
+    options.observe?.(actor, 'assistant.context', { ...stats })
+  }
   const [provider, ...rest] = choice.id.split('/')
   const model: ModelRef = { provider: provider ?? '', model: rest.join('/') }
   const gateway = await options.gateway()
@@ -718,12 +1025,19 @@ async function answer(
   let stopped = false
   try {
     const rounds =
-      max + (recallOn ? MAX_RECALLS : 0) + (assistantTools.length > 0 ? MAX_ASSISTANT_CALLS : 0)
+      max +
+      (recallOn ? MAX_RECALLS : 0) +
+      (assistantTools.length > 0 ? MAX_ASSISTANT_CALLS : 0) +
+      (thread?.recall === true ? MAX_HISTORY_CALLS : 0)
     for (let round = 0; round <= rounds; round += 1) {
       const tools = [
         ...(webOn && searches < max ? [WEB_TOOL] : []),
         ...(recallOn && recalls < MAX_RECALLS ? [RECALL_TOOL] : []),
         ...(asks < MAX_ASSISTANT_CALLS ? assistantTools : []),
+        // WP352 ④：有更早的段才挂「查以前聊过的」
+        ...(thread?.recall === true && historyAsks < MAX_HISTORY_CALLS
+          ? [ASSISTANT_RECALL_TOOL_DEF]
+          : []),
       ]
       // 只认这一轮真挂出去的工具（模型点名没挂的——比如联网没开时的 web_search——一律不执行）
       const offered = new Set(tools.map((t) => t.name))
@@ -752,7 +1066,11 @@ async function answer(
         if (!offered.has(call.name)) content = '这个工具这一轮没有挂，不能用。'
         else if (call.name === FIND_ARCHIVED_WORK_TOOL)
           content = await recallOnce(options, call, { recalls, actor }, sink, candidates)
-        else if (assistant !== undefined && isAssistantTool(call.name)) {
+        else if (call.name === ASSISTANT_RECALL_TOOL && opts.segments !== undefined) {
+          sink({ type: 'notice', text: '在翻以前聊过的…' })
+          content = historyOnce(opts.segments, prompt, call, recalled)
+          historyAsks += 1
+        } else if (assistant !== undefined && isAssistantTool(call.name)) {
           sink({ type: 'notice', text: ASSISTANT_STATUS[call.name] ?? '在看…' })
           const got = await assistant.call(actor, call, { user_text: prompt.text, source })
           content = got.content
@@ -789,7 +1107,7 @@ async function answer(
       sink({ type: 'error', message: reason })
       return {
         ...withModel,
-        text: assistant === undefined ? text : splitRememberTags(text).text,
+        text: assistant === undefined ? text : splitTopicTag(splitRememberTags(text).text).text,
         error: reason,
         ...(sources.length === 0 ? {} : { sources }),
         ...(candidates.length === 0 ? {} : { archived_candidates: candidates }),
@@ -801,7 +1119,11 @@ async function answer(
   }
   const credits = choice.official ? options.credits?.(model.model, usage) : undefined
   // WP343：回答末尾的 <remember> 不给人看；正常答完才记（停下的不记）
-  const said = splitRememberTags(text)
+  const remembered = splitRememberTags(text)
+  // WP352：开头的「换话题了」记号不给人看；正常答完才算（回填给这一轮，答完挪段）
+  const topic = splitTopicTag(remembered.text)
+  if (topic.shifted && !stopped && opts.here !== undefined) opts.here.shifted = true
+  const said = { ...remembered, text: topic.text }
   if (assistant !== undefined && options.memory !== undefined && !stopped) {
     const written = rememberAfterTurn({
       store: options.store,
@@ -818,6 +1140,7 @@ async function answer(
   return {
     ...withModel,
     text: assistant === undefined ? text : said.text,
+    ...(recalled.length === 0 ? {} : { recalled: recalled.map(publicHit) }),
     ...(dispatches.length === 0 ? {} : { dispatches }),
     ...(fanout === undefined ? {} : { fanout }),
     usage: { ...usage, ...(credits === undefined ? {} : { credits }) },
@@ -914,6 +1237,8 @@ async function confirmFanout(
     })
     for (const row of rows) options.memory.changed(actor, 'added', row)
   }
+  // WP352：汇总落在正在聊的那一段
+  const openSeg = store.segments(session.id).at(-1)
   const summary: FreeChatMessageView = {
     id: options.newId('fmsg'),
     session_id: session.id,
@@ -922,6 +1247,7 @@ async function confirmFanout(
     at: clock.now(),
     fanout_summary: sent.summary,
     ...(sent.dispatches.length === 0 ? {} : { dispatches: sent.dispatches }),
+    ...(openSeg === undefined || openSeg.ended_at !== undefined ? {} : { segment_id: openSeg.id }),
   }
   store.addMessage(summary)
   store.putSession({ ...session, updated_at: clock.now() })
@@ -969,6 +1295,46 @@ async function undoFanoutNotes(
   }
   store.putMessage(next)
   return { summary: publicMessage(next) }
+}
+
+/**
+ * WP352 ④：模型要翻一次以前聊过的——按关键词 / 时间搜段落小结与原话（正在聊的这段原话已经在上下文里，
+ * 不搜它），回片段与出处（哪天、哪个话题），当外部资料围起来（里面夹着当时的原话）。只读。
+ */
+function historyOnce(
+  segments: Segments,
+  prompt: FreeChatMessageView,
+  call: { input: unknown },
+  recalled: HistoryHit[],
+): string {
+  const raw = (call.input ?? {}) as Record<string, unknown>
+  const str = (k: string): string | undefined => {
+    const v = raw[k]
+    return typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Date.parse(v.trim()))
+      ? v.trim()
+      : undefined
+  }
+  const q = typeof raw.query === 'string' ? raw.query.trim().slice(0, 200) : ''
+  if (q === '') return '没给要找什么。'
+  const since = str('since')
+  const until = str('until')
+  const groups = segments.grouped(prompt.session_id)
+  const current = groups.find((g) => g.rows.some((m) => m.id === prompt.id))?.seg.id
+  const hits = searchHistory(groups, {
+    q,
+    ...(since === undefined ? {} : { since }),
+    ...(until === undefined ? {} : { until }),
+    ...(current === undefined ? {} : { skip: current }),
+  }).filter((h) => h.segment_id !== current || h.kind === 'summary')
+  for (const h of hits)
+    if (!recalled.some((x) => x.segment_id === h.segment_id && x.message_id === h.message_id))
+      recalled.push(h)
+  if (hits.length === 0) return `用「${q}」没翻到以前聊过的。换个说法再找，或照实告诉用户没找到。`
+  const lines = hits.map(
+    (h, i) =>
+      `${i + 1}. ${h.at.slice(0, 10)}「${h.title ?? ''}」${h.kind === 'summary' ? '的小结' : h.role === 'user' ? '里用户说' : '里你说'}：${h.snippet}`,
+  )
+  return `翻到 ${hits.length} 处（日期是出处，说的时候带上）：\n${fence(lines.join('\n'))}`
 }
 
 /** 模型要搜一次：到上限就说"次数用完了"；搜到的来源去重后推给界面，结果以外部数据的样子还给模型。 */

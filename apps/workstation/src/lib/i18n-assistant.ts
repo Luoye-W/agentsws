@@ -74,6 +74,12 @@ export const ASSISTANT_ZH: Record<string, string> = {
   'matter.cmp.attach.any': '加图或资料（拖进来、粘贴也行）',
   'matter.cmp.attach.doc': '附资料：.txt .md .docx .pdf .xlsx .csv（拖进来也行）',
   'matter.cmp.doc.remove': '去掉这份',
+  // WP352：一条长对话
+  'assistant.topic.new': '换个话题',
+  'assistant.search': '搜以前聊过的',
+  'assistant.search.placeholder': '搜以前聊过的…',
+  'assistant.search.none': '没搜到',
+  'assistant.recalled': '出处 · {date}',
 }
 
 export const ASSISTANT_EN: Record<string, string> = {
@@ -144,4 +150,10 @@ export const ASSISTANT_EN: Record<string, string> = {
   'matter.cmp.attach.any': 'Add images or files (drag or paste works too)',
   'matter.cmp.attach.doc': 'Attach files: .txt .md .docx .pdf .xlsx .csv (drag works too)',
   'matter.cmp.doc.remove': 'Remove',
+  // WP352: one long conversation
+  'assistant.topic.new': 'New topic',
+  'assistant.search': 'Search past chats',
+  'assistant.search.placeholder': 'Search past chats…',
+  'assistant.search.none': 'Nothing found',
+  'assistant.recalled': 'Source · {date}',
 }
