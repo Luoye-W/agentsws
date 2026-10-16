@@ -335,11 +335,18 @@ upstreams:
     why: 自定义 MCP 服务器接进运行时那条路的客户端（apps/server），也是 playwright-mcp 的底座
     npm: '@modelcontextprotocol/sdk'
     repo: modelcontextprotocol/typescript-sdk
-    locked_version: 1.30.0
+    # WP355：1.30.0 → 1.32.1（GHSA-6qxp-vccf-f47h）。1.32.0 起 HTTP 客户端只在同一网站内跟跳转，
+    # 会跳到别的域名 / 端口的 MCP 地址现在连不上——探测那一步把上游英文翻成人话（mcpProbeErrorText）。
+    locked_version: 1.32.1
     pin: exact
     watch: [versions, releases]
     locked_in:
       - apps/server/package.json
+    we_depend_on:
+      - 'Client + StdioClientTransport / StreamableHTTPClientTransport（requestInit.headers 带请求头）'
+      - '跨站跳转不跟时的报错文本 `Redirect to <地址> not followed`（mcpProbeErrorText 按它认）；redirectPolicy 不设，保持默认 same-origin'
+    covered_by:
+      - apps/server/test/connection-directory.test.ts
 
   # WP355（10-16 上游扫描补登）：邮件三件。之前没登记，哨兵看不到它们的安全公告——
   # 10-16 才发现 packages/channels 的 nodemailer 10.0.1、apps/cloud 的 7.0.13 都命中高危。

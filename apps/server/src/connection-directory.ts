@@ -202,6 +202,30 @@ function messageOf(e: unknown): string {
 }
 
 /**
+ * WP355：MCP SDK 1.32 起，HTTP 客户端**只在同一个网站里跟跳转**（GHSA-6qxp-vccf-f47h 那一批修复）——
+ * 我们给 MCP 地址带的请求头常常就是密钥，跟着跳到别的网站等于把密钥交出去。代价是：用户填的地址
+ * 如果会跳到另一个域名 / 端口，现在就连不上。上游那句英文（`Redirect to <地址> not followed`）
+ * 在这里翻成一句人话，告诉用户改填跳转之后的地址；别的错误原样返回。
+ */
+export function mcpProbeErrorText(message: string): string {
+  if (/Redirect to plain http not followed/.test(message))
+    return '这个地址会从 https 跳到不加密的 http，工坊不跟着跳。请改填 https 的地址。'
+  const to = /Redirect to (\S+) not followed/.exec(message)?.[1]
+  if (to !== undefined) {
+    let host = to
+    try {
+      host = new URL(to).host
+    } catch {
+      // 拼不出网址就照原样显示上游给的那一段
+    }
+    return `这个地址会跳到另一个网站（${host}），为了不把请求头里的密钥带过去，工坊不跟着跳。请直接填跳转后的地址。`
+  }
+  if (/Redirect not followed/.test(message))
+    return '这个地址会跳到别的网站，工坊不跟着跳。请直接填跳转后的地址。'
+  return message
+}
+
+/**
  * 默认探测实现：用 `@modelcontextprotocol/sdk` 的 client 连一次，把它报的 tools 列出来。
  *
  * **只连一次，连完就断**：这里不持有会话、不缓存客户端、不把工具挂给任何 Agent——
@@ -257,7 +281,7 @@ export async function probeMcpServer(input: {
       })),
     }
   } catch (e) {
-    return { ok: false, tools: [], detail: messageOf(e) }
+    return { ok: false, tools: [], detail: mcpProbeErrorText(messageOf(e)) }
   } finally {
     // 关不掉也不该让整次探测变成异常——结果已经有了
     await client.close().catch(() => undefined)

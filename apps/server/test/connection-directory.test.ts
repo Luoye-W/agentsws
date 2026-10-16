@@ -8,11 +8,14 @@
  * 出现在响应体、事件日志、落盘文件里。
  */
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { createServer as createHttpServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ConnectionDirectoryItemView, PositionConnectionsView } from '@agentsws/api'
 import type { EventEnvelope, McpServerRecord } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mcpProbeErrorText, probeMcpServer } from '../src/connection-directory.js'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
@@ -513,5 +516,57 @@ describe('WP86（55 §4 第三层）：只读清单与接进运行时', () => {
       }),
     )
     expect(row.read_tools).toEqual(['add', 'echo'])
+  })
+})
+
+describe('WP355：MCP 地址跨站跳转不跟（SDK 1.32，GHSA-6qxp-vccf-f47h），回一句人话', () => {
+  it('上游三种英文都翻成人话；别的错误原样', () => {
+    expect(
+      mcpProbeErrorText(
+        "Error POSTing to endpoint: Redirect to https://evil.example/mcp not followed (redirectPolicy: 'same-origin')",
+      ),
+    ).toBe(
+      '这个地址会跳到另一个网站（evil.example），为了不把请求头里的密钥带过去，工坊不跟着跳。请直接填跳转后的地址。',
+    )
+    expect(
+      mcpProbeErrorText('Redirect to plain http not followed; try https://a.example/ instead'),
+    ).toContain('不加密的 http')
+    expect(
+      mcpProbeErrorText('Redirect not followed: this runtime does not expose the redirect target'),
+    ).toContain('跳到别的网站')
+    expect(mcpProbeErrorText('连接超时（超过 10 秒）')).toBe('连接超时（超过 10 秒）')
+  })
+
+  it('真 SDK 连一个会 307 到另一个端口的地址：连不上、请求头一个字节都没到对面、detail 是人话', async () => {
+    const seen: string[] = []
+    const target = createHttpServer((req, res) => {
+      // 对面只要收到请求就记下来（连请求带没带密钥头一起）
+      seen.push(String(req.headers['x-api-key'] ?? ''))
+      res.writeHead(500).end()
+    })
+    await new Promise<void>((r) => target.listen(0, '127.0.0.1', r))
+    const targetPort = (target.address() as AddressInfo).port
+    const origin = createHttpServer((_req, res) => {
+      // localhost 与 127.0.0.1 端口也不同：同一台机器，但对 SDK 来说是另一个网站
+      res.writeHead(307, { location: `http://localhost:${targetPort}/mcp` }).end()
+    })
+    await new Promise<void>((r) => origin.listen(0, '127.0.0.1', r))
+    const originPort = (origin.address() as AddressInfo).port
+    try {
+      const out = await probeMcpServer({
+        transport: 'streamable-http',
+        url: `http://127.0.0.1:${originPort}/mcp`,
+        // 不用 Authorization：Node 自带的 fetch 跨站跳转时本来就会剥掉它；自定义头（多数 MCP 服务的 key 放这里）不会
+        headers: { 'X-Api-Key': MCP_TOKEN },
+      })
+      expect(out.ok).toBe(false)
+      expect(out.detail).toBe(
+        `这个地址会跳到另一个网站（localhost:${targetPort}），为了不把请求头里的密钥带过去，工坊不跟着跳。请直接填跳转后的地址。`,
+      )
+      expect(seen).toEqual([])
+    } finally {
+      await new Promise((r) => origin.close(r))
+      await new Promise((r) => target.close(r))
+    }
   })
 })
