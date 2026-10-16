@@ -139,6 +139,12 @@ export type KnownEventType =
   | 'memory.removed'
   /** WP234：岗位拆出时整层复制一份（payload：`from` / `scope_id` / `copied`）。 */
   | 'memory.copied'
+  /**
+   * WP352：助理一条长对话。`assistant.context` 每一轮拼进了多少（当前段原话 / 段内小结 / 最近几段小结 /
+   * 记忆的条数与 token 估算、切没切段）；`assistant.topic` 一段收起出了小结、或段内压缩了一次。**不带正文**。
+   */
+  | 'assistant.context'
+  | 'assistant.topic'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'
