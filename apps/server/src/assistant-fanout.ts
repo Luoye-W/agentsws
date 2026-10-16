@@ -10,13 +10,14 @@
  * 2. **确认后扇出**（`send`）：人点「就这样」（可能勾掉 / 改归属 / 改文字，`applyFanoutEdits`）→
  *    - 要做的事：按岗位各开一件（走 WP343 同一个交办入口，`mode: task`、不等跑完），同一批带同一个来源批次，
  *      事项描述里有那一段原文；
- *    - 要记的口径：以 `proposed` 写进对应岗位 / 品牌知识库（`fanoutNoteCard`，出处 = 这份资料），
- *      再出**一张**「要记的 N 条」确认卡（通过 = 这一批生效）；
+ *    - 要记的口径：**直接生效**写进对应岗位 / 品牌知识库（`fanoutNoteCard`，出处 = 这份资料；
+ *      WP357 决策 902：不再出第二张确认卡，汇总卡上能整批撤销，知识库里能逐条改 / 删）；
  *    - 个人偏好：进助理记忆（由调用方写，WP343 那一层）。
  * 3. **汇总**：回一张汇总（派了哪几个岗位几件事、各进了几条知识、哪几条没发、为什么）。
  *    之后各件事的回报照 WP343 回到这段对话，带着批次（界面按批次聚在一起）。
  *
- * 助理自己仍然没有任何对外写口：开事项、写待确认的知识都是工坊内部的事，改外部的由岗位照旧出审批。
+ * 助理自己仍然没有任何对外写口：开事项、写知识都是工坊内部的事（而且是人点了「就这样」才写），
+ * 改外部的由岗位照旧出审批。
  */
 import type {
   FreeChatActor,
@@ -54,10 +55,10 @@ export interface FanoutDeps {
     input: { position_id: string; role_id?: string; text: string; summary?: string },
   ): Promise<{ matter_id: string; title: string; role_id?: string; role_name?: string }>
   /**
-   * 要记的那几条：以 `proposed` 写进知识库，再出一张确认卡。回卡 id 与那张确认卡的 id。
+   * 要记的那几条：写进知识库**就生效**（决策 902；人点的「就这样」）。回写进去的条目 id。
    * 不给 = 这个进程写不了知识（要记的照实算进「没发」）。
    */
-  proposeNotes?(
+  writeNotes?(
     actor: FreeChatActor,
     input: {
       batch_id: string
@@ -66,7 +67,9 @@ export interface FanoutDeps {
       cards: FanoutNoteCard[]
       groups: { name: string; notes: { text: string; quote?: string }[] }[]
     },
-  ): Promise<{ card_ids: string[]; approval_id?: string }>
+  ): Promise<{ card_ids: string[] }>
+  /** 汇总卡上「撤销」：这几条还没退役的全部退役，回撤了几条。不给 = 撤不了。 */
+  retireNotes?(actor: FreeChatActor, card_ids: readonly string[]): Promise<number>
 }
 
 export interface FanoutSent {
@@ -283,10 +286,10 @@ export function createFanout(deps: FanoutDeps) {
           )
         }
       }
-      let knowledge_card_id: string | undefined
+      let note_card_ids: string[] = []
       let brand_notes = 0
       if (notes.length > 0) {
-        if (deps.proposeNotes === undefined)
+        if (deps.writeNotes === undefined)
           failed.push(`要记的 ${notes.length} 条没写进去：这里没有知识库`)
         else {
           const cards = notes.map((item) =>
@@ -311,14 +314,14 @@ export function createFanout(deps: FanoutDeps) {
             ])
           }
           try {
-            const out = await deps.proposeNotes(actor, {
+            const out = await deps.writeNotes(actor, {
               batch_id: view.batch_id,
               title: view.title,
               source: view.source,
               cards,
               groups: [...byGroup].map(([name, rows]) => ({ name, notes: rows })),
             })
-            knowledge_card_id = out.approval_id
+            note_card_ids = out.card_ids
             for (const item of notes)
               if (item.brand === true) brand_notes += 1
               else group(item.position_id as string).notes += 1
@@ -339,7 +342,7 @@ export function createFanout(deps: FanoutDeps) {
         brand_notes,
         memories: memories.length,
         skipped: { dropped: count('dropped'), unsure: count('unsure'), secret: count('secret') },
-        ...(knowledge_card_id === undefined ? {} : { knowledge_card_id }),
+        ...(note_card_ids.length === 0 ? {} : { note_card_ids }),
         ...(failed.length === 0 ? {} : { failed }),
         at,
       }
@@ -353,9 +356,17 @@ export function createFanout(deps: FanoutDeps) {
         parts.length === 0
           ? '这一批什么都没发。'
           : `按「${view.title}」派好了：${parts.join('，')}。${
-              notes.length > 0 && knowledge_card_id !== undefined ? '要记的那几条等你确认。' : ''
+              note_card_ids.length > 0
+                ? '要记的那几条已经记进知识库（带原文出处），不对的话在这张卡上撤销，或者去知识库改 / 删。'
+                : ''
             }做完或要你拍板时，我在这里告诉你。`
       return { summary, dispatches, memories, text }
+    },
+
+    /** WP357（决策 902）：汇总卡上「撤销」——这一批写进去的口径全部退役（留痕不删）。回撤了几条。 */
+    async undoNotes(actor: FreeChatActor, card_ids: readonly string[]): Promise<number> {
+      if (deps.retireNotes === undefined) throw new Error('这里没有知识库，撤不了')
+      return deps.retireNotes(actor, card_ids)
     },
   }
 }

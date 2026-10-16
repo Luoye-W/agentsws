@@ -141,6 +141,7 @@ export function AssistantMessage({
   last,
   onRegenerate,
   onFanout,
+  onUndoNotes,
 }: {
   message: FreeChatMessage
   /** 还在往外吐字。 */
@@ -154,6 +155,8 @@ export function AssistantMessage({
     batch_id: string,
     body: { items?: FreeChatFanoutEdit[]; dismiss?: boolean },
   ) => Promise<void>
+  /** WP357（决策 902）：汇总卡上「撤销」那一批写进知识库的口径。不给 = 只读。 */
+  onUndoNotes?: (batch_id: string) => Promise<void>
 }): React.ReactNode {
   const { t } = useApp()
   const [copied, setCopied] = useState(false)
@@ -198,7 +201,12 @@ export function AssistantMessage({
       {message.fanout_summary === undefined ? (
         <DispatchLine dispatches={message.dispatches ?? []} />
       ) : (
-        <FanoutSummary summary={message.fanout_summary} />
+        <FanoutSummary
+          summary={message.fanout_summary}
+          {...(onUndoNotes === undefined
+            ? {}
+            : { onUndo: () => onUndoNotes(message.fanout_summary?.batch_id ?? '') })}
+        />
       )}
       <Sources sources={message.sources ?? []} />
       {/* WP207：找回归档的候选卡——点一张放回左栏；不点什么都不恢复 */}

@@ -84,8 +84,10 @@ export interface AssistantDeps {
   ): Promise<{ matter_id: string; title: string; role_id?: string; role_name?: string }>
   /** WP350：来源批次的 id。不给 = 按时钟现编一个。 */
   newId?(prefix: string): string
-  /** WP350：要记的那几条以 `proposed` 写进知识库 + 一张确认卡。不给 = 这里写不了知识。 */
-  proposeNotes?: FanoutDeps['proposeNotes']
+  /** WP350 / WP357（决策 902）：要记的那几条写进知识库就生效。不给 = 这里写不了知识。 */
+  writeNotes?: FanoutDeps['writeNotes']
+  /** WP357：汇总卡上「撤销」那一批。不给 = 撤不了。 */
+  retireNotes?: FanoutDeps['retireNotes']
 }
 
 export interface AssistantCallResult {
@@ -172,7 +174,8 @@ export function createAssistant(deps: AssistantDeps): Assistant {
     mine: async (actor) => mine(actor),
     toPick,
     open: (actor, input) => deps.open(actor, input),
-    ...(deps.proposeNotes === undefined ? {} : { proposeNotes: deps.proposeNotes }),
+    ...(deps.writeNotes === undefined ? {} : { writeNotes: deps.writeNotes }),
+    ...(deps.retireNotes === undefined ? {} : { retireNotes: deps.retireNotes }),
   })
 
   const mine = async (actor: FreeChatActor): Promise<PositionInstance[]> =>

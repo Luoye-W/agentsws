@@ -147,6 +147,10 @@ export interface FreeChatFanoutSummary {
   memories: number
   skipped: { dropped: number; unsure: number; secret: number }
   knowledge_card_id?: string
+  /** WP357（决策 902）：写进知识库就生效的那几条（撤销撤的就是它们）。 */
+  note_card_ids?: string[]
+  notes_undone_at?: string
+  notes_undone?: number
   failed?: string[]
   at: string
 }
@@ -280,6 +284,19 @@ export const confirmFanout = (
 ): Promise<{ plan: FreeChatMessage; summary?: FreeChatMessage }> =>
   api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}`, { method: 'POST', body })
 
+/** WP357（决策 902）：汇总卡上「撤销」——这一批写进知识库的口径全部退役。 */
+export const undoFanoutNotes = (
+  session_id: string,
+  batch_id: string,
+): Promise<{ summary: FreeChatMessage }> =>
+  api(`${one(session_id)}/fanout/${encodeURIComponent(batch_id)}/undo-notes`, { method: 'POST' })
+/** WP357：改一条助理记进知识库的口径（就地改、旧句留痕）。 */
+export const editAssistantNote = (card_id: string, statement: string): Promise<unknown> =>
+  api(`${base}/notes/${encodeURIComponent(card_id)}`, { method: 'PATCH', body: { statement } })
+/** WP357：删一条助理记进知识库的口径（退役留痕）。 */
+export const removeAssistantNote = (card_id: string): Promise<{ retired: boolean }> =>
+  api(`${base}/notes/${encodeURIComponent(card_id)}`, { method: 'DELETE' })
+
 /** WP352：助理那一条长对话（老会话第一次拼进来）。 */
 export const getAssistantThread = (): Promise<AssistantThread> => api(`${base}/thread`)
 /** WP352：换个话题。 */
@@ -409,8 +426,11 @@ export function readImage(file: File): Promise<FreeChatImage> {
   })
 }
 
-/** WP350：能附的文本类资料（扩展名）。 */
-export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf'] as const
+/** WP350：能附的文本类资料（扩展名）；WP357（决策 904）加表格 .xlsx / .csv。 */
+export const DOC_EXTENSIONS = ['txt', 'md', 'docx', 'pdf', 'xlsx', 'csv'] as const
+/** WP357：一份资料最多多大、一次最多几份（助理、岗位页、事项输入框同一道；服务端还会再闸一次）。 */
+export const DOC_MAX_BYTES = 5 * 1024 * 1024
+export const DOC_MAX_COUNT = 3
 export const isDocFile = (name: string): boolean =>
   (DOC_EXTENSIONS as readonly string[]).includes(name.split('.').pop()?.toLowerCase() ?? '')
 /** WP350：粘贴超过这么多字就收成一份附件（不塞进输入框）。 */

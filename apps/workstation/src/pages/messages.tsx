@@ -9,7 +9,7 @@
  * - **未读用点不用粗红数字**（36 的减字与图形化）。一个 6px 的品牌色圆点说得清
  *   "这条没读"，而一个红色的 "3" 会让整屏看起来像在报警。
  * - **`KefuAgents` / `KOLAgents` 里的信在这里只读**（63 §9）：顶上一条状态带说
- *   "客服 Agent 在处理"，右下角一个 → 去工作线程。**不给"直接回复"**——
+ *   "客服 AI 在处理"，右下角一个 → 去工作线程。**不给"直接回复"**——
  *   人与 Agent 同时回同一个客户，是这套东西最难解释的一种错。
  *   真要补充口径：教 AI 一句（WP124：人工直发的路已拆，界面只留教 AI）。
  * - **删除永远是"移到垃圾箱"**：界面上那个键叫"删除"，打出去的请求是
@@ -1458,10 +1458,10 @@ function AgentBand({
       data-state={status.state}
     >
       <StatusPill tone={tone}>
-        {/* WP172：B2B 那条路说「B2B Agent 在处理」，不借客服那一句 */}
+        {/* WP172：B2B 那条路说「B2B AI 在处理」，不借客服那一句；WP357（决策 910）红人那条同理 */}
         {t(
-          status.route === 'b2b' && status.state === 'working'
-            ? 'messages.agent.working_b2b'
+          status.state === 'working' && status.route !== 'support'
+            ? `messages.agent.working_${status.route}`
             : `messages.agent.${status.state}`,
         )}
       </StatusPill>

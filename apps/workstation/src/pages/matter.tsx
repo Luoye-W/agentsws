@@ -44,6 +44,7 @@ import {
   RunningEntry,
   SysLine,
 } from '@/components/matter/matter-timeline'
+import { useAttachedDocs } from '@/components/matter/use-attached-docs'
 import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { MatterHandoffBar } from '@/components/peers/handoff-strip'
 import { isSetupCard } from '@/components/setup/setup-deck-body'
@@ -75,6 +76,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
+import type { FreeChatFile } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 import {
   archiveMatter,
@@ -86,6 +88,11 @@ import {
 
 /** 在跑 / 刚发出去时多久拉一次（「正在做…」的当前一步跟着走）。 */
 const POLL_MS = 1500
+
+/** WP357：说的一句（带不带附上的资料）。 */
+type Said = string | { text: string; files: FreeChatFile[] }
+const names = (files: readonly { name: string }[]): string =>
+  files.map((f) => `「${f.name}」`).join('')
 
 /**
  * WP236：最近那次「被停下来」的运行之后，还没有人接着做（没有新的人话 / 新的运行），
@@ -141,6 +148,10 @@ export function MatterPage(): ReactNode {
   const [savingMask, setSavingMask] = useState(false)
   const [asks, setAsks] = useState<PrivateAsk[]>([])
   const [queued, setQueued] = useState<string | undefined>(undefined)
+  /** WP357：排队那句附上的资料（这一轮跑完一起发）。 */
+  const [queuedFiles, setQueuedFiles] = useState<FreeChatFile[]>([])
+  /** WP357：这一句要附上的资料。 */
+  const docs = useAttachedDocs()
   const askSeq = useRef(0)
   /** 在跑或刚发出去：页面隔一会儿拉一次（运行中的步骤、AI 新说的话）。 */
   const polling = useRef(false)
@@ -221,14 +232,24 @@ export function MatterPage(): ReactNode {
   }, [])
 
   const say = useMutation({
-    mutationFn: (value: string) => postMatterMessage(id, value),
+    // WP357：可以带着附上的资料（base64；服务端按助理那套读成文字）
+    mutationFn: (value: Said) =>
+      typeof value === 'string'
+        ? postMatterMessage(id, value)
+        : postMatterMessage(
+            id,
+            value.text,
+            value.files.map((f) => ({ name: f.name, data: f.data })),
+          ),
     // 发出去就清空（一次运行可能要跑几分钟，请求一直挂着）；没发成再放回框里
     onMutate: () => {
       setText('')
       setTimeout(invalidate, 300)
     },
     onError: (_err, value) => {
-      setText((now) => (now === '' ? value : now))
+      const back = typeof value === 'string' ? value : value.text
+      setText((now) => (now === '' ? back : now))
+      if (typeof value !== 'string') docs.restore(value.files)
     },
     onSettled: () => {
       invalidate()
@@ -376,8 +397,14 @@ export function MatterPage(): ReactNode {
   useEffect(() => {
     if (queued === undefined || running) return
     setQueued(undefined)
+    // WP357：排队的那句带着资料的，资料一起发
+    if (queuedFiles.length > 0) {
+      setQueuedFiles([])
+      say.mutate({ text: queued, files: queuedFiles })
+      return
+    }
     say.mutate(queued)
-  }, [queued, running, say])
+  }, [queued, queuedFiles, running, say])
 
   if (matter.isPending) return <Skeleton className="h-64 w-full" />
   if (matter.error !== null || view === undefined)
@@ -448,8 +475,21 @@ export function MatterPage(): ReactNode {
             ),
           ].join('')
     const value = [typed, note].filter((x) => x !== '').join('\n\n')
-    if (value === '') return
+    // WP357：附上的资料（私聊 AI 不带资料）
+    const files = privateMode ? [] : docs.docs
+    if (value === '' && files.length === 0) return
     if (!privateMode) setAttached([])
+    if (files.length > 0) {
+      const said: Said = { text: value, files: docs.take() }
+      if (running) {
+        setQueuedFiles(said.files)
+        setQueued(value === '' ? t('matter.file.only', { names: names(said.files) }) : value)
+        setText('')
+        return
+      }
+      say.mutate(said)
+      return
+    }
     if (privateMode) {
       askSeq.current += 1
       const ask: PrivateAsk = { id: askSeq.current, question: value }
@@ -861,6 +901,11 @@ export function MatterPage(): ReactNode {
             setAttached((xs) => xs.filter((x) => x.id !== aid))
           }}
           {...(canMask ? { onMask: setMasking } : {})}
+          // WP357：附资料（拖进来 / 「+」/ 粘贴文件），与助理同一套
+          docs={docs.docs}
+          onAttachDocs={docs.add}
+          onDetachDoc={docs.remove}
+          docProblem={docs.problem}
         />
         <MaskDialog
           src={attached.find((a) => a.id === masking)?.url}

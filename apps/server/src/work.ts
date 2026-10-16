@@ -28,6 +28,7 @@ import type {
   Goal,
   GoalProgress,
   Iso8601,
+  MatterAttachment,
   MatterEvent,
   MatterLiveRun,
   PersonId,
@@ -60,6 +61,7 @@ import {
   type StandbyRenewalLike,
   type Work,
 } from '@agentsws/work'
+import { attachedLine, attachmentsBrief, readAssistantFile } from './assistant-files.js'
 
 /** 队列上还等着人的状态。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
@@ -111,6 +113,8 @@ export interface WorkPortOptions {
     actor: WorkActor,
     matter_id: string,
     text: string,
+    /** WP357：这句话附上的资料（已读成文字）与交给运行的那段话（话 + 附件围起来）。 */
+    attached?: { attachments: MatterAttachment[]; brief: string },
   ): Promise<{ event: MatterEvent; run_id?: string } | undefined>
   /** WP264：这件事上正在跑的那一次（事项页「正在做…」）；不给 = 不显示。 */
   liveRun?(matter_id: string): MatterLiveRun | undefined
@@ -381,8 +385,15 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const events = work.store.listMatterEvents(id, opts)
       return { events, has_more: work.store.countMatterEvents(id) > events.length }
     },
-    say: async (actor, id, text) => {
-      const routed = await options.sayAt?.(actor, id, text)
+    say: async (actor, id, text, files) => {
+      // WP357：附上的资料与助理同一套读法（抹口令、截断、读不出照实说），运行拿到「话 + 附件」
+      const attachments = (files ?? []).map(readAssistantFile)
+      const attached =
+        attachments.length === 0
+          ? undefined
+          : { attachments, brief: attachmentsBrief(text, attachments) }
+      const said = text.trim() === '' && attached !== undefined ? attachedLine(attachments) : text
+      const routed = await options.sayAt?.(actor, id, said, attached)
       if (routed !== undefined) return routed
       /*
        * WP276（docs/95 §4.3 第 4a 步）：交接过的事项，之后起的运行用**接手人**那条分配——
@@ -400,8 +411,11 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       return work.say(id, {
         person_id: actor.person_id,
         assignment_id: actor.assignment_id,
-        text,
+        text: said,
         ...(run_by === undefined ? {} : { run_by }),
+        ...(attached === undefined
+          ? {}
+          : { attachments: attached.attachments, brief: attached.brief }),
       })
     },
     // WP341：对话里点了「调工具」的按钮（只认这件事上的；别人的事项点不了）

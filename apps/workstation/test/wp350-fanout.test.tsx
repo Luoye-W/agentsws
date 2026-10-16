@@ -84,6 +84,7 @@ const state = vi.hoisted(() => ({
   messages: [] as FreeChatMessage[],
   confirms: [] as { session: string; batch: string; body: Record<string, unknown> }[],
   calls: [] as Record<string, unknown>[],
+  undos: [] as { session: string; batch: string }[],
 }))
 
 vi.mock('@/lib/free-chat', async () => {
@@ -151,13 +152,30 @@ vi.mock('@/lib/free-chat', async () => {
                 brand_notes: 1,
                 memories: 1,
                 skipped: { dropped: 0, unsure: 0, secret: 1 },
-                knowledge_card_id: 'apr_notes',
+                // WP357（决策 902）：写进去就生效，不再有确认卡
+                note_card_ids: ['fc_1', 'fc_2'],
                 at: T0,
               },
             }
       state.messages = state.messages.map((m) => (m.id === next.id ? next : m))
       if (summary !== undefined) state.messages = [...state.messages, summary]
       return { plan: next, ...(summary === undefined ? {} : { summary }) }
+    },
+    undoFanoutNotes: async (session: string, batch: string) => {
+      state.undos.push({ session, batch })
+      const sum = state.messages.find(
+        (m) => m.fanout_summary?.batch_id === batch,
+      ) as FreeChatMessage
+      const summary: FreeChatMessage = {
+        ...sum,
+        fanout_summary: {
+          ...(sum.fanout_summary as NonNullable<FreeChatMessage['fanout_summary']>),
+          notes_undone_at: T0,
+          notes_undone: 2,
+        },
+      }
+      state.messages = state.messages.map((m) => (m.id === summary.id ? summary : m))
+      return { summary }
     },
     streamFreeChat: async (
       session_id: string,
@@ -201,6 +219,7 @@ function renderPage(route = '/assistant/fchat_1'): void {
 beforeEach(() => {
   state.confirms = []
   state.calls = []
+  state.undos = []
   state.messages = [
     {
       id: 'u1',
@@ -271,9 +290,22 @@ describe('WP350 方案卡', () => {
     )
     const summary = await screen.findByTestId('fanout-summary')
     expect(within(summary).getAllByTestId('fanout-summary-group').length).toBe(3)
-    expect(within(summary).getByTestId('fanout-summary-confirm').getAttribute('href')).toBe(
-      '/cards/apr_notes',
+    // WP357（决策 902）：不再「去确认知识」，知识已生效——给「撤销」与「去知识库」
+    expect(within(summary).queryByTestId('fanout-summary-confirm')).toBeNull()
+    expect(summary.textContent).not.toContain('待确认')
+    expect(within(summary).getByTestId('fanout-summary-knowledge').getAttribute('href')).toBe(
+      '/knowledge',
     )
+    // 撤销要点两下：第一下只变「确定撤销」
+    const undo = within(summary).getByTestId('fanout-summary-undo')
+    expect(undo.textContent).toBe('撤销这 2 条知识')
+    await userEvent.click(undo)
+    expect(state.undos).toEqual([])
+    expect(undo.textContent).toBe('确定撤销')
+    await userEvent.click(undo)
+    await waitFor(() => expect(state.undos).toEqual([{ session: 'fchat_1', batch: 'fan_1' }]))
+    expect((await screen.findByTestId('fanout-summary-undone')).textContent).toBe('已撤销 2 条知识')
+    expect(screen.queryByTestId('fanout-summary-undo')).toBeNull()
     expect(screen.getByTestId('fanout-card').getAttribute('data-status')).toBe('sent')
     expect(screen.queryByTestId('fanout-accept')).toBeNull()
   })

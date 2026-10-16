@@ -53,6 +53,7 @@ import {
   newAssistantTopic,
   stopFreeChat,
   streamFreeChat,
+  undoFanoutNotes,
 } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 
@@ -358,6 +359,21 @@ function AssistantThreadPage(): React.ReactNode {
       void client.invalidateQueries({ queryKey: [...KEY, 'assistant'] })
     }
   }
+  /** WP357（决策 902）：汇总卡上「撤销」→ 换上撤过的那条汇总、知识库刷新。 */
+  const undoNotes = async (batch_id: string): Promise<void> => {
+    if (id === undefined) return
+    setError(undefined)
+    try {
+      const out = await undoFanoutNotes(id, batch_id)
+      client.setQueryData<FreeChatMessage[]>([...KEY, 'messages', id], (old) =>
+        (old ?? []).map((m) => (m.id === out.summary.id ? out.summary : m)),
+      )
+      void client.invalidateQueries({ queryKey: ['knowledge', 'cards'] })
+      void client.invalidateQueries({ queryKey: ['knowledge-cards'] })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
   const lastAssistant = [...rows].reverse().find((m) => m.role === 'assistant')
 
   const composer = (
@@ -432,6 +448,8 @@ function AssistantThreadPage(): React.ReactNode {
               if (id !== undefined) void run(id, { regenerate: true })
             }}
             onFanout={fanout}
+            // WP357（决策 902）：汇总卡上「撤销」挂在这条长对话里
+            onUndoNotes={undoNotes}
           />
           {/* WP352：翻了以前聊过的，出处一排（点了跳过去） */}
           <RecalledRefs hits={m.recalled ?? []} onJump={jump} />

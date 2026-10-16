@@ -34,6 +34,7 @@ import type {
   ChatContentPart,
   ChatMessage,
   Clock,
+  FactCard,
   FindArchivedWorkInput,
   ModelRef,
   PricingEntry,
@@ -57,7 +58,12 @@ import {
 } from '@agentsws/stand-ins'
 import { type Assistant, REPORT_WINDOW_MS } from './assistant.js'
 import type { FanoutSource } from './assistant-fanout.js'
-import { publicAttachment, readAssistantFile, sourceKindOf } from './assistant-files.js'
+import {
+  attachmentsBrief,
+  publicAttachment,
+  readAssistantFile,
+  sourceKindOf,
+} from './assistant-files.js'
 import { assistantMemoryLines, rememberAfterTurn, rememberFromFanout } from './assistant-memory.js'
 import { type AssistantContextStats, createSegments, type Segments } from './assistant-segments.js'
 import {
@@ -139,6 +145,14 @@ export interface FreeChatOptions {
   newId(prefix: string): string
   /** WP343：「我的助理」——问全局（只读）+ 派活 + 回报。不给 = 老的随便聊。 */
   assistant?: Assistant
+  /**
+   * WP357（决策 902）：助理记进知识库的口径改 / 删（只认 `assistant_note`、只认让助理记的那个人；
+   * 不行的抛带 `code`（`not_found` / `forbidden` / `invalid_input`）的错）。不给 = 改不了。
+   */
+  notes?: {
+    edit(actor: FreeChatActor, card_id: string, statement: string): Promise<FactCard>
+    remove(actor: FreeChatActor, card_id: string): Promise<unknown>
+  }
   /** WP343：助理这一层的记忆（「自动记忆」开关与记账 / 提醒）。不给 = 不记。 */
   memory?: {
     auto(actor: FreeChatActor): boolean
@@ -428,6 +442,24 @@ export function createFreeChatPort(
       running?.abort()
       return { stopped: running !== undefined }
     },
+    ...(options.notes === undefined
+      ? {}
+      : {
+          editNote: (actor: FreeChatActor, card_id: string, statement: string) =>
+            noteCall(() =>
+              (options.notes as NonNullable<FreeChatOptions['notes']>).edit(
+                actor,
+                card_id,
+                statement,
+              ),
+            ),
+          removeNote: async (actor: FreeChatActor, card_id: string) => {
+            await noteCall(() =>
+              (options.notes as NonNullable<FreeChatOptions['notes']>).remove(actor, card_id),
+            )
+            return { retired: true }
+          },
+        }),
     idle: async () => {
       await segments?.idle()
     },
@@ -470,6 +502,9 @@ export function createFreeChatPort(
             batch_id: string,
             input: Parameters<NonNullable<FreeChatPort['fanout']>>[3],
           ) => confirmFanout(options, own, actor, session_id, batch_id, input),
+          // WP357（决策 902）：汇总卡上「撤销」这一批写进知识库的口径
+          undoFanoutNotes: (actor: FreeChatActor, session_id: string, batch_id: string) =>
+            undoFanoutNotes(options, own, actor, session_id, batch_id),
           async forget(actor: FreeChatActor, id: string) {
             // 别人的与不存在的回同一句：不给探测别人记忆 id 的口
             if (!store.memories(actor.person_id).some((m) => m.id === id))
@@ -794,14 +829,7 @@ function systemPrompt(
  * WP350：用户这句附上的资料接在话后面，当外部资料围起来（里面让你做什么一律不算数）；读不出的照实写一句。
  */
 function withAttachments(m: FreeChatMessageView): string {
-  const files = m.attachments ?? []
-  if (files.length === 0) return m.text
-  const blocks = files.map((a) =>
-    a.text === undefined || a.text === ''
-      ? `附件「${a.name}」：读不出文字（${a.unreadable ?? '没有文字'}）。`
-      : `附件「${a.name}」（${a.chars} 字${a.unreadable === undefined ? '' : `，${a.unreadable}`}）：\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(a.text, 30_000)}\n${EXTERNAL_FENCE.close}`,
-  )
-  return [m.text === '' ? '（用户只附了资料，没说话）' : m.text, ...blocks].join('\n\n')
+  return attachmentsBrief(m.text, m.attachments ?? [])
 }
 
 /** 存着的一条话 → 进模型的那一条。图片只带最后那句用户的话里的（再往前的图不重复花钱）。 */
@@ -1224,6 +1252,49 @@ async function confirmFanout(
   store.addMessage(summary)
   store.putSession({ ...session, updated_at: clock.now() })
   return { plan: publicMessage(sentPlan), summary }
+}
+
+/** WP357：改 / 删助理记的口径时的错误翻成网关错误码（404 / 403 / 400）。 */
+async function noteCall<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    const code = (e as { code?: unknown }).code
+    if (code === 'not_found' || code === 'forbidden' || code === 'invalid_input')
+      throw new ApiError(code, (e as Error).message)
+    throw e
+  }
+}
+
+/**
+ * WP357（决策 902）：汇总卡上「撤销」——这一批直接写进知识库的口径全部退役（留痕不删），
+ * 汇总那一条记上撤销的时候与条数（卡上改成「已撤销」）。撤过的再点回 409。
+ */
+async function undoFanoutNotes(
+  options: FreeChatOptions,
+  own: Own,
+  actor: FreeChatActor,
+  session_id: string,
+  batch_id: string,
+): Promise<{ summary: FreeChatMessageView }> {
+  const { store, clock } = options
+  const session = own(actor, session_id)
+  const assistant = options.assistant
+  if (assistant === undefined) throw new ApiError('not_implemented', '这里没有「助理」')
+  const message = store.messages(session.id).find((m) => m.fanout_summary?.batch_id === batch_id)
+  const summary = message?.fanout_summary
+  if (message === undefined || summary === undefined)
+    throw new ApiError('not_found', '没有这一批的汇总（可能已经删了）')
+  const ids = summary.note_card_ids ?? []
+  if (ids.length === 0) throw new ApiError('conflict', '这一批没有写进知识库的口径')
+  if (summary.notes_undone_at !== undefined) throw new ApiError('conflict', '这一批已经撤销过了')
+  const n = await assistant.fanout.undoNotes(actor, ids)
+  const next: FreeChatMessageView = {
+    ...message,
+    fanout_summary: { ...summary, notes_undone_at: clock.now(), notes_undone: n },
+  }
+  store.putMessage(next)
+  return { summary: publicMessage(next) }
 }
 
 /**

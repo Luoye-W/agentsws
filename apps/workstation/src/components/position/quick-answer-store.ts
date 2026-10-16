@@ -80,6 +80,8 @@ export async function askAtPosition(input: {
   mode?: 'quick'
   /** WP342：输入框左下角选的 AI（记在开出来的事项上；不给 = 品牌默认） */
   model?: string
+  /** WP357：附上的资料（base64） */
+  files?: { name: string; data: string }[]
 }): Promise<QuickAnswerEntry | undefined> {
   seq += 1
   const nonce = seq
@@ -104,6 +106,7 @@ export async function askAtPosition(input: {
       ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
       ...(input.mode === undefined ? {} : { mode: input.mode }),
       ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
     })
     if (out.ambiguous && out.approval_item_id !== undefined)
       return settle({ ...base, status: 'choice', matter_id: out.matter.id, open: out })

@@ -115,9 +115,9 @@ function make(opts: { failOn?: string; notes?: boolean } = {}) {
     ...(opts.notes === false
       ? {}
       : {
-          proposeNotes: async (_a, input) => {
+          writeNotes: async (_a, input) => {
             proposed.push(input.cards.length)
-            return { card_ids: input.cards.map((_c, i) => `fc_${i}`), approval_id: 'apr_1' }
+            return { card_ids: input.cards.map((_c, i) => `fc_${i}`) }
           },
         }),
   })
@@ -160,6 +160,27 @@ describe('派活与扇出', () => {
     expect(opened.map((o) => o.position_id)).toEqual(['reddit-ops'])
     expect(sent.summary.failed?.length).toBe(2)
     expect(sent.dispatches.every((d) => d.batch_id === 'fan_1')).toBe(true)
+  })
+
+  it('WP357（决策 902）：要记的写进去就算数——汇总带条目 id、不带确认卡、话里说已经记进知识库', async () => {
+    const { assistant, proposed } = make()
+    const planned = await assistant.call(
+      actor,
+      {
+        name: 'plan_fanout',
+        input: { items: [{ kind: 'note', text: '退货 30 天', position: '客服' }] },
+      },
+      { user_text: '记一下', source: { name: '对话里的一段话', kind: 'human' } },
+    )
+    if (planned.fanout === undefined) throw new Error('没出方案卡')
+    const sent = await assistant.fanout.send(actor, planned.fanout, [])
+    expect(proposed).toEqual([1])
+    expect(sent.summary.note_card_ids).toEqual(['fc_0'])
+    expect(sent.summary.knowledge_card_id).toBeUndefined()
+    expect(sent.text).toContain('已经记进知识库')
+    expect(sent.text).not.toContain('等你确认')
+    // 没接撤销的进程：撤不了照实说
+    await expect(assistant.fanout.undoNotes(actor, ['fc_0'])).rejects.toThrow('撤不了')
   })
 
   it('事项描述：为什么、截止、来自哪份资料、原文一段', () => {

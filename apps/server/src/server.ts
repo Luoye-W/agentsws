@@ -2698,7 +2698,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
-  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——待确认写进知识库 + 一批一张确认卡
+  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——WP357（决策 902）起点「就这样」即生效，可改可删可撤销
   const assistantNotes = createAssistantNotes({
     clock,
     knowledge,
@@ -10102,8 +10102,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return a !== undefined && a.person_id === person_id && a.revoked_at === undefined
       },
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
-      sayAt: async (actor, matter_id, text) =>
-        (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      sayAt: async (actor, matter_id, text, attached) =>
+        (await positionsFor(ws)).sayAt({
+          matter_id,
+          person_id: actor.person_id,
+          text,
+          // WP357：附上的资料（已读成文字）与交给运行的那段话
+          ...(attached === undefined ? {} : attached),
+        }),
       // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
       genuiTool: async (actor, matter_id, call) => {
         const runtime = brand.runtime?.runHostTool
@@ -10468,10 +10474,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const item = await approvals.get(id)
         return item !== undefined && (item.state === 'pending' || item.state === 'in_review')
       },
-      // WP350：拆成多份——来源批次 id、要记的那几条待确认写进知识库
+      // WP350：拆成多份——来源批次 id、要记的那几条写进知识库（WP357 决策 902：直接生效，能撤销）
       newId: (prefix) =>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
-      proposeNotes: assistantNotes.propose,
+      writeNotes: assistantNotes.write,
+      retireNotes: assistantNotes.retireMany,
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
@@ -10498,6 +10505,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
+      notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
       // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
       observe: (actor, type, payload) => {
         appendEvent({
@@ -10657,6 +10666,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.detach === true ? { detach: true } : {}),
           // WP342：输入框左下角选的 AI（认不出的不记，跟品牌默认走）
           ...(chosen === undefined ? {} : { model: chosen }),
+          // WP357：附上的资料（宿主按助理那套读成文字）
+          ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
         })
         return {
           mode: out.mode,
