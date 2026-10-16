@@ -41395,6 +41395,10 @@ export interface operations {
           mode?: 'auto' | 'quick' | 'chat' | 'ask' | 'task'
           detach?: boolean
           model?: string
+          files?: {
+            name: string
+            data: string
+          }[]
         }
       }
     }
@@ -42369,6 +42373,10 @@ export interface operations {
       content: {
         'application/json': {
           text: string
+          files?: {
+            name: string
+            data: string
+          }[]
         }
       }
     }

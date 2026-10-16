@@ -45739,6 +45739,26 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "files": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "data": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 7000000
+                        }
+                      },
+                      "required": ["name", "data"]
+                    }
                   }
                 },
                 "required": ["title"]
@@ -47177,8 +47197,27 @@
                 "properties": {
                   "text": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 4000
+                  },
+                  "files": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "data": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 7000000
+                        }
+                      },
+                      "required": ["name", "data"]
+                    }
                   }
                 },
                 "required": ["text"]
