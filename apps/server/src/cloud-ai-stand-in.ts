@@ -329,7 +329,8 @@ export function cloudAiStandInFetch(
       )
     // WP343：岗位那边的运行（不是助理对话）回一句「做完了」，别把助理的使用说明当成岗位的回答
     const system = messages.find((m) => m.role === 'system')
-    const fromChat = typeof system?.content !== 'string' || /用户的「助理」|我的助理|随便聊/u.test(system.content)
+    const fromChat =
+      typeof system?.content !== 'string' || /用户的「助理」|我的助理|随便聊/u.test(system.content)
     const text = hasImage
       ? VISION_PROBE_WORD
       : assistantDone !== undefined

@@ -28,14 +28,22 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
   type ChatSessionView,
+  ensureSession,
   getChatMessages,
   listChatSessions,
+  type Me,
   teachChatSession,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dutyHref } from '@/lib/duty-href'
 import { useMode } from '@/lib/mode'
-import { type DutyNeed, LIVE_CHAT_NEED, LIVE_CHAT_TEACH_NEED } from '@/lib/pick-assignment'
+import {
+  type AssignmentPick,
+  type DutyNeed,
+  LIVE_CHAT_NEED,
+  LIVE_CHAT_TEACH_NEED,
+  pickAssignment,
+} from '@/lib/pick-assignment'
 import { readString, SITE_CHAT_SEEN_KEY, writeString } from '@/lib/ui-state'
 import { assignmentOf, canRequest, useDutyAssignment } from '@/lib/use-duty-assignment'
 import { cn } from '@/lib/utils'
@@ -53,13 +61,39 @@ const SITE_CHAT_NEED: DutyNeed = {
 }
 
 /**
+ * 常驻件（左栏、⌘K、消息页那一格）读身份用的：与外壳共用 `['session']`，但**挂上来时不重取**。
+ *
+ * 为什么不直接用 `useDutyAssignment`：它在 `/v1/me` 出错时，每多一个新挂上的观察者就会重取一次
+ * （TanStack 默认 `retryOnMount`）——外壳在「会话取不回来」时正是靠这份查询画整页错误 + 重试，
+ * 常驻件一挂上就把它拉回「加载中」、再出错、再挂……整页空白（boot-error 那条测试撞出来的）。
+ */
+function useQuietSession(): Me | undefined {
+  const me = useQuery({
+    queryKey: ['session'],
+    queryFn: ensureSession,
+    retry: false,
+    retryOnMount: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  })
+  return me.data
+}
+
+/** 常驻件里挑分配：问不到身份 = 没有（不发请求）。 */
+function useQuietPick(need: DutyNeed): AssignmentPick | undefined {
+  const { position } = useApp()
+  const me = useQuietSession()
+  return me === undefined ? undefined : pickAssignment(me.assignments, need, position)
+}
+
+/**
  * 名下有没有网站在线客服。问不到身份时按「没有」算——常驻入口（来源那一格、⌘K、消息渠道那一块、
  * 左栏「消息」的点）只在确知有这条职责时出，免得没这条职责的人也去问一遍访客会话。
  * 老地址 `/chat-window` 照样能进那个来源（进去照实说缺什么）。
  */
 export function useHoldsSiteChat(): boolean {
-  const pick = useDutyAssignment(SITE_CHAT_NEED)
-  return pick.kind === 'ok' || pick.kind === 'no_range'
+  const pick = useQuietPick(SITE_CHAT_NEED)
+  return pick?.kind === 'ok' || pick?.kind === 'no_range'
 }
 
 const STATUS_KEYS: Record<string, string> = {
@@ -117,13 +151,13 @@ function useSeen(): [Seen, (s: ChatSessionView) => void] {
   return [seen.data ?? {}, mark]
 }
 
-/** 进行中的访客对话（会话列表与「消息」左栏的点共用一份缓存）。 */
-function useSessions(enabled = true) {
+/** 进行中的访客对话（这一来源打开时用；与左栏的点共用一份缓存）。 */
+function useSessions() {
   const pick = useDutyAssignment(LIVE_CHAT_NEED)
   const asg = assignmentOf(pick)
   const sessions = useQuery({
     queryKey: ['chat-widget', 'sessions', asg],
-    enabled: enabled && canRequest(pick),
+    enabled: canRequest(pick),
     queryFn: () => listChatSessions(30, asg),
     refetchInterval: 60_000,
   })
@@ -133,7 +167,16 @@ function useSessions(enabled = true) {
 /** 网站聊天里有没有没看过的（「消息」页来源那一格与左栏「消息」的小圆点用）。 */
 export function useSiteChatUnread(): boolean {
   const holds = useHoldsSiteChat()
-  const { sessions } = useSessions(holds)
+  const pick = useQuietPick(LIVE_CHAT_NEED)
+  const asg = pick?.kind === 'ok' ? pick.assignment : undefined
+  const sessions = useQuery({
+    queryKey: ['chat-widget', 'sessions', asg],
+    enabled: holds && asg !== undefined,
+    queryFn: () => listChatSessions(30, asg),
+    refetchInterval: 60_000,
+    retry: false,
+    retryOnMount: false,
+  })
   const [seen] = useSeen()
   return holds && (sessions.data ?? []).some((s) => siteChatUnread(s, seen))
 }
