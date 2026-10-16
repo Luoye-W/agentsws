@@ -95,7 +95,7 @@ describe('还没配上：第一次装', () => {
     await waitFor(() => expect(state.opened).toEqual(['folder', 'chrome']))
     await waitFor(() =>
       expect(screen.getByTestId('extension-install-note').textContent).toBe(
-        'chrome://extensions 已复制：在 Chrome 地址栏粘贴、回车',
+        'chrome://extensions 已复制：在要装插件的那个 Chrome 窗口（有好几个 Chrome 用户的，就在那个用户的窗口）地址栏粘贴、回车',
       ),
     )
     expect(writeText).toHaveBeenLastCalledWith('chrome://extensions')
