@@ -10,6 +10,8 @@
  * 而不是悄悄连出去。
  */
 
+import { zstdDecompressSync } from 'node:zlib'
+
 /** 真实端点（原样抄自 `pi-ai/dist/auth/oauth/openai-codex.js`，抄错了用例就红）。 */
 export const DEVICE_USER_CODE_URL = 'https://auth.openai.com/api/accounts/deviceauth/usercode'
 export const DEVICE_TOKEN_URL = 'https://auth.openai.com/api/accounts/deviceauth/token'
@@ -44,6 +46,11 @@ export interface FakeOpenAiOptions {
   reply?: () => { toolCall?: { name: string; arguments: string }; text?: string }
   /** 这一轮报多少 token。 */
   usage?: { input_tokens: number; output_tokens: number; cached_tokens?: number }
+  /**
+   * WP355：这一轮的输出块原样给（`web_search_call` / 带引用的 `message`…），替身照 Codex 的样子
+   * 逐块发 `response.output_item.done`。给了它就不看 `reply`。
+   */
+  outputItems?: (body: unknown) => unknown[]
 }
 
 export interface FakeOpenAi {
@@ -56,7 +63,26 @@ export interface FakeOpenAi {
   responses: number
   /** 请求头里带过的 Authorization 值（用例据此断言"用的是刷新后那一把"）。 */
   bearers: string[]
+  /** WP355：`/codex/responses` 收到的请求体（zstd 压过的先解开）。体里没有令牌——令牌只在请求头。 */
+  bodies: unknown[]
   restore(): void
+}
+
+/** 请求体：字符串原样解析；pi-ai 走 SSE 时会 zstd 压缩（`content-encoding: zstd`），先解开。 */
+function readBody(init: RequestInit | undefined): unknown {
+  const raw = init?.body
+  let text: string | undefined
+  if (typeof raw === 'string') text = raw
+  else if (raw instanceof Uint8Array) {
+    const zstd = new Headers(init?.headers ?? {}).get('content-encoding') === 'zstd'
+    text = (zstd ? zstdDecompressSync(raw) : Buffer.from(raw)).toString('utf8')
+  }
+  if (text === undefined) return undefined
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
 }
 
 function sse(events: unknown[]): Response {
@@ -82,6 +108,7 @@ export function installFakeOpenAi(options: FakeOpenAiOptions = {}): FakeOpenAi {
     issued: [],
     responses: 0,
     bearers: [],
+    bodies: [],
     restore: () => {
       globalThis.fetch = original
     },
@@ -120,6 +147,28 @@ export function installFakeOpenAi(options: FakeOpenAiOptions = {}): FakeOpenAi {
       state.responses += 1
       const auth = new Headers(init?.headers ?? {}).get('authorization')
       if (auth !== null) state.bearers.push(auth)
+      const body = readBody(init)
+      state.bodies.push(body)
+      if (options.outputItems !== undefined) {
+        const items = options.outputItems(body)
+        const usage = options.usage ?? { input_tokens: 200, output_tokens: 60 }
+        return sse([
+          { type: 'response.created', response: { id: 'resp_ws' } },
+          ...items.flatMap((item, i) => [
+            { type: 'response.output_item.added', output_index: i, item },
+            { type: 'response.output_item.done', output_index: i, item },
+          ]),
+          {
+            type: 'response.completed',
+            response: {
+              id: 'resp_ws',
+              status: 'completed',
+              output: [],
+              usage: { ...usage, total_tokens: usage.input_tokens + usage.output_tokens },
+            },
+          },
+        ])
+      }
       const reply = options.reply?.() ?? { text: '好的，我看一下。' }
       const usage = options.usage ?? { input_tokens: 120, output_tokens: 34, cached_tokens: 10 }
       const events: unknown[] = [{ type: 'response.created', response: { id: 'resp_1' } }]

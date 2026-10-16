@@ -52,6 +52,13 @@ overrides:
   # WP336：dsh-genui 把 react 写进了 dependencies（^18.3.1），不压就会给它单装一份 React 18，
   # 同一页上两份 React，hooks 一调就炸。压到工作台用的那一份 19（它的 peer 本来就写了 ^19）。
   '@changfenhuang/dsh-genui>react': '^19.0.0'
+  # WP355：社区插件 `dsh-web-search-diy`（MIT）只借它导出的 Responses 结果解析（`mapResponsesResponse`），
+  # 它的三个 peer 写的是 `^0.2.0-rc.1`，与树里的 0.2.1-alpha.2「预发布不相交」——同上钉到树里那一版。
+  'dsh-web-search-diy>@deepseek-ai/dsh-credentials': '0.2.1-alpha.2'
+  'dsh-web-search-diy>@deepseek-ai/dsh-launch-environment': '0.2.1-alpha.2'
+  'dsh-web-search-diy>@deepseek-ai/dsh-web': '0.2.1-alpha.2'
+  # schemastery 也跟树里那一版，免得锁文件里出两份（check-upstreams 要求只解析出一个版本）
+  'dsh-web-search-diy>@deepseek-ai/schemastery': '3.18.5-alpha.1'
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用
