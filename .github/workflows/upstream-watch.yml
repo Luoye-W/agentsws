@@ -69,6 +69,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # WP358：周报的「依赖安全公告」一节用 `pnpm audit`——它只读 pnpm-lock.yaml，
+      # 所以只装 pnpm 本身、不 `pnpm install`。
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
