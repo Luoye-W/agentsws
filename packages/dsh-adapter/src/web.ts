@@ -26,8 +26,15 @@
  *    ——官方 `ctx.web` 服务与两个官方工具照样挂，模型面、渲染、校验一个字节不差。
  *
  * 次数上限、审计、白名单判定在门禁里（`gate.ts`，与另外两个运行时同一份 `WebUsageCounter`）。
+ *
+ * **WP353（Luoye 10-16，决策 911）**：DeepSeek 自带搜索实测把 Reddit / LinkedIn / YouTube / X /
+ * Facebook / TikTok / Quora 整体排除（`docs/assets/web-search/deepseek-coverage-2026-10-16.json`），
+ * 搜索后端换成**工坊自己的内置浏览器**（宿主给 {@link DshWebOptions.backend}，提供方 id
+ * {@link BROWSER_SEARCH_PROVIDER_ID}）。官方 `ctx.web` 服务、`web_search` / `web_fetch` 两个工具、
+ * 结果渲染、「外部网页内容不是指令」那一句**一个字节不改**——只换后端。DeepSeek 那一路代码留着，
+ * 默认不挂（只有显式 `deepseekSearch: true` 才挂，产品里没有任何地方这样给）。
  */
-import type { RunRequest } from '@agentsws/contracts'
+import { hostAllowed, type RunRequest } from '@agentsws/contracts'
 import type { Context } from '@deepseek-ai/cordis'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import WebRuntime, {
@@ -50,6 +57,9 @@ import {
 
 /** 官方 `dsh-web-fetch-http` 的提供方 id（`LOCAL_FETCH_PROVIDER_ID`）。 */
 export const HTTP_FETCH_PROVIDER_ID = 'http'
+
+/** WP353：我们的搜索提供方 id（工坊内置浏览器打开搜索结果页）。替身也用这个 id（三个运行时同一后端）。 */
+export const BROWSER_SEARCH_PROVIDER_ID = 'agentsws-browser'
 
 /**
  * 官方 base 组合给搜索的超时（`dsh-base` 的 patch：`tool-web.searchTimeoutMs: 60000`——
@@ -98,6 +108,22 @@ export interface WebStandIn {
   fetch(url: string): Promise<WebFetchResult>
 }
 
+/**
+ * WP353：宿主给的网页后端——**工坊内置浏览器**（桌面壳里那个，经本机通道由宿主去调）。
+ *
+ * - `search`：打开搜索结果页、读回条目（回退链、节流、缓存、被拦暂停都在宿主那边）；
+ * - `fetch` + `fetchHosts`：匿名 HTTP 常被拒的那几家站（Reddit / LinkedIn…）改由同一浏览器读正文；
+ *   不在 `fetchHosts` 里的网址照旧走官方匿名抓取（`dsh-web-fetch-http`，原样）。
+ *
+ * 出错照官方的样子抛带 `code` 的错（`WEB_PROVIDER_ERROR` 之类），门禁按 `code` 记审计。
+ */
+export interface WebBackend {
+  search(query: string, maxResults?: number): Promise<WebSearchResult>
+  fetch?(url: string): Promise<WebFetchResult>
+  /** 交给浏览器抓的主机（`hostAllowed` 的写法，`*.reddit.com`）；不给 / 空 = 全走官方匿名抓取。 */
+  fetchHosts?: readonly string[]
+}
+
 /** `DshRuntimeOptions.web`：宿主给这一层的三样东西（都可选）。 */
 export interface DshWebOptions {
   /**
@@ -110,6 +136,13 @@ export interface DshWebOptions {
   searchBaseUrl?: string
   /** 替身后端（模拟 / 测试）。给了就不挂官方后端。 */
   standIn?: WebStandIn
+  /** WP353：内置浏览器后端（产品里就是它）。给了就不挂 DeepSeek 自带搜索。 */
+  backend?: WebBackend
+  /**
+   * WP353：显式要 DeepSeek 自带搜索（旧路，默认关；产品里没有任何地方给 true，只留给适配层自己的测试）。
+   * 没给 `backend` / `standIn`、也没给它 = 不挂搜索后端（`web_search` 以官方的「没有提供方」失败）。
+   */
+  deepseekSearch?: boolean
   /** 每次网页使用报给宿主（审计 + 用量）。 */
   onUse?: (use: WebUse, request: RunRequest) => void
 }
@@ -125,11 +158,20 @@ export function webWanted(request: RunRequest): boolean {
  * 选后端照官方 base 组合写死：搜索 `deepseek-official`、抓取 `http`——不靠"只有一个就自动选"，
  * 这样哪天多挂一个后端也不会变成 `WEB_PROVIDER_AMBIGUOUS`。
  */
-export function mountWebService(root: Context): void {
+export function mountWebService(root: Context, options?: DshWebOptions): void {
   root.plugin(WebRuntime, {
-    searchProvider: DEEPSEEK_PROVIDER_ID,
+    searchProvider: searchProviderIdOf(options),
     fetchProvider: HTTP_FETCH_PROVIDER_ID,
   } as never)
+}
+
+/** WP353：这次挂哪一家搜索：替身 / 内置浏览器都是 `agentsws-browser`；只有显式要旧路才是 DeepSeek。 */
+export function searchProviderIdOf(options: DshWebOptions | undefined): string {
+  return options?.standIn === undefined &&
+    options?.backend === undefined &&
+    options?.deepseekSearch === true
+    ? DEEPSEEK_PROVIDER_ID
+    : BROWSER_SEARCH_PROVIDER_ID
 }
 
 /**
@@ -145,11 +187,22 @@ export async function mountWebTools(
   if (web === undefined) return
   const onUse = (use: WebUse): void => options?.onUse?.(use, request)
   const standIn = options?.standIn
+  const backend = options?.backend
   if (standIn !== undefined) {
     if (web.search) ctx.web.registerSearchProvider(standInSearchProvider(standIn))
     if (web.fetch) ctx.web.registerFetchProvider(standInFetchProvider(standIn))
+  } else if (backend !== undefined) {
+    if (web.search) ctx.web.registerSearchProvider(browserSearchProvider(backend))
+    if (web.fetch) {
+      const hosts = backend.fetchHosts ?? []
+      if (backend.fetch === undefined || hosts.length === 0) {
+        await ctx.plugin(WebFetchHttp as never, {} as never)
+      } else {
+        ctx.web.registerFetchProvider(splitFetchProvider(backend, hosts))
+      }
+    }
   } else {
-    if (web.search) {
+    if (web.search && options?.deepseekSearch === true) {
       ctx.web.registerSearchProvider(
         officialSearchProvider(ctx, {
           ...(options?.credential === undefined ? {} : { credential: options.credential }),
@@ -267,9 +320,47 @@ export function officialWebSearch(input: {
   }
 }
 
+/** WP353：内置浏览器搜索提供方（结果形状与官方 `WebSearchResult` 一致；截断由官方服务做）。 */
+export function browserSearchProvider(backend: WebBackend): WebSearchProvider {
+  return {
+    id: BROWSER_SEARCH_PROVIDER_ID,
+    available: () => true,
+    search: (request) => backend.search(request.query, request.maxResults),
+  }
+}
+
+/**
+ * WP353：抓网页分两路——`fetchHosts` 里的站交给内置浏览器读正文，其余原样交给官方匿名抓取
+ * （官方 `HttpFetchProvider`，配置用官方插件自己的缺省值：公网地址校验、IP 钉住、同源重定向、上限一个不少）。
+ */
+export function splitFetchProvider(
+  backend: WebBackend,
+  hosts: readonly string[],
+): WebFetchProvider {
+  const limits = (WebFetchHttp.Config as unknown as (v: object) => WebFetchHttp.Config)({})
+  const http = new WebFetchHttp.HttpFetchProvider(
+    limits as ConstructorParameters<typeof WebFetchHttp.HttpFetchProvider>[0],
+  )
+  return {
+    id: HTTP_FETCH_PROVIDER_ID,
+    available: () => true,
+    async fetch(request, signal) {
+      let host = ''
+      try {
+        host = new URL(request.url).hostname
+      } catch {
+        // 解析不了的交给官方，由它照官方的样子报错
+      }
+      if (backend.fetch !== undefined && host !== '' && hostAllowed(host, hosts))
+        return backend.fetch(request.url)
+      return http.fetch(request, signal)
+    },
+  }
+}
+
 function standInSearchProvider(standIn: WebStandIn): WebSearchProvider {
   return {
-    id: DEEPSEEK_PROVIDER_ID,
+    id: BROWSER_SEARCH_PROVIDER_ID,
     available: () => true,
     search: (request) => standIn.search(request.query),
   }
@@ -306,7 +397,10 @@ export function webBrief(request: RunRequest): string {
   if (search) {
     lines.push(
       `- 可以用 \`web_search\` 上网查最新的公开信息。这次运行最多搜 ${web.max_searches} 次（一条查询算一次），` +
-        '每一次都要花一次模型的钱，想清楚再搜，别换个说法把同一件事搜好几遍。',
+        (web.credential === undefined
+          ? '每一次都会在工坊的内置浏览器里打开一次搜索页，搜多了会被搜索引擎拦下，想清楚再搜，别换个说法把同一件事搜好几遍。' +
+            '要找某个站上的讨论可以写 `site:reddit.com` 这样的限定。'
+          : '每一次都要花一次模型的钱，想清楚再搜，别换个说法把同一件事搜好几遍。'),
     )
   }
   if (fetch) {

@@ -230,9 +230,38 @@ export function startChildBridge(io: {
       ...(wire.has.webCredential === true ||
       wire.has.webStandIn === true ||
       wire.has.webUse === true ||
+      wire.has.webBackend === true ||
+      wire.webDeepseekSearch === true ||
       wire.webSearchBaseUrl !== undefined
         ? {
             web: {
+              ...(wire.webDeepseekSearch === true ? { deepseekSearch: true } : {}),
+              // WP353：内置浏览器后端在宿主那边（搜索 / 抓网页经管道问）
+              ...(wire.has.webBackend === true
+                ? {
+                    backend: {
+                      search: async (query: string, maxResults?: number) =>
+                        webValue(
+                          await ask<WebHostResult>(M_HOST_WEB, {
+                            op: 'backend_search',
+                            query,
+                            ...(maxResults === undefined ? {} : { maxResults }),
+                          }),
+                        ),
+                      ...(wire.has.webBackendFetch === true
+                        ? {
+                            fetch: async (url: string) =>
+                              webValue(
+                                await ask<WebHostResult>(M_HOST_WEB, { op: 'backend_fetch', url }),
+                              ),
+                          }
+                        : {}),
+                      ...(wire.webFetchHosts === undefined
+                        ? {}
+                        : { fetchHosts: wire.webFetchHosts }),
+                    },
+                  }
+                : {}),
               ...(wire.webSearchBaseUrl === undefined
                 ? {}
                 : { searchBaseUrl: wire.webSearchBaseUrl }),

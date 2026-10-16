@@ -210,15 +210,20 @@ export type {
 } from './types.js'
 export type {
   DshWebOptions,
+  WebBackend,
   WebCredential,
   WebCredentialKind,
   WebStandIn,
   WebUse,
 } from './web.js'
 export {
+  BROWSER_SEARCH_PROVIDER_ID,
+  browserSearchProvider,
   HTTP_FETCH_PROVIDER_ID,
   officialSearchProvider,
   officialWebSearch,
+  searchProviderIdOf,
+  splitFetchProvider,
   WEB_SEARCH_TIMEOUT_MS,
   webBrief,
   webWanted,

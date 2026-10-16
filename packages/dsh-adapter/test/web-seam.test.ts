@@ -22,11 +22,13 @@ import { DEFAULT_WEB_LIMITS } from '@agentsws/contracts'
 import { standInWebFetch, standInWebSearch } from '@agentsws/stand-ins'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  BROWSER_SEARCH_PROVIDER_ID,
   classifySideEffect,
   createDshRuntime,
   type DshRuntimeOptions,
   type ModelGatewayLike,
   maxStepsFor,
+  searchProviderIdOf,
   subprocessAvailable,
   type WebCredential,
   type WebUse,
@@ -158,6 +160,8 @@ async function runWith(input: {
     ...baseOptions({ gateway: input.gateway }),
     mode: input.mode ?? 'in-process',
     web: {
+      // WP353：DeepSeek 自带搜索默认不挂；这一组测的就是那条旧路，显式要它
+      deepseekSearch: true,
       searchBaseUrl: base,
       credential: async (endpoint) => {
         endpoints.push(endpoint)
@@ -407,5 +411,125 @@ describe.runIf(subprocessAvailable())('WP179 官方网页工具：子进程档',
     expect(results(events).map((r) => r.status)).toEqual(['ok'])
     expect(uses.map((u) => u.kind)).toEqual(['search_usage', 'search'])
     expect(JSON.stringify(events)).not.toContain('acct-token-sub')
+  })
+})
+
+// ── WP353：内置浏览器后端（宿主给 `backend`）────────────────────────────────
+
+const REDDIT = { name: 'web_fetch', input: { url: 'https://www.reddit.com/r/SmartGlasses/' } }
+
+function backendOf(log: string[]): NonNullable<DshRuntimeOptions['web']>['backend'] {
+  return {
+    search: async (query, maxResults) => {
+      log.push(`search:${query}:${maxResults ?? ''}`)
+      return {
+        sources: [
+          {
+            url: 'https://www.reddit.com/r/SmartGlasses/',
+            title: 'r/SmartGlasses',
+            snippet: 'Google · 讨论',
+          },
+        ],
+        truncated: false,
+      }
+    },
+    fetch: async (url) => {
+      log.push(`fetch:${url}`)
+      return { url, statusCode: 200, body: { kind: 'text', content: '版块正文' }, truncated: false }
+    },
+    fetchHosts: ['*.reddit.com'],
+  }
+}
+
+describe('WP353 内置浏览器后端', () => {
+  it('进程内：搜索走宿主后端、不打 DeepSeek；Reddit 交给浏览器抓，别的站照旧官方匿名抓取', async () => {
+    seen.length = 0
+    const log: string[] = []
+    const gateway = scripted([SEARCH, REDDIT, FETCH])
+    const uses: WebUse[] = []
+    const runtime = createDshRuntime({
+      ...baseOptions({ gateway }),
+      mode: 'in-process',
+      web: {
+        // 凭据给了也不用：有后端就不挂 DeepSeek
+        credential: async () => ({ kind: 'account', token: 'never-used' }),
+        searchBaseUrl: base,
+        backend: backendOf(log),
+        onUse: (u) => uses.push(u),
+      },
+    })
+    const { sink, events } = collect()
+    await runtime.run(webRequest(), sink, new AbortController().signal)
+    expect(seen).toHaveLength(0)
+    expect(log[0]).toMatch(/^search:65W 氮化镓 充电器 2026 新品:\d+$/)
+    expect(log[1]).toBe('fetch:https://www.reddit.com/r/SmartGlasses/')
+    expect(log).toHaveLength(2)
+    // 本机地址交给官方匿名抓取：官方在连接之前就拒
+    expect(results(events).map((r) => r.status)).toEqual(['ok', 'ok', 'error'])
+    expect(gateway.requests[1]?.text).toContain('r/SmartGlasses')
+    expect(uses.map((u) => u.kind)).toEqual(['search', 'fetch', 'fetch'])
+    expect(uses.some((u) => u.kind === 'search_usage')).toBe(false)
+  })
+
+  it('没给后端、也没显式要 DeepSeek：不挂任何搜索后端，也不去打 DeepSeek', async () => {
+    seen.length = 0
+    const gateway = scripted([SEARCH])
+    const runtime = createDshRuntime({
+      ...baseOptions({ gateway }),
+      mode: 'in-process',
+      web: {
+        credential: async () => ({ kind: 'account', token: 'never-used' }),
+        searchBaseUrl: base,
+      },
+    })
+    const { sink, events } = collect()
+    await runtime.run(webRequest(), sink, new AbortController().signal)
+    expect(seen).toHaveLength(0)
+    expect(results(events).map((r) => r.status)).toEqual(['error'])
+  })
+
+  it('提供方 id：替身与内置浏览器同一个；只有显式要旧路才是 DeepSeek', () => {
+    expect(searchProviderIdOf(undefined)).toBe(BROWSER_SEARCH_PROVIDER_ID)
+    expect(
+      searchProviderIdOf({
+        standIn: {
+          search: async () => ({ sources: [], truncated: false }),
+          fetch: async (url) => ({
+            url,
+            statusCode: 200,
+            body: { kind: 'text', content: '' },
+            truncated: false,
+          }),
+        },
+      }),
+    ).toBe(BROWSER_SEARCH_PROVIDER_ID)
+    expect(searchProviderIdOf({ deepseekSearch: true })).toBe('deepseek-official')
+  })
+
+  it('提示词：内置浏览器那一档不说「花模型的钱」，提一句 site: 限定', () => {
+    const brief = webBrief(webRequest())
+    expect(brief).toContain('内置浏览器')
+    expect(brief).toContain('site:reddit.com')
+    expect(brief).not.toContain('花一次模型的钱')
+  })
+})
+
+describe.runIf(subprocessAvailable())('WP353 内置浏览器后端：子进程档', () => {
+  it('搜索与按主机分流的抓取经管道问宿主', async () => {
+    seen.length = 0
+    const log: string[] = []
+    const gateway = scripted([SEARCH, REDDIT])
+    const runtime = createDshRuntime({
+      ...baseOptions({ gateway }),
+      mode: 'subprocess',
+      web: { backend: backendOf(log), onUse: () => undefined },
+    })
+    const { sink, events } = collect()
+    await runtime.run(webRequest(), sink, new AbortController().signal)
+    expect(events.find((e) => e.type === 'run.started')).toMatchObject({ runtime: 'dsh' })
+    expect(seen).toHaveLength(0)
+    expect(log).toHaveLength(2)
+    expect(log[1]).toBe('fetch:https://www.reddit.com/r/SmartGlasses/')
+    expect(results(events).map((r) => r.status)).toEqual(['ok', 'ok'])
   })
 })

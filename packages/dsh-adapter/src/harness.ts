@@ -476,7 +476,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     root.plugin(WorkingDirectoryService, { defaultDirectory: cwd } as never)
   }
   const web = webWanted(input.request)
-  if (web) mountWebService(root)
+  if (web) mountWebService(root, input.options.web)
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
   root.plugin(AgentLoop, { maxParallelToolCalls: 1, agents: [] })
   /*
