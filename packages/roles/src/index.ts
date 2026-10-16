@@ -8,6 +8,23 @@
  * - 31 §3.4 采纳率只是体验指标：只有 low 风险才可能被建议升到 L2
  */
 
+// WP350（决策 900）：助理一次拆成多份——认岗位、改方案、知识条目（服务进程与模拟世界同一份）
+export {
+  applyFanoutEdits,
+  FANOUT_MAX_ITEMS,
+  FANOUT_NOTE_SUBJECT,
+  FANOUT_QUOTE_MAX,
+  FANOUT_TEXT_MAX,
+  type FanoutDraftItem,
+  type FanoutEdit,
+  type FanoutItem,
+  type FanoutKind,
+  type FanoutNoteCard,
+  fanoutLooksSecret,
+  fanoutNoteCard,
+  mentionedPositions,
+  resolveFanout,
+} from './assistant-fanout.js'
 // WP343（决策 859）：「我的助理」派活挑岗位 / 职责（服务进程与模拟世界同一份）
 export {
   PICK_MAX_CANDIDATES,
