@@ -57,6 +57,7 @@ import type {
   ModelProvider,
   ModelPurpose,
   ModelRef,
+  PricingCatalog,
 } from '@agentsws/contracts'
 import {
   attributionHeaders,
@@ -107,6 +108,7 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
+import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
@@ -344,7 +346,11 @@ export interface ModelsOptions {
    * WP165：官方接口的积分价从哪读（云上公开价目 + 本机缓存，`pricing-catalog.ts`）。
    * 同步、只读手上那一份、从不打网；不给 / 手上没有就不显示那个数——不编。
    */
-  pricing?: { creditsFor(capability: string, quantity?: number): number | undefined }
+  pricing?: {
+    creditsFor(capability: string, quantity?: number): number | undefined
+    /** WP362：手上那一份价目（AI 钮里列工坊积分那一组的所有模型、算消耗速率）。 */
+    current?(): PricingCatalog | undefined
+  }
   /**
    * WP134：「用我的 DeepSeek 账号登录」那一路。**只有两样**：登录了没有（同步）与官方
    * `resolveToken`（每次请求现取）。不给 = 这个进程没装这条路，那种 provider 永远挂不上。
@@ -444,6 +450,8 @@ export interface ModelsAssembly {
    * 按"已配的"列表的顺序。只列挂上的——没挂上的模型网关会退回同一家的第一个，选了等于白选。
    */
   chatChoices(): ModelChatChoice[]
+  /** WP362：消耗速率的 1x 是谁（`fallback` = 价目里没有 DeepSeek v4 Pro，退回了默认模型）。 */
+  rateBase?(): { model: string; fallback: boolean } | undefined
 }
 
 /** WP188：随便聊下拉里的一项。 */
@@ -454,6 +462,12 @@ export interface ModelChatChoice {
   /** 「Agents 工坊（用积分）」那一条（按积分扣）。 */
   official: boolean
   vision: ModelVisionStatus
+  /** WP362：哪一组（工坊积分 / ChatGPT 订阅 / 自己接的）。 */
+  group?: 'workshop' | 'subscription' | 'own'
+  /** WP362：厂商（图标用；认不出不给）。 */
+  vendor?: string
+  /** WP362：右边那一格（消耗速率 / 订阅额度 / 用你自己的 key）。 */
+  price?: ModelPrice
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -1728,7 +1742,26 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   /** 这家现在**已知**有哪些模型：拉过清单就是那一份，没拉过就只有配置里那一个。 */
   const knownModels = (config: ModelProviderConfig): string[] => {
     const listed = config.models ?? []
-    return listed.includes(config.model) ? listed : [config.model, ...listed]
+    const known = listed.includes(config.model) ? listed : [config.model, ...listed]
+    // WP362：工坊积分那一条——云端价目里的每个模型都能选（AI 钮里列全）
+    if (config.kind !== 'agentsws_cloud') return known
+    const priced = cloudPricedModels().filter((m) => !known.includes(m))
+    return [...known, ...priced]
+  }
+
+  /** WP362：云端价目里按 token 计价的那些模型（去重、按价目顺序）。手上没有价目就空。 */
+  const cloudPricedModels = (): string[] => cloudRatesNow().models
+  const cloudRatesNow = () => {
+    const entries =
+      options.pricing?.current?.()?.pricing.entries.find((e) => e.capability === 'ai.chat')
+        ?.models ?? []
+    const cloud = textConfigsRaw().find((c) => c.kind === 'agentsws_cloud')
+    const def = state.defaults.default
+    const defaultModel =
+      cloud !== undefined && def?.startsWith(`${cloud.id}/`) === true
+        ? def.slice(cloud.id.length + 1)
+        : cloud?.model
+    return cloudRates(entries, defaultModel)
   }
 
   /**
@@ -1739,8 +1772,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 选中的才装。
    */
   const selectedModels = (config: ModelProviderConfig): string[] => {
-    // WP362：订阅目录就那么几个、不花钱建——全挂上，下拉里每个都能点、点了真用它
-    if (config.kind === 'openai-codex') return knownModels(config)
+    // WP362：订阅目录 / 云端价目里的模型——全挂上（只是几个对象，不花钱建），AI 钮里每个都能点、点了真用它
+    if (config.kind === 'openai-codex' || config.kind === 'agentsws_cloud')
+      return knownModels(config)
     const picked = new Set([config.model])
     const ids = [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]
     for (const id of ids) {
@@ -1782,6 +1816,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     ]
   }
   /** WP274：挂文字模型的那几条（只用来生图的那几条不算）。 */
+  /** 不含订阅那一条的（算云端基准用，避免绕圈）。 */
+  const textConfigsRaw = (): ModelProviderConfig[] =>
+    activeConfigs().filter((c) => c.image_only !== true)
   const textConfigs = (): ModelProviderConfig[] => [
     ...activeConfigs().filter((c) => c.image_only !== true),
     ...subscriptionConfigs(),
@@ -2715,16 +2752,42 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return undefined
     },
     hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
-    chatChoices: () =>
-      textConfigs().flatMap((c) =>
-        selectedModels(c).map((model) => ({
+    chatChoices: () => {
+      // WP362：AI 钮按来源分组、每行带厂商与消耗速率（工坊积分）/ 订阅额度 / 用你自己的 key
+      const rates = cloudRatesNow()
+      const choice = (c: ModelProviderConfig, model: string): ModelChatChoice => {
+        const group: ModelChatChoice['group'] =
+          c.kind === 'agentsws_cloud'
+            ? 'workshop'
+            : c.kind === 'openai-codex'
+              ? 'subscription'
+              : 'own'
+        const vendor = vendorOfModel(model)
+        const price: ModelPrice | undefined =
+          group === 'workshop'
+            ? rates.price(model)
+            : group === 'subscription'
+              ? { kind: 'subscription' }
+              : { kind: 'own_key' }
+        return {
           id: `${c.id}/${model}`,
           // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）
           label: providerDisplayLabel(c),
           official: c.kind === 'agentsws_cloud',
           vision: visionStatusOf(c, model),
-        })),
-      ),
+          group,
+          ...(vendor === undefined ? {} : { vendor }),
+          ...(price === undefined ? {} : { price }),
+        }
+      }
+      const order = { workshop: 0, subscription: 1, own: 2 } as const
+      return textConfigs()
+        .flatMap((c) => selectedModels(c).map((model) => choice(c, model)))
+        .map((c, i) => ({ c, i }))
+        .sort((a, b) => order[a.c.group ?? 'own'] - order[b.c.group ?? 'own'] || a.i - b.i)
+        .map(({ c }) => c)
+    },
+    rateBase: () => cloudRatesNow().base,
     dropAccountProvider(reason) {
       const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
       if (rows.length === 0) return false

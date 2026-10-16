@@ -59,6 +59,7 @@ import { publicAttachment, readAssistantFile, sourceKindOf } from './assistant-f
 import { assistantMemoryLines, rememberAfterTurn, rememberFromFanout } from './assistant-memory.js'
 import { splitRememberTags } from './auto-memory.js'
 import type { AssistantMemoryRow, FreeChatStore } from './free-chat-store.js'
+import { RATE_NOTE } from './model-rates.js'
 import type { ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
@@ -82,6 +83,8 @@ export interface FreeChatOptions {
     chatChoices(): ModelChatChoice[]
     defaultRef(): ModelRef
     configured(): boolean
+    /** WP362：消耗速率的 1x 是谁。 */
+    rateBase?(): { model: string; fallback: boolean } | undefined
   }>
   /** 这条分配是哪条职责（记账的 `role_id`）。 */
   roleOf(assignment_id: string): string | undefined
@@ -237,9 +240,12 @@ export function createFreeChatPort(options: FreeChatOptions): FreeChatPort {
         options.web === undefined
           ? { available: false, reason: '这个服务进程没有装联网搜索' }
           : await options.web.status()
+      const base = models.rateBase?.()
       return {
         choices,
         ...(choices.some((c) => c.id === def) ? { default: def } : {}),
+        // WP362：消耗速率的 1x 是谁、问号里那句白话
+        ...(base === undefined ? {} : { rate_base: base, rate_note: RATE_NOTE }),
         web_search: {
           available: web.available,
           ...(web.reason === undefined ? {} : { reason: web.reason }),

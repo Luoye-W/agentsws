@@ -8,6 +8,9 @@
  * 取的是 2026-09-27 云上那一份的快照（当时还在本仓 `packages/metering` 里，已公开过）。
  * 这不是官方价：界面上真实显示的永远是云上取到的那一份（或本机缓存的上一份）。
  * 改这一份只影响 demo / 模拟 / 测试，不改任何人的账。
+ *
+ * WP362：几个模型带了 `consumption_rate` / `rate_source`（消耗速率，DeepSeek v4 Pro 官方原价 = 1）——数字是**示意**，
+ * 真的那一份由私有云按用量账本长期统计；其余模型故意不带，好让界面演示「按官方原价折算」那条退路。
  */
 import type { PricingCatalog } from '@agentsws/contracts'
 
@@ -37,6 +40,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             in: 0.0064,
             out: 0.0256,
             cached: 0.0001,
+            consumption_rate: 0.3,
+            rate_source: 'stats',
           },
           {
             model: 'deepseek-r1',
@@ -55,6 +60,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             in: 0.0281,
             out: 0.0843,
             cached: 0.0009,
+            consumption_rate: 1,
+            rate_source: 'stats',
           },
           {
             model: 'deepseek-v4-pro',
@@ -211,6 +218,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             in: 0.0852,
             out: 0.426,
             cached: 0.0085,
+            consumption_rate: 4.2,
+            rate_source: 'list_price',
           },
           {
             model: 'gpt-5.6-terra',
@@ -253,6 +262,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             in: 0.06,
             out: 0.3,
             cached: 0.006,
+            consumption_rate: 1.3,
+            rate_source: 'stats',
           },
           {
             model: 'MiniMax-M2.5',
@@ -355,6 +366,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             in: 0,
             out: 0,
             cached: 0,
+            consumption_rate: 1.6,
+            rate_source: 'stats',
           },
           {
             model: 'qwen3.8-max',

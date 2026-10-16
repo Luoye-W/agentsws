@@ -242,10 +242,33 @@ export interface FreeChatModelChoice {
   official: boolean
   /** 能不能看图（按上一次三步验证）：`unchecked` = 没验证过，照常让贴图。 */
   vision: 'ok' | 'no' | 'unchecked'
+  /** WP362（只加）：哪一组——`workshop` 工坊积分 / `subscription` ChatGPT 订阅 / `own` 自己接的。 */
+  group?: 'workshop' | 'subscription' | 'own'
+  /** WP362：厂商（`openai` / `deepseek` / `qwen`…，图标用；认不出不给）。 */
+  vendor?: string
+  /** WP362：每行右边那一格。 */
+  price?: FreeChatModelPrice
 }
+
+/**
+ * WP362：AI 钮每行右边那一格。`rate` = 消耗速率（DeepSeek v4 Pro 官方原价 = 1x；`stats` 后台长期统计、
+ * `list_price` 按官方原价折算）；`free` = 限免；`subscription` = 订阅额度；`own_key` = 用你自己的 key。
+ */
+export type FreeChatModelPrice =
+  | { kind: 'rate'; rate: number; source: 'stats' | 'list_price' }
+  | { kind: 'free' }
+  | { kind: 'subscription' }
+  | { kind: 'own_key' }
 
 export interface FreeChatModelsView {
   choices: FreeChatModelChoice[]
+  /**
+   * WP362：消耗速率的 1x 是哪个模型；`fallback` = 价目里没有 DeepSeek v4 Pro（或对不上），退回了默认模型。
+   * 价目拿不到就没有。
+   */
+  rate_base?: { model: string; fallback: boolean }
+  /** WP362：组标题问号里那一句白话（消耗速率怎么算的）。 */
+  rate_note?: string
   /** 「设置 → 模型」里的默认模型（`provider_id/model`）；一条都没配时没有。 */
   default?: string
   web_search: {
