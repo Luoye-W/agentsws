@@ -112,6 +112,7 @@ import {
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
   brandNameOf,
+  builtinConnectNeed,
   CONTENT_CHECK_INTERVAL_MS,
   CONTENT_SIGNING_PUBLIC_KEYS,
   contentChannelOf,
@@ -384,6 +385,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
+import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -1679,6 +1681,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let cloudLinkedSink: (() => void) | undefined
   /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
   let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
+  /** WP360：晚绑定——插件配对表在后面才建出来（这个品牌有没有一个没撤掉的插件配上了）。 */
+  let extensionPairedRef: ((ws: WorkspaceId) => boolean) | undefined
+  /** WP360：晚绑定——需要插件的岗位引导装插件（第一次在岗位上说话时带卡）。 */
+  let extensionOnboardingRef: ExtensionOnboarding | undefined
   /**
    * WP272：令牌缺动作集时后台自动补签（`scope-auto-upgrade.ts`）。晚绑定：各品牌的云面先建，
    * 账号面后装；没装好之前撞上缺动作集就照实回 403。
@@ -3401,6 +3407,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP315：插件里连上了担着的那几家广告后台（勾过风险告知）
     if (need.kind === ADS_BACKEND_NEED_KIND)
       return (await brandModules.forWorkspace(ws).catch(() => undefined))?.adsData?.backendReady()
+    // WP360：插件配上了没有（配对表里有一个没撤掉的；以前落到连接目录里查不到，永远是「不知道」）
+    if (need.kind === 'extension' && need.service === 'extension') return extensionPairedRef?.(ws)
     // WP328：插件里连上 Reddit、登着品牌号（不知道就回 undefined：人说好了就信人）
     if (need.kind === 'reddit_session')
       return (
@@ -5872,11 +5880,51 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return completion.text
       }
     }
+    /*
+     * WP360（决策 947）：人第一次在要插件的岗位上说话、插件还没配上 → 事项里先说一句、把装插件那张卡带进来
+     * （不等人说「装插件」）。只认人说的话（定时 / 待办起的不算）；岗位 = 本人在这件事所属岗位里的那几条职责。
+     */
+    const extensionNudge = async (input: Parameters<StartRun>[0]): Promise<void> => {
+      const nudger = extensionOnboardingRef
+      if (nudger === undefined || input.todo_id !== undefined) return
+      // 人那句话可能在起跑之后才记进时间线：让一拍再看
+      await new Promise((r) => setTimeout(r, 0))
+      const said = workRef?.store
+        .listMatterEvents(input.matter.id, { limit: 50 })
+        .some((e) => e.kind === 'human_message')
+      if (said !== true) return
+      const mine = roles.assignments.get(input.actor.assignment_id)
+      if (mine === undefined || mine.revoked_at !== undefined) return
+      const tpl = input.matter.position_template_id
+      const pos = positionAssemblies.get(ws)
+      const role_ids =
+        tpl === undefined || pos === undefined
+          ? [mine.role_id]
+          : roles.assignments
+              .listByPerson(input.actor.person_id, { workspace_id: ws })
+              .filter(
+                (a) =>
+                  a.revoked_at === undefined &&
+                  (a.id === mine.id || pos.positionOf(a.role_id, a.id).position_id === tpl),
+              )
+              .map((a) => a.role_id)
+      await nudger.nudge({
+        actor: {
+          workspace_id: ws,
+          person_id: input.actor.person_id,
+          assignment_id: mine.id,
+          role_id: mine.role_id,
+        },
+        matter_id: input.matter.id,
+        role_ids,
+      })
+    }
     const startRun: StartRun | undefined =
       baseStartRun === undefined
         ? undefined
         : (input) => {
             void titler.kick({ matter: input.matter, brief: input.brief, actor: input.actor })
+            void extensionNudge(input).catch(() => undefined)
             return baseStartRun(input)
           }
 
@@ -8602,6 +8650,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ws === undefined || ws === workspace.id
         ? boot.ownModels.configured()
         : (await brandModules.models(ws)).configured(),
+    // WP360：第 ④ 步「装插件 + 配对」那一项打不打勾
+    extensionPaired: (ws) => extensionPairedRef?.(ws) === true,
     // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂整个品牌
     shopifyStores: (ws) => {
       const list = (c: typeof boot.connections) =>
@@ -11063,6 +11113,114 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         })
       : undefined
+  extensionPairedRef = (ws) => extensionStore.list(ws).some((t) => t.revoked_at === undefined)
+  /**
+   * WP360（决策 947）：需要插件的岗位一开始就引导装好插件——岗位页顶上那张卡（要不要、配上没有、还差哪步、
+   * 稍后、接方案卡）与第一次对话主动带卡。「要不要」只从职责定义的 `browser_extension` 推。
+   */
+  const dayStartOf = (ws: WorkspaceId): string => {
+    const tz = (outboundTz.get(ws) ?? 0) * 60_000
+    const day = 86_400_000
+    return new Date(Math.floor((Date.parse(clock.now()) + tz) / day) * day - tz).toISOString()
+  }
+  const extensionEvent = (
+    actor: { workspace_id: string; person_id: string; assignment_id: string },
+    type: 'extension.onboarding_snoozed' | 'extension.onboarding_prompted',
+    payload: Record<string, unknown>,
+  ): void =>
+    appendEvent({
+      schema_version: 1,
+      workspace_id: actor.workspace_id as WorkspaceId,
+      type,
+      actor: { kind: 'person', id: actor.person_id },
+      correlation: { trace_id: `trc_extob_${Date.parse(clock.now()).toString(36)}` },
+      payload: { assignment_id: actor.assignment_id, ...payload },
+    })
+  const extensionOnboarding = createExtensionOnboarding({
+    role: (id) => roles.roles.get(id as never),
+    heldRoleIds: (ws, person) =>
+      roles.assignments
+        .listByPerson(person as never, { workspace_id: ws as WorkspaceId })
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => a.role_id),
+    paired: (ws) => extensionPairedRef?.(ws as WorkspaceId) === true,
+    stepDone: async (ws, step) => {
+      const brand = await brandModules.forWorkspace(ws as WorkspaceId).catch(() => undefined)
+      if (step === 'reddit') {
+        const st = brand?.redditWatch?.pluginState().state
+        return st === undefined ? undefined : st === 'connected'
+      }
+      const acts = brand?.adsActions
+      return acts === undefined ? undefined : acts.settings().consent[step] !== undefined
+    },
+    planTarget: async (ws, target) => {
+      const t = (await setupCardsOf(ws as WorkspaceId))?.target(target)
+      return t === undefined ? undefined : { name: t.name, satisfied: await t.satisfied() }
+    },
+    askPlan: async (actor, target) => {
+      const out = await (await setupCardsOf(actor.workspace_id))?.askSetup({
+        target,
+        actor: {
+          person_id: actor.person_id as never,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+        },
+      })
+      return out === undefined ? {} : { card_id: out.item.id }
+    },
+    snoozedToday: (ws) =>
+      kernel.eventLog.readSync({
+        workspace_id: ws as WorkspaceId,
+        types: ['extension.onboarding_snoozed'],
+        since_at: dayStartOf(ws as WorkspaceId),
+      }).length > 0,
+    recordSnooze: (actor, role_ids) =>
+      extensionEvent(actor, 'extension.onboarding_snoozed', { role_ids }),
+    prompted: (ws, assignment_id) =>
+      kernel.eventLog
+        .readSync({ workspace_id: ws as WorkspaceId, types: ['extension.onboarding_prompted'] })
+        .some((e) => (e.payload as { assignment_id?: string }).assignment_id === assignment_id),
+    askConnect: async ({ actor, matter_id, why }) => {
+      const need = builtinConnectNeed('extension')
+      if (need === undefined) return undefined
+      const out = await (await setupCardsOf(actor.workspace_id))?.askConnect({
+        needs: [{ ...need, name: 'Agents 工坊助手（Chrome 插件）' }],
+        why,
+        actor: {
+          person_id: actor.person_id as never,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+        },
+        matter_id,
+        resume: false,
+      })
+      if (out === undefined) return undefined
+      const reused = (out.item.subject as { matter_id?: string }).matter_id !== matter_id
+      // 新出的那张挂进这件事的时间线（复用的那张挂在第一次出它的那件事上）
+      if (!reused)
+        try {
+          ;(await brands?.forWorkspace(actor.workspace_id))?.work.onCard(cardRefOf(out.item))
+        } catch {
+          // 挂不上事项不影响卡本身
+        }
+      return { card_id: out.item.id, reused }
+    },
+    note: async (ws, matter_id, text) => {
+      const brand = await brands?.forWorkspace(ws as WorkspaceId).catch(() => undefined)
+      try {
+        brand?.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'extension_onboarding' },
+        })
+      } catch {
+        // 事项已经没了
+      }
+    },
+    recordPrompt: (actor, payload) =>
+      extensionEvent(actor, 'extension.onboarding_prompted', payload),
+  })
+  extensionOnboardingRef = extensionOnboarding
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
     serviceOf: async (ws) => {
@@ -12133,6 +12291,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     extension: extensionPortOf,
     // WP345：插件随工坊安装与更新 `/v1/extension/install*`、`/v1/extension/version`
     ...(extensionInstall === undefined ? {} : { extensionInstall }),
+    // WP360：需要插件的岗位引导装插件 `/v1/extension/needs*`
+    extensionOnboarding,
     // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
     ...(hostedBoot === undefined
       ? {

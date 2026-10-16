@@ -79,6 +79,7 @@ import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { ExtensionActionsPort } from './routes/extension-actions.js'
 import type { ExtensionInstallPort } from './routes/extension-install.js'
+import type { ExtensionOnboardingPort } from './routes/extension-onboarding.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { GenuiImageHostsPort } from './routes/genui-image-hosts.js'
 import type { HandoffPort } from './routes/handoff.js'
@@ -907,6 +908,11 @@ export interface GatewayDeps {
    * 没装配时那三条路由回 not_implemented——连接卡退回只出配对码那一块。
    */
   extensionInstall?: ExtensionInstallPort
+  /**
+   * WP360（决策 947）：需要插件的岗位一开始就引导装好插件（要不要、配上没有、还差哪步、稍后、接方案卡）。
+   * 没装配时那三条路由回 not_implemented——岗位页顶上就不出那张卡。
+   */
+  extensionOnboarding?: ExtensionOnboardingPort
   /**
    * WP328（docs/102）：Reddit 每日巡查（插件只读 + 工作台看 / 改 / 现在巡查 / 周汇总）。
    * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。
