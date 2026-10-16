@@ -16,6 +16,7 @@
  */
 import type { FetchLike } from '@agentsws/model-gateway'
 import { VISION_PROBE_WORD } from '@agentsws/model-gateway'
+import { stubFanoutDraft } from '@agentsws/stand-ins'
 import { CLOUD_STAND_IN_BASE_URL } from './cloud-stand-in.js'
 
 /** demo 里联网搜索的替身结果（不出网）。 */
@@ -115,11 +116,42 @@ function demoDoneOf(asked: string): string {
   return said === '' ? '' : `：${said.slice(0, 40)}`
 }
 
+/** WP350：系统提示里「用户的岗位」那几行的岗位名。 */
+function positionsOf(system: string): string[] {
+  const at = system.indexOf('用户的岗位')
+  if (at < 0) return []
+  return system
+    .slice(at)
+    .split('\n')
+    .slice(1)
+    .filter((l) => l.startsWith('- '))
+    .map((l) => l.slice(2).split('：')[0]?.trim() ?? '')
+    .filter((n) => n !== '' && n.length <= 20)
+}
+
+/** WP350：附件那段（围栏里的字）；没有附件就是那句话本身。 */
+function materialOf(asked: string): string {
+  const blocks = [...asked.matchAll(/<external_data>\n?([\s\S]*?)\n?<\/external_data>/gu)].map(
+    (m) => m[1] ?? '',
+  )
+  return blocks.length === 0 ? asked : blocks.join('\n')
+}
+
 /** WP343：演示里助理那几个工具怎么被点到（按用户那句话认）。 */
 function assistantCall(
   asked: string,
   tools: readonly string[],
+  system = '',
 ): { name: string; args: Record<string, unknown> } | undefined {
+  // WP350：附了资料 / 提到会议记录 / 一句话点了两个以上岗位 → 按岗位拆成多份（出方案卡）
+  if (tools.includes('plan_fanout')) {
+    const names = positionsOf(system)
+    const named = names.filter((n) => asked.includes(n)).length
+    if (asked.includes('<external_data>') || /会议记录|纪要|周会/u.test(asked) || named >= 2) {
+      const draft = stubFanoutDraft(materialOf(asked), names)
+      if (draft.items.length > 0) return { name: 'plan_fanout', args: draft }
+    }
+  }
   if (tools.includes('hand_to_position') && /^(让|叫|请)/u.test(asked.trim()))
     return { name: 'hand_to_position', args: { text: asked.trim() } }
   if (tools.includes('my_pending_cards') && /要我处理|要我定|等我/u.test(asked))
@@ -138,6 +170,16 @@ function assistantSay(name: string, content: string): string {
     parsed = JSON.parse(content) as Record<string, unknown>
   } catch {
     return content
+  }
+  if (name === 'plan_fanout') {
+    if (parsed.planned !== true) return String(parsed.reason ?? '没拆出东西来。')
+    const n = (k: string) => Number(parsed[k] ?? 0)
+    const bits = [
+      n('tasks') > 0 ? `${n('tasks')} 件要做的事` : '',
+      n('notes') > 0 ? `${n('notes')} 条要记的口径` : '',
+      n('memories') > 0 ? `${n('memories')} 条你的习惯` : '',
+    ].filter((b) => b !== '')
+    return `按岗位拆好了：${bits.join('、')}${n('unsure') > 0 ? `，有 ${n('unsure')} 条归属待定要你挑` : ''}。看一眼，没问题就点「就这样」。`
   }
   if (name === 'hand_to_position') {
     if (parsed.dispatched === true)
@@ -250,7 +292,15 @@ export function cloudAiStandInFetch(
         ? assistantSay(lastTool.name, String(lastTool.content))
         : undefined
     const wantsAssistant =
-      searched || hasImage || body.stream !== true ? undefined : assistantCall(asked, toolNames)
+      searched || hasImage || body.stream !== true
+        ? undefined
+        : assistantCall(
+            asked,
+            toolNames,
+            typeof messages.find((m) => m.role === 'system')?.content === 'string'
+              ? (messages.find((m) => m.role === 'system')?.content as string)
+              : '',
+          )
     if (wantsAssistant !== undefined)
       return sseOf(
         [

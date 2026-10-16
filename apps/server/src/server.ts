@@ -232,6 +232,7 @@ import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
+import { createAssistantNotes, isAssistantNotesCard } from './assistant-notes.js'
 import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
 import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
@@ -2655,6 +2656,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
+  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——待确认写进知识库 + 一批一张确认卡
+  const assistantNotes = createAssistantNotes({
+    clock,
+    knowledge,
+    approvals,
+    roleOf: (id) => roles.assignments.get(id)?.role_id,
+  })
   /*
    * WP323：记录去处的「定规矩」卡由这条总线出（① ② 交代的人自己点；③ 发给老板，与改职责规矩同一条路）。
    * 删去处时还没定的卡撤掉（到期作废，不算谁拒的）。
@@ -7365,6 +7373,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP350：助理扇出的「要记的 N 条」确认卡被点了 → 这一批生效 / 作废
+    if (isAssistantNotesCard(item)) return assistantNotes.onDecided(item)
     // WP322：「按问答导入」定规矩卡 / ③ 的整批卡被点了 → 一行一张知识卡（或整批生效 / 作废）
     if (isFaqImportCard(item) || isFaqBatchCard(item)) {
       await faqImporter?.onDecided(item)
@@ -10274,10 +10284,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const item = await approvals.get(id)
         return item !== undefined && (item.state === 'pending' || item.state === 'in_review')
       },
+      // WP350：拆成多份——来源批次 id、要记的那几条待确认写进知识库
+      newId: (prefix) =>
+        `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
+      proposeNotes: assistantNotes.propose,
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
-          ...fitTaskTitle({ title: input.text.trim() }),
+          ...fitTaskTitle({
+            title: input.text.trim(),
+            ...(input.summary === undefined ? {} : { summary: input.summary }),
+          }),
           ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
           mode: 'task',
           detach: true,
@@ -12556,6 +12573,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP322：FAQ 导入的定规矩卡 / 整批卡
           isFaqImportCard(out) ||
           isFaqBatchCard(out) ||
+          // WP350：助理扇出的「要记的 N 条」确认卡
+          isAssistantNotesCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out)
         ) {

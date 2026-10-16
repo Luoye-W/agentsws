@@ -65,6 +65,9 @@ export interface AssistantDispatchRow {
   role_id?: string
   duty_name?: string
   reported: string[]
+  /** WP350：同一张方案卡派出去的带同一个来源批次（回报按批次聚在一起）。 */
+  batch_id?: string
+  batch_title?: string
 }
 
 /** WP343：「我的助理」这一层的一条记忆（本人的，只在助理对话里用）。 */
@@ -86,6 +89,8 @@ export interface FreeChatStore {
   messages(session_id: string): FreeChatMessageView[]
   addMessage(message: FreeChatMessageView): void
   removeMessage(id: string): void
+  /** WP350：改一条已经存下的话（方案卡点过之后状态变了）。没有这条就什么都不做。 */
+  putMessage(message: FreeChatMessageView): void
   /** WP343：记下 / 更新一件交出去的事。 */
   putDispatch(row: AssistantDispatchRow): void
   /** WP343：这个人交出去、`since` 之后的事（新的在后）。 */
@@ -148,6 +153,12 @@ export function createFreeChatStore(dbPath?: string): FreeChatStore {
     },
     removeMessage: (id) => {
       db.prepare('DELETE FROM free_chat_messages WHERE id = ?').run(id)
+    },
+    putMessage: (message) => {
+      db.prepare('UPDATE free_chat_messages SET json = ? WHERE id = ?').run(
+        JSON.stringify(message),
+        message.id,
+      )
     },
     putDispatch: (row) => {
       db.prepare(
