@@ -52,6 +52,16 @@ overrides:
   # WP336：dsh-genui 把 react 写进了 dependencies（^18.3.1），不压就会给它单装一份 React 18，
   # 同一页上两份 React，hooks 一调就炸。压到工作台用的那一份 19（它的 peer 本来就写了 ^19）。
   '@changfenhuang/dsh-genui>react': '^19.0.0'
+  # WP358：运行时依赖树上的两条传递依赖安全公告（10-05 发布），上游还没跟，先顶到修好的精确版本。
+  # - compression 1.8.1（高危 GHSA-vc2v-76pw-4v95，响应提前断开时内存泄漏 → 拖垮服务）：
+  #   `@deepseek-ai/dsh-host-webserver` 的依赖。工坊自己的组合不起它（deepseek-account.ts 用登记表代替），
+  #   但用户在工作台打开 dsh 官方「网页场景」时，子进程会起这个服务器（只听 127.0.0.1）——真会加载。
+  # - proxy-addr 2.0.7（严重 GHSA-jqcg-44mw-7w3h，IPv4 映射的 IPv6 绕过信任网段）：
+  #   `@modelcontextprotocol/sdk` → express / express-rate-limit 带进来。我们只用 SDK 的客户端，
+  #   实测三个 client 入口一个都不加载 express；压它是为了树里不留严重公告、装包里也不带旧版。
+  # 上游（dsh-host-webserver / MCP SDK 的 express）依赖范围已经 ≥ 修好的版本时删掉这两条（docs/42 ③）。
+  compression: 1.8.2
+  proxy-addr: 2.0.8
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用
