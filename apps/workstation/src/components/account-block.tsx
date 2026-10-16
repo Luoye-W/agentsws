@@ -170,21 +170,23 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
           {t(`account.group.${id}`)}
         </button>
         {expanded
-          ? SHELL_PAGES.filter((p) => p.group === id && shellPageVisible(p, { known, solo })).map((p) => (
-              <button
-                key={p.to}
-                type="button"
-                role="menuitem"
-                data-testid={p.testId}
-                className={cn(ITEM, 'pl-7')}
-                onClick={() => {
-                  go(p.to)
-                }}
-              >
-                <p.icon aria-hidden className="size-4" />
-                {label(p)}
-              </button>
-            ))
+          ? SHELL_PAGES.filter((p) => p.group === id && shellPageVisible(p, { known, solo })).map(
+              (p) => (
+                <button
+                  key={p.to}
+                  type="button"
+                  role="menuitem"
+                  data-testid={p.testId}
+                  className={cn(ITEM, 'pl-7')}
+                  onClick={() => {
+                    go(p.to)
+                  }}
+                >
+                  <p.icon aria-hidden className="size-4" />
+                  {label(p)}
+                </button>
+              ),
+            )
           : null}
       </div>
     )

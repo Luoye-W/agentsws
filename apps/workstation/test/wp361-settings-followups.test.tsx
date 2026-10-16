@@ -92,7 +92,9 @@ function renderMenu(): void {
 async function openWork(): Promise<HTMLElement> {
   fireEvent.click(screen.getByTestId('account-toggle'))
   const menu = screen.getByTestId('account-menu')
-  if (within(menu).getByTestId('account-group-work-toggle').getAttribute('aria-expanded') !== 'true')
+  if (
+    within(menu).getByTestId('account-group-work-toggle').getAttribute('aria-expanded') !== 'true'
+  )
     fireEvent.click(within(menu).getByTestId('account-group-work-toggle'))
   return menu
 }
