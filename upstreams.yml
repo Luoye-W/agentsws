@@ -268,7 +268,8 @@ upstreams:
     kind: runtime-dep
     why: 安装包自带的 Node（服务进程跑在它上面；原生模块按它的 ABI 127 取 prebuild），四个平台各一份
     repo: nodejs/node
-    locked_version: 22.23.2
+    # WP355：22.23.2 → 22.23.3（为了它配的 npm 10.9.9：npm 自带的 tar 7.5.11 有严重级公告）
+    locked_version: 22.23.3
     pin: exact
     version_line: '22'
     runtime_lock_file: apps/desktop/node-runtime.lock.json
@@ -292,7 +293,7 @@ upstreams:
     why: 安装包自带的 npm（一键装 Shopify CLI、按需下载本机连接器都用它；WP254 起随包带，不再先联网下）
     npm: npm
     repo: npm/cli
-    locked_version: 10.9.8
+    locked_version: 10.9.9
     pin: exact
     version_line: '10'
     lockfile_single: false
