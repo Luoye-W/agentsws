@@ -1067,7 +1067,13 @@ export function InlineCard({
 
 /** WP324 / WP348：连接卡 / 配置卡头上那一句（方案卡说「你点头就接着做 / 才生效」）。 */
 function setupHeadKey(card: DeckCard): string {
-  if (card.kind !== 'setup_request') return 'setup.card.head.connect'
+  if (card.kind !== 'setup_request') {
+    // WP360：主动带来的连接卡（这件事没卡在它上面、连好也不重跑）说「连上就能用」
+    const resume = (card.detail.payload as { resume?: unknown } | undefined)?.resume
+    return card.kind === 'connect_request' && resume === undefined
+      ? 'setup.card.head.connect_ready'
+      : 'setup.card.head.connect'
+  }
   const mode = (card.detail.payload as { mode?: unknown } | undefined)?.mode
   return mode === 'change'
     ? 'setup.plan.head_change'

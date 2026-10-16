@@ -5887,8 +5887,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const extensionNudge = async (input: Parameters<StartRun>[0]): Promise<void> => {
       const nudger = extensionOnboardingRef
       if (nudger === undefined || input.todo_id !== undefined) return
-      // 人那句话可能在起跑之后才记进时间线：让一拍再看
-      await new Promise((r) => setTimeout(r, 0))
       const said = workRef?.store
         .listMatterEvents(input.matter.id, { limit: 50 })
         .some((e) => e.kind === 'human_message')
@@ -5922,9 +5920,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const startRun: StartRun | undefined =
       baseStartRun === undefined
         ? undefined
-        : (input) => {
+        : async (input) => {
             void titler.kick({ matter: input.matter, brief: input.brief, actor: input.actor })
-            void extensionNudge(input).catch(() => undefined)
+            // WP360：先说一句、带上装插件那张卡，再起跑（时间线上它在 AI 回话前面）；不需要时几个判断就返回
+            await extensionNudge(input).catch(() => undefined)
             return baseStartRun(input)
           }
 

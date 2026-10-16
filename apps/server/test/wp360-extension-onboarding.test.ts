@@ -186,9 +186,12 @@ describe('WP360 需要插件的岗位一开始就引导装插件', () => {
       '卡进时间线',
     )
     const tl1 = await timeline(m1.matter.id)
-    const said = tl1.findIndex((e) => e.text.includes('先在下面这张卡上装好、配对'))
+    const said = tl1.findIndex((e) => e.text.includes('在下面这张卡上装好、配个对'))
     expect(said).toBeGreaterThanOrEqual(0)
     expect(tl1.findIndex((e) => e.approval_item_id === card.id)).toBeGreaterThan(said)
+    // 先说这一句、带上卡，再起跑（AI 的回话在它们后面）
+    const reply = tl1.findIndex((e) => e.kind === 'agent_message')
+    if (reply >= 0) expect(reply).toBeGreaterThan(said)
 
     // 同一条分配再说话：不再带
     const m2 = await data<{ matter: { id: string } }>(

@@ -11,6 +11,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExtensionOnboardCard, onboardPhase } from '@/components/connections/extension-onboard-card'
 import { PlanList } from '@/components/onboarding/plan-list'
+import { type ConnectContext, ConnectWidget } from '@/components/setup/connect-widgets'
 import type { ExtensionNeedsView, OnboardingPlanView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
@@ -162,6 +163,35 @@ describe('首次设置第 ④ 步', () => {
     renderWithProviders(<PlanList plan={rest} />)
     await screen.findByTestId('onboarding-plan')
     expect(screen.queryByTestId('extension-onboard')).toBeNull()
+  })
+})
+
+describe('对话里那张「先连上插件」连接卡', () => {
+  const ctx: ConnectContext = {
+    owner: 'asg_owner',
+    providers: [],
+    isConnected: () => false,
+    refresh: () => {},
+  }
+  it('只缺配对：少字版（装 + 配对码），不铺整节插件设置', async () => {
+    renderWithProviders(
+      <ConnectWidget
+        need={{ kind: 'extension', service: 'extension', name: '插件', required: true }}
+        ctx={ctx}
+      />,
+    )
+    await screen.findByTestId('extension-install-pair')
+    expect(screen.getByTestId('extension-generate')).toBeTruthy()
+    expect(screen.queryByTestId('extension-section')).toBeNull()
+  })
+  it('要连广告后台：仍是完整那一节', async () => {
+    renderWithProviders(
+      <ConnectWidget
+        need={{ kind: 'ads_backend', service: 'extension', name: '插件', required: true }}
+        ctx={ctx}
+      />,
+    )
+    await screen.findByTestId('extension-section')
   })
 })
 

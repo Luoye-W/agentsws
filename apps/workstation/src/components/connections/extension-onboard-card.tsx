@@ -17,7 +17,7 @@ import { ExtensionPairingCode } from '@/components/connections/browser-extension
 import { ExtensionInstall } from '@/components/connections/extension-install'
 import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import {
   askExtensionPlan,
   type ExtensionNeedsView,
@@ -27,6 +27,23 @@ import {
 import { useApp } from '@/lib/app-context'
 
 export const EXTENSION_NEEDS_KEY = 'extension-needs'
+
+/**
+ * 装插件 + 配对那一块（少字版）：WP345 的「打开插件文件夹 / Chrome 扩展页 + 三步」+ 一句 + 配对码 + 只连本机的承诺。
+ * 岗位页 / 首次设置那张卡、对话里「先连上插件」那张连接卡都用它（连接页仍是完整那一节）。
+ */
+export function ExtensionInstallAndPair(props: { owner: string | undefined }): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <div className="flex flex-col gap-2" data-testid="extension-install-pair">
+      {/* WP345：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步）；不是桌面版就不出这块 */}
+      <ExtensionInstall assignment={props.owner} paired={false} />
+      <p className="text-xs text-ws-muted-fg">{t('extonboard.pair')}</p>
+      <ExtensionPairingCode assignment={props.owner} />
+      <SafetyNote text={t('extension.local_only')} />
+    </div>
+  )
+}
 
 /** 卡现在该画哪一段（纯函数，测试直接调）。 */
 export function onboardPhase(
@@ -142,10 +159,7 @@ export function ExtensionOnboardCard(props: {
           <p className="text-sm text-ws-muted-fg" data-testid="extension-onboard-why">
             {t('extonboard.why', { what })}
           </p>
-          {/* WP345：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步）；不是桌面版就不出这块 */}
-          <ExtensionInstall assignment={owner} paired={false} />
-          <p className="text-xs text-ws-muted-fg">{t('extonboard.pair')}</p>
-          <ExtensionPairingCode assignment={owner} />
+          <ExtensionInstallAndPair owner={owner} />
           {props.mode === 'onboarding' ? (
             <p className="text-xs text-ws-muted-fg">{t('extonboard.onboarding.later.line')}</p>
           ) : null}

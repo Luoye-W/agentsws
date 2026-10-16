@@ -97,7 +97,7 @@ describe('WP360 引导装插件（替身）', () => {
     expect(await ob.nudge({ actor, matter_id: 'm1', role_ids: ['ads.tiktok'] })).toBe(false)
     expect(await ob.nudge({ actor, matter_id: 'm1', role_ids: ['social.reddit'] })).toBe(true)
     expect(log).toEqual([
-      `note:${extensionWhy(['reddit'])}先在下面这张卡上装好、配对，我就能用上它。`,
+      'note:这个岗位要用浏览器插件读 Reddit、把批过的回复填进页面，还没装。在下面这张卡上装好、配个对就行。',
       'card',
       'prompted',
     ])
@@ -110,6 +110,12 @@ describe('WP360 引导装插件（替身）', () => {
     paired.state.paired = true
     expect(await paired.ob.nudge({ actor, matter_id: 'm1' })).toBe(false)
     void state
+  })
+
+  it('卡上那一句为什么按用途拼', () => {
+    expect(extensionWhy(['reddit', 'kol'])).toBe(
+      '这个岗位要靠浏览器插件读 Reddit、把批过的回复填进页面、在 YouTube / Instagram / TikTok 页面上收红人。装一次、配个对，以后跟着工坊自己更新。',
+    )
   })
 
   it('复用的卡：多说一句在「要你处理」里', async () => {

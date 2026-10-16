@@ -162,8 +162,12 @@ export function createExtensionOnboarding(
       // 今天点过「稍后」就不在对话里再提（下一次说话、过了今天再带）；同一条分配只主动带一次
       if (options.snoozedToday(ws) || options.prompted(ws, actor.assignment_id)) return false
       const why = extensionWhy(need.uses)
-      // 先说一句、再出卡（时间线上卡在这句话下面）
-      await options.note(ws, matter_id, `${why}先在下面这张卡上装好、配对，我就能用上它。`)
+      // 先说一句、再出卡（时间线上卡在这句话下面）。界面少字：用途一句、动作一句
+      await options.note(
+        ws,
+        matter_id,
+        `这个岗位要用浏览器插件${need.uses.map((u) => USE_ZH[u]).join('、')}，还没装。在下面这张卡上装好、配个对就行。`,
+      )
       const card = await options.askConnect({ actor, matter_id, why }).catch(() => undefined)
       if (card === undefined) return false
       if (card.reused)
