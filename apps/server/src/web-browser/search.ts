@@ -491,7 +491,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           'WEB_FETCH_BLOCKED',
           block.kind === 'login'
             ? '这一页要登录才能看（工坊内置浏览器没有登录这个站），没读到正文。'
-            : `${block.message}，没读到正文（不绕过）。`,
+            : `这个站${block.message}，没读到正文（不绕过）。`,
         )
       const page = got.page
       const title = page?.signals.title ?? ''

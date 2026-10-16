@@ -45,24 +45,24 @@ export function blockOf(res: Extract<OpenResult, { ok: true }>): Block | undefin
     path = new URL(res.final_url).pathname
   } catch {}
   const signals: PageSignals | undefined = res.serp?.signals ?? res.page?.signals
-  if (path.startsWith('/sorry')) return { kind: 'captcha', message: 'Google 要人机验证' }
-  if (res.status === 429) return { kind: 'rate_limited', message: '站点说请求太多了（429）' }
+  if (path.startsWith('/sorry')) return { kind: 'captcha', message: '要人机验证' }
+  if (res.status === 429) return { kind: 'rate_limited', message: '说请求太多了（429）' }
   const text = signals?.text ?? ''
   // 结果页里的摘要、帖子正文也可能带这些字——只有一条结果都没认出来 / 正文很短时才按文字认
   const empty =
     res.serp !== undefined ? res.serp.items.length === 0 : (res.page?.text.length ?? 0) < 800
-  if (signals?.captcha === true && empty) return { kind: 'captcha', message: '页面要人机验证' }
+  if (signals?.captcha === true && empty) return { kind: 'captcha', message: '要人机验证' }
   if (empty && CAPTCHA_TEXT.some((t) => text.includes(t)))
-    return { kind: 'captcha', message: '页面要人机验证' }
+    return { kind: 'captcha', message: '要人机验证' }
   if (res.status === 403 || (empty && BLOCK_TEXT.some((t) => text.includes(t))))
-    return { kind: 'blocked', message: '站点拦下了这次访问' }
+    return { kind: 'blocked', message: '拦下了这次访问' }
   if (res.page !== undefined) {
     const loginPath = LOGIN_PATHS.some((re) => re.test(path))
     const wall =
       (signals?.passwordInputs ?? 0) > 0 && res.page.text.length < 1500
         ? true
         : LOGIN_TEXT.some((t) => text.includes(t)) && res.page.text.length < 3000
-    if (loginPath || wall) return { kind: 'login', message: '这一页要登录才能看' }
+    if (loginPath || wall) return { kind: 'login', message: '要登录才能看' }
   }
   return undefined
 }
