@@ -107,6 +107,8 @@ export interface WireRuntimeOptions {
   webFetchHosts?: string[]
   /** WP353：显式要 DeepSeek 自带搜索（旧路，默认关）。 */
   webDeepseekSearch?: boolean
+  /** WP362：订阅来源经网关走（见 `DshRuntimeOptions.subscriptionRoute`）。 */
+  subscriptionRoute?: 'adapter' | 'gateway'
   /** 宿主侧是否接了这些回调；子进程据此决定 `options.stage` 之类给不给。 */
   has: {
     executeTool: boolean

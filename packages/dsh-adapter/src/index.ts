@@ -189,6 +189,21 @@ export type {
   SubscriptionQuestion,
   SubscriptionStatus,
 } from './subscription.js'
+export type {
+  PiContext,
+  SubscriptionCatalogModel,
+  SubscriptionChat,
+  SubscriptionChatRequest,
+  SubscriptionChatResult,
+} from './subscription-chat.js'
+export {
+  createSubscriptionChat,
+  SUBSCRIPTION_CHAT_PROVIDER,
+  SubscriptionChatError,
+  subscriptionCatalog,
+  subscriptionErrorKind,
+  toPiContext,
+} from './subscription-chat.js'
 export {
   createSubscriptionLogin,
   installSubscriptionLlm,

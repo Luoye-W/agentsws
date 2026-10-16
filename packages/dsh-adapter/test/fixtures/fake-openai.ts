@@ -51,6 +51,8 @@ export interface FakeOpenAiOptions {
    * 逐块发 `response.output_item.done`。给了它就不看 `reply`。
    */
   outputItems?: (body: unknown) => unknown[]
+  /** WP362：这一次 `/codex/responses` 直接回错（401 过期 / 429 限流…）；回 `undefined` 照常答。 */
+  fail?: () => { status: number; message: string } | undefined
 }
 
 export interface FakeOpenAi {
@@ -149,6 +151,12 @@ export function installFakeOpenAi(options: FakeOpenAiOptions = {}): FakeOpenAi {
       if (auth !== null) state.bearers.push(auth)
       const body = readBody(init)
       state.bodies.push(body)
+      const failed = options.fail?.()
+      if (failed !== undefined)
+        return Response.json(
+          { error: { message: failed.message, type: 'error' } },
+          { status: failed.status },
+        )
       if (options.outputItems !== undefined) {
         const items = options.outputItems(body)
         const usage = options.usage ?? { input_tokens: 200, output_tokens: 60 }

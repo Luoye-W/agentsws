@@ -16,6 +16,10 @@
       "types": "./dist/subscription-facts.d.ts",
       "import": "./dist/subscription-facts.js"
     },
+    "./subscription-chat": {
+      "types": "./dist/subscription-chat.d.ts",
+      "import": "./dist/subscription-chat.js"
+    },
     "./deepseek-account": {
       "types": "./dist/deepseek-account.d.ts",
       "import": "./dist/deepseek-account.js"

@@ -342,7 +342,11 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 在同一棵树上并存、互不知道对方。不走这条路的运行里连这个插件都不装
    * ——与浏览器、preset 同一条纪律（不用的东西不挂）。
    */
-  const subscription = subscriptionProviderOf(input.request.runtime.model.provider)
+  // WP362：宿主说订阅经网关走（`subscriptionRoute: 'gateway'`）就不挂官方适配器，和别的来源同一条路
+  const subscription =
+    input.options.subscriptionRoute === 'gateway'
+      ? undefined
+      : subscriptionProviderOf(input.request.runtime.model.provider)
   if (subscription !== undefined) await installSubscriptionLlm(root)
   /*
    * WP82（55 §3）：**只有这次运行真要开浏览器才有浏览器这一层**。
