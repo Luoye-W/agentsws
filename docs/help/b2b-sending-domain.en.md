@@ -21,7 +21,7 @@ You decide. Nothing is set up without asking you.
    - **SPF**: one TXT record starting with `v=spf1` (only one);
    - **DKIM**: the record your provider gives you ("custom domain DKIM");
    - **DMARC**: the `_dmarc` TXT record; `v=DMARC1; p=none` is fine to start.
-4. Connect the mailbox on the Connections page (IMAP / SMTP), then pick it on the card under Outbound.
+4. Connect the mailbox in Settings → Account connections (IMAP / SMTP), then pick it on the card under Outbound.
 
 You buy the domain and edit DNS at your registrar; we only give the steps.
 
@@ -46,7 +46,7 @@ Only this round stops. The person cools off: by default they aren't picked for a
 
 An **unsubscribe** reply or a hard bounce is what puts someone on the suppression list for good.
 
-Your company's postal address lives in Settings → Company profile: cold-email footers, quotes and shipping documents all use that one.
+Your company's postal address lives in Settings → Brand profile (the company part): cold-email footers, quotes and shipping documents all use that one.
 
 ## FAQ
 

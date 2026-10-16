@@ -418,10 +418,17 @@ describe.runIf(subprocessAvailable())('WP179 官方网页工具：子进程档',
 
 const REDDIT = { name: 'web_fetch', input: { url: 'https://www.reddit.com/r/SmartGlasses/' } }
 
-function backendOf(log: string[]): NonNullable<DshRuntimeOptions['web']>['backend'] {
+function backendOf(
+  log: string[],
+  runs: string[] = [],
+): NonNullable<DshRuntimeOptions['web']>['backend'] {
   return {
-    search: async (query, maxResults) => {
+    // WP355：第三个参数是这次运行（宿主据模型来源判断走不走模型自带的搜索）
+    search: async (query, maxResults, run) => {
       log.push(`search:${query}:${maxResults ?? ''}`)
+      runs.push(
+        `${run?.id ?? '-'}|${run?.runtime.model.provider ?? '-'}|${run?.actor.person_id ?? '-'}`,
+      )
       return {
         sources: [
           {
@@ -445,6 +452,7 @@ describe('WP353 内置浏览器后端', () => {
   it('进程内：搜索走宿主后端、不打 DeepSeek；Reddit 交给浏览器抓，别的站照旧官方匿名抓取', async () => {
     seen.length = 0
     const log: string[] = []
+    const runs: string[] = []
     const gateway = scripted([SEARCH, REDDIT, FETCH])
     const uses: WebUse[] = []
     const runtime = createDshRuntime({
@@ -454,7 +462,7 @@ describe('WP353 内置浏览器后端', () => {
         // 凭据给了也不用：有后端就不挂 DeepSeek
         credential: async () => ({ kind: 'account', token: 'never-used' }),
         searchBaseUrl: base,
-        backend: backendOf(log),
+        backend: backendOf(log, runs),
         onUse: (u) => uses.push(u),
       },
     })
@@ -464,6 +472,9 @@ describe('WP353 内置浏览器后端', () => {
     expect(log[0]).toMatch(/^search:65W 氮化镓 充电器 2026 新品:\d+$/)
     expect(log[1]).toBe('fetch:https://www.reddit.com/r/SmartGlasses/')
     expect(log).toHaveLength(2)
+    // WP355：宿主拿得到这次运行（模型来源、人）
+    const req = webRequest()
+    expect(runs).toEqual([`${req.id}|${req.runtime.model.provider}|${req.actor.person_id}`])
     // 本机地址交给官方匿名抓取：官方在连接之前就拒
     expect(results(events).map((r) => r.status)).toEqual(['ok', 'ok', 'error'])
     expect(gateway.requests[1]?.text).toContain('r/SmartGlasses')
@@ -527,11 +538,12 @@ describe.runIf(subprocessAvailable())('WP353 内置浏览器后端：子进程�
   it('搜索与按主机分流的抓取经管道问宿主', async () => {
     seen.length = 0
     const log: string[] = []
+    const runs: string[] = []
     const gateway = scripted([SEARCH, REDDIT])
     const runtime = createDshRuntime({
       ...baseOptions({ gateway }),
       mode: 'subprocess',
-      web: { backend: backendOf(log), onUse: () => undefined },
+      web: { backend: backendOf(log, runs), onUse: () => undefined },
     })
     const { sink, events } = collect()
     await runtime.run(webRequest(), sink, new AbortController().signal)
@@ -539,6 +551,9 @@ describe.runIf(subprocessAvailable())('WP353 内置浏览器后端：子进程�
     expect(seen).toHaveLength(0)
     expect(log).toHaveLength(2)
     expect(log[1]).toBe('fetch:https://www.reddit.com/r/SmartGlasses/')
+    // WP355：子进程档也把这次运行带给宿主（宿主侧那份请求，不过线）
+    const req = webRequest()
+    expect(runs).toEqual([`${req.id}|${req.runtime.model.provider}|${req.actor.person_id}`])
     expect(results(events).map((r) => r.status)).toEqual(['ok', 'ok'])
   })
 })

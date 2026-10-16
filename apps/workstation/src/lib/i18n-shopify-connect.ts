@@ -28,7 +28,7 @@ export const SHOPIFY_CONNECT_ZH: Record<string, string> = {
   'shopconnect.relogin_needed': '工坊账号需要重新登录',
   'shopconnect.relogin': '去重新登录',
   'shopconnect.account.hint':
-    '是你在 Agents 工坊注册的账号（积分、云端功能都在上面），不是 Shopify 后台的账号。在「设置 → 账号」登录，登完自动回到这里。',
+    '是你在 Agents 工坊注册的账号（积分、云端功能都在上面），不是 Shopify 后台的账号。在「设置 → 账号与积分」登录，登完自动回到这里。',
   'shopconnect.offline': '连不上 Agents 工坊云，检查一下网络',
   'shopconnect.offline.hint': '已经自动重试过一次。开着代理 / VPN 的话换个节点再试。',
   'shopconnect.offline.code': '原因码：{code}',
@@ -82,7 +82,7 @@ export const SHOPIFY_CONNECT_EN: Record<string, string> = {
   'shopconnect.relogin_needed': 'Your Agents Workshop account needs to sign in again',
   'shopconnect.relogin': 'Sign in again',
   'shopconnect.account.hint':
-    'This is the account you registered with Agents Workshop (credits and cloud features live there) — not your Shopify admin login. Sign in under Settings → Account; you’ll come right back here.',
+    'This is the account you registered with Agents Workshop (credits and cloud features live there) — not your Shopify admin login. Sign in under Settings → Account & credits; you’ll come right back here.',
   'shopconnect.offline': 'Can’t reach Agents Workshop cloud — check your network',
   'shopconnect.offline.hint':
     'Already retried once automatically. If you use a proxy / VPN, try another node.',

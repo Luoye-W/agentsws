@@ -1,0 +1,215 @@
+/**
+ * WP356：设置弹窗里那几行「小设置」——主题、语言、动效、登录身份、使用方式、快捷键、桌面端。
+ *
+ * 原来主题 / 语言是一个按钮来回切（看不出还有别的选项），这里改成几选一的小胶囊；
+ * 行为不变（同一个 `setTheme` / `setLang` / `setMotionPref`）。
+ */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
+import { useQuery } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { CompanyModeEntry } from '@/components/company/company-mode'
+import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
+import { UpdateButton } from '@/components/update-button'
+import { ensureSession, listOrganizations } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
+import { Segmented, SettingRow } from './setting-row'
+
+export function ThemeRow(): ReactNode {
+  const { t, theme, setTheme } = useApp()
+  return (
+    <SettingRow
+      testId="settings-theme"
+      title={t('settings.theme')}
+      desc={t('sp.theme.desc')}
+      control={
+        <Segmented
+          label={t('settings.theme')}
+          testId="settings-theme-pick"
+          value={theme}
+          options={[
+            { value: 'light', label: t('theme.light') },
+            { value: 'dark', label: t('theme.dark') },
+          ]}
+          onChange={setTheme}
+        />
+      }
+    />
+  )
+}
+
+export function LanguageRow(): ReactNode {
+  const { t, lang, setLang } = useApp()
+  return (
+    <SettingRow
+      testId="settings-lang"
+      title={t('settings.lang')}
+      desc={t('sp.lang.desc')}
+      control={
+        <Segmented
+          label={t('settings.lang')}
+          testId="settings-lang-pick"
+          value={lang}
+          options={[
+            { value: 'zh', label: '中文' },
+            { value: 'en', label: 'English' },
+          ]}
+          onChange={setLang}
+        />
+      }
+    />
+  )
+}
+
+/** WP195：界面动效——跟随系统（默认）/ 开 / 关。管的是品牌标记的动效，加载转圈不归它管。 */
+export function MotionRow(): ReactNode {
+  const { t } = useApp()
+  const motionPref = useMotionPref()
+  return (
+    <SettingRow
+      title={t('settings.motion')}
+      desc={t('sp.motion.desc')}
+      hint={t('settings.motion.hint')}
+      control={
+        <Segmented
+          label={t('settings.motion')}
+          testId="settings-motion"
+          value={motionPref}
+          options={MOTION_PREFS.map((m) => ({ value: m, label: t(`settings.motion.${m}`) }))}
+          onChange={setMotionPref}
+        />
+      }
+    />
+  )
+}
+
+/** 登录身份（WP233：本机占位邮箱不露出来）。 */
+export function IdentityRow(): ReactNode {
+  const { t } = useApp()
+  const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
+  const email = session.data?.person.email
+  if (email === undefined) return null
+  return (
+    <SettingRow
+      title={t('sp.identity')}
+      desc={t('sp.identity.desc')}
+      control={
+        <span className="font-mono text-xs text-muted-foreground" data-testid="settings-identity">
+          {isPlaceholderOwnerEmail(email) ? t('identity.local_self') : email}
+        </span>
+      }
+    />
+  )
+}
+
+/** 现在是哪种用法（docs/95）：只读一行；② / ③ 下面跟公司那一行与「开公司模式… / 回到同事互联…」。 */
+export function UsageModeRow(): ReactNode {
+  const { t } = useApp()
+  const { mode, known } = useMode()
+  if (!known) return null
+  return (
+    <SettingRow
+      testId="settings-usage-mode"
+      title={t('sp.mode')}
+      desc={t('sp.mode.desc')}
+      control={<span className="text-sm text-ws-body">{t(`sp.mode.${mode}`)}</span>}
+    />
+  )
+}
+
+/**
+ * 52 O1「公司」那一行：公司叫什么、几个品牌几个人、去「全部品牌」管；底下一行小字开 / 关公司模式（WP277）。
+ * 个人（一个人一个品牌）不出——对他来说「公司」这一层不存在。
+ */
+export function OrgSummaryRow(): ReactNode {
+  const { t } = useApp()
+  const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
+  const org = orgs.data?.[0]
+  if (org === undefined || org.solo) return null
+  return (
+    <div className="flex flex-col gap-1 py-3" data-testid="settings-org">
+      <SettingRow
+        className="py-0"
+        title={t('settings.org')}
+        desc={t('sp.company.desc')}
+        hint={t('settings.org.hint')}
+        control={
+          <span className="text-xs text-muted-foreground">
+            <span className="font-medium text-ws-ink">{org.legal_name}</span> ·{' '}
+            {t('settings.org.brands', { n: org.brands })} ·{' '}
+            {t('settings.org.members', { n: org.members })}
+          </span>
+        }
+      />
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to="/settings/brands"
+          className="text-sm text-primary underline-offset-4 hover:underline"
+          data-testid="settings-org-manage"
+        >
+          {t('sp.brands')}
+        </Link>
+        <CompanyModeEntry />
+      </div>
+    </div>
+  )
+}
+
+/** 键盘上能直接用的几个键（只列真的全局生效的）。 */
+const KEYS: readonly [string, string][] = [
+  ['⌘ K', 'sp.key.palette'],
+  ['⌘ ,', 'sp.key.settings'],
+  ['Esc', 'sp.key.close'],
+  ['Enter', 'sp.key.send'],
+  ['Shift Enter', 'sp.key.newline'],
+]
+
+export function ShortcutsList(): ReactNode {
+  const { t } = useApp()
+  return (
+    <ul className="flex flex-col divide-y divide-ws-line" data-testid="settings-shortcuts">
+      {KEYS.map(([keys, label]) => (
+        <li key={keys} className="flex items-center justify-between py-2.5 text-sm">
+          <span className="text-ws-body">{t(label)}</span>
+          <kbd className="ws-num rounded-md border bg-ws-surface px-2 py-0.5 text-xs text-ws-ink">
+            {keys}
+          </kbd>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** 桌面端版本号（桥上有才有）。 */
+function desktopVersion(): string | undefined {
+  const w = globalThis.window as unknown as { agentsws?: { version?: string } } | undefined
+  return w?.agentsws?.version
+}
+
+/** 更新：有新版时就是左下角那个「更新」钮（同一个件）；没有时写当前版本。 */
+export function AppUpdateRow(): ReactNode {
+  const { t } = useApp()
+  const version = desktopVersion()
+  return (
+    <SettingRow
+      testId="settings-app-update"
+      title={t('sp.app_update')}
+      desc={t('sp.app_update.desc')}
+      control={
+        <span className="flex items-center gap-2 text-xs text-ws-muted-fg">
+          {version === undefined ? null : <span className="ws-num">v{version}</span>}
+          <span className="min-w-28">
+            <UpdateButton />
+          </span>
+        </span>
+      }
+    />
+  )
+}
+
+/** 开机自启、暂停、导出诊断这几样在托盘菜单里（工作台改不了，只指个路）。 */
+export function TrayRow(): ReactNode {
+  const { t } = useApp()
+  return <SettingRow title={t('sp.tray')} desc={t('sp.tray.desc')} control={null} />
+}

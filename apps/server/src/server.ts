@@ -728,7 +728,9 @@ import {
   createBrowserWebSearch,
   createSearchThrottle,
   type KeylessSearch,
+  type NativeSearchPort,
   type SearchBrowserChannel,
+  type SearchWho,
   searchBrowserChannelFromEnv,
   searchLocaleLine,
 } from './web-browser/index.js'
@@ -1217,6 +1219,13 @@ export interface ServerOptions {
         maxPerHour?: number
         /** 两次之间随机隔多久（毫秒，缺省 2000–4000；测试给 0）。 */
         gapMs?: readonly [number, number]
+        /**
+         * WP355（决策 937）：名单里的模型来源（ChatGPT 订阅）自带的搜索。缺省接订阅登录那棵树
+         * （用那个人自己的订阅）；测试给替身，`false` = 不接（名单里的来源也走 WP353 的链）。
+         */
+        native?: NativeSearchPort | false
+        /** 自带搜索每小时最多搜几次（缺省 60）。 */
+        nativePerHour?: number
       }
     | false
   /**
@@ -3658,6 +3667,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             }
             return keylessOnce
           }
+  /*
+   * WP355（决策 937）：名单里的模型来源（第一版只有 ChatGPT 订阅）先用它自带的搜索——用**那个人自己**的
+   * 订阅登录（令牌不出登录树）。节流在我们这一层：全进程一次只搜一个、每小时上限；搜不成就退回上面那条链。
+   */
+  const webSearchNative: NativeSearchPort | undefined =
+    webSearchSetup === undefined || webSearchSetup.native === false
+      ? undefined
+      : (webSearchSetup.native ?? {
+          search: (input) =>
+            subscription.nativeSearch(input.person_id, input.source, {
+              query: input.query,
+              maxResults: input.maxResults,
+              ...(input.model === undefined ? {} : { model: input.model }),
+              locale: input.locale,
+              ...(input.signal === undefined ? {} : { signal: input.signal }),
+            }),
+        })
+  const webSearchNativeThrottle = createSearchThrottle({
+    now: () => Date.now(),
+    random,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    maxPerHour: webSearchSetup?.nativePerHour ?? 60,
+    minGapMs: 0,
+    maxGapMs: 0,
+  })
   if (webSearchSetup !== undefined)
     process.stdout.write(
       `web search: ${webSearchChannel === undefined ? '没有内置浏览器（没有桌面壳）' : '工坊内置浏览器'}\n`,
@@ -4123,6 +4157,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               serp: (q) => searchData.serp(q),
             },
             keyless: webSearchKeyless,
+            native: webSearchNative,
+            nativeThrottle: webSearchNativeThrottle,
             now: () => Date.now(),
             log: (line) => process.stdout.write(`${line}\n`),
           })
@@ -10288,7 +10324,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             throw Object.assign(new Error('这里没有工坊的内置浏览器'), {
               code: 'WEB_PROVIDER_UNAVAILABLE',
             })
-          const r = await browser.search(query, 8)
+          /*
+           * WP355（决策 937）：随便聊 / 助理 / 品牌分析 / 出卡前查用的是品牌默认模型——它在名单里
+           * （ChatGPT 订阅）就先用它自带的搜索、用这个人自己的订阅；不行再走 WP353 的链。
+           */
+          const models = await brandModules.models(ws)
+          const ref = models.configured() ? models.defaultRef() : undefined
+          const who: SearchWho = {
+            ...(ref === undefined ? {} : { source: ref.provider, model: ref.model }),
+            person_id: ctx.person_id,
+          }
+          const r = await browser.search(query, 8, who)
+          if (r.native_usage !== undefined) {
+            // 订阅不按 token 收钱：照 WP179 的口径补记一笔（`cost_base` 0），用量页看得到
+            ;(await brandModules.gateway(ws)).recordExternal?.({
+              meta: {
+                workspace_id: ws,
+                assignment_id: ctx.assignment_id as never,
+                role_id: ctx.role_id as never,
+                run_id: ctx.run_id as never,
+                purpose: 'web_search' as const,
+              },
+              model: { provider: who.source ?? 'openai-codex', model: r.native_usage.model },
+              usage: {
+                input_tokens: r.native_usage.input_tokens,
+                output_tokens: r.native_usage.output_tokens,
+                cached_tokens: r.native_usage.cached_tokens,
+              },
+            })
+          }
           found = { sources: r.sources, content: r.content }
         }
         audit(found.sources.length, true)

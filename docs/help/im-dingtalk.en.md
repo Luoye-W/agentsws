@@ -18,7 +18,7 @@ It uses DingTalk's "Stream mode": your computer connects out to DingTalk, so the
 
 Only **the owner or a company admin** can do this; everyone else only sees the status on the card.
 
-5. On the Messaging channels page, in the **DingTalk bot** card, enter the Client ID and Client Secret and click **Save and connect**.
+5. In Settings → Chat channels, in the **DingTalk bot** card, enter the Client ID and Client Secret and click **Save and connect**.
 6. When the card says "Receiving", you're good.
 
 The Client Secret goes straight into the encrypted store on this machine — never sent to the AI, never logged, never shown again.

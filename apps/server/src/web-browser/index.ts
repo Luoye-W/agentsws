@@ -1,4 +1,7 @@
-/** WP353：联网搜索后端（工坊内置浏览器搜 Google → Bing → 云端 Google → 公开搜索服务）。 */
+/**
+ * WP353：联网搜索后端（工坊内置浏览器搜 Google → Bing → 云端 Google → 公开搜索服务）。
+ * WP355：名单里的模型来源（第一版只有 ChatGPT 订阅）先用它自带的搜索，不行再走上面那条链。
+ */
 export {
   type OpenResult,
   SEARCH_BROWSER_TOKEN_ENV,
@@ -15,6 +18,14 @@ export {
   searchLocaleLine,
   searchLocaleOf,
 } from './locale.js'
+export {
+  NATIVE_SEARCH_LABEL,
+  NATIVE_SEARCH_SOURCES,
+  type NativeSearchPort,
+  type NativeSearchSource,
+  nativeSearchSourceOf,
+  type SearchWho,
+} from './native.js'
 export {
   BROWSER_FETCH_HOSTS,
   type BrowserSearchResult,

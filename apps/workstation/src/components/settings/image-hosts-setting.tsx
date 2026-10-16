@@ -5,8 +5,8 @@
 import { Store, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useImageHosts } from '@/components/answer/genui/use-image-hosts'
+import { SettingRow } from '@/components/settings-panel/setting-row'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
 
@@ -24,57 +24,67 @@ export function ImageHostsSetting(): ReactNode {
     setDraft('')
   }
   return (
-    <div className="flex flex-col gap-2" data-testid="settings-image-hosts">
-      <span className="flex items-center gap-1">
-        {t('settings.image_hosts')}
-        <Hint text={t('settings.image_hosts.hint')} />
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {hosts.view.shop_hosts.map((h) => (
-          <span key={h} className={CHIP} title={t('settings.image_hosts.shop')} data-shop="true">
-            <Store aria-label={t('settings.image_hosts.shop')} className="size-3" />
-            {h}
-          </span>
-        ))}
-        {hosts.view.hosts.map((h) => (
-          <span key={h.host} className={CHIP} data-testid="settings-image-host">
-            {h.host}
-            <button
-              type="button"
-              className="text-ws-muted-fg hover:text-ws-ink"
-              aria-label={t('settings.image_hosts.remove', { host: h.host })}
-              disabled={hosts.busy}
-              onClick={() => {
-                hosts.remove(h.host)
+    <SettingRow
+      stacked
+      testId="settings-image-hosts"
+      title={t('settings.image_hosts')}
+      desc={t('sp.image_hosts.desc')}
+      hint={t('settings.image_hosts.hint')}
+      control={
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {hosts.view.shop_hosts.map((h) => (
+              <span
+                key={h}
+                className={CHIP}
+                title={t('settings.image_hosts.shop')}
+                data-shop="true"
+              >
+                <Store aria-label={t('settings.image_hosts.shop')} className="size-3" />
+                {h}
+              </span>
+            ))}
+            {hosts.view.hosts.map((h) => (
+              <span key={h.host} className={CHIP} data-testid="settings-image-host">
+                {h.host}
+                <button
+                  type="button"
+                  className="text-ws-muted-fg hover:text-ws-ink"
+                  aria-label={t('settings.image_hosts.remove', { host: h.host })}
+                  disabled={hosts.busy}
+                  onClick={() => {
+                    hosts.remove(h.host)
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submit()
+            }}
+          >
+            <Input
+              value={draft}
+              className="h-8 max-w-xs text-xs"
+              placeholder={t('settings.image_hosts.placeholder')}
+              aria-label={t('settings.image_hosts')}
+              data-testid="settings-image-hosts-input"
+              onChange={(e) => {
+                setDraft(e.target.value)
               }}
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-      </div>
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          submit()
-        }}
-      >
-        <Input
-          value={draft}
-          className="h-8 max-w-xs text-xs"
-          placeholder={t('settings.image_hosts.placeholder')}
-          aria-label={t('settings.image_hosts')}
-          data-testid="settings-image-hosts-input"
-          onChange={(e) => {
-            setDraft(e.target.value)
-          }}
-        />
-        <Button size="sm" variant="outline" type="submit" disabled={hosts.busy}>
-          {t('settings.image_hosts.add')}
-        </Button>
-      </form>
-      {hosts.error === undefined ? null : <p className="text-xs text-ws-bad">{hosts.error}</p>}
-    </div>
+            />
+            <Button size="sm" variant="outline" type="submit" disabled={hosts.busy}>
+              {t('settings.image_hosts.add')}
+            </Button>
+          </form>
+          {hosts.error === undefined ? null : <p className="text-xs text-ws-bad">{hosts.error}</p>}
+        </div>
+      }
+    />
   )
 }
