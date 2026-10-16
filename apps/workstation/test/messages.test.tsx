@@ -268,10 +268,38 @@ describe('消息页（63 §8）', () => {
     await user.click(await screen.findByTestId('messages-thread'))
     const band = await screen.findByTestId('messages-agent-band')
     expect(band.getAttribute('data-state')).toBe('working')
+    // WP357（决策 910）：说「客服 AI 在处理」，不说「Agent」
+    expect(band.textContent).toContain('客服 AI 在处理')
+    expect(band.textContent).not.toContain('Agent')
+    expect(screen.getByTestId('messages-readonly').textContent).not.toContain('Agent')
     expect(screen.getByTestId('messages-agent-link').getAttribute('href')).toBe('/matters/mat_1')
     expect(screen.getByTestId('messages-readonly')).toBeDefined()
     // 人与 Agent 撞车是这套东西最难解释的一种错——所以这里干脆没有那个按钮
     expect(screen.queryByTestId('messages-reply')).toBeNull()
+    threadView.mockReset()
+    threadView.mockImplementation(async () => ({
+      thread_id: '<t1@x>',
+      subject: '包裹破了',
+      messages: [message()],
+    }))
+  })
+
+  it.each([
+    ['b2b', 'B2B AI 在处理'],
+    ['kol', '红人营销 AI 在处理'],
+  ] as const)('WP357（决策 910）：%s 那条路的状态带说「%s」', async (route, text) => {
+    threadView.mockResolvedValue({
+      thread_id: '<t1@x>',
+      subject: '询价',
+      messages: [message({ route })],
+      agent_status: { route, state: 'working', href: '/matters/mat_1' },
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
+    await user.click(await screen.findByTestId('messages-thread'))
+    const band = await screen.findByTestId('messages-agent-band')
+    expect(band.textContent).toContain(text)
+    expect(band.textContent).not.toContain('Agent')
     threadView.mockReset()
     threadView.mockImplementation(async () => ({
       thread_id: '<t1@x>',

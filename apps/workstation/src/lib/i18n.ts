@@ -12,6 +12,7 @@ import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
+import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
@@ -2043,9 +2044,11 @@ const zh: Table = {
   'messages.archive': '归档',
   // 界面上写「删除」，打出去的是"移到垃圾箱"——**绝不永久删除**（63 §7）
   'messages.delete': '删除',
-  'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
-  'messages.agent.working': '客服 Agent 在处理',
-  'messages.agent.working_b2b': 'B2B Agent 在处理',
+  'messages.readonly': 'AI 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
+  // WP357（决策 910）：「X Agent 在处理」统一说「X AI 在处理」（与网站聊天同一句），各岗位一样
+  'messages.agent.working': '客服 AI 在处理',
+  'messages.agent.working_b2b': 'B2B AI 在处理',
+  'messages.agent.working_kol': '红人营销 AI 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
   'messages.agent.route.support': '这条归客服岗位',
@@ -2330,6 +2333,8 @@ const zh: Table = {
   'models.subscription.model': '用哪个模型',
   'models.subscription.model.pick': '选一个…',
   'models.subscription.price': '订阅',
+  'models.subscription.selectable':
+    '登好了，「默认模型」下拉和输入框的 AI 钮里就有「ChatGPT 订阅」这一组，选它就用订阅干活。',
   'models.subscription.signout': '登出',
   'models.subscription.signout.confirm': '登出？本机存的那条授权记录会被销毁，之后要重新登录一次。',
   'models.save': '保存',
@@ -4065,7 +4070,7 @@ const zh: Table = {
   // ── WP188：随便聊（像 DeepSeek 网页版的自由对话入口）──────────────────
   'nav.free_chat': '助理',
   'home.free_chat': '有什么要我做的？',
-  'command.new_chat': '新对话',
+  'command.new_chat': '助理：换个话题',
   'command.handoff.title': '交给哪个岗位？',
   'command.handoff.placeholder': '搜岗位…',
   'free_chat.empty': '想随便问点什么？',
@@ -6205,9 +6210,10 @@ const en: Table = {
   'messages.archive': 'Archive',
   'messages.delete': 'Delete',
   'messages.readonly':
-    'AI is handling this thread; to answer yourself, take it over in the work thread first.',
-  'messages.agent.working': 'Support agent is on it',
-  'messages.agent.working_b2b': 'B2B agent is on it',
+    'The AI is handling this thread; to answer yourself, take it over in the work thread first.',
+  'messages.agent.working': 'Support AI is on it',
+  'messages.agent.working_b2b': 'B2B AI is on it',
+  'messages.agent.working_kol': 'Creator-marketing AI is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
   'messages.agent.route.support': 'Handled by the support position',
@@ -6497,6 +6503,8 @@ const en: Table = {
   'models.subscription.model': 'Model',
   'models.subscription.model.pick': 'Pick one…',
   'models.subscription.price': 'subscription',
+  'models.subscription.selectable':
+    'Once signed in, “ChatGPT subscription” shows up in the default-model list and in the AI button of every input box.',
   'models.subscription.signout': 'Sign out',
   'models.subscription.signout.confirm':
     'Sign out? The authorization record stored on this machine is destroyed; you will have to sign in again.',
@@ -8302,7 +8310,7 @@ const en: Table = {
   // ── WP188: free chat (a DeepSeek-web-style open chat) ──
   'nav.free_chat': 'Assistant',
   'home.free_chat': 'What can I do for you?',
-  'command.new_chat': 'New chat',
+  'command.new_chat': 'Assistant: new topic',
   'command.handoff.title': 'Hand to which position?',
   'command.handoff.placeholder': 'Search positions…',
   'free_chat.empty': 'Want to ask anything?',
@@ -8471,6 +8479,7 @@ const TABLES: Record<Lang, Table> = {
     ...GEO_ZH,
     // WP345：连接卡上「装插件」那一块（随工坊安装与更新）
     ...EXT_INSTALL_ZH,
+    ...EXT_ONBOARD_ZH,
     // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
     ...SHELL_ZH,
     // WP343：「我的助理」（原随便聊 + 我的代理）
@@ -8508,6 +8517,7 @@ const TABLES: Record<Lang, Table> = {
     ...CARD_PAGE_EN,
     ...GEO_EN,
     ...EXT_INSTALL_EN,
+    ...EXT_ONBOARD_EN,
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,

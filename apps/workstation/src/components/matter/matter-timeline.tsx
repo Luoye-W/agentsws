@@ -6,6 +6,7 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import {
+  type MatterAttachment,
   type MatterEvent,
   type MatterLiveRun,
   type MatterRunStep,
@@ -27,6 +28,7 @@ import {
   ExternalLink,
   Eye,
   FileCode,
+  FileText,
   Info,
   LoaderCircle,
   Plug,
@@ -138,6 +140,14 @@ export function MeBubble({
       >
         {said}
       </div>
+      {/* WP357：这句话附上的资料——名字 · 字数，点开看读出来的文字 */}
+      {(event.attachments ?? []).length === 0 ? null : (
+        <div className="flex w-full flex-col items-end gap-1" data-testid="matter-bubble-files">
+          {(event.attachments ?? []).map((a, i) => (
+            <AttachmentChip key={`${a.name}:${String(i)}`} file={a} />
+          ))}
+        </div>
+      )}
       <div className="flex gap-2 text-[11.5px] text-ws-muted-fg">
         {long ? (
           <button
@@ -155,6 +165,54 @@ export function MeBubble({
           {queued ? t('matter.run.queued') : clockOf(event.at, lang)}
         </span>
       </div>
+    </div>
+  )
+}
+
+/** WP357：人那句话附上的一份资料。读出来的文字点开看（只在本机事项里）；读不出 / 抹了口令照实说一句。 */
+function AttachmentChip({ file }: { file: MatterAttachment }): ReactNode {
+  const { t } = useApp()
+  const [open, setOpen] = useState(false)
+  const readable = file.text !== undefined && file.text !== ''
+  return (
+    <div className="flex w-full flex-col items-end gap-1" data-testid="matter-bubble-file">
+      <button
+        type="button"
+        disabled={!readable}
+        aria-expanded={readable ? open : undefined}
+        onClick={() => {
+          setOpen((v) => !v)
+        }}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-ws-card px-2.5 py-0.5 text-[12px] text-ws-body hover:border-ws-brand/50 disabled:hover:border-ws-line"
+      >
+        <FileText aria-hidden className="size-3.5 shrink-0 text-ws-muted-fg" />
+        <span className="truncate">{file.name}</span>
+        {readable ? (
+          <span className="shrink-0 text-ws-muted-fg">
+            {t('matter.file.chars', { n: file.chars })}
+          </span>
+        ) : null}
+      </button>
+      {file.unreadable === undefined && file.redacted === undefined ? null : (
+        <span className="text-[11px] text-ws-muted-fg">
+          {[
+            file.unreadable,
+            file.redacted === undefined
+              ? undefined
+              : t('matter.file.redacted', { n: file.redacted }),
+          ]
+            .filter((x) => x !== undefined)
+            .join(' · ')}
+        </span>
+      )}
+      {open && readable ? (
+        <pre
+          className="max-h-64 w-full overflow-auto rounded-lg bg-ws-surface p-2.5 text-left text-[12px] leading-5 whitespace-pre-wrap text-ws-body"
+          data-testid="matter-bubble-file-text"
+        >
+          {file.text}
+        </pre>
+      ) : null}
     </div>
   )
 }
@@ -1067,7 +1125,13 @@ export function InlineCard({
 
 /** WP324 / WP348：连接卡 / 配置卡头上那一句（方案卡说「你点头就接着做 / 才生效」）。 */
 function setupHeadKey(card: DeckCard): string {
-  if (card.kind !== 'setup_request') return 'setup.card.head.connect'
+  if (card.kind !== 'setup_request') {
+    // WP360：主动带来的连接卡（这件事没卡在它上面、连好也不重跑）说「连上就能用」
+    const resume = (card.detail.payload as { resume?: unknown } | undefined)?.resume
+    return card.kind === 'connect_request' && resume === undefined
+      ? 'setup.card.head.connect_ready'
+      : 'setup.card.head.connect'
+  }
   const mode = (card.detail.payload as { mode?: unknown } | undefined)?.mode
   return mode === 'change'
     ? 'setup.plan.head_change'

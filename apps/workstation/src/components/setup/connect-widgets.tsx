@@ -12,8 +12,9 @@
  * | `im:wechat` | 个人微信扫码（与消息渠道页同一个件；WP334） |
  * | `model` | 接模型（与开工向导第 ① 步同一个件：工坊接口 / DeepSeek 官方 / 自己的 key 走本机原生表单；WP334） |
  * | `deepseek_account` | DeepSeek 账号登录（与设置页同一个件；WP334） |
+ * | `chatgpt_subscription` | ChatGPT 订阅登录（与设置页那张订阅卡同一个件；WP362） |
  * | `workshop_account` | 关联 Agents 工坊账号（与设置页同一个注册 / 登录表单；WP334） |
- * | `extension` | 浏览器插件：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步，WP345）+ 配对码 |
+ * | `extension` | 浏览器插件：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步，WP345）+ 配对码；只缺配对时是少字版（WP360） |
  * | 认不出 / 要下载连接器 | 「去连接页 / 消息渠道」一个链接（那一页仍是总览） |
  *
  * 每一样还要说「现在连上了没有」（{@link useNeedConnected}）：`true` / `false`；查不了回 `undefined`。
@@ -25,6 +26,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { BrowserExtensionSection } from '@/components/connections/browser-extension'
+import { ExtensionInstallAndPair } from '@/components/connections/extension-onboard-card'
 import { SecureForm } from '@/components/connections/secure-form'
 import { ShopifyConnect } from '@/components/connections/shopify-connect'
 import { TestResultLine } from '@/components/connections/test-result'
@@ -32,6 +34,7 @@ import { TeamBotCard } from '@/components/im/team-bot-card'
 import { WechatBind } from '@/components/im/wechat-bind'
 import { WecomBotForm } from '@/components/im/wecom-bot-form'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
+import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { AiStep } from '@/components/onboarding/ai-step'
 import { ShopAdminBanner, shopAdminQuery } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
@@ -41,6 +44,7 @@ import {
   getCloudAccount,
   getDeepSeekAccount,
   getImStatus,
+  getModelSubscription,
   getSiteTheme,
   listExtensionTokens,
   listModelProviders,
@@ -105,6 +109,13 @@ export function useNeedConnected(need: ConnectNeed, ctx: ConnectContext): boolea
     retry: false,
     refetchInterval: 3000,
   })
+  const chatgpt = useQuery({
+    queryKey: ['model-subscription', 'openai-codex', ctx.owner],
+    queryFn: () => getModelSubscription('openai-codex', ctx.owner),
+    enabled: service === 'chatgpt_subscription' && ctx.owner !== undefined,
+    retry: false,
+    refetchInterval: 3000,
+  })
   const cloud = useQuery({
     queryKey: ['cloud-account', ctx.owner],
     queryFn: () => getCloudAccount(ctx.owner),
@@ -136,6 +147,12 @@ export function useNeedConnected(need: ConnectNeed, ctx: ConnectContext): boolea
     return models.data === undefined ? undefined : models.data.providers.some((p) => p.active)
   if (service === 'deepseek_account')
     return deepseek.data === undefined ? undefined : deepseek.data.signed_in
+  /*
+   * WP362：ChatGPT 订阅——没登录就是「没连上」；登着却说不准（过期的记录还在、被限流时也登着），
+   * 回 `undefined`：卡不自己接着跑，人登好了点「接着做」。
+   */
+  if (service === 'chatgpt_subscription')
+    return chatgpt.data === undefined || chatgpt.data.signed_in ? undefined : false
   if (service === 'workshop_account')
     return cloud.data === undefined ? undefined : cloud.data.linked
   if (service === 'extension')
@@ -245,6 +262,9 @@ export function ConnectWidget({
     return <SiteThemeBanner positionId={undefined} duties={[ctx.duty]} />
   if (service === 'shop_admin' && ctx.duty !== undefined)
     return <ShopAdminBanner duties={[ctx.duty]} />
+  // WP360：只缺「配上插件」这一样 → 少字版（装 + 配对码）；要连广告后台那种（`ads_backend`）仍给完整那一节（同意与开关在里面）
+  if (service === 'extension' && need.kind === 'extension')
+    return <ExtensionInstallAndPair owner={ctx.owner} />
   if (service === 'extension')
     return (
       <BrowserExtensionSection {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })} />
@@ -267,6 +287,14 @@ export function ConnectWidget({
       <DeepSeekAccountLogin
         {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })}
         onConnected={ctx.refresh}
+      />
+    )
+  // WP362：ChatGPT 订阅过期 / 被限流——卡里就是设置页那块订阅登录（重登、换账号都在这里）
+  if (service === 'chatgpt_subscription')
+    return (
+      <SubscriptionPlan
+        provider="openai-codex"
+        {...(ctx.owner === undefined ? {} : { assignment: ctx.owner })}
       />
     )
   if (service === 'workshop_account')

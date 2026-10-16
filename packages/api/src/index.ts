@@ -391,13 +391,24 @@ export type {
   ExtensionVersionReport,
 } from './routes/extension-install.js'
 export { extensionInstallRoutes } from './routes/extension-install.js'
+// WP360：需要插件的岗位一开始就引导装好插件
+export type {
+  ExtensionFollowStep,
+  ExtensionNeedsActor,
+  ExtensionNeedsView,
+  ExtensionOnboardingPort,
+} from './routes/extension-onboarding.js'
+export { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」
+  AssistantHistoryHitView,
   AssistantMemoryView,
+  AssistantSegmentView,
   AssistantStateView,
   AssistantSuggestionView,
   AssistantTargetView,
+  AssistantThreadView,
   FreeChatActor,
   FreeChatAttachment,
   FreeChatCitation,
@@ -410,6 +421,7 @@ export type {
   FreeChatImage,
   FreeChatMessageView,
   FreeChatModelChoice,
+  FreeChatModelPrice,
   FreeChatModelsView,
   FreeChatPort,
   FreeChatReportView,
@@ -540,6 +552,7 @@ export type {
   OnboardingActor,
   OnboardingApplyView,
   OnboardingConnectorItem,
+  OnboardingExtensionItem,
   OnboardingPlanInput,
   OnboardingPlannedPosition,
   OnboardingPlanView,

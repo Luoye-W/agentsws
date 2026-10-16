@@ -7,7 +7,7 @@
  * 输入卡（发送 / 停 / 私聊 AI / Tab 收建议，什么时候不给建议）。
  */
 import type { ApprovalItem, MatterEvent, MatterView } from '@agentsws/contracts'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -408,5 +408,80 @@ describe('WP283 圈区域：只在改图型号认遮罩时给（决策 300）', 
     const dialog = await screen.findByTestId('mask-dialog')
     expect(within(dialog).getByText('圈出要改的地方')).toBeTruthy()
     expect((within(dialog).getByTestId('mask-done') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('WP357 事项 / 线程输入框附资料（与助理同一套）', () => {
+  const drop = (files: File[]): void => {
+    fireEvent.drop(screen.getByTestId('matter-say'), {
+      dataTransfer: { files, types: ['Files'] },
+    })
+  }
+  const DOCX = new File([new Uint8Array([0x50, 0x4b, 3, 4])], '甲方要求.docx', {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  })
+
+  it('拖进 docx → 框里一个小签；说一句发出去，带着 files（不进素材库）', async () => {
+    renderMatter()
+    await screen.findByTestId('matter-attach')
+    drop([DOCX])
+    expect((await screen.findByTestId('matter-doc')).textContent).toContain('甲方要求.docx')
+    await user().type(screen.getByLabelText('在这个事项里说一句'), '照这份改{Enter}')
+    await waitFor(() => {
+      expect(postMatterMessage).toHaveBeenCalled()
+    })
+    const call = postMatterMessage.mock.calls[0] as unknown[]
+    expect(call[0]).toBe('mat_r')
+    expect(call[1]).toBe('照这份改')
+    expect(call[2]).toEqual([{ name: '甲方要求.docx', data: 'UEsDBA==' }])
+    expect(uploadBrandAsset).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByTestId('matter-doc')).toBeNull()
+    })
+  })
+
+  it('只附不说话也能发；拖进图片照旧进素材库；认不出的文件说一句', async () => {
+    renderMatter()
+    await screen.findByTestId('matter-attach')
+    drop([new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'box.png', { type: 'image/png' })])
+    await waitFor(() => {
+      expect(uploadBrandAsset).toHaveBeenCalled()
+    })
+    drop([new File(['x'], 'setup.exe', { type: 'application/octet-stream' })])
+    expect((await screen.findByTestId('matter-attach-rejected')).textContent).toContain('.xlsx')
+    drop([DOCX])
+    await screen.findByTestId('matter-doc')
+    await user().click(screen.getByTestId('matter-send'))
+    await waitFor(() => {
+      expect(postMatterMessage).toHaveBeenCalled()
+    })
+    const call = postMatterMessage.mock.calls[0] as unknown[]
+    // 图的素材 id 照旧写在话里；资料走 files
+    expect(String(call[1])).toContain('dasset_up1')
+    expect((call[2] as { name: string }[]).map((f) => f.name)).toEqual(['甲方要求.docx'])
+  })
+
+  it('时间线上那句话带着附件：名字 · 字数，点开看读出来的文字；读不出的照实说', async () => {
+    current = view([
+      ev({
+        kind: 'human_message',
+        at: D1,
+        text: '参考这张表改我们的记录表',
+        actor: { kind: 'person', id: 'per_1' },
+        attachments: [
+          { name: '甲方记录表.xlsx', chars: 18, text: '日期 | 版块 | 状态\n10-14 | r/a | 已发' },
+          { name: '老表.xls', chars: 0, unreadable: '这种文件读不了' },
+        ],
+      }),
+    ])
+    renderMatter()
+    const files = await screen.findAllByTestId('matter-bubble-file')
+    expect(files[0]?.textContent).toContain('甲方记录表.xlsx')
+    expect(files[0]?.textContent).toContain('18 字')
+    expect(files[1]?.textContent).toContain('这种文件读不了')
+    await user().click(within(files[0] as HTMLElement).getByRole('button'))
+    expect(screen.getByTestId('matter-bubble-file-text').textContent).toContain(
+      '日期 | 版块 | 状态',
+    )
   })
 })

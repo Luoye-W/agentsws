@@ -369,6 +369,8 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             role_id: req.actor.role_id,
             run_id: req.id,
             purpose: 'run',
+            // WP362：订阅来源按人取那个人自己的订阅
+            person_id: req.actor.person_id,
           },
         })
       } catch (e) {

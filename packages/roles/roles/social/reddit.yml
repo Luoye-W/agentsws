@@ -282,6 +282,10 @@ handover:
 
 requires: []
 
+# WP360（决策 947）：这条职责要「Agents 工坊助手」浏览器插件——巡查收件箱和自家版块要靠它读 Reddit；批过的回复也是它填进页面、人自己点发送。
+# 「哪些岗位要插件」只从这一格推（首次设置第 ④ 步、岗位页顶上那张卡、第一次对话都认它）。
+browser_extension: { uses: [reddit] }
+
 quick_prompts:
   - id: pending_members
     label: { zh: "有谁在等着进群", en: "Who is waiting to join" }

@@ -112,6 +112,7 @@ import {
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
   brandNameOf,
+  builtinConnectNeed,
   CONTENT_CHECK_INTERVAL_MS,
   CONTENT_SIGNING_PUBLIC_KEYS,
   contentChannelOf,
@@ -384,6 +385,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
+import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -1069,6 +1071,8 @@ export interface ServerOptions {
    * `await import('@agentsws/dsh-adapter')`。
    */
   subscriptionLogin?: SubscriptionOptions['createLogin']
+  /** WP362：订阅目录替身（测试用；缺省读 pi-ai 的生成目录）。 */
+  subscriptionCatalog?: SubscriptionOptions['catalog']
   /**
    * WP180：官方插件的注入点（测试用：换清单 / 锁定 patch 的路径、换插件层后端）。生产不传——
    * 清单与锁定 patch 用仓库里那两份，插件层用官方模块建在数据目录下。
@@ -1688,6 +1692,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let cloudLinkedSink: (() => void) | undefined
   /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
   let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
+  /** WP360：晚绑定——插件配对表在后面才建出来（这个品牌有没有一个没撤掉的插件配上了）。 */
+  let extensionPairedRef: ((ws: WorkspaceId) => boolean) | undefined
+  /** WP360：晚绑定——需要插件的岗位引导装插件（第一次在岗位上说话时带卡）。 */
+  let extensionOnboardingRef: ExtensionOnboarding | undefined
   /**
    * WP272：令牌缺动作集时后台自动补签（`scope-auto-upgrade.ts`）。晚绑定：各品牌的云面先建，
    * 账号面后装；没装好之前撞上缺动作集就照实回 403。
@@ -2026,6 +2034,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     runtimeMode,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.subscriptionLogin === undefined ? {} : { createLogin: options.subscriptionLogin }),
+    ...(options.subscriptionCatalog === undefined ? {} : { catalog: options.subscriptionCatalog }),
+    // WP362：有人登上 / 登出 ChatGPT 订阅 → 每个已装配的品牌重装一次网关（下拉跟着变）
+    onChange: () => {
+      for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
+    },
   })
   /*
    * WP134：第三种模型来源「用我的 DeepSeek 账号登录」。也是"一台机器一份"（账号在 dsh 本机凭据库里，
@@ -2692,7 +2705,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
-  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——待确认写进知识库 + 一批一张确认卡
+  // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——WP357（决策 902）起点「就这样」即生效，可改可删可撤销
   const assistantNotes = createAssistantNotes({
     clock,
     knowledge,
@@ -3410,6 +3423,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP315：插件里连上了担着的那几家广告后台（勾过风险告知）
     if (need.kind === ADS_BACKEND_NEED_KIND)
       return (await brandModules.forWorkspace(ws).catch(() => undefined))?.adsData?.backendReady()
+    // WP360：插件配上了没有（配对表里有一个没撤掉的；以前落到连接目录里查不到，永远是「不知道」）
+    if (need.kind === 'extension' && need.service === 'extension') return extensionPairedRef?.(ws)
     // WP328：插件里连上 Reddit、登着品牌号（不知道就回 undefined：人说好了就信人）
     if (need.kind === 'reddit_session')
       return (
@@ -3425,6 +3440,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (need.service === 'model') return setupProbes.get(ws)?.model()
     if (need.service === 'workshop_account') return setupProbes.get(ws)?.cloudLinked()
     if (need.service === 'deepseek_account') return deepseekAccount.signedIn()
+    /*
+     * WP362：ChatGPT 订阅——过期的那条记录还在库里（官方刷新失败时保留它，等人重登），被限流时也照样
+     * 「登着」，所以服务端判不出「好了没」：回 `undefined`，卡上人登好了点「接着做」（不自动接着跑，
+     * 免得限流时一遍遍重试把额度再耗一轮）。
+     */
+    if (need.service === 'chatgpt_subscription') return undefined
     // 团队那三条看这个品牌那一套连没连上；个人微信跟人走（查不了：卡上扫完码由卡自己接着做）
     if (
       need.service === 'im:wecom' ||
@@ -5416,6 +5437,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
+      // WP362（决策 938）：ChatGPT 订阅（个人档；按这台机器上有没有人登录过现算）
+      subscription: {
+        signedIn: (provider) => subscription.signedIn(provider),
+        catalog: (provider) => subscription.catalog(provider),
+        complete: (person_id, provider, request) =>
+          subscription.complete(person_id, provider, request),
+      },
       // WP134：账号登录那一路（只有"登录了没有"与官方 resolveToken 两样）
       deepseekAccount: {
         signedIn: () => deepseekAccount.signedIn(),
@@ -5908,11 +5936,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return completion.text
       }
     }
+    /*
+     * WP360（决策 947）：人第一次在要插件的岗位上说话、插件还没配上 → 事项里先说一句、把装插件那张卡带进来
+     * （不等人说「装插件」）。只认人说的话（定时 / 待办起的不算）；岗位 = 本人在这件事所属岗位里的那几条职责。
+     */
+    const extensionNudge = async (input: Parameters<StartRun>[0]): Promise<void> => {
+      const nudger = extensionOnboardingRef
+      if (nudger === undefined || input.todo_id !== undefined) return
+      const said = workRef?.store
+        .listMatterEvents(input.matter.id, { limit: 50 })
+        .some((e) => e.kind === 'human_message')
+      if (said !== true) return
+      const mine = roles.assignments.get(input.actor.assignment_id)
+      if (mine === undefined || mine.revoked_at !== undefined) return
+      const tpl = input.matter.position_template_id
+      const pos = positionAssemblies.get(ws)
+      const role_ids =
+        tpl === undefined || pos === undefined
+          ? [mine.role_id]
+          : roles.assignments
+              .listByPerson(input.actor.person_id, { workspace_id: ws })
+              .filter(
+                (a) =>
+                  a.revoked_at === undefined &&
+                  (a.id === mine.id || pos.positionOf(a.role_id, a.id).position_id === tpl),
+              )
+              .map((a) => a.role_id)
+      await nudger.nudge({
+        actor: {
+          workspace_id: ws,
+          person_id: input.actor.person_id,
+          assignment_id: mine.id,
+          role_id: mine.role_id,
+        },
+        matter_id: input.matter.id,
+        role_ids,
+      })
+    }
     const startRun: StartRun | undefined =
       baseStartRun === undefined
         ? undefined
-        : (input) => {
+        : async (input) => {
             void titler.kick({ matter: input.matter, brief: input.brief, actor: input.actor })
+            // WP360：先说一句、带上装插件那张卡，再起跑（时间线上它在 AI 回话前面）；不需要时几个判断就返回
+            await extensionNudge(input).catch(() => undefined)
             return baseStartRun(input)
           }
 
@@ -8638,6 +8705,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ws === undefined || ws === workspace.id
         ? boot.ownModels.configured()
         : (await brandModules.models(ws)).configured(),
+    // WP360：第 ④ 步「装插件 + 配对」那一项打不打勾
+    extensionPaired: (ws) => extensionPairedRef?.(ws) === true,
     // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂整个品牌
     shopifyStores: (ws) => {
       const list = (c: typeof boot.connections) =>
@@ -10053,8 +10122,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return a !== undefined && a.person_id === person_id && a.revoked_at === undefined
       },
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
-      sayAt: async (actor, matter_id, text) =>
-        (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
+      sayAt: async (actor, matter_id, text, attached) =>
+        (await positionsFor(ws)).sayAt({
+          matter_id,
+          person_id: actor.person_id,
+          text,
+          // WP357：附上的资料（已读成文字）与交给运行的那段话
+          ...(attached === undefined ? {} : attached),
+        }),
       // WP341（决策 847）：对话里点了「调工具」的 genui 按钮——同一个工具执行器（只读当场跑、会改外部的出卡）
       genuiTool: async (actor, matter_id, call) => {
         const runtime = brand.runtime?.runHostTool
@@ -10271,6 +10346,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         role_id: string
         run_id: string
         entry: string
+        /** WP362：这一次真在用的模型（随便聊 / 助理这一轮选的那个）；不给 = 品牌默认。 */
+        model?: { provider: string; model: string }
       },
       _signal?: AbortSignal,
     ): Promise<{
@@ -10323,7 +10400,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
            * （ChatGPT 订阅）就先用它自带的搜索、用这个人自己的订阅；不行再走 WP353 的链。
            */
           const models = await brandModules.models(ws)
-          const ref = models.configured() ? models.defaultRef() : undefined
+          // WP362：判名单看这一轮真在用的模型（这段对话选了 ChatGPT 订阅就是它），没给才看品牌默认
+          const ref = ctx.model ?? (models.configured() ? models.defaultRef() : undefined)
           const who: SearchWho = {
             ...(ref === undefined ? {} : { source: ref.provider, model: ref.model }),
             person_id: ctx.person_id,
@@ -10419,10 +10497,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const item = await approvals.get(id)
         return item !== undefined && (item.state === 'pending' || item.state === 'in_review')
       },
-      // WP350：拆成多份——来源批次 id、要记的那几条待确认写进知识库
+      // WP350：拆成多份——来源批次 id、要记的那几条写进知识库（WP357 决策 902：直接生效，能撤销）
       newId: (prefix) =>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
-      proposeNotes: assistantNotes.propose,
+      writeNotes: assistantNotes.write,
+      retireNotes: assistantNotes.retireMany,
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
@@ -10449,6 +10528,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
+      notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
+      // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
+      observe: (actor, type, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: actor.workspace_id as WorkspaceId,
+          type,
+          actor: { kind: 'person', id: actor.person_id },
+          subject: { type: 'free_chat', id: String(payload.segment_id ?? '') },
+          correlation: {
+            trace_id: `tr_${String(payload.run_id ?? payload.segment_id ?? 'assistant')}`,
+          },
+          payload: { ...payload, person_id: actor.person_id },
+        })
+      },
       // WP343：助理这一层的记忆（本人的）——开关与 WP320 同一个；记一条 / 删一条照常进记忆账本（小提醒读它）与事件日志（不带正文）
       memory: {
         auto: (actor) => autoMemorySettings.get(actor.workspace_id, actor.person_id),
@@ -10507,6 +10602,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               role_id: ctx.role_id,
               run_id: ctx.run_id,
               entry: 'free_chat',
+              ...(ctx.model === undefined ? {} : { model: ctx.model }),
             },
             signal,
           ),
@@ -10594,6 +10690,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.detach === true ? { detach: true } : {}),
           // WP342：输入框左下角选的 AI（认不出的不记，跟品牌默认走）
           ...(chosen === undefined ? {} : { model: chosen }),
+          // WP357：附上的资料（宿主按助理那套读成文字）
+          ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
         })
         return {
           mode: out.mode,
@@ -11127,6 +11225,114 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         })
       : undefined
+  extensionPairedRef = (ws) => extensionStore.list(ws).some((t) => t.revoked_at === undefined)
+  /**
+   * WP360（决策 947）：需要插件的岗位一开始就引导装好插件——岗位页顶上那张卡（要不要、配上没有、还差哪步、
+   * 稍后、接方案卡）与第一次对话主动带卡。「要不要」只从职责定义的 `browser_extension` 推。
+   */
+  const dayStartOf = (ws: WorkspaceId): string => {
+    const tz = (outboundTz.get(ws) ?? 0) * 60_000
+    const day = 86_400_000
+    return new Date(Math.floor((Date.parse(clock.now()) + tz) / day) * day - tz).toISOString()
+  }
+  const extensionEvent = (
+    actor: { workspace_id: string; person_id: string; assignment_id: string },
+    type: 'extension.onboarding_snoozed' | 'extension.onboarding_prompted',
+    payload: Record<string, unknown>,
+  ): void =>
+    appendEvent({
+      schema_version: 1,
+      workspace_id: actor.workspace_id as WorkspaceId,
+      type,
+      actor: { kind: 'person', id: actor.person_id },
+      correlation: { trace_id: `trc_extob_${Date.parse(clock.now()).toString(36)}` },
+      payload: { assignment_id: actor.assignment_id, ...payload },
+    })
+  const extensionOnboarding = createExtensionOnboarding({
+    role: (id) => roles.roles.get(id as never),
+    heldRoleIds: (ws, person) =>
+      roles.assignments
+        .listByPerson(person as never, { workspace_id: ws as WorkspaceId })
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => a.role_id),
+    paired: (ws) => extensionPairedRef?.(ws as WorkspaceId) === true,
+    stepDone: async (ws, step) => {
+      const brand = await brandModules.forWorkspace(ws as WorkspaceId).catch(() => undefined)
+      if (step === 'reddit') {
+        const st = brand?.redditWatch?.pluginState().state
+        return st === undefined ? undefined : st === 'connected'
+      }
+      const acts = brand?.adsActions
+      return acts === undefined ? undefined : acts.settings().consent[step] !== undefined
+    },
+    planTarget: async (ws, target) => {
+      const t = (await setupCardsOf(ws as WorkspaceId))?.target(target)
+      return t === undefined ? undefined : { name: t.name, satisfied: await t.satisfied() }
+    },
+    askPlan: async (actor, target) => {
+      const out = await (await setupCardsOf(actor.workspace_id))?.askSetup({
+        target,
+        actor: {
+          person_id: actor.person_id as never,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+        },
+      })
+      return out === undefined ? {} : { card_id: out.item.id }
+    },
+    snoozedToday: (ws) =>
+      kernel.eventLog.readSync({
+        workspace_id: ws as WorkspaceId,
+        types: ['extension.onboarding_snoozed'],
+        since_at: dayStartOf(ws as WorkspaceId),
+      }).length > 0,
+    recordSnooze: (actor, role_ids) =>
+      extensionEvent(actor, 'extension.onboarding_snoozed', { role_ids }),
+    prompted: (ws, assignment_id) =>
+      kernel.eventLog
+        .readSync({ workspace_id: ws as WorkspaceId, types: ['extension.onboarding_prompted'] })
+        .some((e) => (e.payload as { assignment_id?: string }).assignment_id === assignment_id),
+    askConnect: async ({ actor, matter_id, why }) => {
+      const need = builtinConnectNeed('extension')
+      if (need === undefined) return undefined
+      const out = await (await setupCardsOf(actor.workspace_id))?.askConnect({
+        needs: [{ ...need, name: 'Agents 工坊助手（Chrome 插件）' }],
+        why,
+        actor: {
+          person_id: actor.person_id as never,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+        },
+        matter_id,
+        resume: false,
+      })
+      if (out === undefined) return undefined
+      const reused = (out.item.subject as { matter_id?: string }).matter_id !== matter_id
+      // 新出的那张挂进这件事的时间线（复用的那张挂在第一次出它的那件事上）
+      if (!reused)
+        try {
+          ;(await brands?.forWorkspace(actor.workspace_id))?.work.onCard(cardRefOf(out.item))
+        } catch {
+          // 挂不上事项不影响卡本身
+        }
+      return { card_id: out.item.id, reused }
+    },
+    note: async (ws, matter_id, text) => {
+      const brand = await brands?.forWorkspace(ws as WorkspaceId).catch(() => undefined)
+      try {
+        brand?.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'extension_onboarding' },
+        })
+      } catch {
+        // 事项已经没了
+      }
+    },
+    recordPrompt: (actor, payload) =>
+      extensionEvent(actor, 'extension.onboarding_prompted', payload),
+  })
+  extensionOnboardingRef = extensionOnboarding
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
     serviceOf: async (ws) => {
@@ -12197,6 +12403,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     extension: extensionPortOf,
     // WP345：插件随工坊安装与更新 `/v1/extension/install*`、`/v1/extension/version`
     ...(extensionInstall === undefined ? {} : { extensionInstall }),
+    // WP360：需要插件的岗位引导装插件 `/v1/extension/needs*`
+    extensionOnboarding,
     // WP313（docs/101 §5.4）：插件动作通道（广告后台）`/v1/extension/actions/*`、`/v1/ads-actions/*`
     ...(hostedBoot === undefined
       ? {

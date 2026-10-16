@@ -29,6 +29,7 @@ import type {
   MembershipRequestView,
   OnboardingApplyView,
   OnboardingConnectorItem,
+  OnboardingExtensionItem,
   OnboardingPlanInput,
   OnboardingPlanView,
   OnboardingPlatformCliItem,
@@ -61,6 +62,7 @@ import type {
 import {
   DEFAULT_BRAND_CURRENCY,
   DEFAULT_STOREFRONT_PLATFORM,
+  extensionNeedOf,
   normalizeMarketLanguages,
   normalizeMarkets,
   platformKitOf,
@@ -376,6 +378,11 @@ export interface OnboardingOptions {
    * WP240：按品牌问——跟随公司默认的品牌算公司那一份。
    */
   modelConfigured(workspace_id?: WorkspaceId): boolean | Promise<boolean>
+  /**
+   * WP360：这个品牌有没有一个没撤掉的浏览器插件配上了（第 ④ 步「装插件」那一项打不打勾）。
+   * 不给 = 当没配上。
+   */
+  extensionPaired?(workspace_id: WorkspaceId): boolean
   /**
    * 已连 Shopify 的店（46 I6：连上就自动挂，没连就挂空并在面板明说）。
    * WP240：按品牌问（Rollout 的分配不该挂到 INMO 的店上）。
@@ -1021,6 +1028,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 
     const model_configured = await options.modelConfigured(ws)
     const platform_cli = platformCliOf(platform, roleIds)
+    // WP360（决策 947）：勾的职责里有要浏览器插件的 → 第 ④ 步最前「装插件 + 配对」
+    const extNeed = extensionNeedOf(
+      roleIds.flatMap((id) => {
+        const def = roles.roles.get(id)
+        return def === undefined ? [] : [def]
+      }),
+    )
+    const extension: OnboardingExtensionItem | undefined =
+      extNeed === undefined
+        ? undefined
+        : {
+            uses: extNeed.uses,
+            needed_by: extNeed.role_ids.map((id) => roles.roles.get(id)?.name.zh ?? id),
+            paired: options.extensionPaired?.(ws) === true,
+          }
     return {
       connectors: [...connectors.values()].sort(
         (a, b) => Number(b.required) - Number(a.required) || a.service.localeCompare(b.service),
@@ -1032,6 +1054,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       model_first: !model_configured,
       role_ids: roleIds,
       ...(platform_cli === undefined ? {} : { platform_cli }),
+      ...(extension === undefined ? {} : { extension }),
     }
   }
 

@@ -1,4 +1,4 @@
-import type { AssignmentId, Iso8601, RoleId, RunId, WorkspaceId } from './common.js'
+import type { AssignmentId, Iso8601, PersonId, RoleId, RunId, WorkspaceId } from './common.js'
 import type { ModelRef } from './run.js'
 
 /** 22 模型网关：key 只在网关；按 (workspace, assignment, role, run, purpose) 记账；预算三级；急停。 */
@@ -100,6 +100,12 @@ export interface ModelMeta {
   role_id: RoleId
   run_id: RunId
   purpose: ModelPurpose
+  /**
+   * WP362（只加）：这一次是**谁**在用。订阅来源（ChatGPT 订阅）按人取**那个人自己**的订阅登录；
+   * 别的来源不看它。不给 = 宿主按「这台机器上登录过订阅的那一个人」兜（个人档一台机器一个人）。
+   * 只给 provider 看，网关不把它写进用量事件。
+   */
+  person_id?: PersonId
 }
 export interface CompletionUsage {
   input_tokens: number

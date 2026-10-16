@@ -185,6 +185,16 @@ export interface PricingModelEntry {
    * 私有云价目表还在写这一格，等那边（WP280）去掉再删。
    */
   cn?: boolean
+  /**
+   * WP362（Luoye 10-16，只加）：**消耗速率**——以 DeepSeek v4 Pro 官方原价 = 1 为基准，这个模型一般用一轮
+   * 大概是它的几倍。输入框的 AI 钮上显示成「1.0x」「2.3x」。不给 = 本机按官方原价相对 DeepSeek v4 Pro 折算。
+   */
+  consumption_rate?: number
+  /**
+   * WP362：{@link consumption_rate} 从哪来：`stats` = 后台按用量账本里这个模型的真实平均消耗长期统计出来的；
+   * `list_price` = 按官方原价折算的。实际消耗以用量记录为准。
+   */
+  rate_source?: 'stats' | 'list_price'
 }
 
 /**

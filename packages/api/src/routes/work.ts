@@ -50,6 +50,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { AttachedFileBody } from './free-chat.js'
 
 /** 与工作台面同一个准入：能读自己的队列就能看自己的事项与待办。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
@@ -160,7 +161,18 @@ const CreateMatterBody = z.object({
 
 const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
 
-const MessageBody = z.object({ text: z.string().min(1).max(4000) })
+/**
+ * WP357：在事项里说一句，可以附资料（与助理同一个形状；读文字、截断、抹口令在服务端做）。
+ * 附了资料时话可以是空的。
+ */
+const MessageBody = z
+  .object({
+    text: z.string().max(4000),
+    files: z.array(AttachedFileBody).max(3).optional(),
+  })
+  .refine((b) => b.text.trim() !== '' || (b.files ?? []).length > 0, {
+    message: '说点什么，或者附一份资料',
+  })
 
 /** WP341（决策 847）：对话里点了「调工具」的 genui 按钮。 */
 const GenuiToolBody = z.object({
@@ -343,7 +355,13 @@ export interface WorkPort {
     options: { limit?: number; before?: string },
   ): MaybePromise<{ events: MatterEvent[]; has_more: boolean }>
   /** 人在事项里说话 → 起 Run（17 §1，`work_item` 就是这个事项） */
-  say(actor: WorkActor, id: string, text: string): Promise<{ event: MatterEvent; run_id?: string }>
+  say(
+    actor: WorkActor,
+    id: string,
+    text: string,
+    /** WP357：这句话附上的资料（原样转给宿主读；不给 = 没附）。 */
+    files?: readonly { name: string; data: string }[],
+  ): Promise<{ event: MatterEvent; run_id?: string }>
   /** WP264（决策 177）：人改标题（`title_source: 'user'`，之后不再被自动覆盖）。 */
   retitleMatter?(actor: WorkActor, id: string, title: string): MaybePromise<Matter>
   /**
@@ -638,8 +656,17 @@ export function workRoutes(): Route[] {
       },
       async (c, deps) => {
         const actor = actorOf(c)
-        const { text } = await body(c, MessageBody)
-        return ok(c, await workOf(deps).say(actor, param(c, 'id'), text), 201)
+        const { text, files } = await body(c, MessageBody)
+        return ok(
+          c,
+          await workOf(deps).say(
+            actor,
+            param(c, 'id'),
+            text,
+            ...(files === undefined || files.length === 0 ? [] : [files]),
+          ),
+          201,
+        )
       },
     ),
     route(

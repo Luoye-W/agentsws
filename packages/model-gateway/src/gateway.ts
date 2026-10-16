@@ -494,9 +494,11 @@ class Gateway implements ModelGatewayApi {
           }
           // WP151：DeepSeek 余额不足同理——换一家救不回来，也不该悄悄换模型；原样往上抛
           // WP194：官方接口说「本月额度用完了 / 公司积分用完了」也一样——换一家救不回来，原样那句人话往上抛
+          // WP362：ChatGPT 订阅被限流（`rate_limited`）同理——换一家等于悄悄换模型，照实那句人话往上抛
           if (
             e instanceof GatewayError &&
             (e.code === 'unauthenticated' ||
+              e.code === 'rate_limited' ||
               e.code === 'budget_exhausted' ||
               deepseekQuotaKindOf(e) !== undefined)
           ) {

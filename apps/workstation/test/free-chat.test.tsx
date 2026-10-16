@@ -54,6 +54,16 @@ vi.mock('@/lib/free-chat', async () => {
     getAssistantState: async () => ({ suggestions: [], targets: [] }),
     listAssistantMemory: async () => [],
     listFreeChatSessions: async () => state.sessions,
+    // WP352：只有一条长对话
+    getAssistantThread: async () => ({
+      session: state.sessions[0] ?? {
+        id: 'fchat_1',
+        title: '助理',
+        created_at: T0,
+        updated_at: T0,
+      },
+      segments: [],
+    }),
     listFreeChatMessages: async (id: string) => state.messages[id] ?? [],
     createFreeChatSession: async () => {
       const s = { id: 'fchat_1', title: '新对话', created_at: T0, updated_at: T0 }
@@ -158,13 +168,15 @@ describe('WP188 随便聊：空态与模型下拉', () => {
     })
   })
 
-  it('下拉里有「Agents 工坊（用积分）」，戴我们的品牌标记', () => {
+  it('下拉里有「Agents 工坊（积分）」那一组，组标题戴我们的品牌标记（WP362：按来源分组）', () => {
     const options = openPicker()
     const cloud = options.find((o) => o.dataset.model === 'agentsws/deepseek-flash')
-    expect(cloud?.textContent).toContain('Agents 工坊（用积分）')
-    expect(cloud?.textContent).toContain('按积分扣')
+    expect(cloud?.textContent).toContain('deepseek-flash')
+    const group = cloud?.closest('[data-testid="model-pick-group"]') as HTMLElement
+    expect(group.dataset.group).toBe('workshop')
+    expect(group.textContent).toContain('Agents 工坊（积分）')
     // 我们的品牌标记（不是字母圆圈）
-    expect(cloud?.querySelector('svg rect')).not.toBeNull()
+    expect(group.querySelector('svg rect')).not.toBeNull()
   })
 
   it('没接任何模型：输入框里的 AI 钮换成「还没接 AI」，点了开第三栏接模型卡（WP342 / 857）', async () => {
@@ -262,7 +274,7 @@ describe('WP188 随便聊：一轮对话', () => {
         },
       },
     ]
-    renderPage('/assistant/fchat_9')
+    renderPage()
     const link = await screen.findByTestId('assistant-dispatch-link')
     expect(link.textContent).toBe('已交给 Reddit 运营 · 自家版运营')
     expect(link.getAttribute('href')).toBe('/matters/mat_7')

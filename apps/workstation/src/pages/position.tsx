@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
+import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
@@ -361,6 +362,17 @@ export function PositionPage(): React.ReactNode {
         </div>
       )}
 
+      {/*
+        WP360（决策 947）：要浏览器插件的岗位（职责定义推出来）、插件还没配上 → 顶上常驻装插件卡；
+        配上后换成「还差一步」（插件里连 Reddit / 广告后台）、再接方案卡；都好了就不画。「稍后」当天收起。
+      */}
+      {tab === 'settings' ? null : (
+        <ExtensionOnboardCard
+          roleIds={duties.map((d) => d.role_id)}
+          assignment={duties[0]?.assignment_id}
+          mode="position"
+        />
+      )}
       {/* WP253：建站岗位「让 AI 改网站还差哪一步」（没装 CLI / 没登录 / 没店铺地址）；补上就消失 */}
       <SiteThemeBanner positionId={view?.position_id} duties={duties} />
       {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」——WP288 起只在出问题时出 */}

@@ -32,6 +32,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { AttachedFileBody } from './free-chat.js'
 
 /** 与工作台面同一个准入：能读自己的队列就能看自己的岗位。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
@@ -123,6 +124,11 @@ const OpenBody = z.object({
   detach: z.boolean().optional(),
   /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上；不给 = 品牌默认。 */
   model: z.string().min(1).max(200).optional(),
+  /**
+   * WP357：这句话附上的资料（.txt / .md / .docx / .pdf / .xlsx / .csv，与助理同一个形状）。宿主读成文字
+   * （抹口令、截断）记在事项那句话上，运行拿到「这句话 + 附件」。
+   */
+  files: z.array(AttachedFileBody).max(3).optional(),
 })
 
 const PromoteBody = z.object({

@@ -141,6 +141,7 @@ import {
   blockedByTool,
   blockedLine,
   blockReasonOf,
+  CHATGPT_SUBSCRIPTION_NEED,
   DEEPSEEK_ACCOUNT_NEED,
   DEEPSEEK_ACCOUNT_RUN_PROVIDER,
   RunBlockLog,
@@ -150,6 +151,7 @@ import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
 import { PartialRunLog, pausedForUpdateLine, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
+import { SUBSCRIPTION_SOURCE_ID } from './subscription-model.js'
 
 /**
  * 卡片的出口。类型就是契约的 `CreateApprovalInput`——收件人门禁（31 §3.3）要的
@@ -1578,6 +1580,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ? memo(() =>
           createDshRuntime({
             gateway: { complete: (r) => options.models.complete(r) },
+            /*
+             * WP362（决策 938）：ChatGPT 订阅的运行也经网关走——网关里接了订阅那一跳（服务进程里的
+             * 订阅登录树），凭据不进这次运行那棵树，子进程档也一样。
+             */
+            subscriptionRoute: 'gateway',
             clock,
             seed,
             ...(options.dshMode === undefined ? {} : { mode: options.dshMode }),
@@ -2460,6 +2467,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           active.get(run_id)?.view.model.provider === DEEPSEEK_ACCOUNT_RUN_PROVIDER
         )
           runBlocks.noteSetup('model', { kind: 'connect', need: DEEPSEEK_ACCOUNT_NEED })
+        /*
+         * WP362（决策 938）：用 ChatGPT 订阅跑、没登录 / 登录过期 / 被限流 → 同样出连接卡，卡里就地
+         * 重新登录（或换个账号），登好按原话接着做。dsh 那一档的模型错不带码，认网关那几句人话。
+         */
+        if (
+          active.get(run_id)?.view.model.provider === SUBSCRIPTION_SOURCE_ID &&
+          (error.code === 'unauthenticated' ||
+            error.code === 'rate_limited' ||
+            error.message.includes('ChatGPT 订阅'))
+        )
+          runBlocks.noteSetup('model', { kind: 'connect', need: CHATGPT_SUBSCRIPTION_NEED })
         recordFailure(error)
         await recordBlocked()
         // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带

@@ -5,8 +5,9 @@
  *   归属待定各一组。归属待定的那几条**一直**带一个「交给谁？」下拉（不挑不发）；「改一下」才给每条加上
  *   勾选、改归属、改文字。底部「就这样」「改一下」，「不用了」在旁边。不让人逐个岗位去点（与 WP348 方案卡同一个样子）。
  *   出现：助理这一轮拆出了东西。点过之后只读（标「已派出」/「没派」）。
- * - {@link FanoutSummary} 汇总：派了哪几个岗位几件事（点了进那件事）、各进了几条知识（去确认）、
- *   记下你的几条习惯、没发几条。出现：方案卡点了「就这样」之后。
+ * - {@link FanoutSummary} 汇总：派了哪几个岗位几件事（点了进那件事）、各进了几条知识、
+ *   记下你的几条习惯、没发几条。出现：方案卡点了「就这样」之后。WP357（决策 902）：知识点「就这样」就生效，
+ *   不再「去确认」；右下角「撤销这 N 条知识」（点两下才撤：先变「确定撤销」）与「去知识库」，撤过的标「已撤销」。
  *
  * 界面少字：原文出处一行、灰字、超长截断（悬停看全文）。
  */
@@ -305,9 +306,19 @@ export function FanoutCard({
   )
 }
 
-export function FanoutSummary({ summary }: { summary: FreeChatFanoutSummary }): React.ReactNode {
+export function FanoutSummary({
+  summary,
+  onUndo,
+}: {
+  summary: FreeChatFanoutSummary
+  /** WP357：撤销这一批写进知识库的口径。不给 = 只读。 */
+  onUndo?: () => Promise<void>
+}): React.ReactNode {
   const { t } = useApp()
+  const [arming, setArming] = useState(false)
+  const [undoing, setUndoing] = useState(false)
   const skipped = summary.skipped.dropped + summary.skipped.unsure + summary.skipped.secret
+  const noteIds = summary.note_card_ids ?? []
   return (
     <div
       className="flex flex-col gap-2 rounded-xl border bg-ws-card p-3"
@@ -377,6 +388,48 @@ export function FanoutSummary({ summary }: { summary: FreeChatFanoutSummary }): 
           >
             {t('fanout.summary.confirm')}
           </Link>
+        )}
+        {noteIds.length === 0 ? null : (
+          <span className="ml-auto flex items-center gap-2">
+            {summary.notes_undone_at !== undefined ? (
+              <span data-testid="fanout-summary-undone">
+                {t('fanout.summary.undone', { n: summary.notes_undone ?? 0 })}
+              </span>
+            ) : onUndo === undefined ? null : (
+              <button
+                type="button"
+                className={cn(
+                  'hover:underline disabled:opacity-50',
+                  arming ? 'text-destructive' : 'text-ws-muted-fg',
+                )}
+                disabled={undoing}
+                data-testid="fanout-summary-undo"
+                data-armed={arming}
+                onClick={() => {
+                  if (!arming) {
+                    setArming(true)
+                    return
+                  }
+                  setUndoing(true)
+                  void onUndo().finally(() => {
+                    setUndoing(false)
+                    setArming(false)
+                  })
+                }}
+              >
+                {arming
+                  ? t('fanout.summary.undo_confirm')
+                  : t('fanout.summary.undo', { n: noteIds.length })}
+              </button>
+            )}
+            <Link
+              to="/knowledge"
+              className="text-ws-brand hover:underline"
+              data-testid="fanout-summary-knowledge"
+            >
+              {t('fanout.summary.knowledge')}
+            </Link>
+          </span>
         )}
       </div>
     </div>

@@ -76,29 +76,10 @@ function whenText(value: string | undefined, lang: Lang, never: string): string 
 export function BrowserExtensionSection(props: { assignment?: string }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  /** 屏幕上那个码：明文只活在这个 state 里，刷新一下就没了。 */
-  const [pairing, setPairing] = useState<{ code: string; shown_at: number } | undefined>(undefined)
-  const [now, setNow] = useState(() => Date.now())
 
   const tokens = useQuery({
     queryKey: ['extension-tokens', props.assignment],
     queryFn: () => listExtensionTokens(props.assignment),
-  })
-
-  // 倒计时：码在屏幕上活多久，这一行就跑多久。
-  useEffect(() => {
-    if (pairing === undefined) return
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [pairing])
-
-  const generate = useMutation({
-    mutationFn: () => createExtensionPairing(props.assignment),
-    onSuccess: (out) => {
-      const at = Date.now()
-      setPairing({ code: out.code, shown_at: at })
-      setNow(at)
-    },
   })
 
   const revoke = useMutation({
@@ -154,64 +135,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
         paired={rows.some((r) => r.revoked_at === undefined)}
       />
 
-      <div className="rounded-2xl bg-card p-4 shadow-[var(--ws-shadow)]">
-        {pairing === undefined ? (
-          <div className="flex flex-col gap-2">
-            <Button
-              onClick={() => generate.mutate()}
-              disabled={generate.isPending}
-              data-testid="extension-generate"
-            >
-              {generate.isPending ? t('extension.generating') : t('extension.generate')}
-            </Button>
-            {generate.isError ? (
-              <p className="text-sm text-[var(--ws-bad)]" data-testid="extension-error">
-                {(generate.error as Error).message}
-              </p>
-            ) : (
-              // 「5 分钟、只能用一次」是安全承诺，按 36 §7 必须可见，不能藏进 tooltip。
-              <SafetyNote text={t('extension.code.once')} />
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2" data-testid="extension-code">
-            <div className="font-mono text-4xl tracking-[0.35em] text-[var(--ws-ink)]">
-              {pairing.code}
-            </div>
-            {secondsLeft(pairing.shown_at, now) > 0 ? (
-              <p
-                className="flex items-center gap-1 text-sm text-muted-foreground"
-                data-slot="status"
-              >
-                {t('extension.code.left', { time: mmss(secondsLeft(pairing.shown_at, now)) })}
-                <Hint text={t('extension.code.left.hint')} />
-              </p>
-            ) : (
-              // **到点不让它自己消失**：用户可能正在另一个窗口里一位一位地敲。
-              // 让码留在屏幕上、旁边说一句"大概过期了"，比它凭空不见强得多。
-              <p
-                className="text-sm text-[var(--ws-warn)]"
-                data-slot="status"
-                data-testid="extension-code-stale"
-              >
-                {t('extension.code.stale')}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => generate.mutate()}
-                disabled={generate.isPending}
-              >
-                {t('extension.regenerate')}
-              </Button>
-              <Button variant="ghost" onClick={() => setPairing(undefined)}>
-                {t('extension.collapse')}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+      <ExtensionPairingCode assignment={props.assignment} />
 
       {tokens.isPending ? (
         <Skeleton className="h-20 w-full" />
@@ -242,6 +166,86 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
       {/* 安全承诺，按 36 §7 可见（不藏进 tooltip）。 */}
       <SafetyNote text={t('extension.local_only')} />
     </section>
+  )
+}
+
+/**
+ * 生成配对码那一块（码大、带倒计时、不留痕）。WP360 起抽出来：岗位页顶上 / 首次设置第 ④ 步那张装插件卡也用它。
+ */
+export function ExtensionPairingCode(props: { assignment?: string | undefined }): React.ReactNode {
+  const { t } = useApp()
+  /** 屏幕上那个码：明文只活在这个 state 里，刷新一下就没了。 */
+  const [pairing, setPairing] = useState<{ code: string; shown_at: number } | undefined>(undefined)
+  const [now, setNow] = useState(() => Date.now())
+
+  // 倒计时：码在屏幕上活多久，这一行就跑多久。
+  useEffect(() => {
+    if (pairing === undefined) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [pairing])
+
+  const generate = useMutation({
+    mutationFn: () => createExtensionPairing(props.assignment),
+    onSuccess: (out) => {
+      const at = Date.now()
+      setPairing({ code: out.code, shown_at: at })
+      setNow(at)
+    },
+  })
+
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-[var(--ws-shadow)]">
+      {pairing === undefined ? (
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending}
+            data-testid="extension-generate"
+          >
+            {generate.isPending ? t('extension.generating') : t('extension.generate')}
+          </Button>
+          {generate.isError ? (
+            <p className="text-sm text-[var(--ws-bad)]" data-testid="extension-error">
+              {(generate.error as Error).message}
+            </p>
+          ) : (
+            // 「5 分钟、只能用一次」是安全承诺，按 36 §7 必须可见，不能藏进 tooltip。
+            <SafetyNote text={t('extension.code.once')} />
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2" data-testid="extension-code">
+          <div className="font-mono text-4xl tracking-[0.35em] text-[var(--ws-ink)]">
+            {pairing.code}
+          </div>
+          {secondsLeft(pairing.shown_at, now) > 0 ? (
+            <p className="flex items-center gap-1 text-sm text-muted-foreground" data-slot="status">
+              {t('extension.code.left', { time: mmss(secondsLeft(pairing.shown_at, now)) })}
+              <Hint text={t('extension.code.left.hint')} />
+            </p>
+          ) : (
+            // **到点不让它自己消失**：用户可能正在另一个窗口里一位一位地敲。
+            // 让码留在屏幕上、旁边说一句"大概过期了"，比它凭空不见强得多。
+            <p
+              className="text-sm text-[var(--ws-warn)]"
+              data-slot="status"
+              data-testid="extension-code-stale"
+            >
+              {t('extension.code.stale')}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => generate.mutate()} disabled={generate.isPending}>
+              {t('extension.regenerate')}
+            </Button>
+            <Button variant="ghost" onClick={() => setPairing(undefined)}>
+              {t('extension.collapse')}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

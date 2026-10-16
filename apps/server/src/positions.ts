@@ -24,6 +24,7 @@ import type {
   Clock,
   EventEnvelope,
   Matter,
+  MatterAttachment,
   MatterEvent,
   MatterId,
   PersonId,
@@ -56,6 +57,7 @@ import {
   settleNoHit,
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
+import { attachmentsBrief, readAssistantFile } from './assistant-files.js'
 import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
 import {
   buildPositionWork,
@@ -186,6 +188,11 @@ export interface OpenAtPositionInput {
   detach?: boolean
   /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上。 */
   model?: string
+  /**
+   * WP357：这句话附上的资料（原样的 base64）。与助理同一套读法读成文字（抹口令、截断、读不出照实说），
+   * 记在事项第一句话上；路由与三分只看话本身，运行拿到「话 + 附件围起来」。
+   */
+  files?: readonly { name: string; data: string }[]
 }
 
 /** WP287：岗位里问一句，当场的回答（岗位页输入框下面那一段）。 */
@@ -285,6 +292,10 @@ export interface PositionsAssembly {
     matter_id: MatterId
     person_id: PersonId
     text: string
+    /** WP357：附上的资料（已读成文字）——记在这句话上。 */
+    attachments?: MatterAttachment[]
+    /** WP357：交给运行的那段话（话 + 附件围起来）；不给 = 就是 `text`。 */
+    brief?: string
   }): Promise<{ event: MatterEvent; run_id?: string } | undefined>
   /**
    * 一条职责属于哪个岗位（起 Run 拼 `position` 技能层时要它）。
@@ -721,6 +732,12 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
      */
     const text = taskTextOf(input.title, input.summary)
     /*
+     * WP357：附上的资料——与助理同一套读法；路由与三分只看 `text`，事项第一句话带着附件，
+     * 运行拿到「话 + 附件围起来」。
+     */
+    const attachments: MatterAttachment[] = (input.files ?? []).map(readAssistantFile)
+    const brief = attachments.length === 0 ? undefined : attachmentsBrief(text, attachments)
+    /*
      * WP84：从快捷提示点进来的，职责是**已经定好的**，不跑路由。
      *
      * 两道判定和 `reroute` 逐字一样，一道都不省：不在这个岗位的模板里 → 拒；
@@ -739,7 +756,11 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const named = held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) }))
     // WP237（Fable 代定）：「你好」这类明显不是交活的话——不起运行，只回一句问要做什么
     // WP291：它就是一次当场问答（岗位页上回一句，不进线程）
-    const smallTalk = pinned === undefined && input.mode !== 'task' && looksLikeSmallTalk(text)
+    const smallTalk =
+      pinned === undefined &&
+      input.mode !== 'task' &&
+      attachments.length === 0 &&
+      looksLikeSmallTalk(text)
     /*
      * WP291（决策 356）：调用方点了名的照办；否则下面三分。快捷提示（定了职责）也照样三分——
      * 定的是**哪条职责**，不是「这是一件任务」（「看看今天的订单」也是当场答）。老的 `ask` 就是会话。
@@ -885,6 +906,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       person_id: input.person_id,
       assignment_id: pickedEntry.assignment_id,
       text,
+      ...(brief === undefined ? {} : { attachments, brief }),
     })
     // WP287 / WP291：一开始就判成任务的——原话后面头一句「记成了任务，按「X」做」（还能换的话带「换一条」）
     if (!ask)
@@ -1018,15 +1040,18 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
    * 这件事原来那段话：岗位入口开事项时记下的那句人话（以标题打头的那一句），没有就用标题
    * （WP237 之前开的、还没定职责的事项没记原话）。
    */
-  const briefOf = (matter: Matter): string => {
+  const briefOf = (matter: Matter, opts: { attachments?: boolean } = {}): string => {
     const said = work.store.listMatterEvents(matter.id).filter((e) => e.kind === 'human_message')
-    return (
+    const first =
       // WP259：标题拆过（「第一句…」）的，原话以去掉「…」的那段开头
-      said.find((e) => isTaskBrief(matter.title, e.text))?.text ??
+      said.find((e) => isTaskBrief(matter.title, e.text)) ??
       // WP264：标题换成了 AI 起的短标题 / 人改过的——原话就是这件事的第一句人话
-      (matter.title_source === undefined ? undefined : said[0]?.text) ??
-      matter.title
-    )
+      (matter.title_source === undefined ? undefined : said[0])
+    if (first === undefined) return matter.title
+    // WP357：那句话附了资料的，重跑 / 换职责时附件一起带上（路由只看话本身：`attachments: false`）
+    return opts.attachments === false
+      ? first.text
+      : attachmentsBrief(first.text, first.attachments ?? [])
   }
 
   /** 这件事上还没定的那张「走哪条职责」卡（时间线上路由那一条记着卡号）。 */
@@ -1169,7 +1194,15 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     matter_id: MatterId
     person_id: PersonId
     text: string
+    attachments?: MatterAttachment[]
+    brief?: string
   }): Promise<{ event: MatterEvent; run_id?: string } | undefined> => {
+    // WP357：附上的资料记在这句话上；交给运行的是「话 + 附件」
+    const attached =
+      input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments }
+    const said_brief = input.brief ?? input.text
     const found = work.getMatter(input.matter_id)
     if (found === undefined || found.entry !== 'position') return undefined
     // WP291：在当场问答的线程里又说了一句 = 接着聊（它变成一段会话，进左栏会话历史）
@@ -1190,6 +1223,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         person_id: input.person_id,
         assignment_id: own.id,
         text: input.text,
+        ...attached,
+        ...(input.brief === undefined ? {} : { brief: input.brief }),
       })
       // WP287：会话里接着说的那一句真要动手了（出了卡）——同样转成任务、线程里说一句
       if (matter.ask !== undefined && said.run_id !== undefined) answerOf(matter.id, said.run_id)
@@ -1200,6 +1235,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const held = minePerRole(template, input.person_id)
     if (held.length === 0) return undefined
     const original = briefOf(matter)
+    const originalText = briefOf(matter, { attachments: false })
     // ① 话里点名了哪条（「按 Reddit 运营这条来」）就是哪条
     const named = namedRole(
       input.text,
@@ -1213,7 +1249,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     )
     const duties = held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) }))
     // ② 没点名、又只是打个招呼：记下这句话，回一句问要做什么（不起运行）
-    if (named === undefined && looksLikeSmallTalk(input.text)) {
+    if (named === undefined && input.brief === undefined && looksLikeSmallTalk(input.text)) {
       const event = work.appendEvent(matter.id, {
         kind: 'human_message',
         text: input.text,
@@ -1225,7 +1261,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     // ③ 没点名：原话加这一句再路由一次；打平按分取、一个都没命中按先后取（同一个人的职责）
     // WP287：几条都沾一点也按分 / 先后取（`routeIn`），不再停下来问
     const routed =
-      named === undefined ? routeIn(`${original} ${input.text}`, template, held) : undefined
+      named === undefined ? routeIn(`${originalText} ${input.text}`, template, held) : undefined
     const role_id = named ?? routed?.picked
     if (role_id === undefined) {
       // ④ 还是看不出（几条都沾一点、谁都不像）：只记下这句话，再问一次。不起运行——更不落到负责人的通用助手上
@@ -1233,6 +1269,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         kind: 'human_message',
         text: input.text,
         actor: { kind: 'person', id: input.person_id },
+        ...attached,
       })
       work.appendEvent(matter.id, {
         kind: 'status',
@@ -1250,8 +1287,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       person_id: input.person_id,
       assignment_id: pinned.assignment_id,
       text: input.text,
+      ...attached,
       // 刚定下职责的头一次运行：把原来那件事一起带上（「开始吧」本身不是任务）
-      brief: `${original}\n\n${input.text}`,
+      brief: `${original}\n\n${said_brief}`,
     })
     return said.run_id === undefined ? { event: said.event } : said
   }

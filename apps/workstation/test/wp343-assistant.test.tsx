@@ -69,6 +69,11 @@ vi.mock('@/lib/free-chat', async () => {
     getAssistantState: async () => state.assistant,
     listAssistantMemory: async () => state.memory,
     listFreeChatSessions: async () => [],
+    // WP352：只有一条长对话
+    getAssistantThread: async () => ({
+      session: { id: 'fchat_1', title: '助理', created_at: T0, updated_at: T0 },
+      segments: [],
+    }),
     listFreeChatMessages: async () => state.messages,
     createFreeChatSession: async () => ({
       id: 'fchat_1',
@@ -267,10 +272,10 @@ describe('WP343 输入框 @', () => {
 })
 
 describe('WP343 老地址、回报轮询、记忆', () => {
-  it('/free-chat/:id → /assistant/:id', async () => {
+  it('/free-chat/:id → /assistant（WP352：只有一条对话，不带会话 id）', async () => {
     renderPage('/free-chat/fchat_9?x=1')
     await waitFor(() => {
-      expect(screen.getByTestId('where').textContent).toBe('/assistant/fchat_9?x=1')
+      expect(screen.getByTestId('where').textContent).toBe('/assistant?x=1')
     })
   })
 

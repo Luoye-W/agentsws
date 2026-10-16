@@ -35,6 +35,9 @@ import {
 import type {
   NativeSearchRequest,
   NativeSearchResult,
+  SubscriptionCatalogModel,
+  SubscriptionChatRequest,
+  SubscriptionChatResult,
   SubscriptionLoginHandle,
   SubscriptionQuestion,
 } from '@agentsws/dsh-adapter'
@@ -87,6 +90,13 @@ export interface SubscriptionOptions {
    * 被 import 进来（31 §3.5 的精神：执行器不平白装第三方代码）。测试注入替身。
    */
   createLogin?: (options: { credentials: unknown }) => Promise<SubscriptionLoginHandle>
+  /**
+   * WP362：订阅目录（哪几个模型能选）。缺省懒加载 `@agentsws/dsh-adapter/subscription-chat`
+   * （只读 pi-ai 的生成目录，几十毫秒、不联网、不碰凭据）。测试注入替身。
+   */
+  catalog?: (provider: string) => Promise<SubscriptionCatalogModel[]>
+  /** WP362：有人登录 / 登出了（模型下拉与网关要跟着变）。 */
+  onChange?: () => void
 }
 
 export interface SubscriptionPortLike {
@@ -114,6 +124,23 @@ export interface SubscriptionAssembly {
     provider: SubscriptionProviderKind,
     request: NativeSearchRequest,
   ): Promise<NativeSearchResult>
+  /**
+   * WP362（决策 938）：这台机器上有没有人用这家订阅登录过（**同步**，只看本机库里那条记录在不在，
+   * 不读值）。不是个人档 / 没有秘密库 → 一律 `false`。模型下拉与网关按它决定出不出订阅那一组。
+   */
+  signedIn(provider: SubscriptionProviderKind): boolean
+  /** WP362：这家订阅现在能选哪几个模型（同步；目录还没读进来时是空的，读进来会再 `onChange` 一次）。 */
+  catalog(provider: SubscriptionProviderKind): SubscriptionCatalogModel[]
+  /**
+   * WP362：用订阅跑一次补全（模型网关那一跳）。`person_id` 是这一次是谁：给了就只用**他自己**的订阅
+   * （别人的不借，同 WP355）；没给（不在哪次运行里的零碎调用）且这台机器上只有一个人登录过 → 用那个人的。
+   * 取不到 → `SubscriptionChatError('sign_in')`。令牌不出那棵登录树。
+   */
+  complete(
+    person_id: string | undefined,
+    provider: SubscriptionProviderKind,
+    request: SubscriptionChatRequest,
+  ): Promise<SubscriptionChatResult>
   /** 把还开着的登录树收掉（进程退出时）。 */
   close(): Promise<void>
 }
@@ -234,6 +261,66 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
         .sort()
     },
   })
+
+  /** WP362：这台机器上用这家订阅登录过的人（只看记录在不在，不读值）。 */
+  const signedInPeople = (provider: string): string[] => {
+    if (!available()) return []
+    const suffix = `:${provider}`
+    return options.secrets
+      .list()
+      .map((r) => r.connection_id)
+      .filter((id) => id.startsWith(SUBSCRIPTION_KEY_PREFIX) && id.endsWith(suffix))
+      .map((id) => id.slice(SUBSCRIPTION_KEY_PREFIX.length, id.length - suffix.length))
+      .sort()
+  }
+
+  /**
+   * WP362：这一次用谁的订阅。**点了名就只认那个人自己的**（WP355 的规矩：别人的订阅不借）；
+   * 没点名（不在哪次运行里的零碎调用）→ 这台机器上**只有一个人**登录过就用他的（个人档一台机器一个人），
+   * 几个人都登录过就不猜。
+   */
+  const personFor = (provider: string, wanted: string | undefined): string | undefined => {
+    const people = signedInPeople(provider)
+    if (wanted !== undefined) return people.includes(wanted) ? wanted : undefined
+    return people.length === 1 ? people[0] : undefined
+  }
+
+  /** WP362：订阅目录（读一次留在内存；读进来了通知一声，下拉跟着变）。 */
+  const catalogs = new Map<string, SubscriptionCatalogModel[]>()
+  const loading = new Set<string>()
+  const loadCatalog = (provider: string): void => {
+    if (catalogs.has(provider) || loading.has(provider)) return
+    loading.add(provider)
+    const read =
+      options.catalog ??
+      (async (p: string) => {
+        const mod = await import('@agentsws/dsh-adapter/subscription-chat')
+        return mod.subscriptionCatalog(p)
+      })
+    read(provider)
+      .then((list) => {
+        catalogs.set(provider, list)
+        try {
+          if (list.length > 0) options.onChange?.()
+        } catch {
+          // 宿主那边还没装好（启动途中）：下一次有人看下拉时自然是新的
+        }
+      })
+      .catch(() => {
+        // 目录读不到（这个安装里没有 dsh-adapter）：下拉里就没有订阅这一组，不报错
+        catalogs.set(provider, [])
+      })
+      .finally(() => loading.delete(provider))
+  }
+  const changed = (provider: string): void => {
+    loadCatalog(provider)
+    try {
+      options.onChange?.()
+    } catch {
+      // 下拉 / 网关重装失败不拦登录
+    }
+  }
+  for (const f of SUBSCRIPTION_FACTS) if (signedInPeople(f.id).length > 0) loadCatalog(f.id)
 
   const stateOf = async (person_id: string): Promise<PersonState> => {
     const existing = people.get(person_id)
@@ -413,6 +500,8 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
           })
           .then((outcome) => {
             if (outcome === 'cancelled') attempt.error = '登录已取消'
+            // WP362：登好了——模型下拉里多出订阅那一组，网关跟着重装
+            else changed(provider)
           })
           .catch((e: unknown) => {
             // **原样那句话**，但绝不带值：官方的报错里只有状态码与端点
@@ -468,6 +557,7 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
         }
         state.attempts.delete(id)
         await state.handle.signOut(id)
+        changed(id)
       },
     },
 
@@ -490,12 +580,36 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
       if (person_id === undefined) fail('WEB_PROVIDER_UNAVAILABLE', '不知道是谁在用，取不了订阅')
       const who = person_id as string
       // 先看本机库里这个人有没有那一条（便宜）；没有就不必为一次搜索起一棵登录树
-      if ((await recordsFor(who).read(provider)) === undefined)
+      if ((await recordsFor(who as string).read(provider)) === undefined)
         fail('WEB_PROVIDER_CREDENTIAL_MISSING', '还没用 ChatGPT 订阅登录')
-      const state = await stateOf(who)
+      const state = await stateOf(who as string)
       if (state.handle.nativeSearch === undefined)
         fail('WEB_PROVIDER_UNAVAILABLE', '这一版订阅登录模块不支持自带搜索')
       return (state.handle.nativeSearch as NonNullable<SubscriptionLoginHandle['nativeSearch']>)(
+        provider,
+        request,
+      )
+    },
+
+    signedIn: (provider) => signedInPeople(provider).length > 0,
+
+    catalog(provider) {
+      const hit = catalogs.get(provider)
+      if (hit === undefined && signedInPeople(provider).length > 0) loadCatalog(provider)
+      return hit ?? []
+    },
+
+    async complete(person_id, provider, request) {
+      const signIn = (message: string): never => {
+        throw Object.assign(new Error(message), { name: 'SubscriptionChatError', kind: 'sign_in' })
+      }
+      if (unavailableReason() !== undefined)
+        signIn('这台机器是公司档 / 托管档（或没有秘密库），不能用个人的 ChatGPT 订阅。')
+      const who = personFor(provider, person_id)
+      if (who === undefined) signIn('还没用 ChatGPT 订阅登录。登录一次就能接着用。')
+      const state = await stateOf(who as string)
+      if (state.handle.complete === undefined) signIn('这一版订阅登录模块还不能用订阅跑活。')
+      return (state.handle.complete as NonNullable<SubscriptionLoginHandle['complete']>)(
         provider,
         request,
       )

@@ -139,6 +139,12 @@ export type KnownEventType =
   | 'memory.removed'
   /** WP234：岗位拆出时整层复制一份（payload：`from` / `scope_id` / `copied`）。 */
   | 'memory.copied'
+  /**
+   * WP352：助理一条长对话。`assistant.context` 每一轮拼进了多少（当前段原话 / 段内小结 / 最近几段小结 /
+   * 记忆的条数与 token 估算、切没切段）；`assistant.topic` 一段收起出了小结、或段内压缩了一次。**不带正文**。
+   */
+  | 'assistant.context'
+  | 'assistant.topic'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'
@@ -402,6 +408,16 @@ export type KnownEventType =
   | 'extension.updated'
   /** WP345：插件重载过、还是没换成工坊文件夹里那一版（多半是从别的文件夹加载的；payload：running / wanted）。 */
   | 'extension.update_failed'
+  /**
+   * WP360（决策 947）：需要插件的岗位上「装插件」那张引导卡，人点了「稍后」——当天（本地日）收起。
+   * payload：发起人那条分配、哪几条职责要插件（只有 id，没有任何内容）。
+   */
+  | 'extension.onboarding_snoozed'
+  /**
+   * WP360：人第一次在需要插件的岗位上说话、插件还没配上——AI 先说一句、把装插件那张卡带进这件事。
+   * 同一条分配只一次。payload：分配、事项 id、卡 id。
+   */
+  | 'extension.onboarding_prompted'
 
 export interface EventLog {
   append<T extends string, P>(

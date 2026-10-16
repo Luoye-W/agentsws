@@ -264,13 +264,16 @@ describe('WP342 输入框里的 AI 钮', () => {
     expect(screen.queryByTestId('model-pick-set-default')).toBeNull()
   })
 
-  it('自接的模型：服务商图标 + 型号短名；默认那一项标「默认」', async () => {
+  it('自接的模型：服务商图标 +「来源 · 模型名」（WP362）；默认那一项标「默认」', async () => {
     renderWithProviders(<ComposerModelPicker value={undefined} onChange={() => {}} />)
     const pick = await screen.findByTestId('model-pick')
-    expect(pick.textContent).toBe('deepseek-flash')
+    expect(pick.textContent).toBe('DeepSeek 官方 · deepseek-flash')
     fireEvent.click(pick)
-    const first = screen.getAllByTestId('model-pick-option')[0] as HTMLElement
-    expect(first.textContent).toContain('默认')
+    // WP362：按来源分组，工坊那组排最前；默认那一项（自接的 DeepSeek）标「默认」
+    const def = screen
+      .getAllByTestId('model-pick-option')
+      .find((o) => o.dataset.model === 'deepseek/deepseek-flash') as HTMLElement
+    expect(def.textContent).toContain('默认')
     // ↓ 换到下一项，Esc 收起
     fireEvent.keyDown(screen.getByTestId('model-pick-menu'), { key: 'Escape' })
     expect(screen.queryByTestId('model-pick-menu')).toBeNull()

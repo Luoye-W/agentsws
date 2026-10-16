@@ -12,35 +12,48 @@
  *
  * WP350（决策 900）：能附会议记录 / 文档；助理拆出的「我打算这样分」方案卡就在回复里点（就这样 / 改一下 / 不用了），
  * 点完回复下面一张汇总；同一批派出去的事回来报的那几句聚在一起（标「来自「…」」）。
+ *
+ * WP352（决策 931，Luoye 10-16）：去掉左边会话列表，助理只有**一条连续对话**（老的多条会话第一次打开时按时间拼进来）。
+ * 往上滚是完整历史：换了一天中间一行日期，换了话题一条淡线 + 上一个话题的一行小结；顶部搜索（搜以前聊过的原话与小结，
+ * 点了跳到那里）；「换个话题」手动切段（说一句「换个话题…」也行）。上下文怎么管在服务端（四层，见 `assistant-thread.ts`）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { BrandMark } from '@/components/design'
 import { MemoryButton, PeersButton, Suggestions } from '@/components/free-chat/assistant-bits'
 import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
 import { AssistantMessage, UserBubble } from '@/components/free-chat/message'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
-import { SessionList } from '@/components/free-chat/session-list'
+import {
+  DayDivider,
+  dayOf,
+  HistorySearch,
+  NewTopicButton,
+  RecalledRefs,
+  TopicDivider,
+} from '@/components/free-chat/thread-bits'
 import { useApp } from '@/lib/app-context'
 import {
+  type AssistantHistoryHit,
   type AssistantTarget,
+  type AssistantThread,
   confirmFanout,
   createFreeChatSession,
-  deleteFreeChatSession,
   type FreeChatFanoutEdit,
   type FreeChatFile,
   type FreeChatFrame,
   type FreeChatImage,
   type FreeChatMessage,
   getAssistantState,
+  getAssistantThread,
   getFreeChatModels,
   listFreeChatMessages,
-  listFreeChatSessions,
-  renameFreeChatSession,
+  newAssistantTopic,
   stopFreeChat,
   streamFreeChat,
+  undoFanoutNotes,
 } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 
@@ -87,25 +100,37 @@ interface Live {
 }
 
 export function FreeChatPage(): React.ReactNode {
+  const { id: legacyId } = useParams<{ id?: string }>()
+  const { search } = useLocation()
+  // WP352：只有一条对话——带会话 id 的老地址都回到 `/assistant`
+  if (legacyId !== undefined) return <Navigate replace to={`${ASSISTANT_PATH}${search}`} />
+  return <AssistantThreadPage />
+}
+
+function AssistantThreadPage(): React.ReactNode {
   const { t } = useApp()
-  const { id } = useParams<{ id?: string }>()
-  const navigate = useNavigate()
   const client = useQueryClient()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const { solo, known } = useMode()
-  /**
-   * WP342（决策 853）：每段对话自己的 AI（输入框左下角那个钮）。键是会话 id，新对话还没 id 时是 ''。
-   * 没在这次选过：用这段对话上一条回答用的那个（= 存在会话上），再没有就是品牌默认。
-   */
-  const [picks, setPicks] = useState<Record<string, string>>({})
+  /** WP342（决策 853）：这条对话用的 AI（输入框左下角那个钮）；没选过就用上一条回答用的，再没有就是品牌默认。 */
+  const [pick, setPick] = useState<string | undefined>(undefined)
   const [toggles, setToggles] = useState<ComposerToggles>({ web_search: false, knowledge: false })
   const [live, setLive] = useState<Live | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
+  /** WP352：搜索 / 出处跳过来时亮一下的那条。 */
+  const [lit, setLit] = useState<string | undefined>(undefined)
   const scroller = useRef<HTMLDivElement>(null)
   const abort = useRef<AbortController | undefined>(undefined)
 
   const models = useQuery({ queryKey: [...KEY, 'models'], queryFn: getFreeChatModels })
-  const sessions = useQuery({ queryKey: [...KEY, 'sessions'], queryFn: listFreeChatSessions })
+  // WP352：那一条长对话（老服务进程没有就退回「第一句话时开一段会话」）
+  const thread = useQuery({
+    queryKey: [...KEY, 'thread'],
+    queryFn: getAssistantThread,
+    retry: false,
+  })
+  const [fallbackId, setFallbackId] = useState<string | undefined>(undefined)
+  const id = thread.data?.session.id ?? fallbackId
   // WP343：快捷问题与 `@` 能选的岗位（老服务进程没有就当没有）
   const assistant = useQuery({
     queryKey: [...KEY, 'assistant'],
@@ -123,24 +148,57 @@ export function FreeChatPage(): React.ReactNode {
 
   const choices = models.data?.choices ?? []
   const rows = id === undefined ? [] : (messages.data ?? [])
+  const segs = thread.data?.segments ?? []
   const lastUsed = [...rows].reverse().find((m) => m.model !== undefined)?.model?.id
   const picked =
-    picks[id ?? ''] ??
+    pick ??
     (lastUsed !== undefined && choices.some((c) => c.id === lastUsed) ? lastUsed : undefined) ??
     models.data?.default ??
     choices[0]?.id
   const choice = choices.find((c) => c.id === picked)
 
-  // 新的字进来就滚到底
+  // 新的字进来就滚到底（跳到搜索命中时不滚）
   // biome-ignore lint/correctness/useExhaustiveDependencies: 只按"内容变了"滚
   useEffect(() => {
     const el = scroller.current
-    if (el !== null) el.scrollTop = el.scrollHeight
+    if (el !== null && lit === undefined) el.scrollTop = el.scrollHeight
   }, [rows.length, live?.reply.text, live?.status])
 
   const refresh = (session_id: string): void => {
     void client.invalidateQueries({ queryKey: [...KEY, 'messages', session_id] })
-    void client.invalidateQueries({ queryKey: [...KEY, 'sessions'] })
+    void client.invalidateQueries({ queryKey: [...KEY, 'thread'] })
+  }
+
+  /** WP352：换个话题（这段收起来，下一句开新的一段）。 */
+  const topic = useMutation({
+    mutationFn: newAssistantTopic,
+    onSuccess: (view: AssistantThread) => {
+      client.setQueryData([...KEY, 'thread'], view)
+    },
+  })
+  // ⌘K「换个话题」进来（`?new=1`）：这段说过话就切一下，然后把参数拿掉
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在拿到对话后看一次
+  useEffect(() => {
+    if (params.get('new') !== '1' || thread.data === undefined || messages.data === undefined)
+      return
+    const current = segs.at(-1)
+    if (current !== undefined && rows.some((m) => m.segment_id === current.id)) topic.mutate()
+    const next = new URLSearchParams(params)
+    next.delete('new')
+    setParams(next, { replace: true })
+  }, [thread.data === undefined, messages.data === undefined])
+
+  /** WP352：跳到一条话（搜索命中 / 出处）；命中的是小结就跳到那段开头。 */
+  const jump = (hit: AssistantHistoryHit): void => {
+    const target =
+      hit.message_id ?? rows.find((m) => (m.segment_id ?? segs[0]?.id) === hit.segment_id)?.id
+    if (target === undefined) return
+    setLit(target)
+    requestAnimationFrame(() => {
+      for (const el of document.querySelectorAll<HTMLElement>('[data-msg]'))
+        if (el.dataset.msg === target) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    setTimeout(() => setLit((cur) => (cur === target ? undefined : cur)), 2400)
   }
 
   const run = async (
@@ -257,17 +315,16 @@ export function FreeChatPage(): React.ReactNode {
     }) => {
       let session_id = id
       if (session_id === undefined) {
-        const made = await createFreeChatSession()
+        // WP352：那条长对话还没拿到就再要一次；老服务进程没有长对话才退回开一段会话
+        const made = await getAssistantThread()
+          .then((v) => {
+            client.setQueryData([...KEY, 'thread'], v)
+            return v.session
+          })
+          .catch(() => createFreeChatSession())
         session_id = made.id
-        // 新对话里先选的 AI 跟着这段对话走
-        setPicks((prev) => {
-          const first = prev['']
-          if (first === undefined) return prev
-          const { '': _drop, ...rest } = prev
-          return { ...rest, [made.id]: first }
-        })
+        if (thread.data === undefined) setFallbackId(made.id)
         client.setQueryData([...KEY, 'messages', made.id], [])
-        navigate(`${ASSISTANT_PATH}/${made.id}`)
       }
       await run(session_id, input)
     },
@@ -302,6 +359,21 @@ export function FreeChatPage(): React.ReactNode {
       void client.invalidateQueries({ queryKey: [...KEY, 'assistant'] })
     }
   }
+  /** WP357（决策 902）：汇总卡上「撤销」→ 换上撤过的那条汇总、知识库刷新。 */
+  const undoNotes = async (batch_id: string): Promise<void> => {
+    if (id === undefined) return
+    setError(undefined)
+    try {
+      const out = await undoFanoutNotes(id, batch_id)
+      client.setQueryData<FreeChatMessage[]>([...KEY, 'messages', id], (old) =>
+        (old ?? []).map((m) => (m.id === out.summary.id ? out.summary : m)),
+      )
+      void client.invalidateQueries({ queryKey: ['knowledge', 'cards'] })
+      void client.invalidateQueries({ queryKey: ['knowledge-cards'] })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
   const lastAssistant = [...rows].reverse().find((m) => m.role === 'assistant')
 
   const composer = (
@@ -330,47 +402,86 @@ export function FreeChatPage(): React.ReactNode {
         <ComposerModelPicker
           value={picked}
           onChange={(next) => {
-            setPicks((prev) => ({ ...prev, [id ?? '']: next }))
+            setPick(next)
           }}
           testId="free-chat-model"
         />
       }
     />
   )
-  const lit = (params.get('memory') ?? '').split(',').filter((x) => x !== '')
+  const memoryLit = (params.get('memory') ?? '').split(',').filter((x) => x !== '')
+  const segById = new Map(segs.map((g) => [g.id, g]))
+  const segOf = (m: FreeChatMessage): string | undefined => m.segment_id ?? segs[0]?.id
+  /** 这段话题说过话了（「换个话题」才出）。 */
+  const current = segs.at(-1)
+  const currentHasTalk = current?.current && rows.some((m) => segOf(m) === current.id)
+  const empty = rows.length === 0 && live === undefined
+
+  /** WP352：一条话前面要不要先画日期 / 话题分隔（和上一条比）。 */
+  const dividers = (m: FreeChatMessage, prev: FreeChatMessage | undefined): React.ReactNode => {
+    const day = prev === undefined || (m.at !== '' && dayOf(m.at) !== dayOf(prev.at))
+    const seg = segOf(m)
+    const prevSeg = prev === undefined ? undefined : segOf(prev)
+    const topic =
+      prev !== undefined && seg !== undefined && prevSeg !== undefined && seg !== prevSeg
+    return (
+      <>
+        {topic ? <TopicDivider previous={segById.get(prevSeg)} /> : null}
+        {day && m.at !== '' ? <DayDivider at={m.at} /> : null}
+      </>
+    )
+  }
+  const bubble = (m: FreeChatMessage): React.ReactNode => (
+    <div
+      key={m.id}
+      data-msg={m.id}
+      className={lit === m.id ? 'rounded-xl ring-2 ring-ws-brand/50 transition-shadow' : undefined}
+    >
+      {m.role === 'user' ? (
+        <UserBubble message={m} />
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <AssistantMessage
+            message={m}
+            last={m.id === lastAssistant?.id && !busy}
+            onRegenerate={() => {
+              if (id !== undefined) void run(id, { regenerate: true })
+            }}
+            onFanout={fanout}
+            // WP357（决策 902）：汇总卡上「撤销」挂在这条长对话里
+            onUndoNotes={undoNotes}
+          />
+          {/* WP352：翻了以前聊过的，出处一排（点了跳过去） */}
+          <RecalledRefs hits={m.recalled ?? []} onJump={jump} />
+        </div>
+      )}
+    </div>
+  )
+  // 刚点了「换个话题」、新段还空着：末尾先画一条线
+  const lastRow = rows.at(-1)
+  const trailingTopic =
+    current?.current && lastRow !== undefined && segOf(lastRow) !== current.id && live === undefined
 
   return (
     <div className="-m-4 flex h-[calc(100vh-57px)] md:-m-7" data-testid="free-chat-page">
-      <aside className="hidden w-56 shrink-0 border-r border-ws-line p-3 md:block">
-        <SessionList
-          sessions={sessions.data ?? []}
-          current={id}
-          onNew={() => {
-            navigate(ASSISTANT_PATH)
-          }}
-          onPick={(next) => {
-            navigate(`${ASSISTANT_PATH}/${next}`)
-          }}
-          onRename={(sid, title) => {
-            void renameFreeChatSession(sid, title).then(() => refresh(sid))
-          }}
-          onDelete={(sid) => {
-            void deleteFreeChatSession(sid).then(() => {
-              refresh(sid)
-              if (sid === id) navigate(ASSISTANT_PATH)
-            })
-          }}
-        />
-      </aside>
       <section className="flex min-w-0 flex-1 flex-col">
-        {/* WP343：右上角——助理记的几条；同事互联 / 公司模式多一个「替我答同事」（原「我的代理」）。模型钮在输入框里（WP342） */}
+        {/* WP352：左边没有会话列表了。顶部：搜以前聊过的 · 换个话题 · 记忆 · 替我答同事 */}
         <header className="flex items-center gap-2 px-4 py-2">
+          {rows.length === 0 ? null : <HistorySearch onJump={jump} />}
           <span className="ml-auto flex items-center gap-1.5">
-            <MemoryButton highlight={lit} />
+            {currentHasTalk ? (
+              <NewTopicButton
+                disabled={busy || topic.isPending}
+                onClick={() => {
+                  topic.mutate()
+                }}
+              />
+            ) : null}
+            <MemoryButton highlight={memoryLit} />
             {known && !solo ? <PeersButton defaultOpen={params.get('peers') === '1'} /> : null}
           </span>
         </header>
-        {id === undefined && live === undefined ? (
+        {empty ? (
           <div
             className="flex flex-1 flex-col items-center justify-center gap-5 px-4"
             data-testid="free-chat-empty"
@@ -410,40 +521,45 @@ export function FreeChatPage(): React.ReactNode {
                   data-testid="free-chat-messages"
                 >
                   {segmentsOf(rows).map((seg) => {
-                    const items = seg.rows.map((m) =>
-                      m.role === 'user' ? (
-                        <UserBubble key={m.id} message={m} />
-                      ) : (
-                        <AssistantMessage
-                          key={m.id}
-                          message={m}
-                          last={m.id === lastAssistant?.id && !busy}
-                          onRegenerate={() => {
-                            if (id !== undefined) void run(id, { regenerate: true })
-                          }}
-                          onFanout={fanout}
-                        />
-                      ),
-                    )
+                    const first = seg.rows[0]
+                    const prev = first === undefined ? undefined : rows[rows.indexOf(first) - 1]
+                    const head = first === undefined ? null : dividers(first, prev)
+                    const items = seg.rows.map((m, i) => (
+                      <Fragment key={m.id}>
+                        {i === 0 ? null : dividers(m, seg.rows[i - 1])}
+                        {bubble(m)}
+                      </Fragment>
+                    ))
                     // WP350：同一批派出去的事回来报的几句聚在一起
-                    return seg.batch === undefined ? (
-                      items
-                    ) : (
-                      <div
-                        key={`batch:${seg.rows[0]?.id}`}
-                        className="flex flex-col gap-1.5 border-l-2 border-ws-line pl-2"
-                        data-testid="assistant-report-batch"
-                        data-batch={seg.batch.id}
-                      >
-                        {seg.batch.title === '' ? null : (
-                          <p className="text-[11px] text-muted-foreground">
-                            {t('fanout.batch', { title: seg.batch.title })}
-                          </p>
+                    return (
+                      <Fragment key={`seg:${first?.id}`}>
+                        {head}
+                        {seg.batch === undefined ? (
+                          items
+                        ) : (
+                          <div
+                            className="flex flex-col gap-1.5 border-l-2 border-ws-line pl-2"
+                            data-testid="assistant-report-batch"
+                            data-batch={seg.batch.id}
+                          >
+                            {seg.batch.title === '' ? null : (
+                              <p className="text-[11px] text-muted-foreground">
+                                {t('fanout.batch', { title: seg.batch.title })}
+                              </p>
+                            )}
+                            {items}
+                          </div>
                         )}
-                        {items}
-                      </div>
+                      </Fragment>
                     )
                   })}
+                  {trailingTopic ? (
+                    <TopicDivider
+                      previous={
+                        lastRow === undefined ? undefined : segById.get(segOf(lastRow) ?? '')
+                      }
+                    />
+                  ) : null}
                   {live === undefined ? null : (
                     <AssistantMessage
                       message={live.reply}
@@ -465,9 +581,11 @@ export function FreeChatPage(): React.ReactNode {
   )
 }
 
-/** WP343：老地址 `/free-chat[/:id]` → `/assistant[/:id]`（书签、⌘K 老链接照样打得开）。 */
+/**
+ * WP343：老地址 `/free-chat[/:id]` → `/assistant`（书签、⌘K 老链接照样打得开）。
+ * WP352：只有一条对话，会话 id 不再带。
+ */
 export function LegacyFreeChatRedirect(): React.ReactNode {
-  const { id } = useParams<{ id?: string }>()
   const { search } = useLocation()
-  return <Navigate replace to={`${ASSISTANT_PATH}${id === undefined ? '' : `/${id}`}${search}`} />
+  return <Navigate replace to={`${ASSISTANT_PATH}${search}`} />
 }

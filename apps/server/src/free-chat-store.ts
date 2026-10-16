@@ -44,6 +44,18 @@ CREATE TABLE IF NOT EXISTS assistant_memory_tombstones (
   text TEXT NOT NULL,
   at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS assistant_threads (
+  person_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assistant_segments (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  person_id TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS assistant_segments_session ON assistant_segments (session_id, started_at);
 `
 
 export interface FreeChatSessionRow extends FreeChatSessionView {
@@ -81,6 +93,32 @@ export interface AssistantMemoryRow {
   session_id?: string
 }
 
+/** WP352：一段话题为什么开始（第一段 / 隔了 2 小时以上 / 跨天 / 模型判断话题变了 / 人点了或说了「换个话题」/ 老会话迁过来）。 */
+export type AssistantSegmentReason = 'first' | 'gap' | 'day' | 'topic' | 'manual' | 'migrated'
+
+/**
+ * WP352（决策 931）：助理那条长对话里的一段（一个话题）。话存在 `free_chat_messages`，每条带 `segment_id`；
+ * 这里只记段的头尾、为什么切、段落小结（谁、要做什么、定了什么、派了哪些事）与段内压缩。
+ */
+export interface AssistantSegmentRow {
+  id: string
+  session_id: string
+  person_id: string
+  started_at: string
+  /** 有 = 这段已经结束（后面开了新段）。 */
+  ended_at?: string
+  reason: AssistantSegmentReason
+  /** 一行小结（分隔线上那一行）。 */
+  title?: string
+  /** 话题小结（几行；进下一段的开场上下文、能被「查以前聊过的」搜到）。 */
+  summary?: string
+  summarized_by?: 'ai' | 'rule'
+  /** 这段里交出去的事（只记编号与一句话；进度永远现查）。 */
+  dispatches?: { matter_id: string; title: string; position_name: string; batch_id?: string }[]
+  /** 段内压缩：`upto` 这条（含）以前的原话已经压进 `text`，进模型时只带它与之后的原话。 */
+  compact?: { upto: string; text: string; at: string }
+}
+
 export interface FreeChatStore {
   sessions(person_id: string): FreeChatSessionRow[]
   session(id: string): FreeChatSessionRow | undefined
@@ -101,6 +139,16 @@ export interface FreeChatStore {
   removeMemory(id: string): AssistantMemoryRow | undefined
   /** 删过的那几句（AI 不再记回来，除非人又明说）。 */
   tombstones(person_id: string): string[]
+  /** WP352：这个人的那条长对话（会话 id）；还没有就 `undefined`。 */
+  threadOf(person_id: string): string | undefined
+  setThread(person_id: string, session_id: string): void
+  /** WP352：一段对话里的话题段（按开始时间）。 */
+  segments(session_id: string): AssistantSegmentRow[]
+  putSegment(row: AssistantSegmentRow): void
+  /** WP352：把一段会话的话整段挪到另一段会话（迁移老会话用；接在目标会话末尾，标上 `segment_id`）。 */
+  moveMessages(from: string, to: string, segment_id: string): number
+  /** WP352：交出去的事那根线跟着挪（回报落到新的那条对话里）。 */
+  retargetDispatches(from: string, to: string): void
   close(): void
 }
 
@@ -205,6 +253,59 @@ export function createFreeChatStore(dbPath?: string): FreeChatStore {
           .prepare('SELECT text FROM assistant_memory_tombstones WHERE person_id = ?')
           .all(person_id) as { text: string }[]
       ).map((r) => r.text),
+    threadOf: (person_id) =>
+      (
+        db.prepare('SELECT session_id FROM assistant_threads WHERE person_id = ?').get(person_id) as
+          | { session_id: string }
+          | undefined
+      )?.session_id,
+    setThread: (person_id, session_id) => {
+      db.prepare(
+        `INSERT INTO assistant_threads (person_id, session_id) VALUES (?,?)
+         ON CONFLICT(person_id) DO UPDATE SET session_id = excluded.session_id`,
+      ).run(person_id, session_id)
+    },
+    segments: (session_id) =>
+      (
+        db
+          .prepare(
+            'SELECT json FROM assistant_segments WHERE session_id = ? ORDER BY started_at, rowid',
+          )
+          .all(session_id) as { json: string }[]
+      ).map((r) => JSON.parse(r.json) as AssistantSegmentRow),
+    putSegment: (row) => {
+      db.prepare(
+        `INSERT INTO assistant_segments (id, session_id, person_id, started_at, json) VALUES (?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET session_id = excluded.session_id, started_at = excluded.started_at, json = excluded.json`,
+      ).run(row.id, row.session_id, row.person_id, row.started_at, JSON.stringify(row))
+    },
+    moveMessages: (from, to, segment_id) =>
+      db.transaction(() => {
+        const rows = db
+          .prepare('SELECT id, json FROM free_chat_messages WHERE session_id = ? ORDER BY seq')
+          .all(from) as { id: string; json: string }[]
+        const next = db
+          .prepare('SELECT COALESCE(MAX(seq), 0) AS n FROM free_chat_messages WHERE session_id = ?')
+          .get(to) as { n: number }
+        const move = db.prepare(
+          'UPDATE free_chat_messages SET session_id = ?, seq = ?, json = ? WHERE id = ?',
+        )
+        rows.forEach((r, i) => {
+          const m = { ...(JSON.parse(r.json) as FreeChatMessageView), session_id: to, segment_id }
+          move.run(to, next.n + i + 1, JSON.stringify(m), r.id)
+        })
+        return rows.length
+      })(),
+    retargetDispatches: (from, to) => {
+      const rows = db
+        .prepare('SELECT matter_id, json FROM assistant_dispatches WHERE session_id = ?')
+        .all(from) as { matter_id: string; json: string }[]
+      const put = db.prepare(
+        'UPDATE assistant_dispatches SET session_id = ?, json = ? WHERE matter_id = ?',
+      )
+      for (const r of rows)
+        put.run(to, JSON.stringify({ ...JSON.parse(r.json), session_id: to }), r.matter_id)
+    },
     close: () => {
       db.close()
     },

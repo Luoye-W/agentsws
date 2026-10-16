@@ -174,6 +174,9 @@ export function startChildBridge(io: {
       ...(wire.presetRoot === undefined ? {} : { presetRoot: wire.presetRoot }),
       ...(wire.sessionLogRoot === undefined ? {} : { sessionLogRoot: wire.sessionLogRoot }),
       ...(wire.sideEffects === undefined ? {} : { sideEffects: wire.sideEffects }),
+      ...(wire.subscriptionRoute === undefined
+        ? {}
+        : { subscriptionRoute: wire.subscriptionRoute }),
       // WP147：宿主已经替这次运行的模型答过「能不能看图」
       ...(wire.imageInput === true ? { imageInput: () => true } : {}),
       ...(wire.has.executeTool

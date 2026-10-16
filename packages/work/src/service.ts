@@ -557,6 +557,8 @@ export class Work {
       next_suggestion?: string
       /** WP287：这一条是「这次没跑成」（界面据此出「重试」）。 */
       failed?: MatterEvent['failed']
+      /** WP357：这句话附上的资料（只在 `human_message` 上）。 */
+      attachments?: MatterEvent['attachments']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -570,6 +572,9 @@ export class Work {
       text: input.text,
       actor: input.actor,
       ...(input.ref === undefined ? {} : { ref: input.ref }),
+      ...(input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments.map((a) => ({ ...a })) }),
       ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
       ...(input.approval_item_id === undefined ? {} : { approval_item_id: input.approval_item_id }),
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
@@ -642,6 +647,11 @@ export class Work {
        * 交接过的事项里参与者说一句，运行仍用接手人的职责规矩、模型设置，用量记接手人。
        */
       run_by?: { person_id: PersonId; assignment_id: AssignmentId }
+      /**
+       * WP357：这句话附上的资料（记在这条 `human_message` 上）。交给运行的那段话由调用方拼好放进 `brief`
+       * （附件文字当外部资料围起来）；不给 `brief` 时运行只拿到 `text`。
+       */
+      attachments?: MatterEvent['attachments']
     },
   ): Promise<{ event: MatterEvent; run_id?: RunId }> {
     this.assertNotHandingOff(this.requireMatter(matter_id))
@@ -651,6 +661,7 @@ export class Work {
       kind: 'human_message',
       text: input.text,
       actor: { kind: 'person', id: input.person_id },
+      ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
     })
     // 只发「谁在哪条事项里说了一句、多长」，正文留在事项时间线里
     this.emit(

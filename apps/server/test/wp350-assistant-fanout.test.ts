@@ -4,8 +4,10 @@
  * - 附一份 .md 会议记录 → 模型调 `plan_fanout` → 方案卡（3 个岗位的事 + 2 个岗位的知识 + 待定 + 个人偏好）；
  *   出卡这一步什么都不发（没有事项、没有知识条目）；
  * - 点「就这样」（勾掉一条、改一条归属）→ 开出 3 件事（同一来源批次，事项描述里有原文）、勾掉的不发、
- *   改归属生效、归属待定的不发；要记的以 proposed 带出处写进对应岗位知识库 + 一张确认卡；个人偏好进助理记忆；
- * - 各件事回报按批次回到这段对话；同一张卡再点回冲突；确认卡通过 → 这一批知识生效；
+ *   改归属生效、归属待定的不发；要记的**直接生效**带出处写进对应岗位知识库、不出确认卡（WP357 决策 902）；
+ *   个人偏好进助理记忆；
+ * - 各件事回报按批次回到这段对话；同一张卡再点回冲突；
+ * - WP357：知识库里改一条（旧的退役、新的生效、出处不变）、删一条（退役）；汇总卡上撤销这一批；
  * - 附件里像口令的抹掉再给模型；读不出文字的照实说。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -17,7 +19,7 @@ import type {
   FreeChatMessageView,
   FreeChatSessionView,
 } from '@agentsws/api'
-import type { ApprovalItem, FactCard } from '@agentsws/contracts'
+import type { FactCard } from '@agentsws/contracts'
 import type { FetchLike } from '@agentsws/model-gateway'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
@@ -269,7 +271,7 @@ describe('WP350 助理一次拆成多份', () => {
     expect(listed.find((m) => m.role === 'user')?.attachments?.[0]?.text).toBeUndefined()
   })
 
-  it('就这样（勾掉一条、改一条归属）→ 3 件事同一批次、知识待确认带出处、偏好进记忆；勾掉 / 待定的不发', async () => {
+  it('就这样（勾掉一条、改一条归属）→ 3 件事同一批次、知识直接生效带出处、无确认卡、偏好进记忆；勾掉 / 待定的不发', async () => {
     if (plan === undefined) throw new Error('没有方案卡')
     const id = (text: string) => plan?.items.find((i) => i.text === text)?.id as string
     const before = eventCount()
@@ -309,25 +311,28 @@ describe('WP350 助理一次拆成多份', () => {
     // 勾掉的、待定的没开
     expect(matters.some((m) => m?.title.includes('工单'))).toBe(false)
     expect(matters.some((m) => m?.title.includes('谁来跟'))).toBe(false)
-    // 知识：proposed、出处 = 这份资料、归在对的岗位
+    // 知识：直接生效（决策 902）、出处 = 这份资料、归在对的岗位
     const notes = await cards()
     expect(notes.map((c) => [c.statement, c.status, c.subject.id]).sort()).toEqual(
       [
-        ['运费一律满 50 包邮', 'proposed', 'web-ops'],
-        ['退货期统一 30 天', 'proposed', 'customer-care'],
+        ['运费一律满 50 包邮', 'active', 'web-ops'],
+        ['退货期统一 30 天', 'active', 'customer-care'],
       ].sort(),
     )
+    expect(new Set(summary.note_card_ids)).toEqual(new Set(notes.map((c) => c.id)))
+    expect(eventTypes(before).filter((t) => t === 'knowledge.card.activated').length).toBe(2)
     expect(notes[0]?.provenance[0]?.ref).toBe(`assistant:${plan.batch_id}`)
     expect(notes[0]?.provenance[0]?.locator).toBe('10-16 周会')
     expect(notes.find((c) => c.subject.id === 'customer-care')?.provenance[0]?.quote).toContain(
       '退货期统一 30 天',
     )
-    // 一张确认卡
-    const card = (await server.txn.approvals.get(summary.knowledge_card_id ?? '')) as
-      | ApprovalItem
-      | undefined
-    expect(card?.kind).toBe('knowledge_update')
-    expect((card?.payload as { form?: string } | undefined)?.form).toBe('assistant_notes')
+    // 不再出第二张「要记的 N 条」确认卡
+    expect(summary.knowledge_card_id).toBeUndefined()
+    const events = server.kernel.eventLog
+      .readSync({ workspace_id: server.bootstrap.workspace.id })
+      .slice(before)
+    expect(JSON.stringify(events)).not.toContain('assistant_notes')
+    expect(out.summary?.text).toContain('已经记进知识库')
     // 偏好进助理记忆
     const memory = await data<{ text: string; written_by: string }[]>(
       await call('GET', '/v1/free-chat/memory'),
@@ -364,25 +369,49 @@ describe('WP350 助理一次拆成多份', () => {
     expect(reports.every((r) => r.report?.batch_title === '10-16 周会')).toBe(true)
   })
 
-  it('确认卡通过 → 这一批知识生效', async () => {
-    const summary = (await messagesOf(session)).find(
-      (m) => m.fanout_summary !== undefined,
-    )?.fanout_summary
-    const id = summary?.knowledge_card_id ?? ''
-    const fresh = await server.txn.approvals.get(id)
-    const token = [...(fresh?.deliveries ?? [])]
-      .reverse()
-      .find((d) => d.status === 'sent')?.decision_token
-    const res = await call('POST', `/v1/approvals/${id}/decide`, {
-      decision_token: token,
-      action: 'approve',
+  it('WP357：知识库里改一条（就地改、出处不变、旧句留痕）、删一条；汇总卡上撤销这一批', async () => {
+    const before = await cards()
+    const ship = before.find((c) => c.statement === '运费一律满 50 包邮')
+    const ret = before.find((c) => c.statement === '退货期统一 30 天')
+    if (ship === undefined || ret === undefined) throw new Error('没有那两条')
+    const edited = await call('PATCH', `/v1/free-chat/notes/${ship.id}`, {
+      statement: '运费一律满 60 包邮',
     })
-    expect(res.status).toBe(200)
-    for (let i = 0; i < 100; i += 1) {
-      if ((await cards()).every((c) => c.status === 'active')) break
-      await new Promise((r) => setTimeout(r, 20))
-    }
-    expect((await cards()).map((c) => c.status)).toEqual(['active', 'active'])
+    expect(edited.status).toBe(200)
+    const next = await data<FactCard>(edited)
+    expect(next.id).toBe(ship.id)
+    expect(next.statement).toBe('运费一律满 60 包邮')
+    expect(next.status).toBe('active')
+    expect(next.subject.id).toBe('web-ops')
+    expect(next.provenance).toEqual(ship.provenance)
+    const previous = (next.structured?.previous ?? []) as { statement: string }[]
+    expect(previous[0]?.statement).toBe('运费一律满 50 包邮')
+    // 空的不行；不存在的 404
+    expect((await call('PATCH', `/v1/free-chat/notes/${ship.id}`, { statement: ' ' })).status).toBe(
+      400,
+    )
+    expect((await call('DELETE', '/v1/free-chat/notes/fact_nope')).status).toBe(404)
+    // 删一条 = 退役（留痕不删）；删过的再删 404
+    const removed = await call('DELETE', `/v1/free-chat/notes/${ret.id}`)
+    expect(removed.status).toBe(200)
+    expect((await cards()).find((c) => c.id === ret.id)?.status).toBe('retired')
+    expect((await call('DELETE', `/v1/free-chat/notes/${ret.id}`)).status).toBe(404)
+    // 撤销这一批：还生效的那条（改过的）退役；撤过的再点 409
+    const undo = await call(
+      'POST',
+      `/v1/free-chat/sessions/${session}/fanout/${plan?.batch_id}/undo-notes`,
+    )
+    expect(undo.status).toBe(200)
+    const undone = (await data<{ summary: FreeChatMessageView }>(undo)).summary.fanout_summary
+    expect(undone?.notes_undone_at).toBeDefined()
+    expect(undone?.notes_undone).toBe(1)
+    expect((await cards()).map((c) => c.status)).toEqual(['retired', 'retired'])
+    expect(
+      (await call('POST', `/v1/free-chat/sessions/${session}/fanout/${plan?.batch_id}/undo-notes`))
+        .status,
+    ).toBe(409)
+    const listed = (await messagesOf(session)).find((m) => m.fanout_summary !== undefined)
+    expect(listed?.fanout_summary?.notes_undone_at).toBeDefined()
   })
 
   it('不用了：什么都不发；读不出文字的附件照实说', async () => {
