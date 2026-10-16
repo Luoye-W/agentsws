@@ -6,7 +6,7 @@ You only need this when your brand runs on Shopify. Other site platforms don't n
 
 ## 1. One-click install
 
-1. Open the Site Building page (or Connections) and find the "Shopify CLI" card.
+1. Open the Site Building page (or Settings → Account connections) and find the "Shopify CLI" card.
 2. Click **Install** and wait until it goes from "Downloading" to installed — usually a minute or two.
 
 - No terminal and no Node.js setup: Agents Workshop uses the Node that ships with the app and installs the CLI into **its own data folder**. No system settings change and no admin rights are needed.

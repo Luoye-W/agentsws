@@ -104,7 +104,22 @@ const SOLO_TABS = new Set(['brands', 'positions', 'toolbox'])
 /** WP276：② 同事互联的「团队」页——同事、品牌、岗位、进行中、工具箱（没有成员 / 范围 / 加入公司 / 并进来）。 */
 const PEER_TABS = new Set(['brands', 'positions', 'colleagues', 'toolbox', 'inprogress'])
 
-export function OrgPage(): React.ReactNode {
+/**
+ * WP356（决策 923）：设置弹窗里只要这一页的某一块——不画页头、不画 tab 条，只画那一块。
+ * `people` 按模式落到「同事」（② 同事互联）或「成员」（③ 公司）；`together` 是 ① 里「和同事一起用」那一块。
+ */
+export type OrgSection =
+  | 'brands'
+  | 'positions'
+  | 'toolbox'
+  | 'people'
+  | 'invite'
+  | 'ranges'
+  | 'join'
+  | 'inprogress'
+  | 'together'
+
+export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
   const { t } = useApp()
   /*
    * WP271（docs/95 §2.2）：① 个人——左栏叫「岗位与品牌」，页里只留品牌 / 岗位 / 工具箱；
@@ -125,10 +140,12 @@ export function OrgPage(): React.ReactNode {
     initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
   )
   // WP271：① 里收起的 tab 落回「岗位」（老链接、或从 ③ 降回来时停在那几个 tab 上）
+  const shown =
+    only === undefined ? chosenTab : only === 'people' ? (peers ? 'colleagues' : 'members') : only
   const tab =
-    (solo && !SOLO_TABS.has(chosenTab)) || (peers && !PEER_TABS.has(chosenTab))
+    only === undefined && ((solo && !SOLO_TABS.has(shown)) || (peers && !PEER_TABS.has(shown)))
       ? 'positions'
-      : chosenTab
+      : shown
   const query = params.get('q')
   /**
    * WP202：`/org?new=kol`——从「连接 → 浏览器插件」那句「你还没有红人营销岗位」跳来。
@@ -811,15 +828,19 @@ export function OrgPage(): React.ReactNode {
     )
   }
 
+  // WP356：设置弹窗里只画一块（页头、tab 条、底部那行小字都归弹窗那一节管）
+  const embedded = only !== undefined
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
-          <p className="text-xs text-muted-foreground">{tm('org.subtitle')}</p>
-        </div>
+    <div className="flex flex-col gap-4" data-org-section={only}>
+      <div className="flex items-start gap-2" hidden={embedded && only !== 'together'}>
+        {embedded ? null : (
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
+            <p className="text-xs text-muted-foreground">{tm('org.subtitle')}</p>
+          </div>
+        )}
         {/* WP276（docs/95 §3.3，决策 234）：① 一行小入口——点了才打开局域网发现、出邀请那一块 */}
-        {solo ? (
+        {solo && (!embedded || only === 'together') ? (
           <span className="flex items-center gap-1">
             <Button
               size="sm"
@@ -838,7 +859,7 @@ export function OrgPage(): React.ReactNode {
           </span>
         ) : null}
       </div>
-      {solo && together && myId !== undefined ? (
+      {solo && together && myId !== undefined && (!embedded || only === 'together') ? (
         <Card data-testid="together-panel">
           <CardContent className="pt-4">
             <JoinPanel
@@ -866,7 +887,7 @@ export function OrgPage(): React.ReactNode {
 
       {/* WP234（docs/54 §6.5）：负责人是身份——在公司页顶上，不在左栏「岗位」里。
           WP271：① 个人收起（这里只有你一个人）；WP276：② 也收起（发起人只在「同事」里标一个小字） */}
-      {!company
+      {!company || (embedded && only !== 'people')
         ? null
         : (() => {
             const ownerRow = positions.data?.find((p) => p.id === OWNER_POSITION)
@@ -889,288 +910,297 @@ export function OrgPage(): React.ReactNode {
             )
           })()}
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
-          <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
-          <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
-          {/* WP276：② 团队页——「同事」代替成员 / 加入公司；范围、并进来不出 */}
-          {peers ? <TabsTrigger value="colleagues">{t('team.tab.colleagues')}</TabsTrigger> : null}
-          {!company ? null : (
-            <>
-              <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
-              <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
-              <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
-              <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
-            </>
-          )}
-          <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
-          {solo ? null : <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>}
-        </TabsList>
+      {only === 'together' ? null : (
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList hidden={embedded}>
+            {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
+            <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
+            <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
+            {/* WP276：② 团队页——「同事」代替成员 / 加入公司；范围、并进来不出 */}
+            {peers ? (
+              <TabsTrigger value="colleagues">{t('team.tab.colleagues')}</TabsTrigger>
+            ) : null}
+            {!company ? null : (
+              <>
+                <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
+                <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
+                <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
+                <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
+              </>
+            )}
+            <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
+            {solo ? null : <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>}
+          </TabsList>
 
-        <TabsContent value="brands" className="pt-3">
-          <BrandsTab
-            {...(orgId === undefined ? {} : { org_id: orgId })}
-            {...(owner === undefined ? {} : { assignment: owner })}
-            {...(haltAs === undefined ? {} : { haltAssignment: haltAs })}
-          />
-          {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
-          <div className="pt-4">
-            <BrandDesignCard />
-          </div>
-          {/* WP268：品牌素材库（AI 出的图、传进来的图、店里商品图） */}
-          <div className="pt-4">
-            <BrandAssetsCard />
-          </div>
-          {/* WP224：毛利率（品牌事实里的一格）——投放面板的盈亏线从这里算 */}
-          <div className="pt-4">
-            <GrossMarginCard {...(owner === undefined ? {} : { assignment: owner })} />
-          </div>
-        </TabsContent>
+          <TabsContent value="brands" className="pt-3">
+            <BrandsTab
+              {...(orgId === undefined ? {} : { org_id: orgId })}
+              {...(owner === undefined ? {} : { assignment: owner })}
+              {...(haltAs === undefined ? {} : { haltAssignment: haltAs })}
+            />
+            {/* WP356：设置弹窗里这三张各有各的一节（设计与素材 / 品牌档案），这里不重复 */}
+            {embedded ? null : (
+              <>
+                {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
+                <div className="pt-4">
+                  <BrandDesignCard />
+                </div>
+                {/* WP268：品牌素材库（AI 出的图、传进来的图、店里商品图） */}
+                <div className="pt-4">
+                  <BrandAssetsCard />
+                </div>
+                {/* WP224：毛利率（品牌事实里的一格）——投放面板的盈亏线从这里算 */}
+                <div className="pt-4">
+                  <GrossMarginCard {...(owner === undefined ? {} : { assignment: owner })} />
+                </div>
+              </>
+            )}
+          </TabsContent>
 
-        <TabsContent value="positions" className="pt-3">
-          {positions.data === undefined ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <PositionsTab
-              positions={positions.data}
-              roles={roles.data ?? []}
-              busy={busy}
-              {...(submitted === undefined ? {} : { submitted })}
-              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              {...(wizard === null ? {} : { assigning: wizard })}
-              below={below}
-              {...(kolDraft === undefined ? {} : { draft: kolDraft })}
-              {...(solo || owner !== undefined
-                ? {
-                    onAssign: (id: string) => {
-                      setFailure(undefined)
-                      setReceipt(null)
-                      /*
-                       * WP271：① 个人没有「分给同事」——按钮叫「我来做」，点了直接分给自己，
-                       * 不挑范围（服务端在 ① 里落成整个品牌）
-                       */
-                      if (solo) {
-                        if (myId !== undefined)
-                          assign.mutate({
-                            person_id: myId,
-                            position_id: id,
-                            ranges: [],
-                            range_groups: [],
-                          })
-                        return
-                      }
-                      // 再点一次同一张卡的「分给同事」= 收起
-                      setWizard((current) => (current === id ? null : id))
+          <TabsContent value="positions" className="pt-3">
+            {positions.data === undefined ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <PositionsTab
+                positions={positions.data}
+                roles={roles.data ?? []}
+                busy={busy}
+                {...(submitted === undefined ? {} : { submitted })}
+                {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+                {...(wizard === null ? {} : { assigning: wizard })}
+                below={below}
+                {...(kolDraft === undefined ? {} : { draft: kolDraft })}
+                {...(solo || owner !== undefined
+                  ? {
+                      onAssign: (id: string) => {
+                        setFailure(undefined)
+                        setReceipt(null)
+                        /*
+                         * WP271：① 个人没有「分给同事」——按钮叫「我来做」，点了直接分给自己，
+                         * 不挑范围（服务端在 ① 里落成整个品牌）
+                         */
+                        if (solo) {
+                          if (myId !== undefined)
+                            assign.mutate({
+                              person_id: myId,
+                              position_id: id,
+                              ranges: [],
+                              range_groups: [],
+                            })
+                          return
+                        }
+                        // 再点一次同一张卡的「分给同事」= 收起
+                        setWizard((current) => (current === id ? null : id))
+                      },
+                    }
+                  : {})}
+                onCreate={(input) => {
+                  create.mutate(input)
+                }}
+                onSaveRoles={(id, body) => {
+                  update.mutate({ id, body })
+                }}
+                people={(members.data ?? [])
+                  .filter((m) => m.left_at === undefined)
+                  .map((m) => ({ person_id: m.person_id, name: m.name }))}
+                // WP271：「上级：不设（转老板）」只在 ③ 公司集体（① ② 没有上下级）
+                {...(!company
+                  ? {}
+                  : {
+                      onSupervisor: (id: string, person_id: string | null) => {
+                        supervise.mutate({ id, person_id })
+                      },
+                    })}
+                onRename={(id, input) => {
+                  // WP196：只改名——职责原样带回去（连「可选」那几条的勾选也不动），服务端就不当改模板
+                  const current = positions.data?.find((p) => p.id === id)
+                  if (current === undefined) return
+                  update.mutate({
+                    id,
+                    body: {
+                      ...input,
+                      roles: current.roles.map((r) => ({ role_id: r.role_id, default: r.default })),
                     },
-                  }
-                : {})}
-              onCreate={(input) => {
-                create.mutate(input)
-              }}
-              onSaveRoles={(id, body) => {
-                update.mutate({ id, body })
-              }}
-              people={(members.data ?? [])
-                .filter((m) => m.left_at === undefined)
-                .map((m) => ({ person_id: m.person_id, name: m.name }))}
-              // WP271：「上级：不设（转老板）」只在 ③ 公司集体（① ② 没有上下级）
-              {...(!company
-                ? {}
-                : {
-                    onSupervisor: (id: string, person_id: string | null) => {
-                      supervise.mutate({ id, person_id })
-                    },
-                  })}
-              onRename={(id, input) => {
-                // WP196：只改名——职责原样带回去（连「可选」那几条的勾选也不动），服务端就不当改模板
-                const current = positions.data?.find((p) => p.id === id)
-                if (current === undefined) return
-                update.mutate({
-                  id,
-                  body: {
-                    ...input,
-                    roles: current.roles.map((r) => ({ role_id: r.role_id, default: r.default })),
-                  },
-                })
-              }}
-              // WP276（决策 274 第 3 条）：② 里同事能改规矩、不能删岗位（删是发起人的家务）
-              {...(owner === undefined
-                ? {}
-                : {
-                    onDelete: (id: string) => {
-                      drop.mutate(id)
-                    },
-                  })}
-              onCopyRole={(id) => {
-                copy.mutate(id)
-              }}
-              onProposeRole={(id, patch) => {
-                propose.mutate({ id, patch })
-              }}
-              // WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…
-              onMerge={(id, into, name) => {
-                merge.mutate({ id, into, name })
-              }}
-              onMoveDuty={(id, role_id, to) => {
-                moveDuty.mutate({ id, role_id, to })
-              }}
-              onSplit={(id, input) => {
-                split.mutate({ id, ...input })
-              }}
-              {...(reshaped === undefined ? {} : { notice: reshaped })}
-            />
-          )}
-        </TabsContent>
+                  })
+                }}
+                // WP276（决策 274 第 3 条）：② 里同事能改规矩、不能删岗位（删是发起人的家务）
+                {...(owner === undefined
+                  ? {}
+                  : {
+                      onDelete: (id: string) => {
+                        drop.mutate(id)
+                      },
+                    })}
+                onCopyRole={(id) => {
+                  copy.mutate(id)
+                }}
+                onProposeRole={(id, patch) => {
+                  propose.mutate({ id, patch })
+                }}
+                // WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…
+                onMerge={(id, into, name) => {
+                  merge.mutate({ id, into, name })
+                }}
+                onMoveDuty={(id, role_id, to) => {
+                  moveDuty.mutate({ id, role_id, to })
+                }}
+                onSplit={(id, input) => {
+                  split.mutate({ id, ...input })
+                }}
+                {...(reshaped === undefined ? {} : { notice: reshaped })}
+              />
+            )}
+          </TabsContent>
 
-        <TabsContent value="members" className="pt-3">
-          {members.data === undefined ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <MembersTab
-              members={members.data}
-              invitations={invitations.data ?? []}
-              positions={positions.data ?? []}
-              busy={busy}
-              {...(fresh === undefined ? {} : { freshInvite: fresh })}
-              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              onInvite={(input) => {
-                invite.mutate(input)
-              }}
-              onRevoke={(id) => {
-                revoke.mutate(id)
-              }}
-              onRemove={(person_id) => {
-                remove.mutate(person_id)
-              }}
-            />
-          )}
-        </TabsContent>
+          <TabsContent value="members" className="pt-3">
+            {members.data === undefined ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <MembersTab
+                members={members.data}
+                invitations={invitations.data ?? []}
+                positions={positions.data ?? []}
+                busy={busy}
+                {...(fresh === undefined ? {} : { freshInvite: fresh })}
+                {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+                onInvite={(input) => {
+                  invite.mutate(input)
+                }}
+                onRevoke={(id) => {
+                  revoke.mutate(id)
+                }}
+                onRemove={(person_id) => {
+                  remove.mutate(person_id)
+                }}
+              />
+            )}
+          </TabsContent>
 
-        {/* 44：品牌与产品线（G1 / G2） */}
-        <TabsContent value="ranges" className="pt-3">
-          {brands.data === undefined || lines.data === undefined ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <RangesTab
-              groups={brands.data}
-              lines={lines.data}
-              rangeOptions={ranges.data ?? []}
-              busy={busy}
-              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              onCreateGroup={(input) => {
-                brandCreate.mutate(input)
-              }}
-              onUpdateGroup={(id, body) => {
-                brandUpdate.mutate({ id, body })
-              }}
-              onDeleteGroup={(id) => {
-                brandDelete.mutate(id)
-              }}
-              onCreateLine={(input) => {
-                lineCreate.mutate(input)
-              }}
-              onDeleteLine={(id) => {
-                lineDelete.mutate(id)
-              }}
-              onPropose={(target, id, reason) => {
-                rangePropose.mutate({ target, id, reason })
-              }}
-              onCheckDuplicate={checkDuplicate}
-            />
-          )}
-        </TabsContent>
+          {/* 44：品牌与产品线（G1 / G2） */}
+          <TabsContent value="ranges" className="pt-3">
+            {brands.data === undefined || lines.data === undefined ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <RangesTab
+                groups={brands.data}
+                lines={lines.data}
+                rangeOptions={ranges.data ?? []}
+                busy={busy}
+                {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+                onCreateGroup={(input) => {
+                  brandCreate.mutate(input)
+                }}
+                onUpdateGroup={(id, body) => {
+                  brandUpdate.mutate({ id, body })
+                }}
+                onDeleteGroup={(id) => {
+                  brandDelete.mutate(id)
+                }}
+                onCreateLine={(input) => {
+                  lineCreate.mutate(input)
+                }}
+                onDeleteLine={(id) => {
+                  lineDelete.mutate(id)
+                }}
+                onPropose={(target, id, reason) => {
+                  rangePropose.mutate({ target, id, reason })
+                }}
+                onCheckDuplicate={checkDuplicate}
+              />
+            )}
+          </TabsContent>
 
-        {/* 46 §2 I2 I3：加入一家公司 / 邀请同事 / 谁申请过加入 */}
-        <TabsContent value="invite" className="pt-3">
-          {me.data === undefined ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <JoinPanel
-              {...(lan.data === undefined ? {} : { discovery: lan.data })}
-              configured={me.data.profile !== undefined}
-              invites={invites.data ?? []}
-              requests={requests.data ?? []}
-              busy={busy}
-              sent={joinSent}
-              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              onJoin={(input) => {
-                join.mutate(input)
-              }}
-              onCreateInvite={() => {
-                newInvite.mutate()
-              }}
-              onDecide={(id, approve) => {
-                decide.mutate({ id, approve })
-              }}
-            />
-          )}
-        </TabsContent>
+          {/* 46 §2 I2 I3：加入一家公司 / 邀请同事 / 谁申请过加入 */}
+          <TabsContent value="invite" className="pt-3">
+            {me.data === undefined ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <JoinPanel
+                {...(lan.data === undefined ? {} : { discovery: lan.data })}
+                configured={me.data.profile !== undefined}
+                invites={invites.data ?? []}
+                requests={requests.data ?? []}
+                busy={busy}
+                sent={joinSent}
+                {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+                onJoin={(input) => {
+                  join.mutate(input)
+                }}
+                onCreateInvite={() => {
+                  newInvite.mutate()
+                }}
+                onDecide={(id, approve) => {
+                  decide.mutate({ id, approve })
+                }}
+              />
+            )}
+          </TabsContent>
 
-        {/* 45 H2：个人工作区并进公司的对照页（三类分组、每类全部采纳） */}
-        <TabsContent value="join" className="pt-3">
-          <JoinTab
-            {...(joins.data?.[0] === undefined ? {} : { mapping: joins.data[0] })}
-            busy={busy}
-            {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-            onComplete={(choice) => {
-              const first = joins.data?.[0]
-              if (first !== undefined) joinComplete.mutate({ id: first.join_id, choice })
-            }}
-          />
-        </TabsContent>
-
-        <TabsContent value="toolbox" className="pt-3">
-          <ToolboxTab assignment={as} {...(query === null ? {} : { initialQuery: query })} />
-        </TabsContent>
-
-        {/* WP276：② 团队页「同事」——名单带忙闲、请同事一起用、想一起用的人、数据放哪、退出 */}
-        {peers ? (
-          <TabsContent value="colleagues" className="pt-3">
-            <ColleaguesTab
-              me={myId}
-              initiator={initiator}
-              members={members.data ?? []}
-              invites={invites.data ?? []}
-              requests={requests.data ?? []}
+          {/* 45 H2：个人工作区并进公司的对照页（三类分组、每类全部采纳） */}
+          <TabsContent value="join" className="pt-3">
+            <JoinTab
+              {...(joins.data?.[0] === undefined ? {} : { mapping: joins.data[0] })}
               busy={busy}
               {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              onCreateInvite={() => {
-                newInvite.mutate()
-              }}
-              onDecide={(id, approve) => {
-                decide.mutate({ id, approve })
-              }}
-              // WP289：请他离开先问一句（框在同事 tab 里：列出他会一起断开的个人连接），这里只管真的移出
-              onRemove={(person_id) => {
-                remove.mutate(person_id)
-              }}
-              // WP278：退出先问一句（框在同事 tab 里：列出会断开的个人连接），这里只管真的退
-              onLeave={() => {
-                leave.mutate()
-              }}
-              workspaceId={workspace}
-              offers={offers}
-              onOfferInitiator={(person_id) => {
-                offerInit.mutate(person_id)
-              }}
-              onWithdrawOffer={(id) => {
-                withdrawOffer.mutate(id)
-              }}
-              onExport={() => {
-                exportMine.mutate()
+              onComplete={(choice) => {
+                const first = joins.data?.[0]
+                if (first !== undefined) joinComplete.mutate({ id: first.join_id, choice })
               }}
             />
           </TabsContent>
-        ) : null}
 
-        {/* 40 §3.3 进行中看板：自己取数，页面这边只多这一行 */}
-        <TabsContent value="inprogress" className="pt-3">
-          <InprogressTab />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="toolbox" className="pt-3">
+            <ToolboxTab assignment={as} {...(query === null ? {} : { initialQuery: query })} />
+          </TabsContent>
+
+          {/* WP276：② 团队页「同事」——名单带忙闲、请同事一起用、想一起用的人、数据放哪、退出 */}
+          {peers ? (
+            <TabsContent value="colleagues" className="pt-3">
+              <ColleaguesTab
+                me={myId}
+                initiator={initiator}
+                members={members.data ?? []}
+                invites={invites.data ?? []}
+                requests={requests.data ?? []}
+                busy={busy}
+                {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+                onCreateInvite={() => {
+                  newInvite.mutate()
+                }}
+                onDecide={(id, approve) => {
+                  decide.mutate({ id, approve })
+                }}
+                // WP289：请他离开先问一句（框在同事 tab 里：列出他会一起断开的个人连接），这里只管真的移出
+                onRemove={(person_id) => {
+                  remove.mutate(person_id)
+                }}
+                // WP278：退出先问一句（框在同事 tab 里：列出会断开的个人连接），这里只管真的退
+                onLeave={() => {
+                  leave.mutate()
+                }}
+                workspaceId={workspace}
+                offers={offers}
+                onOfferInitiator={(person_id) => {
+                  offerInit.mutate(person_id)
+                }}
+                onWithdrawOffer={(id) => {
+                  withdrawOffer.mutate(id)
+                }}
+                onExport={() => {
+                  exportMine.mutate()
+                }}
+              />
+            </TabsContent>
+          ) : null}
+
+          {/* 40 §3.3 进行中看板：自己取数，页面这边只多这一行 */}
+          <TabsContent value="inprogress" className="pt-3">
+            <InprogressTab />
+          </TabsContent>
+        </Tabs>
+      )}
       {/* WP277：团队页底部一行小字——发起人「开公司模式…」/ ③ 里老板「回到同事互联…」 */}
-      {solo ? null : <CompanyModeEntry className="justify-end pt-2" />}
+      {solo || embedded ? null : <CompanyModeEntry className="justify-end pt-2" />}
     </div>
   )
 }

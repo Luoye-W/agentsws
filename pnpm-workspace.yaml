@@ -57,6 +57,8 @@ overrides:
   'dsh-web-search-diy>@deepseek-ai/dsh-credentials': '0.2.1-alpha.2'
   'dsh-web-search-diy>@deepseek-ai/dsh-launch-environment': '0.2.1-alpha.2'
   'dsh-web-search-diy>@deepseek-ai/dsh-web': '0.2.1-alpha.2'
+  # schemastery 也跟树里那一版，免得锁文件里出两份（check-upstreams 要求只解析出一个版本）
+  'dsh-web-search-diy>@deepseek-ai/schemastery': '3.18.5-alpha.1'
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用

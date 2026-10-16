@@ -33,8 +33,7 @@ import type {
   OnboardingPlanView,
   OnboardingPositionView,
 } from '@/lib/api'
-import { SettingsPage } from '@/pages/settings'
-import { renderWithProviders } from './helpers'
+import { renderSettings, renderWithProviders } from './helpers'
 import { CARD_TEXT_LIMIT, type CardReport, reportCard, visibleProse } from './less-text-guard'
 
 // ── 夹具：服务端模板的真文案 ─────────────────────────────────────────
@@ -421,8 +420,11 @@ function check(name: string, card: Element): void {
 
 describe('设置页', () => {
   it('通用与公司档案', async () => {
-    renderWithProviders(<SettingsPage />, '/settings', '')
-    check('通用', await screen.findByTestId('settings-general'))
+    // WP356：设置是弹窗，每一节单独查
+    const { unmount } = renderSettings({ section: 'general' }, '/settings', '')
+    check('通用', await screen.findByTestId('settings-pane'))
+    unmount()
+    renderSettings({ section: 'profile' }, '/settings', '')
     check('公司档案', await screen.findByTestId('settings-company'))
   })
 

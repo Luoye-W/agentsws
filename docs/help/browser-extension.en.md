@@ -18,7 +18,7 @@ This covers the Chrome extension “Agents Workshop · Creator helper”: it giv
 
 The extension is not in the Chrome Web Store. It comes with Agents Workshop, in a fixed folder on your computer. Add it to Chrome once; after that it updates whenever the app updates — **no uninstalling, no reinstalling**.
 
-1. In the workstation, under “Connections → Browser extension” (or on the extension card in a chat), press **Open Chrome extensions**: Chrome opens a new tab and `chrome://extensions` is already copied — paste it into the address bar and press Enter (Chrome does not let other programs open that page directly).
+1. In the workstation, under “Settings → This computer → Browser extension” (or on the extension card in a chat), press **Open Chrome extensions**: Chrome opens a new tab and `chrome://extensions` is already copied — paste it into the address bar and press Enter (Chrome does not let other programs open that page directly).
 2. Turn on **Developer mode** (top right of the extensions page).
 3. Back on the card, press **Open extension folder** (the path is copied for you), then click **Load unpacked** (top left of the extensions page) and pick that folder. If the picker cannot find it: on Mac press ⌘⇧G and paste the path; on Windows paste it into the address bar. You can also drag the folder into the picker.
 4. A new icon appears in the toolbar; press it and the panel shows up at the top right of the page. Open any YouTube channel page — the check-up already works.
@@ -33,7 +33,7 @@ If the connection card says the extension in your browser is still the old versi
 
 ## Pair it (only needed to save into your creator list)
 
-1. In the workstation, open “Connections”, scroll to **Browser extension** and press **Generate a pairing code**. Six digits appear — **valid for 5 minutes, once only**.
+1. In the workstation, open Settings (⌘,) → This computer → **Browser extension** and press **Generate a pairing code**. Six digits appear — **valid for 5 minutes, once only**.
 2. Back in Chrome, find the extension in `chrome://extensions` → “Details” → “Extension options” (or press “Pair” on the page panel).
 3. Type the six digits and press **Pair**. The panel’s first line now says which brand it saves into.
 
@@ -65,5 +65,5 @@ In the extension settings, click “Reddit · Connect”. Chrome will ask for ac
 - **“Can’t reach Agents Workshop on this computer”**: the desktop app is closed, or it is not on the default port 4317. Open the app; if the port really differs, change it at the bottom of the extension’s settings.
 - **“Wrong pairing code”**: a code lives 5 minutes and works once. Go back to the workstation and generate another.
 - **The panel says “N items waiting in the extension”**: the desktop app was closed, so the extension held them. Open the app; within 5 minutes they are sent.
-- **Save into a different brand**: “Unpair” in the extension settings, then generate a new code on that brand’s Connections page.
-- **Stop using it**: remove it in `chrome://extensions`, then **revoke** its key under “Connections → Browser extension” — removing the extension only clears this computer; revoking is what kills the key.
+- **Save into a different brand**: “Unpair” in the extension settings, then generate a new code in that brand’s Settings → Browser extension.
+- **Stop using it**: remove it in `chrome://extensions`, then **revoke** its key under “Settings → This computer → Browser extension” — removing the extension only clears this computer; revoking is what kills the key.

@@ -97,12 +97,15 @@ function preOpen(): Window | null {
 export function SceneSwitcher({
   variant = 'rail',
 }: {
-  variant?: 'rail' | 'menu'
+  /** WP356：`inline` = 设置弹窗「这台电脑 → 场景」里那一块——面板常开、就地画，不要那个开关钮。 */
+  variant?: 'rail' | 'menu' | 'inline'
 } = {}): React.ReactNode {
   const { t } = useApp()
+  const inline = variant === 'inline'
   const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
-  const [open, setOpen] = useState(false)
+  const [opened, setOpen] = useState(false)
+  const open = inline || opened
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newTemplate, setNewTemplate] = useState('web')
@@ -207,9 +210,15 @@ export function SceneSwitcher({
 
   // 只有所有者看得到；服务说这台部署切不了场景（托管 / 公司服务器）也不占左栏那一行
   // 问不到（旧服务进程没有这条路由、没权限）同样不出——不摆一个点开是空的入口
-  if (assignment === undefined) return null
   const data = scenes.data
-  if (data?.available !== true) return null
+  if (assignment === undefined || data?.available !== true) {
+    // 设置弹窗里那一节不能是空白：说一句「这台切不了」（还在问时先空着）
+    return inline && (assignment === undefined || data !== undefined) ? (
+      <p className="text-sm text-ws-muted-fg" data-testid="scene-unavailable">
+        {t('sp.scenes.none')}
+      </p>
+    ) : null
+  }
 
   const rows = data?.scenes ?? []
   const launchable = rows.filter((s) => s.launchable)
@@ -219,57 +228,64 @@ export function SceneSwitcher({
 
   return (
     <div className="relative" data-testid="scene-switcher">
-      <button
-        type="button"
-        {...(variant === 'menu' ? { role: 'menuitem', title: t('account.scenes.tip') } : {})}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label={t('scenes.title')}
-        data-testid="scene-toggle"
-        className={cn(
-          'flex w-full items-center gap-2 text-left text-sm',
-          variant === 'menu'
-            ? 'rounded-sm px-2 py-1.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
-            : 'rounded-md px-2 py-1.5 text-ws-muted-fg hover:bg-sidebar-accent/60',
-        )}
-        onClick={() => {
-          setOpen(!open)
-        }}
-        onKeyDown={(e) => {
-          if (variant === 'menu' && e.key === 'ArrowRight') {
-            e.preventDefault()
-            setOpen(true)
-          }
-          if (open && (e.key === 'Escape' || e.key === 'ArrowLeft')) {
-            e.preventDefault()
-            e.stopPropagation()
-            setOpen(false)
-          }
-        }}
-      >
-        <Layers aria-hidden className="size-4 shrink-0" />
-        <span className="flex-1 truncate">{t('scenes.entry')}</span>
-        {running > 0 ? (
-          <span className="ws-num text-[11px] text-ws-good" data-testid="scene-running-count">
-            {running}
-          </span>
-        ) : null}
-        {variant === 'menu' ? <ChevronRight aria-hidden className="size-3.5 opacity-60" /> : null}
-      </button>
+      {inline ? null : (
+        <button
+          type="button"
+          {...(variant === 'menu' ? { role: 'menuitem', title: t('account.scenes.tip') } : {})}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label={t('scenes.title')}
+          data-testid="scene-toggle"
+          className={cn(
+            'flex w-full items-center gap-2 text-left text-sm',
+            variant === 'menu'
+              ? 'rounded-sm px-2 py-1.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
+              : 'rounded-md px-2 py-1.5 text-ws-muted-fg hover:bg-sidebar-accent/60',
+          )}
+          onClick={() => {
+            setOpen(!open)
+          }}
+          onKeyDown={(e) => {
+            if (variant === 'menu' && e.key === 'ArrowRight') {
+              e.preventDefault()
+              setOpen(true)
+            }
+            if (open && (e.key === 'Escape' || e.key === 'ArrowLeft')) {
+              e.preventDefault()
+              e.stopPropagation()
+              setOpen(false)
+            }
+          }}
+        >
+          <Layers aria-hidden className="size-4 shrink-0" />
+          <span className="flex-1 truncate">{t('scenes.entry')}</span>
+          {running > 0 ? (
+            <span className="ws-num text-[11px] text-ws-good" data-testid="scene-running-count">
+              {running}
+            </span>
+          ) : null}
+          {variant === 'menu' ? <ChevronRight aria-hidden className="size-3.5 opacity-60" /> : null}
+        </button>
+      )}
       {open ? (
         <div
           role="dialog"
           aria-label={t('scenes.title')}
           data-testid="scene-panel"
           onKeyDown={(e) => {
-            if (e.key === 'Escape') {
+            // inline：Esc 归设置弹窗（关弹窗），这里不拦
+            if (e.key === 'Escape' && !inline) {
               e.stopPropagation()
               setOpen(false)
             }
           }}
           className={cn(
-            'absolute z-50 w-80 rounded-md border bg-popover p-2 shadow-md',
-            variant === 'menu' ? 'bottom-0 left-full ml-2' : 'bottom-full left-0 mb-1',
+            inline ? 'max-w-md' : 'absolute z-50 w-80 rounded-md border bg-popover p-2 shadow-md',
+            variant === 'menu'
+              ? 'bottom-0 left-full ml-2'
+              : inline
+                ? ''
+                : 'bottom-full left-0 mb-1',
           )}
         >
           <p className="px-1 text-sm font-medium">{t('scenes.title')}</p>

@@ -9,8 +9,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProfileForm } from '@/components/onboarding/profile-form'
 import type { OnboardingStateView, OrganizationView } from '@/lib/api'
-import { SettingsPage } from '@/pages/settings'
-import { renderWithProviders } from './helpers'
+import { renderSettings, renderWithProviders } from './helpers'
 import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const T0 = '2026-10-08T09:00:00.000Z'
@@ -67,7 +66,8 @@ beforeEach(() => {
 describe('WP271 三种模式：设置页', () => {
   it('① 个人：品牌档案 + 主体信息（选填），没有公司邮箱后缀与「公司」卡；一个公司概念词都不出', async () => {
     state.orgs = [SOLO_ORG]
-    renderWithProviders(<SettingsPage />, '/settings', '')
+    // WP356：品牌档案是设置弹窗「品牌 → 品牌档案」那一节
+    renderSettings({ section: 'profile' }, '/settings', '')
     const card = await screen.findByTestId('settings-company')
     await waitFor(() => {
       expect(card.textContent).toContain('品牌档案')
@@ -87,7 +87,7 @@ describe('WP271 三种模式：设置页', () => {
 
   it('① 个人：账号页签也不提所有者 / 成员', async () => {
     state.orgs = [SOLO_ORG]
-    renderWithProviders(<SettingsPage defaultTab="account" />, '/settings', '')
+    renderSettings({ section: 'account' }, '/settings', '')
     await screen.findByTestId('credits-panel')
     await waitFor(() => {
       expect(companyWordsIn(document.body)).toEqual([])
@@ -96,12 +96,15 @@ describe('WP271 三种模式：设置页', () => {
 
   it('③ 公司集体：照旧——公司档案、公司邮箱后缀、「公司」卡', async () => {
     state.orgs = [COMPANY_ORG]
-    renderWithProviders(<SettingsPage />, '/settings', '')
+    // WP356：「公司」那一行在「个人 → 使用方式」；档案在「品牌 → 品牌档案」
+    const { unmount } = renderSettings({ section: 'mode' }, '/settings', '')
+    expect(await screen.findByTestId('settings-org')).toBeTruthy()
+    unmount()
+    renderSettings({ section: 'profile' }, '/settings', '')
     const card = await screen.findByTestId('settings-company')
     await waitFor(() => {
-      expect(screen.getByTestId('settings-org')).toBeTruthy()
+      expect(card.textContent).toContain('公司档案')
     })
-    expect(card.textContent).toContain('公司档案')
     expect(within(card).getByTestId('company-domain')).toBeTruthy()
     expect(within(card).getByTestId('profile-company-block').textContent).toContain('公司全称')
   })
