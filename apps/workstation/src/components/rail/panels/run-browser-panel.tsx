@@ -18,6 +18,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { PanelError } from '@/components/rail/panel-error'
+import { SearchHandoverView } from '@/components/rail/panels/search-handover'
 import { parseMatterPath } from '@/components/rail/rail-layout'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,7 +32,17 @@ const EXECUTOR_KEY = {
   none: 'rail.browser.executor.none',
 } as const
 
-export function RunBrowserPanel({ pathname }: RailPanelBodyProps): ReactNode {
+/** WP353：顶上那一块是联网搜索要人介入的那一页（平时不出现），下面照旧是这件事的运行浏览器状态。 */
+export function RunBrowserPanel(props: RailPanelBodyProps): ReactNode {
+  return (
+    <div className="space-y-4">
+      <SearchHandoverView />
+      <RunBrowserStatus {...props} />
+    </div>
+  )
+}
+
+function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
   const { t } = useApp()
   const matter_id = parseMatterPath(pathname)
 

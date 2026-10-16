@@ -530,20 +530,9 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           </>
         )}
 
-        {/*
-          WP179：「用你的 DeepSeek 账号搜索」——查资料的岗位上网搜索用的是 DeepSeek 官方的搜索，
-          凭据是这里的 DeepSeek 账号 / 官方 key，所以开关放在模型这一页
-        */}
+        {/* WP179 / WP353：「联网搜索」开关（工坊内置浏览器搜，不花积分、不要账号或 key） */}
         <Separator />
-        <WebSearchToggle
-          {...(assignment === undefined ? {} : { assignment })}
-          ready={rows.some(
-            (p) =>
-              p.has_key &&
-              (isDeepSeekAccountKind(p.kind) ||
-                (p.kind === 'deepseek' && p.base_url.startsWith('https://api.deepseek.com'))),
-          )}
-        />
+        <WebSearchToggle {...(assignment === undefined ? {} : { assignment })} />
 
         {/* WP127：第二块「生图」——单独一档，可以不配 */}
         <Separator />

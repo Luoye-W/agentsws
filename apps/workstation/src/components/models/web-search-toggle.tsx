@@ -1,10 +1,9 @@
 /**
- * WP179（Luoye 09-29「官方功能优先」）：**用你的 DeepSeek 账号搜索**——一个开关。
+ * WP179：**联网搜索**——一个开关。WP353（决策 911 / 912）起不再用 DeepSeek 自带搜索：
+ * 用工坊自己的内置浏览器搜 Google（回退 Bing → 云端搜索 → 公开搜索服务），不花积分、不要任何账号或 key。
  *
- * 是数据接口路由（docs/75）里 `web.search` 这一项能力的第一级（`deepseek_native`）：
- * 开着 = 查资料的岗位（内容与搜索、B2B、红人、店铺、投放）干活时能上网搜索；
- * 用你登录的 DeepSeek 账号（没登录就用你填的 DeepSeek 官方 key）付这次搜索的钱，工坊不扣积分。
- * 关掉 = 不上网搜（抓指定网页照旧可以）。
+ * 存的仍是数据接口路由（docs/75）里 `web.search` 这一项的第一级（键名 `deepseek_native` 是历史名字，
+ * 存的形状不改）：开着 = 查资料的岗位与随便聊能上网搜索；关掉 = 不上网搜（抓指定网页照旧可以）。
  *
  * 界面少字：卡面上一行开关 + 一句状态，细节进问号。这一项现在只有一级，所以不画顺序箭头
  * （以后多一级再画，存的形状已经是 `order` + `disabled`）。
@@ -22,11 +21,11 @@ const ROUTE_KEY = 'web.search'
 
 export function WebSearchToggle({
   assignment,
-  ready,
+  ready = true,
 }: {
   assignment?: string | undefined
-  /** 手上有没有能搜的凭据（登录了 DeepSeek 账号，或填了 DeepSeek 官方 key）。 */
-  ready: boolean
+  /** 这里能不能搜（WP353 起不再看 DeepSeek 凭据；缺省能）。 */
+  ready?: boolean
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
