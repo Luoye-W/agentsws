@@ -1,6 +1,6 @@
 # Let AI operate this computer
 
-Some work only happens inside an app on this computer (desktop-only software, system dialogs). "Settings → Computer use" decides whether **AI may touch this computer** — see the screen, click, type. Off by default.
+Some work only happens inside an app on this computer (desktop-only software, system dialogs). "Settings → Web & computer → Computer use" decides whether **AI may touch this computer** — see the screen, click, type. Off by default.
 
 ## Three switches
 

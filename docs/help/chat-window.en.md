@@ -2,7 +2,7 @@
 
 This covers the chat window you install on your website: its look, where the embed code goes, how to choose among the three relay options, and how to “teach the AI” inside visitor conversations.
 
-Where: **visitor conversations** are under Messages → “Website chat” (next to your mailboxes); the **widget settings** (look, embed code, relay) are at the bottom of the account menu → Settings → Messaging channels, under “Website chat widget”.
+Where: **visitor conversations** are under Messages → “Website chat” (next to your mailboxes); the **widget settings** (look, embed code, relay) are in Settings → Chat channels → “Website chat widget” (⌘, opens Settings).
 
 ## Which relay option
 
