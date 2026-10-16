@@ -42,6 +42,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@240xu/dsh-websearch": "2.8.3",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
@@ -76,6 +77,7 @@
     "@deepseek-ai/dsh-headless": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-home-paths": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-jobs": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-launch-environment": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-llm": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-mcp-client": "0.2.1-alpha.2",

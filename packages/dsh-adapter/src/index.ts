@@ -65,6 +65,7 @@ export {
   subprocessAvailable,
 } from './headless/index.js'
 export * from './headless/protocol.js'
+export { KEYLESS_SEARCH_BACKENDS, keylessWebSearch } from './keyless-search.js'
 export type { GatewayAdapterOptions, GatewayBudget, RequestImages } from './llm.js'
 export {
   GATEWAY_PROVIDER,
