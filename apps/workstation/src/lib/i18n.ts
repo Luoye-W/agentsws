@@ -27,6 +27,7 @@ import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
+import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHELL_EN, SHELL_ZH } from './i18n-shell'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
@@ -8477,6 +8478,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_ZH,
     // WP343：「我的助理」（原随便聊 + 我的代理）
     ...ASSISTANT_ZH,
+    // WP356：设置弹窗（五组、每节、每项一句白话）
+    ...SETTINGS_ZH,
   },
   en: {
     ...en,
@@ -8510,6 +8513,7 @@ const TABLES: Record<Lang, Table> = {
     ...EXT_INSTALL_EN,
     ...SHELL_EN,
     ...ASSISTANT_EN,
+    ...SETTINGS_EN,
   },
 }
 

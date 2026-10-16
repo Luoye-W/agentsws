@@ -10,6 +10,8 @@ import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
 import { BrandLinkNote } from '@/components/brand-link-note'
 import { PageError } from '@/components/page-error'
+import { SettingsDialog } from '@/components/settings-panel/settings-dialog'
+import { useSettingsRoute } from '@/components/settings-panel/use-settings-route'
 import {
   ensureSession,
   getHome,
@@ -31,14 +33,11 @@ import { CardPage } from '@/pages/card'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
 import { ChatWindowPage } from '@/pages/chat-window'
-import { ConnectionsPage } from '@/pages/connections'
 import { DutyPage } from '@/pages/duty'
 // WP188：随便聊（像 DeepSeek 网页版的自由对话入口）
 import { ASSISTANT_PATH, FreeChatPage, LegacyFreeChatRedirect } from '@/pages/free-chat'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
-// WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
-import { ImChannelsPage } from '@/pages/im-channels'
 import { InfluencerPage } from '@/pages/influencer'
 import { JoinByCodePage } from '@/pages/join-code'
 import { KnowledgePage } from '@/pages/knowledge'
@@ -49,10 +48,8 @@ import { MeetingsPage } from '@/pages/meetings'
 // WP113（63）：消息——统一收件处（左栏那个入口从「目标」换过来的）
 import { MessagesPage } from '@/pages/messages'
 import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
-import { OrgPage } from '@/pages/org'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
-import { SettingsPage } from '@/pages/settings'
 import { SkillsPage } from '@/pages/skills'
 import { TodosPage } from '@/pages/todos'
 
@@ -76,6 +73,11 @@ function Workspace(): ReactNode {
   const { selectPosition, position } = useApp()
   const client = useQueryClient()
   const location = useLocation()
+  /*
+   * WP356（决策 923）：设置是盖在当前页上的弹窗。地址是设置地址时主区照旧画打开前那一页
+   * （`background`），弹窗盖在上面；关了回到那一页原位。老地址都还在（见 settings-panel/route.ts）。
+   */
+  const settings = useSettingsRoute()
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
   // WP311（决策 507）：链接带着别的品牌（IM 回复里的）→ 先切过去再开那一页
@@ -211,7 +213,12 @@ function Workspace(): ReactNode {
       }}
     >
       {session.data === undefined ? null : <BrandLinkNote brand={session.data.workspace.name} />}
-      <Routes>
+      <SettingsDialog target={settings.target} onNavigate={settings.go} onClose={settings.close} />
+      {/*
+        WP356：设置类的老地址（`/settings*`、`/connections`、`/im-channels`、`/org`）不在这里——
+        它们打开上面那个弹窗，主区按 `settings.background` 画打开前那一页。
+      */}
+      <Routes location={settings.background}>
         <Route path="/" element={<HomePage />} />
         {/* WP188：随便聊。一条路由带可选的会话 id——发第一句时换地址不重挂页面（流不断） */}
         {/* WP343：改名「我的助理」，地址 `/assistant`；老的 `/free-chat` 跳过来 */}
@@ -250,40 +257,10 @@ function Workspace(): ReactNode {
         <Route path="/secretary" element={<Navigate replace to={`${ASSISTANT_PATH}?peers=1`} />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/people/:id" element={<PersonPage />} />
-        {/* WP28 制度面：岗位 / 成员 / 职责 */}
-        <Route path="/org" element={<OrgPage />} />
         {/* WP122（71）：这个品牌的 DESIGN.md —— 设计 / 建站 / 社媒 / 投放出活都照它来 */}
         <Route path="/brand-design" element={<BrandDesignPage />} />
         {/* WP268：品牌素材库 */}
         <Route path="/brand-assets" element={<BrandAssetsPage />} />
-        {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
-        <Route path="/connections" element={<ConnectionsPage />} />
-        {/* WP85（54 §5）：微信 ClawBot（个人）与企业微信机器人（团队） */}
-        <Route path="/im-channels" element={<ImChannelsPage />} />
-        <Route
-          path="/settings"
-          element={
-            <SettingsPage
-              {...(session.data === undefined ? {} : { identity: session.data.person.email })}
-            />
-          }
-        />
-        {/*
-          WP119c：插件深链的三条（docs/76 §10）——从面板的充值 / 设置链接直接落到
-          「账号与积分」那一档，不让人落在默认页再自己找。
-        */}
-        {[['credits'], ['billing'], ['apikeys']].map(([tab]) => (
-          <Route
-            key={tab}
-            path={`/settings/${tab}`}
-            element={
-              <SettingsPage
-                defaultTab="account"
-                {...(session.data === undefined ? {} : { identity: session.data.person.email })}
-              />
-            }
-          />
-        ))}
         {/*
           WP119c：插件深链的两条（docs/76 §10）——存入红人之后的「去查看」直接落到
           红人面板；setup 那条落在「导入与 campaign」。带 ?creator=<handle|id> 时

@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Hint } from '@/components/ui/hint'
+import { SettingRow } from '@/components/settings-panel/setting-row'
 import { useApp } from '@/lib/app-context'
 import { getWorkArchiveSettings, RAIL_KEY, setWorkArchiveSettings } from '@/lib/work-archive'
 
@@ -26,29 +26,31 @@ export function ArchiveSetting(): ReactNode {
   if (current.data === undefined) return null
   const value = current.data.idle_days === null ? 'never' : String(current.data.idle_days)
   return (
-    <div className="flex items-center justify-between" data-testid="settings-archive">
-      <span className="flex items-center gap-1">
-        {t('settings.archive')}
-        <Hint text={t('settings.archive.hint')} />
-      </span>
-      <select
-        className="h-8 rounded-md border bg-background px-2 text-sm"
-        aria-label={t('settings.archive')}
-        data-testid="settings-archive-days"
-        value={value}
-        disabled={save.isPending}
-        onChange={(e) => {
-          save.mutate(e.target.value === 'never' ? null : Number(e.target.value))
-        }}
-      >
-        {DAYS.map((n) => (
-          <option key={n} value={String(n)}>
-            {t('settings.archive.days', { n })}
-          </option>
-        ))}
-        <option value="never">{t('settings.archive.never')}</option>
-      </select>
-    </div>
+    <SettingRow
+      testId="settings-archive"
+      title={t('settings.archive')}
+      desc={t('sp.archive.desc')}
+      hint={t('settings.archive.hint')}
+      control={
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          aria-label={t('settings.archive')}
+          data-testid="settings-archive-days"
+          value={value}
+          disabled={save.isPending}
+          onChange={(e) => {
+            save.mutate(e.target.value === 'never' ? null : Number(e.target.value))
+          }}
+        >
+          {DAYS.map((n) => (
+            <option key={n} value={String(n)}>
+              {t('settings.archive.days', { n })}
+            </option>
+          ))}
+          <option value="never">{t('settings.archive.never')}</option>
+        </select>
+      }
+    />
   )
 }
 
@@ -71,24 +73,28 @@ export function HandoffDaysSetting(): ReactNode {
   const days = current.data?.handoff_days
   if (days === undefined) return null
   return (
-    <div className="flex items-center justify-between" data-testid="settings-handoff">
-      <span>{t('settings.handoff_days')}</span>
-      <select
-        className="h-8 rounded-md border bg-background px-2 text-sm"
-        aria-label={t('settings.handoff_days')}
-        data-testid="settings-handoff-days"
-        value={String(days)}
-        disabled={save.isPending}
-        onChange={(e) => {
-          save.mutate(Number(e.target.value))
-        }}
-      >
-        {HANDOFF_DAYS.map((n) => (
-          <option key={n} value={String(n)}>
-            {t('settings.handoff_days.unit', { n })}
-          </option>
-        ))}
-      </select>
-    </div>
+    <SettingRow
+      testId="settings-handoff"
+      title={t('settings.handoff_days')}
+      desc={t('sp.handoff_days.desc')}
+      control={
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          aria-label={t('settings.handoff_days')}
+          data-testid="settings-handoff-days"
+          value={String(days)}
+          disabled={save.isPending}
+          onChange={(e) => {
+            save.mutate(Number(e.target.value))
+          }}
+        >
+          {HANDOFF_DAYS.map((n) => (
+            <option key={n} value={String(n)}>
+              {t('settings.handoff_days.unit', { n })}
+            </option>
+          ))}
+        </select>
+      }
+    />
   )
 }

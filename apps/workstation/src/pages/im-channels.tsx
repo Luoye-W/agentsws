@@ -43,7 +43,7 @@ import { getImStatus } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 /** WP351：「网站聊天窗」这个渠道（挂件设置）。 */
-function SiteChatChannel(): ReactNode {
+function SiteChatChannel({ bare = false }: { bare?: boolean }): ReactNode {
   const { t } = useApp()
   const { hash } = useLocation()
   // ⌘K / 客服岗位页带着 `#site-chat` 过来：滚到这一块
@@ -53,7 +53,7 @@ function SiteChatChannel(): ReactNode {
   }, [hash])
   return (
     <section id="site-chat" className="flex scroll-mt-4 flex-col gap-3" data-testid="im-site-chat">
-      <h2 className="flex items-center gap-1.5 text-base font-semibold">
+      <h2 className="flex items-center gap-1.5 text-base font-semibold" hidden={bare}>
         {t('nav.chat_window')}
         <Hint text={t('im.site_chat.hint')} testId="im-site-chat-what" />
       </h2>
@@ -62,7 +62,13 @@ function SiteChatChannel(): ReactNode {
   )
 }
 
-export function ImChannelsPage(): ReactNode {
+/**
+ * WP356（决策 923）：设置弹窗里只要其中一块——`mine` 你自己的微信（个人 → 通知）、`team` 三条团队机器人、
+ * `site` 网站聊天窗（品牌 → 消息渠道）。给了 `part` 就不画页头（说明进弹窗那一项的一句话与问号）。
+ */
+export type ImChannelsPart = 'mine' | 'team' | 'site'
+
+export function ImChannelsPage({ part }: { part?: ImChannelsPart } = {}): ReactNode {
   const { t } = useApp()
   const holdsSiteChat = useHoldsSiteChat()
   const status = useQuery({
@@ -99,9 +105,10 @@ export function ImChannelsPage(): ReactNode {
   // WP211（Fable 09-30）：公司的应用凭据只给负责人与公司管理员；别人只看状态
   const canManage = status.data?.can_manage === true
 
+  const show = (p: ImChannelsPart): boolean => part === undefined || part === p
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex flex-col gap-6" data-im-part={part}>
+      <div hidden={part !== undefined}>
         <h1 className="flex items-center gap-3 text-xl font-semibold">
           {t('im.title')}
           <TutorialLink slug="im-channels" className="font-normal" />
@@ -125,125 +132,131 @@ export function ImChannelsPage(): ReactNode {
       </div>
 
       {/* ── 微信：我和我自己的代理 ─────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            {t('im.wechat.title')}
-            {/* WP210：一句话 + 来龙去脉 + 它不做的三件事，都在这一个问号里 */}
-            <Hint
-              text={[
-                t('im.wechat.line'),
-                t('im.wechat.what'),
-                t('im.wechat.not.colleagues'),
-                t('im.wechat.not.group'),
-                t('im.wechat.not.approve'),
-              ].join(' ')}
-              testId="im-wechat-what"
-            />
-          </CardTitle>
-          {/*
+      {show('mine') ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              {t('im.wechat.title')}
+              {/* WP210：一句话 + 来龙去脉 + 它不做的三件事，都在这一个问号里 */}
+              <Hint
+                text={[
+                  t('im.wechat.line'),
+                  t('im.wechat.what'),
+                  t('im.wechat.not.colleagues'),
+                  t('im.wechat.not.group'),
+                  t('im.wechat.not.approve'),
+                ].join(' ')}
+                testId="im-wechat-what"
+              />
+            </CardTitle>
+            {/*
             WP214（36 §7 第四档）：在收信 / 要重连 / 没绑 → 一个状态小图标，连的是哪个微信账号在 tooltip 里
           */}
-          <StatusIcons
-            testId="im-wechat-state"
-            items={[
-              {
-                key: 'wechat',
-                label: t('im.wechat.title'),
-                state: wechat?.bound !== true ? 'unknown' : wechat.live ? 'ok' : 'fail',
-                stateText:
-                  wechat?.bound !== true
-                    ? t('im.state.unbound')
-                    : wechat.live
-                      ? t('im.state.live')
-                      : t('im.state.paused'),
-                icon: MessageCircle,
-                ...(wechat?.bound === true && wechat.account_id !== undefined
-                  ? { detail: t('im.wechat.account', { account: wechat.account_id }) }
-                  : {}),
-              },
-            ]}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {/*
+            <StatusIcons
+              testId="im-wechat-state"
+              items={[
+                {
+                  key: 'wechat',
+                  label: t('im.wechat.title'),
+                  state: wechat?.bound !== true ? 'unknown' : wechat.live ? 'ok' : 'fail',
+                  stateText:
+                    wechat?.bound !== true
+                      ? t('im.state.unbound')
+                      : wechat.live
+                        ? t('im.state.live')
+                        : t('im.state.paused'),
+                  icon: MessageCircle,
+                  ...(wechat?.bound === true && wechat.account_id !== undefined
+                    ? { detail: t('im.wechat.account', { account: wechat.account_id }) }
+                    : {}),
+                },
+              ]}
+            />
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {/*
             WP210 例外（Fable 09-30 定）：条款风险关系到用户的主微信号会不会被封，不能只藏在问号里——
             原话一行留在卡上，条款出处在它旁边的问号里。
           */}
-          <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
-          {/* WP334：扫码那一块与连接卡共用一个件 */}
-          <WechatBind wechat={wechat} />
-        </CardContent>
-      </Card>
+            <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
+            {/* WP334：扫码那一块与连接卡共用一个件 */}
+            <WechatBind wechat={wechat} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* ── 企业微信：团队那一条 ───────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            {t('im.wecom.title')}
-            <Hint text={`${t('im.wecom.line')} ${t('im.wecom.what')}`} testId="im-wecom-what" />
-          </CardTitle>
-          {/* WP214：在收信 / 连接中 / 没配 → 一个状态小图标；BotID 在 tooltip 里 */}
-          <StatusIcons
-            testId="im-wecom-state"
-            items={[
-              {
-                key: 'wecom',
-                label: t('im.wecom.title'),
-                state:
-                  wecom?.configured !== true
-                    ? 'unknown'
-                    : wecom.connected
-                      ? 'ok'
-                      : wecom.state === 'failed'
-                        ? 'fail'
-                        : 'pending',
-                stateText:
-                  wecom?.configured !== true
-                    ? t('im.state.unconfigured')
-                    : wecom.connected
-                      ? t('im.state.live')
-                      : wecom.state === 'failed'
-                        ? t('im.state.failed')
-                        : wecom.state === 'reconnecting'
-                          ? t('im.state.reconnecting')
-                          : t('im.state.connecting'),
-                icon: Users,
-                ...(wecom?.configured === true
-                  ? {
-                      detail: wecom.error ?? t('im.wecom.saved', { bot: wecom.bot_id ?? '' }),
-                    }
-                  : {}),
-              },
-            ]}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {/* WP334：原生表单与连接卡共用一个件（13 §4.3；只有负责人 / 公司管理员能填） */}
-          <WecomBotForm canManage={canManage} />
-          {/* WP211：企业微信也走同一套「绑定我的账号」 */}
-          {wecom?.configured === true ? (
-            <BindRow channel="wecom" bound={wecom.me_bound === true} />
-          ) : null}
-        </CardContent>
-      </Card>
+      {show('team') ? (
+        <>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                {t('im.wecom.title')}
+                <Hint text={`${t('im.wecom.line')} ${t('im.wecom.what')}`} testId="im-wecom-what" />
+              </CardTitle>
+              {/* WP214：在收信 / 连接中 / 没配 → 一个状态小图标；BotID 在 tooltip 里 */}
+              <StatusIcons
+                testId="im-wecom-state"
+                items={[
+                  {
+                    key: 'wecom',
+                    label: t('im.wecom.title'),
+                    state:
+                      wecom?.configured !== true
+                        ? 'unknown'
+                        : wecom.connected
+                          ? 'ok'
+                          : wecom.state === 'failed'
+                            ? 'fail'
+                            : 'pending',
+                    stateText:
+                      wecom?.configured !== true
+                        ? t('im.state.unconfigured')
+                        : wecom.connected
+                          ? t('im.state.live')
+                          : wecom.state === 'failed'
+                            ? t('im.state.failed')
+                            : wecom.state === 'reconnecting'
+                              ? t('im.state.reconnecting')
+                              : t('im.state.connecting'),
+                    icon: Users,
+                    ...(wecom?.configured === true
+                      ? {
+                          detail: wecom.error ?? t('im.wecom.saved', { bot: wecom.bot_id ?? '' }),
+                        }
+                      : {}),
+                  },
+                ]}
+              />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {/* WP334：原生表单与连接卡共用一个件（13 §4.3；只有负责人 / 公司管理员能填） */}
+              <WecomBotForm canManage={canManage} />
+              {/* WP211：企业微信也走同一套「绑定我的账号」 */}
+              {wecom?.configured === true ? (
+                <BindRow channel="wecom" bound={wecom.me_bound === true} />
+              ) : null}
+            </CardContent>
+          </Card>
 
-      {/* ── WP211：飞书 / 钉钉（团队的）──────────────────────────── */}
-      <TeamBotCard
-        channel="feishu"
-        view={status.data?.feishu}
-        accountId={status.data?.feishu?.app_id}
-        canManage={canManage}
-      />
-      <TeamBotCard
-        channel="dingtalk"
-        view={status.data?.dingtalk}
-        accountId={status.data?.dingtalk?.client_id}
-        canManage={canManage}
-      />
+          {/* ── WP211：飞书 / 钉钉（团队的）──────────────────────────── */}
+          <TeamBotCard
+            channel="feishu"
+            view={status.data?.feishu}
+            accountId={status.data?.feishu?.app_id}
+            canManage={canManage}
+          />
+          <TeamBotCard
+            channel="dingtalk"
+            view={status.data?.dingtalk}
+            accountId={status.data?.dingtalk?.client_id}
+            canManage={canManage}
+          />
+        </>
+      ) : null}
 
       {/* ── WP351：网站聊天窗（挂件设置；对话在「消息 → 网站聊天」）──────── */}
-      {holdsSiteChat ? <SiteChatChannel /> : null}
+      {holdsSiteChat && show('site') ? <SiteChatChannel bare={part !== undefined} /> : null}
     </div>
   )
 }

@@ -13,8 +13,7 @@ import { AppShell } from '@/components/app-shell'
 import { ProfileForm } from '@/components/onboarding/profile-form'
 import { BrandsTab } from '@/components/org/brands-tab'
 import type { BrandView, OrganizationView, PositionSummary } from '@/lib/api'
-import { SettingsPage } from '@/pages/settings'
-import { renderWithProviders } from './helpers'
+import { renderSettings, renderWithProviders } from './helpers'
 
 const T0 = '2026-09-15T09:00:00.000Z'
 
@@ -54,7 +53,11 @@ const BRAND_B: BrandView = {
   alerts: 0,
 }
 
-const state: { orgs: OrganizationView[]; brands: BrandView[] } = { orgs: [], brands: [] }
+const state: { orgs: OrganizationView[]; brands: BrandView[]; email: string } = {
+  orgs: [],
+  brands: [],
+  email: 'boss@nordvolt.example',
+}
 const switched: { org: string; workspace: string }[] = []
 const created: unknown[] = []
 const copied: { org: string; to: string; from: string }[] = []
@@ -83,6 +86,12 @@ vi.mock('@/lib/api', async () => {
       throw new Error('这组题不看向导')
     },
     listCatalog: async () => [],
+    // WP356：设置弹窗「登录身份」那一行从会话里读
+    ensureSession: async () => ({
+      person: { id: 'per_wang', email: state.email, name: '王岚' },
+      workspace: { id: 'ws_a', name: '诺伏特户外' },
+      assignments: [],
+    }),
   }
 })
 
@@ -274,32 +283,33 @@ describe('52 O2 / O4 公司页品牌一览', () => {
   })
 })
 
-describe('52 O1 设置页那张"公司"卡', () => {
+describe('52 O1 设置「使用方式」里那一行"公司"', () => {
   it('个人用户看不到它', async () => {
     state.orgs = [SOLO]
     state.brands = [BRAND_A]
-    renderWithProviders(<SettingsPage />)
-    await screen.findByText('设置')
+    renderSettings({ section: 'mode' })
+    await screen.findByTestId('settings-usage-mode')
     expect(screen.queryByTestId('settings-org')).toBeNull()
   })
 
   it('WP271：一个人两个品牌仍看不到它（只看模式，不看品牌数）', async () => {
     state.orgs = [{ ...SOLO, brands: 2, mode: 'solo' }]
     state.brands = [BRAND_A, BRAND_B]
-    renderWithProviders(<SettingsPage />)
-    await screen.findByText('设置')
+    renderSettings({ section: 'mode' })
+    await screen.findByTestId('settings-usage-mode')
     expect(screen.queryByTestId('settings-org')).toBeNull()
   })
 
   it('有第二个品牌 / 第二个人之后才出现，只说公司名与几个品牌几个人', async () => {
     state.orgs = [COMPANY]
     state.brands = [BRAND_A, BRAND_B]
-    renderWithProviders(<SettingsPage />)
+    renderSettings({ section: 'mode' })
     const card = await screen.findByTestId('settings-org')
     expect(card.textContent).toContain('深圳诺伏特科技')
     expect(card.textContent).toContain('2 个品牌')
     expect(card.textContent).toContain('3 个人')
-    expect(screen.getByTestId('settings-org-manage').getAttribute('href')).toBe('/org?tab=brands')
+    // WP356：「全部品牌」是设置弹窗里的一节
+    expect(screen.getByTestId('settings-org-manage').getAttribute('href')).toBe('/settings/brands')
   })
 })
 
@@ -307,11 +317,13 @@ describe('WP233 设置页「身份」那一行', () => {
   it('本机占位邮箱不露出来，说「你（本机）」；真邮箱照常显示', async () => {
     state.orgs = [SOLO]
     state.brands = [BRAND_A]
-    const { unmount } = renderWithProviders(<SettingsPage identity="owner@localhost" />)
+    state.email = 'owner@localhost'
+    const { unmount } = renderSettings({ section: 'account' })
     expect((await screen.findByTestId('settings-identity')).textContent).toBe('你（本机）')
     expect(document.body.textContent).not.toContain('owner@localhost')
     unmount()
-    renderWithProviders(<SettingsPage identity="boss@nordvolt.example" />)
+    state.email = 'boss@nordvolt.example'
+    renderSettings({ section: 'account' })
     expect((await screen.findByTestId('settings-identity')).textContent).toBe(
       'boss@nordvolt.example',
     )
