@@ -689,6 +689,87 @@
         }
       }
     },
+    "/v1/auth/setup-code": {
+      "post": {
+        "operationId": "redeemSetupCode",
+        "summary": "主人用服务日志里的一次性设置码进门（决策 945：服务开给局域网时）",
+        "tags": ["identity"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ token, expires_at }（一次性登录 token，拿去 /v1/auth/verify）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ token, expires_at }（一次性登录 token，拿去 /v1/auth/verify）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 64
+                  }
+                },
+                "required": ["code"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/session": {
       "post": {
         "operationId": "exchangeSession",
@@ -34380,7 +34461,7 @@
         ],
         "responses": {
           "200": {
-            "description": "AcceptedInvitationView（接受后用邮箱走 magic-link 登录）",
+            "description": "AcceptedInvitationView（本机档接受后用邮箱走 magic-link；局域网 / 托管档直接带 login_token）",
             "content": {
               "application/json": {
                 "schema": {
@@ -34431,7 +34512,7 @@
           }
         },
         "security": [],
-        "x-returns": "AcceptedInvitationView（接受后用邮箱走 magic-link 登录）",
+        "x-returns": "AcceptedInvitationView（本机档接受后用邮箱走 magic-link；局域网 / 托管档直接带 login_token）",
         "requestBody": {
           "required": true,
           "content": {

@@ -94,6 +94,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/auth/setup-code': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 主人用服务日志里的一次性设置码进门（决策 945：服务开给局域网时） */
+    post: operations['redeemSetupCode']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/auth/session': {
     parameters: {
       query?: never
@@ -11357,6 +11374,62 @@ export interface operations {
     }
     responses: {
       /** @description { person, session_token } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  redeemSetupCode: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          code: string
+        }
+      }
+    }
+    responses: {
+      /** @description { token, expires_at }（一次性登录 token，拿去 /v1/auth/verify） */
       200: {
         headers: {
           [name: string]: unknown
@@ -34332,7 +34405,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description AcceptedInvitationView（接受后用邮箱走 magic-link 登录） */
+      /** @description AcceptedInvitationView（本机档接受后用邮箱走 magic-link；局域网 / 托管档直接带 login_token） */
       200: {
         headers: {
           [name: string]: unknown
