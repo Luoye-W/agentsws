@@ -146,7 +146,7 @@ export function GeoQuality({
                 label={t('geo.q.win')}
                 {...(now?.compared === undefined
                   ? {}
-                  : { delta: t('geo.q.n', { n: String(now.compared) }) })}
+                  : { note: t('geo.q.n', { n: String(now.compared) }) })}
               />
             </div>
             <div data-testid="geo-tile-acc">
@@ -155,7 +155,7 @@ export function GeoQuality({
                 label={t('geo.q.acc')}
                 {...(now?.claims === undefined
                   ? {}
-                  : { delta: t('geo.q.n', { n: String(now.claims) }) })}
+                  : { note: t('geo.q.n', { n: String(now.claims) }) })}
               />
             </div>
           </div>
@@ -164,19 +164,19 @@ export function GeoQuality({
               <GenuiBlockView spec={spec} fallback={null} />
             </figure>
           )}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="flex flex-col gap-3">
             {q.fields.length === 0 ? null : (
               <Section title={t('geo.q.fields')} testId="geo-q-fields">
                 <ul className="flex flex-col gap-1 text-[13px]">
                   {q.fields.map((f) => (
                     <li
                       key={f.field}
-                      className="grid grid-cols-[5rem_1fr] items-center gap-2"
+                      className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2"
                       data-testid="geo-q-field"
                       data-field={f.field}
                     >
                       <span>{t(`geo.field.${f.field}`)}</span>
-                      <span className="ws-num text-xs text-ws-muted-fg">
+                      <span className="ws-num whitespace-nowrap text-xs text-ws-muted-fg">
                         <span className="text-ws-good">
                           {t('geo.q.correct')} {f.correct}
                         </span>
@@ -200,7 +200,7 @@ export function GeoQuality({
                   {q.rivals.map((r) => (
                     <li key={r.name} className="flex items-center gap-2">
                       <span className="truncate">{r.name}</span>
-                      <span className="ws-num ml-auto text-xs text-ws-muted-fg">
+                      <span className="ws-num ml-auto whitespace-nowrap text-xs text-ws-muted-fg">
                         {t('geo.q.rival.line', {
                           w: String(r.wins),
                           l: String(r.losses),
