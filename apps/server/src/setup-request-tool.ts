@@ -15,6 +15,7 @@ import {
   type ConnectNeed,
   isSecretLikeSetupKey,
   looksLikeSecretValue,
+  type SetupField,
 } from '@agentsws/contracts'
 import {
   REQUEST_SETUP_TOOL,
@@ -22,6 +23,7 @@ import {
   type ToolExecution,
   type ToolExecutor,
 } from '@agentsws/stand-ins'
+import { changeFields } from './setup-research.js'
 
 export interface SetupRequestToolOptions {
   /** 连接目录里能就地连的那几样（`service` → 人话名、kind）。 */
@@ -29,9 +31,18 @@ export interface SetupRequestToolOptions {
   /** 这一样现在连上了没有（认不出回 `undefined`）。 */
   isConnected(need: ConnectNeed): Promise<boolean | undefined>
   /** 一个设置目标（登记过才有）。 */
-  target(
-    id: string,
-  ): Promise<{ id: string; name: string; satisfied(): Promise<boolean> } | undefined>
+  target(id: string): Promise<
+    | {
+        id: string
+        name: string
+        satisfied(): Promise<boolean>
+        /** WP385：现在的格子（判「改成这样」是不是其实没变）。 */
+        fields?(): Promise<SetupField[]>
+        /** WP385：建议值里还没生效的那几格（没有「缺」、只收增减的目标给）。 */
+        pending?(suggestions: Record<string, string>): Promise<Record<string, string>>
+      }
+    | undefined
+  >
   /** 登记过的设置目标（认不出时列给模型看）。 */
   targetIds(): Promise<readonly string[]>
 }
@@ -87,8 +98,8 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
     const setting = str(input.setting)
     const why = str(input.why)
     if (why === undefined) return refuse('invalid_input：why 要写一句为什么（给用户看）。')
-    const suggestions = suggestionsOf(input.suggestions)
-    const reasons = reasonsOf(input.suggestions)
+    let suggestions = suggestionsOf(input.suggestions)
+    let reasons = reasonsOf(input.suggestions)
     // 纪律：任何一格像秘密，整条拒收（不回显）
     if (
       looksLikeSecretValue(why) ||
@@ -140,6 +151,29 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
       return refuse(`invalid_input：认不出设置「${setting}」。能要的：${known.join('、')}。`)
     }
     const satisfied = await target.satisfied().catch(() => false)
+    /*
+     * WP385：设好了、AI 又带了值——先去掉已经生效的（接着做那一轮 AI 照原话再要一次时，不再出一张
+     * 「什么都没变」的卡、也不在时间线上记「卡住了」）；一格都不变就说一声、直接接着做。
+     */
+    if (satisfied && Object.keys(suggestions).length > 0) {
+      let left = suggestions
+      if (target.pending !== undefined)
+        left = await target.pending(suggestions).catch(() => suggestions)
+      else if (target.fields !== undefined) {
+        const fields = await target.fields().catch(() => undefined)
+        if (fields !== undefined && changeFields(fields, suggestions) === undefined) left = {}
+      }
+      if (Object.keys(left).length === 0) {
+        const data: SetupRequestData = {
+          ok: true,
+          already: true,
+          message: `${target.name}已经是这样了，不用卡，直接接着做。`,
+        }
+        return { status: 'ok', data }
+      }
+      suggestions = left
+      reasons = Object.fromEntries(Object.entries(reasons).filter(([k]) => k in left))
+    }
     // WP348（决策 841 并进来）：已经设好了、AI 给了新值 → 出「我打算改成这样」的卡（人确认才生效）
     if (satisfied && Object.keys(suggestions).length === 0) {
       const data: SetupRequestData = {

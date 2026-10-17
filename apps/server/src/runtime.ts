@@ -117,6 +117,7 @@ import {
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
+  isSiteHealthRole,
   isThemeRole,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
@@ -127,6 +128,7 @@ import {
   SCHEDULE_TOOL_NAMES,
   SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
+  SITE_HEALTH_TOOL_NAMES,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
@@ -203,6 +205,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...ADS_DATA_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
+    // WP385：读网站体检结论——只读本机体检记录（不现跑体检）
+    ...SITE_HEALTH_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -483,6 +487,11 @@ export interface RuntimeOptions {
    * 不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   setupRequestTool?: ToolExecutor
+  /**
+   * WP385（决策 1076）：网站运营读体检结论的只读工具 `query_site_health`（`site-health-tools.ts` 建的那一份）。
+   * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  siteHealthTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1243,6 +1252,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
+    const siteHealthTools = options.siteHealthTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1273,7 +1283,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
-      setupRequest === undefined
+      setupRequest === undefined &&
+      siteHealthTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1331,6 +1342,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
       }
+      // WP385：读网站体检结论（名字与别处不重名；职责在执行器里再判一次）
+      if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
+        return siteHealthTools(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1375,6 +1390,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
+    if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1884,6 +1900,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
+        // WP385：读网站体检结论（只给店铺管理、内容与搜索；服务端接了才有）
+        ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
+          ? SITE_HEALTH_TOOL_NAMES
+          : []),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))

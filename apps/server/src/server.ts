@@ -703,6 +703,8 @@ import {
   trafficOrdersFromRows,
 } from './site-health.js'
 import { createChromeRenderer } from './site-health-render.js'
+import { siteHealthSetupTarget } from './site-health-setup.js'
+import { createSiteHealthToolExecutor } from './site-health-tools.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
@@ -3448,6 +3450,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    /*
+     * WP385（决策 1076 → 690）：网站体检设置（商品 feed、其他平台上架页、两张清单的加减）在对话里说一句、
+     * 卡上点头就存；存好在后台重新体检一次（同一时间只跑一次），原来那件事按原话接着做。
+     */
+    const health = brand.siteHealth
+    if (health !== undefined)
+      assembly.registerTarget(
+        siteHealthSetupTarget({
+          service: () => health,
+          rerun: () => {
+            void Promise.allSettled([health.run(), health.aiTraffic()])
+          },
+        }),
+      )
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -5614,6 +5630,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP334（决策 724）：AI 自己要连接卡 / 配置卡（所有职责）。工具只回结构化缺项，
              * 卡由上面那条在这一轮收尾时出（同一缺项只一张、补完按原话接着做）。
              */
+            // WP385（决策 1076）：网站运营 / 内容与搜索读体检结论（只读；正在体检就等它跑完）
+            siteHealthTools: createSiteHealthToolExecutor({ service: () => siteHealth }),
             setupRequestTool: createSetupRequestTool({
               directory: async () =>
                 (directoryAssemblies.get(ws)?.directory() ?? []).flatMap((d) =>
