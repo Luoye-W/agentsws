@@ -11,7 +11,7 @@
  *    - 调内链（`internal_link_edit`）→ 改动卡，用查询做锚文本（机械的，不用模型）；
  *    - 新页面（SERP 看过、人群对）→ **新页面选题卡**（`seo_topic`），批了才开一件写这一页的事项；
  *    - 跳转 / 规范网址 / 没收录 → 开一件交给「建站」的事项；站外提及 → 开一件交给「公关」的事项。
- * 2. **每周**（周一 08:30）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
+ * 2. **每周**（默认周一 16:30，WP388；看上一周）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
  *    站点门面（llms.txt / 结构化数据 / AI 爬虫）开**一次**交给建站的事项。
  * 3. **发布前质检**（`gatePublish`）：账本 stage 之前的改写口——没过就改回草稿、拉回 L1、
  *    卡上逐句说明。
@@ -66,6 +66,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
+import { reportWeek } from '@agentsws/schedule'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
   type BrandProfileLike,
@@ -183,8 +184,13 @@ export interface SeoServiceOptions {
   ga4?(): Promise<readonly LandingConversion[] | undefined>
   /** WP158：GA4 连上了却没数的那句人话（还没选媒体资源 / 这次没读到）；没连或有数回 `undefined`。 */
   ga4Note?(): string | undefined
-  /** 近 7 天的订单（带 Shopify `landing_site`）。 */
-  orders(): readonly LandingOrder[]
+  /**
+   * 近 7 天的订单（带 Shopify `landing_site`）。WP388：给了窗口就取那一段（周报取上一周：
+   * 目标市场时区的周一 00:00 到下周一 00:00，不含）。
+   */
+  orders(window?: { from: string; to: string }): readonly LandingOrder[]
+  /** WP388：周报取数时区（品牌目标市场的；没设就是工作区时区）。不给 = 近 7 天到现在。 */
+  reportTz?(): string
   /** 品牌档案（名字、域名、币种……）。域名为空时用 Search Console 页面清单里的主机名。 */
   brand(): SeoBrandInfo | Promise<SeoBrandInfo>
   /**
@@ -1712,9 +1718,13 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
       const ga4 = (await options.ga4?.()) ?? undefined
+      // WP388：上一周（目标市场时区）；周四起出的照旧近 7 天
+      const tz = options.reportTz?.()
+      const week = tz === undefined ? undefined : reportWeek(clock.now(), tz)
+      const last = week?.kind === 'last_week' ? week : undefined
       const out = pageRevenue({
         gsc: consoleRead.rows ?? [],
-        orders: options.orders(),
+        orders: options.orders(last === undefined ? undefined : { from: last.start, to: last.end }),
         ...(ga4 === undefined ? {} : { ga4 }),
         options: {
           currency: brand.currency,
@@ -1735,7 +1745,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes.push(`${out.unmatched_orders} 张订单没有落地页记录，归不上任何一页（照实报，不猜）。`)
       const payload: SeoWeeklyRevenuePayload = {
         variant: 'weekly_revenue',
-        week_of: date(),
+        week_of: last?.monday ?? date(),
         rows: out.rows,
         unmatched_orders: out.unmatched_orders,
         ga4: ga4 === undefined ? 'not_connected' : 'connected',

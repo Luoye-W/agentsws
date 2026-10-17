@@ -51,6 +51,7 @@ import {
   decideScheduleApproval,
   type FireOutcome,
   MemoryScheduleStore,
+  reportWeek,
   type ScheduleInput,
   type Scheduler,
   type ScheduleStore,
@@ -494,6 +495,10 @@ export interface ReviewDeps extends PlanDeps {
    */
   solo?(): boolean
   /**
+   * WP388：周复盘取数用的时区（品牌目标市场的；没设目标市场就是工作区时区）。不给 = 工作区时区 `tz`。
+   */
+  reportTz?(): string
+  /**
    * 40 §2 工具箱：周复盘里报一段"疑似重复"，并把过了门槛的好东西往上浮。
    * 没装工具箱就少这两样，复盘照跑。
    */
@@ -508,6 +513,27 @@ export interface ReviewDeps extends PlanDeps {
 
 const WAITING_STATES = new Set(['pending', 'in_review'])
 const SPAN_DAYS = { day: 1, week: 7, month: 30 } as const
+
+/**
+ * 复盘回看哪一段。日 / 月：到今天结束往回数 1 / 30 天。
+ *
+ * WP388 周：**上一周**（目标市场时区的周一 00:00 到周日 24:00）——默认周一 16:30 出；
+ * 用户把时间改到周四以后，就是这一周（周一 00:00 到今天结束）。
+ */
+export function reviewWindow(
+  kind: 'day' | 'week' | 'month',
+  now: Iso8601,
+  todayEnd: Iso8601,
+  reportTz: string,
+): { start: Iso8601; end: Iso8601 } {
+  if (kind === 'week') {
+    const w = reportWeek(now, reportTz)
+    return w.kind === 'last_week'
+      ? { start: w.start, end: w.end }
+      : { start: w.start, end: todayEnd }
+  }
+  return { start: iso(Date.parse(todayEnd) - SPAN_DAYS[kind] * DAY_MS), end: todayEnd }
+}
 
 function outcomeOf(item: ApprovalItem) {
   const by = item.decision?.by
@@ -554,7 +580,10 @@ async function createReviewCard(
     },
     priority: 'queue',
     // WP287：复盘只管这一天——到第二天晚上还没看就自己过期，不在「要你处理」里越积越多
-    expires_at: iso(Date.parse(review.period.end) + DAY_MS),
+    // WP388：周复盘出的是上一周（period.end 在出卡之前），从出卡那一刻起算
+    expires_at: iso(
+      Math.max(Date.parse(review.period.end), Date.parse(review.created_at)) + DAY_MS,
+    ),
   }) as Promise<ApprovalItem>
 }
 
@@ -602,7 +631,7 @@ export async function buildReviewsFor(
   }))
   const work = deps.work
   const range = work.todayRange()
-  const start = iso(Date.parse(range.to) - SPAN_DAYS[kind] * DAY_MS)
+  const { start, end } = reviewWindow(kind, work.now(), range.to, deps.reportTz?.() ?? deps.tz)
   /*
    * WP287（Luoye 10-09 真机：每条职责每天一张、一模一样）：卡、待办都是按**人**数的（本人队列、
    * 本人待办），按职责一条一份只是同一份复盘抄 N 遍。现在**一个人一天一份**（也就做到了一个岗位一天最多一份），
@@ -618,17 +647,18 @@ export async function buildReviewsFor(
     if (only !== undefined && position.assignment_id !== only) continue
     // 同一个人同一天（周 / 月同理）已经记过一份就不再记（重跑、补跑都不重复）
     const done = work.latestReview(position.person_id, kind)
-    if (done !== undefined && done.period.end === range.to) continue
+    if (done !== undefined && done.period.end === end) continue
     const cards = await deps.cards(position)
     const waiting = cards.filter((i) => WAITING_STATES.has(i.state)).length
     const draft = buildReview({
       now: work.now(),
       person_id: position.person_id,
       tz_offset_minutes: work.tz_offset_minutes,
-      period: { kind, start, end: range.to },
+      period: { kind, start, end },
       goals: (await deps.goals?.(position)) ?? [],
       cards_events: cards
         .filter((i) => Date.parse(i.updated_at) >= Date.parse(start))
+        .filter((i) => Date.parse(i.updated_at) < Date.parse(end))
         .map(outcomeOf),
       todos: work.listTodos({
         owner: position.person_id,

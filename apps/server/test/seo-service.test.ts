@@ -219,6 +219,23 @@ describe('每周：收入小结与 AI 可见度', () => {
     expect(payload.rows.find((r) => r.page.endsWith('usb-c-65w-charger'))?.orders).toBe(0)
   })
 
+  it('WP388：给了取数时区 → 订单取那个时区的上一周（周一到周日），week_of 是那个周一', async () => {
+    const windows: ({ from: string; to: string } | undefined)[] = []
+    const { service, txn } = setup({
+      clock: { now: () => '2026-10-19T08:30:00.000Z' },
+      reportTz: () => 'America/Los_Angeles',
+      orders: (window) => {
+        windows.push(window)
+        return []
+      },
+    })
+    const out = await service.weeklyRevenue()
+    expect(windows).toEqual([{ from: '2026-10-12T07:00:00.000Z', to: '2026-10-19T07:00:00.000Z' }])
+    const item = await txn.approvals.get(out.approval_item_id ?? '')
+    expect((item?.payload as { week_of: string }).week_of).toBe('2026-10-12')
+    expect(item?.title).toContain('2026-10-12 那一周')
+  })
+
   it('搜索数据接口没接：不探测，说一句人话；门面那件交建站只开一次', async () => {
     const { service, txn, matters } = setup()
     const out = await service.weeklyGeo()
