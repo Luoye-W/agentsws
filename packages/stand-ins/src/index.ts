@@ -52,6 +52,8 @@ export * from './runtime/ads-data.js'
 // WP343：「我的助理」的四个只读工具 + 派活工具（参数表全仓一份）
 export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'
+// WP393：店铺管理「竞品动向」的探平台 / 现在读一次（定义并进报告积木那张表，三个运行时同一份）
+export * from './runtime/competitor-store.js'
 export * from './runtime/dev-stub.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具
 export * from './runtime/image.js'

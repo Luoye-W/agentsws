@@ -114,6 +114,10 @@ const CHANGE_FIELDS: readonly [RegExp, string][] = [
 ]
 const CHANGE_ASK = /改成|改为/
 const SETTING_ASK = /(?:先|得|要|帮我|请)\s*(?:填|设|补)(?:好|上|一下)?/
+/** WP393：「帮我盯一下竞品上新和价格」→ 店铺管理「竞品动向」的方案卡（只认「盯 / 监控」+ 竞品 + 上新 / 价格这类词）。 */
+const COMPETITOR_WATCH_ASK = /(?:盯|监控|看着)/
+const COMPETITOR_WATCH_WORDS = /竞品|对手/
+const COMPETITOR_WATCH_WHAT = /上新|新品|价格|改价|降价|打折|折扣|断货|动静|动向/
 
 /**
  * stub 的岔口：工具面里有 `request_setup`、话里明说「先连上 X / 先填好 Y」，就要一张卡。
@@ -143,6 +147,18 @@ export function setupRequestBranch(
         setting: change[1],
         why: '按你说的改。',
         suggestions: [{ key: field[1], value, why: '你刚才说的' }],
+      },
+    }
+  if (
+    COMPETITOR_WATCH_ASK.test(text) &&
+    COMPETITOR_WATCH_WORDS.test(text) &&
+    COMPETITOR_WATCH_WHAT.test(text)
+  )
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: 'store.competitor_watch',
+        why: '要盯哪几家、每家怎么读、什么算要紧，我先查了一遍定了个方案。',
       },
     }
   if (SETTING_ASK.test(text)) {
