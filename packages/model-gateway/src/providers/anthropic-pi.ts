@@ -6,6 +6,8 @@
  * assistant 轮带上 Anthropic 的思考块（含签名，下一轮原样带回），以及回包里把思考块收成回放。
  */
 import type { ChatContentPart, ChatMessage, ReasoningReplay, ToolDef } from '@agentsws/contracts'
+import { GatewayError } from '../types.js'
+import { wireToolName } from './openai-compatible.js'
 
 type PiText = { type: 'text'; text: string }
 type PiImage = { type: 'image'; data: string; mimeType: string }
@@ -88,10 +90,12 @@ function argsOf(input: unknown): Record<string, unknown> {
 }
 
 /**
- * 上一轮的思考块：**只认这个模型自己产出的**（签名跨模型不通用，官方同一条）；换了模型就不带。
+ * 上一轮的思考块：**只认这个模型自己产出的、同一种协议的**（签名跨模型不通用，官方同一条）；换了模型就不带。
+ * WP376：协议看 `route.api`（Anthropic 兼容口是 `anthropic-messages`，OpenAI 兼容口按官方目录是
+ * `openai-completions` / `openai-responses`）。
  */
-function thinkingOf(replay: ReasoningReplay | undefined, model: string): PiThinking[] {
-  if (replay?.kind !== 'anthropic-messages' || replay.model !== model) return []
+function thinkingOf(replay: ReasoningReplay | undefined, api: string, model: string): PiThinking[] {
+  if (replay?.kind !== api || replay.model !== model) return []
   return replay.blocks.map((b) => ({
     type: 'thinking' as const,
     thinking: b.thinking,
@@ -107,6 +111,8 @@ function thinkingOf(replay: ReasoningReplay | undefined, model: string): PiThink
  *   （pi-ai 按模型声明决定原位送还是并进开头）；
  * - assistant：上一轮的思考块（同一个模型才带）→ 正文 → 工具调用；
  * - 工具结果 → `toolResult`（工具名缺了就从上一条 assistant 里补）；图片部件原样（base64 + mime）。
+ * - WP376：工具名出线前换成合规名（{@link wireToolName}：Anthropic 与 OpenAI 都只认 `[a-zA-Z0-9_-]`，
+ *   我们的工具名带点）；回来时用 {@link piToolNames} 那张表换回原名。
  */
 export function toAnthropicPiContext(
   messages: readonly ChatMessage[],
@@ -131,13 +137,18 @@ export function toAnthropicPiContext(
     }
     if (m.role === 'assistant') {
       const content: (PiText | PiThinking | PiToolCall)[] = [
-        ...thinkingOf(m.reasoning_replay, route.model),
+        ...thinkingOf(m.reasoning_replay, route.api, route.model),
       ]
       const text = textOf(m.content)
       if (text !== '') content.push({ type: 'text', text })
       for (const c of m.tool_calls ?? []) {
         toolNames.set(c.id, c.name)
-        content.push({ type: 'toolCall', id: c.id, name: c.name, arguments: argsOf(c.input) })
+        content.push({
+          type: 'toolCall',
+          id: c.id,
+          name: wireToolName(c.name),
+          arguments: argsOf(c.input),
+        })
       }
       out.push({
         role: 'assistant',
@@ -155,7 +166,7 @@ export function toAnthropicPiContext(
     out.push({
       role: 'toolResult',
       toolCallId: id,
-      toolName: m.name ?? toolNames.get(id) ?? 'tool',
+      toolName: wireToolName(m.name ?? toolNames.get(id) ?? 'tool'),
       content: partsOf(m.content),
       isError: false,
       timestamp: now,
@@ -168,12 +179,36 @@ export function toAnthropicPiContext(
       ? {}
       : {
           tools: tools.map((t) => ({
-            name: t.name,
+            name: wireToolName(t.name),
             description: t.description,
             parameters: t.input_schema,
           })),
         }),
   }
+}
+
+/**
+ * WP376：同一份翻译，名字说清楚它不只给 Anthropic 用（OpenAI 兼容口走官方目录那一路也用它）。
+ */
+export const toPiContext = toAnthropicPiContext
+
+/**
+ * WP376：本次请求的「合规名 → 原名」（与 OpenAI 兼容口那张同一条规矩）；两个原名撞成同一个合规名是
+ * 调用方的错，当场拒。
+ */
+export function piToolNames(tools: readonly ToolDef[] | undefined): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const t of tools ?? []) {
+    const wire = wireToolName(t.name)
+    const prior = map.get(wire)
+    if (prior !== undefined && prior !== t.name)
+      throw new GatewayError('invalid_input', 'two tool names collapse to the same wire name', {
+        wire,
+        names: [prior, t.name],
+      })
+    map.set(wire, t.name)
+  }
+  return map
 }
 
 /** pi-ai 回的那条 assistant（只用到的几格）。 */
@@ -197,6 +232,10 @@ export interface PiAssistantLike {
 export function readPiAssistant(
   message: PiAssistantLike,
   model: string,
+  /** WP376（只加）：回放记成哪一种协议（不给 = Anthropic 兼容口那一种）。 */
+  kind: ReasoningReplay['kind'] = 'anthropic-messages',
+  /** WP376（只加）：合规名 → 原名（{@link piToolNames}）；不给 = 原样。 */
+  names?: ReadonlyMap<string, string>,
 ): {
   text: string
   tool_calls?: { id: string; name: string; input: unknown }[]
@@ -211,7 +250,11 @@ export function readPiAssistant(
     .join('')
   const calls = content
     .filter((c) => c.type === 'toolCall' && typeof c.name === 'string')
-    .map((c) => ({ id: String(c.id ?? ''), name: c.name as string, input: c.arguments ?? {} }))
+    .map((c) => ({
+      id: String(c.id ?? ''),
+      name: names?.get(c.name as string) ?? (c.name as string),
+      input: c.arguments ?? {},
+    }))
   const thinking = content.filter((c) => c.type === 'thinking')
   const reasoning = thinking
     .filter((c) => c.redacted !== true)
@@ -229,9 +272,7 @@ export function readPiAssistant(
     text,
     ...(calls.length === 0 ? {} : { tool_calls: calls }),
     ...(reasoning === '' ? {} : { reasoning }),
-    ...(blocks.length === 0
-      ? {}
-      : { reasoning_replay: { kind: 'anthropic-messages' as const, model, blocks } }),
+    ...(blocks.length === 0 ? {} : { reasoning_replay: { kind, model, blocks } }),
     usage: {
       input_tokens: (message.usage?.input ?? 0) + cacheRead + cacheWrite,
       output_tokens: message.usage?.output ?? 0,
