@@ -177,6 +177,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     base_url: string
     api_key?: string
     region: 'cn' | 'global'
+    /** WP374：按哪种接口去拉（Anthropic 兼容口要说）。 */
+    kind?: ModelProviderKind
   }) => {
     const { id, ...rest } = probe
     return discoverModelProviderModels(id, rest, assignment)

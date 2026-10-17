@@ -91,6 +91,12 @@ export type ModelProviderKind =
    * 登录 / 登出 / 余额走 `/v1/settings/models/deepseek-account*` 那几条路。
    */
   | 'deepseek_account'
+  /**
+   * WP374（决策 980，只加）：**Anthropic 兼容口**——Claude 中转站等「Anthropic 格式」的服务。
+   * 填地址 + key（key 同样只进本机加密库）；协议走官方 pi-ai 的 `anthropic-messages`，
+   * 拉清单走 `GET {根}/v1/models`。
+   */
+  | 'anthropic_compatible'
 
 /**
  * 一个 provider 的对外形状。**这里没有、也不会有 key 字段。**
@@ -509,6 +515,11 @@ export interface DiscoverModelsInput {
   base_url?: string | undefined
   api_key?: string | undefined
   region?: 'cn' | 'global' | undefined
+  /**
+   * WP374（只加）：按哪种接口去拉（还没保存的草稿靠它认是不是 Anthropic 兼容口）。
+   * 不给 = 已存的那条是什么就按什么，没存过就按 OpenAI 兼容（老行为）。
+   */
+  kind?: ModelProviderKind | undefined
 }
 
 /**
@@ -757,6 +768,8 @@ const KIND = z.enum([
   'openai-codex',
   'anthropic',
   'deepseek_account',
+  // WP374
+  'anthropic_compatible',
 ])
 /** WP90：订阅登录的两家 + 两种方式。值一律白名单，不接受别的串。 */
 const SUBSCRIPTION_PROVIDER = z.enum(['openai-codex', 'anthropic'])
@@ -819,6 +832,8 @@ const DiscoverBody = z.object({
   base_url: z.string().min(1).max(512).optional(),
   api_key: z.string().min(1).max(4096).optional(),
   region: REGION.optional(),
+  /** WP374：按哪种接口去拉（草稿用）。 */
+  kind: KIND.optional(),
 })
 
 const DefaultsBody = z.object({

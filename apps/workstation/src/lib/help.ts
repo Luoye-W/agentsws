@@ -248,6 +248,8 @@ export function helpSlugOf(address: string | undefined): HelpSlug | undefined {
 export const HELP_BY_VENDOR: Readonly<Record<string, HelpSlug>> = {
   deepseek: 'model-deepseek',
   'openai-compatible': 'model-openai-compatible',
+  // WP374：Anthropic 兼容（Claude 中转站等）和 OpenAI 兼容同一篇（那篇里单有一节）
+  'anthropic-compatible': 'model-openai-compatible',
   bailian: 'model-bailian',
   openai: 'model-openai',
   anthropic: 'model-anthropic',
