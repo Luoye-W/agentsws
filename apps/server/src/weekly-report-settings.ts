@@ -4,6 +4,7 @@
  * 设置目标 `schedule.weekly_reports`。卡上每份一格（这个品牌里有的那几份），写法「周五 17:00」。
  *
  * 默认每周一 16:30（工作区时区）出上一周的；改过的照用户的（`ensureDefaultTask` 不覆盖）。
+ * 周复盘每人一条：卡上确认的是谁，就只改谁的（经营一页纸、SEO 周报一个品牌一条）。
  * 这里只认这三份系统自带的；AI 用「自动化任务」建的周报由 AI 自己改那条定时，不走这里。
  */
 import type { SetupField } from '@agentsws/contracts'
@@ -138,12 +139,21 @@ export function weeklyReportsSetupTarget(input: {
     },
     // 一直有默认值 = 不缺什么；人说要改时 AI 带新值来，出「我打算改成这样」的卡
     satisfied: async () => true,
-    async apply(values): Promise<void> {
+    async apply(values, context): Promise<void> {
       const rows = present()
       if (rows.length === 0)
         throw new SetupCardError('unknown_target', '这个品牌还没有系统自带的周报定时。')
       const plan: { tasks: ScheduleTask[]; expr: string }[] = []
-      for (const { spec, tasks, value } of rows) {
+      for (const row of rows) {
+        const { spec } = row
+        // 周复盘每人一条：知道是谁确认的，就只改他自己的（公司模式下不动同事的）
+        const tasks =
+          spec.key === 'review_week' && context?.by !== undefined
+            ? row.tasks.filter((t) => t.owner === context.by)
+            : row.tasks
+        const first = tasks[0]
+        if (first === undefined) continue
+        const value = formatWeekly(first)
         const raw = values[spec.key]?.trim()
         if (raw === undefined || raw === '' || raw === value) continue
         const p = parseWeekly(raw)

@@ -159,6 +159,29 @@ describe('WP388 改设置卡改周复盘的时间', () => {
     expect(scheduler.get('sched_review_week_asg_1')?.trigger).toMatchObject({ expr: '0 17 * * 5' })
   })
 
+  it('公司模式：确认的是谁，周复盘就只改谁的（同事那条不动）', async () => {
+    const scheduler = createScheduler({ clock: { now: () => '2026-10-18T00:00:00.000Z' } })
+    await ensureSystemTasks(scheduler, {
+      workspace_id: 'ws_1',
+      owner: 'p_1',
+      role_id: 'common.owner',
+      assignment_id: 'asg_1',
+      tz: '+08:00',
+      positions: [
+        { assignment_id: 'asg_1', person_id: 'p_1', role_id: 'common.owner' },
+        { assignment_id: 'asg_2', person_id: 'p_2', role_id: 'dtc.support' },
+      ],
+      has: { work: true },
+    })
+    const target = weeklyReportsSetupTarget({ scheduler: () => scheduler, workspace_id: 'ws_1' })
+    await target.apply({ review_week: '周五 17:00' }, { by: 'p_2' })
+    expect(scheduler.get('sched_review_week_asg_2')?.trigger).toMatchObject({ expr: '0 17 * * 5' })
+    expect(scheduler.get('sched_review_week_asg_1')?.trigger).toMatchObject({ expr: '30 16 * * 1' })
+    await expect(target.apply({ review_week: '下周吧' }, { by: 'p_1' })).rejects.toThrow(
+      '周五 17:00',
+    )
+  })
+
   it('已经设好 = 不缺什么（不带新值不出卡）；格子里默认那格的问号是「为什么默认周一」', async () => {
     const { cards, scheduler } = await setup()
     expect(await cards.askSetup({ target: WEEKLY_REPORTS_TARGET, actor })).toBeUndefined()
