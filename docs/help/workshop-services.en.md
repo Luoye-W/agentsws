@@ -1,0 +1,34 @@
+# Workshop services: have people get it done
+
+Some things AI can't finish alone — building a store, writing a press piece, opening an account. **Workshop services** let you spend credits and have the Workshop team (or a Workshop partner team) get it done: order → track → receive → accept.
+
+## Where you'll see it
+
+- **When you mention it**: say "I want someone to rebuild my site" and the AI answers as usual, with one extra line at the end: "Workshop site build · From 800 credits · Take a look". Each service shows up once per conversation; click "No thanks" and it won't be suggested again for 30 days (kept in memory, you can always ask). Never in scheduled tasks.
+- **When something is missing**: if a task is stuck on a missing piece (say, no Google account), the connect / setup card gets a "Let the Workshop do it" option. Once done, the task picks up from that step.
+- **When browsing**: click your name at the bottom left → "Workshop services" for all services (by position) and your orders; the "Workshop services" card at the bottom of a position page lists up to three for that position.
+
+## Two kinds
+
+| | Standard (likes, account setup…) | Custom (site builds…) |
+|---|---|---|
+| Ordering | A **price list**: tick what you need, fill in quantity and target (e.g. a post link); the total is shown right away; click "Order" | The AI asks a few questions → a **brief** (edit it if needed) → a quote → "Agree & pay" |
+| Talking | None | Messages in the order; if a call is needed you're asked whether to share contact details (you pick which, only for that order) |
+| Delivery | Once, with proof (links, screenshots, how many done) | In steps, each accepted separately |
+
+## How money moves
+
+- **Nothing is taken until you click**: Order / Agree & pay takes credits into **escrow**; they go to the team only after you accept. The AI never orders for you.
+- **Acceptance**: after delivery you get a card — **Accept / Ask for changes / Request refund**. If you don't click, standard work is accepted after 24 hours and each custom step after 7 days (the card shows when). The number of revisions is on the order card.
+- **Refunds**: unclaimed or late work is refunded automatically; undone standard units are refunded per unit; for poor work, request a refund and Workshop staff decide, with a one-line reason. Refunds go back the way they came.
+- **Billing**: "Account & credits" has a "Workshop services" block — three lines per order: escrow, done, refunded. Add them up for what you actually spent.
+
+## The order panel
+
+Click an order to open the panel on the right: progress and due date, what's "waiting on you" (e.g. upload your logo), and messages with the team. Stuck on a reply? "Draft for me" explains what they're asking and drafts a reply — **it never agrees to extra cost or scope for you**.
+
+Deliverables are kept for 90 days; you get one reminder before they're deleted.
+
+## "Sign in again"
+
+Older Workshop account authorizations may not include Workshop services yet. It's usually added automatically in the background; if not, you'll see "Sign in to your Agents Workshop account again" — sign in once under Settings → Account & credits.
