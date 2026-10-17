@@ -1,10 +1,16 @@
 /** 20 §5 身份与工作区路由（WP33 补：`GET /v1/auth/session`、`POST /v1/auth/logout`）。 */
+import type { IdentityService, Person } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ctxOf, ok, param, principalOf } from '../helpers.js'
-import { SESSION_COOKIE, secretEquals, sessionCookie } from '../identity.js'
+import {
+  SESSION_COOKIE,
+  secretEquals,
+  sessionCookie,
+  type VerifyLoginOptions,
+} from '../identity.js'
 import { type Route, route } from '../route-spec.js'
-import { hasTokenInfo } from '../types.js'
+import { type GatewayDeps, hasTokenInfo } from '../types.js'
 
 const MagicLinkBody = z.object({ email: z.string().min(3) })
 const SessionBody = z.object({ key: z.string().min(8), email: z.string().min(3).optional() })
@@ -12,6 +18,43 @@ const SessionBody = z.object({ key: z.string().min(8), email: z.string().min(3).
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 const VerifyBody = z.object({ token: z.string().min(1) })
 const SetupCodeBody = z.object({ code: z.string().min(4).max(64) })
+/** 决策 942：桌面壳拿会话密钥换一条给主人的一次性登录 token。 */
+const BrowserLinkBody = z.object({ key: z.string().min(8) })
+/** 决策 943：工坊账号认人那两条。 */
+const AccountEmail = z.string().trim().toLowerCase().min(3).max(320)
+const AccountCodeBody = z.object({
+  email: AccountEmail,
+  locale: z.enum(['zh', 'en']).default('zh'),
+})
+const AccountVerifyBody = z.object({
+  email: AccountEmail,
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/u),
+})
+
+/**
+ * 决策 944：浏览器会话按网关配置的寿命签（apps/server 给 30 天）。契约的 `verifyLogin` 只收一个参数；
+ * 本地两档多认一个 `{ sessionTtlMs }`，别的实现收到也只是忽略、照旧用自己的默认。
+ */
+function verifyBrowserLogin(
+  deps: GatewayDeps,
+  token: string,
+): Promise<{ person: Person; session_token: string } | undefined> {
+  const ttl = deps.options?.browserSessionTtlMs
+  if (ttl === undefined) return deps.identity.verifyLogin(token)
+  const verify = deps.identity.verifyLogin as (
+    this: IdentityService,
+    token: string,
+    options?: VerifyLoginOptions,
+  ) => ReturnType<IdentityService['verifyLogin']>
+  return verify.call(deps.identity, token, { sessionTtlMs: ttl })
+}
+
+/** 决策 945 / 943：局域网档（给了设置码）按邮箱要链接这条不再签 token，也不说谁是不是成员。 */
+const SHARED_MAGIC_LINK_MESSAGE =
+  '这台服务器不按邮箱发进入链接：主人用设置码或工坊账号进入，同事请负责人发邀请链接。'
 /** 09-18：本人改自己的展示名；去掉首尾空白后 1–64 字。登录邮箱不在这里改（它是身份）。 */
 const RenameMeBody = z.object({ name: z.string().trim().min(1).max(64) })
 const CreateWorkspaceBody = z.object({
@@ -48,6 +91,12 @@ export function identityRoutes(): Route[] {
       },
       async (c, deps) => {
         const input = await body(c, MagicLinkBody)
+        // 决策 945 收尾（WP371）：局域网档以前还会签一张不交出去的 token、未知邮箱回 404
+        // （能拿来探谁是成员）。现在直接说该怎么进，什么都不签。
+        if (deps.options?.ownerSetupCode !== undefined)
+          throw new ApiError('forbidden', SHARED_MAGIC_LINK_MESSAGE, {
+            details: { reason: 'shared_login' },
+          })
         const issued = await deps.identity.issueLogin(input.email)
         // 托管档不把一次性 token 放进 HTTP 响应，只经邮件投递（20 §3）。
         return deps.options?.exposeMagicLinkToken === false
@@ -68,7 +117,7 @@ export function identityRoutes(): Route[] {
       },
       async (c, deps) => {
         const input = await body(c, VerifyBody)
-        const out = await deps.identity.verifyLogin(input.token)
+        const out = await verifyBrowserLogin(deps, input.token)
         if (!out) throw new ApiError('unauthenticated', '登录 token 无效或已用过')
         return ok(c, out)
       },
@@ -94,6 +143,88 @@ export function identityRoutes(): Route[] {
         if (email === undefined)
           throw new ApiError('unauthenticated', '设置码不对或已经用过，请看服务日志里最新的那一个')
         return ok(c, await deps.identity.issueLogin(email))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/auth/browser-link',
+        operationId: 'issueBrowserLink',
+        summary: '托盘「在浏览器打开」：桌面壳拿会话密钥换一条给主人的一次性登录 token（决策 942）',
+        tag: 'identity',
+        auth: 'public',
+        body: BrowserLinkBody,
+        returns: '{ token, expires_at }（15 分钟、用一次就废；只在本机档开）',
+      },
+      async (c, deps) => {
+        /*
+         * 决策 942：这是 13 §5「token 不进 URL」的**例外**。桌面壳把这张一次性 token 拼进
+         * 地址的 `#` 后面交给系统浏览器（不发给服务端、不进访问日志），工作台落地后立刻用掉、
+         * 并用 `history.replaceState` 从地址栏抹掉。只在本机档开：服务只听 127.0.0.1 / ::1，
+         * 别的电脑根本打不开；局域网档（决策 945）与托管档一律 501。
+         */
+        const expected = deps.options?.sessionKey
+        if (deps.options?.browserLink !== true || expected === undefined || expected.trim() === '')
+          throw new ApiError('not_implemented', '这个服务不给浏览器发一次性进入链接')
+        const input = await body(c, BrowserLinkBody)
+        if (!secretEquals(input.key, expected))
+          throw new ApiError('unauthenticated', '会话密钥不对')
+        const email = deps.options.sessionOwnerEmail
+        if (email === undefined) throw new ApiError('invalid_input', '不知道该给谁发进入链接')
+        return ok(c, await deps.identity.issueLogin(email))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/auth/account/code',
+        operationId: 'sendAccountLoginCode',
+        summary: '用工坊账号进工作区：发一封 6 位登录验证码（决策 943）',
+        tag: 'identity',
+        auth: 'public',
+        outbound: true,
+        body: AccountCodeBody,
+        returns: '{ expires_at, delivered: "email" }（没注册的邮箱云上静默不发，回包一样）',
+      },
+      async (c, deps) => {
+        const port = deps.options?.accountLogin
+        if (port === undefined)
+          throw new ApiError('not_implemented', '这个服务不支持用工坊账号进入')
+        const input = await body(c, AccountCodeBody)
+        // 这一步不看是不是成员：发码之前就说「不是成员」等于让人探名单（局域网档尤其不行）
+        const sent = await port.sendCode({ email: input.email, locale: input.locale })
+        return ok(c, { expires_at: sent.expires_at, delivered: 'email' })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/auth/account/verify',
+        operationId: 'verifyAccountLoginCode',
+        summary: '用工坊账号进工作区：验证码对上 + 这个邮箱是成员 → 一次性登录 token（决策 943）',
+        tag: 'identity',
+        auth: 'public',
+        outbound: true,
+        body: AccountVerifyBody,
+        returns: '{ token, expires_at }（一次性登录 token，拿去 /v1/auth/verify）',
+      },
+      async (c, deps) => {
+        const port = deps.options?.accountLogin
+        if (port === undefined)
+          throw new ApiError('not_implemented', '这个服务不支持用工坊账号进入')
+        const input = await body(c, AccountVerifyBody)
+        // 云端说对了才往下：用的是云端认定的那个邮箱（不是请求里填的那个）
+        const email = await port.verifyCode({ email: input.email, code: input.code })
+        try {
+          return ok(c, await deps.identity.issueLogin(email))
+        } catch (err) {
+          // 码已经证明了邮箱是他的，这时说「不是成员」不算泄露名单
+          if (err instanceof ApiError && err.code === 'not_found')
+            throw new ApiError('not_found', `这个工作区里没有 ${email} 这位成员。`, {
+              details: { reason: 'not_member' },
+            })
+          throw err
+        }
       },
     ),
     route(

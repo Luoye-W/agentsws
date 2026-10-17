@@ -26,6 +26,7 @@
 
 import { randomBytes } from 'node:crypto'
 import type {
+  AccountLoginPort,
   BeginCloudLinkInput,
   BeginCloudLinkResult,
   CloudAccountPort,
@@ -146,6 +147,11 @@ export interface CloudAccountAssembly {
    * 没令牌 / 读不出签发时的动作集 = 空（不凭空补）。启动时后台自动补签用它挑品牌。
    */
   missingScopesOf(workspace_id: WorkspaceId): string[]
+  /**
+   * 决策 943（WP371）：本机成员用工坊账号（邮箱 + 验证码）证明身份进工作区。
+   * 只问云「码对不对、是哪个账号」，**不关联、不签令牌、不留同事的云会话**（验完当场注销）。
+   */
+  accountLogin: AccountLoginPort
 }
 
 interface StoredLink {
@@ -704,8 +710,38 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     },
   }
 
+  /*
+   * 决策 943：认人那一跳。和登录关联用同一个云端口子（`/v1/cloud/auth/otp*`），但到「拿到会话」
+   * 就停：只读账号邮箱，会话立刻注销。所以不挡「这个工作区已经关联过了」、也不要秘密库密钥
+   * ——什么都不往本机存。验证码只在这一跳的请求体里，不进日志、不进事件。
+   */
+  const accountLogin: AccountLoginPort = {
+    async sendCode(input) {
+      const out = await call<{ expires_at: string }>('/v1/cloud/auth/otp', {
+        method: 'POST',
+        body: { email: input.email, locale: input.locale },
+        passThrough: true,
+      })
+      return { expires_at: out.expires_at }
+    },
+    async verifyCode(input) {
+      const verified = await call<CloudSessionIssued>('/v1/cloud/auth/otp/verify', {
+        method: 'POST',
+        body: { email: input.email, code: input.code },
+        passThrough: true,
+      })
+      try {
+        await call('/v1/cloud/auth/logout', { method: 'POST', token: verified.session_token })
+      } catch {
+        // 注销失败不影响认人（那张会话 12 小时后自己过期；本机一个字节都没存）
+      }
+      return verified.account.email.trim().toLowerCase()
+    },
+  }
+
   return {
     port,
+    accountLogin,
     pending: () => pending,
     async ensureBrandToken(workspace_id): Promise<boolean> {
       const current = stored()

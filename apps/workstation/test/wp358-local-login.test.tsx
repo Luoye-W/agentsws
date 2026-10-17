@@ -94,9 +94,11 @@ describe('WP358 登录页说人话', () => {
     asked.length = 0
   })
 
-  it('标题下面说清：这是进这个工作区，不是工坊账号登录', async () => {
+  it('标题下面说清：这是进这个工作区（WP371 起也能用工坊账号，所以不再说「不是工坊账号登录」）', async () => {
     renderWithProviders(<LoginPage />, '/login')
-    expect((await screen.findByTestId('login-subtitle')).textContent).toContain('不是工坊账号')
+    const subtitle = (await screen.findByTestId('login-subtitle')).textContent ?? ''
+    expect(subtitle).toContain('这个工作区里的哪一位')
+    expect(subtitle).not.toContain('不是工坊账号')
   })
 
   it('填了不是成员的邮箱：不只报「未知邮箱」，给主人一键换回、给同事指路', async () => {

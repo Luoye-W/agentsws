@@ -55,6 +55,14 @@ The Mac version is not signed yet, and macOS does not let an unsigned app replac
 
 A Mac that has an older Intel build installed won't be offered updates any more (new versions are Apple silicon (M-series) only). The old build keeps working.
 
+## Using it in a browser
+
+Click "Open in browser" in the tray menu and your browser goes straight into the workspace, with no sign-in. It uses a one-time entry link that works only on this computer, only for 15 minutes and only once. After you land, the link is no longer in the address bar.
+
+Once you are in, that browser remembers you for **30 days**. It stops working right away if you sign out or if you are removed from the workspace.
+
+If you still see the "Enter this workspace" page (say, in a different browser), click "Send me an entry link". If you have an Agents Workshop account, you can also click "Use my Agents Workshop account" and get a 6-digit code by email.
+
 ## Stable and beta
 
 A version with `beta` in it (like `0.2.0-beta.3`) is a **beta**: you get new features first, with the odd rough edge. One without (like `0.2.0`) is **stable**. You keep getting updates for the kind you installed. Beta users are also told when the matching stable version comes out.

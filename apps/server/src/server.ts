@@ -31,6 +31,7 @@ import type {
 } from '@agentsws/api'
 import {
   ApiError,
+  BROWSER_SESSION_TTL_MS,
   canAdministerOrganization,
   createAsyncTraceScope,
   createGateway,
@@ -9127,6 +9128,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const organizations = createOrganizationsAssembly({
     clock,
     identity,
+    // 决策 944：切品牌换来的那张也是浏览器会话（页面自己存着），与登录那张一样活 30 天
+    sessionTtlMs: BROWSER_SESSION_TTL_MS,
     roles,
     approvals,
     appendEvent,
@@ -12508,6 +12511,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 13 §5：配了会话密钥就开 cookie 那条路（`POST /v1/auth/session`）
       ...(sessionKey === undefined ? {} : { sessionKey }),
       sessionOwnerEmail: person.email,
+      // 决策 942：托盘「在浏览器打开」直接进——只在本机档（服务只听 127.0.0.1 / ::1）开
+      browserLink: loginMode === 'local' && hostedBoot === undefined,
+      // 决策 944：浏览器里「记住我」30 天（桌面壳那张照旧 12 小时、壳自己续）
+      browserSessionTtlMs: BROWSER_SESSION_TTL_MS,
+      // 决策 943：用工坊账号认人（本机档、局域网档都开；托管实例没有人从网页登录）
+      ...(hostedBoot === undefined ? { accountLogin: cloudAccount.accountLogin } : {}),
     },
   }
 

@@ -163,10 +163,10 @@ describe('局域网档（NAS / Docker）', () => {
   it('听 0.0.0.0 就是局域网档：填主人邮箱拿不到 token，bootstrap 不给主人邮箱', async () => {
     const s = await boot({ AGENTSWS_BIND_HOST: '0.0.0.0' }, [])
     expect(s.loginMode).toBe('shared')
-    const issued = await dataOf<{ token?: string }>(
-      await post(s, '/v1/auth/magic-link', { email: OWNER }),
-    )
-    expect(issued.token).toBeUndefined()
+    // WP371 收尾：局域网档按邮箱要链接直接 403，什么都不签
+    const asked = await post(s, '/v1/auth/magic-link', { email: OWNER })
+    expect(asked.status).toBe(403)
+    expect(JSON.stringify(await asked.json())).not.toMatch(/"token"/)
     const boot_ = await bootstrapOf(s)
     expect(boot_.owner_email).toBeUndefined()
     expect(boot_.login).toBe('shared')
