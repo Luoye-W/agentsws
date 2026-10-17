@@ -323,3 +323,57 @@ describe('WP392 管道（替身进料口）', () => {
     expect(h.cw.settings().every_hours).toBe(12)
   })
 })
+
+describe('WP392 唯一工作清单加格子：存得住', () => {
+  it('竞品的独立站 / Amazon 对标款、自家 ASIN 改设置后读回来还在（清一下大小写与重复）', async () => {
+    const { createGeoMonitor } = await import('../src/geo-monitor.js')
+    const { createGeoStore } = await import('../src/geo-store.js')
+    const store = createGeoStore()
+    let id = 0
+    const monitor = createGeoMonitor({
+      clock: { now: () => '2026-10-15T10:00:00.000Z' },
+      nextId: (p) => `${p}_${++id}`,
+      store: async () => store,
+      brand: async () => ({
+        name: 'Ours',
+        domains: ['ours.test'],
+        language: 'en',
+        country: 'us',
+        markets: ['US'],
+      }),
+      searchData: () =>
+        ({ status: async () => ({ configured: false, route: 'none', platforms: [] }) }) as never,
+      translate: async (text) => ({ asked: text, language: 'en', untranslated: false }),
+      languageOf: () => 'en',
+      gsc: async () => ({ connected: false, rows: [] }),
+    })
+    await monitor.apply({
+      competitors: [
+        {
+          id: 'c1',
+          name: 'Alpha Bikes',
+          aliases: [],
+          domains: ['alpha.test'],
+          store: { url: ' https://alpha.test ', platform: 'shopify' },
+          amazon: [
+            { marketplace: 'us', asin: ' b0alpha001 ', vs_own: 'B0OWN00001' },
+            { marketplace: 'US', asin: 'B0ALPHA001' },
+          ],
+        },
+      ],
+      brand_amazon: [{ marketplace: 'us', asin: 'b0own00001', label: 'Ranger' }],
+    })
+    const w = store.watch()
+    expect(w?.competitors[0]?.store).toEqual({ url: 'https://alpha.test', platform: 'shopify' })
+    expect(w?.competitors[0]?.amazon).toEqual([
+      { marketplace: 'US', asin: 'B0ALPHA001', vs_own: 'B0OWN00001' },
+    ])
+    expect(w?.brand.amazon).toEqual([{ marketplace: 'US', asin: 'B0OWN00001', label: 'Ranger' }])
+    // 改别的设置不丢这几格
+    await monitor.apply({ brand_aliases: ['Ours Bikes'] })
+    expect(store.watch()?.brand.amazon).toHaveLength(1)
+    expect(store.watch()?.competitors[0]?.store?.url).toBe('https://alpha.test')
+    await monitor.apply({ brand_amazon: [] })
+    expect(store.watch()?.brand.amazon).toBeUndefined()
+  })
+})
