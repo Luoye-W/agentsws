@@ -326,7 +326,8 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     fireEvent.click(screen.getByTestId('rail-overflow'))
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
-      'conversations,reports,outputs,plans,connections,settings',
+      // WP390：第七张「工坊服务」排在最下面
+      'conversations,reports,outputs,plans,connections,settings,workshop-services',
     )
     for (const id of ['conversations', 'plans'])
       expect(screen.getByTestId(`rail-card-${id}`).getAttribute('data-open')).toBe('true')
@@ -444,7 +445,7 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     await openRailCard('outputs')
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
-      'settings,conversations,reports,outputs,plans,connections',
+      'settings,conversations,reports,outputs,plans,connections,workshop-services',
     )
     const saved = JSON.parse(box.get('agentsws.rightrail.cards') ?? '{}') as Record<
       string,
@@ -497,6 +498,7 @@ describe('积木', () => {
       'outputs',
       'connections',
       'settings',
+      'workshop-services',
     ])
     act(() => undefined)
   })

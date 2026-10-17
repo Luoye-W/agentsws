@@ -93,12 +93,13 @@ describe('WP282 按人看积分', () => {
     expect(box.dataset.scope).toBe('all')
     expect(box.textContent).toContain('每个人这个月的积分')
     const head = [...box.querySelectorAll('th')].map((th) => th.textContent)
-    expect(head).toEqual(['谁', 'AI 使用', '数据接口', '增值服务', '次数', '积分'])
+    // WP390：第四块「工坊服务」
+    expect(head).toEqual(['谁', 'AI 使用', '数据接口', '增值服务', '工坊服务', '次数', '积分'])
     const rows = within(box).getAllByTestId('member-credits-row')
     expect(rows.map((r) => r.dataset.person)).toEqual(['per_li', 'per_chen'])
     expect(
       [...(rows[0] as HTMLElement).querySelectorAll('td')].map((td) => td.textContent),
-    ).toEqual(['李默', '10', '4', '30', '3', '44'])
+    ).toEqual(['李默', '10', '4', '30', '0', '3', '44'])
     // 每块的次数在悬停里
     expect((rows[0] as HTMLElement).querySelectorAll('td')[1]?.getAttribute('title')).toBe('1 次')
     const rest = within(box).getByTestId('member-credits-unattributed')

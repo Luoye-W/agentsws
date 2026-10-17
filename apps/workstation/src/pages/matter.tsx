@@ -54,6 +54,7 @@ import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { archiveBlock } from '@/components/sidebar/matter-menu'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isServiceCard } from '@/components/workshop-services/service-card-body'
 import {
   askAi,
   BRAND_ASSET_MAX_BYTES,
@@ -449,8 +450,12 @@ export function MatterPage(): ReactNode {
     blockedSay: t('matter.blocked.say'),
     // WP268：挑图卡要点一张图，不是说一句「就这张」——不给建议
     // WP324：连接卡 / 配置卡要在卡上连 / 填，说一句「接着做」没用——也不给
+    // WP390：工坊服务卡（下单 / 验收 / 联系方式）只在卡上点——花钱的事不靠说一句
     cardAction:
-      firstWaiting === undefined || isImageCard(firstWaiting) || isSetupCard(firstWaiting)
+      firstWaiting === undefined ||
+      isImageCard(firstWaiting) ||
+      isSetupCard(firstWaiting) ||
+      isServiceCard(firstWaiting)
         ? undefined
         : deckActionLabel(firstWaiting, 'approve', t),
   })

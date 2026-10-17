@@ -14,6 +14,7 @@ import {
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback } from 'react'
+import { WorkshopHandoff } from '@/components/workshop-services/handoff-offer'
 import { decide } from '@/lib/api'
 import { RAIL_KEY } from '@/lib/work-archive'
 import { ConnectNeedsBody, useConnectContext } from './connect-card'
@@ -119,7 +120,23 @@ function SetupRequestBody({
 /** 卡片流 / 时间线里的那一块（不是这两种卡回 `null`）。 */
 export function SetupDeckBody({ card }: { card: DeckCard }): ReactNode {
   const p = card.detail.payload
-  if (isConnectRequestPayload(p)) return <ConnectRequestBody card={card} payload={p} />
-  if (isSetupRequestPayload(p)) return <SetupRequestBody card={card} payload={p} />
-  return null
+  const body = isConnectRequestPayload(p) ? (
+    <ConnectRequestBody card={card} payload={p} />
+  ) : isSetupRequestPayload(p) ? (
+    <SetupRequestBody card={card} payload={p} />
+  ) : null
+  if (body === null) return null
+  // WP390：服务目录里有声明了这个卡点的工坊服务 → 多一个可选项「交给工坊办」
+  const offer = (p as ConnectRequestPayload | SetupRequestPayload).workshop_service
+  if (offer === undefined || !card.available_actions.includes('approve')) return body
+  return (
+    <>
+      {body}
+      <WorkshopHandoff
+        offer={offer}
+        cardId={card.id}
+        matterId={(p as ConnectRequestPayload | SetupRequestPayload).resume?.matter_id}
+      />
+    </>
+  )
 }
