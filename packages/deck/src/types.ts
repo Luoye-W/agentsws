@@ -6,6 +6,7 @@
  */
 import type {
   AdsLineCompareView,
+  AiTrafficSummary,
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
@@ -15,6 +16,7 @@ import type {
   ObjectRef,
   RiskClass,
   RoleId,
+  SiteHealthRun,
 } from '@agentsws/contracts'
 import type { DeckLayout } from './layout.js'
 
@@ -1308,6 +1310,10 @@ export interface QueryContext {
   /** WP77（59 §3）：建站面板那几块。 */
   site?: SiteDeckData
   /**
+   * WP381：网站 / 商品体检的最近一次结论与 AI 来源流量（实测）。不给 = 那几块照实说「还没体检」。
+   */
+  site_health?: SiteHealthDeckData
+  /**
    * WP75（57 §3）：投放那几张投影（宿主从 `AdsStore` 里读出来递进来）。
    *
    * 不给 = 这台机器上还没有投放岗位，那几块一律空——**不是**"还没连"。
@@ -1428,6 +1434,17 @@ export interface BlockDef {
    * 「没有 = 好事 / 还早」的块）。不给 = 老行为（空表照出表头）。
    */
   hide_when_empty?: boolean
+  /**
+   * WP381：块头上一个「现在重跑」小钮（体检这种我们自己跑的结论）——点了 `POST` 这个地址，跑完刷新。
+   * 不给 = 没有这个钮。
+   */
+  rerun?: { path: string; label: string }
+}
+
+/** WP381：体检那几块要的数据（宿主从体检库里读出来递进来）。 */
+export interface SiteHealthDeckData {
+  run?: SiteHealthRun
+  ai_traffic?: AiTrafficSummary
 }
 
 export interface BlockData {
