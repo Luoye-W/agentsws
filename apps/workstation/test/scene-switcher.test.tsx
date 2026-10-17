@@ -28,7 +28,7 @@ const row = (over: Partial<DshSceneRow> & { name: string }): DshSceneRow => ({
 
 const LIST: DshScenesData = {
   available: true,
-  dsh_version: '0.2.1-rc.1',
+  dsh_version: '0.2.1-rc.2',
   scenes: [
     row({
       name: 'agentsws',

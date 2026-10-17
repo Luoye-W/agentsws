@@ -101,7 +101,7 @@ export const OFFICIAL_DEFAULTS: PlatformAccountConfig = { desktopPlatform: null 
  * 所以送同一个号——**不**冒充别的客户端、也不编一个平台不认识的号。`test/deepseek-account.test.ts` 钉着
  * 它与装着的 `@deepseek-ai/dsh-deepseek-account-platform` 版本相等：升 dsh 时那条会红，提醒改这里。
  */
-export const DEEPSEEK_ACCOUNT_CLIENT_VERSION = '0.2.1-rc.1'
+export const DEEPSEEK_ACCOUNT_CLIENT_VERSION = '0.2.1-rc.2'
 
 /** 没有显式给语言的调用（查资料 / 余额 / 登出）用的界面语言：我们的界面是中文。 */
 export const DEEPSEEK_ACCOUNT_DEFAULT_LOCALE = 'zh-CN'
