@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   AiPlatform,
+  AiTrafficSummary,
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
@@ -73,6 +74,7 @@ import type {
 import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
+  aiTrafficBrief,
   type BrandProfileLike,
   buildDaily,
   CLAIM_MARKET_GROUPS,
@@ -174,6 +176,11 @@ export interface SeoBrandInfo extends BrandProfileLike {
 
 export interface SeoServiceOptions {
   workspace_id: WorkspaceId
+  /**
+   * WP381：AI 来源流量（Shopify 自己记的来源，实测）——周报和引用数并排写一行。
+   * 不给 / 回 `undefined`（没连店、没读到）= 周报那一格不出。永不让周报失败。
+   */
+  aiTraffic?: () => Promise<AiTrafficSummary | undefined>
   clock: Clock
   random(): number
   approvals: ApprovalBus
@@ -573,6 +580,14 @@ export function claimRuleCard(input: {
 }
 
 export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly {
+  /** WP381：AI 来源流量（实测）；读不到 / 抛了都当没有，周报照出。 */
+  const aiTrafficOf = async (): Promise<AiTrafficSummary | undefined> => {
+    try {
+      return await options.aiTraffic?.()
+    } catch {
+      return undefined
+    }
+  }
   const { workspace_id, clock } = options
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -1403,13 +1418,27 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     const legacy = est === undefined ? undefined : legacyEstimate(est, probing)
     // WP380：周报第二层——缺位主因与先后、数字标来路、站外来源地图、一致性与复查、WP381 的位置
     const outside = await options.geoReportExtras?.().catch(() => undefined)
+    // WP381：AI 来源流量（实测）——结构化的进 `ai_traffic`，那一行插进 WP380 留的 `ai_traffic` 位置
+    const traffic = await aiTrafficOf()
+    const slots =
+      traffic === undefined
+        ? outside?.slots
+        : {
+            ...outside?.slots,
+            ai_traffic: {
+              title: 'AI 来源流量',
+              lines: [aiTrafficBrief(traffic)],
+              basis: 'measured' as const,
+              as_of: traffic.until,
+            },
+          }
     const extra = await quality.weeklyExtras({
       run,
       gaps,
       point,
       view,
       estimate: est,
-      ...(outside?.slots === undefined ? {} : { slots: outside.slots }),
+      ...(slots === undefined ? {} : { slots }),
       ...(outside?.site === undefined ? {} : { site: outside.site }),
     })
     const payload: SeoWeeklyGeoPayload = {
@@ -1428,6 +1457,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       // WP335：简报那一行（这一周拿到回答才有）
       ...(brief === undefined ? {} : { brief }),
       ...extra.payload,
+      // WP381：AI 来源流量（实测）
+      ...(traffic === undefined ? {} : { ai_traffic: traffic }),
     }
     const seen = new Set(
       rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
@@ -1441,6 +1472,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           )
           .join('；')}。${cost}`
       : `${questions} 个买家问题，${seen.size} 个在某个 AI 上提到或引用了我们；缺位 ${gaps.length} 个。${cost}`
+    // AI 来源流量那一行已经随 `slots.ai_traffic` 进了 extra.lines，不再在末尾另起一行
     const lead = [...(brief === undefined ? [] : [brief]), ...extra.lines]
       .map((l) => `${l}\n`)
       .join('')
@@ -1913,12 +1945,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes: out.notes,
         ...(watch.enabled ? { estimate: legacyEstimate(out.estimate, probing) } : {}),
       }
+      // WP381：这周没问 AI，AI 来源流量（实测）照样写
+      const traffic = await aiTrafficOf()
+      if (traffic !== undefined) payload.ai_traffic = traffic
       const approval_item_id = await report(
         actor,
         'weekly_geo',
         week,
         `AI 平台可见度（${week} 那一周）`,
-        out.notes[0] ?? '',
+        [out.notes[0] ?? '', ...(traffic === undefined ? [] : [aiTrafficBrief(traffic)])]
+          .filter((x) => x !== '')
+          .join('\n'),
         payload,
       )
       emit('seo.weekly_geo', actor.assignment_id, {

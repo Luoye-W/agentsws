@@ -311,6 +311,31 @@ describe('WP380 比较胜率 / 描述准确度进监测与周报', () => {
     expect(report?.summary).toContain('AI 来源流量：上周 42 次访问')
     expect(slots?.site_check).toBeUndefined()
   })
+
+  it('合并 WP380 × WP381：AI 来源流量（实测）进 ai_traffic 的位置，摘要里只出一次', async () => {
+    const w = world()
+    const traffic = {
+      measured: true as const,
+      since: '2026-10-05',
+      until: '2026-10-11',
+      currency: 'USD',
+      rows: [],
+      total_orders: 10,
+      ai_orders: 2,
+      ai_revenue: 99.98,
+      visits: 'no_scope' as const,
+      computed_at: '2026-10-12T00:00:00.000Z',
+    }
+    const { service, txn } = setup(w, { aiTraffic: async () => traffic })
+    await prepare(service, w)
+    const out = await service.weeklyGeo('manual')
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    const payload = report?.payload as SeoWeeklyGeoPayload | undefined
+    expect(payload?.ai_traffic).toEqual(traffic)
+    expect(payload?.slots?.ai_traffic?.basis).toBe('measured')
+    expect(payload?.slots?.ai_traffic?.lines[0]).toContain('AI 带来 2 单 / USD 99.98（实测）')
+    expect(report?.summary.split('AI 带来 2 单').length).toBe(2)
+  })
 })
 
 describe('WP380 对外说法一致性', () => {

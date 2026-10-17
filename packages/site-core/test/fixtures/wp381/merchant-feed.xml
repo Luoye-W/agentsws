@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+<channel>
+<title>NordVolt</title>
+<lastBuildDate>Mon, 06 Oct 2026 08:00:00 +0000</lastBuildDate>
+<item>
+<g:id>shopify_US_1001_2001</g:id>
+<g:item_group_id>shopify_US_1001</g:item_group_id>
+<g:title>NordVolt Power Bank 20000 - Black</g:title>
+<g:link>https://nordvolt.example/products/power-bank-20000?variant=2001</g:link>
+<g:price>49.99 USD</g:price>
+<g:availability>in stock</g:availability>
+<g:gtin>4006381333931</g:gtin>
+</item>
+<item>
+<g:id>shopify_US_1001_2002</g:id>
+<g:item_group_id>shopify_US_1001</g:item_group_id>
+<g:title>NordVolt Power Bank 20000 - White</g:title>
+<g:link>https://nordvolt.example/products/power-bank-20000?variant=2002</g:link>
+<g:price>39.99 USD</g:price>
+<g:availability>in stock</g:availability>
+</item>
+<item>
+<g:id>shopify_US_1009_2009</g:id>
+<g:title>Other thing</g:title>
+<g:link>https://nordvolt.example/products/cable</g:link>
+<g:price>9.99 USD</g:price>
+<g:availability>in stock</g:availability>
+</item>
+</channel>
+</rss>
