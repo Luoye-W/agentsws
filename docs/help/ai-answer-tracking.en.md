@@ -7,7 +7,7 @@ More and more shoppers skip the search results and ask ChatGPT, Gemini or Claude
 1. Open the "Content & Search" duty page. The first time, a card "AI answer tracking: decide what to track" appears in your feed.
 2. The card shows what AI suggests from your brand profile (category, markets, stage): how many questions to track, how many name your brand, which AIs, who the competitors are, and roughly how many credits a month (Claude listed separately).
 3. If it looks right, click "Looks good". To adjust, click "Edit": untick questions, swap in candidates, switch off an AI, remove wrong competitors, then click "Use my edits".
-4. A round then runs automatically every Monday morning. To see results now, click "Run now" on the board; when Claude is on, it first tells you how many credits the round costs and only runs after you confirm.
+4. A round then runs automatically every Monday at 16:30 by default (last week has just ended in the US by then; to change the time, just tell the AI). To see results now, click "Run now" on the board; when Claude is on, it first tells you how many credits the round costs and only runs after you confirm.
 
 The "Category" in your brand profile (Settings → Brand profile) is what AI picks questions from. Brand analysis fills one in; fix it if it's off.
 

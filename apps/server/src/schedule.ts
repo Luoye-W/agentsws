@@ -137,7 +137,7 @@ export const HANDLERS = {
   seoDaily: 'seo.daily_read',
   /** WP154：每周一：按页面收入小结 + AI 平台可见度（按品牌各一轮）。 */
   seoWeekly: 'seo.weekly_review',
-  /** WP224（docs/91 §2.2 #1）：秘书每周一早上推「本周经营一页纸」（按品牌各一份）。 */
+  /** WP224（docs/91 §2.2 #1）：秘书每周推一份经营一页纸（按品牌各一份；WP388 默认周一 16:30 出上一周）。 */
   weeklyReview: 'owner.weekly_review',
   /** WP224（docs/91 §7 #2）：每天夜里记一行两条止损线的对照（只记账，不改止损）。 */
   adsLineCompare: 'ads.line_compare',
