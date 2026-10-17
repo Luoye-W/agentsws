@@ -232,7 +232,7 @@ describe('每周：收入小结与 AI 可见度', () => {
     const out = await service.weeklyRevenue()
     expect(windows).toEqual([{ from: '2026-10-12T07:00:00.000Z', to: '2026-10-19T07:00:00.000Z' }])
     const item = await txn.approvals.get(out.approval_item_id ?? '')
-    expect((item?.payload as { week_of: string }).week_of).toBe('2026-10-12')
+    expect((item?.payload as { week_of?: string } | undefined)?.week_of).toBe('2026-10-12')
     expect(item?.title).toContain('2026-10-12 那一周')
   })
 
