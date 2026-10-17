@@ -74,7 +74,9 @@ describe('WP363 AI 钮：倍率旁边写折扣', () => {
     expect(within(kimi).getByTestId('model-pick-price').textContent).toBe('1.3x')
     const off = within(kimi).getByTestId('model-pick-discount')
     expect(off.textContent).toBe('1 折')
-    expect(off.getAttribute('title')).toBe('现在按原价的 10% 收；实际消耗以用量记录为准')
+    expect(off.getAttribute('title')).toBe(
+      '按 token 算，我们的价是这家官方标价的 10%；实际消耗以用量记录为准',
+    )
     // 折扣那一格挨在倍率前面（同一个右侧区域里）
     expect(off.nextElementSibling?.getAttribute('data-testid')).toBe('model-pick-price')
     expect(within(row('agentsws/qwen3.8-max')).getByTestId('model-pick-discount').textContent).toBe(

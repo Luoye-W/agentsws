@@ -44,7 +44,6 @@ import {
   DEFAULT_WEB_LIMITS,
   FIND_ARCHIVED_WORK_TOOL,
   GENUI_DISPLAY_RULE,
-  pricingDiscountOf,
   searchLanguageBrief,
   WEB_SEARCH_TOOL,
 } from '@agentsws/contracts'
@@ -1450,11 +1449,10 @@ export function chatCredits(
   const entry = pricing?.entries.find((e) => e.capability === 'ai.chat')
   if (entry === undefined) return undefined
   const price = entry.models?.find((m) => m.model === model)
+  // WP364（决策 958）：折扣只是说明，三格单价本身就是实收价——不再乘折扣（与云上结算同一个口径）
   const raw =
     price === undefined
       ? (entry.credits_per_unit * (usage.input_tokens + usage.output_tokens)) / 1000
-      : // WP363（决策 954）：有折扣按折后估（云上结算同一个判法，`pricingDiscountOf`）
-        ((usage.input_tokens * price.in + usage.output_tokens * price.out) / 1000) *
-        (pricingDiscountOf(price) ?? 1)
+      : (usage.input_tokens * price.in + usage.output_tokens * price.out) / 1000
   return Math.round(raw * 10_000) / 10_000
 }

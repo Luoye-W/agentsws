@@ -186,31 +186,86 @@ export interface PricingModelEntry {
    */
   cn?: boolean
   /**
-   * WP362（Luoye 10-16，只加）：**消耗速率**——以 DeepSeek v4 Pro 官方原价 = 1 为基准，这个模型一般用一轮
-   * 大概是它的几倍。输入框的 AI 钮上显示成「1.0x」「2.3x」。不给 = 本机按官方原价相对 DeepSeek v4 Pro 折算。
+   * WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）。
+   * 输入框的 AI 钮上显示成「1.0x」「2.3x」。
+   *
+   * WP364（决策 959，Luoye 10-17 纠正）：**按 token 算，不按次**。取这个模型的 token 构成（输入未命中 / 缓存命中 / 输出），
+   * 分子 = 这个构成 × **我们实收的单价**（就是上面 `in` / `cached` / `out`），分母 = 同一个构成 × **我们卖 DeepSeek v4 Pro
+   * 的单价**（决策 972，Luoye 10-17 定：v4 Pro 自己 = 1x）（{@link tokenMixRatio}）。不给 = 本机按同一口径（典型构成）兜底。
    */
   consumption_rate?: number
   /**
-   * WP362：{@link consumption_rate} 从哪来：`stats` = 后台按用量账本里这个模型的真实平均消耗长期统计出来的；
-   * `list_price` = 按官方原价折算的。实际消耗以用量记录为准。
+   * WP362：{@link consumption_rate}（和 {@link discount}）用的是哪种 token 构成：
+   * `stats` = 这个模型近 30 天真实用量里的构成；`list_price` = 样本不够，用典型构成 {@link TYPICAL_TOKEN_MIX}
+   * （输入 3 : 输出 1，不算缓存）。实际消耗以用量记录为准。
    */
   rate_source?: 'stats' | 'list_price'
   /**
-   * WP363（决策 954，只加）：**折扣**——这个模型现在按原价的几成收，`0.1` = 一折（实收原价的 10%）。
-   * 只认 `0 < discount < 1`；不给 / 越界 = 没有折扣（读的一方用 {@link pricingDiscountOf}）。
-   * 输入框的 AI 钮在消耗速率旁边写「1 折」。`in` / `out` / `cached` 与 {@link consumption_rate} 仍是**原价**
-   * 口径：实扣 = 原价 × 折扣，以用量记录为准。
+   * WP363 加（只加）；WP364（决策 958 / 960，Luoye 10-17 纠正）改了含义：**折扣 = 我们卖给用户的价 ÷ 这家 AI 官方标价**，
+   * 按 token 构成加权（构成同 {@link rate_source}）。例：官方百万 token 1 美元、我们收 0.8 美元 → `0.8`，显示「8 折」。
+   * 云上只在 `0 < discount < 1` 时给（≥ 1 不算折扣，不显示）；读的一方用 {@link pricingDiscountOf}。
+   * **它只是说明，不参与结算**：结算永远按 `in` / `out` / `cached` 这三格扣（三格本身就是折后的价）。
    */
   discount?: number
 }
 
 /**
  * WP363：这一条的折扣（`0 < d < 1` 才算；不给 / 0 / ≥ 1 / 不是数 = 没有折扣，回 `undefined`）。
- * 云上结算、本机估价、AI 钮显示都用这一个判法，免得三处对「什么算有折扣」各说各的。
+ * WP364 起只用来**显示**（结算不再乘它）。
  */
 export function pricingDiscountOf(entry: Pick<PricingModelEntry, 'discount'>): number | undefined {
   const d = entry.discount
   return typeof d === 'number' && Number.isFinite(d) && d > 0 && d < 1 ? d : undefined
+}
+
+/**
+ * WP364（决策 959）：一份 token 构成。三格是**比例或总数都行**（只看相对大小）：
+ * `input` = 没命中缓存的输入、`cached` = 命中缓存的输入、`output` = 输出。
+ */
+export interface TokenMix {
+  input: number
+  cached: number
+  output: number
+}
+
+/**
+ * WP364：样本不够时用的**典型构成**——输入 3 : 输出 1、不算缓存命中。业内通行的「混合价」也按 3 : 1 算
+ * （输入远多于输出）；WP362 的本机退路也一直是这个比例，两边接得上。
+ */
+export const TYPICAL_TOKEN_MIX: TokenMix = { input: 3, cached: 0, output: 1 }
+
+/** 一个模型的三格单价（同一个单位、同一个币种；`cached` 不给按 `in` 算）。 */
+export interface TokenUnitPrice {
+  in: number
+  out: number
+  cached?: number
+}
+
+/** WP364：按一份 token 构成算的「平均单价」（加权和 ÷ 总量）；构成全 0 回 0。 */
+export function tokenMixCost(price: TokenUnitPrice, mix: TokenMix): number {
+  const total = Math.max(0, mix.input) + Math.max(0, mix.cached) + Math.max(0, mix.output)
+  if (!(total > 0)) return 0
+  const cached = price.cached ?? price.in
+  return (
+    (Math.max(0, mix.input) * price.in +
+      Math.max(0, mix.cached) * cached +
+      Math.max(0, mix.output) * price.out) /
+    total
+  )
+}
+
+/**
+ * WP364：同一份构成下 `ours ÷ theirs`（两边要先折成同一个单位与币种）。分母是 0 回 `undefined`。
+ * 折扣（ours = 我们的售价、theirs = 这家官方标价）与消耗速率（theirs = 我们卖 DeepSeek v4 Pro 的价）都用它。
+ */
+export function tokenMixRatio(
+  ours: TokenUnitPrice,
+  theirs: TokenUnitPrice,
+  mix: TokenMix,
+): number | undefined {
+  const base = tokenMixCost(theirs, mix)
+  if (!(base > 0)) return undefined
+  return tokenMixCost(ours, mix) / base
 }
 
 /**
@@ -317,6 +372,11 @@ export interface MeteringEvent {
   /** 进 token。**与出分开**——只存合计就再也算不出输入输出的成本比（KOLAgents 的坑）。 */
   input_tokens?: number
   output_tokens?: number
+  /**
+   * WP364（只加）：`input_tokens` 里命中缓存的那部分（含在 `input_tokens` 里，不另加）。
+   * 消耗速率与折扣按真实 token 构成算，要分得清缓存命中；旧行没有 = 当 0。
+   */
+  cached_tokens?: number
   /** 我方成本，**整数微单位**（1 元 = 1_000_000）。四舍五入到分会让便宜模型成本恒为 0。 */
   cost_micros?: number
   /** 成本的币种（价目表里写的那个）。 */
@@ -330,7 +390,7 @@ export interface MeteringEvent {
 /**
  * {@link MeteringEvent} 的字段白名单。多一个键就是违反 49 M6。
  *
- * 前八个是**必填**（`assertMeteringEvent` 逐个查），后八个是 WP115 的成本会计扩列，
+ * 前八个是**必填**（`assertMeteringEvent` 逐个查），后面是 WP115 的成本会计扩列（WP364 加了 `cached_tokens`），
  * 可有可无——给了就写进库，不给就是 null。
  */
 export const METERING_EVENT_FIELDS: readonly (keyof MeteringEvent)[] = [
@@ -346,6 +406,7 @@ export const METERING_EVENT_FIELDS: readonly (keyof MeteringEvent)[] = [
   'model',
   'input_tokens',
   'output_tokens',
+  'cached_tokens',
   'cost_micros',
   'cost_currency',
   'charge_status',

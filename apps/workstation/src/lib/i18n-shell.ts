@@ -34,12 +34,12 @@ export const SHELL_ZH: Record<string, string> = {
   'model.pick.price.subscription': '订阅额度',
   'model.pick.price.own_key': '用你自己的 key',
   'model.pick.rate.note':
-    '消耗速率以 DeepSeek v4 Pro 官方原价为 1x，按后台长期统计换算；实际消耗以用量记录为准。',
+    '消耗速率按 token 算：这个模型常见的用法下，花的积分是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）；折扣是我们的价比这家官方标价。实际消耗以用量记录为准。',
   'model.pick.rate.fallback': '这份价目里没有 DeepSeek v4 Pro，这里按 {model} 算 1x。',
-  'model.pick.rate.stats': '按后台长期统计',
-  'model.pick.rate.list_price': '按官方原价折算',
-  // WP363（决策 954）：倍率旁边的折扣小标签（「1 折」）悬停说明
-  'model.pick.discount.tip': '现在按原价的 {pct}% 收；实际消耗以用量记录为准',
+  'model.pick.rate.stats': '按近 30 天真实用量的 token 构成',
+  'model.pick.rate.list_price': '按典型 token 构成（输入 3 : 输出 1）',
+  // WP363 / WP364（决策 958）：倍率旁边的折扣小标签（「8 折」）悬停说明：我们的价 ÷ 这家官方标价
+  'model.pick.discount.tip': '按 token 算，我们的价是这家官方标价的 {pct}%；实际消耗以用量记录为准',
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': '看图',
 }
@@ -71,13 +71,13 @@ export const SHELL_EN: Record<string, string> = {
   'model.pick.price.subscription': 'Subscription',
   'model.pick.price.own_key': 'Your own key',
   'model.pick.rate.note':
-    'Rates are relative to DeepSeek v4 Pro at list price (1x), from long-run usage stats; your usage log is what counts.',
+    "Rates are per token: what we charge for this model in typical use, relative to what we charge for DeepSeek v4 Pro (1x). Discounts compare our price with the maker's list price. Your usage log is what counts.",
   'model.pick.rate.fallback':
     'DeepSeek v4 Pro is not in this price list, so {model} counts as 1x here.',
-  'model.pick.rate.stats': 'From long-run usage stats',
-  'model.pick.rate.list_price': 'From list prices',
+  'model.pick.rate.stats': 'Token mix from the last 30 days of real usage',
+  'model.pick.rate.list_price': 'Typical token mix (input 3 : output 1)',
   'model.pick.discount.tip':
-    'Charged at {pct}% of list price for now; your usage log is what counts',
+    "Per token, our price is {pct}% of the maker's list price; your usage log is what counts",
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': 'Images',
 }
