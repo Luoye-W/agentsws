@@ -306,11 +306,10 @@ describe('WP380 比较胜率 / 描述准确度进监测与周报', () => {
     await prepare(service, w)
     const out = await service.weeklyGeo('manual')
     const report = await txn.approvals.get(out.approval_item_id ?? '')
-    expect((report?.payload as SeoWeeklyGeoPayload).slots?.ai_traffic?.lines).toEqual([
-      '上周 42 次访问',
-    ])
+    const slots = (report?.payload as SeoWeeklyGeoPayload | undefined)?.slots
+    expect(slots?.ai_traffic?.lines).toEqual(['上周 42 次访问'])
     expect(report?.summary).toContain('AI 来源流量：上周 42 次访问')
-    expect((report?.payload as SeoWeeklyGeoPayload).slots?.site_check).toBeUndefined()
+    expect(slots?.site_check).toBeUndefined()
   })
 })
 
