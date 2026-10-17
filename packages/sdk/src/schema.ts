@@ -26757,6 +26757,7 @@ export interface operations {
             | 'openai-codex'
             | 'anthropic'
             | 'deepseek_account'
+            | 'anthropic_compatible'
           label?: string
           base_url?: string
           model: string
@@ -27223,6 +27224,15 @@ export interface operations {
           api_key?: string
           /** @enum {string} */
           region?: 'cn' | 'global'
+          /** @enum {string} */
+          kind?:
+            | 'deepseek'
+            | 'openai_compatible'
+            | 'agentsws_cloud'
+            | 'openai-codex'
+            | 'anthropic'
+            | 'deepseek_account'
+            | 'anthropic_compatible'
         }
       }
     }

@@ -22767,7 +22767,8 @@
                       "agentsws_cloud",
                       "openai-codex",
                       "anthropic",
-                      "deepseek_account"
+                      "deepseek_account",
+                      "anthropic_compatible"
                     ]
                   },
                   "label": {
@@ -23491,6 +23492,18 @@
                   "region": {
                     "type": "string",
                     "enum": ["cn", "global"]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "deepseek",
+                      "openai_compatible",
+                      "agentsws_cloud",
+                      "openai-codex",
+                      "anthropic",
+                      "deepseek_account",
+                      "anthropic_compatible"
+                    ]
                   }
                 }
               }
