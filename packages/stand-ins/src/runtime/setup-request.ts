@@ -25,7 +25,8 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
       'connect 填要连的：连接页里的服务（如 imap_smtp 发信邮箱、ga4、gsc、meta_ads、shopify_admin），' +
       '或 model（AI 模型）、deepseek_account（DeepSeek 账号）、workshop_account（Agents 工坊账号）、' +
       'im:wecom（企业微信）、im:wechat（微信）、im:feishu（飞书）、im:dingtalk（钉钉）、extension（浏览器插件）。' +
-      'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）等。' +
+      'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）、' +
+      'schedule.weekly_reports（自带的周复盘 / 经营一页纸 / SEO 周报几点出：key 是 review_week / weekly_review / seo_weekly，值写「周五 17:00」）等。' +
       '两个给一个。要设的：卡上是「我打算这样设」的方案——工坊出卡前会自己先查一遍（档案、已连的账号、联网），' +
       '你在 suggestions 里给的值（每个带一句 why）会压过它查到的，用户点「就这样」就存。' +
       '已经设好的也能改：setting + suggestions 给新值，出一张「我打算改成这样」的卡（现值 → 新值），用户确认才生效。' +

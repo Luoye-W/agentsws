@@ -745,6 +745,7 @@ import {
   searchBrowserChannelFromEnv,
   searchLocaleLine,
 } from './web-browser/index.js'
+import { weeklyReportsSetupTarget } from './weekly-report-settings.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -3437,6 +3438,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    // WP388：系统自带的三份周报几点出（跟 AI 说「周复盘改到周五 17:00」→ 改设置卡）
+    assembly.registerTarget(
+      weeklyReportsSetupTarget({ scheduler: () => schedule.scheduler, workspace_id: ws }),
+    )
     setupCards.set(ws, assembly)
     return assembly
   }
