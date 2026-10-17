@@ -1084,3 +1084,8 @@
 | 1036 | （编号说明）WP375 = 右侧面板照 Claude 修整（决策 1035）；WP376 = Anthropic 官方 key 改走原生接口（决策 1031） | 记录 |
 | 1037 | （Luoye 10-17）思考档命名「快 / 标准 / 深度」（不叫「深想」） | **已定**，WP373 |
 | 1038 | （Luoye 10-17 + Fable 实测）DeepSeek 新 Search / Fetch API：两者是独立 provider 可分开选，但 Fetch 抓 Reddit / LinkedIn / YouTube / X / Amazon / Trustpilot / NYT / Wikipedia / Google / 知乎全部失败，Search 不出 reddit / linkedin → 搜索与抓网页都继续用我们自己的（证据 docs/assets/web-search/deepseek-tools-api-2026-10-17.log） | **已定** |
+| 1041 | （WP376）「Anthropic / Claude」卡 API key 老配置怎么迁：启动时自动迁，只换种类与地址（id / key / 模型 / 勾的模型 / 默认不动），落盘记原样；`AGENTSWS_ANTHROPIC_NATIVE=off` 原样改回 | 建议：照已做的 |
+| 1042 | （WP376，1027 的范围）官方目录认不出的 OpenAI 兼容口（中转站、自建、Ollama、百炼按量、Google 兼容层）要不要也改走官方 pi-ai | 建议：不改——官方本来不给它们档，换过去看不出区别，反而丢 WP242 / 243 的断线修补、陌生地址被官方按 OpenAI 本家习惯猜字段 |
+| 1043 | （WP376）「Anthropic 兼容（自定义）」卡默认地址留空（两张卡按地址认，不能撞），表单里必填 | 建议：照已做的 |
+| 1044 | （WP376）OpenAI 兼容口的地址怎么和官方目录比：逐字比（大小写、结尾 `/` 不算），不做模糊匹配——百炼按量、智谱通用这两个预设地址官方目录里没有，不出档 | 建议：照官方 |
+| 1045 | （WP376）官方目录写着好几档、传法却只有「想 / 不想」的型号（如 Moonshot kimi-k2.6）：照官方出三档，选哪档都是「想」 | 建议：照官方先这样，不自己改成开关 |
