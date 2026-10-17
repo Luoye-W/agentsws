@@ -871,6 +871,9 @@ export const BUNDLED_ROLES = [
   'dtc.support',
   'dtc.live-chat',
   'amz.support',
+  // WP395（docs/106 §13）：Amazon 运营岗位的亚马逊店铺运营。不在这张表里 = 类别目录里
+  // 「Amazon 运营」只剩一条默认不勾的 Amazon 客服，岗位也种不出来
+  'amz.store',
   // WP62（51 §2.1）：网站运营岗位的第一条职责——店铺管理（旧 `dtc.ops`）
   'dtc.store',
   // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约

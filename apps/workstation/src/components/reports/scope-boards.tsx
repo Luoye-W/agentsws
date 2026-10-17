@@ -13,6 +13,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { useLocation } from 'react-router-dom'
 import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
 import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
+import { AMAZON_STORE_ROLE, AmazonOpsBoard } from '@/components/amazon/amazon-ops-board'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { DataBoard } from '@/components/position/data-board'
@@ -116,6 +117,8 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
     setPrefsState((p) => ({ ...p, view: 'list', filters: filter.filters }))
   }, [filter])
 
+  // WP395：岗位里有亚马逊店铺运营 → Amazon 那四块（每日巡检 / 竞品动向 / Listing 体检 / 词库）
+  const amazon = duties.find((d) => d.role_id === AMAZON_STORE_ROLE)
   const pending = view?.pending_cards ?? 0
   const fresh =
     view !== undefined && work.data !== undefined && work.data.items.length === 0 && pending === 0
@@ -139,6 +142,7 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
           void client.invalidateQueries({ queryKey: ['position-instance', id] })
         }}
       />
+      {amazon === undefined ? null : <AmazonOpsBoard assignment={amazon.assignment_id} />}
       <DataBoard
         duties={boardDuties}
         expanded={charts}
@@ -166,7 +170,8 @@ export function dutyHasBoards(role_id: string): boolean {
     role_id === 'b2b.outbound' ||
     role_id === 'b2b.sales' ||
     adCreativePlatformOf(role_id) !== undefined ||
-    role_id === 'dtc.content'
+    role_id === 'dtc.content' ||
+    role_id === AMAZON_STORE_ROLE
   )
 }
 
@@ -198,6 +203,7 @@ export function DutyBoards({
           <AdChangesPanel assignment={assignment} />
         </>
       )}
+      {role_id === AMAZON_STORE_ROLE ? <AmazonOpsBoard assignment={assignment} /> : null}
       {role_id === 'dtc.content' ? (
         <>
           <GoogleSourcePicker assignment={assignment} source="gsc" />

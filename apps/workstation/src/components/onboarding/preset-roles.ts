@@ -49,6 +49,8 @@ const PLATFORM_LABEL: Record<string, string> = {
 const WEB_OPS = 'web-ops'
 const SITE_CARE = ['dtc.support', 'dtc.live-chat']
 const AMAZON_CARE = 'amz.support'
+/** WP395（docs/106 §13）：Amazon 运营岗位的主职责（只在分析到 Amazon 时推，docs/104 C2）。 */
+const AMAZON_STORE = 'amz.store'
 /** WP244：空店先要把站搭起来——建站里的整站搭建与网页模板（`apps/server/src/org.ts` 的 `site`）。 */
 const SITE_BUILD = ['site.shopify-build', 'site.shopify-theme']
 
@@ -85,7 +87,10 @@ export function recommendFromIntake({ run, positions }: RecommendInput): DutyRec
       if (p.id === WEB_OPS) for (const r of p.roles) if (r.planned !== true) push(r.id, reason)
     for (const id of SITE_CARE) push(id, '官网分析：网站上的客户要有人答')
   }
-  if (amazon) push(AMAZON_CARE, '分析到你在 Amazon 上卖')
+  if (amazon) {
+    push(AMAZON_STORE, '分析到你在 Amazon 上卖')
+    push(AMAZON_CARE, '分析到你在 Amazon 上卖')
+  }
   for (const link of run.profile.social_links?.value ?? []) {
     const id = SOCIAL_ROLE[link.platform]
     const label = PLATFORM_LABEL[link.platform]

@@ -6,6 +6,7 @@
  */
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
+import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
@@ -8543,6 +8544,8 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
     ...PANEL_ZH,
+    // WP395：Amazon 运营岗位面板四块
+    ...AMAZON_OPS_ZH,
   },
   en: {
     ...en,
@@ -8579,6 +8582,7 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
     ...PANEL_EN,
+    ...AMAZON_OPS_EN,
   },
 }
 

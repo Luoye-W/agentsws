@@ -1,0 +1,52 @@
+# WP395（docs/106 §13 / docs/104 C2）：**卖 Amazon 的品牌种出 Amazon 运营岗位，没数据照实说**。
+#
+# 1. 首次设置第 ③ 步：李默说「我们在 Amazon 美国站卖电动自行车，买家消息也是我回」，勾了亚马逊店铺运营与
+#    Amazon 客服 → 划分建议（`proposePositions`，与服务进程 / 工作台同一份）给出一个「Amazon 运营」，
+#    两条都在里面——只做 Amazon、没有网站客服，Amazon 客服跟着走（docs/106 A3），不单独成一个只有它的「客服」；
+# 2. 岗位里问「我该补货了吗」「账户健康怎么样」：落到亚马逊店铺运营，当场回答照实说「连上 Amazon 店铺后才能算」
+#    ——模拟世界里没有接 Amazon 店铺，不拿独立站的商品数凑一张表（docs/36 §3：不出 0）。
+id: amazon/amazon-ops-position
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-18T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.plan:
+      who: p_li
+      text: 我们在 Amazon 美国站卖电动自行车，买家消息也是我回
+      roles: [amz.store, amz.support]
+  - at: '+5m'
+    position.open:
+      who: p_li
+      position: amazon-ops
+      text: 我该补货了吗，还能撑几天
+      judge: quick
+  - at: '+10m'
+    position.open:
+      who: p_li
+      position: amazon-ops
+      text: 我的 Amazon 账户健康怎么样，有没有要处理的通知
+      judge: quick
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  positions_planned:
+    amazon-ops: [amz.store, amz.support]
+  position_routed_to: [amz.store]
+  position_entries: [quick, quick]
+  position_answer_no_data: [amz.store]
+  event_types:
+    - simulation.position_planned
+    - simulation.position_routed
+    - simulation.position_entry
+    - simulation.position_answered
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  只在 Amazon 上卖的品牌，首次设置是不是划出了一个装着亚马逊店铺运营与 Amazon 客服的「Amazon 运营」？
+  问补货和账户健康时，是不是照实说了要连上 Amazon 店铺才有，而没有拿独立站的数凑答案？

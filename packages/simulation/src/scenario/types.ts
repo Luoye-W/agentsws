@@ -174,6 +174,17 @@ export interface ScenarioPositionStaff {
   position: string
 }
 
+/**
+ * WP395（docs/104 C2 / docs/106 A3）：首次设置第 ③ 步——他的原话 + 勾了哪几条职责 → 划分建议
+ * （`proposePositions`，与服务进程 / 工作台同一份）→ 照建议配岗。原话没提 Amazon 时 Amazon 专属的
+ * 职责拿掉（`mentionsAmazon`，与推荐同一道）。
+ */
+export interface ScenarioPositionPlan {
+  who: string
+  text: string
+  roles: string[]
+}
+
 /** WP199：升级链留痕断言（`expected.escalation_trail`）。 */
 export interface ScenarioEscalationTrail {
   /** 卡上 `routing.escalation.trail` 按顺序的级别。 */
@@ -1097,6 +1108,8 @@ export type ScenarioEvent =
   /* ── WP69（54）：岗位是任务主入口 ── */
   /** WP69：给一个人配上一个岗位（它的默认职责全挂上）。 */
   | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
+  /** WP395：首次设置按原话与勾选划分岗位、照建议配岗。 */
+  | { at: string; type: 'position.plan'; plan: ScenarioPositionPlan }
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
@@ -1520,6 +1533,16 @@ export interface ScenarioExpected {
   assistant_fanout_notes?: string[]
   /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
   position_answer_components?: string[]
+  /**
+   * WP395：首次设置划分出来的岗位，按先后：模板 id（自建的写 `custom`）→ 职责。
+   * `{ amazon-ops: [amz.store, amz.support] }`；写 `{}` = 一个岗位都没划出来。
+   */
+  positions_planned?: Record<string, string[]>
+  /**
+   * WP395（docs/36 §3）：这几条职责的当场回答都照实说「没有数据」——不出组件、不出数
+   * （Amazon 店铺没连时问补货 / 账户健康）。每条至少答过一次。
+   */
+  position_answer_no_data?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**
