@@ -105,6 +105,13 @@ export interface OpenAiCompatibleOptions {
    * `UND_ERR_SOCKET other side closed`）。流式时字一直在来，连接不空闲。别家不开（照旧）。
    */
   streamAlways?: boolean
+  /**
+   * WP377（决策 1051）：把 {@link CompletionHints.reasoning_effort} 原样写进请求体的 `reasoning_effort`（我们自己的 id，
+   * 如 `off` / `high` / `max`）。只有「Agents 工坊官方接口」那一条开：云端认这套 id、按上游那家的写法转出去，
+   * 上游不支持的云端自己丢掉。别家不开——各家写法不一样（WP373 报告 1027），发了不认识的值有的口会 400。
+   * 调用方硬要「别想」（`thinking: 'off'`）时不发它。
+   */
+  sendReasoningEffort?: boolean
 }
 
 interface WireToolCall {
@@ -291,7 +298,11 @@ export function thinkingOffFields(model: string): Record<string, unknown> {
 const usesMaxCompletionTokens = (model: string): boolean => /^(o\d|gpt-5)/i.test(model)
 
 /** WP243：{@link CompletionHints} → 请求体里的那几格。 */
-function hintFields(model: string, hints: CompletionHints): Record<string, unknown> {
+function hintFields(
+  model: string,
+  hints: CompletionHints,
+  sendReasoningEffort = false,
+): Record<string, unknown> {
   return {
     ...(hints.max_output_tokens === undefined
       ? {}
@@ -299,6 +310,9 @@ function hintFields(model: string, hints: CompletionHints): Record<string, unkno
         ? { max_completion_tokens: hints.max_output_tokens }
         : { max_tokens: hints.max_output_tokens }),
     ...(hints.thinking === 'off' ? thinkingOffFields(model) : {}),
+    ...(sendReasoningEffort && hints.thinking !== 'off' && hints.reasoning_effort !== undefined
+      ? { reasoning_effort: hints.reasoning_effort }
+      : {}),
   }
 }
 
@@ -605,7 +619,7 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
         ...(req.seed === undefined ? {} : { seed: req.seed }),
         // WP243：输出上限 / 关思考
-        ...hintFields(options.model, req),
+        ...hintFields(options.model, req, options.sendReasoningEffort === true),
       }
       // WP194：官方接口那一条带上「谁 / 哪个岗位」
       const extra = options.requestHeaders?.(req.meta)
