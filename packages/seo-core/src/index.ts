@@ -20,6 +20,8 @@
  *
  * GEO 的思路参考过 GEOFlow（AGPL-3.0）的公开 README；**代码一行没搬**，全部自己写。
  */
+// WP381：AI 来源流量（实测，Shopify 自己记的来源；规则认、不经模型）
+export * from './ai-traffic.js'
 export * from './attribution.js'
 export * from './claim-rules.js'
 export * from './daily.js'
