@@ -350,3 +350,32 @@ export interface CompetitorWatchStore {
   kv<T>(key: string): T | undefined
   setKv(key: string, value: unknown): void
 }
+
+/* ── 工作台读的视图（连接卡 / 计划卡 / 报表卡）──────────────────────── */
+
+/** 各监控源状态汇总成一句（连接卡：「5 家 · 1 家没读到」）。 */
+export interface CompetitorWatchSummary {
+  /** 几条源（不含暂停的）。 */
+  sources: number
+  /** 盯了几家（竞品 + 自家，按 `competitor_id` 数）。 */
+  competitors: number
+  ok: number
+  failed: number
+  /** 上一次只读到一部分的。 */
+  partial: number
+  unchecked: number
+  /** 没读到的那几家（人话名，照实说）。 */
+  failed_labels: string[]
+}
+
+/** `GET /v1/competitor-watch` 回的那一份。 */
+export interface CompetitorWatchView {
+  settings: CompetitorWatchSettings
+  sources: CompetitorWatchSource[]
+  summary: CompetitorWatchSummary
+  /** 下一次读的时刻（计划卡）。 */
+  next_read_at?: Iso8601
+  last_run?: CompetitorWatchRun
+  /** 有源、但这类进料口这台机器还没接上（WP393 / WP394 还没装时照实说）。 */
+  missing_adapters: CompetitorSourceKind[]
+}
