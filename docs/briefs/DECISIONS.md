@@ -1097,3 +1097,13 @@
 | 1044 | （WP376）OpenAI 兼容口的地址怎么和官方目录比：逐字比（大小写、结尾 `/` 不算），不做模糊匹配——百炼按量、智谱通用这两个预设地址官方目录里没有，不出档 | 建议：照官方。**Luoye 10-17 按建议** |
 | 1045 | （WP376）官方目录写着好几档、官方传法却只分「想 / 不想」的型号（如 Moonshot kimi-k2.6、百炼 Token Plan 的 Qwen / Kimi、Together、NVIDIA、智谱 glm-4.7）：不出三档，收成 WP373 的开 / 关开关；关不掉的不出。判定照官方 pi-ai `openai-completions` 的 `buildParams`：`compat.supportsReasoningEffort` 为假、且写法不是 openrouter / string-thinking / ant-ling、没有思考预算格、模板参数不按档取值（报告 §2a） | **Luoye 10-17 按建议**（采用 Fable 建议：显示成开关）；WP376 已做 |
 | 1040 | （Luoye 10-17）WP375 的 1046–1050 全部同意；WP378 的 1056–1060 同意（界面档名保持「快 / 标准 / 深度」与「思考」开关；1058 Fable 实测 DeepSeek 不带参数默认就思考，1060 实测已跑） | **已定** |
+| 1051 | （WP377）工坊积分出思考小钮：只出云端价目写了档位的模型，眼下 DeepSeek v4 Pro、Flash | **Luoye 10-17 按建议**（见 1039） |
+| 1052 | （WP377）智谱 / Kimi / OpenAI / 通义官方能调、表已写好但关着 | **Luoye 10-17 按建议**：New API 目前只接了 DeepSeek 一个渠道，别家思考档保持关着；顺带价目给没有渠道的模型标 `available: false`，工坊积分 AI 钮不再列它们（选了必失败） |
+| 1053 | （WP377）不支持思考档的模型带了 `reasoning_effort`：云端去掉、按默认跑 | **Luoye 10-17 按建议** |
+| 1054 | （WP377）v4 Pro 的三档 | **Luoye 10-17 按 Fable 建议**：快 = 关掉思考（thinking.type=disabled）、标准 = high、深度 = max；Flash 快 = low / 标准 = high / 深度 = max。依据 Fable 10-17 钥匙串 key 直连实测：v4 Pro / Flash 的 max / high / low / disabled 全 200，reasoning_tokens 含在 completion_tokens 里，v4 Pro 收 low 但思考量与 high 差不多，disabled 只出 8 个 token。云端价目写明三档映射（`levels`） |
+| 1055 | （WP377）DeepSeek 自带 key 的 Chat 口也出思考小钮 | **Luoye 10-17 按建议**：另开 WP378 |
+| 1056 | （WP378）自带 DeepSeek API key 走 Chat 口那条也出思考小钮：三档与工坊积分一致（v4 Pro 快 = 关掉思考 / 标准 = high / 深度 = max；Flash 快 = low / 标准 = high / 深度 = max）；只认官方地址 `api.deepseek.com` + 表里四个模型名，代理地址、`deepseek-chat` / `deepseek-reasoner` 不出 | 建议：照已做的 |
+| 1057 | （WP378）账号登录 / Messages 口那条的 v4 Pro「快」从 low 改成关掉思考，三条来源口径一致（Flash 不变）；以前在事项里存过 Pro「快」（low）的，回到「标准」 | 建议：照已做的（依据 1039 / 1054 的 Fable 实测：Pro 的 low 与 high 想得差不多） |
+| 1058 | （WP378）没选档时 Chat 口一格不发，靠 DeepSeek 官方默认 = high = 界面亮的「标准」（与 Messages 口、WP377 工坊积分同口径；老用户请求字节不变） | 建议：照这样；Fable 上线前实测一次「不带这两格时回包有没有 reasoning_tokens」，若默认不想，再改成没选也发「标准」 |
+| 1059 | （WP378）只认表里写了的模型名，DeepSeek 上新模型要在 `model-gateway` 的 `deepseek-chat-thinking.ts` 加一行，不按名字猜 | 建议：照这样（和 WP373「没声明不出」一个规矩） |
+| 1060 | （WP378）上线前实测（花几分钱，交 Fable 用钥匙串 key）：官方 Chat 口 v4 Pro 发 `thinking: disabled`、`enabled + high`、`enabled + max`，Flash 发 `enabled + low`，各一次，看都 200、`reasoning_tokens` 随档位递增 | 建议：WP377 §1.3 第 1 条已含同样的请求，跑那一遍就够，不另跑 |

@@ -67,6 +67,7 @@ import {
   DEFAULT_CLOUD_BASE_URL,
   NO_VISION_REASON,
   ORG_BALANCE_EXHAUSTED_MESSAGE,
+  pricingReasoningOf,
   VISION_MODEL_EXAMPLES,
 } from '@agentsws/contracts'
 import { retiredSubscriptionModel } from '@agentsws/dsh-adapter/subscription-facts'
@@ -119,8 +120,9 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
+import { deepseekThinkingOf } from './deepseek-thinking.js'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
-import { thinkingOptionsOf } from './model-thinking.js'
+import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
@@ -1660,8 +1662,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ? {}
         : { transcriptionModel: config.transcription_model }),
       // WP151：DeepSeek 官方地址的 API key——余额不足说"去开放平台充值"（不是登录账号的充值页）
+      // WP378（决策 1055）：同一条官方 key 走 Chat 口——选了思考档照官方写法发 thinking + reasoning_effort
       ...(isOfficialDeepSeek(config)
-        ? { deepseekBalance: { onBalance: apiBalanceOf(config.id) } }
+        ? { deepseekBalance: { onBalance: apiBalanceOf(config.id) }, deepseekThinking: true }
         : {}),
       ...(config.kind === 'agentsws_cloud'
         ? {
@@ -1670,6 +1673,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
             cloudErrors: true,
             // WP243：一整段的调用也内部走流式——连接上一直有字节，代理不当它空闲掐掉
             streamAlways: true,
+            // WP377：选了思考档就在请求体里原样发这一档的 id，云端按上游那家的写法转（决策 1032）
+            sendReasoningEffort: true,
           }
         : {}),
     })
@@ -2029,11 +2034,28 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   /**
    * WP370：AI 钮每行多的那几样——给人看的名字、上下文窗口、自带联网、思考程度。只从**官方目录**取
    * （订阅：pi-ai 目录；DeepSeek：账号目录 + 官方适配器的四档），别的来源一样都不编。
+   * WP377（决策 1051）：工坊积分的思考档照**云端价目**那一行的 `reasoning`（云端只给上游官方声明了、链路也带得过去的模型）；
+   * 没写就不出。
    */
   const choiceFacts = (
     c: ModelProviderConfig,
     model: string,
   ): Pick<ModelChatChoice, 'name' | 'context_window' | 'native_search' | 'thinking'> => {
+    if (c.kind === 'agentsws_cloud') {
+      const entries =
+        options.pricing?.current?.()?.pricing?.entries.find((e) => e.capability === 'ai.chat')
+          ?.models ?? []
+      const row = entries.find((e) => e.model === model)
+      const reasoning = row === undefined ? undefined : pricingReasoningOf(row)
+      // 决策 1054：云端写明了三档各落哪一档就照它（v4 Pro 的「快」= 关掉思考），没写按老规矩挑
+      const thinking =
+        reasoning === undefined
+          ? undefined
+          : reasoning.levels === undefined
+            ? thinkingOptionsOf(reasoning.efforts, reasoning.default)
+            : thinkingOptionsFromLevels(reasoning.levels, reasoning.default)
+      return thinking === undefined ? {} : { thinking }
+    }
     if (c.kind === 'openai-codex') {
       const entry = options.subscription?.catalog('openai-codex').find((m) => m.id === model)
       const thinking = entry?.efforts === undefined ? undefined : thinkingOptionsOf(entry.efforts)
@@ -2066,15 +2088,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
     const messages =
       c.kind === 'deepseek_account' || (c.kind === 'deepseek' && deepseekUsesMessages(c, env))
-    if (!messages) return {}
+    if (!messages) {
+      // WP378（决策 1055）：DeepSeek 官方 API key 走 Chat 口——表里认得的模型出小钮（三档与工坊积分一致）；
+      // 代理 / 中转地址、表里没有的模型照旧不出
+      const thinking = isOfficialDeepSeek(c) ? deepseekThinkingOf(model) : undefined
+      return thinking === undefined ? {} : { thinking }
+    }
     const entry =
       c.kind === 'deepseek_account' && accountModels !== undefined
         ? accountModels.resolve(accountModels.current()).offered.find((m) => m.id === model)
         : DEEPSEEK_ACCOUNT_MODELS.find((m) => m.id === model)
-    const thinking = thinkingOptionsOf(
-      DEEPSEEK_REASONING_EFFORTS,
-      DEEPSEEK_DEFAULT_REASONING_EFFORT,
-    )
+    // WP378：表里认得的照表（v4 Pro 快 = 关掉思考，与 Chat 口、工坊积分口径一致）；没有的照官方四档
+    const thinking =
+      deepseekThinkingOf(model) ??
+      thinkingOptionsOf(DEEPSEEK_REASONING_EFFORTS, DEEPSEEK_DEFAULT_REASONING_EFFORT)
     const context =
       entry !== undefined && 'contextWindow' in entry ? entry.contextWindow : undefined
     return {
