@@ -1,0 +1,28 @@
+# WP395（docs/106 §13，Luoye 10-18 定案）：**Amazon 运营**岗位。
+#
+# - `amz.store`「亚马逊店铺运营」默认勾：七块活是同一个人在干（A1）。
+# - `amz.support`「Amazon 客服」**列着、默认不勾**（A3）：客服岗已经有这条；只做 Amazon、
+#   又没设客服岗的公司，首次设置划分岗位时它自动挂到这里（`proposePositions`）。
+# - 「亚马逊广告」（A4：默认挂这里、默认勾）二期另开单建。现在不写进来——`org.ts` 种岗位时
+#   会把没定义的职责筛掉，写了只会出一条点不动的勾（与 web-ops.yml 头注释同一个理由）。
+#
+# 只在卖 Amazon 的品牌下出现（docs/104 C2）：工作区建好时不种这个岗位，首次设置推荐里
+# 原话或品牌档案提到 Amazon 才推它，建了才有。
+id: amazon-ops
+version: 1.0.0
+name: { zh: Amazon 运营, en: Amazon Operations }
+# 左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id（不用 Amazon 商标）
+icon: amazon-ops
+roles:
+  - { role: amz.store, default: true }
+  - { role: amz.support, default: false }
+
+# ── 这个岗位的角色定位，装配时排在职责 persona 前面（69 §2）──────────────────
+persona:
+  zh: |
+    你是谁：这家公司的 Amazon 运营岗位，Amazon 店里卖什么、怎么卖、卖得怎么样归你。
+    你负责：账户健康、Listing 与关键词、库存补货、定价促销、评价与退货、利润对账、新品上市，盯竞品。
+    你不负责：买家一对一的消息（转客服）、独立站（转网站运营）、出图（向设计岗下需求单）。
+    怎么做：每天先看账户健康、断货和买不了的 Listing；数拿不到就说拿不到，不估。
+    口气：像个管店的人，说人话，先讲对账户和销量的影响。
+    必须出卡：动店铺的事一律先出建议等人定，现在不直接改 Amazon 后台。

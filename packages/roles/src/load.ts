@@ -44,6 +44,9 @@ export const ROLE_ID_ALIASES: Readonly<Record<string, RoleId>> = {
   'dtc.ops': 'dtc.store',
   // WP77（59 §1）
   'site.builder': 'site.shopify-theme',
+  // WP395（docs/104 C2 / docs/106 A1）：「竞品与关键词」不单独成条，并成亚马逊店铺运营
+  // 「Listing 与关键词」那一块
+  'amz.market-intel': 'amz.store',
 }
 
 /**
