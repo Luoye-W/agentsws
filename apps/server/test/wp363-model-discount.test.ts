@@ -1,10 +1,10 @@
 /**
- * WP363（决策 954）：价目条目加一格可选 `discount`（0.1 = 一折）。
+ * WP363（决策 954）：价目条目加一格可选 `discount`。WP364（决策 958）改了含义：折扣 = 我们的价 ÷ 这家官方标价。
  *
  * - 只认 `0 < d < 1`（`pricingDiscountOf`），别的一律当没有；
- * - AI 钮那一格：倍率照旧（原价口径），旁边多带 `discount`；限免不带；没有就不给这一格；
- * - 本机估价（`chatCredits`）按折后估，与云上结算一个判法；
- * - 模型面：云替身样例价目里 `kimi-k3` 带的示意一折传到 AI 钮的清单里。
+ * - AI 钮那一格：云上给了倍率就连折扣一起照它；云上没给倍率的走本机兜底（见 wp364 那份测试）；
+ * - 本机估价（`chatCredits`）**不再乘折扣**：三格单价本身就是实收价；
+ * - 模型面：云替身样例价目里 `kimi-k3` 带的示意 8 折传到 AI 钮的清单里。
  */
 
 import { randomBytes } from 'node:crypto'
@@ -42,7 +42,7 @@ describe('折扣怎么认', () => {
       expect(pricingDiscountOf({ discount: bad })).toBeUndefined()
   })
 
-  it('AI 钮那一格：倍率照旧（原价口径）、旁边带折扣；按原价折算的也带；限免不带；没有就不给', () => {
+  it('AI 钮那一格：云上给了倍率就连折扣一起照它；没给倍率又没有本机口径时不编折扣；限免不带', () => {
     const rates = cloudRates(
       [
         { model: 'deepseek-v4-pro', in: 0.04, out: 0.08 },
@@ -66,19 +66,15 @@ describe('折扣怎么认', () => {
       source: 'stats',
       discount: 0.1,
     })
-    expect(rates.price('glm-5')).toEqual({
-      kind: 'rate',
-      rate: 2,
-      source: 'list_price',
-      discount: 0.5,
-    })
+    // 没给本机口径（ctx）时只剩 WP362 老退路：倍率按积分价相对，折扣不编
+    expect(rates.price('glm-5')).toEqual({ kind: 'rate', rate: 2, source: 'list_price' })
     expect(rates.price('deepseek-v4-flash-0731')).toEqual({ kind: 'free' })
     // 1 不是折扣：不给这一格
     expect(rates.price('qwen-max')).toEqual({ kind: 'rate', rate: 1, source: 'list_price' })
     expect(rates.price('deepseek-v4-pro')).toEqual({ kind: 'rate', rate: 1, source: 'list_price' })
   })
 
-  it('本机估价按折后估（与云上结算同一个判法）；没有折扣照原价', () => {
+  it('本机估价不乘折扣（WP364：三格单价就是实收价，与云上结算同一个口径）', () => {
     const pricing = (discount?: number): { entries: PricingEntry[] } => ({
       entries: [
         {
@@ -100,13 +96,13 @@ describe('折扣怎么认', () => {
     })
     const usage = { input_tokens: 10_000, output_tokens: 1_000 }
     expect(chatCredits(pricing(), 'kimi-k3', usage)).toBe(0.9)
-    expect(chatCredits(pricing(0.1), 'kimi-k3', usage)).toBe(0.09)
+    expect(chatCredits(pricing(0.1), 'kimi-k3', usage)).toBe(0.9)
     expect(chatCredits(pricing(1.5), 'kimi-k3', usage)).toBe(0.9)
   })
 })
 
 describe('模型面：折扣传到 AI 钮的清单', () => {
-  it('样例价目里 kimi-k3 的示意一折带到工坊积分那一组；别的没有', () => {
+  it('样例价目里 kimi-k3 的示意 8 折带到工坊积分那一组；别的没有（按 3 倍卖的不到「折」）', () => {
     const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp363-'))
     dirs.push(dir)
     writeFileSync(
@@ -156,7 +152,7 @@ describe('模型面：折扣传到 AI 钮的清单', () => {
       kind: 'rate',
       rate: 1.3,
       source: 'stats',
-      discount: 0.1,
+      discount: 0.8,
     })
     const discounted = choices.filter((c) => c.price?.kind === 'rate' && 'discount' in c.price)
     expect(discounted.map((c) => c.id)).toEqual(['agentsws/kimi-k3'])

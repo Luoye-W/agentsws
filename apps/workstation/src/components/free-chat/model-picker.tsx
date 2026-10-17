@@ -128,6 +128,7 @@ export function formatRate(rate: number): string {
 
 /**
  * WP363（决策 954）：折扣那一格。中文写「1 折」「8.5 折」（折数 = 折扣 × 10，保留一位小数）；
+ * WP364（决策 958）：折扣 = 我们的售价 ÷ 这家官方标价（按 token 构成），只是说明、不另外少扣；
  * 英文写「90% off」。只认 `0 < d < 1`（服务端已经按 `pricingDiscountOf` 筛过，这里再兜一次）。
  */
 export function discountLabel(
