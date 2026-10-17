@@ -213,6 +213,7 @@ export { IMAGE_TIMEOUT_MS, openaiImageProvider } from './providers/openai-images
 export type { OfficialRouteFacts, OpenAiPiApi, PiRouteOptions } from './providers/pi-route.js'
 export {
   isOfficialRouteUrl,
+  levelsSentApart,
   loadOfficialRoutes,
   OPENAI_PI_APIS,
   officialRouteFacts,

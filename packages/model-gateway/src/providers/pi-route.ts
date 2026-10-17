@@ -91,6 +91,83 @@ export function routeKey(baseUrl: string): string | undefined {
 }
 
 /**
+ * 决策 1045（Luoye 10-17）：这个模型选不同的档，官方 pi-ai 发出去的请求**真的不一样**吗？
+ *
+ * 照官方 `api/openai-completions.js` 的 `buildParams`（pi-ai 1.1.0）逐条判，`compat` 与官方 `getCompat` 同一个合法：
+ * 目录条目上的 `compat` 写了就用它，没写按地址认（官方 `detectCompat` 里与档位有关的那两格）：
+ *
+ * - `openai-responses`：一律发 `reasoning.effort`（照目录的 `thinkingLevelMap` 换成那家的词）→ 档有用；
+ * - `openai-completions`：
+ *   - 有思考预算那一格（`compat.thinkingTokenBudgetField` / `supportsThinkingTokenBudget`）→ 预算按档算 → 有用；
+ *   - `thinkingFormat` 是 `openrouter` / `string-thinking` / `ant-ling`：档原样（照映射）发出去 → 有用；
+ *   - `chat-template` / `baseten`：模板参数里有按档取值的那种（不是 `thinking.enabled` 开关）→ 有用；
+ *     `baseten` 另外看下一条；
+ *   - 其余写法（`deepseek` / `zai` / `qwen` / `together` / `openai` / `qwen-chat-template`）：只有
+ *     `compat.supportsReasoningEffort` 为真时才把档发出去（`reasoning_effort`）；为假时只发「开 / 关」。
+ *
+ * 为假的典型：Moonshot（`api.moonshot.ai` / `.cn`，kimi-k2.6 等，目录写 `thinkingFormat: deepseek`、
+ * `supportsReasoningEffort: false`）、智谱（`zai` 那两家）、百炼 Token Plan 的 Qwen（`qwen` 写法，
+ * `supportsReasoningEffort: false`）、Together、NVIDIA、Cloudflare AI Gateway。
+ */
+export function levelsSentApart(model: {
+  api: string
+  baseUrl: string
+  compat?: Record<string, unknown>
+}): boolean {
+  if (model.api !== 'openai-completions') return true
+  const c = model.compat ?? {}
+  if (c.thinkingTokenBudgetField !== undefined || c.supportsThinkingTokenBudget === true)
+    return true
+  const url = model.baseUrl.toLowerCase()
+  const has = (...xs: string[]): boolean => xs.some((x) => url.includes(x))
+  // 官方 detectCompat：按地址认出来的写法与「发不发档」（只抄与档位有关的这两格）
+  const zai = has('api.z.ai', 'open.bigmodel.cn')
+  const together = has('api.together.ai', 'api.together.xyz')
+  const antLing = has('api.ant-ling.com')
+  const detectedFormat = has('deepseek.com')
+    ? 'deepseek'
+    : zai
+      ? 'zai'
+      : together
+        ? 'together'
+        : antLing
+          ? 'ant-ling'
+          : has('openrouter.ai')
+            ? 'openrouter'
+            : 'openai'
+  const detectedEffort = !(
+    has('api.x.ai', 'api.moonshot.', 'gateway.ai.cloudflare.com', 'integrate.api.nvidia.com') ||
+    zai ||
+    together ||
+    antLing
+  )
+  const format = typeof c.thinkingFormat === 'string' ? c.thinkingFormat : detectedFormat
+  const effort =
+    typeof c.supportsReasoningEffort === 'boolean' ? c.supportsReasoningEffort : detectedEffort
+  if (format === 'openrouter' || format === 'string-thinking' || format === 'ant-ling') return true
+  const byLevel = (values: unknown): boolean =>
+    Object.values((values ?? {}) as Record<string, unknown>).some(
+      (v) =>
+        typeof v === 'object' &&
+        v !== null &&
+        (v as { $var?: unknown }).$var !== 'thinking.enabled',
+    )
+  if (format === 'chat-template') return byLevel(c.chatTemplateKwargs)
+  if (format === 'baseten') return effort || byLevel(c.chatTemplateArgs)
+  return effort
+}
+
+/**
+ * 档发不出去的模型：能「不想」就收成开关（`off` + 标准那一档；WP373 把它画成开关），关不掉就没得选（不出）。
+ */
+function onOffOnly(levels: readonly ReasoningEffort[]): ReasoningEffort[] {
+  const on = (['medium', 'high', 'low', 'minimal', 'xhigh', 'max'] as const).find((e) =>
+    levels.includes(e),
+  )
+  return levels.includes('off') && on !== undefined ? ['off', on] : []
+}
+
+/**
  * 读一次官方目录（pi-ai 的生成目录，所有内置的那几家；只读、不联网、不碰凭据），按地址建索引。
  * 读过就记住（之后 {@link officialRouteFacts} 同步可用）。同一个地址上几家都有同一个模型名时取先读到的那家。
  */
@@ -112,9 +189,11 @@ export function loadOfficialRoutes(): Promise<RouteCatalog> {
         }
         if (models.has(raw.id)) continue
         // 照官方 `dsh-llm-pi-ai` 的 `reasoningInfo`：目录里不思考的模型不给档
-        const efforts = raw.reasoning
+        const declared = raw.reasoning
           ? (getSupportedThinkingLevels(raw as never) as string[]).filter(isReasoningEffort)
           : []
+        // 决策 1045：目录写了好几档、官方传法却只分「想 / 不想」的，收成开关（或者没得选）
+        const efforts = levelsSentApart(raw) ? declared : onOffOnly(declared)
         models.set(raw.id, {
           model: raw,
           facts: {
@@ -232,7 +311,9 @@ export function piRouteProvider(options: PiRouteOptions): ModelProvider {
       const model = {
         ...hit.model,
         id: options.model,
-        provider: options.provider,
+        // 来源 id 用官方那一家的（官方协议里有几处按家认：OpenAI 本家的缓存键、xAI 的思考密文…）；
+        // key 只走 `apiKey` 一格，不读进程环境变量
+        provider: hit.facts.vendor,
         baseUrl: options.baseUrl.trim().replace(/\/+$/u, ''),
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       }
@@ -240,7 +321,7 @@ export function piRouteProvider(options: PiRouteOptions): ModelProvider {
       const names = piToolNames(req.tools)
       const context = toPiContext(req.messages, req.tools, {
         api,
-        provider: options.provider,
+        provider: hit.facts.vendor,
         model: options.model,
       })
       const choice = req.tool_choice
