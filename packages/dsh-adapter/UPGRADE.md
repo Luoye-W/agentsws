@@ -2225,7 +2225,7 @@ Luoye 10-17 定 976：「rc.1 直接跟着官方更新（不等）」，取当�
 | `alpha` | 0.2.1-alpha.5 | 2026-10-16T12:31Z |
 | `next` | **0.2.1-rc.1** | 2026-10-17T03:17Z（GitHub tag `dsh-v0.2.1-rc.1` 05:22Z 补上了） |
 
-GitHub 上 08:16Z 又打了 `dsh-v0.2.1-rc.2`（新功能见 §8），但到本单收尾 npm 上还没有这一版，所以本单停在 rc.1。
+GitHub 上 08:16Z 又打了 `dsh-v0.2.1-rc.2`，npm 08:36Z 发（本单 rc.1 这一跳做完、收尾查版本时才看到），于是同一单接着跳到 rc.2，见下面「第二跳」。
 
 `dsh-v0.2.1-alpha.5..dsh-v0.2.1-rc.1` 只有 **4 条提交**：两条是发版合并，`release(vendor)` 把 cordis 一家改成正式号，`release(dsh)` 改 dsh 的号。
 `git diff dsh-v0.2.1-alpha.5 dsh-v0.2.1-rc.1` 一共 355 个文件、**每个文件只改了 `"version"` 那一行**（脚本按行比过：去掉版本号后增删行 0）。
@@ -2285,9 +2285,33 @@ tag 之间只有 `"version"` 行，含 `.default(` / `default:` 的变化行 **0
 
 ### 8. 留下的东西
 
-1. **rc.2 已在 GitHub 打 tag、npm 还没发**（本单收尾时）。它和 rc.1 隔 9 条提交，有一项实打实的新东西：`feat(web): add DeepSeek Search and Fetch APIs behind a settings switch`——
-   DeepSeek 新开的 `/v1/tools` 搜索 / 抓网页接口，放在设置开关后面、默认仍走 Messages 搜索（账号登录也能用、会把这轮用户那句话截 128 字当 `ori_question` 一起发）；另外 DeepSeek Flash 的显示名临时带「1017」小标。
-   我们的网页搜索从 WP353 起默认走内置浏览器，DeepSeek 自带搜索只是可选老路，所以跟 rc.2 时要看的是「这个新接口要不要接成一个可选搜索后端」（交 Luoye，见 WP373 报告）。
+1. rc.2 见下面「第二跳」。
 2. 安全公告：`pnpm audit` 里落在 dsh 树上的三条——`fflate`（中，经 sdk-app 的 Office 包，我们不挂；WP370 已记）、`fast-uri`（中，经 `dsh-app-boot` 的配置编辑器带的 ajv，只做 schema 校验，不出网）、
    `ip-address`（中，经 pi-ai → `@google/genai` → MCP SDK → `express-rate-limit`，那是起服务端时的限流，我们不起）——都碰不到我们，等官方升。WP370 记的 `compression` 这次 audit 里不再出现。
 3. pi-ai 仍是 1.1.0；`desktopPlatform` 上游洞（WP134）仍在。
+
+### 第二跳：0.2.1-rc.1 → 0.2.1-rc.2（同一单，2026-10-17）
+
+**版本口径**：npm `next` = 0.2.1-rc.2（08:36Z 发）；`dsh-v0.2.1-rc.1..dsh-v0.2.1-rc.2` 9 条提交，实打实的两项：
+`feat(web): add DeepSeek Search and Fetch APIs behind a settings switch`、`feat(web): display a temporary 1017 badge for DeepSeek Flash`（中间「名字后加 1017」又被 revert，账号模型目录净零改动）。
+仍要 cordis `~4.0.5` 等，**兄弟包不用再跟**。59 个直接依赖 `npm view <包>@0.2.1-rc.2` 全在。没有新的官方升级指南。
+
+**碰到我们的**（npm 包逐个比：59 个里 56 个除 `package.json` 外逐字相同，下面三个有改动）：
+
+| 包 | 变化 | 碰到我们吗 / 怎么处理 |
+|---|---|---|
+| `dsh-base`（bundle） | patch 多挂一行 `web-deepseek-api`（`dsh-web-deepseek-api`，读 `DEEPSEEK_API_KEY`），不带 `disabled`；默认选择不变（仍是 Messages 搜索 + 本机抓网页），要在官方网页端设置里开「Use the new Web Search API」才用它 | 我们两档运行时不用 `dsh-base`（`harness.ts` 最小挂载），**不受影响**。完整 profile 组合多这一行；它能出网（选中它时才发），照规矩**不锁、交 Luoye**（WP373 报告 1025） |
+| `dsh-web` | `WebRuntime` 的 `searchProvider` / `fetchProvider` 改成热更新配置（`z.string().volatile()`，每次搜索现读） | 我们 `web.ts` 照旧传字符串，cordis 按新 schema 包一层；`tsc` 0 错，`web-seam` / `keyless-search` / `native-search` 全过 |
+| `dsh-web-search-deepseek` | 走 Messages 的辅助搜索那一轮显式发 `thinking: { type: 'disabled' }`（生成的字本来就扔掉，省推理 token）；报错文案换了设置页路径 | 只在 DeepSeek 自带搜索那条可选老路上（WP353 起默认不挂）；省钱、不改结果。`web-seam` 全过 |
+
+新进两包：`dsh-web-deepseek-api`（MIT，只依赖 schemastery）、`dsh-client-ui-deepseek-model-label-1017`（MIT，官方网页端的模型名小标，`@deepseek-ai/dsh` 元包带进来）；都没有安装脚本。
+lockfile `packages:` 1945 → 1947（就这两条），第三方一个没变。`minimumReleaseAgeExclude` 299 条原位换号（同第一跳的临时并排做法）+ 这两条 = 301 条，与 lockfile 里 `@deepseek-ai/dsh*@0.2.1-rc.2` 301 个相等；lockfile 里 `0.2.1-rc.1` 0 处；`--frozen-lockfile` 过。
+
+**默认值扫描**：含 `.default(` 的变化行 4 行，全在新包 `dsh-web-deepseek-api` 的配置里（base 地址、结果条数、凭据引用、`sendOriginalQuestion` 默认开——选中它时会把这轮用户那句话截 128 字发给 DeepSeek）；它默认不被选中、我们运行时也不挂。
+
+**证明没变**（rc.1 的基线在加了 WP373 界面改动之后的代码树上重采过，与 `0.2.1-rc.1.json` 逐字节相同；三包九趟、冒烟也重跑过、与最初逐字节相同）：
+`0.2.1-rc.2.json` 140 条去掉版本号与 rc.1 逐字节相同；提示词与工具表（两档 × 三种请求）逐字节相同；三包 × stub / direct / dsh 九份 `summary.txt` 逐字节相同；装包前冒烟全过（34 秒）、结果表逐字相同。
+安全公告：dsh 树上仍是 fflate / fast-uri / ip-address 三条（同上），没有新的。
+
+**留下的**：DeepSeek 新搜索接口（直接搜、不用再让模型跑一轮，回标题 / 网址 / 摘要 / 日期；抓网页回 Markdown；账号登录也能用）是我们「零开发者配置」的一个现成候选搜索后端，要不要接、接了要不要关掉 `sendOriginalQuestion`，交 Luoye（WP373 报告 1025）。
+
