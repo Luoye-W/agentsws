@@ -50,7 +50,7 @@ function titleKey(title: string): string {
 /**
  * 一条提及的去重键。
  *
- * 优先用归一后的 URL（同一个地址一定是同一条）；没有 URL 就用
+ * 优先用归一后的 URL（同一个地址一定是同一条）；没有 URL 用 feed 给的 guid（WP386）；再没有就用
  * `来源 + 标题`——同一天同一个标题在同一个来源上出现两次，当一条。
  * **不跨来源合并标题**：同一个标题出现在新闻与 Reddit 上是两件事
  * （一条是报道，一条是有人在讨论那条报道），处理方式不一样。
@@ -60,10 +60,78 @@ export function mentionKey(input: {
   url?: string
   title?: string
   text?: string
+  guid?: string
 }): string {
   if (input.url !== undefined && input.url.trim() !== '') return `url:${normalizeUrl(input.url)}`
+  if (input.guid !== undefined && input.guid.trim() !== '') return `guid:${input.guid.trim()}`
   const t = input.title ?? input.text ?? ''
   return `${input.source}:${titleKey(t)}`
+}
+
+/** 标题拆成词（小写、去标点；中文按单字）。 */
+function titleTokens(title: string): string[] {
+  const out: string[] = []
+  for (const m of title.toLowerCase().matchAll(/[\p{Script=Han}]|[\p{L}\p{N}]+/gu)) out.push(m[0])
+  return out
+}
+
+/**
+ * WP386：**同一来源下的相近标题**算不算同一条（转载改了一两个词、加了站名后缀、截短了）。
+ *
+ * 归一后一模一样、一个是另一个的开头（≥ 12 个字），或者词重合度（Jaccard）≥ 0.8，就算同一条。
+ * 只在**同一个站**里比（调用方保证）：不同站同一标题是转载，按 URL 各记一条、靠「被转了几次」看传播。
+ */
+export function similarTitles(a: string | undefined, b: string | undefined): boolean {
+  if (a === undefined || b === undefined) return false
+  const ka = titleKey(a)
+  const kb = titleKey(b)
+  if (ka === '' || kb === '') return false
+  if (ka === kb) return true
+  const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka]
+  if (short.length >= 12 && long.startsWith(short)) return true
+  const ta = new Set(titleTokens(a))
+  const tb = new Set(titleTokens(b))
+  if (ta.size < 3 || tb.size < 3) return false
+  let both = 0
+  for (const t of ta) if (tb.has(t)) both += 1
+  return both / (ta.size + tb.size - both) >= 0.8
+}
+
+/* ── 本地关键词过滤（WP386：普通 RSS 拉回来的是整个站的新内容）──────────── */
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * 一个词在正文里有没有**整词**出现（大小写不敏感）：`INMO` 不命中 `inmobiliaria`，`e-bike` 命中 `E-Bike`。
+ * 带中日韩字的词按子串算（这些文字没有词边界）。引号包着的当一个短语。
+ */
+export function termHit(haystack: string, term: string): boolean {
+  const t = term
+    .trim()
+    .replace(/^["“]|["”]$/gu, '')
+    .trim()
+  if (t === '') return false
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(t))
+    return haystack.toLowerCase().includes(t.toLowerCase())
+  const body = escapeRe(t).replace(/\s+/g, '\\s+')
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'iu').test(haystack)
+}
+
+/**
+ * 一条命不命中这组监控词：至少命中一个关键词、并且一个排除词都不命中。
+ * 没给关键词 = 不按关键词筛（只看排除词）。回命中的词（给提及打标签、给人看为什么留下）。
+ */
+export function keywordFilter(
+  input: { title?: string; text: string },
+  terms: { keywords?: readonly string[]; exclude?: readonly string[] },
+): { keep: boolean; hits: string[]; excluded?: string } {
+  const hay = `${input.title ?? ''}\n${input.text}`
+  const excluded = (terms.exclude ?? []).find((x) => termHit(hay, x))
+  if (excluded !== undefined) return { keep: false, hits: [], excluded }
+  const keywords = (terms.keywords ?? []).filter((k) => k.trim() !== '')
+  if (keywords.length === 0) return { keep: true, hits: [] }
+  const hits = keywords.filter((k) => termHit(hay, k))
+  return { keep: hits.length > 0, hits }
 }
 
 /**
