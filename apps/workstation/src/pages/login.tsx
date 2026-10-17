@@ -244,7 +244,9 @@ export function LoginPage(): React.ReactNode {
               </Button>
             </div>
           )}
-          {shared ? null : <p className="text-xs text-muted-foreground">{t('login.note')}</p>}
+          {shared || withAccount ? null : (
+            <p className="text-xs text-muted-foreground">{t('login.note')}</p>
+          )}
         </CardContent>
       </Card>
     </div>
