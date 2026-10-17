@@ -15,8 +15,10 @@ import {
   createPrWatch,
   createPrWatchStore,
   draftPlan,
+  draftRedditQueries,
   dueSources,
   nextMonitorRunAt,
+  PR_WATCH_REDDIT_TARGET,
   PR_WATCH_TARGET,
   parseRowValue,
   queryFor,
@@ -554,5 +556,77 @@ describe('提及库：竞品不出卡；R8 只有扩散 / 召回 / 诉讼立即�
     })
     expect(byTitle.created).toBe(false)
     expect(store.mentions()[0]?.seen_count).toBe(3)
+  })
+})
+
+describe('决策 1086：Reddit 搜索词由 AI 按档案拟、人确认才开', () => {
+  const kit = {
+    profile: async () => ({}),
+    search: async () => undefined,
+    ask: async () => undefined,
+    note: () => {},
+  }
+  const reddit = async () => ({ ok: true as const, items: [] })
+
+  it('规则脑：品牌名、品类、前三个竞品', () => {
+    expect(
+      draftRedditQueries({
+        name: 'Super73',
+        category: 'electric motorbike',
+        competitors: [
+          { name: 'Aventon' },
+          { name: 'Ride1Up' },
+          { name: 'Onyx' },
+          { name: 'Sur-Ron' },
+        ],
+      }),
+    ).toEqual(['Super73', 'electric motorbike', 'Aventon', 'Ride1Up', 'Onyx'])
+    expect(draftRedditQueries({})).toEqual([])
+  })
+
+  it('不预设开或关：卡上是拟好的词；点头就开，全删 = 不开，定过就不再出', async () => {
+    const h = harness({ reddit })
+    const target = h.watch.redditSetupTarget()
+    expect(target?.id).toBe(PR_WATCH_REDDIT_TARGET)
+    if (target === undefined) return
+    expect(await target.satisfied()).toBe(false)
+    // 没存过的格子不预填（由 research 按档案拟）
+    expect((await target.fields())[0]?.suggested).toBeUndefined()
+    const plan = await target.research?.(kit)
+    expect(plan?.reddit_queries?.value).toBe('Super73, electric motorbike, Aventon')
+    expect(h.watch.configured()).toBe(false)
+    await target.apply({ reddit_queries: 'Super73, Aventon' })
+    expect(h.store.settings().reddit_queries).toEqual(['Super73', 'Aventon'])
+    expect(h.watch.configured()).toBe(true)
+    // 全删 = 不开，但算定过了（不再追着出卡）
+    await target.apply({ reddit_queries: '' })
+    expect(h.store.settings().reddit_queries).toEqual([])
+    expect(await target.satisfied()).toBe(true)
+  })
+
+  it('没接 Reddit 取数路由就没有这张卡', () => {
+    expect(harness({}).watch.redditSetupTarget()).toBeUndefined()
+  })
+
+  it('list_mentions：已经有 feed 在拉、Reddit 还没定 → 顺带出这张卡，只问一次', async () => {
+    const h = harness({
+      reddit,
+      routes: { [GA]: { status: 200, body: fx('google-alerts-3.atom.xml') } },
+    })
+    await h.watch.addLinks({ links: GA })
+    const exec = createPrMonitorToolExecutor({
+      of: async () => ({
+        watch: h.watch,
+        mentions: (f) => h.pr.mentions(f),
+        sources: () => h.store.sources(),
+      }),
+      now: () => '2026-10-18T10:00:00.000Z',
+    })
+    const request = { workspace_id: WS, id: 'run_1' } as unknown as RunRequest
+    const first = await exec({ name: 'list_mentions', input: {}, request })
+    expect(first.status).toBe('ok')
+    expect((first.data as { needs_setup?: string }).needs_setup).toBe(PR_WATCH_REDDIT_TARGET)
+    const again = await exec({ name: 'list_mentions', input: {}, request })
+    expect((again.data as { needs_setup?: string }).needs_setup).toBeUndefined()
   })
 })

@@ -3440,6 +3440,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       assembly.registerTarget(target)
     // WP386：信息监控的提醒清单 + 贴 RSS（缺了出配置卡）
     if (brand.prWatch !== undefined) assembly.registerTarget(brand.prWatch.setupTarget())
+    // 决策 1086：Reddit 搜索词（AI 按档案拟、人确认才开；没接 Reddit 取数路由时没有这张卡）
+    const prReddit = brand.prWatch?.redditSetupTarget()
+    if (prReddit !== undefined) assembly.registerTarget(prReddit)
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())

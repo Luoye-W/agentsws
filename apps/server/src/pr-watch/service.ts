@@ -33,7 +33,7 @@ import {
 } from '@agentsws/contracts'
 import { type AlertsTransport, probeFeedLink, termHit } from '@agentsws/pr-core'
 import { SetupCardError, type SetupTarget } from '../setup-cards.js'
-import type { SetupBrandFacts, SetupResearchKit } from '../setup-research.js'
+import { profileSource, type SetupBrandFacts, type SetupResearchKit } from '../setup-research.js'
 import { dueSources, nextMonitorRunAt, sourceDue } from './due.js'
 import {
   feedAdapter,
@@ -48,6 +48,22 @@ import { draftPlan, type GeoWatchFacts, parseRowValue, researchPlan, rowValue } 
 import { normalizeMonitorSettings } from './store.js'
 
 export const PR_WATCH_TARGET = 'pr.watch'
+/** 决策 1086：Reddit 搜索词那张配置卡。 */
+export const PR_WATCH_REDDIT_TARGET = 'pr.watch.reddit'
+
+/** 按档案拟的 Reddit 搜索词（规则脑）：品牌名、品类、前三个竞品。拟不出就是空。 */
+export function draftRedditQueries(facts: SetupBrandFacts): string[] {
+  const out: string[] = []
+  const add = (v: string | undefined): void => {
+    const t = v?.trim()
+    if (t !== undefined && t !== '' && !out.some((o) => o.toLowerCase() === t.toLowerCase()))
+      out.push(t.slice(0, 80))
+  }
+  add(facts.name)
+  add(facts.subcategory ?? facts.category)
+  for (const c of (facts.competitors ?? []).slice(0, 3)) add(c.name)
+  return out.slice(0, 6)
+}
 /** Reddit 那一路在管道里的 id（提及上的 `source_id`）。 */
 export const REDDIT_SOURCE_ID = 'reddit'
 
@@ -97,6 +113,13 @@ export interface PrWatchAssembly {
   /** 老的单条 feed 迁进来（启动时调一次；回迁了几条）。 */
   migrateLegacy(): number
   setupTarget(): SetupTarget
+  /**
+   * 决策 1086（Luoye 10-18）：Reddit 那一路不预设开或关——AI 按档案拟一组搜索词，出「信息监控 · Reddit 搜索词」
+   * 配置卡给人确认（可删改），点头就开、不点不开。没接 Reddit 取数路由时没有这张卡。
+   */
+  redditSetupTarget(): SetupTarget | undefined
+  /** 该不该把那张 Reddit 卡带出来：已经有 feed 在拉、Reddit 还没定过、也还没问过。问一次就记下（不点不开，不追着问）。 */
+  askRedditOnce(): boolean
 }
 
 const linksIn = (raw: string): string[] =>
@@ -585,6 +608,74 @@ export function createPrWatch(options: PrWatchOptions): PrWatchAssembly {
       return view()
     },
     configured,
+    redditSetupTarget() {
+      if (options.redditSearch === undefined) return undefined
+      const decided = (): boolean =>
+        store.kv<boolean>('reddit_decided') === true || store.settings().reddit_queries.length > 0
+      return {
+        id: PR_WATCH_REDDIT_TARGET,
+        name: '信息监控 · Reddit 搜索词',
+        why: '我按品牌档案拟了几个 Reddit 搜索词（按条计积分）；你确认就开，删掉的不搜，全删 = 不开。',
+        async fields(): Promise<SetupField[]> {
+          const saved = store.settings().reddit_queries
+          return [
+            {
+              key: 'reddit_queries',
+              label: 'Reddit 搜索词',
+              kind: 'text',
+              placeholder: '品牌名、品类、竞品，逗号分开',
+              // 存过的回显（事实）；没存过的由 research 按档案拟
+              ...(saved.length > 0 ? { suggested: saved.join(', ') } : {}),
+              required: false,
+            },
+          ]
+        },
+        async satisfied(): Promise<boolean> {
+          return decided()
+        },
+        async research(kit: SetupResearchKit) {
+          const facts = await kit.profile().catch(() => options.facts?.() ?? {})
+          const drafted = draftRedditQueries({ ...(options.facts?.() ?? {}), ...facts })
+          kit.note(
+            drafted.length === 0
+              ? '品牌档案里没有品牌名、品类和竞品，拟不出 Reddit 搜索词；你填几个也行'
+              : `按品牌档案拟了 ${drafted.length} 个 Reddit 搜索词`,
+            profileSource('品牌'),
+          )
+          return drafted.length === 0
+            ? {}
+            : {
+                reddit_queries: {
+                  value: drafted.join(', '),
+                  why: '品牌名、品类和竞品（看 Reddit 上大家怎么聊、怎么比）；每天每个词取最新几条',
+                  sources: [profileSource('品牌'), profileSource('竞品')],
+                },
+              }
+        },
+        async apply(values): Promise<void> {
+          const queries = (values.reddit_queries ?? '')
+            .split(/[,，、;；\n]/u)
+            .map((q) => q.trim())
+            .filter((q) => q !== '')
+          store.putSettings(
+            normalizeMonitorSettings({ ...store.settings(), reddit_queries: queries }),
+          )
+          store.setKv('reddit_decided', true)
+          options.emit?.('pr.monitor_reddit_set', { queries: queries.length })
+        },
+      }
+    },
+    askRedditOnce() {
+      if (options.redditSearch === undefined || store.sources().length === 0) return false
+      if (
+        store.kv<boolean>('reddit_decided') === true ||
+        store.settings().reddit_queries.length > 0
+      )
+        return false
+      if (store.kv<string>('reddit_asked') !== undefined) return false
+      store.setKv('reddit_asked', options.now())
+      return true
+    },
     migrateLegacy() {
       // 迁过的地址记着：人删掉那条源之后，老卡上那一格不会把它又带回来
       const done = new Set(store.kv<string[]>('legacy_urls') ?? [])

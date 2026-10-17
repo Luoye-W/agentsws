@@ -17,7 +17,7 @@ import {
 } from '@agentsws/contracts'
 import { LIST_MENTIONS_TOOL, type ToolExecution, type ToolExecutor } from '@agentsws/stand-ins'
 import type { StoredMention } from '../pr.js'
-import { PR_WATCH_TARGET, type PrWatchAssembly } from './service.js'
+import { PR_WATCH_REDDIT_TARGET, PR_WATCH_TARGET, type PrWatchAssembly } from './service.js'
 
 const GROUPS: readonly MonitorGroup[] = ['own', 'competitor', 'industry', 'site']
 const SENTIMENTS = ['negative', 'neutral', 'positive'] as const
@@ -118,9 +118,12 @@ export function createPrMonitorToolExecutor(options: PrMonitorToolOptions): Tool
       const g = m.group ?? 'own'
       counts[g] = (counts[g] ?? 0) + 1
     }
+    // 决策 1086：已经有 feed 在拉、Reddit 还没定过 → 这一轮顺带出「Reddit 搜索词」配置卡（问一次，不点不开）
+    const askReddit = brand.watch.askRedditOnce()
     return {
       status: 'ok',
       data: {
+        ...(askReddit ? { needs_setup: PR_WATCH_REDDIT_TARGET } : {}),
         rows: rows.length,
         window: { since, ...(until === undefined ? {} : { until }) },
         by_group: Object.fromEntries(
