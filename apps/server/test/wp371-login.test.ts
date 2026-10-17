@@ -206,3 +206,37 @@ describe('决策 944：浏览器会话 30 天，改成员当场失效', () => {
     expect((await call('/v1/me', undefined, { bearer: entered.session })).status).toBe(401)
   })
 })
+
+describe('决策 1013：撤回还没被接受的邀请', () => {
+  it('撤回之后链接作废（接受 404）；已经接受的撤不了（409，请走「移出成员」）', async () => {
+    const s = await boot()
+    const ws = s.bootstrap.workspace.id
+    const invite = async (email: string) =>
+      dataOf<{ id: string; url: string }>(
+        await call(`/v1/workspaces/${ws}/invitations`, { email }, { owner: true }),
+      )
+    const tokenOf = (u: string): string => u.slice(u.lastIndexOf('/') + 1)
+
+    const pending = await invite('late@nordvolt.example')
+    const withdrawn = await call(`/v1/workspaces/${ws}/invitations/${pending.id}`, undefined, {
+      owner: true,
+      method: 'DELETE',
+    })
+    expect(withdrawn.status).toBe(200)
+    expect((await dataOf<{ revoked_at?: string }>(withdrawn)).revoked_at).toBeTruthy()
+    expect((await call(`/v1/invitations/${tokenOf(pending.url)}/accept`, {})).status).toBe(404)
+
+    const taken = await invite('early@nordvolt.example')
+    expect((await call(`/v1/invitations/${tokenOf(taken.url)}/accept`, {})).status).toBe(200)
+    const late = await call(`/v1/workspaces/${ws}/invitations/${taken.id}`, undefined, {
+      owner: true,
+      method: 'DELETE',
+    })
+    expect(late.status).toBe(409)
+    const unknown = await call(`/v1/workspaces/${ws}/invitations/inv_nope`, undefined, {
+      owner: true,
+      method: 'DELETE',
+    })
+    expect(unknown.status).toBe(404)
+  })
+})

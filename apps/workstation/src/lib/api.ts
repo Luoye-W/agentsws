@@ -2798,6 +2798,8 @@ export interface OrgInvitationView {
   expires_at: string
   accepted_at?: string
   used: boolean
+  /** 决策 1013：负责人撤回了（链接作废）。 */
+  revoked_at?: string
   url?: string
   delivered: 'link' | 'email'
 }
@@ -3239,6 +3241,17 @@ export const removeMember = (
 ): Promise<{ revoked_assignments: number }> =>
   api(
     `/v1/workspaces/${encodeURIComponent(workspace_id)}/members/${encodeURIComponent(person_id)}`,
+    { method: 'DELETE', ...withAssignment(assignment) },
+  )
+
+/** 决策 1013（WP371）：撤回一条还没被接受的邀请（链接当场作废）。 */
+export const withdrawInvitation = (
+  workspace_id: string,
+  invitation_id: string,
+  assignment?: string,
+): Promise<OrgInvitationView> =>
+  api(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/invitations/${encodeURIComponent(invitation_id)}`,
     { method: 'DELETE', ...withAssignment(assignment) },
   )
 

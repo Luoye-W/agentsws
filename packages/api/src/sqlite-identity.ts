@@ -623,6 +623,22 @@ export class SqliteIdentityService implements LocalIdentityService {
       .map((r) => JSON.parse(r.json) as Invitation)
   }
 
+  revokeInvitation(workspace_id: WorkspaceId, invitation_id: string): Invitation | undefined {
+    const row = this.#db
+      .prepare<[string, string], { hash: string; json: string }>(
+        'SELECT hash, json FROM invitations WHERE workspace_id = ? AND id = ?',
+      )
+      .get(workspace_id, invitation_id)
+    if (row === undefined) return undefined
+    const inv = JSON.parse(row.json) as Invitation
+    if (inv.accepted_at !== undefined || inv.revoked_at !== undefined) return inv
+    const revoked: Invitation = { ...inv, used: true, revoked_at: this.#clock.now() }
+    this.#db
+      .prepare('UPDATE invitations SET json = ? WHERE hash = ?')
+      .run(JSON.stringify(revoked), row.hash)
+    return revoked
+  }
+
   async acceptInvitation(token: string, input?: { name?: string }): Promise<AcceptedInvitation> {
     const hash = hashToken(token)
     const row = this.#db

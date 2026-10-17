@@ -200,6 +200,12 @@ export interface LocalIdentityService extends IdentityService, Organizations {
    */
   leaveWorkspace(workspace_id: WorkspaceId, person_id: PersonId): Promise<Membership | undefined>
   /**
+   * 决策 1013（WP371）：撤回一条**还没被接受**的邀请——链接当场作废，再也换不出会话。
+   * 不在这个工作区 → `undefined`；已经接受了 → 原样返回（`accepted_at` 有值，什么都不改：
+   * 人已经进来了，要请他走用「移出成员」，那一步会让他的 token 全部失效）。可选：老实现没有就 501。
+   */
+  revokeInvitation?(workspace_id: WorkspaceId, invitation_id: string): Invitation | undefined
+  /**
    * WP275：{@link IdentityService.members} 的同步版（本地两档本来就是同步读）。给只能同步问的地方用
    * ——比如「进待认领池的活要不要直接记到唯一那个人名下」（决策 259）。可选：没有就当不知道。
    */
@@ -224,6 +230,8 @@ export interface Invitation {
   accepted_by?: PersonId
   /** 一次性：接受过就是 true，过期不改这个位。 */
   used: boolean
+  /** 决策 1013（WP371）：负责人撤回了这条还没被接受的邀请（之后 `used` 也是 true）。 */
+  revoked_at?: Iso8601
 }
 
 export interface CreateInvitationInput {
@@ -561,6 +569,17 @@ export class MemoryIdentityService implements LocalIdentityService {
 
   listInvitations(workspace_id: WorkspaceId): Invitation[] {
     return [...this.#invites.values()].filter((i) => i.workspace_id === workspace_id)
+  }
+
+  revokeInvitation(workspace_id: WorkspaceId, invitation_id: string): Invitation | undefined {
+    for (const [hash, inv] of this.#invites) {
+      if (inv.id !== invitation_id || inv.workspace_id !== workspace_id) continue
+      if (inv.accepted_at !== undefined || inv.revoked_at !== undefined) return inv
+      const revoked: Invitation = { ...inv, used: true, revoked_at: this.#clock.now() }
+      this.#invites.set(hash, revoked)
+      return revoked
+    }
+    return undefined
   }
 
   async acceptInvitation(token: string, input?: { name?: string }): Promise<AcceptedInvitation> {

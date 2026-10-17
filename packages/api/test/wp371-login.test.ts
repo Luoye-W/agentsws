@@ -222,3 +222,27 @@ describe('决策 944：SQLite 档也认会话寿命', () => {
     }
   })
 })
+
+describe('决策 1013：内存档撤回邀请', () => {
+  it('没接受的撤回后作废；接受过的原样返回、不改', async () => {
+    const h = await harness()
+    const a = await h.identity.createInvitation({
+      workspace_id: h.workspace_id,
+      email: 'late@example.com',
+      invited_by: h.person_id,
+    })
+    const revoked = h.identity.revokeInvitation(h.workspace_id, a.invitation.id)
+    expect(revoked?.revoked_at).toBeTruthy()
+    await expect(h.identity.acceptInvitation(a.token)).rejects.toThrow(/无效或已过期/)
+    const b = await h.identity.createInvitation({
+      workspace_id: h.workspace_id,
+      email: 'early@example.com',
+      invited_by: h.person_id,
+    })
+    await h.identity.acceptInvitation(b.token)
+    const same = h.identity.revokeInvitation(h.workspace_id, b.invitation.id)
+    expect(same?.accepted_at).toBeTruthy()
+    expect(same?.revoked_at).toBeUndefined()
+    expect(h.identity.revokeInvitation('ws_other', b.invitation.id)).toBeUndefined()
+  })
+})
