@@ -130,6 +130,10 @@ describe('首次下载', () => {
     const dir = i.layout.versionDir(OPEN_CONNECTOR_PIN.version)
     expect(existsSync(join(dir, HOST_FILE))).toBe(true)
     expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'), 'utf8'))).toEqual(LOCK)
+    // WP365：传递依赖的安全覆盖跟着 package.json 进安装目录（npm ci 据它核对锁文件里被顶的那一版）
+    expect(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).overrides).toEqual(
+      OPEN_CONNECTOR_PIN.overrides,
+    )
     expect(parseCurrentFile(JSON.parse(readFileSync(i.layout.current, 'utf8')))).toMatchObject({
       version: OPEN_CONNECTOR_PIN.version,
     })
