@@ -25,6 +25,7 @@ import type {
   ConnectionDirectoryPort,
   FreeChatPort,
   PositionEntryPort,
+  PrPort,
   SiteThemeView,
   WorkPort,
   WorkstationPort,
@@ -143,6 +144,7 @@ import {
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
+import type { DataSourceStatus, PrDeckData } from '@agentsws/deck'
 import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
 import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
@@ -171,7 +173,7 @@ import {
   stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { createPrRedditAdapter } from '@agentsws/pr-core'
+import { type AlertsTransport, createPrRedditAdapter } from '@agentsws/pr-core'
 import {
   changeKindOf,
   createRoleStore,
@@ -557,6 +559,14 @@ import {
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
+import {
+  createPrMonitorToolExecutor,
+  createPrWatch,
+  createPrWatchStore,
+  type PrWatchAssembly,
+  type PrWatchStoreHandle,
+  summaryOf as prWatchSummaryOf,
+} from './pr-watch/index.js'
 import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import { readRouteLevelOf, readViaSources } from './read-route.js'
@@ -1295,6 +1305,10 @@ export interface ServerOptions {
    * 生产路径不传它，走全局 fetch。
    */
   socialFetch?: SocialFetch
+  /**
+   * WP386：信息监控拉 feed 的那一跳（测试 / 演示塞录好的 feed，不联网）。生产不传，走全局 fetch。
+   */
+  feedFetch?: AlertsTransport['fetch']
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -3422,6 +3436,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       setBrandFacts: (facts) => onboardingRef?.setBrandFacts(ws, facts) ?? false,
     }))
       assembly.registerTarget(target)
+    // WP386：信息监控的提醒清单 + 贴 RSS（缺了出配置卡）
+    if (brand.prWatch !== undefined) assembly.registerTarget(brand.prWatch.setupTarget())
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
@@ -3432,6 +3448,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     setupCards.set(ws, assembly)
     return assembly
   }
+  /** WP386（docs/103 S5）：这个品牌连过任一 Google 服务没有（有 = Google 账号这一步算过了）。 */
+  const GOOGLE_SERVICES = new Set(['gmail', 'ga4', 'gsc', 'youtube_data', 'google_ads'])
+  const googleConnected = (ws: WorkspaceId): boolean =>
+    brandModules
+      .peek(ws)
+      ?.connections.connectedServices()
+      .some((s) => GOOGLE_SERVICES.has(s)) === true
   /** WP324：连接卡上的一样现在连上了没有（认不出回 `undefined`：人说连好了就信人）。 */
   const setupNeedConnected = async (
     ws: WorkspaceId,
@@ -3461,6 +3484,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (need.service === 'model') return setupProbes.get(ws)?.model()
     if (need.service === 'workshop_account') return setupProbes.get(ws)?.cloudLinked()
     if (need.service === 'deepseek_account') return deepseekAccount.signedIn()
+    /*
+     * WP386（docs/103 S5）：Google 账号——连过任一 Google 服务就算有；没有就信人（Google 账号登在用户自己的
+     * 浏览器里，服务端看不见）。
+     */
+    if (need.service === 'google_account') return googleConnected(ws) ? true : undefined
     /*
      * WP362：ChatGPT 订阅——过期的那条记录还在库里（官方刷新失败时保留它，等人重登），被限流时也照样
      * 「登着」，所以服务端判不出「好了没」：回 `undefined`，卡上人登好了点「接着做」（不自动接着跑，
@@ -3768,6 +3796,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
 
     // WP20 连接面：`/v1/connections/*` 与工作台数据源共用同一份连接状态
+    /**
+     * WP386：信息监控那几样晚绑定（监控库在下面才建）：有监控源 = Google Alerts 那一侧算连上（连接卡、
+     * 面板不再催「去连接」）；各条源的状态进面板脚注（拉不到照实说）。
+     */
+    const prMonitorHolder: { store?: PrWatchStoreHandle } = {}
+    const prMonitorCount = (): number => prMonitorHolder.store?.sources().length ?? 0
+    const prMonitorDeck = (): PrDeckData['monitor'] => {
+      const st = prMonitorHolder.store
+      if (st === undefined) return undefined
+      const sources = st.sources().filter((x) => x.paused !== true)
+      const failed = sources.filter((x) => x.status === 'failed')
+      return {
+        total: sources.length,
+        failed: failed.length,
+        summary: prWatchSummaryOf(sources.length, failed.length),
+        failures: failed.map((x) => ({ label: x.label, message: x.last_error ?? '没拉到' })),
+        pulled_ever: sources.some((x) => x.last_ok_at !== undefined),
+        competitors: sources.filter((x) => x.group === 'competitor').length,
+      }
+    }
+    const withMonitorSources = (list: DataSourceStatus[]): DataSourceStatus[] =>
+      prMonitorCount() === 0
+        ? list
+        : [
+            ...list.filter((x) => x.id !== 'google_alerts'),
+            { id: 'google_alerts', label: 'Google Alerts', connected: true },
+          ]
     const connections = await createConnections({
       clock,
       workspace_id: ws,
@@ -3789,7 +3844,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       owners: connectOwners.owners,
       startupBrand: isBootstrap,
       // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
-      extraKinds: () => (cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+      extraKinds: () => [
+        ...(cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+        // WP386：有监控源 = 信息监控那张连接卡算连上
+        ...(prMonitorCount() > 0 ? ['google_alerts'] : []),
+      ],
     })
 
     /**
@@ -4029,7 +4088,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
-      pr: () => prDeckData(pr),
+      pr: () => prDeckData(pr, prMonitorDeck()),
       // WP171 / WP172（docs/84）：B2B 那十九块从这个品牌自己的 B2B 库来（邮件分拣落成的询盘、
       // 批了的客户 / 报价 / 样品 …）。demo 里库里的排前面、后面垫一份演示投影
       // WP173：主动开发那三块（今天待发 · 序列漏斗 · 回复待分）从开发序列来
@@ -4046,7 +4105,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP238：没连 Reddit API、但读 Reddit 已能经接口中台 / 只读浏览器取到——面板不再催「去连接」
       sources: () =>
         withReadVia(
-          withOwnSources(baseWorkData.sources()),
+          withMonitorSources(withOwnSources(baseWorkData.sources())),
           readLevelHolder.of === undefined ? {} : readViaSources(readLevelHolder.of),
         ),
     }
@@ -4538,9 +4597,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * "监控发现的客户投诉转客服"的分界，以及"在别人的地盘上版主说了算"这件事，
      * 从这一跳起是真会发生的事。
      *
-     * `pullMentions` 暂时不给：进料那两条（Google Alerts 的 RSS、Reddit 全站搜）
-     * 要这个品牌连接页上那两张卡真连上才有东西可拉。没配的时候
-     * `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
+     * WP386：`pullMentions` 接上了信息监控（`pr-watch/`）：多条 Google Alerts / 网站 RSS + Reddit 那一路
+     * （同一条取数路由）。没配的时候 `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
      */
     /**
      * WP172（docs/84）：B2B 库的 `/v1/b2b/*`。写都经卡（草稿 → 改动卡 → 批了执行器才落库，
@@ -4568,6 +4626,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP275：① ② 报价超限落回业务员自己、再确认一次
       mode: () => modeOfWorkspace?.(ws) ?? 'company',
     })
+    let prWatchRef: PrWatchAssembly | undefined
     const prService = createPrService({
       workspace_id: ws,
       // WP338（决策 664 / 783）：Reddit 版规原文上卡、不替人判；一天几条由用户设（默认不限）
@@ -4593,7 +4652,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .filter((a) => a.workspace_id === ws && a.revoked_at === undefined)
           .map((a) => ({ person_id: a.person_id })),
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
-      // 定时那一轮用**真持有品牌监控**的那个人的分配去提（定时任务没有"当前用户"）
+      // WP386：拉取接上了——到点的监控源拉一次（信息监控那一份在下面才建，晚绑定）
+      pullMentions: async () =>
+        prWatchRef === undefined
+          ? { ok: false as const, message: '这台机器上没装信息监控（托管模式）。' }
+          : prWatchRef.pull(),
+      // 定时那一轮用**真持有信息监控**的那个人的分配去提（定时任务没有"当前用户"）
       monitorActor: () => {
         const holder = roles.assignments
           .listByRole('pr.monitoring')
@@ -5731,6 +5795,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
               watchRoles: REPORT_WATCH_ROLES,
             },
+            // WP386：信息监控查提及（按组 / 竞品 / 来源 / 情绪 / 时间窗；拉不到的源照实列）
+            prMonitorTools: createPrMonitorToolExecutor({
+              of: async () =>
+                prWatch === undefined
+                  ? undefined
+                  : {
+                      watch: prWatch,
+                      mentions: (filter) => pr.mentions(filter),
+                      sources: () => prWatchStore.sources(),
+                    },
+              now: () => clock.now(),
+              // S5：没连过任一 Google 服务时先出一次「登录 Google 账号」的卡；问过就信人
+              googleReady: () => {
+                const google = ['gmail', 'ga4', 'gsc', 'youtube_data', 'google_ads']
+                if (connections.connectedServices().some((x) => google.includes(x))) return true
+                if (prWatchStore.kv<string>('google_asked') !== undefined) return true
+                prWatchStore.setKv('google_asked', clock.now())
+                return false
+              },
+            }),
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
               service: () => adsDataRef,
@@ -7480,6 +7564,110 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })()
     })
 
+    /**
+     * WP386（docs/103 v2）：信息监控——多条监控源（Google Alerts 的 RSS / 网站 RSS，存在这个品牌自己的库里）、
+     * 到点才拉（默认一天一次、本地 9 点后）、Reddit 那一路走上面同一条取数路由（接口中台 / 只读浏览器）。
+     * 托管模式不装（同 Reddit 巡查）。
+     */
+    const prWatchStore = createPrWatchStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    prMonitorHolder.store = prWatchStore
+    const prWatch =
+      hostedBoot !== undefined
+        ? undefined
+        : createPrWatch({
+            workspace_id: ws,
+            store: prWatchStore,
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            fetch:
+              options.feedFetch ??
+              (async (url, init) => {
+                const res = await fetch(url, {
+                  ...(init?.headers === undefined ? {} : { headers: init.headers }),
+                  signal: AbortSignal.timeout(20_000),
+                })
+                return { ok: res.ok, status: res.status, text: () => res.text() }
+              }),
+            redditSearch: async (query) => {
+              const got = await redditSearch.read({
+                capability: 'social.reddit.search',
+                input: { query, time_window: 'week', sort: 'new', limit: 10 },
+              })
+              return got.ok ? { ok: true, items: got.items } : { ok: false, message: got.message }
+            },
+            ingest: async (rows) => {
+              const holder = roles.assignments
+                .listByRole('pr.monitoring')
+                .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+              if (holder === undefined) return undefined
+              const actor = {
+                workspace_id: ws,
+                person_id: holder.person_id,
+                assignment_id: holder.id,
+                role_id: holder.role_id,
+              }
+              let created = 0
+              for (const row of rows)
+                if ((await prService.port.ingestMention(actor, row)).created) created += 1
+              return { created }
+            },
+            facts: () =>
+              brandFactsOf(onboardingRef?.brandProfile(ws) as Record<string, unknown> | undefined, {
+                ...(() => {
+                  const name = brandNameOfWorkspace(ws)
+                  return name === '' || name === ws ? {} : { name }
+                })(),
+              }),
+            geo: async () => {
+              const v = await seoService.watchView().catch(() => undefined)
+              if (v === undefined) return undefined
+              return {
+                brand_aliases: v.watch.brand.aliases,
+                competitors: v.watch.competitors.map((c) => ({ name: c.name, aliases: c.aliases })),
+                markets: v.watch.markets,
+              }
+            },
+            legacyFeeds: () => connections.publicFieldsOf?.('google_alerts') ?? [],
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'pr_watch' },
+                correlation: { trace_id: `trc_pw_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+    prWatchRef = prWatch
+    // 老的单条 feed（连接卡上那一格）启动时迁进来（还没有真实用户，不留兼容层）
+    prWatch?.migrateLegacy()
+    connections.onConnectionChange(() => {
+      prWatch?.migrateLegacy()
+    })
+    const prPort: PrPort =
+      prWatch === undefined
+        ? prService.port
+        : {
+            ...prService.port,
+            watchView: () => prWatch.view(),
+            watchAddLinks: async (_actor, input) => ({
+              results: await prWatch.addLinks({
+                links: input.links,
+                ...(input.plan_item_id === undefined ? {} : { plan_item_id: input.plan_item_id }),
+                ...(input.group === undefined ? {} : { group: input.group }),
+              }),
+              view: prWatch.view(),
+            }),
+            watchRunNow: async () => ({ ...(await prWatch.runNow()), view: prWatch.view() }),
+            watchUpdateSource: (_actor, id, patch) => prWatch.updateSource(id, patch),
+            watchRemoveSource: (_actor, id) => prWatch.removeSource(id),
+            watchUpdateSettings: (_actor, patch) => prWatch.updateSettings(patch),
+          }
+
     return {
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
@@ -7509,6 +7697,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(webBrowser === undefined ? {} : { webBrowser }),
       pr,
       prService,
+      prPort,
+      prWatchStore,
+      ...(prWatch === undefined ? {} : { prWatch }),
       b2b,
       b2bService,
       b2bOutbound,
@@ -7579,6 +7770,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         site.close()
         ads.close()
         pr.close()
+        prWatchStore.close()
         seoService.close()
       },
     }
@@ -11446,7 +11638,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
   const prPortOf = brandPrPort(
     brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).prService.port,
+    async (ws) => (await brandModules.forWorkspace(ws)).prPort,
   )
   /**
    * WP154「内容与搜索」`/v1/seo/*`：问题清单落在请求人所在品牌的目录下；"现在跑一轮"

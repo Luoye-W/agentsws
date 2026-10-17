@@ -1006,20 +1006,16 @@ export function registerSocialBroadcast(scheduler: Scheduler, deps: SocialBroadc
 }
 
 /* ------------------------------------------------------------------ */
-/* ⑰ WP78 / 60 §5：品牌监控一轮：每 15 分钟                                */
+/* ⑰ WP78 / 60 §5：信息监控一轮（WP386：一小时一拍、到点才拉）           */
 /* ------------------------------------------------------------------ */
 
 /**
- * WP78：监控轮询的节奏。
- *
- * 15 分钟是"负面预警要多快"与"别把 Google 的 feed 打烂"之间那条线：
- * Google Alerts 自己的延迟就是几小时到一天，拉得再密也变不出新东西；
- * 而 Reddit 那一侧一分钟 60 跳的配额要留给别的口子。
- *
- * **不是每分钟**：一条负面早 14 分钟看到，救不了什么；而每分钟拉一轮 RSS
- * 在一天里就是 1440 跳打在同一个地址上。
+ * WP386（docs/103 R6 / R7，决策 668）：信息监控**一小时一拍**——到没到点由信息监控自己按每条源的设置判
+ * （默认一天一次、本地 9 点后；关机错过的开机补一次；失败的隔一小时再试；满 20 条全新的 Google Alerts
+ * feed 自动改成每 4 小时）。没到点的那一拍什么都不拉。原来每 15 分钟一轮删了：Google Alerts 自己的延迟
+ * 就是几小时到一天，拉得再密也变不出新东西。
  */
-export const PR_MONITOR_INTERVAL_MS = 15 * 60_000
+export const PR_MONITOR_INTERVAL_MS = 60 * 60_000
 
 export interface PrMonitorDeps {
   /**
@@ -1640,7 +1636,7 @@ export async function ensureSystemTasks(
     await add(
       'sched_pr_monitor',
       systemTask(base, {
-        title: '每 15 分钟看一眼外面有没有人提我们',
+        title: '信息监控（默认每天一次）',
         handler: HANDLERS.prMonitor,
         trigger: { kind: 'interval', every_ms: PR_MONITOR_INTERVAL_MS },
         misfire_policy: 'skip',

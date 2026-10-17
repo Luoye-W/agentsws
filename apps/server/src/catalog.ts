@@ -855,7 +855,7 @@ export const PR_CONNECTORS: readonly CatalogEntry[] = [
   {
     service: 'google_alerts',
     upstream: 'local',
-    label: 'Google Alerts（品牌监控）',
+    label: 'Google Alerts（信息监控）',
     auth: 'api_key',
     store: 'local_vault',
     data_sources: ['google_alerts'],

@@ -73,8 +73,8 @@ export const PR_ROLES: readonly PrRoleSpec[] = [
   { role_id: 'pr.forums', zh: '论坛营销', en: 'Forum Marketing', mode: 'browser' },
   {
     role_id: 'pr.monitoring',
-    zh: '品牌监控',
-    en: 'Brand Monitoring',
+    zh: '信息监控',
+    en: 'Information Monitoring',
     mode: 'api',
     connector_kind: 'google_alerts',
   },
