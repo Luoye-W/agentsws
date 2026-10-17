@@ -82,6 +82,8 @@ import type {
   ApprovalItem,
   Assignment,
   Clock,
+  CompetitorIntakeAdapter,
+  CompetitorSourceKind,
   ConnectNeed,
   ContentPublicKey,
   DataSourceLevel,
@@ -343,6 +345,13 @@ import {
 import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
+// WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
+import {
+  type CompetitorWatchAssembly,
+  competitorWatchSourceOf,
+  createCompetitorWatch,
+  createCompetitorWatchDb,
+} from './competitor-watch/index.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { openConnectOwners } from './connect-owners.js'
@@ -606,7 +615,7 @@ import {
   settleRedditWrite,
   socialRedditFill,
 } from './reddit-write/wire.js'
-import { createReportToolExecutor, type WatchSource } from './report-tools.js'
+import { combineWatchSources, createReportToolExecutor, type WatchSource } from './report-tools.js'
 import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
@@ -633,6 +642,7 @@ import {
   registerApprovalHousekeeping,
   registerB2bSequence,
   registerBackup,
+  registerCompetitorWatch,
   registerDailyPlan,
   registerEconomics,
   registerIdempotencySweep,
@@ -976,6 +986,12 @@ export interface MountedWorld {
  */
 const REPORT_WATCH_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit'])
 
+/**
+ * WP392（docs/104 C1 / C2）：担竞品监控的职责——竞品独立站归「店铺管理」，Amazon 竞品归「亚马逊店铺运营」（WP395）。
+ * 报告积木里「竞品变化表」只给它们；它们查巡查数据时默认查的是竞品那一份。
+ */
+const REPORT_COMPETITOR_ROLES: ReadonlySet<string> = new Set(['dtc.store', 'amz.store'])
+
 export interface ServerOptions {
   /**
    * SQLite 目录；不给则全部内存档（测试与一次性任务）。
@@ -1010,6 +1026,13 @@ export interface ServerOptions {
    * （WP328）；测试 / 评测注入替身数据。
    */
   watchSource?: (workspace_id: WorkspaceId) => WatchSource | undefined
+  /**
+   * WP392：竞品监控的进料口（每种来源一个：独立站 WP393、Amazon WP394）。给了的盖过内置的那几种；
+   * demo / 测试注入替身。哪种都没有 = 那几条源照实标「还没接上」。
+   */
+  competitorAdapters?: (
+    workspace_id: WorkspaceId,
+  ) => Partial<Record<CompetitorSourceKind, CompetitorIntakeAdapter>>
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -1866,6 +1889,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP328：Reddit 每日巡查的条目 / 巡查 / 设置（一台机器一个库，每行钉品牌）
   const redditWatchStore = createRedditWatchStore(
     dbDir === undefined ? undefined : join(dbDir, 'reddit-watch.sqlite'),
+  )
+  // WP392：竞品监控的监控源 / 快照 / 变化表（一台机器一个库，每行钉品牌）
+  const competitorWatchDb = createCompetitorWatchDb(
+    dbDir === undefined ? undefined : join(dbDir, 'competitor-watch.sqlite'),
   )
   const outboundLog: OutboundLog = createOutboundLog({
     store: outboundStore,
@@ -5713,13 +5740,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               execute: createReportToolExecutor({
                 clock,
                 tzOffsetMinutes: () => workData.tz_offset_minutes,
-                watch: (w) =>
-                  options.watchSource !== undefined
-                    ? options.watchSource(w)
-                    : redditWatch === undefined
+                /*
+                 * WP392：两份巡查库——Reddit 巡查与竞品监控。不给平台按这条职责挑（担竞品监控的默认查竞品那一份）；
+                 * `all` = 配了的全部合成一份（帖子和变化混查）。
+                 */
+                watch: async (w, platform, role_id) => {
+                  const reddit =
+                    options.watchSource !== undefined
+                      ? options.watchSource(w)
+                      : redditWatch === undefined
+                        ? undefined
+                        : redditWatchSourceOf(redditWatch)
+                  const competitor =
+                    competitorWatch === undefined
                       ? undefined
-                      : redditWatchSourceOf(redditWatch),
+                      : competitorWatchSourceOf(competitorWatch)
+                  const all = [reddit, competitor].filter((x): x is WatchSource => x !== undefined)
+                  if (platform === 'all') return combineWatchSources(all)
+                  if (platform !== undefined)
+                    return all.find((x) => x.platform === platform.toLowerCase())
+                  if (role_id !== undefined && REPORT_COMPETITOR_ROLES.has(role_id))
+                    return competitor
+                  return reddit
+                },
                 watchRoles: REPORT_WATCH_ROLES,
+                competitorRoles: REPORT_COMPETITOR_ROLES,
                 outbound: () => outboundLog,
                 approvals: () => approvals,
                 publishedCount: (w, dedupe_key) =>
@@ -5730,6 +5775,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   }).length,
               }),
               watchRoles: REPORT_WATCH_ROLES,
+              competitorRoles: REPORT_COMPETITOR_ROLES,
             },
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
@@ -7453,6 +7499,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     /*
+     * WP392（docs/104）：竞品监控——监控源从唯一工作清单（GEO 关注设置）同步，进料口读一次、和上一次快照比、入库。
+     * 托管实例不装（一、二期在本机跑，docs/104 §3.6）。
+     */
+    const competitorWatch: CompetitorWatchAssembly | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createCompetitorWatch({
+            workspace_id: ws,
+            store: competitorWatchDb.forWorkspace(ws),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            brandWatch: async () => (await seoService.geoHistory()).watch(),
+            adapters: () => options.competitorAdapters?.(ws) ?? {},
+          })
+    /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
      */
@@ -7533,6 +7595,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
+      ...(competitorWatch === undefined ? {} : { competitorWatch }),
       redditLimits,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
@@ -8230,6 +8293,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       tick: async () =>
         (await (await of()).redditWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
     })
+    // WP392：竞品监控（这个品牌的唯一竞品清单、进料口）；没装（托管）就什么都不做
+    registerCompetitorWatch(s, {
+      tick: async () =>
+        (await (await of()).competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
+    })
     // WP315：广告看数据（这个品牌的账户、插件、邮箱）；没装（托管）就什么都不做
     registerAdsDailyExport(s, {
       tick: async () =>
@@ -8329,6 +8397,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
         // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
         redditPatrol: held('social.reddit'),
+        // WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条
+        competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
         adsDailyExport: held('ads.google') || held('ads.meta'),
       },
@@ -12491,6 +12561,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               throw new ApiError('not_implemented', '这个品牌没有装 Reddit 巡查。')
             return rw
           }),
+          // WP392：竞品监控 `/v1/competitor-watch*`（工作台：状态 / 变化表 / 频率 / 现在读一次）
+          competitorWatch: (() => {
+            const cwOf = async (ws: WorkspaceId): Promise<CompetitorWatchAssembly> => {
+              const cw = (await brandModules.forWorkspace(ws)).competitorWatch
+              if (cw === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装竞品监控。')
+              return cw
+            }
+            return {
+              view: async (ws: WorkspaceId) => (await cwOf(ws)).view(),
+              changes: async (
+                ws: WorkspaceId,
+                q: Parameters<CompetitorWatchAssembly['changes']>[0],
+              ) => (await cwOf(ws)).changes(q),
+              updateSettings: async (
+                ws: WorkspaceId,
+                patch: Parameters<CompetitorWatchAssembly['updateSettings']>[0],
+              ) => (await cwOf(ws)).updateSettings(patch),
+              runNow: async (ws: WorkspaceId) => (await cwOf(ws)).runNow({ trigger: 'manual' }),
+            }
+          })(),
         }
       : {}),
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）

@@ -141,6 +141,8 @@ export const HANDLERS = {
   adsLineCompare: 'ads.line_compare',
   /** WP328（docs/102）：Reddit 每日巡查（每小时看一眼到点没有；默认一天一次；周五那次由周报调）。 */
   redditPatrol: 'social.reddit_patrol',
+  /** WP392：竞品监控（一小时一拍、到点才读）。 */
+  competitorWatch: 'store.competitor_watch',
   /** WP315（docs/101 §5.1①）：广告看数据（每小时看一眼：该建「工坊日报」的建、9 点后该导的导、插件不在读邮箱）。 */
   adsDailyExport: 'ads.daily_export',
 } as const
@@ -1056,6 +1058,17 @@ export function registerRedditPatrol(scheduler: Scheduler, deps: RedditPatrolDep
   scheduler.register(HANDLERS.redditPatrol, () => deps.tick())
 }
 
+/** WP392（docs/104）：竞品监控也是一小时一拍、到点才读（默认每天本地 9 点后一次，频率用户能改）。 */
+export const COMPETITOR_WATCH_INTERVAL_MS = 60 * 60_000
+
+export interface CompetitorWatchDeps {
+  tick(): Promise<{ ran: boolean; run_id?: string; skipped?: string }>
+}
+
+export function registerCompetitorWatch(scheduler: Scheduler, deps: CompetitorWatchDeps): void {
+  scheduler.register(HANDLERS.competitorWatch, () => deps.tick())
+}
+
 /** WP315：广告看数据也是一小时一拍、到点才导（默认每天本地 9 点后一次；电脑和 Chrome 开着才导得成）。 */
 export const ADS_DAILY_EXPORT_INTERVAL_MS = 60 * 60_000
 
@@ -1308,6 +1321,8 @@ export interface SchedulePlanOptions {
     redditPatrol?: boolean
     /** WP315：有人担 Google / Meta 投放才建看数据那一条。 */
     adsDailyExport?: boolean
+    /** WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条。 */
+    competitorWatch?: boolean
   }
 }
 
@@ -1625,6 +1640,21 @@ export async function ensureSystemTasks(
    * WP315：广告看数据。一小时一拍、到点才导；**错过了不补跑这一拍**（`skip`）——关机期间错过的，
    * 开机后下一拍看「今天导过没有」只导一次。
    */
+  /*
+   * WP392：竞品监控。一小时一拍、到点才读；错过了不补跑这一拍（`skip`）——关机期间错过的，开机后下一拍
+   * 看「隔了几天」只补一次。没写竞品独立站 / Amazon 对标款时这一拍什么都不读。
+   */
+  if (options.has.competitorWatch === true) {
+    await add(
+      'sched_competitor_watch',
+      systemTask(base, {
+        title: '看一眼竞品上新和价格（默认每天一次）',
+        handler: HANDLERS.competitorWatch,
+        trigger: { kind: 'interval', every_ms: COMPETITOR_WATCH_INTERVAL_MS },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
   if (options.has.adsDailyExport === true) {
     await add(
       'sched_ads_daily_export',

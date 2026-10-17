@@ -68,6 +68,7 @@ import type { ChangeFilesPort } from './routes/changes.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
+import type { CompetitorWatchPort } from './routes/competitor-watch.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
@@ -958,6 +959,11 @@ export interface GatewayDeps {
    * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。
    */
   redditWatch?: RedditWatchPort
+  /**
+   * WP392（docs/104）：竞品监控（工作台看各监控源状态 / 竞品变化表 / 改频率 / 现在读一次）。
+   * 没装配时那几条路由回 not_implemented。
+   */
+  competitorWatch?: CompetitorWatchPort
   /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），

@@ -56,6 +56,7 @@ import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
+import type { CompetitorWatchAssembly } from './competitor-watch/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
 import type { RedditLimits } from './reddit-write/limits.js'
 import type { RedditWriteService } from './reddit-write/service.js'
@@ -297,6 +298,8 @@ export interface BrandModuleSet {
   adsWiring?: AdsWiring
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /** WP392（docs/104）：竞品监控（托管实例没有）。 */
+  competitorWatch?: CompetitorWatchAssembly
   /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
   redditLimits?: RedditLimits
   /**
