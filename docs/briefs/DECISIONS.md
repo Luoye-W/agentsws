@@ -1101,3 +1101,8 @@
 | 1053 | （WP377）不支持思考档的模型带了 `reasoning_effort`：云端去掉、按默认跑 | **Luoye 10-17 按建议** |
 | 1054 | （WP377）v4 Pro 的三档 | **Luoye 10-17 按 Fable 建议**：快 = 关掉思考（thinking.type=disabled）、标准 = high、深度 = max；Flash 快 = low / 标准 = high / 深度 = max。依据 Fable 10-17 钥匙串 key 直连实测：v4 Pro / Flash 的 max / high / low / disabled 全 200，reasoning_tokens 含在 completion_tokens 里，v4 Pro 收 low 但思考量与 high 差不多，disabled 只出 8 个 token。云端价目写明三档映射（`levels`） |
 | 1055 | （WP377）DeepSeek 自带 key 的 Chat 口也出思考小钮 | **Luoye 10-17 按建议**：另开 WP378 |
+| 1056 | （WP378）自带 DeepSeek API key 走 Chat 口那条也出思考小钮：三档与工坊积分一致（v4 Pro 快 = 关掉思考 / 标准 = high / 深度 = max；Flash 快 = low / 标准 = high / 深度 = max）；只认官方地址 `api.deepseek.com` + 表里四个模型名，代理地址、`deepseek-chat` / `deepseek-reasoner` 不出 | 建议：照已做的 |
+| 1057 | （WP378）账号登录 / Messages 口那条的 v4 Pro「快」从 low 改成关掉思考，三条来源口径一致（Flash 不变）；以前在事项里存过 Pro「快」（low）的，回到「标准」 | 建议：照已做的（依据 1039 / 1054 的 Fable 实测：Pro 的 low 与 high 想得差不多） |
+| 1058 | （WP378）没选档时 Chat 口一格不发，靠 DeepSeek 官方默认 = high = 界面亮的「标准」（与 Messages 口、WP377 工坊积分同口径；老用户请求字节不变） | 建议：照这样；Fable 上线前实测一次「不带这两格时回包有没有 reasoning_tokens」，若默认不想，再改成没选也发「标准」 |
+| 1059 | （WP378）只认表里写了的模型名，DeepSeek 上新模型要在 `model-gateway` 的 `deepseek-chat-thinking.ts` 加一行，不按名字猜 | 建议：照这样（和 WP373「没声明不出」一个规矩） |
+| 1060 | （WP378）上线前实测（花几分钱，交 Fable 用钥匙串 key）：官方 Chat 口 v4 Pro 发 `thinking: disabled`、`enabled + high`、`enabled + max`，Flash 发 `enabled + low`，各一次，看都 200、`reasoning_tokens` 随档位递增 | 建议：WP377 §1.3 第 1 条已含同样的请求，跑那一遍就够，不另跑 |

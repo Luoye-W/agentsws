@@ -28,6 +28,10 @@ Signing out deletes the sign-in on this computer and turns this model source off
 
 The API key only goes into this computer's encrypted store: never through AI, never into logs.
 
+## Thinking level
+
+Both ways let you pick Fast / Standard / Deep next to the AI button in the input box (Standard by default). Fast on v4 Pro answers without thinking; Fast on Flash thinks a little. Deep thinks longest; thinking is billed as output, so it costs the most.
+
 ## Out of balance
 
 - Account sign-in: the card says "DeepSeek balance too low" with a "Top up" link; top up on the [DeepSeek platform](https://platform.deepseek.com) and let it continue.

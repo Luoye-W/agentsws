@@ -156,6 +156,13 @@ export {
   parseModelListing,
   resolveAccountCatalog,
 } from './providers/deepseek-account-models.js'
+// WP378（决策 1055）：DeepSeek 官方 API key 走 Chat 口的思考档（三档与工坊积分一致）
+export {
+  DEEPSEEK_THINKING_LEVELS,
+  type DeepSeekThinkingLevels,
+  deepseekChatEffortFields,
+  deepseekThinkingLevelsOf,
+} from './providers/deepseek-chat-thinking.js'
 // WP143：DeepSeek Files API 复用（移植自官方 dsh-llm-deepseek@0.1.7-rc.1）
 export type {
   DeepSeekFileConnection,
