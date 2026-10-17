@@ -2212,3 +2212,82 @@ lockfile `packages:` 段 1945 → 1944 条：dsh 包**一个没进、一个没�
 1. `next` = 0.2.1-rc.1 当天出了（cordis 改正式号 4.0.5）：下一跳是跟 rc 还是继续跟 alpha，交 Luoye 定（报告 976）。
 2. pi-ai 仍是 1.1.0：1.3.0 已出、dsh 范围允许，但 ChatGPT 订阅目录（9 个模型）两版逐字相同，这一跳不动它。
 3. `desktopPlatform` 上游洞（WP134）仍在。
+
+## 0.2.1-alpha.5 → 0.2.1-rc.1（2026-10-17，WP373，决策 976 跟 rc）
+
+### 0. 版本口径
+
+Luoye 10-17 定 976：「rc.1 直接跟着官方更新（不等）」，取当时官方最新的 0.2.1 预发版里**版本号最新**的那个。升级当天（10-17 08:20Z 前后）：
+
+| tag | 版本 | 发布时间 |
+|---|---|---|
+| `latest` | 0.2.0-rc.2 | 2026-09-29T09:56Z |
+| `alpha` | 0.2.1-alpha.5 | 2026-10-16T12:31Z |
+| `next` | **0.2.1-rc.1** | 2026-10-17T03:17Z（GitHub tag `dsh-v0.2.1-rc.1` 05:22Z 补上了） |
+
+GitHub 上 08:16Z 又打了 `dsh-v0.2.1-rc.2`（新功能见 §8），但到本单收尾 npm 上还没有这一版，所以本单停在 rc.1。
+
+`dsh-v0.2.1-alpha.5..dsh-v0.2.1-rc.1` 只有 **4 条提交**：两条是发版合并，`release(vendor)` 把 cordis 一家改成正式号，`release(dsh)` 改 dsh 的号。
+`git diff dsh-v0.2.1-alpha.5 dsh-v0.2.1-rc.1` 一共 355 个文件、**每个文件只改了 `"version"` 那一行**（脚本按行比过：去掉版本号后增删行 0）。
+
+**兄弟包这一跳必须跟**：`npm view @deepseek-ai/dsh@0.2.1-rc.1 dependencies` 写的是 cordis `~4.0.5`、schemastery `~3.18.5`、loader `~1.0.6`、include `~1.0.10`、timer `~1.1.7`——
+正式号的 `~` 不含 `4.0.5-alpha.2` 这些预发布号。kernel / roles / credentials-openconnector / apps/server / profile / dsh-adapter 六处一起改成正式号（`group 1.0.5`、`cosmokit 1.8.6` 由它们带进来）。
+这几个正式号 10-16 13:40Z 才发，还在静默期里，进了 `minimumReleaseAgeExclude`（见 §2）。
+
+**逐包查新版在不在**：仓库里写死 `0.2.1-alpha.5` 的 59 个 `@deepseek-ai/dsh*` 包，`npm view <包>@0.2.1-rc.1 version` **59 个全在**。
+
+**官方升级指南**：这一跳 `docs/upgrade-guide` 没有新文件。
+
+### 1. 上游改了什么（碰到我们的）
+
+**什么都没改**——源码层面 tag 之间只有版本号。为了不只信 tag，又把**发布到 npm 的包**逐个比了一遍：
+59 个直接依赖的 dsh 包 + cordis，alpha.5 与 rc.1 两版 `npm pack` 下来解开，**除 `package.json` 外逐字相同**；`package.json` 去掉版本号后也逐字相同。
+schemastery / loader / include / timer / group / cosmokit 六个兄弟包的 alpha.2 与正式号同样只差版本号。
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`dsh-base` / `dsh-headless` 两份 `cordis.patch.yml` 与 alpha.5 逐字相同（包内容逐字相同的一部分）。锁定表五行全在、组合后全关；`profile-lockdown.test.ts` 全过。**这一跳没有新锁一行，也没有新开一行**。
+
+### 2. 依赖树与原生依赖
+
+lockfile `packages:` 段 1945 → 1945 条：**包名一个没进、一个没走**；变的只有 299 个 dsh 包与七个兄弟包的版本号。没有新包，`allowBuilds` / `ignoredOptionalDependencies` 一字未改。
+
+`minimumReleaseAgeExclude`：299 条 `@deepseek-ai/dsh*@0.2.1-alpha.5` 原位换成 `@0.2.1-rc.1`；另加七条兄弟包正式号（带 WP373 注释）。
+**这一跳的坑**：pnpm 11.13 会先拿新的排除表去校验**旧 lockfile**，旧的 alpha.5 已经不在表里，直接报 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`。
+做法：临时在表里并排留一份 alpha.5（pnpm 会把它们合并成 `alpha.5 || rc.1`），`pnpm install` 换好 lockfile 后，把表还原成只有 rc.1 的那一份，再 `pnpm install --frozen-lockfile` 过一遍（「Lockfile passes supply-chain policies」）。
+脚本核对：lockfile 里 `@deepseek-ai/dsh*@0.2.1-rc.1` 299 个 = 排除表 299 条；lockfile 里 `0.2.1-alpha.5` 0 处、`-alpha.2` 0 处；表里没有新的 `||`。
+BrowserSkill 四条与 `dsh-web-search-diy` 四条 `overrides` 跟着换号（schemastery 那条换成 3.18.5）。
+
+### 3. 我们改了什么
+
+只有版本号：59 处 `@deepseek-ai/dsh*`（dsh-adapter / profile / credentials-openconnector）、六处兄弟包、`computer-use.lock.json`、`upstreams.yml`（dsh 三条、cordis、schemastery）、
+`DEEPSEEK_ACCOUNT_CLIENT_VERSION`、`runtime.ts` 的 health 文案、官方插件清单七项、几条测试里的版本字符串、`upgrade.test.ts` 的 FROM / TO 与 cordis 新旧号。**没有 seam 要修**。
+
+### 4. 怎么证明行为没变
+
+1. **指纹**：升级前在当前代码树（WP370 合进 main 之后）重采，与仓库里的 `0.2.1-alpha.5.json` **逐字节相同**（`cmp` 无输出），照 WP149 不另存，FROM 直接用它；
+   TO = `0.2.1-rc.1.json`。70 场景 × 2 档 = **140 条**，去掉 `dsh_version` 与 `packages` 后两份**逐字节相同**；`upgrade.test.ts` 全过。
+2. **提示词与工具表**：同一段临时测试（不进仓库）升级前后各导一次——两档 × 三种请求（默认售后、带网页工具的内容岗、带终端的建站岗）每一轮的 `messages` + `tools`——**逐字节相同**（先跑两遍确认导出本身是确定的）。
+3. **三个模拟包 × 三个运行时**（stub / direct / dsh）升级前后各一遍，九份 `summary.txt` 前后逐字节相同；`--rewrite-baseline` 没用。
+4. **装包前冒烟** `scripts/preinstall-smoke.mjs`（10 岗位 × 7 步，真 dsh 子进程档）升级前后各一遍全过，结果表逐字相同。
+
+### 5. 官方功能优先：这一跳开了什么、没开什么
+
+源码没变，没有新功能可开。官方插件清单七项照旧（只换号）。
+
+### 6. ④bis 默认值扫描
+
+tag 之间只有 `"version"` 行，含 `.default(` / `default:` 的变化行 **0 行**。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+与 WP370 一节同：四个相关包这一跳 `src` 零改动，**全部成立，不换**。
+
+### 8. 留下的东西
+
+1. **rc.2 已在 GitHub 打 tag、npm 还没发**（本单收尾时）。它和 rc.1 隔 9 条提交，有一项实打实的新东西：`feat(web): add DeepSeek Search and Fetch APIs behind a settings switch`——
+   DeepSeek 新开的 `/v1/tools` 搜索 / 抓网页接口，放在设置开关后面、默认仍走 Messages 搜索（账号登录也能用、会把这轮用户那句话截 128 字当 `ori_question` 一起发）；另外 DeepSeek Flash 的显示名临时带「1017」小标。
+   我们的网页搜索从 WP353 起默认走内置浏览器，DeepSeek 自带搜索只是可选老路，所以跟 rc.2 时要看的是「这个新接口要不要接成一个可选搜索后端」（交 Luoye，见 WP373 报告）。
+2. 安全公告：`pnpm audit` 里落在 dsh 树上的三条——`fflate`（中，经 sdk-app 的 Office 包，我们不挂；WP370 已记）、`fast-uri`（中，经 `dsh-app-boot` 的配置编辑器带的 ajv，只做 schema 校验，不出网）、
+   `ip-address`（中，经 pi-ai → `@google/genai` → MCP SDK → `express-rate-limit`，那是起服务端时的限流，我们不起）——都碰不到我们，等官方升。WP370 记的 `compression` 这次 audit 里不再出现。
+3. pi-ai 仍是 1.1.0；`desktopPlatform` 上游洞（WP134）仍在。
