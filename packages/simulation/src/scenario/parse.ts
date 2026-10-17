@@ -181,6 +181,8 @@ const EVENT_KEYS = [
   // WP69 岗位是任务主入口（54）
   'position.staff',
   'position.open',
+  // WP395：首次设置按原话与勾选划分岗位
+  'position.plan',
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
@@ -317,6 +319,9 @@ const EXPECTED_KEYS = [
   // WP291：岗位入口三分 + 当场回答的组件
   'position_entries',
   'position_answer_components',
+  // WP395：首次设置划分出的岗位、没数据照实说
+  'positions_planned',
+  'position_answer_no_data',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
   'assistant_fanout_tasks',
@@ -2268,6 +2273,18 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'position.plan': {
+      known(source, `${path}.${key}`, body, ['who', 'text', 'roles'])
+      return {
+        at,
+        type: 'position.plan',
+        plan: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          text: str(source, `${path}.${key}.text`, body.text),
+          roles: optStrList(source, `${path}.${key}.roles`, body.roles) ?? [],
+        },
+      }
+    }
     case 'position.open': {
       known(source, `${path}.${key}`, body, ['who', 'position', 'text', 'judge'])
       const judge = body.judge
@@ -2630,6 +2647,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.position_answer_components,
   )
   if (answerComponents !== undefined) out.position_answer_components = answerComponents
+  // WP395：`{ 模板 id: [职责…] }`
+  if (raw.positions_planned !== undefined) {
+    const planned = raw.positions_planned
+    if (typeof planned !== 'object' || planned === null || Array.isArray(planned))
+      fail(source, 'expected.positions_planned', '要写成 { 模板 id: [职责…] }')
+    const map: Record<string, string[]> = {}
+    for (const [k, v] of Object.entries(planned as Record<string, unknown>))
+      map[k] = optStrList(source, `expected.positions_planned.${k}`, v) ?? []
+    out.positions_planned = map
+  }
+  const noData = optStrList(source, 'expected.position_answer_no_data', raw.position_answer_no_data)
+  if (noData !== undefined) out.position_answer_no_data = noData
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
