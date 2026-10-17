@@ -260,6 +260,9 @@ export function migrateOwnerPositionName<
   }
 }
 
+/** WP395（docs/106 §13）：Amazon 运营岗位的模板 id（= `packages/roles/positions/amazon-ops.yml`）。 */
+export const AMAZON_OPS_POSITION_ID = 'amazon-ops'
+
 /**
  * 首批岗位（27 §1 三人包那三行）。只保留"职责定义真的在这台机器上"的那些条目：
  * 默认包里一个职责都不剩的岗位不种——界面上出现一个点不动的卡片比没有它更糟。
@@ -269,6 +272,11 @@ const SEED_POSITIONS: readonly {
   zh: string
   en: string
   roles: [RoleId, boolean][]
+  /**
+   * WP395（docs/104 C2）：`true` = 工作区建好时**不种**，只进类别目录；首次设置里有人选了它的
+   * 职责（推荐只在提到 Amazon 时出），`ensurePosition` 才按这一份建出来。
+   */
+  on_demand?: boolean
 }[] = [
   // WP196（Luoye 09-29）：最高那个岗位默认叫「负责人」（Lead）——不一定是 CEO，也可能是
   // 管海外业务的那位；用户在公司页可以自己改（CEO、海外业务总监……）。id 仍是 `owner`。
@@ -434,6 +442,21 @@ const SEED_POSITIONS: readonly {
       ...B2B_ROLES.map((r): [RoleId, boolean] => [r.role_id, r.default]),
       ['common.member', false],
     ],
+  },
+  // WP395（docs/106 §13）：**Amazon 运营**岗位。亚马逊店铺运营默认勾；Amazon 客服列着、默认不勾
+  // （A3：客服岗已经有这条，只做 Amazon 又没客服岗时划分建议把它挂过来）。
+  // 只在卖 Amazon 的品牌下出现（docs/104 C2）：`on_demand`，不随工作区种出来。
+  // 排在客服后面：`amz.support` 挂在两个模板里时类别归第一个（客服）。
+  {
+    id: AMAZON_OPS_POSITION_ID,
+    zh: 'Amazon 运营',
+    en: 'Amazon Operations',
+    roles: [
+      ['amz.store', true],
+      ['amz.support', false],
+      ['common.member', false],
+    ],
+    on_demand: true,
   },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
@@ -642,6 +665,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   // 首批岗位：库里空的时候种一次；之后用户怎么改就是怎么样
   if (backend.positions().length === 0) {
     for (const seed of SEED_POSITIONS) {
+      if (seed.on_demand === true) continue
       const kept = seed.roles.filter(([id]) => roles.roles.get(id) !== undefined)
       if (!kept.some(([, isDefault]) => isDefault)) continue
       backend.putPosition({
@@ -1607,6 +1631,25 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     by: PersonId,
   ): string => {
     const name = input.name.trim() === '' ? '我的岗位' : input.name.trim()
+    // WP395：按需的模板（Amazon 运营）第一次被选上时才建出来，id 与出厂那份一致
+    if (input.template_id !== undefined && positionOf(input.template_id) === undefined) {
+      const seed = SEED_POSITIONS.find((x) => x.id === input.template_id && x.on_demand === true)
+      const kept = (seed?.roles ?? []).filter(([r]) => roles.roles.get(r) !== undefined)
+      if (
+        seed !== undefined &&
+        kept.some(([, isDefault]) => isDefault) &&
+        input.role_ids.every((r) => kept.some(([x]) => x === r))
+      ) {
+        backend.putPosition({
+          id: seed.id,
+          version: '1.0.0',
+          name: { zh: seed.zh, en: seed.en },
+          roles: kept.map(([role, isDefault]) => ({ role, default: isDefault })),
+          source: 'bundled',
+        })
+        emit('position.created', by, { position_id: seed.id, via: 'onboarding' })
+      }
+    }
     const template = input.template_id === undefined ? undefined : positionOf(input.template_id)
     if (
       template !== undefined &&
