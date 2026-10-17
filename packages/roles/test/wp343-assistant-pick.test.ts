@@ -14,7 +14,7 @@ const reddit: PickPosition = {
   name: 'Reddit 运营',
   aliases: ['Reddit Ops'],
   duties: [
-    { role_id: 'social.reddit', name: '自家版运营' },
+    { role_id: 'social.reddit', name: '官方版块' },
     { role_id: 'pr.reddit', name: 'Reddit 外部露出' },
   ],
 }
@@ -30,14 +30,14 @@ describe('pickDispatchTarget', () => {
       pickDispatchTarget([owner, reddit, care], {
         text: '查一下今天的新帖',
         position: 'reddit运营',
-        duty: '自家版运营',
+        duty: '官方版块',
       }),
     ).toEqual({ ok: true, position_id: 'reddit-ops', role_id: 'social.reddit', by: 'named' })
   })
 
   it('话里提到一个岗位就派给它（职责名也提到了就带上）', () => {
     const out = pickDispatchTarget([owner, reddit, care], {
-      text: '让 Reddit 运营的自家版运营查一下今天的新帖',
+      text: '让 Reddit 运营的官方版块查一下今天的新帖',
     })
     expect(out).toEqual({
       ok: true,

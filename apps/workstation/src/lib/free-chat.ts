@@ -211,7 +211,7 @@ export interface AssistantState {
 export interface AssistantTarget {
   position_id: string
   role_id?: string
-  /** 「Reddit 运营 · 自家版运营」 */
+  /** 「Reddit 运营 · 官方版块」 */
   label: string
 }
 

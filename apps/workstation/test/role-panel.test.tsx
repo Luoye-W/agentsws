@@ -19,7 +19,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClientError, type PersonaViewData, type PositionInstanceData } from '@/lib/api'
 import { AppProvider } from '@/lib/app-context'
-import { renderWithProviders } from './helpers'
+import { openRailPanel, renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
   position_id: 'web-ops',
@@ -125,7 +125,8 @@ function renderRail(route = '/', position = 'asg_store'): void {
 async function openRolePanel(route = '/', position = 'asg_store'): Promise<HTMLElement> {
   renderRail(route, position)
   // WP208：角色是「设定」的第一个标签——点开「设定」默认就在这一格
-  fireEvent.click(screen.getByTestId('rail-icon-settings'))
+  // WP372：右上角「设定」开的是卡片，卡底「显示更多」才是完整的「设定」
+  await openRailPanel('settings')
   // 面板体是 `lazy()` 的：第一次要现加载那个 chunk，机器忙的时候 1 秒不够
   const panel = await screen.findByTestId('role-panel', undefined, { timeout: 8000 })
   await screen.findAllByTestId('role-persona', undefined, { timeout: 8000 })

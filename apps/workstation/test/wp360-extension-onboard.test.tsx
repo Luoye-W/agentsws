@@ -25,7 +25,7 @@ function Where(): React.ReactNode {
 const base = (over: Partial<ExtensionNeedsView> = {}): ExtensionNeedsView => ({
   needed: true,
   uses: ['reddit'],
-  roles: [{ role_id: 'social.reddit', name: { zh: '自家版运营', en: 'Own Subreddit' } }],
+  roles: [{ role_id: 'social.reddit', name: { zh: '官方版块', en: 'Official Subreddit' } }],
   paired: false,
   steps: [{ step: 'reddit', done: false }],
   plans: [{ target: 'reddit.watch', name: 'Reddit 巡查', satisfied: false }],
@@ -156,7 +156,7 @@ describe('首次设置第 ④ 步', () => {
     model_configured: true,
     model_first: false,
     role_ids: ['social.reddit'],
-    extension: { uses: ['reddit'], needed_by: ['自家版运营'], paired: false },
+    extension: { uses: ['reddit'], needed_by: ['官方版块'], paired: false },
     ...over,
   })
 

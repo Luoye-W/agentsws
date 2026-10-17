@@ -183,7 +183,7 @@ describe('createAssistant', () => {
       title: '查新帖',
       position_id: 'reddit',
       position_name: 'Reddit 运营',
-      duty_name: '自家版运营',
+      duty_name: '官方版块',
       reported: [],
     }
     const first = await assistant.progressOf(actor, row)
@@ -192,7 +192,7 @@ describe('createAssistant', () => {
       ['done:r1', 'done'],
       ['failed:r2', 'failed'],
     ])
-    expect(first[1]?.text).toBe('**Reddit 运营 · 自家版运营** 做完了：查到 3 条新帖')
+    expect(first[1]?.text).toBe('**Reddit 运营 · 官方版块** 做完了：查到 3 条新帖')
     const again = await assistant.progressOf(actor, { ...row, reported: first.map((r) => r.key) })
     expect(again).toEqual([])
   })

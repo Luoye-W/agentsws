@@ -272,7 +272,10 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
       expect(registry.resolvePanelId(id)).toEqual({ id: 'settings', sub: id })
     }
     // 不是别名的原样回
-    expect(registry.resolvePanelId('evidence')).toEqual({ id: 'evidence' })
+    expect(registry.resolvePanelId('browser')).toEqual({ id: 'browser' })
+    // WP372：记录 / 发出记录 / 证据合成「产出」的三个标签（旧 id 是别名）
+    for (const id of ['records', 'outbound', 'evidence'])
+      expect(registry.resolvePanelId(id)).toEqual({ id: 'outputs', sub: id })
     // 搬走的两个（邮件助手进消息页、设计规范进公司 → 品牌）不在第三栏了
     expect(registry.panelType('mail-assistant')).toBeUndefined()
     expect(registry.panelType('design-md')).toBeUndefined()
@@ -308,7 +311,9 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
       expect(registry.panelBody(id)).toBeUndefined()
     }
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-data'))
+    // WP372：不成卡的工具在右上角「⋮」里
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-data'))
     expect(await screen.findByTestId('rail-placeholder')).toBeDefined()
   })
 
@@ -316,16 +321,20 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
     expect(registry.panelType('schedules')?.group).toBe('layer')
     expect(registry.panelType('schedules')?.useBadge).toBeDefined()
     expect(registry.panelBody('schedules')).toBeDefined()
-    // WP288：「记录」在「这个岗位或职责」那一组（跟层走），「问 AI」不在注册表里了
-    expect(registry.panelType('records')?.group).toBe('layer')
-    expect(registry.panelType('records')?.scoped).toBe(true)
-    expect(registry.panelBody('records')).toBeDefined()
+    // WP372：定时任务 = 「计划」卡的完整列表
+    expect(registry.panelType('schedules')?.card).toBe('plans')
+    // WP288 →  WP372：「记录」进了「产出」（跟层走），「问 AI」不在注册表里了
+    expect(registry.panelType('outputs')?.group).toBe('layer')
+    // 不跟层走（证据看的是被点的那张卡）；「记录」那个标签定位不到岗位时自己照实说
+    expect(registry.panelType('outputs')?.scoped).toBeUndefined()
+    expect(registry.panelBody('outputs')).toBeDefined()
     expect(registry.panelType('ask')).toBeUndefined()
   })
 
-  it('WP100：「证据」也走同一条公开路——有类型也有身体', () => {
-    expect(registry.panelType('evidence')?.priority).toBe('builtin')
-    expect(registry.panelBody('evidence')).toBeDefined()
+  it('WP100 → WP372：「证据」是「产出」的一个标签，走同一条公开路', () => {
+    expect(registry.panelType('evidence')).toBeUndefined()
+    expect(registry.panelType('outputs')?.priority).toBe('builtin')
+    expect(registry.panelBody('outputs')).toBeDefined()
   })
 
   it('WP95 新加的两个（变更审阅 / 运行中的浏览器）也在同一张表里', () => {
@@ -413,39 +422,33 @@ describe('启动不激活（#6）', () => {
     // 而记忆面板**没有**被挂起来，所以它那条接口一次都没打
     expect(getLayerMemory).not.toHaveBeenCalled()
   })
-
-  // WP97 把第十三个（Office 预览）加进了工具那一组
-  // WP113（63 §8）：加了「邮件助手」那一格，于是从十三个变成十四个
-  // WP120（69 §4）：中组多了「角色」→ 十五个
-  // WP122（71）：又加了「设计规范」那一格（`layer` 组），于是十六个
-  // WP140：内测期间藏起四个还没做的占位面板（数据 / 运行中 / 定时任务 / 文件），于是十二个
-  // WP156：工具组最后加了「教程」，于是十三个
-  // WP181：「定时任务」做好了原位放出来，于是十四个
-  // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成「设定」，邮件助手与设计规范搬走，于是八个
-  // WP288：「问 AI」删掉、「记录」从岗位页 / 职责页的页签挪进中组，还是八个
-  it('一个都没开的时候：九个图标都在（WP323 加了「发出记录」），但没有任何面板发请求', () => {
+  // WP372（决策 1001 / 1019 / 1020）：竖着那一条图标轨改成窗口右上角一排——六张卡各一个图标 +「⋮」
+  it('一个都没开的时候：右上角六张卡的图标 +「⋮」，没有任何面板发请求', async () => {
     renderRail()
-    expect(screen.getAllByTestId(/^rail-icon-/).map((b) => b.dataset.testid)).toEqual([
-      'rail-icon-evidence',
-      'rail-icon-changes',
+    expect(screen.getAllByTestId(/^rail-icon-[a-z]+$/).map((b) => b.dataset.testid)).toEqual([
+      'rail-icon-conversations',
+      'rail-icon-reports',
+      'rail-icon-outputs',
+      'rail-icon-plans',
+      'rail-icon-connections',
       'rail-icon-settings',
-      'rail-icon-schedules',
-      'rail-icon-records',
-      'rail-icon-outbound',
-      'rail-icon-browser',
-      'rail-icon-office-preview',
-      'rail-icon-help',
     ])
     expect(screen.queryByTestId('rail-icon-ask')).toBeNull()
-    expect(screen.getByTestId('rail-icon-schedules')).toBeTruthy()
-    expect(screen.getByTestId('rail-icon-help')).toBeTruthy()
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
+    // 不成卡的工具在「⋮」里（占位的数据面板 / 运行中 / 文件内测期间藏着）
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    const menu = await screen.findByTestId('rail-menu')
+    expect(
+      Array.from(menu.querySelectorAll('[role="menuitem"]')).map((b) =>
+        b.getAttribute('data-testid'),
+      ),
+    ).toEqual(['rail-menu-cards', 'rail-menu-changes', 'rail-menu-browser', 'rail-menu-help'])
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 })
 
-describe('WP208：「定时任务」图标带在跑的数', () => {
+describe('WP208 → WP372：「计划」卡（定时任务）的摘要与状态点', () => {
   const row = (over: Partial<ScheduledTaskRow>): ScheduledTaskRow => ({
     id: `sch_${Math.random().toString(36).slice(2)}`,
     handler: 'automation.reminder',
@@ -457,35 +460,51 @@ describe('WP208：「定时任务」图标带在跑的数', () => {
     ...over,
   })
 
-  it('只数这一层在跑的：暂停的、等批的、别的岗位的、别的种类的都不算；悬停说几个在跑', async () => {
-    getMySchedules.mockResolvedValueOnce([
-      row({}),
-      row({ state: 'running' }),
+  it('只看这一层的：等你点头的亮黄点（图标上同一个点），收起时摘要说下一次', async () => {
+    getMySchedules.mockResolvedValue([
+      row({ next_fire_at: '2030-01-02T01:00:00.000Z' }),
       row({ state: 'paused' }),
       row({ state: 'pending', params: { awaiting_approval: true } }),
       row({ params: { awaiting_approval: true } }),
-      row({ assignment_id: 'asg_other', role_id: 'dtc.support' }),
-      row({ handler: 'mail.poll' }),
+      row({
+        assignment_id: 'asg_other',
+        role_id: 'dtc.support',
+        params: { awaiting_approval: true },
+      }),
+      row({ handler: 'mail.poll', params: { awaiting_approval: true } }),
       row({ state: 'done' }),
     ])
     renderRail()
-    const badge = await screen.findByTestId('rail-badge-schedules')
-    expect(badge.textContent).toBe('2')
-    expect(screen.getByTestId('rail-icon-schedules').getAttribute('title')).toBe(
-      '定时任务 · 2 个定时任务在跑',
+    const dot = await screen.findByTestId('rail-icon-dot-plans')
+    expect(dot.getAttribute('data-dot')).toBe('attention')
+    expect(screen.getByTestId('rail-icon-plans').getAttribute('title')).toBe(
+      '计划 · 2 个计划等你点头',
     )
+    fireEvent.click(screen.getByTestId('rail-icon-conversations'))
+    const summary = await screen.findByTestId('rail-card-summary-plans')
+    expect(summary.textContent).toContain('下次')
+    // 展开：等你点头的排最上
+    fireEvent.click(screen.getByTestId('rail-card-toggle-plans'))
+    const rows = await screen.findAllByTestId('plan-row')
+    expect(rows[0]?.getAttribute('data-waiting')).toBe('true')
+    expect(rows).toHaveLength(4)
+    getMySchedules.mockResolvedValue([])
   })
 
-  it('这一层一个在跑的都没有：0 不显示，悬停只说名字', async () => {
+  it('这一层一个计划都没有：不亮点，悬停只说名字', async () => {
     getMySchedules.mockResolvedValueOnce([
-      row({ assignment_id: 'asg_content', role_id: 'dtc.content' }),
+      row({
+        assignment_id: 'asg_content',
+        role_id: 'dtc.content',
+        params: { awaiting_approval: true },
+      }),
     ])
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
     await waitFor(() => {
       expect(getMySchedules).toHaveBeenCalled()
     })
-    expect(screen.queryByTestId('rail-badge-schedules')).toBeNull()
-    expect(screen.getByTestId('rail-icon-schedules').getAttribute('title')).toBe('定时任务')
+    expect(screen.queryByTestId('rail-icon-dot-plans')).toBeNull()
+    expect(screen.getByTestId('rail-icon-plans').getAttribute('title')).toBe('计划')
   })
 })
 
@@ -554,7 +573,9 @@ describe('官方形状的薄适配（C 档第三件）', () => {
     if (def !== undefined) def.scoped = true
 
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-@example/sidebar-notes'))
+    // WP372：第三方面板没给 pinned（没说要露在右上角），就在「⋮」菜单里
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-@example/sidebar-notes'))
     const body = await screen.findByTestId('official-body')
     expect(body.textContent).toBe('web-ops')
   })

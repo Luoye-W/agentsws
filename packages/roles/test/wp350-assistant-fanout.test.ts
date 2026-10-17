@@ -21,7 +21,7 @@ const reddit: PickPosition = {
   id: 'reddit-ops',
   name: 'Reddit 运营',
   duties: [
-    { role_id: 'social.reddit', name: '自家版运营' },
+    { role_id: 'social.reddit', name: '官方版块' },
     { role_id: 'pr.reddit', name: 'Reddit 外部露出' },
   ],
 }
@@ -40,7 +40,7 @@ const all = [owner, reddit, care, site]
 describe('resolveFanout', () => {
   it('每条按点的岗位名认；职责名带上；要记的可以归品牌公共', () => {
     const items = resolveFanout(all, [
-      { kind: 'task', text: '回复昨天那条差评帖', position: 'Reddit 运营', duty: '自家版运营' },
+      { kind: 'task', text: '回复昨天那条差评帖', position: 'Reddit 运营', duty: '官方版块' },
       { kind: 'task', text: '把退货说明改成 30 天', position: '网站运营', due: '周五前' },
       { kind: 'note', text: '退货期统一 30 天', position: '客服', quote: '会上定：退货 30 天' },
       { kind: 'note', text: '品牌语气偏轻松', position: '品牌' },

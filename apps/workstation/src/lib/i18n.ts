@@ -23,6 +23,7 @@ import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
+import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
@@ -8540,6 +8541,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP372：右上角横排图标、「⋮」与右侧面板五张卡
+    ...PANEL_ZH,
   },
   en: {
     ...en,
@@ -8575,6 +8578,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...PANEL_EN,
   },
 }
 

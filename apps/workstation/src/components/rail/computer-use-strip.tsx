@@ -38,7 +38,7 @@ export function ComputerUseStrip(): ReactNode {
   return (
     <div
       role="status"
-      className="fixed top-2 right-14 z-50 flex items-center gap-2 rounded-full border border-destructive/40 bg-background px-3 py-1 text-xs shadow-sm"
+      className="fixed top-12 right-4 z-50 flex items-center gap-2 rounded-full border border-destructive/40 bg-background px-3 py-1 text-xs shadow-sm"
       data-testid="computer-use-strip"
     >
       <span className="size-2 animate-pulse rounded-full bg-destructive" aria-hidden />

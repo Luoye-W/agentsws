@@ -149,7 +149,7 @@ beforeAll(async () => {
     api_key: 'sk-assistant-test-0001',
   })
   expect(saved.status).toBe(200)
-  // 两个干活的岗位：自建「Reddit 运营」（自家版运营 + 外部露出）与「客服」模板
+  // 两个干活的岗位：自建「Reddit 运营」（官方版块 + 外部露出）与「客服」模板
   for (const input of [
     {
       name: 'Reddit 运营',

@@ -11,7 +11,7 @@
 ## Handing off a task
 
 1. Say it the way you would to a position, e.g. "Have Reddit Ops check today's new posts".
-2. The assistant picks the position (and the duty in it) and opens a task there; "Handed to Reddit Ops · Own Subreddit" shows under its reply — click it to open the task.
+2. The assistant picks the position (and the duty in it) and opens a task there; "Handed to Reddit Ops · Official Subreddit" shows under its reply — click it to open the task.
 3. When the task finishes, or needs your decision, the assistant says so in the same chat, with "Open" or "Decide" right next to it.
 
 ## What it won't do

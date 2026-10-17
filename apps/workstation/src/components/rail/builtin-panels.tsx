@@ -3,39 +3,46 @@
  *
  * WP71 那一版把十一个面板写死在图标轨的数组里；这一版它们全部改成
  * `registerPanelType()` + `registerPanelBody()` 两句——与将来任何一个应用包
- * （23）往第三栏塞面板时写的，**逐字相同**。官方点名它的文档预览面板走的是
- * 和第三方一模一样的路（README 里那句"活证据"），这条纪律我们照立：
- * 一旦有了后门，第三方面板就永远是二等公民，而"二等"会体现在它拿不到的能力上。
+ * （23）往第三栏塞面板时写的，**逐字相同**。内置不走后门：一旦有了后门，
+ * 第三方面板就永远是二等公民，而"二等"会体现在它拿不到的能力上。
  *
- * **身体一律 `lazy()`**（#6）：面板的代码在**第一次被打开**之前既不下载也不挂载，
- * 于是"刷新之后恢复布局"这件事不会顺手把上次那个面板的请求也重放一遍。
- * 图标轨照样画得出十三个格子（WP97 加了 Office 预览）——它读的是第一段（类型），那一段是静态的。
- * WP100 给「证据」补了身体，WP181 给「定时任务」补了身体，于是还占着位的只剩上组那两个（数据面板 / 运行中）。
+ * **身体一律 `lazy()`**（#6）：面板与卡的代码在**第一次被打开 / 展开**之前既不下载也不挂载。
  *
- * **WP208（Luoye 09-30）收拾一遍**：五个「这一层的设置」合成一个「设定」（旧 id 留作别名）；
- * 邮件助手搬进消息页、设计规范搬进「公司 → 品牌」；定时任务挪到中组、图标上带在跑的数。
- * 现在的顺序与每格在哪出现见 docs/36 §9.6 那张表。
+ * **WP208（Luoye 09-30）**：五个「这一层的设置」合成一个「设定」（旧 id 留作别名）。
  *
- * **占位面板只注册类型不注册身体**：点开显示"还没做"（`right-rail.tsx` 兜的），
- * 位置先占住——图标轨的位置定了就不该再挪（肌肉记忆）。
+ * **WP372（决策 1001 / 1004 / 1005 / 1019，Luoye 10-17）**：右侧面板改成**六张卡**——
+ * 对话、报表、产出、计划、连接、设定（`registerRailCard`，默认这个顺序，人可以拖）。
+ * 窗口右上角那一排是这六张卡各一个图标；浏览器、变更审阅、教程进最右的「⋮」。
+ * 「记录 / 发出记录 / 证据」合成「产出」面板的三个标签（旧 id 留作别名），「定时任务」= 计划的完整列表，
+ * 连接卡（决策 690）按地址开时展开「连接」那张卡并滚到那一条。
+ *
+ * **占位面板只注册类型不注册身体**，内测期间整组藏着（{@link SHOW_UNBUILT_PANELS}）。
  */
 import {
   Activity,
   BarChart3,
-  Clock,
+  CalendarClock,
   FileDiff,
-  FileSearch,
   FileText,
   FolderOpen,
   Globe,
   GraduationCap,
-  History,
   MessageSquareQuote,
+  MessagesSquare,
+  Package,
   Plug,
-  Send,
+  ScrollText,
   SlidersHorizontal,
 } from 'lucide-react'
 import { lazy } from 'react'
+import {
+  useConnectionsStatus,
+  useConversationsStatus,
+  useOutputsStatus,
+  usePlansStatus,
+  useReportsStatus,
+  useSettingsStatus,
+} from '@/components/rail/card-status'
 import { useOutboundBadge } from '@/components/rail/outbound-count'
 import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
 import {
@@ -43,171 +50,252 @@ import {
   registerPanelAlias,
   registerPanelBody,
   registerPanelType,
+  registerRailCard,
+  registerRailCardBody,
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
+import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
+import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 
-/**
- * WP208（Luoye 09-30）：**「设定」**——角色 / 记忆 / 知识 / 技能 / 额度五个图标合成一个。
- *
- * 五个旧面板的正文原样搬进 `settings-panel.tsx` 的五个标签（每个标签的身体仍然 `lazy()`）。
- * 旧 id 不删：下面 `registerPanelAlias` 把 `memory` / `skills` / … 落到这个面板的对应标签，
- * 职责页头部的按钮、本机存着的旧布局、别处写死的 `show('memory')` 都照旧开得到。
- */
-/** WP335：一条 AI 回答（看板方格点一格开；只按地址开）。 */
+/* ── 面板身体（`lazy()`） ─────────────────────────────────────────── */
+
 const GeoAnswerBody = lazy(async () => {
   const m = await import('@/components/rail/panels/geo-answer-panel')
   return { default: m.GeoAnswerPanel }
 })
-
 const ConnectBody = lazy(async () => {
   const m = await import('@/components/rail/panels/connect-panel')
   return { default: m.ConnectPanel }
 })
-
 const SettingsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/settings-panel')
   return { default: m.SettingsPanel }
 })
-
-/**
- * WP288（决策 326）：**记录**——原来是岗位页「记录」页签与职责页「记录」页签，挪进这一组
- * （跟着当前岗位 / 职责走）。「问 AI」那一格删了：岗位输入框发出去就进会话、事项页输入框有
- * 「私聊 AI」，用途都覆盖了。
- */
-const RecordsBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/records-panel')
-  return { default: m.RecordsPanel }
+/** WP372：产出 = 记录 / 发出记录 / 证据三个标签（原来是三个图标）。 */
+const OutputsBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/outputs-panel')
+  return { default: m.OutputsPanel }
 })
-
-/** WP323：**发出记录**（这个品牌替你发出去的每一条 + 记录去处的状态）。 */
-const OutboundBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/outbound-panel')
-  return { default: m.OutboundPanel }
-})
-
-/**
- * WP100 新增：**证据**（36 §9 那张表里的第四格）。
- *
- * 位置从 WP71 起就占着（那时点开显示"还没做"）；这一版把正文挂上来，走的是与
- * 其余十二个面板、以及将来任何一个应用包的面板**逐字相同的两句**——内置不走后门
- * （#4）。身体照旧 `lazy()`：没人点「证据 N」之前它一个字节都不下载。
- */
-const EvidenceBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/evidence-panel')
-  return { default: m.EvidencePanel }
-})
-
-/**
- * WP181：**定时任务**（官方「自动化任务」的任务页借形）。位置 WP71 起就占着、WP140 藏起来；
- * 做好了原位放出来，走与别的面板逐字相同的两句注册。
- */
 const SchedulesBody = lazy(async () => {
   const m = await import('@/components/rail/panels/schedules-panel')
   return { default: m.SchedulesPanel }
 })
-
-/** WP95 新增：运行中的浏览器（#12 借形，我们自己的组件画 WP82 / WP92 的会话）。 */
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
   return { default: m.RunBrowserPanel }
 })
-
-/** WP95 新增：变更审阅（#11，逐文件 diff）。 */
 const ChangesBody = lazy(async () => {
   const m = await import('@/components/rail/panels/changes-panel')
   return { default: m.ChangesPanel }
 })
-
-/**
- * WP97 新增：Office 预览（#13）。
- *
- * 身体是 `lazy()`，于是 `docx-preview` / `xlsx` / `jszip` 三个库在**有人点开一份
- * 文件之前**一个字节都不下载；`canOpen` 与 `matches` 那一段是静态的（第一段），
- * 判"这个地址归谁开"不需要把库先拉下来——两段式注册要的就是这个（#6）。
- */
-/**
- * WP156（36 §7 第三档）：**教程**。卡片上的「看教程」为 `agentsws://help/<slug>` 开它；
- * 人点图标轨开的是目录。身体照旧 `lazy()`，文章本身也是各自一个 chunk（`lib/help.ts`）。
- */
 const HelpBodyPanel = lazy(async () => {
   const m = await import('@/components/rail/panels/help-panel')
   return { default: m.HelpPanel }
 })
-
 const OfficePreviewBody = lazy(async () => {
   const m = await import('@/components/rail/panels/office-preview-panel')
   return { default: m.OfficePreviewPanel }
 })
+/** WP372：对话的完整列表（可搜、分组）。 */
+const ConversationsBody = lazy(async () => {
+  const m = await import('@/components/conversations/conversations-panel')
+  return { default: m.ConversationsPanel }
+})
+/** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
+const ReportsBody = lazy(async () => {
+  const m = await import('@/components/reports/reports-panel')
+  return { default: m.ReportsPanel }
+})
+const ReportBody = lazy(async () => {
+  const m = await import('@/components/reports/reports-panel')
+  return { default: m.ReportPanel }
+})
+
+/* ── 卡身体（`lazy()`：卡收着时不下载） ──────────────────────────────── */
+
+const ConversationsCardBody = lazy(async () => {
+  const m = await import('@/components/conversations/conversations-panel')
+  return { default: m.ConversationsCard }
+})
+const ReportsCardBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.ReportsCard }
+})
+const OutputsCardBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.OutputsCard }
+})
+const PlansCardBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.PlansCard }
+})
+const ConnectionsCardBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.ConnectionsCard }
+})
+const SettingsCardBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.SettingsCard }
+})
 
 /**
- * 把内置面板注册进注册表（**幂等**）。
+ * WP140：**内测期间把还没做的占位面板藏起来**。代码不删，做好一个就把它的 id 从
+ * {@link UNBUILT_PANELS} 里删掉，或者整组放出来就把它改成 `true`。
+ */
+export const SHOW_UNBUILT_PANELS = false
+
+/** 还只有类型、没有身体的那几个（数据面板 / 运行中 / 文件）。 */
+export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'files']
+
+/**
+ * WP372：六张卡的默认顺序（决策 1019：对话、报表、产出、计划、连接、设定）。
+ * 右上角露出来的也是这六个、同一个顺序。
+ */
+export const DEFAULT_CARD_ORDER: readonly string[] = [
+  'conversations',
+  'reports',
+  'outputs',
+  'plans',
+  'connections',
+  'settings',
+]
+
+/**
+ * 把内置面板与卡注册进注册表（**幂等**）。
  *
  * 幂等而不是"模块加载时跑一次"：单测会 `resetPanelRegistry()` 之后再渲染右栏，
  * 那时模块早就加载过了，副作用式的注册补不回来。
  */
-/**
- * WP140（docs/78 §2 通用，Fable 定）：**内测期间把还没做的占位面板藏起来**。
- *
- * 图标轨上四个格子点开只有一句「这个面板还没做」——内测的朋友会以为是坏了。
- * 代码不删（位置定了就不该再挪，做好了原位放出来）：做好一个就把它的 id 从
- * {@link UNBUILT_PANELS} 里删掉（它注册了身体就不再是占位），或者整组放出来就把
- * {@link SHOW_UNBUILT_PANELS} 改成 `true`——都是一行。
- */
-export const SHOW_UNBUILT_PANELS = false
-
-/**
- * 还只有类型、没有身体的那几个（数据面板 / 运行中 / 文件）。
- * WP181：「定时任务」做好了（照官方「自动化任务」的任务页借形），原位放出来。
- */
-export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'files']
-
 export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): void {
   if (panelType('settings') !== undefined) return
   const showUnbuilt = options.showUnbuilt ?? SHOW_UNBUILT_PANELS
-  /** 占位面板走这一句：开关关着就不上图标轨（注册表里也没有它，⌘K 搜不到、布局恢复当收起）。 */
   const registerUnbuilt = (definition: Parameters<typeof registerPanelType>[0]): void => {
     if (showUnbuilt || !UNBUILT_PANELS.includes(definition.id)) registerPanelType(definition)
   }
 
-  // ── 上组：这件事的 ───────────────────────────────────────────────
-  registerUnbuilt({
-    id: 'data',
-    label: 'rail.panel.data',
-    icon: BarChart3,
-    priority: 'builtin',
-    group: 'context',
+  // ── 六张卡（决策 1004 / 1019） ───────────────────────────────────
+  const at = (id: string): number => DEFAULT_CARD_ORDER.indexOf(id) + 1
+  registerRailCard({
+    id: 'conversations',
+    label: 'rail.card.conversations',
+    icon: MessagesSquare,
+    order: at('conversations'),
+    pinned: at('conversations'),
+    panel: 'conversations',
+    useStatus: useConversationsStatus,
   })
-  registerUnbuilt({
-    id: 'runs',
-    label: 'rail.panel.runs',
-    icon: Activity,
-    priority: 'builtin',
-    group: 'context',
+  registerRailCardBody('conversations', ConversationsCardBody)
+  registerRailCard({
+    id: 'reports',
+    label: 'rail.card.reports',
+    icon: ScrollText,
+    order: at('reports'),
+    pinned: at('reports'),
+    panel: 'reports',
+    useStatus: useReportsStatus,
   })
-  registerPanelType({
-    id: 'evidence',
-    label: 'rail.panel.evidence',
-    icon: FileSearch,
-    priority: 'builtin',
-    group: 'context',
+  registerRailCardBody('reports', ReportsCardBody)
+  registerRailCard({
+    id: 'outputs',
+    label: 'rail.card.outputs',
+    icon: Package,
+    order: at('outputs'),
+    pinned: at('outputs'),
+    panel: 'outputs',
+    useStatus: useOutputsStatus,
   })
-  registerPanelBody('evidence', EvidenceBody)
-  registerPanelType({
-    id: 'changes',
-    label: 'rail.panel.changes',
-    icon: FileDiff,
-    priority: 'builtin',
-    group: 'context',
-    // 变更审阅能"开"的是一件事与一条变更——第一个真用上 `matches` 的面板（#3）
-    matches: ['agentsws://matter/**', 'agentsws://change/**'],
+  registerRailCardBody('outputs', OutputsCardBody)
+  registerRailCard({
+    id: 'plans',
+    label: 'rail.card.plans',
+    icon: CalendarClock,
+    order: at('plans'),
+    pinned: at('plans'),
+    panel: 'schedules',
+    useStatus: usePlansStatus,
   })
-  registerPanelBody('changes', ChangesBody)
+  registerRailCardBody('plans', PlansCardBody)
+  registerRailCard({
+    id: 'connections',
+    label: 'rail.card.connections',
+    icon: Plug,
+    order: at('connections'),
+    pinned: at('connections'),
+    moreHref: settingsHref('connections'),
+    useStatus: useConnectionsStatus,
+  })
+  registerRailCardBody('connections', ConnectionsCardBody)
+  registerRailCard({
+    id: 'settings',
+    label: 'rail.card.settings',
+    icon: SlidersHorizontal,
+    order: at('settings'),
+    pinned: at('settings'),
+    panel: 'settings',
+    useStatus: useSettingsStatus,
+  })
+  registerRailCardBody('settings', SettingsCardBody)
 
-  // ── 中组：这个岗位或职责的 ───────────────────────────────────────
-  // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成一个「设定」（Luoye 09-30：图标太多）
+  // ── 卡的完整列表（「显示更多」开的那一格；不进「⋮」） ─────────────────
+  registerPanelType({
+    id: 'conversations',
+    label: 'rail.panel.conversations',
+    icon: MessagesSquare,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+    card: 'conversations',
+  })
+  registerPanelBody('conversations', ConversationsBody)
+  registerPanelType({
+    id: 'reports',
+    label: 'rail.panel.reports',
+    icon: ScrollText,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+    card: 'reports',
+  })
+  registerPanelBody('reports', ReportsBody)
+  // 看一份报表（只按地址开：报表卡上点一行）
+  registerPanelType({
+    id: 'report',
+    label: 'rail.panel.report',
+    icon: ScrollText,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+    matches: [`${REPORT_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('report', ReportBody)
+  registerPanelType({
+    id: 'outputs',
+    label: 'rail.panel.outputs',
+    icon: Package,
+    priority: 'builtin',
+    group: 'layer',
+    // 不标 scoped：「证据」看的是被点的那张卡，不跟层走；记录 / 发出记录没定位到岗位时自己照实说
+    card: 'outputs',
+    useBadge: useOutboundBadge,
+  })
+  registerPanelBody('outputs', OutputsBody)
+  // 旧 id：记录 / 发出记录 / 证据 → 产出的三个标签（岗位页 `?tab=records`、卡上「证据 N」照旧开得到）
+  for (const sub of ['records', 'outbound', 'evidence'])
+    registerPanelAlias({ id: sub, panel: 'outputs', sub })
+  registerPanelType({
+    id: 'schedules',
+    label: 'rail.panel.schedules',
+    icon: CalendarClock,
+    priority: 'builtin',
+    group: 'layer',
+    card: 'plans',
+    useBadge: useSchedulesBadge,
+  })
+  registerPanelBody('schedules', SchedulesBody)
   registerPanelType({
     id: 'settings',
     label: 'rail.panel.settings',
@@ -216,45 +304,28 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     priority: 'builtin',
     group: 'layer',
     scoped: true,
+    card: 'settings',
   })
   registerPanelBody('settings', SettingsBody)
   // WP335：「关注设置」（只在「内容与搜索」职责层出那个标签）也落在「设定」里
   for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps', 'geo-watch'])
     registerPanelAlias({ id: sub, panel: 'settings', sub })
-  /*
-   * WP181：**定时任务**。WP208 从「这件事的」挪到这一组：它的数（图标右上角）跟着当前岗位 /
-   * 职责走——职责层数这条职责、岗位层数整个岗位在跑的（`schedule-count.ts`）。
-   */
+  // WP324（决策 690）：连接卡——「去连接」开的；WP372 起展开「连接」卡、在那张卡里就地连
   registerPanelType({
-    id: 'schedules',
-    label: 'rail.panel.schedules',
-    icon: Clock,
+    id: 'connect',
+    label: 'rail.panel.connect',
+    icon: Plug,
     priority: 'builtin',
-    group: 'layer',
-    useBadge: useSchedulesBadge,
+    group: 'context',
+    matches: [`${CONNECT_ADDRESS_PREFIX}**`],
+    hidden: true,
+    card: 'connections',
   })
-  registerPanelBody('schedules', SchedulesBody)
-  registerPanelType({
-    id: 'records',
-    label: 'rail.panel.records',
-    icon: History,
-    priority: 'builtin',
-    group: 'layer',
-    scoped: true,
-  })
-  registerPanelBody('records', RecordsBody)
-  // WP323：发出记录（品牌一份，不跟岗位走；有待补写才出数）
-  registerPanelType({
-    id: 'outbound',
-    label: 'rail.panel.outbound',
-    icon: Send,
-    priority: 'builtin',
-    group: 'layer',
-    useBadge: useOutboundBadge,
-  })
-  registerPanelBody('outbound', OutboundBody)
+  registerPanelBody('connect', ConnectBody)
 
-  // ── 下组：工具 ───────────────────────────────────────────────────
+  // ── 「⋮」里的工具（不成卡的） ──────────────────────────────────────
+  registerUnbuilt({ id: 'data', label: 'rail.panel.data', icon: BarChart3, priority: 'builtin' })
+  registerUnbuilt({ id: 'runs', label: 'rail.panel.runs', icon: Activity, priority: 'builtin' })
   registerPanelType({
     id: 'browser',
     label: 'rail.panel.browser',
@@ -263,30 +334,23 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     group: 'tools',
   })
   registerPanelBody('browser', RunBrowserBody)
+  registerPanelType({
+    id: 'changes',
+    label: 'rail.panel.changes',
+    icon: FileDiff,
+    priority: 'builtin',
+    group: 'context',
+    matches: ['agentsws://matter/**', 'agentsws://change/**'],
+  })
+  registerPanelBody('changes', ChangesBody)
   registerUnbuilt({
     id: 'files',
     label: 'rail.panel.files',
     icon: FolderOpen,
     priority: 'builtin',
     group: 'tools',
+    card: 'outputs',
   })
-  // WP208：设计规范不在第三栏了——搬到「公司 → 品牌」（每个品牌一份，Luoye 09-30）
-  // WP97（#13）：第一个真被 `resolvePanel()` 挑中的面板——知识库里点一份文件，
-  // 地址 `agentsws://file/<源 id>/<文件名>` 交给注册表排序，排到它这儿，
-  // `canOpen` 再看一眼扩展名（只认 docx / xlsx / xls / csv / pptx，别的交给下载）
-  registerPanelType({
-    id: 'office-preview',
-    label: 'rail.panel.office',
-    icon: FileText,
-    priority: 'builtin',
-    group: 'tools',
-    matches: [FILE_ADDRESS_PATTERN],
-    canOpen: canOpenOfficeFile,
-  })
-  registerPanelBody('office-preview', OfficePreviewBody)
-  // WP208：邮件助手不在第三栏了——搬进「消息」页的阅读区（看信时才出现，Luoye 09-30）
-  // WP288：「问 AI」不在第三栏了（岗位输入框 = 会话；事项页输入框有「私聊 AI」）
-  // WP156：教程。归「工具」那一组，排最后——它是"不会用时"才开的东西
   registerPanelType({
     id: 'help',
     label: 'rail.panel.help',
@@ -296,18 +360,21 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     matches: [HELP_ADDRESS_PATTERN],
   })
   registerPanelBody('help', HelpBodyPanel)
-  // WP324（决策 690）：连接卡——「去连接」在第三栏就地连（只按地址开，不占图标）
+
+  // ── 只按地址开的（不进「⋮」） ───────────────────────────────────────
+  // WP97（#13）：知识库里点一份文件，`canOpen` 再看一眼扩展名（docx / xlsx / xls / csv / pptx）
   registerPanelType({
-    id: 'connect',
-    label: 'rail.panel.connect',
-    icon: Plug,
+    id: 'office-preview',
+    label: 'rail.panel.office',
+    icon: FileText,
     priority: 'builtin',
-    group: 'context',
-    matches: [`${CONNECT_ADDRESS_PREFIX}**`],
+    group: 'tools',
+    matches: [FILE_ADDRESS_PATTERN],
+    canOpen: canOpenOfficeFile,
     hidden: true,
   })
-  registerPanelBody('connect', ConnectBody)
-  // WP335（docs/99 §5.6）：一条 AI 回答——看板方格点一格在第三栏开（不占图标，只按地址开）
+  registerPanelBody('office-preview', OfficePreviewBody)
+  // WP335：一条 AI 回答——看板方格点一格在第三栏开
   registerPanelType({
     id: 'geo-answer',
     label: 'rail.panel.geo-answer',

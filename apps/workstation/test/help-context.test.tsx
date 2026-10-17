@@ -28,7 +28,7 @@ import {
   loadHelpArticle,
   splitHelpFrontmatter,
 } from '@/lib/help'
-import { renderWithProviders } from './helpers'
+import { openRailPanel, renderWithProviders } from './helpers'
 
 vi.mock('@/lib/api', async () => ({
   ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
@@ -133,7 +133,7 @@ describe('右栏「教程」面板按上下文排', () => {
     ensureBuiltinPanels()
   })
 
-  function openHelp(route: string): void {
+  async function openHelp(route: string): Promise<void> {
     renderWithProviders(
       <RailStateProvider>
         <RightRail instances={[CARE]} />
@@ -141,11 +141,12 @@ describe('右栏「教程」面板按上下文排', () => {
       route,
       'asg_chat',
     )
-    fireEvent.click(screen.getByTestId('rail-icon-help'))
+    // WP372：「教程」在右上角「⋮」里
+    await openRailPanel('help')
   }
 
   it('在职责页：三组依次是这条职责的、这个岗位的、通用', async () => {
-    openHelp('/positions/asg_chat/duties/dtc.live-chat')
+    await openHelp('/positions/asg_chat/duties/dtc.live-chat')
     await screen.findByTestId('help-panel')
     const groups = screen.getAllByTestId('help-index-group')
     expect(groups.map((g) => g.dataset.group)).toEqual(['role', 'position', 'general'])
@@ -158,7 +159,7 @@ describe('右栏「教程」面板按上下文排', () => {
   })
 
   it('在岗位页：岗位的 + 通用', async () => {
-    openHelp('/positions/asg_chat')
+    await openHelp('/positions/asg_chat')
     await screen.findByTestId('help-panel')
     expect(screen.getAllByTestId('help-index-group').map((g) => g.dataset.group)).toEqual([
       'position',
@@ -167,7 +168,7 @@ describe('右栏「教程」面板按上下文排', () => {
   })
 
   it('搜索搜全部（别的岗位的也搜得到）；「全部 N 篇」一下全摊开', async () => {
-    openHelp('/positions/asg_chat')
+    await openHelp('/positions/asg_chat')
     await screen.findByTestId('help-panel')
     expect(screen.queryByText('LinkedIn：公司主页与老板本人号')).toBeNull()
     fireEvent.change(screen.getByTestId('help-search'), { target: { value: 'linkedin' } })

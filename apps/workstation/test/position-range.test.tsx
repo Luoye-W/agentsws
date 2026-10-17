@@ -9,8 +9,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionSummary } from '@/lib/api'
-import { PositionPage } from '@/pages/position'
 import { renderWithProviders } from './helpers'
+import { PositionWithBoards } from './position-with-boards'
 
 const summary = (over: Partial<PositionSummary>): PositionSummary => ({
   position_id: 'asg_1',
@@ -77,7 +77,7 @@ beforeEach(() => {
 const openPosition = (): void => {
   renderWithProviders(
     <Routes>
-      <Route path="/positions/:id" element={<PositionPage />} />
+      <Route path="/positions/:id" element={<PositionWithBoards />} />
     </Routes>,
     '/positions/asg_1?tab=view',
   )
