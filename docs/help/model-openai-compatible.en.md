@@ -35,12 +35,16 @@ Consoles of the common ones:
 
 Local Ollama needs no key, but Ollama must be installed on this computer with that model pulled.
 
+## Thinking level (Fast / Standard / Deep)
+
+When the address is exactly one the official catalog knows (OpenAI itself, Moonshot international / China, OpenRouter, Bailian Token Plan, for example) and the model name is in that provider's catalog, a thinking-level control appears next to the AI button, and the level is sent the way that provider expects, as the official catalog says. Relays, self-hosted gateways, local Ollama and model names outside the catalog don't declare any levels, so there's no control and they work as before.
+
 ## Connect an Anthropic-compatible service (Claude relays)
 
 Some services speak the "Anthropic format" (Claude relays and self-hosted gateways, mostly). They use a separate card: **"Anthropic compatible (custom)"**, with the same "your own URL and key" plan.
 
-1. Create an API key at the relay (or in the [Anthropic Console](https://console.anthropic.com/settings/keys)).
-2. Find its base URL. With or without `/v1` both work; Agents Workshop fills in the rest. The default is Anthropic itself, `https://api.anthropic.com`; for a relay, replace it with the relay's.
+1. Create an API key at the relay. An Anthropic key of your own doesn't go here: use the "API key" plan on the "Anthropic / Claude" card.
+2. Find its base URL and enter it (this card doesn't prefill one). With or without `/v1` both work; Agents Workshop fills in the rest.
 3. On the card, click "Enter API key", fill in the URL and key, then click "Fetch model list" and pick one. If the list can't be fetched (some relays don't offer it), type the model name.
 4. To show more models in the AI button under the message box, tick them under "Also show in the AI button"; they're grouped with this source.
 5. Save, then click "Test" — three ticks mean it works.

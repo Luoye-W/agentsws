@@ -297,6 +297,10 @@ export function ModelForm({
           id={`${prefix}-base_url`}
           name="base_url"
           defaultValue={existing?.base_url ?? template.default_base_url}
+          // WP376：没有默认地址的卡（Anthropic 兼容（自定义））地址必填，框里给个样子
+          {...(template.default_base_url === ''
+            ? { required: true, placeholder: 'https://relay.example.com' }
+            : {})}
           autoComplete="off"
           spellCheck={false}
           data-testid="model-base-url"

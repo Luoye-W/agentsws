@@ -85,12 +85,12 @@ async function saveRelay(models: ReturnType<typeof modelsWith>['models'], key = 
 }
 
 describe('WP374 (a) 设置：卡、存、拉清单、勾进 AI 钮', () => {
-  it('有「Anthropic 兼容（自定义）」这张卡：填 key、默认地址是 Anthropic 本家', () => {
-    const tpl = MODEL_TEMPLATES.find((t) => t.kind === 'anthropic_compatible')
+  it('有「Anthropic 兼容（自定义）」这张卡：填 key；WP376 起默认地址留空（本家 key 走「Anthropic / Claude」卡）', () => {
+    const tpl = MODEL_TEMPLATES.find((t) => t.vendor === 'anthropic-compatible')
     expect(tpl).toMatchObject({
-      vendor: 'anthropic-compatible',
+      kind: 'anthropic_compatible',
       auth: 'api_key',
-      default_base_url: 'https://api.anthropic.com',
+      default_base_url: '',
     })
   })
 
