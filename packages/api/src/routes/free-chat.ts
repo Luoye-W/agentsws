@@ -295,8 +295,8 @@ export interface FreeChatModelChoice {
 }
 
 /**
- * WP362：AI 钮每行右边那一格。`rate` = 消耗速率（DeepSeek v4 Pro 官方原价 = 1x；`stats` 后台长期统计、
- * `list_price` 按官方原价折算）；`free` = 限免；`subscription` = 订阅额度；`own_key` = 用你自己的 key。
+ * WP362：AI 钮每行右边那一格。`rate` = 消耗速率（WP364 起按 token：我们实收单价 ÷ 我们卖 DeepSeek v4 Pro 的单价，v4 Pro = 1x；
+ * `stats` = 用近 30 天真实 token 构成、`list_price` = 用典型构成）；`discount` = 我们的价 ÷ 这家官方标价；`free` = 限免；`subscription` = 订阅额度；`own_key` = 用你自己的 key。
  */
 export type FreeChatModelPrice =
   | {

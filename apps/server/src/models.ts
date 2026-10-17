@@ -1788,16 +1788,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   /** WP362：云端价目里按 token 计价的那些模型（去重、按价目顺序）。手上没有价目就空。 */
   const cloudPricedModels = (): string[] => cloudRatesNow().models
   const cloudRatesNow = () => {
-    const entries =
-      options.pricing?.current?.()?.pricing.entries.find((e) => e.capability === 'ai.chat')
-        ?.models ?? []
+    const pricing = options.pricing?.current?.()?.pricing
+    const entries = pricing?.entries.find((e) => e.capability === 'ai.chat')?.models ?? []
     const cloud = textConfigsRaw().find((c) => c.kind === 'agentsws_cloud')
     const def = state.defaults.default
     const defaultModel =
       cloud !== undefined && def?.startsWith(`${cloud.id}/`) === true
         ? def.slice(cloud.id.length + 1)
         : cloud?.model
-    return cloudRates(entries, defaultModel)
+    // WP364：云上没给倍率的那几行，本机按同一口径（典型 token 构成 × 本机官方价目）兜底
+    return cloudRates(
+      entries,
+      defaultModel,
+      pricing === undefined ? undefined : { credit_cny: pricing.credit_cny, fx: pricing.fx },
+    )
   }
 
   /**
