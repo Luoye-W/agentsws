@@ -8295,8 +8295,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     // WP392：竞品监控（这个品牌的唯一竞品清单、进料口）；没装（托管）就什么都不做
     registerCompetitorWatch(s, {
-      tick: async () =>
-        (await (await of()).competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
+      tick: async () => {
+        const b = await of()
+        // C3：品牌档案里新查到的竞品，沿用「要不要加进竞品」那张卡问一次（问过不再问）
+        await b.seoService.askProfileCompetitors().catch(() => undefined)
+        return (await b.competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' }
+      },
     })
     // WP315：广告看数据（这个品牌的账户、插件、邮箱）；没装（托管）就什么都不做
     registerAdsDailyExport(s, {
