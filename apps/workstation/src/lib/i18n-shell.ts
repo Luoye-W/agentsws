@@ -47,7 +47,7 @@ export const SHELL_ZH: Record<string, string> = {
   'model.pick.thinking.tip': '想得越深越慢、越费额度。换模型会回到「标准」。',
   'model.pick.thinking.fast': '快',
   'model.pick.thinking.standard': '标准',
-  'model.pick.thinking.deep': '深想',
+  'model.pick.thinking.deep': '深度',
   // WP373：思考程度成了 AI 钮右边的独立小钮；开 / 关型的模型是开关；选的模型用不了的小黄点；换模型那一行
   'model.pick.thinking.aria': '思考程度：{level}',
   'model.pick.thinking.fast.tip': '答得快，适合简单的事',

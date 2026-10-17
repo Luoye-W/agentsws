@@ -2300,7 +2300,7 @@ tag 之间只有 `"version"` 行，含 `.default(` / `default:` 的变化行 **0
 
 | 包 | 变化 | 碰到我们吗 / 怎么处理 |
 |---|---|---|
-| `dsh-base`（bundle） | patch 多挂一行 `web-deepseek-api`（`dsh-web-deepseek-api`，读 `DEEPSEEK_API_KEY`），不带 `disabled`；默认选择不变（仍是 Messages 搜索 + 本机抓网页），要在官方网页端设置里开「Use the new Web Search API」才用它 | 我们两档运行时不用 `dsh-base`（`harness.ts` 最小挂载），**不受影响**。完整 profile 组合多这一行；它能出网（选中它时才发），照规矩**不锁、交 Luoye**（WP373 报告 1025） |
+| `dsh-base`（bundle） | patch 多挂一行 `web-deepseek-api`（`dsh-web-deepseek-api`，读 `DEEPSEEK_API_KEY`），不带 `disabled`；默认选择不变（仍是 Messages 搜索 + 本机抓网页），要在官方网页端设置里开「Use the new Web Search API」才用它 | 我们两档运行时不用 `dsh-base`（`harness.ts` 最小挂载），**不受影响**。完整 profile 组合多这一行；它能出网（选中它时才发），**不锁**（Luoye 10-17 定，决策 1025） |
 | `dsh-web` | `WebRuntime` 的 `searchProvider` / `fetchProvider` 改成热更新配置（`z.string().volatile()`，每次搜索现读） | 我们 `web.ts` 照旧传字符串，cordis 按新 schema 包一层；`tsc` 0 错，`web-seam` / `keyless-search` / `native-search` 全过 |
 | `dsh-web-search-deepseek` | 走 Messages 的辅助搜索那一轮显式发 `thinking: { type: 'disabled' }`（生成的字本来就扔掉，省推理 token）；报错文案换了设置页路径 | 只在 DeepSeek 自带搜索那条可选老路上（WP353 起默认不挂）；省钱、不改结果。`web-seam` 全过 |
 
@@ -2313,5 +2313,5 @@ lockfile `packages:` 1945 → 1947（就这两条），第三方一个没变。`
 `0.2.1-rc.2.json` 140 条去掉版本号与 rc.1 逐字节相同；提示词与工具表（两档 × 三种请求）逐字节相同；三包 × stub / direct / dsh 九份 `summary.txt` 逐字节相同；装包前冒烟全过（34 秒）、结果表逐字相同。
 安全公告：dsh 树上仍是 fflate / fast-uri / ip-address 三条（同上），没有新的。
 
-**留下的**：DeepSeek 新搜索接口（直接搜、不用再让模型跑一轮，回标题 / 网址 / 摘要 / 日期；抓网页回 Markdown；账号登录也能用）是我们「零开发者配置」的一个现成候选搜索后端，要不要接、接了要不要关掉 `sendOriginalQuestion`，交 Luoye（WP373 报告 1025）。
+**留下的**：DeepSeek 新搜索接口（直接搜、不用再让模型跑一轮；抓网页回 Markdown；账号登录也能用）**不接**（Luoye 10-17，决策 1025）：Fable 实测 Fetch 抓 Reddit / LinkedIn / YouTube / X / Amazon / Trustpilot / NYT / Wikipedia / Google / 知乎全部 404「failed to fetch URL」，只有 inmoxr.com 抓到，Search 结果里没有 reddit.com / linkedin.com；搜索、抓网页继续用我们自己的。
 

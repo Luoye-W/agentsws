@@ -312,7 +312,7 @@ export interface Matter {
    */
   model?: string
   /**
-   * WP370（只加）：这件事选的**思考程度**（AI 钮里「快 / 标准 / 深想」落到的那一档；只在 `model` 有值时有意义）。
+   * WP370（只加）：这件事选的**思考程度**（AI 钮里「快 / 标准 / 深度」落到的那一档；只在 `model` 有值时有意义）。
    * 换了 `model` 就清掉（官方同款：换模型回到那个模型的默认档）。缺省 = 模型默认。
    */
   model_effort?: ReasoningEffort

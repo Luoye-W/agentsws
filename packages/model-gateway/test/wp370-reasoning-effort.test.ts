@@ -66,7 +66,7 @@ describe('经网关交到 DeepSeek 账号那一条', () => {
       env: {},
     })
 
-  it('选了「深想」（max）：请求体带 thinking enabled + output_config.effort = max', async () => {
+  it('选了「深度」（max）：请求体带 thinking enabled + output_config.effort = max', async () => {
     const { fetch, bodies } = fakeMessages()
     const gateway = gatewayOf(deepseekAccountProvider({ resolveToken: signedIn, fetch }))
     await gateway.complete({

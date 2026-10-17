@@ -7,8 +7,8 @@
  * 已接的那一条）：不填任何 key、不登录任何账号、不发任何请求出去。思考档取自官方 pi-ai 订阅目录（gpt-5.5）。
  *
  * 拍：
- * 1. 岗位页 AI 钮展开（选了 ChatGPT 订阅 · GPT-5.5，底下「思考：快 / 标准 / 深想」）：浅色 / 深色；
- * 2. 选了「深想」之后的钮（「ChatGPT 订阅 · GPT-5.5 · 深想」）；
+ * 1. 岗位页 AI 钮展开（选了 ChatGPT 订阅 · GPT-5.5，底下「思考：快 / 标准 / 深度」）：浅色 / 深色；
+ * 2. 选了「深度」之后的钮（「ChatGPT 订阅 · GPT-5.5 · 深度」）；
  * 3. 设置 → 模型：改一条自定义接口，「也在 AI 钮里显示」勾选清单。
  *
  * ```
@@ -237,7 +237,7 @@ async function main() {
       console.log(`  ✓ ${name}.png`)
     }
 
-    // 1–2. 岗位页：AI 钮展开（浅 / 深）；选「深想」之后的钮
+    // 1–2. 岗位页：AI 钮展开（浅 / 深）；选「深度」之后的钮
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open({ width: 1280, height: 900, theme })
       await page.goto(`${BASE}/positions/${duty.id}`, { waitUntil: 'networkidle' })

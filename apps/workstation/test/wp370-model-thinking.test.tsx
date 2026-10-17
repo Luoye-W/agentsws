@@ -2,7 +2,7 @@
  * WP370（Luoye 10-17，照官方 dsh alpha.5 的模型选择）：AI 钮的思考程度、显示名、能力小标、搜索；
  * 设置里自定义接口「也在 AI 钮里显示」。
  *
- * 钉的：有档的模型才出「思考：快 / 标准 / 深想」，点了回调这一档 + 当前模型；不是默认档时钮上多「· 深想」；
+ * 钉的：有档的模型才出「思考：快 / 标准 / 深度」，点了回调这一档 + 当前模型；不是默认档时钮上多「· 深度」；
  * 没档的模型（OpenAI 兼容 / 工坊积分）不出这一行；每行用目录里的显示名；订阅那一行有「自带联网」「长上下文」小标；
  * 模型不多于 4 个不出搜索，多于 4 个出、而且不连续的字也对得上；设置表单勾的模型随保存交上去。
  */
@@ -66,7 +66,7 @@ function open(
 }
 
 describe('WP370 AI 钮：思考程度（WP373 起挪成钮右边的独立小钮）', () => {
-  it('有档的模型出三档白话，默认标准；点「深想」回调 high + 当前模型', () => {
+  it('有档的模型出三档白话，默认标准；点「深度」回调 high + 当前模型', () => {
     const { efforts } = open([SUB, OWN], SUB.id)
     fireEvent.click(screen.getByTestId('model-pick'))
     fireEvent.click(screen.getByTestId('model-pick-thinking'))
@@ -79,11 +79,11 @@ describe('WP370 AI 钮：思考程度（WP373 起挪成钮右边的独立小钮�
     expect(efforts).toEqual(['openai-codex/gpt-5.5:high'])
   })
 
-  it('当前这一档直接写在小钮上；AI 钮上不再多写「· 深想」', () => {
+  it('当前这一档直接写在小钮上；AI 钮上不再多写「· 深度」', () => {
     open([SUB, OWN], SUB.id, 'high')
-    expect(screen.getByTestId('model-pick-thinking').textContent).toContain('深想')
+    expect(screen.getByTestId('model-pick-thinking').textContent).toContain('深度')
     expect(screen.queryByTestId('model-pick-effort-tag')).toBeNull()
-    expect(screen.getByTestId('model-pick').textContent).not.toContain('深想')
+    expect(screen.getByTestId('model-pick').textContent).not.toContain('深度')
   })
 
   it('默认档写「标准」', () => {
