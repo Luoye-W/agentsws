@@ -11,8 +11,8 @@ import type {
   SeriesResult,
   TableResult,
 } from '@agentsws/deck'
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ExternalLink } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -27,7 +27,7 @@ import {
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { getBlockData } from '@/lib/api'
+import { getBlockData, rerunBlock } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate, formatValue } from '@/lib/format'
 import { approvalStateLabel, cellText } from '@/lib/humanize'
@@ -408,6 +408,49 @@ export function BlockBody({ data }: { data: BlockData }): React.ReactNode {
   }
 }
 
+/**
+ * WP381：块头一个小钮（「现在体检」）——点了 `POST` 块上写的地址，跑完把这个岗位的块都刷新。
+ * 只有图标，字进 tooltip（界面少字）。
+ */
+function RerunButton({
+  rerun,
+  assignment,
+}: {
+  rerun: NonNullable<BlockDef['rerun']>
+  assignment: string
+}): React.ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const run = useMutation({
+    mutationFn: () => rerunBlock(rerun.path, assignment),
+    onSettled: () => client.invalidateQueries({ queryKey: ['block'] }),
+  })
+  const label = run.isPending
+    ? t('block.rerun.running')
+    : run.isError
+      ? t('block.rerun.failed')
+      : t('block.rerun')
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex size-6 items-center justify-center rounded-md text-ws-muted-fg hover:bg-ws-muted hover:text-ws-fg disabled:opacity-60"
+            aria-label={label}
+            data-testid="block-rerun"
+            disabled={run.isPending}
+            onClick={() => run.mutate()}
+          >
+            <RefreshCw className={`size-3.5 ${run.isPending ? 'animate-spin' : ''}`} aria-hidden />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 /** 一个积木 = 一次 `GET /v1/blocks/{id}/data`。 */
 export function BlockCard({
   block,
@@ -441,6 +484,9 @@ export function BlockCard({
     >
       <div className="flex items-start gap-2">
         <h3 className="ws-display flex-1 text-[15px]">{block.title}</h3>
+        {block.rerun === undefined ? null : (
+          <RerunButton rerun={block.rerun} assignment={assignment} />
+        )}
         {block.report_url === undefined ? null : (
           <a
             className="inline-flex items-center gap-1 text-xs text-ws-muted-fg hover:underline"
