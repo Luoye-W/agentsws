@@ -48,7 +48,9 @@ describe('亚马逊店铺运营 amz.store', () => {
   })
 
   it('连接 amazon_sp 可选；skill 先登记 unit-economics；网页工具两样都挂', () => {
-    expect(role.connectors).toEqual([expect.objectContaining({ kind: 'amazon_sp', required: false })])
+    expect(role.connectors).toEqual([
+      expect.objectContaining({ kind: 'amazon_sp', required: false }),
+    ])
     expect(role.skills.map((s) => s.name)).toEqual(['unit-economics'])
     expect(role.web_tools).toEqual(['web_search', 'web_fetch'])
   })

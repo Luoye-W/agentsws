@@ -59,7 +59,8 @@ describe('3 人 pack：卖 Amazon 的品牌种出 Amazon 运营', () => {
     const { report, evidence } = await runPackScenario('amazon/amazon-ops-position.yml')
     expect(report.passed).toBe(true)
     const planned = evidence.events.find((e) => e.type === 'simulation.position_planned')
-    expect((planned?.payload as { positions: unknown }).positions).toEqual([
+    expect(planned).toBeDefined()
+    expect((planned?.payload as { positions?: unknown } | undefined)?.positions).toEqual([
       { template_id: 'amazon-ops', role_ids: ['amz.store', 'amz.support'] },
     ])
     const answered = evidence.events
