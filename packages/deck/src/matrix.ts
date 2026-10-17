@@ -77,6 +77,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   setup_request: ['approve', 'reject', 'snooze', 'open'],
   // WP321：GEO 关注设置——通过 / 改（在卡上改了再批）/ 不要
   geo_watch: ['approve', 'reject', 'snooze', 'open'],
+  // WP390：花钱卡——批 / 不要 / 稍后；**没有「指导」**（不落成「以后都这样」，下单永远人点）
+  service_order: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -113,6 +115,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   connect_request: { approve: '接着做', reject: '先不连', snooze: '稍后' },
   setup_request: { approve: '保存并接着做', reject: '先不设', snooze: '稍后' },
   geo_watch: { approve: '就这样', reject: '不要', snooze: '稍后' },
+  service_order: { approve: '同意', reject: '先不要', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -164,6 +167,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   setup_request: 'low',
   // WP321：只改本机的关注设置；Claude 那份每月积分在卡上写清
   geo_watch: 'low',
+  // WP390：批了就扣积分进托管（验收 / 联系方式卡也在这一档：动的是钱或个人联系方式）
+  service_order: 'medium',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -215,6 +220,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   connect_request: 1,
   setup_request: 1,
   geo_watch: 2,
+  service_order: 1,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

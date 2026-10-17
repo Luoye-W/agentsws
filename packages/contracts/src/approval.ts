@@ -184,6 +184,18 @@ export type ApprovalKind =
    * payload = `GeoWatchCardPayload`。
    */
   | 'geo_watch'
+  /**
+   * WP390（docs/105 §5 / §7）：**工坊服务卡**——「花钱」家族，**永远 L1、不能升级成自动**。五种卡面
+   * （`payload.form`，见 `service-order.ts` 的 `ServiceOrderCardPayload`）：
+   * - `service_menu` 标准件价目单 / `service_pay` 下单卡（同意并支付）：批了 = 本机服务调云上
+   *   `POST /v1/services/orders`（或 `…/accept-quote`）建单、扣进托管；执行者是本机服务进程；
+   *   失败回滚 = 云上没建单就一分不扣，本机按**同一个幂等键**再出一张卡（再点也只一单一笔）；
+   * - `service_requirements` 定制件需求单：批了 = 交需求单等报价（不扣钱）；
+   * - `service_acceptance` 验收卡（选项：通过 / 要改 / 申请退款）：批了 = 调 `…/accept|revise|dispute`；
+   * - `service_contact` 交换联系方式请求卡（N1）：批了 = 把你选的那一种给这一单的服务方，不批 = 只在订单里沟通。
+   * 失败一律不动钱，在事项里照实说一句、重出一张同键的卡。
+   */
+  | 'service_order'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {
