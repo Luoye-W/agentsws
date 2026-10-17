@@ -232,6 +232,13 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
+// WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
+import {
+  type AmazonListingCheckup,
+  type AmazonListingReader,
+  createAmazonListingCheckup,
+  createAmazonListingToolExecutor,
+} from './amazon-listing/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -1004,6 +1011,12 @@ export interface ServerOptions {
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
   clientErrorLog?: (line: string) => void
+  /**
+   * WP396（docs/106 §13）：Listing 体检读 Amazon 前台商品页用的那一块（WP394 的读页积木：内置浏览器、
+   * `Agent/AgentsWorkshop` 标识、配送邮编、被拦就停）。demo / 测试注入替身。
+   * 不给 = 这里读不了 Amazon 前台，体检照实说「读不了」（不退回去用别的办法读）。
+   */
+  amazonListingReader?: (workspace_id: WorkspaceId) => AmazonListingReader | undefined
   /**
    * WP323：记录去处的飞书适配器发请求用的 `fetch`（测试注入替身飞书；不给用全局 `fetch`）。
    */
@@ -3432,6 +3445,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    // WP396：自家 Amazon 商品（体检没 ASIN 时出卡：按品牌名搜一页给候选，人勾）
+    if (brand.amazonListing !== undefined)
+      assembly.registerTarget(brand.amazonListing.setupTarget())
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -5734,6 +5750,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
               watchRoles: REPORT_WATCH_ROLES,
             },
+            // WP396：Listing 体检（读自家前台页 / 看最近一次 / 改规则；只给 amz.store）
+            amazonListingTools: createAmazonListingToolExecutor({
+              checkup: async (w) =>
+                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
+                  ?.amazonListing,
+            }),
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
               service: () => adsDataRef,
@@ -7333,6 +7355,56 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }),
       nowMs: () => Date.parse(clock.now()),
     })
+    /*
+     * WP396（docs/106 §13）：自家 Listing 体检。自家 ASIN 是关注设置那一格（WP392 `BrandWatch.brand.amazon`，唯一一份）；
+     * 读页走 WP394 的积木（`options.amazonListingReader`）。托管实例不装（云上没有内置浏览器）。
+     */
+    const brandWatchOf = async () => {
+      await seoService.watchView().catch(() => undefined)
+      return (await seoService.geoHistory()).watch()
+    }
+    const amazonListing: AmazonListingCheckup | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createAmazonListingCheckup({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir }),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            reader: () => options.amazonListingReader?.(ws),
+            brand: async () => {
+              const w = await brandWatchOf()
+              const profile = onboardingRef?.brandProfile(ws) as { markets?: unknown } | undefined
+              return {
+                name: w?.brand.name ?? brandNameOfWorkspace(ws),
+                own: w?.brand.amazon ?? [],
+                markets: Array.isArray(profile?.markets)
+                  ? profile.markets.filter((m): m is string => typeof m === 'string')
+                  : [],
+              }
+            },
+            // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」）
+            saveOwn: async (items) => {
+              const store = await seoService.geoHistory()
+              const cur = await brandWatchOf()
+              if (cur === undefined) throw new Error('关注设置还没建好，存不了自家 ASIN')
+              const { prompts: _p, prompt_candidates: _c, ...settings } = cur
+              const { amazon: _old, ...brand } = settings.brand
+              store.saveSettings({
+                ...settings,
+                brand: items.length === 0 ? brand : { ...brand, amazon: items },
+              })
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'amazon-listing' },
+                correlation: { trace_id: `tr_amazon_listing_${clock.now()}` },
+                payload,
+              }),
+          })
     const redditWatch =
       hostedBoot !== undefined
         ? undefined
@@ -7537,6 +7609,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
       redditLimits,
+      ...(amazonListing === undefined ? {} : { amazonListing }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -12487,6 +12560,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               return svc
             },
           }),
+          // WP396：自家 Amazon Listing 体检 `/v1/amazon-listing*`（面板看最近一次 / 现在体检 / 改规则）
+          amazonListing: (() => {
+            const of = async (ws: WorkspaceId): Promise<AmazonListingCheckup> => {
+              const a = (await brandModules.forWorkspace(ws)).amazonListing
+              if (a === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装 Listing 体检。')
+              return a
+            }
+            return {
+              view: async (ws: WorkspaceId) => (await of(ws)).view(),
+              run: async (ws: WorkspaceId) => (await of(ws)).run({ trigger: 'manual' }),
+              setRule: async (
+                ws: WorkspaceId,
+                patch: Parameters<AmazonListingCheckup['setRule']>[0],
+              ) => (await of(ws)).setRule(patch),
+            }
+          })(),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {
             const rw = (await brandModules.forWorkspace(ws)).redditWatch

@@ -14,6 +14,8 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
 import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
+// WP396：自家 Amazon Listing 体检（工作台 `/v1/amazon-listing*`）
+import { amazonListingRoutes } from './routes/amazon-listing.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -312,6 +314,8 @@ export function collectRoutes(): Route[] {
     ...redditWatchRoutes(),
     // WP337：重启并更新前看一眼 / 暂停全部 / 放开。`/v1/update/*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...updatePauseRoutes(),
+    // WP396：自家 Amazon Listing 体检。`/v1/amazon-listing*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonListingRoutes(),
   ]
 }
 

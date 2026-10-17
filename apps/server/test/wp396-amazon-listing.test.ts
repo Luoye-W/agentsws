@@ -261,7 +261,11 @@ describe('WP396 · 规则表带日期、能改；按 ASIN 留历史', () => {
     // 修好了（换成正常页；子体买不了那一处还在），重开服务（从盘上读历史）
     const second = setup(own, { B0NORDNOAP: 'us-normal.html' }, { dir })
     const r2 = await second.svc.run({ trigger: 'manual' })
-    expect(r2.run?.items[0]?.previous).toMatchObject({ issues: before, fixed: before - 1, added: 0 })
+    expect(r2.run?.items[0]?.previous).toMatchObject({
+      issues: before,
+      fixed: before - 1,
+      added: 0,
+    })
   })
 })
 
