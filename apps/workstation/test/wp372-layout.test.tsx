@@ -14,7 +14,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import type { WorkRail } from '@/lib/work-archive'
-import { renderWithProviders } from './helpers'
+import { openRailCard, renderWithProviders } from './helpers'
 
 const NOW = new Date()
 const iso = (daysAgo: number): string =>
@@ -279,41 +279,38 @@ describe('左栏两层（决策 1001）', () => {
   })
 })
 
-describe('右上角一排与「⋮」（决策 1001 / 1020）', () => {
-  it('六张卡各一个图标；「⋮」里是全部卡片 + 浏览器 / 变更审阅 / 教程；没有搜索框', async () => {
+describe('右上角一排与「⋮」（决策 1001 / 1020 → 1035）', () => {
+  it('WP375：右上角只有三个工具 +「⋮」（不再重复放卡片图标）；没有搜索框；工具点了开那一格', async () => {
     renderShell()
     const bar = screen.getByTestId('right-rail')
     const icons = within(bar)
       .getAllByRole('button')
       .map((b) => b.getAttribute('data-testid'))
     expect(icons).toEqual([
-      'rail-icon-conversations',
-      'rail-icon-reports',
-      'rail-icon-outputs',
-      'rail-icon-plans',
-      'rail-icon-connections',
-      'rail-icon-settings',
+      'rail-icon-browser',
+      'rail-icon-changes',
+      'rail-icon-help',
       'rail-overflow',
     ])
     expect(screen.queryByTestId('top-command')).toBeNull()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
-    const menu = await screen.findByTestId('rail-menu')
-    expect(
-      within(menu)
-        .getAllByRole('menuitem')
-        .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-menu-cards', 'rail-menu-changes', 'rail-menu-browser', 'rail-menu-help'])
-    fireEvent.click(within(menu).getByTestId('rail-menu-help'))
+    fireEvent.click(screen.getByTestId('rail-icon-help'))
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('help')
   })
 
-  it('连接没连上：「连接」图标亮红点，卡上同一个点', async () => {
+  it('连接没连上：「⋮」上亮汇总的红点（红压过黄），打开后「连接」卡标题后同一个点', async () => {
     renderShell()
-    const dot = await screen.findByTestId('rail-icon-dot-connections')
-    expect(dot.getAttribute('data-dot')).toBe('alert')
-    fireEvent.click(screen.getByTestId('rail-icon-connections'))
-    const card = await screen.findByTestId('rail-card-connections')
-    expect(card.getAttribute('data-open')).toBe('true')
+    await waitFor(() => {
+      const dots = screen.getAllByTestId('rail-overflow-dot')
+      expect(dots.map((d) => d.getAttribute('data-card')).sort()).toEqual([
+        'connections',
+        'conversations',
+      ])
+    })
+    const red = screen
+      .getAllByTestId('rail-overflow-dot')
+      .find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
+    expect(red.className).toContain('z-10')
+    const card = await openRailCard('connections')
     expect(within(card).getByTestId('rail-card-dot-connections').getAttribute('data-dot')).toBe(
       'alert',
     )
@@ -323,17 +320,17 @@ describe('右上角一排与「⋮」（决策 1001 / 1020）', () => {
   })
 })
 
-describe('右侧面板六张卡（决策 1004 / 1019）', () => {
-  it('点「报表」图标：面板开成卡片堆，对话（默认）与报表展开、其余收起带摘要；报表摘要是名字与日期', async () => {
+describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
+  it('「⋮」开成卡片堆：默认展开对话与计划、其余收起带摘要；报表摘要是名字与日期，点一份在面板里看', async () => {
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-icon-reports'))
+    fireEvent.click(screen.getByTestId('rail-overflow'))
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
       'conversations,reports,outputs,plans,connections,settings',
     )
-    expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
-    expect(screen.getByTestId('rail-card-reports').getAttribute('data-open')).toBe('true')
-    for (const id of ['outputs', 'plans', 'connections', 'settings'])
+    for (const id of ['conversations', 'plans'])
+      expect(screen.getByTestId(`rail-card-${id}`).getAttribute('data-open')).toBe('true')
+    for (const id of ['reports', 'outputs', 'connections', 'settings'])
       expect(screen.getByTestId(`rail-card-${id}`).getAttribute('data-open')).toBe('false')
     expect((await screen.findByTestId('rail-card-summary-settings')).textContent).toBe(
       'DeepSeek V4 Pro',
@@ -341,25 +338,23 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
     expect((await screen.findByTestId('rail-card-summary-connections')).textContent).toBe(
       '1 个要处理',
     )
-    // 报表：点一份在面板里看
+    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe(
+      '周报 · 10-12',
+    )
+    // 报表：展开、点一份在面板里看
+    fireEvent.click(screen.getByTestId('rail-card-toggle-reports'))
     const row = await screen.findByTestId('report-row')
     expect(row.textContent).toContain('周报')
     expect(row.textContent).toContain('10-12')
     fireEvent.click(row)
     const view = await screen.findByTestId('report-view')
     expect(view.textContent).toContain('新帖 12 条')
-    // 收起报表卡：摘要回到标题行
-    fireEvent.click(screen.getByTestId('rail-panel-back'))
-    fireEvent.click(await screen.findByTestId('rail-card-toggle-reports'))
-    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe(
-      '周报 · 10-12',
-    )
   })
 
   it('对话卡：最多 4 条、等你看的排最上（黄点）、在做的转圈；「显示更多」= 按今天 / 本周 / 更早分组', async () => {
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-icon-conversations'))
-    const card = await screen.findByTestId('conv-card')
+    const box = await openRailCard('conversations')
+    const card = await within(box).findByTestId('conv-card')
     const rows = await within(card).findAllByTestId('conv-link')
     expect(rows).toHaveLength(4)
     expect(rows[0]?.textContent).toBe('置顶帖草稿')
@@ -373,7 +368,7 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
         .getByTestId('conv-marker')
         .getAttribute('data-state'),
     ).toBe('running')
-    expect(screen.getByTestId('rail-icon-dot-conversations').getAttribute('data-dot')).toBe(
+    expect(screen.getByTestId('rail-card-dot-conversations').getAttribute('data-dot')).toBe(
       'attention',
     )
     fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
@@ -395,7 +390,7 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
 
   it('岗位总览：对话按职责分组列全部', async () => {
     renderShell('/positions/asg_own')
-    fireEvent.click(screen.getByTestId('rail-icon-conversations'))
+    await openRailCard('conversations')
     fireEvent.click(await screen.findByTestId('rail-card-more-conversations'))
     const panel = await screen.findByTestId('conv-panel')
     expect(panel.getAttribute('data-tier')).toBe('position')
@@ -410,8 +405,8 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
 
   it('「+ 新对话」：一句话交给这条职责（岗位入口那条路，带职责）', async () => {
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-icon-conversations'))
-    const card = await screen.findByTestId('conv-card')
+    const box = await openRailCard('conversations')
+    const card = await within(box).findByTestId('conv-card')
     fireEvent.click(within(card).getByTestId('conv-new'))
     const input = await screen.findByTestId('conv-compose-input')
     fireEvent.change(input, { target: { value: '起草一条置顶' } })
@@ -446,7 +441,7 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
     const box = stubStorage()
     box.set('agentsws.rightrail.card_order', JSON.stringify(['settings', 'conversations']))
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-icon-plans'))
+    await openRailCard('outputs')
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
       'settings,conversations,reports,outputs,plans,connections',
@@ -455,8 +450,8 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
       string,
       Record<string, boolean>
     >
-    expect(saved['role:social.reddit']).toEqual({ plans: true })
-    // 每张卡右上角有拖动手柄（键盘也落得到）
+    expect(saved['role:social.reddit']).toEqual({ outputs: true })
+    // 每张卡都有拖动手柄（键盘也落得到）
     const handle = screen.getByTestId('rail-card-handle-plans')
     expect(handle.tagName).toBe('BUTTON')
     expect(handle.getAttribute('aria-label')).toContain('拖动「计划」')
@@ -465,7 +460,7 @@ describe('右侧面板六张卡（决策 1004 / 1019）', () => {
   it('面板可临时加宽，宽度记住', async () => {
     const box = stubStorage()
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-icon-reports'))
+    await openRailCard('reports')
     fireEvent.click(await screen.findByTestId('rail-card-more-reports'))
     const frame = await screen.findByTestId('rail-panel-frame')
     expect(frame.getAttribute('data-wide')).toBeNull()

@@ -335,7 +335,7 @@ describe('WP259 一句话交给职责：长文本照收（WP372 起在右侧面�
 
 /** WP372：对话不挂左栏了——点右上角「对话」，卡底「显示更多」是完整列表。 */
 async function openConversations(more = false): Promise<HTMLElement> {
-  fireEvent.click(screen.getByTestId('rail-icon-conversations'))
+  fireEvent.click(screen.getByTestId('rail-overflow'))
   const card = await screen.findByTestId('conv-card')
   if (!more) return card
   fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
