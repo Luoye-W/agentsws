@@ -16,7 +16,8 @@
  * 发一句（与重新生成）回的是 **SSE**（`text/event-stream`），不是统一信封——与聊天沙盒同一种写法
  * （`fetch` + `ReadableStream`，凭据在头里，不进 URL）。客户端断开 = 停；另有一条 `stop` 兜底。
  */
-import type { ArchivedWorkCandidate, FactCard } from '@agentsws/contracts'
+import type { ArchivedWorkCandidate, FactCard, ReasoningEffort } from '@agentsws/contracts'
+import { REASONING_EFFORTS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -292,6 +293,30 @@ export interface FreeChatModelChoice {
   vendor?: string
   /** WP362：每行右边那一格。 */
   price?: FreeChatModelPrice
+  /**
+   * WP370（只加）：给人看的模型名（目录里有就给：ChatGPT 订阅「GPT-5.5」、DeepSeek 账号「DeepSeek-V4.1-Flash」）；
+   * 没有就界面用 id 里的模型名。选择与保存一律用 `id`。
+   */
+  name?: string
+  /** WP370：上下文窗口（token；目录里写了才有）。≥ 20 万界面标「长上下文」。 */
+  context_window?: number
+  /** WP370：这个来源**自带**联网搜索（ChatGPT 订阅用订阅的搜索，WP355）。别的模型照样能经内置浏览器搜。 */
+  native_search?: boolean
+  /** WP370：能调的思考程度（只给声明了档位的模型；没有 = 不出「思考」那一行）。 */
+  thinking?: FreeChatModelThinking
+}
+
+/** WP370：思考程度的三档白话（界面只露这三个词）。 */
+export type FreeChatThinkingLevel = 'fast' | 'standard' | 'deep'
+
+/**
+ * WP370：一个模型的思考程度。每档落到这个模型自己声明的那一档 id（官方同一套，见 `ReasoningEffort`）：
+ * ChatGPT 订阅 快 = low / 标准 = medium / 深想 = high；DeepSeek 快 = low / 标准 = high / 深想 = max。
+ * 选择存的是 `effort`；不选 = `default`（模型默认，界面算「标准」）。
+ */
+export interface FreeChatModelThinking {
+  options: { level: FreeChatThinkingLevel; effort: ReasoningEffort }[]
+  default: ReasoningEffort
 }
 
 /**
@@ -354,6 +379,8 @@ export interface FreeChatTurnInput {
   text?: string
   images?: FreeChatImage[]
   model?: string
+  /** WP370：连同 `model` 一起选的思考程度（这个模型没有这一档就按模型默认）。 */
+  effort?: ReasoningEffort
   web_search?: boolean
   knowledge?: boolean
   regenerate?: boolean
@@ -435,6 +462,7 @@ const Image = z.object({
 })
 const TurnOptions = {
   model: z.string().min(1).max(300).optional(),
+  effort: z.enum(REASONING_EFFORTS as [ReasoningEffort, ...ReasoningEffort[]]).optional(),
   web_search: z.boolean().optional(),
   knowledge: z.boolean().optional(),
 }

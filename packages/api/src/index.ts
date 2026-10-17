@@ -423,10 +423,12 @@ export type {
   FreeChatModelChoice,
   FreeChatModelPrice,
   FreeChatModelsView,
+  FreeChatModelThinking,
   FreeChatPort,
   FreeChatReportView,
   FreeChatSessionView,
   FreeChatSource,
+  FreeChatThinkingLevel,
   FreeChatTurnInput,
 } from './routes/free-chat.js'
 export { freeChatRoutes } from './routes/free-chat.js'

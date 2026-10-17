@@ -37,6 +37,7 @@ import type {
   ObjectRef,
   PersonId,
   PositionId,
+  ReasoningEffort,
   Review,
   ReviewDraft,
   ReviewPeriodKind,
@@ -219,6 +220,8 @@ export interface CreateMatterInput {
   quick?: boolean | undefined
   /** WP342：这件事自己选的 AI（`provider_id/model`；不给 = 跟品牌默认，见 `Matter.model`）。 */
   model?: string | undefined
+  /** WP370：连同 `model` 一起选的思考程度（没有 `model` 时不记）。 */
+  model_effort?: ReasoningEffort | undefined
 }
 
 export interface CreateTodoInput {
@@ -437,6 +440,9 @@ export class Work {
         ? { ask: input.quick === true ? { at, quick: true as const } : { at } }
         : {}),
       ...(input.model === undefined || input.model === '' ? {} : { model: input.model }),
+      ...(input.model === undefined || input.model === '' || input.model_effort === undefined
+        ? {}
+        : { model_effort: input.model_effort }),
       context: {
         summary: input.summary ?? '',
         pinned: input.pinned ?? [],
@@ -746,14 +752,17 @@ export class Work {
    * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮）。`undefined` / 空 = 回到跟品牌默认。
    * 只改这一件：不动品牌默认、不算一次「活动」；模型 id 不是正文，但也不进事件日志（换来换去没人要查）。
    */
-  setModel(id: MatterId, model: string | undefined): Matter {
+  setModel(id: MatterId, model: string | undefined, effort?: ReasoningEffort): Matter {
     const matter = this.requireMatter(id)
     const next = model === undefined || model.trim() === '' ? undefined : model.trim()
-    if (next === matter.model) return matter
-    const { model: _old, ...rest } = matter
+    // WP370：思考程度跟着模型走——没有模型就没有它；换了模型、又没说要哪档，就回到那个模型的默认档
+    const nextEffort = next === undefined ? undefined : effort
+    if (next === matter.model && nextEffort === matter.model_effort) return matter
+    const { model: _old, model_effort: _oldEffort, ...rest } = matter
     const updated: Matter = {
       ...rest,
       ...(next === undefined ? {} : { model: next }),
+      ...(nextEffort === undefined ? {} : { model_effort: nextEffort }),
       updated_at: this.now(),
     }
     this.store.putMatter(updated)

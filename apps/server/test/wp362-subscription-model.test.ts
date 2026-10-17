@@ -130,7 +130,8 @@ describe('WP362 (a) 模型面：订阅进下拉、能设默认、花费 0', () =
     const view = await models.port.defaults(owner)
     expect(view.choices).toContainEqual({
       id: 'openai-codex/gpt-5.5',
-      label: 'ChatGPT 订阅（gpt-5.5）',
+      // WP370：设置里的下拉与 AI 钮同一份数据，显示目录里的名字
+      label: 'ChatGPT 订阅（GPT-5.5）',
     })
     expect(view.choices.filter((c) => c.id.startsWith('openai-codex/'))).toHaveLength(3)
     const chat = models.chatChoices().filter((c) => c.id.startsWith('openai-codex/'))

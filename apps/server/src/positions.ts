@@ -31,6 +31,7 @@ import type {
   Position,
   PositionInstance,
   PositionWorkView,
+  ReasoningEffort,
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -188,6 +189,8 @@ export interface OpenAtPositionInput {
   detach?: boolean
   /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上。 */
   model?: string
+  /** WP370：连同 `model` 一起选的思考程度（调用方已核过这个模型有这一档）。 */
+  model_effort?: ReasoningEffort
   /**
    * WP357：这句话附上的资料（原样的 base64）。与助理同一套读法读成文字（抹口令、截断、读不出照实说），
    * 记在事项第一句话上；路由与三分只看话本身，运行拿到「话 + 附件围起来」。
@@ -785,6 +788,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         quick: called === undefined || called === 'quick',
         ...(input.summary === undefined ? {} : { summary: input.summary }),
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.model === undefined || input.model_effort === undefined
+          ? {}
+          : { model_effort: input.model_effort }),
       })
       emit('matter.routed', matter.id, input.person_id, {
         position_id: template.id,
@@ -860,6 +866,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       position_id: pickedEntry.assignment_id,
       role_id: pickedEntry.role_id,
       ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.model === undefined || input.model_effort === undefined
+        ? {}
+        : { model_effort: input.model_effort }),
     })
 
     const alternatives = routed.alternatives ?? []

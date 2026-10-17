@@ -103,8 +103,12 @@ export {
   DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
   DEEPSEEK_ACCOUNT_MODELS,
   DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE,
+  // WP370：官方 DeepSeek 适配器的思考档（off / low / high / max，默认 high）与 Messages 那两格
+  DEEPSEEK_DEFAULT_REASONING_EFFORT,
+  DEEPSEEK_REASONING_EFFORTS,
   deepseekAccountProvider,
   deepseekMessagesProvider,
+  messagesEffortFields,
   toMessagesRequest,
 } from './providers/deepseek-account.js'
 // WP367：账号模型目录从账号的 GET /models 取（移植自官方 dsh-llm-deepseek-account@0.2.1-alpha.4）

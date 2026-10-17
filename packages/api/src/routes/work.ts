@@ -31,6 +31,7 @@ import type {
   MatterView,
   MaybePromise,
   PersonId,
+  ReasoningEffort,
   Review,
   ReviewPeriodKind,
   Todo,
@@ -42,6 +43,7 @@ import {
   CALENDAR_SOURCES,
   fitTaskTitle,
   MATTER_TITLE_MAX,
+  REASONING_EFFORTS,
   TASK_TEXT_MAX,
   taskTextOf,
 } from '@agentsws/contracts'
@@ -157,6 +159,8 @@ const CreateMatterBody = z.object({
   run: z.boolean().optional(),
   /** WP342（决策 853）：这件事自己选的 AI（`provider_id/model`；不给 = 跟品牌默认）。 */
   model: z.string().min(1).max(200).optional(),
+  /** WP370：连同 `model` 一起选的思考程度（不给 = 那个模型的默认档）。 */
+  model_effort: z.enum(REASONING_EFFORTS as [ReasoningEffort, ...ReasoningEffort[]]).optional(),
 })
 
 const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
@@ -187,7 +191,14 @@ const GenuiSetupBody = z.object({
   label: z.string().min(1).max(200),
 })
 /** WP342（决策 853）：换这件事用的 AI；不给 / `null` = 回到跟品牌默认。 */
-const MatterModelBody = z.object({ model: z.string().min(1).max(200).nullable().optional() })
+const MatterModelBody = z.object({
+  model: z.string().min(1).max(200).nullable().optional(),
+  /** WP370：思考程度（AI 钮里「快 / 标准 / 深想」落到的那一档；只在给了 `model` 时有意义）。 */
+  effort: z
+    .enum(REASONING_EFFORTS as [ReasoningEffort, ...ReasoningEffort[]])
+    .nullable()
+    .optional(),
+})
 
 /** WP264（决策 177）：人在事项页上就地改标题（改过的不再被自动起的标题覆盖）。 */
 const RetitleBody = z.object({ title: z.string().min(1).max(MATTER_TITLE_MAX) })
@@ -377,7 +388,13 @@ export interface WorkPort {
    * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮；`undefined` = 回到跟品牌默认）。
    * 认不出 / 不能用的模型 id 由实现拒（`invalid_input`）。
    */
-  setMatterModel?(actor: WorkActor, id: string, model: string | undefined): MaybePromise<Matter>
+  setMatterModel?(
+    actor: WorkActor,
+    id: string,
+    model: string | undefined,
+    /** WP370（只加）：思考程度；不给 = 那个模型的默认档。这个模型没有这一档由实现拒（`invalid_input`）。 */
+    effort?: ReasoningEffort,
+  ): MaybePromise<Matter>
   /** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。回停了几次。 */
   stopMatter?(actor: WorkActor, id: string): Promise<{ stopped: number }>
   /**
@@ -751,7 +768,7 @@ export function workRoutes(): Route[] {
         path: '/v1/matters/:id/model',
         operationId: 'setMatterModel',
         summary:
-          '换这件事用的 AI（输入框左下角那个钮，WP342）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认',
+          '换这件事用的 AI（输入框左下角那个钮，WP342）与思考程度（WP370 `effort`）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认',
         tag: 'work',
         auth: 'bearer',
         assignment: true,
@@ -764,9 +781,14 @@ export function workRoutes(): Route[] {
         const port = workOf(deps)
         if (port.setMatterModel === undefined)
           throw new ApiError('not_implemented', '这个服务进程换不了这件事用的 AI')
-        const { model } = await body(c, MatterModelBody)
+        const { model, effort } = await body(c, MatterModelBody)
         return ok(c, {
-          matter: await port.setMatterModel(actorOf(c), param(c, 'id'), model ?? undefined),
+          matter: await port.setMatterModel(
+            actorOf(c),
+            param(c, 'id'),
+            model ?? undefined,
+            ...(effort === undefined || effort === null ? [] : [effort]),
+          ),
         })
       },
     ),

@@ -592,6 +592,11 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     meta: input.meta,
     // WP342：这件事自己选了 AI——每次补全显式交给网关
     ...(input.request.runtime.model_pinned === true ? { model: input.request.runtime.model } : {}),
+    // WP370：连同模型一起选的思考程度
+    ...(input.request.runtime.model_pinned === true &&
+    input.request.runtime.reasoning_effort !== undefined
+      ? { reasoning_effort: input.request.runtime.reasoning_effort }
+      : {}),
     ...(input.options.seed === undefined ? {} : { seed: input.options.seed }),
     max_cost_base: input.request.budget.max_cost_base,
     ...(budget === undefined ? {} : { budget }),

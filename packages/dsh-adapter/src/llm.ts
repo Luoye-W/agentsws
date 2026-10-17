@@ -17,6 +17,7 @@ import type {
   Completion,
   ModelMeta,
   ModelRef,
+  ReasoningEffort,
   ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
@@ -309,6 +310,8 @@ export interface GatewayAdapterOptions {
    * 给了每次补全都显式交给网关；不给 = 网关按 purpose 选（老行为）。
    */
   model?: ModelRef
+  /** WP370：这件事选的思考程度（`RunRequest.runtime.reasoning_effort`）；给了每次补全都交给网关。 */
+  reasoning_effort?: ReasoningEffort
   seed?: number
   max_cost_base?: number
   /** 每次补全的用量都回调出去（运行时据此填 `run.completed.usage`）。 */
@@ -453,6 +456,9 @@ export class GatewayLlmAdapter extends LlmAdapter {
     try {
       completion = await this.options.gateway.complete({
         ...(this.options.model === undefined ? {} : { model: this.options.model }),
+        ...(this.options.reasoning_effort === undefined
+          ? {}
+          : { reasoning_effort: this.options.reasoning_effort }),
         messages,
         tools,
         meta: this.options.meta,

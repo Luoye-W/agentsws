@@ -24,9 +24,10 @@ import type {
   PersonId,
   PositionInstance,
   PositionWorkView,
+  ReasoningEffort,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { fitTaskTitle, TASK_TEXT_MAX } from '@agentsws/contracts'
+import { fitTaskTitle, REASONING_EFFORTS, TASK_TEXT_MAX } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -124,6 +125,8 @@ const OpenBody = z.object({
   detach: z.boolean().optional(),
   /** WP342（决策 853）：输入框左下角选的 AI（`provider_id/model`），记在开出来的事项上；不给 = 品牌默认。 */
   model: z.string().min(1).max(200).optional(),
+  /** WP370：连同 `model` 一起选的思考程度（这个模型没有这一档就不记，按模型默认）。 */
+  model_effort: z.enum(REASONING_EFFORTS as [ReasoningEffort, ...ReasoningEffort[]]).optional(),
   /**
    * WP357：这句话附上的资料（.txt / .md / .docx / .pdf / .xlsx / .csv，与助理同一个形状）。宿主读成文字
    * （抹口令、截断）记在事项那句话上，运行拿到「这句话 + 附件」。

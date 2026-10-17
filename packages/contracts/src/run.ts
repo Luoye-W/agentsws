@@ -10,6 +10,7 @@ import type {
   WorkspaceId,
 } from './common.js'
 import type { WorkspaceVertical } from './identity.js'
+import type { ReasoningEffort } from './model.js'
 import type { RunCancelReason } from './run-limits.js'
 
 /** 17 §1 RunRequest：协同服务 → 运行时适配器。无状态：运行自带全部上下文。 */
@@ -397,6 +398,11 @@ export interface RunRequest {
      * stub 只记在 `run.started` 上。不给 = 老行为（网关按默认 / purpose 选），一个字节不变。
      */
     model_pinned?: true
+    /**
+     * WP370（只加）：这件事 / 这段对话选的**思考程度**（只在 `model_pinned` 时有意义：选思考程度就是连同当前模型一起选）。
+     * direct / dsh 每次补全把它交给网关（`CompletionHints.reasoning_effort`）；stub 不看。不给 = 模型默认，一个字节不变。
+     */
+    reasoning_effort?: ReasoningEffort
   }
   /**
    * 48 v2 L2（WP54）：这个工作区卖的是什么（`WorkspaceProfile.vertical`）。

@@ -459,6 +459,7 @@ import { createMemoryBook, type MemoryReason } from './memory-book.js'
 import { attachMemoryPersistence } from './memory-persist.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
+import { hasThinkingEffort } from './model-thinking.js'
 import {
   chatModelRefOf,
   createModels,
@@ -5629,6 +5630,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             runModelRef: () => effectiveModels().purposeRef('run'),
             // WP342（决策 853）：事项自己选的 AI——还在「已接的」里面才认，否则跟品牌默认走
             modelOverride: (id) => chatModelRefOf(effectiveModels(), id),
+            // WP370：事项选的思考程度这个模型还有没有
+            modelEffort: (id, effort) =>
+              effectiveModels()
+                .chatChoices()
+                .some((c) => c.id === id && hasThinkingEffort(c.thinking, effort)),
             // WP147：默认模型验证过能看图，浏览器 / 电脑操控的截图才进模型
             modelVision: () => effectiveModels().visionStatus(),
             // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
@@ -10140,6 +10146,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个
       knownModel: async (id) =>
         (await brandModules.models(ws)).chatChoices().some((c) => c.id === id),
+      // WP370：这个模型在 AI 钮里列了这一档思考程度
+      knownEffort: async (id, effort) =>
+        (await brandModules.models(ws))
+          .chatChoices()
+          .some((c) => c.id === id && hasThinkingEffort(c.thinking, effort)),
       // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
       liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
       stopRuns: async (matter_id, reason) => {
@@ -10705,10 +10716,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       mine: (actor) => assembly.mine(actor.person_id),
       open: async (actor, id, input) => {
         // WP342：输入框左下角选的 AI（认不出 / 现在不能用的不记，跟品牌默认走）
-        const chosen =
-          input.model !== undefined &&
-          (await brandModules.models(ws)).chatChoices().some((c) => c.id === input.model)
-            ? input.model
+        const pickable =
+          input.model === undefined
+            ? undefined
+            : (await brandModules.models(ws)).chatChoices().find((c) => c.id === input.model)
+        const chosen = pickable === undefined ? undefined : input.model
+        // WP370：连同模型一起选的思考程度（这个模型列了这一档才记）
+        const effort =
+          pickable !== undefined &&
+          input.model_effort !== undefined &&
+          hasThinkingEffort(pickable.thinking, input.model_effort)
+            ? input.model_effort
             : undefined
         const out = await assembly.open({
           position_id: resolveId(actor, id),
@@ -10723,6 +10741,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.detach === true ? { detach: true } : {}),
           // WP342：输入框左下角选的 AI（认不出的不记，跟品牌默认走）
           ...(chosen === undefined ? {} : { model: chosen }),
+          ...(effort === undefined ? {} : { model_effort: effort }),
           // WP357：附上的资料（宿主按助理那套读成文字）
           ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
         })
