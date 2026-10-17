@@ -16,6 +16,24 @@ import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useApp } from '@/lib/app-context'
+import { hasKey } from '@/lib/i18n'
+
+/**
+ * WP385：格子的字由服务端给（中文）；界面是英文、表里有这一格的英文（`setup.field.<目标>.<键>`、
+ * 占位 `….ph`）就用英文，没有照旧。
+ */
+export function useFieldText(target: string): (f: SetupField) => {
+  label: string
+  placeholder?: string
+} {
+  const { lang, t } = useApp()
+  return (f) => {
+    const k = `setup.field.${target}.${f.key}`
+    const local = lang !== 'zh' && hasKey(lang, k)
+    const ph = local && hasKey(lang, `${k}.ph`) ? t(`${k}.ph`) : f.placeholder
+    return { label: local ? t(k) : f.label, ...(ph === undefined ? {} : { placeholder: ph }) }
+  }
+}
 
 function FieldInput({ field, id }: { field: SetupField; id: string }): ReactNode {
   const common = { id, name: field.key, required: field.required }
@@ -66,6 +84,7 @@ export function SetupFieldsBody({
   onSave: (values: Record<string, string>) => void
 }): ReactNode {
   const { t } = useApp()
+  const text = useFieldText(payload.target)
   const prefix = useId()
   const fields = payload.fields.filter((f) => !isSecretLikeSetupKey(f.key, f.label))
   const submit = (e: FormEvent<HTMLFormElement>): void => {
@@ -83,8 +102,15 @@ export function SetupFieldsBody({
   return (
     <form className="flex flex-col gap-2.5" data-testid="setup-fields" onSubmit={submit}>
       {payload.why === '' ? null : <p className="text-sm leading-6 text-ws-body">{payload.why}</p>}
-      {fields.map((f) => {
-        const id = `${prefix}-${f.key}`
+      {fields.map((raw) => {
+        const id = `${prefix}-${raw.key}`
+        const shown = text(raw)
+        const { placeholder: _p, ...rest } = raw
+        const f: SetupField = {
+          ...rest,
+          label: shown.label,
+          ...(shown.placeholder === undefined ? {} : { placeholder: shown.placeholder }),
+        }
         return (
           <div
             key={f.key}
