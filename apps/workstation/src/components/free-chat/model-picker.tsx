@@ -423,7 +423,7 @@ export function ModelPicker({
           data-testid={`${testId}-menu`}
           onKeyDown={onMenuKey}
           className={cn(
-            'absolute left-0 z-50 flex w-[340px] max-w-[calc(100vw-32px)] flex-col rounded-lg border bg-popover text-popover-foreground shadow-md',
+            'absolute left-0 z-50 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-lg border bg-popover text-popover-foreground shadow-md',
             layout.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
           )}
         >

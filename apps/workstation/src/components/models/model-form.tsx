@@ -431,7 +431,8 @@ export function ModelForm({
       {imageOnly ? null : (
         <PickerModelsField
           id={`${prefix}-picker`}
-          models={models}
+          // 主模型总在 AI 钮里，不用勾
+          models={models.filter((m) => m !== (existing?.model ?? template.default_model))}
           value={pickerModels}
           onChange={setPickerModels}
         />

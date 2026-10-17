@@ -158,12 +158,9 @@ describe('WP370 设置：自定义接口「也在 AI 钮里显示」', () => {
     )
     const box = screen.getByTestId('model-picker-models')
     const options = within(box).getAllByTestId('model-picker-option')
-    expect(options.map((o) => o.getAttribute('data-model'))).toEqual([
-      'gpt-4o-mini',
-      'gpt-4.1',
-      'o4-mini',
-    ])
-    fireEvent.click(options[1] as HTMLElement)
+    // 主模型（gpt-4o-mini）总在 AI 钮里，清单里不再列它
+    expect(options.map((o) => o.getAttribute('data-model'))).toEqual(['gpt-4.1', 'o4-mini'])
+    fireEvent.click(options[0] as HTMLElement)
     fireEvent.submit(screen.getByTestId('model-form'))
     expect(saved[0]?.picker_models).toEqual(['o4-mini', 'gpt-4.1'])
   })
