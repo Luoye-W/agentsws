@@ -1486,7 +1486,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     // WP362：ChatGPT 订阅——经服务端的订阅登录树（官方 pi-ai），令牌不经网关
     if (config.kind === 'openai-codex') {
       const port = options.subscription
-      return port === undefined ? undefined : subscriptionModelProvider({ port, model, vision })
+      return port === undefined
+        ? undefined
+        : subscriptionModelProvider({
+            port,
+            model,
+            vision,
+            // WP374（决策 1032）：没选思考档就发 AI 钮上默认亮的那一档
+            defaultEffort: () => {
+              const efforts = port.catalog('openai-codex').find((m) => m.id === model)?.efforts
+              return efforts === undefined ? undefined : thinkingOptionsOf(efforts)?.default
+            },
+          })
     }
     if (config.kind === 'deepseek_account') {
       if (account === undefined) return undefined
@@ -1523,6 +1534,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         model,
         provider: config.id,
         region: config.region,
+        // WP374（决策 1032）：没选思考档就发 AI 钮上默认亮的「标准」那一档（显示什么就发什么）
+        defaultEffort: () => {
+          const efforts = anthropicModelFacts(model)?.efforts
+          return efforts === undefined ? undefined : thinkingOptionsOf(efforts)?.default
+        },
       })
     }
     if (deepseekUsesMessages(config, env)) {

@@ -222,6 +222,12 @@ export interface AnthropicCompatibleOptions {
   fetch?: typeof globalThis.fetch
   /** 一次补全最多等多久（不给 = 官方 SDK 默认）。 */
   timeoutMs?: number
+  /**
+   * WP374（决策 1032，Luoye 10-17）：**显示什么就发什么**——没选思考档时发这一档（装配方给的是 AI 钮上
+   * 默认亮的「标准」那一档）。现取：官方目录可能后来才读到。不给 / 回 `undefined` = 照官方不发。
+   * 调用方硬要「别想」（`thinking: 'off'`）、强制某个工具时照旧不发。
+   */
+  defaultEffort?: () => ReasoningEffort | undefined
 }
 
 /** pi-ai 的模型：目录认得出就照目录（地址、来源换成这一条的），认不出就最小的一份、不声明思考。 */
@@ -263,9 +269,10 @@ function reasoningOf(
   hints: CompletionHints,
   choice: ToolChoice | undefined,
   facts: AnthropicModelFacts | undefined,
+  defaultEffort?: () => ReasoningEffort | undefined,
 ): ReasoningEffort | undefined {
   if (!model.reasoning || hints.thinking === 'off' || choice?.type === 'tool') return undefined
-  const effort = hints.reasoning_effort
+  const effort = hints.reasoning_effort ?? defaultEffort?.()
   if (effort === undefined || effort === 'off') return undefined
   return facts?.efforts?.includes(effort) === true ? effort : undefined
 }
@@ -327,7 +334,13 @@ export function anthropicCompatibleProvider(options: AnthropicCompatibleOptions)
         import('@earendil-works/pi-ai/utils/transcript'),
       ])
       const model = piModelOf(catalog, options)
-      const effort = reasoningOf(model, req, req.tool_choice, anthropicModelFacts(options.model))
+      const effort = reasoningOf(
+        model,
+        req,
+        req.tool_choice,
+        anthropicModelFacts(options.model),
+        options.defaultEffort,
+      )
       const context = toAnthropicPiContext(req.messages, req.tools, {
         api: ANTHROPIC_MESSAGES_API,
         provider: options.provider,

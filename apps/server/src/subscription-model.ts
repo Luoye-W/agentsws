@@ -11,7 +11,7 @@
  * - 没跑成分三档说人话：没登录 / 登录过期 → `unauthenticated`（运行收尾时出「重新登录」的连接卡），
  *   限流 → `rate_limited`（同一张卡，说明是额度用满了），别的 → 上游错（网关照常降级）。
  */
-import type { ModelProvider } from '@agentsws/contracts'
+import type { ModelProvider, ReasoningEffort } from '@agentsws/contracts'
 import type {
   SubscriptionCatalogModel,
   SubscriptionChatRequest,
@@ -66,11 +66,31 @@ export function subscriptionGatewayError(e: unknown): unknown {
   return new ProviderError(e.message, typeof status === 'number' ? { status } : {})
 }
 
+/**
+ * WP374（决策 1032）：这一次交哪一档。选了就照选的；没选、又没被硬要「别想」，就交界面上默认亮的那一档。
+ */
+function effortOf(
+  chosen: ReasoningEffort | undefined,
+  thinking: 'off' | undefined,
+  fallback: (() => ReasoningEffort | undefined) | undefined,
+): { reasoning_effort?: ReasoningEffort } {
+  if (chosen !== undefined) return { reasoning_effort: chosen }
+  if (thinking === 'off') return {}
+  const standard = fallback?.()
+  return standard === undefined ? {} : { reasoning_effort: standard }
+}
+
 /** 网关上订阅那一条（一个模型一个实例，与别的来源同一种挂法）。 */
 export function subscriptionModelProvider(input: {
   port: SubscriptionModelPort
   model: string
   vision: boolean | undefined
+  /**
+   * WP374（决策 1032，Luoye 10-17）：**显示什么就发什么**——没选思考档时发界面上默认亮的「标准」那一档。
+   * 官方 pi-ai 对订阅「不给档」= 发 `reasoning.effort: none`（不想），而 AI 钮上默认亮的是「标准」（medium）；
+   * 现取（目录可能后来才读到）。回 `undefined` = 这个模型没有档，照旧不写。
+   */
+  defaultEffort?: () => ReasoningEffort | undefined
 }): ModelProvider {
   const { port, model } = input
   return {
@@ -91,8 +111,8 @@ export function subscriptionModelProvider(input: {
             ? {}
             : { max_output_tokens: req.max_output_tokens }),
           ...(req.thinking === undefined ? {} : { thinking: req.thinking }),
-          // WP370：思考程度（pi-ai 按目录映射成订阅认的值）
-          ...(req.reasoning_effort === undefined ? {} : { reasoning_effort: req.reasoning_effort }),
+          // WP370：思考程度（pi-ai 按目录映射成订阅认的值）；WP374（1032）：没选就发默认亮的那一档
+          ...effortOf(req.reasoning_effort, req.thinking, input.defaultEffort),
           ...(req.on_delta === undefined ? {} : { on_delta: req.on_delta }),
           ...(req.signal === undefined ? {} : { signal: req.signal }),
         })

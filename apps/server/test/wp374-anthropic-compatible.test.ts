@@ -28,6 +28,7 @@ import {
 import { chatModelRefOf, createModels, MODEL_TEMPLATES } from '../src/models.js'
 import { createRuntime, type RuntimeOptions } from '../src/runtime.js'
 import { createSecretStore, SECRETS_KEY_ENV, type SecretStore } from '../src/secret-store.js'
+import { type SubscriptionModelPort, subscriptionModelProvider } from '../src/subscription-model.js'
 
 vi.setConfig({ testTimeout: 120_000 })
 
@@ -189,7 +190,7 @@ describe('WP374 (b) 报错人话', () => {
 })
 
 describe('WP374 (c) 思考程度经网关落到 thinking', () => {
-  it('选了「深想」(high) 就开思考；没选不开；中转站自己起名的不发', async () => {
+  it('选了「深想」(high) 就开思考；没选按「标准」发（决策 1032）；硬要别想不开；中转站自己起名的不发', async () => {
     const { models, gateway } = modelsWith()
     await saveRelay(models)
     const meta = {
@@ -199,18 +200,25 @@ describe('WP374 (c) 思考程度经网关落到 thinking', () => {
       run_id: 'run_wp374',
       purpose: 'run' as const,
     }
-    const ask = async (model: string, effort?: 'high') => {
+    const ask = async (model: string, effort?: 'high', off = false) => {
       await gateway.complete({
         model: { provider: 'my-relay', model, region: 'global' },
         messages: [{ role: 'user', content: '在吗' }],
         meta,
         ...(effort === undefined ? {} : { reasoning_effort: effort }),
+        ...(off ? { thinking: 'off' as const } : {}),
       })
-      return fake.requests.at(-1)?.body?.thinking
+      return fake.requests.at(-1)?.body?.thinking as { type?: string; budget_tokens?: number }
     }
-    expect(await ask('claude-sonnet-4-5', 'high')).toMatchObject({ type: 'enabled' })
-    expect(await ask('claude-sonnet-4-5')).toEqual({ type: 'disabled' })
+    const deep = await ask('claude-sonnet-4-5', 'high')
+    expect(deep).toMatchObject({ type: 'enabled' })
+    // 显示什么就发什么：AI 钮上默认亮「标准」（Sonnet 4.5 = medium），没选也按它发
+    const standard = await ask('claude-sonnet-4-5')
+    expect(standard).toMatchObject({ type: 'enabled' })
+    expect(standard.budget_tokens).toBeLessThan(deep.budget_tokens ?? 0)
+    expect(await ask('claude-sonnet-4-5', undefined, true)).toEqual({ type: 'disabled' })
     expect(await ask('relay-claude-special', 'high')).toBeUndefined()
+    expect(await ask('relay-claude-special')).toBeUndefined()
   })
 })
 
@@ -307,5 +315,42 @@ describe('WP374 (d) 三个运行时都能用 Anthropic 兼容口跑', () => {
     const { sent } = await runOnce('direct', 'my-relay/relay-claude-special')
     expect(sent.length).toBeGreaterThan(0)
     for (const r of sent) expect(r.body?.model).toBe('relay-claude-special')
+  })
+})
+
+describe('WP374 (e) 决策 1032 同样的问题：ChatGPT 订阅没选档时也按「标准」发', () => {
+  // 官方 pi-ai 对订阅「不给档」= 发 reasoning.effort none（不想），AI 钮上却默认亮「标准」（medium）
+  it('没选 → medium；选了 → 照选的；硬要别想 → 不交档（订阅那一跳自己写 minimal）', async () => {
+    const asked: (string | undefined)[] = []
+    const port: SubscriptionModelPort = {
+      signedIn: () => true,
+      catalog: () => [
+        {
+          id: 'gpt-5.5',
+          name: 'GPT-5.5',
+          vision: true,
+          efforts: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+        },
+      ],
+      async complete(_person, _provider, request) {
+        asked.push(request.reasoning_effort)
+        return {
+          text: '好',
+          usage: { input_tokens: 1, output_tokens: 1, cached_tokens: 0 },
+          model: request.model,
+        } as never
+      },
+    }
+    const provider = subscriptionModelProvider({
+      port,
+      model: 'gpt-5.5',
+      vision: true,
+      defaultEffort: () => 'medium',
+    })
+    const messages = [{ role: 'user' as const, content: '在吗' }]
+    await provider.complete({ messages })
+    await provider.complete({ messages, reasoning_effort: 'high' })
+    await provider.complete({ messages, thinking: 'off' })
+    expect(asked).toEqual(['medium', 'high', undefined])
   })
 })

@@ -193,6 +193,20 @@ describe('WP374 思考程度（只照官方目录）', () => {
     expect(lastBody().thinking).toBeUndefined()
   })
 
+  it('装配方给了默认档（决策 1032 显示什么就发什么）：没选就按它发；thinking=off 照旧不开', async () => {
+    const p = anthropicCompatibleProvider({
+      baseUrl: fake.url,
+      apiKey: () => GOOD_KEY,
+      model: 'claude-sonnet-4-5',
+      provider: 'my-relay',
+      defaultEffort: () => 'medium',
+    })
+    await p.complete({ messages: [user('在吗')] })
+    expect(lastBody().thinking).toMatchObject({ type: 'enabled', budget_tokens: 8192 })
+    await p.complete({ messages: [user('在吗')], thinking: 'off' })
+    expect(lastBody().thinking).toEqual({ type: 'disabled' })
+  })
+
   it('目录：名字、看图、上下文、档位照官方；带日期的型号认得；中转站自己的名字一样不编', () => {
     const sonnet = anthropicModelFacts('claude-sonnet-4-5')
     expect(sonnet).toMatchObject({ vision: true, context_window: 1_000_000 })
