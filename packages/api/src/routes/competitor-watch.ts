@@ -28,9 +28,15 @@ import { body, ok, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
+/** 变化表的一行：变化本身 + 服务端拼好的一句人话（中英各一句；不提任何数据供应商名）。 */
+export type CompetitorChangeRow = CompetitorChange & { text: { zh: string; en: string } }
+
 export interface CompetitorWatchPort {
   view(workspace_id: WorkspaceId): MaybePromise<CompetitorWatchView>
-  changes(workspace_id: WorkspaceId, query: CompetitorChangeQuery): MaybePromise<CompetitorChange[]>
+  changes(
+    workspace_id: WorkspaceId,
+    query: CompetitorChangeQuery,
+  ): MaybePromise<CompetitorChangeRow[]>
   updateSettings(
     workspace_id: WorkspaceId,
     patch: Partial<CompetitorWatchSettings>,
@@ -104,7 +110,7 @@ export function competitorWatchRoutes(): Route[] {
           { name: 'until', in: 'query', description: 'ISO 时间（不含）' },
           { name: 'limit', in: 'query', description: '最多几条（默认 500）' },
         ],
-        returns: '{ changes: CompetitorChange[] }',
+        returns: '{ changes: CompetitorChangeRow[] }',
       },
       async (c, deps) => {
         const q: CompetitorChangeQuery = {}

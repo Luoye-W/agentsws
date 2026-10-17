@@ -12,6 +12,7 @@ import { isWeeklyReview, WeeklyReviewBody } from '@/components/deck/weekly-revie
 import { GoButton } from '@/components/design'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
+import { CompetitorChangesTable } from '@/components/reports/competitor-watch'
 import {
   type ReportItem,
   reportAddress,
@@ -105,6 +106,8 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
           </ul>
         )}
       </section>
+      {/* WP392：竞品变化表（整张；按竞品 / 种类筛） */}
+      <CompetitorChangesTable scope={props.scope} />
       <section className="flex flex-col gap-2" data-testid="reports-boards">
         <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
           {t('reports.boards')}

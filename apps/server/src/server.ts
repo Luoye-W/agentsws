@@ -207,7 +207,12 @@ import {
   splitFrontmatter,
 } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
-import { createRedditReadRouter, scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
+import {
+  createRedditReadRouter,
+  describeChange,
+  scheduleConflicts,
+  scheduleRulesFor,
+} from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -12578,7 +12583,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               changes: async (
                 ws: WorkspaceId,
                 q: Parameters<CompetitorWatchAssembly['changes']>[0],
-              ) => (await cwOf(ws)).changes(q),
+              ) =>
+                (await cwOf(ws)).changes(q).map((c) => ({
+                  ...c,
+                  text: {
+                    zh: describeChange(c, { lang: 'zh' }),
+                    en: describeChange(c, { lang: 'en' }),
+                  },
+                })),
               updateSettings: async (
                 ws: WorkspaceId,
                 patch: Parameters<CompetitorWatchAssembly['updateSettings']>[0],

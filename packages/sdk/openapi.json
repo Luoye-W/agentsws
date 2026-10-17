@@ -103387,7 +103387,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ changes: CompetitorChange[] }",
+            "description": "{ changes: CompetitorChangeRow[] }",
             "content": {
               "application/json": {
                 "schema": {
@@ -103468,7 +103468,7 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "{ changes: CompetitorChange[] }"
+        "x-returns": "{ changes: CompetitorChangeRow[] }"
       }
     },
     "/v1/competitor-watch/settings": {

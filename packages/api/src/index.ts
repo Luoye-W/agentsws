@@ -255,7 +255,7 @@ export type {
 } from './routes/cloud-account.js'
 export { cloudAccountRoutes } from './routes/cloud-account.js'
 // WP392：竞品监控
-export type { CompetitorWatchPort } from './routes/competitor-watch.js'
+export type { CompetitorChangeRow, CompetitorWatchPort } from './routes/competitor-watch.js'
 export { competitorWatchRoutes } from './routes/competitor-watch.js'
 export {
   type ComputerUseActor,

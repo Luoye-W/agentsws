@@ -20,6 +20,11 @@ import {
   type PositionConnectionItem,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import {
+  COMPETITOR_WATCH_ROLES,
+  competitorWatchKey,
+  getCompetitorWatch,
+} from '@/lib/competitor-watch-api'
 import { getFreeChatModels } from '@/lib/free-chat'
 import { listSinks, SINKS_KEY } from '@/lib/outbound-api'
 
@@ -107,6 +112,23 @@ export function whenLabel(
   return `${shortDate(iso)} ${time}`
 }
 
+/**
+ * WP392：这一层的竞品监控状态（只在担「店铺管理 / 亚马逊店铺运营」的那一层取；和卡里那一份同一个查询键）。
+ */
+function useCompetitorWatchStatus(scope: RailScope | undefined) {
+  const assignment = scope?.roles?.find((r) =>
+    COMPETITOR_WATCH_ROLES.includes(r.role_id),
+  )?.assignment
+  const q = useQuery({
+    queryKey: competitorWatchKey(assignment ?? ''),
+    queryFn: () => getCompetitorWatch(assignment as string),
+    enabled: assignment !== undefined,
+    retry: false,
+    staleTime: 60_000,
+  })
+  return assignment === undefined || q.data === null ? undefined : q.data
+}
+
 /** 计划：下一次什么时候（「下次 明早 9:00」）；等你点头的亮黄点。 */
 export function usePlansStatus({ scope }: RailPanelBodyProps): CardStatus | undefined {
   const { t } = useApp()
@@ -116,14 +138,18 @@ export function usePlansStatus({ scope }: RailPanelBodyProps): CardStatus | unde
     enabled: scope !== undefined,
     retry: false,
   })
+  const competitor = useCompetitorWatchStatus(scope)
   if (scope === undefined || list.data === undefined) return undefined
   const rows = list.data.filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
-  if (rows.length === 0) return undefined
+  const competitorNext = competitor?.next_read_at
+  if (rows.length === 0 && competitorNext === undefined) return undefined
   const waiting = rows.filter((r) => r.params?.awaiting_approval === true).length
-  const next = rows
-    .filter((r) => r.state !== 'paused' && r.next_fire_at !== undefined)
-    .map((r) => r.next_fire_at as string)
-    .sort()[0]
+  const next = [
+    ...rows
+      .filter((r) => r.state !== 'paused' && r.next_fire_at !== undefined)
+      .map((r) => r.next_fire_at as string),
+    ...(competitorNext === undefined ? [] : [competitorNext]),
+  ].sort()[0]
   const summary = next === undefined ? undefined : t('plans.next', { when: whenLabel(next, t) })
   return {
     ...(summary === undefined ? {} : { summary }),
@@ -173,6 +199,15 @@ export function useScopeConnections(scope: RailScope | undefined): {
 export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus | undefined {
   const { t } = useApp()
   const { items } = useScopeConnections(scope)
+  // WP392：竞品监控有没读到的那几家，也算要处理（红点；照实说几家）
+  const competitor = useCompetitorWatchStatus(scope)
+  const failed = competitor?.summary.failed ?? 0
+  if (failed > 0)
+    return {
+      summary: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
+      dot: 'alert',
+      dotLabel: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
+    }
   if (items.length === 0) return undefined
   const todo = items.filter(connectionNeedsYou).length
   if (todo === 0) return { summary: t('conncard.summary.ok') }

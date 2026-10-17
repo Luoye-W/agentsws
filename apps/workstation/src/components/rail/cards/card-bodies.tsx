@@ -16,6 +16,12 @@ import { useRailState } from '@/components/rail/rail-state'
 import type { RailCardBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import {
+  CompetitorChangesTable,
+  CompetitorWatchConnectionRow,
+  CompetitorWatchPlanRow,
+  competitorAssignmentOf,
+} from '@/components/reports/competitor-watch'
+import {
   reportAddress,
   scopeAssignments,
   shortDate,
@@ -49,26 +55,40 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const { reports, ready } = useScopeReports(scope)
-  if (reports.length === 0) return ready ? <Empty text={t('reports.empty')} /> : null
+  // WP392：担竞品监控的这一层，卡里再放竞品变化表（按竞品 / 种类筛；价格带走势）
+  const competitor =
+    competitorAssignmentOf(scope) === undefined ? null : (
+      <CompetitorChangesTable scope={scope} limit={limit} />
+    )
+  if (reports.length === 0)
+    return (
+      <div className="flex flex-col gap-2">
+        {ready ? <Empty text={t('reports.empty')} /> : null}
+        {competitor}
+      </div>
+    )
   return (
-    <ul className="flex flex-col gap-px" data-testid="reports-card">
-      {reports.slice(0, limit).map((r) => (
-        <li key={r.id}>
-          <button
-            type="button"
-            className={ROW}
-            data-testid="report-row"
-            data-id={r.id}
-            onClick={() => {
-              rail.openAddress(reportAddress(r.id))
-            }}
-          >
-            <span className="min-w-0 truncate">{r.title}</span>
-            <Meta>{shortDate(r.at)}</Meta>
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-px" data-testid="reports-card">
+        {reports.slice(0, limit).map((r) => (
+          <li key={r.id}>
+            <button
+              type="button"
+              className={ROW}
+              data-testid="report-row"
+              data-id={r.id}
+              onClick={() => {
+                rail.openAddress(reportAddress(r.id))
+              }}
+            >
+              <span className="min-w-0 truncate">{r.title}</span>
+              <Meta>{shortDate(r.at)}</Meta>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {competitor}
+    </div>
   )
 }
 
@@ -135,9 +155,13 @@ export function PlansCard({ scope, limit }: RailCardBodyProps): ReactNode {
   const rows = (list.data ?? [])
     .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
     .sort(byPlan)
-  if (rows.length === 0) return list.isPending ? null : <Empty text={t('plans.empty')} />
+  // WP392：竞品监控的下次读（不是一条定时任务，是按到点规则算出来的）
+  const competitor = competitorAssignmentOf(scope) !== undefined
+  if (rows.length === 0 && !competitor)
+    return list.isPending ? null : <Empty text={t('plans.empty')} />
   return (
     <ul className="flex flex-col gap-px" data-testid="plans-card">
+      {competitor ? <CompetitorWatchPlanRow scope={scope} /> : null}
       {rows.slice(0, limit).map((r) => {
         const waiting = r.params?.awaiting_approval === true
         return (
@@ -206,8 +230,14 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
           </Suspense>
         </div>
       ) : null}
+      {/* WP392：竞品监控各监控源的状态（坏了亮红点、照实说是哪家） */}
+      {competitorAssignmentOf(scope) === undefined ? null : (
+        <ul className="flex flex-col gap-px">
+          <CompetitorWatchConnectionRow scope={scope} />
+        </ul>
+      )}
       {sorted.length === 0 ? (
-        live || !ready ? null : (
+        live || !ready || competitorAssignmentOf(scope) !== undefined ? null : (
           <Empty text={t('conncard.empty')} />
         )
       ) : (

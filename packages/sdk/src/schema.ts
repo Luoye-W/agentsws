@@ -79912,7 +79912,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { changes: CompetitorChange[] } */
+      /** @description { changes: CompetitorChangeRow[] } */
       200: {
         headers: {
           [name: string]: unknown

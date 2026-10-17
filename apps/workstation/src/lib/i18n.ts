@@ -11,6 +11,7 @@ import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
+import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
@@ -8496,6 +8497,8 @@ const TABLES: Record<Lang, Table> = {
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
     ...REDDIT_WATCH_ZH,
+    // WP392：竞品监控（报表卡的变化表、连接卡、计划卡）
+    ...COMPETITOR_WATCH_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8554,6 +8557,7 @@ const TABLES: Record<Lang, Table> = {
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
     ...REDDIT_WATCH_EN,
+    ...COMPETITOR_WATCH_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
