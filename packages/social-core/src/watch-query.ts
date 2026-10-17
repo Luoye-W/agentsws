@@ -189,7 +189,8 @@ export interface WatchFilter {
 /** 一条原文引用（不截图：原话 + 作者 + 时间 + 链接）。 */
 export interface WatchQuote {
   id: string
-  kind: 'post' | 'comment'
+  /** WP392：`change` = 竞品监控比出来的一条变化。 */
+  kind: WatchItem['kind']
   scope: 'own' | 'external'
   place: string
   author?: string

@@ -16,6 +16,7 @@
 import {
   type ApprovalBus,
   type Clock,
+  type CompetitorChange,
   type Iso8601,
   REPORT_OUTBOUND_ACTION,
   type ReportPayload,
@@ -56,6 +57,11 @@ export interface WatchSource {
   sweeps(window: { since: Iso8601; until: Iso8601 }): MaybePromise<Iso8601[]>
   /** 现在巡查一次并等它做完；有哪块没读成就抛一句人话。没有 = 不能现巡。 */
   sweepNow?(options?: { timeoutMs?: number }): Promise<unknown>
+  /**
+   * WP392：窗口里比出来的竞品变化（竞品监控那一份才有；`items` 里同样带着 `kind: 'change'` 的条目，
+   * 这里给的是变化本身，出报表时按竞品 / 种类数）。
+   */
+  changes?(window: { since: Iso8601; until: Iso8601 }): MaybePromise<CompetitorChange[]>
 }
 
 /** 「立即巡查」最多等多久（插件那两块要等 Chrome 里的插件交回）。 */

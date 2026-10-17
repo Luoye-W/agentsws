@@ -540,12 +540,45 @@ export const GEO_PROMPT_CAP_MAX = 50
 export const WATCH_KEYWORDS_DEFAULT = 20
 export const WATCH_KEYWORDS_MAX = 100
 
+/**
+ * WP392（docs/104 C3）：竞品的独立站（竞品监控读它的公开商品目录）。
+ * 平台由 AI 读一下店里那两个公开地址探出来（WP393）；探不出 = `unknown`。
+ */
+export interface BrandWatchStore {
+  /** 店铺首页地址（`https://aventon.com`）。 */
+  url: string
+  platform: 'shopify' | 'woocommerce' | 'other' | 'unknown'
+  /** 上次探平台的时刻。 */
+  checked_at?: Iso8601
+}
+
+/**
+ * WP392（docs/104 C3 / C6 / C8）：Amazon 上一款要盯的商品（竞品的对标款，或自家的那一款）。
+ * 每家几款不定死，AI 建议、用户确认（C6）。
+ */
+export interface BrandWatchAmazonItem {
+  /** 站点（`US`、`DE`、`JP`…，按 Amazon 站点的国家码）。 */
+  marketplace: string
+  asin: string
+  /** 人话名（`Level 3`）。 */
+  label?: string
+  /** 对标自家哪一款：自家 ASIN 或独立站商品 handle（C8 比差价用；竞品那边才有）。 */
+  vs_own?: string
+}
+
 /** 关注设置里的一个竞品（3–5 个）。`id` 稳定，改名不影响历史（历史里存名字快照）。 */
 export interface BrandWatchCompetitor {
   id: string
   name: string
   aliases: string[]
   domains: string[]
+  /**
+   * WP392（docs/104 C3）：这份是 GEO、信息监控、竞品监控三家共用的**唯一工作清单**，竞品监控只在这里加格子。
+   * 竞品的独立站（有才盯上新 / 改价 / 打折 / 断货）。
+   */
+  store?: BrandWatchStore
+  /** WP392：竞品在 Amazon 上的对标款。 */
+  amazon?: BrandWatchAmazonItem[]
 }
 
 /** 关注的一个关键词（决策 465：SEO 排名按关键词；GEO 按 Prompt，是另一件事）。 */
@@ -565,7 +598,13 @@ export type BrandWatchFrequency = 'weekly' | 'biweekly' | 'monthly' | 'manual'
  */
 export interface BrandWatch {
   /** 我们：品牌名 + 别名（简称、常见拼错、主推商品名）+ 自家域名。 */
-  brand: { name: string; aliases: string[]; domains: string[] }
+  brand: {
+    name: string
+    aliases: string[]
+    domains: string[]
+    /** WP392（docs/104 C8）：自家在 Amazon 上的商品（和竞品对标款比价用；`vs_own` 不填）。 */
+    amazon?: BrandWatchAmazonItem[]
+  }
   /** 竞品 3–5 个。 */
   competitors: BrandWatchCompetitor[]
   /**
