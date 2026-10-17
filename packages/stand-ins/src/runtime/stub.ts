@@ -31,6 +31,7 @@ import {
   sequencesOf,
   startRoundOf,
 } from './b2b-outbound.js'
+import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
   attributionOf,
@@ -85,7 +86,6 @@ import {
   SCHEDULE_UPDATE_TOOL,
   scheduleBranch,
 } from './schedule.js'
-import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import {
   renderSetupRequestAnswer,
   SETUP_REQUEST_TOOL_DEF_BY_NAME,

@@ -312,11 +312,17 @@ export function ingestAlertsReport(input: IngestInput): IngestResult {
       : out.done.length === 0 && out.email.length === 0
         ? 'failed'
         : 'partial'
-  out.summary = summaryOf(job.op, out, n, report.stop)
+  out.summary = alertsSummary(job.op, out, n, report.stop)
   return out
 }
 
-function summaryOf(op: GoogleAlertOp, r: IngestResult, n: number, stop: GoogleAlertsStop): string {
+/** 一趟的收尾那一句（建好几条、几条另出卡、哪几条没成退回手动）。 */
+export function alertsSummary(
+  op: GoogleAlertOp,
+  r: Pick<IngestResult, 'done' | 'email' | 'failed'>,
+  n: number,
+  stop: GoogleAlertsStop,
+): string {
   const parts: string[] = []
   const verb = op === 'create' ? '建好' : '改成 RSS'
   if (r.done.length > 0) parts.push(`${verb} ${r.done.length} 条，RSS 链接已读回，正在先拉一次`)

@@ -222,3 +222,13 @@ export interface GoogleAlertsExistingView {
   /** 已经在监控源里的条数。 */
   already: number
 }
+
+/** 面板 / 接口看的那一份（`GET /v1/pr/watch/alerts`；feed 地址只出脱敏那一格）。 */
+export interface GoogleAlertsPanelView {
+  /** 你的浏览器接上了没有（没接上：只能手动贴链接）。 */
+  browser_ready: boolean
+  /** 最近几趟（新的在前；结果里的链接已脱敏）。 */
+  jobs: GoogleAlertsJob[]
+  /** 读到的已有提醒（链接已脱敏）。 */
+  existing: GoogleAlertsExistingView
+}

@@ -8,11 +8,35 @@
 import type { ToolDef } from '@agentsws/contracts'
 
 export const REPORT_GOOGLE_ALERTS_TOOL = 'report_google_alerts'
+/** 用户在对话里说「帮我建好」「把我已有的提醒读进来」时：出那张卡 / 开一趟只读。 */
+export const BUILD_GOOGLE_ALERTS_TOOL = 'build_google_alerts'
 
-/** 一个工具（`tools.allow` 要字节稳定）。 */
-export const GOOGLE_ALERTS_TOOL_NAMES: readonly string[] = [REPORT_GOOGLE_ALERTS_TOOL]
+/** 两个工具（`tools.allow` 要字节稳定）。 */
+export const GOOGLE_ALERTS_TOOL_NAMES: readonly string[] = [
+  BUILD_GOOGLE_ALERTS_TOOL,
+  REPORT_GOOGLE_ALERTS_TOOL,
+]
 
 export const GOOGLE_ALERTS_TOOL_DEFS: readonly ToolDef[] = [
+  {
+    name: BUILD_GOOGLE_ALERTS_TOOL,
+    description:
+      '用户让你替他在 Google 账号里建好提醒（「帮我建」「让工坊替我建」），或者让你把他已有的提醒读进来时调。' +
+      'mode=create：按配置卡上确认过的清单出一张「要在你的 Google 账号里建 N 条提醒」的卡，用户在卡上勾掉不要的、同意一次，' +
+      '他的浏览器才会去建——调完跟用户说一声「在下面这张卡上确认」，你自己不去打开浏览器建。' +
+      'mode=read_existing：开一趟只读，让他的浏览器读一遍已有的提醒（RSS 投递的出一张勾选导入的卡，还在发邮件的出一张「改成 RSS」的卡）。' +
+      '清单还没确认过（还没有配置卡）就先用 request_setup（setting 填 pr.watch）要信息监控的配置卡。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mode: {
+          type: 'string',
+          description: 'create（出建提醒的卡）/ read_existing（只读一遍已有的）',
+        },
+      },
+      required: ['mode'],
+    },
+  },
   {
     name: REPORT_GOOGLE_ALERTS_TOOL,
     description:
@@ -33,9 +57,13 @@ export const GOOGLE_ALERTS_TOOL_DEFS: readonly ToolDef[] = [
               id: { type: 'string', description: '卡上的行号（ga_1…）' },
               outcome: {
                 type: 'string',
-                description: 'created / existing / switched / existing_email / failed / not_attempted',
+                description:
+                  'created / existing / switched / existing_email / failed / not_attempted',
               },
-              feed_url: { type: 'string', description: '读回的 RSS 链接（google.com/alerts/feeds/…）' },
+              feed_url: {
+                type: 'string',
+                description: '读回的 RSS 链接（google.com/alerts/feeds/…）',
+              },
               reason: { type: 'string', description: '没成 / 没轮到时的一句原因' },
             },
             required: ['id', 'outcome'],
@@ -74,6 +102,8 @@ export const GOOGLE_ALERTS_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new 
 /** 工具回的数据（服务端白名单出参；没有任何一条 feed 的完整地址）。 */
 export interface GoogleAlertsToolData {
   ok: boolean
+  /** 出卡那一下：卡上列了几条。 */
+  count?: number
   /** 建好 / 已有 / 改成 RSS 的条数。 */
   done?: number
   /** 没成的条数（退回手动贴链接）。 */

@@ -11,7 +11,11 @@ import type {
   GoogleAlertsReport,
   GoogleAlertsStop,
 } from '@agentsws/contracts'
-import { GOOGLE_ALERTS_TOOL_NAMES, type ToolExecutor } from '@agentsws/stand-ins'
+import {
+  BUILD_GOOGLE_ALERTS_TOOL,
+  GOOGLE_ALERTS_TOOL_NAMES,
+  type ToolExecutor,
+} from '@agentsws/stand-ins'
 import type { PrAlertsService } from './service.js'
 
 const OUTCOMES: readonly GoogleAlertOutcome[] = [
@@ -85,7 +89,37 @@ export function createGoogleAlertsTool(service: () => PrAlertsService | undefine
     if (!GOOGLE_ALERTS_TOOL_NAMES.includes(call.name))
       return { status: 'error', reason: `unknown_tool: ${call.name}` }
     const svc = service()
-    if (svc === undefined) return { status: 'error', reason: '信息监控还没准备好，结果没记下。' }
+    if (svc === undefined) return { status: 'error', reason: '信息监控还没准备好。' }
+    if (call.name === BUILD_GOOGLE_ALERTS_TOOL) {
+      const actor = {
+        person_id: call.request.actor.person_id,
+        assignment_id: call.request.actor.assignment_id,
+        role_id: call.request.actor.role_id,
+      }
+      if (call.input.mode === 'read_existing') {
+        const r = await svc.readExisting(actor)
+        return r.ok
+          ? {
+              status: 'ok',
+              data: {
+                ok: true,
+                message: '你的浏览器去读一遍已有的提醒了（只看不改），读完在这件事里交代。',
+              },
+            }
+          : { status: 'error', reason: r.reason }
+      }
+      const r = await svc.propose(actor)
+      return r.ok
+        ? {
+            status: 'ok',
+            data: {
+              ok: true,
+              count: r.count,
+              message: `出了一张「要在你的 Google 账号里建 ${r.count} 条提醒」的卡：不想建的勾掉，确认一次，你的浏览器就去建。`,
+            },
+          }
+        : { status: 'error', reason: r.reason }
+    }
     const data = await svc.report(reportOfInput(call.input), {
       ...(call.request.browser_grants === undefined ? {} : { grants: call.request.browser_grants }),
     })

@@ -22,8 +22,10 @@ import type {
   GoogleAlertOp,
   GoogleAlertsExistingView,
   GoogleAlertsJob,
+  GoogleAlertsPanelView,
   GoogleAlertsReport,
   Iso8601,
+  MonitorGroup,
   MonitorSource,
   PrWatchStore,
   RunBrowserGrant,
@@ -34,6 +36,7 @@ import { GOOGLE_ALERT_CHANGE_FORM, maskFeedUrl } from '@agentsws/contracts'
 import {
   alertChangeOf,
   alertLinesFromPlan,
+  alertsSummary,
   approvedLines,
   buildAlertsBrief,
   ingestAlertsReport,
@@ -77,12 +80,19 @@ export interface PrAlertsOptions {
   /** 信息监控那条职责现在谁担着（没人担 = 这一路不可用）。 */
   holder(): PrAlertsActor | undefined
   /** 卡（人可能勾掉了几行：`approve_edited` 的载荷）。 */
-  approval(item_id: string): ApprovalItem | undefined
+  approval(item_id: string): Promise<ApprovalItem | undefined> | ApprovalItem | undefined
   /** 你的浏览器接上了没有（设置 → 浏览器选的是「我正在用的浏览器」且装好了）。 */
   browser(): { ready: true } | { ready: false; reason: string }
   runs: PrAlertsRunHost
-  /** 新存的源先拉一次（WP386 的管道）；不给 = 留着 `unchecked` 等定时那一轮。 */
-  verify?(source: MonitorSource): Promise<{ ok: true } | { ok: false; error: string }>
+  /**
+   * 读回的链接交给信息监控存成源（WP386 的 `addLinks`，`added_via: 'browser'`）：先拉一次，拉到了才算配好、
+   * 拉回来的直接进提及库、配置卡那一行挂上。不给 = 自己存成 `unchecked`，等定时那一轮拉。
+   */
+  attach?(input: {
+    url: string
+    plan_item_id?: string
+    group: MonitorGroup
+  }): Promise<{ ok: true; source_id: string } | { ok: false; message: string }>
   /** 要一张配置卡（导入勾选卡；WP324 `askSetup`）。 */
   askSetup?(input: { target: string; why: string; actor: PrAlertsActor }): Promise<unknown>
   /** 没建成的退回手动（WP386 的配置卡：贴 RSS 链接的格子 + 教程）。 */
@@ -125,6 +135,8 @@ export interface PrAlertsService {
   jobs(): GoogleAlertsJob[]
   /** 导入勾选卡的设置目标（`pr.alerts_import`）。 */
   importTarget(): SetupTarget
+  /** 面板 / 接口看的那一份（链接只出脱敏那一格）。 */
+  panel(): GoogleAlertsPanelView
 }
 
 const JOBS_KEY = 'alerts_build_jobs'
@@ -265,7 +277,9 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
         return { status: 'failed', error: { message: `${got.reason}，没去建。`, retryable: false } }
       const { store } = got
       const item =
-        change.approval?.item_id === undefined ? undefined : o.approval(change.approval.item_id)
+        change.approval?.item_id === undefined
+          ? undefined
+          : await o.approval(change.approval.item_id)
       const edited = item?.state === 'approved_edited' ? item.payload : undefined
       const after = change.after as { op?: GoogleAlertOp } | null
       const op: GoogleAlertOp = after?.op === 'to_rss' ? 'to_rss' : 'create'
@@ -378,45 +392,74 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
         newId: () => o.newId('src'),
         every_hours: store.settings().default_every_hours,
       })
-      // 存源、先拉一次
-      let unreachable = 0
-      for (const s of res.sources) {
-        store.putSource(s)
-        if (o.verify === undefined) continue
-        const v = await o.verify(s).catch((e: unknown) => ({
-          ok: false as const,
-          error: e instanceof Error ? e.message : String(e),
-        }))
-        const row = store.source(s.id) ?? s
-        if (v.ok) store.putSource({ ...row, status: 'ok', last_ok_at: now, last_try_at: now })
-        else {
-          unreachable += 1
-          store.putSource({ ...row, status: 'failed', last_error: v.error, last_try_at: now })
+      // 存源、先拉一次：接了信息监控的管道（WP386 的 `addLinks`）就交给它——拉到了才算配好、
+      // 拉回来的直接进提及库；拉不到的这一行算没成（退回手动）。没接就自己存、标 unchecked。
+      const done = [...res.done]
+      const failed = [...res.failed]
+      for (const d of res.done) {
+        const src = res.sources.find((x) => x.id === d.source_id)
+        if (src === undefined) {
+          // 同一条链接本来就在监控源里：只把配置卡那一行挂上
+          const p =
+            d.line.plan_item_id === undefined ? undefined : store.planItem(d.line.plan_item_id)
+          if (p !== undefined && p.source_id === undefined)
+            store.putPlanItem({ ...p, status: 'linked', source_id: d.source_id, updated_at: now })
+          continue
+        }
+        if (o.attach === undefined) {
+          store.putSource(src)
+          const p =
+            d.line.plan_item_id === undefined ? undefined : store.planItem(d.line.plan_item_id)
+          if (p !== undefined)
+            store.putPlanItem({ ...p, status: 'linked', source_id: src.id, updated_at: now })
+          continue
+        }
+        const att = await o
+          .attach({
+            url: src.url,
+            group: src.group,
+            ...(d.line.plan_item_id === undefined ? {} : { plan_item_id: d.line.plan_item_id }),
+          })
+          .catch((e: unknown) => ({
+            ok: false as const,
+            message: e instanceof Error ? e.message : String(e),
+          }))
+        if (!att.ok) {
+          done.splice(done.indexOf(d), 1)
+          failed.push({ line: d.line, reason: `读回了链接，但先拉一次没拉到（${att.message}）` })
         }
       }
-      // 配置卡那一行挂上
-      for (const l of res.links) {
-        const p = store.planItem(l.plan_item_id)
-        if (p !== undefined)
-          store.putPlanItem({ ...p, status: 'linked', source_id: l.source_id, updated_at: now })
-      }
-      const summary =
-        unreachable === 0
-          ? res.summary
-          : `${res.summary}其中 ${unreachable} 条先拉了一次没拉到，「连接」卡上亮了红点。`
+      const results = res.results.map((r) => {
+        const f = failed.find((x) => x.line.id === r.id)
+        return f === undefined || r.outcome === 'failed' || r.outcome === 'not_attempted'
+          ? r
+          : { id: r.id, outcome: 'failed' as const, reason: f.reason }
+      })
+      const status =
+        failed.length === 0
+          ? 'done'
+          : done.length === 0 && res.email.length === 0
+            ? 'failed'
+            : 'partial'
+      const summary = alertsSummary(
+        job.op,
+        { done, email: res.email, failed },
+        job.lines.length,
+        input.stop,
+      )
       saveJob(store, {
         ...job,
-        status: res.status,
-        results: res.results,
+        status,
+        results,
         stop: input.stop,
         summary,
         updated_at: now,
       })
       o.emit?.('pr_alerts.job_reported', {
         change_id: job.change_id,
-        status: res.status,
-        done: res.done.length,
-        failed: res.failed.length,
+        status,
+        done: done.length,
+        failed: failed.length,
         email: res.email.length,
         stop: input.stop,
       })
@@ -427,16 +470,16 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
           'to_rss',
           res.email.map((l, i) => ({ ...l, id: `ga_${i + 1}`, op: 'to_rss' as const })),
         )
-      if (res.failed.length > 0)
+      if (failed.length > 0)
         await o.onFallback?.({
-          lines: res.failed.map((f) => f.line),
-          why: res.failed[0]?.reason ?? '没建成',
+          lines: failed.map((f) => f.line),
+          why: failed[0]?.reason ?? '没建成',
           actor,
         })
       return {
         ok: true,
-        done: res.done.length,
-        failed: res.failed.length,
+        done: done.length,
+        failed: failed.length,
         email: res.email.length,
         message: [summary, existingNote.message].filter((s) => s !== '').join(' '),
       }
@@ -480,21 +523,22 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
           ...(plan === undefined ? {} : { plan_item_id: plan.id }),
           created_at: now,
         }
+        if (o.attach !== undefined) {
+          const att = await o
+            .attach({
+              url: row.url,
+              group: row.group,
+              ...(plan === undefined ? {} : { plan_item_id: plan.id }),
+            })
+            .catch(() => ({ ok: false as const, message: '' }))
+          if (att.ok) imported += 1
+          else failed += 1
+          continue
+        }
         store.putSource(row)
         if (plan !== undefined)
           store.putPlanItem({ ...plan, status: 'linked', source_id: row.id, updated_at: now })
         imported += 1
-        if (o.verify !== undefined) {
-          const v = await o.verify(row).catch((err: unknown) => ({
-            ok: false as const,
-            error: err instanceof Error ? err.message : String(err),
-          }))
-          if (v.ok) store.putSource({ ...row, status: 'ok', last_ok_at: now, last_try_at: now })
-          else {
-            failed += 1
-            store.putSource({ ...row, status: 'failed', last_error: v.error, last_try_at: now })
-          }
-        }
       }
       o.emit?.('pr_alerts.imported', { imported, failed })
       return { imported, failed }
@@ -505,6 +549,26 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
       if (store === undefined) return []
       settleStale(store)
       return loadJobs(store)
+    },
+
+    panel() {
+      const mask = (u: string | undefined) => (u === undefined ? {} : { feed_url: maskFeedUrl(u) })
+      const ex = service.existing()
+      return {
+        browser_ready: o.browser().ready,
+        jobs: service.jobs().map((j) => ({
+          ...j,
+          ...(j.results === undefined
+            ? {}
+            : {
+                results: j.results.map(({ feed_url, ...r }) => ({ ...r, ...mask(feed_url) })),
+              }),
+        })),
+        existing: {
+          ...ex,
+          importable: ex.importable.map(({ feed_url, ...e }) => ({ ...e, ...mask(feed_url) })),
+        },
+      }
     },
 
     importTarget() {

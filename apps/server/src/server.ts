@@ -558,11 +558,15 @@ import {
   retargetPositionMatters,
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
+import { createPrAlertsService, type PrAlertsService } from './pr-alerts/service.js'
+import { markManualFallback, withBrowserBuild } from './pr-alerts/setup.js'
+import { createGoogleAlertsTool } from './pr-alerts/tool.js'
 import { createPrService } from './pr-service.js'
 import {
   createPrMonitorToolExecutor,
   createPrWatch,
   createPrWatchStore,
+  PR_WATCH_TARGET,
   type PrWatchAssembly,
   type PrWatchStoreHandle,
   summaryOf as prWatchSummaryOf,
@@ -2419,6 +2423,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const moderationApplied = await brand?.socialService.executor.applyModeration(change)
       if (moderationApplied !== undefined) return moderationApplied
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
+      // WP387：「在你的 Google 账号里建 N 条提醒」那张卡同意了 → 开一件事让你的浏览器去建（进了队就回 ok）
+      const alertsApplied = await brand?.prAlerts?.apply(change)
+      if (alertsApplied !== undefined) return alertsApplied
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) {
         // WP182：样品标「已寄」生效了 → 寄样通知再出一张卡（出不成不影响这一张已落库）
@@ -3437,7 +3444,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }))
       assembly.registerTarget(target)
     // WP386：信息监控的提醒清单 + 贴 RSS（缺了出配置卡）
-    if (brand.prWatch !== undefined) assembly.registerTarget(brand.prWatch.setupTarget())
+    // WP387：配置卡多一格「让工坊在你的浏览器里替你建」；读到的已有提醒出一张勾选导入的卡
+    if (brand.prWatch !== undefined) {
+      const alerts = brand.prAlerts
+      assembly.registerTarget(
+        alerts === undefined
+          ? brand.prWatch.setupTarget()
+          : withBrowserBuild(brand.prWatch.setupTarget(), {
+              store: () => brand.prWatchStore,
+              browserReady: () => browserSettings.forRun()?.mode === 'browserskill',
+              propose: () => alerts.propose(),
+            }),
+      )
+      if (alerts !== undefined) assembly.registerTarget(alerts.importTarget())
+    }
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
@@ -4627,6 +4647,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       mode: () => modeOfWorkspace?.(ws) ?? 'company',
     })
     let prWatchRef: PrWatchAssembly | undefined
+    // WP387：你的浏览器替你建 / 导入 Google 提醒（信息监控那一份在下面才建，晚绑定）
+    let prAlertsRef: PrAlertsService | undefined
     const prService = createPrService({
       workspace_id: ws,
       // WP338（决策 664 / 783）：Reddit 版规原文上卡、不替人判；一天几条由用户设（默认不限）
@@ -5796,6 +5818,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               watchRoles: REPORT_WATCH_ROLES,
             },
             // WP386：信息监控查提及（按组 / 竞品 / 来源 / 情绪 / 时间窗；拉不到的源照实列）
+            // WP387：信息监控出「建 Google 提醒」的卡 / 交代你的浏览器建完的结果
+            googleAlertsTool: createGoogleAlertsTool(() => prAlertsRef),
+            // WP387：只有那张卡同意过、那一趟还在跑的那件事，运行请求才带「可以改 Google 提醒」的凭据
+            browserGrants: ({ role_id, matter_id }) =>
+              role_id === 'pr.monitoring' ? (prAlertsRef?.grantsFor(matter_id) ?? []) : [],
             prMonitorTools: createPrMonitorToolExecutor({
               of: async () =>
                 prWatch === undefined
@@ -7643,6 +7670,112 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     prWatchRef = prWatch
+    /*
+     * WP387（docs/103 v2 §3.3、T1）：你的浏览器替你建 / 导入 Google 提醒。清单确认后出一张卡（一批一张、每行可勾掉），
+     * 同意了才开一件事、带着凭据让你的浏览器去建；读回的 RSS 链接交给上面那份信息监控存成源（先拉一次）。
+     */
+    const prAlertsHolder = ():
+      | { person_id: string; assignment_id: string; role_id: string }
+      | undefined => {
+      const a = roles.assignments
+        .listByRole('pr.monitoring')
+        .find((x) => x.workspace_id === ws && x.revoked_at === undefined)
+      return a === undefined
+        ? undefined
+        : { person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
+    }
+    const browserSkillReady = (): boolean => browserSettings.forRun()?.mode === 'browserskill'
+    const prAlerts =
+      prWatch === undefined
+        ? undefined
+        : createPrAlertsService({
+            workspace_id: ws,
+            store: () => prWatchStore,
+            clock,
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            ledger: txn.ledger,
+            actionOf: (assignment_id, action) => {
+              try {
+                const config = roles.effectiveConfig(assignment_id)
+                return {
+                  mandate: config.actions.find((a) => a.id === action)?.mandate ?? { caps: {} },
+                  level: config.automation[action]?.level ?? 'L1',
+                }
+              } catch {
+                return { mandate: { caps: {} }, level: 'L1' }
+              }
+            },
+            holder: prAlertsHolder,
+            approval: (id) => txn.approvals.get(id),
+            browser: () =>
+              browserSkillReady()
+                ? { ready: true }
+                : {
+                    ready: false,
+                    reason: '你的浏览器还没接上（设置 → 浏览器 → 选「我正在用的浏览器」）',
+                  },
+            runs: {
+              open: ({ actor, title }) =>
+                work.createMatter({
+                  kind: 'adhoc',
+                  title,
+                  entry: 'position',
+                  position_template_id: 'pr',
+                  role_id: 'pr.monitoring',
+                  position_id: actor.assignment_id as never,
+                  participants: [actor.person_id as never],
+                }).id,
+              start: async ({ actor, matter_id, brief }) => {
+                await work.run(matter_id as never, {
+                  person_id: actor.person_id as never,
+                  assignment_id: actor.assignment_id as never,
+                  brief,
+                  text: '你的浏览器开始按卡上的清单去做了',
+                })
+              },
+            },
+            attach: async ({ url, plan_item_id, group }) => {
+              const [r] = await prWatch.addLinks({
+                links: url,
+                ...(plan_item_id === undefined ? {} : { plan_item_id }),
+                group,
+                via: 'browser',
+              })
+              return r?.ok === true && r.source_id !== undefined
+                ? { ok: true, source_id: r.source_id }
+                : { ok: false, message: r?.message ?? '没拉到' }
+            },
+            askSetup: async ({ target, why, actor }) =>
+              (await setupCardsOf(ws))?.askSetup({ target, why, actor: actor as never }),
+            // 没建成的退回手动：配置卡重新弹出来，在那几行贴 RSS 链接（卡上有教程）
+            onFallback: async ({ lines, why, actor }) => {
+              markManualFallback(
+                prWatchStore,
+                clock.now(),
+                lines.map((l) => l.label),
+              )
+              await (await setupCardsOf(ws))
+                ?.askSetup({
+                  target: PR_WATCH_TARGET,
+                  why: `${lines
+                    .map((l) => l.label)
+                    .slice(0, 6)
+                    .join('、')}没自动建成（${why}）：在这几行贴 RSS 链接就行，卡上有教程。`,
+                  actor: actor as never,
+                })
+                .catch(() => undefined)
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'pr_alerts' },
+                correlation: { trace_id: `trc_pa_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+    prAlertsRef = prAlerts
     // 老的单条 feed（连接卡上那一格）启动时迁进来（还没有真实用户，不留兼容层）
     prWatch?.migrateLegacy()
     connections.onConnectionChange(() => {
@@ -7666,6 +7799,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             watchUpdateSource: (_actor, id, patch) => prWatch.updateSource(id, patch),
             watchRemoveSource: (_actor, id) => prWatch.removeSource(id),
             watchUpdateSettings: (_actor, patch) => prWatch.updateSettings(patch),
+            // WP387：你的浏览器替你建 / 导入 Google 提醒
+            ...(prAlerts === undefined
+              ? {}
+              : {
+                  alertsView: () => prAlerts.panel(),
+                  alertsBuild: async (actor) => {
+                    const r = await prAlerts.propose(actor)
+                    return r.ok
+                      ? { ok: true as const, approval_id: r.approval_id, count: r.count }
+                      : r
+                  },
+                  alertsReadExisting: (actor) => prAlerts.readExisting(actor),
+                }),
           }
 
     return {
@@ -7700,6 +7846,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       prPort,
       prWatchStore,
       ...(prWatch === undefined ? {} : { prWatch }),
+      ...(prAlerts === undefined ? {} : { prAlerts }),
       b2b,
       b2bService,
       b2bOutbound,
