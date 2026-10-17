@@ -10,6 +10,7 @@
  */
 import type { Iso8601 } from './common.js'
 import type { AiAnswerVia, AiCitationWhere, AiPlatform, SerpFeatures } from './search-data.js'
+import type { AiTrafficSummary } from './site-health.js'
 
 /* ------------------------------------------------------------------ */
 /* Search Console 的一行与六个信号                                        */
@@ -301,6 +302,11 @@ export interface SeoWeeklyGeoPayload {
   pending_cells?: number
   /** WP335：简报那一行（提及率与周变化 · 关注词平均排名与周变化）；这周没拿到回答不写。 */
   brief?: string
+  /**
+   * WP381：AI 来源流量（Shopify 自己记的来源，标「实测」），和上面的引用数并排看。
+   * 没连店 / 没读到就不写（周报那一格不出）。
+   */
+  ai_traffic?: AiTrafficSummary
 }
 
 /** WP166：一个市场这一周的 AI 可见度小结。 */
