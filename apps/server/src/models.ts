@@ -105,11 +105,14 @@ import {
   isRetiredImageModel,
   jsonFileUploadIndex,
   loadAnthropicCatalog,
+  loadOfficialRoutes,
   NO_IMAGE_MODEL_ZH,
   normalizeImageModel,
+  officialRouteFacts,
   openaiCompatibleProvider,
   openaiImageProvider,
   PRICE_CATALOG,
+  piRouteProvider,
   refreshPriceCatalog,
   splitImageProvider,
   stubProvider,
@@ -276,6 +279,60 @@ export interface ModelProviderConfig {
    * 不进默认模型下拉、不当「第一条能用的」自动成默认。
    */
   image_only?: boolean
+  /**
+   * WP376（决策 1031）：这一条是启动时从 Anthropic 的 OpenAI 兼容层**自动迁过来的**——记下迁之前的种类与地址，
+   * 回退（{@link ANTHROPIC_NATIVE_ENV} 设成 `off`）时照它原样改回去。人自己改过地址 / 种类就不再记。
+   */
+  migrated_from?: { kind: ModelProviderKind; base_url: string; at: string }
+}
+
+/**
+ * WP376：回退开关。设成 `off`（或 `0` / `false`）= 不迁、并把迁过的改回 OpenAI 兼容层（万一原生口在哪台机器上
+ * 有问题，不用等发版就能退回去）。不设 = 迁。
+ */
+export const ANTHROPIC_NATIVE_ENV = 'AGENTSWS_ANTHROPIC_NATIVE'
+
+/** 回退开关开着没有。 */
+export function anthropicNativeOff(env: Record<string, string | undefined>): boolean {
+  return /^(off|0|false|no)$/iu.test(env[ANTHROPIC_NATIVE_ENV]?.trim() ?? '')
+}
+
+/** 地址是不是 Anthropic 本家的 OpenAI 兼容层（结尾 `/`、主机名大小写不算差别）。 */
+function isAnthropicOpenAiCompat(baseUrl: string): boolean {
+  return (
+    baseUrl.trim().replace(/\/+$/u, '').toLowerCase() === ANTHROPIC_OPENAI_COMPAT_URL.toLowerCase()
+  )
+}
+
+/**
+ * WP376（决策 1031）：一条存量配置要不要迁、迁成什么。只认「OpenAI 兼容 + Anthropic 本家的兼容层地址」；
+ * id（= 加密库里 key 的位置、默认模型与按用途选的引用、测试结果）、名字、模型、勾进 AI 钮的那几个、
+ * 清单、价格一律不动——只换种类与地址。不该迁的回 `undefined`（所以跑几遍都一样）。
+ */
+export function migrateAnthropicNativeConfig(
+  config: ModelProviderConfig,
+  at: string,
+): ModelProviderConfig | undefined {
+  if (config.kind !== 'openai_compatible' || !isAnthropicOpenAiCompat(config.base_url))
+    return undefined
+  // Anthropic 的 Messages 协议没有向量 / 语音识别接口，这两格迁过去也用不上
+  const { embedding_model: _e, transcription_model: _t, ...rest } = config
+  return {
+    ...rest,
+    kind: 'anthropic_compatible',
+    base_url: ANTHROPIC_NATIVE_URL,
+    migrated_from: { kind: config.kind, base_url: config.base_url, at },
+  }
+}
+
+/** 回退：迁过来的、人没再改过的那一条，原样改回去（别的不动；回 `undefined` = 不用改）。 */
+export function revertAnthropicNativeConfig(
+  config: ModelProviderConfig,
+): ModelProviderConfig | undefined {
+  const from = config.migrated_from
+  if (from === undefined) return undefined
+  const { migrated_from: _m, ...rest } = config
+  return { ...rest, kind: from.kind, base_url: from.base_url }
 }
 
 /**
@@ -340,6 +397,12 @@ export interface ModelsOptions {
   dbDir?: string
   /** 试跑用的 fetch（测试注入 fixture，不联网）。 */
   fetch?: FetchLike
+  /**
+   * WP376：走官方 pi-ai 协议的那几条（Anthropic 兼容口、OpenAI 兼容口里官方目录认得的）用的 fetch
+   * （测试把官方地址改投到本机假服务）。不给：没注入 {@link ModelsOptions.fetch} 就用全局 fetch；
+   * 注入了 `fetch`（测试 / demo 的替身）却没给它，OpenAI 兼容口一律走原来的通道——替身不会让请求漏到真网络上去。
+   */
+  piFetch?: typeof globalThis.fetch
   /** WP42：抓价目页用的 fetch（测试回放固定页面，不联网）。 */
   pageFetch?: PageFetch
   /** 28 §1 急停：`outbound` 档打开时不去抓官网。 */
@@ -603,8 +666,8 @@ export const CLAUDE_SUBSCRIPTION_URL = 'https://claude.ai'
 /**
  * Anthropic 自己的 **OpenAI 兼容口**（`https://api.anthropic.com/v1/`）。
  *
- * 官方给的是"把 OpenAI SDK 的 base_url 指到这里、把 key 换成 Anthropic 的"那一层
- * 兼容层，所以形态仍是 `openai_compatible`，复用同一套 provider 实现。
+ * WP376（决策 1031）起「Anthropic / Claude」卡不再用它（那一层调不了思考），改走原生口
+ * {@link ANTHROPIC_NATIVE_URL}；这个常量只留给迁移认老配置用。
  */
 export const ANTHROPIC_OPENAI_COMPAT_URL = 'https://api.anthropic.com/v1'
 
@@ -787,8 +850,11 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
   /*
    * WP374（决策 980，Luoye 10-17）：**Anthropic 兼容（自定义）**——Claude 中转站、自建网关这类
    * 「Anthropic 格式」的服务。和上面那张 OpenAI 兼容卡同一种用法（填地址 + key），协议换成官方
-   * pi-ai 的 `anthropic-messages`。默认地址填 Anthropic 本家（有 Anthropic key 的人直接能用），
-   * 中转站把地址换成它给的那一条（带不带 `/v1` 都行）。
+   * pi-ai 的 `anthropic-messages`。中转站填它给的那一条地址（带不带 `/v1` 都行）。
+   *
+   * WP376（决策 1031）：Anthropic 本家的 key 有了自己的方案（「Anthropic / Claude」卡 → API key，地址
+   * `https://api.anthropic.com`），这张卡的默认地址就**留空**——两张卡按地址认（`templateSlug`），同一个地址会
+   * 认串；留空也说清楚了这张卡是给中转站的，地址得自己填。
    */
   {
     kind: 'anthropic_compatible',
@@ -802,11 +868,11 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     plan_label: '自己填地址与 key',
     plan_order: 1,
     auth: 'api_key',
-    default_base_url: ANTHROPIC_NATIVE_URL,
+    default_base_url: '',
     default_model: 'claude-sonnet-4-5',
     region: 'global',
     steps: [
-      '在中转站（或 Anthropic 控制台）建一把 API key',
+      '在中转站建一把 API key（Anthropic 本家的 key 走「Anthropic / Claude」那张卡）',
       '找到它给的接口地址（Anthropic 格式那一条，带不带 /v1 都行）',
       '把地址和 key 填进下面的表单，点「拉取模型列表」挑模型；拉不到就手填模型名',
       '点「测试」确认能通',
@@ -1052,31 +1118,34 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     ],
     links: [{ label: 'Claude 订阅档位', url: 'https://claude.ai/upgrade' }],
   },
+  /*
+   * WP376（决策 1031，Luoye 10-17）：API key 这个方案从 Anthropic 的 **OpenAI 兼容层**改走**原生 Messages 口**
+   * （WP374 接好的官方 pi-ai `anthropic-messages`）——这样 Anthropic key 也能调思考程度，名字 / 看图 / 上下文
+   * 照官方 Claude 目录。label 不改（老配置存的是这个名字；改一条存量配置时按它认回这张卡）。
+   * 存量的老配置启动时自动迁过来（{@link migrateAnthropicNative}）。
+   */
   {
-    kind: 'openai_compatible',
+    kind: 'anthropic_compatible',
     label: 'Anthropic（API key，按量计费）',
     summary:
-      'Anthropic 官方的 OpenAI 兼容口：把地址指到 api.anthropic.com/v1、填一把 Anthropic 的 key 就能用。',
+      'Anthropic 官方的原生接口：填一把 Anthropic 的 key 就能用，能调思考程度（快 / 标准 / 深度）。',
     ...ANTHROPIC_VENDOR,
     plan_label: 'API key（按量计费）',
     plan_order: 2,
     auth: 'api_key',
-    default_base_url: ANTHROPIC_OPENAI_COMPAT_URL,
+    default_base_url: ANTHROPIC_NATIVE_URL,
     default_model: 'claude-sonnet-4-5',
     region: 'global',
     steps: [
       '打开 console.anthropic.com，进 API keys 建一把',
       '复制那一串，粘进下面的表单',
-      '地址保持预填的那条（官方的 OpenAI 兼容口，以 /v1 结尾）',
-      '选一个模型名（claude-sonnet-4-5 之类）',
+      '地址保持预填的那条（https://api.anthropic.com）',
+      '点"拉取模型列表"选一个模型（claude-sonnet-4-5 之类）',
       '点"测试"确认能通',
     ],
     links: [
       { label: 'Anthropic Console', url: 'https://console.anthropic.com/settings/keys' },
-      {
-        label: 'OpenAI SDK 兼容层说明',
-        url: 'https://docs.anthropic.com/en/api/openai-sdk',
-      },
+      { label: 'Anthropic Messages 接口说明', url: ANTHROPIC_MESSAGES_DOC_URL },
     ],
   },
   /*
@@ -1366,6 +1435,26 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
   swapRetiredModels()
 
+  /**
+   * WP376（决策 1031）：「Anthropic / Claude」卡的 API key 方案改走原生口——存量配置启动时自动迁过去
+   * （{@link migrateAnthropicNativeConfig}；幂等，迁完落盘）。回退开关开着就反过来改回去。
+   * key 在加密库里按 id 存，id 不变，所以一个字节都不用碰。
+   */
+  const migrateAnthropicNative = (): void => {
+    const off = anthropicNativeOff(env)
+    let changed = false
+    state.providers = state.providers.map((config) => {
+      const next = off
+        ? revertAnthropicNativeConfig(config)
+        : migrateAnthropicNativeConfig(config, clock.now())
+      if (next === undefined) return config
+      changed = true
+      return next
+    })
+    if (changed) flush()
+  }
+  migrateAnthropicNative()
+
   const keyOf = (id: string): string => `${MODEL_KEY_PREFIX}${id}`
 
   /**
@@ -1528,6 +1617,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     if (config.kind === 'anthropic_compatible') {
       // WP374：Anthropic 兼容口（Claude 中转站等）——协议走官方 pi-ai 的 anthropic-messages，key 每次现取
       return anthropicCompatibleProvider({
+        ...(options.piFetch === undefined ? {} : { fetch: options.piFetch }),
         ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
         baseUrl: config.base_url,
         apiKey: keySource(config.id),
@@ -1555,7 +1645,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           : { fetch: options.fetch as unknown as AccountFetch }),
       })
     }
-    return openaiCompatibleProvider({
+    const plain = openaiCompatibleProvider({
       // WP127：上一次验证的结论就是能力声明；没验证过就不声明（网关照常放行）
       ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
       baseUrl: config.base_url,
@@ -1583,6 +1673,25 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           }
         : {}),
     })
+    /*
+     * WP376（决策 1027）：自己接的 OpenAI 兼容口——地址 + 模型是官方目录认识的那家时走官方 pi-ai
+     * （档位与传法照目录）；认不得的由 `plain` 原样接着做。DeepSeek 官方、工坊积分不在这一条上。
+     */
+    const piFetch = options.piFetch ?? (options.fetch === undefined ? globalThis.fetch : undefined)
+    if (config.kind !== 'openai_compatible' || piFetch === undefined) return plain
+    return piRouteProvider({
+      baseUrl: config.base_url,
+      apiKey: keySource(config.id),
+      model,
+      provider: config.id,
+      fallback: plain,
+      fetch: piFetch,
+      // 决策 1032：没选思考档就发 AI 钮上默认亮的那一档（显示什么就发什么）
+      defaultEffort: () => {
+        const efforts = officialRouteFacts(config.base_url, model)?.efforts
+        return efforts === undefined ? undefined : thinkingOptionsOf(efforts)?.default
+      },
+    })
   }
 
   /**
@@ -1599,6 +1708,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     // WP374：Anthropic 兼容口没测过这个模型时，照官方目录的声明（目录认不出就仍是「没验证过」）
     if (tested === undefined && config.kind === 'anthropic_compatible')
       return anthropicModelFacts(model)?.vision
+    // WP376：OpenAI 兼容口地址是官方目录认识的那家、模型在目录里——同样照目录
+    if (tested === undefined && config.kind === 'openai_compatible')
+      return officialRouteFacts(config.base_url, model)?.vision
     return tested
   }
 
@@ -1942,6 +2054,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...(thinking === undefined ? {} : { thinking }),
       }
     }
+    if (c.kind === 'openai_compatible') {
+      // WP376（决策 1027）：地址是官方目录认识的那家、模型在目录里——名字、上下文、思考档照目录；
+      // 认不得的（中转站、自建、目录外的型号）官方不声明，一样都不编
+      const entry = officialRouteFacts(c.base_url, model)
+      const thinking = entry?.efforts === undefined ? undefined : thinkingOptionsOf(entry.efforts)
+      return {
+        ...(entry === undefined ? {} : { name: entry.name, context_window: entry.context_window }),
+        ...(thinking === undefined ? {} : { thinking }),
+      }
+    }
     const messages =
       c.kind === 'deepseek_account' || (c.kind === 'deepseek' && deepseekUsesMessages(c, env))
     if (!messages) return {}
@@ -2090,6 +2212,24 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (state.providers.some((p) => p.kind === 'anthropic_compatible')) reassemble()
     })
     .catch(() => undefined)
+  /*
+   * WP376（决策 1027）：同样先把官方 pi-ai 的整份目录按地址建好索引（只读、不联网）——OpenAI 兼容口的
+   * 名字 / 上下文 / 思考档 / 看图是同步取的。配了地址是官方目录认识的那家的，就重装一次。
+   */
+  void loadOfficialRoutes()
+    .then(() => {
+      if (
+        state.providers.some(
+          (p) =>
+            p.kind === 'openai_compatible' &&
+            [p.model, ...(p.picker_models ?? [])].some(
+              (m) => officialRouteFacts(p.base_url, m) !== undefined,
+            ),
+        )
+      )
+        reassemble()
+    })
+    .catch(() => undefined)
 
   /** WP66（52 O4）：端一份快照。深拷一遍，调用方改它不会动到这个品牌的状态。 */
   const exportSettings = (): ModelSettingsSnapshot =>
@@ -2192,6 +2332,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     const provider =
       kind === 'anthropic_compatible'
         ? anthropicCompatibleProvider({
+            ...(options.piFetch === undefined ? {} : { fetch: options.piFetch }),
             baseUrl: base_url,
             apiKey,
             model: fallback?.model ?? 'probe',
@@ -2679,6 +2820,22 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...priceFieldsFor(input, existing, base_url),
         // WP274：只用来生图的那一条（不给 = 保持原样）
         ...((input.image_only ?? existing?.image_only) === true ? { image_only: true } : {}),
+        // WP376：迁过来的那一条人只改了别的（种类、地址没动）——仍记着，回退开关照样能改回去
+        ...(existing?.migrated_from !== undefined &&
+        existing.kind === input.kind &&
+        existing.base_url === base_url
+          ? { migrated_from: existing.migrated_from }
+          : {}),
+      }
+      // WP376（决策 1031）：新存的 Anthropic 兼容层（老客户端、或在 OpenAI 兼容卡里填了这个地址）同样换成原生口
+      const native = anthropicNativeOff(env)
+        ? undefined
+        : migrateAnthropicNativeConfig(config, clock.now())
+      if (native !== undefined) {
+        const { migrated_from: _m, ...plain } = native
+        Object.assign(config, plain)
+        delete config.embedding_model
+        delete config.transcription_model
       }
       if (existing === undefined) state.providers.push(config)
       else state.providers[state.providers.indexOf(existing)] = config
@@ -3108,6 +3265,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       )
       // WP294：从还没换过的老快照复制过来的，同样换掉退役模型
       swapRetiredModels()
+      // WP376：老快照里的 Anthropic 兼容层配置同样迁过去
+      migrateAnthropicNative()
       flush()
       // key 还没填，所以这一轮多半只装得上 stub——填完 key 下一次保存自然就换过来
       reassemble()

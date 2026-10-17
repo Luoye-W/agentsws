@@ -103,7 +103,12 @@ export {
   loadAnthropicCatalog,
   readAnthropicListing,
 } from './providers/anthropic-compatible.js'
-export { readPiAssistant, toAnthropicPiContext } from './providers/anthropic-pi.js'
+export {
+  piToolNames,
+  readPiAssistant,
+  toAnthropicPiContext,
+  toPiContext,
+} from './providers/anthropic-pi.js'
 // WP134：第三种模型来源「用我的 DeepSeek 账号登录」的推理口（Messages 形态 + x-dsh-auth-token）
 export type {
   AccountFetch,
@@ -204,6 +209,18 @@ export {
 export type { OpenAiImageOptions } from './providers/openai-images.js'
 // WP127：生图单独一档的真实现（OpenAI 形态 `/images/generations`）
 export { IMAGE_TIMEOUT_MS, openaiImageProvider } from './providers/openai-images.js'
+// WP376（决策 1027）：自己接的 OpenAI 兼容口——地址是官方目录认识的那家时走官方 pi-ai（档位与传法照目录）
+export type { OfficialRouteFacts, OpenAiPiApi, PiRouteOptions } from './providers/pi-route.js'
+export {
+  isOfficialRouteUrl,
+  levelsSentApart,
+  loadOfficialRoutes,
+  OPENAI_PI_APIS,
+  officialRouteFacts,
+  piRouteProvider,
+  routeEffortOf,
+  routeKey,
+} from './providers/pi-route.js'
 export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'

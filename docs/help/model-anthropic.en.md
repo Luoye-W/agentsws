@@ -18,14 +18,16 @@ Only available on the **personal** setup (the service runs on your own computer)
 
 ## Option 2: API key (pay as you go)
 
-This is Anthropic's official OpenAI-compatible endpoint: point the address at `api.anthropic.com/v1` and use an Anthropic key.
+This uses Anthropic's own native API: add an Anthropic key and you're set. You can also pick a thinking level (Fast / Standard / Deep) next to the AI button; model names, image support and context length come from Anthropic's official Claude catalog.
 
 1. Open the [Anthropic Console](https://console.anthropic.com/settings/keys) and create a key under API keys.
 2. Copy it, choose "API key" on the card, click "Add API key" and paste it.
-3. Keep the prefilled address (the official OpenAI-compatible endpoint ending in /v1: `https://api.anthropic.com/v1`).
-4. Pick a model name (claude-sonnet-4-5 or similar).
+3. Keep the prefilled address (`https://api.anthropic.com`).
+4. Click "Fetch model list" and pick a model (claude-sonnet-4-5 or similar).
 5. Click "Test".
 
-- [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)
+- [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
+
+If you connected the old way (address `https://api.anthropic.com/v1`), it switches to the native API automatically after the update: no need to re-enter the key, the model or the models you added to the AI button.
 
 The API key only goes into this computer's encrypted store: never through AI, never into logs.

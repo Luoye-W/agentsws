@@ -325,9 +325,9 @@ describe('WP25 §C 模板与空状态', () => {
       // WP90：OpenAI 那张卡的两个方案（订阅登录在前）
       'openai-codex',
       'openai_compatible',
-      // Anthropic 那张卡的两个方案
+      // Anthropic 那张卡的两个方案（WP376：API key 那个改走原生 Messages 口）
       'anthropic',
-      'openai_compatible',
+      'anthropic_compatible',
       // WP274：Google 一张卡（API key，带生图）
       'openai_compatible',
       // WP134：第三种模型来源

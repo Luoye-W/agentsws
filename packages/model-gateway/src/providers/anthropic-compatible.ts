@@ -27,7 +27,13 @@ import type {
 } from '@agentsws/contracts'
 import { REASONING_EFFORTS } from '@agentsws/contracts'
 import { GatewayError, ProviderError } from '../types.js'
-import { type PiAssistantLike, readPiAssistant, toAnthropicPiContext } from './anthropic-pi.js'
+import {
+  type PiAssistantLike,
+  piToolNames,
+  readPiAssistant,
+  toAnthropicPiContext,
+} from './anthropic-pi.js'
+import { wireToolName } from './openai-compatible.js'
 
 /** pi-ai 的协议名（目录与请求里都是这个）。 */
 export const ANTHROPIC_MESSAGES_API = 'anthropic-messages'
@@ -347,6 +353,7 @@ export function anthropicCompatibleProvider(options: AnthropicCompatibleOptions)
         model: options.model,
       })
       const choice = req.tool_choice
+      const names = piToolNames(req.tools)
       const stream = streamSimple(model as never, normalizeContext(context as never), {
         apiKey: key,
         fetch: fetchImpl as never,
@@ -359,7 +366,7 @@ export function anthropicCompatibleProvider(options: AnthropicCompatibleOptions)
           ? {}
           : {
               toolChoice: (choice.type === 'tool' && choice.name !== undefined
-                ? { type: 'tool', name: choice.name }
+                ? { type: 'tool', name: wireToolName(choice.name) }
                 : choice.type) as never,
             }),
       })
@@ -373,7 +380,7 @@ export function anthropicCompatibleProvider(options: AnthropicCompatibleOptions)
           throw Object.assign(new Error('已停下'), { name: 'AbortError' })
         throw anthropicProviderError(message.errorMessage ?? '没有说原因')
       }
-      return readPiAssistant(message, options.model)
+      return readPiAssistant(message, options.model, ANTHROPIC_MESSAGES_API, names)
     },
   }
 }

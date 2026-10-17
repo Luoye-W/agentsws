@@ -79,8 +79,12 @@ export interface ChatMessage {
  * 不带签名。`kind` 标明是哪条线路的格式，别的 provider 认不得就不用。
  */
 export interface ReasoningReplay {
-  /** WP374（只加）：`anthropic-messages` = Anthropic 兼容口（官方 pi-ai 的 Messages 协议）的思考块。 */
-  kind: 'deepseek-messages' | 'anthropic-messages'
+  /**
+   * WP374（只加）：`anthropic-messages` = Anthropic 兼容口（官方 pi-ai 的 Messages 协议）的思考块。
+   * WP376（只加）：`openai-completions` / `openai-responses` = 自己接的 OpenAI 兼容口、地址是官方目录认识的那家时
+   * （走官方 pi-ai 的那两种协议）回来的思考块；`signature` 是官方 pi-ai 的 `thinkingSignature`（原样）。
+   */
+  kind: 'deepseek-messages' | 'anthropic-messages' | 'openai-completions' | 'openai-responses'
   model: string
   /**
    * 按回复里的原顺序。`signature` 原样保存、原样回传，一个字节都不改。
