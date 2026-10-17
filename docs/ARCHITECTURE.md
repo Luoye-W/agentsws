@@ -1,10 +1,10 @@
 # Architecture
 
-*This is the English entry point for contributors. It is distilled from
-`docs/09-底层框架拆解.md` (the source of truth, Chinese) with the security revisions from
-`docs/31` §3 and the open-source route in `docs/32`. Where this file and doc 09 disagree,
-doc 09 wins. For an honest per-layer inventory of what is actually built, read the status
-table in the [README](../README.md) or `docs/38-底层收口清单.md` §1.*
+*This is the English entry point for contributors. It is distilled from the project's
+internal design notes, which are not published; references below such as `docs/19` or
+`docs/47 J1` name sections of those notes and are kept only as labels. The contracts in
+`packages/contracts/src` are the public source of truth. For an honest per-layer inventory
+of what is actually built, read the status table in the [README](../README.md).*
 
 agentsws is a local, open-source agent middle-office for a cross-border e-commerce
 company: it connects people, agents, channels and company knowledge into one system that
@@ -306,6 +306,6 @@ explicitly in the PR and expect the discussion to be about whether a seam is mis
 |---|---|
 | Run it | [`README.md`](../README.md) — clone to a green simulation in 30 minutes |
 | Contribute | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
-| Know what actually works | README status table, or `docs/38-底层收口清单.md` §1 |
-| Understand a contract | `packages/contracts/src/*.ts` — every file names the Chinese spec section it implements |
-| See the whole design | `docs/README.md` indexes all 38 Chinese documents; decisions are appended to the end of `docs/03` |
+| Know what actually works | README status table |
+| Understand a contract | `packages/contracts/src/*.ts` — the contracts are the authoritative interface definitions |
+| Help users | `docs/help/` — the user help articles (zh + en), also published on the website |

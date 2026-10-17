@@ -19,8 +19,8 @@
 > Everything runs on your machine, with your own API keys and your own accounts.
 > **Status: `0.1.0-alpha`, not production-ready** — see [SECURITY.md](SECURITY.md) and the
 > honest status table below. Architecture in English:
-> **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**. The design documents are in Chinese
-> and indexed in [`docs/README.md`](docs/README.md).
+> **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**. Internal design notes are not published;
+> the code, the contracts in `packages/contracts` and the architecture doc are the public reference.
 
 **一句话**：把人、Agent、渠道和公司知识接成一套协同系统——开源免费、跑在公司自己的机器上；
 Agent 只**提议**，写操作一律进人审队列。
@@ -28,7 +28,7 @@ Agent 只**提议**，写操作一律进人审队列。
 **给谁用**：做独立站 / 跨境电商 / 品牌出海的小团队（3–50 人）。最典型的一天是：几十封英文
 客户来信、时差、退换货规则记不住、现有工具按席位收费还要把客户数据传上去。
 
-**别处收费、这里免费**（`docs/32` §3）：客服 AI（Gorgias / Zendesk / Intercom Fin 按席位）、
+**别处收费、这里免费**：客服 AI（Gorgias / Zendesk / Intercom Fin 按席位）、
 连接器平台（Composio / Pipedream 按连接数）、审批工作流、带权限的公司知识库、多店铺 /
 多部门——在这里都是开源版的一部分，没有付费墙。模型 key、店铺账号、邮箱都是你自己的。
 
@@ -49,7 +49,7 @@ Agent 只**提议**，写操作一律进人审队列。
   同一批场景在 `stub` / `dsh` / `direct` 三个运行时下都要过同样的不变量。
 
 上游贡献分两条线：对话渠道适配器（IMAP / SMTP、企业微信、微信 ClawBot……）按 dsh 插件规矩独立发布
-（dsh 官方没有渠道 seam，渠道契约是本仓自己的），系统动作 provider 回 OpenConnector。两者不是一回事，为什么见 `docs/09` §7。
+（dsh 官方没有渠道 seam，渠道契约是本仓自己的），系统动作 provider 回 OpenConnector。两者不是一回事。
 
 ---
 
@@ -108,7 +108,7 @@ pnpm dev:demo --port 4318         # 4317 被占了就换一个
 顶上会有一条黄条说「还没接模型，Agent 跑不起来」——**这是对的**：demo 世界不叫模型，
 卡片是合成的。想让 Agent 真跑起来要去设置页接一个模型 key，那属于第 ③ 步。
 
-界面长什么样：`docs/assets/workstation/`（首页、卡片、事项、日历、连接、模型设置的截图）。
+界面长什么样：官网 <https://agentsws.com> 上有截图。
 
 **③（可选）接真账号**——需要 Docker，以及你自己的 Shopify 自建应用与邮箱应用专用密码
 
@@ -127,11 +127,10 @@ scripts/dev-real.sh     # 起加固的 OpenConnector 容器 + SQLite 落盘的�
 的，可以直接用订阅登录**，不用再买一份 API 额度——走的是官方 `dsh-llm-pi-ai` +
 `dsh-authorization`，凭据存在本机加密库里、只在个人档可用。卡上写着风险：第三方工具用
 订阅登录没有得到 OpenAI / Anthropic 的明文授权，可能被限流或封禁；账号只属于你本人。
-细节见 [`docs/22`](docs/22-模型网关规范-v1.md) §4.2。
+细节见 `packages/contracts/src/model.ts`。
 
-**读懂架构**：先看 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)（英文，从 `docs/09`
-提炼），再看下面这张图，然后翻 `packages/contracts/src/` —— 每份契约的文件头都写着它实现
-的是中文规范的哪一节。
+**读懂架构**：先看 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)（英文），再看下面这张图，
+然后翻 `packages/contracts/src/` —— 契约就是接口的权威定义。
 
 ---
 
@@ -161,7 +160,7 @@ presets/      按职责的 dsh preset
 profiles/     dsh profile：版本锁定
 vendor/       上游子树（dsh-channels 等）
 evals/        eval 用例
-docs/         38 份中文设计文档 + 英文 ARCHITECTURE
+docs/         英文 ARCHITECTURE · help/ 用户帮助文章（工作台与官网共用）· 品牌标记
 upstreams.yml 上游登记表：我们在盯谁、盯它的什么、锁在哪一版（见下）
 scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真账号环境）· release.sh
               fetch-provider-favicons.mjs（`pnpm icons:fetch`：手动去各家官网抓一次 favicon 入库）
@@ -211,11 +210,11 @@ scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真�
 一条周报从上到下四段，按这个顺序读最省时间：**顶上那张小表**（几个上游、哪几个有新版、
 哪几个命中 wishlist、哪几个查不到——没事的一周四行全是"无"，看完就能关）→
 **每个上游一节**（版本与 dist-tags 如实列、窗口内的变动都带链接、折叠着的"我们碰到的 seam"）→
-**dsh 那一节后面**（默认值扫描与自动试升级的结论 + `docs/42` 的 checklist）→
+**dsh 那一节后面**（默认值扫描与自动试升级的结论 + 升级 checklist）→
 **末尾"给评估例程的提示"**（每条一句话：该走全套升级，还是只是一次"重判"，还是"这一趟查不到"）。
 
 报告只摆事实，**不替人做"纳不纳入"的决定**：它不改版本号、不开 PR、不合并
-（`docs/10 §3.3` 第 ⑤ 步是人看报告点通过）。"查不到"也照实写——查不到不等于没变。
+（最后一步是人看报告点通过）。"查不到"也照实写——查不到不等于没变。
 
 本机演练同一套观察（不开 issue）：
 
@@ -225,8 +224,7 @@ pnpm upstream:watch --dry-run --scope daily   # 只查 dsh
 pnpm upstreams:check                          # 只校验登记表与锁的版本一致（CI 里也跑这条）
 ```
 
-细节（两条 cron 的含义、默认值扫描为什么必须扫源码）见
-[`docs/42-上游升级流程-v1.md`](docs/42-上游升级流程-v1.md) §3。
+细节（两条 cron 的含义、默认值扫描为什么必须扫源码）见 `.github/workflows/upstream-watch.yml` 的注释。
 
 ---
 
@@ -236,7 +234,7 @@ pnpm upstreams:check                          # 只校验登记表与锁的版�
 2026-09-10，main 上 172 个测试文件、2251 个用例，`tsc -b --force` 与 `biome check .` 全绿，
 fast 档 8/8。
 
-下面是逐层的诚实盘点，来自 [`docs/38-底层收口清单.md`](docs/38-底层收口清单.md) §1：
+下面是逐层的诚实盘点：
 
 | 层 | 状态 | 缺什么 |
 |---|---|---|
@@ -270,13 +268,13 @@ fast 档 8/8。
 - 没有第三方安全审计，没有 bug bounty，没有维护分支与 backport。
 - 学习回路只走通了一半：能记下 lesson，还不能自动变成第二天的技能提案。
 - 「采纳率高了就自动执行」——**这个我们不做**。退款、补发、发布、配置、资金这些
-  `risk_class: medium|high` 的动作，v1 永远人审（`docs/31` §3.4）。
+  `risk_class: medium|high` 的动作，v1 永远人审。
 
 ---
 
 ## 路线
 
-收口顺序见 [`docs/38-底层收口清单.md`](docs/38-底层收口清单.md) §2。不做新功能，只补底座：
+不做新功能，只补底座：
 
 | 波次 | 内容 |
 |---|---|
@@ -285,8 +283,7 @@ fast 档 8/8。
 | 九 | WP32 模拟回路加强（realistic / soak / judge，每夜跑）· WP33 API 面补齐（WebSocket、OpenAPI 完整、SDK 生成） |
 | 之后 | 应用包执行器、IM 投递、MCP 面、Postgres —— 开源后按社群需求排 |
 
-方向与采用指标见 [`docs/32-开源优先路线修正.md`](docs/32-开源优先路线修正.md)：开源优先、
-build in public、接口冻结 / 实现按切片。
+方向：开源优先、代码公开、接口冻结 / 实现按切片。
 
 ---
 
@@ -300,6 +297,6 @@ build in public、接口冻结 / 实现按切片。
 ## 许可证
 
 - 代码、契约、职责包、技能、模拟回路、DevKit 规范：**Apache-2.0**（[`LICENSE`](LICENSE)、
-  [`NOTICE`](NOTICE)）。选它的理由见 `docs/33` §2：自带专利授权、与全部上游兼容。
+  [`NOTICE`](NOTICE)）。选它的理由：自带专利授权、与全部上游兼容。
 - 名称与标志：[`TRADEMARK.md`](TRADEMARK.md)——**可以 fork，不能叫 agentsws**。
 - 贡献：DCO（`git commit -s`），不要 CLA。

@@ -14,8 +14,8 @@ body:
           is, the 30-minute path, and an honest status table
         - [`docs/ARCHITECTURE.md`](https://github.com/Luoye-W/agentsws/blob/main/docs/ARCHITECTURE.md)
           — the design in English: layers, contracts, runtimes, approvals, security model
-        - [`docs/README.md`](https://github.com/Luoye-W/agentsws/blob/main/docs/README.md)
-          — an index of the 38 Chinese design documents, one line each
+        - [`docs/help/`](https://github.com/Luoye-W/agentsws/tree/main/docs/help)
+          — user help articles (also on the website)
         - [`CONTRIBUTING.md`](https://github.com/Luoye-W/agentsws/blob/main/CONTRIBUTING.md)
           — how to develop against this repo
 
