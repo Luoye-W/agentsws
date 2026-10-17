@@ -251,6 +251,8 @@ export type ThinkingLevel = 'fast' | 'standard' | 'deep'
 export interface FreeChatModelThinking {
   options: { level: ThinkingLevel; effort: ReasoningEffort }[]
   default: ReasoningEffort
+  /** WP373：只支持开 / 关（开 = `options[0].effort`，关 = `off`）；不给 = 三档。 */
+  toggle?: true
 }
 
 /** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1x）/ 限免 / 订阅额度 / 用你自己的 key。 */

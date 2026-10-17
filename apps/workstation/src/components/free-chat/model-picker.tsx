@@ -19,6 +19,11 @@
  *   换模型回到那个模型的默认档；钮上只有不是默认档时才多写「· 深想」；
  * - 搜索照官方：模型多于 4 个才出；按名字不连续也能对上（gpt55 → GPT-5.5），前缀对上的排前面。
  *
+ * WP373（Luoye 10-17，决策 977 / 979 复核）：
+ * - 思考程度从菜单里挪出来，成了 AI 钮右边一个**独立的小钮**（学 Claude Code 输入框的「Opus · High」）：
+ *   钮上直接写当前这一档，点一下弹「快 / 标准 / 深想」；官方只声明了开 / 关的模型画成开关；没声明的不出这个钮；
+ * - 这次 / 这件事选的模型后来用不了（删了、没接上）：照旧退回默认跑，钮上亮一个小黄点，悬停说原来选的是哪个。
+ *
  * 一个轻量的下拉，不用弹层库。键盘：↑↓ 换（搜索框里按 ↓ 进清单）、回车选、Esc 收起并回到钮上。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -42,14 +47,10 @@ import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
 import { getCloudCredits, getMyCloudAllocation, getPositions, setModelDefaults } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import {
-  type FreeChatModelChoice,
-  getFreeChatModels,
-  type ReasoningEffort,
-  type ThinkingLevel,
-} from '@/lib/free-chat'
+import { type FreeChatModelChoice, getFreeChatModels, type ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
+import { ThinkingControl } from './thinking-control'
 
 /** `provider_id/model` 的模型名那一半。 */
 export const modelNameOf = (id: string): string => id.slice(id.indexOf('/') + 1)
@@ -93,9 +94,6 @@ export function matchScore(query: string, text: string): number | undefined {
   }
   return i === 0 ? undefined : 2 + gaps / 100
 }
-
-/** WP370：思考程度三档的白话词（i18n 键）。 */
-export const thinkingKey = (level: ThinkingLevel): string => `model.pick.thinking.${level}`
 
 /** 来源的短名（钮上「来源 · 模型名」那一半）：「DeepSeek 官方 · 官方 API 接口连接」取前半。 */
 const shortSource = (label: string): string => label.split(' · ')[0] ?? label
@@ -345,19 +343,14 @@ export function ModelPicker({
       : currentGroup === 'subscription'
         ? t('model.pick.group.subscription')
         : shortSource(current.label)
-  // WP370：当前这一档思考程度（不是默认档时钮上多写一段）
+  // WP373：思考程度挪到钮右边那个独立小钮（模型声明了档位、调用方接了回调才出）
   const thinking = onEffortChange === undefined ? undefined : current.thinking
-  const effortNow =
-    thinking === undefined
-      ? undefined
-      : (thinking.options.find((o) => o.effort === effort) ??
-        thinking.options.find((o) => o.effort === thinking.default))
-  const effortTag =
-    effortNow === undefined || effortNow.effort === thinking?.default
-      ? undefined
-      : t(thinkingKey(effortNow.level))
   const full = t('model.pick.source_model', { source: sourceName, model: displayNameOf(current) })
-  const fullWithEffort = effortTag === undefined ? full : `${full} · ${effortTag}`
+  // WP373（决策 977）：选的那个现在不在清单里 → 这次退回了默认；钮上亮小黄点
+  const stale =
+    value !== undefined && value !== '' && !choices.some((c) => c.id === value)
+      ? t('model.pick.stale', { name: modelNameOf(value) })
+      : undefined
   // 读屏念的名字：工坊那组仍是「工坊」（决策 853），别的就是「来源 · 模型名」
   const name = current.official ? t('model.pick.workshop') : full
 
@@ -384,170 +377,184 @@ export function ModelPicker({
       : t('model.pick.rate.note')
 
   return (
-    <div ref={box} className="relative">
-      <button
-        ref={trigger}
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={t('model.pick.aria', {
-          name: effortTag === undefined ? name : `${name} · ${effortTag}`,
-        })}
-        title={t('model.pick.tip', { name: fullWithEffort })}
-        data-testid={testId}
-        data-model={current.id}
-        className="inline-flex h-[30px] max-w-[260px] items-center gap-1.5 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
-        onClick={() => {
-          setOpen((o) => !o)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault()
-            setOpen(true)
+    <div className="flex min-w-0 items-center gap-0.5">
+      <div ref={box} className="relative min-w-0">
+        <button
+          ref={trigger}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={
+            stale === undefined
+              ? t('model.pick.aria', { name })
+              : `${t('model.pick.aria', { name })}。${stale}`
           }
-        }}
-      >
-        <ChoiceIcon choice={current} />
-        {current.official ? null : <span className="truncate">{full}</span>}
-        {effortTag === undefined ? null : (
-          <span data-testid={`${testId}-effort-tag`} className="shrink-0">
-            · {effortTag}
-          </span>
-        )}
-        <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
-      </button>
-      {open ? (
-        <div
-          ref={menu}
-          role="listbox"
-          aria-label={t('free_chat.model.pick')}
-          data-testid={`${testId}-menu`}
-          onKeyDown={onMenuKey}
-          className={cn(
-            'absolute left-0 z-50 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-lg border bg-popover text-popover-foreground shadow-md',
-            layout.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
-          )}
+          title={
+            stale === undefined
+              ? t('model.pick.tip', { name: full })
+              : `${stale}\n${t('model.pick.tip', { name: full })}`
+          }
+          data-testid={testId}
+          data-model={current.id}
+          {...(stale === undefined ? {} : { 'data-stale': value })}
+          className="relative inline-flex h-[30px] max-w-[260px] items-center gap-1.5 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
+          onClick={() => {
+            setOpen((o) => !o)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault()
+              setOpen(true)
+            }
+          }}
         >
-          {/* WP370：照官方——模型多于 4 个才出搜索 */}
-          {choices.length <= SEARCH_MIN ? null : (
-            <label className="flex items-center gap-2 border-b px-3 py-2">
-              <Search aria-hidden className="size-3.5 text-muted-foreground" />
-              <input
-                ref={search}
-                type="search"
-                value={query}
-                placeholder={t('model.pick.search')}
-                aria-label={t('model.pick.search')}
-                data-testid={`${testId}-search`}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                }}
-              />
-            </label>
-          )}
-          <div className="overflow-y-auto p-1" style={{ maxHeight: layout.max }}>
-            {groups.length === 0 ? (
-              <p
-                className="px-2 py-3 text-center text-xs text-muted-foreground"
-                data-testid={`${testId}-empty`}
-              >
-                {t('model.pick.empty')}
-              </p>
-            ) : null}
-            {groups.map((g) => (
-              <fieldset
-                key={g.key}
-                aria-label={g.label}
-                data-testid={`${testId}-group`}
-                data-group={g.group}
-                className="m-0 min-w-0 border-0 p-0"
-              >
-                <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11.5px] font-medium text-muted-foreground">
-                  {g.group === 'workshop' ? (
-                    <BrandMark size={14} />
-                  ) : g.group === 'subscription' ? (
-                    <VendorIcon vendor="openai" size={14} />
-                  ) : (
-                    <BrandIcon
-                      provider={g.sample.id.slice(0, g.sample.id.indexOf('/'))}
-                      size={14}
-                    />
-                  )}
-                  <span className="truncate">{g.label}</span>
-                  {g.group === 'workshop' ? (
-                    <Hint text={rateNote} testId={`${testId}-rate-note`} />
-                  ) : null}
-                  {g.group === 'workshop' && balance !== undefined ? (
-                    <span
-                      data-testid={`${testId}-balance`}
-                      className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-normal tabular-nums"
-                    >
-                      {t(
-                        balance.kind === 'member_left'
-                          ? 'model.pick.member_left'
-                          : 'model.pick.balance',
-                        { n: creditsText(balance.credits) },
-                      )}
-                    </span>
-                  ) : null}
-                </div>
-                {g.rows.map((c) => (
-                  <PickerRow
-                    key={c.id}
-                    choice={c}
-                    groupLabel={g.label}
-                    selected={c.id === current.id}
-                    isDefault={c.id === defaultId}
-                    price={priceOf(c)}
-                    testId={testId}
-                    onPick={() => {
-                      onChange(c.id)
-                      close()
-                    }}
-                  />
-                ))}
-              </fieldset>
-            ))}
-          </div>
-          {thinking === undefined || effortNow === undefined ? null : (
-            <ThinkingRow
-              testId={testId}
-              options={thinking.options}
-              current={effortNow.effort}
-              onPick={(next) => {
-                onEffortChange?.(next, current.id)
-              }}
+          <ChoiceIcon choice={current} />
+          {current.official ? null : <span className="truncate">{full}</span>}
+          <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
+          {stale === undefined ? null : (
+            <span
+              aria-hidden
+              data-testid={`${testId}-stale`}
+              title={stale}
+              className="absolute top-1 right-1 size-1.5 rounded-full bg-ws-warn ring-2 ring-background"
             />
           )}
-          <div className="flex flex-col border-t p-1">
-            {onSetDefault === undefined || current.id === defaultId ? null : (
-              <button
-                type="button"
-                data-menu-item
-                title={t('model.pick.default.tip')}
-                data-testid={`${testId}-set-default`}
-                className="rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                onClick={() => {
-                  onSetDefault(current.id)
-                  close()
-                }}
-              >
-                {t('model.pick.default')}
-              </button>
+        </button>
+        {open ? (
+          <div
+            ref={menu}
+            role="listbox"
+            aria-label={t('free_chat.model.pick')}
+            data-testid={`${testId}-menu`}
+            onKeyDown={onMenuKey}
+            className={cn(
+              'absolute left-0 z-50 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-lg border bg-popover text-popover-foreground shadow-md',
+              layout.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
             )}
-            <Link
-              // WP356：设置弹窗「AI → 模型」那一节
-              to={settingsHref('models')}
-              data-menu-item
-              data-testid={`${testId}-manage`}
-              className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-            >
-              {t('free_chat.model.manage')}
-            </Link>
+          >
+            {/* WP370：照官方——模型多于 4 个才出搜索 */}
+            {choices.length <= SEARCH_MIN ? null : (
+              <label className="flex items-center gap-2 border-b px-3 py-2">
+                <Search aria-hidden className="size-3.5 text-muted-foreground" />
+                <input
+                  ref={search}
+                  type="search"
+                  value={query}
+                  placeholder={t('model.pick.search')}
+                  aria-label={t('model.pick.search')}
+                  data-testid={`${testId}-search`}
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  onChange={(e) => {
+                    setQuery(e.target.value)
+                  }}
+                />
+              </label>
+            )}
+            <div className="overflow-y-auto p-1" style={{ maxHeight: layout.max }}>
+              {groups.length === 0 ? (
+                <p
+                  className="px-2 py-3 text-center text-xs text-muted-foreground"
+                  data-testid={`${testId}-empty`}
+                >
+                  {t('model.pick.empty')}
+                </p>
+              ) : null}
+              {groups.map((g) => (
+                <fieldset
+                  key={g.key}
+                  aria-label={g.label}
+                  data-testid={`${testId}-group`}
+                  data-group={g.group}
+                  className="m-0 min-w-0 border-0 p-0"
+                >
+                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11.5px] font-medium text-muted-foreground">
+                    {g.group === 'workshop' ? (
+                      <BrandMark size={14} />
+                    ) : g.group === 'subscription' ? (
+                      <VendorIcon vendor="openai" size={14} />
+                    ) : (
+                      <BrandIcon
+                        provider={g.sample.id.slice(0, g.sample.id.indexOf('/'))}
+                        size={14}
+                      />
+                    )}
+                    <span className="truncate">{g.label}</span>
+                    {g.group === 'workshop' ? (
+                      <Hint text={rateNote} testId={`${testId}-rate-note`} />
+                    ) : null}
+                    {g.group === 'workshop' && balance !== undefined ? (
+                      <span
+                        data-testid={`${testId}-balance`}
+                        className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-normal tabular-nums"
+                      >
+                        {t(
+                          balance.kind === 'member_left'
+                            ? 'model.pick.member_left'
+                            : 'model.pick.balance',
+                          { n: creditsText(balance.credits) },
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+                  {g.rows.map((c) => (
+                    <PickerRow
+                      key={c.id}
+                      choice={c}
+                      groupLabel={g.label}
+                      selected={c.id === current.id}
+                      isDefault={c.id === defaultId}
+                      price={priceOf(c)}
+                      testId={testId}
+                      onPick={() => {
+                        onChange(c.id)
+                        close()
+                      }}
+                    />
+                  ))}
+                </fieldset>
+              ))}
+            </div>
+            <div className="flex flex-col border-t p-1">
+              {onSetDefault === undefined || current.id === defaultId ? null : (
+                <button
+                  type="button"
+                  data-menu-item
+                  title={t('model.pick.default.tip')}
+                  data-testid={`${testId}-set-default`}
+                  className="rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  onClick={() => {
+                    onSetDefault(current.id)
+                    close()
+                  }}
+                >
+                  {t('model.pick.default')}
+                </button>
+              )}
+              <Link
+                // WP356：设置弹窗「AI → 模型」那一节
+                to={settingsHref('models')}
+                data-menu-item
+                data-testid={`${testId}-manage`}
+                className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+              >
+                {t('free_chat.model.manage')}
+              </Link>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      {thinking === undefined ? null : (
+        <ThinkingControl
+          key={current.id}
+          testId={testId}
+          thinking={thinking}
+          effort={effort}
+          placement={placement}
+          onPick={(next) => {
+            onEffortChange?.(next, current.id)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -663,54 +670,6 @@ function PickerRow({
 
 /** WP370：模型多于这么多个才出搜索（官方 alpha.5 同一条线）。 */
 const SEARCH_MIN = 4
-
-/** WP370：「思考：快 / 标准 / 深想」那一行（只给声明了档位的模型）。 */
-function ThinkingRow({
-  testId,
-  options,
-  current,
-  onPick,
-}: {
-  testId: string
-  options: { level: ThinkingLevel; effort: ReasoningEffort }[]
-  current: ReasoningEffort
-  onPick: (effort: ReasoningEffort) => void
-}): React.ReactNode {
-  const { t } = useApp()
-  return (
-    <div
-      className="flex items-center gap-2 border-t px-3 py-2 text-xs"
-      data-testid={`${testId}-thinking`}
-    >
-      <span className="shrink-0 text-muted-foreground">{t('model.pick.thinking')}</span>
-      <Hint text={t('model.pick.thinking.tip')} />
-      <fieldset
-        aria-label={t('model.pick.thinking')}
-        className="m-0 ml-auto flex gap-1 border-0 p-0"
-      >
-        {options.map((o) => (
-          <button
-            key={o.level}
-            type="button"
-            data-menu-item
-            aria-pressed={o.effort === current}
-            data-testid={`${testId}-thinking-${o.level}`}
-            data-effort={o.effort}
-            className={cn(
-              'rounded-full px-2 py-0.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-              o.effort === current ? 'bg-muted font-medium text-ws-ink' : 'text-muted-foreground',
-            )}
-            onClick={() => {
-              onPick(o.effort)
-            }}
-          >
-            {t(thinkingKey(o.level))}
-          </button>
-        ))}
-      </fieldset>
-    </div>
-  )
-}
 
 /**
  * 工坊积分那组标题右边那一格：个人 / 同事互联写余额；公司模式写这个人本月还剩多少（设了上限才有，

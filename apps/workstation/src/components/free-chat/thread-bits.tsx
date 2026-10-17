@@ -5,7 +5,8 @@
  * - {@link TopicDivider}：换了话题，一条淡线 + 上一个话题的一行小结（悬停看整段小结）；
  * - {@link HistorySearch}：顶部搜索（搜以前聊过的原话与小结，点一条跳到那里）；
  * - {@link NewTopicButton}：「换个话题」；
- * - {@link RecalledRefs}：助理翻了以前聊过的，回复下面一排出处（点了跳过去）。
+ * - {@link RecalledRefs}：助理翻了以前聊过的，回复下面一排出处（点了跳过去）；
+ * - {@link ModelSwitchDivider}：WP373，换了模型那一句「上面是 X 答的，接下来用 Y」。
  */
 import { useQuery } from '@tanstack/react-query'
 import { MessageSquarePlus, Search, X } from 'lucide-react'
@@ -15,6 +16,7 @@ import { useApp } from '@/lib/app-context'
 import {
   type AssistantHistoryHit,
   type AssistantSegment,
+  type FreeChatMessage,
   searchAssistantHistory,
 } from '@/lib/free-chat'
 
@@ -214,6 +216,61 @@ export function RecalledRefs({
           {t('assistant.recalled', { date: date(h.at) })}
         </button>
       ))}
+    </div>
+  )
+}
+
+/** WP373（决策 978）：一条回复用的哪个模型（只认模型答的那几条；派出去的事回来报的那句没有 `model`）。 */
+type ReplyModel = NonNullable<FreeChatMessage['model']>
+
+/**
+ * WP373（决策 978）：哪几句用户的话前面要插「上面是 X 答的，接下来用 Y」。照官方 dsh：只在**真换了**模型时——
+ * 这句话的回答用的模型，跟它前面最后一条回答的模型不一样（没换不插；只换了思考程度也不插）。
+ * 和服务端给模型那一句（`withModelSwitchNotices`）同一个判法。
+ */
+export function modelSwitches(
+  rows: readonly FreeChatMessage[],
+): Map<string, { from: ReplyModel; to: ReplyModel }> {
+  const out = new Map<string, { from: ReplyModel; to: ReplyModel }>()
+  let previous: ReplyModel | undefined
+  rows.forEach((m, i) => {
+    if (m.role === 'assistant') {
+      if (m.model !== undefined && m.error === undefined) previous = m.model
+      return
+    }
+    const next = rows.slice(i + 1).find((x) => x.role === 'assistant' || x.role === 'user')
+    const to = next?.role === 'assistant' && next.error === undefined ? next.model : undefined
+    if (previous !== undefined && to !== undefined && to.id !== previous.id)
+      out.set(m.id, { from: previous, to })
+  })
+  return out
+}
+
+/** 出现：上面那条回答和下面这条用的不是同一个模型（{@link modelSwitches}）。 */
+export function ModelSwitchDivider({
+  from,
+  to,
+}: {
+  /** 事项时间线上只有 id（`provider_id/model`）；随便聊还有来源名。 */
+  from: { id: string; label?: string }
+  to: { id: string; label?: string }
+}): React.ReactNode {
+  const { t } = useApp()
+  const short = (m: { id: string }): string => m.id.slice(m.id.indexOf('/') + 1)
+  // 两边模型名一样（同一个模型、换了来源）就带上来源
+  const same = short(from) === short(to)
+  const name = (m: { id: string; label?: string }): string =>
+    same ? (m.label === undefined ? m.id : `${m.label} · ${short(m)}`) : short(m)
+  return (
+    <div
+      className="flex items-center justify-center py-0.5"
+      data-testid="thread-model-switch"
+      data-from={from.id}
+      data-to={to.id}
+    >
+      <span className="text-[11px] text-muted-foreground">
+        {t('chat.model_switch', { from: name(from), to: name(to) })}
+      </span>
     </div>
   )
 }

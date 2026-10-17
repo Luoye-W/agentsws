@@ -65,30 +65,33 @@ function open(
   return { picks, efforts, trigger }
 }
 
-describe('WP370 AI 钮：思考程度', () => {
+describe('WP370 AI 钮：思考程度（WP373 起挪成钮右边的独立小钮）', () => {
   it('有档的模型出三档白话，默认标准；点「深想」回调 high + 当前模型', () => {
     const { efforts } = open([SUB, OWN], SUB.id)
-    const row = screen.getByTestId('model-pick-thinking')
-    expect(within(row).getByTestId('model-pick-thinking-fast').textContent).toBe('快')
+    fireEvent.click(screen.getByTestId('model-pick'))
+    fireEvent.click(screen.getByTestId('model-pick-thinking'))
+    const menu = screen.getByTestId('model-pick-thinking-menu')
+    expect(within(menu).getByTestId('model-pick-thinking-fast').textContent).toBe('快')
     expect(
-      within(row).getByTestId('model-pick-thinking-standard').getAttribute('aria-pressed'),
+      within(menu).getByTestId('model-pick-thinking-standard').getAttribute('aria-checked'),
     ).toBe('true')
-    fireEvent.click(within(row).getByTestId('model-pick-thinking-deep'))
+    fireEvent.click(within(menu).getByTestId('model-pick-thinking-deep'))
     expect(efforts).toEqual(['openai-codex/gpt-5.5:high'])
   })
 
-  it('不是默认档时钮上多写「· 深想」；是默认档时不写', () => {
+  it('当前这一档直接写在小钮上；AI 钮上不再多写「· 深想」', () => {
     open([SUB, OWN], SUB.id, 'high')
-    expect(screen.getByTestId('model-pick-effort-tag').textContent).toContain('深想')
-    expect(screen.getByTestId('model-pick').getAttribute('aria-label')).toContain('深想')
-  })
-
-  it('默认档不写标签', () => {
-    open([SUB, OWN], SUB.id, 'medium')
+    expect(screen.getByTestId('model-pick-thinking').textContent).toContain('深想')
     expect(screen.queryByTestId('model-pick-effort-tag')).toBeNull()
+    expect(screen.getByTestId('model-pick').textContent).not.toContain('深想')
   })
 
-  it('没声明档位的模型（自己接的 OpenAI 兼容口）不出思考那一行', () => {
+  it('默认档写「标准」', () => {
+    open([SUB, OWN], SUB.id, 'medium')
+    expect(screen.getByTestId('model-pick-thinking').textContent).toContain('标准')
+  })
+
+  it('没声明档位的模型（自己接的 OpenAI 兼容口）不出思考那个钮', () => {
     open([SUB, OWN], OWN.id)
     expect(screen.queryByTestId('model-pick-thinking')).toBeNull()
   })

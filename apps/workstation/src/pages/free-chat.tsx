@@ -30,6 +30,8 @@ import {
   DayDivider,
   dayOf,
   HistorySearch,
+  ModelSwitchDivider,
+  modelSwitches,
   NewTopicButton,
   RecalledRefs,
   TopicDivider,
@@ -421,6 +423,8 @@ function AssistantThreadPage(): React.ReactNode {
   )
   const memoryLit = (params.get('memory') ?? '').split(',').filter((x) => x !== '')
   const segById = new Map(segs.map((g) => [g.id, g]))
+  // WP373（决策 978）：真换了模型的那几处插一句「上面是 X 答的，接下来用 Y」
+  const switches = modelSwitches(rows)
   const segOf = (m: FreeChatMessage): string | undefined => m.segment_id ?? segs[0]?.id
   /** 这段话题说过话了（「换个话题」才出）。 */
   const current = segs.at(-1)
@@ -434,10 +438,14 @@ function AssistantThreadPage(): React.ReactNode {
     const prevSeg = prev === undefined ? undefined : segOf(prev)
     const topic =
       prev !== undefined && seg !== undefined && prevSeg !== undefined && seg !== prevSeg
+    const switched = switches.get(m.id)
     return (
       <>
         {topic ? <TopicDivider previous={segById.get(prevSeg)} /> : null}
         {day && m.at !== '' ? <DayDivider at={m.at} /> : null}
+        {switched === undefined ? null : (
+          <ModelSwitchDivider from={switched.from} to={switched.to} />
+        )}
       </>
     )
   }
