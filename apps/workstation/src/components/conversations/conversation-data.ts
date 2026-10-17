@@ -8,11 +8,12 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import type { RailScope } from '@/components/rail/rail-scope'
+import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { getPositions } from '@/lib/api'
 import { getWorkRail, RAIL_KEY, type RailDuty, type RailMatter } from '@/lib/work-archive'
 
-/** 一次向服务端要几条（与左栏原来那一份同一个数，缓存共用）。 */
-export const CONV_FETCH = 20
+/** 一次向服务端要几条（与事项页同一个数，缓存共用）。 */
+export const CONV_FETCH = RAIL_FETCH
 
 export interface ConvDuty extends RailDuty {
   /** 职责名（岗位层按职责分组时的小标题）。 */

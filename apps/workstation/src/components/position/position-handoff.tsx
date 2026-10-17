@@ -6,7 +6,7 @@
  * - WP291（决策 356）：发出去服务端三分——**当场问答**就在框下面答（`QuickAnswer`：一句话 + 组件）；
  *   **会话 / 任务**马上进它的线程。框里的字发出去就清，等回答时框下出「…」。
  * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
- * - 下面一排快捷建议照旧，点一下填进框。
+ * - 下面一排快捷按钮（WP372 决策 1019：按状态现出、最多 6 个、点了直接打开对应卡或直接发出去，开始对话后收起）。
  *
  * WP357（Luoye 10-16 真机：Excel 拖进来没反应）：这个框也能附资料（.txt / .md / .docx / .pdf / .xlsx / .csv，
  * 拖进来、点「+」、粘贴文件都行，与助理同一套）；附件跟着这句话交出去，开出来的事项第一句话上带着它，
@@ -27,6 +27,7 @@ import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { TASK_TEXT_MAX } from '@/lib/handoff'
+import { LandingActions, useLandingActions } from './landing-actions'
 import { QuickAnswer } from './quick-answer'
 
 const MAX_SUGGESTIONS = 4
@@ -52,6 +53,20 @@ export function PositionHandoff({
   const mine = view.roles.filter((r) => r.my_assignment_id !== undefined)
   // 建议只从本人那几条职责来（54 §1：拿别人那条去开就是借岗位扩权）
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
+  /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
+  const [started, setStarted] = useState(false)
+  const actions = useLandingActions(
+    mine.flatMap((r) => r.quick_prompts ?? []).map((q) => ({
+      id: q.id,
+      label: lang === 'en' ? q.label.en : q.label.zh,
+      prompt: q.prompt,
+    })),
+    (prompt) => {
+      clearError()
+      setStarted(true)
+      open.mutate({ title: prompt.slice(0, TASK_TEXT_MAX), model, files: [] })
+    },
+  )
 
   const submit = (): void => {
     const typed = text.trim().slice(0, TASK_TEXT_MAX)
@@ -64,6 +79,7 @@ export function PositionHandoff({
     // WP291：等回答时不锁框（回答在框下出「…」）
     if (title === '') return
     clearError()
+    setStarted(true)
     const files = attached.take().map((d) => ({ name: d.name, data: d.data }))
     open.mutate(
       { title, model, files },
@@ -122,25 +138,11 @@ export function PositionHandoff({
       />
       {/* WP259：没发出去就在框下说一句（含服务端那句话），不再静默 */}
       <HandoffError error={error} />
-      {suggestions.length === 0 ? null : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {suggestions.map((q) => (
-            <button
-              key={q.id}
-              type="button"
-              className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              data-testid="entry-suggestion"
-              data-prompt={q.id}
-              title={q.prompt}
-              onClick={() => {
-                setText(q.prompt)
-              }}
-            >
-              {lang === 'en' ? q.label.en : q.label.zh}
-            </button>
-          ))}
-        </div>
-      )}
+      {/*
+        WP372（决策 1019）：快捷按钮按状态现出（看新报表 / 等你的对话 / 去连接 + 这个岗位自己的提示），
+        最多 6 个，点了直接打开那张卡或直接发出去；开始对话后收起。
+      */}
+      {started ? null : <LandingActions actions={actions} />}
       {/* WP291：当场回答（输入框之下、要你处理之上）；会话 / 任务这里不画，直接进线程 */}
       <QuickAnswer position={id} />
       {hero ? (

@@ -5,6 +5,11 @@
  * 卡标题行只有名字 + 一句摘要；长一点的说法进 tooltip。
  */
 export const PANEL_ZH: Record<string, string> = {
+  'landing.report': '看「{title}」',
+  'landing.waiting': '看等你的 {n} 个对话',
+  'landing.connect': '连上 {name}',
+  'landing.plans': '看等你点头的 {n} 个计划',
+  'duty.boards_moved': '这条职责的看板在右上角「报表」里',
   'rail.card.reports': '报表',
   'rail.panel.reports': '报表',
   'rail.panel.report': '报表',
@@ -77,6 +82,11 @@ export const PANEL_ZH: Record<string, string> = {
 }
 
 export const PANEL_EN: Record<string, string> = {
+  'landing.report': 'Open “{title}”',
+  'landing.waiting': '{n} chats waiting for you',
+  'landing.connect': 'Connect {name}',
+  'landing.plans': '{n} plans waiting for your OK',
+  'duty.boards_moved': 'This duty’s boards are under Reports (top right)',
   'rail.card.reports': 'Reports',
   'rail.panel.reports': 'Reports',
   'rail.panel.report': 'Report',

@@ -72,6 +72,11 @@ export interface DeckSectionProps {
    * WP288：这副牌的标题（「要你处理 N」）。给了就与筛选图标、翻页同一行；不给那一行只有右侧控件。
    */
   title?: ReactNode
+  /**
+   * WP372（决策 1019）：岗位页不再摊报表块（日报 / 周报 / 上线检查单）——它们进右侧面板「报表」卡。
+   * 默认真（老调用方不变）；岗位页传假。
+   */
+  withReports?: boolean
 }
 
 interface DeckData {
@@ -163,6 +168,7 @@ export function DeckSection({
   focus,
   withBase = false,
   title,
+  withReports = true,
 }: DeckSectionProps): React.ReactNode {
   // WP275：回执与快捷键那几句按模式换词（① ② 是「通过」系，不是「批准」系）
   const { t } = useMode()
@@ -404,7 +410,7 @@ export function DeckSection({
       />
 
       {/* WP141：岗位页的报表块（日报 / 上线检查单）不再混在牌堆里当一张卡 */}
-      <ReportBlocks reports={all.data?.reports ?? []} onOpen={onOpen} />
+      {withReports ? <ReportBlocks reports={all.data?.reports ?? []} onOpen={onOpen} /> : null}
 
       {/* WP141：决定之后的一句回执（「记下了」），下一次决定时换掉 */}
       {receipt === '' ? null : (
