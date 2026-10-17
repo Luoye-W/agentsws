@@ -435,7 +435,7 @@ const en: HomeCopy = {
         key: 'team',
         tag: 'Team',
         h: 'Colleagues, side by side',
-        p: 'Everyone runs their own roles and nobody signs off on anybody. Hand work to a colleague; it’s theirs once they accept. Your agent answers colleagues and books time for you.',
+        p: 'Everyone runs their own roles and nobody signs off on anybody. Hand work to a colleague; it’s theirs once they accept. Your assistant answers colleagues and books time for you.',
       },
       {
         key: 'company',

@@ -1,6 +1,6 @@
 # DingTalk bot: create the app, turn on Stream, get credentials
 
-The DingTalk bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own agent**, as that person — so everyone only sees what they are allowed to see.
+The DingTalk bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own assistant**, as that person — so everyone only sees what they are allowed to see.
 
 It uses DingTalk's "Stream mode": your computer connects out to DingTalk, so there is **no public URL and no callback address to configure**. As long as Agents Workshop is running on this computer, the bot can receive and reply.
 
