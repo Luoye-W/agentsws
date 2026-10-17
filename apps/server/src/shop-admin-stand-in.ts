@@ -358,6 +358,95 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
           ),
         },
       }
+    // WP381：网站 / 商品体检读商品（上架中的）；AI 来源流量读订单进店来源与会话来源
+    case 'AgentswsHealthProducts':
+      return {
+        shop: { name: 'Rollout', currencyCode: 'USD' },
+        products: {
+          nodes: shop.products
+            .filter((p) => p.status === 'ACTIVE')
+            .map((p) => ({
+              ...productNode(p),
+              options: p.variants.length > 1 ? [{ name: 'Size' }] : [{ name: 'Title' }],
+              variants: {
+                nodes: p.variants.map((v) => ({
+                  id: v.id,
+                  title: v.title,
+                  sku: v.sku,
+                  price: v.price,
+                  barcode: null,
+                  availableForSale: v.inventoryQuantity > 0,
+                })),
+              },
+            })),
+        },
+      }
+    case 'AgentswsAiTrafficOrders': {
+      // 下在查询窗口里（按窗口起点往后数几天）：替身的「现在」与调用方的钟不一定是同一个
+      const since = /created_at:>='([^']+)'/.exec(String(vars.query ?? ''))?.[1]
+      let day = 7
+      const order = (amount: string, first: Obj | null, last: Obj | null): Obj => ({
+        createdAt:
+          since === undefined
+            ? NOW()
+            : new Date(Date.parse(since) + (day++ + 0.5) * 86_400_000).toISOString(),
+        currentTotalPriceSet: { shopMoney: { amount, currencyCode: 'USD' } },
+        customerJourneySummary: { firstVisit: first, lastVisit: last },
+      })
+      return {
+        shop: { currencyCode: 'USD' },
+        orders: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          nodes: [
+            order(
+              '29.90',
+              {
+                referrerUrl: 'https://chatgpt.com/',
+                landingPage: '/products/rollout-storage-box?utm_source=chatgpt.com',
+                source: 'chatgpt.com',
+              },
+              null,
+            ),
+            order(
+              '49.80',
+              { referrerUrl: 'https://www.google.com/', source: 'Google' },
+              { referrerUrl: 'https://chatgpt.com/c/demo', source: 'chatgpt.com' },
+            ),
+            order(
+              '19.90',
+              { referrerUrl: 'https://www.perplexity.ai/search', source: 'perplexity.ai' },
+              null,
+            ),
+            order('29.90', { referrerUrl: 'https://www.google.com/', source: 'Google' }, null),
+            order('59.80', null, { source: 'direct' }),
+            // 前一段窗口里也有一单从 ChatGPT 来（周变化）
+            ((): Obj => {
+              day = 2
+              return order(
+                '29.90',
+                { referrerUrl: 'https://chatgpt.com/', source: 'chatgpt.com' },
+                null,
+              )
+            })(),
+          ],
+        },
+      }
+    }
+    case 'AgentswsAiTrafficSessions':
+      return {
+        shopifyqlQuery: {
+          parseErrors: [],
+          tableData: {
+            columns: [{ name: 'referrer_domain' }, { name: 'sessions' }],
+            rows: [
+              { referrer_domain: 'google.com', sessions: 1240 },
+              { referrer_domain: 'chatgpt.com', sessions: 86 },
+              { referrer_domain: 'perplexity.ai', sessions: 21 },
+              { referrer_domain: 'gemini.google.com', sessions: 9 },
+            ],
+          },
+        },
+      }
     case 'AgentswsRecentOrders':
       return {
         orders: {

@@ -631,6 +631,14 @@ export interface ScenarioSeoDaily {
   who: string
 }
 
+/**
+ * WP380：GEO 第二层——用录好的 AI 回答与判断回文（`@agentsws/seo-core` 的样本）算比较胜率与描述准确度、
+ * 拿官方事实对两张夹具页（规则 + 录好的模型回文）、按岗位分组，再给一条复查出建议。不调模型、不联网。
+ */
+export interface ScenarioGeoQuality {
+  who: string
+}
+
 /** WP67 / 48 §5.1：起草并提一封开发信（第一稿故意可以带承诺词）。 */
 export interface ScenarioKolOutreach {
   who: string
@@ -1213,6 +1221,7 @@ export type ScenarioEvent =
   | { at: string; type: 'store.daily_report'; daily_report: ScenarioStoreDailyReport }
   /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */
   | { at: string; type: 'content.seo_daily'; seo_daily: ScenarioSeoDaily }
+  | { at: string; type: 'content.geo_quality'; geo_quality: ScenarioGeoQuality }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -2035,6 +2044,16 @@ export interface ScenarioExpected {
    * - `no_dump`：没有数据倾倒——卡上只有挑出来的那几件，读进来的其余行一行都不上卡。
    */
   seo_daily?: { picks?: NumericAssertion; fix_before_write?: boolean; no_dump?: boolean }
+  /**
+   * WP380：GEO 第二层那张报告——比较胜率、描述准确度（0–1）、一致性分到哪几个岗位（按顺序）、
+   * 复查建议。
+   */
+  geo_quality?: {
+    win_rate?: NumericAssertion
+    accuracy?: NumericAssertion
+    owners?: string[]
+    advice?: string
+  }
   /**
    * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。
    *

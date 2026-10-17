@@ -23,12 +23,17 @@ import type {
   ClaimMarketGroup,
   ClaimRulesView,
   GeoAnswerDetail,
+  GeoConsistencyRun,
   GeoCostEstimate,
+  GeoFactsPatch,
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
   GeoHistoryExport,
   GeoMetricsView,
+  GeoOfficialFact,
   GeoQuestion,
+  GeoRecheck,
+  GeoRecheckInput,
   GeoSettings,
   GeoWatchPatch,
   GeoWatchRunResult,
@@ -166,6 +171,17 @@ export interface SeoPort {
   watchMetrics?(actor: SeoActor, input: { weeks?: number }): MaybePromise<GeoMetricsView>
   /** WP335：「一条回答」——按 id 取全文、编号引用、上一期与时间线（没有 = `undefined` → 404）。 */
   watchAnswer?(actor: SeoActor, id: string): MaybePromise<GeoAnswerDetail | undefined>
+  /** WP380：官方事实表（读之前先跟品牌档案同步）。 */
+  watchFacts?(actor: SeoActor): MaybePromise<GeoOfficialFact[]>
+  /** WP380：人改官方事实（空值 = 退回跟档案走）。 */
+  watchSetFacts?(actor: SeoActor, input: GeoFactsPatch): MaybePromise<GeoOfficialFact[]>
+  /** WP380：现在对一次对外说法（没人持有内容职责 = `undefined` → 409）。 */
+  watchConsistency?(
+    actor: SeoActor,
+    input: { urls?: string[] },
+  ): MaybePromise<GeoConsistencyRun | undefined>
+  /** WP380：登记一条复查（改了什么、看哪个数、几天后）。 */
+  watchRecheck?(actor: SeoActor, input: GeoRecheckInput): MaybePromise<GeoRecheck>
 }
 
 /** WP159：改规则表（三件事一次给一件就行）。 */
@@ -385,6 +401,24 @@ const WatchPatchBody = z.object({
   archive_prompts: z.array(z.string().min(1).max(80)).max(100).optional(),
 })
 const WatchSuggestBody = z.object({ card: z.boolean().optional() })
+const FACT_KEY = z.enum(['name', 'category', 'price', 'selling_points', 'markets'])
+const WatchFactsBody = z.object({
+  facts: z
+    .array(z.object({ key: FACT_KEY, value: z.string().max(300) }))
+    .min(1)
+    .max(5),
+})
+const WatchConsistencyBody = z.object({
+  urls: z.array(z.string().url().max(500)).max(10).optional(),
+})
+const WatchRecheckBody = z.object({
+  change: z.string().min(1).max(200),
+  metric: z.enum(['mention_rate', 'citation_rate', 'win_rate', 'accuracy']),
+  prompt_ids: z.array(z.string().min(1).max(200)).min(1).max(50),
+  due_days: z.number().int().min(1).max(90).optional(),
+  matter_id: z.string().min(1).max(200).optional(),
+  owner: z.enum(['site', 'web-ops', 'pr', 'content']).optional(),
+})
 const WatchRunBody = z.object({
   confirm: z.boolean().optional(),
   kinds: z
@@ -421,6 +455,21 @@ function watchPortOf(
     watchRun: p.watchRun.bind(p),
     watchMetrics: p.watchMetrics.bind(p),
   }
+}
+
+/** WP380：可选的几个口（没装 = 501）。 */
+function need<K extends 'watchFacts' | 'watchSetFacts' | 'watchConsistency' | 'watchRecheck'>(
+  deps: GatewayDeps,
+  key: K,
+): NonNullable<SeoPort[K]> {
+  const p = portOf(deps)
+  const fn = p[key]
+  if (fn === undefined)
+    throw new ApiError(
+      'not_implemented',
+      `这个服务进程没有装配 AI 回答监测那一层（SeoPort.${key}）。`,
+    )
+  return (fn as (...args: unknown[]) => unknown).bind(p) as NonNullable<SeoPort[K]>
 }
 
 const GoogleSourcesBody = z.object({
@@ -687,6 +736,89 @@ export function seoRoutes(): Route[] {
         if (detail === undefined) throw new ApiError('not_found', '没有这条回答')
         return ok(c, detail)
       },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/watch/facts',
+        operationId: 'getGeoWatchFacts',
+        summary:
+          'WP380：官方事实表（名称 / 品类 / 价格 / 卖点 / 市场，带日期与以前的说法）——描述准确度与对外说法一致性都拿它对',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'GeoOfficialFact[]',
+      },
+      async (c, deps) => ok(c, await need(deps, 'watchFacts')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/seo/watch/facts',
+        operationId: 'setGeoWatchFacts',
+        summary: 'WP380：人改官方事实（改了旧说法记进 previous；空值 = 退回跟品牌档案走）',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchFactsBody,
+        returns: 'GeoOfficialFact[]',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await need(deps, 'watchSetFacts')(
+            actorOf(c),
+            plain<GeoFactsPatch>(await body(c, WatchFactsBody)),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/watch/consistency',
+        operationId: 'runGeoConsistency',
+        summary:
+          'WP380：现在对一次对外说法——官方事实对官网 / 商品页 / 结构化数据 / 上架页 / 评测页，过时或说法不一的按岗位分好出一张卡',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchConsistencyBody,
+        returns: 'GeoConsistencyRun',
+      },
+      async (c, deps) => {
+        const run = await need(deps, 'watchConsistency')(
+          actorOf(c),
+          plain<{ urls?: string[] }>(await body(c, WatchConsistencyBody)),
+        )
+        if (run === undefined) throw new ApiError('conflict', '没人持有「内容与搜索」这条职责')
+        return ok(c, run)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/watch/rechecks',
+        operationId: 'addGeoRecheck',
+        summary:
+          'WP380：登记一条复查——改了什么、期望哪个数动（提及率 / 引用率 / 比较胜率 / 描述准确度）、几天后重问那组问题',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: WatchRecheckBody,
+        returns: 'GeoRecheck',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await need(deps, 'watchRecheck')(
+            actorOf(c),
+            plain<GeoRecheckInput>(await body(c, WatchRecheckBody)),
+          ),
+        ),
     ),
     route(
       {

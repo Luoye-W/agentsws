@@ -43,9 +43,40 @@ Click any cell in the grid and that answer opens in the right panel:
 - **Our aliases, competitors, keywords, markets, how often, ranking on mobile or desktop**: add or remove them here.
 - To have AI suggest again from your latest brand profile, click "Ask AI to suggest again"; a new card waits for your decision.
 
+## Accuracy and head-to-head
+
+A new block under the board shows up once there is data:
+
+- **Win rate**: of the answers that name you and a competitor and clearly prefer one, the share that prefers you. Ties are left out. The n next to it is how many answers that is.
+- **Accuracy**: when AI talks about your name, category, price, selling points or markets, the share that matches your "official facts". Each field shows right / wrong / outdated, and the wrong ones come with the quote and the official wording.
+- **Official facts**: taken from your brand profile, each with a date. If you change your price and AI still quotes the old one, that counts as "outdated", not "wrong". Edit them in the brand profile.
+
+Both numbers need a model to read the answers, so they are marked "AI judged" and always come with a quote; if the quote can't be found in the answer, it doesn't count. Without a model this block stays empty.
+
+## Checking your public wording
+
+AI often gets things wrong because the web itself disagrees. About once a month (or when you click "Check now" on the board) the workshop checks your official facts against your site and product pages, the structured data in them, marketplace listings, and the review and partner pages AI has cited, as far as they can be fetched.
+
+Anything outdated or inconsistent comes back as one card, split by role: structured data goes to Site Building, site and product page copy to Web Operations, review, media and partner pages to PR. Untick what you don't want to send and approve: each role gets one task (all from the same batch). The workshop never edits outside pages itself; that role asks for approval as usual.
+
+## Automatic rechecks after a change
+
+Every GEO-related change records three things: what changed, which number should move, and when to recheck (usually two weeks for your own pages, four for changes that depend on other sites). On that day the workshop asks the same questions again, compares with before, and sends a card with advice:
+
+- **Expand**: clearly better; use the same fix on similar pages and questions.
+- **Keep**: somewhat better.
+- **Modify**: no real change; try a different fix.
+- **Stop**: worse; pause and consider reverting.
+
+If either side has fewer than 3 answers, it waits another week before deciding. Recheck rounds only ask those questions and don't count toward the weekly numbers.
+
+## Reading the weekly report
+
+On the weekly "AI visibility" card, every number says where it comes from: **measured** (counted from the answers by rules), **derived** (needs AI judgement, such as win rate) or **estimated** (such as credit forecasts), plus the sample size and date. Gaps are sorted by what to do first, each with its main cause (can't crawl, can't read, not useful, outdated, no difference, not recognised, inconsistent, no one vouches, not trusted, can't buy), the role it goes to, and the recheck date. The "Offsite sources" line shows which media and communities AI cites most, and whether that's for PR, community or influencers.
+
 ## FAQ
 
 - **Claude's answer differs from what I see on claude.ai**: the Claude column is taken from Claude's web-search answers and may differ slightly from the website.
 - **Roughly how many credits a month**: one brand, one market, 8 questions, four AIs and 20 keywords, one round a week, comes to about 155 credits a month, most of it Claude. Without Claude it's about 30. The exact number is shown in "Tracking settings".
-- **Are the numbers made by AI**: no. Mentioned or not, position and citations are counted by rules; only the "tone" is AI's judgement, and it always comes with a quote.
+- **Are the numbers made by AI**: no. Mentioned or not, position and citations are counted by rules; only the "tone", win rate and accuracy need AI's judgement, and they always come with a quote.
 - **Can I export or delete the history**: yes. Answers and their sources are kept long-term; you can export them, or delete a time range or the whole brand's history.

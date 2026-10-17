@@ -1,0 +1,44 @@
+# WP380（决策 1066）：GEO 第二层——AI 说得对不对、比得过谁、对外说法、改完复查。
+#
+# 用 `@agentsws/seo-core` 里录好的六条 AI 回答和当时模型的判断回文（不调模型、不联网）：
+#
+# 1. **比较胜率** 50%：同时提到我们和竞品、分了高下的两条里赢一条；平局那条不进分母，
+#    模型摘错原话的那条不算；
+# 2. **描述准确度** 50%：说到我们的 6 句里对 3、错 2、过时 1（说的是十月之前的旧价）；
+# 3. **对外说法**：官方事实对两张夹具页，结构化数据价格不对 → 建站，商品页写着旧价 → 网站运营，
+#    评测站写错市场与卖点 → 公关（模型摘的那句页面上没有的不算）；
+# 4. **复查**：同一组问题前后一比没动静 → 建议「修改」。
+#
+# 它是 L3 自动出、看完归档的报表卡，不进人的队列，不写外部。
+id: content/geo-quality
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-12T08:00:00+08:00' }
+events:
+  - at: '+0m'
+    content.geo_quality:
+      who: p_li
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  geo_quality:
+    win_rate: 0.5
+    accuracy: 0.5
+    owners: [site, web-ops, pr]
+    advice: modify
+  event_types:
+    - digest.geo_quality
+  metrics:
+    staged_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+rubric: >-
+  人看一眼这张卡，知道 AI 在比较时推荐谁、说我们说错了哪几样、外面哪几处说法不一致该交给谁、
+  改过的东西有没有用吗？

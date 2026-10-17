@@ -3,8 +3,7 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。发版用 `scripts/release.sh <version>`。
 
-按任务包（WP）归纳，逐条的合并记录、采纳的契约建议与遗留项在
-[`docs/35-开发任务拆分与派工.md`](docs/35-开发任务拆分与派工.md) §4。
+按任务包（WP）归纳。
 
 ---
 
