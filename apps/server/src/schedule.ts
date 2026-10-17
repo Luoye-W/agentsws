@@ -9,7 +9,7 @@
  * - 时间只经注入的 Clock；工作区时区从数据源来，不读机器本地时区。
  *
  * 消费者清单（WP27 的七个 + WP34 接上的三个）：
- * ① 每日计划（每岗位 08:00）② 复盘（20:00 / 周五加周复盘 / 月末加月复盘）
+ * ① 每日计划（每岗位 08:00）② 复盘（20:00 / 每周一 16:30 复盘上一周 / 月末加月复盘）
  * ③ 会议记录源轮询（15 分钟）④ 幂等表清理（每小时）⑤ Shopify 令牌刷新（到期前 1 小时）
  * ⑥ 技能周合并（周一 06:00）⑦ 复盘 → 次日计划草案的接力（复盘跑完注册一个 at 任务）
  * ⑧ 审批过期与升级（每分钟，39 待办 A）⑨ 邮箱轮询与入站管线（每 2 分钟，39 待办 C）
@@ -55,6 +55,7 @@ import {
   type Scheduler,
   type ScheduleStore,
   type ScheduleTask,
+  WEEKLY_REPORT_CRON,
   type WorkflowEngine,
   type WorkflowInstanceRecord,
   wallClock,
@@ -313,6 +314,38 @@ export function ensureTask(
   return scheduler.schedule({ ...input, id })
 }
 
+/** WP388：三份周报定时的标题（不写几点：时间用户能改，标题跟着错）。 */
+export const REVIEW_WEEK_TITLE = '每周复盘一次上一周'
+export const SEO_WEEKLY_TITLE = '每周看一眼上一周：哪些页带来订单、AI 回答里有没有我们'
+export const WEEKLY_REVIEW_TITLE = '每周推一份上一周的经营一页纸'
+
+/**
+ * WP388：同 {@link ensureTask}，但**还停在旧默认时间上的**（用户没改过）换成新默认的时间与标题；
+ * 时区照它原来的、停着的照样停着（只换时间）。改过时间的、结束了的都不动。
+ */
+export async function ensureDefaultTask(
+  scheduler: Scheduler,
+  id: string,
+  input: Omit<ScheduleInput, 'id'>,
+  legacy: readonly string[],
+): Promise<ScheduleTask> {
+  const existing = scheduler.get(id)
+  if (existing === undefined) return scheduler.schedule({ ...input, id })
+  const t = existing.trigger
+  if (
+    existing.state === 'cancelled' ||
+    existing.state === 'done' ||
+    t.kind !== 'cron' ||
+    input.trigger.kind !== 'cron' ||
+    !legacy.includes(t.expr.trim().replace(/\s+/g, ' '))
+  )
+    return existing
+  return scheduler.update(id, {
+    trigger: { kind: 'cron', expr: input.trigger.expr, tz: t.tz },
+    ...(input.title === undefined ? {} : { title: input.title }),
+  })
+}
+
 /** 一条系统任务除了「谁的」之外要填的东西；`created_by` / `misfire_policy` 有默认值。 */
 type SystemTaskSpec = Omit<
   ScheduleInput,
@@ -445,7 +478,7 @@ export function registerIdleTodos(scheduler: Scheduler, deps: IdleTodosDeps): vo
 }
 
 /* ------------------------------------------------------------------ */
-/* ② 复盘：每天 20:00；周五加周复盘；月末加月复盘                          */
+/* ② 复盘：每天 20:00；每周一 16:30 复盘上一周；月末加月复盘                */
 /* ------------------------------------------------------------------ */
 
 export interface ReviewDeps extends PlanDeps {
@@ -1078,8 +1111,11 @@ export function registerAdsDailyExport(scheduler: Scheduler, deps: AdsDailyExpor
  * 早上读完，人上班第一眼就能看到「今天值得动的 5 件事」（文章：flags land before we're up）。
  */
 export const SEO_DAILY_CRON = '0 8 * * *'
-/** WP154：每周一 08:30——收入小结与 AI 可见度看的是一整周，一周一次足够（也省探测的钱）。 */
-export const SEO_WEEKLY_CRON = '30 8 * * 1'
+/**
+ * WP154：收入小结与 AI 可见度看的是一整周，一周一次足够（也省探测的钱）。
+ * WP388：默认每周一 16:30 看上一周（同 {@link WEEKLY_REPORT_CRON}；以前是周一 08:30）。
+ */
+export const SEO_WEEKLY_CRON = WEEKLY_REPORT_CRON
 
 export interface SeoDeps {
   /** 每个品牌各跑一轮每日判断。 */
@@ -1089,12 +1125,27 @@ export interface SeoDeps {
 }
 
 /**
- * WP224：本周经营一页纸——每周一 08:00（工作区时区；在定时任务里可改）。
+ * WP224：经营一页纸。WP388：默认每周一 16:30（工作区时区）出**上一周**的（以前是周一 08:00 出本周，
+ * 那时美国那边还是周日）；设置里、跟 AI 说一声都能改。
  *
  * 错过了**补跑一次**（`run_once_now`）：周一开机晚了，这周那一份照样该出；关机三周再开机
  * 也只出一份（同一周同一个 dedupe_key，新的取代旧的）。
  */
-export const WEEKLY_REVIEW_CRON = '0 8 * * 1'
+export const WEEKLY_REVIEW_CRON = WEEKLY_REPORT_CRON
+/** WP388：岗位周复盘，默认每周一 16:30 复盘上一周（以前是周五 20:30 复盘本周）。 */
+export const REVIEW_WEEK_CRON = WEEKLY_REPORT_CRON
+
+/**
+ * WP388：三份系统自带的周报以前的默认时间。重启时还停在这个时间的 = 用户没改过 → 直接换成新默认；
+ * 改过的（时间不一样、或换成了别的写法）照用户的，不动。
+ */
+export const LEGACY_WEEKLY_CRONS: Readonly<
+  Record<'review_week' | 'weekly_review' | 'seo_weekly', readonly string[]>
+> = {
+  review_week: ['30 20 * * 5'],
+  weekly_review: ['0 8 * * 1'],
+  seo_weekly: ['30 8 * * 1'],
+}
 /**
  * WP224：两条止损线的对照——每天 23:30 记一次（一天的花费与 ROAS 基本定了）。
  * 错过不补跑：那一天的数已经变了，补记一个不是那天的数比空着更糟。
@@ -1324,8 +1375,17 @@ export async function ensureSystemTasks(
     assignment_id: options.assignment_id,
   }
   const out: ScheduleTask[] = []
-  const add = async (id: string, input: Omit<ScheduleInput, 'id'>): Promise<void> => {
-    out.push(await ensureTask(scheduler, `${id}${options.idSuffix ?? ''}`, input))
+  const add = async (
+    id: string,
+    input: Omit<ScheduleInput, 'id'>,
+    legacy?: readonly string[],
+  ): Promise<void> => {
+    const full = `${id}${options.idSuffix ?? ''}`
+    out.push(
+      legacy === undefined
+        ? await ensureTask(scheduler, full, input)
+        : await ensureDefaultTask(scheduler, full, input, legacy),
+    )
   }
 
   if (options.has.work === true) {
@@ -1344,7 +1404,7 @@ export async function ensureSystemTasks(
           },
         ),
       )
-      // ② 每天 20:00 复盘；周五 20:30 周复盘；月末 20:45 月复盘
+      // ② 每天 20:00 复盘；每周一 16:30 复盘上一周（WP388）；月末 20:45 月复盘
       await add(
         `sched_review_day_${p.assignment_id}`,
         systemTask(
@@ -1363,13 +1423,14 @@ export async function ensureSystemTasks(
         systemTask(
           { ...base, owner: p.person_id, role_id: p.role_id, assignment_id: p.assignment_id },
           {
-            title: '周五加一次周复盘',
+            title: REVIEW_WEEK_TITLE,
             handler: HANDLERS.review,
             params: { kind: 'week' },
-            trigger: { kind: 'cron', expr: '30 20 * * 5', tz },
+            trigger: { kind: 'cron', expr: REVIEW_WEEK_CRON, tz },
             misfire_policy: 'run_once_now',
           },
         ),
+        LEGACY_WEEKLY_CRONS.review_week,
       )
       await add(
         `sched_review_month_${p.assignment_id}`,
@@ -1576,23 +1637,25 @@ export async function ensureSystemTasks(
     await add(
       'sched_seo_weekly',
       systemTask(base, {
-        title: '每周一看一眼：哪些页带来订单、AI 回答里有没有我们',
+        title: SEO_WEEKLY_TITLE,
         handler: HANDLERS.seoWeekly,
         trigger: { kind: 'cron', expr: SEO_WEEKLY_CRON, tz },
         misfire_policy: 'skip',
       }),
+      LEGACY_WEEKLY_CRONS.seo_weekly,
     )
   }
-  // WP224：本周经营一页纸（秘书每周一推）、两条止损线对照（每天夜里记一行）
+  // WP224：经营一页纸（秘书每周推一份上一周的，WP388）、两条止损线对照（每天夜里记一行）
   if (options.has.weeklyReview === true) {
     await add(
       'sched_weekly_review',
       systemTask(base, {
-        title: '每周一早上推一份本周经营一页纸',
+        title: WEEKLY_REVIEW_TITLE,
         handler: HANDLERS.weeklyReview,
         trigger: { kind: 'cron', expr: WEEKLY_REVIEW_CRON, tz },
         misfire_policy: 'run_once_now',
       }),
+      LEGACY_WEEKLY_CRONS.weekly_review,
     )
   }
   if (options.has.adsLineCompare === true) {

@@ -15,7 +15,11 @@ describe('WP388 周报默认：每周一 16:30（工作区时区）', () => {
     // 2026-10-18 是周日
     const next = nextCronAfter(WEEKLY_REPORT_CRON, Date.parse('2026-10-18T00:00:00Z'), '+08:00')
     expect(new Date(next).toISOString()).toBe('2026-10-19T08:30:00.000Z')
-    const sh = nextCronAfter(WEEKLY_REPORT_CRON, Date.parse('2026-10-18T00:00:00Z'), 'Asia/Shanghai')
+    const sh = nextCronAfter(
+      WEEKLY_REPORT_CRON,
+      Date.parse('2026-10-18T00:00:00Z'),
+      'Asia/Shanghai',
+    )
     expect(sh).toBe(next)
   })
 })

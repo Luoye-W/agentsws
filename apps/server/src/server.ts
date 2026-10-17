@@ -187,7 +187,12 @@ import {
   SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
-import { createBrandRouter, type ScheduleTask } from '@agentsws/schedule'
+import {
+  createBrandRouter,
+  reportTimeZone,
+  type ScheduleTask,
+  WEEKLY_REPORT_DEFAULT,
+} from '@agentsws/schedule'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
@@ -2199,7 +2204,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP224：一页纸那条定时 → 设置里那一行（每周几、几点）。 */
   const weeklyReviewScheduleView = (task: ScheduleTask | undefined) => {
     if (task === undefined)
-      return { weekday: 1, time: '08:00', paused: false, missing: true as const }
+      return { ...WEEKLY_REPORT_DEFAULT, paused: false, missing: true as const }
     const parts = task.trigger.kind === 'cron' ? task.trigger.expr.split(/\s+/) : []
     const pad = (n: string | undefined) => String(Number(n ?? 0)).padStart(2, '0')
     return {

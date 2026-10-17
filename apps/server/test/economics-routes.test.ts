@@ -269,14 +269,14 @@ describe('本周经营一页纸', () => {
     expect(newer?.revision).toBe(2)
   })
 
-  it('每周一早上那条定时在；设置里改成周三 09:30 就改的是这一条', async () => {
+  it('每周一 16:30 那条定时在（WP388）；设置里改成周三 09:30 就改的是这一条', async () => {
     expect(server.schedule.scheduler.get('sched_weekly_review')?.trigger).toMatchObject({
       kind: 'cron',
-      expr: '0 8 * * 1',
+      expr: '30 16 * * 1',
     })
     expect(await data(await api('/v1/economics/weekly-review/schedule'))).toEqual({
       weekday: 1,
-      time: '08:00',
+      time: '16:30',
       paused: false,
     })
     const next = await data(

@@ -67,7 +67,10 @@ export function marketTimeZone(country: string | undefined): string | undefined 
 }
 
 /** 品牌的取数时区：目标市场的第一个（主市场）认得出就用它，否则用工作区时区。 */
-export function reportTimeZone(markets: readonly string[] | undefined, workspaceTz: string): string {
+export function reportTimeZone(
+  markets: readonly string[] | undefined,
+  workspaceTz: string,
+): string {
   for (const m of markets ?? []) {
     const zone = marketTimeZone(m)
     if (zone !== undefined) return zone

@@ -99,11 +99,11 @@ describe('系统巡检：两边的时间算法（金样）', () => {
       'sched_raw_prune 0 3 * * *',
       'sched_review_day_asg_1 0 20 * * *',
       'sched_review_month_asg_1 45 20 28-31 * *',
-      'sched_review_week_asg_1 30 20 * * 5',
+      'sched_review_week_asg_1 30 16 * * 1',
       'sched_seo_daily 0 8 * * *',
-      'sched_seo_weekly 30 8 * * 1',
+      'sched_seo_weekly 30 16 * * 1',
       'sched_skills_weekly 0 6 * * 1',
-      'sched_weekly_review 0 8 * * 1',
+      'sched_weekly_review 30 16 * * 1',
     ])
   })
 
