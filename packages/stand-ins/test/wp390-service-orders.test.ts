@@ -3,6 +3,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_SERVICES, ServiceOrdersStandIn } from '../src/cloud/service-orders.js'
+import {
+  assemblePrompt,
+  createStubRuntime,
+  DRAFT_SERVICE_ORDER_TOOL,
+  FIND_SERVICE_TOOL,
+  WORKSHOP_SERVICE_TOOL_NAMES,
+  workshopServiceBranch,
+} from '../src/index.js'
+import { makeRequest, runAndCollect } from './helpers.js'
 
 function world(balance = 2000) {
   let left = balance
@@ -170,5 +179,100 @@ describe('WP390 工坊服务替身', () => {
     expect(w2.left()).toBe(1970)
     expect(w2.svc.cancel(order.id).refunded_credits).toBe(30)
     expect(w2.left()).toBe(2000)
+  })
+})
+
+describe('WP390 两个工具在 stub / direct / dsh 三个运行时里', () => {
+  const clock = { now: () => '2026-10-18T02:00:00.000Z' }
+  const recorder = () => {
+    const calls: { name: string; input: Record<string, unknown> }[] = []
+    return {
+      calls,
+      executeTool: async (call: { name: string; input: Record<string, unknown> }) => {
+        calls.push({ name: call.name, input: call.input })
+        if (call.name === FIND_SERVICE_TOOL)
+          return {
+            status: 'ok' as const,
+            data: {
+              ok: true,
+              services: [
+                {
+                  id: 'workshop.site_build',
+                  name: '工坊建站',
+                  kind: 'custom',
+                  by: '工坊团队',
+                  summary: '',
+                },
+              ],
+              will_offer: true,
+              message: '',
+            },
+          }
+        if (call.name === DRAFT_SERVICE_ORDER_TOOL)
+          return {
+            status: 'ok' as const,
+            data: {
+              ok: true,
+              form: 'service_requirements',
+              approval_item_id: 'card_1',
+              message: '',
+            },
+          }
+        return { status: 'error' as const, reason: 'unsupported_tool' }
+      },
+    }
+  }
+
+  it('stub：点了「看看」→ 查一次、出需求单；有找人代办的意向 → 只查一次（推荐卡由宿主挂）', async () => {
+    const rec = recorder()
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const ask = '我想看看「工坊建站」（工坊服务）'
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'site.shopify-theme',
+        threadSubject: ask,
+        threadBody: ask,
+        allow: [...WORKSHOP_SERVICE_TOOL_NAMES],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls.map((c) => c.name)).toEqual([FIND_SERVICE_TOOL, DRAFT_SERVICE_ORDER_TOOL])
+    const answer = result.outputs.find((o) => o.kind === 'answer')
+    expect(answer?.kind === 'answer' ? answer.text : '').toContain('需求单')
+
+    const rec2 = recorder()
+    const intent = '我想找个专业点的外包帮我重做网站'
+    await runAndCollect(
+      createStubRuntime({ clock, executeTool: rec2.executeTool }),
+      makeRequest({
+        roleId: 'site.shopify-theme',
+        threadSubject: intent,
+        threadBody: intent,
+        allow: [...WORKSHOP_SERVICE_TOOL_NAMES],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec2.calls.map((c) => c.name)).toEqual([FIND_SERVICE_TOOL])
+  })
+
+  it('stub：工具面里没有这两个就一个字节不变', () => {
+    const req = makeRequest({
+      threadSubject: '我想找人建站',
+      threadBody: '我想找人建站',
+      allow: [],
+    })
+    expect(workshopServiceBranch(req, '我想找人建站')).toBeUndefined()
+  })
+
+  it('direct / stub 拼 prompt：工具定义是写给模型的人话，不是占位描述', () => {
+    const { tools } = assemblePrompt(
+      makeRequest({ threadSubject: 'x', threadBody: 'x', allow: [...WORKSHOP_SERVICE_TOOL_NAMES] }),
+    )
+    const find = tools.find((t) => t.name === FIND_SERVICE_TOOL)
+    expect(find?.description).toContain('工坊服务')
+    expect(tools.find((t) => t.name === DRAFT_SERVICE_ORDER_TOOL)?.description).toContain(
+      '只出卡不下单',
+    )
   })
 })

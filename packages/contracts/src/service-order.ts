@@ -751,23 +751,36 @@ export function serviceStartCredits(s: ServiceView): number | undefined {
   return Math.min(...menu.map((m) => round4(m.credits_per_unit * Math.max(1, m.min_quantity))))
 }
 
-/** 一段话里的字与相邻两字（试匹配用；与后台「输几句话试匹配」同一套口径）。 */
+/**
+ * 意向说法里不带意思的那些字（「我想找人帮我…」）：匹配前两边都拿掉，免得「想找人建站」和「想找人拍视频」
+ * 只因为都有「想找人」就算像。
+ */
+const FILLER = /[我你想要找人帮个一的了吗呢吧请给能可以]/gu
+
+/** 一段话里的字与相邻两字（拿掉标点与 {@link FILLER} 之后）。 */
 function grams(s: string): Set<string> {
-  const chars = Array.from(s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, ''))
+  const chars = Array.from(core(s))
   const out = new Set<string>(chars)
   for (let i = 0; i + 1 < chars.length; i++) out.add(`${chars[i]}${chars[i + 1]}`)
   return out
 }
 
 /**
- * 一句意向说法和用户的话有多像（0–1）：说法被整句包含 = 1；否则看说法里的字 / 相邻两字有多少出现在话里。
- * 与 WP389 后台的「试匹配」同一套（过 {@link SERVICE_MATCH_THRESHOLD} 算命中）。
+ * 一句意向说法和用户的话有多像（0–1）：说法被整句包含 = 1；否则看说法里的字 / 相邻两字有多少出现在话里
+ * （两边先拿掉「我想找人帮…」这类不带意思的字）。在 WP389 后台「试匹配」那一套上多了这一步（过
+ * {@link SERVICE_MATCH_THRESHOLD} 算命中）。
  */
+const core = (s: string): string =>
+  s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '').replace(FILLER, '')
+
 export function serviceIntentScore(phrase: string, text: string): number {
   const p = phrase.trim().toLowerCase()
   const t = text.toLowerCase()
   if (p === '' || t.trim() === '') return 0
   if (t.includes(p)) return 1
+  const pc = core(p)
+  if (pc === '') return 0
+  if (core(t).includes(pc)) return 1
   const want = grams(p)
   if (want.size === 0) return 0
   const have = grams(t)

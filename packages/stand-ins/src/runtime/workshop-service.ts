@@ -54,7 +54,18 @@ export const WORKSHOP_SERVICE_TOOL_DEFS: readonly ToolDef[] = [
             properties: {
               item_id: { type: 'string' },
               quantity: { type: 'number' },
-              target: { type: 'object', description: '这一项要填的对象（如 post_url）' },
+              target: {
+                type: 'array',
+                description: '这一项要填的对象（如 [{ name: "post_url", value: "https://…" }]）',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', description: 'find_service 返回的 targets 里的那一格' },
+                    value: { type: 'string' },
+                  },
+                  required: ['name', 'value'],
+                },
+              },
             },
             required: ['item_id', 'quantity'],
           },
