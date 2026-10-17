@@ -59,14 +59,18 @@ import { describe, expect, it } from 'vitest'
  * **WP370（0.2.1-alpha.4 → 0.2.1-alpha.5，跟 alpha）：FROM_FILE 是重采的 `0.2.1-alpha.4-wp370.json`。**
  * 升级前在当前代码树（WP355–WP358 之后）重采：两条场景（助理拆会议纪要、内容岗官方搜索）因我们自己的改动换了指纹，
  * 与仓库里的 `0.2.1-alpha.4.json` 不再相同。兄弟包这一跳**不用跟**（alpha.5 仍要 `~4.0.5-alpha.2`）。旧的十六份一个不删。
+ *
+ * **WP373（0.2.1-alpha.5 → 0.2.1-rc.1，决策 976 跟 rc）：FROM 直接用仓库里的 `0.2.1-alpha.5.json`。**
+ * 升级前在当前代码树（WP370 合进 main 之后）重采了一份，与 `0.2.1-alpha.5.json` **逐字节相同**，所以照 WP149 不另存。
+ * 兄弟包这一跳**必须跟**到正式号（rc.1 要 `~4.0.5`，预发布号不在正式号的 `~` 里）。旧的十七份一个不删。
  */
-const FROM_FILE = '0.2.1-alpha.4-wp370'
-const TO_FILE = '0.2.1-alpha.5'
-const FROM = '0.2.1-alpha.4'
-const TO = '0.2.1-alpha.5'
-/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动；WP293 升到 4.0.5-alpha.1；WP354 升到 4.0.5-alpha.2；WP370 不动）。 */
+const FROM_FILE = '0.2.1-alpha.5'
+const TO_FILE = '0.2.1-rc.1'
+const FROM = '0.2.1-alpha.5'
+const TO = '0.2.1-rc.1'
+/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动；WP293 升到 4.0.5-alpha.1；WP354 升到 4.0.5-alpha.2；WP370 不动；WP373 升到正式号 4.0.5）。 */
 const CORDIS_FROM = '4.0.5-alpha.2'
-const CORDIS_TO = '4.0.5-alpha.2'
+const CORDIS_TO = '4.0.5'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5
