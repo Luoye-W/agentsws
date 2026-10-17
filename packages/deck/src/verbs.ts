@@ -107,6 +107,8 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
     ads_sheet: 'verb.change.approve.ads_sheet',
     ads_activate: 'verb.change.approve.ads_activate',
     ads_undo: 'verb.change.approve.ads_undo',
+    // WP387：个人模式下这叫「确认」，不叫审批
+    google_alert_change: 'verb.change.approve.google_alert_change',
   },
 }
 
@@ -354,6 +356,8 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   marketplace_spend: 'marketplace_spend',
   // WP172：B2B 库里建 / 改一条记录
   b2b_record: 'trade_record',
+  // WP387：在你的 Google 账号里建 / 改提醒
+  google_alert_change: 'google_alerts',
 }
 
 /**

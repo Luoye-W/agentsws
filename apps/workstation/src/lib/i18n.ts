@@ -1830,6 +1830,7 @@ const zh: Table = {
   'verb.change.approve.ads_sheet': '批准上传',
   'verb.change.approve.ads_activate': '开始投放',
   'verb.change.approve.ads_undo': '撤销',
+  'verb.change.approve.google_alert_change': '确认，去建',
   'verb.aftermath.approve.community_moderation': '解除禁言',
   'deck.more': '更多',
   // ── WP100：头一行那个**类别写人话**（"网站运营 · 改价"，不是"变更待批"）──
@@ -1917,6 +1918,7 @@ const zh: Table = {
   'category.marketplace_listing': '平台产品',
   'category.marketplace_spend': '平台花钱',
   'category.trade_record': 'B2B 记录',
+  'category.google_alerts': 'Google 提醒',
   'category.fraud_alert': '疑似诈骗',
   'category.sender_choice': '发信邮箱',
   'category.collection_edit': '改集合',
@@ -6027,6 +6029,7 @@ const en: Table = {
   'verb.change.approve.ads_sheet': 'Approve upload',
   'verb.change.approve.ads_activate': 'Start delivery',
   'verb.change.approve.ads_undo': 'Undo',
+  'verb.change.approve.google_alert_change': 'Confirm and create',
   'verb.aftermath.approve.community_moderation': 'Unmute',
   'deck.more': 'More',
   // WP100：头一行的类别（人话，不是账本枚举名）
@@ -6113,6 +6116,7 @@ const en: Table = {
   'category.marketplace_listing': 'Marketplace listing',
   'category.marketplace_spend': 'Marketplace spend',
   'category.trade_record': 'B2B record',
+  'category.google_alerts': 'Google Alerts',
   'category.fraud_alert': 'Possible fraud',
   'category.sender_choice': 'Sending mailbox',
   'category.collection_edit': 'Collection edit',
