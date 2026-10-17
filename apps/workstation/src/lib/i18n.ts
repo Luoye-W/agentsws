@@ -1067,7 +1067,14 @@ const zh: Table = {
   // WP224：设置 → 通用 · 经营一页纸什么时候推
   'settings.weekly_review': '经营一页纸',
   'settings.weekly_review.hint':
-    '秘书按这个时间把「本周经营一页纸」推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
+    '秘书按这个时间把经营一页纸推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
+  // WP388：周报类定时（经营一页纸、周复盘、SEO 周报）默认周一 16:30 出上周
+  'settings.weekly.last_week': '出上周',
+  'settings.weekly.this_week': '出本周',
+  'settings.weekly.why': '美国那边上一周刚结束、数据也到齐了；想换时间跟我说一声。',
+  'settings.weekly_reports': '周报时间',
+  'settings.weekly_reports.review_week': '周复盘',
+  'settings.weekly_reports.seo_weekly': 'SEO 周报',
   'settings.weekly_review.every': '每',
   'settings.weekly_review.weekday': '星期几',
   'settings.weekly_review.time': '几点',
@@ -5250,7 +5257,14 @@ const en: Table = {
   'org.margin.title': 'Gross margin',
   'settings.weekly_review': 'Weekly one-pager',
   'settings.weekly_review.hint':
-    'When the secretary sends you this week on one page (workspace time zone). Each brand has its own; changing it here changes only this brand.',
+    'When the secretary sends you the one-pager (workspace time zone). Each brand has its own; changing it here changes only this brand.',
+  'settings.weekly.last_week': 'covers last week',
+  'settings.weekly.this_week': 'covers this week',
+  'settings.weekly.why':
+    'By then last week has just ended in the US and the data is in. Want another time? Just tell me.',
+  'settings.weekly_reports': 'Weekly report times',
+  'settings.weekly_reports.review_week': 'Weekly review',
+  'settings.weekly_reports.seo_weekly': 'SEO weekly',
   'settings.weekly_review.every': 'Every',
   'settings.weekly_review.weekday': 'Day',
   'settings.weekly_review.time': 'Time',

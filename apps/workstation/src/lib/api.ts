@@ -7925,6 +7925,45 @@ export const setWeeklyReviewSchedule = (
     ...withAssignment(assignment),
   })
 
+/**
+ * WP388：系统自带的周报定时（周复盘、SEO 周报）——本人在这个品牌里的那几条（设置 → 通知「周报时间」用）。
+ * 一页纸那条走上面那对专用接口；这两份用通用的 `/v1/schedules`（不新开接口）。
+ */
+export const WEEKLY_REPORT_HANDLERS = { review: 'work.review', seo: 'seo.weekly_review' } as const
+
+export const getMyWeeklyReportSchedules = async (
+  assignment?: string,
+): Promise<{ review_week: ScheduledTaskRow[]; seo_weekly: ScheduledTaskRow[] }> => {
+  const rows = await api<ScheduledTaskRow[]>('/v1/schedules?scope=mine', withAssignment(assignment))
+  const live = rows.filter((r) => r.state === 'active' || r.state === 'paused')
+  return {
+    review_week: live.filter(
+      (r) => r.handler === WEEKLY_REPORT_HANDLERS.review && r.params?.kind === 'week',
+    ),
+    seo_weekly: live.filter((r) => r.handler === WEEKLY_REPORT_HANDLERS.seo),
+  }
+}
+
+/** WP388：把一条周定时改到「每周几、几点」（时区照它原来的）。 */
+export const setWeeklyCron = (
+  row: ScheduledTaskRow,
+  input: { weekday: number; time: string },
+  assignment?: string,
+): Promise<ScheduledTaskRow> => {
+  const [hh, mm] = input.time.split(':').map(Number)
+  return api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(row.id)}`, {
+    method: 'PATCH',
+    body: {
+      trigger: {
+        kind: 'cron',
+        expr: `${mm ?? 0} ${hh ?? 0} * * ${input.weekday}`,
+        tz: row.trigger.tz ?? 'UTC',
+      },
+    },
+    ...withAssignment(assignment),
+  })
+}
+
 // ── WP268（决策 213）：品牌素材库（AI 出的图、拖进来的图、店里商品图）─────────────
 //
 // 取原图与上传都不走 `api()`（那个只收发 JSON）：自己拼 `Authorization` / `X-Assignment`。

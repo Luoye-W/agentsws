@@ -9,7 +9,7 @@ import { renderWithProviders } from './helpers'
 
 let entries: { scope: 'brand' | 'category' | 'sku'; key?: string; margin_pct: number }[] = []
 const saved: unknown[] = []
-let schedule = { weekday: 1, time: '08:00', paused: false }
+let schedule = { weekday: 1, time: '16:30', paused: false }
 
 vi.mock('@/lib/api', async () => ({
   ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
@@ -195,16 +195,21 @@ describe('一页纸在岗位页上整张摊开（它不属于任何事项，没�
 })
 
 describe('设置 → 经营一页纸什么时候推', () => {
-  it('默认周一 08:00；改成周三就存周三（只改这个品牌那一条）', async () => {
+  it('默认周一 16:30 出上周（问号里是为什么）；改成周五就存周五、写「出本周」（只改这个品牌那一条）', async () => {
     renderWithProviders(<WeeklyReviewCard assignment="asg_owner" />)
     const day = (await screen.findByTestId('settings-weekly-review-weekday')) as HTMLSelectElement
     expect(day.value).toBe('1')
     expect((screen.getByTestId('settings-weekly-review-time') as HTMLInputElement).value).toBe(
-      '08:00',
+      '16:30',
     )
-    fireEvent.change(day, { target: { value: '3' } })
+    expect(screen.getByTestId('settings-weekly-review-covers').textContent).toBe('出上周')
+    expect(screen.getByTestId('settings-weekly-review-why').getAttribute('data-hint')).toContain(
+      '美国那边上一周刚结束',
+    )
+    fireEvent.change(day, { target: { value: '5' } })
     await waitFor(() => {
-      expect(schedule).toEqual({ weekday: 3, time: '08:00', paused: false })
+      expect(schedule).toEqual({ weekday: 5, time: '16:30', paused: false })
     })
+    expect(await screen.findByText('出本周')).toBeDefined()
   })
 })
