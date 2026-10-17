@@ -11335,16 +11335,16 @@
           },
           "consumption_rate": {
             "type": "number",
-            "description": "WP362（Luoye 10-16，只加）：**消耗速率**——以 DeepSeek v4 Pro 官方原价 = 1 为基准，这个模型一般用一轮 大概是它的几倍。输入框的 AI 钮上显示成「1.0x」「2.3x」。不给 = 本机按官方原价相对 DeepSeek v4 Pro 折算。"
+            "description": "WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）。 输入框的 AI 钮上显示成「1.0x」「2.3x」。"
           },
           "rate_source": {
             "type": "string",
             "enum": ["stats", "list_price"],
-            "description": "WP362：{@link consumption_rate} 从哪来：`stats` = 后台按用量账本里这个模型的真实平均消耗长期统计出来的； `list_price` = 按官方原价折算的。实际消耗以用量记录为准。"
+            "description": "WP362：{@link consumption_rate}（和 {@link discount}）用的是哪种 token 构成： `stats` = 这个模型近 30 天真实用量里的构成；`list_price` = 样本不够，用典型构成 {@link TYPICAL_TOKEN_MIX} （输入 3 : 输出 1，不算缓存）。实际消耗以用量记录为准。"
           },
           "discount": {
             "type": "number",
-            "description": "WP363（决策 954，只加）：**折扣**——这个模型现在按原价的几成收，`0.1` = 一折（实收原价的 10%）。 只认 `0 < discount < 1`；不给 / 越界 = 没有折扣（读的一方用 {@link pricingDiscountOf}）。 输入框的 AI 钮在消耗速率旁边写「1 折」。`in` / `out` / `cached` 与 {@link consumption_rate} 仍是**原价** 口径：实扣 = 原价 × 折扣，以用量记录为准。"
+            "description": "WP363 加（只加）；WP364（决策 958 / 960，Luoye 10-17 纠正）改了含义：**折扣 = 我们卖给用户的价 ÷ 这家 AI 官方标价**， 按 token 构成加权（构成同 {@link rate_source}）。例：官方百万 token 1 美元、我们收 0.8 美元 → `0.8`，显示「8 折」。 云上只在 `0 < discount < 1` 时给（≥ 1 不算折扣，不显示）；读的一方用 {@link pricingDiscountOf}。 **它只是说明，不参与结算**：结算永远按 `in` / `out` / `cached` 这三格扣（三格本身就是折后的价）。"
           }
         },
         "required": ["model", "in", "out"],

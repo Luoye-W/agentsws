@@ -10,8 +10,9 @@
  * 改这一份只影响 demo / 模拟 / 测试，不改任何人的账。
  *
  * WP362：几个模型带了 `consumption_rate` / `rate_source`（消耗速率，DeepSeek v4 Pro 官方原价 = 1）——数字是**示意**，
- * 真的那一份由私有云按用量账本长期统计；其余模型故意不带，好让界面演示「按官方原价折算」那条退路。
- * WP363：`kimi-k3` 带一格示意折扣 `discount: 0.1`（一折），演示倍率旁边的「1 折」。
+ * 真的那一份由私有云按用量账本长期统计；其余模型故意不带，好让界面演示本机兜底（典型 token 构成 × 本机官方价目）那条退路。
+ * WP363：`kimi-k3` 带一格示意折扣，演示倍率旁边的「折」。WP364（决策 958）起折扣的意思是「我们的价 ÷ 这家官方标价」，
+ * 示意值改成 `0.8`（8 折，Luoye 10-17 举的那个例子）；三格积分价照旧（它们本身就是实收价，折扣不再另乘）。
  */
 import type { PricingCatalog } from '@agentsws/contracts'
 
@@ -265,8 +266,8 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
             cached: 0.006,
             consumption_rate: 1.3,
             rate_source: 'stats',
-            // WP363（决策 954）：示意折扣（一折），演示 AI 钮倍率旁边的「1 折」
-            discount: 0.1,
+            // WP364（决策 958）：示意折扣（8 折 = 我们的价是官方标价的 80%），演示 AI 钮倍率旁边的「8 折」
+            discount: 0.8,
           },
           {
             model: 'MiniMax-M2.5',
