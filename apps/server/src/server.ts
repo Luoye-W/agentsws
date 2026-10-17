@@ -4044,6 +4044,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      // WP393：店铺管理日报里「竞品动向」那一段（有要紧的 / 有哪家没读到才出；竞品监控跟着品牌走，晚绑定）
+      competitor: () => {
+        const b = competitorStore?.brief()
+        return b === undefined ? undefined : { title: b.title, lines: b.lines, failed: b.failed }
+      },
       // WP76（58 §3）：设计那五块同理——需求单、brief、待挑、素材库、本周产出
       // 都在这台机器上，出图走模型网关的图片槽（那不是一条连接）。
       design: () =>

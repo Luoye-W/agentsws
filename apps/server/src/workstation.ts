@@ -15,6 +15,7 @@ import type { ApprovalBus, ApprovalItem, Clock, ObjectRef } from '@agentsws/cont
 import type {
   AdsDeckData,
   B2bDeckData,
+  CompetitorDeckData,
   DataSourceStatus,
   DeckCard,
   DesignDeckData,
@@ -107,6 +108,8 @@ export interface WorkstationDataSource {
    * （`ALWAYS_CONNECTED`），空的意思是"还没有询盘 / 报价 / 出运单"，不是"去连接"。
    */
   b2b?(view?: { assignment_id?: string }): B2bDeckData | undefined
+  /** WP393：店铺管理日报里「竞品动向」那一段（没有要紧的、也没有哪家没读到 = `undefined`，不出）。 */
+  competitor?(view?: { assignment_id?: string }): CompetitorDeckData | undefined
   /**
    * WP158：Search Console 与 GA4 读回来的汇总（当天缓存）。不给 = 没装读数那一层，
    * GSC / GA4 那几块照旧空；给了但没选站点 = 块里说"先选一下"。
@@ -231,6 +234,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const ads = options.data.ads?.(view)
       const pr = options.data.pr?.(view)
       const b2b = options.data.b2b?.(view)
+      const competitor = options.data.competitor?.(view)
       const search = options.data.search?.()
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
@@ -254,6 +258,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(ads === undefined ? {} : { ads }),
         ...(pr === undefined ? {} : { pr }),
         ...(b2b === undefined ? {} : { b2b }),
+        ...(competitor === undefined ? {} : { competitor }),
         ...(search === undefined ? {} : { search }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数

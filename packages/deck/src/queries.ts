@@ -2000,6 +2000,19 @@ const QUERY_LIST: QueryDef[] = [
           { item: '订单数', value: String(orders) },
           { item: '库存告急', value: low === undefined ? '没连' : `${low} 个 SKU` },
           { item: '待审改动', value: `${pending} 条` },
+          // WP393：竞品动向——有用户确认过的要紧变化、或有哪家没读到才出这一段（没有就不出）
+          ...(ctx.competitor === undefined
+            ? []
+            : [
+                ...ctx.competitor.lines.map((line, i) => ({
+                  item: i === 0 ? (ctx.competitor?.title ?? '竞品动向') : '',
+                  value: line,
+                })),
+                ...ctx.competitor.failed.map((line, i) => ({
+                  item: i === 0 && ctx.competitor?.lines.length === 0 ? ctx.competitor.title : '',
+                  value: line,
+                })),
+              ]),
         ],
       }
     },
