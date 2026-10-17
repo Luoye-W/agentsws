@@ -1,17 +1,17 @@
 # Message channels: WeChat, WeCom, Feishu and DingTalk
 
-This covers two channels: WeChat lives in Settings → Notifications → WeChat reminders, the team bots in Settings → Chat channels. They are two different things: **WeChat is a private chat between you and your own agent**; **the WeCom bot is the one for the team**.
+This covers two channels: WeChat lives in Settings → Notifications → WeChat reminders, the team bots in Settings → Chat channels. They are two different things: **WeChat is a private chat between you and your own assistant**; **the WeCom bot is the one for the team**.
 
 | Channel | Who uses it | What it does |
 |---|---|---|
-| WeChat (yours) | Only you | Ask your own agent in WeChat: what needs deciding today, where is this at, check my calendar |
-| WeCom bot (the company’s) | The team | Colleagues @ it in a group; it asks each person’s own agent as that person |
+| WeChat (yours) | Only you | Ask your own assistant in WeChat: what needs deciding today, where is this at, check my calendar |
+| WeCom bot (the company’s) | The team | Colleagues @ it in a group; it asks each person’s own assistant as that person |
 
 One rule for both: **decisions are not made in the chat app**. Cards arrive as “summary + handle it in the workstation” links, with no approve / reject buttons — decisions and credentials never go through the chat app.
 
 ## WeChat (yours)
 
-Scan once, then ask your own agent right in WeChat: what needs deciding today, where is this at, check my calendar. The answers are the same ones you see in the workstation.
+Scan once, then ask your own assistant right in WeChat: what needs deciding today, where is this at, check my calendar. The answers are the same ones you see in the workstation.
 
 **What it does not do**
 
@@ -19,7 +19,7 @@ Scan once, then ask your own agent right in WeChat: what needs deciding today, w
 - It cannot join groups and never replies to customers. It is not a support channel.
 - For things you must decide, WeChat only gets a summary and a link; approving happens in the workstation.
 
-> WeChat’s terms (6.1 / 6.4): using it for customer service, broadcasts or public replies can get your main WeChat account banned — your own account. So this channel only does one thing: you asking your own agent.
+> WeChat’s terms (6.1 / 6.4): using it for customer service, broadcasts or public replies can get your main WeChat account banned — your own account. So this channel only does one thing: you asking your own assistant.
 
 The login credentials stay on this machine — never sent to the AI, never logged.
 
@@ -34,7 +34,7 @@ The login credentials stay on this machine — never sent to the AI, never logge
 
 ## WeCom bot (the company’s)
 
-The team channel: @ it in a group and it asks the asker’s own agent as that person, so everyone only sees answers up to what they are allowed to see.
+The team channel: @ it in a group and it asks the asker’s own assistant as that person, so everyone only sees answers up to what they are allowed to see.
 
 **Connect**
 
@@ -57,7 +57,7 @@ Setup guides: [Feishu](help:im-feishu), [DingTalk](help:im-dingtalk).
 
 - **Questions about a position's work** (name the position, e.g. "Anything Reddit Ops needs from me today?"): that position's AI answers in one line — cards waiting for you, to-dos, what it's working on — with a "Handle it in the workbench" link. Work questions that don't name a position go to your main position.
 - **Handing over a job** ("reply to this email for me"): it's logged as a task in that position and you get "Logged as a task — confirm it in the workbench". Nothing is sent from the chat.
-- **Small talk, your schedule, colleagues**: still answered by your personal agent.
+- **Small talk, your schedule, colleagues**: still answered by your personal assistant.
 - **Links open in their own brand**: if the workbench is on another brand, the link switches over first; if you can't open that brand, you stay put and are told why.
 
 ## FAQ

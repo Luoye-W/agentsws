@@ -1091,7 +1091,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     status: 'planned',
     note: {
       zh: '「我的代理」的微信入口：本人问自己的代理、收自己的卡片。同事加不了、不能进群、收不到别人发给你的消息。',
-      en: 'A personal line to your own agent only: colleagues cannot add it, it cannot join groups.',
+      en: 'A personal line to your own assistant only: colleagues cannot add it, it cannot join groups.',
     },
   },
   {

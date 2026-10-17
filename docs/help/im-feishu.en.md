@@ -1,6 +1,6 @@
 # Feishu bot: create the app, turn on long connection, get credentials
 
-The Feishu bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own agent**, as that person — so everyone only sees what they are allowed to see.
+The Feishu bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own assistant**, as that person — so everyone only sees what they are allowed to see.
 
 It uses Feishu's "long connection": your computer connects out to Feishu, so there is **no public URL and no callback address to configure**. As long as Agents Workshop is running on this computer, the bot can receive and reply.
 
