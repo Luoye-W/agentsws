@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto'
 import type {
   AiPlatform,
   BrandWatch,
+  BrandWatchAmazonItem,
   CitedSiteKind,
   GeoAnswerRecord,
   GeoCitationRecord,
@@ -202,6 +203,9 @@ CREATE TABLE IF NOT EXISTS watch_weekly (
 );
 `,
 ]
+
+/** WP392：自家 Amazon 商品在 geo_meta 里的键。 */
+const BRAND_AMAZON_KEY = 'brand_amazon'
 
 /** 现在的表结构版本。 */
 export const GEO_STORE_VERSION = MIGRATIONS.length
@@ -535,11 +539,17 @@ export function createGeoStore(dbPath?: string): GeoStore {
     const r = one('SELECT * FROM watch_settings WHERE id = 1')
     if (r === undefined) return undefined
     const markets_off = pj<string[] | undefined>(r.markets_off, undefined)
+    // WP392（docs/104 C8）：自家的 Amazon 商品放在 geo_meta 一格里（不动表结构）
+    const amazon = pj<BrandWatchAmazonItem[] | undefined>(
+      one('SELECT value FROM geo_meta WHERE key = ?', BRAND_AMAZON_KEY)?.value,
+      undefined,
+    )
     return {
       brand: {
         name: String(r.brand_name),
         aliases: pj(r.brand_aliases, []),
         domains: pj(r.brand_domains, []),
+        ...(amazon === undefined || amazon.length === 0 ? {} : { amazon }),
       },
       competitors: pj(r.competitors, []),
       prompt_limit: Number(r.prompt_limit),
@@ -684,6 +694,13 @@ export function createGeoStore(dbPath?: string): GeoStore {
         w.next_run_at ?? null,
         w.updated_at,
       )
+      // WP392：自家的 Amazon 商品（没有就删掉那一格）
+      if (w.brand.amazon === undefined || w.brand.amazon.length === 0)
+        db.prepare('DELETE FROM geo_meta WHERE key = ?').run(BRAND_AMAZON_KEY)
+      else
+        db.prepare(
+          'INSERT INTO geo_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ).run(BRAND_AMAZON_KEY, j(w.brand.amazon))
     },
 
     prompts,
