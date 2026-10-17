@@ -81,6 +81,7 @@ import {
   transferOwner,
   updateOrgPosition,
   updateRangeGroup,
+  withdrawInvitation,
 } from '@/lib/api'
 import {
   exportMyWork,
@@ -431,6 +432,17 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
     mutationFn: (id: string) => revokeAssignment(id, owner),
     onSuccess: async () => {
       setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+
+  // 决策 1013：撤回还没被接受的邀请（链接作废）
+  const withdraw = useMutation({
+    mutationFn: (id: string) => withdrawInvitation(workspace ?? '', id, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      setFresh(undefined)
       await refresh()
     },
     onError: say,
@@ -1071,6 +1083,9 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
                 }}
                 onRemove={(person_id) => {
                   remove.mutate(person_id)
+                }}
+                onWithdrawInvite={(id) => {
+                  withdraw.mutate(id)
                 }}
               />
             )}

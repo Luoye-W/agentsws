@@ -41,6 +41,7 @@ export function MembersTab({
   onInvite,
   onRevoke,
   onRemove,
+  onWithdrawInvite,
   onOffboarded,
 }: {
   members: OrgMemberView[]
@@ -54,6 +55,8 @@ export function MembersTab({
   onInvite(input: { email: string; name?: string; position_id?: string }): void
   onRevoke(assignment_id: string): void
   onRemove(person_id: string): void
+  /** 决策 1013：撤回还没被接受的邀请（链接作废）；不给就不出按钮。 */
+  onWithdrawInvite?(invitation_id: string): void
   /** 离职跑完之后让上层重取成员与邀请（不给也行，报告卡照样出）。 */
   onOffboarded?(report: OffboardReportView): void
 }): React.ReactNode {
@@ -187,8 +190,22 @@ export function MembersTab({
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <span>{t('org.members.invite.pending')}</span>
               {pending.map((i) => (
-                <span key={i.id} data-testid="invite-pending">
+                <span key={i.id} className="flex items-center gap-2" data-testid="invite-pending">
                   {i.email}
+                  {onWithdrawInvite === undefined ? null : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      data-testid="invite-withdraw"
+                      disabled={busy}
+                      onClick={() => {
+                        onWithdrawInvite(i.id)
+                      }}
+                    >
+                      {t('org.members.invite.withdraw')}
+                    </Button>
+                  )}
                 </span>
               ))}
             </div>

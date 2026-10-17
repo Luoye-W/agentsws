@@ -74,6 +74,7 @@ export {
 } from './idempotency.js'
 export {
   type AcceptedInvitation,
+  BROWSER_SESSION_TTL_MS,
   type CreateInvitationInput,
   createMemoryIdentity,
   DEFAULT_INVITE_TTL,
@@ -90,6 +91,7 @@ export {
   secretEquals,
   sessionCookie,
   type TokenKind,
+  type VerifyLoginOptions,
 } from './identity.js'
 export {
   asyncApiFragment,
@@ -895,6 +897,7 @@ export {
 } from './sqlite-migrations.js'
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
+  AccountLoginPort,
   AutoMemoryPort,
   ChangesPort,
   ClientErrorEntry,

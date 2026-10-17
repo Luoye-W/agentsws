@@ -37,6 +37,7 @@ import {
   type DesktopRestartReadiness,
   type SceneOpenOutcome,
 } from './bridge-types.js'
+import { browserEntryUrl } from './browser-entry.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   createLocalConnectLauncher,
@@ -1074,12 +1075,28 @@ async function bootstrap(): Promise<void> {
     return url
   }
 
+  /*
+   * 决策 942（WP371）：在系统浏览器里打开，直接进、不落登录页。壳向本机服务要一张给主人的
+   * 一次性 token（15 分钟、用一次就废）拼在 `#` 后面——这是 13 §5「token 不进 URL」的例外，
+   * 只在个人档、只对回环地址；要不到就打开老地址。token 只交给 openExternal，不进日志。
+   */
+  const openInBrowser = async (path = '/'): Promise<string> => {
+    const url = await browserEntryUrl({
+      base: serverUrl(),
+      path,
+      remote,
+      issue: async () => {
+        const out = await api.browserLink()
+        if (!out.ok) logger.info('浏览器一次性进入链接没要到，打开登录页', { reason: out.reason })
+        return out.ok ? out.value : undefined
+      },
+    })
+    await shell.openExternal(url)
+    return `${serverUrl()}${path}`
+  }
+
   const openWorkstation = async (path = '/'): Promise<string> => {
-    if (config.openInBrowser) {
-      const url = `${serverUrl()}${path}`
-      await shell.openExternal(url)
-      return url
-    }
+    if (config.openInBrowser) return openInBrowser(path)
     return openWindow(path)
   }
 
@@ -1600,7 +1617,7 @@ async function bootstrap(): Promise<void> {
         void openWindow()
         break
       case 'open-browser':
-        void shell.openExternal(serverUrl())
+        void openInBrowser()
         break
       case 'toggle-pause':
         void togglePause()

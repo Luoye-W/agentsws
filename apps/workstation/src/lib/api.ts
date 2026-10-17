@@ -488,6 +488,58 @@ async function renewDesktopSession(): Promise<boolean> {
   }
 }
 
+/**
+ * 决策 942（WP371）：桌面壳托盘「在浏览器打开」把一张一次性登录 token 拼在地址的
+ * `#agentsws-enter=` 后面（壳那边 `apps/desktop/src/browser-entry.ts` 同名）。
+ *
+ * 这是 13 §5「token 不进 URL」的例外，所以这里两件事都要做、顺序不能反：
+ * 1. **先**用 `history.replaceState` 把它从地址栏抹掉（换不换得成都抹）；
+ * 2. 再拿去 `/v1/auth/verify` 换浏览器会话（用一次就废）。
+ * 换不成（过期、用过了）就当没有，照常往下走登录页。整个页面只消费一次。
+ */
+export const ENTRY_HASH_KEY = 'agentsws-enter'
+let entryConsumed: Promise<void> | undefined
+
+export function consumeEntryToken(): Promise<void> {
+  if (entryConsumed !== undefined) return entryConsumed
+  entryConsumed = (async () => {
+    const loc = globalThis.location as Location | undefined
+    if (loc === undefined) return
+    const hash = loc.hash.startsWith('#') ? loc.hash.slice(1) : loc.hash
+    const params = new URLSearchParams(hash)
+    const token = params.get(ENTRY_HASH_KEY)
+    if (token === null) return
+    params.delete(ENTRY_HASH_KEY)
+    const rest = params.toString()
+    try {
+      globalThis.history?.replaceState(
+        globalThis.history.state,
+        '',
+        `${loc.pathname}${loc.search}${rest === '' ? '' : `#${rest}`}`,
+      )
+    } catch {
+      // 抹不掉也不拿它冒险重放：照样只用这一次
+    }
+    if (token === '') return
+    try {
+      const verified = await api<{ session_token: string }>('/v1/auth/verify', {
+        method: 'POST',
+        body: { token },
+        anonymous: true,
+      })
+      storeToken(verified.session_token)
+    } catch {
+      // 过期 / 用过了：落登录页，不报错
+    }
+  })()
+  return entryConsumed
+}
+
+/** 测试用：让下一次 {@link consumeEntryToken} 重新看一遍地址。 */
+export function resetEntryTokenForTest(): void {
+  entryConsumed = undefined
+}
+
 /** 没有会话——不是错误，是"该去登录页了"（WP28 之后工作区可能不止一个人）。 */
 export class NeedsLoginError extends Error {
   /** 登录页把它填进邮箱框，本机单人档一按就进。 */
@@ -514,6 +566,8 @@ export const bootstrapHint = async (): Promise<BootstrapConfig> => bootstrapConf
  * 再拿 owner 的邮箱自动登录就等于所有人都是老板。
  */
 export async function ensureSession(): Promise<Me> {
+  // 决策 942：托盘「在浏览器打开」带来的一次性 token（地址 `#` 后面）——先抹掉、再换会话
+  await consumeEntryToken()
   try {
     // 没有 bearer 时这一发就是「只带 cookie」；桌面壳里它会直接成功
     return await api<Me>('/v1/me')
@@ -2744,6 +2798,8 @@ export interface OrgInvitationView {
   expires_at: string
   accepted_at?: string
   used: boolean
+  /** 决策 1013：负责人撤回了（链接作废）。 */
+  revoked_at?: string
   url?: string
   delivered: 'link' | 'email'
 }
@@ -3188,6 +3244,17 @@ export const removeMember = (
     { method: 'DELETE', ...withAssignment(assignment) },
   )
 
+/** 决策 1013（WP371）：撤回一条还没被接受的邀请（链接当场作废）。 */
+export const withdrawInvitation = (
+  workspace_id: string,
+  invitation_id: string,
+  assignment?: string,
+): Promise<OrgInvitationView> =>
+  api(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/invitations/${encodeURIComponent(invitation_id)}`,
+    { method: 'DELETE', ...withAssignment(assignment) },
+  )
+
 /** 40 §1.2 离职报告（**只有数字，没有个人数据正文**）。 */
 export interface OffboardStepView {
   step: 'revoke' | 'handover' | 'skills' | 'memory' | 'lessons' | 'report'
@@ -3326,6 +3393,20 @@ export const requestMagicLink = (
 /** 决策 945：主人用服务日志里的一次性设置码换一张一次性登录 token（只在局域网档开）。 */
 export const redeemSetupCode = (code: string): Promise<{ token: string; expires_at: string }> =>
   api('/v1/auth/setup-code', { method: 'POST', body: { code }, anonymous: true })
+
+/** 决策 943：用工坊账号进工作区——发 6 位登录验证码（没注册的邮箱云上静默不发）。 */
+export const sendAccountLoginCode = (
+  email: string,
+  locale: 'zh' | 'en',
+): Promise<{ expires_at: string; delivered: 'email' }> =>
+  api('/v1/auth/account/code', { method: 'POST', body: { email, locale }, anonymous: true })
+
+/** 决策 943：验证码对上 + 是成员 → 一次性登录 token（再走 {@link signInWithToken}）。 */
+export const verifyAccountLoginCode = (
+  email: string,
+  code: string,
+): Promise<{ token: string; expires_at: string }> =>
+  api('/v1/auth/account/verify', { method: 'POST', body: { email, code }, anonymous: true })
 
 /** 用一次性 token 换会话，并把它存下来（之后所有请求都带它）。 */
 export async function signInWithToken(token: string): Promise<Me> {

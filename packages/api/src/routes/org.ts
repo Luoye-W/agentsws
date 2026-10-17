@@ -233,6 +233,8 @@ export interface InvitationView {
   expires_at: string
   accepted_at?: string
   used: boolean
+  /** 决策 1013（WP371）：负责人撤回了（链接作废）。 */
+  revoked_at?: string
   /**
    * 邀请链接。**只在刚建出来那一次带上**（token 明文只出现一次）；
    * 清单里的历史邀请没有这个字段。
@@ -639,6 +641,11 @@ export interface OrgPort {
   withdrawPeerOffer?(actor: OrgActor, id: string): MaybePromise<PeerOfferView>
   invitations(actor: OrgActor): MaybePromise<InvitationView[]>
   invite(actor: OrgActor, input: InviteInput): MaybePromise<InvitationView>
+  /**
+   * 决策 1013（WP371）：撤回一条还没被接受的邀请（链接当场作废）。已经接受的 → `conflict`
+   * （人已经进来了，请他离开走「移出成员」，那一步会让他的会话全部失效）。可选：没有就 501。
+   */
+  revokeInvitation?(actor: OrgActor, invitation_id: string): MaybePromise<InvitationView>
   /** **公开**：被邀请的人这会儿还没有任何凭据，只有邮件里那把 token。 */
   accept(token: string, input: { name?: string | undefined }): MaybePromise<AcceptedInvitationView>
   /** 界面上"选范围"的候选（店铺 / 账号 / 市场 / 部门），由装配方给。 */
@@ -1660,6 +1667,29 @@ export function orgRoutes(): Route[] {
         const actor = sameWorkspace(c)
         const input = await body(c, InviteBody)
         return ok(c, await portOf(deps).invite(actor, input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/workspaces/:id/invitations/:invitation_id',
+        operationId: 'revokeInvitation',
+        summary: '撤回一条还没被接受的邀请：链接当场作废（已接受的 409，请走「移出成员」）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '工作区 id' },
+          { name: 'invitation_id', in: 'path', required: true, description: '邀请 id' },
+        ],
+        returns: 'InvitationView（带 revoked_at）',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.revokeInvitation === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持撤回邀请')
+        return ok(c, await port.revokeInvitation(sameWorkspace(c), param(c, 'invitation_id')))
       },
     ),
     route(

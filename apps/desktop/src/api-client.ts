@@ -66,6 +66,11 @@ interface Envelope<T> {
 export interface ApiClient {
   /** 用会话密钥换一个 HttpOnly cookie（`POST /v1/auth/session`）。 */
   session(): Promise<ApiResult<DesktopSession>>
+  /**
+   * 决策 942（WP371）：托盘「在浏览器打开」用的一次性登录 token（`POST /v1/auth/browser-link`，
+   * 15 分钟、用一次就废）。**只交给 `shell.openExternal`，不进日志。**服务只在本机档开这条。
+   */
+  browserLink(): Promise<ApiResult<string>>
   /** 当前人名下第一条没被撤销的 Assignment（`PUT /v1/halt` 要 `X-Assignment`）。 */
   assignment(session: DesktopSession): Promise<ApiResult<string>>
   /** 运行期急停（`PUT /v1/halt`）。不重启 sidecar。 */
@@ -309,6 +314,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
             : { workspace_id: out.value.value.workspace_id }),
         },
       }
+    },
+
+    async browserLink() {
+      const out = await call<{ token?: unknown }>('/v1/auth/browser-link', {
+        method: 'POST',
+        body: { key: options.sessionKey },
+      })
+      if (!out.ok) return out
+      const token = out.value.value.token
+      if (typeof token !== 'string' || token === '') return { ok: false, reason: '没拿到进入链接' }
+      return { ok: true, value: token }
     },
 
     async assignment(session) {
