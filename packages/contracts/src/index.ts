@@ -31,6 +31,8 @@ export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'
+// WP392（docs/104）：竞品监控积木（快照、变化、进料口适配器、存储接口；和信息监控共用监控源）
+export * from './competitor-watch.js'
 // WP144 / docs/80：电脑操控（官方 dsh-computer-use + Cua Driver MCP 提供方）的设置与授权卡
 export * from './computer-use.js'
 export * from './connect.js'
@@ -91,6 +93,7 @@ export * from './position-work.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
+export * from './pr-watch.js'
 export * from './premium-theme.js'
 // WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
 export * from './pricing-catalog.js'

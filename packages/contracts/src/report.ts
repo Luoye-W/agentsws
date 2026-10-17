@@ -9,6 +9,7 @@
  * - {@link ReportPayload}：发布出来的一份报告（报表区的报表块，同一系列同一周期再发 = 同一份的新版本）。
  */
 import type { Iso8601 } from './common.js'
+import type { CompetitorChange } from './competitor-watch.js'
 
 /** 巡查给外部条目的判断档（从轻到重）。与 WP328 的判断档字面一致。 */
 export type WatchAssessment = 'no_action' | 'low_relevance' | 'follow_up'
@@ -32,7 +33,8 @@ export interface WatchItem {
   id: string
   /** 哪个平台（`reddit` …）。 */
   platform: string
-  kind: 'post' | 'comment'
+  /** WP392：`change` = 竞品监控比出来的一条变化（`change` 那一格有全文；`platform` 是 `competitor`）。 */
+  kind: 'post' | 'comment' | 'change'
   /** `own` = 自家地盘（用户配的版块 / 频道）；`external` = 外部社区（关键词命中）。 */
   scope: 'own' | 'external'
   /** 在哪（版块 / 频道名，不带前缀）。 */
@@ -59,6 +61,8 @@ export interface WatchItem {
   priority?: boolean
   /** WP340：本地标签（标签词命中的）。 */
   tags?: string[]
+  /** WP392：`kind: 'change'` 时这条变化的全文（前后值、幅度、和自家比…）。 */
+  change?: CompetitorChange
 }
 
 /** 发布出来的一份报告（报表块的 payload；也是复制 / 导出 .md 的来源）。 */
