@@ -1085,8 +1085,8 @@
 | 1036 | （编号说明）WP375 = 右侧面板照 Claude 修整（决策 1035）；WP376 = Anthropic 官方 key 改走原生接口（决策 1031） | 记录 |
 | 1037 | （Luoye 10-17）思考档命名「快 / 标准 / 深度」（不叫「深想」） | **已定**，WP373 |
 | 1038 | （Luoye 10-17 + Fable 实测）DeepSeek 新 Search / Fetch API：两者是独立 provider 可分开选，但 Fetch 抓 Reddit / LinkedIn / YouTube / X / Amazon / Trustpilot / NYT / Wikipedia / Google / 知乎全部失败，Search 不出 reddit / linkedin → 搜索与抓网页都继续用我们自己的（证据 docs/assets/web-search/deepseek-tools-api-2026-10-17.log） | **已定** |
-| 1051 | （WP377）工坊积分出思考小钮：只出云端价目写了档位的模型，眼下 DeepSeek v4 Pro（标准 / 深度）、Flash（快 / 标准 / 深度） | 建议：照这样上（官方声明、链路通、思考 token 本来就照实计费）。待定 |
-| 1052 | （WP377）智谱 / Kimi / OpenAI / 通义官方能调、表已写好但关着：New API 里有没有这几家按量渠道没确认 | 建议：Fable 先看 New API 渠道页（不花钱），有哪家按报告 §1.3 实测一次再开。待定 |
-| 1053 | （WP377）不支持思考档的模型带了 `reasoning_effort`：云端去掉、按默认跑（第三方用 OpenAI 原生写法给 gpt 传也会被去掉，直到那家开） | 建议：照这样（派单「忽略、不报错」）。待定 |
-| 1054 | （WP377）v4 Pro 官方目录没有 low：只出「标准 / 深度」，「关掉思考」不单列成「快」 | 建议：照官方目录；实测 low 也收再考虑补「快」。待定 |
-| 1055 | （WP377）顺带核实：DeepSeek 自带 key 的 Chat 口官方写法就是 `thinking` + `reasoning_effort`（WP370 当时没核实、默认不出小钮） | 建议：另开小单给它也出小钮。待定 |
+| 1051 | （WP377）工坊积分出思考小钮：只出云端价目写了档位的模型，眼下 DeepSeek v4 Pro、Flash | **Luoye 10-17 按建议**（见 1039） |
+| 1052 | （WP377）智谱 / Kimi / OpenAI / 通义官方能调、表已写好但关着 | **Luoye 10-17 按建议**：New API 目前只接了 DeepSeek 一个渠道，别家思考档保持关着；顺带价目给没有渠道的模型标 `available: false`，工坊积分 AI 钮不再列它们（选了必失败） |
+| 1053 | （WP377）不支持思考档的模型带了 `reasoning_effort`：云端去掉、按默认跑 | **Luoye 10-17 按建议** |
+| 1054 | （WP377）v4 Pro 的三档 | **Luoye 10-17 按 Fable 建议**：快 = 关掉思考（thinking.type=disabled）、标准 = high、深度 = max；Flash 快 = low / 标准 = high / 深度 = max。依据 Fable 10-17 钥匙串 key 直连实测：v4 Pro / Flash 的 max / high / low / disabled 全 200，reasoning_tokens 含在 completion_tokens 里，v4 Pro 收 low 但思考量与 high 差不多，disabled 只出 8 个 token。云端价目写明三档映射（`levels`） |
+| 1055 | （WP377）DeepSeek 自带 key 的 Chat 口也出思考小钮 | **Luoye 10-17 按建议**：另开 WP378 |
