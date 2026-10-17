@@ -5034,7 +5034,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    /** 换这件事用的 AI（输入框左下角那个钮，WP342）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认 */
+    /** 换这件事用的 AI（输入框左下角那个钮，WP342）与思考程度（WP370 `effort`）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认 */
     put: operations['setMatterModel']
     post?: never
     delete?: never
@@ -26511,6 +26511,7 @@ export interface operations {
           /** @enum {string} */
           price_source?: 'catalog' | 'manual'
           image_only?: boolean
+          picker_models?: string[]
         }
       }
     }
@@ -41570,6 +41571,8 @@ export interface operations {
           mode?: 'auto' | 'quick' | 'chat' | 'ask' | 'task'
           detach?: boolean
           model?: string
+          /** @enum {string} */
+          model_effort?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
           files?: {
             name: string
             data: string
@@ -42173,6 +42176,8 @@ export interface operations {
           summary?: string
           run?: boolean
           model?: string
+          /** @enum {string} */
+          model_effort?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         }
       }
     }
@@ -42875,6 +42880,7 @@ export interface operations {
       content: {
         'application/json': {
           model?: string | null
+          effort?: ('off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | null
         }
       }
     }
@@ -48579,6 +48585,8 @@ export interface operations {
             data: string
           }[]
           model?: string
+          /** @enum {string} */
+          effort?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
           web_search?: boolean
           knowledge?: boolean
           target?: {
@@ -48692,6 +48700,8 @@ export interface operations {
       content: {
         'application/json': {
           model?: string
+          /** @enum {string} */
+          effort?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
           web_search?: boolean
           knowledge?: boolean
         }

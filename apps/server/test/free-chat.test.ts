@@ -17,6 +17,8 @@ interface Seen {
   provider: string
   tools: string[]
   messages: ChatMessage[]
+  /** WP370：这一次带的思考程度。 */
+  effort?: string | undefined
 }
 
 /** 脚本 provider：按顺序回；`tool` 那一步回一个 web_search 调用；正文一个字一个字流出来。 */
@@ -34,6 +36,7 @@ function scripted(
         provider: ref.provider,
         tools: (req.tools ?? []).map((t) => t.name),
         messages: req.messages,
+        effort: req.reasoning_effort,
       })
       const step = script[i] ?? `我是 ${ref.provider} 的回答。`
       i += 1
@@ -79,6 +82,15 @@ function setup(over: Partial<FreeChatOptions> & { script?: (string | { search: s
       label: 'DeepSeek 官方（deepseek-flash）',
       official: false,
       vision: 'ok',
+      // WP370：照官方 DeepSeek 四档收成的三档
+      thinking: {
+        options: [
+          { level: 'fast', effort: 'low' },
+          { level: 'standard', effort: 'high' },
+          { level: 'deep', effort: 'max' },
+        ],
+        default: 'high',
+      },
     },
     {
       id: 'agentsws/deepseek-pro',
@@ -203,6 +215,17 @@ describe('WP188 随便聊：一轮流式对话', () => {
       official: true,
     })
     expect(done?.usage?.credits).toBe(0.42)
+  })
+
+  it('WP370：选了思考程度就交给模型；这个模型没有那一档就按默认（不带）', async () => {
+    const { port, seen } = setup()
+    const s = await port.create(actor, {})
+    await say(port, s.id, { model: 'deepseek/deepseek-flash', effort: 'max' })
+    expect(seen.at(-1)?.effort).toBe('max')
+    await say(port, s.id, { model: 'deepseek/deepseek-flash', effort: 'medium' })
+    expect(seen.at(-1)?.effort).toBeUndefined()
+    await say(port, s.id, { model: 'agentsws/deepseek-pro', effort: 'max' })
+    expect(seen.at(-1)?.effort).toBeUndefined()
   })
 
   it('看不了图的模型收到图：说人话，不打模型', async () => {

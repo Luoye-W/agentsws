@@ -1187,6 +1187,22 @@ describe('WP42 §1 拉模型列表', () => {
     expect(ctx.server.models.providers().map((r) => r.model)).not.toContain('deepseek-v4-pro')
   })
 
+  it('WP370：设置里勾进 AI 钮的那几个——存下来、挂上网关；清空就摘掉', async () => {
+    await put('/v1/models/providers/deepseek', { ...SAVE, picker_models: ['deepseek-v4-pro'] })
+    const saved = await data<{ picker_models?: string[] }>(await api('/v1/models/providers'))
+    expect(JSON.stringify(saved)).toContain('"picker_models":["deepseek-v4-pro"]')
+    expect(ctx.server.models.providers().map((r) => r.model)).toContain('deepseek-v4-pro')
+    const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
+    // 下拉先是与 AI 钮同一份（主模型 + 勾进来的），再接拉回来的其余
+    expect(defaults.choices.map((c) => c.id)).toEqual([
+      'deepseek/deepseek-chat',
+      'deepseek/deepseek-v4-pro',
+      'deepseek/deepseek-flash',
+    ])
+    await put('/v1/models/providers/deepseek', { ...SAVE, picker_models: [] })
+    expect(ctx.server.models.providers().map((r) => r.model)).not.toContain('deepseek-v4-pro')
+  })
+
   it('拉不到的模型名不给选（乱填一个 id 仍然 400）', async () => {
     await put('/v1/models/providers/deepseek', SAVE)
     const res = await put('/v1/models/defaults', { default: 'deepseek/not-a-real-model' })
