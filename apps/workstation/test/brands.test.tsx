@@ -6,7 +6,7 @@
  * （52 O1）。切换器不出、⌘K 里那一组不出、设置页那张卡不出——他的工作台与
  * 这一版上线前一模一样。
  */
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/app-shell'
@@ -187,7 +187,8 @@ describe('52 O2 顶栏品牌切换器', () => {
     state.brands = [BRAND_A, BRAND_B]
     renderShell()
     await screen.findByTestId('brand-current')
-    await userEvent.click(screen.getByLabelText('命令面板 (⌘K)'))
+    // WP372：顶栏没有搜索框了，⌘K 快捷键照旧
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
     expect(await screen.findByText('品牌')).not.toBeNull()
     // 面板里两个品牌都列出来（当前那个点不动）
     expect(await screen.findAllByText('诺伏特课程')).not.toHaveLength(0)

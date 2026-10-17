@@ -28,10 +28,10 @@ import {
   toLocalInput,
   whenText,
 } from '@/lib/position-work'
-import { PositionPage } from '@/pages/position'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
+import { PositionWithBoards } from './position-with-boards'
 
 const NOW = '2026-10-06T08:00:00.000Z'
 
@@ -333,7 +333,7 @@ afterEach(() => {
 const openAt = (path = '/positions/asg_pr') =>
   renderWithProviders(
     <Routes>
-      <Route path="/positions/:id" element={<PositionPage />} />
+      <Route path="/positions/:id" element={<PositionWithBoards />} />
     </Routes>,
     path,
     'asg_pr',

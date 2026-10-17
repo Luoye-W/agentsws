@@ -182,7 +182,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const { items, ready } = useScopeConnections(scope)
-  const live = address !== undefined && address.startsWith(CONNECT_ADDRESS_PREFIX)
+  const live = address?.startsWith(CONNECT_ADDRESS_PREFIX) === true
   const here = useRef<HTMLDivElement | null>(null)
   // 决策 690 + 1004：连接卡弹出来时这一块在最上面，滚到它
   useEffect(() => {
@@ -208,7 +208,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
       ) : null}
       {sorted.length === 0 ? (
         live || !ready ? null : (
-          <Empty text={t('connections.empty')} />
+          <Empty text={t('conncard.empty')} />
         )
       ) : (
         <ul className="flex flex-col gap-px">
@@ -227,7 +227,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
                 {i.connected ? (
                   <CheckCircle2
                     className="ml-auto size-3.5 shrink-0 text-ws-good"
-                    aria-label={t('connections.connected')}
+                    aria-label={t('conncard.connected')}
                   />
                 ) : i.connect_service === undefined ? null : (
                   <button
@@ -241,7 +241,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
                       openConnect(i.connect_service)
                     }}
                   >
-                    {t('connections.connect')}
+                    {t('conncard.connect')}
                   </button>
                 )}
               </li>

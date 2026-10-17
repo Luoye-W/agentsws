@@ -56,11 +56,13 @@ export function PositionHandoff({
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
   const [started, setStarted] = useState(false)
   const actions = useLandingActions(
-    mine.flatMap((r) => r.quick_prompts ?? []).map((q) => ({
-      id: q.id,
-      label: lang === 'en' ? q.label.en : q.label.zh,
-      prompt: q.prompt,
-    })),
+    mine
+      .flatMap((r) => r.quick_prompts ?? [])
+      .map((q) => ({
+        id: q.id,
+        label: lang === 'en' ? q.label.en : q.label.zh,
+        prompt: q.prompt,
+      })),
     (prompt) => {
       clearError()
       setStarted(true)

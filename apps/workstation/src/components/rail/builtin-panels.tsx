@@ -278,7 +278,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     icon: Package,
     priority: 'builtin',
     group: 'layer',
-    scoped: true,
+    // 不标 scoped：「证据」看的是被点的那张卡，不跟层走；记录 / 发出记录没定位到岗位时自己照实说
     card: 'outputs',
     useBadge: useOutboundBadge,
   })

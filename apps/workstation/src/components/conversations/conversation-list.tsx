@@ -205,7 +205,6 @@ export function NewConversation({
       }}
     >
       <Input
-        // biome-ignore lint/a11y/noAutofocus: 点「新对话」就是要在这一格打字
         autoFocus
         value={text}
         maxLength={TASK_TEXT_MAX}

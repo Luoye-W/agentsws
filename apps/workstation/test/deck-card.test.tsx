@@ -14,7 +14,7 @@ import {
 } from '@/components/deck/deck-layout'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
-import { panelType } from '@/components/rail/registry'
+import { panelType, resolvePanelId } from '@/components/rail/registry'
 import { draftCard, questionCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 
@@ -253,8 +253,9 @@ describe('WP98：「证据 N」点开的是第三栏那个证据面板（走公�
 
   it('点它 = show("evidence")，而 evidence 是注册表里真有的那一格', async () => {
     ensureBuiltinPanels()
-    // 注册层这次一个字都没改：这一格是 WP71 就注册好的
-    expect(panelType('evidence')?.label).toBe('rail.panel.evidence')
+    // WP372：「证据」成了「产出」的一个标签——旧 id 是别名，落到那一格
+    expect(resolvePanelId('evidence')).toEqual({ id: 'outputs', sub: 'evidence' })
+    expect(panelType('outputs')?.label).toBe('rail.panel.outputs')
 
     renderWithProviders(
       <RailStateProvider>

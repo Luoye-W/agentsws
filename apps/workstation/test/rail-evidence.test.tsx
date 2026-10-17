@@ -16,11 +16,21 @@ import { DeckCardView } from '@/components/deck/deck-card'
 import { focusEvidenceCard } from '@/components/deck/deck-focus'
 import { evidenceLines } from '@/components/deck/evidence-chips'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
-import { RailStateProvider } from '@/components/rail/rail-state'
-import { panelBody } from '@/components/rail/registry'
+import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
+import { panelBody, resolvePanelId } from '@/components/rail/registry'
 import { RightRail } from '@/components/rail/right-rail'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
+
+/** 别处那句 `show('evidence')`（卡上「证据 N」走的也是它）。 */
+function OpenEvidence(): React.ReactNode {
+  const rail = useRailState()
+  return (
+    <button type="button" data-testid="open-evidence" onClick={() => rail.show('evidence')}>
+      证据
+    </button>
+  )
+}
 
 const noop = (): void => {}
 
@@ -36,9 +46,10 @@ function renderDeckWithRail(): void {
 }
 
 describe('证据面板（WP100）', () => {
-  it('注册表里 evidence 有身体了——不再是那句"还没做"', () => {
+  it('注册表里 evidence 有身体了（WP372 起是「产出」的「证据」标签）', () => {
     ensureBuiltinPanels()
-    expect(panelBody('evidence')).toBeDefined()
+    expect(resolvePanelId('evidence')).toEqual({ id: 'outputs', sub: 'evidence' })
+    expect(panelBody('outputs')).toBeDefined()
   })
 
   it('点「证据 N」→ 面板里列出的就是那 N 条（与胶囊同一份，不另算一遍）', async () => {
@@ -81,10 +92,12 @@ describe('证据面板（WP100）', () => {
     focusEvidenceCard(null)
     renderWithProviders(
       <RailStateProvider>
+        <OpenEvidence />
         <RightRail />
       </RailStateProvider>,
     )
-    await userEvent.click(screen.getByTestId('rail-icon-evidence'))
+    // WP372：没有「证据」图标了——卡上「证据 N」与别处 `show('evidence')` 开到「产出」的「证据」标签
+    await userEvent.click(screen.getByTestId('open-evidence'))
     const empty = await screen.findByTestId('rail-evidence-empty')
     expect(empty.textContent).toContain('证据')
     expect(screen.queryByTestId('rail-placeholder')).toBeNull()

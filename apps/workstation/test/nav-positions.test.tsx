@@ -268,15 +268,15 @@ describe('WP351 左栏学 Claude 收紧（决策 906）', () => {
     expect(link.getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('职责行不缩进：和岗位左边对齐，只靠字色淡一档', async () => {
+  it('WP372（决策 1001）：职责挂在细竖线上，字小一号（13px）、颜色淡一档', async () => {
     const user = userEvent.setup()
     renderShell(INSTANCES)
     const row = screen.getAllByTestId('nav-position-row')[0] as HTMLElement
     await user.click(within(row).getByTestId('nav-position-toggle'))
     const duties = within(row).getByTestId('nav-duties')
-    expect(duties.className).not.toMatch(/\b(ml|pl)-/)
-    expect(duties.className).not.toContain('border-l')
+    expect(duties.className).toContain('border-l')
     const duty = within(duties).getAllByTestId('nav-duty')[0] as HTMLElement
-    expect(duty.className).toContain('text-ws-body')
+    expect(duty.className).toContain('text-[13px]')
+    expect(duty.className).toContain('text-ws-muted-fg')
   })
 })

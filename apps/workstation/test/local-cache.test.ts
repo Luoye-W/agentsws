@@ -46,6 +46,11 @@ const ALLOWED_KEYS = [
   // 分桶是因为布局跟着岗位 / 事项 / 职责走，而桶的键是 id——id 不是内容，
   // 而且它本来就在地址栏里，写进本机不多泄露一个字。
   'agentsws.rightrail.layout',
+  // WP372（决策 1004 / 1005 / 1019）：右侧面板每张卡展开没有（按桶，卡 id → 布尔）、卡的顺序（卡 id 数组）、
+  // 临时加宽后的宽度（一个数）——都是界面结构，没有一个字的内容
+  'agentsws.rightrail.cards',
+  'agentsws.rightrail.card_order',
+  'agentsws.rightrail.wide',
   // WP74（37 §2.5）：日历上开着哪几个图层、停在哪个视图。同上一类——**纯界面偏好**。
   // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
   'agentsws.calendar.layers',

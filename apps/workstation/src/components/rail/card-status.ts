@@ -175,11 +175,11 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
   const { items } = useScopeConnections(scope)
   if (items.length === 0) return undefined
   const todo = items.filter(connectionNeedsYou).length
-  if (todo === 0) return { summary: t('connections.summary.ok') }
+  if (todo === 0) return { summary: t('conncard.summary.ok') }
   return {
-    summary: t('connections.summary.todo', { n: todo }),
+    summary: t('conncard.summary.todo', { n: todo }),
     dot: 'alert',
-    dotLabel: t('connections.dot.todo', { n: todo }),
+    dotLabel: t('conncard.dot.todo', { n: todo }),
   }
 }
 

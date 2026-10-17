@@ -26,6 +26,8 @@ export function OutputsPanel(props: RailPanelBodyProps): ReactNode {
     ? (props.sub as OutputTab)
     : 'records'
   const Body = BODIES[tab]
+  // 记录跟着岗位 / 职责走：这一页还定位不到岗位就照实说（证据看的是被点的那张卡，发出记录是整个品牌的）
+  const needsScope = tab === 'records' && props.scope === undefined
   return (
     <div className="flex flex-col gap-3" data-testid="outputs-panel" data-tab={tab}>
       <div
@@ -63,7 +65,13 @@ export function OutputsPanel(props: RailPanelBodyProps): ReactNode {
             </p>
           }
         >
-          <Body {...props} />
+          {needsScope ? (
+            <p className="text-muted-foreground" data-testid="rail-no-scope">
+              {t('rail.no_scope')}
+            </p>
+          ) : (
+            <Body {...props} />
+          )}
         </Suspense>
       </div>
     </div>
