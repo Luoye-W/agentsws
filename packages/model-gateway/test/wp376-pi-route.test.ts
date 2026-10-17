@@ -15,6 +15,7 @@ import type { ChatMessage, ModelProvider } from '@agentsws/contracts'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   isOfficialRouteUrl,
+  levelsSentApart,
   loadOfficialRoutes,
   officialRouteFacts,
   openaiCompatibleProvider,
@@ -230,5 +231,64 @@ describe('WP376 报错', () => {
       provider(OPENROUTER, 'openai/gpt-5', { key: '' }).complete({ messages: [user('你好')] }),
     ).rejects.toThrow(/API key/)
     expect(fake.requests.length).toBe(before)
+  })
+})
+
+describe('WP376 决策 1045：官方传法只分想 / 不想的型号收成开关', () => {
+  const MOONSHOT = 'https://api.moonshot.cn/v1'
+
+  it('判定照官方 buildParams：Responses 一律分档；Chat Completions 看 supportsReasoningEffort 与写法', () => {
+    expect(levelsSentApart({ api: 'openai-responses', baseUrl: OPENAI })).toBe(true)
+    expect(
+      levelsSentApart({
+        api: 'openai-completions',
+        baseUrl: MOONSHOT,
+        compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: false },
+      }),
+    ).toBe(false)
+    // 没写 compat：按地址认（Moonshot 官方不发档；OpenRouter 原样发档）
+    expect(levelsSentApart({ api: 'openai-completions', baseUrl: MOONSHOT })).toBe(false)
+    expect(levelsSentApart({ api: 'openai-completions', baseUrl: OPENROUTER })).toBe(true)
+    expect(
+      levelsSentApart({
+        api: 'openai-completions',
+        baseUrl: QWEN_PLAN,
+        compat: { thinkingFormat: 'qwen', supportsReasoningEffort: true },
+      }),
+    ).toBe(true)
+    // 有思考预算格：预算按档算
+    expect(
+      levelsSentApart({
+        api: 'openai-completions',
+        baseUrl: MOONSHOT,
+        compat: { supportsReasoningEffort: false, supportsThinkingTokenBudget: true },
+      }),
+    ).toBe(true)
+  })
+
+  it('Moonshot kimi-k2.6、百炼 Token Plan qwen3.6-plus：收成 off + 一档；关不掉的（kimi-k2.7-code）不出', () => {
+    expect(officialRouteFacts(MOONSHOT, 'kimi-k2.6')?.efforts).toEqual(['off', 'medium'])
+    expect(officialRouteFacts(QWEN_PLAN, 'qwen3.6-plus')?.efforts).toEqual(['off', 'medium'])
+    expect(officialRouteFacts(MOONSHOT, 'kimi-k2.7-code')?.efforts).toBeUndefined()
+    // 真分档的不动
+    expect(officialRouteFacts(QWEN_PLAN, 'qwen3.8-max')?.efforts).toEqual([
+      'low',
+      'medium',
+      'xhigh',
+    ])
+  })
+
+  it('开 = 照官方发「想」（thinking.type enabled），关 = 发「不想」', async () => {
+    await provider(MOONSHOT, 'kimi-k2.6').complete({
+      messages: [user('你好')],
+      reasoning_effort: 'medium',
+    })
+    expect(lastBody().thinking).toEqual({ type: 'enabled' })
+    expect(lastBody().reasoning_effort).toBeUndefined()
+    await provider(MOONSHOT, 'kimi-k2.6').complete({
+      messages: [user('你好')],
+      reasoning_effort: 'off',
+    })
+    expect(lastBody().thinking).toEqual({ type: 'disabled' })
   })
 })

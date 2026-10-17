@@ -90,7 +90,9 @@ const routed: typeof globalThis.fetch = (input, init) => {
     ? redirectFetch('https://api.anthropic.com', openai.url)
     : url.startsWith('https://api.anthropic.com')
       ? redirectFetch('https://api.anthropic.com', anthropic.url)
-      : redirectFetch('https://openrouter.ai/api', openai.url)
+      : url.startsWith('https://api.moonshot.cn')
+        ? redirectFetch('https://api.moonshot.cn', openai.url)
+        : redirectFetch('https://openrouter.ai/api', openai.url)
   return to(input, init)
 }
 
@@ -319,6 +321,36 @@ describe('WP376 (c) 自己接的 OpenAI 兼容口：官方目录认得的出档'
     const relay = await send('relay', 'high')
     expect(relay.stream).toBe(false)
     expect(relay.reasoning).toBeUndefined()
+  })
+})
+
+describe('WP376 决策 1045：官方只分想 / 不想的型号在 AI 钮里是开关（WP373）', () => {
+  it('Moonshot kimi-k2.6：开关，默认开；关掉照官方发「不想」，开着发「想」', async () => {
+    const { models, gateway } = oldMachine().boot()
+    await models.port.save(owner, 'kimi', {
+      kind: 'openai_compatible',
+      label: 'Kimi',
+      base_url: 'https://api.moonshot.cn/v1',
+      model: 'kimi-k2.6',
+      api_key: OPENAI_KEY,
+    })
+    const kimi = models.chatChoices().find((c) => c.id === 'kimi/kimi-k2.6')
+    expect(kimi?.thinking).toEqual({
+      options: [{ level: 'standard', effort: 'medium' }],
+      default: 'medium',
+      toggle: true,
+    })
+    const send = async (effort?: 'off') => {
+      await gateway.complete({
+        model: { provider: 'kimi', model: 'kimi-k2.6', region: 'global' },
+        messages: [{ role: 'user', content: '在吗' }],
+        meta,
+        ...(effort === undefined ? {} : { reasoning_effort: effort }),
+      })
+      return openai.requests.at(-1)?.body ?? {}
+    }
+    expect((await send()).thinking).toEqual({ type: 'enabled' })
+    expect((await send('off')).thinking).toEqual({ type: 'disabled' })
   })
 })
 
