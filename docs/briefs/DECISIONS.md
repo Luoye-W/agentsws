@@ -1108,3 +1108,6 @@
 | 1059 | （WP378）只认表里写了的模型名，DeepSeek 上新模型要在 `model-gateway` 的 `deepseek-chat-thinking.ts` 加一行，不按名字猜 | 建议：照这样（和 WP373「没声明不出」一个规矩） |
 | 1060 | （WP378）上线前实测（花几分钱，交 Fable 用钥匙串 key）：官方 Chat 口 v4 Pro 发 `thinking: disabled`、`enabled + high`、`enabled + max`，Flash 发 `enabled + low`，各一次，看都 200、`reasoning_tokens` 随档位递增 | 建议：WP377 §1.3 第 1 条已含同样的请求，跑那一遍就够，不另跑 |
 | 1066 | （Luoye 10-17）GEO 借鉴 Aleyda 清单：岗位知识 + 六项功能全做（比较胜率 / 描述准确度、对外说法一致性、商品信息体检、网站技术体检、AI 来源流量、改完自动复查）；英文 agent → assistant 同意（WP379） | **已定**，WP380 / WP381 / WP379 |
+| 1061 | （WP379）中文界面约 30 处把助理叫「代理」统一成「助理」，另开 WP382，避开「网络代理」义 | **Luoye 10-17 按建议** |
+| 1062 | （WP379）帮助文档提旧名 "My agent" 那句保留 | **Luoye 10-17 按建议** |
+| 1063 | （WP379）指岗位 / AI 同事的 agent 不改 | **Luoye 10-17 按建议** |

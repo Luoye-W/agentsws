@@ -66,7 +66,7 @@ const DIRECTORY: ConnectionDirectoryItem[] = [
     mode: 'channel_adapter',
     status: 'planned',
     docs_url: '/im-channels',
-    note: { zh: '只做本人 ↔ 自己的代理。', en: 'You to your own agent only.' },
+    note: { zh: '只做本人 ↔ 自己的代理。', en: 'You to your own assistant only.' },
   }),
   entry({
     kind: 'mcp_server',
