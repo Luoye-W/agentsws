@@ -225,6 +225,19 @@ export interface PricingModelEntry {
 export interface PricingModelReasoning {
   efforts: ReasoningEffort[]
   default?: ReasoningEffort
+  /**
+   * WP377（决策 1054，Luoye 10-17，只加）：云端**写明**界面三档各落到哪一档。给了就照它出小钮（不给的那档不出）；
+   * 不给 = 客户端按老规矩从 `efforts` 里挑（快 = 比标准浅的 low / minimal，标准 = 默认档，深度 = 更深一档）。
+   * 例：DeepSeek v4 Pro 官方 low 与 high 想得差不多（Fable 实测），所以「快」= `off`（关掉思考）。
+   */
+  levels?: PricingReasoningLevels
+}
+
+/** WP377：界面三档「快 / 标准 / 深度」各落到哪一档（每一格都必须在 `efforts` 里）。 */
+export interface PricingReasoningLevels {
+  fast?: ReasoningEffort
+  standard?: ReasoningEffort
+  deep?: ReasoningEffort
 }
 
 /**
@@ -240,9 +253,18 @@ export function pricingReasoningOf(
   const efforts = REASONING_EFFORTS.filter((e) => have.has(e))
   if (!efforts.some((e) => e !== 'off')) return undefined
   const def = raw.default
+  const levels: PricingReasoningLevels = {}
+  const rawLevels: Partial<Record<keyof PricingReasoningLevels, unknown>> =
+    typeof raw.levels === 'object' && raw.levels !== null ? raw.levels : {}
+  for (const level of ['fast', 'standard', 'deep'] as const) {
+    const e = rawLevels[level]
+    if (typeof e === 'string' && (efforts as readonly string[]).includes(e))
+      levels[level] = e as ReasoningEffort
+  }
   return {
     efforts,
     ...(typeof def === 'string' && efforts.includes(def) ? { default: def } : {}),
+    ...(Object.keys(levels).length === 0 ? {} : { levels }),
   }
 }
 

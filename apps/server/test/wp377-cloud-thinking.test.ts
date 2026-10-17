@@ -24,7 +24,11 @@ afterEach(() => {
 })
 
 const DECLARED: Record<string, PricingModelEntry['reasoning']> = {
-  'deepseek-v4-pro': { efforts: ['off', 'high', 'max'], default: 'high' },
+  'deepseek-v4-pro': {
+    efforts: ['off', 'high', 'max'],
+    default: 'high',
+    levels: { fast: 'off', standard: 'high', deep: 'max' },
+  },
   'deepseek-flash': { efforts: ['off', 'low', 'high', 'max'], default: 'high' },
 }
 
@@ -118,11 +122,12 @@ function setup() {
 }
 
 describe('WP377 工坊积分的思考小钮', () => {
-  it('价目写了档的出：v4 Pro 是「标准 / 深度」（官方没有更浅的一档），Flash 三档全；没写的不出', () => {
+  it('价目写了档的出：v4 Pro 照云端写明的三档（快 = 关掉思考，决策 1054），Flash 按老规矩三档；没写的不出', () => {
     const { models } = setup()
     const choices = models.chatChoices()
     expect(choices.find((c) => c.id === 'agentsws/deepseek-v4-pro')?.thinking).toEqual({
       options: [
+        { level: 'fast', effort: 'off' },
         { level: 'standard', effort: 'high' },
         { level: 'deep', effort: 'max' },
       ],
@@ -156,9 +161,38 @@ describe('WP377 工坊积分的思考小钮', () => {
       reasoning_effort: 'max',
     })
     await gateway.complete({ messages: [{ role: 'user', content: '在吗' }], meta, model })
-    expect(bodies).toHaveLength(2)
+    // 决策 1054：v4 Pro 的「快」= off，原样发 off（云端翻成 thinking disabled）
+    await gateway.complete({
+      messages: [{ role: 'user', content: '在吗' }],
+      meta,
+      model,
+      reasoning_effort: 'off',
+    })
+    expect(bodies).toHaveLength(3)
     expect(bodies[0]?.model).toBe('deepseek-v4-pro')
     expect(bodies[0]?.reasoning_effort).toBe('max')
     expect(bodies[1]).not.toHaveProperty('reasoning_effort')
+    expect(bodies[2]?.reasoning_effort).toBe('off')
+  })
+})
+
+describe('WP377 写明三档（决策 1054）', () => {
+  it('照写明的出、缺的那档不出、不到两档不出、默认 = 写明的标准', async () => {
+    const { thinkingOptionsFromLevels } = await import('../src/model-thinking.js')
+    expect(thinkingOptionsFromLevels({ standard: 'high', deep: 'max' }, 'high')).toEqual({
+      options: [
+        { level: 'standard', effort: 'high' },
+        { level: 'deep', effort: 'max' },
+      ],
+      default: 'high',
+    })
+    expect(thinkingOptionsFromLevels({ standard: 'high' })).toBeUndefined()
+    expect(thinkingOptionsFromLevels({ fast: 'off', deep: 'max' }, 'max')).toEqual({
+      options: [
+        { level: 'fast', effort: 'off' },
+        { level: 'deep', effort: 'max' },
+      ],
+      default: 'max',
+    })
   })
 })

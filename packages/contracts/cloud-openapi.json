@@ -11364,10 +11364,28 @@
           },
           "default": {
             "$ref": "#/components/schemas/ReasoningEffort"
+          },
+          "levels": {
+            "$ref": "#/components/schemas/PricingReasoningLevels"
           }
         },
         "required": ["efforts"],
         "description": "WP377：一个模型在云端能调的思考档。`efforts` 用与本机同一套 id（{@link ReasoningEffort}，含 `off` 表示能关掉思考）； `default` 是上游官方的默认档（不给 = 按客户端的老规矩挑「标准」）。档位怎么写到上游（`thinking` / `reasoning_effort` / `enable_thinking`…）是云端的事，不进契约。"
+      },
+      "PricingReasoningLevels": {
+        "type": "object",
+        "properties": {
+          "fast": {
+            "$ref": "#/components/schemas/ReasoningEffort"
+          },
+          "standard": {
+            "$ref": "#/components/schemas/ReasoningEffort"
+          },
+          "deep": {
+            "$ref": "#/components/schemas/ReasoningEffort"
+          }
+        },
+        "description": "WP377：界面三档「快 / 标准 / 深度」各落到哪一档（每一格都必须在 `efforts` 里）。"
       },
       "PublicContentObservation": {
         "type": "object",

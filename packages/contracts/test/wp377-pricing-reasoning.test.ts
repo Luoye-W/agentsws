@@ -13,7 +13,9 @@ describe('WP377 价目里的思考档', () => {
 
   it('照声明给，按由浅到深排、去重、认不得的丢掉', () => {
     expect(
-      pricingReasoningOf(row({ efforts: ['max', 'off', 'high', 'high', 'ultra'], default: 'high' })),
+      pricingReasoningOf(
+        row({ efforts: ['max', 'off', 'high', 'high', 'ultra'], default: 'high' }),
+      ),
     ).toEqual({ efforts: ['off', 'high', 'max'], default: 'high' })
   })
 
@@ -24,6 +26,25 @@ describe('WP377 价目里的思考档', () => {
   it('默认档不在声明里就不带', () => {
     expect(pricingReasoningOf(row({ efforts: ['off', 'high'], default: 'max' }))).toEqual({
       efforts: ['off', 'high'],
+    })
+  })
+
+  it('决策 1054：三档映射照云端写的带上，不在档位里的那格丢掉', () => {
+    expect(
+      pricingReasoningOf(
+        row({
+          efforts: ['off', 'high', 'max'],
+          default: 'high',
+          levels: { fast: 'off', standard: 'high', deep: 'ultra' },
+        }),
+      ),
+    ).toEqual({
+      efforts: ['off', 'high', 'max'],
+      default: 'high',
+      levels: { fast: 'off', standard: 'high' },
+    })
+    expect(pricingReasoningOf(row({ efforts: ['high', 'max'], levels: 'x' }))).toEqual({
+      efforts: ['high', 'max'],
     })
   })
 })

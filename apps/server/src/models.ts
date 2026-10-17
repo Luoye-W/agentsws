@@ -115,7 +115,7 @@ import {
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
-import { thinkingOptionsOf } from './model-thinking.js'
+import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
@@ -1864,8 +1864,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           ?.models ?? []
       const row = entries.find((e) => e.model === model)
       const reasoning = row === undefined ? undefined : pricingReasoningOf(row)
+      // 决策 1054：云端写明了三档各落哪一档就照它（v4 Pro 的「快」= 关掉思考），没写按老规矩挑
       const thinking =
-        reasoning === undefined ? undefined : thinkingOptionsOf(reasoning.efforts, reasoning.default)
+        reasoning === undefined
+          ? undefined
+          : reasoning.levels === undefined
+            ? thinkingOptionsOf(reasoning.efforts, reasoning.default)
+            : thinkingOptionsFromLevels(reasoning.levels, reasoning.default)
       return thinking === undefined ? {} : { thinking }
     }
     if (c.kind === 'openai-codex') {

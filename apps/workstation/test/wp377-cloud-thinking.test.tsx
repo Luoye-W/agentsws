@@ -16,7 +16,9 @@ const PRO: FreeChatModelChoice = {
   group: 'workshop',
   vendor: 'deepseek',
   thinking: {
+    // 决策 1054：v4 Pro 的「快」= 关掉思考
     options: [
+      { level: 'fast', effort: 'off' },
       { level: 'standard', effort: 'high' },
       { level: 'deep', effort: 'max' },
     ],
@@ -47,14 +49,16 @@ function mount(value: string): string[] {
 }
 
 describe('WP377 工坊积分的思考小钮', () => {
-  it('价目写了档：出小钮，默认「标准」，点「深度」回调 max', () => {
+  it('价目写了档：出三档小钮，默认「标准」；点「深度」回调 max，点「快」回调 off（决策 1054）', () => {
     const efforts = mount(PRO.id)
     const btn = screen.getByTestId('model-pick-thinking')
     expect(btn.getAttribute('data-level')).toBe('standard')
+    expect(btn.hasAttribute('data-toggle')).toBe(false)
     fireEvent.click(btn)
-    expect(screen.queryByTestId('model-pick-thinking-fast')).toBeNull()
     fireEvent.click(screen.getByTestId('model-pick-thinking-deep'))
-    expect(efforts).toEqual([`${PRO.id}:max`])
+    fireEvent.click(screen.getByTestId('model-pick-thinking'))
+    fireEvent.click(screen.getByTestId('model-pick-thinking-fast'))
+    expect(efforts).toEqual([`${PRO.id}:max`, `${PRO.id}:off`])
   })
 
   it('价目没写：不出', () => {
