@@ -142,7 +142,13 @@ export interface PrServiceOptions {
    * "还没连"——**不是**"今天没人提我们"（`pr-core/channels/alerts.ts` 第 3 条）。
    */
   pullMentions?(): Promise<
-    { ok: true; rows: readonly PrMentionInput[] } | { ok: false; message: string }
+    | {
+        ok: true
+        rows: readonly PrMentionInput[]
+        /** WP386：这一轮入完库之后回报几条是新的（监控那一侧记进这一轮）。 */
+        finish?(out: { created: number }): void
+      }
+    | { ok: false; message: string }
   >
   /** 监控那一轮用谁的分配去提（定时任务没有"当前用户"）。 */
   monitorActor?(): PrActor | undefined
@@ -170,6 +176,13 @@ export function redditSitePath(url: string | undefined): string | undefined {
   path = path.split(/[?#]/u)[0] ?? ''
   if (!/^\/r\/[^/]+\/comments\//u.test(path)) return undefined
   return path.endsWith('/') ? path : `${path}/`
+}
+
+/** R8：负面里要立即推的那几类（召回 / 诉讼 / 安全事故），或者已经在扩散（同一条见到 3 次以上）。 */
+const URGENT_SIGNALS = /^negative:(recall|lawsuit|召回|起火|漏电|维权|曝光)$/u
+
+export function urgentNegative(signals: readonly string[], seen_count: number): boolean {
+  return seen_count >= 3 || signals.some((s) => URGENT_SIGNALS.test(s))
 }
 
 /** {@link PrServiceAssembly.monitorSweep} 回的那一份。 */
@@ -356,12 +369,30 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
       observed_at: now,
       status: 'new',
       dedupe_key: key,
+      ...(input.group === undefined ? {} : { group: input.group }),
+      ...(input.competitor === undefined ? {} : { competitor: input.competitor }),
+      ...(input.source_id === undefined ? {} : { source_id: input.source_id }),
     }
-    const saved = store.saveMention(row)
-    const card = handoffOfMention(verdict, {
-      origin: input.origin,
-      ...(input.author === undefined ? {} : { author: input.author }),
+    const saved = store.saveMention({
+      ...row,
+      ...(input.guid === undefined ? {} : { guid: input.guid }),
     })
+    /*
+     * WP386（R8）：只有**自家**的事出卡（转客服 / 负面预警 / 回应草稿）。竞品、行业、指定网站那几组只入表、
+     * 进简报——竞品被骂不是我们的预警，竞品的客户问题也不是我们的工单。同一条已经见过的不再出第二张卡。
+     */
+    const ownGroup = (input.group ?? 'own') === 'own'
+    const card =
+      ownGroup && saved.created
+        ? handoffOfMention(verdict, {
+            origin: input.origin,
+            ...(input.author === undefined ? {} : { author: input.author }),
+          })
+        : {
+            kind: 'archive' as const,
+            title: `存档：${input.origin}`,
+            reason: ownGroup ? '同一条已经见过了。' : '竞品 / 行业动向只入表、进简报，不出卡。',
+          }
 
     /*
      * 归档那一路不出卡：一条好话、一条判不准的闲话，出一张卡只会让队列变长。
@@ -462,7 +493,11 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         },
         separation_of_duties: false,
       },
-      priority: card.kind === 'negative_alert' ? 'immediate' : 'queue',
+      // R8：负面里只有在扩散（被转了几次）/ 召回 / 诉讼这类才立即推，其余进队列、进简报
+      priority:
+        card.kind === 'negative_alert' && urgentNegative(verdict.signals, saved.mention.seen_count)
+          ? 'immediate'
+          : 'queue',
     })
     store.recordTriage({
       mention_id: saved.mention.id,
@@ -495,13 +530,23 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
   }
 
   const port: PrPort = {
-    mentions: (_actor, filter) => ({
-      rows: store.mentions({
-        ...(filter.sentiment === undefined ? {} : { sentiment: filter.sentiment }),
-        ...(filter.triage === undefined ? {} : { triage: filter.triage }),
-        ...(filter.open === undefined ? {} : { open: filter.open }),
-      }) as PrMentionRow[],
-    }),
+    mentions: (_actor, filter) => {
+      const rows = store
+        .mentions({
+          ...(filter.sentiment === undefined ? {} : { sentiment: filter.sentiment }),
+          ...(filter.triage === undefined ? {} : { triage: filter.triage }),
+          ...(filter.open === undefined ? {} : { open: filter.open }),
+          ...(filter.group === undefined ? {} : { group: filter.group }),
+          ...(filter.competitor === undefined ? {} : { competitor: filter.competitor }),
+          ...(filter.source_id === undefined ? {} : { source_id: filter.source_id }),
+          ...(filter.since === undefined ? {} : { since: filter.since }),
+          ...(filter.until === undefined ? {} : { until: filter.until }),
+        })
+        .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))
+      return {
+        rows: (filter.limit === undefined ? rows : rows.slice(0, filter.limit)) as PrMentionRow[],
+      }
+    },
 
     ingestMention: (actor, input) => ingest(actor, input),
 
@@ -867,7 +912,7 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
       out.skipped.push({
         workspace_id,
         reason:
-          '这个品牌里还没有人持有品牌监控（pr.monitoring）这条职责——没人接的话，拉回来也没地方放。',
+          '这个品牌里还没有人持有信息监控（pr.monitoring）这条职责——没人接的话，拉回来也没地方放。',
       })
       return out
     }
@@ -876,7 +921,7 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
       out.skipped.push({
         workspace_id,
         reason:
-          '这个品牌还没配监控源（Google Alerts 的 RSS / Reddit）。**这不等于今天没人提我们**——去连接页把 Google Alerts 填上。',
+          '这个品牌还没配监控源（Google Alerts 的 RSS / 网站 RSS）。**这不等于今天没人提我们**——跟我说「帮我盯一下」，我先列一份要建的提醒。',
       })
       return out
     }
@@ -891,6 +936,7 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
       if (view.approval_item_id !== undefined) out.carded += 1
       if (view.route === 'support') out.routed += 1
     }
+    pulled.finish?.({ created: out.created })
     return out
   }
 

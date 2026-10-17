@@ -11,8 +11,8 @@
  * | `release` | 结构化新闻稿六段；数字 ↔ 事实卡对照；引语必须是人给的 |
  * | `media` | 媒体名单、pitch 两封序列、日配额与抑制名单（复用建联那一套） |
  * | `subreddits` | 版规解析（禁推广 / 要 flair / 冷却）→ 可发 / 不可发 + 原因 |
- * | `monitor` | 提及归一 + 去重 + 情绪三档 + 客户问题 vs 舆情（复用 social-core 的 triage） |
- * | `channels` | Reddit（社媒那份适配器 + 三口）、论坛（浏览器）、Alerts（RSS） |
+ * | `monitor` | 提及归一 + 去重（URL / guid / 同站相近标题）+ 本地整词过滤 + 情绪三档 + 客户问题 vs 舆情 |
+ * | `channels` | Reddit（社媒那份适配器 + 三口）、论坛（浏览器）、Alerts（任意 RSS / Atom，feedsmith） |
  * | `alerts-build` | WP387：你的浏览器替你建 / 导入 Google 提醒（清单 → 一张卡 → 读回 RSS 链接） |
  *
  * **不在这里的东西**（各有去处，免得有人在这里找）：

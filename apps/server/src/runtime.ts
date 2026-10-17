@@ -121,6 +121,7 @@ import {
   isScheduleTool,
   isThemeRole,
   OWNER_TOOL_NAMES,
+  PR_MONITOR_TOOL_NAMES,
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
   RECORD_SINK_TOOL_NAMES,
@@ -211,6 +212,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SETUP_REQUEST_TOOL_NAMES,
     // WP387：交代建 / 读 Google 提醒的结果——只写本机信息监控库（先拉一次 feed 是读）
     ...GOOGLE_ALERTS_TOOL_NAMES,
+    // WP386：信息监控查提及——只读本机提及库
+    ...PR_MONITOR_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -480,6 +483,8 @@ export interface RuntimeOptions {
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
+  /** WP386：信息监控查提及（`list_mentions`，`pr-watch/tools.ts` 建的那一份）。不给 = 没有。 */
+  prMonitorTools?: ToolExecutor
   /**
    * WP315（docs/101 §5.1①）：投放岗看数据的三个工具（`ads-data/tools.ts` 建的那一份）。只给 `ads.*` 职责。
    * 不给 = 没有这一组（老装配、模拟世界字节不变）。
@@ -1262,6 +1267,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
     const googleAlerts = options.googleAlertsTool
+    const prMonitor = options.prMonitorTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1292,7 +1298,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
-      setupRequest === undefined
+      setupRequest === undefined &&
+      prMonitor === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1341,6 +1348,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP331：报告积木（名字与别处不重名）
       if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
         return reportTools(call)
+      }
+      // WP386：信息监控查提及（名字与别处不重名）
+      if (prMonitor !== undefined && PR_MONITOR_TOOL_NAMES.includes(bareOf(call.name))) {
+        return prMonitor(call)
       }
       // WP315：投放岗看数据（名字与别处不重名；职责在执行器里再判一次）
       if (adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -1395,6 +1406,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
+    if (options.prMonitorTools !== undefined && PR_MONITOR_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
