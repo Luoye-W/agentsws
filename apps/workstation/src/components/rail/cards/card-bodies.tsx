@@ -7,10 +7,12 @@
  */
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { CheckCircle2, ChevronRight } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, useEffect, useRef } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
+import { PrWatchSources } from '@/components/pr/pr-watch-sources'
+import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailCardBodyProps } from '@/components/rail/registry'
@@ -26,6 +28,7 @@ import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-o
 import { getMySchedules, getPositionRecords, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { getFreeChatModels } from '@/lib/free-chat'
+import type { PrWatchView } from '@/lib/pr-watch-api'
 import { cn } from '@/lib/utils'
 
 const ROW =
@@ -131,13 +134,24 @@ export function PlansCard({ scope, limit }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const list = useQuery({ queryKey: SCHEDULES_KEY, queryFn: getMySchedules, retry: false })
+  // WP386：信息监控下一次什么时候拉（系统自带的那条定时一小时一拍，人看的是「明早 9:00」）
+  const monitorNext = useScopeMonitor(scope)?.view?.next_run_at
   if (scope === undefined) return null
   const rows = (list.data ?? [])
     .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
     .sort(byPlan)
-  if (rows.length === 0) return list.isPending ? null : <Empty text={t('plans.empty')} />
+  if (rows.length === 0 && monitorNext === undefined)
+    return list.isPending ? null : <Empty text={t('plans.empty')} />
   return (
     <ul className="flex flex-col gap-px" data-testid="plans-card">
+      {monitorNext === undefined ? null : (
+        <li>
+          <div className={ROW} data-testid="plan-row-monitor">
+            <span className="min-w-0 truncate">{t('prwatch.plan.row')}</span>
+            <Meta>{whenLabel(monitorNext, t)}</Meta>
+          </div>
+        </li>
+      )}
       {rows.slice(0, limit).map((r) => {
         const waiting = r.params?.awaiting_approval === true
         return (
@@ -193,6 +207,8 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   const sorted = [...items].sort(
     (a, b) => Number(connectionNeedsYou(b)) - Number(connectionNeedsYou(a)),
   )
+  // WP386：信息监控的监控源（一行汇总；拉不到的亮红点，点开就地看 / 贴）
+  const monitor = useScopeMonitor(scope)
   return (
     <div className="flex flex-col gap-1.5" data-testid="connections-card">
       {live ? (
@@ -206,8 +222,11 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
           </Suspense>
         </div>
       ) : null}
+      {monitor === undefined ? null : (
+        <MonitorRow assignment={monitor.assignment} view={monitor.view} />
+      )}
       {sorted.length === 0 ? (
-        live || !ready ? null : (
+        live || !ready || monitor !== undefined ? null : (
           <Empty text={t('conncard.empty')} />
         )
       ) : (
@@ -249,6 +268,44 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
           })}
         </ul>
       )}
+    </div>
+  )
+}
+
+/** WP386：连接卡上信息监控那一行（「Google Alerts · 17 条 · 1 条拉不到」）；点开就地看每一条、贴 RSS。 */
+function MonitorRow({
+  assignment,
+  view,
+}: {
+  assignment: string
+  view?: PrWatchView | undefined
+}): ReactNode {
+  const { t } = useApp()
+  const [open, setOpen] = useState(false)
+  const bad = (view?.failed ?? 0) > 0
+  return (
+    <div
+      className="flex flex-col gap-1"
+      data-testid="connection-row-monitor"
+      data-todo={bad ? 'true' : undefined}
+    >
+      <button
+        type="button"
+        className={ROW}
+        onClick={() => {
+          setOpen((v) => !v)
+        }}
+      >
+        <BrandIcon provider="google_alerts" />
+        <span className="min-w-0 truncate">{t('prwatch.conn.name')}</span>
+        {bad ? <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-bad" /> : null}
+        <Meta>{view?.summary ?? ''}</Meta>
+      </button>
+      {open ? (
+        <div className="px-1.5 pb-1">
+          <PrWatchSources assignment={assignment} compact />
+        </div>
+      ) : null}
     </div>
   )
 }
