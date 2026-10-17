@@ -12,6 +12,7 @@ import {
   OWNER_TOOL_DEF_BY_NAME,
   SETUP_REQUEST_TOOL_DEF_BY_NAME,
   SHOP_TOOL_DEF_BY_NAME,
+  SITE_HEALTH_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   THEME_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
@@ -30,6 +31,8 @@ const ALL = [
   ...ASSISTANT_TOOL_DEF_BY_NAME.keys(),
   // WP334：AI 自己要连接卡 / 配置卡（所有职责都有）
   ...SETUP_REQUEST_TOOL_DEF_BY_NAME.keys(),
+  // WP385：读网站体检结论（网站运营 / 内容与搜索）
+  ...SITE_HEALTH_TOOL_DEF_BY_NAME.keys(),
   'get_order',
 ]
 
@@ -97,5 +100,19 @@ describe('dsh 参数表：每个工具都过 dsh 的编译', () => {
     expect(schema.properties.suggestions.items.additionalProperties).toBe(false)
     expect(schema.required).toEqual(['why'])
     expect(def?.description).toContain('不要叫用户去设置页')
+  })
+
+  it('WP385 query_site_health：参数表与 stub / direct 同一份（只有可选的 part），描述说清只读、配置走 request_setup', () => {
+    const def = build().find((d) => d.name === 'query_site_health')
+    const schema = def?.parameters as unknown as {
+      properties: Record<string, { enum?: string[]; required?: boolean }>
+      required?: string[]
+    }
+    expect(Object.keys(schema.properties)).toEqual(['part'])
+    expect(schema.properties.part?.enum).toContain('ai_traffic')
+    expect(schema.properties.part?.required).not.toBe(true)
+    expect(schema.required ?? []).toEqual([])
+    expect(def?.description).toContain('只读')
+    expect(def?.description).toContain('site.health')
   })
 })

@@ -101,6 +101,12 @@ import {
   shopBranch,
   shopStagedOf,
 } from './shop.js'
+import {
+  renderSiteHealthAnswer,
+  SITE_HEALTH_TOOL_DEF_BY_NAME,
+  siteHealthBranch,
+  siteHealthQueryDataOf,
+} from './site-health.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
   boundariesToAsk,
@@ -367,7 +373,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
-      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ?? {
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+      // WP385：网站运营 / 内容与搜索读体检结论（服务端接了才有）
+      SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -810,6 +818,83 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP385（决策 1076）：**网站体检**（演示用剧本）。工具面里有 query_site_health：
+       * 话里给了商品 feed / 平台上架页网址 → 要一张体检设置卡（已经是这样了就读一次体检结论接着说）；
+       * 问体检 / AI 爬虫 / AI 带来的成交 → 读体检结论。别的问法一个字节不变。
+       */
+      const healthStep = siteHealthBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (healthStep !== undefined) {
+        const callHost = async (
+          tool: string,
+          input: Record<string, unknown>,
+        ): Promise<{ status: string; data?: unknown; reason?: string }> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status === 'ok') readTools.push(tool)
+          return res
+        }
+        const failedOf = (res: { reason?: string }): string =>
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? '')
+        let answer: string
+        if (healthStep.kind === 'setup') {
+          const res = await callHost(healthStep.tool, healthStep.input)
+          const data = res.status === 'ok' ? setupRequestDataOf(res.data) : undefined
+          if (data?.already === true) {
+            // 设好了（或本来就是这样）：读一次体检结论（正在按新设置体检就等它跑完）
+            const q = await callHost('query_site_health', {})
+            answer = `设好了。${renderSiteHealthAnswer(
+              q.status === 'ok' ? siteHealthQueryDataOf(q.data) : undefined,
+              failedOf(q),
+            )}`
+          } else
+            answer = renderSetupRequestAnswer({
+              ...(data === undefined ? {} : { data }),
+              ...(res.status === 'ok' ? {} : { failed: failedOf(res) }),
+            })
+        } else {
+          const res = await callHost(healthStep.tool, healthStep.input)
+          answer = renderSiteHealthAnswer(
+            res.status === 'ok' ? siteHealthQueryDataOf(res.data) : undefined,
+            failedOf(res),
+          )
+        }
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*
