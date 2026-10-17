@@ -27,6 +27,7 @@ import type {
   ReviewRow,
   SearchDeckData,
   SiteDeckData,
+  SiteHealthDeckData,
   SocialDeckData,
 } from '@agentsws/deck'
 import { defaultTilesFor, PLANNED_SOURCE_NOTES } from '@agentsws/deck'
@@ -84,6 +85,8 @@ export interface WorkstationDataSource {
    * 而检查单里那几项 `unknown` 说的才是"这次没从店里读到"——三种状态，三句话。
    */
   site?(view?: { assignment_id?: string }): SiteDeckData | undefined
+  /** WP381：网站 / 商品体检的最近一次结论与 AI 来源流量（不给 = 那几块「还没体检」）。 */
+  siteHealth?(): SiteHealthDeckData | undefined
   /**
    * WP75（57 §3）：投放面板那几块要的行。
    *
@@ -228,6 +231,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const social = options.data.social?.(view)
       const design = options.data.design?.(view)
       const site = options.data.site?.(view)
+      const siteHealth = options.data.siteHealth?.()
       const ads = options.data.ads?.(view)
       const pr = options.data.pr?.(view)
       const b2b = options.data.b2b?.(view)
@@ -248,6 +252,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(reviews === undefined ? {} : { reviews }),
         ...(posts === undefined ? {} : { posts }),
         ...(kol === undefined ? {} : { kol }),
+        ...(siteHealth === undefined ? {} : { site_health: siteHealth }),
         ...(social === undefined ? {} : { social }),
         ...(design === undefined ? {} : { design }),
         ...(site === undefined ? {} : { site }),

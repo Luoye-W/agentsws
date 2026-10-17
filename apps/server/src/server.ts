@@ -53,6 +53,8 @@ import {
   readCookie,
   SESSION_COOKIE,
   type SeoPort,
+  type SiteHealthPort,
+  type SiteHealthView,
   type SkillsPort,
   SqliteExtensionStore,
   SqliteIdempotencyStore,
@@ -694,6 +696,13 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import {
+  createSiteHealthService,
+  type PageRenderer,
+  type SiteHealthService,
+  trafficOrdersFromRows,
+} from './site-health.js'
+import { createChromeRenderer } from './site-health-render.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
@@ -1074,6 +1083,16 @@ export interface ServerOptions {
   ) => Promise<{ sources: readonly { url: string; title?: string; snippet?: string }[] }>
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
+  /**
+   * WP381：网站 / 商品体检抓公开页面用的 fetch（测试回放录好的页面 → 全程不联网）。
+   * 不给 = 与品牌分析同一口（`brandIntakeFetch`，再不给就是 `globalThis.fetch`）。
+   */
+  siteHealthFetch?: BrandIntakeFetch
+  /**
+   * WP381：体检的「渲染后」那一份（开 JS 看一眼）。`false` = 不比渲染后；不给 = 用这台电脑上的 Chrome / Edge
+   * （托管实例没有）。
+   */
+  siteHealthRenderer?: PageRenderer | false
   /**
    * WP90（55 §9 Q8）：起订阅登录那棵 dsh 树的工厂（测试注入替身 → 全程不联网、
    * 也不真的装一棵 Cordis 树）。生产不传：第一次有人点"用订阅登录"时才
@@ -4005,6 +4024,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP77（59 §3）：建站那五块同理——上线检查单上那几行是**我们自己跑出来的结论**，
       // 店没连上的时候它照实说"这几项没读到"，那与"去连接"不是一回事。
       site: () => siteService.deckData(),
+      // WP381：网站 / 商品体检与 AI 来源流量（上一次的结论，不现算）
+      siteHealth: () => siteHealth.deckData(),
       /*
        * WP75（57 §3）：投放那几块同理——campaign 表与止损记录是**我们自己库里**的行，
        * 一个平台都没连也照样在那儿摆着。四个平台那四个源才是"连没连"的事。
@@ -6158,8 +6179,66 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return { text: completion.text }
       }
     }
+    /*
+     * WP381（决策 1066）：网站 / 商品体检与 AI 来源流量（这个品牌一份，落在品牌目录的 `site-health.json`）。
+     * 只读：公开页面只 GET、店铺走店铺授权的只读口；不一致交给担「店铺管理」的人开一件事。
+     */
+    const siteHealth = createSiteHealthService({
+      clock,
+      newId: (prefix) =>
+        `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 8)}`,
+      ...(dir === undefined ? {} : { file: join(dir, 'site-health.json') }),
+      origin: async () => {
+        const domain = (await identity.getWorkspace(ws))?.profile?.domain?.trim()
+        if (domain === undefined || domain === '') return undefined
+        return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`
+      },
+      fetch: options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never),
+      renderer: () =>
+        options.siteHealthRenderer === false || hostedInstance
+          ? undefined
+          : (options.siteHealthRenderer ??
+            createChromeRenderer({ executable: () => browserSettings.get().executable_path })),
+      shop: async () => (await shopOf(ws))?.auth.reader(),
+      scopes: async () => (await shopOf(ws))?.auth.access?.().then((a) => a?.scopes),
+      fallbackOrders: () =>
+        workData.sources().some((s) => s.id === 'shop' && s.connected)
+          ? trafficOrdersFromRows(workData.orders())
+          : undefined,
+      dispatch: async (input) => {
+        // 担「店铺管理」（网站运营）的那一位；没人担就不派，清单留在体检报表里
+        const holder = roles.assignments
+          .listByWorkspace(ws)
+          .find((a) => a.role_id === 'dtc.store' && a.revoked_at === undefined)
+        if (holder === undefined) return undefined
+        const port = await positionPortFor(ws)
+        const out = await port.open(
+          { workspace_id: ws, person_id: holder.person_id, assignment_id: holder.id },
+          holder.id,
+          {
+            ...fitTaskTitle({ title: input.title, summary: input.text }),
+            role_id: 'dtc.store',
+            mode: 'task',
+            detach: true,
+          },
+        )
+        return { matter_id: out.matter.id }
+      },
+      event: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'site_health' },
+          subject: { type: 'site_health', id: String(payload.run_id ?? ws) },
+          correlation: { trace_id: `tr_site_health_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
     const seoService = createSeoService({
       workspace_id: ws,
+      // WP381：周报里和引用数并排的 AI 来源流量（实测）
+      aiTraffic: () => siteHealth.aiTraffic(),
       routeScopeManager,
       clock,
       random,
@@ -7514,6 +7593,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       b2bOutbound,
       b2bSales,
       seoService,
+      // WP381：网站 / 商品体检与 AI 来源流量
+      siteHealth,
       // WP335：品牌分析认品类用的模型口（与内容与搜索同一个口）
       textModel: seoModel,
       googleReads,
@@ -8210,6 +8291,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       weekly: async () => {
         const b = await of()
+        // WP381：每周一先体检一次网站 / 商品（结论进体检报表，不一致交给网站运营）；体检失败不拦周报
+        await b.siteHealth?.run().catch(() => undefined)
         const revenue = await b.seoService.weeklyRevenue()
         const geo = await b.seoService.weeklyGeo()
         const skipped: unknown[] = []
@@ -11452,6 +11535,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP154「内容与搜索」`/v1/seo/*`：问题清单落在请求人所在品牌的目录下；"现在跑一轮"
    * 跑的也是那个品牌（与定时任务同一条路，只是不用等到早上 8 点）。
    */
+  /** WP381：网站 / 商品体检与 AI 来源流量 `/v1/site-health*`（请求人所在品牌）。 */
+  const siteHealthOf = async (workspace_id: string) => {
+    const svc = (await brandModules.forWorkspace(workspace_id as WorkspaceId)).siteHealth
+    if (svc === undefined) throw new ApiError('not_implemented', '这个品牌没有网站体检')
+    return svc
+  }
+  const siteHealthViewOf = (svc: SiteHealthService): SiteHealthView => {
+    const run = svc.latest()
+    const traffic = svc.lastTraffic()
+    return {
+      ...(run === undefined ? {} : { run }),
+      ...(traffic === undefined ? {} : { ai_traffic: traffic }),
+      settings: svc.settings(),
+    }
+  }
+  const siteHealthPort: SiteHealthPort = {
+    view: async (actor) => siteHealthViewOf(await siteHealthOf(actor.workspace_id)),
+    run: async (actor) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      await svc.run()
+      await svc.aiTraffic().catch(() => undefined)
+      return siteHealthViewOf(svc)
+    },
+    aiTraffic: async (actor) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      await svc.aiTraffic()
+      return siteHealthViewOf(svc)
+    },
+    saveSettings: async (actor, input) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      svc.saveSettings(input)
+      return siteHealthViewOf(svc)
+    },
+  }
   const seoPort: SeoPort = {
     geoQuestions: async (actor) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoView(),
@@ -12511,6 +12628,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     b2bSales: b2bSalesPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
+    siteHealth: siteHealthPort,
     // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
     ...(options.clientErrorLog !== undefined
       ? { clientErrors: stderrClientErrors(options.clientErrorLog) }

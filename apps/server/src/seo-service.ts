@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   AiPlatform,
+  AiTrafficSummary,
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
@@ -68,6 +69,7 @@ import type {
 import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
+  aiTrafficBrief,
   type BrandProfileLike,
   buildDaily,
   CLAIM_MARKET_GROUPS,
@@ -163,6 +165,11 @@ export interface SeoBrandInfo extends BrandProfileLike {
 
 export interface SeoServiceOptions {
   workspace_id: WorkspaceId
+  /**
+   * WP381：AI 来源流量（Shopify 自己记的来源，实测）——周报和引用数并排写一行。
+   * 不给 / 回 `undefined`（没连店、没读到）= 周报那一格不出。永不让周报失败。
+   */
+  aiTraffic?: () => Promise<AiTrafficSummary | undefined>
   clock: Clock
   random(): number
   approvals: ApprovalBus
@@ -536,6 +543,14 @@ export function claimRuleCard(input: {
 }
 
 export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly {
+  /** WP381：AI 来源流量（实测）；读不到 / 抛了都当没有，周报照出。 */
+  const aiTrafficOf = async (): Promise<AiTrafficSummary | undefined> => {
+    try {
+      return await options.aiTraffic?.()
+    } catch {
+      return undefined
+    }
+  }
   const { workspace_id, clock } = options
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -1345,6 +1360,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       .reduce((a, t) => a + t.items.length, 0)
     const questions = new Set(store.answers({ run_id: run.id }).map((a) => a.prompt_id)).size
     const legacy = est === undefined ? undefined : legacyEstimate(est, probing)
+    const traffic = await aiTrafficOf()
     const payload: SeoWeeklyGeoPayload = {
       variant: 'weekly_geo',
       week_of: run.period,
@@ -1360,6 +1376,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       ...(pendingCells === 0 ? {} : { pending_cells: pendingCells }),
       // WP335：简报那一行（这一周拿到回答才有）
       ...(brief === undefined ? {} : { brief }),
+      // WP381：AI 来源流量（实测）
+      ...(traffic === undefined ? {} : { ai_traffic: traffic }),
     }
     const seen = new Set(
       rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
@@ -1374,14 +1392,15 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           .join('；')}。${cost}`
       : `${questions} 个买家问题，${seen.size} 个在某个 AI 上提到或引用了我们；缺位 ${gaps.length} 个。${cost}`
     const lead = brief === undefined ? '' : `${brief}\n`
+    const tail = traffic === undefined ? '' : `\n${aiTrafficBrief(traffic)}`
     const approval_item_id = await report(
       actor,
       'weekly_geo',
       run.period,
       `AI 平台可见度（${run.period} 那一周）`,
       pendingCells === 0
-        ? `${lead}${line}`
-        : `${lead}${line}还有 ${pendingCells} 格在排队，回来后这张卡会更新。`,
+        ? `${lead}${line}${tail}`
+        : `${lead}${line}还有 ${pendingCells} 格在排队，回来后这张卡会更新。${tail}`,
       payload,
     )
     emit('seo.weekly_geo', actor.assignment_id, {
@@ -1816,12 +1835,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes: out.notes,
         ...(watch.enabled ? { estimate: legacyEstimate(out.estimate, probing) } : {}),
       }
+      // WP381：这周没问 AI，AI 来源流量（实测）照样写
+      const traffic = await aiTrafficOf()
+      if (traffic !== undefined) payload.ai_traffic = traffic
       const approval_item_id = await report(
         actor,
         'weekly_geo',
         week,
         `AI 平台可见度（${week} 那一周）`,
-        out.notes[0] ?? '',
+        [out.notes[0] ?? '', ...(traffic === undefined ? [] : [aiTrafficBrief(traffic)])]
+          .filter((x) => x !== '')
+          .join('\n'),
         payload,
       )
       emit('seo.weekly_geo', actor.assignment_id, {

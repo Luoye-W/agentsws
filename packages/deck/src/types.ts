@@ -595,6 +595,11 @@ export interface OrderRow {
    * 按页面收入归因要它；上游没给就没有，**不编**。
    */
   landing_site?: string
+  /**
+   * WP381：顾客从哪个网页点进来的（Shopify 的 `referring_site`；GraphQL 是进店来源的 `referrerUrl`）。
+   * AI 来源流量按它认 chatgpt.com / perplexity.ai…；上游没给就没有，**不编**。
+   */
+  referring_site?: string
 }
 
 /** 记录 Tab 的一行（29 role_view 的 timeline 积木）。 */
