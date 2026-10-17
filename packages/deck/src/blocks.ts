@@ -646,6 +646,7 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
     ...CONTENT_QUEUE_BLOCKS(),
     ...SEO_BLOCKS(),
     // WP381：AI 来源流量（实测），和上面 AI 平台里的引用并排
+    block('seo.ai_orders', 'stat_tile', 'AI 带来的成交（实测）', 'seo.ai_orders'),
     block('seo.ai_traffic', 'table', 'AI 带来的访问与成交', 'seo.ai_traffic'),
   ],
   // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。

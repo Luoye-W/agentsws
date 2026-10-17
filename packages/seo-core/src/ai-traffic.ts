@@ -128,6 +128,8 @@ export function summarizeAiTraffic(input: {
   currency: string
   now: string
   list?: readonly AiReferrer[]
+  /** 前一段窗口（算周变化）；不给就不算。 */
+  previous?: { since: string; until: string }
 }): AiTrafficSummary {
   const list = input.list ?? DEFAULT_AI_REFERRERS
   const rows = new Map<string, AiTrafficRow>()
@@ -158,6 +160,33 @@ export function summarizeAiTraffic(input: {
       const r = row(p.platform)
       r.visits = (r.visits ?? 0) + s.sessions
     }
+  // 前一段窗口：只数来自 AI 的单数与金额
+  let previous: AiTrafficSummary['previous']
+  if (input.previous !== undefined) {
+    const { since, until } = input.previous
+    const prev = input.orders.filter(
+      (o) =>
+        o.created_at >= since &&
+        o.created_at < until &&
+        (aiPlatformOf(o.last, list) ?? aiPlatformOf(o.first, list)) !== undefined,
+    )
+    previous = {
+      ai_orders: prev.length,
+      ai_revenue: Math.round(prev.reduce((n, o) => n + o.total, 0) * 100) / 100,
+    }
+  }
+  // 逐天（窗口起点起，按 24 小时一格）
+  const start = Date.parse(input.since)
+  const days = Math.max(1, Math.ceil((Date.parse(input.until) - start) / 86_400_000))
+  const daily = Array.from({ length: days }, () => 0)
+  for (const o of inWindow) {
+    if ((aiPlatformOf(o.last, list) ?? aiPlatformOf(o.first, list)) === undefined) continue
+    const k = Math.min(
+      days - 1,
+      Math.max(0, Math.floor((Date.parse(o.created_at) - start) / 86_400_000)),
+    )
+    daily[k] = (daily[k] ?? 0) + 1
+  }
   // 清单顺序出（ChatGPT 在前），没数的不出行
   const order = list.map((r) => r.platform)
   return {
@@ -171,6 +200,8 @@ export function summarizeAiTraffic(input: {
     ai_revenue: aiRevenue,
     visits: input.visits_state,
     computed_at: input.now,
+    ...(previous === undefined ? {} : { previous }),
+    daily,
   }
 }
 

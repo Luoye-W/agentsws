@@ -116,6 +116,8 @@ const TRAFFIC: AiTrafficSummary = {
   ai_revenue: 99.98,
   visits: 'no_scope',
   computed_at: '2026-10-17T08:00:00.000Z',
+  previous: { ai_orders: 1, ai_revenue: 29.99 },
+  daily: [0, 1, 0, 0, 1, 0, 0],
 }
 
 const table = (name: string, over = {}): TableResult => {
@@ -144,7 +146,7 @@ describe('WP381 体检报表块', () => {
     )
     expect(ids('site.shopify-build')).toContain('site.health.crawlers')
     expect(ids('site.shopify-build')).not.toContain('site.health.products')
-    expect(ids('dtc.content')).toContain('seo.ai_traffic')
+    expect(ids('dtc.content')).toEqual(expect.arrayContaining(['seo.ai_orders', 'seo.ai_traffic']))
     const b = blocksForRole('dtc.store' as never).find((x) => x.id === 'site.health.products')
     expect(b?.rerun).toEqual({ path: '/v1/site-health/run', label: '现在体检' })
   })
@@ -160,10 +162,18 @@ describe('WP381 体检报表块', () => {
     expect(table('seo.ai_traffic').rows[0]?.platform).toBe('还没算')
   })
 
-  it('爬虫：搜索类全列、训练类只列挡了的；原始 HTML 只列有问题的', () => {
+  it('爬虫：只列挡了的，放行的并成一行；原始 HTML 只列有问题的', () => {
     const t = table('site.ai_crawlers', { site_health: { run: RUN } })
-    expect(t.rows.map((r) => r.state)).toEqual(['放行', '挡了一部分', '挡了'])
-    expect(t.rows[1]?.why).toBe('#19 Disallow: /products/')
+    expect(t.rows).toEqual([
+      {
+        bot: 'PerplexityBot',
+        impact: 'Perplexity · AI 搜索',
+        state: '挡了一部分',
+        why: '#19 Disallow: /products/',
+      },
+      { bot: 'GPTBot', impact: '训练（你的选择）', state: '挡了', why: '#15 Disallow: /' },
+      { bot: '其余 2 个', impact: 'ChatGPT 等', state: '放行', why: '' },
+    ])
     const raw = table('site.raw_html', { site_health: { run: RUN } })
     expect(raw.rows).toEqual([{ page: '/products/pb', fact: '价格 49.99', state: '只靠 JS' }])
   })
@@ -172,10 +182,8 @@ describe('WP381 体检报表块', () => {
     const t = table('site.product_facts', { site_health: { run: RUN } })
     expect(t.rows[0]).toEqual({
       product: 'Power Bank',
-      where: '结构化数据',
-      what: '价格不一致',
-      found: '44.99',
-      expected: '49.99',
+      issue: '结构化数据 · 价格不一致',
+      compare: '44.99 → 49.99',
     })
     expect(t.footer).toMatchObject({ href: '/matters/mat_9', link_label: '看那件事' })
     const c = table('site.chatgpt_shopping', { site_health: { run: RUN } })
@@ -184,7 +192,8 @@ describe('WP381 体检报表块', () => {
 
   it('AI 来源流量：标「实测」与占比；没连店就「去连接」', () => {
     const t = table('seo.ai_traffic', { site_health: { ai_traffic: TRAFFIC } })
-    expect(t.rows).toEqual([{ platform: 'ChatGPT', visits: '', orders: 2, revenue: 99.98 }])
+    expect(t.rows).toEqual([{ platform: 'ChatGPT', orders: 2, revenue: 99.98 }])
+    expect(t.columns.map((c) => c.key)).toEqual(['platform', 'orders', 'revenue'])
     expect(t.footer?.text).toContain('实测')
     expect(t.footer?.text).toContain('占全部成交 20%')
     const off = runQuery(
@@ -196,5 +205,15 @@ describe('WP381 体检报表块', () => {
       'last_7d',
     )
     expect(off.status).toBe('not_connected')
+    const r = runQuery(
+      'seo.ai_orders',
+      queryContext({ site_health: { ai_traffic: TRAFFIC } }),
+      'last_7d',
+    )
+    expect(r.status === 'ok' ? r.data : undefined).toEqual({
+      value: 2,
+      previous: 1,
+      spark: [0, 1, 0, 0, 1, 0, 0],
+    })
   })
 })

@@ -6189,7 +6189,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 8)}`,
       ...(dir === undefined ? {} : { file: join(dir, 'site-health.json') }),
       origin: async () => {
-        const domain = (await identity.getWorkspace(ws))?.profile?.domain?.trim()
+        // 公司档案里填的网站（设置页 / 向导那一格）；老数据退到工作区上记的那一份
+        const domain = (
+          onboardingRef?.companyProfile(ws)?.domain ?? (await identity.getWorkspace(ws))?.profile?.domain
+        )?.trim()
         if (domain === undefined || domain === '') return undefined
         return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`
       },

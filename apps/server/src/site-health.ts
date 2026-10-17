@@ -442,6 +442,8 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
   const aiTraffic = async (): Promise<AiTrafficSummary | undefined> => {
     const until = now()
     const since = new Date(Date.parse(until) - TRAFFIC_DAYS * 86_400_000).toISOString()
+    // 多读前一段同样长的窗口（算周变化）
+    const from = new Date(Date.parse(until) - 2 * TRAFFIC_DAYS * 86_400_000).toISOString()
     const list = effectiveReferrers(state.settings)
     let reader: ShopifyAdminReader | undefined
     try {
@@ -461,7 +463,7 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
             document: AI_TRAFFIC_ORDERS,
             variables: {
               first: ORDER_PAGE,
-              query: `created_at:>='${since}'`,
+              query: `created_at:>='${from}'`,
               ...(after === undefined ? {} : { after }),
             },
           })
@@ -504,6 +506,7 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
       currency: currency ?? orders[0]?.currency ?? 'USD',
       now: until,
       list,
+      previous: { since: from, until: since },
     })
     state = { ...state, traffic: summary }
     save()

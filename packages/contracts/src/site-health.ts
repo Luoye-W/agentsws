@@ -206,4 +206,8 @@ export interface AiTrafficSummary {
   /** 访问数：`ok` / 店铺授权里没有「店铺报表」/ 没读到。 */
   visits: 'ok' | 'no_scope' | 'unavailable'
   computed_at: string
+  /** 前一段同样长的窗口里来自 AI 的（算周变化）；没读那么远就没有。 */
+  previous?: { ai_orders: number; ai_revenue: number }
+  /** 窗口里逐天来自 AI 的单数（画小折线；最早的一天在前）。 */
+  daily?: number[]
 }

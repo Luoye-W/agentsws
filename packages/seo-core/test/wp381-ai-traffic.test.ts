@@ -88,6 +88,7 @@ describe('WP381 ③ AI 来源流量（实测）', () => {
       { platform: 'Claude', orders: 1, revenue: 30 },
     ])
     expect(aiTrafficBrief(s)).toBe('AI 带来 3 单 / USD 169.49（实测） · 访问 150 · ChatGPT 1 单')
+    expect(s.daily).toEqual([0, 1, 1, 1, 0, 0, 0])
   })
 
   it('没授权店铺报表：访问不出、成交照算；清单可加减', () => {
@@ -104,6 +105,17 @@ describe('WP381 ③ AI 来源流量（实测）', () => {
       }),
     })
     expect(s.visits).toBe('no_scope')
+    // 前一段窗口：9 月那一单是 ChatGPT 来的
+    const withPrev = summarizeAiTraffic({
+      orders: ORDERS,
+      visits_state: 'no_scope',
+      since: '2026-10-11T00:00:00Z',
+      until: '2026-10-17T23:59:59Z',
+      currency: 'USD',
+      now: '2026-10-17T12:00:00Z',
+      previous: { since: '2026-08-30T00:00:00Z', until: '2026-10-11T00:00:00Z' },
+    })
+    expect(withPrev.previous).toEqual({ ai_orders: 1, ai_revenue: 99 })
     expect(s.rows.every((r) => r.visits === undefined)).toBe(true)
     expect(s.ai_orders).toBe(2)
     expect(aiTrafficBrief(s)).toBe('AI 带来 2 单 / USD 139.49（实测） · ChatGPT 1 单')

@@ -43,7 +43,7 @@ const notRun = (columns: TableResult['columns'], first: string): TableResult => 
 
 const checkedFooter = (ctx: QueryContext): NonNullable<TableResult['footer']> | undefined => {
   const at = ctx.site_health?.run?.finished_at ?? ctx.site_health?.run?.started_at
-  return at === undefined ? undefined : { text: `体检于 ${at.slice(0, 16).replace('T', ' ')}` }
+  return at === undefined ? undefined : { text: `体检于 ${at.slice(0, 10)}` }
 }
 
 const crawlerState = (v: AiCrawlerVerdict): string =>
@@ -80,7 +80,7 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
     run: (ctx) => {
       const columns = [
         { key: 'bot', label: 'AI 爬虫' },
-        { key: 'purpose', label: '用来' },
+        { key: 'impact', label: '影响' },
         { key: 'state', label: 'robots.txt' },
         { key: 'why', label: '依据', format: 'flag' as const },
       ]
@@ -88,15 +88,28 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
       if (run === undefined) return notRun(columns, '还没体检')
       if (run.robots.state === 'unknown')
         return { ...notRun(columns, '这次没读到 robots.txt'), ...footerOf(ctx) }
-      // 训练用的放行不列；搜索 / 替用户打开的全列（放行也列：一眼看到 ChatGPT、Claude 进得来）
-      const rows = run.crawlers
-        .filter((v) => v.purpose !== 'training' || v.state !== 'allowed')
-        .map((v) => ({
-          bot: v.platform === undefined ? v.token : `${v.token}（${v.platform}）`,
-          purpose: PURPOSE[v.purpose],
-          state: crawlerState(v),
-          why: v.rule ?? '',
-        }))
+      // 只列挡了的（整站 / 一部分）；放行的并成一行，点名几家常用 AI
+      const blocked = run.crawlers.filter((v) => v.state === 'blocked' || v.state === 'partial')
+      const open = run.crawlers.filter((v) => v.state === 'allowed')
+      const named = [
+        ...new Set(open.filter((v) => v.purpose !== 'training').map((v) => v.platform ?? v.token)),
+      ].slice(0, 3)
+      const rows = blocked.map((v) => ({
+        bot: v.token,
+        impact:
+          v.purpose === 'training'
+            ? '训练（你的选择）'
+            : `${v.platform ?? v.vendor} · ${PURPOSE[v.purpose]}`,
+        state: crawlerState(v),
+        why: v.rule ?? '',
+      }))
+      if (open.length > 0)
+        rows.push({
+          bot: `其余 ${String(open.length)} 个`,
+          impact: `${named.join('、')}${open.length > named.length ? ' 等' : ''}`,
+          state: '放行',
+          why: '',
+        })
       return { columns, rows, ...footerOf(ctx) }
     },
   },
@@ -145,14 +158,18 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
     run: (ctx) => {
       const columns = [
         { key: 'product', label: '商品' },
-        { key: 'where', label: '哪里' },
-        { key: 'what', label: '什么' },
-        { key: 'found', label: '写的' },
-        { key: 'expected', label: '后台' },
+        { key: 'issue', label: '哪里不对' },
+        { key: 'compare', label: '写的 → 后台' },
       ]
       const run = ctx.site_health?.run
       if (run === undefined) return notRun(columns, '还没体检')
       const issues = run.products.issues.slice(0, 20)
+      const what = (i: (typeof issues)[number]): string =>
+        i.kind === 'undated'
+          ? '没写日期'
+          : i.kind === 'expired'
+            ? '价格过期'
+            : `${FIELD[i.field]}${i.kind === 'missing' ? '没写' : '不一致'}`
       const rows =
         issues.length === 0
           ? [
@@ -161,21 +178,17 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
                   run.products.checked === 0
                     ? '这次没读到商品'
                     : `抽查 ${String(run.products.checked)} 件都对得上`,
-                where: '',
-                what: '',
-                found: '',
-                expected: '',
+                issue: '',
+                compare: '',
               },
             ]
           : issues.map((i) => ({
               product: i.product_title,
-              where:
-                i.source_label !== undefined && i.source === 'platform'
-                  ? i.source_label
-                  : SOURCE[i.source],
-              what: `${FIELD[i.field]}${i.kind === 'missing' ? '缺' : i.kind === 'undated' ? '没日期' : i.kind === 'expired' ? '过期' : '不一致'}`,
-              found: i.found ?? '',
-              expected: i.expected ?? '',
+              issue: `${i.source === 'platform' && i.source_label !== undefined ? i.source_label : SOURCE[i.source]} · ${what(i)}`,
+              compare:
+                i.found === undefined && i.expected === undefined
+                  ? ''
+                  : `${i.found ?? '—'} → ${i.expected ?? '—'}`,
             }))
       const dispatched = run.dispatched
       return {
@@ -221,24 +234,38 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
     },
   },
   {
+    // 一个数：近 7 天从 AI 来的成交（实测），和前 7 天比；小折线是逐天
+    name: 'seo.ai_orders',
+    source: 'shop',
+    returns: 'scalar',
+    run: (ctx) => {
+      const s = ctx.site_health?.ai_traffic
+      if (s === undefined) return { value: 0, previous: 0, spark: [] }
+      return { value: s.ai_orders, previous: s.previous?.ai_orders ?? 0, spark: s.daily ?? [] }
+    },
+  },
+  {
     name: 'seo.ai_traffic',
     source: 'shop',
     returns: 'table',
     run: (ctx) => {
+      const s = ctx.site_health?.ai_traffic
+      // 访问数没授权读就不出那一列（不出一列空格）
       const columns = [
         { key: 'platform', label: 'AI' },
-        { key: 'visits', label: '访问', align: 'right' as const, format: 'count' as const },
+        ...(s?.visits === 'ok'
+          ? [{ key: 'visits', label: '访问', align: 'right' as const, format: 'count' as const }]
+          : []),
         { key: 'orders', label: '成交', align: 'right' as const, format: 'count' as const },
         { key: 'revenue', label: '金额', align: 'right' as const },
       ]
-      const s = ctx.site_health?.ai_traffic
       if (s === undefined) return notRun(columns, '还没算')
       const rows: Record<string, string | number>[] =
         s.rows.length === 0
-          ? [{ platform: '这段时间没有从 AI 来的成交', visits: '', orders: '', revenue: '' }]
+          ? [{ platform: '这段时间没有从 AI 来的成交', orders: '', revenue: '' }]
           : s.rows.map((r) => ({
               platform: r.platform,
-              visits: r.visits ?? '',
+              ...(s.visits === 'ok' ? { visits: r.visits ?? 0 } : {}),
               orders: r.orders,
               revenue: r.revenue,
             }))
