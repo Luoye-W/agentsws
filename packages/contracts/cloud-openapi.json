@@ -1796,7 +1796,7 @@
             "description": "缺省 `capability`。",
             "schema": {
               "type": "string",
-              "enum": ["workspace", "member", "capability", "day"]
+              "enum": ["workspace", "member", "day", "capability"]
             }
           },
           {
@@ -11345,10 +11345,29 @@
           "discount": {
             "type": "number",
             "description": "WP363 加（只加）；WP364（决策 958 / 960，Luoye 10-17 纠正）改了含义：**折扣 = 我们卖给用户的价 ÷ 这家 AI 官方标价**， 按 token 构成加权（构成同 {@link rate_source}）。例：官方百万 token 1 美元、我们收 0.8 美元 → `0.8`，显示「8 折」。 云上只在 `0 < discount < 1` 时给（≥ 1 不算折扣，不显示）；读的一方用 {@link pricingDiscountOf}。 **它只是说明，不参与结算**：结算永远按 `in` / `out` / `cached` 这三格扣（三格本身就是折后的价）。"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/PricingModelReasoning"
           }
         },
         "required": ["model", "in", "out"],
         "description": "按 token 计价的能力里的一个模型。`in` / `out` 是**积分 / 1k token**。"
+      },
+      "PricingModelReasoning": {
+        "type": "object",
+        "properties": {
+          "efforts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReasoningEffort"
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ReasoningEffort"
+          }
+        },
+        "required": ["efforts"],
+        "description": "WP377：一个模型在云端能调的思考档。`efforts` 用与本机同一套 id（{@link ReasoningEffort}，含 `off` 表示能关掉思考）； `default` 是上游官方的默认档（不给 = 按客户端的老规矩挑「标准」）。档位怎么写到上游（`thinking` / `reasoning_effort` / `enable_thinking`…）是云端的事，不进契约。"
       },
       "PublicContentObservation": {
         "type": "object",
@@ -11573,6 +11592,11 @@
         },
         "required": ["channel", "handle", "followers", "observed_at"],
         "description": "一条**观察**：某个来源在某一刻看到的公开资料快照。"
+      },
+      "ReasoningEffort": {
+        "type": "string",
+        "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+        "description": "WP370：思考程度的 id（官方 dsh / pi-ai 的 `ModelThinkingLevel` 同名）。界面不直接露这些词， 只露「快 / 标准 / 深度」三档白话（见 `@agentsws/api` 的 `FreeChatModelThinking`）。"
       },
       "RelayClientFrame": {
         "anyOf": [

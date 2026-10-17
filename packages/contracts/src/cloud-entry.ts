@@ -20,6 +20,7 @@
  * 合并时才在一处 import，避免两个分支改同一个文件。
  */
 import type { Iso8601, WorkspaceId } from './common.js'
+import { REASONING_EFFORTS, type ReasoningEffort } from './model.js'
 
 /* ------------------------------------------------------------------ */
 /* M2 每项能力一个开关                                                  */
@@ -207,6 +208,42 @@ export interface PricingModelEntry {
    * **它只是说明，不参与结算**：结算永远按 `in` / `out` / `cached` 这三格扣（三格本身就是折后的价）。
    */
   discount?: number
+  /**
+   * WP377（决策 1026 → 1051，只加）：这个模型**经我们云端**时能调的思考档。云端只给「上游官方声明了档位、
+   * 我们的转发链路（New API / 直连）也确实能把档位带过去」的模型；不给 = 这个模型在工坊积分里不出思考小钮。
+   * 客户端照 {@link PricingModelReasoning} 出 WP373 的小钮（快 / 标准 / 深度，或开关），选了哪一档就在
+   * 请求体 `reasoning_effort` 里原样发这一档的 id（决策 1032「显示什么就发什么」）；云端按上游那家的写法转出去。
+   */
+  reasoning?: PricingModelReasoning
+}
+
+/**
+ * WP377：一个模型在云端能调的思考档。`efforts` 用与本机同一套 id（{@link ReasoningEffort}，含 `off` 表示能关掉思考）；
+ * `default` 是上游官方的默认档（不给 = 按客户端的老规矩挑「标准」）。档位怎么写到上游（`thinking` / `reasoning_effort` /
+ * `enable_thinking`…）是云端的事，不进契约。
+ */
+export interface PricingModelReasoning {
+  efforts: ReasoningEffort[]
+  default?: ReasoningEffort
+}
+
+/**
+ * WP377：读一行价目里的思考档（网上来的数据，先洗一遍）：认不得的 id 丢掉、去重、按由浅到深排；
+ * 除了 `off` 至少要有一档能想的，否则当没声明（回 `undefined`）。`default` 不在 `efforts` 里就不带。
+ */
+export function pricingReasoningOf(
+  entry: Pick<PricingModelEntry, 'reasoning'>,
+): PricingModelReasoning | undefined {
+  const raw = entry.reasoning
+  if (typeof raw !== 'object' || raw === null || !Array.isArray(raw.efforts)) return undefined
+  const have = new Set<unknown>(raw.efforts)
+  const efforts = REASONING_EFFORTS.filter((e) => have.has(e))
+  if (!efforts.some((e) => e !== 'off')) return undefined
+  const def = raw.default
+  return {
+    efforts,
+    ...(typeof def === 'string' && efforts.includes(def) ? { default: def } : {}),
+  }
 }
 
 /**
