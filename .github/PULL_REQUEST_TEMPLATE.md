@@ -52,7 +52,8 @@ Review checklist (shared constraints and merge review).
       meaning of an existing contract needs a major version and a migrator, and should be
       discussed in an issue first)
 - [ ] Docs updated if behaviour changed (help articles in `docs/help/` come in zh + en);
-      `docs/ARCHITECTURE.md`, `README` top section and the GitHub templates stay English
+      `README.md` (Chinese) and `README.en.md` (English) are kept in sync;
+      `docs/ARCHITECTURE.md` and the GitHub templates stay English
 - [ ] No internal notes added (`node scripts/check-no-internal-docs.mjs` passes)
 
 **House rules**

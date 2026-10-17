@@ -19,7 +19,7 @@ body:
     attributes:
       label: Before you file
       options:
-        - label: I read the honest status table in the README (some things are simply not built yet)
+        - label: I checked the changelog and the help docs (some things are simply not built yet)
           required: true
         - label: This is not a security vulnerability
           required: true

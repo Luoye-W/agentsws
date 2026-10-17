@@ -14,8 +14,8 @@ body:
           is, the 30-minute path, and an honest status table
         - [`docs/ARCHITECTURE.md`](https://github.com/Luoye-W/agentsws/blob/main/docs/ARCHITECTURE.md)
           — the design in English: layers, contracts, runtimes, approvals, security model
-        - [`docs/help/`](https://github.com/Luoye-W/agentsws/tree/main/docs/help)
-          — user help articles (also on the website)
+        - [Help articles](https://agentsws.com/docs/) — how to install, connect and use
+          each feature
         - [`CONTRIBUTING.md`](https://github.com/Luoye-W/agentsws/blob/main/CONTRIBUTING.md)
           — how to develop against this repo
 

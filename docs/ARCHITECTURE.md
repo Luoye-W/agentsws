@@ -1,10 +1,9 @@
 # Architecture
 
-*This is the English entry point for contributors. It is distilled from the project's
-internal design notes, which are not published; references below such as `docs/19` or
-`docs/47 J1` name sections of those notes and are kept only as labels. The contracts in
-`packages/contracts/src` are the public source of truth. For an honest per-layer inventory
-of what is actually built, read the status table in the [README](../README.md).*
+*This is the English entry point for contributors. It stands on its own: the internal
+design notes it was distilled from are not published. The contracts in
+`packages/contracts/src` are the public source of truth; [`CHANGELOG.md`](../CHANGELOG.md)
+says what has actually shipped.*
 
 agentsws is a local, open-source agent middle-office for a cross-border e-commerce
 company: it connects people, agents, channels and company knowledge into one system that
@@ -67,30 +66,30 @@ action that goes through the ledger.
 
 Confusing the two is the expensive mistake: a sentence in the wiki saying *"order #1002 was
 refunded"* was true the day it was written and is a lie today. So the two layers are kept
-apart, and a third thing — the **ontology registry** (`docs/47`, `packages/ontology`) —
+apart, and a third thing — the **ontology registry** (`packages/ontology`) —
 indexes what exists, what links to what, and what may be done to it. The registry is
 generated from the contracts; it stores nothing of its own.
 
 ```mermaid
 flowchart TB
-  subgraph K["Knowledge layer · LLM Wiki (docs/19)"]
+  subgraph K["Knowledge layer · LLM Wiki"]
     K1["fact / phrasing / policy<br/>written by people, goes stale"]
     K2["historical_case<br/>state words downgraded on intake, stamped as_of"]
   end
 
-  subgraph R["Ontology registry (docs/47 J1) · generated, read-only"]
+  subgraph R["Ontology registry · generated, read-only"]
     R1["objects: key, properties, sensitivity"]
     R2["links: from → to, how to look it up"]
     R3["actions: ChangeKind, risk, approval"]
   end
 
-  subgraph O["Operation layer (docs/15, 18, 21)"]
+  subgraph O["Operation layer"]
     O1["platform API via connectors<br/>orders · customers · products"]
     O2["local ledger<br/>approvals · staged changes · assignments"]
   end
 
   C["contracts + action-side-effects.yml + role scopes"] -- "gen-ontology.mjs, CI checks zero drift" --> R
-  R -- "tailored per position" --> A["Agent run (docs/17 §5.1)"]
+  R -- "tailored per position" --> A["Agent run"]
   R -- "tailored per position" --> U["Workstation data map"]
   A -- "1. read the object" --> O
   A -- "2. read the knowledge" --> K
@@ -104,7 +103,7 @@ Three rules fall out of the picture, and all three are enforced in code:
    order ids, fulfilment status, stock counts or concrete amounts are downgraded to
    `historical_case` on intake and stamped with the time they describe.
 2. **The operation layer changes only through actions.** Every write is a `StagedChange`
-   in the ledger behind an approval (docs/15 §5); a model can never "remember" a state and
+   in the ledger behind an approval; a model can never "remember" a state and
    treat it as true.
 3. **Order of consultation: object first, then knowledge, then a proposal.** The tool
    surface is laid out in those three groups and the system prompt says so in one fixed
@@ -115,9 +114,9 @@ Three rules fall out of the picture, and all three are enforced in code:
 ## 3. The contracts
 
 All of them live in `packages/contracts/src/` as pure TypeScript — types, events, error
-codes, no implementation. Numbers `#1`–`#20` are doc 09 §2's; `#19` (work model) and
-`#20` (browser policy) were added during implementation and back-filled into that table;
-the meetings kernel has no number. **The interfaces are frozen** (`docs/32` §2):
+codes, no implementation. The numbers `#1`–`#20` below are the contract numbers used in
+code comments; `#19` (work model) and `#20` (browser policy) were added during
+implementation; the meetings kernel has no number. **The interfaces are frozen**:
 adding fields, kinds, events and error codes is allowed; changing the meaning of an
 existing one requires a major version and a migrator.
 
@@ -162,7 +161,7 @@ Three adapters implement the same contract and pass the same scenarios:
 | Runtime | Package | What it is |
 |---|---|---|
 | `stub` | `stand-ins` | Deterministic rule-based drafting. No model call. This is what the `fast` tier uses. |
-| `dsh` | `dsh-adapter` | DeepSeek Harness. Our gate plugin occupies five seams: pre-execute, post-execute, approval answerer, systemPrompt section + context injection, and `tools.restrict`. Currently assembled **in-process** via Cordis rather than as a headless subprocess; a real IPC bridge is still to come (`docs/38` §2, WP30). |
+| `dsh` | `dsh-adapter` | DeepSeek Harness. Our gate plugin occupies five seams: pre-execute, post-execute, approval answerer, systemPrompt section + context injection, and `tools.restrict`. Currently assembled **in-process** via Cordis rather than as a headless subprocess; a real IPC bridge is still to come. |
 | `direct` | `runtime-direct` | A turn loop that talks to the model gateway directly, with no dsh at all. Its reason to exist is to prove dsh is replaceable. |
 
 Everything a model can see must be reconstructible from the event log. That is not a
@@ -242,7 +241,7 @@ pnpm -s simulate --tier fast --pack packs/dtc-3c-3p --scenario 'scenarios/**/*.y
 
 ## 7. Security model
 
-From `docs/31` §3. These are load-bearing; a contribution that weakens one will not be
+These are load-bearing; a contribution that weakens one will not be
 merged.
 
 - **Authorization is the whole tuple.** A run binds to exactly one assignment, and its
@@ -304,8 +303,8 @@ explicitly in the PR and expect the discussion to be about whether a seam is mis
 
 | You want to | Read |
 |---|---|
-| Run it | [`README.md`](../README.md) — clone to a green simulation in 30 minutes |
+| Run it | [`README.md`](../README.md) |
 | Contribute | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
-| Know what actually works | README status table |
+| Know what actually works | [`CHANGELOG.md`](../CHANGELOG.md) |
 | Understand a contract | `packages/contracts/src/*.ts` — the contracts are the authoritative interface definitions |
 | Help users | `docs/help/` — the user help articles (zh + en), also published on the website |

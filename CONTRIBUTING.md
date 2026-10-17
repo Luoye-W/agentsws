@@ -44,7 +44,7 @@ pnpm simulate --tier fast --pack packs/dtc-3c-3p  # 8/8 才算基线正常
 pnpm dev:demo                                     # 用合成世界跑起工作台，看真卡片
 ```
 
-跑不通先看 README 的「30 分钟跑通」。
+跑不通先看 README 与帮助文章（<https://agentsws.com/docs/>）。
 
 ## 3. 开发方式：一个任务包一个 worktree
 
@@ -75,7 +75,7 @@ scripts/review-wp.sh ../agentsws-wt/wp42-my-thing packages/my-package
   一条能复现 bug 的场景 YAML 是最好的 bug 报告
 - **连接器 / provider**：优先贡献到上游（dsh-channels、OpenConnector），本仓 `vendor/`
   只放过渡版本与契约测试
-- **文档**：帮助文章（`docs/help/`）中英各一份；`README` 顶部摘要、`docs/ARCHITECTURE.md`、
+- **文档**：帮助文章（`docs/help/`）中英各一份；`README.md`（中文）与 `README.en.md`（英文）两份同步；`docs/ARCHITECTURE.md`、
   `SECURITY.md`、`CODE_OF_CONDUCT.md`、`.github/` 里的模板保持英文
 - **契约与内核**：见下一节
 
