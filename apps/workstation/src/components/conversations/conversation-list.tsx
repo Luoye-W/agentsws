@@ -55,7 +55,11 @@ export function ConvMarker({ state }: { state: RailMatterState }): ReactNode {
 export function ConvRow({ matter }: { matter: RailMatter }): ReactNode {
   const actions = useConversationActions()
   return (
-    <li className="group/thread flex items-center gap-0.5" data-testid="conv-row" data-id={matter.id}>
+    <li
+      className="group/thread flex items-center gap-0.5"
+      data-testid="conv-row"
+      data-id={matter.id}
+    >
       <NavLink
         to={`/matters/${encodeURIComponent(matter.id)}`}
         data-testid="conv-link"

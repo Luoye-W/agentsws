@@ -241,3 +241,27 @@ export function sessionStore(): Pick<Storage, 'getItem' | 'setItem'> | undefined
     return undefined
   }
 }
+
+/**
+ * WP372（决策 1019）：右侧面板**临时加宽**（看报表、看板时）。存的是加宽后的宽度；没有 = 平常宽度。
+ * 全部岗位一份（加宽是「我这块屏幕上想看宽一点」，不是这个岗位的事）。
+ */
+export const RIGHT_RAIL_WIDE_KEY = 'agentsws.rightrail.wide'
+export const RIGHT_RAIL_WIDE_MIN = 560
+export const RIGHT_RAIL_WIDE_MAX = 960
+export const RIGHT_RAIL_WIDE_DEFAULT = 760
+
+export function clampWideWidth(n: number): number {
+  return Math.min(RIGHT_RAIL_WIDE_MAX, Math.max(RIGHT_RAIL_WIDE_MIN, Math.round(n)))
+}
+
+export function readRailWide(): number | null {
+  const raw = read(RIGHT_RAIL_WIDE_KEY)
+  if (raw === null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? clampWideWidth(n) : null
+}
+
+export function writeRailWide(width: number | null): void {
+  write(RIGHT_RAIL_WIDE_KEY, width === null ? '' : String(clampWideWidth(width)))
+}

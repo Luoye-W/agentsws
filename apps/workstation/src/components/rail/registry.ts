@@ -140,13 +140,15 @@ export interface RailCardDefinition {
   order: number
   /** 露在右上角那一排时排第几；不给 = 只在「⋮」与面板里。 */
   pinned?: number
-  /** 「显示更多」开哪个面板（完整列表）；不给 = 卡身体自己管（跳页面）。 */
+  /** 「显示更多」开哪个面板（完整列表）。 */
   panel?: string
+  /** 没有完整面板时「显示更多」去哪一页（连接 → 连接页）。 */
+  moreHref?: string
   /**
    * 标题行的一句摘要与状态点。是 hook（与 `useBadge` 同一条规矩：轻，只读缓存或一个小请求）。
-   * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。
+   * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。图标调用时 `detail` 为假：只要点，摘要要的重请求别发。
    */
-  useStatus?(props: RailPanelBodyProps): CardStatus | undefined
+  useStatus?(props: RailPanelBodyProps, detail: boolean): CardStatus | undefined
 }
 
 /** 卡标题行的状态点：红 = 坏了要修（连接过期），黄 = 等你看。 */

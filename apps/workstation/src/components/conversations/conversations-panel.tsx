@@ -18,8 +18,8 @@ import {
 import {
   ConvRows,
   ConvSearch,
-  NewConversation,
   NewConvButton,
+  NewConversation,
 } from '@/components/conversations/conversation-list'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
@@ -70,13 +70,7 @@ function ComposeBar({ scope }: { scope: RailScope }): ReactNode {
   )
 }
 
-function ArchivedLink({
-  scope,
-  duty,
-}: {
-  scope: RailScope
-  duty: ConvDuty
-}): ReactNode {
+function ArchivedLink({ scope, duty }: { scope: RailScope; duty: ConvDuty }): ReactNode {
   const { t } = useApp()
   const actions = useConversationActions()
   const position_id = scope.tier === 'role' ? scope.parent?.scope_id : scope.scope_id
@@ -148,13 +142,24 @@ export function ConversationsPanel({ scope }: RailPanelBodyProps): ReactNode {
 
 function Heading({ children, testId }: { children: ReactNode; testId: string }): ReactNode {
   return (
-    <h3 className="px-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase" data-testid={testId}>
+    <h3
+      className="px-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase"
+      data-testid={testId}
+    >
       {children}
     </h3>
   )
 }
 
-function TimeGroups({ scope, duty, q }: { scope: RailScope; duty: ConvDuty; q: string }): ReactNode {
+function TimeGroups({
+  scope,
+  duty,
+  q,
+}: {
+  scope: RailScope
+  duty: ConvDuty
+  q: string
+}): ReactNode {
   const { t } = useApp()
   const groups = groupByTime(duty.matters.filter((m) => matchesQuery(m, q)))
   return (
@@ -163,7 +168,12 @@ function TimeGroups({ scope, duty, q }: { scope: RailScope; duty: ConvDuty; q: s
         <p className="px-1.5 text-[12px] text-ws-muted-fg">{t('conv.none_found')}</p>
       ) : null}
       {groups.map((g) => (
-        <section key={g.group} className="flex flex-col gap-1" data-testid="conv-group" data-group={g.group}>
+        <section
+          key={g.group}
+          className="flex flex-col gap-1"
+          data-testid="conv-group"
+          data-group={g.group}
+        >
           <Heading testId="conv-group-title">{t(`conv.group.${g.group}`)}</Heading>
           <ConvRows matters={g.matters} />
         </section>
@@ -179,7 +189,9 @@ function DutyGroup({ scope, duty, q }: { scope: RailScope; duty: ConvDuty; q: st
   return (
     <section className="flex flex-col gap-1" data-testid="conv-duty" data-duty={duty.role_id}>
       <Heading testId="conv-duty-title">{duty.name}</Heading>
-      <ConvRows matters={[...matters].sort((a, b) => b.last_activity.localeCompare(a.last_activity))} />
+      <ConvRows
+        matters={[...matters].sort((a, b) => b.last_activity.localeCompare(a.last_activity))}
+      />
       <Footer scope={scope} duty={duty} />
     </section>
   )
@@ -190,7 +202,9 @@ function Footer({ scope, duty }: { scope: RailScope; duty: ConvDuty }): ReactNod
   return (
     <div className="flex flex-wrap items-center gap-2">
       {duty.more > 0 ? (
-        <span className="px-1.5 text-[12px] text-ws-muted-fg">{t('conv.older', { n: duty.more })}</span>
+        <span className="px-1.5 text-[12px] text-ws-muted-fg">
+          {t('conv.older', { n: duty.more })}
+        </span>
       ) : null}
       <ArchivedLink scope={scope} duty={duty} />
     </div>

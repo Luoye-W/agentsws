@@ -61,7 +61,8 @@ export function useScopeConversations(scope: RailScope | undefined): {
           }
         })
       : fromRail.map((d) => ({ ...d, name: d.role_id }))
-  const duties = scope.tier === 'role' ? ordered.filter((d) => d.role_id === scope.scope_id) : ordered
+  const duties =
+    scope.tier === 'role' ? ordered.filter((d) => d.role_id === scope.scope_id) : ordered
   return { duties, ready: !rail.isPending }
 }
 

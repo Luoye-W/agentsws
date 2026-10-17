@@ -5,6 +5,14 @@
  * 卡标题行只有名字 + 一句摘要；长一点的说法进 tooltip。
  */
 export const PANEL_ZH: Record<string, string> = {
+  'rail.card.reports': '报表',
+  'rail.panel.reports': '报表',
+  'rail.panel.report': '报表',
+  'reports.empty': '还没有报表',
+  'reports.boards': '看板',
+  'report.missing': '这份报表找不到了，从「报表」卡再点一次',
+  'rail.widen': '加宽',
+  'rail.unwiden': '还原宽度',
   'rail.card.conversations': '对话',
   'rail.card.outputs': '产出',
   'rail.card.plans': '计划',
@@ -69,6 +77,14 @@ export const PANEL_ZH: Record<string, string> = {
 }
 
 export const PANEL_EN: Record<string, string> = {
+  'rail.card.reports': 'Reports',
+  'rail.panel.reports': 'Reports',
+  'rail.panel.report': 'Report',
+  'reports.empty': 'No reports yet',
+  'reports.boards': 'Boards',
+  'report.missing': 'This report is gone — open it again from the Reports card',
+  'rail.widen': 'Widen',
+  'rail.unwiden': 'Normal width',
   'rail.card.conversations': 'Chats',
   'rail.card.outputs': 'Outputs',
   'rail.card.plans': 'Plans',
@@ -79,7 +95,8 @@ export const PANEL_EN: Record<string, string> = {
   'rail.card.more': 'Show more',
   'rail.card.expand': 'Expand “{name}”',
   'rail.card.collapse': 'Collapse “{name}”',
-  'rail.card.drag': 'Drag “{name}” to reorder (keyboard: Space to pick up, arrows to move, Space to drop)',
+  'rail.card.drag':
+    'Drag “{name}” to reorder (keyboard: Space to pick up, arrows to move, Space to drop)',
   'rail.card.moved': '“{name}” moved to position {n}',
   'rail.back': 'Back to all cards',
   'rail.panel.conversations': 'Chats',

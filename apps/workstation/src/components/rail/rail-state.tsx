@@ -31,9 +31,11 @@ import {
   readRailCardFlags,
   readRailCardOrder,
   readRailLayout,
+  readRailWide,
   writeRailCardFlags,
   writeRailCardOrder,
   writeRailLayout,
+  writeRailWide,
 } from '@/lib/ui-state'
 
 /** 面板开成「五张卡」时 `open` 的值（存进布局的也是它）。 */
@@ -101,6 +103,9 @@ export interface RailState {
   setOrder(order: readonly string[]): void
   /** WP372：意图用掉了（对话卡开过「新对话」一次就清掉，免得每次展开都弹）。 */
   clearIntent(): void
+  /** WP372（决策 1019）：临时加宽后的宽度；`null` = 平常宽度。全部岗位一份，记住。 */
+  wide: number | null
+  setWide(width: number | null): void
 }
 
 const Ctx = createContext<RailState | null>(null)
@@ -134,6 +139,11 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   const [order, setOrderState] = useState<readonly string[]>(() => readRailCardOrder())
   const [focus, setFocus] = useState<string | null>(null)
   const [intent, setIntent] = useState<string | null>(null)
+  const [wide, setWideState] = useState<number | null>(() => readRailWide())
+  const setWide = useCallback((next: number | null) => {
+    writeRailWide(next)
+    setWideState(next)
+  }, [])
 
   const setOpen = useCallback((panel: string | null) => {
     setState((prev) => {
@@ -268,6 +278,8 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       toggleCard,
       setOrder,
       clearIntent,
+      wide,
+      setWide,
     }),
     [
       layout.open_panel_id,
@@ -287,6 +299,8 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       toggleCard,
       setOrder,
       clearIntent,
+      wide,
+      setWide,
     ],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
@@ -322,6 +336,8 @@ export function useRailState(): RailState {
       toggleCard: noop,
       setOrder: noop,
       clearIntent: noop,
+      wide: null,
+      setWide: noop,
     }
   )
 }
