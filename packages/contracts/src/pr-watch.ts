@@ -42,8 +42,13 @@ export const MONITOR_GROUP_LABELS: Readonly<Record<MonitorGroup, { zh: string; e
  * - `rss`：任意网站的 RSS / Atom（拉回来的是这个站的全部新内容，按 `keywords` 在本地过滤）。
  *
  * 以后只加（`email` / `api` / `browser` / `page_diff`），不改这两种的意思。
+ *
+ * WP392（docs/104 §3.2，竞品监控和信息监控共用这套监控源）**加两种**，判法是「和上一次的快照比」而不是「新来一条算一条」：
+ * - `shop_catalog`：竞品独立站的商品目录（Shopify / WooCommerce 店铺自带的公开商品数据；WP393 实现进料口）；
+ * - `amazon_asin`：Amazon 上几款对标商品（WP394 实现进料口）。
+ * 这两种的监控源形状见 `competitor-watch.ts` 的 `CompetitorWatchSource`。
  */
-export type MonitorSourceKind = 'google_alerts' | 'rss'
+export type MonitorSourceKind = 'google_alerts' | 'rss' | 'shop_catalog' | 'amazon_asin'
 
 /** 一条源现在的状态：拉到过 / 最近一次拉失败 / 还没拉过。 */
 export type MonitorSourceStatus = 'ok' | 'failed' | 'unchecked'
