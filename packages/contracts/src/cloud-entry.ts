@@ -215,6 +215,11 @@ export interface PricingModelEntry {
    * 请求体 `reasoning_effort` 里原样发这一档的 id（决策 1032「显示什么就发什么」）；云端按上游那家的写法转出去。
    */
   reasoning?: PricingModelReasoning
+  /**
+   * WP377（只加）：`false` = 云端眼下**没有这个模型的上游渠道**（价还在表里，但调不通）。客户端不把它列进
+   * 工坊积分的 AI 钮（选了必失败）。不给 = 能用（老云端不写这一格，行为不变）。
+   */
+  available?: boolean
 }
 
 /**

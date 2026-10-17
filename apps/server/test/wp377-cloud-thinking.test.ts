@@ -196,3 +196,19 @@ describe('WP377 写明三档（决策 1054）', () => {
     })
   })
 })
+
+describe('WP377 云端标了没有渠道的模型不进 AI 钮', () => {
+  it('available: false 的不列、价照旧认得；没写这一格的照列（老云端）', async () => {
+    const { cloudRates } = await import('../src/model-rates.js')
+    const rates = cloudRates(
+      [
+        { model: 'deepseek-v4-pro', in: 0.04, out: 0.08 },
+        { model: 'glm-5.3', in: 0.08, out: 0.16, available: false },
+        { model: 'kimi-k3', in: 0.01, out: 0.02 },
+      ],
+      'deepseek-v4-pro',
+    )
+    expect(rates.models).toEqual(['deepseek-v4-pro', 'kimi-k3'])
+    expect(rates.price('glm-5.3')).toMatchObject({ kind: 'rate' })
+  })
+})
