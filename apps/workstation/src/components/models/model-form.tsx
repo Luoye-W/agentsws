@@ -34,6 +34,8 @@ export interface ModelFormValues {
   price_cached?: number
   /** WP42：这三个价是照价目表填的还是用户自己改的。 */
   price_source?: 'catalog' | 'manual'
+  /** WP370：除主模型外，还要在输入框 AI 钮里列出来的那几个（`[]` = 清空）。 */
+  picker_models?: string[]
 }
 
 export function ModelForm({
@@ -84,6 +86,8 @@ export function ModelForm({
   const [listOpen, setListOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const [pulling, setPulling] = useState(false)
+  /** WP370：还要在 AI 钮里列的那几个（模型名不是秘密，可以进 state）。 */
+  const [pickerModels, setPickerModels] = useState<string[]>(existing?.picker_models ?? [])
   /**
    * 价是"照价目表填的"还是"用户自己改的"。
    *
@@ -147,6 +151,8 @@ export function ModelForm({
       ...(price_out === undefined ? {} : { price_out }),
       ...(price_cached === undefined ? {} : { price_cached }),
       price_source: priceManual ? 'manual' : 'catalog',
+      // WP370：只生图的那一条不进 AI 钮
+      ...(imageOnly ? {} : { picker_models: pickerModels.filter((m) => m !== model) }),
     })
     // key 发出去之后连 DOM 里也不留
     form.reset()
@@ -422,6 +428,15 @@ export function ModelForm({
         )}
       </Field>
 
+      {imageOnly ? null : (
+        <PickerModelsField
+          id={`${prefix}-picker`}
+          models={models}
+          value={pickerModels}
+          onChange={setPickerModels}
+        />
+      )}
+
       {/* key 的两句都属于 §2 例外：安全承诺与「已经存过一把」的状态，都不藏 */}
       <Field
         id={`${prefix}-api_key`}
@@ -623,6 +638,95 @@ const ID_BY_HOST: readonly (readonly [RegExp, string])[] = [
   [/(^|\.)openrouter\.ai$/, 'openrouter'],
   [/^(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])$/, 'ollama'],
 ]
+
+/**
+ * WP370（照官方 alpha.4「拉取可用模型 → 勾选 → 加入所选」）：除主模型外，还要在输入框 AI 钮里列哪几个。
+ * 拉到了清单就勾（多于 4 个出搜索，照官方）；拉不到就手填，一行一个。主模型总在，不用勾。
+ */
+function PickerModelsField({
+  id,
+  models,
+  value,
+  onChange,
+}: {
+  id: string
+  models: string[]
+  value: string[]
+  onChange: (next: string[]) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  const [query, setQuery] = useState('')
+  const shown = models.filter(
+    (m) => query.trim() === '' || m.toLowerCase().includes(query.trim().toLowerCase()),
+  )
+  const toggle = (m: string): void => {
+    onChange(value.includes(m) ? value.filter((x) => x !== m) : [...value, m])
+  }
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="model-picker-models">
+      <div className="flex items-center gap-1">
+        <Label htmlFor={id} className="text-xs">
+          {t('models.picker.title')}
+        </Label>
+        <Hint text={t('models.picker.tip')} />
+      </div>
+      {models.length === 0 ? (
+        <textarea
+          id={id}
+          rows={2}
+          spellCheck={false}
+          placeholder={t('models.picker.manual')}
+          data-testid="model-picker-manual"
+          className="rounded-md border bg-background px-2 py-1 font-mono text-xs"
+          defaultValue={value.join('\n')}
+          onChange={(e) => {
+            onChange(
+              e.currentTarget.value
+                .split(/\r?\n/)
+                .map((x) => x.trim())
+                .filter((x) => x !== ''),
+            )
+          }}
+        />
+      ) : (
+        <>
+          {models.length <= 4 ? null : (
+            <Input
+              id={id}
+              value={query}
+              placeholder={t('models.picker.search')}
+              data-testid="model-picker-search"
+              className="h-7 text-xs"
+              onChange={(e) => {
+                setQuery(e.currentTarget.value)
+              }}
+            />
+          )}
+          <div className="flex max-h-40 flex-col overflow-auto rounded-md border bg-background p-1">
+            {shown.map((m) => (
+              <label
+                key={m}
+                className="flex items-center gap-2 rounded px-1.5 py-1 font-mono text-xs hover:bg-accent"
+                title={m}
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(m)}
+                  data-testid="model-picker-option"
+                  data-model={m}
+                  onChange={() => {
+                    toggle(m)
+                  }}
+                />
+                <span className="truncate">{m}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 /**
  * 按接口地址猜一个编号（WP42 交付 4）。

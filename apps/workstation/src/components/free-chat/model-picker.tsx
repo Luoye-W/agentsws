@@ -12,10 +12,26 @@
  * - 选了只改**这一次对话 / 这件事**（调用方存）；「设为默认」改品牌默认（只有所有者有）；底部「管理模型…」；
  * - 一个都没接：钮换成「还没接 AI」，点了在第三栏开「接模型」连接卡（WP334，不跳设置页）。
  *
+ * WP370（Luoye 10-17，照官方 dsh alpha.5 的模型选择）：
+ * - 每行用目录里的**显示名**（GPT-5.5、DeepSeek-V4.1-Flash），id 只在悬停里；
+ * - 能力小标：看图 / 自带联网 / 长上下文（≥ 20 万 token），只画图标，悬停出一句话；
+ * - **思考程度**：当前模型声明了档位才出「思考：快 / 标准 / 深想」一行（官方：没声明就不出）；
+ *   换模型回到那个模型的默认档；钮上只有不是默认档时才多写「· 深想」；
+ * - 搜索照官方：模型多于 4 个才出；按名字不连续也能对上（gpt55 → GPT-5.5），前缀对上的排前面。
+ *
  * 一个轻量的下拉，不用弹层库。键盘：↑↓ 换（搜索框里按 ↓ 进清单）、回车选、Esc 收起并回到钮上。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, Eye, EyeOff, Search, TriangleAlert } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Globe,
+  ScrollText,
+  Search,
+  TriangleAlert,
+} from 'lucide-react'
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
@@ -26,7 +42,12 @@ import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
 import { getCloudCredits, getMyCloudAllocation, getPositions, setModelDefaults } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { type FreeChatModelChoice, getFreeChatModels } from '@/lib/free-chat'
+import {
+  type FreeChatModelChoice,
+  getFreeChatModels,
+  type ReasoningEffort,
+  type ThinkingLevel,
+} from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +62,40 @@ type Group = NonNullable<FreeChatModelChoice['group']>
 /** 这一项属于哪一组（老服务端没有 `group`：按 `official` 兜）。 */
 const groupOf = (c: FreeChatModelChoice): Group =>
   c.group ?? (c.official ? 'workshop' : c.id.startsWith('openai-codex/') ? 'subscription' : 'own')
+
+/** WP370：一行给人看的名字（目录里有显示名就用它，没有就是 id 里的模型名）。 */
+export const displayNameOf = (c: Pick<FreeChatModelChoice, 'id' | 'name'>): string =>
+  c.name !== undefined && c.name.trim() !== '' ? c.name : modelNameOf(c.id)
+
+/** WP370：上下文窗口到多少算「长上下文」（与服务端同一条线）。 */
+export const LONG_CONTEXT_TOKENS = 200_000
+
+/**
+ * WP370：照官方 `rankByName` 的意思——忽略大小写、去掉首尾空格，名字里按顺序出现这些字（可以不连续）就算对上；
+ * 前缀对上的排前面，再按对得紧不紧，最后保持原来的顺序。回 `undefined` = 对不上。
+ */
+export function matchScore(query: string, text: string): number | undefined {
+  const q = query.trim().toLowerCase()
+  if (q === '') return 0
+  const t = text.toLowerCase()
+  if (t.startsWith(q)) return 0
+  const at = t.indexOf(q)
+  if (at >= 0) return 1 + at / 1000
+  let i = 0
+  let gaps = 0
+  let last = -1
+  for (const ch of q) {
+    const found = t.indexOf(ch, last + 1)
+    if (found < 0) return undefined
+    if (last >= 0) gaps += found - last - 1
+    last = found
+    i += 1
+  }
+  return i === 0 ? undefined : 2 + gaps / 100
+}
+
+/** WP370：思考程度三档的白话词（i18n 键）。 */
+export const thinkingKey = (level: ThinkingLevel): string => `model.pick.thinking.${level}`
 
 /** 来源的短名（钮上「来源 · 模型名」那一半）：「DeepSeek 官方 · 官方 API 接口连接」取前半。 */
 const shortSource = (label: string): string => label.split(' · ')[0] ?? label
@@ -107,6 +162,8 @@ export function ModelPicker({
   testId = 'model-pick',
   rateBase,
   balance,
+  effort,
+  onEffortChange,
 }: {
   choices: FreeChatModelChoice[]
   /** 这一次 / 这件事选的（不给 = 跟默认走）。 */
@@ -123,6 +180,10 @@ export function ModelPicker({
   rateBase?: { model: string; fallback: boolean } | undefined
   /** WP362：工坊积分那组标题右边的余额 / 本月还剩。 */
   balance?: PickerBalance | undefined
+  /** WP370：这一次 / 这件事选的思考程度（不给 = 当前模型的默认档）。 */
+  effort?: ReasoningEffort | undefined
+  /** WP370：调思考程度（连同当前模型一起存）；不给 = 不出「思考」那一行。 */
+  onEffortChange?: ((effort: ReasoningEffort, model: string) => void) | undefined
 }): React.ReactNode {
   const { t, lang } = useApp()
   const openConnect = useOpenConnect()
@@ -182,15 +243,27 @@ export function ModelPicker({
 
   // 按来源分组：工坊积分 → ChatGPT 订阅 → 自己接的各家（一家一组）；组内保持服务端给的顺序
   const groups = useMemo((): PickerGroup[] => {
-    const q = query.trim().toLowerCase()
-    const hit = (c: FreeChatModelChoice): boolean =>
-      q === '' ||
-      modelNameOf(c.id).toLowerCase().includes(q) ||
-      (c.vendor ?? '').toLowerCase().includes(q) ||
-      c.label.toLowerCase().includes(q)
+    const q = query.trim()
+    // WP370：名字（显示名 / id 里的模型名）按官方的松匹配；厂商、来源仍按包含
+    const scoreOf = (c: FreeChatModelChoice): number | undefined => {
+      if (q === '') return 0
+      const names = [displayNameOf(c), modelNameOf(c.id)]
+        .map((n) => matchScore(q, n))
+        .filter((x): x is number => x !== undefined)
+      if (names.length > 0) return Math.min(...names)
+      const lower = q.toLowerCase()
+      return (c.vendor ?? '').toLowerCase().includes(lower) || c.label.toLowerCase().includes(lower)
+        ? 3
+        : undefined
+    }
+    const scored = choices
+      .map((c, i) => ({ c, i, score: scoreOf(c) }))
+      .filter(
+        (x): x is { c: FreeChatModelChoice; i: number; score: number } => x.score !== undefined,
+      )
+      .sort((a, b) => a.score - b.score || a.i - b.i)
     const out: PickerGroup[] = []
-    for (const c of choices) {
-      if (!hit(c)) continue
+    for (const { c } of scored) {
       const group = groupOf(c)
       const key = group === 'own' ? `own:${c.id.slice(0, c.id.indexOf('/'))}` : group
       let g = out.find((x) => x.key === key)
@@ -235,8 +308,9 @@ export function ModelPicker({
       return
     }
     const at = list.indexOf(active as HTMLElement)
-    if (e.key === 'ArrowUp' && at === 0) {
-      search.current?.focus()
+    // WP370：没出搜索框（模型不多于 4 个）时首尾相接
+    if (e.key === 'ArrowUp' && at === 0 && search.current !== null) {
+      search.current.focus()
       return
     }
     const next = (at + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length
@@ -270,7 +344,19 @@ export function ModelPicker({
       : currentGroup === 'subscription'
         ? t('model.pick.group.subscription')
         : shortSource(current.label)
-  const full = t('model.pick.source_model', { source: sourceName, model: modelNameOf(current.id) })
+  // WP370：当前这一档思考程度（不是默认档时钮上多写一段）
+  const thinking = onEffortChange === undefined ? undefined : current.thinking
+  const effortNow =
+    thinking === undefined
+      ? undefined
+      : (thinking.options.find((o) => o.effort === effort) ??
+        thinking.options.find((o) => o.effort === thinking.default))
+  const effortTag =
+    effortNow === undefined || effortNow.effort === thinking?.default
+      ? undefined
+      : t(thinkingKey(effortNow.level))
+  const full = t('model.pick.source_model', { source: sourceName, model: displayNameOf(current) })
+  const fullWithEffort = effortTag === undefined ? full : `${full} · ${effortTag}`
   // 读屏念的名字：工坊那组仍是「工坊」（决策 853），别的就是「来源 · 模型名」
   const name = current.official ? t('model.pick.workshop') : full
 
@@ -303,8 +389,10 @@ export function ModelPicker({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={t('model.pick.aria', { name })}
-        title={t('model.pick.tip', { name: full })}
+        aria-label={t('model.pick.aria', {
+          name: effortTag === undefined ? name : `${name} · ${effortTag}`,
+        })}
+        title={t('model.pick.tip', { name: fullWithEffort })}
         data-testid={testId}
         data-model={current.id}
         className="inline-flex h-[30px] max-w-[260px] items-center gap-1.5 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
@@ -320,6 +408,11 @@ export function ModelPicker({
       >
         <ChoiceIcon choice={current} />
         {current.official ? null : <span className="truncate">{full}</span>}
+        {effortTag === undefined ? null : (
+          <span data-testid={`${testId}-effort-tag`} className="shrink-0">
+            · {effortTag}
+          </span>
+        )}
         <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
       </button>
       {open ? (
@@ -334,21 +427,24 @@ export function ModelPicker({
             layout.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
           )}
         >
-          <label className="flex items-center gap-2 border-b px-3 py-2">
-            <Search aria-hidden className="size-3.5 text-muted-foreground" />
-            <input
-              ref={search}
-              type="search"
-              value={query}
-              placeholder={t('model.pick.search')}
-              aria-label={t('model.pick.search')}
-              data-testid={`${testId}-search`}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              onChange={(e) => {
-                setQuery(e.target.value)
-              }}
-            />
-          </label>
+          {/* WP370：照官方——模型多于 4 个才出搜索 */}
+          {choices.length <= SEARCH_MIN ? null : (
+            <label className="flex items-center gap-2 border-b px-3 py-2">
+              <Search aria-hidden className="size-3.5 text-muted-foreground" />
+              <input
+                ref={search}
+                type="search"
+                value={query}
+                placeholder={t('model.pick.search')}
+                aria-label={t('model.pick.search')}
+                data-testid={`${testId}-search`}
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                }}
+              />
+            </label>
+          )}
           <div className="overflow-y-auto p-1" style={{ maxHeight: layout.max }}>
             {groups.length === 0 ? (
               <p
@@ -413,6 +509,16 @@ export function ModelPicker({
               </fieldset>
             ))}
           </div>
+          {thinking === undefined || effortNow === undefined ? null : (
+            <ThinkingRow
+              testId={testId}
+              options={thinking.options}
+              current={effortNow.effort}
+              onPick={(next) => {
+                onEffortChange?.(next, current.id)
+              }}
+            />
+          )}
           <div className="flex flex-col border-t p-1">
             {onSetDefault === undefined || current.id === defaultId ? null : (
               <button
@@ -480,17 +586,43 @@ function PickerRow({
       data-testid={`${testId}-option`}
       data-model={choice.id}
       title={t('model.pick.source_model', { source: groupLabel, model: modelNameOf(choice.id) })}
+      data-name={displayNameOf(choice)}
       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
       onClick={onPick}
     >
       <ChoiceIcon choice={{ id: choice.id, official: false, vendor: choice.vendor }} size={16} />
-      <span className="min-w-0 truncate">{modelNameOf(choice.id)}</span>
+      <span className="min-w-0 truncate">{displayNameOf(choice)}</span>
       {isDefault ? (
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {t('model.pick.is_default')}
         </span>
       ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+        {/* WP370：自带联网 / 长上下文——只画图标，悬停出一句 */}
+        {choice.native_search === true ? (
+          <Globe
+            role="img"
+            aria-label={t('model.pick.cap.web')}
+            data-testid={`${testId}-cap-web`}
+            className="size-3"
+          >
+            <title>{t('model.pick.cap.web')}</title>
+          </Globe>
+        ) : null}
+        {(choice.context_window ?? 0) >= LONG_CONTEXT_TOKENS ? (
+          <ScrollText
+            role="img"
+            aria-label={t('model.pick.cap.long', {
+              k: Math.round((choice.context_window ?? 0) / 1000),
+            })}
+            data-testid={`${testId}-cap-long`}
+            className="size-3"
+          >
+            <title>
+              {t('model.pick.cap.long', { k: Math.round((choice.context_window ?? 0) / 1000) })}
+            </title>
+          </ScrollText>
+        ) : null}
         {choice.vision === 'no' ? (
           <EyeOff aria-label={t('free_chat.model.no_vision')} className="size-3" />
         ) : (
@@ -525,6 +657,57 @@ function PickerRow({
         </span>
       </span>
     </button>
+  )
+}
+
+/** WP370：模型多于这么多个才出搜索（官方 alpha.5 同一条线）。 */
+const SEARCH_MIN = 4
+
+/** WP370：「思考：快 / 标准 / 深想」那一行（只给声明了档位的模型）。 */
+function ThinkingRow({
+  testId,
+  options,
+  current,
+  onPick,
+}: {
+  testId: string
+  options: { level: ThinkingLevel; effort: ReasoningEffort }[]
+  current: ReasoningEffort
+  onPick: (effort: ReasoningEffort) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <div
+      className="flex items-center gap-2 border-t px-3 py-2 text-xs"
+      data-testid={`${testId}-thinking`}
+    >
+      <span className="shrink-0 text-muted-foreground">{t('model.pick.thinking')}</span>
+      <Hint text={t('model.pick.thinking.tip')} />
+      <fieldset
+        aria-label={t('model.pick.thinking')}
+        className="m-0 ml-auto flex gap-1 border-0 p-0"
+      >
+        {options.map((o) => (
+          <button
+            key={o.level}
+            type="button"
+            data-menu-item
+            aria-pressed={o.effort === current}
+            data-testid={`${testId}-thinking-${o.level}`}
+            data-effort={o.effort}
+            className={cn(
+              'rounded-full px-2 py-0.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+              o.effort === current ? 'bg-muted font-medium text-ws-ink' : 'text-muted-foreground',
+            )}
+            onClick={() => {
+              onPick(o.effort)
+            }}
+          >
+            {t(thinkingKey(o.level))}
+          </button>
+        ))}
+      </fieldset>
+    </div>
   )
 }
 
@@ -563,11 +746,17 @@ export function ComposerModelPicker({
   onChange,
   placement = 'up',
   testId,
+  effort,
+  onEffortChange,
 }: {
   value: string | undefined
   onChange: (id: string) => void
   placement?: 'up' | 'down'
   testId?: string
+  /** WP370：这一次 / 这件事选的思考程度（调用方存）。 */
+  effort?: ReasoningEffort | undefined
+  /** WP370：调思考程度（连同当前模型）；不给 = 不出「思考」那一行。 */
+  onEffortChange?: ((effort: ReasoningEffort, model: string) => void) | undefined
 }): React.ReactNode {
   const client = useQueryClient()
   const models = useQuery({ queryKey: MODEL_CHOICES_KEY, queryFn: getFreeChatModels, retry: false })
@@ -592,6 +781,8 @@ export function ComposerModelPicker({
       placement={placement}
       rateBase={models.data.rate_base}
       balance={balance}
+      effort={effort}
+      onEffortChange={onEffortChange}
       {...(owner === undefined
         ? {}
         : {

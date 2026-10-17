@@ -725,6 +725,8 @@ export const openMatterAtPosition = (
     mode?: 'quick' | 'chat' | 'task'
     /** WP342：输入框左下角选的 AI（不给 = 品牌默认） */
     model?: string
+    /** WP370：连同 `model` 一起选的思考程度 */
+    model_effort?: string
     /** WP357：附上的资料（base64；服务端按助理那套读成文字） */
     files?: { name: string; data: string }[]
   },
@@ -1031,8 +1033,16 @@ export const createMatterWithRole = (
  * WP342（决策 853）：换这件事用的 AI（输入框左下角那个钮）。只改这一件、之后接着跑仍用它；
  * `null` = 回到跟品牌默认。
  */
-export const setMatterModel = (id: string, model: string | null): Promise<{ matter: Matter }> =>
-  api(`/v1/matters/${encodeURIComponent(id)}/model`, { method: 'PUT', body: { model } })
+export const setMatterModel = (
+  id: string,
+  model: string | null,
+  /** WP370：连同模型一起选的思考程度（不给 = 那个模型的默认档） */
+  effort?: string,
+): Promise<{ matter: Matter }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/model`, {
+    method: 'PUT',
+    body: { model, ...(effort === undefined ? {} : { effort }) },
+  })
 
 export const getMatterTimeline = (id: string, limit: number): Promise<TimelineData> =>
   api<TimelineData>(`/v1/matters/${encodeURIComponent(id)}/timeline?limit=${limit}`)
@@ -2388,6 +2398,8 @@ export interface ModelProviderView {
   /** WP42：上次拉回来的模型清单。 */
   models?: string[]
   last_listing?: ModelListing
+  /** WP370：除主模型外，还在输入框 AI 钮里列出来的那几个。 */
+  picker_models?: string[]
   last_test?: ModelTestResult
   from_env?: boolean
 }
@@ -2482,6 +2494,8 @@ export const saveModelProvider = (
     api_key?: string
     price_in?: number
     price_out?: number
+    /** WP370：AI 钮里还要列的那几个（`[]` = 清空；不给 = 不动） */
+    picker_models?: string[]
   },
   assignment?: string,
 ): Promise<ModelProviderView> =>
