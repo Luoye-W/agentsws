@@ -20,6 +20,7 @@
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
+    "@earendil-works/pi-ai": "1.1.0",
     "semver": "^7.7.0"
   },
   "devDependencies": {

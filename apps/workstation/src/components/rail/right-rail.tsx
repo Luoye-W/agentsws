@@ -12,6 +12,9 @@
  * - 宽屏挤在主区右边；**< 1200 盖在主区上**（不挤压），点遮罩收起。面板可临时加宽（决策 1019，宽度记住）。
  * - `]` 开 / 关（输入框里按不算）；面板内容永远按当前岗位 / 职责取（`rail-scope.ts`）。
  *
+ * WP375（决策 1035）：右上角不再放六张卡的图标（卡片入口只在面板里），只放面板里没有的工具 +「⋮」开 / 关面板，
+ * 「⋮」上亮各卡红 / 黄点的汇总；窄窗也不再收图标（只剩三个工具）。
+ *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
 import { MoreVertical } from 'lucide-react'
@@ -21,10 +24,10 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
-import { RailCards, StatusDot } from '@/components/rail/rail-cards'
+import { RailCards } from '@/components/rail/rail-cards'
 import { RailPanel } from '@/components/rail/rail-panel'
 import { type RailScope, type RailTier, railContextOf } from '@/components/rail/rail-scope'
-import { cardOpen, RAIL_CARDS, useRailState } from '@/components/rail/rail-state'
+import { RAIL_CARDS, useRailState } from '@/components/rail/rail-state'
 import {
   listRailCards,
   menuPanels,
@@ -60,8 +63,6 @@ function useMedia(query: string): boolean {
 
 /** 窄屏（< 1200）：面板盖在主区上，逻辑一个字不变。 */
 const NARROW = '(max-width: 1199px)'
-/** 再窄（< 900）：右上角那一排图标也收进「⋮」。 */
-const COMPACT = '(max-width: 899px)'
 
 /** 这一页的两层范围与默认层（顶栏图标与面板都要）。 */
 function useRailContext(
@@ -98,53 +99,31 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
     </>
   )
 }
-
-/* ── 右上角那一排 ──────────────────────────────────────────────────── */
-
+/**
+ * WP375（决策 1035，照 Claude 桌面版）：右上角**不再重复放卡片图标**——卡片入口只在面板里。
+ * 这里只放面板里没有的工具（浏览器、变更审阅、教程；注册表 `pinned` 排序），最右「⋮」开 / 关右侧面板；
+ * 任何一张卡有红 / 黄点时「⋮」上亮一个汇总点（红的压过黄的）。
+ */
 export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }): ReactNode {
   ensureBuiltinPanels()
   const { t } = useApp()
   const rail = useRailState()
   const ctx = useRailContext(instances, null)
-  const compact = useMedia(COMPACT)
-  const [menu, setMenu] = useState(false)
-  const box = useRef<HTMLDivElement | null>(null)
   const body: RailPanelBodyProps = {
     ...(ctx.scope === undefined ? {} : { scope: ctx.scope }),
     tier: ctx.tier,
     pathname: ctx.pathname,
   }
-  // 现在开着的那一格归哪张卡（「显示更多」进去的，图标照样亮着）
   const openDef =
     rail.open === null || rail.open === RAIL_CARDS
       ? undefined
       : panelType(resolvePanelId(rail.open).id)
-  const activeCard = (id: string): boolean =>
-    rail.open === RAIL_CARDS ? cardOpen(rail.cards, id) && rail.focus === id : openDef?.card === id
-
-  // 点菜单外面 / Esc 收起菜单
-  useEffect(() => {
-    if (!menu) return
-    const onDown = (e: MouseEvent): void => {
-      if (box.current !== null && !box.current.contains(e.target as Node)) setMenu(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenu(false)
-    }
-    globalThis.addEventListener?.('mousedown', onDown)
-    globalThis.addEventListener?.('keydown', onKey)
-    return () => {
-      globalThis.removeEventListener?.('mousedown', onDown)
-      globalThis.removeEventListener?.('keydown', onKey)
-    }
-  }, [menu])
-
-  const pinned = compact ? [] : pinnedItems()
-  const tools = menuPanels()
-  const pick = (fn: () => void): void => {
-    setMenu(false)
-    fn()
-  }
+  // 先排 `pinned` 的（浏览器、变更审阅、教程），没给 `pinned` 的工具（第三方面板）接在后面
+  const tools = [
+    ...pinnedItems().flatMap((i) => (i.kind === 'panel' ? [i.panel] : [])),
+    ...menuPanels(),
+  ]
+  const panelOpen = rail.open !== null
   return (
     <nav
       className="flex items-center gap-0.5"
@@ -152,126 +131,64 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
       data-testid="right-rail"
       data-open={rail.open ?? ''}
     >
-      {pinned.map((item) =>
-        item.kind === 'card' ? (
-          <CardIcon
-            key={`card:${item.card.id}`}
-            card={item.card}
-            body={body}
-            active={activeCard(item.card.id)}
-            onClick={() => {
-              rail.toggleCard(item.card.id)
-            }}
-          />
-        ) : (
-          <PanelIcon
-            key={`panel:${item.panel.id}`}
-            definition={item.panel}
-            body={body}
-            active={openDef?.id === item.panel.id}
-            onClick={() => {
-              rail.show(openDef?.id === item.panel.id ? null : item.panel.id)
-            }}
-          />
-        ),
-      )}
-      <div ref={box} className="relative">
-        <button
-          type="button"
-          aria-label={t('rail.overflow')}
-          title={t('rail.overflow')}
-          aria-haspopup="menu"
-          aria-expanded={menu}
-          data-testid="rail-overflow"
-          className={cn(
-            'flex size-8 items-center justify-center rounded-md',
-            menu
-              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-              : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-          )}
+      {tools.map((panel) => (
+        <PanelIcon
+          key={panel.id}
+          definition={panel}
+          body={body}
+          active={openDef?.id === panel.id}
           onClick={() => {
-            setMenu((v) => !v)
+            rail.show(openDef?.id === panel.id ? null : panel.id)
           }}
-        >
-          <MoreVertical aria-hidden className="size-4" />
-        </button>
-        {menu ? (
-          <div
-            role="menu"
-            data-testid="rail-menu"
-            className="absolute top-9 right-0 z-50 flex w-52 flex-col gap-px rounded-[10px] border border-ws-line bg-popover p-1 text-[13px] shadow-lg"
-          >
-            <MenuItem
-              testId="rail-menu-cards"
-              label={t('rail.cards')}
-              onClick={() => {
-                pick(() => {
-                  rail.show(RAIL_CARDS)
-                })
-              }}
-            />
-            {compact
-              ? listRailCards(rail.order).map((c) => (
-                  <MenuItem
-                    key={c.id}
-                    testId={`rail-menu-card-${c.id}`}
-                    icon={c.icon}
-                    label={t(c.label)}
-                    onClick={() => {
-                      pick(() => {
-                        rail.openCard(c.id)
-                      })
-                    }}
-                  />
-                ))
-              : null}
-            {tools.length === 0 ? null : <div className="my-1 border-t border-ws-line" />}
-            {tools.map((p) => (
-              <MenuItem
-                key={p.id}
-                testId={`rail-menu-${p.id}`}
-                icon={p.icon}
-                label={t(p.label)}
-                onClick={() => {
-                  pick(() => {
-                    rail.show(p.id)
-                  })
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
+        />
+      ))}
+      <button
+        type="button"
+        aria-label={t(panelOpen ? 'rail.close' : 'rail.open')}
+        title={t(panelOpen ? 'rail.close' : 'rail.open')}
+        aria-pressed={panelOpen}
+        data-testid="rail-overflow"
+        className={cn(ICON, panelOpen ? ICON_ACTIVE : ICON_IDLE)}
+        onClick={() => {
+          rail.show(panelOpen ? null : RAIL_CARDS)
+        }}
+      >
+        <MoreVertical aria-hidden className="size-4" />
+        {/* 汇总点：每张卡各画一个在同一个位置，红的压在黄的上面——看上去只有一个点 */}
+        <span className="absolute top-1 right-1 flex size-1.5">
+          {listRailCards(rail.order).map((card) => (
+            <CardDotProbe key={card.id} card={card} body={body} />
+          ))}
+        </span>
+      </button>
     </nav>
   )
 }
 
-function MenuItem({
-  label,
-  icon: Icon,
-  onClick,
-  testId,
+/** 一张卡的状态点，画在「⋮」右上角（只要点，不取摘要）。 */
+function CardDotProbe({
+  card,
+  body,
 }: {
-  label: string
-  icon?: RailCardDefinition['icon']
-  onClick: () => void
-  testId: string
+  card: RailCardDefinition
+  body: RailPanelBodyProps
 }): ReactNode {
+  const useStatus = card.useStatus ?? noStatus
+  const status = useStatus(body, false)
+  if (status?.dot === undefined) return null
   return (
-    <button
-      type="button"
-      role="menuitem"
-      data-testid={testId}
-      className="flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-left hover:bg-sidebar-accent/60"
-      onClick={onClick}
-    >
-      {Icon === undefined ? (
-        <span className="size-4" />
-      ) : (
-        <Icon aria-hidden className="size-4 text-ws-muted-fg" />
+    <i
+      role="img"
+      aria-label={status.dotLabel ?? ''}
+      title={status.dotLabel}
+      data-testid="rail-overflow-dot"
+      data-card={card.id}
+      data-dot={status.dot}
+      className={cn(
+        'absolute inset-0 rounded-full',
+        status.dot === 'alert' ? 'z-10 bg-ws-bad' : 'bg-ws-warn',
       )}
-      {label}
-    </button>
+    />
   )
 }
 
@@ -281,43 +198,6 @@ const ICON_IDLE = 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-f
 
 function noStatus(_p: RailPanelBodyProps, _d: boolean): undefined {
   return undefined
-}
-
-/** 一张卡的图标：卡上亮什么点，这里就亮什么点（只要点，不取摘要）。 */
-function CardIcon({
-  card,
-  body,
-  active,
-  onClick,
-}: {
-  card: RailCardDefinition
-  body: RailPanelBodyProps
-  active: boolean
-  onClick: () => void
-}): ReactNode {
-  const { t } = useApp()
-  const useStatus = card.useStatus ?? noStatus
-  const status = useStatus(body, false)
-  const label = t(card.label)
-  const tip = status?.dotLabel === undefined ? label : `${label} · ${status.dotLabel}`
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={tip}
-      title={tip}
-      data-testid={`rail-icon-${card.id}`}
-      className={cn(ICON, active ? ICON_ACTIVE : ICON_IDLE)}
-      onClick={onClick}
-    >
-      <card.icon aria-hidden className="size-4" />
-      {status?.dot === undefined ? null : (
-        <span className="absolute top-1 right-1 flex">
-          <StatusDot status={status} testId={`rail-icon-dot-${card.id}`} />
-        </span>
-      )}
-    </button>
-  )
 }
 
 function noBadge(_props: RailPanelBodyProps): undefined {

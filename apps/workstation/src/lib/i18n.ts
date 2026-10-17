@@ -2338,6 +2338,8 @@ const zh: Table = {
   'models.vendor.openai': '用 ChatGPT 订阅登录，或 API key 按量付费。',
   'models.vendor.anthropic': '用 Claude 订阅登录，或 API key 按量付费。',
   'models.vendor.agentsws-cloud': '不填 key、不注册，关联账号后按积分扣。',
+  // WP374
+  'models.vendor.anthropic-compatible': '任何 Anthropic 格式的服务：Claude 中转站、自建网关。',
   'models.subscription.risk': '第三方用订阅登录可能被限流或封禁；只在你自己的电脑上登录。',
   'models.add': '加一个',
   'models.add.button': '填 API key',
@@ -3765,7 +3767,8 @@ const zh: Table = {
   'help.missing': '这篇教程还没写。',
   'help.agentsws-credits.title': 'Agents 工坊官方接口与积分',
   'help.model-deepseek.title': '接 DeepSeek（账户登录 / API key）',
-  'help.model-openai-compatible.title': '接 OpenAI 兼容服务（Kimi、智谱、Ollama…）',
+  'help.model-openai-compatible.title':
+    '接 OpenAI / Anthropic 兼容服务（Kimi、Ollama、Claude 中转站…）',
   'help.model-bailian.title': '接阿里云百炼（三个方案怎么选）',
   'help.model-openai.title': '接 OpenAI / ChatGPT 订阅',
   'help.model-anthropic.title': '接 Anthropic / Claude 订阅',
@@ -6533,6 +6536,8 @@ const en: Table = {
   'models.vendor.openai': 'Sign in with ChatGPT, or pay per use with an API key.',
   'models.vendor.anthropic': 'Sign in with Claude, or pay per use with an API key.',
   'models.vendor.agentsws-cloud': 'No key, no sign-up; link your account and pay in credits.',
+  'models.vendor.anthropic-compatible':
+    'Any Anthropic-format service: Claude relays, self-hosted gateways.',
   'models.subscription.risk':
     'Subscription sign-in by third-party tools may be rate-limited or banned; only sign in on your own computer.',
   'models.add': 'Add one',
@@ -8018,7 +8023,8 @@ const en: Table = {
   'help.missing': 'This tutorial has not been written yet.',
   'help.agentsws-credits.title': 'Agents Workshop models and credits',
   'help.model-deepseek.title': 'Connect DeepSeek (account sign-in / API key)',
-  'help.model-openai-compatible.title': 'Connect an OpenAI-compatible service (Kimi, GLM, Ollama…)',
+  'help.model-openai-compatible.title':
+    'Connect an OpenAI- or Anthropic-compatible service (Kimi, Ollama, Claude relays…)',
   'help.model-bailian.title': 'Connect Alibaba Cloud Model Studio (which plan)',
   'help.model-openai.title': 'Connect OpenAI / a ChatGPT subscription',
   'help.model-anthropic.title': 'Connect Anthropic / a Claude subscription',

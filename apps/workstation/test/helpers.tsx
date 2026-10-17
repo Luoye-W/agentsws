@@ -34,18 +34,33 @@ export async function openSettingsTab(tab: string): Promise<void> {
 }
 
 /**
- * WP372：右侧面板开到某一格。归卡的面板（设定 / 产出 / 计划 / 对话 / 报表）= 点右上角那张卡的图标、
- * 再点卡底「显示更多」；不归卡的工具（浏览器 / 变更审阅 / 教程）= 点「⋮」再点菜单里那一项。
+ * WP372 / WP375：右侧面板开到某一格。归卡的面板（设定 / 产出 / 计划 / 对话 / 报表）= 「⋮」打开面板、
+ * 展开那张卡、点卡底「显示更多」；不归卡的工具（浏览器 / 变更审阅 / 教程）= 右上角那个图标。
  */
 export async function openRailPanel(id: string): Promise<void> {
   const card = RAIL_PANEL_CARD[id]
   if (card === undefined) {
-    fireEvent.click(screen.getByTestId('rail-overflow'))
-    fireEvent.click(await screen.findByTestId(`rail-menu-${id}`))
+    // WP375：不归卡的工具（浏览器 / 变更审阅 / 教程）是右上角的图标
+    fireEvent.click(screen.getByTestId(`rail-icon-${id}`))
     return
   }
-  fireEvent.click(screen.getByTestId(`rail-icon-${card}`))
+  await openRailCard(card)
   fireEvent.click(await screen.findByTestId(`rail-card-more-${card}`))
+}
+
+/**
+ * WP375（决策 1035）：右上角不再有卡片图标——「⋮」开右侧面板，卡没展开就点它的标题行展开。
+ */
+export async function openRailCard(card: string): Promise<HTMLElement> {
+  if (screen.queryByTestId('rail-cards') === null) {
+    // 开着某一格（「显示更多」进去的）就「←」回卡片；面板收着就点「⋮」打开
+    const back = screen.queryByTestId('rail-panel-back')
+    fireEvent.click(back ?? screen.getByTestId('rail-overflow'))
+  }
+  const box = await screen.findByTestId(`rail-card-${card}`)
+  if (box.getAttribute('data-open') !== 'true')
+    fireEvent.click(screen.getByTestId(`rail-card-toggle-${card}`))
+  return box
 }
 
 const RAIL_PANEL_CARD: Record<string, string> = {

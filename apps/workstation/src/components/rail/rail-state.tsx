@@ -41,8 +41,8 @@ import {
 /** 面板开成「五张卡」时 `open` 的值（存进布局的也是它）。 */
 export const RAIL_CARDS = 'cards'
 
-/** 没记过的桶里默认展开哪几张（决策 1004：只展开对话）。 */
-export const DEFAULT_OPEN_CARDS: readonly string[] = ['conversations']
+/** 没记过的桶里默认展开哪几张（决策 1035：对话与计划；WP372 时只有对话）。 */
+export const DEFAULT_OPEN_CARDS: readonly string[] = ['conversations', 'plans']
 
 /** 某张卡这会儿展开着吗（显式记过的为准，没记过按默认）。 */
 export function cardOpen(flags: Record<string, boolean>, id: string): boolean {

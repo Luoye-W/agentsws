@@ -87,6 +87,23 @@ export {
   priceFor,
   priceKey,
 } from './pricing.js'
+// WP374：Anthropic 兼容口（Claude 中转站等；协议是官方 pi-ai 的 anthropic-messages）
+export type {
+  AnthropicCompatibleOptions,
+  AnthropicModelFacts,
+} from './providers/anthropic-compatible.js'
+export {
+  ANTHROPIC_MESSAGES_API,
+  ANTHROPIC_VERSION,
+  anthropicCompatibleProvider,
+  anthropicListingUrl,
+  anthropicModelFacts,
+  anthropicProviderError,
+  anthropicRootUrl,
+  loadAnthropicCatalog,
+  readAnthropicListing,
+} from './providers/anthropic-compatible.js'
+export { readPiAssistant, toAnthropicPiContext } from './providers/anthropic-pi.js'
 // WP134：第三种模型来源「用我的 DeepSeek 账号登录」的推理口（Messages 形态 + x-dsh-auth-token）
 export type {
   AccountFetch,

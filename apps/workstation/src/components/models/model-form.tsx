@@ -65,6 +65,8 @@ export function ModelForm({
     base_url: string
     api_key?: string
     region: 'cn' | 'global'
+    /** WP374：按哪种接口去拉（这张卡的 `kind`；Anthropic 兼容口走 `GET /v1/models`）。 */
+    kind?: ModelProviderTemplate['kind']
   }) => Promise<ModelListing>
   /** WP42 内置价目表：选定模型后照它自动填价。 */
   pricing?: ModelPricingView
@@ -200,6 +202,8 @@ export function ModelForm({
         id: id === '' ? template.kind : id,
         base_url,
         region,
+        // WP374：这张卡是哪种接口（Anthropic 兼容口拉清单的地址与头都不一样）
+        kind: template.kind,
         ...(key === '' ? {} : { api_key: key }),
       })
       setListing(result)
@@ -469,7 +473,8 @@ export function ModelForm({
         />
       </Field>
 
-      {imageOnly ? null : (
+      {/* WP374：Anthropic 兼容口没有向量接口（Messages 协议只有对话），不出这一格 */}
+      {imageOnly || template.kind === 'anthropic_compatible' ? null : (
         <Field
           id={`${prefix}-embedding_model`}
           label={t('models.field.embedding')}
