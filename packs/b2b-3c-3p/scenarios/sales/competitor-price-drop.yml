@@ -1,0 +1,48 @@
+# WP392（docs/104 §3.3）：**竞品监控——第一天只建底子，第二天比出一条降价**。
+#
+# 竞品独立站的公开商品目录由替身进料口交回（不出网），和上一次的快照比，用的是和服务进程同一份对比引擎
+# （`@agentsws/social-core` 的 `diffCatalog`）。这条题钉三件事：
+#
+# 1. 第一次读只当底子：三件商品一件都不报「上新」；
+# 2. 第二天同一款的两个款式一起降价 → 合成**一条**「改价」（不是两条）；店里自己的更新时间怎么跳都不算；
+# 3. 竞品监控自己零写：不出卡、不改任何外部账号（只读外部公开页面，docs/104 §3.4 第 5 条）。
+id: sales/competitor-price-drop
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-19T09:00:00+08:00' }
+events:
+  # 第一天：只建底子
+  - at: '+0m'
+    competitor.read:
+      competitor: Rival Gear
+      source: shop
+      rows:
+        - { product: '1001', variant: '1001-s', title: Trail 500, price: 899, available: true }
+        - { product: '1001', variant: '1001-l', title: Trail 500, price: 999, available: true }
+        - { product: '1002', variant: '1002-1', title: Camp Lite, price: 299, available: true }
+  # 第二天：Trail 500 两个款式都降了（-10% / -12%），Camp Lite 没动
+  - at: '+24h'
+    competitor.read:
+      competitor: Rival Gear
+      source: shop
+      rows:
+        - { product: '1001', variant: '1001-s', title: Trail 500, price: 809, available: true }
+        - { product: '1001', variant: '1001-l', title: Trail 500, price: 879, available: true }
+        - { product: '1002', variant: '1002-1', title: Camp Lite, price: 299, available: true }
+expected:
+  competitor_changes: [price]
+  event_types:
+    - simulation.competitor_read
+    - simulation.competitor_change
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  第一天是不是一条变化都没报？第二天那一条是不是写成「Trail 500 两个款式降价 10%–12%」这样一句，
+  而不是两条、也不是把整店的商品当上新？

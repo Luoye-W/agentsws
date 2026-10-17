@@ -20,6 +20,7 @@ import { instructionRuleCard, isInstructionRuleCard, ruleFromCard } from '@agent
 import type { ActorPolicy } from '@agentsws/stand-ins'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
+import { type CompetitorWatchLoop, installCompetitorWatch } from './competitor.js'
 import { buildRunRequest } from './context.js'
 import { type DesignLoop, installDesign } from './design.js'
 import type { ModelTrace } from './diagnostics.js'
@@ -893,6 +894,13 @@ async function execute(
   /**
    * 惰性装配：场景里没有 `position.*` 就一个都不装（同 `secretary` / `chat`）。
    */
+  /** WP392：竞品监控（惰性：场景里没有 `competitor.read` 就不装）。 */
+  let competitorWatch: CompetitorWatchLoop | undefined
+  const competitorLoop = (): CompetitorWatchLoop => {
+    competitorWatch ??= installCompetitorWatch(world)
+    return competitorWatch
+  }
+
   let positions: PositionsLoop | undefined
   const positionsLoop = (): PositionsLoop => {
     positions ??= installPositions(world)
@@ -1274,6 +1282,11 @@ async function execute(
         } catch (e) {
           workBlocked(e, 'assistant_fanout_failed')
         }
+        return
+      }
+      // WP392：竞品监控读一次（替身进料口；和上一次快照比）
+      case 'competitor.read': {
+        competitorLoop().read(event.competitor_read)
         return
       }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
