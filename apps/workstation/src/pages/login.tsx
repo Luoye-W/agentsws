@@ -15,7 +15,12 @@
  * WP358：这一页常被当成「工坊账号注册 / 登录」。标题下一句话说清楚它是进这个工作区、
  * 不是工坊账号；邮箱不是成员时不再只报「未知邮箱」，而是告诉人该怎么办
  * （主人一键换成主人的邮箱，同事去找负责人要邀请链接）。
+ *
+ * WP371（决策 943）：也能用工坊账号（邮箱 + 验证码）进。局域网档它在最上面（主人 / 已加入的同事的
+ * 主路，设置码是备用）；本机档一次性链接一按就进，工坊账号收在一个按钮后面。所以 WP358 那句
+ * 「这不是工坊账号登录，不用密码」两档都不对了：本机档只留前半句，局域网档不出副标题。
  */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -32,6 +37,7 @@ import {
   signInWithToken,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { AccountLoginPanel } from './login-account'
 import { SharedLoginPanel } from './login-shared'
 
 export function LoginPage(): React.ReactNode {
@@ -43,6 +49,8 @@ export function LoginPage(): React.ReactNode {
   const [email, setEmail] = useState('')
   const [linkToken, setLinkToken] = useState<string | null>(null)
   const [mailed, setMailed] = useState(false)
+  // 决策 943：本机档的工坊账号入口先收着（一次性链接一按就进）；局域网档一直展开
+  const [withAccount, setWithAccount] = useState(false)
 
   const hint = useQuery({ queryKey: ['bootstrap'], queryFn: bootstrapHint })
 
@@ -99,7 +107,7 @@ export function LoginPage(): React.ReactNode {
           <CardTitle className="text-sm">
             {inviteToken === undefined ? t('login.title') : t('login.invite.title')}
           </CardTitle>
-          {inviteToken === undefined ? (
+          {inviteToken === undefined && !shared ? (
             <p className="text-xs text-muted-foreground" data-testid="login-subtitle">
               {t('login.subtitle')}
             </p>
@@ -124,7 +132,12 @@ export function LoginPage(): React.ReactNode {
           )}
 
           {!shared ? null : inviteToken === undefined ? (
-            <SharedLoginPanel onToken={setLinkToken} />
+            <>
+              <AccountLoginPanel onToken={setLinkToken} />
+              <div className="border-t pt-3">
+                <SharedLoginPanel onToken={setLinkToken} />
+              </div>
+            </>
           ) : invite.error === null ? null : (
             <p className="text-xs text-muted-foreground" data-testid="login-shared-colleague">
               {t('login.shared.colleague')}
@@ -191,6 +204,26 @@ export function LoginPage(): React.ReactNode {
                   {t('login.mailed')}
                 </p>
               ) : null}
+              {inviteToken !== undefined ? null : withAccount ? (
+                <div className="border-t pt-3">
+                  <AccountLoginPanel
+                    initialEmail={isPlaceholderOwnerEmail(email) ? '' : email.trim()}
+                    onToken={setLinkToken}
+                  />
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="self-start"
+                  data-testid="login-with-account"
+                  onClick={() => {
+                    setWithAccount(true)
+                  }}
+                >
+                  {t('login.account.open')}
+                </Button>
+              )}
             </>
           )}
           {linkToken === null ? null : (
