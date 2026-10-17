@@ -1486,6 +1486,46 @@ export function checkExpectations(
    * `answered_by_pr` 必须是假——**公关不答客户的问题**。它一旦为真，
    * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
    */
+  /*
+   * WP386：拉监控源那一跳。拉不到时要说一句为什么（`says_why`）——「这条 feed 404 了」与
+   * 「今天没人提我们」是两件事，混成一个 0 是这条职责上最贵的一种谎。
+   */
+  if (expected.pr_feed !== undefined) {
+    const last = [...evidence.events].reverse().find((e) => e.type === 'simulation.pr_feed_pulled')
+    if (last === undefined) {
+      add('pr_feed', false, '这一轮没有拉过一条监控源')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.pr_feed
+      const problems: string[] = []
+      if (want.ok !== undefined && (p.ok === true) !== want.ok)
+        problems.push(want.ok ? `没拉到：${String(p.message ?? '')}` : '应该拉不到，却说拉到了')
+      for (const k of ['fetched', 'kept', 'unique'] as const)
+        if (want[k] !== undefined && Number(p[k]) !== want[k])
+          problems.push(`${k} 是 ${String(p[k])}，不是 ${want[k]}`)
+      if (want.label !== undefined && String(p.label ?? '') !== want.label)
+        problems.push(`名字拆成了「${String(p.label ?? '')}」，不是「${want.label}」`)
+      if (
+        want.links_unwrapped !== undefined &&
+        (p.links_unwrapped === true) !== want.links_unwrapped
+      )
+        problems.push('还有 google.com/url 跳转链接没解开')
+      if (
+        want.says_why !== undefined &&
+        (typeof p.message === 'string' && p.message !== '') !== want.says_why
+      )
+        problems.push('拉不到却没说为什么（会被当成 0 条）')
+      add(
+        'pr_feed',
+        problems.length === 0,
+        problems.length === 0
+          ? p.ok === true
+            ? `拉到 ${String(p.fetched)} 条、留下 ${String(p.kept)} 条`
+            : `照实说没拉到：${String(p.message)}`
+          : problems.join('；'),
+      )
+    }
+  }
   if (expected.pr_mention !== undefined) {
     const last = [...evidence.events]
       .reverse()

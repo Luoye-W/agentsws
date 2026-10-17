@@ -1,0 +1,29 @@
+# WP386（docs/103 v2）：一条监控源拉不到（Google Alerts 那条提醒被删了，feed 回 404）。
+#
+# 这一块必须**照实说没拉到**，并说清多半是什么原因——「这条 feed 404 了」与「今天没人提我们」
+# 是两件事，混成一个 0 是信息监控这条职责上最贵的一种谎（`pr-core/channels/alerts.ts` 第 3 条）。
+id: pr/monitor-feed-404
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    pr.feed:
+      kind: google_alerts
+      status: 404
+      label: Parker
+      entries: []
+expected:
+  pr_feed:
+    ok: false
+    says_why: true
+  event_types:
+    - simulation.pr_feed_pulled
+  metrics:
+    outbound_sent: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  看到这一块的人，能不能分清「这条源坏了」和「今天没人提」？知不知道下一步去哪儿修？
