@@ -175,6 +175,56 @@ export function readRailLayout(bucket: string): RailLayoutEntry {
 }
 
 /**
+ * WP372（决策 1004）：右侧面板每张卡**展开还是收起**，按作用域桶记（与布局同一套桶）。
+ * 值只有卡 id → 布尔（显式选过的）；没记过的按「只展开对话」算（`rail-state.tsx`）。
+ */
+export const RIGHT_RAIL_CARDS_KEY = 'agentsws.rightrail.cards'
+/**
+ * WP372（决策 1005）：五张卡的**顺序**——人拖过之后记住，全部岗位共用一份（不分桶）。
+ * 只有卡 id 的数组。
+ */
+export const RIGHT_RAIL_CARD_ORDER_KEY = 'agentsws.rightrail.card_order'
+
+function readObject(key: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(read(key) ?? '{}')
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+export function readRailCardFlags(bucket: string): Record<string, boolean> {
+  const one = readObject(RIGHT_RAIL_CARDS_KEY)[bucket]
+  if (typeof one !== 'object' || one === null || Array.isArray(one)) return {}
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(one as Record<string, unknown>))
+    if (typeof v === 'boolean') out[k] = v
+  return out
+}
+
+export function writeRailCardFlags(bucket: string, flags: Record<string, boolean>): void {
+  const all = readObject(RIGHT_RAIL_CARDS_KEY)
+  all[bucket] = flags
+  write(RIGHT_RAIL_CARDS_KEY, JSON.stringify(all))
+}
+
+export function readRailCardOrder(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(read(RIGHT_RAIL_CARD_ORDER_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function writeRailCardOrder(order: readonly string[]): void {
+  write(RIGHT_RAIL_CARD_ORDER_KEY, JSON.stringify(order))
+}
+
+/**
  * WP298：「刚因为新版分块加载失败整页重载过」的时刻（毫秒数）。放 **sessionStorage**：
  * 只活在这一个窗口、关了就没；不是业务对象，只为了不让重载转圈。
  */

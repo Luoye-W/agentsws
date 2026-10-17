@@ -31,6 +31,7 @@ import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHELL_EN, SHELL_ZH } from './i18n-shell'
+import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
@@ -8486,6 +8487,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP372：右上角横排图标、「⋮」与右侧面板五张卡
+    ...PANEL_ZH,
   },
   en: {
     ...en,
@@ -8521,6 +8524,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...PANEL_EN,
   },
 }
 

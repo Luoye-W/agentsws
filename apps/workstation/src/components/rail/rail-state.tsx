@@ -14,6 +14,10 @@
  *
  * **只存结构**（#5）：写进本机的永远只有面板 id 与宽度。面板里的内容由面板
  * 自己按作用域重新取，一个字都不落到这台电脑上。
+ *
+ * WP372（决策 1001 / 1004 / 1005，Luoye 10-17）：右侧面板多一种样子——**五张卡**
+ * （`open === RAIL_CARDS`）。每张卡展开 / 收起按桶记（没记过只展开「对话」），
+ * 顺序按人记（全部岗位一份）。按资源地址开一个「归卡」的面板（连接卡）= 展开那张卡并滚到那一条。
  */
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -24,16 +28,31 @@ import {
   clampRailWidth,
   DEFAULT_RAIL_LAYOUT,
   type RailLayoutEntry,
+  readRailCardFlags,
+  readRailCardOrder,
   readRailLayout,
+  writeRailCardFlags,
+  writeRailCardOrder,
   writeRailLayout,
 } from '@/lib/ui-state'
 
+/** 面板开成「五张卡」时 `open` 的值（存进布局的也是它）。 */
+export const RAIL_CARDS = 'cards'
+
+/** 没记过的桶里默认展开哪几张（决策 1004：只展开对话）。 */
+export const DEFAULT_OPEN_CARDS: readonly string[] = ['conversations']
+
+/** 某张卡这会儿展开着吗（显式记过的为准，没记过按默认）。 */
+export function cardOpen(flags: Record<string, boolean>, id: string): boolean {
+  return flags[id] ?? DEFAULT_OPEN_CARDS.includes(id)
+}
+
 export interface RailState {
-  /** 现在开着哪个面板；`null` = 收起成图标轨。 */
+  /** 现在开着哪个面板；`null` = 收起；{@link RAIL_CARDS} = 五张卡。 */
   open: string | null
   /**
    * WP97：这一次是**为哪个资源**开的（`agentsws://file/src_1/报价单.xlsx`）；
-   * `null` = 人点图标轨开的"页"。
+   * `null` = 人点图标开的"页"。
    *
    * **只活在内存里**，不进本机那一份布局：40 §1.2 与 #5 说的"只存结构"里，
    * 结构指的是"开哪个面板、多宽"。刷新之后这一格回到空是**有意的**——
@@ -49,27 +68,54 @@ export interface RailState {
   /**
    * WP97：**为一个资源地址开面板**——`resolvePanel()` 的第一个真入口（#3）。
    *
-   * 知识库里点一份文件走的就是这一句。排序由注册表说了算（`priority` 三档 →
-   * pattern 长度 → 注册顺序，`canOpen()` 一票否决），这里不判"这是不是 Office 文件"：
-   * 判了就等于把注册表那套排序在调用点抄了第二遍，而第二遍永远会先走歪。
-   *
-   * 回 `false` = **没有面板认领这个地址**（.zip、.pdf……）。调用方那时该去下载，
-   * 不该"打开一个空面板然后说不支持"。
-   *
-   * **同一份文件再点一次 = 聚焦已经开着的那个**：状态一个字不改，于是面板不重挂、
-   * 滚动位置与正在看的那一页都留着（#16 借的那条细节）。
+   * 回 `false` = **没有面板认领这个地址**（.zip、.pdf……）。调用方那时该去下载。
+   * **同一份文件再点一次 = 聚焦已经开着的那个**：状态一个字不改，于是面板不重挂。
+   * WP372：认领它的面板归一张卡（连接卡）时，开成五张卡、展开那一张、滚到那一条。
    */
   openAddress(address: string): boolean
-  /** 开着就收起、收起就开这一个（`]` 与图标轨点击都用它）。 */
+  /** 开着就收起、收起就开这一个（`]` 用它）。 */
   toggle(panel: string): void
   /**
    * 改宽度。拖的过程中 `persist` 传假（一帧写一次本机是纯浪费），
    * 松手 / 键盘调完那一下才写。
    */
   setWidth(width: number, persist?: boolean): void
+  /** WP372：这个桶里显式记过的卡展开态（判展开用 {@link cardOpen}）。 */
+  cards: Record<string, boolean>
+  /** WP372：人拖出来的卡顺序（没拖过是空数组 = 按默认）。 */
+  order: readonly string[]
+  /** WP372：刚被点名的那张卡（右上角图标 / 连接卡弹出）：面板滚到它。只在内存里。 */
+  focus: string | null
+  /** WP372：点名那张卡时带的意图（`compose` = 对话卡直接开「新对话」那一格）。只在内存里。 */
+  intent: string | null
+  /**
+   * WP372：开成五张卡并展开这一张、滚到它。
+   * 给 `pathname` = 马上要跳去那一页（左栏职责行的「+」）：布局直接写进**那一页的桶**，跳过去就是开着的。
+   */
+  openCard(id: string, options?: { intent?: string; pathname?: string }): void
+  /** WP372：展开 / 收起一张卡（按桶记住）。 */
+  setCardOpen(id: string, open: boolean): void
+  /** WP372：右上角卡图标：面板开着且这张展开着就收起面板，否则开到它。 */
+  toggleCard(id: string): void
+  /** WP372：拖完 / 键盘挪完的顺序（全部岗位共用一份）。 */
+  setOrder(order: readonly string[]): void
+  /** WP372：意图用掉了（对话卡开过「新对话」一次就清掉，免得每次展开都弹）。 */
+  clearIntent(): void
 }
 
 const Ctx = createContext<RailState | null>(null)
+
+interface BucketState {
+  bucket: string
+  layout: RailLayoutEntry
+  cards: Record<string, boolean>
+}
+
+const readBucket = (bucket: string): BucketState => ({
+  bucket,
+  layout: readRailLayout(bucket),
+  cards: readRailCardFlags(bucket),
+})
 
 export function RailStateProvider({ children }: { children: ReactNode }): ReactNode {
   const location = useLocation()
@@ -78,60 +124,128 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
 
   // 换桶 = 换一份布局。用 render 期比较而不是 `useEffect`：effect 那一版
   // 会先拿旧桶的值画一帧，人眼看得见第三栏"闪"一下别的岗位的面板。
-  const [state, setState] = useState<{ bucket: string; layout: RailLayoutEntry }>(() => ({
-    bucket,
-    layout: readRailLayout(bucket),
-  }))
-  const current = state.bucket === bucket ? state : { bucket, layout: readRailLayout(bucket) }
+  const [state, setState] = useState<BucketState>(() => readBucket(bucket))
+  const current = state.bucket === bucket ? state : readBucket(bucket)
   if (current !== state) setState(current)
   const layout = current.layout
 
   // WP97：为哪个资源开的。与布局分开存，因为它**不进本机**（见 `RailState.address`）。
   const [address, setAddress] = useState<string | null>(null)
+  const [order, setOrderState] = useState<readonly string[]>(() => readRailCardOrder())
+  const [focus, setFocus] = useState<string | null>(null)
+  const [intent, setIntent] = useState<string | null>(null)
 
-  const show = useCallback((panel: string | null) => {
-    setAddress(null)
+  const setOpen = useCallback((panel: string | null) => {
     setState((prev) => {
       const next = { ...prev.layout, open_panel_id: panel }
       writeRailLayout(prev.bucket, next)
-      return { bucket: prev.bucket, layout: next }
+      return { ...prev, layout: next }
     })
   }, [])
 
+  const show = useCallback(
+    (panel: string | null) => {
+      setAddress(null)
+      setFocus(null)
+      setOpen(panel)
+    },
+    [setOpen],
+  )
+
   const toggle = useCallback((panel: string) => {
     setAddress(null)
+    setFocus(null)
     setState((prev) => {
       const next = {
         ...prev.layout,
         open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
       }
       writeRailLayout(prev.bucket, next)
-      return { bucket: prev.bucket, layout: next }
+      return { ...prev, layout: next }
     })
+  }, [])
+
+  const expandIn = useCallback((prev: BucketState, id: string): BucketState => {
+    const cards = { ...prev.cards, [id]: true }
+    const next = { ...prev.layout, open_panel_id: RAIL_CARDS }
+    writeRailCardFlags(prev.bucket, cards)
+    writeRailLayout(prev.bucket, next)
+    return { ...prev, layout: next, cards }
+  }, [])
+
+  const openCard = useCallback(
+    (id: string, options: { intent?: string; pathname?: string } = {}) => {
+      setAddress(null)
+      setFocus(id)
+      setIntent(options.intent ?? null)
+      const target =
+        options.pathname === undefined ? undefined : railLayoutBucket(options.pathname, position)
+      if (target !== undefined && target !== bucket) {
+        // 马上要换页：写进那一页的桶，换过去时 render 期那一下读到的就是开着的
+        expandIn(readBucket(target), id)
+        return
+      }
+      setState((prev) => expandIn(prev, id))
+    },
+    [bucket, position, expandIn],
+  )
+
+  const setCardOpen = useCallback((id: string, open: boolean) => {
+    setState((prev) => {
+      const cards = { ...prev.cards, [id]: open }
+      writeRailCardFlags(prev.bucket, cards)
+      return { ...prev, cards }
+    })
+  }, [])
+
+  const toggleCard = useCallback(
+    (id: string) => {
+      if (layout.open_panel_id === RAIL_CARDS && cardOpen(current.cards, id)) {
+        show(null)
+        return
+      }
+      openCard(id)
+    },
+    [layout.open_panel_id, current.cards, show, openCard],
+  )
+
+  const setOrder = useCallback((next: readonly string[]) => {
+    writeRailCardOrder(next)
+    setOrderState(next)
+  }, [])
+
+  const clearIntent = useCallback(() => {
+    setIntent(null)
   }, [])
 
   const openAddress = useCallback(
     (next_address: string): boolean => {
       const panel = resolvePanel({ address: next_address })
       if (panel === undefined) return false
+      // WP372：归卡的面板（连接卡）= 展开那张卡、滚到那一条（同一份再点一次也只是再滚一次）
+      if (panel.card !== undefined) {
+        const card = panel.card
+        setAddress(next_address)
+        setFocus(card)
+        setIntent(null)
+        setState((prev) => expandIn(prev, card))
+        return true
+      }
       // 已经开着同一份 = 聚焦：**一个 setState 都不发**，于是面板不重挂
       if (layout.open_panel_id === panel.id && address === next_address) return true
       setAddress(next_address)
-      setState((prev) => {
-        const next = { ...prev.layout, open_panel_id: panel.id }
-        writeRailLayout(prev.bucket, next)
-        return { bucket: prev.bucket, layout: next }
-      })
+      setFocus(null)
+      setOpen(panel.id)
       return true
     },
-    [address, layout.open_panel_id],
+    [address, layout.open_panel_id, expandIn, setOpen],
   )
 
   const setWidth = useCallback((width: number, persist = true) => {
     setState((prev) => {
       const next = { ...prev.layout, width: clampRailWidth(width) }
       if (persist) writeRailLayout(prev.bucket, next)
-      return { bucket: prev.bucket, layout: next }
+      return { ...prev, layout: next }
     })
   }, [])
 
@@ -145,11 +259,40 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       toggle,
       openAddress,
       setWidth,
+      cards: current.cards,
+      order,
+      focus,
+      intent,
+      openCard,
+      setCardOpen,
+      toggleCard,
+      setOrder,
+      clearIntent,
     }),
-    [layout.open_panel_id, address, layout.width, bucket, show, toggle, openAddress, setWidth],
+    [
+      layout.open_panel_id,
+      address,
+      layout.width,
+      bucket,
+      show,
+      toggle,
+      openAddress,
+      setWidth,
+      current.cards,
+      order,
+      focus,
+      intent,
+      openCard,
+      setCardOpen,
+      toggleCard,
+      setOrder,
+      clearIntent,
+    ],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
+
+const noop = (): void => {}
 
 /**
  * 没有 Provider 时回一个**什么都不做**的实现，而不是抛。
@@ -165,11 +308,20 @@ export function useRailState(): RailState {
       address: null,
       width: DEFAULT_RAIL_LAYOUT.width,
       bucket: 'default',
-      show: () => {},
-      toggle: () => {},
+      show: noop,
+      toggle: noop,
       // 没有 Provider 时"开不出来"是实话：回假，调用方于是走它的兜底（下载）
       openAddress: () => false,
-      setWidth: () => {},
+      setWidth: noop,
+      cards: {},
+      order: [],
+      focus: null,
+      intent: null,
+      openCard: noop,
+      setCardOpen: noop,
+      toggleCard: noop,
+      setOrder: noop,
+      clearIntent: noop,
     }
   )
 }
