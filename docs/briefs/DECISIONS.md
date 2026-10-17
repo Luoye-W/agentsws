@@ -1096,3 +1096,4 @@
 | 1043 | （WP376）「Anthropic 兼容（自定义）」卡默认地址留空（两张卡按地址认，不能撞），表单里必填 | 建议：照已做的。**Luoye 10-17 按建议** |
 | 1044 | （WP376）OpenAI 兼容口的地址怎么和官方目录比：逐字比（大小写、结尾 `/` 不算），不做模糊匹配——百炼按量、智谱通用这两个预设地址官方目录里没有，不出档 | 建议：照官方。**Luoye 10-17 按建议** |
 | 1045 | （WP376）官方目录写着好几档、官方传法却只分「想 / 不想」的型号（如 Moonshot kimi-k2.6、百炼 Token Plan 的 Qwen / Kimi、Together、NVIDIA、智谱 glm-4.7）：不出三档，收成 WP373 的开 / 关开关；关不掉的不出。判定照官方 pi-ai `openai-completions` 的 `buildParams`：`compat.supportsReasoningEffort` 为假、且写法不是 openrouter / string-thinking / ant-ling、没有思考预算格、模板参数不按档取值（报告 §2a） | **Luoye 10-17 按建议**（采用 Fable 建议：显示成开关）；WP376 已做 |
+| 1040 | （Luoye 10-17）WP375 的 1046–1050 全部同意；WP378 的 1056–1060 同意（界面档名保持「快 / 标准 / 深度」与「思考」开关；1058 Fable 实测 DeepSeek 不带参数默认就思考，1060 实测已跑） | **已定** |
