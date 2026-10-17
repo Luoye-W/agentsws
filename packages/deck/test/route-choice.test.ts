@@ -46,9 +46,7 @@ describe('WP237 走哪条职责的卡', () => {
         options: [{ id: 'pr.reddit', label: '走「外部版块」' }],
       },
     })
-    expect(projectCard(fresh, ctx).options).toEqual([
-      { id: 'pr.reddit', label: '走「外部版块」' },
-    ])
+    expect(projectCard(fresh, ctx).options).toEqual([{ id: 'pr.reddit', label: '走「外部版块」' }])
   })
 
   it('选了一条 = 带着选项批（approve_edited），不选不让批', () => {
