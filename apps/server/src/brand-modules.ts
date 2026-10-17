@@ -24,6 +24,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { PrPort } from '@agentsws/api'
 import type { Halt, StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { PublicLibraryClient } from '@agentsws/kol-core'
 import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
@@ -54,6 +55,7 @@ import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
+import type { PrWatchAssembly, PrWatchStoreHandle } from './pr-watch/index.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { CompetitorWatchAssembly } from './competitor-watch/index.js'
@@ -230,6 +232,12 @@ export interface BrandModuleSet {
    * 与变更账本**的那一层。60 那条"客户投诉转客服"的分界，在服务进程里的落点是它。
    */
   prService: PrServiceAssembly
+  /** WP386：公关库的 `/v1` 端口（`prService.port` + 信息监控那几口）。 */
+  prPort: PrPort
+  /** WP386：信息监控的存储（监控源 / 提醒清单 / 每一轮）。 */
+  prWatchStore: PrWatchStoreHandle
+  /** WP386：信息监控（托管模式没有）。 */
+  prWatch?: PrWatchAssembly
   /**
    * WP172（docs/84）：这个品牌的 B2B 库（九类对象 + 询盘 / 草稿 / 抑制名单），落在这个品牌自己的目录下。
    * 客户名单与报价是一家外贸公司的命根子，品牌 A 的在 B 的任何路由里都读不到。

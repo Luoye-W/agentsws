@@ -17,7 +17,6 @@ import {
   fetchGoogleAlerts,
   parseAlertsFeed,
   postScript,
-  searchRedditMentions,
   searchScript,
   stripHtml,
   submitApprovedPost,
@@ -281,7 +280,7 @@ describe('论坛：浏览器模式三条', () => {
   })
 })
 
-describe('Alerts：RSS 与 Reddit 搜索', () => {
+describe('Alerts：RSS', () => {
   const FEED = 'https://www.google.com/alerts/feeds/123/456'
   const atom = `<?xml version="1.0"?><feed>
     <entry>
@@ -363,44 +362,5 @@ describe('Alerts：RSS 与 Reddit 搜索', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.data).toHaveLength(1)
-  })
-
-  it('Reddit 全站搜：没连就说没连；连上了带回版名与时刻', async () => {
-    const off = transport(() => ({ ok: true, status: 200, body: '{}' }), false)
-    expect((await searchRedditMentions(off, { query: 'Nordvolt' })).ok).toBe(false)
-
-    const on = transport(() => ({
-      ok: true,
-      status: 200,
-      body: JSON.stringify({
-        data: {
-          children: [
-            {
-              data: {
-                title: '有人用过 Nordvolt 吗',
-                selftext: '求推荐',
-                author: 'linaw',
-                subreddit: 'gadgets',
-                permalink: '/r/gadgets/comments/1/x/',
-                created_utc: 1_758_096_000,
-              },
-            },
-          ],
-        },
-      }),
-    }))
-    const res = await searchRedditMentions(on, { query: 'Nordvolt' })
-    expect(res.ok).toBe(true)
-    if (!res.ok) return
-    expect(res.data[0]?.origin).toBe('r/gadgets')
-    expect(on.calls[0]).toContain('https://oauth.reddit.com/search?q=Nordvolt')
-  })
-
-  it('Reddit 401 → 说授权掉了或 UA 写错了（这条渠道最常见的那两件事）', async () => {
-    const t = transport(() => ({ ok: false, status: 401, body: '' }))
-    const res = await searchRedditMentions(t, { query: 'x' })
-    expect(res.ok).toBe(false)
-    if (res.ok) return
-    expect(res.message).toContain('User-Agent')
   })
 })

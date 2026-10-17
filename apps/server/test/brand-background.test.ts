@@ -441,8 +441,8 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     const task = server.schedule.scheduler.get(id)
     expect(task?.state).toBe('active')
     expect(task?.workspace_id).toBe(b.workspace_id)
-    // 视图在第一个品牌，B 的监控照样按时跑（15 分钟一轮）
-    clock.advance(16 * 60_000)
+    // 视图在第一个品牌，B 的监控照样按时跑（WP386：一小时一拍）
+    clock.advance(61 * 60_000)
     const fired = await server.schedule.scheduler.runDue(clock.now())
     const mine = fired.find((o) => o.task.id === id)
     expect(mine?.ok, JSON.stringify(mine?.error)).toBe(true)
@@ -453,7 +453,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     server.roles.assignments.revoke(asg.id)
     await server.background.settled()
     expect(server.schedule.scheduler.get(id)?.state).toBe('paused')
-    clock.advance(16 * 60_000)
+    clock.advance(61 * 60_000)
     const after = await server.schedule.scheduler.runDue(clock.now())
     expect(after.some((o) => o.task.id === id)).toBe(false)
 

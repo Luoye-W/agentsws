@@ -60,6 +60,7 @@ import {
   renderOwnerAnswer,
 } from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import { PR_MONITOR_TOOL_DEF_BY_NAME } from './pr-monitor.js'
 import {
   RECORD_SINK_TOOL_DEF_BY_NAME,
   recordSinkBranch,
@@ -367,7 +368,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
-      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ?? {
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+      // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）
+      PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },

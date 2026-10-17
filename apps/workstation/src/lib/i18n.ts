@@ -27,6 +27,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
+import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
@@ -1542,7 +1543,8 @@ const zh: Table = {
   'connections.line.google_ads': '读表现、改预算与出价；developer token 要单独申请过审。',
   'connections.line.x_ads': 'X 的广告接口；申请制，要广告账户与人工审核。',
   'connections.line.tiktok_ads': 'TikTok 的广告接口；要在 Business Center 授权广告账户。',
-  'connections.line.google_alerts': '免费、不用申请：把品牌提醒的 RSS 地址贴过来。',
+  'connections.line.google_alerts':
+    '免费、不用申请：盯自家、竞品和行业，把 Google 提醒的 RSS 链接贴过来，可以很多条。',
   'connections.line.press_distribution': '一次把稿子发给一批媒体的那类服务。',
   'connections.line.judgeme': '独立站最常用的评价应用。',
   'connections.line.loox': '带图评价，与 Judge.me 二选一，排在它后面。',
@@ -5736,7 +5738,7 @@ const en: Table = {
   'connections.line.tiktok_ads':
     'TikTok’s ads API; ad accounts must be authorized in Business Center.',
   'connections.line.google_alerts':
-    'Free, nothing to apply for: paste your brand alert’s RSS feed.',
+    'Free, nothing to apply for: watch yourself, competitors and your industry by pasting Google Alerts RSS links — as many as you like.',
   'connections.line.press_distribution': 'Services that send one release to many outlets at once.',
   'connections.line.judgeme': 'The most common reviews app for online stores.',
   'connections.line.loox': 'Photo reviews, an alternative to Judge.me, queued after it.',
@@ -8520,6 +8522,8 @@ const TABLES: Record<Lang, Table> = {
     // WP304：选主题卡、买高级主题卡
     ...THEMES_ZH,
     ...SETUP_ZH,
+    // WP386：信息监控（多条监控源、贴 RSS、Google 账号）
+    ...PR_WATCH_ZH,
     // WP291：岗位页当场回答
     ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
@@ -8569,6 +8573,7 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_EN,
     ...THEMES_EN,
     ...SETUP_EN,
+    ...PR_WATCH_EN,
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,

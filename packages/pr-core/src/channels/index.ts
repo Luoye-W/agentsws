@@ -7,7 +7,8 @@
  *   （搜版 / 读版规 / 在别人的版里发），**不重写**；
  * - `forums-browser`：Quora / 知乎没有公开写接口，走第三栏受控浏览器，
  *   读走白名单、写先出卡、失效人接管（照 56 的 Facebook 群组）；
- * - `alerts`：Google Alerts 的 RSS + Reddit 全站搜，`fetch` 注入。
+ * - `alerts`：Google Alerts 与任意网站的 RSS / Atom（feedsmith 解析），`fetch` 注入；
+ *   Reddit 那一路走 `read_reddit` 同一条取数路由（WP386），不在这里。
  *
  * 新闻稿**分发**没有第四条：那一侧的服务（美通社 / 商业资讯这一类）要合同、
  * 要账号、要钱，连接目录里登记为"待增加"（`apps/server/src/catalog.ts` 的

@@ -948,6 +948,19 @@ export interface ScenarioB2bMemberLeft {
  * `text` 决定这条走哪一路（`pr-core` 的 `triageMention` 判，场景递不进来一个
  * 结论）。判成客户问题 → 转客服卡，**公关不答**（60 分界行）。
  */
+/**
+ * WP386：一条监控源（docs/103 v2）。`entries` 是这条 feed 里的条目（世界里拼成真 feed 交给 feedsmith 解析）；
+ * `status: 404` = 提醒被删了——那时要照实说「没拉到」，不当成 0 条。
+ */
+export interface ScenarioPrFeed {
+  kind: 'google_alerts' | 'rss'
+  status: number
+  label: string
+  entries: { title: string; url: string; text: string }[]
+  keywords?: string[]
+  exclude?: string[]
+}
+
 export interface ScenarioPrMention {
   who: string
   source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
@@ -1181,6 +1194,8 @@ export type ScenarioEvent =
   | { at: string; type: 'ads.attribution'; ads_attribution: ScenarioAdsAttribution }
   /** WP78：收一条外面说的话（60，判类不是参数：客户问题转客服）。 */
   | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
+  /** WP386：拉一条监控源（Google Alerts / 网站 RSS）；拉不到照实说。 */
+  | { at: string; type: 'pr.feed'; feed: ScenarioPrFeed }
   /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
   | { at: string; type: 'pr.release'; release: ScenarioPrRelease }
   /** WP171：B2B 某条职责提一个写动作（docs/84）。 */
@@ -1801,6 +1816,19 @@ export interface ScenarioExpected {
    * `answered_by_pr` 必须是假——**公关不答客户的问题**；它一旦为真，
    * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
    */
+  /**
+   * WP386：拉那条监控源的结局（最后一次）。`ok: false` 时 `says_why` 要为真——拉不到要说一句为什么，
+   * 而不是一个 0。
+   */
+  pr_feed?: {
+    ok?: boolean
+    fetched?: number
+    kept?: number
+    unique?: number
+    label?: string
+    links_unwrapped?: boolean
+    says_why?: boolean
+  }
   pr_mention?: {
     triage?: string
     sentiment?: string
