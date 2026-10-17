@@ -80,8 +80,9 @@ describe('POST /v1/auth/setup-code', () => {
       ownerSetupCode: oneCode('ABCDEFGH', 'me@example.com'),
     })
     const res = await h.post('/v1/auth/magic-link', { email: 'me@example.com' }, ANON)
-    const body = (await res.json()) as { data: { token?: string } }
-    expect(body.data.token).toBeUndefined()
+    // WP371 收尾：局域网档这条直接 403「该怎么进」，什么都不签（以前 200 + 不带 token）
+    expect(res.status).toBe(403)
+    expect(JSON.stringify(await res.json())).not.toMatch(/"token"/)
   })
 })
 

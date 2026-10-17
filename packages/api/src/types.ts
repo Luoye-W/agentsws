@@ -691,6 +691,35 @@ export interface GatewayOptions {
    * 给了就开 `POST /v1/auth/setup-code`；本机档不给。
    */
   ownerSetupCode?: OwnerSetupCodePort
+  /**
+   * 决策 942（WP371）：托盘「在浏览器打开」直接进。给了 true（且配了 `sessionKey`）就开
+   * `POST /v1/auth/browser-link`：桌面壳拿会话密钥换一条给主人的一次性登录 token
+   * （15 分钟、用一次就废），交给系统浏览器。**只在本机档开**（服务只听 127.0.0.1 / ::1）；
+   * 局域网档（决策 945）、托管档一律不给。
+   */
+  browserLink?: boolean
+  /**
+   * 决策 944（WP371）：浏览器会话（`POST /v1/auth/verify` 换来的那张）活多久。
+   * apps/server 给 30 天（`identity.ts` 的 `BROWSER_SESSION_TTL_MS`）；不给就是身份服务的默认（12 小时）。
+   * 桌面壳那张（`POST /v1/auth/session`）不受影响。
+   */
+  browserSessionTtlMs?: number
+  /**
+   * 决策 943（WP371）：本机成员用工坊账号（邮箱 + 6 位验证码）证明身份进工作区。
+   * 给了就开 `POST /v1/auth/account/code` 与 `POST /v1/auth/account/verify`。
+   */
+  accountLogin?: AccountLoginPort
+}
+
+/**
+ * 决策 943：用工坊账号认人。本机服务进程替页面去问云端「这个邮箱 + 验证码对不对」，
+ * 云端说对就回那个账号的邮箱；云端那张会话当场注销，**本机不留同事的云令牌**。
+ */
+export interface AccountLoginPort {
+  /** 发一封 6 位登录验证码（没注册的邮箱云上静默不发，回包一样）。 */
+  sendCode(input: { email: string; locale: 'zh' | 'en' }): Promise<{ expires_at: string }>
+  /** 验码：对上了回云端账号的邮箱（小写）；对不上抛 `ApiError`（原样带回云的原因）。 */
+  verifyCode(input: { email: string; code: string }): Promise<string>
 }
 
 /** 决策 945：一次性设置码。对上了返回该以谁的身份进（主人的邮箱，现取），对不上返回 undefined。 */

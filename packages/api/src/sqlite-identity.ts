@@ -39,6 +39,7 @@ import {
   type LocalIdentityService,
   nameFromEmail,
   type TokenKind,
+  type VerifyLoginOptions,
 } from './identity.js'
 import { createOrganizations, type Organizations, type OrgBackend } from './organizations.js'
 import { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
@@ -717,7 +718,10 @@ export class SqliteIdentityService implements LocalIdentityService {
     return { token, expires_at }
   }
 
-  async verifyLogin(token: string): Promise<{ person: Person; session_token: string } | undefined> {
+  async verifyLogin(
+    token: string,
+    options: VerifyLoginOptions = {},
+  ): Promise<{ person: Person; session_token: string } | undefined> {
     const row = this.#db
       .prepare<[string], LoginRow>('SELECT * FROM logins WHERE hash = ?')
       .get(hashToken(token))
@@ -727,7 +731,12 @@ export class SqliteIdentityService implements LocalIdentityService {
     this.#db.prepare('UPDATE logins SET used = 1 WHERE hash = ?').run(row.hash)
     const workspace = this.workspacesOf(row.person_id)[0]
     if (!workspace) throw new ApiError('not_found', '该人还没有工作区')
-    const session = this.issue('session', row.person_id, workspace.id, this.#sessionTtl)
+    const session = this.issue(
+      'session',
+      row.person_id,
+      workspace.id,
+      options.sessionTtlMs ?? this.#sessionTtl,
+    )
     return { person: this.#person(personRow), session_token: session.token }
   }
 
