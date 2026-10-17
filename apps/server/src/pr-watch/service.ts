@@ -449,8 +449,9 @@ export function createPrWatch(options: PrWatchOptions): PrWatchAssembly {
       })
       return fields
     },
+    // 「设好了」= 至少有一条监控源在拉（清单存了、链接还没贴回来，卡照样要出：贴链接就在这张卡上）
     async satisfied(): Promise<boolean> {
-      return store.planItems().length > 0 || configured()
+      return configured()
     },
     async research(kit: SetupResearchKit) {
       if (store.planItems().some((p) => p.selected)) return {}
