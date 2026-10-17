@@ -71,10 +71,10 @@ async function get(token, path, assignment) {
 const openCard = async (page, id) => {
   if ((await page.getByTestId('rail-cards').count()) === 0)
     await page.getByTestId('rail-overflow').click()
-  const card = page.getByTestId(`rail-card-`)
+  const card = page.getByTestId(`rail-card-${id}`)
   await card.waitFor({ timeout: 20_000 })
   if ((await card.getAttribute('data-open')) !== 'true')
-    await page.getByTestId(`rail-card-toggle-`).click()
+    await page.getByTestId(`rail-card-toggle-${id}`).click()
 }
 
 const shot = async (page, name, target) => {
@@ -130,8 +130,13 @@ async function main() {
       await page.waitForURL(/\/positions\/[^/]+$/, { timeout: 20_000 })
       positionUrl = page.url()
       const row = page.getByTestId('nav-position-row').first()
-      if ((await row.getByTestId('nav-duties').count()) === 0)
-        await row.getByTestId('nav-position-toggle').click()
+      // 当前岗位默认展开；岗位那一份晚到一拍时先等一下，真没展开才点箭头（别把展开的又点收起）
+      const shown = await row
+        .getByTestId('nav-duties')
+        .waitFor({ timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false)
+      if (!shown) await row.getByTestId('nav-position-toggle').click()
       await row.getByTestId('nav-duty').first().click()
       await page.waitForURL(/\/duties\//, { timeout: 20_000 })
       dutyUrl = page.url()
