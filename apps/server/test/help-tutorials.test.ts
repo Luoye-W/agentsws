@@ -20,6 +20,7 @@ const HELP = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/help')
 const HELP_BY_VENDOR: Record<string, string> = {
   deepseek: 'model-deepseek',
   'openai-compatible': 'model-openai-compatible',
+  'anthropic-compatible': 'model-openai-compatible',
   bailian: 'model-bailian',
   openai: 'model-openai',
   anthropic: 'model-anthropic',

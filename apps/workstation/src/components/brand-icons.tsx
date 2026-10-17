@@ -187,6 +187,12 @@ const ICONS: Record<string, IconChoice> = {
    * **不属于任何一家**的：通用 OpenAI 兼容网关、我们自己的云。
    */
   'openai-compatible': { kind: 'letter', letter: 'O' },
+  /*
+   * WP374：「Anthropic 兼容（自定义）」那张卡与那条来源。说的是**任何 Anthropic 格式的服务**
+   * （多半是中转站），不是 Anthropic 这家公司——同 OpenAI 兼容那张，走首字母徽标，不借人家的标志。
+   */
+  'anthropic-compatible': { kind: 'letter', letter: 'A' },
+  anthropic_compatible: { kind: 'letter', letter: 'A' },
   // WP274：Google Gemini 那张卡（没抓官方图，先走首字母徽标）
   google: { kind: 'letter', letter: 'G' },
   /*

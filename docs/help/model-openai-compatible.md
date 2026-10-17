@@ -2,7 +2,7 @@
 positions: []
 roles: []
 ---
-# 接 OpenAI 兼容服务（Kimi、智谱、Ollama…）
+# 接 OpenAI / Anthropic 兼容服务（Kimi、Ollama、Claude 中转站…）
 
 任何「OpenAI 格式」的服务都能接：Moonshot（Kimi）、通义千问、智谱，以及这台电脑上跑的 Ollama。Agents 工坊要求模型**能看图**，选模型时挑带 vision / VL 的那一款。
 
@@ -38,6 +38,22 @@ roles: []
 | 本机 Ollama | `http://127.0.0.1:11434/v1` | `llama3.2-vision` |
 
 本机 Ollama 不用 key，但要先在这台电脑上装好 Ollama 并拉下那个模型。
+
+## 接 Anthropic 兼容服务（Claude 中转站）
+
+有的服务说的是「Anthropic 格式」（Claude 中转站、自建网关最常见），走另一张卡：**「Anthropic 兼容（自定义）」**，方案同样是「自己填地址与 key」。
+
+1. 在中转站（或 [Anthropic 控制台](https://console.anthropic.com/settings/keys)）建一把 API key。
+2. 找到它给的接口地址。带不带 `/v1` 都行，Agents 工坊会自己补全。默认填的是 Anthropic 本家 `https://api.anthropic.com`，用中转站就换成它的。
+3. 在卡上点「填 API key」，把地址和 key 填进表单，点「拉取模型列表」挑一个；拉不到（有的中转站没开这个口）就手填模型名。
+4. 想在输入框的 AI 钮里多放几个模型，在「也在 AI 钮里显示」里勾上；它们会和这条来源排在一组。
+5. 点保存，再点「测试」，看到三个小勾就是通了。
+
+几点说明：
+
+- **能力标签只照官方目录**：模型名是 Claude 官方型号（比如 `claude-sonnet-4-5`）的，AI 钮里会显示它的名字、能看图、上下文长度，还能调「快 / 标准 / 深想」；中转站自己起的名字认不出，就不显示这些，也不出思考程度，能不能看图以「测试」为准。官方目录里没写自带联网，所以这一类不标「自带联网」。
+- **报错怎么看**：说「API key 不对」就回中转站后台重新复制一把；说「余额不足」就是那边的额度用完了，去充值。
+- 协议说明见 [Anthropic Messages 接口说明](https://docs.anthropic.com/en/api/messages)。
 
 ## 常见问题
 

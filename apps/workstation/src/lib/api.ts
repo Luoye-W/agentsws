@@ -2397,6 +2397,8 @@ export type ModelProviderKind =
   | 'openai-codex'
   /** WP90：用 Claude 的订阅登录。 */
   | 'anthropic'
+  /** WP374：Anthropic 兼容口（Claude 中转站等；填地址 + key）。 */
+  | 'anthropic_compatible'
 
 export type ModelPurposeName =
   | 'run'
@@ -2582,7 +2584,13 @@ export const testModelProvider = (id: string, assignment?: string): Promise<Mode
  */
 export const discoverModelProviderModels = (
   id: string,
-  input: { base_url?: string; api_key?: string; region?: 'cn' | 'global' },
+  /** WP374：`kind` = 按哪种接口去拉（草稿是 Anthropic 兼容口时要说）。 */
+  input: {
+    base_url?: string
+    api_key?: string
+    region?: 'cn' | 'global'
+    kind?: ModelProviderKind
+  },
   assignment?: string,
 ): Promise<ModelListing> =>
   api(`/v1/models/providers/${encodeURIComponent(id)}/discover`, {

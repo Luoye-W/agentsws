@@ -1,4 +1,4 @@
-# Connect an OpenAI-compatible service (Kimi, GLM, Ollama…)
+# Connect an OpenAI- or Anthropic-compatible service (Kimi, Ollama, Claude relays…)
 
 Any service that speaks the "OpenAI format" works: Moonshot (Kimi), Qwen, Zhipu GLM, and Ollama running on this computer. Agents Workshop requires a model that **can see images**, so pick a vision / VL model.
 
@@ -34,6 +34,22 @@ Consoles of the common ones:
 | Local Ollama | `http://127.0.0.1:11434/v1` | `llama3.2-vision` |
 
 Local Ollama needs no key, but Ollama must be installed on this computer with that model pulled.
+
+## Connect an Anthropic-compatible service (Claude relays)
+
+Some services speak the "Anthropic format" (Claude relays and self-hosted gateways, mostly). They use a separate card: **"Anthropic compatible (custom)"**, with the same "your own URL and key" plan.
+
+1. Create an API key at the relay (or in the [Anthropic Console](https://console.anthropic.com/settings/keys)).
+2. Find its base URL. With or without `/v1` both work; Agents Workshop fills in the rest. The default is Anthropic itself, `https://api.anthropic.com`; for a relay, replace it with the relay's.
+3. On the card, click "Enter API key", fill in the URL and key, then click "Fetch model list" and pick one. If the list can't be fetched (some relays don't offer it), type the model name.
+4. To show more models in the AI button under the message box, tick them under "Also show in the AI button"; they're grouped with this source.
+5. Save, then click "Test" — three ticks mean it works.
+
+Notes:
+
+- **Capability labels come only from the official catalog**: for official Claude model names (such as `claude-sonnet-4-5`) the AI button shows the model's name, that it reads images, its context length, and offers "Fast / Standard / Deep". Names the relay made up aren't recognized, so none of that is shown and there's no thinking control; whether it reads images is settled by "Test". The official catalog doesn't declare built-in web search, so these models aren't labelled with it.
+- **Reading errors**: "API key is wrong" means copy a fresh key from the relay; "balance is too low" means your credit there ran out — top up.
+- Protocol details: [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 
 ## FAQ
 
