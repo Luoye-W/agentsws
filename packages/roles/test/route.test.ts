@@ -213,7 +213,7 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
     }
   })
 
-  it('自家版运营 + Reddit 营销 合并成一个岗位：「Reddit 调研」打平 → 按模板顺序取第一条，另一条留作「换成」', () => {
+  it('官方版块 + 外部版块 合并成一个岗位：「Reddit 调研」打平 → 按模板顺序取第一条，另一条留作「换成」', () => {
     const raw = routeWithinPosition('帮我做一份 Reddit 调研', REDDIT)
     expect(raw.ambiguous).toBe(true)
     const out = settleCloseCall(raw, ['social.reddit', 'pr.reddit'])
@@ -222,8 +222,8 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
     // 分数一样时不按 id 字典序（那会落到 pr.reddit），按岗位里职责的先后
     expect(out.picked).toBe('social.reddit')
     expect(out.alternatives?.map((c) => c.role_id)).toEqual(['pr.reddit'])
-    expect(out.reason).toContain('按「自家版运营」来做的')
-    expect(out.reason).toContain('要换成「Reddit 营销」点这里')
+    expect(out.reason).toContain('按「官方版块」来做的')
+    expect(out.reason).toContain('要换成「外部版块」点这里')
   })
 
   it('谁都不太像（四条各沾一点）照旧拿不准——那时替人选就是瞎猜', () => {
@@ -248,10 +248,10 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
   it('一句话里点名了某条职责就认它（取最长的名字）', () => {
     const roles = [
       { role_id: 'social.reddit', names: ['Reddit 运营', 'Reddit Ops'] },
-      { role_id: 'pr.reddit', names: ['Reddit 营销'] },
+      { role_id: 'pr.reddit', names: ['外部版块'] },
     ]
     expect(namedRole('按 Reddit 运营这条来，开始吧。', roles)).toBe('social.reddit')
-    expect(namedRole('按reddit营销做', roles)).toBe('pr.reddit')
+    expect(namedRole('按外部版块做', roles)).toBe('pr.reddit')
     expect(namedRole('开始吧', roles)).toBeUndefined()
   })
 })
@@ -259,7 +259,7 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
 describe('WP237（Fable 代定）一个都没命中：按岗位里职责的先后取第一条；打招呼不算交活', () => {
   const duties = [
     { role_id: 'social.reddit', role_name: 'Reddit 运营' },
-    { role_id: 'pr.reddit', role_name: 'Reddit 营销' },
+    { role_id: 'pr.reddit', role_name: '外部版块' },
   ]
 
   it('没命中 → 第一条，其余留作「换成」', () => {
@@ -268,7 +268,7 @@ describe('WP237（Fable 代定）一个都没命中：按岗位里职责的先�
     expect(out.ambiguous).toBe(false)
     expect(out.alternatives?.map((c) => c.role_id)).toEqual(['pr.reddit'])
     expect(out.reason).toContain(
-      '看不出更像哪条，先按「Reddit 运营」来做的；要换成「Reddit 营销」点这里',
+      '看不出更像哪条，先按「Reddit 运营」来做的；要换成「外部版块」点这里',
     )
   })
 

@@ -12,8 +12,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar } from '@/components/social/social-calendar'
 import type { PositionSummary } from '@/lib/api'
-import { PositionPage } from '@/pages/position'
 import { renderWithProviders } from './helpers'
+import { PositionWithBoards } from './position-with-boards'
 
 const summary = (over: Partial<PositionSummary>): PositionSummary => ({
   position_id: 'asg_1',
@@ -63,7 +63,7 @@ vi.mock('@/lib/api', async () => {
 function renderView() {
   return renderWithProviders(
     <Routes>
-      <Route path="/positions/:id" element={<PositionPage />} />
+      <Route path="/positions/:id" element={<PositionWithBoards />} />
     </Routes>,
     '/positions/asg_1?tab=view',
   )

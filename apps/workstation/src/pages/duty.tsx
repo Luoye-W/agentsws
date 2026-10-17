@@ -14,24 +14,27 @@
  * **记忆 / 技能 / 知识 / 额度 / 记录不在这一页上**——它们在第三栏（36 §9），跟着当前职责走。
  * WP288（决策 326）：原来的「概览 / 记录」两个页签去掉（记录进第三栏「记录」）；头部那四个
  * 「把右栏打开到那一格」的按钮也去掉——第三栏「设定」图标就在同一屏上，不说两遍。
+ *
+ * **WP372（决策 1019，Luoye 10-17）**：中间栏回到普通对话框形态——标题（+ 一句人话）+ 对话框 + 按状态现出的
+ * 快捷按钮 +「要你拍板」的卡（这条职责的牌）。这条职责自己的看板（社媒内容日历与群发、B2B、投放素材、
+ * AI 回答监测）搬进右侧面板「报表」的下半截（`components/reports/scope-boards.tsx`），头部留一个小链接。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
-import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
-import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
-import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
+import { DeckSection } from '@/components/deck'
 import { InfoTip, WsTag } from '@/components/design'
+import {
+  LandingActions,
+  type LandingPrompt,
+  useLandingActions,
+} from '@/components/position/landing-actions'
 import { PanelError } from '@/components/rail/panel-error'
+import { useRailState } from '@/components/rail/rail-state'
+import { dutyHasBoards } from '@/components/reports/scope-boards'
 import { DutyIcon } from '@/components/role-icons/role-icon'
-// WP335（docs/99 O3）：「内容与搜索」的 AI 回答监测看板（关注设置在第三栏「设定」里）
-import { GeoBoard } from '@/components/seo/geo-board'
-import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
-import { SocialBroadcast } from '@/components/social/social-broadcast'
-import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -54,12 +57,22 @@ import {
 } from '@/lib/duty-capabilities'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { firstSentence } from '@/lib/help'
+import { matterUrl } from '@/lib/work'
 
 /** 头部那一行「用这条职责开一件事」：54 §2 保留的从职责开启那条路。 */
-function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
+function OpenHere({
+  assignment,
+  prompts = [],
+}: {
+  assignment: string
+  /** WP372（决策 1019）：这条职责自己的快捷提示（点了直接发）。 */
+  prompts?: readonly LandingPrompt[]
+}): React.ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
+  /** WP372：开始对话后快捷按钮收起。 */
+  const [started, setStarted] = useState(false)
   const open = useMutation({
     // 54 §2 职责入口：用**这条职责的分配**建事项，跳过岗位内路由——
     // 权限、额度、动作面全是这一条的（不是岗位的并集）。
@@ -70,6 +83,10 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
       setTitle('')
       navigate(`/matters/${out.matter.id}`)
     },
+  })
+  const actions = useLandingActions(prompts, (prompt) => {
+    setStarted(true)
+    open.mutate(prompt.slice(0, TASK_TEXT_MAX))
   })
   return (
     <div className="flex flex-col gap-1" data-testid="duty-open">
@@ -91,6 +108,7 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
           data-busy={open.isPending ? 'true' : undefined}
           disabled={title.trim() === '' || open.isPending}
           onClick={() => {
+            setStarted(true)
             open.mutate(title.trim())
           }}
         >
@@ -104,6 +122,7 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
       </div>
       {/* WP259：没开成就说一句人话（含服务端那句），与「交给它」几个入口同一个口径 */}
       <HandoffError error={open.error} testId="duty-open-error" />
+      {started ? null : <LandingActions actions={actions} />}
     </div>
   )
 }
@@ -210,17 +229,10 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
   )
 }
 
-/** 社群组五条（56 §0）。真源是契约的 `SOCIAL_CHANNELS[].group`，这里照抄一份。 */
-const COMMUNITY_CHANNELS: string[] = [
-  'facebook_group',
-  'reddit',
-  'discord',
-  'telegram_group',
-  'whatsapp',
-]
-
 export function DutyPage(): React.ReactNode {
   const { t, lang, selectPosition, position } = useApp()
+  const navigate = useNavigate()
+  const rail = useRailState()
   const params = useParams<{ assignment: string; role_id: string }>()
   const assignment = params.assignment ?? ''
   const role_id = params.role_id ?? ''
@@ -250,8 +262,6 @@ export function DutyPage(): React.ReactNode {
   const here = instance?.roles.find((r) => r.role_id === role_id)
   const positionName =
     instance === undefined ? '' : lang === 'en' ? instance.name.en : instance.name.zh
-  /** 这条职责是不是九条社媒渠道之一（`social.facebook-group` → `facebook_group`）。 */
-  const socialChannel = socialChannelOfRole(role_id)
 
   return (
     <div className="flex flex-col gap-4" data-testid="duty-page" data-duty={role_id}>
@@ -283,72 +293,59 @@ export function DutyPage(): React.ReactNode {
         <p className="text-xs text-ws-muted-fg" data-testid="duty-holders">
           {t('duty.holders', { count: role.data?.holders ?? 0 })}
         </p>
-        <OpenHere assignment={assignment} />
+        {/* 一句人话（这条职责是干什么的）+ 默认折叠的「高级」 */}
+        <OverviewTab role_id={role_id} />
+        <OpenHere
+          assignment={assignment}
+          prompts={(here?.quick_prompts ?? []).map((q) => ({
+            id: q.id,
+            label: lang === 'en' ? q.label.en : q.label.zh,
+            prompt: q.prompt,
+          }))}
+        />
         {/* WP74：进去的是同一个日历，只是默认开着与这条职责相关的那几层 */}
-        <div className="flex flex-wrap items-center gap-1" data-testid="duty-rail-links">
+        <div className="flex flex-wrap items-center gap-2" data-testid="duty-rail-links">
           <CalendarLink role_id={role_id} />
+          {/*
+            WP372（决策 1019）：这条职责自己的看板（社媒内容日历与群发、B2B、投放素材、AI 回答监测）
+            搬进右侧面板「报表」的下半截；这里留一个小链接，点了直接打开那一格。
+          */}
+          {dutyHasBoards(role_id) ? (
+            <button
+              type="button"
+              data-testid="duty-boards-link"
+              className="text-xs text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
+              onClick={() => {
+                rail.show('reports')
+              }}
+            >
+              {t('duty.boards_moved')}
+            </button>
+          ) : null}
         </div>
       </header>
 
+      {/*
+        WP372（决策 1019）：中间栏 = 标题 + 对话框 + 快捷按钮 +「要你拍板」的卡（只放要决定的）。
+        这条职责的牌（本人在这条职责上的分配），报表块不在这里（进右侧面板「报表」卡）。
+      */}
       <div data-testid="duty-body">
-        {/*
-            WP73（56 §6）：社媒那九条渠道职责的职责页上多两块**能动手的**——
-            内容日历（周视图，拖得动）与群发向导。排在概览之前，与红人那一块
-            同一个道理：这条职责的产出不在"它是什么"里，在"这周发什么、发给谁"上。
-            群发向导只给社群组五条（56 §0 的两组分法）——内容组四条上没有
-            "群里的人"这回事，画一个点不动的向导比不画更糟。
-          */}
-        {socialChannel === undefined ? null : (
-          <div className="mb-4 flex flex-col gap-4">
-            <SocialCalendar assignment={assignment} channel={socialChannel} />
-            {COMMUNITY_CHANNELS.includes(socialChannel) ? (
-              <SocialBroadcast assignment={assignment} channel={socialChannel} />
-            ) : null}
-          </div>
+        {assignment === '' ? null : (
+          <DeckSection
+            positionId={here?.my_assignment_id ?? assignment}
+            positionIds={[here?.my_assignment_id ?? assignment]}
+            withReports={false}
+            onOpen={(card) => {
+              navigate(matterUrl(card))
+            }}
+            title={
+              <h3 className="flex min-w-0 items-center gap-2" data-testid="duty-deck-title">
+                <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
+                <Hint text={t('pos2.deck.hint')} />
+              </h3>
+            }
+          />
         )}
-        {/*
-            WP154「内容与搜索」→ WP335：职责页最上面是 AI 回答监测看板（数字 / 趋势 / 方格 / 排名 / 被引的站 /
-            对比）；原来那块手写的问题清单收进第三栏「设定 → 关注设置」。每日 5 件事与收入表在岗位面板上。
-          */}
-        {/*
-            WP173（docs/84 §2）：「主动开发」的开发信——发信邮箱与体检、公司地址、德奥勾选确认、开一轮。
-            请求挂的是**这条职责自己那条分配**（额度与配额从它来），没有就用岗位这一条。
-          */}
-        {role_id === 'b2b.outbound' ? (
-          <div className="mb-4">
-            <B2bOutboundPanel assignment={here?.my_assignment_id ?? assignment} />
-          </div>
-        ) : null}
-        {/* WP182（docs/84 §3）：「业务」的事实卡、报价单（看 PDF / 发给客户）、样品往前走 */}
-        {role_id === 'b2b.sales' ? (
-          <div className="mb-4">
-            <B2bSalesPanel assignment={here?.my_assignment_id ?? assignment} />
-          </div>
-        ) : null}
-        {/* WP317（docs/101 §5.1④）：Google / Meta 两条投放职责上的素材流水线 */}
-        {adCreativePlatformOf(role_id) === undefined ? null : (
-          <div className="mb-4">
-            <AdCreativePanel
-              assignment={here?.my_assignment_id ?? assignment}
-              platform={adCreativePlatformOf(role_id) ?? 'google'}
-            />
-          </div>
-        )}
-        {/* WP316（docs/101 §5.1② ③）：批过的广告改动——等你确认的、做完的（读回 / 截图 / 撤销） */}
-        {adCreativePlatformOf(role_id) === undefined ? null : (
-          <div className="mb-4">
-            <AdChangesPanel assignment={here?.my_assignment_id ?? assignment} />
-          </div>
-        )}
-        {role_id === 'dtc.content' ? (
-          <div className="mb-4 flex flex-col gap-4">
-            {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}
-            <GoogleSourcePicker assignment={assignment} source="gsc" />
-            <GoogleSourcePicker assignment={assignment} source="ga4" />
-            <GeoBoard assignment={here?.my_assignment_id ?? assignment} />
-          </div>
-        ) : null}
-        <OverviewTab role_id={role_id} />
       </div>
     </div>
   )

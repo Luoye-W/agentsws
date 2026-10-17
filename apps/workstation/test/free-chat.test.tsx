@@ -255,7 +255,7 @@ describe('WP188 随便聊：一轮对话', () => {
             title: '查新帖',
             position_id: 'reddit-ops',
             position_name: 'Reddit 运营',
-            duty_name: '自家版运营',
+            duty_name: '官方版块',
             at: T0,
           },
         ],
@@ -264,19 +264,19 @@ describe('WP188 随便聊：一轮对话', () => {
         id: 'a2',
         session_id: 'fchat_9',
         role: 'assistant',
-        text: '**Reddit 运营 · 自家版运营** 做完了：查到 3 条新帖',
+        text: '**Reddit 运营 · 官方版块** 做完了：查到 3 条新帖',
         at: T0,
         report: {
           matter_id: 'mat_7',
           kind: 'done',
           position_name: 'Reddit 运营',
-          duty_name: '自家版运营',
+          duty_name: '官方版块',
         },
       },
     ]
     renderPage()
     const link = await screen.findByTestId('assistant-dispatch-link')
-    expect(link.textContent).toBe('已交给 Reddit 运营 · 自家版运营')
+    expect(link.textContent).toBe('已交给 Reddit 运营 · 官方版块')
     expect(link.getAttribute('href')).toBe('/matters/mat_7')
     expect(screen.queryByTestId('free-chat-handoff')).toBeNull()
     const report = screen.getByTestId('assistant-report')

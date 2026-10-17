@@ -112,6 +112,13 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     listMessageAccounts: async () => ({ accounts: [] }),
+    // WP372：右侧面板「对话」按职责分组时要职责名（与外壳同一份）
+    getPositions: async () => ({
+      positions: [],
+      instances: INSTANCES,
+      tile_library: [],
+      max_tiles: 6,
+    }),
     listRoleDefinitions: async () => [
       { id: 'kol.youtube', name: 'YouTube 红人', name_en: 'YouTube', superseded_by: undefined },
       { id: 'kol.tiktok', name: 'TikTok 红人', name_en: 'TikTok' },
@@ -291,12 +298,12 @@ describe('WP207 左栏三级「+」', () => {
     ])
   })
 
-  it('职责行「+」：面板只剩一格，写一句回车 = 交给这条职责（跳过岗位内路由）', async () => {
+  it('职责行「+」（WP372）：跳到这条职责，右侧面板「对话」卡开好新对话那一格，写一句回车 = 交给这条职责', async () => {
     const user = userEvent.setup()
     renderShell(true)
     // Radix tooltip + 焦点被新开的面板拿走时，jsdom 里 userEvent 的整套指针序列会卡住；点击本身用 fireEvent
     fireEvent.click(screen.getByTestId('rail-new-matter'))
-    const input = await screen.findByTestId('command-compose-input')
+    const input = await screen.findByTestId('conv-compose-input')
     await user.type(input, '联系 Jake 要新视频的数据{Enter}')
     await waitFor(() => {
       expect(called('openMatterAtPosition')).toHaveLength(1)
@@ -308,14 +315,14 @@ describe('WP207 左栏三级「+」', () => {
   })
 })
 
-describe('WP259 ⌘K 一句话交给职责：长文本照收', () => {
+describe('WP259 一句话交给职责：长文本照收（WP372 起在右侧面板「新对话」那一格）', () => {
   it('一大段：标题取第一句…，完整原文作描述（原来截到 200 字）', async () => {
     renderShell(true)
     fireEvent.click(screen.getByTestId('rail-new-matter'))
-    const input = await screen.findByTestId('command-compose-input')
+    const input = await screen.findByTestId('conv-compose-input')
     const text = `联系 Jake 要新视频的数据。${'顺便问他下个月能不能再排一条合作视频，'.repeat(8)}`
     fireEvent.change(input, { target: { value: text } })
-    fireEvent.submit(screen.getByTestId('command-compose'))
+    fireEvent.submit(screen.getByTestId('conv-compose'))
     await waitFor(() => {
       expect(called('openMatterAtPosition')).toHaveLength(1)
     })
@@ -326,39 +333,40 @@ describe('WP259 ⌘K 一句话交给职责：长文本照收', () => {
   })
 })
 
-describe('WP207 职责下的对话 / 任务', () => {
-  it('状态小点、默认 5 条 + 更多、已归档（n）在职责行悬停钮里；岗位行不挂数', async () => {
-    const user = userEvent.setup()
+/** WP372：对话不挂左栏了——点右上角「对话」，卡底「显示更多」是完整列表。 */
+async function openConversations(more = false): Promise<HTMLElement> {
+  fireEvent.click(screen.getByTestId('rail-icon-conversations'))
+  const card = await screen.findByTestId('conv-card')
+  if (!more) return card
+  fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
+  return screen.findByTestId('conv-panel')
+}
+
+describe('WP207 职责下的对话 / 任务（WP372 起在右侧面板「对话」）', () => {
+  it('卡上最多 4 条、等你看的排最上；完整列表每条都在、按职责分组，「已归档 n」在组底下；左栏不挂', async () => {
     renderShell(true)
-    const rows = await screen.findAllByTestId('rail-matter')
-    expect(rows.map((r) => r.textContent)).toEqual([
-      '在跑的那件',
-      '等你批的',
-      '做完待看',
-      '第四件',
-      '第五件',
-    ])
-    const dots = screen.getAllByTestId('rail-matter-dot')
-    expect(dots.map((d) => d.getAttribute('aria-label'))).toEqual([
-      '在跑',
-      '等你批',
-      '做完了，待你看',
-    ])
-    expect(rows[0]?.getAttribute('href')).toBe('/matters/mat_1')
-    // WP351（决策 906）：岗位行不挂数字了（去岗位页看）
+    expect(screen.queryByTestId('rail-matter')).toBeNull()
+    const card = await openConversations()
+    const rows = await within(card).findAllByTestId('conv-link')
+    expect(rows.map((r) => r.textContent)).toEqual(['等你批的', '做完待看', '在跑的那件', '第四件'])
+    const marks = within(card).getAllByTestId('conv-marker')
+    expect(marks.map((d) => d.getAttribute('aria-label'))).toEqual(['等你看', '等你看', '正在做'])
+    expect(rows[2]?.getAttribute('href')).toBe('/matters/mat_1')
+    // WP351（决策 906）：岗位行不挂数字
     expect(screen.queryByTestId('nav-position-pending')).toBeNull()
-    await user.click(screen.getByTestId('rail-more'))
-    expect(screen.getAllByTestId('rail-matter')).toHaveLength(6)
-    // WP351：「已归档（n）」不在树上占一行，收进职责行悬停出的归档钮（说法在 tooltip / 读屏里）
-    const archived = screen.getByTestId('rail-archived')
-    expect(archived.getAttribute('aria-label')).toBe('已归档（2）')
-    expect(archived.closest('[data-testid="rail-threads"]')).toBeNull()
+    fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
+    const panel = await screen.findByTestId('conv-panel')
+    await waitFor(() => {
+      expect(within(panel).getAllByTestId('conv-link')).toHaveLength(6)
+    })
+    expect(within(panel).getByTestId('conv-archived').textContent).toBe('已归档 2')
   })
 
   it('已归档列表：筛好这条职责，点「恢复」一次一件（by=user）', async () => {
     const user = userEvent.setup()
     renderShell(true)
-    await user.click(await screen.findByTestId('rail-archived'))
+    const panel = await openConversations(true)
+    await user.click(await within(panel).findByTestId('conv-archived'))
     const dialog = await screen.findByTestId('archived-dialog')
     await within(dialog).findByText('美国红人样品寄送')
     expect(called('listArchivedWork')[0]?.args[0]).toEqual({
@@ -377,7 +385,7 @@ describe('WP207 ⌘K：搜到归档的、让 AI 找回', () => {
   it('打字就搜对话与任务，归档的标「已归档」；「让 AI 找回」给候选卡，点一张才恢复（by=ai_suggested）', async () => {
     const user = userEvent.setup()
     renderShell(true)
-    fireEvent.click(screen.getByTestId('top-command'))
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
     const input = await screen.findByPlaceholderText('搜卡片、岗位、教程，或加一个数字块…')
     await user.type(input, '红人样品')
     const works = await screen.findAllByTestId('command-work')
@@ -447,10 +455,10 @@ describe('WP207 随便聊里的候选卡与设置', () => {
   })
 })
 
-describe('WP207 手动归档（Fable 09-30）', () => {
+describe('WP207 手动归档（Fable 09-30；WP372 起在右侧面板「对话」里）', () => {
   it('悬停菜单「归档」→ 底部「已归档…· 撤销」；撤销 = 恢复这一件', async () => {
     renderShell(true)
-    const rows = await screen.findAllByTestId('rail-matter')
+    const rows = await within(await openConversations()).findAllByTestId('conv-link')
     const fourth = rows[3]?.closest('li') as HTMLElement
     fireEvent.click(within(fourth).getByTestId('rail-matter-menu'))
     fireEvent.click(within(fourth).getByTestId('rail-matter-archive'))
@@ -467,10 +475,10 @@ describe('WP207 手动归档（Fable 09-30）', () => {
 
   it('在跑的、有卡等你批的：「归档」置灰，问号里说为什么', async () => {
     renderShell(true)
-    const rows = await screen.findAllByTestId('rail-matter')
+    const rows = await within(await openConversations()).findAllByTestId('conv-link')
     for (const [i, why] of [
-      [0, 'AI 还在跑这件事，跑完才能归档'],
-      [1, '这件事还有卡等你批，批完才能归档'],
+      [2, 'AI 还在跑这件事，跑完才能归档'],
+      [0, '这件事还有卡等你批，批完才能归档'],
     ] as const) {
       const li = rows[i]?.closest('li') as HTMLElement
       fireEvent.click(within(li).getByTestId('rail-matter-menu'))

@@ -118,7 +118,7 @@ const TARGETS: AssistantState['targets'] = [
     position_id: 'reddit-ops',
     name: 'Reddit 运营',
     duties: [
-      { role_id: 'social.reddit', name: '自家版运营' },
+      { role_id: 'social.reddit', name: '官方版块' },
       { role_id: 'pr.reddit', name: '外部露出' },
     ],
   },
@@ -232,13 +232,13 @@ describe('WP343 输入框 @', () => {
   it('打 @ 出岗位与职责，选一个 → 胶囊；发出去带 target，气泡上标「@ 谁」', async () => {
     renderPage()
     const input = await screen.findByTestId('free-chat-input')
-    await userEvent.type(input, '@自家')
+    await userEvent.type(input, '@官方')
     const menu = await screen.findByTestId('assistant-mention-menu')
     const options = within(menu).getAllByTestId('assistant-mention-option')
-    expect(options.map((o) => o.textContent)).toEqual(['Reddit 运营 · 自家版运营'])
+    expect(options.map((o) => o.textContent)).toEqual(['Reddit 运营 · 官方版块'])
     fireEvent.mouseDown(options[0] as HTMLElement)
     expect(screen.getByTestId('assistant-mention-chip').textContent).toContain(
-      'Reddit 运营 · 自家版运营',
+      'Reddit 运营 · 官方版块',
     )
     await userEvent.type(input, '查一下今天的新帖{Enter}')
     await waitFor(() => {
@@ -247,12 +247,12 @@ describe('WP343 输入框 @', () => {
         target: {
           position_id: 'reddit-ops',
           role_id: 'social.reddit',
-          label: 'Reddit 运营 · 自家版运营',
+          label: 'Reddit 运营 · 官方版块',
         },
       })
     })
     expect((await screen.findByTestId('free-chat-user-to')).textContent).toContain(
-      'Reddit 运营 · 自家版运营',
+      'Reddit 运营 · 官方版块',
     )
   })
 
@@ -263,7 +263,7 @@ describe('WP343 输入框 @', () => {
     expect(mentionQuery('@客 服', 5)).toBeUndefined()
     expect(mentionOptions(TARGETS, '').map((o) => o.label)).toEqual([
       'Reddit 运营',
-      'Reddit 运营 · 自家版运营',
+      'Reddit 运营 · 官方版块',
       'Reddit 运营 · 外部露出',
       '客服',
       '客服 · 售后',

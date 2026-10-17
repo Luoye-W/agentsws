@@ -29,8 +29,32 @@ export function renderWithProviders(
  * （标签就是旧 id：`role` / `memory` / `knowledge` / `skills` / `caps`。）
  */
 export async function openSettingsTab(tab: string): Promise<void> {
-  fireEvent.click(screen.getByTestId('rail-icon-settings'))
+  await openRailPanel('settings')
   fireEvent.click(await screen.findByTestId(`settings-tab-${tab}`))
+}
+
+/**
+ * WP372：右侧面板开到某一格。归卡的面板（设定 / 产出 / 计划 / 对话 / 报表）= 点右上角那张卡的图标、
+ * 再点卡底「显示更多」；不归卡的工具（浏览器 / 变更审阅 / 教程）= 点「⋮」再点菜单里那一项。
+ */
+export async function openRailPanel(id: string): Promise<void> {
+  const card = RAIL_PANEL_CARD[id]
+  if (card === undefined) {
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId(`rail-menu-${id}`))
+    return
+  }
+  fireEvent.click(screen.getByTestId(`rail-icon-${card}`))
+  fireEvent.click(await screen.findByTestId(`rail-card-more-${card}`))
+}
+
+const RAIL_PANEL_CARD: Record<string, string> = {
+  settings: 'settings',
+  outputs: 'outputs',
+  records: 'outputs',
+  schedules: 'plans',
+  conversations: 'conversations',
+  reports: 'reports',
 }
 
 /** WP356：设置弹窗开在某一节（原来测 `SettingsPage` 的题改测这里）。 */

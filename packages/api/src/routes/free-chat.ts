@@ -82,7 +82,7 @@ export interface FreeChatMessageView {
    * 界面上是一排卡片，**人点了哪张才恢复哪张**；模型自己恢复不了任何东西。
    */
   archived_candidates?: ArchivedWorkCandidate[]
-  /** WP343：用户这句是 `@` 给谁的（「Reddit 运营 · 自家版运营」，只用来显示）。 */
+  /** WP343：用户这句是 `@` 给谁的（「Reddit 运营 · 官方版块」，只用来显示）。 */
   to?: string
   /** WP343：这一轮交给岗位去做的事（对话里那一行「已交给 X · Y」，点了进那件事）。 */
   dispatches?: FreeChatDispatchView[]

@@ -403,7 +403,7 @@ describe('WP25 §C 「还没接模型」黄条', () => {
       </AppShell>,
       '/onboarding',
     )
-    await screen.findByTestId('top-command')
+    await screen.findByTestId('top-bar')
     await waitFor(() => {
       expect(screen.queryByTestId('no-model-chip')).toBeNull()
     })

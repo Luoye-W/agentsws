@@ -43,7 +43,7 @@ const position = (
   memory_summary: '',
 })
 const positions = [
-  position('reddit-ops', 'Reddit 运营', 'social.reddit', '自家版运营'),
+  position('reddit-ops', 'Reddit 运营', 'social.reddit', '官方版块'),
   position('customer-care', '客服', 'dtc.support', '售后客服'),
   position('web-ops', '网站运营', 'dtc.store', '店铺管理'),
 ]

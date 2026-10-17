@@ -15,7 +15,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LayerMemoryData, PositionInstanceData, RoleDetailView } from '@/lib/api'
-import { openSettingsTab, renderWithProviders } from './helpers'
+import { openRailPanel, openSettingsTab, renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
   position_id: 'web-ops',
@@ -218,28 +218,28 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('一次只开一个：点「设定」开设定，点定时任务就换成定时任务，再点同一个收起', async () => {
+  it('WP372：点一张卡的图标 = 开成卡片堆、展开那一张；「显示更多」= 那一格的完整列表，「←」回卡片；再点图标收起', async () => {
     renderRail()
     fireEvent.click(screen.getByTestId('rail-icon-settings'))
+    expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
+    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('true')
+
+    fireEvent.click(screen.getByTestId('rail-card-more-settings'))
     expect(await screen.findByTestId('rail-panel-settings')).toBeDefined()
+    fireEvent.click(screen.getByTestId('rail-panel-back'))
+    expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
 
-    fireEvent.click(screen.getByTestId('rail-icon-schedules'))
-    await waitFor(() => {
-      expect(screen.queryByTestId('rail-panel-settings')).toBeNull()
-    })
-    expect(screen.getByTestId('rail-panel-schedules')).toBeDefined()
-
-    fireEvent.click(screen.getByTestId('rail-icon-schedules'))
+    fireEvent.click(screen.getByTestId('rail-icon-plans'))
+    expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
+    fireEvent.click(screen.getByTestId('rail-icon-plans'))
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
   })
 
-  it('WP208：五个「这一层的设置」合成一个图标，旧的五个图标都不在了', () => {
+  it('WP208：五个「这一层的设置」合成「设定」，旧的五个图标都不在了', () => {
     renderRail()
-    expect(screen.getByTestId('rail-icon-settings').getAttribute('title')).toBe(
-      '设定 · 这个岗位 / 职责的角色、记忆、知识、技能与额度',
-    )
+    expect(screen.getByTestId('rail-icon-settings').getAttribute('title')).toBe('设定')
     for (const id of [
       'role',
       'memory',
@@ -254,7 +254,7 @@ describe('第三栏骨架（36 §9）', () => {
 
   it('WP208：「设定」顶上五个标签，默认第一个（角色）；切一个标签换一份正文', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-settings'))
+    await openRailPanel('settings')
     const panel = await screen.findByTestId('settings-panel')
     expect(panel.getAttribute('data-tab')).toBe('role')
     expect(
@@ -432,12 +432,15 @@ describe('知识面板（19）', () => {
 describe('WP288：「记录」在第三栏（岗位页 / 职责页不再有「记录」页签）', () => {
   it('岗位上：本人在这个岗位每条职责的记录合在一起，加上不出卡的复盘', async () => {
     renderRail('/positions/asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-records'))
+    await openRailPanel('records')
     const list = await screen.findByTestId('records')
+    // 复盘那一份另外取，回来得晚一拍（WP372：记录已经被「产出」卡先取过了）
+    await waitFor(() => {
+      expect(screen.getByTestId('records').textContent).toContain('复盘：你处理 2 张，AI 5 张')
+    })
     const text = list.textContent ?? ''
     expect(text).toContain('改价：MagSafe 车载支架')
     expect(text).toContain('博客：新品上架')
-    expect(text).toContain('复盘：你处理 2 张，AI 5 张')
     expect(getPositionRecords).toHaveBeenCalledWith('asg_store')
     expect(getPositionRecords).toHaveBeenCalledWith('asg_content')
   })
@@ -446,12 +449,13 @@ describe('WP288：「记录」在第三栏（岗位页 / 职责页不再有「�
     getPositionRecords.mockClear()
     listReviews.mockClear()
     renderRail('/positions/asg_store/duties/dtc.store')
-    fireEvent.click(screen.getByTestId('rail-icon-records'))
+    await openRailPanel('records')
     const list = await screen.findByTestId('records')
     expect(list.textContent).toContain('改价：MagSafe 车载支架')
     expect(list.textContent).not.toContain('博客：新品上架')
     expect(list.textContent).not.toContain('复盘')
-    expect(getPositionRecords).toHaveBeenCalledTimes(1)
+    // 只取了这一条职责的（「产出」卡与完整列表各取一次，测试里缓存不留）
+    expect(new Set(getPositionRecords.mock.calls.map((c) => c[0]))).toEqual(new Set(['asg_store']))
     expect(listReviews).not.toHaveBeenCalled()
   })
 })

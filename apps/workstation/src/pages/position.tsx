@@ -17,10 +17,14 @@
  *
  * WP288：标题下那行「N 张等你定 · N 件在办」去掉（下面「要你处理 N」就是它）；卡住了 / 今天的待办
  * 这两样有才出（它们是要人留意的事，点了筛到下面「工作」那一组）。
+ *
+ * **WP372（决策 1019，Luoye 10-17）：中间栏回到普通对话框形态**——页头 + 对话框 + 按状态现出的快捷按钮 +
+ * 「要你拍板」的卡。上面 3、4 两块（工作、数据看板）和报表块都搬进右侧面板「报表」
+ * （`components/reports/scope-boards.tsx`）；`?tab=view` 打开那一格，页头「卡住了 / 今天的待办」点了也打开它并筛好。
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
@@ -28,13 +32,12 @@ import { ExtensionOnboardCard } from '@/components/connections/extension-onboard
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
-import { DataBoard } from '@/components/position/data-board'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
 import { ShopAdminBanner } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
-import { WorkSection } from '@/components/position/work-section'
 import { useRailState } from '@/components/rail/rail-state'
+import { requestWorkFilter, useCardJumpRequest } from '@/components/reports/position-bridge'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { RedditWatchAlertNotice } from '@/components/social/reddit-watch-alert'
@@ -42,14 +45,7 @@ import { RedditWriteNotice } from '@/components/social/reddit-write-notice'
 import { Hint } from '@/components/ui/hint'
 import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import {
-  loadWorkPrefs,
-  NO_FILTERS,
-  PANEL_QUICK_KINDS,
-  quickViewsOf,
-  saveWorkPrefs,
-  type WorkPrefs,
-} from '@/lib/position-work'
+import { NO_FILTERS, type WorkPrefs } from '@/lib/position-work'
 import { assignmentForPosition, myAssignments } from '@/lib/positions'
 import { matterUrl } from '@/lib/work'
 
@@ -74,7 +70,6 @@ export function PositionPage(): React.ReactNode {
   const params = useParams<{ id: string }>()
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
-  const client = useQueryClient()
   const id = params.id ?? ''
   const rawTab = search.get('tab')
   const tab = viewOf(rawTab)
@@ -87,9 +82,6 @@ export function PositionPage(): React.ReactNode {
   const here = mine.data?.positions.find((p) => p.position_id === id)
   /** WP278：只有一个岗位（首页就是这一页，与首页跳转同一个判据）。 */
   const sole = entry !== undefined && mine.data?.instances?.length === 1
-  const ownerAssignment = (mine.data?.positions ?? []).find(
-    (p) => p.role_id === 'common.owner',
-  )?.position_id
 
   /*
    * 进岗位页就把当前 Assignment 切过去（31 §3.1 一次请求一个 Assignment）。
@@ -136,46 +128,15 @@ export function PositionPage(): React.ReactNode {
       })
     return out
   }, [view, here])
-  const quickViews = useMemo(() => quickViewsOf(duties), [duties])
-  const boardDuties = duties.map((d) => {
-    const summary = mine.data?.positions.find((p) => p.position_id === d.assignment_id)
-    return summary === undefined ? d : { ...d, ranges: summary.ranges }
-  })
-
-  // ── 工作的看法：记在这个岗位上（本机） ──
-  const prefsKey = view?.position_id ?? id
-  const [prefs, setPrefsState] = useState<WorkPrefs>(() => loadWorkPrefs(prefsKey))
-  useEffect(() => {
-    setPrefsState(loadWorkPrefs(prefsKey))
-  }, [prefsKey])
-  const setPrefs = useCallback(
-    (next: WorkPrefs, persist = true): void => {
-      setPrefsState(next)
-      if (persist) saveWorkPrefs(prefsKey, next)
-    },
-    [prefsKey],
-  )
-  const [charts, setCharts] = useState(rawTab === 'view')
-
-  // 老地址 `?tab=view`：图表展开；「面板」类快捷视图（`kol=` 指名就是红人工作台）打开——不记进偏好
-  const legacyView = rawTab === 'view'
-  const kolParam = search.get('kol')
-  useEffect(() => {
-    if (!legacyView || quickViews.length === 0) return
-    const panel =
-      quickViews.find((q) => kolParam !== null && q.kind === 'kol') ??
-      quickViews.find((q) => (PANEL_QUICK_KINDS as readonly string[]).includes(q.kind))
-    if (panel !== undefined) setPrefsState((p) => ({ ...p, view: panel.id }))
-  }, [legacyView, kolParam, quickViews])
-
-  // 卡片流翻到哪张（工作行尾「N 张卡等你」点过来的）
+  // 卡片流翻到哪张（右侧面板「报表 → 工作」行尾「N 张卡等你」点过来的，WP372 起隔着一栏传）
   const [focus, setFocus] = useState<{ card_id: string; nonce: number } | undefined>(undefined)
   const deckRef = useRef<HTMLDivElement | null>(null)
-  const workRef = useRef<HTMLDivElement | null>(null)
-  const boardRef = useRef<HTMLDivElement | null>(null)
+  const jump = useCardJumpRequest(id)
   useEffect(() => {
-    if (rawTab === 'view') scrollTo(boardRef.current)
-  }, [rawTab])
+    if (jump === undefined) return
+    setFocus({ card_id: jump.card_id, nonce: jump.nonce })
+    scrollTo(deckRef.current)
+  }, [jump])
 
   const setTab = (next: View): void => {
     setSearch((prev) => {
@@ -198,6 +159,10 @@ export function PositionPage(): React.ReactNode {
       { replace: true },
     )
   }, [rawTab, rail, setSearch])
+  // WP372：老地址 `?tab=view`（看板 / 红人工作台那几条链接）→ 右侧面板「报表」（看板在它下半截）
+  useEffect(() => {
+    if (rawTab === 'view') rail.show('reports')
+  }, [rawTab, rail])
 
   const counts = work.data?.counts
   const pending = view?.pending_cards ?? 0
@@ -210,18 +175,13 @@ export function PositionPage(): React.ReactNode {
   const fresh =
     view !== undefined && work.data !== undefined && work.data.items.length === 0 && pending === 0
 
-  const refreshWork = (): void => {
-    void client.invalidateQueries({ queryKey: ['position-work'] })
-    void client.invalidateQueries({ queryKey: ['position-instance', id] })
-  }
-
-  /** 卡住了 / 今天的待办：有才出（点了筛到下面「工作」那一组）。 */
+  /** 卡住了 / 今天的待办：有才出（点了打开右侧「报表」，「工作」筛到那一组）。 */
   const stuck = counts?.stuck ?? 0
   const today = counts?.todos_today ?? 0
   const filterWork = (filters: WorkPrefs['filters']): void => {
     setTab('work')
-    setPrefs({ ...prefs, view: 'list', filters }, false)
-    scrollTo(workRef.current)
+    requestWorkFilter(id, filters)
+    rail.show('reports')
   }
 
   return (
@@ -423,6 +383,8 @@ export function PositionPage(): React.ReactNode {
                 positionIds={deckIds}
                 // WP278（决策 284）：只有一个岗位的人首页就是这里——也收挂在底座职责上的卡
                 withBase={sole}
+                // WP372（决策 1019）：报表进右侧面板「报表」卡，这里只放要你拍板的卡
+                withReports={false}
                 {...(focus === undefined ? {} : { focus })}
                 onOpen={(card) => {
                   navigate(matterUrl(card))
@@ -438,34 +400,6 @@ export function PositionPage(): React.ReactNode {
                 }
               />
             )}
-          </div>
-
-          <div ref={workRef} className="scroll-mt-4">
-            <WorkSection
-              data={work.data}
-              pending={work.isPending}
-              error={work.error}
-              quickViews={quickViews}
-              prefs={prefs}
-              onPrefs={(next) => {
-                setPrefs(next)
-              }}
-              onJump={(card_id) => {
-                setFocus({ card_id, nonce: Date.now() })
-                scrollTo(deckRef.current)
-              }}
-              onRefresh={refreshWork}
-            />
-          </div>
-
-          <div ref={boardRef} className="scroll-mt-4">
-            <DataBoard
-              duties={boardDuties}
-              expanded={charts}
-              onExpanded={setCharts}
-              owner={ownerAssignment}
-              empty={fresh}
-            />
           </div>
         </div>
       )}

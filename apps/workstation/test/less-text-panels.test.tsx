@@ -15,6 +15,7 @@ import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PositionConnections } from '@/components/connections/position-connections'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
+import { PositionBoards } from '@/components/reports/scope-boards'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import type { PositionConnectionItem, PositionSummary, RoleDetailView } from '@/lib/api'
 import { DutyPage } from '@/pages/duty'
@@ -182,7 +183,16 @@ describe('岗位页', () => {
   it('还没分配范围（店主看）与在线客服的两扇门：不超', async () => {
     renderWithProviders(
       <Routes>
-        <Route path="/positions/:id" element={<PositionPage />} />
+        <Route
+          path="/positions/:id"
+          element={
+            // WP372：数据看板搬进右侧面板「报表」的下半截（`PositionBoards`），这里两样一起摆
+            <>
+              <PositionPage />
+              <PositionBoards id="asg_1" />
+            </>
+          }
+        />
       </Routes>,
       '/positions/asg_1?tab=view',
     )

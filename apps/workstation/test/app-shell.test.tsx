@@ -116,12 +116,12 @@ describe('左栏（WP43 §1 图标）', () => {
  * WP96 交付 4：左栏与顶栏按画布重排**样式**，结构一个字没动。
  */
 describe('左栏 / 顶栏新风格（WP96）', () => {
-  it('顶栏那颗 ⌘K 变成一条长搜索框，点开还是同一个命令面板', () => {
+  it('WP372（决策 1002）：顶栏没有「交给某个岗位一件事」搜索框了；⌘K 照样开命令面板', async () => {
     renderShell()
-    const bar = screen.getByTestId('top-command')
-    expect(bar.textContent).toContain('交给某个岗位一件事')
-    expect(bar.textContent).toContain('⌘K')
-    expect(bar.getAttribute('aria-label')).toBe('命令面板 (⌘K)')
+    expect(screen.queryByTestId('top-command')).toBeNull()
+    expect(screen.getByTestId('top-bar').textContent).not.toContain('交给某个岗位一件事')
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
+    expect(await screen.findByPlaceholderText('搜卡片、岗位、教程，或加一个数字块…')).toBeTruthy()
   })
 
   it('品牌与账号还在左栏最下面（WP71 定的位置没被换皮挪走）', () => {
