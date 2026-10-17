@@ -427,7 +427,7 @@ export function ConnectionsPage({
                   }
                 : p.service === 'google_alerts'
                   ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS
-                    { oneClick: <PrWatchCard />, advancedLabel: t('shopconnect.advanced') }
+                    { oneClick: <PrWatchCard /> }
                   : {})}
               onStart={(auth_option) => {
                 setResults((prev) => {

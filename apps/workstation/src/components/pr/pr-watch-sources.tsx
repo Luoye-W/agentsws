@@ -161,7 +161,8 @@ export function PrWatchSources({
             {t('prwatch.next', { when: whenLabel(view.next_run_at, t) })}
           </span>
         )}
-        <TutorialLink slug="conn-google" className="ml-auto" />
+        {/* 连接页那张卡头上已经有「看教程」；右栏 / 对话卡里这一版自己带一个 */}
+        {compact ? <TutorialLink slug="conn-google" className="ml-auto" /> : null}
       </div>
       {sources.length === 0 ? null : (
         <ul className="flex max-h-56 flex-col overflow-y-auto">

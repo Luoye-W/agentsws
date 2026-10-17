@@ -179,10 +179,13 @@ import {
   alertLinesFromPlan,
   approvedLines,
   checkSubredditRules,
+  dedupeMentions,
   explainRuleCheck,
+  fetchFeed,
   handoffOfMention,
   hoursSinceLastPost,
   ingestAlertsReport,
+  keywordFilter,
   normalizeAlertQuery,
   parseSubredditRules,
   triageMention,
@@ -1293,6 +1296,12 @@ export interface PrOps {
    * 判成客户问题 → **出一张转客服卡，公关不答**（60 分界行）；
    * 判成负面舆情 → 出一张负面预警卡；媒体询问 → 出一张回应草稿卡。
    */
+  /**
+   * WP386：拉一条监控源（Google Alerts 的 RSS / 网站 RSS）走一遍信息监控的数据链：
+   * feedsmith 解析 → 解开跳转链接 → 本地整词过滤 → 去重。**拉不到就照实说**（`ok: false` + 一句人话），
+   * 不当成 0 条。feed 内容由场景给（不联网），世界里按格式拼成真 feed 再交给 `pr-core` 解析。
+   */
+  feed(input: ScenarioPrFeedInput): Promise<PrFeedResult>
   mention(input: {
     who: PersonId
     source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
@@ -1445,6 +1454,32 @@ export interface B2bInboundResult {
   /** 碰到的承诺类别（询盘里问了价格 / 交期 …，回信会转人审）。 */
   commitments: string[]
   approval_item_id?: string
+}
+
+/** WP386：场景里的一条监控源。 */
+export interface ScenarioPrFeedInput {
+  kind: 'google_alerts' | 'rss'
+  /** 那条 feed 回什么：200 = 正常；404 = 提醒被删了。 */
+  status: number
+  /** feed 标题里盯的词 / 网站名。 */
+  label: string
+  entries: { title: string; url: string; text: string }[]
+  keywords?: string[]
+  exclude?: string[]
+}
+
+/** WP386：拉一条监控源的结果。 */
+export interface PrFeedResult {
+  ok: boolean
+  fetched: number
+  kept: number
+  /** 去重之后几条。 */
+  unique: number
+  label?: string
+  /** 跳转链接都解开了（没有一条还是 `google.com/url`）。 */
+  links_unwrapped: boolean
+  /** 拉不到时那一句人话。 */
+  message?: string
 }
 
 /** WP78：一条提及判完之后的结果。 */
@@ -7453,7 +7488,75 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const prAlertsUnchecked = new Map<string, string[]>()
   let prAlertSeq = 100
 
+  const xmlEscape = (v: string): string =>
+    v.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;').replace(/"/gu, '&quot;')
+
   const pr: PrOps = {
+    async feed(input) {
+      const at = clock.now()
+      const body =
+        input.kind === 'google_alerts'
+          ? `<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Google Alert - ${xmlEscape(input.label)}</title>${input.entries
+              .map(
+                (e, i) =>
+                  `<entry><id>tag:sim,2026:alert:${i}</id><title type="html">${xmlEscape(e.title)}</title><link href="${xmlEscape(`https://www.google.com/url?rct=j&sa=t&url=${encodeURIComponent(e.url)}&ct=ga`)}"/><published>${at}</published><content type="html">${xmlEscape(e.text)}</content></entry>`,
+              )
+              .join('')}</feed>`
+          : `<?xml version="1.0"?><rss version="2.0"><channel><title>${xmlEscape(input.label)}</title>${input.entries
+              .map(
+                (e, i) =>
+                  `<item><title>${xmlEscape(e.title)}</title><link>${xmlEscape(e.url)}</link><guid isPermaLink="false">sim-${i}</guid><description>${xmlEscape(e.text)}</description></item>`,
+              )
+              .join('')}</channel></rss>`
+      const url =
+        input.kind === 'google_alerts'
+          ? 'https://www.google.com/alerts/feeds/0/sim'
+          : 'https://site.example/feed'
+      const got = await fetchFeed(
+        {
+          fetch: async () => ({
+            ok: input.status < 400,
+            status: input.status,
+            text: async () => (input.status < 400 ? body : ''),
+          }),
+          now: () => clock.now(),
+        },
+        { url, ...(input.kind === 'rss' ? { name: input.label } : {}) },
+      )
+      const result: PrFeedResult = got.ok
+        ? (() => {
+            const rows = got.data.rows
+            const kept =
+              input.kind === 'rss'
+                ? rows.filter(
+                    (r) =>
+                      keywordFilter(r, {
+                        keywords: input.keywords ?? [],
+                        exclude: input.exclude ?? [],
+                      }).keep,
+                  )
+                : rows
+            return {
+              ok: true,
+              fetched: rows.length,
+              kept: kept.length,
+              unique: dedupeMentions(kept).length,
+              ...(got.data.label === undefined ? {} : { label: got.data.label }),
+              links_unwrapped: rows.every((r) => !r.url.includes('google.com/url')),
+            }
+          })()
+        : { ok: false, fetched: 0, kept: 0, unique: 0, links_unwrapped: true, message: got.message }
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.pr_feed_pulled',
+        actor: { kind: 'system', id: 'pr_watch' },
+        correlation: { trace_id: traceId() },
+        // 地址与正文不进事件；进的是数和那一句人话
+        payload: { kind: input.kind, ...result },
+      })
+      return result
+    },
     async mention({ who, source, origin, title, text, author }) {
       const role_id = prRoleOf('pr.monitoring')
       const asg = assignmentFor(who, role_id)

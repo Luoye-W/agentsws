@@ -567,10 +567,12 @@ import {
   createPrMonitorToolExecutor,
   createPrWatch,
   createPrWatchStore,
+  demoFeedFetch,
   PR_WATCH_TARGET,
   type PrWatchAssembly,
   type PrWatchStoreHandle,
   summaryOf as prWatchSummaryOf,
+  seedDemoPrWatch,
 } from './pr-watch/index.js'
 import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
@@ -7613,13 +7615,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             tzOffsetMinutes: () => workData.tz_offset_minutes,
             fetch:
               options.feedFetch ??
-              (async (url, init) => {
-                const res = await fetch(url, {
-                  ...(init?.headers === undefined ? {} : { headers: init.headers }),
-                  signal: AbortSignal.timeout(20_000),
-                })
-                return { ok: res.ok, status: res.status, text: () => res.text() }
-              }),
+              ((): AlertsTransport['fetch'] => {
+                const real: AlertsTransport['fetch'] = async (url, init) => {
+                  const res = await fetch(url, {
+                    ...(init?.headers === undefined ? {} : { headers: init.headers }),
+                    signal: AbortSignal.timeout(20_000),
+                  })
+                  return { ok: res.ok, status: res.status, text: () => res.text() }
+                }
+                // 演示：`alerts/feeds/demo/` 下那几条回录好的 feed（不联网）；人真贴进来的照旧走真网络
+                return mount === undefined ? real : demoFeedFetch(real, () => clock.now())
+              })(),
             redditSearch: async (query) => {
               const got = await redditSearch.read({
                 capability: 'social.reddit.search',
@@ -8217,6 +8223,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （我们在别人的地盘上这件事长什么样）。
    */
   if (mount !== undefined) seedDemoPr(boot.pr, clock.now())
+  // WP386：演示里信息监控那几样（四条监控源，其中一条 404 亮红点；几条竞品动向）
+  if (mount !== undefined) seedDemoPrWatch(boot.prWatchStore, boot.pr, clock.now())
   /**
    * WP387：demo 里「让工坊替你建」那张卡（「要在你的 Google 账号里建 4 条提醒」），截图与演示用。
    * 不开浏览器、不连 Google：卡等人点。

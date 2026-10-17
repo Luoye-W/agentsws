@@ -359,6 +359,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'org/two-solo-users-discover',
       // WP387（docs/103 v2 T1）：让工坊替你建 Google 提醒——一张卡、勾掉一条、批了建好、不碰卡外的
       'pr/alerts-build-by-browser',
+      // WP386（docs/103 v2）：信息监控拉到了入表 / feed 404 照实说「没拉到」
+      'pr/monitor-feed-404',
+      'pr/monitor-feed-pulled',
       // WP78（60 §1 / §4）：同一个版 72 小时内再发一条 → 冷却那道门拦下，
       // 换一个版才放行（15 人公司里公关归内容，p_zheng 持 `pr.reddit`）
       'pr/subreddit-cooldown',

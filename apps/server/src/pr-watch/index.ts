@@ -1,3 +1,4 @@
+export { demoFeedFetch, seedDemoPrWatch } from './demo.js'
 export { dueSources, nextMonitorRunAt, sourceDue } from './due.js'
 export {
   feedAdapter,

@@ -20,8 +20,12 @@ export async function seedDemoAlerts(input: {
   now: string
 }): Promise<void> {
   const { store, alerts, now } = input
-  if (store.planItems().length === 0)
+  // 清单上还有没挂上源、勾着的就用它；没有（演示里信息监控那几样都已订上）就放 4 条竞品
+  const pending = store.planItems().some((p) => p.selected && p.status === 'planned')
+  const have = new Set(store.planItems().map((p) => p.query.trim().toLowerCase()))
+  if (!pending)
     DEMO.forEach(([label, query], i) => {
+      if (have.has(query.toLowerCase())) return
       const row: MonitorPlanItem = {
         id: `mp_demo_${i + 1}`,
         workspace_id: store.workspace_id,
