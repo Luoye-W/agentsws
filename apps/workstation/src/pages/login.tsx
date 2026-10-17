@@ -7,6 +7,9 @@
  * - `/invite/:token`：同事点邀请链接进来。先接受邀请（这一步不需要凭据），
  *   接受完他就是这个工作区的成员了，然后用同一个邮箱走上面那条登录。
  *
+ * 决策 945：服务开给局域网（bootstrap 里 `login: 'shared'`）时不出邮箱框——主人用日志里的
+ * 设置码（{@link SharedLoginPanel}），同事的邀请接受完直接带登录 token。
+ *
  * 页面上不出现任何裸 id：说的是"你已经加入 NordVolt Gear"，不是 `ws_dtc3c`。
  *
  * WP358：这一页常被当成「工坊账号注册 / 登录」。标题下一句话说清楚它是进这个工作区、
@@ -29,6 +32,7 @@ import {
   signInWithToken,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { SharedLoginPanel } from './login-shared'
 
 export function LoginPage(): React.ReactNode {
   const { t } = useApp()
@@ -51,8 +55,11 @@ export function LoginPage(): React.ReactNode {
   })
 
   const ownerHint = hint.data?.owner_email
+  const shared = hint.data?.login === 'shared'
   useEffect(() => {
-    if (invite.data !== undefined) setEmail(invite.data.email)
+    // 决策 945：局域网档的邀请接受完就带登录 token，直接到「进去」那一步
+    if (invite.data?.login_token !== undefined) setLinkToken(invite.data.login_token)
+    else if (invite.data !== undefined) setEmail(invite.data.email)
     else if (inviteToken === undefined && ownerHint !== undefined)
       setEmail((current) => (current === '' ? ownerHint : current))
   }, [invite.data, ownerHint, inviteToken])
@@ -107,71 +114,90 @@ export function LoginPage(): React.ReactNode {
             </p>
           ) : (
             <p data-testid="invite-joined">
-              {t('login.invite.joined', { workspace: invite.data?.workspace_name ?? '' })}
+              {t(
+                invite.data?.login_token === undefined
+                  ? 'login.invite.joined'
+                  : 'login.invite.joinedShared',
+                { workspace: invite.data?.workspace_name ?? '' },
+              )}
             </p>
           )}
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="login-email">{t('login.email')}</Label>
-            <Input
-              id="login-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              placeholder="you@company.com"
-              onChange={(e) => {
-                setEmail(e.target.value)
-                setLinkToken(null)
-                setMailed(false)
-              }}
-            />
-          </div>
+          {!shared ? null : inviteToken === undefined ? (
+            <SharedLoginPanel onToken={setLinkToken} />
+          ) : invite.error === null ? null : (
+            <p className="text-xs text-muted-foreground" data-testid="login-shared-colleague">
+              {t('login.shared.colleague')}
+            </p>
+          )}
 
-          <Button
-            disabled={email.trim() === '' || ask.isPending}
-            onClick={() => {
-              ask.mutate(email.trim())
-            }}
-          >
-            {t('login.send')}
-          </Button>
+          {shared ? null : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="login-email">{t('login.email')}</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  placeholder="you@company.com"
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    setLinkToken(null)
+                    setMailed(false)
+                  }}
+                />
+              </div>
 
-          {ask.error === null ? null : unknownEmail !== undefined ? (
-            <div className="flex flex-col gap-1.5" data-testid="login-unknown">
-              <p role="alert" className="text-destructive">
-                {t('login.unknown', { email: unknownEmail })}
-              </p>
-              {ownerHint !== undefined && ownerHint !== unknownEmail ? (
-                <p className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                  {t('login.unknown.owner')}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    data-testid="login-use-owner"
-                    onClick={() => {
-                      setEmail(ownerHint)
-                      ask.mutate(ownerHint)
-                    }}
-                  >
-                    {t('login.unknown.use_owner')}
-                  </Button>
+              <Button
+                disabled={email.trim() === '' || ask.isPending}
+                onClick={() => {
+                  ask.mutate(email.trim())
+                }}
+              >
+                {t('login.send')}
+              </Button>
+
+              {ask.error === null ? null : unknownEmail !== undefined ? (
+                <div className="flex flex-col gap-1.5" data-testid="login-unknown">
+                  <p role="alert" className="text-destructive">
+                    {t('login.unknown', { email: unknownEmail })}
+                  </p>
+                  {ownerHint !== undefined && ownerHint !== unknownEmail ? (
+                    <p className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                      {t('login.unknown.owner')}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid="login-use-owner"
+                        onClick={() => {
+                          setEmail(ownerHint)
+                          ask.mutate(ownerHint)
+                        }}
+                      >
+                        {t('login.unknown.use_owner')}
+                      </Button>
+                    </p>
+                  ) : null}
+                  <p className="text-muted-foreground">{t('login.unknown.colleague')}</p>
+                </div>
+              ) : (
+                <p role="alert" className="text-destructive" data-testid="login-error">
+                  {failure(ask.error)}
+                </p>
+              )}
+              {mailed ? (
+                <p className="text-muted-foreground" data-testid="login-mailed">
+                  {t('login.mailed')}
                 </p>
               ) : null}
-              <p className="text-muted-foreground">{t('login.unknown.colleague')}</p>
-            </div>
-          ) : (
-            <p role="alert" className="text-destructive" data-testid="login-error">
-              {failure(ask.error)}
-            </p>
+            </>
           )}
-          {mailed ? (
-            <p className="text-muted-foreground" data-testid="login-mailed">
-              {t('login.mailed')}
-            </p>
-          ) : null}
           {linkToken === null ? null : (
             <div className="flex flex-col gap-2 rounded-md border bg-muted/40 p-3">
-              <p className="text-muted-foreground">{t('login.ready')}</p>
+              <p className="text-muted-foreground">
+                {t(shared ? 'login.shared.ready' : 'login.ready')}
+              </p>
               <Button
                 variant="default"
                 size="sm"
@@ -185,7 +211,7 @@ export function LoginPage(): React.ReactNode {
               </Button>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">{t('login.note')}</p>
+          {shared ? null : <p className="text-xs text-muted-foreground">{t('login.note')}</p>}
         </CardContent>
       </Card>
     </div>

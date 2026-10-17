@@ -32,6 +32,8 @@ import type {
   KnowledgeGap,
   KnowledgePort,
   ModulesPort,
+  OrgPort,
+  OwnerSetupCodePort,
   PositionSummary,
   RolesPort,
   SkillsPort,
@@ -607,6 +609,10 @@ export async function harness(
     /** WP140：限流用的墙钟（毫秒）；不给就是系统时钟。 */
     wallClockMs?: () => number
     exposeMagicLinkToken?: boolean
+    /** 决策 945：局域网档的主人设置码。 */
+    ownerSetupCode?: OwnerSetupCodePort
+    /** 决策 945：测邀请接受那条要一个制度面替身。 */
+    org?: OrgPort
     /** 不装 19 §6 的那几个可选面，用来测「没装配 → 501」。 */
     bareKnowledge?: boolean
     ws?: WsOptions
@@ -961,7 +967,9 @@ export async function harness(
       ...(options.exposeMagicLinkToken === undefined
         ? {}
         : { exposeMagicLinkToken: options.exposeMagicLinkToken }),
+      ...(options.ownerSetupCode === undefined ? {} : { ownerSetupCode: options.ownerSetupCode }),
     },
+    ...(options.org === undefined ? {} : { org: options.org }),
   }
 
   // 决定时写一条事件，用来验证 trace_id 从请求贯到事件日志（28 §4 用例 6）
