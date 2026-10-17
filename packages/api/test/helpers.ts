@@ -613,6 +613,8 @@ export async function harness(
     ownerSetupCode?: OwnerSetupCodePort
     /** 决策 945：测邀请接受那条要一个制度面替身。 */
     org?: OrgPort
+    /** WP371：别的网关选项原样透传（托盘一次性链接、工坊账号认人、浏览器会话寿命）。 */
+    gateway?: Partial<NonNullable<GatewayDeps['options']>>
     /** 不装 19 §6 的那几个可选面，用来测「没装配 → 501」。 */
     bareKnowledge?: boolean
     ws?: WsOptions
@@ -968,6 +970,7 @@ export async function harness(
         ? {}
         : { exposeMagicLinkToken: options.exposeMagicLinkToken }),
       ...(options.ownerSetupCode === undefined ? {} : { ownerSetupCode: options.ownerSetupCode }),
+      ...options.gateway,
     },
     ...(options.org === undefined ? {} : { org: options.org }),
   }

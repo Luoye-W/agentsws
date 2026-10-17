@@ -1840,6 +1840,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     expires_at: inv.expires_at,
     ...(inv.accepted_at === undefined ? {} : { accepted_at: inv.accepted_at }),
     used: inv.used,
+    ...(inv.revoked_at === undefined ? {} : { revoked_at: inv.revoked_at }),
     ...(url === undefined ? {} : { url }),
     delivered: 'link',
   })
@@ -2412,6 +2413,15 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       })
       const url = `${options.baseUrl ?? ''}/invite/${issued.token}`
       return invitationView(issued.invitation, url)
+    },
+
+    async revokeInvitation(_actor, invitation_id) {
+      const inv = identity.revokeInvitation?.(workspace_id, invitation_id)
+      if (inv === undefined) throw ORG_ERROR('not_found', '没有这条邀请')
+      // 决策 1013：已经接受的不动——人已经进来了，请他离开走「移出成员」（会话当场失效）
+      if (inv.accepted_at !== undefined)
+        throw ORG_ERROR('conflict', '这条邀请已经被接受了。要请他离开，到成员里点「请他离开」。')
+      return invitationView(inv)
     },
 
     async accept(token, input) {

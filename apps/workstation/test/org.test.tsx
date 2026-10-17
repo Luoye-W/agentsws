@@ -262,7 +262,12 @@ vi.mock('@/lib/api', async () => {
     listOrganizations: async () => modeState.orgs,
     listRoleDefinitions: async () => state.roles,
     listMembers: async () => [...MEMBERS, TWO_DUTIES],
-    listInvitations: async () => [],
+    listInvitations: async () => pendingInvites,
+    withdrawInvitation: async (_ws: string, id: string) => {
+      withdrawn.push(id)
+      pendingInvites = []
+      return { ...INVITE, used: true, revoked_at: T0 }
+    },
     listRangeOptions: async () => [
       { kind: 'store', id: 'store_main', label: 'store_main' },
       { kind: 'store', id: 'store_eu', label: 'store_eu' },
@@ -703,7 +708,30 @@ describe('公司页：品牌与产品线（44）', () => {
   })
 })
 
+/** 决策 1013（WP371）：还没被接受的邀请（测试里按需塞）与撤回过的 id。 */
+let pendingInvites: OrgInvitationView[] = []
+const withdrawn: string[] = []
+
 describe('公司页：成员与邀请', () => {
+  it('决策 1013：还没接受的邀请可以撤回', async () => {
+    pendingInvites = [{ ...INVITE, url: undefined } as unknown as OrgInvitationView]
+    withdrawn.length = 0
+    try {
+      const user = userEvent.setup()
+      renderWithProviders(<OrgPage />)
+      await user.click(await screen.findByRole('tab', { name: '成员' }))
+      await user.click(await screen.findByTestId('invite-withdraw'))
+      await waitFor(() => {
+        expect(withdrawn).toEqual([INVITE.id])
+      })
+      await waitFor(() => {
+        expect(screen.queryByTestId('invite-pending')).toBeNull()
+      })
+    } finally {
+      pendingInvites = []
+    }
+  })
+
   it('邀请同事 → 本地档把一次性链接摆出来', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OrgPage />)
