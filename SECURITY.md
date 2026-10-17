@@ -11,10 +11,9 @@ agentsws is at `0.1.0-alpha`. Read this before you point it at a real company.
   that gate is the core of the design and it is tested (see `docs/ARCHITECTURE.md`,
   "Approvals and the ledger"). But the surrounding system has not been through a
   third-party audit, a real production deployment, or a bug bounty.
-- Whole layers are absent or half-built. `docs/38-底层收口清单.md` §1 is an honest,
-  per-contract inventory of what works, what half-works, and what does not exist.
-  The README carries the same table in short form. Nothing in this repository is
-  described as finished when it is not.
+- Whole layers are absent or half-built. [`CHANGELOG.md`](CHANGELOG.md) and the help
+  articles (<https://agentsws.com/docs/>) say what has actually shipped. Nothing in this
+  repository is described as finished when it is not.
 - The threat model assumes **everything below the external boundary is hostile input**:
   customer email, order notes, web pages, connector responses, meeting transcripts.
   Prompt injection is treated as a certainty, not a risk. There are simulation scenarios
@@ -79,7 +78,7 @@ High interest, in rough priority order:
   the machine's encryption keys.
 - Vulnerabilities in upstream projects (DeepSeek Harness, OpenConnector, Cordis,
   better-sqlite3, Electron). Report those upstream; tell us too, and we will pin or patch.
-- Missing hardening we already document as missing in `docs/38-底层收口清单.md` §1 —
+- Missing hardening we already document as missing (in `CHANGELOG.md` or a known issue) —
   tell us anyway if you can show real impact, but expect "known, tracked" as the answer.
 
 ## Supported versions
