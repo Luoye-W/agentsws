@@ -2128,3 +2128,87 @@ lockfile `packages:` 段 1938 → 1943 条。
 1. 完整 profile 里凭据库默认关了：以后谁要在完整 profile 里用"设置页存的 key"，得自己叠官方那三行；我们产品里不起完整 profile，只有账号登录 overlay 用到。
 2. pi-ai 仍是 1.1.0（dsh 的范围 `^1.1.0` 允许 1.3.0；上游扫描说 OAuth 部分逐字未变），这一跳没动它。
 3. `desktopPlatform` 上游洞（WP134）仍在。
+
+## 0.2.1-alpha.4 → 0.2.1-alpha.5（2026-10-17，WP370，跟 alpha）
+
+### 0. 版本口径
+
+Luoye 10-17「Deepseek Harness 又有一个新版本更新了」。升级当天：
+
+| tag | 版本 | 发布时间 |
+|---|---|---|
+| `latest` | 0.2.0-rc.2 | 2026-09-29T09:56Z |
+| `alpha` | **0.2.1-alpha.5** | 2026-10-16T12:31Z |
+| `next` | 0.2.1-rc.1 | 2026-10-17T03:17Z（升级当天上午才出，GitHub 还没有对应 tag；cordis 改要 `~4.0.5` 正式号。本单照派工单只跟 alpha，见报告决策 976） |
+
+`dsh-v0.2.1-alpha.4...dsh-v0.2.1-alpha.5` **36 条提交**（GitHub compare 一页回完）。仍是内测线，发布不到 24 小时，`minimumReleaseAgeExclude` 照写。
+
+**兄弟包这一跳不用跟**：`npm view @deepseek-ai/dsh@0.2.1-alpha.5 dependencies` 仍是 cordis `~4.0.5-alpha.2`、schemastery `~3.18.5-alpha.2`、loader `~1.0.6-alpha.2`、include `~1.0.10-alpha.2`、timer `~1.1.7-alpha.2`，与我们锁的号一致。
+
+**逐包查新版在不在**：仓库里写死 `0.2.1-alpha.4` 的 59 个 `@deepseek-ai/dsh*` 包，`npm view <包>@0.2.1-alpha.5 version` **59 个全在**，没有整包下线或改名。
+
+**官方升级指南**：这一跳只新增 1 份 `v0.2.1-alpha.4/account-notification-fields`（账号「赠金通知」的字段改成可选、`expiresAt` 可为空）。我们没有用 `getUnnotifiedBonuses` / `AccountBonusNotification`（全仓 grep 0 处），碰不到。
+
+### 1. 上游改了什么（碰到我们的）
+
+| 包 | 变化 | 出处 | 碰到我们吗 / 怎么处理 |
+|---|---|---|---|
+| `dsh-tool-fs` | `read` 工具那句系统提示改短（不再列 sed / head / tail） | `fs/tool-fs/src/read.ts` 第 74 行 | 否：我们两档运行时的工具面里没有官方 `read`（提示词导出逐字节相同，§4） |
+| `dsh-tool-subagent` | 子代理那句提示删掉「只剩等待就结束本轮」 | `subagent/tool-subagent/src/index.ts` | 否：两档不挂子代理 |
+| `dsh-sdk-app`（bundle） | `system-prompt` 加 `personaPrefix: You are a coding agent powered by the {{model}} model.`（与 web / headless / acp 对齐「模型身份」那句） | `bundle/sdk-app/cordis.patch.yml` | 否：我们组合的是 `dsh-base` + `dsh-headless`，这两份 patch **逐字未变**；headless 早就有自己那句 persona，WP293 起被我们 preset 的人设整段遮住 |
+| `dsh-client-ui-model-selection` | 新 Slot `conversation.input.model.label`：插件可按「来源」自定义输入框模型选择器里的名字（彩色名、徽标），选择、搜索、勾选仍归选择器 | 包 README「Model label extensions」、`src/client/slots.ts` | 否（官方网页端的件，我们工作台不跑它）。思路借进 WP370 的 AI 钮（来源图标 + 显示名，见报告 §1） |
+| `dsh-deepseek-account` / `-platform` | `AccountBonusNotification` 的 `campaign` / `amount` / `currency` / `grantedAt` 改可选、加 `title`、`expiresAt` 可空 | `lib/types/types.d.ts`；升级指南 `account-notification-fields` | 否（不用赠金通知） |
+| `dsh-tools` | 持久代码执行（PTC）的 `run_code` 参数顺序、几处类型说明 | `lib/types/ptc.d.ts` / `ts-types.d.ts` | 否（不用 PTC） |
+| `dsh-api-terminal-controller` / `ui-settings-account` / `ui-skill` / `ui-dockkit` 等 | 网页端终端去重、账号通知动画、技能菜单刷新、Page Up 偏移 | 各包 `src/client` | 否（网页端） |
+| cua-driver | MCP 提供方 README 仍链 `cua-driver-rs-v0.28.0`，native 提供方仍钉 `@trycua/cua-driver 0.28.0` | 两版 README 与 `package.json` | 驱动不动，只改 `computer-use.lock.json` 的 `providers` 两行与 `referenced_by` |
+
+**和「模型怎么换」有关的官方机制**（alpha.3–alpha.5 累计，本单第 3 步据此落地，逐条对照见报告 §1）：
+① 每个会话一份按来源分组的模型目录（`session.models` / `session.selectModel`），输入框模型钮与 `/model` 共用；
+② 选择 = 来源 + 模型 + 思考程度（`ModelSelection.reasoningEffort`），**下一次请求生效，正在跑的那一步不换**；
+③ 思考程度只给适配器声明了档位的模型（pi-ai 用 `getSupportedThinkingLevels`，DeepSeek 是 off / low / high / max、默认 high），没声明就不出这一行；
+④ 换了来源 / 模型，下一次请求前插一句「上面是 X 生成的，接下来用 Y」（`model-selection.ts`）；
+⑤ 新会话的默认模型由 `dsh-agent-default-model` 一处给；
+⑥ 选的模型后来不在目录里：保留原来的 id、显示「选个模型」，真发请求时才报错（不悄悄换）。
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`dsh-base` / `dsh-headless` 两份 `cordis.patch.yml` 与 alpha.4 **逐字相同**。锁定表五行全在、指向的插件没换、组合后全关；`profile-lockdown.test.ts` 全过。**这一跳没有新锁一行**，也没有新开一行。
+
+### 2. 依赖树与原生依赖
+
+lockfile `packages:` 段 1945 → 1944 条：dsh 包**一个没进、一个没走**（299 个只换号）；第三方唯一变化是重复的 `undici@8.10.2` 那一份消失（合并到已有的 8.11.2）。
+没有新包，`allowBuilds` / `ignoredOptionalDependencies` 一字未改。`minimumReleaseAgeExclude` 先 `sed` 原位换号再 `pnpm install`：299 条，没有 `||`、注释没被吃；
+脚本核对 lockfile 里 `@deepseek-ai/dsh*@0.2.1-alpha.5` 299 个 = 排除表 299 条、lockfile 里 `0.2.1-alpha.4` 0 处。BrowserSkill 四条与 `dsh-web-search-diy` 三条 `overrides` 跟着换号。`pnpm install --frozen-lockfile` 通过。
+
+### 3. 我们改了什么
+
+只有版本号：59 处 `@deepseek-ai/dsh*`（dsh-adapter / profile / credentials-openconnector）、`computer-use.lock.json`、`upstreams.yml`（dsh 三条）、
+`DEEPSEEK_ACCOUNT_CLIENT_VERSION`、`runtime.ts` 的 health 文案、官方插件清单七项（`cordis.patch.yml` 与依赖逐字未变）、几条测试里的版本字符串。**没有 seam 要修**。
+
+### 4. 怎么证明行为没变
+
+1. **指纹**：升级前在当前代码树重采 `0.2.1-alpha.4-wp370.json`（与仓库里 `0.2.1-alpha.4.json` 有 2 条因我们自己的改动不同：助理拆会议纪要、内容岗官方搜索）当 FROM；TO = `0.2.1-alpha.5.json`。
+   70 场景 × 2 档 = **140 条**，去掉 `dsh_version` 与 `packages` 后两份 JSON **逐字节相同**；`upgrade.test.ts` 全过。
+2. **`@agentsws/dsh-adapter` 全量**（`--maxWorkers=2 --testTimeout=120000`）：升级后 38 文件 1332 条全过。
+3. **提示词与工具表**：同一段临时测试（不进仓库）升级前后各导一次——两档 × 三种请求（默认售后、带网页工具的内容岗、带终端的建站岗）每一轮的 `messages` + `tools`——**逐字节相同**。
+4. **三个模拟包 × 三个运行时**、**装包前冒烟**：见报告 §4（升级前后各一遍）。
+
+### 5. 官方功能优先：这一跳开了什么、没开什么
+
+- 没有新包、没有新的可选插件包（仍是十二个），官方插件清单七项照旧。
+- 网页搜索 / 抓网页 / 浏览器几包只改版本号。
+- 模型选择相关的官方做法（§1 ①–⑥）是官方网页端的件，我们不跑它的界面；按「官方怎么做就照着做」把语义搬进工作台的 AI 钮（思考程度、按来源分组、下一轮生效），见报告。
+
+### 6. ④bis 默认值扫描
+
+`diff -r` 两个 tag 的 `packages/`（去测试）里含 `.default(` / `default:` 的变化行：**0 行**。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+与 WP354 一节同：官方 SDK 仍没有 server→client 请求、headless `--json` 仍替不了子进程档、`plugin-manager` 仍不能替 preset 承载、官方账号推理路由仍不替 `model-gateway`——这一跳四个相关包（sdk-server、headless、plugin-manager、llm-deepseek-account）`src` 零改动，**全部成立，不换**。
+
+### 8. 留下的东西
+
+1. `next` = 0.2.1-rc.1 当天出了（cordis 改正式号 4.0.5）：下一跳是跟 rc 还是继续跟 alpha，交 Luoye 定（报告 976）。
+2. pi-ai 仍是 1.1.0：1.3.0 已出、dsh 范围允许，但 ChatGPT 订阅目录（9 个模型）两版逐字相同，这一跳不动它。
+3. `desktopPlatform` 上游洞（WP134）仍在。
