@@ -1,0 +1,50 @@
+# WP387（docs/103 v2 §3.3、T1，Luoye 10-17）：**让工坊替你建 Google 提醒——一张卡，一次同意。**
+#
+# 配置卡上确认了 4 条竞品提醒，点「让工坊替你建」：
+#
+# 1. 对话里出**一张**「要在你的 Google 账号里建 4 条提醒」的卡（`google_alert_change`，永远等人点）——不是一条一张；
+# 2. 人在卡上勾掉 Super73 那一条，同意一次；
+# 3. 卡批了，你的浏览器（这个世界里的替身）只建勾着的那 3 条；账号里本来就有的 Aventon（RSS）不重复建、直接读它的链接；
+#    账号里别的提醒一条都不动；
+# 4. 读回的 3 条 RSS 链接写成监控源。
+id: pr/alerts-build-by-browser
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 10m..1h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-18T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    pr.alerts_build:
+      who: p_wang
+      lines:
+        - { label: Aventon, query: '"Aventon" -job' }
+        - { label: Rad Power, query: '"Rad Power Bikes"' }
+        - { label: Lectric, query: '"Lectric eBikes"' }
+        - { label: Super73, query: '"Super73"' }
+      unchecked: [Super73]
+      existing:
+        - { query: '"aventon" -job', delivery: rss }
+        - { query: '"Cyrusher"', delivery: email }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  pr_alerts_build:
+    card_lines: 4
+    auto_approved: false
+    built: 3
+    sources: 3
+    others_untouched: true
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.pr_alerts_card_staged
+    - simulation.pr_alerts_built
+  metrics:
+    outbound_sent: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  这张卡上「要建哪几条、每条怎么设、只动这几条」，用户一眼看得明白、勾掉不想要的就能放心点同意吗？

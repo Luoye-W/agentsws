@@ -967,6 +967,20 @@ export interface ScenarioPrExternalPost {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/**
+ * WP387（docs/103 v2 §3.3、T1）：「让工坊替你建」Google 提醒——清单出一张卡（一次同意），
+ * 批了替身浏览器在这个世界的 Google 账号里建好、读回 RSS 链接。
+ */
+export interface ScenarioPrAlertsBuild {
+  who: string
+  /** 配置卡上确认过的清单。 */
+  lines: { label: string; query: string; language?: string; region?: string }[]
+  /** 人在卡上勾掉的那几条（按 label）。 */
+  unchecked?: string[]
+  /** 这个 Google 账号里本来就有的提醒。 */
+  existing?: { query: string; delivery: 'rss' | 'email' }[]
+}
+
 /** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
 export interface ScenarioKolCollaboration {
   who: string
@@ -1172,6 +1186,7 @@ export type ScenarioEvent =
   | { at: string; type: 'b2b.member_left'; b2b_member_left: ScenarioB2bMemberLeft }
   /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
   | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
+  | { at: string; type: 'pr.alerts_build'; alerts_build: ScenarioPrAlertsBuild }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
   | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
   /** WP67：建一条合作（48 §5.1，永远 L1）。 */
@@ -1877,6 +1892,17 @@ export interface ScenarioExpected {
     adopted?: boolean
     phrases?: string[]
     routed_to?: string
+  }
+  /**
+   * WP387：替你建 Google 提醒那一趟。`card_lines` = 卡上列了几条（一张卡）、`built` = 建好 / 读回链接的条数、
+   * `sources` = 写成了几条监控源、`others_untouched` = 账号里卡外的提醒一条都没动。
+   */
+  pr_alerts_build?: {
+    card_lines?: number
+    built?: number
+    sources?: number
+    auto_approved?: boolean
+    others_untouched?: boolean
   }
   /** WP78（60 §1）：那一条外部发帖。`blocked` 为真 = 版规不让 / 冷却没过。 */
   pr_external_post?: {
