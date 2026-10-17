@@ -91,7 +91,8 @@ export const DESIGN_DUTIES: readonly DesignDutySpec[] = [
     en: 'Amazon Design',
     produces_zh: '主图 / A+ / 品牌旗舰店 / 视频封面（按 Amazon 规格）',
     produces_en: 'Main images, A+ modules, storefront, video covers (Amazon specs)',
-    request_sources: ['amz.listing'],
+    // WP395：`amz.listing` 是 04 §2 规划时的 id（从没建过，留着只加不删）；真在下单的是亚马逊店铺运营
+    request_sources: ['amz.listing', 'amz.store'],
     spec_families: ['amazon'],
   },
   {

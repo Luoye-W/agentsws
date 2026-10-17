@@ -96,6 +96,34 @@ describe('内置职责填了什么（55 §3）', () => {
       'sellercentral-europe.amazon.com',
       'sellercentral-japan.amazon.com',
     ],
+    // WP395（docs/106）：亚马逊店铺运营读各站前台（竞品与自家 Listing）+ 卖家后台三个区域；
+    // 一个个写死，不开 *.amazon.com 通配
+    'amz.store': [
+      'www.amazon.com',
+      'www.amazon.ca',
+      'www.amazon.com.mx',
+      'www.amazon.com.br',
+      'www.amazon.co.uk',
+      'www.amazon.de',
+      'www.amazon.fr',
+      'www.amazon.it',
+      'www.amazon.es',
+      'www.amazon.nl',
+      'www.amazon.se',
+      'www.amazon.pl',
+      'www.amazon.com.be',
+      'www.amazon.com.tr',
+      'www.amazon.ae',
+      'www.amazon.sa',
+      'www.amazon.eg',
+      'www.amazon.in',
+      'www.amazon.co.jp',
+      'www.amazon.com.au',
+      'www.amazon.sg',
+      'sellercentral.amazon.com',
+      'sellercentral-europe.amazon.com',
+      'sellercentral-japan.amazon.com',
+    ],
   }
 
   it('红人五条各自的平台 + Amazon 只开卖家后台，逐条对上', () => {
