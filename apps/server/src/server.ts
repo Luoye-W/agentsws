@@ -164,6 +164,7 @@ import {
   createModelGateway,
   type FetchLike,
   GatewayError,
+  type ListingFetch,
   type ModelGatewayApi,
   type PageFetch,
   stubImageProvider,
@@ -1156,6 +1157,11 @@ export interface ServerOptions {
     createHost?: DeepSeekAccountOptions['createHost']
     /** 账号那一路推理口（Messages）的替身 fetch。 */
     fetch?: AccountFetch
+    /**
+     * WP367：账号模型清单（`GET https://api.deepseek.com/models`）的替身 fetch。注入了 `fetch` 却没给它
+     * = 不去拉清单、用内置的两个（替身不会顺手让清单请求走到真网络上去）。
+     */
+    modelsFetch?: ListingFetch
     /** 登出后多久摘掉官方模块（测试调成 0）。 */
     signOutGraceMs?: number
   }
@@ -5461,6 +5467,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       deepseekAccount: {
         signedIn: () => deepseekAccount.signedIn(),
         resolveToken: (url: string) => deepseekAccount.resolveToken(url),
+        // WP367：比账号模型清单里的最低版本用
+        clientVersion: () => deepseekAccount.clientVersion(),
         rejectToken: (token: string) => deepseekAccount.rejectToken(token),
         // WP151：余额不足那一行按机器一份（账号只有一个），各品牌的模型卡读同一份
         reportBalance: (insufficient: boolean) => deepseekAccount.reportBalance(insufficient),
@@ -5468,6 +5476,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(options.deepseekAccount?.fetch === undefined
           ? {}
           : { fetch: options.deepseekAccount.fetch }),
+        ...(options.deepseekAccount?.modelsFetch === undefined
+          ? {}
+          : { modelsFetch: options.deepseekAccount.modelsFetch }),
+        // WP367：账号模型清单的诊断（官方同款 `[llm-deepseek-account]` 标签；只有地址、条数、原因）
+        ...(options.quiet === true
+          ? {}
+          : {
+              modelsLog: {
+                info: (m: string) => process.stdout.write(`[llm-deepseek-account] ${m}\n`),
+                warn: (m: string) => process.stderr.write(`[llm-deepseek-account] ${m}\n`),
+              },
+            }),
       },
     })
 
