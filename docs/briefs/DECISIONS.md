@@ -1083,3 +1083,5 @@
 | — | （WP373，Luoye 10-17）思考程度第三档「深想」改名「深度」（快 / 标准 / 深度；英文 Fast / Standard / Deep 不变） | **已定**，WP373 |
 | 1035 | （Luoye 10-17）右侧面板卡片 UI 直接照 Claude 桌面版：展开箭头紧贴标题文字，右侧靠右放摘要信息，鼠标移到卡片右侧 / 右上角才出拖动手柄；默认展开「对话」「计划」；右上角不再重复放卡片图标（卡片入口只在面板里，「⋮」开关面板并汇总红 / 黄点），右上角只放面板里没有的工具入口 | **已定**，WP375 |
 | 1036 | （编号说明）WP375 = 右侧面板照 Claude 修整（决策 1035）；WP376 = Anthropic 官方 key 改走原生接口（决策 1031） | 记录 |
+| 1037 | （Luoye 10-17）思考档命名「快 / 标准 / 深度」（不叫「深想」） | **已定**，WP373 |
+| 1038 | （Luoye 10-17 + Fable 实测）DeepSeek 新 Search / Fetch API：两者是独立 provider 可分开选，但 Fetch 抓 Reddit / LinkedIn / YouTube / X / Amazon / Trustpilot / NYT / Wikipedia / Google / 知乎全部失败，Search 不出 reddit / linkedin → 搜索与抓网页都继续用我们自己的（证据 docs/assets/web-search/deepseek-tools-api-2026-10-17.log） | **已定** |

@@ -6,7 +6,8 @@ worktree `../agentsws-wt/wp376-anthropic-native` · 分支 `wp/376-anthropic-nat
 1. 「Anthropic / Claude」官方 key 方案从 OpenAI 兼容层改走 WP374 已接好的官方 pi-ai `anthropic-messages`（不自写协议）。
 2. 已有配置启动时自动迁过去（地址、key 引用、选过的模型），迁移幂等、可回退；key 仍在本机加密库，不经 AI（决策 814）。
 3. 迁过去以后能调思考程度（接 WP373 的开关），能力标签照官方 Claude 目录。
-4. 中英文案与帮助文档同步。
+4. **并进决策 1027（Luoye 10-17）**：自己接的 OpenAI 兼容口（中转站等）也改走官方 pi-ai 的对应协议，档位和传法从官方来，思考档小钮（WP373）自动出现；官方没声明档位的型号不出。
+5. 中英文案与帮助文档同步。
 
 ## 测试
 本机假服务模拟 Anthropic 官方口（不调真实付费接口）：迁移前后同一配置可用、思考档生效、报错人话；stub / direct / dsh；`scripts/verify-changed.sh`（LC_ALL=en_US.UTF-8）+ 模拟三包。测试用 `--maxWorkers=2 --testTimeout=120000`。
