@@ -9,6 +9,19 @@
  * 是 `@agentsws/seo-core` 里的纯函数，同输入同输出。**只加不删**。
  */
 import type { Iso8601 } from './common.js'
+import type {
+  GeoAnswerInsight,
+  GeoConsistencyFinding,
+  GeoConsistencyRun,
+  GeoFixOwner,
+  GeoGapCause,
+  GeoOfficialFact,
+  GeoQualityView,
+  GeoRecheck,
+  GeoReportFigure,
+  GeoReportSlot,
+  GeoSourceMapRow,
+} from './geo-quality.js'
 import type { AiAnswerVia, AiCitationWhere, AiPlatform, SerpFeatures } from './search-data.js'
 
 /* ------------------------------------------------------------------ */
@@ -278,6 +291,14 @@ export interface GeoGap {
   cited_domains: string[]
   competitors: string[]
   suggestion: string
+  /** WP380：主要原因（十种之一，规则按手上的信号判）。 */
+  cause?: GeoGapCause
+  /** WP380：严重度 × 重要度 ÷ 工作量（越大越先做）。 */
+  priority?: number
+  /** WP380：负责的岗位（岗位模板 id；本职责自己做写 `content`）。 */
+  owner?: GeoFixOwner | 'content'
+  /** WP380：复查日期（`YYYY-MM-DD`）。 */
+  recheck_on?: string
 }
 
 /** `seo_report` 卡 `variant: 'weekly_geo'` 的 payload。 */
@@ -301,6 +322,24 @@ export interface SeoWeeklyGeoPayload {
   pending_cells?: number
   /** WP335：简报那一行（提及率与周变化 · 关注词平均排名与周变化）；这周没拿到回答不写。 */
   brief?: string
+  /** WP380：报告里每个数（带来路：实测 / 推算 / 估算，样本量与日期）。 */
+  figures?: GeoReportFigure[]
+  /** WP380：站外来源地图（被引用的外部来源按市场、类型分，带交给谁）。 */
+  source_map?: GeoSourceMapRow[]
+  /** WP380：最近一次对外说法一致性检查的几处（没查过不写）。 */
+  consistency?: {
+    run_id: string
+    at: string
+    findings: number
+    by_owner: { owner: GeoFixOwner; n: number }[]
+  }
+  /** WP380：复查——这周到期几条、做完几条（各自的建议）。 */
+  rechecks?: {
+    waiting: number
+    done: { id: string; change: string; advice?: string; delta_pp?: number }[]
+  }
+  /** WP380：给 WP381 留的位置（网站体检 / 商品信息体检 / AI 来源流量）；没有就不显示。 */
+  slots?: { site_check?: GeoReportSlot; product_check?: GeoReportSlot; ai_traffic?: GeoReportSlot }
 }
 
 /** WP166：一个市场这一周的 AI 可见度小结。 */
@@ -678,6 +717,11 @@ export interface GeoHistoryExport {
     brand_gsc: SeoBrandGscWeek[]
     /** WP321：模型从回答里认出的其他品牌（只用来建议加竞品，不进指标）。 */
     other_brands?: { answer_id: string; name: string }[]
+    /** WP380：AI 判断（比较 / 说法）、官方事实表、一致性检查、复查。 */
+    insights?: GeoAnswerInsight[]
+    facts?: GeoOfficialFact[]
+    consistency?: GeoConsistencyRun[]
+    rechecks?: GeoRecheck[]
   }
   /** `csv`：表名 → CSV 正文（UTF-8，带表头）。 */
   csv?: Record<string, string>
@@ -802,6 +846,20 @@ export type GeoWatchCardPayload =
       competitors: (BrandWatchCompetitor & { answers: number })[]
       week_of: string
     }
+  | {
+      /** WP380：对外说法不一致，按岗位分好（同 WP350 方案卡：就这样 = 各岗位各开一件事）。 */
+      form: 'geo_consistency'
+      run_id: string
+      batch_id: string
+      groups: { owner: GeoFixOwner; findings: GeoConsistencyFinding[] }[]
+      /** 复查日期（`YYYY-MM-DD`）：到期重跑提到我们的那组问题，看描述准确度。 */
+      recheck_on: string
+    }
+  | {
+      /** WP380：改完复查——前后对比与建议（就这样 = 照建议开一件跟进的事；保留则只记下）。 */
+      form: 'geo_recheck'
+      recheck: GeoRecheck
+    }
 
 /** 指标的几条硬规矩（docs/99 §5.3，借 open-seo）。 */
 export const GEO_TREND_WEEKS = 4
@@ -833,6 +891,19 @@ export interface GeoWeekPoint {
   mention_rate_4w?: number
   /** 与上一周比的提及率变化（百分点，只比两期都拿到回答的格；任一期覆盖 < 90% 不写）。 */
   change_pp?: number
+  /**
+   * WP380 比较胜率：同时提到我们与竞品、且分了高下的回答几条（`compared`）、其中更推荐我们的
+   * 几条（`wins`）、胜率（`wins ÷ compared`，没分高下的不进分母；`compared` 为 0 不写）。AI 判断。
+   */
+  compared?: number
+  wins?: number
+  win_rate?: number
+  /** WP380 描述准确度：回答里说到我们的几句（`claims`）、对 / 错 / 过时各几句、准确度（对 ÷ 说到）。AI 判断。 */
+  claims?: number
+  claims_correct?: number
+  claims_wrong?: number
+  claims_outdated?: number
+  accuracy?: number
 }
 
 /** 一条趋势线：全部 / 某个 AI / 某个市场 / 带不带品牌名。 */
@@ -941,6 +1012,8 @@ export interface GeoMetricsView {
   grid?: GeoGridView
   /** WP335：简报那一行（「AI 里提到我们 38%（+5）· 关注词平均第 12（−1）」）；这周没跑成不写。 */
   brief?: string
+  /** WP380：比较胜率与描述准确度那一块（官方事实、说错的几句、和各竞品比、一致性、复查）。 */
+  quality?: GeoQualityView
 }
 
 /* ------------------------------------------------------------------ */
