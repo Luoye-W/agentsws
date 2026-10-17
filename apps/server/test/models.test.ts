@@ -310,13 +310,15 @@ describe('WP25 §C 模板与空状态', () => {
    *
    * WP274：加 Google Gemini 一张卡（带生图）。十二条 → 七张。
    */
-  it('十二条模板 → 七张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
+  it('十三条模板 → 八张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
     expect(templates.map((t) => t.kind)).toEqual([
       'deepseek',
       'openai_compatible',
+      // WP374：Anthropic 兼容（自定义），紧跟 OpenAI 兼容那张
+      'anthropic_compatible',
       'openai_compatible',
       'openai_compatible',
       'openai_compatible',
@@ -348,6 +350,8 @@ describe('WP25 §C 模板与空状态', () => {
     expect(vendors).toEqual([
       'deepseek',
       'openai-compatible',
+      // WP374
+      'anthropic-compatible',
       'bailian',
       'openai',
       'anthropic',

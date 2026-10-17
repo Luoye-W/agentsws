@@ -79,10 +79,14 @@ export interface ChatMessage {
  * 不带签名。`kind` 标明是哪条线路的格式，别的 provider 认不得就不用。
  */
 export interface ReasoningReplay {
-  kind: 'deepseek-messages'
+  /** WP374（只加）：`anthropic-messages` = Anthropic 兼容口（官方 pi-ai 的 Messages 协议）的思考块。 */
+  kind: 'deepseek-messages' | 'anthropic-messages'
   model: string
-  /** 按回复里的原顺序。`signature` 原样保存、原样回传，一个字节都不改。 */
-  blocks: { thinking: string; signature?: string }[]
+  /**
+   * 按回复里的原顺序。`signature` 原样保存、原样回传，一个字节都不改。
+   * WP374（只加）：`redacted` = 被安全过滤遮住的那种思考块（原文是空的，密文在 `signature` 里，照样原样回传）。
+   */
+  blocks: { thinking: string; signature?: string; redacted?: boolean }[]
 }
 /** 17 §5.4 强制工具选择：`tool` 时模型这一轮只能调 `name` 那个工具；provider 不支持则网关退化为 `auto`。 */
 export interface ToolChoice {

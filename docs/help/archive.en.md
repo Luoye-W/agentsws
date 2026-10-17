@@ -1,6 +1,6 @@
 # Archiving and finding chats and tasks
 
-The chats and tasks **in progress** for each duty live behind the “Chats” icon at the top right of the window: it opens the side panel, where the Chats card lists that duty’s chats (on a position page, all of them grouped by duty). When nobody touches one for a few days, it is tucked away (archived) so the list only shows what is active. Archiving **deletes nothing**: messages, summary, memory and card history all stay, and you can bring it back any time.
+The chats and tasks **in progress** for each duty live in the Chats card of the side panel (the “⋮” at the far top right of the window opens and closes it): the Chats card lists that duty’s chats (on a position page, all of them grouped by duty). When nobody touches one for a few days, it is tucked away (archived) so the list only shows what is active. Archiving **deletes nothing**: messages, summary, memory and card history all stay, and you can bring it back any time.
 
 ## The “+” buttons in the sidebar
 
@@ -18,7 +18,7 @@ Only the company owner can create positions and add duties; other people don’t
 | Amber dot | Waiting for you: a card to approve, or finished work to look at |
 | No mark | Open, waiting for the next step |
 
-When something is waiting for you, the “Chats” icon at the top right shows an amber dot too. The cards themselves are under “Needs you” on the position page.
+When something is waiting for you, an amber dot shows after the Chats card title, and on the “⋮” at the top right too. The cards themselves are under “Needs you” on the position page.
 
 ## When things are archived
 

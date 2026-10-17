@@ -218,28 +218,30 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('WP372：点一张卡的图标 = 开成卡片堆、展开那一张；「显示更多」= 那一格的完整列表，「←」回卡片；再点图标收起', async () => {
+  it('WP375：「⋮」开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；再点「⋮」收起', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-settings'))
+    fireEvent.click(screen.getByTestId('rail-overflow'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
-    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('true')
+    expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
+    expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
+    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('false')
 
+    fireEvent.click(screen.getByTestId('rail-card-toggle-settings'))
+    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('true')
     fireEvent.click(screen.getByTestId('rail-card-more-settings'))
     expect(await screen.findByTestId('rail-panel-settings')).toBeDefined()
     fireEvent.click(screen.getByTestId('rail-panel-back'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
 
-    fireEvent.click(screen.getByTestId('rail-icon-plans'))
-    expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
-    fireEvent.click(screen.getByTestId('rail-icon-plans'))
+    fireEvent.click(screen.getByTestId('rail-overflow'))
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
   })
 
-  it('WP208：五个「这一层的设置」合成「设定」，旧的五个图标都不在了', () => {
+  it('WP208：五个「这一层的设置」合成「设定」，旧的五个图标都不在了（WP375 起卡片也不占右上角）', () => {
     renderRail()
-    expect(screen.getByTestId('rail-icon-settings').getAttribute('title')).toBe('设定')
+    expect(screen.queryByTestId('rail-icon-settings')).toBeNull()
     for (const id of [
       'role',
       'memory',
