@@ -19,6 +19,7 @@ import {
 } from '../net-cause.js'
 import { estimateInputTokens } from '../pricing.js'
 import { GatewayError, ProviderError } from '../types.js'
+import { deepseekChatEffortFields } from './deepseek-chat-thinking.js'
 import {
   type DeepSeekBalanceListener,
   deepseekQuotaError,
@@ -87,6 +88,12 @@ export interface OpenAiCompatibleOptions {
    * 不给 = 照旧（别家的 402 仍是泛泛的上游错误）。
    */
   deepseekBalance?: { onBalance?: DeepSeekBalanceListener }
+  /**
+   * WP378（决策 1055）：这一条是 **DeepSeek 官方 API key 走 Chat 口**（装配方只对官方地址给）。给了：
+   * 选的思考程度（{@link CompletionHints.reasoning_effort}）照官方 Chat 口写法发 `thinking` + `reasoning_effort`
+   * （见 `deepseek-chat-thinking.ts`，三档与工坊积分一致）。不给 = 照旧一格不发。
+   */
+  deepseekThinking?: boolean
   /**
    * WP194：每次对话现算的额外请求头（拿得到这一次的 {@link ModelMeta}）。「Agents 工坊官方接口」
    * 那一条用它带 `X-Agentsws-Member` / `X-Agentsws-Position`；别家不给。回的值只进请求头。
@@ -603,6 +610,10 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         model: options.model,
         messages: toWireMessages(req.messages),
         ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
+        // WP378：DeepSeek 官方 Chat 口——选了思考档才写 thinking / reasoning_effort（没选字节不变）
+        ...(options.deepseekThinking === true
+          ? deepseekChatEffortFields(options.model, req.reasoning_effort, req.thinking)
+          : {}),
         ...(req.seed === undefined ? {} : { seed: req.seed }),
         // WP243：输出上限 / 关思考
         ...hintFields(options.model, req),
