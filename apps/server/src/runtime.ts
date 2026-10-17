@@ -108,6 +108,8 @@ import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  COMPETITOR_STORE_ROLES,
+  COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
   humanizeToolNames,
@@ -204,6 +206,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...ADS_DATA_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
+    // WP393：店铺管理「竞品动向」——探平台 / 现在读一次只读外部公开页面；写的只是本机竞品清单
+    ...COMPETITOR_STORE_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -492,6 +496,11 @@ export interface RuntimeOptions {
    * 不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   setupRequestTool?: ToolExecutor
+  /**
+   * WP393（docs/104 一期 A）：店铺管理「竞品动向」那两个工具（探平台 / 现在读一次；`competitor-watch/store-tools.ts`）。
+   * 只给 `dtc.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  competitorStoreTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1252,6 +1261,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
+    const competitorStore = options.competitorStoreTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1282,7 +1292,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
-      setupRequest === undefined
+      setupRequest === undefined &&
+      competitorStore === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1340,6 +1351,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
       }
+      // WP393：店铺管理「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        competitorStore !== undefined &&
+        COMPETITOR_STORE_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return competitorStore(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1383,6 +1401,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
+      return true
+    if (options.competitorStoreTools !== undefined && COMPETITOR_STORE_TOOL_NAMES.includes(bare))
       return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
@@ -1898,6 +1918,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
+        // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给店铺管理）
+        ...(options.competitorStoreTools !== undefined &&
+        COMPETITOR_STORE_ROLES.includes(config.role_id)
+          ? COMPETITOR_STORE_TOOL_NAMES
+          : []),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))

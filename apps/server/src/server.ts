@@ -64,7 +64,7 @@ import {
 import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
-import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
+import { type PageFetch as BrandIntakeFetch, probeStore } from '@agentsws/brand-intake'
 import { normalizeSubreddit } from '@agentsws/browser-action'
 import type { CatalogNote } from '@agentsws/catalog'
 import type {
@@ -103,6 +103,7 @@ import type {
   SkillTier,
   StartRun,
   StorefrontPlatform,
+  StoreProbeResult,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
@@ -352,10 +353,18 @@ import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 // WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
 import {
+  browserTextReadOf,
+  type CompetitorStoreAssembly,
   type CompetitorWatchAssembly,
   competitorWatchSourceOf,
+  createCompetitorStore,
+  createCompetitorStoreTools,
   createCompetitorWatch,
   createCompetitorWatchDb,
+  createShopCatalogAdapter,
+  nodePageFetch,
+  type OwnShopRead,
+  readOwnShopProducts,
 } from './competitor-watch/index.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
@@ -1038,6 +1047,12 @@ export interface ServerOptions {
   competitorAdapters?: (
     workspace_id: WorkspaceId,
   ) => Partial<Record<CompetitorSourceKind, CompetitorIntakeAdapter>>
+  /** WP393：读竞品独立站时本机直接请求那一口（测试 / demo 塞录好的样本；不给 = 真请求）。 */
+  competitorShopFetch?: BrandIntakeFetch
+  /** WP393：探平台的替身（测试 / demo；不给 = 真探：读一下店里那两个公开地址）。 */
+  competitorProbe?: (url: string, now: string) => Promise<StoreProbeResult> | undefined
+  /** WP393：自家店商品的替身（测试 / demo；不给 = 从已连店铺读）。 */
+  competitorOwnShop?: (workspace_id: WorkspaceId) => Promise<OwnShopRead>
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -3457,6 +3472,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP393：店铺管理「竞品动向」方案卡（盯哪几家、每家走哪条路、什么算要紧、对标款）
+    if (brand.competitorStore !== undefined)
+      assembly.registerTarget(brand.competitorStore.setupTarget())
     // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
@@ -5636,6 +5654,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               target: async (id) => (await setupCardsOf(ws))?.target(id),
               targetIds: async () => (await setupCardsOf(ws))?.targetIds() ?? [],
             }),
+            // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给 dtc.store；托管实例没有）
+            ...(hostedBoot !== undefined
+              ? {}
+              : {
+                  competitorStoreTools: createCompetitorStoreTools({
+                    of: async () => competitorStore,
+                  }),
+                }),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -7507,6 +7533,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP392（docs/104）：竞品监控——监控源从唯一工作清单（GEO 关注设置）同步，进料口读一次、和上一次快照比、入库。
      * 托管实例不装（一、二期在本机跑，docs/104 §3.6）。
      */
+    /*
+     * WP393（docs/104 一期 A）：独立站进料口（先直接读、被挡改走内置浏览器；每页排进内置浏览器那条节流队）+
+     * 店铺管理「竞品动向」（方案卡、探平台、自家店比价、简报那一段）。测试 / demo 给了替身进料口就用替身。
+     */
+    const competitorIo = {
+      fetch: options.competitorShopFetch ?? nodePageFetch,
+      browser: () =>
+        webSearchChannel === undefined ? undefined : browserTextReadOf(webSearchChannel, ws),
+      page: <T>(task: () => Promise<T>) => webSearchThrottle.run(task),
+    }
+    const builtinShopAdapter = createShopCatalogAdapter(competitorIo)
+    let competitorStore: CompetitorStoreAssembly | undefined
     const competitorWatch: CompetitorWatchAssembly | undefined =
       hostedBoot !== undefined
         ? undefined
@@ -7517,8 +7555,69 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             tzOffsetMinutes: () => workData.tz_offset_minutes,
             brandWatch: async () => (await seoService.geoHistory()).watch(),
-            adapters: () => options.competitorAdapters?.(ws) ?? {},
+            adapters: () => ({
+              shop_catalog: builtinShopAdapter,
+              ...(options.competitorAdapters?.(ws) ?? {}),
+            }),
+            extraOwnRef: async () => competitorStore?.ownRef(),
+            afterRun: async (run) => competitorStore?.afterRun(run),
           })
+    if (competitorWatch !== undefined) {
+      // 自家店的商品（一轮里比价、配对标款各要一次：十分钟内复用）
+      let ownMemo: { at: number; read: OwnShopRead } | undefined
+      const ownShop = async (): Promise<OwnShopRead> => {
+        const now = Date.parse(clock.now())
+        if (ownMemo !== undefined && now - ownMemo.at < 10 * 60_000) return ownMemo.read
+        const read = options.competitorOwnShop
+          ? await options.competitorOwnShop(ws)
+          : await readOwnShopProducts((await shopOf(ws).catch(() => undefined))?.auth)
+        ownMemo = { at: now, read }
+        return read
+      }
+      competitorStore = createCompetitorStore({
+        workspace_id: ws,
+        store: competitorWatchDb.forWorkspace(ws),
+        now: () => clock.now(),
+        watch: () => competitorWatch,
+        brandWatch: async () => (await seoService.geoHistory()).watch(),
+        saveCompetitors: async (list) => {
+          await seoService.watchCompetitorsApply(list)
+        },
+        profile: () => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            ...(p?.category === undefined ? {} : { category: p.category }),
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.competitors === undefined
+              ? {}
+              : {
+                  competitors: p.competitors.map((c) => ({
+                    name: c.name,
+                    ...(c.url === undefined ? {} : { url: c.url }),
+                  })),
+                }),
+          }
+        },
+        probe: (url) =>
+          options.competitorProbe?.(url, clock.now()) ??
+          probeStore(
+            {
+              fetch: competitorIo.fetch,
+              ...(competitorIo.browser() === undefined
+                ? {}
+                : {
+                    browser: competitorIo.browser() as NonNullable<
+                      ReturnType<typeof competitorIo.browser>
+                    >,
+                  }),
+              page: competitorIo.page,
+            },
+            url,
+            clock.now(),
+          ),
+        ownShop,
+      })
+    }
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
@@ -7601,6 +7700,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
+      ...(competitorStore === undefined ? {} : { competitorStore }),
       redditLimits,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
