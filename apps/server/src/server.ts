@@ -6191,7 +6191,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       origin: async () => {
         // 公司档案里填的网站（设置页 / 向导那一格）；老数据退到工作区上记的那一份
         const domain = (
-          onboardingRef?.companyProfile(ws)?.domain ?? (await identity.getWorkspace(ws))?.profile?.domain
+          onboardingRef?.companyProfile(ws)?.domain ??
+          (await identity.getWorkspace(ws))?.profile?.domain
         )?.trim()
         if (domain === undefined || domain === '') return undefined
         return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`
