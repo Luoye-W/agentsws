@@ -1,0 +1,8 @@
+[
+{"id":101,"name":"Cruiser 700","slug":"cruiser-700","parent":0,"type":"simple","permalink":"https://ride.example/product/cruiser-700/","is_in_stock":true,"is_purchasable":true,
+ "prices":{"price":"129900","regular_price":"149900","sale_price":"129900","price_range":null,"currency_code":"USD","currency_symbol":"$","currency_minor_unit":2,"currency_decimal_separator":".","currency_thousand_separator":","},
+ "images":[{"id":5,"src":"https://ride.example/wp-content/uploads/cruiser-700.jpg","name":"cruiser-700"}],"variations":[]},
+{"id":102,"name":"Roadster &amp; Rack","slug":"roadster","parent":0,"type":"variable","permalink":"https://ride.example/product/roadster/","is_in_stock":false,"is_purchasable":true,
+ "prices":{"price":"99500","regular_price":"99500","sale_price":"99500","price_range":{"min_amount":"99500","max_amount":"109500"},"currency_code":"USD","currency_symbol":"$","currency_minor_unit":2},
+ "images":[],"variations":[{"id":1021,"attributes":[]}]}
+]
