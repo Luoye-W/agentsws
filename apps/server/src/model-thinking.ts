@@ -66,3 +66,24 @@ export function hasThinkingEffort(
   if (thinking?.toggle === true && effort === 'off') return true
   return thinking?.options.some((o) => o.effort === effort) === true
 }
+
+/**
+ * WP377（决策 1054，Luoye 10-17）：云端价目**写明了**三档各落到哪一档时照它出（工坊积分）。
+ * 例：DeepSeek v4 Pro「快」= `off`（官方 low 与 high 想得差不多，Fable 实测），标准 = high，深度 = max。
+ * 没写明的那档不出；默认 = 写明的「标准」（没写就用声明的默认档）。不到两档就不出小钮。
+ */
+export function thinkingOptionsFromLevels(
+  levels: Partial<Record<FreeChatThinkingLevel, ReasoningEffort>>,
+  declaredDefault?: ReasoningEffort,
+): FreeChatModelThinking | undefined {
+  const order: FreeChatThinkingLevel[] = ['fast', 'standard', 'deep']
+  const options: FreeChatModelThinking['options'] = []
+  for (const level of order) {
+    const effort = levels[level]
+    if (effort !== undefined) options.push({ level, effort })
+  }
+  if (options.length < 2) return undefined
+  const def = levels.standard ?? declaredDefault ?? options[0]?.effort
+  if (def === undefined || !options.some((o) => o.effort === def)) return undefined
+  return { options, default: def }
+}

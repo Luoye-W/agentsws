@@ -109,7 +109,8 @@ export function cloudRates(
   const base =
     baseEntry === undefined ? undefined : { model: baseEntry.model, fallback: listed === undefined }
   return {
-    models: list.map((e) => e.model),
+    // WP377：云端标了没有渠道（`available: false`）的不列进 AI 钮——选了必失败；价照旧认得
+    models: list.filter((e) => e.available !== false).map((e) => e.model),
     base,
     price(model) {
       const e = byModel.get(model)

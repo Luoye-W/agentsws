@@ -1096,3 +1096,8 @@
 | 1043 | （WP376）「Anthropic 兼容（自定义）」卡默认地址留空（两张卡按地址认，不能撞），表单里必填 | 建议：照已做的。**Luoye 10-17 按建议** |
 | 1044 | （WP376）OpenAI 兼容口的地址怎么和官方目录比：逐字比（大小写、结尾 `/` 不算），不做模糊匹配——百炼按量、智谱通用这两个预设地址官方目录里没有，不出档 | 建议：照官方。**Luoye 10-17 按建议** |
 | 1045 | （WP376）官方目录写着好几档、官方传法却只分「想 / 不想」的型号（如 Moonshot kimi-k2.6、百炼 Token Plan 的 Qwen / Kimi、Together、NVIDIA、智谱 glm-4.7）：不出三档，收成 WP373 的开 / 关开关；关不掉的不出。判定照官方 pi-ai `openai-completions` 的 `buildParams`：`compat.supportsReasoningEffort` 为假、且写法不是 openrouter / string-thinking / ant-ling、没有思考预算格、模板参数不按档取值（报告 §2a） | **Luoye 10-17 按建议**（采用 Fable 建议：显示成开关）；WP376 已做 |
+| 1051 | （WP377）工坊积分出思考小钮：只出云端价目写了档位的模型，眼下 DeepSeek v4 Pro、Flash | **Luoye 10-17 按建议**（见 1039） |
+| 1052 | （WP377）智谱 / Kimi / OpenAI / 通义官方能调、表已写好但关着 | **Luoye 10-17 按建议**：New API 目前只接了 DeepSeek 一个渠道，别家思考档保持关着；顺带价目给没有渠道的模型标 `available: false`，工坊积分 AI 钮不再列它们（选了必失败） |
+| 1053 | （WP377）不支持思考档的模型带了 `reasoning_effort`：云端去掉、按默认跑 | **Luoye 10-17 按建议** |
+| 1054 | （WP377）v4 Pro 的三档 | **Luoye 10-17 按 Fable 建议**：快 = 关掉思考（thinking.type=disabled）、标准 = high、深度 = max；Flash 快 = low / 标准 = high / 深度 = max。依据 Fable 10-17 钥匙串 key 直连实测：v4 Pro / Flash 的 max / high / low / disabled 全 200，reasoning_tokens 含在 completion_tokens 里，v4 Pro 收 low 但思考量与 high 差不多，disabled 只出 8 个 token。云端价目写明三档映射（`levels`） |
+| 1055 | （WP377）DeepSeek 自带 key 的 Chat 口也出思考小钮 | **Luoye 10-17 按建议**：另开 WP378 |
