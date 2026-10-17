@@ -26,6 +26,7 @@ import { HandoffError } from '@/components/work/handoff-error'
 import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import type { ReasoningEffort } from '@/lib/free-chat'
 import { TASK_TEXT_MAX } from '@/lib/handoff'
 import { LandingActions, useLandingActions } from './landing-actions'
 import { QuickAnswer } from './quick-answer'
@@ -45,6 +46,8 @@ export function PositionHandoff({
   const [text, setText] = useState('')
   /** WP342：这次交出去用哪个 AI（不选 = 品牌默认）；开出来的事项记着它，之后接着跑仍用它。 */
   const [model, setModel] = useState<string | undefined>(undefined)
+  /** WP370：连同模型一起选的思考程度（换模型就清掉）。 */
+  const [effort, setEffort] = useState<ReasoningEffort | undefined>(undefined)
   const attached = useAttachedDocs()
   const { open, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
@@ -84,7 +87,7 @@ export function PositionHandoff({
     setStarted(true)
     const files = attached.take().map((d) => ({ name: d.name, data: d.data }))
     open.mutate(
-      { title, model, files },
+      { title, model, ...(effort === undefined ? {} : { effort }), files },
       {
         // WP259：没交出去，字放回框里（框下说一句人话）；WP357：附件也放回去
         onError: () => {
@@ -131,7 +134,20 @@ export function PositionHandoff({
         placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
         label={t('position.entry.title')}
         testId="position-entry-input"
-        modelSlot={<ComposerModelPicker value={model} onChange={setModel} />}
+        modelSlot={
+          <ComposerModelPicker
+            value={model}
+            onChange={(next) => {
+              setModel(next)
+              setEffort(undefined)
+            }}
+            effort={effort}
+            onEffortChange={(next, picked) => {
+              setModel(picked)
+              setEffort(next)
+            }}
+          />
+        }
         // WP357：附资料（拖进来 / 「+」/ 粘贴文件）
         docs={attached.docs}
         onAttachDocs={attached.add}

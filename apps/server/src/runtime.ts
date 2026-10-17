@@ -41,6 +41,7 @@ import type {
   ObjectRef,
   PersonId,
   PromptSection,
+  ReasoningEffort,
   RunBrowser,
   RunConnection,
   RunEvent,
@@ -363,6 +364,11 @@ export interface RuntimeOptions {
    * `run.started` 上，direct / dsh 每次补全把它显式交给网关）。不给这个选项 = 不认事项上的选择（老行为）。
    */
   modelOverride?: (id: string) => ModelRef | undefined
+  /**
+   * WP370：事项选的思考程度（`Matter.model_effort`）这个模型现在还有没有这一档。有才进
+   * `RunRequest.runtime.reasoning_effort`；没有（换了目录、删了档）就按模型默认跑，不报错。不给 = 不认思考程度。
+   */
+  modelEffort?: (id: string, effort: ReasoningEffort) => boolean
   /**
    * WP147（截图给 AI 看）：现在生效的默认模型**验证过能看图**吗（WP127 三步验证的结论，
    * `ModelsAssembly.visionStatus()`）。只有 `'ok'` 才让 dsh 那条路由声明图片输入——
@@ -1717,6 +1723,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     // WP342：这件事自己选的 AI（输入框左下角那个钮）；认不出就跟品牌默认走
     const pinnedModel =
       input.matter.model === undefined ? undefined : options.modelOverride?.(input.matter.model)
+    // WP370：连同模型一起选的思考程度（模型现在还有这一档才带上）
+    const pinnedEffort =
+      pinnedModel === undefined ||
+      input.matter.model === undefined ||
+      input.matter.model_effort === undefined ||
+      options.modelEffort?.(input.matter.model, input.matter.model_effort) !== true
+        ? undefined
+        : input.matter.model_effort
     /*
      * WP216：平台专属的官方技能只在品牌平台对得上时留下（每次现取档案）。
      * 一本都没被滤掉时 `config` 就是原来那一份——非平台技能的职责字节一个不变。
@@ -2083,6 +2097,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             : { provider: 'stub', model: 'default', region: 'cn' }),
         seed,
         ...(pinnedModel === undefined ? {} : { model_pinned: true as const }),
+        ...(pinnedEffort === undefined ? {} : { reasoning_effort: pinnedEffort }),
       },
       // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
       ...(vertical === undefined ? {} : { vertical }),

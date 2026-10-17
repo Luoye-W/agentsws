@@ -51,6 +51,7 @@ import {
   getFreeChatModels,
   listFreeChatMessages,
   newAssistantTopic,
+  type ReasoningEffort,
   stopFreeChat,
   streamFreeChat,
   undoFanoutNotes,
@@ -114,6 +115,8 @@ function AssistantThreadPage(): React.ReactNode {
   const { solo, known } = useMode()
   /** WP342（决策 853）：这条对话用的 AI（输入框左下角那个钮）；没选过就用上一条回答用的，再没有就是品牌默认。 */
   const [pick, setPick] = useState<string | undefined>(undefined)
+  /** WP370：这段对话选的思考程度（换模型就清掉 = 回到那个模型的默认档）。 */
+  const [effort, setEffort] = useState<ReasoningEffort | undefined>(undefined)
   const [toggles, setToggles] = useState<ComposerToggles>({ web_search: false, knowledge: false })
   const [live, setLive] = useState<Live | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
@@ -246,6 +249,7 @@ function AssistantThreadPage(): React.ReactNode {
     }
     const opts = {
       ...(picked === undefined ? {} : { model: picked }),
+      ...(picked === undefined || effort === undefined ? {} : { effort }),
       web_search: toggles.web_search,
       knowledge: toggles.knowledge,
     }
@@ -403,6 +407,12 @@ function AssistantThreadPage(): React.ReactNode {
           value={picked}
           onChange={(next) => {
             setPick(next)
+            setEffort(undefined)
+          }}
+          effort={effort}
+          onEffortChange={(next, model) => {
+            setPick(model)
+            setEffort(next)
           }}
           testId="free-chat-model"
         />

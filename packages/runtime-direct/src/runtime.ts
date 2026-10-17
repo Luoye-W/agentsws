@@ -6,6 +6,7 @@ import type {
   ModelGateway,
   ModelRef,
   ObjectRef,
+  ReasoningEffort,
   RunEvent,
   RunOutput,
   RunRequest,
@@ -107,6 +108,8 @@ const DEFAULT_RETURN_WINDOW_DAYS = 14
 interface CompleteArgsBase {
   /** WP342：这件事自己选的 AI（`RunRequest.runtime.model_pinned`）；不给 = 网关按 purpose 选。 */
   model?: ModelRef
+  /** WP370：连同模型一起选的思考程度（`RunRequest.runtime.reasoning_effort`）。 */
+  reasoning_effort?: ReasoningEffort
   messages: ChatMessage[]
   tools?: ToolDef[]
   meta: Parameters<ModelGateway['complete']>[0]['meta']
@@ -562,6 +565,10 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         const args: CompleteArgsBase = {
           // WP342：这件事自己选了 AI——显式交给网关（不按 purpose 选）
           ...(req.runtime.model_pinned === true ? { model: req.runtime.model } : {}),
+          // WP370：思考程度（只跟着「这件事自己选的 AI」走）
+          ...(req.runtime.model_pinned === true && req.runtime.reasoning_effort !== undefined
+            ? { reasoning_effort: req.runtime.reasoning_effort }
+            : {}),
           messages: [...messages],
           tools,
           meta: {

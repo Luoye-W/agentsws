@@ -60,7 +60,12 @@ function secretStore(): SecretStore {
 interface FakePort extends SubscriptionModelPort {
   signed: boolean
   fail: 'sign_in' | 'expired' | 'rate_limited' | undefined
-  calls: { person: string | undefined; model: string; messages: ChatMessage[] }[]
+  calls: {
+    person: string | undefined
+    model: string
+    messages: ChatMessage[]
+    effort?: string | undefined
+  }[]
 }
 
 function fakePort(): FakePort {
@@ -71,7 +76,12 @@ function fakePort(): FakePort {
     signedIn: () => port.signed,
     catalog: () => (port.signed ? CATALOG : []),
     async complete(person, _provider, request) {
-      port.calls.push({ person, model: request.model, messages: request.messages })
+      port.calls.push({
+        person,
+        model: request.model,
+        messages: request.messages,
+        effort: request.reasoning_effort,
+      })
       if (port.fail !== undefined)
         throw Object.assign(new Error(`upstream said 401 (${port.fail})`), {
           name: 'SubscriptionChatError',
@@ -130,7 +140,8 @@ describe('WP362 (a) 模型面：订阅进下拉、能设默认、花费 0', () =
     const view = await models.port.defaults(owner)
     expect(view.choices).toContainEqual({
       id: 'openai-codex/gpt-5.5',
-      label: 'ChatGPT 订阅（gpt-5.5）',
+      // WP370：设置里的下拉与 AI 钮同一份数据，显示目录里的名字
+      label: 'ChatGPT 订阅（GPT-5.5）',
     })
     expect(view.choices.filter((c) => c.id.startsWith('openai-codex/'))).toHaveLength(3)
     const chat = models.chatChoices().filter((c) => c.id.startsWith('openai-codex/'))
@@ -181,6 +192,49 @@ describe('WP362 (a) 模型面：订阅进下拉、能设默认、花费 0', () =
     })
     expect(port.calls[1]?.model).toBe('gpt-6-sol')
     expect(JSON.stringify(events)).not.toContain(TOKEN)
+  })
+})
+
+describe('WP370 订阅那一组：目录名、自带联网、每个模型的思考程度', () => {
+  it('AI 钮清单：订阅每个模型带目录名、自带联网；声明了档的带三档白话；选的档经网关交到订阅', async () => {
+    const port = fakePort()
+    const withEfforts = CATALOG.map((m) =>
+      m.id === 'gpt-5.5'
+        ? {
+            ...m,
+            efforts: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const,
+            context_window: 272_000,
+          }
+        : m,
+    )
+    port.catalog = () =>
+      withEfforts.map((m) => ({ ...m, ...('efforts' in m ? { efforts: [...m.efforts] } : {}) }))
+    const { models, gateway } = modelsWith(port)
+    const chat = models.chatChoices().filter((c) => c.id.startsWith('openai-codex/'))
+    expect(chat.map((c) => c.name)).toEqual(CATALOG.map((m) => m.name))
+    expect(chat.every((c) => c.native_search === true)).toBe(true)
+    const gpt55 = chat.find((c) => c.id === 'openai-codex/gpt-5.5')
+    expect(gpt55?.context_window).toBe(272_000)
+    expect(gpt55?.thinking?.options.map((o) => `${o.level}:${o.effort}`)).toEqual([
+      'fast:low',
+      'standard:medium',
+      'deep:high',
+    ])
+    // 目录里没声明档的不出思考那一行
+    expect(chat.find((c) => c.id === 'openai-codex/gpt-6-sol')?.thinking).toBeUndefined()
+    await gateway.complete({
+      model: { provider: 'openai-codex', model: 'gpt-5.5' },
+      reasoning_effort: 'high',
+      messages: [{ role: 'user', content: '你好' }],
+      meta: {
+        workspace_id: 'ws_1',
+        assignment_id: 'a',
+        role_id: 'r',
+        run_id: 'run_3',
+        purpose: 'run',
+      },
+    })
+    expect(port.calls.at(-1)).toMatchObject({ model: 'gpt-5.5', effort: 'high' })
   })
 })
 

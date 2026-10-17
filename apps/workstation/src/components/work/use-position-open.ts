@@ -33,6 +33,8 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
     mutationFn: async (input: {
       title: string
       model?: string | undefined
+      /** WP370：连同 `model` 一起选的思考程度 */
+      effort?: string | undefined
       /** WP357：附上的资料（base64） */
       files?: { name: string; data: string }[] | undefined
     }) => {
@@ -41,6 +43,7 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
         text: input.title,
         // WP342：输入框左下角选的 AI
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
         ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
       })
       // 没交出去：错误交给框下那一句（WP259，字放回框里），这里不再画一份

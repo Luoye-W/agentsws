@@ -87,6 +87,7 @@ import type {
   FreeChatStore,
 } from './free-chat-store.js'
 import { RATE_NOTE } from './model-rates.js'
+import { hasThinkingEffort } from './model-thinking.js'
 import type { ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
@@ -892,6 +893,11 @@ async function answer(
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },
   }
+  // WP370：思考程度只认这个模型列出来的那几档（换了模型、旧档不在了就按模型默认）
+  const effort =
+    input.effort !== undefined && hasThinkingEffort(choice.thinking, input.effort)
+      ? input.effort
+      : undefined
   if ((prompt.images ?? []).length > 0 && choice.vision === 'no')
     return { ...withModel, ...fail(`「${choice.label}」看不了图。换一个能看图的模型再发。`) }
 
@@ -1052,6 +1058,8 @@ async function answer(
       const offered = new Set(tools.map((t) => t.name))
       const out = await gateway.complete({
         model,
+        // WP370：这段对话选的思考程度（这个模型声明过这一档才带）
+        ...(effort === undefined ? {} : { reasoning_effort: effort }),
         messages,
         ...(tools.length === 0 ? {} : { tools }),
         meta,

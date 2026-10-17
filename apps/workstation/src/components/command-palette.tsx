@@ -57,6 +57,7 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import type { ReasoningEffort } from '@/lib/free-chat'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
@@ -131,6 +132,8 @@ export function CommandPalette({
   const [sentence, setSentence] = useState('')
   /** WP342：⌘K 交给某个岗位时这次用哪个 AI（不选 = 品牌默认）。 */
   const [model, setModel] = useState<string | undefined>(undefined)
+  /** WP370：连同模型一起选的思考程度（换模型就清掉）。 */
+  const [effort, setEffort] = useState<ReasoningEffort | undefined>(undefined)
   useEffect(() => {
     if (!open) {
       setSearch('')
@@ -188,10 +191,14 @@ export function CommandPalette({
       handoff: Handoff
       role_id?: string
       model?: string | undefined
+      effort?: ReasoningEffort | undefined
     }) => {
       void askAtPosition({
         position: input.assignment,
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.model === undefined || input.effort === undefined
+          ? {}
+          : { effort: input.effort }),
         text: input.handoff.title,
         ...(input.handoff.summary === '' ? {} : { summary: input.handoff.summary }),
         // WP207：从职责行的「+」来的，职责已经定了（跳过岗位内路由，与快捷提示同一条路）
@@ -225,6 +232,7 @@ export function CommandPalette({
                 handoff: { title: split.title, summary: split.summary ?? '' },
                 role_id: compose.role_id,
                 model,
+                effort,
               },
               {
                 onSuccess: () => {
@@ -239,7 +247,19 @@ export function CommandPalette({
               {t('command.compose.title', { name: compose.label })}
             </span>
             {/* WP342：这次用哪个 AI（选了只管这一件） */}
-            <ComposerModelPicker value={model} onChange={setModel} placement="down" />
+            <ComposerModelPicker
+              value={model}
+              onChange={(next) => {
+                setModel(next)
+                setEffort(undefined)
+              }}
+              effort={effort}
+              onEffortChange={(next, picked) => {
+                setModel(picked)
+                setEffort(next)
+              }}
+              placement="down"
+            />
           </span>
           <Input
             autoFocus

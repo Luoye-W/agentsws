@@ -32,6 +32,7 @@ import type {
   RunId,
   WorkspaceId,
 } from './common.js'
+import type { ReasoningEffort } from './model.js'
 import type { RunResult } from './run.js'
 import type { RunCancelReason } from './run-limits.js'
 
@@ -305,6 +306,11 @@ export interface Matter {
    * 缺省 = 跟品牌默认走（老事项都没有这一格）。选的那个后来不能用了（删了 / 断了），运行退回默认。
    */
   model?: string
+  /**
+   * WP370（只加）：这件事选的**思考程度**（AI 钮里「快 / 标准 / 深想」落到的那一档；只在 `model` 有值时有意义）。
+   * 换了 `model` 就清掉（官方同款：换模型回到那个模型的默认档）。缺省 = 模型默认。
+   */
+  model_effort?: ReasoningEffort
 }
 
 /** WP287：岗位里问的一句（见 {@link Matter.ask}）。 */

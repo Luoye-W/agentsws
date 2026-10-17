@@ -76,7 +76,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
-import type { FreeChatFile } from '@/lib/free-chat'
+import type { FreeChatFile, ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 import {
   archiveMatter,
@@ -208,6 +208,12 @@ export function MatterPage(): ReactNode {
   /** WP342（决策 853）：换这件事用的 AI（只这一件；之后接着跑仍用它）。 */
   const pickModel = useMutation({
     mutationFn: (model: string) => setMatterModel(id, model),
+    onSuccess: invalidate,
+  })
+  /** WP370：调思考程度（连同当前模型一起存在这件事上）。 */
+  const pickEffort = useMutation({
+    mutationFn: (input: { model: string; effort: ReasoningEffort }) =>
+      setMatterModel(id, input.model, input.effort),
     onSuccess: invalidate,
   })
 
@@ -866,9 +872,20 @@ export function MatterPage(): ReactNode {
           sending={false}
           modelSlot={
             <ComposerModelPicker
-              value={(pickModel.isError ? undefined : pickModel.variables) ?? view?.matter.model}
+              value={
+                (pickEffort.isPending ? pickEffort.variables?.model : undefined) ??
+                (pickModel.isError ? undefined : pickModel.variables) ??
+                view?.matter.model
+              }
               onChange={(next) => {
                 pickModel.mutate(next)
+              }}
+              effort={
+                (pickEffort.isPending ? pickEffort.variables?.effort : undefined) ??
+                (pickModel.isPending ? undefined : view?.matter.model_effort)
+              }
+              onEffortChange={(effort, model) => {
+                pickEffort.mutate({ model, effort })
               }}
             />
           }

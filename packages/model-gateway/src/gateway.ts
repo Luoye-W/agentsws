@@ -435,6 +435,10 @@ class Gateway implements ModelGatewayApi {
               ? {}
               : { max_output_tokens: req.max_output_tokens }),
             ...(req.thinking === undefined ? {} : { thinking: req.thinking }),
+            // WP370：思考程度（provider 只认自己声明过的档）
+            ...(req.reasoning_effort === undefined
+              ? {}
+              : { reasoning_effort: req.reasoning_effort }),
           })
           // WP188：停了就不再等上游（不会流式的 provider 也一样停得下来）
           const raw = req.signal === undefined ? await call : await untilAborted(call, req.signal)

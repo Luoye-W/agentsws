@@ -136,10 +136,10 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
     expect(pluginView(allowlist[0] as OfficialPluginSpec, backend).state).toBe('available')
     const plan = planChange({ action: 'install', name: SAMPLE, allowlist, backend })
     const card = cardPayload(plan)
-    expect(card).toMatchObject({ action: 'install', name: SAMPLE, version: '0.2.1-alpha.4' })
+    expect(card).toMatchObject({ action: 'install', name: SAMPLE, version: '0.2.1-alpha.5' })
     expect(card.tools).toContain('session_search')
     await applyChange({ plan, backend, protectedFiles: [defaultProfilePatchPath()] })
-    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.4' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.5' })
     expect(await backend.skipped([SAMPLE])).toEqual([])
     expect(effectiveBundles(allowlist, backend)).toEqual([
       '@deepseek-ai/dsh-base',
@@ -173,7 +173,7 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
     const spec = allowlist.find((s) => s.name === SAMPLE) as OfficialPluginSpec
     expect(pluginView(spec, backend).state).toBe('upgradable')
     const plan = planChange({ action: 'upgrade', name: SAMPLE, allowlist, backend })
-    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.1-alpha.4' })
+    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.1-alpha.5' })
     await applyChange({ plan, backend, protectedFiles: [] })
     expect(pluginView(spec, backend).state).toBe('installed')
   })

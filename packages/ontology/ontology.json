@@ -134,7 +134,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "d683ae5b6db905ffadd27171cf77c763",
+  "source_digest": "3bd395c3e66eaf6001ba453fe65ca7e3",
   "objects": [
     {
       "id": "ad",
@@ -3065,6 +3065,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "model_effort",
+          "type": "ReasoningEffort",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -5579,6 +5585,12 @@
         {
           "name": "model",
           "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "model_effort",
+          "type": "ReasoningEffort",
           "sensitivity": "internal",
           "optional": true
         }

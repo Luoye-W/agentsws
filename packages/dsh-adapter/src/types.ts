@@ -5,6 +5,7 @@ import type {
   ModelMeta,
   ModelRef,
   ObjectRef,
+  ReasoningEffort,
   RunRequest,
   ToolDef,
 } from '@agentsws/contracts'
@@ -27,6 +28,10 @@ export interface ModelGatewayLike {
     meta: ModelMeta
     seed?: number
     max_cost_base?: number
+    /** WP342：这件事自己选的 AI（`model_pinned` 时）。 */
+    model?: ModelRef
+    /** WP370：这件事选的思考程度（`RunRequest.runtime.reasoning_effort`）。 */
+    reasoning_effort?: ReasoningEffort
   }): Promise<Completion>
 }
 
