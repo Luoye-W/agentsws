@@ -80,6 +80,8 @@ import type {
   PageFetch,
 } from '@agentsws/model-gateway'
 import {
+  anthropicCompatibleProvider,
+  anthropicModelFacts,
   catalogModels,
   checkModel,
   cloudImageModels,
@@ -102,6 +104,7 @@ import {
   imageVendorOf,
   isRetiredImageModel,
   jsonFileUploadIndex,
+  loadAnthropicCatalog,
   NO_IMAGE_MODEL_ZH,
   normalizeImageModel,
   openaiCompatibleProvider,
@@ -605,6 +608,12 @@ export const CLAUDE_SUBSCRIPTION_URL = 'https://claude.ai'
  */
 export const ANTHROPIC_OPENAI_COMPAT_URL = 'https://api.anthropic.com/v1'
 
+/** WP374：Anthropic 本家的原生地址（「Anthropic 兼容（自定义）」那张卡的默认值；官方 SDK 自己接 `/v1/messages`）。 */
+export const ANTHROPIC_NATIVE_URL = 'https://api.anthropic.com'
+
+/** WP374：Anthropic Messages 接口的官方说明（卡上与教程里那一条外链）。 */
+export const ANTHROPIC_MESSAGES_DOC_URL = 'https://docs.anthropic.com/en/api/messages'
+
 /**
  * WP274（决策 255）：Google 官方的 **OpenAI 兼容口**（ai.google.dev/gemini-api/docs/openai，10-08 核对）。
  * 文字模型走这一层；同一把 key 生图时改打原生 `…/v1beta/interactions`（Nano Banana 2.1）。
@@ -774,6 +783,35 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
         region: 'cn',
       },
     ],
+  },
+  /*
+   * WP374（决策 980，Luoye 10-17）：**Anthropic 兼容（自定义）**——Claude 中转站、自建网关这类
+   * 「Anthropic 格式」的服务。和上面那张 OpenAI 兼容卡同一种用法（填地址 + key），协议换成官方
+   * pi-ai 的 `anthropic-messages`。默认地址填 Anthropic 本家（有 Anthropic key 的人直接能用），
+   * 中转站把地址换成它给的那一条（带不带 `/v1` 都行）。
+   */
+  {
+    kind: 'anthropic_compatible',
+    label: 'Anthropic 兼容（自定义）',
+    summary:
+      '任何"Anthropic 格式"的服务都能接：Claude 中转站、自建网关。填地址和 key，能拉到模型清单就勾选，拉不到就手填。',
+    vendor: 'anthropic-compatible',
+    vendor_label: 'Anthropic 兼容（自定义）',
+    vendor_summary:
+      '任何"Anthropic 格式"的服务都能接：Claude 中转站、自建网关。填地址和 key，能拉到模型清单就勾选，拉不到就手填。',
+    plan_label: '自己填地址与 key',
+    plan_order: 1,
+    auth: 'api_key',
+    default_base_url: ANTHROPIC_NATIVE_URL,
+    default_model: 'claude-sonnet-4-5',
+    region: 'global',
+    steps: [
+      '在中转站（或 Anthropic 控制台）建一把 API key',
+      '找到它给的接口地址（Anthropic 格式那一条，带不带 /v1 都行）',
+      '把地址和 key 填进下面的表单，点「拉取模型列表」挑模型；拉不到就手填模型名',
+      '点「测试」确认能通',
+    ],
+    links: [{ label: 'Anthropic Messages 接口说明', url: ANTHROPIC_MESSAGES_DOC_URL }],
   },
   /*
    * WP88：**阿里云百炼**给三张卡——「标准（按量）」「Token Plan（订阅）」「Coding Plan（订阅）」。
@@ -1476,6 +1514,17 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...(account.fetch === undefined ? { files: deepseekFiles } : { fetch: account.fetch }),
       })
     }
+    if (config.kind === 'anthropic_compatible') {
+      // WP374：Anthropic 兼容口（Claude 中转站等）——协议走官方 pi-ai 的 anthropic-messages，key 每次现取
+      return anthropicCompatibleProvider({
+        ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
+        baseUrl: config.base_url,
+        apiKey: keySource(config.id),
+        model,
+        provider: config.id,
+        region: config.region,
+      })
+    }
     if (deepseekUsesMessages(config, env)) {
       // WP143：DeepSeek 官方 API key 改走 Messages 口（开关见 DEEPSEEK_MESSAGES_ENV，默认关）
       return deepseekMessagesProvider({
@@ -1529,8 +1578,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     if (config.kind === 'openai-codex')
       return options.subscription?.catalog('openai-codex').find((m) => m.id === model)?.vision
     const test = state.tests[config.id]
-    if (test?.vision === undefined) return undefined
-    return test.model === `${config.id}/${model}` ? test.vision : undefined
+    const tested =
+      test?.vision !== undefined && test.model === `${config.id}/${model}` ? test.vision : undefined
+    // WP374：Anthropic 兼容口没测过这个模型时，照官方目录的声明（目录认不出就仍是「没验证过」）
+    if (tested === undefined && config.kind === 'anthropic_compatible')
+      return anthropicModelFacts(model)?.vision
+    return tested
   }
 
   const visionStatusOf = (config: ModelProviderConfig, model = config.model): ModelVisionStatus => {
@@ -1863,6 +1916,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...(thinking === undefined ? {} : { thinking }),
       }
     }
+    if (c.kind === 'anthropic_compatible') {
+      // WP374：只照官方 pi-ai 的 anthropic 目录（名字、上下文、思考档）；中转站自己起名的模型一样不编。
+      // 官方目录没声明自带联网，这一格不给
+      const entry = anthropicModelFacts(model)
+      const thinking = entry?.efforts === undefined ? undefined : thinkingOptionsOf(entry.efforts)
+      return {
+        ...(entry === undefined ? {} : { name: entry.name, context_window: entry.context_window }),
+        ...(thinking === undefined ? {} : { thinking }),
+      }
+    }
     const messages =
       c.kind === 'deepseek_account' || (c.kind === 'deepseek' && deepseekUsesMessages(c, env))
     if (!messages) return {}
@@ -2001,6 +2064,17 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   reassemble()
 
+  /*
+   * WP374：先把官方 pi-ai 的 anthropic 目录读进来（只读、不联网，几毫秒）——AI 钮里那几格
+   * （名字、上下文、思考档、看图）是同步取的。读完了、而且配了 Anthropic 兼容口，就重装一次，
+   * 让看图的声明也跟上目录。
+   */
+  void loadAnthropicCatalog()
+    .then(() => {
+      if (state.providers.some((p) => p.kind === 'anthropic_compatible')) reassemble()
+    })
+    .catch(() => undefined)
+
   /** WP66（52 O4）：端一份快照。深拷一遍，调用方改它不会动到这个品牌的状态。 */
   const exportSettings = (): ModelSettingsSnapshot =>
     JSON.parse(
@@ -2097,16 +2171,26 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
     // 值只在这个回调里活一次：取 → 进 header → 结束
     const apiKey = hasProbeKey ? () => probeKey : keySource(id)
-    const provider = openaiCompatibleProvider({
-      baseUrl: base_url,
-      apiKey,
-      model: fallback?.model ?? 'probe',
-      provider: id,
-      region: probe?.region ?? fallback?.region ?? 'cn',
-      env,
-      timeoutMs: DISCOVER_TIMEOUT_MS,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    })
+    // WP374：草稿说了是哪种就按哪种；没说就看存着的那条；都没有按 OpenAI 兼容（老行为）
+    const kind = probe?.kind ?? fallback?.kind ?? state.providers.find((p) => p.id === id)?.kind
+    const provider =
+      kind === 'anthropic_compatible'
+        ? anthropicCompatibleProvider({
+            baseUrl: base_url,
+            apiKey,
+            model: fallback?.model ?? 'probe',
+            provider: id,
+          })
+        : openaiCompatibleProvider({
+            baseUrl: base_url,
+            apiKey,
+            model: fallback?.model ?? 'probe',
+            provider: id,
+            region: probe?.region ?? fallback?.region ?? 'cn',
+            env,
+            timeoutMs: DISCOVER_TIMEOUT_MS,
+            ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+          })
     /**
      * 拉不到时的兜底：内置价目表里这一家有哪几个模型（WP88）。
      *
