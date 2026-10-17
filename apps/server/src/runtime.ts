@@ -2174,6 +2174,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         settle = resolve
       }),
     })
+    /** WP373（决策 978）：这次是哪个模型答的（进 `agent_message`；替身档不记）。 */
+    const used = active.get(run_id)?.view.model
+    const replyModel = (): { model?: string } =>
+      used === undefined || used.provider === 'stub'
+        ? {}
+        : { model: `${used.provider}/${used.model}` }
     const byId = new Map(request.context.map((c) => [c.id, c]))
     const seen: ObjectRef[] = []
     scope = {
@@ -2453,6 +2459,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             actor: { kind: 'agent', id: input.actor.assignment_id },
             run_id,
             stopped: { reason: stoppedReason },
+            ...replyModel(),
           })
         }
         await recordBlocked()
@@ -2526,6 +2533,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
           ...(next === undefined ? {} : { next_suggestion: next }),
+          ...replyModel(),
         })
       }
       await recordBlocked()

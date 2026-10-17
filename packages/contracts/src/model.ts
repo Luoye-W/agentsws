@@ -161,7 +161,7 @@ export interface CompletionHints {
   /** `off` = 别走思考（推理）模式；不给 = provider 默认。 */
   thinking?: 'off'
   /**
-   * WP370（只加）：这一次的**思考程度**（输入框 AI 钮里选的「快 / 标准 / 深想」落到的那一档）。
+   * WP370（只加）：这一次的**思考程度**（输入框 AI 钮里选的「快 / 标准 / 深度」落到的那一档）。
    * 与官方 dsh `ModelSelection.reasoningEffort` 同一套 id；provider 只认自己声明过的档（ChatGPT 订阅照
    * pi-ai `getSupportedThinkingLevels`，DeepSeek 账号照官方 off / low / high / max），认不得的照旧（不报错）。
    * 与 `thinking: 'off'` 同时给时以 `thinking` 为准（那是调用方硬要的「别想」）。不给 = provider 默认。
@@ -171,7 +171,7 @@ export interface CompletionHints {
 
 /**
  * WP370：思考程度的 id（官方 dsh / pi-ai 的 `ModelThinkingLevel` 同名）。界面不直接露这些词，
- * 只露「快 / 标准 / 深想」三档白话（见 `@agentsws/api` 的 `FreeChatModelThinking`）。
+ * 只露「快 / 标准 / 深度」三档白话（见 `@agentsws/api` 的 `FreeChatModelThinking`）。
  */
 export type ReasoningEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 

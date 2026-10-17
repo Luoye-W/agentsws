@@ -41,7 +41,7 @@ const opt = (name) => {
 }
 const flag = (name) => args.includes(name)
 const MODEL = opt('--model') ?? 'gpt-5.5'
-/** WP370：思考程度三档白话（fast 快 / standard 标准 / deep 深想）；不给 = 模型默认档。 */
+/** WP370：思考程度三档白话（fast 快 / standard 标准 / deep 深度）；不给 = 模型默认档。 */
 const EFFORT_LEVEL = opt('--effort')
 const QUESTION =
   opt('--question') ??
@@ -217,7 +217,7 @@ try {
   )
   if (!inDefaults.some((c) => c.id === `openai-codex/${MODEL}`))
     throw new Error(`订阅目录里没有 ${MODEL}（--model 换一个上面列出来的）`)
-  // WP370：这个模型能调哪几档思考程度（AI 钮里「思考：快 / 标准 / 深想」那一行的数据）
+  // WP370：这个模型能调哪几档思考程度（AI 钮里「思考：快 / 标准 / 深度」那一行的数据）
   const picked = chat.choices.find((c) => c.id === `openai-codex/${MODEL}`)
   const thinking = picked?.thinking
   say(
@@ -248,7 +248,7 @@ try {
   const res = await call('POST', `/v1/free-chat/sessions/${session.id}/messages`, {
     text: QUESTION,
     web_search: true,
-    // WP370：连同模型一起交思考程度（AI 钮里选「深想」就是这样交上去的）
+    // WP370：连同模型一起交思考程度（AI 钮里选「深度」就是这样交上去的）
     ...(effort === undefined ? {} : { model: `openai-codex/${MODEL}`, effort }),
   })
   const frames = (await res.text())

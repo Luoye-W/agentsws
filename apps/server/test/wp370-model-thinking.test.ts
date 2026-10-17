@@ -3,7 +3,7 @@
  *
  * | 组 | 用什么 | 钉什么 |
  * |---|---|---|
- * | (a) 三档白话 | `thinkingOptionsOf` | 订阅（off…xhigh）→ 快 low / 标准 medium / 深想 high；DeepSeek（off/low/high/max，默认 high）→ low / high / max；只剩一档不出 |
+ * | (a) 三档白话 | `thinkingOptionsOf` | 订阅（off…xhigh）→ 快 low / 标准 medium / 深度 high；DeepSeek（off/low/high/max，默认 high）→ low / high / max；只剩一档不出 |
  * | (b) 运行时 | 真 `createRuntime`（stub / direct / dsh 进程内）+ 记账的替身网关 | 事项带 `model_effort` → direct / dsh 每次补全都交 `reasoning_effort`；这个模型没有这一档 → 不交（按默认）；没选的事项一个字节不变 |
  * | (c) 工作端口 | `createWorkPort` + 真 `Work` | 开事项时记下思考程度；换模型清掉；这个模型没有这一档 → 拒 |
  *
@@ -41,7 +41,7 @@ const effortOk = (id: string, effort: ReasoningEffort): boolean =>
   )
 
 describe('WP370 (a) 三档白话', () => {
-  it('ChatGPT 订阅：快 = low、标准 = medium（默认）、深想 = high', () => {
+  it('ChatGPT 订阅：快 = low、标准 = medium（默认）、深度 = high', () => {
     expect(SUB_THINKING).toEqual({
       options: [
         { level: 'fast', effort: 'low' },
@@ -52,7 +52,7 @@ describe('WP370 (a) 三档白话', () => {
     })
   })
 
-  it('DeepSeek：照官方四档、默认 high → 快 = low、标准 = high、深想 = max', () => {
+  it('DeepSeek：照官方四档、默认 high → 快 = low、标准 = high、深度 = max', () => {
     expect(thinkingOptionsOf(['off', 'low', 'high', 'max'], 'high')).toEqual({
       options: [
         { level: 'fast', effort: 'low' },
@@ -153,7 +153,7 @@ async function runOnce(mode: Mode, matter: Matter): Promise<(ReasoningEffort | n
 
 describe('WP370 (b) 事项选的思考程度：direct / dsh 每次补全都交给网关', () => {
   for (const mode of ['direct', 'dsh'] as const) {
-    it(`${mode}：选了「深想」就每次带 high；这个模型没有那一档就不带；没选的不带`, async () => {
+    it(`${mode}：选了「深度」就每次带 high；这个模型没有那一档就不带；没选的不带`, async () => {
       const deep = await runOnce(mode, matterOf('mat_a', 'openai-codex/gpt-5.5', 'high'))
       expect(deep.length).toBeGreaterThan(0)
       for (const e of deep) expect(e).toBe('high')

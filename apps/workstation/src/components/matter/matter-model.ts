@@ -25,6 +25,8 @@ export type MatterItem =
   | { kind: 'card'; key: string; event: MatterEvent }
   | { kind: 'choice'; key: string; event: MatterEvent }
   | { kind: 'blocked'; key: string; event: MatterEvent }
+  /** WP373（决策 978）：真换了模型——「上面是 X 答的，接下来用 Y」（居中一行灰字）。 */
+  | { kind: 'switch'; key: string; from: string; to: string }
 
 export type MatterState = 'running' | 'doing' | 'awaiting' | 'blocked' | 'done'
 
@@ -47,6 +49,33 @@ export function openBlock(timeline: readonly MatterEvent[]): MatterEvent | undef
     if (e.blocked !== undefined) return e
   }
   return undefined
+}
+
+/**
+ * WP373（决策 978）：在哪一条前面插「上面是 X 答的，接下来用 Y」。照官方 dsh：AI 这段话用的模型（`agent_message.model`）
+ * 跟它前面最后一段 AI 话的不一样才插；插在引出它的那句人话前面（中间没人说话——比如「接着跑」——就插在这段 AI 话前面）。
+ * 老事件没有 `model` 的不参与。
+ */
+export function modelSwitchesOf(
+  timeline: readonly MatterEvent[],
+): Map<string, { from: string; to: string }> {
+  const out = new Map<string, { from: string; to: string }>()
+  let previous: string | undefined
+  let asked: MatterEvent | undefined
+  for (const e of timeline) {
+    if (e.kind === 'human_message') {
+      asked ??= e
+      continue
+    }
+    if (e.kind !== 'agent_message') continue
+    if (e.model !== undefined) {
+      if (previous !== undefined && e.model !== previous)
+        out.set((asked ?? e).id, { from: previous, to: e.model })
+      previous = e.model
+    }
+    asked = undefined
+  }
+  return out
 }
 
 export function buildItems(
@@ -99,6 +128,7 @@ export function buildItems(
       }
     }
   })
+  const switches = modelSwitchesOf(timeline)
   const out: MatterItem[] = []
   let lastDay = ''
   const push = (item: MatterItem, at: string): void => {
@@ -111,6 +141,9 @@ export function buildItems(
   }
   for (const [i, e] of timeline.entries()) {
     const key = e.id
+    const switched = switches.get(e.id)
+    if (switched !== undefined)
+      push({ kind: 'switch', key: `switch-${e.id}`, from: switched.from, to: switched.to }, e.at)
     let item: MatterItem | undefined
     if (e.kind === 'human_message') item = { kind: 'me', key, event: e }
     else if (e.kind === 'agent_message') {
