@@ -97,7 +97,7 @@ describe('79：今天 N 个待办（M 个已过期）', () => {
       position_id: 'pos-x',
       now: NOW,
       today: { from: '2026-10-07T00:00:00.000Z', to: '2026-10-08T00:00:00.000Z' },
-      duties: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销', assignment_id: 'asg_pr' }],
+      duties: [{ role_id: 'pr.reddit', role_name: '外部版块', assignment_id: 'asg_pr' }],
       matters: [],
       todos: [
         todo({ id: 't_late', position_id: 'asg_pr', due: '2026-10-05T09:00:00.000Z' }),

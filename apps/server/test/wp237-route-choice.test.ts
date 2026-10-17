@@ -125,7 +125,7 @@ afterEach(async () => {
 })
 
 describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的那条开跑', () => {
-  it('「Reddit 调研」→ 直接走「自家版运营」并起运行；时间线挂「换成 Reddit 营销」', async () => {
+  it('「Reddit 调研」→ 直接走「官方版块」并起运行；时间线挂「换成 外部版块」', async () => {
     const out = await open('帮我做一份 Reddit 调研，看看大家怎么评价我们')
     expect(out.ambiguous).toBe(false)
     expect(out.approval_item_id).toBeUndefined()
@@ -136,10 +136,10 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
 
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
     // WP291：任务那一行排在原话后面、头一句「记成了任务，按「X」做」，还能换的挂在它上面
-    expect(routed?.text).toBe('记成了任务，按「自家版运营」做')
+    expect(routed?.text).toBe('记成了任务，按「官方版块」做')
     expect(routed?.route).toEqual({
       picked: 'social.reddit',
-      options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }],
+      options: [{ role_id: 'pr.reddit', role_name: '外部版块' }],
       task: true,
     })
     // 运行用的是那条职责的分配，不是请求头上负责人那条
@@ -147,7 +147,7 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
     expect((await startedRuns()).length).toBe(1)
   })
 
-  it('一键「换成 Reddit 营销」= 改派并重跑', async () => {
+  it('一键「换成 外部版块」= 改派并重跑', async () => {
     const out = await open('帮我做一份 Reddit 调研，看看大家怎么评价我们')
     const res = await dataOf<{ matter: { role_id?: string }; run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/reroute`, {
@@ -166,17 +166,17 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
 })
 
 describe('WP237（Fable 代定）一个判据词都没命中：按岗位里职责的先后取第一条开跑', () => {
-  it('「整理一下」→ 走「自家版运营」并起运行，时间线挂「换成 Reddit 营销」，不出卡', async () => {
+  it('「整理一下」→ 走「官方版块」并起运行，时间线挂「换成 外部版块」，不出卡', async () => {
     const out = await open('整理一下')
     expect(out.ambiguous).toBe(false)
     expect(out.approval_item_id).toBeUndefined()
     expect(out.picked?.role_id).toBe('social.reddit')
     expect(out.run_id).toBeDefined()
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
-    expect(routed?.text).toContain('看不出更像哪条，先按「自家版运营」来做的')
+    expect(routed?.text).toContain('看不出更像哪条，先按「官方版块」来做的')
     expect(routed?.route).toEqual({
       picked: 'social.reddit',
-      options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }],
+      options: [{ role_id: 'pr.reddit', role_name: '外部版块' }],
     })
     expect((await startedRuns()).length).toBe(1)
   })
@@ -327,11 +327,11 @@ describe('WP237 ②③ → WP287：几条都沾一点、谁都不像也不出卡
   })
 })
 describe('WP237 还没定职责时续一句话：绝不落到负责人的通用助手', () => {
-  it('「按 自家版运营这条来，开始吧。」→ 钉到 自家版运营，用那条分配起运行', async () => {
+  it('「按 官方版块这条来，开始吧。」→ 钉到 官方版块，用那条分配起运行', async () => {
     const out = await open('你好')
     const said = await dataOf<{ run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/messages`, {
-        text: '按 自家版运营这条来，开始吧。',
+        text: '按 官方版块这条来，开始吧。',
       }),
     )
     expect(said.run_id).toBeDefined()
@@ -413,7 +413,7 @@ describe('WP237（Fable 代定）「换成 X」重跑之前先停掉还在跑的
       run: true,
     })
     // 停在新运行之前（那一刻只有开事项时那一次）
-    expect(calls).toEqual([`stop ${out.matter.id} 已换成「自家版运营」重跑 runs=1`])
+    expect(calls).toEqual([`stop ${out.matter.id} 已换成「官方版块」重跑 runs=1`])
     expect(res.run_id).toBeDefined()
     expect(runs(out.matter.id).length).toBe(2)
   })

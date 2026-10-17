@@ -63,8 +63,8 @@ export const PR_ROLES: readonly PrRoleSpec[] = [
   { role_id: 'pr.press', zh: '新闻稿', en: 'Press Releases', mode: 'api' },
   {
     role_id: 'pr.reddit',
-    zh: 'Reddit 营销',
-    en: 'Reddit Marketing',
+    zh: '外部版块',
+    en: 'Other Subreddits',
     mode: 'api',
     // 56 §1 那张 `reddit` 卡，**不新建一张**（文件头第二段）
     connector_kind: 'reddit',

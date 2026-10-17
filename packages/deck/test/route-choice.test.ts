@@ -18,12 +18,12 @@ const legacy = () =>
       matter_id: 'mat_1',
       candidates: [
         { role_id: 'social.reddit', role_name: 'Reddit 运营', score: 0.51, why: [] },
-        { role_id: 'pr.reddit', role_name: 'Reddit 营销', score: 0.49, why: [] },
+        { role_id: 'pr.reddit', role_name: '外部版块', score: 0.49, why: [] },
       ],
     },
     options: [
       { id: 'social.reddit', label: 'Reddit 运营' },
-      { id: 'pr.reddit', label: 'Reddit 营销' },
+      { id: 'pr.reddit', label: '外部版块' },
     ],
   })
 
@@ -34,7 +34,7 @@ describe('WP237 走哪条职责的卡', () => {
     expect(card.layout).toBe('choice')
     expect(card.options).toEqual([
       { id: 'social.reddit', label: '走「Reddit 运营」' },
-      { id: 'pr.reddit', label: '走「Reddit 营销」' },
+      { id: 'pr.reddit', label: '走「外部版块」' },
     ])
   })
 
@@ -43,11 +43,11 @@ describe('WP237 走哪条职责的卡', () => {
       kind: 'claim',
       payload: {
         form: 'route_choice',
-        options: [{ id: 'pr.reddit', label: '走「Reddit 营销」' }],
+        options: [{ id: 'pr.reddit', label: '走「外部版块」' }],
       },
     })
     expect(projectCard(fresh, ctx).options).toEqual([
-      { id: 'pr.reddit', label: '走「Reddit 营销」' },
+      { id: 'pr.reddit', label: '走「外部版块」' },
     ])
   })
 

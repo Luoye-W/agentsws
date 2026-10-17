@@ -55,8 +55,8 @@ const base = {
   now: NOW,
   today: { from: '2026-10-06T00:00:00.000Z', to: '2026-10-07T00:00:00.000Z' },
   duties: [
-    { role_id: 'pr.reddit', role_name: 'Reddit 营销', assignment_id: 'asg_pr' },
-    { role_id: 'social.reddit', role_name: '自家版运营', assignment_id: 'asg_social' },
+    { role_id: 'pr.reddit', role_name: '外部版块', assignment_id: 'asg_pr' },
+    { role_id: 'social.reddit', role_name: '官方版块', assignment_id: 'asg_social' },
   ],
   matters: [] as Matter[],
   todos: [] as Todo[],
@@ -119,7 +119,7 @@ describe('buildPositionWork', () => {
     ])
     const byId = new Map(view.items.map((i) => [i.id, i]))
     expect(byId.get('matter:m_wait')?.role_id).toBe('social.reddit')
-    expect(byId.get('matter:m_wait')?.role_name).toBe('自家版运营')
+    expect(byId.get('matter:m_wait')?.role_name).toBe('官方版块')
     expect(byId.get('matter:m_open')?.source).toBe('you')
     expect(byId.get('todo:t_1')?.movable).toBe(true)
     expect(byId.get('matter:m_open')?.movable).toBe(false)
