@@ -1,10 +1,10 @@
 /**
  * WP237（Fable 10-06 真机）：「这件事该走哪条职责」——卡上与事项页上的按钮就是候选职责。
  *
- * - 卡：按钮是「走「Reddit 运营」」「走「Reddit 营销」」，不是「认领 / 不是客户问题」；
+ * - 卡：按钮是「走「Reddit 运营」」「走「外部版块」」，不是「认领 / 不是客户问题」；
  *   点哪个就是带着那个选项批（服务端据此钉职责并开跑）。
  * - 事项页：还没定职责时，标题下与路由那一条下面都给这几个选项；点了 = 改派并开跑。
- * - 打平按分取的那一条下面是「换成「Reddit 营销」」。
+ * - 打平按分取的那一条下面是「换成「外部版块」」。
  */
 import type { MatterView } from '@agentsws/contracts'
 import { screen, waitFor, within } from '@testing-library/react'
@@ -41,7 +41,7 @@ const view = (
       matter_id: 'mat_r',
       at: T0,
       kind: 'status' as const,
-      text: '这件事像「Reddit 运营」也像「Reddit 营销」',
+      text: '这件事像「Reddit 运营」也像「外部版块」',
       actor: { kind: 'agent' as const, id: 'position_router' },
       ...(route === undefined ? {} : { route }),
     },
@@ -72,7 +72,7 @@ const position = {
     },
     {
       role_id: 'pr.reddit',
-      role_name: 'Reddit 营销',
+      role_name: '外部版块',
       default: false,
       assignment_ids: ['asg_p'],
       my_assignment_id: 'asg_p',
@@ -122,7 +122,7 @@ describe('WP237 卡上的按钮就是候选职责', () => {
           content_variants: { zh_summary: '看不出这件事像这个岗位下的哪条职责，先问一句' },
           options: [
             { id: 'social.reddit', label: '走「Reddit 运营」' },
-            { id: 'pr.reddit', label: '走「Reddit 营销」' },
+            { id: 'pr.reddit', label: '走「外部版块」' },
           ],
           available_actions: ['approve', 'reject', 'snooze', 'open'],
           action_labels: { approve: '认领', reject: '不是客户问题' },
@@ -138,7 +138,7 @@ describe('WP237 卡上的按钮就是候选职责', () => {
     expect(bar.textContent).not.toContain('不是客户问题')
     expect(screen.queryByTestId('deck-card-options')).toBeNull()
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
-    await user.click(within(bar).getByRole('button', { name: '走「Reddit 营销」' }))
+    await user.click(within(bar).getByRole('button', { name: '走「外部版块」' }))
     expect(onDecide).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'approve', selected_option_id: 'pr.reddit' }),
     )
@@ -152,13 +152,13 @@ describe('WP237 事项页上同样给这几个选项', () => {
       {
         options: [
           { role_id: 'social.reddit', role_name: 'Reddit 运营' },
-          { role_id: 'pr.reddit', role_name: 'Reddit 营销' },
+          { role_id: 'pr.reddit', role_name: '外部版块' },
         ],
       },
     )
     renderMatter()
     const go = await screen.findAllByTestId('matter-route-go')
-    expect(go.map((b) => b.textContent)).toEqual(['走「Reddit 运营」', '走「Reddit 营销」'])
+    expect(go.map((b) => b.textContent)).toEqual(['走「Reddit 运营」', '走「外部版块」'])
     // 路由那一条下面也有
     expect(within(screen.getByTestId('matter-route-options')).getAllByRole('button')).toHaveLength(
       2,
@@ -170,10 +170,10 @@ describe('WP237 事项页上同样给这几个选项', () => {
     })
   })
 
-  it('打平按分取了「Reddit 运营」：那一条下面是「换成「Reddit 营销」」，点了改派并重跑', async () => {
+  it('打平按分取了「Reddit 运营」：那一条下面是「换成「外部版块」」，点了改派并重跑', async () => {
     current = view(
       { role_id: 'social.reddit', position_id: 'asg_s' },
-      { picked: 'social.reddit', options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }] },
+      { picked: 'social.reddit', options: [{ role_id: 'pr.reddit', role_name: '外部版块' }] },
     )
     renderMatter()
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
@@ -181,7 +181,7 @@ describe('WP237 事项页上同样给这几个选项', () => {
     await screen.findByText('按「Reddit 运营」做的')
     await user.click(screen.getByTestId('matter-route-switch'))
     const box = await screen.findByTestId('matter-route-options')
-    await user.click(within(box).getByRole('button', { name: '换成「Reddit 营销」' }))
+    await user.click(within(box).getByRole('button', { name: '换成「外部版块」' }))
     await waitFor(() => {
       expect(rerouteMatter).toHaveBeenCalledWith('mat_r', 'pr.reddit', { run: true })
     })
@@ -190,7 +190,7 @@ describe('WP237 事项页上同样给这几个选项', () => {
   it('已经换成那条了：不再出「换成」它', async () => {
     current = view(
       { role_id: 'pr.reddit', position_id: 'asg_p' },
-      { picked: 'social.reddit', options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }] },
+      { picked: 'social.reddit', options: [{ role_id: 'pr.reddit', role_name: '外部版块' }] },
     )
     renderMatter()
     await screen.findByTestId('matter')

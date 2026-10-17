@@ -5,7 +5,7 @@
  * 标题永远带上下文（"记忆 · 店铺管理"），因为第三栏最容易出的错就是
  * 人看着一栏数字却不知道它说的是哪个岗位（36 §9：面板内容永远按当前岗位取）。
  */
-import { X } from 'lucide-react'
+import { ArrowLeft, Maximize2, Minimize2, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { RailScope, RailTier } from '@/components/rail/rail-scope'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
@@ -22,6 +22,9 @@ export function RailPanel({
   onClose,
   children,
   testId,
+  onBack,
+  wide,
+  onWide,
 }: {
   /** 面板名（"记忆" / "技能" / "知识" / "额度"）。 */
   title: string
@@ -34,11 +37,28 @@ export function RailPanel({
   onClose: () => void
   children: ReactNode
   testId: string
+  /** WP372：回到卡片堆（从一张卡「显示更多」进来的那一格）。不给就不画。 */
+  onBack?: () => void
+  /** WP372（决策 1019）：现在是不是临时加宽着；给了 `onWide` 才画那个钮。 */
+  wide?: boolean
+  onWide?: () => void
 }): ReactNode {
   const { t } = useApp()
   return (
     <section className="flex h-full min-h-0 flex-col" data-testid={testId} data-tier={tier}>
       <header className="flex items-center gap-2 border-b px-3 py-2">
+        {onBack === undefined ? null : (
+          <button
+            type="button"
+            aria-label={t('rail.back')}
+            title={t('rail.back')}
+            data-testid="rail-panel-back"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={onBack}
+          >
+            <ArrowLeft aria-hidden className="size-4" />
+          </button>
+        )}
         {/* WP213：这一格说的是哪个岗位 / 哪条职责，先用图标认（docs/36 §8.3） */}
         {scope === undefined ? null : scope.tier === 'role' ? (
           <DutyIcon role_id={scope.scope_id} className="text-ws-muted-fg" />
@@ -48,6 +68,23 @@ export function RailPanel({
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium" data-testid="rail-panel-title">
           {scope === undefined ? title : `${title} · ${scope.name}`}
         </h2>
+        {onWide === undefined ? null : (
+          <button
+            type="button"
+            aria-pressed={wide === true}
+            aria-label={t(wide === true ? 'rail.unwiden' : 'rail.widen')}
+            title={t(wide === true ? 'rail.unwiden' : 'rail.widen')}
+            data-testid="rail-panel-wide"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={onWide}
+          >
+            {wide === true ? (
+              <Minimize2 aria-hidden className="size-4" />
+            ) : (
+              <Maximize2 aria-hidden className="size-4" />
+            )}
+          </button>
+        )}
         <button
           type="button"
           aria-label={t('rail.close')}

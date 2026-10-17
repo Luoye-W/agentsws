@@ -111,7 +111,67 @@ export interface PanelTypeDefinition {
    * WP324：**只按资源地址开**，不上图标轨、⌘K 不列（连接卡：从「去连接」开，平时不占一个图标）。
    */
   hidden?: boolean
+  /**
+   * WP372（决策 1001）：**露在窗口右上角那一排**，数字是排第几（小的在左）。
+   * 不给 = 收在最右那个「⋮」菜单里。只有不属于任何卡的面板（浏览器、教程…）用得上它；
+   * 五张卡自己的图标看 {@link RailCardDefinition.pinned}。
+   */
+  pinned?: number
+  /**
+   * WP372（决策 1004）：这个面板**归哪张卡**（`settings` → 卡「设定」的「显示更多」）。
+   * 归了卡的面板不进「⋮」菜单（从卡上点进去）；按资源地址开它时（连接卡 `agentsws://connect/…`），
+   * 右侧面板改成**展开那张卡并滚到那一条**，不再单独开一格。
+   */
+  card?: string
 }
+
+/**
+ * WP372（决策 1004 / 1005，Luoye 10-17）：右侧面板里的**一张卡**（对话 / 产出 / 计划 / 连接 / 设定）。
+ *
+ * 和面板一样两段式：类型（静态，右上角图标、标题行摘要与状态点要它）+ 身体（`lazy()`，展开才下载）。
+ * 卡收起时只画标题行（图标、名字、状态点、一句摘要）；展开画身体——最多 {@link CARD_LIMIT} 条 +「显示更多」。
+ */
+export interface RailCardDefinition {
+  id: string
+  /** i18n 键。 */
+  label: string
+  icon: LucideIcon
+  /** 默认顺序（小的在上）。人拖过之后按人记住的那一份（`lib/ui-state.ts`）。 */
+  order: number
+  /** 露在右上角那一排时排第几；不给 = 只在「⋮」与面板里。 */
+  pinned?: number
+  /** 「显示更多」开哪个面板（完整列表）。 */
+  panel?: string
+  /** 没有完整面板时「显示更多」去哪一页（连接 → 连接页）。 */
+  moreHref?: string
+  /**
+   * 标题行的一句摘要与状态点。是 hook（与 `useBadge` 同一条规矩：轻，只读缓存或一个小请求）。
+   * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。图标调用时 `detail` 为假：只要点，摘要要的重请求别发。
+   */
+  useStatus?(props: RailPanelBodyProps, detail: boolean): CardStatus | undefined
+}
+
+/** 卡标题行的状态点：红 = 坏了要修（连接过期），黄 = 等你看。 */
+export type CardDot = 'alert' | 'attention'
+
+export interface CardStatus {
+  /** 收起时标题行右边那一句（已经翻译好）。 */
+  summary?: string
+  dot?: CardDot
+  /** 悬停在状态点 / 图标上说的那一句（「1 个连接要重连」）。 */
+  dotLabel?: string
+}
+
+/** 卡展开后最多列几条（决策 1004：4 条 +「显示更多」）。 */
+export const CARD_LIMIT = 4
+
+export interface RailCardBodyProps extends RailPanelBodyProps {
+  limit: number
+  /** 「显示更多」：开完整列表（卡的 `panel`），由外壳给。 */
+  onMore: () => void
+}
+
+export type RailCardBody = ComponentType<RailCardBodyProps>
 
 /** WP208：图标右上角那个数，和悬停时替换 tooltip 的那一句（「3 个定时任务在跑」）。 */
 export interface PanelBadge {
@@ -297,10 +357,72 @@ export function resolvePanel(scope: PanelOpenScope): PanelTypeDefinition | undef
   return undefined
 }
 
+const cards = new Map<string, RailCardDefinition>()
+const cardBodies = new Map<string, RailCardBody>()
+
+/** WP372：声明一张卡（id 重复直接抛，同面板）。 */
+export function registerRailCard(definition: RailCardDefinition): Disposer {
+  if (cards.has(definition.id)) throw new Error(`右侧面板卡片 id 重复：${definition.id}`)
+  cards.set(definition.id, definition)
+  return () => {
+    if (cards.get(definition.id) === definition) cards.delete(definition.id)
+  }
+}
+
+/** WP372：给一张卡挂身体（传 `lazy()`：没展开就不下载）。 */
+export function registerRailCardBody(id: string, Body: RailCardBody): Disposer {
+  if (cardBodies.has(id)) throw new Error(`右侧面板卡片身体重复：${id}`)
+  cardBodies.set(id, Body)
+  return () => {
+    if (cardBodies.get(id) === Body) cardBodies.delete(id)
+  }
+}
+
+export function railCard(id: string): RailCardDefinition | undefined {
+  return cards.get(id)
+}
+
+export function railCardBody(id: string): RailCardBody | undefined {
+  return cardBodies.get(id)
+}
+
+/**
+ * 卡的顺序：先按人记住的那一份（`saved`，里面认不出的 id 跳过），没记过的按默认 `order` 接在后面。
+ * 新注册的卡（以后加第六张）因此不会因为人拖过一次就永远找不到。
+ */
+export function listRailCards(saved: readonly string[] = []): RailCardDefinition[] {
+  const byOrder = [...cards.values()].sort((a, b) => a.order - b.order)
+  const known = saved.filter((id, i) => cards.has(id) && saved.indexOf(id) === i)
+  const rest = byOrder.filter((c) => !known.includes(c.id))
+  return [...known.map((id) => cards.get(id) as RailCardDefinition), ...rest]
+}
+
+export type PinnedItem =
+  | { kind: 'card'; card: RailCardDefinition }
+  | { kind: 'panel'; panel: PanelTypeDefinition }
+
+/** 右上角露出来的：卡（`pinned`）与不归卡的面板（`pinned`），按数字排。 */
+export function pinnedItems(): PinnedItem[] {
+  const out: { at: number; item: PinnedItem }[] = []
+  for (const card of cards.values())
+    if (card.pinned !== undefined) out.push({ at: card.pinned, item: { kind: 'card', card } })
+  for (const panel of listPanelTypes())
+    if (panel.pinned !== undefined && panel.card === undefined)
+      out.push({ at: panel.pinned, item: { kind: 'panel', panel } })
+  return out.sort((a, b) => a.at - b.at).map((x) => x.item)
+}
+
+/** 「⋮」菜单里的工具：不藏、不归卡、没露在右上角的面板（浏览器、变更审阅、教程…）。 */
+export function menuPanels(): PanelTypeDefinition[] {
+  return listPanelTypes().filter((p) => p.card === undefined && p.pinned === undefined)
+}
+
 /** 只给测试用：把注册表清空（每个用例各自注册自己那几个）。 */
 export function resetPanelRegistry(): void {
   types.clear()
   bodies.clear()
   aliases.clear()
+  cards.clear()
+  cardBodies.clear()
   counter = 0
 }

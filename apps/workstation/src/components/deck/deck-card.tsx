@@ -275,7 +275,7 @@ export function DeckCardView({
 
   const isQuestion = card.options !== undefined && card.options.length > 0
   /**
-   * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 Reddit 营销」），
+   * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 外部版块」），
    * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
    */
   /** WP276：「X 想把「…」交给你」——选项是自己的岗位 +「不接」（理由可选），不是「走哪条职责」。 */

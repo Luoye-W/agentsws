@@ -228,7 +228,7 @@ describe('左栏与 ⌘K', () => {
 
   it('⌘K 两处都搜得到：网站聊天、网站聊天窗', async () => {
     shell()
-    fireEvent.click(screen.getByTestId('top-command'))
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
     await waitFor(() => {
       const to = screen.getAllByTestId('command-page').map((el) => el.getAttribute('data-to'))
       expect(to).toContain('/messages?view=all&source=chat')

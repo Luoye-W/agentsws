@@ -5,8 +5,8 @@
  * 起一个 demo（端口默认 4399，不碰 4317；stub 运行时，一行网都不出），全程不碰任何凭据。
  * 插件文件夹用一个临时目录假装（只放一个 manifest.json），好让「打开插件文件夹 / Chrome 扩展页」那一块出来：
  *
- * 1. `1-onboarding-step4`：首次设置第 ③ 步勾了「Reddit 营销」「YouTube 红人」→ 第 ④ 步最前是「先装好浏览器插件」；
- * 2. `2-reddit-position-card`：自建「Reddit 运营」岗位（自家版运营 + Reddit 营销）→ 岗位页顶上那张装插件卡；
+ * 1. `1-onboarding-step4`：首次设置第 ③ 步勾了「外部版块」「YouTube 红人」→ 第 ④ 步最前是「先装好浏览器插件」；
+ * 2. `2-reddit-position-card`：自建「Reddit 运营」岗位（官方版块 + 外部版块）→ 岗位页顶上那张装插件卡；
  * 3. `3-first-chat-card`：第一次在这个岗位说话 → 事项里先说一句、带上装插件那张卡；
  * 4. `4-reddit-next-step`：配上插件（演示令牌）、插件来问但还没连 Reddit → 顶上那张换成「还差一步」。
  *
@@ -155,7 +155,7 @@ async function main() {
       console.log(`  📷 ${name}.png`)
     }
 
-    // ① 首次设置：从第 ③ 步开始（AI 已接、第 ② 步做过），勾「Reddit 营销」「YouTube 红人」→ 第 ④ 步
+    // ① 首次设置：从第 ③ 步开始（AI 已接、第 ② 步做过），勾「外部版块」「YouTube 红人」→ 第 ④ 步
     {
       const page = await context.newPage()
       page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
@@ -185,7 +185,7 @@ async function main() {
       await page.close()
     }
 
-    // ② 自建「Reddit 运营」：自家版运营 + Reddit 营销，分给本人
+    // ② 自建「Reddit 运营」：官方版块 + 外部版块，分给本人
     const position = await api(token, owner, 'POST', '/v1/org/positions', {
       name: 'Reddit 运营',
       roles: [

@@ -972,7 +972,7 @@ export interface MountedWorld {
 
 /**
  * WP331：担巡查的职责（报告积木里「查巡查数据 / 立即巡查」只给它们）。现在只有 Reddit 巡查（WP328）：
- * 自家版运营与别人的版两条。
+ * 官方版块与别人的版两条。
  */
 const REPORT_WATCH_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit'])
 
@@ -7454,7 +7454,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
-     * 起草的人 = 担「自家版运营」的那个人（没人担就不起草，条目留在待处理里）。
+     * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
      */
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()

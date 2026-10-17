@@ -133,7 +133,7 @@ describe('WP360 需要插件的岗位一开始就引导装插件', () => {
     )
     expect(plan.extension).toEqual({
       uses: ['reddit', 'kol'],
-      needed_by: ['自家版运营', 'Reddit 营销', 'YouTube 红人'],
+      needed_by: ['官方版块', '外部版块', 'YouTube 红人'],
       paired: false,
     })
     const none = await data<OnboardingPlanView>(
@@ -149,7 +149,7 @@ describe('WP360 需要插件的岗位一开始就引导装插件', () => {
   it('岗位页那张卡 → 第一次对话带卡（只一次、全品牌一张）→ 稍后 → 配对 → 连 Reddit → 自动出巡查方案卡', async () => {
     const reddit = await position('Reddit 运营', ['social.reddit', 'pr.reddit'])
     const own = reddit['social.reddit']
-    if (own === undefined) throw new Error('没分到自家版运营')
+    if (own === undefined) throw new Error('没分到官方版块')
 
     // ① 岗位页那张卡要的数
     const needs = (asg: string, roles: string) =>

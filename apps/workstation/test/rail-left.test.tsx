@@ -206,10 +206,11 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
     expect(within(menu).queryByTestId('account-lang')).toBeNull()
   })
 
-  it('顶栏只剩 ⌘K 与两个芯片：主题 / 语言按钮不在顶栏上了', () => {
+  it('顶栏只剩右上角那一排（WP372：没有 ⌘K 搜索框了）：主题 / 语言按钮不在顶栏上', () => {
     renderShell()
     const header = screen.getByRole('banner')
-    expect(within(header).getByLabelText('命令面板 (⌘K)')).toBeDefined()
+    expect(within(header).queryByLabelText('命令面板 (⌘K)')).toBeNull()
+    expect(within(header).getByTestId('rail-overflow')).toBeDefined()
     expect(within(header).queryByTestId('account-block')).toBeNull()
     expect(within(header).queryByTestId('brand-switcher')).toBeNull()
   })

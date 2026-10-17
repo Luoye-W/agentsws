@@ -40,7 +40,7 @@ const base = {
   position_id: 'social-media',
   now: NOW,
   today: { from: '2026-10-07T00:00:00.000Z', to: '2026-10-08T00:00:00.000Z' },
-  duties: [{ role_id: 'social.reddit', role_name: '自家版运营', assignment_id: 'asg_social' }],
+  duties: [{ role_id: 'social.reddit', role_name: '官方版块', assignment_id: 'asg_social' }],
   todos: [],
   schedules: [],
   posts: [],

@@ -24,7 +24,7 @@ import {
   loadHelpArticle,
 } from '@/lib/help'
 import { translate } from '@/lib/i18n'
-import { renderWithProviders } from './helpers'
+import { openRailPanel, renderWithProviders } from './helpers'
 
 vi.mock('@/lib/api', async () => ({
   ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
@@ -105,13 +105,14 @@ describe('右栏「教程」面板', () => {
     })
   })
 
-  it('图标轨上点「教程」打开的是目录', async () => {
+  it('右上角「⋮」→「教程」打开的是目录', async () => {
     renderWithProviders(
       <RailStateProvider>
         <RightRail />
       </RailStateProvider>,
     )
-    fireEvent.click(screen.getByTestId('rail-icon-help'))
+    // WP372：「教程」在右上角「⋮」里
+    await openRailPanel('help')
     // WP208：不在岗位上 → 只列通用；「全部 N 篇」一下全摊开
     expect(await screen.findAllByTestId('help-index-item')).toHaveLength(
       helpForContext({}).general.length,

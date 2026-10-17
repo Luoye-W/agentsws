@@ -28,10 +28,10 @@ import {
   toLocalInput,
   whenText,
 } from '@/lib/position-work'
-import { PositionPage } from '@/pages/position'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
+import { PositionWithBoards } from './position-with-boards'
 
 const NOW = '2026-10-06T08:00:00.000Z'
 
@@ -41,7 +41,7 @@ const item = (over: Partial<PositionWorkItem>): PositionWorkItem => ({
   ref_id: 'm_1',
   title: '近视求助帖的回帖',
   role_id: 'pr.reddit',
-  role_name: 'Reddit 营销',
+  role_name: '外部版块',
   assignment_id: 'asg_pr',
   group: 'doing',
   status: 'open',
@@ -87,7 +87,7 @@ const fullWork = (): PositionWorkView => ({
       ref_id: 't_1',
       title: '私信版主问 flair',
       role_id: 'social.reddit',
-      role_name: '自家版运营',
+      role_name: '官方版块',
       assignment_id: 'asg_social',
       due_at: '2026-10-06T10:00:00.000Z',
       movable: true,
@@ -112,8 +112,8 @@ const fullWork = (): PositionWorkView => ({
   ],
   counts: { doing: 2, queued: 1, waiting: 0, done: 1, cards: 1, todos_today: 1 },
   duties: [
-    { role_id: 'pr.reddit', role_name: 'Reddit 营销', assignment_id: 'asg_pr' },
-    { role_id: 'social.reddit', role_name: '自家版运营', assignment_id: 'asg_social' },
+    { role_id: 'pr.reddit', role_name: '外部版块', assignment_id: 'asg_pr' },
+    { role_id: 'social.reddit', role_name: '官方版块', assignment_id: 'asg_social' },
   ],
   done_window_days: 14,
 })
@@ -127,14 +127,14 @@ const instance = (over: Partial<PositionInstanceData> = {}): PositionInstanceDat
   roles: [
     {
       role_id: 'pr.reddit',
-      role_name: 'Reddit 营销',
+      role_name: '外部版块',
       default: true,
       assignment_ids: ['asg_pr'],
       my_assignment_id: 'asg_pr',
     },
     {
       role_id: 'social.reddit',
-      role_name: '自家版运营',
+      role_name: '官方版块',
       default: true,
       assignment_ids: ['asg_social'],
       my_assignment_id: 'asg_social',
@@ -176,8 +176,8 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getPositions: async () => ({
       positions: [
-        summary('asg_pr', 'pr.reddit', 'Reddit 营销'),
-        summary('asg_social', 'social.reddit', '自家版运营'),
+        summary('asg_pr', 'pr.reddit', '外部版块'),
+        summary('asg_social', 'social.reddit', '官方版块'),
       ],
       instances: [state.instance],
       tile_library: [],
@@ -186,7 +186,7 @@ vi.mock('@/lib/api', async () => {
     getPosition: async () => state.instance,
     getPositionWork: async () => state.work,
     getPositionCards: async (id: string) => ({
-      position: summary(id, 'pr.reddit', 'Reddit 营销'),
+      position: summary(id, 'pr.reddit', '外部版块'),
       cards:
         id === 'asg_pr'
           ? [
@@ -223,7 +223,7 @@ vi.mock('@/lib/api', async () => {
           name: { zh: '品牌 Reddit 号', en: 'Brand Reddit account' },
           required: true,
           connected: false,
-          needed_by: ['自家版运营'],
+          needed_by: ['官方版块'],
           status: 'available',
           connect_service: 'reddit',
         },
@@ -232,7 +232,7 @@ vi.mock('@/lib/api', async () => {
           name: { zh: 'Apify', en: 'Apify' },
           required: false,
           connected: false,
-          needed_by: ['Reddit 营销'],
+          needed_by: ['外部版块'],
           status: 'available',
           connect_service: 'apify',
         },
@@ -241,7 +241,7 @@ vi.mock('@/lib/api', async () => {
           name: { zh: '浏览器只读', en: 'Browser' },
           required: false,
           connected: true,
-          needed_by: ['Reddit 营销'],
+          needed_by: ['外部版块'],
           status: 'available',
         },
       ],
@@ -333,7 +333,7 @@ afterEach(() => {
 const openAt = (path = '/positions/asg_pr') =>
   renderWithProviders(
     <Routes>
-      <Route path="/positions/:id" element={<PositionPage />} />
+      <Route path="/positions/:id" element={<PositionWithBoards />} />
     </Routes>,
     path,
     'asg_pr',
@@ -550,7 +550,7 @@ describe('数据看板', () => {
     state.tiles = { 'kol.youtube.active': 3, 'kol.instagram.active': 0 }
     openAt()
     const quiet = await screen.findByTestId('data-row-quiet')
-    expect(quiet.textContent).toContain('自家版运营：还没有数')
+    expect(quiet.textContent).toContain('官方版块：还没有数')
     expect(screen.getAllByTestId('data-row')).toHaveLength(1)
     // 展开「看图表」时也并（没动静的那条展开来只是空表）；有数的那条，行上摆过的数字不再大块摆一遍
     fireEvent.click(screen.getByTestId('data-charts-toggle'))
@@ -647,11 +647,11 @@ describe('lib/position-work', () => {
   it('快捷视图：发帖排期排最前；红人 / B2B / 在线客服各有一个', () => {
     const views = quickViewsOf([
       { role_id: 'kol.youtube', role_name: 'YouTube 红人', assignment_id: 'a1' },
-      { role_id: 'social.reddit', role_name: '自家版运营', assignment_id: 'a2' },
+      { role_id: 'social.reddit', role_name: '官方版块', assignment_id: 'a2' },
       { role_id: 'b2b.outbound', role_name: '主动开发', assignment_id: 'a3' },
       { role_id: 'dtc.live-chat', role_name: '在线客服', assignment_id: 'a4' },
     ])
-    // WP249：自家版运营多一个「自家版待处理」，排在它的群发后面；WP255：再跟一个「群里的帖子」
+    // WP249：官方版块多一个「自家版待处理」，排在它的群发后面；WP255：再跟一个「群里的帖子」
     // WP328：「Reddit 巡查」排在自家版待处理前面
     expect(views.map((v) => v.kind)).toEqual([
       'schedule',
@@ -767,7 +767,7 @@ describe('WP248 决策 79 / 82', () => {
           ref_id: 't_late',
           title: '回版主私信',
           role_id: 'social.reddit',
-          role_name: '自家版运营',
+          role_name: '官方版块',
           assignment_id: 'asg_social',
           status: 'doing',
           due_at: '2026-10-03T10:00:00.000Z',
