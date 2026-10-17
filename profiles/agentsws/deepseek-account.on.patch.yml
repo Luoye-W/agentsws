@@ -12,8 +12,17 @@
 # 我们自己的两档运行时不读 profile（`harness.ts` 自己搭树），服务进程里真正的开关是
 # `apps/server/src/deepseek-account.ts`：选了才 `import()` 官方模块、挂一棵只为它的最小树。
 # 这份文件与那边是同一个决定的两处落点；`packages/dsh-adapter/test/profile-lockdown.test.ts`
-# 钉住：不带它 → 关；带它 → 只有这一行被打开，别的锁定一行不动。
+# 钉住：不带它 → 关；带它 → 只有这几行被打开（WP354 起三行，见文件末），别的锁定一行不动。
 #
 # 只写 `disabled: false`，**不写任何 config**：按官方默认值走（派工单硬要求）。
+#
+# WP354（dsh 0.2.1-alpha.4）：官方 headless 组合改成**默认关掉**本机凭据库（`credentials`）和它的两个消费方
+# （`authorization`、`deepseek-account`）——见 `@deepseek-ai/dsh-headless` README「凭据」一节。账号模块的 inject 就是
+# `credentials` + `authorization`，只开它自己那一行等于开了个挂不上的模块。所以照官方 README 给的「恢复存储认证」
+# 三行，选了账号登录时三行一起开；没选时三行都由官方 headless 关着（我们这层一个字不写）。
 - id: deepseek-account
+  disabled: false
+- id: credentials
+  disabled: false
+- id: authorization
   disabled: false

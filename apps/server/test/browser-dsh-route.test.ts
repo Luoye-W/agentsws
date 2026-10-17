@@ -320,12 +320,12 @@ const FAKE_BSK = join(FIXTURES, 'bsk')
 writeFileSync(FAKE_BSK, '#!/bin/sh\necho \'{"ok":true}\'\nexit 0\n', 'utf8')
 chmodSync(FAKE_BSK, 0o755)
 const BSK_TOOLS = [
-  'browser_assist',
-  'browser_inspect',
-  'browser_interact',
-  'browser_page',
-  'browser_session',
-  'browser_tabs',
+  'bsk_assist',
+  'bsk_inspect',
+  'bsk_interact',
+  'bsk_page',
+  'bsk_session',
+  'bsk_tabs',
 ]
 
 describe('带浏览器的运行：工具调用上限 30（09-24，WP148 报告第 1 条）', () => {
@@ -350,7 +350,7 @@ describe('BrowserSkill 那一种：同样走到 dsh，门禁照拦', () => {
       const { events, gateway } = await runOnce({
         browser_scope: ['youtube.com'],
         browser: { mode: 'browserskill', bsk_path: FAKE_BSK },
-        calls: [{ name: 'browser_page', input: { action: 'navigate', url: 'https://evil.test/' } }],
+        calls: [{ name: 'bsk_page', input: { action: 'navigate', url: 'https://evil.test/' } }],
         extra: IN_PROCESS,
       })
       expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')

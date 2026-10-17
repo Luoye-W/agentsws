@@ -84,12 +84,12 @@ describe('邀请链接', () => {
     expect((await screen.findByTestId('invite-joined')).textContent).toContain('NordVolt Gear')
     expect(accepted).toEqual(['inv_tok'])
 
-    const email = screen.getByLabelText('你的邮箱') as HTMLInputElement
+    const email = screen.getByLabelText('你在这个工作区里的邮箱') as HTMLInputElement
     await waitFor(() => {
       expect(email.value).toBe('chen@nordvolt.example')
     })
 
-    await user.click(screen.getByRole('button', { name: '给我一个登录链接' }))
+    await user.click(screen.getByRole('button', { name: '给我一个进入链接' }))
     await user.click(await screen.findByTestId('login-enter'))
     await waitFor(() => {
       expect(entered).toEqual([LOGIN_TOKEN])
@@ -109,7 +109,7 @@ describe('登录页', () => {
   it('本机单人档把邮箱填好，一按就进', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginPage />, '/login')
-    const email = (await screen.findByLabelText('你的邮箱')) as HTMLInputElement
+    const email = (await screen.findByLabelText('你在这个工作区里的邮箱')) as HTMLInputElement
     await waitFor(() => {
       expect(email.value).toBe('wang@nordvolt.example')
     })
@@ -117,7 +117,7 @@ describe('登录页', () => {
     expect(
       screen.getByTestId('login-brand').querySelector('svg')?.getAttribute('data-motion'),
     ).toBe('idle')
-    await user.click(screen.getByRole('button', { name: '给我一个登录链接' }))
+    await user.click(screen.getByRole('button', { name: '给我一个进入链接' }))
     expect(await screen.findByTestId('login-enter')).toBeTruthy()
     expect(asked).toEqual(['wang@nordvolt.example'])
   })
@@ -126,8 +126,8 @@ describe('登录页', () => {
     const user = userEvent.setup()
     state.issue = { expires_at: '2026-09-10T09:15:00.000Z' }
     renderWithProviders(<LoginPage />, '/login')
-    await screen.findByLabelText('你的邮箱')
-    await user.click(screen.getByRole('button', { name: '给我一个登录链接' }))
+    await screen.findByLabelText('你在这个工作区里的邮箱')
+    await user.click(screen.getByRole('button', { name: '给我一个进入链接' }))
     expect(await screen.findByTestId('login-mailed')).toBeTruthy()
     expect(screen.queryByTestId('login-enter')).toBeNull()
   })

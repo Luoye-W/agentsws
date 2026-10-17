@@ -40,6 +40,7 @@ const CHANNELS = {
   launchAtLoginGet: 'agentsws:launch-at-login-get',
   launchAtLoginSet: 'agentsws:launch-at-login-set',
   launchAtLoginChanged: 'agentsws:launch-at-login-changed',
+  sessionRenew: 'agentsws:session-renew',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -123,6 +124,10 @@ const bridge: DesktopBridge = {
         ipcRenderer.removeListener(CHANNELS.launchAtLoginChanged, handler)
       }
     },
+  },
+  // WP358：会话丢了让壳重换（只回是否；cookie 不经过这里）
+  session: {
+    renew: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.sessionRenew) as Promise<boolean>,
   },
 }
 

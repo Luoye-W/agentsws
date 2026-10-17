@@ -44,6 +44,20 @@ describe('钉死的版本与锁文件（WP247）', () => {
     expect(root?.dependencies).toEqual(pkg.dependencies)
     expect(OPEN_CONNECTOR_LOCKFILE.lockfileVersion).toBe(3)
   })
+
+  it('传递依赖的安全覆盖：package.json 带 overrides，锁文件里那个包只剩覆盖的那一版（WP365）', () => {
+    const overrides = OPEN_CONNECTOR_PIN.overrides
+    expect(hostPackageJson().overrides).toEqual(overrides)
+    for (const [name, version] of Object.entries(overrides)) {
+      const hits = Object.entries(OPEN_CONNECTOR_LOCKFILE.packages).filter(([p]) =>
+        p.endsWith(`node_modules/${name}`),
+      )
+      expect(hits.length, name).toBeGreaterThan(0)
+      for (const [p, e] of hits) expect(e.version, p).toBe(version)
+    }
+    const { overrides: _, ...rest } = OPEN_CONNECTOR_PIN
+    expect(hostPackageJson(rest).overrides).toBeUndefined()
+  })
 })
 
 describe('目录布局', () => {

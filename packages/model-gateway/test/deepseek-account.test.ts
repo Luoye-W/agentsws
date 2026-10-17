@@ -160,6 +160,11 @@ describe('WP134 (a) 凭据：官方 resolveToken 现取、只进 x-dsh-auth-toke
     expect(
       DEEPSEEK_ACCOUNT_MODELS.find((m) => m.id === DEEPSEEK_ACCOUNT_DEFAULT_MODEL)?.vision,
     ).toBe(true)
+    // WP367 §3 C（Luoye 10-16）：显示名照官方 dsh-llm-deepseek@0.2.1-alpha.4 的 DEFAULT_MODELS 原文
+    expect(DEEPSEEK_ACCOUNT_MODELS.map((m) => [m.id, m.name])).toEqual([
+      ['deepseek-flash', 'DeepSeek-V4.1-Flash'],
+      ['deepseek-v4-pro', 'DeepSeek-V4-Pro'],
+    ])
     expect((await p.listModels?.())?.map((m) => m.id)).toEqual([
       'deepseek-flash',
       'deepseek-v4-pro',

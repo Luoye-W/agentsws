@@ -92,7 +92,7 @@ describe('运行中的浏览器（#12 / #15）', () => {
       ...BASE,
       executor: 'browserskill',
       current_host: 'admin.shopify.com',
-      awaiting_handoff: { at: '2026-09-18T02:05:00.000Z', note: 'browser_assist' },
+      awaiting_handoff: { at: '2026-09-18T02:05:00.000Z', note: 'bsk_assist' },
     })
     renderBrowser()
     expect((await screen.findByTestId('rail-browser-executor')).textContent).toContain(
@@ -116,7 +116,7 @@ describe('运行中的浏览器（#12 / #15）', () => {
       executor: 'browserskill',
       last_blocked: {
         at: '2026-09-18T02:06:00.000Z',
-        tool: 'browser_page',
+        tool: 'bsk_page',
         reason: 'browser_host_not_allowed: example.com 不在这个岗位开放的站里',
       },
       blocked: 1,
