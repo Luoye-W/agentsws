@@ -20,6 +20,7 @@ import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
+import { ModelSwitchDivider } from '@/components/free-chat/thread-bits'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MaskDialog } from '@/components/matter/mask-dialog'
 import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
@@ -533,6 +534,9 @@ export function MatterPage(): ReactNode {
     switch (item.kind) {
       case 'day':
         return <DaySep key={item.key} at={item.at} />
+      // WP373（决策 978）：真换了模型那一句
+      case 'switch':
+        return <ModelSwitchDivider key={item.key} from={{ id: item.from }} to={{ id: item.to }} />
       case 'me':
         return <MeBubble key={item.key} event={item.event} />
       case 'ai':

@@ -193,7 +193,7 @@ const GenuiSetupBody = z.object({
 /** WP342（决策 853）：换这件事用的 AI；不给 / `null` = 回到跟品牌默认。 */
 const MatterModelBody = z.object({
   model: z.string().min(1).max(200).nullable().optional(),
-  /** WP370：思考程度（AI 钮里「快 / 标准 / 深想」落到的那一档；只在给了 `model` 时有意义）。 */
+  /** WP370：思考程度（AI 钮里「快 / 标准 / 深度」落到的那一档；只在给了 `model` 时有意义）。 */
   effort: z
     .enum(REASONING_EFFORTS as [ReasoningEffort, ...ReasoningEffort[]])
     .nullable()

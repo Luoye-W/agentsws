@@ -311,12 +311,17 @@ export type FreeChatThinkingLevel = 'fast' | 'standard' | 'deep'
 
 /**
  * WP370：一个模型的思考程度。每档落到这个模型自己声明的那一档 id（官方同一套，见 `ReasoningEffort`）：
- * ChatGPT 订阅 快 = low / 标准 = medium / 深想 = high；DeepSeek 快 = low / 标准 = high / 深想 = max。
+ * ChatGPT 订阅 快 = low / 标准 = medium / 深度 = high；DeepSeek 快 = low / 标准 = high / 深度 = max。
  * 选择存的是 `effort`；不选 = `default`（模型默认，界面算「标准」）。
  */
 export interface FreeChatModelThinking {
   options: { level: FreeChatThinkingLevel; effort: ReasoningEffort }[]
   default: ReasoningEffort
+  /**
+   * WP373（只加）：这个模型官方只声明了「不想」和一档——界面画成开关。开 = `options[0].effort`，关 = `off`；
+   * 不给 = 三档（快 / 标准 / 深度）。
+   */
+  toggle?: true
 }
 
 /**
