@@ -14,6 +14,7 @@ import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
+import { GOOGLE_ALERTS_EN, GOOGLE_ALERTS_ZH } from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -8531,6 +8532,7 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
     ...REDDIT_WRITE_ZH,
+    ...GOOGLE_ALERTS_ZH,
     ...ADS_CHANGES_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
@@ -8574,6 +8576,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
+    ...GOOGLE_ALERTS_EN,
     ...ADS_CHANGES_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
