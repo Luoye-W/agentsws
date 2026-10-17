@@ -427,7 +427,9 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
         if (!att.ok) {
           done.splice(done.indexOf(d), 1)
           failed.push({ line: d.line, reason: `读回了链接，但先拉一次没拉到（${att.message}）` })
+          continue
         }
+        fillKnown(store, att.source_id, d.line)
       }
       const results = res.results.map((r) => {
         const f = failed.find((x) => x.line.id === r.id)
@@ -531,8 +533,14 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
               ...(plan === undefined ? {} : { plan_item_id: plan.id }),
             })
             .catch(() => ({ ok: false as const, message: '' }))
-          if (att.ok) imported += 1
-          else failed += 1
+          if (att.ok) {
+            imported += 1
+            fillKnown(store, att.source_id, {
+              query: e.query,
+              ...(e.language === undefined ? {} : { language: e.language }),
+              ...(e.region === undefined ? {} : { region: e.region }),
+            })
+          } else failed += 1
           continue
         }
         store.putSource(row)
@@ -596,6 +604,27 @@ export function createPrAlertsService(o: PrAlertsOptions): PrAlertsService {
         },
       }
     },
+  }
+
+  /**
+   * 交给信息监控存好的那条源，补上我们知道、它从 feed 里看不出来的几格（查询语句、语言、地区）——
+   * 以后判「这条已经在盯了」靠查询语句。已经有的不覆盖。
+   */
+  function fillKnown(
+    store: PrWatchStore,
+    source_id: string,
+    known: { query: string; language?: string; region?: string },
+  ): void {
+    const row = store.source(source_id)
+    if (row === undefined) return
+    const lang = known.language === 'any' ? undefined : known.language
+    const region = known.region === 'any' ? undefined : known.region
+    store.putSource({
+      ...row,
+      ...(row.query === undefined ? { query: known.query } : {}),
+      ...(row.language === undefined && lang !== undefined ? { language: lang } : {}),
+      ...(row.region === undefined && region !== undefined ? { region } : {}),
+    })
   }
 
   /** 记下读到的已有提醒；只读那一趟顺手出「导入」勾选卡与「改成 RSS」卡。 */
