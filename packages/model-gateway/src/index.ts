@@ -107,6 +107,29 @@ export {
   deepseekMessagesProvider,
   toMessagesRequest,
 } from './providers/deepseek-account.js'
+// WP367：账号模型目录从账号的 GET /models 取（移植自官方 dsh-llm-deepseek-account@0.2.1-alpha.4）
+export type {
+  AccountBuiltinModel,
+  AccountCatalogModel,
+  AccountModelCatalogView,
+  AccountModelEntry,
+  AccountModelListing,
+  AccountModelOverride,
+  AccountModelRefusal,
+  DeepSeekAccountModelCatalogOptions,
+  ListingFetch,
+  ResolvedAccountCatalog,
+} from './providers/deepseek-account-models.js'
+export {
+  AccountModelListingError,
+  accountModelRefusalMessage,
+  DEFAULT_MODELS_MAX_AGE_MS,
+  DEFAULT_MODELS_TIMEOUT_MS,
+  DeepSeekAccountModelCatalog,
+  listingEndpoint,
+  parseModelListing,
+  resolveAccountCatalog,
+} from './providers/deepseek-account-models.js'
 // WP143：DeepSeek Files API 复用（移植自官方 dsh-llm-deepseek@0.1.7-rc.1）
 export type {
   DeepSeekFileConnection,

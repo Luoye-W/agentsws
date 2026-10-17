@@ -457,6 +457,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 interface BootstrapConfig {
   owner_email?: string
   demo?: boolean
+  /**
+   * 决策 945：`shared` = 这个服务开给局域网了（NAS）。页面拿不到一次性 token、也拿不到主人邮箱；
+   * 主人用服务日志里的设置码进门，同事走邀请链接。不出这个键 = 只给本机用，照旧。
+   */
+  login?: 'shared'
 }
 
 async function bootstrapConfig(): Promise<BootstrapConfig> {
@@ -466,6 +471,20 @@ async function bootstrapConfig(): Promise<BootstrapConfig> {
     return (await res.json()) as BootstrapConfig
   } catch {
     return {}
+  }
+}
+
+/** WP358：桌面壳的「重换会话」（13 §5 桥接层，特性检测；普通浏览器里没有）。 */
+async function renewDesktopSession(): Promise<boolean> {
+  const w = globalThis.window as unknown as
+    | { agentsws?: { session?: { renew?: () => Promise<boolean> } } }
+    | undefined
+  const renew = w?.agentsws?.session?.renew
+  if (renew === undefined) return false
+  try {
+    return (await renew()) === true
+  } catch {
+    return false
   }
 }
 
@@ -501,6 +520,15 @@ export async function ensureSession(): Promise<Me> {
   } catch (err) {
     if (!(err instanceof ApiClientError) || err.status !== 401) throw err
     clearToken()
+  }
+  // WP358：桌面壳里会话丢了（过期 / 服务进程重启）→ 让壳给所有者重换一张，再问一次。
+  // 一个人用桌面版不该看见登录页；`remote` 档与旧壳回 false / 没有这一项，照旧往下走。
+  if (await renewDesktopSession()) {
+    try {
+      return await api<Me>('/v1/me')
+    } catch (err) {
+      if (!(err instanceof ApiClientError) || err.status !== 401) throw err
+    }
   }
   const config = await bootstrapConfig()
   if (config.demo !== true) throw new NeedsLoginError(config.owner_email)
@@ -3272,6 +3300,8 @@ export interface AcceptedInvitationView {
   email: string
   person_id: string
   assignments: OrgAssignmentView[]
+  /** 决策 945：局域网档接受完直接带一张一次性登录 token（邀请链接本身就是凭据）。 */
+  login_token?: string
 }
 
 /** 接受邀请：这会儿还没有任何凭据，所以是匿名请求。 */
@@ -3292,6 +3322,10 @@ export const requestMagicLink = (
   email: string,
 ): Promise<{ token?: string; expires_at: string; delivered?: string }> =>
   api('/v1/auth/magic-link', { method: 'POST', body: { email }, anonymous: true })
+
+/** 决策 945：主人用服务日志里的一次性设置码换一张一次性登录 token（只在局域网档开）。 */
+export const redeemSetupCode = (code: string): Promise<{ token: string; expires_at: string }> =>
+  api('/v1/auth/setup-code', { method: 'POST', body: { code }, anonymous: true })
 
 /** 用一次性 token 换会话，并把它存下来（之后所有请求都带它）。 */
 export async function signInWithToken(token: string): Promise<Me> {

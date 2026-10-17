@@ -2010,3 +2010,121 @@ lockfile `packages:` 段 1884 → 1911 条。
    要不要在服务端把存着的旧选择自动换成默认，见报告「要定的事」。
 3. 常驻终端要进两档运行时，先让门禁管住 `terminal_send`。
 4. `desktopPlatform` 上游洞（WP134）仍在。
+
+## 0.2.1-alpha.2 → 0.2.1-alpha.4（2026-10-16，WP354，跟 alpha）
+
+### 0. 版本口径
+
+Luoye 10-16「DeepSeek 又有新版本更新了……更新版本吧」；10-10 定过「dsh 跟 alpha 线、版本号最新的那个」。升级当天：
+
+| tag | 版本 | 发布时间 |
+|---|---|---|
+| `latest` / `next` | 0.2.0-rc.2 | 2026-09-29T09:56Z |
+| `alpha` | **0.2.1-alpha.4** | 2026-10-15T13:08Z |
+
+中间跨 alpha.3（10-14）一版；`git log dsh-v0.2.1-alpha.2..dsh-v0.2.1-alpha.4` **941 条提交**。仍是内测线（GitHub 全是 Pre-release）。
+发布不到 24 小时，`minimumReleaseAgeExclude` 必须写。
+
+**兄弟包又必须跟**：`npm view @deepseek-ai/dsh@0.2.1-alpha.4 dependencies` 写的是 cordis `~4.0.5-alpha.2`、schemastery `~3.18.5-alpha.2`、
+loader `~1.0.6-alpha.2`、include `~1.0.10-alpha.2`、timer `~1.1.7-alpha.2`——预发布的 `~` 不含 alpha.1。kernel / roles / credentials-openconnector /
+apps/server / profile / dsh-adapter 六处一起改精确版本（10-14 发，已过静默期，不进排除表）。
+
+**逐包查新版在不在**：仓库里写死 `0.2.1-alpha.2` 的 58 个 `@deepseek-ai/dsh*` 包，`npm view <包>@0.2.1-alpha.4 version` **58 个全在**。
+
+**先读了官方升级指南**（docs/42 WP293 修订注）：`git diff dsh-v0.2.1-alpha.2 dsh-v0.2.1-alpha.4 -- docs/upgrade-guide` 新进 14 份
+（`v0.2.1-alpha.2/` 下 10 份、`v0.2.1-alpha.3/` 下 1 份，另补了 3 份更早版本的）。碰到我们的三份：`stored-credentials-precedence`（headless 关掉凭据库）、
+`deepseek-account-identity-watch`（`watch` 默认不再报身份变化——我们只看登录状态，不受影响）、`deepseek-account-model-catalog`（账号模型改从账号的 `/models` 列表取——我们的账号推理不经官方路由，不受影响，见 §5）。
+
+### 1. 上游改了什么（碰到我们的）
+
+| 包 | 变化 | 出处 | 碰到我们吗 / 怎么处理 |
+|---|---|---|---|
+| `dsh-headless`（bundle） | patch 新加三行 `credentials` / `authorization` / `deepseek-account` 全 `disabled: true`：headless 默认不用本机凭据库，只认启动环境与 `.env` | `bundle/headless/cordis.patch.yml`；升级指南 `stored-credentials-precedence`；README「凭据」 | **碰到**：我们 `deepseek-account.on.patch.yml` 只开 `deepseek-account` 一行，它 inject 的 `credentials` / `authorization` 被官方关了 → 选了账号登录也挂不上（`--dump-config` 实测）。照官方 README 的「恢复存储认证」三行，叠 overlay 时三行一起开（§3） |
+| `dsh-credentials-local` | 凭据优先级翻转：存着的 > 启动环境 > `.env` | 同上；提交 5249d9a4ce | 否：两档运行时自己搭树、凭据由服务进程给；`harness.ts` 那段注释的"inherited environment wins"是**我们自己**在挂 preset 那一跳的规矩，不随官方翻 |
+| `dsh-deepseek-account-platform` | 诊断从 `console.info` 改 `console.error`，**只在平台接口失败时**打；`watch(signal, includeIdentityChanges?)` 默认不报身份变化 | `lib/types/index.d.ts`；提交 c9d56d5073 / d0b0bfcd79；升级指南 `deepseek-account-identity-watch` | 测试面：`deepseek-account.test.ts` 的"令牌不进诊断"守卫改成故意让余额查询失败一次、同时接 `console.error`，免得空转。产品面不受影响 |
+| `dsh-llm-deepseek` | `serialize.ts`：空的 assistant 文本块不发、空消息整条跳过（修旧会话重放失败） | 提交 c368939151 | **移植过来的行为要对**（docs/42 WP143）：`model-gateway` 的 `deepseek-account.ts` `blocksOf` 同样不发空文本块（§3）；Files 复用那几样（`files-api` / `file-store` / `request-files` / `replay`）这一跳**零改动** |
+| `dsh-tool-schedule` | `schedule_create` 的 `title` 说明换成"简洁、不带频率 / 时间 / 状态 / 括号备注"那一大段；`schedule_update` 的 `title` 说明改成 "follow the schedule_create title rules" | `schedule/tool-schedule/src/index.ts` 第 198–205、465、545 行；提交 9f5bc9669b | **碰到**：`stand-ins` 抄的那份照官方原文改（`official-schedule.test.ts` 如约先红）。模型可见：能建定时任务的运行里，这两个参数说明变长了 |
+| `dsh-base`（bundle） | 新 insert `remote-access`（`dsh-api-remote-access`，非 owner Peer 的方法级访问控制），不带 `disabled` | `bundle/base/cordis.patch.yml` | 否：纯本机、只收紧权限（A）；我们两档运行时不挂。完整 profile 组合 99 → 100 行 |
+| `dsh-app-boot` | `OPTIONAL_BUNDLES` 多 `dsh-experimental-plugin-market-bundle`（十二个） | `boot/app-boot/src/profile.ts` | 不进官方插件清单（B：经插件管理装任意 npm 包，绕过清单与出卡），测试钉住（§5） |
+| `dsh-llm` | `LlmAdapter.imageRequestTarget` 新方法（基类有默认实现）、`defaultBaseURL` / `nativeAuth` 等可选字段 | `lib/types/index.d.ts` | 否（只加不改；`tsc -b --force` 0 错） |
+| `dsh-system-prompt` | 分节顺位多 `TEAM_IDENTITY` / `HARNESS_SOURCE` / `WEB_SURFACE` | 同上 | 否：提示词导出逐字节相同（§4） |
+| `dsh-tools` | `createRunCodeTool` 多一个 `ctx` 参数（持久 PTC） | 同上 | 否（我们不用 PTC） |
+| `dsh-sdk-client` / `-protocol` | 新 `resumeSession(sessionId)` / `session/resume` | 同上 | 否（两档用内存会话）；记一笔：长程任务要"断了接着跑"时可用 |
+| `dsh-session-persistence-jsonl` | 改成函数插件、没有默认导出 | 升级指南 `jsonl-persistence-plugin` | 否（我们不挂） |
+| `dsh-jobs` | job id 改成 `<kind>-<16 位十六进制>` | 升级指南 `job-id-identity` | 否（`enableRunInBackground: false`，不挂 jobs） |
+| `dsh-tool-subagent` | 拒收 `persona` / `toolFilter`，改用 preset 组合 | 升级指南 `subagent-preset-composition` | 否（两档不挂子代理） |
+| 网页搜索 / 抓网页 / 浏览器那几包 | `tool-web` / `web-fetch-http` / `web-search-*` / `browser-use-*`：只改了 `package.json` 与中文显示文案，`src` 零改动 | `git diff --stat` | 否 |
+| cua-driver | MCP 提供方 README 仍链 `cua-driver-rs-v0.28.0`，native 提供方仍钉 `@trycua/cua-driver 0.28.0` | 两版 README 与 `package.json` | 驱动不动，只改 `computer-use.lock.json` 的 `providers` 两行与 `referenced_by` |
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`--dump-config`（带 `deepseek-account.on.patch.yml`）组合 99 → 100 行，多的就是 `remote-access`（本机，A）。headless 新关的三行是"官方自己关"，不是我们的锁。
+**存量过一遍**：锁定表五行（`session-log-deepseek`、`deepseek-account`、`otel`、`session-telemetry-otel`、`plugin-package-inventory-deepseek`）全在、指向的插件没换、组合后全关；
+`profile-lockdown.test.ts` 全过。**这一跳没有新锁一行**。
+
+### 2. 依赖树与原生依赖
+
+lockfile `packages:` 段 1938 → 1943 条。
+
+- **dsh 包**：新进 7（`dsh-api-remote-access`、`dsh-plugin-market`、`dsh-plugin-market-index`、`dsh-client-ui-plugin-market`、`dsh-experimental-plugin-market-bundle`、
+  `dsh-client-ui-secret-mask`、`dsh-harness-dev-context`）、消失 3（`dsh-client-store`、`dsh-client-ui-primitives`、`dsh-client-ui-slots`：官方 `perf(deps): … share client libraries`
+  把网页端共享库打进各插件，语音输入 / 团队协作等不再把它们当依赖装）。
+- **第三方**：新名字只有 `minisearch@7.2.0`（MIT，872 KB，插件市场的搜索）；新版本 `undici@8.11.2`、`zod@4.4.3`（都 MIT，与旧版并存）。
+- 全部新增包逐个查：**没有一个带 install / preinstall / postinstall**，许可证全 MIT。`allowBuilds` / `ignoredOptionalDependencies` 一字未改。
+- **`minimumReleaseAgeExclude` 295 → 299**：先 `sed` 换号再 `pnpm install`，pnpm 只在表尾追加 7 条、没写 `||`；7 条按字母序挪回、3 条消失的删掉；
+  脚本核对 lockfile 里 `@deepseek-ai/dsh*@0.2.1-alpha.4` 299 个 = 排除表 299 条、lockfile 里 `0.2.1-alpha.2` 0 处。
+- BrowserSkill 那四条 `overrides` 跟着改号（`dsh-client-ui-primitives` 那条现在是可选 peer、树里没有，留着无害）；`pnpm install --frozen-lockfile` 通过。
+
+### 3. 我们改了什么
+
+① **版本号**：58 处 `@deepseek-ai/dsh*`、六处兄弟包、`computer-use.lock.json`、`upstreams.yml`（dsh 三条、cordis、schemastery）、
+`DEEPSEEK_ACCOUNT_CLIENT_VERSION`、`runtime.ts` 的 health 文案、官方插件清单七项、几条测试里的版本字符串。
+
+② **修 seam**：
+- `profiles/agentsws/deepseek-account.on.patch.yml`：选了账号登录时 `deepseek-account` + `credentials` + `authorization` 三行一起开（官方 README 给的恢复写法，只写 `disabled: false`）。
+  没选时三行由官方 headless 关着，我们这层一个字不写。`profile-lockdown.test.ts` 新增 `OFFICIAL_HEADLESS_OFF`：钉住"这两行由官方 bundle 关、我们不写"、叠 overlay 后三行都开、其余锁定照旧。
+- `stand-ins/src/runtime/schedule.ts`：两处 `title` 说明照官方原文。
+- `model-gateway/src/providers/deepseek-account.ts`：空文本块不发（`deepseek-replay.test.ts` 新增一条）。
+
+③ **测试**：`deepseek-account.test.ts`（诊断改走 `console.error`、只在失败时打）、`official-plugins.test.ts`（插件市场不进清单）、版本字符串。
+
+### 4. 怎么证明行为没变
+
+1. **指纹**：升级前在当前代码树重采 `0.2.1-alpha.2-wp354.json`（pack 已 70 条，与仓库里的 `0.2.1-alpha.2.json` 有 2 条新增、5 条因我们自己的改动不同）当 FROM；
+   TO = `0.2.1-alpha.4.json`。70 场景 × 2 档 = **140 条**，去掉 `dsh_version` 与 `packages` 两个字段后两份 JSON **逐字节相同**；`upgrade.test.ts` 全过。
+2. **`@agentsws/dsh-adapter` 全量**：升级前 35 文件 1284 条全过（默认并发下有一条 7.7 秒超时，`--maxWorkers=2 --testTimeout=120000` 重跑全过）；升级后 35 文件 1310 条全过（多的是对比场景 68 → 70 与新用例）。
+3. **提示词与工具表**：同一段临时测试（不进仓库）在升级前后各导一次——两档 × 两种请求（默认售后、带网页工具的内容岗）每一轮发给模型的 `messages` + `tools`——**逐字节相同**。
+   能建定时任务的运行另有 §1 那两处 `title` 说明的变化（官方原文，已知）。
+4. **三个模拟包 × 三个运行时**（stub / direct / dsh）升级前后各一遍，十八次全部「通过」，九份 `summary.txt` 逐字节相同；`--rewrite-baseline` 没用。
+5. **装包前冒烟** `scripts/preinstall-smoke.mjs`（10 岗位 × 7 步，真 dsh 子进程档）升级前后各一遍全过，结果表逐字相同。
+
+### 5. 官方功能优先：这一跳开了什么、没开什么
+
+- **网页搜索 / 浏览器**：官方这一跳在这几包上只改了显示文案，没有新的搜索 / 浏览器插件（新增 9 个包里没有）。WP179 接进来的官方网页搜索 / 抓网页照旧。
+- **官方插件清单**：七项插进来的行逐字未变，只改版本号。新的第十二个可选包「插件市场」不放（B 类，测试钉住）。
+- **记一笔、不在本单做**：
+  - 账号模型目录改从账号的 `GET /models` 取（`llm-deepseek-account`）：我们设置页的账号模型下拉还是写死的两个（`DEEPSEEK_ACCOUNT_MODELS`）。照官方做要在账号推理那条路上加一次列表请求，值得另开小单。
+  - 网页端密钥遮挡（`dsh-client-ui-secret-mask`：用户把密钥粘进对话时，显示上只留前 8 位）：只在官方网页端里，我们工作台可以借这个做法。
+  - 新的电脑操控对象库（`dsh-cua` + `dsh-experimental-cua-macos`，Swift 写的 macOS 原生提供方）：仍在 experimental，我们照旧走 cua-driver MCP。
+  - 非 owner 的访问控制（`remote-access`）：和「同事互联 / 公司模式」方向接近，等它出 Web 以外的入口再看。
+
+### 6. ④bis 默认值扫描
+
+`git diff -U0 dsh-v0.2.1-alpha.2 dsh-v0.2.1-alpha.4 -- packages`（去测试 / 文案 / README）里含 `.default(` / `default:` 的 84 行逐条看：新包的超时 / 上限、
+插件市场 `indexes` 默认空、持久 PTC 的 `executionMode` 默认 `per-call`、`product-analytics` 的 `enabled: default(true)` 只是挪了位置（原来就是 true，且只在官方网页端）——
+**没有一条出网 / 上报 / 遥测开关从关翻成开**。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+| # | 上次的判断 | 这次实测 | 还成立吗 |
+|---|---|---|---|
+| 1 | 官方 SDK 没有 server→client 请求 | `git grep 'transport.request(' dsh-v0.2.1-alpha.4 -- packages/sdk/server/src` 0 处；新加的 `session/resume` 是 client→server | **成立**，不换 |
+| 2 | headless `--json` 替不了子进程档 | headless 这一跳只改凭据来源与 README | 成立（按源码 diff 判） |
+| 3 | `plugin-manager` 不能替 preset 承载 | 这一跳加的是"已装的包再装 → already-installed"与插件市场 | 同 WP132 |
+| 4 | 官方账号推理路由替 `model-gateway` 的 provider | `llm-deepseek-account` 大改（+674 行，账号模型列表），但仍是官方 LLM 路由那一套 | 成立，不换；模型列表另记（§5） |
+
+### 8. 留下的东西
+
+1. 完整 profile 里凭据库默认关了：以后谁要在完整 profile 里用"设置页存的 key"，得自己叠官方那三行；我们产品里不起完整 profile，只有账号登录 overlay 用到。
+2. pi-ai 仍是 1.1.0（dsh 的范围 `^1.1.0` 允许 1.3.0；上游扫描说 OAuth 部分逐字未变），这一跳没动它。
+3. `desktopPlatform` 上游洞（WP134）仍在。

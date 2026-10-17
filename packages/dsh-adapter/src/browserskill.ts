@@ -10,10 +10,13 @@
  *
  * | 策略 | 官方 provider（WP82） | BrowserSkill（WP92，这个文件） |
  * |---|---|---|
- * | 读写分类 | 按**工具名**判（24 个名字） | 按 `args.action` 判（6 个多态工具，见 {@link BROWSERSKILL_READ_ACTIONS}） |
- * | 域名白名单 | `browser_navigate` / `browser_tabs{new}` 两处 url | 三处：`browser_page{navigate}` / `browser_session{start}` / `browser_tabs{create}` |
+ * | 读写分类 | 按**工具名**判（24 个名字） | 按 `args.action` 判（6 个多态工具，见 {@link BROWSERSKILL_READ_ACTIONS}；`bsk_inspect` 的 debug / extract 再看一层） |
+ * | 域名白名单 | `browser_navigate` / `browser_tabs{new}` 两处 url | 三处打开网页：`bsk_page{navigate}` / `bsk_session{start}` / `bsk_tabs{create}`；外加重放请求那一处（`bsk_inspect{debug,replay}`，WP366） |
  * | 注 JS 公司端硬拒 | `browser_evaluate` / `browser_run_code_unsafe` | 工具面里**没有** evaluate；`bsk evaluate` 这条 CLI 归 shell allowlist（WP89）管 |
- * | 人接管 | 只能写进提示词（官方没有这个语义） | 插件自带 `browser_assist{request-help}`：放行，并在时间线上记一条 `browser_handoff` |
+ * | 人接管 | 只能写进提示词（官方没有这个语义） | 插件自带 `bsk_assist{request-help}`：放行，并在时间线上记一条 `browser_handoff` |
+ *
+ * WP366：上游 0.3.3 把六个工具从 `browser_*` 整体改名成 `bsk_*`（老动作名没变，又加了四个）。
+ * 改名之后，它与官方 provider 那一种（`mcp__playwright-mcp__browser_*`）连短名都不再撞。
  *
  * 凭据不经模型（13 §4）在这一种下更直接：页面是用户自己的浏览器里那一个，登录态、
  * cookie、密码从头到尾在他自己的浏览器里，Agent 只看得见"已登录"这个结果。
@@ -23,7 +26,7 @@ import type { RunBrowser } from '@agentsws/contracts'
 import { hostAllowed } from '@agentsws/contracts'
 import type { ToolSideEffect } from './types.js'
 
-/** 上游 npm 包名（锁死 0.3.0，见 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`）。 */
+/** 上游 npm 包名（锁死 0.3.3，见 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`）。 */
 export const BROWSERSKILL_PLUGIN = '@wxg-prc-cpg/browser-skill-dsh-plugin'
 
 /**
@@ -34,12 +37,12 @@ export const BROWSERSKILL_PLUGIN = '@wxg-prc-cpg/browser-skill-dsh-plugin'
  * {@link browserSkillToolName} 判的是"在不在这张表里"，不是判前缀。
  */
 export const BROWSERSKILL_TOOLS: readonly string[] = [
-  'browser_assist',
-  'browser_inspect',
-  'browser_interact',
-  'browser_page',
-  'browser_session',
-  'browser_tabs',
+  'bsk_assist',
+  'bsk_inspect',
+  'bsk_interact',
+  'bsk_page',
+  'bsk_session',
+  'bsk_tabs',
 ]
 
 const TOOL_SET: ReadonlySet<string> = new Set(BROWSERSKILL_TOOLS)
@@ -51,27 +54,65 @@ const TOOL_SET: ReadonlySet<string> = new Set(BROWSERSKILL_TOOLS)
  * 新来的动作默认进不了公司端，要先有人把它写进这张表、同时决定它是读还是写。
  *
  * 逐条的理由：
- * - `browser_inspect`：六个动作全是看页面（observe / snapshot / html / screenshot /
- *   console / network），一个都不碰外面；
- * - `browser_page`：导航算**读外部**——打开一个网页就是"去外面读一份东西"（55 §3 原话），
- *   真正管住它的是域名白名单。back / forward / reload / wait 同理；
- * - `browser_session`：start 开的是一个**独立的 Agent 窗口**（不是用户那个标签），
+ * - `bsk_inspect`：observe / snapshot / html / screenshot / console / network 全是看页面，
+ *   一个都不碰外面。0.3.3 新增的三个（WP366）不在这张表里：`debug` 看 `debugAction`
+ *   （{@link BROWSERSKILL_DEBUG_READ_ACTIONS}）、`extract` 看给没给 `output`，这两个在
+ *   {@link classifyBrowserSkillEffect} 里另判；`video`（录屏、把 MP4 存到本机路径）整个按写；
+ * - `bsk_page`：导航算**读外部**——打开一个网页就是"去外面读一份东西"（55 §3 原话），
+ *   真正管住它的是域名白名单。back / forward / reload / wait 同理，0.3.3 新增的
+ *   wait-for-element（等某个元素出现 / 消失，只是轮询着看）也一样；
+ * - `bsk_session`：start 开的是一个**独立的 Agent 窗口**（不是用户那个标签），
  *   stop 关的是自己开的那个，list 只是看一眼——都不改外面世界的任何东西；
- * - `browser_tabs`：list / select 是读；create / close 改的是浏览器里的东西，
+ * - `bsk_tabs`：list / select 是读；create / close 改的是浏览器里的东西，
  *   borrow / return 更是**把用户自己的标签搬进 Agent 窗口**，一律按写；
- * - `browser_interact`：点击、输入、选择、按键——全是写；
- * - `browser_assist`：resize / emulate 只改显示；`request-help` 是**请人接管**
+ * - `bsk_interact`：点击、输入、选择、按键——全是写；
+ * - `bsk_assist`：resize / emulate 只改显示；`request-help` 是**请人接管**
  *   （弹一层让用户自己操作），它本身不替用户动手，所以按读放行（另见
  *   {@link isBrowserSkillHandoff}：放行的同时在时间线上记一条）。
  */
 export const BROWSERSKILL_READ_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
-  browser_assist: new Set(['resize', 'emulate', 'request-help']),
-  browser_inspect: new Set(['observe', 'snapshot', 'html', 'screenshot', 'console', 'network']),
-  browser_interact: new Set<string>(),
-  browser_page: new Set(['navigate', 'back', 'forward', 'reload', 'wait']),
-  browser_session: new Set(['start', 'stop', 'list']),
-  browser_tabs: new Set(['list', 'select']),
+  bsk_assist: new Set(['resize', 'emulate', 'request-help']),
+  bsk_inspect: new Set(['observe', 'snapshot', 'html', 'screenshot', 'console', 'network']),
+  bsk_interact: new Set<string>(),
+  bsk_page: new Set(['navigate', 'back', 'forward', 'reload', 'wait', 'wait-for-element']),
+  bsk_session: new Set(['start', 'stop', 'list']),
+  bsk_tabs: new Set(['list', 'select']),
 }
+
+/**
+ * `bsk_inspect{action:'debug'}`（0.3.3 新增，WP366）里**读**的那些 `debugAction`。
+ *
+ * debug 一个动作底下是二十几个子动作，读写混着，所以再看一层。读的是：抓包的开 / 关
+ * （上游原话：光抓包不改流量）、钉住 / 取消钉住某条请求（只是不让它被挤掉）、
+ * 以及各种看结果（性能、汇总、重复请求、请求明细、控制台、规则列表……）。
+ *
+ * 表外一律按写。有意按写的是这几个：
+ * - `rule_add` / `rule_enable` / `rule_disable` / `rule_remove`：**拦截、改写、伪造**
+ *   页面上真在发的请求（上游原话 "can block, modify or mock live traffic"）；
+ * - `replay`：**再发一次**某条请求（上游原话 "may change server data"）；
+ *   它带的 url 另外还要过域名白名单（{@link browserSkillReplayUrl}）；
+ * - `export`：把整份记录写成本机上的一个新文件（路径由模型给）。
+ */
+export const BROWSERSKILL_DEBUG_READ_ACTIONS: ReadonlySet<string> = new Set([
+  'performance',
+  'aggregate',
+  'duplicates',
+  'capabilities',
+  'activity',
+  'wait',
+  'pin',
+  'unpin',
+  'start',
+  'stop',
+  'status',
+  'requests',
+  'request',
+  'operations',
+  'operation',
+  'console',
+  'pages',
+  'rules',
+])
 
 /** 是不是 BrowserSkill 的工具；是就回它自己的名字，不是回 `undefined`。 */
 export function browserSkillToolName(tool: string): string | undefined {
@@ -84,7 +125,14 @@ function actionOf(args: Record<string, unknown> | undefined): string | undefined
   return typeof action === 'string' ? action : undefined
 }
 
-/** 按 `args.action` 判读写（表外一律写；16 §3 最严）。 */
+/**
+ * 按 `args.action` 判读写（表外一律写；16 §3 最严）。
+ *
+ * `bsk_inspect` 的两个 0.3.3 新动作再看一层（WP366）：
+ * - `debug`：`debugAction` 在 {@link BROWSERSKILL_DEBUG_READ_ACTIONS} 里才是读；
+ * - `extract`：把页面上已经加载的表格 / 列表读成行列，与 `html` 是同一种"看"——
+ *   但给了 `output` 就是往本机写一个新文件（JSON / CSV），那一次按写。
+ */
 export function classifyBrowserSkillEffect(
   short: string,
   args?: Record<string, unknown>,
@@ -92,6 +140,15 @@ export function classifyBrowserSkillEffect(
   const reads = BROWSERSKILL_READ_ACTIONS[short]
   const action = actionOf(args)
   if (reads === undefined || action === undefined) return 'write_external'
+  if (short === 'bsk_inspect' && action === 'debug') {
+    const sub = args?.debugAction
+    return typeof sub === 'string' && BROWSERSKILL_DEBUG_READ_ACTIONS.has(sub)
+      ? 'read_external'
+      : 'write_external'
+  }
+  if (short === 'bsk_inspect' && action === 'extract') {
+    return args?.output === undefined ? 'read_external' : 'write_external'
+  }
   return reads.has(action) ? 'read_external' : 'write_external'
 }
 
@@ -100,12 +157,16 @@ export function classifyBrowserSkillEffect(
  *
  * | 工具 | 动作 | url 参数 |
  * |---|---|---|
- * | `browser_page` | `navigate` | 必填 |
- * | `browser_session` | `start` | 选填（不给 = 开个空白的 Agent 窗口） |
- * | `browser_tabs` | `create` | 选填（不给 = 开个空白标签） |
+ * | `bsk_page` | `navigate` | 必填 |
+ * | `bsk_session` | `start` | 选填（不给 = 开个空白的 Agent 窗口） |
+ * | `bsk_tabs` | `create` | 选填（不给 = 开个空白标签） |
  *
  * 回 `undefined` = 这次调用没有"要打开的地址"，白名单这一关没话说；
- * 回 `''` = 该给地址却没给（`browser_page{navigate}`），按"打不开这个地址"拒。
+ * 回 `''` = 该给地址却没给（`bsk_page{navigate}`），按"打不开这个地址"拒。
+ *
+ * `bsk_inspect` 也有个 `url` 入参，但那是 debug 翻请求记录用的**子串过滤**，什么都不打开，
+ * 所以不在这张表里。debug 重放请求带的地址不算"打开网页"（不进第三栏的导航计数），
+ * 由 {@link browserSkillReplayUrl} 单独交给白名单。
  * 别的动作（点击、回退）也可能走到别的站上去，但它们的入参里没有 URL——
  * 判不出来的那些由读写分类兜底。
  */
@@ -115,15 +176,39 @@ export function browserSkillNavigationUrl(
 ): string | undefined {
   const action = actionOf(args)
   const url = typeof args.url === 'string' ? args.url : undefined
-  if (short === 'browser_page' && action === 'navigate') return url ?? ''
-  if (short === 'browser_session' && action === 'start') return url
-  if (short === 'browser_tabs' && action === 'create') return url
+  if (short === 'bsk_page' && action === 'navigate') return url ?? ''
+  if (short === 'bsk_session' && action === 'start') return url
+  if (short === 'bsk_tabs' && action === 'create') return url
   return undefined
 }
 
-/** 这次调用是不是"请人接管"（`browser_assist{action:'request-help'}`）。 */
+/**
+ * debug 重放请求（`bsk_inspect{action:'debug', debugAction:'replay'}`，0.3.3 新增）要发去的地址。
+ *
+ * `replay` 入参是一段 **JSON 字符串**（`{key, url?, method?, headers?, body?}`）。给了 url
+ * 就回它；没给 url（照原样重发抓到的那一条）或者 JSON 解析不了，回 `undefined`——
+ * 前者的地址我们看不见（上游只许与原请求同源），后者插件自己会拒。两种情况都还有
+ * 读写分类兜着：replay 按写，公司端一律拒。
+ */
+export function browserSkillReplayUrl(
+  short: string,
+  args: Record<string, unknown>,
+): string | undefined {
+  if (short !== 'bsk_inspect' || actionOf(args) !== 'debug') return undefined
+  if (args.debugAction !== 'replay' || typeof args.replay !== 'string') return undefined
+  try {
+    const body: unknown = JSON.parse(args.replay)
+    if (body === null || typeof body !== 'object') return undefined
+    const url = (body as Record<string, unknown>).url
+    return typeof url === 'string' ? url : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 这次调用是不是"请人接管"（`bsk_assist{action:'request-help'}`）。 */
 export function isBrowserSkillHandoff(short: string, args: Record<string, unknown>): boolean {
-  return short === 'browser_assist' && actionOf(args) === 'request-help'
+  return short === 'bsk_assist' && actionOf(args) === 'request-help'
 }
 
 export interface BrowserSkillPolicyInput {
@@ -143,7 +228,7 @@ function hostsSentence(allowed: readonly string[]): string {
 }
 
 /**
- * 域名白名单：三处 url 一处不漏（规则与官方 provider 同一套）。
+ * 域名白名单：三处打开网页的 url + 一处重放请求的 url，一处不漏（规则与官方 provider 同一套）。
  *
  * 回 `undefined` = 这一关没话说（接着走读写分类那一关）；回字符串 = 拒，
  * 字符串就是给人看的原因（门禁把它物化成 `tool.result{blocked}` 进事件日志）。
@@ -155,7 +240,8 @@ function hostsSentence(allowed: readonly string[]): string {
 export function checkBrowserSkillPolicy(input: BrowserSkillPolicyInput): string | undefined {
   const short = browserSkillToolName(input.tool)
   if (short === undefined) return undefined
-  const raw = browserSkillNavigationUrl(short, input.args)
+  const raw =
+    browserSkillNavigationUrl(short, input.args) ?? browserSkillReplayUrl(short, input.args)
   if (raw === undefined) return undefined
   const allowed = input.allowedHosts ?? []
   if (allowed.length === 0) {
@@ -180,6 +266,7 @@ export function checkBrowserSkillPolicy(input: BrowserSkillPolicyInput): string 
  *   成功调用过一次**才注册（progressive disclosure）。我们的组合里没有 `dsh-skill` /
  *   `dsh-tool-skill`，那个触发器一辈子不会响——实测 `lazyTools: true` 时
  *   `ctx.tools.schemas(agent)` 是**空的**（一个浏览器工具都没有）。所以这里必须 `false`。
+ *   （WP366 在 0.3.3 上重核过：上游缺省仍是 `true`，测试 (a) 那条照样是 0 个工具。）
  * - `observationEnabled: false`。那是给 dsh 自己的 web 客户端做画中画悬浮层用的：
  *   每 1.5 秒截一次屏、经 loopback 的 SSE 路由推出去。我们是 headless 运行，
  *   没有那张界面，开着只是白截屏（而且截屏是用户屏幕上的内容，不开更干净）。
@@ -275,10 +362,10 @@ export function bskBinaryUsable(path: string): boolean {
 export function browserSkillBrief(): string {
   return [
     '- 你用的是**用户自己那个浏览器**：他登录过的站你直接就看得到，别去登录、别去注册。',
-    '- 你的操作都在一个**单独的 Agent 窗口**里（`browser_session{action:"start"}` 开的那个）。' +
-      '要用用户已经开着的标签，得 `browser_tabs{action:"borrow"}` 借过来——' +
+    '- 你的操作都在一个**单独的 Agent 窗口**里（`bsk_session{action:"start"}` 开的那个）。' +
+      '要用用户已经开着的标签，得 `bsk_tabs{action:"borrow"}` 借过来——' +
       '那会打断他手上的事，用完立刻 `return` 还回去。',
-    '- 卡住了（要登录、要验证码、要他确认）就用 `browser_assist{action:"request-help"}` ' +
+    '- 卡住了（要登录、要验证码、要他确认）就用 `bsk_assist{action:"request-help"}` ' +
       '请本人接管，把要他做什么写清楚；不要自己猜、不要替他填。',
   ].join('\n')
 }

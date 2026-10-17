@@ -252,7 +252,7 @@ export function classifySideEffect(
   /*
    * WP92（55 §10）：第二种浏览器（腾讯 BrowserSkill）的六个工具。
    *
-   * 它们是**裸名**（`browser_page` / `browser_inspect` …，没有 `mcp__…__` 前缀），
+   * 它们是**裸名**（`bsk_page` / `bsk_inspect` …，没有 `mcp__…__` 前缀），
    * 而且一个名字管好几件事，所以判定只能看 `args.action`——表在
    * `browserskill.ts` 的 `BROWSERSKILL_READ_ACTIONS` 里，表外一律按写。
    */

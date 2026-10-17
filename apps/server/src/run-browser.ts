@@ -10,10 +10,10 @@
  *
  * | 格 | 从哪条事件来 |
  * |---|---|
- * | 哪种执行器 | `tool.call` 的工具名（带 `mcp__playwright-mcp__` 前缀 = 官方 provider；六个 `browser_*` 裸名 = WP92 BrowserSkill） |
+ * | 哪种执行器 | `tool.call` 的工具名（带 `mcp__playwright-mcp__` 前缀 = 官方 provider；六个 `bsk_*` 裸名 = WP92 BrowserSkill（0.3.3 起，WP366）） |
  * | 当前域 / 最近一次导航 | `tool.call` 里带 URL 的那几种（两种浏览器各有各的入参位置，判定复用 `@agentsws/dsh-adapter` 那两个纯函数） |
  * | 最近一次拒绝 | `tool.result{status:'blocked'}`，按 `call_id` 认回是哪个工具 |
- * | 等人接管 | `progress{step:'browser_handoff'}`（WP92 的 `browser_assist{request-help}` 放行时记的那一条） |
+ * | 等人接管 | `progress{step:'browser_handoff'}`（WP92 的 `bsk_assist{request-help}` 放行时记的那一条） |
  * | 还在不在跑 | 有没有 `run.completed` / `run.failed` / `run.cancelled` |
  *
  * **不存第二份状态**：这是纯投影，所以运行结束之后照样算得出来——

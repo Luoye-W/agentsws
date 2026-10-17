@@ -87,6 +87,10 @@ beforeEach(async () => {
   vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
     logs.push(JSON.stringify(args))
   })
+  // WP354（dsh 0.2.1-alpha.4）：官方账号模块的诊断从 console.info 挪到 console.error，而且只在失败时打
+  vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    logs.push(JSON.stringify(args))
+  })
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const hit = platform.handle(url, init)
@@ -273,6 +277,12 @@ describe('WP134 登录状态机（官方模块 + 替身平台）', () => {
       (v) => v.status === 'credential-stored',
     )
     const outward = JSON.stringify([await h.state(), await h.profile(), await h.balance()])
+    /*
+     * WP354（dsh 0.2.1-alpha.4，官方 `fix(account): 仅在账号接口失败时输出 stderr 日志`）：诊断只在平台接口
+     * **失败**时才打（console.error）。所以这里故意让余额查询失败一次（带着有效令牌去请求），逼出官方那一条诊断再查它。
+     */
+    platform.setBalance('fail')
+    expect(await h.balance()).toEqual({ status: 'failed' })
     await h.signOut()
     const secret = platform.token
     for (const r of platform.requests) expect(r.body).not.toContain(secret)

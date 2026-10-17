@@ -140,6 +140,8 @@ export interface DeepSeekAccountAssembly {
   signedIn(): boolean
   /** 官方 `resolveToken`：只对 `api.deepseek.com` 给值；没挂模块就是 `undefined`。 */
   resolveToken(url: string): Promise<string | undefined>
+  /** WP367：挂着的那一版 dsh 账号模块的版本号（比账号模型清单的最低版本用）；没挂模块是 `undefined`。 */
+  clientVersion(): string | undefined
   /**
    * WP150：推理口回 401 时把那一次的令牌报回官方 `rejectToken`（官方只在它仍是当前登录时才清，
    * 清了就发「登录失效」→ 这里接着做收尾）。没挂模块就什么都不做。
@@ -424,6 +426,7 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
   return {
     signedIn: () => signed,
     resolveToken: async (url) => (host === undefined ? undefined : host.resolveToken(url)),
+    clientVersion: () => host?.clientVersion,
     rejectToken: async (token) => {
       await host?.rejectToken?.(token)
     },
