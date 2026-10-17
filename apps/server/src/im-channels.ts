@@ -122,7 +122,7 @@ export function storageTierOf(env: NodeJS.ProcessEnv): ImStorageTier {
 export const WECHAT_LOCAL_ONLY =
   '个人微信只能绑在你自己这台机器上。这个工作区的数据现在放在共享数据库 / 云上，' +
   '你的微信登录凭据一旦存进去，同一套数据库的其他人、以及托管方都在它的可及范围里。' +
-  '想用微信跟自己的代理说话，请在本机档（数据在你自己电脑上）的那台机器上绑。'
+  '想用微信跟自己的助理说话，请在本机档（数据在你自己电脑上）的那台机器上绑。'
 
 /* ------------------------------------------------------------------ */
 /* 装配                                                                */
@@ -134,7 +134,7 @@ export const WECHAT_LOCAL_ONLY =
  * 两条长轮询会互相顶掉）。团队那三条（企业微信 / 飞书 / 钉钉）是公司的应用凭据，按品牌各一套。
  */
 export const WECHAT_FIRST_BRAND_ONLY =
-  '个人微信跟人走，不按品牌分：切回第一个品牌绑一次就行，所有品牌都用它跟你的代理说话。'
+  '个人微信跟人走，不按品牌分：切回第一个品牌绑一次就行，所有品牌都用它跟你的助理说话。'
 
 export interface ImIdentity {
   authenticate(bearer: string): Promise<Principal | undefined>
