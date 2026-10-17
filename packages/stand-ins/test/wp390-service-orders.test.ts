@@ -312,3 +312,21 @@ describe('WP390 demo 的自动驾驶', () => {
     expect(status()).toBe('delivered')
   })
 })
+
+describe('WP390 同意报价时积分不够', () => {
+  it('402，一分不扣，这一单原样停在「已报价」', () => {
+    const w = world(100)
+    const { order } = w.svc.submit({
+      service_id: 'workshop.site_build',
+      requirements: [
+        { question_id: 'sell', answer: 'a' },
+        { question_id: 'market', answer: 'b' },
+      ],
+      idempotency_key: 'poor',
+    })
+    w.svc.quote(order.id, { credits: 1200, deliver_hours: 100 })
+    expect(() => w.svc.acceptQuote(order.id)).toThrow(/积分不够/)
+    expect(w.svc.get(order.id).status).toBe('quoted')
+    expect(w.left()).toBe(100)
+  })
+})

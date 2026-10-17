@@ -369,9 +369,12 @@ export class ServiceOrdersStandIn {
     // 一单最多扣一次：已经付过（重发 / 点两次）就回那一单
     if (r.view.status !== 'quoted' && r.view.quote !== undefined && r.view.escrow_credits > 0)
       return this.view(id)
-    this.step(r, 'accept_quote', 'user')
+    // 先看走不走得通、钱够不够，再动状态（积分不够 402 时这一单原样停在「已报价」）
+    if (serviceOrderTransition(r.view.status, 'accept_quote', 'user') === undefined)
+      throw new StandInServiceError(409, 'conflict', '这一单现在不能这样做。')
     const quote = r.view.quote as ServiceQuote
     this.charge(id, quote.credits)
+    this.step(r, 'accept_quote', 'user')
     r.view.total_credits = quote.credits
     r.view.escrow_credits = quote.credits
     r.view.respond_by = this.plus(r.service.promise.accept_hours)

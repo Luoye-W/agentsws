@@ -90,7 +90,13 @@ export interface CloudStandInOptions {
    * WP390：工坊服务（`/v1/services*`）那几条。`scope_missing` = 演老令牌缺 `services` 动作集（403 +
    * `required_scope`，决策 1098）；`services` = 换一份目录（默认示意三项）。
    */
-  services?: { scope_missing?: boolean; catalog?: ServiceView[]; autopilot?: boolean }
+  services?: {
+    scope_missing?: boolean
+    catalog?: ServiceView[]
+    autopilot?: boolean
+    /** 演示多给的充值积分（截图要走完一整单建站时用；默认 0，余额与平时一样）。 */
+    extra_credits?: number
+  }
 }
 
 /** 替身收到过的一次请求（测试用：断言走的是替身，而不是别处）。 */
@@ -513,14 +519,24 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   let premiumSpent = 0
   /** WP390：工坊服务扣进托管、还没退回的（从可用里扣；退回就加回来）。 */
   let servicesSpent = 0
+  const servicesExtra = Math.max(0, options.services?.extra_credits ?? 0)
   const premiumExtra =
     options.premiumTheme === false ? 0 : (options.premiumTheme?.extra_credits ?? 0)
   const balance = (): WalletBalance => ({
     org_id: STAND_IN_ORG.id,
-    purchased: PURCHASED + premiumExtra,
+    purchased: PURCHASED + premiumExtra + servicesExtra,
     granted: GRANTED,
     available: round(
-      Math.max(0, PURCHASED + premiumExtra + GRANTED - monthUsed() - premiumSpent - servicesSpent),
+      Math.max(
+        0,
+        PURCHASED +
+          premiumExtra +
+          servicesExtra +
+          GRANTED -
+          monthUsed() -
+          premiumSpent -
+          servicesSpent,
+      ),
     ),
     reserved: 0,
     expiring: [{ credits: GRANTED, expires_at: days(30) }],
