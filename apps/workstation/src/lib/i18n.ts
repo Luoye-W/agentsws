@@ -50,35 +50,35 @@ const zh: Table = {
   // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"AI 正在替你干活"。
   // 按钮里那种普通的加载转圈不算（docs/36 §12）。
   'brand.busy': 'AI 正在替你干活',
-  // ── 41 §1 个人代理（原「秘书」，09-10 改名）─────────────────────────
+  // ── 41 §1 个人助理（原「秘书」，09-10 改「代理」，WP382 统一叫「助理」）─────────────────────────
   //
   // **只改面向用户的文案**：键名（`secretary.*`）、包名（`@agentsws/secretary`）、
   // 路由（`/v1/people/:id/ask`）、事件名（`secretary.answered`）一个都不动——
   // 那些是契约面，改了就是无谓地把外面接着的东西全打断。
-  'nav.secretary': '我的代理',
+  'nav.secretary': '我的助理',
   // WP96：顶栏那条长搜索框（点开就是 ⌘K 命令面板）
   'nav.command': '交给某个岗位一件事…',
   // WP125（本单交付 4）：合成世界的「演示数据」标记——不显眼但始终在
   'demo.badge': '演示数据',
   'demo.badge.hint': '这个工作区跑的是演示用的合成数据，不是你的真实业务数据。',
-  'secretary.title': '我的代理',
+  'secretary.title': '我的助理',
   'secretary.intro':
-    '代理只管四件事：我是谁、我在做什么、我什么时候有空，以及别人丢来的事该谁做。专业的事它不做，只转给对的岗位。',
-  'secretary.tab.ask': '问代理',
+    '助理只管四件事：我是谁、我在做什么、我什么时候有空，以及别人丢来的事该谁做。专业的事它不做，只转给对的岗位。',
+  'secretary.tab.ask': '问助理',
   'secretary.tab.profile': '我的 profile',
   'secretary.tab.asked': '谁问过我',
   'secretary.tab.meets': '约时间',
-  'secretary.ask.who': '问谁的代理',
+  'secretary.ask.who': '问谁的助理',
   'secretary.ask.placeholder': '他在忙什么？负责哪些店？现在忙不忙？擅长什么？',
   'secretary.ask.submit': '问',
   'secretary.ask.empty': '还没问过。四类问题它答得上：在做什么 / 负责什么 / 忙不忙 / 擅长什么。',
   'secretary.ask.refused': '这个要问本人',
   'secretary.ask.refer': '转给：{role}',
-  'secretary.route.title': '把一件事丢给代理',
+  'secretary.route.title': '把一件事丢给助理',
   'secretary.route.placeholder': '例如：这个客户投诉说包裹破损，要退款，处理一下',
-  'secretary.route.submit': '让代理判断',
+  'secretary.route.submit': '让助理判断',
   'secretary.route.task': '已出认领卡：{role}',
-  'secretary.route.question': '这是专业问题，代理不答——转给 {role}',
+  'secretary.route.question': '这是专业问题，助理不答——转给 {role}',
   'secretary.route.unrouted': '看不出属于哪个岗位，先进「没人认领」的车道',
   'secretary.route.existing': '工具箱里已经有像的：{titles}',
   'secretary.route.similar': '{who} 正在做「{title}」',
@@ -90,7 +90,7 @@ const zh: Table = {
   'secretary.profile.availability': '可用时段',
   'secretary.profile.availability.hint': '别人约你的时候按它算冲突；一场会默认 {n} 分钟。',
   'secretary.profile.contact': '联系偏好',
-  'secretary.profile.contact.secretary': '先问我的代理',
+  'secretary.profile.contact.secretary': '先问我的助理',
   'secretary.profile.contact.direct': '直接找我',
   'secretary.profile.disclosure': '公开级别',
   'secretary.profile.disclosure.hint':
@@ -118,20 +118,20 @@ const zh: Table = {
   'secretary.meets.decline': '换个时间',
   'secretary.meets.accepted': '已经进了双方日历',
   'secretary.meets.declined': '已回绝',
-  'secretary.meets.alternatives': '代理给的替代时段：',
+  'secretary.meets.alternatives': '助理给的替代时段：',
   'secretary.meet.title': '约时间',
   'secretary.meet.subject': '聊什么',
   'secretary.meet.who': '约谁',
   'secretary.meet.day': '哪天',
   'secretary.meet.time': '几点',
   'secretary.meet.duration': '多久（分钟）',
-  'secretary.meet.submit': '发给他的代理',
+  'secretary.meet.submit': '发给他的助理',
   'secretary.meet.sent': '已发出，等他点头才进双方日历',
   'secretary.meet.conflict': '这个时段约不上',
   'secretary.meet.try': '试试这几个：',
   'people.title': '同事',
   'people.hidden': '这一项他设成了不公开——要问本人',
-  'people.ask': '问他的代理',
+  'people.ask': '问他的助理',
   'people.in_progress': '手上有 {n} 件在进行',
   'people.missing': '没有这个人。',
   'people.back': '回同事列表',
@@ -3193,10 +3193,10 @@ const zh: Table = {
   // ── WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）────
   'nav.im': '消息渠道',
   'im.title': '消息渠道',
-  'im.intro': '把代理接到聊天软件上。',
-  'im.intro.hint': '微信那条是「你和你自己的代理的私聊」；企业微信、飞书、钉钉三条是团队用的。',
-  'im.wechat.line': '扫一次码，就能在微信里问你自己的代理。',
-  'im.wechat.terms.short': '只用来问你自己的代理；拿去做客服或群发会牵连你的主微信号。',
+  'im.intro': '把助理接到聊天软件上。',
+  'im.intro.hint': '微信那条是「你和你自己的助理的私聊」；企业微信、飞书、钉钉三条是团队用的。',
+  'im.wechat.line': '扫一次码，就能在微信里问你自己的助理。',
+  'im.wechat.terms.short': '只用来问你自己的助理；拿去做客服或群发会牵连你的主微信号。',
   'im.wechat.local': '登录凭据只存在这台机器上，不经 AI、不进日志。',
   'im.wecom.line': '团队用：同事在群里 @ 它，它按提问人的身份作答。',
   'im.state.live': '在收信',
@@ -3207,12 +3207,12 @@ const zh: Table = {
   'im.state.unconfigured': '没配',
   'im.wechat.title': '微信（你自己的）',
   'im.wechat.what':
-    '扫一次码，之后你可以直接在微信里问自己的代理：今天有什么要定的、这件事到哪了、帮我看一下日程。它答的内容和你在工作台上看到的是同一份。',
+    '扫一次码，之后你可以直接在微信里问自己的助理：今天有什么要定的、这件事到哪了、帮我看一下日程。它答的内容和你在工作台上看到的是同一份。',
   'im.wechat.not.colleagues': '同事加不了这个号——它只认你一个人，别人发来的消息一条都不处理。',
   'im.wechat.not.group': '它不能进群，也不会替你回任何客户。这不是客服渠道。',
   'im.wechat.not.approve': '要你定的事，微信里只给一段摘要和一条链接；按「通过」要回工作台。',
   'im.wechat.terms':
-    '微信官方条款（6.1 / 6.4）规定：拿它去做客服、群发或对外应答，违规会牵连你的主微信账号。所以这条通道只做「你问自己的代理」这一件事。登录凭据只存在你这台机器上，不经 AI、不进日志。',
+    '微信官方条款（6.1 / 6.4）规定：拿它去做客服、群发或对外应答，违规会牵连你的主微信账号。所以这条通道只做「你问自己的助理」这一件事。登录凭据只存在你这台机器上，不经 AI、不进日志。',
   'im.wechat.scan': '扫码连上微信',
   'im.wechat.rescan': '重新扫码',
   'im.wechat.unbind': '解绑',
@@ -3225,7 +3225,7 @@ const zh: Table = {
   'im.wechat.cancel': '先不连',
   'im.wecom.title': '企业微信机器人（公司的）',
   'im.wecom.what':
-    '团队那一条：在群里 @ 它，它按「提问人自己的身份」去问那个人的代理，所以每个人看到的答案都只到他该看到的那一层。',
+    '团队那一条：在群里 @ 它，它按「提问人自己的身份」去问那个人的助理，所以每个人看到的答案都只到他该看到的那一层。',
   'im.wecom.where':
     'BotID 与 Secret 在企业微信管理后台的「智能机器人」里；Secret 只显示一次，记得当场复制。',
   'im.wecom.bot_id': 'BotID',
