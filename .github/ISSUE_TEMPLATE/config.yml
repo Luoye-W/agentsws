@@ -3,6 +3,6 @@ contact_links:
   - name: Security vulnerability / 安全漏洞
     url: https://github.com/Luoye-W/agentsws/security/advisories/new
     about: Report privately. Never in a public issue. See SECURITY.md.
-  - name: Design documents (Chinese) / 设计文档
-    url: https://github.com/Luoye-W/agentsws/blob/main/docs/README.md
-    about: 38 documents, indexed one line each. Decisions are appended to docs/03.
+  - name: Help articles / 教程
+    url: https://agentsws.com/docs/
+    about: How to install, connect accounts and models, and use each feature.

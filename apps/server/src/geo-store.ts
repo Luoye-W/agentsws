@@ -13,6 +13,10 @@
  * | `seo_rank_snapshots` | 一个关注词一次排名 |
  * | `seo_brand_gsc_weekly` | 品牌词在 Search Console 里一周的曝光 / 点击 / 平均排名（决策 468，Luoye 10-14 改） |
  * | `domain_kinds` | 域名分类缓存（内置表认不出的，O2 交模型判一次；人可改） |
+ * | `geo_insights` | WP380：一条回答的 AI 判断（比较更推荐谁、说法对 / 错 / 过时，都附原话） |
+ * | `geo_facts` | WP380：官方事实表（一格一行，带日期与以前的说法） |
+ * | `geo_consistency` | WP380：一次对外说法一致性检查（对了哪几页、查出哪几处） |
+ * | `geo_rechecks` | WP380：一张 GEO 改动的复查记录（改了什么、看哪个数、哪天复查、前后与建议） |
  *
  * 决策 473（Luoye 10-14 改）：回答全文、引用、周指标都**长期保存**，**不做过期清理**；
  * 用户可导出（JSON / CSV）、可删除（按品牌 / 按时间段）。迁移用 `PRAGMA user_version`，只加不删。
@@ -22,13 +26,17 @@ import type {
   AiPlatform,
   BrandWatch,
   CitedSiteKind,
+  GeoAnswerInsight,
   GeoAnswerRecord,
   GeoCitationRecord,
+  GeoConsistencyRun,
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
   GeoHistoryExport,
   GeoMentionRecord,
+  GeoOfficialFact,
   GeoQuestion,
+  GeoRecheck,
   Iso8601,
   SeoBrandGscWeek,
   SeoRankSnapshot,
@@ -201,6 +209,31 @@ CREATE TABLE IF NOT EXISTS watch_weekly (
   PRIMARY KEY (period, kind)
 );
 `,
+  // WP380：比较胜率 / 描述准确度的 AI 判断、官方事实表、一致性检查、改完复查（只加表）
+  `
+CREATE TABLE IF NOT EXISTS geo_insights (
+  answer_id TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  judged_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geo_facts (
+  key TEXT PRIMARY KEY,
+  payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geo_consistency (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geo_rechecks (
+  id TEXT PRIMARY KEY,
+  due TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS geo_rechecks_due ON geo_rechecks (status, due);
+`,
 ]
 
 /** 现在的表结构版本。 */
@@ -340,6 +373,18 @@ export interface GeoStore {
   weekly(
     kind: 'geo' | 'rank' | 'brand_gsc',
   ): { period: string; payload: unknown; computed_at: Iso8601 }[]
+  /** WP380：一条回答的 AI 判断（整条换）。 */
+  setInsight(insight: GeoAnswerInsight): void
+  insights(answer_ids?: readonly string[]): GeoAnswerInsight[]
+  /** WP380：官方事实表（整张换；按 key 存）。 */
+  facts(): GeoOfficialFact[]
+  saveFacts(facts: readonly GeoOfficialFact[]): void
+  /** WP380：一致性检查（同 id 覆盖；取的时候新的在前）。 */
+  saveConsistency(run: GeoConsistencyRun): void
+  consistencyRuns(limit?: number): GeoConsistencyRun[]
+  /** WP380：复查记录（同 id 覆盖）。`due_by` = 复查日期不晚于这天。 */
+  saveRecheck(r: GeoRecheck): void
+  rechecks(filter?: { status?: GeoRecheck['status']; due_by?: string }): GeoRecheck[]
   /** 一个事务里做完（迁移老数据用）。 */
   tx<T>(fn: () => T): T
   close(): void
@@ -599,7 +644,9 @@ export function createGeoStore(dbPath?: string): GeoStore {
           ? 'answer_id, position'
           : table === 'geo_other_brands'
             ? 'answer_id, name'
-            : 'answer_id, entity'
+            : table === 'geo_insights'
+              ? 'answer_id'
+              : 'answer_id, entity'
       out.push(
         ...all(
           `SELECT * FROM ${table} WHERE answer_id IN (${marks}) ORDER BY ${order}`,
@@ -947,6 +994,11 @@ export function createGeoStore(dbPath?: string): GeoStore {
         ranks: store.ranks({ range }),
         brand_gsc: store.brandGscWeeks({ range: weekRange(range) }),
         other_brands: store.otherBrands(ids),
+        // WP380：AI 判断、官方事实、一致性检查、复查
+        insights: store.insights(ids),
+        facts: store.facts(),
+        consistency: store.consistencyRuns(),
+        rechecks: store.rechecks(),
       }
       const head = {
         format,
@@ -972,6 +1024,9 @@ export function createGeoStore(dbPath?: string): GeoStore {
           ranks: toCsv(tables.ranks),
           brand_gsc: toCsv(tables.brand_gsc),
           other_brands: toCsv(tables.other_brands),
+          insights: toCsv(tables.insights),
+          facts: toCsv(tables.facts),
+          rechecks: toCsv(tables.rechecks),
         },
       }
     },
@@ -999,6 +1054,7 @@ export function createGeoStore(dbPath?: string): GeoStore {
           return db.prepare(`DELETE FROM ${table}${w.sql}`).run(...w.args).changes
         }
         drop('geo_other_brands')
+        drop('geo_insights')
         const out: GeoHistoryDeleteResult = {
           citations: drop('geo_citations'),
           mentions: drop('geo_mentions'),
@@ -1015,7 +1071,11 @@ export function createGeoStore(dbPath?: string): GeoStore {
           db.prepare('DELETE FROM watch_settings').run()
           db.prepare('DELETE FROM geo_prompts').run()
           db.prepare('DELETE FROM domain_kinds').run()
+          db.prepare('DELETE FROM geo_facts').run()
         }
+        // WP380：按品牌删时一致性检查与复查一起删（按时间段只删那段里建的）
+        del('geo_consistency', 'at', range)
+        del('geo_rechecks', 'created_at', range)
         return out
       })(),
     addTask: (t) => {
@@ -1077,6 +1137,64 @@ export function createGeoStore(dbPath?: string): GeoStore {
         payload: pj(r.payload, null),
         computed_at: String(r.computed_at),
       })),
+    setInsight: (i) => {
+      db.prepare(
+        `INSERT INTO geo_insights (answer_id, payload, judged_at) VALUES (?,?,?)
+         ON CONFLICT(answer_id) DO UPDATE SET payload = excluded.payload, judged_at = excluded.judged_at`,
+      ).run(i.answer_id, j(i), i.judged_at)
+    },
+    insights: (answer_ids) =>
+      (answer_ids === undefined
+        ? all('SELECT * FROM geo_insights ORDER BY answer_id')
+        : forAnswers('geo_insights', answer_ids, (r) => r)
+      ).flatMap((r) => {
+        const v = pj<GeoAnswerInsight | null>(r.payload, null)
+        return v === null ? [] : [v]
+      }),
+    facts: () =>
+      all('SELECT payload FROM geo_facts').flatMap((r) => {
+        const v = pj<GeoOfficialFact | null>(r.payload, null)
+        return v === null ? [] : [v]
+      }),
+    saveFacts: (facts) =>
+      db.transaction(() => {
+        db.prepare('DELETE FROM geo_facts').run()
+        const put = db.prepare('INSERT INTO geo_facts (key, payload) VALUES (?, ?)')
+        for (const f of facts) put.run(f.key, j(f))
+      })(),
+    saveConsistency: (run) => {
+      db.prepare(
+        `INSERT INTO geo_consistency (id, at, payload) VALUES (?,?,?)
+         ON CONFLICT(id) DO UPDATE SET at = excluded.at, payload = excluded.payload`,
+      ).run(run.id, run.at, j(run))
+    },
+    consistencyRuns: (limit) =>
+      all(
+        `SELECT payload FROM geo_consistency ORDER BY at DESC, id DESC LIMIT ?`,
+        limit ?? 50,
+      ).flatMap((r) => {
+        const v = pj<GeoConsistencyRun | null>(r.payload, null)
+        return v === null ? [] : [v]
+      }),
+    saveRecheck: (r) => {
+      db.prepare(
+        `INSERT INTO geo_rechecks (id, due, status, created_at, payload) VALUES (?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET due = excluded.due, status = excluded.status, payload = excluded.payload`,
+      ).run(r.id, r.due, r.status, r.created_at, j(r))
+    },
+    rechecks: (filter) => {
+      const conds = [
+        ...(filter?.status === undefined ? [] : [{ sql: 'status = ?', args: [filter.status] }]),
+        ...(filter?.due_by === undefined ? [] : [{ sql: 'due <= ?', args: [filter.due_by] }]),
+      ]
+      const w = where(conds)
+      return all(`SELECT payload FROM geo_rechecks${w.sql} ORDER BY due, id`, ...w.args).flatMap(
+        (r) => {
+          const v = pj<GeoRecheck | null>(r.payload, null)
+          return v === null ? [] : [v]
+        },
+      )
+    },
     tx: (fn) => db.transaction(fn)(),
     close: () => db.close(),
   }

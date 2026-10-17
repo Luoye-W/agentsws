@@ -38,3 +38,15 @@ QWEN.log
 
 # wrangler 的本地产物（dry-run / dev 的打包输出）
 .wrangler/
+
+# WP383：内部讨论、决策、派工单与报告、开发日志、审稿截图都在私有仓 agentsws-internal，
+# 公开仓不收（scripts/check-no-internal-docs.mjs 在校验与 CI 里兜底）。截图脚本默认仍写到
+# docs/assets/…，留档请拷到私有仓同一路径。
+DECISIONS.md
+/docs/briefs/
+/docs/upstream/
+/docs/design/
+/docs/[0-9]*
+/docs/assets/*
+!/docs/assets/brand/
+!/docs/assets/架构图-0[1-3]-*.png

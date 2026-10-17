@@ -37,6 +37,7 @@
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
+    "packages/contracts/src/geo-quality.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
@@ -135,7 +136,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "f4ffaab5add6d5d7d8aaf7361c8b762b",
+  "source_digest": "4f4d6b22cf18f2bf04a78b3e565f32d9",
   "objects": [
     {
       "id": "ad",

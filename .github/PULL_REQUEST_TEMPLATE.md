@@ -33,7 +33,7 @@ simulate :  N/8 scenarios, merge gate:
 
 ## Checklist
 
-Review checklist from `docs/35` §2 (shared constraints) and §3 (merge review).
+Review checklist (shared constraints and merge review).
 
 **Green before review**
 
@@ -48,13 +48,15 @@ Review checklist from `docs/35` §2 (shared constraints) and §3 (merge review).
 - [ ] One thing per PR; changes stay inside the package(s) this PR is about
 - [ ] No new dependency, or a new dependency is called out below with a reason
 - [ ] Contracts (`packages/contracts`) unchanged — or, if changed, only **added** fields,
-      kinds, events or error codes (interfaces are frozen, `docs/32` §2; changing the
+      kinds, events or error codes (interfaces are frozen; changing the
       meaning of an existing contract needs a major version and a migrator, and should be
       discussed in an issue first)
-- [ ] Docs updated if behaviour changed. Chinese design docs stay Chinese;
-      `docs/ARCHITECTURE.md`, `README` top section and the GitHub templates stay English
+- [ ] Docs updated if behaviour changed (help articles in `docs/help/` come in zh + en);
+      `README.md` (Chinese) and `README.en.md` (English) are kept in sync;
+      `docs/ARCHITECTURE.md` and the GitHub templates stay English
+- [ ] No internal notes added (`node scripts/check-no-internal-docs.mjs` passes)
 
-**House rules** (`docs/35` §2)
+**House rules**
 
 - [ ] TypeScript strict, ESM, `import type`, no `any`
 - [ ] Time comes from an injected `Clock`; randomness from an injected seed —

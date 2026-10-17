@@ -252,6 +252,8 @@ const EVENT_KEYS = [
   'web.research',
   'store.daily_report',
   'content.seo_daily',
+  // WP380 GEO 第二层
+  'content.geo_quality',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -385,6 +387,8 @@ const EXPECTED_KEYS = [
   'daily_reports',
   'daily_report_figures',
   'seo_daily',
+  // WP380
+  'geo_quality',
   // WP96（36 §2）：只有要人决定的才是卡
   'queue_cards',
   'panel_reports',
@@ -2100,6 +2104,14 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         seo_daily: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
+    case 'content.geo_quality': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'content.geo_quality',
+        geo_quality: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -2713,6 +2725,26 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       ...(d.no_dump === undefined
         ? {}
         : { no_dump: requireBool(source, 'expected.seo_daily.no_dump', d.no_dump) }),
+    }
+  }
+  // WP380：GEO 第二层那张报告
+  if (raw.geo_quality !== undefined) {
+    const d = raw.geo_quality
+    if (!isRec(d)) fail(source, 'expected.geo_quality', '必须是对象')
+    known(source, 'expected.geo_quality', d, ['win_rate', 'accuracy', 'owners', 'advice'])
+    out.geo_quality = {
+      ...(d.win_rate === undefined
+        ? {}
+        : { win_rate: numeric(source, 'expected.geo_quality.win_rate', d.win_rate) }),
+      ...(d.accuracy === undefined
+        ? {}
+        : { accuracy: numeric(source, 'expected.geo_quality.accuracy', d.accuracy) }),
+      ...(d.owners === undefined
+        ? {}
+        : { owners: strList(source, 'expected.geo_quality.owners', d.owners) }),
+      ...(d.advice === undefined
+        ? {}
+        : { advice: str(source, 'expected.geo_quality.advice', d.advice) }),
     }
   }
   // WP96（36 §2）：队列里剩几张、面板报表块有几条
