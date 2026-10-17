@@ -12646,7 +12646,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   if (options.staticDir !== undefined) {
     mountStatic(gateway.app, {
       dir: options.staticDir,
-      bootstrap: { owner_email: person.email, workspace: workspace.id, demo: mount !== undefined },
+      // WP358：所有者邮箱现取（关联云账号后占位 owner@localhost 会换成云账号邮箱）
+      bootstrap: async () => ({
+        owner_email: (await identity.getPerson(person.id))?.email ?? person.email,
+        workspace: workspace.id,
+        demo: mount !== undefined,
+      }),
     })
   }
   let httpServer: ServerType | undefined

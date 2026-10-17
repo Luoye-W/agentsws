@@ -70,6 +70,8 @@ describe('bridge-types', () => {
       launchAtLoginGet: 'agentsws:launch-at-login-get',
       launchAtLoginSet: 'agentsws:launch-at-login-set',
       launchAtLoginChanged: 'agentsws:launch-at-login-changed',
+      // WP358：会话丢了让壳重换
+      sessionRenew: 'agentsws:session-renew',
     })
   })
 

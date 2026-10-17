@@ -469,6 +469,20 @@ async function bootstrapConfig(): Promise<BootstrapConfig> {
   }
 }
 
+/** WP358：桌面壳的「重换会话」（13 §5 桥接层，特性检测；普通浏览器里没有）。 */
+async function renewDesktopSession(): Promise<boolean> {
+  const w = globalThis.window as unknown as
+    | { agentsws?: { session?: { renew?: () => Promise<boolean> } } }
+    | undefined
+  const renew = w?.agentsws?.session?.renew
+  if (renew === undefined) return false
+  try {
+    return (await renew()) === true
+  } catch {
+    return false
+  }
+}
+
 /** 没有会话——不是错误，是"该去登录页了"（WP28 之后工作区可能不止一个人）。 */
 export class NeedsLoginError extends Error {
   /** 登录页把它填进邮箱框，本机单人档一按就进。 */
@@ -501,6 +515,15 @@ export async function ensureSession(): Promise<Me> {
   } catch (err) {
     if (!(err instanceof ApiClientError) || err.status !== 401) throw err
     clearToken()
+  }
+  // WP358：桌面壳里会话丢了（过期 / 服务进程重启）→ 让壳给所有者重换一张，再问一次。
+  // 一个人用桌面版不该看见登录页；`remote` 档与旧壳回 false / 没有这一项，照旧往下走。
+  if (await renewDesktopSession()) {
+    try {
+      return await api<Me>('/v1/me')
+    } catch (err) {
+      if (!(err instanceof ApiClientError) || err.status !== 401) throw err
+    }
   }
   const config = await bootstrapConfig()
   if (config.demo !== true) throw new NeedsLoginError(config.owner_email)

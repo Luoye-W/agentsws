@@ -8,6 +8,10 @@
  *   接受完他就是这个工作区的成员了，然后用同一个邮箱走上面那条登录。
  *
  * 页面上不出现任何裸 id：说的是"你已经加入 NordVolt Gear"，不是 `ws_dtc3c`。
+ *
+ * WP358：这一页常被当成「工坊账号注册 / 登录」。标题下一句话说清楚它是进这个工作区、
+ * 不是工坊账号；邮箱不是成员时不再只报「未知邮箱」，而是告诉人该怎么办
+ * （主人一键换成主人的邮箱，同事去找负责人要邀请链接）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
@@ -73,6 +77,9 @@ export function LoginPage(): React.ReactNode {
 
   const failure = (err: unknown): string =>
     err instanceof ApiClientError ? err.message : t('error.generic')
+  // 服务端「未知邮箱」是 404：换成人话，并给两条出路
+  const unknownEmail =
+    ask.error instanceof ApiClientError && ask.error.status === 404 ? ask.variables : undefined
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
@@ -85,6 +92,11 @@ export function LoginPage(): React.ReactNode {
           <CardTitle className="text-sm">
             {inviteToken === undefined ? t('login.title') : t('login.invite.title')}
           </CardTitle>
+          {inviteToken === undefined ? (
+            <p className="text-xs text-muted-foreground" data-testid="login-subtitle">
+              {t('login.subtitle')}
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           {inviteToken === undefined ? null : invite.isPending ? (
@@ -124,7 +136,30 @@ export function LoginPage(): React.ReactNode {
             {t('login.send')}
           </Button>
 
-          {ask.error === null ? null : (
+          {ask.error === null ? null : unknownEmail !== undefined ? (
+            <div className="flex flex-col gap-1.5" data-testid="login-unknown">
+              <p role="alert" className="text-destructive">
+                {t('login.unknown', { email: unknownEmail })}
+              </p>
+              {ownerHint !== undefined && ownerHint !== unknownEmail ? (
+                <p className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                  {t('login.unknown.owner')}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="login-use-owner"
+                    onClick={() => {
+                      setEmail(ownerHint)
+                      ask.mutate(ownerHint)
+                    }}
+                  >
+                    {t('login.unknown.use_owner')}
+                  </Button>
+                </p>
+              ) : null}
+              <p className="text-muted-foreground">{t('login.unknown.colleague')}</p>
+            </div>
+          ) : (
             <p role="alert" className="text-destructive" data-testid="login-error">
               {failure(ask.error)}
             </p>
