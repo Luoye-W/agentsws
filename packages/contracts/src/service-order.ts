@@ -771,7 +771,10 @@ function grams(s: string): Set<string> {
  * {@link SERVICE_MATCH_THRESHOLD} 算命中）。
  */
 const core = (s: string): string =>
-  s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '').replace(FILLER, '')
+  s
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
+    .replace(FILLER, '')
 
 export function serviceIntentScore(phrase: string, text: string): number {
   const p = phrase.trim().toLowerCase()

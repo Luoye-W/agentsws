@@ -337,9 +337,8 @@ describe('WP390 验收卡 / 联系方式卡', () => {
     await waitFor(() => {
       expect(decide).toHaveBeenCalledTimes(1)
     })
-    expect((decide.mock.calls[0]?.[1] as { selected_option_id: string }).selected_option_id).toBe(
-      'accept',
-    )
+    const picked = decide.mock.calls[0]?.[1] as { selected_option_id: string } | undefined
+    expect(picked?.selected_option_id).toBe('accept')
   })
 
   it('申请退款要写一句为什么才交得上去', async () => {
@@ -381,10 +380,8 @@ describe('WP390 验收卡 / 联系方式卡', () => {
     await waitFor(() => {
       expect(decide).toHaveBeenCalledTimes(1)
     })
-    expect(
-      (decide.mock.calls[0]?.[1] as { edited_payload: { contact: unknown } }).edited_payload
-        .contact,
-    ).toEqual({ kind: 'email', value: 'me@example.com' })
+    const agreed = decide.mock.calls[0]?.[1] as { edited_payload: { contact: unknown } } | undefined
+    expect(agreed?.edited_payload.contact).toEqual({ kind: 'email', value: 'me@example.com' })
   })
 })
 
