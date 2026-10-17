@@ -51,6 +51,11 @@ export interface DesktopBridge {
    * 哪边改了另一边都跟着变。旧壳没有这一项：先判空（没有就不出这个开关）。
    */
   launchAtLogin?: DesktopLaunchAtLoginBridge
+  /**
+   * WP358：会话丢了（过期 / 服务进程重启）→ 让壳用会话密钥给所有者重换一张，cookie 照旧只进
+   * cookie 罐。回 `true` 就再请求一次 `/v1/me`；`remote` 档与旧壳没有这一项或回 `false`，走登录页。
+   */
+  session?: DesktopSessionBridge
 }
 
 /** WP361：开机自启（读 / 写系统登录项；真源是壳的配置）。 */
@@ -60,6 +65,11 @@ export interface DesktopLaunchAtLoginBridge {
   set(on: boolean): Promise<boolean>
   /** 别处（托盘）改了时回调；返回取消订阅。 */
   onChange(listener: (on: boolean) => void): () => void
+}
+
+/** WP358：页面只拿到「换没换成」，拿不到会话本身。 */
+export interface DesktopSessionBridge {
+  renew(): Promise<boolean>
 }
 
 /** WP353：要人介入的那一页。 */
@@ -185,6 +195,8 @@ export const BRIDGE_CHANNELS = {
   launchAtLoginGet: 'agentsws:launch-at-login-get',
   launchAtLoginSet: 'agentsws:launch-at-login-set',
   launchAtLoginChanged: 'agentsws:launch-at-login-changed',
+  /** WP358 */
+  sessionRenew: 'agentsws:session-renew',
 } as const
 
 export interface BridgeInfo {

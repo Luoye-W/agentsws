@@ -48,6 +48,10 @@ import type {
 import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
+  accountModelRefusalMessage,
+  type DeepSeekAccountModelCatalog,
+} from './deepseek-account-models.js'
+import {
   DEFAULT_FILES_API_TIMEOUT_MS,
   type DeepSeekFileConnection,
   DeepSeekFileStore,
@@ -72,16 +76,22 @@ export const DEEPSEEK_ACCOUNT_BASE_URL = 'https://api.deepseek.com/anthropic'
  * 账号登录这一路的默认型号：**能看图的那一档**。
  *
  * 出处：官方 `@deepseek-ai/dsh-llm-deepseek@0.1.7-rc.1` 的 `DEFAULT_MODELS`（`lib/index.js`）——
- * `deepseek-flash`（显示名 DeepSeek-V41-Flash，`inputModalities: ["text", "image"]`）与
+ * `deepseek-flash`（`inputModalities: ["text", "image"]`；显示名见下面的目录）与
  * `deepseek-v4-pro`（只收文字）。官方 README 的原话：省略 `models` 时「公布支持文本和图像的
  * `deepseek-flash`，以及仅支持文本的 `deepseek-v4-pro`」，并注明「不探测网关可用性」。
  * **DeepSeek 官网文档这一次没法核**（本单不联网）——能不能看图以三步验证的第 ③ 步为准。
  */
 export const DEEPSEEK_ACCOUNT_DEFAULT_MODEL = 'deepseek-flash'
 
-/** 官方目录（同上出处）。设置页的模型下拉照它画；`vision` 只是官方声明，验证才算数。 */
+/**
+ * 官方内置目录（同上出处）。显示名跟官方 `dsh-llm-deepseek@0.2.1-alpha.4` 的 `DEFAULT_MODELS`：
+ * `deepseek-flash` 是「DeepSeek-V4.1-Flash」（rc.1 时写作 DeepSeek-V41-Flash；Luoye 10-16 定改，WP367 §3 C），
+ * `deepseek-v4-pro` 仍是「DeepSeek-V4-Pro」。WP367（决策 919）起设置页的模型下拉改从账号的 `GET /models` 取
+ * （`./deepseek-account-models.ts`，移植自官方 0.2.1-alpha.4）；**取不到 / 超时 / 没登录时退回这两个**，
+ * 清单里没声明版本要求的模型也只认这里面的 id。`vision` 只是官方声明，验证才算数。
+ */
 export const DEEPSEEK_ACCOUNT_MODELS: readonly { id: string; name: string; vision: boolean }[] = [
-  { id: 'deepseek-flash', name: 'DeepSeek-V41-Flash', vision: true },
+  { id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', vision: true },
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', vision: false },
 ]
 
@@ -150,6 +160,12 @@ export interface DeepSeekAccountProviderOptions {
    * 装配方据此在模型卡 / 顶栏上出、收"余额不足，去充值"那一行。
    */
   onBalance?: DeepSeekBalanceListener
+  /**
+   * WP367：账号模型目录（一个进程共用一个）。给了：`listModels` 照账号清单回（没登录回空，官方同款）；
+   * 每次 `complete` 先按清单问一句"这个模型这一版给不给用"，不给就**发请求前**失败；
+   * 单次输出上限取清单声明的与 `maxTokens` 里小的那个。不给 = 内置目录、不做门槛（原来的行为）。
+   */
+  catalog?: DeepSeekAccountModelCatalog
 }
 
 /**
@@ -244,6 +260,11 @@ function thinkingBlocksOf(m: ChatMessage, model: string | undefined): WireBlock[
     : [{ type: 'thinking', thinking: m.reasoning }]
 }
 
+/**
+ * WP354（跟官方 `dsh-llm-deepseek@0.2.1-alpha.4` 的 `serialize.ts`，提交 c368939151「修复响应转换产生空文本及
+ * 旧会话重放失败」）：**空文本块一律不发**——字符串是空的不发，数组里 `text: ''` 的那一块也不发；一条消息因此
+ * 一块不剩，就整条跳过（见 `push`）。Messages 口不收空文本块，旧会话里存过的空块会让整段历史重放失败。
+ */
 const blocksOf = (
   content: string | ChatContentPart[],
   options: MessagesRequestOptions = {},
@@ -252,9 +273,11 @@ const blocksOf = (
     ? content === ''
       ? []
       : [{ type: 'text', text: content }]
-    : content.map((part) =>
+    : content.flatMap((part): WireBlock | WireBlock[] =>
         part.type === 'text'
-          ? { type: 'text', text: part.text }
+          ? part.text === ''
+            ? []
+            : { type: 'text', text: part.text }
           : {
               type: 'image',
               source: options.imageSource?.(part) ?? {
@@ -469,10 +492,48 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
     ref,
     ...(options.capabilities === undefined ? {} : { capabilities: { ...options.capabilities } }),
     async listModels(): Promise<ProviderModelInfo[]> {
-      // 官方目录是写在官方包里的建议性清单，不是上游报的；不为它发请求
-      return DEEPSEEK_ACCOUNT_MODELS.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
+      const catalog = account ? options.catalog : undefined
+      // 没给目录：官方内置那两个，不为它发请求
+      if (catalog === undefined) {
+        return DEEPSEEK_ACCOUNT_MODELS.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
+      }
+      // WP367：照账号清单（拉不到用内置目录）；没登录回空——官方 `discoverModels` 同款
+      const view = await catalog.view()
+      if (!view.signedIn) return []
+      return catalog.resolve(view).offered.map((m) => ({ id: m.id, owned_by: 'deepseek' }))
     },
     async complete(req) {
+      /*
+       * WP367：先按账号清单问一句（官方 `connect` + `admit`）——第一次用某份令牌时等清单
+       * （最多几秒），之后用缓存。清单点了名但这一版不给用的，一个字节都不发就失败；清单没提到的放行。
+       */
+      const catalog = account ? options.catalog : undefined
+      if (catalog !== undefined) {
+        await catalog.view(req.signal)
+        const refusal = catalog.refusal(model)
+        if (refusal !== undefined) {
+          throw new GatewayError(
+            'invalid_input',
+            accountModelRefusalMessage(model, refusal, catalog.clientVersion),
+            {
+              source: 'deepseek_account',
+              reason:
+                refusal.kind === 'upgrade-required'
+                  ? 'client_upgrade_required'
+                  : 'model_unsupported',
+              ...(refusal.kind === 'upgrade-required'
+                ? {
+                    required_version: refusal.requiredVersion,
+                    client_version: catalog.clientVersion,
+                  }
+                : {}),
+            },
+          )
+        }
+      }
+      const listedCap = catalog?.model(model)?.maxOutputTokens
+      const routeMax = options.maxTokens ?? DEFAULT_MAX_TOKENS
+      const maxTokens = listedCap === undefined ? routeMax : Math.min(routeMax, listedCap)
       const names = new Map((req.tools ?? []).map((t) => [wireToolName(t.name), t.name]))
       const bodyOf = (fileIds: Map<string, string> | undefined): string => {
         const wire = toMessagesRequest(
@@ -493,7 +554,7 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         )
         return JSON.stringify({
           model,
-          max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+          max_tokens: maxTokens,
           ...wire,
           ...(req.tools === undefined || req.tools.length === 0
             ? {}

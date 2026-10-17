@@ -33,8 +33,16 @@ export const OPEN_CONNECTOR_PIN = {
     'sha512-Oj+Bh6NFyl2cdkuairXRay9EFEOD/lQq+/Ne53uRNmp+WF6TAEw1L9/Z3Ptk5qLXlkM6RI3CHULuJhofy2wHFA==',
   /** 宿主脚本自己 import 的 HTTP 外壳（与上游依赖解出来的同一版，锁文件里只有一份）。 */
   hostDeps: { '@hono/node-server': '2.0.10' },
+  /**
+   * WP365（决策 917）：上游 1.8.0 依赖的传递包里有安全公告、上游还没出修好的版本时，在宿主 package.json
+   * 里用 npm `overrides` 把它顶到修好的那一版（锁文件跟着重出）。nodemailer 9.1.1 → 10.1.1：
+   * GHSA-prgh-xp8r-p3m5 / GHSA-v53p-9fqp-m79j（高危）、GHSA-6vj9-mwq6-2f5v 等（中危）；取 10.1.1 而不是 10.1.0：
+   * 它多修了一条「跨站跳转时剥掉凭据」，与我们自己代码（packages/channels、apps/cloud）用同一版。
+   * 升 OpenConnector 时先看新版自己的依赖是否已修好，修好了就删掉这一条（docs/42、upstreams.yml 有注）。
+   */
+  overrides: { nodemailer: '10.1.1' },
   /** 10-07 实测（干净缓存 `npm ci`）：要下的包数、压缩字节、解开后的字节——界面上的「约 30 MB」由它算。 */
-  packages: 318,
+  packages: 317,
   downloadBytes: 26_800_000,
   installedBytes: 243_000_000,
   /** 上游 `engines.node`；安装包自带的 Node 22.23 满足。 */
@@ -46,6 +54,8 @@ export type OpenConnectorPin = {
   version: string
   integrity: string
   hostDeps: Readonly<Record<string, string>>
+  /** 传递依赖的安全覆盖（npm `overrides`）；没有就不写。 */
+  overrides?: Readonly<Record<string, string>>
   packages: number
   downloadBytes: number
   installedBytes: number
@@ -69,6 +79,7 @@ export function hostPackageJson(pin: OpenConnectorPin = OPEN_CONNECTOR_PIN): {
   private: true
   type: 'module'
   dependencies: Record<string, string>
+  overrides?: Record<string, string>
 } {
   return {
     name: 'agentsws-open-connector-host',
@@ -76,6 +87,7 @@ export function hostPackageJson(pin: OpenConnectorPin = OPEN_CONNECTOR_PIN): {
     private: true,
     type: 'module',
     dependencies: { ...pin.hostDeps, [pin.package]: pin.version },
+    ...(pin.overrides === undefined ? {} : { overrides: { ...pin.overrides } }),
   }
 }
 

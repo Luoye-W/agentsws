@@ -28,8 +28,11 @@ const TYPES: Record<string, string> = {
 export interface StaticOptions {
   /** 工作台的 `dist` 目录 */
   dir: string
-  /** `/app/bootstrap.json`：demo 用它自动登录（不要求用户填任何东西） */
-  bootstrap?: Record<string, unknown>
+  /**
+   * `/app/bootstrap.json`：demo 用它自动登录（不要求用户填任何东西）。
+   * WP358：也可以给取值函数——所有者的邮箱会在关联云账号后变（WP233），每次现取。
+   */
+  bootstrap?: Record<string, unknown> | (() => Promise<Record<string, unknown>>)
 }
 
 /** `dir` 之下的真实文件路径；越界或不存在返回 undefined。 */
@@ -52,7 +55,9 @@ export function resolveAsset(dir: string, pathname: string): string | undefined 
 export function mountStatic<E extends Env>(app: Hono<E>, options: StaticOptions): void {
   const bootstrap = options.bootstrap ?? {}
 
-  app.get('/app/bootstrap.json', (c) => c.json(bootstrap))
+  app.get('/app/bootstrap.json', async (c) =>
+    c.json(typeof bootstrap === 'function' ? await bootstrap() : bootstrap),
+  )
 
   app.get('*', async (c, next) => {
     const path = c.req.path

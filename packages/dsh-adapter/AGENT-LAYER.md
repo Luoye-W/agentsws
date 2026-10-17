@@ -410,7 +410,7 @@ Chrome、真的打开一个网页**这一段只能手工（步骤见 `scripts/de
 ### 9.7 第二种浏览器：BrowserSkill（WP92，55 §10）
 
 个人档的另一种挂法：**用户正在用的那个浏览器**。工具面同样一个字不是我们写的——
-它来自腾讯官方的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin`（MIT，锁 `0.3.0`），
+它来自腾讯官方的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin`（MIT，锁 `0.3.3`；0.3.3 起六个工具改名 `bsk_*`，WP366），
 插件 spawn 本机的 `bsk` CLI，CLI 经 daemon 让浏览器扩展用 `chrome.debugger` 附上去。
 
 ```
@@ -423,7 +423,7 @@ run(req)  —— req.browser.mode === 'browserskill'
             applyBskEnv()                                  ← 两个更新开关，见下 ④
             await agentCtx.plugin(BrowserSkillPlugin, { bskPath, lazyTools: false, … })
           }})
-              └─ 六个裸名工具（browser_session / page / inspect / interact / tabs / assist）
+              └─ 六个裸名工具（bsk_session / page / inspect / interact / tabs / assist）
                  进这个 Agent 的 scope
 ```
 
@@ -437,15 +437,16 @@ run(req)  —— req.browser.mode === 'browserskill'
 
 | 判定 | 工具与动作 |
 |---|---|
-| `read_external` | `browser_inspect` 全部（observe / snapshot / html / screenshot / console / network）、`browser_page` 全部（navigate / back / forward / reload / wait）、`browser_session` start / stop / list、`browser_tabs` list / select、`browser_assist` resize / emulate / request-help |
-| `write_external` | `browser_interact` 全部、`browser_tabs` create / close / **borrow / return**（借用户自己的标签）、**以及任何不在表里的动作，和"没给 `action`"** |
+| `read_external` | `bsk_inspect` 的 observe / snapshot / html / screenshot / console / network，extract（不带 `output`），debug 里看结果的那些子动作（`BROWSERSKILL_DEBUG_READ_ACTIONS`）、`bsk_page` 全部（navigate / back / forward / reload / wait / wait-for-element）、`bsk_session` start / stop / list、`bsk_tabs` list / select、`bsk_assist` resize / emulate / request-help |
+| `write_external` | `bsk_interact` 全部、`bsk_tabs` create / close / **borrow / return**（借用户自己的标签）、`bsk_inspect` 的 video、带 `output` 的 extract、debug 的 `rule_*` / `replay` / `export`（WP366）、**以及任何不在表里的动作，和"没给 `action`"** |
 
-域名白名单三处：`browser_page{navigate}.url`、`browser_session{start}.url`、
-`browser_tabs{create}.url`（后两处的 url 是选填的——不给就是开个空白窗口 / 空白标签）。
+域名白名单三处：`bsk_page{navigate}.url`、`bsk_session{start}.url`、
+`bsk_tabs{create}.url`（后两处的 url 是选填的——不给就是开个空白窗口 / 空白标签）；
+WP366 起再加一处：`bsk_inspect{debug, replay}` 的 `replay` JSON 里的 `url`。
 注 JS 那一道在这一种下**没有对应物**：工具面里没有 evaluate；能跑脚本的是
 `bsk evaluate` 这条 CLI，归 shell 的命令 allowlist（WP89）管。
 
-人接管是这一种真正多出来的东西：`browser_assist{request-help}` 在用户浏览器里弹一层
+人接管是这一种真正多出来的东西：`bsk_assist{request-help}` 在用户浏览器里弹一层
 请他自己做这一步。**两档都放行**（公司端也放行——让人来做正是公司端要的那条路），
 放行的同时发 `progress{step:'browser_handoff'}`。
 
@@ -474,7 +475,7 @@ run(req)  —— req.browser.mode === 'browserskill'
 
 #### 依赖与本机实测
 
-插件锁死 `0.3.0`（`minimumReleaseAgeExclude` 写死这一版）：**无 `dependencies`、无
+插件锁死精确版本（现为 `0.3.3`，`minimumReleaseAgeExclude` 写死这一版）：**无 `dependencies`、无
 install / postinstall / prepare 脚本、无原生模块**（逐条核实过），所以不进 `allowBuilds`。
 它的 peer 写的是 `^0.1.0-rc.6`，与我们这棵 `0.1.6-alpha.1` 的树**按 semver 不相交**
 （预发布规则），不管的话 pnpm 会另装一份 dsh 进它自己的 `node_modules`——那等于一棵树

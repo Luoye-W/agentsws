@@ -5,14 +5,14 @@
 # - 装 / 升级 / 卸载一律出卡（`official_plugin`），卡上写的就是下面每一项的字段；
 # - 装完 profile patch（`cordis.patch.yml`）一个字节都不许变；锁定表里的行谁都改不动。
 #
-# 每一项都逐个核过（出处都是 dsh 0.2.1-alpha.2 安装里自带的那一份，路径 `node_modules/@deepseek-ai/<包>/`）：
+# 每一项都逐个核过（出处都是 dsh 0.2.1-alpha.4 安装里自带的那一份，路径 `node_modules/@deepseek-ai/<包>/`）：
 # - `license`：包里 `package.json` 的 `license` 字段 + `LICENSE` 文件第一行（都是「MIT License / Copyright (c) 2026 DeepSeek」）；
 # - `rows`：包里 `cordis.patch.yml` 的 `insert` 行（`packages/dsh-adapter/test/official-plugins.test.ts` 逐项对照，上游改了就红）；
 # - `tools`：包的 README「Model Experience」写的模型面工具；
 # - `network`：README 里写到的出网（下载、上报）。
 #
 # 为什么现在只有 `shipped` 一种来源：上游 `@deepseek-ai/dsh-app-boot` 的 `OPTIONAL_BUNDLES`（0.2.0 起
-# 「实验能力改成可选插件包」；0.2.1-alpha.2 是十一个）的包**随 dsh 安装一起发、默认关着**——"装"就是选进来，不下载、不跑 pnpm。
+# 「实验能力改成可选插件包」；0.2.1-alpha.2 是十一个、alpha.4 是十二个）的包**随 dsh 安装一起发、默认关着**——"装"就是选进来，不下载、不跑 pnpm。
 # 以后要加 npm 上的官方包，照同样的字段加一项、`source: npm`、版本写死。
 #
 # WP293（dsh 0.2.1-alpha.2）重审：
@@ -28,11 +28,16 @@
 #   127.0.0.1:9230 开一个没有口令的调试口，能在宿主进程里执行任意代码，抓的网络记录不打码——B 类）、
 #   `dsh-experimental-badge-skill-bundle`（「powered by dsh」徽章技能：技术上没问题，但可能把徽章加进给客户的内容里，产品上要定）。
 #
+# WP354（dsh 0.2.1-alpha.4）重审：七项插进来的行（`cordis.patch.yml`）逐字未变，改动只有图标、README 措辞与版本号，
+# 工具与出网逐项复核没变，只改版本号。官方新加的第十二个可选包 `dsh-experimental-plugin-market-bundle`（自定义插件市场：
+# 按用户填的索引网址拉清单、经插件管理 `installBundle` 装任意 npm 包）**不放进来**——它装东西走的正是我们锁着的插件管理
+# （B 类：绕过这份清单与出卡），而且这份清单本身就是我们的「插件市场」。
+#
 # **没放进来的**：`@deepseek-ai/dsh-experimental-auto-review`（自动审阅）——它让模型自己判"放行"就按全权执行，
 # 正好绕过出卡 / 授权（WP179 表二判 B）。不在清单上 = 点不了、装不上。
 
 - name: '@deepseek-ai/dsh-experimental-agent-team-profile'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 团队协作
@@ -53,7 +58,7 @@
   rows: [agent-team, tool-agent-team, ui-agent-team]
 
 - name: '@deepseek-ai/dsh-experimental-voice-input-bundle'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 语音输入
@@ -64,7 +69,7 @@
   rows: [speech-to-text, speech-to-text-sensevoice, api-speech-to-text, ui-voice-input]
 
 - name: '@deepseek-ai/dsh-experimental-session-search'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 查找旧对话
@@ -74,7 +79,7 @@
   rows: [optional-session-search]
 
 - name: '@deepseek-ai/dsh-experimental-ralph-bundle'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 接力循环
@@ -84,7 +89,7 @@
   rows: [optional-ralph]
 
 - name: '@deepseek-ai/dsh-experimental-terminal-bundle'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 常驻终端
@@ -94,7 +99,7 @@
   rows: [optional-persistent-terminals]
 
 - name: '@deepseek-ai/dsh-experimental-session-titles-bundle'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 标题跟随
@@ -104,7 +109,7 @@
   rows: [optional-session-title-all-prompts]
 
 - name: '@deepseek-ai/dsh-experimental-tool-worktree'
-  version: 0.2.1-alpha.2
+  version: 0.2.1-alpha.4
   source: shipped
   license: MIT
   title: 代码副本
