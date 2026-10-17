@@ -134,11 +134,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-<<<<<<< HEAD
-  "source_digest": "d3fe627fbf48e5f23082a91c329b2863",
-=======
-  "source_digest": "d80b3b832d1b06f405cb220074ce45a7",
->>>>>>> main
+  "source_digest": "1cdc4268a9acc1dedc02bd108e988b87",
   "objects": [
     {
       "id": "ad",
