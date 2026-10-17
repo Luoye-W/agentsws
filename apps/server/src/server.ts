@@ -65,6 +65,7 @@ import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
+import { fetchPage, fetchRobots, isDisallowed } from '@agentsws/brand-intake'
 import { normalizeSubreddit } from '@agentsws/browser-action'
 import type { CatalogNote } from '@agentsws/catalog'
 import type {
@@ -6245,6 +6246,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ...(p?.audience === undefined ? {} : { audience: p.audience }),
               ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
               ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
+              // WP380：官方事实表要的子品类、价格带、定位
+              ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+              ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
+              ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
             }
           })(),
         }
@@ -6335,6 +6340,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       claudeModelCheck: async () =>
         options.searchDataFor?.(ws) === undefined ? searchData.claudeModelCheck() : { ok: true },
       watchModel: ({ actor, run_id }) => seoModel(actor, run_id),
+      /*
+       * WP380：对外说法一致性检查取公开网页——品牌分析那一口抓取（只 GET、不带凭据、认得出是我们的 UA），
+       * 先读 robots，`Disallow` 的不取；取不到照实算「没取到」。
+       */
+      pageFetch: async (url) => {
+        const doFetch = (options.brandIntakeFetch ?? globalThis.fetch) as BrandIntakeFetch
+        let target: URL
+        try {
+          target = new URL(url)
+        } catch {
+          return undefined
+        }
+        const disallow = await fetchRobots(doFetch, target.origin).catch(() => [] as string[])
+        if (isDisallowed(target.pathname, disallow)) return undefined
+        const page = await fetchPage(doFetch, url)
+        return page.ok ? { html: page.html } : undefined
+      },
       /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
@@ -11483,6 +11505,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP335：「一条回答」（右栏）——按 id 取全文、引用、上一期与时间线
     watchAnswer: async (actor, id) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchAnswer(id),
+    // WP380：官方事实表、对外说法一致性、登记复查
+    watchFacts: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchFacts(),
+    watchSetFacts: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchSetFacts(input),
+    watchConsistency: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchConsistency(input),
+    watchRecheck: async (actor, input) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.watchRecheck(input),
     // WP310（决策 473）：GEO / 排名历史导出与删除（请求人所在品牌的 geo.sqlite）
     geoHistoryExport: async (actor, input) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoHistoryExport(input),

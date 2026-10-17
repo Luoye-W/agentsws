@@ -10,9 +10,12 @@
  */
 import type { Iso8601 } from './common.js'
 import type {
+  GeoAnswerInsight,
   GeoConsistencyFinding,
+  GeoConsistencyRun,
   GeoFixOwner,
   GeoGapCause,
+  GeoOfficialFact,
   GeoQualityView,
   GeoRecheck,
   GeoReportFigure,
@@ -714,6 +717,11 @@ export interface GeoHistoryExport {
     brand_gsc: SeoBrandGscWeek[]
     /** WP321：模型从回答里认出的其他品牌（只用来建议加竞品，不进指标）。 */
     other_brands?: { answer_id: string; name: string }[]
+    /** WP380：AI 判断（比较 / 说法）、官方事实表、一致性检查、复查。 */
+    insights?: GeoAnswerInsight[]
+    facts?: GeoOfficialFact[]
+    consistency?: GeoConsistencyRun[]
+    rechecks?: GeoRecheck[]
   }
   /** `csv`：表名 → CSV 正文（UTF-8，带表头）。 */
   csv?: Record<string, string>
