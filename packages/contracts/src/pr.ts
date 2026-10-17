@@ -28,6 +28,7 @@
  */
 
 import type { Iso8601, WorkspaceId } from './common.js'
+import type { MonitorGroup } from './pr-watch.js'
 
 /* ── 四条职责（60 §1，Luoye 09-17 手写）──────────────────────────────── */
 
@@ -262,6 +263,12 @@ export interface Mention {
   routed_approval_id?: string
   /** 出过预警卡的话，那张卡的 id。 */
   alert_approval_id?: string
+  /** WP386：盯的哪一组（自家 / 竞品 / 行业 / 指定网站）；老数据没有 = 自家。 */
+  group?: MonitorGroup
+  /** WP386：说的是哪个竞品（`group: 'competitor'` 时）。 */
+  competitor?: string
+  /** WP386：从哪条监控源来的（`MonitorSource.id`；Reddit 那一路是 `reddit`）。 */
+  source_id?: string
 }
 
 /* ── 对象四：外部露出 ───────────────────────────────────────────────── */
