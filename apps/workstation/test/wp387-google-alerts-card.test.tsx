@@ -101,3 +101,60 @@ describe('WP387 建 Google 提醒卡', () => {
     expect((screen.getByTestId('google-alerts-confirm') as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+const panel = {
+  browser_ready: true,
+  jobs: [
+    {
+      change_id: 'chg_1',
+      op: 'create',
+      lines: [],
+      status: 'partial',
+      summary:
+        '建好 2 条，RSS 链接已读回，正在先拉一次；Lectric没建成：到配置卡上手动贴 RSS 链接（卡上有教程）。',
+      created_at: '2026-10-18T09:00:00Z',
+      updated_at: '2026-10-18T09:05:00Z',
+    },
+  ],
+  existing: { importable: [], email: [], already: 0 },
+}
+const buildPrAlerts = vi.fn(async () => ({ ok: true, approval_id: 'ap_9', count: 4 }))
+const readPrAlerts = vi.fn(async () => ({ ok: true, matter_id: 'mt_1' }))
+let ready = true
+vi.mock('@/lib/pr-alerts-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pr-alerts-api')>('@/lib/pr-alerts-api')
+  return {
+    ...actual,
+    getPrAlerts: async () => ({ ...panel, browser_ready: ready }),
+    buildPrAlerts: () => buildPrAlerts(),
+    readPrAlerts: () => readPrAlerts(),
+  }
+})
+const { PrAlertsActions } = await import('@/components/pr/pr-alerts-actions')
+
+describe('WP387 信息监控连接卡上的两个按钮', () => {
+  it('「让工坊替你建」出卡；「读一遍我已有的」开一趟只读；上一趟的收尾一句照实写', async () => {
+    ready = true
+    renderWithProviders(<PrAlertsActions assignment="asg_pr" />)
+    await waitFor(() =>
+      expect(screen.getByTestId('palerts-note').textContent).toContain('Lectric没建成'),
+    )
+    fireEvent.click(screen.getByTestId('palerts-build'))
+    await waitFor(() => expect(buildPrAlerts).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByTestId('palerts-note').textContent).toBe(
+        '出了一张卡（4 条），确认一次就去建',
+      ),
+    )
+    fireEvent.click(screen.getByTestId('palerts-read'))
+    await waitFor(() => expect(readPrAlerts).toHaveBeenCalledTimes(1))
+  })
+
+  it('你的浏览器没接上：两个按钮灰着', async () => {
+    ready = false
+    renderWithProviders(<PrAlertsActions assignment="asg_pr" />)
+    await waitFor(() => expect(screen.getByTestId('palerts-build')).toBeDefined())
+    expect((screen.getByTestId('palerts-build') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('palerts-read') as HTMLButtonElement).disabled).toBe(true)
+  })
+})

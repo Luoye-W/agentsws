@@ -25,3 +25,26 @@ export const GOOGLE_ALERTS_EN: Record<string, string> = {
   'galert.any': 'any',
   'galert.failed': 'Not confirmed: {message}',
 }
+
+/** WP387：信息监控连接卡上的两个按钮。 */
+export const PR_ALERTS_ZH: Record<string, string> = {
+  'palerts.build': '让工坊替你建',
+  'palerts.read': '读一遍我已有的',
+  'palerts.hint':
+    '「替你建」：先出一张卡列出要建的提醒，你确认一次，你的浏览器才一条一条去建。「读一遍」：只看不改，读完已经是 RSS 的可以勾了导入，还在发邮件的另出一张卡问要不要改成 RSS。过程在「运行中的浏览器」里看得到。',
+  'palerts.not_ready':
+    '你的浏览器还没接上（设置 → 浏览器 → 选「我正在用的浏览器」）。现在可以先手动建、把 RSS 链接贴到上面。',
+  'palerts.build.done': '出了一张卡（{n} 条），确认一次就去建',
+  'palerts.read.done': '你的浏览器去读了，读完在对话里说',
+}
+
+export const PR_ALERTS_EN: Record<string, string> = {
+  'palerts.build': 'Let the Workshop create them',
+  'palerts.read': 'Read my existing alerts',
+  'palerts.hint':
+    '"Create": a card lists the alerts first; confirm once and your browser creates them one by one. "Read": look only — RSS ones can be ticked and imported; email ones get a separate card asking to switch them to RSS. Watch it happen under "Browser in use".',
+  'palerts.not_ready':
+    'Your browser is not connected yet (Settings → Browser → "The browser I am using"). For now, create them by hand and paste the RSS links above.',
+  'palerts.build.done': 'A card is out ({n} alerts) — confirm once and they get created',
+  'palerts.read.done': 'Your browser is reading them; it will report in the conversation',
+}
