@@ -28,7 +28,8 @@ export interface SearchBrowserChannel {
   open(input: {
     workspace_id: string
     url: string
-    kind: 'google' | 'bing' | 'page'
+    /** WP393：`data` = 读数据地址的原文（竞品店公开商品数据被直接请求挡了时）。 */
+    kind: 'google' | 'bing' | 'page' | 'data'
     timeout_ms: number
     settle_ms?: number
     max_chars?: number
