@@ -456,6 +456,13 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
 }
 
 export { amazonListPrice, amazonSpecs } from './amazon.js'
+// WP396（docs/106 §13）：自家 Listing 体检要的那几格（读页本身是 WP394 的积木）
+export {
+  currencyOfPrice,
+  listingBullets,
+  listingPrice,
+  readAmazonListingFacts,
+} from './amazon-listing.js'
 // WP346（决策 872）：AI 归纳那一步（移植自 KOLAgents enrichment.ts）
 export type { InsightsModel, InsightsPage, InsightsReply, SourcedField } from './insights.js'
 export {
