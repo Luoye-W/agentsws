@@ -137,6 +137,11 @@ export interface MatterEvent {
    * 正文 `text` 只存在本机事项时间线里；运行拿到的是「这句话 + 附件围起来的外部资料」。老事件没有这一格。
    */
   attachments?: MatterAttachment[]
+  /**
+   * WP373（决策 978）：回这段话的模型（`provider_id/model`）——只在 `agent_message` 上有。事项页按它在
+   * 真换了模型的地方插一句「上面是 X 答的，接下来用 Y」。老事件没有这一格。
+   */
+  model?: string
 }
 
 /** WP357：事项里一句话附上的一份资料（读出来的文字；读不出的照实写 `unreadable`）。 */

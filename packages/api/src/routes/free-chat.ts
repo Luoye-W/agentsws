@@ -317,6 +317,11 @@ export type FreeChatThinkingLevel = 'fast' | 'standard' | 'deep'
 export interface FreeChatModelThinking {
   options: { level: FreeChatThinkingLevel; effort: ReasoningEffort }[]
   default: ReasoningEffort
+  /**
+   * WP373（只加）：这个模型官方只声明了「不想」和一档——界面画成开关。开 = `options[0].effort`，关 = `off`；
+   * 不给 = 三档（快 / 标准 / 深想）。
+   */
+  toggle?: true
 }
 
 /**
