@@ -115,6 +115,21 @@ import type {
   SerpQuery,
   SerpResult,
 } from './search-data.js'
+import type {
+  ServiceAcceptanceRequest,
+  ServiceContactAnswer,
+  ServiceIntentReport,
+  ServiceList,
+  ServiceOrderCancelRequest,
+  ServiceOrderList,
+  ServiceOrderListQuery,
+  ServiceOrderMessagePost,
+  ServiceOrderMessages,
+  ServiceOrderParams,
+  ServiceOrderSubmit,
+  ServiceOrderView,
+  ServiceQuoteAcceptRequest,
+} from './service-order.js'
 import type { StandbyWorkspace } from './standby.js'
 
 /* ------------------------------------------------------------------ */
@@ -2111,6 +2126,127 @@ export interface CloudPremiumThemeApi {
 }
 
 /* ------------------------------------------------------------------ */
+/* 路由表：工坊服务（WP389，docs/105 §7）                                */
+/* ------------------------------------------------------------------ */
+
+interface ServiceOrderErrors extends EntryAuthErrors {
+  400: 'invalid_input'
+  /** 没有这项服务 / 没有这一单（别的组织的单也是这一句） */
+  404: 'not_found'
+  /** 这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了） */
+  409: 'conflict'
+  /** 钱包 / 订单对象没应答（再点不会重复扣） */
+  503: 'unavailable'
+}
+
+/** 订单上的一个动作（通过 / 要改 / 申请退款 / 取消……）：都回这一单现在的样子。 */
+type ServiceOrderActionOp<B> = {
+  auth: 'workspace_token'
+  scope: 'services'
+  tag: 'services'
+  params: ServiceOrderParams
+  body: B
+  ok: { status: 200; body: CloudDataEnvelope<ServiceOrderView> }
+  errors: ServiceOrderErrors
+  errorBody: CloudEntryErrorBody
+}
+
+export interface CloudServiceOrderApi {
+  /** 服务目录：上架的工坊服务（标准件带价目单、定制件带需求问题清单；不收钱） */
+  'GET /v1/services': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    ok: { status: 200; body: CloudDataEnvelope<ServiceList> }
+    errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * 下单（带幂等键）：标准件 / 一口价当场扣进托管（402 = 余额或额度不够）；先报价的交需求单、不扣钱。
+   * 同一个幂等键只建一单、只扣一次
+   */
+  'POST /v1/services/orders': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    headers: AttributionHeaders
+    body: ServiceOrderSubmit
+    ok: { status: 201; body: CloudDataEnvelope<ServiceOrderView>; description: '建好了' }
+    alt: {
+      status: 200
+      body: CloudDataEnvelope<ServiceOrderView>
+      description: '同一个幂等键已经有这一单了：原样回它现在的样子（不再扣）'
+    }
+    errors: ServiceOrderErrors & { 402: 'insufficient_credits' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 我的订单（默认只列没结束的；`status=all` 最近 100 单） */
+  'GET /v1/services/orders': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    query: ServiceOrderListQuery
+    ok: { status: 200; body: CloudDataEnvelope<ServiceOrderList> }
+    errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 看一单现在怎么样（进度、在等你什么、托管 / 实扣 / 退回、交付物、下一步能做什么） */
+  'GET /v1/services/orders/{id}': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    params: ServiceOrderParams
+    ok: { status: 200; body: CloudDataEnvelope<ServiceOrderView> }
+    errors: EntryAuthErrors & { 404: 'not_found' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 同意报价并支付（扣进托管；同一个幂等键只扣一次） */
+  'POST /v1/services/orders/{id}/accept-quote': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    headers: AttributionHeaders
+    params: ServiceOrderParams
+    body: ServiceQuoteAcceptRequest
+    ok: { status: 200; body: CloudDataEnvelope<ServiceOrderView> }
+    errors: ServiceOrderErrors & { 402: 'insufficient_credits' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 这一单的消息串（只有定制件有） */
+  'GET /v1/services/orders/{id}/messages': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    params: ServiceOrderParams
+    ok: { status: 200; body: CloudDataEnvelope<ServiceOrderMessages> }
+    errors: EntryAuthErrors & { 404: 'not_found' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 回一句话（在「等你补材料」时回话 = 补上了，超时的钟接着走） */
+  'POST /v1/services/orders/{id}/messages': ServiceOrderActionOp<ServiceOrderMessagePost>
+  /** 回服务方「交换联系方式」的请求：同意（带上自己选的那一种）或拒绝 */
+  'POST /v1/services/orders/{id}/contact': ServiceOrderActionOp<ServiceContactAnswer>
+  /** 验收通过（定制件通过当前这一段、结算这一段） */
+  'POST /v1/services/orders/{id}/accept': ServiceOrderActionOp<ServiceAcceptanceRequest>
+  /** 要改（返工次数用完了回 409） */
+  'POST /v1/services/orders/{id}/revise': ServiceOrderActionOp<ServiceAcceptanceRequest>
+  /** 申请退款（交给运营判全退 / 部分退 / 不退；理由必填） */
+  'POST /v1/services/orders/{id}/dispute': ServiceOrderActionOp<ServiceAcceptanceRequest>
+  /** 取消（接单之前；已付的全退） */
+  'POST /v1/services/orders/{id}/cancel': ServiceOrderActionOp<ServiceOrderCancelRequest>
+  /** P8：「没接住的意向」——只收一句意向说法与岗位，不收正文（不收钱） */
+  'POST /v1/services/intents': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    body: ServiceIntentReport
+    ok: { status: 202; description: '记下了' }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -2136,7 +2272,8 @@ export interface CloudApi
     CloudChatRelayApi,
     CloudHostedApi,
     CloudStandbyApi,
-    CloudPremiumThemeApi {}
+    CloudPremiumThemeApi,
+    CloudServiceOrderApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

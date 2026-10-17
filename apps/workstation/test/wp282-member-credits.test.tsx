@@ -39,6 +39,7 @@ const REPORT: MemberUsageReport = {
         ai: { credits: 10, calls: 1 },
         data: { credits: 4, calls: 1 },
         service: { credits: 30, calls: 1 },
+        workshop_service: { credits: 0, calls: 0 },
       },
     },
     {
