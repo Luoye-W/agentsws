@@ -8,6 +8,13 @@ Some things AI can't finish alone — building a store, writing a press piece, o
 - **When something is missing**: if a task is stuck on a missing piece (say, no Google account), the connect / setup card gets a "Let the Workshop do it" option. Once done, the task picks up from that step.
 - **When browsing**: click your name at the bottom left → "Workshop services" for all services (by position) and your orders; the "Workshop services" card at the bottom of a position page lists up to three for that position.
 
+## One order, start to finish
+
+1. Click "Take a look" (or "Let the Workshop do it"): standard services open a price list; for custom ones the AI asks a few questions and drafts a brief.
+2. Click "Order" / "Agree & pay" on the card: credits go into escrow.
+3. Wait for delivery: progress, what's waiting on you and messages are in the order panel on the right.
+4. When it's delivered, click "Accept" (or "Ask for changes" / "Request refund") on the acceptance card.
+
 ## Two kinds
 
 | | Standard (likes, account setup…) | Custom (site builds…) |
