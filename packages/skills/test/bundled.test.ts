@@ -35,6 +35,8 @@ const OWN = [
   'ad-headlines',
   'brand-voice',
   'chargeback-evidence',
+  // WP387：你的浏览器替你建 / 读 Google 提醒（页面怎么认写在说明里，不写在代码里）
+  'google-alerts',
   'policy-review',
   'returns-policy-calc',
   'workspace-basics',

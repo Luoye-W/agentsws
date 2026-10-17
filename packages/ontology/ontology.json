@@ -59,6 +59,8 @@
     "packages/contracts/src/platform-kits.ts",
     "packages/contracts/src/position-plan.ts",
     "packages/contracts/src/position-work.ts",
+    "packages/contracts/src/pr-alerts.ts",
+    "packages/contracts/src/pr-watch.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/premium-theme.ts",
     "packages/contracts/src/pricing-catalog.ts",
@@ -134,7 +136,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6c0c947329c50389820f6413c170f061",
+  "source_digest": "62a0d5e5cb37f11ce36c02c99070f253",
   "objects": [
     {
       "id": "ad",
@@ -3589,6 +3591,24 @@
         },
         {
           "name": "alert_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "group",
+          "type": "MonitorGroup",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "competitor",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "source_id",
           "type": "string",
           "sensitivity": "internal",
           "optional": true
@@ -10860,6 +10880,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.email-marketing"],
       "what": "stage flow edit"
+    },
+    {
+      "id": "stage_google_alert_change",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "change_kind": "google_alert_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "what": "stage google alert change"
     },
     {
       "id": "stage_internal_link_edit",

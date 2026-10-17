@@ -59,7 +59,9 @@ describe('WP320 技能库上层落盘', () => {
       owner: 'support',
       version: '1.0.0',
       evals: [],
-      sections: [{ id: 'sec_auto', heading: '语气', body: '回客户一律先道歉。', origin: 'authored' }],
+      sections: [
+        { id: 'sec_auto', heading: '语气', body: '回客户一律先道歉。', origin: 'authored' },
+      ],
       workspace_id: 'ws1',
       scope_id: 'support',
     })
@@ -87,7 +89,9 @@ describe('WP320 技能库上层落盘', () => {
       owner: 'support',
       version: '1.0.0',
       evals: [],
-      sections: [{ id: 'sec_auto', heading: '语气', body: '回客户一律先道歉。', origin: 'authored' }],
+      sections: [
+        { id: 'sec_auto', heading: '语气', body: '回客户一律先道歉。', origin: 'authored' },
+      ],
       workspace_id: 'ws1',
       scope_id: 'support',
     })
