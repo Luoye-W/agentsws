@@ -1084,3 +1084,4 @@
 | 1036 | （编号说明）WP375 = 右侧面板照 Claude 修整（决策 1035）；WP376 = Anthropic 官方 key 改走原生接口（决策 1031） | 记录 |
 | 1037 | （Luoye 10-17）思考档命名「快 / 标准 / 深度」（不叫「深想」） | **已定**，WP373 |
 | 1038 | （Luoye 10-17 + Fable 实测）DeepSeek 新 Search / Fetch API：两者是独立 provider 可分开选，但 Fetch 抓 Reddit / LinkedIn / YouTube / X / Amazon / Trustpilot / NYT / Wikipedia / Google / 知乎全部失败，Search 不出 reddit / linkedin → 搜索与抓网页都继续用我们自己的（证据 docs/assets/web-search/deepseek-tools-api-2026-10-17.log） | **已定** |
+| 1039 | （Luoye 10-17）1041–1045、1051–1055 全部按建议；1045 采用 Fable 建议（只分想 / 不想的型号显示成开关）；1054 采用 Fable 建议（v4 Pro 三档：快 = 关思考 / 标准 = high / 深度 = max，依据 Fable 10-17 实测） | **已定**，WP376 / WP377 / WP378 |
