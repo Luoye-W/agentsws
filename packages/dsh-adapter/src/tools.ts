@@ -14,6 +14,7 @@ import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
   ADS_DATA_TOOL_DEF_BY_NAME,
   ADS_TOOL_DEF_BY_NAME,
+  AMAZON_LISTING_TOOL_DEF_BY_NAME,
   ASSISTANT_TOOL_DEF_BY_NAME,
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
@@ -361,6 +362,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
     // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
     ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
+    // WP396：Listing 体检（定义在 stand-ins 的 `runtime/amazon-listing.ts`）
+    AMAZON_LISTING_TOOL_DEF_BY_NAME.get(name) ??
     // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
     SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
@@ -520,6 +523,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP396：Listing 体检（读自家前台页只读；改规则只动本机）
+      AMAZON_LISTING_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP343：「我的助理」的工具（与随便聊那条模型回合同一份）
       ASSISTANT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
