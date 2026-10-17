@@ -22825,6 +22825,15 @@
                   },
                   "image_only": {
                     "type": "boolean"
+                  },
+                  "picker_models": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
                   }
                 },
                 "required": ["kind", "model"]
@@ -46224,6 +46233,10 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "model_effort": {
+                    "type": "string",
+                    "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+                  },
                   "files": {
                     "maxItems": 3,
                     "type": "array",
@@ -47126,6 +47139,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "model_effort": {
+                    "type": "string",
+                    "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
                   }
                 },
                 "required": ["kind", "title"]
@@ -48054,7 +48071,7 @@
     "/v1/matters/{id}/model": {
       "put": {
         "operationId": "setMatterModel",
-        "summary": "换这件事用的 AI（输入框左下角那个钮，WP342）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认",
+        "summary": "换这件事用的 AI（输入框左下角那个钮，WP342）与思考程度（WP370 `effort`）：只管这一件、之后接着跑仍用它；`model: null` = 回到跟品牌默认",
         "tags": ["work"],
         "parameters": [
           {
@@ -48184,6 +48201,17 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 200
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
                       },
                       {
                         "type": "null"
@@ -56577,6 +56605,10 @@
                     "minLength": 1,
                     "maxLength": 300
                   },
+                  "effort": {
+                    "type": "string",
+                    "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+                  },
                   "web_search": {
                     "type": "boolean"
                   },
@@ -56762,6 +56794,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300
+                  },
+                  "effort": {
+                    "type": "string",
+                    "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
                   },
                   "web_search": {
                     "type": "boolean"

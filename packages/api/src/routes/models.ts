@@ -132,6 +132,11 @@ export interface ModelProviderView {
   models?: string[]
   /** 上次拉清单是什么时候 / 通没通。 */
   last_listing?: ModelListing
+  /**
+   * WP370（只加）：除主模型外，还要**在输入框 AI 钮里列出来**的那几个（从拉回来的清单里勾，拉不到就手填）。
+   * 主模型总在；不给 = 只列主模型（老行为）。
+   */
+  picker_models?: string[]
   /** 上次"测试"的结果。 */
   last_test?: ModelTestResult
   /** WP127：按上一次验证，这条能不能看图。 */
@@ -648,6 +653,8 @@ export interface SaveModelProviderInput {
    * 不进默认模型下拉、不跑三步验证；key 同样只进本机加密库。
    */
   image_only?: boolean | undefined
+  /** WP370：AI 钮里还要列的那几个（见 `ModelProviderView.picker_models`）；不给 = 保持原样，`[]` = 清空。 */
+  picker_models?: string[] | undefined
 }
 
 export interface ModelsPort {
@@ -793,6 +800,8 @@ const SaveBody = z.object({
   price_cached: z.number().min(0).max(100_000).optional(),
   price_source: z.enum(['catalog', 'manual']).optional(),
   image_only: z.boolean().optional(),
+  /** WP370：AI 钮里还要列的那几个模型（最多 30 个）。 */
+  picker_models: z.array(z.string().trim().min(1).max(128)).max(30).optional(),
 })
 
 /** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */

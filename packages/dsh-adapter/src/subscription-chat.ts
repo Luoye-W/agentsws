@@ -17,7 +17,14 @@
  * 子进程档还得把凭据带过进程边界。走网关这一跳，三个运行时（stub / direct / dsh）同一条路，
  * 凭据只在服务进程里；记账、预算、事件也都是网关那一套（订阅 `cost_base` 恒为 0）。
  */
-import type { ChatContentPart, ChatMessage, ToolChoice, ToolDef } from '@agentsws/contracts'
+import type {
+  ChatContentPart,
+  ChatMessage,
+  ReasoningEffort,
+  ToolChoice,
+  ToolDef,
+} from '@agentsws/contracts'
+import { REASONING_EFFORTS } from '@agentsws/contracts'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { type CredentialRecordsLike, piCredentialStore } from './native-search.js'
 import { SUBSCRIPTION_RECORD_SCOPE } from './subscription-facts.js'
@@ -30,6 +37,13 @@ export interface SubscriptionCatalogModel {
   id: string
   name: string
   vision: boolean
+  /**
+   * WP370（只加）：这个模型能调的思考档（官方 pi-ai `getSupportedThinkingLevels`，由浅到深；
+   * 目录里标了不思考的模型没有这一格——官方 `dsh-llm-pi-ai` 同款：不给就不出「思考程度」那一行）。
+   */
+  efforts?: ReasoningEffort[]
+  /** WP370（只加）：上下文窗口（token；目录里的 `contextWindow`）。 */
+  context_window?: number
 }
 
 export interface SubscriptionChatRequest {
@@ -39,6 +53,8 @@ export interface SubscriptionChatRequest {
   tool_choice?: ToolChoice
   max_output_tokens?: number
   thinking?: 'off'
+  /** WP370：思考程度（目录里这个模型声明过的档才发；`off` 照官方 = 不写 `reasoning`）。 */
+  reasoning_effort?: ReasoningEffort
   on_delta?: (text: string) => void
   signal?: AbortSignal
 }
@@ -245,8 +261,15 @@ const NO_AMBIENT_AUTH = {
 interface PiStreamLike extends AsyncIterable<unknown> {
   result(): Promise<unknown>
 }
+interface PiCatalogModelLike {
+  id: string
+  name: string
+  input?: readonly string[]
+  reasoning?: boolean
+  contextWindow?: number
+}
 interface PiModelsLike {
-  getModels(provider?: string): readonly { id: string; name: string; input?: readonly string[] }[]
+  getModels(provider?: string): readonly PiCatalogModelLike[]
   getModel(provider: string, id: string): unknown
   streamSimple(model: unknown, context: unknown, options?: unknown): PiStreamLike
 }
@@ -274,13 +297,30 @@ async function codexModels(records?: CredentialRecordsLike): Promise<PiModelsLik
  */
 export async function subscriptionCatalog(provider: string): Promise<SubscriptionCatalogModel[]> {
   if (provider !== SUBSCRIPTION_CHAT_PROVIDER) return []
-  const models = await codexModels()
-  return models.getModels(SUBSCRIPTION_CHAT_PROVIDER).map((m) => ({
-    id: m.id,
-    name: m.name,
-    vision: (m.input ?? []).includes('image'),
-  }))
+  const [models, { getSupportedThinkingLevels }] = await Promise.all([
+    codexModels(),
+    import('@earendil-works/pi-ai/models'),
+  ])
+  return models.getModels(SUBSCRIPTION_CHAT_PROVIDER).map((m) => {
+    // WP370：照官方 `dsh-llm-pi-ai` 的 `reasoningInfo`——目录里不思考的模型不给档；给了就是 pi-ai 认的那几档
+    const efforts =
+      m.reasoning === true
+        ? (getSupportedThinkingLevels(m as never) as string[]).filter(isReasoningEffort)
+        : []
+    return {
+      id: m.id,
+      name: m.name,
+      vision: (m.input ?? []).includes('image'),
+      ...(efforts.length === 0 ? {} : { efforts }),
+      ...(typeof m.contextWindow === 'number' && m.contextWindow > 0
+        ? { context_window: m.contextWindow }
+        : {}),
+    }
+  })
 }
+
+const isReasoningEffort = (x: string): x is ReasoningEffort =>
+  (REASONING_EFFORTS as readonly string[]).includes(x)
 
 // ── 跑一次补全 ─────────────────────────────────────────────────────────
 
@@ -328,7 +368,12 @@ export function createSubscriptionChat(
         ...(request.max_output_tokens === undefined
           ? {}
           : { maxTokens: request.max_output_tokens }),
-        ...(request.thinking === 'off' ? { reasoning: 'minimal' } : {}),
+        ...(request.thinking === 'off'
+          ? { reasoning: 'minimal' }
+          : // WP370：官方同款——`off` 就是不写 `reasoning`；别的档原样交给 pi-ai（它按目录映射成订阅认的值）
+            request.reasoning_effort === undefined || request.reasoning_effort === 'off'
+            ? {}
+            : { reasoning: request.reasoning_effort }),
         ...(choice === 'none'
           ? { toolChoice: 'none' }
           : choice === undefined

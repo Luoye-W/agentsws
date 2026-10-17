@@ -12,7 +12,11 @@
  *   限流 → `rate_limited`（同一张卡，说明是额度用满了），别的 → 上游错（网关照常降级）。
  */
 import type { ModelProvider } from '@agentsws/contracts'
-import type { SubscriptionChatRequest, SubscriptionChatResult } from '@agentsws/dsh-adapter'
+import type {
+  SubscriptionCatalogModel,
+  SubscriptionChatRequest,
+  SubscriptionChatResult,
+} from '@agentsws/dsh-adapter'
 import { GatewayError, ProviderError } from '@agentsws/model-gateway'
 
 /** 网关上 / 默认模型里订阅那一条的来源名（`provider_id/model` 的前半）。 */
@@ -32,7 +36,8 @@ export const SUBSCRIPTION_RATE_LIMITED_MESSAGE =
 /** 订阅那一半（`subscription.ts` 的子集）。 */
 export interface SubscriptionModelPort {
   signedIn(provider: 'openai-codex'): boolean
-  catalog(provider: 'openai-codex'): { id: string; name: string; vision: boolean }[]
+  /** WP370：目录里每个模型还带能调的思考档与上下文窗口（官方 pi-ai 目录）。 */
+  catalog(provider: 'openai-codex'): SubscriptionCatalogModel[]
   complete(
     person_id: string | undefined,
     provider: 'openai-codex',
@@ -86,6 +91,8 @@ export function subscriptionModelProvider(input: {
             ? {}
             : { max_output_tokens: req.max_output_tokens }),
           ...(req.thinking === undefined ? {} : { thinking: req.thinking }),
+          // WP370：思考程度（pi-ai 按目录映射成订阅认的值）
+          ...(req.reasoning_effort === undefined ? {} : { reasoning_effort: req.reasoning_effort }),
           ...(req.on_delta === undefined ? {} : { on_delta: req.on_delta }),
           ...(req.signal === undefined ? {} : { signal: req.signal }),
         })

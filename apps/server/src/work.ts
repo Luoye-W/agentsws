@@ -32,6 +32,7 @@ import type {
   MatterEvent,
   MatterLiveRun,
   PersonId,
+  ReasoningEffort,
   StartRun,
   Todo,
   WorkStore,
@@ -101,6 +102,11 @@ export interface WorkPortOptions {
    * 不给 = 不判（单测里的老装配）。认不出的：开事项时不记、换模型时拒。
    */
   knownModel?: (id: string) => boolean | Promise<boolean>
+  /**
+   * WP370：这个模型有没有这一档思考程度（= AI 钮里给它列了这一档）。不给 = 不判。
+   * 没有的：开事项时不记、换的时候拒。
+   */
+  knownEffort?: (id: string, effort: ReasoningEffort) => boolean | Promise<boolean>
   clock: Clock
   work: Work
   /** 本人可见的审批项（已按 recipient 过滤）——卡片到期叠层与战报四格都从它数 */
@@ -362,7 +368,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      * 分配来，就是指定用那条职责的规矩做。所以它跳过岗位内路由（岗位入口才路由）。
      * 反查不到职责（分配已撤销）时两个字段都不写：存量事项长什么样，它就长什么样。
      */
-    createMatter: async (actor, { model, ...input }) => {
+    createMatter: async (actor, { model, model_effort, ...input }) => {
       const role_id = options.roleOf?.(actor.assignment_id)
       // WP342：输入框左下角选的 AI；认不出 / 现在不能用的不记（跟品牌默认走）
       const chosen =
@@ -370,9 +376,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         (options.knownModel === undefined || (await options.knownModel(model)))
           ? model
           : undefined
+      // WP370：思考程度只在这个模型真有这一档时记
+      const effort =
+        chosen !== undefined &&
+        model_effort !== undefined &&
+        (options.knownEffort === undefined || (await options.knownEffort(chosen, model_effort)))
+          ? model_effort
+          : undefined
       return work.createMatter({
         ...input,
         ...(chosen === undefined ? {} : { model: chosen }),
+        ...(effort === undefined ? {} : { model_effort: effort }),
         position_id: actor.assignment_id,
         participants: [actor.person_id],
         entry: 'role',
@@ -443,7 +457,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     // WP264（决策 177）：人改的标题之后不再被自动覆盖
     retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
     // WP342（决策 853）：换这件事用的 AI（只这一件；不动品牌默认）
-    setMatterModel: async (_actor, id, model) => {
+    setMatterModel: async (_actor, id, model, effort) => {
       work.requireMatter(id)
       if (
         model !== undefined &&
@@ -451,7 +465,15 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         !(await options.knownModel(model))
       )
         throw new ApiError('invalid_input', '这个 AI 现在用不了（没接上或已经删了），换一个再试')
-      return work.setModel(id, model)
+      // WP370：这个模型没有这一档思考程度
+      if (
+        model !== undefined &&
+        effort !== undefined &&
+        options.knownEffort !== undefined &&
+        !(await options.knownEffort(model, effort))
+      )
+        throw new ApiError('invalid_input', '这个 AI 不能调这一档思考程度，换一档再试')
+      return work.setModel(id, model, effort)
     },
     /*
      * WP287：「没跑成」下面的「重试」——按最近那次没跑成之前人说的那句（没有就按事项第一句 / 标题）

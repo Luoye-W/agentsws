@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path'
 import type {
   DeepSeekQuotaView,
   DiscoverModelsInput,
+  FreeChatModelThinking,
   ModelDefaultsView,
   ModelImageUsing,
   ModelImageView,
@@ -87,7 +88,9 @@ import {
   DEEPSEEK_ACCOUNT_MODELS,
   DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
   DEEPSEEK_API_QUOTA_MESSAGE,
+  DEEPSEEK_DEFAULT_REASONING_EFFORT,
   DEEPSEEK_PLATFORM_TOP_UP_URL,
+  DEEPSEEK_REASONING_EFFORTS,
   DeepSeekAccountModelCatalog,
   DeepSeekFileStore,
   deepseekAccountProvider,
@@ -111,6 +114,7 @@ import {
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
+import { thinkingOptionsOf } from './model-thinking.js'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
@@ -262,6 +266,8 @@ export interface ModelProviderConfig {
   models?: string[]
   /** WP42：上次拉清单通没通（拉不到时界面退回手填，并把原因原样显示出来）。 */
   last_listing?: ModelListing
+  /** WP370：除主模型外还要挂上网关、在 AI 钮里列出来的那几个（人在设置里勾的 / 手填的）。 */
+  picker_models?: string[]
   /**
    * WP274：只用来生图的那一条（设置 →「生图」里单独指定的自定义接口）。不挂文字模型、
    * 不进默认模型下拉、不当「第一条能用的」自动成默认。
@@ -479,6 +485,14 @@ export interface ModelChatChoice {
   vendor?: string
   /** WP362：右边那一格（消耗速率 / 订阅额度 / 用你自己的 key）。 */
   price?: ModelPrice
+  /** WP370：给人看的模型名（订阅目录 / DeepSeek 账号目录里有才给）。 */
+  name?: string
+  /** WP370：上下文窗口（token；目录里写了才有）。 */
+  context_window?: number
+  /** WP370：这个来源自带联网搜索（ChatGPT 订阅）。 */
+  native_search?: boolean
+  /** WP370：能调的思考程度（只给声明了档位的模型）。 */
+  thinking?: FreeChatModelThinking
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -1815,7 +1829,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     // WP362：订阅目录 / 云端价目里的模型——全挂上（只是几个对象，不花钱建），AI 钮里每个都能点、点了真用它
     if (config.kind === 'openai-codex' || config.kind === 'agentsws_cloud')
       return knownModels(config)
-    const picked = new Set([config.model])
+    // WP370：DeepSeek 账号照官方 alpha.5——账号目录整份都在选择器里（目录就几个）。
+    // API key 那条仍按 WP42 只挂选中的（它的清单是 `/models` 拉回来的，不保证短）；要多列在设置里勾
+    if (config.kind === 'deepseek_account') return knownModels(config)
+    // WP370：人在设置里勾了要在 AI 钮里列的那几个（主模型总在最前）
+    const picked = new Set([config.model, ...(config.picker_models ?? [])])
     const ids = [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]
     for (const id of ids) {
       if (id === undefined || id === '') continue
@@ -1825,6 +1843,44 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (knownModels(config).includes(model)) picked.add(model)
     }
     return [...picked]
+  }
+
+  /**
+   * WP370：AI 钮每行多的那几样——给人看的名字、上下文窗口、自带联网、思考程度。只从**官方目录**取
+   * （订阅：pi-ai 目录；DeepSeek：账号目录 + 官方适配器的四档），别的来源一样都不编。
+   */
+  const choiceFacts = (
+    c: ModelProviderConfig,
+    model: string,
+  ): Pick<ModelChatChoice, 'name' | 'context_window' | 'native_search' | 'thinking'> => {
+    if (c.kind === 'openai-codex') {
+      const entry = options.subscription?.catalog('openai-codex').find((m) => m.id === model)
+      const thinking = entry?.efforts === undefined ? undefined : thinkingOptionsOf(entry.efforts)
+      return {
+        ...(entry === undefined || entry.name === '' ? {} : { name: entry.name }),
+        ...(entry?.context_window === undefined ? {} : { context_window: entry.context_window }),
+        native_search: true,
+        ...(thinking === undefined ? {} : { thinking }),
+      }
+    }
+    const messages =
+      c.kind === 'deepseek_account' || (c.kind === 'deepseek' && deepseekUsesMessages(c, env))
+    if (!messages) return {}
+    const entry =
+      c.kind === 'deepseek_account' && accountModels !== undefined
+        ? accountModels.resolve(accountModels.current()).offered.find((m) => m.id === model)
+        : DEEPSEEK_ACCOUNT_MODELS.find((m) => m.id === model)
+    const thinking = thinkingOptionsOf(
+      DEEPSEEK_REASONING_EFFORTS,
+      DEEPSEEK_DEFAULT_REASONING_EFFORT,
+    )
+    const context =
+      entry !== undefined && 'contextWindow' in entry ? entry.contextWindow : undefined
+    return {
+      ...(entry === undefined || entry.name === '' ? {} : { name: entry.name }),
+      ...(typeof context === 'number' ? { context_window: context } : {}),
+      ...(thinking === undefined ? {} : { thinking }),
+    }
   }
 
   const activeConfigs = (): ModelProviderConfig[] => effectiveConfigs().filter((c) => hasKey(c.id))
@@ -2240,6 +2296,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
                     ? '还没填 API key'
                     : `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），key 无处安全存放`,
           }),
+      ...(config.picker_models === undefined || config.picker_models.length === 0
+        ? {}
+        : { picker_models: [...config.picker_models] }),
       ...(config.price_in === undefined ? {} : { price_in: config.price_in }),
       ...(config.price_out === undefined ? {} : { price_out: config.price_out }),
       ...(config.price_cached === undefined ? {} : { price_cached: config.price_cached }),
@@ -2267,6 +2326,79 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
   }
 
+  /**
+   * WP188 / WP362 / WP370：AI 钮那一份清单（挂在网关上的每一个），设置里「默认模型」下拉也用它——**一份数据**。
+   */
+  const chatChoicesNow = (): ModelChatChoice[] => {
+    // WP362：AI 钮按来源分组、每行带厂商与消耗速率（工坊积分）/ 订阅额度 / 用你自己的 key
+    const rates = cloudRatesNow()
+    const choice = (c: ModelProviderConfig, model: string): ModelChatChoice => {
+      const group: ModelChatChoice['group'] =
+        c.kind === 'agentsws_cloud'
+          ? 'workshop'
+          : c.kind === 'openai-codex'
+            ? 'subscription'
+            : 'own'
+      const vendor = vendorOfModel(model)
+      const price: ModelPrice | undefined =
+        group === 'workshop'
+          ? rates.price(model)
+          : group === 'subscription'
+            ? { kind: 'subscription' }
+            : { kind: 'own_key' }
+      const facts = choiceFacts(c, model)
+      return {
+        id: `${c.id}/${model}`,
+        // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）
+        label: providerDisplayLabel(c),
+        official: c.kind === 'agentsws_cloud',
+        vision: visionStatusOf(c, model),
+        group,
+        ...(vendor === undefined ? {} : { vendor }),
+        ...(price === undefined ? {} : { price }),
+        ...facts,
+      }
+    }
+    const order = { workshop: 0, subscription: 1, own: 2 } as const
+    // WP370：自己接的那几家里，照官方 alpha.5 的次序 DeepSeek 账号第一、DeepSeek 第二，别家保持原来的顺序
+    const ownRank = (c: ModelProviderConfig): number =>
+      c.kind === 'deepseek_account' ? 0 : c.kind === 'deepseek' ? 1 : 2
+    return textConfigs()
+      .flatMap((c) =>
+        selectedModels(c).map((model) => ({ choice: choice(c, model), rank: ownRank(c) })),
+      )
+      .map((x, i) => ({ ...x, i }))
+      .sort(
+        (a, b) =>
+          order[a.choice.group ?? 'own'] - order[b.choice.group ?? 'own'] ||
+          a.rank - b.rank ||
+          a.i - b.i,
+      )
+      .map(({ choice: c }) => c)
+  }
+
+  const defaultChoices = (
+    chat: readonly ModelChatChoice[],
+    active: readonly ModelProviderConfig[],
+  ): ModelDefaultsView['choices'] => {
+    const seen = new Set(chat.map((c) => c.id))
+    const rest = active.flatMap((c) =>
+      knownModels(c)
+        .filter((model) => !seen.has(`${c.id}/${model}`))
+        .map((model) => ({
+          id: `${c.id}/${model}`,
+          label: `${providerDisplayLabel(c)}（${model}）`,
+        })),
+    )
+    return [
+      ...chat.map((c) => ({
+        id: c.id,
+        label: `${c.label}（${c.name ?? c.id.slice(c.id.indexOf('/') + 1)}）`,
+      })),
+      ...rest,
+    ]
+  }
+
   const defaultsView = (): ModelDefaultsView => {
     const active = textConfigs()
     const budget = state.defaults.budget ?? {}
@@ -2281,13 +2413,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       default: state.defaults.default ?? (active[0] === undefined ? '' : modelIdOf(active[0])),
       by_purpose: { ...state.defaults.by_purpose },
       budget: defined(budget),
-      // WP42：拉过清单的，这家的每一个模型都能选（没拉过就只有配置里那一个）
-      choices: active.flatMap((c) =>
-        knownModels(c).map((model) => ({
-          id: `${c.id}/${model}`,
-          label: `${providerDisplayLabel(c)}（${model}）`,
-        })),
-      ),
+      // WP370：先是与输入框 AI 钮同一份（同样的名字、同样的次序）；WP42 那条照旧——拉回来的清单里别的模型
+      // 接在后面也能选，选了就挂上网关、也进 AI 钮（默认 / 按用途选中的总会挂上）
+      choices: defaultChoices(chatChoicesNow(), active),
     }
   }
 
@@ -2445,6 +2573,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           transcription_model: input.transcription_model ?? existing?.transcription_model,
           models: keepList ? existing.models : undefined,
           last_listing: keepList ? existing.last_listing : undefined,
+          // WP370：不给 = 保持原样；给了就照它（去重、去掉主模型本身）
+          picker_models: pickerModelsFor(input.picker_models, existing?.picker_models, input.model),
         }),
         ...priceFieldsFor(input, existing, base_url),
         // WP274：只用来生图的那一条（不给 = 保持原样）
@@ -2850,41 +2980,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return undefined
     },
     hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
-    chatChoices: () => {
-      // WP362：AI 钮按来源分组、每行带厂商与消耗速率（工坊积分）/ 订阅额度 / 用你自己的 key
-      const rates = cloudRatesNow()
-      const choice = (c: ModelProviderConfig, model: string): ModelChatChoice => {
-        const group: ModelChatChoice['group'] =
-          c.kind === 'agentsws_cloud'
-            ? 'workshop'
-            : c.kind === 'openai-codex'
-              ? 'subscription'
-              : 'own'
-        const vendor = vendorOfModel(model)
-        const price: ModelPrice | undefined =
-          group === 'workshop'
-            ? rates.price(model)
-            : group === 'subscription'
-              ? { kind: 'subscription' }
-              : { kind: 'own_key' }
-        return {
-          id: `${c.id}/${model}`,
-          // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）
-          label: providerDisplayLabel(c),
-          official: c.kind === 'agentsws_cloud',
-          vision: visionStatusOf(c, model),
-          group,
-          ...(vendor === undefined ? {} : { vendor }),
-          ...(price === undefined ? {} : { price }),
-        }
-      }
-      const order = { workshop: 0, subscription: 1, own: 2 } as const
-      return textConfigs()
-        .flatMap((c) => selectedModels(c).map((model) => choice(c, model)))
-        .map((c, i) => ({ c, i }))
-        .sort((a, b) => order[a.c.group ?? 'own'] - order[b.c.group ?? 'own'] || a.i - b.i)
-        .map(({ c }) => c)
-    },
+    chatChoices: () => chatChoicesNow(),
     rateBase: () => cloudRatesNow().base,
     dropAccountProvider(reason) {
       const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
@@ -2918,6 +3014,21 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return state.providers.length
     },
   }
+}
+
+/**
+ * WP370：存进去的「AI 钮里还要列的那几个」。`next` 不给 = 保持原样；给了去重、去空、去掉主模型本身
+ * （主模型总在），一个都不剩就不存这一格。
+ */
+export function pickerModelsFor(
+  next: readonly string[] | undefined,
+  existing: readonly string[] | undefined,
+  main: string,
+): string[] | undefined {
+  const source = next ?? existing
+  if (source === undefined) return undefined
+  const out = [...new Set(source.map((m) => m.trim()).filter((m) => m !== '' && m !== main.trim()))]
+  return out.length === 0 ? undefined : out
 }
 
 /**

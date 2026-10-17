@@ -17,6 +17,7 @@
  *
  *     node scripts/live-subscription-run.mjs
  *     node scripts/live-subscription-run.mjs --model gpt-5.5 --question "…" --fallback
+ *     node scripts/live-subscription-run.mjs --model gpt-5.5 --effort deep   # WP370：思考程度 fast / standard / deep
  *
  * 屏幕上依次出：订阅进没进两处清单、默认模型设成了谁、这一轮用的是哪个来源、搜了什么、
  * 搜索来自哪一路（ChatGPT 自带搜索 / 退回别的）、回答的头几行、用量（订阅那几笔花费都是 0）。
@@ -40,6 +41,8 @@ const opt = (name) => {
 }
 const flag = (name) => args.includes(name)
 const MODEL = opt('--model') ?? 'gpt-5.5'
+/** WP370：思考程度三档白话（fast 快 / standard 标准 / deep 深想）；不给 = 模型默认档。 */
+const EFFORT_LEVEL = opt('--effort')
 const QUESTION =
   opt('--question') ??
   '用联网搜索查一下 site:reddit.com smart glasses，挑三条最有用的讨论，每条一句话说它讲了什么，附上网址。'
@@ -214,6 +217,23 @@ try {
   )
   if (!inDefaults.some((c) => c.id === `openai-codex/${MODEL}`))
     throw new Error(`订阅目录里没有 ${MODEL}（--model 换一个上面列出来的）`)
+  // WP370：这个模型能调哪几档思考程度（AI 钮里「思考：快 / 标准 / 深想」那一行的数据）
+  const picked = chat.choices.find((c) => c.id === `openai-codex/${MODEL}`)
+  const thinking = picked?.thinking
+  say(
+    `   ${picked?.name ?? MODEL} 的思考程度：${
+      thinking === undefined
+        ? '（这个模型没有档可调）'
+        : thinking.options.map((o) => `${o.level}=${o.effort}`).join('、') +
+          `；默认 ${thinking.default}`
+    }`,
+  )
+  const effort =
+    EFFORT_LEVEL === undefined
+      ? undefined
+      : thinking?.options.find((o) => o.level === EFFORT_LEVEL)?.effort
+  if (EFFORT_LEVEL !== undefined && effort === undefined)
+    throw new Error(`${MODEL} 没有「${EFFORT_LEVEL}」这一档（--effort 用 fast / standard / deep）`)
 
   // ③ 选订阅当默认模型
   const after = await data(
@@ -224,9 +244,12 @@ try {
   // ④ 随便聊：问一句 + 联网搜索
   say(`④ 随便聊问一句（开联网搜索）：${QUESTION}`)
   const session = await data(await call('POST', '/v1/free-chat/sessions', {}))
+  if (effort !== undefined) say(`   这一轮的思考程度：${EFFORT_LEVEL}（${effort}）`)
   const res = await call('POST', `/v1/free-chat/sessions/${session.id}/messages`, {
     text: QUESTION,
     web_search: true,
+    // WP370：连同模型一起交思考程度（AI 钮里选「深想」就是这样交上去的）
+    ...(effort === undefined ? {} : { model: `openai-codex/${MODEL}`, effort }),
   })
   const frames = (await res.text())
     .split('\n')

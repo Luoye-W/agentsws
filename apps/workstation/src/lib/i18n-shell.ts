@@ -42,6 +42,20 @@ export const SHELL_ZH: Record<string, string> = {
   'model.pick.discount.tip': '按 token 算，我们的价是这家官方标价的 {pct}%；实际消耗以用量记录为准',
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': '看图',
+  // WP370：思考程度三档 + 能力小标（只画图标，悬停出这一句）
+  'model.pick.thinking': '思考',
+  'model.pick.thinking.tip': '想得越深越慢、越费额度。换模型会回到「标准」。',
+  'model.pick.thinking.fast': '快',
+  'model.pick.thinking.standard': '标准',
+  'model.pick.thinking.deep': '深想',
+  'model.pick.cap.web': '自带联网搜索',
+  'model.pick.cap.long': '长上下文（约 {k}K）',
+  // WP370：设置里自定义接口——还要在 AI 钮里列哪些
+  'models.picker.title': '也在 AI 钮里显示',
+  'models.picker.tip':
+    '主模型总在。勾上的这几个，输入框的 AI 钮里也能直接选。拉不到清单就手填，一行一个。',
+  'models.picker.search': '搜索清单…',
+  'models.picker.manual': '手填模型名，一行一个',
 }
 
 export const SHELL_EN: Record<string, string> = {
@@ -80,4 +94,17 @@ export const SHELL_EN: Record<string, string> = {
     "Per token, our price is {pct}% of the maker's list price; your usage log is what counts",
   'model.pick.source_model': '{source} · {model}',
   'model.pick.vision': 'Images',
+  'model.pick.thinking': 'Thinking',
+  'model.pick.thinking.tip':
+    'Deeper is slower and uses more quota. Switching models goes back to Standard.',
+  'model.pick.thinking.fast': 'Fast',
+  'model.pick.thinking.standard': 'Standard',
+  'model.pick.thinking.deep': 'Deep',
+  'model.pick.cap.web': 'Built-in web search',
+  'model.pick.cap.long': 'Long context (about {k}K)',
+  'models.picker.title': 'Also show in the AI button',
+  'models.picker.tip':
+    'The main model is always there. Ticked models can be picked right from the AI button. No list? Type names, one per line.',
+  'models.picker.search': 'Search the list…',
+  'models.picker.manual': 'Type model names, one per line',
 }

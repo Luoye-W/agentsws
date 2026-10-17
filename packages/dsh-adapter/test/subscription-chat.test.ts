@@ -145,6 +145,22 @@ describe('翻译成 pi-ai 的 Context', () => {
     expect(list.find((m) => m.id === 'gpt-5.5')).toMatchObject({ vision: true })
     expect(await subscriptionCatalog('anthropic')).toEqual([])
   })
+
+  it('WP370：目录里每个模型带官方 pi-ai 认的思考档（由浅到深）与上下文窗口', async () => {
+    const list = await subscriptionCatalog('openai-codex')
+    const gpt55 = list.find((m) => m.id === 'gpt-5.5')
+    expect(gpt55?.efforts).toEqual(['off', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    expect(gpt55?.context_window).toBeGreaterThan(200_000)
+    // 目录里每个都是思考模型：每个都有档，档都在我们认的那七个里
+    for (const m of list) {
+      expect(m.efforts?.length ?? 0).toBeGreaterThan(1)
+      expect(
+        m.efforts?.every((e) =>
+          ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(e),
+        ),
+      ).toBe(true)
+    }
+  })
 })
 
 describe('整条（替身 OpenAI，不出网）', () => {
@@ -169,6 +185,28 @@ describe('整条（替身 OpenAI，不出网）', () => {
       expect(JSON.stringify(got)).not.toContain(token)
       expect(JSON.stringify(fake.bodies)).not.toContain(token)
     }
+  })
+
+  it('WP370：选了思考程度 → 请求体里写 reasoning.effort；off 与不选都不写（官方同款）', async () => {
+    const fake = installFakeOpenAi({ reply: () => ({ text: '好。' }) })
+    const handle = await signedIn(fake)
+    const effortOf = (): unknown =>
+      (fake.bodies.at(-1) as { reasoning?: { effort?: unknown } }).reasoning?.effort
+    await handle.complete?.('openai-codex', {
+      model: 'gpt-5.5',
+      messages: CONVO,
+      reasoning_effort: 'high',
+    })
+    expect(effortOf()).toBe('high')
+    await handle.complete?.('openai-codex', { model: 'gpt-5.5', messages: CONVO })
+    const plain = effortOf()
+    await handle.complete?.('openai-codex', {
+      model: 'gpt-5.5',
+      messages: CONVO,
+      reasoning_effort: 'off',
+    })
+    expect(effortOf()).toEqual(plain)
+    expect(plain).not.toBe('high')
   })
 
   it('模型要调工具 → tool_calls 原样交回', async () => {

@@ -234,6 +234,23 @@ export interface FreeChatModelChoice {
   vendor?: string
   /** WP362：每行右边那一格。 */
   price?: FreeChatModelPrice
+  /** WP370：目录里给人看的名字（GPT-5.5、DeepSeek-V4.1-Flash）；没有就用 id 里的模型名。 */
+  name?: string
+  /** WP370：上下文窗口（token）。 */
+  context_window?: number
+  /** WP370：这个来源自带联网搜索（ChatGPT 订阅）。 */
+  native_search?: boolean
+  /** WP370：能调的思考程度（三档白话；没有 = 不出那一行）。 */
+  thinking?: FreeChatModelThinking
+}
+
+/** WP370：思考程度的 id（官方 dsh / pi-ai 同名）。 */
+export type ReasoningEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+/** WP370：界面上的三档白话。 */
+export type ThinkingLevel = 'fast' | 'standard' | 'deep'
+export interface FreeChatModelThinking {
+  options: { level: ThinkingLevel; effort: ReasoningEffort }[]
+  default: ReasoningEffort
 }
 
 /** WP362：消耗速率（DeepSeek v4 Pro 官方原价 = 1x）/ 限免 / 订阅额度 / 用你自己的 key。 */
@@ -273,6 +290,8 @@ export type FreeChatFrame =
 
 export interface FreeChatTurnOptions {
   model?: string
+  /** WP370：连同 `model` 一起选的思考程度。 */
+  effort?: ReasoningEffort
   web_search?: boolean
   knowledge?: boolean
 }

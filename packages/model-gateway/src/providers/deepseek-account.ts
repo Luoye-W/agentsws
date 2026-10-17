@@ -42,6 +42,7 @@ import type {
   ModelProvider,
   ModelRef,
   ProviderModelInfo,
+  ReasoningEffort,
   ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
@@ -287,6 +288,27 @@ const blocksOf = (
               },
             },
       )
+
+/**
+ * WP370：思考程度 → Messages 请求体那两格。照官方 `@deepseek-ai/dsh-llm-deepseek@0.2.1-alpha.5`
+ * `src/serialize.ts`（MIT，Copyright (c) 2026 DeepSeek）：`thinking.type` 按是不是 `off` 开关，
+ * 不是 `off` 时 `output_config.effort` 写那一档；官方只收 off / low / high / max 四档（`model-info.ts` 的
+ * `REASONING_EFFORTS`，默认 high）。别的档、或调用方硬要「别想」（`thinking: 'off'`），这里一格不写。
+ */
+export function messagesEffortFields(
+  effort: ReasoningEffort | undefined,
+  thinking: 'off' | undefined,
+): Record<string, unknown> {
+  if (effort === undefined || thinking === 'off') return {}
+  if (!(DEEPSEEK_REASONING_EFFORTS as readonly string[]).includes(effort)) return {}
+  return effort === 'off'
+    ? { thinking: { type: 'disabled' } }
+    : { thinking: { type: 'enabled' }, output_config: { effort } }
+}
+
+/** WP370：官方 DeepSeek 适配器声明的思考档（`dsh-llm-deepseek` `model-info.ts`，由浅到深）与默认档。 */
+export const DEEPSEEK_REASONING_EFFORTS = ['off', 'low', 'high', 'max'] as const
+export const DEEPSEEK_DEFAULT_REASONING_EFFORT = 'high' as const
 
 /**
  * 我们的对话 → Messages 形状。
@@ -556,6 +578,8 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
           model,
           max_tokens: maxTokens,
           ...wire,
+          // WP370：选了思考程度才写这两格（没选 = 官方默认，请求字节不变）
+          ...messagesEffortFields(req.reasoning_effort, req.thinking),
           ...(req.tools === undefined || req.tools.length === 0
             ? {}
             : { tools: req.tools.map(toWireTool) }),

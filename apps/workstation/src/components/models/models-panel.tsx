@@ -123,6 +123,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['model-providers'] })
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
+    // WP370：设置页与输入框 AI 钮同一份清单——存完 AI 钮跟着换
+    void client.invalidateQueries({ queryKey: ['free-chat', 'models'] })
     // 接上模型之后首页那条黄条要消失
     void client.invalidateQueries({ queryKey: ['home'] })
   }
