@@ -368,7 +368,7 @@ export function renderProposal({ id, fromDir, toDir, skills, upstream = {}, at }
           reason: '<为什么放行>',
         })),
         summary: { zh: '<一句改了什么>', en: '<one line>' },
-        proposal: `docs/upstream/proposals/<文件名>.md`,
+        proposal: `agentsws-internal:docs/upstream/proposals/<文件名>.md`,
       },
       null,
       2,

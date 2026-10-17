@@ -13,7 +13,7 @@
 > never a public issue.
 
 中文或英文提 issue、写 PR 都可以。本项目 Apache-2.0，贡献采用
-**DCO（Developer Certificate of Origin）**，不需要签 CLA（定案见 `docs/33` §2.3）。
+**DCO（Developer Certificate of Origin）**，不需要签 CLA。
 
 ---
 
@@ -44,7 +44,7 @@ pnpm simulate --tier fast --pack packs/dtc-3c-3p  # 8/8 才算基线正常
 pnpm dev:demo                                     # 用合成世界跑起工作台，看真卡片
 ```
 
-跑不通先看 README 的「30 分钟跑通」。
+跑不通先看 README 与帮助文章（<https://agentsws.com/docs/>）。
 
 ## 3. 开发方式：一个任务包一个 worktree
 
@@ -60,27 +60,28 @@ scripts/review-wp.sh ../agentsws-wt/wp42-my-thing packages/my-package
 
 `scripts/review-wp.sh <worktree 目录> <包目录>` 会在那个 worktree 里跑构建 / lint /
 测试 / 覆盖率，并**列出改到包目录之外的文件**——多个 WP 并行时这是最有用的一条输出。
-合并用 `git merge --no-ff wp/...`；pnpm-lock 冲突以重新生成解决（`docs/35` §3）。
+合并用 `git merge --no-ff wp/...`；pnpm-lock 冲突以重新生成解决。
 
 外部贡献者用 fork + 普通分支就行，分支名建议 `fix/…`、`feat/…`；`wp/<n>-<name>` 是我们
-内部派工用的。
+内部派工用的。派工单、讨论记录与决策过程不在这个仓库里；本仓只放代码、契约、用户帮助文章
+（`docs/help/`）与英文架构说明。`scripts/check-no-internal-docs.mjs` 会拦下 `docs/` 白名单之外的文件。
 
 ## 4. 贡献什么
 
-- **职责包 / 技能 / 模板**（声明类，最欢迎，也最容易合）：遵循
-  `docs/23-应用包与市场API规范-v1.md` 的 `package.yml` 与 Agent Skills 格式；放
+- **职责包 / 技能 / 模板**（声明类，最欢迎，也最容易合）：遵循 `package.yml`
+  （`packages/contracts/src/packages.ts`）与 Agent Skills 格式，照 `role-packs/` 里现成的写；放
   `role-packs/` 或 `skills/`
-- **模拟场景与合成数据**：`docs/26` 的场景 DSL，放 `packs/<pack>/scenarios/`。
+- **模拟场景与合成数据**：场景 DSL 照 `packs/*/scenarios/` 里现成的写，放 `packs/<pack>/scenarios/`。
   一条能复现 bug 的场景 YAML 是最好的 bug 报告
 - **连接器 / provider**：优先贡献到上游（dsh-channels、OpenConnector），本仓 `vendor/`
   只放过渡版本与契约测试
-- **文档**：中文设计文档保持中文；`README` 顶部摘要、`docs/ARCHITECTURE.md`、
+- **文档**：帮助文章（`docs/help/`）中英各一份；`README.md`（中文）与 `README.en.md`（英文）两份同步；`docs/ARCHITECTURE.md`、
   `SECURITY.md`、`CODE_OF_CONDUCT.md`、`.github/` 里的模板保持英文
 - **契约与内核**：见下一节
 
 ## 5. 契约改动规则（接口已冻结）
 
-`docs/32` §2 定的：**接口层现在冻结，实现层按切片推进。**
+**接口层现在冻结，实现层按切片推进。**
 
 | 改动 | 可以吗 |
 |---|---|
@@ -88,8 +89,7 @@ scripts/review-wp.sh ../agentsws-wt/wp42-my-thing packages/my-package
 | 改已有字段的语义、改必填性、删字段、改事件含义 | **不可以**——那是升 major + 写迁移器的事，先开 issue 讨论并附迁移方案 |
 | 在 `packages/contracts` 里写实现 | 不可以，那个包是纯类型 |
 
-改了契约就要同步：一致性用例、至少两个实现（默认 + 替身）、以及对应的中文规范文档
-（14–29 里的那一份）。
+改了契约就要同步：一致性用例、至少两个实现（默认 + 替身）、以及契约文件头的说明。
 
 ## 6. 规则
 
@@ -117,7 +117,7 @@ pnpm -s simulate --tier fast --pack packs/dtc-3c-3p --scenario 'scenarios/**/*.y
 ```
 
 最后一步是**合并门禁**：8 条场景全过、六条不变量全绿、指标不劣化。它红了就是红了，
-不看别的。审核清单见 `docs/35` §3，PR 模板里已经逐条列好。
+不看别的。审核清单在 PR 模板里逐条列好。
 
 碰安全关键路径的改动（审批 / 账本 / 执行器 / 授权 / 围栏 / 凭据）请在 PR 里明确说明，
 并对着 PR 模板里那一组勾选项逐条自查。

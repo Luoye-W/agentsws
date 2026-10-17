@@ -311,6 +311,13 @@ export function toOrderRow(
     (isRecord(journey) && isRecord(journey.firstVisit)
       ? stringOf(journey.firstVisit.landingPage)
       : undefined)
+  // WP381：从哪个网页点进来的（REST `referring_site`；GraphQL 取最后一次进店、没有再取首次）
+  const visitRef = (k: 'lastVisit' | 'firstVisit'): string | undefined =>
+    isRecord(journey) && isRecord(journey[k]) ? stringOf(journey[k].referrerUrl) : undefined
+  const referring =
+    stringOf(pick(row, ['referring_site', 'referringSite'])) ??
+    visitRef('lastVisit') ??
+    visitRef('firstVisit')
   return {
     id,
     name: typeof number === 'string' || typeof number === 'number' ? `${number}` : id,
@@ -331,6 +338,7 @@ export function toOrderRow(
     ),
     ...(lineItems === undefined ? {} : { line_items: lineItems }),
     ...(landing === undefined ? {} : { landing_site: landing }),
+    ...(referring === undefined ? {} : { referring_site: referring }),
   }
 }
 

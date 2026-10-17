@@ -203,7 +203,7 @@ const block = (
   component: ComponentName,
   title: string,
   query: string,
-  options: { hide_when_empty?: boolean } = {},
+  options: { hide_when_empty?: boolean; rerun?: BlockDef['rerun'] } = {},
 ): BlockDef => {
   const def = queryDef(query)
   const report_url = SOURCE_REPORT_URLS[def.source]
@@ -216,6 +216,7 @@ const block = (
     source: def.source,
     ...(report_url === undefined ? {} : { report_url }),
     ...(options.hide_when_empty === true ? { hide_when_empty: true } : {}),
+    ...(options.rerun === undefined ? {} : { rerun: options.rerun }),
   }
 }
 
@@ -494,6 +495,26 @@ const SITE_CHECKLIST_BLOCKS = (): BlockDef[] => [
   block('site.apps', 'table', '已装 App', 'site.installed_apps'),
 ]
 
+/**
+ * WP381（决策 1066）：网站 / 商品体检。建站看「AI 爬虫进不进得来、关键事实在不在原始页面里」（主题与 robots 归它）；
+ * 网站运营另看商品信息一致性与能否进 ChatGPT 购物（商品数据归它）。块头一个「现在体检」小钮。
+ */
+const SITE_HEALTH_RERUN = { path: '/v1/site-health/run', label: '现在体检' }
+const SITE_TECH_HEALTH_BLOCKS = (): BlockDef[] => [
+  block('site.health.crawlers', 'table', 'AI 爬虫进不进得来', 'site.ai_crawlers', {
+    rerun: SITE_HEALTH_RERUN,
+  }),
+  block('site.health.raw_html', 'table', '不开 JS 看得到吗', 'site.raw_html', {
+    rerun: SITE_HEALTH_RERUN,
+  }),
+]
+const SITE_PRODUCT_HEALTH_BLOCKS = (): BlockDef[] => [
+  block('site.health.products', 'table', '商品信息对不对得上', 'site.product_facts', {
+    rerun: SITE_HEALTH_RERUN,
+  }),
+  block('site.health.chatgpt', 'table', '能否进 ChatGPT 购物', 'site.chatgpt_shopping'),
+]
+
 const SITE_THEME_BLOCKS = (): BlockDef[] => [
   block('site.theme.copies', 'table', '主题副本与预览', 'site.theme_copies'),
   block('site.theme.pending', 'table', '待发布', 'changes.pending_theme_publish'),
@@ -610,6 +631,9 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
     ...STORE_QUEUE_BLOCKS(),
     ...GA4_BLOCKS(),
     ...REVIEW_BLOCKS(),
+    // WP381：商品信息体检 + 网站技术体检
+    ...SITE_PRODUCT_HEALTH_BLOCKS(),
+    ...SITE_TECH_HEALTH_BLOCKS(),
   ],
   /*
    * WP63（51 §2.2）：内容与博客的面板 = 草稿与发布（店铺后台）+ 待发布队列 + 流量（GSC）。
@@ -617,7 +641,14 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
    * AI 可见度。原来那两张查询词 / 落地页的原始表**不再放这条职责的面板**——
    * 不堆数据（文章："flags only what's worth acting on"）；它们还在数据分析那条职责里。
    */
-  'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS(), ...SEO_BLOCKS()],
+  'dtc.content': () => [
+    ...CONTENT_BLOCKS(),
+    ...CONTENT_QUEUE_BLOCKS(),
+    ...SEO_BLOCKS(),
+    // WP381：AI 来源流量（实测），和上面 AI 平台里的引用并排
+    block('seo.ai_orders', 'stat_tile', 'AI 带来的成交（实测）', 'seo.ai_orders'),
+    block('seo.ai_traffic', 'table', 'AI 带来的访问与成交', 'seo.ai_traffic'),
+  ],
   // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。
   //
   // 一块店铺后台的积木都不放：红人这条职责的 scopes 里订单是**只读**、没有
@@ -671,7 +702,7 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
    * 这一版把它补上：一块店铺后台的积木都不放，因为这四条职责的 scopes 里
    * 商品与订单是只读的、没有 analytics 写口（19 §3）。
    */
-  'site.shopify-build': () => SITE_CHECKLIST_BLOCKS(),
+  'site.shopify-build': () => [...SITE_CHECKLIST_BLOCKS(), ...SITE_TECH_HEALTH_BLOCKS()],
   'site.shopify-theme': () => SITE_THEME_BLOCKS(),
   'site.shopify-email': () => SITE_EMAIL_BLOCKS(),
   'site.shopify-apps': () => SITE_APP_BLOCKS(),
