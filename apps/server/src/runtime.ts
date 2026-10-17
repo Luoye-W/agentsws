@@ -51,6 +51,7 @@ import type {
   RunTimeLimits,
   RuntimeAdapter,
   RunWeb,
+  ServiceOffer,
   SkillRef,
   StartRun,
   StorefrontPlatform,
@@ -109,6 +110,7 @@ import {
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
+  FIND_SERVICE_TOOL,
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
@@ -134,6 +136,7 @@ import {
   WATCH_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
+  WORKSHOP_SERVICE_TOOL_NAMES,
 } from '@agentsws/stand-ins'
 import { cardRefOf, type Work } from '@agentsws/work'
 import { type RememberItem, type RunMemoryActor, splitRememberTags } from './auto-memory.js'
@@ -203,6 +206,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...ADS_DATA_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
+    // WP390：工坊服务——查目录只读本机缓存；出卡不下单（下单永远人点）
+    ...WORKSHOP_SERVICE_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -483,6 +488,20 @@ export interface RuntimeOptions {
    * 不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   setupRequestTool?: ToolExecutor
+  /**
+   * WP390（docs/105 §4）：工坊服务的两个工具（`find_service` / `draft_service_order`，所有职责都有）与
+   * **推荐卡**：这一轮收尾时问 `offer` 挂不挂、挂哪一项（分寸在服务里判：后台不推、同一对话一项只推一次、
+   * 说过「不用」30 天不推）。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  workshopServices?: {
+    execute: ToolExecutor
+    offer?(input: {
+      request: RunRequest
+      matter_id: string
+      /** 这一轮 AI 用 `find_service` 查到的第一项。 */
+      found?: string
+    }): Promise<ServiceOffer | undefined>
+  }
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -849,6 +868,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     string,
     { watchdog: RunWatchdog; log: PartialRunLog; blocks: RunBlockLog }
   >()
+  /** WP390：这一轮 AI 用 `find_service` 查到的第一项（收尾时据此挂推荐卡；收尾摘掉）。 */
+  const foundServices = new Map<string, string>()
   /** WP251：这一轮撞上「缺连接 / 缺凭据」时记一笔（缺哪个连接按这条职责现查）。 */
   const noteBlocked = (
     blocks: RunBlockLog | undefined,
@@ -1243,6 +1264,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
+    const workshopTools = options.workshopServices?.execute
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1273,7 +1295,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
-      setupRequest === undefined
+      setupRequest === undefined &&
+      workshopTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1331,6 +1354,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
       }
+      // WP390：工坊服务（名字与别处不重名）
+      if (workshopTools !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bareOf(call.name))) {
+        return workshopTools(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1375,6 +1402,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
+    if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
+      return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1394,6 +1423,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           if (why !== undefined)
             noteBlocked(watch?.blocks, bareOf(call.name), why, call.request.actor.role_id)
           // WP324：缺一步设置 / 缺一样能就地连的（结构化：`needs_setup` / `needs_connection` / 建站与管店的 `needs`）
+          // WP390：AI 查到了哪一项工坊服务（收尾时挂推荐卡用）
+          if (bareOf(call.name) === FIND_SERVICE_TOOL && res.status === 'ok') {
+            const first = (res.data as { services?: { id?: unknown }[] } | undefined)?.services?.[0]
+            if (typeof first?.id === 'string' && !foundServices.has(call.request.id))
+              foundServices.set(call.request.id, first.id)
+          }
           const setupNeed = why === undefined ? setupNeedOf(bareOf(call.name), res) : undefined
           if (setupNeed !== undefined) watch?.blocks.noteSetup(bareOf(call.name), setupNeed)
           watch?.log.hostTool({
@@ -1884,6 +1919,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
+        // WP390：工坊服务（所有职责）
+        ...(options.workshopServices === undefined ? [] : WORKSHOP_SERVICE_TOOL_NAMES),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
@@ -2522,8 +2559,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const said = splitNextSuggestion(humanizeToolNames(answers.join('\n'), request.tools.allow))
       const next = cleanNextSuggestion(result.next_suggestion) ?? said.next
       if (answers.length > 0 && said.text.trim() !== '') {
+        /*
+         * WP390（docs/105 §4）：推荐卡——挂不挂、挂哪一项问服务（后台不推、同一对话一项只推一次、说过「不用」不推）。
+         * 取不到就不挂，不影响这一段话。
+         */
+        const found = foundServices.get(run_id)
+        const offer = await options.workshopServices
+          ?.offer?.({
+            request,
+            matter_id: input.matter.id,
+            ...(found === undefined ? {} : { found }),
+          })
+          .catch(() => undefined)
         work?.appendEvent(input.matter.id, {
           kind: 'agent_message',
+          ...(offer === undefined ? {} : { service_offer: offer }),
           /*
            * WP153（09-26 真账号冒烟）：**兜底**——提示词公共段已经叫模型别提工具名，万一还是说了
            * （「我用 `search_policies` 查了三轮」），进时间线之前按那张统一的「工具名 → 人话」表换掉；
@@ -2594,6 +2644,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       pausing.delete(run_id)
       skillActors.delete(run_id)
       runWatch.delete(run_id)
+      foundServices.delete(run_id)
       runSteps.delete(run_id)
       settle()
     }

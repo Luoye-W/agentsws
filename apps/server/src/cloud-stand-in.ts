@@ -32,6 +32,7 @@ import type {
   MemberUsageRow,
   MyAllocation,
   PricingBlock,
+  ServiceView,
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
@@ -54,6 +55,7 @@ import {
 import {
   DataServiceStandIn,
   SAMPLE_PRICING_CATALOG,
+  ServiceOrdersStandIn,
   StandInDataError,
   StandInWallet,
 } from '@agentsws/stand-ins'
@@ -84,6 +86,11 @@ export interface CloudStandInOptions {
    * `false` = 像还没上线的云一样回 404（卡上「即将开放」）。`extra_credits` = 给合成余额多加一点（演买成）。
    */
   premiumTheme?: false | { extra_credits?: number }
+  /**
+   * WP390：工坊服务（`/v1/services*`）那几条。`scope_missing` = 演老令牌缺 `services` 动作集（403 +
+   * `required_scope`，决策 1098）；`services` = 换一份目录（默认示意三项）。
+   */
+  services?: { scope_missing?: boolean; catalog?: ServiceView[] }
 }
 
 /** 替身收到过的一次请求（测试用：断言走的是替身，而不是别处）。 */
@@ -145,6 +152,11 @@ export interface CloudStandIn {
   shopify: ShopifyCloudStandIn
   /** WP304：高级主题那三条（没开就是 undefined）。 */
   premiumTheme?: PremiumThemeStandIn
+  /**
+   * WP390：工坊服务的云上替身（测试 / demo 直接调「服务方 / 运营」那一侧：报价、接单、交付、说话、判争议）。
+   * `scopeMissing(true)` 演老令牌缺 `services`。
+   */
+  services: ServiceOrdersStandIn & { scopeMissing(on: boolean): void }
 }
 
 /** 只点本机回环口：替身绝不替用户去访问别的网址。 */
@@ -499,13 +511,17 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
 
   /** WP304：替身里买高级主题花掉的（从可用里扣）。 */
   let premiumSpent = 0
+  /** WP390：工坊服务扣进托管、还没退回的（从可用里扣；退回就加回来）。 */
+  let servicesSpent = 0
   const premiumExtra =
     options.premiumTheme === false ? 0 : (options.premiumTheme?.extra_credits ?? 0)
   const balance = (): WalletBalance => ({
     org_id: STAND_IN_ORG.id,
     purchased: PURCHASED + premiumExtra,
     granted: GRANTED,
-    available: round(Math.max(0, PURCHASED + premiumExtra + GRANTED - monthUsed() - premiumSpent)),
+    available: round(
+      Math.max(0, PURCHASED + premiumExtra + GRANTED - monthUsed() - premiumSpent - servicesSpent),
+    ),
     reserved: 0,
     expiring: [{ credits: GRANTED, expires_at: days(30) }],
     low_balance_threshold: 20,
@@ -523,6 +539,33 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
             premiumSpent = round(premiumSpent + credits)
           },
         })
+
+  /** WP390：工坊服务（示意目录；托管从上面那份合成余额里扣、退回加回）。 */
+  let servicesScopeMissing = options.services?.scope_missing === true
+  const services = new ServiceOrdersStandIn({
+    now,
+    newId: (p) => `${p}_${String(++idSeq)}`,
+    available: () => balance().available,
+    spend: (c) => {
+      servicesSpent = round(servicesSpent + c)
+    },
+    refund: (c) => {
+      servicesSpent = round(servicesSpent - c)
+    },
+    ...(options.services?.catalog === undefined ? {} : { services: options.services.catalog }),
+  })
+  /** 工坊服务那三行（托管 / 完成 / 退回）按能力名合计（用量明细「按能力」那一切）。 */
+  const serviceUsageRows = () => {
+    const by = new Map<string, { key: string; credits: number; quantity: number; calls: number }>()
+    for (const r of services.ledger()) {
+      const row = by.get(r.capability) ?? { key: r.capability, credits: 0, quantity: 0, calls: 0 }
+      row.credits = round(row.credits + r.credits)
+      row.quantity = round(row.quantity + r.quantity)
+      row.calls += 1
+      by.set(r.capability, row)
+    }
+    return [...by.values()]
+  }
 
   /** 本月用量：三块各挑一项能力（价目表里真有的），数字是合成的。 */
   const usage = (group: string): UsageReport => {
@@ -550,9 +593,13 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
           ].filter((row) => (row[2] as number) > 0) as [string | undefined, number, number][])
     const rows =
       group === 'capability'
-        ? split.flatMap(([key, credits, calls]) =>
-            key === undefined ? [] : [{ key, credits, quantity: calls, calls }],
-          )
+        ? [
+            ...split.flatMap(([key, credits, calls]) =>
+              key === undefined ? [] : [{ key, credits, quantity: calls, calls }],
+            ),
+            // WP390：工坊服务那一块（每单三行：托管 / 完成 / 退回）
+            ...serviceUsageRows(),
+          ]
         : [{ key: now().slice(0, 10), credits: monthUsed(), quantity: 58, calls: 58 }]
     return {
       group: group === 'workspace' || group === 'day' ? group : 'capability',
@@ -605,6 +652,16 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       block.credits = round(block.credits + c.credits)
       block.calls += c.calls
     }
+    // WP390：工坊服务那一块（替身不记是谁下的单，进「没标注」）
+    if (q.month === undefined || q.month === thisMonth)
+      for (const r of services.ledger()) {
+        const block = rest.blocks.workshop_service
+        rest.credits = round(rest.credits + r.credits)
+        rest.calls += 1
+        rest.quantity += 1
+        block.credits = round(block.credits + r.credits)
+        block.calls += 1
+      }
     const rows = [...people.values()].sort((a, b) => b.credits - a.credits)
     const report: MemberUsageReport = {
       group: 'member',
@@ -935,6 +992,15 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       const out = shopify.handle(method, path, body)
       if (out !== undefined) return respond(out.status, out.body)
     }
+    // ── WP390：工坊服务（只认替身签过的工作区令牌；示意目录、订单、托管）
+    if (path === '/v1/services' || path.startsWith('/v1/services/')) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      if (servicesScopeMissing)
+        return fail(403, 'forbidden', '令牌没有这条路由要的动作', { required_scope: 'services' })
+      const out = services.handle(method, path, url.searchParams, body)
+      if (out !== undefined) return respond(out.status, out.body)
+    }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
   }
 
@@ -968,5 +1034,10 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       await Promise.all([...inFlight])
     },
     shopify,
+    services: Object.assign(services, {
+      scopeMissing(on: boolean) {
+        servicesScopeMissing = on
+      },
+    }),
   }
 }

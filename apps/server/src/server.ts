@@ -97,6 +97,7 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  RunRequest,
   SearchDataPort,
   SkillTier,
   StartRun,
@@ -749,6 +750,17 @@ import {
   createWorkArchive,
   type WorkArchiveAssembly,
 } from './work-archive.js'
+import {
+  createWorkshopServiceTools,
+  isBackgroundRun,
+  isThemeRoleId,
+} from './workshop-service-tools.js'
+import {
+  createWorkshopServices,
+  SERVICE_REFUSAL,
+  type WorkshopServices,
+  workshopServicesPort,
+} from './workshop-services.js'
 import {
   createWorkstationPort,
   emptyDataSource,
@@ -3313,6 +3325,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const assembly = createSetupCards({
       workspace_id: ws,
       clock,
+      // WP390（docs/105 §4.1 ②）：服务目录里声明了这个卡点的 → 卡上多一个「交给工坊办」
+      workshopOffer: async (blocker) => (await workshopServicesOf(ws))?.blockerOffer(blocker),
       ...(brand.dir === undefined ? {} : { dir: brand.dir }),
       approvals: () => txn.approvals,
       onCard: (item) => brand.work.onCard(cardRefOf(item)),
@@ -3430,6 +3444,151 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
     setupCards.set(ws, assembly)
+    return assembly
+  }
+  /*
+   * WP390（docs/105）：**工坊服务**——一个品牌一份（懒建）。服务目录本机缓存、推荐卡的分寸、`service_order` 卡
+   * （批了才调云上下单 / 验收，永远 L1）、跟单与本机账本、落点（主题副本 → 发布审批卡；回执 → 回到卡点接着做）。
+   */
+  const workshopServicesMap = new Map<WorkspaceId, WorkshopServices>()
+  const workshopServicesOf = async (ws: WorkspaceId): Promise<WorkshopServices | undefined> => {
+    const cached = workshopServicesMap.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brands?.forWorkspace(ws)
+    if (brand === undefined) return undefined
+    /** 落主题时用谁的那条建站分配（订单上记的；没有就找这个人名下的建站 / 网站运营职责）。 */
+    const siteAssignmentOf = (person_id: string, assignment_id?: string) => {
+      const mine = roles.assignments
+        .listByPerson(person_id as never, { workspace_id: ws })
+        .filter((a) => a.revoked_at === undefined)
+      return (
+        mine.find((a) => a.id === assignment_id && isThemeRoleId(a.role_id)) ??
+        mine.find((a) => isThemeRoleId(a.role_id))
+      )
+    }
+    const assembly = createWorkshopServices({
+      workspace_id: ws,
+      clock,
+      ...(brand.dir === undefined ? {} : { dir: brand.dir }),
+      cloud: () => brandModules.cloud(ws),
+      approvals: () => txn.approvals,
+      onCard: (item) => brand.work.onCard(cardRefOf(item)),
+      note: (matter_id, text) => {
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'workshop_services' },
+        })
+      },
+      // 定制件：AI 在这件事里一问一答问清需求（点「看看」= 用户说了这一句）
+      ask: async ({ matter_id, actor, text }) => {
+        const assignment_id =
+          actor.assignment_id ??
+          (brand.work.getMatter(matter_id as never)?.position_id as string | undefined)
+        if (assignment_id === undefined) return
+        const name = /「([^」]+)」/u.exec(text)?.[1] ?? '工坊服务'
+        await brand.work.say(matter_id as never, {
+          person_id: actor.person_id as never,
+          assignment_id: assignment_id as never,
+          text: `我想看看「${name}」（工坊服务）`,
+          brief: text,
+        })
+      },
+      openMatter: async ({ actor, title }) =>
+        brand.work.createMatter({
+          kind: 'adhoc',
+          title,
+          participants: [actor.person_id as never],
+          ...(actor.assignment_id === undefined
+            ? {}
+            : { position_id: actor.assignment_id as never }),
+          ...(actor.role_id === undefined ? {} : { role_id: actor.role_id as never }),
+          ...(actor.position_id === undefined
+            ? {}
+            : { position_template_id: actor.position_id as never, entry: 'position' as const }),
+        }).id,
+      landings: {
+        // 主题副本 → 网站运营的发布审批卡（docs/12：发布永远 L1）
+        theme: async ({ theme_id, order_id, actor, matter_id }) => {
+          const theme = await siteThemeOf(ws)
+          const a = siteAssignmentOf(actor.person_id, actor.assignment_id)
+          if (theme === undefined || a === undefined) return undefined
+          const out = await theme.proposePublish({
+            theme_id,
+            request: {
+              id: `svc_${order_id}`,
+              actor: { person_id: actor.person_id, assignment_id: a.id, role_id: a.role_id },
+              ...(matter_id === undefined
+                ? {}
+                : { work_item: { id: matter_id, conversation_id: matter_id, role_id: a.role_id } }),
+            } as unknown as RunRequest,
+          })
+          return out.message
+        },
+        // 「做成了」回执 → 回到卡住的那一步，按原话接着做（连接卡 / 配置卡也复查一遍）
+        resume: async ({ resume }) => {
+          recheckSetupCards(ws)
+          const matter = brand.work.getMatter(resume.matter_id as never)
+          if (matter === undefined || matter.status === 'closed') return
+          const said = brand.work.store
+            .listMatterEvents(resume.matter_id as never, { limit: 200 })
+            .find((e) => e.kind === 'human_message')?.text
+          await brand.work.run(resume.matter_id as never, {
+            person_id: resume.person_id as never,
+            assignment_id: resume.assignment_id as never,
+            brief: said ?? matter.title,
+            text: '工坊办好了，接着做',
+          })
+        },
+      },
+      // P7：「不用」记进记忆（品牌那一层，用户随时问得到、删得掉）
+      remember: async (text, actor) => {
+        await learning.addMemory({
+          tier: 'company',
+          workspace_id: ws,
+          text,
+          by: actor.person_id as never,
+          written_by: 'ai',
+          reason: 'preference',
+        })
+      },
+      // 订单面板「帮我起草回复」：品牌默认模型（没配就用模板）
+      draft: async (prompt) => {
+        const models = await brandModules.models(ws)
+        if (!models.configured()) return undefined
+        const ref = models.defaultRef()
+        if (ref.provider === 'stub') return undefined
+        const gateway = await brandModules.gateway(ws)
+        return (
+          await gateway.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: 'workshop_services' as never,
+              role_id: 'common.owner' as never,
+              run_id: `svc_draft_${Date.parse(clock.now()).toString(36)}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 400,
+            thinking: 'off',
+          })
+        ).text
+      },
+      emit: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'workshop_services' },
+          correlation: { trace_id: `trc_svc_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+      ...(env.AGENTSWS_WORKSHOP_SERVICES_SYNC_MS === undefined
+        ? {}
+        : { syncMs: Number(env.AGENTSWS_WORKSHOP_SERVICES_SYNC_MS) }),
+    })
+    workshopServicesMap.set(ws, assembly)
     return assembly
   }
   /** WP324：连接卡上的一样现在连上了没有（认不出回 `undefined`：人说连好了就信人）。 */
@@ -5604,6 +5763,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               target: async (id) => (await setupCardsOf(ws))?.target(id),
               targetIds: async () => (await setupCardsOf(ws))?.targetIds() ?? [],
             }),
+            /*
+             * WP390（docs/105 §4）：工坊服务的两个工具（所有职责）+ 推荐卡。推荐挂不挂在服务里判：
+             * 只在人在场的那一轮（这一轮之前最后一句是人说的；定时 / 巡查 / 接着做都不推）、同一对话一项只推一次、
+             * 说过「不用」30 天不推。人回「不用」→ 上一轮挂过的那一项记下（30 天不推，进记忆）。
+             */
+            workshopServices: {
+              execute: createWorkshopServiceTools({
+                services: () => workshopServicesOf(ws),
+                positionOf: (req) =>
+                  cloudPositionOf(ws, req.actor.role_id, req.actor.assignment_id),
+              }),
+              offer: async ({ request, matter_id, found }) => {
+                const svc = await workshopServicesOf(ws)
+                const brand = await brands?.forWorkspace(ws)
+                if (svc === undefined || brand === undefined) return undefined
+                const said = brand.work.store
+                  .listMatterEvents(matter_id as never, { limit: 60 })
+                  .filter((e) => e.kind === 'human_message' || e.kind === 'agent_message')
+                const last = said.at(-1)
+                const present = last?.kind === 'human_message' && last.actor.kind === 'person'
+                const position_id = cloudPositionOf(
+                  ws,
+                  request.actor.role_id,
+                  request.actor.assignment_id,
+                )
+                const prevOffer = said
+                  .slice(0, -1)
+                  .reverse()
+                  .find((e) => e.kind === 'agent_message')?.service_offer
+                if (present && prevOffer !== undefined && SERVICE_REFUSAL.test(last.text.trim()))
+                  await svc.decline(prevOffer.service_id, {
+                    person_id: request.actor.person_id,
+                    role_id: request.actor.role_id,
+                    assignment_id: request.actor.assignment_id,
+                  })
+                return svc.offerFor({
+                  conversation: matter_id,
+                  ...(position_id === undefined ? {} : { position_id }),
+                  ...(present ? { text: last.text } : {}),
+                  ...(found === undefined ? {} : { service_id: found }),
+                  background: !present || isBackgroundRun(request),
+                })
+              },
+            },
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -6432,6 +6635,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
         ),
       socialPosts: () => social.posts(),
+      // WP390：工坊服务订单和事项排在一起（这个品牌已经装起来的那一份；没装就没有）
+      extraWork: (position_id) => workshopServicesMap.get(ws)?.workItems(position_id) ?? [],
       // WP244：工作里开着的事项按最近那一轮运行分组（在跑 / 答完了 / 卡住了）
       runningMatters: () => new Set((runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
       // WP244：卡住了说缺什么——这条职责还缺的必需连接（连接目录按品牌装好之后才有）
@@ -7615,6 +7820,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (item.kind === 'connect_request' || item.kind === 'setup_request') {
       const cards = await setupCardsOf(item.workspace_id)
       void cards?.onDecided(item).catch(() => undefined)
+      return
+    }
+    // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 联系方式）被决定 → 调云上、记账、在事项里说一句（后台跑）
+    if (item.kind === 'service_order') {
+      const svc = await workshopServicesOf(item.workspace_id)
+      void svc?.onDecided(item).catch(() => undefined)
       return
     }
     // WP304（决策 445）：选主题卡 / 买高级主题卡被决定 → 起底（复制 / 买 / 下载）、按原话接着做。
@@ -11904,6 +12115,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 默认只有「Agents 工坊（用积分）」一级）。
      */
     dataService: dataServiceApiPort((ws) => brandModules.cloud(ws)),
+    // WP390（docs/105）：工坊服务——目录缓存、看看 / 交给工坊办、订单面板（下单 / 验收都走卡）
+    workshopServices: workshopServicesPort((ws) => workshopServicesOf(ws), {
+      positionOf: (ws, role_id, assignment_id) => cloudPositionOf(ws, role_id, assignment_id),
+    }),
     dshScenes: {
       list: async () => {
         const manager = dshScenesSetup.manager
@@ -12990,6 +13205,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'connect_request' ||
           out.kind === 'setup_request' ||
           out.kind === 'theme_purchase' ||
+          // WP390：工坊服务卡
+          out.kind === 'service_order' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
           isRouteChoice(out) ||
           // WP276：「X 想把「…」交给你」接下 / 不接了

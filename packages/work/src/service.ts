@@ -561,6 +561,8 @@ export class Work {
       run_digest?: MatterEvent['run_digest']
       /** WP264：AI 这段话末尾给的下一步建议。 */
       next_suggestion?: string
+      /** WP390：AI 这段话末尾挂的推荐卡（工坊服务）。 */
+      service_offer?: MatterEvent['service_offer']
       /** WP287：这一条是「这次没跑成」（界面据此出「重试」）。 */
       failed?: MatterEvent['failed']
       /** WP357：这句话附上的资料（只在 `human_message` 上）。 */
@@ -621,6 +623,7 @@ export class Work {
       ...(input.next_suggestion === undefined || input.next_suggestion === ''
         ? {}
         : { next_suggestion: input.next_suggestion }),
+      ...(input.service_offer === undefined ? {} : { service_offer: { ...input.service_offer } }),
       ...(input.failed === undefined
         ? {}
         : { failed: { code: input.failed.code, retryable: input.failed.retryable } }),

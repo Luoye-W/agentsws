@@ -97,6 +97,7 @@ import { storageRoutes } from './routes/storage.js'
 import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
+import { workshopServicesRoutes } from './routes/workshop-services.js'
 import { workstationRoutes } from './routes/workstation.js'
 import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
@@ -161,6 +162,8 @@ export function collectRoutes(): Route[] {
     ...npmRegistryRoutes(),
     // WP192（docs/83 §4）：官方数据接口统一能力口（本机按能力路由，转给云上的 /v1/data/*）
     ...dataServiceRoutes(),
+    // WP390：工坊服务（目录缓存、看看 / 交给工坊办、订单面板）
+    ...workshopServicesRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*
