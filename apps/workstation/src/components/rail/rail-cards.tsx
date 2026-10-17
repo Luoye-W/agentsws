@@ -201,7 +201,11 @@ function SortableCard({
           )}
           <Chevron
             aria-hidden
-            className={cn('size-3.5 shrink-0 text-ws-muted-fg', open && 'ml-auto')}
+            // 没有摘要占着右边时，箭头自己靠右（收起 / 展开都是同一个位置）
+            className={cn(
+              'size-3.5 shrink-0 text-ws-muted-fg',
+              (open || status?.summary === undefined) && 'ml-auto',
+            )}
           />
         </button>
       </div>

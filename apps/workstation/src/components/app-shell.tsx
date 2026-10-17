@@ -592,7 +592,7 @@ export function AppShell({
             右边留的那一截 `env(titlebar-area-*)` 只在以后开了窗口控件叠加（Window Controls Overlay）时才生效。
           */}
               <header
-                className="sticky top-0 z-30 flex h-11 shrink-0 items-center gap-2 border-b border-ws-line bg-ws-paper pl-4"
+                className="sticky top-0 z-50 flex h-11 shrink-0 items-center gap-2 border-b border-ws-line bg-ws-paper pl-4"
                 style={{
                   paddingRight:
                     'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',

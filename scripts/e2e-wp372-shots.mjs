@@ -126,7 +126,7 @@ async function main() {
       await page.waitForURL(/\/duties\//, { timeout: 20_000 })
       dutyUrl = page.url()
       const asg = /\/positions\/([^/]+)\/duties\/([^/?]+)/.exec(dutyUrl)
-      const before = await get(owner, '/v1/work/rail?limit=50', asg?.[1])
+      const before = await get(owner, '/v1/work/rail?limit=20', asg?.[1])
       const count = (rail) =>
         rail.positions.flatMap((p) => p.duties.flatMap((d) => d.matters)).length
       await page.getByTestId('rail-icon-conversations').click()
@@ -138,7 +138,7 @@ async function main() {
       await page.waitForURL(/\/positions\/[^/]+(\?.*)?$|\/matters\//, { timeout: 20_000 })
       let ok = false
       for (let i = 0; i < 60 && !ok; i += 1) {
-        const after = await get(owner, '/v1/work/rail?limit=50', asg?.[1])
+        const after = await get(owner, '/v1/work/rail?limit=20', asg?.[1])
         const titles = after.positions.flatMap((p) =>
           p.duties.flatMap((d) => d.matters.map((m) => m.title)),
         )
