@@ -34,7 +34,7 @@ export const SHELL_ZH: Record<string, string> = {
   'model.pick.price.subscription': '订阅额度',
   'model.pick.price.own_key': '用你自己的 key',
   'model.pick.rate.note':
-    '消耗速率按 token 算：这个模型常见的用法下，我们收的价是 DeepSeek v4 Pro 官方原价的几倍；折扣是我们的价比这家官方标价。实际消耗以用量记录为准。',
+    '消耗速率按 token 算：这个模型常见的用法下，花的积分是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）；折扣是我们的价比这家官方标价。实际消耗以用量记录为准。',
   'model.pick.rate.fallback': '这份价目里没有 DeepSeek v4 Pro，这里按 {model} 算 1x。',
   'model.pick.rate.stats': '按近 30 天真实用量的 token 构成',
   'model.pick.rate.list_price': '按典型 token 构成（输入 3 : 输出 1）',
@@ -71,7 +71,7 @@ export const SHELL_EN: Record<string, string> = {
   'model.pick.price.subscription': 'Subscription',
   'model.pick.price.own_key': 'Your own key',
   'model.pick.rate.note':
-    "Rates are per token: what we charge for this model in typical use, relative to DeepSeek v4 Pro at its official list price (1x). Discounts compare our price with the maker's list price. Your usage log is what counts.",
+    "Rates are per token: what we charge for this model in typical use, relative to what we charge for DeepSeek v4 Pro (1x). Discounts compare our price with the maker's list price. Your usage log is what counts.",
   'model.pick.rate.fallback':
     'DeepSeek v4 Pro is not in this price list, so {model} counts as 1x here.',
   'model.pick.rate.stats': 'Token mix from the last 30 days of real usage',

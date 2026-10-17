@@ -1,15 +1,14 @@
 /**
  * WP362（Luoye 10-16）：输入框 AI 钮里每一行右边那一格——**消耗速率**与**厂商**。
- * WP364（决策 958 / 959，Luoye 10-17 纠正）：两个数都**按 token 算**。
+ * WP364（决策 958 / 959 / 972，Luoye 10-17）：两个数都**按 token 算**。
  *
- * - **消耗速率**：这个模型的 token 构成 × 我们实收的单价，比 DeepSeek v4 Pro **官方标价**在同一构成下的价（「1.3x」）；
+ * - **消耗速率**：这个模型的 token 构成下，我们实收的价 ÷ **我们卖 DeepSeek v4 Pro 的价**（决策 972：v4 Pro 自己 = 1.0x）；
  * - **折扣**：我们的售价 ÷ 这家官方标价（同一构成），`< 1` 才显示（「8 折」）。
  *
  * 云端价目里这一行带了 `consumption_rate`（私有云按近 30 天真实 token 构成算的，`discount` 也一并给）→ 照它；
- * 没带 → 本机兜底，**同一个口径**：构成用典型构成（`TYPICAL_TOKEN_MIX`，输入 3 : 输出 1），
- * 官方标价取本机内置价目（`@agentsws/model-gateway` 的 catalog），积分价按价目里的 `credit_cny` / `fx` 折成同一币种。
- * 本机价目里连 DeepSeek v4 Pro 的官方价都没有时退回 WP362 的老办法（积分价相对 DeepSeek v4 Pro / 默认模型），
- * 再没有就不显示倍率（不编）。
+ * 没带 → 本机兜底，**同一个口径**：构成用典型构成（`TYPICAL_TOKEN_MIX`，输入 3 : 输出 1）；倍率的分母是价目里
+ * DeepSeek v4 Pro 那一行（没有它、或它限免 → 退回当前默认模型 = 1x，再没有就不显示）；折扣的官方价取本机内置价目
+ * （`@agentsws/model-gateway` 的 catalog），积分价按价目里的 `credit_cny` / `fx` 折成同一币种。
  *
  * 价目里同一个模型可能出现好几行（不同上游）：取第一条价不为 0 的那一行，都为 0 就是限免。
  */
@@ -22,12 +21,12 @@ import {
 } from '@agentsws/contracts'
 import { findModel, PRICE_CATALOG, type PriceCatalog } from '@agentsws/model-gateway'
 
-/** 1x 的那个模型（Luoye 10-16 定）。 */
+/** 1x 的那个模型（Luoye 10-16 定；决策 972：分母是我们卖它的价）。 */
 export const RATE_BASE_MODEL = 'deepseek-v4-pro'
 
 /** 组标题问号里那一句白话。 */
 export const RATE_NOTE =
-  '消耗速率按 token 算：这个模型常见的用法下，我们收的价是 DeepSeek v4 Pro 官方原价的几倍；实际消耗以用量记录为准。'
+  '消耗速率按 token 算：这个模型常见的用法下，花的积分是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）；实际消耗以用量记录为准。'
 
 export type ModelPrice =
   | { kind: 'rate'; rate: number; source: 'stats' | 'list_price'; discount?: number }
@@ -40,7 +39,7 @@ export interface CloudRates {
   models: string[]
   /** 模型 → 右边那一格。 */
   price(model: string): ModelPrice | undefined
-  /** 1x 是谁；`fallback` = 本机连 DeepSeek v4 Pro 的官方价都没有、价目里也没有它，退回了默认模型。 */
+  /** 1x 是谁；`fallback` = 价目里没有 DeepSeek v4 Pro（或它限免），退回了默认模型。 */
   base: { model: string; fallback: boolean } | undefined
 }
 
@@ -50,7 +49,7 @@ export interface RateContext {
   credit_cny: number
   /** 参考汇率（价目的 `fx`，`USD: 7.1` = 1 美元折 7.1 元）。 */
   fx: Record<string, number>
-  /** 官方标价表（默认本机内置那份）。 */
+  /** 官方标价表（默认本机内置那份；只用来算折扣）。 */
   catalog?: PriceCatalog
 }
 
@@ -92,7 +91,7 @@ const ourPriceCny = (e: PricingModelEntry, creditCny: number): TokenUnitPrice =>
 const discountFrom = (ratio: number | undefined): number | undefined =>
   ratio === undefined ? undefined : pricingDiscountOf({ discount: Math.round(ratio * 100) / 100 })
 
-/** 云端价目 → 每个模型的消耗速率。`defaultModel` = 当前默认模型（老退路的基准）。 */
+/** 云端价目 → 每个模型的消耗速率。`defaultModel` = 当前默认模型（基准退路）。 */
 export function cloudRates(
   entries: readonly PricingModelEntry[],
   defaultModel: string | undefined,
@@ -104,17 +103,11 @@ export function cloudRates(
     const hit = model === undefined ? undefined : byModel.get(model)
     return hit !== undefined && blended(hit) > 0 ? hit : undefined
   }
-  // WP364：基准是 DeepSeek v4 Pro 的**官方标价**（本机内置价目里有就用它）
-  const officialBase = ctx === undefined ? undefined : officialPriceCny(RATE_BASE_MODEL, ctx)
-  const hasOfficialBase =
-    officialBase !== undefined && blended({ in: officialBase.in, out: officialBase.out }) > 0
+  // 决策 972：分母 = 我们卖 v4 Pro 的价（价目里那一行）；没有就退回默认模型
   const listed = pick(RATE_BASE_MODEL)
   const baseEntry = listed ?? pick(defaultModel)
-  const base = hasOfficialBase
-    ? { model: RATE_BASE_MODEL, fallback: false }
-    : baseEntry === undefined
-      ? undefined
-      : { model: baseEntry.model, fallback: listed === undefined }
+  const base =
+    baseEntry === undefined ? undefined : { model: baseEntry.model, fallback: listed === undefined }
   return {
     models: list.map((e) => e.model),
     base,
@@ -134,25 +127,20 @@ export function cloudRates(
             }
       }
       if (blended(e) === 0) return { kind: 'free' }
-      if (ctx !== undefined && hasOfficialBase && officialBase !== undefined) {
-        const ours = ourPriceCny(e, ctx.credit_cny)
-        const rate = tokenMixRatio(ours, officialBase, TYPICAL_TOKEN_MIX)
-        if (rate !== undefined) {
-          const own = officialPriceCny(model, ctx)
-          const discount =
-            own === undefined
-              ? undefined
-              : discountFrom(tokenMixRatio(ours, own, TYPICAL_TOKEN_MIX))
-          return {
-            kind: 'rate',
-            rate,
-            source: 'list_price',
-            ...(discount === undefined ? {} : { discount }),
-          }
-        }
-      }
       if (baseEntry === undefined) return undefined
-      return { kind: 'rate', rate: blended(e) / blended(baseEntry), source: 'list_price' }
+      const rate = tokenMixRatio(e, baseEntry, TYPICAL_TOKEN_MIX)
+      if (rate === undefined) return undefined
+      const own = ctx === undefined ? undefined : officialPriceCny(model, ctx)
+      const discount =
+        own === undefined || ctx === undefined
+          ? undefined
+          : discountFrom(tokenMixRatio(ourPriceCny(e, ctx.credit_cny), own, TYPICAL_TOKEN_MIX))
+      return {
+        kind: 'rate',
+        rate,
+        source: 'list_price',
+        ...(discount === undefined ? {} : { discount }),
+      }
     },
   }
 }

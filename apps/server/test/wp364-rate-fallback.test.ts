@@ -1,10 +1,10 @@
 /**
- * WP364（决策 958 / 959，Luoye 10-17 纠正）：云上没给倍率时，本机兜底与云上**同一个口径**。
+ * WP364（决策 958 / 959 / 972，Luoye 10-17）：云上没给倍率时，本机兜底与云上**同一个口径**。
  *
- * - 消耗速率 = 典型 token 构成（输入 3 : 输出 1）× 我们的积分价（折成人民币） ÷ 同一构成 × DeepSeek v4 Pro 官方标价；
- * - 折扣 = 同一构成下 我们的积分价 ÷ 这家官方标价，`< 1` 才给；
+ * - 消耗速率 = 典型 token 构成（输入 3 : 输出 1）下 我们的积分价 ÷ 我们卖 DeepSeek v4 Pro 的积分价（v4 Pro = 1.0x）；
+ * - 折扣 = 同一构成下 我们的积分价（折成人民币） ÷ 这家官方标价（本机内置价目），`< 1` 才给；
  * - 云上给了倍率：倍率与折扣都照云上（云上没给折扣 = 不到「折」，本机不另算）；
- * - 本机价目里连 DeepSeek v4 Pro 的官方价都没有：退回 WP362 的老办法。
+ * - 价目里没有 DeepSeek v4 Pro：退回默认模型 = 1x。
  */
 import {
   type PricingModelEntry,
@@ -36,31 +36,29 @@ describe('token 构成的算法（契约里那三个小函数）', () => {
 })
 
 describe('本机兜底：同口径', () => {
-  it('按官方价 3 倍卖：倍率是相对 v4 Pro 官方价，v4 Pro 自己是 3x；不到「折」', () => {
-    const entries: PricingModelEntry[] = [
-      { model: 'deepseek-v4-pro', in: credits(1.32, 3), out: credits(3.96, 3) },
-      { model: 'deepseek-flash', in: credits(0.3, 3), out: credits(1.2, 3) },
-    ]
-    const rates = cloudRates(entries, undefined, ctx)
+  const PRO: PricingModelEntry = {
+    model: 'deepseek-v4-pro',
+    in: credits(1.32, 3),
+    out: credits(3.96, 3),
+  }
+  const blendedOf = (e: { in: number; out: number }) => (e.in * 3 + e.out) / 4
+
+  it('决策 972：分母是我们卖 v4 Pro 的价，v4 Pro 自己 = 1.0x；别的模型相对它；按 3 倍卖不到「折」', () => {
+    const flash = { model: 'deepseek-flash', in: credits(0.3, 3), out: credits(1.2, 3) }
+    const rates = cloudRates([PRO, flash], undefined, ctx)
     expect(rates.base).toEqual({ model: 'deepseek-v4-pro', fallback: false })
-    const pro = rates.price('deepseek-v4-pro')
-    expect(pro?.kind === 'rate' && pro.rate).toBeCloseTo(3, 6)
-    expect(pro?.kind === 'rate' && pro.source).toBe('list_price')
-    expect(pro !== undefined && 'discount' in pro).toBe(false)
-    const flash = rates.price('deepseek-flash')
-    // (3 × 0.3 + 1.2) / 4 = 0.525；(3 × 1.32 + 3.96) / 4 = 1.98；× 3
-    expect(flash?.kind === 'rate' && flash.rate).toBeCloseTo((0.525 / 1.98) * 3, 6)
+    expect(rates.price('deepseek-v4-pro')).toEqual({ kind: 'rate', rate: 1, source: 'list_price' })
+    const f = rates.price('deepseek-flash')
+    expect(f?.kind === 'rate' && f.rate).toBeCloseTo(blendedOf(flash) / blendedOf(PRO), 9)
+    expect(f !== undefined && 'discount' in f).toBe(false)
   })
 
-  it('按官方价 8 折卖：折扣 0.8（AI 钮写「8 折」），倍率跟着是官方价比 × 0.8', () => {
-    const rates = cloudRates(
-      [{ model: 'deepseek-flash', in: credits(0.3, 0.8), out: credits(1.2, 0.8) }],
-      undefined,
-      ctx,
-    )
-    const flash = rates.price('deepseek-flash')
-    expect(flash?.kind === 'rate' && flash.discount).toBe(0.8)
-    expect(flash?.kind === 'rate' && flash.rate).toBeCloseTo((0.525 / 1.98) * 0.8, 6)
+  it('按官方价 8 折卖：折扣 0.8（AI 钮写「8 折」），倍率仍相对我们卖 v4 Pro 的价', () => {
+    const flash = { model: 'deepseek-flash', in: credits(0.3, 0.8), out: credits(1.2, 0.8) }
+    const rates = cloudRates([PRO, flash], undefined, ctx)
+    const f = rates.price('deepseek-flash')
+    expect(f?.kind === 'rate' && f.discount).toBe(0.8)
+    expect(f?.kind === 'rate' && f.rate).toBeCloseTo(blendedOf(flash) / blendedOf(PRO), 9)
   })
 
   it('云上给了倍率：照云上；云上没给折扣就不显示折扣（本机不另算）', () => {
@@ -81,21 +79,19 @@ describe('本机兜底：同口径', () => {
   })
 
   it('价为 0 是限免；本机价目里认不出的模型只出倍率不出折扣', () => {
+    const other = { model: 'some-new-model', in: credits(1, 1), out: credits(1, 1) }
     const rates = cloudRates(
-      [
-        { model: 'deepseek-flash', in: 0, out: 0 },
-        { model: 'some-new-model', in: credits(1, 1), out: credits(1, 1) },
-      ],
+      [PRO, { model: 'deepseek-flash', in: 0, out: 0 }, other],
       undefined,
       ctx,
     )
     expect(rates.price('deepseek-flash')).toEqual({ kind: 'free' })
-    const other = rates.price('some-new-model')
-    expect(other?.kind === 'rate' && other.rate).toBeCloseTo(1 / 1.98, 6)
-    expect(other !== undefined && 'discount' in other).toBe(false)
+    const o = rates.price('some-new-model')
+    expect(o?.kind === 'rate' && o.rate).toBeCloseTo(blendedOf(other) / blendedOf(PRO), 9)
+    expect(o !== undefined && 'discount' in o).toBe(false)
   })
 
-  it('本机价目里没有 DeepSeek v4 Pro：退回 WP362 老办法（积分价相对默认模型）', () => {
+  it('价目里没有 DeepSeek v4 Pro：退回默认模型 = 1x', () => {
     const catalog: PriceCatalog = { version: 1, as_of: '2026-10-17', note: '', vendors: [] }
     const rates = cloudRates(
       [

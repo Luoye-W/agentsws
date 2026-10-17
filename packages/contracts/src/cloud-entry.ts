@@ -186,12 +186,12 @@ export interface PricingModelEntry {
    */
   cn?: boolean
   /**
-   * WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro **官方原价**的几倍。
+   * WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）。
    * 输入框的 AI 钮上显示成「1.0x」「2.3x」。
    *
    * WP364（决策 959，Luoye 10-17 纠正）：**按 token 算，不按次**。取这个模型的 token 构成（输入未命中 / 缓存命中 / 输出），
-   * 分子 = 这个构成 × **我们实收的单价**（就是上面 `in` / `cached` / `out`），分母 = 同一个构成 × DeepSeek v4 Pro
-   * **官方标价**，两边折成同一币种再除（{@link tokenMixCost}）。不给 = 本机按同一口径用本机官方价表兜底。
+   * 分子 = 这个构成 × **我们实收的单价**（就是上面 `in` / `cached` / `out`），分母 = 同一个构成 × **我们卖 DeepSeek v4 Pro
+   * 的单价**（决策 972，Luoye 10-17 定：v4 Pro 自己 = 1x）（{@link tokenMixRatio}）。不给 = 本机按同一口径（典型构成）兜底。
    */
   consumption_rate?: number
   /**
@@ -256,7 +256,7 @@ export function tokenMixCost(price: TokenUnitPrice, mix: TokenMix): number {
 
 /**
  * WP364：同一份构成下 `ours ÷ theirs`（两边要先折成同一个单位与币种）。分母是 0 回 `undefined`。
- * 折扣（ours = 我们的售价、theirs = 这家官方标价）与消耗速率（theirs = DeepSeek v4 Pro 官方标价）都用它。
+ * 折扣（ours = 我们的售价、theirs = 这家官方标价）与消耗速率（theirs = 我们卖 DeepSeek v4 Pro 的价）都用它。
  */
 export function tokenMixRatio(
   ours: TokenUnitPrice,

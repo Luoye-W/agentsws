@@ -11335,7 +11335,7 @@
           },
           "consumption_rate": {
             "type": "number",
-            "description": "WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro **官方原价**的几倍。 输入框的 AI 钮上显示成「1.0x」「2.3x」。"
+            "description": "WP362（Luoye 10-16，只加）：**消耗速率**——这个模型用起来大概是 DeepSeek v4 Pro 的几倍（v4 Pro = 1x）。 输入框的 AI 钮上显示成「1.0x」「2.3x」。"
           },
           "rate_source": {
             "type": "string",

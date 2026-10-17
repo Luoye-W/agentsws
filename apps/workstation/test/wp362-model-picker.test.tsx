@@ -109,7 +109,7 @@ describe('WP362 AI 钮：按来源分组、每行右边那一格', () => {
     })
     expect(within(menu).getByTestId('model-pick-balance').textContent).toBe('余额 96.06 积分')
     const note = within(menu).getByTestId('model-pick-rate-note').getAttribute('data-hint') ?? ''
-    expect(note).toContain('DeepSeek v4 Pro 官方原价的几倍')
+    expect(note).toContain('DeepSeek v4 Pro 的几倍（v4 Pro = 1x）')
     expect(note).toContain('按 qwen3.8-max 算 1x')
   })
 
