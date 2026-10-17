@@ -192,6 +192,8 @@ interface OrderRecord {
   /** 在做 / 在验的是第几段（定制件）。 */
   segment: number
   provider_contact?: ServiceContact
+  /** 自动驾驶（demo）走过的那几步。 */
+  auto?: { said?: true; asked?: true }
 }
 
 export interface ServiceOrdersStandInOptions {
@@ -203,6 +205,11 @@ export interface ServiceOrdersStandInOptions {
   spend: (credits: number) => void
   refund: (credits: number) => void
   services?: readonly ServiceView[]
+  /**
+   * demo 用：服务方是替身，**每列一次订单就把没结束的单各往前推一步**（报价 → 接单 → 要一次材料 → 交付），
+   * 在等你的那几步（报价了、等你补材料、交付了）停着等你。测试不开（服务方那一侧由测试自己调）。
+   */
+  autopilot?: boolean
 }
 
 /** 用量明细里的一行（托管 / 完成 / 退回）。 */
@@ -337,6 +344,14 @@ export class ServiceOrdersStandIn {
   }
 
   list(status: string | null): ServiceOrderList {
+    if (this.options.autopilot === true)
+      for (const r of this.orders.values()) {
+        try {
+          this.autopilotStep(r)
+        } catch {
+          // 推不动就停在这一步
+        }
+      }
     const all = [...this.orders.values()].map((r) => this.view(r.view.id))
     const orders =
       status === 'all'
@@ -673,6 +688,63 @@ export class ServiceOrdersStandIn {
     r.view.status = resolution === 'no_refund' ? 'completed' : 'refunded'
     this.finish(r)
     return this.touch(r)
+  }
+
+  /** demo 的自动驾驶：替服务方往前走一步（在等用户的那几步不动）。 */
+  private autopilotStep(r: OrderRecord): void {
+    const v = r.view
+    const auto = (r.auto ??= {})
+    if (v.status === 'quote_requested') {
+      const base = r.service.from_credits ?? r.service.price_credits ?? 100
+      this.quote(v.id, {
+        credits: Math.round(base * 1.5),
+        deliver_hours: r.service.promise.deliver_hours ?? 240,
+        note: '按需求单报价（演示）',
+      })
+      return
+    }
+    if (v.status === 'paid') {
+      this.take(v.id)
+      if (v.kind === 'custom' && auto.said !== true) {
+        auto.said = true
+        this.say(v.id, '收到需求了。首页要不要放一段产品视频？')
+      }
+      return
+    }
+    if (v.status !== 'in_progress') return
+    if (v.kind === 'custom' && auto.asked !== true) {
+      auto.asked = true
+      this.askUser(v.id, '上传 Logo 原图')
+      return
+    }
+    const last = (v.milestones ?? []).length - 1
+    const isLast = v.kind === 'standard' || r.segment >= last
+    this.deliver(v.id, {
+      ...(v.kind === 'standard'
+        ? {
+            proof: {
+              links: ['https://demo.invalid/proof/1'],
+              screenshots: [],
+              completed: (v.lines ?? []).map((l) => ({ item_id: l.item_id, quantity: l.quantity })),
+            },
+          }
+        : {
+            deliverables: [
+              isLast && r.service.landing === 'theme'
+                ? {
+                    type: 'platform_object' as const,
+                    label: '新主题（未发布）',
+                    ref: '100099',
+                    url: 'https://demo.invalid/?preview_theme_id=100099',
+                  }
+                : {
+                    type: 'link' as const,
+                    label: '这一段的稿子',
+                    url: 'https://demo.invalid/draft',
+                  },
+            ],
+          }),
+    })
   }
 
   /** demo / 测试：把交付物保留期挪近（看「快到期」的提醒）。 */

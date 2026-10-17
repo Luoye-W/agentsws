@@ -1408,6 +1408,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    */
   const cloud = cloudStandIn({
     clock: world.clock,
+    // WP390：工坊服务的服务方在 demo 里是替身，自己往前走（报价 → 接单 → 要材料 → 交付），等你的那几步停着
+    services: { autopilot: true },
     ...(options.cloudAutoLinkAfterMs === undefined
       ? {}
       : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),

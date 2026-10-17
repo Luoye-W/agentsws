@@ -276,3 +276,39 @@ describe('WP390 两个工具在 stub / direct / dsh 三个运行时里', () => {
     )
   })
 })
+
+describe('WP390 demo 的自动驾驶', () => {
+  it('每列一次往前走一步，在等你的那几步停着', () => {
+    let left = 5000
+    let seq = 0
+    const svc = new ServiceOrdersStandIn({
+      now: () => '2026-10-18T02:00:00.000Z',
+      newId: (p) => `${p}_${String(++seq)}`,
+      available: () => left,
+      spend: (c) => {
+        left -= c
+      },
+      refund: (c) => {
+        left += c
+      },
+      autopilot: true,
+    })
+    const { order } = svc.submit({
+      service_id: 'workshop.site_build',
+      requirements: [
+        { question_id: 'sell', answer: 'a' },
+        { question_id: 'market', answer: 'b' },
+      ],
+      idempotency_key: 'auto',
+    })
+    const status = () => svc.list('all').orders.find((o) => o.id === order.id)?.status
+    expect(status()).toBe('quoted')
+    expect(status()).toBe('quoted')
+    svc.acceptQuote(order.id)
+    expect(status()).toBe('in_progress')
+    expect(status()).toBe('waiting_user')
+    svc.postMessage(order.id, { text: '发你了' })
+    expect(status()).toBe('delivered')
+    expect(status()).toBe('delivered')
+  })
+})

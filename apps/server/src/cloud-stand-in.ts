@@ -90,7 +90,7 @@ export interface CloudStandInOptions {
    * WP390：工坊服务（`/v1/services*`）那几条。`scope_missing` = 演老令牌缺 `services` 动作集（403 +
    * `required_scope`，决策 1098）；`services` = 换一份目录（默认示意三项）。
    */
-  services?: { scope_missing?: boolean; catalog?: ServiceView[] }
+  services?: { scope_missing?: boolean; catalog?: ServiceView[]; autopilot?: boolean }
 }
 
 /** 替身收到过的一次请求（测试用：断言走的是替身，而不是别处）。 */
@@ -553,6 +553,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       servicesSpent = round(servicesSpent - c)
     },
     ...(options.services?.catalog === undefined ? {} : { services: options.services.catalog }),
+    ...(options.services?.autopilot === true ? { autopilot: true } : {}),
   })
   /** 工坊服务那三行（托管 / 完成 / 退回）按能力名合计（用量明细「按能力」那一切）。 */
   const serviceUsageRows = () => {
