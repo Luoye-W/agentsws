@@ -50,14 +50,19 @@ import { describe, expect, it } from 'vitest'
  * 升级前在当前代码树（WP178–WP292 之后）重采：pack 从 64 条长到 68 条，与仓库里的 `0.2.0-rc.1.json` 不再相同，
  * 所以按 docs/42 ① 另存一份。cordis 这一跳**必须跟**（0.2.1-alpha.2 要 `~4.0.5-alpha.1`，4.0.4 不在范围里）。
  * 旧的十二份一个不删。
+ *
+ * **WP354（0.2.1-alpha.2 → 0.2.1-alpha.4，跟 alpha）：FROM_FILE 是重采的 `0.2.1-alpha.2-wp354.json`。**
+ * 升级前在当前代码树（WP294–WP353 之后）重采：pack 从 68 条长到 70 条（「我的助理」派活 / 拆成多份两条）、
+ * 另有 5 条因我们自己的改动换了指纹，与仓库里的 `0.2.1-alpha.2.json` 不再相同，所以按 docs/42 ① 另存一份。
+ * cordis 这一跳又**必须跟**（0.2.1-alpha.4 要 `~4.0.5-alpha.2`，预发布的 `~` 不含 alpha.1）。旧的十四份一个不删。
  */
-const FROM_FILE = '0.2.0-rc.1-wp293'
-const TO_FILE = '0.2.1-alpha.2'
-const FROM = '0.2.0-rc.1'
-const TO = '0.2.1-alpha.2'
-/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动；WP293 升到 4.0.5-alpha.1）。 */
-const CORDIS_FROM = '4.0.4'
-const CORDIS_TO = '4.0.5-alpha.1'
+const FROM_FILE = '0.2.1-alpha.2-wp354'
+const TO_FILE = '0.2.1-alpha.4'
+const FROM = '0.2.1-alpha.2'
+const TO = '0.2.1-alpha.4'
+/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动；WP293 升到 4.0.5-alpha.1；WP354 升到 4.0.5-alpha.2）。 */
+const CORDIS_FROM = '4.0.5-alpha.1'
+const CORDIS_TO = '4.0.5-alpha.2'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5

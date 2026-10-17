@@ -244,6 +244,11 @@ function thinkingBlocksOf(m: ChatMessage, model: string | undefined): WireBlock[
     : [{ type: 'thinking', thinking: m.reasoning }]
 }
 
+/**
+ * WP354（跟官方 `dsh-llm-deepseek@0.2.1-alpha.4` 的 `serialize.ts`，提交 c368939151「修复响应转换产生空文本及
+ * 旧会话重放失败」）：**空文本块一律不发**——字符串是空的不发，数组里 `text: ''` 的那一块也不发；一条消息因此
+ * 一块不剩，就整条跳过（见 `push`）。Messages 口不收空文本块，旧会话里存过的空块会让整段历史重放失败。
+ */
 const blocksOf = (
   content: string | ChatContentPart[],
   options: MessagesRequestOptions = {},
@@ -252,9 +257,11 @@ const blocksOf = (
     ? content === ''
       ? []
       : [{ type: 'text', text: content }]
-    : content.map((part) =>
+    : content.flatMap((part): WireBlock | WireBlock[] =>
         part.type === 'text'
-          ? { type: 'text', text: part.text }
+          ? part.text === ''
+            ? []
+            : { type: 'text', text: part.text }
           : {
               type: 'image',
               source: options.imageSource?.(part) ?? {

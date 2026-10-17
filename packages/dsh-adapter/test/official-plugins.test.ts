@@ -45,6 +45,8 @@ const INSPECTOR = '@deepseek-ai/dsh-experimental-inspector-profile'
 const COT_TRANSLATION = '@deepseek-ai/dsh-experimental-cot-translation-bundle'
 const BADGE = '@deepseek-ai/dsh-experimental-badge-skill-bundle'
 const AUTO_REVIEW = '@deepseek-ai/dsh-experimental-auto-review'
+// WP354（dsh 0.2.1-alpha.4 新加的可选包）：自定义插件市场，装东西走插件管理 `installBundle`——B 类，不进清单
+const PLUGIN_MARKET = '@deepseek-ai/dsh-experimental-plugin-market-bundle'
 
 const temps: string[] = []
 function tempDir(): string {
@@ -105,8 +107,9 @@ describe('WP180 审过的清单', () => {
     expect(names).not.toContain(RETIRED_SCHEDULE)
     expect(names).toContain(SAMPLE)
     // 自动审阅（B：绕过出卡）、调试工具（B：本机无口令调试口可执行任意代码）、
-    // 思考翻译（C：推理原文发给微软 / 谷歌翻译）、徽章（产品上等 Luoye 定）
-    for (const out of [AUTO_REVIEW, INSPECTOR, COT_TRANSLATION, BADGE]) {
+    // 思考翻译（C：推理原文发给微软 / 谷歌翻译）、徽章（产品上等 Luoye 定）、
+    // 插件市场（WP354，B：经插件管理装任意 npm 包，绕过这份清单与出卡）
+    for (const out of [AUTO_REVIEW, INSPECTOR, COT_TRANSLATION, BADGE, PLUGIN_MARKET]) {
       expect(OPTIONAL_BUNDLES, out).toContain(out)
       expect(names, out).not.toContain(out)
     }
@@ -133,10 +136,10 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
     expect(pluginView(allowlist[0] as OfficialPluginSpec, backend).state).toBe('available')
     const plan = planChange({ action: 'install', name: SAMPLE, allowlist, backend })
     const card = cardPayload(plan)
-    expect(card).toMatchObject({ action: 'install', name: SAMPLE, version: '0.2.1-alpha.2' })
+    expect(card).toMatchObject({ action: 'install', name: SAMPLE, version: '0.2.1-alpha.4' })
     expect(card.tools).toContain('session_search')
     await applyChange({ plan, backend, protectedFiles: [defaultProfilePatchPath()] })
-    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.4' })
     expect(await backend.skipped([SAMPLE])).toEqual([])
     expect(effectiveBundles(allowlist, backend)).toEqual([
       '@deepseek-ai/dsh-base',
@@ -170,7 +173,7 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
     const spec = allowlist.find((s) => s.name === SAMPLE) as OfficialPluginSpec
     expect(pluginView(spec, backend).state).toBe('upgradable')
     const plan = planChange({ action: 'upgrade', name: SAMPLE, allowlist, backend })
-    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.1-alpha.2' })
+    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.1-alpha.4' })
     await applyChange({ plan, backend, protectedFiles: [] })
     expect(pluginView(spec, backend).state).toBe('installed')
   })
