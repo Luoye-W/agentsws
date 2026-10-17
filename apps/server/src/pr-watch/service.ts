@@ -327,7 +327,8 @@ export function createPrWatch(options: PrWatchOptions): PrWatchAssembly {
         input.plan_item_id !== undefined && i === 0 ? store.planItem(input.plan_item_id) : undefined
       const item = explicit ?? matchPlan(feed.label)
       const label = item?.label ?? feed.label ?? new URL(feed.url).hostname
-      const competitor = item?.competitor ?? (item === undefined ? await competitorIn(label) : undefined)
+      const competitor =
+        item?.competitor ?? (item === undefined ? await competitorIn(label) : undefined)
       const group: MonitorGroup =
         item?.group ??
         input.group ??

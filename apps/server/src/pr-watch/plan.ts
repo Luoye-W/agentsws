@@ -275,8 +275,9 @@ export async function researchPlan(
   if (raw !== undefined) kit.note('问了一次 AI，补上别名和型号', MODEL_SOURCE)
   drafts.forEach((d, i) => {
     const key = `alert_${i + 1}`
-    const extra = Array.isArray(rows[key]?.aliases)
-      ? (rows[key]?.aliases as unknown[])
+    const given = rows[key]?.aliases
+    const extra = Array.isArray(given)
+      ? (given as unknown[])
           .filter((a): a is string => typeof a === 'string')
           // 只认资料里原样出现过的（核对模型没编）
           .filter((a) => hits.some((h) => `${h.title ?? ''} ${h.snippet ?? ''}`.includes(a)))
