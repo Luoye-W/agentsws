@@ -13,6 +13,8 @@
  * **WP372（决策 1001 / 1004 / 1005 / 1019，Luoye 10-17）**：右侧面板改成**六张卡**——
  * 对话、报表、产出、计划、连接、设定（`registerRailCard`，默认这个顺序，人可以拖）。
  * 窗口右上角那一排是这六张卡各一个图标；浏览器、变更审阅、教程进最右的「⋮」。
+ * **WP375（决策 1035）**：右上角不再重复放卡片图标——只放面板里没有的工具（浏览器、变更审阅、教程，`pinned` 排序），
+ * 最右「⋮」开关右侧面板、任何卡有红 / 黄点时亮一个汇总点；默认展开「对话」「计划」。
  * 「记录 / 发出记录 / 证据」合成「产出」面板的三个标签（旧 id 留作别名），「定时任务」= 计划的完整列表，
  * 连接卡（决策 690）按地址开时展开「连接」那张卡并滚到那一条。
  *
@@ -183,7 +185,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.conversations',
     icon: MessagesSquare,
     order: at('conversations'),
-    pinned: at('conversations'),
     panel: 'conversations',
     useStatus: useConversationsStatus,
   })
@@ -193,7 +194,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.reports',
     icon: ScrollText,
     order: at('reports'),
-    pinned: at('reports'),
     panel: 'reports',
     useStatus: useReportsStatus,
   })
@@ -203,7 +203,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.outputs',
     icon: Package,
     order: at('outputs'),
-    pinned: at('outputs'),
     panel: 'outputs',
     useStatus: useOutputsStatus,
   })
@@ -213,7 +212,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.plans',
     icon: CalendarClock,
     order: at('plans'),
-    pinned: at('plans'),
     panel: 'schedules',
     useStatus: usePlansStatus,
   })
@@ -223,7 +221,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.connections',
     icon: Plug,
     order: at('connections'),
-    pinned: at('connections'),
     moreHref: settingsHref('connections'),
     useStatus: useConnectionsStatus,
   })
@@ -233,7 +230,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.settings',
     icon: SlidersHorizontal,
     order: at('settings'),
-    pinned: at('settings'),
     panel: 'settings',
     useStatus: useSettingsStatus,
   })
@@ -324,14 +320,27 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
   registerPanelBody('connect', ConnectBody)
 
   // ── 「⋮」里的工具（不成卡的） ──────────────────────────────────────
-  registerUnbuilt({ id: 'data', label: 'rail.panel.data', icon: BarChart3, priority: 'builtin' })
-  registerUnbuilt({ id: 'runs', label: 'rail.panel.runs', icon: Activity, priority: 'builtin' })
+  registerUnbuilt({
+    id: 'data',
+    label: 'rail.panel.data',
+    icon: BarChart3,
+    priority: 'builtin',
+    pinned: 4,
+  })
+  registerUnbuilt({
+    id: 'runs',
+    label: 'rail.panel.runs',
+    icon: Activity,
+    priority: 'builtin',
+    pinned: 5,
+  })
   registerPanelType({
     id: 'browser',
     label: 'rail.panel.browser',
     icon: Globe,
     priority: 'builtin',
     group: 'tools',
+    pinned: 1,
   })
   registerPanelBody('browser', RunBrowserBody)
   registerPanelType({
@@ -340,6 +349,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     icon: FileDiff,
     priority: 'builtin',
     group: 'context',
+    pinned: 2,
     matches: ['agentsws://matter/**', 'agentsws://change/**'],
   })
   registerPanelBody('changes', ChangesBody)
@@ -357,6 +367,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     icon: GraduationCap,
     priority: 'builtin',
     group: 'tools',
+    pinned: 3,
     matches: [HELP_ADDRESS_PATTERN],
   })
   registerPanelBody('help', HelpBodyPanel)

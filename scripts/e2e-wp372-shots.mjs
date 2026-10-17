@@ -67,6 +67,16 @@ async function get(token, path, assignment) {
   return json.data
 }
 
+/** WP375（决策 1035）：右上角没有卡片图标了——「⋮」打开面板，卡没展开就点它的标题行。 */
+const openCard = async (page, id) => {
+  if ((await page.getByTestId('rail-cards').count()) === 0)
+    await page.getByTestId('rail-overflow').click()
+  const card = page.getByTestId(`rail-card-`)
+  await card.waitFor({ timeout: 20_000 })
+  if ((await card.getAttribute('data-open')) !== 'true')
+    await page.getByTestId(`rail-card-toggle-`).click()
+}
+
 const shot = async (page, name, target) => {
   await page.waitForTimeout(500)
   await (target ?? page).screenshot({ path: join(SHOTS, `${name}.png`) })
@@ -129,7 +139,7 @@ async function main() {
       const before = await get(owner, '/v1/work/rail?limit=20', asg?.[1])
       const count = (rail) =>
         rail.positions.flatMap((p) => p.duties.flatMap((d) => d.matters)).length
-      await page.getByTestId('rail-icon-conversations').click()
+      await openCard(page, 'conversations')
       await page.getByTestId('conv-card').waitFor({ timeout: 20_000 })
       await page.getByTestId('conv-new').click()
       const sentence = '把这周要发的三条内容列个清单'
@@ -157,14 +167,12 @@ async function main() {
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open(theme)
       await page.goto(dutyUrl, { waitUntil: 'networkidle' })
-      await page.getByTestId('rail-icon-conversations').click()
+      await openCard(page, 'conversations')
       await page.getByTestId('rail-cards').waitFor({ timeout: 20_000 })
       await shot(page, `1-wide-${theme}`)
       if (theme === 'light') {
-        await page.getByTestId('rail-overflow').click()
-        await page.getByTestId('rail-menu').waitFor({ timeout: 10_000 })
-        await shot(page, '2-menu')
-        await page.keyboard.press('Escape')
+        // WP375：右上角不再有「⋮」菜单（「⋮」直接开关面板），这一张改拍顶栏
+        await shot(page, '2-menu', page.getByTestId('top-bar'))
         await shot(page, '6-left-rail', page.locator('aside').first())
       }
       await context.close()
@@ -176,7 +184,7 @@ async function main() {
       await page.goto(positionUrl, { waitUntil: 'networkidle' })
       await page.getByTestId('position-handoff').waitFor({ timeout: 20_000 })
       await shot(page, '3-position-landing')
-      await page.getByTestId('rail-icon-reports').click()
+      await openCard(page, 'reports')
       await page.getByTestId('rail-card-more-reports').click()
       await page.getByTestId('reports-panel').waitFor({ timeout: 20_000 })
       await page.getByTestId('rail-panel-wide').click()
@@ -191,7 +199,7 @@ async function main() {
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open(theme, { width: 1000, height: 760 })
       await page.goto(dutyUrl, { waitUntil: 'networkidle' })
-      await page.getByTestId('rail-icon-plans').click()
+      await openCard(page, 'plans')
       await page.getByTestId('rail-cards').waitFor({ timeout: 20_000 })
       await shot(page, `5-narrow-${theme}`)
       await context.close()

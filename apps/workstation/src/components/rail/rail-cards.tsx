@@ -7,6 +7,9 @@
  *   方向键挪、再按空格放下（dnd-kit 自带的键盘传感器与读屏播报）。顺序按人记住、全部岗位一份；
  * - 被点名的那张（右上角图标、连接卡弹出）滚到可见处。
  *
+ * WP375（决策 1035）：标题行照 Claude 桌面版——标题后面紧贴展开箭头与状态点，最右靠右是摘要（展开 / 收起都在）；
+ * 鼠标移到卡上，最右那一截换成六点手柄（摘要让位）。不带图标。
+ *
  * 卡身体是 `lazy()`：收着的卡一个字节都不下载，标题行只调注册表那个轻的 `useStatus`。
  */
 import {
@@ -170,60 +173,64 @@ function SortableCard({
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'group/card relative rounded-[12px] border border-ws-line bg-ws-card',
+        'group/card relative rounded-[12px] border border-ws-line bg-ws-card transition-shadow hover:shadow-ws',
         isDragging && 'z-10 shadow-ws-hover',
         focused && 'ring-1 ring-ws-brand/40',
       )}
       data-testid={`rail-card-${card.id}`}
       data-open={open ? 'true' : 'false'}
     >
-      <div className="flex items-center gap-1.5 py-1.5 pr-8 pl-2.5">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={t(open ? 'rail.card.collapse' : 'rail.card.expand', { name })}
-          data-testid={`rail-card-toggle-${card.id}`}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          onClick={() => {
-            rail.setCardOpen(card.id, !open)
-          }}
+      {/*
+        WP375（决策 1035，照 Claude 桌面版）：标题行 = 标题 + 紧贴着的展开箭头 + 状态点，最右靠右是摘要。
+        整行点一下展开 / 收起；鼠标移到卡上时最右那一截换成拖动手柄（摘要让位）。
+      */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={t(open ? 'rail.card.collapse' : 'rail.card.expand', { name })}
+        data-testid={`rail-card-toggle-${card.id}`}
+        className="flex w-full min-w-0 items-center gap-1 rounded-[12px] py-2.5 pr-3 pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => {
+          rail.setCardOpen(card.id, !open)
+        }}
+      >
+        <span
+          className="shrink-0 text-[13px] font-medium text-ws-ink"
+          data-testid="rail-card-title"
         >
-          <card.icon aria-hidden className="size-3.5 shrink-0 text-ws-muted-fg" />
-          <span className="shrink-0 text-[13px] font-medium">{name}</span>
-          <StatusDot status={status} testId={`rail-card-dot-${card.id}`} />
-          {open || status?.summary === undefined ? null : (
-            <span
-              className="ml-auto min-w-0 truncate text-[12px] text-ws-muted-fg"
-              data-testid={`rail-card-summary-${card.id}`}
-            >
-              {status.summary}
-            </span>
-          )}
-          <Chevron
-            aria-hidden
-            // 没有摘要占着右边时，箭头自己靠右（收起 / 展开都是同一个位置）
-            className={cn(
-              'size-3.5 shrink-0 text-ws-muted-fg',
-              (open || status?.summary === undefined) && 'ml-auto',
-            )}
-          />
-        </button>
-      </div>
-      {/* 决策 1005：右上角的六点手柄，悬停 / 键盘落上来才看得见（Tab 照样落得到） */}
+          {name}
+        </span>
+        <Chevron
+          aria-hidden
+          data-testid={`rail-card-chevron-${card.id}`}
+          className="size-3.5 shrink-0 text-ws-muted-fg"
+        />
+        <StatusDot status={status} testId={`rail-card-dot-${card.id}`} />
+        <span
+          className="ml-auto min-w-0 truncate pl-2 text-[12px] text-ws-muted-fg transition-opacity group-focus-within/card:opacity-0 group-hover/card:opacity-0"
+          data-testid={`rail-card-summary-${card.id}`}
+        >
+          {status?.summary ?? ''}
+        </span>
+      </button>
+      {/* 决策 1005 / 1035：六点手柄只在鼠标移到卡上（或键盘落到它）时出现在最右；Tab 照样落得到 */}
       <button
         type="button"
         ref={setActivatorNodeRef}
         aria-label={t('rail.card.drag', { name })}
         title={t('rail.card.drag', { name })}
         data-testid={`rail-card-handle-${card.id}`}
-        className="absolute top-1.5 right-1.5 flex size-6 cursor-grab touch-none items-center justify-center rounded text-ws-muted-fg opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-sidebar-accent focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
+        className="absolute top-2 right-2 flex size-6 cursor-grab touch-none items-center justify-center rounded-md text-ws-muted-fg opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-sidebar-accent focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
         {...attributes}
         {...listeners}
       >
         <GripVertical aria-hidden className="size-3.5" />
       </button>
       {open ? (
-        <div className="flex flex-col gap-1 px-1.5 pb-2" data-testid={`rail-card-body-${card.id}`}>
+        <div
+          className="flex flex-col gap-1 px-1.5 pb-2.5"
+          data-testid={`rail-card-body-${card.id}`}
+        >
           {Body === undefined ? null : (
             <ErrorBoundary scope="panel" label={`card:${card.id}`} resetKey={card.id}>
               <Suspense fallback={null}>

@@ -5,6 +5,7 @@
  * 卡标题行只有名字 + 一句摘要；长一点的说法进 tooltip。
  */
 export const PANEL_ZH: Record<string, string> = {
+  'rail.open': '打开右侧面板',
   'landing.report': '看「{title}」',
   'landing.waiting': '看等你的 {n} 个对话',
   'landing.connect': '连上 {name}',
@@ -82,6 +83,7 @@ export const PANEL_ZH: Record<string, string> = {
 }
 
 export const PANEL_EN: Record<string, string> = {
+  'rail.open': 'Open side panel',
   'landing.report': 'Open “{title}”',
   'landing.waiting': '{n} chats waiting for you',
   'landing.connect': 'Connect {name}',
