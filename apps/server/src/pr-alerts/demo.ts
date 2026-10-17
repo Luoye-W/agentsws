@@ -1,0 +1,43 @@
+/**
+ * WP387：demo 里「让工坊替你建」那张卡长什么样（截图与演示用；只在挂了合成世界时调）。
+ *
+ * 清单还空着就放 4 条竞品提醒（ebike 演示品牌），然后出一张「要在你的 Google 账号里建 4 条提醒」的卡。
+ * 不开浏览器、不连 Google：卡等人点；点了之后你的浏览器没接上，就照实说、退回手动贴链接。
+ */
+import type { MonitorPlanItem, PrWatchStore } from '@agentsws/contracts'
+import type { PrAlertsService } from './service.js'
+
+const DEMO: readonly [string, string][] = [
+  ['Aventon', '"Aventon" -job'],
+  ['Rad Power', '"Rad Power Bikes"'],
+  ['Lectric', '"Lectric eBikes"'],
+  ['Super73', '"Super73"'],
+]
+
+export async function seedDemoAlerts(input: {
+  store: PrWatchStore
+  alerts: PrAlertsService
+  now: string
+}): Promise<void> {
+  const { store, alerts, now } = input
+  if (store.planItems().length === 0)
+    DEMO.forEach(([label, query], i) => {
+      const row: MonitorPlanItem = {
+        id: `mp_demo_${i + 1}`,
+        workspace_id: store.workspace_id,
+        group: 'competitor',
+        label,
+        query,
+        language: 'en',
+        region: 'US',
+        competitor: label,
+        why: '品牌档案里的主要竞品',
+        selected: true,
+        status: 'planned',
+        created_at: now,
+        updated_at: now,
+      }
+      store.putPlanItem(row)
+    })
+  await alerts.propose().catch(() => undefined)
+}

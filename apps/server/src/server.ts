@@ -558,6 +558,7 @@ import {
   retargetPositionMatters,
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
+import { seedDemoAlerts } from './pr-alerts/demo.js'
 import { createPrAlertsService, type PrAlertsService } from './pr-alerts/service.js'
 import { markManualFallback, withBrowserBuild } from './pr-alerts/setup.js'
 import { createGoogleAlertsTool } from './pr-alerts/tool.js'
@@ -8216,6 +8217,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （我们在别人的地盘上这件事长什么样）。
    */
   if (mount !== undefined) seedDemoPr(boot.pr, clock.now())
+  /**
+   * WP387：demo 里「让工坊替你建」那张卡（「要在你的 Google 账号里建 4 条提醒」），截图与演示用。
+   * 不开浏览器、不连 Google：卡等人点。
+   */
+  if (mount !== undefined && boot.prAlerts !== undefined)
+    await seedDemoAlerts({ store: boot.prWatchStore, alerts: boot.prAlerts, now: clock.now() })
 
   /**
    * WP75（57 §3）：demo 里给广告库放几行，理由与上面两条逐字相同。
