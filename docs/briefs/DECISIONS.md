@@ -1107,3 +1107,4 @@
 | 1058 | （WP378）没选档时 Chat 口一格不发，靠 DeepSeek 官方默认 = high = 界面亮的「标准」（与 Messages 口、WP377 工坊积分同口径；老用户请求字节不变） | 建议：照这样；Fable 上线前实测一次「不带这两格时回包有没有 reasoning_tokens」，若默认不想，再改成没选也发「标准」 |
 | 1059 | （WP378）只认表里写了的模型名，DeepSeek 上新模型要在 `model-gateway` 的 `deepseek-chat-thinking.ts` 加一行，不按名字猜 | 建议：照这样（和 WP373「没声明不出」一个规矩） |
 | 1060 | （WP378）上线前实测（花几分钱，交 Fable 用钥匙串 key）：官方 Chat 口 v4 Pro 发 `thinking: disabled`、`enabled + high`、`enabled + max`，Flash 发 `enabled + low`，各一次，看都 200、`reasoning_tokens` 随档位递增 | 建议：WP377 §1.3 第 1 条已含同样的请求，跑那一遍就够，不另跑 |
+| 1066 | （Luoye 10-17）GEO 借鉴 Aleyda 清单：岗位知识 + 六项功能全做（比较胜率 / 描述准确度、对外说法一致性、商品信息体检、网站技术体检、AI 来源流量、改完自动复查）；英文 agent → assistant 同意（WP379） | **已定**，WP380 / WP381 / WP379 |
