@@ -11,6 +11,7 @@ const SessionBody = z.object({ key: z.string().min(8), email: z.string().min(3).
 /** 会话 cookie 的有效期；与内存 / SQLite 身份服务的会话 token 默认一致（12h）。 */
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 const VerifyBody = z.object({ token: z.string().min(1) })
+const SetupCodeBody = z.object({ code: z.string().min(4).max(64) })
 /** 09-18：本人改自己的展示名；去掉首尾空白后 1–64 字。登录邮箱不在这里改（它是身份）。 */
 const RenameMeBody = z.object({ name: z.string().trim().min(1).max(64) })
 const CreateWorkspaceBody = z.object({
@@ -70,6 +71,29 @@ export function identityRoutes(): Route[] {
         const out = await deps.identity.verifyLogin(input.token)
         if (!out) throw new ApiError('unauthenticated', '登录 token 无效或已用过')
         return ok(c, out)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/auth/setup-code',
+        operationId: 'redeemSetupCode',
+        summary: '主人用服务日志里的一次性设置码进门（决策 945：服务开给局域网时）',
+        tag: 'identity',
+        auth: 'public',
+        body: SetupCodeBody,
+        returns: '{ token, expires_at }（一次性登录 token，拿去 /v1/auth/verify）',
+      },
+      async (c, deps) => {
+        const port = deps.options?.ownerSetupCode
+        if (port === undefined)
+          throw new ApiError('not_implemented', '这个服务只给本机用，不需要设置码')
+        const input = await body(c, SetupCodeBody)
+        const email = await port.redeem(input.code)
+        // 码错、码用过、码被换掉，对外一律同一句话
+        if (email === undefined)
+          throw new ApiError('unauthenticated', '设置码不对或已经用过，请看服务日志里最新的那一个')
+        return ok(c, await deps.identity.issueLogin(email))
       },
     ),
     route(

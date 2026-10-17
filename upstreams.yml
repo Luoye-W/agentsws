@@ -99,6 +99,8 @@ upstreams:
       # WP143：移植（不 import）自 dsh-llm-deepseek 的 Files 复用 / 推理回传（packages/model-gateway/src/providers/deepseek-files.ts）
       - 'dsh-llm-deepseek（移植）: Files 复用——POST /v1/files、anthropic-beta files-api-2025-04-14、按字节去重、失败或超时整份退内联、陈旧 file id 作废重传一次'
       - 'dsh-llm-deepseek（移植）: 推理回传——此前 assistant 轮次的 thinking 块与 signature 原样传回，跨模型去签名'
+      # WP367（决策 919）：账号模型目录移植自 0.2.1-alpha.4（model-gateway/src/providers/deepseek-account-models.ts）
+      - 'dsh-llm-deepseek-account（移植）: 账号 GET /models（Messages 源下、x-dsh-auth-token、拒重定向）；按令牌哈希缓存、5 秒首等、10 分钟后台刷新、失败留上一份 / 没有就内置目录；client_requirements["deepseek-harness"].min_version 按 semver 门槛，没声明只认内置 id；被拒的发请求前失败；modelOverrides 不能加模型'
       # WP147（截图给 AI 看）：MCP 结果里的图片准入 = 挂着 ctx.attachments + 确切路由 resolveModel 声明 inputModalities 含 image
       - 'dsh-mcp-client: 图片准入（ctx.attachments + 路由 inputModalities 含 image），projectContent 在 post-execute 之前装好图片块'
       - 'dsh-attachment-local: dshHome 指一次运行的临时目录；readImageRequest(ref, { width, height, maxBytes })'
@@ -148,6 +150,8 @@ upstreams:
       # WP143：移植自 dsh-llm-deepseek 的 Files 复用与推理回传
       - packages/model-gateway/test/deepseek-files.test.ts
       - packages/model-gateway/test/deepseek-replay.test.ts
+      # WP367：移植自 dsh-llm-deepseek-account 的账号模型目录
+      - packages/model-gateway/test/deepseek-account-models.test.ts
       # WP147：截图进模型（官方 MCP 桥 + 附件库 + 旧图换占位）
       - packages/dsh-adapter/test/screenshots-to-model.test.ts
       - packages/dsh-adapter/UPGRADE.md
@@ -236,6 +240,10 @@ upstreams:
     # sha512）。它不进 package.json / pnpm-lock.yaml，版本钉在 `OPEN_CONNECTOR_PIN` 与锁文件里，
     # `--check` 对账这三处；升级走 docs/42「npm 运行时怎么升」（改钉版本 → 重出锁文件 → 测试）。
     # 发行 / release notes 由上面那条盯（同一个仓库），这一条只盯 npm 版本表。
+    # **例外（WP365，决策 917）**：1.8.0 自己依赖的 nodemailer 9.1.1 有高危公告、上游没出修好的 1.8.x，
+    # 所以 `OPEN_CONNECTOR_PIN.overrides` 用 npm overrides 把它顶到 10.1.1（宿主 package.json 带着它，
+    # 锁文件按它重出、只动了 nodemailer 一个包）。升 OpenConnector 时先看新版自己的 nodemailer 是否 ≥10.1.1，
+    # 是就删掉这条覆盖；`--check` 不查 overrides，靠 local-runtime.test.ts 钉住「锁里只剩覆盖那一版」。
     why: 桌面版的本机连接器（WP247：用户第一次点「连接」时下载、桌面壳当后台服务起停，不要 Docker）
     npm: '@oomol-lab/open-connector'
     repo: oomol-lab/open-connector
@@ -251,6 +259,7 @@ upstreams:
       - '与镜像同一套 HTTP 面：/api/connections、/api/runtime-tokens、/v1/*（connect-adapter 两档共用）'
       - '加固：/v1 静态令牌、加密主密钥、proxy 全封（08 §5；宿主脚本缺一样就拒绝启动）'
       - 'engines.node（1.8.0 要 >=22.18.0；安装包自带的 Node 要满足）'
+      - '传递依赖安全覆盖：nodemailer → 10.1.1（npm overrides；上游用法 createTransport / sendMail、lib/mail-composer、mailparser 里的 lib/addressparser 在 10.x 都还在）'
     covered_by:
       - packages/connect-adapter/test/local-runtime.test.ts
       - apps/server/test/open-connector-installer.test.ts
@@ -265,7 +274,8 @@ upstreams:
     kind: runtime-dep
     why: 安装包自带的 Node（服务进程跑在它上面；原生模块按它的 ABI 127 取 prebuild），四个平台各一份
     repo: nodejs/node
-    locked_version: 22.23.2
+    # WP365：22.23.2 → 22.23.3（为了它配的 npm 10.9.9：npm 自带的 tar 7.5.11 有严重级公告）
+    locked_version: 22.23.3
     pin: exact
     version_line: '22'
     runtime_lock_file: apps/desktop/node-runtime.lock.json
@@ -289,7 +299,7 @@ upstreams:
     why: 安装包自带的 npm（一键装 Shopify CLI、按需下载本机连接器都用它；WP254 起随包带，不再先联网下）
     npm: npm
     repo: npm/cli
-    locked_version: 10.9.8
+    locked_version: 10.9.9
     pin: exact
     version_line: '10'
     lockfile_single: false
@@ -332,11 +342,73 @@ upstreams:
     why: 自定义 MCP 服务器接进运行时那条路的客户端（apps/server），也是 playwright-mcp 的底座
     npm: '@modelcontextprotocol/sdk'
     repo: modelcontextprotocol/typescript-sdk
-    locked_version: 1.30.0
+    # WP365：1.30.0 → 1.32.1（GHSA-6qxp-vccf-f47h）。1.32.0 起 HTTP 客户端只在同一网站内跟跳转，
+    # 会跳到别的域名 / 端口的 MCP 地址现在连不上——探测那一步把上游英文翻成人话（mcpProbeErrorText）。
+    locked_version: 1.32.1
     pin: exact
     watch: [versions, releases]
     locked_in:
       - apps/server/package.json
+    we_depend_on:
+      - 'Client + StdioClientTransport / StreamableHTTPClientTransport（requestInit.headers 带请求头）'
+      - '跨站跳转不跟时的报错文本 `Redirect to <地址> not followed`（mcpProbeErrorText 按它认）；redirectPolicy 不设，保持默认 same-origin'
+    covered_by:
+      - apps/server/test/connection-directory.test.ts
+
+  # WP365（10-16 上游扫描补登）：邮件三件。之前没登记，哨兵看不到它们的安全公告——
+  # 10-16 才发现 packages/channels 的 nodemailer 10.0.1、apps/cloud 的 7.0.13 都命中高危。
+  # mailparser 自己**钉死**一版 nodemailer（3.9.23 钉的是 10.0.1），所以三件要一起看：
+  # 升 nodemailer 时 mailparser（以及测试用的 smtp-server）也要升到钉同一版的那一版，pnpm 锁里才只有一份。
+  - id: nodemailer
+    kind: runtime-dep
+    why: 发信——邮箱渠道的 SMTP 发信（packages/channels）与云端登录信（apps/cloud，自建 Node 形态）
+    npm: nodemailer
+    repo: nodemailer/nodemailer
+    locked_version: 10.1.1
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+      - apps/cloud/package.json
+    we_depend_on:
+      - 'default import + createTransport(url | options) / sendMail / verify（10.x 起是 ESM + CJS 双构建，名字没变）'
+      - 'Node >=20（10.0.0 起；安装包自带 Node 22、云端镜像 node:22）'
+    covered_by:
+      - packages/channels/test/servers.test.ts
+      - apps/cloud/test/wp110-mail.test.ts
+
+  - id: imapflow
+    kind: runtime-dep
+    why: 收信——邮箱渠道的 IMAP 客户端（packages/channels/src/email/imap.ts 是唯一 import 处）
+    npm: imapflow
+    repo: postalsys/imapflow
+    locked_version: 2.0.0
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+    we_depend_on:
+      - 'ImapFlow 的 connect / mailboxOpen / fetch / search / 事件（我们只用收窄后的 ImapClientLike）'
+    covered_by:
+      - packages/channels/test/servers.test.ts
+      - packages/channels/test/imap-error-event.test.ts
+
+  - id: mailparser
+    kind: runtime-dep
+    why: 收信——把 IMAP 拿到的原始邮件解析成正文 / 附件 / 地址（packages/channels/src/email/adapter.ts）
+    npm: mailparser
+    repo: nodemailer/mailparser
+    locked_version: 3.9.39
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - packages/channels/package.json
+    we_depend_on:
+      - 'simpleParser 与 ParsedMail / AddressObject 的形状'
+      - '它钉死的 nodemailer 版本（地址解析 addressparser 在 nodemailer 里）要与 nodemailer 那条一致'
+    covered_by:
+      - packages/channels/test/adapter.test.ts
+      - packages/channels/test/servers.test.ts
 
   # WP216（Luoye 10-05）：建站岗位接的 Shopify 官方 Dev MCP。它不进 package.json——由 `npx` 在用到时
   # 拉**钉死的那一版**（`apps/server/src/shopify-devmcp.ts` 的 DEV_MCP_ARGS），所以没有 locked_in、也不在锁文件里。
@@ -485,9 +557,10 @@ upstreams:
     why: 「我正在用的浏览器」那条腿（个人档）：腾讯官方 dsh 插件 + `bsk` CLI + 用户自己装的 Chrome / Edge 扩展（MIT，docs/55 §10）
     npm: '@wxg-prc-cpg/browser-skill-dsh-plugin'
     repo: Tencent/BrowserSkill
-    locked_version: 0.3.0
+    # WP366（决策 918）：0.3.0 → 0.3.3，插件与 bsk 一起升；0.3.3 把六个工具整体改名 browser_* → bsk_*。
+    locked_version: 0.3.3
     pin: exact
-    bin_version: 0.3.0
+    bin_version: 0.3.3
     bin_tag_prefix: cli-v
     bin_lock_file: browserskill.lock.json
     watch: [versions, releases, readme, wishlist]
@@ -495,10 +568,10 @@ upstreams:
       - packages/dsh-adapter/package.json
     release_age_prefix: '@wxg-prc-cpg/browser-skill-dsh-plugin'
     we_depend_on:
-      - '插件直接在 Agent 的 scoped ctx 上注册 6 个多态工具（动作在 args.action 里），不走 dsh-browser-use seam'
+      - '插件直接在 Agent 的 scoped ctx 上注册 6 个多态工具（bsk_assist / bsk_inspect / bsk_interact / bsk_page / bsk_session / bsk_tabs，动作在 args.action 里），不走 dsh-browser-use seam；工具名再改一次 = 门禁整组失效，测试 (a) 拿真插件比对名字'
       - 'lazyTools 必须显式 false（上游缺省 true 时工具面整个是空的）'
-      - '门禁按 args.action 分读写（packages/dsh-adapter/src/browserskill.ts 的 BROWSERSKILL_READ_ACTIONS）；表外动作一律按写'
-      - '带 url 的三处：browser_page{navigate} / browser_session{start} / browser_tabs{create}（域名白名单拦在这里）'
+      - '门禁按 args.action 分读写（packages/dsh-adapter/src/browserskill.ts 的 BROWSERSKILL_READ_ACTIONS）；表外动作一律按写；bsk_inspect 的 debug 再看 debugAction（BROWSERSKILL_DEBUG_READ_ACTIONS）、extract 看给没给 output'
+      - '带 url 的三处：bsk_page{navigate} / bsk_session{start} / bsk_tabs{create}（域名白名单拦在这里）；外加 bsk_inspect{debug,replay} 的 replay JSON 里的 url'
       - 'bsk 的 release 资产命名 bsk-v<版本>-<target>.tar.gz|zip（browserskill.lock.json 的 url / sha256 逐字抄自上游 version.json）'
       - 'BSK_AUTO_UPDATE=off 只关"装"、不关"查"（docs/55 §10 ④）'
     wishlist:
@@ -506,8 +579,9 @@ upstreams:
       # 写成 `^0.1.0-rc.6`，与我们整棵预发布树在 semver 的预发布规则下**不相交**。每当有一个
       # 那六个之一的包第一次进树，`pnpm install` 就红一次（WP92 撞了三个、WP93 又撞第四个
       # `dsh-client-ui-primitives`），只能一条一条往 `pnpm-workspace.yaml` 的 overrides 里钉。
-      # 还剩 dsh-client-ui-attachment / dsh-client-ui-tool 两个没进树。
-      - dsh plugin 的 peer 范围放宽到能与预发布版相交（现在写死 ^0.1.0-rc.6）
+      # WP366（0.3.3）：范围放宽成 `^0.1.5-rc.3 || ^0.2.0-rc.1`，peer 剩五个（删了
+      # dsh-client-ui-attachment），但仍然不含我们的 0.2.1-alpha.x，四条 override 照留。
+      - dsh plugin 的 peer 范围放宽到能与预发布版相交（0.3.3 写成 ^0.1.5-rc.3 || ^0.2.0-rc.1，仍不含 0.2.1-alpha.x）
     covered_by:
       - packages/dsh-adapter/test/browserskill-seam.test.ts
       - apps/server/test/browserskill-install.test.ts

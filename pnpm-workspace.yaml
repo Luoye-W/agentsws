@@ -44,6 +44,14 @@ packageExtensions:
 # （`^0.1.0-rc.6` 与 `0.1.6-alpha.2` 无交集 → 去 registry 另找一份）。处理同上：钉到
 # 树里已经有的那一版。另两个（`dsh-client-ui-attachment` / `dsh-client-ui-tool`）仍然
 # 不在树里，所以仍然不写——等它们哪天也被拖进来再说。
+# WP366（插件 0.3.3）：上游把 peer 范围放宽成 `^0.1.5-rc.3 || ^0.2.0-rc.1`，但预发布规则照旧——
+# `0.2.1-alpha.2` 的 major.minor.patch 是 0.2.1，比较符里带预发布的只有 0.1.5 / 0.2.0 两组，
+# 仍然**不相交**（拿 semver 实测过：只有正式版 0.2.1 才满足）。所以四条照留。peer 表本身也变了：
+# `dsh-client-ui-attachment` 从 peer 里删掉了（本来就没为它写过 override，没东西可去）；
+# `dsh-llm` 从 optional 变成必需、`dsh-attachment` 从必需变成 optional——两条 override 都还在，
+# 照样链树里那一份。`dsh-client-ui-tool` 仍是 optional peer：它现在虽然在树里，pnpm 对这条
+# 不相交的 optional peer 是**跳过不链**（lockfile 里插件那一条没有它，与 0.3.0 时一样），
+# 所以仍然不写。
 overrides:
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-attachment': '0.2.1-alpha.5'
   '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-tools': '0.2.1-alpha.5'
@@ -59,6 +67,35 @@ overrides:
   'dsh-web-search-diy>@deepseek-ai/dsh-web': '0.2.1-alpha.5'
   # schemastery 也跟树里那一版，免得锁文件里出两份（check-upstreams 要求只解析出一个版本）
   'dsh-web-search-diy>@deepseek-ai/schemastery': '3.18.5-alpha.2'
+  # WP368：运行时依赖树上的两条传递依赖安全公告（10-05 发布），上游还没跟，先顶到修好的精确版本。
+  # - compression 1.8.1（高危 GHSA-vc2v-76pw-4v95，响应提前断开时内存泄漏 → 拖垮服务）：
+  #   `@deepseek-ai/dsh-host-webserver` 的依赖。工坊自己的组合不起它（deepseek-account.ts 用登记表代替），
+  #   但用户在工作台打开 dsh 官方「网页场景」时，子进程会起这个服务器（只听 127.0.0.1）——真会加载。
+  # - proxy-addr 2.0.7（严重 GHSA-jqcg-44mw-7w3h，IPv4 映射的 IPv6 绕过信任网段）：
+  #   `@modelcontextprotocol/sdk` → express / express-rate-limit 带进来。我们只用 SDK 的客户端，
+  #   实测三个 client 入口一个都不加载 express；压它是为了树里不留严重公告、装包里也不带旧版。
+  # 上游（dsh-host-webserver / MCP SDK 的 express）依赖范围已经 ≥ 修好的版本时删掉这两条（docs/42 ③）。
+  compression: 1.8.2
+  proxy-addr: 2.0.8
+  # WP369：WP368 周报第一次跑查出的两条（09-14 / 10-04 修好），同样先顶到修好的精确版本。
+  # - brace-expansion（高危 GHSA-qhr7-859c-m2p7、GHSA-6j4f-fj2g-mc7p，中危 GHSA-q2hr-2g5m-vwhr，
+  #   嵌套 / 畸形花括号把递归打爆或跑成平方级 → 卡死进程）：树里三个大版本各顶到本线最新的修好版。
+  #   - @5（5.0.9）：`packages/data`、`packages/roles` 的 casbin → minimatch 10。casbin 一 import 就加载它，
+  #     但只有 matcher 里写了 `globMatch(...)` 才调；我们两份 model.conf 都只用 `==` 和自己注册的函数，
+  #     输入（assignment / domain / op）也不是用户写的通配符——加载、不调用。
+  #   - @1（1.1.18）/ @2（2.1.4）：工作台 exceljs 的 Node 版（archiver / unzipper → glob / readdir-glob）。
+  #     工作台打包走 exceljs 的浏览器包（`dist/exceljs.min.js`），里面没有 archiver / glob / minimatch，
+  #     所以装到用户机器上的前端碰不到；只有 vitest 在 Node 里造 xlsx 时加载，也不传通配符。
+  #   顶它们是为了运行时依赖树（casbin 会被 esbuild 打进安装包）里不留高危公告。
+  # - http-cache-semantics 4.2.0（高危 GHSA-ch52-4w7c-c8xp，max-stale 处理不当会把别人的缓存响应交出去）：
+  #   dsh-otel → got → cacheable-request。我们的两档运行时不挂 dsh-otel（profile-lockdown 测试钉着），
+  #   完整 profile 里 `otel` 两行锁成关；只有用户自己开 dsh 官方场景时才加载 got，而 dsh-otel 的
+  #   `got.post` 不带 `cache` 选项，cacheable-request 根本不建缓存——加载、不调用。修好的只有 4.3.0（没有 4.2.1）。
+  # 上游（minimatch / casbin、archiver / unzipper、cacheable-request）依赖范围已经 ≥ 修好的版本时删掉（docs/42 ③）。
+  brace-expansion@1: 1.1.21
+  brace-expansion@2: 2.1.7
+  brace-expansion@5: 5.0.12
+  http-cache-semantics: 4.3.0
 
 # WP93（0.1.6-alpha.2）：`@deepseek-ai/dsh` 新拖进来的 `dsh-office-to-pdf`（侧边栏预览
 # Word / Excel / PPT 的那条新功能）依赖 `@deepseek-ai/libreoffice-kit`，后者用
@@ -510,14 +547,18 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-workspace@0.2.1-alpha.5'
   - '@deepseek-ai/dsh-workspace-changes@0.2.1-alpha.5'
   # WP92（55 §10）：腾讯 BrowserSkill 的**官方** dsh 插件（MIT，`Tencent/BrowserSkill`）。
-  # 写死 0.3.0 一个版本：排除的是这一版，不是这个包——下一版出来还得再决定一次。
+  # 写死一个版本：排除的是这一版，不是这个包——下一版出来还得再决定一次。
+  # WP366：0.3.0 → 0.3.3（10-15 发，还在静默期里）。三件重核过：仍然没有 install 类脚本、
+  # 没有原生模块；运行时 import 变成 dsh-tools / schemastery / **dsh-llm**（新加的，只用
+  # `createUserMessage`，dsh-llm 本来就在树里、override 钉着那一份）外加 node 内置；React 那层
+  # 悬浮层（`lib/client.cjs`）仍只给 dsh 自己的 web 客户端用，headless 组合里不加载。
   # 核实过的三件（做的时候逐个看的，不是抄 README）：
   # - 没有 postinstall / install / prepare 脚本，所以**不需要**进 allowBuilds；
   # - 没有原生模块、不下载任何二进制（`bsk` 由我们自己钉版本 + sha256 装，见
   #   `browserskill.lock.json`）；
   # - 运行时只 import `@deepseek-ai/cordis` / `-dsh-tools` / `-schemastery`（都已在树里），
   #   React 那几个 peer 是 optional 的客户端 UI，headless 组合里一个都不加载。
-  - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0'
+  - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.3'
   - miniflare@5.20260917.0-alpha
   - wrangler@4.134.0
   # WP132：`dsh-office-to-pdf` 的依赖从 `@deepseek-ai/libreoffice-kit@0.0.1` 升到 0.1.0（09-22 发，

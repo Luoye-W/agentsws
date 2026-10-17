@@ -5,6 +5,7 @@
  *   pnpm upstream:watch --dry-run            # 本机演练：查一遍、把报告打到 stdout，不开 issue
  *   pnpm upstream:watch --scope daily        # 只查 dsh（每日那一趟）
  *   node scripts/upstream-watch.mjs --out report.md --json summary.json
+ *   pnpm upstream:watch --dry-run --no-audit # 周报不带「依赖安全公告」那一节（WP368）
  *
  * 它**只观察、只写一份 markdown**：不改版本号、不装依赖、不跑测试、不开 issue、不开 PR。
  * 开 issue 是 workflow 那一步的事（权限收在那里，docs/10 §3.3 第 ⑤ 步"L1 人看"）。
@@ -19,6 +20,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import process from 'node:process'
+import { alarming, auditHints, observeDepAudit, renderAuditSection } from './dep-audit.mjs'
 import {
   binReleaseVerdict,
   imageVerdict,
@@ -44,6 +46,7 @@ export function parseArgs(argv) {
     windowDays: 7,
     out: null,
     json: null,
+    noAudit: false,
     now: new Date(),
   }
   for (let i = 0; i < argv.length; i++) {
@@ -64,6 +67,7 @@ export function parseArgs(argv) {
     else if (a === '--window-days') opts.windowDays = Number.parseInt(next(), 10)
     else if (a === '--out') opts.out = next()
     else if (a === '--json') opts.json = next()
+    else if (a === '--no-audit') opts.noAudit = true
     else throw new Error(`不认识的参数 ${a}`)
   }
   if (!['weekly', 'daily'].includes(opts.scope)) throw new Error('--scope 只许 weekly / daily')
@@ -417,11 +421,19 @@ export function renderReport(observations, opts) {
   L.push(
     `| 查不到的 | ${broken.length === 0 ? '无' : broken.map((o) => `\`${o.id}\``).join('、')} |`,
   )
+  // WP368：只有运行时依赖的严重 / 高危算数；构建期 / 开发期的在那一节里单列
+  if (opts.depAudit && !opts.depAudit.errors.length) {
+    const hot = [...new Set(alarming(opts.depAudit).map((a) => a.module))]
+    L.push(
+      `| 运行时依赖安全公告（严重 / 高危） | ${hot.length === 0 ? '无' : hot.map((m) => `\`${m}\``).join('、')} |`,
+    )
+  }
   L.push('')
 
   for (const o of observations) L.push(...renderSection(o, opts))
 
-  L.push(...renderHints(observations))
+  L.push(...renderAuditSection(opts.depAudit))
+  L.push(...renderHints(observations, opts.depAudit))
   return `${L.join('\n')}\n`
 }
 
@@ -597,7 +609,7 @@ function renderBin(it, bin) {
 }
 
 /** 末尾那一段：给"判断层"（将来的评估例程 / 现在的人）看的提示。 */
-function renderHints(observations) {
+function renderHints(observations, depAudit) {
   const L = ['## 给评估例程的提示', '']
   const behind = observations.filter(isBehind)
   const ahead = observations.filter((o) => o.npm?.verdict?.state === 'ahead')
@@ -632,6 +644,7 @@ function renderHints(observations) {
   for (const o of broken) {
     L.push(`- \`${o.id}\` 这一趟查不到（${o.errors[0]}）。**查不到 ≠ 没变**，下一趟仍要看。`)
   }
+  L.push(...auditHints(depAudit))
   L.push('')
   L.push(
     '判断层要回答的还是那三问（docs/10 §3.3 ②）：碰没碰我们的 seam · 破坏性还是增量 · 命不命中 wishlist。',
@@ -695,6 +708,12 @@ export async function main(argv) {
     observations.push(await observe(it, sinceIso))
   }
 
+  // WP368：依赖安全公告只跟周报走（daily 那一趟只看 dsh）
+  if (opts.scope === 'weekly' && !opts.only && !opts.noAudit) {
+    process.stderr.write('… 依赖安全公告（pnpm audit）\n')
+    opts.depAudit = observeDepAudit()
+  }
+
   const report = renderReport(observations, opts)
   if (opts.out) {
     mkdirSync(dirname(opts.out), { recursive: true })
@@ -717,6 +736,8 @@ export async function main(argv) {
       dsh_target: dsh?.npm?.verdict?.highest ?? null,
       dsh_changed: dsh?.npm?.verdict?.state === 'behind',
       unreachable: observations.filter((o) => o.errors.length).map((o) => o.id),
+      runtime_advisories:
+        opts.depAudit?.errors.length === 0 ? alarming(opts.depAudit).length : null,
     }
     mkdirSync(dirname(opts.json), { recursive: true })
     writeFileSync(opts.json, `${JSON.stringify(summary, null, 2)}\n`)

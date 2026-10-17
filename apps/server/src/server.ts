@@ -164,6 +164,7 @@ import {
   createModelGateway,
   type FetchLike,
   GatewayError,
+  type ListingFetch,
   type ModelGatewayApi,
   type PageFetch,
   stubImageProvider,
@@ -671,6 +672,7 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
+import { createOwnerSetupCode, type LoginMode, loginModeOf } from './setup-code.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
 import { brandFactsOf, createResearchKit } from './setup-research.js'
 import { builtinSetupTargets } from './setup-targets.js'
@@ -988,6 +990,11 @@ export interface ServerOptions {
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
   /**
+   * 决策 945：局域网档的主人设置码印到哪。不给写 stderr（`docker compose logs server` 看得到）；
+   * 本机档不印。测试注入它来读码。
+   */
+  setupCodeLog?: (line: string) => void
+  /**
    * WP298：前端报错那一行写到哪。不给：不 quiet 时写 stderr（桌面壳收进 server.log），
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
@@ -1150,6 +1157,11 @@ export interface ServerOptions {
     createHost?: DeepSeekAccountOptions['createHost']
     /** 账号那一路推理口（Messages）的替身 fetch。 */
     fetch?: AccountFetch
+    /**
+     * WP367：账号模型清单（`GET https://api.deepseek.com/models`）的替身 fetch。注入了 `fetch` 却没给它
+     * = 不去拉清单、用内置的两个（替身不会顺手让清单请求走到真网络上去）。
+     */
+    modelsFetch?: ListingFetch
     /** 登出后多久摘掉官方模块（测试调成 0）。 */
     signOutGraceMs?: number
   }
@@ -1487,6 +1499,11 @@ export interface Server {
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
   traceScope: TraceScope
   bootstrap: Bootstrap
+  /**
+   * 决策 945：`local` = 只给本机用（桌面版），登录页照旧一按就进；
+   * `shared` = 开给局域网（NAS / Docker），一次性 token 不进页面，主人用日志里的设置码进门。
+   */
+  loginMode: LoginMode
   /** 已监听时的 URL（listen 之后才有）。 */
   url?: string
   listen(port?: number): Promise<{ url: string; port: number }>
@@ -1640,6 +1657,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const env = options.env ?? process.env
   // WP128：是不是托管实例（Cloudflare Container 里那一份）；开了开关缺配置就在这里抛
   const hostedBoot = hostedModeOf(env)
+  // 决策 945：先看这一份是不是只给本机用（AGENTSWS_BIND_HOST 写错也在这里就抛）
+  const loginMode = loginModeOf(env, bindHost(env))
   const clock: Clock = options.clock ?? { now: () => new Date().toISOString() }
   const random = options.random ?? seededRandom(Date.parse(clock.now()) % 2147483647)
   const dbDir = options.dbDir
@@ -5448,6 +5467,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       deepseekAccount: {
         signedIn: () => deepseekAccount.signedIn(),
         resolveToken: (url: string) => deepseekAccount.resolveToken(url),
+        // WP367：比账号模型清单里的最低版本用
+        clientVersion: () => deepseekAccount.clientVersion(),
         rejectToken: (token: string) => deepseekAccount.rejectToken(token),
         // WP151：余额不足那一行按机器一份（账号只有一个），各品牌的模型卡读同一份
         reportBalance: (insufficient: boolean) => deepseekAccount.reportBalance(insufficient),
@@ -5455,6 +5476,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(options.deepseekAccount?.fetch === undefined
           ? {}
           : { fetch: options.deepseekAccount.fetch }),
+        ...(options.deepseekAccount?.modelsFetch === undefined
+          ? {}
+          : { modelsFetch: options.deepseekAccount.modelsFetch }),
+        // WP367：账号模型清单的诊断（官方同款 `[llm-deepseek-account]` 标签；只有地址、条数、原因）
+        ...(options.quiet === true
+          ? {}
+          : {
+              modelsLog: {
+                info: (m: string) => process.stdout.write(`[llm-deepseek-account] ${m}\n`),
+                warn: (m: string) => process.stderr.write(`[llm-deepseek-account] ${m}\n`),
+              },
+            }),
       },
     })
 
@@ -11749,6 +11782,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     return out
   }
+  /*
+   * 决策 945：局域网档主人进门用的一次性设置码（印在服务日志里）。托管实例（云上值守聊天窗）
+   * 没有人从网页登录，不印——码不该落进第三方的日志。
+   */
+  const ownerSetupCode =
+    loginMode === 'shared' && hostedBoot === undefined
+      ? createOwnerSetupCode({
+          // 主人邮箱现取：关联工坊账号后会从占位邮箱换成账号邮箱（WP233）
+          ownerEmail: async () => (await identity.getPerson(person.id))?.email ?? person.email,
+          ...(options.setupCodeLog === undefined ? {} : { log: options.setupCodeLog }),
+        })
+      : undefined
+
   const deps: GatewayDeps = {
     identity,
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
@@ -12453,8 +12499,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
       ...(idempotencyStore === undefined ? {} : { idempotencyStore }),
-      // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）
-      exposeMagicLinkToken: true,
+      // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）。
+      // 决策 945：开给局域网时不回——否则谁都能填主人邮箱以主人身份进来
+      exposeMagicLinkToken: loginMode === 'local',
+      ...(ownerSetupCode === undefined ? {} : { ownerSetupCode }),
       // 13 §5：桌面壳靠 pid / port 认出「这个 sidecar 就是我起的那个」
       instance: { pid: process.pid, port: () => boundPort },
       // 13 §5：配了会话密钥就开 cookie 那条路（`POST /v1/auth/session`）
@@ -12647,11 +12695,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     mountStatic(gateway.app, {
       dir: options.staticDir,
       // WP358：所有者邮箱现取（关联云账号后占位 owner@localhost 会换成云账号邮箱）
-      bootstrap: async () => ({
-        owner_email: (await identity.getPerson(person.id))?.email ?? person.email,
-        workspace: workspace.id,
-        demo: mount !== undefined,
-      }),
+      // 决策 945：局域网档不把主人邮箱给没登录的人，告诉页面走设置码 / 邀请链接
+      bootstrap: async () =>
+        loginMode === 'local'
+          ? {
+              owner_email: (await identity.getPerson(person.id))?.email ?? person.email,
+              workspace: workspace.id,
+              demo: mount !== undefined,
+            }
+          : { login: 'shared', demo: mount !== undefined },
     })
   }
   let httpServer: ServerType | undefined
@@ -12742,6 +12794,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     backend,
     traceScope,
     bootstrap: { person, workspace, ownerAssignment, internalToken },
+    loginMode,
     async listen(port?: number) {
       const wanted =
         port ?? (env.AGENTSWS_PORT === undefined ? DEFAULT_PORT : Number(env.AGENTSWS_PORT))
@@ -12768,6 +12821,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       })
       httpServer = started
+      // 决策 945：局域网档真起来了才印第一个设置码（重复 listen 不换码）
+      ownerSetupCode?.announce()
       // 15 §5.8：接活之前先把账对完。`engage()` 已经在装配时把出站闸拉下来了，
       // 这里是慢的那一半（要查外部系统）；查不清的留成人工对账项，出站保持停着。
       await reconcile.run()

@@ -26,10 +26,13 @@ import * as BrowserSkillPlugin from '@wxg-prc-cpg/browser-skill-dsh-plugin'
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyBskEnv,
+  BROWSERSKILL_DEBUG_READ_ACTIONS,
+  BROWSERSKILL_READ_ACTIONS,
   BROWSERSKILL_TOOLS,
   BSK_NO_UPDATE_MANIFEST,
   browserSkillNavigationUrl,
   browserSkillPluginConfig,
+  browserSkillReplayUrl,
   browserSkillToolName,
   bskBinaryUsable,
   classifySideEffect,
@@ -100,12 +103,56 @@ async function bare(): Promise<Context> {
   })
 }
 
+/**
+ * 读表之外、**有意按写**的动作（WP366 对着 0.3.3 逐个判过）。与读表合起来必须正好等于
+ * 上游每个工具的 action 枚举——测试 (a) 拿真插件比对，上游加了动作就红，逼着有人来判。
+ * `bsk_inspect` 的 debug / extract 不在读表里，读写由 `classifyBrowserSkillEffect` 再看一层。
+ */
+const KNOWN_WRITES: Record<string, readonly string[]> = {
+  bsk_assist: [],
+  bsk_inspect: ['debug', 'extract', 'video'],
+  bsk_interact: [
+    'click',
+    'hover',
+    'wheel',
+    'scroll-to',
+    'focus',
+    'blur',
+    'fill',
+    'select',
+    'press',
+  ],
+  bsk_page: [],
+  bsk_session: [],
+  bsk_tabs: ['create', 'close', 'borrow', 'return'],
+}
+
+/** debug 里有意按写的子动作：改写 / 拦截 / 伪造流量、重发请求、往本机写文件。 */
+const DEBUG_WRITES = ['export', 'rule_add', 'rule_enable', 'rule_disable', 'rule_remove', 'replay']
+
+/** 0.3.0 的六个老名字。 */
+const OLD_NAMES = [
+  'browser_assist',
+  'browser_inspect',
+  'browser_interact',
+  'browser_page',
+  'browser_session',
+  'browser_tabs',
+]
+
 /** 与上游同名的工具替身（六个多态工具，入参里有 action / url）。 */
 const standIn = (name: string) =>
   defineTool({
     name,
     description: `browserskill ${name}`,
-    parameters: { action: { type: 'string' }, url: { type: 'string' } },
+    parameters: {
+      action: { type: 'string' },
+      url: { type: 'string' },
+      debugAction: { type: 'string' },
+      replay: { type: 'string' },
+      output: { type: 'string' },
+      id: { type: 'string' },
+    },
     output: {
       schema: { type: 'json' },
       render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
@@ -197,6 +244,42 @@ describe('(a) 真插件：挂得上，六个工具，与官方 provider 同一�
     } finally {
       await scope.dispose()
     }
+  })
+
+  it('WP366：上游每个动作都有人判过——新动作 / 新的带 url 入参一出来这条就红', async () => {
+    const req = makeRequest({ ...KOL })
+    const { harness } = await harnessOf(req)
+    try {
+      // schemas() 给的是投影成 JSON Schema 的那一份（入参都在 `properties` 里）
+      type Params = Record<string, { enum?: readonly string[] }>
+      const schemas = harness.ctx.tools
+        .schemas(harness.agent as never)
+        .filter((s) => browserSkillToolName(s.name) !== undefined)
+      const paramsOf = (name: string): Params => {
+        const found = schemas.find((s) => s.name === name)
+        expect(found, name).toBeDefined()
+        return (found?.parameters as unknown as { properties?: Params })?.properties ?? {}
+      }
+      // ① 每个工具的 action 枚举 = 读表 ∪ 有意按写的那张表（一个不多、一个不少）
+      for (const tool of BROWSERSKILL_TOOLS) {
+        const upstream = [...(paramsOf(tool).action?.enum ?? [])].sort()
+        const decided = [...(BROWSERSKILL_READ_ACTIONS[tool] ?? []), ...KNOWN_WRITES[tool]].sort()
+        expect(upstream, tool).toEqual(decided)
+      }
+      // ② debug 的子动作同理
+      const debug = [...(paramsOf('bsk_inspect').debugAction?.enum ?? [])].sort()
+      expect(debug).toEqual([...BROWSERSKILL_DEBUG_READ_ACTIONS, ...DEBUG_WRITES].sort())
+      // ③ 带 `url` 入参的工具就这四个：三个打开网页的 + bsk_inspect（那是 debug 的子串过滤，
+      //    不打开任何东西）。哪天别的工具也长出 url，白名单就得先想清楚那一处
+      const withUrl = schemas.filter((s) => 'url' in paramsOf(s.name)).map((s) => s.name)
+      expect(withUrl.sort()).toEqual(['bsk_inspect', 'bsk_page', 'bsk_session', 'bsk_tabs'])
+    } finally {
+      await harness.dispose()
+    }
+  })
+
+  it('WP366：0.3.0 的老名字（browser_*）不再认作 BrowserSkill', () => {
+    for (const old of OLD_NAMES) expect(browserSkillToolName(old), old).toBeUndefined()
   })
 
   it('lazyTools 必须是 false：上游缺省 true 时我们这棵树里一个工具都不会有', async () => {
@@ -306,90 +389,209 @@ describe('(b) 提示词：这一种独有的三条规矩进 persona 段', () => 
 
 describe('(c) 读写分类：看 args.action（55 §10 那张表）', () => {
   const cases: [string, string, 'read_external' | 'write_external'][] = [
-    ['browser_inspect', 'observe', 'read_external'],
-    ['browser_inspect', 'snapshot', 'read_external'],
-    ['browser_inspect', 'html', 'read_external'],
-    ['browser_inspect', 'screenshot', 'read_external'],
-    ['browser_inspect', 'console', 'read_external'],
-    ['browser_inspect', 'network', 'read_external'],
-    ['browser_page', 'navigate', 'read_external'],
-    ['browser_page', 'back', 'read_external'],
-    ['browser_page', 'forward', 'read_external'],
-    ['browser_page', 'reload', 'read_external'],
-    ['browser_page', 'wait', 'read_external'],
-    ['browser_session', 'start', 'read_external'],
-    ['browser_session', 'stop', 'read_external'],
-    ['browser_session', 'list', 'read_external'],
-    ['browser_tabs', 'list', 'read_external'],
-    ['browser_tabs', 'select', 'read_external'],
-    ['browser_tabs', 'create', 'write_external'],
-    ['browser_tabs', 'close', 'write_external'],
-    ['browser_tabs', 'borrow', 'write_external'],
-    ['browser_tabs', 'return', 'write_external'],
-    ['browser_interact', 'click', 'write_external'],
-    ['browser_interact', 'fill', 'write_external'],
-    ['browser_interact', 'press', 'write_external'],
-    ['browser_interact', 'select', 'write_external'],
-    ['browser_assist', 'resize', 'read_external'],
-    ['browser_assist', 'emulate', 'read_external'],
-    ['browser_assist', 'request-help', 'read_external'],
+    ['bsk_inspect', 'observe', 'read_external'],
+    ['bsk_inspect', 'snapshot', 'read_external'],
+    ['bsk_inspect', 'html', 'read_external'],
+    ['bsk_inspect', 'screenshot', 'read_external'],
+    ['bsk_inspect', 'console', 'read_external'],
+    ['bsk_inspect', 'network', 'read_external'],
+    ['bsk_page', 'navigate', 'read_external'],
+    ['bsk_page', 'back', 'read_external'],
+    ['bsk_page', 'forward', 'read_external'],
+    ['bsk_page', 'reload', 'read_external'],
+    ['bsk_page', 'wait', 'read_external'],
+    ['bsk_session', 'start', 'read_external'],
+    ['bsk_session', 'stop', 'read_external'],
+    ['bsk_session', 'list', 'read_external'],
+    ['bsk_tabs', 'list', 'read_external'],
+    ['bsk_tabs', 'select', 'read_external'],
+    ['bsk_tabs', 'create', 'write_external'],
+    ['bsk_tabs', 'close', 'write_external'],
+    ['bsk_tabs', 'borrow', 'write_external'],
+    ['bsk_tabs', 'return', 'write_external'],
+    ['bsk_interact', 'click', 'write_external'],
+    ['bsk_interact', 'fill', 'write_external'],
+    ['bsk_interact', 'press', 'write_external'],
+    ['bsk_interact', 'select', 'write_external'],
+    ['bsk_assist', 'resize', 'read_external'],
+    ['bsk_assist', 'emulate', 'read_external'],
+    ['bsk_assist', 'request-help', 'read_external'],
+    // WP366：0.3.3 新增 / 补齐
+    ['bsk_page', 'wait-for-element', 'read_external'],
+    ['bsk_interact', 'hover', 'write_external'],
+    ['bsk_interact', 'wheel', 'write_external'],
+    ['bsk_interact', 'scroll-to', 'write_external'],
+    ['bsk_interact', 'focus', 'write_external'],
+    ['bsk_interact', 'blur', 'write_external'],
+    ['bsk_inspect', 'video', 'write_external'],
   ]
   it.each(cases)('%s{action:%s} → %s', (tool, action, expected) => {
     expect(classifySideEffect(tool, undefined, { action })).toBe(expected)
   })
 
   it('没给 action、或者上游新增的动作 → 一律按写（16 §3 最严）', () => {
-    expect(classifySideEffect('browser_inspect')).toBe('write_external')
-    expect(classifySideEffect('browser_page', undefined, { action: 'brand_new' })).toBe(
+    expect(classifySideEffect('bsk_inspect')).toBe('write_external')
+    expect(classifySideEffect('bsk_page', undefined, { action: 'brand_new' })).toBe(
       'write_external',
     )
-    expect(classifySideEffect('browser_tabs', undefined, { action: 42 })).toBe('write_external')
+    expect(classifySideEffect('bsk_tabs', undefined, { action: 42 })).toBe('write_external')
+  })
+
+  it.each([...BROWSERSKILL_DEBUG_READ_ACTIONS])('WP366 bsk_inspect{debug, %s} → 读', (sub) => {
+    expect(
+      classifySideEffect('bsk_inspect', undefined, { action: 'debug', debugAction: sub }),
+    ).toBe('read_external')
+  })
+
+  it.each(DEBUG_WRITES)('WP366 bsk_inspect{debug, %s} → 写（改流量 / 重发 / 写文件）', (sub) => {
+    expect(
+      classifySideEffect('bsk_inspect', undefined, { action: 'debug', debugAction: sub }),
+    ).toBe('write_external')
+  })
+
+  it('WP366 debug 没给 debugAction、或者给了个表外的 → 写', () => {
+    expect(classifySideEffect('bsk_inspect', undefined, { action: 'debug' })).toBe('write_external')
+    expect(
+      classifySideEffect('bsk_inspect', undefined, { action: 'debug', debugAction: 'brand_new' }),
+    ).toBe('write_external')
+  })
+
+  it('WP366 extract：只读页面是读，给了 output（往本机写文件）是写', () => {
+    expect(
+      classifySideEffect('bsk_inspect', undefined, { action: 'extract', extractKind: 'table' }),
+    ).toBe('read_external')
+    expect(
+      classifySideEffect('bsk_inspect', undefined, {
+        action: 'extract',
+        extractKind: 'table',
+        output: '/tmp/rows.csv',
+      }),
+    ).toBe('write_external')
   })
 
   it('人接管认得出来（放行的同时要记一条）', () => {
-    expect(isBrowserSkillHandoff('browser_assist', { action: 'request-help' })).toBe(true)
-    expect(isBrowserSkillHandoff('browser_assist', { action: 'resize' })).toBe(false)
-    expect(isBrowserSkillHandoff('browser_interact', { action: 'request-help' })).toBe(false)
+    expect(isBrowserSkillHandoff('bsk_assist', { action: 'request-help' })).toBe(true)
+    expect(isBrowserSkillHandoff('bsk_assist', { action: 'resize' })).toBe(false)
+    expect(isBrowserSkillHandoff('bsk_interact', { action: 'request-help' })).toBe(false)
   })
 })
 
 describe('(d) 域名白名单：三处 url 一处不漏', () => {
+  /** WP366：逐个工具名过一遍——改名改漏一个，那一处就能绕过白名单。 */
+  const URL_CALLS: [string, (url: string) => Record<string, unknown>][] = [
+    ['bsk_page{navigate}', (url) => ({ action: 'navigate', url })],
+    ['bsk_session{start}', (url) => ({ action: 'start', url })],
+    ['bsk_tabs{create}', (url) => ({ action: 'create', url })],
+    [
+      'bsk_inspect{debug,replay}',
+      (url) => ({
+        action: 'debug',
+        debugAction: 'replay',
+        id: 'req_1',
+        replay: JSON.stringify({ key: 'k1', url, method: 'GET' }),
+      }),
+    ],
+  ]
+  it.each(URL_CALLS)('%s：白名单内放行、白名单外拒', async (label, args) => {
+    const tool = label.slice(0, label.indexOf('{'))
+    const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'personal' }))
+    try {
+      const good = await g.gate.execute('c_1', tool, args('https://www.youtube.com/@someone'))
+      expect(good.isError, label).toBe(false)
+      const bad = await g.gate.execute('c_2', tool, args('https://evil.example.com/'))
+      expect(bad.isError, label).toBe(true)
+      expect(g.gate.records.get('c_2')?.reason).toContain('evil.example.com 不在里面')
+    } finally {
+      await g.dispose()
+    }
+  })
+
+  it('WP366 老名字带着白名单外的地址来 → 照样拦（不在 allowlist），不会漏过去', async () => {
+    const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'personal' }))
+    try {
+      const res = await g.gate.execute('c_1', 'browser_page', {
+        action: 'navigate',
+        url: 'https://evil.example.com/',
+      })
+      expect(res.isError).toBe(true)
+      expect(g.gate.records.get('c_1')?.reason).toBe('not_in_allowlist: browser_page')
+    } finally {
+      await g.dispose()
+    }
+  })
+
+  it('WP366 重放请求的地址怎么取：只认 replay JSON 里的 url', () => {
+    const replay = (body: string) => ({ action: 'debug', debugAction: 'replay', replay: body })
+    expect(
+      browserSkillReplayUrl('bsk_inspect', replay('{"key":"k","url":"https://a.test/x"}')),
+    ).toBe('https://a.test/x')
+    // 没给 url（照原样重发抓到的那条，上游只许同源）/ JSON 坏了（插件自己会拒）→ 没话说
+    expect(browserSkillReplayUrl('bsk_inspect', replay('{"key":"k"}'))).toBeUndefined()
+    expect(browserSkillReplayUrl('bsk_inspect', replay('not json'))).toBeUndefined()
+    // debug 别的子动作里的 url 是翻记录用的子串过滤，不是要去的地址
+    expect(
+      browserSkillReplayUrl('bsk_inspect', {
+        action: 'debug',
+        debugAction: 'requests',
+        url: 'evil.example.com',
+      }),
+    ).toBeUndefined()
+    // 不进第三栏的导航计数
+    expect(
+      browserSkillNavigationUrl('bsk_inspect', replay('{"key":"k","url":"https://a.test/"}')),
+    ).toBeUndefined()
+  })
+
+  it('WP366 debug 翻记录（url 是子串过滤）：公司端照样放行，白名单不误拦', async () => {
+    const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'executor' }))
+    try {
+      const res = await g.gate.execute('c_1', 'bsk_inspect', {
+        action: 'debug',
+        debugAction: 'requests',
+        url: 'evil.example.com',
+      })
+      expect(res.isError).toBe(false)
+    } finally {
+      await g.dispose()
+    }
+  })
+
   it('三处认得出来，别的动作没有 url 可查', () => {
-    expect(browserSkillNavigationUrl('browser_page', { action: 'navigate', url: 'x' })).toBe('x')
-    expect(browserSkillNavigationUrl('browser_session', { action: 'start', url: 'x' })).toBe('x')
-    expect(browserSkillNavigationUrl('browser_tabs', { action: 'create', url: 'x' })).toBe('x')
+    expect(browserSkillNavigationUrl('bsk_page', { action: 'navigate', url: 'x' })).toBe('x')
+    expect(browserSkillNavigationUrl('bsk_session', { action: 'start', url: 'x' })).toBe('x')
+    expect(browserSkillNavigationUrl('bsk_tabs', { action: 'create', url: 'x' })).toBe('x')
     // 该给地址却没给（navigate）→ 空串 → 按"打不开这个地址"拒
-    expect(browserSkillNavigationUrl('browser_page', { action: 'navigate' })).toBe('')
+    expect(browserSkillNavigationUrl('bsk_page', { action: 'navigate' })).toBe('')
     // 选填的两处不给 url = 开个空白窗口 / 空白标签，白名单没话说
-    expect(browserSkillNavigationUrl('browser_session', { action: 'start' })).toBeUndefined()
-    expect(browserSkillNavigationUrl('browser_tabs', { action: 'create' })).toBeUndefined()
-    expect(browserSkillNavigationUrl('browser_interact', { action: 'click' })).toBeUndefined()
+    expect(browserSkillNavigationUrl('bsk_session', { action: 'start' })).toBeUndefined()
+    expect(browserSkillNavigationUrl('bsk_tabs', { action: 'create' })).toBeUndefined()
+    expect(browserSkillNavigationUrl('bsk_interact', { action: 'click' })).toBeUndefined()
   })
 
   it('白名单内放行、白名单外拒，三处都一样（理由是人话）', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'personal' }))
     try {
-      const good = await g.gate.execute('c_1', 'browser_page', {
+      const good = await g.gate.execute('c_1', 'bsk_page', {
         action: 'navigate',
         url: 'https://www.youtube.com/@someone',
       })
       expect(good.isError).toBe(false)
 
-      const bad = await g.gate.execute('c_2', 'browser_page', {
+      const bad = await g.gate.execute('c_2', 'bsk_page', {
         action: 'navigate',
         url: 'https://www.amazon.com/dp/B000',
       })
       expect(bad.isError).toBe(true)
       expect(g.gate.records.get('c_2')?.reason).toContain('www.amazon.com 不在里面')
 
-      const session = await g.gate.execute('c_3', 'browser_session', {
+      const session = await g.gate.execute('c_3', 'bsk_session', {
         action: 'start',
         url: 'https://evil.example.com/',
       })
       expect(session.isError).toBe(true)
       expect(g.gate.records.get('c_3')?.reason).toContain('evil.example.com 不在里面')
 
-      const tab = await g.gate.execute('c_4', 'browser_tabs', {
+      const tab = await g.gate.execute('c_4', 'bsk_tabs', {
         action: 'create',
         url: 'https://evil.example.com/',
       })
@@ -411,7 +613,7 @@ describe('(d) 域名白名单：三处 url 一处不漏', () => {
     })
     const g = await gateOnBare(req)
     try {
-      const res = await g.gate.execute('c_1', 'browser_page', {
+      const res = await g.gate.execute('c_1', 'bsk_page', {
         action: 'navigate',
         url: 'https://www.youtube.com/',
       })
@@ -425,7 +627,7 @@ describe('(d) 域名白名单：三处 url 一处不漏', () => {
   it('URL 不是 URL → 拒，而不是"没有 host 所以放行"', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'personal' }))
     try {
-      const res = await g.gate.execute('c_1', 'browser_page', {
+      const res = await g.gate.execute('c_1', 'bsk_page', {
         action: 'navigate',
         url: 'youtube.com',
       })
@@ -441,16 +643,37 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
   it('executor 档：点击、借标签一律拒（现成的 tool.result{blocked}）', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'executor' }))
     try {
-      const click = await g.gate.execute('c_1', 'browser_interact', {
+      const click = await g.gate.execute('c_1', 'bsk_interact', {
         action: 'click',
         target: '@e3',
       })
       expect(click.isError).toBe(true)
       expect(g.gate.records.get('c_1')?.reason).toContain('write_external_requires_executor')
 
-      const borrow = await g.gate.execute('c_2', 'browser_tabs', { action: 'borrow', tabId: '7' })
+      const borrow = await g.gate.execute('c_2', 'bsk_tabs', { action: 'borrow', tabId: '7' })
       expect(borrow.isError).toBe(true)
       expect(g.gate.records.get('c_2')?.reason).toContain('write_external_requires_executor')
+    } finally {
+      await g.dispose()
+    }
+  })
+
+  it('WP366 executor 档：改流量、重发请求、录屏、导出到本机一律拒', async () => {
+    const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'executor' }))
+    try {
+      const calls: Record<string, unknown>[] = [
+        { action: 'debug', debugAction: 'rule_add', rule: '{}' },
+        { action: 'debug', debugAction: 'replay', id: 'r1', replay: '{"key":"k"}' },
+        { action: 'debug', debugAction: 'export', output: '/tmp/x.json' },
+        { action: 'video', videoAction: 'start' },
+        { action: 'extract', extractKind: 'table', output: '/tmp/rows.csv' },
+      ]
+      for (const [i, args] of calls.entries()) {
+        const id = `c_${i}`
+        const res = await g.gate.execute(id, 'bsk_inspect', args)
+        expect(res.isError, JSON.stringify(args)).toBe(true)
+        expect(g.gate.records.get(id)?.reason).toContain('write_external_requires_executor')
+      }
     } finally {
       await g.dispose()
     }
@@ -459,7 +682,7 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
   it('executor 档：看页面照样放行（不然连看一眼都做不到）', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'executor' }))
     try {
-      const res = await g.gate.execute('c_1', 'browser_inspect', { action: 'observe' })
+      const res = await g.gate.execute('c_1', 'bsk_inspect', { action: 'observe' })
       expect(res.isError).toBe(false)
     } finally {
       await g.dispose()
@@ -469,7 +692,7 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
   it('personal 档：写放行，并记一条 progress{browser_write}', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'personal' }))
     try {
-      const res = await g.gate.execute('c_1', 'browser_interact', {
+      const res = await g.gate.execute('c_1', 'bsk_interact', {
         action: 'fill',
         target: '@e3',
         value: 'hi',
@@ -478,7 +701,7 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
       expect(
         g.events.some(
           (e: RunEvent) =>
-            e.type === 'progress' && e.step === 'browser_write' && e.note === 'browser_interact',
+            e.type === 'progress' && e.step === 'browser_write' && e.note === 'bsk_interact',
         ),
       ).toBe(true)
     } finally {
@@ -490,7 +713,7 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
     for (const policy of ['personal', 'executor'] as const) {
       const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: policy }))
       try {
-        const res = await g.gate.execute('c_1', 'browser_assist', {
+        const res = await g.gate.execute('c_1', 'bsk_assist', {
           action: 'request-help',
           prompt: '请你登录一下',
         })
@@ -498,7 +721,7 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
         expect(
           g.events.some(
             (e: RunEvent) =>
-              e.type === 'progress' && e.step === 'browser_handoff' && e.note === 'browser_assist',
+              e.type === 'progress' && e.step === 'browser_handoff' && e.note === 'bsk_assist',
           ),
           policy,
         ).toBe(true)
@@ -511,9 +734,9 @@ describe('(e) 两档策略：公司端拒写、个人端放行并留痕', () => 
   it('不给 browser 时这六个名字不在 allowlist 里 → blocked（不是"没这个工具"）', async () => {
     const g = await gateOnBare(makeRequest())
     try {
-      const res = await g.gate.execute('c_1', 'browser_inspect', { action: 'observe' })
+      const res = await g.gate.execute('c_1', 'bsk_inspect', { action: 'observe' })
       expect(res.isError).toBe(true)
-      expect(g.gate.records.get('c_1')?.reason).toBe('not_in_allowlist: browser_inspect')
+      expect(g.gate.records.get('c_1')?.reason).toBe('not_in_allowlist: bsk_inspect')
     } finally {
       await g.dispose()
     }

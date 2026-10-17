@@ -62,9 +62,9 @@ function fakeNpmTgz(version: string): { tgz: Buffer; longRel: string } {
 describe('锁里的 npm', () => {
   const lock = readLock(LOCK)
 
-  it('登记了与 Node 22.23.2 官方配套的 npm 10.9.8，sha512 是 registry 那种写法', () => {
-    expect(lock.node.version).toBe('22.23.2')
-    expect(lock.npm.version).toBe('10.9.8')
+  it('登记了与 Node 22.23.3 官方配套的 npm 10.9.9，sha512 是 registry 那种写法', () => {
+    expect(lock.node.version).toBe('22.23.3')
+    expect(lock.npm.version).toBe('10.9.9')
     expect(lock.npm.integrity).toMatch(/^sha512-[A-Za-z0-9+/]{86}==$/)
     expect(lock.npm.tarball).toBe(npmTarballUrl(lock.npm.version))
     // 报告里写的体积就来自这几格
@@ -83,8 +83,8 @@ describe('锁里的 npm', () => {
 
   it('许可证说明里写上随包的 npm', () => {
     const versions = bundledVersions(join(here, '..'))
-    expect(versions.npm).toBe('10.9.8')
-    expect(specialSection([], versions)).toContain('npm v10.9.8（Artistic-2.0')
+    expect(versions.npm).toBe('10.9.9')
+    expect(specialSection([], versions)).toContain('npm v10.9.9（Artistic-2.0')
   })
 })
 
