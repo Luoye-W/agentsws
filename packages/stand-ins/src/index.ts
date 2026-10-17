@@ -70,6 +70,8 @@ export * from './runtime/research.js'
 export * from './runtime/schedule.js'
 // WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具
 export * from './runtime/setup-request.js'
+// WP387：浏览器建完 / 读完 Google 提醒后交代结果
+export * from './runtime/google-alerts.js'
 export * from './runtime/shop.js'
 export * from './runtime/skills.js'
 export * from './runtime/stub.js'

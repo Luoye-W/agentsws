@@ -84,6 +84,7 @@ import {
   SCHEDULE_UPDATE_TOOL,
   scheduleBranch,
 } from './schedule.js'
+import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import {
   renderSetupRequestAnswer,
   SETUP_REQUEST_TOOL_DEF_BY_NAME,
@@ -367,7 +368,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
-      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ?? {
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+      // WP387：浏览器建完 / 读完 Google 提醒后交代结果（只有信息监控、服务端接了才有）
+      GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
