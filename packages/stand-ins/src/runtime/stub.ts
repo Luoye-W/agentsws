@@ -143,6 +143,14 @@ import {
   WebUsageCounter,
   webResearchPlan,
 } from './web.js'
+import {
+  DRAFT_SERVICE_ORDER_TOOL,
+  FIND_SERVICE_TOOL,
+  findServiceDataOf,
+  renderWorkshopServiceAnswer,
+  WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
+  workshopServiceBranch,
+} from './workshop-service.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -367,7 +375,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
-      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ?? {
+      SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+      // WP390：工坊服务的两个工具（服务端接了才有）
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -810,6 +820,74 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP390（docs/105 §4）：**工坊服务**（演示用剧本）。点了「看看」（话里是「我想看看「X」（工坊服务）」）→ 查一次、
+       * 出价目单 / 需求单；话里有找人代办的意向 → 查一次（推荐卡由宿主挂在回答末尾），正常回答。
+       */
+      const svcStep = workshopServiceBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (svcStep !== undefined && options.executeTool !== undefined) {
+        const exec = options.executeTool
+        const call = async (tool: string, input: Record<string, unknown>) => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input })
+          const res = await exec({ name: tool, input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status === 'ok') readTools.push(tool)
+          return res
+        }
+        const intent = svcStep.kind === 'start' ? svcStep.name : svcStep.intent
+        const found = await call(FIND_SERVICE_TOOL, { intent })
+        const data = found.status === 'ok' ? findServiceDataOf(found.data) : undefined
+        let answer: string
+        if (found.status !== 'ok')
+          answer = renderWorkshopServiceAnswer({ failed: found.reason ?? '' })
+        else if (svcStep.kind === 'start' && data?.services[0] !== undefined) {
+          const drafted = await call(DRAFT_SERVICE_ORDER_TOOL, { service_id: data.services[0].id })
+          const d = (drafted.data ?? {}) as { ok?: boolean; form?: string; message?: string }
+          answer =
+            drafted.status === 'ok'
+              ? renderWorkshopServiceAnswer({
+                  drafted: {
+                    ok: d.ok === true,
+                    ...(d.form === 'service_menu' || d.form === 'service_requirements'
+                      ? { form: d.form }
+                      : {}),
+                    message: d.message ?? '',
+                  },
+                })
+              : renderWorkshopServiceAnswer({ failed: drafted.reason ?? '' })
+        } else answer = renderWorkshopServiceAnswer(data === undefined ? {} : { found: data })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*

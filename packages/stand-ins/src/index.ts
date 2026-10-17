@@ -78,6 +78,7 @@ export * from './runtime/theme.js'
 export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'
 export * from './runtime/web.js'
+export * from './runtime/workshop-service.js'
 
 export const DEFAULT_START: Iso8601 = '2026-09-07T01:00:00.000Z'
 

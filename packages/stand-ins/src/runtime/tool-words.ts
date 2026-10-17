@@ -86,6 +86,9 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   shop_save_page: '页面改动卡',
   shop_save_menu: '菜单改动卡',
   shop_create_discount: '折扣码卡',
+  // WP390：工坊服务
+  find_service: '工坊服务目录',
+  draft_service_order: '工坊服务的卡',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */
