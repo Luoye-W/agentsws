@@ -48,17 +48,17 @@ describe('哪种执行器', () => {
     expect(JSON.stringify(view)).not.toContain('token')
   })
 
-  it('BrowserSkill：六个裸名工具，URL 在 `action` 那一支上', () => {
+  it('BrowserSkill：六个 bsk_* 裸名工具，URL 在 `action` 那一支上', () => {
     const view = summarizeRunBrowser('run_1', [
       ev('tool.call', {
         call_id: 'c1',
-        tool: 'browser_page',
+        tool: 'bsk_page',
         input: { action: 'navigate', url: 'https://admin.shopify.com/store/x/themes' },
       }),
     ])
     expect(view.executor).toBe('browserskill')
     expect(view.current_host).toBe('admin.shopify.com')
-    expect(view.last_navigation?.tool).toBe('browser_page')
+    expect(view.last_navigation?.tool).toBe('bsk_page')
   })
 
   it('一个浏览器工具都没调过：`none`，而且别的工具的拒绝不进这个面板', () => {
@@ -77,7 +77,7 @@ describe('被拦下来的那一次', () => {
     const view = summarizeRunBrowser('run_1', [
       ev('tool.call', {
         call_id: 'c1',
-        tool: 'browser_page',
+        tool: 'bsk_page',
         input: { action: 'navigate', url: 'https://example.com/' },
       }),
       ev('tool.result', {
@@ -87,7 +87,7 @@ describe('被拦下来的那一次', () => {
       }),
     ])
     expect(view.blocked).toBe(1)
-    expect(view.last_blocked?.tool).toBe('browser_page')
+    expect(view.last_blocked?.tool).toBe('bsk_page')
     expect(view.last_blocked?.reason).toContain('browser_host_not_allowed')
   })
 })
@@ -95,19 +95,19 @@ describe('被拦下来的那一次', () => {
 describe('等人接管', () => {
   it('`progress{browser_handoff}` 之后就是"等你接管"', () => {
     const view = summarizeRunBrowser('run_1', [
-      ev('tool.call', { call_id: 'c1', tool: 'browser_assist', input: { action: 'request-help' } }),
-      ev('progress', { step: 'browser_handoff', note: 'browser_assist' }),
+      ev('tool.call', { call_id: 'c1', tool: 'bsk_assist', input: { action: 'request-help' } }),
+      ev('progress', { step: 'browser_handoff', note: 'bsk_assist' }),
     ])
-    expect(view.awaiting_handoff?.note).toBe('browser_assist')
+    expect(view.awaiting_handoff?.note).toBe('bsk_assist')
     expect(view.running).toBe(true)
   })
 
   it('人接完管、它又动手了：这个状态就该消失', () => {
     const view = summarizeRunBrowser('run_1', [
-      ev('progress', { step: 'browser_handoff', note: 'browser_assist' }),
+      ev('progress', { step: 'browser_handoff', note: 'bsk_assist' }),
       ev('tool.call', {
         call_id: 'c2',
-        tool: 'browser_page',
+        tool: 'bsk_page',
         input: { action: 'navigate', url: 'https://admin.shopify.com/' },
       }),
     ])
