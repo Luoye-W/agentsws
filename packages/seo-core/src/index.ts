@@ -20,6 +20,9 @@
  *
  * GEO 的思路参考过 GEOFlow（AGPL-3.0）的公开 README；**代码一行没搬**，全部自己写。
  */
+
+// WP396（docs/106 §13）：自家 Amazon Listing 体检的规则表与判法
+export * from './amazon-listing-check.js'
 export * from './attribution.js'
 export * from './claim-rules.js'
 export * from './daily.js'
