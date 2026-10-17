@@ -473,7 +473,8 @@ export function ModelForm({
         />
       </Field>
 
-      {imageOnly ? null : (
+      {/* WP374：Anthropic 兼容口没有向量接口（Messages 协议只有对话），不出这一格 */}
+      {imageOnly || template.kind === 'anthropic_compatible' ? null : (
         <Field
           id={`${prefix}-embedding_model`}
           label={t('models.field.embedding')}

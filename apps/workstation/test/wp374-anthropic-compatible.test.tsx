@@ -49,6 +49,8 @@ describe('WP374 Anthropic 兼容那张卡', () => {
         }}
       />,
     )
+    // Anthropic 兼容口没有向量接口：不出「向量模型」那一格
+    expect(document.querySelector('input[name="embedding_model"]')).toBeNull()
     fireEvent.click(screen.getByTestId('model-discover'))
     await waitFor(() => expect(probes).toHaveLength(1))
     expect(probes[0]).toMatchObject({
