@@ -33,6 +33,7 @@ import type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,
   KolSearchHit,
@@ -338,6 +339,11 @@ export interface KolServiceOptions {
    * 一句话介绍（认你卖的东西是哪一大类，打分用）、目标市场（打分的地区条件）。不给 = 都没有。
    */
   brandProfile?(): { postal_address?: string; one_liner?: string; markets?: readonly string[] }
+  /**
+   * WP416：有没有能发信的邮箱。没有时真红人的开发信照样起草，但卡上照实说「批了也发不出去」、
+   * 一律要人点（不自动批），回执里带 `needs_mailbox` 让对话里就地出连接卡。不给 = 当连着（老装配）。
+   */
+  mailConnected?(): boolean
 }
 
 export interface KolServiceAssembly {
@@ -375,6 +381,12 @@ const OUTREACH_ACTION = 'stage_outreach'
 
 /** 开发信的日配额默认值（职责 yml 的 `max_outreach_per_day`）。 */
 export const DEFAULT_OUTREACH_CAP = 30
+
+/** WP416：存在品牌设置里的起草默认值。 */
+interface SavedOutreachDefaults {
+  brand_pitch?: string
+  product?: string
+}
 
 /** 公共库那一行的主页地址（库里只有 渠道 + handle，链接是拼出来的）。 */
 function urlOfPublicRow(channel: KolChannel, handle: string): string {
@@ -420,7 +432,19 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const { store, secrets, clock, approvals, ledger, appendEvent } = options
   const workspace_id = options.workspace_id
   /** 人点过"不是同一个人"的那几对，进程内记着（重启后会再问一次——建议本来就是算出来的）。 */
+  // WP416（自查 kol B「同一人合并卡」）：点过「不是同一个人」的落盘（以前只在内存里，重启又冒出来）
   const rejectedMerges = new Set<string>()
+  let mergesLoaded = false
+  /** 头一次用到时从库里读（库替身可能没有设置口：读不到就当没有）。 */
+  const loadRejectedMerges = (): void => {
+    if (mergesLoaded) return
+    mergesLoaded = true
+    try {
+      for (const id of store.setting<string[]>('merge_rejected') ?? []) rejectedMerges.add(id)
+    } catch {
+      // 读不到就从空的开始
+    }
+  }
 
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -703,12 +727,42 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const ownerOfChannel = (channel: KolChannel): Assignment | undefined =>
     options.holdersOf(roleIdOfChannel(channel))[0]
 
+  const savedDefaults = (): SavedOutreachDefaults => {
+    try {
+      return store.setting<SavedOutreachDefaults>('outreach_defaults') ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  /** WP416（决策 531）：起草那两格的默认值——存过的 → 品牌档案 → 空。 */
+  const outreachDefaultsOf = (): KolOutreachDefaultsView => {
+    const saved = savedDefaults()
+    const profile = options.brandProfile?.()
+    const profilePitch = profile?.one_liner?.trim() ?? ''
+    const savedPitch = saved.brand_pitch?.trim() ?? ''
+    const brand_pitch = savedPitch !== '' ? savedPitch : profilePitch
+    return {
+      brand_pitch,
+      product: saved.product?.trim() ?? '',
+      source:
+        savedPitch !== '' || (saved.product ?? '') !== ''
+          ? 'saved'
+          : profilePitch !== ''
+            ? 'brand_profile'
+            : 'none',
+      mailbox_connected: options.mailConnected?.() ?? true,
+    }
+  }
+
   /** 起草并提一封开发信。`step` 不给就按序列算下一封。 */
   const stageOutreach = async (input: {
     actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string }
     creator: Creator
     channel: KolChannel
     step: OutreachStep
+    /** WP416：「一句话介绍我们」是哪来的（品牌档案 / AI 写的），卡上说一句。 */
+    pitch_note?: string
     vars: {
       product: string
       reason: string
@@ -785,6 +839,32 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
      * ——用户可以一边演练一边干真活，那边的开发信不该因此多一道手续。
      */
     const sandboxDrill = input.creator.sandbox === true
+    // WP416：真红人、可这台机器上没有能发信的邮箱——卡照样出（信先写好），但照实说、不许自动批
+    const noMailbox = !sandboxDrill && options.mailConnected?.() === false
+    /*
+     * 卡面上要人先看一眼的几句（WP416 自查 kol U5：以前写在 notes 里、卡面看不见）——同时进 notes
+     * 与 `after.heads_up`（卡面一行一句）。
+     */
+    const headsUp: string[] = [
+      ...(noMailbox
+        ? ['还没连发信邮箱：现在批了也发不出去。先在下面那张连接卡上连好邮箱，再点「发送」。']
+        : []),
+      ...(input.pitch_note === undefined ? [] : [input.pitch_note]),
+      /*
+       * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
+       * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
+       */
+      ...(input.vars.language === 'en' &&
+      hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
+        ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
+        : []),
+      // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
+      ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
+        ? [
+            '公司档案里还没填公司地址：英文开发信页脚要用它（法规要求）。去「设置 → 通用 → 公司档案」填一下。',
+          ]
+        : []),
+    ]
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -806,27 +886,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         suppression_checked: true,
         // 跟进那一封要用首封同一组变量——跟进信提到的产品必须和首封是同一个
         vars: input.vars,
+        ...(headsUp.length === 0 ? {} : { heads_up: headsUp }),
+        creator_name: input.creator.display_name,
       },
-      notes: [
-        `给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`,
-        /*
-         * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
-         * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
-         */
-        ...(input.vars.language === 'en' &&
-        hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
-          ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
-          : []),
-        // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
-        ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
-          ? [
-              '公司档案里还没填公司地址：英文开发信页脚要用它（法规要求）。去「设置 → 通用 → 公司档案」填一下。',
-            ]
-          : []),
-      ],
+      notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`, ...headsUp],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
-      level: sandboxDrill ? 'L1' : level,
+      level: sandboxDrill || noMailbox ? 'L1' : level,
       provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
       approval: {
         title: `开发信：${input.creator.display_name}（${SEQUENCE_TITLE[draft.step]}）`,
@@ -861,14 +927,17 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       approval_item_id: outcome.approval.id,
       auto_approved: outcome.approval.automation.auto_approved,
     })
-    // 首封提上去 = 这条合作进了"已建联"（序列跟进靠这一格找人）
+    /*
+     * WP416（自查 kol C2）：提卡**不再**把合作推到「已建联」——信真发出去（执行器读回之后）才推。
+     * 以前一提卡就改阶段，于是没发出去的信也排上了第 3、7 天的跟进。起草仍算一次动静。
+     */
     const collab = store
       .collaborations({ channel: input.channel })
       .find((c) => c.creator_id === input.creator.id && c.stage === 'sourced')
-    // WP117b（66 复测 #18）：合作清单上要显示"最近一次往来"，起草也算一次动静
     if (draft.step === 'first' && collab !== undefined)
-      store.saveCollaboration({ ...collab, stage: 'contacted', last_activity_at: clock.now() })
+      store.saveCollaboration({ ...collab, last_activity_at: clock.now() })
     return {
+      ...(noMailbox ? { needs_mailbox: true } : {}),
       step: draft.step,
       subject: draft.subject,
       body: draft.body,
@@ -1002,7 +1071,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     followers: number | undefined,
     filter: { min_followers?: number | undefined; max_followers?: number | undefined },
   ): boolean => {
-    if (followers === undefined) return true
+    // WP416（自查 kol A2）：给了粉丝区间、这个人粉丝数却不知道——不算在区间里（以前恒为真，区间形同虚设）
+    if (followers === undefined)
+      return filter.min_followers === undefined && filter.max_followers === undefined
     if (filter.min_followers !== undefined && followers < filter.min_followers) return false
     if (filter.max_followers !== undefined && followers > filter.max_followers) return false
     return true
@@ -1034,7 +1105,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     source: 'channel',
     rows: [],
     reason: 'no_data_source',
-    message: `现在搜不了 ${channelLabel(channel)} 上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。`,
+    message:
+      channel === 'youtube'
+        ? '现在搜不了 YouTube 上的红人：还没接任何数据来源。在连接页填你自己的 YouTube 数据 key（免费，不扣积分），或者关联 Agents 工坊账号（按次扣积分），任选其一就能搜。'
+        : `现在搜不了 ${channelLabel(channel)} 上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜；也可以在浏览器里打开 ${channelLabel(channel)}，用插件把人收进来。`,
     entry_points: [
       {
         id: 'link_account',
@@ -1178,6 +1252,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               note: `改用工坊官方数据接口（约 ${searchPrice.credits} 积分一次）。`,
             }
       let lastWorkshopFailure: KolSearchResult | undefined
+      let handleOnly: string | undefined
 
       for (const level of effective) {
         // ① 用户自己的官方平台 key（本地直连、不扣积分）
@@ -1192,6 +1267,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             // 适配器在但没填 key（`not_connected`）＝这一级"没配"，落下一级；
             // 真报错（配额、上游故障…）才停：不静默回退到花钱的那一级
             if (out.reason === 'not_connected') continue
+            // WP416：这家只能按账号名查、给的是关键词——这一级做不了这件事，落下一级（公共库那一级能按关键词找）
+            if (out.reason === 'handle_only') {
+              handleOnly = out.message
+              continue
+            }
             emit('kol.search_failed', actor.person_id, { channel, reason: out.reason })
             return {
               ok: false,
@@ -1278,6 +1358,15 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         }
       }
 
+      // WP416：自己的 key 只能按账号名查、别的级又没答上来——照实说（调用方退回本地库 / 指去插件）
+      if (handleOnly !== undefined)
+        return {
+          ok: false,
+          source: 'channel',
+          rows: [],
+          reason: 'handle_only',
+          message: handleOnly,
+        }
       // ④ 都没有（或都没配）：人话 + 两个入口
       const base = nothingConfigured(channel)
       // 压根没关联：那一级等于没配，两句话就是 base（「去关联」是第一个按钮）
@@ -1463,12 +1552,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       })
       if (!outcome.ok) return { staged: false, message: outcome.message } satisfies KolStagedView
       /*
-       * **卡批了才落库**是这条路的正确行为，可是这一版没有"批了自动落库"的施行器
-       * （执行器只认连接器上的写动作）。折中并且照实说：记录当场建出来，
-       * 阶段钉在 `sourced`（还没找上人，没有任何对外动作），预算跟着卡走——
-       * 也就是说库里这一行代表"我们打算谈"，而"谈成多少钱"仍然由卡决定。
+       * WP416（自查 kol B「建合作卡」）：这一行当场建出来、但标「等你点头」——点「同意」由执行器
+       * （`kol-mail.ts`）清掉标记并读回，点「不要」这一行删掉。自动批了的（执行器已经落过库）不再标。
        */
-      const row: Collaboration = {
+      const auto = outcome.approval.automation.auto_approved
+      const existing = store.collaboration(target.id)
+      const row: Collaboration = existing ?? {
         id: target.id,
         creator_id: creator.id,
         channel: input.channel,
@@ -1476,8 +1565,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         currency,
         ...(input.budget === undefined ? {} : { budget: input.budget }),
         ...(input.campaign_id === undefined ? {} : { campaign_id: input.campaign_id }),
+        ...(auto ? {} : { awaiting_approval: true }),
       }
-      store.saveCollaboration(row)
+      if (existing === undefined) store.saveCollaboration(row)
       emit('kol.collaboration_staged', actor.person_id, {
         collaboration_id: row.id,
         creator_id: creator.id,
@@ -1665,7 +1755,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
         approval: {
           title: `寄样：${creator.display_name}（${cost} ${currency}）`,
-          summary: `给 ${creator.display_name} 寄一份样品，成本 ${cost} ${currency}。批了才记账，合作进「已寄样」。`,
+          // WP416（自查 kol B「寄样」）：照实说这一步只记录，不替你下单发货
+          summary: `给 ${creator.display_name} 寄一份样品，成本 ${cost} ${currency}。批了只记一笔账、合作进「已寄样」——不会替你下单发货，货要你自己寄。`,
           recipients: [{ person: actor.person_id, via: 'owner' }],
           proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
           rule: 'owner',
@@ -2053,15 +2144,63 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       } satisfies KolImportView
     },
 
+    outreachDefaults() {
+      return outreachDefaultsOf()
+    },
+
+    saveOutreachDefaults(actor, input) {
+      const prev = savedDefaults()
+      const next: SavedOutreachDefaults = {
+        ...prev,
+        ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch.trim() }),
+        ...(input.product === undefined ? {} : { product: input.product.trim() }),
+      }
+      store.saveSetting('outreach_defaults', next, clock.now())
+      emit('kol.outreach_defaults_saved', actor.person_id, {
+        brand_pitch: input.brand_pitch !== undefined,
+        product: input.product !== undefined,
+      })
+      return outreachDefaultsOf()
+    },
+
     async outreach(actor, input) {
       const creator = creatorOr404(input.creator_id)
       const account = store.accounts({ creator_id: creator.id, channel: input.channel })[0]
       const language = outreachLanguageOf(account?.language)
+      /*
+       * WP416（决策 531，自查 kol A1）：「一句话介绍我们」不给就**从品牌这边补**——先取你存过的，
+       * 再取品牌档案里的一句话介绍。都没有才照旧说缺（AI 起草时会自己写一句传进来，卡上标出来让你看）。
+       */
+      const defaults = outreachDefaultsOf()
+      const given = input.brand_pitch?.trim()
+      const brand_pitch =
+        given !== undefined && given !== ''
+          ? given
+          : defaults.brand_pitch === ''
+            ? undefined
+            : defaults.brand_pitch
+      const pitch_note =
+        given !== undefined && given !== ''
+          ? input.pitch_by_ai === true
+            ? '「一句话介绍我们」是 AI 按品牌情况写的（品牌档案里还没有这一句）；不对就点「改一下」。'
+            : undefined
+          : brand_pitch === undefined
+            ? undefined
+            : defaults.source === 'brand_profile'
+              ? '「一句话介绍我们」取自品牌档案；不对就点「改一下」。'
+              : undefined
+      // WP416（自查 kol U-x5）：英文信默认不署中文名——取不到英文名就用「品牌名 + team」
+      const person = input.sender_name ?? (await options.personName(actor.person_id))
+      const sender_name =
+        input.sender_name === undefined && language === 'en' && hasCjk(person)
+          ? `The ${options.brandName()} team`
+          : person
       return stageOutreach({
         actor,
         creator,
         channel: input.channel,
         step: input.step ?? 'first',
+        ...(pitch_note === undefined ? {} : { pitch_note }),
         vars: {
           product: input.product,
           /*
@@ -2079,16 +2218,31 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
            * 最坏的情况是替他向红人说了一句不实的话。缺了就照 `draftOutreach`
            * 的规矩走：不起草，把缺的那一格说出来。
            */
-          ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch }),
-          sender_name: input.sender_name ?? (await options.personName(actor.person_id)),
+          ...(brand_pitch === undefined ? {} : { brand_pitch }),
+          sender_name,
         },
       })
     },
 
     async planCampaign(actor, input) {
+      /*
+       * WP416：AI 给了名单就排这几个人；预算没给（0）时按这条职责的合作预算上限 × 人数起一个数
+       * （卡上照样能改）——以前预算缺省 0 被判为「缺口」，这张卡永远出不来。
+       */
+      const named = input.creator_ids === undefined ? undefined : new Set(input.creator_ids)
+      const cap = (() => {
+        const mine = assignmentForChannel(actor.person_id, input.channels[0] ?? 'youtube')
+        if (mine === undefined) return undefined
+        const c = actionOf(mine.id, COLLAB_ACTION).mandate.caps.max_collab_budget
+        return typeof c === 'number' && c > 0 ? c : undefined
+      })()
+      const budget =
+        input.budget > 0 || named === undefined || cap === undefined
+          ? input.budget
+          : cap * named.size
       const brief: CampaignBrief = {
         goal: input.goal,
-        budget: input.budget,
+        budget,
         currency: input.currency ?? 'USD',
         channels: input.channels,
         headcount: input.headcount,
@@ -2109,7 +2263,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               },
             }),
       }
-      const plan = planCampaign(brief, store.accounts(), clock.now())
+      const plan = planCampaign(
+        brief,
+        store.accounts().filter((a) => named === undefined || named.has(a.creator_id)),
+        clock.now(),
+      )
       const campaign_id = nextId('cmp')
       const existing = store.collaborations()
       const by_channel: KolCampaignGroup[] = plan.by_channel.map((group) => {
@@ -2431,6 +2589,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     async mergeSuggestions(actor) {
       const names = new Map(store.creators().map((c) => [c.id, c.display_name]))
       const rows: KolMergeSuggestionView[] = []
+      loadRejectedMerges()
       for (const s of suggestMerges(profilesOf())) {
         const id = mergeSuggestionId(s.keep_id, s.merge_id)
         if (rejectedMerges.has(id)) continue
@@ -2461,6 +2620,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             merge_id: s.merge_id,
             reasons: s.reasons,
             confidence: s.confidence,
+            /*
+             * WP416（自查 kol B「同一人合并卡」）：选项也放进载荷——卡片投影只认载荷里的 options，
+             * 以前只放在卡本身上，卡面成了一个是非题，选了也没效果。
+             */
+            options: [
+              { id: 'merge', label: '是同一个人，合' },
+              { id: 'keep_apart', label: '不是同一个人' },
+            ],
           },
           evidence: {
             source_events: [],
@@ -2519,7 +2686,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     rejectMerge(actor, id) {
       if (parseMergeSuggestionId(id) === undefined)
         throw new ApiError('invalid_input', '这不是一条合并建议的 id')
+      loadRejectedMerges()
       rejectedMerges.add(id)
+      try {
+        store.saveSetting('merge_rejected', [...rejectedMerges], clock.now())
+      } catch {
+        // 落不了盘：这一次进程里照样不再提
+      }
       emit('kol.merge_rejected', actor.person_id, { suggestion_id: id })
       return { id, rejected: true as const }
     },
@@ -2568,17 +2741,47 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         out.skipped.push({ collaboration_id: collab.id, reason: '这个人名下没有联系方式' })
         continue
       }
-      const sent = changes
-        .filter((c) => c.target.type === 'creator_contact' && c.target.id === contact.id)
-        .map((c) => ({
-          step: ((c.after as { step?: OutreachStep }).step ?? 'first') as OutreachStep,
-          at: c.created_at,
-          vars: (c.after as { vars?: Record<string, string> }).vars,
-        }))
+      /*
+       * WP416（自查 kol C2）：**只算真发出去的那几封**——往来记录里我们发的（执行器读回之后才记）。
+       * 以前按账本里提过的卡算：被拒掉的、没连邮箱发不出去的首封都算「已发」，于是第 3、7 天
+       * 去跟进一封对方从没收到的信。回过信（往来里有他发来的）就不再跟。
+       */
+      const thread = store.exchanges({ creator_id: collab.creator_id })
+      const byId = new Map(changes.map((c) => [c.id, c]))
+      const sent = thread
+        .filter((x) => x.direction === 'out' && x.channel === collab.channel)
+        .map((x) => {
+          const c = x.change_id === undefined ? undefined : byId.get(x.change_id)
+          return {
+            step: (x.step ??
+              (c?.after as { step?: OutreachStep } | undefined)?.step ??
+              'first') as OutreachStep,
+            at: x.at,
+            vars: (c?.after as { vars?: Record<string, string> } | undefined)?.vars,
+          }
+        })
         .sort((a, b) => a.at.localeCompare(b.at))
+      if (sent.length === 0) {
+        out.skipped.push({ collaboration_id: collab.id, reason: '首封还没真发出去，不排跟进' })
+        continue
+      }
+      const firstAt = sent[0]?.at ?? ''
+      const replied = thread.some((x) => x.direction === 'in' && x.at >= firstAt)
+      // 上一封跟进还在等人批（或在发）：不重复提
+      const pending = changes.some(
+        (c) =>
+          c.target.type === 'creator_contact' &&
+          c.target.id === contact.id &&
+          (c.status === 'staged' || c.status === 'approved' || c.status === 'applying') &&
+          !thread.some((x) => x.change_id === c.id),
+      )
+      if (pending) {
+        out.skipped.push({ collaboration_id: collab.id, reason: '上一封还在等你批' })
+        continue
+      }
       const next = nextInSequence({
         sent: sent.map(({ step, at }) => ({ step, at })),
-        replied: false,
+        replied,
         contact: contact.value_ref,
         suppressed,
       })

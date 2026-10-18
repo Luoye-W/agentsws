@@ -224,7 +224,8 @@ function MiniTile({ block, range, id }: { block: Block; range: RangeName; id: st
   const delta = payload?.delta_pct
   return (
     <div className="flex min-w-0 flex-col gap-1" data-testid="data-tile" data-block-id={block.id}>
-      <span className="truncate text-xs text-ws-muted-fg">{block.title}</span>
+      {/* WP416（自查 kol U2）：窄栏里标签整句换行显示，不截成「在…」「等…」 */}
+      <span className="line-clamp-2 text-xs leading-snug text-ws-muted-fg">{block.title}</span>
       {query.isPending ? (
         <Skeleton className="h-6 w-16" />
       ) : (
@@ -237,6 +238,7 @@ function MiniTile({ block, range, id }: { block: Block; range: RangeName; id: st
                   payload.currency === undefined ? 'count' : 'money',
                   lang,
                   payload.currency,
+                  true,
                 )}
           </span>
           {delta === undefined || !Number.isFinite(delta) || delta === 0 ? null : (
@@ -303,7 +305,7 @@ function DutyRow({
       data-testid="data-row"
       data-role={duty.role_id}
     >
-      <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-[10rem_minmax(0,1fr)]">
+      <div className="@container grid grid-cols-1 items-start gap-3 md:grid-cols-[10rem_minmax(0,1fr)]">
         <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
           <DutyIcon role_id={duty.role_id} size={15} />
           <span className="truncate">{duty.role_name}</span>
@@ -311,7 +313,8 @@ function DutyRow({
         {view.isPending ? (
           <Skeleton className="h-10 w-full" />
         ) : tiles.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          // WP416（自查 kol U2）：按这一块自己的宽度排（右栏窄时两列），不按整个窗口宽
+          <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
             {tiles.slice(0, MAX_TILES).map((b) => (
               <MiniTile key={b.id} block={b} range={range} id={duty.assignment_id} />
             ))}

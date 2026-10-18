@@ -323,6 +323,24 @@ export interface KolOutreachView extends KolStagedView {
   missing_vars: string[]
   /** 今天还能发几封（职责 yml 的 `max_outreach_per_day`）。 */
   quota: { cap: number; sent_today: number; remaining: number; allowed: boolean }
+  /**
+   * WP416：这台机器上还没有能发信的邮箱——卡出了，但批了也发不出去（先连邮箱）。
+   * 对话里据此就地出一张连接卡；面板上据此在起草区下面出「先连邮箱」。
+   */
+  needs_mailbox?: boolean
+}
+
+/**
+ * WP416（决策 531）：起草开发信那两格的默认值——「一句话介绍我们」与「想聊的产品」。
+ * 先取你存过的，没存过就从品牌档案里拿；都没有就是空的（AI 起草时自己写一句、卡上标出来让你看）。
+ */
+export interface KolOutreachDefaultsView {
+  brand_pitch: string
+  product: string
+  /** 这两格是哪来的：`saved` = 你存过的；`brand_profile` = 品牌档案；`none` = 都没有。 */
+  source: 'saved' | 'brand_profile' | 'none'
+  /** 这台机器上有没有能发信的邮箱（没有：起草区下面提示先连）。 */
+  mailbox_connected: boolean
 }
 
 /** campaign 清单里的一条。 */
@@ -495,6 +513,11 @@ export interface KolCampaignBrief {
   currency?: string | undefined
   channels: KolChannel[]
   headcount: number
+  /**
+   * WP416（自查 kol A「add_to_campaign」）：就排这几个人（AI 已经挑好的）——不再只拿来当人数、系统重挑。
+   * 不给 = 按条件从库里挑（老行为）。HTTP 不收这一格。
+   */
+  creator_ids?: string[] | undefined
   /** 打分条件（类目 / 语言 / 地区 / 粉丝带）。 */
   criteria?:
     | {
@@ -659,8 +682,17 @@ export interface KolPort {
       reason?: string | undefined
       brand_pitch?: string | undefined
       sender_name?: string | undefined
+      /** WP416：`brand_pitch` 是 AI 写的（品牌档案里没有）——卡上标出来让人确认。HTTP 不收这一格。 */
+      pitch_by_ai?: boolean | undefined
     },
   ): MaybePromise<KolOutreachView>
+  /** WP416（决策 531）：起草那两格的默认值（存过的 → 品牌档案 → 空）。可选：老装配没有。 */
+  outreachDefaults?(actor: KolActor): MaybePromise<KolOutreachDefaultsView>
+  /** WP416：把起草那两格存成这个品牌的设置（下次每个红人都预填它）。 */
+  saveOutreachDefaults?(
+    actor: KolActor,
+    input: { brand_pitch?: string | undefined; product?: string | undefined },
+  ): MaybePromise<KolOutreachDefaultsView>
 
   /**
    * 付费 reveal 一个公共库里的联系方式（49 M4 `data.kol.lookup`）。
@@ -917,6 +949,11 @@ const OutreachBody = z.object({
   reason: z.string().max(500).optional(),
   brand_pitch: z.string().max(500).optional(),
   sender_name: z.string().max(100).optional(),
+})
+
+const OutreachDefaultsBody = z.object({
+  brand_pitch: z.string().max(500).optional(),
+  product: z.string().max(200).optional(),
 })
 
 const RevealBody = z.object({
@@ -1542,6 +1579,46 @@ export function kolRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).outreach(actorOf(c), await body(c, OutreachBody)), 201),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/outreach/defaults',
+        operationId: 'getKolOutreachDefaults',
+        summary:
+          '起草开发信那两格的默认值（「一句话介绍我们」「想聊的产品」）：先取存过的，没有就从品牌档案拿（决策 531）；顺带说有没有能发信的邮箱',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTACT,
+        returns: 'KolOutreachDefaultsView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).outreachDefaults
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有开发信默认值这一项。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/kol/outreach/defaults',
+        operationId: 'saveKolOutreachDefaults',
+        summary: '把起草开发信那两格存成这个品牌的设置（以后每个红人都预填它，可改）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTACT,
+        body: OutreachDefaultsBody,
+        returns: 'KolOutreachDefaultsView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).saveOutreachDefaults
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有开发信默认值这一项。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, OutreachDefaultsBody)))
+      },
     ),
     route(
       {

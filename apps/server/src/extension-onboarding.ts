@@ -57,6 +57,8 @@ export interface ExtensionOnboardingOptions {
     matter_id: string
     why: string
   }): Promise<{ card_id: string; reused: boolean } | undefined>
+  /** WP416：「要你处理」里还开着的那张装插件连接卡（没有回 `undefined`）。不给 = 不查。 */
+  openConnectCard?(workspace_id: string): Promise<string | undefined>
   /** 事项时间线上说一句（不在乎成没成）。 */
   note(workspace_id: string, matter_id: string, text: string): void | Promise<void>
   /** 记一笔「主动带过」（只有 id）。 */
@@ -129,7 +131,11 @@ export function createExtensionOnboarding(
       const t = await options.planTarget(ws, target).catch(() => undefined)
       if (t !== undefined) plans.push({ target, name: t.name, satisfied: t.satisfied })
     }
+    const open = options.paired(ws)
+      ? undefined
+      : await options.openConnectCard?.(ws).catch(() => undefined)
     return {
+      ...(open === undefined ? {} : { connect_card_id: open }),
       needed: true,
       uses: need.uses,
       roles: defs

@@ -190,6 +190,9 @@ export function setupNeedOf(
   }
   if (res.status === 'ok' && data?.queued_reason === 'company_address')
     return { kind: 'setup', target: 'company.address' }
+  // WP416：红人开发信卡出了、但没有能发信的邮箱 → 连接卡接一只（同 B2B 那一张）
+  if (res.status === 'ok' && data?.needs_mailbox === true)
+    return { kind: 'connect', need: MAILBOX_NEED }
   // WP334（决策 726）：一只邮箱都没有（有邮箱时出的是「用哪只发」选择卡，不归这里）→ 连接卡接一只
   if (
     res.status === 'ok' &&

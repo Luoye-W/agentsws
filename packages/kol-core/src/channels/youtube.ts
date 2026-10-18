@@ -37,10 +37,20 @@ interface RawChannel {
   about_url?: string
 }
 
+/**
+ * WP416（自查 kol A2）：频道主页链接。有自定义名（`customUrl`，形如 `@name`）用 `/@name`；
+ * 没有就用 `/channel/<UC…>`——以前拼成 `/@UC…`，那是打不开的链接。
+ */
+export function youtubeChannelUrl(raw: { handle?: string; id?: string }): string {
+  const handle = raw.handle?.replace(/^@/, '')
+  if (handle !== undefined && handle !== '') return `https://www.youtube.com/@${handle}`
+  return `https://www.youtube.com/channel/${raw.id ?? ''}`
+}
+
 const hitOf = (raw: RawChannel): ChannelSearchHit => ({
   channel: CHANNEL,
   handle: (raw.handle ?? raw.id ?? '').replace(/^@/, '').toLowerCase(),
-  url: `https://www.youtube.com/@${(raw.handle ?? raw.id ?? '').replace(/^@/, '')}`,
+  url: youtubeChannelUrl(raw),
   display_name: raw.title ?? raw.handle ?? raw.id ?? '',
   ...(raw.subscriber_count === undefined ? {} : { followers: raw.subscriber_count }),
   ...(raw.engagement_rate === undefined ? {} : { engagement_rate: raw.engagement_rate }),

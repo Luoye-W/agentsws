@@ -18,6 +18,12 @@ import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
 import {
+  isKolOutreachPayload,
+  isKolReviewPayload,
+  KolOutreachBody,
+  KolReviewBody,
+} from '@/components/kol/kol-card-bodies'
+import {
   GoogleAlertChangeBody,
   isGoogleAlertChangePayload,
 } from '@/components/pr/google-alert-change-body'
@@ -336,6 +342,8 @@ export function DeckCardBody({
         // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
         if (isGoogleAlertChangePayload(payload))
           return <GoogleAlertChangeBody card={card} payload={payload} />
+        // WP416：红人验收结论——一句话，不露字段名
+        if (isKolReviewPayload(payload)) return <KolReviewBody payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />
@@ -662,6 +670,8 @@ export function DeckCardBody({
       default:
         // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
         if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
+        // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
+        if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (
           <div data-testid="deck-layout-outbound">
             <OutboundBody card={card} mode={mode} />

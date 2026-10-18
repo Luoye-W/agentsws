@@ -389,15 +389,22 @@ export function PositionPage(): React.ReactNode {
                 onOpen={(card) => {
                   navigate(matterUrl(card))
                 }}
-                title={
-                  <h3 className="flex min-w-0 items-center gap-2" data-testid="position-deck-title">
-                    <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
-                    {pending === 0 ? null : (
-                      <span className="ws-num text-xs text-ws-muted-fg">{pending}</span>
-                    )}
-                    <Hint text={t('pos2.deck.hint')} />
-                  </h3>
-                }
+                title={(total) => {
+                  // WP416（自查 kol U7）：数跟下面这副牌走（还没取到时先用岗位视图那个数）
+                  const n = total ?? pending
+                  return (
+                    <h3
+                      className="flex min-w-0 items-center gap-2"
+                      data-testid="position-deck-title"
+                    >
+                      <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
+                      {n === 0 ? null : (
+                        <span className="ws-num text-xs text-ws-muted-fg">{n}</span>
+                      )}
+                      <Hint text={t('pos2.deck.hint')} />
+                    </h3>
+                  )
+                }}
               />
             )}
           </div>

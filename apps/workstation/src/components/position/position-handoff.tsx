@@ -67,6 +67,11 @@ export function PositionHandoff({
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
   const [started, setStarted] = useState(false)
+  /*
+   * WP416（自查 kol U13）：几条职责的快捷按钮同名（红人五条渠道各一个「找一批红人」）——同名的只留第一个
+   * （排在前面的那条职责的），不再出两个一模一样的按钮（第二个其实是另一条渠道的提示）。
+   */
+  const seenLabels = new Set<string>()
   const actions = useLandingActions(
     mine
       .flatMap((r) => r.quick_prompts ?? [])
@@ -74,7 +79,12 @@ export function PositionHandoff({
         id: q.id,
         label: lang === 'en' ? q.label.en : q.label.zh,
         prompt: q.prompt,
-      })),
+      }))
+      .filter((q) => {
+        if (seenLabels.has(q.label)) return false
+        seenLabels.add(q.label)
+        return true
+      }),
     (prompt) => {
       clearError()
       setStarted(true)

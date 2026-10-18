@@ -210,6 +210,11 @@ export interface Collaboration {
   /** WP117 交付 4：这条合作属于演练活动（见 {@link Creator.sandbox}）。 */
   sandbox?: boolean
   /**
+   * WP416：建这条合作的那张卡还没人点头（点「不要」这一行就删掉；点「同意」这一格清掉）。
+   * 没有这一格 = 已经生效（老数据一律当生效）。
+   */
+  awaiting_approval?: boolean
+  /**
    * WP117b（66 复测 #18）：**最近一次往来是什么时候**。
    *
    * 合作清单上每一行都要有它——只有阶段的那一版没法用：24 行「已找到 ›」长得
@@ -360,4 +365,13 @@ export interface KolExchange {
   change_id?: string
   /** 第几封（首封 / 3 天跟进 / 7 天收尾），出站才有。 */
   step?: 'first' | 'follow_up' | 'final'
+  /**
+   * WP416：邮件信头里的 Message-ID（出站 = 我们发的那一封；入站 = 对方那一封）。
+   * 回信对合作靠它（对方的 In-Reply-To / References 里有我们这一封的 id）。
+   */
+  mail_message_id?: string
+  /** WP416：出站那一封在发件 outbox 里的那一行（读回确认用）。 */
+  outbox_id?: string
+  /** WP416：从哪只邮箱发的 / 收的（脱敏前的地址只在本机）。 */
+  mailbox?: string
 }

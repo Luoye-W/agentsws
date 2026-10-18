@@ -78,9 +78,33 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
     id: 'kol.outreach_sandbox',
     kinds: ['kol_outreach'],
     readback: 'local',
-    // 只有发给演练红人的那一封有去处（进演练收件箱）；真红人的开发信还没有真发信的执行器
+    // 发给演练红人的那一封进演练收件箱（真红人的那一封归下一行）
     accepts: (c) => str(rec(c.after).creator_id)?.startsWith(SANDBOX_ID_PREFIX) === true,
     label: '演练红人：投进演练收件箱',
+  },
+  {
+    // WP416：真红人的开发信经已连邮箱发、读回 outbox 确认服务商收下才算（演练红人那一封在上一行先接走）
+    id: 'kol.outreach_mail',
+    kinds: ['kol_outreach'],
+    readback: 'verified',
+    label: '红人开发信：经已连邮箱发出、读回确认',
+  },
+  {
+    // WP416：新建合作卡（不带 collaboration_id；议价卡归下一行）批了才落库、读回核对
+    id: 'kol.collaboration_create',
+    kinds: ['kol_collaboration'],
+    readback: 'local',
+    accepts: (c) =>
+      rec(c.after).collaboration_id === undefined && c.target?.type === 'collaboration',
+    label: '红人库：新建合作批了才落库',
+  },
+  {
+    // WP416：交付物验收结论人批了才落库、读回核对
+    id: 'kol.deliverable_review',
+    kinds: ['kol_deliverable_review'],
+    readback: 'local',
+    accepts: (c) => c.target?.type === 'deliverable',
+    label: '红人库：验收结论落库',
   },
   {
     id: 'kol.collaboration',

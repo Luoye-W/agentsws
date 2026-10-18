@@ -267,6 +267,9 @@ describe('阶段判断', () => {
     expect(onboardPhase(base(), 'position')).toBe('install')
     expect(onboardPhase(base({ snoozed: true }), 'position')).toBe('hidden')
     expect(onboardPhase(base({ snoozed: true }), 'onboarding')).toBe('install')
+    // WP416：「要你处理」里已经有那张装插件连接卡 → 岗位页顶上不再重复出（首次设置那一屏照旧）
+    expect(onboardPhase(base({ connect_card_id: 'card_ext' }), 'position')).toBe('hidden')
+    expect(onboardPhase(base({ connect_card_id: 'card_ext' }), 'onboarding')).toBe('install')
     expect(onboardPhase(base({ paired: true }), 'position')).toBe('steps')
     // 查不了的那一步不拦人
     expect(onboardPhase(base({ paired: true, steps: [{ step: 'reddit' }] }), 'position')).toBe(

@@ -41,6 +41,11 @@ export interface ExtensionNeedsView {
   plans: { target: string; name: string; satisfied: boolean }[]
   /** 今天点过「稍后」。 */
   snoozed: boolean
+  /**
+   * WP416（自查 kol U3）：「要你处理」里已经有一张还没处理的装插件连接卡（卡 id）——岗位页顶上那张就不再出，
+   * 配对说明与「生成配对码」只留一处。没有 / 老服务没有这一格。
+   */
+  connect_card_id?: string
 }
 
 export interface ExtensionNeedsActor {

@@ -199,7 +199,10 @@ const TEMPLATES_EN: Readonly<
     body: [
       `Hi ${v.creator_name},`,
       '',
-      `I'm ${v.sender_name} from ${v.brand}. ${v.brand_pitch}`,
+      // WP416：署名是「品牌 team」（取不到英文名时）就说 This is the … team，不写成 I'm The X team from X
+      v.sender_name === `The ${v.brand} team`
+        ? `This is the ${v.brand} team. ${v.brand_pitch}`
+        : `I'm ${v.sender_name} from ${v.brand}. ${v.brand_pitch}`,
       '',
       `${v.reason} I'd love to know whether ${v.product} could be a fit for your ${noun}.`,
       '',

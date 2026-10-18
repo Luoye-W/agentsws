@@ -204,7 +204,15 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          * 不是安慰剂。公共库那一档要等 WP116 真接上，接上之后 `port.search`
          * 自己就会回 `ok`，这里一行都不用改。
          */
-        if (res.reason === 'not_connected' || res.reason === 'no_data_source') {
+        /*
+         * WP416（自查 kol A3）：只能按账号查（关键词找人走插件 / 公共库）、上游这次没答上来、配额用完——
+         * 一样退回本地库，并照实说为什么（以前 AI 直接拿到一句报错）。
+         */
+        const fellBack =
+          res.reason === 'handle_only' ||
+          res.reason === 'upstream_error' ||
+          res.reason === 'quota_exhausted'
+        if (res.reason === 'not_connected' || res.reason === 'no_data_source' || fellBack) {
           const local = await port.creators(actor, {
             channel,
             ...(q === undefined ? {} : { q }),
@@ -224,7 +232,9 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
               object: 'creator',
               source: 'local_library',
               ...(cond.length === 0 ? {} : { criteria: cond.join(' · ') }),
-              note: `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。连上之后能搜到更多。`,
+              note: fellBack
+                ? `${res.message ?? `${channel} 这次没搜成。`} 下面是你自己库里的人（导入、插件收录或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。`
+                : `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。连上之后能搜到更多。`,
             },
           }
         }
@@ -241,6 +251,38 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             reason: `not_linked：${res.message ?? '还没关联 Agents 工坊账号。'}`,
           }
         return { status: 'error', reason: res.message ?? res.reason ?? '这条渠道这次没答上来。' }
+      }
+
+      /*
+       * WP416（自查 kol A「搜到的新人接后续动作」）：搜出来的人收进库——以前搜到的人没有 creator_id，
+       * 接不上 get_creator / draft_outreach，AI 只能对库里原有的人做事。不花钱、不出卡（同 POST /v1/kol/creators）。
+       */
+      case 'save_creator': {
+        const handle = str(input.handle)
+        if (handle === undefined) return missing('handle')
+        try {
+          const detail = await port.createCreator(actor, {
+            channel,
+            handle,
+            display_name: str(input.display_name) ?? handle.replace(/^@/, ''),
+            ...(str(input.url) === undefined ? {} : { url: str(input.url) }),
+            ...(num(input.followers) === undefined ? {} : { followers: num(input.followers) }),
+            ...(str(input.category) === undefined ? {} : { category: str(input.category) }),
+            ...(str(input.language) === undefined ? {} : { language: str(input.language) }),
+            ...(str(input.region) === undefined ? {} : { region: str(input.region) }),
+          })
+          return {
+            status: 'ok',
+            data: {
+              creator_id: detail.creator.id,
+              display_name: detail.creator.display_name,
+              has_contact: detail.contacts.length > 0,
+            },
+            provenance: [{ type: 'creator', id: detail.creator.id }],
+          }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
       }
 
       case 'get_creator': {
@@ -395,9 +437,11 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          */
         const view = await port.planCampaign(actor, {
           goal: str(input.campaign) ?? str(input.product) ?? '新品建联',
+          // WP416：没给预算由服务端按职责的合作预算上限起一个数；名单就是 AI 给的这几个
           budget: num(input.budget) ?? 0,
           channels: [channel],
           headcount: ids.length,
+          creator_ids: ids,
         })
         const picks = view.by_channel.flatMap((g) => g.picks)
         return {
@@ -419,18 +463,39 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         const creator_id = str(input.creator_id)
         if (creator_id === undefined) return missing('creator_id')
         const step = (['first', 'follow_up', 'final'] as const).find((s) => s === input.step)
+        /*
+         * WP416（决策 531）：产品不给就用存过的默认；「一句话介绍我们」不给由服务端从品牌档案补，
+         * AI 给了就用 AI 写的（卡上标出来让人看）。
+         */
+        const defaults = await port.outreachDefaults?.(actor)
+        const product =
+          str(input.product) ??
+          (defaults?.product === undefined || defaults.product === ''
+            ? undefined
+            : defaults.product)
+        // 品牌这边已经有那一句（存过的 / 品牌档案）就用它，AI 写的只在都没有时补上
+        const pitch =
+          defaults !== undefined && defaults.brand_pitch !== '' ? undefined : str(input.brand_pitch)
         const view = await port.outreach(actor, {
           creator_id,
           channel,
           ...(step === undefined ? {} : { step }),
-          product: str(input.product) ?? '我们的产品',
+          product: product ?? '我们的产品',
           ...(str(input.reason) === undefined ? {} : { reason: str(input.reason) }),
+          ...(pitch === undefined ? {} : { brand_pitch: pitch, pitch_by_ai: true }),
         })
         return stagedOf(view, 'kol_outreach', {
           subject: view.subject,
           forbidden_hits: view.forbidden_hits,
           missing_vars: view.missing_vars,
           quota: view.quota,
+          // WP416：没连发信邮箱——运行时据此在对话里就地出一张连接卡（决策 690）
+          ...(view.needs_mailbox === true
+            ? {
+                needs_mailbox: true,
+                note: '卡出了，但还没连发信邮箱：批了也发不出去。先连上邮箱。',
+              }
+            : {}),
         })
       }
 
@@ -440,6 +505,19 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         if (id === undefined) return missing('collaboration_id')
         if (stage === undefined) {
           return { status: 'error', reason: `不认识「${String(input.stage)}」这个阶段。` }
+        }
+        /*
+         * WP416（自查 kol A「advance_collaboration」）：「谈成」「已寄样」不许 AI 直接写库——
+         * 谈成要人点头（议价 / 建合作那张卡），已寄样要有寄样记录（寄样那一步，有成本还要出花钱卡）。
+         */
+        if (stage === 'agreed' || stage === 'sample_sent') {
+          return {
+            status: 'blocked',
+            reason:
+              stage === 'agreed'
+                ? '「谈成」要人点头：报价走议价那张卡，批了才算谈成。不能直接推。'
+                : '「已寄样」要有寄样记录：在合作线程上记一笔寄样（有成本会出花钱卡），记了才算。不能直接推。',
+          }
         }
         try {
           const collab = await port.advanceCollaboration(actor, id, { stage })
@@ -492,9 +570,16 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
       case 'create_tracked_link': {
         const collaboration_id = str(input.collaboration_id)
         if (collaboration_id === undefined) return missing('collaboration_id')
+        const target = str(input.target_url) ?? str(input.url)
+        if (target === undefined)
+          return {
+            status: 'error',
+            reason: '缺落地页地址：这条链接要指到哪一页（商品页 / 活动页）？先问人，不要编一个。',
+          }
         const row = await port.createTrackedLink(actor, {
           collaboration_id,
-          url: str(input.target_url) ?? str(input.url) ?? 'https://example.com',
+          // WP416（自查 kol A「create_tracked_link」）：没给落地页就问，不默认 example.com
+          url: target,
           campaign: str(input.campaign) ?? 'kol',
           ...(str(input.discount_code) === undefined
             ? {}

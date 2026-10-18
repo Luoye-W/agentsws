@@ -592,7 +592,13 @@ export function kolOutreachApply(
         ? { step: after.step }
         : {}),
     })
-    if (collab !== undefined) store.saveCollaboration({ ...collab, last_activity_at: at })
+    // WP416：信投出去了才算「已建联」（以前提卡那一刻就改了阶段）
+    if (collab !== undefined)
+      store.saveCollaboration({
+        ...collab,
+        ...(collab.stage === 'sourced' ? { stage: 'contacted' as const } : {}),
+        last_activity_at: at,
+      })
   }
   return {
     status: 'ok',
