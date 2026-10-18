@@ -297,7 +297,12 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
         {
           ...(INSTANCE.roles[0] as PositionInstanceData['roles'][number]),
           quick_prompts: [
-            { id: 'q1', label: { zh: '看今天的价格', en: 'Prices' }, prompt: '看价格' },
+            {
+              id: 'q1',
+              label: { zh: '看今天的价格', en: 'Prices' },
+              prompt: '看价格',
+              kind: 'ask',
+            },
           ],
         },
         {
@@ -306,7 +311,9 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
           default: false,
           assignment_ids: ['asg_content'],
           my_assignment_id: 'asg_content',
-          quick_prompts: [{ id: 'q2', label: { zh: '写一篇博客', en: 'Blog' }, prompt: '写博客' }],
+          quick_prompts: [
+            { id: 'q2', label: { zh: '写一篇博客', en: 'Blog' }, prompt: '写博客', kind: 'ask' },
+          ],
         },
       ],
     })
