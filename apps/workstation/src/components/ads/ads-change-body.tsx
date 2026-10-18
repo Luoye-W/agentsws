@@ -51,12 +51,14 @@ export function money(n: unknown, currency: string | undefined): string {
   return sym === '' && currency !== undefined ? `${v} ${currency}` : `${sym}${v}`
 }
 
-/** 摘要里去掉总闸那一段（卡头小标签已经写了）。 */
+/** 「300 → 330」这种（上面那一行已经写了金额，摘要里再写一遍就去掉）。 */
+const BARE_CHANGE = /^\s*-?\d+(?:\.\d+)?\s*→\s*-?\d+(?:\.\d+)?\s*$/u
+
+/** 摘要里去掉总闸那一段（卡头小标签已经写了）和光秃秃的「300 → 330」（上面那一行写过了）。 */
 export function reasonWithoutGate(text: string, gate: string | undefined): string {
-  if (gate === undefined) return text
   return text
     .split('｜')
-    .filter((s) => s.trim() !== gate.trim())
+    .filter((s) => (gate === undefined || s.trim() !== gate.trim()) && !BARE_CHANGE.test(s))
     .join('｜')
 }
 

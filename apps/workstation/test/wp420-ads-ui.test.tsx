@@ -39,8 +39,9 @@ describe('改预算卡（U2 / U4）', () => {
     expect(money(12.5, 'EUR')).toBe('€12.50')
     expect(money(undefined, 'USD')).toBe('—')
     expect(reasonWithoutGate('300 → 330｜今天花了 700，总闸 1000', '今天花了 700，总闸 1000')).toBe(
-      '300 → 330',
+      '',
     )
+    expect(reasonWithoutGate('老客回购好｜300 → 330', undefined)).toBe('老客回购好')
   })
 
   it('一行前后对比、不露 value / platform 字段名；插件没连卡底一行', () => {

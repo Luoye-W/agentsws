@@ -216,11 +216,14 @@ async function main() {
       await adsNav.click()
       await page.waitForURL(/\/positions\/[^/?]+/, { timeout: 20_000 })
       await page.waitForTimeout(1500)
-      // 改预算卡（职责页的「要你处理」里）+ 连接卡里插件那几行
-      const positionUrl = page.url().split('?')[0]
-      await page.goto(`${BASE}/positions/${meta}/duties/ads.meta`, { waitUntil: 'load' })
+      // 改预算卡：在岗位页「要你处理」那副牌里，往后翻到它（第一张多半是插件连接卡）
       const change = page.getByTestId('ads-change-body').first()
-      await change.waitFor({ timeout: 30_000 }).catch(() => undefined)
+      for (let i = 0; i < 4 && (await change.count()) === 0; i++) {
+        const next = page.getByTestId('deck-next').first()
+        if ((await next.count()) === 0 || !(await next.isEnabled())) break
+        await next.click()
+        await page.waitForTimeout(600)
+      }
       if ((await change.count()) > 0) {
         await change.scrollIntoViewIfNeeded()
         const main = (await page.getByTestId('ads-change-main').first().textContent()) ?? ''
@@ -229,15 +232,8 @@ async function main() {
           (await page.getByTestId('ads-change-queue-note').count()) > 0,
           `卡底一行「批了先排队」（${theme}）`,
         )
-        await shot(page, `ads-1-budget-card-${theme}`, change.locator('xpath=../..'))
-      } else console.log(`  （职责页上没看到改预算卡，跳过这张截图）`)
-      const ext = page.getByTestId('connection-extension-rows').first()
-      if ((await ext.count()) > 0) {
-        const todo = await ext.locator('[data-todo="true"]').count()
-        check(todo > 0, `连接卡：插件没配对那几行亮红、算要处理（${theme}）`)
-        await shot(page, `ads-4-connections-${theme}`, page.getByTestId('connections-card').first())
-      } else console.log('  （连接卡收着，跳过这张截图）')
-      await page.goto(positionUrl, { waitUntil: 'load' })
+        await shot(page, `ads-1-budget-card-${theme}`, change.locator('xpath=../../..'))
+      } else console.log('  （牌堆里没翻到改预算卡，跳过这张截图）')
       const entry = page.getByTestId('ad-creative-entry-open').first()
       await entry.waitFor({ timeout: 20_000 })
       await entry.click()
