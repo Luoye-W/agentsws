@@ -397,6 +397,7 @@ export function AiEntry({
   publishing,
   onResume,
   resuming,
+  resumeLabel,
 }: {
   item: Extract<MatterItem, { kind: 'ai' }>
   roleId?: string | undefined
@@ -407,6 +408,8 @@ export function AiEntry({
   /** WP236：这一条是被停下来的那次的部分结果——下面出「接着跑」。 */
   onResume?: (() => void) | undefined
   resuming?: boolean
+  /** WP423：按钮上的字（预算停的那次写「接着做」）；不给 = 「接着跑」。 */
+  resumeLabel?: string
 }): ReactNode {
   const { t } = useApp()
   const raw = item.event?.text ?? ''
@@ -490,7 +493,7 @@ export function AiEntry({
           disabled={resuming === true}
           onClick={onResume}
         >
-          {t('matter.resume')}
+          {resumeLabel ?? t('matter.resume')}
         </Button>
       )}
     </AiShell>
@@ -547,6 +550,7 @@ export function SysLine({
   routing,
   onResume,
   resuming,
+  resumeLabel,
   onRetry,
   retrying,
 }: {
@@ -557,6 +561,8 @@ export function SysLine({
   routing?: boolean
   onResume?: (() => void) | undefined
   resuming?: boolean
+  /** WP423：按钮上的字（预算停的那次写「接着做」）；不给 = 「接着跑」。 */
+  resumeLabel?: string
   /** WP287：「没跑成」那一行下面的「重试」（只给最近那一条、后面没人接着做时） */
   onRetry?: (() => void) | undefined
   retrying?: boolean
@@ -595,7 +601,10 @@ export function SysLine({
         d.outcome === 'completed'
           ? 'matter.sys.done'
           : d.outcome === 'stopped'
-            ? 'matter.sys.stopped'
+            ? // WP423：预算停的写人话原因（「查的东西太多，这一轮先停在这里」）
+              d.budget === undefined
+              ? 'matter.sys.stopped'
+              : `matter.sys.budget.${d.budget}`
             : 'matter.sys.failed',
       ),
       durationText(d.seconds, t),
@@ -712,7 +721,7 @@ export function SysLine({
             disabled={resuming === true}
             onClick={onResume}
           >
-            {t('matter.resume')}
+            {resumeLabel ?? t('matter.resume')}
           </Button>
         )}
         {onRetry === undefined || item.variant !== 'failed' ? null : (

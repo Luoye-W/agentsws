@@ -128,6 +128,8 @@ export interface HarnessInput extends GateInput {
   /** 预算耗尽时的回调（宿主发 `budget.exhausted` 并停 Agent）；与 `GateInput` 同一个签名。 */
   /** 宿主累计的 token 用量（预算判定读它）。 */
   tokensSpent?: () => number
+  /** WP423：现在是不是收尾回合（见 `GatewayBudget.wrapUp`）。 */
+  wrapUp?: () => boolean
   /** 每次真的送进网关的请求（Model-visible ⟺ logged）。 */
   onModelRequest?: (request: { messages: ChatMessage[]; tools: ToolDef[] }) => void
   /** 每次补全的用量。 */
@@ -586,6 +588,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
           max_tokens: input.request.budget.max_tokens,
           spent: input.tokensSpent,
           exhausted: (which, used, cap) => input.onBudgetExhausted?.(which, used, cap),
+          ...(input.wrapUp === undefined ? {} : { wrapUp: input.wrapUp }),
         }
   const adapter = new GatewayLlmAdapter({
     gateway: input.options.gateway,

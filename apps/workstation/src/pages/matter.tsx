@@ -9,7 +9,7 @@
  *
  * 底部这个输入框是**对话入口的第四处**，也是唯一有边界的一处：作用域是这个事项、角色是这个岗位的 Agent。
  */
-import type { MatterEvent } from '@agentsws/contracts'
+import { isConnectRequestPayload } from '@agentsws/contracts'
 import { type DeckAction, type DeckCard, projectCard } from '@agentsws/deck'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, CircleCheck } from 'lucide-react'
@@ -29,8 +29,10 @@ import {
   buildItems,
   dayKey,
   matterState,
+  resumableOf,
   retryableFailure,
   suggestionFor,
+  waitingOnOf,
 } from '@/components/matter/matter-model'
 import {
   AiEntry,
@@ -93,21 +95,6 @@ const POLL_MS = 1500
 type Said = string | { text: string; files: FreeChatFile[] }
 const names = (files: readonly { name: string }[]): string =>
   files.map((f) => `「${f.name}」`).join('')
-
-/**
- * WP236：最近那次「被停下来」的运行之后，还没有人接着做（没有新的人话 / 新的运行），
- * 就在那一条下面出「接着跑」。只给最近那一条——更早的停下来已经被后面的运行接上了。
- */
-function resumableOf(timeline: readonly MatterEvent[]): string | undefined {
-  const stopped = timeline
-    .filter((e) => e.stopped !== undefined)
-    .reduce<MatterEvent | undefined>((a, e) => (a === undefined || e.at >= a.at ? e : a), undefined)
-  if (stopped === undefined) return undefined
-  const later = timeline.some(
-    (e) => e.at > stopped.at && (e.kind === 'human_message' || e.kind === 'run'),
-  )
-  return later ? undefined : stopped.id
-}
 
 export function MatterPage(): ReactNode {
   const { t, lang } = useApp()
@@ -411,7 +398,7 @@ export function MatterPage(): ReactNode {
     )
 
   const hasMore = more.data?.has_more ?? view.has_more
-  const resumableId = closed ? undefined : resumableOf(timeline)
+  const resumable = closed ? undefined : resumableOf(timeline)
   const retryId = closed ? undefined : retryableFailure(timeline)
   const roles = position.data?.roles ?? []
   const roleNameOf = (role_id: string): string | undefined =>
@@ -430,6 +417,14 @@ export function MatterPage(): ReactNode {
     running: running || railState === 'running',
     awaiting,
     timeline,
+    // WP423：只差连插件 / 填设置时不写「等你批」
+    waitingOn: waitingOnOf(
+      waitingCards.map((c) => ({
+        connect: isConnectRequestPayload(c.detail.payload),
+        setup: isSetupCard(c) && !isConnectRequestPayload(c.detail.payload),
+      })),
+      view.open_card_ids.length,
+    ),
   })
   const firstWaiting = waitingCards[waitingCards.length - 1]
   const suggestion = suggestionFor({
@@ -499,12 +494,14 @@ export function MatterPage(): ReactNode {
   }
 
   const resumeProps = (eventId: string | undefined) =>
-    eventId !== undefined && eventId === resumableId
+    eventId !== undefined && eventId === resumable?.id
       ? {
           onResume: () => {
             say.mutate(t('matter.resume.brief'))
           },
           resuming: say.isPending,
+          // WP423：预算停的那次写「接着做」
+          ...(resumable.budget ? { resumeLabel: t('matter.resume.go') } : {}),
         }
       : {}
 

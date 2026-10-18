@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { runBudgetCaps } from '../src/runtime.js'
 
 describe('runBudgetCaps', () => {
-  it('缺省 6 万 token、12 次', () => {
+  it('WP423：缺省 15 万 token、12 次（原来 6 万，8 步就过线）', () => {
     expect(runBudgetCaps({ themeRun: false, granted: false, browsing: false })).toEqual({
-      max_tokens: 60_000,
+      max_tokens: 150_000,
       max_tool_calls: 12,
+    })
+  })
+  it('WP423：查资料 / 浏览 40 万 token（10-19 自测 6.96 万就停了）；电脑操控 60 万', () => {
+    expect(runBudgetCaps({ themeRun: false, granted: false, browsing: true })).toEqual({
+      max_tokens: 400_000,
+      max_tool_calls: 30,
+    })
+    expect(runBudgetCaps({ themeRun: false, granted: true, browsing: false })).toEqual({
+      max_tokens: 600_000,
+      max_tool_calls: 40,
     })
   })
   it('浏览器 / 网页工具 30 次，电脑操控授权 40 次', () => {

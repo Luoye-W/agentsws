@@ -367,10 +367,16 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
     expect(
       events.filter((e) => e.type === 'progress' && e.step === 'compact').length,
     ).toBeGreaterThanOrEqual(2)
-    // 一个字没写、没推；那一句「现在读…」被当成答复、照「做完了」收——就是 ci.16
+    // 一个字没写、没推——就是 ci.16 的病根（没有 produce 那一套）
     expect(calls.some((c) => c.tool === 'theme_write_file')).toBe(false)
     expect(calls.some((c) => c.tool === 'theme_push_unpublished')).toBe(false)
-    expect(result.status).toBe('completed')
-    expect(result.outputs).toEqual([{ kind: 'answer', text: CI16 }])
+    /*
+     * WP423 起普通运行也会「催一下」、回合用完还会收尾：那一句「现在读…」不再被当成答复照「做完了」收，
+     * 而是照实记成回合用完、交出照实拼的那一段（为什么停、做了什么、接着做）。
+     */
+    expect(result.status).toBe('budget_exhausted')
+    const answer = result.outputs.find((o) => o.kind === 'answer')
+    expect(answer?.kind === 'answer' && answer.text).not.toBe(CI16)
+    expect(answer?.kind === 'answer' && answer.text).toContain('接着做')
   }, 60_000)
 })

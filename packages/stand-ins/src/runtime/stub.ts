@@ -164,6 +164,7 @@ import {
   WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
   workshopServiceBranch,
 } from './workshop-service.js'
+import { renderWrapUp, WEB_WRAP_UP_MISSING_FETCH, WRAP_UP_STEP, wrapUpFallback } from './wrap-up.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -679,12 +680,28 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             fetched = { url, status: webStatusOf(res.data) }
           }
         }
-        const answer = renderWebAnswer({
+        const found = renderWebAnswer({
           query: webPlan.query,
           sources,
           ...(fetched === undefined ? {} : { fetched }),
           ...(failed === undefined ? {} : { failed }),
         })
+        /*
+         * WP423：预算到了也要交东西——收尾那一段（为什么停 + 已经查到的 + 还差什么 + 接着做），
+         * 与 direct / dsh 的替身规则脑在收尾回合拼出同一段话。
+         */
+        if (exhausted !== undefined)
+          sink({ type: 'progress', step: WRAP_UP_STEP, note: exhausted.which })
+        const answer =
+          exhausted === undefined
+            ? found
+            : renderWrapUp({
+                which: exhausted.which,
+                body: found,
+                ...(webPlan.fetch && fetched === undefined
+                  ? { missing: WEB_WRAP_UP_MISSING_FETCH }
+                  : {}),
+              })
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = describeRun({
@@ -1965,6 +1982,18 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       usage.output_tokens = Math.ceil(body.length / 4) + (seed % 7)
+
+      /*
+       * WP423：预算到了也要交东西（与 direct / dsh 同口径）——要答复的运行交一段照实拼的收尾：
+       * 为什么停、已经做了什么、还差什么、点「接着做」。只要草稿 / 变更的运行（客服回信）一个字节不变。
+       */
+      if (exhausted !== undefined && req.expectations.outputs.includes('answer')) {
+        sink({ type: 'progress', step: WRAP_UP_STEP, note: exhausted.which })
+        outputs.push({
+          kind: 'answer',
+          text: wrapUpFallback({ which: exhausted.which, readTools }),
+        })
+      }
 
       const noStage = req.expectations.must_stage_if_change_requested && wantsChange && !staged
       // 17 §3：摘要是给下一次运行与人看的，写成一句人话（三个运行时同一份拼法）

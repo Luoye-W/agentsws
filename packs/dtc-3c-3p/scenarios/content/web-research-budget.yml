@@ -1,0 +1,38 @@
+# WP423：查资料查到一半「预算到了」——不能只剩一句开场白，要把查到的交出来。
+#
+# 10-19 自测：运营岗查 subreddit，累计 token 撞上限就停了，产出只有「我先上网查……」。这条把同一类情况钉成剧本：
+#
+# 1. 把这次运行的工具调用上限压到 1——搜完一次，再去细看第一条来源时预算就到了；
+# 2. **三个运行时都再跑一次收尾**：不再调工具，把已经搜到的来源交出来、说清为什么停、还差哪一步、怎么接着做；
+# 3. 只查不动：一张卡都不出、一封信都不发。
+id: content/web-research-budget
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    web.research:
+      who: p_li
+      role: dtc.content
+      ask: 查一下 2026 年 65W 氮化镓充电器的新品和价格，列出来源
+      max_tool_calls: 1
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  calls_tool: [web_search]
+  event_types:
+    - web.searched
+    - simulation.web_research
+  metrics:
+    staged_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  运营看这一段回话，知道为什么停了、已经查到了哪些来源、点什么能接着查吗？

@@ -2410,7 +2410,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'web.research': {
-      known(source, `${path}.${key}`, body, ['who', 'role', 'ask'])
+      known(source, `${path}.${key}`, body, ['who', 'role', 'ask', 'max_tool_calls'])
       return {
         at,
         type: 'web.research',
@@ -2418,6 +2418,11 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           who: str(source, `${path}.${key}.who`, body.who),
           role: str(source, `${path}.${key}.role`, body.role),
           ask: str(source, `${path}.${key}.ask`, body.ask),
+          ...(body.max_tool_calls === undefined
+            ? {}
+            : {
+                max_tool_calls: num(source, `${path}.${key}.max_tool_calls`, body.max_tool_calls),
+              }),
         },
       }
     }
