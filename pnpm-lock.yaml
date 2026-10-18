@@ -1371,6 +1371,9 @@ importers:
       '@agentsws/support-core':
         specifier: workspace:*
         version: link:../support-core
+      feedsmith:
+        specifier: 3.0.1
+        version: 3.0.1
 
   packages/roles:
     dependencies:

@@ -248,28 +248,23 @@ export function CompetitorChangesTable({
           </p>
         )
       ) : (
-        <table className="w-full table-fixed text-[12px]" data-testid="competitor-table">
-          <thead className="sr-only">
-            <tr>
-              <th>{t('cwatch.col.competitor')}</th>
-              <th>{t('cwatch.col.change')}</th>
-              <th>{t('cwatch.trend')}</th>
-              <th>{t('cwatch.col.when')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((c) => {
-              const trend = priceTrend(all, c)
-              const text = lang === 'en' ? c.text.en : c.text.zh
-              return (
-                <tr
-                  key={c.id}
-                  className="align-top"
-                  data-testid="competitor-change-row"
-                  data-kind={c.kind}
-                >
-                  <td className="w-[22%] truncate py-1 pr-1 text-ws-muted-fg">{c.competitor}</td>
-                  <td className="py-1 pr-1 text-ws-body">
+        <ul className="flex flex-col gap-1.5" data-testid="competitor-table">
+          {shown.map((c) => {
+            const trend = priceTrend(all, c)
+            const text = lang === 'en' ? c.text.en : c.text.zh
+            return (
+              <li
+                key={c.id}
+                className="flex flex-col gap-0.5 px-1.5 text-[12px]"
+                data-testid="competitor-change-row"
+                data-kind={c.kind}
+              >
+                <div className="flex items-baseline gap-2 text-[11px] text-ws-muted-fg">
+                  <span className="min-w-0 truncate">{c.competitor}</span>
+                  <span className="ml-auto shrink-0 ws-num">{shortDate(c.detected_at)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 text-ws-body">
                     {c.url === undefined || c.url === '' ? (
                       text
                     ) : (
@@ -277,26 +272,21 @@ export function CompetitorChangesTable({
                         {text}
                       </a>
                     )}
-                  </td>
-                  <td className="w-12 py-1">
-                    {trend.length >= 2 ? (
-                      <span title={t('cwatch.trend')}>
-                        <Sparkline
-                          points={trend}
-                          testId="competitor-trend"
-                          className="h-4 w-12 text-ws-brand"
-                        />
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="w-12 py-1 text-right text-[11px] text-ws-muted-fg ws-num">
-                    {shortDate(c.detected_at)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                  </span>
+                  {trend.length >= 2 ? (
+                    <span className="shrink-0" title={t('cwatch.trend')}>
+                      <Sparkline
+                        points={trend}
+                        testId="competitor-trend"
+                        className="h-4 w-12 text-ws-brand"
+                      />
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
     </section>
   )

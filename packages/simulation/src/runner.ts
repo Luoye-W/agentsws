@@ -1592,6 +1592,12 @@ async function execute(
         await tick()
         return
       }
+      // WP386：拉一条监控源（不联网：feed 内容由场景给）
+      case 'pr.feed': {
+        await world.pr.feed(event.feed)
+        await tick()
+        return
+      }
       case 'pr.release': {
         const e = event.release
         const out = await world.pr.release({

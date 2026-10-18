@@ -61,6 +61,8 @@ export * from './runtime/kol.js'
 export * from './runtime/output-cards.js'
 export * from './runtime/owner.js'
 export * from './runtime/playbook.js'
+// WP386：信息监控的读工具 list_mentions
+export * from './runtime/pr-monitor.js'
 export * from './runtime/produce.js'
 // WP323：记录去处的三个工具（通用能力：用户几句话交代，AI 配好，出「定规矩」卡）
 export * from './runtime/record-sink.js'
