@@ -7,7 +7,9 @@
  *
  * 本机只记「怎么筛」（列 key → 搜的字 / 勾的值 / 起止日子），按表格 id 一份；存不下也照常筛，只是刷新后回到不筛。
  */
-import { readString, writeString } from './ui-state'
+import { readString, TABLE_FILTER_KEY_PREFIX, writeString } from './ui-state'
+
+export { TABLE_FILTER_KEY_PREFIX }
 
 export type TableFilterKind = 'search' | 'select' | 'date'
 export type FilterCell = string | number | boolean | null | undefined
@@ -153,7 +155,6 @@ export function applyFilters<Row>(
 }
 
 // ── 本机记住 ────────────────────────────────────────────────────────────
-export const TABLE_FILTER_KEY_PREFIX = 'agentsws.table_filter.'
 
 const strings = (x: unknown): string[] | undefined =>
   Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : undefined

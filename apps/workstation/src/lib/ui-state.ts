@@ -64,6 +64,13 @@ export const MOTION_PREF_KEY = 'agentsws.motion'
  */
 export const POSITION_WORK_KEY_PREFIX = 'agentsws.position_work.'
 
+/**
+ * WP401（决策 1090 / 1143）：积木表格的**筛法**（列 key → 搜的字 / 勾的值 / 起止日子），按表格 id 一份。
+ * 同日历、岗位工作那几个键——界面偏好：存的是「怎么看」，不存表里任何一行；丢了最坏是回到不筛。
+ * 键 = 前缀 + 积木 id（AI 画的表 = `genui.` + 表上的 id 或列名 + 行内容的指纹）。读写在 `lib/table-filter.ts`。
+ */
+export const TABLE_FILTER_KEY_PREFIX = 'agentsws.table_filter.'
+
 export const RIGHT_RAIL_MIN_WIDTH = 320
 export const RIGHT_RAIL_MAX_WIDTH = 520
 export const RIGHT_RAIL_DEFAULT_WIDTH = 380
