@@ -120,7 +120,8 @@ export type CloudStandInFetch = (
   init?: {
     method?: string
     headers?: Record<string, string>
-    body?: string
+    /** WP403：传订单附件时是文件的字节。 */
+    body?: string | Uint8Array
     signal?: AbortSignal
   },
 ) => Promise<CloudStandInResponse>
@@ -720,6 +721,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     url: URL,
     headers: Record<string, string> | undefined,
     body: Record<string, unknown>,
+    raw?: Uint8Array,
   ): CloudStandInResponse => {
     const path = url.pathname
     const token = bearer(headers)
@@ -1015,7 +1017,19 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         return fail(401, 'unauthenticated', '令牌无效')
       if (servicesScopeMissing)
         return fail(403, 'forbidden', '令牌没有这条路由要的动作', { required_scope: 'services' })
-      const out = services.handle(method, path, url.searchParams, body)
+      const type = Object.entries(headers ?? {}).find(
+        ([k]) => k.toLowerCase() === 'content-type',
+      )?.[1]
+      const out = services.handle(
+        method,
+        path,
+        url.searchParams,
+        body,
+        raw === undefined
+          ? undefined
+          : { bytes: raw, ...(type === undefined ? {} : { contentType: type }) },
+      )
+      if (out?.bytes !== undefined) return respondBytes(out.status, out.bytes, out.headers ?? {})
       if (out !== undefined) return respond(out.status, out.body)
     }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
@@ -1029,6 +1043,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (url.origin !== new URL(CLOUD_STAND_IN_BASE_URL).origin)
         return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
       let body: Record<string, unknown> = {}
+      // WP403：订单附件的正文是文件本身（不是 JSON）
+      if (init?.body instanceof Uint8Array) return route(method, url, init.headers, {}, init.body)
       if (init?.body !== undefined && init.body !== '') {
         try {
           body = JSON.parse(init.body) as Record<string, unknown>

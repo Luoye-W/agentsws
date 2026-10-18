@@ -32,7 +32,8 @@ export const SERVICE_ORDER_SCOPE = 'services' as const
 
 /**
  * 云端路径。`orders` 后面接 `/{id}`、`/{id}/accept-quote`、`/{id}/messages`、`/{id}/contact`、
- * `/{id}/accept`、`/{id}/revise`、`/{id}/dispute`、`/{id}/cancel`。
+ * `/{id}/accept`、`/{id}/revise`、`/{id}/dispute`、`/{id}/cancel`；WP403 加 `/{id}/extra`、
+ * `/{id}/attachments`、`/{id}/attachments/{attachment_id}`（{@link serviceOrderPath}）。
  */
 export const SERVICE_ORDER_CLOUD_PATHS = {
   services: '/v1/services',
@@ -405,6 +406,8 @@ export interface ServiceDeliverable {
   ref?: string
   /** 定制件：属于哪一段。 */
   milestone_id?: string
+  /** WP403：是一份订单附件（服务方传的交付文件）——取文件走 `…/attachments/{attachment_id}`。 */
+  attachment_id?: string
   delivered_at: Iso8601
 }
 
@@ -561,6 +564,13 @@ export interface ServiceOrderView {
   contact?: ServiceContactExchange
   /** 消息条数（定制件；取消息走 `…/messages`）。 */
   message_count: number
+  /**
+   * WP403：追加费用（服务方发起、你在下单卡上点头才扣进托管；只有定制件有）。最新的在后面；
+   * 在等你点的那一条 `status: 'pending'`。
+   */
+  extras?: ServiceOrderExtra[]
+  /** WP403：订单附件（你补的材料 + 服务方的交付文件；按订单隔离，结束后 90 天删）。 */
+  attachments?: ServiceOrderAttachment[]
   /** 下一步你能做的（按转移表算好给的）。 */
   actions: ServiceOrderAction[]
   created_at: Iso8601
@@ -995,7 +1005,7 @@ export interface ServiceRequirementsCardPayload extends ServiceCardOrigin {
 
 /**
  * **下单卡**（同意并支付）：一口价的定制件交完需求单（`pay`）、报价回来了（`accept_quote`）、
- * 会上说定要加钱（`extra`，一期云上还没有这个口，见 WP390 报告）。
+ * 会上说定要加钱（`extra`：服务方发起一条追加，你点「同意并支付」才扣进托管——WP403 `…/extra`）。
  */
 export interface ServicePayCardPayload extends ServiceCardOrigin {
   form: 'service_pay'
@@ -1011,6 +1021,9 @@ export interface ServicePayCardPayload extends ServiceCardOrigin {
   requirements?: ServiceRequirementAnswer[]
   /** 报价里那一句说明。 */
   quote_note?: string
+  /** WP403：`extra` 那一种——云上那一条追加的 id 与服务方说的为什么。 */
+  extra_id?: string
+  extra_reason?: string
   idempotency_key: string
 }
 
@@ -1160,4 +1173,141 @@ export interface WorkshopServiceReplyDraft {
   text: string
   /** 对方提到加钱 / 改范围：草稿里没替你答应，要你自己定。 */
   needs_you?: true
+}
+
+/* ------------------------------------------------------------------ */
+/* WP403（决策 1134）：追加费用与订单附件                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 一条追加费用的状态：等你点头 / 同意了（扣进托管）/ 没同意 / 服务方撤回或订单结束了还没点。
+ */
+export const SERVICE_ORDER_EXTRA_STATUSES = [
+  'pending',
+  'accepted',
+  'declined',
+  'withdrawn',
+] as const
+export type ServiceOrderExtraStatus = (typeof SERVICE_ORDER_EXTRA_STATUSES)[number]
+
+/**
+ * **追加费用**（docs/105 §3.4「要加钱就出一张追加下单卡，照样 L1」）：服务方（运营代回填）发起，
+ * 用户在下单卡（`service_pay`、`stage: 'extra'`）上点「同意并支付」才扣进**同一单的托管**；钱随它算进的
+ * 那一段一起验收结算、一起按原路退（记账照 WP389 三行：托管 / 完成 / 退回）。只有定制件有。
+ * 同一时间最多一条在等你。
+ */
+export interface ServiceOrderExtra {
+  id: string
+  credits: number
+  /** 服务方说的为什么（「会上定了加两页」）。 */
+  reason: string
+  /** 加了这笔交付时限往后顺延多少小时（不给 = 不顺延）。 */
+  deliver_hours?: number
+  /** 算进哪一段（随那一段一起验收结算；同意那一刻在做 / 在验的那一段，没有就下一段）。 */
+  milestone_id?: string
+  status: ServiceOrderExtraStatus
+  requested_at: Iso8601
+  answered_at?: Iso8601
+}
+
+/**
+ * `POST /v1/services/orders/{id}/extra` 的请求：同意（扣进托管）或不同意。同一个幂等键只扣一次；
+ * 钱不够回 402，这一条原样等着（充了再点就成）。
+ */
+export interface ServiceExtraAnswer {
+  extra_id: string
+  accept: boolean
+  idempotency_key: string
+}
+
+/** 附件是谁传的、干什么用：你补的材料 / 服务方的交付文件。 */
+export const SERVICE_ATTACHMENT_PURPOSES = ['material', 'delivery'] as const
+export type ServiceAttachmentPurpose = (typeof SERVICE_ATTACHMENT_PURPOSES)[number]
+
+/** 附件的上限（云上按它拦；本机传之前先按它说一句）。 */
+export const SERVICE_ATTACHMENT_LIMITS = {
+  /** 单个文件最多多大（字节）：25 MB。 */
+  max_bytes: 25 * 1024 * 1024,
+  /** 一单最多几个文件。 */
+  max_files: 50,
+  /** 一单所有文件加起来最多多大（字节）：200 MB。 */
+  max_total_bytes: 200 * 1024 * 1024,
+  /** 文件名最长多少个字。 */
+  max_name: 200,
+} as const
+
+/**
+ * 一份**订单附件**：存在云端（按订单隔离——只有这一单的组织拿得到），和交付物一起保留到订单结束后
+ * 90 天（P10），到期删文件、这一行留着标 `expired`。
+ */
+export interface ServiceOrderAttachment {
+  id: string
+  name: string
+  content_type: string
+  /** 字节数。 */
+  size: number
+  /** 文件内容的 sha256（十六进制）。 */
+  sha256: string
+  from: 'user' | 'provider'
+  purpose: ServiceAttachmentPurpose
+  /** 定制件：交付文件属于哪一段。 */
+  milestone_id?: string
+  uploaded_at: Iso8601
+  /** 什么时候删（订单结束后 90 天；没结束时没有）。 */
+  expires_at?: Iso8601
+  /** 到期删掉了（文件取不到了，这一行留着）。 */
+  expired?: true
+}
+
+/**
+ * `POST /v1/services/orders/{id}/attachments` 的查询参数（正文就是文件本身，`Content-Type` 写它的类型）。
+ * 用户传的一律是「补材料」；在「等你补材料」时传 = 补上了，超时的钟接着走。
+ */
+export interface ServiceAttachmentUploadQuery {
+  /** 文件名（URL 编码）。 */
+  name: string
+}
+
+/** `/v1/services/orders/{id}/attachments/{attachment_id}` 的路径参数。 */
+export interface ServiceAttachmentParams {
+  id: string
+  attachment_id: string
+}
+
+/**
+ * 下载附件时响应头里带的。正文一律按 `application/octet-stream` 回（不在云的域名上直接渲染用户传的
+ * HTML / SVG）；文件原本的类型在 `x-content-type`。
+ */
+export interface ServiceAttachmentDownloadHeaders {
+  /** `attachment; filename*=UTF-8''…` */
+  'content-disposition': string
+  /** 文件内容的 sha256（十六进制）。 */
+  'x-content-sha256': string
+  /** 文件原本的类型（传的时候声明的那个，`type/subtype`）。 */
+  'x-content-type': string
+}
+
+/** 一单的路径（`sub` 是 `/extra`、`/attachments`、`/attachments/<id>` 这类）。 */
+export function serviceOrderPath(order_id: string, sub = ''): string {
+  return `${SERVICE_ORDER_CLOUD_PATHS.orders}/${encodeURIComponent(order_id)}${sub}`
+}
+
+/** 附件名洗一遍：去掉路径与控制字符、压空白、截到上限；洗完是空的回 `undefined`。 */
+export function serviceAttachmentName(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const base = raw.split(/[\\/]/u).at(-1) ?? ''
+  const visible = [...base].filter((ch) => {
+    const code = ch.codePointAt(0) ?? 0
+    return code >= 0x20 && code !== 0x7f
+  })
+  const clean = visible.join('').replace(/\s+/gu, ' ').trim()
+  if (clean === '' || clean === '.' || clean === '..') return undefined
+  return clean.slice(0, SERVICE_ATTACHMENT_LIMITS.max_name)
+}
+
+/** 这一单在等你点头的那条追加（没有回 `undefined`）。 */
+export function pendingServiceExtra(
+  view: Pick<ServiceOrderView, 'extras'>,
+): ServiceOrderExtra | undefined {
+  return view.extras?.find((e) => e.status === 'pending')
 }
