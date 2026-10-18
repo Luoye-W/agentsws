@@ -27,6 +27,7 @@ import {
   type ContentItem,
   type ContentManifest,
   type ContentPublicKey,
+  type ContentSource,
 } from '@agentsws/contracts'
 
 // ---------- 拒收原因 ----------
@@ -45,6 +46,8 @@ export type ContentRejectReason =
   | 'too_large'
   | 'missing_file'
   | 'fetch_failed'
+  /** WP406：清单的来源和这条通道对不上（官方订阅的通道只收 `source: 'official'`，公开通道只收 `public`）。 */
+  | 'source'
 
 /** 每个原因的一句人话（界面上照抄；技术细节进 tooltip）。 */
 export const CONTENT_REJECT_TEXT: Readonly<Record<ContentRejectReason, string>> = {
@@ -61,6 +64,7 @@ export const CONTENT_REJECT_TEXT: Readonly<Record<ContentRejectReason, string>> 
   too_large: '更新包里有文件大得不正常，整包没收。',
   missing_file: '更新包缺文件，整包没收。',
   fetch_failed: '这次没连上更新源，过几个小时再试。',
+  source: '更新包的来源对不上，没收。',
 }
 
 export class ContentPackError extends Error {
@@ -244,7 +248,15 @@ export interface VerifyManifestOptions {
   /** 见过的最大序号：清单序号不比它大就当旧包（防回放）。同号重查不算旧（`allowSame`）。 */
   minSerial?: number
   allowSame?: boolean
+  /**
+   * WP406：这条通道收哪个来源的清单（清单不写 `source` = `public`）。给了就必须对得上，不对抛 `source`——
+   * 官方订阅的清单只认官方那张公钥表、只走官方那条通道，反之亦然（两边钥匙分开，一边出事不连累另一边）。
+   */
+  source?: ContentSource
 }
+
+/** 条目 id：`<种类>:<名字>`。WP406 起种类与名字都可以带下划线（只放宽，老 id 照认）。 */
+export const CONTENT_ITEM_ID = /^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$/
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -256,7 +268,8 @@ function checkItemShape(raw: unknown, i: number): ContentItem {
   }
   if (!isObj(raw)) return bad('不是对象')
   const { id, kind, name, version, files, sha256 } = raw
-  if (!isStr(id) || !/^[a-z]+:[a-z0-9][a-z0-9.-]*$/.test(id)) return bad('id 不对')
+  // WP406：种类可以带下划线（`role_content`），名字可以带下划线（规则表名 `seo.claim_rules`）——只放宽
+  if (!isStr(id) || !CONTENT_ITEM_ID.test(id)) return bad('id 不对')
   if (!isStr(kind) || !(CONTENT_ITEM_KINDS as readonly string[]).includes(kind))
     return bad('kind 不对')
   if (!isStr(name) || id !== `${kind}:${name}`) return bad('id 与 kind:name 不一致')
@@ -307,6 +320,8 @@ export function verifyContentManifest(
   if (raw.key_id !== keyId)
     throw new ContentPackError('unknown_key', '清单写的钥匙与签名的钥匙不一致')
   if (raw.channel !== options.channel) throw new ContentPackError('channel', String(raw.channel))
+  if (options.source !== undefined && (raw.source ?? 'public') !== options.source)
+    throw new ContentPackError('source', String(raw.source ?? 'public'))
   if (typeof raw.serial !== 'number' || !Number.isInteger(raw.serial) || raw.serial < 1)
     throw new ContentPackError('bad_manifest', 'serial 不对')
   const min = options.minSerial ?? 0
@@ -365,6 +380,8 @@ export interface BuildContentPackInput {
   min_app_version: string
   items: { meta: ContentItemMeta; dir: string }[]
   privateKeyPem: string
+  /** WP406：清单的来源（官方订阅那条通道打的包写 `official`；不写 = 老格式，等于 `public`）。 */
+  source?: ContentSource
 }
 
 export interface BuiltContentPack {
@@ -394,6 +411,7 @@ export function buildContentPack(input: BuildContentPackInput): BuiltContentPack
   const manifest: ContentManifest = {
     schema: CONTENT_MANIFEST_SCHEMA,
     channel: input.channel,
+    ...(input.source === undefined ? {} : { source: input.source }),
     serial: input.serial,
     created_at: input.created_at,
     min_app_version: input.min_app_version,

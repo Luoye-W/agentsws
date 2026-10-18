@@ -127,6 +127,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   // WP390（docs/105 §5）：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 交换联系方式）——主体与主按钮在卡身里，
   // 排版借「策略」那一种的是非题骨架（同连接卡 / 配置卡）
   service_order: 'policy',
+  // WP406（私有 docs/107 §5.1）：岗位更新——逐项「改了什么 / 你改过没」+ 卡身里「全部应用 / 挑着看 / 这次跳过」
+  content_update_digest: 'policy',
 }
 
 /**

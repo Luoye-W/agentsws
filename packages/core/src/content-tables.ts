@@ -22,6 +22,12 @@ export type ContentTableProvider = (
 
 const providers: ContentTableProvider[] = []
 
+/**
+ * WP406：随软件带的那几张表按表名记一份（`builtinContentTable` 加载时顺手登记）。官方更新按条三方合并要
+ * 「原来那一版」——没应用过官方版时，原来那一版就是随软件带的这一份。
+ */
+const builtins = new Map<string, ContentTableFile>()
+
 /** 登记一个覆盖源（后登记的先问）。回一个撤销函数（测试与宿主关停时用）。 */
 export function registerContentTableProvider(provider: ContentTableProvider): () => void {
   providers.unshift(provider)
@@ -55,7 +61,13 @@ export function builtinContentTable<Row extends ContentTableRow>(
     throw new Error('内容表缺 table 名')
   const bad = contentTableProblem(file.rows)
   if (bad !== undefined) throw new Error(`内容表 ${file.table}：${bad}`)
+  builtins.set(file.table, file as ContentTableFile)
   return file as ContentTableFile<Row>
+}
+
+/** 随软件带的那一张（这个进程里加载过它的模块才有；没有回 `undefined`）。 */
+export function builtinContentTableRows(table: string): readonly ContentTableRow[] | undefined {
+  return builtins.get(table)?.rows
 }
 
 export interface ReadContentTableOptions<Row> {
