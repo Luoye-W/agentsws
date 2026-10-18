@@ -264,6 +264,20 @@ describe('岗位 / 职责 / 事项页面板默认打开（决策 1035 更正）'
     expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ role: false })
   })
 
+  it('窗口 900–1199：面板默认开着、并排占一栏，不盖在对话上（Luoye 10-19）', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('1199px'),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    renderRail('/positions/asg_sup')
+    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
+    const frame = screen.getByTestId('rail-panel-frame')
+    expect(frame.className).toContain('sticky')
+    expect(frame.className).not.toContain('fixed')
+  })
+
   it('窗口窄于 900：没记过的先收着，露出来的工具也收进「⋮」', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('899px') || q.includes('1199px'),

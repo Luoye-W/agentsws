@@ -71,8 +71,11 @@ function useMedia(query: string): boolean {
   return hit
 }
 
-/** 窄屏（< 1200）：面板盖在主区上，逻辑一个字不变。 */
-const NARROW = '(max-width: 1199px)'
+/**
+ * 只有窗口窄于 900（接近手机宽）面板才盖在主区上；900 以上一律并排占一栏，和 Claude 的右侧面板一样
+ * （Luoye 10-19：状态卡默认一直显示、占右栏，不浮在对话上）。窄一些的窗口靠下面的 `maxWidth` 让面板让位。
+ */
+const NARROW = '(max-width: 899px)'
 /**
  * WP412（Luoye 10-19）：「⋮」里先列「设定」卡的几个标签——岗位定义（职责页叫职责定义）、技能、知识、记忆、额度，
  * 顺序照 Luoye 给的；`id` 就是 `registerPanelAlias` 的那几个 sub。
@@ -529,7 +532,8 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
             ? 'fixed top-11 right-0 bottom-0 max-w-[calc(100vw-1rem)] shadow-lg'
             : 'sticky top-11 h-[calc(100vh-2.75rem)]',
         )}
-        style={{ width }}
+        // 并排时面板最多占窗口的 38%（加宽时 60%），窗口窄了自己收，给对话留地方
+        style={narrow ? { width } : { width, maxWidth: wide === null ? '38vw' : '60vw', minWidth: 300 }}
         data-testid="rail-panel-frame"
         data-panel={open}
         data-wide={wide === null ? undefined : 'true'}
