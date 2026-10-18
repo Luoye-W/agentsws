@@ -9944,6 +9944,12 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "x-content-type": {
+                "description": "文件原本的类型（传的时候声明的那个，`type/subtype`）。",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },

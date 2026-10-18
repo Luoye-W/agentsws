@@ -1274,12 +1274,17 @@ export interface ServiceAttachmentParams {
   attachment_id: string
 }
 
-/** 下载附件时响应头里带的。 */
+/**
+ * 下载附件时响应头里带的。正文一律按 `application/octet-stream` 回（不在云的域名上直接渲染用户传的
+ * HTML / SVG）；文件原本的类型在 `x-content-type`。
+ */
 export interface ServiceAttachmentDownloadHeaders {
   /** `attachment; filename*=UTF-8''…` */
   'content-disposition': string
   /** 文件内容的 sha256（十六进制）。 */
   'x-content-sha256': string
+  /** 文件原本的类型（传的时候声明的那个，`type/subtype`）。 */
+  'x-content-type': string
 }
 
 /** 一单的路径（`sub` 是 `/extra`、`/attachments`、`/attachments/<id>` 这类）。 */
