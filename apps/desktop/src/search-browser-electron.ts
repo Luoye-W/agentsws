@@ -12,12 +12,14 @@
  */
 import { type BrowserWindow, session as electronSession, WebContentsView } from 'electron'
 import {
+  AMAZON_URL_PATTERNS,
   cleanUserAgent,
   type OpenRequest,
   type OpenResult,
   type SearchBrowserDriver,
   type SearchBrowserStatus,
   searchPartitionOf,
+  userAgentFor,
 } from './search-browser.js'
 import { extractReadable, extractSerp, pageScript } from './search-extract.js'
 
@@ -65,6 +67,17 @@ export function createElectronSearchBrowser(deps: {
     if (!prepared.has(partition)) {
       prepared.add(partition)
       ses.setUserAgent(cleanUserAgent(ses.getUserAgent()))
+      // WP398（docs/106 §2.1）：访问 Amazon 的每个请求自报 `Agent/AgentsWorkshop`（别的站不加）
+      ses.webRequest.onBeforeSendHeaders(
+        { urls: [...AMAZON_URL_PATTERNS] },
+        (details, callback) => {
+          const headers = { ...details.requestHeaders }
+          const key =
+            Object.keys(headers).find((k) => k.toLowerCase() === 'user-agent') ?? 'User-Agent'
+          headers[key] = userAgentFor(details.url, headers[key] ?? ses.getUserAgent())
+          callback({ requestHeaders: headers })
+        },
+      )
       ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
       ses.setPermissionCheckHandler(() => false)
       ses.on('will-download', (event, item) => {

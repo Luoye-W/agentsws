@@ -47,6 +47,62 @@ export function cleanUserAgent(ua: string): string {
   return out.join(' ')
 }
 
+/**
+ * WP398（docs/106 §2.1 Amazon Agent Policy）：访问 **Amazon** 的每个请求，User-Agent 末尾带上 `Agent/AgentsWorkshop`
+ * ——照实告诉 Amazon 这是代人干活的软件（Chromium 原有那几段不去掉）。别的站照旧 {@link cleanUserAgent}。
+ * 带了标识 Amazon 随时能拦；拦了就停，不绕（服务进程那一侧管）。
+ */
+export const AMAZON_AGENT_TOKEN = 'Agent/AgentsWorkshop'
+
+/** Amazon 各站前台（与 `amz/store.yml` 的 `browser_scope` 同一批）+ 联想词 / 图片这些资源域。 */
+export const AMAZON_DOMAINS: readonly string[] = [
+  'amazon.com',
+  'amazon.ca',
+  'amazon.com.mx',
+  'amazon.com.br',
+  'amazon.co.uk',
+  'amazon.de',
+  'amazon.fr',
+  'amazon.it',
+  'amazon.es',
+  'amazon.nl',
+  'amazon.se',
+  'amazon.pl',
+  'amazon.com.be',
+  'amazon.com.tr',
+  'amazon.ae',
+  'amazon.sa',
+  'amazon.eg',
+  'amazon.in',
+  'amazon.co.jp',
+  'amazon.com.au',
+  'amazon.sg',
+  'media-amazon.com',
+  'ssl-images-amazon.com',
+  'images-amazon.com',
+]
+
+/** Electron `webRequest` 的地址过滤写法（`*.amazon.com` 也认 `amazon.com` 本身）。 */
+export const AMAZON_URL_PATTERNS: readonly string[] = AMAZON_DOMAINS.map((d) => `*://*.${d}/*`)
+
+/** 这个主机是不是 Amazon（各站前台、联想词、图片资源）。 */
+export function isAmazonHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, '')
+  return AMAZON_DOMAINS.some((d) => h === d || h.endsWith(`.${d}`))
+}
+
+/** 这个请求该带的 User-Agent：Amazon 的在末尾加 {@link AMAZON_AGENT_TOKEN}（已经有了不重复加）。 */
+export function userAgentFor(url: string, ua: string): string {
+  let host = ''
+  try {
+    host = new URL(url).hostname
+  } catch {
+    return ua
+  }
+  if (!isAmazonHost(host) || ua.includes(AMAZON_AGENT_TOKEN)) return ua
+  return `${ua} ${AMAZON_AGENT_TOKEN}`.trim()
+}
+
 export type OpenKind = 'google' | 'bing' | 'page'
 
 export interface OpenRequest {
