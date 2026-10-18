@@ -276,6 +276,8 @@ export function DeckCardView({
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
+  /** WP418（审计 U8）：选主题卡——头一行不出期限、不出「AI」角标（只按这一种 kind 收，通用头别的卡照旧）。 */
+  const pickOne = card.kind === 'theme_choice'
   /**
    * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 外部版块」），
    * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
@@ -404,7 +406,8 @@ export function DeckCardView({
           WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
           WP278：交给你的卡正文里已经有「几号前不接就退回」——不再出「剩 N 天」说第二遍。
         */}
-        {peerNotice || handoffOffer ? null : <WaitPill card={card} />}
+        {/* WP418（审计 U8）：选主题这种「选一个」的卡没有期限可言——不出「剩 N 天」 */}
+        {peerNotice || handoffOffer || pickOne ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -434,12 +437,15 @@ export function DeckCardView({
               }}
             />
           )}
-          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
-          <WsAvatar
-            name={t(`deck.proposer.${card.detail.proposer.kind}`)}
-            tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
-            className="size-[22px] text-[10px]"
-          />
+          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。
+              WP418（审计 U8）：选主题卡上「AI」这个角标对人没用，不出 */}
+          {pickOne ? null : (
+            <WsAvatar
+              name={t(`deck.proposer.${card.detail.proposer.kind}`)}
+              tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
+              className="size-[22px] text-[10px]"
+            />
+          )}
         </span>
       </div>
 

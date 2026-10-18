@@ -127,10 +127,10 @@
       "def": "85f9b683b4f11d72"
     },
     "dtc.fulfillment": {
-      "zh": "74dd8e106b5d458c",
-      "en": "90860f964aadd39c",
-      "content": "ba21e1d3f0ac0f5e",
-      "def": "9d72832ec3e4a404"
+      "zh": "6ef651654c7ff204",
+      "en": "bf31d22a6aaf236c",
+      "content": "8c69bd5252eec28f",
+      "def": "4260ab36eb5740cf"
     },
     "dtc.live-chat": {
       "zh": "d0ebf75a1ae79e4e",
@@ -139,10 +139,10 @@
       "def": "99e9e66d6e994a8e"
     },
     "dtc.store": {
-      "zh": "9f7b349adc093888",
-      "en": "606171301e6676a9",
-      "content": "347d052e781ba85c",
-      "def": "92c42520c20184f6"
+      "zh": "ac2cec4f74cfbec7",
+      "en": "7476cb2f9cdd9892",
+      "content": "3e6d1cc3a9f5c00f",
+      "def": "2ccc6e995484ead9"
     },
     "dtc.support": {
       "zh": "9819a497de49657e",
@@ -205,28 +205,28 @@
       "def": "451056d4cf2e8a70"
     },
     "site.shopify-apps": {
-      "zh": "41f2661b31feff86",
-      "en": "3a23ed1dccba2319",
-      "content": "a57457b3a52c42df",
-      "def": "e2e987f019b30074"
+      "zh": "42cefb3603d7a447",
+      "en": "f1243972aafbd086",
+      "content": "35f2dc5b8bd646e4",
+      "def": "f7201bf2713e9270"
     },
     "site.shopify-build": {
-      "zh": "3aa69a1f0eea1588",
-      "en": "77296bc920c0196b",
-      "content": "71e484419c36dd37",
-      "def": "3d627fbe3a27fee9"
+      "zh": "3ea591a84a2466ad",
+      "en": "2ff5de5889ccffcb",
+      "content": "3b9f07a0fef74fcb",
+      "def": "ca448e2e6cb4f151"
     },
     "site.shopify-email": {
-      "zh": "3006b16e764503a6",
-      "en": "4cfef27e3119aabb",
-      "content": "654e65c867c806bf",
-      "def": "2b29366a439ee0f3"
+      "zh": "7456fad9d016718f",
+      "en": "e41fa24c38c6a26f",
+      "content": "d4be43ee81fcc064",
+      "def": "17dc9e69c2ca4a56"
     },
     "site.shopify-theme": {
       "zh": "5a8dbfe190fcace3",
       "en": "1e8de5a8d16e30f3",
       "content": "115c89c5b7f5d26f",
-      "def": "793a6d049676726c"
+      "def": "fd306e0d97fc6e26"
     },
     "social.discord": {
       "zh": "f0379e8c235edc9b",

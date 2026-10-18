@@ -189,6 +189,15 @@ describe('WP216 平台 CLI 卡', () => {
     expect(screen.getByTestId('platform-cli-log').textContent).toContain('added 3 packages')
     expect(screen.queryByTestId('platform-cli-install-run')).toBeNull()
     expect(screen.getByTestId('platform-cli-cancel')).toBeTruthy()
+    // WP418（审计 U4）：装的时候只留一行进度——「没装 / 没登录」标签不出；「取消」是次要按钮（描边）
+    expect(screen.queryByTestId('platform-cli-status')).toBeNull()
+    expect(screen.getByTestId('platform-cli-cancel').getAttribute('data-variant')).toBe('outline')
+  })
+
+  it('WP418 U4：状态是两个小文字标签「没装 / 没登录」，不是没字的图标', async () => {
+    renderWithProviders(<PlatformCliCard positionId="site" />)
+    const tags = await screen.findByTestId('platform-cli-status')
+    expect(tags.textContent).toBe('没装没登录')
   })
 
   it('装失败（网络）：一句人话 + 原始码 + 「重试」', async () => {

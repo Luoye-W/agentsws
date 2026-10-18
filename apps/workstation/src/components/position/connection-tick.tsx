@@ -72,6 +72,8 @@ export function ConnectionTick({
     lines.push(
       until === undefined ? t('pos2.tick.shopify') : `${t('pos2.tick.shopify')} · ${until}`,
     )
+    // WP418（审计 C7）：悬停时说清管的是哪家店
+    if (s.store !== undefined) lines.push(t('shop_admin.store_is', { store: s.store }))
   }
   const names = connected
     .filter((i) => !(shopHere && i.connect_service === 'shopify_admin'))

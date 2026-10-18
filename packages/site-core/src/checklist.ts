@@ -22,8 +22,11 @@ export type LaunchCheckId =
   | 'navigation'
   | 'required_apps'
   | 'theme_published'
+  /** WP418：店面还挂着密码（顾客进不了店）。读不到就照 `unknown` 记。 */
+  | 'storefront_password'
 
 export const LAUNCH_CHECK_IDS: readonly LaunchCheckId[] = [
+  'storefront_password',
   'domain',
   'payment',
   'tax',
@@ -105,6 +108,10 @@ export interface LaunchCheckFacts {
     /** 线上那一份还是 Shopify 送的默认主题、一个字没改过。 */
     is_default_untouched?: boolean
   }
+  /** WP418：店面密码（新店默认开着；不关掉顾客进不了店，检查单其余几项全绿也没用）。 */
+  storefront?: {
+    password_enabled?: boolean
+  }
 }
 
 export interface LaunchCheckOptions {
@@ -136,8 +143,13 @@ export interface LaunchChecklist {
   unknown: readonly LaunchCheckItem[]
   blockers: number
   warnings: number
-  /** 一个 blocker 都没有 = 能开门（warning 不拦）。 */
+  /**
+   * 一个 blocker 都没有、**而且**会拦路的那几项都读到了 = 能开门（warning 不拦）。
+   * WP418（自查 A10）：读不到的拦路项不能当成「没问题」。
+   */
   ready: boolean
+  /** WP418：会拦路、但这次没读到的那几项（`ready` 为 false 的另一个原因）。 */
+  unread_blockers: number
   checked_at: string
   /** 缺的政策页 handle（界面上直接列出来）。 */
   missing_policies: readonly string[]
@@ -146,6 +158,7 @@ export interface LaunchChecklist {
 }
 
 const SEVERITY: Record<LaunchCheckId, LaunchSeverity> = {
+  storefront_password: 'blocker',
   domain: 'warning',
   payment: 'blocker',
   tax: 'warning',
@@ -157,6 +170,7 @@ const SEVERITY: Record<LaunchCheckId, LaunchSeverity> = {
 }
 
 const TITLES: Record<LaunchCheckId, { zh: string; en: string }> = {
+  storefront_password: { zh: '店面密码', en: 'Storefront password' },
   domain: { zh: '域名', en: 'Domain' },
   payment: { zh: '收款方式', en: 'Payments' },
   tax: { zh: '税', en: 'Taxes' },
@@ -216,6 +230,39 @@ export function runLaunchChecklist(
   options: LaunchCheckOptions = {},
 ): LaunchChecklist {
   const items: LaunchCheckItem[] = []
+
+  // ── 店面密码（WP418：真正「开门」那一步；只读，关密码要店主在后台选好套餐后自己点）────
+  const ADMIN_PASSWORD = {
+    zh: '去 Shopify 后台「在线商店 → 偏好设置」关掉店面密码（要先选好套餐）。',
+    en: 'Turn off the storefront password in Online Store → Preferences (needs a paid plan).',
+  }
+  if (facts.storefront?.password_enabled === undefined)
+    items.push(
+      item(
+        'storefront_password',
+        'unknown',
+        { zh: '没读到店面密码的设置', en: 'Storefront password not read' },
+        ADMIN_PASSWORD,
+      ),
+    )
+  else if (facts.storefront.password_enabled)
+    items.push(
+      item(
+        'storefront_password',
+        'missing',
+        { zh: '店面还挂着密码，顾客进不了店', en: 'Storefront is password-protected' },
+        ADMIN_PASSWORD,
+      ),
+    )
+  else
+    items.push(
+      item(
+        'storefront_password',
+        'ok',
+        { zh: '店面没有密码，顾客进得来', en: 'Storefront is open' },
+        { zh: '', en: '' },
+      ),
+    )
 
   // ── 域名 ────────────────────────────────────────────────────────────
   if (facts.domain === undefined)
@@ -532,13 +579,16 @@ export function runLaunchChecklist(
   const order: Record<LaunchSeverity, number> = { blocker: 0, warning: 1 }
   const sorted = [...missing].sort((a, b) => order[a.severity] - order[b.severity])
   const blockers = missing.filter((i) => i.severity === 'blocker').length
+  const unknown = items.filter((i) => i.state === 'unknown')
+  const unreadBlockers = unknown.filter((i) => i.severity === 'blocker').length
   return {
     items,
     missing: sorted,
-    unknown: items.filter((i) => i.state === 'unknown'),
+    unknown,
     blockers,
     warnings: missing.length - blockers,
-    ready: blockers === 0,
+    ready: blockers === 0 && unreadBlockers === 0,
+    unread_blockers: unreadBlockers,
     checked_at: options.at ?? '',
     missing_policies: missingPolicies,
     missing_apps: missingApps,
@@ -558,6 +608,23 @@ export function launchCheckAfter(result: LaunchChecklist): Record<string, unknow
     blockers: result.blockers,
     warnings: result.warnings,
     ready: result.ready,
+    unread_blockers: result.unread_blockers,
     checked_at: result.checked_at,
   }
+}
+
+/**
+ * WP418（自查 A10）：检查单的那一句标题。**没读到的拦路项不许说成「没有拦路」**——
+ * 一项都没读到时，以前标题写「没有拦路的缺项」，用户会以为能开门了。
+ */
+export function launchChecklistHeadline(result: {
+  blockers: number
+  unread_blockers: number
+  unknown: readonly unknown[]
+}): string {
+  if (result.blockers > 0) return `上线检查单：${result.blockers} 项会让顾客买不成`
+  if (result.unread_blockers > 0) return `上线检查单：${result.unknown.length} 项没读到，先连店再查`
+  if (result.unknown.length > 0)
+    return `上线检查单：拦路的都过了，还有 ${result.unknown.length} 项没读到`
+  return '上线检查单：没有拦路的缺项'
 }

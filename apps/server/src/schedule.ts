@@ -147,7 +147,26 @@ export const HANDLERS = {
   competitorWatch: 'store.competitor_watch',
   /** WP315（docs/101 §5.1①）：广告看数据（每小时看一眼：该建「工坊日报」的建、9 点后该导的导、插件不在读邮箱）。 */
   adsDailyExport: 'ads.daily_export',
+  /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常卡（时间读职责 yml 的 `digest_schedule`）。 */
+  storeDigest: 'store.daily_digest',
+  /** WP418（自查 B13）：网站体检每周一自动跑（店铺管理或内容与搜索有人担就建，不再挂在内容与搜索的周报上）。 */
+  siteHealthWeekly: 'site.health_weekly',
 } as const
+
+/** WP418：网站体检每周一早上 8 点（内容与搜索周报 8:30 之前，周报能用上这一次的结论）。 */
+export const SITE_HEALTH_WEEKLY_CRON = '0 8 * * 1'
+
+export interface StoreDigestDeps {
+  /** 这个品牌出一张日报卡（有异常再出告警）。 */
+  digest(): Promise<unknown>
+  /** 这个品牌体检一次网站 / 商品。 */
+  siteHealth(): Promise<unknown>
+}
+
+export function registerStoreDigest(scheduler: Scheduler, deps: StoreDigestDeps): void {
+  scheduler.register(HANDLERS.storeDigest, () => deps.digest())
+  scheduler.register(HANDLERS.siteHealthWeekly, () => deps.siteHealth())
+}
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
 export const HOUSEKEEPING_INTERVAL_MS = 60_000
@@ -1405,6 +1424,10 @@ export interface SchedulePlanOptions {
     adsDailyExport?: boolean
     /** WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条。 */
     competitorWatch?: boolean
+    /** WP418：有人担「店铺管理」才建每日日报那一条；值是 cron（职责 yml 的 `digest_schedule`）。 */
+    storeDigest?: string
+    /** WP418：有人担「店铺管理」或「内容与搜索」才建每周体检那一条。 */
+    siteHealthWeekly?: boolean
   }
 }
 
@@ -1745,6 +1768,33 @@ export async function ensureSystemTasks(
         title: '看一眼竞品上新和价格（默认每天一次）',
         handler: HANDLERS.competitorWatch,
         trigger: { kind: 'interval', every_ms: COMPETITOR_WATCH_INTERVAL_MS },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * WP418（自查 B7）：店铺日报。**错过了补跑一次**（`run_once_now`）：早上开机晚了，今天那张日报照样该出
+   * （同一天的 dedupe_key 一样，补跑也只有一张）。
+   */
+  if (options.has.storeDigest !== undefined) {
+    await add(
+      'sched_store_digest',
+      systemTask(base, {
+        title: '每天出一张店铺日报（有异常再提醒）',
+        handler: HANDLERS.storeDigest,
+        trigger: { kind: 'cron', expr: options.has.storeDigest, tz },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // WP418（自查 B13）：网站体检每周一自动跑；错过不补（关机三周再开机只该体检一次，下周一照常）
+  if (options.has.siteHealthWeekly === true) {
+    await add(
+      'sched_site_health_weekly',
+      systemTask(base, {
+        title: '每周一体检一次网站和商品',
+        handler: HANDLERS.siteHealthWeekly,
+        trigger: { kind: 'cron', expr: SITE_HEALTH_WEEKLY_CRON, tz },
         misfire_policy: 'skip',
       }),
     )

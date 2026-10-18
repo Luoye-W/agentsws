@@ -32,6 +32,7 @@ import type {
   SearchDataPort,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from '@agentsws/deck'
 import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import { contentHashOf } from '@agentsws/knowledge'
@@ -1458,6 +1459,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    */
   const cloud = cloudStandIn({
     clock: world.clock,
+    // WP418（自查 A6）：demo 的工坊账号带全套默认动作集（含 `store`），选主题卡上演得出「买高级主题」
+    linkScopes: DEFAULT_CLOUD_SCOPES,
     // WP390：工坊服务的服务方在 demo 里是替身，自己往前走（报价 → 接单 → 要材料 → 交付），等你的那几步停着
     services: {
       autopilot: true,

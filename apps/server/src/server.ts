@@ -241,6 +241,7 @@ import {
   scheduleConflicts,
   scheduleRulesFor,
 } from '@agentsws/social-core'
+import type { ToolExecutor } from '@agentsws/stand-ins'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -784,6 +785,7 @@ import {
   registerSkillsWeekly,
   registerSocialBroadcast,
   registerSocialPublish,
+  registerStoreDigest,
   registerTokenRefresh,
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
@@ -814,6 +816,7 @@ import { ShopAdminError } from './shop-admin.js'
 import {
   createShopAdmin,
   createStoreAuthRunner,
+  hasLiveStoreGrant,
   type ShopAdminAssembly,
   STORE_SESSION_CLI_ID,
 } from './shop-auth.js'
@@ -822,10 +825,20 @@ import type { ShopOps } from './shop-ops.js'
 import { createShopOps } from './shop-service.js'
 import { createShopToolSurface } from './shop-tools.js'
 import type { BrokerFetch } from './shopify-broker.js'
-import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js'
+import {
+  type CloudShopLinks,
+  createCloudShopLinks,
+  createShopifyConnect,
+} from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import {
+  createLayeredSiteFacts,
+  siteAppsToolData,
+  siteChecklistToolData,
+  siteEmailsToolData,
+} from './site-facts.js'
 import {
   createSiteHealthService,
   type PageRenderer,
@@ -853,6 +866,7 @@ import { modelTagReviewer } from './social-tags.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
+import { createStoreDigest, type StoreDigest, storeDigestCron } from './store-digest.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
 import { createScopeManagerRouter } from './supervisor.js'
 import { createSupportInbox, type SupportInboxPort } from './support-inbox.js'
@@ -2708,6 +2722,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP316：广告卡批了 → 插件在用户自己的后台里执行（进了队就回 ok，结局记广告变更账本）
       const adsApplied = await brand?.adsWiring?.apply(change)
       if (adsApplied !== undefined) return adsApplied
+      // WP418（自查 A11 / A18 / A19）：建站自己的卡——检查单（只读，查完即好）；装 App / 改 App / 改通知邮件做不到，照实回「没做」
+      const siteApplied = brand?.siteService.apply(change)
+      // WP415 统一口径：做不到的那几类（`not_wired`）演示里照走兜底（标「演示」），生产照实回「没做」+ 去哪里自己点
+      if (siteApplied !== undefined && !(siteApplied.not_wired === true && executionMode === 'demo'))
+        return siteApplied
       // WP253：换线上主题那张卡批了 → 由服务端跑 `theme publish`（这是整条路上唯一换线上主题的地方）
       if (change.kind === 'publish_theme') {
         const themed = await (await siteThemeOf(change.workspace_id))?.apply(change)
@@ -3296,11 +3315,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 档案有就用档案；没设而连了某个平台的店铺就按它推断并写回档案；都没有 = undefined（一样都不启用）。
    * 店铺连接那张表（缺省按 Shopify）不走这里。
    */
+  /** WP418：云端一键授权的缓存（下面才建好；推平台时只同步看一眼）。 */
+  let cloudShopLinksRef: CloudShopLinks | undefined
   const brandPlatformOf = (ws: WorkspaceId): StorefrontPlatform | undefined =>
     resolveBrandPlatform(
       {
         profile: (w) => brandProfileOf(w).storefront_platform,
-        connectedServices: (w) => brands?.peek(w)?.connections.connectedServices() ?? [],
+        connectedServices: (w) => [
+          ...(brands?.peek(w)?.connections.connectedServices() ?? []),
+          // WP418（自查 C4）：只做了连接页云端一键授权的品牌，连上那一刻也认成 Shopify
+          ...(cloudShopLinksRef?.peek(w as WorkspaceId) === undefined ? [] : ['shopify_admin']),
+        ],
         writeBack: (w, p) =>
           onboardingRef?.setStorefrontPlatform(w, p, 'inferred_from_connection') ?? false,
       },
@@ -4216,6 +4241,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.shopAdmin?.spawn === undefined ? {} : { spawn: options.shopAdmin.spawn }),
   })
   const shops = new Map<WorkspaceId, { auth: ShopAdminAssembly; ops: ShopOps }>()
+  /** WP418（自查 C1）：每个品牌那一份 CLI 店铺授权（同步判断「店铺后台连上没有」用；没数据目录时只在内存里）。 */
+  const cliShopAuths = new Map<WorkspaceId, ShopAdminAssembly>()
   /** WP268：每个品牌一份素材库与生图服务（装品牌时登记；决定钩子与 `/v1/brand-assets` 按品牌取）。 */
   const brandAssetsByWs = new Map<WorkspaceId, BrandAssets>()
   const imageServices = new Map<WorkspaceId, ImageService>()
@@ -4227,6 +4254,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (lib === undefined) throw new ApiError('not_implemented', '这个品牌没有素材库')
     return lib
   }
+  /**
+   * WP418（自查 U8）：工具回来带着 `approval_item_id`（出了卡）、这次运行挂在某件事项上 → 把卡挂进那件事项的时间线。
+   * 变更账本出的卡 subject 上没有事项（账本不认识事项），所以由这里补一跳；挂不上不影响工具结果。
+   */
+  const linkStagedCards =
+    (ws: WorkspaceId, exec: ToolExecutor): ToolExecutor =>
+    async (call) => {
+      const res = await exec(call)
+      const data =
+        res.data !== null && typeof res.data === 'object'
+          ? (res.data as Record<string, unknown>)
+          : {}
+      const matter_id = call.request.work_item?.id
+      if (
+        res.status === 'ok' &&
+        typeof data.approval_item_id === 'string' &&
+        matter_id !== undefined
+      )
+        try {
+          const item = await txn.approvals.get(data.approval_item_id as never)
+          const work = (await brands?.forWorkspace(ws))?.work
+          // 已经挂过的（选主题卡这种由模块自己挂）不再挂第二次
+          const already = work?.store
+            .listMatterEvents(matter_id as never, { limit: 500 })
+            .some((e) => e.approval_item_id === data.approval_item_id)
+          if (item !== undefined && already !== true)
+            work?.onCard({
+              ...cardRefOf(item),
+              matter_id: matter_id as never,
+              run_id: call.request.id as never,
+            })
+        } catch {
+          // 挂不上：卡照样在待批里
+        }
+      return res
+    }
+  const linkStagedSurface = (
+    ws: WorkspaceId,
+    surface: ReturnType<typeof createShopToolSurface>,
+  ): ReturnType<typeof createShopToolSurface> => ({
+    ...surface,
+    executeTool: linkStagedCards(ws, surface.executeTool),
+  })
   const shopOf = async (
     ws: WorkspaceId,
   ): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined> => {
@@ -4276,6 +4346,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       install: (spec) => shopCli.install?.(spec),
       installJob: (spec) => shopCli.installJob?.(spec),
+      // WP418（自查 C2）：授权一次要齐整个品牌担着的职责用得到的权限
+      brandRoles: () =>
+        roles.roles
+          .list()
+          .map((r) => r.id)
+          .filter((id) =>
+            roles.assignments
+              .listByRole(id, { workspace_id: ws })
+              .some((a) => a.revoked_at === undefined),
+          ),
       auth: storeAuthRunner,
       run:
         options.shopAdmin?.run ??
@@ -4300,6 +4380,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP265（Fable 追加）：这个品牌在连接页一键授权连着店 → **优先走云端代发**（查询不带、批过的卡带
      * `allow_mutations`），岗位页那一行、工具面、出卡都按云端那一条；没有才回退上面的 CLI 授权。
      */
+    cliShopAuths.set(ws, cliAuth)
     const auth = preferCloudShopAdmin(cliAuth, {
       link: () => cloudShopLinks.link(ws),
       call: async () => {
@@ -4387,6 +4468,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
     ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
+  cloudShopLinksRef = cloudShopLinks
   /*
    * WP353（决策 912）：联网搜索后端的进程级那几样——内置浏览器的本机通道（桌面壳经环境变量给）、
    * 全进程一条节流队（同一时刻只开一页、随机隔 2–4 秒、每小时上限）、公开搜索服务（懒加载）。
@@ -4548,6 +4630,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
       extraKinds: () => [
         ...(cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+        // WP418（自查 C1）：岗位页上做过 CLI 店铺授权也算店铺后台已连（四种授权统一认）
+        ...(hasLiveStoreGrant(
+          dir === undefined ? undefined : join(dir, 'shop-admin.json'),
+          clock.now(),
+        ) || cliShopAuths.get(ws)?.hasLiveGrant?.() === true
+          ? ['shopify', 'shop']
+          : []),
         // WP386：有监控源 = 信息监控那张连接卡算连上
         ...(prMonitorCount() > 0 ? ['google_alerts'] : []),
       ],
@@ -4709,6 +4798,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /** WP238：取数路由走得通哪一级（云客户端在下面才建好，这里先占位、建好后填上）。 */
     const readLevelHolder: { of?: (route: string) => DataSourceLevel | undefined } = {}
+    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警区只同步看一眼。 */
+    let storeDigestRef: StoreDigest | undefined
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       systemCards: (actor) => ({
@@ -4718,6 +4809,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
+          ...(storeDigestRef?.alerts(actor.person_id) ?? []),
           // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
           ...adsNoticeCards({
             rows: adsWiringNow.entries(),
@@ -5511,6 +5604,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP388：出上一周的（目标市场时区）
       reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
     })
+    /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常提醒（面板那一份数，不经模型手）。 */
+    const storeDigest = createStoreDigest({
+      workspace_id: ws,
+      clock,
+      assignments: () => roles.assignments.listByWorkspace(ws),
+      approvals,
+      port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
+    })
+    storeDigestRef = storeDigest
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
     const lineCompareSnapshot = async () => {
       await economics.refresh()
@@ -5534,6 +5636,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 一条 Action 读不到就那一格留空，检查单照 `unknown` 记：一次令牌过期，
      * 不该在卡面上写成"这家店没有收款方式"。
      */
+    const siteFacts = createLayeredSiteFacts({
+      connect: createConnectSiteFacts({
+        connect: connections.connect as never,
+        // 店铺那条连接（没有 = 这一层什么都不给）
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+      }),
+      reader: async () => (await shopOf(ws).catch(() => undefined))?.auth.reader(),
+    })
     const siteService = createSiteService({
       workspace_id: ws,
       routeScopeManager,
@@ -5542,14 +5655,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals: txn.approvals,
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
-      facts: createConnectSiteFacts({
-        connect: connections.connect as never,
-        // 店铺那条连接（没有 = 整次巡检全是"没读到"，而不是"全缺"）
-        connection: () =>
-          connections
-            .liveConnections()
-            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
-      }),
+      /*
+       * WP418（自查 A9）：先问 OpenConnector 那一条（高级接法），再问店铺授权（云端一键授权优先、没有就 CLI
+       * 店铺授权——与改店工具同一个口子），一格一格补齐；都没有 = 那几格照「没读到」记。
+       */
+      facts: siteFacts,
+      themes: () => siteThemes.get(ws)?.lastListed?.() ?? [],
+      storeDomain: () => siteFacts.shop?.() ?? onboardingRef?.shopifyDomainOf(ws),
       // 装上了却还没连上 API 的那几条要指得出来（59 §2 那条接缝）
       connectedKinds: () => connections.connectedKinds(),
       appendEvent,
@@ -6010,6 +6122,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          * WP267（决策 209）：这个品牌在连接页云端一键授权连着店（授了 read_orders）→ 客服回信 / 订单查询的
          * 订单与商品改走云端代发（只读）；没连再回退连接器那条 Shopify 连接。改动照旧出卡。
          */
+        // WP418（自查 B11）：只做了 CLI 店铺授权（有看订单的权限）也查得到单
+        cliShop: async () => {
+          const m = await shopOf(ws)
+          const access = await m?.auth.access().catch(() => undefined)
+          return access?.scopes.includes('read_orders') === true ? m?.auth.reader() : undefined
+        },
         cloudShop: () =>
           cloudShopReader(
             {
@@ -6731,7 +6849,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP253：网页模板的九个受限主题工具（起底 / 列 / 拉 / 检查 / 看改文件 / 推未发布 / 发布出卡）。
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
-            themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            // WP418（自查 U8）：改店 / 发布主题这几类工具出的卡挂进这次运行的事项（以前卡和事项没连上，时间线里找不到）
+            themeTools: linkStagedCards(
+              ws,
+              createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            ),
             // WP316：改广告的两个工具（提一批只出卡、列广告改动记录）；Google / Meta 两条投放职责才摆
             ...(adsActions === undefined
               ? {}
@@ -6745,7 +6867,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
              */
-            shopTools: createShopToolSurface({ module: () => shopOf(ws) }),
+            shopTools: linkStagedSurface(
+              ws,
+              createShopToolSurface({
+                module: () => shopOf(ws),
+                // WP418（自查 A8）：整站搭建跑一遍上线检查单（只读，不出卡；结论落进面板「上线检查单」）
+                siteChecklist: async (request) => {
+                  const site = (await brandModules.forWorkspace(ws)).siteService.port
+                  const { run } = await site.runChecklist({
+                    workspace_id: ws,
+                    person_id: request.actor.person_id as never,
+                    assignment_id: request.actor.assignment_id as never,
+                    role_id: request.actor.role_id as never,
+                  })
+                  return siteChecklistToolData(run)
+                },
+                // WP418（自查 A16）：插件 / 邮件模板两条职责读本机建站库
+                siteRead: async (tool, request) => {
+                  const site = (await brandModules.forWorkspace(ws)).siteService.port
+                  const actor = {
+                    workspace_id: ws,
+                    person_id: request.actor.person_id as never,
+                    assignment_id: request.actor.assignment_id as never,
+                    role_id: request.actor.role_id as never,
+                  }
+                  return tool === 'site_apps_list'
+                    ? siteAppsToolData((await site.apps(actor)).rows)
+                    : siteEmailsToolData((await site.emailTemplates(actor)).rows)
+                },
+              }),
+            ),
             // WP268：生图 / 改图 / 素材库（设计岗五条 + 网页模板；生图配了才摆）
             imageTools: imageService,
             vertical: () => brandProfileOf(ws).vertical,
@@ -9283,6 +9434,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
+      storeDigest,
       lineCompareSnapshot,
       work,
       ...(runtime === undefined ? {} : { runtime }),
@@ -10014,8 +10166,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       weekly: async () => {
         const b = await of()
-        // WP381：每周一先体检一次网站 / 商品（结论进体检报表，不一致交给网站运营）；体检失败不拦周报
-        await b.siteHealth?.run().catch(() => undefined)
+        // WP418（自查 B13）：体检挪到自己那一条定时（每周一 8 点，店铺管理或内容与搜索有人担就建）
         const revenue = await b.seoService.weeklyRevenue()
         const geo = await b.seoService.weeklyGeo()
         const skipped: unknown[] = []
@@ -10028,6 +10179,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     registerEconomics(s, {
       weeklyReview: async () => (await of()).weeklyReview.run(),
       lineCompare: async () => (await of()).lineCompareSnapshot(),
+    })
+    // WP418（自查 B7 / B13）：店铺日报 + 异常提醒；网站体检每周一自动跑
+    registerStoreDigest(s, {
+      digest: async () => (await of()).storeDigest?.run() ?? { skipped: 'not_installed' },
+      siteHealth: async () =>
+        (await (await of()).siteHealth?.run()) ?? { skipped: 'not_installed' },
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
@@ -10149,6 +10306,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
         adsDailyExport: held('ads.google') || held('ads.meta'),
+        // WP418（自查 B7）：有人担「店铺管理」才建每日日报（时间读职责 yml 的 `digest_schedule`）
+        ...(held('dtc.store')
+          ? { storeDigest: storeDigestCron(roles.roles.get('dtc.store')?.notifications) }
+          : {}),
+        // WP418（自查 B13）：店铺管理或内容与搜索有人担就每周体检
+        siteHealthWeekly: held('dtc.store') || held('dtc.content'),
       },
     })
   }
@@ -10206,6 +10369,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+    // WP418
+    { ids: ['sched_store_digest'], held: (ws) => roleHeldIn(ws, 'dtc.store') },
+    {
+      ids: ['sched_site_health_weekly'],
+      held: (ws) => roleHeldIn(ws, 'dtc.store') || roleHeldIn(ws, 'dtc.content'),
+    },
     // WP224
     { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },
     {
@@ -13651,6 +13820,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     hasRoles: (ws, role_ids) =>
       role_ids.some((r) => roles.assignments.listByRole(r, { workspace_id: ws }).length > 0),
     platformChoices: () => storefrontPlatformChoices(),
+    // WP418（自查 A1）：岗位上担着建站 / 店铺管理的职责就要先选平台（不认岗位 id）
+    positionNeedsPlatform: (ws, position_id) =>
+      roles.roles
+        .list()
+        .map((r) => r.id)
+        .filter((id) => id.startsWith('site.') || id === 'dtc.store')
+        .some((id) =>
+          roles.assignments
+            .listByRole(id, { workspace_id: ws as WorkspaceId })
+            .some(
+              (a) =>
+                a.revoked_at === undefined &&
+                cloudPositionOf(ws as WorkspaceId, id, a.id) === position_id,
+            ),
+        ),
     prober: platformCliProber,
     runner: platformCliRunner,
     loginStoreOf: platformCliLoginOf,

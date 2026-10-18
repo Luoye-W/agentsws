@@ -383,6 +383,45 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
     )
     expect(staged).toEqual([])
   })
+
+  it('WP418（自查 A5）：店里本来就有、没在工坊里推过预览的主题（如太老的 Classic 2019）不许直接发上线', async () => {
+    const t = make()
+    await t.setStore(SHOP)
+    cli.setThemes([
+      { id: '100001', name: 'Horizon', role: 'main', files: { ...FAKE_HORIZON_FILES } },
+      { id: '100009', name: 'Classic 2019', role: 'unpublished', files: {} },
+    ])
+    const out = await t.proposePublish({ theme_id: '100009', request: request() })
+    expect(out.status).toBe('blocked')
+    expect(out.message).toContain('不是在工坊里推的预览')
+    expect(staged).toEqual([])
+  })
+
+  it('WP418（自查 A5）：卡出来之后线上主题被人换过 → 不发；发完读回它真成了线上主题才算好', async () => {
+    const t = make()
+    await t.setStore(SHOP)
+    await t.initFromBase({})
+    const pushed = await t.push({ name: 'Rovella 首页 v1' })
+    const out = await t.proposePublish({ theme_id: pushed.theme_id, request: request() })
+    expect(out.status).toBe('staged')
+    const card = staged[0] as StageInput
+    const change = {
+      id: 'chg_1',
+      workspace_id: WS,
+      kind: 'publish_theme',
+      before: { theme_id: '100777', theme_name: '别人换上去的' },
+      after: card.after,
+    } as unknown as StagedChange
+    const stale = await t.apply(change)
+    expect(stale).toMatchObject({ status: 'failed' })
+    expect(stale?.error?.message).toContain('线上主题被换过')
+    expect(cli.calls().filter((c) => c.argv[1] === 'publish')).toEqual([])
+    const ok = await t.apply({ ...change, before: card.before } as StagedChange)
+    expect(ok).toMatchObject({ status: 'ok' })
+    // 读回：发完又列了一次主题
+    const lists = cli.calls().filter((c) => c.argv[1] === 'list')
+    expect(lists.length).toBeGreaterThanOrEqual(2)
+  })
 })
 
 describe('Horizon 起底与工作目录的边界（WP301）', () => {

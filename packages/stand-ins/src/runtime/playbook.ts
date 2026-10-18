@@ -78,6 +78,7 @@ const DOMAIN_ZH: Readonly<Record<string, string>> = {
   ads: '投放',
   design: '设计',
   dev: '建站',
+  site: '建站',
   pr: '公共关系',
   common: '通用',
 }

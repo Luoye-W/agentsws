@@ -17,6 +17,7 @@ import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/r
 import { scopeAssignments, shortDate, useScopeReports } from '@/components/reports/report-data'
 import {
   getMySchedules,
+  getPlatformKit,
   getPositionConnections,
   getPositionRecords,
   type PositionConnectionItem,
@@ -235,6 +236,22 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
   const monitor = useScopeMonitor(scope)?.view
   // WP392：竞品监控有没读到的那几家，也算要处理（红点；照实说几家）。钩子先都调完再判
   const competitor = useCompetitorWatchStatus(scope)
+  // WP418（自查 U1）：建站平台还没选时，不许说「都连好了」
+  const positionId = positionIdOf(scope)
+  const assignment = scope?.assignment
+  const platform = useQuery({
+    queryKey: ['platform-kit', positionId ?? '', assignment ?? ''],
+    queryFn: () => getPlatformKit({ position_id: positionId ?? '' }, assignment),
+    enabled: positionId !== undefined && scope?.tier === 'position',
+    retry: false,
+    staleTime: 60_000,
+  })
+  if (platform.data?.choose_platform !== undefined)
+    return {
+      summary: t('conncard.summary.no_platform'),
+      dot: 'alert',
+      dotLabel: t('conncard.summary.no_platform'),
+    }
   if (monitor !== undefined && monitor.failed > 0)
     return { summary: monitor.summary, dot: 'alert', dotLabel: monitor.summary }
   const failed = competitor?.summary.failed ?? 0

@@ -79,7 +79,10 @@ export function ThemeChoiceBody({
             <Sparkles className="size-3.5 text-ws-brand" aria-hidden />
             {t('themes.choice.premium')}
             {canPremium ? <Tag tone="brand">{t('themes.choice.recommended')}</Tag> : null}
-            {premium.status === 'soon' || premium.status === 'needs_account' ? (
+            {premium.status === 'soon' ||
+            premium.status === 'needs_account' ||
+            premium.status === 'needs_scope' ||
+            premium.status === 'offline' ? (
               <Tag tone="muted">{t(`themes.choice.premium.${premium.status}`)}</Tag>
             ) : null}
           </span>

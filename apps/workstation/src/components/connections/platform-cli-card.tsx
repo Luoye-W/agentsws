@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
-import { StatusIcons, type StatusItem } from '@/components/design/status-icons'
+import { type StatusItem, statusText } from '@/components/design/status-icons'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -135,6 +135,36 @@ export function cliStatusItems(
 }
 
 /**
+ * WP418（自查 A1 / U1）：岗位**主页**顶上那一行「先选建站平台」——以前只在设置页签的 CLI 卡里，
+ * 平台没设时建站岗位页一句提示都不出。只在服务端说要选（`choose_platform`）时画；选好就消失。
+ */
+export function PlatformChooseBanner({
+  positionId,
+  assignment,
+}: {
+  positionId?: string
+  assignment?: string
+}): React.ReactNode {
+  const client = useQueryClient()
+  const key = ['platform-kit', positionId ?? '', assignment ?? '']
+  const view = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      getPlatformKit(positionId === undefined ? {} : { position_id: positionId }, assignment),
+    enabled: positionId !== undefined,
+  })
+  const choose = view.data?.choose_platform
+  if (choose === undefined) return null
+  return (
+    <ChoosePlatformRow
+      choices={choose.choices}
+      {...(positionId === undefined ? {} : { positionId })}
+      onSaved={(next) => client.setQueryData(key, next)}
+    />
+  )
+}
+
+/**
  * WP216（Fable 10-05）：品牌还没设建站平台时，建站岗位页上那一行「先选一下你的建站平台」+ 下拉。
  * 选平台是改品牌档案，只有负责人能改——用负责人那条分配发；不是负责人就只说一句、不给下拉。
  */
@@ -202,6 +232,46 @@ function ChoosePlatformRow({
         </span>
       )}
     </div>
+  )
+}
+
+/**
+ * WP418（审计 U4）：状态不再是两个没字的小图标（红叉 / 灰杠角标像出错了）——换成几个小文字标签
+ * 「装好了 / 没装」「登录了 / 没登录」。细节照旧进 `title` 与读屏（`data-hint` 同一份）。
+ */
+function CliTags({ items, label }: { items: StatusItem[]; label: string }): React.ReactNode {
+  const { t } = useApp()
+  if (items.length === 0) return null
+  return (
+    <ul
+      className="flex flex-wrap items-center gap-1.5"
+      data-slot="status"
+      data-testid="platform-cli-status"
+      aria-label={label}
+    >
+      {items.map((item) => {
+        const text = statusText(item, t(`status.${item.state}`))
+        return (
+          <li
+            key={item.key}
+            role="img"
+            aria-label={text}
+            title={text}
+            data-hint={text}
+            data-testid="status-icon"
+            data-key={item.key}
+            data-state={item.state}
+            className={
+              item.state === 'ok'
+                ? 'rounded-full bg-ws-good-bg px-2 py-px text-[11px] text-ws-good'
+                : 'rounded-full bg-ws-tint px-2 py-px text-[11px] text-ws-muted-fg'
+            }
+          >
+            {t(`platform_cli.tag.${item.key}.${item.state}`)}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -397,7 +467,7 @@ export function PlatformCliCard({
       return (
         <Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           disabled={cancel.isPending}
           onClick={() => cancel.mutate()}
           data-testid="platform-cli-cancel"
@@ -456,12 +526,12 @@ export function PlatformCliCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <StatusIcons
-          items={cliStatusItems(cli, t, view.data?.kit?.mcp)}
-          label={spec.label}
-          testId="platform-cli-status"
-        />
-        {running ? <JobLine job={job} /> : null}
+        {/* WP418（审计 U4）：装 / 登录的时候只留一行进度，状态标签等跑完再出 */}
+        {running ? (
+          <JobLine job={job} />
+        ) : (
+          <CliTags items={cliStatusItems(cli, t, view.data?.kit?.mcp)} label={spec.label} />
+        )}
         {!running && cli.state !== 'ready' ? (
           <p className="text-sm" data-testid="platform-cli-step">
             {stepText()}

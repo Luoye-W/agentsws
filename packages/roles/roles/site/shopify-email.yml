@@ -20,7 +20,7 @@ id: site.shopify-email
 version: 1.0.0
 domain: dev
 name: { zh: Shopify 邮件模板, en: Shopify Email Templates }
-description: Shopify 通知邮件模板的正文与主题行（订单确认、发货、退款、弃购…）。改的是**模板**不是一次群发——给谁发、这周发什么活动是网站运营岗位的邮件营销那条职责的事。草稿可自动，启用永远人审；Liquid 缺必需变量直接拦。
+description: Shopify 通知邮件模板的正文与主题行（订单确认、发货、退款、弃购…）。改的是**模板**不是一次群发——给谁发、这周发什么活动是网站运营岗位的邮件营销那条职责的事。草稿可自动，启用永远人审；Liquid 缺必需变量直接拦。**替你写进店里还没接通**（Shopify 接口改不了通知模板）——批了把改好的那一版给你，去后台「设置 → 通知」贴进去。
 
 scopes:
   - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -64,14 +64,14 @@ grounding:
       name: email_templates,
       intent_terms: [邮件模板, email template, 通知邮件, notification, 订单确认, 发货通知],
       cue_terms: [改, change, 写, write, 启用, enable, 预览, preview],
-      tool: site.email.list,
+      tool: site_email_templates,
       prefetch: true,
     }
   - {
       name: sample_order,
       intent_terms: [变量, variable, liquid, 预览, preview],
       cue_terms: [填, fill, 看看, show, 长什么样, looks like],
-      tool: shopify.order.get,
+      tool: get_order,
       prefetch: false,
     }
 
@@ -153,4 +153,4 @@ persona:
     你不负责：给谁发、这周发什么活动→网站运营的邮件营销；客户一对一的回信→客服；主题与页面→网页模板。
     怎么做：改的是模板不是一次群发；Liquid 少了必需变量就直接说拦住了，别猜一个默认值填进去。
     口气：像写模板的人，短句、每一处改动说清楚为什么。
-    必须出卡：启用模板；草稿可以自动。
+    必须出卡：启用模板；草稿可以自动。替人写进店里还没接通：批了只能把改好的那一版给人去后台贴，照实说。

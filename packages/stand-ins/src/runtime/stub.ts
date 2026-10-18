@@ -105,6 +105,7 @@ import {
 import { setupStateBranch } from './setup-state.js'
 import {
   firstProductOf,
+  renderSiteChecklistAnswer,
   SHOP_GET_PRODUCT_TOOL,
   SHOP_LIST_PRODUCTS_TOOL,
   SHOP_SAVE_PRODUCT_TOOL,
@@ -113,6 +114,7 @@ import {
   type ShopStep,
   shopBranch,
   shopStagedOf,
+  siteChecklistBranch,
 } from './shop.js'
 import {
   renderSiteHealthAnswer,
@@ -852,6 +854,59 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP418（自查 A8 / A20）：**上线检查单**（演示用剧本）。工具面里有 site_checklist_run、话里问「还差什么才能开门」
+       * → 真跑一遍检查单（服务端那一份，读不到的照实写「没读到」），把结论念出来。别的问法一个字节不变。
+       */
+      const checklistStep = siteChecklistBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (checklistStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: checklistStep.tool, input: checklistStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: checklistStep.tool,
+                input: checklistStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(checklistStep.tool)
+        const answer = renderSiteChecklistAnswer(
+          res.status === 'ok' ? res.data : undefined,
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : res.reason,
+        )
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*

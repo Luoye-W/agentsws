@@ -28,6 +28,12 @@ import { useMode } from '@/lib/mode'
 export const MAX_QUICK_ACTIONS = 4
 
 /**
+ * WP418（审计 U9）：发布主题卡借了「发布」排版，但它不是发帖——按钮是「发布 / 不发」，
+ * 没有「改时间」（WP414 起次按钮统一「修改 / 不要 / 稍后」，「修改」照常外露）。
+ */
+const themePublish = (card: DeckCard): boolean => card.change_kind === 'publish_theme'
+
+/**
  * 按钮行上的那几个：主动词 + 次动词，按 `LAYOUT_VERBS` 排，最多四个。
  *
  * 只出这张卡**真有**的动作（`available_actions` 是服务端按 kind × state 给的，
@@ -73,6 +79,10 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
   if ((card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff') {
     if (a === 'approve') return t('handoff.accept')
     if (a === 'reject') return t('handoff.decline')
+  }
+  if (themePublish(card)) {
+    if (a === 'approve') return t('verb.publish_theme.approve')
+    if (a === 'reject') return t('verb.publish_theme.reject')
   }
   // WP232：收件人待定的草稿批了不发出去——按钮不能写「发送」
   const key = verbKey(

@@ -167,6 +167,50 @@ describe('WP261 授权管理商品和页面', () => {
   })
 })
 
+describe('WP418 店铺授权的几句话', () => {
+  it('U5：同岗位有改主题的职责时，没授权那一行说清「上一步是改主题用的」', async () => {
+    renderWithProviders(
+      <ShopAdminBanner
+        duties={[
+          { role_id: 'site.shopify-theme', assignment_id: 'asg_theme' },
+          { role_id: 'site.shopify-build', assignment_id: 'asg_build' },
+        ]}
+      />,
+    )
+    const banner = await screen.findByTestId('shop-admin-banner')
+    expect(banner.textContent).toContain('上一步是改主题用的，这一步让 AI 改商品、页面、菜单')
+  })
+
+  it('C7：设置里那一行写「管的是 xxx.myshopify.com」', async () => {
+    api.view = view('authorized', { scopes_granted: ['write_products'], refreshable: true })
+    renderWithProviders(<ShopAdminBanner duties={STORE} variant="settings" />)
+    const banner = await screen.findByTestId('shop-admin-banner')
+    expect(banner.textContent).toContain('管的是 rovella-test.myshopify.com')
+  })
+
+  it('C6：一天内到期、不会自动续期——岗位页提前说一句；会续期的不说', async () => {
+    api.view = view('authorized', {
+      scopes_granted: ['write_products'],
+      refreshable: false,
+      expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    })
+    const { unmount } = renderWithProviders(<ShopAdminBanner duties={STORE} />)
+    expect((await screen.findByTestId('shop-admin-expiring')).textContent).toContain(
+      '到期，到时点一下重新授权',
+    )
+    unmount()
+    api.view = view('authorized', {
+      scopes_granted: ['write_products'],
+      refreshable: true,
+      expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    })
+    renderWithProviders(<ShopAdminBanner duties={STORE} />)
+    await waitFor(() => expect(api.gets.length).toBeGreaterThan(1))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('shop-admin-expiring')).toBeNull()
+  })
+})
+
 describe('WP288 连接正常 = 标题旁一个绿勾', () => {
   it('授权好了：绿勾，悬停「Shopify 已连接 · 会自动续期」，点了去连接页 Shopify 那张卡', async () => {
     api.view = view('authorized', {
@@ -175,7 +219,10 @@ describe('WP288 连接正常 = 标题旁一个绿勾', () => {
     })
     renderWithProviders(<ConnectionTick id="asg_store" duties={STORE} />)
     const tick = await screen.findByTestId('position-connected')
-    expect(tick.getAttribute('data-hint')).toBe('Shopify 已连接 · 会自动续期')
+    // WP418（审计 C7）：悬停也说管的是哪家店
+    expect(tick.getAttribute('data-hint')).toBe(
+      'Shopify 已连接 · 会自动续期\n管的是 rovella-test.myshopify.com',
+    )
     expect(tick.getAttribute('href')).toBe('/connections?service=shopify_admin')
   })
 

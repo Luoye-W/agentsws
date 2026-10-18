@@ -215,7 +215,11 @@ export function DutyPage(): React.ReactNode {
           <DutyIcon role_id={role_id} size={22} selected />
         </span>
         <div className="flex min-w-0 flex-1 items-center gap-1.5 self-center">
-          <h1 className="ws-display truncate text-[26px] leading-tight" data-testid="duty-name">
+          {/* WP418（审计 U14）：右栏加宽时标题换行，不截成「Shopify 整...」 */}
+          <h1
+            className="ws-display min-w-0 text-[26px] leading-tight break-words"
+            data-testid="duty-name"
+          >
             {role.data?.name ?? here?.role_name ?? role_id}
           </h1>
           {description === '' ? null : <Hint text={description} testId="duty-description" />}

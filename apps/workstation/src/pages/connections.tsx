@@ -425,6 +425,7 @@ export function ConnectionsPage({
                       />
                     ),
                     advancedLabel: t('shopconnect.advanced'),
+                    advancedNote: t('shopconnect.advanced.note'),
                   }
                 : p.service === 'google_alerts'
                   ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS

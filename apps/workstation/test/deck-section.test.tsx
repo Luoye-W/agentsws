@@ -189,6 +189,17 @@ describe('37 §1 第 9 行：空态 = 今日战报四格', () => {
     // 没筛选时不出「回到全部」
     expect(screen.queryByText('回到全部')).toBeNull()
   })
+
+  it('WP418 U2：四个数全是 0 时只留一行「✓ 没有要你处理的」，不画四块 0', async () => {
+    home = homeData({
+      queue: [],
+      battle_report: { ...REPORT, ai_handled: 0, handled: 0, auto_sent: 0, intercepted: 0 },
+    })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    const report = await screen.findByTestId('deck-battle-report')
+    expect(report.textContent).toBe('✓ 没有要你处理的')
+    expect(screen.queryByTestId('recap-ai_handled')).toBeNull()
+  })
 })
 
 describe('37 §1 第 10 行：筛选行', () => {

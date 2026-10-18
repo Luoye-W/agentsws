@@ -35,11 +35,13 @@ export const SHOPIFY_CONNECT_ZH: Record<string, string> = {
   'shopconnect.retry': '再试一次',
   'shopconnect.unsupported': '这家店暂不支持一键授权，等公开应用上线',
   'shopconnect.unsupported.hint':
-    '一键授权现在只开给内测的店；公开应用过了 Shopify 审核之后任何店都能用。等不及的话，下面「高级」里可以用你自己建的 Shopify 应用。',
+    '一键授权现在只开给内测的店；公开应用过了 Shopify 审核之后任何店都能用。等不及的话，下面「其他接法」里可以用你自己建的 Shopify 应用。',
   'shopconnect.failed': '没连上：{message}',
   'shopconnect.failed.default': '店主没点安装，或者取消了。再点一次。',
   'shopconnect.expired': '等太久了，这次授权过期了。再点一次。',
-  'shopconnect.advanced': '高级：用自己的 Shopify 应用',
+  'shopconnect.advanced': '其他接法',
+  'shopconnect.advanced.note':
+    '用你自己在 Shopify 建的应用来连：要填应用的密钥，一般用不上，一键授权连不上时再用。',
   'connections.advanced': '高级',
   'shopconnect.scope.products': '商品',
   'shopconnect.scope.inventory': '库存',
@@ -91,11 +93,13 @@ export const SHOPIFY_CONNECT_EN: Record<string, string> = {
   'shopconnect.unsupported':
     'One-click isn’t available for this store yet — coming with the public app',
   'shopconnect.unsupported.hint':
-    'One-click is open to beta stores for now; once the public app passes Shopify review, any store can use it. Can’t wait? Use your own Shopify app under “Advanced” below.',
+    'One-click is open to beta stores for now; once the public app passes Shopify review, any store can use it. Can’t wait? Use your own Shopify app under “Other ways” below.',
   'shopconnect.failed': 'Not connected: {message}',
   'shopconnect.failed.default': 'The install wasn’t approved or was cancelled. Try again.',
   'shopconnect.expired': 'This authorization timed out. Try again.',
-  'shopconnect.advanced': 'Advanced: use your own Shopify app',
+  'shopconnect.advanced': 'Other ways',
+  'shopconnect.advanced.note':
+    "Connect with a Shopify app you created yourself. It needs the app's keys; only use it if one-click doesn't work.",
   'connections.advanced': 'Advanced',
   'shopconnect.scope.products': 'products',
   'shopconnect.scope.inventory': 'inventory',

@@ -48,8 +48,25 @@ export const SHOP_CREATE_DISCOUNT_TOOL = 'shop_create_discount'
 export const SHOP_REFUND_ORDER_TOOL = 'shop_refund_order'
 export const SHOP_CHANGE_ADDRESS_TOOL = 'shop_change_order_address'
 export const SHOP_RESHIP_ORDER_TOOL = 'shop_reship_order'
+/** WP418（自查 A13）：退换货 / 隐私 / 条款 / 配送在 Shopify 里是「政策」，不是普通页面。 */
+export const SHOP_SAVE_POLICY_TOOL = 'shop_save_policy'
+/** WP418（自查 B4）：库存加减（`inventoryAdjustQuantities`）。 */
+export const SHOP_ADJUST_INVENTORY_TOOL = 'shop_adjust_inventory'
+/** WP418（自查 B5）：全站自动折扣（不用输码，`discountAutomaticBasicCreate`）。 */
+export const SHOP_CREATE_PROMOTION_TOOL = 'shop_create_automatic_discount'
+/** WP418（自查 B10）：看一张订单能发哪几件、已发的单号。 */
+export const SHOP_GET_ORDER_TOOL = 'shop_get_order'
+/** WP418（自查 B10）：标发货 + 回填单号（只发其中几件 = 拆单先发有货的）。 */
+export const SHOP_FULFILL_ORDER_TOOL = 'shop_fulfill_order'
+/** WP418（自查 A8）：跑一遍上线检查单（只读，不出卡）。 */
+export const SITE_CHECKLIST_TOOL = 'site_checklist_run'
+/** WP418（自查 A16）：插件这条职责看「装了哪些 App、目录里推荐哪些」（只读本机建站库）。 */
+export const SITE_APPS_TOOL = 'site_apps_list'
+/** WP418（自查 A16）：邮件模板这条职责看几封通知邮件现在的样子（只读本机建站库）。 */
+export const SITE_EMAILS_TOOL = 'site_email_templates'
 
 export const SHOP_READ_TOOL_NAMES: readonly string[] = [
+  SHOP_GET_ORDER_TOOL,
   SHOP_GET_COLLECTION_TOOL,
   SHOP_GET_PAGE_TOOL,
   SHOP_GET_PRODUCT_TOOL,
@@ -70,6 +87,10 @@ export const SHOP_ORDER_TOOL_NAMES: readonly string[] = [
 
 export const SHOP_WRITE_TOOL_NAMES: readonly string[] = [
   ...SHOP_ORDER_TOOL_NAMES,
+  SHOP_ADJUST_INVENTORY_TOOL,
+  SHOP_CREATE_PROMOTION_TOOL,
+  SHOP_FULFILL_ORDER_TOOL,
+  SHOP_SAVE_POLICY_TOOL,
   SHOP_ADD_IMAGES_TOOL,
   SHOP_CREATE_DISCOUNT_TOOL,
   SHOP_SAVE_COLLECTION_TOOL,
@@ -84,6 +105,9 @@ export const SHOP_WRITE_TOOL_NAMES: readonly string[] = [
 export const SHOP_TOOL_NAMES: readonly string[] = [
   ...SHOP_READ_TOOL_NAMES,
   ...SHOP_WRITE_TOOL_NAMES,
+  SITE_APPS_TOOL,
+  SITE_CHECKLIST_TOOL,
+  SITE_EMAILS_TOOL,
 ].sort()
 
 export const isShopTool = (name: string): boolean =>
@@ -111,6 +135,11 @@ export const SHOP_TOOL_SCOPE: Readonly<Record<string, string>> = {
   [SHOP_REFUND_ORDER_TOOL]: 'write_orders',
   [SHOP_CHANGE_ADDRESS_TOOL]: 'write_orders',
   [SHOP_RESHIP_ORDER_TOOL]: 'write_draft_orders',
+  [SHOP_SAVE_POLICY_TOOL]: 'write_legal_policies',
+  [SHOP_ADJUST_INVENTORY_TOOL]: 'write_inventory',
+  [SHOP_CREATE_PROMOTION_TOOL]: 'write_discounts',
+  [SHOP_GET_ORDER_TOOL]: 'read_merchant_managed_fulfillment_orders',
+  [SHOP_FULFILL_ORDER_TOOL]: 'write_merchant_managed_fulfillment_orders',
 }
 
 /** WP417：客服两条职责（网站客服、社群管理）能用的店铺改动：退款 / 改地址 / 补发 / 发折扣码。 */
@@ -119,16 +148,47 @@ const SUPPORT_SHOP_TOOLS: readonly string[] = [
   SHOP_CREATE_DISCOUNT_TOOL,
 ].sort()
 
+/** WP418：不看店铺授权也摆出来的那几个（检查单没授权时照实说「没读到」，所以不靠授权出现）。 */
+export const SHOP_TOOLS_WITHOUT_SCOPE: readonly string[] = [
+  SITE_APPS_TOOL,
+  SITE_CHECKLIST_TOOL,
+  SITE_EMAILS_TOOL,
+]
+
 /**
  * 每条职责登记了哪几个（与 `PlatformStoreAdminSpec.scopes_by_role` 对得上：要的权限够用这几个）。
  * 店铺管理全有；整站搭建管结构（页面、菜单）、只读商品与合集；网页模板只读商品与合集（选合集 / 挂商品）。
  */
 export const SHOP_TOOLS_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
   // WP417：店铺管理不动订单（退款 / 改地址 / 补发归客服）
-  'dtc.store': SHOP_TOOL_NAMES.filter((n) => !SHOP_ORDER_TOOL_NAMES.includes(n)),
+  'dtc.store': [
+    SHOP_ADD_IMAGES_TOOL,
+    SHOP_ADJUST_INVENTORY_TOOL,
+    SHOP_CREATE_DISCOUNT_TOOL,
+    SHOP_CREATE_PROMOTION_TOOL,
+    SHOP_GET_COLLECTION_TOOL,
+    SHOP_GET_PAGE_TOOL,
+    SHOP_GET_PRODUCT_TOOL,
+    SHOP_LIST_COLLECTIONS_TOOL,
+    SHOP_LIST_DISCOUNTS_TOOL,
+    SHOP_LIST_MENUS_TOOL,
+    SHOP_LIST_PAGES_TOOL,
+    SHOP_LIST_PRODUCTS_TOOL,
+    SHOP_RECENT_ORDERS_TOOL,
+    SHOP_SAVE_COLLECTION_TOOL,
+    SHOP_SAVE_MENU_TOOL,
+    SHOP_SAVE_PAGE_TOOL,
+    SHOP_SAVE_PRODUCT_TOOL,
+    SHOP_SET_PRICE_TOOL,
+    SHOP_SET_STATUS_TOOL,
+  ].sort(),
+  // WP418（自查 B10）：订单履约——看单、标发货 / 回填单号（取消订单、延误通知还没接通）
+  'dtc.fulfillment': [SHOP_FULFILL_ORDER_TOOL, SHOP_GET_ORDER_TOOL, SHOP_RECENT_ORDERS_TOOL].sort(),
   'dtc.support': SUPPORT_SHOP_TOOLS,
   'dtc.community-support': SUPPORT_SHOP_TOOLS,
   'site.shopify-build': [
+    SITE_CHECKLIST_TOOL,
+    SHOP_SAVE_POLICY_TOOL,
     SHOP_GET_COLLECTION_TOOL,
     SHOP_GET_PAGE_TOOL,
     SHOP_GET_PRODUCT_TOOL,
@@ -139,6 +199,9 @@ export const SHOP_TOOLS_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
     SHOP_SAVE_MENU_TOOL,
     SHOP_SAVE_PAGE_TOOL,
   ].sort(),
+  // WP418（自查 A16）：插件 / 邮件模板两条职责以前 grounding 写的工具全仓没有执行器
+  'site.shopify-apps': [SITE_APPS_TOOL],
+  'site.shopify-email': [SITE_EMAILS_TOOL],
   'site.shopify-theme': [
     SHOP_GET_COLLECTION_TOOL,
     SHOP_GET_PRODUCT_TOOL,
@@ -158,6 +221,7 @@ function covers(granted: readonly string[], need: string): boolean {
 export function shopToolsFor(role_id: string, granted: readonly string[]): string[] {
   return (SHOP_TOOLS_BY_ROLE[role_id] ?? [])
     .filter((n) => {
+      if (SHOP_TOOLS_WITHOUT_SCOPE.includes(n)) return true
       const need = SHOP_TOOL_SCOPE[n]
       return need !== undefined && covers(granted, need)
     })
@@ -466,6 +530,125 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
       required: ['order_id', 'reason'],
     },
   },
+  {
+    name: SHOP_SAVE_POLICY_TOOL,
+    description:
+      '**不会直接改。** 出一张卡：写 / 改一张店铺政策（退换货、隐私、服务条款、配送、联系方式）。' +
+      '这几张在 Shopify 里是「政策」，**不要用 shop_save_page 建成普通页面**（检查单认不到）。人批了才改。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['refund', 'privacy', 'terms_of_service', 'shipping', 'contact'],
+          description: '哪一张',
+        },
+        body_html: STR('正文（HTML，整份替换）'),
+      },
+      required: ['type', 'body_html'],
+    },
+  },
+  {
+    name: SHOP_ADJUST_INVENTORY_TOOL,
+    description:
+      '**不会直接改库存。** 出一张卡：给一个变体的库存加减（收货 +、报损 -），按「现在 → 改后」写清。' +
+      '改之前先 shop_get_product 读过。人批了才改，改完读回核对。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_id: STR('商品 id'),
+        variant_id: STR('变体 id（商品只有一个变体时可以不给）'),
+        delta: { type: 'integer', description: '加几件（负数 = 减几件）' },
+        reason: {
+          type: 'string',
+          enum: ['received', 'correction', 'damaged', 'shrinkage', 'restock'],
+          description: '为什么改（默认 correction）',
+        },
+      },
+      required: ['product_id', 'delta'],
+    },
+  },
+  {
+    name: SHOP_CREATE_PROMOTION_TOOL,
+    description:
+      '**不会直接建。** 出一张卡：全站自动折扣（顾客不用输码、整店商品生效）：打几折或每单减多少、起止时间、满多少可用。' +
+      '永远要人批。只想发码给一部分人用 shop_create_discount。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: STR('活动名（顾客结账时看得到）'),
+        percent: { type: 'number', description: '减百分之几（如 15 = 减 15%）' },
+        amount_off: { type: 'number', description: '或者：每单减多少钱（店铺币种）' },
+        starts_at: STR('开始时间（ISO；不给 = 马上）'),
+        ends_at: STR('结束时间（建议给；不给 = 一直生效）'),
+        minimum_subtotal: { type: 'number', description: '满多少钱才减' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: SHOP_GET_ORDER_TOOL,
+    description:
+      '看一张订单的发货情况：还有哪几件没发（每件剩几个）、已经发出去的包裹和单号。标发货 / 回填单号之前必须先用它读一遍。只读，没有顾客个人信息。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: STR('订单 id（gid://shopify/Order/…）'),
+        name: STR('或者给订单号（如 #1001）'),
+      },
+    },
+  },
+  {
+    name: SHOP_FULFILL_ORDER_TOOL,
+    description:
+      '**不会直接发货。** 出一张卡：把这张单（或其中几件）标成已发货、带上物流单号和承运商；' +
+      '只给 line_items = 只发这几件（拆单先发有货的）。这张单已经发了、只是缺单号 → 给 fulfillment_id，只回填单号。' +
+      '先 shop_get_order 读过。单号没拿到就别出卡。人批了才改，改完读回核对。取消订单、给顾客发延误通知还没接通。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        order_id: STR('订单 id'),
+        tracking_number: STR('物流单号'),
+        carrier: STR('承运商（如 UPS、USPS、顺丰、云途）'),
+        tracking_url: STR('查件链接（可选）'),
+        line_items: {
+          type: 'array',
+          description: '只发这几件（不给 = 剩下没发的全发）',
+          items: {
+            type: 'object',
+            properties: {
+              id: STR('shop_get_order 回的那一行的 id'),
+              quantity: { type: 'integer', description: '发几个' },
+            },
+          },
+        },
+        fulfillment_id: STR('只回填单号时：已经发出去的那一个包裹的 id'),
+        notify_customer: { type: 'boolean', description: '让 Shopify 给顾客发发货通知（默认发）' },
+      },
+      required: ['order_id', 'tracking_number', 'carrier'],
+    },
+  },
+  {
+    name: SITE_APPS_TOOL,
+    description:
+      '看这家店装了哪些 App、装了却还没连上的是哪几个，以及目录里按类别推荐的那几个（收不收钱、干什么）。只读。' +
+      '装 / 卸 App 工坊替你做不了（Shopify 不让第三方装）：只能给 App Store 链接让人自己装。',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: SITE_EMAILS_TOOL,
+    description:
+      '看几封通知邮件（订单确认、发货通知……）现在的标题、是否在用、有没有改过的草稿、缺不缺必需变量。只读。' +
+      '改通知邮件工坊替你做不了（Shopify 接口改不了）：只能把改好的那一版给人，让人去后台「设置 → 通知」贴进去。',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: SITE_CHECKLIST_TOOL,
+    description:
+      '现在跑一遍上线检查单（店面密码、域名、收款、税、运费、政策页、导航、必装 App、线上主题），回每一项的结论。' +
+      '只读、不出卡。读不到的项会写「没读到」——照实说，别当成「没问题」。',
+    input_schema: { type: 'object', properties: {} },
+  },
 ]
 
 export const SHOP_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
@@ -516,4 +699,33 @@ export function firstProductOf(data: unknown): { id: string; title: string } | u
   return typeof p.id === 'string' && typeof p.title === 'string'
     ? { id: p.id, title: p.title }
     : undefined
+}
+
+// ── WP418：stub 剧本「还差什么才能开门」（演示用：跑一遍上线检查单，照实念结论） ──────────────
+
+const CHECKLIST_ASK = /检查单|开门|上线|还差什么|还缺什么|checklist|launch|go live/i
+
+/** stub 的岔口：工具面里有检查单、话里问的是上线 / 检查单，才走这一边。 */
+export function siteChecklistBranch(req: RunRequest, text: string): ShopStep | undefined {
+  if (!req.tools.allow.includes(SITE_CHECKLIST_TOOL)) return undefined
+  return CHECKLIST_ASK.test(text) ? { tool: SITE_CHECKLIST_TOOL, input: {} } : undefined
+}
+
+/** 检查单工具回的那一份 → 一段人话（只念结论，数一个都不改）。 */
+export function renderSiteChecklistAnswer(data: unknown, failed?: string): string {
+  const d = obj(data)
+  const items = Array.isArray(d.items) ? d.items.map(obj) : []
+  if (typeof d.headline !== 'string')
+    return `这次没跑成上线检查单${failed === undefined || failed === '' ? '' : `：${failed}`}。`
+  const line = (i: Record<string, unknown>): string =>
+    `· ${String(i.item)}：${String(i.detail)}${typeof i.fix === 'string' && i.fix !== '' ? `（${String(i.fix)}）` : ''}`
+  const block = items.filter((i) => i.state === '缺' && i.severity === '顾客买不成')
+  const later = items.filter((i) => i.state === '缺' && i.severity !== '顾客买不成')
+  const unread = items.filter((i) => i.state === '没读到')
+  return [
+    d.headline,
+    ...(block.length === 0 ? [] : ['顾客买不成的：', ...block.map(line)]),
+    ...(later.length === 0 ? [] : ['迟早出事的：', ...later.map(line)]),
+    ...(unread.length === 0 ? [] : ['这次没读到的（不是没有，是没读到）：', ...unread.map(line)]),
+  ].join('\n')
 }

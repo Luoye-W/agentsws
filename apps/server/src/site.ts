@@ -11,7 +11,8 @@
  * 1. **凭据一格都没有**。`ShopAppRecord.connection_id` 指的是连接页上那一条连接；
  *    取 token 是发出去那一跳的事（同 `social.ts` 的第 1 条）。
  * 2. **写动作永远先出卡**。改模板 → `email_template_edit`、装 App → `app_install`、
- *    跑检查单 → `launch_check`（L3，它什么都不改但照样进队列，14 的老规矩）。
+ *    跑检查单 → `launch_check`（WP418：一律 L3 自动过、执行器只回「查完了」——它什么都不改，不进人的待办）。
+ *    改模板 / 装 App **工坊做不到**（Shopify 不给第三方这两个写口）：卡上先说清，批了照实回「没做」+ 去哪里自己点。
  *    这个文件里**没有一处直接改店里的东西**——那是执行器在卡被批准之后做的事。
  * 3. **判断在纯函数里，事实在这一层**。检查单怎么判是 `@agentsws/site-core` 的事
  *    （同一份事实每次得到同一张清单）；这一层只负责把事实读齐、把结论落库。
@@ -46,8 +47,10 @@ import type {
   Recipient,
   ShopAppRecord,
   ShopEmailTemplate,
+  StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { NOT_WIRED_ERROR_PREFIX } from '@agentsws/contracts'
 import type { SiteDeckData } from '@agentsws/deck'
 import {
   appInstallAfter,
@@ -56,15 +59,17 @@ import {
   emailTemplateAfter,
   type LaunchCheckFacts,
   launchCheckAfter,
+  launchChecklistHeadline,
   NOTIFICATION_TYPES,
   notificationType,
   PREVIEW_SAMPLE,
   renderPreview,
   runLaunchChecklist,
+  shopApp,
   type ThemeSummaryLike,
   themeLanes,
 } from '@agentsws/site-core'
-import type { StageInput, StageOutcome } from '@agentsws/txn'
+import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
 import type BetterSqlite3 from 'better-sqlite3'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
@@ -227,13 +232,37 @@ export interface SiteServiceOptions {
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
   routeScopeManager?: ScopeManagerRouter
+  /** WP418（自查 A17）：最近一次列出来的主题（网页模板那一侧记的），面板「主题副本与预览」读它。 */
+  themes?(): readonly ThemeSummaryLike[]
+  /** WP418：这家店的后台地址（`xxx.myshopify.com`），给「去后台自己点」那几张卡拼深链。 */
+  storeDomain?(): string | undefined
 }
 
 export interface SiteServiceAssembly {
   port: SitePort
   /** 面板那几块要的那份投影（59 §3）。 */
   deckData(): SiteDeckData
+  /**
+   * WP418（自查 A11 / A18 / A19）：建站自己那几类卡批了之后的执行器（不是这几类 / 不是这个品牌 → `undefined`）。
+   *
+   * - `launch_check`：只读巡检，查已经查完了——回 ok（`site_check_…`），不再落进内存空桩。
+   * - `app_install` / `app_config` / `email_template_edit`：Shopify 不让第三方替店主装 App、改通知模板，
+   *   工坊**做不到**——照实回 failed，并把「去哪里自己点」写进原因（下次巡检再读回核对）。
+   */
+  apply(change: StagedChange): BackendResult | undefined
 }
+
+/** WP418：Shopify 后台深链（店铺地址不知道时只给相对说法）。 */
+export function shopAdminLink(store: string | undefined, path: string): string {
+  return store === undefined ? `Shopify 后台 /admin/${path}` : `https://${store}/admin/${path}`
+}
+
+/** WP418：这几类建站卡工坊执行不了（出卡时就在卡上说清，批了照实回「没做」）。 */
+export const SITE_MANUAL_KINDS: readonly ChangeKind[] = [
+  'app_install',
+  'app_config',
+  'email_template_edit',
+]
 
 /** 职责 → 它提这条 kind 时用的动作 id（额度与等级从**本次那条分配**来，05 §4）。 */
 const ACTION_OF_KIND: Partial<Record<ChangeKind, string>> = {
@@ -335,7 +364,10 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
   }): Promise<SiteStagedView> => {
     const run_id = `run_site_${nextId('s')}`
     const action = ACTION_OF_KIND[input.kind] ?? 'stage_store_setup'
-    const { mandate, level } = actionOf(input.actor.assignment_id, action)
+    const found = actionOf(input.actor.assignment_id, action)
+    const mandate = found.mandate
+    // WP418（自查 A11）：检查单是只读巡检，不进人的待批（它什么都不改，批不批都一样）
+    const level = input.kind === 'launch_check' ? 'L3' : found.level
     const stageInput: StageInput = {
       workspace_id,
       role_id: input.actor.role_id,
@@ -468,10 +500,11 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
         before: {},
         after: launchCheckAfter(result),
         notes: result.missing.map((i) => `${i.title.zh}：${i.detail.zh}`),
-        title: result.ready
-          ? '上线检查单：没有拦路的缺项'
-          : `上线检查单：${result.blockers} 项会让顾客买不成`,
-        summary: result.missing.map((i) => `${i.title.zh}——${i.fix.zh}`).join('\n'),
+        title: launchChecklistHeadline(result),
+        summary: [
+          ...result.missing.map((i) => `${i.title.zh}——${i.fix.zh}`),
+          ...result.unknown.map((i) => `${i.title.zh}——没读到（${i.fix.zh}）`),
+        ].join('\n'),
         seen: [target],
         rule: 'role_holder',
       })
@@ -527,9 +560,12 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
         target,
         before: { subject: before.subject, body: before.body, enabled: before.enabled },
         after: emailTemplateAfter(input),
-        notes: input.enabled
-          ? ['启用这一份之后，之后每一个下单的客户收到的都是它']
-          : ['草稿——启用那一下另提一张卡'],
+        notes: [
+          ...(input.enabled
+            ? ['启用这一份之后，之后每一个下单的客户收到的都是它']
+            : ['草稿——启用那一下另提一张卡']),
+          `这一步还没接通：Shopify 不让第三方改通知邮件。批了之后请到 ${shopAdminLink(options.storeDomain?.(), 'settings/notifications')} 把这一版贴进去。`,
+        ],
         title: `${spec.name.zh}：${input.enabled ? '启用这一份' : '改成这一版（草稿）'}`,
         summary: input.subject,
         seen: [target],
@@ -571,10 +607,14 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
           operation: input.operation,
           ...(input.reason === undefined ? {} : { reason: input.reason }),
         }),
-        notes:
+        notes: [
           input.operation === 'install'
-            ? ['装一个 App = 把店里的数据交给另一家公司，多数还按月收钱']
-            : ['卸掉一个正在往前台注脚本的 App，店面会当场少一块'],
+            ? '装一个 App = 把店里的数据交给另一家公司，多数还按月收钱'
+            : '卸掉一个正在往前台注脚本的 App，店面会当场少一块',
+          input.operation === 'install'
+            ? `这一步还没接通：Shopify 不让第三方替你装 App。批了之后请到 ${appStoreLink(input.app_id)} 自己装，装好下次巡检会读回核对。`
+            : `这一步还没接通：请到 ${shopAdminLink(options.storeDomain?.(), 'settings/apps')} 自己卸。`,
+        ],
         title: `${input.operation === 'install' ? '装' : '卸'} ${before?.name ?? input.app_id}`,
         summary: input.reason ?? '',
         seen: [target],
@@ -589,10 +629,56 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
     },
   }
 
+  const apply = (change: StagedChange): BackendResult | undefined => {
+    if (change.workspace_id !== workspace_id) return undefined
+    if (change.kind === 'launch_check')
+      return {
+        status: 'ok',
+        execution_id: `site_check_${change.target.id}`,
+        outcome_ref: change.target,
+      }
+    if (!SITE_MANUAL_KINDS.includes(change.kind)) return undefined
+    const after =
+      change.after !== null && typeof change.after === 'object'
+        ? (change.after as Record<string, unknown>)
+        : {}
+    const domain = options.storeDomain?.()
+    const where =
+      change.kind === 'email_template_edit'
+        ? `请到 ${shopAdminLink(domain, 'settings/notifications')} 把卡上这一版贴进去`
+        : change.kind === 'app_config'
+          ? `请到 ${shopAdminLink(domain, 'settings/apps')} 打开这个 App 自己改`
+          : after.operation === 'uninstall'
+            ? `请到 ${shopAdminLink(domain, 'settings/apps')} 自己卸`
+            : `请到 ${appStoreLink(String(after.app_id ?? change.target.id))} 自己装，装好下次巡检会读回核对`
+    emit('site.manual_step_needed', 'system', { kind: change.kind, change_id: change.id })
+    // WP415 统一口径：带 `not_wired` 与前缀，卡、时间线、记录面板照「没做 · 还没接通」显示（前缀上屏前去掉）
+    return {
+      status: 'failed',
+      not_wired: true,
+      error: {
+        message: `${NOT_WIRED_ERROR_PREFIX}这一步还没接通，工坊没有替你做：${where}。`,
+        retryable: false,
+      },
+    }
+  }
+
   return {
     port,
-    deckData: () => siteDeckData(store, { apps: appRows(), templates: allTemplates() }),
+    deckData: () =>
+      siteDeckData(store, {
+        apps: appRows(),
+        templates: allTemplates(),
+        ...(options.themes === undefined ? {} : { themes: options.themes() }),
+      }),
+    apply,
   }
+}
+
+/** WP418：App Store 上搜这个 App（目录里认识就按名字搜，不认识按 id 搜）。 */
+export function appStoreLink(app_id: string): string {
+  const name = shopApp(app_id)?.name.en ?? app_id
+  return `https://apps.shopify.com/search?q=${encodeURIComponent(name)}`
 }
 
 /* ── 面板投影（59 §3） ────────────────────────────────────────────────── */
@@ -900,6 +986,7 @@ export function seedDemoSite(store: SiteStore, now: string): void {
     navigation: { main_menu_items: 5, footer_menu_items: 0 },
     apps: { installed: ['judge-me', 'klaviyo'] },
     theme: { published: { id: 'thm_live', name: 'Dawn — Nordvolt 改' } },
+    storefront: { password_enabled: false },
   }
   const result = runLaunchChecklist(facts, { at: iso(-2 * 3_600_000) })
   store.saveRun({

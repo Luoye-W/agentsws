@@ -16,6 +16,7 @@ import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import { openExternal } from '@/components/connections/bridge'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
 import {
   isKolOutreachPayload,
@@ -32,6 +33,7 @@ import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
@@ -143,6 +145,67 @@ function KeyValues({
         </div>
       ))}
     </dl>
+  )
+}
+
+/**
+ * WP418（审计 U9）：发布主题卡的主体——「打开预览」按钮（在浏览器里开）+ 换哪一份 + 改了几个文件。
+ * 全从 payload 的 before / after 取；取不到主题名就退回整段说明。
+ */
+function PublishThemeBody({
+  card,
+  payload,
+  fallback,
+}: {
+  card: DeckCard
+  payload: Record<string, unknown>
+  fallback: string
+}): React.ReactNode {
+  const { t } = useApp()
+  const after = isRecord(payload.after) ? payload.after : {}
+  const before = isRecord(payload.before) ? payload.before : {}
+  const preview = str(after.preview_url) ?? highlightText(card, 'preview')
+  const to = str(after.theme_name)
+  const from = str(before.theme_name)
+  const files = Array.isArray(after.files)
+    ? after.files.filter((f): f is string => typeof f === 'string')
+    : undefined
+  return (
+    <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-publish-theme">
+      {preview === undefined ? null : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-fit gap-1.5"
+          data-testid="deck-publish-theme-preview"
+          title={preview}
+          onClick={() => {
+            openExternal(preview)
+          }}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+          {t('deck.publish_theme.preview')}
+        </Button>
+      )}
+      {to === undefined ? (
+        <Note>{fallback}</Note>
+      ) : (
+        <ul className="flex flex-col gap-1 text-[13px] leading-5 text-ws-body">
+          <li>
+            {from === undefined
+              ? t('deck.publish_theme.first', { to })
+              : t('deck.publish_theme.swap', { from, to })}
+          </li>
+          {files === undefined ? null : (
+            <li className="text-ws-muted-fg" title={files.join('\n')}>
+              {files.length === 0
+                ? t('deck.publish_theme.files.none')
+                : t('deck.publish_theme.files', { n: files.length })}
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -430,6 +493,9 @@ export function DeckCardBody({
 
       // ③ 发布：左预览右说明；排期时间与受众数**必现**（15 §2 / 56 §2）
       case 'publish': {
+        // WP418（审计 U9）：发布主题卡不是发帖——只要「打开预览」+ 改了哪几处，不要排期 / 受众 / 空缩略图
+        if (card.change_kind === 'publish_theme')
+          return <PublishThemeBody card={card} payload={payload} fallback={content.text} />
         const preview = str(payload.preview_image) ?? str(payload.image_url)
         const scheduled = highlightText(card, 'scheduled')
         const audience = highlightText(card, 'audience')
@@ -437,23 +503,27 @@ export function DeckCardBody({
         const parentUrl = isRecord(payload.after) ? str(payload.after.parent_url) : undefined
         return (
           <div className="mt-2.5 flex gap-3" data-testid="deck-layout-publish">
-            <div
-              data-testid="deck-publish-preview"
-              className="size-24 flex-none overflow-hidden rounded-xl bg-ws-tint"
-            >
-              {preview === undefined ? null : (
+            {/* WP418（审计 U10）：没图就不留图位 */}
+            {preview === undefined ? null : (
+              <div
+                data-testid="deck-publish-preview"
+                className="size-24 flex-none overflow-hidden rounded-xl bg-ws-tint"
+              >
                 <img src={preview} alt="" className="size-full object-cover" />
-              )}
-            </div>
+              </div>
+            )}
             <div className="min-w-0 flex-1 text-[13px] leading-5 text-ws-body">
               <p className="whitespace-pre-wrap">{content.text}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
                   {t('deck.publish.when', { when: scheduled ?? t('deck.publish.now') })}
                 </span>
-                <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
-                  {t('deck.publish.audience', { n: audience ?? '—' })}
-                </span>
+                {/* WP418（审计 U10）：没有受众数就不出「受众 · —」 */}
+                {audience === undefined ? null : (
+                  <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
+                    {t('deck.publish.audience', { n: audience })}
+                  </span>
+                )}
               </div>
               {parentUrl === undefined ? null : (
                 <a

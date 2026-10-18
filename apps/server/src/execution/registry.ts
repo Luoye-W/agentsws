@@ -204,6 +204,10 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
       'refund',
       'reship',
       'address_change',
+      // WP418（建站 B4 / B5 / B10）：库存加减 / 全站自动折扣 / 标发货与回填单号（政策走 store_setup）
+      'inventory_adjust',
+      'promotion',
+      'create_fulfillment',
     ],
     readback: 'verified',
     // 只有经店铺工具出的卡（带 `via: shop_admin`）才走 Shopify 后台；别的路出的同类卡没有去处

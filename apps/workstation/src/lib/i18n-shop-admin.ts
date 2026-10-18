@@ -10,6 +10,9 @@ export const SHOP_ADMIN_ZH: Record<string, string> = {
   'shop_admin.store.placeholder': 'your-store.myshopify.com',
   'shop_admin.store.save': '保存',
   'shop_admin.unauthorized': '让 AI 管商品、页面、菜单和折扣，要先授权',
+  'shop_admin.unauthorized.after_theme': '上一步是改主题用的，这一步让 AI 改商品、页面、菜单',
+  'shop_admin.store_is': '管的是 {store}',
+  'shop_admin.expiring': '店铺授权 {time} 到期，到时点一下重新授权',
   'shop_admin.authorize': '授权管理商品和页面',
   'shop_admin.authorizing': '在浏览器里批准授权就行',
   'shop_admin.open': '没弹出来？点这里打开',
@@ -45,6 +48,16 @@ export const SHOP_ADMIN_ZH: Record<string, string> = {
   'shop_admin.scope.read_orders': '看订单',
   'shop_admin.scope.read_publications': '看销售渠道',
   'shop_admin.scope.write_publications': '上架到网店',
+  // WP418（自查 C2）：缺的权限要写得出中文名（以前「店铺授权还缺：」后面是空的）
+  'shop_admin.scope.read_files': '看图片和文件',
+  'shop_admin.scope.write_files': '传图片和文件',
+  'shop_admin.scope.write_inventory': '改库存',
+  'shop_admin.scope.read_legal_policies': '看政策页',
+  'shop_admin.scope.write_legal_policies': '改政策页',
+  'shop_admin.scope.read_shipping': '看运费',
+  'shop_admin.scope.read_themes': '看主题',
+  'shop_admin.scope.read_merchant_managed_fulfillment_orders': '看发货单',
+  'shop_admin.scope.write_merchant_managed_fulfillment_orders': '标发货、填单号',
 }
 
 export const SHOP_ADMIN_EN: Record<string, string> = {
@@ -55,6 +68,10 @@ export const SHOP_ADMIN_EN: Record<string, string> = {
   'shop_admin.store.placeholder': 'your-store.myshopify.com',
   'shop_admin.store.save': 'Save',
   'shop_admin.unauthorized': 'Authorize AI to manage products, pages, menus and discounts',
+  'shop_admin.unauthorized.after_theme':
+    'The last step was for the theme; this one lets AI edit products, pages and menus',
+  'shop_admin.store_is': 'Managing {store}',
+  'shop_admin.expiring': 'Store authorization expires {time}; authorize again then',
   'shop_admin.authorize': 'Authorize products & pages',
   'shop_admin.authorizing': 'Approve it in your browser',
   'shop_admin.open': "Didn't open? Click here",
@@ -91,4 +108,13 @@ export const SHOP_ADMIN_EN: Record<string, string> = {
   'shop_admin.scope.read_orders': 'view orders',
   'shop_admin.scope.read_publications': 'view sales channels',
   'shop_admin.scope.write_publications': 'publish to online store',
+  'shop_admin.scope.read_files': 'see images and files',
+  'shop_admin.scope.write_files': 'upload images and files',
+  'shop_admin.scope.write_inventory': 'edit inventory',
+  'shop_admin.scope.read_legal_policies': 'see policies',
+  'shop_admin.scope.write_legal_policies': 'edit policies',
+  'shop_admin.scope.read_shipping': 'see shipping',
+  'shop_admin.scope.read_themes': 'see themes',
+  'shop_admin.scope.read_merchant_managed_fulfillment_orders': 'see fulfillment orders',
+  'shop_admin.scope.write_merchant_managed_fulfillment_orders': 'mark shipped and add tracking',
 }
