@@ -1,0 +1,295 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：客服垂直包（goods）的意图标签（label）、聊天分类器判据（classifier，顺序即优先级）、开场引导策略（opening，进 prompt 的 user 侧，不是对客文案）、归一化铁律第 5 条（normalize_enum_line）、缺料清单（missing_info，顺序即拼装顺序）与两句计划文案（plan_text），从 verticals/goods/intents.ts 原样挪来。值域枚举（values / guideCategories / shadowEvalCategories）与计划的判法留在 intents.ts。",
+    "KefuAgent 现网原文逐字节（S039）；每一行带稳定 id（冻结那刻定，改字不改 id）。"
+  ],
+  "table": "support.goods.intents",
+  "rows": [
+    {
+      "id": "label.presales_product",
+      "kind": "label",
+      "intent": "presales_product",
+      "text": "售前产品咨询"
+    },
+    {
+      "id": "label.order_tracking",
+      "kind": "label",
+      "intent": "order_tracking",
+      "text": "订单追踪"
+    },
+    {
+      "id": "label.shipping_delay",
+      "kind": "label",
+      "intent": "shipping_delay",
+      "text": "物流/发货问题"
+    },
+    {
+      "id": "label.return_refund",
+      "kind": "label",
+      "intent": "return_refund",
+      "text": "退换货/退款"
+    },
+    {
+      "id": "label.product_issue",
+      "kind": "label",
+      "intent": "product_issue",
+      "text": "产品使用/故障"
+    },
+    {
+      "id": "label.warranty_parts",
+      "kind": "label",
+      "intent": "warranty_parts",
+      "text": "保修/配件"
+    },
+    {
+      "id": "label.human_handoff",
+      "kind": "label",
+      "intent": "human_handoff",
+      "text": "联系人工"
+    },
+    {
+      "id": "label.general_support",
+      "kind": "label",
+      "intent": "general_support",
+      "text": "其他客服问题"
+    },
+    {
+      "id": "classifier.return_refund",
+      "kind": "classifier",
+      "intent": "return_refund",
+      "terms": ["refund", "return", "chargeback", "退款", "退货", "退换货", "拒付", "投诉"],
+      "confidenceScore": 92,
+      "riskLevel": "high",
+      "reasonZh": "客户提到退款、退货、拒付或投诉，需要保守处理并进入人工审核边界。"
+    },
+    {
+      "id": "classifier.order_tracking",
+      "kind": "classifier",
+      "intent": "order_tracking",
+      "terms": [
+        "tracking",
+        "track",
+        "where is my",
+        "where my order is",
+        "my order",
+        "package",
+        "parcel",
+        "shipment",
+        "delivery",
+        "shipped",
+        "not arrived",
+        "hasn't arrived",
+        "订单",
+        "物流",
+        "运单",
+        "包裹",
+        "发货了吗",
+        "没收到",
+        "到哪了"
+      ],
+      "subIntent": {
+        "terms": ["delay", "stuck", "customs", "延迟", "卡住", "清关"],
+        "intent": "shipping_delay"
+      },
+      "confidenceScore": 88,
+      "riskLevel": "normal",
+      "reasonZh": "客户在询问订单或物流状态，应优先查询订单、履约和 tracking 上下文。"
+    },
+    {
+      "id": "classifier.presales_product",
+      "kind": "classifier",
+      "intent": "presales_product",
+      "terms": [
+        "before i buy",
+        "compatible",
+        "fit",
+        "size",
+        "spec",
+        "compare",
+        "适合",
+        "兼容",
+        "尺寸",
+        "规格",
+        "购买前",
+        "能买吗"
+      ],
+      "matchProductTerms": true,
+      "confidenceScore": 84,
+      "riskLevel": "normal",
+      "reasonZh": "客户在购买前确认产品信息，应结合商品页、FAQ 和品牌知识回答。",
+      "dropOrderRef": true,
+      "notes": ["提到了 workspace 学到的商品/品牌词本身就是售前信号。"]
+    },
+    {
+      "id": "classifier.product_issue",
+      "kind": "classifier",
+      "intent": "product_issue",
+      "terms": [
+        "broken",
+        "not working",
+        "stopped working",
+        "stopped charging",
+        "not turn on",
+        "won't turn on",
+        "wont turn on",
+        "does not turn on",
+        "no longer works",
+        "is dead",
+        "went dead",
+        "completely dead",
+        "faulty",
+        "defect",
+        "malfunction",
+        "damaged",
+        "hot",
+        "noise",
+        "故障",
+        "坏了",
+        "损坏",
+        "发热",
+        "异响",
+        "失灵",
+        "不工作",
+        "打不开",
+        "开不了机",
+        "充不进电"
+      ],
+      "confidenceScore": 86,
+      "riskLevel": "normal",
+      "riskEscalation": {
+        "terms": ["unsafe", "danger", "安全", "危险"],
+        "riskLevel": "high"
+      },
+      "reasonZh": "客户在描述产品使用或故障问题，需要先补齐证据，再判断是否转售后动作。",
+      "notes": [
+        "真实客户描述故障有十几种说法。原先只匹配 'not working'，于是",
+        "\"stopped working\" / \"won't turn on\" 落成普通聊天，那些 case 从来没有",
+        "去要它需要的那张照片。",
+        "不是光秃秃的 'stopped'/'dead'：\"I stopped by\" 和 \"the deadline\" 都不是",
+        "故障，而词首边界规则分不开它们。"
+      ]
+    },
+    {
+      "id": "classifier.warranty_parts",
+      "kind": "classifier",
+      "intent": "warranty_parts",
+      "terms": ["warranty", "part", "accessory", "replacement", "保修", "配件", "补件"],
+      "confidenceScore": 80,
+      "riskLevel": "normal",
+      "reasonZh": "客户在询问保修、配件或补件，需要确认订单和具体部件。"
+    },
+    {
+      "id": "classifier.human_handoff",
+      "kind": "classifier",
+      "intent": "human_handoff",
+      "terms": ["human", "agent", "人工", "真人", "客服"],
+      "confidenceScore": 90,
+      "riskLevel": "normal",
+      "reasonZh": "客户明确要求人工，需要给出接管预期并通知值班人员。",
+      "dropOrderRef": true
+    },
+    {
+      "id": "classifier.general_support",
+      "kind": "classifier",
+      "intent": "general_support",
+      "terms": [],
+      "confidenceScore": 58,
+      "riskLevel": "normal",
+      "reasonZh": "客户问题还不够明确，AI 应先追问关键上下文，而不是直接泛泛回答。"
+    },
+    {
+      "id": "opening.presales_product",
+      "kind": "opening",
+      "intent": "presales_product",
+      "text": "客户想了解商品。先确认他关心的点（用途/尺寸/兼容/材质），只依据 products 里的真实在售商品作答，不要编型号和价格。"
+    },
+    {
+      "id": "opening.order_tracking",
+      "kind": "opening",
+      "intent": "order_tracking",
+      "text": "客户要查订单。直接、礼貌地请他给出订单号（仅邮箱在在线聊天里不足以证明身份），拿到之前不要透露任何订单事实。"
+    },
+    {
+      "id": "opening.shipping_delay",
+      "kind": "opening",
+      "intent": "shipping_delay",
+      "text": "客户关心物流时效或包裹异常。先说明可查的口径与所需信息（订单号/运单号），不要承诺具体到货日期。"
+    },
+    {
+      "id": "opening.return_refund",
+      "kind": "opening",
+      "intent": "return_refund",
+      "text": "客户问退换货政策。按知识库里的政策条款说明流程与条件；不要承诺退款、赔偿或具体时限——这类请求设 needs_handoff。"
+    },
+    {
+      "id": "opening.product_issue",
+      "kind": "opening",
+      "intent": "product_issue",
+      "text": "客户遇到产品问题。先问清具体现象与使用场景；有官方视频/FAQ 链接就附上，不要自己编维修步骤。"
+    },
+    {
+      "id": "opening.general_support",
+      "kind": "opening",
+      "intent": "general_support",
+      "text": "客户点的是「其他问题」。用一句话邀请他把具体问题说出来，不要预设是哪类诉求。"
+    },
+    {
+      "id": "normalize_enum_line",
+      "kind": "normalize_enum_line",
+      "text": "5. intent 只能取：presales_product（售前咨询）/ order_tracking（订单查询）/\n   shipping_delay（物流问题）/ return_refund（退换货政策）/ product_issue（产品故障）/\n   general_support（其他）。"
+    },
+    {
+      "id": "missing_info.1",
+      "kind": "missing_info",
+      "intents": ["order_tracking", "shipping_delay", "return_refund"],
+      "label": "订单号或下单邮箱",
+      "labelEn": "your order number or the email used at checkout",
+      "satisfiedBy": ["order_ref", "email"]
+    },
+    {
+      "id": "missing_info.2",
+      "kind": "missing_info",
+      "intents": ["product_issue"],
+      "label": "订单号或下单邮箱",
+      "labelEn": "your order number or the email used at checkout",
+      "satisfiedBy": ["order_ref", "email"]
+    },
+    {
+      "id": "missing_info.3",
+      "kind": "missing_info",
+      "intents": ["product_issue"],
+      "label": "问题照片或短视频",
+      "labelEn": "a photo or short video of the issue",
+      "satisfiedBy": [],
+      "satisfiedByTerms": ["photo", "video", "图片"],
+      "notes": [
+        "词面判据保持原实现的朴素 `includes`（不走词首边界）：'photo' / 'video' /",
+        "'图片' 三个词一个字节不改。"
+      ]
+    },
+    {
+      "id": "missing_info.4",
+      "kind": "missing_info",
+      "intents": ["presales_product"],
+      "label": "具体产品型号或使用场景",
+      "labelEn": "the product model or your use case",
+      "satisfiedBy": ["product_context"]
+    },
+    {
+      "id": "plan.defaultNextQuestionZh",
+      "kind": "plan_text",
+      "field": "defaultNextQuestionZh",
+      "text": "我会根据当前商品、订单和客服知识继续帮你处理。"
+    },
+    {
+      "id": "plan.handoffReplyEn",
+      "kind": "plan_text",
+      "field": "handoffReplyEn",
+      "text": "Thanks for the details — I want to make sure you get an accurate answer, so I'm checking with my team on this. It may take a little while. If you'd like, leave your email (and your order number if you have one) and we'll follow up there, so you don't have to wait here.",
+      "notes": [
+        "改造前 `chat-service.ts` 里那个 `HANDOFF_REPLY` 常量，逐字节原样（含破折号",
+        "与那对括号）：现网每一次转人工、每一次预算/成本闸拦截，客户读到的都是它。"
+      ]
+    }
+  ]
+}
