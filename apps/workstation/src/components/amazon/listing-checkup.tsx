@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { AmazonEmpty, registerAmazonBlockBody } from '@/components/amazon/amazon-ops-board'
+import { KeywordGapLine } from '@/components/amazon/keyword-gap-line'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import {
@@ -190,6 +191,10 @@ export function ListingCheckupCard({
           {item.message ?? t(`alst.status.${item.status}`)}
         </p>
       )}
+      {/* WP398：这一款有几个竞品常用词你没写进标题 / 五点（还没有词库 / 没算过就不出） */}
+      {item.status === 'checked' ? (
+        <KeywordGapLine asin={item.asin} assignment={assignment} />
+      ) : null}
       {item.previous === undefined ? null : (
         <p className="text-xs text-muted-foreground" data-testid="alst-previous">
           {t('alst.previous', { issues: item.previous.issues, fixed: item.previous.fixed })}

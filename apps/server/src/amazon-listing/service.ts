@@ -65,6 +65,11 @@ export interface AmazonListingCheckupOptions {
   /** 知识库里的违规宣称规则卡（人改过 / 加过的）；不给只用自带的。 */
   claimCards?(): Promise<readonly ClaimRuleCardLike[]>
   emit?(type: string, payload: Record<string, unknown>): void
+  /**
+   * WP398 合并时接的线：这一轮读到的那几页（标题、五点）交给 Amazon 词库拆词（体检结果里不存五点，
+   * 所以在读到页的这一刻交）。不给 = 不交。
+   */
+  onFacts?(facts: readonly AmazonListingFacts[]): void
 }
 
 export interface ListingRunResult {
@@ -229,6 +234,7 @@ export function createAmazonListingCheckup(
       stopped_message =
         '这里读不了 Amazon 前台（没有桌面版的内置浏览器，或者读 Amazon 的那一块还没装上），这次没体检。'
     }
+    if (facts.length > 0) options.onFacts?.(facts)
     const ruleList = rules()
     const sellers = await ownSellers()
     const cards = (await options.claimCards?.().catch(() => [])) ?? []

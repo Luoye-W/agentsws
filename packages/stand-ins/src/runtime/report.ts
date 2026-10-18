@@ -15,9 +15,9 @@
  * | `list_competitor_changes` | WP392：查竞品变化表（上新 / 下架 / 改价 / 打折 / 断货 / 评分 / 评论数 / 排名）：按竞品、种类、时间窗、来源筛 |
  */
 import type { ToolDef } from '@agentsws/contracts'
-import { COMPETITOR_STORE_TOOL_DEFS } from './competitor-store.js'
 // WP394：亚马逊店铺运营「竞品动向」的现在读一次（定义并进这张表，三个运行时同一份）
 import { AMAZON_COMPETITOR_TOOL_DEFS } from './amazon-competitor.js'
+import { COMPETITOR_STORE_TOOL_DEFS } from './competitor-store.js'
 
 export const QUERY_WATCH_ITEMS_TOOL = 'query_watch_items'
 export const RUN_WATCH_NOW_TOOL = 'run_watch_now'

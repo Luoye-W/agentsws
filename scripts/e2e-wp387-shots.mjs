@@ -123,7 +123,7 @@ async function main() {
   })
   const brand = await server.brands.forWorkspace(ws)
   const now = new Date().toISOString()
-  PLAN.forEach(([label, query], i) =>
+  for (const [i, [label, query]] of PLAN.entries())
     brand.prWatchStore.putPlanItem({
       id: `mp_${i + 1}`,
       workspace_id: ws,
@@ -138,8 +138,7 @@ async function main() {
       status: 'planned',
       created_at: now,
       updated_at: now,
-    }),
-  )
+    })
   const built = await call('POST', '/v1/pr/watch/alerts/build', undefined, duty.id)
   console.log(`  出卡：${JSON.stringify(built)}`)
 

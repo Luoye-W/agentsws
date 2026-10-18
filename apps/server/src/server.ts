@@ -272,6 +272,7 @@ import {
   createAmazonKeywordBank,
   createAmazonKeywordToolExecutor,
   createBrowserAutocompleteReader,
+  listingTextsFromFacts,
   listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
@@ -8045,6 +8046,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             // WP394：读页走竞品对标款同一块（内置浏览器、Agent 标识、配送邮编、被拦就停）；测试 / demo 给了替身就用替身
             reader: () => options.amazonListingReader?.(ws) ?? amazonFront,
+            // WP398：体检读到的自家页（标题、五点）交给词库拆词，词库的「自家写了什么」就有了
+            onFacts: (facts) => amazonKeywords?.ingestListings(listingTextsFromFacts(facts)),
             brand: async () => {
               const w = await brandWatchOf()
               const profile = onboardingRef?.brandProfile(ws) as { markets?: unknown } | undefined

@@ -23,7 +23,13 @@ import {
   searchPartitionOf,
   userAgentFor,
 } from './search-browser.js'
-import { extractData, extractHtml, extractReadable, extractSerp, pageScript } from './search-extract.js'
+import {
+  extractData,
+  extractHtml,
+  extractReadable,
+  extractSerp,
+  pageScript,
+} from './search-extract.js'
 
 /** 交给人的那一页（第三栏亮出来的）。 */
 export interface SearchHandover {

@@ -6,12 +6,12 @@ export * from './ads.js'
 export * from './ads-wiring.js'
 // WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
 export * from './amazon-competitor.js'
+// WP397（docs/106 §13）：Amazon 库存补货公式与 FBA 赔偿复核算式（数由公式算，不让模型估）
+export * from './amazon-inventory.js'
 // WP398（docs/106 §13 A8）：Amazon 词库（联想词 + 竞品 / 自家 Listing 拆词、竞品有你没有的差距）
 export * from './amazon-keywords.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检（读前台、按规则表判、只出建议）
 export * from './amazon-listing.js'
-// WP397（docs/106 §13）：Amazon 库存补货公式与 FBA 赔偿复核算式（数由公式算，不让模型估）
-export * from './amazon-inventory.js'
 export * from './amazon-reimbursement.js'
 export * from './answer.js'
 export * from './approval.js'
