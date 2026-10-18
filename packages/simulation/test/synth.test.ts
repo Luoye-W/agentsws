@@ -93,7 +93,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP396 再加一条（自家 Listing 体检出 3 处问题、给草稿、被拦停、下设计需求单）→ 78
     // WP398 再加一条（Amazon 词库：出差距词、标出他牌名、被拦就停）→ 79
     // WP394 再加两条（Amazon 对标款：第二天降价带比你便宜多少 / 被拦退云端积分照扣）→ 81
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(81)
+    // WP402 再加一条（Amazon 内置浏览器被拦、云端也没读到 → 先问同意、再在你自己的浏览器里读）→ 82
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(82)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
