@@ -2118,7 +2118,7 @@ async function bootstrap(): Promise<void> {
       size: file.size,
       fetch: async (url, headers) => {
         const ctrl = new AbortController()
-        const res = await ses.fetch(url, { headers, signal: ctrl.signal, cache: 'no-store' })
+        const res = await ses.fetch(url, { headers, signal: ctrl.signal })
         const body = res.body as unknown as AsyncIterable<Uint8Array> | null
         return {
           status: res.status,
