@@ -126,7 +126,11 @@ interface BucketState {
   cards: Record<string, boolean>
 }
 
-/** WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。 */
+/**
+ * WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。
+ * Luoye 10-19：900 以上面板一律并排占一栏、默认开着（不再画成浮层），所以「默认收着」与「浮层」同一条线 900
+ * （WP421 曾把这条线提到 1200，按这一条撤回）。
+ */
 const NARROW_DEFAULT = '(max-width: 899px)'
 
 function narrowWindow(): boolean {

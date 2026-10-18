@@ -18,9 +18,20 @@ const BUSY_CODES = new Set(['provider_unavailable', 'rate_limited', 'timeout'])
 /** 余额 / 额度不足的上游原文（WP151 的「去充值」那类），原样给人看。 */
 const QUOTA_HINT = /(余额|充值|额度|quota|insufficient)/iu
 
+/** 中文里有没有字（上游原文全是英文时不原样给非技术用户看）。 */
+const HAS_CJK = /[\u4e00-\u9fff]/u
+
+/**
+ * WP421（自查 general 2.5）：余额 / 额度 / 登录过期的上游原文是英文时（"Insufficient Balance"、"quota exceeded"），
+ * 换成中文固定句；中文原文（自家写的人话）照旧原样用。英文原文只进日志。
+ */
+const QUOTA_ZH = '模型那边的余额或额度不够了，去充值或换一个模型后点重试'
+const AUTH_ZH = '模型账号的登录过期了（或 key 不对），重新登录 / 换一把 key 后点重试'
+
 export function runFailureText(error: { code: string; message: string }): string {
-  if (error.code === 'unauthenticated' && error.message.trim() !== '') return error.message.trim()
-  if (QUOTA_HINT.test(error.message) && error.message.length <= 120) return error.message.trim()
+  const msg = error.message.trim()
+  if (error.code === 'unauthenticated' && msg !== '') return HAS_CJK.test(msg) ? msg : AUTH_ZH
+  if (QUOTA_HINT.test(msg) && msg.length <= 120) return HAS_CJK.test(msg) ? msg : QUOTA_ZH
   if (error.code === 'budget_exhausted') return '这次的额度用完了，调高额度后点重试'
   if (error.code === 'provider_error') return 'AI 这次回得不对劲，点重试再来一次'
   if (BUSY_CODES.has(error.code)) return '模型那边这会儿没回上，点重试或稍后再试'

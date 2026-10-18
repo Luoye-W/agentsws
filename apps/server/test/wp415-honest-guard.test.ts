@@ -95,20 +95,21 @@ describe('登记表 × 卡种 × 运行形态（纯函数）', () => {
 
   it('生产里确实还有一批卡种没接通（这张名单变短 = 有组接上了真执行器）', () => {
     expect(notWiredKinds.length).toBeGreaterThan(0)
-    // 几个审计点名的：改出价、换素材、发新闻稿、装 App、改邮件模板、定稿入库
-    // （退款 WP417 起经店铺授权接上了——只接经店铺工具出的那种，见下一条）
+    // 几个审计点名的：改出价、换素材、装 App、改邮件模板
+    // （退款 WP417 起经店铺授权接上了、定稿入库与新闻稿定稿 WP421 接上了——见下面几条）
     for (const k of [
       'bid_change',
       'creative_swap',
-      'press_release',
       'app_install',
       'email_template_edit',
-      'asset_publish',
     ] as ChangeKind[])
       expect(notWiredKinds, k).toContain(k)
     // WP417：退款 / 补发 / 改地址只接经店铺工具出的那种（别的来路的同类卡照旧标「还没接通」）
     for (const k of ['refund', 'reship', 'address_change'] as ChangeKind[])
       expect(kindWiring(k), k).toBe('partly')
+    // WP421：新闻稿只接「定稿」那种（要分发的还没接通）；定稿入库整类接上
+    expect(kindWiring('press_release')).toBe('partly')
+    expect(kindWiring('asset_publish')).toBe('wired')
   })
 
   for (const mode of MODES)
@@ -429,12 +430,15 @@ describe('「能查什么」：grounding 里写的工具有没有执行器（决
       'list_community_threads',
       'list_mentions',
       'search_creators',
-      // WP419 接上了
+      // WP419 / WP421 接上了
       'list_social_posts',
+      'list_design_requests',
+      'get_brand_system',
+      'list_press_releases',
     ])
       expect(toolWired(name), name).toBe(true)
-    for (const name of ['list_design_requests', 'get_brand_system'])
-      expect(toolWired(name), name).toBe(false)
+    // 职责模板里写了、宿主里没有执行器的工具名照旧标没接通
+    expect(toolWired('no_such_tool_for_guard')).toBe(false)
     expect(toolWiringView('get_order')).toEqual({
       name: 'get_order',
       label: '订单查询',

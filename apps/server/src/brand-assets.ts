@@ -97,6 +97,8 @@ export interface SaveAssetInput {
   tags?: readonly string[]
   design_note?: string
   provenance: DesignAssetProvenance
+  /** WP421：在做哪张设计需求单。 */
+  request_id?: string
 }
 
 export interface BrandAssetFilter {
@@ -186,6 +188,7 @@ export function createBrandAssets(options: BrandAssetsOptions): BrandAssets {
         : { width: input.width, ...(input.height === undefined ? {} : { height: input.height }) }),
       ...(input.tags === undefined || input.tags.length === 0 ? {} : { tags: [...input.tags] }),
       ...(input.design_note === undefined ? {} : { design_note: input.design_note }),
+      ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
       provenance: input.provenance,
       created_at: now,
     }

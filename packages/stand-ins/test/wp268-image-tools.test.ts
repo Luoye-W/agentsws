@@ -96,13 +96,17 @@ describe('stub 剧本', () => {
     expect(imageBranch(req(IMAGE_TOOL_NAMES as string[]), '把首页改成深色')).toBeUndefined()
   })
 
-  it('回话：照工具回的那句说；没走通照实说', () => {
+  it('回话：出了图只说几张、在下面挑（不照抄写给模型的回执）；没走通照实说', () => {
     const data = imageDataOf({
       kind: 'image_pick',
       status: 'awaiting_pick',
-      message: '出了 3 张图',
+      message: '出了 3 张图……人挑之前别把它当定稿。别再重出同一批。',
+      asset_ids: ['a', 'b', 'c'],
     })
-    expect(renderImageAnswer({ ...(data === undefined ? {} : { data }) })).toBe('出了 3 张图')
+    // WP421：写给模型的工具回执不照抄进回话
+    expect(renderImageAnswer({ ...(data === undefined ? {} : { data }) })).toBe(
+      '出了 3 张图，在下面挑一张。',
+    )
     expect(renderImageAnswer({ failed: '生图还没配' })).toContain('生图还没配')
   })
 })

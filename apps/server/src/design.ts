@@ -87,7 +87,7 @@ import {
   specNoteZh,
   weeklyOutput,
 } from '@agentsws/design-core'
-import type { StageInput, StageOutcome } from '@agentsws/txn'
+import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
 import type BetterSqlite3 from 'better-sqlite3'
 
 /* ── 存储 ─────────────────────────────────────────────────────────────── */
@@ -429,10 +429,38 @@ export interface DesignServiceOptions {
    * 与上面那一格分开取：注入要的是**拼好的那段话**，自检要的是**色板与字体表**。
    */
   brandDesignProfile?(): BrandDesignProfile | undefined
+  /**
+   * WP421（自查 general 2.4）：一张需求单建好了 → 交给设计岗（开事项、通知做这条设计职责的人）。
+   * 回一句给下单方的话（「设计岗的 X 收到了」/「设计岗还没人做，先排着」）。不给 = 只落库（老行为）。
+   */
+  onRequestCreated?(request: DesignRequest): Promise<string | undefined>
+  /** WP421：需求单交付了（挑中 / 入库那一张）→ 回到下单的那件事上说一句。 */
+  onDelivered?(request: DesignRequest, asset: DesignAsset): Promise<void>
 }
 
 export interface DesignServiceAssembly {
   port: DesignPort
+  /**
+   * WP421：这条设计职责现在用哪张品牌系统（`get_brand_system` 工具读它）。没设过 = `system` 空、`note` 照实说；
+   * 另带这个品牌 `DESIGN.md` 里的色板与字体（有就带，供 AI 参考；不是品牌系统本身）。
+   */
+  brandSystem(duty: DesignDuty): ResolvedBrandSystem & {
+    design_md?: { colors: string[]; fonts: string[] }
+  }
+  /**
+   * WP421：一张素材定稿了（挑图卡挑中 / 入库卡批了）——带需求单的把单推到「交付了」并回给下单方。
+   * 回一句给时间线的话；没有需求单回 `undefined`。
+   */
+  deliver(asset: DesignAsset): Promise<string | undefined>
+  /**
+   * WP421：「定稿入库」卡（`asset_publish`）批了的执行器：素材改 `published`、需求单交付，**读回**确认。
+   * 不是这张卡回 `undefined`。
+   */
+  applyPublish(change: {
+    kind: string
+    after?: unknown
+    workspace_id: string
+  }): Promise<BackendResult | undefined>
 }
 
 export function createDesignService(options: DesignServiceOptions): DesignServiceAssembly {
@@ -618,6 +646,24 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           `不知道这张单该归哪条设计职责（来源是 ${actor.role_id}）。在 duty 里指定一条：${DESIGN_DUTIES.map((d) => d.id).join(' / ')}。`,
         )
       const now = clock.now()
+      /*
+       * WP421（自查 general 2.4）：同一个来源、同一个标题、还没做完的单——不再下第二张（亚马逊体检卡刷新后能重复下单）。
+       * 回原来那一张，不另出卡、不另通知设计岗。
+       */
+      const from = input.from_role_id ?? actor.role_id
+      const open = store
+        .requests({ duty, from_role_id: from })
+        .find(
+          (r) =>
+            r.title.trim() === input.title.trim() &&
+            r.status !== 'delivered' &&
+            r.status !== 'cancelled',
+        )
+      if (open !== undefined)
+        return {
+          request: requestRow(open),
+          staged: { staged: false, message: '这张单已经下过了，还在做。' },
+        }
       const request: DesignRequest = {
         id: nextId('dreq'),
         workspace_id,
@@ -635,6 +681,8 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
         created_at: now,
       }
       store.saveRequest(request)
+      // WP421：交给设计岗（开事项、通知）——以前只落一行，没人接
+      const handed = await options.onRequestCreated?.(request).catch(() => undefined)
       const staged = await stageOne({
         actor,
         action: DESIGN_ACTIONS.requestDesign,
@@ -647,7 +695,10 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           title: request.title,
           from_role_id: request.from_role_id,
         },
-        notes: [`路由到设计岗的「${designDutySpec(duty)?.zh ?? duty}」。`],
+        notes: [
+          `路由到设计岗的「${designDutySpec(duty)?.zh ?? duty}」。`,
+          ...(handed === undefined ? [] : [handed]),
+        ],
         title: `给设计岗下一张单：${request.title}`,
         summary: excerpt(request.need, 120),
         seen: [{ type: 'design_request', id: request.id }],
@@ -968,7 +1019,64 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
     },
   }
 
-  return { port }
+  const deliver = async (asset: DesignAsset): Promise<string | undefined> => {
+    if (asset.request_id === undefined) return undefined
+    const request = store.request(asset.request_id)
+    if (request === undefined) return undefined
+    if (request.status !== 'delivered') store.advanceRequest(request.id, 'delivered', clock.now())
+    appendEvent({
+      schema_version: 1,
+      workspace_id,
+      type: 'design.request_delivered',
+      actor: { kind: 'system', id: 'design' as never },
+      correlation: { trace_id: `tr_design_${clock.now()}` },
+      payload: { request_id: request.id, asset_id: asset.id },
+    })
+    await options.onDelivered?.(request, asset).catch(() => undefined)
+    return `需求单「${request.title}」交付了，结果回给了${sourceLabel(request.from_role_id, options.roleName)}。`
+  }
+
+  return {
+    port,
+    deliver,
+    applyPublish: async (change) => {
+      if (change.kind !== 'asset_publish' || change.workspace_id !== workspace_id) return undefined
+      const after = (change.after ?? {}) as { asset_id?: unknown }
+      const id = typeof after.asset_id === 'string' ? after.asset_id : undefined
+      const asset = id === undefined ? undefined : store.asset(id)
+      if (asset === undefined)
+        return {
+          status: 'failed',
+          error: { message: '这张素材已经不在素材库里了，没入库。', retryable: false },
+        }
+      store.saveAsset({ ...asset, status: 'published', updated_at: clock.now() })
+      const back = store.asset(asset.id)
+      if (back?.status !== 'published')
+        return {
+          status: 'unknown',
+          error: { message: '改了，但读回来不是「已定稿」。', retryable: true },
+        }
+      await deliver(back)
+      return {
+        status: 'ok',
+        execution_id: `design_publish_${asset.id}`,
+        outcome_ref: { type: 'design_asset', id: asset.id },
+      }
+    },
+    brandSystem: (duty) => {
+      const resolved = brandOf(duty)
+      const profile = options.brandDesignProfile?.()
+      const colors = Object.entries(profile?.colors ?? {}).map(
+        ([k, v]) => `${k} ${String(v.value)}`,
+      )
+      const fonts = Object.values(profile?.typography ?? {})
+        .map((t) => t.value.fontFamily)
+        .filter((f): f is string => typeof f === 'string' && f !== '')
+      return colors.length === 0 && fonts.length === 0
+        ? resolved
+        : { ...resolved, design_md: { colors, fonts: [...new Set(fonts)] } }
+    },
+  }
 }
 
 /** `gateway` 一格都没给的时候那句话（正常路径下读的是 provider 自己的 `unavailable_reason`）。 */

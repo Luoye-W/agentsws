@@ -917,6 +917,17 @@ export interface GatewayDeps {
     role_id: RoleId
     proposer: PersonId
   }): Promise<Recipient>
+  /**
+   * WP421（只加）：卡上点了「改一下」（指导，作用域「这一条」）之后**按指导重写**。
+   * 不是 AI 跑出来的卡（B2B 询盘首回 / 报价单这类由服务端起草的）没有运行可以接着改——宿主在这里按卡的种类
+   * 重起草、出一张新卡。回新卡的 id；这种卡不归它管 / 重写不了回 `undefined`（界面照旧）。不给 = 老行为。
+   */
+  redraft?(input: {
+    item: ApprovalItem
+    text: string
+    person_id: PersonId
+    assignment_id: string
+  }): Promise<{ approval_item_id?: string; message: string } | undefined>
   changes: ChangesPort
   /**
    * WP95（36 §11，`docs/upstream/sidebar-compare.md` #11）：一条变更改了哪几个文件。

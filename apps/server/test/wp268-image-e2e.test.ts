@@ -213,7 +213,8 @@ describe('WP268 生图接入建站端到端', () => {
     const cardEvent = view.timeline.find((e) => e.kind === 'card')
     expect(cardEvent?.approval_item_id).toBeDefined()
     const reply = view.timeline.find((e) => e.kind === 'agent_message')?.text ?? ''
-    expect(reply).toContain('挑图卡')
+    // WP421：回话不照抄写给模型的回执，只说出了几张、在下面挑
+    expect(reply).toContain('在下面挑一张')
     expect(reply).not.toContain('generate_image')
 
     // 卡：三张 + 再来一版；卡面写明选中会传店铺、挂首页
@@ -273,9 +274,10 @@ describe('WP268 生图接入建站端到端', () => {
         shop_file?: { theme_ref: string }
       }[]
     }>(await call('GET', `/v1/brand-assets?matter_id=${out.matter.id}`))
-    expect(lib.rows).toHaveLength(3)
+    // WP421：挑中 = 定稿（published），同批另两张作废（素材库默认不列作废的）
+    expect(lib.rows).toHaveLength(1)
     const chosen = lib.rows.find((r) => r.id === asset_id)
-    expect(chosen).toMatchObject({ status: 'picked', source_label: 'AI 生成' })
+    expect(chosen).toMatchObject({ status: 'published', source_label: 'AI 生成' })
     expect(chosen?.shop_file?.theme_ref).toContain('shopify://shop_images/')
   })
 

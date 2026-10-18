@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest'
 import {
   consistencyPrompt,
   factValuesOf,
-  figureLine,
   GEO_SAMPLE_ANSWERS,
   GEO_SAMPLE_BRAND,
   GEO_SAMPLE_FACTS,
@@ -136,7 +135,9 @@ describe('WP380 一条回答的 AI 判断（录好的回文）', () => {
 
   it('周指标：胜率 = 赢 ÷ 分了高下的（平局不进分母）；准确度 = 对 ÷ 说到的', () => {
     const [p] = weekPoints(sampleRows())
-    expect(p).toMatchObject({ compared: 2, wins: 1, win_rate: 0.5 })
+    // WP421：少于 5 条只给条数、不出百分比
+    expect(p).toMatchObject({ compared: 2, wins: 1 })
+    expect(p?.win_rate).toBeUndefined()
     // 说到 6 句：对 3（s1 卖点、s2 品类、s5 价格）、错 2（s3 品类、市场）、过时 1（s2 价格）
     expect(p).toMatchObject({
       claims: 6,
@@ -354,11 +355,10 @@ describe('WP380 周报模板：数字标来路、站外来源地图、缺位主�
       ['mention_rate', 'measured'],
       ['citation_rate', 'measured'],
       ['sov', 'measured'],
-      ['win_rate', 'derived'],
+      // WP421：只有 2 条分出高下的样本——不出胜率百分比
       ['accuracy', 'derived'],
       ['credits', 'estimated'],
     ])
-    expect(figs.map(figureLine)[3]).toBe('比较胜率 50%（推算，n=2，10-12）')
   })
 
   it('站外来源地图：按市场 × 类型分、竞品站不进、带交给谁', () => {

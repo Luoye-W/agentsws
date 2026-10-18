@@ -132,7 +132,8 @@ export const DESIGN_DUTIES: readonly DesignDutySpec[] = [
     produces_zh: '展位 / 易拉宝 / 画册 / 名片（印刷规格 CMYK / 出血）',
     produces_en: 'Booth, roll-ups, brochures, name cards (CMYK print specs)',
     // 58 §1：展会设计**没有上游职责**，人手动开一件事
-    request_sources: ['human'],
+    // WP421：B2B「展会」那条职责 yml 里也写着「向设计岗下需求单」（展位 / 易拉宝），只加不删
+    request_sources: ['human', 'b2b.exhibition'],
     spec_families: ['print'],
   },
 ]

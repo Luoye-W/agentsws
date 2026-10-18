@@ -172,6 +172,21 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
     label: '换线上主题：服务端跑 theme publish',
   },
   {
+    // WP421：新闻稿草稿批了 → 定稿（人改过的正文回写）、读回「已批」；要分发的那种还没接通（不登记）
+    id: 'pr.press_release_finalize',
+    kinds: ['press_release'],
+    readback: 'verified',
+    accepts: (c) => c.target?.type === 'press_release' && rec(c.after).distributed !== true,
+    label: '新闻稿：定稿落库、读回核对',
+  },
+  {
+    // WP421：定稿入库——素材改「已定稿」、需求单交付、回给下单方，读回核对
+    id: 'design.asset_publish',
+    kinds: ['asset_publish'],
+    readback: 'verified',
+    label: '设计定稿入库：落库、读回核对',
+  },
+  {
     id: 'design.record',
     kinds: ['design_request', 'design_brief', 'design_variant'],
     readback: 'local',

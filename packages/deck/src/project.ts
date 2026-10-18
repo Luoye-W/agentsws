@@ -628,6 +628,9 @@ export function entityChipsOf(
   return { chips, dropped }
 }
 
+/** WP421：B2B 回信卡默认那一格接上正文的前多少个字。 */
+const B2B_BODY_LEAD = 320
+
 /** 内容盒的三种语言变体；只从结构化字段里取，一个字不编（37 §1 第 4 行）。 */
 export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
   const payload = isRecord(item.payload) ? item.payload : {}
@@ -645,8 +648,18 @@ export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
     str(body.text) ??
     b2bBody
   const en = str(payload.summary_en) ?? str(payload.en)
+  /*
+   * WP421（自查 general 界面 #2）：B2B 回信卡默认那一格只有 AI 的判断理由，看不到要发出去的信——
+   * 判断理由后面接上正文的前几行（全文仍在「原文」那一档）。
+   */
+  const lead =
+    b2bBody === undefined
+      ? undefined
+      : b2bBody.length > B2B_BODY_LEAD
+        ? `${b2bBody.slice(0, B2B_BODY_LEAD).trimEnd()}…`
+        : b2bBody
   return {
-    zh_summary: item.summary,
+    zh_summary: lead === undefined ? item.summary : `${item.summary}\n\n${lead}`,
     ...(original === undefined ? {} : { original }),
     ...(en === undefined ? {} : { en }),
   }

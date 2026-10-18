@@ -20,6 +20,7 @@ import {
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
+  DESK_TOOL_DEF_BY_NAME,
   DRAFT_BODY_DESCRIPTION,
   DRAFT_NOT_CREATED,
   DRAFT_SUBJECT_DESCRIPTION,
@@ -382,6 +383,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
     // WP419：社媒发帖 / Reddit 起草出卡（定义在 stand-ins 的 `runtime/social-tools.ts`）
     SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name) ??
+    // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（定义在 stand-ins 的 `runtime/desk-tools.ts`）
+    DESK_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name) ??
     // WP417：客服查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
@@ -559,6 +562,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       SUPPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP419：社媒发帖 / Reddit 起草（查只读本机；出卡不发）
       SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
+      DESK_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

@@ -1104,7 +1104,8 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     label: '用 Claude 订阅登录（Pro / Max）',
     summary: '已经在付 Claude 的钱就不用再买 API 额度：登录一次，按订阅额度跑。',
     ...ANTHROPIC_VENDOR,
-    plan_label: '用 Claude 订阅登录（Pro / Max）',
+    // WP421：登录了也还接不进模型——方案名上照实写（卡里那一句见 `subscription.ts` 的 CLAUDE_SUBSCRIPTION_NOT_WIRED）
+    plan_label: '用 Claude 订阅登录（暂不可用）',
     plan_order: 1,
     auth: 'subscription',
     subscription_provider: 'anthropic',

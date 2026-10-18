@@ -74,6 +74,7 @@ const getB2bOutbound = vi.fn<() => Promise<B2bOutboundData>>()
 const saveB2bOutboundSettings = vi.fn<(input: unknown) => Promise<B2bOutboundData>>()
 const startB2bSequence = vi.fn<(input: unknown) => Promise<B2bSequenceStartData>>()
 const checkB2bSender = vi.fn<() => Promise<B2bOutboundData>>()
+const importB2bCsv = vi.fn<(input: unknown) => Promise<unknown>>()
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -83,6 +84,7 @@ vi.mock('@/lib/api', async () => {
     saveB2bOutboundSettings: (input: unknown) => saveB2bOutboundSettings(input),
     startB2bSequence: (input: unknown) => startB2bSequence(input),
     checkB2bSender: () => checkB2bSender(),
+    importB2bCsv: (input: unknown) => importB2bCsv(input),
   }
 })
 
@@ -193,5 +195,35 @@ describe('开发信面板', () => {
     await waitFor(() =>
       expect(saveB2bOutboundSettings).toHaveBeenCalledWith({ sender_established: true }),
     )
+  })
+
+  it('WP421：导入名单——选一张 CSV 就出卡，回执说批了才进库', async () => {
+    getB2bOutbound.mockResolvedValue({ ...BASE, eligible: 0 })
+    importB2bCsv.mockResolvedValue({
+      staged: true,
+      rows: 2,
+      suppressed: 0,
+      approval_item_id: 'apr_1',
+    })
+    renderWithProviders(<B2bOutboundPanel assignment="asg_out" />)
+    fireEvent.change(await screen.findByTestId('b2b-import-source'), {
+      target: { value: 'https://fair.example/exhibitors' },
+    })
+    const file = new File(
+      ['company,email\nVolthaus,anna@volthaus.example\nPeak,mia@peak.example'],
+      'fair.csv',
+      {
+        type: 'text/csv',
+      },
+    )
+    fireEvent.change(screen.getByTestId('b2b-import-file'), { target: { files: [file] } })
+    await waitFor(() =>
+      expect(importB2bCsv).toHaveBeenCalledWith({
+        name: 'fair',
+        csv: 'company,email\nVolthaus,anna@volthaus.example\nPeak,mia@peak.example',
+        source_url: 'https://fair.example/exhibitors',
+      }),
+    )
+    expect((await screen.findByTestId('b2b-import-result')).textContent).toContain('批了才进库')
   })
 })

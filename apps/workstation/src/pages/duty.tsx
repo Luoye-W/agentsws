@@ -133,9 +133,6 @@ function DutyAbout({
         <p className="text-sm" data-testid="duty-line">
           <MarkdownInline text={view.description} />
         </p>
-        <p className="text-xs text-ws-muted-fg" data-testid="duty-holders">
-          {t('duty.holders', { count: view.holders ?? 0 })}
-        </p>
       </div>
       <DutyAdvanced view={view} />
       {/* WP74：同一个日历，默认开着这条职责相关的那几层；WP372：这条职责的看板在右侧「报表」 */}

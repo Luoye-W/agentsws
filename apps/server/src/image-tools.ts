@@ -107,6 +107,13 @@ export interface ImageServiceOptions {
     url: string,
   ) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>
   appendEvent?(type: string, payload: Record<string, unknown>): void
+  /** WP421：这张设计需求单在不在（`generate_image` 带的 `request_id` 先核一下）。 */
+  requestExists?(request_id: string): boolean
+  /**
+   * WP421：人在挑图卡上挑中了一张 = 定稿（入素材库、算进「本周定稿」）。带需求单的，交付给下单的岗位。
+   * 回一句给事项时间线的话（不给 = 只记定稿）。
+   */
+  onPublished?(asset: DesignAsset, by: string | undefined): Promise<string | undefined>
 }
 
 export interface ImageService {
@@ -309,6 +316,12 @@ export function createImageService(options: ImageServiceOptions): ImageService {
         ...(block === undefined ? {} : { block }),
       }
     }
+    // WP421：在做哪张设计需求单（不认识的 id 不带，免得挑中后「交付」给一张不存在的单）
+    const asked_request = str(input.request_id, 100)
+    const request_id =
+      asked_request !== undefined && options.requestExists?.(asked_request) === true
+        ? asked_request
+        : undefined
     const refs: string[] = []
     let mask_asset_id: string | undefined
     if (operation === 'edit') {
@@ -378,6 +391,7 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       ...(style_note === undefined ? {} : { style_note }),
       ...(tags.length === 0 ? {} : { tags }),
       ...(place === undefined ? {} : { place }),
+      ...(request_id === undefined ? {} : { request_id }),
     }
   }
 
@@ -522,6 +536,7 @@ export function createImageService(options: ImageServiceOptions): ImageService {
           spec_id: job.spec_id ?? `aspect:${job.aspect_ratio ?? '1:1'}`,
           status: 'variant',
           ...(job.tags === undefined ? {} : { tags: job.tags }),
+          ...(job.request_id === undefined ? {} : { request_id: job.request_id }),
           provenance: {
             source: 'generated',
             operation: job.operation,
@@ -834,19 +849,30 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       note(p.matter_id, '选的那张在素材库里找不到了。')
       return true
     }
+    /*
+     * WP421（自查 general 2.4）：挑图卡本身就是人点的那一下——挑中 = 定稿（`published`），同批其它张作废；
+     * 以前只标 `picked`，面板「素材库 / 本周定稿」按 `published` 数，永远 0，还一直挂着「等你点入库」却没有按钮。
+     */
     const marked: DesignAsset = {
       ...asset,
-      status: 'picked',
+      status: 'published',
       provenance: {
         ...asset.provenance,
         ...(by === undefined ? {} : { picked_by: by }),
         picked_at: now,
       },
+      updated_at: now,
     }
     assets.update(marked)
+    for (const v of p.variants) {
+      const other = v.asset_id === asset.id ? undefined : assets.get(v.asset_id)
+      if (other !== undefined && other.status === 'variant')
+        assets.update({ ...other, status: 'rejected', updated_at: now })
+    }
     emit('image.picked', { run_id: p.run_id, asset_id: asset.id, upload: p.upload })
+    const delivered = await options.onPublished?.(marked, by).catch(() => undefined)
     if (p.job.place === undefined || options.place === undefined) {
-      note(p.matter_id, `选了${picked?.label ?? '这一张'}，进素材库了。`)
+      note(p.matter_id, `选了${picked?.label ?? '这一张'}，进素材库了。${delivered ?? ''}`)
       return true
     }
     note(
@@ -876,7 +902,12 @@ export function createImageService(options: ImageServiceOptions): ImageService {
     async offered(role_id) {
       if (!isImageRole(role_id)) return []
       const p = options.images()
-      if (p === undefined || !p.available) return []
+      /*
+       * WP421（自查 general 2.4）：生图没配时**也摆出图与素材库**（不摆改图）——以前整个藏起来，AI 不知道没配，
+       * 人设又写「出几版初稿」，容易嘴上说出了图。现在它一调，执行器回「生图还没配」，运行收尾出连接卡就地配。
+       */
+      if (p === undefined || !p.available)
+        return IMAGE_TOOL_NAMES.filter((n) => n !== EDIT_IMAGE_TOOL)
       return IMAGE_TOOL_NAMES.filter((n) => n !== EDIT_IMAGE_TOOL || p.edit !== undefined)
     },
     onDecided,

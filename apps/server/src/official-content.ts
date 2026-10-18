@@ -2061,8 +2061,9 @@ export function createOfficialContent(options: OfficialContentOptions): Official
             details: { reason: 'scope_missing', required_scope: 'content' },
           })
         }
-        if (res.status === 501)
-          throw new ApiError('not_implemented', res.message ?? '云上还没开通岗位更新，没有扣积分。')
+        // WP421（自查 general 2.5）：云上没有这个入口（404 / 501）→「还没上线」，不把路由原文给人看
+        if (res.status === 501 || res.status === 404)
+          throw new ApiError('not_implemented', '岗位更新还没上线，没有扣积分。')
         throw new ApiError('invalid_input', res.message ?? '云上没答应这一次订阅。')
       }
       writeSub(ws, { view: res.data, checked_at: now(), last: 'ok' })

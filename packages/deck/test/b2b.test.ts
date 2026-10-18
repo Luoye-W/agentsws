@@ -214,6 +214,11 @@ describe('WP182：B2B 回信卡的正文看得见', () => {
       }) as never
     expect(contentVariantsOf(item('b2b_reply')).original).toBe('Hi Anna, the MOQ is 500 pcs.')
     expect(contentVariantsOf(item('b2b_record')).original).toBeUndefined()
+    // WP421：默认那一格也看得见要发的信（判断理由 + 正文前几行）
+    expect(contentVariantsOf(item('b2b_reply')).zh_summary).toBe(
+      '真买家\n\nHi Anna, the MOQ is 500 pcs.',
+    )
+    expect(contentVariantsOf(item('b2b_record')).zh_summary).toBe('真买家')
   })
 })
 

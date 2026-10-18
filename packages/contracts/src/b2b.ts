@@ -612,7 +612,8 @@ export interface B2bDraft {
   record: Record<string, unknown>
   /** 报价：这一版（只读，批了才写进版本表）。 */
   quote_version?: B2bQuoteVersion
-  status: 'draft' | 'submitted' | 'applied' | 'blocked'
+  /** WP421（只加）：`rejected` = 卡被驳回了（面板不再算「待审」；可以再改再提）。 */
+  status: 'draft' | 'submitted' | 'applied' | 'blocked' | 'rejected'
   change_id?: string
   approval_item_id?: string
   /** 被 guardrail 拦下时那句人话。 */

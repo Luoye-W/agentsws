@@ -464,6 +464,9 @@ import {
   type DeepSeekAccountOptions,
 } from './deepseek-account.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
+import { createDesignHandoff } from './design-handoff.js'
+import { deskApply } from './desk-apply.js'
+import { createDeskToolExecutor } from './desk-tools.js'
 import type { MdnsFactory } from './discovery.js'
 import {
   createDshScenes,
@@ -821,7 +824,12 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
-import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
+import {
+  claimRuleCard,
+  createSeoService,
+  pickRoleHolder,
+  type SeoServiceAssembly,
+} from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createOwnerSetupCode, type LoginMode, loginModeOf } from './setup-code.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
@@ -944,6 +952,16 @@ import {
 
 /** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
 /** WP212：「交给 X ▾」里常驻的五个岗位（与消息相关；别的岗位开着才列）。 */
+/** WP421：AI 读搜索报告卡时看全部状态（报告卡不进队列，状态多半是 auto_approved / applied）。 */
+const DESK_REPORT_STATES = [
+  'pending',
+  'in_review',
+  'approved',
+  'approved_edited',
+  'auto_approved',
+  'applied',
+] as const
+
 const MESSAGE_POSITIONS: readonly string[] = [
   'customer-care',
   'kol-marketing',
@@ -2753,6 +2771,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP261：独立站运营的卡批了 → 由服务端带 `--allow-mutations` 去改、读回确认（整条路上唯一改店铺数据的地方）
       const shopped = await (await shopOf(change.workspace_id))?.ops.apply(change)
       if (shopped !== undefined) return shopped
+      /*
+       * WP421（自查 general R1）：新闻稿 / 论坛帖 / 内容改动 / 定稿入库 / 设计需求单——有真执行器的真做并读回，
+       * 做不到的照实回「没做 + 原因」，不再落进下面的内存空桩回「已执行」。
+       */
+      const deskApplied = await deskApply(change, {
+        ...(brand === undefined
+          ? {}
+          : { pr: brand.pr, design: brand.designService, designStore: brand.design }),
+        now: () => clock.now(),
+      })
+      // WP415 统一口径：还没接通的那几种（`not_wired`）演示里照走兜底（标「演示」）
+      if (deskApplied !== undefined && !(deskApplied.not_wired === true && executionMode === 'demo'))
+        return deskApplied
       // WP415：出卡时已办完 / 批了交给排期去做的那几类（登记表里 `inline` 的）
       const inline = inlineApply(change)
       if (inline !== undefined) return inline
@@ -5085,6 +5116,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
     // WP176：开发信装配（`b2bOutbound`）比运行时晚建；运行时里的开发信工具经这个盒子懒取
     const b2bOutboundLate: { current?: B2bOutboundAssembly } = {}
+    // WP421：搜索 / GEO 那一摊比运行时晚建（工具只在真调那一刻才碰它）
+    const seoLate: { current?: { watchMetrics: SeoServiceAssembly['watchMetrics'] } } = {}
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
@@ -5755,7 +5788,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * brief 与规格并明说（58 §1）。素材字节进 blob store，库里只留 `blob://…`。
      * 品牌系统从公司层技能取（24），取不到就出「先设品牌系统」卡。
      */
+    /*
+     * WP421（自查 general 2.4）：需求单交接的两头——建单交给做这条设计职责的人（开事项 + 待办）、
+     * 交付回到下单的那件事上。工作模型比这里晚建（`workRef` 晚绑定）。
+     */
+    const designHandoff = createDesignHandoff({
+      work: () => workRef,
+      holders: (role_id) =>
+        roles.assignments
+          .listByRole(role_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined),
+      roleName: (id) => roles.roles.get(id)?.name.zh,
+    })
     const designService = createDesignService({
+      onRequestCreated: (request) => designHandoff.onRequestCreated(request),
+      onDelivered: (request, asset) => designHandoff.onDelivered(request, asset),
       workspace_id: ws,
       store: design,
       clock,
@@ -6105,6 +6152,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       clock,
       assets: brandAssets,
+      // WP421：挑中 = 定稿；带需求单的交付回下单方
+      requestExists: (id) => design.request(id) !== undefined,
+      onPublished: (asset) => designService.deliver(asset),
       images: () => ownGateway.images,
       pricing: () => {
         const view = ownModels.imageView()
@@ -6952,6 +7002,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             /*
+             * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具。读的是与界面同一份库，
+             * 起草落到与 `/v1/pr|b2b|design/*` 同一个端口（出卡，人批了才算数）。
+             */
+            deskTools: createDeskToolExecutor({
+              pr: () => prService.port,
+              company: () => ({
+                name: onboardingRef?.companyProfile(ws)?.legal_name ?? brandNameOfWorkspace(ws),
+              }),
+              seoReports: async (actor) => {
+                const states = [...DESK_REPORT_STATES]
+                const mine = await txn.approvals.queue({
+                  workspace_id: ws,
+                  person_id: actor.person_id,
+                  lane: 'mine',
+                  kind: 'seo_report',
+                  state: states,
+                })
+                const scope = await txn.approvals
+                  .queue({
+                    workspace_id: ws,
+                    person_id: actor.person_id,
+                    lane: 'scope',
+                    kind: 'seo_report',
+                    state: states,
+                  })
+                  .catch(() => [])
+                return [...mine, ...scope.filter((x) => !mine.some((m) => m.id === x.id))]
+              },
+              geoMetrics: async () => seoLate.current?.watchMetrics({ weeks: 5 }),
+              b2b: () => ({ store: b2b, port: b2bService.port }),
+              design: () => designService,
+            }),
+            /*
              * WP253：网页模板的九个受限主题工具（起底 / 列 / 拉 / 检查 / 看改文件 / 推未发布 / 发布出卡）。
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
@@ -7666,6 +7749,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return createGeoStore(join(dir, 'geo.sqlite'))
       },
     })
+    seoLate.current = seoService
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
      *
@@ -9825,6 +9909,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           { workspace_id: item.workspace_id, person_id: by, assignment_id, role_id: item.role_id },
           item.id,
         )
+      return
+    }
+    // WP421（自查 general 2.3）：B2B 库 / 业务的卡被驳回 → 回写（面板不再永远挂「待审」）
+    if (isB2bRejected(item)) {
+      brand?.b2bService.onRejected({
+        change_id: String((item.payload as { change_id?: unknown }).change_id ?? ''),
+        ...(item.decision?.reason === undefined ? {} : { reason: item.decision.reason }),
+      })
+      brand?.b2bSales.onRejected(item)
       return
     }
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
@@ -14242,6 +14335,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }),
     // WP174：`POST /v1/approvals` 的 `scope_manager` 也走岗位上级 → 老板
     routeScopeManager,
+    /*
+     * WP421（自查 general 2.3）：「改一下」→ 服务端起草的 B2B 卡真按指导重写（回信卡出新卡；报价 / 样品这类
+     * 结构化记录退回草稿、记下那句话）。别的卡回 undefined，界面照旧。
+     */
+    redraft: async ({ item, text, person_id }) => {
+      const brand = await brands?.forWorkspace(item.workspace_id)
+      if (brand === undefined) return undefined
+      const sales = await brand.b2bSales.redraft(item, text, person_id as PersonId)
+      if (sales !== undefined) return sales
+      if (!isB2bRejected(item)) return undefined
+      const back = brand.b2bService.onRejected({
+        change_id: String((item.payload as { change_id?: unknown }).change_id ?? ''),
+        instruction: text,
+      })
+      return back === undefined ? undefined : { message: back.message }
+    },
     changes: txn.ledger,
     guardrails,
     knowledge: knowledgePort,
@@ -15588,7 +15697,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isKolCollaborationCard(out) ||
           out.kind === 'kol_campaign' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
-          isKolMergeCard(out)
+          isKolMergeCard(out) ||
+          // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）
+          isB2bRejected(out)
         ) {
           try {
             await hook.current?.(out)
@@ -15600,6 +15711,17 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
     },
   })
+}
+
+/** WP421：B2B 库 / 业务那几种账本卡被驳回了（驳回与「改一下」都走这里）。 */
+function isB2bRejected(item: ApprovalItem): boolean {
+  const kind = (item.payload as { kind?: unknown } | undefined)?.kind
+  return (
+    item.kind === 'staged_change' &&
+    item.state === 'rejected' &&
+    typeof kind === 'string' &&
+    kind.startsWith('b2b_')
+  )
 }
 
 /** 品牌模块装好之后才有；决定发生时现取（与 `brands` 同一个晚绑定的套路）。每个服务进程一份。 */

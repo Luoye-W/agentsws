@@ -505,9 +505,11 @@ export function DeckCardBody({
         const audience = highlightText(card, 'audience')
         // WP332：公关在别人帖子下回一条评论——被回的那一条点得开（插件也按它找回复框）
         const parentUrl = isRecord(payload.after) ? str(payload.after.parent_url) : undefined
+        // WP421（自查 general）：批了也不会自动发（新闻稿分发、外部论坛还没接）——卡上照实写「要你自己发」
+        const manual = isRecord(payload.after) && payload.after.manual_send === true
         return (
           <div className="mt-2.5 flex gap-3" data-testid="deck-layout-publish">
-            {/* WP418（审计 U10）：没图就不留图位 */}
+            {/* WP418（审计 U10）/ WP421（界面清单 #1）：没有封面就不画占位块 */}
             {preview === undefined ? null : (
               <div
                 data-testid="deck-publish-preview"
@@ -519,8 +521,15 @@ export function DeckCardBody({
             <div className="min-w-0 flex-1 text-[13px] leading-5 text-ws-body">
               <p className="whitespace-pre-wrap">{content.text}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
-                  {t('deck.publish.when', { when: scheduled ?? t('deck.publish.now') })}
+                <span
+                  className={`inline-flex h-[22px] items-center rounded-md px-2 text-xs ${
+                    manual ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-surface'
+                  }`}
+                  data-testid={manual ? 'deck-publish-manual' : undefined}
+                >
+                  {manual
+                    ? t('deck.publish.manual')
+                    : t('deck.publish.when', { when: scheduled ?? t('deck.publish.now') })}
                 </span>
                 {/* WP418（审计 U10）：没有受众数就不出「受众 · —」 */}
                 {audience === undefined ? null : (

@@ -14,7 +14,7 @@
  * DKIM 按 DNS 判的写明「未经实信验证」；说过不感兴趣、还在冷却里的人一行，名单与到期日进问号。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Mail, RefreshCw, Send } from 'lucide-react'
+import { FileUp, Mail, RefreshCw, Send } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatusPill } from '@/components/design/primitives'
@@ -30,6 +30,7 @@ import {
   type B2bSequenceStartData,
   checkB2bSender,
   getB2bOutbound,
+  importB2bCsv,
   saveB2bOutboundSettings,
   startB2bSequence,
 } from '@/lib/api'
@@ -76,6 +77,17 @@ function AuthPill({
   )
 }
 
+/** 读一张表格的文字（不是每个环境都有 `File.text()`，退回 FileReader）。 */
+function readText(file: File): Promise<string> {
+  if (typeof file.text === 'function') return file.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('读不出这张表'))
+    reader.readAsText(file)
+  })
+}
+
 export function B2bOutboundPanel({ assignment }: { assignment: string }): React.ReactNode {
   const { t } = useApp()
   const qc = useQueryClient()
@@ -101,6 +113,25 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
       await qc.invalidateQueries({ queryKey: key })
       await qc.invalidateQueries({ queryKey: ['view'] })
     },
+  })
+  // WP421（自查 general 2.3）：联系人库以前没有入口进人，「开一轮」永远「没有能发的人」
+  const [source, setSource] = useState('')
+  const [imported, setImported] = useState<string | undefined>(undefined)
+  const importList = useMutation({
+    mutationFn: async (file: File) =>
+      importB2bCsv(
+        {
+          name: file.name.replace(/\.csv$/iu, ''),
+          csv: await readText(file),
+          ...(source.trim() === '' ? {} : { source_url: source.trim() }),
+        },
+        assignment,
+      ),
+    onSuccess: (out) => {
+      setImported(out.staged ? t('b2b.out.import.done', { rows: out.rows }) : (out.message ?? ''))
+      void qc.invalidateQueries({ queryKey: key })
+    },
+    onError: (e) => setImported(e.message),
   })
   const v = q.data
   if (v === undefined) return null
@@ -272,6 +303,48 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
                 </label>
               )}
             </>
+          )}
+        </section>
+
+        {/* ⑤ WP421：导入名单（CSV；导入本身出卡，批了才进库） */}
+        <section className="flex flex-col gap-2" data-testid="b2b-import">
+          <span className="flex items-center gap-1 text-ws-muted-fg">
+            {t('b2b.out.import')}
+            <Hint text={`${t('b2b.out.import.hint')}。${t('b2b.out.import.ai')}`} />
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="min-w-0 flex-1"
+              value={source}
+              data-testid="b2b-import-source"
+              placeholder={t('b2b.out.import.source')}
+              onChange={(e) => setSource(e.target.value)}
+            />
+            <label
+              className={`inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-ws-border px-2.5 text-xs ${
+                importList.isPending ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <FileUp className="size-3.5" aria-hidden />
+              {t('b2b.out.import.pick')}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                data-testid="b2b-import-file"
+                disabled={importList.isPending}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file !== undefined) importList.mutate(file)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </div>
+          {imported === undefined ? null : (
+            <p className="text-ws-muted-fg" data-testid="b2b-import-result">
+              {imported}
+            </p>
           )}
         </section>
 

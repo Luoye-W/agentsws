@@ -18,6 +18,7 @@ import {
   AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   COMPETITOR_STORE_TOOL_NAMES,
+  DESK_TOOL_NAMES,
   GOOGLE_ALERTS_TOOL_NAMES,
   IMAGE_TOOL_NAMES,
   OWNER_TOOL_NAMES,
@@ -81,6 +82,8 @@ export const HOST_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...AMAZON_COMPETITOR_TOOL_NAMES,
   // WP419：社媒发帖 / Reddit 起草（查只读本机，起草只出卡）
   ...SOCIAL_WORK_TOOL_NAMES,
+  // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
+  ...DESK_TOOL_NAMES,
 ])
 
 /** `mcp__shopify__get_order` → `get_order`。 */

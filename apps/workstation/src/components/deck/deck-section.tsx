@@ -238,6 +238,12 @@ export function DeckSection({
     },
     onSuccess: (out, input) => {
       setError('')
+      // WP421：「改一下」后服务端真重写了（或照实说重写不了）就说那一句，不再一律许诺「改好再给你看」
+      const redraft = (out as { redraft?: { message?: unknown } } | undefined)?.redraft?.message
+      if (typeof redraft === 'string' && redraft !== '') {
+        setReceipt(redraft)
+        return
+      }
       const key = receiptKey(input.body, input.card)
       setReceipt(key === undefined ? '' : t(key))
       // WP414：「不要 / 稍后」出可选理由那一行（填了理由才去找同类）；「发送」后同类要不要一起发，也在这一行

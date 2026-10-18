@@ -401,13 +401,19 @@ function TodayDue({
           })}
         </ul>
       )}
-      <Link
-        to="/todos"
-        className="text-xs text-muted-foreground hover:underline"
+      {/* WP421（自查 general 2.6）：以前链到待办页，那里没有卡片区——改成滚到本页的牌堆 */}
+      <button
+        type="button"
+        className="self-start text-xs text-muted-foreground hover:underline"
         data-testid="cards-waiting"
+        onClick={() =>
+          document
+            .querySelector('[data-testid="queue"]')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
       >
         {t('home.today.cards', { count: cardsWaiting })}
-      </Link>
+      </button>
     </div>
   )
 }

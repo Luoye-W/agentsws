@@ -83,7 +83,14 @@ export function PositionHandoff({
     (prompt) => {
       clearError()
       setStarted(true)
-      open.mutate({ title: prompt.slice(0, TASK_TEXT_MAX), model, files: [], ...pin })
+      // WP421（自查 general 2.5）：快捷按钮开的事项也带上已选的思考档（以前只带模型）
+      open.mutate({
+        title: prompt.slice(0, TASK_TEXT_MAX),
+        model,
+        ...(effort === undefined ? {} : { effort }),
+        files: [],
+        ...pin,
+      })
     },
   )
 
