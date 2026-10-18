@@ -183,7 +183,7 @@ async function main() {
     await page.getByText('公共关系').first().click()
     await page.waitForLoadState('networkidle')
     if ((await page.getByTestId('rail-cards').count()) === 0)
-      await page.getByTestId('rail-overflow').click()
+      await page.getByTestId('rail-toggle').click()
     const card = page.getByTestId('rail-card-connections')
     await card.waitFor({ timeout: 20_000 })
     if ((await card.getAttribute('data-open')) !== 'true')

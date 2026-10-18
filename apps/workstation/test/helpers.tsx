@@ -40,8 +40,15 @@ export async function openSettingsTab(tab: string): Promise<void> {
 export async function openRailPanel(id: string): Promise<void> {
   const card = RAIL_PANEL_CARD[id]
   if (card === undefined) {
-    // WP375：不归卡的工具（浏览器 / 变更审阅 / 教程）是右上角的图标
-    fireEvent.click(screen.getByTestId(`rail-icon-${id}`))
+    // WP375：不归卡的工具（浏览器 / 变更审阅）是右上角的图标；WP412：不常用的（教程…）在「⋮」菜单里
+    const icon = screen.queryByTestId(`rail-icon-${id}`)
+    if (icon !== null) {
+      fireEvent.click(icon)
+      return
+    }
+    if (screen.queryByTestId('rail-menu') === null)
+      fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId(`rail-menu-${id}`))
     return
   }
   await openRailCard(card)
@@ -49,13 +56,14 @@ export async function openRailPanel(id: string): Promise<void> {
 }
 
 /**
- * WP375（决策 1035）：右上角不再有卡片图标——「⋮」开右侧面板，卡没展开就点它的标题行展开。
+ * WP375（决策 1035）：右上角不再有卡片图标，卡没展开就点它的标题行展开。
+ * WP412（决策 1035 更正）：面板由右上角专门的开关（`rail-toggle`）开；岗位 / 职责 / 事项页默认就开着。
  */
 export async function openRailCard(card: string): Promise<HTMLElement> {
   if (screen.queryByTestId('rail-cards') === null) {
-    // 开着某一格（「显示更多」进去的）就「←」回卡片；面板收着就点「⋮」打开
+    // 开着某一格（「显示更多」进去的）就「←」回卡片；面板收着就点面板开关打开
     const back = screen.queryByTestId('rail-panel-back')
-    fireEvent.click(back ?? screen.getByTestId('rail-overflow'))
+    fireEvent.click(back ?? screen.getByTestId('rail-toggle'))
   }
   const box = await screen.findByTestId(`rail-card-${card}`)
   if (box.getAttribute('data-open') !== 'true')

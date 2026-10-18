@@ -15,6 +15,8 @@
  * 窗口右上角那一排是这六张卡各一个图标；浏览器、变更审阅、教程进最右的「⋮」。
  * **WP375（决策 1035）**：右上角不再重复放卡片图标——只放面板里没有的工具（浏览器、变更审阅、教程，`pinned` 排序），
  * 最右「⋮」开关右侧面板、任何卡有红 / 黄点时亮一个汇总点；默认展开「对话」「计划」。
+ * **WP412（决策 1035 更正）**：最右换成专门的面板开关（汇总点挂在它上面），「⋮」回到溢出菜单——教程、记忆收进去，
+ * 右上角只露浏览器、变更审阅。
  * 「记录 / 发出记录 / 证据」合成「产出」面板的三个标签（旧 id 留作别名），「定时任务」= 计划的完整列表，
  * 连接卡（决策 690）按地址开时展开「连接」那张卡并滚到那一条。
  *
@@ -400,7 +402,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     icon: GraduationCap,
     priority: 'builtin',
     group: 'tools',
-    pinned: 3,
+    // WP412（决策 1035 更正）：教程不常用，收进「⋮」（不再露在右上角）
     matches: [HELP_ADDRESS_PATTERN],
   })
   registerPanelBody('help', HelpBodyPanel)

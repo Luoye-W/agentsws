@@ -5,10 +5,9 @@
  * - 页头一行：AI 起的短标题（点了改）+ 一行灰字（职责 · 状态 · 参与者 · 最近活动 · 有才出的待办），「⋯」收其余；吸顶。
  * - 对话式时间线：你说的在右、AI 在左；结果 / 审批 / 选择 / 卡住是能直接点的卡；过程事件缩成居中一行灰字（默认收起）；
  *   正在跑的那次在最底下「正在做…」+ 当前一步。
- * - 底部输入卡：卡内圆形发送（运行中变「停」）、「私聊 AI」开关（替代原来那块「问 AI」）、Tab 收建议。
+ * - 底部输入卡：卡内圆形发送（运行中变「停」）、Tab 收建议。WP412（决策 1221）：「私聊 AI」开关去掉。
  *
  * 底部这个输入框是**对话入口的第四处**，也是唯一有边界的一处：作用域是这个事项、角色是这个岗位的 Agent。
- * 私聊 AI 只是问一句给自己看，不产生任何动作，关掉就没了（决策 178）。
  */
 import type { MatterEvent } from '@agentsws/contracts'
 import { type DeckAction, type DeckCard, projectCard } from '@agentsws/deck'
@@ -23,7 +22,7 @@ import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { ModelSwitchDivider } from '@/components/free-chat/thread-bits'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MaskDialog } from '@/components/matter/mask-dialog'
-import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
+import { MatterComposer } from '@/components/matter/matter-composer'
 import { type DutyOption, MatterHeader } from '@/components/matter/matter-header'
 import {
   awaitingReply,
@@ -56,7 +55,6 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isServiceCard } from '@/components/workshop-services/service-card-body'
 import {
-  askAi,
   BRAND_ASSET_MAX_BYTES,
   closeMatter,
   completeTodo,
@@ -111,13 +109,6 @@ function resumableOf(timeline: readonly MatterEvent[]): string | undefined {
   return later ? undefined : stopped.id
 }
 
-interface PrivateAsk {
-  id: number
-  question: string
-  answer?: string
-  error?: string
-}
-
 export function MatterPage(): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
@@ -138,7 +129,6 @@ export function MatterPage(): ReactNode {
   const { mode } = useMode()
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
   const me = session.data?.person.id
-  const [privateMode, setPrivateMode] = useState(false)
   // WP268：事项里加进来的图（已进素材库，发话时带上 id）
   const [attached, setAttached] = useState<
     { id: string; url: string; mask?: string | undefined }[]
@@ -148,13 +138,11 @@ export function MatterPage(): ReactNode {
   const [canMask, setCanMask] = useState(false)
   const [masking, setMasking] = useState<string | undefined>(undefined)
   const [savingMask, setSavingMask] = useState(false)
-  const [asks, setAsks] = useState<PrivateAsk[]>([])
   const [queued, setQueued] = useState<string | undefined>(undefined)
   /** WP357：排队那句附上的资料（这一轮跑完一起发）。 */
   const [queuedFiles, setQueuedFiles] = useState<FreeChatFile[]>([])
   /** WP357：这一句要附上的资料。 */
   const docs = useAttachedDocs()
-  const askSeq = useRef(0)
   /** 在跑或刚发出去：页面隔一会儿拉一次（运行中的步骤、AI 新说的话）。 */
   const polling = useRef(false)
 
@@ -472,7 +460,7 @@ export function MatterPage(): ReactNode {
     const typed = text.trim()
     // WP268：加进来的图已经在素材库里了，话里带上它们的 id（AI 用 list_brand_assets / edit_image 拿得到）
     const note =
-      privateMode || attached.length === 0
+      attached.length === 0
         ? ''
         : [
             t('matter.cmp.attach.note', {
@@ -487,10 +475,10 @@ export function MatterPage(): ReactNode {
             ),
           ].join('')
     const value = [typed, note].filter((x) => x !== '').join('\n\n')
-    // WP357：附上的资料（私聊 AI 不带资料）
-    const files = privateMode ? [] : docs.docs
+    // WP357：附上的资料
+    const files = docs.docs
     if (value === '' && files.length === 0) return
-    if (!privateMode) setAttached([])
+    setAttached([])
     if (files.length > 0) {
       const said: Said = { text: value, files: docs.take() }
       if (running) {
@@ -500,21 +488,6 @@ export function MatterPage(): ReactNode {
         return
       }
       say.mutate(said)
-      return
-    }
-    if (privateMode) {
-      askSeq.current += 1
-      const ask: PrivateAsk = { id: askSeq.current, question: value }
-      setAsks((xs) => [...xs, ask])
-      setText('')
-      askAi({ scope: { matter_id: id }, question: value })
-        .then((res) => {
-          setAsks((xs) => xs.map((x) => (x.id === ask.id ? { ...x, answer: res.answer } : x)))
-        })
-        .catch((err: unknown) => {
-          const error = err instanceof Error ? err.message : String(err)
-          setAsks((xs) => xs.map((x) => (x.id === ask.id ? { ...x, error } : x)))
-        })
       return
     }
     if (running) {
@@ -836,23 +809,6 @@ export function MatterPage(): ReactNode {
             />
           )}
           {running ? <RunningEntry live={live} roleId={roleId} roleName={roleName} /> : null}
-          {asks.map((a) => (
-            <PrivatePair
-              key={a.id}
-              question={a.question}
-              answer={a.answer}
-              error={a.error}
-              onClose={() => {
-                setAsks((xs) => xs.filter((x) => x.id !== a.id))
-              }}
-              onForward={() => {
-                setAsks((xs) => xs.filter((x) => x.id !== a.id))
-                setPrivateMode(false)
-                if (running) setQueued(a.question)
-                else say.mutate(a.question)
-              }}
-            />
-          ))}
           {closed ? (
             <div
               className="flex items-center justify-center gap-2 text-[12.5px] text-ws-muted-fg"
@@ -873,10 +829,6 @@ export function MatterPage(): ReactNode {
           }}
           running={running}
           closed={closed}
-          privateMode={privateMode}
-          onTogglePrivate={() => {
-            setPrivateMode((v) => !v)
-          }}
           suggestion={suggestion}
           sending={false}
           modelSlot={

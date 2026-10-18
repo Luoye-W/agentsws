@@ -422,20 +422,19 @@ describe('启动不激活（#6）', () => {
     // 而记忆面板**没有**被挂起来，所以它那条接口一次都没打
     expect(getLayerMemory).not.toHaveBeenCalled()
   })
-  // WP372 → WP375（决策 1035）：右上角不再重复放卡片图标，只放面板里没有的工具 +「⋮」开关面板
-  it('一个都没开的时候：右上角只有三个工具（浏览器 / 变更审阅 / 教程）+「⋮」，没有任何面板发请求', () => {
+  // WP372 → WP375（决策 1035）→ WP412（更正）：右上角只露工具、「⋮」是溢出菜单、最右是面板开关
+  it('一个都没开的时候：右上角露两个工具（浏览器 / 变更审阅）+「⋮」+ 面板开关，没有任何面板发请求', () => {
     renderRail()
     expect(screen.getAllByTestId(/^rail-icon-[a-z]+$/).map((b) => b.dataset.testid)).toEqual([
       'rail-icon-browser',
       'rail-icon-changes',
-      'rail-icon-help',
     ])
     for (const id of ['conversations', 'reports', 'outputs', 'plans', 'connections', 'settings'])
       expect(screen.queryByTestId(`rail-icon-${id}`)).toBeNull()
     expect(screen.queryByTestId('rail-icon-ask')).toBeNull()
     // 占位的数据面板 / 运行中 / 文件内测期间藏着
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
-    expect(screen.getByTestId('rail-overflow').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('rail-toggle').getAttribute('aria-pressed')).toBe('false')
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
@@ -453,7 +452,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     ...over,
   })
 
-  it('只看这一层的：等你点头的亮黄点（「⋮」上汇总亮同一个点），摘要说下一次；默认展开、等点头的排最上', async () => {
+  it('只看这一层的：等你点头的亮黄点（面板开关上汇总亮同一个点），摘要说下一次；默认展开、等点头的排最上', async () => {
     getMySchedules.mockResolvedValue([
       row({ next_fire_at: '2030-01-02T01:00:00.000Z' }),
       row({ state: 'paused' }),
@@ -468,11 +467,11 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
       row({ state: 'done' }),
     ])
     renderRail()
-    const dot = await screen.findByTestId('rail-overflow-dot')
+    const dot = await screen.findByTestId('rail-toggle-dot')
     expect(dot.getAttribute('data-card')).toBe('plans')
     expect(dot.getAttribute('data-dot')).toBe('attention')
     expect(dot.getAttribute('aria-label')).toBe('2 个计划等你点头')
-    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(screen.getByTestId('rail-toggle'))
     const summary = await screen.findByTestId('rail-card-summary-plans')
     expect(summary.textContent).toContain('下次')
     expect(screen.getByTestId('rail-card-dot-plans').getAttribute('data-dot')).toBe('attention')
@@ -484,7 +483,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     getMySchedules.mockResolvedValue([])
   })
 
-  it('这一层一个要你点头的计划都没有：「⋮」上不亮点', async () => {
+  it('这一层一个要你点头的计划都没有：面板开关上不亮点', async () => {
     getMySchedules.mockResolvedValueOnce([
       row({
         assignment_id: 'asg_content',
@@ -496,7 +495,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     await waitFor(() => {
       expect(getMySchedules).toHaveBeenCalled()
     })
-    expect(screen.queryByTestId('rail-overflow-dot')).toBeNull()
+    expect(screen.queryByTestId('rail-toggle-dot')).toBeNull()
   })
 })
 
@@ -565,8 +564,9 @@ describe('官方形状的薄适配（C 档第三件）', () => {
     if (def !== undefined) def.scoped = true
 
     renderRail()
-    // WP375：没给 pinned 的第三方工具接在右上角那几个工具后面
-    fireEvent.click(await screen.findByTestId('rail-icon-@example/sidebar-notes'))
+    // WP412：没给 pinned 的第三方工具收在「⋮」菜单里
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-@example/sidebar-notes'))
     const body = await screen.findByTestId('official-body')
     expect(body.textContent).toBe('web-ops')
   })

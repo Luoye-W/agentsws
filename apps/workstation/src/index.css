@@ -708,14 +708,6 @@
       0 0 0 1px color-mix(in srgb, var(--ws-ink) 34%, transparent),
       0 12px 32px rgba(0, 0, 0, 0.5);
   }
-  /* 私聊 AI：整张卡换成蓝色系，一眼和「交代给 Agent」分开 */
-  .ws-composer.ws-composer-private,
-  .dark .ws-composer.ws-composer-private {
-    background: color-mix(in srgb, var(--ws-info-bg) 70%, var(--ws-card));
-    box-shadow:
-      0 0 0 1.5px color-mix(in srgb, var(--ws-info) 55%, transparent),
-      0 10px 28px rgba(20, 40, 30, 0.08);
-  }
   .ws-shimmer {
     background: linear-gradient(
       90deg,

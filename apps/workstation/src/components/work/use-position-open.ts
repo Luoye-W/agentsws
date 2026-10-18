@@ -37,10 +37,13 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
       effort?: string | undefined
       /** WP357：附上的资料（base64） */
       files?: { name: string; data: string }[] | undefined
+      /** WP412：职责页上发的——钉到这条职责（服务端照样三分：当场答 / 会话 / 任务） */
+      role_id?: string | undefined
     }) => {
       const entry = await askAtPosition({
         position: id,
         text: input.title,
+        ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
         // WP342：输入框左下角选的 AI
         ...(input.model === undefined ? {} : { model: input.model }),
         ...(input.effort === undefined ? {} : { effort: input.effort }),

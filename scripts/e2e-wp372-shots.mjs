@@ -70,7 +70,7 @@ async function get(token, path, assignment) {
 /** WP375（决策 1035）：右上角没有卡片图标了——「⋮」打开面板，卡没展开就点它的标题行。 */
 const openCard = async (page, id) => {
   if ((await page.getByTestId('rail-cards').count()) === 0)
-    await page.getByTestId('rail-overflow').click()
+    await page.getByTestId('rail-toggle').click()
   const card = page.getByTestId(`rail-card-${id}`)
   await card.waitFor({ timeout: 20_000 })
   if ((await card.getAttribute('data-open')) !== 'true')
