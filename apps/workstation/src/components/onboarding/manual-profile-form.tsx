@@ -18,6 +18,8 @@ export function manualEdits(draft: {
   brand_name: string
   one_liner: string
   support_email: string
+  /** WP424：邮件营销用的哪一家（可不填）。 */
+  email_service?: string
   currency: string
   markets: string[]
 }): ManualBrandProfile {
@@ -29,6 +31,8 @@ export function manualEdits(draft: {
   if (line !== undefined) out.one_liner = line
   const email = text(draft.support_email)
   if (email !== undefined) out.support_email = email
+  const esp = text(draft.email_service ?? '')
+  if (esp !== undefined) out.email_service = esp
   const currency = text(draft.currency)
   if (currency !== undefined) out.currency = currency.toUpperCase()
   if (draft.markets.length > 0) out.markets = [...draft.markets]
@@ -50,12 +54,13 @@ export function ManualProfileForm({
     brand_name: brandName,
     one_liner: '',
     support_email: '',
+    email_service: '',
     currency: '',
     markets: [] as string[],
   })
   const edits = manualEdits(draft)
   const text = (
-    key: 'brand_name' | 'one_liner' | 'support_email' | 'currency',
+    key: 'brand_name' | 'one_liner' | 'support_email' | 'email_service' | 'currency',
     extra: { type?: string; maxLength: number; placeholder?: string },
   ): React.ReactNode => (
     <div className="flex flex-col gap-1">
@@ -87,6 +92,11 @@ export function ManualProfileForm({
       {text('brand_name', { maxLength: 80 })}
       {text('one_liner', { maxLength: 200 })}
       {text('support_email', { type: 'email', maxLength: 200 })}
+      {/* WP424：说了用哪一家，第 ④ 步才把它列进「要连的平台」 */}
+      {text('email_service', {
+        maxLength: 60,
+        placeholder: t('intake.field.email_service.placeholder'),
+      })}
       {text('currency', { maxLength: 3, placeholder: 'USD' })}
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium">{t('intake.field.markets')}</span>

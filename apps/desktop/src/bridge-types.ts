@@ -56,6 +56,19 @@ export interface DesktopBridge {
    * cookie 罐。回 `true` 就再请求一次 `/v1/me`；`remote` 档与旧壳没有这一项或回 `false`，走登录页。
    */
   session?: DesktopSessionBridge
+  /**
+   * WP424：主窗口藏了系统标题栏（`window-chrome.ts`）。`inset` = Mac 红绿灯嵌在左上（左栏顶部留位置），
+   * `overlay` = Windows 三个按钮叠在右上（顶栏右边让出、颜色跟主题）。旧壳与 Linux 没有这一项——
+   * 页面就照普通网页排（不留那块空、顶栏不设拖动区）。
+   */
+  titleBar?: DesktopTitleBarBridge
+}
+
+/** WP424：藏起来的标题栏（只有样子与「换主题」一件事）。 */
+export interface DesktopTitleBarBridge {
+  readonly style: 'inset' | 'overlay'
+  /** 工作台换了深 / 浅色：Windows 叠加按钮那一块跟着换底色（Mac 上是空操作，回 false）。 */
+  setTheme(theme: 'light' | 'dark'): Promise<boolean>
 }
 
 /** WP361：开机自启（读 / 写系统登录项；真源是壳的配置）。 */
@@ -204,9 +217,13 @@ export const BRIDGE_CHANNELS = {
   launchAtLoginChanged: 'agentsws:launch-at-login-changed',
   /** WP358 */
   sessionRenew: 'agentsws:session-renew',
+  /** WP424 */
+  titleBarTheme: 'agentsws:title-bar-theme',
 } as const
 
 export interface BridgeInfo {
   platform: string
   version: string
+  /** WP424：主窗口藏了系统标题栏时是哪一种（见 `window-chrome.ts`）；没藏就没有。 */
+  title_bar?: 'inset' | 'overlay'
 }

@@ -60,6 +60,8 @@ export interface ProfileDraft {
   /** WP248（决策 83）：品牌一句话介绍 / 客服邮箱 / 币种（设置页才出；向导第 ② 步走档案卡）。 */
   one_liner: string
   support_email: string
+  /** WP424：邮件营销用的哪一家（空 = 没说过）。 */
+  email_service: string
   currency: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、这里可改；GEO 策略按它认品类）。 */
   category: string
@@ -154,6 +156,7 @@ export function ProfileForm({
     postal_address: profile?.postal_address ?? '',
     one_liner: profile?.one_liner ?? '',
     support_email: profile?.support_email ?? '',
+    email_service: profile?.email_service ?? '',
     currency: profile?.currency ?? DEFAULT_BRAND_CURRENCY,
     category: profile?.category ?? '',
     insights: insightsOfProfile(profile),
@@ -563,6 +566,23 @@ export function ProfileForm({
                   }}
                 />
               </div>
+            </div>
+            {/* WP424：邮件营销用的哪一家（说了，首次设置 / 岗位清单才把那一家列进「要连的平台」） */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="brand-email-service" className="flex items-center gap-1">
+                {t('intake.field.email_service')}
+                <Hint text={t('intake.field.email_service.hint')} />
+              </Label>
+              <Input
+                id="brand-email-service"
+                data-testid="brand-email-service"
+                value={draft.email_service}
+                maxLength={60}
+                placeholder={t('intake.field.email_service.placeholder')}
+                onChange={(e) => {
+                  setDraft({ ...draft, email_service: e.target.value })
+                }}
+              />
             </div>
             {/*
               WP346（决策 872）：品牌分析第二版那几格——每格可改；AI 填的挂「AI 建议」，

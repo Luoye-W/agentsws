@@ -106,6 +106,7 @@ export { SHOPIFY_DEFAULT_HOME_TEXTS } from './shopify-default-texts.js'
 export type { SiteIntakeOptions, SiteIntakeResult } from './site.js'
 export {
   analyzeSite,
+  detectEmailService,
   detectPlatform,
   isFreshShopifyStore,
   isPlaceholderStoreName,

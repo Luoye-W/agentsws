@@ -42,6 +42,7 @@ const CHANNELS = {
   launchAtLoginSet: 'agentsws:launch-at-login-set',
   launchAtLoginChanged: 'agentsws:launch-at-login-changed',
   sessionRenew: 'agentsws:session-renew',
+  titleBarTheme: 'agentsws:title-bar-theme',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -133,6 +134,19 @@ const bridge: DesktopBridge = {
   session: {
     renew: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.sessionRenew) as Promise<boolean>,
   },
+  // WP424：藏了系统标题栏才有这一项（页面据此给红绿灯 / 系统按钮留位置、设拖动区）
+  ...(info.title_bar === undefined
+    ? {}
+    : {
+        titleBar: {
+          style: info.title_bar,
+          setTheme: (theme: 'light' | 'dark'): Promise<boolean> =>
+            ipcRenderer.invoke(
+              CHANNELS.titleBarTheme,
+              theme === 'dark' ? 'dark' : 'light',
+            ) as Promise<boolean>,
+        },
+      }),
 }
 
 contextBridge.exposeInMainWorld('agentsws', Object.freeze(bridge))

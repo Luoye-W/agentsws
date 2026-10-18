@@ -104,6 +104,8 @@ export interface WorkspaceProfileInput {
   one_liner?: string | undefined
   /** WP248（决策 83）：客服邮箱。不给 = 不改；给空串 = 清空；不像邮箱回 400。 */
   support_email?: string | undefined
+  /** WP424：邮件营销用的哪一家（人说的原话）。不给 = 不改；给空串 = 清空。 */
+  email_service?: string | undefined
   /** WP248（决策 83）：币种（三位字母，存大写）。不给 = 不改；给空串 = 清空（读时按 USD）。 */
   currency?: string | undefined
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改）。不给 = 不改；给空串 = 清空。 */
@@ -149,6 +151,8 @@ export interface WorkspaceProfileView {
   one_liner?: string
   /** WP248（决策 83）：客服邮箱（没写过就没有）。 */
   support_email?: string
+  /** WP424：邮件营销用的哪一家（没写过就没有）。 */
+  email_service?: string
   /** WP248（决策 83）：币种。服务端总会给——没写过就是 `USD`（`DEFAULT_BRAND_CURRENCY`）。 */
   currency?: string
   /** WP335（决策 659）：品类（没写过就没有）。 */
@@ -549,6 +553,8 @@ const ProfileBody = z.object({
     .optional(),
   // WP335（决策 659）：品类。不给 = 不改；空串 = 清空
   category: z.string().max(80).optional(),
+  // WP424：邮件营销用的哪一家。不给 = 不改；空串 = 清空
+  email_service: z.string().max(60).optional(),
   // WP346（决策 872）：第二版那几格。不给 = 不改；空串 / null / 空数组 = 清空
   subcategory: z.string().max(80).optional(),
   positioning: z.string().max(800).optional(),
@@ -713,6 +719,7 @@ export function onboardingRoutes(): Route[] {
             ...(input.support_email === undefined ? {} : { support_email: input.support_email }),
             ...(input.currency === undefined ? {} : { currency: input.currency }),
             ...(input.category === undefined ? {} : { category: input.category }),
+            ...(input.email_service === undefined ? {} : { email_service: input.email_service }),
             // WP346（决策 872）：第二版那几格 + 人点了「对」的那几格
             ...(input.subcategory === undefined ? {} : { subcategory: input.subcategory }),
             ...(input.positioning === undefined ? {} : { positioning: input.positioning }),

@@ -7,6 +7,7 @@ import { applyMotionPref } from '@/components/design/motion-pref'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { AppProvider } from '@/lib/app-context'
 import { installGlobalErrorReporting } from '@/lib/client-errors'
+import { DesktopDragStrip } from '@/lib/desktop-chrome'
 import { installPreloadReload } from '@/lib/preload-reload'
 import './index.css'
 
@@ -33,6 +34,8 @@ createRoot(root).render(
           <BrowserRouter>
             <App />
           </BrowserRouter>
+          {/* WP424：桌面壳藏了标题栏时，登录 / 启动这几屏顶上那条拖动区 */}
+          <DesktopDragStrip />
         </ErrorBoundary>
       </AppProvider>
     </QueryClientProvider>

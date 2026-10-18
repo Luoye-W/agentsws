@@ -134,6 +134,8 @@ const ManualBody = z.object({
       // WP335（决策 659）：品类
       category: z.string().trim().min(1).max(80).optional(),
       support_email: z.string().trim().email('这不像一个邮箱').optional(),
+      // WP424：邮件营销用的哪一家
+      email_service: z.string().trim().min(1).max(60).optional(),
       currency: z
         .string()
         .trim()

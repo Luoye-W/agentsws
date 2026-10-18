@@ -39552,6 +39552,10 @@
                     "type": "string",
                     "maxLength": 80
                   },
+                  "email_service": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
                   "subcategory": {
                     "type": "string",
                     "maxLength": 80
@@ -42182,6 +42186,11 @@
                         "type": "string",
                         "format": "email",
                         "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "email_service": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60
                       },
                       "currency": {
                         "type": "string",

@@ -32,13 +32,14 @@
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
+import { AI_SUBSCRIPTION_CARDS, SubscriptionPlan } from '@/components/models/subscription-plan'
 import { CLOUD_PROVIDER_ID } from '@/components/settings/model-cloud-card'
 import {
   ApiClientError,
@@ -47,11 +48,13 @@ import {
   getCloudAccount,
   getCloudCredits,
   getDeepSeekAccount,
+  getModelSubscription,
   isAccountTemplate,
   isDeepSeekAccountKind,
   listModelProviders,
   type ModelProviderKind,
   type ModelTestResult,
+  type SubscriptionProviderId,
   saveModelProvider,
   setCapabilitySources,
   testModelProvider,
@@ -60,8 +63,11 @@ import { useApp } from '@/lib/app-context'
 import { HELP_BY_VENDOR, templateGuide } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
-/** 这一步是靠哪条路接上的。 */
-export type AiChoice = 'official' | 'own' | 'account'
+/** 这一步是靠哪条路接上的。WP424：加「订阅登录」（ChatGPT 订阅）。 */
+export type AiChoice = 'official' | 'own' | 'account' | 'subscription'
+
+/** WP424：订阅登录卡那张表放在 `models/subscription-plan.tsx`（设置页的模型面板同一份，接通前都不显示）。 */
+export { AI_SUBSCRIPTION_CARDS }
 
 /** WP152：「DeepSeek 官方」那张卡里选的是哪种连法。 */
 export type DeepSeekMode = 'account' | 'api'
@@ -173,6 +179,11 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   const [picked, setPicked] = useState<string | undefined>(undefined)
   /** WP152：「DeepSeek 官方」卡里的二选一；没点过就按已配的推（见 {@link defaultDeepSeekMode}）。 */
   const [dsPicked, setDsPicked] = useState<DeepSeekMode | undefined>(undefined)
+  /** WP424：展开的是哪一张订阅卡。 */
+  const [subPicked, setSubPicked] = useState<SubscriptionProviderId | undefined>(undefined)
+  const onSubscribed = useCallback(() => {
+    onConnected('subscription')
+  }, [onConnected])
 
   const providers = useQuery({
     queryKey: ['model-providers', assignment],
@@ -481,7 +492,12 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                 ))}
               </div>
             )}
+            {/*
+              WP424（Luoye 10-19 真机）：换一家预设要换掉整张表——表单是原生的（值只在 DOM 里），
+              不按模板换 key 的话显示名 / 接口地址 / 模型名还停在上一家
+            */}
             <ModelForm
+              key={slugOf(template)}
               template={template}
               busy={saveAndTest.isPending}
               onCancel={() => {
@@ -577,6 +593,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                   {t('onboarding.ai.ds.api.hint')}
                 </p>
                 <ModelForm
+                  key={slugOf(dsApiTemplate)}
                   template={dsApiTemplate}
                   busy={saveAndTest.isPending}
                   onCancel={() => {
@@ -599,6 +616,29 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         ) : null}
       </section>
 
+      {/* ── WP424：订阅登录（ChatGPT 订阅；Claude 订阅留了位置，接通前不显示）──── */}
+      {AI_SUBSCRIPTION_CARDS.filter(
+        (c) =>
+          c.enabled &&
+          (providers.data?.templates ?? []).some(
+            (tpl) => tpl.auth === 'subscription' && tpl.subscription_provider === c.provider,
+          ),
+      ).map((c) => (
+        <SubscriptionCard
+          key={c.provider}
+          provider={c.provider}
+          label={t(c.label)}
+          {...(assignment === undefined ? {} : { assignment })}
+          open={choice === 'subscription' && subPicked === c.provider}
+          onOpen={() => {
+            setTest(undefined)
+            setSubPicked(c.provider)
+            setChoice('subscription')
+          }}
+          onReady={onSubscribed}
+        />
+      ))}
+
       {failure === undefined ? null : (
         <p role="alert" className="text-sm text-destructive" data-testid="ai-error">
           {failure}
@@ -617,5 +657,64 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * WP424：一张订阅登录卡（与「DeepSeek 官方」同一级）。这台机器用不了订阅登录（公司档 / 托管档）
+ * 就整张不出——摆一张点进去只说「用不了」的卡，不如不摆。
+ */
+function SubscriptionCard({
+  provider,
+  label,
+  assignment,
+  open,
+  onOpen,
+  onReady,
+}: {
+  provider: SubscriptionProviderId
+  label: string
+  assignment?: string
+  open: boolean
+  onOpen: () => void
+  onReady: () => void
+}): React.ReactNode {
+  // 与卡里 `SubscriptionPlan` 同一个 queryKey（共用缓存）
+  const state = useQuery({
+    queryKey: ['model-subscription', provider, assignment],
+    queryFn: () => getModelSubscription(provider, assignment),
+    retry: false,
+  })
+  if (state.data?.available !== true) return null
+  return (
+    <section
+      data-testid={`ai-card-sub-${provider}`}
+      data-open={open}
+      className={cn('rounded-lg border p-3 text-sm', open ? 'border-primary' : 'border-border')}
+    >
+      <button
+        type="button"
+        data-testid={`ai-pick-sub-${provider}`}
+        className="flex w-full items-center gap-2 text-left"
+        onClick={onOpen}
+      >
+        <BrandIcon provider={provider} size={16} className="shrink-0" />
+        <span className="font-medium">{label}</span>
+        {state.data.signed_in ? (
+          <Check
+            aria-hidden
+            className="size-4 text-primary"
+            data-testid={`ai-sub-${provider}-ok`}
+          />
+        ) : null}
+      </button>
+      {open ? (
+        <SubscriptionPlan
+          provider={provider}
+          {...(assignment === undefined ? {} : { assignment })}
+          onReady={onReady}
+        />
+      ) : null}
+    </section>
   )
 }

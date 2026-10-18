@@ -462,7 +462,7 @@ describe('设置页', () => {
       'openai-compatible',
       'bailian',
       'openai',
-      'anthropic',
+      // WP424：Claude 订阅接通前不显示——这份假数据里 Anthropic 只有订阅那一条，整张卡就不出
       'agentsws-cloud',
     ])
     for (const card of cards) {

@@ -611,6 +611,51 @@ describe('46 §3 岗位与职责 → 清单', () => {
     expect(none.connectors.length).toBeGreaterThan(0)
   })
 
+  // WP424（Luoye 10-19）：邮件营销不等于 Klaviyo——没说过用哪一家就进「可选」，说了才列成要连的
+  it('邮件营销：没说用哪一家 → Klaviyo 只在可选里；档案写了 Klaviyo → 列成要连的；说的是目录里没有的一家 → 仍是可选', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const plan = async () =>
+      data<PlanView>(
+        await m.call('POST', '/v1/onboarding/plan', {
+          body: { role_ids: ['dtc.email-marketing'] },
+        }),
+      )
+    const klaviyo = (p: PlanView) => p.connectors.find((c) => c.service === 'klaviyo')
+
+    const unsaid = await plan()
+    expect(klaviyo(unsaid)?.required).toBe(false)
+
+    const profile = await data<{ email_service?: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家卖灯的公司', email_service: ' klaviyo ' },
+      }),
+    )
+    expect(profile.email_service).toBe('klaviyo')
+    const said = await plan()
+    expect(klaviyo(said)?.required).toBe(true)
+
+    // 说的是 Shopify Email → 列的就是那一家
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: 'Shopify Email' },
+    })
+    const shopifyEmail = await plan()
+    expect(shopifyEmail.connectors.find((c) => c.service === 'shopify_email')?.required).toBe(true)
+    expect(klaviyo(shopifyEmail)).toBeUndefined()
+
+    // 目录里没有的一家（Omnisend）→ 不替他认定是 Klaviyo，照旧进可选
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: 'Omnisend' },
+    })
+    expect(klaviyo(await plan())?.required).toBe(false)
+
+    // 清空 = 没说过
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: '' },
+    })
+    expect(klaviyo(await plan())?.required).toBe(false)
+  }, 60_000)
+
   it('只勾职责 → 一个自定义岗位；名字不给就是"我的岗位"', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })

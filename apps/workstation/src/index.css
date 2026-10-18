@@ -733,3 +733,40 @@
     }
   }
 }
+
+/*
+ * WP424（Luoye 10-19，学 Claude 桌面版）：桌面壳藏了系统标题栏之后的拖动区。
+ *
+ * `.ws-drag` 只挂在顶栏与左栏顶部那一行上（而且只在壳里挂，见 `lib/desktop-chrome.ts`）；
+ * 它里面能点的东西一律 `no-drag`，否则按钮点不动。弹出来的菜单 / 对话框叠在顶栏上时同样 `no-drag`。
+ * 普通浏览器不认这个属性，什么都不发生。
+ */
+@layer components {
+  .ws-drag {
+    -webkit-app-region: drag;
+  }
+  .ws-drag
+    :is(
+      a,
+      button,
+      input,
+      select,
+      textarea,
+      label,
+      summary,
+      [role="button"],
+      [role="tab"],
+      [role="menuitem"],
+      [data-no-drag]
+    ),
+  [role="dialog"],
+  [role="menu"],
+  [role="listbox"],
+  [data-radix-popper-content-wrapper] {
+    -webkit-app-region: no-drag;
+  }
+  /* 没有外壳的那几屏（登录 / 启动）顶上一条细拖动区；外壳在时它收起来（顶栏自己能拖） */
+  html[data-shell] .ws-drag-strip {
+    display: none;
+  }
+}

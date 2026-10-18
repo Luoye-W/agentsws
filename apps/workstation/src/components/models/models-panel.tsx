@@ -29,7 +29,10 @@ import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { QuotaNotice } from '@/components/models/quota-notice'
-import { SubscriptionPlan } from '@/components/models/subscription-plan'
+import {
+  SubscriptionPlan,
+  subscriptionTemplateShown,
+} from '@/components/models/subscription-plan'
 import { WebSearchToggle } from '@/components/models/web-search-toggle'
 import { CloudPlanActions } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
@@ -836,7 +839,8 @@ export interface VendorCardData {
 export function groupTemplates(templates: ModelProviderTemplate[]): VendorCardData[] {
   const cards: VendorCardData[] = []
   const byId = new Map<string, VendorCardData>()
-  for (const tpl of templates) {
+  // WP424：还没接通的订阅登录（Claude 订阅）留了位置、不显示
+  for (const tpl of templates.filter(subscriptionTemplateShown)) {
     const id = tpl.vendor ?? templateSlug(tpl.kind, tpl.default_base_url)
     let card = byId.get(id)
     if (card === undefined) {
