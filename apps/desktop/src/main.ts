@@ -65,6 +65,7 @@ import {
 import { loadAutoUpdater, moduleExport } from './electron-updater-module.js'
 import { bundledExtensionDir, extensionFolder, syncBundledExtension } from './extension-sync.js'
 import {
+  appDirName,
   cleanupPlan,
   confirmSwitch,
   consumeDrill,
@@ -78,6 +79,7 @@ import {
   takeRollback,
   uninstallKeyOf,
 } from './fast-update.js'
+import { carryFirewall, describeOutcome, nodePowerShell } from './firewall.js'
 import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
@@ -2064,6 +2066,24 @@ async function bootstrap(): Promise<void> {
       ? undefined
       : `import 服务入口退出码 ${String(out.code)}：${out.stderr.trim().split(/\r?\n/).slice(0, 6).join(' / ')}`
   }
+  /*
+   * WP422：防火墙的「允许」随更新带过去（用户对旧版的 Node 点过允许 → 新版的 Node 也加一条；
+   * 指向已删版本目录的规则清掉）。改规则要管理员权限，应用一般没有——那就跳过、记一句，不弹 UAC。
+   * 安装程序那条路由 `build/installer.nsh` 做同一件事（同一份 `firewall.ts`）。
+   */
+  const carryFirewallTo = async (dir: string): Promise<void> => {
+    if (layout === undefined || process.platform !== 'win32') return
+    const outcome = await carryFirewall({
+      root: layout.root,
+      dir,
+      exists: existsSync,
+      run: nodePowerShell(),
+    })
+    if (outcome.kind === 'nothing') return
+    const line = describeOutcome(outcome)
+    if (outcome.kind === 'done' && outcome.failed.length === 0) logger.info(line, { dir })
+    else logger.warn(line, { dir })
+  }
   const cleanupVersions = async (): Promise<void> => {
     if (layout === undefined) return
     let running = ''
@@ -2089,6 +2109,8 @@ async function bootstrap(): Promise<void> {
         logger.warn('旧的版本目录没清掉（下次再试）', { dir: name, error: String(err) })
       }
     }
+    // WP422：删过版本目录 → 指向它们的防火墙规则一并清掉（顺手补上当前这一版漏加的允许）
+    if (plan.length > 0) await carryFirewallTo(layout.currentDir)
   }
   /** 「重启并更新」那一刻要用的东西（在下面 updates 建好之后才填上）。 */
   let quiesceForSwitch: () => Promise<void> = async () => undefined
@@ -2301,6 +2323,8 @@ async function bootstrap(): Promise<void> {
           if (problem === undefined) {
             staged = found
             logger.info('新版在旁边摆好了，重启只切换', { version: found })
+            // WP422：切过去之前就把防火墙的「允许」带给新版的 Node（后台做，不占切换的那几秒）
+            void carryFirewallTo(join(layout.root, appDirName(found)))
           } else
             logger.warn('新版没摆好，点「重启并更新」时照旧走安装程序', { version: found, problem })
         } finally {

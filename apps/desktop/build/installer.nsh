@@ -141,6 +141,15 @@
       ${EndIf}
       FileWrite $R6 "${UNINSTALL_REGISTRY_KEY}$\r$\n"
       FileClose $R6
+      ; WP422：防火墙按真实路径（app-<版本>\resources\node\node.exe）记「允许」，换一版就又问一次。
+      ; 用户对旧版点过允许 → 给这一版的 Node 加一条「Agents 工坊（局域网发现）」允许规则，并删掉指向已经不在的
+      ; 旧版本的规则；从没点过的不加。按用户装没有管理员权限 → 只记一句、不弹 UAC。失败不挡安装（脚本总是退 0）。
+      ${If} ${FileExists} "$R8\resources\node\node.exe"
+      ${AndIf} ${FileExists} "$R8\resources\app\dist\firewall-cli.js"
+        nsExec::ExecToLog /TIMEOUT=90000 '"$R8\resources\node\node.exe" "$R8\resources\app\dist\firewall-cli.js" --root "$INSTDIR" --dir "$R8"'
+        Pop $R7
+        DetailPrint "agentsws: firewall carry-over finished ($R7)"
+      ${EndIf}
     ${EndIf}
   ${EndIf}
   !insertmacro agentswsOtherScope
@@ -160,6 +169,9 @@
     ; 平铺布局（联接建不了的盘）照旧把这一版的文件删掉
     !insertmacro agentswsAppEntries agentswsRemoveEntry
   ${Else}
+    ; WP422：真卸载时把我们加过的防火墙规则一起删（按名字认；按用户装没有管理员权限就删不了，也不挡卸载）
+    nsExec::ExecToLog /TIMEOUT=30000 '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="Agents 工坊（局域网发现）"'
+    Pop $R0
     SetOutPath $TEMP
     RMDir /r $INSTDIR
   ${EndIf}

@@ -795,6 +795,18 @@ describe('46 §2 I2 局域网发现', () => {
       mdns: () => ({ reason: '这台机器没有可用网卡' }),
     })
     servers.push(server)
+    // WP422：开关关着不去试；打开开关那一刻才知道起不来
+    await server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/workspace/profile', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${server.bootstrap.internalToken}`,
+          'X-Assignment': server.bootstrap.ownerAssignment.id,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ legal_name: '诺伏特', discoverable: true }),
+      }),
+    )
     const res = await server.gateway.fetch(
       new Request('http://127.0.0.1/v1/discovery/peers', {
         headers: {

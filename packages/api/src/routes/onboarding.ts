@@ -209,7 +209,10 @@ export interface OnboardingStateView {
   other_assignments: number
   /** 这个人是不是所有者——不是的话向导里不出"公司档案"与"邀请码"。 */
   is_owner: boolean
-  /** 局域网发现这台机器上能不能用；不能用时 `reason` 是一句人话。 */
+  /**
+   * 局域网发现这台机器上能不能用；不能用时 `reason` 是一句人话。
+   * WP422：开关关着时不去试（试一下就要在网卡上绑口），所以 `available: false` 只代表「试过、起不来」。
+   */
   discovery: { available: boolean; enabled: boolean; reason?: string }
   /**
    * WP54（48 v2 L2 / 46 §1）：「你卖的是」那两个选项与各自的一句人话。
@@ -398,6 +401,7 @@ export interface DiscoveryPeerView {
 }
 
 export interface DiscoveryStateView {
+  /** false = 试过、起不来（WP422：开关关着时不去试，没试过就回 true）。 */
   available: boolean
   enabled: boolean
   reason?: string
