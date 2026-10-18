@@ -80,6 +80,7 @@ import type { SiteHealthService } from './site-health.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
+import type { StoreDigest } from './store-digest.js'
 import type { SupportJudgment } from './support-judgment.js'
 import type { WeeklyReviewService } from './weekly-review.js'
 import type { WorkstationDataSource } from './workstation.js'
@@ -356,6 +357,8 @@ export interface BrandModuleSet {
   economics: EconomicsService
   /** WP224（docs/91 §2.2 #1）：这个品牌的经营一页纸（秘书每周推给老板；WP388 默认周一 16:30 出上一周）。 */
   weeklyReview: WeeklyReviewService
+  /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常提醒。 */
+  storeDigest?: StoreDigest
   /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
   lineCompareSnapshot(): Promise<{ rows: number; date: string }>
   work: Work

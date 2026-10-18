@@ -759,6 +759,7 @@ import {
   registerSkillsWeekly,
   registerSocialBroadcast,
   registerSocialPublish,
+  registerStoreDigest,
   registerTokenRefresh,
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
@@ -834,6 +835,7 @@ import { modelTagReviewer } from './social-tags.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
+import { createStoreDigest, type StoreDigest, storeDigestCron } from './store-digest.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
 import { createScopeManagerRouter } from './supervisor.js'
 import {
@@ -4648,6 +4650,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /** WP238：取数路由走得通哪一级（云客户端在下面才建好，这里先占位、建好后填上）。 */
     const readLevelHolder: { of?: (route: string) => DataSourceLevel | undefined } = {}
+    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警区只同步看一眼。 */
+    let storeDigestRef: StoreDigest | undefined
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       systemCards: (actor) => ({
@@ -4657,6 +4661,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
+          ...(storeDigestRef?.alerts(actor.person_id) ?? []),
           // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
           ...adsNoticeCards({
             rows: adsWiringNow.entries(),
@@ -5435,6 +5441,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP388：出上一周的（目标市场时区）
       reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
     })
+    /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常提醒（面板那一份数，不经模型手）。 */
+    const storeDigest = createStoreDigest({
+      workspace_id: ws,
+      clock,
+      assignments: () => roles.assignments.listByWorkspace(ws),
+      approvals,
+      port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
+    })
+    storeDigestRef = storeDigest
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
     const lineCompareSnapshot = async () => {
       await economics.refresh()
@@ -9121,6 +9136,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
+      storeDigest,
       lineCompareSnapshot,
       work,
       ...(runtime === undefined ? {} : { runtime }),
@@ -9811,8 +9827,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       weekly: async () => {
         const b = await of()
-        // WP381：每周一先体检一次网站 / 商品（结论进体检报表，不一致交给网站运营）；体检失败不拦周报
-        await b.siteHealth?.run().catch(() => undefined)
+        // WP418（自查 B13）：体检挪到自己那一条定时（每周一 8 点，店铺管理或内容与搜索有人担就建）
         const revenue = await b.seoService.weeklyRevenue()
         const geo = await b.seoService.weeklyGeo()
         const skipped: unknown[] = []
@@ -9825,6 +9840,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     registerEconomics(s, {
       weeklyReview: async () => (await of()).weeklyReview.run(),
       lineCompare: async () => (await of()).lineCompareSnapshot(),
+    })
+    // WP418（自查 B7 / B13）：店铺日报 + 异常提醒；网站体检每周一自动跑
+    registerStoreDigest(s, {
+      digest: async () => (await of()).storeDigest?.run() ?? { skipped: 'not_installed' },
+      siteHealth: async () =>
+        (await (await of()).siteHealth?.run()) ?? { skipped: 'not_installed' },
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
@@ -9945,6 +9966,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
         adsDailyExport: held('ads.google') || held('ads.meta'),
+        // WP418（自查 B7）：有人担「店铺管理」才建每日日报（时间读职责 yml 的 `digest_schedule`）
+        ...(held('dtc.store')
+          ? { storeDigest: storeDigestCron(roles.roles.get('dtc.store')?.notifications) }
+          : {}),
+        // WP418（自查 B13）：店铺管理或内容与搜索有人担就每周体检
+        siteHealthWeekly: held('dtc.store') || held('dtc.content'),
       },
     })
   }
@@ -10002,6 +10029,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+    // WP418
+    { ids: ['sched_store_digest'], held: (ws) => roleHeldIn(ws, 'dtc.store') },
+    {
+      ids: ['sched_site_health_weekly'],
+      held: (ws) => roleHeldIn(ws, 'dtc.store') || roleHeldIn(ws, 'dtc.content'),
+    },
     // WP224
     { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },
     {
