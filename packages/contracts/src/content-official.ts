@@ -18,7 +18,12 @@
  * 这一层与摘要的形状。**不做加密、不做防拷贝**（客户端是开源的，docs/107 §6）。
  */
 import type { Iso8601 } from './common.js'
-import type { ContentChannel, ContentManifest, LocalizedText } from './content-updates.js'
+import type {
+  ContentChannel,
+  ContentManifest,
+  ContentPublicKey,
+  LocalizedText,
+} from './content-updates.js'
 import { CONTENT_CHANNELS } from './content-updates.js'
 import type { CONTENT_SERVICE_ID, SubscriptionStatus } from './subscription.js'
 
@@ -54,6 +59,21 @@ export const OFFICIAL_CONTENT_KEYS = {
   blob: (sha256: string): string => `blobs/${sha256}`,
 } as const
 
+/**
+ * **官方订阅内容**的验签公钥（ed25519，32 字节原始公钥的 base64；`key_id` = 公钥 sha256 的前 16 个十六进制字符）。
+ *
+ * 和第三方内容那张表（`CONTENT_SIGNING_PUBLIC_KEYS`，docs/90）**分开**：两个仓的钥匙分开，一边出事不连累另一边
+ * （私有 docs/107 §7）。来源是 `official` 的清单只认这张表，`public` 的只认那张。
+ * Luoye 10-19 用 `content-keygen.mjs` 生成，私钥只在私有内容仓的 secret {@link OFFICIAL_CONTENT_SIGNING_KEY_SECRET} 里。
+ * 换钥同 docs/90：先把新公钥**加**进来随一个软件版本发出去，等大多数人升上来再用新私钥签，最后删旧的。
+ */
+export const OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS: readonly ContentPublicKey[] = [
+  { key_id: '0d94da8ec49e6fb8', public_key: 'LtD5L3H09lufW06tCMlPzgAdTdQOX3KH5/dtiQv8Hfo=' },
+]
+
+/** 私有内容仓（`agentsws-content`）里放签名私钥的 GitHub Actions secret **名字**（值只在那里）。 */
+export const OFFICIAL_CONTENT_SIGNING_KEY_SECRET = 'CONTENT_OFFICIAL_SIGNING_KEY'
+
 /** 摘要看最近几天（Luoye 10-19：周更）。 */
 export const OFFICIAL_CONTENT_SUMMARY_DAYS = 7
 /** 摘要里一个岗位最多列几条标题（条数照实给）。 */
@@ -67,7 +87,9 @@ export function isContentSha256(value: string): boolean {
 }
 
 /** 渠道参数：不给 = `stable`；认不出 = `undefined`（调用方回 400）。 */
-export function officialContentChannelOf(raw: string | null | undefined): ContentChannel | undefined {
+export function officialContentChannelOf(
+  raw: string | null | undefined,
+): ContentChannel | undefined {
   if (raw === null || raw === undefined || raw === '') return 'stable'
   return (CONTENT_CHANNELS as readonly string[]).includes(raw) ? (raw as ContentChannel) : undefined
 }
@@ -76,9 +98,18 @@ export function officialContentChannelOf(raw: string | null | undefined): Conten
  * `positions=a,b,c` → 岗位 id 列表。不给 / 空 = `undefined`（全部岗位）；有一个不像岗位 id 的、
  * 或者超过 {@link OFFICIAL_CONTENT_SUMMARY_MAX_POSITIONS} 个 = `null`（调用方回 400）。
  */
-export function parseContentPositionsQuery(raw: string | null | undefined): string[] | undefined | null {
+export function parseContentPositionsQuery(
+  raw: string | null | undefined,
+): string[] | undefined | null {
   if (raw === null || raw === undefined) return undefined
-  const ids = [...new Set(raw.split(',').map((p) => p.trim()).filter((p) => p !== ''))]
+  const ids = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((p) => p.trim())
+        .filter((p) => p !== ''),
+    ),
+  ]
   if (ids.length === 0) return undefined
   if (ids.length > OFFICIAL_CONTENT_SUMMARY_MAX_POSITIONS) return null
   return ids.every((id) => /^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) ? ids : null
@@ -213,6 +244,7 @@ export function positionsOfContentBlob(
 ): string[] {
   const out = new Set<string>()
   for (const item of manifest.items)
-    if (item.files.some((f) => f.sha256 === sha256)) for (const p of item.positions ?? []) out.add(p)
+    if (item.files.some((f) => f.sha256 === sha256))
+      for (const p of item.positions ?? []) out.add(p)
   return [...out].sort()
 }

@@ -8,6 +8,7 @@ import {
   CONTENT_MANIFEST_SCHEMA,
   CONTENT_SCOPE,
   CONTENT_SERVICE_ID,
+  CONTENT_SIGNING_PUBLIC_KEYS,
   CONTENT_SOURCES,
   type ContentItem,
   type ContentManifest,
@@ -15,6 +16,8 @@ import {
   isContentSha256,
   OFFICIAL_CONTENT_KEYS,
   OFFICIAL_CONTENT_PATHS,
+  OFFICIAL_CONTENT_SIGNING_KEY_SECRET,
+  OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
   OFFICIAL_CONTENT_SUMMARY_MAX_POSITIONS,
   officialContentChannelOf,
   parseContentPositionsQuery,
@@ -91,14 +94,22 @@ describe('WP405 岗位更新订阅契约', () => {
     expect(parseContentPositionsQuery(' , ')).toBeUndefined()
     expect(parseContentPositionsQuery('amazon-ops, seo,amazon-ops')).toEqual(['amazon-ops', 'seo'])
     expect(parseContentPositionsQuery('a/../b')).toBeNull()
-    const many = Array.from({ length: OFFICIAL_CONTENT_SUMMARY_MAX_POSITIONS + 1 }, (_, i) => `p${i}`)
+    const many = Array.from(
+      { length: OFFICIAL_CONTENT_SUMMARY_MAX_POSITIONS + 1 },
+      (_, i) => `p${i}`,
+    )
     expect(parseContentPositionsQuery(many.join(','))).toBeNull()
   })
 
   it('摘要：只数最近一周、按岗位分、急的标出来、只给标题不给正文', () => {
     const m = manifest([
       item({ id: 'skill:a', positions: ['amazon-ops'], released_at: '2026-10-18T00:00:00.000Z' }),
-      item({ id: 'skill:b', positions: ['amazon-ops', 'seo'], urgent: true, released_at: '2026-10-19T08:00:00.000Z' }),
+      item({
+        id: 'skill:b',
+        positions: ['amazon-ops', 'seo'],
+        urgent: true,
+        released_at: '2026-10-19T08:00:00.000Z',
+      }),
       item({ id: 'skill:old', positions: ['amazon-ops'], released_at: '2026-10-01T00:00:00.000Z' }),
       item({ id: 'skill:none' }),
       // 不写 released_at 按清单 created_at（10-19，在窗口里）
@@ -115,15 +126,34 @@ describe('WP405 岗位更新订阅契约', () => {
     // 新的在前
     expect(s.positions[0]?.titles[0]?.zh).toBe('标题 skill:b')
     expect(JSON.stringify(s)).not.toContain('正文那句改了什么')
-    const only = summarizeOfficialContent(m, { now: '2026-10-19T12:00:00.000Z', positions: ['seo'] })
+    const only = summarizeOfficialContent(m, {
+      now: '2026-10-19T12:00:00.000Z',
+      positions: ['seo'],
+    })
     expect(only.positions.map((p) => p.position_id)).toEqual(['seo'])
+  })
+
+  it('官方订阅的验签公钥单独一张表，和第三方内容那张不混；key_id = 公钥 sha256 前 16 位', async () => {
+    const { createHash } = await import('node:crypto')
+    expect(OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS.length).toBeGreaterThan(0)
+    for (const k of OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS) {
+      const raw = Buffer.from(k.public_key, 'base64')
+      expect(raw.length).toBe(32)
+      expect(createHash('sha256').update(raw).digest('hex').slice(0, 16)).toBe(k.key_id)
+      expect(CONTENT_SIGNING_PUBLIC_KEYS.map((p) => p.key_id)).not.toContain(k.key_id)
+    }
+    expect(OFFICIAL_CONTENT_SIGNING_KEY_SECRET).toBe('CONTENT_OFFICIAL_SIGNING_KEY')
   })
 
   it('一个文件归哪几个岗位：清单里含它的条目的 positions 并起来', () => {
     const m = manifest([
       item({ id: 'skill:a', positions: ['seo'] }),
       item({ id: 'skill:b', positions: ['amazon-ops', 'seo'] }),
-      item({ id: 'skill:x', positions: ['kol'], files: [{ path: 'x.md', sha256: SHA('b'), size: 1 }] }),
+      item({
+        id: 'skill:x',
+        positions: ['kol'],
+        files: [{ path: 'x.md', sha256: SHA('b'), size: 1 }],
+      }),
     ])
     expect(positionsOfContentBlob(m, SHA('a'))).toEqual(['amazon-ops', 'seo'])
     expect(positionsOfContentBlob(m, SHA('c'))).toEqual([])

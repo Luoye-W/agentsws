@@ -63,6 +63,14 @@ import type {
 } from './cloud-entry.js'
 import type { Iso8601, WorkspaceId } from './common.js'
 import type {
+  ContentSubscriptionView,
+  OfficialContentBlobParams,
+  OfficialContentQuery,
+  OfficialContentSummary,
+  OfficialContentSummaryQuery,
+} from './content-official.js'
+import type { ContentManifest } from './content-updates.js'
+import type {
   DataCallParams,
   DataCallRequest,
   DataCallResult,
@@ -99,14 +107,6 @@ import type {
   PublicCreatorQuery,
   RevealedContact,
 } from './kol-public.js'
-import type {
-  ContentSubscriptionView,
-  OfficialContentBlobParams,
-  OfficialContentQuery,
-  OfficialContentSummary,
-  OfficialContentSummaryQuery,
-} from './content-official.js'
-import type { ContentManifest } from './content-updates.js'
 import type {
   PremiumThemeDownloadQuery,
   PremiumThemeEntitlement,
