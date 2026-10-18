@@ -279,8 +279,8 @@ describe('左栏两层（决策 1001）', () => {
   })
 })
 
-describe('右上角一排与「⋮」（决策 1001 / 1020 → 1035）', () => {
-  it('WP375：右上角只有三个工具 +「⋮」（不再重复放卡片图标）；没有搜索框；工具点了开那一格', async () => {
+describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 1035 → WP412）', () => {
+  it('WP412：右上角是露出的工具 +「⋮」+ 面板开关（不再重复放卡片图标）；没有搜索框；教程在「⋮」里', async () => {
     renderShell()
     const bar = screen.getByTestId('right-rail')
     const icons = within(bar)
@@ -289,25 +289,26 @@ describe('右上角一排与「⋮」（决策 1001 / 1020 → 1035）', () => {
     expect(icons).toEqual([
       'rail-icon-browser',
       'rail-icon-changes',
-      'rail-icon-help',
       'rail-overflow',
+      'rail-toggle',
     ])
     expect(screen.queryByTestId('top-command')).toBeNull()
-    fireEvent.click(screen.getByTestId('rail-icon-help'))
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-help'))
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('help')
   })
 
-  it('连接没连上：「⋮」上亮汇总的红点（红压过黄），打开后「连接」卡标题后同一个点', async () => {
+  it('连接没连上：面板开关上亮汇总的红点（红压过黄），「连接」卡标题后同一个点', async () => {
     renderShell()
     await waitFor(() => {
-      const dots = screen.getAllByTestId('rail-overflow-dot')
+      const dots = screen.getAllByTestId('rail-toggle-dot')
       expect(dots.map((d) => d.getAttribute('data-card')).sort()).toEqual([
         'connections',
         'conversations',
       ])
     })
     const red = screen
-      .getAllByTestId('rail-overflow-dot')
+      .getAllByTestId('rail-toggle-dot')
       .find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
     expect(red.className).toContain('z-10')
     const card = await openRailCard('connections')
@@ -321,9 +322,8 @@ describe('右上角一排与「⋮」（决策 1001 / 1020 → 1035）', () => {
 })
 
 describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
-  it('「⋮」开成卡片堆：默认展开对话与计划、其余收起带摘要；报表摘要是名字与日期，点一份在面板里看', async () => {
+  it('职责页默认开成卡片堆：默认展开对话与计划、其余收起带摘要；报表摘要是名字与日期，点一份在面板里看', async () => {
     renderShell()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
       // WP390：第七张「工坊服务」排在最下面

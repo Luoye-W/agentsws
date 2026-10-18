@@ -12,12 +12,13 @@
  * - 宽屏挤在主区右边；**< 1200 盖在主区上**（不挤压），点遮罩收起。面板可临时加宽（决策 1019，宽度记住）。
  * - `]` 开 / 关（输入框里按不算）；面板内容永远按当前岗位 / 职责取（`rail-scope.ts`）。
  *
- * WP375（决策 1035）：右上角不再放六张卡的图标（卡片入口只在面板里），只放面板里没有的工具 +「⋮」开 / 关面板，
- * 「⋮」上亮各卡红 / 黄点的汇总；窄窗也不再收图标（只剩三个工具）。
+ * WP375（决策 1035）：右上角不再放六张卡的图标（卡片入口只在面板里），只放面板里没有的工具。
+ * WP412（决策 1035 更正）：最右是专门的**面板开关**（侧栏图标，红 / 黄点汇总挂在它上面）；「⋮」回到溢出菜单，
+ * 只收不常用的工具（教程、记忆、第三方面板；窄于 900 时露出来的工具也收进来）。
  *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
-import { MoreVertical } from 'lucide-react'
+import { Brain, type LucideIcon, MoreVertical, PanelRight } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -63,6 +64,8 @@ function useMedia(query: string): boolean {
 
 /** 窄屏（< 1200）：面板盖在主区上，逻辑一个字不变。 */
 const NARROW = '(max-width: 1199px)'
+/** WP412：窗口窄于 900 时，露在右上角的工具也收进「⋮」。 */
+const COMPACT = '(max-width: 899px)'
 
 /** 这一页的两层范围与默认层（顶栏图标与面板都要）。 */
 function useRailContext(
@@ -100,15 +103,21 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
   )
 }
 /**
- * WP375（决策 1035，照 Claude 桌面版）：右上角**不再重复放卡片图标**——卡片入口只在面板里。
- * 这里只放面板里没有的工具（浏览器、变更审阅、教程；注册表 `pinned` 排序），最右「⋮」开 / 关右侧面板；
- * 任何一张卡有红 / 黄点时「⋮」上亮一个汇总点（红的压过黄的）。
+ * WP412（真机 10-18 #8，决策 1035 更正，照 Claude 桌面版）：右上角从左到右——
+ *
+ * - 露出来的工具（浏览器、变更审阅；注册表 `pinned` 排序）；
+ * - 「⋮」**溢出菜单**：放不下 / 不常用的工具（教程、记忆，以及没给 `pinned` 的第三方面板）；窗口窄于 900 时
+ *   露出来的那几个也收进来。它**不再**开关面板；
+ * - 最右一个专门的**面板开关**（侧栏图标）：点它开 / 关右侧面板；任何一张卡有红 / 黄点时汇总点挂在它上面（红的压过黄的）。
  */
 export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }): ReactNode {
   ensureBuiltinPanels()
   const { t } = useApp()
   const rail = useRailState()
   const ctx = useRailContext(instances, null)
+  const compact = useMedia(COMPACT)
+  const [menu, setMenu] = useState(false)
+  const box = useRef<HTMLDivElement | null>(null)
   const body: RailPanelBodyProps = {
     ...(ctx.scope === undefined ? {} : { scope: ctx.scope }),
     tier: ctx.tier,
@@ -118,12 +127,33 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
     rail.open === null || rail.open === RAIL_CARDS
       ? undefined
       : panelType(resolvePanelId(rail.open).id)
-  // 先排 `pinned` 的（浏览器、变更审阅、教程），没给 `pinned` 的工具（第三方面板）接在后面
-  const tools = [
-    ...pinnedItems().flatMap((i) => (i.kind === 'panel' ? [i.panel] : [])),
-    ...menuPanels(),
-  ]
+
+  // 点菜单外面 / Esc 收起菜单
+  useEffect(() => {
+    if (!menu) return
+    const onDown = (e: MouseEvent): void => {
+      if (box.current !== null && !box.current.contains(e.target as Node)) setMenu(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenu(false)
+    }
+    globalThis.addEventListener?.('mousedown', onDown)
+    globalThis.addEventListener?.('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener?.('mousedown', onDown)
+      globalThis.removeEventListener?.('keydown', onKey)
+    }
+  }, [menu])
+
+  const pinned = pinnedItems().flatMap((i) => (i.kind === 'panel' ? [i.panel] : []))
+  // 窄窗：露出来的那几个也收进「⋮」
+  const shown = compact ? [] : pinned
+  const overflow = [...(compact ? pinned : []), ...menuPanels()]
   const panelOpen = rail.open !== null
+  const pick = (panel: string): void => {
+    setMenu(false)
+    rail.show(panel)
+  }
   return (
     <nav
       className="flex items-center gap-0.5"
@@ -131,7 +161,7 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
       data-testid="right-rail"
       data-open={rail.open ?? ''}
     >
-      {tools.map((panel) => (
+      {shown.map((panel) => (
         <PanelIcon
           key={panel.id}
           definition={panel}
@@ -142,18 +172,62 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
           }}
         />
       ))}
+      <div ref={box} className="relative">
+        <button
+          type="button"
+          aria-label={t('rail.overflow')}
+          title={t('rail.overflow')}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          data-testid="rail-overflow"
+          className={cn(ICON, menu ? ICON_ACTIVE : ICON_IDLE)}
+          onClick={() => {
+            setMenu((v) => !v)
+          }}
+        >
+          <MoreVertical aria-hidden className="size-4" />
+        </button>
+        {menu ? (
+          <div
+            role="menu"
+            data-testid="rail-menu"
+            className="absolute top-9 right-0 z-50 flex w-48 flex-col gap-px rounded-[10px] border border-ws-line bg-popover p-1 text-[13px] shadow-lg"
+          >
+            {overflow.map((p) => (
+              <MenuItem
+                key={p.id}
+                testId={`rail-menu-${p.id}`}
+                icon={p.icon}
+                label={t(p.label)}
+                onClick={() => {
+                  pick(p.id)
+                }}
+              />
+            ))}
+            {/* 记忆：「设定」卡里的一个标签，不常用，收在这里直达 */}
+            <MenuItem
+              testId="rail-menu-memory"
+              icon={Brain}
+              label={t('rail.menu.memory')}
+              onClick={() => {
+                pick('memory')
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
       <button
         type="button"
-        aria-label={t(panelOpen ? 'rail.close' : 'rail.open')}
-        title={t(panelOpen ? 'rail.close' : 'rail.open')}
+        aria-label={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
+        title={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
         aria-pressed={panelOpen}
-        data-testid="rail-overflow"
+        data-testid="rail-toggle"
         className={cn(ICON, panelOpen ? ICON_ACTIVE : ICON_IDLE)}
         onClick={() => {
           rail.show(panelOpen ? null : RAIL_CARDS)
         }}
       >
-        <MoreVertical aria-hidden className="size-4" />
+        <PanelRight aria-hidden className="size-4" />
         {/* 汇总点：每张卡各画一个在同一个位置，红的压在黄的上面——看上去只有一个点 */}
         <span className="absolute top-1 right-1 flex size-1.5">
           {listRailCards(rail.order).map((card) => (
@@ -165,7 +239,32 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
   )
 }
 
-/** 一张卡的状态点，画在「⋮」右上角（只要点，不取摘要）。 */
+function MenuItem({
+  label,
+  icon: Icon,
+  onClick,
+  testId,
+}: {
+  label: string
+  icon: LucideIcon
+  onClick: () => void
+  testId: string
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid={testId}
+      className="flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-left hover:bg-sidebar-accent/60"
+      onClick={onClick}
+    >
+      <Icon aria-hidden className="size-4 text-ws-muted-fg" />
+      {label}
+    </button>
+  )
+}
+
+/** 一张卡的状态点，画在面板开关右上角（只要点，不取摘要）。 */
 function CardDotProbe({
   card,
   body,
@@ -181,7 +280,7 @@ function CardDotProbe({
       role="img"
       aria-label={status.dotLabel ?? ''}
       title={status.dotLabel}
-      data-testid="rail-overflow-dot"
+      data-testid="rail-toggle-dot"
       data-card={card.id}
       data-dot={status.dot}
       className={cn(

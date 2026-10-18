@@ -5,6 +5,7 @@
  * - 拖动手柄平时看不见，鼠标移到卡上（`group-hover`）才出现在最右，摘要同时让位；
  * - 默认展开「对话」「计划」，记住过的照记住的；
  * - 右上角没有卡片图标，只有工具 +「⋮」；「⋮」开 / 关面板，任何卡有红 / 黄点时上面亮一个汇总点（红压过黄）。
+ *   WP412（决策 1035 更正）：开 / 关与汇总点挪到专门的面板开关（`rail-toggle`），「⋮」回到溢出菜单；职责页默认开着。
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -149,7 +150,6 @@ describe('卡片标题行照 Claude（决策 1035）', () => {
   it('标题 → 紧贴的箭头 → 状态点，最右靠右是摘要；没有图标', async () => {
     h.connected = false
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
     const toggle = await screen.findByTestId('rail-card-toggle-connections')
     // 连接那一份取回来，点与摘要才出
     await screen.findByTestId('rail-card-dot-connections')
@@ -174,7 +174,6 @@ describe('卡片标题行照 Claude（决策 1035）', () => {
 
   it('收起的箭头朝右（›），展开的朝下（⌄）', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
     const open = await screen.findByTestId('rail-card-chevron-conversations')
     const closed = screen.getByTestId('rail-card-chevron-settings')
     expect(open.getAttribute('class')).toContain('chevron-down')
@@ -183,7 +182,6 @@ describe('卡片标题行照 Claude（决策 1035）', () => {
 
   it('拖动手柄平时透明，鼠标移到卡上才出现在最右，摘要同时让位；键盘落上来也看得见', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
     const handle = await screen.findByTestId('rail-card-handle-plans')
     expect(handle.className).toContain('opacity-0')
     expect(handle.className).toContain('group-hover/card:opacity-100')
@@ -204,7 +202,6 @@ describe('默认展开「对话」「计划」（决策 1035）', () => {
       JSON.stringify({ 'role:dtc.support': { plans: false, settings: true } }),
     )
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
     await screen.findByTestId('rail-cards')
     const open = (id: string) => screen.getByTestId(`rail-card-${id}`).getAttribute('data-open')
     expect(open('conversations')).toBe('true')
@@ -214,32 +211,34 @@ describe('默认展开「对话」「计划」（决策 1035）', () => {
   })
 })
 
-describe('右上角：没有卡片图标，「⋮」开关面板并亮汇总点（决策 1035）', () => {
-  it('只有工具 +「⋮」；「⋮」开、再点收起', async () => {
+describe('右上角：没有卡片图标；面板开关开 / 关面板并亮汇总点（决策 1035 → WP412 更正）', () => {
+  it('露出的工具 +「⋮」+ 最右的面板开关；职责页默认开着，点开关收起、再点打开', async () => {
     renderRail()
     const bar = screen.getByTestId('right-rail')
     expect(
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-icon-help', 'rail-overflow'])
-    const toggle = screen.getByTestId('rail-overflow')
-    expect(toggle.getAttribute('aria-label')).toBe('打开右侧面板')
-    fireEvent.click(toggle)
+    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow', 'rail-toggle'])
     expect(await screen.findByTestId('rail-cards')).toBeTruthy()
-    expect(screen.getByTestId('rail-overflow').getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByTestId('rail-overflow'))
+    const toggle = screen.getByTestId('rail-toggle')
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    expect(toggle.getAttribute('aria-label')).toBe('收起右侧面板')
+    fireEvent.click(toggle)
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
+    expect(screen.getByTestId('rail-toggle').getAttribute('aria-label')).toBe('打开右侧面板')
+    fireEvent.click(screen.getByTestId('rail-toggle'))
+    expect(await screen.findByTestId('rail-cards')).toBeTruthy()
   })
 
-  it('没事的时候「⋮」上不亮点', async () => {
+  it('没事的时候面板开关上不亮点', async () => {
     renderRail()
     await waitFor(() => {
-      expect(screen.getByTestId('rail-overflow')).toBeTruthy()
+      expect(screen.getByTestId('rail-toggle')).toBeTruthy()
     })
-    expect(screen.queryByTestId('rail-overflow-dot')).toBeNull()
+    expect(screen.queryByTestId('rail-toggle-dot')).toBeNull()
   })
 
   it('黄 + 红：两个点叠在同一个位置，红的在上', async () => {
@@ -247,9 +246,9 @@ describe('右上角：没有卡片图标，「⋮」开关面板并亮汇总点�
     h.connected = false
     renderRail()
     await waitFor(() => {
-      expect(screen.getAllByTestId('rail-overflow-dot')).toHaveLength(2)
+      expect(screen.getAllByTestId('rail-toggle-dot')).toHaveLength(2)
     })
-    const dots = screen.getAllByTestId('rail-overflow-dot')
+    const dots = screen.getAllByTestId('rail-toggle-dot')
     const red = dots.find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
     const yellow = dots.find((d) => d.getAttribute('data-dot') === 'attention') as HTMLElement
     expect(red.getAttribute('data-card')).toBe('connections')
@@ -257,6 +256,6 @@ describe('右上角：没有卡片图标，「⋮」开关面板并亮汇总点�
     expect(red.className).toContain('z-10')
     expect(yellow.className).not.toContain('z-10')
     expect(red.parentElement).toBe(yellow.parentElement)
-    expect(red.closest('[data-testid="rail-overflow"]')).toBeTruthy()
+    expect(red.closest('[data-testid="rail-toggle"]')).toBeTruthy()
   })
 })

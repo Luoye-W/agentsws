@@ -40,3 +40,14 @@ export function railLayoutBucket(pathname: string, assignment: string | null): s
   if (position !== undefined) return `position:${position}`
   return assignment === null || assignment === '' ? 'default' : `position:${assignment}`
 }
+
+/**
+ * WP412（决策 1035 更正）：这一页是哪一类「干活的页」——岗位页、职责页、事项页右侧面板默认打开，
+ * 人手动开 / 关过按这个类型记住。别的页（首页、知识库……）不算（回 `undefined`，照旧按桶记）。
+ */
+export function railPageKind(pathname: string): 'position' | 'role' | 'matter' | undefined {
+  if (parseMatterPath(pathname) !== undefined) return 'matter'
+  if (parseDutyPath(pathname) !== undefined) return 'role'
+  if (parsePositionPath(pathname) !== undefined) return 'position'
+  return undefined
+}

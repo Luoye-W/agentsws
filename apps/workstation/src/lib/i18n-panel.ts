@@ -6,6 +6,9 @@
  */
 export const PANEL_ZH: Record<string, string> = {
   'rail.open': '打开右侧面板',
+  'rail.toggle.open': '打开右侧面板',
+  'rail.toggle.close': '收起右侧面板',
+  'rail.menu.memory': '记忆',
   'landing.report': '看「{title}」',
   'landing.waiting': '看等你的 {n} 个对话',
   'landing.connect': '连上 {name}',
@@ -84,6 +87,9 @@ export const PANEL_ZH: Record<string, string> = {
 
 export const PANEL_EN: Record<string, string> = {
   'rail.open': 'Open side panel',
+  'rail.toggle.open': 'Open side panel',
+  'rail.toggle.close': 'Close side panel',
+  'rail.menu.memory': 'Memory',
   'landing.report': 'Open “{title}”',
   'landing.waiting': '{n} chats waiting for you',
   'landing.connect': 'Connect {name}',

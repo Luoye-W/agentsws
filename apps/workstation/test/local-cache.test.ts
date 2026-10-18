@@ -51,6 +51,8 @@ const ALLOWED_KEYS = [
   'agentsws.rightrail.cards',
   'agentsws.rightrail.card_order',
   'agentsws.rightrail.wide',
+  // WP412（决策 1035 更正）：右侧面板在岗位 / 职责 / 事项页上人手动开 / 关过没有（页面类型 → 布尔）——界面结构
+  'agentsws.rightrail.page_open',
   // WP74（37 §2.5）：日历上开着哪几个图层、停在哪个视图。同上一类——**纯界面偏好**。
   // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
   'agentsws.calendar.layers',
