@@ -58,6 +58,7 @@ In the extension settings, click “Reddit · Connect”. Chrome will ask for ac
 - **If the extension is offline, it waits**: approved posts stay queued until you open Chrome (up to 24 hours). Nothing is posted for you automatically.
 - **Not posted? Fill it again**: the social media position page shows a “Not posted” line with the reason. Click “Fill again” to hand the same approved draft to the extension, with no new approval. You can also dismiss the line.
 - To stop, click “Stop” on the bar. The draft stays on the page, unsent.
+- **Not replying? Click “Don't send”.** It takes effect at once; a reason is optional (tap “Not relevant”, “Bad timing” and so on in the line at the top). Similar cards from the same subreddit with a similar AI reason are skipped along with it; the line at the top lists them and “Undo” puts them back. When you click “Send”, similar cards are only offered to send together. They are never sent on their own.
 - An extension paired before this update has to be **paired again** to do Reddit posting.
 
 ## FAQ
