@@ -163,6 +163,11 @@ export function createExtensionOnboarding(
     },
     nudge: async ({ actor, matter_id, role_ids }) => {
       const ws = actor.workspace_id
+      /*
+       * WP421（自查 general 界面 #3）：这一次做事的那条职责自己用不上插件（例如公关岗位里写新闻稿）就不在对话里带——
+       * 以前按整个岗位判，写新闻稿时第一屏先是「先装好 Chrome 插件、读 Reddit」的大卡，跟这件事毫无关系。
+       */
+      if (extensionNeedOf(defsOf([actor.role_id])) === undefined) return false
       const need = extensionNeedOf(defsOf(role_ids ?? [actor.role_id]))
       if (need === undefined || options.paired(ws)) return false
       // 今天点过「稍后」就不在对话里再提（下一次说话、过了今天再带）；同一条分配只主动带一次

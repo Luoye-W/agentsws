@@ -74,7 +74,8 @@ describe('③ 发布卡', () => {
       }),
     )
     const body = screen.getByTestId('deck-layout-publish')
-    expect(screen.getByTestId('deck-publish-preview')).toBeTruthy()
+    // WP421：没有封面就不画占位块
+    expect(screen.queryByTestId('deck-publish-preview')).toBeNull()
     expect(body.textContent).toContain('明天 14:00')
     expect(body.textContent).toContain('1,204 人')
   })
@@ -84,6 +85,21 @@ describe('③ 发布卡', () => {
     const body = screen.getByTestId('deck-layout-publish')
     expect(body.textContent).toContain('批了就发')
     expect(body.textContent).toContain('受众')
+  })
+})
+
+describe('WP421 发布卡：批了也不会自动发的照实写', () => {
+  it('payload.after.manual_send → 「批了要你自己发」，不写「批了就发」', () => {
+    renderCard(
+      layoutCard(
+        'publish',
+        { kind: 'staged_change', highlights: [] },
+        { kind: 'press_release', after: { distributed: true, manual_send: true } },
+      ),
+    )
+    const body = screen.getByTestId('deck-layout-publish')
+    expect(screen.getByTestId('deck-publish-manual').textContent).toBe('批了要你自己发')
+    expect(body.textContent).not.toContain('批了就发')
   })
 })
 

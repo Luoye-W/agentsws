@@ -122,13 +122,12 @@ async function main() {
     }
     const decide = (assignment, id, body) =>
       api(token, assignment, 'POST', `/v1/approvals/${id}/decide`, body)
+    /** 批了之后等它施行完。demo 有 2 分钟取消窗口——这里直接跳过窗口施行（同窗口过完那一刻）。 */
     const settle = async (id) => {
-      for (let i = 0; i < 120; i += 1) {
-        const item = await live.server.approvals.get(id)
-        if (item !== undefined && !['approved', 'approved_edited', 'applying'].includes(item.state))
-          return item
-        await sleep(250)
-      }
+      const item = await live.server.approvals.get(id)
+      const change_id = item?.payload?.change_id
+      if (change_id !== undefined && ['approved', 'approved_edited'].includes(item.state))
+        await live.server.txn.executor.apply(change_id, { force: true }).catch(() => undefined)
       return live.server.approvals.get(id)
     }
 
@@ -213,11 +212,27 @@ async function main() {
       await shot('b2b-samples', `/matters/${samples.matter}`)
       if (redraft?.approval_item_id !== undefined)
         await shot('b2b-redraft', `/cards/${redraft.approval_item_id}`)
-      await shot(
-        'b2b-import',
-        `/positions/${asg('b2b.outbound')}`,
-        '[data-testid="b2b-outbound-panel"]',
-      ).catch((e) => console.error(`  （主动开发面板没拍成：${e.message.split('\n')[0]}）`))
+      // 主动开发面板在职责页「⋯ 这条职责能做什么」→「看板」（右侧面板报表下半截）
+      try {
+        await page.goto(`${BASE}/positions/${asg('b2b.outbound')}/duties/b2b.outbound`, {
+          waitUntil: 'networkidle',
+        })
+        await page.getByTestId('duty-about-link').click({ timeout: 20_000 })
+        await page.getByTestId('duty-boards-link').click({ timeout: 20_000 })
+        const more = page.getByTestId('rail-card-more-reports')
+        if ((await more.count()) > 0) await more.click()
+        const panel = page.getByTestId('b2b-import').first()
+        await panel.waitFor({ timeout: 20_000 })
+        await panel.scrollIntoViewIfNeeded()
+        await page.waitForTimeout(600)
+        await page
+          .getByTestId('b2b-outbound-panel')
+          .first()
+          .screenshot({ path: join(SHOTS, `b2b-import-${theme}.png`) })
+        console.log(`  📷 b2b-import-${theme}.png`)
+      } catch (e) {
+        console.error(`  （主动开发面板没拍成：${String(e.message).split('\n')[0]}）`)
+      }
       await shot('design-request', `/matters/${req.matter}`)
       await shot('design-queue', `/matters/${queue.matter}`)
       await shot('content-geo', `/matters/${geo.matter}`)

@@ -643,6 +643,8 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         after: {
           // 这一格就是分档的判据（guardrail 按它升 L1）
           distributed: true,
+          // WP421：分发渠道还没接——卡上照实写「批了要你自己发」
+          manual_send: true,
           headline: release.headline,
           body: release.body,
           quotes: release.quotes,
@@ -838,6 +840,8 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
           platform: input.platform,
           venue: input.venue,
           venue_label: `${input.platform}／${input.venue}`,
+          // WP421：别的论坛还没接自动发——卡上照实写「批了要你自己发」（Reddit 走插件代发）
+          ...(isReddit ? {} : { manual_send: true }),
           body: input.body,
           rules_checked,
           rules_summary: explained,

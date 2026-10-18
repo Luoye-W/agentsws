@@ -131,6 +131,18 @@ describe('WP360 引导装插件（替身）', () => {
     )
   })
 
+  it('WP421：这一次做事的职责自己用不上插件（写新闻稿）就不带，哪怕同岗位别的职责要', async () => {
+    const { ob, log } = make()
+    expect(
+      await ob.nudge({
+        actor: { ...actor, role_id: 'pr.press' },
+        matter_id: 'm1',
+        role_ids: ['pr.press', 'pr.reddit'],
+      }),
+    ).toBe(false)
+    expect(log).toEqual([])
+  })
+
   it('复用的卡：多说一句在「要你处理」里', async () => {
     const { ob, log, state } = make()
     state.reused = true
