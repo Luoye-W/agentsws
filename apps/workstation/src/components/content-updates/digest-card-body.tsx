@@ -49,7 +49,8 @@ export function DigestCardBody({
           action: 'approve',
           version: card.version,
           via: 'workstation',
-          selected_option_id: option,
+          // 按钮在卡身里：选的是哪一个放在 edited_payload 里（卡上不挂选项列表）
+          edited_payload: { ...payload, selected_option_id: option },
         } as never,
         card.position_id,
       ),

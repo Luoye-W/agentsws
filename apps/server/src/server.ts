@@ -1694,6 +1694,8 @@ export interface Server {
    * 设置里那一行不出，卡也不会出。
    */
   contentUpdates?: ContentUpdates
+  /** WP406（私有 docs/107）：官方订阅的岗位更新（存放处在才有；截图脚本 / 测试直接调 `check()`）。 */
+  officialContent?: OfficialContent
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /** WP181：官方「自动化任务」包的那一层（四个工具的执行器、到点的处理器、`scheduled_task` 卡）。 */
@@ -14462,6 +14464,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudAccount,
     pricingCatalog,
     ...(contentUpdates === undefined ? {} : { contentUpdates }),
+    ...(officialContent === undefined ? {} : { officialContent }),
     schedule,
     automation,
     reconcile,

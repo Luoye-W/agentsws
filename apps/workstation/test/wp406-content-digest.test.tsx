@@ -168,11 +168,13 @@ describe('WP406 岗位更新卡', () => {
     await waitFor(() => expect(decide).toHaveBeenCalledTimes(1))
     expect(decide.mock.calls[0]?.[1]).toMatchObject({
       action: 'approve',
-      selected_option_id: 'apply_all',
+      edited_payload: { selected_option_id: 'apply_all' },
     })
     await userEvent.click(screen.getByTestId('content-digest-skip'))
     await waitFor(() => expect(decide).toHaveBeenCalledTimes(2))
-    expect(decide.mock.calls[1]?.[1]).toMatchObject({ selected_option_id: 'skip' })
+    expect(decide.mock.calls[1]?.[1]).toMatchObject({
+      edited_payload: { selected_option_id: 'skip' },
+    })
     expect(screen.queryByTestId('content-digest-pick')).toBeTruthy()
   })
 })

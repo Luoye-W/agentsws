@@ -17,7 +17,10 @@ import type { ContentItemKind, LocalizedText } from './content-updates.js'
 /** 卡的种类（`ApprovalKind` 里那一格）。 */
 export const CONTENT_DIGEST_CARD_KIND = 'content_update_digest' as const
 
-/** 卡上那三个按钮里由服务端接住的两个（「挑着看」只开第三栏，不定这张卡）。 */
+/**
+ * 卡上那三个按钮里由服务端接住的两个（「挑着看」只开第三栏，不定这张卡）。按钮在卡身里：批卡时带
+ * `edited_payload.selected_option_id`（卡上不挂选项列表，免得画成一道选择题）。
+ */
 export const CONTENT_DIGEST_OPTIONS = ['apply_all', 'skip'] as const
 export type ContentDigestOption = (typeof CONTENT_DIGEST_OPTIONS)[number]
 
@@ -79,8 +82,6 @@ export interface ContentDigestCardPayload {
   items: ContentDigestItem[]
   /** 收下这批时的清单序号。 */
   serial: number
-  /** 选项两处都写（卡片投影读 payload.options）。 */
-  options?: { id: ContentDigestOption; label: string }[]
 }
 
 /* ------------------------------------------------------------------ */

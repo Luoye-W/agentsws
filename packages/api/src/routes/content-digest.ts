@@ -36,12 +36,11 @@ import { body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
-const READ = {
-  domain: 'store_config',
-  op: 'read',
-  range: 'workspace',
-  sensitivity: 'internal',
-} as const
+/**
+ * 与岗位页同一道门（`approval.read@own`：在这个岗位里干活的人都看得到）；应用 / 退回 / 改设置够不够格
+ * 由服务端判一处（`canApplyContentUpdates`）。
+ */
+const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
 
 const TAG = 'settings'
 

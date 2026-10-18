@@ -214,6 +214,8 @@ export interface OfficialCheckReport {
   serial?: number
   reason?: string
   text?: string
+  /** 拒收时哪一项、哪一格（排障用；界面只说 `text`）。 */
+  detail?: string
   /** `<品牌>:<岗位>@<周>` 出 / 并了的卡。 */
   carded: string[]
   /** `<品牌>:<条目>@<版本>` 自动应用了的。 */
@@ -378,10 +380,6 @@ const ACTIVE_CARD = new Set([
 const OWNER_ROLE = 'common.owner'
 const TIMEOUT_MS = 30_000
 const SUMMARY_TTL_MS = 6 * 60 * 60 * 1000
-const DIGEST_OPTIONS = [
-  { id: 'apply_all', label: '全部应用' },
-  { id: 'skip', label: '这次跳过' },
-] as const
 
 const tagOf = (item: Pick<ContentItem, 'id' | 'version'>): string => `${item.id}@${item.version}`
 const nameOfId = (id: string): string => id.slice(id.indexOf(':') + 1)
@@ -1520,7 +1518,6 @@ export function createOfficialContent(options: OfficialContentOptions): Official
       ...(advice === undefined || advice.trim() === '' ? {} : { advice: advice.trim() }),
       items: rows,
       serial,
-      options: DIGEST_OPTIONS.map((o) => ({ ...o })),
     }
     const tags = items.map(tagOf).sort()
     seq += 1
@@ -1535,7 +1532,6 @@ export function createOfficialContent(options: OfficialContentOptions): Official
       title: `${pos.name.zh} · ${urgent ? '急 · ' : '本周'}更新 · ${rows.length} 项`,
       summary: payload.advice ?? '',
       payload,
-      options: DIGEST_OPTIONS.map((o) => ({ ...o })),
       evidence: {
         source_events: [],
         provenance: { seen: items.map((i) => ({ type: 'content_item', id: i.id })) },
@@ -1685,6 +1681,7 @@ export function createOfficialContent(options: OfficialContentOptions): Official
             state: 'error',
             reason: err.reason,
             text: CONTENT_REJECT_TEXT[err.reason],
+            ...(err.detail === undefined ? {} : { detail: err.detail }),
           }
         }
         // 没连上：断网不报错，照已经收下的那份

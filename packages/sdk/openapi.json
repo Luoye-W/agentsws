@@ -108555,9 +108555,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "OfficialSubscriptionLocalView"
@@ -108674,9 +108674,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "OfficialSubscriptionLocalView"
@@ -108795,9 +108795,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "{ carded: number; applied: number; state: string }"
@@ -108916,9 +108916,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView"
@@ -109037,9 +109037,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView",
@@ -109185,9 +109185,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "ContentItemDiffView"
@@ -109325,9 +109325,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView",
@@ -109344,7 +109344,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$"
+                      "pattern": "^[a-z_]+:[a-z0-9][a-z0-9._-]*$"
                     }
                   },
                   "choices": {
@@ -109508,9 +109508,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView"
@@ -109648,9 +109648,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "ContentAiMergeResult",
@@ -109664,7 +109664,7 @@
                 "properties": {
                   "item_id": {
                     "type": "string",
-                    "pattern": "^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$"
+                    "pattern": "^[a-z_]+:[a-z0-9][a-z0-9._-]*$"
                   },
                   "part_key": {
                     "type": "string",
@@ -109811,9 +109811,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView",
@@ -109827,7 +109827,7 @@
                 "properties": {
                   "item_id": {
                     "type": "string",
-                    "pattern": "^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$"
+                    "pattern": "^[a-z_]+:[a-z0-9][a-z0-9._-]*$"
                   }
                 }
               }
@@ -109968,9 +109968,9 @@
           }
         ],
         "x-authz": {
-          "domain": "store_config",
+          "domain": "approval",
           "op": "read",
-          "range": "workspace",
+          "range": "own",
           "sensitivity": "internal"
         },
         "x-returns": "PositionContentUpdatesView"
