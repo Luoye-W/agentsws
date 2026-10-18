@@ -68,11 +68,14 @@ export const LAYER_COLOR: Record<CalendarSource, string> = {
  * `role_id` 是职责 id（`social.meta` / `kol.outreach` / `support.inbox`…），
  * 认不出来的一律回落成"待办 + 会议 + 卡片到期"——那是**任何岗位**都成立的三层。
  */
-export function defaultLayersFor(role_id?: string): CalendarSource[] {
+export function defaultLayersFor(role_id?: string, held?: readonly string[]): CalendarSource[] {
   if (role_id !== undefined) {
     if (role_id.startsWith('social.')) return ['social_post', 'todo']
     if (role_id.startsWith('kol.')) return ['kol_deliverable', 'todo']
   }
+  // WP419（自查 U6）：直接进日历、本人担着社媒职责 → 「社媒排期」默认也勾上（不然看不到自己的排期）
+  if (held?.some((r) => r.startsWith('social.')) === true)
+    return ['todo', 'meeting', 'card_due', 'social_post']
   return ['todo', 'meeting', 'card_due']
 }
 

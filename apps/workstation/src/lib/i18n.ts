@@ -3469,6 +3469,10 @@ const zh: Table = {
   'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
   'social.calendar.no_account': '内容日历：这条渠道还没登记号',
   // WP419（决策 1231）：登记号只要主页链接；到点插件打开你登录着的发帖页、你点发布
+  'social.summary.count': '这两周 {n} 条',
+  'social.summary.next': '这两周 {n} 条 · 下一条 {when}',
+  'social.summary.expand': '在这里排',
+  'social.summary.collapse': '收起',
   'social.register.url': '主页链接',
   'social.register.name': '显示名（可不填）',
   'social.register.save': '登记',
@@ -7759,6 +7763,10 @@ const en: Table = {
   'social.calendar.always_l1':
     'Publishing always needs a human tap. Once approved it goes out at the time you set.',
   'social.calendar.no_account': 'Content calendar: no account registered on this channel yet',
+  'social.summary.count': '{n} posts in these two weeks',
+  'social.summary.next': '{n} posts in these two weeks · next {when}',
+  'social.summary.expand': 'Plan here',
+  'social.summary.collapse': 'Collapse',
   'social.register.url': 'Profile link',
   'social.register.name': 'Display name (optional)',
   'social.register.save': 'Add',
