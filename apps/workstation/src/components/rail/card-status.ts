@@ -6,9 +6,11 @@
  *
  * 点的颜色（决策 1004）：红 = 坏了要修（连接没连上 / 过期、发出记录写不进去），黄 = 等你看（对话等你、计划等你点头）。
  */
+
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useScopeConversations } from '@/components/conversations/conversation-data'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
+import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import type { RailScope } from '@/components/rail/rail-scope'
 import type { CardStatus, RailPanelBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
@@ -116,14 +118,18 @@ export function usePlansStatus({ scope }: RailPanelBodyProps): CardStatus | unde
     enabled: scope !== undefined,
     retry: false,
   })
+  // WP386：信息监控的下一次（「信息监控 · 明早 9:00」）也算这一层的计划
+  const monitorNext = useScopeMonitor(scope)?.view?.next_run_at
   if (scope === undefined || list.data === undefined) return undefined
   const rows = list.data.filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
-  if (rows.length === 0) return undefined
+  if (rows.length === 0 && monitorNext === undefined) return undefined
   const waiting = rows.filter((r) => r.params?.awaiting_approval === true).length
-  const next = rows
-    .filter((r) => r.state !== 'paused' && r.next_fire_at !== undefined)
-    .map((r) => r.next_fire_at as string)
-    .sort()[0]
+  const next = [
+    ...rows
+      .filter((r) => r.state !== 'paused' && r.next_fire_at !== undefined)
+      .map((r) => r.next_fire_at as string),
+    ...(monitorNext === undefined ? [] : [monitorNext]),
+  ].sort()[0]
   const summary = next === undefined ? undefined : t('plans.next', { when: whenLabel(next, t) })
   return {
     ...(summary === undefined ? {} : { summary }),
@@ -173,6 +179,10 @@ export function useScopeConnections(scope: RailScope | undefined): {
 export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus | undefined {
   const { t } = useApp()
   const { items } = useScopeConnections(scope)
+  // WP386：信息监控有拉不到的源 → 红点（汇总那一句照搬：「17 条 · 1 条拉不到」）
+  const monitor = useScopeMonitor(scope)?.view
+  if (monitor !== undefined && monitor.failed > 0)
+    return { summary: monitor.summary, dot: 'alert', dotLabel: monitor.summary }
   if (items.length === 0) return undefined
   const todo = items.filter(connectionNeedsYou).length
   if (todo === 0) return { summary: t('conncard.summary.ok') }

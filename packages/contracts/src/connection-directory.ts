@@ -833,7 +833,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   // 职责 yml 里标的是 `mode: browser`——目录里给它一张点不动的卡比不给更糟。
   {
     kind: 'google_alerts',
-    name: { zh: 'Google Alerts（品牌监控）', en: 'Google Alerts' },
+    name: { zh: 'Google Alerts（信息监控）', en: 'Google Alerts' },
     category: 'pr',
     auth: 'api_key',
     mode: 'openconnector_provider',

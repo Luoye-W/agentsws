@@ -672,6 +672,7 @@ export type {
   PrExternalPostInput,
   PrExternalPostRow,
   PrExternalPostView,
+  PrMentionFilter,
   PrMentionInput,
   PrMentionRow,
   PrMentionView,
@@ -679,6 +680,10 @@ export type {
   PrReleaseInput,
   PrReleaseRow,
   PrStagedView,
+  PrWatchLinkResult,
+  PrWatchSourcePatch,
+  PrWatchSourceRow,
+  PrWatchView,
 } from './routes/pr.js'
 export { prRoutes } from './routes/pr.js'
 export {

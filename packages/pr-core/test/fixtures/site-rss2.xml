@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel><title>E-Bike Review Example</title><link>https://ebr.example.com</link><description>Reviews</description>
+<item><title>Aventon Level 3 long-term review</title><link>https://ebr.example.com/aventon-level-3?utm_source=rss</link><guid isPermaLink="false">ebr-101</guid><pubDate>Fri, 17 Oct 2026 08:00:00 GMT</pubDate><dc:creator>Jo Rider</dc:creator><description><![CDATA[<p>We rode the <b>Aventon</b> for 3 months.</p>]]></description></item>
+<item><title>Inmobiliaria market update</title><link>https://ebr.example.com/inmobiliaria</link><guid isPermaLink="false">ebr-102</guid><pubDate>Fri, 17 Oct 2026 07:00:00 GMT</pubDate><description>Housing prices in Madrid (inmobiliarias).</description></item>
+<item><title>Best cheap e-bikes: Aventon job openings and more</title><link>https://ebr.example.com/jobs</link><guid isPermaLink="false">ebr-103</guid><pubDate>Thu, 16 Oct 2026 07:00:00 GMT</pubDate><description>Aventon is hiring, see the job board.</description></item>
+<item><title>Lectric XP 4 vs Aventon Sinch</title><link>https://ebr.example.com/xp4-vs-sinch</link><guid isPermaLink="false">ebr-104</guid><pubDate>Wed, 15 Oct 2026 07:00:00 GMT</pubDate><description>Head to head.</description></item>
+</channel></rss>

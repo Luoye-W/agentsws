@@ -474,6 +474,8 @@ const PR_OUTREACH_BLOCKS = (): BlockDef[] => [
 const PR_MONITORING_BLOCKS = (): BlockDef[] => [
   block('pr.monitoring.alerts', 'table', '负面预警', 'pr.negative_alerts'),
   block('pr.monitoring.mentions', 'table', '提及流', 'pr.mentions'),
+  // WP386：竞品动向（四组里竞品那一组单列一块，按竞品排）
+  block('pr.monitoring.competitors', 'table', '竞品动向', 'pr.competitor_mentions'),
   block('pr.monitoring.handoffs', 'table', '转客服', 'pr.support_handoffs'),
 ]
 

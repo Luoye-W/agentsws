@@ -1092,6 +1092,26 @@ export interface PrDeckData {
   }[]
   /** 转客服：判成客户问题、已经出了卡的那些（60 分界行）。 */
   handoffs: (PrMentionRow & { approval_id?: string })[]
+  /** WP386：竞品动向（`group: 'competitor'` 的提及，按竞品、再按时间排）。 */
+  competitor_mentions?: PrMentionRow[]
+  /**
+   * WP386：信息监控各条源的状态——**拉不到的照实说**（表格下面一行），不让一张空表冒充「今天没人提我们」。
+   * 不给 = 宿主没装信息监控。
+   */
+  monitor?: {
+    /** 几条监控源。 */
+    total: number
+    /** 其中最近一次拉失败的几条。 */
+    failed: number
+    /** 一句（「17 条 · 1 条拉不到」）。 */
+    summary: string
+    /** 拉失败的那几条：名字 + 一句人话。 */
+    failures: { label: string; message: string }[]
+    /** 有没有哪一条拉成过（都没拉成过 = 空表不代表没人提）。 */
+    pulled_ever: boolean
+    /** 盯了几个竞品（竞品那一块空着时说清是「没盯」还是「没人提」）。 */
+    competitors: number
+  }
 }
 
 /**
@@ -1190,6 +1210,10 @@ export interface PrMentionRow {
   sentiment?: string
   triage?: string
   status: string
+  /** WP386：盯的哪一组（`own` / `competitor` / `industry` / `site`；老数据没有 = 自家）。 */
+  group?: string
+  /** WP386：说的是哪个竞品。 */
+  competitor?: string
 }
 
 /** 一条线程在面板上的样子（待回评论 / 待处理帖子 / 转客服三块共用）。 */

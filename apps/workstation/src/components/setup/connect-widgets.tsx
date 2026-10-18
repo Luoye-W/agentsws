@@ -19,6 +19,7 @@
  *
  * 每一样还要说「现在连上了没有」（{@link useNeedConnected}）：`true` / `false`；查不了回 `undefined`。
  */
+
 import type { ConnectNeed } from '@agentsws/contracts'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
@@ -38,6 +39,11 @@ import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { AiStep } from '@/components/onboarding/ai-step'
 import { ShopAdminBanner, shopAdminQuery } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
+import {
+  GoogleAccountStep,
+  PrWatchSources,
+  useMonitorAssignment,
+} from '@/components/pr/pr-watch-sources'
 import { Button } from '@/components/ui/button'
 import { SafetyNote } from '@/components/ui/hint'
 import {
@@ -64,7 +70,14 @@ export interface ConnectContext {
   refresh(): void
 }
 
-const SPECIAL = new Set(['site_theme', 'shop_admin', 'extension', 'im:wechat'])
+const SPECIAL = new Set([
+  'site_theme',
+  'shop_admin',
+  'extension',
+  'im:wechat',
+  'google_account',
+  'google_alerts',
+])
 /** WP334：消息渠道四条（团队三条 + 个人微信）都问同一个状态。 */
 const IM_SERVICES = new Set(['im:feishu', 'im:dingtalk', 'im:wecom', 'im:wechat'])
 const teamChannel = (service: string | undefined): 'feishu' | 'dingtalk' | undefined =>
@@ -305,6 +318,9 @@ export function ConnectWidget({
         onDone={ctx.refresh}
       />
     )
+  // WP386：信息监控——Google 账号这一步、多条 Google Alerts / 网站 RSS 就在卡里贴
+  if (service === 'google_account') return <GoogleAccountStep />
+  if (service === 'google_alerts') return <PrWatchInCard />
   if (service === 'shopify_admin')
     return (
       <ShopifyConnect
@@ -364,4 +380,9 @@ function WechatWidget(): ReactNode {
       <WechatBind wechat={status.data?.wechat} compact />
     </div>
   )
+}
+
+/** WP386：对话里的连接卡上那一版（少字：不出「现在拉一轮」）。 */
+function PrWatchInCard(): ReactNode {
+  return <PrWatchSources assignment={useMonitorAssignment()} compact />
 }

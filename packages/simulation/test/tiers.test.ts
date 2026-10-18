@@ -357,6 +357,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP51 首次设置与同事发现（46 §2 I1 / I3）：两个各自单干的人，
       // 公司名写法不同但算出同一把钥匙 → 局域网互见 → 一方申请 → 对方 owner 批
       'org/two-solo-users-discover',
+      // WP386：信息监控的数据链（拉到了 / feed 404 照实说），不出卡、不看谁担职责
+      'pr/monitor-feed-404',
+      'pr/monitor-feed-pulled',
       // WP78（60 §1 / §4）：同一个版 72 小时内再发一条 → 冷却那道门拦下，
       // 换一个版才放行（15 人公司里公关归内容，p_zheng 持 `pr.reddit`）
       'pr/subreddit-cooldown',
