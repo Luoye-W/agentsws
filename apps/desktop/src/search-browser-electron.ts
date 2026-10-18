@@ -11,15 +11,19 @@
  *   AI 自己的那个视图照常干活，不碰这一页。
  */
 import { type BrowserWindow, session as electronSession, WebContentsView } from 'electron'
+import { setAmazonDeliveryZip } from './amazon-delivery.js'
 import {
+  type AmazonDeliveryResult,
   cleanUserAgent,
+  isAmazonUrl,
   type OpenRequest,
   type OpenResult,
   type SearchBrowserDriver,
   type SearchBrowserStatus,
   searchPartitionOf,
+  userAgentFor,
 } from './search-browser.js'
-import { extractReadable, extractSerp, pageScript } from './search-extract.js'
+import { extractHtml, extractReadable, extractSerp, pageScript } from './search-extract.js'
 
 /** 交给人的那一页（第三栏亮出来的）。 */
 export interface SearchHandover {
@@ -64,7 +68,21 @@ export function createElectronSearchBrowser(deps: {
     const ses = electronSession.fromPartition(partition)
     if (!prepared.has(partition)) {
       prepared.add(partition)
-      ses.setUserAgent(cleanUserAgent(ses.getUserAgent()))
+      const original = ses.getUserAgent()
+      ses.setUserAgent(cleanUserAgent(original))
+      // WP394（docs/106 A9，Amazon Agent Policy）：对 Amazon 各站与资源域的每个请求，User-Agent 末尾自报
+      // `Agent/AgentsWorkshop`（Chromium 原有段照留）；别的域名不动（照旧是上面那个干净的 UA）。
+      ses.webRequest.onBeforeSendHeaders((details, cb) => {
+        if (!isAmazonUrl(details.url)) {
+          cb({ requestHeaders: details.requestHeaders })
+          return
+        }
+        const headers = { ...details.requestHeaders }
+        for (const k of Object.keys(headers))
+          if (k.toLowerCase() === 'user-agent') delete headers[k]
+        headers['User-Agent'] = userAgentFor(details.url, original)
+        cb({ requestHeaders: headers })
+      })
       ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
       ses.setPermissionCheckHandler(() => false)
       ses.on('will-download', (event, item) => {
@@ -164,14 +182,16 @@ export function createElectronSearchBrowser(deps: {
     const script =
       req.kind === 'page'
         ? pageScript(extractReadable, { maxChars: req.max_chars })
-        : pageScript(extractSerp, { engine: req.kind, limit: 10 })
+        : req.kind === 'html'
+          ? pageScript(extractHtml, { maxChars: req.max_chars })
+          : pageScript(extractSerp, { engine: req.kind, limit: 10 })
     try {
       const data = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: script }])
       return {
         ok: true,
         status: got.status,
         final_url: wc.getURL(),
-        ...(req.kind === 'page' ? { page: data } : { serp: data }),
+        ...(req.kind === 'page' || req.kind === 'html' ? { page: data } : { serp: data }),
       }
     } catch (err) {
       return { ok: false, reason: 'failed', message: `读不出这一页：${String(err)}` }
@@ -219,10 +239,53 @@ export function createElectronSearchBrowser(deps: {
     view.webContents.on('did-navigate-in-page', check)
   }
 
+  /** WP394：开站点首页 → 在页面里走 Amazon 自己的改地址接口交邮编 → 再开一次首页读「配送到」那一行。 */
+  async function deliveryOnce(req: {
+    workspace_id: string
+    url: string
+    zip: string
+    timeout_ms: number
+  }): Promise<AmazonDeliveryResult> {
+    const wc = slotOf(req.workspace_id).view.webContents
+    const got = await load(wc, `${req.url}/`, req.timeout_ms)
+    if (!got.ok) return got
+    const first = (await wc
+      .executeJavaScriptInIsolatedWorld(WORLD_ID, [
+        { code: pageScript(extractHtml, { maxChars: 400_000 }) },
+      ])
+      .catch(() => undefined)) as { signals?: { captcha?: boolean } } | undefined
+    if (first?.signals?.captcha === true)
+      return { ok: false, reason: 'blocked', message: 'Amazon 要人机验证，没设配送地址' }
+    // 主世界里跑：要用这一页自己的源（同源请求、带这个 partition 的 cookie）；脚本只调 Amazon 自己的改地址接口
+    const r = (await wc
+      .executeJavaScript(pageScript(setAmazonDeliveryZip, { zip: req.zip }))
+      .catch((e: unknown) => ({ ok: false, status: 0, message: String(e) }))) as {
+      ok: boolean
+      message?: string
+    }
+    if (!r.ok) return { ok: false, reason: 'failed', message: r.message ?? '没设上' }
+    const again = await load(wc, `${req.url}/`, req.timeout_ms)
+    if (!again.ok) return { ok: true }
+    const line = (await wc
+      .executeJavaScriptInIsolatedWorld(WORLD_ID, [
+        {
+          code: `(document.getElementById('glow-ingress-line2')?.textContent ?? '').replace(/\\s+/g, ' ').trim()`,
+        },
+      ])
+      .catch(() => '')) as string
+    return line === '' ? { ok: true } : { ok: true, deliver_to: line.slice(0, 120) }
+  }
+
   return {
     open(req) {
       const slot = slotOf(req.workspace_id)
       const next = slot.queue.then(() => openOnce(req))
+      slot.queue = next.catch(() => undefined)
+      return next
+    },
+    amazonDelivery(req) {
+      const slot = slotOf(req.workspace_id)
+      const next = slot.queue.then(() => deliveryOnce(req))
       slot.queue = next.catch(() => undefined)
       return next
     },

@@ -31,6 +31,8 @@ export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'
+// WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
+export * from './amazon-competitor.js'
 // WP392（docs/104）：竞品监控积木（快照、变化、进料口适配器、存储接口；和信息监控共用监控源）
 export * from './competitor-watch.js'
 // WP144 / docs/80：电脑操控（官方 dsh-computer-use + Cua Driver MCP 提供方）的设置与授权卡

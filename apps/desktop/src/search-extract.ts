@@ -166,6 +166,28 @@ export function extractReadable(args: { maxChars: number }): ReadableExtract {
   }
 }
 
+/**
+ * WP394（docs/104 一期 B）：**Amazon 前台页的 HTML 原文**（商品页 / 搜索页）——服务进程按 `brand-intake` 的
+ * 那套解析器读价格、划线价、优惠券、BSR、有没有货。只读：不点、不填、不滚动。
+ */
+export function extractHtml(args: { maxChars: number }): ReadableExtract {
+  const raw = document.documentElement?.outerHTML ?? ''
+  const body = (document.body?.innerText ?? '').slice(0, 3000)
+  return {
+    signals: {
+      title: (document.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      text: body.replace(/\s+/g, ' ').toLowerCase(),
+      captcha:
+        document.querySelector(
+          'form[action*="validateCaptcha"], #captchacharacters, .g-recaptcha, .h-captcha, iframe[src*="recaptcha"], iframe[src*="hcaptcha"]',
+        ) !== null,
+      passwordInputs: document.querySelectorAll('input[type="password"]').length,
+    },
+    text: raw.slice(0, args.maxChars),
+    truncated: raw.length > args.maxChars,
+  }
+}
+
 /** 拼成 `executeJavaScript` 要的那一段（函数源码 + 参数，参数只是 JSON 数据）。 */
 export function pageScript<A>(fn: (args: A) => unknown, args: A): string {
   return `(${fn.toString()})(${JSON.stringify(args)})`

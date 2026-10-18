@@ -47,7 +47,75 @@ export function cleanUserAgent(ua: string): string {
   return out.join(' ')
 }
 
-export type OpenKind = 'google' | 'bing' | 'page'
+/**
+ * WP394（docs/106 §13 A9，Amazon Agent Policy）：替人自动访问 Amazon 的软件**每个请求都要自报身份**。
+ * 内置浏览器对 Amazon 各站（与 `packages/brand-intake/src/amazon.ts` 的站点表对得上，测试钉住）和它的
+ * 图片 / 脚本资源域的请求，User-Agent 末尾加这一段；其余域名照旧走 {@link cleanUserAgent}。
+ */
+export const AMAZON_AGENT_TOKEN = 'Agent/AgentsWorkshop'
+
+/** Amazon 各站前台域名后缀（含联想词接口所在的 `completion.amazon.*`，按后缀认）。 */
+export const AMAZON_SITE_SUFFIXES: readonly string[] = [
+  'amazon.com.au',
+  'amazon.com.mx',
+  'amazon.com.br',
+  'amazon.co.uk',
+  'amazon.co.jp',
+  'amazon.de',
+  'amazon.fr',
+  'amazon.it',
+  'amazon.es',
+  'amazon.ca',
+  'amazon.in',
+  'amazon.nl',
+  'amazon.se',
+  'amazon.com.be',
+  'amazon.com.tr',
+  'amazon.pl',
+  'amazon.ae',
+  'amazon.sa',
+  'amazon.eg',
+  'amazon.sg',
+  'amazon.com',
+]
+
+/** Amazon 的图片 / 脚本资源域。 */
+export const AMAZON_RESOURCE_SUFFIXES: readonly string[] = [
+  'media-amazon.com',
+  'ssl-images-amazon.com',
+  'images-amazon.com',
+  'amazon-adsystem.com',
+]
+
+/** 这个网址是不是 Amazon 的（前台各站、联想词、资源域）。认不出的网址一律不算。 */
+export function isAmazonUrl(url: string): boolean {
+  let host: string
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '')
+  } catch {
+    return false
+  }
+  return [...AMAZON_SITE_SUFFIXES, ...AMAZON_RESOURCE_SUFFIXES].some(
+    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+  )
+}
+
+/** Amazon 那几个域用的 UA：Chromium 原有段照留（同 {@link cleanUserAgent}），末尾自报 `Agent/AgentsWorkshop`。 */
+export function amazonUserAgent(ua: string): string {
+  const base = cleanUserAgent(ua)
+    .split(' ')
+    .filter((p) => p !== AMAZON_AGENT_TOKEN)
+    .join(' ')
+  return `${base} ${AMAZON_AGENT_TOKEN}`.trim()
+}
+
+/** 这一个请求该带哪个 UA：Amazon 的自报身份，别的照旧。 */
+export function userAgentFor(url: string, ua: string): string {
+  return isAmazonUrl(url) ? amazonUserAgent(ua) : cleanUserAgent(ua)
+}
+
+/** WP394：`html` = 读 Amazon 前台页的 HTML 原文（**只认 Amazon 的网址**）。 */
+export type OpenKind = 'google' | 'bing' | 'page' | 'html'
 
 export interface OpenRequest {
   workspace_id: string
@@ -88,14 +156,50 @@ export interface SearchBrowserStatus {
   verified_at?: number
 }
 
+/**
+ * WP394（docs/104 §2.3）：把这个品牌内置浏览器里 Amazon 某站的「配送到」设成一个邮编（不登录，只是 Amazon
+ * 记在这个 partition 里的地址 cookie）。出口在境外时 Amazon 会认成别的国家，价格变币种、写「不能配送」。
+ */
+export interface AmazonDeliveryRequest {
+  workspace_id: string
+  /** 站点前台首页（`https://www.amazon.com/`）。 */
+  url: string
+  zip: string
+  timeout_ms: number
+}
+
+export type AmazonDeliveryResult =
+  | { ok: true; deliver_to?: string }
+  | { ok: false; reason: 'timeout' | 'failed' | 'blocked'; message: string }
+
 /** Electron 那一半要实现的口子。 */
 export interface SearchBrowserDriver {
   open(req: OpenRequest): Promise<OpenResult>
   reveal(req: RevealRequest): Promise<{ shown: boolean }>
   status(workspace_id: string): SearchBrowserStatus
+  /** WP394：设 Amazon「配送到」（没实现 = 这一版桌面壳不会设，服务进程照实说）。 */
+  amazonDelivery?(req: AmazonDeliveryRequest): Promise<AmazonDeliveryResult>
 }
 
-const KINDS: readonly OpenKind[] = ['google', 'bing', 'page']
+/** 通道收到的「设配送邮编」请求：只认 Amazon 站点首页、邮编只许字母数字空格横线。 */
+export function validateAmazonDelivery(body: unknown): AmazonDeliveryRequest | string {
+  const b = (body ?? {}) as Record<string, unknown>
+  if (!isWorkspace(b.workspace_id)) return 'workspace_id 不对'
+  if (!isWebUrl(b.url) || !isAmazonUrl(b.url) || !b.url.startsWith('https://www.amazon.'))
+    return '只认 Amazon 站点首页'
+  if (typeof b.zip !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 -]{1,10}$/.test(b.zip))
+    return '邮编格式不对'
+  return {
+    workspace_id: b.workspace_id,
+    url: new URL(b.url).origin,
+    zip: b.zip,
+    timeout_ms: clampInt(b.timeout_ms, 1_000, 60_000, 20_000),
+  }
+}
+
+const KINDS: readonly OpenKind[] = ['google', 'bing', 'page', 'html']
+/** WP394：Amazon 一页商品页的 HTML 原文最多多少字（整页 1–2 MB）。 */
+export const HTML_MAX_CHARS = 4_000_000
 
 const isWorkspace = (v: unknown): v is string =>
   typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,120}$/.test(v)
@@ -122,14 +226,18 @@ export function validateOpen(body: unknown): OpenRequest | string {
   const b = (body ?? {}) as Record<string, unknown>
   if (!isWorkspace(b.workspace_id)) return 'workspace_id 不对'
   if (!isWebUrl(b.url)) return '只开 http / https 网址'
-  if (!KINDS.includes(b.kind as OpenKind)) return 'kind 只认 google / bing / page'
+  if (!KINDS.includes(b.kind as OpenKind)) return 'kind 只认 google / bing / page / html'
+  if (b.kind === 'html' && !isAmazonUrl(b.url)) return 'html 只开 Amazon 的网址'
   return {
     workspace_id: b.workspace_id,
     url: b.url,
     kind: b.kind as OpenKind,
     timeout_ms: clampInt(b.timeout_ms, 1_000, 60_000, 15_000),
     settle_ms: clampInt(b.settle_ms, 0, 10_000, 1_200),
-    max_chars: clampInt(b.max_chars, 1_000, 200_000, 60_000),
+    max_chars:
+      b.kind === 'html'
+        ? clampInt(b.max_chars, 1_000, HTML_MAX_CHARS, HTML_MAX_CHARS)
+        : clampInt(b.max_chars, 1_000, 200_000, 60_000),
   }
 }
 
@@ -187,7 +295,7 @@ function tokenOk(header: string | undefined, token: string): boolean {
 }
 
 /**
- * 起本机通道：`POST /open`、`POST /reveal`、`GET /status?workspace_id=`。只听 127.0.0.1、随机端口；
+ * 起本机通道：`POST /open`、`POST /reveal`、`POST /amazon-delivery`（WP394）、`GET /status?workspace_id=`。只听 127.0.0.1、随机端口；
  * 每个请求要带 `Authorization: Bearer <口令>`，不对一律 401；浏览器来的跨站请求（带 Origin）一律拒。
  */
 export async function startSearchBrowserChannel(input: {
@@ -210,6 +318,17 @@ export async function startSearchBrowserChannel(input: {
           const got = validateOpen(await readBody(req))
           if (typeof got === 'string') return send(res, 400, { error: got })
           return send(res, 200, await input.driver.open(got))
+        }
+        if (req.method === 'POST' && url.pathname === '/amazon-delivery') {
+          const got = validateAmazonDelivery(await readBody(req))
+          if (typeof got === 'string') return send(res, 400, { error: got })
+          if (input.driver.amazonDelivery === undefined)
+            return send(res, 200, {
+              ok: false,
+              reason: 'failed',
+              message: '这一版桌面壳不会设配送地址',
+            })
+          return send(res, 200, await input.driver.amazonDelivery(got))
         }
         if (req.method === 'POST' && url.pathname === '/reveal') {
           const got = validateReveal(await readBody(req))

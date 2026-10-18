@@ -20,6 +20,7 @@ import {
   type CatalogSnapshot,
   type CatalogSnapshotRow,
   type CatalogStateRow,
+  type CatalogUnreadField,
   COMPETITOR_REMOVED_AFTER_MISSES,
   type CompetitorChange,
   type CompetitorChangeKind,
@@ -104,17 +105,35 @@ interface Entry {
   group: string
 }
 
+/** WP394：这一行这一格没读到（云端那一路没有划线价 / 优惠券）。 */
+const unread = (r: CatalogSnapshotRow, f: CatalogUnreadField): boolean =>
+  r.fields_unread?.includes(f) === true
+
 const toState = (
   row: CatalogSnapshotRow,
   now: Iso8601,
   prev?: CatalogStateRow,
-): CatalogStateRow => ({
-  ...row,
-  read_at: now,
-  first_seen_at: prev?.first_seen_at ?? now,
-  last_seen_at: now,
-  missing: 0,
-})
+): CatalogStateRow => {
+  const out: CatalogStateRow = {
+    ...row,
+    read_at: now,
+    first_seen_at: prev?.first_seen_at ?? now,
+    last_seen_at: now,
+    missing: 0,
+  }
+  // WP394：这次没读到的格子留着上一次读到的值（下一次能读到时和它比，不和「空」比）
+  if (prev !== undefined && row.fields_unread !== undefined) {
+    const still: CatalogUnreadField[] = []
+    for (const f of row.fields_unread) {
+      const was = prev[f]
+      if (was !== undefined && !unread(prev, f)) Object.assign(out, { [f]: was })
+      else still.push(f)
+    }
+    if (still.length === 0) delete out.fields_unread
+    else out.fields_unread = still
+  }
+  return out
+}
 
 /** 把这一次读到的和上一次的快照比，交回新快照与比出来的变化。 */
 export function diffCatalog(input: CatalogDiffInput): CatalogDiffOutput {
@@ -215,7 +234,9 @@ function compareRow(p: CatalogSnapshotRow, row: CatalogSnapshotRow): Entry[] {
     priceMoved && p.price !== undefined && row.price !== undefined
       ? pctChange(p.price, row.price)
       : undefined
-  if (onSale(p) !== onSale(row)) {
+  // WP394：任一边划线价没读到（云端那一路）就不判打折起止，只看价本身
+  const saleKnown = !unread(p, 'compare_at_price') && !unread(row, 'compare_at_price')
+  if (saleKnown && onSale(p) !== onSale(row)) {
     // 打折开始 / 结束本身就说明了价怎么变的：这一行不再另出一条「改价」。
     // 幅度：价真变了就是价的涨跌；价没变（只是加 / 去了划线价）就是划线价和现价差几成。
     const start = onSale(row)
@@ -246,7 +267,11 @@ function compareRow(p: CatalogSnapshotRow, row: CatalogSnapshotRow): Entry[] {
     })
   const couponBefore = p.coupon?.trim() || undefined
   const couponAfter = row.coupon?.trim() || undefined
-  if ((couponBefore === undefined) !== (couponAfter === undefined)) {
+  if (
+    !unread(p, 'coupon') &&
+    !unread(row, 'coupon') &&
+    (couponBefore === undefined) !== (couponAfter === undefined)
+  ) {
     const start = couponAfter !== undefined
     out.push({
       kind: start ? 'discount_start' : 'discount_end',

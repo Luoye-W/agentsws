@@ -40,7 +40,7 @@ describe('规则', () => {
       '只开 http / https 网址',
     )
     expect(validateOpen({ workspace_id: 'ws_1', url: 'https://a.com', kind: 'click' })).toBe(
-      'kind 只认 google / bing / page',
+      'kind 只认 google / bing / page / html',
     )
     expect(validateOpen(null)).toBe('workspace_id 不对')
     expect(
