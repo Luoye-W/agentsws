@@ -29,6 +29,7 @@ import {
 } from '@agentsws/brand-intake'
 import { AMAZON_DELIVERY_ZIPS } from '@agentsws/contracts'
 import type { SearchBrowserChannel } from '../web-browser/channel.js'
+import type { AmazonBlockPort } from './block.js'
 
 /**
  * 被拦之后多久不再碰 Amazon（这一轮剩下的走云端；人机验证 AI 不碰）。和 WP398 联想词那一路同一个长度
@@ -71,6 +72,11 @@ export interface AmazonFrontReaderDeps {
   saveState(next: AmazonFrontState): void
   /** 站点的配送邮编（不给用 `AMAZON_DELIVERY_ZIPS`）。 */
   zipOf?(marketplace: string): string | undefined
+  /**
+   * WP402（决策 1146）：品牌级「被 Amazon 拦了」（和联想词那一边共用一份）。给了就按它停、按它记；
+   * 不给 = 只看自己这一份 `blocked_until`（测试 / 老装配）。
+   */
+  block?: AmazonBlockPort
   log?(message: string, fields?: Record<string, unknown>): void
 }
 
@@ -110,13 +116,20 @@ export function createAmazonFrontReader(deps: AmazonFrontReaderDeps): AmazonFron
   const zipOf = deps.zipOf ?? ((mk: string) => AMAZON_DELIVERY_ZIPS[mk.trim().toUpperCase()])
 
   const pausedUntil = (): number | undefined => {
+    if (deps.block !== undefined) return deps.block.pausedUntil()
     const until = deps.state().blocked_until
     return until !== undefined && until > deps.nowMs() ? until : undefined
   }
 
   const markBlocked = (url: string): void => {
     const now = deps.nowMs()
-    deps.saveState({ ...deps.state(), blocked_at: now, blocked_until: now + AMAZON_BLOCK_PAUSE_MS })
+    if (deps.block !== undefined) deps.block.block('competitor')
+    else
+      deps.saveState({
+        ...deps.state(),
+        blocked_at: now,
+        blocked_until: now + AMAZON_BLOCK_PAUSE_MS,
+      })
     deps.log?.('Amazon 要人机验证：暂停读 Amazon', { workspace_id: ws, host: hostOf(url) })
   }
 

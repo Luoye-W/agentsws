@@ -25,7 +25,7 @@
 
 import type { Iso8601, WorkspaceId } from './common.js'
 import type { MonitorRunPart, MonitorSource } from './pr-watch.js'
-import type { ReadRouteAttempt } from './read-chain.js'
+import type { AmazonBlockState, AmazonOwnBrowserConsent, ReadRouteAttempt } from './read-chain.js'
 
 /* ── 监控源 ───────────────────────────────────────────────────────── */
 
@@ -408,4 +408,11 @@ export interface CompetitorWatchView {
   last_run?: CompetitorWatchRun
   /** 有源、但这类进料口这台机器还没接上（WP393 / WP394 还没装时照实说）。 */
   missing_adapters: CompetitorSourceKind[]
+  /**
+   * WP402（决策 1140 / 1146）：Amazon 走你自己的浏览器（取数链第 3 条路）——同意了没有、这台有没有这条路
+   * （设置里撤回 / 重新打开用）。托管实例没有。
+   */
+  own_browser?: AmazonOwnBrowserConsent & { available: boolean }
+  /** WP402：品牌级「被 Amazon 拦了」（竞品读页与联想词共用；面板那一句「暂停到几点」用）。 */
+  amazon_block?: AmazonBlockState
 }

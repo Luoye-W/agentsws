@@ -10,6 +10,7 @@
  * 权限：店铺管理与 Amazon 店铺运营都读商品（`product` read）；改频率、现在读一次只动本机、只读外部公开页面，同一把闸。
  */
 import {
+  type AmazonOwnBrowserConsent,
   COMPETITOR_CHANGE_KINDS,
   type CompetitorChange,
   type CompetitorChangeKind,
@@ -42,6 +43,14 @@ export interface CompetitorWatchPort {
     patch: Partial<CompetitorWatchSettings>,
   ): MaybePromise<CompetitorWatchSettings>
   runNow(workspace_id: WorkspaceId): Promise<CompetitorWatchRun>
+  /**
+   * WP402（决策 1140 / 1146）：Amazon 走你自己的浏览器——设置里同意 / 撤回（撤回 = 不用、不再问）。
+   * 没装这一块的本机服务没有这一口。
+   */
+  setOwnBrowserConsent?(
+    workspace_id: WorkspaceId,
+    consent: 'granted' | 'revoked',
+  ): MaybePromise<AmazonOwnBrowserConsent>
 }
 
 const READ = {
@@ -65,6 +74,8 @@ const settingsSchema = z
     new_within_days: z.number().int().min(1).max(90).optional(),
   })
   .strict()
+
+const ownBrowserSchema = z.object({ consent: z.enum(['granted', 'revoked']) }).strict()
 
 const isoOf = (raw: string | undefined, name: string): Iso8601 | undefined => {
   if (raw === undefined || raw === '') return undefined
@@ -173,6 +184,31 @@ export function competitorWatchRoutes(): Route[] {
         returns: 'CompetitorWatchRun',
       },
       async (c, deps) => ok(c, await portOf(deps).runNow(principalOf(c).workspace_id)),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/competitor-watch/own-browser',
+        operationId: 'setCompetitorOwnBrowserConsent',
+        summary:
+          'Amazon 读不到时用你自己的浏览器读（只读、每家每天至多一次）：同意 / 撤回（撤回 = 不用、不再问）',
+        tag: 'store',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: ownBrowserSchema,
+        returns: 'AmazonOwnBrowserConsent',
+      },
+      async (c, deps) => {
+        const { consent } = await body(c, ownBrowserSchema)
+        const set = portOf(deps).setOwnBrowserConsent
+        if (set === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个本机服务版本没有「用你自己的浏览器读」这一项。',
+          )
+        return ok(c, await set(principalOf(c).workspace_id, consent))
+      },
     ),
   ]
 }

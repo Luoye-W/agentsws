@@ -170,9 +170,20 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
       got = { rows: [], complete: false, error: failText(src.label, e) }
     }
     if (got.error !== undefined && got.rows.length === 0) {
-      store.putSource({ ...src, status: 'failed', last_try_at: now, last_error: got.error })
+      store.putSource({
+        ...src,
+        status: 'failed',
+        last_try_at: now,
+        last_error: got.error,
+        ...(got.attempts === undefined ? {} : { last_attempts: got.attempts }),
+      })
       return {
-        part: { ...base, status: 'failed', message: got.error },
+        part: {
+          ...base,
+          status: 'failed',
+          message: got.error,
+          ...(got.attempts === undefined ? {} : { attempts: got.attempts }),
+        },
         changes: [],
         note: got.error,
       }
@@ -208,6 +219,9 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
     delete next.last_error
     if (got.via !== undefined) next.last_via = got.via
     else delete next.last_via
+    // WP402：这一次取数链上试过哪几条路（连接卡那一行「走了哪条路」）
+    if (got.attempts !== undefined) next.last_attempts = got.attempts
+    else delete next.last_attempts
     store.putSource(next)
     const partial = got.complete ? undefined : `${src.label} 只读到一部分，这次不判下架`
     const message = [
@@ -227,6 +241,7 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
         changes: out.changes.length,
         complete: got.complete,
         ...(got.via === undefined ? {} : { via: got.via }),
+        ...(got.attempts === undefined ? {} : { attempts: got.attempts }),
         ...(out.baseline ? { baseline: true as const } : {}),
         ...(message === '' ? {} : { message }),
       },

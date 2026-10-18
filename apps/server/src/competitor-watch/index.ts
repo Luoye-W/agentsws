@@ -28,6 +28,7 @@ export {
   createCompetitorWatch,
 } from './service.js'
 export { browserTextReadOf, createShopCatalogAdapter, nodePageFetch } from './shop-adapter.js'
+export { type ShopPageCloudPort, shopPageCloudRead } from './shop-cloud.js'
 export { amazonHomeOf, type SourceSync, syncSources, wantedSources } from './sources.js'
 export { type CompetitorWatchDb, createCompetitorWatchDb } from './store.js'
 export {
