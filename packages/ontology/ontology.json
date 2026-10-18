@@ -7,6 +7,8 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-inventory.ts",
+    "packages/contracts/src/amazon-reimbursement.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -87,6 +89,7 @@
     "packages/roles/roles/ads/meta.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
+    "packages/roles/roles/amz/store.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/b2b/exhibition.yml",
     "packages/roles/roles/b2b/fulfillment.yml",
@@ -134,7 +137,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6c0c947329c50389820f6413c170f061",
+  "source_digest": "12b18b7b0d95f805c74fc5e15f082bf8",
   "objects": [
     {
       "id": "ad",
@@ -10445,6 +10448,7 @@
         "ads.meta",
         "ads.tiktok",
         "ads.x",
+        "amz.store",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",
