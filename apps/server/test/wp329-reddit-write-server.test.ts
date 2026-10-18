@@ -226,6 +226,18 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
 
   it('WP328 交过来的「待处理」条目：起草一份、直接出卡（人在卡上改字再批）；私信不回', async () => {
     const b = await brand()
+    const actor = {
+      workspace_id: server.bootstrap.workspace.id,
+      person_id: server.bootstrap.person.id,
+      assignment_id: reddit.id,
+      role_id: reddit.role_id,
+    }
+    // WP411：品牌号怎么说话没定 → 先不起草（宿主出设置卡）；定了再起草
+    expect(
+      await b.redditWrites.draftAndStage(actor, { target: replyTarget as never }),
+    ).toMatchObject({ staged: false, skipped: 'needs_persona' })
+    const full = await server.brands.forWorkspace(server.bootstrap.workspace.id)
+    full.redditPersona?.set({ stance: 'personal' })
     const out = await b.redditWrites.draftAndStage(
       {
         workspace_id: server.bootstrap.workspace.id,

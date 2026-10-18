@@ -139,7 +139,8 @@ export interface RedditWatchAssembly {
   setStatus(
     id: string,
     status: RedditWatchItemStatus,
-    extra?: { outbound_record_id?: string },
+    /** WP411：`note` = 一句人话（「品牌号 10-12 已经回过这一条」）。 */
+    extra?: { outbound_record_id?: string; note?: string },
   ): RedditWatchEntry | undefined
   /** 人点「现在巡查」。正在跑的那一轮没结束就回那一轮。 */
   runNow(): Promise<RedditWatchRun>
@@ -1512,6 +1513,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       const next: RedditWatchEntry = { ...it, status, status_at: options.now() }
       if (extra?.outbound_record_id !== undefined)
         next.outbound_record_id = extra.outbound_record_id
+      if (extra?.note !== undefined) next.note = extra.note
       store.put(next)
       emit('reddit_watch.item_status', { item_id: id, status })
       return next

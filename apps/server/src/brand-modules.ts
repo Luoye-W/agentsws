@@ -69,6 +69,7 @@ import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
 import type { RedditLimits } from './reddit-write/limits.js'
+import type { RedditPersonaStore } from './reddit-write/persona.js'
 import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
@@ -341,6 +342,8 @@ export interface BrandModuleSet {
   amazonBlock?: AmazonBlockPort
   /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
   redditLimits?: RedditLimits
+  /** WP411：品牌号在 Reddit 上怎么说话（配置卡 `reddit.persona`；没配之前自动起草不出卡）。 */
+  redditPersona?: RedditPersonaStore
   /** WP396（docs/106 §13）：自家 Amazon Listing 体检（托管实例没有）。 */
   amazonListing?: AmazonListingCheckup
   /**
