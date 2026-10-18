@@ -333,7 +333,9 @@ export const ROLE_SCHEMA: Node = Schema.object({
   // 写成「对象 | 不写」：只写 `Schema.object` 的话，不写的职责会被补成 `{}` 再判 `uses` 缺失
   browser_extension: Schema.union([
     Schema.object({
-      uses: Schema.array(Schema.union(['reddit', 'kol', 'google_ads', 'meta_ads', 'social'] as const))
+      uses: Schema.array(
+        Schema.union(['reddit', 'kol', 'google_ads', 'meta_ads', 'social'] as const),
+      )
         .min(1)
         .required(),
     }),

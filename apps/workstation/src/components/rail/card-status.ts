@@ -248,7 +248,7 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
       dot: 'alert',
       dotLabel: t('conncard.summary.ext_install'),
     }
-  if (ext !== undefined && ext.steps.some((s) => s.done === false))
+  if (ext?.steps.some((s) => s.done === false) === true)
     return {
       summary: t('conncard.summary.ext_step'),
       dot: 'alert',

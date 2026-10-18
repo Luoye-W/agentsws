@@ -518,6 +518,73 @@ try {
   await panel.locator('[data-testid="ws-tab-todo"]').click()
   const gone = await until(async () => (await cards.count()) === 0, 15_000)
   check('另一张在工坊里处理了 → 侧边栏那张自己收起', gone)
+
+  // ⑤ WP419（决策 1231）：社媒发帖不要开发者应用——到点了交给你：侧边栏「等你发的帖子」、打开发帖页、发好了
+  const fbAsg = server.roles.assignments.create({
+    person_id: me,
+    workspace_id: ws,
+    granted_by: me,
+    ranges: [{ kind: 'store', id: 'store_1' }],
+    role_id: 'social.facebook',
+  })
+  const actor = {
+    workspace_id: ws,
+    person_id: me,
+    assignment_id: fbAsg.id,
+    role_id: 'social.facebook',
+  }
+  const acct = await brand.socialService.port.createAccount(actor, {
+    channel: 'facebook',
+    handle: 'nordvolt',
+    display_name: 'Nordvolt',
+    url: 'https://www.facebook.com/nordvolt',
+    external_id: 'https://www.facebook.com/nordvolt',
+  })
+  const made = await brand.socialService.port.createPost(actor, {
+    account_id: acct.id,
+    kind: 'post',
+    body: 'Weekend camping checklist: what we pack and why.',
+    scheduled_at: new Date(Date.now() + 1500).toISOString(),
+  })
+  const postCard =
+    made.staged.approval_item_id === undefined
+      ? undefined
+      : await server.txn.approvals.get(made.staged.approval_item_id)
+  const postTok = postCard?.deliveries.find(
+    (d) => d.to === me && d.status === 'sent',
+  )?.decision_token
+  if (postCard !== undefined && postTok !== undefined)
+    await server.approvals.decide(postCard.id, me, {
+      action: 'approve',
+      decision_token: postTok,
+      via: 'workstation',
+    })
+  await new Promise((r) => setTimeout(r, 2000))
+  for (let i = 0; i < 20 && brand.socialService.handoffs().length === 0; i += 1) {
+    await brand.socialService.publishDue()
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  const postRow = panel.locator('[data-testid="ws-post"]')
+  const postShown = await until(async () => (await postRow.count()) === 1, 20_000)
+  check('到点了没接官方接口 → 侧边栏「等你发的帖子」里有这一条（不要开发者应用）', postShown)
+  await shot(panel, '8-post-light')
+  await panel.emulateMedia({ colorScheme: 'dark' })
+  await shot(panel, '8-post-dark')
+  await panel.emulateMedia({ colorScheme: 'light' })
+  await panel
+    .locator('[data-testid="ws-post-link"]')
+    .fill('https://www.facebook.com/nordvolt/posts/1')
+  await panel.locator('[data-testid="ws-post-done"]').click()
+  const published = await until(
+    () => brand.social.post(made.post.id)?.status === 'published',
+    15_000,
+  )
+  const after = brand.social.post(made.post.id)
+  check(
+    '点「发好了」带链接 → 帖子记已发、读回确认（插件不点发布）',
+    published && after?.published_via === 'extension' && after?.readback === 'link',
+    JSON.stringify({ status: after?.status, via: after?.published_via, readback: after?.readback }),
+  )
   await panel.emulateMedia({ colorScheme: 'dark' })
   await shot(panel, '2-todo-dark-after')
   await panel.emulateMedia({ colorScheme: 'light' })
