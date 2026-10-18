@@ -185,3 +185,46 @@ describe('WP414 同类卡跟着前一个决定', () => {
     expect(screen.queryByTestId('deck-follow-suggested')).toBeNull()
   })
 })
+
+describe('WP414 Reddit「发出去」卡（「发送」在卡身里）', () => {
+  it('卡身里点「发送」→ 同类卡也报到顶上那一行「要一起发送吗」；底下那排是「修改 / 不发 / 稍后」', async () => {
+    const user = userEvent.setup()
+    const base = draftCard()
+    home = homeData({
+      queue: [
+        draftCard({
+          id: 'ap_1',
+          title: '回复 u/alice（r/Smartphones）',
+          detail: {
+            ...base.detail,
+            payload: {
+              form: 'reddit_write',
+              channel: 'reddit',
+              channel_label: 'Reddit · r/Smartphones',
+              reddit: {
+                kind: 'comment',
+                subreddit: 'Smartphones',
+                parent_fullname: 't3_p1',
+                permalink: '/r/Smartphones/comments/p1/x/',
+              },
+              body: { text: 'Thanks for sharing.' },
+            },
+          },
+        }),
+        draftCard({ id: 'ap_2', title: '回复 u/bob（r/Smartphones）' }),
+      ],
+    })
+    decideOut = follow('approve', 'suggested')
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    const bar = await screen.findByTestId('deck-action-bar')
+    expect(
+      within(bar)
+        .getAllByRole('button')
+        .map((b) => b.textContent?.trim()),
+    ).toEqual(['修改', '不发', '稍后'])
+    await user.click(screen.getByTestId('reddit-write-send'))
+    const line = await screen.findByTestId('deck-follow-suggested')
+    expect(line.textContent).toContain('要一起发送吗')
+    expect(approveBatch).not.toHaveBeenCalled()
+  })
+})

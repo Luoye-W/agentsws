@@ -9,7 +9,7 @@
  *    「一起发」要再点一次确认（与超额再确认同一个做法），「逐张看」翻到第一张。
  */
 import type { DeckCard } from '@agentsws/deck'
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +27,22 @@ export interface DeckAfter {
   card: DeckCard
   action: 'approve' | 'reject' | 'snooze' | 'instruct'
   follow?: DecideFollowData
+}
+
+/**
+ * 卡身里自己带主按钮的卡（Reddit「发出去」卡的「发送」在卡身里）决定完，把回包里的同类卡交给牌堆那一行。
+ * 不在牌堆里渲染（独立的聊天窗、插件）时没有提供者，什么都不做。
+ */
+export const DeckAfterContext = createContext<((after: DeckAfter) => void) | undefined>(undefined)
+
+/** 卡身里用：决定完报一声（没有同类就不报）。 */
+export function useReportDeckAfter(): (after: DeckAfter) => void {
+  const report = useContext(DeckAfterContext)
+  return (after) => {
+    const f = after.follow
+    if (f === undefined || (f.applied.length === 0 && f.suggested.length === 0)) return
+    report?.(after)
+  }
 }
 
 /** 快捷理由（「其他…」开一个输入框）。回信类说「不想回」，别的卡说「不需要」。 */

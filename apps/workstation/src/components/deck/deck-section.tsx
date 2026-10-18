@@ -30,7 +30,11 @@ import {
   DeckFilterPop,
   type PositionOption,
 } from '@/components/deck/deck-filters'
-import { type DeckAfter, DeckFollowStrip } from '@/components/deck/deck-follow-strip'
+import {
+  type DeckAfter,
+  DeckAfterContext,
+  DeckFollowStrip,
+} from '@/components/deck/deck-follow-strip'
 import {
   directionForDeckAction,
   directionForDeckKey,
@@ -496,16 +500,19 @@ export function DeckSection({
                 className="absolute inset-x-6 top-4 h-full -rotate-1 rounded-2xl border bg-card/40"
               />
             ) : null}
-            <DeckCardView
-              key={card.id}
-              card={card}
-              mode={mode}
-              busy={mutation.isPending}
-              exiting={exiting}
-              {...(error === '' ? {} : { error })}
-              onDecide={dispatch}
-              onOpen={onOpen}
-            />
+            {/* WP414：卡身里自带主按钮的卡（Reddit「发送」）决定完，同类卡也报到顶上那一行 */}
+            <DeckAfterContext.Provider value={setAfter}>
+              <DeckCardView
+                key={card.id}
+                card={card}
+                mode={mode}
+                busy={mutation.isPending}
+                exiting={exiting}
+                {...(error === '' ? {} : { error })}
+                onDecide={dispatch}
+                onOpen={onOpen}
+              />
+            </DeckAfterContext.Provider>
           </div>
           {/* WP141：提示行按这张卡真有的动作生成（没有「稍后」就不写 ↑ 稍后） */}
           {hints.length === 0 ? null : (
