@@ -8,6 +8,7 @@
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
 import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
+import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
 import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
@@ -8567,6 +8568,7 @@ const TABLES: Record<Lang, Table> = {
     // WP394：「竞品动向」那一块
     ...AMAZON_COMPETITORS_ZH,
     ...AMAZON_KEYWORDS_ZH,
+    ...AMAZON_LISTING_ZH,
   },
   en: {
     ...en,
@@ -8608,6 +8610,7 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_OPS_EN,
     ...AMAZON_COMPETITORS_EN,
     ...AMAZON_KEYWORDS_EN,
+    ...AMAZON_LISTING_EN,
   },
 }
 

@@ -22,6 +22,7 @@ import type {
   ScenarioActor,
   ScenarioEvent,
   ScenarioExpected,
+  ScenarioListingPage,
   ScenarioStandIns,
   ScenarioTxnPolicy,
   Tier,
@@ -183,6 +184,8 @@ const EVENT_KEYS = [
   'position.open',
   // WP395：首次设置按原话与勾选划分岗位
   'position.plan',
+  // WP396：自家 Listing 体检一次
+  'listing.check',
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
@@ -329,6 +332,8 @@ const EXPECTED_KEYS = [
   // WP395：首次设置划分出的岗位、没数据照实说
   'positions_planned',
   'position_answer_no_data',
+  // WP396：Listing 体检出了哪几处问题、草稿、设计需求单
+  'listing_checkup',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
   // WP392：竞品监控比出了哪几种变化
@@ -2457,6 +2462,71 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'listing.check': {
+      known(source, `${path}.${key}`, body, ['who', 'pages', 'own_sellers', 'blocked', 'design'])
+      if (!Array.isArray(body.pages)) fail(source, `${path}.${key}.pages`, '必须是列表')
+      const pages = body.pages.map((r, i) => {
+        const at2 = `${path}.${key}.pages[${i}]`
+        if (!isRec(r)) fail(source, at2, '必须是对象')
+        known(source, at2, r, [
+          'asin',
+          'marketplace',
+          'title',
+          'bullets',
+          'description',
+          'aplus',
+          'images',
+          'video',
+          'rating',
+          'reviews',
+          'price',
+          'stock',
+          'seller',
+        ])
+        const optNum = (k: string): number | undefined =>
+          r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
+        const optBool = (k: string): boolean | undefined => {
+          if (r[k] === undefined) return undefined
+          if (typeof r[k] !== 'boolean') fail(source, `${at2}.${k}`, '必须是 true / false')
+          return r[k] as boolean
+        }
+        if (r.stock !== undefined && r.stock !== 'in_stock' && r.stock !== 'out_of_stock')
+          fail(source, `${at2}.stock`, '只认 in_stock / out_of_stock')
+        const page: Record<string, unknown> = {
+          asin: str(source, `${at2}.asin`, r.asin),
+          marketplace: optStr(source, `${at2}.marketplace`, r.marketplace),
+          title: optStr(source, `${at2}.title`, r.title),
+          bullets: optStrList(source, `${at2}.bullets`, r.bullets),
+          description: optBool('description'),
+          aplus: optBool('aplus'),
+          images: optNum('images'),
+          video: optBool('video'),
+          rating: optNum('rating'),
+          reviews: optNum('reviews'),
+          price: optStr(source, `${at2}.price`, r.price),
+          stock: r.stock,
+          seller: optStr(source, `${at2}.seller`, r.seller),
+        }
+        for (const k of Object.keys(page)) if (page[k] === undefined) delete page[k]
+        return page as unknown as ScenarioListingPage
+      })
+      if (body.design !== undefined && typeof body.design !== 'boolean')
+        fail(source, `${path}.${key}.design`, '必须是 true / false')
+      const blocked =
+        body.blocked === undefined ? undefined : num(source, `${path}.${key}.blocked`, body.blocked)
+      const sellers = optStrList(source, `${path}.${key}.own_sellers`, body.own_sellers)
+      return {
+        at,
+        type: 'listing.check',
+        listing_check: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          pages,
+          ...(sellers === undefined ? {} : { own_sellers: sellers }),
+          ...(blocked === undefined ? {} : { blocked }),
+          ...(body.design === true ? { design: true } : {}),
+        },
+      }
+    }
     case 'position.open': {
       known(source, `${path}.${key}`, body, ['who', 'position', 'text', 'judge'])
       const judge = body.judge
@@ -2849,6 +2919,40 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   }
   const noData = optStrList(source, 'expected.position_answer_no_data', raw.position_answer_no_data)
   if (noData !== undefined) out.position_answer_no_data = noData
+  // WP396：Listing 体检
+  if (raw.listing_checkup !== undefined) {
+    const lc = raw.listing_checkup
+    if (!isRec(lc)) fail(source, 'expected.listing_checkup', '必须是对象')
+    known(source, 'expected.listing_checkup', lc, [
+      'issues',
+      'drafts_at_least',
+      'design_requests',
+      'design_routed_to',
+      'stopped',
+      'pages_read',
+    ])
+    if (lc.stopped !== undefined && lc.stopped !== 'blocked')
+      fail(source, 'expected.listing_checkup.stopped', '只认 blocked')
+    const issues = optStrList(source, 'expected.listing_checkup.issues', lc.issues)
+    const n = (k: string): number | undefined =>
+      lc[k] === undefined ? undefined : num(source, `expected.listing_checkup.${k}`, lc[k])
+    const drafts = n('drafts_at_least')
+    const design = n('design_requests')
+    const pagesRead = n('pages_read')
+    const routedTo = optStr(
+      source,
+      'expected.listing_checkup.design_routed_to',
+      lc.design_routed_to,
+    )
+    out.listing_checkup = {
+      ...(issues === undefined ? {} : { issues }),
+      ...(drafts === undefined ? {} : { drafts_at_least: drafts }),
+      ...(design === undefined ? {} : { design_requests: design }),
+      ...(lc.stopped === 'blocked' ? { stopped: 'blocked' as const } : {}),
+      ...(pagesRead === undefined ? {} : { pages_read: pagesRead }),
+      ...(routedTo === undefined ? {} : { design_routed_to: routedTo }),
+    }
+  }
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)

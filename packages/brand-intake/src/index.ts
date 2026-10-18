@@ -469,6 +469,8 @@ export type { AmazonProductFacts, AmazonSearchCard } from './amazon.js'
 export {
   AMAZON_RESOURCE_HOSTS,
   AMAZON_SITE_HOSTS,
+  type AmazonAvailability,
+  amazonAvailability,
   amazonAvailable,
   amazonBsr,
   amazonCoupon,
@@ -479,6 +481,8 @@ export {
   amazonMoney,
   amazonPriceText,
   amazonProductUrlOf,
+  amazonRating,
+  amazonReviews,
   amazonSearchCards,
   amazonSearchUrlOf,
   amazonSpecs,
@@ -489,6 +493,13 @@ export {
   isAmazonMissingPage,
   parseAmazonProduct,
 } from './amazon.js'
+// WP396（docs/106 §13）：自家 Listing 体检要的那几格（读页本身是 WP394 的积木）
+export {
+  currencyOfPrice,
+  listingBullets,
+  listingPrice,
+  readAmazonListingFacts,
+} from './amazon-listing.js'
 export type {
   AmazonAsinReadDeps,
   AmazonAsinReadResult,

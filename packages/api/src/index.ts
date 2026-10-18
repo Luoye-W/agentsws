@@ -149,6 +149,13 @@ export {
   type AmazonKeywordsPort,
   amazonKeywordRoutes,
 } from './routes/amazon-keywords.js'
+// WP396：自家 Amazon Listing 体检
+export type {
+  AmazonListingPort,
+  AmazonListingRulePatch,
+  AmazonListingRunView,
+} from './routes/amazon-listing.js'
+export { amazonListingRoutes } from './routes/amazon-listing.js'
 // WP287：「发给他的卡他必须点得动」那把尺子（只关于本人的卡）——服务端岗位页计数也用它
 export { isSelfCard, SELF_CARD_FORMS } from './routes/approvals.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'

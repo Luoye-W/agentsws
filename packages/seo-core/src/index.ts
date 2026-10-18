@@ -25,6 +25,8 @@
 export * from './ai-traffic.js'
 // WP398（docs/106 §13 A8）：Amazon 词库——拆词、归一化、他牌名、差距
 export * from './amazon-keywords.js'
+// WP396（docs/106 §13）：自家 Amazon Listing 体检的规则表与判法
+export * from './amazon-listing-check.js'
 export * from './attribution.js'
 export * from './claim-rules.js'
 export * from './daily.js'

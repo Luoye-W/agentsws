@@ -716,6 +716,49 @@ export function checkExpectations(
       `划分出 ${show(gotPairs) || '（没有）'}，期望 ${show(want) || '（没有）'}`,
     )
   }
+  // WP396（docs/106 §13）：Listing 体检出了哪几处问题、草稿、设计需求单；被拦后不再读；体检自己零写
+  if (expected.listing_checkup !== undefined) {
+    const want = expected.listing_checkup
+    const issues = evidence.events.filter((e) => e.type === 'simulation.listing_issue')
+    const reads = evidence.events.filter((e) => e.type === 'simulation.listing_read')
+    const okReads = reads.filter((e) => payloadOf(e).status === 'ok').length
+    const blockedAt = reads.findIndex((e) => payloadOf(e).status === 'blocked')
+    const got = issues.map((e) => String(payloadOf(e).rule_id))
+    const drafts = issues.filter((e) => payloadOf(e).draft === true).length
+    const designEvents = evidence.events.filter(
+      (e) =>
+        e.type === 'simulation.design_request_requested' &&
+        payloadOf(e).from_role_id === 'amz.store',
+    )
+    const designs = designEvents.length
+    const problems: string[] = []
+    if (want.issues !== undefined && got.join(',') !== want.issues.join(','))
+      problems.push(`问题是 [${got.join(', ')}]，期望 [${want.issues.join(', ')}]`)
+    if (want.drafts_at_least !== undefined && drafts < want.drafts_at_least)
+      problems.push(`只有 ${drafts} 处带草稿`)
+    if (want.design_requests !== undefined && designs !== want.design_requests)
+      problems.push(`下了 ${designs} 张设计需求单，期望 ${want.design_requests}`)
+    if (
+      want.design_routed_to !== undefined &&
+      designEvents.some((e) => payloadOf(e).routed_to !== want.design_routed_to)
+    )
+      problems.push(
+        `需求单路由到了 [${designEvents.map((e) => String(payloadOf(e).routed_to ?? '（没判出来）')).join(', ')}]，期望 ${want.design_routed_to}`,
+      )
+    if (want.pages_read !== undefined && okReads !== want.pages_read)
+      problems.push(`读了 ${okReads} 页，期望 ${want.pages_read}`)
+    if (want.stopped === 'blocked' && (blockedAt < 0 || blockedAt !== reads.length - 1))
+      problems.push('被拦之后还在读（或者根本没被拦）')
+    if (issues.some((e) => typeof payloadOf(e).source !== 'string' || payloadOf(e).source === ''))
+      problems.push('有问题没带规则出处')
+    add(
+      'listing_checkup',
+      problems.length === 0,
+      problems.length === 0
+        ? `体检出 ${got.length} 处（草稿 ${drafts} 处、设计需求单 ${designs} 张）`
+        : problems.join('；'),
+    )
+  }
   // WP395（docs/36 §3）：这几条职责的当场回答照实说没数据——不出组件、不出数
   if (expected.position_answer_no_data !== undefined) {
     const answered = evidence.events

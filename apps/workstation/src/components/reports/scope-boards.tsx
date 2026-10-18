@@ -16,6 +16,8 @@ import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creat
 import { AMAZON_STORE_ROLE, AmazonOpsBoard } from '@/components/amazon/amazon-ops-board'
 // WP394：「竞品动向」块（模块里自己登记进 Amazon 运营面板）
 import '@/components/amazon/amazon-competitors'
+// WP396：「Listing 体检」块的身体（导入即注册进上面那块面板）
+import '@/components/amazon/listing-checkup'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { DataBoard } from '@/components/position/data-board'

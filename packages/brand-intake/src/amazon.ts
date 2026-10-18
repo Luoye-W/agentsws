@@ -544,19 +544,49 @@ export function amazonPriceText(html: string): string | undefined {
   return `${stripTags(symbol ?? '')}${w}${fraction === undefined ? '' : `.${stripTags(fraction)}`}`
 }
 
-/** 优惠券那一句（`Apply $100 coupon` / `Save 10% with coupon`）；没有不给。 */
+/**
+ * 优惠券那一句（`Apply $100 coupon` / `Save 10% with coupon` / `$50 coupon applied`）；没有不给。
+ * WP394 与 WP396（自家 Listing 体检）共用这一份：优惠券块（新版 `promoPriceBlockMessage`、老版 `couponBadgeRegularVpc`、
+ * `vpcButton`）里先认 `couponText…` / `couponLabelText` 那一格，认不出再按字面找。
+ */
 export function amazonCoupon(html: string): string | undefined {
   const scope =
     sliceOfId(html, 'promoPriceBlockMessage_feature_div', 6000) ??
+    sliceOfId(html, 'couponBadgeRegularVpc', 3000) ??
     sliceOfId(html, 'vpcButton', 3000) ??
     html
   const m =
     /(?:id=["']couponText[^"']*["']|class=["'][^"']*couponLabelText[^"']*["'])[^>]*>([\s\S]{0,300}?)<\/(?:label|span)>/i.exec(
       scope,
-    )?.[1] ?? /((?:Apply|Save)\s[^<]{1,40}?coupon)/i.exec(scope)?.[1]
+    )?.[1] ??
+    /((?:apply|save)\s+[^<]{0,40}?coupon[^<]{0,30}|[^<>]{0,20}coupon\s+applied[^<]{0,20})/i.exec(
+      scope,
+    )?.[1]
   if (m === undefined) return undefined
   const text = stripTags(m).replace(/\s*(?:Terms|Shop items)\s*$/i, '')
   return text === '' ? undefined : text.slice(0, 120)
+}
+
+/** 评分（0–5；`acrPopover` 的 title，多语言站点那几种写法都认）。读不到不给。 */
+export function amazonRating(html: string): number | undefined {
+  const pop =
+    /id=["']acrPopover["'][^>]*title=["']([0-9.,]+)\s*(?:out of|von|sur|su|de|5つ星のうち)/i.exec(
+      html,
+    )?.[1]
+  const raw = pop ?? /([0-9.,]+)\s*out of\s*5\s*stars/i.exec(html)?.[1]
+  if (raw === undefined) return undefined
+  const n = Number(raw.replace(',', '.'))
+  return Number.isFinite(n) && n > 0 && n <= 5 ? n : undefined
+}
+
+/** 评论数（`acrCustomerReviewText`：`2,318 ratings` / `(987)`；退到页面上的 `N global ratings`）。读不到不给。 */
+export function amazonReviews(html: string): number | undefined {
+  const raw =
+    /id=["']acrCustomerReviewText["'][^>]*>\s*\(?([\d.,\s]*\d)/i.exec(html)?.[1] ??
+    /([\d,]+)\s*(?:global ratings|ratings)\b/i.exec(html)?.[1]
+  if (raw === undefined) return undefined
+  const n = Number(raw.replace(/[.,\s]/g, ''))
+  return Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
 /**
@@ -583,14 +613,53 @@ export function amazonBsr(html: string): CatalogBsr[] {
   return out
 }
 
-/** 有没有货：`#availability` 那一句；`#outOfStock` 块在就是没货。读不到不给。 */
-export function amazonAvailable(html: string): boolean | undefined {
-  if (/id=["']outOfStock["']/i.test(html)) return false
-  const raw = /id=["']availability["'][^>]*>([\s\S]{0,800}?)<\/div>/i.exec(html)?.[1]
+/** 「有没有货」那一句的几种结果（WP396 体检卡照原句写）。 */
+export interface AmazonAvailability {
+  availability: 'in_stock' | 'out_of_stock' | 'unknown'
+  /** 页面上的原句（最多 160 字）。 */
+  availability_text?: string
+}
+
+const textAfterId = (html: string, id: string): string | undefined => {
+  const raw = new RegExp(
+    `id=["']${id}["'][^>]*>([\\s\\S]{0,2000}?)<\\/(?:span|div|h1|a|p|td)>`,
+    'i',
+  ).exec(html)?.[1]
   const text = raw === undefined ? '' : stripTags(raw)
-  if (/currently unavailable|out of stock|temporarily out of stock|not available/i.test(text))
-    return false
-  if (/in stock|only \d+ left|usually ships|available to ship/i.test(text)) return true
+  return text === '' ? undefined : text
+}
+
+/**
+ * 有没有货：`#availability` 那一句（缺货页是 `#outOfStock`），多语言站点那几种说法都认。
+ * WP394 与 WP396 共用这一份。
+ */
+export function amazonAvailability(html: string): AmazonAvailability {
+  const text =
+    textAfterId(html, 'availability') ??
+    (/id=["']outOfStock["']/i.test(html) ? textAfterId(html, 'outOfStock') : undefined)
+  if (text === undefined) return { availability: 'unknown' }
+  const t = text.slice(0, 160)
+  if (
+    /currently unavailable|out of stock|nicht verfügbar|actuellement indisponible|non disponibile|no disponible|在庫切れ|現在お取り扱いできません/i.test(
+      t,
+    )
+  )
+    return { availability: 'out_of_stock', availability_text: t }
+  if (
+    /in stock|only \d+ left|auf lager|en stock|disponibilità immediata|在庫あり|usually ships|available to ship/i.test(
+      t,
+    )
+  )
+    return { availability: 'in_stock', availability_text: t }
+  return { availability: 'unknown', availability_text: t }
+}
+
+/** 有没有货（真假）：照 {@link amazonAvailability}；那一句认不出时，有「加入购物车」按钮算有货。读不到不给。 */
+export function amazonAvailable(html: string): boolean | undefined {
+  const a = amazonAvailability(html).availability
+  if (a === 'out_of_stock') return false
+  if (a === 'in_stock') return true
+  if (/id=["']outOfStock["']/i.test(html)) return false
   if (/id=["']add-to-cart-button["']/i.test(html)) return true
   return undefined
 }
@@ -655,15 +724,8 @@ export function parseAmazonProduct(
   const price = priceText === undefined ? undefined : amazonMoney(priceText)
   const listText = amazonListPrice(html)
   const list = listText === undefined ? undefined : amazonMoney(listText)
-  const rating = Number(
-    /id=["']acrPopover["'][^>]*title=["']([0-9.,]+)\s/i.exec(html)?.[1]?.replace(',', '.') ??
-      /([0-9.]+)\s*out of\s*5\s*stars/i.exec(html)?.[1] ??
-      Number.NaN,
-  )
-  const reviewsRaw =
-    /id=["']acrCustomerReviewText["'][^>]*>\s*\(?([\d.,]+)/i.exec(html)?.[1] ??
-    /([\d,]+)\s*(?:global ratings|ratings)\b/i.exec(html)?.[1]
-  const reviews = reviewsRaw === undefined ? Number.NaN : Number(reviewsRaw.replace(/[.,]/g, ''))
+  const rating = amazonRating(html)
+  const reviews = amazonReviews(html)
   const coupon = amazonCoupon(html)
   const available = amazonAvailable(html)
   const deliverTo = amazonDeliverTo(html)
@@ -680,8 +742,8 @@ export function parseAmazonProduct(
       ? { list_price: list.value }
       : {}),
     ...(coupon === undefined ? {} : { coupon }),
-    ...(Number.isFinite(rating) && rating > 0 && rating <= 5 ? { rating } : {}),
-    ...(Number.isFinite(reviews) && reviews >= 0 ? { reviews } : {}),
+    ...(rating === undefined ? {} : { rating }),
+    ...(reviews === undefined ? {} : { reviews }),
     bsr: amazonBsr(html),
     ...(available === undefined ? {} : { available }),
     bullets: featureBullets(html),

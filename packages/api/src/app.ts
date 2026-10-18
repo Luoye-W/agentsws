@@ -15,6 +15,8 @@ import { activityRoutes } from './routes/activity.js'
 import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
 import { amazonKeywordRoutes } from './routes/amazon-keywords.js'
+// WP396：自家 Amazon Listing 体检（工作台 `/v1/amazon-listing*`）
+import { amazonListingRoutes } from './routes/amazon-listing.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -322,6 +324,8 @@ export function collectRoutes(): Route[] {
     ...competitorWatchRoutes(),
     // WP398：Amazon 词库。`/v1/amazon-keywords*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...amazonKeywordRoutes(),
+    // WP396：自家 Amazon Listing 体检。`/v1/amazon-listing*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonListingRoutes(),
   ]
 }
 

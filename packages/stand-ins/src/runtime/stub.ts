@@ -21,6 +21,7 @@ import { renderReplyBody, replySubject } from '@agentsws/support-core'
 import { ADS_TOOL_DEF_BY_NAME } from './ads.js'
 import { ADS_DATA_TOOL_DEF_BY_NAME } from './ads-data.js'
 import { AMAZON_KEYWORD_TOOL_DEF_BY_NAME } from './amazon-keywords.js'
+import { AMAZON_LISTING_TOOL_DEF_BY_NAME } from './amazon-listing.js'
 import {
   B2B_LIST_SEQUENCES_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
@@ -370,6 +371,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
       // WP398：Amazon 词库（刷新 / 看词库 / 标一个词；只给亚马逊店铺运营）
       AMAZON_KEYWORD_TOOL_DEF_BY_NAME.get(name) ??
+      // WP396：Listing 体检（读自家前台页 / 看最近一次 / 改规则；只给亚马逊店铺运营）
+      AMAZON_LISTING_TOOL_DEF_BY_NAME.get(name) ??
       // WP334：AI 自己要连接卡 / 配置卡（服务端接了才有）
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）

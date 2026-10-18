@@ -37,11 +37,17 @@ describe('亚马逊店铺运营 amz.store', () => {
 
   it('一期只读：没有 stage / write 的数据域，动作只有向设计岗下需求单（L3）', () => {
     for (const s of role.scopes) {
-      const ops = s.domain === 'approval' ? ['read', 'approve'] : ['read']
+      // WP396：唯一能提的是给设计岗的需求单（体检卡上那个按钮）——不碰 Amazon 上任何东西
+      const ops =
+        s.domain === 'approval'
+          ? ['read', 'approve']
+          : s.domain === 'design_request'
+            ? ['read', 'stage']
+            : ['read']
       expect(s.ops, s.domain).toEqual(ops)
     }
     expect(role.scopes.map((s) => s.domain).sort()).toEqual(
-      ['approval', 'knowledge', 'order', 'product', 'skill'].sort(),
+      ['approval', 'design_request', 'knowledge', 'order', 'product', 'skill'].sort(),
     )
     expect(role.actions.map((a) => a.id)).toEqual(['request_design'])
     expect(role.automation.request_design?.ceiling).toBe('L3')

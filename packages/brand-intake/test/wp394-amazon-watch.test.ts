@@ -11,6 +11,7 @@ import type { CompetitorWatchSource } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   type AmazonPageOutcome,
+  amazonAvailability,
   amazonBsr,
   amazonHostOfMarket,
   amazonMoney,
@@ -21,6 +22,7 @@ import {
   isImportantAmazonChange,
   parseAmazonProduct,
   readAmazonAsins,
+  readAmazonListingFacts,
   suggestAmazonBenchmarks,
   suggestAmazonRules,
 } from '../src/index.js'
@@ -311,5 +313,30 @@ describe('WP394 · 挑对标款（规则脑）与什么算重要', () => {
     ).toBe(true)
     expect(isImportantAmazonChange({ kind: 'rating', before: 4.1, after: 3.9 }, rules)).toBe(true)
     expect(isImportantAmazonChange({ kind: 'out_of_stock' }, rules)).toBe(false)
+  })
+})
+
+describe('WP394 · 和 WP396 体检同一份读法', () => {
+  it('优惠券、有没有货、评论数：竞品对标款那一路和自家体检那一路读出来一样', () => {
+    for (const [name, asin] of [
+      ['us-normal.html', 'B0TESTRG01'],
+      ['out-of-stock.html', 'B0TESTRG02'],
+      ['deal-coupon.html', 'B0TESTRG03'],
+    ] as const) {
+      const html = page(name)
+      const mine = parseAmazonProduct(html, { asin })
+      const theirs = readAmazonListingFacts(html, {
+        asin,
+        marketplace: 'US',
+        url: `https://www.amazon.com/dp/${asin}`,
+        read_at: NOW,
+      })
+      expect(theirs?.coupon).toBe(mine?.coupon)
+      expect(theirs?.reviews_count).toBe(mine?.reviews)
+      expect(theirs?.rating).toBe(mine?.rating)
+      expect(amazonAvailability(html).availability).toBe(
+        mine?.available === undefined ? 'unknown' : mine.available ? 'in_stock' : 'out_of_stock',
+      )
+    }
   })
 })

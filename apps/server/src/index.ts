@@ -20,6 +20,9 @@ export {
   listingTextsFromFacts,
   listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
+// WP396（docs/106 §13）：Listing 体检读页口子（WP394 的读页积木、demo 替身接这里）
+export type { AmazonListingReader, ListingPageRead } from './amazon-listing/index.js'
+export { amazonProductUrl } from './amazon-listing/index.js'
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
