@@ -1039,7 +1039,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       {
         id: 'link_account',
         label: '关联官方账号',
-        note: '送 10 积分，之后走工坊官方数据接口（按次计价，价常显在界面上）。',
+        note: '送 5 积分，之后走工坊官方数据接口（按次计价，价常显在界面上）。',
       },
       {
         id: 'byo',

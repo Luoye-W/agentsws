@@ -890,7 +890,7 @@ describe('WP142 候选池与活动：不够数说原因，给两个动作', () =
       message:
         '现在搜不了YouTube上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。',
       entry_points: [
-        { id: 'link_account', label: '关联官方账号', note: '送 10 积分' },
+        { id: 'link_account', label: '关联官方账号', note: '送 5 积分' },
         { id: 'byo', label: '接自己的数据接口', note: '不扣积分' },
       ],
     })
