@@ -42,8 +42,8 @@ describe('58 §1 五条设计职责的常量表（WP76）', () => {
     expect(designDutyForSource('dtc.support')).toBeUndefined()
   })
 
-  it('展会设计没有上游职责，人手动开', () => {
-    expect(designDutySpec('exhibition')?.request_sources).toEqual(['human'])
+  it('展会设计：人手动开，加上 B2B「展会」那条职责下的单（WP421）', () => {
+    expect(designDutySpec('exhibition')?.request_sources).toEqual(['human', 'b2b.exhibition'])
   })
 
   it('每条职责至少有一族规格，且族里真有规格（`ads` 除外——那份在 design-core）', () => {
