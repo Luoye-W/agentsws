@@ -1,5 +1,5 @@
 /**
- * WP416（自查 kol U13）：几条职责的快捷按钮同名时，后面带上是哪条职责（不出两个一模一样的「找一批红人」）。
+ * WP416（自查 kol U13）：几条职责的快捷按钮同名时只留一个（不出两个一模一样的「找一批红人」）。
  */
 import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -39,11 +39,10 @@ const VIEW: PositionInstanceData = {
 } as PositionInstanceData
 
 describe('WP416 快捷按钮同名去重', () => {
-  it('同名的带上职责名；不同名的照旧', () => {
+  it('同名的只留一个；不同名的照旧', () => {
     renderWithProviders(<PositionHandoff id="asg_yt" view={VIEW} />)
-    const labels = screen.getAllByTestId('landing-action').map((b) => b.textContent ?? '')
-    expect(labels.some((l) => l.includes('找一批红人 · YouTube 红人'))).toBe(true)
-    expect(labels.some((l) => l.includes('找一批红人 · Instagram 红人'))).toBe(true)
-    expect(labels.some((l) => l.trim() === '起草开发信')).toBe(true)
+    const labels = screen.getAllByTestId('landing-action').map((b) => (b.textContent ?? '').trim())
+    expect(labels.filter((l) => l === '找一批红人')).toHaveLength(1)
+    expect(labels).toContain('起草开发信')
   })
 })

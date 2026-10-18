@@ -144,7 +144,11 @@ async function run(page, ctx) {
   await shoot(page, 'collab-card')
   await collabCard.first().locator('[data-action="reject"]').first().click()
   await page.locator('[data-testid="deck-panel-reject"] textarea').first().fill('先不谈')
-  await page.locator('[data-testid="deck-panel-reject"] button').first().click()
+  await page
+    .locator('[data-testid="deck-panel-reject"] button')
+    .filter({ hasText: '提交' })
+    .first()
+    .click()
   await settle(page, 2500)
   const afterReject = await api('/v1/kol/collaborations?channel=youtube')
   must(

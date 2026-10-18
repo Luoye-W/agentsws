@@ -68,25 +68,23 @@ export function PositionHandoff({
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
   const [started, setStarted] = useState(false)
   /*
-   * WP416（自查 kol U13）：几条职责的快捷按钮同名（红人五条渠道各一个「找一批红人」）——同名的后面带上
-   * 是哪条职责，不再出两个一模一样的按钮（第二个其实是另一条渠道的）。
+   * WP416（自查 kol U13）：几条职责的快捷按钮同名（红人五条渠道各一个「找一批红人」）——同名的只留第一个
+   * （排在前面的那条职责的），不再出两个一模一样的按钮（第二个其实是另一条渠道的提示）。
    */
-  const quick = mine.flatMap((r) =>
-    (r.quick_prompts ?? []).map((q) => ({
-      id: q.id,
-      label: lang === 'en' ? q.label.en : q.label.zh,
-      prompt: q.prompt,
-      duty: r.role_name,
-    })),
-  )
-  const seenLabels = new Map<string, number>()
-  for (const q of quick) seenLabels.set(q.label, (seenLabels.get(q.label) ?? 0) + 1)
+  const seenLabels = new Set<string>()
   const actions = useLandingActions(
-    quick.map((q) => ({
-      id: q.id,
-      label: (seenLabels.get(q.label) ?? 0) > 1 ? `${q.label} · ${q.duty}` : q.label,
-      prompt: q.prompt,
-    })),
+    mine
+      .flatMap((r) => r.quick_prompts ?? [])
+      .map((q) => ({
+        id: q.id,
+        label: lang === 'en' ? q.label.en : q.label.zh,
+        prompt: q.prompt,
+      }))
+      .filter((q) => {
+        if (seenLabels.has(q.label)) return false
+        seenLabels.add(q.label)
+        return true
+      }),
     (prompt) => {
       clearError()
       setStarted(true)
