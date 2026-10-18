@@ -789,6 +789,7 @@ import { ShopAdminError } from './shop-admin.js'
 import {
   createShopAdmin,
   createStoreAuthRunner,
+  hasLiveStoreGrant,
   type ShopAdminAssembly,
   STORE_SESSION_CLI_ID,
 } from './shop-auth.js'
@@ -797,7 +798,11 @@ import type { ShopOps } from './shop-ops.js'
 import { createShopOps } from './shop-service.js'
 import { createShopToolSurface } from './shop-tools.js'
 import type { BrokerFetch } from './shopify-broker.js'
-import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js'
+import {
+  type CloudShopLinks,
+  createCloudShopLinks,
+  createShopifyConnect,
+} from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
@@ -3230,11 +3235,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 档案有就用档案；没设而连了某个平台的店铺就按它推断并写回档案；都没有 = undefined（一样都不启用）。
    * 店铺连接那张表（缺省按 Shopify）不走这里。
    */
+  /** WP418：云端一键授权的缓存（下面才建好；推平台时只同步看一眼）。 */
+  let cloudShopLinksRef: CloudShopLinks | undefined
   const brandPlatformOf = (ws: WorkspaceId): StorefrontPlatform | undefined =>
     resolveBrandPlatform(
       {
         profile: (w) => brandProfileOf(w).storefront_platform,
-        connectedServices: (w) => brands?.peek(w)?.connections.connectedServices() ?? [],
+        connectedServices: (w) => [
+          ...(brands?.peek(w)?.connections.connectedServices() ?? []),
+          // WP418（自查 C4）：只做了连接页云端一键授权的品牌，连上那一刻也认成 Shopify
+          ...(cloudShopLinksRef?.peek(w as WorkspaceId) === undefined ? [] : ['shopify_admin']),
+        ],
         writeBack: (w, p) =>
           onboardingRef?.setStorefrontPlatform(w, p, 'inferred_from_connection') ?? false,
       },
@@ -4307,6 +4318,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
     ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
+  cloudShopLinksRef = cloudShopLinks
   /*
    * WP353（决策 912）：联网搜索后端的进程级那几样——内置浏览器的本机通道（桌面壳经环境变量给）、
    * 全进程一条节流队（同一时刻只开一页、随机隔 2–4 秒、每小时上限）、公开搜索服务（懒加载）。
@@ -4468,6 +4480,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
       extraKinds: () => [
         ...(cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+        // WP418（自查 C1）：岗位页上做过 CLI 店铺授权也算店铺后台已连（四种授权统一认）
+        ...(hasLiveStoreGrant(
+          dir === undefined ? undefined : join(dir, 'shop-admin.json'),
+          clock.now(),
+        )
+          ? ['shopify', 'shop']
+          : []),
         // WP386：有监控源 = 信息监控那张连接卡算连上
         ...(prMonitorCount() > 0 ? ['google_alerts'] : []),
       ],
@@ -5921,6 +5940,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          * WP267（决策 209）：这个品牌在连接页云端一键授权连着店（授了 read_orders）→ 客服回信 / 订单查询的
          * 订单与商品改走云端代发（只读）；没连再回退连接器那条 Shopify 连接。改动照旧出卡。
          */
+        // WP418（自查 B11）：只做了 CLI 店铺授权（有看订单的权限）也查得到单
+        cliShop: async () => {
+          const m = await shopOf(ws)
+          const access = await m?.auth.access().catch(() => undefined)
+          return access?.scopes.includes('read_orders') === true ? m?.auth.reader() : undefined
+        },
         cloudShop: () =>
           cloudShopReader(
             {
@@ -13359,6 +13384,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     hasRoles: (ws, role_ids) =>
       role_ids.some((r) => roles.assignments.listByRole(r, { workspace_id: ws }).length > 0),
     platformChoices: () => storefrontPlatformChoices(),
+    // WP418（自查 A1）：岗位上担着建站 / 店铺管理的职责就要先选平台（不认岗位 id）
+    positionNeedsPlatform: (ws, position_id) =>
+      roles.roles
+        .list()
+        .map((r) => r.id)
+        .filter((id) => id.startsWith('site.') || id === 'dtc.store')
+        .some((id) =>
+          roles.assignments
+            .listByRole(id, { workspace_id: ws as WorkspaceId })
+            .some(
+              (a) =>
+                a.revoked_at === undefined &&
+                cloudPositionOf(ws as WorkspaceId, id, a.id) === position_id,
+            ),
+        ),
     prober: platformCliProber,
     runner: platformCliRunner,
     loginStoreOf: platformCliLoginOf,

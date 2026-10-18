@@ -255,6 +255,32 @@ export function createStoreAuthRunner(options: {
   }
 }
 
+/**
+ * WP418（自查 C1）：**同步**看一眼这个品牌有没有一份没过期、没被收回的 CLI 店铺授权（只读那份记录文件）。
+ * 「还缺必需的连接：店铺后台」那种同步判断用它——CLI 授权做完以后不该还说没连。
+ */
+export function hasLiveStoreGrant(settingsFile: string | undefined, nowIso: string): boolean {
+  if (settingsFile === undefined || !existsSync(settingsFile)) return false
+  try {
+    const raw = JSON.parse(readFileSync(settingsFile, 'utf8')) as Partial<ShopAdminFile>
+    const nowMs = Date.parse(nowIso)
+    return Object.values(raw.grants ?? {}).some((g) => {
+      if (g === undefined || typeof g.store !== 'string') return false
+      const p = raw.problem
+      if (
+        p !== undefined &&
+        p.store === g.store &&
+        p.code !== 'missing_scope' &&
+        Date.parse(p.at) >= Date.parse(g.acquired_at)
+      )
+        return false
+      return !isExpired(g, nowMs)
+    })
+  } catch {
+    return false
+  }
+}
+
 // ── 一个品牌一份 ─────────────────────────────────────────────────────────
 
 export interface ShopAdminOptions {

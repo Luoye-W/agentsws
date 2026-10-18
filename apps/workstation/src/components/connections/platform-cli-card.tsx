@@ -135,6 +135,36 @@ export function cliStatusItems(
 }
 
 /**
+ * WP418（自查 A1 / U1）：岗位**主页**顶上那一行「先选建站平台」——以前只在设置页签的 CLI 卡里，
+ * 平台没设时建站岗位页一句提示都不出。只在服务端说要选（`choose_platform`）时画；选好就消失。
+ */
+export function PlatformChooseBanner({
+  positionId,
+  assignment,
+}: {
+  positionId?: string
+  assignment?: string
+}): React.ReactNode {
+  const client = useQueryClient()
+  const key = ['platform-kit', positionId ?? '', assignment ?? '']
+  const view = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      getPlatformKit(positionId === undefined ? {} : { position_id: positionId }, assignment),
+    enabled: positionId !== undefined,
+  })
+  const choose = view.data?.choose_platform
+  if (choose === undefined) return null
+  return (
+    <ChoosePlatformRow
+      choices={choose.choices}
+      {...(positionId === undefined ? {} : { positionId })}
+      onSaved={(next) => client.setQueryData(key, next)}
+    />
+  )
+}
+
+/**
  * WP216（Fable 10-05）：品牌还没设建站平台时，建站岗位页上那一行「先选一下你的建站平台」+ 下拉。
  * 选平台是改品牌档案，只有负责人能改——用负责人那条分配发；不是负责人就只说一句、不给下拉。
  */

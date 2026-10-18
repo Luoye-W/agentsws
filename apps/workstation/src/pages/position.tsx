@@ -29,6 +29,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
+import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
@@ -331,6 +332,15 @@ export function PositionPage(): React.ReactNode {
           roleIds={duties.map((d) => d.role_id)}
           assignment={duties[0]?.assignment_id}
           mode="position"
+        />
+      )}
+      {/* WP418（自查 A1）：建站平台还没选 → 顶上一行「先选建站平台」+ 下拉（设置页签里那张 CLI 卡自己会出） */}
+      {tab === 'settings' ? null : (
+        <PlatformChooseBanner
+          {...(view?.position_id === undefined ? {} : { positionId: view.position_id })}
+          {...(duties[0]?.assignment_id === undefined
+            ? {}
+            : { assignment: duties[0].assignment_id })}
         />
       )}
       {/* WP253：建站岗位「让 AI 改网站还差哪一步」（没装 CLI / 没登录 / 没店铺地址）；补上就消失 */}

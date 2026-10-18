@@ -149,6 +149,11 @@ export interface ConnectRecordSourceOptions {
    */
   cloudShop?: () => Promise<Pick<ShopifyAdminReader, 'query'> | undefined>
   /**
+   * WP418（自查 B11）：岗位页做过 CLI 店铺授权（有 `read_orders`）的只读口。只在**云端没有、连接器那条店铺连接也没有**
+   * 时才用——只做了 CLI 店铺授权的用户以前查不到单。
+   */
+  cliShop?: () => Promise<Pick<ShopifyAdminReader, 'query'> | undefined>
+  /**
    * WP67（48 §5.2）：这个品牌的红人库（只读口）。
    *
    * **迟绑定**，理由与 `work` 那一格一样：红人库在 `assembleBrand` 里建，
@@ -973,7 +978,15 @@ export function createConnectRecordSource(
   /** 这个品牌现在能不能走云端（问不到 = 走连接器）。 */
   const cloudReader = async (): Promise<Pick<ShopifyAdminReader, 'query'> | undefined> => {
     try {
-      return await options.cloudShop?.()
+      const cloud = await options.cloudShop?.()
+      if (cloud !== undefined) return cloud
+    } catch {
+      // 问不到云：往下看 CLI 授权
+    }
+    // WP418（自查 B11）：连接器那条店铺连接也没有 → 用岗位页的 CLI 店铺授权（同一套云端查询，形状一样）
+    if (activeShop() !== undefined) return undefined
+    try {
+      return await options.cliShop?.()
     } catch {
       return undefined
     }
