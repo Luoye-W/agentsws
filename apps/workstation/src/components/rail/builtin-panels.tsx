@@ -64,6 +64,7 @@ import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
 import { AMAZON_KEYWORDS_ADDRESS_PREFIX } from '@/lib/amazon-keywords-api'
+import { CONTENT_UPDATES_ADDRESS_PREFIX } from '@/lib/content-digest-api'
 import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 import { SERVICE_ORDER_ADDRESS_PREFIX } from '@/lib/workshop-services-api'
@@ -149,6 +150,11 @@ const ConnectionsCardBody = lazy(async () => {
   return { default: m.ConnectionsCard }
 })
 // WP390：工坊服务（订单面板、服务列表、右栏那张卡）
+/** WP406：岗位更新——卡上「挑着看」开的那一页。 */
+const ContentUpdatesBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/content-updates-panel')
+  return { default: m.ContentUpdatesPanel }
+})
 const ServiceOrderBody = lazy(async () => {
   const m = await import('@/components/workshop-services/order-panel')
   return { default: m.ServiceOrderPanel }
@@ -440,6 +446,19 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('service-order', ServiceOrderBody)
+  // WP406（私有 docs/107 §5）：岗位更新卡上「挑着看」——按地址开（在哪一页都开得到），设定里岗位层另有一个标签
+  registerPanelType({
+    id: 'content-updates',
+    label: 'rail.panel.content-updates',
+    icon: SlidersHorizontal,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${CONTENT_UPDATES_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('content-updates', ContentUpdatesBody)
+  // 「设定」里岗位层那个标签的别名（`show('updates')` 落到设定面板的那个标签）
+  registerPanelAlias({ id: 'updates', panel: 'settings', sub: 'updates' })
   // WP390：账号菜单「工坊服务」那一页（我的订单 + 全部服务，按岗位分组）
   registerPanelType({
     id: 'workshop-services',

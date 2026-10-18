@@ -51,6 +51,7 @@ import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
 import { ensureSession, getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { contentUpdatesAddress, isContentDigestPayload } from '@/lib/content-digest-api'
 import { formatDateTime } from '@/lib/format'
 import { recordText, tOr } from '@/lib/humanize'
 
@@ -310,6 +311,11 @@ export function DeckCardView({
   const act = (action: DeckAction): void => {
     if (action === 'open' && isContentCard) {
       setCompare(true)
+      return
+    }
+    // WP406：岗位更新卡的「挑着看」开第三栏（这张卡没有事项可进）
+    if (action === 'open' && isContentDigestPayload(card.detail.payload)) {
+      rail.openAddress(contentUpdatesAddress(card.detail.payload.position_id))
       return
     }
     if (action === 'open') {

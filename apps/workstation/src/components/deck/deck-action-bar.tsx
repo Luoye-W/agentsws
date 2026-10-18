@@ -50,7 +50,9 @@ export function quickActions(card: DeckCard): DeckAction[] {
     form === 'reddit_write' ||
     // WP387：建 / 改 Google 提醒——「确认」要带上卡上的勾选，在卡身里
     (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
-    (typeof form === 'string' && form.startsWith('service_'))
+    (typeof form === 'string' && form.startsWith('service_')) ||
+    // WP406：岗位更新的「全部应用 / 这次跳过」在卡身里（带选项）
+    form === 'content_update_digest'
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
     .filter((a) => !(bodyPrimary && a === 'approve'))
