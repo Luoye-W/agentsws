@@ -288,6 +288,26 @@ describe('WP393 · 方案卡（决策 887 / 888）', () => {
       expect.objectContaining({ product_key: '7002', own_key: 'city-helmet', by: 'user' }),
     ])
   })
+
+  it('WP408（决策 1154）：连了店但这一款没有对标款——不比（不拿你店里最便宜的那件凑），只报竞品自己的降价', async () => {
+    const t = setup()
+    const values = await acceptPlan(t)
+    // Level 3 不再对标任何一款；店里最便宜的是 City Helmet $79（老做法会写「起价比你店里最便宜的 City Helmet 贵 $N」）
+    await t.cs
+      .setupTarget()
+      .apply({ ...values, pairs: 'Rival Bikes · Sinch Step-Thru = City Helmet' })
+    t.shop.dropLevel3()
+    t.setNow('2026-10-20T01:30:00.000Z')
+    await t.cw.runNow({ trigger: 'schedule' })
+    const price = t.store.changes({ kinds: ['price'] })
+    expect(price).toHaveLength(1)
+    expect(price[0]).toMatchObject({ title: 'Level 3 Commuter', pct: -10 })
+    expect(price[0]?.vs_own).toBeUndefined()
+    const line = t.cs.brief()?.lines[0] ?? ''
+    expect(line).toContain('Level 3 Commuter')
+    expect(line).not.toContain('City Helmet')
+    expect(line).not.toContain('最便宜')
+  })
 })
 
 describe('WP393 · 两个工具', () => {

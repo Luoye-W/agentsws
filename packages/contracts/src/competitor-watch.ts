@@ -253,6 +253,7 @@ export interface CompetitorVsOwn {
   /**
    * WP402（决策 1137）：拿什么比的——`pair` 竞品这一款的起价 vs 自家对标款；`lowest` 没有对标款时两边最低价比
    * （竞品这一款的起价 vs 自家店里最便宜的那一款）。不给 = 老数据（按对标款）。
+   * WP408（决策 1154）：没有对标款就不比，新数据只会是 `pair`；`lowest` 只留给老数据。
    */
   basis?: 'pair' | 'lowest'
 }
