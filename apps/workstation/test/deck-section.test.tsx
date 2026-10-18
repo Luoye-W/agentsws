@@ -92,16 +92,12 @@ describe('37 §1 第 1 行：一次一张', () => {
     expect(deck.getAttribute('aria-keyshortcuts')).toBe('ArrowRight ArrowLeft ArrowUp ArrowDown')
     deck.focus()
 
-    // ← 开拒绝理由框（卡还没走：人得先说句话）
-    await user.keyboard('{ArrowLeft}')
-    expect(screen.getByTestId('deck-panel-reject')).toBeDefined()
-    await user.click(screen.getByRole('button', { name: '返回' }))
-
-    // ↓ 开指导框
-    deck.focus()
+    // ↓ 开「修改」框
     await user.keyboard('{ArrowDown}')
     expect(screen.getByTestId('deck-panel-instruct')).toBeDefined()
     await user.click(screen.getByRole('button', { name: '返回' }))
+    // WP414：← 不开写理由的框（「不要」一下就生效，见下一条）
+    expect(screen.queryByTestId('deck-panel-reject')).toBeNull()
 
     // ↑ 直接稍后
     deck.focus()
@@ -133,7 +129,7 @@ describe('37 §1 第 1 行：一次一张', () => {
     home = homeData({ queue: [draftCard()] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
-    await user.click(screen.getByText('改一下'))
+    await user.click(screen.getByText('修改'))
     const box = screen.getByLabelText('一句话说清楚要怎么改')
     await user.click(box)
     await user.keyboard('改一句{ArrowLeft}{ArrowRight}')
@@ -429,12 +425,12 @@ describe('WP141：不决定前一张也能去后面的卡', () => {
     })
   })
 
-  it('「改一下」提交后给一句「记下了」', async () => {
+  it('「修改」提交后给一句「记下了」', async () => {
     const user = userEvent.setup()
     home = homeData({ queue: [draftCard(), quote] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
-    await user.click(screen.getByText('改一下'))
+    await user.click(screen.getByText('修改'))
     await user.type(screen.getByLabelText('一句话说清楚要怎么改'), '先道歉')
     await user.click(screen.getByRole('button', { name: '提交' }))
     expect((await screen.findByTestId('deck-receipt')).textContent).toContain('记下了')

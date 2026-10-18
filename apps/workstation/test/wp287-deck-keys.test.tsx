@@ -111,10 +111,13 @@ describe('WP287 键盘跟着卡上的按钮走（遍历所有卡型）', () => {
     expect(deckKeys(card, t)).toEqual([])
   })
 
-  it('动作不在动作行上的（收在 `···` 里的「指导」）：↓ 不出——按了也开不了面板', () => {
+  it('WP414：「修改」外露成按钮——卡上有它，↓ 就是它（点开那个框）', () => {
     const card = cardOf('review')
     const actions: DeckAction[] = [...card.available_actions, 'instruct']
     const keys = deckKeys({ ...card, available_actions: actions }, t)
-    expect(keys.some((k) => k.direction === 'down')).toBe(false)
+    expect(keys.find((k) => k.direction === 'down')).toMatchObject({
+      action: 'instruct',
+      click: true,
+    })
   })
 })
