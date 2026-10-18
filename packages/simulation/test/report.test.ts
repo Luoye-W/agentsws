@@ -274,13 +274,15 @@ describe('套件与报告落盘（26 §5）', () => {
     // WP343 再加一条（「我的助理」派活 → 岗位出审批，助理零写）→ 69
     // WP350 再加一条（会议记录分派：一份资料拆给几个岗位）→ 70
     // WP380 再加一条（GEO 第二层：比较胜率、描述准确度、对外说法、复查）→ 71
-    // WP395 再加一条（卖 Amazon 的品牌划出 Amazon 运营、没数据照实说）→ 72
-    // WP386 再加两条（信息监控拉到了 / feed 404 照实说）→ 74
+    // WP386 再加两条（信息监控拉到了 / feed 404 照实说）→ 73
+    // WP387 再加一条（让工坊替你建 Google 提醒：一张卡一次同意）→ 74
     // WP392 再加一条（竞品监控：第一天只建底子，第二天比出一条降价）→ 75
-    // WP394 再加两条（Amazon 对标款：第二天降价带比你便宜多少 / 被拦退云端积分照扣）→ 77
-    // WP398 再加一条（Amazon 词库：出差距词、标出他牌名、被拦就停）→ 78
-    // WP396 再加一条（自家 Listing 体检）→ 79
-    expect(result.reports).toHaveLength(79)
+    // WP393 再加一条（店铺管理「竞品动向」：配好 → 第二天降价并说比你便宜多少）→ 76
+    // WP395 再加一条（卖 Amazon 的品牌划出 Amazon 运营、没数据照实说）→ 77
+    // WP396 再加一条（自家 Listing 体检出 3 处问题、给草稿、被拦停、下设计需求单）→ 78
+    // WP398 再加一条（Amazon 词库：出差距词、标出他牌名、被拦就停）→ 79
+    // WP394 再加两条（Amazon 对标款：第二天降价带比你便宜多少 / 被拦退云端积分照扣）→ 81
+    expect(result.reports).toHaveLength(81)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -288,7 +290,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(79)
+    expect(summary.scenarios).toHaveLength(81)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
     // 跑一整个 pack 不是 5 秒的活，而且并行跑别的项目时还要抢 CPU。
     // WP121b 把题目加到 60 条之后，机器忙起来时 120s 会压线——放宽到 180s。
