@@ -228,7 +228,7 @@ export type BrandIntakeRunStatus =
   | 'failed'
   | 'cancelled'
 
-/** 花了多少、封顶多少（用官方接口时这一步计入注册送的那 10 积分）。 */
+/** 花了多少、封顶多少（用官方接口时这一步计入注册送的那 5 积分）。 */
 export interface BrandIntakeBudget {
   /** 开跑前给用户看的预估。 */
   estimated_credits: number
@@ -323,8 +323,8 @@ export interface BrandIntakeConfirmInput {
 /**
  * 一次基础分析的积分封顶（70 §3）。
  *
- * 2 是**对着注册送的 10 积分定的**：分析花掉 2，剩 8 还够几十轮便宜档对话。
- * 一个新用户不该在第一分钟就把赠送的额度烧光——那样"送 10 积分"这件事
+ * 2 是**对着注册送的 5 积分定的**：分析花掉 2，剩 3 还够十几轮便宜档对话。
+ * 一个新用户不该在第一分钟就把赠送的额度烧光——那样"送 5 积分"这件事
  * 反而变成了一个坏印象。
  */
 export const DEFAULT_BRAND_INTAKE_CAP_CREDITS = 2

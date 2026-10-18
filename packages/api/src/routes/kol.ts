@@ -258,7 +258,7 @@ export interface KolSearchResult {
    */
   fallback_offer?: { credits: number; note: string }
   /**
-   * 第四层（都没有）的两个入口：关联官方账号送 10 积分 / 接自己的数据接口。
+   * 第四层（都没有）的两个入口：关联官方账号送 5 积分 / 接自己的数据接口。
    */
   entry_points?: { id: 'link_account' | 'byo'; label: string; note: string }[]
   /** 这份数据什么时候看到的。 */

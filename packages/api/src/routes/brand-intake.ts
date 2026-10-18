@@ -104,7 +104,7 @@ export interface BrandIntakePort {
  * 发起的入参。
  *
  * `urls` 至少一条、最多三条：一个官网 + 一两条 Amazon 链接已经够画出第一版
- * 档案了，再多只会把那 10 积分烧光（70 §3.1）。
+ * 档案了，再多只会把那 5 积分烧光（70 §3.1）。
  */
 const StartBody = z.object({
   urls: z.array(z.string().url('这不像一个网址')).min(1).max(3),
