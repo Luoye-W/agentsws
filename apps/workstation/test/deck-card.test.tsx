@@ -484,7 +484,7 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
     expect(onOpen).toHaveBeenCalledWith(card)
   })
 
-  it('WP141：没有展示名时说「一件还没起名的事项」，事项 id 也不上屏', () => {
+  it('WP416：没有展示名时这一行不出（不说「一件还没起名的事项」），事项 id 也不上屏', () => {
     renderWithProviders(
       <DeckCardView
         card={draftCard({ matter_id: 'mat_7' })}
@@ -493,9 +493,9 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
         onOpen={noop}
       />,
     )
-    const link = screen.getByTestId('deck-matter-link').textContent ?? ''
-    expect(link).not.toContain('mat_7')
-    expect(link).toContain('还没起名')
+    expect(screen.queryByTestId('deck-matter-link')).toBeNull()
+    expect(document.body.textContent).not.toContain('mat_7')
+    expect(document.body.textContent).not.toContain('还没起名')
   })
 })
 

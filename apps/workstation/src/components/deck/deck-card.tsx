@@ -363,7 +363,8 @@ export function DeckCardView({
       ) : null}
       {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。
           WP276：交给你的卡标题里已经写了是哪件事，这一行不再说一遍 */}
-      {card.matter_id === undefined || handoffOffer ? null : (
+      {/* WP416（自查 kol U16）：事项还没起名就不出这一行（「属于：一件还没起名的事项」等于没说） */}
+      {card.matter_id === undefined || card.matter_label === undefined || handoffOffer ? null : (
         <button
           type="button"
           data-testid="deck-matter-link"
@@ -372,10 +373,7 @@ export function DeckCardView({
             onOpen(card)
           }}
         >
-          {/* WP141：查不到展示名就说「一件还没起名的事项」，事项 id 不上屏 */}
-          {card.matter_label === undefined
-            ? t('deck.matter.untitled')
-            : t('deck.matter', { title: card.matter_label })}
+          {t('deck.matter', { title: card.matter_label })}
         </button>
       )}
 

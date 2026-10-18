@@ -11,7 +11,7 @@
  * - 定时任务：原来压在「记录」底下，**本人在这个岗位每条职责上的**都列出来，一个开关停 / 开；
  * - 高级：WP238 的人话权限（`lib/duty-capabilities`），原始 id 只在「开发者视图」。
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, ExternalLink, MoreHorizontal, Plus, Split } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { LayerMemory } from '@/components/work/layer-memory'
 import {
+  getLayerMemory,
   getMySchedules,
   getPositionConnections,
   getRoleDefinition,
@@ -495,6 +496,60 @@ function Advanced({ roles }: { roles: PositionInstanceData['roles'] }): ReactNod
   )
 }
 
+/**
+ * WP416（自查 kol U12）：记忆那一节——岗位层 + 每条职责一层；**全空时只说一行「还没有记忆」**
+ * （以前六段各说两遍「还没攒下东西」、外加六个点了没用的「提到这一层」）。
+ */
+export function MemoryLayers({
+  positionId,
+  name,
+  roles,
+}: {
+  positionId: string
+  name: string
+  roles: readonly { role_id: string; role_name: string }[]
+}): ReactNode {
+  const { t } = useApp()
+  const layers = useQueries({
+    queries: [
+      { tier: 'position' as const, scope: positionId },
+      ...roles.map((r) => ({ tier: 'role' as const, scope: r.role_id })),
+    ].map((l) => ({
+      queryKey: ['layer-memory', l.tier, l.scope],
+      queryFn: () => getLayerMemory(l.tier, l.scope),
+    })),
+  })
+  if (layers.some((q) => q.isPending)) return <Skeleton className="h-16 w-full" />
+  const empty = layers.every((q) => (q.data?.entries.length ?? 0) === 0)
+  if (empty)
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="memory-none">
+        {t('memory.none')}
+      </p>
+    )
+  const has = (i: number): boolean => (layers[i]?.data?.entries.length ?? 0) > 0
+  return (
+    <div className="flex flex-col gap-4">
+      {has(0) ? (
+        <div>
+          <h4 className="mb-1.5 text-sm font-medium">{t('memory.position', { name })}</h4>
+          <LayerMemory tier="position" scopeId={positionId} />
+        </div>
+      ) : null}
+      {roles.map((r, i) =>
+        has(i + 1) ? (
+          <div key={r.role_id} data-testid="role-memory" data-role={r.role_id}>
+            <h4 className="mb-1.5 text-sm font-medium">
+              {t('memory.role', { name: r.role_name })}
+            </h4>
+            <LayerMemory tier="role" scopeId={r.role_id} />
+          </div>
+        ) : null,
+      )}
+    </div>
+  )
+}
+
 export function PositionSettings({
   id,
   view,
@@ -583,22 +638,7 @@ export function PositionSettings({
 
         <section data-testid="position-memory">
           <SectionHead id="memory" title={t('pos2.set.memory')} sub={t('pos2.set.memory.sub')} />
-          <div className="flex flex-col gap-4">
-            <div>
-              <h4 className="mb-1.5 text-sm font-medium">
-                {t('memory.position', { name: view.name.zh })}
-              </h4>
-              <LayerMemory tier="position" scopeId={view.position_id} />
-            </div>
-            {view.roles.map((r) => (
-              <div key={r.role_id} data-testid="role-memory" data-role={r.role_id}>
-                <h4 className="mb-1.5 text-sm font-medium">
-                  {t('memory.role', { name: r.role_name })}
-                </h4>
-                <LayerMemory tier="role" scopeId={r.role_id} />
-              </div>
-            ))}
-          </div>
+          <MemoryLayers positionId={view.position_id} name={view.name.zh} roles={view.roles} />
         </section>
 
         <section>
