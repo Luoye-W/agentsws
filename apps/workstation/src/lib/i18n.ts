@@ -3494,7 +3494,7 @@ const zh: Table = {
   'social.broadcast.template.placeholder': 'WhatsApp 的模板名（后台批过的那一个）',
   'social.broadcast.opt_in': '这批人都 opt-in 过，而且我举证得出来',
   'social.broadcast.copy.placeholder': '群发正文。承诺类的话（"一定""保证""包退"）会被当场拦下来。',
-  'social.broadcast.submit': '算一下受众并提上去',
+  'social.broadcast.submit': '提交群发',
   'social.broadcast.always_l1': '群发永远要人点一下：一次发出去收不回来，收的是群里的人。',
   'social.broadcast.no_account': '群发：这条渠道还没登记号 / 群',
   'social.broadcast.whatsapp_note':
