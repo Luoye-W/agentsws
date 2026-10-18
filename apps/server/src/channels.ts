@@ -239,8 +239,18 @@ export interface ChannelsOptions {
   work?: Work
   /** 17 §1 起 Run；不给就只开事项不跑运行时。 */
   startRun?: StartRun
-  /** 入站事项挂谁名下（本人的那条岗位）。 */
-  position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
+  /**
+   * WP417（自查客服 A33）：一封回信真发出去了 → 告诉客服判断层「这条线程回过了」（首响 SLA 停表）。
+   * 以前没人调，回了信超时提醒照样响。
+   */
+  noteOutbound?(thread_id: string): void
+  /**
+   * 入站事项挂谁名下（本人的那条岗位）。WP417（自查 A15）：带上路由算出来的职责（`dtc.support` /
+   * `amz.support` …），装配方按它找本人持有的那一条；找不到再退回第一条。
+   */
+  position?(
+    role_id?: RoleId,
+  ): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /** 06 §2.4 路由器；缺省按渠道映射（邮件 → `dtc.support`）。 */
   route?(input: RouteInput): RouteResult | undefined
   /**
@@ -713,7 +723,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       }
       return existing
     }
-    const position = options.position?.()
+    const position = options.position?.(event.routing.role_id)
     const who = event.actor?.display ?? event.actor?.external_id ?? '客户'
     return work.createMatter({
       kind: 'conversation',
@@ -812,7 +822,8 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       // （与上面渠道判定里的 `needs_human_review` 是同一条纪律的两面）
       if (verdict.action === 'handoff') return
     }
-    const position = options.position?.()
+    // WP417（自查 A15）：起 Run 用路由算出来的那条职责，不是「第一条岗位」
+    const position = options.position?.(event.routing.role_id)
     const startRun = options.startRun
     if (startRun === undefined || position === undefined) return
     const { run_id } = await startRun({
@@ -1176,7 +1187,35 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       if (typeof thread !== 'string' || thread.length === 0) return undefined
       // 收件人只从线程台账取（31 §3.3），所以要找到**认识这个线程**的那个账号
       const channel = await pick(channels, thread)
-      if (channel === undefined) return undefined
+      /*
+       * WP417（自查客服 A18）：接不住就**照实失败**——以前回 `undefined` 掉到内存桩，桩回 ok，
+       * 卡显示发成功、客户其实一封没收到。现在说清是邮箱没连，还是连着的邮箱认不出这封信。
+       */
+      if (channel === undefined) {
+        refresh()
+        const none = channels.length === 0
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'delivery.failed',
+          actor: { kind: 'system', id: 'channel:email' },
+          subject: { type: 'approval_item', id: item.id },
+          correlation: { trace_id: `tr_mail_unrouted_${item.id}` },
+          payload: {
+            reason: none ? 'mailbox_not_connected' : 'thread_unknown',
+            thread_ref: thread,
+          },
+        })
+        return {
+          status: 'failed',
+          error: {
+            message: none
+              ? '没发出去：邮箱还没连上。去「设置 → 账号连接」连上邮箱，再在这件事里点一次「发送」。'
+              : '没发出去：连着的邮箱里找不到这封来信（可能换了邮箱或信被挪走了）。请在邮箱里直接回复。',
+            retryable: false,
+          },
+        }
+      }
 
       // 15 §5.8 / 28 §1：出站急停。对账没完、或人按了托盘的「暂停」，这里一律不发。
       if (options.halt.isHalted('outbound')) {
@@ -1271,6 +1310,11 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           idempotency_key: opts.idempotencyKey,
         })
         row = await outbox.markAccepted(row, clock.now(), sent.external_id)
+        try {
+          options.noteOutbound?.(thread)
+        } catch {
+          // 停表失败不影响发送结果
+        }
         return { status: 'ok', execution_id: sent.external_id }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)

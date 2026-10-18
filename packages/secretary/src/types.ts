@@ -259,6 +259,15 @@ export interface AskedRecord {
   answer_hash: string
   fields: ProfileField[]
   refused: boolean
+  /**
+   * WP417（决策 1234）：这一问到哪了。`held` = 助理起草好了、等本人看一眼（问的人收到的是「交给本人了」）；
+   * `direct` = 本人选了「直接找我」，助理不代答；`answered`（或没有这一格的老记录）= 已经答了。
+   */
+  status?: 'held' | 'direct' | 'answered'
+  /** 等本人看的那一版（`held` 时才有）；本人点了「就这样回」之后进 `answer`。 */
+  draft?: string
+  /** 本人放行的时刻。 */
+  released_at?: Iso8601
 }
 
 /* ------------------------------------------------------------------ */

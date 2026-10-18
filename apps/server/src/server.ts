@@ -90,6 +90,7 @@ import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
+  AssignmentId,
   Clock,
   CompetitorIntakeAdapter,
   CompetitorSourceKind,
@@ -109,6 +110,7 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  RoleId,
   RunRequest,
   SearchDataPort,
   SkillTier,
@@ -265,6 +267,7 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
+import { amazonDraftGuard } from './amazon-draft-guard.js'
 // WP394（docs/104 一期 B）：读 Amazon 前台的那一块（自报 Agent、配送邮编、被拦就停）与云端兜底
 import {
   type AmazonCloudPort,
@@ -504,6 +507,7 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { type ImAskCandidate, imAskLabels, pickImAssignment } from './im-ask-route.js'
+import { pickNamedPerson } from './im-ask-target.js'
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { askPositionAgent } from './im-position-ask.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
@@ -741,7 +745,12 @@ import { DEEPSEEK_ACCOUNT_NEED } from './run-blocked.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { repairStuckRuns } from './run-repair.js'
-import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
+import {
+  createRuntime,
+  type MatterRecordSource,
+  type RuntimeAssembly,
+  type RuntimeOptions,
+} from './runtime.js'
 import {
   createScheduleAssembly,
   createSchedulePort,
@@ -846,6 +855,7 @@ import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
 import { createScopeManagerRouter } from './supervisor.js'
+import { createSupportInbox, type SupportInboxPort } from './support-inbox.js'
 import {
   createSupportJudgment,
   SUPPORT_SLA_HANDLER,
@@ -3324,6 +3334,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return first === undefined
       ? undefined
       : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+  }
+
+  /**
+   * WP417（自查客服 A15 / C20）：入站这一次挂到**路由算出来的那条职责**上——来信 → `dtc.support` /
+   * `amz.support`，聊天 → `dtc.live-chat`。按顺序找本人在这个品牌里持有的第一条匹配职责；
+   * 一条都没有才退回 {@link firstPositionOf}（老行为）。人设、话术、知识权限、卡归谁都跟着它走。
+   */
+  /** WP417：客服判断层、在线聊天各自先找哪几条职责（找不到退回第一条岗位）。 */
+  const SUPPORT_DUTIES = ['dtc.support', 'amz.support'] as const
+  const LIVE_CHAT_DUTIES = ['dtc.live-chat', 'dtc.support'] as const
+  const positionFor = (
+    ws: WorkspaceId,
+    roleIds: readonly (string | undefined)[],
+  ): { person_id: PersonId; assignment_id: string; role_id: string } | undefined => {
+    const held = roles.assignments
+      .listByPerson(person.id, { workspace_id: ws })
+      .filter((a) => a.revoked_at === undefined)
+    for (const want of roleIds) {
+      if (want === undefined) continue
+      const hit = held.find((a) => a.role_id === want)
+      if (hit !== undefined)
+        return { person_id: hit.person_id, assignment_id: hit.id, role_id: hit.role_id }
+    }
+    return firstPositionOf(ws)
   }
 
   // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
@@ -5955,6 +5989,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 运行时比判断层先装配好，而运行时的 `judgeDraft` 要调它——靠这个变量打断环。
      */
     let supportJudgmentRef: SupportJudgment | undefined
+    /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
+    let supportInboxRef: SupportInboxPort | undefined
+    /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
+    let routeDraftRef: NonNullable<RuntimeOptions['routeDraft']> | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
       createConnectRecordSource({
@@ -5988,6 +6026,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
         social: () => social,
+        // WP417：等着回的来信 / 聊天会话（只读本机消息库与聊天库）
+        support: () => supportInboxRef,
         /*
          * WP77：邮件模板与已装 App 的**只读**记录（见 `RecordSitePort`）。
          *
@@ -6748,14 +6788,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 先泄漏守卫（商家教 AI 的那句中文有没有被逐字抄进客户会看到的正文），
              * 再三道自主门。判断层还没装好（装配期）就是 `undefined`：老行为。
              */
-            judgeDraft: (input) =>
-              supportJudgmentRef?.judgeDraft({
+            // WP417（自查 C2 / D9）：聊天会话 / 社群线程上的回复回原渠道（装配见 `routeDraftRef`）
+            routeDraft: async (input) => routeDraftRef?.(input),
+            judgeDraft: async (input) => {
+              // WP417（自查 B5）：Amazon 买家消息起草时就过平台硬闸（不等人点了发送才拦）
+              const pin = input.matter.context.pinned.find((p) => p.type === 'contact')
+              const contact =
+                pin === undefined
+                  ? undefined
+                  : ((await Promise.resolve(records.record?.(pin)).catch(() => undefined)) as
+                      | { email?: string }
+                      | undefined)
+              const amazon = amazonDraftGuard({
+                recipient: contact?.email,
+                subject: input.subject,
+                body: input.body,
+              })
+              if (amazon !== undefined) return amazon
+              return supportJudgmentRef?.judgeDraft({
                 channel: input.channel,
                 thread_id: input.thread_external_id ?? input.matter.id,
                 inbound_text: input.inbound_text,
                 reply_text: input.body,
                 generated_by: 'ai',
-              }),
+              })
+            },
             /*
              * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
              *
@@ -7450,7 +7507,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       appendEvent,
       approvals,
-      position: () => firstPositionOf(ws),
+      position: () => positionFor(ws, SUPPORT_DUTIES),
       vertical: () => brandProfileOf(ws).vertical,
       // 落款：品牌名（模板草稿要它；没有就用一个中性的）
       signature: () => '客服团队',
@@ -7459,7 +7516,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 每次现查：商家刚在卡上答过一条，下一封信就该按新口径走，不该等重启。
        */
       policies: async () => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const cards = await knowledge.store.list(
@@ -7496,7 +7553,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 72 §P0-3：答不上来 → 落缺口 + 记一个等待者（按线程去重，零新表）
       gaps: {
         openGap: (input) => {
-          const position = firstPositionOf(ws)
+          const position = positionFor(ws, SUPPORT_DUTIES)
           if (position === undefined) return undefined
           return knowledge.intake.openGap({
             workspace_id: ws,
@@ -7544,11 +7601,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(records.contactOf === undefined
         ? {}
         : { resolveActor: (email: string) => records.contactOf?.(email) }),
-      // 入站事项挂谁名下：本人在**这个品牌**里现在持有的第一条岗位。
-      // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
-      position: () => firstPositionOf(ws),
+      // 入站事项挂谁名下：本人在**这个品牌**里持有的、路由算出来的那条职责（WP417 自查 A15）；
+      // 没有就退回第一条。每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
+      position: (role_id) => positionFor(ws, [role_id, 'dtc.support']),
       // WP125（72 §P0-1）：落成事项之后、起 Run 之前，客服判断层先说话
       judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
+      // WP417（自查 A33）：回信真发出去 → 首响 SLA 停表
+      noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
       /**
        * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
        *
@@ -7695,7 +7754,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 同一套知识与订单只读：记录源就是运行时那一个
       source: records,
       searchKnowledge: async (text, limit) => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
@@ -7712,12 +7771,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
       },
-      position: () => firstPositionOf(ws),
+      position: () => positionFor(ws, LIVE_CHAT_DUTIES),
+      // WP417（决策 1232）：缺省每一句先出卡要人批；商家在聊天窗设置里手动开「常见问题直接发」才直接发
+      autoSendFaq: () => lateWidget.current?.config().auto_send_faq === true,
+      // WP417（自查 C10）：访客报了订单号 → 只读查这一单（与运行时同一个记录源）
+      lookupOrder: async (order_ref) => {
+        const res = await records.executeTool?.({
+          name: 'get_order',
+          input: { order_id: order_ref },
+          request: { tools: { allow: ['get_order'] } } as unknown as RunRequest,
+        })
+        return res?.status === 'ok' ? res.data : undefined
+      },
+      // WP417（自查 C15）：超时转邮件的跟进信经已连的邮箱真发；卡挂网站客服
+      sendMail: (input) => channels.sendMail(input),
+      emailPosition: () => positionFor(ws, ['dtc.support']),
       // WP289（决策 318）：聊天窗里教的「以后都这样」落在客服那几条职责的规矩上；聊天 AI 每一轮照做
       roleRules: () => chatRoleRulesText(ws),
       // WP333：聊天回复也带上品牌话术（这个品牌自己写过 `brand-voice` 才有；只有基础版 = 照旧）
       brandVoice: async () => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return undefined
         const resolved = await skills.registry
           .resolve(BRAND_VOICE_SKILL, {
@@ -8123,6 +8196,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     lateMessages.current = messages
+    routeDraftRef = async ({ matter, body, actor }) => {
+      const pins = matter.context.pinned
+      // 社群线程：出回帖卡（批了经这条渠道的出口发回群 / 私信；承诺话术在那里打回）
+      const community = pins.find((p) => p.type === 'community_thread')
+      if (community !== undefined && socialService.port.replyThread !== undefined) {
+        const out = await socialService.port.replyThread(
+          {
+            workspace_id: ws,
+            person_id: actor.person_id as PersonId,
+            assignment_id: actor.assignment_id as AssignmentId,
+            role_id: actor.role_id as RoleId,
+          },
+          community.id,
+          { text: body },
+        )
+        return out.staged && out.approval_item_id !== undefined
+          ? { approval_item_id: out.approval_item_id }
+          : { error: out.message ?? '回帖卡没出成' }
+      }
+      // 聊天会话：出聊天回复卡（批了发回聊天窗）
+      for (const p of pins) {
+        if (p.type !== 'thread') continue
+        const id = await chat.proposeReply(p.id, body)
+        if (id !== undefined) return { approval_item_id: id }
+      }
+      return undefined
+    }
+    supportInboxRef = createSupportInbox({
+      clock,
+      mail: () => messages.store,
+      chat: () => ({
+        sessions: (filter) => chat.sessions(filter),
+        messages: (id, limit) => chat.messages(id, limit),
+      }),
+    })
 
     /*
      * WP124：转发器设置进本机加密库（与邮箱口令、模型 key 同一个库）；
@@ -10024,7 +10132,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          */
         kol: KOL_CHANNEL_IDS.some((channel) => held(`kol.${channel}`)),
         // WP73：有人持有社媒那九条渠道职责之一时才建那条巡检
-        social: SOCIAL_ROLE_IDS.some((role_id) => held(role_id)),
+        // WP417（自查客服 D6）：只开了「社群管理」、没开社媒运营的品牌也要收帖（自动进帖挂在这一拍上）
+        social: SOCIAL_ROLE_IDS.some((role_id) => held(role_id)) || held('dtc.community-support'),
         // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
         pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
         // WP173：有人持有「主动开发」才建开发信序列那条定时
@@ -11867,6 +11976,66 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (await brandModules.models(ws))
           .chatChoices()
           .some((c) => c.id === id && hasThinkingEffort(c.thinking, effort)),
+      // WP417（自查 D8）：转客服卡点了「接」→ 社群管理下开一件事（钉着那条线程）、起运行起草回帖
+      acceptHandoff: async (actor, item) => {
+        const payload = item.payload as {
+          thread_id?: string
+          author?: string
+          account?: string
+          text?: string
+        }
+        if (typeof payload.thread_id !== 'string') return
+        const role_id = 'dtc.community-support' as RoleId
+        const positions = await positionsFor(ws)
+        const held = roles.assignments
+          .listByPerson(actor.person_id as PersonId, { workspace_id: ws })
+          .find((a) => a.role_id === role_id && a.revoked_at === undefined)
+        const position_id = positions.positionOf(role_id, held?.id).position_id
+        if (position_id === undefined) return
+        await positions.open({
+          position_id,
+          person_id: actor.person_id as PersonId,
+          title: `回 ${payload.author ?? '客户'} 的问题${payload.account === undefined ? '' : `（${payload.account}）`}`,
+          summary: `社媒运营转过来的：${(payload.text ?? '').slice(0, 200)}`,
+          pinned: [{ type: 'community_thread', id: payload.thread_id }],
+          role_id,
+          mode: 'task',
+          detach: true,
+        })
+      },
+      // WP417（自查 F11 / F12）：约时间卡批了真建会；「先给本人看」那张点了「就这样回 / 我自己回」才回给同事
+      acceptSecretary: async (actor, item) => {
+        const payload = item.payload as {
+          form?: string
+          meet_id?: string
+          asked_id?: string
+          answer?: string
+        }
+        const choice = item.decision?.selected_option_id
+        const { secretary } = await secretaryOf(ws)
+        if (payload.form === 'meet' && typeof payload.meet_id === 'string') {
+          await secretary
+            .decideMeet(
+              payload.meet_id,
+              actor.person_id as PersonId,
+              choice === 'decline' ? { action: 'decline' } : { action: 'accept' },
+            )
+            .catch(() => undefined)
+          return
+        }
+        if (payload.form === 'secretary_answer' && typeof payload.asked_id === 'string') {
+          const edited = (item.decision?.edited_payload as { answer?: unknown } | undefined)?.answer
+          await secretary.releaseAnswer(
+            actor.person_id as PersonId,
+            payload.asked_id,
+            choice === 'self'
+              ? `${(await identity.getPerson(actor.person_id as PersonId))?.name ?? '本人'}会直接回你。`
+              : typeof edited === 'string'
+                ? edited
+                : undefined,
+          )
+        }
+      },
       // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
       liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
       stopRuns: async (matter_id, reason) => {
@@ -14534,10 +14703,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // ——名册刷新了也照样抛。所以这里自己开一个 trace 作用域。
         const target = input.workspace_id ?? ws
         const port = (await secretaryOf(target)).port
+        /*
+         * WP417（自查 F7）：问的是**点名的那位同事**（「小王今天忙吗」），不是提问人自己。
+         * 认不出点名的就还是问自己（「我今天有什么会」）。
+         */
+        const people = await Promise.all(
+          (await identity.members(target))
+            .filter((m) => m.left_at === undefined)
+            .map(async (m) => ({
+              id: m.person_id,
+              name: (await identity.getPerson(m.person_id))?.name ?? '',
+            })),
+        )
+        const named = pickNamedPerson(input.question, people, input.viewer)
         const out = await traceScope.run(`trc_im_${Math.floor(random() * 1e12).toString(36)}`, () =>
           port.ask(
             { workspace_id: target, person_id: input.viewer, assignment_id: input.assignment_id },
-            input.viewer,
+            (named?.id ?? input.viewer) as PersonId,
             input.question,
           ),
         )

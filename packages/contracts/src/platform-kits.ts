@@ -298,6 +298,17 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
           'site.shopify-build': ['read_products', 'write_content', 'write_online_store_navigation'],
           // WP268（决策 213）：挑中的图传到店铺「文件」再挂主题（`fileCreate`；write 隐含 read）
           'site.shopify-theme': ['read_products', 'write_files'],
+          /*
+           * WP417（自查客服 A24–A27）：客服退款 / 改地址（订单写）、补发（建 0 元补发单）、发折扣码。
+           * 还没授权这几项的店，工具照样摆、出卡前照实说「店铺授权里缺这一项，去重新授权」。
+           */
+          'dtc.support': ['read_orders', 'write_discounts', 'write_draft_orders', 'write_orders'],
+          'dtc.community-support': [
+            'read_orders',
+            'write_discounts',
+            'write_draft_orders',
+            'write_orders',
+          ],
         },
       },
       npm_tag: 'latest',

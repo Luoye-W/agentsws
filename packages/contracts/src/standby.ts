@@ -108,6 +108,11 @@ export interface ChatWidgetConfig {
    * 死线在求助那一刻固化，改它只影响新的求助。
    */
   assist_wait_seconds?: number
+  /**
+   * WP417（决策 1232）：「常见问题直接发」。缺省关 = 在线客服每一句先出卡要人批；
+   * 商家手动打开后，答案出自知识卡、而且没有退款 / 赔偿这类承诺的那一句才直接发。
+   */
+  auto_send_faq?: boolean
   /** 挂件在页面上的位置（预设二选一；36 §原则 16：开关与预设，不做自由画布）。 */
   position?: 'left' | 'right'
   /** 挂件界面语言。`auto` 跟宿主页 `<html lang>`，`zh` / `en` 强制。 */

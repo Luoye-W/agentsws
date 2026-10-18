@@ -931,7 +931,8 @@ async function answer(
     choices[0]
   if (choice === undefined)
     // WP334（决策 726）：不再叫人去设置页——输入框旁那个「还没接模型，接一个」就地开连接卡
-    return fail('还没接模型，点「接一个」就地接上再来聊。')
+    // WP417（自查 F2 / U24）：页面上叫「还没接 AI」，照这个说
+    return fail('还没接 AI：点输入框旁的「还没接 AI」接一个，再来聊。')
   const withModel = {
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },

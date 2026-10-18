@@ -161,7 +161,8 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
       granted_by: 'p_owner',
     })
     const cfg = s.effectiveConfig(a.id, { connected: CONNECTED })
-    expect(cfg.grounding.map((g) => g.name)).toEqual(['order_status', 'policy'])
+    // WP417：网站客服多了「等着回的来信」（查超时没回的那一问）
+    expect(cfg.grounding.map((g) => g.name)).toEqual(['order_status', 'policy', 'waiting_mail'])
     expect(cfg.skills.map((x) => x.name)).toEqual([
       'customer-care',
       'returns-policy-calc',

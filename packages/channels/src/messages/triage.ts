@@ -244,6 +244,9 @@ export function matchSenderRule(
   return rules.find((r) => r.sender.trim().toLowerCase() === domain)
 }
 
+/** WP417：Amazon 买家消息的转发地址（与 `support-core` 的 `AMAZON_MARKETPLACE_RELAY_RE` 同口径，本包不依赖它）。 */
+const AMAZON_RELAY = /^[a-z0-9]{8,32}@marketplace\.amazon\.[a-z.]{2,10}$/i
+
 /* ── 规则层（① ② ③） ─────────────────────────────────────────────────── */
 
 /**
@@ -268,6 +271,24 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['In-Reply-To / References 命中客服已有线程'],
       at: ctx.at,
       ...ruleKind('customer_question', 1),
+    }
+  }
+  /*
+   * WP417（自查客服 B3）：Amazon 买家消息（发件人是 marketplace relay 地址）一律是客服——
+   * 这类信的信头常像自动通知，不先认出来就会被下面那一档当通知拦掉。
+   */
+  if (ctx.support_enabled && AMAZON_RELAY.test(input.from_email.trim())) {
+    return {
+      route: 'support',
+      labels: [],
+      needs_reply: true,
+      priority: 'high',
+      summary: clip('Amazon 买家消息'),
+      confidence: 0.95,
+      by: 'rule',
+      reasons: ['发件人是 Amazon 买家消息的转发地址'],
+      at: ctx.at,
+      ...ruleKind('customer_question', 0.95),
     }
   }
   if (ctx.kol_enabled && ctx.isKolThread(input.thread_id, input.references)) {

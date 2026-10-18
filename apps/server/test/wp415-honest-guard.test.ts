@@ -95,9 +95,9 @@ describe('登记表 × 卡种 × 运行形态（纯函数）', () => {
 
   it('生产里确实还有一批卡种没接通（这张名单变短 = 有组接上了真执行器）', () => {
     expect(notWiredKinds.length).toBeGreaterThan(0)
-    // 几个审计点名的：退款、改出价、换素材、发新闻稿、装 App、改邮件模板、定稿入库
+    // 几个审计点名的：改出价、换素材、发新闻稿、装 App、改邮件模板、定稿入库
+    // （退款 WP417 起经店铺授权接上了——只接经店铺工具出的那种，见下一条）
     for (const k of [
-      'refund',
       'bid_change',
       'creative_swap',
       'press_release',
@@ -106,6 +106,9 @@ describe('登记表 × 卡种 × 运行形态（纯函数）', () => {
       'asset_publish',
     ] as ChangeKind[])
       expect(notWiredKinds, k).toContain(k)
+    // WP417：退款 / 补发 / 改地址只接经店铺工具出的那种（别的来路的同类卡照旧标「还没接通」）
+    for (const k of ['refund', 'reship', 'address_change'] as ChangeKind[])
+      expect(kindWiring(k), k).toBe('partly')
   })
 
   for (const mode of MODES)

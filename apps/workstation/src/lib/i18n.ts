@@ -3342,6 +3342,10 @@ const zh: Table = {
   'chat.window.origins.hint': '逗号分隔；留空一个都不放行（默认安全）。',
   'chat.window.assist_wait': '求助等待时长',
   'chat.window.assist_wait.option': '{n} 秒',
+  'chat.window.assist_wait.option_min': '{n} 分钟',
+  'chat.window.auto_send_faq': '常见问题直接发',
+  'chat.window.auto_send_faq.hint':
+    '关着时 AI 每一句都先给你批。打开后，答案来自知识卡、又没提退款赔偿的那一句直接发。',
   'chat.window.assist_wait.hint':
     '超时要人拍板的问题，访客最多等这么久，然后自动转邮件跟进。改了只影响之后的新求助。',
   'chat.window.relay': '转发方式',
@@ -3404,7 +3408,7 @@ const zh: Table = {
   'chat.visitor.why':
     '这里发出去的消息与真访客走同一条流水线：同一条入站管线、同一套知识与订单只读、同一条审批队列。',
   'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
-  'chat.visitor.send': '发',
+  'chat.visitor.send': '发送',
   'chat.transcript.empty': '还没有消息。发一句试试。',
   // WP112：线程末尾那行——这一轮交给 AI 了、还没回来
   'chat.thinking': '客服 AI 正在判这一轮…',
@@ -3434,6 +3438,9 @@ const zh: Table = {
   'chat.plan.blocked': '这一轮没答出来：{reason}',
 
   'chat.action.answer': '直接答',
+  'chat.action.answer_held': '先给你批',
+  'chat.action.answer_held.why':
+    '能答，回复已经起草好；你批了才发给访客（常见问题可以在聊天窗设置里打开「直接发」）。',
   'chat.action.answer.why': '低风险、资料齐：按知识与订单事实答一句，不承诺任何事。',
   'chat.action.collect_info': '先问清楚',
   'chat.action.collect_info.why': '这一类缺了关键资料就走不下去（比如查订单没给单号），先问出来。',
@@ -7674,6 +7681,10 @@ const en: Table = {
   'chat.window.origins.hint': 'Comma separated; empty means none may embed (safe default).',
   'chat.window.assist_wait': 'Handoff wait time',
   'chat.window.assist_wait.option': '{n} sec',
+  'chat.window.assist_wait.option_min': '{n} min',
+  'chat.window.auto_send_faq': 'Send FAQ answers directly',
+  'chat.window.auto_send_faq.hint':
+    'Off: every AI reply waits for your OK. On: replies taken from your knowledge cards that promise no refund or compensation go out directly.',
   'chat.window.assist_wait.hint':
     'When the AI needs you, the visitor waits at most this long before we switch to email follow-up. Changes only affect new requests.',
   'chat.window.relay': 'Relay mode',
@@ -7768,6 +7779,9 @@ const en: Table = {
   'chat.plan.blocked': 'No answer this turn: {reason}',
 
   'chat.action.answer': 'Answer it',
+  'chat.action.answer_held': 'Waiting for your OK',
+  'chat.action.answer_held.why':
+    'The AI can answer and has drafted the reply; it goes to the visitor once you approve (turn on “Send FAQ answers directly” in chat window settings to skip this for FAQs).',
   'chat.action.answer.why':
     'Low risk and nothing missing: answer from knowledge and order facts, commit to nothing.',
   'chat.action.collect_info': 'Ask first',

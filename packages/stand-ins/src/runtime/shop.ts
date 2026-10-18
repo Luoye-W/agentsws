@@ -44,6 +44,10 @@ export const SHOP_SAVE_COLLECTION_TOOL = 'shop_save_collection'
 export const SHOP_SAVE_PAGE_TOOL = 'shop_save_page'
 export const SHOP_SAVE_MENU_TOOL = 'shop_save_menu'
 export const SHOP_CREATE_DISCOUNT_TOOL = 'shop_create_discount'
+/** WP417（自查客服 A24–A27）：客服动订单的三个——退款 / 改收货地址 / 补发。一样只出卡，人批了才改。 */
+export const SHOP_REFUND_ORDER_TOOL = 'shop_refund_order'
+export const SHOP_CHANGE_ADDRESS_TOOL = 'shop_change_order_address'
+export const SHOP_RESHIP_ORDER_TOOL = 'shop_reship_order'
 
 export const SHOP_READ_TOOL_NAMES: readonly string[] = [
   SHOP_GET_COLLECTION_TOOL,
@@ -57,7 +61,15 @@ export const SHOP_READ_TOOL_NAMES: readonly string[] = [
   SHOP_RECENT_ORDERS_TOOL,
 ].sort()
 
+/** WP417：客服的三个订单改动（不给店铺管理：那条职责不动订单）。 */
+export const SHOP_ORDER_TOOL_NAMES: readonly string[] = [
+  SHOP_CHANGE_ADDRESS_TOOL,
+  SHOP_REFUND_ORDER_TOOL,
+  SHOP_RESHIP_ORDER_TOOL,
+].sort()
+
 export const SHOP_WRITE_TOOL_NAMES: readonly string[] = [
+  ...SHOP_ORDER_TOOL_NAMES,
   SHOP_ADD_IMAGES_TOOL,
   SHOP_CREATE_DISCOUNT_TOOL,
   SHOP_SAVE_COLLECTION_TOOL,
@@ -96,14 +108,26 @@ export const SHOP_TOOL_SCOPE: Readonly<Record<string, string>> = {
   [SHOP_SAVE_PAGE_TOOL]: 'write_content',
   [SHOP_SAVE_MENU_TOOL]: 'write_online_store_navigation',
   [SHOP_CREATE_DISCOUNT_TOOL]: 'write_discounts',
+  [SHOP_REFUND_ORDER_TOOL]: 'write_orders',
+  [SHOP_CHANGE_ADDRESS_TOOL]: 'write_orders',
+  [SHOP_RESHIP_ORDER_TOOL]: 'write_draft_orders',
 }
+
+/** WP417：客服两条职责（网站客服、社群管理）能用的店铺改动：退款 / 改地址 / 补发 / 发折扣码。 */
+const SUPPORT_SHOP_TOOLS: readonly string[] = [
+  ...SHOP_ORDER_TOOL_NAMES,
+  SHOP_CREATE_DISCOUNT_TOOL,
+].sort()
 
 /**
  * 每条职责登记了哪几个（与 `PlatformStoreAdminSpec.scopes_by_role` 对得上：要的权限够用这几个）。
  * 店铺管理全有；整站搭建管结构（页面、菜单）、只读商品与合集；网页模板只读商品与合集（选合集 / 挂商品）。
  */
 export const SHOP_TOOLS_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
-  'dtc.store': SHOP_TOOL_NAMES,
+  // WP417：店铺管理不动订单（退款 / 改地址 / 补发归客服）
+  'dtc.store': SHOP_TOOL_NAMES.filter((n) => !SHOP_ORDER_TOOL_NAMES.includes(n)),
+  'dtc.support': SUPPORT_SHOP_TOOLS,
+  'dtc.community-support': SUPPORT_SHOP_TOOLS,
   'site.shopify-build': [
     SHOP_GET_COLLECTION_TOOL,
     SHOP_GET_PAGE_TOOL,
@@ -383,6 +407,63 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
         minimum_subtotal: { type: 'number', description: '满多少钱才能用' },
       },
       required: ['title', 'code'],
+    },
+  },
+  {
+    name: SHOP_REFUND_ORDER_TOOL,
+    description:
+      '**不会直接退。** 出一张退款卡：这一单退多少钱（不给 = 退剩下能退的全部）、为什么。出卡前会现读这一单（已付多少、已退多少），' +
+      '超过能退的不出卡。人批了才在店铺后台真退，退完读回「已退金额」对上了才算好。先用 get_order 查过这一单再用它。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        order_id: STR('订单号（#1001）或订单 id'),
+        amount: { type: 'number', description: '退多少钱（店铺币种；不给 = 退剩下能退的全部）' },
+        reason: STR('一句话说为什么退（卡上给人看，也写进店铺后台的备注）'),
+        notify_customer: {
+          type: 'boolean',
+          description: '退完让 Shopify 给顾客发通知（缺省不发）',
+        },
+      },
+      required: ['order_id', 'reason'],
+    },
+  },
+  {
+    name: SHOP_CHANGE_ADDRESS_TOOL,
+    description:
+      '**不会直接改。** 出一张改收货地址的卡：只有还没发货的单能改。出卡前现读这一单的原地址，卡上写「原来 → 改成」。' +
+      '人批了才改，改完读回地址对上了才算好。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        order_id: STR('订单号（#1001）或订单 id'),
+        address1: STR('街道地址'),
+        address2: STR('门牌、楼层（可不给）'),
+        city: STR('城市'),
+        province_code: STR('省 / 州代码（如 CA；没有可不给）'),
+        zip: STR('邮编'),
+        country_code: STR('国家代码（如 US）'),
+        name: STR('收件人姓名（不给 = 不改）'),
+        phone: STR('电话（不给 = 不改）'),
+        reason: STR('一句话说为什么改'),
+      },
+      required: ['order_id', 'address1', 'city', 'zip', 'country_code'],
+    },
+  },
+  {
+    name: SHOP_RESHIP_ORDER_TOOL,
+    description:
+      '**不会直接补发。** 出一张补发卡：从这一单里挑一件（漏发 / 错发 / 破损），免费再发一份到原收货地址。' +
+      '人批了才在后台建一张 0 元的补发单，建完读回那张新单才算好。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        order_id: STR('原订单号（#1001）或订单 id'),
+        line_item_id: STR('补哪一件（get_order 里那一行的 id；这一单只有一件可不给）'),
+        quantity: { type: 'integer', description: '补几个（缺省 1）' },
+        reason: STR('一句话说为什么补发（漏发 / 错发 / 破损…）'),
+      },
+      required: ['order_id', 'reason'],
     },
   },
 ]

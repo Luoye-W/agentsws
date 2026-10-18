@@ -35,19 +35,27 @@ export function ChatPlanPanel({ turn }: { turn: ChatTurnView | undefined }): Rea
     )
   }
   const plan = turn.plan
+  /*
+   * WP417（决策 1232）：「能答」的那一句缺省也先出卡等你批——这时标签说「先给你批」，不说「直接答」
+   * （摘要那一行同理：说的是起草好了等你批）。
+   */
+  const held = plan.action === 'answer' && turn.approval_item_id !== undefined
+  const label = held ? 'answer_held' : plan.action
   return (
     <Card data-testid="chat-plan" data-action={plan.action}>
       <CardHeader className="gap-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           {t('chat.plan.title')}
           <Badge variant={TONE[plan.action] ?? 'secondary'} data-testid="chat-plan-action">
-            {t(`chat.action.${plan.action}`)}
+            {t(`chat.action.${label}`)}
           </Badge>
-          <Hint text={t(`chat.action.${plan.action}.why`)} testId="chat-plan-why" />
+          <Hint text={t(`chat.action.${label}.why`)} testId="chat-plan-why" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <p className="text-muted-foreground">{plan.summary}</p>
+        <p className="text-muted-foreground">
+          {held ? t('chat.action.answer_held.why') : plan.summary}
+        </p>
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt className="text-muted-foreground">{t('chat.plan.intent')}</dt>

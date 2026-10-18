@@ -99,6 +99,16 @@ function poolItemView(item: PoolItem): WorkPoolItem {
 
 export interface WorkPortOptions {
   /**
+   * WP417（自查客服 D8）：社媒运营转过来的「转客服卡」（`form: 'support_handoff'`）点了「接」→
+   * 在社群管理那条职责下开一件事（钉着那条线程）、起运行，起草回帖。以前点了只改卡状态，什么都不发生。
+   */
+  acceptHandoff?(actor: WorkActor, item: ApprovalItem): Promise<void>
+  /**
+   * WP417（自查 F11 / F12）：替我答那几张卡（`meet` 约时间、`secretary_answer` 先给本人看）点了之后真生效
+   * ——以前「约时间」卡批了会议不建、状态不变。
+   */
+  acceptSecretary?(actor: WorkActor, item: ApprovalItem): Promise<void>
+  /**
    * WP342（决策 853）：这个模型 id（`provider_id/model`）现在能不能选（= 在「设置 → 模型」已接的里面）。
    * 不给 = 不判（单测里的老装配）。认不出的：开事项时不记、换模型时拒。
    */
@@ -671,8 +681,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      * `anchor` 指向事项时间线上那条产出——点待办标题就回到会议现场的那一处（37 §2.2b）。
      * **本人确认前不形成责任**（31 I13）：这一步只在本人按下"接"之后才发生。
      */
-    acceptClaim(actor, item) {
+    async acceptClaim(actor, item) {
       const payload = item.payload as ClaimPayload | undefined
+      const form = (payload as { form?: string } | undefined)?.form
+      if (form === 'support_handoff') {
+        await options.acceptHandoff?.(actor, item)
+        return undefined
+      }
+      if (form === 'meet' || form === 'secretary_answer') {
+        await options.acceptSecretary?.(actor, item)
+        return undefined
+      }
       if (payload?.form !== 'claim') return undefined
       const matter_id = payload.matter_id
       // 同一张卡按两次不重复建（认领卡的 dedupe_key 稳定，卡本身也只能决定一次）

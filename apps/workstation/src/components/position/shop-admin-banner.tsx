@@ -31,7 +31,14 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 
 /** 登记了运营工具的职责（与服务端 `PlatformStoreAdminSpec.scopes_by_role` 同一张表）。 */
-export const SHOP_ADMIN_ROLES = ['dtc.store', 'site.shopify-build', 'site.shopify-theme']
+export const SHOP_ADMIN_ROLES = [
+  'dtc.store',
+  'site.shopify-build',
+  'site.shopify-theme',
+  // WP417：客服退款 / 改地址 / 补发 / 发码也走这一份店铺授权
+  'dtc.support',
+  'dtc.community-support',
+]
 /** 有这两条之一的岗位上，「装 CLI / 填店铺」由网页模板那一行带。 */
 const THEME_ROLES = ['site.shopify-theme', 'site.builder']
 

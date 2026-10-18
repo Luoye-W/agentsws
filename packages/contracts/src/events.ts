@@ -389,6 +389,10 @@ export type KnownEventType =
   | 'chat.turn_planned'
   | 'chat.takeover_changed'
   | 'chat.assist_timeout'
+  // WP417（决策 1232）：在线客服缺省要人批——这一句起草好了、先出卡等人批（payload：原因、卡 id）
+  | 'chat.reply_held'
+  // WP417（自查 C15）：聊天里没等到人 → 出了一张跟进邮件卡（payload：卡 id；邮箱不进日志）
+  | 'chat.email_follow_up'
   // WP57：商家在聊天里「教 AI」之后沉淀下来的知识候选（承诺类永不自动发布，19）
   | 'knowledge.candidate_created'
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。

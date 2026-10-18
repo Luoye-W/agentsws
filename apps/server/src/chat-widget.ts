@@ -132,6 +132,7 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
             : {
                 assist_wait_seconds: normalizeAssistWaitSeconds(parsed.config.assist_wait_seconds),
               }),
+          ...(parsed.config?.auto_send_faq === true ? { auto_send_faq: true } : {}),
         },
         ...(parsed.updated_at === undefined ? {} : { updated_at: parsed.updated_at }),
       }
@@ -209,8 +210,14 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
           ...(accent === undefined || accent === '' ? {} : { accent: safeAccent(accent) }),
           ...(greeting === undefined || greeting === '' ? {} : { greeting }),
           ...(input.assist_wait_seconds === undefined
-            ? {}
+            ? state.config.assist_wait_seconds === undefined
+              ? {}
+              : { assist_wait_seconds: state.config.assist_wait_seconds }
             : { assist_wait_seconds: normalizeAssistWaitSeconds(input.assist_wait_seconds) }),
+          // WP417（决策 1232）：没带这一格 = 保持原样（老界面只改外观时不能把它悄悄关掉 / 打开）
+          ...((input.auto_send_faq ?? state.config.auto_send_faq) === true
+            ? { auto_send_faq: true }
+            : {}),
         },
         updated_at: clock.now(),
       }

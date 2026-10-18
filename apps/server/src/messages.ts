@@ -1606,7 +1606,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
                   ? '红人营销岗位没开，开了才能交。'
                   : route === 'b2b' && !b2bEnabledFor(row.account)
                     ? 'B2B 岗位没开（或这只邮箱不收 B2B 信），开了才能交。'
-                    : '这封信没交出去（原信取不回，或那一路没接住）。',
+                    : // WP417（自查 U13）：说人话、给下一步
+                      '没交成功：这封信的原文没取回来。可以再点一次，或者点「我自己回」。',
           }
       }
       const event = (handed_off: boolean): void =>

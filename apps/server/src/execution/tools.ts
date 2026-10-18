@@ -37,13 +37,22 @@ import {
   WEB_SEARCH_TOOL,
   WORKSHOP_SERVICE_TOOL_NAMES,
 } from '@agentsws/stand-ins'
-import { COMMUNITY_THREADS_TOOL, POLICY_TOOL, TOOL_ACTIONS } from '../records.js'
+import {
+  CHAT_SESSIONS_TOOL,
+  COMMUNITY_THREADS_TOOL,
+  POLICY_TOOL,
+  SUPPORT_THREADS_TOOL,
+  TOOL_ACTIONS,
+} from '../records.js'
 
 /** 宿主里有执行器的工具名（裸名）。 */
 export const HOST_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.keys(TOOL_ACTIONS),
   POLICY_TOOL,
   COMMUNITY_THREADS_TOOL,
+  // WP417：客服查询类（等着回的来信 / 聊天会话），执行在 records.ts 的记录源执行器
+  SUPPORT_THREADS_TOOL,
+  CHAT_SESSIONS_TOOL,
   READ_SKILL_TOOL,
   WEB_SEARCH_TOOL,
   WEB_FETCH_TOOL,

@@ -9,7 +9,13 @@
  * 4. 工具面（{@link ShopToolSurface.offered}）按「职责表 × 授权里的权限」给：没授权一个都不出。
  */
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
-import { SHOP_READ_TOOL_NAMES, SHOP_TOOL_NAMES, shopToolsFor } from '@agentsws/stand-ins'
+import {
+  SHOP_ORDER_TOOL_NAMES,
+  SHOP_READ_TOOL_NAMES,
+  SHOP_TOOL_NAMES,
+  SHOP_TOOLS_BY_ROLE,
+  shopToolsFor,
+} from '@agentsws/stand-ins'
 import { AUTH_PROBLEM_CODES, ShopAdminError } from './shop-admin.js'
 import type { ShopAdminAssembly } from './shop-auth.js'
 import { roleHasTool, type ShopOps, ShopOpsError } from './shop-ops.js'
@@ -34,7 +40,16 @@ export function createShopToolSurface(options: ShopToolsOptions): ShopToolSurfac
       const m = await options.module()
       if (m === undefined) return []
       const access = await m.auth.access()
-      return access === undefined ? [] : shopToolsFor(role_id, access.scopes)
+      if (access === undefined) return []
+      const granted = shopToolsFor(role_id, access.scopes)
+      /*
+       * WP417（自查客服 A24–A26）：客服的订单改动（退款 / 改地址 / 补发）缺权限也摆出来——
+       * 调的时候照实说「店铺授权里缺这一项，去重新授权」，而不是让模型以为根本做不了、凭空答一段。
+       */
+      const asks = (SHOP_TOOLS_BY_ROLE[role_id] ?? []).filter(
+        (n) => SHOP_ORDER_TOOL_NAMES.includes(n) && !granted.includes(n),
+      )
+      return [...granted, ...asks].sort()
     },
     executeTool: async ({ name, input, request }): Promise<ToolExecution> => {
       const bare = bareOf(name)

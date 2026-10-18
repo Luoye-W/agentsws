@@ -194,7 +194,17 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
   },
   {
     id: 'shop.ops',
-    kinds: ['listing_edit', 'price_change', 'collection_edit', 'discount_code', 'store_setup'],
+    kinds: [
+      'listing_edit',
+      'price_change',
+      'collection_edit',
+      'discount_code',
+      'store_setup',
+      // WP417（客服 A24–A26）：退款 / 补发 / 改收货地址经店铺授权那一套改订单、读回核对
+      'refund',
+      'reship',
+      'address_change',
+    ],
     readback: 'verified',
     // 只有经店铺工具出的卡（带 `via: shop_admin`）才走 Shopify 后台；别的路出的同类卡没有去处
     accepts: (c) => rec(c.after).via === SHOP_VIA,

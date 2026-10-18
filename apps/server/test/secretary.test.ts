@@ -206,7 +206,7 @@ describe('profile 与公开级别（41 §1.3）', () => {
 })
 
 describe('代答（41 §1.2 第一行）', () => {
-  it('A 问 B 的秘书"在忙什么"：只拿到同事可见级的标题与条数', async () => {
+  it('A 问 B 的秘书"在忙什么"：只拿到同事可见级的标题与条数；WP417（决策 1234）先给本人看，本人点了才回', async () => {
     // 陈晓手上有一件在做的活
     expect((await chenCall('POST', '/v1/todos', { title: '核对昨天的退款单' })).status).toBe(201)
 
@@ -215,9 +215,46 @@ describe('代答（41 §1.2 第一行）', () => {
     )
     expect(out.refused).toBe(false)
     expect(out.kind).toBe('doing')
-    expect(out.answer).toContain('核对昨天的退款单')
+    // 先交给陈晓本人看：问的人这一刻拿到的是「交给本人了」，不是答案
+    expect(out.answer).toContain('交给陈晓本人')
+    expect(out.answer).not.toContain('核对昨天的退款单')
     expect(out.fields).toEqual(['in_progress'])
     expect(out.run_id).toMatch(/^run_/)
+
+    // 陈晓队列里有一张「助理准备这样回」的卡；点「就这样回」
+    type Card = {
+      id: string
+      kind: string
+      revision: number
+      payload: { form?: string; answer?: string }
+    }
+    const mine = await dataOf<Card[]>(await chenCall('GET', '/v1/approvals?lane=mine'))
+    const card = mine.find((i) => i.payload.form === 'secretary_answer')
+    expect(card?.payload.answer).toContain('核对昨天的退款单')
+    const decided = await chenCall('POST', `/v1/approvals/${card?.id}/decide`, {
+      action: 'approve',
+      version: card?.revision,
+      selected_option_id: 'send',
+    })
+    expect(decided.status).toBe(200)
+    // 问的人收到「陈晓回你了」
+    const asker = await dataOf<Card[]>(await call('GET', '/v1/approvals?lane=mine'))
+    const reply = asker.find((i) => i.payload.form === 'secretary_reply')
+    expect(reply?.payload.answer).toContain('核对昨天的退款单')
+  })
+
+  it('WP417（自查 F17）：选了「直接找我」→ 助理不代答，本人收到「有人找你」', async () => {
+    expect(
+      (await chenCall('PUT', '/v1/me/profile', { contact_policy: { prefer: 'direct' } })).status,
+    ).toBe(200)
+    const out = await dataOf<AskView>(
+      await call('POST', `/v1/people/${chenId}/ask`, { body: { question: '陈晓在忙什么？' } }),
+    )
+    expect(out.refused).toBe(true)
+    expect(out.answer).toContain('直接找我')
+    type Card = { payload: { form?: string } }
+    const mine = await dataOf<Card[]>(await chenCall('GET', '/v1/approvals?lane=mine'))
+    expect(mine.some((i) => i.payload.form === 'secretary_direct')).toBe(true)
   })
 
   it('问私有待办被拒', async () => {
@@ -334,6 +371,29 @@ describe('日程与约时间（41 §1.2 第二行）', () => {
     const mine = await dataOf<CalendarItem[]>(await call('GET', `/v1/me/agenda?${range}`))
     const theirs = await dataOf<CalendarItem[]>(await chenCall('GET', `/v1/me/agenda?${range}`))
     expect(mine.map((i) => i.title)).toContain('聊定价')
+    expect(theirs.map((i) => i.title)).toContain('聊定价')
+  })
+
+  it('WP417（自查 F12）：在队列里批「约时间」卡（选「这个时间可以」）→ 真建会', async () => {
+    const proposal = await dataOf<MeetView>(
+      await call('POST', `/v1/people/${chenId}/meet`, {
+        body: { title: '聊定价', candidates: [{ start: MON_14, end: MON_1430 }] },
+      }),
+    )
+    type Card = { id: string; revision: number; payload: { form?: string } }
+    const mine = await dataOf<Card[]>(await chenCall('GET', '/v1/approvals?lane=mine'))
+    const card = mine.find((i) => i.id === proposal.approval_item_id)
+    expect(card?.payload.form).toBe('meet')
+    const decided = await chenCall('POST', `/v1/approvals/${card?.id}/decide`, {
+      action: 'approve',
+      version: card?.revision,
+      selected_option_id: 'accept',
+    })
+    expect(decided.status).toBe(200)
+    const after = await dataOf<MeetView[]>(await chenCall('GET', '/v1/me/meets'))
+    expect(after.find((m) => m.id === proposal.id)?.state).toBe('accepted')
+    const range = `from=${MON_14}&to=2026-09-08T00:00:00.000Z`
+    const theirs = await dataOf<CalendarItem[]>(await chenCall('GET', `/v1/me/agenda?${range}`))
     expect(theirs.map((i) => i.title)).toContain('聊定价')
   })
 

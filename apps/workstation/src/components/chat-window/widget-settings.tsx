@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   type ChatRelayTestView,
   getChatRelaySettings,
@@ -43,11 +44,19 @@ export function embedCode(endpoint: string | undefined): string {
   return `<script src="${base.replace(/\/$/, '')}/widget.js" async></script>`
 }
 
-/** 预览：同一段脚本跑在 iframe 里（srcdoc，无外部请求时脚本安静退出）。 */
-function previewDoc(code: string): string {
-  return `<!doctype html><html><body style="margin:0;font-family:sans-serif;background:#f6f7f8">
+const escapeHtml = (t: string): string =>
+  t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/**
+ * 预览：画出挂件在网页上的样子（右下角的按钮 + 欢迎语气泡），按现在的主色与欢迎语。
+ * WP417（自查 C28 / U19）：以前把嵌入脚本塞进一个禁了脚本的 iframe，框里只剩「你的网页」四个字。
+ */
+export function previewDoc(accent: string, greeting: string): string {
+  const color = /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : '#2563eb'
+  return `<!doctype html><html><body style="margin:0;font-family:sans-serif;background:#f6f7f8;height:100vh;position:relative">
   <p style="padding:16px;color:#9aa0a6;font-size:13px">你的网页</p>
-  ${code.replace('<script', '<script data-preview="1"')}
+  <div style="position:absolute;right:16px;bottom:72px;max-width:70%;background:#fff;border-radius:12px;padding:10px 12px;font-size:13px;color:#202124;box-shadow:0 2px 8px rgba(0,0,0,.12)">${escapeHtml(greeting)}</div>
+  <div style="position:absolute;right:16px;bottom:16px;width:44px;height:44px;border-radius:50%;background:${color};box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>
   </body></html>`
 }
 
@@ -223,7 +232,7 @@ export function ChatWidgetSettings(): React.ReactNode {
             <select
               aria-label={t('chat.window.assist_wait')}
               className="h-9 rounded-md border bg-transparent px-2 text-[13px]"
-              value={cfg?.assist_wait_seconds ?? 30}
+              value={cfg?.assist_wait_seconds ?? 180}
               data-testid="chat-assist-wait"
               onChange={(e) =>
                 saveSettings.mutate({
@@ -236,10 +245,35 @@ export function ChatWidgetSettings(): React.ReactNode {
             >
               {[30, 60, 180, 300, 600].map((s) => (
                 <option key={s} value={s}>
-                  {t('chat.window.assist_wait.option', { n: s < 60 ? String(s) : `${s / 60}` })}
+                  {/* WP417：60 秒以上按分钟说（以前 180 秒显示成「3 秒」） */}
+                  {s < 60
+                    ? t('chat.window.assist_wait.option', { n: String(s) })
+                    : t('chat.window.assist_wait.option_min', { n: String(s / 60) })}
                 </option>
               ))}
             </select>
+          </div>
+          {/* WP417（决策 1232）：在线客服缺省每一句先出卡要你批；常见问题可以手动打开「直接发」 */}
+          <div className="flex items-center gap-2 text-[13px]">
+            <Switch
+              id="chat-auto-send-faq"
+              checked={cfg?.auto_send_faq === true}
+              aria-label={t('chat.window.auto_send_faq')}
+              data-testid="chat-auto-send-faq"
+              onCheckedChange={(on) =>
+                saveSettings.mutate({
+                  allowed_origins: cfg?.allowed_origins ?? [],
+                  ...(accent === undefined ? {} : { accent }),
+                  ...(greeting === '' ? {} : { greeting }),
+                  ...(cfg?.assist_wait_seconds === undefined
+                    ? {}
+                    : { assist_wait_seconds: cfg.assist_wait_seconds }),
+                  auto_send_faq: on,
+                })
+              }
+            />
+            <label htmlFor="chat-auto-send-faq">{t('chat.window.auto_send_faq')}</label>
+            <Hint text={t('chat.window.auto_send_faq.hint')} />
           </div>
         </CardContent>
       </Card>
@@ -380,7 +414,10 @@ export function ChatWidgetSettings(): React.ReactNode {
             title={t('chat.window.preview')}
             data-testid="chat-preview"
             className="h-64 w-full rounded-md border bg-white"
-            srcDoc={previewDoc(code)}
+            srcDoc={previewDoc(
+              accent,
+              greeting === '' ? t('chat.window.greeting.placeholder') : greeting,
+            )}
             sandbox=""
           />
         </CardContent>

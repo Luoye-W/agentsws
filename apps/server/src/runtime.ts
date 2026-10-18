@@ -118,6 +118,7 @@ import {
   COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
+  DRAFT_REPLY_TOOL,
   FIND_SERVICE_TOOL,
   GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
@@ -628,6 +629,19 @@ export interface RuntimeOptions {
    * 不接 = 老行为：草稿照常建卡，只是 `context.gates` 是空的、没有泄漏守卫。
    * 真服务进程一定接（`server.ts` 把它接到 `support-judgment.ts` 上）。
    */
+  /**
+   * WP417（自查客服 C2 / C24 / D9）：这件事的回复**该回到哪个渠道**。事项上钉着聊天会话 / 社群线程时，
+   * 起草出来的回复要回原来那个聊天窗 / 群，而不是变成一张「收件人待定」的邮件卡。
+   * 装配方认得出就自己出那张卡、回卡 id；认不出（普通邮件线程 / 没钉东西）回 `undefined`，照旧出邮件卡；
+   * 那个渠道出卡被拦下回 `{ error }`（不再退回邮件卡，免得人以为发得出去）。
+   */
+  routeDraft?(input: {
+    matter: Matter
+    run_id: string
+    subject: string
+    body: string
+    actor: { person_id: string; assignment_id: string; role_id: string }
+  }): Promise<{ approval_item_id: string } | { error: string } | undefined>
   judgeDraft?(input: {
     matter: Matter
     run_id: string
@@ -787,6 +801,8 @@ export function declaresImageInput(
 export interface DraftVerdict {
   action: 'send' | 'rewrite' | 'card'
   rewrite_instruction?: string
+  /** WP417：打回重写时时间线上那一句（不给 = 泄漏守卫那一句）。 */
+  note?: string
   /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
   gate_context: GateDecision[]
 }
@@ -1069,11 +1085,38 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // 打回重写：原因回给写正文的那一跳，**不建卡**（这一版根本没成形）
       work.appendEvent(s.matter.id, {
         kind: 'status',
-        text: '这一版回信照抄了内部指导的原文，已打回重写。',
+        text: verdict.note ?? '这一版回信照抄了内部指导的原文，已打回重写。',
         actor: { kind: 'system', id: 'runtime' },
         run_id: s.run_id,
       })
       return { rewrite: verdict.rewrite_instruction ?? '重写一版，不要引用内部指导的原文。' }
+    }
+    // WP417（自查 C2 / D9）：聊天会话 / 社群线程上的事——回复回原渠道（那张卡由装配方出）
+    const routedAssignment = roles.assignments.get(s.assignment_id)
+    const routed = await options
+      .routeDraft?.({
+        matter: s.matter,
+        run_id: s.run_id,
+        subject: payload.subject,
+        body: payload.body,
+        actor: {
+          person_id: s.person_id,
+          assignment_id: s.assignment_id,
+          role_id: routedAssignment?.role_id ?? 'common.member',
+        },
+      })
+      .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }))
+    if (routed !== undefined) {
+      if ('error' in routed) {
+        work.appendEvent(s.matter.id, {
+          kind: 'status',
+          text: `回复没出成卡：${routed.error}`,
+          actor: { kind: 'system', id: 'runtime' },
+          run_id: s.run_id,
+        })
+        return undefined
+      }
+      return { approval_item_id: routed.approval_item_id }
     }
     const subject =
       seen.find((r) => r.type === 'thread') ??
@@ -1150,6 +1193,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     })
     if (item.state === 'blocked') return undefined
     backfill(item)
+    /*
+     * WP417（自查客服 A18）：邮箱还没连上——卡照出（草稿不丢），这一轮收尾就地出「连邮箱」的连接卡；
+     * 真点「发送」时渠道照实回「没发出去：邮箱没连」，不再掉到内存桩显示发成功。
+     */
+    if (payload.channel === 'email' && to !== undefined) {
+      const emailNeed = (options.missingConnectionNeeds?.(assignment?.role_id ?? '') ?? []).find(
+        (n) => n.kind === 'email',
+      )
+      if (emailNeed !== undefined)
+        runWatch.get(s.run_id)?.blocks.noteSetup(DRAFT_REPLY_TOOL, {
+          kind: 'connect',
+          need: emailNeed,
+          why: '回信写好了，但邮箱还没连上，现在发不出去。连上就能发。',
+        })
+    }
     return { approval_item_id: item.id }
   }
 
