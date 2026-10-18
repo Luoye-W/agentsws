@@ -82,6 +82,7 @@ export * from './runtime/research.js'
 export * from './runtime/schedule.js'
 // WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具
 export * from './runtime/setup-request.js'
+export * from './runtime/setup-state.js'
 export * from './runtime/shop.js'
 // WP385：网站运营 / 内容与搜索读体检结论（只读）
 export * from './runtime/site-health.js'

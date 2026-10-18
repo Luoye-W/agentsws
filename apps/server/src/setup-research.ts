@@ -195,11 +195,20 @@ export interface SetupResearchCache {
 export function createResearchKit(
   host: SetupResearchHost,
   options: { cache?: SetupResearchCache; searchMax?: number; askMax?: number } = {},
-): { kit: SetupResearchKit; steps(): SetupPlanStep[]; used(): { searches: number; asks: number } } {
+): {
+  kit: SetupResearchKit
+  steps(): SetupPlanStep[]
+  used(): { searches: number; asks: number }
+  /** WP410：这一趟哪几样没查成（档案空 / 搜不了 / 没模型…；人话，给卡上「没查成」那一句）。 */
+  problems(): string[]
+} {
   const steps: SetupPlanStep[] = []
   let searches = 0
   let asks = 0
   let facts: SetupBrandFacts | undefined
+  // WP410：每一样最后一次的结局（没调过 = 不算问题）
+  let searchState: 'unused' | 'off' | 'error' | 'ok' = 'unused'
+  let askState: 'unused' | 'off' | 'error' | 'ok' = 'unused'
   const searchMax = options.searchMax ?? SETUP_SEARCH_MAX
   const askMax = options.askMax ?? SETUP_ASK_MAX
   const kit: SetupResearchKit = {
@@ -210,13 +219,29 @@ export function createResearchKit(
     },
     async search(query) {
       const q = query.trim().slice(0, 200)
-      if (q === '' || host.search === undefined || searches >= searchMax) return undefined
+      if (q === '') return undefined
+      if (host.search === undefined) {
+        if (searchState === 'unused') searchState = 'off'
+        return undefined
+      }
+      if (searches >= searchMax) return undefined
       searches += 1
       const key = `search:${shortHash(q)}`
       const hit = options.cache?.get(key)
-      if (Array.isArray(hit)) return hit as SetupWebHit[]
-      const got = await host.search(q).catch(() => undefined)
-      if (got === undefined) return undefined
+      if (Array.isArray(hit)) {
+        searchState = 'ok'
+        return hit as SetupWebHit[]
+      }
+      let failed = false
+      const got = await host.search(q).catch(() => {
+        failed = true
+        return undefined
+      })
+      if (got === undefined) {
+        if (searchState !== 'ok') searchState = failed ? 'error' : 'off'
+        return undefined
+      }
+      searchState = 'ok'
       const clean = got
         .filter((h) => typeof h?.url === 'string' && /^https?:\/\//iu.test(h.url))
         .slice(0, 10)
@@ -229,13 +254,28 @@ export function createResearchKit(
       return clean
     },
     async ask(prompt) {
-      if (host.ask === undefined || asks >= askMax) return undefined
+      if (host.ask === undefined) {
+        if (askState === 'unused') askState = 'off'
+        return undefined
+      }
+      if (asks >= askMax) return undefined
       asks += 1
       const key = `ask:${shortHash(prompt)}`
       const hit = options.cache?.get(key)
-      if (typeof hit === 'string') return hit
-      const got = await host.ask(prompt).catch(() => undefined)
-      if (got !== undefined && got.trim() !== '') options.cache?.set(key, got)
+      if (typeof hit === 'string') {
+        askState = 'ok'
+        return hit
+      }
+      let failed = false
+      const got = await host.ask(prompt).catch(() => {
+        failed = true
+        return undefined
+      })
+      if (got !== undefined && got.trim() !== '') {
+        askState = 'ok'
+        options.cache?.set(key, got)
+      } else if (askState !== 'ok')
+        askState = failed ? 'error' : got === undefined ? 'off' : 'error'
       return got
     },
     note(text, source) {
@@ -244,7 +284,16 @@ export function createResearchKit(
       steps.push({ text: t, ...(source === undefined ? {} : { source }) })
     },
   }
-  return { kit, steps: () => [...steps], used: () => ({ searches, asks }) }
+  const problems = (): string[] => {
+    const out: string[] = []
+    if (facts !== undefined && Object.keys(facts).length === 0) out.push('品牌档案还是空的')
+    if (searchState === 'off') out.push('联网搜索没开')
+    if (searchState === 'error') out.push('联网搜索出错了')
+    if (askState === 'off') out.push('没接 AI 模型')
+    if (askState === 'error') out.push('AI 没回话')
+    return out
+  }
+  return { kit, steps: () => [...steps], used: () => ({ searches, asks }), problems }
 }
 
 /** 档案那一格的来源。 */

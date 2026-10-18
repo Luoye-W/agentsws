@@ -212,6 +212,7 @@ export function renderSetupRequestAnswer(input: {
   if (d.needs_setup !== undefined && d.change === true)
     return `${d.setup_name ?? d.needs_setup}我打算这样改：在下面这张卡上点头就生效。`
   if (d.needs_setup !== undefined)
-    return `${d.setup_name ?? d.needs_setup}我先定了个方案：在下面这张卡上点头，我就接着做。`
+    // WP410（真机 #6）：这一刻还没查——不说「定好了」；查不成卡上会照实说
+    return `${d.setup_name ?? d.needs_setup}我去查一遍、定个方案，出在下面这张卡上（查不成会照实写在卡上）；你点头我就接着做。`
   return d.message
 }

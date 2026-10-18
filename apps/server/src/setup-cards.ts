@@ -26,7 +26,9 @@ import {
   type Clock,
   type ConnectNeed,
   type ConnectRequestPayload,
+  type ContextItem,
   connectRequestDedupeKey,
+  isLegacySetupRequest,
   isSecretLikeSetupKey,
   type MatterRunBlock,
   type RunRequest,
@@ -36,6 +38,7 @@ import {
   type SetupResumeTarget,
   setupRequestDedupeKey,
 } from '@agentsws/contracts'
+import { canonicalJson } from '@agentsws/core'
 import { finalPayload } from '@agentsws/txn'
 import {
   changeFields,
@@ -79,7 +82,30 @@ export interface SetupTarget {
    * （如体检设置：「加一条上架页」已经在了就不再出卡）。不给 = 按格子现值比（{@link changeFields}）。
    */
   pending?(suggestions: Record<string, string>): Promise<Record<string, string>>
+  /**
+   * WP410（真机 #9）：这个目标**此刻**存着的原值 + 它靠的连接（以插件交回 / 连接表为准）。
+   * 给了就按 {@link roles} 注进那几条职责每次运行的上下文（「当前设置快照」，三个运行时同一份字节），
+   * AI 说连接 / 设置的状态只按它，不凭记忆或旧对话。
+   */
+  state?(): Promise<SetupTargetState>
+  /** WP410：哪几条职责的运行要带上 {@link state}（不给 = 不带）。 */
+  roles?: readonly string[]
 }
+
+/** WP410：一个设置目标此刻的真实状态（给岗位 AI 看；没有任何秘密）。 */
+export interface SetupTargetState {
+  /** 设好了没有（同 `satisfied()`）。 */
+  configured: boolean
+  /** 人话名 → 现在存着的原值（空的就是空串，不补建议值）。 */
+  values: Record<string, string>
+  /** 靠的连接：人话名 → 现在怎样（以插件交回 / 连接表为准）。 */
+  connections?: Record<string, string>
+  /** 另外几句（最近一轮跑了没、结果怎样）。 */
+  notes?: string[]
+}
+
+/** WP410：「当前设置快照」那一条上下文的 id（三个运行时同一份）。 */
+export const SETUP_STATE_CONTEXT_ID = 'setup_state'
 
 export class SetupCardError extends Error {
   constructor(
@@ -176,6 +202,17 @@ export interface SetupCardsAssembly {
   /** WP334：登记过的设置目标 id（认不出时列给模型看）。 */
   targetIds(): string[]
   /**
+   * WP410（真机 #5）：升级迁移——旧版留下、还没处理的**空表单**配置卡（没有 `mode`）一律作废；
+   * 目标还没设好的，当场换成新版方案卡（先查一遍，等着的事项带过去）。每个品牌只跑一次（记在
+   * `setup-cards.json` 的 `migrations` 里）。
+   */
+  migrateLegacy?(): Promise<{ withdrawn: number; reasked: number }>
+  /**
+   * WP410（真机 #9）：这条职责的「当前设置快照」（登记了 `state` / `roles` 的目标 + 还开着的设置 / 连接卡）。
+   * 没有相关目标回 `undefined`（别的职责的上下文一个字节不变）。
+   */
+  stateFor?(role_id: string): Promise<ContextItem | undefined>
+  /**
    * WP349：这个品牌查过的搜索 / 模型结果缓存（同一句话 7 天内不再花钱）。品牌分析联网查与配置卡
    * 出卡前查**共用这一份**（键同 `createResearchKit`）。可选：老装配 / 替身没有就不缓存。
    */
@@ -211,6 +248,11 @@ export interface AskSetupInput {
   actor: RunRequest['actor']
   matter_id?: string
   run_id?: string
+  /**
+   * WP410（真机 #5）：已经有一张开着的卡时，重查一遍、格子变了就换一张（插件刚交回账号这类：
+   * 已知的值要预填上）。不给 = 照旧（开着的那张是新版方案卡就直接挂上去）。
+   */
+  refresh?: boolean
 }
 
 /** 内部：重出一张时直接用上一张的格子（不再查一遍、不再花钱）。 */
@@ -233,7 +275,12 @@ interface StateFile {
   cards: Record<string, CardRecord>
   /** WP348：查过的搜索 / 模型结果（同一句话 7 天内不再花钱）。 */
   research?: Record<string, { at: string; value: unknown }>
+  /** WP410：跑过的升级迁移（跑一次就记下）。 */
+  migrations?: string[]
 }
+
+/** WP410：旧版空表单卡作废那一次迁移的名字。 */
+export const LEGACY_SETUP_MIGRATION = 'wp410-legacy-setup-cards'
 
 /** WP348：查过的搜索 / 模型结果留多久。 */
 const RESEARCH_TTL_MS = 7 * 86_400_000
@@ -258,6 +305,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
         version: 1,
         cards: raw.cards ?? {},
         ...(raw.research === undefined ? {} : { research: raw.research }),
+        ...(Array.isArray(raw.migrations) ? { migrations: raw.migrations } : {}),
       }
     } catch {
       return { version: 1, cards: {} }
@@ -273,7 +321,16 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       )
       writeFileSync(
         file,
-        `${JSON.stringify({ version: 1, cards, ...(state.research === undefined ? {} : { research: state.research }) }, null, 2)}\n`,
+        `${JSON.stringify(
+          {
+            version: 1,
+            cards,
+            ...(state.research === undefined ? {} : { research: state.research }),
+            ...(state.migrations === undefined ? {} : { migrations: state.migrations }),
+          },
+          null,
+          2,
+        )}\n`,
       )
     } catch {
       // 写不下只丢「等着的」清单：卡还在，人补完照样能在事项里说「接着做」
@@ -479,7 +536,12 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     target: SetupTarget,
     fields: SetupField[],
     input: AskSetupInput,
-  ): Promise<{ fields: SetupField[]; steps: NonNullable<SetupRequestPayload['steps']> }> => {
+  ): Promise<{
+    fields: SetupField[]
+    steps: NonNullable<SetupRequestPayload['steps']>
+    /** WP410：没查成的那一句原因（查成了 / 本来不查就没有）。 */
+    failed?: string
+  }> => {
     // 宿主没给工具（老装配 / 测试）：照样查——已连的数据由目标自己读，档案 / 搜索 / 模型就是没有
     const host: SetupResearchHost | undefined =
       target.research === undefined
@@ -491,14 +553,25 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
           }) ?? { profile: () => ({}) })
     let plan: SetupPlan = {}
     let steps: NonNullable<SetupRequestPayload['steps']> = []
+    let threw: string | undefined
+    let problems: string[] = []
     if (target.research !== undefined && host !== undefined) {
-      const { kit, steps: stepsOf, used } = createResearchKit(host, { cache: researchCache })
+      const {
+        kit,
+        steps: stepsOf,
+        used,
+        problems: problemsOf,
+      } = createResearchKit(host, { cache: researchCache })
       try {
         plan = await target.research(kit)
-      } catch {
+      } catch (e) {
         plan = {}
+        // WP410：查的过程出错——照实说（只留一小段，不带堆栈）
+        const msg = e instanceof Error ? e.message.trim() : ''
+        threw = msg === '' ? '查的时候出错了' : `查的时候出错了：${msg.slice(0, 60)}`
       }
       steps = stepsOf()
+      problems = problemsOf()
       emit('setup_card.researched', { target: target.id, steps: steps.length, ...used() })
     }
     const merged = mergePlan(fields, plan, {
@@ -507,7 +580,32 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       ...(target.noGuess === undefined ? {} : { noGuess: target.noGuess }),
     })
     if (input.matter_id !== undefined) for (const st of steps) note(input.matter_id, st.text)
-    return { fields: merged, steps }
+    const failed =
+      target.research === undefined ? undefined : researchFailure(merged, target, threw, problems)
+    if (failed !== undefined) emit('setup_card.research_failed', { target: target.id })
+    return { fields: merged, steps, ...(failed === undefined ? {} : { failed }) }
+  }
+
+  /** WP410：开着的这张为什么要换掉（不用换回 `undefined`）。格子形状变了 / 旧版空表单 → 一定换。 */
+  const staleOf = async (
+    prior: SetupRequestPayload,
+    target: SetupTarget,
+    input: AskSetupInput,
+  ): Promise<'legacy' | 'shape' | 'research_failed' | 'suggestions' | 'refresh' | undefined> => {
+    if (isLegacySetupRequest(prior)) return 'legacy'
+    const keys = (await fieldsOf(target).catch(() => undefined))?.map((f) => f.key)
+    if (keys !== undefined && keys.join('\n') !== prior.fields.map((f) => f.key).join('\n'))
+      return 'shape'
+    if (prior.research_failed !== undefined) return 'research_failed'
+    const given = Object.entries(input.suggestions ?? {})
+    if (
+      given.some(([k, v]) => {
+        const f = prior.fields.find((x) => x.key === k)
+        return f !== undefined && (f.suggested ?? '').trim() !== v.trim()
+      })
+    )
+      return 'suggestions'
+    return input.refresh === true ? 'refresh' : undefined
   }
 
   const askSetupWith = async (
@@ -523,13 +621,22 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     const dedupe_key = setupRequestDedupeKey(ws, target.id)
     const resume = resumeOf(input.actor, input.matter_id)
     const prior = await activeCard(bus, dedupe_key)
-    if (prior !== undefined) {
+    /*
+     * WP410（真机 #6）：开着的那张不是拿来就用——旧版空表单、格子变了、上次没查成、AI 这次给的值不一样、
+     * 或调用方要「刷新」（插件刚交回账号）：重新查、重出一张，开着的那张收起，等着的事项带过去。
+     */
+    const stale =
+      prior === undefined || prepared !== undefined
+        ? undefined
+        : await staleOf(finalPayload(prior.item) as SetupRequestPayload, target, input)
+    if (prior !== undefined && stale === undefined) {
       const attach = attachTo(prior.rec, resume)
       emit('setup_card.reused', { card_id: prior.id, kind: 'setup_request', attach })
       return { item: prior.item, attach }
     }
     let fields: SetupField[]
     let steps: NonNullable<SetupRequestPayload['steps']> = prepared?.steps ?? []
+    let failed: string | undefined
     if (prepared !== undefined) fields = prepared.fields
     else if (change) {
       const next = changeFields(await fieldsOf(target), input.suggestions ?? {}, {
@@ -542,48 +649,84 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       const planned = await planOf(target, await fieldsOf(target), input)
       fields = planned.fields
       steps = planned.steps
+      failed = planned.failed
     }
     if (fields.length === 0) return undefined
+    // 「刷新」「AI 给了值」重查出来跟开着的那张一样：不换，照旧挂上去
+    if (prior !== undefined && (stale === 'refresh' || stale === 'suggestions')) {
+      const was = finalPayload(prior.item) as SetupRequestPayload
+      if (JSON.stringify(was.fields) === JSON.stringify(fields) && was.research_failed === failed) {
+        const attach = attachTo(prior.rec, resume)
+        emit('setup_card.reused', { card_id: prior.id, kind: 'setup_request', attach })
+        return { item: prior.item, attach }
+      }
+    }
+    const carried: SetupResumeTarget[] = []
+    if (prior !== undefined) {
+      prior.rec.done = true
+      save()
+      await bus.withdraw(prior.id, 'system' as never).catch(() => undefined)
+      carried.push(...prior.rec.waiting)
+      emit('setup_card.replaced', { card_id: prior.id, target: target.id, reason: stale })
+    }
+    const waiting = [...carried]
+    if (resume !== undefined && !waiting.some((w) => w.matter_id === resume.matter_id))
+      waiting.push(resume)
     const offer = change
       ? undefined
       : await options
           .workshopOffer?.({ key: `setup:${target.id}`, name: target.name })
           .catch(() => undefined)
+    const why =
+      failed === undefined
+        ? (input.why ?? target.why)
+        : `没查成：${failed}。要不要你来填下面几格？也可以补好品牌档案后跟我说「再查一次」。`
     const payload: SetupRequestPayload = {
       form: 'setup_request',
       target: target.id,
-      why: input.why ?? target.why,
+      why,
       fields,
       mode: change ? 'change' : 'plan',
       ...(steps.length === 0 ? {} : { steps }),
+      ...(failed === undefined ? {} : { research_failed: failed }),
       ...(resume === undefined ? {} : { resume }),
       ...(offer === undefined ? {} : { workshop_service: offer }),
     }
     const item = await bus.create({
       ...cardBase({
         actor: input.actor,
-        matter_id: input.matter_id,
+        matter_id: input.matter_id ?? carried[0]?.matter_id,
         run_id: input.run_id,
         object: { type: 'setting', id: target.id },
       }),
       kind: 'setup_request',
       dedupe_key,
-      title: change ? `${target.name}：我打算改成这样` : `${target.name}：我打算这样设`,
+      title: change
+        ? `${target.name}：我打算改成这样`
+        : failed === undefined
+          ? `${target.name}：我打算这样设`
+          : `${target.name}：没查成，要你来填吗`,
       summary: payload.why,
       payload,
     } as never)
-    state.cards[item.id] = {
-      kind: 'setup_request',
-      dedupe_key,
-      waiting: resume === undefined ? [] : [resume],
-    }
+    state.cards[item.id] = { kind: 'setup_request', dedupe_key, waiting }
     save()
+    // 没查成照实说：这件事的时间线上记一句（不装成方案）
+    if (failed !== undefined)
+      for (const w of waiting)
+        note(w.matter_id, `没查成${target.name}的方案：${failed}。卡上的格子要不要你来填？`)
+    // 换下来的那张上等着的别的事项：说一声卡换了
+    for (const w of carried)
+      if (w.matter_id !== input.matter_id)
+        note(w.matter_id, `${target.name}的设置卡换成新的了，在「要你处理」里。`)
     emit('setup_card.asked', {
       card_id: item.id,
       kind: 'setup_request',
       target: target.id,
       mode: payload.mode,
       needs_you: fields.filter((f) => f.needs_you === true).length,
+      ...(failed === undefined ? {} : { research_failed: true }),
+      ...(prior === undefined ? {} : { replaced: prior.id }),
     })
     return { item, attach: resume !== undefined }
   }
@@ -716,13 +859,17 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     if (action === 'reject') {
       rec.done = true
       save()
+      /*
+       * WP410（真机 #9）：只说「这张卡不要了」，不说「这件事停在这儿」——别的路可能早就在跑
+       * （Reddit 巡查走插件，不连官方 API 照样跑），那一句会让人以为事情停了。
+       */
+      const p = item.payload as ConnectRequestPayload | SetupRequestPayload
+      const what =
+        p.form === 'connect_request'
+          ? `先不连${namesOf(p.needs)}了`
+          : `先不设${targets.get(p.target)?.name ?? '这一步'}了`
       for (const w of rec.waiting)
-        note(
-          w.matter_id,
-          item.kind === 'connect_request'
-            ? '先不连了，这件事停在这儿。'
-            : '先不设了，这件事停在这儿。',
-        )
+        note(w.matter_id, `${what}；用到它的那一步先跳过，要用时跟我说一声。`)
       emit('setup_card.declined', { card_id: item.id, kind: item.kind })
       return
     }
@@ -780,7 +927,115 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     return n
   }
 
+  /** WP410：升级迁移——旧版空表单卡作废，没设好的目标换成方案卡（每个品牌一次）。 */
+  const migrateLegacy = async (): Promise<{ withdrawn: number; reasked: number }> => {
+    const out = { withdrawn: 0, reasked: 0 }
+    if (state.migrations?.includes(LEGACY_SETUP_MIGRATION) === true) return out
+    const bus = options.approvals()
+    if (bus === undefined) return out
+    for (const [id, rec] of Object.entries(state.cards)) {
+      if (rec.done === true || rec.kind !== 'setup_request') continue
+      const item = await bus.get(id).catch(() => undefined)
+      if (item === undefined || !ACTIVE_STATES.has(item.state)) continue
+      const payload = item.payload as SetupRequestPayload
+      if (!isLegacySetupRequest(payload)) continue
+      rec.done = true
+      save()
+      await bus.withdraw(id, 'system' as never).catch(() => undefined)
+      out.withdrawn += 1
+      emit('setup_card.migrated', { card_id: id, target: payload.target })
+      const target = targets.get(payload.target)
+      if (target === undefined || (await target.satisfied().catch(() => false))) continue
+      const first = rec.waiting[0]
+      const actor = {
+        person_id: (first?.person_id ?? item.routing.recipients[0]?.person ?? '') as never,
+        assignment_id: (first?.assignment_id ?? item.proposer.assignment_id ?? '') as never,
+        role_id: item.role_id,
+      } as RunRequest['actor']
+      const next = await askSetupWith({
+        actor,
+        target: target.id,
+        ...(first === undefined ? {} : { matter_id: first.matter_id }),
+      }).catch(() => undefined)
+      if (next === undefined) continue
+      out.reasked += 1
+      const rec2 = state.cards[next.item.id]
+      if (rec2 !== undefined) for (const w of rec.waiting.slice(1)) attachTo(rec2, w)
+      for (const w of rec.waiting)
+        note(
+          w.matter_id,
+          `旧版的「${target.name}」设置卡作废了，换成新的方案卡：我先查过一遍，你点头就行。`,
+        )
+      try {
+        options.onCard?.(next.item)
+      } catch {
+        // 挂不上事项不影响卡本身
+      }
+    }
+    state.migrations = [...(state.migrations ?? []), LEGACY_SETUP_MIGRATION]
+    save()
+    // 没有要换的就不记审计事件（每个新品牌开机都会走到这里）
+    if (out.withdrawn > 0)
+      emit('setup_card.migration_done', { name: LEGACY_SETUP_MIGRATION, ...out })
+    return out
+  }
+
+  /** WP410：这条职责的「当前设置快照」。 */
+  const stateFor = async (role_id: string): Promise<ContextItem | undefined> => {
+    const mine = [...targets.values()].filter(
+      (t) => t.state !== undefined && t.roles?.includes(role_id) === true,
+    )
+    if (mine.length === 0) return undefined
+    const settings: Record<string, unknown>[] = []
+    for (const t of mine) {
+      const st = await t.state?.().catch(() => undefined)
+      if (st === undefined) continue
+      settings.push({
+        target: t.id,
+        name: t.name,
+        configured: st.configured,
+        values: Object.fromEntries(
+          Object.entries(st.values).map(([k, v]) => [k, v.trim() === '' ? '（空）' : v]),
+        ),
+        ...(st.connections === undefined ? {} : { connections: st.connections }),
+        ...(st.notes === undefined || st.notes.length === 0 ? {} : { notes: st.notes }),
+      })
+    }
+    if (settings.length === 0) return undefined
+    // 还开着的设置 / 连接卡（这条职责名下的，或就是这几个目标的）
+    const open: { kind: string; title: string }[] = []
+    const bus = options.approvals()
+    const ids = new Set(mine.map((t) => t.id))
+    if (bus !== undefined)
+      for (const [id, rec] of Object.entries(state.cards)) {
+        if (rec.done === true) continue
+        const item = await bus.get(id).catch(() => undefined)
+        if (item === undefined || !ACTIVE_STATES.has(item.state)) continue
+        const p = item.payload as ConnectRequestPayload | SetupRequestPayload
+        const ours = item.role_id === role_id || (p.form === 'setup_request' && ids.has(p.target))
+        if (!ours) continue
+        open.push({ kind: rec.kind === 'connect_request' ? '连接卡' : '设置卡', title: item.title })
+      }
+    const content = canonicalJson({
+      note:
+        '这是此刻从库里读出的真实值，不是记忆。说连接、设置、巡查跑没跑，只按这一段；' +
+        '这里没写的就说不知道、去查，不要凭之前的对话。',
+      settings,
+      open_cards: open,
+    })
+    return {
+      id: SETUP_STATE_CONTEXT_ID,
+      kind: 'summary',
+      source_ref: SETUP_STATE_CONTEXT_ID,
+      sensitivity: 'internal',
+      content,
+      bytes: new TextEncoder().encode(content).byteLength,
+    }
+  }
+
   return {
+    migrateLegacy,
+    stateFor,
     registerTarget(target) {
       if (targets.has(target.id))
         throw new SetupCardError('invalid_input', `设置目标重复登记：${target.id}`)
@@ -820,4 +1075,24 @@ export function valuesOf(payload: SetupRequestPayload): Record<string, string> {
     out[f.key] = v
   }
   return out
+}
+
+/**
+ * WP410（真机 #6）：查完了，卡上能让人「就这样」的格子一格都没有（只剩默认的下拉 / 开关、
+ * 不让 AI 猜的账号）——这就是没查成，不能装成方案、静默退回一张空表单。回人话原因；查成了回 `undefined`。
+ */
+export function researchFailure(
+  fields: readonly SetupField[],
+  target: Pick<SetupTarget, 'noGuess'>,
+  threw: string | undefined,
+  problems: readonly string[],
+): string | undefined {
+  if (threw !== undefined) return [threw, ...problems].join('；')
+  const noGuess = new Set(target.noGuess ?? [])
+  const free = fields.filter(
+    (f) => f.kind !== 'select' && f.kind !== 'toggle' && !noGuess.has(f.key),
+  )
+  if (free.length === 0) return undefined
+  if (free.some((f) => (f.suggested ?? '').trim() !== '')) return undefined
+  return problems.length > 0 ? problems.join('；') : '档案和搜索里都没找到能用的'
 }

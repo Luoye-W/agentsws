@@ -64,6 +64,7 @@ import {
   type SettingsSuggestions,
   writeSettings,
 } from './settings.js'
+import { patrolState } from './state.js'
 import type { RedditWatchItemQuery, RedditWatchStore } from './store.js'
 import { type PatrolBrandBrief, type PatrolSuggestion, suggestPatrol } from './suggest.js'
 import { applyLocalMarks } from './terms.js'
@@ -190,6 +191,10 @@ export const JOB_RUNNING_TTL_MS = 20 * 60_000
 export const CARD_GAP_MS = 20 * 3_600_000
 /** 第一次读只要这么近的。 */
 export const FIRST_READ_WINDOW_S = 7 * 86_400
+/** WP410：升级迁移（旧版记下的「设置卡今天出过了」作废）跑过的记号。 */
+export const PATROL_SETUP_MIGRATION_KEY = 'migrated:wp410'
+/** WP410：巡查快照注进哪几条职责的上下文（官方版块 / 外部版块）。 */
+export const PATROL_STATE_ROLES: readonly string[] = ['social.reddit', 'pr.reddit']
 
 interface ExtState {
   seen_at?: Iso8601
@@ -265,16 +270,34 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
 
   /* ── 卡：缺设置 / 缺连接（一种卡一天最多一次）────────────────────────── */
   const throttled = (kind: string): boolean => {
-    const at = store.kv<Iso8601>(ws, `asked:${kind}`)
+    const at = store.kv<Iso8601 | null>(ws, `asked:${kind}`) ?? undefined
     if (at !== undefined && nowMs() - ms(at) < CARD_GAP_MS) return true
     store.setKv(ws, `asked:${kind}`, options.now())
     return false
   }
-  const askSetup = async (): Promise<void> => {
+  /*
+   * WP410（真机 #5）：升级迁移，跑一次就记下——旧版记下的「设置卡今天出过了」作废
+   * （旧版那张空表单卡由 setup-cards 的迁移换成方案卡；这里不清，新版就要再等一天才出得来）。
+   */
+  if (store.kv(ws, PATROL_SETUP_MIGRATION_KEY) === undefined) {
+    store.setKv(ws, 'asked:setup', null)
+    store.setKv(ws, PATROL_SETUP_MIGRATION_KEY, options.now())
+  }
+  /**
+   * 缺设置出方案卡（一天最多一次）。WP410：`force` = 插件刚把账号交回 / 刚连上 Reddit——不受一天一次限制，
+   * 开着的那张也重查一遍（已知的品牌号、自家版块要预填上）。
+   */
+  const askSetup = async (o: { force?: boolean } = {}): Promise<void> => {
     const actor = options.actor?.()
-    if (actor === undefined || throttled('setup')) return
+    if (actor === undefined) return
+    if (o.force === true) store.setKv(ws, 'asked:setup', options.now())
+    else if (throttled('setup')) return
     await (await options.setupCards?.())
-      ?.askSetup({ target: REDDIT_WATCH_TARGET, actor })
+      ?.askSetup({
+        target: REDDIT_WATCH_TARGET,
+        actor,
+        ...(o.force === true ? { refresh: true } : {}),
+      })
       .catch(() => undefined)
   }
   const askConnect = async (need: ConnectNeed, why: string): Promise<void> => {
@@ -925,7 +948,11 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         if (p[k] !== undefined) touchPart(k, { last_try_at: '1970-01-01T00:00:00.000Z' })
       for (const k of Object.keys(subClocks()))
         touchSub(k, { last_try_at: '1970-01-01T00:00:00.000Z' })
-      void tick().catch(() => undefined)
+      // WP410（真机 #5）：刚连上、还没设好、已经知道登着哪个号——不等一天一次，直接出（或刷新）方案卡
+      // （没设好时定时一拍也只是出卡，两条只走一条，免得同一张卡查两遍）
+      if (ext().user !== undefined && !isConfigured(settings()))
+        void askSetup({ force: true }).catch(() => undefined)
+      else void tick().catch(() => undefined)
     }
     sweep()
     // WP348：还没配巡查、也不知道登着哪个号 → 排一件「只看登着哪个号」（配置卡方案里品牌号就用它）
@@ -977,7 +1004,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       // WP360（决策 947）：插件刚装好、刚连上 Reddit、知道登着哪个号了 → 不等人开口，接上巡查的方案卡
       // （品牌号就是插件里登着的那个；一天最多一张，与缺设置时出的是同一张）
       // 出卡前要查一遍（搜索 / 模型），不让插件这一条请求等着
-      if (!isConfigured(settings())) void askSetup().catch(() => undefined)
+      // WP410（真机 #5）：插件把账号交回来了——不受一天一次限制，开着的那张也按新知道的号重查
+      if (!isConfigured(settings())) void askSetup({ force: true }).catch(() => undefined)
       return { accepted: true }
     }
     pace.endKey(rec.pace_key, rec.job.id)
@@ -1060,8 +1088,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       pendingListeners.add(l)
       return () => pendingListeners.delete(l)
     },
-    setupTarget: () =>
-      redditWatchSetupTarget({
+    setupTarget: () => ({
+      ...redditWatchSetupTarget({
         store,
         workspace_id: ws,
         ...(options.suggestions === undefined ? {} : { suggestions: options.suggestions }),
@@ -1074,6 +1102,23 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
             suggest: (brief, ask) => aiSuggestions({ brief, ask }),
           }),
       }),
+      // WP410（真机 #9）：官方版块 / 外部版块的 AI 说巡查的连接与设置只读这一份（三个运行时同一份）
+      roles: PATROL_STATE_ROLES,
+      state: async () => {
+        sweep()
+        const active = activeRun()
+        const last = active ?? store.runs(ws, { limit: 1 })[0]
+        return patrolState({
+          settings: settings(),
+          ext: ext(),
+          ...(last === undefined ? {} : { last }),
+          running: active !== undefined,
+          pending: store
+            .list(ws, { reply: true, limit: 300 })
+            .filter((x) => x.status === 'open' || x.status === 'drafting').length,
+        })
+      },
+    }),
     onAlert: (l) => {
       alertListeners.add(l)
       return () => alertListeners.delete(l)

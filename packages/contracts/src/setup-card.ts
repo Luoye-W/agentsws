@@ -142,6 +142,11 @@ export interface SetupRequestPayload {
   mode?: 'plan' | 'change'
   /** WP348：出卡前查了什么（几行；没查就没有）。 */
   steps?: SetupPlanStep[]
+  /**
+   * WP410（真机 #6）：出卡前**没查成**——一句人话原因（「联网搜索没开；没接 AI 模型」）。
+   * 有它 = 卡上照实说「没查成，原因…，要不要你来填」，不装成方案；没有 = 查过了（或这个目标本来不查）。
+   */
+  research_failed?: string
   /** WP390：同连接卡那一格——「交给工坊办」。 */
   workshop_service?: ServiceOffer
 }
@@ -174,6 +179,13 @@ export const isSetupRequestPayload = (p: unknown): p is SetupRequestPayload =>
   (p as { form?: unknown }).form === 'setup_request' &&
   typeof (p as { target?: unknown }).target === 'string' &&
   Array.isArray((p as { fields?: unknown }).fields)
+
+/**
+ * WP410（真机 #5 / #6）：旧版留下的**空表单**配置卡——WP348 之前出的卡没有 `mode`（WP324 那张表单）。
+ * 升级后这种卡一律作废、换成方案卡（决策 530：没有真实用户，不做兼容）。
+ */
+export const isLegacySetupRequest = (p: unknown): boolean =>
+  isSetupRequestPayload(p) && p.mode !== 'plan' && p.mode !== 'change'
 
 /**
  * 一个设置键 / 名字看着像不像秘密（口令、令牌、密钥）。配置卡一律不收这种——
