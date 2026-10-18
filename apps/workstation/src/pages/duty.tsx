@@ -85,7 +85,13 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
               ) : (
                 <ul className="flex flex-col gap-0.5">
                   {g.lines.map((line) => (
-                    <li key={line.key} data-testid={`duty-${g.id}`} data-raw={line.raw}>
+                    <li
+                      key={line.key}
+                      data-testid={`duty-${g.id}`}
+                      data-raw={line.raw}
+                      data-not-wired={line.not_wired === true ? 'true' : undefined}
+                      className={line.not_wired === true ? 'text-ws-muted-fg' : undefined}
+                    >
                       <InfoTip text={line.raw}>{line.text}</InfoTip>
                     </li>
                   ))}

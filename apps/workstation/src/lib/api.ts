@@ -1667,6 +1667,8 @@ export interface PositionConnectionItem {
   status: 'available' | 'planned'
   connect_service?: string
   note?: { zh: string; en: string }
+  /** WP415（只加）：连它要去平台开发者后台建应用 / 抄令牌（标「需要开发者配置」，不诱导去填）。 */
+  developer_setup?: true
 }
 
 export interface PositionConnectionsView {
@@ -1675,6 +1677,8 @@ export interface PositionConnectionsView {
   ready: boolean
   missing_required: string[]
   items: PositionConnectionItem[]
+  /** WP415（只加）：职责要、且已经连上的那几条。 */
+  connected?: string[]
 }
 
 export interface McpServerRecord {
@@ -2755,6 +2759,9 @@ export interface RoleSummaryView {
     review_cannot_be_disabled: boolean
     caps: { key: string; value: string }[]
     window?: { max_count: number; per: string }
+    /** WP415（只加）：落到哪类改动 / 生产里有没有真执行器（没有这一格 = 看渠道，不标）。 */
+    change_kind?: string
+    wired?: 'wired' | 'partly' | 'not_wired'
   }[]
   automation: { action_id: string; ceiling: string; initial: string; hard_ceiling: boolean }[]
   connectors: { kind: string; required: boolean }[]

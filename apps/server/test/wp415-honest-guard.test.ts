@@ -404,3 +404,15 @@ describe('统一执行结果（卡、时间线、发出记录同一份口径）'
     expect(executionOutcomeOf({ state: 'pending' })).toBeUndefined()
   })
 })
+
+describe('连接目录：要开发者应用 / 令牌的都标出来（决策 1239）', () => {
+  it('要用户抄令牌 / 客户端密钥的连接一律 developer_setup', async () => {
+    const { CONNECTION_DIRECTORY } = await import('@agentsws/contracts')
+    const DEV_FIELDS = ['access_token', 'bot_token', 'client_secret', 'developer_token']
+    for (const e of CONNECTION_DIRECTORY) {
+      if (e.status !== 'available') continue
+      const needsDev = e.fields.some((f) => DEV_FIELDS.includes(f.name))
+      if (needsDev) expect(e.developer_setup, e.kind).toBe(true)
+    }
+  })
+})

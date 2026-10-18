@@ -24,6 +24,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { ExecutionPill } from '@/components/deck/execution-note'
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { ColumnFilter, FilteredLine, useTableFilters } from '@/components/design/table-filter'
 import { Sparkline } from '@/components/stat-tile'
@@ -488,7 +489,12 @@ function TimelineBlock({ payload }: { payload: { rows: RecordRow[] } }): React.R
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-ws-muted-fg">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            <span>{approvalStateLabel(row.state, lang)}</span>
+            {/* WP415：执行过的照实说办没办成 */}
+            {row.execution === undefined ? (
+              <span>{approvalStateLabel(row.state, lang)}</span>
+            ) : (
+              <ExecutionPill view={row.execution} />
+            )}
           </div>
           <div className="text-sm">{row.title}</div>
         </li>
