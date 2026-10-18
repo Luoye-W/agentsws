@@ -14,6 +14,8 @@ import { useLocation } from 'react-router-dom'
 import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
 import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
 import { AMAZON_STORE_ROLE, AmazonOpsBoard } from '@/components/amazon/amazon-ops-board'
+// WP396：「Listing 体检」块的身体（导入即注册进上面那块面板）
+import '@/components/amazon/listing-checkup'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { DataBoard } from '@/components/position/data-board'

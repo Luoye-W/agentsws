@@ -109,6 +109,7 @@ import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agents
 import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
+  AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   COMPETITOR_STORE_ROLES,
   COMPETITOR_STORE_TOOL_NAMES,
@@ -121,6 +122,7 @@ import {
   imageWorkSection,
   isAdsDataRole,
   isAdsWiredRole,
+  isAmazonListingRole,
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
@@ -216,6 +218,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...REPORT_TOOL_NAMES,
     // WP315：投放岗看数据——查数只读本机库；现在导一次排给插件（只点导出）；止损只出卡
     ...ADS_DATA_TOOL_NAMES,
+    // WP396：Listing 体检——读自家前台页只读外部；看结果 / 改规则只动本机
+    ...AMAZON_LISTING_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
     // WP385：读网站体检结论——只读本机体检记录（不现跑体检）
@@ -512,6 +516,11 @@ export interface RuntimeOptions {
    * 不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   adsDataTools?: ToolExecutor
+  /**
+   * WP396（docs/106 §13）：亚马逊店铺运营的 Listing 体检三个工具（`amazon-listing/tools.ts` 建的那一份）。
+   * 只给 `amz.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  amazonListingTools?: ToolExecutor
   /**
    * WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具 `request_setup`（`setup-request-tool.ts` 建的那一份）。
    * **所有职责都有**；工具只回结构化缺项，卡由这一轮收尾时的 `setupCards.onRunBlocked` 出（同一缺项只一张）。
@@ -1313,6 +1322,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const sinkTools = options.recordSinkTools
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
+    const amazonListingTools = options.amazonListingTools
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
     const googleAlerts = options.googleAlertsTool
@@ -1354,7 +1364,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       prMonitor === undefined &&
       googleAlerts === undefined &&
       workshopTools === undefined &&
-      competitorStore === undefined
+      competitorStore === undefined &&
+      amazonListingTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1411,6 +1422,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP315：投放岗看数据（名字与别处不重名；职责在执行器里再判一次）
       if (adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bareOf(call.name))) {
         return adsDataTools(call)
+      }
+      // WP396：Listing 体检（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonListingTools !== undefined &&
+        AMAZON_LISTING_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonListingTools(call)
       }
       // WP334：AI 自己要卡（名字与别处不重名）
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -1478,6 +1496,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
     if (options.prMonitorTools !== undefined && PR_MONITOR_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
+    if (options.amazonListingTools !== undefined && AMAZON_LISTING_TOOL_NAMES.includes(bare))
+      return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
@@ -2004,6 +2024,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
         ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
           ? ADS_DATA_TOOL_NAMES
+          : []),
+        // WP396：Listing 体检（只给亚马逊店铺运营；服务端接了才有）
+        ...(isAmazonListingRole(config.role_id) && options.amazonListingTools !== undefined
+          ? AMAZON_LISTING_TOOL_NAMES
           : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),

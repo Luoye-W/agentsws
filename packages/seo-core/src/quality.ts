@@ -125,6 +125,11 @@ export function splitSentences(text: string): string[] {
 
 const figureKey = (v: string): string => v.replace(/[,\s_]/g, '')
 
+/** WP396：一条违规宣称规则命不命中这一句（Listing 体检复用同一个判法）。 */
+export function claimRuleMatches(rule: ContentClaimRule, sentence: string): boolean {
+  return matches(rule, sentence)
+}
+
 function matches(rule: ContentClaimRule, sentence: string): boolean {
   if (rule.regex === true) {
     try {

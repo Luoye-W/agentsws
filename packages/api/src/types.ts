@@ -55,6 +55,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
 import type { AdCreativePort } from './routes/ad-creative.js'
 import type { AdsPort } from './routes/ads.js'
+import type { AmazonListingPort } from './routes/amazon-listing.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
 import type { BackgroundPort } from './routes/background.js'
@@ -966,6 +967,11 @@ export interface GatewayDeps {
    * 没装配时那几条路由回 not_implemented。
    */
   competitorWatch?: CompetitorWatchPort
+  /**
+   * WP396（docs/106 §13）：自家 Amazon Listing 体检（面板看最近一次 / 现在体检 / 改规则）。
+   * 没装配时那几条路由回 not_implemented。
+   */
+  amazonListing?: AmazonListingPort
   /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），

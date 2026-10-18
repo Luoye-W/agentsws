@@ -185,6 +185,38 @@ export interface ScenarioPositionPlan {
   roles: string[]
 }
 
+/**
+ * WP396（docs/106 §13）：自家 Listing 体检读到的一页（前台商品页上读得到的那几格；写在场景里，
+ * 读页积木是替身）。没写的格子 = 页面上读不到。
+ */
+export interface ScenarioListingPage {
+  asin: string
+  marketplace?: string
+  title?: string
+  bullets?: string[]
+  description?: boolean
+  aplus?: boolean
+  images?: number
+  video?: boolean
+  rating?: number
+  reviews?: number
+  price?: string
+  stock?: 'in_stock' | 'out_of_stock'
+  seller?: string
+}
+
+/**
+ * WP396：体检一次（与服务进程同一份规则表与判法 `checkListing`）。`blocked` = 读到第几页时 Amazon 出了验证页
+ * （从 0 数；那一页起都不读）。`design: true` = 人在体检卡上点了第一处图片问题的「向设计岗下需求单」。
+ */
+export interface ScenarioListingCheck {
+  who: string
+  pages: ScenarioListingPage[]
+  own_sellers?: string[]
+  blocked?: number
+  design?: boolean
+}
+
 /** WP199：升级链留痕断言（`expected.escalation_trail`）。 */
 export interface ScenarioEscalationTrail {
   /** 卡上 `routing.escalation.trail` 按顺序的级别。 */
@@ -1189,6 +1221,8 @@ export type ScenarioEvent =
   | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
   /** WP395：首次设置按原话与勾选划分岗位、照建议配岗。 */
   | { at: string; type: 'position.plan'; plan: ScenarioPositionPlan }
+  /** WP396：自家 Listing 体检一次（替身读页；只出建议，不写 Amazon）。 */
+  | { at: string; type: 'listing.check'; listing_check: ScenarioListingCheck }
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
@@ -1639,6 +1673,19 @@ export interface ScenarioExpected {
    * （Amazon 店铺没连时问补货 / 账户健康）。每条至少答过一次。
    */
   position_answer_no_data?: string[]
+  /**
+   * WP396（docs/106 §13）：Listing 体检出了哪几处问题（规则 id，按体检卡上的顺序）、至少几处带草稿、
+   * 下了几张设计需求单；同时钉住：被拦之后一页都没再读、体检自己零写（不出卡、不改 Amazon）。
+   */
+  listing_checkup?: {
+    issues?: string[]
+    drafts_at_least?: number
+    design_requests?: number
+    /** 需求单真路由到的那条设计职责（`design.amazon`）。 */
+    design_routed_to?: string
+    stopped?: 'blocked'
+    pages_read?: number
+  }
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**

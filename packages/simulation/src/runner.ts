@@ -5,6 +5,7 @@
  * 事件按**虚拟时间**执行；每推进一步都跑一次"合成人决定 + 执行器出队"，
  * 因为 14 §4.1 的取消窗口与 15 §5 的父子顺序都只有在时间真的流动时才成立。
  */
+
 import type {
   ApprovalItem,
   Assignment,
@@ -30,6 +31,7 @@ import { checkExpectations } from './expectations.js'
 import { checkInvariants } from './invariants.js'
 import type { JudgeReport } from './judge.js'
 import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
+import { runListingCheck } from './listing.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
@@ -1267,6 +1269,18 @@ async function execute(
           text: event.plan.text,
           roles: event.plan.roles,
         })
+        return
+      }
+      // WP396：自家 Listing 体检（替身读页、同一份判法）；人点了「向设计岗下需求单」就走设计岗那条
+      case 'listing.check': {
+        const out = runListingCheck(world, event.listing_check)
+        if (event.listing_check.design === true && out.design !== undefined)
+          await designRequest({
+            who: event.listing_check.who as never,
+            from: 'amz.store' as never,
+            title: out.design.title,
+            need: out.design.need,
+          })
         return
       }
       // WP343：「我的助理」派活

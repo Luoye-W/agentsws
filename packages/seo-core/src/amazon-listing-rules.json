@@ -1,0 +1,538 @@
+{
+  "$comment": "WP396（docs/106 §13）：自家 Listing 体检规则表。每条带出处（official = Amazon 卖家帮助 / 官方公告；practice = 公开运营资料里的通行做法）与核对日期；params 是建议值，用户能改。规则在变：核对日期过了 180 天，卡上标「这条规则可能过时」。违规宣称那一条按站点用 claim-rules.ts 的市场分组。",
+  "rules": [
+    {
+      "id": "offer.in_stock",
+      "area": "offer",
+      "check": "in_stock",
+      "severity": "blocker",
+      "name": {
+        "zh": "有没有货",
+        "en": "In stock"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：前台写「Currently unavailable」就买不了"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "先补货或开自发货；断货太久会掉排名",
+        "en": "Restock or add a merchant-fulfilled offer; long stockouts cost ranking"
+      },
+      "enabled": true
+    },
+    {
+      "id": "offer.buybox_present",
+      "area": "offer",
+      "check": "buybox_present",
+      "severity": "blocker",
+      "name": {
+        "zh": "购物车（Featured Offer）在不在",
+        "en": "Featured Offer shown"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "Amazon 卖家论坛：Featured Offer（购物车）资格说明"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "在后台「库存」里看这条 Listing 的 Featured Offer 资格（价格、配送、账户表现都有关）",
+        "en": "Check Featured Offer eligibility for this listing in Seller Central (price, delivery and account performance all matter)"
+      },
+      "enabled": true
+    },
+    {
+      "id": "offer.buybox_own",
+      "area": "offer",
+      "check": "buybox_own",
+      "severity": "blocker",
+      "name": {
+        "zh": "购物车是不是你",
+        "en": "You own the Featured Offer"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：购物车被别的卖家拿走（跟卖），大部分订单不是你的"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "看看是不是被跟卖；是就走品牌保护（这一块在账户健康与合规里）",
+        "en": "Check for hijackers; if so, use brand protection (Account health & compliance)"
+      },
+      "enabled": true
+    },
+    {
+      "id": "title.max_chars",
+      "area": "title",
+      "check": "title_max_chars",
+      "severity": "search",
+      "name": {
+        "zh": "标题长度",
+        "en": "Title length"
+      },
+      "params": {
+        "max_chars": 200
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 官方公告：商品标题新要求（2025-01-21 起）",
+        "url": "https://sellercentral.amazon.com/seller-forums/discussions/t/533f9cf7-3b5e-4974-b523-02e4a1a42c5f"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "把标题收到建议长度以内：品牌 + 商品是什么 + 最要紧的一两个属性",
+        "en": "Trim to the suggested length: brand + what it is + the one or two key attributes"
+      },
+      "enabled": true
+    },
+    {
+      "id": "title.repeat_words",
+      "area": "title",
+      "check": "title_repeat_words",
+      "severity": "search",
+      "name": {
+        "zh": "同一个词重复",
+        "en": "Repeated words"
+      },
+      "params": {
+        "max_repeat": 2,
+        "exempt": [
+          "a",
+          "an",
+          "the",
+          "and",
+          "or",
+          "for",
+          "with",
+          "of",
+          "in",
+          "on",
+          "to",
+          "by",
+          "at",
+          "from",
+          "&",
+          "-",
+          "–",
+          "|"
+        ]
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 官方公告：商品标题新要求（2025-01-21 起）",
+        "url": "https://sellercentral.amazon.com/seller-forums/discussions/t/533f9cf7-3b5e-4974-b523-02e4a1a42c5f"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "同一个词（介词、冠词、连词除外）最多出现建议次数",
+        "en": "Use each word (except prepositions, articles and conjunctions) at most the suggested number of times"
+      },
+      "enabled": true
+    },
+    {
+      "id": "title.special_chars",
+      "area": "title",
+      "check": "title_special_chars",
+      "severity": "search",
+      "name": {
+        "zh": "标题里的特殊符号",
+        "en": "Special characters in title"
+      },
+      "params": {
+        "chars": ["!", "$", "?", "_", "{", "}", "^", "¬", "¦"]
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 官方公告：商品标题新要求（2025-01-21 起）",
+        "url": "https://sellercentral.amazon.com/seller-forums/discussions/t/533f9cf7-3b5e-4974-b523-02e4a1a42c5f"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "去掉这些符号（是品牌名的一部分除外）",
+        "en": "Remove these characters unless they are part of the brand name"
+      },
+      "enabled": true
+    },
+    {
+      "id": "title.promo_words",
+      "area": "title",
+      "check": "title_promo_words",
+      "severity": "search",
+      "name": {
+        "zh": "标题里的促销字眼",
+        "en": "Promotional words in title"
+      },
+      "params": {
+        "words": [
+          "best",
+          "best seller",
+          "best-selling",
+          "#1",
+          "no. 1",
+          "top rated",
+          "free shipping",
+          "sale",
+          "hot sale",
+          "hot deal",
+          "limited time",
+          "100% guaranteed",
+          "cheapest"
+        ]
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：商品详情页规则",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/G202024200"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "标题只写商品本身，促销、排名、包邮这类字眼拿掉",
+        "en": "Keep the title about the product; remove promotional, ranking or shipping claims"
+      },
+      "enabled": true
+    },
+    {
+      "id": "title.all_caps",
+      "area": "title",
+      "check": "title_all_caps",
+      "severity": "improve",
+      "name": {
+        "zh": "标题全大写",
+        "en": "All-caps title"
+      },
+      "params": {
+        "max_upper_ratio": 0.7
+      },
+      "source": {
+        "kind": "practice",
+        "title": "Amazon 各类目风格指南通行写法：每个词首字母大写，不全大写"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "改成每个词首字母大写",
+        "en": "Use title case instead of all caps"
+      },
+      "enabled": true
+    },
+    {
+      "id": "bullets.min_count",
+      "area": "bullets",
+      "check": "bullets_min_count",
+      "severity": "search",
+      "name": {
+        "zh": "五点条数",
+        "en": "Number of bullet points"
+      },
+      "params": {
+        "min": 3
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：五点描述要求",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/GX5L8BF8GLMML6CX"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "至少写到建议条数，每条讲一个买家关心的点",
+        "en": "Write at least the suggested number, one buyer concern per bullet"
+      },
+      "enabled": true
+    },
+    {
+      "id": "bullets.empty",
+      "area": "bullets",
+      "check": "bullets_empty",
+      "severity": "search",
+      "name": {
+        "zh": "五点空着",
+        "en": "Empty bullet points"
+      },
+      "params": {},
+      "source": {
+        "kind": "official",
+        "title": "Amazon 官方公告：五点描述新要求（2024-08-15 起）",
+        "url": "https://sellercentral.amazon.com/seller-forums/discussions/t/65f8e647-977d-49ac-9036-2049b96720b2"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "空的那几条补上，或者删掉",
+        "en": "Fill in or delete the empty bullets"
+      },
+      "enabled": true
+    },
+    {
+      "id": "bullets.length",
+      "area": "bullets",
+      "check": "bullets_length",
+      "severity": "improve",
+      "name": {
+        "zh": "每条五点长度",
+        "en": "Bullet length"
+      },
+      "params": {
+        "min_chars": 10,
+        "max_chars": 255
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：五点描述要求",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/GX5L8BF8GLMML6CX"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "每条收在建议长度之间：短标题 + 一句说清楚",
+        "en": "Keep each bullet within the suggested length: a short label plus one clear sentence"
+      },
+      "enabled": true
+    },
+    {
+      "id": "bullets.special_chars",
+      "area": "bullets",
+      "check": "bullets_special_chars",
+      "severity": "search",
+      "name": {
+        "zh": "五点里的表情和特殊符号",
+        "en": "Emojis and special characters in bullets"
+      },
+      "params": {
+        "chars": ["™", "®", "©", "€", "✅", "❌", "☺", "★", "✔"]
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 官方公告：五点描述新要求（2024-08-15 起）",
+        "url": "https://sellercentral.amazon.com/seller-forums/discussions/t/65f8e647-977d-49ac-9036-2049b96720b2"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "去掉表情和这些符号",
+        "en": "Remove emojis and these symbols"
+      },
+      "enabled": true
+    },
+    {
+      "id": "content.description_or_aplus",
+      "area": "content",
+      "check": "description_or_aplus",
+      "severity": "improve",
+      "name": {
+        "zh": "描述 / A+ 都没有",
+        "en": "No description or A+"
+      },
+      "params": {},
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：商品详情页规则",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/G202024200"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "至少写一段商品描述；做了品牌注册的可以上 A+",
+        "en": "Add at least a product description; brand-registered sellers can add A+"
+      },
+      "enabled": true
+    },
+    {
+      "id": "content.aplus",
+      "area": "content",
+      "check": "aplus_present",
+      "severity": "improve",
+      "name": {
+        "zh": "有没有 A+",
+        "en": "A+ content"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：品牌注册卖家用 A+（图文模块）讲卖点，转化更好"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "品牌注册了就做一版 A+（向设计岗下需求单）",
+        "en": "If brand-registered, add A+ content (send a design request)"
+      },
+      "enabled": true
+    },
+    {
+      "id": "images.main",
+      "area": "images",
+      "check": "main_image_present",
+      "severity": "blocker",
+      "name": {
+        "zh": "有没有主图",
+        "en": "Main image"
+      },
+      "params": {},
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：商品图片要求",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/G1881"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "补一张主图（纯白底、商品占画面 85% 以上），没有主图 Listing 会被压制",
+        "en": "Add a main image (pure white background, product fills 85%+); listings without one get suppressed"
+      },
+      "enabled": true
+    },
+    {
+      "id": "images.min_count",
+      "area": "images",
+      "check": "images_min_count",
+      "severity": "improve",
+      "name": {
+        "zh": "图片张数",
+        "en": "Number of images"
+      },
+      "params": {
+        "min": 6
+      },
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：主图 + 至少 5 张副图（场景、尺寸、细节、对比、包装）"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "补到建议张数：场景、尺寸、细节、包装各一张",
+        "en": "Add images up to the suggested count: in use, size, detail, packaging"
+      },
+      "enabled": true
+    },
+    {
+      "id": "images.video",
+      "area": "images",
+      "check": "video_present",
+      "severity": "improve",
+      "name": {
+        "zh": "有没有视频",
+        "en": "Product video"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：商品视频放在图片区，讲清怎么用"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "拍一段 30 秒内的使用视频（向设计岗下需求单）",
+        "en": "Make a short how-to video (send a design request)"
+      },
+      "enabled": true
+    },
+    {
+      "id": "variants.broken",
+      "area": "variants",
+      "check": "variants_broken",
+      "severity": "search",
+      "name": {
+        "zh": "变体是不是断了",
+        "en": "Broken variations"
+      },
+      "params": {
+        "min_title_similarity": 0.8
+      },
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：商品详情页规则",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/G202024200"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "同一款不同颜色 / 尺码应该挂在一个父体下；在后台「变体」里重新挂上",
+        "en": "Different colors or sizes of one product belong under one parent; re-link them in Seller Central"
+      },
+      "enabled": true
+    },
+    {
+      "id": "variants.unavailable",
+      "area": "variants",
+      "check": "variants_unavailable",
+      "severity": "improve",
+      "name": {
+        "zh": "有子体买不了",
+        "en": "Variations out of stock"
+      },
+      "params": {},
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：子体断货会让买家选到买不了的款式"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "补货，或者暂时把买不了的款式藏起来",
+        "en": "Restock or temporarily hide the unavailable variations"
+      },
+      "enabled": true
+    },
+    {
+      "id": "reviews.rating_min",
+      "area": "reviews",
+      "check": "rating_min",
+      "severity": "improve",
+      "name": {
+        "zh": "评分",
+        "en": "Star rating"
+      },
+      "params": {
+        "min": 4
+      },
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：评分低于 4 星转化明显变差"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "看最近的差评说什么，改商品或者改 Listing 说清楚",
+        "en": "Read recent low ratings; fix the product or make the listing clearer"
+      },
+      "enabled": true
+    },
+    {
+      "id": "reviews.count_min",
+      "area": "reviews",
+      "check": "reviews_min",
+      "severity": "improve",
+      "name": {
+        "zh": "评论数",
+        "en": "Number of ratings"
+      },
+      "params": {
+        "min": 10
+      },
+      "source": {
+        "kind": "practice",
+        "title": "通行做法：新品评论太少，买家不敢下单"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "签收后用 Amazon 自带的「请求评价」（连上店铺后能自动发）",
+        "en": "Use Amazon’s built-in Request a Review after delivery (automatic once the store is connected)"
+      },
+      "enabled": true
+    },
+    {
+      "id": "claims.market",
+      "area": "claims",
+      "check": "claims",
+      "severity": "search",
+      "name": {
+        "zh": "违规宣称",
+        "en": "Prohibited claims"
+      },
+      "params": {},
+      "source": {
+        "kind": "official",
+        "title": "Amazon 卖家帮助：商品详情页规则",
+        "url": "https://sellercentral.amazon.com/help/hub/reference/external/G202024200"
+      },
+      "checked_at": "2026-10-18",
+      "advice": {
+        "zh": "这类说法换成能证明的事实，或者拿掉",
+        "en": "Replace with facts you can prove, or remove"
+      },
+      "enabled": true
+    }
+  ]
+}
