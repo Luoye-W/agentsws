@@ -10,10 +10,11 @@
  *
  * **截图**（`--out` 目录，默认 `docs/assets/wp412`；审稿截图放私有仓，别提交进公开仓）：
  * 1. `1-duty-light` / `1-duty-dark`：职责页新样子 + 右侧面板默认打开；
- * 2. `2-topbar-light` / `2-topbar-dark`：顶栏特写——露出的工具、「⋮」菜单展开（教程、记忆）、最右面板开关（带汇总点）；
+ * 2. `2-topbar-light` / `2-topbar-dark`：顶栏特写——露出的工具、「⋮」菜单展开、最右面板开关（带汇总点）；
  * 3. `3-duty-about-light` / `3-duty-about-dark`：职责页「⋯ 这条职责能做什么」；
  * 4. `4-position-light` / `4-position-dark`：岗位页同一个样子，面板默认打开；
- * 5. `5-compact`：窗口窄于 900——面板先收着、工具收进「⋮」。
+ * 5. `5-compact`：窗口窄于 900——面板先收着、工具收进「⋮」；
+ * 6. `6-overflow-light` / `6-overflow-dark`：「⋮」展开——职责定义、技能、知识、记忆、额度，再是教程。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
@@ -200,9 +201,11 @@ async function main() {
           screenshot: (o) =>
             page.screenshot({
               ...o,
-              clip: { x: bar.x + bar.width - 420, y: bar.y, width: 420, height: bar.height + 130 },
+              clip: { x: bar.x + bar.width - 420, y: bar.y, width: 420, height: bar.height + 300 },
             }),
         })
+      // 「⋮」展开：设定那几格（职责页叫「职责定义」）+ 教程
+      await shot(page, `6-overflow-${theme}`, page.getByTestId('rail-menu'))
       await page.keyboard.press('Escape')
       await page.getByTestId('duty-about-link').click()
       await page.getByTestId('duty-about').waitFor({ timeout: 20_000 })
