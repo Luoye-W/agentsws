@@ -38,7 +38,7 @@ export function draftCard(over: Partial<DeckCard> = {}): DeckCard {
     action_labels: {
       approve: '发送',
       reject: '不发',
-      instruct: '指导',
+      instruct: '修改',
       snooze: '稍后',
       open: '打开',
     },

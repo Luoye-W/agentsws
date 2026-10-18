@@ -92,11 +92,11 @@ export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
 
 /** 36 §2.2 的「快捷行」动词。服务端给，前端不硬编码 kind → 中文。 */
 const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
-  outbound_draft: { approve: '发送', reject: '不发', instruct: '指导' },
-  staged_change: { approve: '批准', reject: '驳回', instruct: '指导' },
+  outbound_draft: { approve: '发送', reject: '不发', instruct: '修改' },
+  staged_change: { approve: '批准', reject: '驳回', instruct: '修改' },
   policy_change: { approve: '就这么定', instruct: '其他…', snooze: '稍后' },
   ai_question: { approve: '就这个', instruct: '我来说', snooze: '稍后' },
-  knowledge_update: { approve: '采纳', reject: '不采纳', instruct: '指导' },
+  knowledge_update: { approve: '采纳', reject: '不采纳', instruct: '修改' },
   skill_lesson: { approve: '采纳', reject: '不采纳', snooze: '稍后' },
   skill_promotion: { approve: '同意晋升', reject: '不晋升', snooze: '稍后' },
   claim: { approve: '接', reject: '不接', snooze: '稍后' },
@@ -124,7 +124,8 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
 const DEFAULT_LABELS: Record<DeckAction, string> = {
   approve: '批准',
   reject: '驳回',
-  instruct: '指导',
+  // WP414：「指导」与「需要补素材」合成一个「修改」
+  instruct: '修改',
   snooze: '稍后',
   open: '打开',
 }
