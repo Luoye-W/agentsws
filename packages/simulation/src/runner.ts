@@ -1295,7 +1295,10 @@ async function execute(
       }
       // WP392：竞品监控读一次（替身进料口；和上一次快照比）
       case 'competitor.read': {
-        competitorLoop().read(event.competitor_read)
+        // WP394：Amazon 对标款走和服务进程同一份「读那一轮」（被拦就停、退云端、积分照扣）
+        if (event.competitor_read.source === 'amazon')
+          await competitorLoop().readAmazon(event.competitor_read)
+        else competitorLoop().read(event.competitor_read)
         return
       }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────

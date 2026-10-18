@@ -1,0 +1,47 @@
+# WP394（docs/104 C4，docs/106 A9）：**内置浏览器被 Amazon 拦了 → 不重试不绕、剩下的走工坊云端数据、积分照扣**。
+#
+# 1. 第一天三款都由内置浏览器读到（只建底子）；
+# 2. 第二天读到第二款就碰到验证页：这一轮不再碰 Amazon、不重试，第二、三款改走云端替身（0.18 积分 / 个 → 0.36）；
+# 3. 云端那一路没有划线价和优惠券：Trail 700 昨天有划线价和优惠券、今天云端读不到——**不报「打折结束」**，
+#    它真降了的价照报一条改价。
+id: amazon/competitor-blocked-cloud
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-19T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    competitor.read:
+      competitor: Rival Gear
+      source: amazon
+      rows:
+        - { product: B0TESTRG01, title: Trail 500, price: 1299, rating: 4.4, reviews: 2318, available: true }
+        - { product: B0TESTRG02, title: Camp Lite, price: 999, rating: 4.1, reviews: 512, available: true }
+        - { product: B0TESTRG03, title: Trail 700, price: 1599.99, compare_at: 1899.99, coupon: Apply $100 coupon, rating: 4.6, reviews: 987, available: true }
+  - at: '+24h'
+    competitor.read:
+      competitor: Rival Gear
+      source: amazon
+      blocked_at: B0TESTRG02
+      rows:
+        - { product: B0TESTRG01, title: Trail 500, price: 1299, rating: 4.4, reviews: 2318, available: true }
+        - { product: B0TESTRG02, title: Camp Lite, price: 999, rating: 4.1, reviews: 512, available: true }
+        - { product: B0TESTRG03, title: Trail 700, price: 1499.99, compare_at: 1899.99, coupon: Apply $100 coupon, rating: 4.6, reviews: 987, available: true }
+expected:
+  competitor_changes: [price]
+  competitor_via: [browser, cloud]
+  competitor_credits: 0.36
+  event_types:
+    - simulation.competitor_read
+    - simulation.competitor_change
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  被拦之后是不是就没再用内置浏览器读、也没有绕过验证，而是改走工坊云端数据、照实扣了 0.36 积分？
+  Trail 700 的划线价和优惠券云端读不到，是不是照实空着、没有报成「打折结束」？

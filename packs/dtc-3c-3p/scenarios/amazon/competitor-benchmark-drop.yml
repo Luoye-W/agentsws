@@ -1,0 +1,59 @@
+# WP394（docs/104 一期 B，C8）：**配好对标款 → 第二天一条降价，带「比你便宜多少」**。
+#
+# Amazon 前台商品页由替身交回（不出网），读的那一轮和服务进程是同一份（`@agentsws/brand-intake` 的
+# `readAmazonAsins`：内置浏览器先读、被拦就停退云端），比的是同一份快照对比引擎（`diffCatalog`）。钉三件事：
+#
+# 1. 第一次读只当底子：自家两款、竞品三款，一条变化都不报；
+# 2. 第二天 Trail 500 从 $1,299 降到 $1,149（-11.5%）→ **一条**改价，带「比你的 Ranger（$1,399）便宜 $250」；
+# 3. 全程走内置浏览器、一个积分不扣；竞品监控自己零写（不出卡、不碰 Seller Central）。
+id: amazon/competitor-benchmark-drop
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-19T09:00:00+08:00' }
+events:
+  # 第一天：自家对照款先读（比价要用它的价），再读竞品——都只建底子
+  - at: '+0m'
+    competitor.read:
+      competitor: Nordvik
+      source: amazon
+      own: true
+      rows:
+        - { product: B0OWNMINE1, title: Nordvik Ranger Commuter Ebike, price: 1399, available: true }
+        - { product: B0OWNMINE2, title: Nordvik Fold Folding Ebike, price: 1099, available: true }
+  - at: '+1m'
+    competitor.read:
+      competitor: Rival Gear
+      source: amazon
+      rows:
+        - { product: B0TESTRG01, title: Trail 500, price: 1299, compare_at: 1499, rating: 4.4, reviews: 2318, bsr: 1234, bsr_category: Sports & Outdoors, available: true, vs_own: B0OWNMINE1 }
+        - { product: B0TESTRG02, title: Camp Lite, price: 999, rating: 4.1, reviews: 512, bsr: 8901, bsr_category: Sports & Outdoors, available: true, vs_own: B0OWNMINE2 }
+        - { product: B0TESTRG03, title: Trail 700, price: 1599.99, compare_at: 1899.99, coupon: Apply $100 coupon, rating: 4.6, reviews: 987, available: true, vs_own: B0OWNMINE1 }
+  # 第二天：Trail 500 降到 $1,149（划线价还在、只是价变了），其余不动
+  - at: '+24h'
+    competitor.read:
+      competitor: Rival Gear
+      source: amazon
+      rows:
+        - { product: B0TESTRG01, title: Trail 500, price: 1149, compare_at: 1499, rating: 4.4, reviews: 2318, bsr: 1234, bsr_category: Sports & Outdoors, available: true, vs_own: B0OWNMINE1 }
+        - { product: B0TESTRG02, title: Camp Lite, price: 999, rating: 4.1, reviews: 512, bsr: 8901, bsr_category: Sports & Outdoors, available: true, vs_own: B0OWNMINE2 }
+        - { product: B0TESTRG03, title: Trail 700, price: 1599.99, compare_at: 1899.99, coupon: Apply $100 coupon, rating: 4.6, reviews: 987, available: true, vs_own: B0OWNMINE1 }
+expected:
+  competitor_changes: [price]
+  competitor_vs_own: [-250]
+  competitor_via: [browser, browser, browser]
+  competitor_credits: 0
+  event_types:
+    - simulation.competitor_read
+    - simulation.competitor_change
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  第一天是不是一条变化都没报？第二天是不是只出了一条「Trail 500 降价 11.5%」，并且说清比你的 Ranger 便宜 $250，
+  而不是把划线价、优惠券那几格当成变化？

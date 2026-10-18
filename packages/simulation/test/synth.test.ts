@@ -88,7 +88,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP395 再加一条（卖 Amazon 的品牌划出 Amazon 运营、没数据照实说）→ 72
     // WP386 再加两条（信息监控拉到了 / feed 404 照实说）→ 74
     // WP392 再加一条（竞品监控：第一天只建底子，第二天比出一条降价）→ 75
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(75)
+    // WP394 再加两条（Amazon 对标款：第二天降价带比你便宜多少 / 被拦退云端积分照扣）→ 77
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(77)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

@@ -403,9 +403,24 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
         needs_you: true,
         why: '贴一个你在 Amazon 上的店铺或商品链接，我从那里读你卖哪几款（对标、比价用）',
       }
-    const mine = ownList(mk, own)
-    const category = facts.subcategory ?? facts.category ?? prof.subcategory ?? prof.category
     const reader = deps.reader()
+    // 自家几款的标题和价：快照里没有（还没读过）就用内置浏览器读一下前台页（最多 5 页，算进额度）
+    const mine: { asin: string; title?: string; price?: number }[] = []
+    for (const o of ownList(mk, own)) {
+      if (o.price === undefined && mine.length < 5 && reader?.ready() === true) {
+        const got = await reader.readFacts({ marketplace: mk, asin: o.asin })
+        if (got.status === 'ok') {
+          mine.push({
+            asin: o.asin,
+            ...(got.facts.title === undefined ? {} : { title: got.facts.title }),
+            ...(got.facts.price === undefined ? {} : { price: got.facts.price }),
+          })
+          continue
+        }
+      }
+      mine.push(o)
+    }
+    const category = facts.subcategory ?? facts.category ?? prof.subcategory ?? prof.category
     const brandName = watch?.brand.name ?? prof.name
     const cands = await candidates()
     if (cands.length === 0)
