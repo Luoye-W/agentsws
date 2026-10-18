@@ -378,6 +378,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提
       // WP392：竞品监控（第一天只建底子，第二天比出一条降价）
       'store/competitor-price-drop',
+      // WP393：店铺管理「竞品动向」（配好 → 第二天降价并说比你便宜多少）
+      'store/competitor-store-vs-own',
       'store/daily-report-card',
     ])
     for (const r of result.reports) {
