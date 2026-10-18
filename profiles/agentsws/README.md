@@ -1,24 +1,24 @@
 # profiles/agentsws
 
-dsh profile（16 §1）：**"我们这种模式"的技术实体**。
+dsh profile：**"我们这种模式"的技术实体**。
 
 - `package.json` —— `dsh.profile.bundles` 列出组合的 bundle，并把每个 `@deepseek-ai/dsh-*`
-  **锁到 0.2.0-rc.1**（WP177；不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
-- `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**（docs/42 红线 7）。WP179（Luoye 09-29「官方功能优先」）起
+  **锁到 0.2.0-rc.1**（不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
+- `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**。2026-09-29 起按「官方功能优先」，
   锁定只留给 **B 真冲突**（插件管理两行、配置写回两行）与 **C 数据外发**（四行上报）；别的官方功能一律接进来——
   `web-search-deepseek` 与 `hmr` 两行已撤。逐行归类见 `packages/dsh-adapter/README.md`「逐行重判」。
   每一行的 id 由 `packages/dsh-adapter/test/profile-lockdown.test.ts` 对照 `dsh --dump-config-schema`
-  导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红（WP133）。
-  **WP180**：B 类"包一层后打开"——插件管理两行（`plugin-manager` / `tool-plugin-manager`）、配置写回两行（`config-editor` / `settings`）
+  导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红。
+  B 类"包一层后打开"——插件管理两行（`plugin-manager` / `tool-plugin-manager`）、配置写回两行（`config-editor` / `settings`）
   也撤了；文件末尾插进来一行开着的**守门插件** `agentsws-profile-guard`（`@agentsws/dsh-adapter/profile-guard`）：配置保存想写本文件里
   任何一行直接拒，官方插件管理的写方法一律拒。锁定表现在 = 本文件里的每一个 id（C 类四行、两处"选了才开"、守门插件）。
-- `plugin-allowlist.yml` —— **审过的官方插件清单**（WP180）。设置 →「官方插件」只列、也只许装这里的；装 / 升级 / 卸载一律出卡，
+- `plugin-allowlist.yml` —— **审过的官方插件清单**。设置 →「官方插件」只列、也只许装这里的；装 / 升级 / 卸载一律出卡，
   做完 `cordis.patch.yml` 逐字节比一遍。每一项的版本 / 许可证 / 插进来的行由 `packages/dsh-adapter/test/official-plugins.test.ts`
   对照 dsh 安装里那一份，dsh 升级时要重审（对不上的在界面上是"新版本待审"、不进组合）。
-- `deepseek-account.on.patch.yml` —— **运行时 patch**（WP134）：只把 `deepseek-account`（官方 DeepSeek 账号登录）
+- `deepseek-account.on.patch.yml` —— **运行时 patch**：只把 `deepseek-account`（官方 DeepSeek 账号登录）
   那一行打开。默认不叠——profile 层那一行仍是关死的；用户在向导 / 设置里选了「用我的 DeepSeek 账号登录」才 `--patch` 叠上。
   钉住"没选关、选了开、别的锁定不动"：`profile-lockdown.test.ts` 的 `OPT_IN` 一组。
-- `computer-use.on.patch.yml` —— **运行时 patch**（WP144，docs/80）：把电脑操控两行（`computer-use` 服务 +
+- `computer-use.on.patch.yml` —— **运行时 patch**：把电脑操控两行（`computer-use` 服务 +
   Cua Driver **MCP** 提供方）打开。这两行 dsh-base 里本来没有，由 `cordis.patch.yml` 唯一一处 `insert` 插进来、
   写死 `disabled: true`（`INSERTED_OFF` 表）；用户在设置里打开「电脑操控」、这次运行又批了授权才叠上，
   驱动路径由服务进程经 `AGENTSWS_CUA_DRIVER` 给（数据目录里钉版本 + sha256 的那一份）。native 提供方不挂、不进依赖。
@@ -31,9 +31,9 @@ preset 决定**一个职责用哪些工具、哪段人设**（`presets/<role_id>
 差别在 bundle（headless vs web-app）与"能不能装第三方代码"（v1 公司端不装，31 §3.5）。
 
 升级 dsh 的流程：改这里的版本 → 跑 `packages/dsh-adapter/test` 的 seam 契约测试 →
-全绿才合并（17 §4「任一红 = 不升级」）。
+全绿才合并（任一红 = 不升级）。
 
-## 真接管 dsh 进程时要加的行（占位，WP133 从 `cordis.patch.yml` 挪过来）
+## 真接管 dsh 进程时要加的行（占位，从 `cordis.patch.yml` 挪过来）
 
 锁定之外的发行版配置现在一行都不生效（两档运行时由 `packages/dsh-adapter/src/harness.ts` 自己搭树，
 不读这个 profile）。哪天真用 `dsh --profile agentsws` 起跨进程 headless run，再把下面这些写进
@@ -52,7 +52,7 @@ preset 决定**一个职责用哪些工具、哪段人设**（`presets/<role_id>
     # 'ask' 才会走 answerer waterfall；没有 answerer 时 dsh 自己 fail-closed
     policy: ask
 
-# WP132：0.1.7 起 preset 不再按目录扫（`dsh-agent-presets` 整包下线），
+# 0.1.7 起 preset 不再按目录扫（`dsh-agent-presets` 整包下线），
 # 换成 `dsh-agent-preset-registry` + 一行一个 `dsh-agent-preset` 的声明：
 - insert:
     - id: agent-preset-registry
@@ -67,5 +67,5 @@ preset 决定**一个职责用哪些工具、哪段人设**（`presets/<role_id>
 ```
 
 为什么锁定不拆成 bundle 的独立 patch 文件：bundle 层读不出来会被**跳过、照样启动**（fail-open），
-profile 这一层读不出来才会启动失败（fail-closed）。WP133 实测过，理由写在 `cordis.patch.yml` 文件头。
+profile 这一层读不出来才会启动失败（fail-closed）。实测过，理由写在 `cordis.patch.yml` 文件头。
 

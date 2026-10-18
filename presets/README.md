@@ -5,7 +5,7 @@
 55 §4 第三层：一条职责一个官方 preset，里面放**这条职责有哪些连接**（一条连接一行
 `@deepseek-ai/dsh-mcp-client`）。
 
-> **WP132（dsh 0.1.7-rc.1）**：官方把按目录扫的 `@deepseek-ai/dsh-agent-presets` 换成了
+> **dsh 0.1.7-rc.1 起**：官方把按目录扫的 `@deepseek-ai/dsh-agent-presets` 换成了
 > [`@deepseek-ai/dsh-agent-preset-registry`](https://www.npmjs.com/package/@deepseek-ai/dsh-agent-preset-registry)，
 > 它**不扫目录、不收路径**。运行时现在把同一份内容（`presetDefinition(req)`）直接
 > `register()` 进去；下面说的那三个文件照旧生成，留给跨进程那一面（`host.cordis.yml`）与排障。
@@ -33,4 +33,4 @@
 要给一条职责加一台 MCP 服务器：在连接页登记它、勾出哪几个工具是只读的，然后在**职责模板**
 的 `connectors[]` 里写 `mcp:<名字>`。下一次运行就挂上了。
 
-细节见 `docs/18` §3.4.1 与 `packages/dsh-adapter/AGENT-LAYER.md` §10。
+细节见 `packages/dsh-adapter/AGENT-LAYER.md` §10。

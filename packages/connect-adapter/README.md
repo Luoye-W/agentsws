@@ -1,6 +1,6 @@
 # @agentsws/connect-adapter
 
-见 docs/34 §2、docs/08、docs/18 §1。**唯一允许 import `@oomol-lab/connector` 的包**——`OOMOL_CONNECT_*`
+**唯一允许 import `@oomol-lab/connector` 的包**——`OOMOL_CONNECT_*`
 变量、`x-oo-*` 头、`oct_` token 全部收在这里，业务代码只看 `Connect` 契约。
 
 对接**自托管的 OpenConnector 本地 runtime**（`ghcr.io/oomol-lab/open-connector`）：
@@ -11,14 +11,14 @@
 | `connections()` | `GET /api/connections` + 本地 workspace / ownership 元数据 |
 | `beginConnect()` | oauth2 → `POST /api/oauth/authorizations`；api_key / custom_credential → 由 provider 的 `auth` 元数据生成 secure form 描述（**凭据不经本包**，由不经模型的原生表单直接 `PUT /api/connections/:service`） |
 | `pollConnect()` | 轮询 `GET /api/connections` 看目标 alias 是否出现（上游没有 connection-request 读接口） |
-| `submitForm()` | `PUT /api/connections/:service`（body `{ authType, connectionName, values }`，回 `ConnectionSummary`）——WP20 原生表单直填的落点。**`values` 只在这一次转发里存在**：不进本包状态、不进事件（事件里只有字段名）、不进返回值。`values` 的键是**provider 目录声明的字段 id**（`GET /api/providers/:service` 的 `auth[].fields[].key` 与 `extraFields[].key`），写错会被 400 `invalid_input: Unexpected credential field` 顶回来 |
+| `submitForm()` | `PUT /api/connections/:service`（body `{ authType, connectionName, values }`，回 `ConnectionSummary`）——原生表单直填的落点。**`values` 只在这一次转发里存在**：不进本包状态、不进事件（事件里只有字段名）、不进返回值。`values` 的键是**provider 目录声明的字段 id**（`GET /api/providers/:service` 的 `auth[].fields[].key` 与 `extraFields[].key`），写错会被 400 `invalid_input: Unexpected credential field` 顶回来 |
 | `removeConnection()` | `DELETE /api/connections/:service?connectionName=…`（09-09 从 runtime 自己的 `/openapi.json` 核实）。**路径段是 service，不是连接 id**；上游对"删一个不存在的目标"也回 200，所以本包删完必定重新列一次确认，没删掉抛 `not_implemented`，绝不静默当成删掉了 |
 | `transferConnection()` | v1：同一 runtime 内改本地 ownership / workspace 元数据；跨 runtime 未实现 |
 | `issueToken()` / `revokeTokens()` | `POST /api/runtime-tokens`、`GET`/`DELETE /api/runtime-tokens/:id` |
 | `execute()` | `POST /v1/actions/:id`（经 SDK `OpenConnector.executeRaw`）+ `Idempotency-Key` + `x-oo-connector-alias` |
 | `proxy()` | 一律本地拒绝（role-read 的 `allowedProxies` 恒空；role-apply v1 也不开） |
 
-### 一台机多个品牌共用一个 runtime（WP252，决策 125）
+### 一台机多个品牌共用一个 runtime
 
 给了 `owners`（整台机一份的 `ConnectionOwners`，所有品牌的适配器传同一个实例）就是「按品牌隔开」档：
 
@@ -33,34 +33,34 @@
 
 不给 `owners` = 老行为（单品牌、测试）。服务进程的装配在 `apps/server/src/connect-owners.ts`。
 
-### 在哪一版上验过（WP146 起镜像钉版本）
+### 在哪一版上验过（镜像钉版本）
 
 | 镜像 | digest（多架构 index） | 验了什么 | 日期 |
 |---|---|---|---|
 | **`v1.6.5`（现在钉的）** | `sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1` | 真容器录制（全部场景 + 加固探针）→ 磁带回放 → 一致性套件真适配器那一遍 16 条，全绿；磁带就是这一版录的 | 2026-09-24 |
-| `v1.6.3` | `sha256:f25207e6f71eabc70182c4f5db5c01db79091d0f4523a7495b35e649d5b6c006` | 同上一整套，全绿（没钉：派工时 latest 已是 v1.6.5） | 2026-09-24 |
-| `v1.5.0` | `sha256:b9e6133c9caa6d5997fe51784df99a1d43ddd509b6346a0c0245e4512136e781` | WP12 / WP25 那份磁带（当时写的是 `:latest`，事后按本机留存的镜像 digest 对出来是 v1.5.0） | 2026-09-09 |
+| `v1.6.3` | `sha256:f25207e6f71eabc70182c4f5db5c01db79091d0f4523a7495b35e649d5b6c006` | 同上一整套，全绿（没钉：当时 latest 已是 v1.6.5） | 2026-09-24 |
+| `v1.5.0` | `sha256:b9e6133c9caa6d5997fe51784df99a1d43ddd509b6346a0c0245e4512136e781` | 最早那份磁带（当时写的是 `:latest`，事后按本机留存的镜像 digest 对出来是 v1.5.0） | 2026-09-09 |
 
 三版之间请求序列与状态码逐条一致；body 的差异：v1.6.x 的 `/v1/actions` 多了 `operationType`（`read` / `write`），
 gmail 的 `authTypes` 多了 `custom_credential`，虚拟 no_auth 连接多了 `itunes_search`（1.6.3）、`osv`（1.6.5）。
 
 镜像写在四处：`docker-compose.yml`、`scripts/dev-real.sh`、`test/record-fixtures.test.ts` 的缺省 `OC_IMAGE`、
 仓库根 `upstreams.yml`；`node scripts/check-upstreams.mjs --check` 逐字对账（连同 `test/fixtures/runtime.meta.json`
-的 `runtime_image`——换版本就得重录磁带）。怎么升见 docs/42 §1 末尾「镜像怎么升」。
+的 `runtime_image`——换版本就得重录磁带）。怎么升：改这四处的 tag 与 digest → 重录磁带 → `check-upstreams --check` 与本包测试全绿。
 
 **数据目录**：镜像自带 `OOMOL_CONNECT_DATA_DIR=/app/data`（匿名卷）。compose 与 dev-real 挂的是 `/data`，
-所以两边都显式设 `OOMOL_CONNECT_DATA_DIR=/data`——WP146 以前没设，凭据库其实不在宿主目录里，重建容器就丢。
+所以两边都显式设 `OOMOL_CONNECT_DATA_DIR=/data`——2026-09-24 以前没设，凭据库其实不在宿主目录里，重建容器就丢。
 
-### 09-09 在真 runtime 上核实过的几件事（WP25）
+### 09-09 在真 runtime 上核实过的几件事
 
 - runtime 自己带一份 **`GET /openapi.json`**（要 bearer；`/docs` 是它的 Scalar 页）。上游端点的
   真实形状以它为准，别猜。
 - `shopify_admin` 的凭据字段是 **`apiKey`（Admin API 访问令牌）+ `shopDomain`**。
-  WP20 猜的 `shop` / `accessToken` 是错的，会被 400 顶回来。
+  早先猜的 `shop` / `accessToken` 是错的，会被 400 顶回来。
 - **`PUT /api/connections/:service` 会当场验证凭据**（api_key 档会真去打一次上游）。
   验证不过回 400 `credential_verification_failed`——所以 Shopify 那条路必须先换到有效令牌再 PUT。
 - 上游已经有 **`generic_imap` / `qq_mail` / `netease_mail` / `netease_enterprise_mail`** 这些邮箱
-  provider（WP20 时的"上游没有通用 IMAP/SMTP"已经过时）。我们仍然自己收发信：入站管线要的是
+  provider（早先"上游没有通用 IMAP/SMTP"的判断已经过时）。我们仍然自己收发信：入站管线要的是
   原始 MIME 与 UID 增量，不是一组 Action。
 
 安装器策略见 `assertRuntimeHardened()`：鉴权未开或加密无法确认时返回 `{ ok: false, reasons }`，

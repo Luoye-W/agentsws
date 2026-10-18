@@ -7,7 +7,7 @@
 | `mark-dark.svg` | 深底上（GitHub 深色主题、深色封面） |
 | `mark-light.svg` | 浅底上（压暗端点——亮端点在纸白上黄那一头几乎消失） |
 | `mark-mono.svg` | 单色，`currentColor`；印刷、灰度、以及任何小于 28px 的地方 |
-| `mark-idle-dark.svg` / `mark-idle-light.svg` | README 顶上那张（WP200）：**会动**的待机标记（波 + 流光），CSS keyframes 内联在 SVG 里、不带脚本，GitHub 的 `<img>` 里也能动；系统开了「减少动态效果」时静止。四周各留 4 个单位，抬起的那块不会被裁——所以 README 里挂 99px，标记本身仍是 88px 那么大 |
+| `mark-idle-dark.svg` / `mark-idle-light.svg` | README 顶上那张：**会动**的待机标记（波 + 流光），CSS keyframes 内联在 SVG 里、不带脚本，GitHub 的 `<img>` 里也能动；系统开了「减少动态效果」时静止。四周各留 4 个单位，抬起的那块不会被裁——所以 README 里挂 99px，标记本身仍是 88px 那么大 |
 
 ## 真源不在这里
 
@@ -31,4 +31,4 @@
 - 浅底不直接用深底那套亮端点
 - 不把「出海Agents工坊」六个字塞进标记里
 
-产品里怎么用（哪种动效代表什么语义、哪里禁用）写在 **`docs/36` §12**。
+产品里怎么用（哪种动效代表什么语义、哪里禁用）由工作台的界面规范定，代码在 `packages/brand` 与 `apps/workstation/src/components/design/`。

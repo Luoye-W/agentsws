@@ -37,4 +37,4 @@ KefuAgent（托管 SaaS，自带界面）与 agentsws 开源中台（本地、�
 - `@agentsws/stand-ins` 的 stub 运行时、`@agentsws/runtime-direct` 的规则脑：
   分类 / 起草 / 边界判定都调这里，回信模板三条路径逐字节相同
 - `role-packs/dtc-customer-care`：职责包的技能与能力来源
-- KefuAgent（反向）：SaaS 侧改为依赖本包时的接线点见仓库根 `docs/33-SaaS有机融合与许可证选择.md` §1
+- KefuAgent（反向）：SaaS 侧改为依赖本包时，从 `src/index.ts` 的导出接线

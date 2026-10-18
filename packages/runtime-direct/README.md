@@ -31,5 +31,5 @@
 
 ## tool_choice
 
-22 的 `ModelGateway.complete` 还没有 `tool_choice`（见 WP14 报告）。`withToolChoice(gateway)` 在网关外面
+模型网关契约的 `ModelGateway.complete` 还没有 `tool_choice`。`withToolChoice(gateway)` 在网关外面
 把它补上：强制轮里模型没调那个工具就替换成对它的一次调用。网关原生支持之后这个包装器可以整体删掉。

@@ -1,13 +1,13 @@
 # @agentsws/kol-public
 
-云上的**公共红人库服务**（48 §5.3 / 49 §6 WP61）。把 KOLAgents 的 `public_*` 那一层
+云上的**公共红人库服务**。把 KOLAgents 的 `public_*` 那一层
 原样重建成 agentsws 云上的一个服务：插件采集汇聚、共享库读写、k-匿名基准、
 YouTube 配额池与 Apify 降级。
 
 **这个包不起服务**——它导出 `mountKolPublicRoutes(app, deps)`，由 `apps/cloud`
-挂上去（写法同 WP59 的 `@agentsws/cloud-entry`、WP60 的 `@agentsws/standby`）。
+挂上去（写法同 `@agentsws/cloud-entry`、`@agentsws/standby`）。
 
-与 WP67 的 `@agentsws/kol-core`（本地那一半）**零 import**：这边是跨租户的共享事实层，
+与 `@agentsws/kol-core`（本地那一半）**零 import**：这边是跨租户的共享事实层，
 那边是一个工作区自己的归属数据，两层之间只有一个自足键 `{ channel, handle }`。
 
 ## 路由（前缀 `/v1/data/kol`）

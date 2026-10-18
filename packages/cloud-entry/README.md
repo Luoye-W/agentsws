@@ -67,10 +67,10 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:4401/v1/ai/models \
   -H 'Authorization: Bearer wst_dev_nowallet'
 ```
 
-## 合并说明（给审核者）
+## 实现说明
 
-- `TokenVerifier`（`src/types.ts`）是 WP58 `packages/contracts/src/cloud.ts` 里
-  `CloudTokenVerifier` 的**局部声明**，结构完全相同。合并时改成
+- `TokenVerifier`（`src/types.ts`）是 `packages/contracts/src/cloud.ts` 里
+  `CloudTokenVerifier` 的**局部声明**，结构完全相同；要统一时改成
   `import type { CloudTokenVerifier } from '@agentsws/contracts'` 即可，一行的事。
-- 这个包故意不建 `apps/cloud`——云侧骨架是 WP58 的活。合并时把 `mountEntryRoutes`
-  挂进那边的 Hono 应用就行。
+- 这个包故意不建 `apps/cloud`——云侧应用自己把 `mountEntryRoutes`
+  挂进它的 Hono 应用就行。

@@ -1,10 +1,10 @@
 # b2b-3c-3p
 
-WP171（docs/84）B2B 岗位的模拟包。**手写**（`agentsws synth` 只生成 dtc 家族）。
+B2B 岗位的模拟包。**手写**（`agentsws synth` 只生成 dtc 家族）。
 一家 3 人的 3C 电源工厂兼外贸公司：老板周岚、销售经理林峰（`scope_manager`）、业务员何佳
 （B2B 四条职责都挂在她身上；平台运营是第二批，没人挂）。
 
-演示数据改写自 Luoye 自己的 BtoBAgents（`demo-data.ts` / `runtime-v2/seed.ts`）：GaN 充电器、
+演示数据改写自维护者自己的 BtoBAgents（`demo-data.ts` / `runtime-v2/seed.ts`）：GaN 充电器、
 移动电源、TWS 耳机，样品与报价例外、展会线索。客户名全是虚构的，邮箱一律 `.example`，
 原来写死的 ElectroMart 那一页不搬。
 
@@ -19,7 +19,7 @@ WP171（docs/84）B2B 岗位的模拟包。**手写**（`agentsws synth` 只生�
 | `export-docs-check` | 单证不符点转人审；尾款没到放单多一条提醒、落老板 |
 | `payment-account-change-red-card` | 改收款账户的信 → 红卡、账户不采纳；照信提付款指示被拦 |
 
-WP172 加四条邮件分拣场景（`scenarios/messages/`，判法是 `@agentsws/channels` 的 `triageMessage`，
+四条邮件分拣场景（`scenarios/messages/`，判法是 `@agentsws/channels` 的 `triageMessage`，
 与服务进程里跑的同一个函数）：
 
 | 场景 | 钉住什么 |
@@ -29,7 +29,7 @@ WP172 加四条邮件分拣场景（`scenarios/messages/`，判法是 `@agentsws
 | `b2b-unsubscribe-suppressed` | 人回的退订、硬退信进抑制名单；软退信不拉黑 |
 | `b2b-no-position-no-move` | 没开 B2B 岗位 → 不挪、不开事项、不起 Run |
 
-WP173 加六条开发信序列场景（`scenarios/outbound/`，筛人 / 预热配额 / 模板 / 页脚 / 卡的 after /
+六条开发信序列场景（`scenarios/outbound/`，筛人 / 预热配额 / 模板 / 页脚 / 卡的 after /
 回信分类用 `@agentsws/b2b-core`，与服务进程同一套函数；能不能提由 guardrail 判）：
 
 | 场景 | 钉住什么 |
@@ -41,7 +41,7 @@ WP173 加六条开发信序列场景（`scenarios/outbound/`，筛人 / 预热�
 | `reply-interested-to-sales` | 回信问价 → 停序列、交给业务；跟进那一轮只剩没回信的 |
 | `unsubscribe-stops-sequence` | 回信退订 → 进抑制名单；跟进那一轮把他剔掉 |
 
-WP176（Luoye 09-28「不感兴趣只停这一轮」）加三条：
+「不感兴趣只停这一轮」三条：
 
 | 场景 | 钉住什么 |
 |---|---|
@@ -49,7 +49,7 @@ WP176（Luoye 09-28「不感兴趣只停这一轮」）加三条：
 | `cooldown-expired-reselect` | 冷却期满能再选进新一轮、出卡；第二次说不感兴趣冷却翻倍（180 天），期内再开又剔掉 |
 | `unsubscribe-still-permanent` | 退订仍永久进抑制名单：200 天后再开一轮照样剔掉 |
 
-WP182（docs/84 §3 业务）加五条（`scenarios/sales/`；分级、首回、报价金额、样品提醒、交接清单都是
+销售跟进五条（`scenarios/sales/`；分级、首回、报价金额、样品提醒、交接清单都是
 `@agentsws/b2b-core` 的函数，与服务进程 `b2b-sales.ts` 同一份）。四张事实卡的 frontmatter 加了
 `reply_en`（起草能直接引的英文那一句，不进正文）：
 
