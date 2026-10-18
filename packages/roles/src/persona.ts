@@ -400,6 +400,44 @@ export function applyPersonaSectionOverride(
   return { zh, en }
 }
 
+/**
+ * 一份 persona 摊成「段」（id / 小标题 / 正文），形状与技能的段合并（`planContentMerge`，`@agentsws/skills`）
+ * 要的一样——persona 的官方更新（WP406）直接复用那一套按段三方合并，不另写一份。拆不开 → 空数组。
+ */
+export function personaMergeSections(
+  persona: PersonaText | undefined,
+  lang: PersonaLang,
+): { id: PersonaSectionId; heading: string; body: string }[] {
+  if (persona === undefined) return []
+  const split = splitPersonaSections(personaTextIn(persona, lang), lang)
+  return split === undefined
+    ? []
+    : split.sections.map((s) => ({ id: s.id, heading: s.heading, body: s.body }))
+}
+
+/** 按段改写摊成段合并要的「上层改动」（整段替换那一种）。 */
+export function personaSectionEdits(
+  sections: PersonaSectionOverrides | undefined,
+  lang: PersonaLang,
+  owner: { tier: string; owner: string },
+): {
+  tier: string
+  owner: string
+  source: 'layer'
+  op: 'replace'
+  section_id: string
+  body: string
+}[] {
+  const changed = sections?.[lang] ?? {}
+  return PERSONA_SECTION_IDS.filter((id) => changed[id] !== undefined).map((id) => ({
+    ...owner,
+    source: 'layer',
+    op: 'replace',
+    section_id: id,
+    body: changed[id] ?? '',
+  }))
+}
+
 /** 按段改写里改了哪几段（中文那份；面板标「改过」用）。 */
 export function overriddenPersonaSections(
   sections: PersonaSectionOverrides | undefined,
