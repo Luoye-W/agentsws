@@ -164,6 +164,8 @@ async function main() {
       check(note === '没有搜索量，按竞品里出现的次数排', '差距那一行点开：写明没有搜索量')
       await block.scrollIntoViewIfNeeded()
       await shot(page, `1-block-${theme}`, block)
+      // 老地址 `?tab=view` 会一直把右侧钉在「报表」上：去掉它再点「看词表」（右侧布局按页记着，报表照样开着）
+      await page.goto(page.url().split('?')[0], { waitUntil: 'networkidle' })
       await block.getByTestId('amzkw-open').click()
       const panel = page.getByTestId('amzkw-panel')
       await panel.getByTestId('amzkw-row').first().waitFor({ timeout: 20_000 })
