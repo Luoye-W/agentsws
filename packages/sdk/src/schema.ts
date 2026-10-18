@@ -378,7 +378,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** WP414：决定之后补一句理由（「不要」理由可选；跟着处理的那几张一起补） */
+    /** WP414：决定之后补一句理由（「不要 / 稍后」理由可选；第一次补理由时按这条理由找同类一并处理，已跟着处理的那几张一起补） */
     post: operations['addApprovalReason']
     delete?: never
     options?: never
@@ -14189,7 +14189,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { item: ApprovalItem, followers: number } */
+      /** @description { item: ApprovalItem, followers: number, follow?: CardFollowResult } */
       200: {
         headers: {
           [name: string]: unknown
