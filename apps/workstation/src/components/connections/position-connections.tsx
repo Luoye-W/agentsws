@@ -82,7 +82,17 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                   {t('position.connections.needed_by', { roles: item.needed_by.join('、') })}
                 </p>
               </div>
-              {item.status === 'available' && item.connect_service !== undefined ? (
+              {item.developer_setup === true ? (
+                // WP415（决策 1239）：要去开发者后台建应用的，照实标出来，不拿按钮诱导人去填
+                <span
+                  className="flex items-center gap-1 text-xs text-muted-foreground"
+                  data-testid="position-connection-dev-setup"
+                  data-slot="status"
+                >
+                  {t('conncard.dev_setup')}
+                  <Hint text={t('conncard.dev_setup.hint')} />
+                </span>
+              ) : item.status === 'available' && item.connect_service !== undefined ? (
                 // WP324：第三栏就地连
                 <Button
                   size="sm"

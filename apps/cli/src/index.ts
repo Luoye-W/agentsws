@@ -216,6 +216,8 @@ export function buildProgram(
     .option('--two-brands', '再造一个品牌（公司页的品牌一览就有两行，各有各的数）')
     // WP96：十一种卡片排版各一张，用来看《卡片排版一览》
     .option('--card-gallery', '再种十一张卡（十一种排版各一张）')
+    // WP415：用演示数据看生产里的样子（没接通的卡标「还没接通」、批不了）
+    .option('--execution <mode>', '执行兜底：demo（默认，标「演示」）/ live（照生产：还没接通）')
     .action(async (opts: Record<string, unknown>) => {
       const root = opts.root === undefined ? baseDir() : fromCwd(String(opts.root))
       const demo = await createDemo({
@@ -224,6 +226,9 @@ export function buildProgram(
         quiet: true,
         ...(opts.twoBrands === true ? { twoBrands: true } : {}),
         ...(opts.cardGallery === true ? { cardGallery: true } : {}),
+        ...(opts.execution === 'live' || opts.execution === 'demo'
+          ? { execution: opts.execution }
+          : {}),
         ...(opts.static === undefined ? {} : { staticDir: fromCwd(String(opts.static)) }),
       })
       const { url } = await demo.server.listen()

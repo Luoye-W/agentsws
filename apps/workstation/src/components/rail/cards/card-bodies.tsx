@@ -31,6 +31,7 @@ import {
 } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-open-connect'
+import { Hint } from '@/components/ui/hint'
 import { getMySchedules, getPositionRecords, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { getFreeChatModels } from '@/lib/free-chat'
@@ -280,6 +281,15 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
                     className="ml-auto size-3.5 shrink-0 text-ws-good"
                     aria-label={t('conncard.connected')}
                   />
+                ) : i.developer_setup === true ? (
+                  // WP415（决策 1239）：要去开发者后台建应用的，不拿「去连接」诱导人去填
+                  <span
+                    className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-ws-muted-fg"
+                    data-testid="connection-dev-setup"
+                  >
+                    {t('conncard.dev_setup')}
+                    <Hint text={t('conncard.dev_setup.hint')} />
+                  </span>
                 ) : i.connect_service === undefined ? null : (
                   <button
                     type="button"

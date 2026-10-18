@@ -192,6 +192,11 @@ export interface DemoOptions {
    */
   cardGallery?: boolean
   /**
+   * WP415：执行兜底按哪种形态走。不给 = 演示（没有真执行器的卡标「演示」、批了走空桩）；
+   * `agentsws demo --execution live` 用演示数据看生产里的样子（没接通的卡标「还没接通」、批不了）。
+   */
+  execution?: 'live' | 'demo'
+  /**
    * WP100：把"今天"定在哪一刻（毫秒）。**只给测试用**；不给就是启动的这一刻。
    *
    * 有了它，"demo 的钟锚在启动那天"这件事才测得出来——否则用例只能拿 `Date.now()`
@@ -1527,6 +1532,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     clock: world.clock,
     random: world.random,
     mount,
+    ...(options.execution === undefined ? {} : { execution: options.execution }),
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
     // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）
     competitorOwnShop: async () => ({ connected: true, products: DEMO_OWN_PRODUCTS }),

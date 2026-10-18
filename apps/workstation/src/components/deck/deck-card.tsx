@@ -40,6 +40,7 @@ import {
 } from '@/components/deck/deck-layout'
 import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
+import { ExecutionPill, WiringNote } from '@/components/deck/execution-note'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
 import {
   HandoffDecide,
@@ -329,6 +330,11 @@ export function DeckCardView({
       setGoMessages(true)
       return
     }
+    // WP415：没接通的卡上「知道了」——不是对内容说不，不开写理由的面板，一下就收起
+    if (card.wiring?.state === 'not_wired' && action === 'reject') {
+      onDecide({ action, reason: t('exec.ack.reason'), version: card.version })
+      return
+    }
     // 不对 / 指导都先就地开面板——卡只有在人真说了句话之后才离开。
     if (action === 'reject' || action === 'instruct') {
       setPanel(action)
@@ -457,6 +463,13 @@ export function DeckCardView({
         {card.routed_note === undefined ? null : (
           <p className="mt-0.5 text-xs text-muted-foreground" data-testid="deck-routed-note">
             {card.routed_note}
+          </p>
+        )}
+        {/* WP415：这一步接没接通（生产里没有真执行器 = 还没接通；演示 = 演示）；执行过的照实说办没办成 */}
+        <WiringNote wiring={card.wiring} />
+        {card.execution === undefined ? null : (
+          <p className="mt-1">
+            <ExecutionPill view={card.execution} />
           </p>
         )}
 

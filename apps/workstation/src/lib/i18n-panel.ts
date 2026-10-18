@@ -83,6 +83,10 @@ export const PANEL_ZH: Record<string, string> = {
 
   'conncard.summary.todo': '{n} 个要处理',
   'conncard.summary.ok': '都连好了',
+  // WP415（自查 R4）：只缺可选的不说「都连好了」；要开发者应用的不诱导去填
+  'conncard.summary.optional': '可选 {n} 个没连',
+  'conncard.dev_setup': '需要开发者配置',
+  'conncard.dev_setup.hint': '要去平台的开发者后台建应用、抄令牌。后续会换成登录态，现在先不用管。',
   'conncard.empty': '这里不用连什么',
   'conncard.connect': '去连接',
   'conncard.connected': '已连好',
@@ -172,6 +176,10 @@ export const PANEL_EN: Record<string, string> = {
 
   'conncard.summary.todo': '{n} to fix',
   'conncard.summary.ok': 'All connected',
+  'conncard.summary.optional': '{n} optional not connected',
+  'conncard.dev_setup': 'Needs developer setup',
+  'conncard.dev_setup.hint':
+    'Requires creating an app in the platform developer console. This will move to a sign-in flow later; you can skip it for now.',
   'conncard.empty': 'Nothing to connect here',
   'conncard.connect': 'Connect',
   'conncard.connected': 'Connected',

@@ -187,6 +187,8 @@ export function positionIdOf(scope: RailScope | undefined): string | undefined {
 export function useScopeConnections(scope: RailScope | undefined): {
   items: PositionConnectionItem[]
   ready: boolean
+  /** WP415：职责要、且已经连上的那几条（服务端给；老服务端没有 = 空）。 */
+  connected: string[]
 } {
   // 岗位连接接口认的是岗位页地址里那条分配（与岗位页同一个查询键，缓存共用）
   const id = scope?.tier === 'role' ? (scope.assignment ?? '') : (scope?.assignment ?? '')
@@ -197,14 +199,38 @@ export function useScopeConnections(scope: RailScope | undefined): {
     retry: false,
     staleTime: 60_000,
   })
-  if (scope === undefined) return { items: [], ready: true }
-  return { items: connectionsInScope(q.data?.items ?? [], scope), ready: !q.isPending }
+  if (scope === undefined) return { items: [], ready: true, connected: [] }
+  return {
+    items: connectionsInScope(q.data?.items ?? [], scope),
+    ready: !q.isPending,
+    connected: q.data?.connected ?? [],
+  }
+}
+
+/**
+ * WP415（自查 R4，决策 1239）：连接那一行的一句话——只有**真连好且真被用到**时才说「都连好了」。
+ *
+ * - 必需的没连（含要开发者配置的）→「N 个要处理」+ 红点；
+ * - 只缺可选的 →「可选 N 个没连」（不亮红点，但不说「都连好了」）；
+ * - 什么都不缺、且这个岗位真有连上在用的 →「都连好了」；
+ * - 什么都不要 → 不出这一句。
+ */
+export function connectionsSummary(
+  items: readonly PositionConnectionItem[],
+  connected: readonly string[],
+): { kind: 'todo' | 'optional' | 'ok'; n: number } | undefined {
+  const todo = items.filter(connectionNeedsYou).length
+  if (todo > 0) return { kind: 'todo', n: todo }
+  const optional = items.filter((i) => !i.connected).length
+  if (optional > 0) return { kind: 'optional', n: optional }
+  if (connected.length > 0) return { kind: 'ok', n: connected.length }
+  return undefined
 }
 
 /** 连接：几个要处理（亮红点），都好了就说「都连好了」。 */
 export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus | undefined {
   const { t } = useApp()
-  const { items } = useScopeConnections(scope)
+  const { items, connected } = useScopeConnections(scope)
   // WP386：信息监控有拉不到的源 → 红点（汇总那一句照搬：「17 条 · 1 条拉不到」）
   const monitor = useScopeMonitor(scope)?.view
   // WP392：竞品监控有没读到的那几家，也算要处理（红点；照实说几家）。钩子先都调完再判
@@ -218,13 +244,14 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
       dot: 'alert',
       dotLabel: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
     }
-  if (items.length === 0) return undefined
-  const todo = items.filter(connectionNeedsYou).length
-  if (todo === 0) return { summary: t('conncard.summary.ok') }
+  const sum = connectionsSummary(items, connected)
+  if (sum === undefined) return undefined
+  if (sum.kind === 'ok') return { summary: t('conncard.summary.ok') }
+  if (sum.kind === 'optional') return { summary: t('conncard.summary.optional', { n: sum.n }) }
   return {
-    summary: t('conncard.summary.todo', { n: todo }),
+    summary: t('conncard.summary.todo', { n: sum.n }),
     dot: 'alert',
-    dotLabel: t('conncard.dot.todo', { n: todo }),
+    dotLabel: t('conncard.dot.todo', { n: sum.n }),
   }
 }
 

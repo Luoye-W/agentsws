@@ -138,6 +138,12 @@ export interface ConnectionDirectoryEntry {
   resolved_by_profile?: boolean
   /** 一句人话：这是什么 / 为什么还没做。界面上的灰字。 */
   note?: { zh: string; en: string }
+  /**
+   * WP415（自查 R4，决策 1239）：连这一条要用户自己去平台的**开发者后台**建应用、申请权限、
+   * 抄令牌——与「用户零开发者配置」冲突。界面上不再拿「去连接」诱导人去填，而是标
+   * 「需要开发者配置（后续会换成登录态）」。
+   */
+  developer_setup?: true
 }
 
 // ── 几组复用的字段描述 ────────────────────────────────────────────────
@@ -262,6 +268,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'shopify',
+    developer_setup: true,
     name: { zh: 'Shopify 店铺', en: 'Shopify' },
     category: 'storefront',
     auth: 'client_credentials',
@@ -445,6 +452,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
    */
   {
     kind: 'meta_marketing',
+    developer_setup: true,
     name: { zh: 'Meta Marketing API（投放）', en: 'Meta Marketing API (Ads)' },
     category: 'ads',
     auth: 'api_key',
@@ -484,6 +492,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'google_ads',
+    developer_setup: true,
     name: { zh: 'Google Ads API', en: 'Google Ads API' },
     category: 'ads',
     auth: 'api_key',
@@ -698,6 +707,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
    */
   {
     kind: 'meta_graph',
+    developer_setup: true,
     name: { zh: 'Meta Graph API（FB 主页 + IG）', en: 'Meta Graph API (Page + Instagram)' },
     category: 'social',
     auth: 'oauth',
@@ -718,6 +728,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   // 另一套（单独用例、单独令牌），主页令牌调不动它，所以是自己一张。
   {
     kind: 'threads_api',
+    developer_setup: true,
     name: { zh: 'Threads API', en: 'Threads API' },
     category: 'social',
     auth: 'oauth',
@@ -734,6 +745,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'linkedin_api',
+    developer_setup: true,
     name: { zh: 'LinkedIn（公司主页 + 本人号）', en: 'LinkedIn (Company Page + member)' },
     category: 'social',
     auth: 'oauth',
@@ -751,6 +763,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'tiktok_content',
+    developer_setup: true,
     name: { zh: 'TikTok Content Posting API', en: 'TikTok Content Posting API' },
     category: 'social',
     auth: 'client_credentials',
@@ -784,6 +797,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'reddit',
+    developer_setup: true,
     name: { zh: 'Reddit API', en: 'Reddit API' },
     category: 'social',
     auth: 'client_credentials',
@@ -887,6 +901,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'discord_bot',
+    developer_setup: true,
     name: { zh: 'Discord 机器人', en: 'Discord bot' },
     category: 'social',
     auth: 'api_key',
@@ -922,6 +937,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'telegram_bot',
+    developer_setup: true,
     name: { zh: 'Telegram 机器人', en: 'Telegram bot' },
     category: 'social',
     auth: 'api_key',
@@ -957,6 +973,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   },
   {
     kind: 'whatsapp_business',
+    developer_setup: true,
     name: { zh: 'WhatsApp Business API', en: 'WhatsApp Business API' },
     category: 'social',
     auth: 'api_key',

@@ -89,6 +89,8 @@ export interface PositionConnectionItem {
   status: ConnectionDirectoryEntry['status']
   connect_service?: string
   note?: { zh: string; en: string }
+  /** WP415（只加）：连它要去平台开发者后台建应用 / 抄令牌——界面标「需要开发者配置」，不诱导去填。 */
+  developer_setup?: true
 }
 
 export interface PositionConnectionsView {
@@ -98,6 +100,11 @@ export interface PositionConnectionsView {
   ready: boolean
   /** 还缺的**必需**连接（kind）。 */
   missing_required: string[]
+  /**
+   * WP415（只加，自查 R4）：这个岗位的职责要、**且已经连上**的那几条（kind）。
+   * 界面上只有它非空、又没有缺的时才说「连好了」——一条都不要的岗位不说「都连好了」。
+   */
+  connected?: string[]
   /** 并集 − 已连；连上一个就少一条（连上全部 = 空数组 = 卡自己消失）。 */
   items: PositionConnectionItem[]
 }
@@ -458,7 +465,7 @@ export function createConnectionDirectory(
   /** 这几条职责要、但还没连上的连接（岗位连接清单与店主的 `list_connections` 共用这一份）。 */
   const gapsOf = (
     role_ids: readonly RoleId[],
-  ): { items: PositionConnectionItem[]; missing_required: string[] } => {
+  ): { items: PositionConnectionItem[]; missing_required: string[]; connected: string[] } => {
     const connected = connectedSet()
     const merged = new Map<
       string,
@@ -507,11 +514,15 @@ export function createConnectionDirectory(
 
     const items: PositionConnectionItem[] = []
     const missing_required: string[] = []
+    const linked: string[] = []
     for (const [kind, row] of merged) {
       const isConnected = connected.has(kind)
       if (row.required && !isConnected) missing_required.push(kind)
       // "连上这 N 个就能开工"：已连的那几条**不出现在卡上**（连上就少一条）
-      if (isConnected) continue
+      if (isConnected) {
+        linked.push(kind)
+        continue
+      }
       const entry = row.entry
       const connect_service = entry === undefined ? undefined : connectServiceOf(entry)
       items.push({
@@ -524,6 +535,7 @@ export function createConnectionDirectory(
         status: entry?.status ?? 'planned',
         ...(connect_service === undefined ? {} : { connect_service }),
         ...(entry?.note === undefined ? {} : { note: entry.note }),
+        ...(entry?.developer_setup === true ? { developer_setup: true as const } : {}),
       })
     }
     // 必需的排在前面；同档按目录顺序（界面上不会因为一次刷新就换位置）
@@ -533,18 +545,19 @@ export function createConnectionDirectory(
         Number(b.required) - Number(a.required) ||
         (order.get(a.kind) ?? 999) - (order.get(b.kind) ?? 999),
     )
-    return { items, missing_required }
+    return { items, missing_required, connected: linked }
   }
 
   const positionConnections = (person_id: PersonId, id: string): PositionConnectionsView => {
     const { position_id, position_name, role_ids } = resolve(person_id, id)
-    const { items, missing_required } = gapsOf(role_ids)
+    const { items, missing_required, connected } = gapsOf(role_ids)
     return {
       position_id,
       position_name,
       ready: missing_required.length === 0,
       missing_required,
       items,
+      connected,
     }
   }
 

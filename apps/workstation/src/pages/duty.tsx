@@ -48,6 +48,7 @@ import {
   connectorLines,
   scopeLines,
   skillLines,
+  toolLines,
 } from '@/lib/duty-capabilities'
 import { matterUrl } from '@/lib/work'
 
@@ -66,6 +67,8 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
       lines: actionLines(view, t),
       empty: t('duty.actions.none'),
     },
+    // WP415：能查什么（没有执行器的标「还没接通」）
+    { id: 'tool', title: t('duty.tools'), lines: toolLines(view, t) },
     { id: 'skill', title: t('duty.skills'), lines: skillLines(view, t) },
     { id: 'connector', title: t('duty.connectors.title'), lines: connectorLines(view, t, lang) },
   ]
@@ -85,7 +88,13 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
               ) : (
                 <ul className="flex flex-col gap-0.5">
                   {g.lines.map((line) => (
-                    <li key={line.key} data-testid={`duty-${g.id}`} data-raw={line.raw}>
+                    <li
+                      key={line.key}
+                      data-testid={`duty-${g.id}`}
+                      data-raw={line.raw}
+                      data-not-wired={line.not_wired === true ? 'true' : undefined}
+                      className={line.not_wired === true ? 'text-ws-muted-fg' : undefined}
+                    >
                       <InfoTip text={line.raw}>{line.text}</InfoTip>
                     </li>
                   ))}

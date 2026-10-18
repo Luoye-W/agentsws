@@ -345,6 +345,8 @@ export class Executor {
           idempotency_key: change.id,
           ...(result.execution_id ? { execution_id: result.execution_id } : {}),
           ...(result.outcome_ref ? { outcome_ref: result.outcome_ref } : {}),
+          // WP415：执行后有没有读回来核对（没说就不写，读成「未能回读」）
+          ...(result.readback ? { readback: result.readback } : {}),
         },
       }
       // apply 成功的落地一次做完：预占转 committed + 变更转 applied
@@ -357,6 +359,7 @@ export class Executor {
           attempts,
           guardrail_rerun,
           ...(result.outcome_ref ? { outcome_ref: result.outcome_ref } : {}),
+          ...(result.readback ? { readback: result.readback } : {}),
         })
       await this.rt.emit('change.applied', {
         workspace_id: change.workspace_id,
@@ -367,7 +370,7 @@ export class Executor {
           run_id: change.run_id,
           ...(result.execution_id ? { execution_id: result.execution_id } : {}),
         },
-        payload: { outcome_ref: result.outcome_ref ?? null },
+        payload: { outcome_ref: result.outcome_ref ?? null, readback: result.readback ?? null },
         ...(item ? { item_id: item.id } : {}),
       })
       if (item)
@@ -425,7 +428,7 @@ export class Executor {
       message: result.error?.message ?? '施行失败',
       retryable: result.error?.retryable === true,
     }
-    return this.fail(change, error, item, attempts)
+    return this.fail(change, error, item, attempts, result.not_wired === true)
   }
 
   private async fail(
@@ -433,6 +436,8 @@ export class Executor {
     error: ApplyError,
     item?: ApprovalItem,
     attempts: NonNullable<ApprovalItem['apply']>['attempts'] = [],
+    /** WP415：没做是因为「这一步还没接通」——审批项上记一笔，界面据此说「还没接通」而不是「失败」。 */
+    notWired = false,
   ): Promise<ApplyOutcome> {
     const at = this.rt.now()
     const next: StagedChange = {
@@ -461,6 +466,7 @@ export class Executor {
           passed: false,
           caps_hit: (change.guardrail_rerun?.hits ?? []).map((h) => h.rule),
         },
+        ...(notWired ? { not_wired: true as const } : {}),
       })
     await this.rt.emit('change.failed', {
       workspace_id: change.workspace_id,
@@ -707,13 +713,20 @@ export class Executor {
       attempts,
       guardrail_rerun: { passed: ok, caps_hit: [] },
       ...(result.outcome_ref ? { outcome_ref: result.outcome_ref } : {}),
+      // WP415：回读结论 / 没接通，照实记在卡上
+      ...(ok && result.readback ? { readback: result.readback } : {}),
+      ...(!ok && result.not_wired === true ? { not_wired: true as const } : {}),
     })
     await this.rt.emit(ok ? 'approval.applied' : 'approval.apply_failed', {
       workspace_id: item.workspace_id,
       actor: { kind: 'system', id: this.rt.policy.executor_id },
       subject: { type: 'approval_item', id: item.id },
       correlation: { ...(result.execution_id ? { execution_id: result.execution_id } : {}) },
-      payload: { outcome_ref: result.outcome_ref ?? null, status: result.status },
+      payload: {
+        outcome_ref: result.outcome_ref ?? null,
+        status: result.status,
+        readback: result.readback ?? null,
+      },
       item_id: item.id,
     })
     const out = this.rt.store.getApproval(item.id)
