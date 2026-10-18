@@ -3675,6 +3675,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.amazonListing !== undefined)
       assembly.registerTarget(brand.amazonListing.setupTarget())
     setupCards.set(ws, assembly)
+    // WP410（真机 #5）：升级迁移——旧版留下的空表单配置卡作废、没设好的换成方案卡（每个品牌一次）
+    void assembly.migrateLegacy?.().catch(() => undefined)
     return assembly
   }
   /** WP386（docs/103 S5）：这个品牌连过任一 Google 服务没有（有 = Google 账号这一步算过了）。 */
@@ -6398,6 +6400,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             storefrontPlatform: () => brandPlatformOf(ws),
             // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
             timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+            // WP410（真机 #9）：当前设置快照（Reddit 巡查的连接与设置原值；只给登记了的职责）
+            setupState: async ({ role_id }) => (await setupCardsOf(ws))?.stateFor?.(role_id),
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
             automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
@@ -9621,6 +9625,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     await ensureBrandTasks(ws)
     await applyRoleGates(ws)
     await retireTasks(ws)
+    // WP410（真机 #5）：配置卡装配懒建时跑一次升级迁移（旧版空表单卡作废、换方案卡）——开机就建，不等第一次出卡
+    void setupCardsOf(ws).catch(() => undefined)
   }
 
   /**
