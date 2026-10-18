@@ -37,8 +37,10 @@ import type {
   GeoAnswerDetail,
   GeoAnswerSide,
   GeoCitationRecord,
+  GeoFactsPatch,
   GeoMentionRecord,
   GeoMetricsView,
+  GeoOfficialFact,
   GeoProbeRow,
   GeoQuestion,
   GeoRunEstimate,
@@ -80,12 +82,14 @@ import {
   classifyPrompt,
   competitorId,
   defaultWatchKeywords,
+  factValuesOf,
   type GeoAlert,
   type GeoUnitPrices,
   generatePromptCandidates,
   geoAlerts,
   geoBriefLine,
   geoGrid,
+  geoQualityOf,
   geoRunEstimate,
   geoTrends,
   guessPromptTopic,
@@ -95,8 +99,10 @@ import {
   mondayOf,
   newPromptCandidates,
   parseClassifyReply,
+  parseInsightReply,
   parseJudgeReply,
   parseStrategyReply,
+  patchFacts,
   pickDefaultPrompts,
   promptId,
   promptIsBranded,
@@ -106,6 +112,7 @@ import {
   shiftDay,
   stageHint,
   strategyPrompt,
+  syncFacts,
 } from '@agentsws/seo-core'
 import type { BrandWatchSettings, GeoStore, StoredPrompt } from './geo-store.js'
 import { answerHash as answerHashOf, defaultWatchSettings } from './geo-store.js'
@@ -141,6 +148,10 @@ export interface WatchBrand {
   audience?: BrandAudience | undefined
   keywords?: BrandKeywords | undefined
   competitors?: readonly BrandCompetitor[] | undefined
+  /** WP380：官方事实表要的几格（品牌档案第二版；没有不写）。 */
+  subcategory?: string | undefined
+  price_band?: string | undefined
+  positioning?: string | undefined
 }
 
 export interface GeoMonitorDeps {
@@ -546,6 +557,7 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     const entities = { brand: watch.brand, competitors: watch.competitors }
     const judge = deps.model?.('judge')
     const cap = deps.judgeCap ?? WATCH_JUDGE_CAP
+    const facts = judge === undefined ? [] : await officialFacts(store)
     let answered = 0
     let credits = 0
     for (const r of results) {
@@ -611,6 +623,10 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       if (judge === undefined || judged.n >= cap) continue
       judged.n += 1
       const ours = mentions.find((m) => m.entity === 'ours')
+      // WP380：提到我们的回答顺带判「和竞品比更推荐谁」与「说得对不对」（同一次调用）
+      const rivals = mentions
+        .filter((m) => m.entity !== 'ours' && m.mentioned)
+        .map((m) => watch.competitors.find((c) => c.id === m.entity)?.name ?? m.name_snapshot)
       try {
         const reply = await judge({
           prompt: judgePrompt({
@@ -618,9 +634,29 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
             competitors: watch.competitors.map((c) => c.name),
             answer: text,
             mentioned: ours?.mentioned === true,
+            facts,
+            rivals,
           }),
         })
         const j = parseJudgeReply(reply.text, text, ours?.mentioned === true)
+        if (ours?.mentioned === true) {
+          const got = parseInsightReply(reply.text, text, {
+            mentioned: true,
+            facts,
+            rivals,
+          })
+          const asOf = facts
+            .map((f) => f.as_of)
+            .sort()
+            .at(-1)
+          if (got.compare !== undefined || got.claims.length > 0)
+            store.setInsight({
+              answer_id: id,
+              ...got,
+              ...(asOf === undefined ? {} : { facts_as_of: asOf }),
+              judged_at: now(),
+            })
+        }
         const mood = j.sentiment
         if (mood !== undefined && ours !== undefined)
           store.replaceMentions(
@@ -822,7 +858,14 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
 
   async function runGeo(
     trigger: 'scheduled' | 'manual',
-    opts: { confirmed?: boolean } = {},
+    opts: {
+      confirmed?: boolean
+      /**
+       * WP380 复查：只问这几条（即时问、不走排队档；官方那条路不问 Claude——单格贵、这一轮没人确认过）。
+       * 这一轮记在复查表上，不进每周指标。
+       */
+      recheck?: { prompt_ids: readonly string[]; markets?: readonly string[] | undefined }
+    } = {},
   ): Promise<GeoRoundOutcome> {
     const { store, watch } = await ensureWatch()
     const search = deps.searchData()
@@ -837,9 +880,18 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     })
     if (!watch.enabled) return skip('AI 回答监测在设置里关掉了，这一轮没有问。')
     if (!status.configured) return skip(status.reason ?? '搜索数据接口还没接，这一轮没有问各 AI。')
-    const markets = probingMarkets(watch)
+    const only = opts.recheck
+    const markets = probingMarkets(watch).filter(
+      (m) => only?.markets === undefined || only.markets.length === 0 || only.markets.includes(m),
+    )
     if (markets.length === 0) return skip('每个市场的监测都关掉了，这一轮没有问。')
-    const prompts = watch.prompts.filter((p) => p.enabled).slice(0, watch.prompt_limit)
+    const prompts =
+      only === undefined
+        ? watch.prompts.filter((p) => p.enabled).slice(0, watch.prompt_limit)
+        : store
+            .prompts({ archived: true })
+            .filter((p) => only.prompt_ids.includes(p.id))
+            .map(asQuestion)
     if (prompts.length === 0) return skip('还没选要追的 Prompt，这一轮没有问。')
     const notes: string[] = []
     let platforms = askable(watch, status, caps)
@@ -854,7 +906,9 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     // 决策 650（Luoye 10-14 定）：Claude 默认就问——定时那一轮不等策略定了（关注的 AI 里关掉才不问）；
     // 手动「现在跑一轮」官方那条路仍要这一轮合并确认过才问（单格 ≥ 1 积分，docs/75），自带 key 照问
     const claudeOk =
-      trigger === 'scheduled' || opts.confirmed === true || status.route !== 'official'
+      (trigger === 'scheduled' && only === undefined) ||
+      opts.confirmed === true ||
+      status.route !== 'official'
     if (platforms.includes('claude') && !claudeOk) {
       platforms = platforms.filter((p) => p !== 'claude')
       notes.push(NOTE_CLAUDE_NOT_CONFIRMED_RUN)
@@ -900,7 +954,10 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     const submitted: string[] = []
     // ① 定时 + 官方：ChatGPT / Gemini / AI 概览走排队档批量任务（决策 469）
     const batch =
-      trigger === 'scheduled' && status.route === 'official' && data !== undefined
+      trigger === 'scheduled' &&
+      only === undefined &&
+      status.route === 'official' &&
+      data !== undefined
         ? platforms.filter(
             (p) => BATCHABLE.includes(p) && capOf(caps, `ai_answer_batch.${p}`)?.available === true,
           )
@@ -1209,19 +1266,70 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
   /* ── 指标（规则算，从历史原文来） ─────────────────────────────────────── */
 
   /** `from` 那一周起的 GEO 回答（带判定、引用、那一轮的周、Prompt 带不带品牌名）。 */
-  function history(store: GeoStore, fromWeek: string): MetricAnswer[] {
-    const runs = new Map(store.runs({ kind: 'geo' }).map((r) => [r.id, r]))
+  function history(
+    store: GeoStore,
+    fromWeek: string,
+    opts: { rechecks?: 'exclude' | 'only' } = {},
+  ): MetricAnswer[] {
+    // WP380：复查那几轮只问了一小组，不进每周指标（复查自己比前后）
+    const recheckRuns = new Set(
+      store.rechecks().flatMap((r) => (r.run_id === undefined ? [] : [r.run_id])),
+    )
+    const keep = (id: string) =>
+      opts.rechecks === 'only' ? recheckRuns.has(id) : !recheckRuns.has(id)
+    const runs = new Map(
+      store
+        .runs({ kind: 'geo' })
+        .filter((r) => keep(r.id))
+        .map((r) => [r.id, r]),
+    )
     const branded = new Map(store.prompts({ archived: true }).map((p) => [p.id, p.branded]))
-    return store
+    const answers = store
       .answers({ range: { from: `${fromWeek}T00:00:00Z` } })
       .filter((a) => runs.has(a.run_id))
-      .map((a) => ({
-        answer: a,
-        week: runs.get(a.run_id)?.period ?? mondayOf(a.fetched_at),
-        mentions: store.mentions(a.id),
-        citations: store.citations(a.id),
-        branded: branded.get(a.prompt_id),
-      }))
+    const insights = new Map(
+      store.insights(answers.map((a) => a.id)).map((i) => [i.answer_id, i] as const),
+    )
+    return answers.map((a) => ({
+      answer: a,
+      week: runs.get(a.run_id)?.period ?? mondayOf(a.fetched_at),
+      mentions: store.mentions(a.id),
+      citations: store.citations(a.id),
+      branded: branded.get(a.prompt_id),
+      insight: insights.get(a.id),
+    }))
+  }
+
+  /* ── WP380：官方事实表 ─────────────────────────────────────────────── */
+
+  /** 官方事实表：先跟品牌档案同步（档案改了旧说法进 previous；人改的不动），再读。 */
+  async function officialFacts(store?: GeoStore): Promise<GeoOfficialFact[]> {
+    const s = store ?? (await deps.store())
+    const b = await deps.brand()
+    const cur = s.facts()
+    const next = syncFacts(
+      cur,
+      factValuesOf({
+        name: b.name,
+        category: b.category,
+        subcategory: b.subcategory,
+        price_band: b.price_band,
+        positioning: b.positioning,
+        one_liner: b.one_liner,
+        markets: b.markets,
+      }),
+      today(now()),
+    )
+    if (JSON.stringify(next) !== JSON.stringify(cur)) s.saveFacts(next)
+    return next
+  }
+
+  /** 人改官方事实（空值 = 退回跟档案走）。 */
+  async function setFacts(patch: GeoFactsPatch): Promise<GeoOfficialFact[]> {
+    const store = await deps.store()
+    const cur = await officialFacts(store)
+    store.saveFacts(patchFacts(cur, patch, today(now())))
+    return officialFacts(store)
   }
 
   function rankHistory(store: GeoStore, fromWeek: string): RankPoint[] {
@@ -1270,7 +1378,24 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
       allLine?.points.find((p) => p.week === week),
       rank.week === week ? rank : undefined,
     )
+    // WP380：说得对不对、比得过谁（AI 判断那一步附原话；这里只数）+ 官方事实、一致性、复查
+    const facts = await officialFacts(store)
+    const consistency = store.consistencyRuns(1)[0]
+    const rechecks = [
+      ...store.rechecks({ status: 'waiting' }),
+      ...store
+        .rechecks({ status: 'done' })
+        .sort((a, b) => b.due.localeCompare(a.due))
+        .slice(0, 5),
+    ].slice(0, 10)
+    const quality = {
+      ...geoQualityOf(rows, week, facts),
+      facts,
+      ...(consistency === undefined ? {} : { consistency }),
+      rechecks,
+    }
     return {
+      quality,
       ...(week === undefined ? {} : { week }),
       ...(grid === undefined ? {} : { grid }),
       ...(brief === undefined ? {} : { brief }),
@@ -1722,6 +1847,12 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
     suggest,
     apply,
     runGeo,
+    /** WP380：官方事实表（读之前先跟档案同步）/ 人改。 */
+    officialFacts: () => officialFacts(),
+    setFacts,
+    /** WP380：指标要的回答行（复查那几轮默认不算；`only` = 只要复查那几轮）。 */
+    historyRows: async (fromWeek: string, opts: { rechecks?: 'exclude' | 'only' } = {}) =>
+      history(await deps.store(), fromWeek, opts),
     runRank,
     brandGsc,
     collect,

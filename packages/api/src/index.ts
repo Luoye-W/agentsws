@@ -783,6 +783,13 @@ export type {
   SiteThemeView,
 } from './routes/site.js'
 export { siteRoutes } from './routes/site.js'
+// WP381：网站 / 商品体检与 AI 来源流量
+export {
+  type SiteHealthActor,
+  type SiteHealthPort,
+  type SiteHealthView,
+  siteHealthRoutes,
+} from './routes/site-health.js'
 export type { SiteActor } from './routes/site-types.js'
 export type {
   SocialAccountInput,

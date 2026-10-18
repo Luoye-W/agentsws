@@ -250,7 +250,12 @@ export function bundledPositionOfRole(role_id: RoleId): Position | undefined {
   const hits = loadBundledPositions()
     .filter((p) => !SUPERSEDED_POSITION_IDS.includes(p.id))
     .filter((p) => p.roles.some((r) => r.role === target))
-  return hits.length === 1 ? hits[0] : undefined
+  if (hits.length === 1) return hits[0]
+  // WP395（docs/106 A3）：一条职责在一个模板里默认勾、在别的模板里只是「列着、默认不勾」
+  // （`amz.support`：客服岗默认勾，Amazon 运营岗位只列着）——它的家是默认勾的那一个。
+  // 默认勾的也不止一个，照旧不猜。
+  const home = hits.filter((p) => p.roles.some((r) => r.role === target && r.default))
+  return home.length === 1 ? home[0] : undefined
 }
 
 /**

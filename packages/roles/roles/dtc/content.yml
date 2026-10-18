@@ -158,6 +158,11 @@ thresholds:
   seo_gem_max_clicks: 50
   # WP159：每天最多让模型写几份改动卡初稿（超了用规则版兜底；0 = 不用模型）
   seo_model_drafts_per_day: 5
+  # WP380：GEO 改动几天后复查（本职责改页面 14 天；交公关 / 对外说法要等站外改，28 天）；
+  # 对外说法一致性检查多久跑一次（跟着每周那一轮看到期没有）
+  geo_recheck_days: 14
+  geo_recheck_days_offsite: 28
+  geo_consistency_days: 28
 home_blocks:
   # 51 §2.2 面板：草稿队列、待发布、近 30 天发布与流量
   - {

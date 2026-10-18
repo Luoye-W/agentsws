@@ -181,6 +181,8 @@ const EVENT_KEYS = [
   // WP69 岗位是任务主入口（54）
   'position.staff',
   'position.open',
+  // WP395：首次设置按原话与勾选划分岗位
+  'position.plan',
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
@@ -255,6 +257,8 @@ const EVENT_KEYS = [
   'web.research',
   'store.daily_report',
   'content.seo_daily',
+  // WP380 GEO 第二层
+  'content.geo_quality',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -320,6 +324,9 @@ const EXPECTED_KEYS = [
   // WP291：岗位入口三分 + 当场回答的组件
   'position_entries',
   'position_answer_components',
+  // WP395：首次设置划分出的岗位、没数据照实说
+  'positions_planned',
+  'position_answer_no_data',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
   // WP392：竞品监控比出了哪几种变化
@@ -391,6 +398,8 @@ const EXPECTED_KEYS = [
   'daily_reports',
   'daily_report_figures',
   'seo_daily',
+  // WP380
+  'geo_quality',
   // WP96（36 §2）：只有要人决定的才是卡
   'queue_cards',
   'panel_reports',
@@ -2203,6 +2212,14 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         seo_daily: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
+    case 'content.geo_quality': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'content.geo_quality',
+        geo_quality: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -2368,6 +2385,18 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         staff: {
           who: str(source, `${path}.${key}.who`, body.who),
           position: str(source, `${path}.${key}.position`, body.position),
+        },
+      }
+    }
+    case 'position.plan': {
+      known(source, `${path}.${key}`, body, ['who', 'text', 'roles'])
+      return {
+        at,
+        type: 'position.plan',
+        plan: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          text: str(source, `${path}.${key}.text`, body.text),
+          roles: optStrList(source, `${path}.${key}.roles`, body.roles) ?? [],
         },
       }
     }
@@ -2740,6 +2769,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.position_answer_components,
   )
   if (answerComponents !== undefined) out.position_answer_components = answerComponents
+  // WP395：`{ 模板 id: [职责…] }`
+  if (raw.positions_planned !== undefined) {
+    const planned = raw.positions_planned
+    if (typeof planned !== 'object' || planned === null || Array.isArray(planned))
+      fail(source, 'expected.positions_planned', '要写成 { 模板 id: [职责…] }')
+    const map: Record<string, string[]> = {}
+    for (const [k, v] of Object.entries(planned as Record<string, unknown>))
+      map[k] = optStrList(source, `expected.positions_planned.${k}`, v) ?? []
+    out.positions_planned = map
+  }
+  const noData = optStrList(source, 'expected.position_answer_no_data', raw.position_answer_no_data)
+  if (noData !== undefined) out.position_answer_no_data = noData
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
@@ -2823,6 +2864,26 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       ...(d.no_dump === undefined
         ? {}
         : { no_dump: requireBool(source, 'expected.seo_daily.no_dump', d.no_dump) }),
+    }
+  }
+  // WP380：GEO 第二层那张报告
+  if (raw.geo_quality !== undefined) {
+    const d = raw.geo_quality
+    if (!isRec(d)) fail(source, 'expected.geo_quality', '必须是对象')
+    known(source, 'expected.geo_quality', d, ['win_rate', 'accuracy', 'owners', 'advice'])
+    out.geo_quality = {
+      ...(d.win_rate === undefined
+        ? {}
+        : { win_rate: numeric(source, 'expected.geo_quality.win_rate', d.win_rate) }),
+      ...(d.accuracy === undefined
+        ? {}
+        : { accuracy: numeric(source, 'expected.geo_quality.accuracy', d.accuracy) }),
+      ...(d.owners === undefined
+        ? {}
+        : { owners: strList(source, 'expected.geo_quality.owners', d.owners) }),
+      ...(d.advice === undefined
+        ? {}
+        : { advice: str(source, 'expected.geo_quality.advice', d.advice) }),
     }
   }
   // WP96（36 §2）：队列里剩几张、面板报表块有几条

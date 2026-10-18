@@ -429,8 +429,12 @@ describe('WP310 geo.sqlite：导出与删除（决策 473）', () => {
         'answers',
         'brand_gsc',
         'citations',
+        // WP380：AI 判断、官方事实、复查
+        'facts',
+        'insights',
         'mentions',
         'other_brands',
+        'rechecks',
         'prompts',
         'ranks',
         'runs',

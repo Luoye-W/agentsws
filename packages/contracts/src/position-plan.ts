@@ -14,7 +14,8 @@ export const MAX_DUTIES_PER_POSITION = 6
 export interface PositionCatalogEntry {
   id: string
   name: string
-  roles: readonly { id: string }[]
+  /** WP395：`default` 给了就用来认「这条职责的家」（挂在几个类别里时归默认勾的那个）。 */
+  roles: readonly { id: string; default?: boolean }[]
 }
 
 /** 第 ③ 步的产出：一个岗位 = 名字 + 几条职责（+ 从哪个类别来的，复用模板时用）。 */
@@ -70,12 +71,26 @@ export function mergedPositionName(
     : fallback
 }
 
-/** 一条职责归哪个类别（挂在几个模板里时归第一个）。 */
+/**
+ * 一条职责归哪个类别（挂在几个模板里时归第一个）。WP395：挂在几个模板里、其中只在一个里默认勾
+ * （`amz.support`：客服默认勾、Amazon 运营只列着）→ 归默认勾的那个，与目录顺序无关。
+ */
 export function categoryOfRole(
   role_id: string,
   catalog: readonly PositionCatalogEntry[],
 ): PositionCatalogEntry | undefined {
-  return catalog.find((c) => c.roles.some((r) => r.id === role_id))
+  const hits = catalog.filter((c) => c.roles.some((r) => r.id === role_id))
+  if (hits.length <= 1) return hits[0]
+  const home = hits.filter((c) => c.roles.some((r) => r.id === role_id && r.default !== false))
+  return home.length === 1 ? home[0] : hits[0]
+}
+
+/**
+ * WP395（docs/104 C2）：一句话里算不算「提到了 Amazon」。FBA / ASIN / 卖家后台 / Seller Central
+ * 是 Amazon 才有的说法；「Listing」不算（独立站也这么说）。首次设置推荐与模拟同一份。
+ */
+export function mentionsAmazon(text: string): boolean {
+  return /amazon|亚马逊|\bFBA\b|\bASINs?\b|卖家后台|seller\s*central/i.test(text)
 }
 
 /** 超过阈值就按顺序切成几堆（「社媒运营 · 1」「社媒运营 · 2」），模板 id 只留给第一堆。 */
@@ -124,6 +139,26 @@ export function proposePositions(
     const list = byCategory.get(cat.id)
     if (list === undefined) byCategory.set(cat.id, [id])
     else list.push(id)
+  }
+  // 1bis. WP395（docs/106 A3）：挂在几个类别里的职责，在第一个类别里**孤零零一条**、而后面另一个
+  //   也挂着它的类别里已经有别的职责被选中 → 改归那个类别。只做 Amazon、没设客服岗的公司，
+  //   `amz.support` 就跟着亚马逊店铺运营进「Amazon 运营」，不单独成一个只有它的「客服」。
+  for (const [catId, ids] of [...byCategory]) {
+    const only = ids.length === 1 ? ids[0] : undefined
+    if (only === undefined) continue
+    const home = catalog.find(
+      (c) =>
+        c.id !== catId &&
+        (byCategory.get(c.id) ?? []).length > 0 &&
+        c.roles.some((r) => r.id === only),
+    )
+    if (home === undefined) continue
+    const order = home.roles.map((r) => r.id)
+    const moved = [...(byCategory.get(home.id) ?? []), only].sort(
+      (a, b) => order.indexOf(a) - order.indexOf(b),
+    )
+    byCategory.set(home.id, moved)
+    byCategory.delete(catId)
   }
   // 2. 同渠道并岗：找出「整个类别只选了这一个渠道」的那些类别
   const soleChannel = new Map<string, string>()

@@ -67,6 +67,7 @@ import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
 import type { SeoServiceAssembly } from './seo-service.js'
 import type { SiteServiceAssembly, SiteStore } from './site.js'
+import type { SiteHealthService } from './site-health.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
@@ -255,6 +256,8 @@ export interface BrandModuleSet {
    * 这个品牌的目录下。
    */
   seoService: SeoServiceAssembly
+  /** WP381：这个品牌的网站 / 商品体检与 AI 来源流量（`site-health.json` 落在这个品牌的目录下）。 */
+  siteHealth?: SiteHealthService
   /**
    * WP335（决策 659）：这个品牌的一次性文字模型口（品牌分析认品类用；用量照常记在这个品牌的账上）。
    * 没接模型 / 只有 stub → `undefined`。可选：老的装配不给就当没有。

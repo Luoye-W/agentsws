@@ -14,11 +14,10 @@ body:
 
         Two things worth knowing before you write:
 
-        - The **interfaces are frozen** (`docs/32` §2). Adding fields and kinds is fine;
+        - The **interfaces are frozen** Adding fields and kinds is fine;
           changing the meaning of an existing contract needs a major version and a migrator.
         - Whole layers are deliberately deferred (application packages and the registry,
-          IM delivery, MCP surface, Postgres). See `docs/38-底层收口清单.md` §2 for the
-          order things are being closed out in.
+          IM delivery, MCP surface, Postgres). See the status table in the README.
 
   - type: textarea
     id: problem

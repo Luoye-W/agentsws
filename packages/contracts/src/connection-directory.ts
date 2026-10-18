@@ -1090,7 +1090,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: '/im-channels',
     status: 'planned',
     note: {
-      zh: '「我的代理」的微信入口：本人问自己的代理、收自己的卡片。同事加不了、不能进群、收不到别人发给你的消息。',
+      zh: '「我的助理」的微信入口：本人问自己的助理、收自己的卡片。同事加不了、不能进群、收不到别人发给你的消息。',
       en: 'A personal line to your own assistant only: colleagues cannot add it, it cannot join groups.',
     },
   },
@@ -1105,7 +1105,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: '/im-channels',
     status: 'planned',
     note: {
-      zh: '团队渠道：审批卡推送、同事在群里 @ 代理。',
+      zh: '团队渠道：审批卡推送、同事在群里 @ 助理。',
       en: 'The team channel: approval cards and @-mentions in group chats.',
     },
   },

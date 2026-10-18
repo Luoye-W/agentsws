@@ -192,7 +192,14 @@ describe('59 §3 四条职责各看自己那几块', () => {
   const idsOf = (role: string): string[] => blocksForRole(role as never).map((b) => b.id)
 
   it('整站搭建看检查单；网页模板看副本与待发布；邮件看模板与待启用；插件看已装与待装', () => {
-    expect(idsOf('site.shopify-build')).toEqual(['site.checklist', 'site.themes', 'site.apps'])
+    expect(idsOf('site.shopify-build')).toEqual([
+      'site.checklist',
+      'site.themes',
+      'site.apps',
+      // WP381：网站技术体检（AI 爬虫、原始 HTML）
+      'site.health.crawlers',
+      'site.health.raw_html',
+    ])
     expect(idsOf('site.shopify-theme')).toEqual(['site.theme.copies', 'site.theme.pending'])
     expect(idsOf('site.shopify-email')).toEqual(['site.email.templates', 'site.email.pending'])
     expect(idsOf('site.shopify-apps')).toEqual(['site.apps.installed', 'site.apps.pending'])

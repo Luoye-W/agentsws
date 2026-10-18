@@ -19,6 +19,7 @@ import {
 } from '@agentsws/contracts'
 import { B2B_QUERIES } from './b2b-queries.js'
 import { DeckError } from './errors.js'
+import { SITE_HEALTH_QUERIES } from './site-health-queries.js'
 import { ADS_SOURCE_BY_PLATFORM, SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
   DataSourceId,
@@ -2668,6 +2669,8 @@ const QUERY_LIST: QueryDef[] = [
   // WP76（58 §3）：设计岗位五块
   ...DESIGN_QUERIES,
   ...SITE_QUERIES,
+  // WP381：网站 / 商品体检四块 + AI 来源流量
+  ...SITE_HEALTH_QUERIES,
   ...ADS_QUERIES,
   // WP78（60 §3）：公关五块
   ...PR_QUERIES,
