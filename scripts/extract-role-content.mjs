@@ -17,7 +17,7 @@
  *   node scripts/extract-role-content.mjs --check          只自检往返，不写盘
  * 先跑 `pnpm exec tsc -b`（要读 packages/roles/dist）。
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
@@ -82,5 +82,8 @@ async function main() {
   )
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))
+)
   await main()

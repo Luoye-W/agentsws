@@ -38,6 +38,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # WP404：冻结内容守卫要比 HEAD^1（PR 的合并提交的第一个父 = 目标分支；推到 main = 上一个提交）
+          fetch-depth: 2
 
       # pnpm 版本取自根 package.json 的 packageManager 字段（pnpm 11）
       - uses: pnpm/action-setup@v4
@@ -63,6 +66,14 @@ jobs:
         env:
           AGENTSWS_FORBIDDEN_NAMES: ${{ secrets.AGENTSWS_FORBIDDEN_NAMES }}
         run: node scripts/check-no-internal-docs.mjs
+
+      # WP404（docs/107 §11）：岗位内容 10-19 起冻结成开源基础版，只收修错和社群改进。冻结范围
+      # （职责 / 岗位 yml 的内容字段、skills/bundled/、外置规则表 *.content.json）改动超过 20 行：
+      # PR 上要标 content-fix（没标就红）；推到 main 只提醒，不拦主线修错。
+      - name: check-content-freeze（冻结内容改动超过 20 行要标 content-fix）
+        env:
+          CONTENT_FIX_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'content-fix') }}
+        run: node scripts/check-content-freeze.mjs --base HEAD^1 ${{ github.event_name == 'pull_request' && '--strict' || '' }}
 
       # WP197：官网 apps/site 只构建、不部署（部署由 Fable 找 Luoye 确认后手动做）。
       # CI 里不打网取价目（AGENTSWS_SITE_OFFLINE=1 → 用仓库样例），构建结果不随云上改价而变；
