@@ -383,7 +383,8 @@ describe('挑图卡被决定', () => {
     const option = card.options?.[1]?.id ?? ''
     await svc.onDecided(decided(card, option))
     const picked = assets.get(option.replace('asset:', ''))
-    expect(picked?.status).toBe('picked')
+    // WP421：挑中 = 定稿（published），同批其它张作废
+    expect(picked?.status).toBe('published')
     expect(picked?.provenance.picked_by).toBe('per_boss')
     expect(placed).toHaveLength(1)
     expect(placed[0]).toMatchObject({
@@ -391,8 +392,8 @@ describe('挑图卡被决定', () => {
       matter_id: 'mat_1',
     })
     expect(notes.at(-1)).toBe('挂好了（替身）')
-    // 另一张还在库里（没被当成「不要」）
-    expect(assets.list().filter((a) => a.status === 'variant')).toHaveLength(1)
+    // WP421（自查 general 2.4）：同批另一张不再一直挂着「等你挑」——挑中一张，其余作废（还在库里，标作废）
+    expect(assets.list().filter((a) => a.status === 'variant')).toHaveLength(0)
   })
 
   it('不带 place 的只记选中、不挂网站', async () => {

@@ -264,16 +264,22 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
   const recipientFor = async (
     actor: PrActor,
     rule: 'role_holder' | 'scope_manager' | 'owner',
-  ): Promise<Recipient> =>
-    rule === 'scope_manager' && options.routeScopeManager !== undefined
-      ? recipientOf(
-          await options.routeScopeManager({
-            workspace_id: options.workspace_id,
-            role_id: actor.role_id,
-            proposer: actor.person_id,
-          }),
-        )
-      : { person: actor.person_id, via: rule }
+  ): Promise<Recipient> => {
+    if (rule === 'scope_manager' && options.routeScopeManager !== undefined)
+      return recipientOf(
+        await options.routeScopeManager({
+          workspace_id: options.workspace_id,
+          role_id: actor.role_id,
+          proposer: actor.person_id,
+        }),
+      )
+    // WP421（自查 general 2.1）：`owner` 的卡落到老板身上（以前落回提的人自己）；没有老板才落回本人
+    if (rule === 'owner') {
+      const owner = await options.owner().catch(() => undefined)
+      if (owner !== undefined) return { person: owner as never, via: 'owner' }
+    }
+    return { person: actor.person_id, via: rule }
+  }
 
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
@@ -671,9 +677,13 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
     async proposeExternalPost(actor, input) {
       const now = clock.now()
       const isReddit = input.platform.trim().toLowerCase() === 'reddit'
-      const policy =
-        options.policyOf?.({ platform: input.platform, venue: input.venue }) ??
-        conservativePolicy(input.venue, now)
+      const known = options.policyOf?.({ platform: input.platform, venue: input.venue })
+      /*
+       * WP421（自查 general 2.1）：别的论坛**没读到版规**时不再按「保守默认」判成禁推广拦下（每条都被拦，
+       * 理由还说「版规明写着禁自我推广」——那是编的）。照实写「没读到版规」放上卡，人看了版规再批。
+       */
+      const rulesUnread = !isReddit && known === undefined
+      const policy = known ?? conservativePolicy(input.venue, now)
       /*
        * WP338（决策 664 / 783，Luoye 10-15 确认）：Reddit **不替用户判「这个版让不让推广」、不设冷却**。
        * 版规原文（插件借品牌号会话只读读回的那一份；没有再用装配给的版规里的原文）放上卡，人看了再批；
@@ -708,25 +718,34 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
         ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
         now,
       })
-      const rules_checked = isReddit
-        ? // 「查过了」照记（guardrail 要这一格）；结论不替人下：不判推广、不判冷却
-          {
+      const rules_checked = rulesUnread
+        ? {
             ok: true,
             reasons: [],
             ...(input.flair === undefined ? {} : { flair: input.flair }),
             checked_at: now,
           }
-        : checkSubredditRules({
-            policy,
-            ...(input.flair === undefined ? {} : { flair: input.flair }),
-            ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
-            now,
-          })
-      const explained = isReddit
-        ? sub_rules.length === 0
-          ? '没读到版规'
-          : `版规 ${sub_rules.length} 条`
-        : explainRuleCheck(rules_checked, input.venue)
+        : isReddit
+          ? // 「查过了」照记（guardrail 要这一格）；结论不替人下：不判推广、不判冷却
+            {
+              ok: true,
+              reasons: [],
+              ...(input.flair === undefined ? {} : { flair: input.flair }),
+              checked_at: now,
+            }
+          : checkSubredditRules({
+              policy,
+              ...(input.flair === undefined ? {} : { flair: input.flair }),
+              ...(last?.published_at === undefined ? {} : { last_post_at: last.published_at }),
+              now,
+            })
+      const explained = rulesUnread
+        ? `没读到${input.platform}「${input.venue}」的版规：发之前请你看一眼版规再批`
+        : isReddit
+          ? sub_rules.length === 0
+            ? '没读到版规'
+            : `版规 ${sub_rules.length} 条`
+          : explainRuleCheck(rules_checked, input.venue, input.platform)
       /*
        * WP332：Reddit 上回一条**评论**要那条评论的链接（插件靠它找到回复框）。调用方没给就从来源补、
        * 补不到就照实说——稿子留着（草稿），**不出能发的卡**。

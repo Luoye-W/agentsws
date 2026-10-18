@@ -454,6 +454,8 @@ import {
   type DeepSeekAccountOptions,
 } from './deepseek-account.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
+import { createDesignHandoff } from './design-handoff.js'
+import { deskApply } from './desk-apply.js'
 import { createDeskToolExecutor } from './desk-tools.js'
 import type { MdnsFactory } from './discovery.js'
 import {
@@ -2668,6 +2670,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP261：独立站运营的卡批了 → 由服务端带 `--allow-mutations` 去改、读回确认（整条路上唯一改店铺数据的地方）
       const shopped = await (await shopOf(change.workspace_id))?.ops.apply(change)
       if (shopped !== undefined) return shopped
+      /*
+       * WP421（自查 general R1）：新闻稿 / 论坛帖 / 内容改动 / 定稿入库 / 设计需求单——有真执行器的真做并读回，
+       * 做不到的照实回「没做 + 原因」，不再落进下面的内存空桩回「已执行」。
+       */
+      const deskApplied = await deskApply(change, {
+        ...(brand === undefined
+          ? {}
+          : { pr: brand.pr, design: brand.designService, designStore: brand.design }),
+        now: () => clock.now(),
+      })
+      if (deskApplied !== undefined) return deskApplied
       return backend.apply(change, opts)
     }),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
@@ -5472,7 +5485,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * brief 与规格并明说（58 §1）。素材字节进 blob store，库里只留 `blob://…`。
      * 品牌系统从公司层技能取（24），取不到就出「先设品牌系统」卡。
      */
+    /*
+     * WP421（自查 general 2.4）：需求单交接的两头——建单交给做这条设计职责的人（开事项 + 待办）、
+     * 交付回到下单的那件事上。工作模型比这里晚建（`workRef` 晚绑定）。
+     */
+    const designHandoff = createDesignHandoff({
+      work: () => workRef,
+      holders: (role_id) =>
+        roles.assignments
+          .listByRole(role_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined),
+      roleName: (id) => roles.roles.get(id)?.name.zh,
+    })
     const designService = createDesignService({
+      onRequestCreated: (request) => designHandoff.onRequestCreated(request),
+      onDelivered: (request, asset) => designHandoff.onDelivered(request, asset),
       workspace_id: ws,
       store: design,
       clock,
@@ -5822,6 +5849,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       clock,
       assets: brandAssets,
+      // WP421：挑中 = 定稿；带需求单的交付回下单方
+      requestExists: (id) => design.request(id) !== undefined,
+      onPublished: (asset) => designService.deliver(asset),
       images: () => ownGateway.images,
       pricing: () => {
         const view = ownModels.imageView()

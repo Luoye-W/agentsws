@@ -1901,7 +1901,7 @@ const zh: Table = {
   'category.publish_product': '上架',
   'category.unpublish_product': '下架',
   'category.publish_post': '发布',
-  'category.community_post': '群内发帖',
+  'category.community_post': '外部发帖',
   'category.broadcast': '群发',
   'category.campaign_send': '邮件群发',
   'category.press_release': '新闻稿',

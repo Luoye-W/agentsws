@@ -89,6 +89,8 @@ export interface ImageJob {
   /** 用途标（素材库按它分组：`hero` / `banner` / `story` / `social` / `ad`）。 */
   tags?: string[]
   place?: ImagePlaceTarget
+  /** WP421：在做哪张设计需求单（人挑中那张就算交付，结果回到下单的岗位）。 */
+  request_id?: string
 }
 
 /** `image_pick` 卡的 payload。 */

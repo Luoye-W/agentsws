@@ -273,9 +273,10 @@ describe('WP268 生图接入建站端到端', () => {
         shop_file?: { theme_ref: string }
       }[]
     }>(await call('GET', `/v1/brand-assets?matter_id=${out.matter.id}`))
-    expect(lib.rows).toHaveLength(3)
+    // WP421：挑中 = 定稿（published），同批另两张作废（素材库默认不列作废的）
+    expect(lib.rows).toHaveLength(1)
     const chosen = lib.rows.find((r) => r.id === asset_id)
-    expect(chosen).toMatchObject({ status: 'picked', source_label: 'AI 生成' })
+    expect(chosen).toMatchObject({ status: 'published', source_label: 'AI 生成' })
     expect(chosen?.shop_file?.theme_ref).toContain('shopify://shop_images/')
   })
 
