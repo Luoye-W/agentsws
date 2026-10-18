@@ -481,6 +481,27 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     expect(data.rows).toHaveLength(1)
   })
 
+  it('WP416：只能按账号查（关键词找人走插件）/ 上游没答上来——一样退到本地库并照实说为什么', async () => {
+    for (const reason of ['handle_only', 'upstream_error', 'quota_exhausted']) {
+      const run = exec(
+        fakePort({
+          search: async () => ({
+            ok: false,
+            reason,
+            rows: [],
+            message: 'Instagram 的官方接口只能按账号名查，用插件把人收进来。',
+          }),
+        }),
+      )
+      const res = await run({ name: 'search_creators', input: { q: 'skincare yoga' }, request })
+      expect(res.status).toBe('ok')
+      const data = res.data as { source: string; note: string; rows: unknown[] }
+      expect(data.source).toBe('local_library')
+      expect(data.note).toContain('只能按账号名查')
+      expect(data.note).toContain('你自己库里的人')
+    }
+  })
+
   it('红人装配没起来 / 名字不是红人工具：都照实说', async () => {
     const noPort = createKolToolExecutor({
       workspace_id: 'ws_1',

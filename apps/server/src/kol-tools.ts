@@ -204,7 +204,15 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          * 不是安慰剂。公共库那一档要等 WP116 真接上，接上之后 `port.search`
          * 自己就会回 `ok`，这里一行都不用改。
          */
-        if (res.reason === 'not_connected' || res.reason === 'no_data_source') {
+        /*
+         * WP416（自查 kol A3）：只能按账号查（关键词找人走插件 / 公共库）、上游这次没答上来、配额用完——
+         * 一样退回本地库，并照实说为什么（以前 AI 直接拿到一句报错）。
+         */
+        const fellBack =
+          res.reason === 'handle_only' ||
+          res.reason === 'upstream_error' ||
+          res.reason === 'quota_exhausted'
+        if (res.reason === 'not_connected' || res.reason === 'no_data_source' || fellBack) {
           const local = await port.creators(actor, {
             channel,
             ...(q === undefined ? {} : { q }),
@@ -224,7 +232,9 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
               object: 'creator',
               source: 'local_library',
               ...(cond.length === 0 ? {} : { criteria: cond.join(' · ') }),
-              note: `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。连上之后能搜到更多。`,
+              note: fellBack
+                ? `${res.message ?? `${channel} 这次没搜成。`} 下面是你自己库里的人（导入、插件收录或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。`
+                : `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。连上之后能搜到更多。`,
             },
           }
         }

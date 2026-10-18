@@ -16,6 +16,8 @@ import {
   type ChannelSearchHit,
   type ChannelSearchQuery,
   type ContactHint,
+  handleOnly,
+  handlesOf,
   type KolChannelAdapter,
   type KolChannelTransport,
   notConnected,
@@ -93,17 +95,10 @@ export function createInstagramAdapter(transport: KolChannelTransport): KolChann
     async search(q: ChannelSearchQuery): Promise<ChannelResult<ChannelSearchHit[]>> {
       const off = guard<ChannelSearchHit[]>()
       if (off !== undefined) return off
-      const handles = q.q
-        .split(/[,，\s]+/)
-        .map((s) => s.trim())
-        .filter((s) => s !== '')
-        .slice(0, q.limit ?? 25)
-      if (handles.length === 0)
-        return {
-          ok: false,
-          reason: 'upstream_error',
-          message: `${LABEL} 没有"按关键词搜人"这个接口——给一个或几个账号名（@开头那个），我按名字去查。`,
-        }
+      // WP416：关键词不再拆成账号名去查——照实说只能按账号查（调用方退回本地库 / 插件）
+      const named = handlesOf(q.q, q.limit ?? 25)
+      if (named === undefined) return handleOnly(LABEL)
+      const handles = named
       const out: ChannelSearchHit[] = []
       for (const h of handles) {
         try {

@@ -1045,7 +1045,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     followers: number | undefined,
     filter: { min_followers?: number | undefined; max_followers?: number | undefined },
   ): boolean => {
-    if (followers === undefined) return true
+    // WP416（自查 kol A2）：给了粉丝区间、这个人粉丝数却不知道——不算在区间里（以前恒为真，区间形同虚设）
+    if (followers === undefined)
+      return filter.min_followers === undefined && filter.max_followers === undefined
     if (filter.min_followers !== undefined && followers < filter.min_followers) return false
     if (filter.max_followers !== undefined && followers > filter.max_followers) return false
     return true
@@ -1077,7 +1079,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     source: 'channel',
     rows: [],
     reason: 'no_data_source',
-    message: `现在搜不了 ${channelLabel(channel)} 上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。`,
+    message:
+      channel === 'youtube'
+        ? '现在搜不了 YouTube 上的红人：还没接任何数据来源。在连接页填你自己的 YouTube 数据 key（免费，不扣积分），或者关联 Agents 工坊账号（按次扣积分），任选其一就能搜。'
+        : `现在搜不了 ${channelLabel(channel)} 上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜；也可以在浏览器里打开 ${channelLabel(channel)}，用插件把人收进来。`,
     entry_points: [
       {
         id: 'link_account',
@@ -1221,6 +1226,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               note: `改用工坊官方数据接口（约 ${searchPrice.credits} 积分一次）。`,
             }
       let lastWorkshopFailure: KolSearchResult | undefined
+      let handleOnly: string | undefined
 
       for (const level of effective) {
         // ① 用户自己的官方平台 key（本地直连、不扣积分）
@@ -1235,6 +1241,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             // 适配器在但没填 key（`not_connected`）＝这一级"没配"，落下一级；
             // 真报错（配额、上游故障…）才停：不静默回退到花钱的那一级
             if (out.reason === 'not_connected') continue
+            // WP416：这家只能按账号名查、给的是关键词——这一级做不了这件事，落下一级（公共库那一级能按关键词找）
+            if (out.reason === 'handle_only') {
+              handleOnly = out.message
+              continue
+            }
             emit('kol.search_failed', actor.person_id, { channel, reason: out.reason })
             return {
               ok: false,
@@ -1321,6 +1332,15 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         }
       }
 
+      // WP416：自己的 key 只能按账号名查、别的级又没答上来——照实说（调用方退回本地库 / 指去插件）
+      if (handleOnly !== undefined)
+        return {
+          ok: false,
+          source: 'channel',
+          rows: [],
+          reason: 'handle_only',
+          message: handleOnly,
+        }
       // ④ 都没有（或都没配）：人话 + 两个入口
       const base = nothingConfigured(channel)
       // 压根没关联：那一级等于没配，两句话就是 base（「去关联」是第一个按钮）
