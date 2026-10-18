@@ -6,6 +6,7 @@
  */
 import type {
   ServiceOffer,
+  ServiceOrderAttachment,
   ServiceOrderMessage,
   ServiceOrderStatus,
   ServiceOrderView,
@@ -18,7 +19,7 @@ import type {
   WorkshopServiceStartResult,
 } from '@agentsws/contracts'
 import { SERVICE_ORDER_TERMINAL_STATUSES } from '@agentsws/contracts'
-import { api } from './api'
+import { ApiClientError, type ApiErrorBody, api, assignmentId, storedToken } from './api'
 
 export type {
   ServiceOffer,
@@ -90,6 +91,57 @@ export const cancelWorkshopOrder = (id: string, assignment?: string): Promise<Se
     method: 'POST',
     ...as(assignment),
   })
+
+/** WP403：自己拼 `Authorization` / `X-Assignment`（multipart / 文件流不走 `api()` 那个发 JSON 的函数）。 */
+function fileHeaders(assignment?: string): Headers {
+  const headers = new Headers()
+  const token = storedToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? assignmentId()
+  if (asg !== null) headers.set('X-Assignment', asg)
+  return headers
+}
+
+/** WP403：传一份补材料（multipart；在「等你补材料」时传 = 补上了）。 */
+export async function uploadWorkshopAttachment(
+  id: string,
+  file: File,
+  assignment?: string,
+): Promise<ServiceOrderAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`/v1/workshop-services/orders/${encodeURIComponent(id)}/attachments`, {
+    method: 'POST',
+    headers: fileHeaders(assignment),
+    body: form,
+  })
+  const text = await res.text()
+  const parsed: unknown = text === '' ? {} : JSON.parse(text)
+  if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
+  return (parsed as { data: ServiceOrderAttachment }).data
+}
+
+/** WP403：取一份附件，存成用户电脑上的一个文件（浏览器下载）。 */
+export async function downloadWorkshopAttachment(
+  id: string,
+  attachment: Pick<ServiceOrderAttachment, 'id' | 'name'>,
+  assignment?: string,
+): Promise<void> {
+  const res = await fetch(
+    `/v1/workshop-services/orders/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachment.id)}`,
+    { headers: fileHeaders(assignment) },
+  )
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  const url = URL.createObjectURL(await res.blob())
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = attachment.name
+    a.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+}
 
 /** 第三栏「订单」的资源地址：`agentsws://service-order/<订单号>`。 */
 export const SERVICE_ORDER_ADDRESS_PREFIX = 'agentsws://service-order/'

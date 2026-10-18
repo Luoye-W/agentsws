@@ -2,10 +2,17 @@
  * WP390（docs/105 §5）：第三栏的**订单面板**（`agentsws://service-order/<订单号>`）——进度、预计时间、在等你的事、
  * 消息串（AI 帮读懂、起草回复，**不替你答应加钱或改范围**）、钱（托管 / 已结算 / 已退）、交付物保留到哪天
  * （P10：快到期提醒一次）、接单之前能取消。下单 / 验收 / 交换联系方式都在卡上，这里只指过去。
+ *
+ * WP403：附件——「在等你补材料」那一格能直接传文件（传了 = 补上了），附件列表里你传的、交付文件都能下载；
+ * 对方要追加费用时标黄一行（点头在卡上，这里不花钱）。
  */
-import type { ServiceOrderView } from '@agentsws/contracts'
+import {
+  pendingServiceExtra,
+  SERVICE_ATTACHMENT_LIMITS,
+  type ServiceOrderView,
+} from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Paperclip, Sparkles } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
@@ -15,11 +22,13 @@ import { useApp } from '@/lib/app-context'
 import {
   cancelWorkshopOrder,
   creditsText,
+  downloadWorkshopAttachment,
   draftWorkshopReply,
   getWorkshopOrder,
   isOpenOrder,
   parseServiceOrderAddress,
   postWorkshopMessage,
+  uploadWorkshopAttachment,
   WORKSHOP_ORDERS_KEY,
 } from '@/lib/workshop-services-api'
 
@@ -58,6 +67,8 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
   const client = useQueryClient()
   const navigate = useNavigate()
   const reply = useRef<HTMLTextAreaElement>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
   const [text, setText] = useState('')
   const [needsYou, setNeedsYou] = useState(false)
   const [ledgerOpen, setLedgerOpen] = useState(false)
@@ -91,6 +102,22 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
     mutationFn: () => cancelWorkshopOrder(id ?? ''),
     onSuccess: refresh,
   })
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadWorkshopAttachment(id ?? '', file),
+    onSuccess: () => {
+      setFileError(undefined)
+      refresh()
+    },
+    onError: (e) => setFileError(e instanceof Error ? e.message : String(e)),
+  })
+  const pick = (file: File | undefined) => {
+    if (file === undefined) return
+    if (file.size > SERVICE_ATTACHMENT_LIMITS.max_bytes) {
+      setFileError(t('svc.order.file.too_big'))
+      return
+    }
+    upload.mutate(file)
+  }
   if (id === undefined || detail.isError)
     return <p className="p-3 text-sm text-ws-muted-fg">{t('svc.order.missing')}</p>
   const d = detail.data
@@ -102,6 +129,23 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
   const eta = day(o.deliver_by, lang)
   const custom = o.kind === 'custom'
   const open = isOpenOrder(o.status)
+  const extra = pendingServiceExtra(o)
+  const accepted = (o.extras ?? []).filter((x) => x.status === 'accepted')
+  const files = o.attachments ?? []
+  const canUpload = custom && open && o.status !== 'draft'
+  const uploadButton = canUpload ? (
+    <Button
+      size="xs"
+      variant="outline"
+      className="gap-1"
+      data-testid="service-order-upload"
+      disabled={upload.isPending}
+      onClick={() => picker.current?.click()}
+    >
+      <Paperclip aria-hidden className="size-3" />
+      {upload.isPending ? t('svc.order.uploading') : t('svc.order.upload')}
+    </Button>
+  ) : null
   return (
     <div
       className="flex flex-col gap-3 p-3 text-[13px]"
@@ -148,10 +192,39 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
           data-testid="service-order-waiting"
         >
           <span className="min-w-0 flex-1">{t('svc.order.waiting', { what: o.waiting_for })}</span>
+          {uploadButton}
           <Button size="xs" variant="outline" onClick={() => reply.current?.focus()}>
             {t('svc.order.reply')}
           </Button>
         </div>
+      )}
+      {canUpload ? (
+        <input
+          ref={picker}
+          type="file"
+          className="hidden"
+          data-testid="service-order-file"
+          onChange={(e) => {
+            pick(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+      ) : null}
+      {fileError === undefined ? null : (
+        <p className="text-[12px] text-ws-warn" data-testid="service-order-file-error">
+          {fileError}
+        </p>
+      )}
+      {extra === undefined ? null : (
+        <p
+          className="rounded-lg bg-ws-warn-bg px-2.5 py-2 text-ws-warn"
+          data-testid="service-order-extra"
+        >
+          {t('svc.order.extra_waiting', {
+            credits: creditsText(extra.credits, lang),
+            reason: extra.reason,
+          })}
+        </p>
       )}
       {d.card_id === undefined ? null : (
         <div
@@ -179,7 +252,8 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
           <AlertTriangle aria-hidden className="size-3.5" />
           {t('svc.order.expiring', { date: day(o.deliverables_expire_at, lang) ?? '' })}
         </p>
-      ) : o.deliverables_expire_at === undefined || o.deliverables.length === 0 ? null : (
+      ) : o.deliverables_expire_at === undefined ||
+        (o.deliverables.length === 0 && files.length === 0) ? null : (
         <p className="text-[12px] text-ws-muted-fg">
           {t('svc.order.expires', { date: day(o.deliverables_expire_at, lang) ?? '' })}
         </p>
@@ -196,6 +270,48 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
             value: o.contact.provider_contact.value,
           })}
         </p>
+      ) : null}
+
+      {files.length > 0 || (canUpload && o.waiting_for === undefined) ? (
+        <section className="flex flex-col gap-1" data-testid="service-order-files">
+          <div className="flex items-center gap-2">
+            <h4 className="min-w-0 flex-1 text-[12px] font-medium text-ws-muted-fg">
+              {t('svc.order.files')}
+            </h4>
+            {o.waiting_for === undefined ? uploadButton : null}
+          </div>
+          <ul className="flex flex-col gap-0.5">
+            {files.map((f) => (
+              <li key={f.id} className="flex items-center gap-1.5 text-[12.5px]">
+                <span className="min-w-0 flex-1 truncate text-ws-ink" title={f.name}>
+                  {f.name}
+                </span>
+                <span className="shrink-0 text-[11.5px] text-ws-muted-fg">
+                  {f.from === 'user' ? t('svc.order.file.mine') : t('svc.order.file.delivery')} ·{' '}
+                  {Math.max(1, Math.ceil(f.size / 1024))} KB
+                </span>
+                {f.expired === true ? (
+                  <span className="shrink-0 text-[11.5px] text-ws-muted-fg">
+                    {t('svc.order.file.expired')}
+                  </span>
+                ) : (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    data-testid="service-order-download"
+                    onClick={() => {
+                      void downloadWorkshopAttachment(o.id, f).catch((e: unknown) =>
+                        setFileError(e instanceof Error ? e.message : String(e)),
+                      )
+                    }}
+                  >
+                    {t('svc.order.file.download')}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {custom ? (
@@ -268,6 +384,13 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
         </section>
       ) : null}
 
+      {accepted.length === 0 ? null : (
+        <p className="text-[12px] text-ws-muted-fg ws-num" data-testid="service-order-extras">
+          {t('svc.order.extras', {
+            list: accepted.map((x) => creditsText(x.credits, lang)).join(' + '),
+          })}
+        </p>
+      )}
       <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg ws-num">
         {t('svc.order.money', {
           escrow: creditsText(o.escrow_credits, lang),
