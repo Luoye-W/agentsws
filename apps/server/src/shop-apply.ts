@@ -36,6 +36,7 @@ import {
   VARIANTS_UPDATE,
 } from './shop-graphql.js'
 import { readCollection, readMenus, readPage, readProduct } from './shop-ops.js'
+import { applyExtra } from './shop-ops-extra.js'
 import { localImage } from './shop-propose.js'
 
 export class ShopApplyError extends Error {
@@ -600,7 +601,11 @@ export async function applyShopChange(ctx: ApplyContext, change: StagedChange): 
       return menuSave(ctx, a, before, false)
     case 'discount_create':
       return discountCreate(ctx, a)
-    default:
+    default: {
+      // WP418：政策 / 库存 / 全站自动折扣 / 发货与回填单号
+      const extra = await applyExtra(ctx, a, before, change)
+      if (extra !== undefined) return extra
       throw new ShopApplyError(`卡上的改动认不出：${String(a.shop_op)}`)
+    }
   }
 }

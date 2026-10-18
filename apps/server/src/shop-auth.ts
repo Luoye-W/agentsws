@@ -282,6 +282,11 @@ export interface ShopAdminOptions {
   env?: NodeJS.ProcessEnv
   nodeExec?: string
   appendEvent?(type: string, payload: Record<string, unknown>): void
+  /**
+   * WP418（自查 C2）：这个品牌所有担着的职责（授权时按**整个品牌**用得到的权限并集要，
+   * 不再按点授权的那个岗位——否则换个岗位又要再授权一次）。不给 = 只按传进来的那几条。
+   */
+  brandRoles?(): readonly string[]
 }
 
 export interface ShopAccess {
@@ -480,7 +485,9 @@ export function createShopAdmin(options: ShopAdminOptions): ShopAdminAssembly {
     // 只能取登记表里的权限：岗位要的 ∪ 以前给过的（CLI 自己也会把店里已有的并进来）
     const registry = new Set(storeAdminAllScopes(s.sa))
     const before = (v.grant?.scopes ?? []).filter((x) => registry.has(x))
-    const scopes = [...new Set([...v.scopes_needed, ...before])]
+    // WP418（自查 C2）：一次要齐整个品牌用得到的（建站 + 网站运营……），换岗位不用再授权
+    const brandWide = storeAdminScopesFor(s.sa, options.brandRoles?.() ?? [])
+    const scopes = [...new Set([...v.scopes_needed, ...brandWide, ...before])]
       .filter((x) => registry.has(x))
       .sort()
     if (scopes.length === 0) return

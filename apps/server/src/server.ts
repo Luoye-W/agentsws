@@ -801,6 +801,7 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { createLayeredSiteFacts, siteChecklistToolData } from './site-facts.js'
 import {
   createSiteHealthService,
   type PageRenderer,
@@ -2644,6 +2645,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP316：广告卡批了 → 插件在用户自己的后台里执行（进了队就回 ok，结局记广告变更账本）
       const adsApplied = await brand?.adsWiring?.apply(change)
       if (adsApplied !== undefined) return adsApplied
+      // WP418（自查 A11 / A18 / A19）：建站自己的卡——检查单（只读，查完即好）；装 App / 改 App / 改通知邮件做不到，照实回「没做」
+      const siteApplied = brand?.siteService.apply(change)
+      if (siteApplied !== undefined) return siteApplied
       // WP253：换线上主题那张卡批了 → 由服务端跑 `theme publish`（这是整条路上唯一换线上主题的地方）
       if (change.kind === 'publish_theme') {
         const themed = await (await siteThemeOf(change.workspace_id))?.apply(change)
@@ -4182,6 +4186,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       install: (spec) => shopCli.install?.(spec),
       installJob: (spec) => shopCli.installJob?.(spec),
+      // WP418（自查 C2）：授权一次要齐整个品牌担着的职责用得到的权限
+      brandRoles: () =>
+        roles.roles
+          .list()
+          .map((r) => r.id)
+          .filter((id) =>
+            roles.assignments
+              .listByRole(id, { workspace_id: ws })
+              .some((a) => a.revoked_at === undefined),
+          ),
       auth: storeAuthRunner,
       run:
         options.shopAdmin?.run ??
@@ -5425,6 +5439,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 一条 Action 读不到就那一格留空，检查单照 `unknown` 记：一次令牌过期，
      * 不该在卡面上写成"这家店没有收款方式"。
      */
+    const siteFacts = createLayeredSiteFacts({
+      connect: createConnectSiteFacts({
+        connect: connections.connect as never,
+        // 店铺那条连接（没有 = 这一层什么都不给）
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+      }),
+      reader: async () => (await shopOf(ws).catch(() => undefined))?.auth.reader(),
+    })
     const siteService = createSiteService({
       workspace_id: ws,
       routeScopeManager,
@@ -5433,14 +5458,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals: txn.approvals,
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
-      facts: createConnectSiteFacts({
-        connect: connections.connect as never,
-        // 店铺那条连接（没有 = 整次巡检全是"没读到"，而不是"全缺"）
-        connection: () =>
-          connections
-            .liveConnections()
-            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
-      }),
+      /*
+       * WP418（自查 A9）：先问 OpenConnector 那一条（高级接法），再问店铺授权（云端一键授权优先、没有就 CLI
+       * 店铺授权——与改店工具同一个口子），一格一格补齐；都没有 = 那几格照「没读到」记。
+       */
+      facts: siteFacts,
+      themes: () => siteThemes.get(ws)?.lastListed?.() ?? [],
+      storeDomain: () => siteFacts.shop?.() ?? onboardingRef?.shopifyDomainOf(ws),
       // 装上了却还没连上 API 的那几条要指得出来（59 §2 那条接缝）
       connectedKinds: () => connections.connectedKinds(),
       appendEvent,
@@ -6630,7 +6654,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
              */
-            shopTools: createShopToolSurface({ module: () => shopOf(ws) }),
+            shopTools: createShopToolSurface({
+              module: () => shopOf(ws),
+              // WP418（自查 A8）：整站搭建跑一遍上线检查单（只读，不出卡；结论落进面板「上线检查单」）
+              siteChecklist: async (request) => {
+                const site = (await brandModules.forWorkspace(ws)).siteService.port
+                const { run } = await site.runChecklist({
+                  workspace_id: ws,
+                  person_id: request.actor.person_id as never,
+                  assignment_id: request.actor.assignment_id as never,
+                  role_id: request.actor.role_id as never,
+                })
+                return siteChecklistToolData(run)
+              },
+            }),
             // WP268：生图 / 改图 / 素材库（设计岗五条 + 网页模板；生图配了才摆）
             imageTools: imageService,
             vertical: () => brandProfileOf(ws).vertical,

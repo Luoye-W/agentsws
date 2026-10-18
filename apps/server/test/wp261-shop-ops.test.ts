@@ -157,7 +157,7 @@ describe('工具面按授权出现 / 隐藏', () => {
     ])
     expect(await surface.offered('dtc.store')).not.toContain('shop_save_product')
     await authorize(['dtc.store'])
-    expect(await surface.offered('dtc.store')).toHaveLength(17)
+    expect(await surface.offered('dtc.store')).toHaveLength(19)
     expect(await surface.offered('site.shopify-build')).toEqual(
       expect.arrayContaining(['shop_save_page', 'shop_save_menu']),
     )

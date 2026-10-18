@@ -287,15 +287,29 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
         api_version: '2026-07',
         scopes_by_role: {
           'dtc.store': [
-            'read_inventory',
             'read_orders',
             'write_content',
             'write_discounts',
+            // WP418（自查 B4）：库存加减（`write_inventory` 隐含 `read_inventory`）
+            'write_inventory',
             'write_online_store_navigation',
             'write_products',
             'write_publications',
           ],
-          'site.shopify-build': ['read_products', 'write_content', 'write_online_store_navigation'],
+          // WP418（自查 B10）：订单履约——看单、标发货 / 回填单号
+          'dtc.fulfillment': ['read_orders', 'write_merchant_managed_fulfillment_orders'],
+          /*
+           * WP418（自查 A9 / A13）：上线检查单要读政策 / 运费 / 线上主题（`read_legal_policies` 由写隐含、
+           * `read_shipping`、`read_themes`），补政策页要 `write_legal_policies`（政策不是普通页面）。
+           */
+          'site.shopify-build': [
+            'read_products',
+            'read_shipping',
+            'read_themes',
+            'write_content',
+            'write_legal_policies',
+            'write_online_store_navigation',
+          ],
           // WP268（决策 213）：挑中的图传到店铺「文件」再挂主题（`fileCreate`；write 隐含 read）
           'site.shopify-theme': ['read_products', 'write_files'],
         },

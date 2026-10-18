@@ -45,6 +45,16 @@ export const SHOP_ADMIN_ZH: Record<string, string> = {
   'shop_admin.scope.read_orders': '看订单',
   'shop_admin.scope.read_publications': '看销售渠道',
   'shop_admin.scope.write_publications': '上架到网店',
+  // WP418（自查 C2）：缺的权限要写得出中文名（以前「店铺授权还缺：」后面是空的）
+  'shop_admin.scope.read_files': '看图片和文件',
+  'shop_admin.scope.write_files': '传图片和文件',
+  'shop_admin.scope.write_inventory': '改库存',
+  'shop_admin.scope.read_legal_policies': '看政策页',
+  'shop_admin.scope.write_legal_policies': '改政策页',
+  'shop_admin.scope.read_shipping': '看运费',
+  'shop_admin.scope.read_themes': '看主题',
+  'shop_admin.scope.read_merchant_managed_fulfillment_orders': '看发货单',
+  'shop_admin.scope.write_merchant_managed_fulfillment_orders': '标发货、填单号',
 }
 
 export const SHOP_ADMIN_EN: Record<string, string> = {
@@ -91,4 +101,13 @@ export const SHOP_ADMIN_EN: Record<string, string> = {
   'shop_admin.scope.read_orders': 'view orders',
   'shop_admin.scope.read_publications': 'view sales channels',
   'shop_admin.scope.write_publications': 'publish to online store',
+  'shop_admin.scope.read_files': 'see images and files',
+  'shop_admin.scope.write_files': 'upload images and files',
+  'shop_admin.scope.write_inventory': 'edit inventory',
+  'shop_admin.scope.read_legal_policies': 'see policies',
+  'shop_admin.scope.write_legal_policies': 'edit policies',
+  'shop_admin.scope.read_shipping': 'see shipping',
+  'shop_admin.scope.read_themes': 'see themes',
+  'shop_admin.scope.read_merchant_managed_fulfillment_orders': 'see fulfillment orders',
+  'shop_admin.scope.write_merchant_managed_fulfillment_orders': 'mark shipped and add tracking',
 }

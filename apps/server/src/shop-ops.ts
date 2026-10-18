@@ -44,6 +44,7 @@ import {
   RECENT_ORDERS,
   s,
 } from './shop-graphql.js'
+import { readExtra } from './shop-ops-extra.js'
 
 export type ShopOp =
   | 'product_create'
@@ -58,6 +59,12 @@ export type ShopOp =
   | 'menu_create'
   | 'menu_update'
   | 'discount_create'
+  // WP418：政策 / 库存 / 全站自动折扣 / 发货与回填单号（`shop-ops-extra.ts`）
+  | 'policy_update'
+  | 'inventory_adjust'
+  | 'automatic_discount_create'
+  | 'fulfillment_create'
+  | 'tracking_update'
 
 /** 卡上 `after._via` 写这个，执行器才认（别的来路的同一类卡不归这里）。 */
 export const SHOP_VIA = 'shop_admin'
@@ -83,6 +90,13 @@ const MACHINE_KEYS = new Set([
   'add',
   'remove',
   'products',
+  // WP418
+  'inventory_item',
+  'location',
+  'order_id',
+  'by_fo',
+  'fulfillment_id',
+  'policy_type',
 ])
 /** 只给卡面看的摘要（执行器不认，还原时丢掉）。 */
 const SUMMARY_KEYS = new Set(['count', 'pictures', 'menu', 'spec', 'added', 'removed'])
@@ -184,10 +198,19 @@ const ACTION_OF: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     shop_save_page: 'stage_listing_edit',
     shop_save_menu: 'stage_listing_edit',
     shop_create_discount: 'stage_discount_code',
+    // WP418（自查 B4 / B5）
+    shop_adjust_inventory: 'stage_inventory_adjust',
+    shop_create_automatic_discount: 'stage_promotion',
   },
   'site.shopify-build': {
     shop_save_page: 'stage_store_setup',
     shop_save_menu: 'stage_store_setup',
+    // WP418（自查 A13）
+    shop_save_policy: 'stage_store_setup',
+  },
+  // WP418（自查 B10）
+  'dtc.fulfillment': {
+    shop_fulfill_order: 'stage_create_fulfillment',
   },
 }
 
@@ -413,8 +436,11 @@ async function runRead(
       )
       return { orders: nodes(data.orders).map(orderOut) }
     }
-    default:
+    default: {
+      const extra = await readExtra({ reader, log }, tool, input, run_id)
+      if (extra !== undefined) return extra
       throw new ShopOpsError('not_allowed', `不认识的查询：${tool}`)
+    }
   }
 }
 

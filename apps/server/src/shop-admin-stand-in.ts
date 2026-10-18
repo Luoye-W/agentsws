@@ -59,6 +59,77 @@ export interface FakeShop {
   seq: number
   /** WP268：店铺「文件」里的图（`fileCreate` 建的；第一次查状态是 UPLOADED，再查才 READY）。 */
   files?: { id: string; filename: string; url: string; alt?: string; polled: number }[]
+  /** WP418：政策（`shopPolicies`；没给 = 一张都没写）。 */
+  policies?: { type: string; body: string; url?: string }[]
+  /** WP418：店面密码还开着（新店默认开）。 */
+  password_enabled?: boolean
+  /** WP418：运费区域与费率。 */
+  shipping?: { zones: number; rates: number }
+  /** WP418：全站自动折扣。 */
+  autoDiscounts?: { id: string; title: string; status: string }[]
+  /** WP418：订单的发货情况（没给 = 用 {@link demoOrders}）。 */
+  orders?: FakeOrder[]
+}
+
+/** WP418：一张订单的发货单与已发包裹（没有顾客信息）。 */
+export interface FakeOrder {
+  id: string
+  name: string
+  lines: { id: string; name: string; sku: string; total: number; remaining: number }[]
+  fulfillments: {
+    id: string
+    status: string
+    tracking: { number: string; company: string; url?: string }[]
+  }[]
+}
+
+/** WP418：假店里两张单——一张两件都没发，一张已经发了但没填单号。 */
+export function demoOrders(): FakeOrder[] {
+  return [
+    {
+      id: 'gid://shopify/Order/1',
+      name: '#1001',
+      lines: [
+        {
+          id: 'gid://shopify/FulfillmentOrderLineItem/11',
+          name: 'Rovella 折叠收纳箱 - 大号',
+          sku: 'RO-2001',
+          total: 1,
+          remaining: 1,
+        },
+        {
+          id: 'gid://shopify/FulfillmentOrderLineItem/12',
+          name: 'Rovella 车载挂钩',
+          sku: 'RO-2003',
+          total: 1,
+          remaining: 1,
+        },
+      ],
+      fulfillments: [],
+    },
+    {
+      id: 'gid://shopify/Order/2',
+      name: '#1002',
+      lines: [
+        {
+          id: 'gid://shopify/FulfillmentOrderLineItem/21',
+          name: 'Rovella 折叠收纳箱 - 小号',
+          sku: 'RO-2002',
+          total: 1,
+          remaining: 0,
+        },
+      ],
+      fulfillments: [{ id: 'gid://shopify/Fulfillment/31', status: 'SUCCESS', tracking: [] }],
+    },
+  ]
+}
+
+const LOCATION = { id: 'gid://shopify/Location/1', name: '主仓' }
+
+const orderStatus = (o: FakeOrder): string => {
+  const left = o.lines.reduce((n, l) => n + l.remaining, 0)
+  const all = o.lines.reduce((n, l) => n + l.total, 0)
+  return left === 0 ? 'FULFILLED' : left === all ? 'UNFULFILLED' : 'PARTIALLY_FULFILLED'
 }
 
 const NOW = (): string => new Date().toISOString()
@@ -164,6 +235,10 @@ export function demoShop(): FakeShop {
     ],
     sessions: new Map(),
     seq: 9000,
+    // WP418：一家刚搭起来的店——只写了退换货政策、店面还挂着密码、运费配了一条
+    policies: [{ type: 'REFUND_POLICY', body: '<p>30 天无理由退换。</p>' }],
+    password_enabled: true,
+    shipping: { zones: 1, rates: 1 },
   }
 }
 
@@ -463,6 +538,262 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
           ],
         },
       }
+    // WP418：上线检查单经店铺授权读的那几条
+    case 'AgentswsSiteShop':
+      return {
+        shop: {
+          myshopifyDomain: 'rovella.myshopify.com',
+          primaryDomain: {
+            url: 'https://rovella.myshopify.com',
+            host: 'rovella.myshopify.com',
+            sslEnabled: true,
+          },
+        },
+      }
+    case 'AgentswsSitePolicies':
+      return { shop: { shopPolicies: (shop.policies ?? []).map((p) => ({ ...p })) } }
+    case 'AgentswsSiteShipping': {
+      const sh = shop.shipping ?? { zones: 0, rates: 0 }
+      return {
+        deliveryProfiles: {
+          nodes: [
+            {
+              profileLocationGroups: [
+                {
+                  locationGroupZones: {
+                    nodes: Array.from({ length: sh.zones }, (_, i) => ({
+                      zone: { id: `gid://shopify/DeliveryZone/${i + 1}`, name: `区域 ${i + 1}` },
+                      methodDefinitions: {
+                        nodes: Array.from({ length: i === 0 ? sh.rates : 0 }, (_, j) => ({
+                          id: `gid://shopify/DeliveryMethodDefinition/${j + 1}`,
+                          active: true,
+                        })),
+                      },
+                    })),
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }
+    }
+    case 'AgentswsSiteThemes':
+      return {
+        themes: {
+          nodes: [{ id: 'gid://shopify/OnlineStoreTheme/100001', name: 'Dawn', role: 'MAIN' }],
+        },
+      }
+    case 'AgentswsSitePassword':
+      return { onlineStore: { passwordProtection: { enabled: shop.password_enabled === true } } }
+    case 'AgentswsSitePayments':
+      return { shopifyPaymentsAccount: { activated: true } }
+    // WP418：政策 / 库存 / 全站自动折扣 / 订单发货
+    case 'AgentswsPolicyUpdate': {
+      const input = vars.shopPolicy as Obj
+      shop.policies = [
+        ...(shop.policies ?? []).filter((p) => p.type !== input.type),
+        { type: String(input.type), body: String(input.body) },
+      ]
+      return {
+        shopPolicyUpdate: {
+          shopPolicy: {
+            id: `gid://shopify/ShopPolicy/${id()}`,
+            type: input.type,
+            body: input.body,
+          },
+          userErrors: [],
+        },
+      }
+    }
+    case 'AgentswsVariantInventory': {
+      const v = shop.products.flatMap((p) => p.variants).find((x) => x.id === vars.id)
+      if (v === undefined) return { productVariant: null }
+      return {
+        productVariant: {
+          id: v.id,
+          title: v.title,
+          sku: v.sku,
+          inventoryItem: {
+            id: v.id.replace('ProductVariant', 'InventoryItem'),
+            tracked: true,
+            inventoryLevels: {
+              nodes: [
+                {
+                  location: LOCATION,
+                  quantities: [{ name: 'available', quantity: v.inventoryQuantity }],
+                },
+              ],
+            },
+          },
+        },
+      }
+    }
+    case 'AgentswsInventoryAdjust': {
+      const input = vars.input as Obj
+      for (const c of (input.changes as Obj[]) ?? []) {
+        const v = shop.products
+          .flatMap((p) => p.variants)
+          .find((x) => x.id.replace('ProductVariant', 'InventoryItem') === c.inventoryItemId)
+        if (v === undefined)
+          return {
+            inventoryAdjustQuantities: {
+              userErrors: [{ field: ['changes'], message: 'item not found' }],
+            },
+          }
+        if (c.changeFromQuantity !== undefined && c.changeFromQuantity !== v.inventoryQuantity)
+          return {
+            inventoryAdjustQuantities: {
+              userErrors: [{ field: ['changeFromQuantity'], message: 'quantity changed' }],
+            },
+          }
+        v.inventoryQuantity += Number(c.delta)
+      }
+      return {
+        inventoryAdjustQuantities: {
+          inventoryAdjustmentGroup: { reason: input.reason, changes: input.changes },
+          userErrors: [],
+        },
+      }
+    }
+    case 'AgentswsAutoDiscountCreate': {
+      const input = vars.input as Obj
+      const did = `gid://shopify/DiscountAutomaticNode/${id()}`
+      shop.autoDiscounts = [
+        ...(shop.autoDiscounts ?? []),
+        { id: did, title: String(input.title), status: 'ACTIVE' },
+      ]
+      return {
+        discountAutomaticBasicCreate: { automaticDiscountNode: { id: did }, userErrors: [] },
+      }
+    }
+    case 'AgentswsAutoDiscount': {
+      const d = (shop.autoDiscounts ?? []).find((x) => x.id === vars.id)
+      return {
+        automaticDiscountNode:
+          d === undefined
+            ? null
+            : { id: d.id, automaticDiscount: { title: d.title, status: d.status } },
+      }
+    }
+    case 'AgentswsOrderByName': {
+      shop.orders ??= demoOrders()
+      const name = /name:(\S+)/.exec(String(vars.query ?? ''))?.[1]
+      const o = shop.orders.find((x) => x.name === name || x.name === `#${name}`)
+      return { orders: { nodes: o === undefined ? [] : [{ id: o.id }] } }
+    }
+    case 'AgentswsOrderFulfillment': {
+      shop.orders ??= demoOrders()
+      const o = shop.orders.find((x) => x.id === vars.id)
+      if (o === undefined) return { order: null }
+      return {
+        order: {
+          id: o.id,
+          name: o.name,
+          displayFulfillmentStatus: orderStatus(o),
+          displayFinancialStatus: 'PAID',
+          cancelledAt: null,
+          fulfillmentOrders: {
+            nodes: [
+              {
+                id: `${o.id.replace('Order', 'FulfillmentOrder')}`,
+                status: o.lines.some((l) => l.remaining > 0) ? 'OPEN' : 'CLOSED',
+                assignedLocation: { name: LOCATION.name },
+                lineItems: {
+                  nodes: o.lines.map((l) => ({
+                    id: l.id,
+                    remainingQuantity: l.remaining,
+                    totalQuantity: l.total,
+                    lineItem: { name: l.name, sku: l.sku },
+                  })),
+                },
+              },
+            ],
+          },
+          fulfillments: o.fulfillments.map((f) => ({
+            id: f.id,
+            status: f.status,
+            createdAt: NOW(),
+            trackingInfo: f.tracking.map((t) => ({
+              number: t.number,
+              company: t.company,
+              url: t.url ?? null,
+            })),
+          })),
+        },
+      }
+    }
+    case 'AgentswsFulfillmentCreate': {
+      shop.orders ??= demoOrders()
+      const input = vars.fulfillment as Obj
+      const groups = (input.lineItemsByFulfillmentOrder as Obj[]) ?? []
+      const order = shop.orders.find((o) =>
+        groups.some((g) => g.fulfillmentOrderId === o.id.replace('Order', 'FulfillmentOrder')),
+      )
+      if (order === undefined)
+        return {
+          fulfillmentCreate: {
+            fulfillment: null,
+            userErrors: [{ field: ['fulfillment'], message: 'fulfillment order not found' }],
+          },
+        }
+      for (const g of groups)
+        for (const li of (g.fulfillmentOrderLineItems as Obj[]) ?? []) {
+          const line = order.lines.find((l) => l.id === li.id)
+          if (line === undefined || line.remaining < Number(li.quantity))
+            return {
+              fulfillmentCreate: {
+                fulfillment: null,
+                userErrors: [{ field: ['quantity'], message: 'too many' }],
+              },
+            }
+          line.remaining -= Number(li.quantity)
+        }
+      const t = input.trackingInfo as Obj
+      const f = {
+        id: `gid://shopify/Fulfillment/${id()}`,
+        status: 'SUCCESS',
+        tracking: [
+          {
+            number: String(t.number),
+            company: String(t.company),
+            ...(typeof t.url === 'string' ? { url: t.url } : {}),
+          },
+        ],
+      }
+      order.fulfillments.push(f)
+      return {
+        fulfillmentCreate: {
+          fulfillment: { id: f.id, status: f.status, trackingInfo: f.tracking },
+          userErrors: [],
+        },
+      }
+    }
+    case 'AgentswsTrackingUpdate': {
+      shop.orders ??= demoOrders()
+      const f = shop.orders.flatMap((o) => o.fulfillments).find((x) => x.id === vars.fulfillmentId)
+      if (f === undefined)
+        return {
+          fulfillmentTrackingInfoUpdate: {
+            fulfillment: null,
+            userErrors: [{ field: ['fulfillmentId'], message: 'not found' }],
+          },
+        }
+      const t = vars.trackingInfoInput as Obj
+      f.tracking = [
+        {
+          number: String(t.number),
+          company: String(t.company),
+          ...(typeof t.url === 'string' ? { url: t.url } : {}),
+        },
+      ]
+      return {
+        fulfillmentTrackingInfoUpdate: {
+          fulfillment: { id: f.id, trackingInfo: f.tracking },
+          userErrors: [],
+        },
+      }
+    }
     case 'AgentswsPublications':
       return {
         publications: { nodes: [{ id: 'gid://shopify/Publication/1', name: 'Online Store' }] },

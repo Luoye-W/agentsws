@@ -887,6 +887,14 @@ export function evaluateGuardrail(
       const promoCap = capNumber(mandate, 'max_promo_discount_pct')
       if (p !== undefined && promoCap !== undefined && p > promoCap)
         review('max_promo_discount_pct', promoCap, p)
+      // WP418（自查 B3）：按金额减的码以前不受任何额度约束——配了 `max_promo_amount_off` 就按它判，
+      // 没配就转人审（百分比额度量不了「每单减多少钱」）
+      const off = num(after.amount_off)
+      if (off !== undefined && promoCap !== undefined) {
+        const offCap = capNumber(mandate, 'max_promo_amount_off')
+        if (offCap === undefined) review('max_promo_discount_pct', promoCap, 'amount_off')
+        else if (off > offCap) review('max_promo_amount_off', offCap, off)
+      }
       const usesCap = capNumber(mandate, 'max_promo_uses')
       if (usesCap !== undefined) {
         const uses = num(after.usage_limit)
@@ -1031,6 +1039,23 @@ export function evaluateGuardrail(
     }
     case 'price_change':
     case 'promotion': {
+      /*
+       * WP418（自查 B5）：全站自动折扣按**力度**判（减百分之几 / 每单减多少），没有「改前价 → 改后价」。
+       * 按金额减的折对不上百分比额度——宁可转人审，也不让它绕开额度（自查 B3 同一条理由）。
+       */
+      if (
+        change.kind === 'promotion' &&
+        after.price === undefined &&
+        (after.percent !== undefined || after.amount_off !== undefined)
+      ) {
+        const p = num(after.percent)
+        const cap = capNumber(mandate, 'max_promotion_discount_pct')
+        if (p !== undefined) {
+          if (p <= 0 || p > 100) block('promotion_percent_range', '0-100', p)
+          else if (cap !== undefined && p > cap) review('max_promotion_discount_pct', cap, p)
+        } else if (cap !== undefined) review('max_promotion_discount_pct', cap, 'amount_off')
+        break
+      }
       const b = num(before.price),
         a = num(after.price)
       if (a === undefined || a <= 0) block('price_positive_required')

@@ -31,7 +31,12 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 
 /** 登记了运营工具的职责（与服务端 `PlatformStoreAdminSpec.scopes_by_role` 同一张表）。 */
-export const SHOP_ADMIN_ROLES = ['dtc.store', 'site.shopify-build', 'site.shopify-theme']
+export const SHOP_ADMIN_ROLES = [
+  'dtc.store',
+  'dtc.fulfillment',
+  'site.shopify-build',
+  'site.shopify-theme',
+]
 /** 有这两条之一的岗位上，「装 CLI / 填店铺」由网页模板那一行带。 */
 const THEME_ROLES = ['site.shopify-theme', 'site.builder']
 
@@ -131,10 +136,14 @@ export function ShopAdminBanner({
   if (variant === 'settings' && v.state !== 'authorized') return null
   if (themeHere && (v.state === 'no_cli' || v.state === 'no_store')) return null
 
+  // WP418（自查 C2 / U6）：认不出的权限写原名，不能留空
   const scopeWords = (list: readonly string[]): string =>
     list
-      .map((s) => t(`shop_admin.scope.${s}`))
-      .filter((w, i, all) => !w.startsWith('shop_admin.') && all.indexOf(w) === i)
+      .map((s) => {
+        const w = t(`shop_admin.scope.${s}`)
+        return w.startsWith('shop_admin.') ? s : w
+      })
+      .filter((w, i, all) => all.indexOf(w) === i)
       .join(lang === 'zh' ? '、' : ', ')
   const hint = <Hint text={t('shop_admin.hint')} />
   const failure =
