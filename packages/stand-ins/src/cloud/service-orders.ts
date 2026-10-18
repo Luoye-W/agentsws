@@ -696,7 +696,8 @@ export class ServiceOrdersStandIn {
   /** demo 的自动驾驶：替服务方往前走一步（在等用户的那几步不动）。 */
   private autopilotStep(r: OrderRecord): void {
     const v = r.view
-    const auto = (r.auto ??= {})
+    if (r.auto === undefined) r.auto = {}
+    const auto = r.auto
     if (v.status === 'quote_requested') {
       const base = r.service.from_credits ?? r.service.price_credits ?? 100
       this.quote(v.id, {
