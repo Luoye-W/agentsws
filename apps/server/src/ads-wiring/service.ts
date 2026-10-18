@@ -713,12 +713,9 @@ export function isAdsRoleChange(change: Pick<StagedChange, 'kind' | 'role_id'>):
   return ADS_ROLE_KINDS.has(change.kind) && String(change.role_id ?? '').startsWith('ads.')
 }
 
-export const NOT_WIRED_KIND =
-  `${NOT_WIRED_ERROR_PREFIX}还没接通：改出价 / 换素材工坊还不能替你去后台改，这一下没做。请你自己在广告后台改。`
-export const NOT_WIRED_HOSTED =
-  `${NOT_WIRED_ERROR_PREFIX}还没接通：这台没有浏览器插件，改不到你的广告后台，这一下没做。去装了插件的桌面版里再提一次。`
-export const NOT_WIRED_ACCOUNT =
-  `${NOT_WIRED_ERROR_PREFIX}还没接通：这个广告账户插件还不会点（只接了 Google / Meta），这一下没做。请你自己在后台改。`
+export const NOT_WIRED_KIND = `${NOT_WIRED_ERROR_PREFIX}还没接通：改出价 / 换素材工坊还不能替你去后台改，这一下没做。请你自己在广告后台改。`
+export const NOT_WIRED_HOSTED = `${NOT_WIRED_ERROR_PREFIX}还没接通：这台没有浏览器插件，改不到你的广告后台，这一下没做。去装了插件的桌面版里再提一次。`
+export const NOT_WIRED_ACCOUNT = `${NOT_WIRED_ERROR_PREFIX}还没接通：这个广告账户插件还不会点（只接了 Google / Meta），这一下没做。请你自己在后台改。`
 
 // WP415 统一口径：带 `not_wired` 与前缀，卡、时间线、记录面板照「没做 · 还没接通」显示（前缀上屏前去掉）
 const notDone = (message: string): BackendResult => ({

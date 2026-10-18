@@ -2761,7 +2761,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP418（自查 A11 / A18 / A19）：建站自己的卡——检查单（只读，查完即好）；装 App / 改 App / 改通知邮件做不到，照实回「没做」
       const siteApplied = brand?.siteService.apply(change)
       // WP415 统一口径：做不到的那几类（`not_wired`）演示里照走兜底（标「演示」），生产照实回「没做」+ 去哪里自己点
-      if (siteApplied !== undefined && !(siteApplied.not_wired === true && executionMode === 'demo'))
+      if (
+        siteApplied !== undefined &&
+        !(siteApplied.not_wired === true && executionMode === 'demo')
+      )
         return siteApplied
       // WP253：换线上主题那张卡批了 → 由服务端跑 `theme publish`（这是整条路上唯一换线上主题的地方）
       if (change.kind === 'publish_theme') {
@@ -2782,7 +2785,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         now: () => clock.now(),
       })
       // WP415 统一口径：还没接通的那几种（`not_wired`）演示里照走兜底（标「演示」）
-      if (deskApplied !== undefined && !(deskApplied.not_wired === true && executionMode === 'demo'))
+      if (
+        deskApplied !== undefined &&
+        !(deskApplied.not_wired === true && executionMode === 'demo')
+      )
         return deskApplied
       // WP415：出卡时已办完 / 批了交给排期去做的那几类（登记表里 `inline` 的）
       const inline = inlineApply(change)

@@ -870,7 +870,9 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
     }
     case 'AgentswsTrackingUpdate': {
       shop.fulfillment_orders ??= demoFulfillmentOrders()
-      const f = shop.fulfillment_orders.flatMap((o) => o.fulfillments).find((x) => x.id === vars.fulfillmentId)
+      const f = shop.fulfillment_orders
+        .flatMap((o) => o.fulfillments)
+        .find((x) => x.id === vars.fulfillmentId)
       if (f === undefined)
         return {
           fulfillmentTrackingInfoUpdate: {

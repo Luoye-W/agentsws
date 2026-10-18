@@ -939,9 +939,7 @@ export class ApprovalBusImpl implements ApprovalBus {
           item.kind === 'outbound_draft' &&
           (item.payload as { channel?: unknown } | null)?.channel === 'chat'
         const hours =
-          chatCard && typeof own === 'number' && own > 0
-            ? Math.min(own, policyHours)
-            : policyHours
+          chatCard && typeof own === 'number' && own > 0 ? Math.min(own, policyHours) : policyHours
         if (elapsed < hours) continue
         const already = item.routing.escalation.escalated_at.length
         const idx = item.routing.escalation.chain.indexOf(tier)
