@@ -6,6 +6,7 @@
  */
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
+import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
 import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
@@ -8555,6 +8556,7 @@ const TABLES: Record<Lang, Table> = {
     ...PANEL_ZH,
     // WP395：Amazon 运营岗位面板四块
     ...AMAZON_OPS_ZH,
+    ...AMAZON_KEYWORDS_ZH,
   },
   en: {
     ...en,
@@ -8592,6 +8594,7 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,
+    ...AMAZON_KEYWORDS_EN,
   },
 }
 
