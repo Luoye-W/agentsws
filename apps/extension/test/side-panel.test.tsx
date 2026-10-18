@@ -18,12 +18,12 @@ const card = {
   id: 'ap_1',
   version: 2,
   kind: 'reply' as const,
-  subreddit: 'inmoxr',
-  title: '回复 alice（Reddit · r/inmoxr）',
+  subreddit: 'ivraxr',
+  title: '回复 alice（Reddit · r/ivraxr）',
   post_title: 'Does the Air3 work with glasses?',
   parent_author: 'alice',
   parent_text: 'Mine fogs up a bit when I wear glasses.',
-  link: 'https://www.reddit.com/r/inmoxr/comments/abc/s/c1/',
+  link: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
   draft: { text: 'It fits over most frames.' },
   reason: '用户在问兼容性',
   facts: [{ id: 'fc_1', text: 'Q: glasses? A: yes' }],
@@ -32,12 +32,12 @@ const card = {
 
 const base = (over: Partial<PanelSnapshot> = {}): PanelSnapshot => ({
   at: '2026-10-18T02:00:00.000Z',
-  workspace_name: 'INMO',
+  workspace_name: 'IVRA',
   person_name: 'Luoye',
   can_act: true,
   progress: {
     configured: true,
-    account: 'Arvinw',
+    account: 'ivra_official',
     reddit_connected: true,
     reading: false,
     drafting: 1,
@@ -125,7 +125,7 @@ describe('WP413 侧边栏', () => {
   it('有卡默认停在「要你处理」：原帖、理由、草稿都在；改草稿 → 填进页面带改过的字与版本 → 读回后「已发 · 已记录」', async () => {
     state = { kind: 'ok', snapshot: base(), reddit_here: true }
     await mount()
-    expect(q('ws-who')?.textContent).toBe('INMO · Luoye')
+    expect(q('ws-who')?.textContent).toBe('IVRA · Luoye')
     expect(q('ws-tab-todo')?.getAttribute('aria-selected')).toBe('true')
     expect(q('ws-quote')?.textContent).toContain('fogs up')
     expect(q('ws-reason')?.textContent).toContain('兼容性')
@@ -141,10 +141,10 @@ describe('WP413 侧边栏', () => {
             job_id: 'aj_1',
             approval_item_id: 'ap_1',
             state: 'sent',
-            subreddit: 'inmoxr',
+            subreddit: 'ivraxr',
             label: card.title,
             record_id: 'ob_1',
-            link: 'https://www.reddit.com/r/inmoxr/comments/abc/s/new1/',
+            link: 'https://www.reddit.com/r/ivraxr/comments/abc/s/new1/',
             queued_at: '2026-10-18T02:00:00.000Z',
             via_extension: true,
           },
@@ -192,7 +192,7 @@ describe('WP413 侧边栏', () => {
     expect(parts).toContain('自家版块26 条')
     expect(parts).toContain('被 Reddit 拦了，已停')
     expect(q('ws-now')?.textContent).toContain('起草中 1')
-    expect(host.textContent).toContain('u/Arvinw')
+    expect(host.textContent).toContain('u/ivra_official')
   })
 
   it('记录：在插件里批的、各去处写没写进去', async () => {
@@ -206,24 +206,24 @@ describe('WP413 侧边栏', () => {
             sent_at: '2026-10-18T02:01:00.000Z',
             channel: 'reddit',
             action: 'reply',
-            destination: 'r/inmoxr',
+            destination: 'r/ivraxr',
             content: 'Edited in the side panel.',
             status: 'sent',
             via_extension: true,
             sinks: [
-              { name: 'INMO 回复记录', status: 'written' },
+              { name: 'IVRA 回复记录', status: 'written' },
               { name: '备份表', status: 'failed', message: '飞书授权过期了' },
             ],
           },
         ],
-        sinks: [{ name: 'INMO 回复记录', state: 'active', written: 1, pending: 0 }],
+        sinks: [{ name: 'IVRA 回复记录', state: 'active', written: 1, pending: 0 }],
       }),
       reddit_here: true,
     }
     await mount()
     await click(q('ws-tab-records'))
     expect(q('ws-via-ext')?.textContent).toBe('在插件里批的')
-    expect(q('ws-sinkres')?.textContent).toContain('INMO 回复记录')
+    expect(q('ws-sinkres')?.textContent).toContain('IVRA 回复记录')
     expect(q('ws-sinks')?.textContent).toContain('已写 1')
   })
 

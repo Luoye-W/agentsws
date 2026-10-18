@@ -1,5 +1,5 @@
 /**
- * WP413（T-INMO 10-18 R1，Luoye 10-19 定 a–d）：插件**常驻侧边栏**与本机服务之间的线上形状。
+ * WP413（真机联调 10-18 R1，Luoye 10-19 定 a–d）：插件**常驻侧边栏**与本机服务之间的线上形状。
  * 路由在 `packages/api/src/routes/extension-panel.ts`。
  *
  * 侧边栏三块：**进度**（读了什么、几点读的、下次几点、现在在做什么）、**要你处理**（「发出去」类卡：看 / 改 /
@@ -123,7 +123,7 @@ export interface PanelWrite {
 
 /** 一个记录去处写这一行的结果。 */
 export interface PanelSinkResult {
-  /** 用户交代的去处名字（「INMO 回复记录表」）。 */
+  /** 用户交代的去处名字（「IVRA 回复记录表」）。 */
   name: string
   status: 'written' | 'pending' | 'failed'
   /** 失败那一句。 */

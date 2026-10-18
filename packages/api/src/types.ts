@@ -965,7 +965,7 @@ export interface GatewayDeps {
    */
   extensionOnboarding?: ExtensionOnboardingPort
   /**
-   * WP413（T-INMO R1）：插件常驻侧边栏（进度 / 要你处理 / 记录）。没装配时 `/v1/extension/panel*` 回
+   * WP413（真机联调 R1）：插件常驻侧边栏（进度 / 要你处理 / 记录）。没装配时 `/v1/extension/panel*` 回
    * not_implemented，插件侧边栏照实说「先升级 Agents 工坊」。会话仍由 {@link extension} 那一套令牌判。
    */
   extensionPanel?: ExtensionPanelPort

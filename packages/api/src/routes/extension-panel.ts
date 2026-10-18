@@ -1,5 +1,5 @@
 /**
- * WP413（T-INMO 10-18 R1，Luoye 10-19 定 a–d）：**插件常驻侧边栏**的路由（`/v1/extension/panel*`）。
+ * WP413（真机联调 10-18 R1，Luoye 10-19 定 a–d）：**插件常驻侧边栏**的路由（`/v1/extension/panel*`）。
  *
  * 判权与 `/v1/extension/*` 那一套完全一样（插件令牌 + Origin），**复用现有配对令牌与 scope，不加新的**：
  * - 看（进度 / 要你处理 / 记录）：令牌上有 `reddit.read` 或 `reddit.write` 其中一个；
