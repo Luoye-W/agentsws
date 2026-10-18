@@ -859,12 +859,15 @@ export class ApprovalBusImpl implements ApprovalBus {
             ? this.rt.policy.escalation_hours.scope_manager
             : this.rt.policy.escalation_hours.owner
         /*
-         * WP417（自查客服 C18）：「现在就看」的卡（聊天里访客在等）按卡自己写的 `after_hours` 升级
+         * WP417（自查客服 C18）：聊天卡（访客就在聊天窗里等）按卡自己写的 `after_hours` 升级
          * ——以前一律 24 / 48 小时，聊天卡写的 1 小时从来不生效。别的卡照旧（只认策略那两档）。
          */
         const own = item.routing.escalation.after_hours
+        const chatCard =
+          item.kind === 'outbound_draft' &&
+          (item.payload as { channel?: unknown } | null)?.channel === 'chat'
         const hours =
-          item.priority === 'immediate' && typeof own === 'number' && own > 0
+          chatCard && typeof own === 'number' && own > 0
             ? Math.min(own, policyHours)
             : policyHours
         if (elapsed < hours) continue
