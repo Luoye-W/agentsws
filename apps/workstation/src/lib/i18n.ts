@@ -2594,6 +2594,7 @@ const zh: Table = {
   'kol.detail.outreach.no_mailbox': '还没连发信邮箱：信能起草，批了也发不出去。',
   'kol.detail.outreach.connect_mailbox': '连邮箱',
   'kol.card.expand': '展开全文',
+  'kol.collab.awaiting': '等你点头',
   'kol.card.collapse': '收起',
   'kol.card.review': '把这件交付物判为「{label}」。',
   'kol.detail.outreach.product': '想聊的那个产品',
@@ -2652,6 +2653,7 @@ const zh: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': '导入与活动',
   'kol.import': '导入红人表',
+  'influencer.title': '红人库',
   'influencer.empty.title': '红人库',
   'influencer.empty':
     '这个品牌还没有人持有红人职责。先在「组织」里把它分配给自己，红人库就会出现在这里。',
@@ -6864,6 +6866,7 @@ const en: Table = {
     'No sending mailbox yet: drafts work, but approved emails can’t go out.',
   'kol.detail.outreach.connect_mailbox': 'Connect mailbox',
   'kol.card.expand': 'Show all',
+  'kol.collab.awaiting': 'Awaiting your OK',
   'kol.card.collapse': 'Collapse',
   'kol.card.review': 'Mark this deliverable as “{label}”.',
   'kol.detail.outreach.product': 'Product you want to pitch',
@@ -6922,6 +6925,7 @@ const en: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': 'Import & campaign',
   'kol.import': 'Import creators',
+  'influencer.title': 'Creator library',
   'influencer.empty.title': 'Creator library',
   'influencer.empty':
     'Nobody on this brand holds a creator duty yet. Assign one to yourself under “Org” and the library shows up here.',

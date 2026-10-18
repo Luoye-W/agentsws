@@ -198,7 +198,8 @@ export function CreatorCard({
   const catLevel = cat === undefined || cat.unknown === true ? undefined : levelOfFactor(cat.score)
   return (
     <li
-      className="flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
+      // WP416（自查 kol U1）：卡在窄的右栏里时（容器查询）只出一行「粉丝 · 互动」，三格数字不挤成一团
+      className="@container flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
       data-testid="kol-creator-card"
       data-creator={row.creator_id}
       data-next={step}
@@ -215,19 +216,30 @@ export function CreatorCard({
             <span className="block truncate text-sm font-medium">{row.display_name}</span>
             <span className="block truncate text-xs text-muted-foreground">{handle}</span>
           </span>
-          {/* 刷粉护栏那一条：数不可信的不给分，理由写在卡上，不悄悄少一张 */}
+          {/* 刷粉护栏那一条：数不可信的不给分，理由写在卡上（名字下面整行，不再压在分数那一格里） */}
           {row.blocked === undefined ? (
             <ScoreHero score={row.score} label={t('kol.card.score')} />
-          ) : (
-            <span
-              className="max-w-28 shrink-0 text-right text-[11px] leading-tight text-ws-bad"
-              data-testid="kol-blocked"
-            >
-              {row.blocked}
+          ) : null}
+        </span>
+        {row.blocked === undefined ? null : (
+          <span className="text-[11px] leading-snug text-ws-bad" data-testid="kol-blocked">
+            {row.blocked}
+          </span>
+        )}
+        <span
+          className="flex min-w-0 gap-2 truncate text-xs text-muted-foreground @xs:hidden"
+          data-testid="kol-card-compact"
+        >
+          <span className="ws-num">
+            {t('kol.judge.followers')} {num(row.followers)}
+          </span>
+          {eng === undefined ? null : (
+            <span className="ws-num">
+              {t('kol.judge.engagement')} {eng.value}%
             </span>
           )}
         </span>
-        <span className="grid grid-cols-3 gap-1">
+        <span className="hidden grid-cols-3 gap-1 @xs:grid">
           <Stat id="followers" label={t('kol.judge.followers')} value={num(row.followers)} />
           <Stat
             id="engagement"

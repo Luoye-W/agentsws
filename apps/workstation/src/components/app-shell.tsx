@@ -149,7 +149,10 @@ function PositionNav({
   const duties = instance.roles.filter((r) => r.my_assignment_id !== undefined)
   const href = `/positions/${first}`
   // 只在岗位页本身亮（在它的职责页时亮的是那条职责，不是两行一起亮）
-  const active = pathname === href
+  // WP416（自查 kol U9）：红人库页（`/influencer/*`）也算在红人营销岗位里——左栏那一行亮着，知道自己在哪
+  const active =
+    pathname === href ||
+    (pathname.startsWith('/influencer') && instance.roles.some((r) => r.role_id.startsWith('kol.')))
   const Chevron = open ? ChevronDown : ChevronRight
   return (
     <div data-testid="nav-position-row" data-position={instance.position_id}>

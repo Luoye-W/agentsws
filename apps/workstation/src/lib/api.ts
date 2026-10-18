@@ -5154,6 +5154,8 @@ export interface KolCollaborationData {
   last_activity_at?: string
   /** 演练数据（列表行上带一个角标）。 */
   sandbox?: boolean
+  /** WP416：建这条合作的卡还没人点头。 */
+  awaiting_approval?: boolean
   /** WP299（决策 386）：寄样（地址只有脱敏样子）。 */
   sample?: {
     address_masked: string

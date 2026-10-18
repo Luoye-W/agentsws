@@ -921,6 +921,15 @@ function Collaborations({
                             演练
                           </span>
                         ) : null}
+                        {/* WP416：建合作那张卡还没人点头——点「不要」这一行就没了 */}
+                        {c.awaiting_approval === true ? (
+                          <span
+                            className="rounded bg-ws-surface px-1 text-[10px] text-ws-muted-fg"
+                            data-testid="kol-collab-awaiting"
+                          >
+                            {t('kol.collab.awaiting')}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                         {c.segments === undefined ? null : (
