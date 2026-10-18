@@ -13,9 +13,9 @@
 import { type BrowserWindow, session as electronSession, WebContentsView } from 'electron'
 import { setAmazonDeliveryZip } from './amazon-delivery.js'
 import {
+  AMAZON_URL_PATTERNS,
   type AmazonDeliveryResult,
   cleanUserAgent,
-  isAmazonUrl,
   type OpenRequest,
   type OpenResult,
   type SearchBrowserDriver,
@@ -68,21 +68,18 @@ export function createElectronSearchBrowser(deps: {
     const ses = electronSession.fromPartition(partition)
     if (!prepared.has(partition)) {
       prepared.add(partition)
-      const original = ses.getUserAgent()
-      ses.setUserAgent(cleanUserAgent(original))
-      // WP394（docs/106 A9，Amazon Agent Policy）：对 Amazon 各站与资源域的每个请求，User-Agent 末尾自报
-      // `Agent/AgentsWorkshop`（Chromium 原有段照留）；别的域名不动（照旧是上面那个干净的 UA）。
-      ses.webRequest.onBeforeSendHeaders((details, cb) => {
-        if (!isAmazonUrl(details.url)) {
-          cb({ requestHeaders: details.requestHeaders })
-          return
-        }
-        const headers = { ...details.requestHeaders }
-        for (const k of Object.keys(headers))
-          if (k.toLowerCase() === 'user-agent') delete headers[k]
-        headers['User-Agent'] = userAgentFor(details.url, original)
-        cb({ requestHeaders: headers })
-      })
+      ses.setUserAgent(cleanUserAgent(ses.getUserAgent()))
+      // WP398（docs/106 §2.1）：访问 Amazon 的每个请求自报 `Agent/AgentsWorkshop`（别的站不加）
+      ses.webRequest.onBeforeSendHeaders(
+        { urls: [...AMAZON_URL_PATTERNS] },
+        (details, callback) => {
+          const headers = { ...details.requestHeaders }
+          const key =
+            Object.keys(headers).find((k) => k.toLowerCase() === 'user-agent') ?? 'User-Agent'
+          headers[key] = userAgentFor(details.url, headers[key] ?? ses.getUserAgent())
+          callback({ requestHeaders: headers })
+        },
+      )
       ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
       ses.setPermissionCheckHandler(() => false)
       ses.on('will-download', (event, item) => {

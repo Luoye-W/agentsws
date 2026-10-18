@@ -1,0 +1,39 @@
+# WP398（docs/106 §13 A8）：**Amazon 词库：出差距词、标出他牌名**。
+#
+# 录好的联想词（种子词取自家标题的核心词 `electric bike`，本身 + a–z 一批）+ 三家竞品、自家一条 Listing 的标题 / 五点，
+# 跑和服务进程同一份的拆词 / 归一化 / 差距（`@agentsws/seo-core`）：
+# 1. 差距词按「出现在几家竞品里」排（一期没有搜索量）：三家都写了「hydraulic disc brake」「removable battery」，
+#    自家没写 → 排在最前；同一串词只留一个（不再单列 disc brake）；
+# 2. 联想词里带别家品牌的（voltway / ridgeline）标出来：不能填进后台关键词；
+# 3. 第二次刷新到第 5 页出验证页：停下、不重试（读了 4 页）。
+id: amazon/amazon-keyword-gaps
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-18T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    amazon.keywords:
+      who: p_li
+  - at: '+1h'
+    amazon.keywords:
+      who: p_li
+      blocked_at: 5
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  amazon_keywords:
+    top_gaps: [hydraulic disc brake, removable battery, fat tire]
+    other_brands: [voltway electric bike, ridgeline electric bike]
+    autocomplete: blocked
+  event_types:
+    - simulation.amazon_keywords
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  词库是不是把「三家竞品都写了、自家没写」的词排在最前，并照实说没有搜索量？
+  带别家品牌名的联想词有没有单独标出来？Amazon 出验证页时有没有停下、不重试？

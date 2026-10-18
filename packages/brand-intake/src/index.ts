@@ -28,6 +28,14 @@ export {
   isBlocked,
   storefrontCards,
 } from './amazon.js'
+// WP398（docs/106 §13 A8）：Amazon 搜索框联想词（地址 + 读回来的那一页；读页的是内置浏览器）
+export {
+  type AmazonSuggestionParse,
+  amazonAutocompletePrefixes,
+  amazonAutocompleteSupported,
+  amazonAutocompleteUrl,
+  parseAmazonSuggestions,
+} from './amazon-autocomplete.js'
 // WP335（决策 659）：品类一格——AI 填、人可改
 export {
   CATEGORY_MAX_CHARS,
@@ -455,7 +463,7 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
   return out as BrandIntakeProfile
 }
 
-// WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的积木——站点 / 地址 / 商品页那几格 / 搜索卡片 / 联想词，
+// WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的积木——站点 / 地址 / 商品页那几格 / 搜索卡片（联想词用 WP398 的 amazon-autocomplete），
 // 以及读对标款那一轮（内置浏览器先读、被拦就停退云端）与挑对标款、什么算重要。WP396 / WP398 直接用这一套。
 export type { AmazonProductFacts, AmazonSearchCard } from './amazon.js'
 export {
@@ -474,8 +482,6 @@ export {
   amazonSearchCards,
   amazonSearchUrlOf,
   amazonSpecs,
-  amazonSuggestions,
-  amazonSuggestUrlOf,
   amazonUndeliverable,
   currencyOfAmazonPrice,
   isAmazonChallenge,

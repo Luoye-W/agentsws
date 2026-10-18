@@ -48,70 +48,71 @@ export function cleanUserAgent(ua: string): string {
 }
 
 /**
- * WP394（docs/106 §13 A9，Amazon Agent Policy）：替人自动访问 Amazon 的软件**每个请求都要自报身份**。
- * 内置浏览器对 Amazon 各站（与 `packages/brand-intake/src/amazon.ts` 的站点表对得上，测试钉住）和它的
- * 图片 / 脚本资源域的请求，User-Agent 末尾加这一段；其余域名照旧走 {@link cleanUserAgent}。
+ * WP398（docs/106 §2.1 Amazon Agent Policy）：访问 **Amazon** 的每个请求，User-Agent 末尾带上 `Agent/AgentsWorkshop`
+ * ——照实告诉 Amazon 这是代人干活的软件（Chromium 原有那几段不去掉）。别的站照旧 {@link cleanUserAgent}。
+ * 带了标识 Amazon 随时能拦；拦了就停，不绕（服务进程那一侧管）。
  */
 export const AMAZON_AGENT_TOKEN = 'Agent/AgentsWorkshop'
 
-/** Amazon 各站前台域名后缀（含联想词接口所在的 `completion.amazon.*`，按后缀认）。 */
-export const AMAZON_SITE_SUFFIXES: readonly string[] = [
-  'amazon.com.au',
+/** Amazon 各站前台（与 `amz/store.yml` 的 `browser_scope` 同一批）+ 联想词 / 图片这些资源域。 */
+export const AMAZON_DOMAINS: readonly string[] = [
+  'amazon.com',
+  'amazon.ca',
   'amazon.com.mx',
   'amazon.com.br',
   'amazon.co.uk',
-  'amazon.co.jp',
   'amazon.de',
   'amazon.fr',
   'amazon.it',
   'amazon.es',
-  'amazon.ca',
-  'amazon.in',
   'amazon.nl',
   'amazon.se',
+  'amazon.pl',
   'amazon.com.be',
   'amazon.com.tr',
-  'amazon.pl',
   'amazon.ae',
   'amazon.sa',
   'amazon.eg',
+  'amazon.in',
+  'amazon.co.jp',
+  'amazon.com.au',
   'amazon.sg',
-  'amazon.com',
-]
-
-/** Amazon 的图片 / 脚本资源域。 */
-export const AMAZON_RESOURCE_SUFFIXES: readonly string[] = [
   'media-amazon.com',
   'ssl-images-amazon.com',
   'images-amazon.com',
-  'amazon-adsystem.com',
 ]
 
-/** 这个网址是不是 Amazon 的（前台各站、联想词、资源域）。认不出的网址一律不算。 */
-export function isAmazonUrl(url: string): boolean {
-  let host: string
+/** Electron `webRequest` 的地址过滤写法（`*.amazon.com` 也认 `amazon.com` 本身）。 */
+export const AMAZON_URL_PATTERNS: readonly string[] = AMAZON_DOMAINS.map((d) => `*://*.${d}/*`)
+
+/** 这个主机是不是 Amazon（各站前台、联想词、图片资源）。 */
+export function isAmazonHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, '')
+  return AMAZON_DOMAINS.some((d) => h === d || h.endsWith(`.${d}`))
+}
+
+/** 这个请求该带的 User-Agent：Amazon 的在末尾加 {@link AMAZON_AGENT_TOKEN}（已经有了不重复加）。 */
+export function userAgentFor(url: string, ua: string): string {
+  let host = ''
   try {
-    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '')
+    host = new URL(url).hostname
+  } catch {
+    return ua
+  }
+  if (!isAmazonHost(host) || ua.includes(AMAZON_AGENT_TOKEN)) return ua
+  return `${ua} ${AMAZON_AGENT_TOKEN}`.trim()
+}
+
+/**
+ * WP394：这个网址是不是 Amazon 的（读 HTML 原文、设配送邮编只认它；按 {@link isAmazonHost} 判）。
+ * 认不出的网址一律不算。
+ */
+export function isAmazonUrl(url: string): boolean {
+  try {
+    return isAmazonHost(new URL(url).hostname)
   } catch {
     return false
   }
-  return [...AMAZON_SITE_SUFFIXES, ...AMAZON_RESOURCE_SUFFIXES].some(
-    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
-  )
-}
-
-/** Amazon 那几个域用的 UA：Chromium 原有段照留（同 {@link cleanUserAgent}），末尾自报 `Agent/AgentsWorkshop`。 */
-export function amazonUserAgent(ua: string): string {
-  const base = cleanUserAgent(ua)
-    .split(' ')
-    .filter((p) => p !== AMAZON_AGENT_TOKEN)
-    .join(' ')
-  return `${base} ${AMAZON_AGENT_TOKEN}`.trim()
-}
-
-/** 这一个请求该带哪个 UA：Amazon 的自报身份，别的照旧。 */
-export function userAgentFor(url: string, ua: string): string {
-  return isAmazonUrl(url) ? amazonUserAgent(ua) : cleanUserAgent(ua)
 }
 
 /** WP394：`html` = 读 Amazon 前台页的 HTML 原文（**只认 Amazon 的网址**）。 */

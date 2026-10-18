@@ -108,12 +108,14 @@ export interface CatalogSnapshotRow {
   bsr?: CatalogBsr[]
   /** Amazon：优惠券文字（`Save $50 with coupon`）；没有不填。 */
   coupon?: string
+  /**
+   * Amazon：五点（WP398 词库拆词用；只加的一格，`amazon_asin` 进料口读商品页时顺手填，读不到不填）。
+   */
+  bullets?: string[]
   /** 商品创建时间（Shopify `created_at`；判「上新」用）。读不到不填，就只看「第一次出现」。 */
   product_created_at?: Iso8601
   /** 这一行是什么时候读到的。 */
   read_at: Iso8601
-  /** WP394：Amazon 五点（WP398 拆词用；只存这几句，不存整页原文）。 */
-  bullets?: string[]
   /**
    * WP394：这一次**这条路读不到**的格子（云端那一路没有划线价、优惠券）。写在这里的格子照实空着，
    * 对比时不拿「空」当「没了」（不报「打折结束」），快照里留着上一次读到的值。

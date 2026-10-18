@@ -208,9 +208,6 @@ export function demoAmazon(): { reader: AmazonFrontReader; cloud: AmazonCloudPor
       }))
       return { status: 'ok', cards }
     },
-    async suggest() {
-      return { status: 'failed', message: 'demo 里没有联想词' }
-    },
     async readStorefront() {
       return { status: 'failed', message: 'demo 里没有店铺页' }
     },

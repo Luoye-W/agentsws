@@ -21,8 +21,6 @@ import {
   amazonProductUrlOf,
   amazonSearchCards,
   amazonSearchUrlOf,
-  amazonSuggestions,
-  amazonSuggestUrlOf,
   isAmazonChallenge,
   isAmazonHost,
   isAmazonMissingPage,
@@ -32,8 +30,11 @@ import {
 import { AMAZON_DELIVERY_ZIPS } from '@agentsws/contracts'
 import type { SearchBrowserChannel } from '../web-browser/channel.js'
 
-/** 被拦之后多久不再碰 Amazon（这一轮剩下的走云端；人机验证 AI 不碰）。 */
-export const AMAZON_BLOCK_PAUSE_MS = 6 * 3_600_000
+/**
+ * 被拦之后多久不再碰 Amazon（这一轮剩下的走云端；人机验证 AI 不碰）。和 WP398 联想词那一路同一个长度
+ * （24 小时，决策 1117）。
+ */
+export const AMAZON_BLOCK_PAUSE_MS = 24 * 3_600_000
 /** 配送地址设过之后多久内信它（过了再设一次）。 */
 export const AMAZON_DELIVERY_FRESH_MS = 7 * 86_400_000
 /** 一页最多等多久。 */
@@ -48,11 +49,6 @@ export type AmazonRawRead =
 
 export type AmazonCardsRead =
   | { status: 'ok'; cards: AmazonSearchCard[] }
-  | { status: 'blocked' | 'quota'; message?: string }
-  | { status: 'failed'; message: string }
-
-export type AmazonSuggestRead =
-  | { status: 'ok'; words: string[] }
   | { status: 'blocked' | 'quota'; message?: string }
   | { status: 'failed'; message: string }
 
@@ -91,8 +87,6 @@ export interface AmazonFrontReader {
   readFacts(input: { marketplace: string; asin: string }): Promise<AmazonPageOutcome>
   /** 搜一页、交回卡片（挑对标款）。 */
   searchCards(input: { marketplace: string; query: string }): Promise<AmazonCardsRead>
-  /** 搜索框联想词（WP398）。 */
-  suggest(input: { marketplace: string; prefix: string }): Promise<AmazonSuggestRead>
   /** 读一页店铺页（自家 ASIN 读不到时，用户贴的店铺链接）：交回卡片上的 ASIN 与标题。 */
   readStorefront(url: string): Promise<AmazonStorefrontRead>
 }
@@ -105,14 +99,6 @@ export type AmazonStorefrontRead =
 const BLOCKED_MSG = 'Amazon 要人机验证：内置浏览器先不读 Amazon，不绕、不重试（AI 不碰验证码）'
 const NO_BROWSER = '这台电脑没有工坊内置浏览器'
 const QUOTA_MSG = '内置浏览器这一小时的额度用完了'
-
-const decode = (s: string): string =>
-  s
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
 
 interface Opened {
   raw: AmazonRawRead
@@ -313,24 +299,6 @@ export function createAmazonFrontReader(deps: AmazonFrontReaderDeps): AmazonFron
       if (raw.status === 'ok') return { status: 'ok', cards: amazonSearchCards(raw.html) }
       if (raw.status === 'failed') return { status: 'failed', message: raw.message }
       return { status: raw.status, ...(raw.message === undefined ? {} : { message: raw.message }) }
-    },
-    async suggest({ marketplace, prefix }) {
-      const url = amazonSuggestUrlOf(marketplace, prefix)
-      if (url === undefined)
-        return { status: 'failed', message: `这个站点的联想词还没接上：${marketplace}` }
-      const { raw } = await open(url)
-      if (raw.status === 'failed') return { status: 'failed', message: raw.message }
-      if (raw.status !== 'ok')
-        return {
-          status: raw.status,
-          ...(raw.message === undefined ? {} : { message: raw.message }),
-        }
-      const body = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(raw.html)?.[1] ?? raw.html
-      try {
-        return { status: 'ok', words: amazonSuggestions(JSON.parse(decode(body))) }
-      } catch {
-        return { status: 'failed', message: '联想词回的不是认得的格式' }
-      }
     },
     async readStorefront(url) {
       let host = ''

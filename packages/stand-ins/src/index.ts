@@ -51,6 +51,8 @@ export * from './runtime/ads.js'
 export * from './runtime/ads-data.js'
 // WP394：亚马逊店铺运营「竞品动向」的现在读一次（定义并进报告积木那张表）
 export * from './runtime/amazon-competitor.js'
+// WP398：亚马逊店铺运营的 Amazon 词库三个工具
+export * from './runtime/amazon-keywords.js'
 // WP343：「我的助理」的四个只读工具 + 派活工具（参数表全仓一份）
 export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'

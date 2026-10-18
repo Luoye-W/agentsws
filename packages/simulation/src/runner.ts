@@ -18,6 +18,7 @@ import type {
 } from '@agentsws/contracts'
 import { instructionRuleCard, isInstructionRuleCard, ruleFromCard } from '@agentsws/core'
 import type { ActorPolicy } from '@agentsws/stand-ins'
+import { runAmazonKeywordSample } from './amazon-keywords.js'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
 import { type CompetitorWatchLoop, installCompetitorWatch } from './competitor.js'
@@ -1988,6 +1989,25 @@ async function execute(
         world.appendEvent('simulation.geo_quality', {
           who: event.geo_quality.who,
           item: out.approval_item_id,
+        })
+        return
+      }
+      // WP398：Amazon 词库（录好的联想词与 Listing 文本，和服务进程同一份拆词 / 差距）
+      case 'amazon.keywords': {
+        const out = runAmazonKeywordSample({
+          world,
+          ...(event.amazon_keywords.blocked_at === undefined
+            ? {}
+            : { blocked_at: event.amazon_keywords.blocked_at }),
+        })
+        world.appendEvent('simulation.amazon_keywords', {
+          who: event.amazon_keywords.who,
+          autocomplete: out.autocomplete,
+          seed: out.seed,
+          pages_read: out.pages_read,
+          gaps: out.gaps.slice(0, 10),
+          other_brand_terms: out.other_brand_terms,
+          total: out.total,
         })
         return
       }

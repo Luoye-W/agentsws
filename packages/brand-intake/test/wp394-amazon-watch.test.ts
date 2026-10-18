@@ -1,7 +1,7 @@
 /**
  * WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的积木——全用录好的样本，不联网。
  *
- * 商品页那几格（美元正常页 / 配送到加拿大 / 验证页 / 缺货 / 划线价 + 优惠券）、BSR 两级、搜索卡片、联想词；
+ * 商品页那几格（美元正常页 / 配送到加拿大 / 验证页 / 缺货 / 划线价 + 优惠券）、BSR 两级、搜索卡片（联想词是 WP398 的）；
  * 读一轮：被拦就停不重试、剩下的转云端（积分照扣、划线价 / 优惠券照实空着）、币种不符作废、额度满了照实说；
  * 挑对标款（规则脑）、什么算重要。
  */
@@ -16,8 +16,6 @@ import {
   amazonMoney,
   amazonProductUrlOf,
   amazonSearchCards,
-  amazonSuggestions,
-  amazonSuggestUrlOf,
   isAmazonChallenge,
   isAmazonHost,
   isImportantAmazonChange,
@@ -46,15 +44,11 @@ describe('WP394 · 站点与地址', () => {
       expect(isAmazonHost(h)).toBe(false)
   })
 
-  it('站点 → 前台域名、商品页、联想词地址', () => {
+  it('站点 → 前台域名、商品页地址', () => {
     expect(amazonHostOfMarket('US')).toBe('www.amazon.com')
     expect(amazonHostOfMarket('uk')).toBe('www.amazon.co.uk')
     expect(amazonHostOfMarket('ZZ')).toBeUndefined()
     expect(amazonProductUrlOf('US', 'b0testrg01')).toBe('https://www.amazon.com/dp/B0TESTRG01')
-    const s = amazonSuggestUrlOf('US', 'rival gear e')
-    expect(s).toMatch(/^https:\/\/completion\.amazon\.com\/api\/2017\/suggestions\?/)
-    expect(s).toContain('mid=ATVPDKIKX0DER')
-    expect(amazonSuggestUrlOf('ZZ', 'x')).toBeUndefined()
   })
 
   it('价格文字 → 数与币种（千分位、欧式小数点、加元）', () => {
@@ -129,7 +123,7 @@ describe('WP394 · 商品页那几格', () => {
   })
 })
 
-describe('WP394 · 搜索卡片与联想词', () => {
+describe('WP394 · 搜索卡片', () => {
   it('搜索结果页：每张卡的 ASIN、标题、价、评分、评论数、广告位', () => {
     const cards = amazonSearchCards(page('search.html'))
     expect(cards.map((c) => c.asin)).toEqual([
@@ -142,16 +136,6 @@ describe('WP394 · 搜索卡片与联想词', () => {
     ])
     expect(cards[0]?.sponsored).toBe(true)
     expect(cards[1]).toMatchObject({ price: 1299, reviews: 2318, rating: 4.4, sponsored: false })
-  })
-
-  it('联想词 JSON → 词表；形状不对回空', () => {
-    expect(amazonSuggestions(JSON.parse(page('suggest.json')))).toEqual([
-      'rival gear ebike',
-      'rival gear electric bike for adults',
-      'rival gear ebike battery',
-    ])
-    expect(amazonSuggestions({ nope: 1 })).toEqual([])
-    expect(amazonSuggestions(null)).toEqual([])
   })
 })
 

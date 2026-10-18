@@ -109,6 +109,7 @@ import {
   ADS_TOOL_NAMES,
   AMAZON_COMPETITOR_ROLES,
   AMAZON_COMPETITOR_TOOL_NAMES,
+  AMAZON_KEYWORD_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
@@ -117,6 +118,7 @@ import {
   imageWorkSection,
   isAdsDataRole,
   isAdsWiredRole,
+  isAmazonKeywordRole,
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
@@ -205,6 +207,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...REPORT_TOOL_NAMES,
     // WP315：投放岗看数据——查数只读本机库；现在导一次排给插件（只点导出）；止损只出卡
     ...ADS_DATA_TOOL_NAMES,
+    // WP398：Amazon 词库——读前台联想词只读外部；看词库 / 标词只动本机
+    ...AMAZON_KEYWORD_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
     // WP386：信息监控查提及——只读本机提及库
@@ -495,6 +499,11 @@ export interface RuntimeOptions {
    * 不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   adsDataTools?: ToolExecutor
+  /**
+   * WP398（docs/106 §13 A8）：亚马逊店铺运营的 Amazon 词库三个工具（`amazon-keywords/tools.ts` 建的那一份）。
+   * 只给 `amz.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  amazonKeywordTools?: ToolExecutor
   /**
    * WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具 `request_setup`（`setup-request-tool.ts` 建的那一份）。
    * **所有职责都有**；工具只回结构化缺项，卡由这一轮收尾时的 `setupCards.onRunBlocked` 出（同一缺项只一张）。
@@ -1265,6 +1274,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const sinkTools = options.recordSinkTools
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
+    const amazonKeywordTools = options.amazonKeywordTools
     const setupRequest = options.setupRequestTool
     const prMonitor = options.prMonitorTools
     const amazonCompetitor = options.amazonCompetitorTools
@@ -1298,6 +1308,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
+      amazonKeywordTools === undefined &&
       setupRequest === undefined &&
       prMonitor === undefined &&
       amazonCompetitor === undefined
@@ -1358,6 +1369,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bareOf(call.name))) {
         return adsDataTools(call)
       }
+      // WP398：Amazon 词库（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonKeywordTools !== undefined &&
+        AMAZON_KEYWORD_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonKeywordTools(call)
+      }
       // WP334：AI 自己要卡（名字与别处不重名）
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
@@ -1412,6 +1430,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
     if (options.prMonitorTools !== undefined && PR_MONITOR_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
+    if (options.amazonKeywordTools !== undefined && AMAZON_KEYWORD_TOOL_NAMES.includes(bare))
+      return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
@@ -1927,6 +1947,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
         ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
           ? ADS_DATA_TOOL_NAMES
+          : []),
+        // WP398：Amazon 词库（只给亚马逊店铺运营；服务端接了才有）
+        ...(isAmazonKeywordRole(config.role_id) && options.amazonKeywordTools !== undefined
+          ? AMAZON_KEYWORD_TOOL_NAMES
           : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),

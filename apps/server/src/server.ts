@@ -115,6 +115,7 @@ import {
   ADS_DEFAULT_CAPS,
   ADS_PLATFORMS,
   AI_IMAGE_EDIT_CAPABILITY,
+  type AmazonListingText,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
@@ -252,6 +253,14 @@ import {
   createAmazonFrontReader,
   readAmazonCloud,
 } from './amazon-front/index.js'
+// WP398（docs/106 §13 A8）：Amazon 词库（前台联想词 + 竞品 / 自家 Listing 拆词 + 差距）
+import {
+  type AmazonAutocompleteReader,
+  type AmazonKeywordBank,
+  createAmazonKeywordBank,
+  createAmazonKeywordToolExecutor,
+  createBrowserAutocompleteReader,
+} from './amazon-keywords/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -1059,6 +1068,16 @@ export interface ServerOptions {
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
   clientErrorLog?: (line: string) => void
+  /**
+   * WP398（docs/106 §13 A8）：词库读 Amazon 搜索框联想词用的那一块。不给 = 有桌面壳的内置浏览器时用它读
+   * （`Agent/AgentsWorkshop` 标识、固定间隔、算进每小时额度、被拦就停），没有就照实说「读不了」。demo / 测试注入替身。
+   */
+  amazonAutocompleteReader?: (workspace_id: WorkspaceId) => AmazonAutocompleteReader | undefined
+  /**
+   * WP398：拆词用的 Listing 文本（竞品快照 WP392 / WP394、自家体检 WP396 合进来后接这里；demo 注入录好的几份）。
+   * 不给 = 只拆读页那几单交进来的（`ingestListings`）。
+   */
+  amazonKeywordListings?: (workspace_id: WorkspaceId) => Promise<AmazonListingText[]>
   /**
    * WP323：记录去处的飞书适配器发请求用的 `fetch`（测试注入替身飞书；不给用全局 `fetch`）。
    */
@@ -5924,6 +5943,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 return false
               },
             }),
+            // WP398：Amazon 词库（刷新 / 看词库 / 标一个词；只给 amz.store）
+            amazonKeywordTools: createAmazonKeywordToolExecutor({
+              bank: async (w) =>
+                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
+                  ?.amazonKeywords,
+            }),
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
               service: () => adsDataRef,
@@ -7606,6 +7631,61 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }),
       nowMs: () => Date.parse(clock.now()),
     })
+    /*
+     * WP398（docs/106 §13 A8）：Amazon 词库（品牌目录下 `amazon-keywords.json`）。联想词走内置浏览器
+     * （桌面壳那一条队，固定间隔、算进每小时额度、被拦就停）；托管实例不装（云上没有内置浏览器）。
+     */
+    const amazonKeywords: AmazonKeywordBank | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createAmazonKeywordBank({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir }),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            reader: () =>
+              options.amazonAutocompleteReader?.(ws) ??
+              (webSearchChannel === undefined
+                ? undefined
+                : createBrowserAutocompleteReader({
+                    workspace_id: ws,
+                    channel: webSearchChannel,
+                    throttle: webSearchThrottle,
+                  })),
+            brand: async () => {
+              await seoService.watchView().catch(() => undefined)
+              const w = (await seoService.geoHistory()).watch()
+              const p = onboardingRef?.brandProfile(ws)
+              return {
+                name: w?.brand.name ?? brandNameOfWorkspace(ws),
+                markets: p?.markets ?? [],
+                competitors: [
+                  ...(w?.competitors ?? []).map((c) => ({ id: c.id, name: c.name })),
+                  ...(p?.competitors ?? []).map((c) => ({ id: c.name, name: c.name })),
+                ],
+                seed_hints: [p?.category, p?.subcategory, ...(p?.keywords?.category ?? [])].filter(
+                  (x): x is string => typeof x === 'string' && x.trim() !== '',
+                ),
+              }
+            },
+            ...(options.amazonKeywordListings === undefined
+              ? {}
+              : {
+                  competitorListings: () =>
+                    options.amazonKeywordListings?.(ws) ?? Promise.resolve([]),
+                }),
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'amazon-keywords' },
+                correlation: {
+                  trace_id: `tr_amazon_keywords_${Date.parse(clock.now()).toString(36)}`,
+                },
+                payload,
+              }),
+          })
     const redditWatch =
       hostedBoot !== undefined
         ? undefined
@@ -8012,6 +8092,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
       ...(amazonFront === undefined ? {} : { amazonFront }),
       redditLimits,
+      ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -13077,6 +13158,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
     siteHealth: siteHealthPort,
+    // WP398：Amazon 词库 `/v1/amazon-keywords*`（岗位页「词库」块、第三栏词表、体检卡那一行）
+    amazonKeywords: (() => {
+      const of = async (ws: string): Promise<AmazonKeywordBank> => {
+        const b = (await brandModules.forWorkspace(ws as WorkspaceId)).amazonKeywords
+        if (b === undefined) throw new ApiError('not_implemented', '这个品牌没有装 Amazon 词库。')
+        return b
+      }
+      return {
+        view: async (actor) => (await of(actor.workspace_id)).view(),
+        list: async (actor, query) => (await of(actor.workspace_id)).list(query),
+        refresh: async (actor, input) =>
+          (await of(actor.workspace_id)).refresh({ trigger: 'manual', ...input }),
+        mark: async (actor, patch) => {
+          const r = (await of(actor.workspace_id)).mark(patch)
+          if (!r.ok) throw new ApiError('invalid_input', r.message)
+          return r.keyword
+        },
+      }
+    })(),
     // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
     ...(options.clientErrorLog !== undefined
       ? { clientErrors: stderrClientErrors(options.clientErrorLog) }

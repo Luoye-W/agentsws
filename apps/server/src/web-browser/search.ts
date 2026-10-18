@@ -105,7 +105,8 @@ const webError = (code: string, message: string): Error =>
 export interface SearchThrottle {
   /**
    * 排队跑一个「开一页」：等到轮到、隔够随机间隔才开；这一小时满了回 `undefined`（不开）。
-   * WP394：`steady` = 固定间隔（取下限），不加随机停顿——读 Amazon 用（docs/106 A9：不模仿人的节奏）。
+   * WP398：`steady` = 固定间隔（取最短那一档），**不加随机停顿**——读 Amazon 用（docs/106 §2.1：不模仿人的节奏；
+   * 固定间隔是防误操作，可以留）。照样算进这一小时的额度。
    */
   run<T>(task: () => Promise<T>, opts?: { steady?: boolean }): Promise<T | undefined>
   /** 这一小时已经开了几页。 */

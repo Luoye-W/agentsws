@@ -683,6 +683,15 @@ export interface ScenarioGeoQuality {
   who: string
 }
 
+/**
+ * WP398（docs/106 §13 A8）：Amazon 词库——录好的联想词与竞品 / 自家 Listing 文本，跑一遍和服务进程同一份的
+ * 拆词、他牌名、差距（`@agentsws/seo-core`）。`blocked_at` = 联想词第几页出验证页（那一页起停下、不重试）。
+ */
+export interface ScenarioAmazonKeywords {
+  who: string
+  blocked_at?: number
+}
+
 /** WP67 / 48 §5.1：起草并提一封开发信（第一稿故意可以带承诺词）。 */
 export interface ScenarioKolOutreach {
   who: string
@@ -1283,6 +1292,8 @@ export type ScenarioEvent =
   /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */
   | { at: string; type: 'content.seo_daily'; seo_daily: ScenarioSeoDaily }
   | { at: string; type: 'content.geo_quality'; geo_quality: ScenarioGeoQuality }
+  /** WP398：Amazon 词库刷新一次（联想词 + 拆 Listing + 差距）。 */
+  | { at: string; type: 'amazon.keywords'; amazon_keywords: ScenarioAmazonKeywords }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -2138,6 +2149,15 @@ export interface ScenarioExpected {
     accuracy?: NumericAssertion
     owners?: string[]
     advice?: string
+  }
+  /**
+   * WP398：Amazon 词库那一次——差距词开头几个（按竞品数排，按顺序比）、含他牌名的联想词（集合）、
+   * 联想词读完了没有（`ok` / `blocked`）。
+   */
+  amazon_keywords?: {
+    top_gaps?: string[]
+    other_brands?: string[]
+    autocomplete?: 'ok' | 'blocked'
   }
   /**
    * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。

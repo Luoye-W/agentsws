@@ -1,6 +1,6 @@
 /**
  * WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的那一块（内置浏览器自报 Agent、配送邮编、被拦就停）
- * 与云端兜底。竞品对标款（本单）、自家 Listing 体检（WP396）、词库联想词（WP398）共用。
+ * 与云端兜底。竞品对标款（本单）、自家 Listing 体检（WP396）共用；联想词是 WP398 那一份。
  */
 export {
   AMAZON_CLOUD_POLL_MS,
@@ -19,6 +19,5 @@ export {
   type AmazonFrontState,
   type AmazonRawRead,
   type AmazonStorefrontRead,
-  type AmazonSuggestRead,
   createAmazonFrontReader,
 } from './reader.js'

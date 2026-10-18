@@ -7,8 +7,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   AMAZON_AGENT_TOKEN,
-  AMAZON_SITE_SUFFIXES,
-  amazonUserAgent,
+  AMAZON_DOMAINS,
   isAmazonUrl,
   type SearchBrowserDriver,
   startSearchBrowserChannel,
@@ -17,13 +16,15 @@ import {
   validateOpen,
 } from '../src/search-browser.js'
 
-const UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @agentsws/desktop/0.3.1 Chrome/146.0.7680.80 Electron/44.3.0 Safari/537.36'
 const CLEAN =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.80 Safari/537.36'
 
-describe('WP394 · Amazon 请求自报身份', () => {
-  it('Amazon 各站、联想词、图片资源域：UA 末尾一定带 Agent/AgentsWorkshop，Chromium 原有段照留', () => {
+/*
+ * UA 那一半用 WP398 先做的那份（`userAgentFor` / `isAmazonHost` / `AMAZON_DOMAINS`，WP398 自己的测试钉了基本形状）；
+ * 这里补本单读页用到的那几处：商品页 / 搜索页 / 联想词 / 图片都带标识、冒名域名不算、站点表和 brand-intake 对得上。
+ */
+describe('WP394 · Amazon 请求自报身份（复用 WP398 的那份）', () => {
+  it('商品页、搜索页、联想词、图片资源：UA 末尾带 Agent/AgentsWorkshop，Chromium 原有段照留、只加一次', () => {
     for (const url of [
       'https://www.amazon.com/dp/B0TESTRG01',
       'https://www.amazon.co.uk/s?k=ebike',
@@ -31,33 +32,25 @@ describe('WP394 · Amazon 请求自报身份', () => {
       'https://completion.amazon.com/api/2017/suggestions?prefix=a',
       'https://m.media-amazon.com/images/I/71x.jpg',
       'https://images-na.ssl-images-amazon.com/images/G/01/x.js',
-      'https://fls-na.amazon.com/1/batch/1/OE/',
     ]) {
-      const ua = userAgentFor(url, UA)
-      expect(ua.endsWith(` ${AMAZON_AGENT_TOKEN}`)).toBe(true)
-      expect(ua.startsWith(CLEAN)).toBe(true)
+      const ua = userAgentFor(url, CLEAN)
+      expect(ua).toBe(`${CLEAN} ${AMAZON_AGENT_TOKEN}`)
+      expect(userAgentFor(url, ua)).toBe(ua)
+      expect(isAmazonUrl(url)).toBe(true)
     }
-    expect(AMAZON_AGENT_TOKEN).toBe('Agent/AgentsWorkshop')
   })
 
-  it('别的域名照旧是干净的 UA（不带标识）；冒名的域名不算 Amazon', () => {
+  it('别的域名、冒名的域名不带标识', () => {
     for (const url of [
       'https://www.google.com/search?q=x',
       'https://aventon.com/products.json',
       'https://amazon.com.evil.test/',
       'https://notamazon.com/',
-      'https://aws.amazon.com.example.org/',
       'not a url',
     ]) {
       expect(isAmazonUrl(url)).toBe(false)
-      expect(userAgentFor(url, UA)).toBe(CLEAN)
+      expect(userAgentFor(url, CLEAN)).toBe(CLEAN)
     }
-  })
-
-  it('标识只加一次（UA 里已经有了不重复）', () => {
-    const once = amazonUserAgent(UA)
-    expect(amazonUserAgent(once)).toBe(once)
-    expect(once.split(AMAZON_AGENT_TOKEN)).toHaveLength(2)
   })
 
   it('站点表和 brand-intake 的 Amazon 站点表对得上（那边加了站，这边一起加）', () => {
@@ -66,9 +59,9 @@ describe('WP394 · Amazon 请求自报身份', () => {
       'utf8',
     )
     const table = /const HOST_COUNTRY[\s\S]*?\n\]/.exec(src)?.[0] ?? ''
-    const suffixes = [...table.matchAll(/\['(amazon\.[a-z.]+)'/g)].map((m) => m[1])
+    const suffixes = [...table.matchAll(/\['(amazon\.[a-z.]+)'/g)].map((m) => m[1] as string)
     expect(suffixes.length).toBeGreaterThan(15)
-    expect([...AMAZON_SITE_SUFFIXES].sort()).toEqual([...suffixes].sort())
+    for (const s of suffixes) expect(AMAZON_DOMAINS).toContain(s)
   })
 })
 

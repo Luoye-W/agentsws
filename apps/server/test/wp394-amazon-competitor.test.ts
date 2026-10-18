@@ -293,8 +293,10 @@ describe('WP394 · 读 Amazon 前台那一块', () => {
     expect((await t.reader.searchCards({ marketplace: 'US', query: 'x' })).status).toBe('blocked')
     expect(t.amz.opened.length).toBe(before)
     expect(t.reader.ready()).toBe(false)
-    // 暂停过了才再读
-    t.at('2026-10-19T08:00:00.000Z')
+    // 暂停 24 小时（和 WP398 联想词那一路一样长），过了才再读
+    t.at('2026-10-20T01:00:00.000Z')
+    expect(t.reader.ready()).toBe(false)
+    t.at('2026-10-20T02:00:00.000Z')
     expect(t.reader.ready()).toBe(true)
   })
 
@@ -306,39 +308,10 @@ describe('WP394 · 读 Amazon 前台那一块', () => {
     expect(t.amz.opened).toEqual([])
   })
 
-  it('WP396 那一口（原文）同样先设地址；联想词读得到', async () => {
+  it('WP396 那一口（原文）同样先设地址', async () => {
     const t = setup()
     const raw = await t.reader.readProduct({ marketplace: 'US', asin: 'B0TESTRG01' })
     expect(raw.status).toBe('ok')
-    const sug = createAmazonFrontReader({
-      workspace_id: WS,
-      channel: () => ({
-        ...t.amz.channel,
-        open: async (input) => ({
-          ok: true,
-          status: 200,
-          final_url: input.url,
-          page: {
-            signals: sig(),
-            text: `<html><body><pre>${fx('suggest.json')}</pre></body></html>`,
-            truncated: false,
-          },
-        }),
-      }),
-      page: (task) => task(),
-      nowMs: () => 0,
-      state: () => ({}),
-      saveState: () => {},
-    })
-    const got = await sug.suggest({ marketplace: 'US', prefix: 'rival gear e' })
-    expect(got).toEqual({
-      status: 'ok',
-      words: [
-        'rival gear ebike',
-        'rival gear electric bike for adults',
-        'rival gear ebike battery',
-      ],
-    })
   })
 })
 

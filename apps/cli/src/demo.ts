@@ -69,6 +69,7 @@ import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
 import { demoAmazon } from './demo-amazon.js'
+import { DEMO_AMAZON_LISTINGS, demoAmazonAutocompleteReader } from './demo-amazon-keywords.js'
 import { DEMO_COMPETITORS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
 
@@ -1584,6 +1585,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * （没给 readNet），工具照实说「演示环境没装出网读取」。
      */
     readonlyBrowser: readonlyBrowserStandIn(),
+    /*
+     * WP398：Amazon 词库在 demo 里读的是录好的联想词与几条现编的 Listing 文本——不起浏览器、不连 Amazon。
+     */
+    amazonAutocompleteReader: () => demoAmazonAutocompleteReader(),
+    amazonKeywordListings: async () => [...DEMO_AMAZON_LISTINGS],
     /*
      * WP381：网站 / 商品体检在 demo 里抓的是**现编的**几页（按路径认，哪个域名都一样），渲染后那一份也是替身——
      * 不起浏览器、不出网。现编的店：robots 挡了 GPTBot、商品页只有 PerplexityBot 进不去；收纳箱的价格只靠 JS 才出现、

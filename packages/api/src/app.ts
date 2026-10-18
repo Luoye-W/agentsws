@@ -14,6 +14,7 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
 import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
+import { amazonKeywordRoutes } from './routes/amazon-keywords.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -319,6 +320,8 @@ export function collectRoutes(): Route[] {
     ...siteHealthRoutes(),
     // WP392：竞品监控。`/v1/competitor-watch*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...competitorWatchRoutes(),
+    // WP398：Amazon 词库。`/v1/amazon-keywords*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonKeywordRoutes(),
   ]
 }
 
