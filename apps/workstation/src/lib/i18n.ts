@@ -2590,6 +2590,9 @@ const zh: Table = {
   'kol.contact.source.channel_about': '来自频道「关于」页',
   'kol.detail.outreach': '起一封开发信',
   'kol.detail.outreach.pitch': '一句话说我们是做什么的（这句会原样写进信里）',
+  'kol.detail.outreach.prefilled': '两格从品牌档案预填，可改；改了下次照这个填。',
+  'kol.detail.outreach.no_mailbox': '还没连发信邮箱：信能起草，批了也发不出去。',
+  'kol.detail.outreach.connect_mailbox': '连邮箱',
   'kol.detail.outreach.product': '想聊的那个产品',
   'kol.detail.outreach.draft': '起草',
   'kol.detail.outreach.auto': '已经自动发出去了。',
@@ -6852,6 +6855,11 @@ const en: Table = {
   'kol.contact.source.channel_about': 'from channel About page',
   'kol.detail.outreach': 'Draft an outreach email',
   'kol.detail.outreach.pitch': 'One line about what you do (goes into the email verbatim)',
+  'kol.detail.outreach.prefilled':
+    'Prefilled from your brand profile — edit freely; edits become the new default.',
+  'kol.detail.outreach.no_mailbox':
+    'No sending mailbox yet: drafts work, but approved emails can’t go out.',
+  'kol.detail.outreach.connect_mailbox': 'Connect mailbox',
   'kol.detail.outreach.product': 'Product you want to pitch',
   'kol.detail.outreach.draft': 'Draft',
   'kol.detail.outreach.auto': 'Sent automatically.',

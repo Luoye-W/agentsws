@@ -5246,7 +5246,26 @@ export interface KolOutreachData extends KolStagedData {
   forbidden_hits: string[]
   missing_vars: string[]
   quota: { cap: number; sent_today: number; remaining: number; allowed: boolean }
+  /** WP416：还没连发信邮箱（卡出了，批了也发不出去）。 */
+  needs_mailbox?: boolean
 }
+
+/** WP416（决策 531）：起草那两格的默认值。 */
+export interface KolOutreachDefaultsData {
+  brand_pitch: string
+  product: string
+  source: 'saved' | 'brand_profile' | 'none'
+  mailbox_connected: boolean
+}
+
+export const getKolOutreachDefaults = (assignment?: string): Promise<KolOutreachDefaultsData> =>
+  api('/v1/kol/outreach/defaults', withAssignment(assignment))
+
+export const saveKolOutreachDefaults = (
+  input: { brand_pitch?: string; product?: string },
+  assignment?: string,
+): Promise<KolOutreachDefaultsData> =>
+  api('/v1/kol/outreach/defaults', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
 export interface KolImportData {
   summary: string
@@ -5360,7 +5379,7 @@ export const draftKolOutreach = (
     creator_id: string
     channel: KolChannelId
     product: string
-    /** 一句话说我们是做什么的。**服务端不编一个**，缺了就不起草。 */
+    /** 一句话说我们是做什么的。不给服务端从品牌档案补（WP416）；都没有就不起草。 */
     brand_pitch?: string
     reason?: string
     step?: 'first' | 'follow_up' | 'final'

@@ -17,12 +17,12 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint, SafetyNote } from '@/components/ui/hint'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -34,6 +34,7 @@ import {
   getKolCollaborations,
   getKolCreator,
   getKolCreators,
+  getKolOutreachDefaults,
   importKolTable,
   type KolCampaignData,
   type KolChannelId,
@@ -42,6 +43,7 @@ import {
   type KolSearchData,
   planKolCampaign,
   revealKolContact,
+  saveKolOutreachDefaults,
   searchKolCreators,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -444,10 +446,22 @@ function CreatorDetail({
   const [email, setEmail] = useState('')
   const [product, setProduct] = useState('')
   /*
-   * "我们是做什么的"这句话**只有用户自己知道**，服务端不编一个（编出来最好也是废话）。
-   * 所以这里是一个真的输入框，而不是一个可以省略的参数。
+   * WP416（决策 531，自查 kol U17）：「我们是做什么的」「想聊的产品」两格**预填**——存过的优先，
+   * 没存过从品牌档案拿；改了的起草成功后记成品牌设置，下一个红人就不用再填一遍。
    */
   const [pitch, setPitch] = useState('')
+  const defaults = useQuery({
+    queryKey: ['kol-outreach-defaults', assignment],
+    queryFn: () => getKolOutreachDefaults(assignment),
+  })
+  const prefilled = useRef(false)
+  useEffect(() => {
+    const d = defaults.data
+    if (d === undefined || prefilled.current) return
+    prefilled.current = true
+    setPitch((p) => (p === '' ? d.brand_pitch : p))
+    setProduct((p) => (p === '' ? d.product : p))
+  }, [defaults.data])
   const [draft, setDraft] = useState<KolOutreachData | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
@@ -488,6 +502,17 @@ function CreatorDetail({
     onSuccess: (out) => {
       setError(undefined)
       setDraft(out)
+      // 两格跟存着的不一样：记成品牌设置（下一个红人预填它）
+      const d = defaults.data
+      if (
+        out.staged &&
+        d !== undefined &&
+        (d.brand_pitch !== pitch.trim() || d.product !== product.trim())
+      )
+        void saveKolOutreachDefaults(
+          { brand_pitch: pitch.trim(), product: product.trim() },
+          assignment,
+        ).then(() => client.invalidateQueries({ queryKey: ['kol-outreach-defaults'] }))
       setReceipt(
         out.staged
           ? out.auto_approved === true
@@ -546,8 +571,10 @@ function CreatorDetail({
 
         {/* ② 联系方式：**只有脱敏形态**（这个组件里拿不到明文，服务端也不给） */}
         <section data-testid="kol-contacts">
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">
+          <h4 className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
             {t('kol.detail.contacts')}
+            {/* WP416（自查 kol U10）：「只显示脱敏形态…」收进问号，不常驻一整句 */}
+            <Hint text={t('kol.detail.contacts.note')} testId="kol-contacts-note" />
           </h4>
           {view.contacts.length === 0 ? (
             <p className="text-muted-foreground">{t('kol.detail.contacts.empty')}</p>
@@ -564,8 +591,6 @@ function CreatorDetail({
               ))}
             </ul>
           )}
-          {/* WP157：这是安全承诺（真地址在哪、谁取得到），按 36 §7 用盾牌那一行 */}
-          <SafetyNote text={t('kol.detail.contacts.note')} className="mt-1" />
           <KolError error={error} testid="kol-detail-error" />
           <KolReceipt text={receipt} testid="kol-detail-receipt" />
           <div className="mt-1 flex items-center gap-2">
@@ -601,20 +626,38 @@ function CreatorDetail({
             <Input
               value={pitch}
               placeholder={t('kol.detail.outreach.pitch')}
+              aria-label={t('kol.detail.outreach.pitch')}
               data-testid="kol-outreach-pitch"
               onChange={(e) => {
                 setPitch(e.target.value)
               }}
             />
-            <div className="flex items-center gap-2">
-              <Input
-                value={product}
-                placeholder={t('kol.detail.outreach.product')}
-                data-testid="kol-outreach-product"
-                onChange={(e) => {
-                  setProduct(e.target.value)
-                }}
-              />
+            <Input
+              value={product}
+              placeholder={t('kol.detail.outreach.product')}
+              aria-label={t('kol.detail.outreach.product')}
+              data-testid="kol-outreach-product"
+              onChange={(e) => {
+                setProduct(e.target.value)
+              }}
+            />
+            {defaults.data?.source === 'brand_profile' ? (
+              <p className="text-[11px] text-muted-foreground" data-testid="kol-outreach-prefilled">
+                {t('kol.detail.outreach.prefilled')}
+              </p>
+            ) : null}
+            {defaults.data?.mailbox_connected === false ? (
+              <p
+                className="flex flex-wrap items-center gap-1 text-[11px] text-[var(--ws-warn)]"
+                data-testid="kol-outreach-no-mailbox"
+              >
+                {t('kol.detail.outreach.no_mailbox')}
+                <Link to="/connections?service=imap_smtp" className="underline underline-offset-2">
+                  {t('kol.detail.outreach.connect_mailbox')}
+                </Link>
+              </p>
+            ) : null}
+            <div className="flex justify-end">
               <Button
                 size="xs"
                 data-testid="kol-outreach-go"
@@ -643,6 +686,11 @@ function CreatorDetail({
                       cap: draft.quota.cap,
                     })}
                   </p>
+                  {draft.needs_mailbox === true ? (
+                    <p className="mt-1 text-[11px] text-[var(--ws-warn)]">
+                      {t('kol.detail.outreach.no_mailbox')}
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 // 禁承诺是 block 不是转人审：这一封根本没进队列，理由照实说
