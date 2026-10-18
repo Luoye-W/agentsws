@@ -565,6 +565,72 @@ const DROP_AT_PACKAGE_ROOT = /^(readme|changelog|changes|history)(\.(md|markdown
  */
 export const STRIP_PACKAGE_PATHS = ['@deepseek-ai/dsh-experimental-inspector/lib/devtools']
 
+/**
+ * beta.13：有的包把自己的依赖打进包里（例：feedsmith 的 `dist/node_modules/trousse`，dist 里用相对路径
+ * `../node_modules/trousse/...` 引）。electron-builder 收依赖时把包内**不在包根**的 `node_modules` 目录整个丢掉，
+ * bundle 时就解析不到。这里按包里真有的每个包，从仓库里同名同版本的原包把这种目录补回来（只补缺的，不覆盖）。
+ * `sourceOf(name, version)` 返回原包目录（找不到回 undefined）；`maxDepth` 只往下找几层，免得扫太深。
+ */
+export function restoreVendoredNodeModules(nodeModules, sourceOf, { maxDepth = 3 } = {}) {
+  const restored = []
+  const packages = []
+  for (const name of existsSync(nodeModules) ? readdirSync(nodeModules) : []) {
+    if (name.startsWith('.')) continue
+    if (name.startsWith('@')) {
+      for (const sub of readdirSync(join(nodeModules, name))) packages.push(`${name}/${sub}`)
+    } else packages.push(name)
+  }
+  for (const name of packages) {
+    const dest = join(nodeModules, ...name.split('/'))
+    const pkgJson = join(dest, 'package.json')
+    if (!existsSync(pkgJson)) continue
+    let version
+    try {
+      version = JSON.parse(readFileSync(pkgJson, 'utf8')).version
+    } catch {
+      continue
+    }
+    const src = sourceOf(name, version)
+    if (src === undefined || !existsSync(src)) continue
+    const walk = (dir, rel, depth) => {
+      if (depth > maxDepth) return
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`
+        if (entry.name === 'node_modules') {
+          // 包根下的 node_modules 是包管理器放依赖的地方，不归这里管
+          if (rel === '') continue
+          const target = join(dest, ...childRel.split('/'))
+          if (!existsSync(target)) {
+            cpSync(join(dir, entry.name), target, { recursive: true, dereference: true })
+            restored.push(`${name}/${childRel}`)
+          }
+          continue
+        }
+        walk(join(dir, entry.name), childRel, depth + 1)
+      }
+    }
+    walk(src, '', 0)
+  }
+  return restored
+}
+
+/** 仓库里同名同版本的原包：先找 pnpm 的 `.pnpm/<名>@<版本>/node_modules/<名>`，再找根 node_modules。 */
+export function repoPackageDir(name, version) {
+  const store = join(REPO_ROOT, 'node_modules', '.pnpm')
+  const prefix = `${name.replace('/', '+')}@${version}`
+  if (existsSync(store)) {
+    for (const dir of readdirSync(store)) {
+      if (dir === prefix || dir.startsWith(`${prefix}_`)) {
+        const candidate = join(store, dir, 'node_modules', ...name.split('/'))
+        if (existsSync(candidate)) return candidate
+      }
+    }
+  }
+  const top = join(REPO_ROOT, 'node_modules', ...name.split('/'))
+  return existsSync(top) ? top : undefined
+}
+
 export function stripPackagePaths(nodeModules, paths = STRIP_PACKAGE_PATHS) {
   let files = 0
   let bytes = 0
@@ -771,6 +837,10 @@ export default async function afterPack(context) {
     join(REPO_ROOT, 'node_modules', '.pnpm'),
   ])
   log(`补齐依赖 ${added.length} 个${added.length === 0 ? '' : `：${added.join(', ')}`}`)
+  const vendored = restoreVendoredNodeModules(join(appDir, 'node_modules'), repoPackageDir)
+  log(
+    `补回包内自带的依赖目录 ${vendored.length} 个${vendored.length === 0 ? '' : `：${vendored.join(', ')}`}`,
+  )
 
   const stagedDir = join(DESKTOP_ROOT, 'vendor', 'natives', target)
   if (!existsSync(stagedDir))
