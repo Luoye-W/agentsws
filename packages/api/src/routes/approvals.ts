@@ -10,6 +10,12 @@ import type {
 } from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
+import {
+  type CardFollowResult,
+  FOLLOW_LIMIT,
+  followDecision,
+  followReason,
+} from '../card-follow.js'
 import { ApiError, normalizeError } from '../errors.js'
 import {
   assignmentOf,
@@ -94,6 +100,15 @@ const DecideBody = z.object({
    * `409 similar_exists`；"我这个不一样，仍新建"要写一句为什么。
    */
   duplicate_ack: DuplicateAck.optional(),
+})
+
+/** WP414：撤回跟着处理的那几张（id 由工作台那条「另外 N 张也一并…」带回来）。 */
+const FollowUndoBody = z.object({ ids: z.array(z.string().min(1)).min(1).max(FOLLOW_LIMIT) })
+
+/** WP414：事后补理由（快捷理由 chip 或一句话）；`follower_ids` = 跟着处理的那几张一起补。 */
+const ReasonBody = z.object({
+  reason: z.string().trim().min(1).max(300),
+  follower_ids: z.array(z.string().min(1)).max(FOLLOW_LIMIT).optional(),
 })
 
 const KINDS = [
@@ -775,14 +790,127 @@ export function approvalRoutes(): Route[] {
             out,
           )) as Todo | undefined
         }
+        /*
+         * WP414：同类卡跟着这一下——只跟工作台里人亲手点的「不要 / 稍后 / 通过」（指导、选择题、
+         * 卡片回调都不跟）。「不要 / 稍后」照办并记账；「通过」只把同类列回去，绝不自动发。
+         */
+        let follow: CardFollowResult | undefined
+        if (
+          via === 'workstation' &&
+          input.instruction === undefined &&
+          input.selected_option_id === undefined &&
+          (deckAction === 'reject' || deckAction === 'snooze' || deckAction === 'approve')
+        ) {
+          try {
+            follow = await followDecision(deps, {
+              item: out,
+              person_id: p.person_id,
+              action: deckAction,
+              trace_id: c.get('rctx').trace_id,
+            })
+          } catch {
+            // 跟随是锦上添花：找同类出错不影响这一次决定
+            follow = undefined
+          }
+        }
         return ok(c, {
           ...redactItem(out, p.person_id),
+          ...optional(follow, 'follow'),
           // 指导的作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更）；
           // v1 只原样回给调用方，路由到 24 / 05 的机器留给后续 WP（见交付报告）。
           ...optional(resolved.instruction_scope, 'instruction_scope'),
           ...optional(landed, 'instruction_proposal'),
           ...optional(claimed, 'todo'),
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/approvals/:id/follow/undo',
+        operationId: 'undoApprovalFollow',
+        summary: 'WP414：撤回「跟着这张卡一并处理」的那几张（放回待处理）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: DECIDE,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '人亲手点的那张（带头的）' },
+        ],
+        body: FollowUndoBody,
+        returns: '{ restored: ApprovalItem[], skipped: string[] }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const leader = param(c, 'id')
+        await mustGet(deps, leader, p.workspace_id)
+        const input = await body(c, FollowUndoBody)
+        const reopen = deps.approvals.reopen
+        if (reopen === undefined) throw new ApiError('not_implemented', '这里撤不回来')
+        const restored: ApprovalItem[] = []
+        const skipped: string[] = []
+        for (const id of new Set(input.ids)) {
+          const item = await deps.approvals.get(id)
+          // 只认「跟着这张、由本人那一下带动」的；别的（自己点的、别人点的、已经撤过的）一律跳过
+          if (
+            item === undefined ||
+            item.workspace_id !== p.workspace_id ||
+            item.decision?.followed?.leader_id !== leader ||
+            item.decision.by !== p.person_id
+          ) {
+            skipped.push(id)
+            continue
+          }
+          const back = await reopen.call(deps.approvals, id, p.person_id, {
+            reason: '撤回「跟着处理」',
+          })
+          if (back === undefined) skipped.push(id)
+          else restored.push(redactItem(back, p.person_id))
+        }
+        return ok(c, { restored, skipped })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/approvals/:id/reason',
+        operationId: 'addApprovalReason',
+        summary: 'WP414：决定之后补一句理由（「不要」理由可选；跟着处理的那几张一起补）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: DECIDE,
+        params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
+        body: ReasonBody,
+        returns: '{ item: ApprovalItem, followers: number }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const id = param(c, 'id')
+        await mustGet(deps, id, p.workspace_id)
+        const input = await body(c, ReasonBody)
+        const annotate = deps.approvals.annotate
+        if (annotate === undefined) throw new ApiError('not_implemented', '这里补不了理由')
+        const out = await annotate.call(deps.approvals, id, p.person_id, { reason: input.reason })
+        if (out === undefined) throw new ApiError('conflict', '这张卡还没定，补不了理由')
+        let followers = 0
+        for (const fid of new Set(input.follower_ids ?? [])) {
+          const f = await deps.approvals.get(fid)
+          if (
+            f === undefined ||
+            f.workspace_id !== p.workspace_id ||
+            f.decision?.followed?.leader_id !== id ||
+            f.decision.by !== p.person_id
+          )
+            continue
+          const done = await annotate.call(deps.approvals, fid, p.person_id, {
+            reason: followReason(out.title, input.reason),
+          })
+          if (done !== undefined) followers += 1
+        }
+        return ok(c, { item: redactItem(out, p.person_id), followers })
       },
     ),
     ...(
