@@ -604,7 +604,10 @@ export class Executor {
   /**
    * 14 §4.1 / 31 §3.2 父子顺序：含子退款的回信，必须在所有子项 applied 之后才发。
    */
-  async applyApproval(item_id: string): Promise<ApprovalItem> {
+  async applyApproval(
+    item_id: string,
+    opts: { skip_cancel_window?: boolean } = {},
+  ): Promise<ApprovalItem> {
     const item = this.rt.store.getApproval(item_id)
     if (!item) throw new TxnError('not_found', item_id)
     if (!['approved', 'approved_edited', 'auto_approved'].includes(item.state))
@@ -623,11 +626,16 @@ export class Executor {
 
     // 出站也要单一施行者：同一个线程 / 目标不能被两个进程同时发。
     return this.withApplyLock(`${refKey(item.subject.object)}|outbound_draft`, (fencing_token) =>
-      this.deliverLocked(item, fencing_token),
+      this.deliverLocked(item, fencing_token, opts.skip_cancel_window === true),
     )
   }
 
-  private async deliverLocked(item: ApprovalItem, fencing_token: number): Promise<ApprovalItem> {
+  private async deliverLocked(
+    item: ApprovalItem,
+    fencing_token: number,
+    /** WP413：交出去之后还要人亲手点发送（插件填进页面）——不等取消窗口。 */
+    skipCancelWindow = false,
+  ): Promise<ApprovalItem> {
     for (const child_id of item.links.children) {
       const child = this.rt.store.getApproval(child_id)
       if (!child) throw new TxnError('not_found', child_id)
@@ -637,7 +645,11 @@ export class Executor {
 
     const now = this.rt.now()
     const decidedAt = item.decision?.at
-    if (decidedAt && ms(now) - ms(decidedAt) < this.rt.policy.cancel_window_sec * 1000)
+    if (
+      !skipCancelWindow &&
+      decidedAt &&
+      ms(now) - ms(decidedAt) < this.rt.policy.cancel_window_sec * 1000
+    )
       throw new TxnError('conflict', '批准后的取消窗口尚未结束')
 
     // WP199：拍板的人必须是合法审批人（快照绑定的名单或核对得上的升级追加者）

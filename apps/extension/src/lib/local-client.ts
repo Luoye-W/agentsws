@@ -26,6 +26,10 @@ import type {
   ActionSheetResponse,
   AdsAccountHint,
   AdsActionSettings,
+  PanelFillInput,
+  PanelFillResult,
+  PanelSkipInput,
+  PanelSnapshot,
   RedditReadNextResponse,
   RedditReadResultInput,
 } from '@agentsws/browser-action'
@@ -264,5 +268,47 @@ export function redditResult(
     { ...options, timeoutMs: Math.max(options.timeoutMs ?? LOCAL_TIMEOUT_MS, 30_000) },
     `/v1/extension/reddit/${encodeURIComponent(id)}/result`,
     { method: 'POST', body: input },
+  )
+}
+
+/* ── WP413：常驻侧边栏（`/v1/extension/panel*`）。令牌仍然只在这个文件里出现 ──────────── */
+
+/** 侧边栏一屏：进度 / 要你处理 / 记录。 */
+export function panelSnapshot(
+  options: LocalClientOptions,
+): Promise<LocalCallResult<PanelSnapshot>> {
+  return call<PanelSnapshot>(options, '/v1/extension/panel', { method: 'GET' })
+}
+
+const panelCardPath = (id: string, verb: 'fill' | 'skip'): string =>
+  `/v1/extension/panel/cards/${encodeURIComponent(id)}/${verb}`
+
+/** 在插件里批这张卡（改过就按改过的）并马上交给插件填进页面。 */
+export function panelFill(
+  options: LocalClientOptions,
+  id: string,
+  input: PanelFillInput,
+): Promise<LocalCallResult<PanelFillResult>> {
+  return call<PanelFillResult>(options, panelCardPath(id, 'fill'), { method: 'POST', body: input })
+}
+
+/** 不发（驳回这张卡）。 */
+export function panelSkip(
+  options: LocalClientOptions,
+  id: string,
+  input: PanelSkipInput,
+): Promise<LocalCallResult<{ ok: true }>> {
+  return call<{ ok: true }>(options, panelCardPath(id, 'skip'), { method: 'POST', body: input })
+}
+
+/** 没发出去的那一条再填一次。 */
+export function panelRefill(
+  options: LocalClientOptions,
+  job: string,
+): Promise<LocalCallResult<PanelFillResult>> {
+  return call<PanelFillResult>(
+    options,
+    `/v1/extension/panel/writes/${encodeURIComponent(job)}/refill`,
+    { method: 'POST', body: {} },
   )
 }

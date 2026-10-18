@@ -294,7 +294,8 @@ interface SinkSideDeps {
 type SinkApi = Pick<
   OutboundLog,
   'sinks' | 'inspect' | 'propose' | 'onDecided' | 'pause' | 'resume' | 'remove' | 'retry'
->
+> &
+  Required<Pick<OutboundLog, 'writesOf'>>
 
 /** 记录去处那一半：去处的增删改、读表头、出卡、写入与补写。 */
 function createSinkSide(deps: SinkSideDeps): { api: SinkApi; flushAll(): Promise<number> } {
@@ -647,6 +648,12 @@ function createSinkSide(deps: SinkSideDeps): { api: SinkApi; flushAll(): Promise
   return {
     api: {
       sinks: (ws) => store.sinks(ws).map(view),
+      // WP413：这一行写进各去处的状态（插件侧边栏「记录」那一块）
+      writesOf: (ws, record_id) =>
+        store
+          .sinks(ws)
+          .map((s) => store.write(s.id, record_id))
+          .filter((w): w is NonNullable<typeof w> => w !== undefined),
       inspect,
       propose,
       onDecided,

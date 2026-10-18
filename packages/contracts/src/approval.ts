@@ -358,7 +358,11 @@ export interface Decision {
   action: DecisionAction
   by: PersonId | 'mandate'
   at: Iso8601
-  via: 'workstation' | 'im_card' | 'email' | 'api' | 'batch'
+  /**
+   * 在哪儿点的。WP413（只加）：`extension` = 在浏览器插件的侧边栏里点的（插件令牌绑定的那个人；
+   * 只能由插件那几条路由写，工作台的 decide 路由不收这个值）。
+   */
+  via: 'workstation' | 'im_card' | 'email' | 'api' | 'batch' | 'extension'
   reason?: string
   edited_payload?: unknown
   edit_diff?: Diff

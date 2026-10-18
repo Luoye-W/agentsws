@@ -11,6 +11,8 @@ export * from './evidence.js'
 export * from './fingerprint.js'
 export * from './guard.js'
 export * from './pace.js'
+// WP413：插件常驻侧边栏（进度 / 要你处理 / 记录）
+export * from './panel.js'
 export * from './protocol.js'
 export * from './queue.js'
 // WP328：Reddit 只读（插件读收件箱与自家版块）

@@ -425,6 +425,14 @@ export type {
   ExtensionOnboardingPort,
 } from './routes/extension-onboarding.js'
 export { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
+// WP413：插件常驻侧边栏
+export type { ExtensionPanelFacts, ExtensionPanelPort } from './routes/extension-panel.js'
+export {
+  editedPayloadOf,
+  extensionPanelRoutes,
+  isPanelCard,
+  panelCardOf,
+} from './routes/extension-panel.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」

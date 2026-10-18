@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: false,
-    include: ['test/**/*.test.ts'],
+    // WP413：侧边栏的组件测试是 .tsx
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
   },
 })
