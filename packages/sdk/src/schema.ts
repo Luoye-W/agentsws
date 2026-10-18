@@ -81678,6 +81678,7 @@ export interface operations {
           }
           alert_words?: string[]
           tag_words?: string[]
+          external_backfill_days?: number
         }
       }
     }
