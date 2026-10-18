@@ -18,7 +18,7 @@
  * ```
  */
 import { spawn } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,7 +28,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
 const argOf = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
 // 审稿截图不进公开仓（WP383）：默认写到私有仓旁边那份 agentsws-internal 的 docs/assets/wp390，`--out` 可改
-const SHOTS = resolve(argOf('--out') ?? join(ROOT, '../../agentsws-internal/docs/assets/wp390'))
+// （主仓 ~/Documents/agentsws 的旁边，或 worktree ~/Documents/agentsws-wt/<名> 往上两层的旁边）
+const INTERNAL = [join(ROOT, '../agentsws-internal'), join(ROOT, '../../agentsws-internal')].find(
+  (d) => existsSync(d),
+)
+const SHOTS = resolve(
+  argOf('--out') ?? join(INTERNAL ?? join(ROOT, '../agentsws-internal'), 'docs/assets/wp390'),
+)
 const PORT = Number(argOf('--port') ?? '4399') || 4399
 const BASE = `http://127.0.0.1:${PORT}`
 const OWNER = 'wang@nordvolt.example'
