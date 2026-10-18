@@ -83,6 +83,7 @@ import type { ExtensionPort } from './routes/extension.js'
 import type { ExtensionActionsPort } from './routes/extension-actions.js'
 import type { ExtensionInstallPort } from './routes/extension-install.js'
 import type { ExtensionOnboardingPort } from './routes/extension-onboarding.js'
+import type { ExtensionPanelPort } from './routes/extension-panel.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { GenuiImageHostsPort } from './routes/genui-image-hosts.js'
 import type { HandoffPort } from './routes/handoff.js'
@@ -963,6 +964,11 @@ export interface GatewayDeps {
    * 没装配时那三条路由回 not_implemented——岗位页顶上就不出那张卡。
    */
   extensionOnboarding?: ExtensionOnboardingPort
+  /**
+   * WP413（T-INMO R1）：插件常驻侧边栏（进度 / 要你处理 / 记录）。没装配时 `/v1/extension/panel*` 回
+   * not_implemented，插件侧边栏照实说「先升级 Agents 工坊」。会话仍由 {@link extension} 那一套令牌判。
+   */
+  extensionPanel?: ExtensionPanelPort
   /**
    * WP328（docs/102）：Reddit 每日巡查（插件只读 + 工作台看 / 改 / 现在巡查 / 周汇总）。
    * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。

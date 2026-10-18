@@ -55,6 +55,7 @@ import { extensionRoutes } from './routes/extension.js'
 import { extensionActionRoutes } from './routes/extension-actions.js'
 import { extensionInstallRoutes } from './routes/extension-install.js'
 import { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
+import { extensionPanelRoutes } from './routes/extension-panel.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
@@ -297,6 +298,8 @@ export function collectRoutes(): Route[] {
     ...extensionInstallRoutes(),
     // WP360：需要插件的岗位引导装插件。`/v1/extension/needs*` 是定值段，与别处不撞
     ...extensionOnboardingRoutes(),
+    // WP413：插件常驻侧边栏。`/v1/extension/panel*` 是定值段，与别处不撞
+    ...extensionPanelRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
     // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径
