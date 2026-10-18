@@ -179,7 +179,9 @@ export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>
     entry.capability.startsWith('kol.service.') ||
     entry.capability.startsWith('support.service.') ||
     // WP304 / WP305（决策 445）：高级主题按店买断（`theme.premium.store`）
-    entry.capability.startsWith('theme.premium.')
+    entry.capability.startsWith('theme.premium.') ||
+    // WP405（私有 docs/107）：岗位更新订阅（`content.official.monthly`）
+    entry.capability.startsWith('content.official.')
   )
     return 'service'
   return 'data'

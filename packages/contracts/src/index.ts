@@ -49,6 +49,8 @@ export * from './computer-use.js'
 export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
 export * from './connection-directory.js'
+// WP405（私有 docs/107）：岗位更新订阅（订阅、按订阅放行的官方内容、更新摘要）
+export * from './content-official.js'
 // WP219（docs/90）：第三方内容更新（内容包格式、签名常量、卡与设置）
 export * from './content-updates.js'
 export * from './data.js'
