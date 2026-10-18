@@ -1,0 +1,639 @@
+/*
+ * WP413 侧边栏的样式。与设置页同一套 `--ws-*` 令牌（工作台 index.css 的同名值），浅 / 深两套跟着系统走。
+ * 侧边栏宽度由 Chrome 定（大约 320–500px），所以只排一列。
+ */
+
+:root {
+  --ws-paper: #f3f5f2;
+  --ws-card: #ffffff;
+  --ws-line: #ecefea;
+  --ws-ink: #263331;
+  --ws-body: #4b5550;
+  --ws-muted-fg: #6b746f;
+  --ws-brand: #007b67;
+  --ws-brand-ink: #045246;
+  --ws-brand-fg: #ffffff;
+  --ws-tint: #e8f3f0;
+  --ws-good: #158a4b;
+  --ws-good-bg: #e3f5ea;
+  --ws-warn: #b26e0b;
+  --ws-warn-bg: #fff4db;
+  --ws-bad: #c93b30;
+  --ws-bad-bg: #fde9e7;
+  --ws-surface: #f7f9f6;
+  --ws-radius-card: 16px;
+  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ws-paper: #0e100f;
+    --ws-card: #171a18;
+    --ws-line: #242825;
+    --ws-ink: #f1f4f0;
+    --ws-body: #c9d2cc;
+    --ws-muted-fg: #98a29b;
+    --ws-brand: #76fb91;
+    --ws-brand-ink: #b9ffc9;
+    --ws-brand-fg: #0e100f;
+    --ws-tint: #173c24;
+    --ws-good: #76fb91;
+    --ws-good-bg: #173c24;
+    --ws-warn: #f5c451;
+    --ws-warn-bg: #3a2e10;
+    --ws-bad: #ff7a6b;
+    --ws-bad-bg: #3d1d19;
+    --ws-surface: #1c201d;
+    --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ws-paper);
+  color: var(--ws-body);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ws-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 32px;
+  min-height: 100vh;
+}
+
+.ws-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-top-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.3;
+}
+
+.ws-top-text b {
+  color: var(--ws-ink);
+  font-size: 14px;
+}
+
+.ws-mark {
+  width: 22px;
+  height: 22px;
+  color: var(--ws-brand);
+  flex: none;
+}
+
+.ws-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ws-ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.ws-ico--sm {
+  width: 12px;
+  height: 12px;
+}
+
+.ws-muted {
+  color: var(--ws-muted-fg);
+  font-size: 12px;
+}
+
+.ws-clamp-1,
+.ws-clamp-2,
+.ws-clamp-4 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ws-clamp-1 {
+  -webkit-line-clamp: 1;
+}
+
+.ws-clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.ws-clamp-4 {
+  -webkit-line-clamp: 4;
+}
+
+/* ── 提示条 / 小标签 / 按钮 ───────────────────────────────────────── */
+
+.ws-note {
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--ws-tint);
+  color: var(--ws-brand-ink);
+  margin: 0;
+}
+
+.ws-note--warn {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+.ws-note--bad {
+  background: var(--ws-bad-bg);
+  color: var(--ws-bad);
+}
+
+.ws-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.ws-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--ws-surface);
+  color: var(--ws-muted-fg);
+  border: 1px solid var(--ws-line);
+  white-space: nowrap;
+}
+
+.ws-pill--good {
+  background: var(--ws-good-bg);
+  color: var(--ws-good);
+  border-color: transparent;
+}
+
+.ws-pill--warn,
+.ws-pill--wait {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+  border-color: transparent;
+}
+
+.ws-pill--bad {
+  background: var(--ws-bad-bg);
+  color: var(--ws-bad);
+  border-color: transparent;
+}
+
+.ws-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ws-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ws-btn--primary {
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+}
+
+.ws-btn--ghost {
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+  border: 1px solid var(--ws-line);
+}
+
+.ws-btn--sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.ws-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--ws-muted-fg);
+  padding: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ws-iconbtn:hover {
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+}
+
+.ws-input {
+  border: 1px solid var(--ws-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ws-ink);
+  background: var(--ws-card);
+  width: 100%;
+}
+
+.ws-input:focus {
+  outline: 2px solid var(--ws-brand);
+  outline-offset: -1px;
+}
+
+.ws-draft {
+  resize: vertical;
+  min-height: 110px;
+  line-height: 1.5;
+}
+
+.ws-code {
+  letter-spacing: 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ws-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 三块的切换 ───────────────────────────────────────────────────── */
+
+.ws-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+}
+
+.ws-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--ws-muted-fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 4px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.ws-tab--on {
+  background: var(--ws-card);
+  color: var(--ws-ink);
+  font-weight: 600;
+  box-shadow: var(--ws-shadow);
+}
+
+.ws-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+/* ── 一块的卡片 ───────────────────────────────────────────────────── */
+
+.ws-sec {
+  background: var(--ws-card);
+  border-radius: var(--ws-radius-card);
+  box-shadow: var(--ws-shadow);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ws-sec > b {
+  color: var(--ws-ink);
+}
+
+.ws-sec p {
+  margin: 0;
+}
+
+.ws-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ws-sec-head b {
+  color: var(--ws-ink);
+  font-size: 14px;
+}
+
+.ws-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ws-muted-fg);
+  padding: 18px 0;
+  margin: 0;
+}
+
+/* ① 进度 */
+
+.ws-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ws-ink);
+}
+
+.ws-parts,
+.ws-writes,
+.ws-cards,
+.ws-recs,
+.ws-sinks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-part {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  column-gap: 6px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-part:last-child {
+  border-bottom: 0;
+}
+
+.ws-part-name {
+  color: var(--ws-ink);
+}
+
+.ws-part-line {
+  font-variant-numeric: tabular-nums;
+  color: var(--ws-ink);
+}
+
+.ws-part-msg {
+  grid-column: 2 / 4;
+  color: var(--ws-muted-fg);
+  font-size: 11px;
+}
+
+.ws-part--good .ws-part-ico {
+  color: var(--ws-good);
+}
+
+.ws-part--wait .ws-part-ico,
+.ws-part--warn .ws-part-ico {
+  color: var(--ws-warn);
+}
+
+.ws-part--bad .ws-part-ico,
+.ws-part--bad .ws-part-line {
+  color: var(--ws-bad);
+}
+
+.ws-part--idle .ws-part-ico,
+.ws-part--idle .ws-part-line {
+  color: var(--ws-muted-fg);
+}
+
+.ws-now {
+  display: flex;
+  gap: 6px;
+}
+
+.ws-chip {
+  flex: 1;
+  background: var(--ws-surface);
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: var(--ws-muted-fg);
+  font-size: 12px;
+}
+
+.ws-chip b {
+  color: var(--ws-ink);
+  font-size: 15px;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ② 要你处理 */
+
+.ws-write {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--ws-surface);
+  margin-bottom: 6px;
+}
+
+.ws-write--good {
+  background: var(--ws-good-bg);
+  color: var(--ws-good);
+}
+
+.ws-write--bad {
+  background: var(--ws-bad-bg);
+  color: var(--ws-bad);
+}
+
+.ws-write--wait {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+.ws-write-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-write-label {
+  color: var(--ws-ink);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-write-state {
+  font-weight: 600;
+}
+
+.ws-bad-text {
+  color: var(--ws-bad);
+  font-size: 11px;
+}
+
+.ws-card-item {
+  border-bottom: 1px solid var(--ws-line);
+  padding: 8px 0;
+}
+
+.ws-card-item:last-child {
+  border-bottom: 0;
+}
+
+.ws-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--ws-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ws-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ws-post-title {
+  color: var(--ws-ink);
+  font-weight: 600;
+}
+
+.ws-quote {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--ws-line);
+  background: var(--ws-surface);
+  border-radius: 0 8px 8px 0;
+  color: var(--ws-body);
+  white-space: pre-wrap;
+}
+
+.ws-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ws-brand);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.ws-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ws-actions .ws-btn--primary {
+  flex: 1;
+}
+
+/* ③ 记录 */
+
+.ws-sink {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  column-gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-sink > :nth-child(n + 3) {
+  grid-column: 2;
+}
+
+.ws-sink--active .ws-ico {
+  color: var(--ws-good);
+}
+
+.ws-sink--broken .ws-ico,
+.ws-sink--paused .ws-ico,
+.ws-sink--pending_confirm .ws-ico {
+  color: var(--ws-warn);
+}
+
+.ws-sink-name {
+  color: var(--ws-ink);
+}
+
+.ws-rec {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ws-line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-rec:last-child {
+  border-bottom: 0;
+}
+
+.ws-rec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-rec p {
+  color: var(--ws-ink);
+}
+
+.ws-sinkres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

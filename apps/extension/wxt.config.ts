@@ -32,6 +32,8 @@ const releaseVersion = process.env.AGENTSWS_EXTENSION_VERSION?.trim()
  *    执行的那个后台标签页。
  * 6. WP328（Reddit）：`old.reddit.com` / `www.reddit.com` 也是可选权限，设置页点「连接 Reddit」才申请；
  *    只用来借你已登录的会话读品牌号自己的收件箱与自家版块的 `.json`（只读、不改已读）。
+ * 7. WP413（侧边栏）：`sidePanel` 由 WXT 按 `entrypoints/sidepanel/` 自动加进清单（`side_panel.default_path`），
+ *    这个权限没有任何安装提示；侧边栏页面和设置页一样只跟本插件的后台说话，后台只打 `127.0.0.1`。
  */
 export default defineConfig({
   // WXT 把 `@` 指向 srcDir，所以 srcDir 就是 `src/`——这样 `@/lib/*`、`@/ui/*`
@@ -70,8 +72,8 @@ export default defineConfig({
       // 本机服务。只有回环——插件不认识任何其它 http 目标。
       'http://127.0.0.1/*',
     ],
-    // `action` **没有** popup：按一下工具栏图标是开 / 关页面上那块面板
-    // （用户要一边看那个人的主页一边看体检结果，弹窗挡着就白做了）。
+    // `action` **没有** popup：三个红人平台上按一下工具栏图标是开 / 关页面上那块面板
+    // （用户要一边看那个人的主页一边看体检结果，弹窗挡着就白做了）；别的页面打开侧边栏（WP413）。
     // 有 popup 的话 `chrome.action.onClicked` 根本不会触发。
     action: { default_title: 'Agents 工坊助手' },
     // 设置页开在新标签里：那一页除了配对还有整段隐私说明，塞进小弹窗读不了。

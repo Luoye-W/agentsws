@@ -5,8 +5,8 @@
  * 没有 URL 这一格，所以「让这个插件去打别的服务器」这件事在协议层就没有入口。
  *
  * 另外两件它管的事：
- * - 工具栏图标被按了 → 让当前页面开 / 关那块面板（插件没有 popup 窗口，
- *   面板长在页面上，因为用户要一边看那个人的主页一边看体检结果）；
+ * - 工具栏图标被按了 → 三个红人平台上让当前页面开 / 关那块面板（插件没有 popup 窗口，
+ *   面板长在页面上，因为用户要一边看那个人的主页一边看体检结果）；别的页面打开侧边栏（WP413）；
  * - 每隔一会儿把排着的观测补上去（桌面应用可能是刚刚才打开的）。
  * - WP313：广告动作通道——连上了广告后台（可选权限）才每分钟问一次本机「有没有批好的活」，
  *   问到了就在看得见的广告后台标签页上做；页面顶上的横条点了停止 / 确认，消息回到这里。
@@ -14,6 +14,7 @@
  */
 
 import { defineBackground } from 'wxt/utils/define-background'
+import { onActionClick } from '@/lib/action-click'
 import { adsPanelStatus, recordAdsConsent } from '@/lib/ads/broker'
 import { noteActionClick } from '@/lib/ads/capture-grant'
 import type { RunControl } from '@/lib/ads/executor'
@@ -23,6 +24,13 @@ import { pollAdsOnce } from '@/lib/ads/poller'
 import type { BrokerDeps } from '@/lib/broker'
 import { flush, observe, pair, status, unpair } from '@/lib/broker'
 import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
+import {
+  type PanelBrokerDeps,
+  panelFillCard,
+  panelRefillWrite,
+  panelSkipCard,
+  panelState,
+} from '@/lib/panel/broker'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
 import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
@@ -108,15 +116,27 @@ export default defineBackground(() => {
     void pollReddit()
   })
 
-  // 工具栏图标：没有 popup，按一下是让页面上那块面板开 / 关。
+  // 工具栏图标：没有 popup。WP413：三个红人平台上照旧开 / 关页面上那块面板；别的页面打开侧边栏
+  // （进度 / 要你处理 / 记录）。WP313：执行器正在等截图授权时，这一下就是授权。
   chrome.action.onClicked.addListener((tab) => {
-    if (tab.id === undefined) return
-    // WP313：执行器正在这个标签页上等截图授权——这一下点击就是授权（activeTab），不开红人面板
-    if (noteActionClick(tab.id)) return
-    chrome.tabs.sendMessage(tab.id, { type: 'toggle-panel' }).catch(() => {
-      // 不是三个平台的页面 = 没有 content script 在听。静默。
+    onActionClick(tab, {
+      noteActionClick,
+      togglePanel: (id) => chrome.tabs.sendMessage(id, { type: 'toggle-panel' }),
+      // 必须在点击回调里同步调（只认用户手势）
+      openSidePanel: (windowId) => chrome.sidePanel.open({ windowId }),
+      openOptions: () => {
+        void chrome.runtime.openOptionsPage().catch(() => undefined)
+      },
     })
   })
+  // WP413：侧边栏要的那几件（看 / 填进页面 / 不发 / 再填一次），填完马上去领活
+  const panelDeps: PanelBrokerDeps = {
+    store: deps.store,
+    perms,
+    pollNow: () => {
+      void pollAds()
+    },
+  }
 
   chrome.runtime.onMessage.addListener(
     (message: ExtensionMessage, _sender, reply: (response: ExtensionResponse) => void): boolean => {
@@ -194,6 +214,27 @@ export default defineBackground(() => {
             return
           case 'update-check':
             void checkUpdate()
+            reply({ type: 'ack' })
+            return
+          case 'panel-state':
+            reply({ type: 'panel-state', state: await panelState(panelDeps) })
+            return
+          case 'panel-fill': {
+            const { type: _t, id, ...input } = message
+            reply({ type: 'panel-act', ...(await panelFillCard(panelDeps, id, input)) })
+            return
+          }
+          case 'panel-skip':
+            reply({
+              type: 'panel-act',
+              ...(await panelSkipCard(panelDeps, message.id, message.version)),
+            })
+            return
+          case 'panel-refill':
+            reply({ type: 'panel-act', ...(await panelRefillWrite(panelDeps, message.job)) })
+            return
+          case 'open-options':
+            void chrome.runtime.openOptionsPage().catch(() => undefined)
             reply({ type: 'ack' })
             return
           case 'ads-stop':
