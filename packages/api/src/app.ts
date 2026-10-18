@@ -34,6 +34,8 @@ import { clientErrorRoutes } from './routes/client-errors.js'
 // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力的"用我的 / 用 agentsws 的"开关
 import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
+// WP392：竞品监控（工作台 `/v1/competitor-watch*`）
+import { competitorWatchRoutes } from './routes/competitor-watch.js'
 import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
@@ -312,6 +314,8 @@ export function collectRoutes(): Route[] {
     ...redditWatchRoutes(),
     // WP337：重启并更新前看一眼 / 暂停全部 / 放开。`/v1/update/*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...updatePauseRoutes(),
+    // WP392：竞品监控。`/v1/competitor-watch*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...competitorWatchRoutes(),
   ]
 }
 

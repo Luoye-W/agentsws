@@ -184,6 +184,8 @@ const EVENT_KEYS = [
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
+  // WP392 竞品监控读一次（快照对比）
+  'competitor.read',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -232,6 +234,7 @@ const EVENT_KEYS = [
   'b2b.member_left',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
+  'pr.feed',
   'pr.release',
   'pr.external_post',
   // WP67 红人营销（48 §5.1）
@@ -319,6 +322,8 @@ const EXPECTED_KEYS = [
   'position_answer_components',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
+  // WP392：竞品监控比出了哪几种变化
+  'competitor_changes',
   'assistant_fanout_tasks',
   'assistant_fanout_notes',
   'secretary_kinds',
@@ -373,6 +378,7 @@ const EXPECTED_KEYS = [
   'b2b_handover',
   // WP78（60）
   'pr_mention',
+  'pr_feed',
   'pr_release',
   'pr_external_post',
   // WP57
@@ -952,6 +958,63 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'competitor.read': {
+      known(source, `${path}.${key}`, body, ['competitor', 'source', 'rows', 'complete', 'error'])
+      const kind = str(source, `${path}.${key}.source`, body.source)
+      if (kind !== 'shop' && kind !== 'amazon')
+        fail(source, `${path}.${key}.source`, '只认 shop / amazon')
+      if (!Array.isArray(body.rows)) fail(source, `${path}.${key}.rows`, '必须是列表')
+      const rows = body.rows.map((r, i) => {
+        const at2 = `${path}.${key}.rows[${i}]`
+        if (!isRec(r)) fail(source, at2, '必须是对象')
+        known(source, at2, r, [
+          'product',
+          'variant',
+          'title',
+          'price',
+          'compare_at',
+          'available',
+          'rating',
+          'reviews',
+          'created_at',
+        ])
+        const optNum = (k: string): number | undefined =>
+          r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
+        const variant = optStr(source, `${at2}.variant`, r.variant)
+        const created = optStr(source, `${at2}.created_at`, r.created_at)
+        const price = optNum('price')
+        const compare_at = optNum('compare_at')
+        const rating = optNum('rating')
+        const reviews = optNum('reviews')
+        if (r.available !== undefined && typeof r.available !== 'boolean')
+          fail(source, `${at2}.available`, '必须是 true / false')
+        return {
+          product: str(source, `${at2}.product`, r.product),
+          title: str(source, `${at2}.title`, r.title),
+          ...(variant === undefined ? {} : { variant }),
+          ...(price === undefined ? {} : { price }),
+          ...(compare_at === undefined ? {} : { compare_at }),
+          ...(typeof r.available === 'boolean' ? { available: r.available } : {}),
+          ...(rating === undefined ? {} : { rating }),
+          ...(reviews === undefined ? {} : { reviews }),
+          ...(created === undefined ? {} : { created_at: created }),
+        }
+      })
+      if (body.complete !== undefined && typeof body.complete !== 'boolean')
+        fail(source, `${path}.${key}.complete`, '必须是 true / false')
+      const error = optStr(source, `${path}.${key}.error`, body.error)
+      return {
+        at,
+        type: 'competitor.read',
+        competitor_read: {
+          competitor: str(source, `${path}.${key}.competitor`, body.competitor),
+          source: kind,
+          rows,
+          ...(typeof body.complete === 'boolean' ? { complete: body.complete } : {}),
+          ...(error === undefined ? {} : { error }),
+        },
+      }
+    }
     case 'shop.price_change': {
       known(source, `${path}.${key}`, body, ['who', 'product', 'price', 'graphql', 'note'])
       return {
@@ -1328,6 +1391,46 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(title === undefined ? {} : { title }),
           text: str(source, `${path}.${key}.text`, body.text),
           ...(author === undefined ? {} : { author }),
+        },
+      }
+    }
+    case 'pr.feed': {
+      known(source, `${path}.${key}`, body, [
+        'kind',
+        'status',
+        'label',
+        'entries',
+        'keywords',
+        'exclude',
+      ])
+      const kind = str(source, `${path}.${key}.kind`, body.kind)
+      if (kind !== 'google_alerts' && kind !== 'rss')
+        fail(source, `${path}.${key}.kind`, 'kind 只能是：google_alerts / rss')
+      const status = Number(body.status ?? 200)
+      if (!Number.isInteger(status)) fail(source, `${path}.${key}.status`, 'status 要是一个整数')
+      const rawEntries = Array.isArray(body.entries) ? body.entries : []
+      const entries = rawEntries.map((e: unknown, i: number) => {
+        const o = (e ?? {}) as Record<string, unknown>
+        return {
+          title: str(source, `${path}.${key}.entries[${i}].title`, o.title),
+          url: str(source, `${path}.${key}.entries[${i}].url`, o.url),
+          text: str(source, `${path}.${key}.entries[${i}].text`, o.text),
+        }
+      })
+      const words = (v: unknown): string[] | undefined =>
+        Array.isArray(v) ? v.map((x) => String(x)) : undefined
+      const keywords = words(body.keywords)
+      const exclude = words(body.exclude)
+      return {
+        at,
+        type: 'pr.feed',
+        feed: {
+          kind: kind as 'google_alerts' | 'rss',
+          status,
+          label: str(source, `${path}.${key}.label`, body.label),
+          entries,
+          ...(keywords === undefined ? {} : { keywords }),
+          ...(exclude === undefined ? {} : { exclude }),
         },
       }
     }
@@ -2612,6 +2715,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.assistant_dispatched_to,
   )
   if (dispatchedTo !== undefined) out.assistant_dispatched_to = dispatchedTo
+  // WP392：竞品监控比出了哪几种变化
+  const competitorChanges = optStrList(
+    source,
+    'expected.competitor_changes',
+    raw.competitor_changes,
+  )
+  if (competitorChanges !== undefined) out.competitor_changes = competitorChanges
   const fanoutTasks = optStrList(
     source,
     'expected.assistant_fanout_tasks',
@@ -2941,6 +3051,15 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       stated_on_card: 'bool',
     },
     // WP78（60）
+    pr_feed: {
+      ok: 'bool',
+      fetched: 'num',
+      kept: 'num',
+      unique: 'num',
+      label: 'str',
+      links_unwrapped: 'bool',
+      says_why: 'bool',
+    },
     pr_mention: {
       triage: 'str',
       sentiment: 'str',

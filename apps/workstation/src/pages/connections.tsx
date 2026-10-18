@@ -13,6 +13,7 @@
  * 凭据这条线：值从 `SecureForm` 的 FormData 出来 → `submitConnection` 发出去 → 结束。
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
  */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -41,6 +42,7 @@ import { SearchDataSection } from '@/components/connections/search-data'
 // WP265：Shopify 卡的「连接 Shopify」一键授权（老的客户端 ID 表单收进卡内「高级」）
 import { ShopifyConnect } from '@/components/connections/shopify-connect'
 import { useConnectAs } from '@/components/connections/use-connect-as'
+import { PrWatchSources, useMonitorAssignment } from '@/components/pr/pr-watch-sources'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
@@ -423,7 +425,10 @@ export function ConnectionsPage({
                     ),
                     advancedLabel: t('shopconnect.advanced'),
                   }
-                : {})}
+                : p.service === 'google_alerts'
+                  ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS
+                    { oneClick: <PrWatchCard /> }
+                  : {})}
               onStart={(auth_option) => {
                 setResults((prev) => {
                   const { [p.service]: _dropped, ...rest } = prev
@@ -483,4 +488,9 @@ export function ConnectionsPage({
       {ownerId === undefined || embedded ? null : <DataBackend assignment={asId} />}
     </div>
   )
+}
+
+/** WP386：连接页那张 Google Alerts 卡里的多条监控源（本人担着「信息监控」才看得到）。 */
+function PrWatchCard(): React.ReactNode {
+  return <PrWatchSources assignment={useMonitorAssignment()} />
 }

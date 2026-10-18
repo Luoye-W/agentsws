@@ -9,7 +9,7 @@ What each of the six Google connections does and how to set it up. The first one
 | Google Search Console | How your site does in Google Search | Same project as GA4, one more API to enable |
 | YouTube Data API | Search channels by keyword, read subscribers and topics | Just an API key; 10,000 units a day for the whole site |
 | Google Ads API | Ad performance, budgets and bids, pausing | The developer token needs review |
-| Google Alerts (brand monitoring) | Brand mentions in news, blogs and reviews | Free, no application, no key |
+| Google Alerts (information monitoring) | Mentions of you, competitors and your industry in news, blogs and forums | Free, no application, no key |
 
 Only need to read and send email? Skip Gmail and see [Connect a mailbox](help:conn-email) — one app password does it.
 
@@ -117,18 +117,38 @@ Covers Search, Shopping, PMax and YouTube ads: read performance, change budgets 
 
 The Merchant Center product feed also belongs to the ads job, but that side isn't connected yet — this card only handles ads for now.
 
-## Google Alerts (brand monitoring)
+## Google Alerts (information monitoring)
 
-Free, no application, no key: create an alert in Google Alerts, switch delivery to RSS, and paste the feed address here. It's the **only** news-monitoring source that needs no application, costs nothing and breaks nobody's terms.
+Information monitoring watches news, blogs and forums about your brand, your competitors and your industry, mostly through Google Alerts: one alert per thing you watch, delivered to **RSS**, with the RSS link pasted back to me. Free, no application, no key, and you can have many.
 
-It covers news, blogs and reviews. Reddit discussions are covered by the Reddit card's site-wide search — see [Community bots](help:conn-community).
+You don't have to come up with the list yourself: say "watch my competitors" and I'll draft one from your brand profile and competitors (each with its search query and a reason). Confirm it, then create the alerts.
 
-**How**
+**How to create one**
 
 1. Open [Google Alerts](https://www.google.com/alerts) and sign in with your Google account.
-2. Create an alert with your brand name as the keyword. One in Chinese and one in English is safer.
-3. Click the pencil next to the alert → set "Deliver to" to **RSS feed**.
-4. Copy the feed address and enter it in the form. It stays on this computer only.
+2. Type the query from the list, for example `"Aventon" -job`.
+3. Click "Show options" and set:
+   - How often: **As-it-happens**
+   - Sources: Automatic
+   - Language and region: as on the list
+   - How many: **All results** (the default "Only the best results" misses a lot)
+   - Deliver to: **RSS feed** (not your email)
+
+   > Screenshot slot: the expanded options, with "All results" and "RSS feed" selected.
+
+4. Click "Create alert". In your alert list, right-click the RSS icon next to it and copy the link.
+
+   > Screenshot slot: the RSS icon in the alert list.
+
+5. Paste the link back into the card in the chat (each row has its own box, or paste a batch at once). I fetch it right away; it only counts once it comes through.
+
+**If you paste the wrong thing**
+
+If the link doesn't start with `https://www.google.com/alerts/feeds/` and isn't a readable RSS feed, I'll tell you on the spot that the alert is still delivered by email — switch "Deliver to" to RSS in Google Alerts and copy it again.
+
+**Website feeds work too**
+
+Many blogs, forums and store blogs have their own RSS. Paste it in; it carries everything new on that site, so I filter locally for your brand and competitor names and only keep matches.
 
 **Links**
 
@@ -136,7 +156,9 @@ It covers news, blogs and reviews. Reddit discussions are covered by the Reddit 
 
 **Good to know**
 
-Google Alerts lags (a few hours to a day) and misses things — it isn't whole-web monitoring. When the feed can't be fetched, the panel says so plainly ("this feed wasn't fetched") and **never shows "0 mentions today"**: brand monitoring has to keep those two apart.
+- By default each feed is pulled once a day (after 9 am local time); anything missed while the computer was off is pulled once when it's back. Tell me if you want a different schedule.
+- A Google Alerts feed only keeps the latest ~20 items. If a pull brings 20 items that are all new, I switch that feed to every 4 hours and mention it in the brief.
+- Alerts lag (hours to a day) and miss things. When a feed can't be fetched it gets a red dot on the Connections card and the panel says it wasn't fetched — it **never shows 0**.
 
 ## FAQ
 

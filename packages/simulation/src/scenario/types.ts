@@ -212,6 +212,33 @@ export interface ScenarioAssistantDispatch {
   duty?: string
 }
 
+/** WP392（docs/104）：竞品监控读到的一行（一个商品的一个款式；Amazon 一个 ASIN 一行）。 */
+export interface ScenarioCompetitorRow {
+  product: string
+  variant?: string
+  title: string
+  price?: number
+  compare_at?: number
+  available?: boolean
+  rating?: number
+  reviews?: number
+  /** 商品创建时间（ISO；判「上新」用）。 */
+  created_at?: string
+}
+
+/**
+ * WP392（docs/104 §3.3）：竞品监控读了一次（替身进料口交回的几行）。和上一次的快照比出变化——
+ * 第一次只当底子；`complete: false` = 这次没读全（不判下架）；`error` = 这次没读到（照实记失败）。
+ */
+export interface ScenarioCompetitorRead {
+  competitor: string
+  /** `shop`（独立站）/ `amazon`（Amazon 对标款）。 */
+  source: 'shop' | 'amazon'
+  rows: ScenarioCompetitorRow[]
+  complete?: boolean
+  error?: string
+}
+
 /**
  * WP350（决策 900）：「我的助理」把一份资料（会议记录）拆给几个岗位。`drop` 是人在方案卡上勾掉的那几条
  * （卡内编号 `i1`…），`move` 是人改了归属的那几条（`i3=web-ops`）。
@@ -921,6 +948,19 @@ export interface ScenarioB2bMemberLeft {
  * `text` 决定这条走哪一路（`pr-core` 的 `triageMention` 判，场景递不进来一个
  * 结论）。判成客户问题 → 转客服卡，**公关不答**（60 分界行）。
  */
+/**
+ * WP386：一条监控源（docs/103 v2）。`entries` 是这条 feed 里的条目（世界里拼成真 feed 交给 feedsmith 解析）；
+ * `status: 404` = 提醒被删了——那时要照实说「没拉到」，不当成 0 条。
+ */
+export interface ScenarioPrFeed {
+  kind: 'google_alerts' | 'rss'
+  status: number
+  label: string
+  entries: { title: string; url: string; text: string }[]
+  keywords?: string[]
+  exclude?: string[]
+}
+
 export interface ScenarioPrMention {
   who: string
   source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
@@ -1104,6 +1144,8 @@ export type ScenarioEvent =
   | { at: string; type: 'assistant.fanout'; assistant_fanout: ScenarioAssistantFanout }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
+  /** WP392：竞品监控读了一次（和上一次快照比出变化；第一次只当底子）。 */
+  | { at: string; type: 'competitor.read'; competitor_read: ScenarioCompetitorRead }
   /** WP44：推一份未发布主题副本（造预览）。 */
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
@@ -1152,6 +1194,8 @@ export type ScenarioEvent =
   | { at: string; type: 'ads.attribution'; ads_attribution: ScenarioAdsAttribution }
   /** WP78：收一条外面说的话（60，判类不是参数：客户问题转客服）。 */
   | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
+  /** WP386：拉一条监控源（Google Alerts / 网站 RSS）；拉不到照实说。 */
+  | { at: string; type: 'pr.feed'; feed: ScenarioPrFeed }
   /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
   | { at: string; type: 'pr.release'; release: ScenarioPrRelease }
   /** WP171：B2B 某条职责提一个写动作（docs/84）。 */
@@ -1512,6 +1556,11 @@ export interface ScenarioExpected {
    */
   assistant_dispatched_to?: string[]
   /**
+   * WP392：竞品监控按顺序比出了哪几种变化（`price` / `new` / `removed`…）。同时钉住：第一次读不出任何变化、
+   * 竞品监控自己零写（不出卡、不改任何外部账号）。
+   */
+  competitor_changes?: string[]
+  /**
    * WP350：「我的助理」一次拆成多份——要做的事按顺序开到了哪几个岗位（岗位模板 id），
    * 同一批（一份资料一个来源批次）；助理自己零写。
    */
@@ -1767,6 +1816,19 @@ export interface ScenarioExpected {
    * `answered_by_pr` 必须是假——**公关不答客户的问题**；它一旦为真，
    * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
    */
+  /**
+   * WP386：拉那条监控源的结局（最后一次）。`ok: false` 时 `says_why` 要为真——拉不到要说一句为什么，
+   * 而不是一个 0。
+   */
+  pr_feed?: {
+    ok?: boolean
+    fetched?: number
+    kept?: number
+    unique?: number
+    label?: string
+    links_unwrapped?: boolean
+    says_why?: boolean
+  }
   pr_mention?: {
     triage?: string
     sentiment?: string

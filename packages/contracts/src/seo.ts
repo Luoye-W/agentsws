@@ -1070,6 +1070,8 @@ export interface GeoWatchPatch {
   /** 整份采用一份策略（设定卡「通过」/「改」走这里）。 */
   strategy?: GeoWatchStrategy
   brand_aliases?: string[]
+  /** WP392（docs/104 C8）：自家在 Amazon 上的商品（整份替换；空数组 = 清掉）。 */
+  brand_amazon?: BrandWatchAmazonItem[]
   competitors?: BrandWatchCompetitor[]
   keywords?: BrandWatchKeyword[]
   platforms?: AiPlatform[]

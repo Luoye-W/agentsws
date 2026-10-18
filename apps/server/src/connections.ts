@@ -309,6 +309,11 @@ export interface ConnectionsAssembly {
   connectedKinds(): string[]
   /** WP216：现在连着（active）的连接目录 service（`shopify_admin` …）——推断品牌的建站平台用。 */
   connectedServices(): string[]
+  /**
+   * WP386：某个服务的连接上**不是秘密**的那几格（如老的 Google Alerts 卡上那条 `feed_url`）——
+   * 启动时把老的单条 feed 迁进信息监控用。秘密格一律不回。
+   */
+  publicFieldsOf?(service: string): Record<string, string>[]
   close(): void
 }
 
@@ -1672,6 +1677,26 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
     connectedServices() {
       return [...new Set(cached.filter((c) => c.status === 'active').map((c) => c.service))]
+    },
+    publicFieldsOf(service) {
+      const entry = catalogEntry(service)
+      if (entry === undefined) return []
+      const open = new Set(entry.fields.filter((f) => !f.secret).map((f) => f.name))
+      const out: Record<string, string>[] = []
+      for (const c of cached) {
+        if (c.service !== service || c.id.startsWith(RECONNECT_PREFIX)) continue
+        let fields: Record<string, string> | undefined
+        try {
+          fields = secrets.get(c.id)
+        } catch {
+          fields = undefined
+        }
+        if (fields === undefined) continue
+        const picked: Record<string, string> = {}
+        for (const [k, v] of Object.entries(fields)) if (open.has(k)) picked[k] = v
+        out.push(picked)
+      }
+      return out
     },
     connectedKinds() {
       const kinds = new Set<string>()

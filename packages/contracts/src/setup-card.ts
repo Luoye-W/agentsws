@@ -212,6 +212,7 @@ export function setupRequestDedupeKey(workspace_id: string, target: string): str
  * | `im:wechat` | 个人微信扫码 |
  * | `im:feishu` / `im:dingtalk` | 团队机器人卡（WP324 已有） |
  * | `extension` | 浏览器插件配对码（WP324 已有） |
+ * | `google_account` | 在浏览器里登录 Google 账号（WP386：信息监控的前置；建 Google 提醒要用） |
  *
  * 连接目录里的那些（`imap_smtp` 发信邮箱、`ga4`、`meta_ads`…）照 WP324 按目录走，不在这张表里。
  */
@@ -238,6 +239,11 @@ export const BUILTIN_CONNECT_NEEDS: Readonly<Record<string, Omit<ConnectNeed, 'r
   'im:feishu': { kind: 'im:feishu', service: 'im:feishu', name: '飞书' },
   'im:dingtalk': { kind: 'im:dingtalk', service: 'im:dingtalk', name: '钉钉' },
   extension: { kind: 'extension', service: 'extension', name: '浏览器插件' },
+  /**
+   * WP386（docs/103 S5）：Google 账号——信息监控的前置（Google 提醒要在用户自己的 Google 账号里建）。
+   * 卡上让人在这台电脑的浏览器里登录 Google；已经连过任一 Google 服务（Gmail / GA4 / GSC…）就算有。
+   */
+  google_account: { kind: 'google_account', service: 'google_account', name: 'Google 账号' },
 }
 
 /** 内置那几样之一 → 一样「要连的」（认不出回 `undefined`）。 */

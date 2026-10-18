@@ -254,6 +254,9 @@ export type {
   CloudUnlinkResult,
 } from './routes/cloud-account.js'
 export { cloudAccountRoutes } from './routes/cloud-account.js'
+// WP392：竞品监控
+export type { CompetitorChangeRow, CompetitorWatchPort } from './routes/competitor-watch.js'
+export { competitorWatchRoutes } from './routes/competitor-watch.js'
 export {
   type ComputerUseActor,
   type ComputerUsePort,
@@ -672,6 +675,7 @@ export type {
   PrExternalPostInput,
   PrExternalPostRow,
   PrExternalPostView,
+  PrMentionFilter,
   PrMentionInput,
   PrMentionRow,
   PrMentionView,
@@ -679,6 +683,10 @@ export type {
   PrReleaseInput,
   PrReleaseRow,
   PrStagedView,
+  PrWatchLinkResult,
+  PrWatchSourcePatch,
+  PrWatchSourceRow,
+  PrWatchView,
 } from './routes/pr.js'
 export { prRoutes } from './routes/pr.js'
 export {

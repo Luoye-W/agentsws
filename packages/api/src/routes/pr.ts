@@ -31,6 +31,11 @@ import type {
   MentionSentiment,
   MentionSource,
   MentionTriage,
+  MonitorGroup,
+  MonitorPlanItem,
+  MonitorRun,
+  MonitorSettings,
+  MonitorSource,
   PersonId,
   PressQuote,
   PressRelease,
@@ -179,6 +184,71 @@ export interface PrMentionInput {
   text: string
   author?: string | undefined
   published_at?: Iso8601 | undefined
+  /** WP386：盯的哪一组 / 哪个竞品 / 哪条监控源（信息监控那一轮拉回来的才有）。 */
+  group?: MonitorGroup | undefined
+  competitor?: string | undefined
+  source_id?: string | undefined
+  /** WP386：feed 里这一条的 guid（去重用）。 */
+  guid?: string | undefined
+}
+
+/** WP386：提及清单的筛选（按组、竞品、来源、情绪、时间窗）。 */
+export interface PrMentionFilter {
+  sentiment?: MentionSentiment | undefined
+  triage?: MentionTriage | undefined
+  open?: boolean | undefined
+  group?: MonitorGroup | undefined
+  competitor?: string | undefined
+  /** 监控源 id（`reddit` = Reddit 那一路）。 */
+  source_id?: string | undefined
+  /** 按发布时间（含 since，不含 until）。 */
+  since?: Iso8601 | undefined
+  until?: Iso8601 | undefined
+  limit?: number | undefined
+}
+
+/* ── WP386：信息监控的监控源（多条 feed）──────────────────────────────── */
+
+/** 一条监控源在响应体里的样子：**地址只出脱敏那一格**（Google Alerts 的地址本身就是钥匙）。 */
+export interface PrWatchSourceRow extends Omit<MonitorSource, 'url'> {
+  url_masked: string
+}
+
+/** 信息监控那一块（连接卡、右栏、配置卡读它）。 */
+export interface PrWatchView {
+  sources: PrWatchSourceRow[]
+  plan: MonitorPlanItem[]
+  settings: MonitorSettings
+  /** 一句话（「17 条 · 1 条拉不到」/「还没有监控源」）。 */
+  summary: string
+  /** 拉不到的几条（红点）。 */
+  failed: number
+  /** 下一次什么时候拉（按设置算；没源 / 关了就没有）。 */
+  next_run_at?: Iso8601
+  last_run?: MonitorRun
+}
+
+/** 贴进来的一条链接的结局（一次可以贴一批）。 */
+export interface PrWatchLinkResult {
+  /** 贴的那一条（脱敏）。 */
+  input_masked: string
+  ok: boolean
+  /** 一句人话（成了说「已订上 Super73，拉到 20 条」；错了说为什么）。 */
+  message: string
+  source_id?: string
+  plan_item_id?: string
+  label?: string
+  kind?: MonitorSource['kind']
+}
+
+export interface PrWatchSourcePatch {
+  paused?: boolean | undefined
+  every_hours?: number | undefined
+  group?: MonitorGroup | undefined
+  label?: string | undefined
+  competitor?: string | undefined
+  keywords?: string[] | undefined
+  exclude?: string[] | undefined
 }
 
 export interface PrReleaseInput {
@@ -210,14 +280,7 @@ export interface PrExternalPostInput {
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
 
 export interface PrPort {
-  mentions(
-    actor: PrActor,
-    filter: {
-      sentiment?: MentionSentiment | undefined
-      triage?: MentionTriage | undefined
-      open?: boolean | undefined
-    },
-  ): MaybePromise<{ rows: PrMentionRow[] }>
+  mentions(actor: PrActor, filter: PrMentionFilter): MaybePromise<{ rows: PrMentionRow[] }>
   /**
    * 收一条新提及：去重落库 → `triageMention` 判类 → 按类出卡。
    *
@@ -257,6 +320,22 @@ export interface PrPort {
     actor: PrActor,
     filter: { stage?: MediaContact['stage'] | undefined; beat?: string | undefined },
   ): MaybePromise<{ rows: PrContactRow[] }>
+
+  /* ── WP386：信息监控的监控源（没装就 501）──────────────────────────── */
+  watchView?(actor: PrActor): MaybePromise<PrWatchView>
+  /** 贴一批链接（换行 / 空格分开）：每条当场拉一次，拉到了才算配好；按 feed 标题对上清单上的哪一行。 */
+  watchAddLinks?(
+    actor: PrActor,
+    input: { links: string; plan_item_id?: string | undefined; group?: MonitorGroup | undefined },
+  ): Promise<{ results: PrWatchLinkResult[]; view: PrWatchView }>
+  watchRunNow?(actor: PrActor): Promise<{ run?: MonitorRun; message: string; view: PrWatchView }>
+  watchUpdateSource?(
+    actor: PrActor,
+    id: string,
+    patch: PrWatchSourcePatch,
+  ): MaybePromise<PrWatchView>
+  watchRemoveSource?(actor: PrActor, id: string): MaybePromise<PrWatchView>
+  watchUpdateSettings?(actor: PrActor, patch: Partial<MonitorSettings>): MaybePromise<PrWatchView>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -284,6 +363,7 @@ function actorOf(c: Parameters<typeof principalOf>[0]): PrActor {
 
 const SOURCES = ['news', 'reddit', 'forum', 'review', 'social', 'blog', 'other'] as const
 const SENTIMENTS = ['negative', 'neutral', 'positive'] as const
+const GROUPS = ['own', 'competitor', 'industry', 'site'] as const
 const TRIAGES = ['customer_issue', 'reputation', 'media_inquiry', 'praise', 'noise'] as const
 const RELEASE_STATUSES = ['draft', 'approved', 'distributed', 'withdrawn'] as const
 const POST_STATUSES = ['draft', 'approved', 'published', 'blocked', 'removed'] as const
@@ -357,6 +437,47 @@ const ExternalPostBody = z.object({
   parent_permalink: z.string().min(1).max(500).optional(),
 })
 
+const WatchLinksBody = z.object({
+  /** 一条或一批（换行 / 空格 / 逗号分开）。 */
+  links: z.string().min(1).max(20_000),
+  plan_item_id: z.string().min(1).max(100).optional(),
+  group: z.enum(GROUPS).optional(),
+})
+
+const WatchSourceBody = z.object({
+  paused: z.boolean().optional(),
+  every_hours: z.number().int().min(1).max(168).optional(),
+  group: z.enum(GROUPS).optional(),
+  label: z.string().min(1).max(120).optional(),
+  competitor: z.string().max(120).optional(),
+  keywords: z.array(z.string().min(1).max(80)).max(50).optional(),
+  exclude: z.array(z.string().min(1).max(80)).max(50).optional(),
+})
+
+const WatchSettingsBody = z.object({
+  enabled: z.boolean().optional(),
+  day_start_hour: z.number().int().min(0).max(23).optional(),
+  default_every_hours: z.number().int().min(1).max(168).optional(),
+  reddit_queries: z.array(z.string().min(1).max(120)).max(20).optional(),
+})
+
+type WatchMethod =
+  | 'watchView'
+  | 'watchAddLinks'
+  | 'watchRunNow'
+  | 'watchUpdateSource'
+  | 'watchRemoveSource'
+  | 'watchUpdateSettings'
+
+/** 信息监控那几口（没装 = 501，说清楚）。 */
+function watchOf<K extends WatchMethod>(deps: GatewayDeps, name: K): NonNullable<PrPort[K]> {
+  const port = portOf(deps)
+  const fn = port[name]
+  if (fn === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配信息监控（监控源）。')
+  return fn.bind(port) as NonNullable<PrPort[K]>
+}
+
 export function prRoutes(): Route[] {
   return [
     route(
@@ -373,19 +494,47 @@ export function prRoutes(): Route[] {
           { name: 'sentiment', in: 'query', description: 'negative | neutral | positive' },
           { name: 'triage', in: 'query', description: '五类之一' },
           { name: 'open', in: 'query', description: 'true = 只看还没处理完的' },
+          { name: 'group', in: 'query', description: 'own | competitor | industry | site' },
+          { name: 'competitor', in: 'query', description: '只看说这个竞品的' },
+          {
+            name: 'source_id',
+            in: 'query',
+            description: '只看这条监控源来的（reddit = Reddit 那一路）',
+          },
+          { name: 'since', in: 'query', description: 'ISO 时间（含）' },
+          { name: 'until', in: 'query', description: 'ISO 时间（不含）' },
+          { name: 'limit', in: 'query', description: '最多几条' },
         ],
         returns: '{ rows: PrMentionRow[] }',
       },
       async (c, deps) => {
         const sentiment = enumQuery(c, 'sentiment', SENTIMENTS)
         const triage = enumQuery(c, 'triage', TRIAGES)
+        const group = enumQuery(c, 'group', GROUPS)
         const open = c.req.query('open') === 'true'
+        const text = (name: string): string | undefined => {
+          const v = c.req.query(name)?.trim()
+          return v === undefined || v === '' ? undefined : v.slice(0, 200)
+        }
+        const competitor = text('competitor')
+        const source_id = text('source_id')
+        const since = text('since')
+        const until = text('until')
+        const limit = Number(c.req.query('limit'))
         return ok(
           c,
           await portOf(deps).mentions(actorOf(c), {
             ...(sentiment === undefined ? {} : { sentiment }),
             ...(triage === undefined ? {} : { triage }),
             ...(open ? { open: true } : {}),
+            ...(group === undefined ? {} : { group }),
+            ...(competitor === undefined ? {} : { competitor }),
+            ...(source_id === undefined ? {} : { source_id }),
+            ...(since === undefined ? {} : { since }),
+            ...(until === undefined ? {} : { until }),
+            ...(Number.isFinite(limit) && limit > 0
+              ? { limit: Math.min(500, Math.floor(limit)) }
+              : {}),
           }),
         )
       },
@@ -552,6 +701,122 @@ export function prRoutes(): Route[] {
             ...(beat === undefined || beat.trim() === '' ? {} : { beat: beat.trim() }),
           }),
         )
+      },
+    ),
+    /* ── WP386：信息监控的监控源 ───────────────────────────────────── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/pr/watch',
+        operationId: 'prWatchView',
+        summary:
+          '信息监控：各条监控源的状态（地址只出脱敏那一格）、AI 建议的提醒清单、设置、下一次什么时候拉。拉不到的照实标红，不当 0 条',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_MENTION,
+        returns: 'PrWatchView',
+      },
+      async (c, deps) => ok(c, await watchOf(deps, 'watchView')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/pr/watch/links',
+        operationId: 'prWatchAddLinks',
+        summary:
+          '贴 RSS 链接（可以一次贴一批）：每条当场拉一次，拉到了才算配好；按 feed 标题对上清单上的哪一行。不是 RSS 的当场说清楚（多半还是邮箱投递）',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        body: WatchLinksBody,
+        returns: '{ results: PrWatchLinkResult[]; view: PrWatchView }',
+      },
+      async (c, deps) => {
+        const input = await body(c, WatchLinksBody)
+        return ok(
+          c,
+          await watchOf(deps, 'watchAddLinks')(actorOf(c), {
+            links: input.links,
+            ...(input.plan_item_id === undefined ? {} : { plan_item_id: input.plan_item_id }),
+            ...(input.group === undefined ? {} : { group: input.group }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/pr/watch/run',
+        operationId: 'prWatchRunNow',
+        summary: '现在拉一轮（所有没暂停的监控源）；拉不到的照实说',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        returns: '{ run?: MonitorRun; message: string; view: PrWatchView }',
+      },
+      async (c, deps) => ok(c, await watchOf(deps, 'watchRunNow')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/pr/watch/sources/:id',
+        operationId: 'prWatchUpdateSource',
+        summary: '改一条监控源（暂停 / 频率 / 组 / 名字 / 竞品 / 本地过滤词）',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        params: [{ name: 'id', in: 'path', description: '监控源 id' }],
+        body: WatchSourceBody,
+        returns: 'PrWatchView',
+      },
+      async (c, deps) => {
+        const patch = await body(c, WatchSourceBody)
+        const clean: PrWatchSourcePatch = {}
+        for (const [k, v] of Object.entries(patch))
+          if (v !== undefined) (clean as Record<string, unknown>)[k] = v
+        return ok(c, await watchOf(deps, 'watchUpdateSource')(actorOf(c), param(c, 'id'), clean))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/pr/watch/sources/:id',
+        operationId: 'prWatchRemoveSource',
+        summary: '删一条监控源（拉回来的提及留着）',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        params: [{ name: 'id', in: 'path', description: '监控源 id' }],
+        returns: 'PrWatchView',
+      },
+      async (c, deps) =>
+        ok(c, await watchOf(deps, 'watchRemoveSource')(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/pr/watch/settings',
+        operationId: 'prWatchUpdateSettings',
+        summary:
+          '改信息监控的设置（开关、几点之后拉、默认隔几小时、Reddit 那一路搜什么）——只给默认值，用户说了算',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        body: WatchSettingsBody,
+        returns: 'PrWatchView',
+      },
+      async (c, deps) => {
+        const patch = await body(c, WatchSettingsBody)
+        const clean: Partial<MonitorSettings> = {}
+        for (const [k, v] of Object.entries(patch))
+          if (v !== undefined) (clean as Record<string, unknown>)[k] = v
+        return ok(c, await watchOf(deps, 'watchUpdateSettings')(actorOf(c), clean))
       },
     ),
   ]

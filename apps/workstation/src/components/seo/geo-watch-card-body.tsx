@@ -279,7 +279,9 @@ function RivalsBody({ card, payload }: { card: DeckCard; payload: RivalsPayload 
               />
               <span className="font-medium">{c.name}</span>
               <span className="text-xs text-ws-muted-fg">
-                {t('geo.card.rivals.answers', { n: String(c.answers) })}
+                {c.answers > 0
+                  ? t('geo.card.rivals.answers', { n: String(c.answers) })
+                  : t('geo.card.rivals.from_profile')}
               </span>
             </label>
           </li>
