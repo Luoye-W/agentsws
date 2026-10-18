@@ -59,6 +59,24 @@ export interface FakeShop {
   seq: number
   /** WP268：店铺「文件」里的图（`fileCreate` 建的；第一次查状态是 UPLOADED，再查才 READY）。 */
   files?: { id: string; filename: string; url: string; alt?: string; polled: number }[]
+  /** WP417：客服动订单（退款 / 改地址 / 补发）那几条操作用的订单。 */
+  orders?: FakeOrder[]
+  /** WP417：`hide_addresses` = 模拟「受保护的顾客数据」没过审（带地址的查询报错）。 */
+  hide_addresses?: boolean
+}
+
+/** WP417：假店里的一单（形状只够客服那几条操作）。 */
+export interface FakeOrder {
+  id: string
+  name: string
+  currency: string
+  financial: string
+  fulfillment: string
+  total: number
+  refunded: number
+  address: Obj
+  lines: { id: string; title: string; quantity: number; variant: string; price: number }[]
+  tx: { id: string; kind: string; status: string; gateway: string; amount: number }[]
 }
 
 const NOW = (): string => new Date().toISOString()
@@ -162,10 +180,90 @@ export function demoShop(): FakeShop {
         usageLimit: 500,
       },
     ],
+    orders: [
+      {
+        id: 'gid://shopify/Order/1',
+        name: '#1001',
+        currency: 'USD',
+        financial: 'PAID',
+        fulfillment: 'UNFULFILLED',
+        total: 49.8,
+        refunded: 0,
+        address: {
+          firstName: 'Anna',
+          lastName: 'Lee',
+          name: 'Anna Lee',
+          address1: '12 Demo St',
+          city: 'Austin',
+          provinceCode: 'TX',
+          zip: '73301',
+          countryCodeV2: 'US',
+        },
+        lines: [
+          {
+            id: 'gid://shopify/LineItem/11',
+            title: 'Rovella 折叠收纳箱 · 大号',
+            quantity: 1,
+            variant: 'gid://shopify/ProductVariant/2001',
+            price: 29.9,
+          },
+          {
+            id: 'gid://shopify/LineItem/12',
+            title: 'Rovella 折叠收纳箱 · 小号',
+            quantity: 1,
+            variant: 'gid://shopify/ProductVariant/2002',
+            price: 19.9,
+          },
+        ],
+        tx: [
+          {
+            id: 'gid://shopify/OrderTransaction/31',
+            kind: 'SALE',
+            status: 'SUCCESS',
+            gateway: 'shopify_payments',
+            amount: 49.8,
+          },
+        ],
+      },
+    ],
     sessions: new Map(),
     seq: 9000,
   }
 }
+
+const money = (n: number, currency: string): Obj => ({
+  shopMoney: { amount: n.toFixed(2), currencyCode: currency },
+})
+
+/** WP417：假店的一单 → `AgentswsOrderForChange` 回的那一份。 */
+const orderNode = (x: FakeOrder, withAddress: boolean): Obj => ({
+  id: x.id,
+  name: x.name,
+  currencyCode: x.currency,
+  displayFinancialStatus: x.financial,
+  displayFulfillmentStatus: x.fulfillment,
+  cancelledAt: null,
+  totalPriceSet: money(x.total, x.currency),
+  totalRefundedSet: money(x.refunded, x.currency),
+  ...(withAddress ? { shippingAddress: x.address } : {}),
+  lineItems: {
+    nodes: x.lines.map((l) => ({
+      id: l.id,
+      title: l.title,
+      quantity: l.quantity,
+      refundableQuantity: l.quantity,
+      variant: { id: l.variant },
+      originalUnitPriceSet: { shopMoney: { amount: l.price.toFixed(2) } },
+    })),
+  },
+  transactions: x.tx.map((t) => ({
+    id: t.id,
+    kind: t.kind,
+    status: t.status,
+    gateway: t.gateway,
+    amountSet: { shopMoney: { amount: t.amount.toFixed(2) } },
+  })),
+})
 
 const productNode = (p: FakeProduct): Obj => ({
   id: p.id,
@@ -699,6 +797,110 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
       }
       return { menuUpdate: { menu: { id: vars.id }, userErrors: [] } }
     }
+    // ── WP417：客服动订单 ──
+    case 'AgentswsOrderByName': {
+      const q = String(vars.query ?? '').replace(/^name:/, '')
+      return {
+        orders: {
+          nodes: (shop.orders ?? [])
+            .filter((x) => x.name === q)
+            .map((x) => ({ id: x.id, name: x.name })),
+        },
+      }
+    }
+    case 'AgentswsOrderForChange': {
+      const x = (shop.orders ?? []).find((y) => y.id === vars.id)
+      // 带地址的那一份在「受保护的顾客数据」没过审时整条报错（同真店）
+      if (
+        x !== undefined &&
+        shop.hide_addresses === true &&
+        /shippingAddress/.test(String(vars.__doc ?? ''))
+      )
+        return undefined
+      return { order: x === undefined ? null : orderNode(x, vars.__address === true) }
+    }
+    case 'AgentswsRefundCreate': {
+      const input = vars.input as Obj
+      const x = (shop.orders ?? []).find((y) => y.id === input.orderId)
+      if (x === undefined)
+        return {
+          refundCreate: {
+            refund: null,
+            userErrors: [{ field: ['orderId'], message: 'Order does not exist' }],
+          },
+        }
+      const tx = (input.transactions as Obj[] | undefined)?.[0] ?? {}
+      const amount = Number(tx.amount ?? 0)
+      if (x.refunded + amount > x.total + 0.005)
+        return {
+          refundCreate: {
+            refund: null,
+            userErrors: [{ field: ['transactions'], message: 'Amount exceeds refundable' }],
+          },
+        }
+      x.refunded = Math.round((x.refunded + amount) * 100) / 100
+      x.financial = x.refunded >= x.total ? 'REFUNDED' : 'PARTIALLY_REFUNDED'
+      return {
+        refundCreate: {
+          refund: {
+            id: `gid://shopify/Refund/${id()}`,
+            totalRefundedSet: money(amount, x.currency),
+          },
+          userErrors: [],
+        },
+      }
+    }
+    case 'AgentswsOrderUpdate': {
+      const input = vars.input as Obj
+      const x = (shop.orders ?? []).find((y) => y.id === input.id)
+      if (x === undefined)
+        return {
+          orderUpdate: {
+            order: null,
+            userErrors: [{ field: ['id'], message: 'Order does not exist' }],
+          },
+        }
+      const a = (input.shippingAddress ?? {}) as Obj
+      x.address = {
+        ...x.address,
+        ...a,
+        ...(a.countryCode === undefined ? {} : { countryCodeV2: a.countryCode }),
+      }
+      return { orderUpdate: { order: { id: x.id }, userErrors: [] } }
+    }
+    case 'AgentswsDraftOrderCreate': {
+      const did = `gid://shopify/DraftOrder/${id()}`
+      ;(shop as FakeShop & { drafts?: Obj[] }).drafts = [
+        ...((shop as FakeShop & { drafts?: Obj[] }).drafts ?? []),
+        { id: did, input: vars.input },
+      ]
+      return { draftOrderCreate: { draftOrder: { id: did }, userErrors: [] } }
+    }
+    case 'AgentswsDraftOrderComplete': {
+      const oid = `gid://shopify/Order/${id()}`
+      const name = `#${shop.seq}`
+      shop.orders = [
+        ...(shop.orders ?? []),
+        {
+          id: oid,
+          name,
+          currency: 'USD',
+          financial: 'PAID',
+          fulfillment: 'UNFULFILLED',
+          total: 0,
+          refunded: 0,
+          address: {},
+          lines: [],
+          tx: [],
+        },
+      ]
+      return {
+        draftOrderComplete: {
+          draftOrder: { id: vars.id, status: 'COMPLETED', order: { id: oid, name } },
+          userErrors: [],
+        },
+      }
+    }
     case 'AgentswsDiscountCreate': {
       const input = vars.input as Obj
       const did = `gid://shopify/DiscountCodeNode/${id()}`
@@ -741,7 +943,12 @@ export function shopAdminRunStandIn(shop: FakeShop): RunCli {
       }
     if (!shop.sessions.has(store))
       return { code: 1, stdout: '', stderr: `No stored app authentication found for ${store}.` }
-    const data = resolveFakeShop(shop, m?.[2] ?? '', vars)
+    // WP417：带不带收货地址（受保护的顾客数据）由查询正文决定，替身按它回
+    const data = resolveFakeShop(shop, m?.[2] ?? '', {
+      ...vars,
+      __doc: doc,
+      __address: /shippingAddress/.test(doc),
+    })
     if (data === undefined)
       return {
         code: 1,

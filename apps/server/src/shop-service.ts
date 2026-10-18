@@ -10,6 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { RunRequest, StagedChange } from '@agentsws/contracts'
+import { SHOP_ORDER_TOOL_NAMES, SHOP_TOOL_SCOPE } from '@agentsws/stand-ins'
 import type { BackendResult, StageInput } from '@agentsws/txn'
 import { SHOP_ADMIN_TEXT, ShopAdminError } from './shop-admin.js'
 import { type Applied, applyShopChange, ShopApplyError } from './shop-apply.js'
@@ -26,7 +27,15 @@ import {
   type ShopOpsOptions,
   toCard,
 } from './shop-ops.js'
+import { applyOrderChange, orderDraftOf } from './shop-orders.js'
 import { draftOf } from './shop-propose.js'
+
+/** `write_x` 隐含 `read_x`（与 stand-ins 的 `shopToolsFor` 同一个口径）。 */
+const scopeCovers = (granted: readonly string[], need: string): boolean => {
+  if (granted.includes(need)) return true
+  const m = /^read_(.+)$/.exec(need)
+  return m !== null && granted.includes(`write_${m[1]}`)
+}
 
 interface AppliedRecord {
   at: string
@@ -97,20 +106,33 @@ export function createShopOps(
       const m = mandateOf(() => options.effectiveConfig(request.actor.assignment_id), action)
       if (m === undefined) return { status: 'blocked', message: '这条职责没有这个动作，出不了卡。' }
       const { access, reader } = await contextFor()
-      const draft = await draftOf(
-        tool,
-        {
-          reader,
-          access,
-          log,
-          run_id: request.id,
-          fileRoots: options.fileRoots(),
-          ...(options.assetFile === undefined
-            ? {}
-            : { assetFile: (id: string) => options.assetFile?.(id) }),
-        },
-        input,
-      )
+      // WP417：缺这件事要的那一项权限 → 照实说、带「去重新授权」（不出卡、不碰店）
+      const need = SHOP_TOOL_SCOPE[tool]
+      if (need !== undefined && !scopeCovers(access.scopes, need))
+        throw new ShopAdminError('missing_scope', SHOP_ADMIN_TEXT.missing_scope, {
+          missing: [need],
+        })
+      // WP417（自查客服 A24–A26）：退款 / 改地址 / 补发——现读这一单当「原来」，读过就算「改前读过」
+      const orderDraft = SHOP_ORDER_TOOL_NAMES.includes(tool)
+        ? await orderDraftOf(tool, reader, access.store, input)
+        : undefined
+      if (orderDraft !== undefined) log.mark(request.id, orderDraft.target)
+      const draft =
+        orderDraft ??
+        (await draftOf(
+          tool,
+          {
+            reader,
+            access,
+            log,
+            run_id: request.id,
+            fileRoots: options.fileRoots(),
+            ...(options.assetFile === undefined
+              ? {}
+              : { assetFile: (id: string) => options.assetFile?.(id) }),
+          },
+          input,
+        ))
       const kind = action.replace(/^stage_/, '') as StageInput['kind']
       const recipient = (await options.recipient?.({
         route_to: m.route_to,
@@ -134,6 +156,18 @@ export function createShopOps(
         before: toCard(draft.before),
         after: toCard(draft.after),
         notes: draft.notes,
+        // 额度按店铺币种算（不换汇：fx 1，基准币 = 店铺币种）
+        ...(orderDraft?.money === undefined
+          ? {}
+          : {
+              money: {
+                ...orderDraft.money,
+                amount_base: orderDraft.money.amount,
+                base_currency: orderDraft.money.currency,
+                fx_rate: 1,
+                fx_at: now(),
+              },
+            }),
         created_by: { kind: 'agent', id: `agent_${role_id}` },
         mandate: m.mandate,
         /*
@@ -146,7 +180,7 @@ export function createShopOps(
           seen: { [draft.target.type]: [draft.target.id] },
           // 改前必读：这次运行真读过（或新建的东西没有原文可读）才写进去——guardrail 按它拦
           read_full:
-            draft.synthetic === true || log.has(run_id, draft.target)
+            ('synthetic' in draft && draft.synthetic === true) || log.has(run_id, draft.target)
               ? [`${draft.target.type}:${draft.target.id}`]
               : [],
           recorded_at: now(),
@@ -209,10 +243,18 @@ export function createShopOps(
         }
       let result: Applied
       try {
-        result = await applyShopChange(
-          { admin, access, fileRoots: options.fileRoots(), fetch: options.fetch ?? fetch, now },
-          { ...change, after, before: fromCard(change.before) },
-        )
+        const ctx = {
+          admin,
+          access,
+          fileRoots: options.fileRoots(),
+          fetch: options.fetch ?? fetch,
+          now,
+        }
+        const before = fromCard(change.before)
+        // WP417：订单那三类（退款 / 改地址 / 补发）在 `shop-orders.ts`；别的照旧
+        result =
+          (await applyOrderChange(ctx, after, before)) ??
+          (await applyShopChange(ctx, { ...change, after, before }))
       } catch (e) {
         const retryable =
           e instanceof ShopApplyError

@@ -58,6 +58,10 @@ export type ShopOp =
   | 'menu_create'
   | 'menu_update'
   | 'discount_create'
+  // WP417（自查客服 A24–A26）：客服动订单
+  | 'order_refund'
+  | 'order_address'
+  | 'order_reship'
 
 /** 卡上 `after._via` 写这个，执行器才认（别的来路的同一类卡不归这里）。 */
 export const SHOP_VIA = 'shop_admin'
@@ -83,6 +87,14 @@ const MACHINE_KEYS = new Set([
   'add',
   'remove',
   'products',
+  // WP417：订单改动给执行器用的那几格
+  'order_id',
+  'transaction_id',
+  'gateway',
+  'line_item_id',
+  'variant_id_reship',
+  'address',
+  'notify',
 ])
 /** 只给卡面看的摘要（执行器不认，还原时丢掉）。 */
 const SUMMARY_KEYS = new Set(['count', 'pictures', 'menu', 'spec', 'added', 'removed'])
@@ -174,6 +186,13 @@ export interface ShopOpsOptions {
   appendEvent?(type: string, payload: Record<string, unknown>): void
 }
 
+const SUPPORT_ACTIONS: Readonly<Record<string, string>> = {
+  shop_refund_order: 'stage_refund',
+  shop_change_order_address: 'stage_address_change',
+  shop_reship_order: 'stage_reship',
+  shop_create_discount: 'stage_discount_code',
+}
+
 /** 每条职责的每个改动工具落到 yml 里哪一条动作（kind = 去掉 `stage_` 的那一段）。 */
 const ACTION_OF: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'dtc.store': {
@@ -189,6 +208,9 @@ const ACTION_OF: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     shop_save_page: 'stage_store_setup',
     shop_save_menu: 'stage_store_setup',
   },
+  // WP417（自查客服 A24–A27、D5）：网站客服与社群管理的退款 / 补发 / 改地址 / 发码
+  'dtc.support': SUPPORT_ACTIONS,
+  'dtc.community-support': SUPPORT_ACTIONS,
 }
 
 export interface ShopOps {
