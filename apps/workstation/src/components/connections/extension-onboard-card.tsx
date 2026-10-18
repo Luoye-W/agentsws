@@ -19,7 +19,7 @@ import { ExtensionInstall } from '@/components/connections/extension-install'
 import { settingsHref } from '@/components/settings-panel/route'
 import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
-import { Hint, SafetyNote } from '@/components/ui/hint'
+import { Hint } from '@/components/ui/hint'
 import {
   askExtensionPlan,
   type ExtensionNeedsView,
@@ -40,9 +40,12 @@ export function ExtensionInstallAndPair(props: { owner: string | undefined }): R
     <div className="flex flex-col gap-2" data-testid="extension-install-pair">
       {/* WP345：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步）；不是桌面版就不出这块 */}
       <ExtensionInstall assignment={props.owner} paired={false} />
-      <p className="text-xs text-ws-muted-fg">{t('extonboard.pair')}</p>
+      {/* WP419（自查 U12）：「只连 127.0.0.1」是技术话，收进问号 */}
+      <p className="flex items-center gap-1 text-xs text-ws-muted-fg">
+        {t('extonboard.pair')}
+        <Hint text={t('extension.local_only')} />
+      </p>
       <ExtensionPairingCode assignment={props.owner} />
-      <SafetyNote text={t('extension.local_only')} />
     </div>
   )
 }

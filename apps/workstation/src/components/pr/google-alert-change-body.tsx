@@ -98,7 +98,14 @@ export function GoogleAlertChangeBody({
                 }
               />
               <span className="flex min-w-0 flex-col">
-                <span className="truncate font-mono text-ws-ink">{l.query}</span>
+                {/* WP419（自查 U11）：主文字说人话，原始查询语句放悬停 */}
+                <span
+                  className="truncate text-ws-ink"
+                  title={l.query}
+                  data-testid="google-alert-readable"
+                >
+                  {readableAlertQuery(l.query)}
+                </span>
                 <span className="text-xs text-ws-muted-fg">
                   {t('galert.where', {
                     language: l.language === 'any' ? any : l.language,
@@ -139,4 +146,27 @@ export function GoogleAlertChangeBody({
       ) : null}
     </div>
   )
+}
+
+const HIRING = new Set(['job', 'jobs', 'hiring', 'career', 'careers', 'recruit', 'recruiting'])
+
+/**
+ * WP419（自查 U11）：Google 提醒的查询语句 → 人话：`"Aventon" -job -jobs` → `Aventon（排除招聘）`；
+ * 别的排除词照写（`排除 used`）；`OR` 写成「或」。认不出就原样。
+ */
+export function readableAlertQuery(query: string): string {
+  const exclude: string[] = []
+  const words: string[] = []
+  for (const m of query.matchAll(/(-?)"([^"]+)"|(-?)(\S+)/gu)) {
+    const neg = (m[1] ?? m[3] ?? '') === '-'
+    const word = (m[2] ?? m[4] ?? '').trim()
+    if (word === '') continue
+    if (neg) exclude.push(word)
+    else words.push(word === 'OR' ? '或' : word)
+  }
+  if (words.length === 0) return query
+  const hiring = exclude.filter((x) => HIRING.has(x.toLowerCase()))
+  const other = exclude.filter((x) => !HIRING.has(x.toLowerCase()))
+  const notes = [...(hiring.length > 0 ? ['招聘'] : []), ...other]
+  return `${words.join(' ')}${notes.length === 0 ? '' : `（排除${notes.join('、')}）`}`
 }

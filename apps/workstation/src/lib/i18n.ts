@@ -1472,7 +1472,8 @@ const zh: Table = {
   'extension.ads.job.confirm': '确认提交',
   'extension.generate': '生成配对码',
   'extension.generating': '正在生成…',
-  'extension.code.once': '码 5 分钟内有效，只能用一次；去插件的设置页填进去。',
+  // WP419（自查 U12）：侧边栏里已经能就地配对
+  'extension.code.once': '码 5 分钟内有效、只能用一次：点工具栏上的工坊图标，在侧边栏里输入。',
   'extension.code.left': '还剩 {time}',
   'extension.code.left.hint':
     '去插件设置页把这 6 位数字填进去。关掉这一页它就没了，到时候再生成一个就是。',
@@ -5702,7 +5703,8 @@ const en: Table = {
   'extension.ads.job.confirm': 'Submit',
   'extension.generate': 'Generate a pairing code',
   'extension.generating': 'Generating…',
-  'extension.code.once': 'Valid for 5 minutes, once only; enter it in the extension settings.',
+  'extension.code.once':
+    'Valid for 5 minutes, once only: click the Workshop icon in the toolbar and enter it in the side panel.',
   'extension.code.left': '{time} left',
   'extension.code.left.hint':
     'Type these 6 digits into the extension settings. Close this page and it is gone — just generate another.',

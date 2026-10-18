@@ -9034,7 +9034,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ? { ready: true }
                 : {
                     ready: false,
-                    reason: '你的浏览器还没接上（设置 → 浏览器 → 选「我正在用的浏览器」）',
+                    reason: '你的浏览器还没接上，可以在设置里的「浏览器」选你正在用的那个',
                   },
             runs: {
               open: ({ actor, title }) =>
@@ -9079,10 +9079,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               await (await setupCardsOf(ws))
                 ?.askSetup({
                   target: PR_WATCH_TARGET,
-                  why: `${lines
-                    .map((l) => l.label)
-                    .slice(0, 6)
-                    .join('、')}没自动建成（${why}）：在这几行贴 RSS 链接就行，卡上有教程。`,
+                  // WP419（自查 U8）：一句话说清、不套括号
+                  why: `这 ${lines.length} 条没建成，贴 RSS 链接就行——${why}。`,
                   actor: actor as never,
                 })
                 .catch(() => undefined)

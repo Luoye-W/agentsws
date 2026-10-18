@@ -66,7 +66,11 @@ describe('WP387 建 Google 提醒卡', () => {
     decide.mockClear()
     renderWithProviders(<GoogleAlertChangeBody card={card} payload={payload} />)
     const box = screen.getByTestId('deck-google-alerts')
-    expect(box.textContent).toContain('"Aventon" -job')
+    // WP419（自查 U11）：主文字说人话，原始语句在悬停里
+    expect(box.textContent).toContain('Aventon（排除招聘）')
+    expect(screen.getAllByTestId('google-alert-readable')[0]?.getAttribute('title')).toContain(
+      '"Aventon" -job',
+    )
     expect(box.textContent).toContain('地区 不限')
     expect(screen.getByTestId('google-alerts-confirm').textContent).toBe('确认，去建 3 条')
     fireEvent.click(screen.getByTestId('google-alert-line-ga_2'))
