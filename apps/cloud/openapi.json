@@ -700,7 +700,8 @@
                         "standby",
                         "data",
                         "kol",
-                        "store"
+                        "store",
+                        "services"
                       ]
                     }
                   },
@@ -992,7 +993,8 @@
                         "standby",
                         "data",
                         "kol",
-                        "store"
+                        "store",
+                        "services"
                       ]
                     }
                   },

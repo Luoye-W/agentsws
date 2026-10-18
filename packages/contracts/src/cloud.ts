@@ -60,8 +60,11 @@ export interface CloudOrg {
  *   列 / 断开连接、云端代发 Admin GraphQL。店铺令牌只在云上（决策 185），这把动作集只管
  *   「这把工作区令牌能不能替这个工作区开口」。
  *
- * 本版八个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`，WP265 加 `store`）；
- * 加能力就加成员（只加不删）。
+ * - `services`：工坊服务（`/v1/services/*`，WP389，docs/105）——服务目录、下单（扣进托管）、看进度、
+ *   消息、交换联系方式、验收。
+ *
+ * 本版九个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`，WP265 加 `store`，
+ * WP389 加 `services`）；加能力就加成员（只加不删）。
  */
 export type CloudScope =
   | 'ai'
@@ -72,6 +75,7 @@ export type CloudScope =
   | 'data'
   | 'kol'
   | 'store'
+  | 'services'
 
 export const CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -82,6 +86,7 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
   'data',
   'kol',
   'store',
+  'services',
 ]
 
 /**
@@ -100,6 +105,9 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
  * `store` 进默认（决策 186）同 `kol` 的理由：一键授权连店要店主在 Shopify 上点「安装」，
  * 没点过的工作区调 `/v1/shopify/*` 什么也拿不到；不放进默认的后果是「连店之前先回云上
  * 重签一把令牌」——那一步用户不知道要做。老令牌缺这一项时本机照实说、引导重新登录一次。
+ *
+ * `services` 进默认（WP389）同一条理由：动作集本身不花钱——下单永远是用户在下单卡上点（L1），
+ * 不放进默认的后果是「第一次下单前先回云上重签一把令牌」。
  */
 export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -108,6 +116,7 @@ export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'data',
   'kol',
   'store',
+  'services',
 ]
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */

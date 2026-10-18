@@ -40,6 +40,7 @@ const SCOPE_VALUES = [
   'data',
   'kol',
   'store',
+  'services',
 ] as const satisfies readonly CloudScope[]
 
 export const ScopeSchema = z.enum(SCOPE_VALUES)

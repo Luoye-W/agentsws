@@ -68,7 +68,15 @@ describe('付费三块', () => {
 
   it('三块都不空——空的那一块在界面上是一张永远 0 的卡', () => {
     const seen = new Set(PRICING_FILE.entries.map((e) => pricingBlockOf(e)))
-    expect([...PRICING_BLOCKS].every((b) => seen.has(b))).toBe(true)
+    // WP389：「工坊服务」的价在服务目录每一项上，不在 pricing.json
+    const listed = PRICING_BLOCKS.filter((b) => b !== 'workshop_service')
+    expect(listed.every((b) => seen.has(b))).toBe(true)
+  })
+
+  it('WP389：工坊服务的三行（托管 / 完成 / 退回）归「工坊服务」那一块', () => {
+    expect(pricingBlockOf({ capability: 'workshop.service.escrow' })).toBe('workshop_service')
+    expect(pricingBlockOf({ capability: 'workshop.service.refund' })).toBe('workshop_service')
+    expect(PRICING_BLOCKS).toContain('workshop_service')
   })
 
   it('AI 归 ai、增值服务归 service（WP124 改通用名，红人与客服都归它）、其余归 data', () => {

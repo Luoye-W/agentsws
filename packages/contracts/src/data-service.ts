@@ -719,12 +719,23 @@ function tidy(name: string, value: string): string {
  * 云上与本机替身用同一个函数，所以「这个输入合不合法」两边的话一样。
  */
 export function normalizeDataInput(spec: DataCapabilitySpec, raw: unknown): DataInputCheck {
+  return normalizeInputFields(spec.input, raw)
+}
+
+/**
+ * WP389（只加）：按一张输入白名单校验并规范化——{@link normalizeDataInput} 的本体，抽出来给
+ * 工坊服务价目单每一项「要填的对象」用（`service-order.ts`，同一套写法、同一句人话）。
+ */
+export function normalizeInputFields(
+  fields: readonly DataInputField[],
+  raw: unknown,
+): DataInputCheck {
   const src =
     typeof raw === 'object' && raw !== null && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {}
   const out: Record<string, unknown> = {}
-  for (const field of spec.input) {
+  for (const field of fields) {
     const value = src[field.name]
     const missing =
       value === undefined ||
