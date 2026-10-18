@@ -239,8 +239,13 @@ export interface ChannelsOptions {
   work?: Work
   /** 17 §1 起 Run；不给就只开事项不跑运行时。 */
   startRun?: StartRun
-  /** 入站事项挂谁名下（本人的那条岗位）。 */
-  position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
+  /**
+   * 入站事项挂谁名下（本人的那条岗位）。WP417（自查 A15）：带上路由算出来的职责（`dtc.support` /
+   * `amz.support` …），装配方按它找本人持有的那一条；找不到再退回第一条。
+   */
+  position?(
+    role_id?: RoleId,
+  ): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /** 06 §2.4 路由器；缺省按渠道映射（邮件 → `dtc.support`）。 */
   route?(input: RouteInput): RouteResult | undefined
   /**
@@ -713,7 +718,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       }
       return existing
     }
-    const position = options.position?.()
+    const position = options.position?.(event.routing.role_id)
     const who = event.actor?.display ?? event.actor?.external_id ?? '客户'
     return work.createMatter({
       kind: 'conversation',
@@ -812,7 +817,8 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       // （与上面渠道判定里的 `needs_human_review` 是同一条纪律的两面）
       if (verdict.action === 'handoff') return
     }
-    const position = options.position?.()
+    // WP417（自查 A15）：起 Run 用路由算出来的那条职责，不是「第一条岗位」
+    const position = options.position?.(event.routing.role_id)
     const startRun = options.startRun
     if (startRun === undefined || position === undefined) return
     const { run_id } = await startRun({
