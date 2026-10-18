@@ -118,7 +118,7 @@ async function shoot(browser, token, theme, path, blockIds, name) {
   const first = page.locator(`[data-block-id="${blockIds[0]}"]`)
   // WP372 / WP375：报表块在右栏「报表」卡里——「⋮」打开面板、展开报表卡、「显示更多」、加宽
   if ((await page.getByTestId('rail-cards').count()) === 0)
-    await page.getByTestId('rail-overflow').click()
+    await page.getByTestId('rail-toggle').click()
   const card = page.getByTestId('rail-card-reports')
   await card.waitFor({ timeout: 20_000 })
   if ((await card.getAttribute('data-open')) !== 'true')
