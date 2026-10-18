@@ -34,11 +34,11 @@ expected:
   onboarding:
     who: p_wang
     connected: true
-    signup_credits: 10
+    signup_credits: 5
     analysed: true
     capped: false
-    # 送 10 减去这一轮的 1.05
-    balance_credits: ">=8"
+    # 送 5（Luoye 10-19 改）减去这一轮的 1.05
+    balance_credits: ">=3"
   event_types: [simulation.onboarding_done]
   metrics:
     runs_failed: 0
