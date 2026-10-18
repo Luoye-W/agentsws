@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { autoUpdaterHolder, loadAutoUpdater } from '../src/electron-updater-module.js'
+import { autoUpdaterHolder, loadAutoUpdater, moduleExport } from '../src/electron-updater-module.js'
 
 const desktopRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -78,5 +78,26 @@ describe('loadAutoUpdater', () => {
     await expect(loadAutoUpdater(async () => ({ default: { autoUpdater: null } }))).rejects.toThrow(
       /没有 autoUpdater/,
     )
+  })
+})
+
+describe('moduleExport（WP409：拿 CancellationToken）', () => {
+  it('具名导出层有就用；没有到 default 层找；都没有回 undefined', () => {
+    class Token {}
+    expect(moduleExport({ CancellationToken: Token }, 'CancellationToken')).toBe(Token)
+    expect(moduleExport({ default: { CancellationToken: Token } }, 'CancellationToken')).toBe(Token)
+    expect(moduleExport({ default: {} }, 'CancellationToken')).toBeUndefined()
+    expect(moduleExport(undefined, 'CancellationToken')).toBeUndefined()
+  })
+
+  it('真的 electron-updater 包里拿得到 CancellationToken（不碰 autoUpdater getter）', async () => {
+    const mod = await import('electron-updater')
+    const Token = moduleExport(mod, 'CancellationToken') as new () => {
+      cancel(): void
+      cancelled: boolean
+    }
+    const t = new Token()
+    t.cancel()
+    expect(t.cancelled).toBe(true)
   })
 })
