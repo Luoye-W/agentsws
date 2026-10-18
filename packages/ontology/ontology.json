@@ -7,6 +7,7 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-keywords.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -24,6 +25,7 @@
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
+    "packages/contracts/src/competitor-watch.ts",
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
@@ -60,6 +62,7 @@
     "packages/contracts/src/platform-kits.ts",
     "packages/contracts/src/position-plan.ts",
     "packages/contracts/src/position-work.ts",
+    "packages/contracts/src/pr-watch.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/premium-theme.ts",
     "packages/contracts/src/pricing-catalog.ts",
@@ -137,7 +140,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "e41a4a8cb7f387b544138ef908d12c46",
+  "source_digest": "ec4dfb045af9cc8ad9b9982fec2f68ca",
   "objects": [
     {
       "id": "ad",
@@ -3592,6 +3595,24 @@
         },
         {
           "name": "alert_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "group",
+          "type": "MonitorGroup",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "competitor",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "source_id",
           "type": "string",
           "sensitivity": "internal",
           "optional": true
