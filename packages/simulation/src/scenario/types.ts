@@ -716,6 +716,8 @@ export interface ScenarioWebResearch {
   role: string
   /** 那句话（进事项的 `thread` 那一格）。 */
   ask: string
+  /** WP423：把这次运行的工具调用上限压到这么多（演「预算到了」的剧本）；不给 = 服务端的 30。 */
+  max_tool_calls?: number
 }
 
 /** WP63（51 §2.1 数据日报）：出一张日报卡。 */

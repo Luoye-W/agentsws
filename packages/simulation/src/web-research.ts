@@ -48,7 +48,13 @@ export interface WebResearchRecord {
 
 export interface WebResearchLoop {
   /** 交给这个人的这条职责一件"去网上查一下"的事。 */
-  research(input: { who: PersonId; role: RoleId; ask: string }): Promise<WebResearchRecord>
+  research(input: {
+    who: PersonId
+    role: RoleId
+    ask: string
+    /** WP423：压低工具调用上限（演「预算到了」）。 */
+    max_tool_calls?: number
+  }): Promise<WebResearchRecord>
   /** stub / direct 的工具桥：网页工具走到这里（替身后端 + 审计）。 */
   execute(call: {
     name: string
@@ -129,7 +135,7 @@ export function installWebResearch(world: World): WebResearchLoop {
     return { status: 'error', reason: `unknown_tool: ${call.name}` }
   }
 
-  const research: WebResearchLoop['research'] = async ({ who, role, ask }) => {
+  const research: WebResearchLoop['research'] = async ({ who, role, ask, max_tool_calls }) => {
     const asg = assignmentFor(who, role)
     const config = world.roles.effectiveConfig(asg.id)
     const roleWeb = config.web
@@ -185,7 +191,13 @@ export function installWebResearch(world: World): WebResearchLoop {
       skills: [],
       persona: { sections: [] },
       // 服务端挂了网页工具的运行放到 30（`runtime.ts` WP179 那一段）
-      budget: { max_tokens: 60_000, max_tool_calls: 30, max_seconds: 120, max_cost_base: 5 },
+      // WP423：服务端查资料的运行放到 40 万 token（`runBudgetCaps`）；场景可以压低调用上限演「预算到了」
+      budget: {
+        max_tokens: 400_000,
+        max_tool_calls: max_tool_calls ?? 30,
+        max_seconds: 120,
+        max_cost_base: 5,
+      },
       expectations: { outputs: ['answer'], must_stage_if_change_requested: false },
       runtime: {
         preset: asg.role_id,

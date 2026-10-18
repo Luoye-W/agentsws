@@ -14,7 +14,7 @@ import { asRecord, type OrderView, orderIdFromText, orderView } from '../view.js
 import { kolBrain, kolRunOf } from './kol-brain.js'
 import type { ScriptedTurn, ScriptFn } from './scripted.js'
 import { scriptedProvider } from './scripted.js'
-import { webBrainTurn } from './web-brain.js'
+import { webBrainTurn, wrapUpBrainTurn } from './web-brain.js'
 
 /**
  * 售后"规则脑"：一个**确定性的** ModelProvider，用工具协议说话。
@@ -115,6 +115,9 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
      * WP179：**去网上查一下**。工具面里有官方 `web_search`、事项那句话像"搜 / 查 / 调研"才走；
      * 判定与 stub 的剧本同一份。工具面里没有网页工具的运行下面逐字不变。
      */
+    // WP423：收尾回合（预算到了）——不再调工具，把已经查到的交出来
+    const wrap = wrapUpBrainTurn(messages, tools)
+    if (wrap !== undefined) return wrap
     const web = webBrainTurn(messages, tools)
     if (web !== undefined) return web
     if (kolRunOf(messages, tools) !== undefined) {

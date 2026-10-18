@@ -84,12 +84,19 @@ describe('WP260 说了要做却停下 → 续跑（direct）', () => {
     ])
   })
 
-  it('普通运行（没有 produce）同一句照旧收工——不影响问答', async () => {
-    const h = harness({ tools: THEME_TOOLS, script: [{ text: CI16 }] })
+  it('WP423：普通运行（没有 produce）同一句也催一下（上限 2 次，用的是通用那句）', async () => {
+    const h = harness({
+      tools: THEME_TOOLS,
+      script: [{ text: CI16 }, { text: '读完了，没有要改的。' }],
+    })
     const result = await h.run(themeRequest())
     expect(result.status).toBe('completed')
-    expect(eventsOf(h.events, 'progress').filter((e) => e.step === UNFINISHED_STEP)).toEqual([])
-    expect(result.outputs).toEqual([{ kind: 'answer', text: CI16 }])
+    expect(
+      eventsOf(h.events, 'progress')
+        .filter((e) => e.step === UNFINISHED_STEP)
+        .map((e) => e.note),
+    ).toEqual(['1/2'])
+    expect(result.outputs).toEqual([{ kind: 'answer', text: '读完了，没有要改的。' }])
   })
 
   it('produce 的运行回的是答案（不是「我接下来要…」）不续', async () => {

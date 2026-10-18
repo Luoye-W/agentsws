@@ -35,6 +35,7 @@ import type {
   GenuiToolOutcome,
   Matter,
   MatterRunBlock,
+  MatterRunDigest,
   MaybePromise,
   MemoryFact,
   ModelRef,
@@ -114,6 +115,7 @@ import {
   AMAZON_KEYWORD_TOOL_NAMES,
   AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  budgetStopReason,
   COMPETITOR_STORE_ROLES,
   COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
@@ -2564,9 +2566,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     // WP264：步骤记录（事项页「正在做…」与跑完那一行灰字）
     const steps = new RunStepLog(nowMs())
     runSteps.set(run_id, { matter_id: input.matter.id, started_at: clock.now(), log: steps })
+    /** WP423：这次是哪一项预算到了（`budget.exhausted`；第一次那条为准）。 */
+    let budgetHit: MatterRunDigest['budget']
     /** WP264：跑完 / 停下 / 没跑成都记一条运行摘要（排在 AI 那段话前面）。 */
-    const recordDigest = (outcome: 'completed' | 'stopped' | 'failed'): void => {
+    const recordDigest = (outcome: 'completed' | 'stopped' | 'failed', budget?: boolean): void => {
       try {
+        const byBudget = budget === true && budgetHit !== undefined ? budgetHit : undefined
         // 记成 `status`（不是 `run`）：「跑了几次」仍只数开跑那一条
         work?.appendEvent(input.matter.id, {
           kind: 'status',
@@ -2576,11 +2581,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               : outcome === 'stopped'
                 ? pausing.has(run_id)
                   ? '因更新暂停'
-                  : '这次被停下了'
+                  : byBudget !== undefined
+                    ? // WP423：预算停的说人话原因（「查的东西太多，这一轮先停在这里」）
+                      budgetStopReason(byBudget)
+                    : '这次被停下了'
                 : '这次没跑成',
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
-          run_digest: steps.digest(outcome, nowMs()),
+          run_digest: {
+            ...steps.digest(outcome, nowMs()),
+            ...(byBudget === undefined ? {} : { budget: byBudget }),
+          },
         })
       } catch {
         // 事项已经没了：摘要只是给人看的一行，少一条不影响别的
@@ -2676,6 +2687,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (e.type === 'run.cancelled')
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
       if (e.type === 'run.failed') failure ??= e.error
+      if (e.type === 'budget.exhausted') budgetHit ??= e.which
       appendRunEvent(request, e)
       // 15 §6 provenance：只证明「读过」——注入的记录与工具真回来的实体
       if (e.type === 'context.injected') {
@@ -2846,7 +2858,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       // WP287：额度 / 回合用完停下的，摘要那一行写「被停下了」，不写「跑完了」
-      recordDigest(result.status === 'budget_exhausted' ? 'stopped' : 'completed')
+      // WP423：预算停的那一行写人话原因，收尾那段话下面出「接着做」（`run_digest.budget`）
+      recordDigest(result.status === 'budget_exhausted' ? 'stopped' : 'completed', true)
       /*
        * WP264（决策 179）：下一步建议——运行时结构化给的优先，否则取答复末尾的 `<next>…</next>`；
        * 标记从正文里拿掉。没有就没有，不从正文里猜。
@@ -3115,8 +3128,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 /**
  * 一次职责运行的 token / 工具调用上限（时间与花费另算）。
  *
- * - 缺省 6 万 token、12 次；
- * - WP144：批过电脑操控授权的 40 次；WP148 / WP179：真挂了浏览器或网页工具的 30 次；
+ * - 缺省 15 万 token、12 次（WP423：原来 6 万）；
+ * - WP144：批过电脑操控授权的 40 次、60 万 token；WP148 / WP179：真挂了浏览器或网页工具的 30 次、40 万 token（WP423）；
  * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
  *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次；
  *   WP260：再放到 80 万 token、40 回合（见下）。
@@ -3134,10 +3147,22 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
    * 花费另有 `max_cost_base` 兜底。
    */
   if (input.themeRun) return { max_tokens: 800_000, max_tool_calls: 60, max_turns: 40 }
-  return {
-    max_tokens: 60_000,
-    max_tool_calls: input.granted ? 40 : input.browsing ? 30 : 12,
-  }
+  /*
+   * WP423（10-19 Mac 自测）：查 subreddit 的运行 12 步、累计 6.96 万 token 就撞上 6 万停了（实际只花了约 0.012 元，
+   * 缓存命中 4.99 万）——这一格是**累计**输入（每回合把整段历史再送一遍），不是「这次读了多少」。
+   * 照 WP260 的算法按「步数 × 每步历史」估：
+   *
+   * - 查资料 / 浏览（30 次调用、约 31 步）：每步历史从提示词的 6 千左右涨到二三万（网页摘要、帖子列表），
+   *   平均按 1.2 万算 ≈ 37 万——放到 **40 万**；
+   * - 批过授权的电脑操控（40 次、41 步，带截图）：平均按 1.4 万算 ≈ 57 万——放到 **60 万**；
+   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**。
+   *
+   * 真正的护栏是花费（`max_cost_base`，按价目表算、命中缓存的那部分很便宜）：40 万 token 在 DeepSeek 上大半是缓存，
+   * 约一两毛钱；token 上限只防「死循环把历史越滚越大」。到了也不是白停——运行时再跑一次收尾，把查到的交出来。
+   */
+  if (input.granted) return { max_tokens: 600_000, max_tool_calls: 40 }
+  if (input.browsing) return { max_tokens: 400_000, max_tool_calls: 30 }
+  return { max_tokens: 150_000, max_tool_calls: 12 }
 }
 
 /**

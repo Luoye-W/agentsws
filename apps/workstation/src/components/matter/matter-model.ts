@@ -28,7 +28,18 @@ export type MatterItem =
   /** WP373（决策 978）：真换了模型——「上面是 X 答的，接下来用 Y」（居中一行灰字）。 */
   | { kind: 'switch'; key: string; from: string; to: string }
 
-export type MatterState = 'running' | 'doing' | 'awaiting' | 'blocked' | 'done'
+/**
+ * WP423：`connect` / `setup` 是「等你批」的细分——等着的卡全是连接卡（只差连插件 / 账号）就写「等你连上」，
+ * 全是配置卡就写「等你填设置」，别把「连一下」说成「等你批」。
+ */
+export type MatterState =
+  | 'running'
+  | 'doing'
+  | 'awaiting'
+  | 'connect'
+  | 'setup'
+  | 'blocked'
+  | 'done'
 
 /** 本地日期（YYYY-M-D），按它判「同一天只出一次」。 */
 export function dayKey(iso: string): string {
@@ -224,10 +235,14 @@ export function matterState(input: {
   running: boolean
   awaiting: boolean
   timeline: readonly MatterEvent[]
+  /**
+   * WP423：等着的那几张卡是什么——全是连接卡 `connect`、全是配置卡 `setup`；有别的卡（真要批的）或不知道就不给。
+   */
+  waitingOn?: 'connect' | 'setup' | undefined
 }): MatterState {
   if (input.closed) return 'done'
   if (input.running) return 'running'
-  if (input.awaiting) return 'awaiting'
+  if (input.awaiting) return input.waitingOn ?? 'awaiting'
   if (openBlock(input.timeline) !== undefined) return 'blocked'
   return 'doing'
 }
@@ -284,4 +299,43 @@ export function bubbleIsLong(text: string): boolean {
 /** AI 的长回答先露一屏，「展开全文」。 */
 export function replyIsLong(text: string): boolean {
   return text.split('\n').length > 14 || Array.from(text).length > 700
+}
+
+/**
+ * WP423：等着的卡是不是**全是**连接卡（或全是配置卡）——是的话页头写「等你连上」/「等你填设置」，不写「等你批」。
+ * 有一张真要批的、或者还有没拉到的卡，就照旧「等你批」。
+ */
+export function waitingOnOf(
+  cards: readonly { connect: boolean; setup: boolean }[],
+  openCount: number,
+): 'connect' | 'setup' | undefined {
+  if (cards.length === 0 || cards.length < openCount) return undefined
+  if (cards.every((c) => c.connect)) return 'connect'
+  if (cards.every((c) => c.setup)) return 'setup'
+  return undefined
+}
+
+/**
+ * WP236 / WP423：最近那次「被停下来」的运行之后，还没有人接着做（没有新的人话 / 新的运行），
+ * 就在那一条下面出「接着跑」。只给最近那一条——更早的停下来已经被后面的运行接上了。
+ *
+ * 预算停的那次（`run_digest.budget`）按钮挂在**收尾那段话**下面（同一次运行的 AI 消息；没有就挂在摘要那一行），
+ * 按钮写「接着做」。
+ */
+export function resumableOf(
+  timeline: readonly MatterEvent[],
+): { id: string; budget: boolean } | undefined {
+  const stopped = timeline
+    .filter((e) => e.stopped !== undefined || e.run_digest?.budget !== undefined)
+    .reduce<MatterEvent | undefined>((a, e) => (a === undefined || e.at >= a.at ? e : a), undefined)
+  if (stopped === undefined) return undefined
+  const later = timeline.some(
+    (e) => e.at > stopped.at && (e.kind === 'human_message' || e.kind === 'run'),
+  )
+  if (later) return undefined
+  if (stopped.run_digest?.budget === undefined) return { id: stopped.id, budget: false }
+  const reply = timeline.find(
+    (e) => e.kind === 'agent_message' && e.run_id !== undefined && e.run_id === stopped.run_id,
+  )
+  return { id: reply?.id ?? stopped.id, budget: true }
 }

@@ -95,7 +95,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP394 再加两条（Amazon 对标款：第二天降价带比你便宜多少 / 被拦退云端积分照扣）→ 81
     // WP402 再加一条（Amazon 内置浏览器被拦、云端也没读到 → 先问同意、再在你自己的浏览器里读）→ 82
     // WP411 再加一条（Reddit 巡查噪音过滤 + 去重：整词匹配、同一条只起草一次、外部帖闸）→ 83
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(83)
+    // WP423 再加一条（查资料查到一半预算到了 → 四个运行时都收尾、交出同一段话）→ 84
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(84)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

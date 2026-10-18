@@ -4,7 +4,7 @@
  * 请求带了 `budget.max_turns` 就按它定步数。两档（同进程 / 子进程）各跑一遍。
  */
 import type { ChatMessage, Completion, RunProduce, RunRequest } from '@agentsws/contracts'
-import { UNFINISHED_NUDGE, UNFINISHED_STEP } from '@agentsws/stand-ins'
+import { GENERAL_UNFINISHED_NUDGE, UNFINISHED_NUDGE, UNFINISHED_STEP } from '@agentsws/stand-ins'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createDshRuntime,
@@ -93,15 +93,25 @@ describe.each(MODES)('WP260 dsh（%s）：说了要做却停下 → 续跑', (mo
     )
   })
 
-  it('普通运行（没有 produce）同一句照旧收工', async () => {
-    const gateway = scripted([{ text: '', tool_calls: [READ] }, { text: CI16 }])
+  it('WP423：普通运行（没有 produce）同一句也催一下（通用那句，上限 2 次）', async () => {
+    const gateway = scripted([
+      { text: '', tool_calls: [READ] },
+      { text: CI16 },
+      { text: '读完了，没有要改的。' },
+    ])
     const calls: string[] = []
     const runtime = createDshRuntime({ ...options(gateway, calls), mode })
     const { sink, events } = collect()
     const result = await runtime.run(themeRequest(), sink, new AbortController().signal)
-    expect(gateway.seen).toHaveLength(2)
-    expect(result.outputs).toContainEqual({ kind: 'answer', text: CI16 })
-    expect(events.some((e) => e.type === 'progress' && e.step === UNFINISHED_STEP)).toBe(false)
+    expect(gateway.seen).toHaveLength(3)
+    expect(gateway.seen[2]?.at(-1)).toMatchObject({
+      role: 'user',
+      content: GENERAL_UNFINISHED_NUDGE,
+    })
+    expect(result.outputs).toContainEqual({ kind: 'answer', text: '读完了，没有要改的。' })
+    expect(events.filter((e) => e.type === 'progress' && e.step === UNFINISHED_STEP)).toHaveLength(
+      1,
+    )
   })
 })
 

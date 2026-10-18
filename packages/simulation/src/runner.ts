@@ -2016,6 +2016,7 @@ async function execute(
           who: e.who,
           role: e.role,
           ask: e.ask,
+          ...(e.max_tool_calls === undefined ? {} : { max_tool_calls: e.max_tool_calls }),
         })
         world.appendEvent('simulation.web_research', {
           who: e.who,
