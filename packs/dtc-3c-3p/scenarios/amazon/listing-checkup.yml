@@ -1,0 +1,75 @@
+# WP396（docs/106 §13）：**自家 Listing 体检出 3 处问题、给草稿、下设计需求单**。
+#
+# 1. 李默在 Amazon 美国站卖电动自行车，首次设置划出「Amazon 运营」（亚马逊店铺运营在里面）；
+# 2. 体检三个自家 ASIN（读页积木是替身）：第一款标题里有「Best」、图只有 3 张；第二款没货；
+#    读第三款时 Amazon 出了验证页——停下，不重试、不绕，第三款不读；
+# 3. 判法与服务进程同一份（`checkListing` + 规则表）：出 3 处问题，每处带规则出处；标题那处给一版草稿；
+# 4. 李默在体检卡上点了图片那处的「向设计岗下需求单」→ 一张需求单从亚马逊店铺运营路由到设计岗。
+#    （这个包里设计岗只担 design.dtc，所以真路由到它）。体检自己零写：不出卡、不改 Amazon。
+id: amazon/listing-checkup
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-18T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.plan:
+      who: p_li
+      text: 我们在 Amazon 美国站卖电动自行车
+      roles: [amz.store]
+  - at: '+5m'
+    listing.check:
+      who: p_li
+      design: true
+      blocked: 2
+      pages:
+        - asin: B0VOLT0001
+          title: Voltride City 500 Electric Bike, Best Commuter E-Bike, 48V Battery, 7 Speed
+          bullets:
+            - 48V removable battery rides up to 45 miles per charge
+            - Seven speed gears for hills and long commutes
+            - Hydraulic disc brakes stop fast in the rain
+          images: 3
+          rating: 4.5
+          reviews: 312
+          price: $1,299.00
+        - asin: B0VOLT0002
+          title: Voltride Trail 750 Fat Tire Electric Mountain Bike, 52V, Full Suspension
+          bullets:
+            - 52V battery with 750W rear hub motor
+            - 4 inch fat tires for sand, snow and trails
+            - Full suspension fork and rear shock
+          images: 8
+          rating: 4.4
+          reviews: 96
+          stock: out_of_stock
+        - asin: B0VOLT0003
+          title: Voltride Kids Balance Bike
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  positions_planned:
+    amazon-ops: [amz.store]
+  listing_checkup:
+    issues: [title.promo_words, images.min_count, offer.in_stock]
+    drafts_at_least: 1
+    design_requests: 1
+    # 这个 3 人包里设计岗只担着「独立站设计」（design.dtc），没人担 Amazon 设计——岗位路由真判到它
+    design_routed_to: design.dtc
+    stopped: blocked
+    pages_read: 2
+  event_types:
+    - simulation.position_planned
+    - simulation.listing_read
+    - simulation.listing_issue
+    - simulation.listing_checked
+    - simulation.design_request_requested
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  Listing 体检是不是每处问题都写了是哪条规则、出处在哪？标题那处有没有给一版能直接用的草稿？
+  读到验证页是不是停下了、没有重试？图片问题是不是一点就下到了设计岗？体检自己有没有改 Amazon 上任何东西？
