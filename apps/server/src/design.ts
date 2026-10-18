@@ -433,6 +433,13 @@ export interface DesignServiceOptions {
 
 export interface DesignServiceAssembly {
   port: DesignPort
+  /**
+   * WP421：这条设计职责现在用哪张品牌系统（`get_brand_system` 工具读它）。没设过 = `system` 空、`note` 照实说；
+   * 另带这个品牌 `DESIGN.md` 里的色板与字体（有就带，供 AI 参考；不是品牌系统本身）。
+   */
+  brandSystem(duty: DesignDuty): ResolvedBrandSystem & {
+    design_md?: { colors: string[]; fonts: string[] }
+  }
 }
 
 export function createDesignService(options: DesignServiceOptions): DesignServiceAssembly {
@@ -968,7 +975,22 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
     },
   }
 
-  return { port }
+  return {
+    port,
+    brandSystem: (duty) => {
+      const resolved = brandOf(duty)
+      const profile = options.brandDesignProfile?.()
+      const colors = Object.entries(profile?.colors ?? {}).map(
+        ([k, v]) => `${k} ${String(v.value)}`,
+      )
+      const fonts = Object.values(profile?.typography ?? {})
+        .map((t) => t.value.fontFamily)
+        .filter((f): f is string => typeof f === 'string' && f !== '')
+      return colors.length === 0 && fonts.length === 0
+        ? resolved
+        : { ...resolved, design_md: { colors, fonts: [...new Set(fonts)] } }
+    },
+  }
 }
 
 /** `gateway` 一格都没给的时候那句话（正常路径下读的是 provider 自己的 `unavailable_reason`）。 */

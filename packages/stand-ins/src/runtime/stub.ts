@@ -33,6 +33,12 @@ import {
   sequencesOf,
   startRoundOf,
 } from './b2b-outbound.js'
+import {
+  DESK_TOOL_DEF_BY_NAME,
+  deskBranch,
+  deskToolDataOf,
+  renderDeskAnswer,
+} from './desk-tools.js'
 import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
@@ -400,7 +406,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）
       PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ??
       // WP390：工坊服务的两个工具（服务端接了才有）
-      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ?? {
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
+      DESK_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -843,6 +851,60 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（演示用剧本）。
+       * 工具面里有、话对得上才走：调一次工具，把它回的那句结论 + 明细照抄成回话；别的问法一个字节不变。
+       */
+      const deskText = [
+        threadText,
+        plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? ''),
+      ].join('\n')
+      const deskStep = deskBranch(req, deskText)
+      if (deskStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: deskStep.tool, input: deskStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: deskStep.tool,
+                input: deskStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(deskStep.tool)
+        const answer = renderDeskAnswer(
+          res.status === 'ok' ? deskToolDataOf(res.data) : undefined,
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+        )
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*

@@ -118,6 +118,8 @@ import {
   COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
+  DESK_TOOL_NAMES,
+  deskToolsFor,
   FIND_SERVICE_TOOL,
   GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
@@ -240,6 +242,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...WORKSHOP_SERVICE_TOOL_NAMES,
     // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
     ...AMAZON_COMPETITOR_TOOL_NAMES,
+    // WP421：公关 / 内容与搜索 / B2B / 设计——读本机库只读；起草只出卡（人批了才算数）
+    ...DESK_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -477,6 +481,11 @@ export interface RuntimeOptions {
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。
    */
   b2bOutboundTools?: ToolExecutor
+  /**
+   * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（`deskToolsFor` 那一张表按职责给）。
+   * 不给 = 这几条职责照旧没有这些工具。
+   */
+  deskTools?: ToolExecutor
   /**
    * WP316：改广告的两个工具（`ads-tools.ts` 建的那一份）。给了才进 Google / Meta 两条投放职责的工具面；
    * 执行器里还会再判一次职责。提一批只出卡，批了插件才去用户自己的后台里做。
@@ -1355,6 +1364,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const prMonitor = options.prMonitorTools
     const workshopTools = options.workshopServices?.execute
     const amazonCompetitor = options.amazonCompetitorTools
+    const deskTools = options.deskTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1393,7 +1403,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       competitorStore === undefined &&
       amazonListingTools === undefined &&
       amazonKeywordTools === undefined &&
-      amazonCompetitor === undefined
+      amazonCompetitor === undefined &&
+      deskTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1495,6 +1506,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ) {
         return amazonCompetitor(call)
       }
+      // WP421：公关 / 内容与搜索 / B2B / 设计（名字与别处不重名；职责在执行器里再判一次）
+      if (deskTools !== undefined && DESK_TOOL_NAMES.includes(bareOf(call.name))) {
+        return deskTools(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1553,6 +1568,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       return true
     if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
       return true
+    if (options.deskTools !== undefined && DESK_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -2101,6 +2117,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         AMAZON_COMPETITOR_ROLES.includes(config.role_id)
           ? AMAZON_COMPETITOR_TOOL_NAMES
           : []),
+        // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（按职责那一张表给；服务端接了才有）
+        ...(options.deskTools === undefined ? [] : deskToolsFor(config.role_id)),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))

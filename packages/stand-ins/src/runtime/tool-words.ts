@@ -91,6 +91,19 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // WP390：工坊服务
   find_service: '工坊服务目录',
   draft_service_order: '工坊服务的卡',
+  // WP421：公关 / 内容与搜索 / B2B / 设计
+  list_press_releases: '新闻稿清单',
+  draft_press_release: '新闻稿草稿卡',
+  search_facts: '事实卡',
+  list_forum_posts: '论坛帖清单',
+  draft_forum_post: '论坛帖草稿卡',
+  query_seo_today: '今天值得动的几件事',
+  query_geo_metrics: 'AI 回答监测',
+  list_b2b_records: 'B2B 库',
+  save_b2b_contacts: '导入名单卡',
+  list_design_requests: '设计需求单',
+  get_brand_system: '品牌系统',
+  request_design: '设计需求单',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */

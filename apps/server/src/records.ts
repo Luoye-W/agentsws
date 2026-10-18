@@ -85,6 +85,11 @@ export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
 /** 走知识层、不走连接器的那一个。 */
 export const POLICY_TOOL = 'search_policies'
 /**
+ * WP421：公关两条职责（新闻稿 / 外部论坛）写数字之前「先查事实卡」用的名字。事实卡就在知识库里，
+ * 与 `search_policies` 同一次检索（同一套权限下推），只是名字是职责 yml 里写的那一个。
+ */
+export const FACTS_TOOL = 'search_facts'
+/**
  * WP236：社群线程（群里 / 评论区 / 私信里还没处理完的那些）。社媒五条群聊类职责与社群客服的
  * grounding 一直写着它，但以前没有执行器——模型一调就是 `unsupported_tool`。读本品牌社媒库。
  */
@@ -1191,7 +1196,7 @@ export function createConnectRecordSource(
   /** WP236：这个记录源真能执行哪些工具（运行时只把这些摆给模型）。 */
   const executes = (tool: string): boolean => {
     const bare = bareToolName(tool)
-    if (bare === POLICY_TOOL || TOOL_ACTIONS[bare] !== undefined) return true
+    if (bare === POLICY_TOOL || bare === FACTS_TOOL || TOOL_ACTIONS[bare] !== undefined) return true
     if (bare === COMMUNITY_THREADS_TOOL) return options.social?.()?.threads !== undefined
     return false
   }
@@ -1255,7 +1260,7 @@ export function createConnectRecordSource(
       return exec
     }
     try {
-      if (bare === POLICY_TOOL) {
+      if (bare === POLICY_TOOL || bare === FACTS_TOOL) {
         return finish(
           await searchPolicies(request, stringOf(input.query) ?? request.work_item?.id ?? ''),
         )

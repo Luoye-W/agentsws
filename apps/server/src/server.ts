@@ -454,6 +454,7 @@ import {
   type DeepSeekAccountOptions,
 } from './deepseek-account.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
+import { createDeskToolExecutor } from './desk-tools.js'
 import type { MdnsFactory } from './discovery.js'
 import {
   createDshScenes,
@@ -779,7 +780,12 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
-import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
+import {
+  claimRuleCard,
+  createSeoService,
+  pickRoleHolder,
+  type SeoServiceAssembly,
+} from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createOwnerSetupCode, type LoginMode, loginModeOf } from './setup-code.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
@@ -888,6 +894,16 @@ import {
 
 /** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
 /** WP212：「交给 X ▾」里常驻的五个岗位（与消息相关；别的岗位开着才列）。 */
+/** WP421：AI 读搜索报告卡时看全部状态（报告卡不进队列，状态多半是 auto_approved / applied）。 */
+const DESK_REPORT_STATES = [
+  'pending',
+  'in_review',
+  'approved',
+  'approved_edited',
+  'auto_approved',
+  'applied',
+] as const
+
 const MESSAGE_POSITIONS: readonly string[] = [
   'customer-care',
   'kol-marketing',
@@ -4880,6 +4896,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
     // WP176：开发信装配（`b2bOutbound`）比运行时晚建；运行时里的开发信工具经这个盒子懒取
     const b2bOutboundLate: { current?: B2bOutboundAssembly } = {}
+    // WP421：搜索 / GEO 那一摊比运行时晚建（工具只在真调那一刻才碰它）
+    const seoLate: { current?: { watchMetrics: SeoServiceAssembly['watchMetrics'] } } = {}
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
@@ -6613,6 +6631,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             /*
+             * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具。读的是与界面同一份库，
+             * 起草落到与 `/v1/pr|b2b|design/*` 同一个端口（出卡，人批了才算数）。
+             */
+            deskTools: createDeskToolExecutor({
+              pr: () => prService.port,
+              company: () => ({
+                name: onboardingRef?.companyProfile(ws)?.legal_name ?? brandNameOfWorkspace(ws),
+              }),
+              seoReports: async (actor) => {
+                const states = [...DESK_REPORT_STATES]
+                const mine = await txn.approvals.queue({
+                  workspace_id: ws,
+                  person_id: actor.person_id,
+                  lane: 'mine',
+                  kind: 'seo_report',
+                  state: states,
+                })
+                const scope = await txn.approvals
+                  .queue({
+                    workspace_id: ws,
+                    person_id: actor.person_id,
+                    lane: 'scope',
+                    kind: 'seo_report',
+                    state: states,
+                  })
+                  .catch(() => [])
+                return [...mine, ...scope.filter((x) => !mine.some((m) => m.id === x.id))]
+              },
+              geoMetrics: async () => seoLate.current?.watchMetrics({ weeks: 5 }),
+              b2b: () => ({ store: b2b, port: b2bService.port }),
+              design: () => designService,
+            }),
+            /*
              * WP253：网页模板的九个受限主题工具（起底 / 列 / 拉 / 检查 / 看改文件 / 推未发布 / 发布出卡）。
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
@@ -7277,6 +7328,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return createGeoStore(join(dir, 'geo.sqlite'))
       },
     })
+    seoLate.current = seoService
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
      *
