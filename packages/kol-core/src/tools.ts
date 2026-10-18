@@ -155,8 +155,11 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
           enum: ['first', 'follow_up', 'final'],
           description: '第几封，默认 first',
         },
-        product: str('要推的产品'),
+        product: str('要推的产品（不给就用存过的默认产品）'),
         reason: str('为什么找这个人（一句话，会进正文）'),
+        brand_pitch: str(
+          '一句话介绍我们是做什么的（会进正文）。不给就从品牌档案取；品牌档案里也没有时，按你知道的品牌情况写一句，卡上会标出来让人确认',
+        ),
       },
       required: ['creator_id'],
     },

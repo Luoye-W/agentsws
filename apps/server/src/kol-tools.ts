@@ -419,18 +419,39 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         const creator_id = str(input.creator_id)
         if (creator_id === undefined) return missing('creator_id')
         const step = (['first', 'follow_up', 'final'] as const).find((s) => s === input.step)
+        /*
+         * WP416（决策 531）：产品不给就用存过的默认；「一句话介绍我们」不给由服务端从品牌档案补，
+         * AI 给了就用 AI 写的（卡上标出来让人看）。
+         */
+        const defaults = await port.outreachDefaults?.(actor)
+        const product =
+          str(input.product) ??
+          (defaults?.product === undefined || defaults.product === ''
+            ? undefined
+            : defaults.product)
+        // 品牌这边已经有那一句（存过的 / 品牌档案）就用它，AI 写的只在都没有时补上
+        const pitch =
+          defaults !== undefined && defaults.brand_pitch !== '' ? undefined : str(input.brand_pitch)
         const view = await port.outreach(actor, {
           creator_id,
           channel,
           ...(step === undefined ? {} : { step }),
-          product: str(input.product) ?? '我们的产品',
+          product: product ?? '我们的产品',
           ...(str(input.reason) === undefined ? {} : { reason: str(input.reason) }),
+          ...(pitch === undefined ? {} : { brand_pitch: pitch, pitch_by_ai: true }),
         })
         return stagedOf(view, 'kol_outreach', {
           subject: view.subject,
           forbidden_hits: view.forbidden_hits,
           missing_vars: view.missing_vars,
           quota: view.quota,
+          // WP416：没连发信邮箱——运行时据此在对话里就地出一张连接卡（决策 690）
+          ...(view.needs_mailbox === true
+            ? {
+                needs_mailbox: true,
+                note: '卡出了，但还没连发信邮箱：批了也发不出去。先连上邮箱。',
+              }
+            : {}),
         })
       }
 

@@ -510,6 +510,7 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
+import { createKolMail, isKolCollaborationCard, type KolMailPort } from './kol-mail.js'
 import { kolPaymentApply, kolSampleApply } from './kol-money.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import {
@@ -2608,6 +2609,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kolSampleApply(brand, change, () => clock.now()) ??
         kolPaymentApply(brand, change, () => clock.now())
       if (sandboxed !== undefined) return sandboxed
+      // WP416：真红人的开发信经已连邮箱发（读回才算）、建合作 / 验收卡批了才落库
+      const kolApplied = await brand?.kolMail?.apply(change)
+      if (kolApplied !== undefined) return kolApplied
       // WP329：公关的 Reddit 外部发帖卡批了 → 插件填发帖页、人点发送（以前批了也发不出去）
       const externalPosted = await applyExternalPost(change, {
         writes: brand?.redditWrites,
@@ -4918,8 +4922,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       personName: async (person_id) => (await identity.getPerson(person_id))?.name ?? person_id,
       // WP299（决策 388 / 389）：英文开发信页脚的公司地址、打分用的一句话介绍与目标市场
       brandProfile: () => onboardingRef?.brandProfile(ws) ?? {},
+      // WP416：有没有能发信的邮箱（没有：开发信卡照实说、要人点、就地出连接卡）
+      mailConnected: () => kolMail.connected(),
       appendEvent,
       random,
+    })
+    /*
+     * WP416：红人这一路的真执行器。邮箱渠道在下面才建（`channels`），所以发信那一半晚绑定；
+     * 测试与 demo 用 `b2bStandIns`（替身邮箱 / 替身 SMTP，同 B2B 开发信那一套），生产走消息层。
+     */
+    const kolMailBox: { current?: KolMailPort } = {}
+    const kolMail = createKolMail({
+      workspace_id: ws,
+      store: kol,
+      secrets: brandSecrets,
+      clock,
+      mail: () => kolMailBox.current,
+      appendEvent,
     })
 
     /**
@@ -7575,6 +7594,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
       ...(options.mailer === undefined ? {} : { makeMailer: options.mailer }),
     })
+    // WP416：红人开发信经这只邮箱发（替身优先：测试与 demo 不连真邮箱）
+    kolMailBox.current = {
+      addresses: () =>
+        options.b2bStandIns?.mailboxes === undefined
+          ? channels.addresses()
+          : [...options.b2bStandIns.mailboxes],
+      sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
+      ...(options.b2bStandIns?.sendMail !== undefined
+        ? {}
+        : {
+            readBack: async (outbox_id: string) => {
+              const row = await channels.outbox.store.get(outbox_id)
+              return row === undefined ? undefined : { status: row.status }
+            },
+          }),
+    }
     // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
     connections.onMailChange(() => {
       channels.refresh()
@@ -7890,6 +7925,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       workspace_id: ws,
       b2b: b2bMail,
+      // WP416：红人回信对上人和合作（回我们开发信的那一封按线程分到红人）
+      kol: kolMail,
       appendEvent,
       halt: brandHalt,
       accounts: () => connections.mailAccounts(),
@@ -9012,6 +9049,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol,
       kolService,
       kolSandbox,
+      kolMail,
       kolPublic,
       searchData,
       ...(webBrowser === undefined ? {} : { webBrowser }),
@@ -9176,6 +9214,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP276（决策 237）：有人申请加入——卡上同意 / 拒绝就是同意 / 拒绝这条申请（谁先点算谁的）
     if (item.kind === 'membership') return onMembershipDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
+    // WP416：建合作卡点了「不要」→ 等着点头的那一行删掉（批了由执行器落库）
+    if (isKolCollaborationCard(item)) return brand?.kolMail?.onDecided(item)
+    // WP416：挑人清单卡在「要你处理」里批了 = 面板上点「接受」（按清单为每个人提一张建合作卡）
+    if (item.kind === 'kol_campaign') {
+      const by = item.decision?.by
+      const assignment_id = item.proposer.assignment_id
+      if (
+        (item.state === 'approved' || item.state === 'approved_edited') &&
+        brand !== undefined &&
+        by !== undefined &&
+        by !== 'mandate' &&
+        assignment_id !== undefined
+      )
+        await brand.kolService.port.acceptCampaign(
+          { workspace_id: item.workspace_id, person_id: by, assignment_id, role_id: item.role_id },
+          item.id,
+        )
+      return
+    }
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
     // WP210：客户来信投不进的那张卡批了（「再投一次」）→ 把那条死信重投回队列；
@@ -14758,7 +14815,10 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP350：助理扇出的「要记的 N 条」确认卡
           isAssistantNotesCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
-          isRecordSinkCard(out)
+          isRecordSinkCard(out) ||
+          // WP416：建合作卡点了「不要」→ 那一行删掉；挑人清单卡批了 → 按清单建合作
+          isKolCollaborationCard(out) ||
+          out.kind === 'kol_campaign'
         ) {
           try {
             await hook.current?.(out)

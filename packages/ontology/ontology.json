@@ -151,7 +151,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "f7e8c2ca52adf9070195ffe2bbf10bb0",
+  "source_digest": "4ae2ab03d8ffa7015226c69f0d695cd9",
   "objects": [
     {
       "id": "ad",
@@ -1461,6 +1461,12 @@
         },
         {
           "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "awaiting_approval",
           "type": "boolean",
           "sensitivity": "internal",
           "optional": true

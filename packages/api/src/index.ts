@@ -506,6 +506,7 @@ export type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,
   KolRevealPrice,
