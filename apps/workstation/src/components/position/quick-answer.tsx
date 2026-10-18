@@ -22,11 +22,19 @@ import { useApp } from '@/lib/app-context'
 import { RAIL_KEY } from '@/lib/work-archive'
 import { askAtPosition, closeQuickAnswer, useQuickAnswer } from './quick-answer-store'
 
-export function QuickAnswer({ position }: { position: string }): ReactNode {
+export function QuickAnswer({
+  position,
+  role_id,
+}: {
+  position: string
+  /** WP412：职责页上只出在这条职责上问的那一条（岗位页不给 = 这个岗位上的都出）。 */
+  role_id?: string
+}): ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
   const client = useQueryClient()
-  const entry = useQuickAnswer(position)
+  const here = useQuickAnswer(position)
+  const entry = role_id === undefined || here?.role_id === role_id ? here : undefined
   /** 「依据」展开的是哪一条（换了一条回答就收起） */
   const [basisFor, setBasisFor] = useState<number | undefined>(undefined)
 
