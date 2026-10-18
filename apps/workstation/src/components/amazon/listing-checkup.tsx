@@ -51,7 +51,9 @@ function IssueRow({ issue, assignment }: { issue: ListingIssue; assignment: stri
         <span className="text-sm font-medium">{issue.rule_name}</span>
         {issue.source.url === undefined ? (
           <span className="text-xs text-muted-foreground" data-testid="alst-source">
-            {issue.source.kind === 'practice' ? `${t('alst.practice')} · ` : ''}
+            {issue.source.kind === 'practice' && !issue.source.title.startsWith(t('alst.practice'))
+              ? `${t('alst.practice')} · `
+              : ''}
             {issue.source.title}
           </span>
         ) : (
@@ -233,7 +235,7 @@ export function ListingCheckupCard({
 }
 
 function Summary({ view }: { view: ListingCheckupView }): ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const run = view.latest
   if (run === undefined) return null
   const s = run.summary
@@ -244,7 +246,14 @@ function Summary({ view }: { view: ListingCheckupView }): ReactNode {
           ? t('alst.summary.clean', { asins: s.asins })
           : t('alst.summary', { asins: s.asins, issues: s.issues })}
         <span className="ml-2 text-xs text-muted-foreground">
-          {t('alst.when', { at: new Date(run.finished_at).toLocaleString() })}
+          {t('alst.when', {
+            at: new Date(run.finished_at).toLocaleString(lang === 'en' ? 'en-US' : 'zh-CN', {
+              month: 'numeric',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          })}
         </span>
       </p>
       {s.worst === undefined ? null : (
@@ -299,7 +308,7 @@ export function ListingCheckupBlock({ assignment }: { assignment: string }): Rea
               <li key={key} className="flex flex-col gap-1.5">
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 text-left text-sm hover:underline"
+                  className="flex w-full min-w-0 items-center gap-1.5 text-left text-sm hover:underline"
                   onClick={() => setOpen(isOpen ? undefined : key)}
                   data-testid="alst-asin"
                   aria-expanded={isOpen}
@@ -314,7 +323,9 @@ export function ListingCheckupBlock({ assignment }: { assignment: string }): Rea
                   <span className="min-w-0 flex-1 truncate">{item.label ?? item.title ?? ''}</span>
                   <span
                     className={
-                      item.status === 'checked' ? 'text-xs' : 'text-xs text-muted-foreground'
+                      item.status === 'checked'
+                        ? 'shrink-0 text-xs'
+                        : 'shrink-0 text-xs text-muted-foreground'
                     }
                   >
                     {item.status === 'checked'

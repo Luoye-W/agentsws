@@ -32,6 +32,9 @@ scopes:
   - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
   - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  # WP396：体检卡上「向设计岗下需求单」那个按钮走 `/v1/design/requests`（下面 `request_design` 那条动作），
+  # 要能提一张 `design_request`；只提单、不读设计岗的 brief（那一域只有设计岗有）
+  - { domain: design_request, ops: [read, stage], range: assigned, max_sensitivity: internal }
 
 connectors:
   # 连接目录里的 `amazon_sp`（现在是 planned）。`required: false`：没连照样能读前台、

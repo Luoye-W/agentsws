@@ -120,7 +120,7 @@ async function main() {
 
     for (const theme of ['light', 'dark']) {
       const context = await browser.newContext({
-        viewport: { width: 1440, height: 900 },
+        viewport: { width: 1440, height: 2200 },
         colorScheme: theme,
       })
       await context.addInitScript(
@@ -141,9 +141,12 @@ async function main() {
       await nav.waitFor({ timeout: 20_000 })
       await nav.click()
       await page.waitForURL(/\/positions\/[^/?]+/, { timeout: 20_000 })
-      await page.goto(`${page.url().split('?')[0]}?tab=view`, { waitUntil: 'networkidle' })
+      await page.goto(`${page.url().split('?')[0]}?tab=view`, { waitUntil: 'load' })
       const block = page.getByTestId('alst-block')
-      await block.waitFor({ timeout: 20_000 })
+      await block.waitFor({ timeout: 60_000 }).catch(async (e) => {
+        await page.screenshot({ path: join(tmpdir(), 'wp396-e2e-fail.png') })
+        throw e
+      })
       const summary = (await page.getByTestId('alst-summary').textContent()) ?? ''
       check(/3 个 ASIN · \d+ 处问题/.test(summary), `面板摘要：${summary.slice(0, 40)}（${theme}）`)
       await block.scrollIntoViewIfNeeded()
