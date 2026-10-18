@@ -313,10 +313,17 @@ try {
     channel: 'chromium',
     headless: !flag('--headed'),
     viewport: { width: 1280, height: 800 },
-    args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
+    args: [
+      `--disable-extensions-except=${ext}`,
+      `--load-extension=${ext}`,
+      // WP419：保底——没被下面截住的请求（插件新开标签页偶尔先于路由生效）一律解析不到，绝不连到真站
+      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
+      // 系统代理（fake-IP 那种）会绕过上面的解析规则：不走代理
+      '--no-proxy-server',
+    ],
   })
   // 只放本机；Reddit 一律回替身；别的一律掐
-  await context.route('**/*', async (route) => {
+  const guard = async (route) => {
     const u = new URL(route.request().url())
     if (u.protocol === 'chrome-extension:' || u.hostname === '127.0.0.1') return route.continue()
     if (/(^|\.)reddit\.com$/u.test(u.hostname)) {
@@ -334,7 +341,16 @@ try {
       return route.fulfill({ status: 404, body: '' })
     }
     leaked.push(u.href)
+    if (process.env.WP419_DEBUG === '1')
+      console.log(
+        `[掐掉] ${u.href} ${route.request().resourceType()} ← ${route.request().frame()?.url() ?? '?'}`,
+      )
     return route.abort()
+  }
+  await context.route('**/*', guard)
+  // WP419：插件新开的标签页偶尔绕过 context 级的截取——每个新页面再挂一层同样的
+  context.on('page', (p) => {
+    void p.route('**/*', guard).catch(() => undefined)
   })
   let [sw] = context.serviceWorkers()
   if (sw === undefined) sw = await context.waitForEvent('serviceworker', { timeout: 20_000 })
@@ -415,11 +431,19 @@ try {
   await alice.locator('[data-testid="ws-draft"]').fill(EDITED)
   await alice.locator('[data-testid="ws-fill"]').click()
   let pg
+  let reloaded = false
   const filled = await until(async () => {
     pg = context
       .pages()
       .find((x) => x.url().startsWith('https://old.reddit.com/r/ivraxr/comments/abc/'))
     if (pg === undefined) return false
+    // WP419：插件新开的标签页偶尔先于截取生效（打到了解析不到的真站）——不是替身页就重载一次（这时截取已挂上）
+    const title = await pg.title().catch(() => '')
+    if (!title.includes('替身') && !reloaded) {
+      reloaded = true
+      await pg.reload().catch(() => undefined)
+      return false
+    }
     const v = await pg
       .locator('#thing_t1_c1 > .child textarea')
       .inputValue()
