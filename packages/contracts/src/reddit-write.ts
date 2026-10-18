@@ -90,7 +90,7 @@ export type RedditStageResult =
 export interface RedditWritePayload {
   form: typeof REDDIT_WRITE_FORM
   channel: 'reddit'
-  /** 卡上一行：「Reddit · r/inmoxr」。 */
+  /** 卡上一行：「Reddit · r/ivraxr」。 */
   channel_label: string
   /**
    * 写到哪。**不叫 `target`**：审批总线把 `payload.target` 当成「改的是哪个对象」（`ObjectRef`）
@@ -132,7 +132,7 @@ export interface RedditWriteView {
   record_id?: string
   queued_at: Iso8601
   finished_at?: Iso8601
-  /** WP332：卡上那一行（「回复 alice（Reddit · r/inmoxr）」）；岗位页提醒条用它说是哪一条。 */
+  /** WP332：卡上那一行（「回复 alice（Reddit · r/ivraxr）」）；岗位页提醒条用它说是哪一条。 */
   label?: string
   /** WP332：没发出去的那一类（`handover` 停下交给人 / `stopped` 点了停止 / `expired` 没人来领 / `failed`…）。 */
   outcome?: string

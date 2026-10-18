@@ -5,6 +5,7 @@
  * 事件按**虚拟时间**执行；每推进一步都跑一次"合成人决定 + 执行器出队"，
  * 因为 14 §4.1 的取消窗口与 15 §5 的父子顺序都只有在时间真的流动时才成立。
  */
+
 import type {
   ApprovalItem,
   Assignment,
@@ -18,8 +19,10 @@ import type {
 } from '@agentsws/contracts'
 import { instructionRuleCard, isInstructionRuleCard, ruleFromCard } from '@agentsws/core'
 import type { ActorPolicy } from '@agentsws/stand-ins'
+import { runAmazonKeywordSample } from './amazon-keywords.js'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
+import { type CompetitorWatchLoop, installCompetitorWatch } from './competitor.js'
 import { buildRunRequest } from './context.js'
 import { type DesignLoop, installDesign } from './design.js'
 import type { ModelTrace } from './diagnostics.js'
@@ -29,6 +32,7 @@ import { checkExpectations } from './expectations.js'
 import { checkInvariants } from './invariants.js'
 import type { JudgeReport } from './judge.js'
 import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
+import { runListingCheck } from './listing.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
@@ -893,6 +897,13 @@ async function execute(
   /**
    * 惰性装配：场景里没有 `position.*` 就一个都不装（同 `secretary` / `chat`）。
    */
+  /** WP392：竞品监控（惰性：场景里没有 `competitor.read` 就不装）。 */
+  let competitorWatch: CompetitorWatchLoop | undefined
+  const competitorLoop = (): CompetitorWatchLoop => {
+    competitorWatch ??= installCompetitorWatch(world)
+    return competitorWatch
+  }
+
   let positions: PositionsLoop | undefined
   const positionsLoop = (): PositionsLoop => {
     positions ??= installPositions(world)
@@ -1252,6 +1263,27 @@ async function execute(
         await positionOpen(event.open_at_position)
         return
       }
+      // WP395：首次设置按原话与勾选划分岗位、照建议配岗
+      case 'position.plan': {
+        positionsLoop().plan({
+          who: event.plan.who as never,
+          text: event.plan.text,
+          roles: event.plan.roles,
+        })
+        return
+      }
+      // WP396：自家 Listing 体检（替身读页、同一份判法）；人点了「向设计岗下需求单」就走设计岗那条
+      case 'listing.check': {
+        const out = runListingCheck(world, event.listing_check)
+        if (event.listing_check.design === true && out.design !== undefined)
+          await designRequest({
+            who: event.listing_check.who as never,
+            from: 'amz.store' as never,
+            title: out.design.title,
+            need: out.design.need,
+          })
+        return
+      }
       // WP343：「我的助理」派活
       case 'assistant.dispatch': {
         try {
@@ -1274,6 +1306,19 @@ async function execute(
         } catch (e) {
           workBlocked(e, 'assistant_fanout_failed')
         }
+        return
+      }
+      // WP392：竞品监控读一次（替身进料口；和上一次快照比）
+      case 'competitor.read': {
+        // WP394：Amazon 对标款走和服务进程同一份「读那一轮」（被拦就停、退云端、积分照扣）
+        if (event.competitor_read.source === 'amazon')
+          await competitorLoop().readAmazon(event.competitor_read)
+        else competitorLoop().read(event.competitor_read)
+        return
+      }
+      // WP393：店铺管理「竞品动向」配好了
+      case 'competitor.plan': {
+        competitorLoop().plan(event.competitor_plan)
         return
       }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
@@ -1574,6 +1619,12 @@ async function execute(
         await tick()
         return
       }
+      // WP386：拉一条监控源（不联网：feed 内容由场景给）
+      case 'pr.feed': {
+        await world.pr.feed(event.feed)
+        await tick()
+        return
+      }
       case 'pr.release': {
         const e = event.release
         const out = await world.pr.release({
@@ -1593,6 +1644,22 @@ async function execute(
           // 没出处的那几个数原样记下来——卡面与 block 消息里就是它们
           uncited: out.uncited,
           distributed: out.distributed,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'pr.alerts_build': {
+        const e = event.alerts_build
+        const out = await world.pr.alertsBuild({
+          who: e.who,
+          lines: e.lines,
+          ...(e.unchecked === undefined ? {} : { unchecked: e.unchecked }),
+          ...(e.existing === undefined ? {} : { existing: e.existing }),
+        })
+        world.appendEvent('simulation.pr_alerts_requested', {
+          staged: out.staged,
+          lines: out.lines,
           ...(out.reason === undefined ? {} : { reason: out.reason }),
         })
         await tick()
@@ -1957,6 +2024,25 @@ async function execute(
         world.appendEvent('simulation.geo_quality', {
           who: event.geo_quality.who,
           item: out.approval_item_id,
+        })
+        return
+      }
+      // WP398：Amazon 词库（录好的联想词与 Listing 文本，和服务进程同一份拆词 / 差距）
+      case 'amazon.keywords': {
+        const out = runAmazonKeywordSample({
+          world,
+          ...(event.amazon_keywords.blocked_at === undefined
+            ? {}
+            : { blocked_at: event.amazon_keywords.blocked_at }),
+        })
+        world.appendEvent('simulation.amazon_keywords', {
+          who: event.amazon_keywords.who,
+          autocomplete: out.autocomplete,
+          seed: out.seed,
+          pages_read: out.pages_read,
+          gaps: out.gaps.slice(0, 10),
+          other_brand_terms: out.other_brand_terms,
+          total: out.total,
         })
         return
       }

@@ -713,3 +713,44 @@ describe('WP321 自带 key 与迁移', () => {
     expect((await service.geoHistory()).watch()?.prompt_limit).toBe(10)
   })
 })
+
+describe('WP392 品牌档案里新查到的竞品：沿用「要不要加进竞品」那张卡问一次', () => {
+  it('不在关注清单里的才问；给担店铺管理的人；批了加进竞品；同一家不再问第二次', async () => {
+    const w = world()
+    const STORE = { ...CONTENT, assignment_id: 'asg_store', role_id: 'dtc.store' }
+    const { service, cards, decide } = setup(w, {
+      holderOf: (role) =>
+        role === 'dtc.store' ? STORE : role === 'dtc.content' ? CONTENT : undefined,
+      brand: () => ({
+        name: 'NordVolt',
+        language: 'en',
+        domains: ['nordvolt.example'],
+        shop_host: 'nordvolt.example',
+        currency: 'USD',
+        country: 'us',
+        markets: ['US'],
+        competitors: [
+          { name: 'Anker', reason: '同价位', url: 'https://www.anker.example/us' },
+          { name: 'Zendure', reason: '露营圈常比' },
+        ],
+      }),
+    })
+    await service.watchApply({
+      competitors: [{ id: 'c_anker', name: 'Anker', aliases: [], domains: [] }],
+    })
+    const first = await service.askProfileCompetitors()
+    expect(first.asked).toEqual(['Zendure'])
+    const [card] = await cards('geo_watch_competitors')
+    if (card === undefined) throw new Error('没出竞品卡')
+    expect(card.role_id).toBe('dtc.store')
+    const p = card.payload as Extract<GeoWatchCardPayload, { form: 'geo_watch_competitors' }>
+    expect(p.competitors).toMatchObject([{ name: 'Zendure', answers: 0 }])
+    // 再敲一次：问过了，不再问
+    expect((await service.askProfileCompetitors()).asked).toEqual([])
+    await decide(card.id, 'approve')
+    expect((await service.watchView()).watch.competitors.map((c) => c.name)).toEqual([
+      'Anker',
+      'Zendure',
+    ])
+  })
+})

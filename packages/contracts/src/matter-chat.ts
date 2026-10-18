@@ -32,7 +32,7 @@ const widthOf = (ch: string): number =>
 
 /**
  * 原话 → 退路标题：一行化，看上去超过 {@link SHORT_TITLE_FALLBACK} 个字宽就截断加「…」
- * （中文一字一格，英文字母半格——「用 agentsws-theme 给 Rollout 搭英文首页…」）。
+ * （中文一字一格，英文字母半格——「用 agentsws-theme 给 Rovella 搭英文首页…」）。
  */
 export function fallbackShortTitle(brief: string): string {
   const flat = brief.replace(/\s+/gu, ' ').trim()

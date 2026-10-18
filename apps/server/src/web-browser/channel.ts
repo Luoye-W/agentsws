@@ -28,7 +28,11 @@ export interface SearchBrowserChannel {
   open(input: {
     workspace_id: string
     url: string
-    kind: 'google' | 'bing' | 'page'
+    /**
+     * WP393：`data` = 读数据地址的原文（竞品店公开商品数据被直接请求挡了时）。
+     * WP394：`html` = Amazon 前台页的 HTML 原文（壳那边只认 Amazon 的网址）。
+     */
+    kind: 'google' | 'bing' | 'page' | 'data' | 'html'
     timeout_ms: number
     settle_ms?: number
     max_chars?: number
@@ -40,7 +44,22 @@ export interface SearchBrowserChannel {
     message: string
   }): Promise<boolean>
   status(workspace_id: string): Promise<{ revealed: boolean; verified_at?: number } | undefined>
+  /**
+   * WP394（docs/104 §2.3）：把这个品牌内置浏览器里 Amazon 某站的「配送到」设成一个邮编（不登录，只是地址 cookie）。
+   * 老的桌面壳没有这一口：回 `{ ok: false }`，调用方照实说。
+   */
+  amazonDelivery?(input: {
+    workspace_id: string
+    url: string
+    zip: string
+    timeout_ms?: number
+  }): Promise<AmazonDeliveryResult>
 }
+
+/** WP394：设配送邮编的结果。 */
+export type AmazonDeliveryResult =
+  | { ok: true; deliver_to?: string }
+  | { ok: false; reason: 'timeout' | 'failed' | 'blocked' | 'unreachable'; message: string }
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>
 
@@ -97,6 +116,21 @@ export function searchBrowserChannelFromEnv(
         return got.shown === true
       } catch {
         return false
+      }
+    },
+    async amazonDelivery(input) {
+      try {
+        return (await call(
+          '/amazon-delivery',
+          { method: 'POST', body: JSON.stringify(input) },
+          (input.timeout_ms ?? 20_000) * 2 + 30_000,
+        )) as AmazonDeliveryResult
+      } catch (err) {
+        return {
+          ok: false,
+          reason: 'unreachable',
+          message: `连不上工坊的内置浏览器：${err instanceof Error ? err.message : String(err)}`,
+        }
       }
     },
     async status(workspace_id) {

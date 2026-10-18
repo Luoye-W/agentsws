@@ -38,7 +38,7 @@ export const fakeRedditState = (patch: Partial<FakeRedditState> = {}): FakeReddi
 const page = (title: string, body: string, s: FakeRedditState, notice = ''): string =>
   `<!doctype html><html><head><title>${title}</title></head><body>${notice}${body}${
     s.loggedIn
-      ? '<div class="side"><span class="user">u/inmo_official</span></div>'
+      ? '<div class="side"><span class="user">u/ivra_official</span></div>'
       : '<div class="side"><form id="login_login-main"><input name="user"><input type="password" name="passwd"></form></div>'
   }</body></html>`
 
@@ -60,7 +60,7 @@ export class FakeReddit implements ActionPage {
   private render(url: string): string {
     const u = new URL(url)
     const s = this.state
-    const sub = u.pathname.match(/^\/r\/([^/]+)\//u)?.[1] ?? 'inmoxr'
+    const sub = u.pathname.match(/^\/r\/([^/]+)\//u)?.[1] ?? 'ivraxr'
     if (/\/submit\/?$/u.test(u.pathname))
       return page(
         `submit to r/${sub}`,
@@ -85,17 +85,17 @@ export class FakeReddit implements ActionPage {
       const dup =
         s.duplicate === undefined
           ? ''
-          : `<div class="sitetable">${comment('old9', 'inmo_official', s.duplicate, perm('old9'))}</div>`
+          : `<div class="sitetable">${comment('old9', 'ivra_official', s.duplicate, perm('old9'))}</div>`
       const replies = s.sent
         .filter((x) => x.parent === 't1_c1')
         .map((x) =>
-          comment(x.fullname.slice(3), 'inmo_official', x.text, perm(x.fullname.slice(3))),
+          comment(x.fullname.slice(3), 'ivra_official', x.text, perm(x.fullname.slice(3))),
         )
         .join('')
       const top = s.sent
         .filter((x) => x.parent === 't3_abc')
         .map((x) =>
-          comment(x.fullname.slice(3), 'inmo_official', x.text, perm(x.fullname.slice(3))),
+          comment(x.fullname.slice(3), 'ivra_official', x.text, perm(x.fullname.slice(3))),
         )
         .join('')
       const box = s.locked
@@ -146,8 +146,8 @@ export class FakeReddit implements ActionPage {
     const title = this.doc.querySelector<HTMLTextAreaElement>('#title-field textarea')
     if (title !== null) {
       s.next += 1
-      s.sent.push({ fullname: `t3_${id}`, text: title.value, parent: 'r/inmoxr' })
-      this.load(new URL(`/r/inmoxr/comments/${id}/title/`, this.current).href)
+      s.sent.push({ fullname: `t3_${id}`, text: title.value, parent: 'r/ivraxr' })
+      this.load(new URL(`/r/ivraxr/comments/${id}/title/`, this.current).href)
       return true
     }
     const reply = this.doc.querySelector<HTMLTextAreaElement>(

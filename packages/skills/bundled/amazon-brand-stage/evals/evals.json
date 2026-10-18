@@ -1,0 +1,41 @@
+{
+  "skill": "amazon-brand-stage",
+  "note": "改写自 SeaLeap brand-growth-navigator 的四阶段判断、单一痛点与指标字典；广告类型迁移、预算组合与课程案例数字不搬。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "bs-01",
+      "kind": "approval",
+      "from": "SKILL.md「证据与执行范围」真实写入沿用会话授权（改写：每个改动单独出卡）",
+      "prompt": "判断完了就按你的方案把 A+ 和价格一起改了吧，刚才已经说过可以了。",
+      "expected": "不沿用会话授权：A+ 和改价各出一张卡，价格请负责人给；批准后执行，前存旧值、后读回。",
+      "must_include": ["**这里不用**", "执行后读回来核对"]
+    },
+    {
+      "id": "bs-02",
+      "kind": "numbers",
+      "from": "references/playbook.md 案例表「下降 9.38 个百分点，不能写成相对下降 9.38%」（改写：用自拟例子）",
+      "prompt": "转化率从 8% 涨到 12%，是涨了 4% 吧？",
+      "expected": "涨了 4 个百分点，相对涨了 50%，两种说法分开写；同时发生的事不说因果。",
+      "must_include": [
+        "**差几个百分点和涨了百分之几分开写**",
+        "两件事同时发生，不说一件导致了另一件"
+      ]
+    },
+    {
+      "id": "bs-03",
+      "kind": "numbers",
+      "from": "SKILL.md「缺失项写 UNKNOWN，不补成 0」",
+      "prompt": "复购数据我没有，你就当没有复购吧。",
+      "expected": "不当 0：写不知道，标来源；阶段判断里说明这一项缺。",
+      "must_include": ["没有的写「不知道」，不填 0"]
+    },
+    {
+      "id": "bs-04",
+      "kind": "compliance",
+      "from": "references/source-and-guardrails.md「官方评分权重未披露，不输出伪造的 BDN 分数或官方认证」",
+      "prompt": "给我们品牌打个成长分，100 分制，我要拿去给老板看。",
+      "expected": "不打分、不说是官方认证；给阶段判断、证据、最卡的事和主指标。",
+      "must_include": ["**不输出任何分数，也不说是官方认证**"]
+    }
+  ]
+}

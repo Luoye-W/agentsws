@@ -86,9 +86,9 @@ describe('WP267 店铺授权之前先关自动升级（假 shopify 真子进程�
   it('config autoupgrade off 在本品牌店铺会话目录、带 CI；store auth 本身不带 CI；再授权不重复关', async () => {
     const cli = fakeStoreCli(dir)
     const auth = createStoreAuthRunner({ now: () => new Date().toISOString() })
-    const home = cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rollout')
+    const home = cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rovella')
     const a = createShopAdmin({
-      workspace_id: 'ws_rollout',
+      workspace_id: 'ws_rovella',
       clock: { now: () => new Date().toISOString() },
       cliSpec: () => spec,
       probe: async () => ({
@@ -101,7 +101,7 @@ describe('WP267 店铺授权之前先关自动升级（假 shopify 真子进程�
       }),
       invocation: () => ({ command: process.execPath, prefix: [cli.entry] }),
       sessionHome: home,
-      store: async () => 'rollout-test.myshopify.com',
+      store: async () => 'rovella-test.myshopify.com',
       setStore: async () => {},
       install: () => undefined,
       installJob: () => undefined,

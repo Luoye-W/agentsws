@@ -29,7 +29,7 @@ import { ShopAdminError, type ShopifyAdminReader } from '../src/shop-admin.js'
 import { demoShop, type FakeShop, resolveFakeShop } from '../src/shop-admin-stand-in.js'
 import { SHOPIFY_STAND_IN_SCOPES } from '../src/shopify-cloud-stand-in.js'
 
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 const T0 = '2026-10-14T06:00:00.000Z'
 
 /** 近 30 天里的三笔（昨天两笔、今天一笔）+ 一笔 40 天前的（窗口外，要被丢掉）。 */
@@ -245,7 +245,7 @@ describe('WP319 ① 端到端：连接页一键授权之后，面板「店铺后
         scopes: [...SHOPIFY_STAND_IN_SCOPES, 'read_publications', 'write_publications'],
       },
     })
-    // 这台机器上没有 Shopify CLI（Rollout 那台 Windows 也一样：店是在连接页一键授权连的）
+    // 这台机器上没有 Shopify CLI（Rovella 那台 Windows 也一样：店是在连接页一键授权连的）
     const exec: ProbeExec = async (bin) =>
       bin === 'node' ? { ok: true, stdout: 'v22.12.0' } : { ok: false, stdout: '', missing: true }
     server = await createServer({
@@ -276,7 +276,7 @@ describe('WP319 ① 端到端：连接页一键授权之后，面板「店铺后
     await call(
       'PUT',
       '/v1/workspace/profile',
-      { legal_name: 'Rollout', storefront_platform: 'shopify' },
+      { legal_name: 'Rovella', storefront_platform: 'shopify' },
       owner,
     )
     await call(

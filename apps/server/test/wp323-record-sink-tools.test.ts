@@ -35,7 +35,7 @@ function setup() {
             { field_name: '版块', type: 1 },
             { field_name: '回复内容', type: 1 },
           ],
-          records: [{ 日期: '2026/10/13', 版块: 'r/inmoxr', 回复内容: 'old' }],
+          records: [{ 日期: '2026/10/13', 版块: 'r/ivraxr', 回复内容: 'old' }],
         },
       ],
     ]),
@@ -76,7 +76,7 @@ describe('记录去处的工具', () => {
       { name: '版块', type: 'text' },
       { name: '回复内容', type: 'text' },
     ])
-    expect(data.samples).toEqual([['2026/10/13', 'r/inmoxr', 'old']])
+    expect(data.samples).toEqual([['2026/10/13', 'r/ivraxr', 'old']])
     expect(JSON.stringify(data)).not.toMatch(/bascn|tblX1|test-secret|cli_test/)
   })
 
@@ -85,7 +85,7 @@ describe('记录去处的工具', () => {
     const r = await run(PROPOSE_RECORD_SINK_TOOL, {
       url: URL_A,
       instruction: '每发一条记到这张表，日期写成 2026/10/14',
-      name: 'INMO 回复记录',
+      name: 'IVRA 回复记录',
       columns: [
         { column: '日期', field: 'sent_date', date: 'YYYY/MM/DD' },
         { column: '负责人', value: 'Luoye' },
@@ -95,7 +95,7 @@ describe('记录去处的工具', () => {
     expect(r.status).toBe('ok')
     expect(r.data).toMatchObject({
       ok: true,
-      name: 'INMO 回复记录',
+      name: 'IVRA 回复记录',
       card: true,
       unknown: ['负责人'],
       columns: [
@@ -106,7 +106,7 @@ describe('记录去处的工具', () => {
     })
     const list = await run(LIST_RECORD_SINKS_TOOL, {})
     expect((list.data as { sinks: unknown[] }).sinks).toMatchObject([
-      { name: 'INMO 回复记录', state: '等你确认', written: 0, pending: 0 },
+      { name: 'IVRA 回复记录', state: '等你确认', written: 0, pending: 0 },
     ])
     expect(JSON.stringify(list.data)).not.toMatch(/bascn|tblX1/)
   })
@@ -135,7 +135,7 @@ describe('stub 剧本', () => {
     const text = renderRecordSinkAnswer({
       data: {
         ok: true,
-        name: 'INMO 回复记录',
+        name: 'IVRA 回复记录',
         card: true,
         columns: [{ column: '日期', fill: '发出日期' }],
       },

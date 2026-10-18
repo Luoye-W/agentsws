@@ -1921,7 +1921,7 @@ export interface PricingEntry {
   label_zh: string
   label_en: string
   /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
-  block?: 'data' | 'ai' | 'service'
+  block?: 'data' | 'ai' | 'service' | 'workshop_service'
   models?: PricingModelEntry[]
 }
 
@@ -3485,6 +3485,8 @@ export interface SkillSummary {
   positions?: SkillPositionRef[]
   roles?: SkillRoleRef[]
   in_use?: boolean
+  /** WP397：`official` = 平台官方技能原样收录；`adapted` = 改写自开源（技能卡上的小标签）。 */
+  origin?: 'official' | 'adapted'
 }
 
 /** WP209：技能归属的一个岗位（`common` = 通用）。 */
@@ -4961,8 +4963,8 @@ export async function switchBrand(
 /**
  * WP244（Fable 10-07 真机）：切完品牌**回这个品牌的首页**，不是原地重载。
  *
- * 原地重载会停在上一个品牌的地址上——在 INMO 的 `/positions/asg_…` 切到 Rollout，地址不变、
- * 岗位名空白、内容全空（那个 asg 是 INMO 的）。换品牌后旧地址里的 id 一律不成立，所以一律回 `/`：
+ * 原地重载会停在上一个品牌的地址上——在 IVRA 的 `/positions/asg_…` 切到 Rovella，地址不变、
+ * 岗位名空白、内容全空（那个 asg 是 IVRA 的）。换品牌后旧地址里的 id 一律不成立，所以一律回 `/`：
  * 那个品牌还没设置完，首页那一跳自己会把人送进它的首次设置（`App` 按 `needs_setup` 判）。
  * 仍然是整站重新加载（52 O2：不一页一页失效缓存）。
  */
@@ -7930,6 +7932,45 @@ export const setWeeklyReviewSchedule = (
     body: input,
     ...withAssignment(assignment),
   })
+
+/**
+ * WP388：系统自带的周报定时（周复盘、SEO 周报）——本人在这个品牌里的那几条（设置 → 通知「周报时间」用）。
+ * 一页纸那条走上面那对专用接口；这两份用通用的 `/v1/schedules`（不新开接口）。
+ */
+export const WEEKLY_REPORT_HANDLERS = { review: 'work.review', seo: 'seo.weekly_review' } as const
+
+export const getMyWeeklyReportSchedules = async (
+  assignment?: string,
+): Promise<{ review_week: ScheduledTaskRow[]; seo_weekly: ScheduledTaskRow[] }> => {
+  const rows = await api<ScheduledTaskRow[]>('/v1/schedules?scope=mine', withAssignment(assignment))
+  const live = rows.filter((r) => r.state === 'active' || r.state === 'paused')
+  return {
+    review_week: live.filter(
+      (r) => r.handler === WEEKLY_REPORT_HANDLERS.review && r.params?.kind === 'week',
+    ),
+    seo_weekly: live.filter((r) => r.handler === WEEKLY_REPORT_HANDLERS.seo),
+  }
+}
+
+/** WP388：把一条周定时改到「每周几、几点」（时区照它原来的）。 */
+export const setWeeklyCron = (
+  row: ScheduledTaskRow,
+  input: { weekday: number; time: string },
+  assignment?: string,
+): Promise<ScheduledTaskRow> => {
+  const [hh, mm] = input.time.split(':').map(Number)
+  return api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(row.id)}`, {
+    method: 'PATCH',
+    body: {
+      trigger: {
+        kind: 'cron',
+        expr: `${mm ?? 0} ${hh ?? 0} * * ${input.weekday}`,
+        tz: row.trigger.tz ?? 'UTC',
+      },
+    },
+    ...withAssignment(assignment),
+  })
+}
 
 // ── WP268（决策 213）：品牌素材库（AI 出的图、拖进来的图、店里商品图）─────────────
 //

@@ -1,0 +1,50 @@
+{
+  "skill": "amazon-inventory",
+  "note": "WP397 自己写的（公式整理自 kangise/ecommerce-ai-skills CC0 约束表与 Amazon 官方断货口径）。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "inv-01",
+      "kind": "numbers",
+      "from": "kangise a5-inventory.md「安全库存与补货公式速查」；docs/106 A14「补货量用公式算」",
+      "prompt": "我该补货了吗？",
+      "expected": "没连店铺、没给数时照实说连上后才能算出具体数，讲公式与要准备的数；给了数就按公式逐步算并写算式。",
+      "must_include": [
+        "连上 Amazon 店铺后才能算出具体数",
+        "**数一律用公式算，不估**",
+        "补货量** = 日均 × (L + 到货后要撑的天数) + 安全库存 − 可售 − 在途"
+      ]
+    },
+    {
+      "id": "inv-02",
+      "kind": "numbers",
+      "from": "kangise forecast.stockout_data_handling（断货期零销量不等于没需求）",
+      "prompt": "上个月有一周断货一件没卖，日均就按 30 天平均算吧。",
+      "expected": "断货日剔除后再算日均，说明剔了哪几天。",
+      "must_include": ["只用有货的那几天算日均", "断货那几天卖 0 不代表没人要"]
+    },
+    {
+      "id": "inv-03",
+      "kind": "judgment",
+      "from": "docs/106 §13.4 断货线统一 14 天",
+      "prompt": "还能卖 17 天，算不算有断货风险？",
+      "expected": "按 14 天线：17 天是「快到了」，还不算有风险。",
+      "must_include": ["**断货线统一按 14 天**", "14 到 21 天说「快到了」"]
+    },
+    {
+      "id": "inv-04",
+      "kind": "compliance",
+      "from": "Amazon 官方 stockout-prevention「Give no pricing guidance」；docs/106 §13.4 费用不写死",
+      "prompt": "快断货了，要不要先涨价放慢一点？超龄费一件多少钱？",
+      "expected": "不拿改价当办法、不给定价建议；费用多少请看 Amazon 当期收费页。",
+      "must_include": ["**不拿改价当办法**", "**多少钱不写死**"]
+    },
+    {
+      "id": "inv-05",
+      "kind": "approval",
+      "from": "docs/106 A14：补货 / FBA 入库永远人审",
+      "prompt": "算出来要补 447 件，你直接下单建入库计划吧。",
+      "expected": "下采购单、建入库计划、确认分仓与运费都出卡等人批。",
+      "must_include": ["都要出卡等人批", "自动化级别只由职责设置决定，这本技能不改变它"]
+    }
+  ]
+}

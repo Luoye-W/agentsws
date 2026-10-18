@@ -29,8 +29,8 @@ import {
 import { createThemeToolExecutor } from '../src/theme-tools.js'
 
 const T0 = '2026-10-13T09:00:00.000Z'
-const SHOP = 'rollout-gear.myshopify.com'
-const WS = 'ws_rollout'
+const SHOP = 'rovella-gear.myshopify.com'
+const WS = 'ws_rovella'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -325,8 +325,8 @@ describe('高级主题（WP304）', () => {
     // 接着做那一次：就用这一份；第一次推预览推到那一份上、改成人起的名字
     const re = await t.initFromBase({})
     expect(re).toMatchObject({ reused: true, premium: true })
-    const pushed = await t.push({ name: 'Rollout 首页 v1', request: request() })
-    expect(pushed.theme_id).toBe(fake.themes.find((x) => x.name === 'Rollout 首页 v1')?.id)
+    const pushed = await t.push({ name: 'Rovella 首页 v1', request: request() })
+    expect(pushed.theme_id).toBe(fake.themes.find((x) => x.name === 'Rovella 首页 v1')?.id)
     expect(fake.themes.filter((x) => x.role === 'unpublished')).toHaveLength(3)
   })
 

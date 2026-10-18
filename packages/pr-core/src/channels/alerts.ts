@@ -1,28 +1,31 @@
 /**
- * `pr.monitoring` 的两条进料口（60 §2 `channels/alerts.ts`）。
+ * `pr.monitoring`（信息监控）的 feed 进料口（60 §2 `channels/alerts.ts`；WP386 改用 feedsmith、放开任意 RSS）。
  *
- * | 口 | 拿什么 | 为什么是它 |
- * |---|---|---|
- * | {@link fetchGoogleAlerts} | 新闻、博客、评测 | Google Alerts 的 RSS 是**唯一**不用申请、不要钱、也不违反谁的条款的新闻监控入口 |
- * | {@link searchRedditMentions} | Reddit 上的讨论 | 品牌名在 Reddit 上被提到，多数时候不在我们自己的版里 |
+ * | 口 | 拿什么 |
+ * |---|---|
+ * | {@link fetchGoogleAlerts} | 一条 Google Alerts 的 RSS（feed 本身已经按查询语句筛过） |
+ * | {@link fetchFeed} | 任意 RSS / Atom / RDF / JSON Feed（某个网站的全部新内容，调用方按关键词在本地过滤） |
+ *
+ * Reddit 不在这里：它走 `read_reddit` 同一条取数路由（接口中台 / 浏览器只读，决策 76、R10），由服务进程那一侧接；
+ * 原来对 `oauth.reddit.com/search` 的那段（从没被调用过）WP386 删了——Reddit 11-13 停 RSS、2027-03 关公共 API。
  *
  * 四条纪律：
  *
- * 1. **`fetch` 注入**（同 `social-core/channels/types.ts` 第 1 条）。这个包
- *    没有网络依赖，测试里塞一个假 fetch 就能把"RSS 空了怎么说""404 怎么说"测掉。
- * 2. **RSS 自己解析，不拉 XML 库**。Google Alerts 的 feed 是很规整的 Atom，
- *    要的只有五个标签。为一个固定形状的 feed 拖进一个 XML 解析器，
- *    换来的是一条新的供应链依赖（16 §3）。
- * 3. **拿不到就说拿不到**（36 §3）。没配 feed 地址、feed 404、解析不出条目，
- *    一律回 `{ ok: false, reason, message }`，`message` 是给人看的一句话。
- *    **绝不回一个空数组假装"今天没人提我们"**——那是这条职责上最贵的一种谎。
- * 4. **正文原样带回**。Google Alerts 的摘要里带 `<b>` 高亮，这里只把标签剥掉、
- *    把实体解开，一个字不改写（外部文本，21 §1）。
+ * 1. **`fetch` 注入**（同 `social-core/channels/types.ts` 第 1 条）。测试里塞一个假 fetch 就能把
+ *    "feed 404 怎么说""不是 feed 怎么说"测掉，不联网。
+ * 2. **解析交给 feedsmith**（MIT，本机和 Workers 都能跑；docs/103 §2 查过 dsh 官方 / 社区没有合适的）。
+ *    原来的正则只认 Google Alerts 那一种 Atom；换成它之后 RSS 2.0、Atom、RDF、JSON Feed 都认。
+ * 3. **拿不到就说拿不到**（36 §3）。没地址、404、不是 feed，一律回 `{ ok: false, reason, message }`，
+ *    `message` 是给人看的一句话。**绝不回一个空数组假装"今天没人提我们"**。
+ * 4. **正文原样带回**。只把标签剥掉、把实体解开，一个字不改写（外部文本，21 §1）。
  */
 
-import type { Iso8601, MentionSource } from '@agentsws/contracts'
-import type { SocialError, SocialResult, SocialTransport } from '@agentsws/social-core'
+import { GOOGLE_ALERTS_FEED_PREFIX, type Iso8601, type MentionSource } from '@agentsws/contracts'
+import type { SocialResult, SocialTransport } from '@agentsws/social-core'
+import { parseFeed } from 'feedsmith'
 import { mentionKey } from '../monitor.js'
+
+export { GOOGLE_ALERTS_FEED_PREFIX }
 
 const LABEL = 'Google Alerts'
 
@@ -36,14 +39,11 @@ export interface RawMention {
   author?: string
   published_at: Iso8601
   dedupe_key: string
+  /** WP386：feed 里这一条的 guid / id（有就带上；去重与「这条见过没有」用它）。 */
+  guid?: string
 }
 
-/* ── 一、Google Alerts（RSS）─────────────────────────────────────────── */
-
-/** Google Alerts 的 feed 地址长这样（连接卡上那一格填的就是它）。 */
-export const GOOGLE_ALERTS_FEED_PREFIX = 'https://www.google.com/alerts/feeds/'
-
-/** 这个地址像不像一条 Google Alerts 的 feed（连接卡的表单校验读它）。 */
+/** 这个地址像不像一条 Google Alerts 的 feed（连接卡 / 配置卡的校验读它）。 */
 export function isGoogleAlertsFeed(url: string): boolean {
   return url.trim().startsWith(GOOGLE_ALERTS_FEED_PREFIX)
 }
@@ -76,11 +76,6 @@ export function stripHtml(raw: string): string {
     .trim()
 }
 
-const tag = (xml: string, name: string): string | undefined => {
-  const m = xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'))
-  return m?.[1]
-}
-
 /**
  * Google Alerts 把真实地址藏在 `google.com/url?...&url=<真地址>` 里。
  * 拆出来，拆不出就原样返回——**不猜**（猜错一个地址，人点过去到不了那篇文章）。
@@ -95,44 +90,187 @@ export function unwrapAlertLink(href: string): string {
   }
 }
 
-/** 一条 Atom `<entry>` → 一条提及；缺链接或缺时间的丢掉（**不补一个现在时刻**）。 */
-export function parseAlertsFeed(xml: string, now: Iso8601): RawMention[] {
-  const out: RawMention[] = []
-  for (const m of xml.matchAll(/<entry[^>]*>([\s\S]*?)<\/entry>/gi)) {
-    const entry = m[1] ?? ''
-    const hrefMatch = entry.match(/<link[^>]*href="([^"]+)"/i)
-    const href = hrefMatch?.[1]
-    if (href === undefined) continue
-    const url = unwrapAlertLink(stripHtml(href))
-    const published = tag(entry, 'published') ?? tag(entry, 'updated')
-    const at = published === undefined ? Number.NaN : Date.parse(stripHtml(published))
-    const title = stripHtml(tag(entry, 'title') ?? '')
-    const text = stripHtml(tag(entry, 'content') ?? tag(entry, 'summary') ?? '')
-    if (title === '' && text === '') continue
+/**
+ * Google Alerts 的 feed 标题里带着它盯的词：`Google Alert - Super73` → `Super73`
+ * （中文界面是「Google 快讯 - …」）。别的 feed 回原标题；没有标题回 `undefined`。
+ */
+export function feedLabelOf(title: string | undefined): string | undefined {
+  if (title === undefined) return undefined
+  const t = stripHtml(title)
+  if (t === '') return undefined
+  const m = /^(?:google\s*alerts?|google\s*快讯|google\s*快訊)\s*[-–—:：]\s*(.+)$/iu.exec(t)
+  const raw = (m?.[1] ?? t).trim()
+  // 整个被一对引号包着才去掉（`"Super73"` → `Super73`）；查询语句里的引号原样留
+  const label = /^["“][^"“”]+["”]$/u.test(raw) ? raw.slice(1, -1).trim() : raw
+  return label === '' ? undefined : label
+}
+
+/* ── 解析（feedsmith）──────────────────────────────────────────────── */
+
+/** 一份 feed 解出来的样子（四种格式归一）。 */
+export interface ParsedFeed {
+  format: 'rss' | 'atom' | 'rdf' | 'json'
+  /** feed 自己的标题（原样，去过标签）。 */
+  title?: string
+  /** 人话名：Google Alerts 拆出来的那个词，别的 feed 就是它的标题（{@link feedLabelOf}）。 */
+  label?: string
+  rows: RawMention[]
+}
+
+type Loose = Record<string, unknown>
+const obj = (v: unknown): Loose | undefined =>
+  v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Loose) : undefined
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+/** feedsmith 有的格子是字符串，有的是 `{ value }`（Atom 的 text construct、RSS 的 guid）。 */
+const textOf = (v: unknown): string | undefined => {
+  if (typeof v === 'string') return v
+  const val = obj(v)?.value
+  return typeof val === 'string' ? val : undefined
+}
+
+interface LooseItem {
+  link?: string
+  guid?: string
+  title?: string
+  text?: string
+  author?: string
+  date?: string
+}
+
+function atomItem(e: Loose): LooseItem {
+  const links = list(e.links)
+    .map(obj)
+    .filter((l): l is Loose => l !== undefined)
+  const alt = links.find((l) => l.rel === undefined || l.rel === 'alternate') ?? links[0]
+  const author = list(e.authors).map(obj)[0]?.name
+  return {
+    ...(typeof alt?.href === 'string' ? { link: alt.href } : {}),
+    ...(typeof e.id === 'string' ? { guid: e.id } : {}),
+    ...(textOf(e.title) === undefined ? {} : { title: textOf(e.title) as string }),
+    ...((textOf(e.content) ?? textOf(e.summary)) === undefined
+      ? {}
+      : { text: (textOf(e.content) ?? textOf(e.summary)) as string }),
+    ...(typeof author === 'string' && author.trim() !== '' ? { author } : {}),
+    ...(typeof (e.published ?? e.updated) === 'string'
+      ? { date: (e.published ?? e.updated) as string }
+      : {}),
+  }
+}
+
+function rssItem(i: Loose): LooseItem {
+  const dc = obj(i.dc)
+  const content = obj(i.content)
+  const creator = list(dc?.creators)[0] ?? dc?.creator
+  const author = list(i.authors)[0] ?? creator
+  const date = i.pubDate ?? dc?.date ?? list(dc?.dates)[0]
+  const text = textOf(content?.encoded) ?? textOf(i.description)
+  return {
+    ...(typeof i.link === 'string' ? { link: i.link } : {}),
+    ...(textOf(i.guid) === undefined ? {} : { guid: textOf(i.guid) as string }),
+    ...(textOf(i.title) === undefined ? {} : { title: textOf(i.title) as string }),
+    ...(text === undefined ? {} : { text }),
+    ...(typeof author === 'string' && author.trim() !== '' ? { author } : {}),
+    ...(typeof date === 'string' ? { date } : {}),
+  }
+}
+
+function jsonItem(i: Loose): LooseItem {
+  const link = i.url ?? i.external_url
+  const author = obj(list(i.authors)[0])?.name ?? obj(i.author)?.name
+  const text = i.content_text ?? i.summary ?? i.content_html
+  const date = i.date_published ?? i.date_modified
+  return {
+    ...(typeof link === 'string' ? { link } : {}),
+    ...(typeof i.id === 'string' ? { guid: i.id } : {}),
+    ...(typeof i.title === 'string' ? { title: i.title } : {}),
+    ...(typeof text === 'string' ? { text } : {}),
+    ...(typeof author === 'string' && author.trim() !== '' ? { author } : {}),
+    ...(typeof date === 'string' ? { date } : {}),
+  }
+}
+
+/** 站点名 → 来源种类（Reddit / 博客 / 其余算新闻）。 */
+function sourceOfHost(origin: string): MentionSource {
+  return /(^|\.)reddit\.com$/.test(origin)
+    ? 'reddit'
+    : /blog|medium\.com$|substack\.com$/.test(origin)
+      ? 'blog'
+      : 'news'
+}
+
+/**
+ * 一份 feed 文本 → 归一的条目。**不是 feed 回 `undefined`**（网页、登录页、空串）——调用方照实说，
+ * 不当成 0 条。缺链接或标题正文全空的条目丢掉；拿不到发布时间就用 `now`（我们看到它的时刻）。
+ */
+export function parseFeedDoc(text: string, now: Iso8601): ParsedFeed | undefined {
+  let parsed: { format: string; feed: unknown }
+  try {
+    parsed = parseFeed(text) as { format: string; feed: unknown }
+  } catch {
+    return undefined
+  }
+  const feed = obj(parsed.feed) ?? {}
+  const format = parsed.format as ParsedFeed['format']
+  const raw: LooseItem[] =
+    format === 'atom'
+      ? list(feed.entries)
+          .map(obj)
+          .filter((e): e is Loose => e !== undefined)
+          .map(atomItem)
+      : format === 'json'
+        ? list(feed.items)
+            .map(obj)
+            .filter((e): e is Loose => e !== undefined)
+            .map(jsonItem)
+        : list(feed.items)
+            .map(obj)
+            .filter((e): e is Loose => e !== undefined)
+            .map(rssItem)
+  const rows: RawMention[] = []
+  for (const it of raw) {
+    if (it.link === undefined || it.link.trim() === '') continue
+    const url = unwrapAlertLink(stripHtml(it.link))
+    const title = stripHtml(it.title ?? '')
+    const body = stripHtml(it.text ?? '')
+    if (title === '' && body === '') continue
     let origin = ''
     try {
       origin = new URL(url).hostname
     } catch {
       origin = 'unknown'
     }
-    const source: MentionSource = /(^|\.)reddit\.com$/.test(origin)
-      ? 'reddit'
-      : /blog|medium\.com$/.test(origin)
-        ? 'blog'
-        : 'news'
-    out.push({
+    const at = it.date === undefined ? Number.NaN : Date.parse(stripHtml(it.date))
+    const source = sourceOfHost(origin)
+    const guid = it.guid?.trim()
+    rows.push({
       source,
       origin,
       url,
       ...(title === '' ? {} : { title }),
-      text,
-      // 拿不到发布时间就用我们看到它的时刻，并且**如实记在 `observed_at` 那一侧**
+      text: body,
+      ...(it.author === undefined ? {} : { author: stripHtml(it.author) }),
       published_at: Number.isNaN(at) ? now : new Date(at).toISOString(),
-      dedupe_key: mentionKey({ source, url, title }),
+      dedupe_key: mentionKey({ source, url, title, ...(guid ? { guid } : {}) }),
+      ...(guid ? { guid } : {}),
     })
   }
-  return out
+  const title = textOf(feed.title)
+  const clean = title === undefined ? undefined : stripHtml(title)
+  const label = feedLabelOf(clean)
+  return {
+    format,
+    ...(clean === undefined || clean === '' ? {} : { title: clean }),
+    ...(label === undefined ? {} : { label }),
+    rows,
+  }
 }
+
+/** 一条 Google Alerts（或任意）feed → 一批提及（原来那个口子，形状不变）。 */
+export function parseAlertsFeed(xml: string, now: Iso8601): RawMention[] {
+  return parseFeedDoc(xml, now)?.rows ?? []
+}
+
+/* ── 拉取 ─────────────────────────────────────────────────────────── */
 
 export interface AlertsTransport {
   /** 一跳 HTTP（结构上与 `globalThis.fetch` 相容；由宿主注入）。 */
@@ -140,11 +278,69 @@ export interface AlertsTransport {
   now(): Iso8601
 }
 
+const ACCEPT =
+  'application/atom+xml, application/rss+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5'
+
+/** 贴进来的不是 RSS 时那一句（Google Alerts 默认是邮箱投递，最常见的就是这个）。 */
+export const EMAIL_DELIVERY_HINT =
+  '这条还是邮箱投递，去 Google Alerts 把投递方式改成 RSS，再把 RSS 链接贴过来。'
+
 /**
- * 拉一条 Google Alerts feed。
+ * 拉一条 feed（Google Alerts 或任意网站的 RSS / Atom）。
  *
- * feed 地址是**这个品牌自己的**（连接卡 `google_alerts` 那一格），由调用方
- * 从加密库取出来递进来——这个函数不认识凭据库。
+ * 地址是**这个品牌自己的**（监控源那一行），由调用方递进来——这个函数不认识库。
+ * `name` 是失败那句话里的主语（「Google Alerts」/ 网站名）。
+ */
+export async function fetchFeed(
+  transport: AlertsTransport,
+  input: { url: string; name?: string },
+): Promise<SocialResult<ParsedFeed>> {
+  const url = input.url.trim()
+  const google = isGoogleAlertsFeed(url)
+  const who = input.name ?? (google ? LABEL : '这个网站')
+  if (url === '')
+    return {
+      ok: false,
+      reason: 'not_connected',
+      message: `${who} 还没有 feed 地址，所以这一块没有数。`,
+    }
+  let res: Awaited<ReturnType<AlertsTransport['fetch']>>
+  try {
+    res = await transport.fetch(url, { headers: { accept: ACCEPT } })
+  } catch (e) {
+    return {
+      ok: false,
+      reason: 'upstream_error',
+      message: `${who} 那边没给回数据：${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
+    }
+  }
+  if (!res.ok)
+    return {
+      ok: false,
+      reason: res.status === 404 ? 'not_connected' : 'upstream_error',
+      status: res.status,
+      message:
+        res.status === 404
+          ? google
+            ? `${LABEL} 说这条 feed 不存在（404）。多半是那条提醒被删了或者地址抄错了一段——回 Google Alerts 重新复制一次。`
+            : `${who} 的这个 feed 地址不存在了（404）。`
+          : `${who} 回了 ${res.status}。这一轮没拉到，下一轮再试。`,
+    }
+  const parsed = parseFeedDoc(await res.text(), transport.now())
+  if (parsed === undefined)
+    return {
+      ok: false,
+      reason: 'upstream_error',
+      message: google
+        ? `${LABEL} 给回来的不是一条 feed（里面一个 entry 都没有）。这一轮不算"今天没人提我们"——那两件事必须分得开。`
+        : `${who} 给回来的不是 RSS（像是网页或登录页）。这一轮不算"没有新内容"。`,
+    }
+  return { ok: true, observed_at: transport.now(), data: parsed }
+}
+
+/**
+ * 拉一条 Google Alerts feed（原来那个口子：只认 Google Alerts 的地址，回一批提及）。
+ * 任意 RSS 走 {@link fetchFeed}。
  */
 export async function fetchGoogleAlerts(
   transport: AlertsTransport,
@@ -155,7 +351,7 @@ export async function fetchGoogleAlerts(
     return {
       ok: false,
       reason: 'not_connected',
-      message: `${LABEL} 还没连上（没有 feed 地址），所以"外面有谁提我们"这一块没有数。去连接页把 Google Alerts 的 RSS 地址填上。`,
+      message: `${LABEL} 还没连上（没有 feed 地址），所以"外面有谁提我们"这一块没有数。把 Google Alerts 的 RSS 链接贴过来。`,
     }
   if (!isGoogleAlertsFeed(url))
     return {
@@ -163,140 +359,54 @@ export async function fetchGoogleAlerts(
       reason: 'not_connected',
       message: `这不像一条 Google Alerts 的 RSS 地址（要以 ${GOOGLE_ALERTS_FEED_PREFIX} 开头）。在 Google Alerts 里把提醒的"投递方式"改成 RSS，再把那个地址复制过来。`,
     }
-  let res: Awaited<ReturnType<AlertsTransport['fetch']>>
-  try {
-    res = await transport.fetch(url, { headers: { accept: 'application/atom+xml' } })
-  } catch (e) {
-    return {
-      ok: false,
-      reason: 'upstream_error',
-      message: `${LABEL} 那边没给回数据：${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-    }
-  }
-  if (!res.ok)
-    return {
-      ok: false,
-      reason: res.status === 404 ? 'not_connected' : 'upstream_error',
-      status: res.status,
-      message:
-        res.status === 404
-          ? `${LABEL} 说这条 feed 不存在（404）。多半是那条提醒被删了或者地址抄错了一段——回 Google Alerts 重新复制一次。`
-          : `${LABEL} 回了 ${res.status}。这一轮没拉到，下一轮再试。`,
-    }
-  const xml = await res.text()
-  const rows = parseAlertsFeed(xml, transport.now())
-  if (rows.length === 0 && !/<entry[\s>]/i.test(xml))
-    return {
-      ok: false,
-      reason: 'upstream_error',
-      message: `${LABEL} 给回来的不是一条 Atom feed（里面一个 entry 都没有）。这一轮不算"今天没人提我们"——那两件事必须分得开。`,
-    }
-  return { ok: true, observed_at: transport.now(), data: rows }
+  const got = await fetchFeed(transport, { url, name: LABEL })
+  return got.ok ? { ok: true, observed_at: got.observed_at, data: got.data.rows } : got
 }
 
-/* ── 二、Reddit 搜索 ────────────────────────────────────────────────── */
-
-const REDDIT_SEARCH_BASE = 'https://oauth.reddit.com/search'
-
-interface RawRedditListing {
-  data?: {
-    children?: {
-      data?: {
-        name?: string
-        title?: string
-        selftext?: string
-        author?: string
-        subreddit?: string
-        permalink?: string
-        created_utc?: number
-        num_comments?: number
-      }
-    }[]
-  }
+/** {@link probeFeedLink} 认出来的一条：哪一种、规整后的地址、拉回来的那一份。 */
+export interface ProbedFeed extends ParsedFeed {
+  kind: 'google_alerts' | 'rss'
+  url: string
 }
 
 /**
- * 全站搜品牌名（**不是我们自己的版**——那是 `social.reddit` 的事）。
+ * 用户贴进来的一条链接：是不是能读的 feed（贴的时候当场拉一次，拉到了才算配好）。
  *
- * 复用 `social-core` 的那把 transport（凭据、UA、限流全在那边），这里只多拼
- * 一个 `/search` 的 URL。
+ * - `google.com/alerts/feeds/…` → Google Alerts 的 RSS；
+ * - Google Alerts 的别的地址（提醒列表页、邮件里的「编辑提醒」链接）→ 当场说「这条还是邮箱投递」；
+ * - 别的网址：拉一次，是 RSS / Atom 就收（任意网站的 feed）；不是就照实说，并带上那句提示。
  */
-export async function searchRedditMentions(
-  transport: SocialTransport,
-  input: { query: string; limit?: number },
-): Promise<SocialResult<RawMention[]>> {
-  if (!transport.connected('reddit'))
+export async function probeFeedLink(
+  transport: AlertsTransport,
+  raw: string,
+): Promise<SocialResult<ProbedFeed>> {
+  const url = raw.trim()
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return { ok: false, reason: 'not_connected', message: `这不是一个链接。${EMAIL_DELIVERY_HINT}` }
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:')
     return {
       ok: false,
       reason: 'not_connected',
-      message: 'Reddit 还没连上，所以"Reddit 上有谁提我们"这一块没有数。去连接页把 Reddit 连上。',
+      message: `这不是一个网页链接。${EMAIL_DELIVERY_HINT}`,
     }
-  const cred = await transport.credential('reddit')
-  const url = `${REDDIT_SEARCH_BASE}?q=${encodeURIComponent(input.query)}&sort=new&limit=${Math.min(input.limit ?? 25, 100)}`
-  let res: Awaited<ReturnType<SocialTransport['fetch']>>
-  try {
-    res = await transport.fetch(url, {
-      headers: {
-        authorization: `Bearer ${cred.access_token ?? cred.token ?? ''}`,
-        'user-agent': cred.user_agent ?? 'agentsws/1.0 (品牌监控；https://github.com/agentsws)',
-        accept: 'application/json',
-      },
-    })
-  } catch (e) {
-    return {
-      ok: false,
-      reason: 'upstream_error',
-      message: `Reddit 那边没给回数据：${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-    }
-  }
-  if (!res.ok) return redditHttpFailure(res.status)
-  let raw: RawRedditListing
-  try {
-    raw = JSON.parse(await res.text()) as RawRedditListing
-  } catch (e) {
-    return {
-      ok: false,
-      reason: 'upstream_error',
-      message: `Reddit 给回来的不是 JSON：${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-    }
-  }
-  const now = transport.now()
+  const google = isGoogleAlertsFeed(url)
+  if (!google && /(^|\.)google\.[a-z.]+$/iu.test(u.hostname) && u.pathname.startsWith('/alerts'))
+    return { ok: false, reason: 'not_connected', message: EMAIL_DELIVERY_HINT }
+  const got = await fetchFeed(transport, {
+    url,
+    ...(google ? { name: LABEL } : { name: u.hostname }),
+  })
+  if (!got.ok)
+    return got.reason === 'upstream_error' && got.status === undefined && !google
+      ? { ...got, message: `这个链接不是能读的 RSS。${EMAIL_DELIVERY_HINT}` }
+      : got
   return {
     ok: true,
-    observed_at: now,
-    data: (raw.data?.children ?? []).map((c) => {
-      const row = c.data ?? {}
-      const url = `https://www.reddit.com${row.permalink ?? ''}`
-      const title = row.title ?? ''
-      return {
-        source: 'reddit' as const,
-        origin: `r/${row.subreddit ?? '?'}`,
-        url,
-        ...(title === '' ? {} : { title }),
-        text: row.selftext ?? title,
-        ...(row.author === undefined ? {} : { author: row.author }),
-        published_at:
-          row.created_utc === undefined ? now : new Date(row.created_utc * 1000).toISOString(),
-        dedupe_key: mentionKey({ source: 'reddit', url, title }),
-      }
-    }),
+    observed_at: got.observed_at,
+    data: { ...got.data, kind: google ? 'google_alerts' : 'rss', url },
   }
-}
-
-function redditHttpFailure(status: number): SocialError {
-  if (status === 401 || status === 403)
-    return {
-      ok: false,
-      reason: 'not_connected',
-      status,
-      message: `Reddit 拒绝了这次搜索（${status}）。多半是授权掉了，或者 User-Agent 写的不是它认的那个格式——去连接页重新授权一次。`,
-    }
-  if (status === 429)
-    return {
-      ok: false,
-      reason: 'rate_limited',
-      status,
-      message: 'Reddit 说太快了（429）。等一会儿再搜；这一轮先跳过，不会丢。',
-    }
-  return { ok: false, reason: 'upstream_error', status, message: `Reddit 回了 ${status}。` }
 }

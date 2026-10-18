@@ -1092,6 +1092,26 @@ export interface PrDeckData {
   }[]
   /** 转客服：判成客户问题、已经出了卡的那些（60 分界行）。 */
   handoffs: (PrMentionRow & { approval_id?: string })[]
+  /** WP386：竞品动向（`group: 'competitor'` 的提及，按竞品、再按时间排）。 */
+  competitor_mentions?: PrMentionRow[]
+  /**
+   * WP386：信息监控各条源的状态——**拉不到的照实说**（表格下面一行），不让一张空表冒充「今天没人提我们」。
+   * 不给 = 宿主没装信息监控。
+   */
+  monitor?: {
+    /** 几条监控源。 */
+    total: number
+    /** 其中最近一次拉失败的几条。 */
+    failed: number
+    /** 一句（「17 条 · 1 条拉不到」）。 */
+    summary: string
+    /** 拉失败的那几条：名字 + 一句人话。 */
+    failures: { label: string; message: string }[]
+    /** 有没有哪一条拉成过（都没拉成过 = 空表不代表没人提）。 */
+    pulled_ever: boolean
+    /** 盯了几个竞品（竞品那一块空着时说清是「没盯」还是「没人提」）。 */
+    competitors: number
+  }
 }
 
 /**
@@ -1190,6 +1210,10 @@ export interface PrMentionRow {
   sentiment?: string
   triage?: string
   status: string
+  /** WP386：盯的哪一组（`own` / `competitor` / `industry` / `site`；老数据没有 = 自家）。 */
+  group?: string
+  /** WP386：说的是哪个竞品。 */
+  competitor?: string
 }
 
 /** 一条线程在面板上的样子（待回评论 / 待处理帖子 / 转客服三块共用）。 */
@@ -1274,6 +1298,15 @@ export interface DesignDeckData {
   }
 }
 
+/** WP393：日报里「竞品动向」那一段（有才出）。 */
+export interface CompetitorDeckData {
+  title: string
+  /** 一条要紧的变化一句（带竞品名、和自家比的差价）。 */
+  lines: string[]
+  /** 没读到的那几家（「Aventon 这次没读到」）。 */
+  failed: string[]
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -1342,6 +1375,11 @@ export interface QueryContext {
   /** WP158：Search Console 与 GA4 的真读数（不给 = 那几块照旧空）。 */
   search?: SearchDeckData
   /**
+   * WP393（docs/104 一期 A）：店铺管理「竞品动向」——简报那一段（宿主算好递进来，数字不经模型手）。
+   * 不给 = 没配竞品监控、或者这一天没有要紧的变化也没有哪家没读到——日报里就**不出**这一段（docs/96 P3）。
+   */
+  competitor?: CompetitorDeckData
+  /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *
    * 不给就用 `ANOMALY_DEFAULTS`——积木层不该因为宿主忘了传一格就算不出东西，
@@ -1374,6 +1412,14 @@ export interface TableResult {
      * 格子里非空就画一个小三角，字进 tooltip（不是一列字）。
      */
     format?: 'money' | 'count' | 'percent' | 'ratio' | 'flag'
+    /**
+     * WP401（决策 1090）：这一列能不能筛、怎么筛。表头出一个小漏斗，点开才有选项；筛的状态记在本机（按积木 id）。
+     *
+     * - `true` = 可筛，怎么筛看数据：一长串字 → 搜文字；取值只有几种 → 下拉多选；日期 → 日期范围；全是数 → 不筛。
+     * - `'search'` / `'select'` / `'date'` = 指定。
+     * - 不给 = 这一列不出漏斗（老积木一个字不变）。
+     */
+    filter?: true | 'search' | 'select' | 'date'
   }[]
   rows: Record<string, string | number>[]
   /**

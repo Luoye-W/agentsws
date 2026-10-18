@@ -38,16 +38,16 @@ const AT = new Date().toISOString()
 const freshRun = (status) => ({
   id: 'bi_fresh',
   schema_version: 1,
-  workspace_id: 'ws_rollout',
+  workspace_id: 'ws_rovella',
   status,
-  inputs: [{ url: 'https://rollout.example', kind: 'website' }],
-  pages: [{ url: 'https://rollout.example/', kind: 'home', ok: true }],
+  inputs: [{ url: 'https://rovella.example', kind: 'website' }],
+  pages: [{ url: 'https://rovella.example/', kind: 'home', ok: true }],
   budget: { estimated_credits: 1.8, cap_credits: 2, spent_credits: 0.3 },
   profile: {
     storefront_platform: {
       value: 'shopify',
       confidence: 'medium',
-      evidence: [{ url: 'https://rollout.example/', locator: 'page:cdn.shopify.com' }],
+      evidence: [{ url: 'https://rovella.example/', locator: 'page:cdn.shopify.com' }],
     },
   },
   fresh_store: true,
@@ -145,8 +145,8 @@ async function main() {
       await patchGet(page, '**/v1/onboarding/state', (data) => ({
         ...data,
         needs_setup: true,
-        brand_name: 'Rollout',
-        workspace_name: 'Rollout',
+        brand_name: 'Rovella',
+        workspace_name: 'Rovella',
         added_brand: true,
         model_configured: true,
       }))
@@ -164,8 +164,8 @@ async function main() {
       await patchGet(page, '**/v1/onboarding/state', (data) => ({
         ...data,
         needs_setup: true,
-        brand_name: 'Rollout',
-        workspace_name: 'Rollout',
+        brand_name: 'Rovella',
+        workspace_name: 'Rovella',
         added_brand: true,
         model_configured: true,
         business_done: true,

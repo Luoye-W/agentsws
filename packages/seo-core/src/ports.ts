@@ -33,6 +33,11 @@ export interface SearchConsolePort {
    * 不给 / 回 `undefined` = 数是新的（替身与"没连"都不给）。
    */
   note?(): string | undefined
+  /**
+   * WP388（决策 1093）：这一份行数据覆盖哪几天（含，`YYYY-MM-DD`；Google 已出齐的最近 7 天）。
+   * 周报上要标明。不给 = 不知道（替身 / 没连）。
+   */
+  window?(): { start: string; end: string } | undefined
 }
 
 /** 没连 Search Console。 */

@@ -8,11 +8,13 @@ import type { PositionWorkGroup, PositionWorkItem } from '@agentsws/contracts'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useRailState } from '@/components/rail/rail-state'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { createTodoAt, type PositionWorkData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dueTone, type GroupBy, groupItems, whenText } from '@/lib/position-work'
+import { serviceOrderAddress } from '@/lib/workshop-services-api'
 import {
   CardsBadge,
   DutyChip,
@@ -34,6 +36,22 @@ export function ItemTitle({
   wrap?: boolean
 }): ReactNode {
   const cls = wrap ? 'line-clamp-2 break-words' : 'min-w-0 truncate'
+  const rail = useRailState()
+  // WP390：工坊服务订单——点开是第三栏的订单面板（进度、在等你的事、消息）
+  if (item.kind === 'service_order')
+    return (
+      <button
+        type="button"
+        className={`${cls} text-left hover:underline`}
+        title={item.title}
+        data-testid="work-service-order"
+        onClick={() => {
+          rail.openAddress(serviceOrderAddress(item.ref_id))
+        }}
+      >
+        {item.title}
+      </button>
+    )
   return item.matter_id === undefined ? (
     <span className={cls} title={item.title}>
       {item.title}

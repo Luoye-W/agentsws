@@ -28,20 +28,20 @@ function redditCard(kind: 'reply' | 'submit'): DeckCard {
       payload: {
         form: 'reddit_write',
         channel: 'reddit',
-        channel_label: 'Reddit · r/inmoxr',
+        channel_label: 'Reddit · r/ivraxr',
         reddit:
           kind === 'reply'
             ? {
                 kind: 'reply',
-                subreddit: 'inmoxr',
+                subreddit: 'ivraxr',
                 parent_fullname: 't1_c1',
-                permalink: '/r/inmoxr/comments/abc/s/c1/',
+                permalink: '/r/ivraxr/comments/abc/s/c1/',
                 parent_author: 'alice',
               }
-            : { kind: 'submit', subreddit: 'inmoxr' },
+            : { kind: 'submit', subreddit: 'ivraxr' },
         body:
           kind === 'reply'
-            ? { text: 'Hi Alice, INMO here.' }
+            ? { text: 'Hi Alice, IVRA here.' }
             : { text: 'Ask us anything.', subject: 'Weekly Q&A' },
         author: 'alice',
         in_reply_to: 'Mine fogs up a bit',
@@ -61,7 +61,7 @@ describe('WP329 Reddit「发出去」卡', () => {
     expect(screen.getByTestId('reddit-write-rules').textContent).toBe('版规 1 条')
     expect(screen.getByTestId('reddit-write-quote').textContent).toBe('Mine fogs up a bit')
     expect((screen.getByTestId('reddit-write-text') as HTMLTextAreaElement).value).toBe(
-      'Hi Alice, INMO here.',
+      'Hi Alice, IVRA here.',
     )
     expect(screen.getByTestId('reddit-write-basis').textContent).toContain('1')
     expect(screen.getByTestId('reddit-write-send')).toBeTruthy()

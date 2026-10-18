@@ -80,7 +80,7 @@ async function signedIn(fake: FakeOpenAi): Promise<SubscriptionLoginHandle> {
 
 const CONVO: ChatMessage[] = [
   { role: 'system', content: '你是店主助理。' },
-  { role: 'system', content: '[brand:b1]\n品牌：INMO' },
+  { role: 'system', content: '[brand:b1]\n品牌：IVRA' },
   { role: 'user', content: '看看这单' },
   {
     role: 'assistant',
@@ -106,7 +106,7 @@ describe('翻译成 pi-ai 的 Context', () => {
       'gpt-5.5',
       1,
     )
-    expect(ctx.systemPrompt).toBe('你是店主助理。\n\n[brand:b1]\n品牌：INMO')
+    expect(ctx.systemPrompt).toBe('你是店主助理。\n\n[brand:b1]\n品牌：IVRA')
     expect(ctx.messages.map((m) => m.role)).toEqual([
       'user',
       'assistant',

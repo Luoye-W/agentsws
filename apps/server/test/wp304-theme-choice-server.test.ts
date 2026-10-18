@@ -12,7 +12,7 @@ import type { ProbeExec } from '../src/platform-cli.js'
 import { FAKE_OS2_THEME_FILES, themeCliStandIn } from '../src/site-theme-stand-in.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
-const SHOP = '6suegp-md.myshopify.com'
+const SHOP = '6demox-md.myshopify.com'
 
 let server: Server
 let theme: Assignment
@@ -87,7 +87,7 @@ beforeEach(async () => {
     await call(
       'PUT',
       '/v1/workspace/profile',
-      { legal_name: 'Rollout', storefront_platform: 'shopify' },
+      { legal_name: 'Rovella', storefront_platform: 'shopify' },
       owner,
     ),
   )

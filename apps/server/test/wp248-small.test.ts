@@ -28,7 +28,7 @@ async function boot(): Promise<Server> {
     tokenRefreshIntervalMs: 0,
     scheduleIntervalMs: 0,
     liveDataIntervalMs: 0,
-    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'INMO' },
+    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'IVRA' },
     mdns: () => ({ reason: '测试里不开局域网' }),
     brandIntakeFetch: async () => ({ ok: false, status: 429, text: async () => '' }),
   })
@@ -135,7 +135,7 @@ describe('79：今天 N 个待办（M 个已过期）', () => {
     const me = ownerOf(server)
     const created = server.work.createTodo({
       owner: server.bootstrap.person.id,
-      title: '回 r/INMO 版主的私信',
+      title: '回 r/IVRA 版主的私信',
       source: 'manual',
       due: '2026-10-03T09:00:00.000Z',
       horizon: 'week',
@@ -154,7 +154,7 @@ describe('79：今天 N 个待办（M 个已过期）', () => {
     )
     expect(home.status, home.message).toBe(200)
     const due = home.data?.today?.due
-    expect(due?.todos.map((t) => t.title)).toEqual(['回 r/INMO 版主的私信', '今天发周报'])
+    expect(due?.todos.map((t) => t.title)).toEqual(['回 r/IVRA 版主的私信', '今天发周报'])
     expect(due?.overdue_ids).toEqual([created.id])
   })
 })
@@ -229,31 +229,31 @@ describe('83：品牌档案三格', () => {
     const server = await boot()
     const me = ownerOf(server)
     const first = await call<ProfileView>(server, me, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO',
+      legal_name: 'IVRA',
     })
     expect(first.status, first.message).toBe(200)
     expect(first.data?.currency).toBe('USD')
     expect(first.data?.one_liner).toBeUndefined()
 
     const set = await call<ProfileView>(server, me, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO',
+      legal_name: 'IVRA',
       one_liner: '  给近视的人做的   AR 眼镜 ',
-      support_email: 'support@inmo.example',
+      support_email: 'support@ivra.example',
       currency: 'eur',
     })
     expect(set.data).toMatchObject({
       one_liner: '给近视的人做的 AR 眼镜',
-      support_email: 'support@inmo.example',
+      support_email: 'support@ivra.example',
       currency: 'EUR',
     })
     // 不给 = 不改（只改公司名的那次保存不清掉三格）
     const kept = await call<ProfileView>(server, me, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO Tech',
+      legal_name: 'IVRA Tech',
     })
     expect(kept.data?.one_liner).toBe('给近视的人做的 AR 眼镜')
     // 空串 = 清空；币种清空回到 USD
     const cleared = await call<ProfileView>(server, me, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO Tech',
+      legal_name: 'IVRA Tech',
       support_email: '',
       currency: '',
     })
@@ -262,7 +262,7 @@ describe('83：品牌档案三格', () => {
     expect(
       (
         await call(server, me, 'PUT', '/v1/workspace/profile', {
-          legal_name: 'INMO Tech',
+          legal_name: 'IVRA Tech',
           support_email: 'not-an-email',
         })
       ).status,
@@ -272,18 +272,18 @@ describe('83：品牌档案三格', () => {
   it('第 ② 步手填确认后写进这个品牌的档案（不再只活在那一轮分析的内存里）', async () => {
     const server = await boot()
     const me = ownerOf(server)
-    await call(server, me, 'PUT', '/v1/workspace/profile', { legal_name: 'INMO' })
+    await call(server, me, 'PUT', '/v1/workspace/profile', { legal_name: 'IVRA' })
     const out = await call(server, me, 'POST', '/v1/brand-intake/manual', {
       edits: {
         one_liner: '户外滑板与配件',
-        support_email: 'help@inmo.example',
+        support_email: 'help@ivra.example',
         currency: 'cad',
       },
     })
     expect(out.status, out.message).toBe(201)
     expect(server.onboarding.brandProfile(server.bootstrap.workspace.id)).toMatchObject({
       one_liner: '户外滑板与配件',
-      support_email: 'help@inmo.example',
+      support_email: 'help@ivra.example',
       currency: 'CAD',
     })
   })
@@ -292,21 +292,21 @@ describe('83：品牌档案三格', () => {
     const server = await boot()
     const me = ownerOf(server)
     await call(server, me, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO',
+      legal_name: 'IVRA',
       one_liner: '给近视的人做的 AR 眼镜',
-      support_email: 'support@inmo.example',
+      support_email: 'support@ivra.example',
       currency: 'USD',
     })
     const brand = server.personas
       .sections({ role_id: 'dtc.support', workspace_id: server.bootstrap.workspace.id })
       .find((s) => s.id === 'brand')
     expect(brand?.text).toContain('一句话定位：给近视的人做的 AR 眼镜')
-    expect(brand?.text).toContain('客服邮箱：support@inmo.example')
+    expect(brand?.text).toContain('客服邮箱：support@ivra.example')
     expect(brand?.text).toContain('币种：USD')
-    // 另一个品牌（没写过三格）：一行都不带，不拿 INMO 的顶上
+    // 另一个品牌（没写过三格）：一行都不带，不拿 IVRA 的顶上
     const other = server.personas
       .sections({ role_id: 'dtc.support', workspace_id: 'ws_other' })
       .find((s) => s.id === 'brand')
-    expect(other?.text ?? '').not.toContain('support@inmo.example')
+    expect(other?.text ?? '').not.toContain('support@ivra.example')
   })
 })

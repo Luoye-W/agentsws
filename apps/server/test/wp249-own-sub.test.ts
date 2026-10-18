@@ -58,7 +58,7 @@ beforeEach(async () => {
     {
       kind: 't3',
       id: 'spam1',
-      title: 'Cheap INMO Air3 wholesale, DM me on telegram',
+      title: 'Cheap IVRA Air3 wholesale, DM me on telegram',
       body: 'best price https://bit.ly/x',
       author: 'spammer1',
       reports: ['No spam or self-promotion'],
@@ -119,10 +119,10 @@ afterEach(async () => {
 async function registerSubs(): Promise<string> {
   const own = await post('/v1/social/accounts', {
     channel: 'reddit',
-    handle: 'r/inmoxr',
-    display_name: 'INMO XR',
-    url: 'https://www.reddit.com/r/inmoxr/',
-    external_id: 'inmoxr',
+    handle: 'r/ivraxr',
+    display_name: 'IVRA XR',
+    url: 'https://www.reddit.com/r/ivraxr/',
+    external_id: 'ivraxr',
     own_subreddit: true,
   })
   expect(own.status).toBe(201)
@@ -144,7 +144,7 @@ async function login(): Promise<void> {
   const checked = await data<{ state: string; username?: string }>(
     await post('/v1/social/reddit-browser/check'),
   )
-  expect(checked).toMatchObject({ state: 'logged_in', username: 'inmo_official' })
+  expect(checked).toMatchObject({ state: 'logged_in', username: 'ivra_official' })
 }
 
 const queue = async (): Promise<OwnSubQueueView> => data(await api('/v1/social/own-sub/queue'))
@@ -165,7 +165,7 @@ describe('WP249 自家版待处理', () => {
     await login()
     const q = await queue()
     expect(q.channel).toBe('browser')
-    expect(q.subreddits.map((s) => s.name)).toEqual(['inmoxr'])
+    expect(q.subreddits.map((s) => s.name)).toEqual(['ivraxr'])
     expect(site.visited.some((p) => p.includes('augmentedreality'))).toBe(false)
     expect(q.items.map((i) => [i.id, i.kind, i.suggestion.verdict])).toEqual([
       ['t3_spam1', 'reported', 'remove'],
@@ -175,7 +175,7 @@ describe('WP249 自家版待处理', () => {
     ])
     expect(q.items[0]?.suggestion).toMatchObject({ rule: 'No spam or self-promotion' })
     expect(q.rules).toEqual([
-      { subreddit: 'inmoxr', rules: ['No spam or self-promotion', 'Be civil', 'Stay on topic'] },
+      { subreddit: 'ivraxr', rules: ['No spam or self-promotion', 'Be civil', 'Stay on topic'] },
     ])
     expect(q.sources.find((s) => s.source === 'join_requests')).toMatchObject({
       status: 'unsupported',
@@ -216,12 +216,12 @@ describe('WP249 自家版待处理', () => {
     const face = `${card?.title} ${card?.summary}`
     expect(face).toContain('移除 u/spammer1 的这条帖子')
     expect(face).toContain('AI 建议：移除')
-    expect(face).toContain('Cheap INMO Air3')
+    expect(face).toContain('Cheap IVRA Air3')
     const change = await server.txn.ledger.get(staged.change_id as string)
     expect(change?.after).toMatchObject({
       source: 'own_sub_queue',
       action: 'delete_post',
-      removal_message: 'Removed: this breaks r/inmoxr rule "No spam or self-promotion".',
+      removal_message: 'Removed: this breaks r/ivraxr rule "No spam or self-promotion".',
     })
     // 同一条不出第二张
     const again = await data<{ staged: boolean; message?: string }>(
@@ -243,7 +243,7 @@ describe('WP249 自家版待处理', () => {
       'POST /api/comment thing_id=t3_spam1',
     ])
     expect(site.comments.spam1).toEqual([
-      'Removed: this breaks r/inmoxr rule "No spam or self-promotion".',
+      'Removed: this breaks r/ivraxr rule "No spam or self-promotion".',
     ])
     expect(after.items.map((i) => i.id)).not.toContain('t3_spam1')
     expect((await server.txn.ledger.get(staged.change_id as string))?.status).toBe('applied')

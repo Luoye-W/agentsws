@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it } from 'vitest'
-import { extractReadable, extractSerp, pageScript } from '../src/search-extract.js'
+import { extractData, extractReadable, extractSerp, pageScript } from '../src/search-extract.js'
 
 const FIX = join(import.meta.dirname, 'fixtures', 'search')
 
@@ -79,6 +79,37 @@ describe('extractReadable', () => {
     const short = extractReadable({ maxChars: 10 })
     expect(short.text).toHaveLength(10)
     expect(short.truncated).toBe(true)
+  })
+})
+
+describe('extractData（WP393）', () => {
+  it('JSON 页：<pre> 里的原文原样读回（不压空白），超长标截断', () => {
+    const body = '{"products":[{"id":1,"title":"A  B"}]}'
+    const dom = new JSDOM(`<html><body><pre>${body}</pre></body></html>`, {
+      url: 'https://shop.example/products.json',
+    })
+    Object.assign(globalThis, { document: dom.window.document, location: dom.window.location })
+    const got = extractData({ maxChars: 1000 })
+    expect(got.text).toBe(body)
+    expect(got.truncated).toBe(false)
+    expect(extractData({ maxChars: 5 }).truncated).toBe(true)
+  })
+
+  it('XML 页（all.atom）：整份文档序列化回去', () => {
+    const xml = '<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>x</id></entry></feed>'
+    const dom = new JSDOM(xml, {
+      url: 'https://shop.example/collections/all.atom',
+      contentType: 'application/xml',
+    })
+    Object.assign(globalThis, {
+      document: dom.window.document,
+      location: dom.window.location,
+      XMLSerializer: dom.window.XMLSerializer,
+    })
+    const got = extractData({ maxChars: 10_000 })
+    expect(got.text).toContain('<entry><id>x</id></entry>')
+    expect(got.content_type).toContain('xml')
+    Reflect.deleteProperty(globalThis, 'XMLSerializer')
   })
 })
 

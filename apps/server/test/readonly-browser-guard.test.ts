@@ -13,7 +13,7 @@ const doc = (url: string, method = 'GET') => ({ method, url, resourceType: 'docu
 
 describe('requestVerdict：只放白名单站点上的 GET 页面', () => {
   it('白名单里的 GET 页面放行', () => {
-    expect(requestVerdict(doc('https://www.reddit.com/r/inmo/new/'), HOSTS).allow).toBe(true)
+    expect(requestVerdict(doc('https://www.reddit.com/r/ivra/new/'), HOSTS).allow).toBe(true)
     expect(requestVerdict(doc('https://old.reddit.com/r/x/'), HOSTS).allow).toBe(true)
   })
   it('POST / PUT / DELETE 一律掐掉（提交、点赞、评论都走这些）', () => {

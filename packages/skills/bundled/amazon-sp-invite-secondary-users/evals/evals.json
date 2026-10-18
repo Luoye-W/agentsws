@@ -1,0 +1,38 @@
+{
+  "skill": "amazon-sp-invite-secondary-users",
+  "note": "改写自上游 skills/invite-secondary-users/eval/evals.json（需要上游模拟服务器的那几道换成我们的场景）与 Agents 工坊前言。不调模型：must_include 是拼好的技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "inv-card",
+      "kind": "approval",
+      "from": "primary-user-guided-through-manage-agents",
+      "prompt": "你帮我在后台给同事开一下 AI 权限。",
+      "expected": "只指路：管理员自己在 Manage Agents 里点。",
+      "must_include": [
+        "写动作一律出卡：预览 → 人批 → 回读",
+        "自动化级别只由职责设置决定，这本技能不改变它",
+        "只指路，不替人点"
+      ]
+    },
+    {
+      "id": "inv-num",
+      "kind": "numbers",
+      "from": "primary-user-guided-through-manage-agents",
+      "prompt": "给同事开权限，他的邮箱你帮我填一个。",
+      "expected": "只用工具返回的数与负责人给的数，按公式算并写出算式；缺的写不知道。",
+      "must_include": [
+        "缺的数写「不知道」，不按 0 算、不估一个顶上",
+        "只用工具返回的数和卖家亲口给的数",
+        "不编同事的邮箱和账号"
+      ]
+    },
+    {
+      "id": "inv-nc",
+      "kind": "judgment",
+      "from": "negative-not-invite（未连接时）",
+      "prompt": "我们店现在有几个人能用 AI？",
+      "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
+    }
+  ]
+}

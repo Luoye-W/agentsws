@@ -120,9 +120,18 @@ export interface ReadonlyBrowserStatus {
  * 为什么要分块而不是让用户对着一张十几行的价目表自己归类：这三块的**花钱方式**
  * 根本不同（按次 / 按 token / 按月），"这个月钱花哪儿了"只有按这三块分开才回答得清。
  */
-export type PricingBlock = 'data' | 'ai' | 'service'
+export type PricingBlock =
+  | 'data'
+  | 'ai'
+  | 'service'
+  /**
+   * WP389（docs/105 §3.3，P1）：**工坊服务**——人工 / 代办 / 合作方替用户做成一件事（建站、发稿……）。
+   * 与按月订阅的 `service` 分开：花钱方式不同（下单扣进托管、验收后结算、按规则退），用量明细每单三行
+   * （托管 / 完成 / 退回，能力名前缀 `workshop.service.`）。价不在 `pricing.json`，在服务目录每一项上。
+   */
+  | 'workshop_service'
 
-export const PRICING_BLOCKS: readonly PricingBlock[] = ['data', 'ai', 'service']
+export const PRICING_BLOCKS: readonly PricingBlock[] = ['data', 'ai', 'service', 'workshop_service']
 
 /**
  * 价目表里的一条：一项能力、一个单位、多少积分。
@@ -164,6 +173,8 @@ export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>
   if ((entry.block as string) === 'kol_service') return 'service'
   if (entry.block !== undefined) return entry.block
   if (entry.capability.startsWith('ai.')) return 'ai'
+  // WP389：工坊服务的三行（托管 / 完成 / 退回）
+  if (entry.capability.startsWith('workshop.service.')) return 'workshop_service'
   if (
     entry.capability.startsWith('kol.service.') ||
     entry.capability.startsWith('support.service.') ||
@@ -568,6 +579,7 @@ export function emptyMemberUsageBlocks(): MemberUsageBlocks {
     data: { credits: 0, calls: 0 },
     ai: { credits: 0, calls: 0 },
     service: { credits: 0, calls: 0 },
+    workshop_service: { credits: 0, calls: 0 },
   }
 }
 

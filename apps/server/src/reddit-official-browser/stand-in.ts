@@ -67,10 +67,10 @@ const listing = (things: readonly FakeThing[], sub: string) => ({
   },
 })
 
-export function createFakeOldReddit(origin: string, sub = 'inmoxr'): FakeOldReddit {
+export function createFakeOldReddit(origin: string, sub = 'ivraxr'): FakeOldReddit {
   const site: FakeOldReddit = {
     loggedIn: false,
-    username: 'inmo_official',
+    username: 'ivra_official',
     rules: ['No spam or self-promotion', 'Be civil', 'Stay on topic'],
     queues: { modqueue: [], unmoderated: [] },
     banned: [],

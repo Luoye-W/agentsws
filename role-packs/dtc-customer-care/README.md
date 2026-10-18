@@ -1,6 +1,6 @@
 # role-packs/dtc-customer-care
 
-官方应用：网站客服职责包（钩子 A；WP54 起 `dtc.support` = 原售前 + 售后）。`package.yml` + `roles/` + skills + scenarios。1c 从 KefuAgent 抽共享包。
+官方应用：网站客服职责包（钩子 A；`dtc.support` = 原售前 + 售后）。`package.yml` + `roles/` + skills + scenarios。1c 从 KefuAgent 抽共享包。
 
 技能与能力来自共享包 **`@agentsws/support-core`**（33 §1）：分类、业务边界注册表、回复起草、
 知识引导、升级与 SLA，以及 `skills/customer-care/SKILL.md` 本身。KefuAgent（托管 SaaS）

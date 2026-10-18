@@ -1,5 +1,5 @@
 /**
- * WP244（Fable 10-07 真机，rolloutgear.com）：刚开的 Shopify 空店不该被读成「品牌名 = My Store」。
+ * WP244（Fable 10-07 真机，rovellagear.com）：刚开的 Shopify 空店不该被读成「品牌名 = My Store」。
  *
  * 夹具 = Shopify 默认店：店名 My Store、首页默认主题（Image banner / Talk about your brand）、
  * 只有 Shopify 自动生成的那份隐私政策。另一条：政策摘要只取正文（不带页头导航）、实体解码。
@@ -15,7 +15,7 @@ import {
 } from '../src/index.js'
 import { fixture, replayFetch, SHOP, SHOP_PAGES } from './fixtures.js'
 
-const FRESH = 'https://rollout.example'
+const FRESH = 'https://rovella.example'
 
 const FRESH_PAGES: Record<string, string> = {
   [`${FRESH}/`]: 'fresh-home.html',
@@ -69,7 +69,7 @@ describe('WP244 · 刚开的 Shopify 空店', () => {
 
 describe('WP244 · 政策摘要只取正文、实体解码', () => {
   it('摘要不带 Skip to content / 导航 / Cart 0，`&ndash;` 解成 –', async () => {
-    const policy = fixture('fresh-privacy.html').replace(/My Store/g, 'Rollout Gear')
+    const policy = fixture('fresh-privacy.html').replace(/My Store/g, 'Rovella Gear')
     const home = fixture('shop-home.html')
     const fetch = async (url: string) => {
       if (url === `${SHOP}/`) return { ok: true, status: 200, text: async () => home }

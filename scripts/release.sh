@@ -82,7 +82,7 @@ else
       echo
       echo "## $VERSION — $(date +%Y-%m-%d)"
       echo
-      echo "<!-- 下面是从 git log 自动列的，发版前请归纳成「新增 / 修复 / 移除 / 已知未做」 -->"
+      echo "<!-- 下面是从 git log 自动列的，发版前请归纳成「新增 / 改进 / 修复」的人话：不写工单号、决策号、内部文档链接和客户名 -->"
       echo
       git log --no-merges --pretty='- %s' "$RANGE"
       awk 'BEGIN{done=0} /^---$/{ if (!done) { done=1; next } } done { print }' CHANGELOG.md

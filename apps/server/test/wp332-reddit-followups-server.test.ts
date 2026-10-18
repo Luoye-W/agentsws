@@ -48,9 +48,9 @@ const brand = () => server.brands.forWorkspace(server.bootstrap.workspace.id)
 
 const replyTarget = {
   kind: 'reply',
-  subreddit: 'inmoxr',
+  subreddit: 'ivraxr',
   parent_fullname: 't1_c1',
-  permalink: '/r/inmoxr/comments/abc/slug/c1/',
+  permalink: '/r/ivraxr/comments/abc/slug/c1/',
   post_title: 'Does the Air3 work with glasses?',
   parent_author: 'alice',
   parent_text: 'Mine fogs up a bit when I wear glasses.',
@@ -87,7 +87,7 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
   it('人点了停止 → 能再填；再填不出新卡、同一张卡交给插件；读回 → 发出记录一行', async () => {
     const b = await brand()
     await b.adsActions?.next(['reddit'], 0)
-    const text = 'Hi Alice, INMO here. The anti-fog insert in the box helps a lot with glasses.'
+    const text = 'Hi Alice, IVRA here. The anti-fog insert in the box helps a lot with glasses.'
     const staged = await data<{ approval_item_id: string }>(
       await post('/v1/social/reddit/stage', { target: replyTarget, text }),
     )
@@ -123,7 +123,7 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
       outcome: 'done',
       message: '做完了。',
       step: 6,
-      reads: { fullname: 't1_n9', permalink: '/r/inmoxr/comments/abc/slug/n9/' },
+      reads: { fullname: 't1_n9', permalink: '/r/ivraxr/comments/abc/slug/n9/' },
     })
     const records = await data<OutboundRecord[]>(await api('/v1/outbound/records'))
     expect(records).toHaveLength(1)
@@ -136,7 +136,7 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
     const b = await brand()
     await b.adsActions?.next(['reddit'], 0)
     const staged = await data<{ approval_item_id: string }>(
-      await post('/v1/social/reddit/stage', { target: replyTarget, text: 'Hi Alice, INMO here.' }),
+      await post('/v1/social/reddit/stage', { target: replyTarget, text: 'Hi Alice, IVRA here.' }),
     )
     await approve(staged.approval_item_id)
     t += 125_000

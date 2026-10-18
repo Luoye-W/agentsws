@@ -18,7 +18,7 @@ import {
 } from '../src/shop-admin-stand-in.js'
 
 const T0 = '2026-10-08T09:00:00.000Z'
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 
 let server: Server
 let store: Assignment
@@ -103,7 +103,7 @@ beforeEach(async () => {
         'X-Assignment': owner,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ legal_name: 'Rollout', storefront_platform: 'shopify' }),
+      body: JSON.stringify({ legal_name: 'Rovella', storefront_platform: 'shopify' }),
     }),
   )
   await dataOf(res)
@@ -160,7 +160,7 @@ describe('WP341 对话里的工具按钮', () => {
       run_id,
     })
     expect(read).toMatchObject({ effect: 'read', status: 'ok' })
-    expect(JSON.stringify(read.data)).toContain('Rollout 折叠收纳箱')
+    expect(JSON.stringify(read.data)).toContain('Rovella 折叠收纳箱')
     expect((await timeline(matter_id)).map((e) => e.text)).toContain(
       '你点了「看看店里的商品」，查好了。',
     )

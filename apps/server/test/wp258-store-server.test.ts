@@ -15,8 +15,8 @@ import { createServer, type Server } from '../src/index.js'
 import { platformCliStandIn } from '../src/platform-cli-stand-in.js'
 import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 
-const SITE = 'https://rollout.example'
-const ROLLOUT = '6suegp-md.myshopify.com'
+const SITE = 'https://rovella.example'
+const ROVELLA = '6demox-md.myshopify.com'
 const FIXTURES = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../packages/brand-intake/test/fixtures',
@@ -24,7 +24,7 @@ const FIXTURES = join(
 /** 刚开的 Shopify 空店首页，带上 Shopify 每一页都有的那一行 `Shopify.shop = "…"`。 */
 const home = readFileSync(join(FIXTURES, 'fresh-home.html'), 'utf8').replace(
   '</head>',
-  `<script>Shopify.shop = "${ROLLOUT}";</script></head>`,
+  `<script>Shopify.shop = "${ROVELLA}";</script></head>`,
 )
 const site: PageFetch = async (url) =>
   url === `${SITE}/`
@@ -78,10 +78,10 @@ beforeEach(async () => {
     orgs: [
       {
         id: '111',
-        name: 'Rollout Org',
+        name: 'Rovella Org',
         stores: [
-          { store: ROLLOUT, name: 'My Store', plan: 'basic' },
-          { store: 'inmo-dev.myshopify.com', name: 'INMO Dev', plan: 'Development' },
+          { store: ROVELLA, name: 'My Store', plan: 'basic' },
+          { store: 'ivra-dev.myshopify.com', name: 'IVRA Dev', plan: 'Development' },
         ],
       },
     ],
@@ -112,7 +112,7 @@ beforeEach(async () => {
   await call(
     'PUT',
     '/v1/workspace/profile',
-    { legal_name: 'Rollout', storefront_platform: 'shopify' },
+    { legal_name: 'Rovella', storefront_platform: 'shopify' },
     owner,
   )
 })
@@ -152,31 +152,31 @@ describe('WP258 登录 Shopify 后自动取店铺（真装配线）', () => {
       (r) => r.data?.kit?.cli?.state === 'ready',
     )
 
-    // ③ 登好了：服务端自己跑了 store list；官网那家（6suegp-md）默认选中，岗位页那一格不出现
+    // ③ 登好了：服务端自己跑了 store list；官网那家（6demox-md）默认选中，岗位页那一格不出现
     const view = await until(
       () => call<ThemeView>('GET', '/v1/site/theme'),
       (r) => r.data?.store !== undefined,
     )
     expect(view.data).toMatchObject({
       cli: 'ready',
-      store: ROLLOUT,
+      store: ROVELLA,
       store_source: 'cli',
-      site_store: ROLLOUT,
+      site_store: ROVELLA,
       store_lookup: { status: 'ok' },
     })
     expect(view.data?.next).toBeUndefined()
     expect(view.data?.store_lookup?.stores.map((s) => s.store)).toEqual([
-      ROLLOUT,
-      'inmo-dev.myshopify.com',
+      ROVELLA,
+      'ivra-dev.myshopify.com',
     ])
     expect(fake.calls.filter((c) => c[0] === 'store')).toEqual([['store', 'list', '--json']])
 
     // ④ 下拉框里换一家：选了即存；不在清单里的 400；「都不是？手动填」照旧
     const picked = await call<ThemeView>('PUT', '/v1/site/theme/store', {
-      store: 'inmo-dev.myshopify.com',
+      store: 'ivra-dev.myshopify.com',
       source: 'list',
     })
-    expect(picked.data).toMatchObject({ store: 'inmo-dev.myshopify.com', store_source: 'cli' })
+    expect(picked.data).toMatchObject({ store: 'ivra-dev.myshopify.com', store_source: 'cli' })
     const bad = await call('PUT', '/v1/site/theme/store', {
       store: 'evil.myshopify.com',
       source: 'list',

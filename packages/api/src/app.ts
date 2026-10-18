@@ -14,6 +14,9 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
 import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
+import { amazonKeywordRoutes } from './routes/amazon-keywords.js'
+// WP396：自家 Amazon Listing 体检（工作台 `/v1/amazon-listing*`）
+import { amazonListingRoutes } from './routes/amazon-listing.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -34,6 +37,8 @@ import { clientErrorRoutes } from './routes/client-errors.js'
 // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力的"用我的 / 用 agentsws 的"开关
 import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
+// WP392：竞品监控（工作台 `/v1/competitor-watch*`）
+import { competitorWatchRoutes } from './routes/competitor-watch.js'
 import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
@@ -98,6 +103,7 @@ import { storageRoutes } from './routes/storage.js'
 import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
+import { workshopServicesRoutes } from './routes/workshop-services.js'
 import { workstationRoutes } from './routes/workstation.js'
 import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
@@ -162,6 +168,8 @@ export function collectRoutes(): Route[] {
     ...npmRegistryRoutes(),
     // WP192（docs/83 §4）：官方数据接口统一能力口（本机按能力路由，转给云上的 /v1/data/*）
     ...dataServiceRoutes(),
+    // WP390：工坊服务（目录缓存、看看 / 交给工坊办、订单面板）
+    ...workshopServicesRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*
@@ -315,6 +323,12 @@ export function collectRoutes(): Route[] {
     ...updatePauseRoutes(),
     // WP381：网站 / 商品体检与 AI 来源流量。`/v1/site-health*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...siteHealthRoutes(),
+    // WP392：竞品监控。`/v1/competitor-watch*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...competitorWatchRoutes(),
+    // WP396：自家 Amazon Listing 体检。`/v1/amazon-listing*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonListingRoutes(),
+    // WP398：Amazon 词库。`/v1/amazon-keywords*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonKeywordRoutes(),
   ]
 }
 

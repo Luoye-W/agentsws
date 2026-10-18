@@ -166,6 +166,61 @@ export function extractReadable(args: { maxChars: number }): ReadableExtract {
   }
 }
 
+/**
+ * WP393（docs/104 §3.6）：**数据地址的原文**（竞品店公开的 `products.json` / Store API / `all.atom`）——
+ * 直接请求被挡时，在内置浏览器里打开同一个地址、把页面上显示的原文原样读回（不折行、不压空白）。
+ * JSON / 纯文本页 Chromium 把原文放在 `<pre>` 里；XML 页把整份文档序列化回去。只读，不点不填。
+ */
+export function extractData(args: {
+  maxChars: number
+}): ReadableExtract & { content_type: string } {
+  const type = (document.contentType ?? '').toLowerCase()
+  const pre = document.querySelector('body > pre') as HTMLElement | null
+  const raw = /xml/.test(type)
+    ? new XMLSerializer().serializeToString(document)
+    : (pre?.textContent ??
+      document.body?.textContent ??
+      document.documentElement?.textContent ??
+      '')
+  const head = raw.slice(0, 3000)
+  return {
+    signals: {
+      title: (document.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      text: head.replace(/\s+/g, ' ').toLowerCase(),
+      captcha:
+        document.querySelector(
+          '#captcha-form, .g-recaptcha, .h-captcha, .cf-turnstile, iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"]',
+        ) !== null,
+      passwordInputs: document.querySelectorAll('input[type="password"]').length,
+    },
+    text: raw.slice(0, args.maxChars),
+    truncated: raw.length > args.maxChars,
+    content_type: type,
+  }
+}
+
+/**
+ * WP394（docs/104 一期 B）：**Amazon 前台页的 HTML 原文**（商品页 / 搜索页）——服务进程按 `brand-intake` 的
+ * 那套解析器读价格、划线价、优惠券、BSR、有没有货。只读：不点、不填、不滚动。
+ */
+export function extractHtml(args: { maxChars: number }): ReadableExtract {
+  const raw = document.documentElement?.outerHTML ?? ''
+  const body = (document.body?.innerText ?? '').slice(0, 3000)
+  return {
+    signals: {
+      title: (document.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      text: body.replace(/\s+/g, ' ').toLowerCase(),
+      captcha:
+        document.querySelector(
+          'form[action*="validateCaptcha"], #captchacharacters, .g-recaptcha, .h-captcha, iframe[src*="recaptcha"], iframe[src*="hcaptcha"]',
+        ) !== null,
+      passwordInputs: document.querySelectorAll('input[type="password"]').length,
+    },
+    text: raw.slice(0, args.maxChars),
+    truncated: raw.length > args.maxChars,
+  }
+}
+
 /** 拼成 `executeJavaScript` 要的那一段（函数源码 + 参数，参数只是 JSON 数据）。 */
 export function pageScript<A>(fn: (args: A) => unknown, args: A): string {
   return `(${fn.toString()})(${JSON.stringify(args)})`

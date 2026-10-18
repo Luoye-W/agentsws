@@ -1,11 +1,11 @@
 /**
- * WP242：AI 不在、退回按词对时认得常见说法（Fable 10-06 真机：Rollout 那句话一条都推不准）。
+ * WP242：AI 不在、退回按词对时认得常见说法（Fable 10-06 真机：Rovella 那句话一条都推不准）。
  * 「独立站 / Shopify / 建站 / 主题」→ 建站；「社媒」→ 社媒运营；「红人 / 达人 / KOL」→ 红人营销；
  * 「广告 / 投放」→ 投放；「客服 / 售前售后」→ 客服（Amazon 客服只在提到 Amazon 时推）；「设计 / 出图」→ 设计。
  */
 import { describe, expect, it } from 'vitest'
 import { type SuggestCatalogRole, suggestPositions } from '../src/onboarding-suggest.js'
-import { ROLLOUT_TEXT } from './wp242-fixtures.js'
+import { ROVELLA_TEXT } from './wp242-fixtures.js'
 
 const role = (
   id: string,
@@ -56,8 +56,8 @@ const ids = async (text: string): Promise<string[]> => {
 }
 
 describe('WP242 按词对：常见说法', () => {
-  it('Rollout 那句话：建站、社媒、红人、投放、客服都推上；不推 Amazon 客服、不推非默认的', async () => {
-    const got = await ids(ROLLOUT_TEXT)
+  it('Rovella 那句话：建站、社媒、红人、投放、客服都推上；不推 Amazon 客服、不推非默认的', async () => {
+    const got = await ids(ROVELLA_TEXT)
     expect(got).toEqual(
       [
         'site.shopify-build',

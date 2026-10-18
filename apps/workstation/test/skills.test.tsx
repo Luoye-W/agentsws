@@ -274,3 +274,32 @@ describe('WP209 技能页：按岗位分组、折叠、展开一张、搜索、�
     ])
   })
 })
+
+describe('WP397 技能卡上的来源小标签', () => {
+  it('官方原样收录 / 改写自开源各标一个；没写来源的不标', async () => {
+    state.skills = [
+      {
+        ...SKILL,
+        name: 'amazon-sp-stockout-prevention',
+        origin: 'official',
+        overlays: [],
+        pending_proposals: 0,
+      },
+      {
+        ...SKILL,
+        name: 'amazon-fba-reimbursement',
+        origin: 'adapted',
+        overlays: [],
+        pending_proposals: 0,
+      },
+      { ...SKILL, overlays: [], pending_proposals: 0 },
+    ]
+    renderWithProviders(<SkillsPage />)
+    await screen.findByText('amazon-sp-stockout-prevention')
+    const tags = screen.getAllByTestId('skill-tile-origin')
+    expect(tags.map((t) => [t.dataset.origin, t.textContent]).sort()).toEqual([
+      ['adapted', '改写自开源'],
+      ['official', '官方原样收录'],
+    ])
+  })
+})

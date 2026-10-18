@@ -43,6 +43,7 @@ import type {
   PromptSection,
   ReasoningEffort,
   RunBrowser,
+  RunBrowserGrant,
   RunConnection,
   RunEvent,
   RunId,
@@ -51,6 +52,7 @@ import type {
   RunTimeLimits,
   RuntimeAdapter,
   RunWeb,
+  ServiceOffer,
   SkillRef,
   StartRun,
   StorefrontPlatform,
@@ -107,18 +109,31 @@ import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agents
 import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
+  AMAZON_COMPETITOR_ROLES,
+  AMAZON_COMPETITOR_TOOL_NAMES,
+  AMAZON_KEYWORD_TOOL_NAMES,
+  AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  COMPETITOR_STORE_ROLES,
+  COMPETITOR_STORE_TOOL_NAMES,
+  COMPETITOR_TOOL_NAMES,
   createStubRuntime,
+  FIND_SERVICE_TOOL,
+  GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
   isAdsDataRole,
   isAdsWiredRole,
+  isAmazonKeywordRole,
+  isAmazonListingRole,
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
+  isSiteHealthRole,
   isThemeRole,
   OWNER_TOOL_NAMES,
+  PR_MONITOR_TOOL_NAMES,
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
   RECORD_SINK_TOOL_NAMES,
@@ -127,6 +142,7 @@ import {
   SCHEDULE_TOOL_NAMES,
   SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
+  SITE_HEALTH_TOOL_NAMES,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
@@ -134,6 +150,7 @@ import {
   WATCH_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
+  WORKSHOP_SERVICE_TOOL_NAMES,
 } from '@agentsws/stand-ins'
 import { cardRefOf, type Work } from '@agentsws/work'
 import { type RememberItem, type RunMemoryActor, splitRememberTags } from './auto-memory.js'
@@ -150,6 +167,10 @@ import {
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
+
+/** WP387：交代建 / 读 Google 提醒结果的那条职责（信息监控）。 */
+const GOOGLE_ALERTS_ROLE = 'pr.monitoring'
+
 import { PartialRunLog, pausedForUpdateLine, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 import { SUBSCRIPTION_SOURCE_ID } from './subscription-model.js'
@@ -201,8 +222,24 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...REPORT_TOOL_NAMES,
     // WP315：投放岗看数据——查数只读本机库；现在导一次排给插件（只点导出）；止损只出卡
     ...ADS_DATA_TOOL_NAMES,
+    // WP396：Listing 体检——读自家前台页只读外部；看结果 / 改规则只动本机
+    ...AMAZON_LISTING_TOOL_NAMES,
+    // WP398：Amazon 词库——读前台联想词只读外部；看词库 / 标词只动本机
+    ...AMAZON_KEYWORD_TOOL_NAMES,
     // WP334：AI 自己要卡——只回结构化缺项，卡由运行时收尾时出（本机）
     ...SETUP_REQUEST_TOOL_NAMES,
+    // WP385：读网站体检结论——只读本机体检记录（不现跑体检）
+    ...SITE_HEALTH_TOOL_NAMES,
+    // WP387：交代建 / 读 Google 提醒的结果——只写本机信息监控库（先拉一次 feed 是读）
+    ...GOOGLE_ALERTS_TOOL_NAMES,
+    // WP393：店铺管理「竞品动向」——探平台 / 现在读一次只读外部公开页面；写的只是本机竞品清单
+    ...COMPETITOR_STORE_TOOL_NAMES,
+    // WP386：信息监控查提及——只读本机提及库
+    ...PR_MONITOR_TOOL_NAMES,
+    // WP390：工坊服务——查目录只读本机缓存；出卡不下单（下单永远人点）
+    ...WORKSHOP_SERVICE_TOOL_NAMES,
+    // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
+    ...AMAZON_COMPETITOR_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -471,18 +508,77 @@ export interface RuntimeOptions {
    * WP331（决策 691）：报告积木的四个工具（`report-tools.ts` 建的那一份）。查发出记录 / 发布报告给所有职责；
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
-  reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
+  reportTools?: {
+    execute: ToolExecutor
+    watchRoles: ReadonlySet<string>
+    /**
+     * WP392：担竞品监控的职责（店铺管理、Amazon 店铺运营）：给竞品变化表，也给查巡查数据 / 立即巡查
+     * （默认查的是竞品那一份）。不给 = 没人担。
+     */
+    competitorRoles?: ReadonlySet<string>
+  }
+  /** WP386：信息监控查提及（`list_mentions`，`pr-watch/tools.ts` 建的那一份）。不给 = 没有。 */
+  prMonitorTools?: ToolExecutor
   /**
    * WP315（docs/101 §5.1①）：投放岗看数据的三个工具（`ads-data/tools.ts` 建的那一份）。只给 `ads.*` 职责。
    * 不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   adsDataTools?: ToolExecutor
   /**
+   * WP396（docs/106 §13）：亚马逊店铺运营的 Listing 体检三个工具（`amazon-listing/tools.ts` 建的那一份）。
+   * 只给 `amz.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  amazonListingTools?: ToolExecutor
+  /**
+   * WP398（docs/106 §13 A8）：亚马逊店铺运营的 Amazon 词库三个工具（`amazon-keywords/tools.ts` 建的那一份）。
+   * 只给 `amz.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  amazonKeywordTools?: ToolExecutor
+  /**
    * WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具 `request_setup`（`setup-request-tool.ts` 建的那一份）。
    * **所有职责都有**；工具只回结构化缺项，卡由这一轮收尾时的 `setupCards.onRunBlocked` 出（同一缺项只一张）。
    * 不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   setupRequestTool?: ToolExecutor
+  /**
+   * WP385（决策 1076）：网站运营读体检结论的只读工具 `query_site_health`（`site-health-tools.ts` 建的那一份）。
+   * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  siteHealthTools?: ToolExecutor
+  /**
+   * WP387（docs/103 v2 §3.3）：浏览器建完 / 读完 Google 提醒后交代结果的 `report_google_alerts`
+   * （`pr-alerts/tool.ts`）。只给信息监控那条职责；不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  googleAlertsTool?: ToolExecutor
+  /**
+   * WP387：这件事这次运行带不带「可以改 Google 提醒」的凭据（`RunRequest.browser_grants`）。
+   * 只有那张卡同意过、那一趟还在跑的那件事才有；不给 / 回空 = 不写这个字段（受保护页面上的写一律拦）。
+   */
+  browserGrants?: (input: { role_id: string; matter_id: string }) => RunBrowserGrant[]
+  /**
+   * WP390（docs/105 §4）：工坊服务的两个工具（`find_service` / `draft_service_order`，所有职责都有）与
+   * **推荐卡**：这一轮收尾时问 `offer` 挂不挂、挂哪一项（分寸在服务里判：后台不推、同一对话一项只推一次、
+   * 说过「不用」30 天不推）。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  workshopServices?: {
+    execute: ToolExecutor
+    offer?(input: {
+      request: RunRequest
+      matter_id: string
+      /** 这一轮 AI 用 `find_service` 查到的第一项。 */
+      found?: string
+    }): Promise<ServiceOffer | undefined>
+  }
+  /**
+   * WP393（docs/104 一期 A）：店铺管理「竞品动向」那两个工具（探平台 / 现在读一次；`competitor-watch/store-tools.ts`）。
+   * 只给 `dtc.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  competitorStoreTools?: ToolExecutor
+  /**
+   * WP394（docs/104 一期 B）：亚马逊店铺运营「竞品动向」现在读一次（`competitor-watch/amazon-tools.ts`）。
+   * 只给 `amz.store`。不给 = 没有这一个（老装配、模拟世界字节不变）。
+   */
+  amazonCompetitorTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -849,6 +945,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     string,
     { watchdog: RunWatchdog; log: PartialRunLog; blocks: RunBlockLog }
   >()
+  /** WP390：这一轮 AI 用 `find_service` 查到的第一项（收尾时据此挂推荐卡；收尾摘掉）。 */
+  const foundServices = new Map<string, string>()
   /** WP251：这一轮撞上「缺连接 / 缺凭据」时记一笔（缺哪个连接按这条职责现查）。 */
   const noteBlocked = (
     blocks: RunBlockLog | undefined,
@@ -1242,7 +1340,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const sinkTools = options.recordSinkTools
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
+    const amazonListingTools = options.amazonListingTools
+    const amazonKeywordTools = options.amazonKeywordTools
     const setupRequest = options.setupRequestTool
+    const siteHealthTools = options.siteHealthTools
+    const googleAlerts = options.googleAlertsTool
+    const competitorStore = options.competitorStoreTools
+    const prMonitor = options.prMonitorTools
+    const workshopTools = options.workshopServices?.execute
+    const amazonCompetitor = options.amazonCompetitorTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1273,7 +1379,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       sinkTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
-      setupRequest === undefined
+      setupRequest === undefined &&
+      siteHealthTools === undefined &&
+      prMonitor === undefined &&
+      googleAlerts === undefined &&
+      workshopTools === undefined &&
+      competitorStore === undefined &&
+      amazonListingTools === undefined &&
+      amazonKeywordTools === undefined &&
+      amazonCompetitor === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1323,13 +1437,57 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
         return reportTools(call)
       }
+      // WP386：信息监控查提及（名字与别处不重名）
+      if (prMonitor !== undefined && PR_MONITOR_TOOL_NAMES.includes(bareOf(call.name))) {
+        return prMonitor(call)
+      }
       // WP315：投放岗看数据（名字与别处不重名；职责在执行器里再判一次）
       if (adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bareOf(call.name))) {
         return adsDataTools(call)
       }
+      // WP396：Listing 体检（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonListingTools !== undefined &&
+        AMAZON_LISTING_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonListingTools(call)
+      }
+      // WP398：Amazon 词库（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonKeywordTools !== undefined &&
+        AMAZON_KEYWORD_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonKeywordTools(call)
+      }
       // WP334：AI 自己要卡（名字与别处不重名）
       if (setupRequest !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bareOf(call.name))) {
         return setupRequest(call)
+      }
+      // WP385：读网站体检结论（名字与别处不重名；职责在执行器里再判一次）
+      if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
+        return siteHealthTools(call)
+      }
+      // WP387：交代建 / 读 Google 提醒的结果（名字与别处不重名）
+      if (googleAlerts !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bareOf(call.name))) {
+        return googleAlerts(call)
+      }
+      // WP390：工坊服务（名字与别处不重名）
+      if (workshopTools !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bareOf(call.name))) {
+        return workshopTools(call)
+      }
+      // WP393：店铺管理「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        competitorStore !== undefined &&
+        COMPETITOR_STORE_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return competitorStore(call)
+      }
+      // WP394：亚马逊店铺运营「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonCompetitor !== undefined &&
+        AMAZON_COMPETITOR_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonCompetitor(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1372,8 +1530,22 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
+    if (options.prMonitorTools !== undefined && PR_MONITOR_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
+    if (options.amazonListingTools !== undefined && AMAZON_LISTING_TOOL_NAMES.includes(bare))
+      return true
+    if (options.amazonKeywordTools !== undefined && AMAZON_KEYWORD_TOOL_NAMES.includes(bare))
+      return true
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
+      return true
+    if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
+    if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
+      return true
+    if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
+      return true
+    if (options.competitorStoreTools !== undefined && COMPETITOR_STORE_TOOL_NAMES.includes(bare))
+      return true
+    if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
       return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
@@ -1394,6 +1566,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           if (why !== undefined)
             noteBlocked(watch?.blocks, bareOf(call.name), why, call.request.actor.role_id)
           // WP324：缺一步设置 / 缺一样能就地连的（结构化：`needs_setup` / `needs_connection` / 建站与管店的 `needs`）
+          // WP390：AI 查到了哪一项工坊服务（收尾时挂推荐卡用）
+          if (bareOf(call.name) === FIND_SERVICE_TOOL && res.status === 'ok') {
+            const first = (res.data as { services?: { id?: unknown }[] } | undefined)?.services?.[0]
+            if (typeof first?.id === 'string' && !foundServices.has(call.request.id))
+              foundServices.set(call.request.id, first.id)
+          }
           const setupNeed = why === undefined ? setupNeedOf(bareOf(call.name), res) : undefined
           if (setupNeed !== undefined) watch?.blocks.noteSetup(bareOf(call.name), setupNeed)
           watch?.log.hostTool({
@@ -1873,17 +2051,50 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP331：报告积木（查发出记录 / 发布报告所有职责；查巡查 / 立即巡查只给担巡查的职责）
         ...(options.reportTools === undefined
           ? []
-          : REPORT_TOOL_NAMES.filter(
-              (n) =>
+          : REPORT_TOOL_NAMES.filter((n) => {
+              const competitor = options.reportTools?.competitorRoles?.has(config.role_id) === true
+              // WP392：竞品变化表只给担竞品监控的职责
+              if (COMPETITOR_TOOL_NAMES.includes(n)) return competitor
+              return (
                 !WATCH_TOOL_NAMES.includes(n) ||
-                options.reportTools?.watchRoles.has(config.role_id) === true,
-            )),
+                competitor ||
+                options.reportTools?.watchRoles.has(config.role_id) === true
+              )
+            })),
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
         ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
           ? ADS_DATA_TOOL_NAMES
           : []),
+        // WP396：Listing 体检（只给亚马逊店铺运营；服务端接了才有）
+        ...(isAmazonListingRole(config.role_id) && options.amazonListingTools !== undefined
+          ? AMAZON_LISTING_TOOL_NAMES
+          : []),
+        // WP398：Amazon 词库（只给亚马逊店铺运营；服务端接了才有）
+        ...(isAmazonKeywordRole(config.role_id) && options.amazonKeywordTools !== undefined
+          ? AMAZON_KEYWORD_TOOL_NAMES
+          : []),
         // WP334：AI 自己要连接卡 / 配置卡（所有职责）
         ...(options.setupRequestTool === undefined ? [] : SETUP_REQUEST_TOOL_NAMES),
+        // WP385：读网站体检结论（只给店铺管理、内容与搜索；服务端接了才有）
+        ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
+          ? SITE_HEALTH_TOOL_NAMES
+          : []),
+        // WP387：信息监控交代建 / 读 Google 提醒的结果（服务端接了才有）
+        ...(config.role_id === GOOGLE_ALERTS_ROLE && options.googleAlertsTool !== undefined
+          ? GOOGLE_ALERTS_TOOL_NAMES
+          : []),
+        // WP390：工坊服务（所有职责）
+        ...(options.workshopServices === undefined ? [] : WORKSHOP_SERVICE_TOOL_NAMES),
+        // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给店铺管理）
+        ...(options.competitorStoreTools !== undefined &&
+        COMPETITOR_STORE_ROLES.includes(config.role_id)
+          ? COMPETITOR_STORE_TOOL_NAMES
+          : []),
+        // WP394：亚马逊店铺运营「竞品动向」（现在读一次；只给亚马逊店铺运营）
+        ...(options.amazonCompetitorTools !== undefined &&
+        AMAZON_COMPETITOR_ROLES.includes(config.role_id)
+          ? AMAZON_COMPETITOR_TOOL_NAMES
+          : []),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
@@ -1902,6 +2113,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       matter_id: input.matter.id,
     })
     const granted = computer_use?.granted_until !== undefined
+    // WP387：这件事有没有一趟同意过、还在跑的「改 Google 提醒」（有才给凭据）
+    const browser_grants =
+      options.browserGrants?.({ role_id: config.role_id, matter_id: input.matter.id }) ?? []
     // WP237（#67）：按条计费的工具（现在只有 read_reddit）每次运行按价目现填单价
     const tool_prices: Record<string, number> = {}
     if (options.toolPrice !== undefined)
@@ -2119,6 +2333,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(connections.length === 0 ? {} : { connections }),
       // WP144：不给就不写这个字段——老的运行记录回放出来仍是「碰不到电脑」
       ...(computer_use === undefined ? {} : { computer_use }),
+      // WP387：只有挂了浏览器、这件事有同意过的卡时才写（不写 = 受保护页面上的写一律拦）
+      ...(browser === undefined || browser_grants.length === 0 ? {} : { browser_grants }),
       // WP179：同上——不给就不写，没挂网页工具的运行 RunRequest 一个字节不变
       ...(web === undefined ? {} : { web }),
       // WP237：取不到价就不写这个字段（描述里只说「按条计积分」），老运行的请求一个字节不变
@@ -2522,8 +2738,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const said = splitNextSuggestion(humanizeToolNames(answers.join('\n'), request.tools.allow))
       const next = cleanNextSuggestion(result.next_suggestion) ?? said.next
       if (answers.length > 0 && said.text.trim() !== '') {
+        /*
+         * WP390（docs/105 §4）：推荐卡——挂不挂、挂哪一项问服务（后台不推、同一对话一项只推一次、说过「不用」不推）。
+         * 取不到就不挂，不影响这一段话。
+         */
+        const found = foundServices.get(run_id)
+        const offer = await options.workshopServices
+          ?.offer?.({
+            request,
+            matter_id: input.matter.id,
+            ...(found === undefined ? {} : { found }),
+          })
+          .catch(() => undefined)
         work?.appendEvent(input.matter.id, {
           kind: 'agent_message',
+          ...(offer === undefined ? {} : { service_offer: offer }),
           /*
            * WP153（09-26 真账号冒烟）：**兜底**——提示词公共段已经叫模型别提工具名，万一还是说了
            * （「我用 `search_policies` 查了三轮」），进时间线之前按那张统一的「工具名 → 人话」表换掉；
@@ -2594,6 +2823,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       pausing.delete(run_id)
       skillActors.delete(run_id)
       runWatch.delete(run_id)
+      foundServices.delete(run_id)
       runSteps.delete(run_id)
       settle()
     }

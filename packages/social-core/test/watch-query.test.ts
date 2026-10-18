@@ -24,10 +24,10 @@ const item = (over: Partial<WatchItem>): WatchItem => {
     platform: 'reddit',
     kind: 'comment',
     scope: 'own',
-    place: 'inmoxr',
+    place: 'ivraxr',
     author: `user${n}`,
     created_at: '2026-10-13T03:00:00.000Z',
-    url: `https://www.reddit.com/r/inmoxr/comments/x/${n}/`,
+    url: `https://www.reddit.com/r/ivraxr/comments/x/${n}/`,
     text: `text ${n}`,
     ...over,
   }
@@ -72,7 +72,7 @@ describe('queryWatchItems', () => {
       place: 'augmentedreality',
       topic: { key: 't:compare', label: '和别家对比' },
       assessment: 'no_action',
-      keyword: 'INMO',
+      keyword: 'IVRA',
     }),
     item({
       id: 't1_y',
@@ -80,13 +80,13 @@ describe('queryWatchItems', () => {
       place: 'smartglasses',
       topic: { key: 't:compare', label: '和别家对比' },
       assessment: 'follow_up',
-      keyword: 'INMO',
+      keyword: 'IVRA',
     }),
     item({ id: 't1_z', scope: 'external', place: 'tech', keyword: 'Air3' }),
   ]
 
   it('窗口、去重、自家 / 外部计数、被删照样算数', () => {
-    const r = queryWatchItems({ items, ownPlaces: ['r/inmoxr'], window })
+    const r = queryWatchItems({ items, ownPlaces: ['r/ivraxr'], window })
     expect(r.totals).toMatchObject({
       items: 6,
       own: { posts: 1, comments: 2 },
@@ -94,7 +94,7 @@ describe('queryWatchItems', () => {
       voc: 1,
       ugc: 1,
     })
-    const own = queryWatchItems({ items, ownPlaces: ['inmoxr'], window, filter: { scope: 'own' } })
+    const own = queryWatchItems({ items, ownPlaces: ['ivraxr'], window, filter: { scope: 'own' } })
     expect(own.items.map((x) => x.id)).toEqual(['t3_a', 't1_b', 't1_c'])
     expect(own.items[2]).toMatchObject({ text: '', deleted: true })
     expect(own.items[1]?.note).toBe('后补的判断')
@@ -119,7 +119,7 @@ describe('queryWatchItems', () => {
   it('按话题归组：取最重的那一档、按严重度排、没话题按关键词、每组最多几条', () => {
     const r = queryWatchItems({
       items,
-      ownPlaces: ['inmoxr'],
+      ownPlaces: ['ivraxr'],
       window,
       filter: { scope: 'external' },
       group_by: 'topic',
@@ -148,7 +148,7 @@ describe('queryWatchItems：WP340 优先 / 本地标签', () => {
       item({ id: 't1_r' }),
     ]
     const q = (filter: { priority?: boolean; tag?: string }) =>
-      queryWatchItems({ items, ownPlaces: ['inmoxr'], window, filter })
+      queryWatchItems({ items, ownPlaces: ['ivraxr'], window, filter })
     expect(q({ priority: true }).items.map((x) => [x.id, x.priority, x.tags])).toEqual([
       ['t3_p', true, ['Air3']],
     ])
@@ -177,7 +177,7 @@ describe('summarizeSent', () => {
     } as OutboundRecord
   }
   const records = [
-    rec({ link: 'https://www.reddit.com/r/inmoxr/comments/1/x/our1/' }),
+    rec({ link: 'https://www.reddit.com/r/ivraxr/comments/1/x/our1/' }),
     rec({ action: 'comment', parent_external_id: 't1_abc' }),
     rec({ action: 'post' }),
     rec({ channel: 'email', action: 'email' }),

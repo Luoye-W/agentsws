@@ -179,6 +179,8 @@ export const SCHEDULE_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
 
 const ASKS = /提醒我|每天|每周|工作日|分钟后|小时后|定时/
 const WEEKDAY: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 }
+/** 话里说了几点没有（同 `clockOf` 认的写法）。 */
+const HAS_CLOCK = /\d{1,2}\s*[点:：时]/
 
 /** 「下午 3 点半」「9:30」「早上 8 点」→ `HH:mm:00`；没说几点就是 09:00。 */
 function clockOf(text: string): string {
@@ -211,6 +213,9 @@ export function scheduleBranch(
   if (hours?.[1] !== undefined) return { ...base, after_seconds: Number(hours[1]) * 3600 }
   const time = clockOf(text)
   if (/工作日/.test(text)) return { ...base, weekly: { time, weekdays: [1, 2, 3, 4, 5] } }
+  // WP388：要每周一份报告 / 简报、没说周几 → 每周一；没说几点 → 16:30（出上一周的）
+  if (/每周|每星期/.test(text) && /报|汇总/.test(text) && !/每周[一二三四五六日天]/.test(text))
+    return { ...base, weekly: { time: HAS_CLOCK.test(text) ? time : '16:30:00', weekdays: [1] } }
   const week = /每周([一二三四五六日天、,，和及]+)/.exec(text)
   if (week?.[1] !== undefined) {
     const days = [...new Set([...week[1]].map((c) => WEEKDAY[c]).filter((d) => d !== undefined))]

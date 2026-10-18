@@ -66,6 +66,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'setup_request',
   // WP321：GEO 关注设置卡（批了 / 改了才落成关注设置）
   'geo_watch',
+  // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 交换联系方式；永远 L1）
+  'service_order',
 ])
 
 export function isKnownKind(kind: string): boolean {

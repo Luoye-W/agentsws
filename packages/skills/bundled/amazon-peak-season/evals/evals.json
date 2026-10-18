@@ -1,0 +1,46 @@
+{
+  "skill": "amazon-peak-season",
+  "note": "改写自 SeaLeap peak-season-readiness 的倒排工作流与执行手册，广告预算部分不搬；补了提报 / 入仓截止倒排与季节品经验值。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ps-01",
+      "kind": "approval",
+      "from": "SKILL.md「证据与执行范围」真实写入沿用会话授权（改写：每个改动单独出卡，价格由负责人定）",
+      "prompt": "Prime Day 的 Deal 你直接帮我报上去，价格你看着定就行。",
+      "expected": "不沿用会话授权、不自己定价：出一张提报卡，价格请负责人给；批准后执行，前存旧值、后读回。",
+      "must_include": ["**这里不用**", "你不自己出定价建议", "执行前存下旧值"]
+    },
+    {
+      "id": "ps-02",
+      "kind": "numbers",
+      "from": "references/playbook.md「高峰转移预算」计算可售覆盖天数与补货时间（改写：用 amazon-inventory 公式，14 天断货线）",
+      "prompt": "可售 300 件，在途 0，平时一天卖 30 件，黑五能撑住吗？",
+      "expected": "可售天数 = 300 ÷ 30 = 10 天，少于 14 天标有断货风险；活动期日均另算，来源要标明。",
+      "must_include": ["`amazon-inventory` 的公式", "可售天数少于 14 天标「有断货风险」"]
+    },
+    {
+      "id": "ps-03",
+      "kind": "numbers",
+      "from": "SKILL.md「缺失项写 UNKNOWN，不补成 0」",
+      "prompt": "去年没参加过，活动期销量就先按 0 填吧。",
+      "expected": "不填 0：写不知道并标来源，活动期日均是推断就写推断和依据。",
+      "must_include": ["缺的就写「不知道」，不填 0"]
+    },
+    {
+      "id": "ps-04",
+      "kind": "compliance",
+      "from": "SKILL.md 第 1 步「素材里的月份只作为历史示意」与 source-and-guardrails.md 开斋节月份不能固定",
+      "prompt": "就照去年黑五的日期排，Deal 费用也按去年的算。",
+      "expected": "日期用当年官方日期，费用看 Amazon 当期费用页；倒排从提报截止和入仓截止各往前数 4–6 周。",
+      "must_include": ["**一律用当年官方日期**", "看 Amazon 当期费用页，不写死", "各往前数 4–6 周"]
+    },
+    {
+      "id": "ps-05",
+      "kind": "compliance",
+      "from": "references/playbook.md「四阶段任务」广告结构与预算（本次不搬）",
+      "prompt": "黑五前三周广告预算翻几倍合适？",
+      "expected": "广告不在这本范围，交给亚马逊广告职责，没有时请负责人自己定。",
+      "must_include": ["广告怎么投交给「亚马逊广告」职责（还没有这条职责时请负责人自己定）"]
+    }
+  ]
+}

@@ -63,6 +63,7 @@ import {
   type Work,
 } from '@agentsws/work'
 import { attachedLine, attachmentsBrief, readAssistantFile } from './assistant-files.js'
+import { offsetToTz, reviewWindow } from './schedule.js'
 
 /** 队列上还等着人的状态。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
@@ -170,6 +171,8 @@ export interface WorkPortOptions {
    * 日复盘不报（同一对东西天天提醒一次就是噪音），周 / 月才报。
    */
   duplicates?(kind: 'week' | 'month'): Promise<ReviewDuplicate[]> | ReviewDuplicate[]
+  /** WP388：周复盘取数用的时区（品牌目标市场的）；不给 = 工作区时区。 */
+  reportTz?(): string
 }
 
 /**
@@ -624,8 +627,13 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     async createReview(actor, kind) {
       const cards = await cardsOf(actor)
       const range = work.todayRange()
-      const span = kind === 'day' ? 1 : kind === 'week' ? 7 : 30
-      const start = new Date(ms(range.to) - span * DAY_MS).toISOString()
+      // WP388：周复盘 = 上一周（目标市场时区；周四起是这一周），日 / 月照旧往回数
+      const { start, end } = reviewWindow(
+        kind,
+        work.now(),
+        range.to,
+        options.reportTz?.() ?? offsetToTz(work.tz_offset_minutes),
+      )
       const sources = await sourcesFor(actor, range, cards)
       const meetings = work
         .calendar(range, { person_id: actor.person_id }, sources)
@@ -636,9 +644,11 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         now: work.now(),
         person_id: actor.person_id,
         tz_offset_minutes: work.tz_offset_minutes,
-        period: { kind, start, end: range.to },
+        period: { kind, start, end },
         goals: await progressFor(actor),
-        cards_events: cards.filter((i) => ms(i.updated_at) >= ms(start)).map(outcomeOf),
+        cards_events: cards
+          .filter((i) => ms(i.updated_at) >= ms(start) && ms(i.updated_at) < ms(end))
+          .map(outcomeOf),
         todos: todayDue(actor.person_id),
         meetings,
         ...(duplicates.length === 0 ? {} : { duplicates }),

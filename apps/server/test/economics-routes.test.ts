@@ -237,8 +237,9 @@ describe('本周经营一页纸', () => {
   it('预览：五段齐、每条发现带数和出处、没人担的写「没接」', async () => {
     const p = await data<WeeklyReviewPayload>(await api('/v1/economics/weekly-review'))
     expect(p.kind).toBe('weekly_review')
-    expect(p.week_of).toBe('2026-10-05')
-    expect(p.situation).not.toBe('')
+    // WP388：周一出的是上一周（没设目标市场 = 工作区时区的周一到周日）
+    expect(p.week_of).toBe('2026-09-28')
+    expect(p.situation).toContain('2026-09-28 到 2026-10-04')
     for (const f of p.findings) {
       expect(f.value).not.toBe('')
       expect(f.source).not.toBe('')
@@ -255,6 +256,7 @@ describe('本周经营一页纸', () => {
     )
     const item = await server.txn.approvals.get(first.approval_item_id ?? '')
     expect(item?.kind).toBe('weekly_review')
+    expect(item?.title).toBe('上周经营一页纸 · 2026-09-28')
     expect(item?.role_id).toBe('common.owner')
     expect(item?.routing.recipients[0]?.person).toBe(owner.person_id)
     // 同日报 / 搜索报告：L3 出、不进审批队列（deck 的 NOT_A_CARD），面板上是一块报表
@@ -269,14 +271,14 @@ describe('本周经营一页纸', () => {
     expect(newer?.revision).toBe(2)
   })
 
-  it('每周一早上那条定时在；设置里改成周三 09:30 就改的是这一条', async () => {
+  it('每周一 16:30 那条定时在（WP388）；设置里改成周三 09:30 就改的是这一条', async () => {
     expect(server.schedule.scheduler.get('sched_weekly_review')?.trigger).toMatchObject({
       kind: 'cron',
-      expr: '0 8 * * 1',
+      expr: '30 16 * * 1',
     })
     expect(await data(await api('/v1/economics/weekly-review/schedule'))).toEqual({
       weekday: 1,
-      time: '08:00',
+      time: '16:30',
       paused: false,
     })
     const next = await data(

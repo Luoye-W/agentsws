@@ -5,7 +5,7 @@ Electron 托盘壳（13 §5「桌面壳改为浏览器打开 + 极小启动器�
 
 托盘做五件事：打开工作台（默认应用内窗口）/ 在浏览器打开 / 暂停（急停）/ 状态 / 退出，
 外加重启服务、打开日志目录、开机自启。
-WP136 起还有「切换场景」子菜单（dsh 的其他场景由服务进程用捆绑的 Node 起，网址交系统浏览器；docs/79）。
+还有「切换场景」子菜单（dsh 的其他场景由服务进程用捆绑的 Node 起，网址交系统浏览器）。
 
 ## 结构
 
@@ -25,8 +25,8 @@ WP136 起还有「切换场景」子菜单（dsh 的其他场景由服务进程�
 | `src/connect-runtime.ts` | OpenConnector runtime 检测 + 加固检查（v1 不负责拉起） |
 | `src/mode.ts` | 本机 / 连公司服务器的判定（40 §1.3）；`src/wizard-preload.cts` 是首启向导的界面 |
 | `src/updater.ts` | 更新的平台档位（签名定的）+ notify 档的「只查」 |
-| `src/update-controller.ts` `src/update-feed.ts` | WP218：一键更新状态机、更新源规则（见「应用内一键更新」） |
-| `src/tray-tint.ts` | WP218：Windows 托盘图标上色（template 图在深色任务栏上看不见） |
+| `src/update-controller.ts` `src/update-feed.ts` | 一键更新状态机、更新源规则（见「应用内一键更新」） |
+| `src/tray-tint.ts` | Windows 托盘图标上色（template 图在深色任务栏上看不见） |
 
 除 `main.ts` / `preload.cts` 外**没有一个模块 import `electron`**——所以状态机、退避、密钥、
 URL 判定、菜单模型都能在 vitest 里跑满 100% 行覆盖；`main.ts` 由 `e2e/` 的 playwright 冒烟覆盖。
@@ -41,7 +41,7 @@ secrets.bin     safeStorage 密文（macOS 钥匙串 / Windows DPAPI 背书）
 halt.json       急停档位（托盘"暂停"写它）
 logs/           desktop.log、server.log（子进程 stdout / stderr，脱敏后）
 data/           传给服务进程的 AGENTSWS_DB_DIR
-dsh/            WP136：我们自己的 DSH_HOME（dsh 各场景 + 本机凭据库），不是 ~/.dsh；见 docs/79
+dsh/            我们自己的 DSH_HOME（dsh 各场景 + 本机凭据库），不是 ~/.dsh
 ```
 
 `AGENTSWS_DESKTOP_USER_DATA` 可以把整个目录挪走（开发与 e2e 用）。
@@ -80,7 +80,7 @@ cookie 的 url 与 CSP `'self'` 的依据，三处必须是同一个字符串。
 | CSP | 主进程在 `onHeadersReceived` 里**覆盖**成 `default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` |
 | 导航 | `will-navigate` / `setWindowOpenHandler`：本地源放行，http(s)/mailto 交系统浏览器，**其余协议一律拒**（`file:` `javascript:` `ms-msdt:` 这些交给 `shell.openExternal` 是能执行本机命令的） |
 | 权限 | `setPermissionRequestHandler` 一律拒 |
-| 桥接 | `notify / openExternal / platform / version`，加 WP184 的 `openScene`、WP218 的 `update`；IPC 只接受本地源窗口发来的调用 |
+| 桥接 | `notify / openExternal / platform / version`，加 `openScene`、`update`；IPC 只接受本地源窗口发来的调用 |
 | 子进程环境 | 白名单继承（`INHERITED_ENV`），宿主的 `DEEPSEEK_API_KEY` 之类漏不进去 |
 
 ## 桥接层与特性检测
@@ -116,16 +116,16 @@ server 哪天提供了运行期急停接口，`src/halt.ts` 换成直接调它�
 
 1. `AGENTSWS_SIDECAR_RUNTIME=electron` —— 逃生口，明确要求时才借 Electron 自带 Node；
 2. `AGENTSWS_NODE` —— 指定 node 可执行文件；
-3. **安装包里随包携带的那一份**（WP111 起真的有了：`<resources>/node/bin/node`，
+3. **安装包里随包携带的那一份**（`<resources>/node/bin/node`，
    Windows 上是 `<resources>/node/node.exe`）；
 4. `PATH` 上的 `node`。
 
-**WP111 起用户不需要自己装 Node。** `scripts/fetch-node.mjs` 把官方 Node 22 发行包下到
+**用户不需要自己装 Node。** `scripts/fetch-node.mjs` 把官方 Node 22 发行包下到
 `vendor/node/<平台>/`（sha256 对官方 `SHASUMS256.txt`，哈希签进 `node-runtime.lock.json`），
 `extraResources` 把当前平台那一份摆进 `<resources>/node`。第 4 条留着只是兜底
 （开发期没跑过脚本、或者捆绑那份被杀毒软件删了）——退化成"要装 Node"比直接起不来好。
 
-**npm 也跟着带（WP254）。** 同一个脚本再把这版 Node 官方配套的 npm（22.23.3 配 10.9.9；sha512 钉在锁的
+**npm 也跟着带。** 同一个脚本再把这版 Node 官方配套的 npm（22.23.3 配 10.9.9；sha512 钉在锁的
 `npm` 段，与 registry 的 `dist.integrity` 逐字相同）按官方发行包的布局摆到 `vendor/node/<平台>/lib/node_modules/npm`
 （Windows 是 `node_modules/npm`）。服务进程找 npm 先看的就是这里，所以「一键安装 Shopify CLI」「下载连接器」
 不再先联网下 npm。安装包大约 +3 MB（npm 的 tgz 2.97 MB，装好后约 11.7 MB、2009 个文件）；afterPack 查它在不在、
@@ -140,12 +140,12 @@ server 哪天提供了运行期急停接口，`src/halt.ts` 换成直接调它�
 那个 afterPack 还顺手补一件事：electron-builder 的 pnpm 依赖收集器解析不了带 peer 后缀的
 `.pnpm` 目录（`@hono+node-server@2.1.1_hono@4.13.7`），也不跟 `peerDependencies`。
 日志里只有一行 `cannot find path for dependency` 就过去了，而 `@hono/node-server` 正是服务进程
-listen 用的那一个——WP111 之前打出来的包**装完根本起不来**。afterPack 按 `dependencies` +
+listen 用的那一个——没补齐时打出来的包**装完根本起不来**。afterPack 按 `dependencies` +
 非 optional 的 `peerDependencies` 做一次广度优先补齐（一次补 77 个），那个 import 冒烟就是它的门禁。
 
-## Windows（WP218）
+## Windows
 
-WP218 在 Windows 上查出并修掉的（CI 作业 `desktop-windows.yml` 装起来真跑验它们）：
+在 Windows 上查出并修掉的（CI 作业 `desktop-windows.yml` 装起来真跑验它们）：
 
 - **停进程**：Windows 没有 SIGTERM，`kill()` = 直接结束，服务进程的收尾（关场景、关库）永远跑不到，
   它起的场景 `node.exe` 变孤儿、锁住安装目录 → 更新 / 卸载「文件被占用」。现在壳**关 stdin 请服务进程收尾**
@@ -164,14 +164,14 @@ WP218 在 Windows 上查出并修掉的（CI 作业 `desktop-windows.yml` 装起
   用户数据放 `agentsws-smoke-数据`，并打印安装目录里最长的路径（≥260 就失败）。
 - **连接器不需要 Docker**：桌面版不起 OpenConnector；本机凭据库那 23 张卡（邮箱等）照常用，
   只有标「需要 Docker（可选）」的那 6 张要用户自己装 Docker Desktop（与 mac 一样）。
-- **AI 跑命令走 PowerShell**（WP225）：建站与主题那条职责的终端在 Windows 上是官方 `dsh-pwsh-sandbox` +
+- **AI 跑命令走 PowerShell**：建站与主题那条职责的终端在 Windows 上是官方 `dsh-pwsh-sandbox` +
   `dsh-tool-pwsh`（PowerShell 7 优先，没有就用系统自带的 5.1），不要求装 Git Bash；同一张命令白名单，
   PowerShell 的子表达式 / 脚本块 / 变量整类拒。
-- **npm 装的命令行工具**（WP225）：`shopify` / `npx` 是 `.cmd` 壳，服务进程按 PATH + PATHEXT 找到后经
+- **npm 装的命令行工具**：`shopify` / `npx` 是 `.cmd` 壳，服务进程按 PATH + PATHEXT 找到后经
   `cmd.exe /d /s /c` 起（`apps/server/src/win-cli.ts`）；`reg query` 的输出按 OEM 代码页解（中文路径不乱码）。
-- **退出等服务进程停干净**（WP225）：壳在 `before-quit` 里等服务进程退（最多 15 秒，8 秒没退按树强杀），
+- **退出等服务进程停干净**：壳在 `before-quit` 里等服务进程退（最多 15 秒，8 秒没退按树强杀），
   不先走——强杀的计时器在壳里。
-- **CI**（`.github/workflows/desktop-windows.yml`）：`nsis` 作业装起来真跑（WP225 起按进程树 + 目录多种写法认进程、
+- **CI**（`.github/workflows/desktop-windows.yml`）：`nsis` 作业装起来真跑（按进程树 + 目录多种写法认进程、
   原始退出码按十六进制打出来）；`update-e2e` 作业打 N 与 N+1、本机起更新源，真点一次「下载 → 重启并更新」，
   看新版本起来、数据还在。
 - **dsh 与官方场景**：用捆绑的 `node.exe` 直接跑 dsh 的 `bin.js`，不经 `.cmd`、不靠 PATH；
@@ -192,19 +192,19 @@ pnpm --filter @agentsws/desktop dist -- --mac --arm64   # 出安装包；架构�
 各带一份 `.blockmap`。**不签名、不公证**（`identity: null`）。`asar: false`——服务进程是以子进程跑的，
 从 asar 里执行脚本要额外的 hook，v1 用平铺目录换确定性。
 
-**`scripts/dist.mjs` 是唯一的打包入口（WP218）**：它按环境变量与版本号算出这一包的更新源，用
+**`scripts/dist.mjs` 是唯一的打包入口**：它按环境变量与版本号算出这一包的更新源，用
 `-c.publish.*` 覆盖 `electron-builder.yml` 里默认那份，并且**一律 `--publish never`**——electron-builder
 自己从不上传，上传只由 `release.yml` 做。变量见下面「应用内一键更新 · 更新源」。
 
-**afterPack 的门禁（WP111 → WP218）**：补齐依赖（WP218 起多从 `.pnpm/node_modules` 找，sharp 按平台装的
+**afterPack 的门禁**：补齐依赖（也从 `.pnpm/node_modules` 找，sharp 按平台装的
 `@img/sharp-<平台>` 以前一直漏）→ 换原生模块 ABI → 许可证 → 官方插件清单 → **工作台产物在不在**
-（WP111 起的包一直没带工作台，装好点「打开工作台」是 404）→ 用捆绑的 Node 冒烟：better-sqlite3 真开一次库、
+（早期的包一直没带工作台，装好点「打开工作台」是 404）→ 用捆绑的 Node 冒烟：better-sqlite3 真开一次库、
 `sharp` / `koffi` / `node-pty` 真 require 一次、服务进程入口真 import 一次。任何一步不过，打包失败。
 
-**安装包里不带任何 Shopify 主题（WP301，决策 399）**：WP297 曾把建站起底主题包随包带，决策 399 起建站改在店铺里复制
+**安装包里不带任何 Shopify 主题**：早期曾把建站起底主题包随包带，现在建站改在店铺里复制
 店家自己的 Shopify 官方 Horizon，安装包、打包脚本与两个 workflow 都不再取、不再带主题代码（`test/wp301-no-theme-bundle.test.ts` 守着）。
 
-**第三方许可证（WP148）**：安装包的 `<resources>/licenses/` 里有三份——`THIRD_PARTY_LICENSES.txt`
+**第三方许可证**：安装包的 `<resources>/licenses/` 里有三份——`THIRD_PARTY_LICENSES.txt`
 （`scripts/third-party-licenses.mjs` 按 `pnpm -F "@agentsws/desktop..." licenses list --prod --json` 生成：
 libvips 的 LGPL-3.0 与动态库形态、捆绑的 Node、better-sqlite3 预编译模块写成人话在最前面，
 包里真带着的原生二进制逐个列出，然后按许可证汇总、逐包全文）、Electron 的 `LICENSE.electron.txt`、
@@ -212,12 +212,11 @@ Chromium 的 `LICENSES.chromium.html`（mac 上 electron-builder 会丢掉后两
 在解包那一刻先存一份）。托盘「开源软件许可」打开的就是那份 txt。**包里带原生二进制、却不在清单里**
 的包有一个，打包就失败。单独生成一份看看：`node apps/desktop/scripts/third-party-licenses.mjs <输出路径>`（不联网）。
 
-## 内测安装与升级（WP111）
+## 内测安装与升级
 
-发给一位**非技术用户**的那条路。给她看的一页纸是
-[`docs/62-内测安装与升级-v1.md`](../../docs/62-内测安装与升级-v1.md)；这里是我们这一侧。
+发给一位**非技术用户**的那条路。给用户看的说明在官网下载页与帮助文档里；这里是我们这一侧。
 
-### 发一版（WP218）
+### 发一版
 
 ```bash
 git tag v0.2.0-beta.1 && git push origin v0.2.0-beta.1   # beta
@@ -229,7 +228,7 @@ git tag v0.2.0 && git push origin v0.2.0                 # stable
 
 `.github/workflows/release.yml` 接手：
 
-1. 两台机器各打自己那一份（windows-latest / macos-14；WP326 起 Mac 只出 Apple 芯片版，不再打 Intel）；Windows 那份**装起来真跑一遍**
+1. 两台机器各打自己那一份（windows-latest / macos-14；Mac 只出 Apple 芯片版，不再打 Intel）；Windows 那份**装起来真跑一遍**
    （`scripts/win-install-smoke.mjs`），不过就不发；
 2. 收拢：`latest-mac.yml`（只认 arm64 那一份）、`check` 产物结构（latest-mac.yml 里混进别的架构就红）、生成官网 `downloads.json`；
 3. **同一套产物**传到自有下载站（R2，`dl.agentsws.com/<渠道>/`，**先安装包后 `latest*.yml`**）和
@@ -239,7 +238,7 @@ git tag v0.2.0 && git push origin v0.2.0                 # stable
 手动触发（workflow_dispatch）**默认 dry_run**：只打包、收拢、自检，整套产物留作 artifact，一个字节都不上传。
 
 **CI 里没有任何真实凭据**：R2 用三个 Actions secrets 的名字（`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` /
-`R2_ACCOUNT_ID`，值由 Luoye 自己填），桶名在仓库变量 `R2_BUCKET`（没设 = `agentsws-downloads`）；
+`R2_ACCOUNT_ID`，值由维护者在仓库设置里填），桶名在仓库变量 `R2_BUCKET`（没设 = `agentsws-downloads`）；
 GitHub 用 workflow 自带的 `GITHUB_TOKEN`。不签名、不公证（`CSC_IDENTITY_AUTO_DISCOVERY=false`）。
 交叉平台打包不做。
 
@@ -248,7 +247,7 @@ GitHub 用 workflow 自带的 `GITHUB_TOKEN`。不签名、不公证（`CSC_IDEN
 exe（用户数据目录也带中文）→ `/v1/health` 200 → 打开工作台首页截图 → 单实例 → 我们的进程只听回环 →
 退出后没有留下进程 → 静默卸载、用户数据还在。安装包、截图与日志都是那次运行的 artifact，**不发布**。
 
-## 应用内一键更新（WP218）
+## 应用内一键更新
 
 像 Claude / Codex 那样：**工作台左下角（账号区正上方）**一颗按钮，托盘上也有同一项。
 
@@ -272,16 +271,16 @@ exe（用户数据目录也带中文）→ `/v1/health` 200 → 打开工作台�
 
 - **每一步都等人点**：查到不自动下，下完不自动装，退出时也不偷偷装（`autoInstallOnAppQuit = false`）——
   否则会绕开装前自检。
-- **装前确认**照 WP184 退出确认：官方场景在跑、AI 正在操作电脑、或者**岗位 AI 正在干活**
-  （WP225：问服务进程 `GET /v1/activity`，跨品牌只回数量；问不到按没有算），先问「有任务在跑，确定现在重启？」；
+- **装前确认**照退出确认：官方场景在跑、AI 正在操作电脑、或者**岗位 AI 正在干活**
+  （问服务进程 `GET /v1/activity`，跨品牌只回数量；问不到按没有算），先问「有任务在跑，确定现在重启？」；
   选「再等等」按钮留着。
-- **装前自检**（WP111 那道闸）：`GET /v1/health` 不 ok 就不装，旧版继续跑。
+- **装前自检**：`GET /v1/health` 不 ok 就不装，旧版继续跑。
 - **装之前先把服务进程和场景停干净**：Windows 上还开着的 `node.exe` 会让安装程序「文件被占用」。
 - **差分下载**：NSIS 出 `.exe.blockmap`，只下变了的块；差分失败 electron-updater 自己退回整包，下完一律校 sha512。
 - **数据都在**：用户数据在 `%APPDATA%\@agentsws\desktop`（mac `~/Library/Application Support/@agentsws/desktop`），
   不在安装目录里；NSIS 升级与卸载都不碰它（`deleteAppDataOnUninstall` 默认关）。
 
-### 更新源（Luoye 10-05 定）
+### 更新源
 
 | 源 | 角色 | 地址 |
 |---|---|---|
@@ -308,7 +307,7 @@ exe（用户数据目录也带中文）→ `/v1/health` 200 → 打开工作台�
 |---|---|---|
 | Windows（NSIS） | **应用内一键更新** | 未签名的 NSIS 照样能自更新 |
 | macOS | **只提示**：按钮写「有新版本」，点了打开官网下载页 | Squirrel.Mac 强制校验代码签名，未签名连 `checkForUpdates()` 都过不去。读的是下载站的 `latest-mac.yml`（主源连不上退 GitHub API） |
-| Linux（AppImage） | 只提示 | release 已不打 Linux 包（WP218），留着这一档 |
+| Linux（AppImage） | 只提示 | release 已不打 Linux 包，留着这一档 |
 
 判定在 `src/updater.ts` 的 `updatePolicy()`，连**理由**一起进日志与诊断包。三个开关：
 

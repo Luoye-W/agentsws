@@ -11,7 +11,7 @@
  *    - 调内链（`internal_link_edit`）→ 改动卡，用查询做锚文本（机械的，不用模型）；
  *    - 新页面（SERP 看过、人群对）→ **新页面选题卡**（`seo_topic`），批了才开一件写这一页的事项；
  *    - 跳转 / 规范网址 / 没收录 → 开一件交给「建站」的事项；站外提及 → 开一件交给「公关」的事项。
- * 2. **每周**（周一 08:30）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
+ * 2. **每周**（默认周一 16:30，WP388；看上一周）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
  *    站点门面（llms.txt / 结构化数据 / AI 爬虫）开**一次**交给建站的事项。
  * 3. **发布前质检**（`gatePublish`）：账本 stage 之前的改写口——没过就改回草稿、拉回 L1、
  *    卡上逐句说明。
@@ -28,7 +28,10 @@ import type {
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
+  BrandCompetitor,
   BrandWatch,
+  BrandWatchAmazonItem,
+  BrandWatchCompetitor,
   ClaimMarketGroup,
   ClaimRulesView,
   Clock,
@@ -72,6 +75,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
+import { reportWeek } from '@agentsws/schedule'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
   aiTrafficBrief,
@@ -172,6 +176,8 @@ export interface SeoBrandInfo extends BrandProfileLike {
   subcategory?: string
   price_band?: string
   positioning?: string
+  /** WP392：品牌档案里 AI 联网查到的竞品（只当建议来源；工作清单是关注设置那份）。 */
+  competitors?: readonly BrandCompetitor[]
 }
 
 export interface SeoServiceOptions {
@@ -201,8 +207,15 @@ export interface SeoServiceOptions {
   ga4?(): Promise<readonly LandingConversion[] | undefined>
   /** WP158：GA4 连上了却没数的那句人话（还没选媒体资源 / 这次没读到）；没连或有数回 `undefined`。 */
   ga4Note?(): string | undefined
-  /** 近 7 天的订单（带 Shopify `landing_site`）。 */
-  orders(): readonly LandingOrder[]
+  /** WP388（决策 1093）：GA4 那一份覆盖哪几天（含）；不知道 = `undefined`。 */
+  ga4Window?(): { start: string; end: string } | undefined
+  /**
+   * 近 7 天的订单（带 Shopify `landing_site`）。WP388：给了窗口就取那一段（周报取上一周：
+   * 目标市场时区的周一 00:00 到下周一 00:00，不含）。
+   */
+  orders(window?: { from: string; to: string }): readonly LandingOrder[]
+  /** WP388：周报取数时区（品牌目标市场的；没设就是工作区时区）。不给 = 近 7 天到现在。 */
+  reportTz?(): string
   /** 品牌档案（名字、域名、币种……）。域名为空时用 Search Console 页面清单里的主机名。 */
   brand(): SeoBrandInfo | Promise<SeoBrandInfo>
   /**
@@ -332,6 +345,24 @@ export interface SeoServiceAssembly {
   }): Promise<{ strategy: GeoWatchStrategy; estimate: GeoRunEstimate; approval_item_id?: string }>
   /** WP321：改关注设置（用户确认 / 改策略）。 */
   watchApply(patch: GeoWatchPatch): Promise<GeoWatchView>
+  /**
+   * WP393（docs/104 C3）：竞品监控的方案卡 / 探平台写回唯一工作清单的竞品（整份替换）。
+   * **不**把 GEO 的设定卡标成「已定」——这是竞品监控那边的确认，不是 GEO 策略。
+   */
+  watchCompetitorsApply(competitors: BrandWatchCompetitor[]): Promise<BrandWatch>
+  /**
+   * WP394（docs/104 C3 / C8）：Amazon 竞品方案卡写回唯一工作清单——竞品（含 Amazon 对标款格）+ 自家 ASIN（整份替换）。
+   * **不**把 GEO 的设定卡标成「已定」——这是竞品监控那边的确认，不是 GEO 策略。
+   */
+  watchAmazonApply(patch: {
+    competitors: BrandWatchCompetitor[]
+    brand_amazon: BrandWatchAmazonItem[]
+  }): Promise<BrandWatch>
+  /**
+   * WP392（docs/104 C3）：品牌档案里**新查到**的竞品（不在关注设置的竞品里、没被拒过、没问过）——沿用「要不要加进竞品」
+   * 那张卡问一次（不另建清单）。卡给担竞品监控 / 内容与搜索的那个人；没人担就不问。
+   */
+  askProfileCompetitors(): Promise<{ approval_item_id?: string; asked: string[] }>
   /** WP321：现在跑一轮（Claude 单格 ≥ 1 积分：不带 `confirm` 只回估算）。 */
   watchRun(input: { confirm?: boolean; kinds?: ('geo' | 'rank')[] }): Promise<GeoWatchRunResult>
   /** WP321：看板要的数。 */
@@ -1212,6 +1243,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   /* ── WP321：监测（关注设置、每周一轮、指标、变化大才出卡）——引擎在 `./geo-monitor.ts` ── */
 
   const watchActor = (): SeoActor | undefined => options.holderOf('dtc.content')
+  /** WP392：品牌档案里的竞品问过哪几家（geo_meta；问过不再问）。 */
+  const PROFILE_RIVALS_ASKED_KEY = 'profile_competitors_asked'
   const monitor = createGeoMonitor({
     clock,
     nextId,
@@ -1841,9 +1874,12 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
       const ga4 = (await options.ga4?.()) ?? undefined
+      // WP388（决策 1091）：订单取到出报告前一天为止最近完整的 7 天（目标市场时区）
+      const tz = options.reportTz?.()
+      const last = tz === undefined ? undefined : reportWeek(clock.now(), tz)
       const out = pageRevenue({
         gsc: consoleRead.rows ?? [],
-        orders: options.orders(),
+        orders: options.orders(last === undefined ? undefined : { from: last.start, to: last.end }),
         ...(ga4 === undefined ? {} : { ga4 }),
         options: {
           currency: brand.currency,
@@ -1852,6 +1888,21 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         },
       })
       const notes: string[] = []
+      // WP388（决策 1093）：几栏各是哪几天——订单按我们的 7 天；搜索数据 / GA4 是 Google 已出齐的最近 7 天
+      const range = (w: { start: string; end: string }): string =>
+        `${w.start.slice(5)} 至 ${w.end.slice(5)}`
+      const spans: string[] = []
+      if (last !== undefined)
+        spans.push(`订单 ${range({ start: last.from_date, end: last.to_date })}`)
+      const gscWindow =
+        consoleRead.rows === undefined ? undefined : options.searchConsole().window?.()
+      if (gscWindow !== undefined) spans.push(`搜索数据 ${range(gscWindow)}`)
+      const ga4Window = ga4 === undefined ? undefined : options.ga4Window?.()
+      if (ga4Window !== undefined) spans.push(`GA4 ${range(ga4Window)}`)
+      if (spans.length > 0)
+        notes.push(
+          `${spans.join('；')}${gscWindow !== undefined || ga4Window !== undefined ? '（Google 的数晚两三天，取的是它已出齐的最近 7 天）' : ''}。`,
+        )
       if (consoleRead.rows === undefined)
         notes.push('Search Console 还没连：点击那一列是 0，订单与收入照 Shopify 的落地页算。')
       const ga4Note = options.ga4Note?.()
@@ -1864,7 +1915,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes.push(`${out.unmatched_orders} 张订单没有落地页记录，归不上任何一页（照实报，不猜）。`)
       const payload: SeoWeeklyRevenuePayload = {
         variant: 'weekly_revenue',
-        week_of: date(),
+        week_of: last?.from_date ?? date(),
         rows: out.rows,
         unmatched_orders: out.unmatched_orders,
         ga4: ga4 === undefined ? 'not_connected' : 'connected',
@@ -1876,7 +1927,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         actor,
         'weekly_revenue',
         payload.week_of,
-        `按页面收入小结（${payload.week_of} 那一周）`,
+        last === undefined
+          ? `按页面收入小结（${payload.week_of} 那一周）`
+          : `按页面收入小结（${last.from_date} 至 ${last.to_date}）`,
         `${out.rows.length} 页；点击多没订单 ${leaks} 页，点击少出订单 ${gems} 页。`,
         payload,
       )
@@ -2078,6 +2131,85 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
       const strategy = await monitor.suggest()
       return { strategy, estimate: await monitor.estimateFor(strategy) }
+    },
+    async askProfileCompetitors() {
+      const brand = await options.brand()
+      const profile = brand.competitors ?? []
+      if (profile.length === 0) return { asked: [] }
+      const actor = options.holderOf('dtc.store') ?? options.holderOf('amz.store') ?? watchActor()
+      if (actor === undefined) return { asked: [] }
+      const { store, watch } = await monitor.ensureWatch()
+      const low = (x: string) => x.trim().toLowerCase()
+      const skip = new Set([
+        low(watch.brand.name),
+        ...watch.competitors.flatMap((c) => [low(c.name), ...c.aliases.map(low)]),
+        ...(JSON.parse(store.meta(DECLINED_RIVALS_KEY) ?? '[]') as string[]).map(low),
+        ...(JSON.parse(store.meta(PROFILE_RIVALS_ASKED_KEY) ?? '[]') as string[]).map(low),
+      ])
+      const fresh = profile
+        .filter((c) => c.name.trim() !== '' && !skip.has(low(c.name)))
+        .slice(0, 5)
+      if (fresh.length === 0) return { asked: [] }
+      const hostOf = (url: string | undefined): string[] => {
+        if (url === undefined) return []
+        try {
+          return [new URL(url).hostname.replace(/^www\./, '')]
+        } catch {
+          return []
+        }
+      }
+      const week = clock.now().slice(0, 10)
+      const names = fresh.map((c) => c.name.trim())
+      const payload: GeoWatchCardPayload = {
+        form: 'geo_watch_competitors',
+        // answers = 0：不是 AI 回答里数出来的，是品牌档案里查到的（卡面按它换说法）
+        competitors: fresh.map((c) => ({
+          id: competitorId(c.name),
+          name: c.name.trim(),
+          aliases: [],
+          domains: hostOf(c.url),
+          answers: 0,
+        })),
+        week_of: week,
+      }
+      const item = await options.approvals.create<GeoWatchCardPayload>({
+        workspace_id,
+        schema_version: 1,
+        kind: 'geo_watch',
+        role_id: actor.role_id,
+        subject: { object: { type: 'geo_watch', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|geo_watch|competitors|profile|${names.map(low).sort().join(',')}`,
+        title: '品牌档案里新查到的竞品：要加进关注吗？',
+        summary: fresh.map((c) => `${c.name.trim()}：${c.reason}`).join('\n'),
+        payload,
+        evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+        proposer: {
+          kind: 'agent',
+          id: `agent_${actor.role_id}`,
+          assignment_id: actor.assignment_id,
+        },
+        automation: { level_at_creation: 'L1' },
+        routing: {
+          recipients: [{ person: actor.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 72, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      // 问过就记下（加不加由卡决定；同一家不再问第二次）
+      const was = JSON.parse(store.meta(PROFILE_RIVALS_ASKED_KEY) ?? '[]') as string[]
+      store.setMeta(PROFILE_RIVALS_ASKED_KEY, JSON.stringify([...new Set([...was, ...names])]))
+      return { approval_item_id: item.id, asked: names }
+    },
+    async watchCompetitorsApply(competitors) {
+      return monitor.apply({ competitors }, { markSetup: false })
+    },
+    async watchAmazonApply(patch) {
+      return monitor.apply(
+        { competitors: patch.competitors, brand_amazon: patch.brand_amazon },
+        { markSetup: false },
+      )
     },
     async watchApply(patch) {
       await monitor.apply(patch)

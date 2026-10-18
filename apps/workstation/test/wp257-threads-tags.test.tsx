@@ -33,7 +33,7 @@ const tg = (over: Partial<SocialIngestData> = {}): SocialIngestData => ({
   auto: true,
   connected: true,
   every_minutes: 15,
-  accounts: [{ account_id: 'sa_tg', name: 'INMO 用户群', state: 'ok' }],
+  accounts: [{ account_id: 'sa_tg', name: 'IVRA 用户群', state: 'ok' }],
   tags: { model_review: false, model_ready: true },
   ...over,
 })
@@ -42,7 +42,7 @@ const row = (id: string, text: string, triage?: SocialThreadRowData['triage']) =
   ({
     id,
     account_id: 'sa_tg',
-    account_name: 'INMO 用户群',
+    account_name: 'IVRA 用户群',
     channel: 'telegram_group',
     external_id: id,
     surface: 'thread',
@@ -147,7 +147,7 @@ describe('WP257 Telegram 群：登记与隐私模式', () => {
       accounts: [
         {
           account_id: 'sa_tg',
-          name: 'INMO 用户群',
+          name: 'IVRA 用户群',
           state: 'missing_permissions',
           missing: ['privacy_mode'],
           message:
@@ -158,14 +158,14 @@ describe('WP257 Telegram 群：登记与隐私模式', () => {
     renderWithProviders(<SocialThreads assignment="asg" channel="telegram_group" />)
     const issue = await screen.findByTestId('threads-issue')
     expect(issue.getAttribute('data-state')).toBe('missing_permissions')
-    expect(issue.textContent).toContain('INMO 用户群')
+    expect(issue.textContent).toContain('IVRA 用户群')
     expect(issue.textContent).toContain('/setprivacy')
   })
 
   it('认群地址', () => {
     expect(parseTelegramGroup('https://t.me/c/1234567890/55')).toBe('-1001234567890')
-    expect(parseTelegramGroup('https://t.me/inmo_users')).toBe('@inmo_users')
-    expect(parseTelegramGroup('@inmo_users')).toBe('@inmo_users')
+    expect(parseTelegramGroup('https://t.me/ivra_users')).toBe('@ivra_users')
+    expect(parseTelegramGroup('@ivra_users')).toBe('@ivra_users')
     expect(parseTelegramGroup('-1001234567890')).toBe('-1001234567890')
     expect(parseTelegramGroup('https://t.me/+AbCd')).toBeUndefined()
     expect(parseTelegramGroup('hello')).toBeUndefined()

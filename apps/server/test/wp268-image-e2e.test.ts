@@ -26,7 +26,7 @@ import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 type Hero = { sections: { hero: { settings: { image?: string } } } }
 
 const T0 = '2026-10-08T09:00:00.000Z'
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 
 let server: Server
 let theme: Assignment
@@ -146,7 +146,7 @@ beforeEach(async () => {
           'X-Assignment': owner,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ legal_name: 'Rollout', storefront_platform: 'shopify' }),
+        body: JSON.stringify({ legal_name: 'Rovella', storefront_platform: 'shopify' }),
       }),
     ),
   )

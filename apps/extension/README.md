@@ -1,8 +1,8 @@
 # @agentsws/extension（参考实现）
 
-**这是「插件开放接口」（`docs/76`）的参考实现，功能精简。官方完整版不开源**——内测用户装的是私有 Release 里的 zip（见 `docs/68`）。
+**这是「插件开放接口」的参考实现，功能精简。官方完整版不开源**——早期内测用户装的是私有 Release 里的 zip。
 
-> WP345（决策 871）起：随 Agents 工坊安装包带、跟着工坊更新的就是这一份（「Agents 工坊助手」，红人 + 广告 + Reddit），
+> 现在：随 Agents 工坊安装包带、跟着工坊更新的就是这一份（「Agents 工坊助手」，红人 + 广告 + Reddit），
 > 不再让人下载 zip。见下面「随工坊安装与更新」。
 
 它示范的是接口怎么用，不是功能上限：
@@ -10,11 +10,11 @@
 - 本机直连 + 6 位配对码（配对时绑定扩展 Origin 与令牌）；
 - 观测上报（幂等、离线队列补传）；
 - 登录云账号即共享公开数据到公共红人库，如实告知（`hello` 里的 `shares_to_public_library`）；
-- WP313：广告动作通道（`src/lib/ads/*`）——可选权限连接两家广告后台，长轮询领批过的活，
+- 广告动作通道（`src/lib/ads/*`）——可选权限连接两家广告后台，长轮询领批过的活，
   在看得见的后台标签页上按写死的步骤表执行（规矩在 `@agentsws/browser-action`），顶上「正在操作 · 停止」横条。
   真浏览器走法：`node scripts/e2e-ext-actions.mjs`（本地假后台，不碰真站）。
 
-想自己写一个采集插件：从 `docs/76` 的 30 行最小示例开始，不需要这份代码。想看面板、打分、体检这些功能长什么样：用官方完整版。
+想自己写一个采集插件：只要做配对与上报两步（照 `src/lib/local-client.ts` 的写法），不需要整份代码。想看面板、打分、体检这些功能长什么样：用官方完整版。
 
 ## 开发
 
@@ -24,7 +24,7 @@ pnpm -F @agentsws/extension build   # wxt build + zip
 pnpm -F @agentsws/extension test
 ```
 
-## 随工坊安装与更新（WP345，决策 871）
+## 随工坊安装与更新
 
 插件**不上架商店**。工坊安装包里带着构建好的 `chrome-mv3`，桌面版每次启动把它放到数据目录下一个**固定文件夹**
 （`<用户数据目录>/chrome-extension`：Mac `~/Library/Application Support/@agentsws/desktop/chrome-extension`，

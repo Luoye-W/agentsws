@@ -126,7 +126,7 @@ const FREQ_TAIL =
   /^(.+?)\s*(?:[:：]|[(（])?\s*(每天|天天|daily|每周\s*([1-7])\s*次|([1-7])\s*次\s*\/?\s*周|([1-7])\s*(?:x|times)?\s*\/\s*week|每周|每星期|weekly)\s*[)）]?$/iu
 
 /**
- * 「inmoxr, SmartGlasses（每周3次）, Xreal 每周」→ 版块 + 各自一周几次（没写的不在表里 = 跟总频率，默认每天）。
+ * 「ivraxr, SmartGlasses（每周3次）, Xreal 每周」→ 版块 + 各自一周几次（没写的不在表里 = 跟总频率，默认每天）。
  * 版块名不合法、频率认不出 → `bad` 里回那一项原样。
  */
 export function parseSubList(raw: string): {
@@ -231,7 +231,7 @@ export function redditWatchSetupTarget(input: {
         ownWhy = '连接里登记的自家版'
       }
       return [
-        textField('own_subreddits', '自家版块', 'inmoxr', own, ownWhy),
+        textField('own_subreddits', '自家版块', 'ivraxr', own, ownWhy),
         textField(
           'watch_subreddits',
           '重点版块',

@@ -8,7 +8,7 @@
     "role_id": "social.reddit",
     "watch": {
       "platform": "reddit",
-      "own_places": ["inmoxr"],
+      "own_places": ["ivraxr"],
       "sweeps": ["2026-10-15T01:30:00.000Z"],
       "items": [
         {
@@ -16,10 +16,10 @@
           "platform": "reddit",
           "kind": "post",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_p1",
           "created_at": "2026-10-12T03:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/p1/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/p1/",
           "text": "First week with the Air3, the display is gorgeous. Pics inside.",
           "title": "My Air3 first week",
           "signals": {
@@ -32,10 +32,10 @@
           "platform": "reddit",
           "kind": "post",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_p2",
           "created_at": "2026-10-13T04:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/p2/",
           "text": "Battery drains in about 2 hours when streaming. Is that normal?",
           "title": "Battery drains fast?",
           "signals": {
@@ -48,10 +48,10 @@
           "platform": "reddit",
           "kind": "post",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_p3",
           "created_at": "2026-10-14T05:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/p3/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/p3/",
           "text": "",
           "title": "(deleted)",
           "deleted": true
@@ -61,10 +61,10 @@
           "platform": "reddit",
           "kind": "comment",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_c1",
           "created_at": "2026-10-13T06:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/c1/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/c1/",
           "text": "Wish it had a wider field of view, otherwise great.",
           "title": "Battery drains fast?",
           "signals": {
@@ -77,10 +77,10 @@
           "platform": "reddit",
           "kind": "comment",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_c2",
           "created_at": "2026-10-14T07:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/c2/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/c2/",
           "text": "Same here, mine lasts about 2.5h.",
           "title": "Battery drains fast?"
         },
@@ -89,10 +89,10 @@
           "platform": "reddit",
           "kind": "comment",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_c3",
           "created_at": "2026-10-15T01:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/c3/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/c3/",
           "text": "Nice photos!",
           "title": "My Air3 first week"
         },
@@ -101,10 +101,10 @@
           "platform": "reddit",
           "kind": "comment",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_c4",
           "created_at": "2026-10-16T05:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/c4/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/c4/",
           "text": "Ordered mine today.",
           "title": "My Air3 first week"
         },
@@ -113,10 +113,10 @@
           "platform": "reddit",
           "kind": "comment",
           "scope": "own",
-          "place": "inmoxr",
+          "place": "ivraxr",
           "author": "user_ld",
           "created_at": "2026-10-10T15:00:00.000Z",
-          "url": "https://www.reddit.com/r/inmoxr/comments/old/",
+          "url": "https://www.reddit.com/r/ivraxr/comments/old/",
           "text": "last week's comment",
           "title": "Old thread"
         },
@@ -129,13 +129,13 @@
           "author": "ext_x1",
           "created_at": "2026-10-13T08:00:00.000Z",
           "url": "https://www.reddit.com/r/augmentedreality/comments/x1/",
-          "text": "INMO Air3 vs XREAL One — which one for travel?",
+          "text": "IVRA Air3 vs XREAL One — which one for travel?",
           "topic": {
-            "key": "t:inmo-vs-xreal",
+            "key": "t:ivra-vs-xreal",
             "label": "和 XREAL 对比"
           },
           "assessment": "follow_up",
-          "keyword": "INMO"
+          "keyword": "IVRA"
         },
         {
           "id": "t1_x2",
@@ -146,13 +146,13 @@
           "author": "ext_x2",
           "created_at": "2026-10-14T09:00:00.000Z",
           "url": "https://www.reddit.com/r/smartglasses/comments/x2/",
-          "text": "I picked the INMO because of the built-in OS.",
+          "text": "I picked the IVRA because of the built-in OS.",
           "topic": {
-            "key": "t:inmo-vs-xreal",
+            "key": "t:ivra-vs-xreal",
             "label": "和 XREAL 对比"
           },
           "assessment": "no_action",
-          "keyword": "INMO"
+          "keyword": "IVRA"
         },
         {
           "id": "t3_x3",
@@ -163,13 +163,13 @@
           "author": "ext_x3",
           "created_at": "2026-10-15T03:00:00.000Z",
           "url": "https://www.reddit.com/r/China/comments/x3/",
-          "text": "影目的眼镜在国内卖多少钱？",
+          "text": "艾维的眼镜在国内卖多少钱？",
           "topic": {
             "key": "t:price-cn",
             "label": "国内价格讨论"
           },
           "assessment": "low_relevance",
-          "keyword": "影目"
+          "keyword": "艾维"
         }
       ]
     },
@@ -180,11 +180,11 @@
         "channel": "reddit",
         "action": "reply",
         "kind": "outbound_draft",
-        "destination": "r/inmoxr",
+        "destination": "r/ivraxr",
         "thread_title": "Battery drains fast?",
-        "thread_url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+        "thread_url": "https://www.reddit.com/r/ivraxr/comments/p2/",
         "content": "About 2–3 hours is expected while streaming; a firmware update next week improves it.",
-        "link": "https://www.reddit.com/r/inmoxr/comments/p2/x/our1/",
+        "link": "https://www.reddit.com/r/ivraxr/comments/p2/x/our1/",
         "external_id": "t1_our1",
         "parent_external_id": "t3_p2"
       },
@@ -194,11 +194,11 @@
         "channel": "reddit",
         "action": "comment",
         "kind": "outbound_draft",
-        "destination": "r/inmoxr",
+        "destination": "r/ivraxr",
         "thread_title": "Battery drains fast?",
-        "thread_url": "https://www.reddit.com/r/inmoxr/comments/p2/",
+        "thread_url": "https://www.reddit.com/r/ivraxr/comments/p2/",
         "content": "Thanks for the feedback on FOV — passed it to the product team.",
-        "link": "https://www.reddit.com/r/inmoxr/comments/p2/x/our2/",
+        "link": "https://www.reddit.com/r/ivraxr/comments/p2/x/our2/",
         "external_id": "t1_our2",
         "parent_external_id": "t1_c1"
       },
@@ -208,9 +208,9 @@
         "channel": "reddit",
         "action": "reply",
         "kind": "outbound_draft",
-        "destination": "r/inmoxr",
+        "destination": "r/ivraxr",
         "content": "last week's reply",
-        "link": "https://www.reddit.com/r/inmoxr/comments/old/x/our0/",
+        "link": "https://www.reddit.com/r/ivraxr/comments/old/x/our0/",
         "parent_external_id": "t3_old"
       },
       {
@@ -232,7 +232,7 @@
   },
   "turns": [
     {
-      "say": "每周五下午 5 点给我出一份 r/inmoxr 周报，数据周日到周五：①帖子数评论数 ②有效 VOC / UGC ③外部舆情按话题归组带判断和原文链接 ④我们本周回复数和链接",
+      "say": "每周五下午 5 点给我出一份 r/ivraxr 周报，数据周日到周五：①帖子数评论数 ②有效 VOC / UGC ③外部舆情按话题归组带判断和原文链接 ④我们本周回复数和链接",
       "expect": {
         "tools_called": ["schedule_create"],
         "schedule": {
@@ -253,14 +253,14 @@
           "sections_in_order": ["own_counts", "voc_ugc", "external", "replies"],
           "contains": {
             "own_counts": ["3", "4"],
-            "voc_ugc": ["https://www.reddit.com/r/inmoxr/comments/p2/"],
+            "voc_ugc": ["https://www.reddit.com/r/ivraxr/comments/p2/"],
             "external": ["https://www.reddit.com/r/augmentedreality/comments/x1/"],
             "replies": [
-              "https://www.reddit.com/r/inmoxr/comments/p2/x/our1/",
-              "https://www.reddit.com/r/inmoxr/comments/p2/x/our2/"
+              "https://www.reddit.com/r/ivraxr/comments/p2/x/our1/",
+              "https://www.reddit.com/r/ivraxr/comments/p2/x/our2/"
             ]
           },
-          "omits": ["https://www.reddit.com/r/inmoxr/comments/old/x/our0/", "last week's comment"]
+          "omits": ["https://www.reddit.com/r/ivraxr/comments/old/x/our0/", "last week's comment"]
         }
       }
     },
@@ -285,7 +285,7 @@
           "sections_in_order": ["external", "own_counts", "voc_ugc", "replies"],
           "contains": {
             "external": ["https://www.reddit.com/r/augmentedreality/comments/x1/"],
-            "replies": ["https://www.reddit.com/r/inmoxr/comments/p2/x/our1/"]
+            "replies": ["https://www.reddit.com/r/ivraxr/comments/p2/x/our1/"]
           }
         }
       }

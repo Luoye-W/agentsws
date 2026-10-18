@@ -1,0 +1,63 @@
+/**
+ * WP398（docs/106 §13 A8）：Amazon 词库的词条（中英各一份；在 `i18n.ts` 的 `TABLES` 那一行并进去）。
+ *
+ * 界面少字：块里一行数 + 两个按钮；说明进问号。一期没有搜索量——差距词按竞品里出现的次数排，卡上照实写。
+ * 用户可见的字不提数据供应商名。
+ */
+export const AMAZON_KEYWORDS_ZH: Record<string, string> = {
+  'rail.panel.amazon-keywords': '词表',
+  'amzkw.summary': '{total} 个词 · {gaps} 个差距词',
+  'amzkw.updated': '更新于 {at}',
+  'amzkw.open': '看词表',
+  'amzkw.refresh': '现在更新',
+  'amzkw.refreshing': '正在读…',
+  'amzkw.reader_off': '这里读不了 Amazon 搜索框联想词（桌面版才有）',
+  'amzkw.gap.line': '有 {n} 个竞品常用词你没写进标题 / 五点',
+  'amzkw.gap.none': '竞品常用的词你都写进去了',
+  'amzkw.gap.no_competitors': '还没有竞品的 Listing 可比',
+  'amzkw.gap.competitors': '{n} 家竞品在用',
+  'amzkw.gap.missing': '缺：{words}',
+  'amzkw.more': '还有 {n} 个，看词表',
+  'amzkw.filter.all': '全部',
+  'amzkw.filter.gap': '差距词',
+  'amzkw.filter.other_brand': '他牌名',
+  'amzkw.col.term': '词',
+  'amzkw.col.competitors': '竞品',
+  'amzkw.own.has': '你已写进',
+  'amzkw.mark.core': '核心',
+  'amzkw.mark.exclude': '不要',
+  'amzkw.mark.in_listing': '已埋进 Listing',
+  'amzkw.other_brand': '含别家品牌名，不能填进后台关键词',
+  'amzkw.panel.empty': '没有符合的词',
+  'amzkw.panel.missing': '还没有词库',
+  'amzkw.total': '共 {n} 个',
+}
+
+export const AMAZON_KEYWORDS_EN: Record<string, string> = {
+  'rail.panel.amazon-keywords': 'Keywords',
+  'amzkw.summary': '{total} terms · {gaps} gap terms',
+  'amzkw.updated': 'Updated {at}',
+  'amzkw.open': 'Open list',
+  'amzkw.refresh': 'Update now',
+  'amzkw.refreshing': 'Reading…',
+  'amzkw.reader_off': 'Amazon search suggestions can only be read in the desktop app',
+  'amzkw.gap.line': '{n} terms competitors commonly use are missing from your title / bullets',
+  'amzkw.gap.none': 'You already use the terms competitors commonly use',
+  'amzkw.gap.no_competitors': 'No competitor listings to compare yet',
+  'amzkw.gap.competitors': 'used by {n} competitors',
+  'amzkw.gap.missing': 'Missing: {words}',
+  'amzkw.more': '{n} more in the list',
+  'amzkw.filter.all': 'All',
+  'amzkw.filter.gap': 'Gaps',
+  'amzkw.filter.other_brand': 'Other brands',
+  'amzkw.col.term': 'Term',
+  'amzkw.col.competitors': 'Competitors',
+  'amzkw.own.has': 'In your listing',
+  'amzkw.mark.core': 'Core',
+  'amzkw.mark.exclude': 'Exclude',
+  'amzkw.mark.in_listing': 'In listing',
+  'amzkw.other_brand': 'Contains another brand’s name; do not put it in backend search terms',
+  'amzkw.panel.empty': 'No matching terms',
+  'amzkw.panel.missing': 'No keyword list yet',
+  'amzkw.total': '{n} in total',
+}

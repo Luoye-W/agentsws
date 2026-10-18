@@ -14,6 +14,8 @@ import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
   ADS_DATA_TOOL_DEF_BY_NAME,
   ADS_TOOL_DEF_BY_NAME,
+  AMAZON_KEYWORD_TOOL_DEF_BY_NAME,
+  AMAZON_LISTING_TOOL_DEF_BY_NAME,
   ASSISTANT_TOOL_DEF_BY_NAME,
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
@@ -22,6 +24,7 @@ import {
   DRAFT_NOT_CREATED,
   DRAFT_SUBJECT_DESCRIPTION,
   DRAFT_TOOL_DESCRIPTION,
+  GOOGLE_ALERTS_TOOL_DEF_BY_NAME,
   IMAGE_TOOL_DEF_BY_NAME,
   isMcpReadTool,
   isScheduleTool,
@@ -34,9 +37,11 @@ import {
   renderTrustedToolResult,
   SETUP_REQUEST_TOOL_DEF_BY_NAME,
   SHOP_TOOL_DEF_BY_NAME,
+  SITE_HEALTH_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
   THEME_TOOL_DEF_BY_NAME,
+  WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -361,8 +366,18 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
     // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
     ADS_DATA_TOOL_DEF_BY_NAME.get(name) ??
+    // WP398：Amazon 词库（定义在 stand-ins 的 `runtime/amazon-keywords.ts`）
+    AMAZON_KEYWORD_TOOL_DEF_BY_NAME.get(name) ??
+    // WP396：Listing 体检（定义在 stand-ins 的 `runtime/amazon-listing.ts`）
+    AMAZON_LISTING_TOOL_DEF_BY_NAME.get(name) ??
     // WP334：AI 自己要连接卡 / 配置卡（定义在 stand-ins 的 `runtime/setup-request.ts`）
     SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
+    // WP385：读网站体检结论（定义在 stand-ins 的 `runtime/site-health.ts`）
+    SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ??
+    // WP387：浏览器建完 / 读完 Google 提醒后交代结果（定义在 stand-ins 的 `runtime/google-alerts.ts`）
+    GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
+    // WP390：工坊服务（定义在 stand-ins 的 `runtime/workshop-service.ts`）
+    WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
@@ -520,10 +535,20 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）
       ADS_DATA_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP398：Amazon 词库（读前台联想词只读外部；看词库 / 标词只动本机）
+      AMAZON_KEYWORD_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP396：Listing 体检（读自家前台页只读；改规则只动本机）
+      AMAZON_LISTING_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP343：「我的助理」的工具（与随便聊那条模型回合同一份）
       ASSISTANT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP334：AI 自己要连接卡 / 配置卡（只回结构化缺项；卡由运行时收尾时出）
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP385：读网站体检结论（只读；不现跑体检）
+      SITE_HEALTH_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP387：浏览器建完 / 读完 Google 提醒后交代结果
+      GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP390：工坊服务（查目录只读本机缓存；出卡不下单）
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

@@ -30,6 +30,11 @@ export interface RailScope {
    */
   assignments?: readonly string[]
   /**
+   * WP392：这一层下面本人持有的职责（岗位层 = 这个岗位里我持有的每一条；职责层 = 那一条）与各自的分配。
+   * 只跟某几条职责有关的卡片内容（竞品监控只跟店铺管理 / 亚马逊店铺运营有关）按它判出不出、带哪条分配。
+   */
+  roles?: readonly { role_id: string; assignment: string }[]
+  /**
    * 上面那一层（职责层的上面是它所属的岗位）。
    * 记忆面板下面折着的"上面继承的"要它——不然界面只知道自己这一层的 id。
    */
@@ -90,6 +95,11 @@ export function railContextOf(
             ? {}
             : { assignment: myAssignments(owner)[0] as string }),
           assignments: myAssignments(owner),
+          roles: owner.roles.flatMap((r) =>
+            r.my_assignment_id === undefined
+              ? []
+              : [{ role_id: r.role_id, assignment: r.my_assignment_id }],
+          ),
         }
 
   // 职责层：地址栏指着哪条就是哪条；不在职责页时用当前分配对应的那条职责
@@ -105,7 +115,11 @@ export function railContextOf(
           name: held.role_name,
           ...(held.my_assignment_id === undefined
             ? {}
-            : { assignment: held.my_assignment_id, assignments: [held.my_assignment_id] }),
+            : {
+                assignment: held.my_assignment_id,
+                assignments: [held.my_assignment_id],
+                roles: [{ role_id: held.role_id, assignment: held.my_assignment_id }],
+              }),
           ...(position === undefined
             ? {}
             : {

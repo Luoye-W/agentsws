@@ -24,6 +24,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { PrPort } from '@agentsws/api'
 import type { Halt, StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { PublicLibraryClient } from '@agentsws/kol-core'
 import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
@@ -34,6 +35,9 @@ import type { AdsActionsService } from './ads-actions/service.js'
 import type { AdsDataService } from './ads-data/service.js'
 import type { AdsServiceAssembly } from './ads-service.js'
 import type { AdsWiring } from './ads-wiring/service.js'
+import type { AmazonFrontReader } from './amazon-front/index.js'
+import type { AmazonKeywordBank } from './amazon-keywords/index.js'
+import type { AmazonListingCheckup } from './amazon-listing/index.js'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bSalesAssembly } from './b2b-sales.js'
 import type { B2bServiceAssembly } from './b2b-service.js'
@@ -42,6 +46,11 @@ import type { ChannelsAssembly } from './channels.js'
 import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
+import type {
+  AmazonCompetitorAssembly,
+  CompetitorStoreAssembly,
+  CompetitorWatchAssembly,
+} from './competitor-watch/index.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { EconomicsService } from './economics.js'
@@ -53,7 +62,9 @@ import type { LiveDataSource } from './live-data.js'
 import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
+import type { PrAlertsService } from './pr-alerts/service.js'
 import type { PrServiceAssembly } from './pr-service.js'
+import type { PrWatchAssembly, PrWatchStoreHandle } from './pr-watch/index.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
 import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { RedditWatchAssembly } from './reddit-watch/index.js'
@@ -230,6 +241,14 @@ export interface BrandModuleSet {
    * 与变更账本**的那一层。60 那条"客户投诉转客服"的分界，在服务进程里的落点是它。
    */
   prService: PrServiceAssembly
+  /** WP386：公关库的 `/v1` 端口（`prService.port` + 信息监控那几口）。 */
+  prPort: PrPort
+  /** WP386：信息监控的存储（监控源 / 提醒清单 / 每一轮）。 */
+  prWatchStore: PrWatchStoreHandle
+  /** WP386：信息监控（托管模式没有）。 */
+  prWatch?: PrWatchAssembly
+  /** WP387：你的浏览器替你建 / 导入 Google 提醒（托管模式不装）。 */
+  prAlerts?: PrAlertsService
   /**
    * WP172（docs/84）：这个品牌的 B2B 库（九类对象 + 询盘 / 草稿 / 抑制名单），落在这个品牌自己的目录下。
    * 客户名单与报价是一家外贸公司的命根子，品牌 A 的在 B 的任何路由里都读不到。
@@ -300,8 +319,23 @@ export interface BrandModuleSet {
   adsWiring?: AdsWiring
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /** WP392（docs/104）：竞品监控（托管实例没有）。 */
+  competitorWatch?: CompetitorWatchAssembly
+  /** WP393（docs/104 一期 A）：店铺管理「竞品动向」（方案卡、探平台、自家比价、简报那一段；跟着竞品监控走）。 */
+  competitorStore?: CompetitorStoreAssembly
+  /** WP394（docs/104 一期 B）：亚马逊店铺运营「竞品动向」（方案卡、现在读一次；跟着竞品监控走）。 */
+  amazonCompetitor?: AmazonCompetitorAssembly
+  /**
+   * WP394：读 Amazon 前台的那一块（内置浏览器自报 Agent、配送邮编、被拦就停）。WP396 / WP398 直接用它；
+   * 没有桌面壳 / 托管实例没有。
+   */
+  amazonFront?: AmazonFrontReader
+  /** WP398（docs/106 §13 A8）：Amazon 词库（托管实例没有）。 */
+  amazonKeywords?: AmazonKeywordBank
   /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
   redditLimits?: RedditLimits
+  /** WP396（docs/106 §13）：自家 Amazon Listing 体检（托管实例没有）。 */
+  amazonListing?: AmazonListingCheckup
   /**
    * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
    */
@@ -310,7 +344,7 @@ export interface BrandModuleSet {
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
   economics: EconomicsService
-  /** WP224（docs/91 §2.2 #1）：这个品牌的本周经营一页纸（秘书每周一推给老板）。 */
+  /** WP224（docs/91 §2.2 #1）：这个品牌的经营一页纸（秘书每周推给老板；WP388 默认周一 16:30 出上一周）。 */
   weeklyReview: WeeklyReviewService
   /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
   lineCompareSnapshot(): Promise<{ rows: number; date: string }>

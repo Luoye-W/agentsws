@@ -66,14 +66,16 @@ export async function loadPricing(o: LoadPricingOptions): Promise<SitePricing> {
   }
 }
 
-export type Block = 'data' | 'ai' | 'service'
+/** 付费三块 + WP390 的「工坊服务」（人替你做成的事；价在每项服务上，价目表里通常没有行）。 */
+export type Block = 'data' | 'ai' | 'service' | 'workshop_service'
 
 /** 一条能力归哪一块（与 contracts 的 `pricingBlockOf` 同一套兜底：先看 `block`，没有按前缀）。 */
 export function blockOf(e: Pick<PricingEntry, 'capability' | 'block'>): Block {
   const b = e.block as string | undefined
-  if (b === 'ai' || b === 'data') return b
+  if (b === 'ai' || b === 'data' || b === 'workshop_service') return b
   if (b === 'service' || b === 'kol_service') return 'service'
   if (e.capability.startsWith('ai.')) return 'ai'
+  if (e.capability.startsWith('workshop.service.')) return 'workshop_service'
   if (e.capability.includes('.service.')) return 'service'
   return 'data'
 }

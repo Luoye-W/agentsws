@@ -29,12 +29,13 @@ import type {
   Mention,
   MentionSentiment,
   MentionTriage,
+  MonitorGroup,
   PressRelease,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { extractFigures, uncitedFigures } from '@agentsws/core'
 import type { PrDeckData, PrMentionRow } from '@agentsws/deck'
-import { pitchFunnel } from '@agentsws/pr-core'
+import { pitchFunnel, similarTitles } from '@agentsws/pr-core'
 import type BetterSqlite3 from 'better-sqlite3'
 
 /** 库里的四张表。名字与对象类型一一对应，不另起别名。 */
@@ -56,7 +57,12 @@ export const PR_TABLES: readonly PrTable[] = [
  */
 export interface StoredMention extends Mention {
   seen_count: number
+  /** WP386：feed 里这一条的 guid（同一条源里 guid 一样 = 同一条）。 */
+  guid?: string
 }
+
+/** WP386：同站相近标题在多少天内算同一条（转载 / 改标题一般就这几天）。 */
+const SIMILAR_TITLE_DAYS = 7
 
 interface PrBackend {
   all<T>(table: PrTable): T[]
@@ -143,6 +149,12 @@ export interface PrStore {
     triage?: MentionTriage
     /** 只要还没处理完的（`new` / `triaged`）。 */
     open?: boolean
+    /** WP386：按组（老数据没有组 = 自家）、竞品、监控源、发布时间窗筛。 */
+    group?: MonitorGroup
+    competitor?: string
+    source_id?: string
+    since?: string
+    until?: string
   }): StoredMention[]
   mention(id: string): StoredMention | undefined
   posts(filter?: { platform?: string; status?: ExternalPost['status'] }): ExternalPost[]
@@ -160,7 +172,7 @@ export interface PrStore {
    *
    * 回的是库里那一条（新的或已有的），以及它是不是新的。
    */
-  saveMention(row: Mention): { mention: StoredMention; created: boolean }
+  saveMention(row: Mention & { guid?: string }): { mention: StoredMention; created: boolean }
   /**
    * 判类那一跳的结论写回提及（`@agentsws/pr-core` 的 `triageMention` 算的）。
    *
@@ -188,8 +200,30 @@ export function createPrStore(options: PrStoreOptions): PrStore {
       ? createMemoryBackend()
       : createSqliteBackend(join(options.dbDir, 'pr.sqlite'))
 
-  const findByKey = (key: string): StoredMention | undefined =>
-    backend.all<StoredMention>('mention').find((m) => m.dedupe_key === key)
+  /**
+   * WP386：去重加强——同键（URL / guid / 标题）→ 同一条；同一条源里 guid 一样 → 同一条；
+   * 同一个站、{@link SIMILAR_TITLE_DAYS} 天内标题相近（改了一两个词、加了站名后缀）→ 同一条。
+   */
+  const findDuplicate = (row: Mention & { guid?: string }): StoredMention | undefined => {
+    const all = backend.all<StoredMention>('mention')
+    const byKey = all.find((m) => m.dedupe_key === row.dedupe_key)
+    if (byKey !== undefined) return byKey
+    if (row.guid !== undefined && row.guid !== '') {
+      const byGuid = all.find(
+        (m) => m.guid === row.guid && (m.source_id ?? '') === (row.source_id ?? ''),
+      )
+      if (byGuid !== undefined) return byGuid
+    }
+    if (row.title === undefined) return undefined
+    const at = Date.parse(row.published_at)
+    return all.find(
+      (m) =>
+        m.origin === row.origin &&
+        m.source === row.source &&
+        Math.abs(Date.parse(m.published_at) - at) <= SIMILAR_TITLE_DAYS * 86_400_000 &&
+        similarTitles(m.title, row.title),
+    )
+  }
 
   return {
     workspace_id: options.workspace_id,
@@ -213,7 +247,16 @@ export function createPrStore(options: PrStoreOptions): PrStore {
         .filter((m) => filter?.sentiment === undefined || m.sentiment === filter.sentiment)
         .filter((m) => filter?.triage === undefined || m.triage === filter.triage)
         // 转给客服的那些**不算**公关的待处理：球在客服那边（60 分界行）
-        .filter((m) => filter?.open !== true || OPEN_STATUSES.includes(m.status)),
+        .filter((m) => filter?.open !== true || OPEN_STATUSES.includes(m.status))
+        .filter((m) => filter?.group === undefined || (m.group ?? 'own') === filter.group)
+        .filter(
+          (m) =>
+            filter?.competitor === undefined ||
+            (m.competitor ?? '').toLowerCase() === filter.competitor.toLowerCase(),
+        )
+        .filter((m) => filter?.source_id === undefined || m.source_id === filter.source_id)
+        .filter((m) => filter?.since === undefined || m.published_at >= filter.since)
+        .filter((m) => filter?.until === undefined || m.published_at < filter.until),
     mention: (id) => backend.get<StoredMention>('mention', id),
 
     posts: (filter) =>
@@ -228,7 +271,7 @@ export function createPrStore(options: PrStoreOptions): PrStore {
     savePost: (row) => backend.put('external_post', row.id, row),
 
     saveMention: (row) => {
-      const found = findByKey(row.dedupe_key)
+      const found = findDuplicate(row)
       if (found === undefined) {
         const fresh: StoredMention = { ...row, seen_count: 1 }
         backend.put('mention', fresh.id, fresh)
@@ -303,6 +346,8 @@ function excerpt(text: string, max = 60): string {
  */
 export function prDeckData(
   store: Pick<PrStore, 'contacts' | 'releases' | 'mentions' | 'posts'>,
+  /** WP386：信息监控各条源的状态（不给 = 没装信息监控）。 */
+  monitor?: PrDeckData['monitor'],
 ): PrDeckData {
   const at = (iso: string | undefined): number => (iso === undefined ? Number.NaN : Date.parse(iso))
   const all = store.mentions()
@@ -318,6 +363,8 @@ export function prDeckData(
     ...(m.sentiment === undefined ? {} : { sentiment: m.sentiment as string }),
     ...(m.triage === undefined ? {} : { triage: m.triage as string }),
     status: m.status as string,
+    ...(m.group === undefined ? {} : { group: m.group }),
+    ...(m.competitor === undefined ? {} : { competitor: m.competitor }),
   })
 
   /** 提及流：转出去的那些不在这里（第 2 条）。 */
@@ -397,7 +444,28 @@ export function prDeckData(
       ...(p.feedback?.removed === undefined ? {} : { removed: p.feedback.removed }),
     }))
 
-  return { mentions, negative_alerts, releases, pitch_funnel, external_posts, handoffs }
+  /** WP386：竞品动向——按竞品名排，同一个竞品里新的在上。 */
+  const competitor_mentions = all
+    .filter((m) => m.group === 'competitor')
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.competitor ?? '').localeCompare(b.competitor ?? '') ||
+        at(b.published_at) - at(a.published_at),
+    )
+    .slice(0, MAX_ROWS)
+    .map(row)
+
+  return {
+    mentions,
+    negative_alerts,
+    releases,
+    pitch_funnel,
+    external_posts,
+    handoffs,
+    competitor_mentions,
+    ...(monitor === undefined ? {} : { monitor }),
+  }
 }
 
 /**

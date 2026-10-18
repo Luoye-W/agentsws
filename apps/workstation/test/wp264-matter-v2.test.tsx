@@ -18,7 +18,7 @@ const D1b = '2026-10-07T06:40:00.000Z'
 const D2 = '2026-10-08T01:05:00.000Z'
 
 const BRIEF =
-  '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+  '用 agentsws-theme 给 Rovella 搭英文首页（星际机甲正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 const FINAL = [
   '### 改了什么（2 个文件）',
   '- `templates/index.json`：首页 5 屏',
@@ -46,11 +46,11 @@ const baseTimeline = (): MatterEvent[] => [
   ev({
     kind: 'status',
     at: D1b,
-    text: '预览好了：未发布主题「Rollout Homepage v1 (dark tech)」（线上没动）。',
+    text: '预览好了：未发布主题「Rovella Homepage v1 (dark tech)」（线上没动）。',
     actor: { kind: 'agent', id: 'site.shopify-theme' },
     preview: {
       url: 'https://shop.example/?preview_theme_id=1',
-      label: 'Rollout Homepage v1 (dark tech)',
+      label: 'Rovella Homepage v1 (dark tech)',
       changed_files: ['templates/index.json', 'config/settings_data.json'],
       check: { errors: 0, warnings: 0 },
     },
@@ -68,7 +68,7 @@ const baseTimeline = (): MatterEvent[] => [
         { text: '改 templates/index.json', status: 'ok', seconds: 108 },
         { text: '改 config/settings_data.json', status: 'ok', seconds: 22 },
         { text: '主题检查', status: 'ok', seconds: 41 },
-        { text: '推成未发布主题「Rollout Homepage v1 (dark tech)」', status: 'ok', seconds: 35 },
+        { text: '推成未发布主题「Rovella Homepage v1 (dark tech)」', status: 'ok', seconds: 35 },
       ],
     },
   }),
@@ -85,7 +85,7 @@ const view = (
     schema_version: 1 as const,
     workspace_id: 'ws_1',
     kind: 'adhoc' as const,
-    title: 'Rollout 英文首页 · 深色科技风',
+    title: 'Rovella 英文首页 · 深色科技风',
     title_source: 'ai' as const,
     status: 'open' as const,
     entry: 'position' as const,
@@ -129,7 +129,7 @@ const approval = (over: Partial<ApprovalItem> = {}): ApprovalItem => ({
   role_id: 'site.theme',
   subject: { object: { type: 'thread', id: 'thr_1' } },
   dedupe_key: 'dk_1',
-  title: '把「Rollout Homepage v1 (dark tech)」设为线上主题',
+  title: '把「Rovella Homepage v1 (dark tech)」设为线上主题',
   summary: '访客马上看到新首页\n配色是全店级：商品页、购物车也会变深色',
   payload: {},
   evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
@@ -172,7 +172,7 @@ vi.mock('@/lib/api', async () => {
     listOrganizations: async () => matterOrgs,
     ensureSession: async () => ({
       person: { id: 'per_1', email: 'p1@ex.com', name: '王岚' },
-      workspace: { id: 'ws_1', name: 'Rollout' },
+      workspace: { id: 'ws_1', name: 'Rovella' },
       assignments: [],
     }),
     getMatter: (...a: unknown[]) => getMatter(...(a as [])),
@@ -240,14 +240,14 @@ describe('WP264 页头', () => {
   it('短标题一行；点了就地改，Enter 存（PATCH）', async () => {
     renderMatter()
     const title = await screen.findByTestId('matter-title')
-    expect(title.textContent).toContain('Rollout 英文首页 · 深色科技风')
+    expect(title.textContent).toContain('Rovella 英文首页 · 深色科技风')
     const u = user()
     await u.click(title)
     const input = screen.getByTestId('matter-title-input')
     await u.clear(input)
-    await u.type(input, 'Rollout 首页{Enter}')
+    await u.type(input, 'Rovella 首页{Enter}')
     await waitFor(() => {
-      expect(retitleMatter).toHaveBeenCalledWith('mat_r', 'Rollout 首页')
+      expect(retitleMatter).toHaveBeenCalledWith('mat_r', 'Rovella 首页')
     })
   })
 
@@ -281,7 +281,7 @@ describe('WP276 ② 交给同事', () => {
   it('「⋯」里多一个「交给同事」，点了出同事下拉（带忙闲）；整页不像公司；① 里没有这一项', async () => {
     matterOrgs.splice(0, matterOrgs.length, {
       id: 'org_1',
-      legal_name: 'Rollout',
+      legal_name: 'Rovella',
       discoverable: true,
       owner_id: 'per_1',
       role: 'owner',
@@ -322,7 +322,7 @@ describe('WP276 ② 交给同事', () => {
   it('① 个人：「⋯」里没有「交给同事」', async () => {
     matterOrgs.splice(0, matterOrgs.length, {
       id: 'org_1',
-      legal_name: 'Rollout',
+      legal_name: 'Rovella',
       discoverable: false,
       owner_id: 'per_1',
       role: 'owner',
@@ -365,7 +365,7 @@ describe('WP264 对话式时间线', () => {
   it('预览嵌在那条 AI 消息里：打开预览 / 发布上线（说一句出卡）/ 看改动', async () => {
     renderMatter()
     const card = await screen.findByTestId('matter-preview-card')
-    expect(card.textContent).toContain('Rollout Homepage v1 (dark tech)')
+    expect(card.textContent).toContain('Rovella Homepage v1 (dark tech)')
     expect(card.textContent).toContain('改了 2 个文件 · 检查 0 错 0 警')
     const u = user()
     await u.click(within(card).getByTestId('matter-preview-open'))
@@ -465,7 +465,7 @@ describe('WP264 对话式时间线', () => {
     ])
     renderMatter()
     const done = await screen.findByTestId('matter-card-done')
-    expect(done.textContent).toContain('你批了 · 把「Rollout Homepage v1 (dark tech)」设为线上主题')
+    expect(done.textContent).toContain('你批了 · 把「Rovella Homepage v1 (dark tech)」设为线上主题')
   })
 
   it('运行中：「正在做…」+ 当前一步，点开实时步骤；输入卡发送位变「停」', async () => {
@@ -588,7 +588,7 @@ describe('WP264 纯函数', () => {
     const tl = baseTimeline()
     const items = buildItems(tl, { closed: false, roleId: 'site.theme' })
     const ai = items.find((i) => i.kind === 'ai')
-    expect(ai?.kind === 'ai' && ai.preview?.preview?.label).toBe('Rollout Homepage v1 (dark tech)')
+    expect(ai?.kind === 'ai' && ai.preview?.preview?.label).toBe('Rovella Homepage v1 (dark tech)')
     const split = [tl[2] as MatterEvent, ev({ kind: 'human_message', at: D1b, text: '嗯' })]
     const alone = buildItems(split, { closed: false })
     expect(alone.filter((i) => i.kind === 'ai')).toHaveLength(1)

@@ -57,7 +57,7 @@ const provider = new DeepSeekSearchProvider(() => ({
 }))
 
 const QUERIES = [
-  ['natural', 'INMO Air3 review reddit'],
+  ['natural', 'XREAL One review reddit'],
   ['natural', 'best AI translation glasses 2026'],
   ['natural', 'smart glasses with teleprompter recommendations'],
   ['natural', 'XREAL vs RayNeo which to buy'],
@@ -65,14 +65,14 @@ const QUERIES = [
   ['natural', 'AR glasses subreddit'],
   ['natural', 'Shopify Facebook ads ROAS benchmark 2026'],
   ['natural', 'how to do influencer outreach for a DTC brand'],
-  ['natural', 'INMO glasses company LinkedIn'],
+  ['natural', 'XREAL glasses company LinkedIn'],
   ['natural', 'Anker Soundcore customer complaints'],
   ['site', 'site:reddit.com smart glasses captions'],
-  ['site', 'site:reddit.com INMO'],
+  ['site', 'site:reddit.com XREAL'],
   ['site', 'site:reddit.com r/SmartGlasses'],
-  ['site', 'site:linkedin.com INMO'],
+  ['site', 'site:linkedin.com XREAL'],
   ['site', 'site:linkedin.com smart glasses head of marketing'],
-  ['site', 'site:youtube.com INMO Air3 review'],
+  ['site', 'site:youtube.com XREAL One review'],
   ['site', 'site:x.com RayNeo X3'],
   ['site', 'site:amazon.com translation glasses'],
   ['site', 'site:trustpilot.com XREAL'],
@@ -80,7 +80,7 @@ const QUERIES = [
   ['site', 'site:facebook.com smart glasses group'],
   ['site', 'site:tiktok.com smart glasses'],
   ['zh', '智能眼镜 推荐 2026'],
-  ['zh', 'INMO 影目 眼镜 评测'],
+  ['zh', 'XREAL 眼镜 评测'],
 ]
 
 const WATCH = {

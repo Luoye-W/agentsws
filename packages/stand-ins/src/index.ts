@@ -49,16 +49,28 @@ export * from './registry.js'
 export * from './runtime/ads.js'
 // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡）
 export * from './runtime/ads-data.js'
+// WP394：亚马逊店铺运营「竞品动向」的现在读一次（定义并进报告积木那张表）
+export * from './runtime/amazon-competitor.js'
+// WP398：亚马逊店铺运营的 Amazon 词库三个工具
+export * from './runtime/amazon-keywords.js'
+// WP396：亚马逊店铺运营的 Listing 体检三个工具
+export * from './runtime/amazon-listing.js'
 // WP343：「我的助理」的四个只读工具 + 派活工具（参数表全仓一份）
 export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'
+// WP393：店铺管理「竞品动向」的探平台 / 现在读一次（定义并进报告积木那张表，三个运行时同一份）
+export * from './runtime/competitor-store.js'
 export * from './runtime/dev-stub.js'
+// WP387：浏览器建完 / 读完 Google 提醒后交代结果
+export * from './runtime/google-alerts.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具
 export * from './runtime/image.js'
 export * from './runtime/kol.js'
 export * from './runtime/output-cards.js'
 export * from './runtime/owner.js'
 export * from './runtime/playbook.js'
+// WP386：信息监控的读工具 list_mentions
+export * from './runtime/pr-monitor.js'
 export * from './runtime/produce.js'
 // WP323：记录去处的三个工具（通用能力：用户几句话交代，AI 配好，出「定规矩」卡）
 export * from './runtime/record-sink.js'
@@ -71,6 +83,8 @@ export * from './runtime/schedule.js'
 // WP334（决策 724）：AI 自己要连接卡 / 配置卡的通用工具
 export * from './runtime/setup-request.js'
 export * from './runtime/shop.js'
+// WP385：网站运营 / 内容与搜索读体检结论（只读）
+export * from './runtime/site-health.js'
 export * from './runtime/skills.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
@@ -78,6 +92,7 @@ export * from './runtime/theme.js'
 export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'
 export * from './runtime/web.js'
+export * from './runtime/workshop-service.js'
 
 export const DEFAULT_START: Iso8601 = '2026-09-07T01:00:00.000Z'
 

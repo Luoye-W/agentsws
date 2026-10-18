@@ -19,7 +19,7 @@ import { ShopAdminError, type ShopifyAdminReader } from '../src/shop-admin.js'
 import { demoShop, type FakeShop, resolveFakeShop } from '../src/shop-admin-stand-in.js'
 import { SHOPIFY_STAND_IN_SCOPES } from '../src/shopify-cloud-stand-in.js'
 
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 const T0 = '2026-10-15T06:00:00.000Z'
 
 const ORDERS = {
@@ -293,7 +293,7 @@ describe('WP333 端到端：一键授权之后「库存告急数」', () => {
     await call(
       'PUT',
       '/v1/workspace/profile',
-      { legal_name: 'Rollout', storefront_platform: 'shopify' },
+      { legal_name: 'Rovella', storefront_platform: 'shopify' },
       owner,
     )
     await call(

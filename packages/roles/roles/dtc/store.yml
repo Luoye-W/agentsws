@@ -1,10 +1,10 @@
-# 51 §2.1 店铺管理：**一条职责、五个能力面**（WP63 补齐）。
+# 51 §2.1 店铺管理：**一条职责、六个能力面**（WP63 补齐五个；WP393 / docs/104 C1 加第六个「竞品动向」，不新开职责）。
 #
 # 它是 15 人 pack 里那条 `dtc.ops`（独立站运营）的新身份。旧 id `dtc.ops` 永远读得
 # 进来（加载器的 `ROLE_ID_ALIASES`），已有分配在启动时迁移一次并记
 # `assignment.role_migrated`——职责 id 是别人库里已经有的东西。
 #
-# 五个能力面（51 §2.1 那张表）与它们在下面的落点：
+# 六个能力面（51 §2.1 那张表 + docs/104 C1）与它们在下面的落点：
 #
 # | 能力面 | 读 | 写 |
 # |---|---|---|
@@ -13,6 +13,7 @@
 # | 促销与折扣 | 折扣码 / 自动折扣 / 活动列表 | `stage_discount_code`（营销发码）、`stage_promotion`（全站活动） |
 # | 数据日报 | 销售 / 订单 / 转化 / 流量 | **无写**，只出日报卡与异常卡（L3） |
 # | 评价管理 | 评价列表与评分（评价应用连接器**待增加**） | `stage_review_reply`、`stage_review_invite` |
+# | 竞品动向（WP393） | 竞品独立站公开的商品数据：上新 / 下架 / 改价 / 打折 / 断货，和你的对标款比价（`list_competitor_changes`、`find_competitor_store`、`read_competitor_stores`） | **无写**：只读外部公开页面、不碰你的外部账号，所以不出审批卡；配置走方案卡 `store.competitor_watch` |
 #
 # 三条纪律，每一条都能在下面指到具体的行：
 #
@@ -32,7 +33,7 @@ id: dtc.store
 version: 1.1.0
 domain: dtc
 name: { zh: 店铺管理, en: DTC Store Management }
-description: 店铺设置、商品与库存、促销与折扣、数据日报、评价管理
+description: 店铺设置、商品与库存、促销与折扣、数据日报、评价管理、竞品动向（竞品的上新、价格、折扣）
 
 scopes:
   # 数据日报那一面读的是销售与订单——没有这一条，19 §3 的过滤下推会把整个
@@ -404,6 +405,15 @@ quick_prompts:
     label: { zh: "回一轮评价", en: "Reply to this week reviews" }
     prompt: "这周还没回的评价按好评差评分开，差评先给我起草回复"
     kind: start_task
+  # WP393（docs/104 C1）：第六个能力面「竞品动向」——问一句看变化表；要盯就走方案卡（store.competitor_watch）
+  - id: competitor_moves
+    label: { zh: "竞品最近有什么动静", en: "What competitors changed" }
+    prompt: "竞品独立站最近有什么动静？上新、降价、打折、断货按要紧程度说，能和我的对标款比的就说差多少钱"
+    kind: ask
+  - id: watch_competitors
+    label: { zh: "帮我盯竞品的上新和价格", en: "Watch competitor launches and prices" }
+    prompt: "帮我盯一下竞品独立站的上新和价格：先给我一个方案（盯哪几家、每家怎么读、什么算要紧），我点头再开始"
+    kind: start_task
 
 task_examples:
   - id: daily_check
@@ -418,6 +428,11 @@ task_examples:
     title: { zh: "算下周补多少货", en: "Work out next week restock" }
     description: "想知道下周该补哪些货、各补多少。"
     expected_output: "一份按最近销量算出来的补货清单，断货风险最高的排最前面，每条附上估计能撑几天。"
+  # WP393（docs/104 一期 A）
+  - id: competitor_watch
+    title: { zh: "盯竞品的上新和价格", en: "Watch competitor launches and prices" }
+    description: "想知道几家主要竞品的独立站什么时候上新、降价、打折。"
+    expected_output: "先一张方案卡：盯哪几家、每家走哪条路、什么算要紧（按你的品类给建议），你点头就先读一次当底子；之后每天读一次，有要紧的（比如「Level 3 降价 12%，比你的 Ranger 便宜 $200」）才进每天日报，读不到的照实说。"
 
 # WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
 # 查资料的职责默认挂；客服类不挂（不让客服回复夹网页内容）。
@@ -430,7 +445,7 @@ web_tools: [web_search, web_fetch]
 persona:
   zh: |
     你是谁：网站运营岗位里管店铺本身的人。
-    你负责：店铺设置、商品与库存、价格、促销与折扣码、数据日报、评价回复与邀评。
+    你负责：店铺设置、商品与库存、价格、促销与折扣码、数据日报、评价回复与邀评；竞品的上新、价格、折扣（读他们店里公开的商品数据，和你的对标款比价）。
     你不负责：客户一对一的问答与退款→客服；网站这个壳怎么搭→建站；账号与社群→社媒运营；买广告→投放。
     怎么做：动商品与价格前先看这一条现在是什么样、最近卖得怎么样；数拿不到就说拿不到，别按印象改价。
     口气：像管店的人，说人话，先讲影响多少单。

@@ -50,9 +50,9 @@ const brand = () => server.brands.forWorkspace(server.bootstrap.workspace.id)
 
 const replyTarget = {
   kind: 'reply',
-  subreddit: 'inmoxr',
+  subreddit: 'ivraxr',
   parent_fullname: 't1_c1',
-  permalink: '/r/inmoxr/comments/abc/slug/c1/',
+  permalink: '/r/ivraxr/comments/abc/slug/c1/',
   post_title: 'Does the Air3 work with glasses?',
   parent_author: 'alice',
   parent_text: 'Mine fogs up a bit when I wear glasses.',
@@ -125,7 +125,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     const ok = await data<{ staged: boolean; approval_item_id: string }>(
       await post('/v1/social/reddit/stage', {
         target: replyTarget,
-        text: 'Hi Alice, INMO here. The anti-fog insert in the box helps a lot with glasses.',
+        text: 'Hi Alice, IVRA here. The anti-fog insert in the box helps a lot with glasses.',
       }),
     )
     expect(ok.staged).toBe(true)
@@ -141,7 +141,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
 
   it('批了 → 交给插件；插件填好、人点发送、读回 → 发出记录多一行，对方再回挂回这一行', async () => {
     await pluginSeen()
-    const text = 'Hi Alice, INMO here. The anti-fog insert in the box helps a lot with glasses.'
+    const text = 'Hi Alice, IVRA here. The anti-fog insert in the box helps a lot with glasses.'
     const id = await stageAndApprove(text)
     const card = await server.txn.approvals.get(id)
     expect(card?.state).toBe('applied')
@@ -156,7 +156,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     expect(job?.approval_id).toBe(id)
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/inmoxr/comments/abc/slug/c1/',
+      url: 'https://old.reddit.com/r/ivraxr/comments/abc/slug/c1/',
     })
     expect(job?.plan.allow.values).toEqual([text])
     expect(job?.plan.allow.click.join(' ')).not.toMatch(/save|submit/u)
@@ -168,24 +168,24 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
       outcome: 'done',
       message: '做完了。',
       step: 6,
-      reads: { fullname: 't1_new1', permalink: '/r/inmoxr/comments/abc/slug/new1/' },
+      reads: { fullname: 't1_new1', permalink: '/r/ivraxr/comments/abc/slug/new1/' },
     })
     const writes = await data<{ rows: RedditWriteView[] }>(await api('/v1/social/reddit/writes'))
     expect(writes.rows[0]).toMatchObject({
       state: 'sent',
-      link: 'https://www.reddit.com/r/inmoxr/comments/abc/slug/new1/',
+      link: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/new1/',
     })
     const records = await data<OutboundRecord[]>(await api('/v1/outbound/records'))
     expect(records).toHaveLength(1)
     expect(records[0]).toMatchObject({
       channel: 'reddit',
       action: 'reply',
-      destination: 'r/inmoxr',
+      destination: 'r/ivraxr',
       counterpart: 'alice',
       content: text,
       external_id: 't1_new1',
       parent_external_id: 't1_c1',
-      link: 'https://www.reddit.com/r/inmoxr/comments/abc/slug/new1/',
+      link: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/new1/',
       approval_item_id: id,
       status: 'sent',
     })
@@ -202,7 +202,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
 
   it('插件停下交给人：照实记「没发出去」+ 原因，不记发出记录', async () => {
     await pluginSeen()
-    await stageAndApprove('Hi Alice, INMO here. The anti-fog insert in the box helps.')
+    await stageAndApprove('Hi Alice, IVRA here. The anti-fog insert in the box helps.')
     const b = await brand()
     const job = (await b.adsActions?.next(['reddit'], 0))?.job
     b.adsActions?.result(job?.id as string, {
@@ -218,7 +218,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
   })
 
   it('插件从没连过：不走程序直发（决策 761 关），排着等插件，进度里说插件不在线', async () => {
-    await stageAndApprove('Hi Alice, INMO here. The anti-fog insert in the box helps.')
+    await stageAndApprove('Hi Alice, IVRA here. The anti-fog insert in the box helps.')
     const writes = await data<{ rows: RedditWriteView[] }>(await api('/v1/social/reddit/writes'))
     expect(writes.rows[0]?.state).toBe('queued')
     expect(writes.rows[0]?.message).toContain('插件不在线')
@@ -261,10 +261,10 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     const account = await data<{ id: string }>(
       await post('/v1/social/accounts', {
         channel: 'reddit',
-        handle: 'r/inmoxr',
-        display_name: 'INMO XR',
-        url: 'https://www.reddit.com/r/inmoxr/',
-        external_id: 'inmoxr',
+        handle: 'r/ivraxr',
+        display_name: 'IVRA XR',
+        url: 'https://www.reddit.com/r/ivraxr/',
+        external_id: 'ivraxr',
         own_subreddit: true,
       }),
     )
@@ -283,7 +283,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     const row = b.social.thread(thread.thread.id)
     b.social.saveThread({
       ...(row as NonNullable<typeof row>),
-      permalink: '/r/inmoxr/comments/xyz/s/c9/',
+      permalink: '/r/ivraxr/comments/xyz/s/c9/',
     })
     const staged = await data<{ approval_item_id: string }>(
       await post(`/v1/social/threads/${thread.thread.id}/reply`, {
@@ -299,7 +299,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
       outcome: 'done',
       message: '做完了。',
       step: 6,
-      reads: { fullname: 't1_r1', permalink: '/r/inmoxr/comments/xyz/s/r1/' },
+      reads: { fullname: 't1_r1', permalink: '/r/ivraxr/comments/xyz/s/r1/' },
     })
     expect(b.social.thread(thread.thread.id)).toMatchObject({
       status: 'answered',

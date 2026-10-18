@@ -9,6 +9,12 @@
  * 纪律：参数里**没有一格收凭据**。口令 / 密钥只在卡上的本机原生表单里填；「为什么」「建议值」里像秘密的整条拒收。
  */
 import type { RunRequest, ToolDef } from '@agentsws/contracts'
+import {
+  AMAZON_COMPETITOR_ASK,
+  AMAZON_COMPETITOR_SETTING,
+  AMAZON_COMPETITOR_SITE,
+  AMAZON_COMPETITOR_WORDS,
+} from './amazon-competitor.js'
 
 export const REQUEST_SETUP_TOOL = 'request_setup'
 
@@ -25,7 +31,8 @@ export const SETUP_REQUEST_TOOL_DEFS: readonly ToolDef[] = [
       'connect 填要连的：连接页里的服务（如 imap_smtp 发信邮箱、ga4、gsc、meta_ads、shopify_admin），' +
       '或 model（AI 模型）、deepseek_account（DeepSeek 账号）、workshop_account（Agents 工坊账号）、' +
       'im:wecom（企业微信）、im:wechat（微信）、im:feishu（飞书）、im:dingtalk（钉钉）、extension（浏览器插件）。' +
-      'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）等。' +
+      'setting 填要设的：company.profile（公司档案）、company.address（公司实体地址）、site.store（哪家店）、' +
+      'schedule.weekly_reports（自带的周复盘 / 经营一页纸 / SEO 周报几点出：key 是 review_week / weekly_review / seo_weekly，值写「周五 17:00」）等。' +
       '两个给一个。要设的：卡上是「我打算这样设」的方案——工坊出卡前会自己先查一遍（档案、已连的账号、联网），' +
       '你在 suggestions 里给的值（每个带一句 why）会压过它查到的，用户点「就这样」就存。' +
       '已经设好的也能改：setting + suggestions 给新值，出一张「我打算改成这样」的卡（现值 → 新值），用户确认才生效。' +
@@ -114,6 +121,10 @@ const CHANGE_FIELDS: readonly [RegExp, string][] = [
 ]
 const CHANGE_ASK = /改成|改为/
 const SETTING_ASK = /(?:先|得|要|帮我|请)\s*(?:填|设|补)(?:好|上|一下)?/
+/** WP393：「帮我盯一下竞品上新和价格」→ 店铺管理「竞品动向」的方案卡（只认「盯 / 监控」+ 竞品 + 上新 / 价格这类词）。 */
+const COMPETITOR_WATCH_ASK = /(?:盯|监控|看着)/
+const COMPETITOR_WATCH_WORDS = /竞品|对手/
+const COMPETITOR_WATCH_WHAT = /上新|新品|价格|改价|降价|打折|折扣|断货|动静|动向/
 
 /**
  * stub 的岔口：工具面里有 `request_setup`、话里明说「先连上 X / 先填好 Y」，就要一张卡。
@@ -124,6 +135,19 @@ export function setupRequestBranch(
   text: string,
 ): { tool: string; input: Record<string, unknown> } | undefined {
   if (!req.tools.allow.includes(REQUEST_SETUP_TOOL)) return undefined
+  // WP394：「帮我盯 Amazon 上的竞品」→ 亚马逊店铺运营「竞品动向」的方案卡（要在独立站那条之前认：话里也有「价格」）
+  if (
+    AMAZON_COMPETITOR_SITE.test(text) &&
+    AMAZON_COMPETITOR_ASK.test(text) &&
+    AMAZON_COMPETITOR_WORDS.test(text)
+  )
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: AMAZON_COMPETITOR_SETTING,
+        why: '盯哪几款、各对标你哪一款、什么算重要，我先在 Amazon 上查了一遍定了个方案。',
+      },
+    }
   if (CONNECT_ASK.test(text)) {
     const hit = CONNECT_WORDS.find(([re]) => re.test(text))
     if (hit !== undefined)
@@ -143,6 +167,18 @@ export function setupRequestBranch(
         setting: change[1],
         why: '按你说的改。',
         suggestions: [{ key: field[1], value, why: '你刚才说的' }],
+      },
+    }
+  if (
+    COMPETITOR_WATCH_ASK.test(text) &&
+    COMPETITOR_WATCH_WORDS.test(text) &&
+    COMPETITOR_WATCH_WHAT.test(text)
+  )
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: 'store.competitor_watch',
+        why: '要盯哪几家、每家怎么读、什么算要紧，我先查了一遍定了个方案。',
       },
     }
   if (SETTING_ASK.test(text)) {

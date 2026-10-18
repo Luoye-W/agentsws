@@ -17,20 +17,20 @@ import { renderWithProviders } from './helpers'
 const NOW = '2026-10-07T08:00:00.000Z'
 
 const view = (): OwnSubQueueView => ({
-  subreddits: [{ account_id: 'sa_1', name: 'inmoxr', display_name: 'INMO XR' }],
+  subreddits: [{ account_id: 'sa_1', name: 'ivraxr', display_name: 'IVRA XR' }],
   channel: 'browser',
   browser: {
     state: 'logged_in',
-    username: 'inmo_official',
+    username: 'ivra_official',
     writes_last_day: 0,
     max_writes_per_day: 30,
   },
-  sources: [{ subreddit: 'inmoxr', source: 'modqueue', status: 'ok', count: 1 }],
+  sources: [{ subreddit: 'ivraxr', source: 'modqueue', status: 'ok', count: 1 }],
   items: [
     {
       id: 't3_held1',
       account_id: 'sa_1',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       kind: 'held',
       thing: 'post',
       title: 'My review',
@@ -41,7 +41,7 @@ const view = (): OwnSubQueueView => ({
       suggestion: { verdict: 'approve', reason: '没看到广告或骂人的话。' },
     },
   ],
-  rules: [{ subreddit: 'inmoxr', rules: [] }],
+  rules: [{ subreddit: 'ivraxr', rules: [] }],
   observed_at: NOW,
 })
 
@@ -49,7 +49,7 @@ const rows = (): SocialThreadRowData[] => [
   {
     id: 'ct_1',
     account_id: 'sa_dc',
-    account_name: 'INMO 社群',
+    account_name: 'IVRA 社群',
     channel: 'discord',
     external_id: 'dc_1',
     surface: 'thread',
@@ -93,7 +93,7 @@ vi.mock('@/lib/social-ingest-api', () => ({
     auto: true,
     connected: true,
     every_minutes: 15,
-    accounts: [{ account_id: 'sa_dc', name: 'INMO 社群', state: 'ok' }],
+    accounts: [{ account_id: 'sa_dc', name: 'IVRA 社群', state: 'ok' }],
   }),
   setSocialIngestInterval: async () => ({}),
   registerDiscordChannel: async () => ({ id: 'sa_x' }),
@@ -203,7 +203,7 @@ describe('WP255 社群线程列表', () => {
     renderWithProviders(<SocialThreads assignment="asg_dc" channel="discord" />)
     const row = (await screen.findAllByTestId('social-thread'))[0] as HTMLElement
     expect(row.textContent).toContain('linaw')
-    expect(row.textContent).toContain('INMO 社群')
+    expect(row.textContent).toContain('IVRA 社群')
     expect(row.textContent).toContain('夸奖')
     expect(row.textContent).toContain('刚收到眼镜')
     fireEvent.click(within(row).getByTestId('reply-open'))

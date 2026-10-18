@@ -55,6 +55,8 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
 import type { AdCreativePort } from './routes/ad-creative.js'
 import type { AdsPort } from './routes/ads.js'
+import type { AmazonKeywordsPort } from './routes/amazon-keywords.js'
+import type { AmazonListingPort } from './routes/amazon-listing.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
 import type { BackgroundPort } from './routes/background.js'
@@ -68,6 +70,7 @@ import type { ChangeFilesPort } from './routes/changes.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
+import type { CompetitorWatchPort } from './routes/competitor-watch.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
@@ -118,6 +121,7 @@ import type { StoragePort } from './routes/storage.js'
 import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
 import type { WorkArchivePort } from './routes/work-archive.js'
+import type { WorkshopServicesApiPort } from './routes/workshop-services.js'
 import type { WsOptions } from './routes/ws.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -566,6 +570,11 @@ export interface SkillSummary {
   roles?: SkillRoleRef[]
   /** 本人名下有没撤销的职责在用它。 */
   in_use?: boolean
+  /**
+   * WP397：这一本从哪来（frontmatter 的 `origin`）。`official` = 平台官方技能原样收录
+   * （Shopify、Amazon 官方卖家技能）；`adapted` = 改写自开源。我们自己写的不回。
+   */
+  origin?: 'official' | 'adapted'
 }
 
 /** WP209：技能归属的一个岗位。 */
@@ -960,6 +969,16 @@ export interface GatewayDeps {
    */
   redditWatch?: RedditWatchPort
   /**
+   * WP392（docs/104）：竞品监控（工作台看各监控源状态 / 竞品变化表 / 改频率 / 现在读一次）。
+   * 没装配时那几条路由回 not_implemented。
+   */
+  competitorWatch?: CompetitorWatchPort
+  /**
+   * WP396（docs/106 §13）：自家 Amazon Listing 体检（面板看最近一次 / 现在体检 / 改规则）。
+   * 没装配时那几条路由回 not_implemented。
+   */
+  amazonListing?: AmazonListingPort
+  /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），
    * 只是没有任何增删改的入口。
@@ -1079,6 +1098,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/data-service*` 回 not_implemented。
    */
   dataService?: DataServiceApiPort
+  /**
+   * WP390（docs/105）：工坊服务（目录缓存、看看 / 交给工坊办、订单面板）。按品牌取。
+   * 没装配时 `/v1/workshop-services*` 回 not_implemented。下单 / 验收都走卡（`service_order`），不在这里。
+   */
+  workshopServices?: WorkshopServicesApiPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**
@@ -1240,6 +1264,8 @@ export interface GatewayDeps {
   updatePause?: UpdatePausePort
   /** WP381：网站 / 商品体检与 AI 来源流量。没装配时 `/v1/site-health*` 回 not_implemented。 */
   siteHealth?: SiteHealthPort
+  /** WP398：Amazon 词库。没装配时 `/v1/amazon-keywords*` 回 not_implemented。 */
+  amazonKeywords?: AmazonKeywordsPort
 }
 
 /**

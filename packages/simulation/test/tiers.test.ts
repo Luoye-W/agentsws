@@ -340,6 +340,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/product-line-isolation',
       'ops/theme-publish-needs-approval',
       'ops/two-desks-no-union',
+      // WP395（docs/104 C2）：只说独立站不划 Amazon 运营；说了亚马逊 / FBA 才有，问补货照实说没数据
+      'org/amazon-ops-only-for-amazon-brands',
       // WP343「我的助理」派活 → 岗位出审批，助理零写
       'org/assistant-dispatch-to-position',
       // WP350「我的助理」一次拆成多份：会议记录分派给几个岗位、几个岗位记待确认的口径
@@ -357,6 +359,11 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP51 首次设置与同事发现（46 §2 I1 / I3）：两个各自单干的人，
       // 公司名写法不同但算出同一把钥匙 → 局域网互见 → 一方申请 → 对方 owner 批
       'org/two-solo-users-discover',
+      // WP387（docs/103 v2 T1）：让工坊替你建 Google 提醒——一张卡、勾掉一条、批了建好、不碰卡外的
+      'pr/alerts-build-by-browser',
+      // WP386（docs/103 v2）：信息监控拉到了入表 / feed 404 照实说「没拉到」
+      'pr/monitor-feed-404',
+      'pr/monitor-feed-pulled',
       // WP78（60 §1 / §4）：同一个版 72 小时内再发一条 → 冷却那道门拦下，
       // 换一个版才放行（15 人公司里公关归内容，p_zheng 持 `pr.reddit`）
       'pr/subreddit-cooldown',
@@ -373,6 +380,10 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP199：发布卡落到批不了的运营主管 → 升级给负责人 → 批了真能施行，升级链留痕完整
       'social/escalated-post-applies',
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提
+      // WP392：竞品监控（第一天只建底子，第二天比出一条降价）
+      'store/competitor-price-drop',
+      // WP393：店铺管理「竞品动向」（配好 → 第二天降价并说比你便宜多少）
+      'store/competitor-store-vs-own',
       'store/daily-report-card',
     ])
     for (const r of result.reports) {

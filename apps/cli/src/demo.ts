@@ -16,6 +16,7 @@
  * 两者差十天的结果就是截图里满屏"已过期"、日历把所有到期堆在同一天。
  * 起点定下之后，世界里一切照旧走合成时钟（**模拟仍是虚拟时钟，基线一个数没动**）。
  */
+
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -68,6 +69,10 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
+import { demoAmazon } from './demo-amazon.js'
+import { DEMO_AMAZON_LISTINGS, demoAmazonAutocompleteReader } from './demo-amazon-keywords.js'
+import { demoListingReader } from './demo-amazon-listing.js'
+import { DEMO_COMPETITORS, DEMO_OWN_PRODUCTS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
@@ -108,12 +113,12 @@ const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
     'User-agent: PerplexityBot',
     'Disallow: /products/',
   ].join('\n'),
-  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Rollout 折叠收纳箱","offers":[{"@type":"Offer","price":"27.90","priceCurrency":"USD","availability":"https://schema.org/InStock"},{"@type":"Offer","price":"19.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}]}</script>
-</head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
-  '/products/rollout-storage-box.js': JSON.stringify({
+  '/products/rovella-storage-box': `<!doctype html><html><head><title>Rovella 折叠收纳箱</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Rovella 折叠收纳箱","offers":[{"@type":"Offer","price":"27.90","priceCurrency":"USD","availability":"https://schema.org/InStock"},{"@type":"Offer","price":"19.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}]}</script>
+</head><body><main><h1>Rovella 折叠收纳箱</h1><div data-price></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+  '/products/rovella-storage-box.js': JSON.stringify({
     id: 1001,
-    handle: 'rollout-storage-box',
+    handle: 'rovella-storage-box',
     updated_at: '2026-10-10T09:00:00+08:00',
     variants: [
       { id: 2001, price: 2990, available: true },
@@ -125,7 +130,7 @@ const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
   '/policies/privacy-policy': '<html><body><main><h1>Privacy policy</h1></main></body></html>',
 }
 const DEMO_SITE_HEALTH_RENDERED: Record<string, string> = {
-  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title></head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+  '/products/rovella-storage-box': `<!doctype html><html><head><title>Rovella 折叠收纳箱</title></head><body><main><h1>Rovella 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
 }
 
 const DEMO_BANNER_PNG =
@@ -1442,6 +1447,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    */
   const cloud = cloudStandIn({
     clock: world.clock,
+    // WP390：工坊服务的服务方在 demo 里是替身，自己往前走（报价 → 接单 → 要材料 → 交付），等你的那几步停着
+    services: {
+      autopilot: true,
+      // 截图脚本要走完一整单建站时多给一点演示积分（默认不给，余额与平时一样）
+      ...(Number(process.env.AGENTSWS_DEMO_SERVICE_CREDITS ?? '') > 0
+        ? { extra_credits: Number(process.env.AGENTSWS_DEMO_SERVICE_CREDITS) }
+        : {}),
+    },
     ...(options.cloudAutoLinkAfterMs === undefined
       ? {}
       : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),
@@ -1498,10 +1511,27 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       return { ok: true, outbox_id: `demo_ob_${demoMailSeq}`, message_id, account }
     },
   }
+  // WP392：竞品监控的替身进料口（一个 demo 一份：第一次原样、之后 Jackery 那款降价）
+  const competitorShop = demoShopAdapter()
+  // WP394：Amazon 前台与云端兜底的替身（编的 ASIN；第二次读起 Jackery 那款降价；想演被拦见 `demo-amazon.ts`）
+  const amazonDemo = demoAmazon()
+  const listingReader = demoListingReader()
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
+    competitorAdapters: () => ({ shop_catalog: competitorShop }),
+    // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）
+    competitorOwnShop: async () => ({ connected: true, products: DEMO_OWN_PRODUCTS }),
+    competitorProbe: async (url, now) => ({
+      url,
+      platform: 'other',
+      route: 'unsupported',
+      reason: '这家网站暂时读不了商品数据',
+      checked_at: now,
+    }),
+    amazonFront: () => amazonDemo.reader,
+    amazonCloud: () => amazonDemo.cloud,
     b2bStandIns,
     staticDir,
     // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，
@@ -1511,6 +1541,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         ? { ok: true, data_uri: `data:image/png;base64,${DEMO_BANNER_PNG}` }
         : { ok: false, reason: 'http_error' },
     brandData: (ws) => extraBrandData.get(ws),
+    // WP396：Listing 体检的替身读页（三个演示 ASIN，不连 Amazon）
+    amazonListingReader: () => listingReader,
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
@@ -1575,6 +1607,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * （没给 readNet），工具照实说「演示环境没装出网读取」。
      */
     readonlyBrowser: readonlyBrowserStandIn(),
+    /*
+     * WP398：Amazon 词库在 demo 里读的是录好的联想词与几条现编的 Listing 文本——不起浏览器、不连 Amazon。
+     */
+    amazonAutocompleteReader: () => demoAmazonAutocompleteReader(),
+    amazonKeywordListings: async () => [...DEMO_AMAZON_LISTINGS],
     /*
      * WP381：网站 / 商品体检在 demo 里抓的是**现编的**几页（按路径认，哪个域名都一样），渲染后那一份也是替身——
      * 不起浏览器、不出网。现编的店：robots 挡了 GPTBot、商品页只有 PerplexityBot 进不去；收纳箱的价格只靠 JS 才出现、
@@ -1798,6 +1835,10 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 一张在批的超授权报价（第 2 版）与一张批过的、两份样品（一份超期没寄）、一张离职交接卡
   await seedSales(server, world)
 
+  // WP392（docs/104）：竞品监控——关注的三家竞品写上独立站（`.example` 替身店）。第一次读只建底子，
+  // 之后再读出「Explorer 1000 v2 两个款式降价 15%」（替身进料口，见 `demo-competitors.ts`）
+  await seedCompetitorWatch(server, world)
+
   // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
   if (options.cardGallery === true) await seedCardGallery(world)
   // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
@@ -1815,6 +1856,20 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       await world.close()
     },
   }
+}
+
+/* ── WP392：竞品监控 ─────────────────────────────────────────────────── */
+
+async function seedCompetitorWatch(server: Server, world: World): Promise<void> {
+  const brand = await server.brands.forWorkspace(world.workspace_id)
+  // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」，demo 别处还要演它）
+  await brand.seoService.watchView().catch(() => undefined)
+  const store = await brand.seoService.geoHistory()
+  const cur = store.watch()
+  if (cur === undefined) return
+  const { prompts: _p, prompt_candidates: _c, ...settings } = cur
+  store.saveSettings({ ...settings, competitors: DEMO_COMPETITORS })
+  await brand.competitorWatch?.sync()
 }
 
 /* ── WP113（63）：消息页的样例来信 ─────────────────────────────────────── */

@@ -114,7 +114,7 @@ overrides:
 # 后者用 optionalDependencies 挂着**六个平台包**，里面是 onnxruntime 与 sherpa-onnx 的
 # 原生 `.node` / `.dylib`（本机 darwin-arm64 实测 33 MB）；同样没有 install 脚本，
 # `allowBuilds` 管不着。我们的 headless 组合不挂任何语音 / `dsh-client-*` 插件
-# （两档模块图实测零命中，见 packages/dsh-adapter/UPGRADE.md WP132 一节），所以平台包一律不装；
+# （两档模块图实测零命中，见 packages/dsh-adapter/UPGRADE.md「0.1.6-alpha.2 → 0.1.7-rc.1」一节），所以平台包一律不装；
 # `sherpa-onnx-node` 本体留着（硬依赖，删了依赖图缺边；没有平台包它只是加载时找不到原生库）。
 # 写三条前缀而不是 `sherpa-onnx-*`：后者字面上也盖住 `sherpa-onnx-node` 本体，读的人会误会。
 ignoredOptionalDependencies:
@@ -154,7 +154,7 @@ allowBuilds:
   node-addon-native-custom-loader: false
   # 0.1.3-alpha.2 有、0.1.5-rc.1 没有了的两项，随包一起删：
   # - fs-ext（原生文件建议锁）：`dsh-session-persistence-jsonl` 不再 require 它 —— 这一条改变了
-  #   WP30 对官方 sdk 档的判断，见 packages/dsh-adapter/UPGRADE.md §5
+  #   早先对官方 sdk 档的判断，见 packages/dsh-adapter/UPGRADE.md §5
   # - @deepseek-ai/node-addon-landlock-run：Linux 沙箱 addon，被 node-addon-system 取代
   # squirrel.windows 打包器（electron-builder 的可选依赖）；Windows 我们出 NSIS，不需要它
   electron-winstaller: false
@@ -337,7 +337,7 @@ minimumReleaseAgeExclude:
   # WP149（0.1.7-rc.2）：整批 273 条 rc.1 → rc.2 原位替换（273 → 279），新进树 6 条（没有消失的）：
   #   dsh-experimental-auto-review（`@deepseek-ai/dsh` 元包的新依赖：rc.2「插件管理页可启用自动审阅」，
   #   不在任何 bundle 里，我们不挂，模块图 0 命中）；dsh-llm-deepseek-account / -api-key
-  #   （`dsh-base` 的新依赖：账号与 API Key 两条模型入口拆开，见 dsh-adapter/UPGRADE.md WP149 一节）；
+  #   （`dsh-base` 的新依赖：账号与 API Key 两条模型入口拆开，见 dsh-adapter/UPGRADE.md「0.1.7-rc.1 → 0.1.7-rc.2」一节）；
   #   dsh-client-shortcuts / dsh-client-ui-shortcuts（`dsh-web-app` 的快捷键设置）；
   #   dsh-util-code-language（`dsh-tool-fs` 的新依赖，按扩展名认语言，纯 JS）。
   # 第三方只多了 `@js-temporal/polyfill`（ISC）+ `jsbi`（Apache-2.0），`dsh-schedule` 拖来的，纯 JS、无 install 脚本，不带 dsh 前缀、不在这张表里。
@@ -348,7 +348,7 @@ minimumReleaseAgeExclude:
   #   新进的全是 `@deepseek-ai/dsh` 元包拖来的可选插件包与它们的零件（会话搜索、Ralph、终端、徽章技能、会话标题、
   #   思考翻译、Inspector、Git worktree）+ dsh-tool-schedule（四个定时工具单独成包，dsh-adapter 直接依赖）/
   #   dsh-tool-session-query / dsh-tool-terminal / dsh-working-directory / dsh-tool-working-directory /
-  #   dsh-session-title-all-prompts-llm。详见 dsh-adapter/UPGRADE.md WP293 一节。
+  #   dsh-session-title-all-prompts-llm。详见 dsh-adapter/UPGRADE.md「0.2.0-rc.1 → 0.2.1-alpha.2」一节。
   # 兄弟包 cordis / schemastery / loader / include / timer / group 这次**必须跟**（新版要 `~4.0.5-alpha.1` 等，4.0.4 不在范围里），
   #   它们 10-03 发、已过静默期，不进这张表。
   # WP354（0.2.1-alpha.2 → 0.2.1-alpha.4）：整批原位换号（先 sed 再 pnpm install，没有 `||`、没吃注释），

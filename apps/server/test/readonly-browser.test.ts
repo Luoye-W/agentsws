@@ -5,10 +5,10 @@ import type { BrowserSession, PageRead } from '../src/readonly-browser/session.j
 
 const HOSTS = ['*.reddit.com']
 const LIMITS = { min_interval_seconds: 20, max_pages_per_hour: 30, max_pages_per_day: 3 }
-const post = { kind: 'post', url: '/r/inmo/comments/a1/hi/', title: 'Hi', text: 'hello' }
+const post = { kind: 'post', url: '/r/ivra/comments/a1/hi/', title: 'Hi', text: 'hello' }
 const okPage = (over: Partial<PageRead> = {}): PageRead => ({
   status: 200,
-  finalUrl: 'https://www.reddit.com/r/inmo/new/',
+  finalUrl: 'https://www.reddit.com/r/ivra/new/',
   extract: {
     signals: { title: 't', text: '', passwordInputs: 0, frameSources: [], items: 1 },
     items: [post],
@@ -39,13 +39,13 @@ function harness(pages: PageRead[], opts: { exists?: boolean } = {}) {
 describe('createReadonlyBrowser', () => {
   it('读一页：要用时才起浏览器，读回条目；第二页复用同一个浏览器', async () => {
     const h = harness([])
-    const got = await h.rb.read('https://www.reddit.com/r/inmo/new/', { limit: 10 })
+    const got = await h.rb.read('https://www.reddit.com/r/ivra/new/', { limit: 10 })
     expect(got).toMatchObject({ ok: true, items: [post] })
     h.tick(21_000)
-    await h.rb.read('https://www.reddit.com/r/inmo/new/')
+    await h.rb.read('https://www.reddit.com/r/ivra/new/')
     expect(h.launch).toHaveBeenCalledTimes(1)
     expect(h.session.readPage).toHaveBeenCalledWith(
-      'https://www.reddit.com/r/inmo/new/',
+      'https://www.reddit.com/r/ivra/new/',
       { limit: 10, maxText: 4000 },
       HOSTS,
     )
@@ -61,7 +61,7 @@ describe('createReadonlyBrowser', () => {
   })
   it('没找到 Chrome / Edge：照实说，状态也是「没找到」', async () => {
     const h = harness([], { exists: false })
-    const got = await h.rb.read('https://www.reddit.com/r/inmo/')
+    const got = await h.rb.read('https://www.reddit.com/r/ivra/')
     expect(got).toMatchObject({ ok: false, reason: 'no_browser' })
     expect(h.rb.status().state).toBe('no_browser')
   })

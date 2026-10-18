@@ -19,7 +19,7 @@ import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
 const T0 = '2026-10-05T00:00:00.000Z'
 const SECRETS_KEY = 'c'.repeat(64)
-const CLOUD_EMAIL = 'boss@inmoxr.com'
+const CLOUD_EMAIL = 'boss@ivraxr.com'
 
 function seeded(seed = 23): () => number {
   let a = seed >>> 0
@@ -70,7 +70,7 @@ describe('WP233 alignOwnerEmail：规则', () => {
     expect(events[0]?.payload).toEqual({
       person_id: owner.id,
       from_domain: 'localhost',
-      to_domain: 'inmoxr.com',
+      to_domain: 'ivraxr.com',
       reason: 'cloud_account_linked',
     })
     expect(JSON.stringify(events)).not.toContain('boss@')
@@ -225,7 +225,7 @@ describe('WP233 真装配线：关联云账号之后', () => {
     const events = await ownerEvents(ctx)
     expect(events).toHaveLength(1)
     expect(events[0]?.payload).toMatchObject({
-      to_domain: 'inmoxr.com',
+      to_domain: 'ivraxr.com',
       reason: 'cloud_account_linked',
     })
     expect(JSON.stringify(events)).not.toContain('boss@')

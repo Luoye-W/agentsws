@@ -29,6 +29,7 @@ import {
   Eye,
   FileCode,
   FileText,
+  Handshake,
   Info,
   LoaderCircle,
   Plug,
@@ -43,6 +44,8 @@ import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
+import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
+import { ServiceOfferLine } from '@/components/workshop-services/service-offer-line'
 import { useApp } from '@/lib/app-context'
 import {
   bubbleIsLong,
@@ -473,6 +476,10 @@ export function AiEntry({
             </button>
           ) : null}
         </div>
+      )}
+      {/* WP390（docs/105 §4）：推荐卡——挂在这段话末尾的一行（不是审批卡、不进卡片队列） */}
+      {item.event?.service_offer === undefined ? null : (
+        <ServiceOfferLine offer={item.event.service_offer} matterId={item.event.matter_id} />
       )}
       {onResume === undefined ? null : (
         <Button
@@ -999,6 +1006,43 @@ export function InlineCard({
       </AiShell>
     )
   }
+  // WP390：工坊服务卡——价目单 / 需求单 / 下单 / 验收 / 联系方式就在对话里点（主按钮在卡身里）
+  if (isServiceCard(card))
+    return (
+      <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
+        <div
+          className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-brand/45 bg-ws-card shadow-ws"
+          data-testid="matter-service-card"
+          data-card={card.id}
+        >
+          <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+            <Handshake aria-hidden className="size-3.5" />
+            {t('svc.card.head')}
+          </div>
+          <div className="px-3.5 pt-2 pb-3">
+            <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
+              {card.title}
+            </p>
+            <ServiceCardBody card={card} />
+          </div>
+          {card.available_actions.includes('reject') ? (
+            <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="matter-card-reject"
+                disabled={deciding}
+                onClick={() => {
+                  onDecide(card, 'reject')
+                }}
+              >
+                {deckActionLabel(card, 'reject', t)}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </AiShell>
+    )
   // WP324（决策 690）：连接卡 / 配置卡——就在对话里连 / 填（同一张卡的投影），补完原任务自动接着做
   if (isSetupCard(card))
     return (

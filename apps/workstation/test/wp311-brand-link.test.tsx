@@ -47,7 +47,7 @@ function Probe({ current }: { current: string }): ReactNode {
     <div>
       <span data-testid="where">{`${loc.pathname}${loc.search}`}</span>
       {switching ? <span data-testid="switching" /> : <span data-testid="page" />}
-      <BrandLinkNote brand="Rollout" />
+      <BrandLinkNote brand="Rovella" />
     </div>
   )
 }
@@ -112,7 +112,7 @@ describe('WP311 打开带品牌的链接', () => {
     renderWithProviders(<Probe current="ws_a" />, '/positions/web-ops?brand=ws_zzz')
     const note = await screen.findByTestId('brand-link-note')
     expect(note.getAttribute('data-reason')).toBe('missing')
-    expect(note.textContent).toContain('「Rollout」')
+    expect(note.textContent).toContain('「Rovella」')
     await waitFor(() => {
       expect(screen.getByTestId('where').textContent).toBe('/')
     })

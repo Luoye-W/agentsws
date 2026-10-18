@@ -21,8 +21,8 @@ import { createSecretStore } from '../src/secret-store.js'
 import { type ShopifyCloudStandIn, shopifyCloudStandIn } from '../src/shopify-cloud-stand-in.js'
 import { createShopifyConnect, SHOPIFY_CONNECT_SCOPE_MISSING } from '../src/shopify-connect.js'
 
-const INMO = 'ws_inmo' as WorkspaceId
-const ROLLOUT = 'ws_rollout' as WorkspaceId
+const IVRA = 'ws_ivra' as WorkspaceId
+const ROVELLA = 'ws_rovella' as WorkspaceId
 const clock: Clock = { now: () => new Date().toISOString() }
 const KEY = { AGENTSWS_SECRETS_KEY: 'e'.repeat(64) }
 
@@ -83,8 +83,8 @@ afterAll(async () => {
 beforeEach(() => {
   fake = shopifyCloudStandIn({ autoConnectAfterMs: -1 })
   tokens = {
-    wst_old_inmo: { workspace: INMO, scopes: ['ai', 'wallet:read'] },
-    wst_old_rollout: { workspace: ROLLOUT, scopes: ['ai', 'wallet:read'] },
+    wst_old_ivra: { workspace: IVRA, scopes: ['ai', 'wallet:read'] },
+    wst_old_rovella: { workspace: ROVELLA, scopes: ['ai', 'wallet:read'] },
   }
   upgradeMode = 'ok'
   hits.length = 0
@@ -102,8 +102,8 @@ function rig() {
     return v
   }
   for (const [ws, token] of [
-    [INMO, 'wst_old_inmo'],
-    [ROLLOUT, 'wst_old_rollout'],
+    [IVRA, 'wst_old_ivra'],
+    [ROVELLA, 'wst_old_rovella'],
   ] as const)
     vaultOf(ws).put(CLOUD_TOKEN_SECRET_ID, {
       token,
@@ -115,12 +115,12 @@ function rig() {
       linked_at: '2026-09-01T00:00:00.000Z',
     })
   const account = createCloudAccount({
-    secrets: vaultOf(ROLLOUT),
+    secrets: vaultOf(ROVELLA),
     clock,
     env: { AGENTSWS_CLOUD_BASE_URL: base },
     appendEvent: () => {},
-    workspace_id: () => ROLLOUT,
-    brands: () => [ROLLOUT, INMO],
+    workspace_id: () => ROVELLA,
+    brands: () => [ROVELLA, IVRA],
     secretsFor: vaultOf,
     localBaseUrl: () => undefined,
   })
@@ -128,12 +128,12 @@ function rig() {
   const auto = createScopeAutoUpgrade({
     upgrade: (ws) => account.upgradeScopes(ws),
     missingOf: (ws) => account.missingScopesOf(ws),
-    brands: () => [ROLLOUT, INMO],
+    brands: () => [ROVELLA, IVRA],
     nowMs: () => Date.now(),
     onResult: (ws, r) => results.push({ ws, ok: r.ok, ...(r.reason === undefined ? {} : r) }),
   })
   const clouds = new Map(
-    [ROLLOUT, INMO].map((ws) => [
+    [ROVELLA, IVRA].map((ws) => [
       ws,
       createCloud({
         clock,
@@ -147,8 +147,8 @@ function rig() {
     clock,
     cloudOf: async (ws) => clouds.get(ws),
     emailOf: () => 'owner@example.com',
-    shopHints: () => [{ shop: 'rollout-demo.myshopify.com', source: 'profile' }],
-    startupBrand: ROLLOUT,
+    shopHints: () => [{ shop: 'rovella-demo.myshopify.com', source: 'profile' }],
+    startupBrand: ROVELLA,
     upgrade: (ws) => account.upgradeScopes(ws),
     autoUpgrade: (ws) => auto.ensure(ws),
     offlineRetryMs: 0,
@@ -161,20 +161,20 @@ const actor = (ws: WorkspaceId) => ({ workspace_id: ws, person_id: 'p_owner' })
 describe('WP272 缺 store：后台自动补签，卡上无感', () => {
   it('打开卡：自动补签 → 卡上没有「授权要更新」，连接按钮直接可用；同公司另一品牌一起补上', async () => {
     const t = rig()
-    const view = await t.port.view(actor(ROLLOUT))
+    const view = await t.port.view(actor(ROVELLA))
     expect(view.blocked).toBeUndefined()
-    expect(view.suggested_shop).toBe('rollout-demo.myshopify.com')
+    expect(view.suggested_shop).toBe('rovella-demo.myshopify.com')
     // 补签只打了一次（同公司另一品牌顺手补），令牌没换
     expect(hits.filter((p) => p.endsWith('/upgrade'))).toHaveLength(2)
-    expect(t.vaultOf(ROLLOUT).get(CLOUD_TOKEN_SECRET_ID)?.token).toBe('wst_old_rollout')
-    expect(t.account.missingScopesOf(ROLLOUT)).toEqual([])
-    expect(t.account.missingScopesOf(INMO)).toEqual([])
+    expect(t.vaultOf(ROVELLA).get(CLOUD_TOKEN_SECRET_ID)?.token).toBe('wst_old_rovella')
+    expect(t.account.missingScopesOf(ROVELLA)).toEqual([])
+    expect(t.account.missingScopesOf(IVRA)).toEqual([])
     // 连接按钮：直接起授权，不用任何人点「更新授权」
-    const started = await t.port.start(actor(ROLLOUT), {})
+    const started = await t.port.start(actor(ROVELLA), {})
     expect(started.authorize_url).toMatch(/^https:\/\//)
     // 另一品牌打开卡也不再补签
     hits.length = 0
-    expect((await t.port.view(actor(INMO))).blocked).toBeUndefined()
+    expect((await t.port.view(actor(IVRA))).blocked).toBeUndefined()
     expect(hits.some((p) => p.endsWith('/upgrade'))).toBe(false)
   })
 
@@ -182,21 +182,21 @@ describe('WP272 缺 store：后台自动补签，卡上无感', () => {
     const t = rig()
     const cloud = createCloud({
       clock,
-      secrets: t.vaultOf(ROLLOUT),
+      secrets: t.vaultOf(ROVELLA),
       env: { AGENTSWS_CLOUD_BASE_URL: base },
-      scopeUpgrade: () => t.auto.ensure(ROLLOUT),
+      scopeUpgrade: () => t.auto.ensure(ROVELLA),
     })
     const out = (await cloud.call('/v1/shopify/connections')) as KolCloudCall<unknown>
     expect(out.ok).toBe(true)
-    expect(t.results).toEqual([{ ws: ROLLOUT, ok: true }])
+    expect(t.results).toEqual([{ ws: ROVELLA, ok: true }])
   })
 
   it('启动时扫一遍：本机记着缺动作集的品牌都补上（不等谁撞上）', async () => {
     const t = rig()
-    expect(t.account.missingScopesOf(ROLLOUT)).toContain('store')
+    expect(t.account.missingScopesOf(ROVELLA)).toContain('store')
     await t.auto.sweep()
-    expect(t.account.missingScopesOf(ROLLOUT)).toEqual([])
-    expect(t.account.missingScopesOf(INMO)).toEqual([])
+    expect(t.account.missingScopesOf(ROVELLA)).toEqual([])
+    expect(t.account.missingScopesOf(IVRA)).toEqual([])
     // 第一个品牌补的时候顺手补了第二个，扫到第二个时已经不缺，不再打
     expect(hits.filter((p) => p.endsWith('/upgrade'))).toHaveLength(2)
   })
@@ -204,12 +204,12 @@ describe('WP272 缺 store：后台自动补签，卡上无感', () => {
   it('并发的几跳只补一次', async () => {
     const t = rig()
     const all = await Promise.all([
-      t.auto.ensure(ROLLOUT),
-      t.auto.ensure(ROLLOUT),
-      t.auto.ensure(ROLLOUT),
+      t.auto.ensure(ROVELLA),
+      t.auto.ensure(ROVELLA),
+      t.auto.ensure(ROVELLA),
     ])
     expect(all).toEqual([true, true, true])
-    expect(t.results.filter((r) => r.ws === ROLLOUT)).toHaveLength(1)
+    expect(t.results.filter((r) => r.ws === ROVELLA)).toHaveLength(1)
   })
 })
 
@@ -217,25 +217,25 @@ describe('WP272 补签确实不成：才引导重新登录（去设置 → 账�
   it('老云没这一条（404）：卡上 scope_missing，那句话说「工坊账号需要重新登录」，冷却里不再敲云', async () => {
     upgradeMode = 'gone'
     const t = rig()
-    const view = await t.port.view(actor(ROLLOUT))
+    const view = await t.port.view(actor(ROVELLA))
     expect(view.blocked?.reason).toBe('scope_missing')
     expect(view.blocked?.message).toBe(SHOPIFY_CONNECT_SCOPE_MISSING)
     expect(view.blocked?.message).toContain('设置 → 账号')
     expect(view.blocked?.message).not.toContain('更新授权')
     hits.length = 0
-    await t.port.view(actor(ROLLOUT))
+    await t.port.view(actor(ROVELLA))
     expect(hits.some((p) => p.endsWith('/upgrade'))).toBe(false)
     // 重新登录（新令牌）之后冷却作废
     t.auto.reset()
     upgradeMode = 'ok'
-    expect((await t.port.view(actor(ROLLOUT))).blocked).toBeUndefined()
+    expect((await t.port.view(actor(ROVELLA))).blocked).toBeUndefined()
   })
 
   it('令牌被撤（补签 401）：同样引导重新登录', async () => {
     upgradeMode = 'revoked'
     const t = rig()
-    expect((await t.port.view(actor(ROLLOUT))).blocked?.reason).toBe('scope_missing')
-    expect(t.results[0]).toMatchObject({ ws: ROLLOUT, ok: false, reason: 'upgrade_unavailable' })
+    expect((await t.port.view(actor(ROVELLA))).blocked?.reason).toBe('scope_missing')
+    expect(t.results[0]).toMatchObject({ ws: ROVELLA, ok: false, reason: 'upgrade_unavailable' })
   })
 })
 
@@ -256,7 +256,7 @@ describe('WP272 离线：先重试一次再判，问号里带原因码', () => {
           }) as never,
         }),
         shopHints: () => [],
-        startupBrand: ROLLOUT,
+        startupBrand: ROVELLA,
         offlineRetryMs: 0,
       }),
     }
@@ -267,13 +267,13 @@ describe('WP272 离线：先重试一次再判，问号里带原因码', () => {
       { ok: false, status: 0, cause_code: 'ECONNRESET' },
       { ok: true, status: 200, data: { connections: [] } },
     ])
-    expect((await p.port.view(actor(ROLLOUT))).blocked).toBeUndefined()
+    expect((await p.port.view(actor(ROVELLA))).blocked).toBeUndefined()
     expect(p.calls()).toBe(2)
   })
 
   it('两下都没打通：offline + 原因码（ENOTFOUND）', async () => {
     const p = portOf([{ ok: false, status: 0, cause_code: 'ENOTFOUND' }])
-    const view = await p.port.view(actor(ROLLOUT))
+    const view = await p.port.view(actor(ROVELLA))
     expect(view.blocked).toMatchObject({ reason: 'offline', cause_code: 'ENOTFOUND' })
     expect(p.calls()).toBe(2)
   })

@@ -41,8 +41,8 @@ const who = (account?: string): PageRead => ({
 
 async function boot(readAs: string) {
   dir = mkdtempSync(join(tmpdir(), 'wp249-block-'))
-  const site = createFakeOldReddit('https://old.reddit.com', 'inmoxr')
-  site.username = 'INMO_Official'
+  const site = createFakeOldReddit('https://old.reddit.com', 'ivraxr')
+  site.username = 'IVRA_Official'
   const session: BrowserSession = {
     readPage: vi.fn(async (url: string) => (url === REDDIT_WHOAMI_URL ? who(readAs) : who())),
     close: vi.fn(async () => undefined),
@@ -92,8 +92,8 @@ async function boot(readAs: string) {
 }
 
 describe('决策 108：官方号进读号拦截名单', () => {
-  it('官方号浏览器里登录过 u/INMO_Official → 读号登的是它就拦下', async () => {
-    const h = await boot('inmo_official')
+  it('官方号浏览器里登录过 u/IVRA_Official → 读号登的是它就拦下', async () => {
+    const h = await boot('ivra_official')
     // 还没在官方号浏览器里登录过：读号认不出它是官方号，放行
     const before = await h.call<RedditReadAccountStatus>(
       'POST',
@@ -106,12 +106,12 @@ describe('决策 108：官方号进读号拦截名单', () => {
       '/v1/social/reddit-browser/check',
       h.social,
     )
-    expect(official).toMatchObject({ state: 'logged_in', username: 'INMO_Official' })
+    expect(official).toMatchObject({ state: 'logged_in', username: 'IVRA_Official' })
     const after = await h.call<RedditReadAccountStatus>(
       'POST',
       '/v1/settings/reddit-read-account/check',
     )
-    expect(after).toMatchObject({ state: 'refused', username: 'inmo_official' })
+    expect(after).toMatchObject({ state: 'refused', username: 'ivra_official' })
     // 官方号后来登出了，名单里照样记着
     h.site.loggedIn = false
     await h.call('POST', '/v1/social/reddit-browser/check', h.social)

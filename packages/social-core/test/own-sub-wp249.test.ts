@@ -52,7 +52,7 @@ function fake(
     now: () => NOW,
     credential: async (_c: SocialChannel) => ({
       access_token: 'REDDIT-SECRET',
-      user_agent: 'macos:agentsws:1.0 (by /u/inmo)',
+      user_agent: 'macos:agentsws:1.0 (by /u/ivra)',
     }),
     fetch: async (url, init) => {
       calls.push({
@@ -74,12 +74,12 @@ const LISTING = {
         kind: 't3',
         data: {
           name: 't3_p1',
-          title: 'Cheap INMO glasses, DM me on telegram',
+          title: 'Cheap IVRA glasses, DM me on telegram',
           selftext: 'wholesale price https://bit.ly/x',
           author: 'spammer1',
-          permalink: '/r/inmoxr/comments/p1/cheap/',
+          permalink: '/r/ivraxr/comments/p1/cheap/',
           created_utc: 1_791_000_000,
-          subreddit: 'inmoxr',
+          subreddit: 'ivraxr',
           num_reports: 2,
           user_reports: [['Spam', 2, false, false]],
           mod_reports: [],
@@ -92,8 +92,8 @@ const LISTING = {
           body: 'This is off topic I think',
           link_title: 'Air3 battery',
           author: 'alice',
-          permalink: '/r/inmoxr/comments/p2/air3/c1/',
-          subreddit: 'inmoxr',
+          permalink: '/r/ivraxr/comments/p2/air3/c1/',
+          subreddit: 'ivraxr',
           num_reports: 1,
           user_reports: [],
           mod_reports: [],
@@ -106,8 +106,8 @@ const LISTING = {
           title: 'Held by automod',
           selftext: 'Just my review',
           author: 'bob',
-          permalink: '/r/inmoxr/comments/p3/held/',
-          subreddit: 'inmoxr',
+          permalink: '/r/ivraxr/comments/p3/held/',
+          subreddit: 'ivraxr',
           num_reports: 0,
         },
       },
@@ -123,7 +123,7 @@ describe('版务 listing 解析', () => {
       thing: 'post',
       author: 'spammer1',
       report_reasons: ['Spam'],
-      url: 'https://www.reddit.com/r/inmoxr/comments/p1/cheap/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/p1/cheap/',
       source: 'modqueue',
     })
     expect(items[0]?.created_at).toBe(new Date(1_791_000_000 * 1000).toISOString())
@@ -140,18 +140,18 @@ describe('OAuth 接口：版务读口与动作', () => {
       url.includes('/about/rules') ? { rules: [{ short_name: 'No spam' }] } : LISTING,
     )
     const a = createRedditAdapter(t)
-    const q = await a.modQueue?.({ account_external_id: 'r/inmoxr', source: 'modqueue', limit: 20 })
+    const q = await a.modQueue?.({ account_external_id: 'r/ivraxr', source: 'modqueue', limit: 20 })
     expect(q?.ok).toBe(true)
     expect(t.calls[0]?.url).toBe(
-      'https://oauth.reddit.com/r/inmoxr/about/modqueue?limit=20&raw_json=1',
+      'https://oauth.reddit.com/r/ivraxr/about/modqueue?limit=20&raw_json=1',
     )
     expect(t.calls[0]?.headers.authorization).toBe('Bearer REDDIT-SECRET')
     expect(t.calls[0]?.headers['user-agent']).toContain('agentsws')
-    await a.modQueue?.({ account_external_id: 'inmoxr', source: 'unmoderated' })
-    expect(t.calls[1]?.url).toContain('/r/inmoxr/about/unmoderated?limit=50')
-    const rules = await a.communityRules?.('inmoxr')
+    await a.modQueue?.({ account_external_id: 'ivraxr', source: 'unmoderated' })
+    expect(t.calls[1]?.url).toContain('/r/ivraxr/about/unmoderated?limit=50')
+    const rules = await a.communityRules?.('ivraxr')
     expect(rules).toMatchObject({ ok: true, data: ['No spam'] })
-    const join = await a.modQueue?.({ account_external_id: 'inmoxr', source: 'join_requests' })
+    const join = await a.modQueue?.({ account_external_id: 'ivraxr', source: 'join_requests' })
     expect(join).toMatchObject({ ok: false, reason: 'not_implemented' })
     expect(t.calls).toHaveLength(3)
   })
@@ -160,10 +160,10 @@ describe('OAuth 接口：版务读口与动作', () => {
     const t = fake(() => LISTING)
     const a = createRedditAdapter(t)
     for (let i = 0; i < REDDIT_MAX_CALLS_PER_MINUTE; i += 1)
-      expect((await a.modQueue?.({ account_external_id: 'inmoxr', source: 'modqueue' }))?.ok).toBe(
+      expect((await a.modQueue?.({ account_external_id: 'ivraxr', source: 'modqueue' }))?.ok).toBe(
         true,
       )
-    const over = await a.modQueue?.({ account_external_id: 'inmoxr', source: 'modqueue' })
+    const over = await a.modQueue?.({ account_external_id: 'ivraxr', source: 'modqueue' })
     expect(over).toMatchObject({ ok: false, reason: 'rate_limited' })
     expect(t.calls).toHaveLength(REDDIT_MAX_CALLS_PER_MINUTE)
   })
@@ -172,14 +172,14 @@ describe('OAuth 接口：版务读口与动作', () => {
     const t = fake(() => ({ json: { errors: [] } }))
     const a = createRedditAdapter(t)
     await a.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 't1_c1',
       action: 'approve',
     })
     expect(t.calls[0]?.url).toBe('https://oauth.reddit.com/api/approve')
     expect(t.calls[0]?.body).toContain('id=t1_c1')
     const res = await a.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 'p1',
       action: 'delete_post',
       removal_message: 'Removed: No spam',
@@ -195,7 +195,7 @@ describe('OAuth 接口：版务读口与动作', () => {
       type: 'public',
     })
     await a.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 't1_c1',
       action: 'delete_post',
       removal_message: 'x',
@@ -203,7 +203,7 @@ describe('OAuth 接口：版务读口与动作', () => {
     expect(t.calls[4]?.url).toContain('removal_comment_message')
     // 不带理由就只移除，不留话
     await a.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 't3_p9',
       action: 'delete_post',
     })
@@ -215,7 +215,7 @@ describe('建议：批准 / 移除 / 不用管 + 引用版规', () => {
   const RULES = ['No spam or self-promotion', 'Be civil', 'Stay on topic']
   const base: ModQueueEntry = {
     id: 't3_x',
-    subreddit: 'inmoxr',
+    subreddit: 'ivraxr',
     thing: 'post',
     title: 'My review',
     excerpt: 'Love the display.',
@@ -255,16 +255,16 @@ describe('建议：批准 / 移除 / 不用管 + 引用版规', () => {
 
 describe('浏览器通道：步骤与驱动层白名单', () => {
   const writes: RedditBrowserWrite[] = [
-    { kind: 'approve', sub: 'inmoxr', fullname: 't3_p1', queue: 'modqueue' },
+    { kind: 'approve', sub: 'ivraxr', fullname: 't3_p1', queue: 'modqueue' },
     {
       kind: 'remove',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       fullname: 't3_p1',
       queue: 'unmoderated',
       removal_message: 'Rule 1',
     },
-    { kind: 'ban', sub: 'inmoxr', username: 'spammer1', days: 7, note: 'spam' },
-    { kind: 'submit', sub: 'inmoxr', title: 'Hello', text: 'Body', sticky: true },
+    { kind: 'ban', sub: 'ivraxr', username: 'spammer1', days: 7, note: 'spam' },
+    { kind: 'submit', sub: 'ivraxr', title: 'Hello', text: 'Body', sticky: true },
     { kind: 'reply', post_fullname: 't3_p1', text: 'Thanks!' },
   ]
 
@@ -311,13 +311,13 @@ describe('浏览器通道：步骤与驱动层白名单', () => {
     expect(postAllowed(plan, 'POST', `${ORIGIN}/api/approve`)).toBe(true)
     expect(postAllowed(plan, 'POST', `${ORIGIN}/api/remove`)).toBe(false)
     expect(postAllowed(plan, 'POST', `${ORIGIN}/api/vote`)).toBe(false)
-    expect(postAllowed(plan, 'GET', `${ORIGIN}/r/inmoxr/`)).toBe(true)
+    expect(postAllowed(plan, 'GET', `${ORIGIN}/r/ivraxr/`)).toBe(true)
     const remove = planRedditWrite(ORIGIN, writes[1] as RedditBrowserWrite)
     expect(remove.allowed_posts).toEqual(['/api/remove', '/api/comment'])
     // 评论的移除这一版不留话（楼中楼不做）→ 只放 /api/remove
     const removeComment = planRedditWrite(ORIGIN, {
       kind: 'remove',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       fullname: 't1_c1',
       queue: 'modqueue',
       removal_message: 'x',
@@ -330,11 +330,11 @@ describe('浏览器通道：步骤与驱动层白名单', () => {
   })
 
   it('发帖之后落到的帖子页认得出新帖 id，别的版不认', () => {
-    expect(landedPostFullname(`${ORIGIN}/r/inmoxr/comments/abc12/hello/`, 'r/inmoxr')).toBe(
+    expect(landedPostFullname(`${ORIGIN}/r/ivraxr/comments/abc12/hello/`, 'r/ivraxr')).toBe(
       't3_abc12',
     )
-    expect(landedPostFullname(`${ORIGIN}/r/other/comments/abc12/hello/`, 'inmoxr')).toBeUndefined()
-    expect(landedPostFullname(`${ORIGIN}/r/inmoxr/submit`, 'inmoxr')).toBeUndefined()
+    expect(landedPostFullname(`${ORIGIN}/r/other/comments/abc12/hello/`, 'ivraxr')).toBeUndefined()
+    expect(landedPostFullname(`${ORIGIN}/r/ivraxr/submit`, 'ivraxr')).toBeUndefined()
   })
 })
 
@@ -368,7 +368,7 @@ describe('接口优先、浏览器兜底', () => {
       transport: t,
     })
     await h.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 't3_p1',
       action: 'approve',
     })
@@ -385,27 +385,27 @@ describe('接口优先、浏览器兜底', () => {
       browser: b,
       transport: t,
     })
-    const q = await h.modQueue?.({ account_external_id: 'r/inmoxr', source: 'unmoderated' })
+    const q = await h.modQueue?.({ account_external_id: 'r/ivraxr', source: 'unmoderated' })
     expect(q?.ok && q.data[0]?.source).toBe('unmoderated')
     await h.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 't3_p1',
       action: 'delete_post',
       queue: 'unmoderated',
       removal_message: 'No spam',
     })
-    await h.broadcast?.({ account_external_id: 'inmoxr', body: 'Weekend AMA\nJoin us' })
+    await h.broadcast?.({ account_external_id: 'ivraxr', body: 'Weekend AMA\nJoin us' })
     const r = await h.reply?.({ parent_external_id: 'p1', text: 'Thanks' })
     expect(r).toMatchObject({ ok: true, data: { external_id: 't3_new' } })
     expect(b.runs).toEqual([
       {
         kind: 'remove',
-        sub: 'inmoxr',
+        sub: 'ivraxr',
         fullname: 't3_p1',
         queue: 'unmoderated',
         removal_message: 'No spam',
       },
-      { kind: 'submit', sub: 'inmoxr', title: 'Weekend AMA', text: 'Join us', sticky: true },
+      { kind: 'submit', sub: 'ivraxr', title: 'Weekend AMA', text: 'Join us', sticky: true },
       { kind: 'reply', post_fullname: 't3_p1', text: 'Thanks' },
     ])
     expect(t.calls).toHaveLength(0)
@@ -420,14 +420,14 @@ describe('接口优先、浏览器兜底', () => {
       transport: t,
     })
     const ban = await h.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 'spammer1',
       action: 'ban',
     })
     expect(ban).toMatchObject({ ok: false, reason: 'upstream_error' })
     expect(ban?.ok === false && ban.message).toContain('登录官方号')
     const mute = await h.moderate?.({
-      account_external_id: 'inmoxr',
+      account_external_id: 'ivraxr',
       target_external_id: 'x',
       action: 'mute',
     })
@@ -439,7 +439,7 @@ describe('接口优先、浏览器兜底', () => {
       transport: t,
     })
     expect(
-      await off.modQueue?.({ account_external_id: 'inmoxr', source: 'modqueue' }),
+      await off.modQueue?.({ account_external_id: 'ivraxr', source: 'modqueue' }),
     ).toMatchObject({
       ok: false,
       reason: 'not_connected',

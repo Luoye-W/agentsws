@@ -1,0 +1,260 @@
+# WP395（docs/106 §13，Luoye 10-18 定案）：**亚马逊店铺运营** = Amazon 运营岗位的主职责。
+#
+# 一条职责、七块（docs/106 §13.2 A1）。中小公司里这七样是**同一个 Amazon 运营**在干，
+# 所以不拆成七条（Luoye 09-26「按人切」）；七块只是意图词分组、快捷问题分组与面板分块：
+#
+# | # | 块 | 一期（不用授权） |
+# |---|---|---|
+# | ① | 账户健康与合规（品牌保护、侵权投诉、跟卖、类目审批、给 Amazon 开工单） | 没有数据来源，面板照实说「连上 Amazon 店铺后才有」 |
+# | ② | Listing 与关键词（竞品对标在这里） | 读前台、出建议（竞品 WP394、体检 WP396、词库 WP398 往这块里填） |
+# | ③ | 库存、补货与入库 | 同 ① |
+# | ④ | 定价与促销 | 只能看前台价，不改价 |
+# | ⑤ | 评价、退货与买家反馈 | 只能看前台评分 |
+# | ⑥ | 利润与对账 | 单品利润用 `unit-economics` 公式算（数在对话里问），不估 |
+# | ⑦ | 新品上市 | 只出方案 |
+#
+# 旧 id `amz.market-intel`（docs/104 C2 定的「竞品与关键词」）读进来就是这一条——
+# 加载器的 `ROLE_ID_ALIASES`（docs/106 A1：它并成了 ② 那一块）。
+#
+# 一期**一个写动作都没有**，只有一条「向设计岗下需求单」。改价、改 Listing、补货、促销、
+# 请求评价都在二期按 docs/106 A14 加（改价不许写成「20% 以内自动」）。
+# 「亚马逊广告」是另一条职责（A4，二期另开单建），不在这里。
+id: amz.store
+version: 1.0.0
+domain: amz
+name: { zh: 亚马逊店铺运营, en: Amazon Store Operations }
+description: 账户健康与合规、Listing 与关键词、库存补货与入库、定价与促销、评价退货与买家反馈、利润与对账、新品上市
+
+scopes:
+  # 一期只读。订单只看汇总：`internal` 封顶，买家姓名地址这类个人信息在更高一档，读不到。
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  # WP396：体检卡上「向设计岗下需求单」那个按钮走 `/v1/design/requests`（下面 `request_design` 那条动作），
+  # 要能提一张 `design_request`；只提单、不读设计岗的 brief（那一域只有设计岗有）
+  - { domain: design_request, ops: [read, stage], range: assigned, max_sensitivity: internal }
+
+connectors:
+  # 连接目录里的 `amazon_sp`（现在是 planned）。`required: false`：没连照样能读前台、
+  # 出建议；面板上要它的那几块照实说「连上 Amazon 店铺后才有」。官方卖家 MCP 那张卡 WP399 加。
+  - {
+      kind: amazon_sp,
+      required: false,
+      grants: [listings.read, inventory.read, reports.read],
+      ownership: workspace,
+    }
+
+actions:
+  # ── 向设计岗下需求单（照 `dtc/store.yml` 的 `request_design`）──────────────
+  # Amazon 主图、A+ 要换的时候开一件事给设计岗（落到 `design.amazon` 由设计岗自己判）。
+  # L3 自动：不出图、不花钱、不对外发一个字，下错了设计岗那边关掉就是了。
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
+
+automation:
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
+
+# 七块各一组意图词（docs/106 §13.2 A1）。工具都是查本品牌资料（`search_policies`）：
+# 一期没有 Amazon 店铺的数据口，命中了先翻资料里记下的 Amazon 规矩与自家数，再开口。
+grounding:
+  - {
+      name: account_health,
+      intent_terms: [账户健康, 账号健康, 绩效通知, 侵权, 跟卖, 品牌备案, 类目审批, 开工单, account health],
+      cue_terms: [怎么办, 有没有, 风险, 看看, 检查, 申诉, check],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: listing_keywords,
+      intent_terms: [Listing, ASIN, 五点, 标题, 关键词, 埋词, A+, BSR, 竞品, 对标, 被压制, 买不了, 搜不到],
+      cue_terms: [看看, 问题, 优化, 盯, 比, 改, 写, check],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: inventory_inbound,
+      intent_terms: [FBA, 补货, 断货, 库存, 入库, 货件, 头程, 库龄, inventory, restock],
+      cue_terms: [该, 多少, 几天, 够不够, 什么时候, 算, when],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: pricing_promo,
+      intent_terms: [定价, 改价, Coupon, 优惠券, Deal, 秒杀, 会员日, Prime Day, 黑五, 购物车, Buy Box],
+      cue_terms: [多少, 怎么定, 要不要, 报, 做, 方案],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: reviews_returns,
+      intent_terms: [差评, 评分, 星级, 退货率, 退货原因, 卖家反馈, 请求评价, Vine, review],
+      cue_terms: [为什么, 怎么, 看看, 分析, 多少, why],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: profit_settlement,
+      intent_terms: [利润, 毛利, 佣金, 配送费, 仓储费, 对账, 结算, 赔偿, 报销, profit],
+      cue_terms: [多少, 算, 赚, 亏, 对不上, 少了, how much],
+      tool: search_policies,
+      prefetch: false,
+    }
+  - {
+      name: new_launch,
+      intent_terms: [新品, 上新, 上市, 新 Listing, 推新, launch],
+      cue_terms: [怎么, 计划, 准备, 节奏, 方案, plan],
+      tool: search_policies,
+      prefetch: false,
+    }
+
+# 单品利润的算式（售价 − 佣金 − FBA 配送费 − 头程 − 广告 …）
+# WP397（docs/106 §13，A13）：全部按需加载——索引里只有名字和一句话，用到哪本才读哪本。
+#   amazon-sp-*：Amazon 官方卖家技能原样收录（工具来自官方卖家连接，连上之前照实说做不了）
+#   amazon-*：SeaLeap（MIT）挑选改写的一批，加上我们自己写的库存公式与岗位节奏 / 红线
+# 广告类（ACOS、广告结构、SB / SD / 视频……）一本没挂，留给二期「亚马逊广告」职责。
+skills:
+  - { name: unit-economics, tier: open, load: on_demand }
+  - { name: amazon-ops-playbook, tier: open, load: on_demand }
+  - { name: amazon-inventory, tier: open, load: on_demand }
+  # ① 账户健康与合规
+  - { name: amazon-sp-support-case-helper, tier: open, load: on_demand }
+  - { name: amazon-sp-invite-secondary-users, tier: open, load: on_demand }
+  - { name: amazon-case-tracking, tier: open, load: on_demand }
+  - { name: amazon-eu-packaging, tier: open, load: on_demand }
+  - { name: amazon-connection-check, tier: open, load: on_demand }
+  # ② Listing 与关键词
+  - { name: amazon-sp-listing-troubleshooter, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-issues, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-buyability, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-searchability, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-compliance, tier: open, load: on_demand }
+  - { name: amazon-listing-optimizer, tier: open, load: on_demand }
+  - { name: amazon-localization, tier: open, load: on_demand }
+  - { name: amazon-sqp-recon, tier: open, load: on_demand }
+  # ③ 库存、补货与入库
+  - { name: amazon-sp-stockout-prevention, tier: open, load: on_demand }
+  - { name: amazon-sp-fba-inbound-management, tier: open, load: on_demand }
+  - { name: amazon-multichannel, tier: open, load: on_demand }
+  # ④ 定价与促销
+  - { name: amazon-peak-season, tier: open, load: on_demand }
+  - { name: amazon-brand-tools-promo, tier: open, load: on_demand }
+  # ⑥ 利润与对账
+  - { name: amazon-sp-finance-month-end-closer, tier: open, load: on_demand }
+  - { name: amazon-sp-seller-analytics, tier: open, load: on_demand }
+  - { name: amazon-fba-reimbursement, tier: open, load: on_demand }
+  - { name: amazon-data-kiosk-recon, tier: open, load: on_demand }
+  # ⑦ 新品上市与品牌
+  - { name: amazon-brand-prep-listing, tier: open, load: on_demand }
+  - { name: amazon-brand-stage, tier: open, load: on_demand }
+  - { name: amazon-ce-category, tier: open, load: on_demand }
+  - { name: amazon-global-expansion, tier: open, load: on_demand }
+  # 给开发者的（负责人一般用不上）
+  - { name: amazon-sp-sp-api-knowledge, tier: open, load: on_demand }
+
+# 岗位面板的四块（每日巡检 / 竞品动向 / Listing 体检 / 词库）由工作台按职责画，不走 home_blocks
+home_blocks: []
+notifications: []
+
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []
+
+# 快捷问题（五条，界面少字；每条职责 3–5 条是全仓规矩，WP394 的「竞品最近有什么动静」没再加，见 WP394 报告）。分组写在每条上面的注释里，对应上面那七块；
+# 利润（⑥）放在下面的示例任务里。
+quick_prompts:
+  # ② Listing 与关键词
+  - id: listing_check
+    label: { zh: "看看我的 Listing", en: "Check my listings" }
+    prompt: "看看我的 Listing 有什么问题：每条说清是哪条 Amazon 规矩，先说影响能不能买、能不能被搜到的"
+    kind: ask
+  # ② Listing 与关键词（竞品对标）
+  - id: watch_competitors
+    label: { zh: "盯 Amazon 竞品", en: "Watch Amazon competitors" }
+    prompt: "帮我盯 Amazon 上的竞品：先挑几款对标款，说说它们的价格、评分和排名"
+    kind: start_task
+  # ③ 库存、补货与入库
+  - id: restock_check
+    label: { zh: "该补货了吗", en: "Do I need to restock" }
+    prompt: "我该补货了吗？按最近的卖法算算还能撑几天，拿不到库存数就直接说"
+    kind: ask
+  # ① 账户健康与合规
+  - id: account_health
+    label: { zh: "账户健康怎么样", en: "Account health" }
+    prompt: "我的 Amazon 账户健康怎么样，有没有要马上处理的通知？拿不到就直接说"
+    kind: ask
+  # ② Listing 与关键词（出图走设计岗）
+  - id: request_images
+    label: { zh: "要一套主图", en: "Request new images" }
+    prompt: "给这款商品向设计岗下一张 Amazon 主图和 A+ 的需求单，写清楚要什么、为什么换"
+    kind: start_task
+
+task_examples:
+  - id: listing_review
+    title: { zh: "体检一条 Listing", en: "Review a listing" }
+    description: "想知道自家某条 Listing 哪里不合 Amazon 的规矩。"
+    expected_output: "一份问题清单：每条指出是哪条规矩、影响什么、建议怎么改；只出建议，不改店里任何东西。"
+  - id: competitor_compare
+    title: { zh: "和竞品比一比", en: "Compare with competitors" }
+    description: "想知道对标的几款竞品卖什么价、评分多少、排第几。"
+    expected_output: "一张对照表：竞品和自家对应款的价格、评分、评论数、排名，拿不到的格子写明拿不到。"
+  - id: profit_check
+    title: { zh: "算清一款赚不赚钱", en: "Is this product profitable" }
+    description: "想知道一款商品在 Amazon 上扣完各项费用还剩多少。"
+    expected_output: "一份按公式算出的单品利润：每项费用一行，哪个数是你给的、哪个是估的写清楚。"
+
+# 读前台、查资料。客服类不挂，这条要查竞品与规矩，挂
+web_tools: [web_search, web_fetch]
+
+# 浏览器只许开这几类站（docs/106 目标站点）：
+# - Amazon 各站前台（北美 / 欧洲 / 中东 / 亚太），读竞品与自家 Listing 的公开页；
+# - 卖家后台三个区域（与 `amz/support.yml` 一致）。
+# 不顺手多开（不开 *.amazon.com 通配，免得进 AWS、广告后台这类不相干的子域）。
+browser_scope:
+  - www.amazon.com
+  - www.amazon.ca
+  - www.amazon.com.mx
+  - www.amazon.com.br
+  - www.amazon.co.uk
+  - www.amazon.de
+  - www.amazon.fr
+  - www.amazon.it
+  - www.amazon.es
+  - www.amazon.nl
+  - www.amazon.se
+  - www.amazon.pl
+  - www.amazon.com.be
+  - www.amazon.com.tr
+  - www.amazon.ae
+  - www.amazon.sa
+  - www.amazon.eg
+  - www.amazon.in
+  - www.amazon.co.jp
+  - www.amazon.com.au
+  - www.amazon.sg
+  - sellercentral.amazon.com
+  - sellercentral-europe.amazon.com
+  - sellercentral-japan.amazon.com
+
+# ── 角色定位（69 §2 六段骨架）──────────────────────────────────────────────
+persona:
+  zh: |
+    你是谁：Amazon 运营岗位里管店铺本身的人。
+    你负责：账户健康与合规、Listing 与关键词（含竞品）、库存与入库、定价促销、评价退货、利润对账、新品上市。
+    你不负责：买家消息→客服；站内广告有 Amazon 广告职责时归你，没有时转投放；出图→向设计岗下需求单；独立站→网站运营。
+    怎么做：先看账户健康和断货；改 Listing、价格前先看销量和竞品价；补货、利润用公式算；数拿不到就说。
+    口气：像管店的人，说人话，先讲对账户和销量的影响。
+    必须出卡：现在不改店里任何东西，要改的写成建议、人去后台改。

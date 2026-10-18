@@ -26,6 +26,7 @@ import type {
   BrandCompetitor,
   BrandKeywords,
   BrandWatch,
+  BrandWatchAmazonItem,
   BrandWatchCompetitor,
   BrandWatchKeyword,
   Clock,
@@ -1614,6 +1615,24 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
   }
 
   const PLATFORM_OK = new Set<AiPlatform>(BRAND_WATCH_DEFAULT_PLATFORMS)
+  /** WP392：Amazon 商品清一下（站点大写、ASIN 大写去空、同站点同 ASIN 只留一条；C6 只设技术上限 100）。 */
+  const cleanAmazon = (items: readonly BrandWatchAmazonItem[]): BrandWatchAmazonItem[] => {
+    const seen = new Set<string>()
+    const out: BrandWatchAmazonItem[] = []
+    for (const it of items) {
+      const marketplace = it.marketplace.trim().toUpperCase()
+      const asin = it.asin.trim().toUpperCase()
+      if (marketplace === '' || asin === '' || seen.has(`${marketplace}|${asin}`)) continue
+      seen.add(`${marketplace}|${asin}`)
+      out.push({
+        marketplace,
+        asin,
+        ...(it.label === undefined || it.label.trim() === '' ? {} : { label: it.label.trim() }),
+        ...(it.vs_own === undefined || it.vs_own.trim() === '' ? {} : { vs_own: it.vs_own.trim() }),
+      })
+    }
+    return out.slice(0, 100)
+  }
   const cleanCompetitors = (cs: readonly BrandWatchCompetitor[]): BrandWatchCompetitor[] =>
     cs
       .filter((c) => c.name.trim() !== '')
@@ -1636,6 +1655,11 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
           )
           .filter((d) => d.includes('.'))
           .slice(0, 5),
+        // WP392（docs/104 C3）：竞品监控加的两格（独立站、Amazon 对标款）原样留着，只清一下空的
+        ...(c.store === undefined || c.store.url.trim() === ''
+          ? {}
+          : { store: { ...c.store, url: c.store.url.trim() } }),
+        ...(c.amazon === undefined ? {} : { amazon: cleanAmazon(c.amazon) }),
       }))
 
   /**
@@ -1679,6 +1703,12 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         }
       if (patch.competitors !== undefined)
         s = { ...s, competitors: cleanCompetitors(patch.competitors) }
+      // WP392（docs/104 C8）：自家的 Amazon 商品（竞品对标款比价用）
+      if (patch.brand_amazon !== undefined) {
+        const { amazon: _old, ...brand } = s.brand
+        const amazon = cleanAmazon(patch.brand_amazon)
+        s = { ...s, brand: amazon.length === 0 ? brand : { ...brand, amazon } }
+      }
       if (patch.keywords !== undefined)
         s = {
           ...s,

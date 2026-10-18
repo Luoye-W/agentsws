@@ -128,7 +128,7 @@ describe('createImagePlacer', () => {
       shop: async () => ({
         scopes: async () => scopes,
         admin: async () => ({
-          store: 'rollout-test.myshopify.com',
+          store: 'rovella-test.myshopify.com',
           query: async (op) =>
             resolveFakeShop(
               shop,
@@ -188,7 +188,7 @@ describe('createImagePlacer', () => {
     expect(saved?.shop_file).toMatchObject({
       filename: name,
       theme_ref: `shopify://shop_images/${name}`,
-      store: 'rollout-test.myshopify.com',
+      store: 'rovella-test.myshopify.com',
     })
     expect(saved?.shop_file?.url).toContain('cdn.shopify.com')
     expect(saved?.placed).toMatchObject({ ...HERO, theme_id: '77' })

@@ -13,10 +13,10 @@ import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import type { PlatformKitView, SiteThemeStoreChoice, SiteThemeView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
-const ROLLOUT = '6suegp-md.myshopify.com'
+const ROVELLA = '6demox-md.myshopify.com'
 const STORES: SiteThemeStoreChoice[] = [
-  { store: ROLLOUT, name: 'My Store', plan: 'basic', organization: 'Rollout' },
-  { store: 'inmo-dev.myshopify.com', name: 'INMO Dev', plan: 'Development' },
+  { store: ROVELLA, name: 'My Store', plan: 'basic', organization: 'Rovella' },
+  { store: 'ivra-dev.myshopify.com', name: 'IVRA Dev', plan: 'Development' },
 ]
 
 const api = {
@@ -98,14 +98,14 @@ describe('WP258 登录后自动找店', () => {
     const select = screen.getByTestId('site-theme-store-pick') as HTMLSelectElement
     expect([...select.options].map((o) => o.textContent)).toEqual([
       '选一家店',
-      'My Store · 6suegp-md.myshopify.com · basic',
-      'INMO Dev · inmo-dev.myshopify.com · Development',
+      'My Store · 6demox-md.myshopify.com · basic',
+      'IVRA Dev · ivra-dev.myshopify.com · Development',
     ])
     // 没有手填那一格（要点「都不是？手动填」才出）
     expect(screen.queryByTestId('site-theme-store-input')).toBeNull()
-    await userEvent.selectOptions(select, 'inmo-dev.myshopify.com')
+    await userEvent.selectOptions(select, 'ivra-dev.myshopify.com')
     await waitFor(() =>
-      expect(api.saves).toEqual([{ store: 'inmo-dev.myshopify.com', source: 'list' }]),
+      expect(api.saves).toEqual([{ store: 'ivra-dev.myshopify.com', source: 'list' }]),
     )
     const row = await screen.findByTestId('site-theme-store-row')
     expect(row.textContent).toContain('改哪家店')
@@ -114,9 +114,9 @@ describe('WP258 登录后自动找店', () => {
     expect(screen.getAllByTestId('site-theme-store-row')).toHaveLength(1)
     expect(screen.queryByTestId('site-theme-banner')).toBeNull()
     const sw = screen.getByTestId('site-theme-store-switch') as HTMLSelectElement
-    expect(sw.value).toBe('inmo-dev.myshopify.com')
-    await userEvent.selectOptions(sw, ROLLOUT)
-    await waitFor(() => expect(api.saves.at(-1)).toEqual({ store: ROLLOUT, source: 'list' }))
+    expect(sw.value).toBe('ivra-dev.myshopify.com')
+    await userEvent.selectOptions(sw, ROVELLA)
+    await waitFor(() => expect(api.saves.at(-1)).toEqual({ store: ROVELLA, source: 'list' }))
   })
 
   it('「都不是？手动填」：出手填那一格，存的是手填', async () => {
@@ -164,7 +164,7 @@ describe('WP258 登录后自动找店', () => {
 
   it('只有一家、自动定了（或连了店 / 手填过）：什么都不画', async () => {
     api.view = base({
-      store: ROLLOUT,
+      store: ROVELLA,
       store_source: 'cli',
       store_lookup: {
         status: 'ok',
@@ -180,27 +180,27 @@ describe('WP258 登录后自动找店', () => {
 })
 
 describe('WP267（决策 164）：只有一家但不是官网那家', () => {
-  const ONE = [{ store: ROLLOUT, name: 'My Store', plan: 'basic' }]
+  const ONE = [{ store: ROVELLA, name: 'My Store', plan: 'basic' }]
 
   it('照实问「官网那家店不在这个账号下」+ 换个账号 / 就用这家；就用这家 = 从清单里选', async () => {
     api.view = base({
       next: 'store',
-      site_store: 'inmo-official.myshopify.com',
+      site_store: 'ivra-official.myshopify.com',
       store_lookup: { status: 'ok', stores: ONE, checked_at: 'now' },
     })
     renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
     const banner = await screen.findByTestId('site-theme-banner')
     expect(banner.getAttribute('data-store-mode')).toBe('mismatch')
-    expect(banner.textContent).toContain('官网那家店（inmo-official.myshopify.com）不在这个账号下')
+    expect(banner.textContent).toContain('官网那家店（ivra-official.myshopify.com）不在这个账号下')
     expect(screen.queryByTestId('site-theme-store-pick')).toBeNull()
     await userEvent.click(screen.getByTestId('site-theme-mismatch-use'))
-    await waitFor(() => expect(api.saves).toEqual([{ store: ROLLOUT, source: 'list' }]))
+    await waitFor(() => expect(api.saves).toEqual([{ store: ROVELLA, source: 'list' }]))
   })
 
   it('换个账号：起登录（登录卡在下面展开）', async () => {
     api.view = base({
       next: 'store',
-      site_store: 'inmo-official.myshopify.com',
+      site_store: 'ivra-official.myshopify.com',
       store_lookup: { status: 'ok', stores: ONE, checked_at: 'now' },
     })
     renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)

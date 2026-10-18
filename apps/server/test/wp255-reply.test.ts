@@ -85,10 +85,10 @@ async function ownSubItem(): Promise<{ account_id: string; item_id: string }> {
   const account = await data<{ id: string }>(
     await post('/v1/social/accounts', {
       channel: 'reddit',
-      handle: 'r/inmoxr',
-      display_name: 'INMO XR',
-      url: 'https://www.reddit.com/r/inmoxr/',
-      external_id: 'inmoxr',
+      handle: 'r/ivraxr',
+      display_name: 'IVRA XR',
+      url: 'https://www.reddit.com/r/ivraxr/',
+      external_id: 'ivraxr',
       own_subreddit: true,
     }),
   )
@@ -180,9 +180,9 @@ describe('WP255 社群线程列表里的「回复」（Discord）', () => {
         '/v1/social/accounts',
         {
           channel: 'discord',
-          handle: 'inmo-community',
-          display_name: 'INMO 社群',
-          url: 'https://discord.gg/inmo',
+          handle: 'ivra-community',
+          display_name: 'IVRA 社群',
+          url: 'https://discord.gg/ivra',
           external_id: 'guild_1',
         },
         discord,

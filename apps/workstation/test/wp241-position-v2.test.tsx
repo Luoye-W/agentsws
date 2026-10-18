@@ -96,7 +96,7 @@ const fullWork = (): PositionWorkView => ({
       id: 'schedule:s_1',
       kind: 'schedule',
       ref_id: 's_1',
-      title: 'r/INMO 入群审核',
+      title: 'r/IVRA 入群审核',
       group: 'queued',
       status: 'active',
       source: 'schedule',

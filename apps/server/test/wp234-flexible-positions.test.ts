@@ -2,7 +2,7 @@
  * WP234（docs/54 §6）岗位弹性化，真装配线（路由 → onboarding / org / positions / learning），不打桩。
  *
  * 钉住的：
- * - 第 ③ 步交岗位清单：一个岗位装来自不同模板的职责（INMO：「Reddit 运营」= 公关 + 社媒的 Reddit）；
+ * - 第 ③ 步交岗位清单：一个岗位装来自不同模板的职责（IVRA：「Reddit 运营」= 公关 + 社媒的 Reddit）；
  *   新分配安放在它那一行上，左栏只出它，不出模板「社媒运营」「公共关系」；
  * - 「负责人」不进「我的岗位」，`common.owner` 那条分配原样在；
  * - 合并：职责、安放、事项、岗位层记忆都跟过去，两版打架的记忆两版都留；自建的那个删掉；记审计；
@@ -107,7 +107,7 @@ afterEach(async () => {
 })
 
 describe('docs/54 §6.2 第 ③ 步交岗位清单', () => {
-  it('INMO：「Reddit 运营」装公关与社媒两条 Reddit；左栏只出它，不出那两个模板', async () => {
+  it('IVRA：「Reddit 运营」装公关与社媒两条 Reddit；左栏只出它，不出那两个模板', async () => {
     const out = await apply([{ name: 'Reddit 运营', role_ids: ['pr.reddit', 'social.reddit'] }])
     expect(out.created_assignments.map((a) => a.role_id).sort()).toEqual([
       'pr.reddit',

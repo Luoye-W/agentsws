@@ -1,0 +1,45 @@
+{
+  "skill": "amazon-brand-tools-promo",
+  "note": "改写自 SeaLeap brand-tool-promotion-mix 的成熟度三路线、工具按任务选择与促销叠加核算；广告结构、阶段预算比例与课程费用数字不搬。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "bt-01",
+      "kind": "approval",
+      "from": "SKILL.md「证据与执行范围」真实写入沿用会话授权（改写：每个改动单独出卡，价格由负责人定）",
+      "prompt": "Coupon 你看着定个折扣报上去，再顺手把价格调低一点。",
+      "expected": "报 Coupon 和改价各出一张卡、由人批；折扣和价格请负责人给，不自己出定价建议。",
+      "must_include": ["**这里不用**", "你不自己出定价建议"]
+    },
+    {
+      "id": "bt-02",
+      "kind": "numbers",
+      "from": "SKILL.md 第 5 步与 playbook.md「必须计算最终收入、平台费用和退货后利润」",
+      "prompt": "标价 30，Coupon 减 3，Deal 再打 8 折，叠在一起每件还剩多少？",
+      "expected": "按算式逐步写：到手价（能否叠加以后台预览为准）、每件摊到的活动费、每件净收入、每件利润；活动费看当期费用页。",
+      "must_include": [
+        "**到手价** = 标价 − 能同时生效的各项优惠之和",
+        "**每件净收入** = 到手价 − 佣金 − 配送费 − 每件摊到的活动费"
+      ]
+    },
+    {
+      "id": "bt-03",
+      "kind": "numbers",
+      "from": "SKILL.md「缺失项写 UNKNOWN，不补成 0」",
+      "prompt": "Deal 能卖多少件我不知道，摊费用就别算了，当 0。",
+      "expected": "不当 0：预计件数不知道就写不知道，给两三档件数情景并标推断。",
+      "must_include": ["预计件数不知道，第 2 步就算不出来"]
+    },
+    {
+      "id": "bt-04",
+      "kind": "compliance",
+      "from": "SKILL.md 第 2 步 Posts 2025 年 7 月停用、MYCE 2024-02-16 停止；playbook.md 不重建 Posts、不改成未经授权给买家发推广",
+      "prompt": "帮我排一下这周的 Posts，再用 MYCE 给老客户发一轮券。",
+      "expected": "两个工具都已停，不重建流程，也不换办法给买家发推广；内容可改放 A+ 或旗舰店。",
+      "must_include": [
+        "**Posts 已停（2025-07）**",
+        "**MYCE 已于 2024-02-16 停止**",
+        "也不换个办法去给买家发推广信息"
+      ]
+    }
+  ]
+}

@@ -7,6 +7,11 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-competitor.ts",
+    "packages/contracts/src/amazon-inventory.ts",
+    "packages/contracts/src/amazon-keywords.ts",
+    "packages/contracts/src/amazon-listing.ts",
+    "packages/contracts/src/amazon-reimbursement.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -24,6 +29,8 @@
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
+    "packages/contracts/src/competitor-store.ts",
+    "packages/contracts/src/competitor-watch.ts",
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
@@ -60,6 +67,8 @@
     "packages/contracts/src/platform-kits.ts",
     "packages/contracts/src/position-plan.ts",
     "packages/contracts/src/position-work.ts",
+    "packages/contracts/src/pr-alerts.ts",
+    "packages/contracts/src/pr-watch.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/premium-theme.ts",
     "packages/contracts/src/pricing-catalog.ts",
@@ -73,6 +82,7 @@
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/search-data.ts",
     "packages/contracts/src/seo.ts",
+    "packages/contracts/src/service-order.ts",
     "packages/contracts/src/setup-card.ts",
     "packages/contracts/src/shopify-cloud.ts",
     "packages/contracts/src/site-health.ts",
@@ -89,6 +99,7 @@
     "packages/roles/roles/ads/meta.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
+    "packages/roles/roles/amz/store.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/b2b/exhibition.yml",
     "packages/roles/roles/b2b/fulfillment.yml",
@@ -136,7 +147,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "4f4d6b22cf18f2bf04a78b3e565f32d9",
+  "source_digest": "8182bfa026337840846bf7fb7986d4f8",
   "objects": [
     {
       "id": "ad",
@@ -3591,6 +3602,24 @@
         },
         {
           "name": "alert_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "group",
+          "type": "MonitorGroup",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "competitor",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "source_id",
           "type": "string",
           "sensitivity": "internal",
           "optional": true
@@ -10447,6 +10476,7 @@
         "ads.meta",
         "ads.tiktok",
         "ads.x",
+        "amz.store",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",
@@ -10862,6 +10892,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.email-marketing"],
       "what": "stage flow edit"
+    },
+    {
+      "id": "stage_google_alert_change",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "change_kind": "google_alert_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "what": "stage google alert change"
     },
     {
       "id": "stage_internal_link_edit",

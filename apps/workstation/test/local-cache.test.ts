@@ -69,6 +69,11 @@ const DRAFT_PREFIX = 'agentsws.draft.'
  * 同日历那两个键；键 = 前缀 + 岗位模板 id。值里没有任何一条工作项的内容。
  */
 const POSITION_WORK_PREFIX = 'agentsws.position_work.'
+/**
+ * WP401（决策 1143）：积木表格的筛法（搜的字 / 勾的值 / 起止日子），按表格 id 一份——界面偏好，
+ * 值里没有表里的任何一行；键 = 前缀 + 积木 id。
+ */
+const TABLE_FILTER_PREFIX = 'agentsws.table_filter.'
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
@@ -81,7 +86,10 @@ function sourceFiles(dir: string): string[] {
 }
 
 const allowed = (key: string): boolean =>
-  ALLOWED_KEYS.includes(key) || key.startsWith(DRAFT_PREFIX) || key.startsWith(POSITION_WORK_PREFIX)
+  ALLOWED_KEYS.includes(key) ||
+  key.startsWith(DRAFT_PREFIX) ||
+  key.startsWith(POSITION_WORK_PREFIX) ||
+  key.startsWith(TABLE_FILTER_PREFIX)
 
 describe('40 §1.2 第一条规则：个人电脑上不存真源', () => {
   const files = sourceFiles(SRC)

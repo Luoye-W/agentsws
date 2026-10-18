@@ -32,7 +32,7 @@ import type { ShopOps } from '../src/shop-ops.js'
 import { createShopOps } from '../src/shop-service.js'
 import { createShopToolSurface } from '../src/shop-tools.js'
 
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -72,7 +72,7 @@ const req = (role_id = 'dtc.store', id = 'run_1'): RunRequest =>
 const changeOf = (i: number): StagedChange =>
   ({
     id: `chg_${i}`,
-    workspace_id: 'ws_rollout',
+    workspace_id: 'ws_rovella',
     kind: staged[i]?.kind,
     target: staged[i]?.target,
     before: staged[i]?.before,
@@ -91,7 +91,7 @@ beforeEach(async () => {
   })
   const run = shopAdminRunStandIn(shop)
   auth = createShopAdmin({
-    workspace_id: 'ws_rollout',
+    workspace_id: 'ws_rovella',
     clock: { now: () => new Date().toISOString() },
     cliSpec: () => spec,
     probe: async () => ({ installed: true, node_ok: true, min_node_major: 22, checked_at: '' }),
@@ -107,7 +107,7 @@ beforeEach(async () => {
     },
   })
   ops = createShopOps({
-    workspace_id: 'ws_rollout',
+    workspace_id: 'ws_rovella',
     clock: { now: () => new Date().toISOString() },
     auth,
     ledger: {
@@ -180,11 +180,11 @@ describe('查询', () => {
       products: { title: string; inventory: number; price: string }[]
     }
     expect(list.products[0]).toMatchObject({
-      title: 'Rollout 折叠收纳箱',
+      title: 'Rovella 折叠收纳箱',
       inventory: 168,
       price: '19.90 USD – 29.90 USD',
     })
-    const p = (await ops.read('shop_get_product', { handle: 'rollout-hook' }, req())) as {
+    const p = (await ops.read('shop_get_product', { handle: 'rovella-hook' }, req())) as {
       variants: unknown[]
       status: string
     }
@@ -229,21 +229,21 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     await ops.read('shop_get_product', { id }, req())
     const r = await ops.propose(
       'shop_save_product',
-      { id, title: 'Rollout 折叠收纳箱 Pro', tags: ['收纳', '爆款'] },
+      { id, title: 'Rovella 折叠收纳箱 Pro', tags: ['收纳', '爆款'] },
       req(),
     )
     expect(r.status).toBe('staged')
     const s0 = staged[0] as StageInput
     expect(s0.kind).toBe('listing_edit')
-    expect(s0.before).toEqual({ title: 'Rollout 折叠收纳箱', tags: ['收纳', '新品'] })
-    expect(s0.approval.title).toBe('改商品「Rollout 折叠收纳箱」：标题、标签')
+    expect(s0.before).toEqual({ title: 'Rovella 折叠收纳箱', tags: ['收纳', '新品'] })
+    expect(s0.approval.title).toBe('改商品「Rovella 折叠收纳箱」：标题、标签')
     expect(s0.notes).toContain('标签：收纳、新品 → 收纳、爆款')
     expect(s0.provenance?.read_full).toEqual([`product:${id}`])
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱')
     expect(calls.some((c) => c.includes('--allow-mutations'))).toBe(false)
     const res = await ops.apply(changeOf(0))
     expect(res).toMatchObject({ status: 'ok', outcome_ref: { type: 'product', id } })
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱 Pro')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱 Pro')
     expect(calls.filter((c) => c.includes('--allow-mutations'))).toHaveLength(1)
     // 同一张卡重放：不再跑一次
     await ops.apply(changeOf(0))
@@ -266,7 +266,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     await authorize()
     await ops.propose(
       'shop_save_product',
-      { title: 'Rollout 杯架', price: 12.5, options: [{ name: '颜色', values: ['黑', '白'] }] },
+      { title: 'Rovella 杯架', price: 12.5, options: [{ name: '颜色', values: ['黑', '白'] }] },
       req(),
     )
     expect(staged[0]).toMatchObject({
@@ -279,10 +279,10 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
         spec: '颜色（黑 / 白）',
       },
     })
-    expect(staged[0]?.approval.title).toBe('新建商品「Rollout 杯架」（先存草稿）')
+    expect(staged[0]?.approval.title).toBe('新建商品「Rovella 杯架」（先存草稿）')
     expect((await ops.apply(changeOf(0)))?.status).toBe('ok')
     const created = shop.products.at(-1)
-    expect(created).toMatchObject({ title: 'Rollout 杯架', status: 'DRAFT' })
+    expect(created).toMatchObject({ title: 'Rovella 杯架', status: 'DRAFT' })
     expect(created?.variants.map((v) => v.title)).toEqual(['黑', '白'])
 
     const hook = 'gid://shopify/Product/1002'
@@ -407,7 +407,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
       { product_id: id, images: [{ file: png, alt: '挂钩' }, { url: 'https://img.test/a.jpg' }] },
       req(),
     )
-    expect(staged[0]?.approval.title).toBe('给商品「Rollout 车载挂钩」加 2 张图')
+    expect(staged[0]?.approval.title).toBe('给商品「Rovella 车载挂钩」加 2 张图')
     const res = await ops.apply(changeOf(0))
     expect(res?.error?.message).toBeUndefined()
     expect(res?.status).toBe('ok')
@@ -427,7 +427,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     expect(
       await ops.apply({
         id: 'x',
-        workspace_id: 'ws_rollout',
+        workspace_id: 'ws_rovella',
         kind: 'listing_edit',
         after: { title: 'A' },
       } as unknown as StagedChange),
@@ -447,7 +447,7 @@ describe('WP267（决策 198）：传商品图也认设计岗素材库里的图'
   it('给 asset_id：找到对象存储里那份文件，过同一道检查；批了照样走临时地址上传', async () => {
     await authorize()
     const id = 'gid://shopify/Product/1002'
-    const designDir = join(dir, 'blobs', 'design', 'ws_rollout', 'design.ecommerce')
+    const designDir = join(dir, 'blobs', 'design', 'ws_rovella', 'design.ecommerce')
     mkdirSync(designDir, { recursive: true })
     const png = join(designDir, 'dsa_hero.png')
     writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]))
@@ -459,7 +459,7 @@ describe('WP267（决策 198）：传商品图也认设计岗素材库里的图'
     mkdirSync(join(dir, 'blobs', 'design', 'ws_other'), { recursive: true })
     writeFileSync(assets.dsa_other as string, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))
     const withAssets = createShopOps({
-      workspace_id: 'ws_rollout',
+      workspace_id: 'ws_rovella',
       clock: { now: () => new Date().toISOString() },
       auth,
       ledger: {
@@ -469,7 +469,7 @@ describe('WP267（决策 198）：传商品图也认设计岗素材库里的图'
         },
       },
       effectiveConfig: config,
-      fileRoots: () => [join(dir, 'brand'), join(dir, 'blobs', 'design', 'ws_rollout')],
+      fileRoots: () => [join(dir, 'brand'), join(dir, 'blobs', 'design', 'ws_rovella')],
       assetFile: (assetId) => assets[assetId],
       fetch: (async (url: string, init: RequestInit) => {
         uploads.push({ url, form: init.body as FormData })
@@ -511,7 +511,7 @@ describe('WP267（决策 198）：传商品图也认设计岗素材库里的图'
       { product_id: id, images: [{ asset_id: 'dsa_hero', alt: '主图' }] },
       req(),
     )
-    expect(staged[0]?.approval.title).toBe('给商品「Rollout 车载挂钩」加 1 张图')
+    expect(staged[0]?.approval.title).toBe('给商品「Rovella 车载挂钩」加 1 张图')
     const res = await withAssets.apply(changeOf(0))
     expect(res?.status).toBe('ok')
     expect((uploads[0]?.form.get('file') as File | undefined)?.name).toBe('dsa_hero.png')

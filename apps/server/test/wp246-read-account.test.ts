@@ -34,7 +34,7 @@ const page = (
   extra: Partial<PageRead> = {},
 ): PageRead => ({
   status: 200,
-  finalUrl: 'https://www.reddit.com/r/inmo/new/',
+  finalUrl: 'https://www.reddit.com/r/ivra/new/',
   extract: {
     signals: {
       title: '',
@@ -45,7 +45,7 @@ const page = (
       ...(over.signals ?? {}),
     },
     items: over.items ?? [
-      { kind: 'post', url: '/r/inmo/comments/a1/x/', title: 'Hi', text: 'hello' },
+      { kind: 'post', url: '/r/ivra/comments/a1/x/', title: 'Hi', text: 'hello' },
     ],
   },
   ...extra,
@@ -109,7 +109,7 @@ function harness(opts: { who?: string; brand?: string[]; pages?: PageRead[] } = 
   const account = createRedditReadAccount({
     browser: rb,
     dir: join(dir, 'readonly-browser'),
-    brandHandles: () => opts.brand ?? ['INMO_Official', 'u/inmo_mod'],
+    brandHandles: () => opts.brand ?? ['IVRA_Official', 'u/ivra_mod'],
     nowMs: () => now,
     openWindow,
     platform: 'darwin',
@@ -127,7 +127,7 @@ function harness(opts: { who?: string; brand?: string[]; pages?: PageRead[] } = 
   const read = async () =>
     (await exec({
       name: 'read_reddit',
-      input: { subreddit: 'inmo' },
+      input: { subreddit: 'ivra' },
       request: undefined as never,
     })) as {
       data: { rows: number; missing?: string; source: ResearchFetchRecord }
@@ -201,16 +201,16 @@ describe('Reddit 读号', () => {
   })
 
   it('读号是品牌登记的号（官方 / 版主）：拦下，路由记「会话被拒」，提示换号', async () => {
-    const h = harness({ who: 'inmo_mod' })
+    const h = harness({ who: 'ivra_mod' })
     const st = await h.account.check()
-    expect(st).toMatchObject({ state: 'refused', username: 'inmo_mod' })
+    expect(st).toMatchObject({ state: 'refused', username: 'ivra_mod' })
     expect(st.message).toContain('换一个普通号')
     h.tick(30_000)
     const got = await h.read()
     expect(got.data.rows).toBe(0)
     expect(got.data.source.attempts[0]).toMatchObject({ outcome: 'session_refused' })
     // 大小写、u/ 前缀都归一了再比
-    const h2 = harness({ who: 'INMO_OFFICIAL' })
+    const h2 = harness({ who: 'IVRA_OFFICIAL' })
     expect((await h2.account.check()).state).toBe('refused')
   })
 

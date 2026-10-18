@@ -342,11 +342,27 @@ const PromptBody = z.object({
   branded: z.boolean().optional(),
   selected: z.boolean().optional(),
 })
+/** WP392：Amazon 上一款（竞品对标款 / 自家的那一款）。 */
+const AmazonItemBody = z.object({
+  marketplace: z.string().min(2).max(4),
+  asin: z.string().min(1).max(20),
+  label: z.string().max(120).optional(),
+  vs_own: z.string().max(120).optional(),
+})
 const CompetitorBody = z.object({
   id: z.string().max(80),
   name: z.string().min(1).max(80),
   aliases: z.array(z.string().max(80)).max(10),
   domains: z.array(z.string().max(120)).max(5),
+  // WP392（docs/104 C3）：竞品监控加的两格
+  store: z
+    .object({
+      url: z.string().min(1).max(300),
+      platform: z.enum(['shopify', 'woocommerce', 'other', 'unknown']),
+      checked_at: z.string().max(40).optional(),
+    })
+    .optional(),
+  amazon: z.array(AmazonItemBody).max(100).optional(),
 })
 const KeywordBody = z.object({
   keyword: z.string().min(1).max(120),
@@ -371,6 +387,7 @@ const StrategyBody = z.object({
 const WatchPatchBody = z.object({
   strategy: StrategyBody.optional(),
   brand_aliases: z.array(z.string().max(80)).max(10).optional(),
+  brand_amazon: z.array(AmazonItemBody).max(100).optional(),
   competitors: z.array(CompetitorBody).max(10).optional(),
   keywords: z.array(KeywordBody).max(100).optional(),
   platforms: z.array(WatchPlatform).max(4).optional(),

@@ -58,7 +58,7 @@ const plan: SetupRequestPayload = {
       key: 'brand_username',
       label: '品牌号',
       kind: 'text',
-      suggested: 'INMO_Official',
+      suggested: 'IVRA_Official',
       suggested_why: '插件里登着的就是这个号',
       sources: [{ kind: 'connected', label: '插件里登着的 Reddit 号' }],
       required: false,
@@ -78,9 +78,9 @@ const plan: SetupRequestPayload = {
     },
   ],
   steps: [
-    { text: '看了品牌档案：INMO' },
+    { text: '看了品牌档案：IVRA' },
     {
-      text: '插件里登着的 Reddit 号：u/INMO_Official',
+      text: '插件里登着的 Reddit 号：u/IVRA_Official',
       source: { kind: 'connected', label: '插件' },
     },
   ],
@@ -141,7 +141,7 @@ describe('方案卡（WP348）', () => {
     }
     expect(input.edited_payload.values).toMatchObject({
       watch_subreddits: 'SmartGlasses',
-      brand_username: 'INMO_Official',
+      brand_username: 'IVRA_Official',
       every_hours: '24',
     })
   })
@@ -192,8 +192,8 @@ describe('方案卡（WP348）', () => {
           key: 'keywords',
           label: '关键词',
           kind: 'text',
-          current: 'INMO',
-          suggested: 'INMO',
+          current: 'IVRA',
+          suggested: 'IVRA',
           required: false,
         },
       ],

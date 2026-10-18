@@ -55,9 +55,12 @@ type Group = 'capability' | 'workspace' | 'day'
 
 const GROUPS: Group[] = ['capability', 'workspace', 'day']
 
-/** 付费三块（67 §1）。顺序就是界面上从左到右。 */
-type Block = 'data' | 'ai' | 'service'
-const BLOCKS: Block[] = ['data', 'ai', 'service']
+/**
+ * 付费三块（67 §1）+ WP389 / WP390 的第四块「工坊服务」（docs/105 §3.3：人替你做成的事，下单扣进托管、
+ * 验收后结算、没做完的原路退）。顺序就是界面上从左到右。
+ */
+type Block = 'data' | 'ai' | 'service' | 'workshop_service'
+const BLOCKS: Block[] = ['data', 'ai', 'service', 'workshop_service']
 
 /**
  * 一条能力归哪一块。
@@ -69,6 +72,8 @@ const BLOCKS: Block[] = ['data', 'ai', 'service']
 function blockOf(capability: string, declared?: Block): Block {
   if (declared !== undefined) return declared
   if (capability.startsWith('ai.')) return 'ai'
+  // WP390：工坊服务那三行（托管 / 完成 / 退回）——与云侧 `pricingBlockOf` 同一条
+  if (capability.startsWith('workshop.service.')) return 'workshop_service'
   if (capability.startsWith('kol.service.') || capability.startsWith('support.service.'))
     return 'service'
   return 'data'
@@ -219,10 +224,13 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
     BLOCKS.map((b) => [b, { credits: 0, calls: 0 }]),
   )
   for (const row of byCapability.data?.rows ?? []) {
-    const bucket = perBlock.get(blockOfCapability(row.key))
+    const block = blockOfCapability(row.key)
+    const bucket = perBlock.get(block)
     if (bucket === undefined) continue
+    // 工坊服务每单三行：积分三行相加 = 实际花掉的；「几次」只数托管那一行（= 几单）
     bucket.credits += row.credits
-    bucket.calls += row.calls
+    if (block !== 'workshop_service' || row.key === 'workshop.service.escrow')
+      bucket.calls += row.calls
   }
 
   return (
@@ -267,7 +275,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               <h4 className="text-xs font-medium text-muted-foreground">
                 {t('credits.blocks.price')}
               </h4>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {BLOCKS.map((b) => {
                   const cheapest = cheapestOf(
                     (pricing.data?.entries ?? []).filter(
@@ -289,9 +297,13 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                         {cheapest === undefined ? '—' : price(cheapest.credits_per_unit)}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        {cheapest === undefined
-                          ? t('credits.blocks.none')
-                          : t('credits.blocks.from', { unit: t(`credits.unit.${cheapest.unit}`) })}
+                        {b === 'workshop_service'
+                          ? t('credits.blocks.per_service')
+                          : cheapest === undefined
+                            ? t('credits.blocks.none')
+                            : t('credits.blocks.from', {
+                                unit: t(`credits.unit.${cheapest.unit}`),
+                              })}
                       </p>
                     </div>
                   )
@@ -346,7 +358,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                 data-testid="credits-blocks"
               >
                 <h4 className="text-xs font-medium text-muted-foreground">{t('credits.blocks')}</h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {BLOCKS.map((b) => {
                     const sum = perBlock.get(b) ?? { credits: 0, calls: 0 }
                     return (
@@ -364,7 +376,9 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                         <p className="text-[11px] text-muted-foreground">
                           {sum.calls === 0
                             ? t('credits.blocks.none')
-                            : `${t('credits.usage.calls')} ${String(sum.calls)}`}
+                            : b === 'workshop_service'
+                              ? t('credits.blocks.orders', { n: String(sum.calls) })
+                              : `${t('credits.usage.calls')} ${String(sum.calls)}`}
                         </p>
                       </div>
                     )

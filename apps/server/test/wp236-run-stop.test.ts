@@ -44,8 +44,8 @@ function scripted(calls: number, stepMs: number, finalMs: number) {
       n += 1
       if (n <= calls) {
         await sleep(stepMs)
-        return done(n === 1 ? '我先去 Reddit 上搜一下 INMO 最近的讨论。' : '', [
-          { id: `call_${n}`, name: 'read_reddit', input: { query: `INMO ${n}` } },
+        return done(n === 1 ? '我先去 Reddit 上搜一下 IVRA 最近的讨论。' : '', [
+          { id: `call_${n}`, name: 'read_reddit', input: { query: `IVRA ${n}` } },
         ])
       }
       await sleep(finalMs)
@@ -71,7 +71,7 @@ const research: ToolExecutor = async (call) => ({
       {
         kind: 'post',
         url: 'https://reddit.com/x',
-        title: `INMO Air3 review ${String(call.input.query)}`,
+        title: `IVRA Air3 review ${String(call.input.query)}`,
         text: '…',
       },
     ],
@@ -97,7 +97,7 @@ const matter = {
   schema_version: 1,
   workspace_id: 'ws_1',
   kind: 'task',
-  title: 'INMO Reddit 研究',
+  title: 'IVRA Reddit 研究',
   status: 'open',
   context: { summary: '', pinned: [] },
   created_at: '2026-10-06T09:00:00.000Z',
@@ -134,7 +134,7 @@ async function runOnce(gateway: ModelGatewayApi, thresholds: Record<string, numb
   } as unknown as Work)
   await runtime.startRun({
     matter,
-    brief: '看看 Reddit 上最近一周大家在聊 INMO 智能眼镜的什么',
+    brief: '看看 Reddit 上最近一周大家在聊 IVRA 智能眼镜的什么',
     actor: { person_id: 'per_1', assignment_id: 'asg_1' },
   } as Parameters<typeof runtime.startRun>[0])
   return { timeline, summaries, events }
@@ -165,11 +165,11 @@ describe('WP236 宿主看门狗：没动静才停', () => {
     const partial = timeline.find((e) => e.kind === 'agent_message')
     expect(partial?.stopped).toEqual({ reason: 'idle_timeout' })
     expect(partial?.text).toContain('我先去 Reddit 上搜一下')
-    expect(partial?.text).toContain('INMO Air3 review INMO 1')
-    expect(partial?.text).toContain('INMO Air3 review INMO 2')
+    expect(partial?.text).toContain('IVRA Air3 review IVRA 1')
+    expect(partial?.text).toContain('IVRA Air3 review IVRA 2')
     // 工具名不露（换成人话）
     expect(partial?.text).not.toContain('read_reddit')
-    expect(summaries[0]).toContain('INMO Air3 review')
+    expect(summaries[0]).toContain('IVRA Air3 review')
   }, 30_000)
 
   it('一直忙但跑满总时长 → max_duration', async () => {
@@ -198,7 +198,7 @@ describe('WP236 部分结果与停的那句话', () => {
     const log = new PartialRunLog()
     log.hostTool({
       tool: 'read_reddit',
-      input: { query: 'INMO' },
+      input: { query: 'IVRA' },
       status: 'ok',
       data: { rows: 0, items: [], missing: '两路都没取到' },
     })

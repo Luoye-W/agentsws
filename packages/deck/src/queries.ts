@@ -23,6 +23,7 @@ import { SITE_HEALTH_QUERIES } from './site-health-queries.js'
 import { ADS_SOURCE_BY_PLATFORM, SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
   DataSourceId,
+  PrDeckData,
   QueryContext,
   QueryData,
   QueryResult,
@@ -919,28 +920,99 @@ const EXTERNAL_POST_WORDS: Readonly<Record<string, string>> = {
 const word = (table: Readonly<Record<string, string>>, value: string): string =>
   table[value] ?? value
 
+/** WP386：「盯的是」那一列（竞品带上名字）。 */
+const GROUP_WORDS: Readonly<Record<string, string>> = {
+  own: '自家',
+  competitor: '竞品',
+  industry: '行业',
+  site: '指定网站',
+}
+const groupWord = (r: { group?: string; competitor?: string }): string => {
+  const g = word(GROUP_WORDS, r.group ?? 'own')
+  return r.competitor === undefined ? g : `${g} · ${r.competitor}`
+}
+
+/**
+ * WP386：信息监控那一行脚注——拉不到的源照实说；一条都没拉成过时说清「空表不等于没人提」。
+ * 都好好的就不出（不加字）。
+ */
+function monitorFooter(monitor: PrDeckData['monitor'], rows: number): string | undefined {
+  if (monitor === undefined) return undefined
+  if (monitor.total === 0)
+    return rows === 0
+      ? '还没有监控源：跟我说「帮我盯一下」，我先列一份要建的 Google 提醒。'
+      : undefined
+  if (!monitor.pulled_ever) return '监控源还没拉成过一次——这张表空着不等于没人提。'
+  if (monitor.failed === 0) return undefined
+  const names = monitor.failures
+    .slice(0, 3)
+    .map((f) => `「${f.label}」`)
+    .join('、')
+  return `${monitor.failed} 条监控源这次没拉到（${names}），那几块没有数，不等于没人提。`
+}
+
 const PR_QUERIES: QueryDef[] = [
   {
     name: 'pr.mentions',
     source: 'google_alerts',
     returns: 'table',
-    run: (ctx) => ({
-      columns: [
-        { key: 'published_at', label: '什么时候' },
-        { key: 'origin', label: '在哪儿' },
-        { key: 'sentiment', label: '情绪' },
-        { key: 'triage', label: '归谁' },
-        { key: 'body', label: '说了什么' },
-      ],
-      rows: (ctx.pr?.mentions ?? []).map((r) => ({
-        published_at: r.published_at,
-        origin: r.origin,
-        // 没判过就空着——**不写"中性"**：没判与判成中性是两件事
-        sentiment: r.sentiment ?? '',
-        triage: r.triage ?? '',
-        body: r.excerpt,
-      })),
-    }),
+    run: (ctx) => {
+      const rows = ctx.pr?.mentions ?? []
+      const footer = monitorFooter(ctx.pr?.monitor, rows.length)
+      return {
+        // WP401：提及表能筛——日期范围、盯的是 / 在哪儿 / 情绪 / 归谁 下拉多选、说了什么 搜文字
+        columns: [
+          { key: 'published_at', label: '什么时候', filter: 'date' as const },
+          { key: 'group', label: '盯的是', filter: 'select' as const },
+          { key: 'origin', label: '在哪儿', filter: 'select' as const },
+          { key: 'sentiment', label: '情绪', filter: 'select' as const },
+          { key: 'triage', label: '归谁', filter: 'select' as const },
+          { key: 'body', label: '说了什么', filter: 'search' as const },
+        ],
+        rows: rows.map((r) => ({
+          published_at: r.published_at,
+          group: groupWord(r),
+          origin: r.origin,
+          // 没判过就空着——**不写"中性"**：没判与判成中性是两件事
+          sentiment: r.sentiment ?? '',
+          triage: r.triage ?? '',
+          body: r.excerpt,
+        })),
+        ...(footer === undefined ? {} : { footer: { text: footer } }),
+      }
+    },
+  },
+  {
+    /** WP386：竞品动向（按竞品排，同一个竞品里新的在上）。 */
+    name: 'pr.competitor_mentions',
+    source: 'google_alerts',
+    returns: 'table',
+    run: (ctx) => {
+      const rows = ctx.pr?.competitor_mentions ?? []
+      const monitor = ctx.pr?.monitor
+      const footer =
+        monitor !== undefined && monitor.competitors === 0 && rows.length === 0
+          ? '还没盯竞品：跟我说「帮我盯一下竞品」，我先列一份要建的提醒。'
+          : monitorFooter(monitor, rows.length)
+      return {
+        // WP401（决策 1145）：竞品 / 在哪儿 / 情绪 勾选、什么时候 日期、说了什么 搜
+        columns: [
+          { key: 'competitor', label: '竞品', filter: 'select' as const },
+          { key: 'published_at', label: '什么时候', filter: 'date' as const },
+          { key: 'origin', label: '在哪儿', filter: 'select' as const },
+          { key: 'sentiment', label: '情绪', filter: 'select' as const },
+          { key: 'body', label: '说了什么', filter: 'search' as const },
+        ],
+        rows: rows.map((r) => ({
+          competitor: r.competitor ?? '',
+          published_at: r.published_at,
+          origin: r.origin,
+          sentiment: r.sentiment ?? '',
+          body: r.excerpt,
+        })),
+        ...(footer === undefined ? {} : { footer: { text: footer } }),
+      }
+    },
   },
   {
     name: 'pr.negative_alerts',
@@ -1630,10 +1702,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '履约' },
+          { key: 'status', label: '履约', filter: 'select' as const },
         ],
         rows,
       }
@@ -1659,10 +1731,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '支付' },
+          { key: 'status', label: '支付', filter: 'select' as const },
         ],
         rows,
       }
@@ -1746,10 +1818,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '支付' },
+          { key: 'status', label: '支付', filter: 'select' as const },
         ],
         rows,
       }
@@ -2001,6 +2073,19 @@ const QUERY_LIST: QueryDef[] = [
           { item: '订单数', value: String(orders) },
           { item: '库存告急', value: low === undefined ? '没连' : `${low} 个 SKU` },
           { item: '待审改动', value: `${pending} 条` },
+          // WP393：竞品动向——有用户确认过的要紧变化、或有哪家没读到才出这一段（没有就不出）
+          ...(ctx.competitor === undefined
+            ? []
+            : [
+                ...ctx.competitor.lines.map((line, i) => ({
+                  item: i === 0 ? (ctx.competitor?.title ?? '竞品动向') : '',
+                  value: line,
+                })),
+                ...ctx.competitor.failed.map((line, i) => ({
+                  item: i === 0 && ctx.competitor?.lines.length === 0 ? ctx.competitor.title : '',
+                  value: line,
+                })),
+              ]),
         ],
       }
     },

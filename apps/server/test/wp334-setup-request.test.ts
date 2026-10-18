@@ -171,7 +171,7 @@ describe('WP334 request_setup：认得出要什么', () => {
     expect(JSON.stringify(c)).not.toContain('hunter2')
     // 人话里正常的字不误拦
     expect(looksLikeSecretValue('要把每天的待办发到企业微信群里')).toBe(false)
-    expect(looksLikeSecretValue('店铺是 6suegp-md.myshopify.com')).toBe(false)
+    expect(looksLikeSecretValue('店铺是 6demox-md.myshopify.com')).toBe(false)
   })
 })
 

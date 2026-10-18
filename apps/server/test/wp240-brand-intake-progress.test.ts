@@ -34,7 +34,7 @@ const PAGES: Record<string, string> = {
   [`${SHOP}/products/fjord-tote`]: 'product-tote.html',
 }
 const ACTOR: BrandIntakeActor = {
-  workspace_id: 'ws_rollout',
+  workspace_id: 'ws_rovella',
   person_id: 'p_1',
   assignment_id: 'a_1',
   role_id: 'common.owner',
@@ -47,7 +47,7 @@ function make(fetch: PageFetch, passwordPost?: StorefrontPasswordPost) {
   const written: { ws: string }[] = []
   const made = createBrandIntake({
     clock: { now: () => new Date(Date.UTC(2026, 9, 6, 0, 0, ++seq)).toISOString() },
-    workspace_id: 'ws_inmo',
+    workspace_id: 'ws_ivra',
     fetch,
     newId: (prefix) => `${prefix}_${String(++seq)}`,
     sinks: {
@@ -155,6 +155,6 @@ describe('WP240 服务侧 · 读不到时照实说', () => {
 
     // 确认：写的是确认人所在的品牌
     await f.port.confirm(ACTOR, { run_id: started.id })
-    expect(f.written).toEqual([{ ws: 'ws_rollout' }])
+    expect(f.written).toEqual([{ ws: 'ws_rovella' }])
   })
 })

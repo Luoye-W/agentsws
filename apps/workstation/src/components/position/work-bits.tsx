@@ -6,7 +6,14 @@
  * 已完成 = 绿底勾。
  */
 import type { PositionWorkGroup, PositionWorkItem } from '@agentsws/contracts'
-import { AlarmClock, CalendarClock, Check, FolderClosed, SquareCheck } from 'lucide-react'
+import {
+  AlarmClock,
+  CalendarClock,
+  Check,
+  FolderClosed,
+  Handshake,
+  SquareCheck,
+} from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { InfoTip } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
@@ -115,6 +122,8 @@ const KIND_ICON = {
   todo: SquareCheck,
   schedule: AlarmClock,
   post: CalendarClock,
+  // WP390：工坊服务订单（别人替你做的那一件）
+  service_order: Handshake,
 } as const
 
 /** 每行前面一个灰色小图标区分 事项 / 待办 / 定时 / 排期，悬停才说是什么。 */

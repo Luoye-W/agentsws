@@ -27,7 +27,7 @@ vi.mock('@/lib/api', async () => {
 const base: ShopAdminView = {
   applicable: true,
   state: 'authorized',
-  store: '6suegp-md.myshopify.com',
+  store: '6demox-md.myshopify.com',
   scopes_needed: ['write_products', 'write_publications'],
   scopes_granted: ['read_products', 'write_products'],
   missing: [],

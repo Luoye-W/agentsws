@@ -174,6 +174,49 @@ export interface ScenarioPositionStaff {
   position: string
 }
 
+/**
+ * WP395（docs/104 C2 / docs/106 A3）：首次设置第 ③ 步——他的原话 + 勾了哪几条职责 → 划分建议
+ * （`proposePositions`，与服务进程 / 工作台同一份）→ 照建议配岗。原话没提 Amazon 时 Amazon 专属的
+ * 职责拿掉（`mentionsAmazon`，与推荐同一道）。
+ */
+export interface ScenarioPositionPlan {
+  who: string
+  text: string
+  roles: string[]
+}
+
+/**
+ * WP396（docs/106 §13）：自家 Listing 体检读到的一页（前台商品页上读得到的那几格；写在场景里，
+ * 读页积木是替身）。没写的格子 = 页面上读不到。
+ */
+export interface ScenarioListingPage {
+  asin: string
+  marketplace?: string
+  title?: string
+  bullets?: string[]
+  description?: boolean
+  aplus?: boolean
+  images?: number
+  video?: boolean
+  rating?: number
+  reviews?: number
+  price?: string
+  stock?: 'in_stock' | 'out_of_stock'
+  seller?: string
+}
+
+/**
+ * WP396：体检一次（与服务进程同一份规则表与判法 `checkListing`）。`blocked` = 读到第几页时 Amazon 出了验证页
+ * （从 0 数；那一页起都不读）。`design: true` = 人在体检卡上点了第一处图片问题的「向设计岗下需求单」。
+ */
+export interface ScenarioListingCheck {
+  who: string
+  pages: ScenarioListingPage[]
+  own_sellers?: string[]
+  blocked?: number
+  design?: boolean
+}
+
 /** WP199：升级链留痕断言（`expected.escalation_trail`）。 */
 export interface ScenarioEscalationTrail {
   /** 卡上 `routing.escalation.trail` 按顺序的级别。 */
@@ -210,6 +253,67 @@ export interface ScenarioAssistantDispatch {
   text: string
   position?: string
   duty?: string
+}
+
+/** WP392（docs/104）：竞品监控读到的一行（一个商品的一个款式；Amazon 一个 ASIN 一行）。 */
+export interface ScenarioCompetitorRow {
+  product: string
+  variant?: string
+  title: string
+  price?: number
+  compare_at?: number
+  available?: boolean
+  rating?: number
+  reviews?: number
+  /** 商品创建时间（ISO；判「上新」用）。 */
+  created_at?: string
+  /** WP394：Amazon 优惠券文字。 */
+  coupon?: string
+  /** WP394：Amazon 大类 BSR 名次与类目。 */
+  bsr?: number
+  bsr_category?: string
+  /** WP394：对标自家哪一款（自家 ASIN；C8 比价）。 */
+  vs_own?: string
+}
+
+/**
+ * WP392（docs/104 §3.3）：竞品监控读了一次（替身进料口交回的几行）。和上一次的快照比出变化——
+ * 第一次只当底子；`complete: false` = 这次没读全（不判下架）；`error` = 这次没读到（照实记失败）。
+ */
+export interface ScenarioCompetitorRead {
+  competitor: string
+  /** `shop`（独立站）/ `amazon`（Amazon 对标款）。 */
+  source: 'shop' | 'amazon'
+  rows: ScenarioCompetitorRow[]
+  complete?: boolean
+  error?: string
+  /**
+   * WP394（Amazon）：这一次读的是自家的对照款（`competitor` 写品牌名；竞品比价时用它的价）。
+   */
+  own?: boolean
+  /** WP394（Amazon）：内置浏览器读到这个 ASIN 时碰到验证页（之后这一轮不再碰 Amazon，剩下的走云端替身）。 */
+  blocked_at?: string
+  /** WP394（Amazon）：这一次没有内置浏览器（没有桌面壳），全走云端替身。 */
+  no_browser?: boolean
+  /** WP394（Amazon）：云端替身每个 ASIN 扣几个积分（缺省 0.18）。 */
+  cloud_credits?: number
+}
+
+/**
+ * WP393（docs/104 一期 A，C5 / C8）：店铺管理「竞品动向」配好了——方案卡上用户确认的「什么算要紧」、
+ * 自家店里的几款（比价用）、竞品哪一款对标自家哪一款。之后每次读完，有要紧的才出简报那一段。
+ */
+export interface ScenarioCompetitorPlan {
+  rules: {
+    price_drop_pct?: number
+    cheaper_than_own?: boolean
+    new_products?: boolean
+    discounts?: boolean
+    stock?: boolean
+    removed?: boolean
+  }
+  own: { key: string; title: string; price?: number }[]
+  pairs: { competitor: string; product: string; own: string }[]
 }
 
 /**
@@ -628,6 +732,15 @@ export interface ScenarioGeoQuality {
   who: string
 }
 
+/**
+ * WP398（docs/106 §13 A8）：Amazon 词库——录好的联想词与竞品 / 自家 Listing 文本，跑一遍和服务进程同一份的
+ * 拆词、他牌名、差距（`@agentsws/seo-core`）。`blocked_at` = 联想词第几页出验证页（那一页起停下、不重试）。
+ */
+export interface ScenarioAmazonKeywords {
+  who: string
+  blocked_at?: number
+}
+
 /** WP67 / 48 §5.1：起草并提一封开发信（第一稿故意可以带承诺词）。 */
 export interface ScenarioKolOutreach {
   who: string
@@ -929,6 +1042,19 @@ export interface ScenarioB2bMemberLeft {
  * `text` 决定这条走哪一路（`pr-core` 的 `triageMention` 判，场景递不进来一个
  * 结论）。判成客户问题 → 转客服卡，**公关不答**（60 分界行）。
  */
+/**
+ * WP386：一条监控源（docs/103 v2）。`entries` 是这条 feed 里的条目（世界里拼成真 feed 交给 feedsmith 解析）；
+ * `status: 404` = 提醒被删了——那时要照实说「没拉到」，不当成 0 条。
+ */
+export interface ScenarioPrFeed {
+  kind: 'google_alerts' | 'rss'
+  status: number
+  label: string
+  entries: { title: string; url: string; text: string }[]
+  keywords?: string[]
+  exclude?: string[]
+}
+
 export interface ScenarioPrMention {
   who: string
   source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
@@ -973,6 +1099,20 @@ export interface ScenarioPrExternalPost {
   /** 我们上一条在**这个版**是几小时前发的。不给 = 这一轮里没发过。 */
   last_post_hours_ago?: number
   level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP387（docs/103 v2 §3.3、T1）：「让工坊替你建」Google 提醒——清单出一张卡（一次同意），
+ * 批了替身浏览器在这个世界的 Google 账号里建好、读回 RSS 链接。
+ */
+export interface ScenarioPrAlertsBuild {
+  who: string
+  /** 配置卡上确认过的清单。 */
+  lines: { label: string; query: string; language?: string; region?: string }[]
+  /** 人在卡上勾掉的那几条（按 label）。 */
+  unchecked?: string[]
+  /** 这个 Google 账号里本来就有的提醒。 */
+  existing?: { query: string; delivery: 'rss' | 'email' }[]
 }
 
 /** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
@@ -1105,6 +1245,10 @@ export type ScenarioEvent =
   /* ── WP69（54）：岗位是任务主入口 ── */
   /** WP69：给一个人配上一个岗位（它的默认职责全挂上）。 */
   | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
+  /** WP395：首次设置按原话与勾选划分岗位、照建议配岗。 */
+  | { at: string; type: 'position.plan'; plan: ScenarioPositionPlan }
+  /** WP396：自家 Listing 体检一次（替身读页；只出建议，不写 Amazon）。 */
+  | { at: string; type: 'listing.check'; listing_check: ScenarioListingCheck }
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
@@ -1112,6 +1256,10 @@ export type ScenarioEvent =
   | { at: string; type: 'assistant.fanout'; assistant_fanout: ScenarioAssistantFanout }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
+  /** WP392：竞品监控读了一次（和上一次快照比出变化；第一次只当底子）。 */
+  | { at: string; type: 'competitor.read'; competitor_read: ScenarioCompetitorRead }
+  /** WP393：店铺管理「竞品动向」配好了（什么算要紧 + 自家几款 + 对标款）。 */
+  | { at: string; type: 'competitor.plan'; competitor_plan: ScenarioCompetitorPlan }
   /** WP44：推一份未发布主题副本（造预览）。 */
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
@@ -1160,6 +1308,8 @@ export type ScenarioEvent =
   | { at: string; type: 'ads.attribution'; ads_attribution: ScenarioAdsAttribution }
   /** WP78：收一条外面说的话（60，判类不是参数：客户问题转客服）。 */
   | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
+  /** WP386：拉一条监控源（Google Alerts / 网站 RSS）；拉不到照实说。 */
+  | { at: string; type: 'pr.feed'; feed: ScenarioPrFeed }
   /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
   | { at: string; type: 'pr.release'; release: ScenarioPrRelease }
   /** WP171：B2B 某条职责提一个写动作（docs/84）。 */
@@ -1180,6 +1330,7 @@ export type ScenarioEvent =
   | { at: string; type: 'b2b.member_left'; b2b_member_left: ScenarioB2bMemberLeft }
   /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
   | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
+  | { at: string; type: 'pr.alerts_build'; alerts_build: ScenarioPrAlertsBuild }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
   | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
   /** WP67：建一条合作（48 §5.1，永远 L1）。 */
@@ -1209,6 +1360,8 @@ export type ScenarioEvent =
   /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */
   | { at: string; type: 'content.seo_daily'; seo_daily: ScenarioSeoDaily }
   | { at: string; type: 'content.geo_quality'; geo_quality: ScenarioGeoQuality }
+  /** WP398：Amazon 词库刷新一次（联想词 + 拆 Listing + 差距）。 */
+  | { at: string; type: 'amazon.keywords'; amazon_keywords: ScenarioAmazonKeywords }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -1521,6 +1674,21 @@ export interface ScenarioExpected {
    */
   assistant_dispatched_to?: string[]
   /**
+   * WP392：竞品监控按顺序比出了哪几种变化（`price` / `new` / `removed`…）。同时钉住：第一次读不出任何变化、
+   * 竞品监控自己零写（不出卡、不改任何外部账号）。
+   */
+  competitor_changes?: string[]
+  /** WP394：比出来的变化里，带「和自家对标款比」的那几条差价（竞品现价 − 自家现价，按顺序）。 */
+  competitor_vs_own?: number[]
+  /** WP394：Amazon 那几次读按顺序走了哪条路（`browser` / `cloud`）。 */
+  competitor_via?: string[]
+  /** WP394：Amazon 走云端一共扣了几个积分。 */
+  competitor_credits?: number
+  /**
+   * WP393：简报里「竞品动向」那一段要有这几句（子串，全都要在）；给空列表 = 这一段一次都不该出。
+   */
+  competitor_brief?: string[]
+  /**
    * WP350：「我的助理」一次拆成多份——要做的事按顺序开到了哪几个岗位（岗位模板 id），
    * 同一批（一份资料一个来源批次）；助理自己零写。
    */
@@ -1529,6 +1697,29 @@ export interface ScenarioExpected {
   assistant_fanout_notes?: string[]
   /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
   position_answer_components?: string[]
+  /**
+   * WP395：首次设置划分出来的岗位，按先后：模板 id（自建的写 `custom`）→ 职责。
+   * `{ amazon-ops: [amz.store, amz.support] }`；写 `{}` = 一个岗位都没划出来。
+   */
+  positions_planned?: Record<string, string[]>
+  /**
+   * WP395（docs/36 §3）：这几条职责的当场回答都照实说「没有数据」——不出组件、不出数
+   * （Amazon 店铺没连时问补货 / 账户健康）。每条至少答过一次。
+   */
+  position_answer_no_data?: string[]
+  /**
+   * WP396（docs/106 §13）：Listing 体检出了哪几处问题（规则 id，按体检卡上的顺序）、至少几处带草稿、
+   * 下了几张设计需求单；同时钉住：被拦之后一页都没再读、体检自己零写（不出卡、不改 Amazon）。
+   */
+  listing_checkup?: {
+    issues?: string[]
+    drafts_at_least?: number
+    design_requests?: number
+    /** 需求单真路由到的那条设计职责（`design.amazon`）。 */
+    design_routed_to?: string
+    stopped?: 'blocked'
+    pages_read?: number
+  }
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**
@@ -1776,6 +1967,19 @@ export interface ScenarioExpected {
    * `answered_by_pr` 必须是假——**公关不答客户的问题**；它一旦为真，
    * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
    */
+  /**
+   * WP386：拉那条监控源的结局（最后一次）。`ok: false` 时 `says_why` 要为真——拉不到要说一句为什么，
+   * 而不是一个 0。
+   */
+  pr_feed?: {
+    ok?: boolean
+    fetched?: number
+    kept?: number
+    unique?: number
+    label?: string
+    links_unwrapped?: boolean
+    says_why?: boolean
+  }
   pr_mention?: {
     triage?: string
     sentiment?: string
@@ -1886,6 +2090,17 @@ export interface ScenarioExpected {
     adopted?: boolean
     phrases?: string[]
     routed_to?: string
+  }
+  /**
+   * WP387：替你建 Google 提醒那一趟。`card_lines` = 卡上列了几条（一张卡）、`built` = 建好 / 读回链接的条数、
+   * `sources` = 写成了几条监控源、`others_untouched` = 账号里卡外的提醒一条都没动。
+   */
+  pr_alerts_build?: {
+    card_lines?: number
+    built?: number
+    sources?: number
+    auto_approved?: boolean
+    others_untouched?: boolean
   }
   /** WP78（60 §1）：那一条外部发帖。`blocked` 为真 = 版规不让 / 冷却没过。 */
   pr_external_post?: {
@@ -2030,6 +2245,15 @@ export interface ScenarioExpected {
     accuracy?: NumericAssertion
     owners?: string[]
     advice?: string
+  }
+  /**
+   * WP398：Amazon 词库那一次——差距词开头几个（按竞品数排，按顺序比）、含他牌名的联想词（集合）、
+   * 联想词读完了没有（`ok` / `blocked`）。
+   */
+  amazon_keywords?: {
+    top_gaps?: string[]
+    other_brands?: string[]
+    autocomplete?: 'ok' | 'blocked'
   }
   /**
    * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。

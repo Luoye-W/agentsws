@@ -20,10 +20,10 @@ const t = (id: string, kind: 't1' | 't3', over: Record<string, unknown> = {}) =>
     id,
     name: `${kind}_${id}`,
     author: 'alice',
-    subreddit: 'inmoxr',
+    subreddit: 'ivraxr',
     created_utc: Date.parse('2026-10-14T00:00:00Z') / 1000,
     ...(kind === 't3' ? { title: `post ${id}`, selftext: 'love my Air3' } : { body: `c ${id}` }),
-    permalink: `/r/inmoxr/comments/p1/x/${id}/`,
+    permalink: `/r/ivraxr/comments/p1/x/${id}/`,
     ...over,
   },
 })
@@ -87,7 +87,7 @@ function setup(over: Partial<RedditWatchOptions> = {}, start = '2026-10-14T02:00
     now: () => now,
     newId: (p) => `${p}_${++n}`,
     tzOffsetMinutes: () => 480,
-    brandName: () => 'INMO',
+    brandName: () => 'IVRA',
     setupCards: async () => cards as never,
     actor: () => ACTOR,
     outbound: () => outbound as never,
@@ -140,27 +140,27 @@ const SEARCH = vi.fn(async (i: { query: string }) => ({
       kind: 'post' as const,
       url: 'https://www.reddit.com/r/realestate/comments/aa2/x/',
       id: 'aa2',
-      title: 'inmobiliaria tips',
+      title: 'ivrabiliaria tips',
       text: 'casa',
       subreddit: 'realestate',
       created_at: '2026-10-13T11:00:00.000Z',
     },
     {
       kind: 'post' as const,
-      url: 'https://www.reddit.com/r/inmoxr/comments/aa3/x/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/aa3/x/',
       id: 'aa3',
       title: 'own sub',
       text: 'x',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
     },
   ],
 }))
 
 describe('关键词命中（拉丁字母按整词）', () => {
-  it('INMO 不撞 inmobiliaria；中文按包含', () => {
-    expect(keywordHit('INMO Air3 is great', 'inmo')).toBe(true)
-    expect(keywordHit('inmobiliaria tips', 'INMO')).toBe(false)
-    expect(keywordHit('影目眼镜', '影目')).toBe(true)
+  it('IVRA 不撞 ivrabiliaria；中文按包含', () => {
+    expect(keywordHit('IVRA Air3 is great', 'ivra')).toBe(true)
+    expect(keywordHit('ivrabiliaria tips', 'IVRA')).toBe(false)
+    expect(keywordHit('艾维眼镜', '艾维')).toBe(true)
   })
 })
 
@@ -173,7 +173,7 @@ describe('缺设置 / 缺连接：出卡（一天最多一次）', () => {
   })
   it('插件没配对：收件箱 / 自家版块出连接卡；外部社区照搜', async () => {
     const s = setup({ search: SEARCH })
-    s.watch.updateSettings({ own_subreddits: ['r/inmoxr'], keywords: ['INMO'] })
+    s.watch.updateSettings({ own_subreddits: ['r/ivraxr'], keywords: ['IVRA'] })
     const run = await s.watch.runNow()
     expect(run.parts.map((p) => `${p.part}:${p.status}`)).toEqual([
       'inbox:needs_connection',
@@ -182,7 +182,7 @@ describe('缺设置 / 缺连接：出卡（一天最多一次）', () => {
     ])
     expect(run.finished_at).toBeDefined()
     expect(s.connects[0]?.[0]).toMatchObject({ kind: 'extension', service: 'extension' })
-    // 外部：自家版块那条不算外部；inmobiliaria 只是撞字 → 相关度不高
+    // 外部：自家版块那条不算外部；ivrabiliaria 只是撞字 → 相关度不高
     const ext = s.watch.items({ source: 'external' })
     expect(ext.map((x) => x.fullname).sort()).toEqual(['t3_aa1', 't3_aa2'])
     expect(ext.find((x) => x.fullname === 't3_aa2')?.judgement?.verdict).toBe('low_relevance')
@@ -200,20 +200,20 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
       }),
       t('c8', 't1', { type: 'username_mention', body: '[deleted]', author: '[deleted]' }),
     ]),
-    '/r/inmoxr/new/.json': listing([t('p2', 't3'), t('p1', 't3', { author: 'INMO_Official' })]),
-    '/r/inmoxr/comments/.json': listing([t('c5', 't1', { body: 'nice' })]),
+    '/r/ivraxr/new/.json': listing([t('p2', 't3'), t('p1', 't3', { author: 'IVRA_Official' })]),
+    '/r/ivraxr/comments/.json': listing([t('c5', 't1', { body: 'nice' })]),
   }
 
   it('排活 → 插件领 → 交回：入库、挂后续、判断、待处理、读到哪', async () => {
     const s = setup()
     // 插件先配好、连上 Reddit（还没配版块时来问一次）
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'], brand_username: 'inmo_official' })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
     const onPending = vi.fn()
     s.watch.onPending(onPending)
     const run = await s.watch.runNow()
     expect(run.parts.every((p) => p.status === 'waiting')).toBe(true)
-    const reddit = fakeReddit(routes, 'INMO_Official')
+    const reddit = fakeReddit(routes, 'IVRA_Official')
     expect(await extensionRound(s.watch, reddit)).toBe(true)
     // 收件箱一律 mark=false
     expect(
@@ -225,7 +225,7 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
       'own_sub:ok',
     ])
     expect(view.last_run?.finished_at).toBeDefined()
-    expect(view.extension.user).toBe('INMO_Official')
+    expect(view.extension.user).toBe('IVRA_Official')
     // 我们自己发的帖：记 ours，不判、不进待处理
     const p1 = s.watch.items({ source: 'own_sub' }).find((x) => x.fullname === 't3_p1')
     expect(p1?.ours).toBe(true)
@@ -246,7 +246,7 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
     const got = s.watch.next({ connected: true })
     expect(got.job?.reads.find((r) => r.key === 'inbox')?.stop_at).toBe('t1_c9')
     const res = await runRedditRead(got.job as never, {
-      fetch: fakeReddit(routes, 'inmo_official').fetch,
+      fetch: fakeReddit(routes, 'ivra_official').fetch,
       sleep: async () => {},
       stopped: () => false,
       gapMs: 0,
@@ -259,7 +259,7 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
     const s = setup()
     // 插件先配好、连上 Reddit（还没配版块时来问一次）
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'], brand_username: 'inmo_official' })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
     await s.watch.runNow()
     await extensionRound(s.watch, fakeReddit(routes, 'my_personal'))
     const run = s.watch.view().last_run as RedditWatchRun
@@ -273,7 +273,7 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
     const s = setup()
     // 插件先配好、连上 Reddit（还没配版块时来问一次）
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     await s.watch.runNow()
     s.setNow('2026-10-14T04:30:00.000Z')
     s.watch.sweep()
@@ -320,22 +320,22 @@ describe('插件读收件箱与自家版块（替身插件 × 替身 Reddit）',
     const s = setup({ complete: () => complete })
     // 插件先配好、连上 Reddit（还没配版块时来问一次）
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     await s.watch.runNow()
     await extensionRound(
       s.watch,
       fakeReddit(
         {
           '/message/inbox/.json?mark=false': listing([]),
-          '/r/inmoxr/new/.json': listing([t('p2', 't3')]),
-          '/r/inmoxr/comments/.json': listing([t('c1', 't1', { body: 'iPhone?' }), t('c2', 't1')]),
+          '/r/ivraxr/new/.json': listing([t('p2', 't3')]),
+          '/r/ivraxr/comments/.json': listing([t('c1', 't1', { body: 'iPhone?' }), t('c2', 't1')]),
         },
-        'inmo_official',
+        'ivra_official',
       ),
     )
     expect(complete).toHaveBeenCalledTimes(1)
     // 没配品牌号：第一次读到就记下登着的号（之后换号就一条都不读）
-    expect(s.watch.settings().brand_username).toBe('inmo_official')
+    expect(s.watch.settings().brand_username).toBe('ivra_official')
     const d = s.watch.digest({
       since: '2026-10-11T00:00:00.000Z',
       until: '2026-10-17T00:00:00.000Z',
@@ -350,14 +350,14 @@ describe('什么时候巡查（一天一次起步）', () => {
   const empty = fakeReddit(
     {
       '/message/inbox/.json?mark=false': listing([]),
-      '/r/inmoxr/new/.json': listing([]),
-      '/r/inmoxr/comments/.json': listing([]),
+      '/r/ivraxr/new/.json': listing([]),
+      '/r/ivraxr/comments/.json': listing([]),
     },
-    'inmo_official',
+    'ivra_official',
   )
   it('刚连上插件：缺连接停着的那一块马上来一轮', async () => {
     const s = setup({}, '2026-10-14T02:00:00.000Z')
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     await s.watch.tick()
     expect(s.watch.view().last_run?.parts[0]?.status).toBe('needs_connection')
     // 插件第一次来问（连着 Reddit）：同一拍就把活领走了
@@ -368,7 +368,7 @@ describe('什么时候巡查（一天一次起步）', () => {
   it('每天一次：本地 9 点前不跑、当天不跑第二次、第二天再跑', async () => {
     const s = setup({}, '2026-10-14T00:00:00.000Z') // 本地 08:00
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     expect(await s.watch.tick()).toMatchObject({ ran: false, skipped: 'not_due' })
     s.setNow('2026-10-14T02:00:00.000Z') // 10:00
     expect(await s.watch.tick()).toMatchObject({ ran: true })
@@ -381,7 +381,7 @@ describe('什么时候巡查（一天一次起步）', () => {
   it('一天一次的定时里没有「周五最后一次」（要最新数据由 AI 调立即巡查）', async () => {
     const s = setup({}, '2026-10-16T09:05:00.000Z') // 周五 17:05（东八区）
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     expect(await s.watch.tick()).toMatchObject({ ran: true })
     await extensionRound(s.watch, empty)
     s.setNow('2026-10-16T10:30:00.000Z')
@@ -395,12 +395,12 @@ describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
       t('c9', 't1', { type: 'comment_reply', body: 'iPhone?' }),
       t('m1', 't1', { type: 'comment_reply', subreddit: 'other_sub' }),
     ]),
-    '/r/inmoxr/new/.json': listing([t('p2', 't3', { title: 'My Air3 unboxing' })]),
-    '/r/inmoxr/comments/.json': listing([t('c9', 't1', { body: 'iPhone?' })]),
+    '/r/ivraxr/new/.json': listing([t('p2', 't3', { title: 'My Air3 unboxing' })]),
+    '/r/ivraxr/comments/.json': listing([t('c9', 't1', { body: 'iPhone?' })]),
   }
   it('sweepNow：现在巡查一次，等插件交回再回（正在跑的那一轮直接等它）', async () => {
     // 替身插件：sweepNow 在「等」的时候（每次 sleep）来领活、读替身 Reddit、交回
-    const reddit = fakeReddit(routes, 'inmo_official')
+    const reddit = fakeReddit(routes, 'ivra_official')
     let handed = false
     const ref: { w?: ReturnType<typeof setup>['watch'] } = {}
     const s = setup(
@@ -413,7 +413,7 @@ describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
       '2026-10-16T09:05:00.000Z',
     )
     ref.w = s.watch
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'], keywords: ['INMO'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'], keywords: ['IVRA'] })
     s.watch.next({ connected: true })
     // 刚连上会马上补跑一轮；它还没做完时 AI 要「立即巡查」→ 直接等这一轮
     const run = await s.watch.sweepNow({ pollMs: 1, timeoutMs: 50 })
@@ -424,7 +424,7 @@ describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
     const src = redditWatchSourceOf(s.watch)
     expect(src.platform).toBe('reddit')
     expect(await src.configured()).toBe(true)
-    expect(await src.ownPlaces()).toEqual(['inmoxr'])
+    expect(await src.ownPlaces()).toEqual(['ivraxr'])
     const w = { since: '2026-10-10T16:00:00.000Z', until: '2026-10-16T10:00:00.000Z' }
     const items = await src.items(w)
     // 同一条评论在收件箱和版块里都有 → 只算一次；别处版块里回我们的不算
@@ -439,7 +439,7 @@ describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
   it('插件一直没来交：sweepNow 到时抛一句人话（报告照样用已入库的出）', async () => {
     const s = setup({ sleep: async () => {} }, '2026-10-16T09:05:00.000Z')
     s.watch.next({ connected: true })
-    s.watch.updateSettings({ own_subreddits: ['inmoxr'] })
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'] })
     s.watch.next({ connected: true }) // 把「刚连上补跑」那一件领走、不交
     await expect(s.watch.sweepNow({ pollMs: 1, timeoutMs: 3 })).rejects.toThrow('插件还没交回')
   })
@@ -461,13 +461,13 @@ describe('配置卡的设置目标', () => {
     await expect(target.apply({ own_subreddits: 'r/bad name' })).rejects.toThrow('版块名')
     await expect(target.apply({})).rejects.toThrow('至少')
     await target.apply({
-      own_subreddits: 'r/inmoxr',
-      keywords: 'INMO, 影目，Xreal',
+      own_subreddits: 'r/ivraxr',
+      keywords: 'IVRA, 艾维，Xreal',
       every_hours: '12',
     })
     expect(s.watch.settings()).toMatchObject({
-      own_subreddits: ['inmoxr'],
-      keywords: ['INMO', '影目', 'Xreal'],
+      own_subreddits: ['ivraxr'],
+      keywords: ['IVRA', '艾维', 'Xreal'],
       every_hours: 12,
     })
     expect(await target.satisfied()).toBe(true)

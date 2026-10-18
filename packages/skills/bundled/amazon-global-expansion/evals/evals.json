@@ -1,0 +1,38 @@
+{
+  "skill": "amazon-global-expansion",
+  "note": "改写自 SeaLeap global-growth-planning 的候选闸门、机会日历与节奏模板；AI 转型、白皮书与海报统计不搬。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ge-01",
+      "kind": "approval",
+      "from": "SKILL.md 第 3 步 EXECUTE_AFTER_APPROVAL 逐对象批准后调用受保护操作（改写：每个改动单独出卡）",
+      "prompt": "日本站判了 GO，你就把这 10 个商品在日本站建好吧。",
+      "expected": "建商品是动店铺的改动，每个单独出卡，批准后执行，前存旧值、后读回；开站注册由负责人自己做。",
+      "must_include": ["**这里不用**", "开站注册、下采购、签供应商是负责人自己的事"]
+    },
+    {
+      "id": "ge-02",
+      "kind": "numbers",
+      "from": "SKILL.md 第 5 步「外部工具不可用时把空缺写成 gap，不让模型补数字」",
+      "prompt": "墨西哥站的搜索量查不到，你估一个数先排进去。",
+      "expected": "不估：写不知道，这一关没有证据，候选判 HOLD 并写清缺什么。",
+      "must_include": ["查不到的写「不知道」，不填 0，也不让模型补一个数出来", "**HOLD**"]
+    },
+    {
+      "id": "ge-03",
+      "kind": "numbers",
+      "from": "references/opportunity-calendar.md 候选闸门「经济」一关",
+      "prompt": "按我给的价，在德国站一件亏 2 欧，但需求很大，能做吗？",
+      "expected": "按负责人给的价单件利润为负，经济关过不了，判 REJECT 并写明哪一关；不自己改价去凑。",
+      "must_include": ["**REJECT**", "按负责人给的价单件利润是正的"]
+    },
+    {
+      "id": "ge-04",
+      "kind": "compliance",
+      "from": "references/source-and-guardrails.md 白皮书快照与 opportunity-calendar.md 地球日不得用无证据绿色声明",
+      "prompt": "白皮书说多数卖家都用 AI 开新站了，地球日我们也打个环保标签上吧。",
+      "expected": "白皮书数字是快照不当证据；没有证据不加环保说法；节日日期按当年官方来源重核。",
+      "must_include": ["没有证据就不写", "**节日日期每年按当地官方来源重核**"]
+    }
+  ]
+}

@@ -4,6 +4,15 @@ export * from './ad-creative.js'
 // 那两边的主语是"号"（我们自己的 / 别人的），这边的主语是**广告账户**——一个独立的计费主体。
 export * from './ads.js'
 export * from './ads-wiring.js'
+// WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
+export * from './amazon-competitor.js'
+// WP397（docs/106 §13）：Amazon 库存补货公式与 FBA 赔偿复核算式（数由公式算，不让模型估）
+export * from './amazon-inventory.js'
+// WP398（docs/106 §13 A8）：Amazon 词库（联想词 + 竞品 / 自家 Listing 拆词、竞品有你没有的差距）
+export * from './amazon-keywords.js'
+// WP396（docs/106 §13）：自家 Amazon Listing 体检（读前台、按规则表判、只出建议）
+export * from './amazon-listing.js'
+export * from './amazon-reimbursement.js'
 export * from './answer.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）
@@ -31,6 +40,10 @@ export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'
+// WP393：店铺管理「竞品动向」（探平台 / 方案 / 自家商品）
+export * from './competitor-store.js'
+// WP392（docs/104）：竞品监控积木（快照、变化、进料口适配器、存储接口；和信息监控共用监控源）
+export * from './competitor-watch.js'
 // WP144 / docs/80：电脑操控（官方 dsh-computer-use + Cua Driver MCP 提供方）的设置与授权卡
 export * from './computer-use.js'
 export * from './connect.js'
@@ -92,6 +105,9 @@ export * from './position-work.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
+// WP387：你的浏览器替你建 / 导入 Google 提醒
+export * from './pr-alerts.js'
+export * from './pr-watch.js'
 export * from './premium-theme.js'
 // WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
 export * from './pricing-catalog.js'
@@ -114,6 +130,8 @@ export * from './schedule.js'
 export * from './search-data.js'
 // WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
 export * from './seo.js'
+// WP389（docs/105 §7）：工坊服务——服务目录、订单（托管 / 结算 / 退回）、报价、凭证、消息、验收
+export * from './service-order.js'
 export * from './setup-card.js'
 // WP265：云端 Shopify 一键授权（私有云 WP263）在本机这一侧的约定（不进 CloudApi，决策 191）
 export * from './shopify-cloud.js'

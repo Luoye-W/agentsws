@@ -3,7 +3,7 @@
  *
  * 真服务进程 + stub 运行时（脚本化工具调用，见 `@agentsws/stand-ins` 的 `report-playbook.ts`）+ 替身巡查数据：
  *
- * 1. 「每周五下午 5 点给我出一份 r/inmoxr 周报，数据周日到周五：①…②…③…④…」→ AI 用官方自动化任务建一条
+ * 1. 「每周五下午 5 点给我出一份 r/ivraxr 周报，数据周日到周五：①…②…③…④…」→ AI 用官方自动化任务建一条
  *    每周五 17:00 的定时（提示词 = 这段要求）；
  * 2. 到点 → 先立即巡查 → 查巡查数据 / 查发出记录 → 发布报告（四节按要求的顺序、带原文链接与我们的回复链接）；
  * 3. 「把第三节放最前面」→ AI 改那条定时的提示词（同一条，没新建）；
@@ -72,7 +72,7 @@ describe('WP331 一句话配出周报、再一句话改格式（stub 运行时�
       'query_sent_records',
       'publish_report',
     ])
-    expect(t2.report?.title).toBe('r/inmoxr 周报（10/11 – 10/16）')
+    expect(t2.report?.title).toBe('r/ivraxr 周报（10/11 – 10/16）')
     expect(t2.report?.markdown).toContain('- 帖子 **3** · 评论 **4**')
     expect(t2.report?.markdown).toContain('和 XREAL 对比（post × 1 / comment × 1）')
     expect(t2.report?.markdown).toContain('评估：需跟进')

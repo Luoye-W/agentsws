@@ -9,7 +9,7 @@ import { renderWithProviders } from './helpers'
 
 const profile = {
   legal_name: '深圳卢耶科技有限公司',
-  brand_name: 'Rollout',
+  brand_name: 'Rovella',
   discoverable: true,
   vertical: 'goods' as const,
   storefront_platform: 'shopify' as const,

@@ -1,12 +1,12 @@
 /**
- * WP243：Rollout 那句「说说你要做什么」的一份**像真模型会回的**紧凑答案（新格式），
+ * WP243：Rovella 那句「说说你要做什么」的一份**像真模型会回的**紧凑答案（新格式），
  * 以及同样内容用老格式写出来的样子——好比较输出长度。
  *
- * 21 条职责（10-06 真机那一次推了 5 岗 21 职责），原话都是 {@link ROLLOUT_TEXT} 里真有的字。
+ * 21 条职责（10-06 真机那一次推了 5 岗 21 职责），原话都是 {@link ROVELLA_TEXT} 里真有的字。
  */
-import { ROLLOUT_TEXT } from './wp242-fixtures.js'
+import { ROVELLA_TEXT } from './wp242-fixtures.js'
 
-export { ROLLOUT_TEXT }
+export { ROVELLA_TEXT }
 
 type Row = [id: string, reason: string, quote: string]
 
@@ -44,10 +44,10 @@ const POSITIONS: [string, string[]][] = [
 ]
 
 /** 新格式（WP243 提示词要的那种）：`{"r":[[id,理由,原话]],"p":[[名字,[id…]]]}`，不换行。 */
-export const ROLLOUT_COMPACT_ANSWER = JSON.stringify({ r: ROWS, p: POSITIONS })
+export const ROVELLA_COMPACT_ANSWER = JSON.stringify({ r: ROWS, p: POSITIONS })
 
 /** 同样的内容，老格式（WP234 提示词要的那种，模型通常还会缩进换行——这里按缩进 2 算）。 */
-export const ROLLOUT_OLD_ANSWER = JSON.stringify(
+export const ROVELLA_OLD_ANSWER = JSON.stringify(
   {
     roles: ROWS.map(([role_id, reason, quote]) => ({ role_id, reason, quote })),
     positions: POSITIONS.map(([name, role_ids]) => ({ name, role_ids })),

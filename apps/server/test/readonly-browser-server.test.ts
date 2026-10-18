@@ -22,7 +22,7 @@ import { SECRETS_KEY_ENV, type SecretStore } from '../src/secret-store.js'
 
 const listing = (items: Record<string, unknown>[], text = ''): PageRead => ({
   status: 200,
-  finalUrl: 'https://www.reddit.com/search/?q=inmo',
+  finalUrl: 'https://www.reddit.com/search/?q=ivra',
   extract: {
     signals: { title: '', text, passwordInputs: 0, frameSources: [], items: items.length },
     items,
@@ -68,9 +68,9 @@ describe('read_reddit × 本机只读浏览器', () => {
       listing([
         {
           kind: 'post',
-          url: '/r/inmo/comments/a1/hi/',
+          url: '/r/ivra/comments/a1/hi/',
           title: 'Hi',
-          subreddit: 'inmo',
+          subreddit: 'ivra',
           score: 3,
           comments: 1,
           created_at: '2026-10-04T08:00:00.000Z',
@@ -78,7 +78,7 @@ describe('read_reddit × 本机只读浏览器', () => {
         },
       ]),
     ])
-    const got = await h.exec(call({ action: 'search', query: 'inmo', limit: 5 }))
+    const got = await h.exec(call({ action: 'search', query: 'ivra', limit: 5 }))
     expect(got).toMatchObject({
       status: 'ok',
       data: {
@@ -86,9 +86,9 @@ describe('read_reddit × 本机只读浏览器', () => {
         items: [
           {
             kind: 'post',
-            url: 'https://www.reddit.com/r/inmo/comments/a1/hi/',
+            url: 'https://www.reddit.com/r/ivra/comments/a1/hi/',
             title: 'Hi',
-            subreddit: 'inmo',
+            subreddit: 'ivra',
             score: 3,
           },
         ],
@@ -100,19 +100,19 @@ describe('read_reddit × 本机只读浏览器', () => {
       ['browser_readonly', 'ok'],
     ])
     expect(vi.mocked(h.session.readPage).mock.calls[0]?.[0]).toMatch(
-      /^https:\/\/www\.reddit\.com\/search\/\?q=inmo/u,
+      /^https:\/\/www\.reddit\.com\/search\/\?q=ivra/u,
     )
     expect(vi.mocked(h.session.readPage).mock.calls[0]?.[1]).toEqual({ limit: 5, maxText: 4000 })
   })
 
   it('被拦了：这一路记 blocked、照实说；暂停期间路由在门口就挡住，不再开页面', async () => {
     const h = setup([listing([], 'are you a robot?')])
-    const got = await h.exec(call({ action: 'posts', subreddit: 'inmo' }))
+    const got = await h.exec(call({ action: 'posts', subreddit: 'ivra' }))
     expect(got).toMatchObject({ status: 'ok', data: { rows: 0 } })
     expect(h.records[0]?.attempts.at(-1)).toMatchObject({ outcome: 'blocked' })
     expect(h.rb.status().state).toBe('blocked')
     h.tick(60_000)
-    await h.exec(call({ action: 'posts', subreddit: 'inmo' }))
+    await h.exec(call({ action: 'posts', subreddit: 'ivra' }))
     expect(h.records[1]?.attempts.at(-1)).toMatchObject({ outcome: 'blocked' })
     expect(h.session.readPage).toHaveBeenCalledTimes(1)
   })

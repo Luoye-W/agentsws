@@ -25,6 +25,7 @@ import type {
   ConnectionDirectoryPort,
   FreeChatPort,
   PositionEntryPort,
+  PrPort,
   SiteThemeView,
   WorkPort,
   WorkstationPort,
@@ -66,8 +67,13 @@ import {
 import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
-import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
-import { fetchPage, fetchRobots, isDisallowed } from '@agentsws/brand-intake'
+import {
+  type PageFetch as BrandIntakeFetch,
+  fetchPage,
+  fetchRobots,
+  isDisallowed,
+  probeStore,
+} from '@agentsws/brand-intake'
 import { normalizeSubreddit } from '@agentsws/browser-action'
 import type { CatalogNote } from '@agentsws/catalog'
 import type {
@@ -85,6 +91,8 @@ import type {
   ApprovalItem,
   Assignment,
   Clock,
+  CompetitorIntakeAdapter,
+  CompetitorSourceKind,
   ConnectNeed,
   ContentPublicKey,
   DataSourceLevel,
@@ -100,10 +108,12 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  RunRequest,
   SearchDataPort,
   SkillTier,
   StartRun,
   StorefrontPlatform,
+  StoreProbeResult,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
@@ -112,6 +122,7 @@ import {
   ADS_DEFAULT_CAPS,
   ADS_PLATFORMS,
   AI_IMAGE_EDIT_CAPABILITY,
+  type AmazonListingText,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
@@ -146,6 +157,7 @@ import {
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
+import type { DataSourceStatus, PrDeckData } from '@agentsws/deck'
 import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
 import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
@@ -174,7 +186,7 @@ import {
   stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { createPrRedditAdapter } from '@agentsws/pr-core'
+import { type AlertsTransport, createPrRedditAdapter } from '@agentsws/pr-core'
 import {
   changeKindOf,
   createRoleStore,
@@ -190,7 +202,12 @@ import {
   SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
-import { createBrandRouter, type ScheduleTask } from '@agentsws/schedule'
+import {
+  createBrandRouter,
+  reportTimeZone,
+  type ScheduleTask,
+  WEEKLY_REPORT_DEFAULT,
+} from '@agentsws/schedule'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
@@ -208,7 +225,12 @@ import {
   splitFrontmatter,
 } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
-import { createRedditReadRouter, scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
+import {
+  createRedditReadRouter,
+  describeChange,
+  scheduleConflicts,
+  scheduleRulesFor,
+} from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -235,6 +257,31 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
+// WP394（docs/104 一期 B）：读 Amazon 前台的那一块（自报 Agent、配送邮编、被拦就停）与云端兜底
+import {
+  type AmazonCloudPort,
+  type AmazonFrontReader,
+  type AmazonFrontState,
+  createAmazonFrontReader,
+  readAmazonCloud,
+} from './amazon-front/index.js'
+// WP398（docs/106 §13 A8）：Amazon 词库（前台联想词 + 竞品 / 自家 Listing 拆词 + 差距）
+import {
+  type AmazonAutocompleteReader,
+  type AmazonKeywordBank,
+  createAmazonKeywordBank,
+  createAmazonKeywordToolExecutor,
+  createBrowserAutocompleteReader,
+  listingTextsFromFacts,
+  listingTextsFromSnapshots,
+} from './amazon-keywords/index.js'
+// WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
+import {
+  type AmazonListingCheckup,
+  type AmazonListingReader,
+  createAmazonListingCheckup,
+  createAmazonListingToolExecutor,
+} from './amazon-listing/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -346,6 +393,25 @@ import {
 import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
+// WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
+import {
+  type AmazonCompetitorAssembly,
+  browserTextReadOf,
+  type CompetitorStoreAssembly,
+  type CompetitorWatchAssembly,
+  competitorWatchSourceOf,
+  createAmazonAsinAdapter,
+  createAmazonCompetitor,
+  createAmazonCompetitorTools,
+  createCompetitorStore,
+  createCompetitorStoreTools,
+  createCompetitorWatch,
+  createCompetitorWatchDb,
+  createShopCatalogAdapter,
+  nodePageFetch,
+  type OwnShopRead,
+  readOwnShopProducts,
+} from './competitor-watch/index.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { openConnectOwners } from './connect-owners.js'
@@ -559,7 +625,22 @@ import {
   retargetPositionMatters,
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
+import { seedDemoAlerts } from './pr-alerts/demo.js'
+import { createPrAlertsService, type PrAlertsService } from './pr-alerts/service.js'
+import { markManualFallback, withBrowserBuild } from './pr-alerts/setup.js'
+import { createGoogleAlertsTool } from './pr-alerts/tool.js'
 import { createPrService } from './pr-service.js'
+import {
+  createPrMonitorToolExecutor,
+  createPrWatch,
+  createPrWatchStore,
+  demoFeedFetch,
+  PR_WATCH_TARGET,
+  type PrWatchAssembly,
+  type PrWatchStoreHandle,
+  summaryOf as prWatchSummaryOf,
+  seedDemoPrWatch,
+} from './pr-watch/index.js'
 import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import { readRouteLevelOf, readViaSources } from './read-route.js'
@@ -609,7 +690,7 @@ import {
   settleRedditWrite,
   socialRedditFill,
 } from './reddit-write/wire.js'
-import { createReportToolExecutor, type WatchSource } from './report-tools.js'
+import { combineWatchSources, createReportToolExecutor, type WatchSource } from './report-tools.js'
 import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
@@ -636,6 +717,7 @@ import {
   registerApprovalHousekeeping,
   registerB2bSequence,
   registerBackup,
+  registerCompetitorWatch,
   registerDailyPlan,
   registerEconomics,
   registerIdempotencySweep,
@@ -704,6 +786,8 @@ import {
   trafficOrdersFromRows,
 } from './site-health.js'
 import { createChromeRenderer } from './site-health-render.js'
+import { siteHealthSetupTarget } from './site-health-setup.js'
+import { createSiteHealthToolExecutor } from './site-health-tools.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
@@ -750,6 +834,7 @@ import {
   searchBrowserChannelFromEnv,
   searchLocaleLine,
 } from './web-browser/index.js'
+import { weeklyReportsSetupTarget } from './weekly-report-settings.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -759,6 +844,17 @@ import {
   createWorkArchive,
   type WorkArchiveAssembly,
 } from './work-archive.js'
+import {
+  createWorkshopServiceTools,
+  isBackgroundRun,
+  isThemeRoleId,
+} from './workshop-service-tools.js'
+import {
+  createWorkshopServices,
+  SERVICE_REFUSAL,
+  type WorkshopServices,
+  workshopServicesPort,
+} from './workshop-services.js'
 import {
   createWorkstationPort,
   emptyDataSource,
@@ -881,6 +977,9 @@ export const BUNDLED_ROLES = [
   'dtc.support',
   'dtc.live-chat',
   'amz.support',
+  // WP395（docs/106 §13）：Amazon 运营岗位的亚马逊店铺运营。不在这张表里 = 类别目录里
+  // 「Amazon 运营」只剩一条默认不勾的 Amazon 客服，岗位也种不出来
+  'amz.store',
   // WP62（51 §2.1）：网站运营岗位的第一条职责——店铺管理（旧 `dtc.ops`）
   'dtc.store',
   // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约
@@ -986,6 +1085,12 @@ export interface MountedWorld {
  */
 const REPORT_WATCH_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.reddit'])
 
+/**
+ * WP392（docs/104 C1 / C2）：担竞品监控的职责——竞品独立站归「店铺管理」，Amazon 竞品归「亚马逊店铺运营」（WP395）。
+ * 报告积木里「竞品变化表」只给它们；它们查巡查数据时默认查的是竞品那一份。
+ */
+const REPORT_COMPETITOR_ROLES: ReadonlySet<string> = new Set(['dtc.store', 'amz.store'])
+
 export interface ServerOptions {
   /**
    * SQLite 目录；不给则全部内存档（测试与一次性任务）。
@@ -1012,6 +1117,22 @@ export interface ServerOptions {
    */
   clientErrorLog?: (line: string) => void
   /**
+   * WP398（docs/106 §13 A8）：词库读 Amazon 搜索框联想词用的那一块。不给 = 有桌面壳的内置浏览器时用它读
+   * （`Agent/AgentsWorkshop` 标识、固定间隔、算进每小时额度、被拦就停），没有就照实说「读不了」。demo / 测试注入替身。
+   */
+  amazonAutocompleteReader?: (workspace_id: WorkspaceId) => AmazonAutocompleteReader | undefined
+  /**
+   * WP398：拆词用的 Listing 文本（竞品快照 WP392 / WP394、自家体检 WP396 合进来后接这里；demo 注入录好的几份）。
+   * 不给 = 只拆读页那几单交进来的（`ingestListings`）。
+   */
+  amazonKeywordListings?: (workspace_id: WorkspaceId) => Promise<AmazonListingText[]>
+  /**
+   * WP396（docs/106 §13）：Listing 体检读 Amazon 前台商品页用的那一块（WP394 的读页积木：内置浏览器、
+   * `Agent/AgentsWorkshop` 标识、配送邮编、被拦就停）。demo / 测试注入替身。
+   * 不给 = 这里读不了 Amazon 前台，体检照实说「读不了」（不退回去用别的办法读）。
+   */
+  amazonListingReader?: (workspace_id: WorkspaceId) => AmazonListingReader | undefined
+  /**
    * WP323：记录去处的飞书适配器发请求用的 `fetch`（测试注入替身飞书；不给用全局 `fetch`）。
    */
   outboundFetch?: FeishuFetch
@@ -1020,6 +1141,26 @@ export interface ServerOptions {
    * （WP328）；测试 / 评测注入替身数据。
    */
   watchSource?: (workspace_id: WorkspaceId) => WatchSource | undefined
+  /**
+   * WP392：竞品监控的进料口（每种来源一个：独立站 WP393、Amazon WP394）。给了的盖过内置的那几种；
+   * demo / 测试注入替身。哪种都没有 = 那几条源照实标「还没接上」。
+   */
+  competitorAdapters?: (
+    workspace_id: WorkspaceId,
+  ) => Partial<Record<CompetitorSourceKind, CompetitorIntakeAdapter>>
+  /** WP393：读竞品独立站时本机直接请求那一口（测试 / demo 塞录好的样本；不给 = 真请求）。 */
+  competitorShopFetch?: BrandIntakeFetch
+  /** WP393：探平台的替身（测试 / demo；不给 = 真探：读一下店里那两个公开地址）。 */
+  competitorProbe?: (url: string, now: string) => Promise<StoreProbeResult> | undefined
+  /** WP393：自家店商品的替身（测试 / demo；不给 = 从已连店铺读）。 */
+  competitorOwnShop?: (workspace_id: WorkspaceId) => Promise<OwnShopRead>
+  /**
+   * WP394（docs/104 C4）：Amazon 对标款云端兜底那一路的数据能力口（测试 / demo 塞替身；不给 = 关联了账号就走
+   * 工坊云端数据 `amazon.product`，没关联 = 没有这一路）。
+   */
+  amazonCloud?: (workspace_id: WorkspaceId) => AmazonCloudPort | undefined
+  /** WP394：读 Amazon 前台那一块的替身（测试 / demo；不给 = 用桌面壳的内置浏览器，没有桌面壳 = 没有）。 */
+  amazonFront?: (workspace_id: WorkspaceId) => AmazonFrontReader | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -1315,6 +1456,10 @@ export interface ServerOptions {
    * 生产路径不传它，走全局 fetch。
    */
   socialFetch?: SocialFetch
+  /**
+   * WP386：信息监控拉 feed 的那一跳（测试 / 演示塞录好的 feed，不联网）。生产不传，走全局 fetch。
+   */
+  feedFetch?: AlertsTransport['fetch']
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -1887,6 +2032,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const redditWatchStore = createRedditWatchStore(
     dbDir === undefined ? undefined : join(dbDir, 'reddit-watch.sqlite'),
   )
+  // WP392：竞品监控的监控源 / 快照 / 变化表（一台机器一个库，每行钉品牌）
+  const competitorWatchDb = createCompetitorWatchDb(
+    dbDir === undefined ? undefined : join(dbDir, 'competitor-watch.sqlite'),
+  )
   const outboundLog: OutboundLog = createOutboundLog({
     store: outboundStore,
     adapters: createSinkAdapters([
@@ -2219,7 +2368,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP224：一页纸那条定时 → 设置里那一行（每周几、几点）。 */
   const weeklyReviewScheduleView = (task: ScheduleTask | undefined) => {
     if (task === undefined)
-      return { weekday: 1, time: '08:00', paused: false, missing: true as const }
+      return { ...WEEKLY_REPORT_DEFAULT, paused: false, missing: true as const }
     const parts = task.trigger.kind === 'cron' ? task.trigger.expr.split(/\s+/) : []
     const pad = (n: string | undefined) => String(Number(n ?? 0)).padStart(2, '0')
     return {
@@ -2425,6 +2574,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const moderationApplied = await brand?.socialService.executor.applyModeration(change)
       if (moderationApplied !== undefined) return moderationApplied
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
+      // WP387：「在你的 Google 账号里建 N 条提醒」那张卡同意了 → 开一件事让你的浏览器去建（进了队就回 ok）
+      const alertsApplied = await brand?.prAlerts?.apply(change)
+      if (alertsApplied !== undefined) return alertsApplied
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) {
         // WP182：样品标「已寄」生效了 → 寄样通知再出一张卡（出不成不影响这一张已落库）
@@ -2798,6 +2950,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   /** 首次设置那一面（品牌级档案）比这里晚装配，所以档案是**被读的**（WP62 / WP65）。 */
   let onboardingRef: OnboardingAssembly | undefined
+  /** WP388：周报取数时区——品牌目标市场的（多个取第一个认得出的），没设就是工作区时区。 */
+  const reportTzOf = (ws: WorkspaceId, tzOffsetMinutes: number): string =>
+    reportTimeZone(onboardingRef?.brandProfile(ws).markets, offsetToTz(tzOffsetMinutes))
   /**
    * 那份 `DESIGN.md`（WP122，71 §5）同样比品牌模块晚装配：它要读 `brandIntake`
    * 手上抓回来的页面，而 `brandIntake` 又要读首次设置那一面。四个岗位出活时经
@@ -3146,7 +3301,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP251（决策 119）：「品牌：」按**这次运行所在的品牌**取品牌名（品牌档案里的品牌名 = 工作区的
      * `brand.name`），公司全称另起一行「公司：」（这个品牌挂的那家公司）。以前这一行一直是公司全称、
-     * 每个品牌都一样——Rollout 跑 AI 看到的是「品牌：INMO 的公司全称」。
+     * 每个品牌都一样——Rovella 跑 AI 看到的是「品牌：IVRA 的公司全称」。
      */
     brand: (ws) => {
       const target = (ws ?? workspace.id) as WorkspaceId
@@ -3333,6 +3488,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const assembly = createSetupCards({
       workspace_id: ws,
       clock,
+      // WP390（docs/105 §4.1 ②）：服务目录里声明了这个卡点的 → 卡上多一个「交给工坊办」
+      workshopOffer: async (blocker) => (await workshopServicesOf(ws))?.blockerOffer(blocker),
       ...(brand.dir === undefined ? {} : { dir: brand.dir }),
       approvals: () => txn.approvals,
       onCard: (item) => brand.work.onCard(cardRefOf(item)),
@@ -3442,14 +3599,212 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       setBrandFacts: (facts) => onboardingRef?.setBrandFacts(ws, facts) ?? false,
     }))
       assembly.registerTarget(target)
+    // WP386：信息监控的提醒清单 + 贴 RSS（缺了出配置卡）
+    // WP387：配置卡多一格「让工坊在你的浏览器里替你建」；读到的已有提醒出一张勾选导入的卡
+    if (brand.prWatch !== undefined) {
+      const alerts = brand.prAlerts
+      assembly.registerTarget(
+        alerts === undefined
+          ? brand.prWatch.setupTarget()
+          : withBrowserBuild(brand.prWatch.setupTarget(), {
+              store: () => brand.prWatchStore,
+              browserReady: () => browserSettings.forRun()?.mode === 'browserskill',
+              propose: () => alerts.propose(),
+            }),
+      )
+      if (alerts !== undefined) assembly.registerTarget(alerts.importTarget())
+      // 决策 1086：Reddit 搜索词（AI 按档案拟、人确认才开；没接 Reddit 取数路由时没有这张卡）
+      const prReddit = brand.prWatch.redditSetupTarget()
+      if (prReddit !== undefined) assembly.registerTarget(prReddit)
+    }
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP393：店铺管理「竞品动向」方案卡（盯哪几家、每家走哪条路、什么算要紧、对标款）
+    if (brand.competitorStore !== undefined)
+      assembly.registerTarget(brand.competitorStore.setupTarget())
+    // WP394：亚马逊店铺运营「竞品动向」方案卡（盯哪些 ASIN、各对标谁、什么算重要、频率）
+    if (brand.amazonCompetitor !== undefined)
+      assembly.registerTarget(brand.amazonCompetitor.setupTarget())
     // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    /*
+     * WP385（决策 1076 → 690）：网站体检设置（商品 feed、其他平台上架页、两张清单的加减）在对话里说一句、
+     * 卡上点头就存；存好在后台重新体检一次（同一时间只跑一次），原来那件事按原话接着做。
+     */
+    const health = brand.siteHealth
+    if (health !== undefined)
+      assembly.registerTarget(
+        siteHealthSetupTarget({
+          service: () => health,
+          rerun: () => {
+            void Promise.allSettled([health.run(), health.aiTraffic()])
+          },
+        }),
+      )
+    // WP388：系统自带的三份周报几点出（跟 AI 说「周复盘改到周五 17:00」→ 改设置卡）
+    assembly.registerTarget(
+      weeklyReportsSetupTarget({ scheduler: () => schedule.scheduler, workspace_id: ws }),
+    )
+    // WP396：自家 Amazon 商品（体检没 ASIN 时出卡：按品牌名搜一页给候选，人勾）
+    if (brand.amazonListing !== undefined)
+      assembly.registerTarget(brand.amazonListing.setupTarget())
     setupCards.set(ws, assembly)
+    return assembly
+  }
+  /** WP386（docs/103 S5）：这个品牌连过任一 Google 服务没有（有 = Google 账号这一步算过了）。 */
+  const GOOGLE_SERVICES = new Set(['gmail', 'ga4', 'gsc', 'youtube_data', 'google_ads'])
+  const googleConnected = (ws: WorkspaceId): boolean =>
+    brandModules
+      .peek(ws)
+      ?.connections.connectedServices()
+      .some((s) => GOOGLE_SERVICES.has(s)) === true
+
+  /*
+   * WP390（docs/105）：**工坊服务**——一个品牌一份（懒建）。服务目录本机缓存、推荐卡的分寸、`service_order` 卡
+   * （批了才调云上下单 / 验收，永远 L1）、跟单与本机账本、落点（主题副本 → 发布审批卡；回执 → 回到卡点接着做）。
+   */
+  const workshopServicesMap = new Map<WorkspaceId, WorkshopServices>()
+  const workshopServicesOf = async (ws: WorkspaceId): Promise<WorkshopServices | undefined> => {
+    const cached = workshopServicesMap.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brands?.forWorkspace(ws)
+    if (brand === undefined) return undefined
+    /** 落主题时用谁的那条建站分配（订单上记的；没有就找这个人名下的建站 / 网站运营职责）。 */
+    const siteAssignmentOf = (person_id: string, assignment_id?: string) => {
+      const mine = roles.assignments
+        .listByPerson(person_id as never, { workspace_id: ws })
+        .filter((a) => a.revoked_at === undefined)
+      return (
+        mine.find((a) => a.id === assignment_id && isThemeRoleId(a.role_id)) ??
+        mine.find((a) => isThemeRoleId(a.role_id))
+      )
+    }
+    const assembly = createWorkshopServices({
+      workspace_id: ws,
+      clock,
+      ...(brand.dir === undefined ? {} : { dir: brand.dir }),
+      cloud: () => brandModules.cloud(ws),
+      approvals: () => txn.approvals,
+      onCard: (item) => brand.work.onCard(cardRefOf(item)),
+      note: (matter_id, text) => {
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'system', id: 'workshop_services' },
+        })
+      },
+      // 定制件：AI 在这件事里一问一答问清需求（点「看看」= 用户说了这一句）
+      ask: async ({ matter_id, actor, text }) => {
+        const assignment_id =
+          actor.assignment_id ??
+          (brand.work.getMatter(matter_id as never)?.position_id as string | undefined)
+        if (assignment_id === undefined) return
+        const name = /「([^」]+)」/u.exec(text)?.[1] ?? '工坊服务'
+        await brand.work.say(matter_id as never, {
+          person_id: actor.person_id as never,
+          assignment_id: assignment_id as never,
+          text: `我想看看「${name}」（工坊服务）`,
+          brief: text,
+        })
+      },
+      openMatter: async ({ actor, title }) =>
+        brand.work.createMatter({
+          kind: 'adhoc',
+          title,
+          participants: [actor.person_id as never],
+          ...(actor.assignment_id === undefined
+            ? {}
+            : { position_id: actor.assignment_id as never }),
+          ...(actor.role_id === undefined ? {} : { role_id: actor.role_id as never }),
+          ...(actor.position_id === undefined
+            ? {}
+            : { position_template_id: actor.position_id as never, entry: 'position' as const }),
+        }).id,
+      landings: {
+        // 主题副本 → 网站运营的发布审批卡（docs/12：发布永远 L1）
+        theme: async ({ theme_id, order_id, actor, matter_id }) => {
+          const theme = await siteThemeOf(ws)
+          const a = siteAssignmentOf(actor.person_id, actor.assignment_id)
+          if (theme === undefined || a === undefined) return undefined
+          const out = await theme.proposePublish({
+            theme_id,
+            request: {
+              id: `svc_${order_id}`,
+              actor: { person_id: actor.person_id, assignment_id: a.id, role_id: a.role_id },
+              ...(matter_id === undefined
+                ? {}
+                : { work_item: { id: matter_id, conversation_id: matter_id, role_id: a.role_id } }),
+            } as unknown as RunRequest,
+          })
+          return out.message
+        },
+        // 「做成了」回执 → 回到卡住的那一步，按原话接着做（连接卡 / 配置卡也复查一遍）
+        resume: async ({ resume }) => {
+          recheckSetupCards(ws)
+          const matter = brand.work.getMatter(resume.matter_id as never)
+          if (matter === undefined || matter.status === 'closed') return
+          const said = brand.work.store
+            .listMatterEvents(resume.matter_id as never, { limit: 200 })
+            .find((e) => e.kind === 'human_message')?.text
+          await brand.work.run(resume.matter_id as never, {
+            person_id: resume.person_id as never,
+            assignment_id: resume.assignment_id as never,
+            brief: said ?? matter.title,
+            text: '工坊办好了，接着做',
+          })
+        },
+      },
+      // P7：「不用」记进记忆（品牌那一层，用户随时问得到、删得掉）
+      remember: async (text, actor) => {
+        await learning.addMemory({
+          tier: 'company',
+          workspace_id: ws,
+          text,
+          by: actor.person_id as never,
+          written_by: 'ai',
+          reason: 'preference',
+        })
+      },
+      // 订单面板「帮我起草回复」：品牌默认模型（没配就用模板）
+      draft: async (prompt) => {
+        const models = await brandModules.models(ws)
+        if (!models.configured()) return undefined
+        const ref = models.defaultRef()
+        if (ref.provider === 'stub') return undefined
+        const gateway = await brandModules.gateway(ws)
+        return (
+          await gateway.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: 'workshop_services' as never,
+              role_id: 'common.owner' as never,
+              run_id: `svc_draft_${Date.parse(clock.now()).toString(36)}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 400,
+            thinking: 'off',
+          })
+        ).text
+      },
+      emit: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'workshop_services' },
+          correlation: { trace_id: `trc_svc_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+      ...(env.AGENTSWS_WORKSHOP_SERVICES_SYNC_MS === undefined
+        ? {}
+        : { syncMs: Number(env.AGENTSWS_WORKSHOP_SERVICES_SYNC_MS) }),
+    })
+    workshopServicesMap.set(ws, assembly)
     return assembly
   }
   /** WP324：连接卡上的一样现在连上了没有（认不出回 `undefined`：人说连好了就信人）。 */
@@ -3481,6 +3836,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (need.service === 'model') return setupProbes.get(ws)?.model()
     if (need.service === 'workshop_account') return setupProbes.get(ws)?.cloudLinked()
     if (need.service === 'deepseek_account') return deepseekAccount.signedIn()
+    /*
+     * WP386（docs/103 S5）：Google 账号——连过任一 Google 服务就算有；没有就信人（Google 账号登在用户自己的
+     * 浏览器里，服务端看不见）。
+     */
+    if (need.service === 'google_account') return googleConnected(ws) ? true : undefined
     /*
      * WP362：ChatGPT 订阅——过期的那条记录还在库里（官方刷新失败时保留它，等人重登），被限流时也照样
      * 「登着」，所以服务端判不出「好了没」：回 `undefined`，卡上人登好了点「接着做」（不自动接着跑，
@@ -3788,6 +4148,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
 
     // WP20 连接面：`/v1/connections/*` 与工作台数据源共用同一份连接状态
+    /**
+     * WP386：信息监控那几样晚绑定（监控库在下面才建）：有监控源 = Google Alerts 那一侧算连上（连接卡、
+     * 面板不再催「去连接」）；各条源的状态进面板脚注（拉不到照实说）。
+     */
+    const prMonitorHolder: { store?: PrWatchStoreHandle } = {}
+    const prMonitorCount = (): number => prMonitorHolder.store?.sources().length ?? 0
+    const prMonitorDeck = (): PrDeckData['monitor'] => {
+      const st = prMonitorHolder.store
+      if (st === undefined) return undefined
+      const sources = st.sources().filter((x) => x.paused !== true)
+      const failed = sources.filter((x) => x.status === 'failed')
+      return {
+        total: sources.length,
+        failed: failed.length,
+        summary: prWatchSummaryOf(sources.length, failed.length),
+        failures: failed.map((x) => ({ label: x.label, message: x.last_error ?? '没拉到' })),
+        pulled_ever: sources.some((x) => x.last_ok_at !== undefined),
+        competitors: sources.filter((x) => x.group === 'competitor').length,
+      }
+    }
+    const withMonitorSources = (list: DataSourceStatus[]): DataSourceStatus[] =>
+      prMonitorCount() === 0
+        ? list
+        : [
+            ...list.filter((x) => x.id !== 'google_alerts'),
+            { id: 'google_alerts', label: 'Google Alerts', connected: true },
+          ]
     const connections = await createConnections({
       clock,
       workspace_id: ws,
@@ -3809,7 +4196,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       owners: connectOwners.owners,
       startupBrand: isBootstrap,
       // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
-      extraKinds: () => (cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+      extraKinds: () => [
+        ...(cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
+        // WP386：有监控源 = 信息监控那张连接卡算连上
+        ...(prMonitorCount() > 0 ? ['google_alerts'] : []),
+      ],
     })
 
     /**
@@ -4014,6 +4405,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      // WP393：店铺管理日报里「竞品动向」那一段（有要紧的 / 有哪家没读到才出；竞品监控跟着品牌走，晚绑定）
+      competitor: () => {
+        const b = competitorStore?.brief()
+        return b === undefined ? undefined : { title: b.title, lines: b.lines, failed: b.failed }
+      },
       // WP76（58 §3）：设计那五块同理——需求单、brief、待挑、素材库、本周产出
       // 都在这台机器上，出图走模型网关的图片槽（那不是一条连接）。
       design: () =>
@@ -4051,7 +4447,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
-      pr: () => prDeckData(pr),
+      pr: () => prDeckData(pr, prMonitorDeck()),
       // WP171 / WP172（docs/84）：B2B 那十九块从这个品牌自己的 B2B 库来（邮件分拣落成的询盘、
       // 批了的客户 / 报价 / 样品 …）。demo 里库里的排前面、后面垫一份演示投影
       // WP173：主动开发那三块（今天待发 · 序列漏斗 · 回复待分）从开发序列来
@@ -4068,7 +4464,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP238：没连 Reddit API、但读 Reddit 已能经接口中台 / 只读浏览器取到——面板不再催「去连接」
       sources: () =>
         withReadVia(
-          withOwnSources(baseWorkData.sources()),
+          withMonitorSources(withOwnSources(baseWorkData.sources())),
           readLevelHolder.of === undefined ? {} : readViaSources(readLevelHolder.of),
         ),
     }
@@ -4560,9 +4956,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * "监控发现的客户投诉转客服"的分界，以及"在别人的地盘上版主说了算"这件事，
      * 从这一跳起是真会发生的事。
      *
-     * `pullMentions` 暂时不给：进料那两条（Google Alerts 的 RSS、Reddit 全站搜）
-     * 要这个品牌连接页上那两张卡真连上才有东西可拉。没配的时候
-     * `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
+     * WP386：`pullMentions` 接上了信息监控（`pr-watch/`）：多条 Google Alerts / 网站 RSS + Reddit 那一路
+     * （同一条取数路由）。没配的时候 `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
      */
     /**
      * WP172（docs/84）：B2B 库的 `/v1/b2b/*`。写都经卡（草稿 → 改动卡 → 批了执行器才落库，
@@ -4590,6 +4985,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP275：① ② 报价超限落回业务员自己、再确认一次
       mode: () => modeOfWorkspace?.(ws) ?? 'company',
     })
+    let prWatchRef: PrWatchAssembly | undefined
+    // WP387：你的浏览器替你建 / 导入 Google 提醒（信息监控那一份在下面才建，晚绑定）
+    let prAlertsRef: PrAlertsService | undefined
     const prService = createPrService({
       workspace_id: ws,
       // WP338（决策 664 / 783）：Reddit 版规原文上卡、不替人判；一天几条由用户设（默认不限）
@@ -4615,7 +5013,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .filter((a) => a.workspace_id === ws && a.revoked_at === undefined)
           .map((a) => ({ person_id: a.person_id })),
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
-      // 定时那一轮用**真持有品牌监控**的那个人的分配去提（定时任务没有"当前用户"）
+      // WP386：拉取接上了——到点的监控源拉一次（信息监控那一份在下面才建，晚绑定）
+      pullMentions: async () =>
+        prWatchRef === undefined
+          ? { ok: false as const, message: '这台机器上没装信息监控（托管模式）。' }
+          : prWatchRef.pull(),
+      // 定时那一轮用**真持有信息监控**的那个人的分配去提（定时任务没有"当前用户"）
       monitorActor: () => {
         const holder = roles.assignments
           .listByRole('pr.monitoring')
@@ -4740,6 +5143,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals,
       port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
       brandName: () => brandNameOfWorkspace(ws),
+      // WP388：出上一周的（目标市场时区）
+      reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
     })
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
     const lineCompareSnapshot = async () => {
@@ -5615,6 +6020,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP334（决策 724）：AI 自己要连接卡 / 配置卡（所有职责）。工具只回结构化缺项，
              * 卡由上面那条在这一轮收尾时出（同一缺项只一张、补完按原话接着做）。
              */
+            // WP385（决策 1076）：网站运营 / 内容与搜索读体检结论（只读；正在体检就等它跑完）
+            siteHealthTools: createSiteHealthToolExecutor({ service: () => siteHealth }),
             setupRequestTool: createSetupRequestTool({
               directory: async () =>
                 (directoryAssemblies.get(ws)?.directory() ?? []).flatMap((d) =>
@@ -5626,6 +6033,67 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               target: async (id) => (await setupCardsOf(ws))?.target(id),
               targetIds: async () => (await setupCardsOf(ws))?.targetIds() ?? [],
             }),
+            /*
+             * WP390（docs/105 §4）：工坊服务的两个工具（所有职责）+ 推荐卡。推荐挂不挂在服务里判：
+             * 只在人在场的那一轮（这一轮之前最后一句是人说的；定时 / 巡查 / 接着做都不推）、同一对话一项只推一次、
+             * 说过「不用」30 天不推。人回「不用」→ 上一轮挂过的那一项记下（30 天不推，进记忆）。
+             */
+            workshopServices: {
+              execute: createWorkshopServiceTools({
+                services: () => workshopServicesOf(ws),
+                positionOf: (req) =>
+                  cloudPositionOf(ws, req.actor.role_id, req.actor.assignment_id),
+              }),
+              offer: async ({ request, matter_id, found }) => {
+                const svc = await workshopServicesOf(ws)
+                const brand = await brands?.forWorkspace(ws)
+                if (svc === undefined || brand === undefined) return undefined
+                const said = brand.work.store
+                  .listMatterEvents(matter_id as never, { limit: 60 })
+                  .filter((e) => e.kind === 'human_message' || e.kind === 'agent_message')
+                const last = said.at(-1)
+                const present = last?.kind === 'human_message' && last.actor.kind === 'person'
+                const position_id = cloudPositionOf(
+                  ws,
+                  request.actor.role_id,
+                  request.actor.assignment_id,
+                )
+                const prevOffer = said
+                  .slice(0, -1)
+                  .reverse()
+                  .find((e) => e.kind === 'agent_message')?.service_offer
+                if (present && prevOffer !== undefined && SERVICE_REFUSAL.test(last.text.trim()))
+                  await svc.decline(prevOffer.service_id, {
+                    person_id: request.actor.person_id,
+                    role_id: request.actor.role_id,
+                    assignment_id: request.actor.assignment_id,
+                  })
+                return svc.offerFor({
+                  conversation: matter_id,
+                  ...(position_id === undefined ? {} : { position_id }),
+                  ...(present ? { text: last.text } : {}),
+                  ...(found === undefined ? {} : { service_id: found }),
+                  background: !present || isBackgroundRun(request),
+                })
+              },
+            },
+            // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给 dtc.store；托管实例没有）
+            ...(hostedBoot !== undefined
+              ? {}
+              : {
+                  competitorStoreTools: createCompetitorStoreTools({
+                    of: async () => competitorStore,
+                  }),
+                }),
+            // WP394：亚马逊店铺运营「竞品动向」现在读一次（只给 amz.store；托管实例没有）
+            ...(hostedBoot !== undefined
+              ? {}
+              : {
+                  amazonCompetitorTools: createAmazonCompetitorTools({
+                    of: async (w) =>
+                      (await brandModules.forWorkspace(w).catch(() => undefined))?.amazonCompetitor,
+                  }),
+                }),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -5735,13 +6203,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               execute: createReportToolExecutor({
                 clock,
                 tzOffsetMinutes: () => workData.tz_offset_minutes,
-                watch: (w) =>
-                  options.watchSource !== undefined
-                    ? options.watchSource(w)
-                    : redditWatch === undefined
+                /*
+                 * WP392：两份巡查库——Reddit 巡查与竞品监控。不给平台按这条职责挑（担竞品监控的默认查竞品那一份）；
+                 * `all` = 配了的全部合成一份（帖子和变化混查）。
+                 */
+                watch: async (w, platform, role_id) => {
+                  const reddit =
+                    options.watchSource !== undefined
+                      ? options.watchSource(w)
+                      : redditWatch === undefined
+                        ? undefined
+                        : redditWatchSourceOf(redditWatch)
+                  const competitor =
+                    competitorWatch === undefined
                       ? undefined
-                      : redditWatchSourceOf(redditWatch),
+                      : competitorWatchSourceOf(competitorWatch)
+                  const all = [reddit, competitor].filter((x): x is WatchSource => x !== undefined)
+                  if (platform === 'all') return combineWatchSources(all)
+                  if (platform !== undefined)
+                    return all.find((x) => x.platform === platform.toLowerCase())
+                  if (role_id !== undefined && REPORT_COMPETITOR_ROLES.has(role_id))
+                    return competitor
+                  return reddit
+                },
                 watchRoles: REPORT_WATCH_ROLES,
+                competitorRoles: REPORT_COMPETITOR_ROLES,
                 outbound: () => outboundLog,
                 approvals: () => approvals,
                 publishedCount: (w, dedupe_key) =>
@@ -5752,7 +6238,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   }).length,
               }),
               watchRoles: REPORT_WATCH_ROLES,
+              competitorRoles: REPORT_COMPETITOR_ROLES,
             },
+            // WP386：信息监控查提及（按组 / 竞品 / 来源 / 情绪 / 时间窗；拉不到的源照实列）
+            // WP387：信息监控出「建 Google 提醒」的卡 / 交代你的浏览器建完的结果
+            googleAlertsTool: createGoogleAlertsTool(() => prAlertsRef),
+            // WP387：只有那张卡同意过、那一趟还在跑的那件事，运行请求才带「可以改 Google 提醒」的凭据
+            browserGrants: ({ role_id, matter_id }) =>
+              role_id === 'pr.monitoring' ? (prAlertsRef?.grantsFor(matter_id) ?? []) : [],
+            prMonitorTools: createPrMonitorToolExecutor({
+              of: async () =>
+                prWatch === undefined
+                  ? undefined
+                  : {
+                      watch: prWatch,
+                      mentions: (filter) => pr.mentions(filter),
+                      sources: () => prWatchStore.sources(),
+                    },
+              now: () => clock.now(),
+              // S5：没连过任一 Google 服务时先出一次「登录 Google 账号」的卡；问过就信人
+              googleReady: () => {
+                const google = ['gmail', 'ga4', 'gsc', 'youtube_data', 'google_ads']
+                if (connections.connectedServices().some((x) => google.includes(x))) return true
+                if (prWatchStore.kv<string>('google_asked') !== undefined) return true
+                prWatchStore.setKv('google_asked', clock.now())
+                return false
+              },
+            }),
+            // WP398：Amazon 词库（刷新 / 看词库 / 标一个词；只给 amz.store）
+            amazonKeywordTools: createAmazonKeywordToolExecutor({
+              bank: async (w) =>
+                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
+                  ?.amazonKeywords,
+            }),
+            // WP396：Listing 体检（读自家前台页 / 看最近一次 / 改规则；只给 amz.store）
+            amazonListingTools: createAmazonListingToolExecutor({
+              checkup: async (w) =>
+                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
+                  ?.amazonListing,
+            }),
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
               service: () => adsDataRef,
@@ -6278,13 +6802,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       ga4: () => googleReads.ga4Conversions(),
       ga4Note: () => googleReads.ga4Note(),
+      ga4Window: () => googleReads.ga4Window?.(),
       // WP155：这个品牌的搜索数据接口（官方 / 自带 key / 不接）；测试与 demo 可以换替身
       searchData: () => options.searchDataFor?.(ws) ?? searchData,
-      orders: () => {
-        const since = Date.parse(clock.now()) - 7 * 86_400_000
+      // WP388：周报取上一周（目标市场时区）；不给窗口 = 近 7 天
+      reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
+      orders: (window) => {
+        const since =
+          window === undefined ? Date.parse(clock.now()) - 7 * 86_400_000 : Date.parse(window.from)
+        const until = window === undefined ? Number.POSITIVE_INFINITY : Date.parse(window.to)
         return workData
           .orders()
-          .filter((o) => Date.parse(o.created_at) >= since)
+          .filter((o) => Date.parse(o.created_at) >= since && Date.parse(o.created_at) < until)
           .map((o) => ({
             id: o.id,
             ...(o.landing_site === undefined ? {} : { landing_site: o.landing_site }),
@@ -6537,6 +7066,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
         ),
       socialPosts: () => social.posts(),
+      // WP390：工坊服务订单和事项排在一起（这个品牌已经装起来的那一份；没装就没有）
+      extraWork: (position_id) => workshopServicesMap.get(ws)?.workItems(position_id) ?? [],
       // WP244：工作里开着的事项按最近那一轮运行分组（在跑 / 答完了 / 卡住了）
       runningMatters: () => new Set((runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
       // WP244：卡住了说缺什么——这条职责还缺的必需连接（连接目录按品牌装好之后才有）
@@ -7435,6 +7966,121 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }),
       nowMs: () => Date.parse(clock.now()),
     })
+    /*
+     * WP398（docs/106 §13 A8）：Amazon 词库（品牌目录下 `amazon-keywords.json`）。联想词走内置浏览器
+     * （桌面壳那一条队，固定间隔、算进每小时额度、被拦就停）；托管实例不装（云上没有内置浏览器）。
+     */
+    const amazonKeywords: AmazonKeywordBank | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createAmazonKeywordBank({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir }),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            reader: () =>
+              options.amazonAutocompleteReader?.(ws) ??
+              (webSearchChannel === undefined
+                ? undefined
+                : createBrowserAutocompleteReader({
+                    workspace_id: ws,
+                    channel: webSearchChannel,
+                    throttle: webSearchThrottle,
+                  })),
+            brand: async () => {
+              await seoService.watchView().catch(() => undefined)
+              const w = (await seoService.geoHistory()).watch()
+              const p = onboardingRef?.brandProfile(ws)
+              return {
+                name: w?.brand.name ?? brandNameOfWorkspace(ws),
+                markets: p?.markets ?? [],
+                competitors: [
+                  ...(w?.competitors ?? []).map((c) => ({ id: c.id, name: c.name })),
+                  ...(p?.competitors ?? []).map((c) => ({ id: c.name, name: c.name })),
+                ],
+                seed_hints: [p?.category, p?.subcategory, ...(p?.keywords?.category ?? [])].filter(
+                  (x): x is string => typeof x === 'string' && x.trim() !== '',
+                ),
+              }
+            },
+            // WP394：竞品 / 自家对标款的标题和五点从竞品监控的快照里拿（`amazon_asin` 进料口读商品页时填的）；
+            // 测试 / demo 给了替身就用替身
+            competitorListings: async () => {
+              if (options.amazonKeywordListings !== undefined)
+                return options.amazonKeywordListings(ws)
+              const db = competitorWatchDb.forWorkspace(ws)
+              const w = (await seoService.geoHistory()).watch()
+              return listingTextsFromSnapshots({
+                sources: db.sources(),
+                snapshot: (id) => db.snapshot(id),
+                names: new Map((w?.competitors ?? []).map((c) => [c.id, c.name])),
+              })
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'amazon-keywords' },
+                correlation: {
+                  trace_id: `tr_amazon_keywords_${Date.parse(clock.now()).toString(36)}`,
+                },
+                payload,
+              }),
+          })
+    /*
+     * WP396（docs/106 §13）：自家 Listing 体检。自家 ASIN 是关注设置那一格（WP392 `BrandWatch.brand.amazon`，唯一一份）；
+     * 读页走 WP394 的积木（`options.amazonListingReader`）。托管实例不装（云上没有内置浏览器）。
+     */
+    const brandWatchOf = async () => {
+      await seoService.watchView().catch(() => undefined)
+      return (await seoService.geoHistory()).watch()
+    }
+    const amazonListing: AmazonListingCheckup | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createAmazonListingCheckup({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir }),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            // WP394：读页走竞品对标款同一块（内置浏览器、Agent 标识、配送邮编、被拦就停）；测试 / demo 给了替身就用替身
+            reader: () => options.amazonListingReader?.(ws) ?? amazonFront,
+            // WP398：体检读到的自家页（标题、五点）交给词库拆词，词库的「自家写了什么」就有了
+            onFacts: (facts) => amazonKeywords?.ingestListings(listingTextsFromFacts(facts)),
+            brand: async () => {
+              const w = await brandWatchOf()
+              const profile = onboardingRef?.brandProfile(ws) as { markets?: unknown } | undefined
+              return {
+                name: w?.brand.name ?? brandNameOfWorkspace(ws),
+                own: w?.brand.amazon ?? [],
+                markets: Array.isArray(profile?.markets)
+                  ? profile.markets.filter((m): m is string => typeof m === 'string')
+                  : [],
+              }
+            },
+            // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」）
+            saveOwn: async (items) => {
+              const store = await seoService.geoHistory()
+              const cur = await brandWatchOf()
+              if (cur === undefined) throw new Error('关注设置还没建好，存不了自家 ASIN')
+              const { prompts: _p, prompt_candidates: _c, ...settings } = cur
+              const { amazon: _old, ...brand } = settings.brand
+              store.saveSettings({
+                ...settings,
+                brand: items.length === 0 ? brand : { ...brand, amazon: items },
+              })
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'amazon-listing' },
+                correlation: { trace_id: `tr_amazon_listing_${clock.now()}` },
+                payload,
+              }),
+          })
     const redditWatch =
       hostedBoot !== undefined
         ? undefined
@@ -7558,6 +8204,163 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     /*
+     * WP392（docs/104）：竞品监控——监控源从唯一工作清单（GEO 关注设置）同步，进料口读一次、和上一次快照比、入库。
+     * 托管实例不装（一、二期在本机跑，docs/104 §3.6）。
+     */
+    /*
+     * WP393（docs/104 一期 A）：独立站进料口（先直接读、被挡改走内置浏览器；每页排进内置浏览器那条节流队）+
+     * 店铺管理「竞品动向」（方案卡、探平台、自家店比价、简报那一段）。测试 / demo 给了替身进料口就用替身。
+     */
+    const competitorIo = {
+      fetch: options.competitorShopFetch ?? nodePageFetch,
+      browser: () =>
+        webSearchChannel === undefined ? undefined : browserTextReadOf(webSearchChannel, ws),
+      page: <T>(task: () => Promise<T>) => webSearchThrottle.run(task),
+    }
+    const builtinShopAdapter = createShopCatalogAdapter(competitorIo)
+    let competitorStore: CompetitorStoreAssembly | undefined
+    /*
+     * WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的那一块——桌面壳的内置浏览器（每个请求自报
+     * `Agent/AgentsWorkshop`、配送邮编、被拦就停）、排进和搜索同一条节流队（固定间隔、每小时额度共用）；
+     * 云端兜底走工坊云端数据 `amazon.product`（关联了账号才有）。托管实例不装。
+     */
+    const cwStore = competitorWatchDb.forWorkspace(ws)
+    const AMAZON_FRONT_KEY = 'amazon_front'
+    const amazonFront: AmazonFrontReader | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : (options.amazonFront?.(ws) ??
+          (webSearchChannel === undefined
+            ? undefined
+            : createAmazonFrontReader({
+                workspace_id: ws,
+                channel: () => webSearchChannel,
+                page: (task) => webSearchThrottle.run(task, { steady: true }),
+                nowMs: () => Date.parse(clock.now()),
+                state: () => cwStore.kv<AmazonFrontState>(AMAZON_FRONT_KEY) ?? {},
+                saveState: (next) => cwStore.setKv(AMAZON_FRONT_KEY, next),
+              })))
+    const amazonCloudPort = (): AmazonCloudPort | undefined =>
+      options.amazonCloud !== undefined
+        ? options.amazonCloud(ws)
+        : ownCloud.linked()
+          ? createDataService(ownCloud)
+          : undefined
+    let amazonCompetitor: AmazonCompetitorAssembly | undefined
+    const amazonAsinAdapter = createAmazonAsinAdapter({
+      reader: () => amazonFront,
+      cloud: () => {
+        const port = amazonCloudPort()
+        return port === undefined
+          ? undefined
+          : (input) =>
+              readAmazonCloud(port, input, {
+                sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+                nowMs: () => Date.now(),
+              })
+      },
+      store: () => cwStore,
+      onCredits: (source_id, credits) => amazonCompetitor?.noteCredits(source_id, credits),
+    })
+    const competitorWatch: CompetitorWatchAssembly | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createCompetitorWatch({
+            workspace_id: ws,
+            store: cwStore,
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            brandWatch: async () => (await seoService.geoHistory()).watch(),
+            adapters: () => ({
+              shop_catalog: builtinShopAdapter,
+              amazon_asin: amazonAsinAdapter,
+              ...(options.competitorAdapters?.(ws) ?? {}),
+            }),
+            extraOwnRef: async () => competitorStore?.ownRef(),
+            afterRun: async (run) => competitorStore?.afterRun(run),
+          })
+    if (competitorWatch !== undefined) {
+      // 自家店的商品（一轮里比价、配对标款各要一次：十分钟内复用）
+      let ownMemo: { at: number; read: OwnShopRead } | undefined
+      const ownShop = async (): Promise<OwnShopRead> => {
+        const now = Date.parse(clock.now())
+        if (ownMemo !== undefined && now - ownMemo.at < 10 * 60_000) return ownMemo.read
+        const read = options.competitorOwnShop
+          ? await options.competitorOwnShop(ws)
+          : await readOwnShopProducts((await shopOf(ws).catch(() => undefined))?.auth)
+        ownMemo = { at: now, read }
+        return read
+      }
+      competitorStore = createCompetitorStore({
+        workspace_id: ws,
+        store: competitorWatchDb.forWorkspace(ws),
+        now: () => clock.now(),
+        watch: () => competitorWatch,
+        brandWatch: async () => (await seoService.geoHistory()).watch(),
+        saveCompetitors: async (list) => {
+          await seoService.watchCompetitorsApply(list)
+        },
+        profile: () => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            ...(p?.category === undefined ? {} : { category: p.category }),
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.competitors === undefined
+              ? {}
+              : {
+                  competitors: p.competitors.map((c) => ({
+                    name: c.name,
+                    ...(c.url === undefined ? {} : { url: c.url }),
+                  })),
+                }),
+          }
+        },
+        probe: (url) =>
+          options.competitorProbe?.(url, clock.now()) ??
+          probeStore(
+            {
+              fetch: competitorIo.fetch,
+              ...(competitorIo.browser() === undefined
+                ? {}
+                : {
+                    browser: competitorIo.browser() as NonNullable<
+                      ReturnType<typeof competitorIo.browser>
+                    >,
+                  }),
+              page: competitorIo.page,
+            },
+            url,
+            clock.now(),
+          ),
+        ownShop,
+      })
+    }
+    if (competitorWatch !== undefined)
+      amazonCompetitor = createAmazonCompetitor({
+        workspace_id: ws,
+        store: cwStore,
+        now: () => clock.now(),
+        watch: () => competitorWatch,
+        brandWatch: async () => (await seoService.geoHistory()).watch(),
+        saveWatch: async (patch) => {
+          await seoService.watchAmazonApply(patch)
+        },
+        profile: () => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            name: brandNameOfWorkspace(ws),
+            ...(p?.category === undefined ? {} : { category: p.category }),
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.markets === undefined ? {} : { markets: p.markets }),
+            ...(p?.competitors === undefined
+              ? {}
+              : { competitors: p.competitors.map((c) => ({ name: c.name })) }),
+          }
+        },
+        reader: () => amazonFront,
+      })
+    /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
      */
@@ -7584,6 +8387,233 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       })()
     })
+
+    /**
+     * WP386（docs/103 v2）：信息监控——多条监控源（Google Alerts 的 RSS / 网站 RSS，存在这个品牌自己的库里）、
+     * 到点才拉（默认一天一次、本地 9 点后）、Reddit 那一路走上面同一条取数路由（接口中台 / 只读浏览器）。
+     * 托管模式不装（同 Reddit 巡查）。
+     */
+    const prWatchStore = createPrWatchStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    prMonitorHolder.store = prWatchStore
+    const prWatch =
+      hostedBoot !== undefined
+        ? undefined
+        : createPrWatch({
+            workspace_id: ws,
+            store: prWatchStore,
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+            fetch:
+              options.feedFetch ??
+              ((): AlertsTransport['fetch'] => {
+                const real: AlertsTransport['fetch'] = async (url, init) => {
+                  const res = await fetch(url, {
+                    ...(init?.headers === undefined ? {} : { headers: init.headers }),
+                    signal: AbortSignal.timeout(20_000),
+                  })
+                  return { ok: res.ok, status: res.status, text: () => res.text() }
+                }
+                // 演示：`alerts/feeds/demo/` 下那几条回录好的 feed（不联网）；人真贴进来的照旧走真网络
+                return mount === undefined ? real : demoFeedFetch(real, () => clock.now())
+              })(),
+            redditSearch: async (query) => {
+              const got = await redditSearch.read({
+                capability: 'social.reddit.search',
+                input: { query, time_window: 'week', sort: 'new', limit: 10 },
+              })
+              return got.ok ? { ok: true, items: got.items } : { ok: false, message: got.message }
+            },
+            ingest: async (rows) => {
+              const holder = roles.assignments
+                .listByRole('pr.monitoring')
+                .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+              if (holder === undefined) return undefined
+              const actor = {
+                workspace_id: ws,
+                person_id: holder.person_id,
+                assignment_id: holder.id,
+                role_id: holder.role_id,
+              }
+              let created = 0
+              for (const row of rows)
+                if ((await prService.port.ingestMention(actor, row)).created) created += 1
+              return { created }
+            },
+            facts: () =>
+              brandFactsOf(onboardingRef?.brandProfile(ws) as Record<string, unknown> | undefined, {
+                ...(() => {
+                  const name = brandNameOfWorkspace(ws)
+                  return name === '' || name === ws ? {} : { name }
+                })(),
+              }),
+            geo: async () => {
+              const v = await seoService.watchView().catch(() => undefined)
+              if (v === undefined) return undefined
+              return {
+                brand_aliases: v.watch.brand.aliases,
+                competitors: v.watch.competitors.map((c) => ({ name: c.name, aliases: c.aliases })),
+                markets: v.watch.markets,
+              }
+            },
+            legacyFeeds: () => connections.publicFieldsOf?.('google_alerts') ?? [],
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'pr_watch' },
+                correlation: { trace_id: `trc_pw_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+    prWatchRef = prWatch
+    /*
+     * WP387（docs/103 v2 §3.3、T1）：你的浏览器替你建 / 导入 Google 提醒。清单确认后出一张卡（一批一张、每行可勾掉），
+     * 同意了才开一件事、带着凭据让你的浏览器去建；读回的 RSS 链接交给上面那份信息监控存成源（先拉一次）。
+     */
+    const prAlertsHolder = ():
+      | { person_id: string; assignment_id: string; role_id: string }
+      | undefined => {
+      const a = roles.assignments
+        .listByRole('pr.monitoring')
+        .find((x) => x.workspace_id === ws && x.revoked_at === undefined)
+      return a === undefined
+        ? undefined
+        : { person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
+    }
+    const browserSkillReady = (): boolean => browserSettings.forRun()?.mode === 'browserskill'
+    const prAlerts =
+      prWatch === undefined
+        ? undefined
+        : createPrAlertsService({
+            workspace_id: ws,
+            store: () => prWatchStore,
+            clock,
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            ledger: txn.ledger,
+            actionOf: (assignment_id, action) => {
+              try {
+                const config = roles.effectiveConfig(assignment_id)
+                return {
+                  mandate: config.actions.find((a) => a.id === action)?.mandate ?? { caps: {} },
+                  level: config.automation[action]?.level ?? 'L1',
+                }
+              } catch {
+                return { mandate: { caps: {} }, level: 'L1' }
+              }
+            },
+            holder: prAlertsHolder,
+            approval: (id) => txn.approvals.get(id),
+            browser: () =>
+              browserSkillReady()
+                ? { ready: true }
+                : {
+                    ready: false,
+                    reason: '你的浏览器还没接上（设置 → 浏览器 → 选「我正在用的浏览器」）',
+                  },
+            runs: {
+              open: ({ actor, title }) =>
+                work.createMatter({
+                  kind: 'adhoc',
+                  title,
+                  entry: 'position',
+                  position_template_id: 'pr',
+                  role_id: 'pr.monitoring',
+                  position_id: actor.assignment_id as never,
+                  participants: [actor.person_id as never],
+                }).id,
+              start: async ({ actor, matter_id, brief }) => {
+                await work.run(matter_id as never, {
+                  person_id: actor.person_id as never,
+                  assignment_id: actor.assignment_id as never,
+                  brief,
+                  text: '你的浏览器开始按卡上的清单去做了',
+                })
+              },
+            },
+            attach: async ({ url, plan_item_id, group }) => {
+              const [r] = await prWatch.addLinks({
+                links: url,
+                ...(plan_item_id === undefined ? {} : { plan_item_id }),
+                group,
+                via: 'browser',
+              })
+              return r?.ok === true && r.source_id !== undefined
+                ? { ok: true, source_id: r.source_id }
+                : { ok: false, message: r?.message ?? '没拉到' }
+            },
+            askSetup: async ({ target, why, actor }) =>
+              (await setupCardsOf(ws))?.askSetup({ target, why, actor: actor as never }),
+            // 没建成的退回手动：配置卡重新弹出来，在那几行贴 RSS 链接（卡上有教程）
+            onFallback: async ({ lines, why, actor }) => {
+              markManualFallback(
+                prWatchStore,
+                clock.now(),
+                lines.map((l) => l.label),
+              )
+              await (await setupCardsOf(ws))
+                ?.askSetup({
+                  target: PR_WATCH_TARGET,
+                  why: `${lines
+                    .map((l) => l.label)
+                    .slice(0, 6)
+                    .join('、')}没自动建成（${why}）：在这几行贴 RSS 链接就行，卡上有教程。`,
+                  actor: actor as never,
+                })
+                .catch(() => undefined)
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'pr_alerts' },
+                correlation: { trace_id: `trc_pa_${Date.parse(clock.now()).toString(36)}` },
+                payload,
+              }),
+          })
+    prAlertsRef = prAlerts
+    // 老的单条 feed（连接卡上那一格）启动时迁进来（还没有真实用户，不留兼容层）
+    prWatch?.migrateLegacy()
+    connections.onConnectionChange(() => {
+      prWatch?.migrateLegacy()
+    })
+    const prPort: PrPort =
+      prWatch === undefined
+        ? prService.port
+        : {
+            ...prService.port,
+            watchView: () => prWatch.view(),
+            watchAddLinks: async (_actor, input) => ({
+              results: await prWatch.addLinks({
+                links: input.links,
+                ...(input.plan_item_id === undefined ? {} : { plan_item_id: input.plan_item_id }),
+                ...(input.group === undefined ? {} : { group: input.group }),
+              }),
+              view: prWatch.view(),
+            }),
+            watchRunNow: async () => ({ ...(await prWatch.runNow()), view: prWatch.view() }),
+            watchUpdateSource: (_actor, id, patch) => prWatch.updateSource(id, patch),
+            watchRemoveSource: (_actor, id) => prWatch.removeSource(id),
+            watchUpdateSettings: (_actor, patch) => prWatch.updateSettings(patch),
+            // WP387：你的浏览器替你建 / 导入 Google 提醒
+            ...(prAlerts === undefined
+              ? {}
+              : {
+                  alertsView: () => prAlerts.panel(),
+                  alertsBuild: async (actor) => {
+                    const r = await prAlerts.propose(actor)
+                    return r.ok
+                      ? { ok: true as const, approval_id: r.approval_id, count: r.count }
+                      : r
+                  },
+                  alertsReadExisting: (actor) => prAlerts.readExisting(actor),
+                }),
+          }
 
     return {
       workspace_id: ws,
@@ -7614,6 +8644,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(webBrowser === undefined ? {} : { webBrowser }),
       pr,
       prService,
+      prPort,
+      prWatchStore,
+      ...(prWatch === undefined ? {} : { prWatch }),
+      ...(prAlerts === undefined ? {} : { prAlerts }),
       b2b,
       b2bService,
       b2bOutbound,
@@ -7640,7 +8674,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
+      ...(competitorWatch === undefined ? {} : { competitorWatch }),
+      ...(competitorStore === undefined ? {} : { competitorStore }),
+      ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
+      ...(amazonFront === undefined ? {} : { amazonFront }),
       redditLimits,
+      ...(amazonListing === undefined ? {} : { amazonListing }),
+      ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -7686,6 +8726,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         site.close()
         ads.close()
         pr.close()
+        prWatchStore.close()
         seoService.close()
       },
     }
@@ -7722,6 +8763,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (item.kind === 'connect_request' || item.kind === 'setup_request') {
       const cards = await setupCardsOf(item.workspace_id)
       void cards?.onDecided(item).catch(() => undefined)
+      return
+    }
+    // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 联系方式）被决定 → 调云上、记账、在事项里说一句（后台跑）
+    if (item.kind === 'service_order') {
+      const svc = await workshopServicesOf(item.workspace_id)
+      void svc?.onDecided(item).catch(() => undefined)
       return
     }
     // WP304（决策 445）：选主题卡 / 买高级主题卡被决定 → 起底（复制 / 买 / 下载）、按原话接着做。
@@ -7865,8 +8912,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   await deepseekAccount.resume()
   /*
-   * WP251：启动品牌没挂在公司下、而它的负责人已经有一家公司（Fable 10-07 真机：INMO 没有 org_id，
-   * 加的品牌 Rollout 挂在公司下）——挂进去，kind 与加的品牌一致。放在建任何一个品牌那一套之前之后都行，
+   * WP251：启动品牌没挂在公司下、而它的负责人已经有一家公司（Fable 10-07 真机：IVRA 没有 org_id，
+   * 加的品牌 Rovella 挂在公司下）——挂进去，kind 与加的品牌一致。放在建任何一个品牌那一套之前之后都行，
    * 但必须在品牌后台起来之前（它们按「这家公司有哪些品牌」起），也必须在 DeepSeek 账号挂回来之后
    * （判"原来的公司默认品牌自己接没接模型"要建它那一套）。幂等：挂过就只剩 kind 的核对。
    */
@@ -7984,6 +9031,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （我们在别人的地盘上这件事长什么样）。
    */
   if (mount !== undefined) seedDemoPr(boot.pr, clock.now())
+  // WP386：演示里信息监控那几样（四条监控源，其中一条 404 亮红点；几条竞品动向）
+  if (mount !== undefined) seedDemoPrWatch(boot.prWatchStore, boot.pr, clock.now())
+  /**
+   * WP387：demo 里「让工坊替你建」那张卡（「要在你的 Google 账号里建 4 条提醒」），截图与演示用。
+   * 不开浏览器、不连 Google：卡等人点。
+   */
+  if (mount !== undefined && boot.prAlerts !== undefined)
+    await seedDemoAlerts({ store: boot.prWatchStore, alerts: boot.prAlerts, now: clock.now() })
 
   /**
    * WP75（57 §3）：demo 里给广告库放几行，理由与上面两条逐字相同。
@@ -8239,6 +9294,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .list({ workspace_id: ws, status: 'pooled' })
           .map((l) => ({ id: l.id, text: l.text })),
       relay: (review) => relay(review),
+      // WP388：周复盘取上一周（目标市场时区）
+      reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP287：① 个人模式复盘照记、不出卡
       solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
       // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮——都只看这个品牌
@@ -8339,6 +9396,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       tick: async () =>
         (await (await of()).redditWatch?.tick()) ?? { ran: false, skipped: 'not_installed' },
     })
+    // WP392：竞品监控（这个品牌的唯一竞品清单、进料口）；没装（托管）就什么都不做
+    registerCompetitorWatch(s, {
+      tick: async () => {
+        const b = await of()
+        // C3：品牌档案里新查到的竞品，沿用「要不要加进竞品」那张卡问一次（问过不再问）
+        await b.seoService.askProfileCompetitors().catch(() => undefined)
+        return (await b.competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' }
+      },
+    })
     // WP315：广告看数据（这个品牌的账户、插件、邮箱）；没装（托管）就什么都不做
     registerAdsDailyExport(s, {
       tick: async () =>
@@ -8438,6 +9504,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
         // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
         redditPatrol: held('social.reddit'),
+        // WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条
+        competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
         adsDailyExport: held('ads.google') || held('ads.meta'),
       },
@@ -10255,6 +11323,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP388：手动「周复盘」也取上一周（目标市场时区）
+      reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个
       knownModel: async (id) =>
         (await brandModules.models(ws)).chatChoices().some((c) => c.id === id),
@@ -11555,7 +12625,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
   const prPortOf = brandPrPort(
     brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).prService.port,
+    async (ws) => (await brandModules.forWorkspace(ws)).prPort,
   )
   /**
    * WP154「内容与搜索」`/v1/seo/*`：问题清单落在请求人所在品牌的目录下；"现在跑一轮"
@@ -12056,6 +13126,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 默认只有「Agents 工坊（用积分）」一级）。
      */
     dataService: dataServiceApiPort((ws) => brandModules.cloud(ws)),
+    // WP390（docs/105）：工坊服务——目录缓存、看看 / 交给工坊办、订单面板（下单 / 验收都走卡）
+    workshopServices: workshopServicesPort((ws) => workshopServicesOf(ws), {
+      positionOf: (ws, role_id, assignment_id) => cloudPositionOf(ws, role_id, assignment_id),
+    }),
     dshScenes: {
       list: async () => {
         const manager = dshScenesSetup.manager
@@ -12636,6 +13710,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               return svc
             },
           }),
+          // WP396：自家 Amazon Listing 体检 `/v1/amazon-listing*`（面板看最近一次 / 现在体检 / 改规则）
+          amazonListing: (() => {
+            const of = async (ws: WorkspaceId): Promise<AmazonListingCheckup> => {
+              const a = (await brandModules.forWorkspace(ws)).amazonListing
+              if (a === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装 Listing 体检。')
+              return a
+            }
+            return {
+              view: async (ws: WorkspaceId) => (await of(ws)).view(),
+              run: async (ws: WorkspaceId) => (await of(ws)).run({ trigger: 'manual' }),
+              setRule: async (
+                ws: WorkspaceId,
+                patch: Parameters<AmazonListingCheckup['setRule']>[0],
+              ) => (await of(ws)).setRule(patch),
+            }
+          })(),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {
             const rw = (await brandModules.forWorkspace(ws)).redditWatch
@@ -12643,6 +13734,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               throw new ApiError('not_implemented', '这个品牌没有装 Reddit 巡查。')
             return rw
           }),
+          // WP392：竞品监控 `/v1/competitor-watch*`（工作台：状态 / 变化表 / 频率 / 现在读一次）
+          competitorWatch: (() => {
+            const cwOf = async (ws: WorkspaceId): Promise<CompetitorWatchAssembly> => {
+              const cw = (await brandModules.forWorkspace(ws)).competitorWatch
+              if (cw === undefined)
+                throw new ApiError('not_implemented', '这个品牌没有装竞品监控。')
+              return cw
+            }
+            return {
+              view: async (ws: WorkspaceId) => (await cwOf(ws)).view(),
+              changes: async (
+                ws: WorkspaceId,
+                q: Parameters<CompetitorWatchAssembly['changes']>[0],
+              ) =>
+                (await cwOf(ws)).changes(q).map((c) => ({
+                  ...c,
+                  text: {
+                    zh: describeChange(c, { lang: 'zh' }),
+                    en: describeChange(c, { lang: 'en' }),
+                  },
+                })),
+              updateSettings: async (
+                ws: WorkspaceId,
+                patch: Parameters<CompetitorWatchAssembly['updateSettings']>[0],
+              ) => (await cwOf(ws)).updateSettings(patch),
+              runNow: async (ws: WorkspaceId) => (await cwOf(ws)).runNow({ trigger: 'manual' }),
+            }
+          })(),
         }
       : {}),
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
@@ -12664,6 +13783,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
     siteHealth: siteHealthPort,
+    // WP398：Amazon 词库 `/v1/amazon-keywords*`（岗位页「词库」块、第三栏词表、体检卡那一行）
+    amazonKeywords: (() => {
+      const of = async (ws: string): Promise<AmazonKeywordBank> => {
+        const b = (await brandModules.forWorkspace(ws as WorkspaceId)).amazonKeywords
+        if (b === undefined) throw new ApiError('not_implemented', '这个品牌没有装 Amazon 词库。')
+        return b
+      }
+      return {
+        view: async (actor) => (await of(actor.workspace_id)).view(),
+        list: async (actor, query) => (await of(actor.workspace_id)).list(query),
+        refresh: async (actor, input) =>
+          (await of(actor.workspace_id)).refresh({ trigger: 'manual', ...input }),
+        mark: async (actor, patch) => {
+          const r = (await of(actor.workspace_id)).mark(patch)
+          if (!r.ok) throw new ApiError('invalid_input', r.message)
+          return r.keyword
+        },
+      }
+    })(),
     // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
     ...(options.clientErrorLog !== undefined
       ? { clientErrors: stderrClientErrors(options.clientErrorLog) }
@@ -13143,6 +14281,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'connect_request' ||
           out.kind === 'setup_request' ||
           out.kind === 'theme_purchase' ||
+          // WP390：工坊服务卡
+          out.kind === 'service_order' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
           isRouteChoice(out) ||
           // WP276：「X 想把「…」交给你」接下 / 不接了

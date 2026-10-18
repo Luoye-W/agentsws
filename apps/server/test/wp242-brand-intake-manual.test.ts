@@ -4,14 +4,14 @@
  * 钉住：
  * 1. 被拦（429）时那一句带状态码，并给「换个网址再读 / 就在下面手动填」两条路；
  * 2. `POST /v1/brand-intake/manual`：品牌名、一句话、客服邮箱、币种、市场——与「看着没问题」同一条写法，
- *    写的是**这个品牌**（Rollout），INMO 一个字节不动；走过就不再要设置；
+ *    写的是**这个品牌**（Rovella），IVRA 一个字节不动；走过就不再要设置；
  * 3. 一格都没填 / 邮箱不像邮箱 → 400。
  */
 import type { PageFetch } from '@agentsws/brand-intake'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 
-const SHOP = 'https://rollout.example'
+const SHOP = 'https://rovella.example'
 
 /** 店铺对脚本一律 429（真机上从 Windows / Mac 直接 curl 都是这样）。 */
 const blocked: PageFetch = async () => ({ ok: false, status: 429, text: async () => '' })
@@ -35,7 +35,7 @@ async function boot(): Promise<Server> {
     tokenRefreshIntervalMs: 0,
     scheduleIntervalMs: 0,
     liveDataIntervalMs: 0,
-    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'INMO' },
+    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'IVRA' },
     mdns: () => ({ reason: '测试里不开局域网' }),
     brandIntakeFetch: blocked,
   })
@@ -76,32 +76,32 @@ async function call<T>(
   }
 }
 
-const inmoOf = (server: Server): Who => ({
+const ivraOf = (server: Server): Who => ({
   token: server.bootstrap.internalToken,
   assignment: server.bootstrap.ownerAssignment.id,
   workspace_id: server.bootstrap.workspace.id,
 })
 
-async function rolloutOf(server: Server): Promise<Who> {
-  const inmo = inmoOf(server)
-  const set = await call(server, inmo, 'PUT', '/v1/workspace/profile', {
-    legal_name: 'INMO',
-    brand_name: 'INMO',
+async function rovellaOf(server: Server): Promise<Who> {
+  const ivra = ivraOf(server)
+  const set = await call(server, ivra, 'PUT', '/v1/workspace/profile', {
+    legal_name: 'IVRA',
+    brand_name: 'IVRA',
     storefront_platform: 'shopify',
   })
   expect(set.status).toBe(200)
-  const org = (await call<{ id: string }[]>(server, inmo, 'GET', '/v1/orgs')).data?.[0]?.id ?? ''
+  const org = (await call<{ id: string }[]>(server, ivra, 'GET', '/v1/orgs')).data?.[0]?.id ?? ''
   const created = await call<{ workspace_id: string }>(
     server,
-    inmo,
+    ivra,
     'POST',
     `/v1/orgs/${org}/brands`,
-    { name: 'Rollout' },
+    { name: 'Rovella' },
   )
   const workspace_id = created.data?.workspace_id ?? ''
   const switched = await call<{ session_token?: string }>(
     server,
-    inmo,
+    ivra,
     'POST',
     `/v1/orgs/${org}/brands/${workspace_id}/switch`,
   )
@@ -133,13 +133,13 @@ interface State {
 describe('WP242 第 ② 步读不到网站：说清楚 + 就地手填', () => {
   it('429：一句带状态码的人话，给「换个网址再读 / 手动填」', async () => {
     const server = await boot()
-    const rollout = await rolloutOf(server)
-    const started = await call<Run>(server, rollout, 'POST', '/v1/brand-intake/runs', {
+    const rovella = await rovellaOf(server)
+    const started = await call<Run>(server, rovella, 'POST', '/v1/brand-intake/runs', {
       urls: [`${SHOP}/`],
     })
     let run: Run | undefined
     for (let i = 0; i < 200; i++) {
-      run = (await call<Run>(server, rollout, 'GET', `/v1/brand-intake/runs/${started.data?.id}`))
+      run = (await call<Run>(server, rovella, 'GET', `/v1/brand-intake/runs/${started.data?.id}`))
         .data
       if (run?.status !== 'running') break
       await new Promise((r) => setTimeout(r, 5))
@@ -151,15 +151,15 @@ describe('WP242 第 ② 步读不到网站：说清楚 + 就地手填', () => {
     expect(run?.failure).toContain('手动填')
   })
 
-  it('就地手填：写进 Rollout（品牌名、市场），INMO 不动；第 ② 步算做过（还要走完第 ④ 步）', async () => {
+  it('就地手填：写进 Rovella（品牌名、市场），IVRA 不动；第 ② 步算做过（还要走完第 ④ 步）', async () => {
     const server = await boot()
-    const rollout = await rolloutOf(server)
-    const inmoBefore = server.onboarding.brandProfile(server.bootstrap.workspace.id)
-    const out = await call<Run>(server, rollout, 'POST', '/v1/brand-intake/manual', {
+    const rovella = await rovellaOf(server)
+    const ivraBefore = server.onboarding.brandProfile(server.bootstrap.workspace.id)
+    const out = await call<Run>(server, rovella, 'POST', '/v1/brand-intake/manual', {
       edits: {
-        brand_name: 'Rollout Outdoors',
+        brand_name: 'Rovella Outdoors',
         one_liner: '户外滑板与配件',
-        support_email: 'support@rollout.example',
+        support_email: 'support@rovella.example',
         currency: 'usd',
         markets: ['US', 'CA'],
       },
@@ -169,34 +169,34 @@ describe('WP242 第 ② 步读不到网站：说清楚 + 就地手填', () => {
     expect(out.data?.profile.currency?.value).toBe('USD')
     expect(out.data?.profile.one_liner?.edited).toBe(true)
 
-    const r = (await call<State>(server, rollout, 'GET', '/v1/onboarding/state')).data
-    expect(r?.brand_name).toBe('Rollout Outdoors')
+    const r = (await call<State>(server, rovella, 'GET', '/v1/onboarding/state')).data
+    expect(r?.brand_name).toBe('Rovella Outdoors')
     // WP251（决策 92）：手填存好 = 第 ② 步做完；加的品牌要走完第 ④ 步才算设置完
     expect(r?.needs_setup).toBe(true)
     expect(r?.business_done).toBe(true)
-    expect(server.onboarding.brandProfile(rollout.workspace_id as never).markets).toEqual([
+    expect(server.onboarding.brandProfile(rovella.workspace_id as never).markets).toEqual([
       'US',
       'CA',
     ])
-    // INMO：品牌名、档案、公司全称都没变
-    const i = (await call<State>(server, inmoOf(server), 'GET', '/v1/onboarding/state')).data
-    expect(i?.brand_name).toBe('INMO')
-    expect(server.onboarding.brandProfile(server.bootstrap.workspace.id)).toEqual(inmoBefore)
-    expect(server.onboarding.companyProfile()?.legal_name).toBe('INMO')
+    // IVRA：品牌名、档案、公司全称都没变
+    const i = (await call<State>(server, ivraOf(server), 'GET', '/v1/onboarding/state')).data
+    expect(i?.brand_name).toBe('IVRA')
+    expect(server.onboarding.brandProfile(server.bootstrap.workspace.id)).toEqual(ivraBefore)
+    expect(server.onboarding.companyProfile()?.legal_name).toBe('IVRA')
     // 最近那一次就是这条（回到这一步时按它恢复现场）
-    const latest = await call<Run>(server, rollout, 'GET', '/v1/brand-intake/runs/latest')
+    const latest = await call<Run>(server, rovella, 'GET', '/v1/brand-intake/runs/latest')
     expect(latest.data?.id).toBe(out.data?.id)
   })
 
   it('一格都没填 / 邮箱不像邮箱：400', async () => {
     const server = await boot()
-    const rollout = await rolloutOf(server)
+    const rovella = await rovellaOf(server)
     expect(
-      (await call(server, rollout, 'POST', '/v1/brand-intake/manual', { edits: {} })).status,
+      (await call(server, rovella, 'POST', '/v1/brand-intake/manual', { edits: {} })).status,
     ).toBe(400)
     expect(
       (
-        await call(server, rollout, 'POST', '/v1/brand-intake/manual', {
+        await call(server, rovella, 'POST', '/v1/brand-intake/manual', {
           edits: { support_email: 'not-an-email' },
         })
       ).status,

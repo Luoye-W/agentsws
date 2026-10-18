@@ -27,13 +27,13 @@ const rec = (over: Partial<OutboundRecord> = {}): OutboundRecord => ({
   channel: 'reddit',
   action: 'reply',
   kind: 'outbound_draft',
-  destination: 'r/inmoxr',
+  destination: 'r/ivraxr',
   thread_title: 'Battery life?',
-  thread_url: 'https://www.reddit.com/r/inmoxr/comments/abc/',
+  thread_url: 'https://www.reddit.com/r/ivraxr/comments/abc/',
   counterpart: 'u/alice',
   counterpart_text: 'How long does it last?',
   content: 'About 3 hours of active use.',
-  link: 'https://www.reddit.com/r/inmoxr/comments/abc/_/def/',
+  link: 'https://www.reddit.com/r/ivraxr/comments/abc/_/def/',
   external_id: 't1_def',
   approved_by: 'Luoye',
   status: 'sent',
@@ -135,12 +135,12 @@ describe('飞书适配器（替身）', () => {
             name: '回复记录',
             fields: [
               { field_name: '日期', type: 5 },
-              { field_name: '版块', type: 3, options: ['r/inmoxr'] },
+              { field_name: '版块', type: 3, options: ['r/ivraxr'] },
               { field_name: '帖子链接', type: 15 },
               { field_name: '回复内容', type: 1 },
               { field_name: '对方回复数', type: 2 },
             ],
-            records: [{ 版块: 'r/inmoxr', 回复内容: 'hi' }],
+            records: [{ 版块: 'r/ivraxr', 回复内容: 'hi' }],
           },
         ],
       ]),
@@ -178,8 +178,8 @@ describe('飞书适配器（替身）', () => {
     if (!info.ok) throw new Error(info.message)
     expect(info.data.ref).toEqual({ app_token: 'bascnAAA111', table_id: 'tblX1' })
     expect(info.data.columns[0]).toEqual({ name: '日期', type: 'date' })
-    expect(info.data.columns[1]).toEqual({ name: '版块', type: 'select', options: ['r/inmoxr'] })
-    expect(info.data.samples[0]?.[1]).toBe('r/inmoxr')
+    expect(info.data.columns[1]).toEqual({ name: '版块', type: 'select', options: ['r/ivraxr'] })
+    expect(info.data.samples[0]?.[1]).toBe('r/ivraxr')
     const columns = guessColumns(info.data.columns).map((c) =>
       c.column === '对方回复数'
         ? { ...c, source: { from: 'field' as const, field: 'follow_up_count' as const } }
@@ -205,7 +205,7 @@ describe('飞书适配器（替身）', () => {
     expect(rows).toHaveLength(2)
     expect(rows[1]).toEqual({
       日期: Date.parse('2026-10-14T02:30:00.000Z'),
-      版块: 'r/inmoxr',
+      版块: 'r/ivraxr',
       帖子链接: { text: rec().thread_url, link: rec().thread_url },
       回复内容: 'About 3 hours of active use.',
       对方回复数: 0,

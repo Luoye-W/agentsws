@@ -25,8 +25,8 @@ let dir: string
 const NOW_S = Math.floor(T0 / 1000)
 const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
 const ROUTES: Record<string, unknown> = {
-  '/api/me.json': { kind: 't2', data: { name: 'inmo_official' } },
-  '/r/inmoxr/about/rules.json': {
+  '/api/me.json': { kind: 't2', data: { name: 'ivra_official' } },
+  '/r/ivraxr/about/rules.json': {
     rules: [{ short_name: 'No referral links', description: 'Do not post affiliate links.' }],
   },
   '/message/inbox/.json': listing([
@@ -38,17 +38,17 @@ const ROUTES: Record<string, unknown> = {
         type: 'comment_reply',
         author: 'alice',
         body: 'does it work with iPhone?',
-        subreddit: 'inmoxr',
+        subreddit: 'ivraxr',
         parent_id: 't1_ours',
         link_id: 't3_p1',
         link_title: 'Air3 setup tips',
-        context: '/r/inmoxr/comments/p1/air3_setup/c9/?context=3',
+        context: '/r/ivraxr/comments/p1/air3_setup/c9/?context=3',
         created_utc: NOW_S - 600,
       },
     },
   ]),
-  '/r/inmoxr/new/.json': listing([]),
-  '/r/inmoxr/comments/.json': listing([]),
+  '/r/ivraxr/new/.json': listing([]),
+  '/r/ivraxr/comments/.json': listing([]),
 }
 const fakeFetch = async (url: string): Promise<RedditFetched> => {
   const body = ROUTES[new URL(url).pathname]
@@ -117,7 +117,7 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     const brand = await server.brands.forWorkspace(ws)
     const rw = brand.redditWatch
     if (rw === undefined) throw new Error('没装 Reddit 巡查')
-    rw.updateSettings({ own_subreddits: ['inmoxr'], brand_username: 'inmo_official' })
+    rw.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
 
     // ① 巡查：插件来问 → 读替身 Reddit → 交回
     // 插件刚连上会马上起一轮（异步）；没起就点一次「现在巡查」
@@ -140,7 +140,7 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     const entry = rw.items({ reply: true }).find((x) => x.fullname === 't1_c9')
     expect(entry?.judgement?.reply).toBe(true)
     // 版规是插件只读读回来的（决策 764）
-    expect(rw.rules('inmoxr')?.rules).toEqual(['No referral links：Do not post affiliate links.'])
+    expect(rw.rules('ivraxr')?.rules).toEqual(['No referral links：Do not post affiliate links.'])
 
     // ② 自动起草出卡（条目标「起草中」）
     let card: ApprovalItem | undefined
@@ -156,7 +156,7 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
       reddit: {
         kind: 'reply',
         parent_fullname: 't1_c9',
-        permalink: '/r/inmoxr/comments/p1/air3_setup/c9/',
+        permalink: '/r/ivraxr/comments/p1/air3_setup/c9/',
         source: { type: 'reddit_watch_item', id: entry?.id },
       },
       rules: ['No referral links：Do not post affiliate links.'],
@@ -174,7 +174,7 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     const write = await brand.adsActions?.next(['reddit'], 0)
     const job = write?.job
     expect(job?.plan.kind).toBe('reddit_reply')
-    expect(job?.account).toEqual({ platform: 'reddit', id: 'inmo_official' })
+    expect(job?.account).toEqual({ platform: 'reddit', id: 'ivra_official' })
     // 与巡查共用一本账：写活占着号时巡查领不到
     await rw.runNow()
     expect(rw.next({ connected: true }).job).toBeUndefined()
@@ -182,7 +182,7 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
       outcome: 'done',
       message: '做完了。',
       step: 6,
-      reads: { fullname: 't1_new1', permalink: '/r/inmoxr/comments/p1/air3_setup/new1/' },
+      reads: { fullname: 't1_new1', permalink: '/r/ivraxr/comments/p1/air3_setup/new1/' },
     })
 
     // ⑤ 发出记录有行；条目回过了、挂上那一行

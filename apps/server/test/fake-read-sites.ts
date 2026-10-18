@@ -22,7 +22,7 @@ const player = (o: Record<string, unknown>): string =>
 const details = (id: string, title: string) => ({
   videoId: id,
   title,
-  author: 'INMO Official',
+  author: 'IVRA Official',
   lengthSeconds: '95',
   shortDescription: 'Unboxing the Air3. Links: https://example.com',
 })

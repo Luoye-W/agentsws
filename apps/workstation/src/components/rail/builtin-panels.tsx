@@ -29,14 +29,17 @@ import {
   FolderOpen,
   Globe,
   GraduationCap,
+  Handshake,
   MessageSquareQuote,
   MessagesSquare,
   Package,
   Plug,
   ScrollText,
   SlidersHorizontal,
+  Tags,
 } from 'lucide-react'
 import { lazy } from 'react'
+import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
 import {
   useConnectionsStatus,
   useConversationsStatus,
@@ -59,11 +62,18 @@ import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
+import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
+import { AMAZON_KEYWORDS_ADDRESS_PREFIX } from '@/lib/amazon-keywords-api'
 import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
+import { SERVICE_ORDER_ADDRESS_PREFIX } from '@/lib/workshop-services-api'
 
 /* ── 面板身体（`lazy()`） ─────────────────────────────────────────── */
 
+const AmazonKeywordsBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/amazon-keywords-panel')
+  return { default: m.AmazonKeywordsPanel }
+})
 const GeoAnswerBody = lazy(async () => {
   const m = await import('@/components/rail/panels/geo-answer-panel')
   return { default: m.GeoAnswerPanel }
@@ -137,6 +147,19 @@ const PlansCardBody = lazy(async () => {
 const ConnectionsCardBody = lazy(async () => {
   const m = await import('@/components/rail/cards/card-bodies')
   return { default: m.ConnectionsCard }
+})
+// WP390：工坊服务（订单面板、服务列表、右栏那张卡）
+const ServiceOrderBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/order-panel')
+  return { default: m.ServiceOrderPanel }
+})
+const WorkshopServicesBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/services-panel')
+  return { default: m.WorkshopServicesPanel }
+})
+const WorkshopServicesCardBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/services-panel')
+  return { default: m.WorkshopServicesCard }
 })
 const SettingsCardBody = lazy(async () => {
   const m = await import('@/components/rail/cards/card-bodies')
@@ -234,6 +257,16 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     useStatus: useSettingsStatus,
   })
   registerRailCardBody('settings', SettingsCardBody)
+  // WP390（docs/105 §4.1 ③）：第七张卡「工坊服务」排在最下面——岗位页 = 这个岗位能用的服务（最多三项）+ 在做的单
+  registerRailCard({
+    id: 'workshop-services',
+    label: 'rail.card.workshop-services',
+    icon: Handshake,
+    order: DEFAULT_CARD_ORDER.length + 1,
+    panel: 'workshop-services',
+    useStatus: useWorkshopServicesStatus,
+  })
+  registerRailCardBody('workshop-services', WorkshopServicesCardBody)
 
   // ── 卡的完整列表（「显示更多」开的那一格；不进「⋮」） ─────────────────
   registerPanelType({
@@ -396,4 +429,39 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('geo-answer', GeoAnswerBody)
+  // WP390：一张工坊服务订单（`agentsws://service-order/<订单号>`）——进度、在等你的事、消息、钱
+  registerPanelType({
+    id: 'service-order',
+    label: 'rail.panel.service-order',
+    icon: Handshake,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${SERVICE_ORDER_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('service-order', ServiceOrderBody)
+  // WP390：账号菜单「工坊服务」那一页（我的订单 + 全部服务，按岗位分组）
+  registerPanelType({
+    id: 'workshop-services',
+    label: 'rail.panel.workshop-services',
+    icon: Handshake,
+    priority: 'builtin',
+    group: 'tools',
+    card: 'workshop-services',
+    hidden: true,
+  })
+  registerPanelBody('workshop-services', WorkshopServicesBody)
+  // WP398：Amazon 词表——对话里「帮我看看关键词」、岗位页「词库」块的「看词表」在第三栏开
+  registerPanelType({
+    id: 'amazon-keywords',
+    label: 'rail.panel.amazon-keywords',
+    icon: Tags,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${AMAZON_KEYWORDS_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('amazon-keywords', AmazonKeywordsBody)
+  // WP398：岗位页「词库」块（WP395 的面板留的那一块）
+  registerKeywordBankBlock()
 }

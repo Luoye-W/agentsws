@@ -1,5 +1,5 @@
 /**
- * 九个出厂岗位（`packages/roles/positions/*.yml`，名字照那里的中英 name）：首页岗位墙与「岗位」页共用这一份。
+ * 十个出厂岗位（`packages/roles/positions/*.yml`，名字照那里的中英 name）：首页岗位墙与「岗位」页共用这一份。
  * WP344：负责人自 WP234 起是身份标记、不是工作岗位，岗位墙不再列；`dtc-ops` 已拆成网站运营与客服（SUPERSEDED），也不列。
  * 每个岗位一句话 + 会出的卡 + 要连什么，只写 10-15 已合进 main 的能力。
  */
@@ -68,6 +68,16 @@ const zh: Role[] = [
     line: '商品、促销、邮件；盯着 AI 怎么回答你的品类',
     cards: ['改价 / 促销', '邮件营销群发', '发货与履约'],
     connects: ['Shopify', 'Search Console', 'GA4', 'Klaviyo'],
+    isNew: true,
+  },
+  {
+    id: 'amazon',
+    position: 'amazon-ops',
+    icon: 'store',
+    name: 'Amazon 运营',
+    line: '只在你卖 Amazon 时出现：Listing 体检、关键词差距、盯竞品对标款',
+    cards: ['竞品监控方案', '向设计岗提图片需求'],
+    connects: ['桌面版内置浏览器（读 Amazon 前台）'],
     isNew: true,
   },
   {
@@ -157,6 +167,16 @@ const en: Role[] = [
     isNew: true,
   },
   {
+    id: 'amazon',
+    position: 'amazon-ops',
+    icon: 'store',
+    name: 'Amazon Operations',
+    line: 'Shows up only if you sell on Amazon: listing check-ups, keyword gaps, competitor ASIN watch',
+    cards: ['Competitor watch plan', 'Image requests to Design'],
+    connects: ['Built-in browser in the desktop app (reads Amazon storefront pages)'],
+    isNew: true,
+  },
+  {
     id: 'ads',
     position: 'ads',
     icon: 'mega',
@@ -210,10 +230,10 @@ const pageZh = {
   meta: {
     title: '岗位 · Agents 工坊',
     description:
-      '客服、红人营销、社媒运营、网站运营、投放、建站、B2B、公共关系、设计：九个岗位各管一摊，要拍板的事先出卡给你批。',
+      '客服、红人营销、社媒运营、网站运营、Amazon 运营、投放、建站、B2B、公共关系、设计：十个岗位各管一摊，要拍板的事先出卡给你批。',
   },
   eyebrow: '岗位',
-  title: '九个岗位，各管一摊。',
+  title: '十个岗位，各管一摊。',
   sub: '每个岗位有自己的职责、记忆和权限。要发出去、要花钱的，先出一张卡。',
   status: '都在内测中，一个个打磨；进度写在更新日志里。',
   cardsLabel: '会出的卡',
@@ -233,10 +253,10 @@ const pageEn: RolesPageCopy = {
   meta: {
     title: 'Roles · Agents Workshop',
     description:
-      'Customer Care, Creator Marketing, Social Media, Web Operations, Paid Ads, Site Building, B2B, Public Relations, Design: nine roles, each owning its lane — anything that needs your call becomes a card first.',
+      'Customer Care, Creator Marketing, Social Media, Web Operations, Amazon Operations, Paid Ads, Site Building, B2B, Public Relations, Design: ten roles, each owning its lane — anything that needs your call becomes a card first.',
   },
   eyebrow: 'Roles',
-  title: 'Nine roles, each owning its lane.',
+  title: 'Ten roles, each owning its lane.',
   sub: 'Every role has its own duties, memory and permissions. Anything that goes out or costs money becomes a card first.',
   status: 'All in beta and being polished one by one — progress is in the changelog.',
   cardsLabel: 'Cards it hands you',

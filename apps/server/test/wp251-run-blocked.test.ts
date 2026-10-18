@@ -350,8 +350,8 @@ describe('WP251 启动品牌挂到公司（装配）', () => {
   it('挂到负责人名下品牌最多的那家；原来的公司默认品牌自己接了模型就记下「用自己那一套」', async () => {
     const { ws, identity } = fakeIdentity(
       [
-        { id: 'ws_inmo', owner_id: 'per_1', kind: 'personal' },
-        { id: 'ws_rollout', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
+        { id: 'ws_ivra', owner_id: 'per_1', kind: 'personal' },
+        { id: 'ws_rovella', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
         { id: 'ws_lone', owner_id: 'per_1', kind: 'shared', org_id: 'org_b' },
         { id: 'ws_third', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
       ],
@@ -363,40 +363,40 @@ describe('WP251 启动品牌挂到公司（装配）', () => {
     const kept: string[] = []
     const out = await attachBootBrandToCompany({
       identity: identity as never,
-      workspace_id: 'ws_inmo' as never,
-      ownModelsConfigured: async (id) => id === 'ws_rollout',
+      workspace_id: 'ws_ivra' as never,
+      ownModelsConfigured: async (id) => id === 'ws_rovella',
       keepOwnModels: async (id) => {
         kept.push(id)
       },
     })
     expect(out.attached).toBe('org_a')
-    expect(ws.get('ws_inmo')).toMatchObject({ org_id: 'org_a', kind: 'shared' })
-    expect(kept).toEqual(['ws_rollout'])
+    expect(ws.get('ws_ivra')).toMatchObject({ org_id: 'org_a', kind: 'shared' })
+    expect(kept).toEqual(['ws_rovella'])
     // 再跑一次：什么都不变
     const again = await attachBootBrandToCompany({
       identity: identity as never,
-      workspace_id: 'ws_inmo' as never,
+      workspace_id: 'ws_ivra' as never,
       ownModelsConfigured: async () => true,
       keepOwnModels: async (id) => {
         kept.push(id)
       },
     })
     expect(again).toEqual({ shared: [], kept_own_models: [] })
-    expect(kept).toEqual(['ws_rollout'])
+    expect(kept).toEqual(['ws_rovella'])
   })
 
   it('原来的公司默认品牌自己没接模型：不记（挂进来之后跟随公司）', async () => {
     const { identity } = fakeIdentity(
       [
-        { id: 'ws_inmo', owner_id: 'per_1', kind: 'personal' },
-        { id: 'ws_rollout', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
+        { id: 'ws_ivra', owner_id: 'per_1', kind: 'personal' },
+        { id: 'ws_rovella', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
       ],
       [{ id: 'org_a', owner_id: 'per_1', created_at: '2026-10-02T00:00:00.000Z' }],
     )
     const kept: string[] = []
     const out = await attachBootBrandToCompany({
       identity: identity as never,
-      workspace_id: 'ws_inmo' as never,
+      workspace_id: 'ws_ivra' as never,
       ownModelsConfigured: async () => false,
       keepOwnModels: async (id) => {
         kept.push(id)
@@ -433,24 +433,24 @@ describe('WP251 启动品牌挂到公司（装配）', () => {
 
     const two = fakeIdentity(
       [
-        { id: 'ws_inmo', owner_id: 'per_1', kind: 'personal', org_id: 'org_a' },
-        { id: 'ws_rollout', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
+        { id: 'ws_ivra', owner_id: 'per_1', kind: 'personal', org_id: 'org_a' },
+        { id: 'ws_rovella', owner_id: 'per_1', kind: 'shared', org_id: 'org_a' },
       ],
       [{ id: 'org_a', owner_id: 'per_1', created_at: '2026-10-02T00:00:00.000Z' }],
     )
-    // 真机实际的形状（Fable 10-07 复查）：INMO 一直挂着公司、只是 kind = personal——只改 kind，别的不动
+    // 真机实际的形状（Fable 10-07 复查）：IVRA 一直挂着公司、只是 kind = personal——只改 kind，别的不动
     const kept: string[] = []
     const out = await attachBootBrandToCompany({
       identity: two.identity as never,
-      workspace_id: 'ws_inmo' as never,
+      workspace_id: 'ws_ivra' as never,
       ownModelsConfigured: async () => true,
       keepOwnModels: async (id) => {
         kept.push(id)
       },
     })
-    expect(out).toEqual({ shared: ['ws_inmo'], kept_own_models: [] })
-    expect(two.ws.get('ws_inmo')).toEqual({
-      id: 'ws_inmo',
+    expect(out).toEqual({ shared: ['ws_ivra'], kept_own_models: [] })
+    expect(two.ws.get('ws_ivra')).toEqual({
+      id: 'ws_ivra',
       owner_id: 'per_1',
       kind: 'shared',
       org_id: 'org_a',
@@ -459,7 +459,7 @@ describe('WP251 启动品牌挂到公司（装配）', () => {
     // 再跑一次：什么都不变
     const again = await attachBootBrandToCompany({
       identity: two.identity as never,
-      workspace_id: 'ws_inmo' as never,
+      workspace_id: 'ws_ivra' as never,
       ownModelsConfigured: async () => true,
       keepOwnModels: async (id) => {
         kept.push(id)

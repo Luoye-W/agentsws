@@ -136,9 +136,16 @@ describe('WP216 平台套件与自带技能对得上', () => {
     }
   })
 
-  it('反过来：有官方旁注的技能都登记在某个平台下（不然它会对所有品牌生效）', () => {
+  it('反过来：有官方旁注的技能要么登记在某个平台下，要么只挂在某个岗位上（不然它会对所有品牌生效）', () => {
     for (const name of listBundledSkills()) {
-      if (readOfficialSkillMeta(name) !== undefined) expect(isPlatformSkill(name), name).toBe(true)
+      const meta = readOfficialSkillMeta(name)
+      if (meta === undefined) continue
+      // WP397：Amazon 是卖场不是建站平台——官方卖家技能只挂在 Amazon 运营岗位上（那个岗位只在卖 Amazon 的品牌下出现）
+      const positioned = (meta.frontmatter.positions ?? '').trim() !== ''
+      expect(
+        isPlatformSkill(name) || (meta.upstream.publisher === 'Amazon' && positioned),
+        name,
+      ).toBe(true)
     }
   })
 })

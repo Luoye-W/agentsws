@@ -18,7 +18,7 @@ const D1b = '2026-10-07T06:40:00.000Z'
 const D2 = '2026-10-08T01:05:00.000Z'
 
 const BRIEF =
-  '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+  '用 agentsws-theme 给 Rovella 搭英文首页（星际机甲正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 const FINAL = [
   '### 改了什么（2 个文件）',
   '- `templates/index.json`：首页 5 屏',
@@ -46,11 +46,11 @@ const baseTimeline = (): MatterEvent[] => [
   ev({
     kind: 'status',
     at: D1b,
-    text: '预览好了：未发布主题「Rollout Homepage v1 (dark tech)」（线上没动）。',
+    text: '预览好了：未发布主题「Rovella Homepage v1 (dark tech)」（线上没动）。',
     actor: { kind: 'agent', id: 'site.shopify-theme' },
     preview: {
       url: 'https://shop.example/?preview_theme_id=1',
-      label: 'Rollout Homepage v1 (dark tech)',
+      label: 'Rovella Homepage v1 (dark tech)',
       changed_files: ['templates/index.json', 'config/settings_data.json'],
       check: { errors: 0, warnings: 0 },
     },
@@ -68,7 +68,7 @@ const baseTimeline = (): MatterEvent[] => [
         { text: '改 templates/index.json', status: 'ok', seconds: 108 },
         { text: '改 config/settings_data.json', status: 'ok', seconds: 22 },
         { text: '主题检查', status: 'ok', seconds: 41 },
-        { text: '推成未发布主题「Rollout Homepage v1 (dark tech)」', status: 'ok', seconds: 35 },
+        { text: '推成未发布主题「Rovella Homepage v1 (dark tech)」', status: 'ok', seconds: 35 },
       ],
     },
   }),
@@ -85,7 +85,7 @@ const view = (
     schema_version: 1 as const,
     workspace_id: 'ws_1',
     kind: 'adhoc' as const,
-    title: 'Rollout 英文首页 · 深色科技风',
+    title: 'Rovella 英文首页 · 深色科技风',
     title_source: 'ai' as const,
     status: 'open' as const,
     entry: 'position' as const,
@@ -132,7 +132,7 @@ const approval = (over: Partial<ApprovalItem> = {}): ApprovalItem => ({
   role_id: 'site.theme',
   subject: { object: { type: 'thread', id: 'thr_1' } },
   dedupe_key: 'dk_1',
-  title: '把「Rollout Homepage v1 (dark tech)」设为线上主题',
+  title: '把「Rovella Homepage v1 (dark tech)」设为线上主题',
   summary: '访客马上看到新首页\n配色是全店级：商品页、购物车也会变深色',
   payload: {},
   evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },

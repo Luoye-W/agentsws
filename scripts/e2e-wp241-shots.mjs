@@ -219,7 +219,7 @@ async function main() {
       ['「召回」传言怎么应对', 'pr.reddit'],
       ['盯 10-07 那篇评测帖的评论', 'pr.reddit'],
       ['5 条重点帖的回应口径', 'pr.reddit'],
-      ['整理 r/INMO 版规', 'social.reddit'],
+      ['整理 r/IVRA 版规', 'social.reddit'],
     ]
     const opened = []
     for (const [title, role_id] of matters)
@@ -248,11 +248,11 @@ async function main() {
     const done = await todo(social, '找 5 个适合我们的版', iso(-60))
     await api(token, social, 'POST', `/v1/todos/${done.id}/done`)
     await api(token, social, 'POST', '/v1/schedules', {
-      title: 'r/INMO 入群审核',
+      title: 'r/IVRA 入群审核',
       trigger: { kind: 'interval', every_ms: 7_200_000 },
     })
     await api(token, pr, 'POST', '/v1/schedules', {
-      title: '扫一遍 Reddit 上提到 INMO 的帖子',
+      title: '扫一遍 Reddit 上提到 IVRA 的帖子',
       trigger: { kind: 'cron', expr: '0 9 * * *', tz: 'Asia/Shanghai' },
     })
     await new Promise((r) => setTimeout(r, 3000))

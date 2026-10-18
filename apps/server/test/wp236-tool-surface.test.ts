@@ -77,7 +77,7 @@ const THREAD: RecordSocialThread = {
   channel: 'reddit',
   surface: 'thread',
   author_handle: 'u/someone',
-  text: 'Is the INMO Air3 worth it?',
+  text: 'Is the IVRA Air3 worth it?',
   created_at: '2026-10-05T10:00:00.000Z',
   status: 'open',
 }

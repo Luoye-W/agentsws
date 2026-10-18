@@ -21,6 +21,7 @@
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/social-core": "workspace:*",
-    "@agentsws/support-core": "workspace:*"
+    "@agentsws/support-core": "workspace:*",
+    "feedsmith": "3.0.1"
   }
 }

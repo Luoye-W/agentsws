@@ -41,6 +41,8 @@ const WITH_WEB = [
   'ads.meta',
   'ads.tiktok',
   'ads.x',
+  // WP395：亚马逊店铺运营要查竞品与 Amazon 规矩
+  'amz.store',
   'b2b.exhibition',
   'b2b.outbound',
   'b2b.sales',

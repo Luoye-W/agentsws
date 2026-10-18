@@ -33,7 +33,7 @@ export function accountKey(account: Pick<ActionAccount, 'platform' | 'id'>): str
 }
 
 /**
- * WP328：Reddit 品牌号的键（`reddit:inmo_official`）。读（每日巡查）与写（WP329 填草稿）共用一本账：
+ * WP328：Reddit 品牌号的键（`reddit:ivra_official`）。读（每日巡查）与写（WP329 填草稿）共用一本账：
  * 同一个号一次一件，读写不会同时开。还不知道用户名时用品牌 id 凑一个（`reddit:ws:<id>`）。
  */
 export function redditPaceKey(user: string | undefined, workspaceId: string): string {

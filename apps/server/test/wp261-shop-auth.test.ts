@@ -23,7 +23,7 @@ import {
 import { createRunCli } from '../src/shopify-theme.js'
 import { type FakeStoreCli, fakeStoreCli } from './fixtures/fake-shopify-store.js'
 
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 const STORE_ROLES = ['dtc.store']
@@ -43,7 +43,7 @@ const probe = async (): Promise<PlatformCliProbe> => ({
 })
 
 function make(
-  ws = 'ws_rollout',
+  ws = 'ws_rovella',
   store: () => string | undefined = () => machine.store,
 ): ShopAdminAssembly {
   return createShopAdmin({
@@ -122,7 +122,7 @@ describe('授权那一行走到哪一档', () => {
     expect(call?.argv[6]?.split(',').sort()).toEqual(
       [...(spec.store_admin?.scopes_by_role['dtc.store'] ?? [])].sort(),
     )
-    const home = cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rollout')
+    const home = cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rovella')
     expect(call?.home).toBe(home)
     expect(existsSync(join(home, '.fake-store-session.json'))).toBe(true)
     // 白名单：我们的秘密一个都不传，代理照传；授权不带 CI（同登录）
@@ -131,13 +131,13 @@ describe('授权那一行走到哪一档', () => {
     expect(call?.ci).toBe(false)
   })
 
-  it('两个品牌各一份会话：INMO 没授权就是没授权，Rollout 的令牌碰不到', async () => {
-    await authorizeAndWait(make('ws_rollout'))
-    const inmo = make('ws_inmo')
-    expect((await inmo.view(STORE_ROLES)).state).toBe('unauthorized')
-    // 即使 INMO 的设置文件里伪造一条授权，CLI 那边也是没授权（会话目录是分开的）
+  it('两个品牌各一份会话：IVRA 没授权就是没授权，Rovella 的令牌碰不到', async () => {
+    await authorizeAndWait(make('ws_rovella'))
+    const ivra = make('ws_ivra')
+    expect((await ivra.view(STORE_ROLES)).state).toBe('unauthorized')
+    // 即使 IVRA 的设置文件里伪造一条授权，CLI 那边也是没授权（会话目录是分开的）
     await expect(
-      (await authorizeAndWaitFake(inmo)).query({
+      (await authorizeAndWaitFake(ivra)).query({
         name: 'x',
         document: 'query AgentswsShop { shop { name } }',
       }),
@@ -169,10 +169,10 @@ describe('授权那一行走到哪一档', () => {
 
   it('等浏览器时：同一时间只有一个品牌在授权；取消后回到没授权', async () => {
     cli.setAuthMode('hang')
-    const a = make('ws_rollout')
+    const a = make('ws_rovella')
     await a.run('authorize', STORE_ROLES)
     expect((await a.view(STORE_ROLES)).state).toBe('authorizing')
-    await expect(make('ws_inmo').run('authorize', STORE_ROLES)).rejects.toBeInstanceOf(
+    await expect(make('ws_ivra').run('authorize', STORE_ROLES)).rejects.toBeInstanceOf(
       ShopAdminError,
     )
     await a.cancel(STORE_ROLES)
@@ -205,9 +205,9 @@ describe('授权那一行走到哪一档', () => {
 /** 伪造：设置文件里有授权、CLI 会话里没有（看 CLI 报「没授权」时我们怎么认）。 */
 async function authorizeAndWaitFake(a: ShopAdminAssembly) {
   const { writeFileSync, mkdirSync } = await import('node:fs')
-  mkdirSync(join(dir, 'brands', 'ws_inmo'), { recursive: true })
+  mkdirSync(join(dir, 'brands', 'ws_ivra'), { recursive: true })
   writeFileSync(
-    join(dir, 'brands', 'ws_inmo', 'shop-admin.json'),
+    join(dir, 'brands', 'ws_ivra', 'shop-admin.json'),
     JSON.stringify({
       version: 1,
       grants: {
@@ -235,9 +235,9 @@ describe('store execute', () => {
   it('查询：文档与变量走文件、带钉的版本、不带 --allow-mutations、跑完临时文件删掉', async () => {
     const a = make()
     await authorizeAndWait(a)
-    cli.respond('AgentswsShop', { shop: { name: 'Rollout' } })
+    cli.respond('AgentswsShop', { shop: { name: 'Rovella' } })
     const r = await a.reader()
-    expect(await r.query(Q)).toEqual({ shop: { name: 'Rollout' } })
+    expect(await r.query(Q)).toEqual({ shop: { name: 'Rovella' } })
     const call = cli.calls().at(-1)
     expect(call?.op).toBe('AgentswsShop')
     expect(call?.mutations).toBe(false)
@@ -245,7 +245,7 @@ describe('store execute', () => {
     expect(call?.ci).toBe(true)
     expect(call?.argv).toContain('--query-file')
     const work = join(
-      cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rollout'),
+      cliSessionHome(join(dir, 'tools'), STORE_SESSION_CLI_ID, 'ws_rovella'),
       'work',
     )
     expect(readdirSync(work)).toEqual([])
@@ -269,8 +269,8 @@ describe('store execute', () => {
     const a = make()
     await authorizeAndWait(a)
     cli.set('old-version')
-    cli.respond('AgentswsShop', { shop: { name: 'Rollout' } })
-    expect(await (await a.reader()).query(Q)).toEqual({ shop: { name: 'Rollout' } })
+    cli.respond('AgentswsShop', { shop: { name: 'Rovella' } })
+    expect(await (await a.reader()).query(Q)).toEqual({ shop: { name: 'Rovella' } })
     expect(cli.calls().at(-1)?.version).toBeUndefined()
   })
 

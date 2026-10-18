@@ -33,7 +33,7 @@ const runGenuiTool = vi.fn(async (_id: string, input: { tool: string }) =>
 const openExternal = vi.fn((_url: string) => undefined)
 let imageHosts = {
   hosts: [] as { host: string; added_at: string }[],
-  shop_hosts: ['shop.rollout.example'],
+  shop_hosts: ['shop.rovella.example'],
 }
 const addImageHost = vi.fn(async (host: string) => {
   imageHosts = {
@@ -79,7 +79,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 beforeEach(() => {
-  imageHosts = { hosts: [], shop_hosts: ['shop.rollout.example'] }
+  imageHosts = { hosts: [], shop_hosts: ['shop.rovella.example'] }
   addImageHost.mockClear()
   removeImageHost.mockClear()
   wecomConnected = false
@@ -289,7 +289,7 @@ describe('WP341 追加（849）外部图片白名单', () => {
     renderReply(
       fenced({
         items: [
-          { type: 'image', src: 'https://shop.rollout.example/hero.jpg', alt: '店铺首图' },
+          { type: 'image', src: 'https://shop.rovella.example/hero.jpg', alt: '店铺首图' },
           { type: 'image', src: 'https://pics.partner.example/a.jpg', alt: '合作方图' },
         ],
       }),
@@ -298,7 +298,7 @@ describe('WP341 追加（849）外部图片白名单', () => {
     const block = await screen.findByTestId('answer-genui', {}, SLOW)
     await waitFor(() => expect(block.querySelectorAll('img')).toHaveLength(1), SLOW)
     expect(block.querySelector('img')?.getAttribute('src')).toBe(
-      'https://shop.rollout.example/hero.jpg',
+      'https://shop.rovella.example/hero.jpg',
     )
     fireEvent.click(await screen.findByTestId('genui-media-always'))
     await waitFor(() => expect(addImageHost).toHaveBeenCalledWith('pics.partner.example'))
@@ -308,12 +308,12 @@ describe('WP341 追加（849）外部图片白名单', () => {
   it('设置里：能看（店铺那几个删不掉）、能删、能手动加', async () => {
     imageHosts = {
       hosts: [{ host: 'pics.partner.example', added_at: '2026-10-15T00:00:00Z' }],
-      shop_hosts: ['shop.rollout.example'],
+      shop_hosts: ['shop.rovella.example'],
     }
     const { ImageHostsSetting } = await import('@/components/settings/image-hosts-setting')
     renderWithProviders(<ImageHostsSetting />)
     const row = await screen.findByTestId('settings-image-hosts')
-    expect(row.textContent).toContain('shop.rollout.example')
+    expect(row.textContent).toContain('shop.rovella.example')
     expect(
       within(row)
         .getAllByTestId('settings-image-host')

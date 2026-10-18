@@ -2,7 +2,7 @@
  * WP301（决策 399 = A）：**旧的自带主题**（agentsws-theme，v0.9.x / v0.10 起底的工作目录）怎么办。
  *
  * 那套主题已改闭源、工坊不再用也不再分发；建站岗位改在店里复制一份 Shopify 官方的 Horizon 来做。已经起过底的
- * 工作目录（例如 Windows 上 Rollout 那一份）：
+ * 工作目录（例如 Windows 上 Rovella 那一份）：
  *
  * - **不删、不自动迁**：工具回话里照实说一句「这份是旧的自带主题，工坊已改用 Horizon」；
  * - 下一次起底（`theme_init_from_base`）在 Horizon 上新起一份时，旧目录整份挪去

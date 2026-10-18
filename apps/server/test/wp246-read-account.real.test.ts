@@ -52,7 +52,7 @@ describe.skipIf(!RUN)('读号 × 本机 Chrome × 本地假 Reddit', () => {
     const account = createRedditReadAccount({
       browser: rb,
       dir: join(root, 'brand-a', 'readonly-browser'),
-      brandHandles: () => ['inmo_official'],
+      brandHandles: () => ['ivra_official'],
       nowMs: () => now,
       whoamiUrl: `${site.origin}/old-home/`,
     })
@@ -77,15 +77,15 @@ describe.skipIf(!RUN)('读号 × 本机 Chrome × 本地假 Reddit', () => {
 
   it('登录的是品牌登记的号：拦下', async () => {
     now += 21_000
-    await rb.read(`${site.origin}/set-reader/?u=inmo_official`)
+    await rb.read(`${site.origin}/set-reader/?u=ivra_official`)
     now += 21_000
     const account = createRedditReadAccount({
       browser: rb,
-      brandHandles: () => ['u/INMO_Official'],
+      brandHandles: () => ['u/IVRA_Official'],
       nowMs: () => now,
       whoamiUrl: `${site.origin}/old-home/`,
     })
-    expect(await account.check()).toMatchObject({ state: 'refused', username: 'inmo_official' })
+    expect(await account.check()).toMatchObject({ state: 'refused', username: 'ivra_official' })
     expect(account.gate()).toMatchObject({ ok: false, refused: true })
   })
 })

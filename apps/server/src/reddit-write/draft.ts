@@ -26,7 +26,7 @@ export const MAX_REDDIT_POST = 6_000
 
 export interface RedditDraftPromptInput {
   target: RedditWriteTarget
-  /** 品牌名（「INMO」）。 */
+  /** 品牌名（「IVRA」）。 */
   brand: string
   /** 品牌号用户名（不带 `u/`；不知道就没有）。 */
   account?: string

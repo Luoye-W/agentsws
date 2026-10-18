@@ -12,8 +12,8 @@ import { renderWithProviders } from './helpers'
 const AT = '2026-10-07T09:00:00.000Z'
 
 const base = {
-  legal_name: 'INMO Tech',
-  brand_name: 'INMO',
+  legal_name: 'IVRA Tech',
+  brand_name: 'IVRA',
   discoverable: true,
   vertical: 'goods' as const,
   storefront_platform: 'shopify' as const,
@@ -41,13 +41,13 @@ describe('WP248 品牌档案三格', () => {
     expect(currency.value).toBe('USD')
 
     await userEvent.type(one, '给近视的人做的 AR 眼镜')
-    await userEvent.type(email, 'support@inmo.example')
+    await userEvent.type(email, 'support@ivra.example')
     await userEvent.clear(currency)
     await userEvent.type(currency, 'eur')
     await userEvent.click(screen.getByTestId('company-save'))
     expect(saved[0]).toMatchObject({
       one_liner: '给近视的人做的 AR 眼镜',
-      support_email: 'support@inmo.example',
+      support_email: 'support@ivra.example',
       currency: 'EUR',
     })
   })
@@ -58,7 +58,7 @@ describe('WP248 品牌档案三格', () => {
         profile={{
           ...base,
           one_liner: '户外滑板与配件',
-          support_email: 'help@rollout.example',
+          support_email: 'help@rovella.example',
           currency: 'CAD',
         }}
         busy={false}
@@ -68,7 +68,7 @@ describe('WP248 品牌档案三格', () => {
     )
     expect((screen.getByTestId('brand-one-liner') as HTMLInputElement).value).toBe('户外滑板与配件')
     expect((screen.getByTestId('brand-support-email') as HTMLInputElement).value).toBe(
-      'help@rollout.example',
+      'help@rovella.example',
     )
     expect((screen.getByTestId('brand-currency') as HTMLInputElement).value).toBe('CAD')
   })

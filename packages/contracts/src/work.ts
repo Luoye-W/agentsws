@@ -35,6 +35,7 @@ import type {
 import type { ReasoningEffort } from './model.js'
 import type { RunResult } from './run.js'
 import type { RunCancelReason } from './run-limits.js'
+import type { ServiceOffer } from './service-order.js'
 
 export type MatterId = string
 export type GoalId = string
@@ -131,6 +132,11 @@ export interface MatterEvent {
    * 输入框空着时显示成浅灰建议、按 Tab 收下；只在 `agent_message` 上有。不从正文里猜。
    */
   next_suggestion?: string
+  /**
+   * WP390（docs/105 §4）：AI 这段话末尾挂的**推荐卡**——一行「名字 · 起价 · 看看」（不是审批卡、不进卡片队列）。
+   * 只在 `agent_message` 上有；同一项服务一次对话只挂一次、说「不用」后 30 天不挂、定时任务里不挂。老事件没有这一格。
+   */
+  service_offer?: ServiceOffer
   /**
    * WP357（Luoye 10-16）：这句话附上的资料（.txt / .md / .docx / .pdf / .xlsx / .csv）——只在
    * `human_message` 上有。读法与助理同一套（像口令的字抹掉、每份最多 3 万字、表格读成一行一行），

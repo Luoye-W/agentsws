@@ -45,7 +45,7 @@ function shell(body: string, loggedIn: boolean, extra = '', spy = true): string 
   return (
     `<!doctype html><html><head><title>reddit</title><script>var MODHASH="uh123";</script>${extra}</head>` +
     `<body class="${loggedIn ? 'loggedin ' : ''}listing-page">` +
-    `<div id="header-bottom-right">${loggedIn ? '<span class="user"><a href="/user/inmo_official/">inmo_official</a></span>' : '<a class="login-required" href="/login">log in</a>'}</div>` +
+    `<div id="header-bottom-right">${loggedIn ? '<span class="user"><a href="/user/ivra_official/">ivra_official</a></span>' : '<a class="login-required" href="/login">log in</a>'}</div>` +
     `${body}${spy ? SPY : ''}</body></html>`
   )
 }
@@ -53,7 +53,7 @@ function shell(body: string, loggedIn: boolean, extra = '', spy = true): string 
 const POST_SCRIPT =
   '<script>function rpost(p,d,cb){fetch(p,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams(Object.assign({uh:MODHASH},d)).toString()}).then(function(r){return r.json()}).then(cb)}</script>'
 
-export async function startFakeOldReddit(sub = 'inmoxr'): Promise<FakeOldRedditSite> {
+export async function startFakeOldReddit(sub = 'ivraxr'): Promise<FakeOldRedditSite> {
   const site: Omit<FakeOldRedditSite, 'origin' | 'close'> = {
     seen: [],
     queues: { modqueue: [], unmoderated: [] },

@@ -100,4 +100,18 @@ export const SETUP_EN: Record<string, string> = {
   'setup.need.workshop_account': 'Agents Workshop account',
   'setup.need.imap_smtp': 'Sending mailbox',
   'rail.panel.connect': 'Connect',
+  // WP385：网站体检设置那几格（服务端给的是中文）
+  'setup.field.site.health.feed_url': 'Product feed',
+  'setup.field.site.health.listings_add': 'Add listing',
+  'setup.field.site.health.listings_add.ph': 'Platform | product handle | URL',
+  'setup.field.site.health.listings_remove': 'Remove listing',
+  'setup.field.site.health.listings_remove.ph': 'URL or platform',
+  'setup.field.site.health.crawlers_add': 'Add AI crawler',
+  'setup.field.site.health.crawlers_add.ph': 'User agent | search / user / training',
+  'setup.field.site.health.crawlers_remove': 'Skip crawler',
+  'setup.field.site.health.crawlers_remove.ph': 'User agent',
+  'setup.field.site.health.referrers_add': 'Add AI source',
+  'setup.field.site.health.referrers_add.ph': 'Platform | referrer domain',
+  'setup.field.site.health.referrers_remove': 'Skip source',
+  'setup.field.site.health.referrers_remove.ph': 'Platform name',
 }

@@ -57,6 +57,7 @@ import {
   AI_TRAFFIC_ORDERS,
   aiTrafficSessionsDoc,
   HEALTH_PRODUCTS,
+  HEALTH_PRODUCTS_BY_HANDLE,
   healthProductsOf,
   trafficOrdersOf,
   trafficSessionsOf,
@@ -119,6 +120,10 @@ export interface SiteHealthService {
   saveSettings(next: SiteHealthSettings): SiteHealthSettings
   /** 跑一次体检（永不抛：读不到的写进 `notes`）。 */
   run(): Promise<SiteHealthRun>
+  /**
+   * WP385：正在跑的那一次（没在跑回 `undefined`）。同一时间只跑一次：跑着时再要 `run()` 拿到的是同一次。
+   */
+  running(): Promise<SiteHealthRun> | undefined
   /** 算近 7 天 AI 来源流量（读不到店回 `undefined`）。 */
   aiTraffic(): Promise<AiTrafficSummary | undefined>
   /** 上一次算的 AI 来源流量（面板读它，不现算）。 */
@@ -231,9 +236,13 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     }
   }
 
-  /** 读店铺商品（没授权 / 读不到回 `undefined` 与一句人话）。 */
+  /**
+   * 读店铺商品（没授权 / 读不到回 `undefined` 与一句人话）。
+   * WP385：设置里填了其他平台上架页的商品，不在最近更新的那几件里也补读进来（不然那条上架页永远比不上）。
+   */
   const readProducts = async (
     sample: number,
+    listed: readonly string[] = [],
   ): Promise<{ shop: { name?: string; currency?: string }; products: ProductTruth[] } | string> => {
     let reader: ShopifyAdminReader | undefined
     try {
@@ -248,7 +257,33 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
         document: HEALTH_PRODUCTS,
         variables: { first: sample },
       })
-      return healthProductsOf(data)
+      const got = healthProductsOf(data)
+      const have = new Set(got.products.map((p) => p.handle))
+      const missing = [...new Set(listed)]
+        .filter((h) => /^[a-z0-9][a-z0-9-]*$/i.test(h) && !have.has(h))
+        .slice(0, MAX_SAMPLE)
+      if (missing.length > 0) {
+        try {
+          const more = healthProductsOf(
+            await reader.query<unknown>({
+              name: 'health_products_listed',
+              document: HEALTH_PRODUCTS_BY_HANDLE,
+              variables: {
+                first: missing.length,
+                query: `status:active AND (${missing.map((h) => `handle:${h}`).join(' OR ')})`,
+              },
+            }),
+          )
+          for (const p of more.products)
+            if (missing.includes(p.handle) && !have.has(p.handle)) {
+              have.add(p.handle)
+              got.products.push(p)
+            }
+        } catch {
+          // 补读没成：只比最近更新的那几件
+        }
+      }
+      return got
     } catch {
       return '这次没读到店里的商品'
     }
@@ -293,7 +328,7 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     }
   }
 
-  const run = async (): Promise<SiteHealthRun> => {
+  const runOnce = async (): Promise<SiteHealthRun> => {
     const settings = state.settings
     const out: SiteHealthRun = {
       id: options.newId('shr'),
@@ -323,7 +358,10 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
 
     // ① 商品与政策
     const sample = Math.min(MAX_SAMPLE, Math.max(1, settings.sample_products ?? DEFAULT_SAMPLE))
-    const shop = await readProducts(sample)
+    const shop = await readProducts(
+      sample,
+      (settings.listings ?? []).map((l) => l.handle),
+    )
     const products = typeof shop === 'string' ? [] : shop.products.filter((p) => p.handle !== '')
     if (typeof shop === 'string') out.notes.push(shop)
     const policies = await storePolicies(get, origin)
@@ -433,6 +471,17 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     return keep(out)
   }
 
+  /** WP385：同一时间只跑一次（报表上点、改完设置、周一那一轮可能前后脚到）。 */
+  let inflight: Promise<SiteHealthRun> | undefined
+  const run = (): Promise<SiteHealthRun> => {
+    if (inflight !== undefined) return inflight
+    const p = runOnce().finally(() => {
+      if (inflight === p) inflight = undefined
+    })
+    inflight = p
+    return p
+  }
+
   const keep = (r: SiteHealthRun): SiteHealthRun => {
     state = { ...state, runs: [r, ...state.runs].slice(0, KEEP_RUNS) }
     save()
@@ -528,6 +577,7 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
       return next
     },
     run,
+    running: () => inflight,
     aiTraffic,
     lastTraffic: () => state.traffic,
     deckData: () => ({

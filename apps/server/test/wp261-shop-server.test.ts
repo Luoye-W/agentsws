@@ -18,7 +18,7 @@ import {
 } from '../src/shop-admin-stand-in.js'
 
 const T0 = '2026-10-08T09:00:00.000Z'
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 
 let server: Server
 let store: Assignment
@@ -112,7 +112,7 @@ beforeEach(async () => {
         'X-Assignment': owner,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ legal_name: 'Rollout', storefront_platform: 'shopify' }),
+      body: JSON.stringify({ legal_name: 'Rovella', storefront_platform: 'shopify' }),
     }),
   )
   await dataOf(res)
@@ -195,7 +195,7 @@ describe('WP261 独立站运营端到端（stub）', () => {
       'shop_get_product',
       'shop_save_product',
     ])
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱')
     const pending = (
       await server.txn.approvals.queue({
         workspace_id: server.bootstrap.workspace.id,
@@ -212,8 +212,8 @@ describe('WP261 独立站运营端到端（stub）', () => {
     expect(pending).toHaveLength(1)
     const card = pending[0]
     expect(card?.state).toBe('pending')
-    expect(card?.title).toBe('改商品「Rollout 折叠收纳箱」：标题')
-    expect(card?.summary).toContain('标题：Rollout 折叠收纳箱 → Rollout 折叠收纳箱（新版）')
+    expect(card?.title).toBe('改商品「Rovella 折叠收纳箱」：标题')
+    expect(card?.summary).toContain('标题：Rovella 折叠收纳箱 → Rovella 折叠收纳箱（新版）')
 
     // ⑤ 人批了、过撤回窗口：执行器去改店，读回对上
     const id = card?.id ?? ''
@@ -224,7 +224,7 @@ describe('WP261 独立站运营端到端（stub）', () => {
     })
     now = new Date(Date.parse(T0) + 60 * 60 * 1000).toISOString()
     await server.txn.executor.applyApproval(id)
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱（新版）')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱（新版）')
     const types = server.kernel.eventLog
       .readSync({ workspace_id: server.bootstrap.workspace.id })
       .map((e) => e.type)

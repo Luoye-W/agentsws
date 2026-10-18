@@ -372,10 +372,15 @@ describe('积分面板（49 M5）', () => {
     })
   })
 
-  it('这个月钱花在哪：三张小卡，按付费三块分（67 §1）', async () => {
+  it('这个月钱花在哪：四张小卡，按付费三块 + 工坊服务分（67 §1、WP390）', async () => {
     renderWithProviders(<CreditsPanel assignment="asg_owner" />)
     const blocks = await screen.findAllByTestId('credits-block')
-    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'service'])
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual([
+      'data',
+      'ai',
+      'service',
+      'workshop_service',
+    ])
     const byBlock = (name: string): string =>
       blocks.find((b) => b.getAttribute('data-block') === name)?.textContent ?? ''
     // 价目表里 ai.chat 没写 block，按能力名前缀兜底也要归对
@@ -463,9 +468,17 @@ describe('WP142 没关联也看得到价（docs/78 第 44 步）', () => {
     expect((await screen.findByTestId('credits-not-linked')).textContent).toContain(
       '价钱先摆在这儿',
     )
-    // 三块：还没花钱，每块说的是最低多少
+    // 三块 + 工坊服务：还没花钱，每块说的是最低多少（工坊服务每项单独定价）
     const blocks = await screen.findAllByTestId('credits-block')
-    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'service'])
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual([
+      'data',
+      'ai',
+      'service',
+      'workshop_service',
+    ])
+    expect(
+      blocks.find((b) => b.getAttribute('data-block') === 'workshop_service')?.textContent,
+    ).toContain('每项服务单独定价')
     await waitFor(() => {
       expect(blocks.find((b) => b.getAttribute('data-block') === 'data')?.textContent).toContain(
         '0.02',

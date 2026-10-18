@@ -73,11 +73,11 @@ function service(): SocialServiceAssembly {
     random: () => 0.5,
     holdersOf: () => [],
     owner: async () => 'p_1',
-    brandName: () => 'INMO',
+    brandName: () => 'IVRA',
   })
 }
 
-function register(chat = GROUP, id = 'sa_tg', name = 'INMO 用户群'): void {
+function register(chat = GROUP, id = 'sa_tg', name = 'IVRA 用户群'): void {
   store.saveAccount({
     id,
     workspace_id: WS,
@@ -100,8 +100,8 @@ beforeEach(() => {
   tg = createFakeTelegram({ now })
   tg.chats.set(GROUP, {
     id: GROUP,
-    title: 'INMO 用户群',
-    username: 'inmo_users',
+    title: 'IVRA 用户群',
+    username: 'ivra_users',
     type: 'supergroup',
   })
   tg.chats.set(OTHER, { id: OTHER, title: '别人的群', type: 'supergroup' })
@@ -129,7 +129,7 @@ describe('WP257 Telegram 自动进帖：入库、打标签、去重', () => {
     expect(texts()).toEqual([
       '我的订单什么时候到？',
       '进群看福利 t.me/+AbCd123',
-      '@inmo_helper_bot 这个能连 iPhone 吗？',
+      '@ivra_helper_bot 这个能连 iPhone 吗？',
     ])
     expect(rows().map((r) => [r.triage, r.triage_by])).toEqual([
       ['customer_question', 'rule'],
@@ -283,7 +283,7 @@ describe('WP257 Telegram 自动进帖：缺什么照实说', () => {
     expect(acc).toMatchObject({ state: 'missing_permissions', missing: ['privacy_mode'] })
     expect(acc?.message).toContain('/setprivacy')
     expect(acc?.message).toContain('BotFather')
-    expect(texts()).toEqual(['@inmo_helper_bot 怎么退货？'])
+    expect(texts()).toEqual(['@ivra_helper_bot 怎么退货？'])
 
     tg.botStatus.set(GROUP, 'administrator')
     nowMs += 15 * MIN
@@ -337,12 +337,12 @@ describe('WP257 Telegram 登记：读群名', () => {
     const svc = service()
     const row = await svc.port.createAccount(actor, {
       channel: 'telegram_group',
-      handle: '@inmo_users',
-      display_name: '@inmo_users',
-      url: 'https://t.me/inmo_users',
-      external_id: '@inmo_users',
+      handle: '@ivra_users',
+      display_name: '@ivra_users',
+      url: 'https://t.me/ivra_users',
+      external_id: '@ivra_users',
     })
-    expect(row).toMatchObject({ display_name: 'INMO 用户群', external_id: String(GROUP) })
+    expect(row).toMatchObject({ display_name: 'IVRA 用户群', external_id: String(GROUP) })
     expect(tg.calls).toEqual(['getChat'])
     tg.say(GROUP, 'hello')
     await svc.ingest.sweep()
@@ -362,6 +362,6 @@ describe('WP257 Telegram 登记：读群名', () => {
     expect(row.display_name).toBe('群 7890')
     connected = true
     await svc.ingest.sweep()
-    expect(store.account(row.id)?.display_name).toBe('INMO 用户群')
+    expect(store.account(row.id)?.display_name).toBe('IVRA 用户群')
   })
 })

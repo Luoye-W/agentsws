@@ -588,6 +588,79 @@ export function checkExpectations(
         (leaked === 0 ? '' : `；${leaked} 个当场问答出现在列表里`),
     )
   }
+  // WP392：竞品监控按顺序比出了哪几种变化；竞品监控自己零写（第一次只当底子）
+  if (expected.competitor_changes !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_change')
+      .map((e) => String(payloadOf(e).kind))
+    const firstReads = evidence.events.filter(
+      (e) => e.type === 'simulation.competitor_read' && payloadOf(e).baseline === true,
+    )
+    const ok =
+      got.length === expected.competitor_changes.length &&
+      got.every((g, i) => g === expected.competitor_changes?.[i]) &&
+      firstReads.length > 0
+    add(
+      'competitor_changes',
+      ok,
+      `竞品监控比出了 [${got.join(', ')}]，期望 [${expected.competitor_changes.join(', ')}]` +
+        (firstReads.length === 0 ? '；没有一次「只建底子」的首读' : ''),
+    )
+  }
+  // WP393：简报里「竞品动向」那一段（有要紧的才出；空列表 = 不该出）
+  if (expected.competitor_brief !== undefined) {
+    const lines = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_brief')
+      .flatMap((e) => {
+        const l = payloadOf(e).lines
+        return Array.isArray(l) ? l.map(String) : []
+      })
+    const want = expected.competitor_brief
+    const text = lines.join('\n')
+    const ok = want.length === 0 ? lines.length === 0 : want.every((w) => text.includes(w))
+    add(
+      'competitor_brief',
+      ok,
+      `简报「竞品动向」：${lines.length === 0 ? '没出' : lines.join('；')}；期望 ${want.length === 0 ? '不出' : `含 ${want.join(' / ')}`}`,
+    )
+  }
+  // WP394：Amazon 对标款——带自家比价的那几条差价、每次读走了哪条路、云端一共扣了几个积分
+  if (expected.competitor_vs_own !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_change' && payloadOf(e).vs_own !== undefined)
+      .map((e) => Number(payloadOf(e).vs_own))
+    const want = expected.competitor_vs_own
+    add(
+      'competitor_vs_own',
+      got.length === want.length &&
+        got.every((g, i) => Math.abs(g - (want[i] ?? Number.NaN)) < 0.005),
+      `和自家对标款比出的差价 [${got.join(', ')}]，期望 [${want.join(', ')}]`,
+    )
+  }
+  if (expected.competitor_via !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_read' && payloadOf(e).source === 'amazon')
+      .map((e) => String(payloadOf(e).via ?? 'none'))
+    const want = expected.competitor_via
+    add(
+      'competitor_via',
+      got.length === want.length && got.every((g, i) => g === want[i]),
+      `Amazon 每次读走了 [${got.join(', ')}]，期望 [${want.join(', ')}]`,
+    )
+  }
+  if (expected.competitor_credits !== undefined) {
+    const got =
+      Math.round(
+        evidence.events
+          .filter((e) => e.type === 'simulation.competitor_read')
+          .reduce((n, e) => n + Number(payloadOf(e).credits ?? 0), 0) * 100,
+      ) / 100
+    add(
+      'competitor_credits',
+      Math.abs(got - expected.competitor_credits) < 0.005,
+      `云端一共扣了 ${got} 积分，期望 ${expected.competitor_credits}`,
+    )
+  }
   // WP343：「我的助理」按顺序交给了哪几个岗位；助理那一步自己不 stage、不 apply
   if (expected.assistant_dispatched_to !== undefined) {
     const got = evidence.events
@@ -632,6 +705,96 @@ export function checkExpectations(
       `事开到 [${tasks.join(', ')}]，知识写进 [${notes.join(', ')}]（已生效 ${active}）` +
         `，期望 [${(expected.assistant_fanout_tasks ?? []).join(', ')}] / [${(expected.assistant_fanout_notes ?? []).join(', ')}]` +
         (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
+    )
+  }
+  // WP395（docs/104 C2 / docs/106 A3）：首次设置划分出来的岗位与各自的职责，按先后逐个对上
+  if (expected.positions_planned !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.position_planned')
+      .flatMap((e) => {
+        const ps = payloadOf(e).positions
+        return Array.isArray(ps) ? (ps as { template_id: string; role_ids: string[] }[]) : []
+      })
+    const want = Object.entries(expected.positions_planned)
+    const show = (ps: [string, string[]][]): string =>
+      ps.map(([k, v]) => `${k}: [${v.join(', ')}]`).join('；')
+    const gotPairs = got.map((p): [string, string[]] => [p.template_id, p.role_ids])
+    const same =
+      gotPairs.length === want.length &&
+      gotPairs.every(
+        ([k, v], i) =>
+          k === want[i]?.[0] &&
+          v.length === (want[i]?.[1].length ?? -1) &&
+          v.every((r, j) => r === want[i]?.[1][j]),
+      )
+    add(
+      'positions_planned',
+      same,
+      `划分出 ${show(gotPairs) || '（没有）'}，期望 ${show(want) || '（没有）'}`,
+    )
+  }
+  // WP396（docs/106 §13）：Listing 体检出了哪几处问题、草稿、设计需求单；被拦后不再读；体检自己零写
+  if (expected.listing_checkup !== undefined) {
+    const want = expected.listing_checkup
+    const issues = evidence.events.filter((e) => e.type === 'simulation.listing_issue')
+    const reads = evidence.events.filter((e) => e.type === 'simulation.listing_read')
+    const okReads = reads.filter((e) => payloadOf(e).status === 'ok').length
+    const blockedAt = reads.findIndex((e) => payloadOf(e).status === 'blocked')
+    const got = issues.map((e) => String(payloadOf(e).rule_id))
+    const drafts = issues.filter((e) => payloadOf(e).draft === true).length
+    const designEvents = evidence.events.filter(
+      (e) =>
+        e.type === 'simulation.design_request_requested' &&
+        payloadOf(e).from_role_id === 'amz.store',
+    )
+    const designs = designEvents.length
+    const problems: string[] = []
+    if (want.issues !== undefined && got.join(',') !== want.issues.join(','))
+      problems.push(`问题是 [${got.join(', ')}]，期望 [${want.issues.join(', ')}]`)
+    if (want.drafts_at_least !== undefined && drafts < want.drafts_at_least)
+      problems.push(`只有 ${drafts} 处带草稿`)
+    if (want.design_requests !== undefined && designs !== want.design_requests)
+      problems.push(`下了 ${designs} 张设计需求单，期望 ${want.design_requests}`)
+    if (
+      want.design_routed_to !== undefined &&
+      designEvents.some((e) => payloadOf(e).routed_to !== want.design_routed_to)
+    )
+      problems.push(
+        `需求单路由到了 [${designEvents.map((e) => String(payloadOf(e).routed_to ?? '（没判出来）')).join(', ')}]，期望 ${want.design_routed_to}`,
+      )
+    if (want.pages_read !== undefined && okReads !== want.pages_read)
+      problems.push(`读了 ${okReads} 页，期望 ${want.pages_read}`)
+    if (want.stopped === 'blocked' && (blockedAt < 0 || blockedAt !== reads.length - 1))
+      problems.push('被拦之后还在读（或者根本没被拦）')
+    if (issues.some((e) => typeof payloadOf(e).source !== 'string' || payloadOf(e).source === ''))
+      problems.push('有问题没带规则出处')
+    add(
+      'listing_checkup',
+      problems.length === 0,
+      problems.length === 0
+        ? `体检出 ${got.length} 处（草稿 ${drafts} 处、设计需求单 ${designs} 张）`
+        : problems.join('；'),
+    )
+  }
+  // WP395（docs/36 §3）：这几条职责的当场回答照实说没数据——不出组件、不出数
+  if (expected.position_answer_no_data !== undefined) {
+    const answered = evidence.events
+      .filter((e) => e.type === 'simulation.position_answered')
+      .map(payloadOf)
+    const bad: string[] = []
+    for (const role of expected.position_answer_no_data) {
+      const mine = answered.filter((p) => p.role_id === role)
+      const honest = mine.filter(
+        (p) => p.no_data === true && Array.isArray(p.components) && p.components.length === 0,
+      )
+      if (mine.length === 0 || honest.length !== mine.length) bad.push(role)
+    }
+    add(
+      'position_answer_no_data',
+      bad.length === 0,
+      bad.length === 0
+        ? `[${expected.position_answer_no_data.join(', ')}] 没数据时都照实说了`
+        : `没照实说（或一次没答）：${bad.join(', ')}`,
     )
   }
   if (expected.position_answer_components !== undefined) {
@@ -775,6 +938,40 @@ export function checkExpectations(
         problems.length === 0,
         problems.length === 0
           ? `胜率 ${String(p.win_rate)}、准确度 ${String(p.accuracy)}、分到 ${owners.join('、')}、建议 ${String(p.advice)}`
+          : problems.join('；'),
+      )
+    }
+  }
+  // WP398：Amazon 词库——差距词按竞品数排、他牌名标出来、被拦就停
+  if (expected.amazon_keywords !== undefined) {
+    const want = expected.amazon_keywords
+    const last = evidence.events.filter((e) => e.type === 'simulation.amazon_keywords').pop()
+    if (last === undefined) add('amazon_keywords', false, '词库一次都没刷新')
+    else {
+      const p = payloadOf(last)
+      const gaps = Array.isArray(p.gaps) ? (p.gaps as [string, number][]).map((g) => g[0]) : []
+      const others = Array.isArray(p.other_brand_terms) ? (p.other_brand_terms as string[]) : []
+      const problems: string[] = []
+      if (want.top_gaps !== undefined) {
+        const head = gaps.slice(0, want.top_gaps.length)
+        if (head.join('|') !== want.top_gaps.join('|'))
+          problems.push(`差距词开头 ${head.join('、')}（期望 ${want.top_gaps.join('、')}）`)
+      }
+      if (want.other_brands !== undefined) {
+        const a = [...others].sort().join('|')
+        const b = [...want.other_brands].sort().join('|')
+        if (a !== b)
+          problems.push(
+            `他牌名 ${others.join('、') || '（没有）'}（期望 ${want.other_brands.join('、')}）`,
+          )
+      }
+      if (want.autocomplete !== undefined && p.autocomplete !== want.autocomplete)
+        problems.push(`联想词 ${String(p.autocomplete)}（期望 ${want.autocomplete}）`)
+      add(
+        'amazon_keywords',
+        problems.length === 0,
+        problems.length === 0
+          ? `差距词 ${gaps.slice(0, 3).join('、')}…；他牌名 ${others.join('、') || '（没有）'}；联想词 ${String(p.autocomplete)}（读了 ${String(p.pages_read)} 页）`
           : problems.join('；'),
       )
     }
@@ -1515,6 +1712,46 @@ export function checkExpectations(
    * `answered_by_pr` 必须是假——**公关不答客户的问题**。它一旦为真，
    * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
    */
+  /*
+   * WP386：拉监控源那一跳。拉不到时要说一句为什么（`says_why`）——「这条 feed 404 了」与
+   * 「今天没人提我们」是两件事，混成一个 0 是这条职责上最贵的一种谎。
+   */
+  if (expected.pr_feed !== undefined) {
+    const last = [...evidence.events].reverse().find((e) => e.type === 'simulation.pr_feed_pulled')
+    if (last === undefined) {
+      add('pr_feed', false, '这一轮没有拉过一条监控源')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.pr_feed
+      const problems: string[] = []
+      if (want.ok !== undefined && (p.ok === true) !== want.ok)
+        problems.push(want.ok ? `没拉到：${String(p.message ?? '')}` : '应该拉不到，却说拉到了')
+      for (const k of ['fetched', 'kept', 'unique'] as const)
+        if (want[k] !== undefined && Number(p[k]) !== want[k])
+          problems.push(`${k} 是 ${String(p[k])}，不是 ${want[k]}`)
+      if (want.label !== undefined && String(p.label ?? '') !== want.label)
+        problems.push(`名字拆成了「${String(p.label ?? '')}」，不是「${want.label}」`)
+      if (
+        want.links_unwrapped !== undefined &&
+        (p.links_unwrapped === true) !== want.links_unwrapped
+      )
+        problems.push('还有 google.com/url 跳转链接没解开')
+      if (
+        want.says_why !== undefined &&
+        (typeof p.message === 'string' && p.message !== '') !== want.says_why
+      )
+        problems.push('拉不到却没说为什么（会被当成 0 条）')
+      add(
+        'pr_feed',
+        problems.length === 0,
+        problems.length === 0
+          ? p.ok === true
+            ? `拉到 ${String(p.fetched)} 条、留下 ${String(p.kept)} 条`
+            : `照实说没拉到：${String(p.message)}`
+          : problems.join('；'),
+      )
+    }
+  }
   if (expected.pr_mention !== undefined) {
     const last = [...evidence.events]
       .reverse()
@@ -1618,6 +1855,47 @@ export function checkExpectations(
    * 两件事：版规不让 / 冷却没过是 **block**（不是转人审）；能发的那一条
    * **永远人审**（`HARD_L1`，报 L3 也会被按回来）。
    */
+  /*
+   * WP387：替你建 Google 提醒——一张卡列 N 条、永远等人点；批了之后建好的条数、写成的监控源、
+   * 账号里卡外的提醒一条都没动。
+   */
+  if (expected.pr_alerts_build !== undefined) {
+    const want = expected.pr_alerts_build
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_alerts_card_staged')
+    const built = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_alerts_built')
+    const sp = staged === undefined ? {} : payloadOf(staged)
+    const bp = built === undefined ? {} : payloadOf(built)
+    const problems: string[] = []
+    if (staged === undefined) problems.push('没出那张「要在你的 Google 账号里建 N 条提醒」的卡')
+    if (want.card_lines !== undefined && Number(sp.lines) !== want.card_lines)
+      problems.push(`卡上列了 ${String(sp.lines)} 条，期望 ${want.card_lines}`)
+    if (want.auto_approved !== undefined && (sp.auto_approved === true) !== want.auto_approved)
+      problems.push(want.auto_approved ? '这张卡没自己过' : '改用户的 Google 账号不该自动放行')
+    if ((want.built !== undefined || want.sources !== undefined) && built === undefined)
+      problems.push('卡批了之后浏览器没去建')
+    const done = Number(bp.created ?? 0) + Number(bp.existing ?? 0)
+    if (want.built !== undefined && built !== undefined && done !== want.built)
+      problems.push(`建好 / 读回 ${done} 条，期望 ${want.built}`)
+    if (want.sources !== undefined && built !== undefined && Number(bp.sources) !== want.sources)
+      problems.push(`写成 ${String(bp.sources)} 条监控源，期望 ${want.sources}`)
+    if (
+      want.others_untouched !== undefined &&
+      built !== undefined &&
+      (bp.others_untouched === true) !== want.others_untouched
+    )
+      problems.push('账号里卡外的提醒被动了')
+    add(
+      'pr_alerts_build',
+      problems.length === 0,
+      problems.length === 0
+        ? `一张卡 ${String(sp.lines)} 条，批了建好 ${done} 条、监控源 ${String(bp.sources ?? 0)} 条`
+        : problems.join('；'),
+    )
+  }
   if (expected.pr_external_post !== undefined) {
     const want = expected.pr_external_post
     const staged = [...evidence.events]

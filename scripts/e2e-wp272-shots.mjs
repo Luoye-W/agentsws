@@ -76,7 +76,7 @@ async function api(token, assignment, method, path, body) {
   return json.data
 }
 
-const SHOP = '6suegp-md.myshopify.com'
+const SHOP = '6demox-md.myshopify.com'
 const IDLE = {
   linked: true,
   email: 'demo@example.com',

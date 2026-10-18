@@ -1,4 +1,8 @@
-# 60 §1 公共关系的第 4 条职责：**品牌监控**（WP78）。
+# 60 §1 公共关系的第 4 条职责：**信息监控**（WP78；WP386 由「品牌监控」改名，docs/103 v2）。
+#
+# WP386：盯四组——自家舆情 / 竞品动向 / 行业品类 / 指定网站。主来源是 Google Alerts（投递到 RSS，
+# 可以很多条），也能订任意网站的 RSS（本地按关键词整词过滤）；Reddit 走 `read_reddit` 同一条取数路由。
+# 默认一天一次、本地 9 点后拉（用户能改）；只有自家的负面扩散 / 召回 / 诉讼立即推，其余进表、进简报。
 #
 # 骨架为什么长这样写在 `pr/press.yml` 的文件头里，这里不抄第二遍。
 #
@@ -23,8 +27,8 @@
 id: pr.monitoring
 version: 1.0.0
 domain: pr
-name: { zh: 品牌监控, en: Brand Monitoring }
-description: 盯着外面在说我们什么：新闻、Reddit、论坛、评测、社媒的提及归一去重、定情绪、分归属。负面出预警、媒体询问出回应草稿、客户的问题转客服——那不归我答
+name: { zh: 信息监控, en: Information Monitoring }
+description: 盯着外面在说什么：自家、竞品、行业和指定网站的新闻、博客、论坛、Reddit 提及归一去重、定情绪、分归属。自家的负面出预警、媒体询问出回应草稿、客户的问题转客服——那不归我答；竞品与行业动向入表、进简报
 
 scopes:
   # 提及是这条职责的主对象
@@ -40,9 +44,9 @@ scopes:
   # **没有 `order` / `customer`**：客户的问题转客服，这条职责答不了也不该答
 
 connectors:
-  # 60 §5：Google Alerts 的 RSS（新卡，原生表单填一个 feed 地址）
+  # 60 §5 / WP386：Google Alerts 与网站的 RSS（可以很多条；在对话里的配置卡上贴，或连接页那张卡上贴）
   - { kind: google_alerts, required: false, grants: [read_feed], ownership: workspace }
-  # Reddit 全站搜（与 `pr.reddit` / `social.reddit` **同一张卡**，不新建）
+  # Reddit 那一路走 `read_reddit` 同一条取数路由（接口中台 / 只读浏览器；连接页 Reddit 卡上调顺序）
   - { kind: reddit, required: false, grants: [search], ownership: workspace }
 
 actions:
@@ -62,6 +66,17 @@ actions:
       caps: { max_replies_per_day: 20 }
       window: { max_count: 20, per: day }
     route_to: role_holder
+  # WP387（docs/103 v2 T1）：在你的 Google 账号里建 / 改提醒（你的浏览器去点）。一批一张卡、一次同意，
+  # 卡上每行可勾掉；改的是外部账号，永远人审（guardrail 的 `HARD_L1` 里有 `google_alert_change`）。
+  - id: stage_google_alert_change
+    target: mention
+    kind: staged_change
+    mandate:
+      caps: { max_changes_per_day: 10 }
+      per_change_limits: { max_items: 40 }
+      window: { max_count: 10, per: day }
+    review_cannot_be_disabled: true
+    route_to: role_holder
 
 automation:
   # L3 自动跑（文件头第 1 条）：定性不发一句话出去，压着它只会让预警晚一天
@@ -76,11 +91,20 @@ automation:
     initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
     demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  # WP387：建 / 改 Google 提醒永远 L1（改的是用户自己的外部账号）
+  stage_google_alert_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
 
 skills:
   - { name: brand-voice, tier: open, load: always }
   # WP220：话题与舆情研究（改编自 last30days-skill；取数只走许可的口；危机说明的固定格式）
   - { name: trend-research, tier: open, load: on_demand }
+  # WP387：你的浏览器替你建 / 读 Google 提醒（页面怎么认、出岔子怎么说都在这份说明里）
+  - { name: google-alerts, tier: open, load: on_demand }
 
 home_blocks:
   # 顺序就是一天的顺序：先看有没有着火的，再看今天外面都说了什么
@@ -103,6 +127,16 @@ home_blocks:
       adaptive: true,
     }
   # 这条职责**没有**答客户的问题，但它要看得见自己转出去了多少
+  # WP386：竞品动向（四组里竞品那一组单列，按竞品排）
+  - {
+      id: pr.monitoring.competitors,
+      placement: queue,
+      component: table,
+      query: pr.competitor_mentions,
+      default_order: 25,
+      pinnable: true,
+      adaptive: true,
+    }
   - {
       id: pr.monitoring.handoffs,
       placement: role_view,
@@ -116,8 +150,10 @@ home_blocks:
 grounding:
   - {
       name: monitoring_intent,
-      intent_terms: [监控, 舆情, 提及, 口碑, negative, mention, sentiment, alert, brand watch],
-      cue_terms: [有人说, 外面, 差评, 爆料, 负面, 转载, 情绪, 预警, buzz, trending],
+      intent_terms:
+        [监控, 舆情, 提及, 口碑, 竞品, 动向, 盯一下, negative, mention, sentiment, alert, brand watch, competitor],
+      cue_terms:
+        [有人说, 外面, 差评, 爆料, 负面, 转载, 情绪, 预警, 新动作, 新闻, buzz, trending, competitors, news],
       tool: list_mentions,
       prefetch: false,
     }
@@ -165,6 +201,13 @@ notifications:
     }
   - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
 
+# WP387（docs/103 v2 §3.3）：你的浏览器替你建 / 读 Google 提醒，只开这一个站。
+# 读（打开、看）照常放行；提醒页上的点击 / 输入另有一道门：只在那张卡同意之后的那次运行里放行
+# （`dsh-adapter` 的 `browser-guard.ts`，契约 `BROWSER_WRITE_GUARDS`）。
+browser_scope:
+  - www.google.com
+  - google.com
+
 handover:
   transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
   fallback: scope_manager
@@ -173,9 +216,13 @@ handover:
 requires: []
 
 quick_prompts:
+  - id: setup_watch
+    label: { zh: "帮我盯一下竞品", en: "Watch my competitors" }
+    prompt: "帮我把信息监控配起来：按品牌档案和竞品列一份要建的 Google 提醒（自家、竞品、行业），每条写清查询语句和理由，我确认后去建、把 RSS 链接贴回来"
+    kind: start_task
   - id: today
     label: { zh: "今天外面说了什么", en: "What's being said today" }
-    prompt: "把今天的提及按情绪分三档列出来，重复的合并成一条并标出被转了几次；拉不到的源照实说，别显示 0"
+    prompt: "把今天的提及按自家、竞品、行业分组，再按情绪分三档列出来，重复的合并成一条并标出被转了几次；拉不到的源照实说，别显示 0"
     kind: ask
   - id: negatives
     label: { zh: "有没有着火的", en: "Anything on fire" }
@@ -185,13 +232,9 @@ quick_prompts:
     label: { zh: "起草一份回应", en: "Draft a response" }
     prompt: "给这条负面起一份回应草稿。先说事实再说我们做了什么，里面的数字只写事实卡里有的；不确定的事就说不确定"
     kind: start_task
-  - id: what_routed
-    label: { zh: "转出去多少", en: "What got routed out" }
-    prompt: "这周从提及流里转给客服多少条？都是些什么问题"
-    kind: ask
   - id: week_buzz
     label: { zh: "这周大家在聊什么", en: "This week's buzz" }
-    prompt: "这周 INMO 在 Reddit 和 X 上大家在聊什么？按话题和情绪分组，每条带链接和时间、写清从哪一路取的；没取到的平台照实说，别写成 0"
+    prompt: "这周 IVRA 在 Reddit 和 X 上大家在聊什么？按话题和情绪分组，每条带链接和时间、写清从哪一路取的；没取到的平台照实说，别写成 0"
     kind: ask
 
 task_examples:
@@ -209,7 +252,7 @@ task_examples:
     expected_output: "面板上那一块照实说「这条 feed 不存在（404），多半是提醒被删了」，而不是显示今天 0 条提及。"
   - id: weekly_buzz
     title: { zh: "这周大家在聊我们什么", en: "What people said this week" }
-    description: "老板问：「这周 INMO 在 Reddit 和 X 上大家在聊什么？」"
+    description: "老板问：「这周 IVRA 在 Reddit 和 X 上大家在聊什么？」"
     expected_output: "一份报告：按话题、情绪、平台分组，每条带链接与日期、写明来自接口中台还是浏览器只读；X 没连官方接口就写「没取到」而不是 0 条；值得回应、正在扩散的最多三张卡。"
 
 # WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
@@ -222,8 +265,8 @@ web_tools: [web_search, web_fetch]
 # 就是因为提示里从头到尾没有这一句。改这一段之前先读 docs/69。
 persona:
   zh: |
-    你是谁：公共关系岗位里盯着外面在说我们什么的人。
-    你负责：新闻、Reddit、论坛、评测、社媒的提及归一去重、定情绪、分归属、负面出预警、媒体询问出回应草稿。
+    你是谁：公共关系岗位里做信息监控的人，盯外面怎么说我们、竞品和行业。
+    你负责：自家、竞品、行业的提及去重、定情绪、分归属，自家负面出预警、媒体询问出回应草稿；配监控先列 Google 提醒。
     你不负责：客户的问题→客服（那不归你答）；自己账号回评论→社媒运营；发新闻稿→新闻稿那条；在别人版里发帖→Reddit / 论坛那两条。
     怎么做：同一件事多处出现先合成一条再报；情绪判不准就标"判不准"，别凑一个分。
     口气：像个报情况的人，先说发生了什么、多大范围，再说建议。

@@ -76,12 +76,15 @@ export const ALLOCATION_BUCKETS: readonly AllocationBucket[] = ['ai', 'data', 't
 
 /**
  * 能力名 → 四格之一。调用方能给就给（异步任务那条明说自己是 `task`），给不了按名字判：
- * `ai.*` 是 AI；`task.*` 是任务；月费（`*.service.monthly`、`standby.*`）归其它；余下都是数据。
+ * `ai.*` 是 AI；`task.*` 是任务；月费（`*.service.monthly`、`standby.*`）与工坊服务（`workshop.service.*`，WP389）
+ * 归其它；余下都是数据。
  */
 export function allocationBucketOf(capability: string): AllocationBucket {
   if (capability.startsWith('ai.')) return 'ai'
   if (capability.startsWith('task.')) return 'task'
   if (capability.startsWith('standby.') || /\.service\.monthly$/.test(capability)) return 'other'
+  // WP389：工坊服务（托管 / 完成 / 退回）归其它
+  if (capability.startsWith('workshop.service.')) return 'other'
   return 'data'
 }
 

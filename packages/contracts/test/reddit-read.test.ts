@@ -43,7 +43,7 @@ describe('WP220 Reddit 取数路由', () => {
     if (search === undefined) throw new Error('缺能力')
     expect(
       normalizeDataInput(search, {
-        query: ' INMO Air3 ',
+        query: ' IVRA Air3 ',
         subreddit: 'r/AugmentedReality',
         time_window: 'WEEK',
         limit: 25,
@@ -51,7 +51,7 @@ describe('WP220 Reddit 取数路由', () => {
       }),
     ).toEqual({
       ok: true,
-      input: { query: 'INMO Air3', subreddit: 'augmentedreality', time_window: 'week', limit: 25 },
+      input: { query: 'IVRA Air3', subreddit: 'augmentedreality', time_window: 'week', limit: 25 },
     })
     expect(normalizeDataInput(search, { query: 'x', time_window: 'decade' })).toMatchObject({
       ok: false,

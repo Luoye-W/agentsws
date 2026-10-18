@@ -111,7 +111,7 @@ describe('发出记录 + 记录去处（服务进程）', () => {
     const p = await s.outbound.propose(ws, {
       url: 'https://x.feishu.cn/base/bascnAAA111?table=tblX1',
       instruction: '以后每发一条都记到这张表',
-      name: 'INMO 回复记录',
+      name: 'IVRA 回复记录',
       actor: {
         person_id: s.bootstrap.person.id,
         assignment_id: s.bootstrap.ownerAssignment.id,
@@ -121,7 +121,7 @@ describe('发出记录 + 记录去处（服务进程）', () => {
     if (!p.ok) throw new Error(p.message)
     const card = (await s.txn.approvals.get(p.card_id as string)) as ApprovalItem
     expect(card.kind).toBe('policy_change')
-    expect(card.title).toBe('记录去处：INMO 回复记录')
+    expect(card.title).toBe('记录去处：IVRA 回复记录')
     const payload = card.payload as Record<string, unknown>
     expect(payload.form).toBe('record_sink')
     expect(payload.options).toEqual([
@@ -145,14 +145,14 @@ describe('发出记录 + 记录去处（服务进程）', () => {
     const sinks = await data<{ state: string; name: string }[]>(
       await call('GET', '/v1/outbound/sinks'),
     )
-    expect(sinks).toMatchObject([{ state: 'active', name: 'INMO 回复记录' }])
+    expect(sinks).toMatchObject([{ state: 'active', name: 'IVRA 回复记录' }])
 
     s.outbound.record(ws, {
       source_key: 'approval:apv_x1',
       channel: 'reddit',
       action: 'reply',
       kind: 'social_reply',
-      destination: 'r/inmoxr',
+      destination: 'r/ivraxr',
       content: 'Thanks for asking!',
     })
     await s.outbound.flush()
@@ -247,10 +247,10 @@ describe('写入点', () => {
       id: 'sa_r',
       workspace_id: WS,
       channel: 'reddit',
-      handle: 'inmo_official',
-      display_name: 'r/inmoxr',
-      url: 'https://www.reddit.com/r/inmoxr',
-      external_id: 'inmoxr',
+      handle: 'ivra_official',
+      display_name: 'r/ivraxr',
+      url: 'https://www.reddit.com/r/ivraxr',
+      external_id: 'ivraxr',
       observed_at: NOW,
     } as never)
     const thread: CommunityThread = {
@@ -298,7 +298,7 @@ describe('写入点', () => {
         source_key: 'approval:ap_1',
         channel: 'reddit',
         action: 'reply',
-        destination: 'r/inmoxr',
+        destination: 'r/ivraxr',
         counterpart: 'u/alice',
         content: 'About 3h.',
         external_id: 't1_reply',

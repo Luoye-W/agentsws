@@ -10,8 +10,8 @@ import { renderWithProviders } from './helpers'
 
 const view = (over: Partial<RedditWatchView> = {}): RedditWatchView => ({
   settings: {
-    own_subreddits: ['inmoxr'],
-    keywords: ['INMO'],
+    own_subreddits: ['ivraxr'],
+    keywords: ['IVRA'],
     every_hours: 24,
     day_start_hour: 9,
     keyword_limit: 10,
@@ -39,10 +39,10 @@ const view = (over: Partial<RedditWatchView> = {}): RedditWatchView => ({
       source: 'inbox',
       kind: 'comment',
       fullname: 't1_c9',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       author: 'alice',
       text: 'does it work with iPhone?',
-      url: 'https://www.reddit.com/r/inmoxr/comments/p1/x/c9/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/p1/x/c9/',
       created_at: '2026-10-14T00:00:00.000Z',
       fetched_at: '2026-10-14T01:00:00.000Z',
       run_id: 'rwr_1',

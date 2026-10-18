@@ -82,26 +82,26 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
   })
 
   it('读版的帖子列表：结构化条目；只发了一个 GET 页面，脚本里的 POST、图片、样式一个没发', async () => {
-    const got = await rb.read(`${site.origin}/r/inmo/new/`, { limit: 2 })
+    const got = await rb.read(`${site.origin}/r/ivra/new/`, { limit: 2 })
     expect(got.ok).toBe(true)
     if (!got.ok) return
     expect(got.items).toHaveLength(2)
     expect(got.items[0]).toMatchObject({
       kind: 'post',
-      url: '/r/inmo/comments/a1/inmo_air3_first_impressions/',
-      title: 'INMO Air3 first impressions',
+      url: '/r/ivra/comments/a1/ivra_air3_first_impressions/',
+      title: 'IVRA Air3 first impressions',
       author: 'user_a1',
-      subreddit: 'inmo',
+      subreddit: 'ivra',
       score: 120,
       comments: 34,
-      text: 'Body of INMO Air3 first impressions.',
+      text: 'Body of IVRA Air3 first impressions.',
     })
-    expect(pagesSeen()).toEqual([{ method: 'GET', path: '/r/inmo/new/' }])
+    expect(pagesSeen()).toEqual([{ method: 'GET', path: '/r/ivra/new/' }])
   }, 60_000)
 
   it('读一条帖子和评论；不带上一页种下的 cookie（每次一个干净的会话）', async () => {
     next()
-    const got = await rb.read(`${site.origin}/r/inmo/comments/a1/inmo_air3_first_impressions/`)
+    const got = await rb.read(`${site.origin}/r/ivra/comments/a1/ivra_air3_first_impressions/`)
     expect(got.ok).toBe(true)
     if (!got.ok) return
     expect(got.items.map((i) => i.kind)).toEqual(['post', 'comment', 'comment'])
@@ -123,7 +123,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
       subreddit: 'smartglasses',
     })
     next()
-    const o = await rb.read(`${site.origin}/old/r/inmo/`)
+    const o = await rb.read(`${site.origin}/old/r/ivra/`)
     expect(o.ok && o.items[0]).toMatchObject({
       title: 'Old layout post',
       author: 'carol',
@@ -133,7 +133,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
 
   it('限速：20 秒内第二页不开（站点一个请求都没收到）', async () => {
     const before = site.seen.length
-    const got = await rb.read(`${site.origin}/r/inmo/new/`)
+    const got = await rb.read(`${site.origin}/r/ivra/new/`)
     expect(got).toMatchObject({ ok: false, reason: 'limited' })
     expect(site.seen.length).toBe(before)
   })
@@ -143,7 +143,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
     const got = await rb.read(`${site.origin}/r/offsite/`)
     expect(got).toMatchObject({ ok: false, reason: 'off_site' })
     expect(site.seen.some((r) => r.path === '/offsite-target')).toBe(false)
-    const direct = await rb.read(`${site.origin.replace('localhost', '127.0.0.1')}/r/inmo/new/`)
+    const direct = await rb.read(`${site.origin.replace('localhost', '127.0.0.1')}/r/ivra/new/`)
     expect(direct).toMatchObject({ ok: false, reason: 'not_allowed' })
   }, 60_000)
 
@@ -159,7 +159,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
     expect(rb.status().state).toBe('blocked')
     const before = site.seen.length
     next()
-    expect(await rb.read(`${site.origin}/r/inmo/new/`)).toMatchObject({ reason: 'blocked' })
+    expect(await rb.read(`${site.origin}/r/ivra/new/`)).toMatchObject({ reason: 'blocked' })
     expect(site.seen.length).toBe(before)
     now += 2 * 3_600_000
   }, 60_000)
@@ -211,7 +211,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
         return started
       },
     })
-    const got = await b.read(`${site.origin}/r/inmo/new/`)
+    const got = await b.read(`${site.origin}/r/ivra/new/`)
     expect(got.ok).toBe(true)
     await sleep(800)
     expect(alive(orphan.child.pid)).toBe(false)
@@ -246,7 +246,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
       const got = await exec({
         id: 'c1',
         name: 'read_reddit',
-        input: { action: 'posts', subreddit: 'inmo', sort: 'new', limit: 2 },
+        input: { action: 'posts', subreddit: 'ivra', sort: 'new', limit: 2 },
       })
       expect(got).toMatchObject({
         status: 'ok',
@@ -255,9 +255,9 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
           items: [
             {
               kind: 'post',
-              url: 'https://www.reddit.com/r/inmo/comments/a1/inmo_air3_first_impressions/',
-              title: 'INMO Air3 first impressions',
-              subreddit: 'inmo',
+              url: 'https://www.reddit.com/r/ivra/comments/a1/ivra_air3_first_impressions/',
+              title: 'IVRA Air3 first impressions',
+              subreddit: 'ivra',
               score: 120,
               comments: 34,
             },

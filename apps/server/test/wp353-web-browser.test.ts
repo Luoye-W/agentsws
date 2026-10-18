@@ -117,7 +117,7 @@ describe('搜索语言（工坊这一层定规矩）', () => {
       market: 'JP',
       language: 'ja',
     })
-    expect(searchLocaleOf({ markets: ['US'] }, 'INMO 竞品 国内')).toEqual({ language: 'zh-CN' })
+    expect(searchLocaleOf({ markets: ['US'] }, 'IVRA 竞品 国内')).toEqual({ language: 'zh-CN' })
     expect(searchLocaleOf({ markets: ['TW'] }, 'smart glasses')).toEqual({
       market: 'TW',
       language: 'zh-TW',
@@ -141,7 +141,7 @@ describe('搜索语言（工坊这一层定规矩）', () => {
   it('美国品牌（用户用中文问、AI 用英文写查询）→ 内置浏览器开 Google 带 gl=us&hl=en', async () => {
     const shell = fakeShell(() => serp(['https://www.reddit.com/r/SmartGlasses/']))
     const { search } = setup({ channel: shell.channel })
-    await search.search('INMO Air3 review reddit')
+    await search.search('IVRA Air3 review reddit')
     const u = new URL(shell.opened[0] ?? '')
     expect(u.hostname).toBe('www.google.com')
     expect(u.searchParams.get('gl')).toBe('us')

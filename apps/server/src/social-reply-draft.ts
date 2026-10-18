@@ -20,7 +20,7 @@ export const MAX_DRAFT_OUTPUT = 600
 export interface ReplyDraftInput {
   /** 渠道的人话名（「Reddit」「Discord」）。 */
   channel_label: string
-  /** 哪个号 / 群 / 版（「r/inmoxr」）。 */
+  /** 哪个号 / 群 / 版（「r/ivraxr」）。 */
   account_name: string
   surface: 'thread' | 'comment' | 'dm'
   author: string

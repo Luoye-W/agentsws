@@ -28,7 +28,7 @@ const clock: Clock = {
 const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 
 const BRIEF =
-  '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+  '用 agentsws-theme 给 Rovella 搭英文首页（星际机甲正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 
 /** 先调一次 search_policies，然后回 `reply`。 */
 function scripted(reply: string) {
@@ -199,7 +199,7 @@ describe('WP264 短标题', () => {
     })
     const m = work.createMatter({
       kind: 'adhoc',
-      title: '用 agentsws-theme 给 Rollout 搭英文首页…',
+      title: '用 agentsws-theme 给 Rovella 搭英文首页…',
     })
     const kick = () =>
       titler.kick({
@@ -211,12 +211,12 @@ describe('WP264 短标题', () => {
   }
 
   it('首轮：便宜模型起的标题落进去（ai）；原话围栏进提示词', async () => {
-    const { work, m, kick, prompts } = setup(async () => '「Rollout 英文首页 · 深色科技风」')
+    const { work, m, kick, prompts } = setup(async () => '「Rovella 英文首页 · 深色科技风」')
     await kick()
-    expect(work.getMatter(m.id)?.title).toBe('Rollout 英文首页 · 深色科技风')
+    expect(work.getMatter(m.id)?.title).toBe('Rovella 英文首页 · 深色科技风')
     expect(work.getMatter(m.id)?.title_source).toBe('ai')
     expect(prompts[0]).toContain('<external_data>')
-    expect(prompts[0]).toContain('Rollout')
+    expect(prompts[0]).toContain('Rovella')
   })
 
   it('模型抛错 / 没接模型 → 原话前 20 字（brief）', async () => {
@@ -224,7 +224,7 @@ describe('WP264 短标题', () => {
       throw new Error('429')
     })
     await a.kick()
-    expect(a.work.getMatter(a.m.id)?.title).toBe('用 agentsws-theme 给 Rollout 搭英文首页…')
+    expect(a.work.getMatter(a.m.id)?.title).toBe('用 agentsws-theme 给 Rovella 搭英文首页…')
     expect(a.work.getMatter(a.m.id)?.title_source).toBe('brief')
     const b = setup()
     await b.kick()

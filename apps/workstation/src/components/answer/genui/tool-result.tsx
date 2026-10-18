@@ -8,6 +8,7 @@ import { GenuiBlock, processGenuiSpec } from '@changfenhuang/dsh-genui/embed'
 import { Loader2 } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { useApp } from '@/lib/app-context'
+import { wrapGenuiTables } from './table-filter-node'
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
   x !== null && typeof x === 'object' && !Array.isArray(x)
@@ -67,6 +68,11 @@ export function ToolResult({
     [outcome],
   )
   const processed = useMemo(() => (spec === undefined ? undefined : processGenuiSpec(spec)), [spec])
+  // WP401：工具读回来的表也带筛选
+  const shown = useMemo(
+    () => (processed?.spec == null ? undefined : wrapGenuiTables(processed.spec)),
+    [processed],
+  )
   const line = (text: string, tone = 'text-ws-muted-fg'): ReactNode => (
     <p className={`mt-2 text-xs ${tone}`} data-testid="genui-tool-result">
       {text}
@@ -87,10 +93,10 @@ export function ToolResult({
     return line(t('genui.tool.staged', { n: outcome.approval_item_ids?.length ?? 0 }))
   if (outcome.effect === 'refused' || outcome.status !== 'ok')
     return line(t('genui.tool.failed', { why: outcome.message ?? '' }), 'text-ws-warn')
-  if (processed?.spec === null || processed?.spec === undefined) return null
+  if (shown === undefined) return null
   return (
     <div className="mt-2" data-testid="genui-tool-result" data-effect="read">
-      <GenuiBlock spec={processed.spec} animateEntrance={false} />
+      <GenuiBlock spec={shown} animateEntrance={false} />
     </div>
   )
 }

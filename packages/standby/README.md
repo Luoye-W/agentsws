@@ -1,6 +1,6 @@
 # @agentsws/standby
 
-49 §6 WP60 / 48 L6：**在线值守**的云侧编排。
+**在线值守**的云侧编排。
 
 一句话：**同一时刻只有一个服务进程**。值守开 = 你的工作区服务进程在云上跑，
 本地桌面变成"远程窗口"。不做双活，不做同步——同步要解决的那个问题（两份真源打架）
@@ -30,7 +30,7 @@
 | `POST /v1/standby/workspaces` | 同上 | 开通 / 续期（按 `standby.seat.month` × 座位数向钱包收一个月） |
 | `GET /v1/standby/workspaces/:id` | 同上 | 状态 |
 | `POST /v1/standby/workspaces/:id/stop` | 同上 | 停（**不删数据**） |
-| `POST /v1/standby/workspaces/:id/import` | 同上 | 上传 WP36 导出包 → 校验 → 解包 → 起进程 |
+| `POST /v1/standby/workspaces/:id/import` | 同上 | 上传工作区导出包 → 校验 → 解包 → 起进程 |
 | `GET /v1/standby/workspaces/:id/export` | 同上 | 反向搬家：把云上这一份导出来（到期停了也能导） |
 | `ALL /w/:workspace_id/*` | **公开** | 原样代理到子进程。末端用户走子进程自己的 magic link 会话 |
 

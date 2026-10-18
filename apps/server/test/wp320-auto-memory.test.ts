@@ -214,10 +214,10 @@ describe('WP320 自动写入点 + 事件 + 账本', () => {
     await run('回一下', [{ text: '回复美国客户一律用英文' }], 1)
     const again = await run('回一下', [{ text: '回复美国客户一律用英文' }], 2)
     expect(again.skipped.map((s) => s.reason)).toEqual(['duplicate'])
-    const merged = await run('回一下', [{ text: '回复美国客户一律用英文，签名用 Rollout Team' }], 3)
+    const merged = await run('回一下', [{ text: '回复美国客户一律用英文，签名用 Rovella Team' }], 3)
     expect(merged.merged).toHaveLength(1)
     const entries = (await positionMemory()).filter((e) => e.written_by === 'ai')
-    expect(entries.map((e) => e.body)).toEqual(['回复美国客户一律用英文，签名用 Rollout Team'])
+    expect(entries.map((e) => e.body)).toEqual(['回复美国客户一律用英文，签名用 Rovella Team'])
     expect(entries[0]?.run_id).toBe('run_3')
     const kinds = server.kernel.eventLog
       .readSync({ workspace_id: server.bootstrap.workspace.id })

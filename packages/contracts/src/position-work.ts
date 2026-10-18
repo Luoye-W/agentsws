@@ -25,12 +25,18 @@ export type PositionWorkKind =
   | 'schedule'
   /** 社媒排期（56 SocialPost）：排好了、到点发 */
   | 'post'
+  /**
+   * WP390（docs/105 §2）：工坊服务订单——别人替你做的那一件（建站、发稿…），和事项排在一起。
+   * `ref_id` 是订单号；点开是右栏订单面板。
+   */
+  | 'service_order'
 
 export const POSITION_WORK_KINDS: readonly PositionWorkKind[] = [
   'matter',
   'todo',
   'schedule',
   'post',
+  'service_order',
 ]
 
 /**

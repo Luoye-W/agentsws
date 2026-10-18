@@ -5,10 +5,10 @@ const base: RedditPendingLike = {
   id: 'rw_1',
   kind: 'comment',
   fullname: 't1_c1',
-  subreddit: 'inmoxr',
+  subreddit: 'ivraxr',
   author: 'alice',
   text: 'Mine fogs up a bit',
-  url: 'https://www.reddit.com/r/inmoxr/comments/abc/slug/c1/?context=3',
+  url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/?context=3',
   post_title: 'Air3 with glasses?',
   inbox_type: 'comment_reply',
 }
@@ -17,9 +17,9 @@ describe('WP329：WP328 待处理条目 → 写到哪', () => {
   it('评论（含收件箱回复 / @）→ 楼中楼，带链接与上下文', () => {
     expect(redditTargetFromItem(base)).toEqual({
       kind: 'reply',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       parent_fullname: 't1_c1',
-      permalink: '/r/inmoxr/comments/abc/slug/c1/',
+      permalink: '/r/ivraxr/comments/abc/slug/c1/',
       post_title: 'Air3 with glasses?',
       parent_author: 'alice',
       parent_text: 'Mine fogs up a bit',
@@ -34,7 +34,7 @@ describe('WP329：WP328 待处理条目 → 写到哪', () => {
       kind: 'post',
       fullname: 't3_abc',
       title: 'Air3 with glasses?',
-      url: '/r/inmoxr/comments/abc/slug/',
+      url: '/r/ivraxr/comments/abc/slug/',
     })
     expect(t?.kind).toBe('comment')
     expect(t?.parent_fullname).toBe('t3_abc')

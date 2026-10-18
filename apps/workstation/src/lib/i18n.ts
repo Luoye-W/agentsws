@@ -6,14 +6,25 @@
  */
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
+import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
+import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
+import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
+import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
+import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
+import {
+  GOOGLE_ALERTS_EN,
+  GOOGLE_ALERTS_ZH,
+  PR_ALERTS_EN,
+  PR_ALERTS_ZH,
+} from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -26,9 +37,11 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
+import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
+import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHELL_EN, SHELL_ZH } from './i18n-shell'
@@ -37,6 +50,7 @@ import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
+import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 
 export type Lang = 'zh' | 'en'
@@ -1067,7 +1081,14 @@ const zh: Table = {
   // WP224：设置 → 通用 · 经营一页纸什么时候推
   'settings.weekly_review': '经营一页纸',
   'settings.weekly_review.hint':
-    '秘书按这个时间把「本周经营一页纸」推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
+    '秘书按这个时间把经营一页纸推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
+  // WP388：周报类定时（经营一页纸、周复盘、SEO 周报）默认周一 16:30 出上周
+  'settings.weekly.last_week': '出上周',
+  'settings.weekly.last_7_days': '出前 7 天',
+  'settings.weekly.why': '美国那边上一周刚结束、数据也到齐了；想换时间跟我说一声。',
+  'settings.weekly_reports': '周报时间',
+  'settings.weekly_reports.review_week': '周复盘',
+  'settings.weekly_reports.seo_weekly': 'SEO 周报',
   'settings.weekly_review.every': '每',
   'settings.weekly_review.weekday': '星期几',
   'settings.weekly_review.time': '几点',
@@ -1261,6 +1282,9 @@ const zh: Table = {
   'skills.proposal.quotes': '你当时说的',
   'skills.proposal.open': '去卡片上定',
   'skills.excluded': '已排除',
+  // WP397：技能卡上的来源小标签
+  'skills.source.official': '官方原样收录',
+  'skills.source.adapted': '改写自开源',
   'skills.exclude': '不用这个技能',
   'skills.include': '重新启用',
   'skills.learned_from': 'AI 学来的',
@@ -1546,7 +1570,8 @@ const zh: Table = {
   'connections.line.google_ads': '读表现、改预算与出价；developer token 要单独申请过审。',
   'connections.line.x_ads': 'X 的广告接口；申请制，要广告账户与人工审核。',
   'connections.line.tiktok_ads': 'TikTok 的广告接口；要在 Business Center 授权广告账户。',
-  'connections.line.google_alerts': '免费、不用申请：把品牌提醒的 RSS 地址贴过来。',
+  'connections.line.google_alerts':
+    '免费、不用申请：盯自家、竞品和行业，把 Google 提醒的 RSS 链接贴过来，可以很多条。',
   'connections.line.press_distribution': '一次把稿子发给一批媒体的那类服务。',
   'connections.line.judgeme': '独立站最常用的评价应用。',
   'connections.line.loox': '带图评价，与 Judge.me 二选一，排在它后面。',
@@ -1835,6 +1860,7 @@ const zh: Table = {
   'verb.change.approve.ads_sheet': '批准上传',
   'verb.change.approve.ads_activate': '开始投放',
   'verb.change.approve.ads_undo': '撤销',
+  'verb.change.approve.google_alert_change': '确认，去建',
   'verb.aftermath.approve.community_moderation': '解除禁言',
   'deck.more': '更多',
   // ── WP100：头一行那个**类别写人话**（"网站运营 · 改价"，不是"变更待批"）──
@@ -1922,6 +1948,7 @@ const zh: Table = {
   'category.marketplace_listing': '平台产品',
   'category.marketplace_spend': '平台花钱',
   'category.trade_record': 'B2B 记录',
+  'category.google_alerts': 'Google 提醒',
   'category.fraud_alert': '疑似诈骗',
   'category.sender_choice': '发信邮箱',
   'category.collection_edit': '改集合',
@@ -2996,7 +3023,7 @@ const zh: Table = {
   'onboarding.company.legal_name.hint':
     '写营业执照上的全称，别写简称。同事那边写法稍有出入没关系——多打的空格、大小写、"有限公司"这类尾缀都会自动对齐。',
   'onboarding.company.domain': '公司邮箱后缀',
-  'onboarding.company.domain.placeholder': '例如 inmoxr.com',
+  'onboarding.company.domain.placeholder': '例如 ivraxr.com',
   'onboarding.company.domain.hint':
     '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
   'onboarding.company.vertical': '你卖的是',
@@ -3962,6 +3989,36 @@ const zh: Table = {
   'skill.name.social-research': '社媒研究',
   'skill.name.trend-research': '话题与舆情研究',
   'skill.name.shopify': 'Shopify 官方技能',
+  // WP397：Amazon 运营岗位的技能（官方原样收录 amazon-sp-*，改写与自写 amazon-*）
+  'skill.name.amazon-brand-prep-listing': '品牌起步页面准备',
+  'skill.name.amazon-brand-stage': '品牌阶段判断',
+  'skill.name.amazon-brand-tools-promo': '品牌工具与促销组合',
+  'skill.name.amazon-case-tracking': '工单跟踪',
+  'skill.name.amazon-ce-category': '消费电子选品与上市关口',
+  'skill.name.amazon-connection-check': '店铺连接核验',
+  'skill.name.amazon-data-kiosk-recon': '经营数据对账',
+  'skill.name.amazon-eu-packaging': '欧盟包装材料自查',
+  'skill.name.amazon-fba-reimbursement': 'FBA 赔偿复核',
+  'skill.name.amazon-global-expansion': '开站与节日机会',
+  'skill.name.amazon-inventory': 'Amazon 库存与补货',
+  'skill.name.amazon-listing-optimizer': 'Listing 体检与改写',
+  'skill.name.amazon-localization': '多站点本土化',
+  'skill.name.amazon-multichannel': '多渠道协同',
+  'skill.name.amazon-ops-playbook': 'Amazon 运营节奏与红线',
+  'skill.name.amazon-peak-season': '旺季备战',
+  'skill.name.amazon-sp-fba-inbound-management': 'Amazon 官方：FBA 入库',
+  'skill.name.amazon-sp-finance-month-end-closer': 'Amazon 官方：月结对账',
+  'skill.name.amazon-sp-invite-secondary-users': 'Amazon 官方：给子账号开 AI 权限',
+  'skill.name.amazon-sp-listing-buyability': 'Amazon 官方：买不了怎么办',
+  'skill.name.amazon-sp-listing-compliance': 'Amazon 官方：改前合规预检',
+  'skill.name.amazon-sp-listing-issues': 'Amazon 官方：Listing 报错修复',
+  'skill.name.amazon-sp-listing-searchability': 'Amazon 官方：搜不到怎么办',
+  'skill.name.amazon-sp-listing-troubleshooter': 'Amazon 官方：Listing 问题分诊',
+  'skill.name.amazon-sp-seller-analytics': 'Amazon 官方：经营数据',
+  'skill.name.amazon-sp-sp-api-knowledge': 'Amazon 官方：SP-API 开发问答',
+  'skill.name.amazon-sp-stockout-prevention': 'Amazon 官方：断货预防',
+  'skill.name.amazon-sp-support-case-helper': 'Amazon 官方：给 Amazon 开工单',
+  'skill.name.amazon-sqp-recon': 'SQP 跨期对账',
   'kol.campaign.already': '已在合作里',
   'kol.campaign.all_existing':
     '清单上这 {n} 位都已经在合作里了，所以没有新建。去合作线程接着谈，或者先找更多人。',
@@ -5255,7 +5312,14 @@ const en: Table = {
   'org.margin.title': 'Gross margin',
   'settings.weekly_review': 'Weekly one-pager',
   'settings.weekly_review.hint':
-    'When the secretary sends you this week on one page (workspace time zone). Each brand has its own; changing it here changes only this brand.',
+    'When the secretary sends you the one-pager (workspace time zone). Each brand has its own; changing it here changes only this brand.',
+  'settings.weekly.last_week': 'covers last week',
+  'settings.weekly.last_7_days': 'covers the 7 days before',
+  'settings.weekly.why':
+    'By then last week has just ended in the US and the data is in. Want another time? Just tell me.',
+  'settings.weekly_reports': 'Weekly report times',
+  'settings.weekly_reports.review_week': 'Weekly review',
+  'settings.weekly_reports.seo_weekly': 'SEO weekly',
   'settings.weekly_review.every': 'Every',
   'settings.weekly_review.weekday': 'Day',
   'settings.weekly_review.time': 'Time',
@@ -5429,6 +5493,8 @@ const en: Table = {
   'skills.proposal.quotes': 'What you said',
   'skills.proposal.open': 'Decide on the card',
   'skills.excluded': 'Excluded',
+  'skills.source.official': 'Official, unmodified',
+  'skills.source.adapted': 'Adapted from open source',
   'skills.exclude': 'Do not use this skill',
   'skills.include': 'Use it again',
   'skills.learned_from': 'Learned by AI',
@@ -5744,7 +5810,7 @@ const en: Table = {
   'connections.line.tiktok_ads':
     'TikTok’s ads API; ad accounts must be authorized in Business Center.',
   'connections.line.google_alerts':
-    'Free, nothing to apply for: paste your brand alert’s RSS feed.',
+    'Free, nothing to apply for: watch yourself, competitors and your industry by pasting Google Alerts RSS links — as many as you like.',
   'connections.line.press_distribution': 'Services that send one release to many outlets at once.',
   'connections.line.judgeme': 'The most common reviews app for online stores.',
   'connections.line.loox': 'Photo reviews, an alternative to Judge.me, queued after it.',
@@ -6036,6 +6102,7 @@ const en: Table = {
   'verb.change.approve.ads_sheet': 'Approve upload',
   'verb.change.approve.ads_activate': 'Start delivery',
   'verb.change.approve.ads_undo': 'Undo',
+  'verb.change.approve.google_alert_change': 'Confirm and create',
   'verb.aftermath.approve.community_moderation': 'Unmute',
   'deck.more': 'More',
   // WP100：头一行的类别（人话，不是账本枚举名）
@@ -6122,6 +6189,7 @@ const en: Table = {
   'category.marketplace_listing': 'Marketplace listing',
   'category.marketplace_spend': 'Marketplace spend',
   'category.trade_record': 'B2B record',
+  'category.google_alerts': 'Google Alerts',
   'category.fraud_alert': 'Possible fraud',
   'category.sender_choice': 'Sending mailbox',
   'category.collection_edit': 'Collection edit',
@@ -7203,7 +7271,7 @@ const en: Table = {
   'onboarding.company.legal_name.hint':
     'Use the name on the business licence, not a short form. It is fine if a colleague types it slightly differently — extra spaces, casing and suffixes like "Co., Ltd." are lined up automatically.',
   'onboarding.company.domain': 'Company email suffix',
-  'onboarding.company.domain.placeholder': 'e.g. inmoxr.com',
+  'onboarding.company.domain.placeholder': 'e.g. ivraxr.com',
   'onboarding.company.domain.hint':
     'When colleagues ask to join with an email on this suffix, they are easier to recognise as the same company; they still need your approval. Optional.',
   'onboarding.company.platform': 'What your site is built with',
@@ -8225,6 +8293,35 @@ const en: Table = {
   'skill.name.social-research': 'Social research',
   'skill.name.trend-research': 'Trend & buzz research',
   'skill.name.shopify': 'Shopify official skill',
+  'skill.name.amazon-brand-prep-listing': 'Brand-prep listing builder',
+  'skill.name.amazon-brand-stage': 'Brand stage navigator',
+  'skill.name.amazon-brand-tools-promo': 'Brand tools and promotion mix',
+  'skill.name.amazon-case-tracking': 'Support case tracking',
+  'skill.name.amazon-ce-category': 'Consumer electronics launch gates',
+  'skill.name.amazon-connection-check': 'Amazon connection check',
+  'skill.name.amazon-data-kiosk-recon': 'Data Kiosk reconciliation',
+  'skill.name.amazon-eu-packaging': 'EU packaging (PPWR) self-check',
+  'skill.name.amazon-fba-reimbursement': 'FBA reimbursement audit',
+  'skill.name.amazon-global-expansion': 'Global marketplace and event planning',
+  'skill.name.amazon-inventory': 'Amazon inventory and restock',
+  'skill.name.amazon-listing-optimizer': 'Amazon listing audit and rewrite',
+  'skill.name.amazon-localization': 'Amazon marketplace localization',
+  'skill.name.amazon-multichannel': 'Multichannel operations',
+  'skill.name.amazon-ops-playbook': 'Amazon operations rhythm and red lines',
+  'skill.name.amazon-peak-season': 'Peak season readiness',
+  'skill.name.amazon-sp-fba-inbound-management': 'Amazon official: FBA inbound',
+  'skill.name.amazon-sp-finance-month-end-closer': 'Amazon official: month-end close',
+  'skill.name.amazon-sp-invite-secondary-users': 'Amazon official: invite secondary users',
+  'skill.name.amazon-sp-listing-buyability': 'Amazon official: listing buyability',
+  'skill.name.amazon-sp-listing-compliance': 'Amazon official: listing compliance',
+  'skill.name.amazon-sp-listing-issues': 'Amazon official: listing issues',
+  'skill.name.amazon-sp-listing-searchability': 'Amazon official: listing searchability',
+  'skill.name.amazon-sp-listing-troubleshooter': 'Amazon official: listing troubleshooter',
+  'skill.name.amazon-sp-seller-analytics': 'Amazon official: seller analytics',
+  'skill.name.amazon-sp-sp-api-knowledge': 'Amazon official: SP-API knowledge',
+  'skill.name.amazon-sp-stockout-prevention': 'Amazon official: stockout prevention',
+  'skill.name.amazon-sp-support-case-helper': 'Amazon official: support case helper',
+  'skill.name.amazon-sqp-recon': 'SQP period reconciliation',
   'kol.campaign.already': 'already working together',
   'kol.campaign.all_existing':
     'All {n} people on this list are already in a collaboration, so nothing new was created. Continue in the threads, or find more people first.',
@@ -8505,6 +8602,8 @@ const TABLES: Record<Lang, Table> = {
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
     ...REDDIT_WATCH_ZH,
+    // WP392：竞品监控（报表卡的变化表、连接卡、计划卡）
+    ...COMPETITOR_WATCH_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8525,7 +8624,10 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_ZH,
     // WP304：选主题卡、买高级主题卡
     ...THEMES_ZH,
+    ...SERVICES_ZH,
     ...SETUP_ZH,
+    // WP386：信息监控（多条监控源、贴 RSS、Google 账号）
+    ...PR_WATCH_ZH,
     // WP291：岗位页当场回答
     ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
@@ -8536,6 +8638,8 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
     ...REDDIT_WRITE_ZH,
+    ...GOOGLE_ALERTS_ZH,
+    ...PR_ALERTS_ZH,
     ...ADS_CHANGES_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
@@ -8552,6 +8656,14 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
     ...PANEL_ZH,
+    // WP395：Amazon 运营岗位面板四块
+    ...AMAZON_OPS_ZH,
+    // WP394：「竞品动向」那一块
+    ...AMAZON_COMPETITORS_ZH,
+    ...AMAZON_KEYWORDS_ZH,
+    ...AMAZON_LISTING_ZH,
+    // WP401：积木表格的筛选
+    ...TABLE_FILTER_ZH,
   },
   en: {
     ...en,
@@ -8563,6 +8675,7 @@ const TABLES: Record<Lang, Table> = {
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
     ...REDDIT_WATCH_EN,
+    ...COMPETITOR_WATCH_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
@@ -8573,12 +8686,16 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
     ...THEMES_EN,
+    ...SERVICES_EN,
     ...SETUP_EN,
+    ...PR_WATCH_EN,
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
+    ...GOOGLE_ALERTS_EN,
+    ...PR_ALERTS_EN,
     ...ADS_CHANGES_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
@@ -8588,6 +8705,11 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
     ...PANEL_EN,
+    ...AMAZON_OPS_EN,
+    ...AMAZON_COMPETITORS_EN,
+    ...AMAZON_KEYWORDS_EN,
+    ...AMAZON_LISTING_EN,
+    ...TABLE_FILTER_EN,
   },
 }
 

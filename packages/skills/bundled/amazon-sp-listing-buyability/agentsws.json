@@ -1,0 +1,29 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-listing-buyability",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/listing-buyability",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：买不了怎么办",
+    "display_name_en": "Amazon official: listing buyability",
+    "summary": "没报价、商品不全、没库存三样查起",
+    "summary_en": "Why a listing cannot be bought",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [],
+  "sha256": {
+    "SKILL.md": "6a6d5c0a8cec72b3dcd9143e1fd7109773852e2011fe75f6ee56e3d010f68599",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

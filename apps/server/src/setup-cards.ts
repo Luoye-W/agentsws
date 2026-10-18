@@ -30,6 +30,7 @@ import {
   isSecretLikeSetupKey,
   type MatterRunBlock,
   type RunRequest,
+  type ServiceOffer,
   type SetupField,
   type SetupRequestPayload,
   type SetupResumeTarget,
@@ -58,8 +59,11 @@ export interface SetupTarget {
   fields(): Promise<SetupField[]>
   /** 已经设好了没有（设好了就不出卡；出了的卡保存后也按它复核）。 */
   satisfied(): Promise<boolean>
-  /** 存下人填的值（只含登记过的格子）；不合法就抛 {@link SetupCardError}（那一句给人看）。 */
-  apply(values: Record<string, string>): Promise<void>
+  /**
+   * 存下人填的值（只含登记过的格子）；不合法就抛 {@link SetupCardError}（那一句给人看）。
+   * WP388：第二个参数是谁点的确认（`by` = 人的 id；规则自动的没有）——只该改本人那一份的目标用它。
+   */
+  apply(values: Record<string, string>, context?: { by?: string }): Promise<void>
   /**
    * WP348（决策 887）：「怎么查」——出卡前在这件事的运行里查一遍（档案、已连的数据、限次联网搜索、
    * 问一次模型），交回每一格的方案值 + 理由 + 来源。不给 = 只用 `fields()` 里已知的。
@@ -70,6 +74,11 @@ export interface SetupTarget {
    * 的建议都不填；查不到就标「需要你填」。
    */
   noGuess?: readonly string[]
+  /**
+   * WP385：AI 给的建议值里**还没生效**的那几格（已经是这样的去掉）。没有「缺」、只收增减的目标用它
+   * （如体检设置：「加一条上架页」已经在了就不再出卡）。不给 = 按格子现值比（{@link changeFields}）。
+   */
+  pending?(suggestions: Record<string, string>): Promise<Record<string, string>>
 }
 
 export class SetupCardError extends Error {
@@ -94,6 +103,11 @@ const RISK_BY_SERVICE: Readonly<Record<string, string>> = {
 export interface SetupCardsOptions {
   workspace_id: string
   clock: Clock
+  /**
+   * WP390（docs/105 §4.1 ②）：服务目录里声明了这个卡点的工坊服务（`connect:<服务>` / `setup:<设置目标>`）
+   * → 卡上多一个可选项「交给工坊办」。不给 / 查不到就没有这一格。
+   */
+  workshopOffer?(blocker: { key: string; name?: string }): Promise<ServiceOffer | undefined>
   /** 这个品牌的落盘目录（记「哪张卡上等着哪几件事」）；不给就全内存。 */
   dir?: string
   approvals(): ApprovalBus | undefined
@@ -153,7 +167,12 @@ export interface SetupCardsAssembly {
   /** 连接清单变了：还在等的连接卡里，缺的都连上了的那几张自动收起、接着做。回接着做了几张。 */
   recheck(): Promise<number>
   /** WP334：一个登记过的设置目标（AI 要卡时认目标用；没登记回 `undefined`）。 */
-  target(id: string): Pick<SetupTarget, 'id' | 'name' | 'satisfied'> | undefined
+  target(
+    id: string,
+  ):
+    | (Pick<SetupTarget, 'id' | 'name' | 'satisfied'> &
+        Partial<Pick<SetupTarget, 'fields' | 'pending'>>)
+    | undefined
   /** WP334：登记过的设置目标 id（认不出时列给模型看）。 */
   targetIds(): string[]
   /**
@@ -377,12 +396,20 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       needs
         .map((n) => (n.service === undefined ? undefined : RISK_BY_SERVICE[n.service]))
         .find((r) => r !== undefined)
+    const first = needs[0]
+    const offer =
+      first === undefined
+        ? undefined
+        : await options
+            .workshopOffer?.({ key: `connect:${first.service ?? first.kind}`, name: first.name })
+            .catch(() => undefined)
     const payload: ConnectRequestPayload = {
       form: 'connect_request',
       why: input.why ?? `这件事要用到${namesOf(needs)}，连上我就接着做。`,
       needs,
       ...(risk === undefined ? {} : { risk }),
       ...(resume === undefined ? {} : { resume }),
+      ...(offer === undefined ? {} : { workshop_service: offer }),
     }
     const item = await bus.create({
       ...cardBase({
@@ -517,6 +544,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       steps = planned.steps
     }
     if (fields.length === 0) return undefined
+    const offer = change
+      ? undefined
+      : await options
+          .workshopOffer?.({ key: `setup:${target.id}`, name: target.name })
+          .catch(() => undefined)
     const payload: SetupRequestPayload = {
       form: 'setup_request',
       target: target.id,
@@ -525,6 +557,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       mode: change ? 'change' : 'plan',
       ...(steps.length === 0 ? {} : { steps }),
       ...(resume === undefined ? {} : { resume }),
+      ...(offer === undefined ? {} : { workshop_service: offer }),
     }
     const item = await bus.create({
       ...cardBase({
@@ -712,7 +745,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       return
     }
     try {
-      await target.apply(valuesOf(payload))
+      const by = item.decision?.by
+      await target.apply(
+        valuesOf(payload),
+        by === undefined || by === 'mandate' ? {} : { by: String(by) },
+      )
     } catch (e) {
       const why = e instanceof Error ? e.message : '没存成'
       await reask(item, rec, `没存成：${why}`)

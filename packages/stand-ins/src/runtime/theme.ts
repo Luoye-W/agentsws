@@ -158,7 +158,7 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
     name: THEME_PUSH_TOOL,
     description:
       '把工作目录推成店里一份**未发布**主题（线上一个字节不动），回预览链接——预览链接就是给人看的材料。' +
-      '同一个名字再推一次会更新那一份副本。name 写人认得出的名字，如「Rollout 首页 v1」。',
+      '同一个名字再推一次会更新那一份副本。name 写人认得出的名字，如「Rovella 首页 v1」。',
     input_schema: {
       type: 'object',
       properties: {

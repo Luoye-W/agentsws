@@ -163,9 +163,24 @@ export function reviewIsQuiet(draft: ReviewDraft & { duplicates?: unknown[] }): 
   )
 }
 
-export function reviewTitle(draft: ReviewDraft): string {
+export function reviewTitle(
+  draft: ReviewDraft & { created_at?: string },
+  /** WP388：窗口在出的那一刻之前就结束了时叫什么（不给 =「上周」；不是周一到周日的那 7 天给「近 7 天」）。 */
+  pastWeekLabel?: string,
+): string {
+  // WP388：周复盘默认出上一周（窗口在出的那一刻之前就结束了）
+  const lastWeek =
+    draft.period.kind === 'week' &&
+    draft.created_at !== undefined &&
+    Date.parse(draft.period.end) <= Date.parse(draft.created_at)
   const label =
-    draft.period.kind === 'day' ? '今天' : draft.period.kind === 'week' ? '本周' : '本月'
+    draft.period.kind === 'day'
+      ? '今天'
+      : draft.period.kind === 'week'
+        ? lastWeek
+          ? (pastWeekLabel ?? '上周')
+          : '本周'
+        : '本月'
   return `${label}的复盘：你处理 ${draft.cards.you_handled} 张，AI ${draft.cards.ai_handled} 张`
 }
 

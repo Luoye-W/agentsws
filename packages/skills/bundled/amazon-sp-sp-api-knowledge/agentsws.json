@@ -1,0 +1,36 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-sp-api-knowledge",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/sp-api-knowledge",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：SP-API 开发问答",
+    "display_name_en": "Amazon official: SP-API knowledge",
+    "summary": "只给开发者用：查 SP-API 文档再回答",
+    "summary_en": "SP-API developer Q&A grounded in the docs",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [
+    "references/design-and-code.md",
+    "references/query-craft.md",
+    "references/tool-reference.md"
+  ],
+  "sha256": {
+    "SKILL.md": "32fd797344e3406d4d0cce36a3758079b588efc1509144fc2f95c682906bf3fb",
+    "references/design-and-code.md": "a883515210e584fc67eaa29d9e98c908d93ae38bb8d517d7d57f65a2d6f4535c",
+    "references/query-craft.md": "ead07f3f17bb24a717965bbeaa8175c7852f4ddaa7c78e73e241b7da81fadb4e",
+    "references/tool-reference.md": "8683a29075c45b0abd43eb5e484983110bbb96a119e7b43bb011c258bd4c04f2",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

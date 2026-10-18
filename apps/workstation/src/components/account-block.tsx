@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   Coins,
+  Handshake,
   LogOut,
   Moon,
   Settings,
@@ -34,6 +35,7 @@ import {
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { avatarInitial } from '@/components/design'
+import { useRailState } from '@/components/rail/rail-state'
 import { SceneSwitcher } from '@/components/scene-switcher'
 import { SHELL_PAGES, type ShellPage, shellPageVisible } from '@/components/shell-pages'
 import { Separator } from '@/components/ui/separator'
@@ -127,6 +129,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
     setOpen(false)
     navigate(to)
   }
+  const rail = useRailState()
   const flip = (id: string): void => {
     setGroups((prev) => {
       const next = { ...prev, [id]: prev[id] !== true }
@@ -285,6 +288,20 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
               </button>
             ) : null}
           </div>
+          {/* WP390（docs/105 §4.1 ③）：工坊服务——全部服务（按岗位分组）+ 我的订单，在第三栏开 */}
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="account-workshop-services"
+            className={ITEM}
+            onClick={() => {
+              setOpen(false)
+              rail.show('workshop-services')
+            }}
+          >
+            <Handshake aria-hidden className="size-4" />
+            {t('menu.workshop_services')}
+          </button>
           <Separator className="my-1" />
           {group('work')}
           <button

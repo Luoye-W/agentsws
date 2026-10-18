@@ -46,6 +46,9 @@
     },
     {
       "name": "premium-theme"
+    },
+    {
+      "name": "services"
     }
   ],
   "paths": {
@@ -8332,6 +8335,1328 @@
           }
         }
       }
+    },
+    "/v1/services": {
+      "get": {
+        "operationId": "getV1Services",
+        "summary": "服务目录：上架的工坊服务（标准件带价目单、定制件带需求问题清单；不收钱）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceList"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders": {
+      "post": {
+        "operationId": "postV1ServicesOrders",
+        "summary": "下单（带幂等键）：标准件 / 一口价当场扣进托管（402 = 余额或额度不够）；先报价的交需求单、不扣钱。",
+        "description": "同一个幂等键只建一单、只扣一次",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceOrderSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同一个幂等键已经有这一单了：原样回它现在的样子（不再扣）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "建好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "insufficient_credits",
+            "x-error-codes": ["insufficient_credits"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getV1ServicesOrders",
+        "summary": "我的订单（默认只列没结束的；`status=all` 最近 100 单）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "`open` 只要没结束的（默认）、`all` 全部（最近 100 单）。",
+            "schema": {
+              "type": "string",
+              "enum": ["open", "all"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderList"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}": {
+      "get": {
+        "operationId": "getV1ServicesOrdersId",
+        "summary": "看一单现在怎么样（进度、在等你什么、托管 / 实扣 / 退回、交付物、下一步能做什么）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/accept-quote": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdAcceptQuote",
+        "summary": "同意报价并支付（扣进托管；同一个幂等键只扣一次）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceQuoteAcceptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "insufficient_credits",
+            "x-error-codes": ["insufficient_credits"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/messages": {
+      "get": {
+        "operationId": "getV1ServicesOrdersIdMessages",
+        "summary": "这一单的消息串（只有定制件有）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderMessages"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postV1ServicesOrdersIdMessages",
+        "summary": "回一句话（在「等你补材料」时回话 = 补上了，超时的钟接着走）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceOrderMessagePost"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/contact": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdContact",
+        "summary": "回服务方「交换联系方式」的请求：同意（带上自己选的那一种）或拒绝",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceContactAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/accept": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdAccept",
+        "summary": "验收通过（定制件通过当前这一段、结算这一段）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAcceptanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/revise": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdRevise",
+        "summary": "要改（返工次数用完了回 409）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAcceptanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/dispute": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdDispute",
+        "summary": "申请退款（交给运营判全退 / 部分退 / 不退；理由必填）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAcceptanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/cancel": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdCancel",
+        "summary": "取消（接单之前；已付的全退）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceOrderCancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/intents": {
+      "post": {
+        "operationId": "postV1ServicesIntents",
+        "summary": "P8：「没接住的意向」——只收一句意向说法与岗位，不收正文（不收钱）",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceIntentReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "记下了"
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8934,7 +10259,7 @@
       },
       "AllocationNoticeLevel": {
         "type": "number",
-        "enum": [80, 100],
+        "enum": [100, 80],
         "description": "用到上限的几成时提醒（各一次，本人与管理员都看得到）。"
       },
       "AllocationReport": {
@@ -9572,7 +10897,8 @@
           "standby",
           "data",
           "kol",
-          "store"
+          "store",
+          "services"
         ],
         "description": "18 §1「最小动作集」：一把工作区令牌能做什么，逐条列出来，没列的一律不行。"
       },
@@ -10971,9 +12297,12 @@
           },
           "service": {
             "$ref": "#/components/schemas/MemberUsageBlock"
+          },
+          "workshop_service": {
+            "$ref": "#/components/schemas/MemberUsageBlock"
           }
         },
-        "required": ["ai", "data", "service"],
+        "required": ["ai", "data", "service", "workshop_service"],
         "description": "按价目表三块拆开（三格都在，没用到是 0）。"
       },
       "MemberUsageReport": {
@@ -11259,7 +12588,7 @@
       },
       "PricingBlock": {
         "type": "string",
-        "enum": ["data", "ai", "service"],
+        "enum": ["data", "ai", "service", "workshop_service"],
         "description": "付费的三块（67 §1，Luoye 2026-09-19 定）。"
       },
       "PricingCatalog": {
@@ -12483,6 +13812,787 @@
         },
         "required": ["query", "items", "fetched_at", "source"]
       },
+      "ServiceAcceptance": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": ["accept", "revise", "dispute"]
+          },
+          "by": {
+            "type": "string",
+            "enum": ["user", "system"],
+            "description": "到期自动通过时是 `system`。"
+          },
+          "milestone_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["decision", "by", "at"],
+        "description": "一次验收（通过 / 要改 / 申请退款 + 理由）。"
+      },
+      "ServiceAcceptanceRequest": {
+        "type": "object",
+        "properties": {
+          "milestone_id": {
+            "type": "string",
+            "description": "定制件：验的是哪一段（不给 = 当前在验的那一段）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "要改 / 申请退款时说一句为什么（申请退款必填）。"
+          }
+        },
+        "description": "`…/accept`、`…/revise`、`…/dispute` 的请求。"
+      },
+      "ServiceContact": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ServiceContactKind"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "value"]
+      },
+      "ServiceContactAnswer": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "accept": {
+            "type": "boolean"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ServiceContact"
+          }
+        },
+        "required": ["request_id", "accept"],
+        "description": "`POST /v1/services/orders/{id}/contact` 的请求：同意（带上自己选的那一种）或拒绝。"
+      },
+      "ServiceContactExchange": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "服务方为什么要（「约个时间过一下设计稿」）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "accepted", "declined"]
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "answered_at": {
+            "type": "string"
+          },
+          "provider_contact": {
+            "$ref": "#/components/schemas/ServiceContact"
+          },
+          "user_contact": {
+            "$ref": "#/components/schemas/ServiceContact"
+          }
+        },
+        "required": ["id", "reason", "status", "requested_at"],
+        "description": "交换联系方式（N1）：服务方发请求 → 用户点同意才把**他自己填的**那一种给这一单的服务方； 对方的联系方式同时给到用户。只对这一单有效，订单结束后不再返回。"
+      },
+      "ServiceContactKind": {
+        "type": "string",
+        "enum": ["wechat", "phone", "email"],
+        "description": "联系方式的种类（用户自己选给哪一种，N1）。"
+      },
+      "ServiceDeliverable": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["file", "link", "text", "receipt", "platform_object"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string",
+            "description": "平台里那个对象的 id（主题副本 id……）。"
+          },
+          "milestone_id": {
+            "type": "string",
+            "description": "定制件：属于哪一段。"
+          },
+          "delivered_at": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "label", "delivered_at"],
+        "description": "一件交付物。"
+      },
+      "ServiceDeliveryProof": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "screenshots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "截图地址（存在云上，带过期时刻）。"
+          },
+          "completed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                }
+              },
+              "required": ["item_id", "quantity"]
+            },
+            "description": "每一项实际完成了多少（少于下单数量的那部分按件自动退）。"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": ["links", "screenshots", "completed"],
+        "description": "标准件交付的凭证：链接、截图、每一项实际完成多少。"
+      },
+      "ServiceDispute": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "opened_at": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": ["full_refund", "partial_refund", "no_refund"]
+          },
+          "refund_credits": {
+            "type": "number",
+            "description": "这次判退了多少。"
+          },
+          "note": {
+            "type": "string",
+            "description": "运营写给用户的一句理由。"
+          },
+          "resolved_at": {
+            "type": "string"
+          }
+        },
+        "required": ["reason", "opened_at"],
+        "description": "争议与运营的判定（P6：用户看得到一句理由）。"
+      },
+      "ServiceIntentReport": {
+        "type": "object",
+        "properties": {
+          "phrase": {
+            "type": "string"
+          },
+          "position_id": {
+            "type": "string"
+          }
+        },
+        "required": ["phrase"],
+        "description": "P8：「没接住的意向」——用户说出了意向但目录里没有对应的服务。**只收说法与岗位，不收正文** （`phrase` 是 AI 归纳出来的一句意向说法，不是用户原话；≤ 200 字）。"
+      },
+      "ServiceList": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceView"
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["services", "at"]
+      },
+      "ServiceMenuItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "unit_zh": {
+            "type": "string",
+            "description": "单位（「个」「条」「篇」）。"
+          },
+          "unit_en": {
+            "type": "string"
+          },
+          "credits_per_unit": {
+            "type": "number",
+            "description": "每单位多少积分。"
+          },
+          "min_quantity": {
+            "type": "number",
+            "description": "数量上下限（含）。"
+          },
+          "max_quantity": {
+            "type": "number"
+          },
+          "target_fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataInputField"
+            },
+            "description": "这一项要填的对象（比如帖子链接）；空数组 = 不用填。"
+          }
+        },
+        "required": [
+          "id",
+          "label_zh",
+          "label_en",
+          "unit_zh",
+          "unit_en",
+          "credits_per_unit",
+          "min_quantity",
+          "max_quantity",
+          "target_fields"
+        ],
+        "description": "标准件价目单里的一项（照数据接口的输入白名单写法：`target_fields` 是这一项要填的对象， 不在表里的字段一律丢掉）。"
+      },
+      "ServiceMilestone": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "share_percent": {
+            "type": "number",
+            "description": "占总价多少（1–100 的整数）。"
+          }
+        },
+        "required": ["id", "label_zh", "label_en", "share_percent"],
+        "description": "定制件的一个阶段与它占总价的百分比（各段加起来 = 100）。"
+      },
+      "ServiceMilestoneView": {
+        "type": "object",
+        "properties": {
+          "credits": {
+            "type": "number",
+            "description": "这一段多少积分（总价 × 占比，零头算进最后一段）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "delivered", "accepted", "refunded"]
+          },
+          "delivered_at": {
+            "type": "string"
+          },
+          "accepted_at": {
+            "type": "string"
+          },
+          "auto_accept_at": {
+            "type": "string",
+            "description": "交付了还没点：到这一刻自动通过。"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "share_percent": {
+            "type": "number",
+            "description": "占总价多少（1–100 的整数）。"
+          }
+        },
+        "required": ["credits", "status", "id", "label_zh", "label_en", "share_percent"],
+        "description": "定制件一段的状态。"
+      },
+      "ServiceOrderCancelRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "description": "`POST /v1/services/orders/{id}/cancel` 的请求（接单之前才能取消；已付的全退）。"
+      },
+      "ServiceOrderLine": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "description": "价目单里那一项的 id。"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "target": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "这一项要填的对象（按 `target_fields` 白名单；多给的丢掉）。"
+          }
+        },
+        "required": ["item_id", "quantity"],
+        "description": "标准件价目单上勾的一行。"
+      },
+      "ServiceOrderLineView": {
+        "type": "object",
+        "properties": {
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "credits_per_unit": {
+            "type": "number"
+          },
+          "credits": {
+            "type": "number",
+            "description": "这一行一共多少积分。"
+          },
+          "completed": {
+            "type": "number",
+            "description": "实际完成多少（交付之后才有）。"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "价目单里那一项的 id。"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "target": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "这一项要填的对象（按 `target_fields` 白名单；多给的丢掉）。"
+          }
+        },
+        "required": ["label_zh", "label_en", "credits_per_unit", "credits", "item_id", "quantity"],
+        "description": "订单里价目单的一行（下单时的价、实际完成多少）。"
+      },
+      "ServiceOrderList": {
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderView"
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["orders", "at"]
+      },
+      "ServiceOrderMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "enum": ["user", "provider", "system"]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["text", "need_input", "meeting_note", "status"],
+            "description": "`text` 普通一句；`need_input` 服务方要你补材料；`meeting_note` 会上定了什么（要你确认）； `status` 系统记一笔（接单了、交付了、退了多少）。"
+          },
+          "text": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "from", "kind", "text", "at"],
+        "description": "一条消息（只有定制件有消息串；标准件不出消息、不出联系方式）。"
+      },
+      "ServiceOrderMessagePost": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["text"],
+        "description": "`POST /v1/services/orders/{id}/messages` 的请求（用户说话；在「等你补材料」时说话 = 补上了）。"
+      },
+      "ServiceOrderMessages": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderMessage"
+            }
+          }
+        },
+        "required": ["order_id", "messages"]
+      },
+      "ServiceOrderSubmit": {
+        "type": "object",
+        "properties": {
+          "service_id": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderLine"
+            },
+            "description": "标准件：勾的那几行（N4：一张价目单能勾多项、一次下单）。"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceRequirementAnswer"
+            },
+            "description": "定制件：需求单。"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键（1–128 个字符）：同一个组织同一个键只建一单、只扣一次——下单卡点两次、网络抖了重发， 拿回的都是同一单。"
+          }
+        },
+        "required": ["service_id", "idempotency_key"],
+        "description": "`POST /v1/services/orders` 的请求。"
+      },
+      "ServiceOrderView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["standard", "custom"]
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "cancelled",
+              "paid",
+              "draft",
+              "quote_requested",
+              "quoted",
+              "in_progress",
+              "waiting_user",
+              "delivered",
+              "disputed",
+              "completed",
+              "refunded",
+              "expired"
+            ]
+          },
+          "provider_label": {
+            "type": "string",
+            "enum": ["workshop_team", "partner_team"]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderLineView"
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceRequirementAnswer"
+            }
+          },
+          "quote": {
+            "$ref": "#/components/schemas/ServiceQuote"
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMilestoneView"
+            }
+          },
+          "total_credits": {
+            "type": "number",
+            "description": "这一单一共多少积分（先报价的在报价之前没有）。"
+          },
+          "escrow_credits": {
+            "type": "number",
+            "description": "托管着多少（扣进来还没结算、也没退的）。"
+          },
+          "settled_credits": {
+            "type": "number",
+            "description": "已经结算给服务方的（实扣）。"
+          },
+          "refunded_credits": {
+            "type": "number",
+            "description": "退回了多少。"
+          },
+          "waiting_for": {
+            "type": "string",
+            "description": "在等你什么（「上传 Logo 原图」）。"
+          },
+          "revisions_left": {
+            "type": "number",
+            "description": "还能返工几次。"
+          },
+          "respond_by": {
+            "type": "string",
+            "description": "到这一刻还没人接 / 没报价就自动收尾（全退）。"
+          },
+          "deliver_by": {
+            "type": "string",
+            "description": "预计交付（超了没交付的部分全退；等你的时候往后顺延）。"
+          },
+          "auto_accept_at": {
+            "type": "string",
+            "description": "交付了还没点：到这一刻自动通过。"
+          },
+          "deliverables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceDeliverable"
+            }
+          },
+          "deliverables_expire_at": {
+            "type": "string",
+            "description": "交付物保留到什么时候（P10：90 天）。"
+          },
+          "proof": {
+            "$ref": "#/components/schemas/ServiceDeliveryProof"
+          },
+          "acceptances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAcceptance"
+            }
+          },
+          "dispute": {
+            "$ref": "#/components/schemas/ServiceDispute"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ServiceContactExchange"
+          },
+          "message_count": {
+            "type": "number",
+            "description": "消息条数（定制件；取消息走 `…/messages`）。"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quote",
+                "pay",
+                "request_quote",
+                "accept_quote",
+                "take",
+                "ask_user",
+                "user_reply",
+                "deliver",
+                "accept",
+                "auto_accept",
+                "revise",
+                "dispute",
+                "resolve",
+                "cancel",
+                "expire"
+              ]
+            },
+            "description": "下一步你能做的（按转移表算好给的）。"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "service_id",
+          "kind",
+          "label_zh",
+          "label_en",
+          "status",
+          "provider_label",
+          "escrow_credits",
+          "settled_credits",
+          "refunded_credits",
+          "revisions_left",
+          "deliverables",
+          "acceptances",
+          "message_count",
+          "actions",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "一张订单的样子（`GET /v1/services/orders/{id}`）。"
+      },
+      "ServicePromise": {
+        "type": "object",
+        "properties": {
+          "accept_hours": {
+            "type": "number",
+            "description": "下单后多久内接单（超了全退）。"
+          },
+          "quote_hours": {
+            "type": "number",
+            "description": "先报价的服务：多久内报价。"
+          },
+          "deliver_hours": {
+            "type": "number",
+            "description": "接单后多久内交付（定制件按报价单，这里是没报价时的参考；超了没交付的部分全退）。"
+          }
+        },
+        "required": ["accept_hours"],
+        "description": "承诺时长（小时）。"
+      },
+      "ServiceQuestion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "hint_zh": {
+            "type": "string",
+            "description": "给 AI 的一句提示（怎么问、举个例子）；不给用户看。"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只认这几个答案（不给 = 随便写）。"
+          },
+          "max": {
+            "type": "number",
+            "description": "答案最长多少字（缺省 2000）。"
+          }
+        },
+        "required": ["id", "label_zh", "label_en"],
+        "description": "需求单里的一个问题（AI 在对话里替服务方问，问完生成需求单）。"
+      },
+      "ServiceQuote": {
+        "type": "object",
+        "properties": {
+          "credits": {
+            "type": "number"
+          },
+          "deliver_hours": {
+            "type": "number",
+            "description": "接单后多久交付（小时）。"
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMilestone"
+            },
+            "description": "这一单的分段（不给按服务的默认分段）。"
+          },
+          "note": {
+            "type": "string",
+            "description": "一句话说明报价包含什么。"
+          },
+          "quoted_at": {
+            "type": "string"
+          }
+        },
+        "required": ["credits", "deliver_hours", "quoted_at"],
+        "description": "服务方的报价（运营代回填）。"
+      },
+      "ServiceQuoteAcceptRequest": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": ["idempotency_key"],
+        "description": "`POST /v1/services/orders/{id}/accept-quote` 的请求（同一个键只扣一次）。"
+      },
+      "ServiceRequirementAnswer": {
+        "type": "object",
+        "properties": {
+          "question_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": ["question_id", "answer"],
+        "description": "需求单里一个问题的答案。"
+      },
       "ServiceSubscription": {
         "type": "object",
         "properties": {
@@ -12546,6 +14656,139 @@
           "updated_at"
         ],
         "description": "一个组织在一个服务上的订阅。"
+      },
+      "ServiceView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["standard", "custom"]
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "summary_zh": {
+            "type": "string",
+            "description": "一句话说明。"
+          },
+          "summary_en": {
+            "type": "string"
+          },
+          "pricing_mode": {
+            "type": "string",
+            "enum": ["fixed", "quote", "per_unit"]
+          },
+          "price_credits": {
+            "type": "number",
+            "description": "一口价（`fixed`）。"
+          },
+          "from_credits": {
+            "type": "number",
+            "description": "先报价的服务给一个「起价 X 积分」参考（`quote`）。"
+          },
+          "menu": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMenuItem"
+            },
+            "description": "标准件的价目单（`kind: standard` 才有）。"
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMilestone"
+            },
+            "description": "定制件分几段交付（`kind: custom` 才有；不给 = 一段交付）。"
+          },
+          "promise": {
+            "$ref": "#/components/schemas/ServicePromise"
+          },
+          "revisions": {
+            "type": "number",
+            "description": "能返工几次（P5 默认 1）。"
+          },
+          "auto_accept_hours": {
+            "type": "number",
+            "description": "交付后几小时不点自动通过（标准件默认 24、定制件每段默认 168、其余 72）。"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceQuestion"
+            },
+            "description": "下单前要问清的东西（定制件；标准件空数组）。"
+          },
+          "deliverables": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["file", "link", "text", "receipt", "platform_object"]
+            }
+          },
+          "landing": {
+            "type": "string",
+            "enum": ["theme", "outbound_record", "draft", "resume_step", "knowledge_file"]
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "关联岗位（岗位页「这个岗位能用的服务」按它列）。"
+          },
+          "intents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "意向说法（「想找人建站」……；`find_service` 按它匹配）。"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "关联的卡点（「品牌没有独立站」……；「缺设置」卡上「交给工坊办」按它挂）。"
+          },
+          "provider_label": {
+            "type": "string",
+            "enum": ["workshop_team", "partner_team"]
+          },
+          "available": {
+            "type": "boolean",
+            "description": "现在能不能下单（上架了、有人接）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "不能下单时一句人话。"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label_zh",
+          "label_en",
+          "summary_zh",
+          "summary_en",
+          "pricing_mode",
+          "promise",
+          "revisions",
+          "auto_accept_hours",
+          "questions",
+          "deliverables",
+          "landing",
+          "positions",
+          "intents",
+          "provider_label",
+          "available"
+        ],
+        "description": "`GET /v1/services` 里的一项服务。"
       },
       "SignupBonusView": {
         "type": "object",

@@ -20,8 +20,10 @@ import type {
   InvariantName,
   Scenario,
   ScenarioActor,
+  ScenarioCompetitorPlan,
   ScenarioEvent,
   ScenarioExpected,
+  ScenarioListingPage,
   ScenarioStandIns,
   ScenarioTxnPolicy,
   Tier,
@@ -181,9 +183,17 @@ const EVENT_KEYS = [
   // WP69 岗位是任务主入口（54）
   'position.staff',
   'position.open',
+  // WP395：首次设置按原话与勾选划分岗位
+  'position.plan',
+  // WP396：自家 Listing 体检一次
+  'listing.check',
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
+  // WP392 竞品监控读一次（快照对比）
+  'competitor.read',
+  // WP393 店铺管理「竞品动向」配好了
+  'competitor.plan',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -232,8 +242,10 @@ const EVENT_KEYS = [
   'b2b.member_left',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
+  'pr.feed',
   'pr.release',
   'pr.external_post',
+  'pr.alerts_build',
   // WP67 红人营销（48 §5.1）
   'kol.outreach',
   'kol.collaboration',
@@ -254,6 +266,8 @@ const EVENT_KEYS = [
   'content.seo_daily',
   // WP380 GEO 第二层
   'content.geo_quality',
+  // WP398 Amazon 词库
+  'amazon.keywords',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -319,8 +333,21 @@ const EXPECTED_KEYS = [
   // WP291：岗位入口三分 + 当场回答的组件
   'position_entries',
   'position_answer_components',
+  // WP395：首次设置划分出的岗位、没数据照实说
+  'positions_planned',
+  'position_answer_no_data',
+  // WP396：Listing 体检出了哪几处问题、草稿、设计需求单
+  'listing_checkup',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
+  // WP392：竞品监控比出了哪几种变化
+  'competitor_changes',
+  // WP393：简报里「竞品动向」那一段
+  'competitor_brief',
+  // WP394：Amazon 对标款的差价 / 走哪条路 / 云端扣了几个积分
+  'competitor_vs_own',
+  'competitor_via',
+  'competitor_credits',
   'assistant_fanout_tasks',
   'assistant_fanout_notes',
   'secretary_kinds',
@@ -375,8 +402,10 @@ const EXPECTED_KEYS = [
   'b2b_handover',
   // WP78（60）
   'pr_mention',
+  'pr_feed',
   'pr_release',
   'pr_external_post',
+  'pr_alerts_build',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -389,6 +418,8 @@ const EXPECTED_KEYS = [
   'seo_daily',
   // WP380
   'geo_quality',
+  // WP398
+  'amazon_keywords',
   // WP96（36 §2）：只有要人决定的才是卡
   'queue_cards',
   'panel_reports',
@@ -956,6 +987,156 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'competitor.read': {
+      known(source, `${path}.${key}`, body, [
+        'competitor',
+        'source',
+        'rows',
+        'complete',
+        'error',
+        'own',
+        'blocked_at',
+        'no_browser',
+        'cloud_credits',
+      ])
+      const kind = str(source, `${path}.${key}.source`, body.source)
+      if (kind !== 'shop' && kind !== 'amazon')
+        fail(source, `${path}.${key}.source`, '只认 shop / amazon')
+      if (!Array.isArray(body.rows)) fail(source, `${path}.${key}.rows`, '必须是列表')
+      const rows = body.rows.map((r, i) => {
+        const at2 = `${path}.${key}.rows[${i}]`
+        if (!isRec(r)) fail(source, at2, '必须是对象')
+        known(source, at2, r, [
+          'product',
+          'variant',
+          'title',
+          'price',
+          'compare_at',
+          'available',
+          'rating',
+          'reviews',
+          'created_at',
+          'coupon',
+          'bsr',
+          'bsr_category',
+          'vs_own',
+        ])
+        const optNum = (k: string): number | undefined =>
+          r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
+        const variant = optStr(source, `${at2}.variant`, r.variant)
+        const created = optStr(source, `${at2}.created_at`, r.created_at)
+        const price = optNum('price')
+        const compare_at = optNum('compare_at')
+        const rating = optNum('rating')
+        const reviews = optNum('reviews')
+        const bsr = optNum('bsr')
+        const coupon = optStr(source, `${at2}.coupon`, r.coupon)
+        const bsrCategory = optStr(source, `${at2}.bsr_category`, r.bsr_category)
+        const vsOwn = optStr(source, `${at2}.vs_own`, r.vs_own)
+        if (r.available !== undefined && typeof r.available !== 'boolean')
+          fail(source, `${at2}.available`, '必须是 true / false')
+        return {
+          product: str(source, `${at2}.product`, r.product),
+          title: str(source, `${at2}.title`, r.title),
+          ...(variant === undefined ? {} : { variant }),
+          ...(price === undefined ? {} : { price }),
+          ...(compare_at === undefined ? {} : { compare_at }),
+          ...(typeof r.available === 'boolean' ? { available: r.available } : {}),
+          ...(rating === undefined ? {} : { rating }),
+          ...(reviews === undefined ? {} : { reviews }),
+          ...(created === undefined ? {} : { created_at: created }),
+          ...(coupon === undefined ? {} : { coupon }),
+          ...(bsr === undefined ? {} : { bsr }),
+          ...(bsrCategory === undefined ? {} : { bsr_category: bsrCategory }),
+          ...(vsOwn === undefined ? {} : { vs_own: vsOwn }),
+        }
+      })
+      if (body.complete !== undefined && typeof body.complete !== 'boolean')
+        fail(source, `${path}.${key}.complete`, '必须是 true / false')
+      const error = optStr(source, `${path}.${key}.error`, body.error)
+      for (const k of ['own', 'no_browser'] as const)
+        if (body[k] !== undefined && typeof body[k] !== 'boolean')
+          fail(source, `${path}.${key}.${k}`, '必须是 true / false')
+      const blockedAt = optStr(source, `${path}.${key}.blocked_at`, body.blocked_at)
+      const cloudCredits =
+        body.cloud_credits === undefined
+          ? undefined
+          : num(source, `${path}.${key}.cloud_credits`, body.cloud_credits)
+      if (kind !== 'amazon' && (body.own !== undefined || blockedAt !== undefined))
+        fail(source, `${path}.${key}`, 'own / blocked_at 只给 amazon')
+      return {
+        at,
+        type: 'competitor.read',
+        competitor_read: {
+          competitor: str(source, `${path}.${key}.competitor`, body.competitor),
+          source: kind,
+          rows,
+          ...(typeof body.complete === 'boolean' ? { complete: body.complete } : {}),
+          ...(error === undefined ? {} : { error }),
+          ...(body.own === true ? { own: true } : {}),
+          ...(blockedAt === undefined ? {} : { blocked_at: blockedAt }),
+          ...(body.no_browser === true ? { no_browser: true } : {}),
+          ...(cloudCredits === undefined ? {} : { cloud_credits: cloudCredits }),
+        },
+      }
+    }
+    case 'competitor.plan': {
+      known(source, `${path}.${key}`, body, ['rules', 'own', 'pairs'])
+      if (!isRec(body.rules)) fail(source, `${path}.${key}.rules`, '必须是对象')
+      const rulesIn = body.rules as Record<string, unknown>
+      known(source, `${path}.${key}.rules`, rulesIn, [
+        'price_drop_pct',
+        'cheaper_than_own',
+        'new_products',
+        'discounts',
+        'stock',
+        'removed',
+      ])
+      const rules: ScenarioCompetitorPlan['rules'] = {}
+      if (rulesIn.price_drop_pct !== undefined)
+        rules.price_drop_pct = num(
+          source,
+          `${path}.${key}.rules.price_drop_pct`,
+          rulesIn.price_drop_pct,
+        )
+      for (const k of [
+        'cheaper_than_own',
+        'new_products',
+        'discounts',
+        'stock',
+        'removed',
+      ] as const) {
+        const v = rulesIn[k]
+        if (v === undefined) continue
+        if (typeof v !== 'boolean') fail(source, `${path}.${key}.rules.${k}`, '必须是 true / false')
+        rules[k] = v
+      }
+      const list = (k: 'own' | 'pairs'): Record<string, unknown>[] => {
+        const v = body[k] ?? []
+        if (!Array.isArray(v) || v.some((x) => !isRec(x)))
+          fail(source, `${path}.${key}.${k}`, '必须是对象列表')
+        return v as Record<string, unknown>[]
+      }
+      const own = list('own').map((o, i) => {
+        known(source, `${path}.${key}.own[${i}]`, o, ['key', 'title', 'price'])
+        return {
+          key: str(source, `${path}.${key}.own[${i}].key`, o.key),
+          title: str(source, `${path}.${key}.own[${i}].title`, o.title),
+          ...(o.price === undefined
+            ? {}
+            : { price: num(source, `${path}.${key}.own[${i}].price`, o.price) }),
+        }
+      })
+      const pairs = list('pairs').map((o, i) => {
+        known(source, `${path}.${key}.pairs[${i}]`, o, ['competitor', 'product', 'own'])
+        return {
+          competitor: str(source, `${path}.${key}.pairs[${i}].competitor`, o.competitor),
+          product: str(source, `${path}.${key}.pairs[${i}].product`, o.product),
+          own: str(source, `${path}.${key}.pairs[${i}].own`, o.own),
+        }
+      })
+      return { at, type: 'competitor.plan', competitor_plan: { rules, own, pairs } }
+    }
     case 'shop.price_change': {
       known(source, `${path}.${key}`, body, ['who', 'product', 'price', 'graphql', 'note'])
       return {
@@ -1335,6 +1516,46 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'pr.feed': {
+      known(source, `${path}.${key}`, body, [
+        'kind',
+        'status',
+        'label',
+        'entries',
+        'keywords',
+        'exclude',
+      ])
+      const kind = str(source, `${path}.${key}.kind`, body.kind)
+      if (kind !== 'google_alerts' && kind !== 'rss')
+        fail(source, `${path}.${key}.kind`, 'kind 只能是：google_alerts / rss')
+      const status = Number(body.status ?? 200)
+      if (!Number.isInteger(status)) fail(source, `${path}.${key}.status`, 'status 要是一个整数')
+      const rawEntries = Array.isArray(body.entries) ? body.entries : []
+      const entries = rawEntries.map((e: unknown, i: number) => {
+        const o = (e ?? {}) as Record<string, unknown>
+        return {
+          title: str(source, `${path}.${key}.entries[${i}].title`, o.title),
+          url: str(source, `${path}.${key}.entries[${i}].url`, o.url),
+          text: str(source, `${path}.${key}.entries[${i}].text`, o.text),
+        }
+      })
+      const words = (v: unknown): string[] | undefined =>
+        Array.isArray(v) ? v.map((x) => String(x)) : undefined
+      const keywords = words(body.keywords)
+      const exclude = words(body.exclude)
+      return {
+        at,
+        type: 'pr.feed',
+        feed: {
+          kind: kind as 'google_alerts' | 'rss',
+          status,
+          label: str(source, `${path}.${key}.label`, body.label),
+          entries,
+          ...(keywords === undefined ? {} : { keywords }),
+          ...(exclude === undefined ? {} : { exclude }),
+        },
+      }
+    }
     case 'pr.release': {
       known(source, `${path}.${key}`, body, [
         'who',
@@ -1672,6 +1893,50 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         at,
         type: 'b2b.member_left',
         b2b_member_left: { who: str(source, `${path}.${key}.who`, body.who), accounts },
+      }
+    }
+    case 'pr.alerts_build': {
+      known(source, `${path}.${key}`, body, ['who', 'lines', 'unchecked', 'existing'])
+      if (!Array.isArray(body.lines) || body.lines.length === 0)
+        fail(source, `${path}.${key}.lines`, '必须是非空数组')
+      const lines = (body.lines as unknown[]).map((l, i) => {
+        const at2 = `${path}.${key}.lines[${i}]`
+        if (!isRec(l)) fail(source, at2, '必须是对象')
+        known(source, at2, l, ['label', 'query', 'language', 'region'])
+        const language = optStr(source, `${at2}.language`, l.language)
+        const region = optStr(source, `${at2}.region`, l.region)
+        return {
+          label: str(source, `${at2}.label`, l.label),
+          query: str(source, `${at2}.query`, l.query),
+          ...(language === undefined ? {} : { language }),
+          ...(region === undefined ? {} : { region }),
+        }
+      })
+      const rawExisting = body.existing
+      if (rawExisting !== undefined && !Array.isArray(rawExisting))
+        fail(source, `${path}.${key}.existing`, '必须是数组')
+      const existing = ((rawExisting as unknown[] | undefined) ?? []).map((e, i) => {
+        const at2 = `${path}.${key}.existing[${i}]`
+        if (!isRec(e)) fail(source, at2, '必须是对象')
+        known(source, at2, e, ['query', 'delivery'])
+        const delivery = str(source, `${at2}.delivery`, e.delivery)
+        if (delivery !== 'rss' && delivery !== 'email')
+          fail(source, `${at2}.delivery`, 'delivery 只能是 rss / email')
+        return {
+          query: str(source, `${at2}.query`, e.query),
+          delivery: delivery as 'rss' | 'email',
+        }
+      })
+      const unchecked = optStrList(source, `${path}.${key}.unchecked`, body.unchecked)
+      return {
+        at,
+        type: 'pr.alerts_build',
+        alerts_build: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          lines,
+          ...(unchecked === undefined ? {} : { unchecked }),
+          ...(existing.length === 0 ? {} : { existing }),
+        },
       }
     }
     case 'pr.external_post': {
@@ -2112,6 +2377,19 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         geo_quality: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
+    case 'amazon.keywords': {
+      known(source, `${path}.${key}`, body, ['who', 'blocked_at'])
+      return {
+        at,
+        type: 'amazon.keywords',
+        amazon_keywords: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(body.blocked_at === undefined
+            ? {}
+            : { blocked_at: num(source, `${path}.${key}.blocked_at`, body.blocked_at) }),
+        },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -2277,6 +2555,83 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         staff: {
           who: str(source, `${path}.${key}.who`, body.who),
           position: str(source, `${path}.${key}.position`, body.position),
+        },
+      }
+    }
+    case 'position.plan': {
+      known(source, `${path}.${key}`, body, ['who', 'text', 'roles'])
+      return {
+        at,
+        type: 'position.plan',
+        plan: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          text: str(source, `${path}.${key}.text`, body.text),
+          roles: optStrList(source, `${path}.${key}.roles`, body.roles) ?? [],
+        },
+      }
+    }
+    case 'listing.check': {
+      known(source, `${path}.${key}`, body, ['who', 'pages', 'own_sellers', 'blocked', 'design'])
+      if (!Array.isArray(body.pages)) fail(source, `${path}.${key}.pages`, '必须是列表')
+      const pages = body.pages.map((r, i) => {
+        const at2 = `${path}.${key}.pages[${i}]`
+        if (!isRec(r)) fail(source, at2, '必须是对象')
+        known(source, at2, r, [
+          'asin',
+          'marketplace',
+          'title',
+          'bullets',
+          'description',
+          'aplus',
+          'images',
+          'video',
+          'rating',
+          'reviews',
+          'price',
+          'stock',
+          'seller',
+        ])
+        const optNum = (k: string): number | undefined =>
+          r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
+        const optBool = (k: string): boolean | undefined => {
+          if (r[k] === undefined) return undefined
+          if (typeof r[k] !== 'boolean') fail(source, `${at2}.${k}`, '必须是 true / false')
+          return r[k] as boolean
+        }
+        if (r.stock !== undefined && r.stock !== 'in_stock' && r.stock !== 'out_of_stock')
+          fail(source, `${at2}.stock`, '只认 in_stock / out_of_stock')
+        const page: Record<string, unknown> = {
+          asin: str(source, `${at2}.asin`, r.asin),
+          marketplace: optStr(source, `${at2}.marketplace`, r.marketplace),
+          title: optStr(source, `${at2}.title`, r.title),
+          bullets: optStrList(source, `${at2}.bullets`, r.bullets),
+          description: optBool('description'),
+          aplus: optBool('aplus'),
+          images: optNum('images'),
+          video: optBool('video'),
+          rating: optNum('rating'),
+          reviews: optNum('reviews'),
+          price: optStr(source, `${at2}.price`, r.price),
+          stock: r.stock,
+          seller: optStr(source, `${at2}.seller`, r.seller),
+        }
+        for (const k of Object.keys(page)) if (page[k] === undefined) delete page[k]
+        return page as unknown as ScenarioListingPage
+      })
+      if (body.design !== undefined && typeof body.design !== 'boolean')
+        fail(source, `${path}.${key}.design`, '必须是 true / false')
+      const blocked =
+        body.blocked === undefined ? undefined : num(source, `${path}.${key}.blocked`, body.blocked)
+      const sellers = optStrList(source, `${path}.${key}.own_sellers`, body.own_sellers)
+      return {
+        at,
+        type: 'listing.check',
+        listing_check: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          pages,
+          ...(sellers === undefined ? {} : { own_sellers: sellers }),
+          ...(blocked === undefined ? {} : { blocked }),
+          ...(body.design === true ? { design: true } : {}),
         },
       }
     }
@@ -2624,6 +2979,33 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.assistant_dispatched_to,
   )
   if (dispatchedTo !== undefined) out.assistant_dispatched_to = dispatchedTo
+  // WP392：竞品监控比出了哪几种变化
+  const competitorChanges = optStrList(
+    source,
+    'expected.competitor_changes',
+    raw.competitor_changes,
+  )
+  if (competitorChanges !== undefined) out.competitor_changes = competitorChanges
+  // WP393：简报里「竞品动向」那一段要有的几句（空列表 = 不该出）
+  if (raw.competitor_brief !== undefined) {
+    if (
+      !Array.isArray(raw.competitor_brief) ||
+      raw.competitor_brief.some((x) => typeof x !== 'string')
+    )
+      fail(source, 'expected.competitor_brief', '必须是字符串列表')
+    out.competitor_brief = raw.competitor_brief as string[]
+  }
+  if (raw.competitor_vs_own !== undefined) {
+    if (!Array.isArray(raw.competitor_vs_own))
+      fail(source, 'expected.competitor_vs_own', '必须是数的列表')
+    out.competitor_vs_own = raw.competitor_vs_own.map((v, i) =>
+      num(source, `expected.competitor_vs_own[${i}]`, v),
+    )
+  }
+  const competitorVia = optStrList(source, 'expected.competitor_via', raw.competitor_via)
+  if (competitorVia !== undefined) out.competitor_via = competitorVia
+  if (raw.competitor_credits !== undefined)
+    out.competitor_credits = num(source, 'expected.competitor_credits', raw.competitor_credits)
   const fanoutTasks = optStrList(
     source,
     'expected.assistant_fanout_tasks',
@@ -2642,6 +3024,52 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.position_answer_components,
   )
   if (answerComponents !== undefined) out.position_answer_components = answerComponents
+  // WP395：`{ 模板 id: [职责…] }`
+  if (raw.positions_planned !== undefined) {
+    const planned = raw.positions_planned
+    if (typeof planned !== 'object' || planned === null || Array.isArray(planned))
+      fail(source, 'expected.positions_planned', '要写成 { 模板 id: [职责…] }')
+    const map: Record<string, string[]> = {}
+    for (const [k, v] of Object.entries(planned as Record<string, unknown>))
+      map[k] = optStrList(source, `expected.positions_planned.${k}`, v) ?? []
+    out.positions_planned = map
+  }
+  const noData = optStrList(source, 'expected.position_answer_no_data', raw.position_answer_no_data)
+  if (noData !== undefined) out.position_answer_no_data = noData
+  // WP396：Listing 体检
+  if (raw.listing_checkup !== undefined) {
+    const lc = raw.listing_checkup
+    if (!isRec(lc)) fail(source, 'expected.listing_checkup', '必须是对象')
+    known(source, 'expected.listing_checkup', lc, [
+      'issues',
+      'drafts_at_least',
+      'design_requests',
+      'design_routed_to',
+      'stopped',
+      'pages_read',
+    ])
+    if (lc.stopped !== undefined && lc.stopped !== 'blocked')
+      fail(source, 'expected.listing_checkup.stopped', '只认 blocked')
+    const issues = optStrList(source, 'expected.listing_checkup.issues', lc.issues)
+    const n = (k: string): number | undefined =>
+      lc[k] === undefined ? undefined : num(source, `expected.listing_checkup.${k}`, lc[k])
+    const drafts = n('drafts_at_least')
+    const design = n('design_requests')
+    const pagesRead = n('pages_read')
+    const routedTo = optStr(
+      source,
+      'expected.listing_checkup.design_routed_to',
+      lc.design_routed_to,
+    )
+    out.listing_checkup = {
+      ...(issues === undefined ? {} : { issues }),
+      ...(drafts === undefined ? {} : { drafts_at_least: drafts }),
+      ...(design === undefined ? {} : { design_requests: design }),
+      ...(lc.stopped === 'blocked' ? { stopped: 'blocked' as const } : {}),
+      ...(pagesRead === undefined ? {} : { pages_read: pagesRead }),
+      ...(routedTo === undefined ? {} : { design_routed_to: routedTo }),
+    }
+  }
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
@@ -2745,6 +3173,25 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       ...(d.advice === undefined
         ? {}
         : { advice: str(source, 'expected.geo_quality.advice', d.advice) }),
+    }
+  }
+  // WP398：Amazon 词库那一次
+  if (raw.amazon_keywords !== undefined) {
+    const d = raw.amazon_keywords
+    if (!isRec(d)) fail(source, 'expected.amazon_keywords', '必须是对象')
+    known(source, 'expected.amazon_keywords', d, ['top_gaps', 'other_brands', 'autocomplete'])
+    if (d.autocomplete !== undefined && d.autocomplete !== 'ok' && d.autocomplete !== 'blocked')
+      fail(source, 'expected.amazon_keywords.autocomplete', '只能是 ok / blocked')
+    out.amazon_keywords = {
+      ...(d.top_gaps === undefined
+        ? {}
+        : { top_gaps: strList(source, 'expected.amazon_keywords.top_gaps', d.top_gaps) }),
+      ...(d.other_brands === undefined
+        ? {}
+        : {
+            other_brands: strList(source, 'expected.amazon_keywords.other_brands', d.other_brands),
+          }),
+      ...(d.autocomplete === undefined ? {} : { autocomplete: d.autocomplete }),
     }
   }
   // WP96（36 §2）：队列里剩几张、面板报表块有几条
@@ -2973,6 +3420,15 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       stated_on_card: 'bool',
     },
     // WP78（60）
+    pr_feed: {
+      ok: 'bool',
+      fetched: 'num',
+      kept: 'num',
+      unique: 'num',
+      label: 'str',
+      links_unwrapped: 'bool',
+      says_why: 'bool',
+    },
     pr_mention: {
       triage: 'str',
       sentiment: 'str',
@@ -2987,6 +3443,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       requested_level: 'str',
       auto_approved: 'bool',
       stated_on_card: 'bool',
+    },
+    pr_alerts_build: {
+      card_lines: 'num',
+      built: 'num',
+      sources: 'num',
+      auto_approved: 'bool',
+      others_untouched: 'bool',
     },
     pr_external_post: {
       blocked: 'bool',
