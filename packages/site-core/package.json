@@ -18,7 +18,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@agentsws/brand-intake": "workspace:*",
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*"
+    "@agentsws/core": "workspace:*",
+    "robots-parser": "3.0.1"
   }
 }

@@ -11,6 +11,7 @@
  */
 import type {
   AiPlatform,
+  GeoAnswerInsight,
   GeoAnswerRecord,
   GeoBrandShare,
   GeoCellChange,
@@ -50,6 +51,8 @@ export interface MetricAnswer {
   mentions: readonly GeoMentionRecord[]
   citations: readonly GeoCitationRecord[]
   branded?: boolean | undefined
+  /** WP380：这条回答的 AI 判断（比较 / 说法；没判过不写）。 */
+  insight?: GeoAnswerInsight | undefined
 }
 
 const cellKey = (a: GeoAnswerRecord): string => `${a.prompt_id}|${a.platform}|${a.market}`
@@ -96,6 +99,33 @@ function pointOf(week: string, rows: readonly MetricAnswer[]): GeoWeekPoint {
       : { avg_rank: round(ranks.reduce((a, b) => a + b, 0) / ranks.length, 2) }),
     ...(all === 0 ? {} : { sov: round(mentioned.length / all) }),
     ...(rows.length === 0 ? {} : { coverage: round(ok.length / rows.length) }),
+    ...qualityOf(ok),
+  }
+}
+
+/**
+ * WP380：比较胜率与描述准确度（AI 判断那一步已附原话；这里只数）。没分高下的不进胜率分母；
+ * 一条都没有就不写（不出 0）。
+ */
+function qualityOf(ok: readonly MetricAnswer[]): Partial<GeoWeekPoint> {
+  const compares = ok.flatMap((r) => (r.insight?.compare === undefined ? [] : [r.insight.compare]))
+  const decided = compares.filter((c) => c.verdict !== 'tie')
+  const wins = decided.filter((c) => c.verdict === 'ours').length
+  const claims = ok.flatMap((r) => r.insight?.claims ?? [])
+  const n = (v: string) => claims.filter((c) => c.verdict === v).length
+  return {
+    ...(decided.length === 0
+      ? {}
+      : { compared: decided.length, wins, win_rate: round(wins / decided.length) }),
+    ...(claims.length === 0
+      ? {}
+      : {
+          claims: claims.length,
+          claims_correct: n('correct'),
+          claims_wrong: n('wrong'),
+          claims_outdated: n('outdated'),
+          accuracy: round(n('correct') / claims.length),
+        }),
   }
 }
 

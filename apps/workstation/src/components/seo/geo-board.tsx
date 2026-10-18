@@ -23,6 +23,7 @@ import { useApp } from '@/lib/app-context'
 import { getGeoMetrics, getGeoWatch, runGeoWatch } from '@/lib/geo-watch-api'
 import { pct } from './geo-bits'
 import { GeoGrid } from './geo-grid'
+import { GeoQuality } from './geo-quality'
 import { GeoCompare, GeoRankTable, GeoSites } from './geo-tables'
 import { GeoTrend } from './geo-trend'
 
@@ -202,6 +203,7 @@ export function GeoBoard({ assignment }: { assignment: string }): ReactNode {
             <GeoSites view={view} />
             <GeoCompare brands={view.brands} />
           </div>
+          <GeoQuality view={view} assignment={assignment} />
         </>
       )}
     </section>

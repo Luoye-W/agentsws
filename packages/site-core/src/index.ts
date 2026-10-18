@@ -25,4 +25,6 @@ export * from './apps.js'
 export * from './brand-design.js'
 export * from './checklist.js'
 export * from './email-templates.js'
+// WP381：网站 / 商品体检（AI 爬虫、原始 HTML、商品信息一致性、ChatGPT 购物评估）
+export * from './health/index.js'
 export * from './theme.js'

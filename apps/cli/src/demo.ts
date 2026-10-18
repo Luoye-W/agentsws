@@ -96,6 +96,40 @@ const DEMO_BRAND_INSIGHTS = {
   ],
 }
 /** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
+/** WP381：体检在 demo 里抓的那几页（现编；按路径认）。 */
+const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
+  '/robots.txt': [
+    'User-agent: *',
+    'Disallow: /admin',
+    'Disallow: /cart',
+    'Disallow: /checkouts/',
+    '',
+    'User-agent: GPTBot',
+    'Disallow: /',
+    '',
+    'User-agent: PerplexityBot',
+    'Disallow: /products/',
+  ].join('\n'),
+  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Rollout 折叠收纳箱","offers":[{"@type":"Offer","price":"27.90","priceCurrency":"USD","availability":"https://schema.org/InStock"},{"@type":"Offer","price":"19.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}]}</script>
+</head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+  '/products/rollout-storage-box.js': JSON.stringify({
+    id: 1001,
+    handle: 'rollout-storage-box',
+    updated_at: '2026-10-10T09:00:00+08:00',
+    variants: [
+      { id: 2001, price: 2990, available: true },
+      { id: 2002, price: 1990, available: true },
+    ],
+  }),
+  '/policies/refund-policy':
+    '<html><body><main><h1>Refund policy</h1><p>We have a 30-day return policy.</p></main></body></html>',
+  '/policies/privacy-policy': '<html><body><main><h1>Privacy policy</h1></main></body></html>',
+}
+const DEMO_SITE_HEALTH_RENDERED: Record<string, string> = {
+  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title></head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+}
+
 const DEMO_BANNER_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAoAAAACCAIAAADuA9qHAAAAEUlEQVR4nGPQ78/GgxjwSwMAyvgXNS/YpuQAAAAASUVORK5CYII='
 export const DEMO_SCENARIO = 'scenarios/aftersales/return-within-window.yml'
@@ -1546,6 +1580,36 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * （没给 readNet），工具照实说「演示环境没装出网读取」。
      */
     readonlyBrowser: readonlyBrowserStandIn(),
+    /*
+     * WP381：网站 / 商品体检在 demo 里抓的是**现编的**几页（按路径认，哪个域名都一样），渲染后那一份也是替身——
+     * 不起浏览器、不出网。现编的店：robots 挡了 GPTBot、商品页只有 PerplexityBot 进不去；收纳箱的价格只靠 JS 才出现、
+     * 结构化数据里还是旧价 27.90。
+     */
+    siteHealthFetch: async (url: string) => {
+      const body =
+        DEMO_SITE_HEALTH_PAGES[
+          (() => {
+            try {
+              return new URL(url).pathname
+            } catch {
+              return url
+            }
+          })()
+        ]
+      return body === undefined
+        ? { ok: false, status: 404, text: async () => '' }
+        : { ok: true, status: 200, text: async () => body }
+    },
+    siteHealthRenderer: {
+      render: async (urls) =>
+        new Map(
+          urls.flatMap((u) => {
+            const path = new URL(u).pathname
+            const html = DEMO_SITE_HEALTH_RENDERED[path] ?? DEMO_SITE_HEALTH_PAGES[path]
+            return html === undefined ? [] : [[u, html] as [string, string]]
+          }),
+        ),
+    },
     /*
      * WP216 / WP245：「Shopify CLI」卡在 demo 里是替身——不跑这台机器上真的 npm / `shopify`：
      * 一开始当作没装；「一键安装」演进度后装好（工作台自带那份），「登录 Shopify」打出一个

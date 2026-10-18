@@ -1975,6 +1975,14 @@ async function execute(
         })
         return
       }
+      case 'content.geo_quality': {
+        const out = await world.shop.geoQuality({ who: event.geo_quality.who })
+        world.appendEvent('simulation.geo_quality', {
+          who: event.geo_quality.who,
+          item: out.approval_item_id,
+        })
+        return
+      }
       case 'content.seo_daily': {
         const out = await world.shop.seoDaily({ who: event.seo_daily.who })
         world.appendEvent('simulation.seo_daily', {

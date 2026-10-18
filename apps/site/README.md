@@ -3,7 +3,7 @@
 Agents 工坊的官网（WP197）。**只放公开页面**：首页、岗位、价格（公开价目）、下载、教程文档、更新日志、用户条款 / 隐私政策 / 退款政策、404。
 登录、账号、充值、用量、运营后台**一律不在这里**——官网上的「登录 / 积分与充值」只是跳 `https://cloud.agentsws.com` 的链接（那边在私有仓）。
 
-- 设计真源：`docs/design/site/{home,pricing,download}.html`（方向 A「纸与绿」）与 `docs/87-官网设计-v1.md`
+- 设计真源：内部设计稿（方向 A「纸与绿」，不在本仓）
 - 纯静态：Astro 出 HTML，零后端、零客户端框架；全站只有一段约 2 KB 的内联脚本（明暗切换、标记姿态、「为什么」逐级点亮）
 - 中文在 `/`，英文在 `/en/`，同一套路径，**不按浏览器语言自动跳**
 
@@ -33,7 +33,7 @@ pnpm --filter @agentsws/site dev        # 开发服务器
 pnpm --filter @agentsws/site build      # 出 apps/site/dist（纯静态）
 AGENTSWS_SITE_OFFLINE=1 pnpm --filter @agentsws/site build   # 不打网，价目用仓库样例
 node apps/site/scripts/serve.mjs        # 本机起 dist（只听 127.0.0.1）
-node apps/site/scripts/shots.mjs        # 审稿截图 → docs/assets/wp197/
+node apps/site/scripts/shots.mjs        # 审稿截图 → docs/assets/wp197/（本地，不进仓库）
 node apps/site/scripts/og.mjs           # 重出分享图（改了 OG 标题或标记之后）
 node apps/site/scripts/app-shots.mjs    # 重拍工作台截图（先编好 apps/cli 与工作台；默认自己起 demo 在 4398）
 pnpm --filter @agentsws/site launch:check   # 上线前：dist 里不许剩占位，条款 / 联系邮箱 / 价格都在

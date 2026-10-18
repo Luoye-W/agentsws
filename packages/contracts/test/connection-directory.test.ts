@@ -272,3 +272,13 @@ describe('自定义 MCP 服务器的校验（纯函数，不联网）', () => {
     ).toHaveLength(1)
   })
 })
+
+describe('WP382：中文说明里那个替我答同事的叫「助理」（决策 1061）', () => {
+  it('微信 / 企业微信两条说明不再写「代理」', () => {
+    for (const kind of ['wechat_clawbot', 'wecom_bot']) {
+      const zh = connectionDirectoryEntry(kind)?.note?.zh ?? ''
+      expect(zh).toContain('助理')
+      expect(zh).not.toContain('代理')
+    }
+  })
+})

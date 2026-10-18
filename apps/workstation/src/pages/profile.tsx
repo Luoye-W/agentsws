@@ -129,7 +129,7 @@ export function SecretaryPage({ embedded = false }: { embedded?: boolean } = {})
 
   return (
     <div className="flex flex-col gap-4" data-testid={embedded ? 'peers-panel' : 'secretary-page'}>
-      {/* WP43 ③：一句标题就够，「代理只管四件事」进问号 */}
+      {/* WP43 ③：一句标题就够，「助理只管四件事」进问号 */}
       {embedded ? null : (
         <h1 className="flex items-center gap-1 font-semibold text-base">
           {t('secretary.title')}
