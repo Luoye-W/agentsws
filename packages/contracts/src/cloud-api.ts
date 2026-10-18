@@ -117,9 +117,14 @@ import type {
 } from './search-data.js'
 import type {
   ServiceAcceptanceRequest,
+  ServiceAttachmentDownloadHeaders,
+  ServiceAttachmentParams,
+  ServiceAttachmentUploadQuery,
   ServiceContactAnswer,
+  ServiceExtraAnswer,
   ServiceIntentReport,
   ServiceList,
+  ServiceOrderAttachment,
   ServiceOrderCancelRequest,
   ServiceOrderList,
   ServiceOrderListQuery,
@@ -155,7 +160,7 @@ export type CloudApiAuth =
   | 'visitor'
 
 /** 成功响应的媒体类型（缺省 `json`）。 */
-export type CloudApiContent = 'json' | 'sse' | 'html' | 'javascript' | 'text' | 'zip'
+export type CloudApiContent = 'json' | 'sse' | 'html' | 'javascript' | 'text' | 'zip' | 'binary'
 
 /** 表里一条路由的形状（生成器按这些键读；多写一个键不会进契约）。 */
 export interface CloudApiOperation {
@@ -170,7 +175,7 @@ export interface CloudApiOperation {
   /** 我们认的请求头（不含 `Authorization`）。 */
   headers?: object
   body?: unknown
-  /** 请求体的媒体类型（缺省 `json`；快照上传是 `zip`）。 */
+  /** 请求体的媒体类型（缺省 `json`；快照上传是 `zip`；WP403 订单附件是任意文件 `binary`）。 */
   bodyContent?: CloudApiContent
   ok: {
     status: number
@@ -2234,6 +2239,57 @@ export interface CloudServiceOrderApi {
   'POST /v1/services/orders/{id}/dispute': ServiceOrderActionOp<ServiceAcceptanceRequest>
   /** 取消（接单之前；已付的全退） */
   'POST /v1/services/orders/{id}/cancel': ServiceOrderActionOp<ServiceOrderCancelRequest>
+  /**
+   * WP403：回服务方发起的追加费用——同意（扣进这一单的托管，随它算进的那一段验收结算）或不同意。
+   * 同一个幂等键只扣一次；钱不够 402、这一条原样等着
+   */
+  'POST /v1/services/orders/{id}/extra': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    headers: AttributionHeaders
+    params: ServiceOrderParams
+    body: ServiceExtraAnswer
+    ok: { status: 200; body: CloudDataEnvelope<ServiceOrderView> }
+    errors: ServiceOrderErrors & { 402: 'insufficient_credits' }
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * WP403：传一份补材料（正文就是文件本身；只有定制件、订单没结束时）。在「等你补材料」时传 = 补上了。
+   * 单个 25 MB、一单 50 个 / 200 MB；按订单隔离，订单结束后 90 天删
+   */
+  'POST /v1/services/orders/{id}/attachments': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    params: ServiceOrderParams
+    query: ServiceAttachmentUploadQuery
+    body: unknown
+    bodyContent: 'binary'
+    ok: { status: 201; body: CloudDataEnvelope<ServiceOrderAttachment>; description: '传好了' }
+    errors: ServiceOrderErrors & {
+      /** 文件太大 / 这一单的附件满了 */
+      413: 'invalid_input'
+      /** 这个节点没开通附件存储 */
+      501: 'not_implemented'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /** WP403：取一份附件（你补的材料或服务方的交付文件）：文件流，sha256 在响应头；到期删了的回 404 */
+  'GET /v1/services/orders/{id}/attachments/{attachment_id}': {
+    auth: 'workspace_token'
+    scope: 'services'
+    tag: 'services'
+    params: ServiceAttachmentParams
+    ok: {
+      status: 200
+      body: unknown
+      content: 'binary'
+      headers: ServiceAttachmentDownloadHeaders
+    }
+    errors: EntryAuthErrors & { 404: 'not_found'; 501: 'not_implemented' }
+    errorBody: CloudEntryErrorBody
+  }
   /** P8：「没接住的意向」——只收一句意向说法与岗位，不收正文（不收钱） */
   'POST /v1/services/intents': {
     auth: 'workspace_token'

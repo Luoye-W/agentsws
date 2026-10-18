@@ -269,6 +269,7 @@ const CONTENT_TYPES = {
   javascript: 'text/javascript',
   text: 'text/plain',
   zip: 'application/zip',
+  binary: 'application/octet-stream',
 }
 
 /** 生成整份文档。`version` 取根 package.json。 */
@@ -308,7 +309,7 @@ export function buildCloudContract(root, version) {
 
   /** 二进制正文（快照 zip）不从类型转：TS 那边写 `unknown`，契约里就是一串字节。 */
   const schemaFor = (type, content) =>
-    content === 'zip' ? { type: 'string', format: 'binary' } : convert(type)
+    content === 'zip' || content === 'binary' ? { type: 'string', format: 'binary' } : convert(type)
 
   const paths = {}
   const tags = new Set()
