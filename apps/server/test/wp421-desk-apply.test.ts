@@ -202,6 +202,13 @@ describe('端到端（真服务）', () => {
       need: '首页横幅 3:1',
       matter_id: asking.id,
     })
+    // 同一个来源、同一个标题、还没做完的单不下第二张
+    const again = await brand.designService.port.createRequest(actorOf(store) as never, {
+      title: '新品横幅',
+      need: '首页横幅 3:1',
+    })
+    expect(again.request.id).toBe(out.request.id)
+    expect(again.staged.staged).toBe(false)
     const designMatter = work
       .listMatters({ kind: 'conversation' })
       .find((m) => m.context.pinned.some((p) => p.id === out.request.id))

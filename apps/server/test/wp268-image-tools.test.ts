@@ -126,7 +126,7 @@ const run = (name: string, input: Record<string, unknown>, r = req()) =>
   svc.executeTool({ name, input, request: r })
 
 describe('工具面', () => {
-  it('设计岗与网页模板才有；生图没配一个都不摆；模型不会改图就不摆 edit_image', async () => {
+  it('设计岗与网页模板才有；生图没配只摆出图与素材库（调了回连接卡）；模型不会改图就不摆 edit_image', async () => {
     expect(await svc.offered('site.shopify-theme')).toEqual([
       'edit_image',
       'generate_image',
@@ -135,7 +135,11 @@ describe('工具面', () => {
     expect(await svc.offered('design.social')).toHaveLength(3)
     expect(await svc.offered('dtc.store')).toEqual([])
     provider = { ...provider, available: false, unavailable_reason: '生图还没配' }
-    expect(await svc.offered('design.ads')).toEqual([])
+    // WP421：没配也摆出图与素材库（一调就回「生图还没配」→ 连接卡），不再整个藏起来
+    expect(await svc.offered('design.ads')).toEqual(['generate_image', 'list_brand_assets'])
+    const asked = await run('generate_image', { prompt: 'x' }, req('design.ads'))
+    expect(asked.status).toBe('error')
+    expect(asked.reason).toContain('生图还没配')
     const { edit: _drop, ...noEdit } = stubImageProvider({ seed: 1 })
     provider = noEdit
     expect(await svc.offered('design.ads')).toEqual(['generate_image', 'list_brand_assets'])

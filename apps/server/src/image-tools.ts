@@ -902,7 +902,12 @@ export function createImageService(options: ImageServiceOptions): ImageService {
     async offered(role_id) {
       if (!isImageRole(role_id)) return []
       const p = options.images()
-      if (p === undefined || !p.available) return []
+      /*
+       * WP421（自查 general 2.4）：生图没配时**也摆出图与素材库**（不摆改图）——以前整个藏起来，AI 不知道没配，
+       * 人设又写「出几版初稿」，容易嘴上说出了图。现在它一调，执行器回「生图还没配」，运行收尾出连接卡就地配。
+       */
+      if (p === undefined || !p.available)
+        return IMAGE_TOOL_NAMES.filter((n) => n !== EDIT_IMAGE_TOOL)
       return IMAGE_TOOL_NAMES.filter((n) => n !== EDIT_IMAGE_TOOL || p.edit !== undefined)
     },
     onDecided,

@@ -126,8 +126,12 @@ interface BucketState {
   cards: Record<string, boolean>
 }
 
-/** WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。 */
-const NARROW_DEFAULT = '(max-width: 899px)'
+/**
+ * WP412：窗口窄时，没记过开关的页先收着（面板会盖住主区）。
+ * WP421（自查 general 2.6）：900–1199 这一档面板画成浮层加遮罩、盖住主区（13 寸笔记本每进一页都要先关一次），
+ * 默认收着的线从 900 提到 1200。
+ */
+const NARROW_DEFAULT = '(max-width: 1199px)'
 
 function narrowWindow(): boolean {
   try {

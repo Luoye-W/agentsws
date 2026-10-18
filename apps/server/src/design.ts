@@ -646,6 +646,24 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           `不知道这张单该归哪条设计职责（来源是 ${actor.role_id}）。在 duty 里指定一条：${DESIGN_DUTIES.map((d) => d.id).join(' / ')}。`,
         )
       const now = clock.now()
+      /*
+       * WP421（自查 general 2.4）：同一个来源、同一个标题、还没做完的单——不再下第二张（亚马逊体检卡刷新后能重复下单）。
+       * 回原来那一张，不另出卡、不另通知设计岗。
+       */
+      const from = input.from_role_id ?? actor.role_id
+      const open = store
+        .requests({ duty, from_role_id: from })
+        .find(
+          (r) =>
+            r.title.trim() === input.title.trim() &&
+            r.status !== 'delivered' &&
+            r.status !== 'cancelled',
+        )
+      if (open !== undefined)
+        return {
+          request: requestRow(open),
+          staged: { staged: false, message: '这张单已经下过了，还在做。' },
+        }
       const request: DesignRequest = {
         id: nextId('dreq'),
         workspace_id,

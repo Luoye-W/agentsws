@@ -192,7 +192,10 @@ describe('变更审阅：逐文件 diff（#11）', () => {
     renderChanges()
     fireEvent.click(await screen.findByTestId('rail-changes-item-chg_1'))
     fireEvent.click(await screen.findByTestId('rail-changes-file-assets/theme.css'))
-    expect((await screen.findByTestId('rail-changes-coarse')).textContent).toContain('超时')
+    // WP421：文案减字（「文件太大，只显示改动行数」）——仍然说出是粗粒度
+    expect((await screen.findByTestId('rail-changes-coarse')).textContent).toContain(
+      '只显示改动行数',
+    )
   })
 
   it('这台机器上没有这份工作副本：照实说（不是错误，是常态）', async () => {
