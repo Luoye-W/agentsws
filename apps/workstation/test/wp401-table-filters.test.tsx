@@ -18,6 +18,9 @@ import {
 } from '@/lib/table-filter'
 import { renderWithProviders } from './helpers'
 
+// 整张面板 + 筛选控件逐个点，单条要十几秒；机器忙时 5 秒默认值必超时（int/1020 门禁）
+vi.setConfig({ testTimeout: 120_000 })
+
 const { BlockBody } = await import('@/components/blocks/block-view')
 const { default: GenuiView } = await import('@/components/answer/genui/genui-view')
 
