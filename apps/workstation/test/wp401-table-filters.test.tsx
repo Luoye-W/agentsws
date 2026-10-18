@@ -273,9 +273,7 @@ describe('WP401 AI 用 genui 画的表自动带筛选', () => {
     fireEvent.change(within(panel).getByTestId('table-filter-q-0'), { target: { value: '1003' } })
     await waitFor(() => expect(rows()).toBe(1))
     expect(screen.getByTestId('table-filtered').textContent).toContain('1 / 4 行')
-    const keys = [...store.keys()].filter((k) =>
-      k.startsWith(`${TABLE_FILTER_KEY_PREFIX}genui.`),
-    )
+    const keys = [...store.keys()].filter((k) => k.startsWith(`${TABLE_FILTER_KEY_PREFIX}genui.`))
     expect(keys).toHaveLength(1)
     fireEvent.click(screen.getByTestId('table-filter-clear'))
     await waitFor(() => expect(rows()).toBe(4))
