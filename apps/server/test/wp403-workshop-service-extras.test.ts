@@ -18,7 +18,7 @@ const T0 = Date.parse('2026-10-18T02:00:00.000Z')
 type Out = ReturnType<ServiceOrdersStandIn['handle']>
 
 function harness(balance = 2000) {
-  let t = T0
+  const t = T0
   let seq = 0
   let left = balance
   const now = () => new Date(t).toISOString()
@@ -86,7 +86,8 @@ function harness(balance = 2000) {
     async create(input: Record<string, unknown>) {
       // 同一个去重键还在等的那张：原样回（与真总线同一个口径）
       const same = cards.find(
-        (c) => c.dedupe_key === input.dedupe_key && (c.state === 'pending' || c.state === 'in_review'),
+        (c) =>
+          c.dedupe_key === input.dedupe_key && (c.state === 'pending' || c.state === 'in_review'),
       )
       if (same !== undefined) return same
       const item = {
@@ -150,7 +151,9 @@ function harness(balance = 2000) {
     const id = cloudSvc.list('all').orders[0]?.id as string
     cloudSvc.quote(id, { credits: 1000, deliver_hours: 240 })
     await svc.sync()
-    const pay = [...cards].reverse().find((c) => (c.payload as { form?: string }).form === 'service_pay')
+    const pay = [...cards]
+      .reverse()
+      .find((c) => (c.payload as { form?: string }).form === 'service_pay')
     await decide(pay as ApprovalItem, 'approve')
     cloudSvc.take(id)
     await svc.sync()
