@@ -372,6 +372,18 @@ export interface Decision {
   selected_option_id?: string
   /** 绑定 (item_id, revision, execution_snapshot)；revision 变化即失效；by='mandate' 的自动决定无 token */
   decision_token?: string
+  /**
+   * WP414（只加）：这一条不是人逐张点的，而是**跟着另一张卡的决定**一并处理的（同类卡跟随）。
+   * `leader_id` 是人真点的那张，`why` 是一句「为什么算同类」（卡上、账本里都看得到）。
+   * 只出现在「不要 / 稍后」这类不对外的决定上；对外动作永远不跟随。
+   */
+  followed?: DecisionFollow
+}
+
+/** WP414：跟随决定的来路（谁的哪个决定带动了这一张、为什么算同类）。 */
+export interface DecisionFollow {
+  leader_id: string
+  why: string
 }
 
 export interface ApplyRecord {
@@ -544,6 +556,8 @@ export interface DecideInput {
   /** 乐观并发：与 ApprovalItem.revision 比对 */
   version?: number
   via: Decision['via']
+  /** WP414（只加）：跟着另一张卡的决定一并处理（落到 `Decision.followed`）。 */
+  followed?: DecisionFollow
 }
 
 /** `ApprovalBus.create` 的入参：宿主负责生成的字段不收，另收一份执行上下文。 */
@@ -626,4 +640,16 @@ export interface ApprovalBus {
    * 可选：没实现的宿主由调用方跳过。
    */
   expireNow?(id: string, reason: string): Promise<ApprovalItem | undefined>
+  /**
+   * WP414：把一张**已经「不要 / 稍后」了**的卡放回待处理（`rejected` / `deferred` → `pending`）：
+   * 去掉那次决定、给收件人重新投一张令牌；原来的决定原样记进 `approval.reopened` 事件（账本不丢）。
+   * 别的状态（批了 / 施行了 / 过期 / 撤回）回 `undefined`、一个字不动——对外的事撤不回来。
+   * 可选：没实现的宿主由调用方跳过（「撤回」那一下就说撤不了）。
+   */
+  reopen?(id: string, by: PersonId, input: { reason: string }): Promise<ApprovalItem | undefined>
+  /**
+   * WP414：决定之后**补一句理由**（「不要」一下就生效、理由可选，事后点快捷理由补上）。
+   * 只有那次决定的本人能补；没有决定的卡回 `undefined`。记 `approval.reason_added`（学习信号）。
+   */
+  annotate?(id: string, by: PersonId, input: { reason: string }): Promise<ApprovalItem | undefined>
 }

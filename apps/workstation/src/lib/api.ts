@@ -1020,6 +1020,87 @@ export const decide = (id: string, input: DecideInput, assignment: string): Prom
     assignment,
   })
 
+/** WP414：为什么算同类（前端按它出中英文）。 */
+/** `same_reason` = AI 按人给的理由判的（直接显示 `why`）；其余是「要一起发吗」那一路的词重合。 */
+export type FollowBasis =
+  | 'same_reason'
+  | 'same_object'
+  | 'same_topic'
+  | 'same_source'
+  | 'same_judgement'
+
+/** WP414：一张同类卡（已跟着处理的 / 要人确认的）。 */
+export interface FollowedCardData {
+  id: string
+  title: string
+  why: string
+  basis: FollowBasis[]
+  source?: string
+}
+
+/** WP414：决定之后带回来的「同类卡跟着处理」（decide 的回包里 `follow` 那一格）。 */
+export interface DecideFollowData {
+  action: 'reject' | 'snooze' | 'approve'
+  leader_id: string
+  leader_title: string
+  /** 按哪条理由判的（「不要 / 稍后」才有） */
+  reason?: string
+  applied: FollowedCardData[]
+  suggested: FollowedCardData[]
+}
+
+/** 从 decide 的回包里取 `follow`（老服务进程没有就是 `undefined`）。 */
+export function followOf(out: unknown): DecideFollowData | undefined {
+  const f = (out as { follow?: unknown } | null | undefined)?.follow
+  if (typeof f !== 'object' || f === null) return undefined
+  const v = f as Partial<DecideFollowData>
+  if (!Array.isArray(v.applied) || !Array.isArray(v.suggested)) return undefined
+  return v as DecideFollowData
+}
+
+/** WP414：撤回「跟着这张一并处理」的那几张（放回待处理）。 */
+export const undoFollow = (
+  leaderId: string,
+  ids: readonly string[],
+  assignment: string,
+): Promise<{ restored: { id: string }[]; skipped: string[] }> =>
+  api(`/v1/approvals/${encodeURIComponent(leaderId)}/follow/undo`, {
+    method: 'POST',
+    body: { ids: [...ids] },
+    assignment,
+  })
+
+/**
+ * WP414：「不要 / 稍后」之后补一句理由（快捷理由 / 一句话）；已跟着处理的那几张一起补。
+ * 第一次补（还没跟着处理过）时服务端按这条理由去找同类，回包里带 `follow`。
+ */
+export const addDecisionReason = (
+  id: string,
+  input: { reason: string; follower_ids?: readonly string[] },
+  assignment: string,
+): Promise<{ followers: number; follow?: DecideFollowData }> =>
+  api(`/v1/approvals/${encodeURIComponent(id)}/reason`, {
+    method: 'POST',
+    body: {
+      reason: input.reason,
+      ...(input.follower_ids === undefined || input.follower_ids.length === 0
+        ? {}
+        : { follower_ids: [...input.follower_ids] }),
+    },
+    assignment,
+  })
+
+/** WP414：同类卡「一起发」——走 14 §8 的批量决定（同 kind 同职责；每张单独记一次）。 */
+export const approveBatch = (
+  ids: readonly string[],
+  assignment: string,
+): Promise<{ results: { id: string; error?: { code: string; message: string } }[] }> =>
+  api('/v1/approvals/batch/decide', {
+    method: 'POST',
+    body: { entries: ids.map((id) => ({ id })), action: 'approve' },
+    assignment,
+  })
+
 export const setHomeTiles = (
   position_id: string,
   tile_ids: string[],

@@ -41,6 +41,12 @@ export type KnownEventType =
   | 'approval.expired'
   | 'approval.withdrawn'
   | 'approval.superseded'
+  /** WP414：一张卡的「不要 / 稍后」带动了同类卡一并处理（账本：谁的哪个决定带动了哪几张）。 */
+  | 'approval.followed'
+  /** WP414：跟着处理的卡被撤回、放回待处理。 */
+  | 'approval.reopened'
+  /** WP414：决定之后补了一句理由（「不要」理由可选）。 */
+  | 'approval.reason_added'
   // changes (15)
   | 'change.staged'
   | 'change.blocked'

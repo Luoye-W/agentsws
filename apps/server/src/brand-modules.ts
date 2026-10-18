@@ -42,6 +42,7 @@ import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bSalesAssembly } from './b2b-sales.js'
 import type { B2bServiceAssembly } from './b2b-service.js'
 import type { B2bStore } from './b2b-store.js'
+import type { ReasonComplete } from './card-follow.js'
 import type { ChannelsAssembly } from './channels.js'
 import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
@@ -350,6 +351,11 @@ export interface BrandModuleSet {
    * WP329（docs/102 §2.3）：Reddit 写——起草、「发出去」卡、批了交给插件填草稿（人点发送）、读回、记发出记录。
    */
   redditWrites: RedditWriteService
+  /**
+   * WP414（10-19 更正）：「不要 / 稍后」给了理由之后，按理由逐张判同类卡用的那一份模型
+   * （这个品牌真在用的默认模型；stub / 没配回 `undefined`，走剧本）。
+   */
+  reasonComplete?: () => ReasonComplete | undefined
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */

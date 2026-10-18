@@ -38,7 +38,7 @@ import {
   DECK_CARD_BODY_SCROLL_CLASS,
   DECK_CARD_MIN_HEIGHT_CLASS,
 } from '@/components/deck/deck-layout'
-import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
+import { DeckNotePanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { ExecutionPill, WiringNote } from '@/components/deck/execution-note'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
@@ -256,7 +256,7 @@ export function DeckCardView({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [detail, setDetail] = useState(false)
-  const [panel, setPanel] = useState<NoteMode | 'supplement' | null>(null)
+  const [panel, setPanel] = useState<NoteMode | null>(null)
   const [option, setOption] = useState<string>('')
   /** WP278：「我要退出」点了，先问一句（框里列出会断开的个人连接）。 */
   const [leaving, setLeaving] = useState(false)
@@ -335,9 +335,14 @@ export function DeckCardView({
       onDecide({ action, reason: t('exec.ack.reason'), version: card.version })
       return
     }
-    // 不对 / 指导都先就地开面板——卡只有在人真说了句话之后才离开。
-    if (action === 'reject' || action === 'instruct') {
+    // WP414：「修改」就地开一个框（说一句怎么改，或贴素材）——卡在人真说了句话之后才离开
+    if (action === 'instruct') {
       setPanel(action)
+      return
+    }
+    // WP414（Luoye 10-19）：「不要」一下就生效、不强制写理由——可选的快捷理由在卡流顶上那一行补
+    if (action === 'reject') {
+      onDecide({ action, version: card.version })
       return
     }
     onDecide({
@@ -516,17 +521,7 @@ export function DeckCardView({
               {error}
             </p>
           )}
-          {panel === 'supplement' ? (
-            <DeckSupplementPanel
-              onCancel={() => {
-                setPanel(null)
-              }}
-              onSnooze={() => {
-                setPanel(null)
-                onDecide({ action: 'snooze', version: card.version })
-              }}
-            />
-          ) : panel === null && handoffOffer ? (
+          {panel === null && handoffOffer ? (
             <HandoffDecide
               options={card.options ?? []}
               busy={busy === true}
@@ -590,9 +585,6 @@ export function DeckCardView({
               disabled={busy === true}
               optionMissing={isQuestion && option === ''}
               onAction={act}
-              onSupplement={() => {
-                setPanel('supplement')
-              }}
               {...(isContentCard
                 ? {
                     extra: (

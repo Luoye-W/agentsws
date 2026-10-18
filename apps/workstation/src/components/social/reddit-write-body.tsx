@@ -13,10 +13,11 @@ import { REDDIT_WRITE_FORM, type RedditWritePayload } from '@agentsws/contracts'
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
+import { useReportDeckAfter } from '@/components/deck/deck-follow-strip'
 import { InfoTip } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
-import { decide } from '@/lib/api'
+import { decide, followOf } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -42,6 +43,8 @@ export function RedditWriteBody({
   const decidable = card.available_actions.includes('approve')
   const edited =
     text.trim() !== payload.body.text.trim() || title.trim() !== (payload.body.subject ?? '').trim()
+  // WP414：「发送」之后同类卡只问「要一起发吗」（回包里带回来，交给牌堆顶上那一行）
+  const reportAfter = useReportDeckAfter()
   const send = useMutation({
     mutationFn: () =>
       decide(
@@ -64,6 +67,10 @@ export function RedditWriteBody({
         } as never,
         card.position_id,
       ),
+    onSuccess: (out) => {
+      const follow = followOf(out)
+      if (follow !== undefined) reportAfter({ card, action: 'approve', follow })
+    },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: ['approval'] })
       void client.invalidateQueries({ queryKey: ['deck'] })

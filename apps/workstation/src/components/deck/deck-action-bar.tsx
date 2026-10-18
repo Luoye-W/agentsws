@@ -10,14 +10,12 @@
  * 换的只有**文案与摆放**：`approve` 还是 `approve`，动作矩阵、路由、审批状态机
  * 一个字没动（36 §2.1 五动作没有第六个）。
  *
- * 摆放三档：
- * - **主动词**：左起第一个，实心。一张卡只有一个；
- * - **次动词**：跟在后面，描边。`outbound` / `change` / `publish` / `money` / `handoff`
- *   各有两个（含"改一下"那一路），其余只有一个；
- * - **`···` 更多**：主次都排不上的那些——多半是「指导」、以及「需要补素材」与
- *   「稍后」。WP15 那条"没有更多菜单"的老规矩这次松了一格，理由是它当初要防的事
- *   （把一堆没想清楚的选项藏起来）与现在做的事正相反：这里收进去的是**三个固定
- *   的安静动作**，让出来的位置给了"这一下会发生什么"。
+ * 摆放（WP414，Luoye 10-19 真机）：
+ * - **主动词**：左起第一个，实心。一张卡只有一个（有的卡主按钮在卡身里，这里就不出）；
+ * - **次动词**：跟在后面，**一律是描边按钮**，依次「修改 / 不要 / 稍后」——底下那几个只是文字时
+ *   用户会以为是说明；「稍后」不再收进 `···`（有的卡暂时不知道怎么处理，要能一眼跳过）；
+ *   「需要补素材」并进「修改」（点开同一个框：说一句怎么改，或贴素材）；
+ * - **`···`**：只留真正少用的（主次都排不上的动作）；没有就不出。
  */
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
@@ -26,10 +24,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useMode } from '@/lib/mode'
 
-export const MAX_QUICK_ACTIONS = 3
+/** 主动词 + 「修改 / 不要 / 稍后」。 */
+export const MAX_QUICK_ACTIONS = 4
 
 /**
- * 按钮行上的那几个：主动词 + 次动词，按 `LAYOUT_VERBS` 排，最多三个。
+ * 按钮行上的那几个：主动词 + 次动词，按 `LAYOUT_VERBS` 排，最多四个。
  *
  * 只出这张卡**真有**的动作（`available_actions` 是服务端按 kind × state 给的，
  * 这里一个都不添）。
@@ -93,7 +92,7 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
   return card.action_labels?.[a] ?? t(`action.${a}`)
 }
 
-/** `···` 里的那几个：主次都排不上的动作（多半是「指导」与「稍后」）。 */
+/** `···` 里的那几个：主次都排不上的动作（WP414 起一般没有——没有就不出 `···`）。 */
 export function moreActions(card: DeckCard): DeckAction[] {
   return card.available_actions.filter((a) => a !== 'open' && verbRank(card.layout, a) === 'more')
 }
@@ -103,7 +102,6 @@ export function DeckActionBar({
   disabled,
   optionMissing,
   onAction,
-  onSupplement,
   extra,
 }: {
   card: DeckCard
@@ -111,7 +109,6 @@ export function DeckActionBar({
   /** 选择题卡还没选 → approve 按不动（36 §2.1：裸 approve 服务端会拒） */
   optionMissing?: boolean
   onAction: (action: DeckAction) => void
-  onSupplement: () => void
   /** WP219：主次按钮后面再放一个（内容更新卡的「查看改动」）。不是第四个决定，只是看。 */
   extra?: React.ReactNode
 }): React.ReactNode {
@@ -180,63 +177,50 @@ export function DeckActionBar({
       {optionMissing === true ? (
         <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>
       ) : null}
-      {/*
-        安静区收进这一个 `···`：指导（这张卡没把它排进次动词时）、需要补素材、稍后。
-        它们不是对这张卡的判断，而是承认现在判断不了——所以不占前面那三个位置。
-      */}
-      <span className="relative ml-auto inline-flex" ref={box}>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-haspopup="menu"
-          aria-label={t('deck.more')}
-          title={t('deck.more')}
-          data-testid="deck-more"
-          disabled={disabled === true}
-          className="inline-flex size-7 items-center justify-center rounded-md text-ws-muted-fg hover:bg-ws-surface hover:text-ws-ink disabled:opacity-50"
-          onClick={() => {
-            setOpen(!open)
-          }}
-        >
-          <MoreHorizontal className="size-4" aria-hidden />
-        </button>
-        {open ? (
-          // 与岗位卡的 `···`、账号块、品牌切换器同一种朴素下拉：一个按钮 + 一张列表
-          <div
-            role="menu"
-            data-testid="deck-more-menu"
-            className="absolute right-0 bottom-full z-50 mb-1 flex w-44 flex-col rounded-md border bg-popover p-1 shadow-md"
+      {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；没有就不出 */}
+      {more.length === 0 ? null : (
+        <span className="relative ml-auto inline-flex" ref={box}>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-haspopup="menu"
+            aria-label={t('deck.more')}
+            title={t('deck.more')}
+            data-testid="deck-more"
+            disabled={disabled === true}
+            className="inline-flex size-7 items-center justify-center rounded-md text-ws-muted-fg hover:bg-ws-surface hover:text-ws-ink disabled:opacity-50"
+            onClick={() => {
+              setOpen(!open)
+            }}
           >
-            {more.map((action) => (
-              <button
-                key={action}
-                type="button"
-                role="menuitem"
-                data-action={action}
-                className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-                onClick={() => {
-                  setOpen(false)
-                  onAction(action)
-                }}
-              >
-                {labelOf(action)}
-              </button>
-            ))}
-            <button
-              type="button"
-              role="menuitem"
-              data-action="supplement"
-              className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-              onClick={() => {
-                setOpen(false)
-                onSupplement()
-              }}
+            <MoreHorizontal className="size-4" aria-hidden />
+          </button>
+          {open ? (
+            // 与岗位卡的 `···`、账号块、品牌切换器同一种朴素下拉：一个按钮 + 一张列表
+            <div
+              role="menu"
+              data-testid="deck-more-menu"
+              className="absolute right-0 bottom-full z-50 mb-1 flex w-44 flex-col rounded-md border bg-popover p-1 shadow-md"
             >
-              {t('deck.needs_media')}
-            </button>
-          </div>
-        ) : null}
-      </span>
+              {more.map((action) => (
+                <button
+                  key={action}
+                  type="button"
+                  role="menuitem"
+                  data-action={action}
+                  className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+                  onClick={() => {
+                    setOpen(false)
+                    onAction(action)
+                  }}
+                >
+                  {labelOf(action)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </span>
+      )}
     </div>
   )
 }

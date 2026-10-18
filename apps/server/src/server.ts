@@ -370,6 +370,7 @@ import {
   installBrowserSkillCli,
   readLock,
 } from './browserskill-install.js'
+import { createReasonJudge, similarApprovals } from './card-follow.js'
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
@@ -9095,6 +9096,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       redditWrites,
+      // WP414（10-19 更正）：「不要 / 稍后」给了理由后按理由逐张判同类卡（stub / 没配走剧本）
+      reasonComplete: () => {
+        const models = effectiveModels()
+        const ref = models.configured() ? models.defaultRef() : undefined
+        if (ref === undefined || ref.provider === 'stub') return undefined
+        return async (prompt, input) =>
+          (
+            await gatewayProxy.complete({
+              messages: [{ role: 'user', content: prompt }],
+              meta: {
+                workspace_id: ws,
+                assignment_id: input.assignment_id as never,
+                role_id: input.leader.role_id as never,
+                run_id: `card_follow_${randomBytes(4).toString('hex')}` as never,
+                purpose: 'judge',
+              },
+              model: ref,
+              max_output_tokens: 1500,
+              thinking: 'off',
+            })
+          ).text
+      },
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
       ...(competitorStore === undefined ? {} : { competitorStore }),
@@ -13496,6 +13519,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modules: kernel.modules,
     reconcile,
     approvals,
+    // WP414：「发送 / 通过」之后问要不要一起发——「像」按同一个对象 / 同一话题 / 同一来源 + 同一判断依据算
+    similarCards: similarApprovals,
+    // WP414（10-19 更正）：「不要 / 稍后」给了理由才跟——按理由由 AI 逐张判（词重合只预筛；stub 走剧本）
+    judgeByReason: createReasonJudge({
+      complete: async (input) =>
+        (await brandModules.forWorkspace(input.leader.workspace_id)).reasonComplete?.(),
+    }),
     // WP174：`POST /v1/approvals` 的 `scope_manager` 也走岗位上级 → 老板
     routeScopeManager,
     changes: txn.ledger,

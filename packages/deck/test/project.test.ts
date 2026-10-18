@@ -43,7 +43,7 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     expect(card.available_actions).toEqual(['approve', 'reject', 'instruct', 'snooze', 'open'])
     expect(card.action_labels?.approve).toBe('发送')
     expect(card.action_labels?.reject).toBe('不发')
-    expect(card.action_labels?.instruct).toBe('指导')
+    expect(card.action_labels?.instruct).toBe('修改')
     expect(card.channel).toBe('email')
     expect(card.version).toBe(1)
     expect(card.position_id).toBe('asg_1')

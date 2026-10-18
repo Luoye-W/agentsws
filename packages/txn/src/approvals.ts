@@ -518,6 +518,7 @@ export class ApprovalBusImpl implements ApprovalBus {
         : {}),
       ...(input.redirect_to !== undefined ? { redirect_to: input.redirect_to } : {}),
       ...(input.defer_until !== undefined ? { defer_until: input.defer_until } : {}),
+      ...(input.followed !== undefined ? { followed: { ...input.followed } } : {}),
     }
 
     item.decision = decision
@@ -586,6 +587,7 @@ export class ApprovalBusImpl implements ApprovalBus {
         rejected: learning === 'rejected',
         ...(decision.edit_diff ? { edit_diff: decision.edit_diff } : {}),
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.followed !== undefined ? { followed_from: input.followed.leader_id } : {}),
         self_approved,
         via: input.via,
       },
@@ -832,6 +834,76 @@ export class ApprovalBusImpl implements ApprovalBus {
       actor: { kind: 'system', id: 'txn' },
       subject: { type: 'approval_item', id: item.id },
       payload: { reason },
+      item_id: item.id,
+    })
+    return item
+  }
+
+  /**
+   * WP414：「不要 / 稍后」了的卡放回待处理（同类卡跟随之后人点了「撤回」）。
+   * 只认 `rejected` / `deferred`——批了、施行了、过期、撤回的一个字不动（回 `undefined`）。
+   * 原来那次决定进 `approval.reopened` 的 payload（账本里看得到撤回前是什么）。
+   */
+  async reopen(
+    id: string,
+    by: PersonId,
+    input: { reason: string },
+  ): Promise<ApprovalItem | undefined> {
+    const item = this.rt.store.getApproval(id)
+    if (item === undefined) return undefined
+    if (item.state !== 'rejected' && item.state !== 'deferred') return undefined
+    const previous = { state: item.state, ...(item.decision ? { decision: item.decision } : {}) }
+    const now = this.rt.now()
+    item.state = 'pending'
+    delete item.decision
+    item.updated_at = now
+    this.rt.store.revokeTokensFor(item.id)
+    this.rt.store.putApproval(item)
+    await this.rt.emit('approval.reopened', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'person', id: by },
+      subject: { type: 'approval_item', id: item.id },
+      payload: {
+        by,
+        reason: input.reason,
+        previous_state: previous.state,
+        ...(previous.decision === undefined
+          ? {}
+          : {
+              previous_action: previous.decision.action,
+              ...(previous.decision.reason === undefined
+                ? {}
+                : { previous_reason: previous.decision.reason }),
+              ...(previous.decision.followed === undefined
+                ? {}
+                : { followed_from: previous.decision.followed.leader_id }),
+            }),
+      },
+      item_id: item.id,
+    })
+    // 重新投给原来那几位收件人（旧令牌已全部作废）
+    await this.route(item)
+    return this.rt.store.getApproval(item.id)
+  }
+
+  /** WP414：决定之后补一句理由（只有那次决定的本人能补）。 */
+  async annotate(
+    id: string,
+    by: PersonId,
+    input: { reason: string },
+  ): Promise<ApprovalItem | undefined> {
+    const item = this.rt.store.getApproval(id)
+    const reason = input.reason.trim()
+    if (item?.decision === undefined || reason === '') return undefined
+    if (item.decision.by !== by) throw new TxnError('forbidden', '只有做这次决定的人能补理由')
+    item.decision = { ...item.decision, reason }
+    item.updated_at = this.rt.now()
+    this.rt.store.putApproval(item)
+    await this.rt.emit('approval.reason_added', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'person', id: by },
+      subject: { type: 'approval_item', id: item.id },
+      payload: { reason, state: item.state, action: item.decision.action },
       item_id: item.id,
     })
     return item

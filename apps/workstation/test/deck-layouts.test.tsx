@@ -324,7 +324,7 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
     expect(within(screen.getByTestId('deck-action-bar')).getByText('批准')).toBeTruthy()
   })
 
-  it('「指导」在选择卡上排不进按钮行，收进 ···（动作还在，位置换了）', async () => {
+  it('WP414：选择卡上「我来说」（修改）也外露成按钮，没有 ···', () => {
     renderCard(
       layoutCard('choice', {
         kind: 'ai_question',
@@ -335,10 +335,8 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
       }),
     )
     const bar = screen.getByTestId('deck-action-bar')
-    expect(within(bar).queryByText('我来说')).toBeNull()
-    await userEvent.click(screen.getByTestId('deck-more'))
-    const menu = screen.getByTestId('deck-more-menu')
-    expect(within(menu).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
+    expect(within(bar).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
+    expect(screen.queryByTestId('deck-more')).toBeNull()
   })
 })
 

@@ -1,5 +1,7 @@
 /**
- * 动作行里就地展开的三块折叠区（37 §1 第 7 行：**点开前不在 DOM 里**）。
+ * 动作行里就地展开的折叠区（37 §1 第 7 行：**点开前不在 DOM 里**）。
+ *
+ * WP414：「需要补素材」那一块并进了「修改」（同一个框），「不要」一下就生效、不再开写理由的框。
  *
  * 它们不是抽屉、不是弹窗，而是**替换掉动作行本身**——卡面永远一屏读完，人不会一边
  * 写指导一边看不见自己在给哪张卡写。渐进披露的意思也就是字面的意思：这些 textarea
@@ -82,14 +84,16 @@ export function DeckNotePanel({
         </div>
       ) : null}
       {/* WP43 ③：提示进问号；输入框自己的 aria-label 照旧 */}
+      {/* WP414：「修改」= 原来的「改一下」+「需要补素材」：说一句怎么改，或贴素材 / 链接 */}
       <p className="flex items-center gap-1 text-xs font-medium">
-        {mode === 'instruct' ? t('card.instruct.title') : t('action.reject')}
-        <Hint text={mode === 'instruct' ? t('deck.instruct.hint') : t('deck.reject.hint')} />
+        {mode === 'instruct' ? t('deck.revise.title') : t('action.reject')}
+        <Hint text={mode === 'instruct' ? t('deck.revise.hint') : t('deck.reject.hint')} />
       </p>
       <Textarea
         autoFocus
         rows={3}
         aria-label={mode === 'instruct' ? t('card.instruct.text') : t('deck.reject.hint')}
+        {...(mode === 'instruct' ? { placeholder: t('deck.revise.placeholder') } : {})}
         value={text}
         onChange={(e) => {
           setText(e.target.value)
@@ -136,39 +140,6 @@ export function DeckNotePanel({
         指导会变成 AI 对客户说的话，问 AI 不会（面板自带那行标注）。
       */}
       {mode === 'instruct' ? <AskAiPanel {...(ask === undefined ? {} : { scope: ask })} /> : null}
-    </div>
-  )
-}
-
-/**
- *「需要补素材」= `ai_question` 的反向入口（37 §1 第 6 行）。
- *
- * 正向的 `ai_question` 是 AI 问人「这条缺资料」；这里是人对 AI 说同一句话。v1 只有
- * 前端形态：`/v1` 上还没有这个入口（WP19 的「问 AI 单轮入口」一起做），所以面板明说
- * 为什么点不动，而不是假装提交成功。
- */
-export function DeckSupplementPanel({
-  onCancel,
-  onSnooze,
-}: {
-  onCancel: () => void
-  onSnooze: () => void
-}): React.ReactNode {
-  const { t } = useApp()
-  return (
-    <div className="flex flex-col gap-2" data-testid="deck-panel-supplement">
-      <p className="flex items-center gap-1 text-sm font-medium">
-        {t('deck.supplement.title')}
-        <Hint text={t('deck.supplement.hint')} />
-      </p>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onSnooze}>
-          {t('deck.supplement.snooze')}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>
-          {t('deck.back')}
-        </Button>
-      </div>
     </div>
   )
 }
