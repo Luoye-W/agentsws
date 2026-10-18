@@ -891,6 +891,34 @@ upstreams:
       - packages/skills/test/official-skills.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP397（docs/106 §13，A13）：Amazon 官方卖家技能 12 本，**原样收录**（Apache-2.0）。上游没打 tag，
+  # 钉提交；每本收进 packages/skills/bundled/amazon-sp-<名>/（SKILL.md + references/ + LICENSE 原样，
+  # sha256 记在各自的 agentsws.json），我们的话在 AGENTSWS.md 与 evals/。上游 eval/（要它的模拟服务器）、
+  # commands/、.mcp.json 不带；连官方卖家连接是 WP399 的事。升级 = 换文件 + 改旁注的提交 / sha256 / version。
+  - id: amazon-sp-agentic-toolkit
+    kind: ported
+    why: Amazon 运营岗位（亚马逊店铺运营）按需加载的 12 本官方技能：断货预防、FBA 入库、Listing 四件套与分诊、月结对账、开工单、经营数据、子账号授权、SP-API 问答
+    repo: amzn/selling-partner-agentic-toolkit
+    pinned_commit: 8d90d3b7c1537254b53c82651ac31fdbf0089368
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills
+      - LICENSE
+      - .mcp.json
+    we_depend_on:
+      - 'skills/<名>/SKILL.md 与 references/*.md → packages/skills/bundled/amazon-sp-<名>/（原样，sha256 记在 agentsws.json）'
+      - 'frontmatter 的 name / description / version（入库名换成 amazon-sp-<名>，上游原名记 upstream_name）'
+      - '工具名（listings_patchListingsItem、fbaInventory_getInventorySummaries、fbaInbound_* …）——WP399 接上官方卖家连接后要对得上'
+      - 'stockout-prevention / listing-issues 里「DO NOT EXECUTE without approval」两句（bundled.ts 的 AUTHORIZATION_PHRASE_EXCEPTIONS 逐字放行）'
+      - 'Apache-2.0 许可证（换了许可证就不能再原样分发）'
+    wishlist:
+      - 新增技能目录（例如请求评价、Coupon / Deal、广告）
+      - 许可证变化
+      - 写动作的确认方式变了（AGENTSWS.md 第 2 条要跟着改）
+    covered_by:
+      - packages/skills/test/wp397-amazon-official.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
   # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
   - id: tremor-raw

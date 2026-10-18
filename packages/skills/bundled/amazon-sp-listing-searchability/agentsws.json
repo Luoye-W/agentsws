@@ -1,0 +1,29 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-listing-searchability",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/listing-searchability",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：搜不到怎么办",
+    "display_name_en": "Amazon official: listing searchability",
+    "summary": "有没有被收录、标题五点关键词怎么改",
+    "summary_en": "Why a listing is not found, and search content",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [],
+  "sha256": {
+    "SKILL.md": "a6b8dae896216505fd5b4c084870380e71c65195a4427abce3a4f272489ab41b",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

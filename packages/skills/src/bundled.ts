@@ -120,9 +120,30 @@ export const SKILL_AUTHORIZATION_PHRASES: readonly string[] = [
   'upload directly',
 ]
 
-/** 技能文本里命中了哪些授权字样（大小写不敏感）。 */
-export function findAuthorizationPhrases(markdown: string): string[] {
-  const lower = markdown.toLowerCase()
+/**
+ * WP397（docs/101 §1.3 的先例：换说法或单开例外）：**官方原样收录**的正文里，授权字样只出现在
+ * 「禁止」句里（Amazon 官方的 `DO NOT EXECUTE without approval`）。官方正文一个字节不能改，
+ * 所以按技能单开例外：只放行这里逐字列出的整句，同一个词出现在别处照样拦。
+ *
+ * 只给原样收录的技能用（测试查：这里的每个名字都有官方旁注）；我们自己写的、改写的一律换说法。
+ */
+export const AUTHORIZATION_PHRASE_EXCEPTIONS: Readonly<Record<string, readonly string[]>> = {
+  'amazon-sp-listing-issues': ['Draft the fix (DO NOT EXECUTE without approval)'],
+  'amazon-sp-stockout-prevention': ['Draft actions (DO NOT EXECUTE without approval)'],
+}
+
+/**
+ * 技能文本里命中了哪些授权字样（大小写不敏感）。
+ *
+ * `allowed`：逐字放行的整句（{@link AUTHORIZATION_PHRASE_EXCEPTIONS}）；先把这几句整句去掉再查。
+ */
+export function findAuthorizationPhrases(
+  markdown: string,
+  allowed: readonly string[] = [],
+): string[] {
+  let text = markdown
+  for (const sentence of allowed) text = text.split(sentence).join('')
+  const lower = text.toLowerCase()
   return SKILL_AUTHORIZATION_PHRASES.filter((p) => lower.includes(p.toLowerCase()))
 }
 
@@ -236,6 +257,12 @@ export const OFFICIAL_META_FILE = 'agentsws.json'
  */
 export interface OfficialSkillMeta {
   kind: 'official'
+  /**
+   * WP397：入库用的名字（= 目录名）。上游 SKILL.md 的 `name` 和目录名不同时写它
+   * （Amazon 官方的 `stockout-prevention` 收进来叫 `amazon-sp-stockout-prevention`）；
+   * 拼出来的 frontmatter `name` 换成它，上游原名记在 `upstream_name`。不写 = 用上游的名字。
+   */
+  name?: string
   upstream: {
     publisher: string
     repo: string
@@ -319,8 +346,11 @@ export function composeOfficialSkill(
   const root = join(dir, name)
   const official = splitFrontmatter(readFileSync(join(root, 'SKILL.md'), 'utf8'))
   const extra: Record<string, string> = { ...meta.frontmatter }
+  if (meta.name !== undefined && meta.name !== official.frontmatter.name) {
+    extra.upstream_name = official.frontmatter.name
+  }
   const fm: Frontmatter = {
-    name: official.frontmatter.name,
+    name: meta.name ?? official.frontmatter.name,
     ...(official.frontmatter.description === undefined
       ? {}
       : { description: official.frontmatter.description }),

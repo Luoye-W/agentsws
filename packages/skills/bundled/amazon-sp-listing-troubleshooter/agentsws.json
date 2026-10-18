@@ -1,0 +1,29 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-listing-troubleshooter",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/listing-troubleshooter",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：Listing 问题分诊",
+    "display_name_en": "Amazon official: listing troubleshooter",
+    "summary": "先看是报错、买不了还是搜不到，再转给对应那本",
+    "summary_en": "Scan a listing and route to the right fix",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [],
+  "sha256": {
+    "SKILL.md": "e2514c6b31e086c1db4c4c4d9aa72b2d027814091e396a27335d4e0ccec37d4c",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

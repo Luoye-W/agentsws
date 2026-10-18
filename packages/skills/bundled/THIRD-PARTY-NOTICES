@@ -2,7 +2,8 @@ Third-party notices for packages/skills/bundled/
 
 Most SKILL.md files in this directory are Chinese translations and rewrites of material from
 the projects below, adapted to Agents Workshop's rules (see the first line of each SKILL.md).
-The exception is shopify/: Shopify's official skill, included unmodified (see its section below).
+The exceptions are shopify/ and amazon-sp-*/: official skills from Shopify and Amazon, included
+unmodified (see their sections below).
 
 ================================================================================
 coreyhaines31/marketingskills
@@ -164,3 +165,31 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================================
+amzn/selling-partner-agentic-toolkit
+https://github.com/amzn/selling-partner-agentic-toolkit
+plugin version 1.0.0 (no release tag), pinned commit 8d90d3b7c1537254b53c82651ac31fdbf0089368
+Used in: amazon-sp-fba-inbound-management, amazon-sp-finance-month-end-closer,
+         amazon-sp-invite-secondary-users, amazon-sp-listing-buyability,
+         amazon-sp-listing-compliance, amazon-sp-listing-issues, amazon-sp-listing-searchability,
+         amazon-sp-listing-troubleshooter, amazon-sp-seller-analytics, amazon-sp-sp-api-knowledge,
+         amazon-sp-stockout-prevention, amazon-sp-support-case-helper
+         (skills/<name>/SKILL.md and skills/<name>/references/*.md included unmodified, each
+         directory carries the upstream LICENSE file; our additions live in agentsws.json,
+         AGENTSWS.md and evals/ next to them. The upstream eval/ files, commands/ and .mcp.json
+         are not included.)
+--------------------------------------------------------------------------------
+Copyright Amazon.com, Inc. or its affiliates.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

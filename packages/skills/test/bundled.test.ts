@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  AUTHORIZATION_PHRASE_EXCEPTIONS,
   BUNDLED_SKILLS_DIR,
   findAuthorizationPhrases,
   listBundledSkills,
@@ -52,6 +53,12 @@ const PORTED = ['customer-care']
 const RESEARCH = ['social-research', 'trend-research']
 /** WP216：平台官方技能，原样收录（文件一个字节不改，旁注另放）。 */
 const OFFICIAL = ['shopify']
+/** WP397：Amazon 官方卖家技能 12 本，原样收录（格式另在 `wp397-amazon-official.test.ts` 查）。 */
+const AMAZON_OFFICIAL = listBundledSkills().filter((n) => n.startsWith('amazon-sp-'))
+/** WP397：改写自 SeaLeap（MIT）与自己写的 Amazon 技能（格式另在 `wp397-amazon-skills.test.ts` 查）。 */
+const AMAZON_OWN = listBundledSkills().filter(
+  (n) => n.startsWith('amazon-') && !n.startsWith('amazon-sp-'),
+)
 const PORTED_FROM = join(
   fileURLToPath(new URL('../../support-core/skills/', import.meta.url)),
   'customer-care',
@@ -69,7 +76,16 @@ const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
   it('WP160 的五个 + WP162 的六个 + WP170 的 B2B 六个都在，目录名即技能名', () => {
     expect(names).toEqual(
-      [...THIRD_PARTY, ...AGENCY, ...OWN, ...PORTED, ...RESEARCH, ...OFFICIAL].sort(),
+      [
+        ...THIRD_PARTY,
+        ...AGENCY,
+        ...OWN,
+        ...PORTED,
+        ...RESEARCH,
+        ...OFFICIAL,
+        ...AMAZON_OFFICIAL,
+        ...AMAZON_OWN,
+      ].sort(),
     )
   })
 
@@ -245,7 +261,12 @@ describe('自带技能：守卫（WP160 改写规矩第一条）', () => {
 
   for (const name of names) {
     it(`${name}：没有「自动发送 / 自动发布 / 直接上传 / without approval」这类授权字样`, () => {
-      expect(findAuthorizationPhrases(readBundledSkill(name).markdown)).toEqual([])
+      expect(
+        findAuthorizationPhrases(
+          readBundledSkill(name).markdown,
+          AUTHORIZATION_PHRASE_EXCEPTIONS[name] ?? [],
+        ),
+      ).toEqual([])
     })
 
     it(`${name}：写明出卡、写明自动化级别不由技能授权`, () => {

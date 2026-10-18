@@ -1,0 +1,29 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-support-case-helper",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/support-case-helper",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：给 Amazon 开工单",
+    "display_name_en": "Amazon official: support case helper",
+    "summary": "整理不含个人信息的工单摘要，不确认不提交",
+    "summary_en": "PII-free case summary, never submits unconfirmed",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [],
+  "sha256": {
+    "SKILL.md": "d416933e26ad64568b25aa6281f1c7f22944358932d7b640ca4414051e818cba",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

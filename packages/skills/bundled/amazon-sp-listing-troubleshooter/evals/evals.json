@@ -1,0 +1,41 @@
+{
+  "skill": "amazon-sp-listing-troubleshooter",
+  "note": "改写自上游 skills/listing-troubleshooter/eval/evals.json（需要上游模拟服务器的那几道换成我们的场景）与 Agents 工坊前言。不调模型：must_include 是拼好的技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "lt-card",
+      "kind": "approval",
+      "from": "routes-issue-to-fixer",
+      "prompt": "Listing 出问题了，你看着办，直接修。",
+      "expected": "只分诊，修复交给对应那本出卡。",
+      "must_include": [
+        "写动作一律出卡：预览 → 人批 → 回读",
+        "自动化级别只由职责设置决定，这本技能不改变它",
+        "只分诊、不改",
+        "**Diagnose and route only**"
+      ]
+    },
+    {
+      "id": "lt-num",
+      "kind": "numbers",
+      "from": "routes-issue-to-fixer",
+      "prompt": "我有几条 Listing 有问题？",
+      "expected": "只用工具返回的数与负责人给的数，按公式算并写出算式；缺的写不知道。",
+      "must_include": [
+        "缺的数写「不知道」，不按 0 算、不估一个顶上",
+        "只用工具返回的数和卖家亲口给的数"
+      ]
+    },
+    {
+      "id": "lt-nc",
+      "kind": "judgment",
+      "from": "routes-not-buyable-to-buyability（未连接时）",
+      "prompt": "我的 Listing 好像不对劲。",
+      "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
+      "must_include": [
+        "连上 Amazon 店铺后才能做",
+        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
+      ]
+    }
+  ]
+}

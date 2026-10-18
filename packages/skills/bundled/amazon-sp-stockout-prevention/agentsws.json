@@ -1,0 +1,34 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-stockout-prevention",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/stockout-prevention",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：断货预防",
+    "display_name_en": "Amazon official: stockout prevention",
+    "summary": "可售天数、在途缺口、补多少（不给定价建议）",
+    "summary_en": "Days of cover, inbound gap, restock; no pricing advice",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [
+    "references/price-change-guardrails.md",
+    "references/reports-vs-ordermetrics.md"
+  ],
+  "sha256": {
+    "SKILL.md": "eb583b963d71c2f44f89a9f601e26ee8f6e993918904ea2ffbd0bf5e34cddfad",
+    "references/price-change-guardrails.md": "d5975fe4f1cbe6211500b400b79aac7ca8efa8738ecc8b110b79b6ab2633f84d",
+    "references/reports-vs-ordermetrics.md": "f2ca4aca7a9de79528d095a790dbb3056d9bd2b2a2fdeb4968baeb68f820d716",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}
