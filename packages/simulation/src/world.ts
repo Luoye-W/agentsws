@@ -422,6 +422,8 @@ const APPLY_ACTIONS = [
 ]
 const CONNECTIONS = ['conn_shopify_admin', 'conn_gmail']
 const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
+/** WP425：模拟里「工坊积分」备用那一条的 provider id（场景注入了「自己的 AI 出错」才挂）。 */
+export const WORKSHOP_BACKUP_PROVIDER = 'workshop'
 
 export interface RunContext {
   run_id: string
@@ -642,6 +644,11 @@ export interface World {
   setBudget(budget: ModelGatewayPolicy['budget']): void
   /** 场景 `model.outage`：从现在起 `ms` 毫秒内所有 provider 调用失败。 */
   startOutage(ms: number): void
+  /**
+   * WP425 场景 `model.own_fault`：自己的 AI（主用）接下来 `times` 次调用回 `code`；挂上「工坊积分」备用，
+   * 开关按 `backup`（缺省开）。
+   */
+  injectOwnFault(fault: { code: number; times: number; backup: 'on' | 'off' }): void
   modelDown(): boolean
   /** 17 §2 事件 → 事件日志（含 correlation.run_id）。 */
   appendRunEvent(req: RunRequest, e: RunEvent): void
@@ -2290,6 +2297,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   // ── 模型网关：stub provider + 可注入的"模型挂了" ──────────────────────
   let outageUntilMs = 0
+  // WP425：自己的 AI 还要出几次错、出什么错；备用（工坊积分）挂没挂、开关开没开
+  let ownFault: { code: number; left: number } | undefined
+  let backupMode: 'on' | 'off' | undefined
   // `direct` 与 `dsh` 两条分支：22 的 stub provider 只出文本、不出 tool_calls，
   // **回合就跑不起来**——direct 的 turn loop 空转，dsh 的 agent-loop 一轮就 idle。
   // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）。
@@ -2319,6 +2329,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       if (clock.nowMs() < outageUntilMs) {
         throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
       }
+      if (ownFault !== undefined && ownFault.left > 0) {
+        ownFault.left -= 1
+        throw new ProviderError(`注入的模型故障：provider http ${ownFault.code}`, {
+          status: ownFault.code,
+        })
+      }
       return base.complete(req)
     },
     async embed(texts: string[]) {
@@ -2330,14 +2346,41 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
   }
 
-  const gatewayPolicy = (budget: ModelGatewayPolicy['budget']): ModelGatewayPolicy => ({
-    default: modelRef,
-    prices: opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } },
-    ...(budget === undefined ? {} : { budget }),
-  })
+  /*
+   * WP425：「工坊积分」备用——同一个确定性替身（parity 比的仍是运行时），只是挂在另一个 provider id 上；
+   * 场景里注入了「自己的 AI 出错」才挂（老场景一个字节不变：模型挂了照旧冻结）。
+   */
+  const backupRef: ModelRef = { provider: WORKSHOP_BACKUP_PROVIDER, model: modelRef.model }
+  const backupProvider: ModelProvider = {
+    ...gatedProvider,
+    ref: backupRef,
+    async complete(req: Parameters<ModelProvider['complete']>[0]) {
+      if (clock.nowMs() < outageUntilMs) {
+        throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
+      }
+      return base.complete(req)
+    },
+  }
+  let currentBudget: ModelGatewayPolicy['budget']
+  const gatewayPolicy = (budget: ModelGatewayPolicy['budget']): ModelGatewayPolicy => {
+    const prices = opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } }
+    const own = prices[`${modelRef.provider}/${modelRef.model}`]
+    return {
+      default: modelRef,
+      prices:
+        backupMode === undefined || own === undefined
+          ? prices
+          : { ...prices, [`${backupRef.provider}/${backupRef.model}`]: own },
+      ...(budget === undefined ? {} : { budget }),
+      ...(backupMode === undefined
+        ? {}
+        : { source_fallback: { to: backupRef, enabled: backupMode === 'on' } }),
+    }
+  }
   const buildGateway = (budget: ModelGatewayPolicy['budget']): ModelGatewayApi => {
+    currentBudget = budget
     const built = createModelGateway({
-      providers: [gatedProvider],
+      providers: backupMode === undefined ? [gatedProvider] : [gatedProvider, backupProvider],
       policy: gatewayPolicy(budget),
       clock,
       env: {},
@@ -3563,6 +3606,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       outages.push({ from_ms: from, to_ms: outageUntilMs })
     },
     modelDown: () => clock.nowMs() < outageUntilMs,
+    injectOwnFault(fault) {
+      ownFault = { code: fault.code, left: fault.times }
+      backupMode = fault.backup
+      // 备用挂上 / 开关变了：换一套 provider 与策略（账照留：同一个网关实例）
+      gateway.reconfigure({
+        providers: [gatedProvider, backupProvider],
+        policy: gatewayPolicy(currentBudget),
+      })
+    },
     appendRunEvent(req, e) {
       const { type, ...payload } = e
       appendEnvelope({

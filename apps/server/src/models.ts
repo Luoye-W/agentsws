@@ -26,6 +26,7 @@ import type {
   DeepSeekQuotaView,
   DiscoverModelsInput,
   FreeChatModelThinking,
+  ModelAiSourceView,
   ModelDefaultsView,
   ModelImageUsing,
   ModelImageView,
@@ -232,6 +233,15 @@ const withoutRetired = (models: string[]): string[] => models.filter((m) => !isR
  */
 export const CLOUD_IMAGE_PROVIDER_ID = 'agentsws-cloud'
 
+/**
+ * WP425：自己的 AI 用不了时切到工坊积分——登录了工坊账号、但设置里没加积分那张卡时，备用那一条的 provider id
+ * （只挂网关、只出现在用量里；不进「已配的」列表、不进 AI 钮）。加了那张卡就用那张卡的。
+ */
+export const CLOUD_FALLBACK_PROVIDER_ID = 'agentsws-cloud-backup'
+
+/** WP425：没加积分那张卡时，备用用哪个模型（与积分那张卡的默认模型同一个）。 */
+export const CLOUD_FALLBACK_DEFAULT_MODEL = 'deepseek-flash'
+
 /** WP274：型号名 → 给人看的名字（`gpt-image-2.5-flare` → GPT Image 2.5）。认不出就原样。 */
 export function prettyImageModel(model: string): string {
   const name = model.trim().toLowerCase()
@@ -370,6 +380,11 @@ interface ModelsStateFile {
      * 52 O3「跟随公司默认」与 O4「从某个品牌复制」复制的就是这一份决定，生图也该跟着走。
      */
     image?: { provider_id: string; model: string; edit_model?: string }
+    /**
+     * WP425：开关「自己的用不了时用工坊积分接着做」。不写 = 登录了工坊账号就开（默认开）；
+     * 放在 `defaults` 里：跟随公司默认 / 从别的品牌复制时一起走。
+     */
+    fallback_cloud?: boolean
     budget?: {
       workspace_daily_base?: number
       workspace_monthly_base?: number
@@ -481,6 +496,13 @@ export interface ModelSettingsSnapshot {
 
 export interface ModelsAssembly {
   port: ModelsPort
+  /**
+   * WP425：「自己的用不了时用工坊积分接着做」现在怎样——`available` = 登录了工坊账号（有备用），
+   * `on` = 开关开着（登录了默认开）。
+   */
+  fallbackCloud(): { available: boolean; on: boolean }
+  /** WP425：改那个开关（保存即生效；对话里那张「用工坊积分接着做」卡也走这里）。 */
+  setFallbackCloud(on: boolean): void
   /** 这台机器上有没有能用的模型（运行时与首页黄条问它，不再看环境变量）。 */
   configured(): boolean
   /** 现在生效的默认模型（运行时组 `RunRequest.runtime.model` 用）。 */
@@ -1467,6 +1489,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * （{@link CLOUD_TOKEN_SECRET_ID}）——所以取 key 与判"有没有 key"都要先问这一句。
    */
   const isCloud = (id: string): boolean =>
+    id === CLOUD_FALLBACK_PROVIDER_ID ||
     state.providers.find((p) => p.id === id)?.kind === 'agentsws_cloud'
 
   /** WP134：这条是不是「用我的 DeepSeek 账号登录」那一种（凭据在 dsh 凭据库里，不在我们这儿）。 */
@@ -2174,6 +2197,49 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return { provider: config.id, model, region: config.region }
   }
 
+  /**
+   * WP425：AI 来源顺序的「备用」——工坊积分那一条（登录了工坊账号才有）。设置里加了积分那张卡就用它
+   * （和 AI 钮里那一组同一条、同一个模型）；没加就现算一条虚的（同一把工作区令牌、同一个服务入口）。
+   */
+  const cloudFallbackConfig = (): ModelProviderConfig | undefined => {
+    if (!hasCloudToken()) return undefined
+    const row = textConfigs().find((c) => c.kind === 'agentsws_cloud')
+    if (row !== undefined) return row
+    return {
+      id: CLOUD_FALLBACK_PROVIDER_ID,
+      kind: 'agentsws_cloud',
+      label: CLOUD_LABEL,
+      base_url: cloudAiBaseUrl(env),
+      model: CLOUD_FALLBACK_DEFAULT_MODEL,
+      region: 'cn',
+      price_in: 0,
+      price_out: 0,
+      price_cached: 0,
+    }
+  }
+
+  /** WP425：开关现在开没开（没登录工坊账号时无所谓开关，一律当没有备用）。 */
+  const fallbackCloudOn = (): boolean => state.defaults.fallback_cloud ?? true
+
+  /** WP425：主用来源给人看的名字（切换那一句里的「你的 X」）。 */
+  const sourceLabelFor = (c: ModelProviderConfig): string => {
+    if (c.kind === 'openai-codex') return 'ChatGPT'
+    if (c.kind === 'deepseek_account') return 'DeepSeek 账号'
+    return providerDisplayLabel(c)
+  }
+
+  const sourceFallbackOf = (): ModelGatewayPolicy['source_fallback'] => {
+    const cloud = cloudFallbackConfig()
+    if (cloud === undefined) return undefined
+    const labels: Record<string, string> = {}
+    for (const c of textConfigs()) if (c.kind !== 'agentsws_cloud') labels[c.id] = sourceLabelFor(c)
+    return {
+      to: { provider: cloud.id, model: cloud.model, region: cloud.region },
+      enabled: fallbackCloudOn(),
+      labels,
+    }
+  }
+
   const policyOf = (): ModelGatewayPolicy => {
     const prices: ModelGatewayPolicy['prices'] = { ...STUB_PRICES }
     for (const c of textConfigs()) {
@@ -2192,11 +2258,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (ref !== undefined) by_purpose[purpose as ModelPurpose] = ref
     }
     const budget = state.defaults.budget ?? {}
+    // WP425：备用那一条（虚的那条也要有一行价，不然网关预留时说「价目里没有」）
+    const source_fallback = sourceFallbackOf()
+    if (source_fallback !== undefined) {
+      const key = `${source_fallback.to.provider}/${source_fallback.to.model}`
+      prices[key] ??= { in: 0, out: 0, cached: 0 }
+    }
     return {
       default: defaultRef(),
       ...(Object.keys(by_purpose).length === 0 ? {} : { by_purpose }),
       prices,
       budget: defined(budget),
+      ...(source_fallback === undefined ? {} : { source_fallback }),
     }
   }
 
@@ -2213,6 +2286,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         const provider = buildProvider(config, model)
         if (provider !== undefined) providers.push(provider)
       }
+    }
+    // WP425：没加积分那张卡、但登录了工坊账号——备用那一条也挂上（只在自己的用不了时才会被调到）
+    const backup = cloudFallbackConfig()
+    if (backup?.id === CLOUD_FALLBACK_PROVIDER_ID && providers.length > 0) {
+      const provider = buildProvider(backup)
+      if (provider !== undefined) providers.push(provider)
     }
     if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
@@ -2685,6 +2764,31 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       // WP370：先是与输入框 AI 钮同一份（同样的名字、同样的次序）；WP42 那条照旧——拉回来的清单里别的模型
       // 接在后面也能选，选了就挂上网关、也进 AI 钮（默认 / 按用途选中的总会挂上）
       choices: defaultChoices(chatChoicesNow(), active),
+      ai_source: aiSourceView(active),
+    }
+  }
+
+  /**
+   * WP425：「AI 来源」那一处——主用（自己的：订阅 / API key / DeepSeek 账号，可多个）、备用（工坊积分）、开关。
+   * 与 AI 钮同一份数据（同样的来源名、同样的分组）。
+   */
+  const aiSourceView = (active: readonly ModelProviderConfig[]): ModelAiSourceView => {
+    const own = active
+      .filter((c) => c.kind !== 'agentsws_cloud')
+      .map((c) => ({
+        provider_id: c.id,
+        label: providerDisplayLabel(c),
+        group: c.kind === 'openai-codex' ? ('subscription' as const) : ('own' as const),
+      }))
+    const cloud = cloudFallbackConfig()
+    return {
+      own,
+      backup: {
+        available: cloud !== undefined,
+        label: CLOUD_LABEL,
+        ...(cloud === undefined ? {} : { model: cloud.model }),
+      },
+      fallback_to_cloud: cloud !== undefined && fallbackCloudOn(),
     }
   }
 
@@ -3090,6 +3194,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         state.defaults.by_purpose = next
       }
       if (input.budget !== undefined) state.defaults.budget = defined(input.budget)
+      // WP425：开关「自己的用不了时用工坊积分接着做」
+      if (input.fallback_to_cloud !== undefined)
+        state.defaults.fallback_cloud = input.fallback_to_cloud
       flush()
       reassemble()
       return defaultsView()
@@ -3230,6 +3337,15 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   return {
     port,
+    fallbackCloud: () => {
+      const available = cloudFallbackConfig() !== undefined
+      return { available, on: available && fallbackCloudOn() }
+    },
+    setFallbackCloud(on) {
+      state.defaults.fallback_cloud = on
+      flush()
+      reassemble()
+    },
     configured: () => textConfigs().length > 0,
     defaultRef,
     imageView: () => imageView(),

@@ -2470,6 +2470,11 @@ const zh: Table = {
   'models.cloud.numbers': '本月用了 {month} 积分 · 余额 {balance}',
 
   'credits.title': '积分',
+  'free_chat.backup_card.text':
+    '打开后，你自己的 AI 用不了的那一轮用工坊积分，下一轮自动回到你自己的。',
+  'free_chat.backup_card.use': '用工坊积分接着做',
+  'credits.own_ai_note':
+    'AI 用你自己的（订阅或 API key）时，AI 那部分不扣积分；数据、云浏览器、增值服务照常用积分。',
   'credits.hint': '1 积分 = ¥1。充值买的永不过期，活动送的按周期清零，扣费先扣有期限的。',
   'credits.not_linked': '还没关联 Agents 工坊账号。关联之后这里会显示余额与用量。',
   'credits.available': '可用',
@@ -2771,6 +2776,14 @@ const zh: Table = {
   'models.pricing.vendor_ok': '{label}：抓到 {n} 条',
   'models.pricing.vendor_failed': '{label}：官网抓取失败，用的是内置价（{reason}）',
   'models.defaults': '哪件事用哪个模型',
+  'models.ai_source': 'AI 来源',
+  'models.ai_source.hint':
+    '先用你自己的 AI（订阅或 API key）；额度用完、连不上或 key 失效时，那一轮自动换成工坊积分接着做，下一轮自动回到你自己的。数据、云浏览器等付费服务不管 AI 用谁，都照常扣积分。',
+  'models.ai_source.primary': '主用',
+  'models.ai_source.backup': '备用',
+  'models.ai_source.no_own': '还没接你自己的 AI',
+  'models.ai_source.backup_off': '登录工坊账号后可用',
+  'models.ai_source.switch': '自己的用不了时用工坊积分接着做',
   'models.defaults.default': '默认',
   'models.defaults.same_as_default': '跟默认一样',
   'models.purpose.run': '跑活（回客户、处理事项）',
@@ -6830,6 +6843,11 @@ const en: Table = {
   'models.cloud.numbers': '{month} credits this month · {balance} left',
 
   'credits.title': 'Credits',
+  'free_chat.backup_card.text':
+    'When your own AI can’t answer, that round uses Workshop credits; the next round goes back to yours.',
+  'free_chat.backup_card.use': 'Continue with Workshop credits',
+  'credits.own_ai_note':
+    'When the AI is your own (subscription or API key), the AI part uses no credits; data, the cloud browser and add-on services still use credits.',
   'credits.hint':
     '1 credit = CNY 1. Credits you buy never expire; granted ones clear each period, and those are spent first.',
   'credits.not_linked':
@@ -7148,6 +7166,14 @@ const en: Table = {
   'models.pricing.vendor_ok': '{label}: {n} prices',
   'models.pricing.vendor_failed': '{label}: fetch failed, keeping the built-in price ({reason})',
   'models.defaults': 'Which model for what',
+  'models.ai_source': 'AI source',
+  'models.ai_source.hint':
+    'Your own AI (subscription or API key) goes first. When it runs out of quota, can’t be reached or its key stops working, that round switches to Workshop credits and the next round goes back to yours. Paid services like data and the cloud browser use credits no matter which AI you use.',
+  'models.ai_source.primary': 'Primary',
+  'models.ai_source.backup': 'Backup',
+  'models.ai_source.no_own': 'No AI of your own yet',
+  'models.ai_source.backup_off': 'Sign in to a Workshop account to use it',
+  'models.ai_source.switch': 'Use Workshop credits when mine can’t',
   'models.defaults.default': 'Default',
   'models.defaults.same_as_default': 'Same as default',
   'models.purpose.run': 'Running work (replies, matters)',

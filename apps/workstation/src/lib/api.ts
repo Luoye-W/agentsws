@@ -2600,6 +2600,15 @@ export interface ModelDefaultsView {
   org_default?: boolean
   /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
   org_default_brand?: string
+  /** WP425：AI 来源（主用：自己的；备用：工坊积分；开关）。老服务端没有。 */
+  ai_source?: ModelAiSourceView
+}
+
+/** WP425：AI 来源顺序（与输入框 AI 钮同一份数据）。 */
+export interface ModelAiSourceView {
+  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  backup: { available: boolean; label: string; model?: string }
+  fallback_to_cloud: boolean
 }
 
 export interface ModelUsageRow {
@@ -2702,6 +2711,8 @@ export const setModelDefaults = (
       workspace_monthly_base?: number
       assignment_daily_base?: number
     }
+    /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
+    fallback_to_cloud?: boolean
   },
   assignment?: string,
 ): Promise<ModelDefaultsView> =>

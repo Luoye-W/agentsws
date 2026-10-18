@@ -28471,6 +28471,7 @@ export interface operations {
           by_purpose?: {
             [key: string]: string
           }
+          fallback_to_cloud?: boolean
           budget?: {
             workspace_daily_base?: number
             workspace_monthly_base?: number

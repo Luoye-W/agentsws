@@ -2,7 +2,7 @@
  * `expected` 的结构化断言（26 §1）。断言不变量与结构，**不断言措辞**——
  * `reply_omits` / `reply_includes_any` 是"必须没有 / 至少有一个"的白名单，不是逐字比对。
  */
-import type { ChangeKind } from '@agentsws/contracts'
+import { type ChangeKind, MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import { type DeckKind, isQueueCard } from '@agentsws/deck'
 import { assemblePrompt } from '@agentsws/stand-ins'
 import type { Evidence } from './evidence.js'
@@ -214,6 +214,31 @@ export function checkExpectations(
       'run_failed_codes',
       missing.length === 0,
       missing.length === 0 ? `[${[...codes].join(', ')}]` : `缺：${missing.join(', ')}`,
+    )
+  }
+  // WP425：运行记录里「这一轮用工坊积分」那一行
+  if (expected.model_source_switches !== undefined) {
+    const n = evidence.events.filter(
+      (e) => e.type === 'progress' && payloadOf(e).step === MODEL_SOURCE_SWITCHED_STEP,
+    ).length
+    add(
+      'model_source_switches',
+      matchNumeric(n, expected.model_source_switches),
+      `${n}（期望 ${String(expected.model_source_switches)}）`,
+    )
+  }
+  // WP425：用量里出现过的模型来源
+  if (expected.model_providers_used !== undefined) {
+    const used = new Set(
+      evidence.events
+        .filter((e) => e.type === 'model.usage')
+        .map((e) => String((payloadOf(e).model as { provider?: unknown })?.provider ?? '')),
+    )
+    const missing = expected.model_providers_used.filter((p) => !used.has(p))
+    add(
+      'model_providers_used',
+      missing.length === 0,
+      missing.length === 0 ? `[${[...used].join(', ')}]` : `没用过：${missing.join(', ')}`,
     )
   }
   if (expected.notifications_to !== undefined) {

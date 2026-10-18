@@ -10,6 +10,8 @@
  * - 其余（内部错、参数表、装配失败…）→ 一句通用的「工坊这边出错了，已记下」。
  */
 
+import { isSourceFallbackOffText } from '@agentsws/model-gateway'
+
 /** 内部错误的那句通用人话（派工单原文）。 */
 export const INTERNAL_FAILURE_TEXT = '工坊这边出错了，已记下，点重试或稍后再试'
 
@@ -30,6 +32,8 @@ const AUTH_ZH = '模型账号的登录过期了（或 key 不对），重新登�
 
 export function runFailureText(error: { code: string; message: string }): string {
   const msg = error.message.trim()
+  // WP425：自己的 AI 用不了、开关关着停下的那一句本来就是给人看的（说清原因与开关）
+  if (isSourceFallbackOffText(error.message)) return msg
   if (error.code === 'unauthenticated' && msg !== '') return HAS_CJK.test(msg) ? msg : AUTH_ZH
   if (QUOTA_HINT.test(msg) && msg.length <= 120) return HAS_CJK.test(msg) ? msg : QUOTA_ZH
   if (error.code === 'budget_exhausted') return '这次的额度用完了，调高额度后点重试'

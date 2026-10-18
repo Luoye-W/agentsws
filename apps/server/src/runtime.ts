@@ -66,6 +66,7 @@ import {
   createRunWatchdog,
   GENUI_DISPLAY_RULE,
   type MatterLiveRun,
+  MODEL_SOURCE_SWITCHED_STEP,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
@@ -98,6 +99,7 @@ import {
   skillPromptSections,
 } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import { isSourceFallbackOffText } from '@agentsws/model-gateway'
 import {
   houseRulesSection,
   nextSuggestionSection,
@@ -174,6 +176,7 @@ import {
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
+import { MODEL_FALLBACK_CLOUD_TARGET } from './setup-targets.js'
 
 /** WP387：交代建 / 读 Google 提醒结果的那条职责（信息监控）。 */
 const GOOGLE_ALERTS_ROLE = 'pr.monitoring'
@@ -2688,6 +2691,22 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
       if (e.type === 'run.failed') failure ??= e.error
       if (e.type === 'budget.exhausted') budgetHit ??= e.which
+      /*
+       * WP425：这一轮从自己的 AI 切到了工坊积分——对话（事项时间线）里照实一行
+       * 「你的 ChatGPT 额度用完了，这一轮用工坊积分」；运行记录（事件日志）里那条 progress 照记。
+       */
+      if (e.type === 'progress' && e.step === MODEL_SOURCE_SWITCHED_STEP && e.note !== undefined) {
+        try {
+          work?.appendEvent(input.matter.id, {
+            kind: 'status',
+            text: e.note,
+            actor: { kind: 'system', id: 'runtime' },
+            run_id,
+          })
+        } catch {
+          // 事项已经没了
+        }
+      }
       appendRunEvent(request, e)
       // 15 §6 provenance：只证明「读过」——注入的记录与工具真回来的实体
       if (e.type === 'context.injected') {
@@ -2844,6 +2863,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             error.message.includes('ChatGPT 订阅'))
         )
           runBlocks.noteSetup('model', { kind: 'connect', need: CHATGPT_SUBSCRIPTION_NEED })
+        /*
+         * WP425：自己的 AI 用不了、开关「自己的用不了时用工坊积分接着做」关着——照实停下，并在对话里出
+         * 「用工坊积分接着做」那张卡（配置卡：点一下打开开关、按原话接着做；决策 690）。三个运行时同一句话。
+         */
+        if (isSourceFallbackOffText(error.message))
+          runBlocks.noteSetup('model', { kind: 'setup', target: MODEL_FALLBACK_CLOUD_TARGET })
         recordFailure(error)
         await recordBlocked()
         // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带

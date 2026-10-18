@@ -834,7 +834,7 @@ import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
 import { createOwnerSetupCode, type LoginMode, loginModeOf } from './setup-code.js'
 import { createSetupRequestTool } from './setup-request-tool.js'
 import { brandFactsOf, createResearchKit } from './setup-research.js'
-import { builtinSetupTargets } from './setup-targets.js'
+import { builtinSetupTargets, modelFallbackCloudTarget } from './setup-targets.js'
 import { ShopAdminError } from './shop-admin.js'
 import {
   createShopAdmin,
@@ -2000,6 +2000,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP334（决策 725 / 726）：IM 渠道连上 / 云账号关联上了 → 这个品牌还在等的连接卡复查一遍
     if (e.type === 'connection.changed' || e.type === 'cloud.account_linked')
       setupRecheckSink?.(e.workspace_id as WorkspaceId)
+    // WP425：关联 / 解除工坊账号 → 各品牌重装一次网关（「自己的用不了时用工坊积分」那条备用跟着有 / 没有）
+    if (e.type === 'cloud.account_linked' || e.type === 'cloud.account_unlinked')
+      cloudLinkChangedSink?.()
     if (e.type === 'cloud.account_linked') {
       cloudLinkedSink?.()
       // WP272：新签的令牌——补签没成的冷却作废
@@ -2008,6 +2011,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   /** WP233：晚绑定——云账号那一套装好之后才挂上（见 `alignOwnerEmail`）。 */
   let cloudLinkedSink: (() => void) | undefined
+  /** WP425：晚绑定——品牌那一套装好之后才挂上（关联 / 解除账号时各品牌重装网关）。 */
+  let cloudLinkChangedSink: (() => void) | undefined
   /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
   let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
   /** WP360：晚绑定——插件配对表在后面才建出来（这个品牌有没有一个没撤掉的插件配上了）。 */
@@ -2589,6 +2594,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * `item.workspace_id` 取模块的函数，而不是一个装配期就定死的对象。
    */
   let brands: BrandModules | undefined
+  cloudLinkChangedSink = () => {
+    for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
+  }
   /** WP215：调度器比品牌后台晚建，后台状态那一格惰性取它。 */
   let scheduleRef: ScheduleAssembly | undefined
 
@@ -4003,6 +4011,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       setBrandFacts: (facts) => onboardingRef?.setBrandFacts(ws, facts) ?? false,
     }))
       assembly.registerTarget(target)
+    // WP425：自己的 AI 用不了、开关关着时那张「用工坊积分接着做」卡（跟随公司默认时改的是公司默认那一份）
+    assembly.registerTarget(modelFallbackCloudTarget(() => brandModules.models(ws)))
     // WP386：信息监控的提醒清单 + 贴 RSS（缺了出配置卡）
     // WP387：配置卡多一格「让工坊在你的浏览器里替你建」；读到的已有提醒出一张勾选导入的卡
     if (brand.prWatch !== undefined) {

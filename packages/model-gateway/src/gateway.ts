@@ -11,6 +11,8 @@ import type {
   ModelMeta,
   ModelProvider,
   ModelRef,
+  ModelSourceSwitch,
+  ModelSourceSwitchReason,
   ProviderNetTry,
   RoleId,
   ToolDef,
@@ -36,6 +38,13 @@ import {
   priceKey,
 } from './pricing.js'
 import { deepseekQuotaKindOf } from './providers/deepseek-quota.js'
+import type { SourceFallbackPolicy } from './source-fallback.js'
+import {
+  sourceFallbackOffError,
+  sourceLabelOf,
+  sourceSwitchMessage,
+  sourceSwitchReasonOf,
+} from './source-fallback.js'
 import type {
   BudgetExhaustedPayload,
   BudgetFrozenPayload,
@@ -144,6 +153,9 @@ export interface ModelGatewayApi extends ModelGateway {
 }
 
 const HALT_ENV = 'AGENTSWS_MODEL_HALT'
+
+/** WP425：记几轮「这一轮切过了」（够一台机器同时在跑的那些；多了最旧的先忘）。 */
+const SWITCHED_RUNS_KEPT = 500
 
 class Gateway implements ModelGatewayApi {
   /**
@@ -323,11 +335,75 @@ class Gateway implements ModelGatewayApi {
 
   // ---- 契约实现 ----
 
+  /**
+   * WP425：这一次要不要、能不能切到工坊积分。主用本身就是工坊积分、设置页「测试」那一次（测的就是这一家）
+   * 都不切；没登录工坊账号（策略里没有这一格）也不切。
+   */
+  private sourceFallbackFor(
+    req: CompleteRequest,
+    primary: ModelRef,
+  ): SourceFallbackPolicy | undefined {
+    const fb = this.opts.policy.source_fallback
+    if (fb === undefined || req.capability_probe === true) return undefined
+    if (primary.provider === fb.to.provider) return undefined
+    // 网关上没挂工坊积分那一条：切过去也是「没注册」，不如照原样报
+    if (!this.opts.providers.some((p) => p.ref.provider === fb.to.provider)) return undefined
+    return fb
+  }
+
+  /** WP425：这一轮切过了（run_id → 原因）。只留最近的一批，旧的自然淘汰。 */
+  private readonly switchedRuns = new Map<string, ModelSourceSwitchReason>()
+
+  private markSwitched(runId: string, reason: ModelSourceSwitchReason): void {
+    this.switchedRuns.delete(runId)
+    this.switchedRuns.set(runId, reason)
+    while (this.switchedRuns.size > SWITCHED_RUNS_KEPT) {
+      const oldest = this.switchedRuns.keys().next().value
+      if (oldest === undefined) break
+      this.switchedRuns.delete(oldest)
+    }
+  }
+
   async complete(req: CompleteRequest): Promise<Completion> {
     this.assertNotHalted()
+    const primary = this.resolveRef(req.meta, req.model)
+    const fb = this.sourceFallbackFor(req, primary)
+    if (fb === undefined) return this.completeOn(req, primary)
+    const runId = req.meta.run_id
+    // 一轮里切过一次就用到底（不来回切）；下一轮 run_id 不同，自然回到主用
+    if (fb.enabled && this.switchedRuns.has(runId)) return this.completeOn(req, fb.to)
+    // 已经往外吐过字的不切（换一家从头说会把两段拼在一起）
+    let streamed = false
+    const onDelta = req.on_delta
+    const watched: CompleteRequest =
+      onDelta === undefined
+        ? req
+        : {
+            ...req,
+            on_delta: (text: string) => {
+              if (text !== '') streamed = true
+              onDelta(text)
+            },
+          }
+    try {
+      return await this.completeOn(watched, primary)
+    } catch (e) {
+      const reason = sourceSwitchReasonOf(e)
+      if (reason === undefined || streamed || isAborted(req.signal)) throw e
+      const label = sourceLabelOf(fb, primary)
+      if (!fb.enabled) throw sourceFallbackOffError(e, reason, primary, label)
+      this.markSwitched(runId, reason)
+      const message = sourceSwitchMessage(reason, label)
+      const out = await this.completeOn(req, fb.to)
+      const source_switch: ModelSourceSwitch = { from: primary, to: fb.to, reason, message }
+      this.emit('model.source_switched', ctxOf(req.meta), source_switch)
+      return { ...out, source_switch }
+    }
+  }
+
+  private async completeOn(req: CompleteRequest, primary: ModelRef): Promise<Completion> {
     const { meta } = req
     const ctx = ctxOf(meta)
-    const primary = this.resolveRef(meta, req.model)
     const primaryProvider = this.findProvider(primary)
     const withImages = hasImagePart(req.messages)
     // WP127：声明了看不了图的模型，带图的请求在这里就拦下——不花钱、说人话。
