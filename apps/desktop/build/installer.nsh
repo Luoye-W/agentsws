@@ -20,8 +20,17 @@
 
 !include "agentsws-app-entries.nsh"
 
+; WP409：装之前另一种安装范围（按用户 / 按机器）登记的安装位置（见下面第 4 节）。只有安装程序用得着。
+!ifndef BUILD_UNINSTALLER
+  Var agentswsUserDir
+  Var agentswsMachineDir
+!endif
+
 ; ── 2. 只摆不装 ────────────────────────────────────────────────────────────
 !macro customInit
+  ; WP409：electron-builder 换成按机器装时会先卸掉按用户那一份（连登记一起删），所以在那之前先记下它在哪
+  ReadRegStr $agentswsUserDir HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+  ReadRegStr $agentswsMachineDir HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
   ${GetParameters} $R0
   ClearErrors
   ${GetOptions} $R0 "--agentsws-stage" $R1
@@ -134,6 +143,7 @@
       FileClose $R6
     ${EndIf}
   ${EndIf}
+  !insertmacro agentswsOtherScope
 !macroend
 
 ; ── 3. 卸载 ────────────────────────────────────────────────────────────────
@@ -153,4 +163,79 @@
     SetOutPath $TEMP
     RMDir /r $INSTDIR
   ${EndIf}
+!macroend
+
+; ── 4. WP409（内测真机 10-18 #2）：换了安装范围时收拾另一份 ─────────────────────
+; 现象：旧版按用户装在 %LOCALAPPDATA%\Programs\agentsws，手动装新版时选了「所有用户」装到 Program Files。
+; electron-builder 会用 `--updated` 静默卸掉按用户那一份——可我们的卸载在 `--updated` 下只删 `current` 联接
+; （同一目录里升级要留上一版回滚），于是旧的 app-<版本>\、卸载程序都留着，开始菜单里 Electron 补的 agentsws.lnk
+; 还指着已经不在的 current\agentsws.exe，点了打不开。
+;   按机器装：按用户那一份已不在登记里 → 把它留下的版本目录 / 平铺文件 / 卸载程序删掉（只删认得出是我们的），
+;             再删按用户那几个快捷方式（新的都在「所有用户」开始菜单里，指 current）。数据目录不碰。
+;   按用户装：机器上还有一份按机器装的 → 问一句要不要卸（静默装默认不卸），要卸就交给它自己的卸载程序
+;             （会要管理员确认；只卸程序，数据不动）。
+!macro agentswsRemoveFromOld NAME
+  RMDir /r "$R1\${NAME}"
+  Delete "$R1\${NAME}"
+!macroend
+
+!macro agentswsOtherScope
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  ${If} $installMode == "all"
+    ReadRegStr $R0 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+    ${If} $R0 == ""
+      SetShellVarContext current
+      StrCpy $R1 $agentswsUserDir
+      ${If} $R1 == ""
+        StrCpy $R1 "$LOCALAPPDATA\Programs\${APP_FILENAME}"
+      ${EndIf}
+      ${If} $R1 != $INSTDIR
+      ${AndIf} ${FileExists} "$R1\*.*"
+        DetailPrint "agentsws: removing the per-user copy left in $R1"
+        RMDir "$R1\current"
+        FindFirst $R2 $R3 "$R1\app-*"
+        ${DoWhile} $R3 != ""
+          ${If} ${FileExists} "$R1\$R3\${APP_EXECUTABLE_FILENAME}"
+            RMDir /r "$R1\$R3"
+          ${EndIf}
+          FindNext $R2 $R3
+        ${Loop}
+        FindClose $R2
+        ; 更早的平铺安装：确认根上真是我们的 exe 才按条目删
+        ${If} ${FileExists} "$R1\${APP_EXECUTABLE_FILENAME}"
+          !insertmacro agentswsAppEntries agentswsRemoveFromOld
+        ${EndIf}
+        Delete "$R1\${UNINSTALL_FILENAME}"
+        Delete "$R1\agentsws-install.txt"
+        Delete "$R1\uninstallerIcon.ico"
+        RMDir "$R1"
+      ${EndIf}
+      Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+      Delete "$DESKTOP\${SHORTCUT_NAME}.lnk"
+      Delete "$SMPROGRAMS\${PRODUCT_FILENAME}.lnk"
+      SetShellVarContext all
+      System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
+    ${EndIf}
+  ${Else}
+    StrCpy $R0 $agentswsMachineDir
+    ${If} $R0 != ""
+    ${AndIf} $R0 != $INSTDIR
+    ${AndIf} ${FileExists} "$R0\${UNINSTALL_FILENAME}"
+      ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "这台电脑上还有一份给「所有用户」装的 Agents 工坊（$R0），开始菜单里会有两个入口。要现在卸掉那一份吗？只卸程序，你的数据和设置都在（可能要管理员确认）。$\r$\n$\r$\nAnother copy of Agents Workshop is installed for all users ($R0). Uninstall it now? Only the program is removed; your data and settings stay." /SD IDNO IDYES`
+        InitPluginsDir
+        CopyFiles /SILENT "$R0\${UNINSTALL_FILENAME}" "$PLUGINSDIR\agentsws-other-uninstaller.exe"
+        ExecWait '"$PLUGINSDIR\agentsws-other-uninstaller.exe" /S /allusers _?=$R0' $R2
+        DetailPrint "agentsws: the all-users copy's uninstaller returned $R2"
+      ${Else}
+        DetailPrint "agentsws: keeping the all-users copy in $R0"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
 !macroend

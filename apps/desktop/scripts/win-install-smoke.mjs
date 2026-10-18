@@ -161,8 +161,8 @@ export function copyDirSync(from, to) {
 }
 
 /** NSIS 静默安装的参数：`/D=` 必须在最后、不能带引号（所以调用时用 windowsVerbatimArguments）。 */
-export function installerArgs(dir) {
-  return ['/S', `/D=${dir}`]
+export function installerArgs(dir, extra = []) {
+  return ['/S', ...extra, `/D=${dir}`]
 }
 
 /**
@@ -268,8 +268,8 @@ export function installedExe(dir, exists = existsSync) {
 }
 
 /** 静默安装到 `dir`，回装好的 exe。 */
-export function silentInstall(installer, dir) {
-  const inst = spawnSync(installer, installerArgs(dir), {
+export function silentInstall(installer, dir, extra = []) {
+  const inst = spawnSync(installer, installerArgs(dir, extra), {
     windowsVerbatimArguments: true,
     timeout: 300_000,
   })
@@ -336,6 +336,57 @@ export function shortcutPaths(env = process.env, name = 'Agents 工坊') {
       `${name}.lnk`,
     ),
   }
+}
+
+/** WP409：「所有用户」那一份的快捷方式位置（按机器装时开始菜单 / 桌面在这里）。 */
+export function allUsersShortcutPaths(env = process.env, name = 'Agents 工坊') {
+  const programData = env.ProgramData ?? env.PROGRAMDATA ?? 'C:\\ProgramData'
+  const publicDir = env.PUBLIC ?? 'C:\\Users\\Public'
+  return {
+    startMenu: join(programData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${name}.lnk`),
+    desktop: join(publicDir, 'Desktop', `${name}.lnk`),
+  }
+}
+
+/**
+ * WP409（内测真机 10-18 #2）：先按用户装、再按机器装之后——按用户那一份不该留下任何东西
+ * （版本目录、current、卸载程序），按用户的快捷方式要么没了、要么指向新装的那份；
+ * 「所有用户」开始菜单里的快捷方式指新装的 `current\agentsws.exe`。回问题清单与给报告看的几行。
+ *
+ * `fs` / `targetOf` 可注入（单测在 mac 上跑）。
+ */
+export function checkScopeSwitch(
+  { userDir, machineDir, userLinks, machineLinks },
+  fs = { exists: existsSync, list: (d) => readdirSync(d) },
+  targetOf = shortcutTarget,
+) {
+  const problems = []
+  const lines = []
+  const left = fs.exists(userDir)
+    ? fs.list(userDir).filter((n) => /^app-|^current$|^Uninstall .*\.exe$|^agentsws\.exe$/i.test(n))
+    : []
+  lines.push(
+    `按用户那一份（${userDir}）：${fs.exists(userDir) ? `还在，剩 ${left.join('、') || '空目录'}` : '已删'}`,
+  )
+  if (left.length > 0) problems.push(`按用户那一份没收拾干净：${left.join('、')}`)
+  const want = normalizeWinPath(join(machineDir, 'current', 'agentsws.exe'))
+  for (const [what, lnk] of Object.entries(userLinks)) {
+    const target = targetOf(lnk)
+    if (target === undefined) continue
+    lines.push(`按用户的快捷方式（${what}）→ ${target}`)
+    if (normalizeWinPath(target) !== want)
+      problems.push(`按用户的快捷方式（${what}）还指着旧的：${target}`)
+  }
+  const start = targetOf(machineLinks.startMenu)
+  lines.push(`所有用户的开始菜单 → ${start ?? '（没有）'}`)
+  if (start === undefined || normalizeWinPath(start) !== want)
+    problems.push('所有用户开始菜单里的快捷方式没指向新装的 current\\agentsws.exe')
+  return { problems, lines }
+}
+
+/** 当前进程是不是管理员（按机器装要它；`net session` 只有管理员跑得通）。 */
+export function isAdmin() {
+  return spawnSync('net', ['session'], { windowsHide: true, stdio: 'ignore' }).status === 0
 }
 
 /**
@@ -603,20 +654,46 @@ async function main() {
   }
   step(`日志拷出来了：${copyDirSync(join(userData, 'logs'), join(out, 'logs'))} 个文件`)
 
+  // 4b. WP409（内测 10-18 #2）：同一个安装包再「按机器」装一次（先前那份是按用户的）——
+  //     按用户那一份要收拾干净、快捷方式统一指新装的这份。要管理员（CI 的 windows-latest 是）。
+  let finalDir = dir
+  let finalExe = exe
+  let uninstallExtra = []
+  if (isAdmin()) {
+    const machineDir = join(process.env.ProgramFiles ?? 'C:\\Program Files', '智能体 工坊 测试')
+    const t1 = Date.now()
+    finalExe = silentInstall(installer, machineDir, ['/allusers'])
+    step(`换范围：按机器装好了：${finalExe}（${Math.round((Date.now() - t1) / 1000)} 秒）`)
+    const scope = checkScopeSwitch({
+      userDir: dir,
+      machineDir,
+      userLinks: shortcutPaths(),
+      machineLinks: allUsersShortcutPaths(),
+    })
+    for (const line of scope.lines) step(line)
+    if (scope.problems.length > 0) throw new Error(`换范围没收拾干净：${scope.problems.join('；')}`)
+    step('换范围：按用户那一份收拾干净了，快捷方式都指新装的')
+    finalDir = machineDir
+    uninstallExtra = ['/allusers']
+  } else step('不是管理员：跳过「换范围重装」那一条（WP409）')
+
   // 5. 静默卸载：文件没被占用、用户数据还在
-  const uninstaller = readdirSync(dir).find((f) => /^Uninstall .*\.exe$/i.test(f))
+  const uninstaller = readdirSync(finalDir).find((f) => /^Uninstall .*\.exe$/i.test(f))
   if (uninstaller === undefined) throw new Error('安装目录里没有卸载程序')
   step(`开始静默卸载：${uninstaller}`)
   // 等它自己回来（NSIS 卸载程序会把自己抄到临时目录再起一份、随即返回，所以下面照样等 exe 消失）；
   // 不用 detached + unref：父进程不再留一个没人管的子进程句柄
-  const un = spawnSync(join(dir, uninstaller), ['/S'], { windowsHide: true, timeout: 120_000 })
+  const un = spawnSync(join(finalDir, uninstaller), ['/S', ...uninstallExtra], {
+    windowsHide: true,
+    timeout: 120_000,
+  })
   step(`卸载程序返回：${describeExit(un.status, un.signal)}`)
-  for (let i = 0; i < 60 && existsSync(exe); i += 1) await sleep(1000)
-  if (existsSync(exe)) throw new Error('静默卸载 60 秒后程序还在')
+  for (let i = 0; i < 60 && existsSync(finalExe); i += 1) await sleep(1000)
+  if (existsSync(finalExe)) throw new Error('静默卸载 60 秒后程序还在')
   // WP327：联接与版本目录都要删干净
-  for (let i = 0; i < 30 && existsSync(dir); i += 1) await sleep(1000)
-  if (existsSync(dir) && installLayout(dir).apps.length > 0)
-    throw new Error(`卸载后版本目录还在：${installLayout(dir).apps.join('、')}`)
+  for (let i = 0; i < 30 && existsSync(finalDir); i += 1) await sleep(1000)
+  if (existsSync(finalDir) && installLayout(finalDir).apps.length > 0)
+    throw new Error(`卸载后版本目录还在：${installLayout(finalDir).apps.join('、')}`)
   if (!existsSync(join(userData, 'config.json'))) throw new Error('卸载把用户数据也删了')
   step('卸载干净，用户数据保留')
 
