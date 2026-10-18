@@ -558,7 +558,13 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           : plan.action === 'assist'
             ? `${who} 在聊天里要人工`
             : `${who} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
-      summary: review_kind === 'answer' ? '批了就发回聊天窗' : plan.summary,
+      // WP417（自查 C11）：卡面上就是要发给访客的那句（起草好的真回复），不是系统说明
+      summary:
+        draft !== undefined && draft.trim() !== ''
+          ? draft.slice(0, 300)
+          : review_kind === 'answer'
+            ? '批了就发回聊天窗'
+            : plan.summary,
       payload: {
         channel: 'chat',
         session_id: session.id,

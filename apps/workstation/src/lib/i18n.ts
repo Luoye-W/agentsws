@@ -3414,6 +3414,9 @@ const zh: Table = {
   'chat.plan.blocked': '这一轮没答出来：{reason}',
 
   'chat.action.answer': '直接答',
+  'chat.action.answer_held': '先给你批',
+  'chat.action.answer_held.why':
+    '能答，回复已经起草好；你批了才发给访客（常见问题可以在聊天窗设置里打开「直接发」）。',
   'chat.action.answer.why': '低风险、资料齐：按知识与订单事实答一句，不承诺任何事。',
   'chat.action.collect_info': '先问清楚',
   'chat.action.collect_info.why': '这一类缺了关键资料就走不下去（比如查订单没给单号），先问出来。',
@@ -7693,6 +7696,9 @@ const en: Table = {
   'chat.plan.blocked': 'No answer this turn: {reason}',
 
   'chat.action.answer': 'Answer it',
+  'chat.action.answer_held': 'Waiting for your OK',
+  'chat.action.answer_held.why':
+    'The AI can answer and has drafted the reply; it goes to the visitor once you approve (turn on “Send FAQ answers directly” in chat window settings to skip this for FAQs).',
   'chat.action.answer.why':
     'Low risk and nothing missing: answer from knowledge and order facts, commit to nothing.',
   'chat.action.collect_info': 'Ask first',
