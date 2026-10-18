@@ -252,3 +252,31 @@ describe('端到端（stub）：「起草开发信」进 Run 能走通', () => {
     for (const t of toolsCalled(out.run_id ?? '')) expect(B2B_OUTBOUND_TOOL_NAMES).not.toContain(t)
   })
 })
+
+describe('WP421：开一轮排着的原因带回运行（出设置卡 / 连接卡）', () => {
+  it('缺公司地址 → 数据里带 queued_reason，运行收尾认得出要「填公司地址」', async () => {
+    const port = {
+      ...fakePort,
+      start: async () => ({
+        status: 'queued',
+        message: '公司地址没填，先排着',
+        picked: 0,
+        queued_tomorrow: 0,
+        queued_reason: 'company_address',
+        excluded: [],
+      }),
+    } as unknown as B2bOutboundPort
+    const exec = createB2bOutboundToolExecutor({ workspace_id: 'ws_1' as never, port: () => port })
+    const res = await exec({
+      name: 'start_outreach_round',
+      input: {},
+      request: request('b2b.outbound'),
+    })
+    expect(res.data).toMatchObject({ queued_reason: 'company_address' })
+    const { setupNeedOf } = await import('../src/run-blocked.js')
+    expect(setupNeedOf('start_outreach_round', res)).toEqual({
+      kind: 'setup',
+      target: 'company.address',
+    })
+  })
+})

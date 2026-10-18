@@ -126,6 +126,11 @@ export function createB2bOutboundToolExecutor(options: B2bOutboundToolsOptions):
             // 运行时靠这两样把「出了卡」翻成时间线上看得见的一条
             kind: 'b2b_outreach',
             ...(out.change_id === undefined ? {} : { change_id: out.change_id }),
+            /*
+             * WP421（自查 general 2.3）：排着的原因原样带上——运行收尾靠它出「填公司地址」的配置卡 /
+             * 「接一只邮箱」的连接卡（`run-blocked.ts`）。以前这一格被丢了，AI 说「在卡上填好」，卡根本不出来。
+             */
+            ...(out.queued_reason === undefined ? {} : { queued_reason: out.queued_reason }),
           },
         }
       }

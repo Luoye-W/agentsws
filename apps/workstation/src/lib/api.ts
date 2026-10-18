@@ -7508,6 +7508,21 @@ export const startB2bSequence = (
 ): Promise<B2bSequenceStartData> =>
   api('/v1/b2b/outbound/sequences', { method: 'POST', body: input, ...withAssignment(assignment) })
 
+/** WP421：导入一张客户 / 联系人名单（CSV）——导入本身出卡，批了才进库。 */
+export interface B2bImportResultData {
+  staged: boolean
+  message?: string
+  approval_item_id?: string
+  rows: number
+  suppressed: number
+}
+
+export const importB2bCsv = (
+  input: { name: string; csv: string; source_url?: string },
+  assignment?: string,
+): Promise<B2bImportResultData> =>
+  api('/v1/b2b/imports/csv', { method: 'POST', body: input, ...withAssignment(assignment) })
+
 export const checkB2bSender = (assignment?: string): Promise<B2bOutboundData> =>
   api('/v1/b2b/outbound/sender/check', { method: 'POST', ...withAssignment(assignment) })
 

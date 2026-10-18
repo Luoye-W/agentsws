@@ -220,8 +220,14 @@ export function DeckSection({
       setReceipt('')
       setExiting(null)
     },
-    onSuccess: (_out, input) => {
+    onSuccess: (out, input) => {
       setError('')
+      // WP421：「改一下」后服务端真重写了（或照实说重写不了）就说那一句，不再一律许诺「改好再给你看」
+      const redraft = (out as { redraft?: { message?: unknown } } | undefined)?.redraft?.message
+      if (typeof redraft === 'string' && redraft !== '') {
+        setReceipt(redraft)
+        return
+      }
       const key = receiptKey(input.body, input.card)
       setReceipt(key === undefined ? '' : t(key))
     },

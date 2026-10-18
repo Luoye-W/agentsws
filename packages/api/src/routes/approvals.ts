@@ -760,6 +760,22 @@ export function approvalRoutes(): Route[] {
                 assignment_id: assignmentOf(c).id,
                 guard: ruleGuard,
               })
+        // WP421：「改一下」（这一条）→ 服务端起草的卡按指导重写、出新卡（不归它管的回 undefined，界面照旧）
+        const redraft =
+          resolved.instruction_scope === 'single_reply' &&
+          input.instruction !== undefined &&
+          deps.redraft !== undefined
+            ? await deps
+                .redraft({
+                  item: out,
+                  text: input.instruction.text,
+                  person_id: p.person_id,
+                  assignment_id: assignmentOf(c).id,
+                })
+                .catch((e: unknown) => ({
+                  message: `没重写成：${e instanceof Error ? e.message : String(e)}`,
+                }))
+            : undefined
         // 37 §4.1：认领卡接下来才形成责任（31 I13）——建一条挂在会议事项上的待办
         let claimed: Todo | undefined
         if (
@@ -782,6 +798,7 @@ export function approvalRoutes(): Route[] {
           ...optional(resolved.instruction_scope, 'instruction_scope'),
           ...optional(landed, 'instruction_proposal'),
           ...optional(claimed, 'todo'),
+          ...optional(redraft, 'redraft'),
         })
       },
     ),

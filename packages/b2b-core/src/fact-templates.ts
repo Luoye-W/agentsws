@@ -46,7 +46,7 @@ export interface B2bFactTemplate {
 }
 
 export const B2B_FACT_TEMPLATE_LOCATOR = '模板，待填'
-export const B2B_FACT_PREFILL_LOCATOR = '按官网推荐的行业预填，待核'
+export const B2B_FACT_PREFILL_LOCATOR = '按官网推荐的行业给的参考，待你逐项核实'
 
 /** 每一类该填的几格（中文名 → 空值）。 */
 const FIELDS: Readonly<Record<B2bFactCategoryId, readonly string[]>> = {
@@ -59,8 +59,9 @@ const FIELDS: Readonly<Record<B2bFactCategoryId, readonly string[]>> = {
 }
 
 /**
- * 六张模板。`industry` 给了就预填认证清单（没有推荐认证的行业仍是空模板）。
- * 认证那一张的 `reply_en` 也预填——但卡是 proposed，人不点生效，起草一个字都不会引。
+ * 六张模板。`industry` 给了，认证那一张**只给参考、不预填**（WP421，自查 general 2.3）：
+ * 以前按行业猜一串证名写进「已有认证」和可引用的英文句，人一点生效，回信就会声称有 CE / FCC——
+ * 这是编的。现在「已有认证」与英文句一律空着，行业常见的证名只放进说明里当提示，人逐项核实、自己填了才算数。
  */
 export function b2bFactTemplates(
   industry?: Pick<IndustryGuess, 'industry' | 'certifications'>,
@@ -69,19 +70,15 @@ export function b2bFactTemplates(
     const fields = Object.fromEntries(FIELDS[c.id].map((f) => [f, '']))
     const certs = c.id === 'certifications' ? (industry?.certifications ?? []) : []
     if (certs.length > 0) {
-      // 只把确定的证名进英文那一句（「UL/ETL（按产品与市场确认）」这种带括号的只留在中文里）
-      const plain = certs.filter((x) => !/[（(]/.test(x))
       return {
         category: c.id,
         key: b2bFactKey(c.id),
-        statement: `认证清单（按官网判断的行业「${industry?.industry ?? ''}」预填，待核）：${certs.join('、')}。请核对哪些型号真有、证书挂谁的名。`,
+        statement: `认证清单（模板，待填）：只填你真有证书的。按官网判断的行业「${industry?.industry ?? ''}」常见的有 ${certs.join('、')}——这只是参考，不代表你有；没核实的不要填。`,
         structured: {
           category: c.id,
-          fields: { ...fields, 已有认证: certs.join('、') },
-          reply_en:
-            plain.length === 0
-              ? ''
-              : `Our products are certified to ${plain.join(', ')} (by model — we can share the certificates).`,
+          fields,
+          // 英文句空着：人填了「已有认证」、核实过才写（起草只引生效卡里的这一句）
+          reply_en: '',
           prefilled: 'industry',
           certifications: certs,
         },

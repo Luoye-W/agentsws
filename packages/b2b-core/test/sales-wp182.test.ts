@@ -175,15 +175,17 @@ describe('WP182 首回：只引事实卡，没有卡就说确认', () => {
 })
 
 describe('WP182 六类事实卡模板', () => {
-  it('3C 预填认证清单；其余是空模板；key 认得回来', () => {
+  it('3C 给常见认证当参考（不预填）；其余是空模板；key 认得回来', () => {
     const t = b2bFactTemplates(guessIndustry('we make GaN chargers and power banks'))
     expect(t).toHaveLength(6)
     const cert = t.find((x) => x.category === 'certifications')
     expect(cert?.structured.certifications).toEqual(
       expect.arrayContaining(['CE', 'FCC', 'RoHS', 'UKCA', 'PSE']),
     )
-    expect(cert?.structured.reply_en).toContain('UKCA')
-    expect(cert?.structured.reply_en).not.toContain('UL/ETL')
+    // WP421：按行业猜的证名只当参考——不写进可引用的英文句、不填「已有认证」
+    expect(cert?.structured.reply_en).toBe('')
+    expect(cert?.structured.fields['已有认证']).toBe('')
+    expect(cert?.statement).toContain('不代表你有')
     expect(t.find((x) => x.category === 'delivery')?.structured.reply_en).toBe('')
     expect(b2bFactCategoryOf('b2b:delivery')).toBe('delivery')
     expect(b2bFactCategoryOf('policy:refund')).toBeUndefined()

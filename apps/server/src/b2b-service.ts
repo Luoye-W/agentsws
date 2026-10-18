@@ -152,6 +152,16 @@ export interface B2bServiceAssembly {
   apply(change: { id: string; kind: string; after?: unknown }): BackendResult | undefined
   /** B2B 面板那十九块里能从库里算出来的那几块（没有的是空数组）。 */
   deckData(now: string): B2bDeckData
+  /**
+   * WP421（自查 general 2.3）：B2B 库的卡被驳回 / 点了「改一下」——那份草稿回写成「被驳回」（面板不再永远挂「待审」，
+   * 草稿可以再改再提）；`instruction` 给了（「改一下」）就退回成草稿，并把那句话记在草稿上。
+   * 回一句给界面的话；不是这份草稿的卡回 `undefined`。
+   */
+  onRejected(input: {
+    change_id: string
+    reason?: string
+    instruction?: string
+  }): { message: string; draft_id: string } | undefined
 }
 
 const num = (v: unknown, fallback: number): number => (typeof v === 'number' ? v : fallback)
@@ -745,7 +755,37 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
     }
   }
 
-  return { port, apply, deckData: (now) => b2bDeckFromStore(store, now) }
+  const onRejected: B2bServiceAssembly['onRejected'] = ({ change_id, reason, instruction }) => {
+    if (change_id === '') return undefined
+    const d = store.drafts().find((x) => x.change_id === change_id)
+    // 「改一下」在决定之后才到：那时驳回的回写已经把它标成 rejected 了，照样退回草稿
+    const open =
+      d?.status === 'submitted' || (instruction !== undefined && d?.status === 'rejected')
+    if (d === undefined || !open) return undefined
+    const zh = COLLECTION_ZH[d.collection]
+    if (instruction !== undefined) {
+      // 「改一下」：结构化的记录（报价的价格阶梯、样品的件数）不让模型猜着改——退回草稿，人照这句话改完再提
+      store.saveDraft({
+        ...d,
+        status: 'draft',
+        message: `按你说的改：${instruction.slice(0, 200)}`,
+        updated_at: clock.now(),
+      })
+      return {
+        draft_id: d.id,
+        message: `这份${zh}退回成草稿了，在「业务」里按你说的改好再提交。`,
+      }
+    }
+    store.saveDraft({
+      ...d,
+      status: 'rejected',
+      ...(reason === undefined ? {} : { message: `被驳回：${reason.slice(0, 200)}` }),
+      updated_at: clock.now(),
+    })
+    return { draft_id: d.id, message: `这份${zh}不提了。` }
+  }
+
+  return { port, apply, deckData: (now) => b2bDeckFromStore(store, now), onRejected }
 }
 
 const COLLECTION_ZH: Readonly<Record<B2bCollection, string>> = {

@@ -9258,6 +9258,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP276（决策 237）：有人申请加入——卡上同意 / 拒绝就是同意 / 拒绝这条申请（谁先点算谁的）
     if (item.kind === 'membership') return onMembershipDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
+    // WP421（自查 general 2.3）：B2B 库 / 业务的卡被驳回 → 回写（面板不再永远挂「待审」）
+    if (isB2bRejected(item)) {
+      brand?.b2bService.onRejected({
+        change_id: String((item.payload as { change_id?: unknown }).change_id ?? ''),
+        ...(item.decision?.reason === undefined ? {} : { reason: item.decision.reason }),
+      })
+      brand?.b2bSales.onRejected(item)
+      return
+    }
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
     // WP210：客户来信投不进的那张卡批了（「再投一次」）→ 把那条死信重投回队列；
@@ -13529,6 +13538,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     approvals,
     // WP174：`POST /v1/approvals` 的 `scope_manager` 也走岗位上级 → 老板
     routeScopeManager,
+    /*
+     * WP421（自查 general 2.3）：「改一下」→ 服务端起草的 B2B 卡真按指导重写（回信卡出新卡；报价 / 样品这类
+     * 结构化记录退回草稿、记下那句话）。别的卡回 undefined，界面照旧。
+     */
+    redraft: async ({ item, text, person_id }) => {
+      const brand = await brands?.forWorkspace(item.workspace_id)
+      if (brand === undefined) return undefined
+      const sales = await brand.b2bSales.redraft(item, text, person_id as PersonId)
+      if (sales !== undefined) return sales
+      if (!isB2bRejected(item)) return undefined
+      const back = brand.b2bService.onRejected({
+        change_id: String((item.payload as { change_id?: unknown }).change_id ?? ''),
+        instruction: text,
+      })
+      return back === undefined ? undefined : { message: back.message }
+    },
     changes: txn.ledger,
     guardrails,
     knowledge: knowledgePort,
@@ -14840,7 +14865,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP350：助理扇出的「要记的 N 条」确认卡
           isAssistantNotesCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
-          isRecordSinkCard(out)
+          isRecordSinkCard(out) ||
+          // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）
+          isB2bRejected(out)
         ) {
           try {
             await hook.current?.(out)
@@ -14852,6 +14879,17 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
     },
   })
+}
+
+/** WP421：B2B 库 / 业务那几种账本卡被驳回了（驳回与「改一下」都走这里）。 */
+function isB2bRejected(item: ApprovalItem): boolean {
+  const kind = (item.payload as { kind?: unknown } | undefined)?.kind
+  return (
+    item.kind === 'staged_change' &&
+    item.state === 'rejected' &&
+    typeof kind === 'string' &&
+    kind.startsWith('b2b_')
+  )
 }
 
 /** 品牌模块装好之后才有；决定发生时现取（与 `brands` 同一个晚绑定的套路）。每个服务进程一份。 */
