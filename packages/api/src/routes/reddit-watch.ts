@@ -155,6 +155,8 @@ const settingsSchema = z
     sub_per_week: z.record(z.string().max(30), z.number().int().min(1).max(7)).optional(),
     alert_words: z.array(z.string().max(40)).max(30).optional(),
     tag_words: z.array(z.string().max(40)).max(50).optional(),
+    // WP411：第一次外部巡查往回补几天
+    external_backfill_days: z.number().int().min(1).max(31).optional(),
   })
   .strict()
 

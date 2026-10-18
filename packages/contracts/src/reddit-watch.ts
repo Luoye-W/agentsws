@@ -106,6 +106,8 @@ export interface RedditWatchEntry {
   tags?: string[]
   /** WP340：这一条的「优先」提醒人已经看过 / 收起了（或同一条在别的来源已经提醒过）。 */
   alert_seen?: true
+  /** WP411：为什么没起草 / 起草时标了什么（一句人话：「品牌号 10-12 已经回过这一条」「外部帖没提到我们」）。 */
+  note?: string
 }
 
 /** 每品牌的巡查设置（缺版块 / 缺关键词就出配置卡，按 WP324）。 */
@@ -138,7 +140,15 @@ export interface RedditWatchSettings {
   alert_words?: string[]
   /** WP340：本地标签词（如型号写法；命中就给条目打这个标签，查巡查数据可按标签筛）。 */
   tag_words?: string[]
+  /**
+   * WP411（#10）：第一次外部巡查往回补几天（1–31；不给 = {@link REDDIT_EXTERNAL_BACKFILL_DAYS}）。
+   * 插件在线时在你浏览器里搜（不扣积分）；不在线退回数据渠道。
+   */
+  external_backfill_days?: number
 }
+
+/** WP411：第一次外部巡查默认往回补几天。 */
+export const REDDIT_EXTERNAL_BACKFILL_DAYS = 7
 
 /** WP340：版块一周几次的可选档（每天 / 每周 3 次 / 每周 2 次 / 每周 1 次）。 */
 export const REDDIT_SUB_PER_WEEK_CHOICES: readonly number[] = [7, 3, 2, 1]
@@ -176,6 +186,10 @@ export interface RedditWatchRunPart {
   fetched: number
   fresh: number
   finished_at?: Iso8601
+  /** WP411：外部关键词结果里没整词出现、本地丢掉的几条（不入库、不判、不计）。 */
+  filtered?: number
+  /** WP411：同一条（全名）在别的来源已经有了、没再入库的几条。 */
+  dupes?: number
 }
 
 /** 一次巡查。 */
@@ -187,7 +201,9 @@ export interface RedditWatchRun {
   /** WP330 时「周报前的本周最后一次」；WP331 起不再有这一说，新跑的都是 `false`（字段留着，老数据照读）。 */
   final: boolean
   /** 谁让跑的：定时 / 人点「现在巡查」或 AI 调「立即巡查」/ `weekly` 只在 WP330 留下的老数据里。 */
-  trigger: 'schedule' | 'manual' | 'weekly'
+  trigger: 'schedule' | 'manual' | 'weekly' | 'backfill'
+  /** WP411（#13）：回补那一次的时间窗。 */
+  window?: { since: Iso8601; until: Iso8601 }
   parts: RedditWatchRunPart[]
   /** 这次新出的「待处理」几条。 */
   pending: number
@@ -279,3 +295,25 @@ export function redditWeekWindow(
     until: new Date(nowMs).toISOString(),
   }
 }
+
+/**
+ * WP411（#13）：按时间窗回补的计划——回补前先说一句「要补 X 天，约 N 页，在你浏览器里读」，然后照做。
+ * 补不了时 `ok: false`，`message` 照实说原因、`can` 说能做的。
+ */
+export type RedditBackfillPlan =
+  | {
+      ok: true
+      since: Iso8601
+      until: Iso8601
+      days: number
+      /** 最多翻几页（每页 100 条；读到起点就停，通常少于这个数）。 */
+      pages: number
+      /** 读哪几路（`搜「IVRA」`、`r/ivraxr 新帖`…人话）。 */
+      reads: string[]
+      via: 'browser'
+      /** 那一句人话。 */
+      message: string
+      /** 补不到的部分（例如 Reddit 搜索只给帖子、评论搜不到）。 */
+      limits: string[]
+    }
+  | { ok: false; message: string; can: string }
