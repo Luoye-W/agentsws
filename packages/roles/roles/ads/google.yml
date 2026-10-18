@@ -250,7 +250,8 @@ grounding:
       name: google_ads_intent,
       intent_terms: [Google, 谷歌, 搜索广告, Search, Shopping, 购物广告, PMax, 效果最大化, YouTube 广告, 关键词, 否词, keyword, negative],
       cue_terms: [投放, 广告, 预算, 出价, 花费, 素材, ROAS, CPA, 转化, 止损, 暂停, 转化动作],
-      tool: list_ad_campaigns,
+      # WP420（自查 A7）：原来写的工具名全仓没有，运行时静默丢掉；查数是 `query_ads_data`
+      tool: query_ads_data,
       prefetch: false,
     }
   # 04 §5 的额度纪律：提预算之前先看总闸还剩多少。**这一条 prefetch**——
@@ -259,7 +260,8 @@ grounding:
       name: spend_gate_before_increase,
       intent_terms: [加预算, 提预算, 涨预算, 加钱, 放量, increase budget, scale],
       cue_terms: [多少, 能不能, 上限, 总闸, 还剩, budget, cap],
-      tool: read_spend_gate,
+      # WP420（自查 A7）：「加预算前先看总闸」——`query_ads_data` 回 `spend_gate`（原来那个工具名不存在，这条预取从没发生过）
+      tool: query_ads_data,
       prefetch: true,
     }
   # 19：文案里说到价格、折扣、时效、保修之前先查事实卡
@@ -275,7 +277,9 @@ grounding:
       name: pixel_code_goes_to_site,
       intent_terms: [像素代码, 埋点, GTM, 标签管理, 主题代码, theme, script, tag],
       cue_terms: [装, 改, 加一段, 部署, install, deploy, add],
-      tool: route_to_site_builder,
+      # WP420（自查 A7）：转建站靠路由认上面这几个意图词（`roles/src/route.ts`），不靠工具；没有转岗工具，
+      # 原来那个工具名不存在。工具位放查资料（先看资料里记的像素 / 埋点约定再开口）
+      tool: search_policies,
       prefetch: false,
     }
 
@@ -324,11 +328,11 @@ browser_extension: { uses: [google_ads] }
 quick_prompts:
   - id: today_spend
     label: { zh: "今天花了多少", en: "Today's spend" }
-    prompt: "今天 Google Ads 花了多少？岗位的总闸还剩多少？哪条 campaign 花得最多"
+    prompt: "今天花了多少？总闸还剩多少？哪条广告系列花得最多？"
     kind: ask
   - id: who_to_cut
     label: { zh: "该关掉哪几条", en: "What should I cut" }
-    prompt: "现在有哪几条 campaign 该止损？把 ROAS、今天花了多少、占日预算多少列出来，两条判据分开说"
+    prompt: "现在有哪几条广告系列该止损？把 ROAS、今天花了多少、占日预算多少列出来，两条判据分开说"
     kind: ask
   - id: raise_budget
     label: { zh: "给跑得好的加预算", en: "Scale the winners" }
@@ -343,9 +347,9 @@ task_examples:
   - id: stop_loss_round
     title: { zh: "跑一轮止损", en: "Run a stop-loss pass" }
     description: "这周有几条广告一直在花钱，不知道哪些该关。"
-    expected_output: "一张表：每条 campaign 的 ROAS、今天花了多少、占日预算多少，两条判据分开打勾；真的越线的已经自动停了并出了一张「已止损」卡，差一条判据的留着跑并写清差在哪。"
+    expected_output: "一张表：每条广告系列的 ROAS、今天花了多少、占日预算多少，两条判据分开打勾；真的越线的已经自动停了并出了一张「已止损」卡，差一条判据的留着跑并写清差在哪。"
   - id: new_campaign
-    title: { zh: "开一条新 campaign", en: "Open a new campaign" }
+    title: { zh: "开一条新广告系列", en: "Open a new campaign" }
     description: "新品上架，想投一轮看看。"
     expected_output: "一张要你点的卡：预算多少、投给谁、素材是哪几版、今天的总闸还剩多少。批了之后它是「停着」建出来的——让它开始花钱是另一张卡。"
   - id: attribution_review

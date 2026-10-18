@@ -221,7 +221,8 @@ export function PositionPage(): React.ReactNode {
           </div>
           {view === undefined ? null : fresh ? (
             <p className="text-xs text-ws-muted-fg" data-testid="position-status">
-              {t('pos2.status.new', { n: view.roles.length })}
+              {/* WP420（自查 U6）：只数自己担着的那几条（左栏只有一条却写「4 条职责」） */}
+              {t('pos2.status.new', { n: duties.length > 0 ? duties.length : view.roles.length })}
             </p>
           ) : stuck === 0 && today === 0 ? null : (
             <p
