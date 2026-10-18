@@ -13,6 +13,8 @@
  *
  * 按条合并（用户隐藏 / 改 / 自己加、官方新版）是 WP406 的事：这里只管「这一层整格换上去」。
  */
+
+import { readdirSync, readFileSync } from 'node:fs'
 import type {
   PositionContent,
   PositionContentFile,
@@ -28,8 +30,10 @@ import {
   ROLE_GROUNDING_CONTENT_FIELDS,
 } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
+import { parse as parseYaml } from 'yaml'
 import {
   BUNDLED_POSITIONS_DIR,
+  BUNDLED_ROLES_DIR,
   bundledPosition,
   bundledRole,
   bundledRoleFile,
@@ -272,4 +276,38 @@ export function loadBundledRoleWithContent(id: RoleId, content: RoleContent): Ro
 export function loadBundledPositionWithContent(id: string, content: PositionContent): Position {
   const file = `${BUNDLED_POSITIONS_DIR}${id}.yml`
   return bundledPosition(applyPositionContent(loadPosition(file), content, `${file} + content`))
+}
+
+/**
+ * 全部内置职责 / 岗位的内容文件——**按 yml 原样**抽（persona 只有手写的中文那份，不带生成的英文；
+ * 生成的英文是另一份产物，跟着中文的哈希走）。`scripts/extract-role-content.mjs` 与往返测试用。
+ */
+export function bundledContentFiles(): {
+  roles: RoleContentFile[]
+  positions: PositionContentFile[]
+} {
+  const roles: RoleContentFile[] = []
+  for (const domain of readdirSync(BUNDLED_ROLES_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort())
+    for (const file of readdirSync(`${BUNDLED_ROLES_DIR}${domain}`)
+      .filter((f) => f.endsWith('.yml'))
+      .sort()) {
+      const raw = parseYaml(
+        readFileSync(`${BUNDLED_ROLES_DIR}${domain}/${file}`, 'utf8'),
+      ) as Record<string, unknown>
+      roles.push(roleContentFileOf(String(raw.id), roleContentOf(raw)))
+    }
+  const positions: PositionContentFile[] = []
+  for (const file of readdirSync(BUNDLED_POSITIONS_DIR)
+    .filter((f) => f.endsWith('.yml'))
+    .sort()) {
+    const raw = parseYaml(readFileSync(`${BUNDLED_POSITIONS_DIR}${file}`, 'utf8')) as Record<
+      string,
+      unknown
+    >
+    positions.push(positionContentFileOf(String(raw.id), positionContentOf(raw)))
+  }
+  return { roles, positions }
 }

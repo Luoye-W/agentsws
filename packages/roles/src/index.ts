@@ -48,6 +48,7 @@ export { createMemoryBackend, createSqliteBackend } from './backend.js'
 export {
   applyPositionContent,
   applyRoleContent,
+  bundledContentFiles,
   checkContentFile,
   checkPositionContent,
   checkRoleContent,
