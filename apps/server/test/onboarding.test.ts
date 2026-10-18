@@ -437,6 +437,16 @@ describe('46 §1 首次设置', () => {
     const state = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
     expect(state.needs_setup).toBe(true)
   })
+
+  it('Luoye 10-19 真机：没写过档案、但走完了第 ④ 步 → 不再拉回向导', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const before = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(before.needs_setup).toBe(true)
+    await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } })
+    const after = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(after.needs_setup).toBe(false)
+  })
 })
 
 /* ── 46 §3：勾选 → 清单 → 真建分配 ──────────────────────────────────── */
