@@ -38,6 +38,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
+import { PR_MENTIONS_EN, PR_MENTIONS_ZH } from './i18n-pr-mentions'
 import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
@@ -8629,6 +8630,8 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WATCH_ZH,
     // WP392：竞品监控（报表卡的变化表、连接卡、计划卡）
     ...COMPETITOR_WATCH_ZH,
+    // WP419：信息监控的提及表
+    ...PR_MENTIONS_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8703,6 +8706,7 @@ const TABLES: Record<Lang, Table> = {
     ...OWN_SUB_EN,
     ...REDDIT_WATCH_EN,
     ...COMPETITOR_WATCH_EN,
+    ...PR_MENTIONS_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,

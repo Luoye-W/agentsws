@@ -108,6 +108,7 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  ReportPayload,
   RunRequest,
   SearchDataPort,
   SkillTier,
@@ -655,6 +656,7 @@ import { createPrAlertsService, type PrAlertsService } from './pr-alerts/service
 import { markManualFallback, withBrowserBuild } from './pr-alerts/setup.js'
 import { createGoogleAlertsTool } from './pr-alerts/tool.js'
 import { createPrService } from './pr-service.js'
+import { buildMonitorBrief, localDate as localBriefDate } from './pr-watch/brief.js'
 import {
   createPrMonitorToolExecutor,
   createPrWatch,
@@ -717,7 +719,12 @@ import {
   settleRedditWrite,
   socialRedditFill,
 } from './reddit-write/wire.js'
-import { combineWatchSources, createReportToolExecutor, type WatchSource } from './report-tools.js'
+import {
+  combineWatchSources,
+  createReportToolExecutor,
+  reportDedupeKey,
+  type WatchSource,
+} from './report-tools.js'
 import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
@@ -8897,6 +8904,95 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
     prWatchRef = prWatch
     /*
+     * WP419（自查 P8）：信息监控每天一份简报——拉完一轮之后出（同一天只一份），进担信息监控那个人的岗位报表区
+     * （与 AI 发布的报告同一种报表块；看一眼就过，不进审批队列）。没配源、没人担都不出。
+     */
+    const publishMonitorBrief = async (): Promise<boolean> => {
+      if (prWatch === undefined) return false
+      const view = prWatch.view()
+      if (view.sources.length === 0 || view.last_run === undefined) return false
+      const holder = roles.assignments
+        .listByRole('pr.monitoring')
+        .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+      if (holder === undefined) return false
+      const now = clock.now()
+      const tz = workData.tz_offset_minutes
+      const date = localBriefDate(now, tz)
+      const dedupe_key = reportDedupeKey({
+        workspace_id: ws,
+        assignment_id: holder.id,
+        series: '监控简报',
+        period_key: date,
+      })
+      if (
+        txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'weekly_review', dedupe_key })
+          .length > 0
+      )
+        return false
+      const actor = {
+        workspace_id: ws,
+        person_id: holder.person_id,
+        assignment_id: holder.id,
+        role_id: holder.role_id,
+      }
+      const since = new Date(Date.parse(now) - 7 * 86_400_000).toISOString()
+      const mentions = (await prService.port.mentions(actor as never, { since, limit: 500 })).rows
+      const brief = buildMonitorBrief({
+        now,
+        tzOffsetMinutes: tz,
+        mentions,
+        sources: view.sources.map((s) => ({
+          label: s.label,
+          group: s.group,
+          status: s.status,
+          ...(s.last_error === undefined ? {} : { last_error: s.last_error }),
+          ...(s.paused === true ? { paused: true } : {}),
+        })),
+      })
+      const payload: ReportPayload = {
+        kind: 'report',
+        series: '监控简报',
+        title: brief.title,
+        period: brief.period,
+        period_start: brief.date,
+        markdown: `${brief.markdown}\n`,
+        published_at: now,
+        version: 1,
+      }
+      await approvals.create<ReportPayload>({
+        workspace_id: ws,
+        schema_version: 1,
+        kind: 'weekly_review',
+        role_id: holder.role_id,
+        subject: { object: { type: 'workspace', id: ws } },
+        dedupe_key,
+        title: brief.title,
+        summary: brief.period,
+        payload,
+        evidence: {
+          run_id: `pr_brief_${date}`,
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+        proposer: { kind: 'system', id: 'pr_monitor_brief', assignment_id: holder.id },
+        automation: {
+          level_at_creation: 'L3',
+          auto_approved: true,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [{ person: holder.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 72, business_hours: true, chain: [], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'digest',
+      } as never)
+      return true
+    }
+    /*
      * WP387（docs/103 v2 §3.3、T1）：你的浏览器替你建 / 导入 Google 提醒。清单确认后出一张卡（一批一张、每行可勾掉），
      * 同意了才开一件事、带着凭据让你的浏览器去建；读回的 RSS 链接交给上面那份信息监控存成源（先拉一次）。
      */
@@ -9097,6 +9193,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
+      // WP419：信息监控每天一份简报
+      publishMonitorBrief,
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
@@ -9842,7 +9940,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       lineCompare: async () => (await of()).lineCompareSnapshot(),
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
-    registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
+    registerPrMonitor(s, {
+      sweep: async () => {
+        const brand = await of()
+        const out = await brand.prService.monitorSweep()
+        // WP419（自查 P8）：拉完一轮出当天的监控简报（同一天只一份）
+        await brand.publishMonitorBrief?.().catch(() => false)
+        return out
+      },
+    })
     // WP328：Reddit 每日巡查（这个品牌的插件、版块、关键词）；没装（托管）就什么都不做
     registerRedditPatrol(s, {
       tick: async () =>

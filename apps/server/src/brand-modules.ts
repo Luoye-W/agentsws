@@ -248,6 +248,11 @@ export interface BrandModuleSet {
   prWatchStore: PrWatchStoreHandle
   /** WP386：信息监控（托管模式没有）。 */
   prWatch?: PrWatchAssembly
+  /**
+   * WP419（自查 P8）：信息监控每天一份简报（拉完一轮之后调；同一天只一份，进岗位报表区）。
+   * 回出了没有（没配源 / 没人担 / 今天已经出过 = 不出）。
+   */
+  publishMonitorBrief?(): Promise<boolean>
   /** WP387：你的浏览器替你建 / 导入 Google 提醒（托管模式不装）。 */
   prAlerts?: PrAlertsService
   /**

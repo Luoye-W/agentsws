@@ -11,6 +11,7 @@ import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'rea
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
+import { MentionsTable } from '@/components/pr/mentions-table'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
@@ -63,11 +64,15 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
     competitorAssignmentOf(scope) === undefined ? null : (
       <CompetitorChangesTable scope={scope} limit={limit} />
     )
+  // WP419（自查 P5）：担信息监控的这一层，卡里放拉回来的提及表（按组 / 情绪 / 来源筛）
+  const mentions = <MentionsTable scope={scope} {...(limit === undefined ? {} : { limit })} />
+  const monitored = useScopeMonitor(scope) !== undefined
   if (reports.length === 0)
     return (
       <div className="flex flex-col gap-2">
-        {ready ? <Empty text={t('reports.empty')} /> : null}
+        {ready && !monitored ? <Empty text={t('reports.empty')} /> : null}
         {competitor}
+        {mentions}
       </div>
     )
   return (
@@ -91,6 +96,7 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
         ))}
       </ul>
       {competitor}
+      {mentions}
     </div>
   )
 }
