@@ -170,6 +170,13 @@ h1 {
   color: var(--ws-bad);
 }
 
+/* WP409：配对成功那一条（顶上，绿） */
+.ws-note--good {
+  background: var(--ws-good-bg);
+  color: var(--ws-good);
+  font-weight: 600;
+}
+
 .ws-facts {
   list-style: none;
   margin: 0;

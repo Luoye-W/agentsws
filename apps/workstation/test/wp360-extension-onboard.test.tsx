@@ -131,6 +131,57 @@ describe('岗位页顶上那张卡', () => {
     await waitFor(() => expect(screen.queryByTestId('extension-onboard')).toBeNull())
   })
 
+  it('WP409：配上之后说一行「插件已连上 · 哪个浏览器」；令牌没名字时只说「插件已连上」', async () => {
+    state.needs = base({
+      paired: true,
+      paired_with: { label: 'Chrome · Windows', paired_at: '2026-10-18T08:00:00Z' },
+    })
+    const view = renderWithProviders(
+      <ExtensionOnboardCard roleIds={['social.reddit']} assignment="asg_reddit" mode="position" />,
+    )
+    expect((await screen.findByTestId('extension-onboard-paired-line')).textContent).toContain(
+      '插件已连上 · Chrome · Windows',
+    )
+    view.unmount()
+    state.needs = base({
+      paired: true,
+      paired_with: { label: '浏览器插件', paired_at: '2026-10-18T08:00:00Z' },
+    })
+    renderWithProviders(
+      <ExtensionOnboardCard roleIds={['social.reddit']} assignment="asg_reddit" mode="position" />,
+    )
+    const line = await screen.findByTestId('extension-onboard-paired-line')
+    expect(line.textContent).toContain('插件已连上')
+    expect(line.textContent).not.toContain('·')
+  })
+
+  it('WP409：看着它配上、而且都连好了（卡要收起）——仍留一行「插件已连上」', async () => {
+    state.needs = base()
+    renderWithProviders(
+      <ExtensionOnboardCard roleIds={['social.reddit']} assignment="asg_reddit" mode="position" />,
+    )
+    expect((await screen.findByTestId('extension-onboard')).getAttribute('data-phase')).toBe(
+      'install',
+    )
+    state.needs = base({
+      paired: true,
+      paired_with: { label: 'Chrome · Mac', paired_at: '2026-10-18T08:00:00Z' },
+      steps: [{ step: 'reddit', done: true }],
+      plans: [{ target: 'reddit.watch', name: 'Reddit 巡查', satisfied: true }],
+    })
+    // 卡每 4 秒问一次
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('extension-onboard').getAttribute('data-phase')).toBe(
+          'just-paired',
+        ),
+      { timeout: 6000 },
+    )
+    expect(screen.getByTestId('extension-onboard-paired-line').textContent).toContain(
+      'Chrome · Mac',
+    )
+  })
+
   it('不要插件 / 今天稍后过：不画', async () => {
     state.needs = base({ needed: false })
     renderWithProviders(

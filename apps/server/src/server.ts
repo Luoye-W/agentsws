@@ -12588,6 +12588,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         .filter((a) => a.revoked_at === undefined)
         .map((a) => a.role_id),
     paired: (ws) => extensionPairedRef?.(ws as WorkspaceId) === true,
+    // WP409：配上的是哪一把（最近配的、没撤的）——工坊那一行「插件已连上 · Chrome · Windows」
+    pairedWith: (ws) => {
+      const live = extensionStore
+        .list(ws as WorkspaceId)
+        .filter((t) => t.revoked_at === undefined)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+      return live === undefined
+        ? undefined
+        : {
+            label: live.label,
+            paired_at: live.created_at,
+            ...(live.last_used_at === undefined ? {} : { last_used_at: live.last_used_at }),
+          }
+    },
     stepDone: async (ws, step) => {
       const brand = await brandModules.forWorkspace(ws as WorkspaceId).catch(() => undefined)
       if (step === 'reddit') {

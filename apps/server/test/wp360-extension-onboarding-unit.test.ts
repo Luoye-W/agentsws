@@ -85,6 +85,19 @@ describe('WP360 引导装插件（替身）', () => {
     expect((await ob.needs(actor, ['ads.tiktok'])).needed).toBe(false)
   })
 
+  it('WP409：配上了说配的是哪一个（浏览器 · 系统）；没配上 / 老接线不说', async () => {
+    const withWhom = { label: 'Chrome · Windows', paired_at: '2026-10-18T08:00:00.000Z' }
+    const { ob, state } = make({ pairedWith: () => withWhom })
+    expect((await ob.needs(actor)).paired_with).toBeUndefined()
+    state.paired = true
+    expect((await ob.needs(actor)).paired_with).toEqual(withWhom)
+    // 职责不要插件也照样说（工坊别处也用这一份）
+    expect((await ob.needs(actor, ['ads.tiktok'])).paired_with).toEqual(withWhom)
+    const old = make()
+    old.state.paired = true
+    expect('paired_with' in (await old.ob.needs(actor))).toBe(false)
+  })
+
   it('稍后当天只记一次', async () => {
     const { ob, log } = make()
     expect((await ob.snooze(actor)).snoozed).toBe(true)

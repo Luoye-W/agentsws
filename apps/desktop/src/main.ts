@@ -6,7 +6,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, openSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, openSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { constants as osConstants, setPriority, tmpdir } from 'node:os'
@@ -62,7 +62,7 @@ import {
   diagnosticsListing,
   humanBytes,
 } from './diagnostics.js'
-import { loadAutoUpdater } from './electron-updater-module.js'
+import { loadAutoUpdater, moduleExport } from './electron-updater-module.js'
 import { bundledExtensionDir, extensionFolder, syncBundledExtension } from './extension-sync.js'
 import {
   cleanupPlan,
@@ -161,6 +161,16 @@ import {
   type UpdateBackend,
   type UpdateStatus,
 } from './update-controller.js'
+import {
+  DownloadInterrupted,
+  downloadResumable,
+  idleGuard,
+  mainProcessErrorHandler,
+  nodeResumableFiles,
+  placeInUpdaterCache,
+  resolveUpdateFile,
+  robustDownload,
+} from './update-download.js'
 import {
   type FeedConfig,
   feedFromEnv,
@@ -328,6 +338,16 @@ async function bootstrap(): Promise<void> {
       process.stdout.write(`${line}\n`)
     },
   })
+  /**
+   * WP409（内测真机 10-18 #1）：主进程兜底——没人接住的异常不再弹「JavaScript error occurred in the main
+   * process」英文原生框。断线类（`net::ERR_*`）交给正在跑的更新下载（叫停这一次、按「下载断了」收场），
+   * 其余照实写日志。`interruptDownload` 由更新那一段在下载时填上。
+   */
+  let interruptDownload: ((err: unknown) => boolean) | undefined
+  process.on(
+    'uncaughtException',
+    mainProcessErrorHandler({ logger, onNetError: (err) => interruptDownload?.(err) ?? false }),
+  )
   const version = app.getVersion()
   logger.info('桌面壳启动', { version, userData: paths.userData })
   // WP319：刚由「重启并更新」装上来的——收掉「正在更新」单（那个小窗跟着关），记一行用了多久
@@ -2067,12 +2087,72 @@ async function bootstrap(): Promise<void> {
   /** 「重启并更新」那一刻要用的东西（在下面 updates 建好之后才填上）。 */
   let quiesceForSwitch: () => Promise<void> = async () => undefined
 
+  /**
+   * WP409：续传。electron-updater 的整包下载一断就把临时文件删了、下次从 0 开始；这里带 Range 接着下
+   * （和库同一个会话，走同样的系统代理），校验过放进库的 `pending/` 缓存，再让库「下载」一次直接认这份。
+   * 库的缓存目录拿不到（还没下过一次）就什么都不做，交给库整包下。
+   */
+  const resumeIntoUpdaterCache = async (
+    real: AppUpdater,
+    file: { url: string; fileName: string; sha512: string; size?: number; admin: boolean },
+    onProgress: (percent: number) => void,
+  ): Promise<void> => {
+    const helper = (
+      real as unknown as {
+        downloadedUpdateHelper?: { cacheDir: string; cacheDirForPendingUpdate: string } | null
+      }
+    ).downloadedUpdateHelper
+    if (helper == null) return
+    const rfiles = nodeResumableFiles()
+    const dir = join(helper.cacheDir, 'agentsws-resume')
+    rfiles.ensureDir(dir)
+    const partial = join(dir, `${file.fileName}.part`)
+    // 别的版本留下的半截不要了
+    for (const name of readdirSync(dir))
+      if (name.endsWith('.part') && join(dir, name) !== partial) rfiles.remove(join(dir, name))
+    const ses = session.fromPartition('electron-updater', { cache: false })
+    await downloadResumable({
+      url: file.url,
+      partial,
+      sha512: file.sha512,
+      size: file.size,
+      fetch: async (url, headers) => {
+        const ctrl = new AbortController()
+        const res = await ses.fetch(url, { headers, signal: ctrl.signal })
+        const body = res.body as unknown as AsyncIterable<Uint8Array> | null
+        return {
+          status: res.status,
+          body: body === null ? null : idleGuard(body, () => ctrl.abort()),
+        }
+      },
+      files: rfiles,
+      onProgress,
+      sleep,
+      logger,
+    })
+    placeInUpdaterCache({
+      files: rfiles,
+      from: partial,
+      pendingDir: helper.cacheDirForPendingUpdate,
+      fileName: file.fileName,
+      sha512: file.sha512,
+      isAdminRightsRequired: file.admin,
+      join,
+    })
+    logger.info('续传下完、校验过，交给 electron-updater', { file: file.fileName })
+  }
+
   /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
   const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
     // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动。
     // WP225：不能写 `const { autoUpdater } = await import(...)`——CJS 的惰性 getter 认不成具名导出，
     // 打包后拿到 undefined（见 electron-updater-module.ts）
-    const real = await loadAutoUpdater<AppUpdater>(() => import('electron-updater'))
+    const updaterModule = await import('electron-updater')
+    const real = await loadAutoUpdater<AppUpdater>(async () => updaterModule)
+    // WP409：取消一次下载要它（主进程兜底接住断线时叫停那一次）；拿不到就不带（照旧下）
+    const Token = moduleExport(updaterModule, 'CancellationToken') as
+      | (new () => { cancel(): void })
+      | undefined
     real.autoDownload = false
     // 只在用户点了「重启并更新」时装：退出时偷偷装会绕开装之前的自检
     real.autoInstallOnAppQuit = false
@@ -2082,11 +2162,57 @@ async function bootstrap(): Promise<void> {
     // 那一类在「查」的时候不写，结论交给状态机记一行 info（见 update-controller.ts 的 electronUpdaterLogger）
     real.logger = updaterLogger
     let found: string | undefined
+    /** WP409：查到的那个安装包（续传要它的地址、sha512、大小）；只有自有下载站那一路续传。 */
+    let foundFile:
+      | { url: string; fileName: string; sha512: string; size?: number; admin: boolean }
+      | undefined
+    /** WP409：上一次下载被我们叫停过（库里那一次可能永远不回来）。 */
+    let abandoned = false
+    /** electron-updater 下一次；`differential = false` 这次不走差分。被主进程兜底叫停时以「断了」收场。 */
+    const attemptDownload = (differential: boolean): Promise<string[]> =>
+      new Promise((resolve, reject) => {
+        real.disableDifferentialDownload = !differential
+        const holder = real as unknown as { downloadPromise?: Promise<string[]> | null }
+        if (abandoned && holder.downloadPromise != null) {
+          // 被叫停的那一次在库里还挂着（断线错误没人接，它的 Promise 不会再回来）——放掉它，新起一次
+          logger.warn('上一次下载被叫停后还挂在 electron-updater 里，放掉重来')
+          holder.downloadPromise = null
+        }
+        abandoned = false
+        const token = Token === undefined ? undefined : new Token()
+        let settled = false
+        interruptDownload = (err) => {
+          if (settled) return false
+          settled = true
+          abandoned = true
+          interruptDownload = undefined
+          token?.cancel()
+          reject(new DownloadInterrupted(err))
+          return true
+        }
+        const run =
+          token === undefined ? real.downloadUpdate() : real.downloadUpdate(token as never)
+        run.then(
+          (files) => {
+            if (settled) return
+            settled = true
+            interruptDownload = undefined
+            resolve(files)
+          },
+          (err: unknown) => {
+            if (settled) return
+            settled = true
+            interruptDownload = undefined
+            reject(err)
+          },
+        )
+      })
     return {
       async check() {
         real.setFeedURL(
           feed.provider === 'generic'
-            ? { provider: 'generic', url: feed.url }
+            ? // WP409：差分下载「一段一个请求」——多段合一的那条路（库的默认）断线时错误没人接，弹原生框还卡死
+              { provider: 'generic', url: feed.url, useMultipleRangeRequest: false }
             : { provider: 'github', owner: feed.owner, repo: feed.repo },
         )
         updaterChecking = true
@@ -2108,6 +2234,18 @@ async function bootstrap(): Promise<void> {
             return undefined
           }
           found = v
+          const file =
+            result?.updateInfo.files?.find((f) => /\.exe$/i.test(f.url)) ??
+            result?.updateInfo.files?.[0]
+          foundFile =
+            feed.provider === 'generic' && file !== undefined && typeof file.sha512 === 'string'
+              ? {
+                  ...resolveUpdateFile(feed.url, file.url),
+                  sha512: file.sha512,
+                  ...(typeof file.size === 'number' ? { size: file.size } : {}),
+                  admin: file.isAdminRightsRequired === true,
+                }
+              : undefined
           return { version: found }
         } finally {
           updaterChecking = false
@@ -2121,8 +2259,18 @@ async function bootstrap(): Promise<void> {
         }
         real.on('download-progress', listener)
         let files: string[]
+        const file = foundFile
         try {
-          files = await real.downloadUpdate()
+          // WP409：断了先退整包、能续传就续传、自动再试几次（见 update-download.ts）
+          files = await robustDownload({
+            attempt: attemptDownload,
+            resume:
+              file === undefined
+                ? undefined
+                : () => resumeIntoUpdaterCache(real, file, (p) => onProgress(p * share)),
+            sleep,
+            logger,
+          })
         } finally {
           real.removeListener('download-progress', listener)
         }
@@ -2468,6 +2616,13 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.updateCancelWait, (event) =>
     fromLocalWindow(event) ? updates.cancelWait() : false,
   )
+  // WP409：下载断了时「去下载页」手动装（地址由壳定，页面不传网址）
+  ipcMain.handle(BRIDGE_CHANNELS.updateOpenPage, async (event) => {
+    if (!fromLocalWindow(event)) return false
+    logger.info('用户从更新按钮去了下载页')
+    await shell.openExternal(DOWNLOAD_PAGE)
+    return true
+  })
   // WP361：设置弹窗「这台电脑 → 桌面端」的开机自启开关（只认 true / false）
   ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginGet, (event) =>
     fromLocalWindow(event) ? launchAtLogin.get() : false,

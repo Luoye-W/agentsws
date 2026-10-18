@@ -23,18 +23,30 @@ import type {
 import type { WorkspaceId } from '@agentsws/contracts'
 import { browserCandidates, type Env } from './readonly-browser/find-browser.js'
 
+/** WP409：起进程的额外要求。 */
+export interface LaunchOptions {
+  /** Windows：参数原样拼进命令行（`explorer.exe /select,"<路径>"` 要这样，Node 的自动加引号它不认）。 */
+  verbatim?: boolean
+}
+
 /** 起一个与本进程脱钩的进程。起得来回 true（不看退出码：Windows 的 explorer.exe 成功了也回 1）。 */
 export type Launch = (
   command: string,
   args: string[],
   env: Record<string, string>,
+  options?: LaunchOptions,
 ) => Promise<boolean>
 
 /** 真的那一个：脱钩起（detached + unref），不接输出；`spawn` 事件到了就算起来了。 */
-export const spawnDetached: Launch = (command, args, env) =>
+export const spawnDetached: Launch = (command, args, env, options) =>
   new Promise((resolve) => {
     try {
-      const child = spawn(command, args, { detached: true, stdio: 'ignore', env })
+      const child = spawn(command, args, {
+        detached: true,
+        stdio: 'ignore',
+        env,
+        ...(options?.verbatim === true ? { windowsVerbatimArguments: true } : {}),
+      })
       child.once('error', () => resolve(false))
       child.once('spawn', () => {
         child.unref()
@@ -117,11 +129,27 @@ function joinPath(dir: string, name: string): string {
   return dir.endsWith(sep) ? `${dir}${name}` : `${dir}${sep}${name}`
 }
 
-/** 打开一个文件夹用哪个命令。 */
-export function folderOpener(platform: NodeJS.Platform, dir: string): [string, string[]] {
-  if (platform === 'darwin') return ['open', [dir]]
-  if (platform === 'win32') return ['explorer.exe', [dir]]
-  return ['xdg-open', [dir]]
+/** 上一级文件夹（不 import node:path：Windows 路径在 mac 上测也对）。 */
+function parentOf(dir: string): string {
+  const trimmed = dir.replace(/[\\/]+$/, '')
+  const cut = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  if (cut < 0) return trimmed
+  return cut === 0 ? trimmed.slice(0, 1) : trimmed.slice(0, cut)
+}
+
+/**
+ * 「打开插件文件夹」用哪个命令。WP409（内测真机 10-18 #3）：不是进到文件夹**里面**，而是在上一级里
+ * **选中**它——这样人看得见这个文件夹本身，能直接把它拖进 Chrome 扩展页（开发者模式下拖进去就装好）。
+ * Mac `open -R`；Windows `explorer.exe /select,"<路径>"`（原样拼，第三格要求 verbatim）；Linux 没有通用的
+ * 「选中」，打开上一级。
+ */
+export function folderOpener(
+  platform: NodeJS.Platform,
+  dir: string,
+): [string, string[], LaunchOptions?] {
+  if (platform === 'darwin') return ['open', ['-R', dir]]
+  if (platform === 'win32') return ['explorer.exe', [`/select,"${dir}"`], { verbatim: true }]
+  return ['xdg-open', [parentOf(dir)]]
 }
 
 /**
@@ -164,8 +192,13 @@ export function createExtensionInstall(options: ExtensionInstallOptions): Extens
       if (target === 'folder') {
         const dir = folder()
         if (dir === undefined) return { opened: false, message: NO_FOLDER }
-        const [command, args] = folderOpener(options.platform, dir)
-        const opened = await options.launch(command, args, options.browserEnv(options.env))
+        const [command, args, launchOptions] = folderOpener(options.platform, dir)
+        const opened = await options.launch(
+          command,
+          args,
+          options.browserEnv(options.env),
+          launchOptions,
+        )
         return opened ? { opened } : { opened, message: `没打开，文件夹在：${dir}` }
       }
       const executable = browserCandidates(options.platform, options.env).find((p) =>

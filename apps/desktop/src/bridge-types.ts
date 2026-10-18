@@ -153,6 +153,11 @@ export interface DesktopUpdateBridge {
   restart?(choice: DesktopRestartChoice): Promise<DesktopInstallOutcome>
   /** WP337：「等空闲后重启」时点一下取消。 */
   cancelWait?(): Promise<boolean>
+  /**
+   * WP409：下载断了时的另一条出路——打开官网下载页手动装（地址由壳定，页面不传网址）。
+   * 旧壳没有：先判空（没有就不出「去下载页」）。
+   */
+  openDownloadPage?(): Promise<boolean>
 }
 
 /** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
@@ -186,6 +191,8 @@ export const BRIDGE_CHANNELS = {
   updateReadiness: 'agentsws:update-readiness',
   updateRestart: 'agentsws:update-restart',
   updateCancelWait: 'agentsws:update-cancel-wait',
+  /** WP409 */
+  updateOpenPage: 'agentsws:update-open-page',
   /** WP353 */
   searchPending: 'agentsws:search-pending',
   searchChanged: 'agentsws:search-changed',

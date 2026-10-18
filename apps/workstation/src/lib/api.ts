@@ -6716,6 +6716,8 @@ export interface ExtensionNeedsView {
   uses: BrowserExtensionUseView[]
   roles: { role_id: string; name: { zh: string; en: string } }[]
   paired: boolean
+  /** WP409：配上的是哪一个（令牌名，多半是「Chrome · Windows」这类）；老服务没有。 */
+  paired_with?: { label: string; paired_at: string; last_used_at?: string }
   steps: { step: ExtensionFollowStepView; done?: boolean }[]
   plans: { target: string; name: string; satisfied: boolean }[]
   snoozed: boolean

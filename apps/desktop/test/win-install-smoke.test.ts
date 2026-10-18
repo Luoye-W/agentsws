@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  allUsersShortcutPaths,
+  checkScopeSwitch,
   copyDirSync,
   descendantsOf,
   describeExit,
@@ -135,6 +137,67 @@ describe('win-install-smoke 纯函数', () => {
 
   it('NSIS 静默安装：/D= 在最后、不带引号', () => {
     expect(installerArgs('C:\\P\\智能体 工坊')).toEqual(['/S', '/D=C:\\P\\智能体 工坊'])
+    // WP409：按机器装加 /allusers，/D= 仍在最后
+    expect(installerArgs('C:\\P\\x', ['/allusers'])).toEqual(['/S', '/allusers', '/D=C:\\P\\x'])
+  })
+})
+
+describe('WP409：按用户 → 按机器换范围之后', () => {
+  const userDir = 'C:\\Users\\u\\AppData\\Local\\Programs\\x'
+  const machineDir = 'C:\\Program Files\\x'
+  const newExe = `${machineDir}\\current\\agentsws.exe`
+  const links = {
+    userLinks: { startMenu: 'U\\start.lnk', startMenuProduct: 'U\\agentsws.lnk' },
+    machineLinks: { startMenu: 'M\\start.lnk', desktop: 'M\\desk.lnk' },
+  }
+
+  it('按用户那一份删干净、快捷方式都指新的：没有问题', () => {
+    const out = checkScopeSwitch(
+      { userDir, machineDir, ...links },
+      { exists: () => false, list: () => [] },
+      (lnk) => (lnk === 'M\\start.lnk' ? newExe : undefined),
+    )
+    expect(out.problems).toEqual([])
+  })
+
+  it('10-18 内测那一幕：旧版本目录、卸载程序还在，旧的 agentsws.lnk 指着已经没了的 current', () => {
+    const out = checkScopeSwitch(
+      { userDir, machineDir, ...links },
+      {
+        exists: () => true,
+        list: () => [
+          'app-0.2.0-beta.10',
+          'app-0.2.0-beta.11',
+          'Uninstall agentsws.exe',
+          'notes.txt',
+        ],
+      },
+      (lnk) =>
+        lnk === 'U\\agentsws.lnk'
+          ? `${userDir}\\current\\agentsws.exe`
+          : lnk === 'M\\start.lnk'
+            ? newExe
+            : undefined,
+    )
+    expect(out.problems).toHaveLength(2)
+    expect(out.problems[0]).toContain('app-0.2.0-beta.11')
+    expect(out.problems[0]).not.toContain('notes.txt')
+    expect(out.problems[1]).toContain('startMenuProduct')
+  })
+
+  it('所有用户开始菜单里没有快捷方式也算问题', () => {
+    const out = checkScopeSwitch(
+      { userDir, machineDir, ...links },
+      { exists: () => false, list: () => [] },
+      () => undefined,
+    )
+    expect(out.problems).toEqual(['所有用户开始菜单里的快捷方式没指向新装的 current\\agentsws.exe'])
+  })
+
+  it('所有用户的快捷方式位置', () => {
+    const p = allUsersShortcutPaths({ ProgramData: 'C:\\PD', PUBLIC: 'C:\\Pub' })
+    expect(p.startMenu).toContain('Start Menu')
+    expect(p.desktop).toContain('Desktop')
   })
 })
 

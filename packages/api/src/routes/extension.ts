@@ -21,7 +21,12 @@
 import type { Iso8601, KolChannel, MaybePromise } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import type { ExtensionScope, ExtensionSession, ExtensionStore } from '../extension-store.js'
+import {
+  browserLabelFromUserAgent,
+  type ExtensionScope,
+  type ExtensionSession,
+  type ExtensionStore,
+} from '../extension-store.js'
 import { body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
@@ -817,9 +822,12 @@ export function extensionRoutes(): Route[] {
       },
       async (c, deps) => {
         const input = await body(c, pairSchema)
+        // WP409：配上后工坊那一行要说「哪个浏览器」——配对码没起名字就按 UA 认（Chrome · Windows 这类）
+        const hint = browserLabelFromUserAgent(c.req.header('User-Agent'))
         const out = portOf(deps).store.redeem({
           code: input.code,
           origin: c.req.header('Origin'),
+          ...(hint === undefined ? {} : { label_hint: hint }),
         })
         if (!out.ok) {
           // Origin 不对是「你不是扩展」，其余都是「码不对」——两句人话，不给码。
