@@ -2,10 +2,11 @@
  * WP360（决策 947，Luoye 10-16）：哪些职责 / 岗位「需要浏览器插件」只由职责定义里的 `browser_extension` 推出来。
  *
  * 钉四件事：
- * - 现在命中的就是这七条职责（Reddit 两条、红人三条有插件面板的平台、广告两家有插件动作的后台）；
+ * - 现在命中的就是这十四条职责（Reddit 两条、红人三条有插件面板的平台、广告两家有插件动作的后台、
+ *   WP419 起社媒内容账号七条：到点打开发帖页、人点发布）；
  *   加一条要在这里加一行，并说清它拿插件做什么；
  * - 以 Reddit 为本职（`*.reddit`）的职责一定声明了 `reddit`（读 / 填回复都走插件）——忘了写会少一张引导卡；
- * - 岗位 = 默认勾的那几条职责的并集：红人营销、投放、公共关系命中；社媒运营默认不勾自家版，不命中；
+ * - 岗位 = 默认勾的那几条职责的并集：红人营销、投放、公共关系、社媒运营（内容账号）命中；
  * - 拼错用途在加载时就拒，不让它静默变成「不需要插件」。
  */
 
@@ -28,12 +29,20 @@ const HITS: Record<string, BrowserExtensionUse[]> = {
   'kol.youtube': ['kol'],
   'pr.reddit': ['reddit'],
   'social.reddit': ['reddit'],
+  // WP419（决策 1231）：社媒内容账号发帖走你自己的登录态 + 插件（到点打开发帖页、人点发布）
+  'social.facebook': ['social'],
+  'social.instagram': ['social'],
+  'social.linkedin': ['social'],
+  'social.threads': ['social'],
+  'social.tiktok': ['social'],
+  'social.x': ['social'],
+  'social.youtube': ['social'],
 }
 
 describe('WP360 需要插件的职责', () => {
   const roles = loadBundledRoles()
 
-  it('命中的就是这七条，用途写对', () => {
+  it('命中的就是这十四条，用途写对', () => {
     const got = Object.fromEntries(
       roles
         .filter((r) => r.browser_extension !== undefined)
@@ -71,13 +80,15 @@ describe('WP360 需要插件的职责', () => {
       ads: ['google_ads', 'meta_ads'],
       'kol-marketing': ['kol'],
       pr: ['reddit'],
+      // WP419：社媒运营默认勾的内容账号要插件发帖
+      'social-media': ['social'],
     })
     // 自建「Reddit 运营」（自家版 + 别人的版）：一张卡、一个用途
-    expect(need(['social.reddit', 'pr.reddit', 'social.tiktok'])).toEqual({
+    expect(need(['social.reddit', 'pr.reddit', 'social.discord'])).toEqual({
       uses: ['reddit'],
       role_ids: ['social.reddit', 'pr.reddit'],
     })
-    expect(need(['social.tiktok', 'dtc.support'])).toBeUndefined()
+    expect(need(['social.discord', 'dtc.support'])).toBeUndefined()
   })
 
   it('配对之后的步与方案卡：去重、固定顺序', () => {
