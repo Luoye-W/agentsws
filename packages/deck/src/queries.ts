@@ -773,7 +773,11 @@ const SOCIAL_QUERIES: QueryDef[] = [
         { key: 'body', label: '问的是什么' },
       ],
       // 这条职责**没有**答客户问题，但它要看得见自己转出去了多少（56 边界行）
-      rows: ofChannel(ctx.social?.handoffs ?? [], ctx).map((r) => ({
+      // WP417（自查客服 D11）：社群管理（接的那一边）认不出渠道——它要看**全部**转过来的，不按渠道筛
+      rows: (ctx.role_id === 'dtc.community-support'
+        ? (ctx.social?.handoffs ?? [])
+        : ofChannel(ctx.social?.handoffs ?? [], ctx)
+      ).map((r) => ({
         created_at: r.created_at,
         author: r.author,
         status: r.status,

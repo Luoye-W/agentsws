@@ -272,6 +272,11 @@ export interface ChatLane {
   }): Promise<ChatTeachingResult & { candidate_saved: boolean }>
   /** 求助超时巡检（`support.chat_assist_timeout`）。 */
   sweepAssistTimeouts(): Promise<ChatAssistSweepReport>
+  /**
+   * WP417（自查 C2 / C24）：岗位 AI 在这条会话的事项里起草了一句回复 → 出一张**聊天回复卡**（批了发回聊天窗）。
+   * 不是聊天会话的线程回 `undefined`（调用方照旧出邮件卡）。
+   */
+  proposeReply(thread_external_id: string, text: string): Promise<string | undefined>
   /** 出站：批准了的聊天草稿真推进会话。不归聊天管就回 `undefined`。 */
   deliver(item: ApprovalItem, opts: { idempotencyKey: string }): Promise<BackendResult | undefined>
   /** 21 §4 随主体删除。 */
@@ -1242,6 +1247,20 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           error: { message, retryable: code !== 'authorization_check_failed' },
         }
       }
+    },
+
+    async proposeReply(thread_external_id, text): Promise<string | undefined> {
+      const session = await store.findByThread(thread_external_id)
+      if (session === undefined) return undefined
+      const plan = buildChatPlan({
+        classification: classifyChatTurn(text, { pack }),
+        turn_text: text,
+        pack,
+        status: 'open',
+        takeover: false,
+      })
+      lastDraft.set(session.id, text)
+      return raiseCard(session, plan, '', text, 'answer')
     },
 
     eraseVisitor: async (visitor_id) => store.eraseVisitor(visitor_id),

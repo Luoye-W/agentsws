@@ -145,6 +145,8 @@ function harness(
      * 说得清"找到 / 找不到"的收信端。
      */
     makeSource?: (account: MailAccount) => MailSource
+    /** WP417：入站挂谁名下（收路由算出来的职责）。 */
+    position?: (role_id?: string) => { person_id: string; assignment_id: string; role_id: string }
   } = {},
 ): Harness {
   const clock = over.clock ?? baseClock
@@ -171,7 +173,12 @@ function harness(
     accounts: () => accounts,
     credentials: { password: () => PASS },
     work,
-    position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
+    position: (over.position ??
+      (() => ({
+        person_id: 'p_owner',
+        assignment_id: 'asg_1',
+        role_id: 'dtc.support',
+      }))) as never,
     ...(over.resolveActor === undefined ? {} : { resolveActor: over.resolveActor }),
     ...(over.batch === undefined ? {} : { batch: over.batch }),
     startRun: (input) => {
@@ -278,6 +285,27 @@ describe('IMAP 轮询 → 入站管线 → 岗位事项 → 起 Run（39 待办 
     // 还是那一条事项，只是补钉了来信人
     expect(matters).toHaveLength(1)
     expect(matters[0]?.context.pinned).toEqual([first?.context.pinned[0], contact])
+  })
+
+  it('WP417（自查 A15）：来信起的运行挂到路由算出来的客服职责，不是「第一条岗位」', async () => {
+    const asked: (string | undefined)[] = []
+    const h = harness({
+      position: (role_id) => {
+        asked.push(role_id)
+        return role_id === 'dtc.support'
+          ? { person_id: 'p_owner', assignment_id: 'asg_support', role_id: 'dtc.support' }
+          : { person_id: 'p_owner', assignment_id: 'asg_store', role_id: 'dtc.store' }
+      },
+    })
+    await h.channels.poll()
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.every((r) => r === 'dtc.support')).toBe(true)
+    const matter = h.work.listMatters({ kind: 'conversation' })[0]
+    expect(matter?.position_id).toBe('asg_support')
+    const run = h.work
+      .matterView(matter?.id as string, { limit: 20 })
+      .timeline.find((e) => e.kind === 'run')
+    expect(run?.actor).toEqual({ kind: 'agent', id: 'dtc.support' })
   })
 
   it('同一封信再拉一次不重复出事项（去重 24h 窗口）', async () => {

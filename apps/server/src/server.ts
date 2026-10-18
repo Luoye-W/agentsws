@@ -90,6 +90,7 @@ import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
+  AssignmentId,
   Clock,
   CompetitorIntakeAdapter,
   CompetitorSourceKind,
@@ -108,6 +109,7 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  RoleId,
   RunRequest,
   SearchDataPort,
   SkillTier,
@@ -725,7 +727,12 @@ import { DEEPSEEK_ACCOUNT_NEED } from './run-blocked.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { repairStuckRuns } from './run-repair.js'
-import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
+import {
+  createRuntime,
+  type MatterRecordSource,
+  type RuntimeAssembly,
+  type RuntimeOptions,
+} from './runtime.js'
 import {
   createScheduleAssembly,
   createSchedulePort,
@@ -5907,6 +5914,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     let supportJudgmentRef: SupportJudgment | undefined
     /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
     let supportInboxRef: SupportInboxPort | undefined
+    /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
+    let routeDraftRef: NonNullable<RuntimeOptions['routeDraft']> | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
       createConnectRecordSource({
@@ -6702,6 +6711,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 先泄漏守卫（商家教 AI 的那句中文有没有被逐字抄进客户会看到的正文），
              * 再三道自主门。判断层还没装好（装配期）就是 `undefined`：老行为。
              */
+            // WP417（自查 C2 / D9）：聊天会话 / 社群线程上的回复回原渠道（装配见 `routeDraftRef`）
+            routeDraft: async (input) => routeDraftRef?.(input),
             judgeDraft: (input) =>
               supportJudgmentRef?.judgeDraft({
                 channel: input.channel,
@@ -8073,6 +8084,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     lateMessages.current = messages
+    routeDraftRef = async ({ matter, body, actor }) => {
+      const pins = matter.context.pinned
+      // 社群线程：出回帖卡（批了经这条渠道的出口发回群 / 私信；承诺话术在那里打回）
+      const community = pins.find((p) => p.type === 'community_thread')
+      if (community !== undefined && socialService.port.replyThread !== undefined) {
+        const out = await socialService.port.replyThread(
+          {
+            workspace_id: ws,
+            person_id: actor.person_id as PersonId,
+            assignment_id: actor.assignment_id as AssignmentId,
+            role_id: actor.role_id as RoleId,
+          },
+          community.id,
+          { text: body },
+        )
+        return out.staged && out.approval_item_id !== undefined
+          ? { approval_item_id: out.approval_item_id }
+          : { error: out.message ?? '回帖卡没出成' }
+      }
+      // 聊天会话：出聊天回复卡（批了发回聊天窗）
+      for (const p of pins) {
+        if (p.type !== 'thread') continue
+        const id = await chat.proposeReply(p.id, body)
+        if (id !== undefined) return { approval_item_id: id }
+      }
+      return undefined
+    }
     supportInboxRef = createSupportInbox({
       clock,
       mail: () => messages.store,
@@ -11761,6 +11799,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (await brandModules.models(ws))
           .chatChoices()
           .some((c) => c.id === id && hasThinkingEffort(c.thinking, effort)),
+      // WP417（自查 D8）：转客服卡点了「接」→ 社群管理下开一件事（钉着那条线程）、起运行起草回帖
+      acceptHandoff: async (actor, item) => {
+        const payload = item.payload as {
+          thread_id?: string
+          author?: string
+          account?: string
+          text?: string
+        }
+        if (typeof payload.thread_id !== 'string') return
+        const role_id = 'dtc.community-support' as RoleId
+        const positions = await positionsFor(ws)
+        const held = roles.assignments
+          .listByPerson(actor.person_id as PersonId, { workspace_id: ws })
+          .find((a) => a.role_id === role_id && a.revoked_at === undefined)
+        const position_id = positions.positionOf(role_id, held?.id).position_id
+        if (position_id === undefined) return
+        await positions.open({
+          position_id,
+          person_id: actor.person_id as PersonId,
+          title: `回 ${payload.author ?? '客户'} 的问题${payload.account === undefined ? '' : `（${payload.account}）`}`,
+          summary: `社媒运营转过来的：${(payload.text ?? '').slice(0, 200)}`,
+          pinned: [{ type: 'community_thread', id: payload.thread_id }],
+          role_id,
+          mode: 'task',
+          detach: true,
+        })
+      },
       // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
       liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
       stopRuns: async (matter_id, reason) => {
