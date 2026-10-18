@@ -11,12 +11,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { EXTENSION_NEEDS_KEY } from '@/components/connections/extension-onboard-card'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { getExtensionNeeds } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+
+/**
+ * 和岗位页顶上那张装插件卡同一个缓存前缀（`extension-onboard-card.tsx` 的 `EXTENSION_NEEDS_KEY`）。
+ * 不 import 那个文件：它连着设置 / 连接一大串，挂进卡片堆会拖慢、还可能绕成环。
+ */
+const EXTENSION_NEEDS_KEY = 'extension-needs'
 
 export interface ExtensionRow {
   key: string
