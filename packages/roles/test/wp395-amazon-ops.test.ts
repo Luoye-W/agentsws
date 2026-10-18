@@ -47,11 +47,14 @@ describe('亚马逊店铺运营 amz.store', () => {
     expect(role.automation.request_design?.ceiling).toBe('L3')
   })
 
-  it('连接 amazon_sp 可选；skill 先登记 unit-economics；网页工具两样都挂', () => {
+  it('连接 amazon_sp 可选；技能 unit-economics 打头、WP397 的 Amazon 技能全部按需；网页工具两样都挂', () => {
     expect(role.connectors).toEqual([
       expect.objectContaining({ kind: 'amazon_sp', required: false }),
     ])
-    expect(role.skills.map((s) => s.name)).toEqual(['unit-economics'])
+    expect(role.skills[0]?.name).toBe('unit-economics')
+    // WP397：其余都是 amazon-*（官方 amazon-sp-* 与改写 / 自写），一律按需加载
+    for (const s of role.skills.slice(1)) expect(s.name.startsWith('amazon-'), s.name).toBe(true)
+    for (const s of role.skills) expect(s.load, s.name).toBe('on_demand')
     expect(role.web_tools).toEqual(['web_search', 'web_fetch'])
   })
 
