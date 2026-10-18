@@ -6447,6 +6447,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             researchTools: chainResearchTools(
               createResearchToolExecutor({
+                // WP419：前两路都不行 → 借用户 Chrome 里的插件现读一次（巡查那一份的 readOnce；不入巡查库）
+                pluginRead: async (reads) => {
+                  const rw = redditWatchLate.current
+                  if (rw === undefined)
+                    return { ok: false, why: '这个品牌没装 Reddit 巡查（插件那一路没接）' }
+                  const got = await rw.readOnce(reads)
+                  return got.ok ? { ok: true, parts: got.result.parts } : got
+                },
                 route: () => ownCloud.redditReadRoute(),
                 limits: () => ownCloud.redditBrowserReadLimits(),
                 callData: (capability, input) =>

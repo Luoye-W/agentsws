@@ -930,7 +930,8 @@ export function firstUsableReadLevel(
  * - `web_search` / `web_fetch`：官方网页工具（WP179，DeepSeek 原生搜索 + 抓公开网页）；
  * - `workshop`：接口中台（WP192 的能力目录，积分）；
  * - `browser_readonly`：本机浏览器只读（只给 Reddit，见上）；
- * - `official_api`：品牌自己连上的平台官方接口（连接页那张卡，有授权时）。
+ * - `official_api`：品牌自己连上的平台官方接口（连接页那张卡，有授权时）；
+ * - `extension`：WP419，用户 Chrome 里的「Agents 工坊助手」插件（品牌号会话、只读；Reddit 前两路都不行时）。
  */
 export const RESEARCH_FETCH_ROUTES = [
   'web_search',
@@ -938,6 +939,7 @@ export const RESEARCH_FETCH_ROUTES = [
   'workshop',
   'browser_readonly',
   'official_api',
+  'extension',
 ] as const
 export type ResearchFetchRoute = (typeof RESEARCH_FETCH_ROUTES)[number]
 

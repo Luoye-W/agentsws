@@ -8,6 +8,7 @@
  */
 
 import { useQueries, useQuery } from '@tanstack/react-query'
+import { EXTENSION_NEEDS_KEY } from '@/components/connections/extension-onboard-card'
 import { useScopeConversations } from '@/components/conversations/conversation-data'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
@@ -16,6 +17,8 @@ import type { CardStatus, RailPanelBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import { scopeAssignments, shortDate, useScopeReports } from '@/components/reports/report-data'
 import {
+  type ExtensionNeedsView,
+  getExtensionNeeds,
   getMySchedules,
   getPositionConnections,
   getPositionRecords,
@@ -201,10 +204,31 @@ export function useScopeConnections(scope: RailScope | undefined): {
   return { items: connectionsInScope(q.data?.items ?? [], scope), ready: !q.isPending }
 }
 
+/**
+ * WP419（主会话 Mac 自测 / 自查 S10）：这一层的职责要浏览器插件时，插件的状态（与岗位页顶上那张装插件卡同一份查询）。
+ * 不要插件 / 还没查到回 `undefined`。
+ */
+export function useScopeExtensionNeeds(
+  scope: RailScope | undefined,
+): ExtensionNeedsView | undefined {
+  const roleIds = (scope?.roles ?? []).map((r) => r.role_id)
+  const assignment = scope?.assignment
+  const q = useQuery({
+    queryKey: [EXTENSION_NEEDS_KEY, assignment, roleIds.join(',')],
+    queryFn: () => getExtensionNeeds(roleIds, assignment),
+    enabled: roleIds.length > 0 && assignment !== undefined,
+    retry: false,
+    staleTime: 30_000,
+  })
+  return q.data?.needed === true ? q.data : undefined
+}
+
 /** 连接：几个要处理（亮红点），都好了就说「都连好了」。 */
 export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus | undefined {
   const { t } = useApp()
   const { items } = useScopeConnections(scope)
+  // WP419：要插件的岗位，插件没配上 / 配上了还差一步（连 Reddit 之类）→ 红点，不说「都连好了」
+  const ext = useScopeExtensionNeeds(scope)
   // WP386：信息监控有拉不到的源 → 红点（汇总那一句照搬：「17 条 · 1 条拉不到」）
   const monitor = useScopeMonitor(scope)?.view
   // WP392：竞品监控有没读到的那几家，也算要处理（红点；照实说几家）。钩子先都调完再判
@@ -217,6 +241,18 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
       summary: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
       dot: 'alert',
       dotLabel: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
+    }
+  if (ext !== undefined && !ext.paired)
+    return {
+      summary: t('conncard.summary.ext_install'),
+      dot: 'alert',
+      dotLabel: t('conncard.summary.ext_install'),
+    }
+  if (ext !== undefined && ext.steps.some((s) => s.done === false))
+    return {
+      summary: t('conncard.summary.ext_step'),
+      dot: 'alert',
+      dotLabel: t('conncard.summary.ext_step'),
     }
   if (items.length === 0) return undefined
   const todo = items.filter(connectionNeedsYou).length

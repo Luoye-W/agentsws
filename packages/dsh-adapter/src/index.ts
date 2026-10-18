@@ -265,6 +265,8 @@ export {
   nativeSearchRun,
   officialSearchProvider,
   officialWebSearch,
+  redditFetchNote,
+  redditGuardFetch,
   searchProviderIdOf,
   splitFetchProvider,
   WEB_SEARCH_TIMEOUT_MS,

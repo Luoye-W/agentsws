@@ -83,6 +83,9 @@ export const PANEL_ZH: Record<string, string> = {
 
   'conncard.summary.todo': '{n} 个要处理',
   'conncard.summary.ok': '都连好了',
+  // WP419：要插件的岗位，插件没配上 / 还差一步时不说「都连好了」
+  'conncard.summary.ext_install': '插件还没装好',
+  'conncard.summary.ext_step': '插件还差一步',
   'conncard.empty': '这里不用连什么',
   'conncard.connect': '去连接',
   'conncard.connected': '已连好',
@@ -172,6 +175,8 @@ export const PANEL_EN: Record<string, string> = {
 
   'conncard.summary.todo': '{n} to fix',
   'conncard.summary.ok': 'All connected',
+  'conncard.summary.ext_install': 'Extension not set up',
+  'conncard.summary.ext_step': 'Extension needs one more step',
   'conncard.empty': 'Nothing to connect here',
   'conncard.connect': 'Connect',
   'conncard.connected': 'Connected',
