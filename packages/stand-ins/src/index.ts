@@ -89,6 +89,8 @@ export * from './runtime/site-health.js'
 export * from './runtime/skills.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
+// WP417：客服四条职责的查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
+export * from './runtime/support-tools.js'
 export * from './runtime/theme.js'
 export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'

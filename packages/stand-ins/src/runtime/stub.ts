@@ -122,6 +122,7 @@ import {
   marketplaceLinkSlip,
   rewriteForChannelGuard,
 } from './support.js'
+import { SUPPORT_TOOL_DEF_BY_NAME } from './support-tools.js'
 import {
   checkOf,
   choiceOf,
@@ -400,7 +401,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）
       PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ??
       // WP390：工坊服务的两个工具（服务端接了才有）
-      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ?? {
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP417：客服查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
+      SUPPORT_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },

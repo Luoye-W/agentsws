@@ -26,6 +26,7 @@
  * 不管它是先由 `packages/channels` 的入站解析出来的，还是先由 `get_order` 带回来的，
  * 认的都是同一个 `ObjectRef`（`noteContact` 保证这件事）。
  */
+
 import { createHash } from 'node:crypto'
 import type {
   AssignmentId,
@@ -60,6 +61,7 @@ import {
   supportOrderDoc,
   supportOrdersDoc,
 } from './shop-graphql.js'
+import type { SupportInboxPort } from './support-inbox.js'
 
 /** 事项工具签出来的 token 挂在这个 assignment 下（与试连、活数据源各自分开记账）。 */
 export const TOOLS_ASSIGNMENT = 'asg_matter_tools'
@@ -89,6 +91,12 @@ export const POLICY_TOOL = 'search_policies'
  * grounding 一直写着它，但以前没有执行器——模型一调就是 `unsupported_tool`。读本品牌社媒库。
  */
 export const COMMUNITY_THREADS_TOOL = 'list_community_threads'
+
+/** WP417：客服查询类工具（等着回的来信 / 聊天会话）。 */
+export const SUPPORT_THREADS_TOOL = 'list_support_threads'
+export const CHAT_SESSIONS_TOOL = 'list_chat_sessions'
+/** WP417：转客服之后社媒库里的状态（社群管理缺省要看到它们）。 */
+const ROUTED_TO_SUPPORT = 'routed_to_support'
 
 /** `list_orders` / `list_products` 一次最多给模型几条（它是来答一封信的，不是来导数据的）。 */
 export const LIST_LIMIT = 20
@@ -158,6 +166,11 @@ export interface ConnectRecordSourceOptions {
   kol?: () => RecordKolPort | undefined
   /** WP72（56 §2）：社媒账号与社群线程的只读面（见 {@link RecordSocialPort}）。 */
   social?: () => RecordSocialPort | undefined
+  /**
+   * WP417（自查客服 A8 / C23）：等着回的来信与聊天会话（`list_support_threads` / `list_chat_sessions`）。
+   * 不给 = 这两个工具没接，工具面里也不摆。
+   */
+  support?: () => SupportInboxPort | undefined
   /** WP77（59 §2）：邮件模板与已装 App 的只读面（见 {@link RecordSitePort}）。 */
   site?: () => RecordSitePort | undefined
   /** WP75（57 §1）：广告账户与 campaign 的只读面（见 {@link RecordAdsPort}）。 */
@@ -1193,6 +1206,8 @@ export function createConnectRecordSource(
     const bare = bareToolName(tool)
     if (bare === POLICY_TOOL || TOOL_ACTIONS[bare] !== undefined) return true
     if (bare === COMMUNITY_THREADS_TOOL) return options.social?.()?.threads !== undefined
+    if (bare === SUPPORT_THREADS_TOOL || bare === CHAT_SESSIONS_TOOL)
+      return options.support?.() !== undefined
     return false
   }
 
@@ -1212,9 +1227,26 @@ export function createConnectRecordSource(
       SOCIAL_CHANNELS.find((c) => c.role_id === request.actor.role_id)?.id
     const open = input.open !== false
     const asked = typeof input.limit === 'number' ? Math.floor(input.limit) : LIST_LIMIT
-    const limit = Math.max(1, Math.min(LIST_LIMIT, asked))
+    const limit = Math.max(1, Math.min(50, asked))
+    /*
+     * WP417（自查 D3）：社群管理缺省要看到「社媒运营转过来的」——转客服之后状态是 `routed_to_support`，
+     * 老的 `open` 筛选正好把它们滤掉。没处理完 = 还开着 + 转过来还没人回。
+     */
+    const handedOver = input.handed_over === true
+    const sinceDays =
+      typeof input.since_days === 'number' ? Math.min(90, input.since_days) : undefined
+    const since =
+      sinceDays === undefined || !(sinceDays > 0)
+        ? undefined
+        : Date.parse(clock.now()) - sinceDays * 86_400_000
     const rows = port
-      .threads({ ...(channel === undefined ? {} : { channel }), ...(open ? { open: true } : {}) })
+      .threads(channel === undefined ? {} : { channel })
+      .filter((r) =>
+        handedOver
+          ? r.status === ROUTED_TO_SUPPORT
+          : !open || r.status === 'open' || r.status === ROUTED_TO_SUPPORT,
+      )
+      .filter((r) => since === undefined || Date.parse(r.created_at) >= since)
       .slice(0, limit)
     return {
       status: 'ok',
@@ -1232,6 +1264,53 @@ export function createConnectRecordSource(
       },
       provenance: rows.map((r) => ({ type: 'community_thread', id: r.id }) satisfies ObjectRef),
     }
+  }
+
+  const supportPort = (): SupportInboxPort | undefined => options.support?.()
+  const limitOf = (input: Record<string, unknown>): number =>
+    Math.max(
+      1,
+      Math.min(50, typeof input.limit === 'number' ? Math.floor(input.limit) : LIST_LIMIT),
+    )
+
+  /** WP417（自查 A8 / A43 / B7）：客服邮箱里还等着回的来信（只读消息库）。 */
+  const listSupportThreads = async (input: Record<string, unknown>): Promise<ToolExecution> => {
+    const port = supportPort()
+    if (port === undefined)
+      return {
+        status: 'error',
+        reason: `unsupported_tool：这个进程没接「${SUPPORT_THREADS_TOOL}」。`,
+      }
+    const minHours = typeof input.min_waiting_hours === 'number' ? input.min_waiting_hours : 0
+    const dueWithin =
+      typeof input.due_within_hours === 'number' ? input.due_within_hours : undefined
+    const amazonOnly = input.amazon_only === true || dueWithin !== undefined
+    const rows = (await port.waitingMail())
+      .filter((r) => r.waiting_hours >= minHours)
+      .filter((r) => !amazonOnly || r.amazon)
+      .filter((r) => dueWithin === undefined || (r.due_in_hours ?? Infinity) <= dueWithin)
+    const shown = rows.slice(0, limitOf(input))
+    return {
+      status: 'ok',
+      data: { total: rows.length, threads: shown },
+      provenance: shown.map((r) => ({ type: 'thread', id: r.thread_id }) satisfies ObjectRef),
+    }
+  }
+
+  /** WP417（自查 C23）：网站聊天窗里的会话（只读聊天库）。 */
+  const listChatSessions = async (input: Record<string, unknown>): Promise<ToolExecution> => {
+    const port = supportPort()
+    if (port === undefined)
+      return {
+        status: 'error',
+        reason: `unsupported_tool：这个进程没接「${CHAT_SESSIONS_TOOL}」。`,
+      }
+    const raw = stringOf(input.status)
+    const status =
+      raw === 'email_follow_up' || raw === 'open' || raw === 'all' ? raw : ('waiting' as const)
+    const rows = await port.chatSessions(status)
+    const shown = rows.slice(0, limitOf(input))
+    return { status: 'ok', data: { total: rows.length, sessions: shown } }
   }
 
   const executeTool: ToolExecutor = async ({ name, input, request }) => {
@@ -1261,6 +1340,8 @@ export function createConnectRecordSource(
         )
       }
       if (bare === COMMUNITY_THREADS_TOOL) return finish(listCommunityThreads(request, input))
+      if (bare === SUPPORT_THREADS_TOOL) return finish(await listSupportThreads(input))
+      if (bare === CHAT_SESSIONS_TOOL) return finish(await listChatSessions(input))
       if (TOOL_ACTIONS[bare] === undefined) {
         return finish({ status: 'error', reason: `unsupported_tool：这个进程没接「${bare}」。` })
       }

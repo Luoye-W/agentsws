@@ -830,6 +830,7 @@ import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
 import { createScopeManagerRouter } from './supervisor.js'
+import { createSupportInbox, type SupportInboxPort } from './support-inbox.js'
 import {
   createSupportJudgment,
   SUPPORT_SLA_HANDLER,
@@ -3264,6 +3265,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return first === undefined
       ? undefined
       : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+  }
+
+  /**
+   * WP417（自查客服 A15 / C20）：入站这一次挂到**路由算出来的那条职责**上——来信 → `dtc.support` /
+   * `amz.support`，聊天 → `dtc.live-chat`。按顺序找本人在这个品牌里持有的第一条匹配职责；
+   * 一条都没有才退回 {@link firstPositionOf}（老行为）。人设、话术、知识权限、卡归谁都跟着它走。
+   */
+  /** WP417：客服判断层、在线聊天各自先找哪几条职责（找不到退回第一条岗位）。 */
+  const SUPPORT_DUTIES = ['dtc.support', 'amz.support'] as const
+  const LIVE_CHAT_DUTIES = ['dtc.live-chat', 'dtc.support'] as const
+  const positionFor = (
+    ws: WorkspaceId,
+    roleIds: readonly (string | undefined)[],
+  ): { person_id: PersonId; assignment_id: string; role_id: string } | undefined => {
+    const held = roles.assignments
+      .listByPerson(person.id, { workspace_id: ws })
+      .filter((a) => a.revoked_at === undefined)
+    for (const want of roleIds) {
+      if (want === undefined) continue
+      const hit = held.find((a) => a.role_id === want)
+      if (hit !== undefined)
+        return { person_id: hit.person_id, assignment_id: hit.id, role_id: hit.role_id }
+    }
+    return firstPositionOf(ws)
   }
 
   // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
@@ -5880,6 +5905,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 运行时比判断层先装配好，而运行时的 `judgeDraft` 要调它——靠这个变量打断环。
      */
     let supportJudgmentRef: SupportJudgment | undefined
+    /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
+    let supportInboxRef: SupportInboxPort | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
       createConnectRecordSource({
@@ -5913,6 +5940,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
         social: () => social,
+        // WP417：等着回的来信 / 聊天会话（只读本机消息库与聊天库）
+        support: () => supportInboxRef,
         /*
          * WP77：邮件模板与已装 App 的**只读**记录（见 `RecordSitePort`）。
          *
@@ -7375,7 +7404,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       appendEvent,
       approvals,
-      position: () => firstPositionOf(ws),
+      position: () => positionFor(ws, SUPPORT_DUTIES),
       vertical: () => brandProfileOf(ws).vertical,
       // 落款：品牌名（模板草稿要它；没有就用一个中性的）
       signature: () => '客服团队',
@@ -7384,7 +7413,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 每次现查：商家刚在卡上答过一条，下一封信就该按新口径走，不该等重启。
        */
       policies: async () => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const cards = await knowledge.store.list(
@@ -7421,7 +7450,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 72 §P0-3：答不上来 → 落缺口 + 记一个等待者（按线程去重，零新表）
       gaps: {
         openGap: (input) => {
-          const position = firstPositionOf(ws)
+          const position = positionFor(ws, SUPPORT_DUTIES)
           if (position === undefined) return undefined
           return knowledge.intake.openGap({
             workspace_id: ws,
@@ -7469,9 +7498,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(records.contactOf === undefined
         ? {}
         : { resolveActor: (email: string) => records.contactOf?.(email) }),
-      // 入站事项挂谁名下：本人在**这个品牌**里现在持有的第一条岗位。
-      // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
-      position: () => firstPositionOf(ws),
+      // 入站事项挂谁名下：本人在**这个品牌**里持有的、路由算出来的那条职责（WP417 自查 A15）；
+      // 没有就退回第一条。每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
+      position: (role_id) => positionFor(ws, [role_id, 'dtc.support']),
       // WP125（72 §P0-1）：落成事项之后、起 Run 之前，客服判断层先说话
       judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
       /**
@@ -7604,7 +7633,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 同一套知识与订单只读：记录源就是运行时那一个
       source: records,
       searchKnowledge: async (text, limit) => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
@@ -7621,12 +7650,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
       },
-      position: () => firstPositionOf(ws),
+      position: () => positionFor(ws, LIVE_CHAT_DUTIES),
       // WP289（决策 318）：聊天窗里教的「以后都这样」落在客服那几条职责的规矩上；聊天 AI 每一轮照做
       roleRules: () => chatRoleRulesText(ws),
       // WP333：聊天回复也带上品牌话术（这个品牌自己写过 `brand-voice` 才有；只有基础版 = 照旧）
       brandVoice: async () => {
-        const position = firstPositionOf(ws)
+        const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return undefined
         const resolved = await skills.registry
           .resolve(BRAND_VOICE_SKILL, {
@@ -8030,6 +8059,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     lateMessages.current = messages
+    supportInboxRef = createSupportInbox({
+      clock,
+      mail: () => messages.store,
+      chat: () => ({
+        sessions: (filter) => chat.sessions(filter),
+        messages: (id, limit) => chat.messages(id, limit),
+      }),
+    })
 
     /*
      * WP124：转发器设置进本机加密库（与邮箱口令、模型 key 同一个库）；
