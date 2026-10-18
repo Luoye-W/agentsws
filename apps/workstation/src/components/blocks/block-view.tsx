@@ -169,68 +169,71 @@ function TableBlock({
       </>
     )
   return (
-    <div className="-mx-4 overflow-x-auto">
-      <table className="w-full text-[13.5px]" data-testid="block-table">
-        <thead>
-          {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
-          <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
-            {payload.columns.map((c) => {
-              const col = byKey.get(c.key)
-              return (
-                <th
-                  key={c.key}
-                  scope="col"
-                  className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
-                >
-                  {col === undefined ? (
-                    c.label
-                  ) : (
-                    <span className="inline-flex items-center gap-0.5">
-                      {c.label}
-                      <ColumnFilter
-                        col={col}
-                        value={state[c.key]}
-                        onChange={(v) => setColumn(c.key, v)}
-                        display={display}
-                      />
-                    </span>
-                  )}
-                </th>
-              )
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={rowKey(row, payload.columns)}
-              className="border-b border-ws-line last:border-0"
-            >
+    <div>
+      <div className="-mx-4 overflow-x-auto">
+        <table className="w-full text-[13.5px]" data-testid="block-table">
+          <thead>
+            {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
+            <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
               {payload.columns.map((c) => {
-                const value = row[c.key]
-                if (c.format === 'flag')
-                  return (
-                    <td key={c.key} className="px-2 py-3.5">
-                      <FlagCell text={String(value ?? '')} />
-                    </td>
-                  )
+                const col = byKey.get(c.key)
                 return (
-                  <td
+                  <th
                     key={c.key}
-                    className={`px-4 py-3.5 ${c.align === 'right' ? 'ws-num text-right' : ''}`}
+                    scope="col"
+                    className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
                   >
-                    {cellDisplay(c, value, row, lang)}
-                  </td>
+                    {col === undefined ? (
+                      c.label
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+                        {c.label}
+                        <ColumnFilter
+                          col={col}
+                          value={state[c.key]}
+                          onChange={(v) => setColumn(c.key, v)}
+                          display={display}
+                        />
+                      </span>
+                    )}
+                  </th>
                 )
               })}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={rowKey(row, payload.columns)}
+                className="border-b border-ws-line last:border-0"
+              >
+                {payload.columns.map((c) => {
+                  const value = row[c.key]
+                  if (c.format === 'flag')
+                    return (
+                      <td key={c.key} className="px-2 py-3.5">
+                        <FlagCell text={String(value ?? '')} />
+                      </td>
+                    )
+                  return (
+                    <td
+                      key={c.key}
+                      className={`px-4 py-3.5 ${c.align === 'right' ? 'ws-num text-right' : ''}`}
+                    >
+                      {cellDisplay(c, value, row, lang)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
+      </div>
+      {/* 在表格那层横向滚动外面：表往右滚了也看得见「n / m 行 · 清空」 */}
       {filtering ? (
         <FilteredLine shown={rows.length} total={payload.rows.length} onClear={clear} />
       ) : null}
-      {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
     </div>
   )
 }

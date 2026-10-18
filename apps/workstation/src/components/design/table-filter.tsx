@@ -290,7 +290,7 @@ export function FilteredLine({
   const { t } = useApp()
   return (
     <p
-      className="flex items-center gap-1 px-4 pt-2 text-xs text-ws-muted-fg"
+      className="flex items-center gap-1 pt-2 text-xs text-ws-muted-fg"
       data-testid="table-filtered"
     >
       {shown === 0 ? t('table.filter.none') : t('table.filter.shown', { shown, total })}
