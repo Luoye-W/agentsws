@@ -6221,6 +6221,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                       limiter: redditReadLimiterOf(readonlyBrowser),
                     }),
                 nowMs: () => Date.parse(clock.now()),
+                // WP411：since / until 写成本地日期时按品牌时区算
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
                 /*
                  * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
                  * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。

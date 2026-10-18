@@ -117,5 +117,36 @@ export function redditWatchSourceOf(rw: RedditWatchAssembly): WatchSource {
         .map((r) => r.finished_at)
         .filter((t): t is Iso8601 => t !== undefined && t >= w.since && t <= w.until),
     sweepNow: (o) => rw.sweepNow(o?.timeoutMs === undefined ? {} : { timeoutMs: o.timeoutMs }),
+    // WP411（#13）：按时间窗回补（在你浏览器里读）
+    backfill: (input) => rw.backfill(input),
+    // WP411：每一块大约从什么时候起有数据（自家 = 收件箱 + 自家版块；外部 = 关键词 + 重点版块）
+    coverage: () => {
+      const c = rw.coverage()
+      const min = (...xs: (Iso8601 | undefined)[]): Iso8601 | undefined =>
+        xs.filter((x): x is Iso8601 => x !== undefined).sort()[0]
+      const own = min(c.own_sub)
+      const ext = min(c.external, c.watch_sub)
+      const s = rw.settings()
+      return [
+        ...(s.own_subreddits.length === 0
+          ? []
+          : [
+              {
+                scope: 'own' as const,
+                label: '自家版块',
+                ...(own === undefined ? {} : { since: own }),
+              },
+            ]),
+        ...(s.keywords.length === 0 && (s.watch_subreddits ?? []).length === 0
+          ? []
+          : [
+              {
+                scope: 'external' as const,
+                label: '外部社区',
+                ...(ext === undefined ? {} : { since: ext }),
+              },
+            ]),
+      ]
+    },
   }
 }

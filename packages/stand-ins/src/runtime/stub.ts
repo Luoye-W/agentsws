@@ -70,8 +70,10 @@ import {
   recordSinkDataOf,
   renderRecordSinkAnswer,
 } from './record-sink.js'
-import { PUBLISH_REPORT_TOOL, REPORT_TOOL_DEF_BY_NAME } from './report.js'
+import { PUBLISH_REPORT_TOOL, REPORT_TOOL_DEF_BY_NAME, RUN_WATCH_NOW_TOOL } from './report.js'
 import {
+  backfillAnswer,
+  backfillAsk,
   composeStubReport,
   type ReportNeed,
   reorderAsk,
@@ -1129,14 +1131,19 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * 工具面里没有 `publish_report` / `schedule_update` 的运行一个字节不变。
        */
       const plan = reportPlan(req.tools.allow, threadText)
+      // WP411（#13）：「把 10-11 到 10-16 补一下」→ 先看计划、说一句，再照做
+      const fill =
+        plan === undefined ? backfillAsk(req.tools.allow, threadText, clock.now()) : undefined
       const reorder =
         plan === undefined &&
+        fill === undefined &&
         req.tools.allow.includes(SCHEDULE_UPDATE_TOOL) &&
         req.tools.allow.includes(SCHEDULE_LIST_TOOL)
           ? reorderAsk(threadText)
           : undefined
       if (
         (plan !== undefined && req.tools.allow.includes(PUBLISH_REPORT_TOOL)) ||
+        fill !== undefined ||
         reorder !== undefined
       ) {
         const callTool = async (
@@ -1183,6 +1190,13 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             res.status === 'ok'
               ? `已发布「${doc.title}」${typeof data.version === 'number' && data.version > 1 ? `（第 ${data.version} 版）` : ''}，在报表区。`
               : `报告没发出去：${res.reason ?? '这一步没走通'}`
+        } else if (fill !== undefined) {
+          const reddit = /reddit|(^|[\s（(])r\//iu.test(threadText) ? { platform: 'reddit' } : {}
+          const preview = await callTool(RUN_WATCH_NOW_TOOL, { ...reddit, ...fill, preview: true })
+          const p = (preview.data ?? {}) as { ok?: boolean }
+          const done =
+            p.ok === true ? await callTool(RUN_WATCH_NOW_TOOL, { ...reddit, ...fill }) : undefined
+          answer = backfillAnswer(preview.data, done?.data)
         } else {
           const ask = reorder as { from: number; to: 'first' | 'last' }
           const listed = await callTool(SCHEDULE_LIST_TOOL, {})

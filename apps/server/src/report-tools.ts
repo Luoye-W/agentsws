@@ -23,6 +23,7 @@ import {
   type CompetitorSourceKind,
   type Iso8601,
   REPORT_OUTBOUND_ACTION,
+  type RedditBackfillPlan,
   type ReportPayload,
   WATCH_ASSESSMENTS,
   type WatchAssessment,
@@ -73,6 +74,18 @@ export interface WatchSource {
   changes?(window: { since: Iso8601; until: Iso8601 }): MaybePromise<CompetitorChange[]>
   /** WP392：各条源这次读没读到（报告照实写「哪家没读到」）。没有 = 不分源。 */
   health?(): MaybePromise<{ sources: number; failed: string[]; partial: string[] }>
+  /**
+   * WP411（#13）：按时间窗回补（`preview` = 只回那一句计划）。没有 = 这个平台补不了指定时间段。
+   * 补不了回 `plan.ok: false`（原因 + 能做的）；超时抛一句人话。
+   */
+  backfill?(input: {
+    since: string
+    until?: string
+    preview?: boolean
+    timeoutMs?: number
+  }): Promise<{ plan: RedditBackfillPlan; run?: unknown }>
+  /** WP411：自家 / 外部大约从什么时候起有数据（没采过的没有 `since`）。 */
+  coverage?(): MaybePromise<{ scope: 'own' | 'external'; label: string; since?: Iso8601 }[]>
 }
 
 /**
@@ -241,6 +254,22 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
       ...(limit === undefined ? {} : { limit }),
     })
     const done = sweeps.filter((t) => t >= w.since && t <= w.until).sort()
+    // WP411（#13）：这段时间某一块没采过 → 照实说「没采到」，不当 0
+    const tz = options.tzOffsetMinutes(ws)
+    const day = (iso: Iso8601): string =>
+      new Date(Date.parse(iso) + tz * 60_000).toISOString().slice(0, 10)
+    const coverage: string[] = []
+    for (const c of (await source.coverage?.()) ?? []) {
+      if (scope !== undefined && c.scope !== scope) continue
+      if (c.since === undefined)
+        coverage.push(
+          `${c.label}还没采过：这段时间的是没采到，不是 0。要补用 run_watch_now 带 since / until。`,
+        )
+      else if (w.since < c.since)
+        coverage.push(
+          `${c.label}大约从 ${day(c.since)} 起才有数据，之前的没采到（不是 0）；要补用 run_watch_now 带 since / until。`,
+        )
+    }
     return ok({
       configured: true,
       platform: source.platform,
@@ -249,13 +278,75 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
       sweeps: { count: done.length, ...(done.length === 0 ? {} : { last_at: done.at(-1) }) },
       ...r,
       ...(w.problems.length === 0 ? {} : { problems: w.problems }),
+      ...(coverage.length === 0 ? {} : { coverage }),
     })
+  }
+
+  /** WP411（#13）：按时间窗回补——先说计划（`preview`），再照做；补不了照实说原因与能做的。 */
+  const backfill = async (source: WatchSource, input: Record<string, unknown>) => {
+    const since = str(input.since) ?? ''
+    const until = str(input.until)
+    if (source.backfill === undefined)
+      return ok({
+        ok: false,
+        message: '这个平台补不了指定的时间段。',
+        can: '用已入库的数据，并在报告里写明这段没采到。',
+      })
+    try {
+      const res = await source.backfill({
+        since,
+        ...(until === undefined ? {} : { until }),
+        ...(input.preview === true ? { preview: true } : {}),
+        timeoutMs: WATCH_WAIT_MS,
+      })
+      const plan: RedditBackfillPlan = res.plan
+      if (!plan.ok) return ok({ ok: false, message: plan.message, can: plan.can })
+      const head = {
+        ok: true,
+        say: plan.message,
+        days: plan.days,
+        pages: plan.pages,
+        reads: plan.reads,
+        limits: plan.limits,
+      }
+      if (input.preview === true) return ok({ ...head, preview: true })
+      const run = res.run as
+        | {
+            finished_at?: string
+            parts?: {
+              part?: string
+              status?: string
+              fresh?: number
+              filtered?: number
+              message?: string
+            }[]
+          }
+        | undefined
+      return ok({
+        ...head,
+        ...(run?.finished_at === undefined ? {} : { finished_at: run.finished_at }),
+        parts: (run?.parts ?? []).map((p) => ({
+          part: p.part,
+          status: p.status,
+          ...(p.fresh === undefined ? {} : { fresh: p.fresh }),
+          ...(p.filtered === undefined ? {} : { filtered: p.filtered }),
+          ...(p.message === undefined ? {} : { message: p.message }),
+        })),
+      })
+    } catch (e) {
+      return ok({
+        ok: false,
+        message: `${e instanceof Error ? e.message : String(e)}`.slice(0, 400),
+        can: '插件交回之前读到的已经入库；过一会儿再说一次接着补。',
+      })
+    }
   }
 
   const runNow = async (ws: WorkspaceId, input: Record<string, unknown>, role_id: string) => {
     const source = await options.watch(ws, str(input.platform), role_id)
     if (source === undefined || !(await source.configured()))
       return ok({ ok: false, message: '这个品牌还没配巡查。' })
+    if (str(input.since) !== undefined) return backfill(source, input)
     if (source.sweepNow === undefined)
       return ok({ ok: false, message: '这个平台不能现在巡查，用已入库的数据。' })
     try {

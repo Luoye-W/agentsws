@@ -199,6 +199,11 @@ export interface RedditWatchAssembly {
     timeoutMs?: number
     pollMs?: number
   }): Promise<{ plan: RedditBackfillPlan; run?: RedditWatchRun }>
+  /**
+   * WP411（#13）：每一块大约从什么时候起有数据（按跑成的那几轮往回推：外部一天、版块第一次七天、回补按它的窗口）。
+   * 没跑成过的块没有这一格。查数据时窗口早于它 → 照实说「没采到」，不当 0。
+   */
+  coverage(): Partial<Record<RedditWatchPart, Iso8601>>
   /** WP411（#11）：这一条的整串上下文（原帖、上下文评论、品牌号已说过的）。找不到条目回 `undefined`。 */
   thread(id: string): RedditThreadContext | undefined
   /**
@@ -1570,6 +1575,28 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     sweep,
     pace,
     backfill,
+    coverage: () => {
+      const out: Partial<Record<RedditWatchPart, Iso8601>> = {}
+      const keep = (p: RedditWatchPart, at: number): void => {
+        const iso = new Date(at).toISOString()
+        const cur = out[p]
+        if (cur === undefined || iso < cur) out[p] = iso
+      }
+      for (const r of store.runs(ws, { limit: 1000 }))
+        for (const p of r.parts) {
+          if (p.status !== 'ok') continue
+          const back =
+            r.window !== undefined
+              ? ms(r.window.since)
+              : ms(r.started_at) - (p.part === 'external' ? 86_400_000 : FIRST_READ_WINDOW_S * 1000)
+          keep(p.part, back)
+        }
+      // 第一次外部巡查往回补过几天（数据渠道那一路）
+      const first = store.kv<{ at: Iso8601; via: string; days?: number }>(ws, 'ext_backfill')
+      if (first?.via === 'data_channel' && first.days !== undefined)
+        keep('external', ms(first.at) - first.days * 86_400_000)
+      return out
+    },
     thread: (id) => {
       const it = store.get(ws, id)
       if (it === undefined) return undefined
