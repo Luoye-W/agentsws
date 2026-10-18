@@ -28,12 +28,13 @@ import { flush, observe, pair, status, unpair } from '@/lib/broker'
 import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
 import {
   type PanelBrokerDeps,
+  panelAnswerPost,
   panelFillCard,
   panelRefillWrite,
   panelSkipCard,
   panelState,
 } from '@/lib/panel/broker'
-import { workshopCardUrl } from '@/lib/panel/format'
+import { composeUrlAllowed, workshopCardUrl } from '@/lib/panel/format'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
 import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
@@ -249,6 +250,28 @@ export default defineBackground(() => {
           case 'open-options':
             void chrome.runtime.openOptionsPage().catch(() => undefined)
             reply({ type: 'ack' })
+            return
+          case 'open-social-compose':
+            // WP419：只开那几家的发帖页；插件不在页面上点任何东西（发布永远人点）
+            if (composeUrlAllowed(message.url))
+              void chrome.tabs.create({ url: message.url, active: true }).catch(() => undefined)
+            reply({ type: 'ack' })
+            return
+          case 'panel-post-done':
+            reply({
+              type: 'panel-act',
+              ...(await panelAnswerPost(panelDeps, message.id, 'done', {
+                ...(message.link === undefined ? {} : { link: message.link }),
+              })),
+            })
+            return
+          case 'panel-post-skip':
+            reply({
+              type: 'panel-act',
+              ...(await panelAnswerPost(panelDeps, message.id, 'skip', {
+                ...(message.reason === undefined ? {} : { reason: message.reason }),
+              })),
+            })
             return
           case 'open-workshop-card': {
             // WP419：只拼本机回环地址的 /cards/<id>（id 认不出就不开）

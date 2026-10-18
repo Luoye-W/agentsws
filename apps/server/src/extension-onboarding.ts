@@ -69,6 +69,7 @@ const USE_ZH: Record<BrowserExtensionUse, string> = {
   kol: '在 YouTube / Instagram / TikTok 页面上收红人',
   google_ads: '在你的 Google 广告后台执行批过的改动',
   meta_ads: '在你的 Meta 广告后台执行批过的改动',
+  social: '到点打开你登录着的社媒发帖页、你点发布',
 }
 
 /** 卡上与时间线上那一句为什么。 */

@@ -3,11 +3,12 @@
  * 点「填进页面」= 批这张卡（插件里批 = 工坊里批），插件新开一个标签页跳到那个帖子、把草稿填好；
  * **你自己在 Reddit 上点 Reply**，插件读回确认后这一条变成「已发 · 已记录」。工坊那边是同一张卡、同一份记录。
  */
-import type { PanelCard, PanelStage, PanelWrite } from '@agentsws/browser-action'
+import type { PanelCard, PanelPost, PanelStage, PanelWrite } from '@agentsws/browser-action'
 import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
 import { useState } from 'react'
 import { CHECK_LABEL, stageTone, writeLine, writeTone } from '@/lib/panel/format'
 import { IconCheck, IconClock, IconExternal, IconX } from './panel-icons'
+import { PanelPosts, type PostActions } from './panel-posts'
 import { StageLine } from './panel-progress'
 
 export interface CardActions {
@@ -220,7 +221,12 @@ export function PanelCards(props: {
   /** WP419：起草卡在要你动手的那一步（等定口吻 / 矛盾 / 没人担…）——放在最上面一行。 */
   stage?: PanelStage
   openCard?: (id: string) => void
+  /** WP419（决策 1231）：交给你发的社媒帖子。 */
+  posts?: PanelPost[]
+  postActions?: PostActions
+  canPost?: boolean
 }): React.ReactNode {
+  const posts = props.posts ?? []
   const [openId, setOpenId] = useState<string | undefined>(props.cards[0]?.id)
   const open = openId ?? props.cards[0]?.id
   return (
@@ -243,7 +249,10 @@ export function PanelCards(props: {
           这把配对只能看。去设置页重新配对一次，就能在这里处理。
         </p>
       )}
-      {props.cards.length === 0 ? (
+      {props.postActions === undefined ? null : (
+        <PanelPosts posts={posts} actions={props.postActions} canAct={props.canPost === true} />
+      )}
+      {props.cards.length === 0 && posts.length > 0 ? null : props.cards.length === 0 ? (
         <p className="ws-empty" data-testid="ws-todo-empty">
           <IconCheck className="ws-ico" /> 没有要你处理的
         </p>

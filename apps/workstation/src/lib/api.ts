@@ -5843,10 +5843,43 @@ export const getSocialAccounts = (
 }
 
 export const createSocialPost = (
-  input: { account_id: string; kind: string; body: string; scheduled_at?: string },
+  input: {
+    account_id: string
+    kind: string
+    body: string
+    scheduled_at?: string
+    /** WP419：素材库里的图（发帖时带上）。 */
+    media_refs?: string[]
+  },
   assignment?: string,
 ): Promise<SocialPostData> =>
   api('/v1/social/posts', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/**
+ * WP419（决策 1231，自查 S2）：登记一个要发帖的号——只要主页链接（不用开发者应用）。发帖时插件打开你登录着的发帖页。
+ */
+export const registerSocialAccount = (
+  input: { channel: SocialChannelId; url: string; display_name: string },
+  assignment?: string,
+): Promise<{ id: string }> => {
+  const u = new URL(input.url)
+  const handle =
+    u.pathname
+      .split('/')
+      .filter((x) => x !== '')[0]
+      ?.replace(/^@/u, '') ?? u.hostname
+  return api('/v1/social/accounts', {
+    method: 'POST',
+    body: {
+      channel: input.channel,
+      handle,
+      display_name: input.display_name.trim() === '' ? handle : input.display_name.trim(),
+      url: u.toString(),
+      external_id: u.toString(),
+    },
+    ...withAssignment(assignment),
+  })
+}
 
 /** 周视图上拖一下 = 改排期。换个时间发也是一次发布，所以服务端会重新出一张卡。 */
 export const rescheduleSocialPost = (
@@ -6708,7 +6741,7 @@ export const openExtensionInstall = (
  * 岗位页顶上那张卡读这一份：要不要、配上没有、配上之后还差哪步、接哪张方案卡、今天点过「稍后」没有。
  * 带的是**本岗位那条分配**（不是所有者的）；配对码那一块另走所有者那条。
  */
-export type BrowserExtensionUseView = 'reddit' | 'kol' | 'google_ads' | 'meta_ads'
+export type BrowserExtensionUseView = 'reddit' | 'kol' | 'google_ads' | 'meta_ads' | 'social'
 export type ExtensionFollowStepView = 'reddit' | 'google_ads' | 'meta_ads'
 
 export interface ExtensionNeedsView {

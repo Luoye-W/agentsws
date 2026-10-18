@@ -132,3 +132,28 @@ export const CHECK_LABEL: Readonly<Record<string, string>> = {
   thread: '整串没现读成',
   contradiction: '和以前说的矛盾',
 }
+
+/** WP419（决策 1231）：插件「打开发帖页」只认这几家（与契约 `SOCIAL_COMPOSE_HOSTS` 同一份写法）。 */
+export const COMPOSE_HOSTS: readonly string[] = [
+  'x.com',
+  '*.threads.net',
+  '*.linkedin.com',
+  '*.facebook.com',
+  '*.instagram.com',
+  '*.tiktok.com',
+  'studio.youtube.com',
+]
+
+/** 这个地址能不能由插件打开（https、主机在上面那张表里）。 */
+export function composeUrlAllowed(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'https:') return false
+    const host = u.hostname.toLowerCase()
+    return COMPOSE_HOSTS.some((h) =>
+      h.startsWith('*.') ? host === h.slice(2) || host.endsWith(h.slice(1)) : host === h,
+    )
+  } catch {
+    return false
+  }
+}

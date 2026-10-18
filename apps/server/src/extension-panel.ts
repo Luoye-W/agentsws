@@ -11,6 +11,7 @@
 
 import type { ExtensionPanelFacts, ExtensionPanelPort } from '@agentsws/api'
 import type {
+  PanelPost,
   PanelProgress,
   PanelRecord,
   PanelSinkResult,
@@ -28,8 +29,11 @@ import type {
   RedditWatchView,
   RedditWriteView,
   SinkWrite,
+  SocialAccount,
+  SocialPost,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { socialChannelSpec, socialComposeUrl } from '@agentsws/contracts'
 
 const DAY_MS = 86_400_000
 /** 批过的写在侧边栏留几天（已发的只留一天）。 */
@@ -88,6 +92,39 @@ export interface ExtensionPanelOptions {
   applyNow(item_id: string): Promise<unknown>
   /** WP419：起草前那两道门（不给 = 不说卡在哪一道门）。 */
   draftGate?(ws: WorkspaceId): Promise<PanelDraftGate | undefined>
+  /** WP419（决策 1231）：交给人发的社媒帖子（与各自挂的号）。不给 = 侧边栏没有这一块。 */
+  handoffs?(ws: WorkspaceId): Promise<{ post: SocialPost; account?: SocialAccount }[]>
+  /** WP419：人在侧边栏里回话（发好了 / 不发了）。回 `false` = 不是交给人的那一条。 */
+  answerPost?(
+    ws: WorkspaceId,
+    post_id: string,
+    answer:
+      | { done: true; by: string; link?: string }
+      | { done: false; by: string; reason?: string },
+  ): Promise<boolean>
+}
+
+/** WP419：交给人发的一条 → 侧边栏上那一行（发帖页只会是那几家的站）。认不出渠道回 `undefined`。 */
+export function panelPostOf(
+  post: SocialPost,
+  account: SocialAccount | undefined,
+): (PanelPost & { owner?: string }) | undefined {
+  const compose = socialComposeUrl(post.channel, post.body, account?.url)
+  if (compose === undefined || post.handoff === undefined) return undefined
+  return {
+    id: post.id,
+    channel: post.channel,
+    channel_label: socialChannelSpec(post.channel)?.zh ?? post.channel,
+    account: account?.display_name ?? account?.handle ?? '',
+    body: post.body,
+    kind: post.kind,
+    ...(post.scheduled_at === undefined ? {} : { scheduled_at: post.scheduled_at }),
+    compose_url: compose.url,
+    prefilled: compose.prefilled,
+    media: post.media_refs?.length ?? 0,
+    handed_at: post.handoff.at,
+    ...(post.handoff.owner === undefined ? {} : { owner: post.handoff.owner }),
+  }
 }
 
 /**
@@ -395,8 +432,12 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       options.outbound.writesOf === undefined
         ? undefined
         : (id: string) => options.outbound.writesOf?.(ws, id) ?? []
+    const posts = ((await options.handoffs?.(ws).catch(() => [])) ?? [])
+      .map((h) => panelPostOf(h.post, h.account))
+      .filter((x): x is PanelPost & { owner?: string } => x !== undefined)
     return {
       ...(name === undefined ? {} : { workspace_name: name }),
+      ...(posts.length === 0 ? {} : { posts }),
       progress,
       writes: recentWrites(writes?.writes() ?? [], now),
       records: options.outbound
@@ -421,6 +462,16 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
         .sort((a, b) => Date.parse(b.queued_at) - Date.parse(a.queued_at))[0]
       if (row !== undefined) return { write: panelWriteOf(row) }
       return { message: message ?? '批好了，正在交给插件。' }
+    },
+    async answerPost(session, post_id, answer) {
+      if (options.answerPost === undefined) return { ok: false, message: '这个品牌没装社媒发帖。' }
+      const done = await options.answerPost(session.workspace_id, post_id, {
+        ...answer,
+        by: session.person_id,
+      } as never)
+      return done
+        ? { ok: true }
+        : { ok: false, message: '这一条已经回过话了（在工坊里或另一处）。' }
     },
     async refill(session, job_id) {
       const writes = await options.writes(session.workspace_id)

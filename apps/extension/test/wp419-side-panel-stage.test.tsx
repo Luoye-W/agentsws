@@ -9,7 +9,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ExtensionMessage, ExtensionResponse } from '../src/lib/messages'
 import type { PanelState } from '../src/lib/panel/broker'
-import { workshopCardUrl } from '../src/lib/panel/format'
+import { composeUrlAllowed, workshopCardUrl } from '../src/lib/panel/format'
 import { SidePanel } from '../src/ui/side-panel'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -144,6 +144,67 @@ describe('WP419 侧边栏：卡在哪一步照实说', () => {
     expect(q('ws-prior')?.textContent).toContain('说过 1 次')
     expect(q('ws-check')?.textContent).toBe('没依据的已改掉')
     expect(q('ws-check')?.getAttribute('title')).toContain('2 年保修')
+  })
+
+  it('WP419（决策 1231）等你发的社媒帖子：打开发帖页、发好了带链接、不发了；角标算它', async () => {
+    state = {
+      kind: 'ok',
+      snapshot: snap({
+        progress: { configured: true, reading: false, drafting: 0, pending: 0 },
+        can_post: true,
+        posts: [
+          {
+            id: 'sp_x',
+            channel: 'x',
+            channel_label: 'X',
+            account: 'Nordvolt',
+            body: 'Weekend camping checklist',
+            kind: 'post',
+            scheduled_at: '2026-10-19T02:00:00.000Z',
+            compose_url: 'https://x.com/intent/post?text=Weekend%20camping%20checklist',
+            prefilled: true,
+            media: 1,
+            handed_at: '2026-10-19T02:00:00.000Z',
+          },
+        ],
+      }),
+      reddit_here: true,
+    }
+    await mount()
+    expect(q('ws-tab-todo')?.textContent).toContain('1')
+    expect(q('ws-post-body')?.textContent).toBe('Weekend camping checklist')
+    expect(host.textContent).toContain('正文已预填')
+    expect(host.textContent).toContain('素材 1 个')
+    await click(q('ws-post-open'))
+    expect(sent).toContainEqual({
+      type: 'open-social-compose',
+      url: 'https://x.com/intent/post?text=Weekend%20camping%20checklist',
+    })
+    const input = q('ws-post-link') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'https://x.com/nordvolt/status/1',
+      )
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(q('ws-post-done'))
+    expect(sent).toContainEqual({
+      type: 'panel-post-done',
+      id: 'sp_x',
+      link: 'https://x.com/nordvolt/status/1',
+    })
+    await click(q('ws-post-skip'))
+    expect(sent).toContainEqual({ type: 'panel-post-skip', id: 'sp_x' })
+  })
+
+  it('发帖页只开那几家的站（https）', () => {
+    expect(composeUrlAllowed('https://x.com/intent/post?text=a')).toBe(true)
+    expect(composeUrlAllowed('https://www.linkedin.com/feed/?shareActive=true')).toBe(true)
+    expect(composeUrlAllowed('https://studio.youtube.com/')).toBe(true)
+    expect(composeUrlAllowed('http://x.com/')).toBe(false)
+    expect(composeUrlAllowed('https://evil.example/')).toBe(false)
+    expect(composeUrlAllowed('https://x.com.evil.example/')).toBe(false)
   })
 
   it('工坊卡地址只拼本机回环、id 认不出不拼', () => {

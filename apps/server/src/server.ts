@@ -5200,14 +5200,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
         if (workRef === undefined || holder === undefined) return undefined
         const todo = workRef.createTodo({
-          title: `复制文案去 ${channel_label} 发`,
+          title: `去 ${channel_label} 发这一条（插件侧边栏里能打开发帖页）`,
           owner: holder.person_id,
           note: `${post.body}\n\n——\n原定时间：${post.scheduled_at ?? '批了就发'}。没自动发出去的原因：${reason}`,
           horizon: 'today',
           source: 'card',
           position_id: holder.id,
         })
-        return { todo_id: todo.id }
+        return { todo_id: todo.id, owner: holder.person_id }
+      },
+      // WP419：交给人发的那一条在插件里回了话（发好了 / 不发了）→ 那条待办收掉
+      closeManualTask: (todo_id) => {
+        try {
+          workRef?.complete(todo_id as never)
+        } catch {
+          // 人已经自己勾过 / 删了：不管
+        }
       },
     })
 
@@ -14231,6 +14239,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
             // WP419（自查 R5）：起草前那两道门——有没有人担、品牌号口吻定了没有（侧边栏照实说卡在哪）
             draftGate: redditDraftGateOf,
+            // WP419（决策 1231）：到点交给人发的社媒帖子（侧边栏里打开发帖页、人点发布、回来点发好了）
+            handoffs: async (ws) => {
+              const brand = await brandModules.forWorkspace(ws)
+              return brand.socialService.handoffs().map((post) => {
+                const account = brand.social.account(post.account_id)
+                return account === undefined ? { post } : { post, account }
+              })
+            },
+            answerPost: async (ws, post_id, answer) =>
+              (await brandModules.forWorkspace(ws)).socialService.answerHandoff(post_id, answer) !==
+              undefined,
             // U16：侧边栏顶上写品牌名（不写内部工作区名）
             workspaceName: async (ws) => brandNameOfWorkspace(ws),
           }),

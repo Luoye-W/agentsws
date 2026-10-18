@@ -649,3 +649,11 @@ body {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* WP419：等你发的社媒帖子——头一行不是按钮（不折叠） */
+.ws-card-head--static {
+  cursor: default;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}

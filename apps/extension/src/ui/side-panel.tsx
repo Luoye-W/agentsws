@@ -16,6 +16,7 @@ import { requestReddit } from '@/lib/reddit/permissions'
 import { BrandMark } from './brand-mark'
 import { type CardActions, PanelCards } from './panel-cards'
 import { IconGear } from './panel-icons'
+import type { PostActions } from './panel-posts'
 import { PanelProgressView } from './panel-progress'
 import { PanelRecords } from './panel-records'
 
@@ -93,7 +94,16 @@ export function SidePanel(props: {
   const todoCount =
     snap === undefined
       ? 0
-      : snap.cards.length + (snap.progress.stage?.card_id === undefined ? 0 : 1)
+      : snap.cards.length +
+        (snap.posts?.length ?? 0) +
+        (snap.progress.stage?.card_id === undefined ? 0 : 1)
+  // WP419（决策 1231）：交给你发的社媒帖子
+  const postActions: PostActions = {
+    open: (p) => void send({ type: 'open-social-compose', url: p.compose_url }),
+    done: (p, link) =>
+      act({ type: 'panel-post-done', id: p.id, ...(link === undefined ? {} : { link }) }),
+    skip: (p) => act({ type: 'panel-post-skip', id: p.id }),
+  }
   const openCard = (id: string) => void send({ type: 'open-workshop-card', id })
   // 第一次拿到快照时定下停在哪一块（有卡 / 有正在处理的写 → 要你处理；否则进度），之后不跟着数据跳
   const opening: Tab =
@@ -176,6 +186,9 @@ export function SidePanel(props: {
               canAct={snap.can_act}
               {...(snap.progress.stage === undefined ? {} : { stage: snap.progress.stage })}
               openCard={openCard}
+              posts={snap.posts ?? []}
+              postActions={postActions}
+              canPost={snap.can_post === true}
             />
           ) : null}
           {current === 'progress' ? (

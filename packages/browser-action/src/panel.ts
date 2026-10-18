@@ -199,6 +199,38 @@ export interface PanelSinkView {
   last_error?: string
 }
 
+/**
+ * WP419（决策 1231）：到点了、交给你在自己登录着的后台里发的一条社媒帖子。侧边栏里：打开发帖页（能预填就预填）、
+ * 复制文案、发好了（可贴回那一条的链接 = 读回确认）/ 不发了。
+ */
+export interface PanelPost {
+  id: string
+  /** 渠道 id（`x` / `facebook`…）与人话名。 */
+  channel: string
+  channel_label: string
+  /** 发到哪个号（显示名）。 */
+  account: string
+  /** 批过的正文（插件只用它）。 */
+  body: string
+  kind: string
+  scheduled_at?: string
+  /** 打开哪一页（只会是 `SOCIAL_COMPOSE_HOSTS` 里的站）。 */
+  compose_url: string
+  /** 正文已经预填进那一页（X / Threads / LinkedIn）；否则要人粘贴。 */
+  prefilled: boolean
+  /** 要带的素材几个（在工坊素材库里；这一版插件不替你传文件）。 */
+  media: number
+  handed_at: string
+}
+
+/** `POST /v1/extension/panel/posts/:id/done|skip`：交给你发的那一条，你回的话。 */
+export interface PanelPostAnswerInput {
+  /** 发好了：那一条的链接（贴了 = 读回确认；不贴 = 只是你说发了）。 */
+  link?: string
+  /** 不发了：为什么。 */
+  reason?: string
+}
+
 /** `GET /v1/extension/panel`：侧边栏一屏要的全部事实。 */
 export interface PanelSnapshot {
   at: string
@@ -215,6 +247,10 @@ export interface PanelSnapshot {
   /** 发出记录（最近 20 条、新的在前）。 */
   records: PanelRecord[]
   sinks: PanelSinkView[]
+  /** WP419：交给你发的社媒帖子（到点了、没接官方接口）。 */
+  posts?: PanelPost[]
+  /** WP419：这把配对能不能回「发好了 / 不发了」（有 `social.post`）。 */
+  can_post?: boolean
 }
 
 /** `POST /v1/extension/panel/cards/:id/fill`：批（改过就按改过的）并马上交给插件填进页面。 */

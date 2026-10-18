@@ -3466,6 +3466,13 @@ const zh: Table = {
   'social.calendar.staged': '草稿建好了，已经提上去等人点头。',
   'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
   'social.calendar.no_account': '内容日历：这条渠道还没登记号',
+  // WP419（决策 1231）：登记号只要主页链接；到点插件打开你登录着的发帖页、你点发布
+  'social.register.url': '主页链接',
+  'social.register.name': '显示名（可不填）',
+  'social.register.save': '登记',
+  'social.register.why': '不用开发者应用：到点插件打开你登录着的发帖页，你点发布。',
+  'social.media.pick': '带图',
+  'social.media.need': '这条渠道要带图片或视频：在这挑一张，或到时候在发帖页里自己选。',
   'social.empty.connect': '去连接',
   'social.calendar.compose.placeholder': '写这条要发的正文。价格、时效、保修只写事实卡里有的。',
   'social.calendar.compose.submit': '提上去',
@@ -7749,6 +7756,14 @@ const en: Table = {
   'social.calendar.always_l1':
     'Publishing always needs a human tap. Once approved it goes out at the time you set.',
   'social.calendar.no_account': 'Content calendar: no account registered on this channel yet',
+  'social.register.url': 'Profile link',
+  'social.register.name': 'Display name (optional)',
+  'social.register.save': 'Add',
+  'social.register.why':
+    'No developer app needed: on time the extension opens your signed-in composer and you click Post.',
+  'social.media.pick': 'Add image',
+  'social.media.need':
+    'This channel needs an image or video: pick one here, or choose it yourself in the composer.',
   'social.empty.connect': 'Connect',
   'social.calendar.compose.placeholder':
     'Write the post. Prices, delivery times and warranties: only what the fact cards say.',
