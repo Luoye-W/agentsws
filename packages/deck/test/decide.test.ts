@@ -5,6 +5,7 @@ import {
   errorCodeFor,
   INSTRUCTION_SCOPES,
   projectCard,
+  REJECT_NO_REASON,
   resolveDecision,
 } from '../src/index.js'
 import { item, NOW, policyItem } from './fixtures.js'
@@ -72,17 +73,15 @@ describe('resolveDecision（36 §2.1 五动作 → 14 §4 状态机）', () => {
     expect(out.edited_payload).toEqual({ selected_option_id: 'refuse' })
   })
 
-  it('reject 必须写原因（14 §4）', () => {
-    fails(
-      () => resolveDecision(draft(), { action: 'reject' }, options),
-      'REASON_REQUIRED',
-      'invalid_input',
-    )
-    fails(
-      () => resolveDecision(draft(), { action: 'reject', reason: '   ' }, options),
-      'REASON_REQUIRED',
-      'invalid_input',
-    )
+  it('WP414：reject 理由可选——没写记一次「不要」，写了照原样记', () => {
+    expect(resolveDecision(draft(), { action: 'reject' }, options)).toEqual({
+      action: 'reject',
+      reason: REJECT_NO_REASON,
+    })
+    expect(resolveDecision(draft(), { action: 'reject', reason: '   ' }, options)).toEqual({
+      action: 'reject',
+      reason: REJECT_NO_REASON,
+    })
     expect(resolveDecision(draft(), { action: 'reject', reason: '太啰嗦' }, options)).toEqual({
       action: 'reject',
       reason: '太啰嗦',

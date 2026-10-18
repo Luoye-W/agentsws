@@ -53,31 +53,20 @@ describe('十一种各有主动词', () => {
     }
   })
 
-  it('画布上那十一行：主动词与次动词逐条对得上', () => {
-    const table: Record<string, [string, string[]]> = {
-      outbound: ['approve', ['instruct', 'reject']],
-      change: ['approve', ['instruct', 'reject']],
-      publish: ['approve', ['instruct', 'reject']],
-      money: ['approve', ['instruct', 'reject']],
-      choice: ['approve', ['reject']],
-      variants: ['approve', ['reject']],
-      aftermath: ['approve', ['reject']],
-      person: ['approve', ['reject']],
-      handoff: ['approve', ['instruct', 'reject']],
-      takeover: ['approve', ['reject']],
-      policy: ['approve', ['reject']],
-    }
-    for (const [layout, [primary, secondary]] of Object.entries(table)) {
-      expect(LAYOUT_VERBS[layout as keyof typeof LAYOUT_VERBS].primary).toBe(primary)
-      expect([...LAYOUT_VERBS[layout as keyof typeof LAYOUT_VERBS].secondary]).toEqual(secondary)
+  it('WP414：十一种排版的次按钮都是「修改 / 不要 / 稍后」，主动词照旧', () => {
+    for (const layout of DECK_LAYOUTS) {
+      expect(LAYOUT_VERBS[layout].primary).toBe('approve')
+      expect([...LAYOUT_VERBS[layout].secondary]).toEqual(['instruct', 'reject', 'snooze'])
     }
   })
 
-  it('排不上主次的动作收进 ···（`more`）', () => {
+  it('WP414：「稍后」与「修改」不再收进 ···（没有 `more` 了）', () => {
     expect(verbRank('outbound', 'approve')).toBe('primary')
     expect(verbRank('outbound', 'instruct')).toBe('secondary')
-    expect(verbRank('choice', 'instruct')).toBe('more')
-    expect(verbRank('policy', 'snooze')).toBe('more')
+    expect(verbRank('choice', 'instruct')).toBe('secondary')
+    expect(verbRank('policy', 'snooze')).toBe('secondary')
+    for (const layout of DECK_LAYOUTS)
+      for (const a of ACTIONS) expect(verbRank(layout, a)).not.toBe('more')
   })
 })
 

@@ -40,7 +40,18 @@ export interface LayoutVerbs {
 }
 
 /**
- * 十一种排版各自的主次动词（画布逐条抄下来的）。
+ * WP414（Luoye 10-19 真机）：次按钮一律是「修改 / 不要 / 稍后」三个、**全部外露成描边按钮**。
+ *
+ * - 「稍后」不再收进 `···`——有的卡暂时不知道怎么处理，要能一眼跳过；
+ * - 「修改」合并了原来的「改一下」与「需要补素材」（点开一个框：说一句怎么改，或贴素材）；
+ * - 「不要」照卡种说「不发 / 不要 / 不用」，点一下就生效、理由可选。
+ *
+ * 卡上没有的动作（`available_actions` 里没有）照旧不出——这张表只管次序与摆放。
+ */
+const QUIET: readonly DeckVerb[] = ['instruct', 'reject', 'snooze']
+
+/**
+ * 十一种排版各自的主次动词（画布逐条抄下来的；WP414 起次动词统一成 {@link QUIET}）。
  *
  * | 排版 | 主 | 次 |
  * |---|---|---|
@@ -61,17 +72,17 @@ export interface LayoutVerbs {
  * 说法在这张表上。
  */
 export const LAYOUT_VERBS: Record<DeckLayout, LayoutVerbs> = {
-  outbound: { primary: 'approve', secondary: ['instruct', 'reject'] },
-  change: { primary: 'approve', secondary: ['instruct', 'reject'] },
-  publish: { primary: 'approve', secondary: ['instruct', 'reject'] },
-  money: { primary: 'approve', secondary: ['instruct', 'reject'] },
-  choice: { primary: 'approve', secondary: ['reject'] },
-  variants: { primary: 'approve', secondary: ['reject'] },
-  aftermath: { primary: 'approve', secondary: ['reject'] },
-  person: { primary: 'approve', secondary: ['reject'] },
-  handoff: { primary: 'approve', secondary: ['instruct', 'reject'] },
-  takeover: { primary: 'approve', secondary: ['reject'] },
-  policy: { primary: 'approve', secondary: ['reject'] },
+  outbound: { primary: 'approve', secondary: QUIET },
+  change: { primary: 'approve', secondary: QUIET },
+  publish: { primary: 'approve', secondary: QUIET },
+  money: { primary: 'approve', secondary: QUIET },
+  choice: { primary: 'approve', secondary: QUIET },
+  variants: { primary: 'approve', secondary: QUIET },
+  aftermath: { primary: 'approve', secondary: QUIET },
+  person: { primary: 'approve', secondary: QUIET },
+  handoff: { primary: 'approve', secondary: QUIET },
+  takeover: { primary: 'approve', secondary: QUIET },
+  policy: { primary: 'approve', secondary: QUIET },
 }
 
 /**
