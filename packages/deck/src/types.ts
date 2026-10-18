@@ -1412,6 +1412,14 @@ export interface TableResult {
      * 格子里非空就画一个小三角，字进 tooltip（不是一列字）。
      */
     format?: 'money' | 'count' | 'percent' | 'ratio' | 'flag'
+    /**
+     * WP401（决策 1090）：这一列能不能筛、怎么筛。表头出一个小漏斗，点开才有选项；筛的状态记在本机（按积木 id）。
+     *
+     * - `true` = 可筛，怎么筛看数据：一长串字 → 搜文字；取值只有几种 → 下拉多选；日期 → 日期范围；全是数 → 不筛。
+     * - `'search'` / `'select'` / `'date'` = 指定。
+     * - 不给 = 这一列不出漏斗（老积木一个字不变）。
+     */
+    filter?: true | 'search' | 'select' | 'date'
   }[]
   rows: Record<string, string | number>[]
   /**
