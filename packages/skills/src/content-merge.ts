@@ -140,3 +140,176 @@ export function diffSkillMarkdown(
   for (const [heading, body] of left) out.push({ heading, change: 'removed', before: body })
   return out
 }
+
+/* ── WP404（docs/107 §4）：按条的三方合并 ─────────────────────────────────── */
+
+/**
+ * 列表 / 规则表里的一条（快捷问题、示例任务、规则表的一行……）：稳定 id + 内容。
+ * 值按规范化的 JSON 比（键的顺序不算）；两边都是字符串时还认「在后面追加了一句」。
+ */
+export interface MergeItem<V = unknown> {
+  id: string
+  value: V
+}
+
+/** 上层里对某一条的一处改动：隐藏、改、自己加。 */
+export interface ItemUserEdit<V = unknown> {
+  /** 哪一层（company / position / role / personal …）。 */
+  tier: string
+  /** 那一层的主人。 */
+  owner: string
+  op: 'hide' | 'edit' | 'add'
+  item_id: string
+  /** `edit` / `add` 的新内容。 */
+  value?: V
+}
+
+/**
+ * 干净的那一种，带一句「怎么落」：
+ * - `keep`：照你的（上游没动这一条 / 你自己加的 / 你隐藏的那条上游也删了）；
+ * - `same`：你改成的正好就是新版（这一处改动可以去掉，留着也一样）；
+ * - `follow_new`：你只是照抄了旧版（没真改）——跟新版走，这一处改动作废，不问人；
+ * - `rebase`：你在旧版后面追加了一句——新版 + 你追加的（`value_after`）。
+ */
+export interface ItemMergeClean<V = unknown> extends ItemUserEdit<V> {
+  resolution: 'keep' | 'same' | 'follow_new' | 'rebase'
+  /** `rebase` 时合好的那一版。 */
+  value_after?: V
+}
+
+/** 要人选的那一种（「用新版 / 保留我的」）。没选之前**你的照旧生效**（与段合并同一条规矩）。 */
+export interface ItemMergeConflict<V = unknown> extends ItemUserEdit<V> {
+  /** 上游改了你也改了 / 上游删了你改了 / 你自己加的 id 和上游新加的撞了。 */
+  reason: 'upstream_changed' | 'upstream_removed' | 'id_clash'
+  base_before?: V
+  base_after?: V
+  /** 你的（隐藏 = 不写）。 */
+  mine?: V
+}
+
+export interface ItemMergePlan<V = unknown> {
+  clean: ItemMergeClean<V>[]
+  conflicts: ItemMergeConflict<V>[]
+  /** 上游这一版本身变了哪些条（卡上「+3 条 / 改 1 条」从这里数）。 */
+  upstream: { added: string[]; changed: string[]; removed: string[] }
+}
+
+/** 规范化的 JSON（对象按键排序），值比较用。 */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`
+  if (typeof v === 'object' && v !== null)
+    return `{${Object.keys(v)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+      .join(',')}}`
+  return typeof v === 'string' ? JSON.stringify(normalizeBody(v)) : JSON.stringify(v)
+}
+
+const sameValue = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b)
+
+/**
+ * 按条的三方合并：旧基础层、新基础层、上层的「隐藏 / 改 / 自己加」→ 干净的与冲突的。**只算，不改**。
+ *
+ * 与 `planContentMerge`（按段）同一张表（docs/90 §6.3），换成「条」：
+ *
+ * | 上游（旧 → 新） | 你 | 结果 |
+ * |---|---|---|
+ * | 没动 | 改了 / 隐藏了 | 保留你的（`keep`） |
+ * | 改了 | 在后面追加了一句 | 新版 + 你追加的（`rebase`） |
+ * | 改了 | 改成和新版一样 | 干净（`same`） |
+ * | 改了 | 改成别的 / 隐藏了 | **冲突**（`upstream_changed`） |
+ * | 删了 | 改了 | **冲突**（`upstream_removed`）；你也隐藏了 = 干净 |
+ * | — | 你自己加的 | 干净（`keep`）；id 正好和上游新加的撞了 → 冲突（`id_clash`） |
+ * | 改了 | 只是照抄了旧版（没真改） | 跟新版走，不问人（`follow_new`） |
+ */
+export function planItemMerge<V = unknown>(
+  before: readonly MergeItem<V>[],
+  after: readonly MergeItem<V>[],
+  edits: readonly ItemUserEdit<V>[],
+): ItemMergePlan<V> {
+  const old = new Map(before.map((i) => [i.id, i]))
+  const now = new Map(after.map((i) => [i.id, i]))
+  const upstream = {
+    added: after.filter((i) => !old.has(i.id)).map((i) => i.id),
+    changed: after
+      .filter((i) => {
+        const was = old.get(i.id)
+        return was !== undefined && !sameValue(was.value, i.value)
+      })
+      .map((i) => i.id),
+    removed: before.filter((i) => !now.has(i.id)).map((i) => i.id),
+  }
+  const plan: ItemMergePlan<V> = { clean: [], conflicts: [], upstream }
+  const clean = (
+    edit: ItemUserEdit<V>,
+    resolution: ItemMergeClean<V>['resolution'],
+    value_after?: V,
+  ) =>
+    plan.clean.push({ ...edit, resolution, ...(value_after === undefined ? {} : { value_after }) })
+  const conflict = (edit: ItemUserEdit<V>, reason: ItemMergeConflict<V>['reason']) => {
+    const was = old.get(edit.item_id)
+    const is = now.get(edit.item_id)
+    plan.conflicts.push({
+      ...edit,
+      reason,
+      ...(was === undefined ? {} : { base_before: was.value }),
+      ...(is === undefined ? {} : { base_after: is.value }),
+      ...(edit.op === 'hide' || edit.value === undefined ? {} : { mine: edit.value }),
+    })
+  }
+  for (const edit of edits) {
+    const was = old.get(edit.item_id)
+    const is = now.get(edit.item_id)
+    if (edit.op === 'add' || was === undefined) {
+      // 你自己加的：上游从来没有这一条。只有上游这一版正好新加了同一个 id 才要人看
+      if (is !== undefined && !sameValue(is.value, edit.value)) conflict(edit, 'id_clash')
+      else clean(edit, 'keep')
+      continue
+    }
+    if (is === undefined) {
+      // 上游把这一条删了：你也隐藏了就一致，改过的要人选
+      if (edit.op === 'hide') clean(edit, 'keep')
+      else conflict(edit, 'upstream_removed')
+      continue
+    }
+    if (sameValue(was.value, is.value)) {
+      clean(edit, 'keep')
+      continue
+    }
+    if (edit.op === 'hide') {
+      conflict(edit, 'upstream_changed')
+      continue
+    }
+    if (sameValue(edit.value, is.value)) {
+      clean(edit, 'same')
+      continue
+    }
+    if (sameValue(edit.value, was.value)) {
+      clean(edit, 'follow_new')
+      continue
+    }
+    if (
+      typeof edit.value === 'string' &&
+      typeof was.value === 'string' &&
+      typeof is.value === 'string'
+    ) {
+      const base = was.value.trimEnd()
+      if (edit.value.startsWith(base) && edit.value.length > base.length) {
+        const appended = edit.value.slice(base.length)
+        clean(edit, 'rebase', `${is.value.trimEnd()}${appended}` as V)
+        continue
+      }
+    }
+    conflict(edit, 'upstream_changed')
+  }
+  return plan
+}
+
+/** 按条冲突的稳定键（同一版、同一条、同一层同一主人只问一次）。 */
+export function itemConflictKey(
+  table: string,
+  version: string,
+  c: Pick<ItemUserEdit, 'tier' | 'owner' | 'item_id'>,
+): string {
+  return [table, version, c.tier, c.owner, c.item_id].join('|')
+}

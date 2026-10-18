@@ -2,6 +2,8 @@
 export * from './b2b-guardrail.js'
 export * from './b2b-terms.js'
 export * from './company.js'
+// WP404（docs/107）：外置规则表的读取口（按品牌可覆盖；没登记覆盖源时就是随软件带的那一份）
+export * from './content-tables.js'
 export * from './fencing.js'
 export * from './guardrail.js'
 export * from './mandate.js'

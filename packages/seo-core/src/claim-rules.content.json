@@ -1,0 +1,382 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：违规宣称规则表，从 claim-rules.ts 原样挪来（WP159 按市场分组；每条带出处与一句人话）。",
+    "id 是稳定 id：知识库里的规则卡用 subject.key = id 盖过这一条（改写法 / 关掉）；改字不改 id。",
+    "regex: true 的 pattern 按正则判（判法在 claim-rules.ts / content-check），其余按字面子串；label 是界面上给人看的写法（不露正则）。"
+  ],
+  "table": "seo.claim_rules",
+  "rows": [
+    {
+      "id": "abs_zh_best",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "最好",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_first",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "第一品牌",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_only",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "唯一",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_top",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "顶级",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_lowest",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "全网最低",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_never",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "永不",
+      "reason": "广告里不能用「最好 / 第一 / 顶级」这类绝对化用语。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_zh_100",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "100%",
+      "reason": "「100%」是绝对化说法，要有证据才能写。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "abs_en_best",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "\\bbest in the world\\b",
+      "regex": true,
+      "reason": "「#1 / guaranteed / best in the world」这类说法要先有证据，拿不出就是误导。",
+      "source_title": "FTC：广告证实政策声明",
+      "source_url": "https://www.ftc.gov/legal-library/browse/ftc-policy-statement-regarding-advertising-substantiation",
+      "label": "best in the world"
+    },
+    {
+      "id": "abs_en_no1",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "#1",
+      "reason": "「#1 / guaranteed / best in the world」这类说法要先有证据，拿不出就是误导。",
+      "source_title": "FTC：广告证实政策声明",
+      "source_url": "https://www.ftc.gov/legal-library/browse/ftc-policy-statement-regarding-advertising-substantiation"
+    },
+    {
+      "id": "abs_en_guarantee",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "\\bguarantee(d)?\\b",
+      "regex": true,
+      "reason": "「#1 / guaranteed / best in the world」这类说法要先有证据，拿不出就是误导。",
+      "source_title": "FTC：广告证实政策声明",
+      "source_url": "https://www.ftc.gov/legal-library/browse/ftc-policy-statement-regarding-advertising-substantiation",
+      "label": "guarantee、guaranteed"
+    },
+    {
+      "id": "abs_en_never",
+      "market": "global",
+      "category": "absolute",
+      "pattern": "\\bnever (fails|breaks)\\b",
+      "regex": true,
+      "reason": "「#1 / guaranteed / best in the world」这类说法要先有证据，拿不出就是误导。",
+      "source_title": "FTC：广告证实政策声明",
+      "source_url": "https://www.ftc.gov/legal-library/browse/ftc-policy-statement-regarding-advertising-substantiation",
+      "label": "never fails、never breaks"
+    },
+    {
+      "id": "med_zh_cure",
+      "market": "global",
+      "category": "medical",
+      "pattern": "治愈",
+      "reason": "普通商品不能说治疗、预防疾病。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "med_zh_treat",
+      "market": "global",
+      "category": "medical",
+      "pattern": "治疗",
+      "reason": "普通商品不能说治疗、预防疾病。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "med_zh_prevent",
+      "market": "global",
+      "category": "medical",
+      "pattern": "预防疾病",
+      "reason": "普通商品不能说治疗、预防疾病。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "med_zh_cancer",
+      "market": "global",
+      "category": "medical",
+      "pattern": "抗癌",
+      "reason": "普通商品不能说治疗、预防疾病。",
+      "source_title": "中华人民共和国广告法（第九条、第十七条）",
+      "source_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647620.htm"
+    },
+    {
+      "id": "med_en_cure",
+      "market": "global",
+      "category": "medical",
+      "pattern": "\\b(cures?|heals?|treats?) (disease|cancer|diabetes|anxiety|insomnia)\\b",
+      "regex": true,
+      "reason": "普通商品不能说能治病（cure / treat …），健康功效要有人体试验级别的证据。",
+      "source_title": "FTC：健康产品合规指南",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/health-products-compliance-guidance",
+      "label": "cures / heals / treats + 疾病（disease、cancer…）"
+    },
+    {
+      "id": "med_en_fda",
+      "market": "global",
+      "category": "medical",
+      "pattern": "\\bfda[- ]approved\\b",
+      "regex": true,
+      "reason": "「FDA approved」要真有批文；大多数商品根本不经 FDA 审批。",
+      "source_title": "FTC：健康产品合规指南",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/health-products-compliance-guidance",
+      "label": "FDA approved"
+    },
+    {
+      "id": "us.unproven_efficacy",
+      "market": "us",
+      "category": "medical",
+      "pattern": "\\b(clinically|scientifically|doctor)[- ](proven|tested|recommended)\\b",
+      "regex": true,
+      "reason": "说「临床证明 / 医生推荐」要有像样的人体临床试验撑着。",
+      "source_title": "FTC：健康产品合规指南",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/health-products-compliance-guidance",
+      "label": "clinically proven、scientifically tested、doctor recommended…"
+    },
+    {
+      "id": "us.made_in_usa",
+      "market": "us",
+      "category": "origin",
+      "pattern": "\\bmade in (the )?(usa|u\\.s\\.a\\.?|u\\.s\\.|america|united states)\\b",
+      "regex": true,
+      "reason": "写「Made in USA」要几乎全部在美国生产（最后组装和主要加工都在美国），否则要加限定说明。",
+      "source_title": "FTC：Made in USA 标准",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/complying-made-usa-standard",
+      "label": "Made in USA、Made in America…"
+    },
+    {
+      "id": "us.endorsement",
+      "market": "us",
+      "category": "endorsement",
+      "pattern": "\\b(as seen on|featured in|recommended by|customers (say|love)|reviewers? (say|love))\\b",
+      "regex": true,
+      "reason": "引用评价、红人或媒体背书：要是真实的；有利益关系（送货、付费、亲友）要清楚披露。",
+      "source_title": "FTC：代言指南问答",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/ftcs-endorsement-guides-what-people-are-asking",
+      "label": "as seen on、featured in、customers love…"
+    },
+    {
+      "id": "us.fake_reviews",
+      "market": "us",
+      "category": "endorsement",
+      "pattern": "\\b(5[- ]star|five[- ]star) reviews?\\b",
+      "regex": true,
+      "reason": "不能自己写、买或挑着放评价；星级与评价要照实。",
+      "source_title": "FTC：消费者评价与推荐规则（16 CFR 465）",
+      "source_url": "https://www.ecfr.gov/current/title-16/chapter-I/subchapter-D/part-465",
+      "label": "5-star reviews、five-star reviews"
+    },
+    {
+      "id": "us.green_generic",
+      "market": "us",
+      "category": "green",
+      "pattern": "\\b(eco[- ]friendly|environmentally friendly|earth[- ]friendly|planet[- ]friendly)\\b",
+      "regex": true,
+      "reason": "笼统的环保说法（eco-friendly、环保）要改成具体、能证明的（比如「包装可回收」）。",
+      "source_title": "FTC：绿色指南（16 CFR 260）",
+      "source_url": "https://www.ecfr.gov/current/title-16/chapter-I/subchapter-B/part-260",
+      "label": "eco-friendly、environmentally friendly…"
+    },
+    {
+      "id": "eu.green_generic",
+      "market": "eu_uk",
+      "category": "green",
+      "pattern": "\\b(eco[- ]friendly|environmentally friendly|climate[- ]friendly|planet[- ]friendly|earth[- ]friendly|good for the planet)\\b",
+      "regex": true,
+      "reason": "欧盟 2026-09-27 起禁止笼统的环保宣称（eco-friendly 等），除非有公认的卓越环保表现证明。",
+      "source_title": "欧盟绿色转型指令 (EU) 2024/825",
+      "source_url": "https://eur-lex.europa.eu/eli/dir/2024/825/oj",
+      "label": "eco-friendly、climate-friendly、good for the planet…"
+    },
+    {
+      "id": "eu.offset_neutral",
+      "market": "eu_uk",
+      "category": "green",
+      "pattern": "\\b(carbon[- ]neutral|climate[- ]neutral|co2[- ]neutral|net[- ]zero|climate[- ]positive|carbon[- ]positive)\\b",
+      "regex": true,
+      "reason": "靠抵消（买碳汇）说「碳中和 / 气候中和」在欧盟一律禁止。",
+      "source_title": "欧盟绿色转型指令 (EU) 2024/825",
+      "source_url": "https://eur-lex.europa.eu/eli/dir/2024/825/oj",
+      "label": "carbon neutral、climate neutral、net zero…"
+    },
+    {
+      "id": "uk.green_claims",
+      "market": "eu_uk",
+      "category": "green",
+      "pattern": "\\b(sustainable|biodegradable|compostable|100% recyclable)\\b",
+      "regex": true,
+      "reason": "英国：环保宣称要具体、准确、考虑整个生命周期，并且拿得出证据。",
+      "source_title": "英国 CMA 绿色宣称准则",
+      "source_url": "https://www.gov.uk/government/publications/green-claims-code-making-environmental-claims",
+      "label": "sustainable、biodegradable、compostable、100% recyclable"
+    },
+    {
+      "id": "eu.comparison",
+      "market": "eu_uk",
+      "category": "comparison",
+      "pattern": "\\b(better|faster|cheaper|stronger|longer[- ]lasting) than (any|all|other|competitors?|the competition|leading brands?)\\b",
+      "regex": true,
+      "reason": "和竞品比，要比同类商品、比能核实的具体指标，不能贬低对方。",
+      "source_title": "欧盟误导与比较广告指令 2006/114/EC",
+      "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32006L0114",
+      "label": "better / cheaper … than competitors"
+    },
+    {
+      "id": "eu.superlative",
+      "market": "eu_uk",
+      "category": "absolute",
+      "pattern": "\\b(number one|no\\. ?1|world'?s best|unbeatable|best on the market)\\b",
+      "regex": true,
+      "reason": "「第一 / 无敌 / 市面最好」要先有文件证据，否则算误导消费者。",
+      "source_title": "英国 CAP 守则第 3 节：误导性广告",
+      "source_url": "https://www.asa.org.uk/type/non_broadcast/code_section/03.html",
+      "label": "number one、world’s best、unbeatable…"
+    },
+    {
+      "id": "uk.health",
+      "market": "eu_uk",
+      "category": "medical",
+      "pattern": "\\b(boosts? (your )?immun(e|ity)|detox(ifies)?|anti[- ]ageing)\\b",
+      "regex": true,
+      "reason": "只有持证药品或医疗器械能说治疗或预防；「增强免疫、排毒」这类健康说法要有证据。",
+      "source_title": "英国 CAP 守则第 12 节：健康类宣称",
+      "source_url": "https://www.asa.org.uk/type/non_broadcast/code_section/12.html",
+      "label": "boosts immunity、detox、anti-ageing"
+    },
+    {
+      "id": "eu.misleading",
+      "market": "eu_uk",
+      "category": "other",
+      "pattern": "\\b(limited time only|only \\d+ left|last chance)\\b",
+      "regex": true,
+      "reason": "「限时 / 仅剩几件」要是真的，编出来的紧迫感在欧盟属于不公平商业行为。",
+      "source_title": "欧盟不公平商业行为指令 2005/29/EC",
+      "source_url": "https://eur-lex.europa.eu/eli/dir/2005/29/oj",
+      "label": "limited time only、only 3 left、last chance"
+    },
+    {
+      "id": "ca.made_in_canada",
+      "market": "ca",
+      "category": "origin",
+      "pattern": "\\b(made in canada|product of canada)\\b",
+      "regex": true,
+      "reason": "「Product of Canada」要 98% 以上成本在加拿大；「Made in Canada」要 51% 以上，并加「含进口零件」这类说明。",
+      "source_title": "加拿大竞争局：Product of / Made in Canada",
+      "source_url": "https://competition-bureau.canada.ca/en/how-we-foster-competition/education-and-outreach/publications/product-canada-and-made-canada-claims",
+      "label": "Made in Canada、Product of Canada"
+    },
+    {
+      "id": "ca.performance",
+      "market": "ca",
+      "category": "performance",
+      "pattern": "\\b(lasts? (up to )?\\d+|\\d+x (faster|longer|stronger)|lab[- ]tested|tested to)\\b",
+      "regex": true,
+      "reason": "说性能、寿命、效果（「续航 10 小时」「快 3 倍」）要在说之前做过充分、恰当的测试。",
+      "source_title": "加拿大竞争局：性能宣称要事先测试",
+      "source_url": "https://competition-bureau.canada.ca/en/deceptive-marketing-practices/types-deceptive-marketing-practices/performance-claims-not-based-adequate-and-proper-test",
+      "label": "lasts up to 10…、3x faster、lab-tested"
+    },
+    {
+      "id": "ca.green",
+      "market": "ca",
+      "category": "green",
+      "pattern": "\\b(eco[- ]friendly|environmentally friendly|carbon[- ]neutral|net[- ]zero|sustainable)\\b",
+      "regex": true,
+      "reason": "加拿大 2024 年起：环保宣称要有充分恰当的测试或按国际公认方法证明。",
+      "source_title": "加拿大竞争局：环保宣称指引",
+      "source_url": "https://competition-bureau.canada.ca/en/deceptive-marketing-practices/greenwashing-guidance-businesses",
+      "label": "eco-friendly、carbon neutral、sustainable…"
+    },
+    {
+      "id": "au.made_in_australia",
+      "market": "au",
+      "category": "origin",
+      "pattern": "\\b(made in australia|australian[- ]made|product of australia)\\b",
+      "regex": true,
+      "reason": "「Made in Australia」要在澳洲完成最后一道实质性加工，简单包装不算。",
+      "source_title": "ACCC：产地宣称",
+      "source_url": "https://www.accc.gov.au/business/advertising-and-promotions/country-of-origin-claims",
+      "label": "Made in Australia、Australian made"
+    },
+    {
+      "id": "au.green",
+      "market": "au",
+      "category": "green",
+      "pattern": "\\b(eco[- ]friendly|environmentally friendly|carbon[- ]neutral|sustainable|biodegradable|compostable)\\b",
+      "regex": true,
+      "reason": "环保宣称要真实、准确、有合理依据，别用笼统说法。",
+      "source_title": "ACCC：企业环保宣称指南",
+      "source_url": "https://www.accc.gov.au/about-us/publications/a-guide-to-making-environmental-claims-for-business",
+      "label": "eco-friendly、carbon neutral、biodegradable…"
+    },
+    {
+      "id": "au.reviews",
+      "market": "au",
+      "category": "endorsement",
+      "pattern": "\\b(5[- ]star|five[- ]star|customers love|reviewers? (say|love))\\b",
+      "regex": true,
+      "reason": "不能造假评价、压差评；拿好处换来的评价要披露。",
+      "source_title": "ACCC：网上评价",
+      "source_url": "https://www.accc.gov.au/business/advertising-and-promotions/online-reviews-for-product-and-services",
+      "label": "5-star、customers love…"
+    },
+    {
+      "id": "au.therapeutic",
+      "market": "au",
+      "category": "medical",
+      "pattern": "\\b(relieves?|soothes?) (pain|arthritis|headaches?|inflammation)\\b",
+      "regex": true,
+      "reason": "说缓解疼痛这类治疗性功效，要按药械广告规则来，普通商品不能说。",
+      "source_title": "TGA：治疗用品广告守则",
+      "source_url": "https://www.tga.gov.au/resources/guidance/applying-advertising-code-rules-general-requirements",
+      "label": "relieves pain、soothes arthritis…"
+    }
+  ]
+}

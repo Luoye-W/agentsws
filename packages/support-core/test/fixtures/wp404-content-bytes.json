@@ -1,0 +1,36 @@
+{
+  "goods": {
+    "key": "73fd7657a86dbcff",
+    "labelZh": "c98e8c00f35e45d0",
+    "hintZh": "281b8cb87f913401",
+    "persona": "0d56f7093cf3113b",
+    "chatRules": "2719aa64598e4306",
+    "emailRules": "e7710c7930fe6662",
+    "intents": "8af3c1bdd10c5e50",
+    "chatPlan": "1413689df50641a9",
+    "presales": "82a6cdf3aa72e143",
+    "l3Denylist": "09a637ae6d01611e",
+    "knowledge": "8a56ad5f386f559a",
+    "boundaries": "c0d199ebacd5d6d6",
+    "changeGate": "a7f46b8435c91f5d",
+    "triage": "26c18b440d95333c",
+    "draft": "2c2274b0d73f0ea3"
+  },
+  "digital": {
+    "key": "d85e2e76e598925e",
+    "labelZh": "b2312927e571f94f",
+    "hintZh": "e908a6f5856c6828",
+    "persona": "882a37daf05ac644",
+    "chatRules": "11b1bd5d06eb5445",
+    "emailRules": "9bc2cd30533f0435",
+    "intents": "6ce0fdd209cce5fb",
+    "chatPlan": "88c17e8db7c9a1a9",
+    "presales": "52d8de2790337719",
+    "l3Denylist": "f367a43fc18bbf3c",
+    "knowledge": "5ee70346a81c9306",
+    "boundaries": "70155cd67c922d86",
+    "changeGate": "9cdeaca26f86bc79",
+    "triage": "0e274c450b955763",
+    "draft": "67cbbad843948e63"
+  }
+}

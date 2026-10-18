@@ -360,6 +360,35 @@ export const POSITION_SCHEMA: Node = Schema.object({
 }).required()
 
 /**
+ * WP404（docs/107 §3）：**内容层**的形状——只认契约白名单里的那几格（`ROLE_CONTENT_FIELDS`）。
+ *
+ * 每一格的写法与 `ROLE_SCHEMA` 里同名那一格一字不差（同一批节点），所以内容层里写得进去的，
+ * 叠到骨架上一定过得了骨架那一关；白名单外的键由 `collectUnknownKeys` 拒，整份不收。
+ * `grounding` 只认 `name` + 两张词表：`tool` / `prefetch` 是骨架。
+ */
+export const ROLE_CONTENT_SHAPE: Node = Schema.object({
+  name: optionalObject(Schema.object({ zh: str(), en: str() })),
+  description: Schema.string(),
+  persona: PERSONA,
+  quick_prompts: Schema.array(QUICK_PROMPT).max(MAX_QUICK_PROMPTS),
+  task_examples: Schema.array(TASK_EXAMPLE).max(MAX_TASK_EXAMPLES),
+  grounding: Schema.array(
+    Schema.object({
+      name: str(),
+      intent_terms: Schema.array(Schema.string()),
+      cue_terms: Schema.array(Schema.string()),
+    }),
+  ),
+}).required()
+
+/** WP404：岗位内容层的形状（名字、角色定位、挂哪几条职责与默认勾哪几条）。 */
+export const POSITION_CONTENT_SHAPE: Node = Schema.object({
+  name: optionalObject(Schema.object({ zh: str(), en: str() })),
+  persona: PERSONA,
+  roles: Schema.array(Schema.object({ role: str(), default: bool() })),
+}).required()
+
+/**
  * WP84：schemastery 之后的那一刀——**`quick_prompts` / `task_examples` 的 id 在本职责内唯一**。
  *
  * 为什么非查不可：这两个 id 是界面上的 React key，也是以后"这条快捷提示被点了几次"

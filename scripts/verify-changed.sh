@@ -31,6 +31,10 @@ step "biome（只查改动）" npx biome check --changed --since="$base" --no-er
 # 2bis. 公开仓只放代码（WP383）：派工单、报告、决策表、开发日志、编号文档、审稿截图都在私有仓
 step "内部文档守卫" node scripts/check-no-internal-docs.mjs
 
+# 2ter. 冻结内容（WP404 / docs/107 §11）：职责 / 岗位内容、内置技能、外置规则表 10-19 起只收修错。
+#   超过 20 行只提醒（这里从不拦）；真要合，PR 上标 content-fix。
+step "冻结内容守卫（只提醒）" node scripts/check-content-freeze.mjs --base "$base"
+
 # 3. 测试：只跑「改过的包」自己的测试，并限制并发。
 #    （vitest --changed 在本仓会因为某个包按目录路径引用资源而建图失败，所以按包选。
 #     依赖它的下游包靠上面的增量 tsc 兜类型；行为回归留给合并关口的全量。）

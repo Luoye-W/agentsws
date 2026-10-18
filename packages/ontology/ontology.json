@@ -77,6 +77,7 @@
     "packages/contracts/src/reddit-watch.ts",
     "packages/contracts/src/reddit-write.ts",
     "packages/contracts/src/report.ts",
+    "packages/contracts/src/role-content.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
@@ -148,7 +149,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "b73bc67e7654e3d2970dca5f50a26350",
+  "source_digest": "f4f033c3816503a87f9e5a9c9b832c96",
   "objects": [
     {
       "id": "ad",

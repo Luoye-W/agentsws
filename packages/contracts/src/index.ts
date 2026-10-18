@@ -121,6 +121,8 @@ export * from './reddit-watch.js'
 export * from './reddit-write.js'
 // WP331（决策 691）：报告积木的共用形状（巡查条目、发布出来的报告；不认平台、不认客户）
 export * from './report.js'
+// WP404（docs/107）：岗位内容的白名单、内容文件与外置规则表的形状
+export * from './role-content.js'
 export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗
