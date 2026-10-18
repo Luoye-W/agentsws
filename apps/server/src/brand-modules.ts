@@ -34,6 +34,7 @@ import type { AdsActionsService } from './ads-actions/service.js'
 import type { AdsDataService } from './ads-data/service.js'
 import type { AdsServiceAssembly } from './ads-service.js'
 import type { AdsWiring } from './ads-wiring/service.js'
+import type { AmazonKeywordBank } from './amazon-keywords/index.js'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bSalesAssembly } from './b2b-sales.js'
 import type { B2bServiceAssembly } from './b2b-service.js'
@@ -300,6 +301,8 @@ export interface BrandModuleSet {
   adsWiring?: AdsWiring
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /** WP398（docs/106 §13 A8）：Amazon 词库（托管实例没有）。 */
+  amazonKeywords?: AmazonKeywordBank
   /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
   redditLimits?: RedditLimits
   /**

@@ -14,6 +14,7 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { activityRoutes } from './routes/activity.js'
 import { adCreativeRoutes } from './routes/ad-creative.js'
 import { adsRoutes } from './routes/ads.js'
+import { amazonKeywordRoutes } from './routes/amazon-keywords.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -315,6 +316,8 @@ export function collectRoutes(): Route[] {
     ...updatePauseRoutes(),
     // WP381：网站 / 商品体检与 AI 来源流量。`/v1/site-health*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...siteHealthRoutes(),
+    // WP398：Amazon 词库。`/v1/amazon-keywords*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...amazonKeywordRoutes(),
   ]
 }
 

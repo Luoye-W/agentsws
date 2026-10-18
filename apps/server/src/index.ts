@@ -4,6 +4,14 @@
  * `createServer()` 装配内核与全部已合并模块并返回一个可 listen 的句柄；
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
+
+// WP398：Amazon 词库读联想词的口子（demo 注入替身）与拆词用的 Listing 文本转换
+export {
+  type AmazonAutocompleteReader,
+  type AutocompleteRead,
+  listingTextsFromFacts,
+  listingTextsFromSnapshots,
+} from './amazon-keywords/index.js'
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {

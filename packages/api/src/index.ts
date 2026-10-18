@@ -143,6 +143,12 @@ export type {
 } from './routes/ads.js'
 export { adsRoutes } from './routes/ads.js'
 export type { AdsActor } from './routes/ads-types.js'
+// WP398：Amazon 词库
+export {
+  type AmazonKeywordsActor,
+  type AmazonKeywordsPort,
+  amazonKeywordRoutes,
+} from './routes/amazon-keywords.js'
 // WP287：「发给他的卡他必须点得动」那把尺子（只关于本人的卡）——服务端岗位页计数也用它
 export { isSelfCard, SELF_CARD_FORMS } from './routes/approvals.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
