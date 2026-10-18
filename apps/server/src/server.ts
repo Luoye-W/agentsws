@@ -139,6 +139,7 @@ import {
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
   normalizeGenuiHost,
+  OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   platformKitOf,
@@ -154,6 +155,7 @@ import {
   evaluateGuardrail,
   extractFigures,
   isInstructionRuleCard,
+  registerContentTableProvider,
   resolveTimeZone,
   roleRulesSection,
   uncitedFigures,
@@ -170,9 +172,12 @@ import {
 import type { OfficialSelector } from '@agentsws/dsh-adapter/official-schedule'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
+  canActivatePackEntry,
   cardsToPack,
   createKnowledge,
   type Knowledge,
+  packEntryToCard,
+  parseKnowledgePack,
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
@@ -548,6 +553,12 @@ import {
 } from './models.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
+import {
+  createOfficialContent,
+  OFFICIAL_CONTENT_DIR,
+  type OfficialContent,
+  type OfficialContentOptions,
+} from './official-content.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import {
   createOnboarding,
@@ -600,6 +611,7 @@ import {
 } from './peers.js'
 import {
   createFilePersonaBackend,
+  createMemoryPersonaBackend,
   createPersonas,
   PersonaError,
   type PersonasAssembly,
@@ -1291,6 +1303,20 @@ export interface ServerOptions {
     appVersion?: string
     /** 起来就查、之后每 6 小时查（缺省：开着就查；测试关掉自己调 `check()`）。 */
     schedule?: boolean
+  }
+  /**
+   * WP406（私有 docs/107）：官方订阅的岗位更新（测试 / demo 用：现生成的钥匙、临时存放处、AI 一句建议的替身）。
+   * 生产不传：开关同内容更新（`AGENTSWS_CONTENT_UPDATES=on`），钥匙用内置公钥 `OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS`，
+   * 存放处在 `content-updates/official/`，取数经品牌的云连接（`/v1/content/official/*`）。
+   */
+  officialContent?: {
+    enabled?: boolean
+    root?: string
+    keys?: readonly ContentPublicKey[]
+    appVersion?: string
+    schedule?: boolean
+    advise?: OfficialContentOptions['advise']
+    aiMerge?: OfficialContentOptions['aiMerge']
   }
   /**
    * WP216：检测本机平台 CLI 用的子进程（测试 / demo 换成替身，不跑真的 `shopify`）。
@@ -2905,8 +2931,172 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
   // 启动：各品牌更新过的基础层装回技能库（软件自带版追上了就丢掉覆盖）
   await contentUpdates?.restore()
-  const contentWrap = <B extends ApprovalBus>(bus: B): B =>
-    contentUpdates === undefined ? bus : contentUpdates.wrap(bus)
+
+  /*
+   * WP406（私有 docs/107）：**官方订阅的岗位更新**。开关同上（装好的桌面版才开）；存放处在内容更新底下的
+   * `official/`；验签只认官方那张公钥表。出卡走同一条审批总线（「全部应用 / 这次跳过」在 `officialContent.wrap` 里接住）。
+   * 公司改的角色定位那一层（`personas.json`）在这里先建好，官方更新与 `personas.ts` 用同一份。
+   */
+  const personaBackend =
+    dbDir === undefined
+      ? createMemoryPersonaBackend()
+      : createFilePersonaBackend(personaFileIn(dbDir))
+  const officialOpts = options.officialContent
+  const officialRoot =
+    officialOpts?.root ??
+    (contentRoot === undefined ? undefined : join(contentRoot, OFFICIAL_CONTENT_DIR))
+  const officialEnabled = officialOpts?.enabled ?? contentEnabled
+  const officialKeys = officialOpts?.keys ?? OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS
+  const officialAppVersion = officialOpts?.appVersion ?? contentAppVersion
+  const officialOff = !officialEnabled
+    ? '这台没开岗位更新（装好的桌面版才开）。'
+    : officialKeys.length === 0
+      ? CONTENT_REJECT_TEXT.no_keys
+      : undefined
+  /** 品牌负责人那条分配（AI 一句建议 / 合一版记账记在它头上）。 */
+  const ownerAssignmentOf = async (ws: WorkspaceId) => {
+    const owner = (await identity.getWorkspace(ws))?.owner_id
+    if (owner === undefined) return undefined
+    return roles.assignments
+      .listByPerson(owner, { workspace_id: ws, role_id: 'common.owner' })
+      .find((a) => a.revoked_at === undefined)
+  }
+  /** 品牌默认模型的一次短问答（没接真模型就 `undefined`——卡上不写那句建议）。 */
+  const officialModelText = async (
+    ws: WorkspaceId,
+    prompt: string,
+    run: string,
+  ): Promise<string | undefined> => {
+    const own = ws === workspace.id
+    const models = own ? boot.ownModels : await brandModules.models(ws)
+    const ref = models.configured() ? models.defaultRef() : undefined
+    const asg = await ownerAssignmentOf(ws)
+    if (ref === undefined || ref.provider === 'stub' || asg === undefined) return undefined
+    const gateway = own ? boot.ownGateway : await brandModules.gateway(ws)
+    const completion = await gateway.complete({
+      messages: [{ role: 'user', content: prompt }],
+      meta: {
+        workspace_id: ws,
+        assignment_id: asg.id,
+        role_id: asg.role_id,
+        run_id: `${run}_${suggestSha(prompt).slice(0, 16)}` as never,
+        purpose: 'extraction',
+      },
+      model: ref,
+      max_output_tokens: SUGGEST_MAX_OUTPUT_TOKENS,
+      thinking: 'off',
+    })
+    return completion.text
+  }
+  let officialContent: OfficialContent | undefined
+  if (officialRoot !== undefined)
+    officialContent = createOfficialContent({
+      root: officialRoot,
+      appVersion: officialAppVersion,
+      channel: contentChannelOf(officialAppVersion),
+      keys: officialKeys,
+      clock,
+      registry: skills.registry,
+      bootWorkspace: workspace.id,
+      brands: contentBrands,
+      positions: (ws) => {
+        const held = new Set(
+          roles.assignments
+            .listByWorkspace(ws)
+            .filter((a) => a.revoked_at === undefined)
+            .map((a) => String(a.role_id)),
+        )
+        return org
+          .positions()
+          .filter((p) => p.roles.some((r) => !r.role.startsWith('common.') && held.has(r.role)))
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            roles: p.roles.map((r) => String(r.role)),
+            ...(p.supervisor_person_id === undefined
+              ? {}
+              : { supervisor_person_id: p.supervisor_person_id }),
+          }))
+      },
+      company: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
+      isOwner: async (ws, person) =>
+        roles.assignments
+          .listByPerson(person, { workspace_id: ws, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      platformOf: (ws) => brandProfileOf(ws).storefront_platform,
+      cloud: (ws) => brandModules.cloud(ws),
+      approvals: () => approvalsForContent,
+      appendEvent,
+      roles: { get: (id) => roles.roles.get(id), register: (def) => roles.roles.register(def) },
+      personas: {
+        get: (subject) =>
+          personaBackend
+            .all()
+            .find((r) => r.subject.kind === subject.kind && r.subject.id === subject.id),
+        put: (row) => personaBackend.put(row),
+        remove: (subject) => personaBackend.remove(subject),
+      },
+      knowledge: {
+        // 官方知识包：照知识包 v1 的规矩逐条提议，够格的才激活（承诺类一律落候选）
+        import: async (ws, files) => {
+          const asg = await ownerAssignmentOf(ws)
+          const parsed = parseKnowledgePack([...files])
+          if (asg === undefined || !parsed.ok) return []
+          const ids: string[] = []
+          for (const entry of parsed.entries) {
+            const card = await knowledge.store.propose(
+              packEntryToCard(entry, {
+                workspace_id: ws,
+                owner: asg.person_id,
+                scope: [],
+                created_by_id: asg.id,
+                at: clock.now(),
+              }),
+            )
+            ids.push(card.id)
+            if (canActivatePackEntry(entry))
+              await knowledge.store.activate(card.id, asg.person_id, { by_agent: true })
+          }
+          return ids
+        },
+        retire: async (ws, ids) => {
+          const asg = await ownerAssignmentOf(ws)
+          if (asg === undefined) return
+          for (const id of ids)
+            await knowledge.store.retire(id, asg.person_id).catch(() => undefined)
+        },
+      },
+      advise:
+        officialOpts?.advise ??
+        (async (ws, input) => {
+          const lines = input.items.map((i) => `- ${i.title}（${i.summary}；${i.mine}）`).join('\n')
+          const text = await officialModelText(
+            ws,
+            `你是「${input.position}」岗位的助手。官方这周给这个岗位更新了下面几项（括号里是改了什么、和用户自己改过的关系）：\n${lines}\n\n用一句不超过 40 个字的中文给负责人一个建议（要不要全部应用、哪几项值得留意）。只回这一句，不要解释。`,
+            'content_digest_advice',
+          )
+          return text?.split('\n')[0]?.trim()
+        }),
+      aiMerge:
+        officialOpts?.aiMerge ??
+        (async (ws, input) =>
+          officialModelText(
+            ws,
+            `下面是「${input.label}」这一段的三个版本。请把「用户的版本」里用户自己加的意思，合进「官方新版」里，出一段合好的正文。只回合好的正文，不要解释、不要加标题。\n\n【原来】\n${input.before ?? '（没有）'}\n\n【官方新版】\n${input.after ?? '（删掉了）'}\n\n【用户的版本】\n${input.mine ?? '（没有）'}`,
+            'content_ai_merge',
+          )),
+      ...(officialOff === undefined ? {} : { off: officialOff }),
+    })
+  // 启动：应用过的官方版装回去（技能库、职责定义）；规则表经读取口按品牌覆盖
+  await officialContent?.restore()
+  if (officialContent !== undefined) {
+    const oc = officialContent
+    registerContentTableProvider((table, brand) => oc.tableRows(brand as WorkspaceId, table))
+  }
+  const contentWrap = <B extends ApprovalBus>(bus: B): B => {
+    const inner = contentUpdates === undefined ? bus : contentUpdates.wrap(bus)
+    return officialContent === undefined ? inner : officialContent.wrap(inner)
+  }
 
   const approvals = seoDecided(
     // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
@@ -2946,18 +3136,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   outboundWithdraw = async (id) => {
     if (approvals.expireNow !== undefined) await approvals.expireNow(id, '记录去处已删')
   }
-  // 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器
+  /*
+   * 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器。
+   * WP406（私有 docs/107 §15 连带改动）：内容只从「官方订阅」那条路收——docs/90 的公开通道代码留着，**不再定时查**
+   * （测试 / demo 显式给 `schedule: true` 才查）；官方那条照同一个节奏查。
+   */
   const contentTimers: ReturnType<typeof setTimeout>[] = []
-  if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule !== false) {
-    const run = (): void => {
-      void contentUpdates.check().catch(() => undefined)
-    }
+  const every6h = (run: () => void): void => {
     const first = setTimeout(run, 30_000)
     const every = setInterval(run, CONTENT_CHECK_INTERVAL_MS)
     first.unref?.()
     every.unref?.()
     contentTimers.push(first, every)
   }
+  if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule === true)
+    every6h(() => {
+      void contentUpdates.check().catch(() => undefined)
+    })
+  if (
+    officialContent !== undefined &&
+    officialOff === undefined &&
+    officialOpts?.schedule !== false
+  )
+    every6h(() => {
+      void officialContent?.check().catch(() => undefined)
+    })
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
   //
   // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
@@ -3304,7 +3507,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     roles,
     positions: () => org.positions(),
-    ...(dbDir === undefined ? {} : { backend: createFilePersonaBackend(personaFileIn(dbDir)) }),
+    backend: personaBackend,
+    // WP406：官方岗位内容应用过的岗位角色定位当「包里的原文」（公司按段改的照旧叠上）
+    packagedPositionPersona: (id) => officialContent?.positionPersona(id),
     // WP276（决策 243 / 274 第 4 条）：② 同事互联里角色定位谁都能改（留名字、同岗位的人可撤回）
     isOwner: (person_id) =>
       modeOfWorkspaceSync?.(workspace.id) === 'peers' ||
@@ -13274,6 +13479,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             diff: (actor, id) => contentUpdates.diff(actor.workspace_id as WorkspaceId, id),
           },
         }),
+    /*
+     * WP406（私有 docs/107）：岗位更新。**按品牌、按岗位**；谁能应用 / 退回在引擎里判一处（公司模式只有品牌负责人
+     * 与这个岗位的负责人）。
+     */
+    ...(officialContent === undefined
+      ? {}
+      : (() => {
+          const oc = officialContent
+          const ws = (a: { workspace_id: string }) => a.workspace_id as WorkspaceId
+          const who = (a: { person_id: string }) => a.person_id as PersonId
+          return {
+            contentDigest: {
+              view: (a, pos) => oc.view(ws(a), pos, who(a)),
+              setPolicy: (a, pos, policy) => oc.setPolicy(ws(a), pos, who(a), policy),
+              diff: (a, pos, id) => oc.diff(ws(a), pos, id),
+              apply: (a, pos, input) => oc.apply(ws(a), pos, who(a), input),
+              skip: (a, pos) => oc.skip(ws(a), pos, who(a)),
+              aiMerge: (a, pos, input) => oc.aiMerge(ws(a), pos, who(a), input),
+              rollback: (a, pos, input) => oc.rollback(ws(a), pos, who(a), input),
+              dismissNudge: (a, pos) => oc.dismissNudge(ws(a), pos, who(a)),
+              subscription: (a) => oc.subscription(ws(a)),
+              subscribe: (a) => oc.subscribe(ws(a), who(a)),
+              check: async () => {
+                const r = await oc.check()
+                return { state: r.state, carded: r.carded.length, applied: r.applied.length }
+              },
+            } satisfies NonNullable<GatewayDeps['contentDigest']>,
+          }
+        })()),
     /*
      * WP216：平台专属那一套（官方技能 / Dev MCP / 官方 CLI 卡）。**按品牌档案**判断平台；
      * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。

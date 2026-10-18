@@ -102,6 +102,11 @@ export type CloudBytesCallFn = <T>(
     bytes?: Uint8Array
     content_type?: string
     timeout_ms?: number
+    /**
+     * WP406：回包一律当字节带回（不按 `content-type` 解 JSON 信封）。官方内容的清单是 JSON，
+     * 但签名是对**原始字节**签的——解了再序列化就验不过了。只对 2xx 生效；出错照旧解信封。
+     */
+    raw?: boolean
   },
 ) => Promise<CloudBytesCall<T>>
 
@@ -524,7 +529,11 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         headers?: { get(name: string): string | null }
       }
       const type = res.headers?.get('content-type') ?? ''
-      if (res.ok && !type.includes('application/json') && res.arrayBuffer !== undefined) {
+      if (
+        res.ok &&
+        (init.raw === true || !type.includes('application/json')) &&
+        res.arrayBuffer !== undefined
+      ) {
         const headers: Record<string, string> = {}
         for (const h of BYTES_HEADERS) {
           const v = res.headers?.get(h)

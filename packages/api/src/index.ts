@@ -310,6 +310,11 @@ export type {
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
 export {
+  type ContentDigestActor,
+  type ContentDigestPort,
+  contentDigestRoutes,
+} from './routes/content-digest.js'
+export {
   type ContentUpdatesActor,
   type ContentUpdatesPort,
   contentUpdatesRoutes,
