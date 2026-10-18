@@ -24,7 +24,13 @@ import {
   daySpendGate,
   stopLossVerdict,
 } from '@agentsws/ads-core'
-import type { AdsActor, AdsCampaignRow, AdsPort, AdsStagedView } from '@agentsws/api'
+import type {
+  AdsActor,
+  AdsCampaignRow,
+  AdsOverviewView,
+  AdsPort,
+  AdsStagedView,
+} from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
   AdAccount,
@@ -85,6 +91,10 @@ export interface AdsServiceOptions {
    * 今天的数判不成立、昨天整天成立，就按昨天出卡（卡上写「昨天整天花了」）。不给只按今天判（单测）。
    */
   stopLossBasis?: (c: AdCampaign) => StopLossBasis | undefined
+  /** WP420（自查 A8）：日报数据到没到（看数据那一份的状态；托管实例 / 单测不给）。 */
+  dataStatus?: (platform: AdsPlatform) => AdsOverviewView['data'] | undefined
+  /** 品牌时区偏移（「今天」从几点算；不给按 UTC）。 */
+  tzOffsetMinutes?: () => number
 }
 
 export interface AdsServiceAssembly {
@@ -729,6 +739,59 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         spend_gate: gateOf(capsOf(actor.assignment_id, 'stage_creative_swap'), 0).view,
       }
     },
+  }
+
+  /*
+   * WP420（自查 A6 / A8）：投放看板——以前 `home_blocks` 定义了 8 块，界面一块都没画；
+   * 广告库里明明有数，用户只能问 AI。这里把那几个数从广告库直接算出来（不打平台、不经 AI）。
+   */
+  port.overview = (actor) => overviewOf(platformOf(actor), actor)
+
+  const overviewOf = (platform: AdsPlatform, actor: AdsActor): AdsOverviewView => {
+    const caps = capsOf(actor.assignment_id, 'stage_budget_change')
+    const gate = gateOf(caps, 0)
+    const rows = store.campaigns({ platform })
+    const withSpend = rows.filter((c) => c.metrics?.spend !== undefined)
+    const spend = withSpend.reduce((sum, c) => sum + (c.metrics?.spend ?? 0), 0)
+    const valued = withSpend.filter((c) => c.metrics?.roas !== undefined)
+    const valuedSpend = valued.reduce((sum, c) => sum + (c.metrics?.spend ?? 0), 0)
+    const value = valued.reduce(
+      (sum, c) => sum + (c.metrics?.spend ?? 0) * (c.metrics?.roas ?? 0),
+      0,
+    )
+    const conv = withSpend.filter((c) => c.metrics?.conversions !== undefined)
+    const tz = options.tzOffsetMinutes?.() ?? 0
+    const localDay = (iso: string): string =>
+      new Date(Date.parse(iso) + tz * 60_000).toISOString().slice(0, 10)
+    const today = localDay(clock.now())
+    const stops = store.stopLosses({ platform }).filter((s) => localDay(s.at) === today)
+    const currency = store.accounts({ platform }).find((a) => a.currency !== '')?.currency
+    const data = options.dataStatus?.(platform)
+    return {
+      platform,
+      ...(currency === undefined ? {} : { currency }),
+      ...(withSpend.length === 0 ? {} : { spend_today: Math.round(spend * 100) / 100 }),
+      spend_gate: gate.view,
+      ...(valuedSpend > 0 ? { roas_today: Math.round((value / valuedSpend) * 100) / 100 } : {}),
+      ...(conv.length === 0
+        ? {}
+        : {
+            conversions_today: conv.reduce((sum, c) => sum + (c.metrics?.conversions ?? 0), 0),
+          }),
+      stop_losses_today: stops.length,
+      campaigns: rows
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+          ...(c.metrics?.spend === undefined ? {} : { spend: c.metrics.spend }),
+          ...(c.metrics?.roas === undefined ? {} : { roas: c.metrics.roas }),
+          ...(c.metrics?.conversions === undefined ? {} : { conversions: c.metrics.conversions }),
+        }))
+        .sort((a, b) => (b.spend ?? -1) - (a.spend ?? -1)),
+      ...(data === undefined ? {} : { data }),
+    }
   }
 
   if (proposals !== undefined && options.wiring !== undefined) {

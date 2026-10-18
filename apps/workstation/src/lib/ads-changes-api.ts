@@ -61,3 +61,38 @@ export const stageAdCreativeSheet = (
     body: input,
     assignment,
   })
+
+/**
+ * WP420（自查 A6 / A8）：投放看板——今天花了多少、总闸还剩多少、ROAS、今天止损几条、广告系列表、
+ * 日报数据到没到（服务端从广告库与看数据库算，不打平台）。
+ */
+export interface AdsOverviewView {
+  platform: string
+  currency?: string
+  spend_today?: number
+  spend_gate: { spent: number; cap: number; remaining: number; note: string }
+  roas_today?: number
+  conversions_today?: number
+  stop_losses_today: number
+  campaigns: {
+    id: string
+    name: string
+    status: string
+    daily_budget?: number
+    spend?: number
+    roas?: number
+    conversions?: number
+  }[]
+  data?: {
+    plugin: 'ready' | 'away' | 'not_connected' | 'unavailable'
+    account?: string
+    last_import_at?: string
+    newest_day?: string
+    message?: string
+  }
+}
+
+export const ADS_OVERVIEW_KEY = ['ads-overview'] as const
+
+export const getAdsOverview = (assignment: string): Promise<AdsOverviewView> =>
+  api('/v1/ads/overview', { assignment })

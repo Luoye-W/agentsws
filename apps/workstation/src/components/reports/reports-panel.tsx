@@ -20,6 +20,7 @@ import {
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
+import { dutyHasBoards } from '@/components/reports/scope-boards'
 import { useApp } from '@/lib/app-context'
 import { matterUrl } from '@/lib/work'
 
@@ -76,10 +77,14 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const { reports, ready } = useScopeReports(props.scope)
+  const scope = props.scope
+  const hasBoards =
+    scope?.assignment !== undefined && (scope.tier === 'position' || dutyHasBoards(scope.scope_id))
   return (
     <div className="flex flex-col gap-5" data-testid="reports-panel">
       <section className="flex flex-col gap-1">
-        {reports.length === 0 && ready ? (
+        {/* WP420（自查 U9）：下面有看板时不再说「还没有报表」 */}
+        {reports.length === 0 && ready && !hasBoards ? (
           <p className="text-[12px] text-ws-muted-fg" data-testid="reports-empty">
             {t('reports.empty')}
           </p>

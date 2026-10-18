@@ -5330,6 +5330,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       changeOf: (id) => txn.ledger.get(id),
       // WP224：止损卡上判据旁边并排一格盈亏线（只显示）
       breakEven: breakEvenNow,
+      // WP420（自查 A8）：投放看板上那一行「日报数据到没到」（看数据在下面才建，取值时才碰它）
+      dataStatus: (p) => {
+        const st = adsData?.status().find((x) => x.platform === p)
+        if (st === undefined) return undefined
+        return {
+          plugin: st.plugin,
+          ...(st.account === undefined ? {} : { account: st.account }),
+          ...(st.last_import === undefined ? {} : { last_import_at: st.last_import.at }),
+          ...(st.newest_day === undefined ? {} : { newest_day: st.newest_day }),
+          ...(st.message === undefined ? {} : { message: st.message }),
+        }
+      },
+      tzOffsetMinutes: () => workData.tz_offset_minutes,
       // WP420（自查 A4）：止损判据按昨天整天再判一次（看数据在下面才建，取值时才碰它）
       stopLossBasis: (c) => {
         const d = adsData

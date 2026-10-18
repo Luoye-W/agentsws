@@ -332,3 +332,26 @@ describe('每张卡上都有总闸剩余（04 §5）', () => {
     }
   })
 })
+
+describe('投放看板（WP420 自查 A6 / A8）', () => {
+  it('今天花了多少、总闸还剩多少、ROAS、今天止损几条、广告系列表——从广告库直接算', async () => {
+    await seed({ spend: 300, roas: 2, dailyBudget: 1000 })
+    const res = await api('/v1/ads/overview')
+    expect(res.status).toBe(200)
+    const v = await data<{
+      spend_today?: number
+      roas_today?: number
+      currency?: string
+      stop_losses_today: number
+      spend_gate: { remaining: number; cap: number }
+      campaigns: { name: string; spend?: number }[]
+      data?: { plugin: string }
+    }>(res)
+    expect(v.spend_today).toBe(300)
+    expect(v.roas_today).toBe(2)
+    expect(v.currency).toBe('CNY')
+    expect(v.stop_losses_today).toBe(0)
+    expect(v.spend_gate.cap).toBe(1000)
+    expect(v.campaigns).toEqual([expect.objectContaining({ name: '九月桌面收纳', spend: 300 })])
+  })
+})

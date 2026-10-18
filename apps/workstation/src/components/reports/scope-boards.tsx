@@ -13,6 +13,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { useLocation } from 'react-router-dom'
 import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
 import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
+import { AdsOverview } from '@/components/ads/ads-overview'
 import { AMAZON_STORE_ROLE, AmazonOpsBoard } from '@/components/amazon/amazon-ops-board'
 // WP394：「竞品动向」块（模块里自己登记进 Amazon 运营面板）
 import '@/components/amazon/amazon-competitors'
@@ -123,6 +124,7 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
 
   // WP395：岗位里有亚马逊店铺运营 → Amazon 那四块（每日巡检 / 竞品动向 / Listing 体检 / 词库）
   const amazon = duties.find((d) => d.role_id === AMAZON_STORE_ROLE)
+  const adsDuties = duties.filter((d) => adCreativePlatformOf(d.role_id) !== undefined)
   const pending = view?.pending_cards ?? 0
   const fresh =
     view !== undefined && work.data !== undefined && work.data.items.length === 0 && pending === 0
@@ -147,6 +149,10 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
         }}
       />
       {amazon === undefined ? null : <AmazonOpsBoard assignment={amazon.assignment_id} />}
+      {/* WP420（自查 A6）：岗位里有投放职责 → 每条一块「今天」看板（数从广告库来） */}
+      {adsDuties.map((d) => (
+        <AdsOverview key={d.assignment_id} assignment={d.assignment_id} />
+      ))}
       <DataBoard
         duties={boardDuties}
         expanded={charts}
@@ -203,6 +209,7 @@ export function DutyBoards({
       {role_id === 'b2b.sales' ? <B2bSalesPanel assignment={assignment} /> : null}
       {platform === undefined ? null : (
         <>
+          <AdsOverview assignment={assignment} />
           <AdCreativePanel assignment={assignment} platform={platform} />
           <AdChangesPanel assignment={assignment} />
         </>

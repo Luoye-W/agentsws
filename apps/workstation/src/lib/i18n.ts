@@ -6,6 +6,7 @@
  */
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
+import { ADS_OVERVIEW_EN, ADS_OVERVIEW_ZH } from './i18n-ads-overview'
 import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
 import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
 import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
@@ -8651,6 +8652,7 @@ const TABLES: Record<Lang, Table> = {
     ...GOOGLE_ALERTS_ZH,
     ...PR_ALERTS_ZH,
     ...ADS_CHANGES_ZH,
+    ...ADS_OVERVIEW_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
     // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
@@ -8709,6 +8711,7 @@ const TABLES: Record<Lang, Table> = {
     ...GOOGLE_ALERTS_EN,
     ...PR_ALERTS_EN,
     ...ADS_CHANGES_EN,
+    ...ADS_OVERVIEW_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
     ...EXT_INSTALL_EN,
