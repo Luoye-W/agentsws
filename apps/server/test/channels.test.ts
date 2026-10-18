@@ -145,6 +145,8 @@ function harness(
      * 说得清"找到 / 找不到"的收信端。
      */
     makeSource?: (account: MailAccount) => MailSource
+    /** WP417：回信发出去了（首响 SLA 停表）。 */
+    noteOutbound?: (thread_id: string) => void
     /** WP417：入站挂谁名下（收路由算出来的职责）。 */
     position?: (role_id?: string) => { person_id: string; assignment_id: string; role_id: string }
   } = {},
@@ -180,6 +182,7 @@ function harness(
         role_id: 'dtc.support',
       }))) as never,
     ...(over.resolveActor === undefined ? {} : { resolveActor: over.resolveActor }),
+    ...(over.noteOutbound === undefined ? {} : { noteOutbound: over.noteOutbound }),
     ...(over.batch === undefined ? {} : { batch: over.batch }),
     startRun: (input) => {
       runs.push({ matter: input.matter, brief: input.brief })
@@ -392,13 +395,15 @@ describe('出站发信（18 §3）', () => {
       payload: { channel: 'email', thread_ref: thread, body: { text } },
     }) as unknown as ApprovalItem
 
-  it('批准的回信真发出去，收件人只从线程台账取', async () => {
-    const h = harness()
+  it('批准的回信真发出去，收件人只从线程台账取；WP417（自查 A33）发出去就给首响 SLA 停表', async () => {
+    const stopped: string[] = []
+    const h = harness({ noteOutbound: (t) => stopped.push(t) })
     await h.channels.poll()
     const out = await h.channels.deliver(draft('<m-1@mail.example>'), { idempotencyKey: 'chg_1' })
     expect(out).toMatchObject({ status: 'ok' })
     expect(h.mailer.sent).toHaveLength(1)
     expect(h.mailer.sent[0]?.to).toEqual(['ann@customer.com'])
+    expect(stopped).toEqual(['<m-1@mail.example>'])
   })
 
   it('急停 outbound 档挡住发信（对账没完 / 人按了暂停都走这一条）', async () => {

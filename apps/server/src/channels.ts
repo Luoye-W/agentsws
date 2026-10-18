@@ -240,6 +240,11 @@ export interface ChannelsOptions {
   /** 17 §1 起 Run；不给就只开事项不跑运行时。 */
   startRun?: StartRun
   /**
+   * WP417（自查客服 A33）：一封回信真发出去了 → 告诉客服判断层「这条线程回过了」（首响 SLA 停表）。
+   * 以前没人调，回了信超时提醒照样响。
+   */
+  noteOutbound?(thread_id: string): void
+  /**
    * 入站事项挂谁名下（本人的那条岗位）。WP417（自查 A15）：带上路由算出来的职责（`dtc.support` /
    * `amz.support` …），装配方按它找本人持有的那一条；找不到再退回第一条。
    */
@@ -1305,6 +1310,11 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           idempotency_key: opts.idempotencyKey,
         })
         row = await outbox.markAccepted(row, clock.now(), sent.external_id)
+        try {
+          options.noteOutbound?.(thread)
+        } catch {
+          // 停表失败不影响发送结果
+        }
         return { status: 'ok', execution_id: sent.external_id }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)

@@ -7531,6 +7531,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       position: (role_id) => positionFor(ws, [role_id, 'dtc.support']),
       // WP125（72 §P0-1）：落成事项之后、起 Run 之前，客服判断层先说话
       judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
+      // WP417（自查 A33）：回信真发出去 → 首响 SLA 停表
+      noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
       /**
        * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
        *
