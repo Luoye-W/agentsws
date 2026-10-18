@@ -135,11 +135,29 @@ export interface ContentItem {
   files: ContentFileEntry[]
   /** 条目摘要：按路径排序的 `path\tsha256\n` 拼起来的 sha256。 */
   sha256: string
+  /**
+   * WP405（官方订阅，私有 docs/107）：这一条归哪几个岗位（岗位 id）。云端「更新摘要」与运营后台按岗位计数读它；
+   * 不写 = 不进摘要（照样能下载）。
+   */
+  positions?: string[]
+  /** WP405：标「急」（平台政策这类，不等周更单出一张）。 */
+  urgent?: boolean
+  /** WP405：这一条现在这一版进官方订阅的时刻（「最近一周更新了几项」按它算；不写按清单的 `created_at`）。 */
+  released_at?: Iso8601
 }
+
+/**
+ * WP405：内容包从哪来。`public` = docs/90 的公开通道（随软件带的第三方内容）；`official` = 岗位更新订阅
+ * （私有内容仓打包、云端按订阅放行，私有 docs/107 §7）。
+ */
+export const CONTENT_SOURCES = ['public', 'official'] as const
+export type ContentSource = (typeof CONTENT_SOURCES)[number]
 
 export interface ContentManifest {
   schema: typeof CONTENT_MANIFEST_SCHEMA
   channel: ContentChannel
+  /** WP405：来源（不写 = `public`，老清单原样认）。 */
+  source?: ContentSource
   /** 只增的序号：用户端记住见过的最大值，比它小的包一律当旧包（防回放）。 */
   serial: number
   created_at: Iso8601

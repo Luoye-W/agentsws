@@ -49,6 +49,9 @@
     },
     {
       "name": "services"
+    },
+    {
+      "name": "content"
     }
   ],
   "paths": {
@@ -9657,6 +9660,604 @@
           }
         }
       }
+    },
+    "/v1/content/subscription": {
+      "get": {
+        "operationId": "getV1ContentSubscription",
+        "summary": "岗位更新订阅现在怎样（按公司一份，公司下所有品牌同一份）",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContentSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这个节点还没开通岗位更新（没扣积分）",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postV1ContentSubscription",
+        "summary": "开通岗位更新（30 积分 / 月，当场扣第一期；没有试用）。",
+        "description": "钱不够不回 402：订阅照开、状态进 `grace`，`charged` 里那一期 `ok: false`；同一期重复点只扣一次。",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContentSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这个节点还没开通岗位更新（没扣积分）",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteV1ContentSubscription",
+        "summary": "取消：当期用完为止（当期照常能下），下期不扣；已经应用 / 下到本机的永远留着",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContentSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这个节点还没开通岗位更新（没扣积分）",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/content/official/manifest": {
+      "get": {
+        "operationId": "getV1ContentOfficialManifest",
+        "summary": "官方内容清单：原始字节（签名就是对它签的，别重排）；先查订阅；每次记一条下载",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["stable", "beta"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentManifest"
+                }
+              }
+            },
+            "headers": {
+              "X-Agentsws-Content-Serial": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "payment_required",
+            "x-error-codes": ["payment_required"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "这个渠道没有清单 / 没有这个文件 / 路径里的哈希格式不对或对不上",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "私有存储没接",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/content/official/manifest.sig": {
+      "get": {
+        "operationId": "getV1ContentOfficialManifestSig",
+        "summary": "清单签名（对清单原始字节的 ed25519 签名，base64）；先查订阅",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["stable", "beta"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Agentsws-Content-Serial": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "payment_required",
+            "x-error-codes": ["payment_required"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "这个渠道没有清单 / 没有这个文件 / 路径里的哈希格式不对或对不上",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "私有存储没接",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/content/official/blobs/{sha256}": {
+      "get": {
+        "operationId": "getV1ContentOfficialBlobsSha256",
+        "summary": "一个文件（按清单里的 sha256 取，流式原样回）；先查订阅；每次记一条下载",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "description": "64 位小写十六进制（清单里每个文件的 `sha256`）。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/octet-stream": {
+                "schema": {}
+              }
+            },
+            "headers": {
+              "X-Agentsws-Content-Sha256": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "payment_required",
+            "x-error-codes": ["payment_required"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "这个渠道没有清单 / 没有这个文件 / 路径里的哈希格式不对或对不上",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "私有存储没接",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/content/official/summary": {
+      "get": {
+        "operationId": "getV1ContentOfficialSummary",
+        "summary": "更新摘要：每个岗位最近一周几项、有没有急的、标题（不查订阅；只回标题不回正文）",
+        "tags": ["content"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "content",
+        "parameters": [
+          {
+            "name": "positions",
+            "in": "query",
+            "required": false,
+            "description": "逗号分隔的岗位 id（只看这几个；不给 = 全部有更新的岗位）。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["stable", "beta"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/OfficialContentSummary"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10898,7 +11499,8 @@
           "data",
           "kol",
           "store",
-          "services"
+          "services",
+          "content"
         ],
         "description": "18 §1「最小动作集」：一把工作区令牌能做什么，逐条列出来，没列的一律不行。"
       },
@@ -10997,6 +11599,280 @@
         "type": "string",
         "enum": ["workstation", "web"],
         "description": "注册从哪儿来的（留证用）。"
+      },
+      "ContentFileEntry": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "相对条目目录的路径（`/` 分隔、不许 `..`、不许绝对路径）。"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": ["path", "sha256", "size"]
+      },
+      "ContentItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`<kind>:<name>`，例如 `skill:shopify`。"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["skill", "role", "declarative"]
+          },
+          "name": {
+            "type": "string",
+            "description": "技能名 / 职责 id。"
+          },
+          "version": {
+            "type": "string"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "upstream": {
+            "$ref": "#/components/schemas/ContentUpstreamRef"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ContentReviewSummary"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontPlatform"
+            },
+            "description": "只落到建站平台是这几个的品牌；不写 = 所有品牌（与 WP216 PLATFORM_KITS 同一口径）。"
+          },
+          "min_app_version": {
+            "type": "string",
+            "description": "这一条要求的最低软件版本（不满足：这一条跳过，提示先更新软件）。"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentFileEntry"
+            }
+          },
+          "sha256": {
+            "type": "string",
+            "description": "条目摘要：按路径排序的 `path\\tsha256\\n` 拼起来的 sha256。"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "WP405（官方订阅，私有 docs/107）：这一条归哪几个岗位（岗位 id）。云端「更新摘要」与运营后台按岗位计数读它； 不写 = 不进摘要（照样能下载）。"
+          },
+          "urgent": {
+            "type": "boolean",
+            "description": "WP405：标「急」（平台政策这类，不等周更单出一张）。"
+          },
+          "released_at": {
+            "type": "string",
+            "description": "WP405：这一条现在这一版进官方订阅的时刻（「最近一周更新了几项」按它算；不写按清单的 `created_at`）。"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "version",
+          "title",
+          "summary",
+          "upstream",
+          "review",
+          "files",
+          "sha256"
+        ]
+      },
+      "ContentManifest": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string",
+            "const": "agentsws.content-manifest/1"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["stable", "beta"]
+          },
+          "source": {
+            "type": "string",
+            "enum": ["public", "official"],
+            "description": "WP405：来源（不写 = `public`，老清单原样认）。"
+          },
+          "serial": {
+            "type": "number",
+            "description": "只增的序号：用户端记住见过的最大值，比它小的包一律当旧包（防回放）。"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "min_app_version": {
+            "type": "string",
+            "description": "整包要求的最低软件版本（不满足：整包不收）。"
+          },
+          "key_id": {
+            "type": "string",
+            "description": "用哪把钥签的（对 {@link CONTENT_SIGNING_PUBLIC_KEYS}）。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentItem"
+            }
+          }
+        },
+        "required": [
+          "schema",
+          "channel",
+          "serial",
+          "created_at",
+          "min_app_version",
+          "key_id",
+          "items"
+        ]
+      },
+      "ContentReviewSummary": {
+        "type": "object",
+        "properties": {
+          "reviewer": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "string"
+          },
+          "license_before": {
+            "type": "string",
+            "description": "许可证前后（不变才能原样分发）。"
+          },
+          "license_after": {
+            "type": "string"
+          },
+          "scan_hits": {
+            "type": "number",
+            "description": "可疑指令扫描：命中条数与规则 id；命中的每一条都要有审核人写的放行理由。"
+          },
+          "scan_rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes_ok": {
+            "type": "boolean",
+            "description": "我们的旁注（`AGENTSWS.md` 等）仍对得上。"
+          },
+          "tests_ok": {
+            "type": "boolean",
+            "description": "测试与模拟全过。"
+          },
+          "proposal": {
+            "type": "string",
+            "description": "提案（diff + 许可证对比 + 扫描结果）在仓库里的路径。"
+          }
+        },
+        "required": [
+          "reviewer",
+          "reviewed_at",
+          "license_before",
+          "license_after",
+          "scan_hits",
+          "scan_rules",
+          "notes_ok",
+          "tests_ok"
+        ],
+        "description": "审核记录摘要（docs/42 §5「内容更新」那一步的结论）。"
+      },
+      "ContentSubscriptionCharge": {
+        "type": "object",
+        "properties": {
+          "cycle_start": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": ["cycle_start", "ok"],
+        "description": "开通时这一次扣了哪几期（补扣落下的几期也在这里）。`ok: false` = 没扣成，进宽限。"
+      },
+      "ContentSubscriptionView": {
+        "type": "object",
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "const": "content.official.monthly"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "usable": {
+            "type": "boolean"
+          },
+          "credits_per_month": {
+            "type": "number",
+            "description": "每月多少积分（30）。"
+          },
+          "cancel_at_period_end": {
+            "type": "boolean"
+          },
+          "current_cycle_end": {
+            "type": "string",
+            "description": "当期到哪天（取消后用到这天为止）。"
+          },
+          "grace_until": {
+            "type": "string",
+            "description": "欠费宽限到哪天。"
+          },
+          "charged": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentSubscriptionCharge"
+            },
+            "description": "只在开通那一次回：这一次扣了哪几期。"
+          }
+        },
+        "required": ["service_id", "status", "usable", "credits_per_month", "cancel_at_period_end"],
+        "description": "`GET / POST / DELETE /v1/content/subscription` 回的：这个公司的「岗位更新」订阅现在怎样。"
+      },
+      "ContentUpstreamRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`upstreams.yml` 里的 id。"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string",
+            "description": "官方发布 / 提交的日期（卡上写「官方某日更新」）。"
+          },
+          "license": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "repo", "commit", "published_at", "license"],
+        "description": "这一版从哪个上游哪个提交来。"
       },
       "ContributionEvent": {
         "type": "object",
@@ -12230,6 +13106,18 @@
         ],
         "description": "同步状态（界面上那一行「最近同步：3 分钟前 · 云端 1,204 条」）。"
       },
+      "LocalizedText": {
+        "type": "object",
+        "properties": {
+          "zh": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string"
+          }
+        },
+        "required": ["zh", "en"]
+      },
       "MagicLinkRequest": {
         "type": "object",
         "properties": {
@@ -12418,6 +13306,59 @@
         },
         "required": ["month", "timezone", "used", "reserved"],
         "description": "`GET /v1/wallet/allocation/me`：成员自己的「本月额度：已用 X / 上限 Y」。"
+      },
+      "OfficialContentSummary": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": ["stable", "beta"]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "since": {
+            "type": "string",
+            "description": "统计窗口（最近 {@link OFFICIAL_CONTENT_SUMMARY_DAYS} 天）。"
+          },
+          "until": {
+            "type": "string"
+          },
+          "serial": {
+            "type": "number",
+            "description": "算这份摘要用的清单序号。"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfficialPositionSummary"
+            }
+          }
+        },
+        "required": ["channel", "available", "since", "until", "positions"],
+        "description": "`GET /v1/content/official/summary` 回的。`available: false` = 云上还没开通岗位更新（存储没接 / 还没发过）， 那时 `positions` 是空的——界面不出那行小字，不编数字。"
+      },
+      "OfficialPositionSummary": {
+        "type": "object",
+        "properties": {
+          "position_id": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "urgent": {
+            "type": "boolean"
+          },
+          "titles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalizedText"
+            }
+          }
+        },
+        "required": ["position_id", "count", "urgent", "titles"],
+        "description": "一个岗位最近一周的更新：几项、有没有急的、标题（新的在前；**不含正文**）。"
       },
       "PluginPairing": {
         "type": "object",
@@ -14601,7 +15542,7 @@
           },
           "service_id": {
             "type": "string",
-            "description": "哪个服务（{@link KOL_SERVICE_ID} / {@link SUPPORT_SERVICE_ID} …）。"
+            "description": "哪个服务（{@link KOL_SERVICE_ID} / {@link SUPPORT_SERVICE_ID} / {@link CONTENT_SERVICE_ID} …）。"
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus"
@@ -14877,6 +15818,11 @@
         },
         "required": ["workspaces", "seat_price"],
         "description": "`GET /v1/standby/workspaces`。"
+      },
+      "StorefrontPlatform": {
+        "type": "string",
+        "enum": ["shopify", "woocommerce", "magento", "other", "none"],
+        "description": "51 §1 N0 / 46 §1 ①：**网站是用什么搭的**。"
       },
       "SubscriptionStatus": {
         "type": "string",

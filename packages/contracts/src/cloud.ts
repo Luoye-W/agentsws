@@ -63,8 +63,11 @@ export interface CloudOrg {
  * - `services`：工坊服务（`/v1/services/*`，WP389，docs/105）——服务目录、下单（扣进托管）、看进度、
  *   消息、交换联系方式、验收。
  *
- * 本版九个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`，WP265 加 `store`，
- * WP389 加 `services`）；加能力就加成员（只加不删）。
+ * - `content`：岗位更新订阅（`/v1/content/*`，WP405，私有 docs/107 §7）——订阅的开通 / 取消 / 状态、
+ *   官方内容清单与文件（先查订阅）、更新摘要（不查订阅）。
+ *
+ * 本版十个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`，WP265 加 `store`，
+ * WP389 加 `services`，WP405 加 `content`）；加能力就加成员（只加不删）。
  */
 export type CloudScope =
   | 'ai'
@@ -76,6 +79,7 @@ export type CloudScope =
   | 'kol'
   | 'store'
   | 'services'
+  | 'content'
 
 export const CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -87,6 +91,7 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
   'kol',
   'store',
   'services',
+  'content',
 ]
 
 /**
@@ -108,6 +113,10 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
  *
  * `services` 进默认（WP389）同一条理由：动作集本身不花钱——下单永远是用户在下单卡上点（L1），
  * 不放进默认的后果是「第一次下单前先回云上重签一把令牌」。
+ *
+ * `content` 进默认（WP405）同 `kol`：没订阅的组织拿清单与文件一律 402，动作集本身不解锁任何付费内容；
+ * 摘要（标题与条数）本来就人人可看。老令牌缺这一项时照 WP272 / WP390 的做法后台自动补签（撞上 403
+ * `details.required_scope: 'content'` 补一次再打）。
  */
 export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -117,6 +126,7 @@ export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'kol',
   'store',
   'services',
+  'content',
 ]
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */

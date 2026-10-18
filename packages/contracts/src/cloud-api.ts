@@ -100,6 +100,14 @@ import type {
   RevealedContact,
 } from './kol-public.js'
 import type {
+  ContentSubscriptionView,
+  OfficialContentBlobParams,
+  OfficialContentQuery,
+  OfficialContentSummary,
+  OfficialContentSummaryQuery,
+} from './content-official.js'
+import type { ContentManifest } from './content-updates.js'
+import type {
   PremiumThemeDownloadQuery,
   PremiumThemeEntitlement,
   PremiumThemePurchaseRequest,
@@ -155,7 +163,8 @@ export type CloudApiAuth =
   | 'visitor'
 
 /** 成功响应的媒体类型（缺省 `json`）。 */
-export type CloudApiContent = 'json' | 'sse' | 'html' | 'javascript' | 'text' | 'zip'
+/** WP405 加 `binary`（`application/octet-stream`：岗位更新的文件按内容哈希原样回）。 */
+export type CloudApiContent = 'json' | 'sse' | 'html' | 'javascript' | 'text' | 'zip' | 'binary'
 
 /** 表里一条路由的形状（生成器按这些键读；多写一个键不会进契约）。 */
 export interface CloudApiOperation {
@@ -2247,6 +2256,108 @@ export interface CloudServiceOrderApi {
 }
 
 /* ------------------------------------------------------------------ */
+/* 路由表：岗位更新订阅（WP405，私有 docs/107 §6 / §7）                    */
+/* ------------------------------------------------------------------ */
+
+interface ContentSubscriptionErrors extends EntryAuthErrors {
+  /** 这个节点还没开通岗位更新（没扣积分） */
+  501: 'not_implemented'
+}
+
+/** 清单 / 签名 / 文件都先查订阅：没订、欠费宽限里、欠费停了都是 402（`details.status`）。 */
+interface OfficialContentErrors extends EntryAuthErrors {
+  400: 'invalid_input'
+  402: 'payment_required'
+  /** 这个渠道没有清单 / 没有这个文件 / 路径里的哈希格式不对或对不上 */
+  404: 'not_found'
+  /** 私有存储没接 */
+  501: 'not_implemented'
+}
+
+/** 清单与签名回的响应头。 */
+export interface OfficialContentManifestHeaders {
+  'X-Agentsws-Content-Serial': string
+}
+
+/** 文件回的响应头。 */
+export interface OfficialContentBlobHeaders {
+  'X-Agentsws-Content-Sha256': string
+}
+
+export interface CloudContentApi {
+  /** 岗位更新订阅现在怎样（按公司一份，公司下所有品牌同一份） */
+  'GET /v1/content/subscription': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    ok: { status: 200; body: CloudDataEnvelope<ContentSubscriptionView> }
+    errors: ContentSubscriptionErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * 开通岗位更新（30 积分 / 月，当场扣第一期；没有试用）。
+   * 钱不够不回 402：订阅照开、状态进 `grace`，`charged` 里那一期 `ok: false`；同一期重复点只扣一次。
+   */
+  'POST /v1/content/subscription': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    ok: { status: 200; body: CloudDataEnvelope<ContentSubscriptionView> }
+    errors: ContentSubscriptionErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 取消：当期用完为止（当期照常能下），下期不扣；已经应用 / 下到本机的永远留着 */
+  'DELETE /v1/content/subscription': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    ok: { status: 200; body: CloudDataEnvelope<ContentSubscriptionView> }
+    errors: ContentSubscriptionErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 官方内容清单：原始字节（签名就是对它签的，别重排）；先查订阅；每次记一条下载 */
+  'GET /v1/content/official/manifest': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    query: OfficialContentQuery
+    ok: { status: 200; body: ContentManifest; headers: OfficialContentManifestHeaders }
+    errors: OfficialContentErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 清单签名（对清单原始字节的 ed25519 签名，base64）；先查订阅 */
+  'GET /v1/content/official/manifest.sig': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    query: OfficialContentQuery
+    ok: { status: 200; body: string; content: 'text'; headers: OfficialContentManifestHeaders }
+    errors: OfficialContentErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 一个文件（按清单里的 sha256 取，流式原样回）；先查订阅；每次记一条下载 */
+  'GET /v1/content/official/blobs/{sha256}': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    params: OfficialContentBlobParams
+    ok: { status: 200; body: unknown; content: 'binary'; headers: OfficialContentBlobHeaders }
+    errors: OfficialContentErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 更新摘要：每个岗位最近一周几项、有没有急的、标题（不查订阅；只回标题不回正文） */
+  'GET /v1/content/official/summary': {
+    auth: 'workspace_token'
+    scope: 'content'
+    tag: 'content'
+    query: OfficialContentSummaryQuery
+    ok: { status: 200; body: CloudDataEnvelope<OfficialContentSummary> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -2273,7 +2384,8 @@ export interface CloudApi
     CloudHostedApi,
     CloudStandbyApi,
     CloudPremiumThemeApi,
-    CloudServiceOrderApi {}
+    CloudServiceOrderApi,
+    CloudContentApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

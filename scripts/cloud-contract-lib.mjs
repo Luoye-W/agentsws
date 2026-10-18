@@ -269,6 +269,7 @@ const CONTENT_TYPES = {
   javascript: 'text/javascript',
   text: 'text/plain',
   zip: 'application/zip',
+  binary: 'application/octet-stream',
 }
 
 /** 生成整份文档。`version` 取根 package.json。 */

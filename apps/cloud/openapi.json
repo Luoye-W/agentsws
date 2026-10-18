@@ -701,7 +701,8 @@
                         "data",
                         "kol",
                         "store",
-                        "services"
+                        "services",
+                        "content"
                       ]
                     }
                   },
@@ -994,7 +995,8 @@
                         "data",
                         "kol",
                         "store",
-                        "services"
+                        "services",
+                        "content"
                       ]
                     }
                   },

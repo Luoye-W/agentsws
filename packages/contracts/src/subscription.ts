@@ -35,6 +35,17 @@ export const KOL_SERVICE_ID = 'kol.service.monthly'
 export const SUPPORT_SERVICE_ID = 'support.service.monthly'
 
 /**
+ * 岗位更新订阅（WP405，私有 docs/107 §6，Luoye 10-19 定）：官方持续更新的岗位内容（persona、技能、规则表、
+ * 快捷问题、知识包……）按周推给订阅的公司。30 积分 / 月，**全部岗位一个价、按公司订一份**，公司下所有品牌生效；
+ * **不给试用**（运营赠送月照旧只作个案）。退订后已经应用 / 已经下到本机的永久留着，只是不再收新的。
+ *
+ * 名字不叫 `*.service.monthly`：它不是「增值服务」那一类的托管能力，是内容订阅；计费块照样归 `service`
+ * （`pricing.json` 那一行写明 `block: service`），额度格归「其它」（{@link CONTENT_SERVICE_ID} 在
+ * `allocationBucketOf` 里单列）。
+ */
+export const CONTENT_SERVICE_ID = 'content.official.monthly'
+
+/**
  * 一个按月订阅的增值服务（`subscriptions.json` 里的一行）。
  *
  * `id` 同时就是价目表里那条能力的名字（`pricing.json` 的 `capability`）——
@@ -115,7 +126,7 @@ export function subscriptionUsable(status: SubscriptionStatus): boolean {
  */
 export interface ServiceSubscription {
   org_id: string
-  /** 哪个服务（{@link KOL_SERVICE_ID} / {@link SUPPORT_SERVICE_ID} …）。 */
+  /** 哪个服务（{@link KOL_SERVICE_ID} / {@link SUPPORT_SERVICE_ID} / {@link CONTENT_SERVICE_ID} …）。 */
   service_id: string
   status: SubscriptionStatus
   /** 第一次开通的时刻。取消再开通不改它（用来回答「用了多久」）。 */
