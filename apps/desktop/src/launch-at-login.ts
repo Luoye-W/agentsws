@@ -20,14 +20,35 @@ export interface LoginItemSettings {
  * 交给系统的那一份。WP327：Windows 版本目录布局下（`layoutCurrent` 有值）开机自启指
  * `current\<exe 名>`——版本目录会被清理，指着它下次开机就找不到了；Mac 与老布局只给开 / 关。
  */
+/** 开机自动启动时带的参数（Windows）；见 {@link wasLaunchedAtLogin}。 */
+export const LAUNCHED_AT_LOGIN_ARG = '--launched-at-login'
+
+/** 这次是不是开机自动启动的：Mac 问系统，Windows 看参数。 */
+export function wasLaunchedAtLogin(
+  platform: NodeJS.Platform,
+  argv: readonly string[],
+  macOpenedAtLogin: () => boolean,
+): boolean {
+  if (platform === 'darwin') {
+    try {
+      return macOpenedAtLogin()
+    } catch {
+      return false
+    }
+  }
+  return argv.includes(LAUNCHED_AT_LOGIN_ARG)
+}
+
 export function loginItemSettings(
   openAtLogin: boolean,
   layoutCurrent: string | undefined,
   execPath: string,
 ): LoginItemSettings {
+  // Windows 带一个参数，起来后认得出「这次是开机自动启动」（Mac 看 `wasOpenedAtLogin`）
+  const args = process.platform === 'win32' ? { args: [LAUNCHED_AT_LOGIN_ARG] } : {}
   return layoutCurrent === undefined
-    ? { openAtLogin }
-    : { openAtLogin, path: join(layoutCurrent, basename(execPath)) }
+    ? { openAtLogin, ...args }
+    : { openAtLogin, path: join(layoutCurrent, basename(execPath)), ...args }
 }
 
 export interface LaunchAtLoginDeps {
