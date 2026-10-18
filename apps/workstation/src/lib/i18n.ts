@@ -1256,6 +1256,9 @@ const zh: Table = {
   'skills.proposal.quotes': '你当时说的',
   'skills.proposal.open': '去卡片上定',
   'skills.excluded': '已排除',
+  // WP397：技能卡上的来源小标签
+  'skills.source.official': '官方原样收录',
+  'skills.source.adapted': '改写自开源',
   'skills.exclude': '不用这个技能',
   'skills.include': '重新启用',
   'skills.learned_from': 'AI 学来的',
@@ -5420,6 +5423,8 @@ const en: Table = {
   'skills.proposal.quotes': 'What you said',
   'skills.proposal.open': 'Decide on the card',
   'skills.excluded': 'Excluded',
+  'skills.source.official': 'Official, unmodified',
+  'skills.source.adapted': 'Adapted from open source',
   'skills.exclude': 'Do not use this skill',
   'skills.include': 'Use it again',
   'skills.learned_from': 'Learned by AI',

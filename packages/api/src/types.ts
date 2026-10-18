@@ -565,6 +565,11 @@ export interface SkillSummary {
   roles?: SkillRoleRef[]
   /** 本人名下有没撤销的职责在用它。 */
   in_use?: boolean
+  /**
+   * WP397：这一本从哪来（frontmatter 的 `origin`）。`official` = 平台官方技能原样收录
+   * （Shopify、Amazon 官方卖家技能）；`adapted` = 改写自开源。我们自己写的不回。
+   */
+  origin?: 'official' | 'adapted'
 }
 
 /** WP209：技能归属的一个岗位。 */
