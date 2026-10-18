@@ -103,10 +103,13 @@ export type {
   PersonaBrandContext,
   PersonaLang,
   PersonaProblem,
+  PersonaSectionPart,
   PersonaSectionsInput,
+  SplitPersona,
 } from './persona.js'
 export {
   applyPersonaOverride,
+  applyPersonaSectionOverride,
   checkAllPersonas,
   checkGeneratedPersonaEn,
   checkPersona,
@@ -114,12 +117,16 @@ export {
   HOUSE_RULES_ORDER,
   hasChineseText,
   houseRulesSection,
+  joinPersonaSections,
   MAX_PERSONA_CHARS,
+  overriddenPersonaSections,
   PERSONA_ORDER,
+  PERSONA_SECTION_IDS,
   PERSONA_SECTIONS_EN,
   PERSONA_SECTIONS_ZH,
   personaIsEmpty,
   personaKey,
+  personaSectionDiff,
   personaSections,
   personaTextIn,
   personaUntranslated,
@@ -129,6 +136,7 @@ export {
   renderBrandContext,
   replyLanguageSection,
   sameSubject,
+  splitPersonaSections,
 } from './persona.js'
 export type { GeneratedPersonaEn, PersonaEnFile, PersonaEnProblem } from './persona-en.js'
 export {
