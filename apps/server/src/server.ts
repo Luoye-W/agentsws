@@ -8215,10 +8215,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 外部关键词走与 `read_reddit` 同一条取数路由（接口中台 → 只读浏览器）。托管实例不装（云上没有用户的浏览器）。
      * AI 判断用这个品牌的默认模型、记在持有「Reddit」那条社媒职责的人头上；没人持有就只按规则、也不出卡。
      */
-    const redditHolder = () =>
+    const redditHeldBy = (role_id: string) =>
       roles.assignments
-        .listByRole('social.reddit')
+        .listByRole(role_id)
         .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+    /*
+     * WP419（自查 R4）：只担「外部版块」（公关 `pr.reddit`）也装巡查、也起草——担官方版块的人优先，没有就是
+     * 担外部版块的人；外部那一半（外部关键词 / 关注版块读到的）草稿归担外部版块的人（没人担就归官方版块那位）。
+     */
+    const redditHolder = () => redditHeldBy('social.reddit') ?? redditHeldBy('pr.reddit')
+    const redditExternalHolder = () => redditHeldBy('pr.reddit') ?? redditHeldBy('social.reddit')
     const redditSearch = createRedditReadRouter({
       route: () => ownCloud.redditReadRoute(),
       limits: () => ownCloud.redditBrowserReadLimits(),
@@ -8722,12 +8728,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()
       if (holder === undefined || redditWrites === undefined) return
-      const actor = {
+      const actorOf = (h: NonNullable<ReturnType<typeof redditHolder>>) => ({
         workspace_id: ws,
-        person_id: holder.person_id,
-        assignment_id: holder.id,
-        role_id: holder.role_id,
-      }
+        person_id: h.person_id,
+        assignment_id: h.id,
+        role_id: h.role_id,
+      })
+      const actor = actorOf(holder)
+      // WP419：外部读到的归担外部版块的人
+      const externalActor = actorOf(redditExternalHolder() ?? holder)
       if (redditPersona.get() === undefined) {
         if (redditPersona.shouldAsk())
           void (async () =>
@@ -8743,7 +8752,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           if (target === undefined) continue
           const thread = redditWatch.thread(entry.id)
           const got = await redditWrites
-            ?.draftAndStage(actor, {
+            ?.draftAndStage(entry.source === 'external' ? externalActor : actor, {
               target,
               ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
               ...(thread === undefined ? {} : { thread }),
@@ -9877,8 +9886,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
         weeklyReview: held('common.owner'),
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
-        // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
-        redditPatrol: held('social.reddit'),
+        // WP328：有人持有社媒「Reddit」那条职责才建每日巡查；WP419：只担公关「外部版块」也建
+        redditPatrol: held('social.reddit') || held('pr.reddit'),
         // WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条
         competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
@@ -9932,7 +9941,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
     // WP328
-    { ids: ['sched_reddit_patrol'], held: (ws) => roleHeldIn(ws, 'social.reddit') },
+    // WP328；WP419：只担「外部版块」也算
+    {
+      ids: ['sched_reddit_patrol'],
+      held: (ws) => roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit'),
+    },
     // WP315
     {
       ids: ['sched_ads_daily_export'],
