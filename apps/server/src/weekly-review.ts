@@ -1,5 +1,9 @@
 /**
- * WP224（docs/91 §2.2 #1）：**本周经营一页纸**的服务端那一半——取面板、出卡。
+ * WP224（docs/91 §2.2 #1）：**经营一页纸**的服务端那一半——取面板、出卡。
+ *
+ * WP388（决策 1091）：取**到出报告前一天为止最近完整的 7 天**（日界线按品牌目标市场时区）——默认周一 16:30 出
+ * = 上周一到周日。面板上下文的「现在」挪到那 7 天的最后一刻、日界线按那个市场的偏移切，「近 7 天」就正好是它。
+ * 标题：周一到周日写「上周经营一页纸」，别的（改到周五出那种）写「经营一页纸 · 起 至 止」。
  *
  * 一页纸怎么写在 `@agentsws/deck` 的 `composeWeeklyReview`（纯函数）；这里只做两件事：
  *
@@ -21,6 +25,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { composeWeeklyReview, type QueryContext } from '@agentsws/deck'
+import { type ReportWeek, reportWeek } from '@agentsws/schedule'
 
 export interface WeeklyReviewServiceOptions {
   workspace_id: WorkspaceId
@@ -31,6 +36,8 @@ export interface WeeklyReviewServiceOptions {
   /** 这个品牌的工作台端口（面板上下文从它来）。 */
   port(): Promise<WorkstationPort>
   brandName(): string | undefined
+  /** WP388：取数时区（品牌目标市场的；没设就是工作区时区）。不给 = 不挪窗口（近 7 天到现在）。 */
+  reportTz?(): string
 }
 
 export interface WeeklyReviewService {
@@ -66,17 +73,33 @@ export function createWeeklyReviewService(
     }
   }
 
-  const build = async (): Promise<WeeklyReviewPayload | undefined> => {
+  /** WP388：这一刻出的是哪一周（不给取数时区 = 不挪）。 */
+  const weekOf = (): ReportWeek | undefined => {
+    const tz = options.reportTz?.()
+    return tz === undefined ? undefined : reportWeek(options.clock.now(), tz)
+  }
+
+  const compose = async (
+    week: ReportWeek | undefined,
+  ): Promise<WeeklyReviewPayload | undefined> => {
     const owner = holderOf(OWNER_ROLE)
     if (owner === undefined) return undefined
     const port = await options.port()
-    const base = await contextOf(port, owner)
+    const last = week
+    // 「现在」= 那 7 天的最后一刻，日界线按目标市场那时的偏移——面板的「近 7 天」就是那 7 天
+    const now =
+      last === undefined ? options.clock.now() : new Date(Date.parse(last.end) - 1).toISOString()
+    const shift = (ctx: QueryContext | undefined): QueryContext | undefined =>
+      ctx === undefined || last === undefined
+        ? ctx
+        : { ...ctx, now, tz_offset_minutes: last.offset_minutes }
+    const base = shift(await contextOf(port, owner))
     if (base === undefined) return undefined
-    const content = await contextOf(port, holderOf('dtc.content'))
-    const support = await contextOf(port, holderOf('dtc.support'))
+    const content = shift(await contextOf(port, holderOf('dtc.content')))
+    const support = shift(await contextOf(port, holderOf('dtc.support')))
     const brand = options.brandName()
-    return composeWeeklyReview({
-      now: options.clock.now(),
+    const payload = composeWeeklyReview({
+      now,
       base,
       ...(content === undefined ? {} : { content }),
       ...(support === undefined ? {} : { support }),
@@ -90,7 +113,11 @@ export function createWeeklyReviewService(
         ),
       ],
     })
+    // 那 7 天从哪天起（改到周五出时不是周一）：去重键与标题都按它
+    return last === undefined ? payload : { ...payload, week_of: last.from_date }
   }
+
+  const build = (): Promise<WeeklyReviewPayload | undefined> => compose(weekOf())
 
   return {
     build,
@@ -98,7 +125,8 @@ export function createWeeklyReviewService(
       const owner = holderOf(OWNER_ROLE)
       if (owner === undefined)
         return { skipped: '这个品牌没有「公司设置与授权」岗位，一页纸没人收' }
-      const payload = await build()
+      const week = weekOf()
+      const payload = await compose(week)
       if (payload === undefined) return { skipped: '老板那一面的面板读不到' }
       const ws = options.workspace_id
       const item = await options.approvals.create<WeeklyReviewPayload>({
@@ -108,7 +136,12 @@ export function createWeeklyReviewService(
         role_id: OWNER_ROLE,
         subject: { object: { type: 'workspace', id: ws } },
         dedupe_key: `dk_${ws}|weekly_review|${payload.week_of}`,
-        title: `本周经营一页纸 · ${payload.week_of}`,
+        title:
+          week === undefined
+            ? `本周经营一页纸 · ${payload.week_of}`
+            : week.mon_to_sun
+              ? `上周经营一页纸 · ${week.from_date}`
+              : `经营一页纸 · ${week.from_date} 至 ${week.to_date}`,
         summary: payload.situation,
         payload,
         evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },

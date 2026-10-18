@@ -192,7 +192,12 @@ import {
   SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
-import { createBrandRouter, type ScheduleTask } from '@agentsws/schedule'
+import {
+  createBrandRouter,
+  reportTimeZone,
+  type ScheduleTask,
+  WEEKLY_REPORT_DEFAULT,
+} from '@agentsws/schedule'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
@@ -769,6 +774,7 @@ import {
   searchBrowserChannelFromEnv,
   searchLocaleLine,
 } from './web-browser/index.js'
+import { weeklyReportsSetupTarget } from './weekly-report-settings.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -2242,7 +2248,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP224：一页纸那条定时 → 设置里那一行（每周几、几点）。 */
   const weeklyReviewScheduleView = (task: ScheduleTask | undefined) => {
     if (task === undefined)
-      return { weekday: 1, time: '08:00', paused: false, missing: true as const }
+      return { ...WEEKLY_REPORT_DEFAULT, paused: false, missing: true as const }
     const parts = task.trigger.kind === 'cron' ? task.trigger.expr.split(/\s+/) : []
     const pad = (n: string | undefined) => String(Number(n ?? 0)).padStart(2, '0')
     return {
@@ -2824,6 +2830,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   /** 首次设置那一面（品牌级档案）比这里晚装配，所以档案是**被读的**（WP62 / WP65）。 */
   let onboardingRef: OnboardingAssembly | undefined
+  /** WP388：周报取数时区——品牌目标市场的（多个取第一个认得出的），没设就是工作区时区。 */
+  const reportTzOf = (ws: WorkspaceId, tzOffsetMinutes: number): string =>
+    reportTimeZone(onboardingRef?.brandProfile(ws).markets, offsetToTz(tzOffsetMinutes))
   /**
    * 那份 `DESIGN.md`（WP122，71 §5）同样比品牌模块晚装配：它要读 `brandIntake`
    * 手上抓回来的页面，而 `brandIntake` 又要读首次设置那一面。四个岗位出活时经
@@ -3507,6 +3516,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         }),
       )
+    // WP388：系统自带的三份周报几点出（跟 AI 说「周复盘改到周五 17:00」→ 改设置卡）
+    assembly.registerTarget(
+      weeklyReportsSetupTarget({ scheduler: () => schedule.scheduler, workspace_id: ws }),
+    )
     setupCards.set(ws, assembly)
     return assembly
   }
@@ -4848,6 +4861,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals,
       port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
       brandName: () => brandNameOfWorkspace(ws),
+      // WP388：出上一周的（目标市场时区）
+      reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
     })
     /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
     const lineCompareSnapshot = async () => {
@@ -6413,13 +6428,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       ga4: () => googleReads.ga4Conversions(),
       ga4Note: () => googleReads.ga4Note(),
+      ga4Window: () => googleReads.ga4Window?.(),
       // WP155：这个品牌的搜索数据接口（官方 / 自带 key / 不接）；测试与 demo 可以换替身
       searchData: () => options.searchDataFor?.(ws) ?? searchData,
-      orders: () => {
-        const since = Date.parse(clock.now()) - 7 * 86_400_000
+      // WP388：周报取上一周（目标市场时区）；不给窗口 = 近 7 天
+      reportTz: () => reportTzOf(ws, workData.tz_offset_minutes),
+      orders: (window) => {
+        const since =
+          window === undefined ? Date.parse(clock.now()) - 7 * 86_400_000 : Date.parse(window.from)
+        const until = window === undefined ? Number.POSITIVE_INFINITY : Date.parse(window.to)
         return workData
           .orders()
-          .filter((o) => Date.parse(o.created_at) >= since)
+          .filter((o) => Date.parse(o.created_at) >= since && Date.parse(o.created_at) < until)
           .map((o) => ({
             id: o.id,
             ...(o.landing_site === undefined ? {} : { landing_site: o.landing_site }),
@@ -8614,6 +8634,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .list({ workspace_id: ws, status: 'pooled' })
           .map((l) => ({ id: l.id, text: l.text })),
       relay: (review) => relay(review),
+      // WP388：周复盘取上一周（目标市场时区）
+      reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP287：① 个人模式复盘照记、不出卡
       solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
       // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮——都只看这个品牌
@@ -10630,6 +10652,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP388：手动「周复盘」也取上一周（目标市场时区）
+      reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个
       knownModel: async (id) =>
         (await brandModules.models(ws)).chatChoices().some((c) => c.id === id),

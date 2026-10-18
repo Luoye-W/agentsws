@@ -67,6 +67,7 @@ import { ImageHostsSetting } from '@/components/settings/image-hosts-setting'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
+import { WeeklyReportsCard } from '@/components/settings/weekly-reports-card'
 import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { ensureSession } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -271,6 +272,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         keywords: '周报 每周 推送',
         show: owner,
         render: (c) => <WeeklyReviewCard assignment={as(c)} />,
+      },
+      {
+        // WP388：周复盘、SEO 周报每周几点出（本人在这个品牌里的那几条；一条都没有整张不出）
+        id: 'weekly-reports',
+        title: 'settings.weekly_reports',
+        desc: 'sp.weekly_reports.desc',
+        keywords: '周报 周复盘 复盘 SEO 每周 weekly review',
+        render: (c) => <WeeklyReportsCard assignment={c.connectAs ?? c.ownerId ?? ''} />,
       },
       {
         id: 'wechat',

@@ -321,7 +321,7 @@ export interface BrandModuleSet {
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
   economics: EconomicsService
-  /** WP224（docs/91 §2.2 #1）：这个品牌的本周经营一页纸（秘书每周一推给老板）。 */
+  /** WP224（docs/91 §2.2 #1）：这个品牌的经营一页纸（秘书每周推给老板；WP388 默认周一 16:30 出上一周）。 */
   weeklyReview: WeeklyReviewService
   /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
   lineCompareSnapshot(): Promise<{ rows: number; date: string }>

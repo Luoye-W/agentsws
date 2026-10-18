@@ -134,7 +134,7 @@ quick_prompts:
     prompt: "现在勾着的岗位里，还有哪些必需的连接没接上"
     kind: ask
   # WP224：只读动作「本周经营一页纸」——各岗位面板上的数汇成一页，取不到写「没接」。
-  # 秘书每周一早上也会推一张同样的卡（定时任务 `sched_weekly_review`，时间可改）
+  # 秘书默认每周一 16:30 也会推一张上一周的（定时任务 `sched_weekly_review`，时间可改；WP388）
   - id: weekly_review
     label: { zh: "本周经营一页纸", en: "This week on one page" }
     prompt: "按「情况 / 发现 / 影响 / 建议 / 下一步」给我这周的经营一页纸：每条发现带一个数和出处，数只从各岗位面板取，取不到就写没接"

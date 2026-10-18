@@ -30,6 +30,16 @@ describe('scheduleBranch', () => {
       weekly: { time: '09:00:00', weekdays: [1, 3] },
     })
     expect(scheduleBranch(ALL, '30 分钟后提醒我回电话')).toMatchObject({ after_seconds: 1800 })
+    // WP388：要每周一份报告、没说周几几点 → 每周一 16:30；说了就照说的
+    expect(scheduleBranch(ALL, '每周给我一份 PR 简报')).toMatchObject({
+      weekly: { time: '16:30:00', weekdays: [1] },
+    })
+    expect(scheduleBranch(ALL, '每周给我一份 PR 简报，下午 5 点')).toMatchObject({
+      weekly: { time: '17:00:00', weekdays: [1] },
+    })
+    expect(scheduleBranch(ALL, '每周五出一份周报')).toMatchObject({
+      weekly: { time: '09:00:00', weekdays: [5] },
+    })
     expect(scheduleBranch(ALL, '帮我看看这单')).toBeUndefined()
   })
 

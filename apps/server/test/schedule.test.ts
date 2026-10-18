@@ -123,13 +123,13 @@ describe('七个消费者', () => {
     expect((out.result as { plans: string[] }).plans).toHaveLength(1)
   })
 
-  it('② 复盘：20:00 触发 → 一张 review 卡；周五 / 月末各有一条长周期版本', async () => {
+  it('② 复盘：20:00 触发 → 一张 review 卡；每周一 16:30（WP388）/ 月末各有一条长周期版本', async () => {
     const asg = server.bootstrap.ownerAssignment.id
     expect(server.schedule.scheduler.get(`sched_review_day_${asg}`)?.trigger).toMatchObject({
       expr: '0 20 * * *',
     })
     expect(server.schedule.scheduler.get(`sched_review_week_${asg}`)?.trigger).toMatchObject({
-      expr: '30 20 * * 5',
+      expr: '30 16 * * 1',
     })
     expect(server.schedule.scheduler.get(`sched_review_month_${asg}`)?.trigger).toMatchObject({
       expr: '45 20 28-31 * *',

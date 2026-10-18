@@ -58,8 +58,11 @@ export interface SetupTarget {
   fields(): Promise<SetupField[]>
   /** 已经设好了没有（设好了就不出卡；出了的卡保存后也按它复核）。 */
   satisfied(): Promise<boolean>
-  /** 存下人填的值（只含登记过的格子）；不合法就抛 {@link SetupCardError}（那一句给人看）。 */
-  apply(values: Record<string, string>): Promise<void>
+  /**
+   * 存下人填的值（只含登记过的格子）；不合法就抛 {@link SetupCardError}（那一句给人看）。
+   * WP388：第二个参数是谁点的确认（`by` = 人的 id；规则自动的没有）——只该改本人那一份的目标用它。
+   */
+  apply(values: Record<string, string>, context?: { by?: string }): Promise<void>
   /**
    * WP348（决策 887）：「怎么查」——出卡前在这件事的运行里查一遍（档案、已连的数据、限次联网搜索、
    * 问一次模型），交回每一格的方案值 + 理由 + 来源。不给 = 只用 `fields()` 里已知的。
@@ -722,7 +725,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       return
     }
     try {
-      await target.apply(valuesOf(payload))
+      const by = item.decision?.by
+      await target.apply(
+        valuesOf(payload),
+        by === undefined || by === 'mandate' ? {} : { by: String(by) },
+      )
     } catch (e) {
       const why = e instanceof Error ? e.message : '没存成'
       await reask(item, rec, `没存成：${why}`)

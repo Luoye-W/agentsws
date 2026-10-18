@@ -393,6 +393,14 @@ describe('战报四格与复盘', () => {
     expect(clean.todos.completion_pct).toBe(100)
     expect(clean.highlights).toEqual(['待办全清：1 条'])
     expect(reviewTitle(clean)).toContain('本周')
+    // WP388：窗口在出的那一刻之前就结束了 = 上一周
+    expect(reviewTitle({ ...clean, created_at: '2099-01-01T00:00:00.000Z' })).toContain(
+      '上周的复盘',
+    )
+    // 改到周五出那种（不是周一到周日）：宿主给「近 7 天」
+    expect(reviewTitle({ ...clean, created_at: '2099-01-01T00:00:00.000Z' }, '近 7 天')).toContain(
+      '近 7 天的复盘',
+    )
 
     const empty = buildReview({ ...base, period: { kind: 'month', start: T0, end: T0 }, todos: [] })
     expect(empty.todos).toEqual({ done: 0, total: 0, completion_pct: 100 })
