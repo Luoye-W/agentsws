@@ -119,17 +119,25 @@ describe('内置职责都写了内容（WP84 §2）', () => {
 
   // WP220：示例任务上限 3 → 4（品牌监控与 TikTok 各加了一条研究的例子，派工单要的）
   // WP393：快捷问题上限 5 → 7（店铺管理加了「竞品动向」那一面的两个，派工单要的；契约上限是 8）
-  it('一条都不落下，条数在 3–7 / 2–4 之间', () => {
+  // WP402（决策 1148 / 1136）：每条职责上限 6；店铺管理上限 7、实留 6
+  it('一条都不落下，条数在 3–6（店铺管理 ≤ 7）/ 2–4 之间', () => {
     expect(files.length).toBeGreaterThanOrEqual(14)
     for (const file of files) {
       const role = loadRole(file)
       const prompts = role.quick_prompts ?? []
       const examples = role.task_examples ?? []
       expect(prompts.length, `${role.id} quick_prompts`).toBeGreaterThanOrEqual(3)
-      expect(prompts.length, `${role.id} quick_prompts`).toBeLessThanOrEqual(7)
+      expect(prompts.length, `${role.id} quick_prompts`).toBeLessThanOrEqual(
+        role.id === 'dtc.store' ? 7 : 6,
+      )
       expect(examples.length, `${role.id} task_examples`).toBeGreaterThanOrEqual(2)
       expect(examples.length, `${role.id} task_examples`).toBeLessThanOrEqual(4)
     }
+    // 1136：店铺管理实留 6；1148：亚马逊店铺运营加了「竞品最近有什么动静」
+    expect(loadBundledRole('dtc.store').quick_prompts).toHaveLength(6)
+    const amz = loadBundledRole('amz.store').quick_prompts ?? []
+    expect(amz).toHaveLength(6)
+    expect(amz.find((p) => p.id === 'competitor_moves')?.label.zh).toBe('竞品最近有什么动静')
   })
 
   it('中英各一份，句子不空，id 在本职责内唯一', () => {

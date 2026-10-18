@@ -401,10 +401,7 @@ quick_prompts:
     label: { zh: "做一个折扣码", en: "Create a discount code" }
     prompt: "做一个 8 折折扣码，限单客一次、下周日到期，出卡等我批"
     kind: review
-  - id: reply_reviews
-    label: { zh: "回一轮评价", en: "Reply to this week reviews" }
-    prompt: "这周还没回的评价按好评差评分开，差评先给我起草回复"
-    kind: start_task
+  # WP402（决策 1136：上限 7、实留 6）：「回一轮评价」拿掉——评价应用还没连，点了也做不了
   # WP393（docs/104 C1）：第六个能力面「竞品动向」——问一句看变化表；要盯就走方案卡（store.competitor_watch）
   - id: competitor_moves
     label: { zh: "竞品最近有什么动静", en: "What competitors changed" }
