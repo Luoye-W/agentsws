@@ -255,7 +255,7 @@ describe('广告账户：只认插件在后台里看到的', () => {
     })
     expect(fields.find((f) => f.key === 'meta')).toMatchObject({
       needs_you: true,
-      suggested_why: '插件还没连Meta 广告后台，要你填',
+      suggested_why: '先在插件里连上Meta 广告后台：连好我自己认账户（也可以贴后台网址）',
     })
     // AI 在对话里给的账户不认
     const guessed = mergePlan(await t.fields(), plan ?? {}, {
@@ -265,6 +265,9 @@ describe('广告账户：只认插件在后台里看到的', () => {
     expect(guessed.find((f) => f.key === 'meta')?.suggested).toBeUndefined()
     const unpaired = target(undefined)
     const p2 = await unpaired.research?.(createResearchKit({ profile: () => ({}) }).kit)
-    expect(p2?.google).toMatchObject({ needs_you: true, why: '插件还没配对，看不到账户，要你填' })
+    expect(p2?.google).toMatchObject({
+      needs_you: true,
+      why: '先配插件：配好了我自己在后台里认账户（急的话也可以贴后台网址）',
+    })
   })
 })

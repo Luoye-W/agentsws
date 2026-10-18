@@ -150,9 +150,18 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
       />
       {amazon === undefined ? null : <AmazonOpsBoard assignment={amazon.assignment_id} />}
       {/* WP420（自查 A6）：岗位里有投放职责 → 每条一块「今天」看板（数从广告库来） */}
-      {adsDuties.map((d) => (
-        <AdsOverview key={d.assignment_id} assignment={d.assignment_id} />
-      ))}
+      {adsDuties.map((d) => {
+        const platform = adCreativePlatformOf(d.role_id)
+        return (
+          <div key={d.assignment_id} className="flex flex-col gap-4">
+            <AdsOverview assignment={d.assignment_id} />
+            {/* WP420（自查 A16 / U7）：岗位页「素材流水线」点了打开的就是这里 */}
+            {platform === undefined ? null : (
+              <AdCreativePanel assignment={d.assignment_id} platform={platform} />
+            )}
+          </div>
+        )
+      })}
       <DataBoard
         duties={boardDuties}
         expanded={charts}
