@@ -293,7 +293,6 @@ import {
   createAmazonListingToolExecutor,
 } from './amazon-listing/index.js'
 import { compositeApprovals } from './approvals-composite.js'
-import { similarApprovals } from './card-follow.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
 import { createAssistantNotes, isAssistantNotesCard } from './assistant-notes.js'
@@ -370,6 +369,7 @@ import {
   installBrowserSkillCli,
   readLock,
 } from './browserskill-install.js'
+import { similarApprovals } from './card-follow.js'
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
