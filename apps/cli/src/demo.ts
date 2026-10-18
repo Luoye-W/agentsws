@@ -68,6 +68,7 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
+import { DEMO_COMPETITORS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
@@ -1506,10 +1507,13 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       return { ok: true, outbox_id: `demo_ob_${demoMailSeq}`, message_id, account }
     },
   }
+  // WP392：竞品监控的替身进料口（一个 demo 一份：第一次原样、之后 Jackery 那款降价）
+  const competitorShop = demoShopAdapter()
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
+    competitorAdapters: () => ({ shop_catalog: competitorShop }),
     b2bStandIns,
     staticDir,
     // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，
@@ -1806,6 +1810,10 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 一张在批的超授权报价（第 2 版）与一张批过的、两份样品（一份超期没寄）、一张离职交接卡
   await seedSales(server, world)
 
+  // WP392（docs/104）：竞品监控——关注的三家竞品写上独立站（`.example` 替身店）。第一次读只建底子，
+  // 之后再读出「Explorer 1000 v2 两个款式降价 15%」（替身进料口，见 `demo-competitors.ts`）
+  await seedCompetitorWatch(server, world)
+
   // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
   if (options.cardGallery === true) await seedCardGallery(world)
   // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
@@ -1823,6 +1831,20 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       await world.close()
     },
   }
+}
+
+/* ── WP392：竞品监控 ─────────────────────────────────────────────────── */
+
+async function seedCompetitorWatch(server: Server, world: World): Promise<void> {
+  const brand = await server.brands.forWorkspace(world.workspace_id)
+  // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」，demo 别处还要演它）
+  await brand.seoService.watchView().catch(() => undefined)
+  const store = await brand.seoService.geoHistory()
+  const cur = store.watch()
+  if (cur === undefined) return
+  const { prompts: _p, prompt_candidates: _c, ...settings } = cur
+  store.saveSettings({ ...settings, competitors: DEMO_COMPETITORS })
+  await brand.competitorWatch?.sync()
 }
 
 /* ── WP113（63）：消息页的样例来信 ─────────────────────────────────────── */

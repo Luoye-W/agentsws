@@ -30,6 +30,9 @@
 export * from './broadcast.js'
 export * from './calendar.js'
 export * from './channels/index.js'
+// WP392：竞品监控的快照对比引擎、变化表查询与一句人话
+export * from './competitor/diff.js'
+export * from './competitor/query.js'
 export * from './moderation.js'
 export * from './own-sub-queue.js'
 export * from './platform.js'

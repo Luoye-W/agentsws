@@ -212,6 +212,33 @@ export interface ScenarioAssistantDispatch {
   duty?: string
 }
 
+/** WP392（docs/104）：竞品监控读到的一行（一个商品的一个款式；Amazon 一个 ASIN 一行）。 */
+export interface ScenarioCompetitorRow {
+  product: string
+  variant?: string
+  title: string
+  price?: number
+  compare_at?: number
+  available?: boolean
+  rating?: number
+  reviews?: number
+  /** 商品创建时间（ISO；判「上新」用）。 */
+  created_at?: string
+}
+
+/**
+ * WP392（docs/104 §3.3）：竞品监控读了一次（替身进料口交回的几行）。和上一次的快照比出变化——
+ * 第一次只当底子；`complete: false` = 这次没读全（不判下架）；`error` = 这次没读到（照实记失败）。
+ */
+export interface ScenarioCompetitorRead {
+  competitor: string
+  /** `shop`（独立站）/ `amazon`（Amazon 对标款）。 */
+  source: 'shop' | 'amazon'
+  rows: ScenarioCompetitorRow[]
+  complete?: boolean
+  error?: string
+}
+
 /**
  * WP350（决策 900）：「我的助理」把一份资料（会议记录）拆给几个岗位。`drop` 是人在方案卡上勾掉的那几条
  * （卡内编号 `i1`…），`move` 是人改了归属的那几条（`i3=web-ops`）。
@@ -1139,6 +1166,8 @@ export type ScenarioEvent =
   | { at: string; type: 'assistant.fanout'; assistant_fanout: ScenarioAssistantFanout }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
+  /** WP392：竞品监控读了一次（和上一次快照比出变化；第一次只当底子）。 */
+  | { at: string; type: 'competitor.read'; competitor_read: ScenarioCompetitorRead }
   /** WP44：推一份未发布主题副本（造预览）。 */
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
@@ -1550,6 +1579,11 @@ export interface ScenarioExpected {
    * 同时钉住：助理那一步自己没有产生任何 staged / applied（只开了事项）。
    */
   assistant_dispatched_to?: string[]
+  /**
+   * WP392：竞品监控按顺序比出了哪几种变化（`price` / `new` / `removed`…）。同时钉住：第一次读不出任何变化、
+   * 竞品监控自己零写（不出卡、不改任何外部账号）。
+   */
+  competitor_changes?: string[]
   /**
    * WP350：「我的助理」一次拆成多份——要做的事按顺序开到了哪几个岗位（岗位模板 id），
    * 同一批（一份资料一个来源批次）；助理自己零写。

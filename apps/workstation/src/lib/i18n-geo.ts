@@ -148,6 +148,7 @@ export const GEO_ZH: Record<string, string> = {
   'geo.card.edit.done': '改好了，就这样',
   'geo.card.edit.cancel': '不改了',
   'geo.card.rivals.answers': '{n} 条回答里出现',
+  'geo.card.rivals.from_profile': '品牌档案里查到的',
   // 决策 659：品牌档案「品类」
   'onboarding.brand.category': '品类',
   'onboarding.brand.category.placeholder': '比如：AR 眼镜',
@@ -349,6 +350,7 @@ export const GEO_EN: Record<string, string> = {
   'geo.card.edit.done': 'Use my edits',
   'geo.card.edit.cancel': 'Cancel',
   'geo.card.rivals.answers': 'In {n} answers',
+  'geo.card.rivals.from_profile': 'Found in your brand profile',
   'onboarding.brand.category': 'Category',
   'onboarding.brand.category.placeholder': 'e.g. AR glasses',
   'onboarding.brand.category.hint':

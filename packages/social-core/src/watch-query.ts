@@ -179,7 +179,8 @@ export interface WatchFilter {
   keyword?: string
   /** 只要判过有效的 VOC / UGC（`any` = 两样有一样）。 */
   signal?: 'voc' | 'ugc' | 'any'
-  kind?: 'post' | 'comment'
+  /** WP392：`change` = 只要竞品监控比出来的变化。 */
+  kind?: 'post' | 'comment' | 'change'
   /** WP340：只要命中告警词的「优先」条目（`false` = 只要不优先的）。 */
   priority?: boolean
   /** WP340：只要带这个本地标签的（不分大小写）。 */
@@ -189,7 +190,8 @@ export interface WatchFilter {
 /** 一条原文引用（不截图：原话 + 作者 + 时间 + 链接）。 */
 export interface WatchQuote {
   id: string
-  kind: 'post' | 'comment'
+  /** WP392：`change` = 竞品监控比出来的一条变化。 */
+  kind: WatchItem['kind']
   scope: 'own' | 'external'
   place: string
   author?: string
@@ -209,6 +211,19 @@ export interface WatchQuote {
   priority?: true
   /** WP340：本地标签。 */
   tags?: string[]
+  /** WP392：竞品变化的前后值与幅度（白名单：不带图、不带内部键）。 */
+  change?: {
+    kind: string
+    competitor: string
+    before?: number | string | boolean | null
+    after?: number | string | boolean | null
+    pct?: number
+    pct_range?: [number, number]
+    variants?: number
+    currency?: string
+    category?: string
+    vs_own_diff?: number
+  }
 }
 
 export interface WatchGroup {
@@ -216,6 +231,8 @@ export interface WatchGroup {
   topic: string
   posts: number
   comments: number
+  /** WP392：组里竞品变化几条（有才给）。 */
+  changes?: number
   /** 组里最重的那一档。 */
   assessment: WatchAssessment
   items: WatchQuote[]
@@ -234,6 +251,8 @@ export interface WatchQueryResult {
     ugc: number
     /** WP340：其中「优先」（命中告警词）的条数。 */
     priority: number
+    /** WP392：其中竞品变化的条数。 */
+    changes: number
   }
   groups?: WatchGroup[]
   items: WatchQuote[]
@@ -333,12 +352,26 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
     if (it.keyword !== undefined) q.keyword = it.keyword
     if (it.priority === true) q.priority = true
     if (it.tags !== undefined && it.tags.length > 0) q.tags = [...it.tags]
+    const c = it.change
+    if (c !== undefined) {
+      q.change = { kind: c.kind, competitor: c.competitor }
+      if (c.before !== undefined) q.change.before = c.before
+      if (c.after !== undefined) q.change.after = c.after
+      if (c.pct !== undefined) q.change.pct = c.pct
+      if (c.pct_range !== undefined) q.change.pct_range = c.pct_range
+      if (c.variants !== undefined) q.change.variants = c.variants
+      if (c.currency !== undefined) q.change.currency = c.currency
+      if (c.category !== undefined) q.change.category = c.category
+      if (c.vs_own !== undefined) q.change.vs_own_diff = c.vs_own.diff
+    }
     return q
   }
   const count = (xs: WatchItem[], scope?: 'own' | 'external') => {
     const ys = scope === undefined ? xs : xs.filter((x) => scopeOf(x) === scope)
     const posts = ys.filter((x) => x.kind === 'post').length
-    return { posts, comments: ys.length - posts }
+    // WP392：竞品变化不算帖子也不算评论（单独数在 totals.changes）
+    const comments = ys.filter((x) => x.kind === 'comment').length
+    return { posts, comments }
   }
   const all = count(hits)
   const result: WatchQueryResult = {
@@ -350,6 +383,7 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
       voc: hits.filter((x) => x.signals?.voc === true && !gone(x)).length,
       ugc: hits.filter((x) => x.signals?.ugc === true && !gone(x)).length,
       priority: hits.filter((x) => x.priority === true).length,
+      changes: hits.filter((x) => x.kind === 'change').length,
     },
     items: [],
     more: 0,
@@ -365,10 +399,12 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
         const latest = [...list].reverse().find((i) => i.topic !== undefined) ?? list[0]
         const shown = list.filter((i) => !gone(i))
         const c = count(list)
+        const changes = list.filter((i) => i.kind === 'change').length
         return {
           key,
           topic: latest === undefined ? '其他' : topicLabel(latest),
           ...c,
+          ...(changes === 0 ? {} : { changes }),
           assessment: list.reduce<WatchAssessment>(
             (acc, i) => (severity(i.assessment) > severity(acc) ? (i.assessment ?? acc) : acc),
             'no_action',
@@ -380,7 +416,7 @@ export function queryWatchItems(input: WatchQueryInput): WatchQueryResult {
       .sort(
         (a, b) =>
           severity(b.assessment) - severity(a.assessment) ||
-          b.posts + b.comments - (a.posts + a.comments) ||
+          b.posts + b.comments + (b.changes ?? 0) - (a.posts + a.comments + (a.changes ?? 0)) ||
           a.topic.localeCompare(b.topic),
       )
   } else {

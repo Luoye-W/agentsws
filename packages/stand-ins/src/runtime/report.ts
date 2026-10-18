@@ -12,6 +12,7 @@
  * | `run_watch_now` | 现在巡查一次并等它做完（出报告前要最新数据时） |
  * | `query_sent_records` | 查我们发出去的条目（发出记录）：时间窗 / 渠道 / 动作，计数与链接 |
  * | `publish_report` | 发布一份报告到这个岗位的报表区；同一系列同一周期再发 = 同一份的新版本 |
+ * | `list_competitor_changes` | WP392：查竞品变化表（上新 / 下架 / 改价 / 打折 / 断货 / 评分 / 评论数 / 排名）：按竞品、种类、时间窗、来源筛 |
  */
 import type { ToolDef } from '@agentsws/contracts'
 
@@ -19,9 +20,12 @@ export const QUERY_WATCH_ITEMS_TOOL = 'query_watch_items'
 export const RUN_WATCH_NOW_TOOL = 'run_watch_now'
 export const QUERY_SENT_RECORDS_TOOL = 'query_sent_records'
 export const PUBLISH_REPORT_TOOL = 'publish_report'
+/** WP392（docs/104）：竞品变化表（竞品监控那份数据口；只给担竞品监控的职责）。 */
+export const LIST_COMPETITOR_CHANGES_TOOL = 'list_competitor_changes'
 
 /** 四个工具（排好序：`tools.allow` 要字节稳定）。 */
 export const REPORT_TOOL_NAMES: readonly string[] = [
+  LIST_COMPETITOR_CHANGES_TOOL,
   PUBLISH_REPORT_TOOL,
   QUERY_SENT_RECORDS_TOOL,
   QUERY_WATCH_ITEMS_TOOL,
@@ -30,6 +34,9 @@ export const REPORT_TOOL_NAMES: readonly string[] = [
 
 /** 跟巡查有关的那两个（只给担巡查那几条职责的运行）。 */
 export const WATCH_TOOL_NAMES: readonly string[] = [QUERY_WATCH_ITEMS_TOOL, RUN_WATCH_NOW_TOOL]
+
+/** WP392：竞品变化表那一个（只给担竞品监控的职责：店铺管理、Amazon 店铺运营）。 */
+export const COMPETITOR_TOOL_NAMES: readonly string[] = [LIST_COMPETITOR_CHANGES_TOOL]
 
 const PERIOD = {
   period: {
@@ -54,7 +61,7 @@ const PERIOD = {
   until: { type: 'string', description: '止：ISO 时间或本地日期 YYYY-MM-DD（含那一天）' },
 }
 
-export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
+const BASE_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: QUERY_WATCH_ITEMS_TOOL,
     description:
@@ -67,7 +74,11 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
       type: 'object',
       properties: {
         ...PERIOD,
-        platform: { type: 'string', description: '哪个平台（不给 = 这个岗位配的那一个）' },
+        platform: {
+          type: 'string',
+          description:
+            '哪个平台（不给 = 这个岗位配的那一个；competitor = 竞品监控比出来的变化；all = 配了的全部一起查）',
+        },
         scope: { type: 'string', enum: ['own', 'external'], description: '自家 / 外部' },
         assessment: {
           type: 'array',
@@ -81,7 +92,11 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
           enum: ['voc', 'ugc', 'any'],
           description: '只要判过有效的 VOC / UGC（any = 两样有一样）',
         },
-        kind: { type: 'string', enum: ['post', 'comment'] },
+        kind: {
+          type: 'string',
+          enum: ['post', 'comment', 'change'],
+          description: 'change = 只要竞品变化',
+        },
         priority: {
           type: 'boolean',
           description: 'true = 只要命中告警词的「优先」条目（巡查设置里的告警词，本地匹配）',
@@ -158,6 +173,51 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
     },
   },
 ]
+
+/** WP392：竞品变化表（报告积木的数据口之一）。 */
+const LIST_COMPETITOR_CHANGES_DEF: ToolDef = {
+  name: LIST_COMPETITOR_CHANGES_TOOL,
+  description:
+    '查竞品变化表：竞品独立站和 Amazon 对标款跟上一次比出来的变化——上新、下架、改价、开始 / 结束打折（含优惠券）、' +
+    '断货 / 补货、评分、评论数、排名。按竞品、变化种类、时间窗（按发现时间）、来源（独立站 / Amazon）筛；' +
+    '回计数（按种类、按竞品）和每条的标题、链接、前后值、幅度、时间、一句人话，写了对标款的还有「比自家贵 / 便宜多少」；' +
+    '也回各家这次读没读到（没读到的照实写进报告，不要当成「没变化」）。只读；数字是数出来的，写报告时照抄。' +
+    '第一次读只建底子不出变化；什么算重要由用户定，这里不判。',
+  input_schema: {
+    type: 'object',
+    properties: {
+      ...PERIOD,
+      competitor: { type: 'string', description: '竞品名或 id（不给 = 全部）' },
+      kinds: {
+        type: 'array',
+        items: {
+          type: 'string',
+          enum: [
+            'new',
+            'removed',
+            'price',
+            'discount_start',
+            'discount_end',
+            'out_of_stock',
+            'back_in_stock',
+            'rating',
+            'reviews',
+            'bsr',
+          ],
+        },
+        description: '只要这几种变化',
+      },
+      source: {
+        type: 'string',
+        enum: ['shop', 'amazon'],
+        description: '只要独立站（shop）/ Amazon 的',
+      },
+      limit: { type: 'number', description: '列几条（默认 50，最多 200）' },
+    },
+  },
+}
+
+export const REPORT_TOOL_DEFS: readonly ToolDef[] = [...BASE_TOOL_DEFS, LIST_COMPETITOR_CHANGES_DEF]
 
 export const REPORT_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
   REPORT_TOOL_DEFS.map((d) => [d.name, d]),

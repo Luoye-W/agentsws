@@ -28,6 +28,7 @@ import type {
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
+  BrandCompetitor,
   BrandWatch,
   ClaimMarketGroup,
   ClaimRulesView,
@@ -173,6 +174,8 @@ export interface SeoBrandInfo extends BrandProfileLike {
   subcategory?: string
   price_band?: string
   positioning?: string
+  /** WP392：品牌档案里 AI 联网查到的竞品（只当建议来源；工作清单是关注设置那份）。 */
+  competitors?: readonly BrandCompetitor[]
 }
 
 export interface SeoServiceOptions {
@@ -340,6 +343,11 @@ export interface SeoServiceAssembly {
   }): Promise<{ strategy: GeoWatchStrategy; estimate: GeoRunEstimate; approval_item_id?: string }>
   /** WP321：改关注设置（用户确认 / 改策略）。 */
   watchApply(patch: GeoWatchPatch): Promise<GeoWatchView>
+  /**
+   * WP392（docs/104 C3）：品牌档案里**新查到**的竞品（不在关注设置的竞品里、没被拒过、没问过）——沿用「要不要加进竞品」
+   * 那张卡问一次（不另建清单）。卡给担竞品监控 / 内容与搜索的那个人；没人担就不问。
+   */
+  askProfileCompetitors(): Promise<{ approval_item_id?: string; asked: string[] }>
   /** WP321：现在跑一轮（Claude 单格 ≥ 1 积分：不带 `confirm` 只回估算）。 */
   watchRun(input: { confirm?: boolean; kinds?: ('geo' | 'rank')[] }): Promise<GeoWatchRunResult>
   /** WP321：看板要的数。 */
@@ -1220,6 +1228,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   /* ── WP321：监测（关注设置、每周一轮、指标、变化大才出卡）——引擎在 `./geo-monitor.ts` ── */
 
   const watchActor = (): SeoActor | undefined => options.holderOf('dtc.content')
+  /** WP392：品牌档案里的竞品问过哪几家（geo_meta；问过不再问）。 */
+  const PROFILE_RIVALS_ASKED_KEY = 'profile_competitors_asked'
   const monitor = createGeoMonitor({
     clock,
     nextId,
@@ -2106,6 +2116,76 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
       const strategy = await monitor.suggest()
       return { strategy, estimate: await monitor.estimateFor(strategy) }
+    },
+    async askProfileCompetitors() {
+      const brand = await options.brand()
+      const profile = brand.competitors ?? []
+      if (profile.length === 0) return { asked: [] }
+      const actor = options.holderOf('dtc.store') ?? options.holderOf('amz.store') ?? watchActor()
+      if (actor === undefined) return { asked: [] }
+      const { store, watch } = await monitor.ensureWatch()
+      const low = (x: string) => x.trim().toLowerCase()
+      const skip = new Set([
+        low(watch.brand.name),
+        ...watch.competitors.flatMap((c) => [low(c.name), ...c.aliases.map(low)]),
+        ...(JSON.parse(store.meta(DECLINED_RIVALS_KEY) ?? '[]') as string[]).map(low),
+        ...(JSON.parse(store.meta(PROFILE_RIVALS_ASKED_KEY) ?? '[]') as string[]).map(low),
+      ])
+      const fresh = profile
+        .filter((c) => c.name.trim() !== '' && !skip.has(low(c.name)))
+        .slice(0, 5)
+      if (fresh.length === 0) return { asked: [] }
+      const hostOf = (url: string | undefined): string[] => {
+        if (url === undefined) return []
+        try {
+          return [new URL(url).hostname.replace(/^www\./, '')]
+        } catch {
+          return []
+        }
+      }
+      const week = clock.now().slice(0, 10)
+      const names = fresh.map((c) => c.name.trim())
+      const payload: GeoWatchCardPayload = {
+        form: 'geo_watch_competitors',
+        // answers = 0：不是 AI 回答里数出来的，是品牌档案里查到的（卡面按它换说法）
+        competitors: fresh.map((c) => ({
+          id: competitorId(c.name),
+          name: c.name.trim(),
+          aliases: [],
+          domains: hostOf(c.url),
+          answers: 0,
+        })),
+        week_of: week,
+      }
+      const item = await options.approvals.create<GeoWatchCardPayload>({
+        workspace_id,
+        schema_version: 1,
+        kind: 'geo_watch',
+        role_id: actor.role_id,
+        subject: { object: { type: 'geo_watch', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|geo_watch|competitors|profile|${names.map(low).sort().join(',')}`,
+        title: '品牌档案里新查到的竞品：要加进关注吗？',
+        summary: fresh.map((c) => `${c.name.trim()}：${c.reason}`).join('\n'),
+        payload,
+        evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+        proposer: {
+          kind: 'agent',
+          id: `agent_${actor.role_id}`,
+          assignment_id: actor.assignment_id,
+        },
+        automation: { level_at_creation: 'L1' },
+        routing: {
+          recipients: [{ person: actor.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 72, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      // 问过就记下（加不加由卡决定；同一家不再问第二次）
+      const was = JSON.parse(store.meta(PROFILE_RIVALS_ASKED_KEY) ?? '[]') as string[]
+      store.setMeta(PROFILE_RIVALS_ASKED_KEY, JSON.stringify([...new Set([...was, ...names])]))
+      return { approval_item_id: item.id, asked: names }
     },
     async watchApply(patch) {
       await monitor.apply(patch)

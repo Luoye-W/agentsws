@@ -10,12 +10,17 @@
  * | `run_watch_now` | 巡查库的 `sweepNow`：现在巡查一次、等它做完（最多 {@link WATCH_WAIT_MS}） |
  * | `query_sent_records` | WP323 发出记录 → `summarizeSent` 计数 + 链接 |
  * | `publish_report` | 报表块（`weekly_review` 同类：不进审批队列），发给这次运行的人、挂在这条职责上；同一系列同一周期 = 同一份的新版本；记录去处点名 `report` 的记一行 |
+ * | `list_competitor_changes` | WP392：竞品监控那一份（`platform: 'competitor'` 的 {@link WatchSource}）的 `changes` → `queryCompetitorChanges` 筛、数 |
+ *
+ * WP392：`query_watch_items` 的 `platform` 多两种写法——`competitor`（竞品变化）、`all`（配了的全部一起查，帖子和变化混在一起）。
  *
  * 出参白名单：计数、原文引用（截断过）、链接、时间——不带任何内部 id 以外的东西、不带凭据。
  */
 import {
   type ApprovalBus,
   type Clock,
+  type CompetitorChange,
+  type CompetitorSourceKind,
   type Iso8601,
   REPORT_OUTBOUND_ACTION,
   type ReportPayload,
@@ -25,7 +30,11 @@ import {
   type WorkspaceId,
 } from '@agentsws/contracts'
 import {
+  COMPETITOR_WATCH_PLATFORM,
+  type CompetitorChangeFilter,
   type PeriodInput,
+  parseChangeKinds,
+  queryCompetitorChanges,
   queryWatchItems,
   resolvePeriod,
   type SentFilter,
@@ -34,6 +43,7 @@ import {
 } from '@agentsws/social-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import {
+  LIST_COMPETITOR_CHANGES_TOOL,
   PUBLISH_REPORT_TOOL,
   QUERY_SENT_RECORDS_TOOL,
   QUERY_WATCH_ITEMS_TOOL,
@@ -56,6 +66,51 @@ export interface WatchSource {
   sweeps(window: { since: Iso8601; until: Iso8601 }): MaybePromise<Iso8601[]>
   /** 现在巡查一次并等它做完；有哪块没读成就抛一句人话。没有 = 不能现巡。 */
   sweepNow?(options?: { timeoutMs?: number }): Promise<unknown>
+  /**
+   * WP392：窗口里比出来的竞品变化（竞品监控那一份才有；`items` 里同样带着 `kind: 'change'` 的条目，
+   * 这里给的是变化本身，出报表时按竞品 / 种类数）。
+   */
+  changes?(window: { since: Iso8601; until: Iso8601 }): MaybePromise<CompetitorChange[]>
+  /** WP392：各条源这次读没读到（报告照实写「哪家没读到」）。没有 = 不分源。 */
+  health?(): MaybePromise<{ sources: number; failed: string[]; partial: string[] }>
+}
+
+/**
+ * WP392：几份巡查库合成一份（`platform: 'all'`：帖子和竞品变化一起查）。只合配了的那几份。
+ */
+export async function combineWatchSources(list: readonly WatchSource[]): Promise<WatchSource> {
+  const on: WatchSource[] = []
+  for (const s of list) if (await s.configured()) on.push(s)
+  return {
+    platform: on.map((s) => s.platform).join('+') || 'none',
+    configured: () => on.length > 0,
+    ownPlaces: async () => [...new Set((await Promise.all(on.map((s) => s.ownPlaces()))).flat())],
+    items: async (w) => (await Promise.all(on.map((s) => s.items(w)))).flat(),
+    sweeps: async (w) => (await Promise.all(on.map((s) => s.sweeps(w)))).flat(),
+    ...(on.some((s) => s.sweepNow !== undefined)
+      ? {
+          sweepNow: async (o?: { timeoutMs?: number }) => {
+            const parts: unknown[] = []
+            let finished_at: string | undefined
+            for (const s of on) {
+              if (s.sweepNow === undefined) continue
+              const r = (await s.sweepNow(o)) as
+                | { finished_at?: string; parts?: unknown[] }
+                | undefined
+              parts.push(...(r?.parts ?? []))
+              if (r?.finished_at !== undefined) finished_at = r.finished_at
+            }
+            return { ...(finished_at === undefined ? {} : { finished_at }), parts }
+          },
+        }
+      : {}),
+    ...(on.some((s) => s.changes !== undefined)
+      ? {
+          changes: async (w: { since: Iso8601; until: Iso8601 }) =>
+            (await Promise.all(on.map((s) => s.changes?.(w) ?? []))).flat(),
+        }
+      : {}),
+  }
 }
 
 /** 「立即巡查」最多等多久（插件那两块要等 Chrome 里的插件交回）。 */
@@ -67,10 +122,19 @@ export const REPORT_MAX_CHARS = 60_000
 export interface ReportToolOptions {
   clock: Clock
   tzOffsetMinutes(workspace_id: WorkspaceId): number
-  /** 这个品牌某个平台的巡查库（不给平台 = 配了的那一个）；没有回 `undefined`。 */
-  watch(workspace_id: WorkspaceId, platform?: string): MaybePromise<WatchSource | undefined>
+  /**
+   * 这个品牌某个平台的巡查库（不给平台 = 这条职责配的那一个；WP392：`competitor` = 竞品监控、`all` = 全部合成一份）；
+   * 没有回 `undefined`。`role_id` 是这次运行的职责（不给平台时按它挑）。
+   */
+  watch(
+    workspace_id: WorkspaceId,
+    platform?: string,
+    role_id?: string,
+  ): MaybePromise<WatchSource | undefined>
   /** 担巡查的那几条职责（查巡查 / 立即巡查只给它们）。 */
   watchRoles: ReadonlySet<string>
+  /** WP392：担竞品监控的那几条职责（`list_competitor_changes` 只给它们；不给 = 没人担）。 */
+  competitorRoles?: ReadonlySet<string>
   /** 发出记录（懒取：比运行时晚建）。 */
   outbound(): Pick<OutboundLog, 'list' | 'record' | 'sinks'> | undefined
   /** 出报表块那条审批总线（懒取）。 */
@@ -124,8 +188,9 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
   const queryWatch = async (
     ws: WorkspaceId,
     input: Record<string, unknown>,
+    role_id: string,
   ): Promise<ToolExecution> => {
-    const source = await options.watch(ws, str(input.platform))
+    const source = await options.watch(ws, str(input.platform), role_id)
     const w = resolvePeriod(options.clock.now(), options.tzOffsetMinutes(ws), periodOf(input))
     if (source === undefined || !(await source.configured()))
       return ok({
@@ -149,7 +214,10 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
       input.signal === 'voc' || input.signal === 'ugc' || input.signal === 'any'
         ? input.signal
         : undefined
-    const kind = input.kind === 'post' || input.kind === 'comment' ? input.kind : undefined
+    const kind =
+      input.kind === 'post' || input.kind === 'comment' || input.kind === 'change'
+        ? input.kind
+        : undefined
     const filter: WatchFilter = {}
     if (scope !== undefined) filter.scope = scope
     if (assessment !== undefined && assessment.length > 0) filter.assessment = assessment
@@ -184,8 +252,8 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
     })
   }
 
-  const runNow = async (ws: WorkspaceId, input: Record<string, unknown>) => {
-    const source = await options.watch(ws, str(input.platform))
+  const runNow = async (ws: WorkspaceId, input: Record<string, unknown>, role_id: string) => {
+    const source = await options.watch(ws, str(input.platform), role_id)
     if (source === undefined || !(await source.configured()))
       return ok({ ok: false, message: '这个品牌还没配巡查。' })
     if (source.sweepNow === undefined)
@@ -215,6 +283,65 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
         note: '没读成的那几块照实写进报告，用已入库的数据出。',
       })
     }
+  }
+
+  /** WP392：竞品变化表（出参白名单：计数、标题、链接、前后值、幅度、时间、一句人话）。 */
+  const listChanges = async (
+    ws: WorkspaceId,
+    input: Record<string, unknown>,
+    role_id: string,
+  ): Promise<ToolExecution> => {
+    const source = await options.watch(ws, COMPETITOR_WATCH_PLATFORM, role_id)
+    const w = resolvePeriod(options.clock.now(), options.tzOffsetMinutes(ws), periodOf(input))
+    if (source === undefined || source.changes === undefined || !(await source.configured()))
+      return ok({
+        configured: false,
+        window: windowView(w),
+        message:
+          '这个品牌还没盯竞品（关注的竞品上没写独立站或 Amazon 对标款）。先说一句「帮我盯竞品的上新和价格」。',
+      })
+    const filter: CompetitorChangeFilter = {}
+    const competitor = str(input.competitor)
+    if (competitor !== undefined) filter.competitor = competitor
+    const kinds = parseChangeKinds(input.kinds ?? input.kind)
+    if (kinds !== undefined) filter.kinds = kinds
+    const sourceKind: CompetitorSourceKind | undefined =
+      input.source === 'shop'
+        ? 'shop_catalog'
+        : input.source === 'amazon'
+          ? 'amazon_asin'
+          : undefined
+    if (sourceKind !== undefined) filter.source_kind = sourceKind
+    const range = { since: w.since, until: w.until }
+    const [changes, health, sweeps] = await Promise.all([
+      source.changes(range),
+      source.health?.(),
+      source.sweeps(range),
+    ])
+    const limit = int(input.limit)
+    const r = queryCompetitorChanges({
+      changes,
+      window: range,
+      filter,
+      ...(limit === undefined ? {} : { limit }),
+    })
+    const done = sweeps.filter((t) => t >= w.since && t <= w.until).sort()
+    return ok({
+      configured: true,
+      window: windowView(w),
+      reads: { count: done.length, ...(done.length === 0 ? {} : { last_at: done.at(-1) }) },
+      ...(health === undefined
+        ? {}
+        : {
+            sources: {
+              count: health.sources,
+              ...(health.failed.length === 0 ? {} : { not_read: health.failed }),
+              ...(health.partial.length === 0 ? {} : { partly_read: health.partial }),
+            },
+          }),
+      ...r,
+      ...(w.problems.length === 0 ? {} : { problems: w.problems }),
+    })
   }
 
   const querySent = (ws: WorkspaceId, input: Record<string, unknown>): ToolExecution => {
@@ -350,14 +477,21 @@ export function createReportToolExecutor(options: ReportToolOptions): ToolExecut
     const ws = call.request.workspace_id as WorkspaceId
     const input = (call.input ?? {}) as Record<string, unknown>
     const name = bare(call.name)
+    const role = call.request.actor.role_id
     const watchTool = name === QUERY_WATCH_ITEMS_TOOL || name === RUN_WATCH_NOW_TOOL
-    if (watchTool && !options.watchRoles.has(call.request.actor.role_id))
+    // WP392：担竞品监控的职责也能查巡查数据（默认就是竞品那一份）
+    const competitorRole = options.competitorRoles?.has(role) === true
+    if (watchTool && !options.watchRoles.has(role) && !competitorRole)
       return { status: 'blocked', reason: '这条职责看不了巡查数据' }
+    if (name === LIST_COMPETITOR_CHANGES_TOOL && !competitorRole)
+      return { status: 'blocked', reason: '这条职责看不了竞品变化表' }
     switch (name) {
       case QUERY_WATCH_ITEMS_TOOL:
-        return queryWatch(ws, input)
+        return queryWatch(ws, input, role)
       case RUN_WATCH_NOW_TOOL:
-        return runNow(ws, input)
+        return runNow(ws, input, role)
+      case LIST_COMPETITOR_CHANGES_TOOL:
+        return listChanges(ws, input, role)
       case QUERY_SENT_RECORDS_TOOL:
         return querySent(ws, input)
       case PUBLISH_REPORT_TOOL:

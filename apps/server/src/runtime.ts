@@ -110,6 +110,7 @@ import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  COMPETITOR_TOOL_NAMES,
   createStubRuntime,
   GOOGLE_ALERTS_TOOL_NAMES,
   FIND_SERVICE_TOOL,
@@ -491,7 +492,15 @@ export interface RuntimeOptions {
    * WP331（决策 691）：报告积木的四个工具（`report-tools.ts` 建的那一份）。查发出记录 / 发布报告给所有职责；
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
-  reportTools?: { execute: ToolExecutor; watchRoles: ReadonlySet<string> }
+  reportTools?: {
+    execute: ToolExecutor
+    watchRoles: ReadonlySet<string>
+    /**
+     * WP392：担竞品监控的职责（店铺管理、Amazon 店铺运营）：给竞品变化表，也给查巡查数据 / 立即巡查
+     * （默认查的是竞品那一份）。不给 = 没人担。
+     */
+    competitorRoles?: ReadonlySet<string>
+  }
   /** WP386：信息监控查提及（`list_mentions`，`pr-watch/tools.ts` 建的那一份）。不给 = 没有。 */
   prMonitorTools?: ToolExecutor
   /**
@@ -1962,11 +1971,16 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP331：报告积木（查发出记录 / 发布报告所有职责；查巡查 / 立即巡查只给担巡查的职责）
         ...(options.reportTools === undefined
           ? []
-          : REPORT_TOOL_NAMES.filter(
-              (n) =>
+          : REPORT_TOOL_NAMES.filter((n) => {
+              const competitor = options.reportTools?.competitorRoles?.has(config.role_id) === true
+              // WP392：竞品变化表只给担竞品监控的职责
+              if (COMPETITOR_TOOL_NAMES.includes(n)) return competitor
+              return (
                 !WATCH_TOOL_NAMES.includes(n) ||
-                options.reportTools?.watchRoles.has(config.role_id) === true,
-            )),
+                competitor ||
+                options.reportTools?.watchRoles.has(config.role_id) === true
+              )
+            })),
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
         ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
           ? ADS_DATA_TOOL_NAMES

@@ -184,6 +184,8 @@ const EVENT_KEYS = [
   // WP343「我的助理」派活
   'assistant.dispatch',
   'assistant.fanout',
+  // WP392 竞品监控读一次（快照对比）
+  'competitor.read',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -323,6 +325,8 @@ const EXPECTED_KEYS = [
   'position_answer_components',
   // WP343：助理把事交给了哪几个岗位
   'assistant_dispatched_to',
+  // WP392：竞品监控比出了哪几种变化
+  'competitor_changes',
   'assistant_fanout_tasks',
   'assistant_fanout_notes',
   'secretary_kinds',
@@ -957,6 +961,63 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           to: str(source, `${path}.${key}.to`, body.to),
           name: str(source, `${path}.${key}.name`, body.name),
           email: str(source, `${path}.${key}.email`, body.email),
+        },
+      }
+    }
+    case 'competitor.read': {
+      known(source, `${path}.${key}`, body, ['competitor', 'source', 'rows', 'complete', 'error'])
+      const kind = str(source, `${path}.${key}.source`, body.source)
+      if (kind !== 'shop' && kind !== 'amazon')
+        fail(source, `${path}.${key}.source`, '只认 shop / amazon')
+      if (!Array.isArray(body.rows)) fail(source, `${path}.${key}.rows`, '必须是列表')
+      const rows = body.rows.map((r, i) => {
+        const at2 = `${path}.${key}.rows[${i}]`
+        if (!isRec(r)) fail(source, at2, '必须是对象')
+        known(source, at2, r, [
+          'product',
+          'variant',
+          'title',
+          'price',
+          'compare_at',
+          'available',
+          'rating',
+          'reviews',
+          'created_at',
+        ])
+        const optNum = (k: string): number | undefined =>
+          r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
+        const variant = optStr(source, `${at2}.variant`, r.variant)
+        const created = optStr(source, `${at2}.created_at`, r.created_at)
+        const price = optNum('price')
+        const compare_at = optNum('compare_at')
+        const rating = optNum('rating')
+        const reviews = optNum('reviews')
+        if (r.available !== undefined && typeof r.available !== 'boolean')
+          fail(source, `${at2}.available`, '必须是 true / false')
+        return {
+          product: str(source, `${at2}.product`, r.product),
+          title: str(source, `${at2}.title`, r.title),
+          ...(variant === undefined ? {} : { variant }),
+          ...(price === undefined ? {} : { price }),
+          ...(compare_at === undefined ? {} : { compare_at }),
+          ...(typeof r.available === 'boolean' ? { available: r.available } : {}),
+          ...(rating === undefined ? {} : { rating }),
+          ...(reviews === undefined ? {} : { reviews }),
+          ...(created === undefined ? {} : { created_at: created }),
+        }
+      })
+      if (body.complete !== undefined && typeof body.complete !== 'boolean')
+        fail(source, `${path}.${key}.complete`, '必须是 true / false')
+      const error = optStr(source, `${path}.${key}.error`, body.error)
+      return {
+        at,
+        type: 'competitor.read',
+        competitor_read: {
+          competitor: str(source, `${path}.${key}.competitor`, body.competitor),
+          source: kind,
+          rows,
+          ...(typeof body.complete === 'boolean' ? { complete: body.complete } : {}),
+          ...(error === undefined ? {} : { error }),
         },
       }
     }
@@ -2712,6 +2773,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.assistant_dispatched_to,
   )
   if (dispatchedTo !== undefined) out.assistant_dispatched_to = dispatchedTo
+  // WP392：竞品监控比出了哪几种变化
+  const competitorChanges = optStrList(
+    source,
+    'expected.competitor_changes',
+    raw.competitor_changes,
+  )
+  if (competitorChanges !== undefined) out.competitor_changes = competitorChanges
   const fanoutTasks = optStrList(
     source,
     'expected.assistant_fanout_tasks',

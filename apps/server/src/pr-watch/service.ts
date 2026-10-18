@@ -141,7 +141,8 @@ const norm = (s: string): string =>
 export function createPrWatch(options: PrWatchOptions): PrWatchAssembly {
   const { store } = options
   const transport: AlertsTransport = { fetch: options.fetch, now: options.now }
-  const adapters: Record<MonitorSource['kind'], IngressAdapter> = {
+  // WP392：`shop_catalog` / `amazon_asin` 两种走竞品监控自己的快照对比管道（`competitor-watch/`），这里没有
+  const adapters: Partial<Record<MonitorSource['kind'], IngressAdapter>> = {
     google_alerts: feedAdapter(transport, (id) => store.source(id)?.url),
     rss: feedAdapter(transport, (id) => store.source(id)?.url),
   }
@@ -200,9 +201,11 @@ export function createPrWatch(options: PrWatchOptions): PrWatchAssembly {
     }
     const rows: PrMentionInput[] = []
     for (const s of sources) {
+      const adapter = adapters[s.kind]
+      if (adapter === undefined) continue
       const res = await runPipelineFor({
         source: pipelineSourceOf(s),
-        adapter: adapters[s.kind],
+        adapter,
         store,
       })
       run.parts.push(res.part)

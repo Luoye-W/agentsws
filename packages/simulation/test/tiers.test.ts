@@ -378,6 +378,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP199：发布卡落到批不了的运营主管 → 升级给负责人 → 批了真能施行，升级链留痕完整
       'social/escalated-post-applies',
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提
+      // WP392：竞品监控（第一天只建底子，第二天比出一条降价）
+      'store/competitor-price-drop',
       'store/daily-report-card',
     ])
     for (const r of result.reports) {

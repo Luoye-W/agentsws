@@ -24,6 +24,7 @@
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
+    "packages/contracts/src/competitor-watch.ts",
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
@@ -139,7 +140,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "9f4df68ccc5d1c0cd8a34431510d6a13",
+  "source_digest": "cf8dc529efa85e4005836c43ac9c87fc",
   "objects": [
     {
       "id": "ad",

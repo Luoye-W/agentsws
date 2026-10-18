@@ -588,6 +588,25 @@ export function checkExpectations(
         (leaked === 0 ? '' : `；${leaked} 个当场问答出现在列表里`),
     )
   }
+  // WP392：竞品监控按顺序比出了哪几种变化；竞品监控自己零写（第一次只当底子）
+  if (expected.competitor_changes !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_change')
+      .map((e) => String(payloadOf(e).kind))
+    const firstReads = evidence.events.filter(
+      (e) => e.type === 'simulation.competitor_read' && payloadOf(e).baseline === true,
+    )
+    const ok =
+      got.length === expected.competitor_changes.length &&
+      got.every((g, i) => g === expected.competitor_changes?.[i]) &&
+      firstReads.length > 0
+    add(
+      'competitor_changes',
+      ok,
+      `竞品监控比出了 [${got.join(', ')}]，期望 [${expected.competitor_changes.join(', ')}]` +
+        (firstReads.length === 0 ? '；没有一次「只建底子」的首读' : ''),
+    )
+  }
   // WP343：「我的助理」按顺序交给了哪几个岗位；助理那一步自己不 stage、不 apply
   if (expected.assistant_dispatched_to !== undefined) {
     const got = evidence.events

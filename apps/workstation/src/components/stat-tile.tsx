@@ -16,8 +16,19 @@ import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { useApp } from '@/lib/app-context'
 import { formatDelta, formatValue } from '@/lib/format'
 
-/** 迷你走势线。testid 保持 `sparkline`：36 §5.2 那条「首页无图表」的断言按它数。 */
-function Sparkline({ points }: { points: number[] }): React.ReactNode {
+/**
+ * 迷你走势线。testid 保持 `sparkline`：36 §5.2 那条「首页无图表」的断言按它数。
+ * WP392：竞品变化表的价格走势也用它（换个 testid、可换尺寸）。
+ */
+export function Sparkline({
+  points,
+  testId = 'sparkline',
+  className = 'h-6 w-24 text-ws-brand',
+}: {
+  points: number[]
+  testId?: string
+  className?: string
+}): React.ReactNode {
   if (points.length < 2) return null
   const max = Math.max(...points)
   const min = Math.min(...points)
@@ -30,10 +41,10 @@ function Sparkline({ points }: { points: number[] }): React.ReactNode {
     <svg
       viewBox="0 0 100 24"
       preserveAspectRatio="none"
-      className="h-6 w-24 text-ws-brand"
+      className={className}
       aria-hidden="true"
       focusable="false"
-      data-testid="sparkline"
+      data-testid={testId}
     >
       <polyline
         points={path}
