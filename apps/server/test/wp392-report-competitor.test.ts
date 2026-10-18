@@ -251,6 +251,7 @@ describe('WP392 publish_report 用变化出一份报表', () => {
     expect(r.data).toMatchObject({ ok: true, version: 1 })
     expect(created).toHaveLength(1)
     expect(created[0]).toMatchObject({ kind: 'weekly_review', title: '竞品周报' })
-    expect((created[0]?.payload as { markdown: string }).markdown).toContain('降价11.1%')
+    const payload = created[0]?.payload as { markdown: string } | undefined
+    expect(payload?.markdown).toContain('降价11.1%')
   })
 })
