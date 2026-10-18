@@ -281,6 +281,7 @@ export interface Harness {
   events: { type: string; payload: Record<string, unknown> }[]
   publish(serial: number, specs: ItemSpec[], options?: Parameters<typeof pack>[4]): void
   decideBus: FakeBus
+  registry: ReturnType<typeof createSkills>['registry']
 }
 
 /** 规则表覆盖源是进程全局的：每建一套替身，先撤掉上一套登记的。 */
@@ -357,6 +358,7 @@ export function harness(
       cloud.built = pack(dir, key, serial, specs, options)
     },
     decideBus: bus,
+    registry: skills.registry,
   }
 }
 

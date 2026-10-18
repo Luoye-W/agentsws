@@ -34,6 +34,7 @@
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
+    "packages/contracts/src/content-digest.ts",
     "packages/contracts/src/content-official.ts",
     "packages/contracts/src/content-updates.ts",
     "packages/contracts/src/data-service.ts",
@@ -150,7 +151,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6c35108634ad6e43a2e2c4f092f18074",
+  "source_digest": "1612920165e505d4d25abba7b4d16f1e",
   "objects": [
     {
       "id": "ad",
