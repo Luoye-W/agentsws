@@ -47,10 +47,10 @@ export class StandInWalletError extends Error {
 }
 
 /**
- * 注册赠送的样例规则（10 积分、`granted`、90 天到期）。真规则在云上；这一份只给合成世界演
+ * 注册赠送的样例规则（5 积分、`granted`、90 天到期）。真规则在云上；这一份只给合成世界演
  * 「接上官方接口就到账」那一步，和 {@link SAMPLE_PRICING_CATALOG} 同一个取法（09-27 快照）。
  */
-export const SAMPLE_SIGNUP_BONUS = { credits: 10, kind: 'granted', expires_days: 90 } as const
+export const SAMPLE_SIGNUP_BONUS = { credits: 5, kind: 'granted', expires_days: 90 } as const
 
 /** 注册赠送的幂等键（与云上同形：不含时间、邮箱、金额）。 */
 export const signupBonusSourceRefOf = (account_id: string): string => `signup_bonus:${account_id}`

@@ -240,14 +240,14 @@ describe('WP126 四级路由', () => {
     expect(out.source).toBe('public_library')
   })
 
-  it('④都没有：一句人话 + 两个入口（关联送 10 积分 / 接自己的）', async () => {
+  it('④都没有：一句人话 + 两个入口（关联送 5 积分 / 接自己的）', async () => {
     const h = harness({ byo: false, library: { ok: false } })
     const out = await h.search({ q: '美妆' })
     expect(out.ok).toBe(false)
     expect(out.reason).toBe('no_data_source')
     expect(out.message).toContain('任选其一')
     expect(out.entry_points?.map((e) => e.id)).toEqual(['link_account', 'byo'])
-    expect(out.entry_points?.[0]?.note).toContain('10 积分')
+    expect(out.entry_points?.[0]?.note).toContain('5 积分')
   })
 
   it('49 M2 老开关拨到 agentsws：官方接口排最前', async () => {

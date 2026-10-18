@@ -271,7 +271,7 @@ const zh = {
       tag: 'Agents 工坊（用积分）',
       price: '1 积分 = ¥1',
       unit: '按用量',
-      items: ['不填 key、不用去各家注册', '注册送 10 积分', '充值的积分永不过期'],
+      items: ['不填 key、不用去各家注册', '注册送 5 积分', '充值的积分永不过期'],
       cta: '看价格',
     },
   },
@@ -633,7 +633,7 @@ const en: HomeCopy = {
       unit: 'pay as you go',
       items: [
         'No API keys, no sign-ups elsewhere',
-        '10 free credits when you sign up',
+        '5 free credits when you sign up',
         'Purchased credits never expire',
       ],
       cta: 'See pricing',

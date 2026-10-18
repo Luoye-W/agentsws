@@ -4079,7 +4079,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   /**
-   * WP121b：这个世界里那一份钱包（注册送的 10 积分与这一轮分析的花销都走它）。
+   * WP121b：这个世界里那一份钱包（注册送的 5 积分与这一轮分析的花销都走它）。
    *
    * 用的是钱包的契约替身（WP165 起；以前是 `@agentsws/metering` 的真钱包），不是一个计数器：
    * `granted` 那一类、90 天到期、余额不够就拦——这三件事是它算的，不是场景写死的数。
@@ -4817,7 +4817,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       }
 
       /*
-       * 花的钱从那 10 积分里走（用自己的模型接口时不扣我们的积分——那一轮
+       * 花的钱从那 5 积分里走（用自己的模型接口时不扣我们的积分——那一轮
        * 根本没经过我们的云）。余额不够就只扣得动剩下那些：钱包自己会拦。
        */
       if (input.ai === 'official' && spent > 0) {

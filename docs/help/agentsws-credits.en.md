@@ -1,6 +1,6 @@
 # Agents Workshop models and credits
 
-Don't want to sign up with each provider and copy keys around? Use Agents Workshop's models: **no key, no other sign-ups** — link an Agents Workshop account once, pay in credits, and switch back to your own keys any time. New accounts get 10 credits.
+Don't want to sign up with each provider and copy keys around? Use Agents Workshop's models: **no key, no other sign-ups** — link an Agents Workshop account once, pay in credits, and switch back to your own keys any time. New accounts get 5 credits.
 
 Not linking is fine too — your own keys go direct from this computer and cost nothing here: they never pass through us.
 

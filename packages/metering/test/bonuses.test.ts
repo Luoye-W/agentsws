@@ -18,10 +18,10 @@ import {
 } from '../src/bonuses.js'
 
 describe('bonuses.json', () => {
-  it('注册赠送是 10 积分、granted、90 天', () => {
+  it('注册赠送是 5 积分、granted、90 天', () => {
     const rule = signupBonus()
     expect(rule).toBeDefined()
-    expect(rule?.credits).toBe(10)
+    expect(rule?.credits).toBe(5)
     expect(rule?.kind).toBe('granted')
     expect(rule?.expires_days).toBe(90)
   })

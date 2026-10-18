@@ -2,7 +2,7 @@
  * WP231：「用 Agents 工坊的接口」分清注册与登录（密码 + 邮箱验证码）。
  *
  * 真装配线（路由 → 端口 → 加密库）+ demo 的云替身：
- * - 注册：名字 + 邮箱 + 密码 + 勾条款 → 发码 → 验码 → 已关联、送 10 积分；没勾条款不许发；
+ * - 注册：名字 + 邮箱 + 密码 + 勾条款 → 发码 → 验码 → 已关联、送 5 积分；没勾条款不许发；
  * - 已注册的邮箱点注册 → 409 + `already_registered`（界面据此一键切到登录）；
  * - 登录：验证码登录 / 密码登录；没注册的邮箱发码静默成功；验证码不对是 400 + `invalid_code`（不是 401）；
  * - 忘记密码：发码 → 验码 + 新密码 → 已关联；
@@ -87,7 +87,7 @@ afterEach(async () => {
 })
 
 describe('WP231 注册与登录（本机这一跳）', () => {
-  it('注册：没勾条款不许发；勾了 → 发码 → 验码 → 已关联、送 10 积分', async () => {
+  it('注册：没勾条款不许发；勾了 → 发码 → 验码 → 已关联、送 5 积分', async () => {
     const form = { name: '北风电器', email: 'new@example.com', password: PASSWORD, locale: 'zh' }
     expect((await api('/v1/cloud/account/signup', form)).status).toBe(400)
     expect((await api('/v1/cloud/account/signup', { ...form, accept_terms: false })).status).toBe(
@@ -109,7 +109,7 @@ describe('WP231 注册与登录（本机这一跳）', () => {
     expect(done.status).toBe(200)
     expect(done.body.data.linked).toBe(true)
     expect(done.body.data.registered).toBe(true)
-    expect(done.body.data.bonus_credits).toBe(10)
+    expect(done.body.data.bonus_credits).toBe(5)
 
     // 密码与验证码一个字节都没落盘
     const bytes = everyByte(dir)

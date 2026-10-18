@@ -1,6 +1,6 @@
 /**
  * 价格页文案。**单价一个都不写在这里**：价目与充值档位构建时从云上公开接口取（`lib/pricing.ts`）。
- * 这里只写已经公开在教程里的口径：1 积分 = ¥1、1 美元 = 7 积分、注册送 10 积分、充值永不过期。
+ * 这里只写已经公开在教程里的口径：1 积分 = ¥1、1 美元 = 7 积分、注册送 5 积分、充值永不过期。
  */
 import type { Lang } from './common.js'
 
@@ -32,7 +32,7 @@ const zh = {
     line: '不想自己去各家开账号，就用我们的。',
     items: [
       '不填 key，关联一次账号就能用',
-      '注册送 10 积分',
+      '注册送 5 积分',
       '充值的积分永不过期',
       '每项能力随时切回自己的 key',
     ],
@@ -130,7 +130,7 @@ const en: PricingCopy = {
     line: 'Don’t want to open accounts everywhere? Use ours.',
     items: [
       'No keys — link your account once',
-      '10 free credits when you sign up',
+      '5 free credits when you sign up',
       'Purchased credits never expire',
       'Switch any capability back to your own key anytime',
     ],

@@ -3492,7 +3492,7 @@ const zh: Table = {
   // 两张大卡各一行说明，选中哪张才展开哪张——两张同时铺开的话，第一次打开
   // 这个产品的人要先读两段字才知道该点哪儿。
   'onboarding.ai.official': '用 Agents 工坊的接口',
-  'onboarding.ai.official.bonus': '注册送 10 积分',
+  'onboarding.ai.official.bonus': '注册送 5 积分',
   'onboarding.ai.official.email': '你的邮箱',
   'onboarding.ai.official.send': '发登录信',
   'onboarding.ai.official.sent': '信发出去了。去邮箱点那条链接，这一页会自己接上。',
@@ -7804,7 +7804,7 @@ const en: Table = {
 
   // ── WP121b (70 §2 / §3): step ① "Connect AI" and step ② "Your business" ──
   'onboarding.ai.official': "Use Agents Workshop's own endpoint",
-  'onboarding.ai.official.bonus': '10 credits on sign-up',
+  'onboarding.ai.official.bonus': '5 credits on sign-up',
   'onboarding.ai.official.email': 'Your email',
   'onboarding.ai.official.send': 'Send the sign-in email',
   'onboarding.ai.official.sent':

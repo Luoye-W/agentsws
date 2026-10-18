@@ -23,7 +23,7 @@ export const CLOUD_AUTH_ZH: Record<string, string> = {
   'cauth.terms': '《用户条款》',
   'cauth.privacy': '《隐私政策》',
   'cauth.signup.send': '注册',
-  'cauth.signup.lead': '注册送 10 积分。',
+  'cauth.signup.lead': '注册送 5 积分。',
   'cauth.signup.lead.hint':
     '填完会往邮箱发一个 6 位验证码，输对了才建号。密码只在云上存加密后的哈希。',
   'cauth.login.code': '邮箱验证码',
@@ -78,7 +78,7 @@ export const CLOUD_AUTH_EN: Record<string, string> = {
   'cauth.terms': 'Terms of Service',
   'cauth.privacy': 'Privacy Policy',
   'cauth.signup.send': 'Sign up',
-  'cauth.signup.lead': '10 free credits when you sign up.',
+  'cauth.signup.lead': '5 free credits when you sign up.',
   'cauth.signup.lead.hint':
     'We email you a 6-digit code; the account is created once you enter it. Only a salted hash of your password is stored.',
   'cauth.login.code': 'Email code',
