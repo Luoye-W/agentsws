@@ -48,14 +48,10 @@ scopes:
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
 
 connectors:
-  # `required: false`：没连也能看提案、攒审批、排计划——真正动到账户那一跳才需要它。
-  # 写 true 会把一个还在等 `ads_management` 审核的用户整条职责挡在门外
-  - {
-      kind: meta_marketing,
-      required: false,
-      grants: [read_insights, manage_campaigns, manage_ads, read_pixels],
-      ownership: workspace,
-    }
+  # WP420（自查 A5，决策 947「用户零开发者配置」）：去掉 `meta_marketing`——那张卡要用户去开发者后台申请访问令牌，
+  # 填了也没有任何代码去用（`ads-core` 的平台适配器服务端没实例化）。真正要的是插件配对 + 在插件里连上
+  # 广告后台，那两行由 `browser_extension` 推、连接卡上照实列（没好就亮红，不许说「都连好了」）。
+  []
 
 actions:
   # 57 §1 写那一列的五个动作。额度写在**动作**上不写在职责上（同 51 §2.3）。

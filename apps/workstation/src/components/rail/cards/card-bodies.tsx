@@ -14,6 +14,7 @@ import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
+import { ExtensionRows, useScopeExtension } from '@/components/rail/cards/extension-rows'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailCardBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
@@ -232,6 +233,8 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   )
   // WP386：信息监控的监控源（一行汇总；拉不到的亮红点，点开就地看 / 贴）
   const monitor = useScopeMonitor(scope)
+  // WP420：要插件的这一层，先列插件那几行（配对、后台在插件里连上没有）
+  const extension = useScopeExtension(scope)
   return (
     <div className="flex flex-col gap-1.5" data-testid="connections-card">
       {live ? (
@@ -248,6 +251,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
       {monitor === undefined ? null : (
         <MonitorRow assignment={monitor.assignment} view={monitor.view} />
       )}
+      {extension === undefined ? null : <ExtensionRows rows={extension} />}
       {/* WP392：竞品监控各监控源的状态（坏了亮红点、照实说是哪家） */}
       {competitorAssignmentOf(scope) === undefined ? null : (
         <ul className="flex flex-col gap-px">
@@ -258,6 +262,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
         live ||
         !ready ||
         monitor !== undefined ||
+        extension !== undefined ||
         competitorAssignmentOf(scope) !== undefined ? null : (
           <Empty text={t('conncard.empty')} />
         )

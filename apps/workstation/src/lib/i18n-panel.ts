@@ -87,6 +87,12 @@ export const PANEL_ZH: Record<string, string> = {
   'conncard.connect': '去连接',
   'conncard.connected': '已连好',
   'conncard.dot.todo': '{n} 个连接要处理',
+  // WP420：连接卡上插件那几行
+  'extconn.paired': '浏览器插件（Agents 工坊助手）',
+  'extconn.google_ads': 'Google 广告后台（插件里连上）',
+  'extconn.meta_ads': 'Meta 广告后台（插件里连上）',
+  'extconn.reddit': 'Reddit（插件里连上）',
+  'extconn.pair': '去配对',
 
   'settings.row.model': '用的 AI',
   'settings.model.none': '还没接 AI',
@@ -176,6 +182,11 @@ export const PANEL_EN: Record<string, string> = {
   'conncard.connect': 'Connect',
   'conncard.connected': 'Connected',
   'conncard.dot.todo': '{n} connections need you',
+  'extconn.paired': 'Browser helper (Agents Workshop)',
+  'extconn.google_ads': 'Google Ads (connected in the helper)',
+  'extconn.meta_ads': 'Meta Ads (connected in the helper)',
+  'extconn.reddit': 'Reddit (connected in the helper)',
+  'extconn.pair': 'Pair',
 
   'settings.row.model': 'AI',
   'settings.model.none': 'No AI yet',

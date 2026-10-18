@@ -11,6 +11,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { useScopeConversations } from '@/components/conversations/conversation-data'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
+import { useScopeExtension } from '@/components/rail/cards/extension-rows'
 import type { RailScope } from '@/components/rail/rail-scope'
 import type { CardStatus, RailPanelBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
@@ -209,6 +210,7 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
   const monitor = useScopeMonitor(scope)?.view
   // WP392：竞品监控有没读到的那几家，也算要处理（红点；照实说几家）。钩子先都调完再判
   const competitor = useCompetitorWatchStatus(scope)
+  const extension = useScopeExtension(scope)
   if (monitor !== undefined && monitor.failed > 0)
     return { summary: monitor.summary, dot: 'alert', dotLabel: monitor.summary }
   const failed = competitor?.summary.failed ?? 0
@@ -218,8 +220,10 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
       dot: 'alert',
       dotLabel: t('cwatch.dot.failed', { n: competitor?.summary.failed_labels.length ?? failed }),
     }
-  if (items.length === 0) return undefined
-  const todo = items.filter(connectionNeedsYou).length
+  // WP420（自查 A5 / U1）：要插件的这一层，插件没配对 / 后台没在插件里连上也算要处理（不许说「都连好了」）
+  const ext = extension ?? []
+  if (items.length === 0 && ext.length === 0) return undefined
+  const todo = items.filter(connectionNeedsYou).length + ext.filter((r) => !r.ok).length
   if (todo === 0) return { summary: t('conncard.summary.ok') }
   return {
     summary: t('conncard.summary.todo', { n: todo }),
