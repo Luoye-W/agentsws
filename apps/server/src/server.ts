@@ -266,6 +266,7 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
+import { amazonDraftGuard } from './amazon-draft-guard.js'
 // WP394（docs/104 一期 B）：读 Amazon 前台的那一块（自报 Agent、配送邮编、被拦就停）与云端兜底
 import {
   type AmazonCloudPort,
@@ -6714,14 +6715,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP417（自查 C2 / D9）：聊天会话 / 社群线程上的回复回原渠道（装配见 `routeDraftRef`）
             routeDraft: async (input) => routeDraftRef?.(input),
-            judgeDraft: (input) =>
-              supportJudgmentRef?.judgeDraft({
+            judgeDraft: async (input) => {
+              // WP417（自查 B5）：Amazon 买家消息起草时就过平台硬闸（不等人点了发送才拦）
+              const pin = input.matter.context.pinned.find((p) => p.type === 'contact')
+              const contact =
+                pin === undefined
+                  ? undefined
+                  : ((await Promise.resolve(records.record?.(pin)).catch(() => undefined)) as
+                      | { email?: string }
+                      | undefined)
+              const amazon = amazonDraftGuard({
+                recipient: contact?.email,
+                subject: input.subject,
+                body: input.body,
+              })
+              if (amazon !== undefined) return amazon
+              return supportJudgmentRef?.judgeDraft({
                 channel: input.channel,
                 thread_id: input.thread_external_id ?? input.matter.id,
                 inbound_text: input.inbound_text,
                 reply_text: input.body,
                 generated_by: 'ai',
-              }),
+              })
+            },
             /*
              * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
              *
@@ -9958,8 +9974,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: KOL_CHANNEL_IDS.some((channel) => held(`kol.${channel}`)),
         // WP73：有人持有社媒那九条渠道职责之一时才建那条巡检
         // WP417（自查客服 D6）：只开了「社群管理」、没开社媒运营的品牌也要收帖（自动进帖挂在这一拍上）
-        social:
-          SOCIAL_ROLE_IDS.some((role_id) => held(role_id)) || held('dtc.community-support'),
+        social: SOCIAL_ROLE_IDS.some((role_id) => held(role_id)) || held('dtc.community-support'),
         // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
         pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
         // WP173：有人持有「主动开发」才建开发信序列那条定时

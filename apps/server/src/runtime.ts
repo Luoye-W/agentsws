@@ -801,6 +801,8 @@ export function declaresImageInput(
 export interface DraftVerdict {
   action: 'send' | 'rewrite' | 'card'
   rewrite_instruction?: string
+  /** WP417：打回重写时时间线上那一句（不给 = 泄漏守卫那一句）。 */
+  note?: string
   /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
   gate_context: GateDecision[]
 }
@@ -1083,7 +1085,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // 打回重写：原因回给写正文的那一跳，**不建卡**（这一版根本没成形）
       work.appendEvent(s.matter.id, {
         kind: 'status',
-        text: '这一版回信照抄了内部指导的原文，已打回重写。',
+        text: verdict.note ?? '这一版回信照抄了内部指导的原文，已打回重写。',
         actor: { kind: 'system', id: 'runtime' },
         run_id: s.run_id,
       })
