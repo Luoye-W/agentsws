@@ -1116,9 +1116,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // WP240：建品牌时自动起的那份影子档案（`provisional`）不算"设过"
         // WP251（决策 92）：加的品牌要**走完第 ④ 步**才算设置完——第 ② 步确认了、③④ 没做就离开，
         // 回首页照样拉回它的首次设置（停在上次那一步：`business_done`）。启动品牌口径不变。
+        // Luoye 10-19 真机：第 ② 步公司名和组织上已有的一样就不写档案 → 档案一直是空的，走完第 ④ 步回首页
+        // 又被拉回向导。**走完过第 ④ 步（`completed`）就永远不算没设置**，不再只看档案。
         needs_setup:
           others === 0 &&
-          (added ? !backend.completed(ws) : profile === undefined || profile.provisional === true),
+          !backend.completed(ws) &&
+          (added || profile === undefined || profile.provisional === true),
         workspace_name: options.workspaceName(ws),
         brand_name: brandNameOf(ws),
         ...(profile === undefined ? {} : { profile: viewOf(profile, ws) }),

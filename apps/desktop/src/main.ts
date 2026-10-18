@@ -82,7 +82,7 @@ import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
-import { createLaunchAtLogin, loginItemSettings } from './launch-at-login.js'
+import { createLaunchAtLogin, loginItemSettings, wasLaunchedAtLogin } from './launch-at-login.js'
 import { nodeLayoutFs } from './layout-fs.js'
 import { createLogger } from './logging.js'
 import {
@@ -1851,6 +1851,11 @@ async function bootstrap(): Promise<void> {
 
   // ── 健康轮询：托盘状态、"打开工作台"是否可点都看它。
   let firstRunOpened = false
+  const launchedAtLogin = wasLaunchedAtLogin(
+    process.platform,
+    process.argv,
+    () => app.getLoginItemSettings().wasOpenedAtLogin,
+  )
   const pollHealth = async (): Promise<void> => {
     health = await probeHealth(serverUrl(), {
       fetchImpl: globalThis.fetch as never,
@@ -1869,10 +1874,11 @@ async function bootstrap(): Promise<void> {
         healthy: health.ok,
         alreadyOpened: firstRunOpened,
         remote,
+        launchedAtLogin,
       })
     ) {
       firstRunOpened = true
-      logger.info('第一次打开：自动端出工作台')
+      logger.info(firstRun ? '第一次打开：自动端出工作台' : '打开应用：端出工作台')
       void openWorkstation()
     }
   }
@@ -2718,6 +2724,12 @@ async function bootstrap(): Promise<void> {
     // 托盘壳：关掉窗口不退出应用（13 §5「托盘常驻」）。
     if (!quitting) return
     app.quit()
+  })
+  // Luoye 10-19：Mac 上点程序坞图标 / 从「应用程序」再打开一次，来的是 activate（不是 second-instance）——
+  // 没这条，窗口关了以后只有菜单栏那一项能把它叫回来
+  app.on('activate', () => {
+    if (quitting) return
+    void openWorkstation()
   })
 }
 

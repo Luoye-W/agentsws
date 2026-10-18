@@ -69,9 +69,8 @@ afterPack: scripts/after-pack.mjs
 mac:
   category: public.app-category.productivity
   icon: build/icon.png
-  # 托盘常驻、不进 Dock（13 §5「无主窗口启动」）。
-  extendInfo:
-    LSUIElement: 1
+  # Luoye 10-19：要像普通 Mac 应用一样进程序坞（以前 LSUIElement 让它只蹲菜单栏，找不到）；
+  # 关窗不退出、菜单栏图标照旧在。
   identity: null
   # WP218：架构不写在这里——写了的话 `--mac --arm64` 也会顺手打 x64（那台机器上没有 x64 的捆绑 Node，
   # afterPack 直接失败）。架构由命令行给：release.yml 里两台 mac 各打自己那一个。
