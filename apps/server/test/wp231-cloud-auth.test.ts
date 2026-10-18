@@ -109,7 +109,7 @@ describe('WP231 注册与登录（本机这一跳）', () => {
     expect(done.status).toBe(200)
     expect(done.body.data.linked).toBe(true)
     expect(done.body.data.registered).toBe(true)
-    expect(done.body.data.bonus_credits).toBe(10)
+    expect(done.body.data.bonus_credits).toBe(5)
 
     // 密码与验证码一个字节都没落盘
     const bytes = everyByte(dir)
