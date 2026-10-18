@@ -13,16 +13,17 @@ import { getSchedules, patchSchedule, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
 import type { Lang } from '@/lib/i18n'
-import { frequencyText, ruleOfTrigger } from '@/lib/schedule-rule'
+import { cronText, frequencyText, ruleOfTrigger } from '@/lib/schedule-rule'
 
-/** 触发器 → 一句人话。cron 不翻译成自然语言（会翻错），原样给但标出时区。 */
+/** 触发器 → 一句人话。WP416：常见 cron 翻成「每天 08:00」，认不出的说「定时」（不露 cron 原文）。 */
 export function triggerText(trigger: ScheduledTaskRow['trigger'], lang: Lang = 'zh'): string {
   // WP181：官方「自动化任务」的时间规则（每天 / 每周几 / 工作日……）
   if (trigger.kind === 'rule') {
     const rule = ruleOfTrigger(trigger)
     return rule === undefined ? trigger.kind : frequencyText(rule, lang)
   }
-  if (trigger.kind === 'cron') return `cron ${String(trigger.expr)}（${String(trigger.tz)}）`
+  if (trigger.kind === 'cron')
+    return cronText(String(trigger.expr ?? ''), lang) ?? (lang === 'zh' ? '定时' : 'Scheduled')
   if (trigger.kind === 'interval') {
     const minutes = Math.round((trigger.every_ms ?? 0) / 60000)
     return `每 ${minutes} 分钟`

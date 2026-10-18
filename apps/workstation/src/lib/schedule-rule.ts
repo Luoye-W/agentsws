@@ -85,7 +85,7 @@ export function frequencyText(rule: ScheduleRule, lang: Lang, zone = browserZone
       return zh ? `每 ${Math.round(s / 60)} 分钟` : `Every ${Math.round(s / 60)} min`
     }
     case 'cron':
-      return `cron ${rule.expression ?? ''}${tz}`
+      return `${cronText(rule.expression ?? '', lang) ?? (zh ? '定时' : 'Scheduled')}${tz}`
     default: {
       const at = rule.at === undefined ? undefined : new Date(rule.at)
       const when =
@@ -101,6 +101,40 @@ export function frequencyText(rule: ScheduleRule, lang: Lang, zone = browserZone
       return `${zh ? '一次' : 'Once'} · ${when}`
     }
   }
+}
+
+/**
+ * WP416（自查 kol U11）：常见的 cron 写法 → 一句人话（「每天 08:00」「每周一 06:00」「每月月底 20:45」
+ * 「每小时」）。认不出的回 `undefined`（调用方说「定时」，不把 `0 8 * * *` 露给人看）。
+ */
+export function cronText(expr: string, lang: Lang): string | undefined {
+  const zh = lang === 'zh'
+  const f = expr.trim().split(/\s+/)
+  if (f.length !== 5) return undefined
+  const [m, h, dom, mon, dow] = f as [string, string, string, string, string]
+  if (mon !== '*' || !/^\d+$/.test(m)) return undefined
+  if (h === '*' && dom === '*' && dow === '*')
+    return m === '0'
+      ? zh
+        ? '每小时'
+        : 'Hourly'
+      : zh
+        ? `每小时第 ${m} 分`
+        : `Hourly at :${pad(Number(m))}`
+  if (!/^\d+$/.test(h)) return undefined
+  const time = `${pad(Number(h))}:${pad(Number(m))}`
+  if (dom === '*' && dow === '*') return zh ? `每天 ${time}` : `Daily ${time}`
+  if (dom === '*' && /^[0-7](,[0-7])*$/.test(dow)) {
+    const days = dow.split(',').map((d) => (Number(d) === 0 ? 7 : Number(d)))
+    if (isWorkdays(days)) return zh ? `工作日 ${time}` : `Weekdays ${time}`
+    const names = days.map((d) => (zh ? WEEK_ZH[d] : WEEK_EN[d]) ?? '')
+    return zh ? `每周${names.join('、')} ${time}` : `Every ${names.join(', ')} ${time}`
+  }
+  if (dow === '*' && (dom === 'L' || dom === '28-31'))
+    return zh ? `每月月底 ${time}` : `Month end ${time}`
+  if (dow === '*' && /^\d+$/.test(dom))
+    return zh ? `每月 ${dom} 日 ${time}` : `Monthly on day ${dom} ${time}`
+  return undefined
 }
 
 /* ── 面板上那几格（官方「Run time」卡借形）─────────────────────────────────── */

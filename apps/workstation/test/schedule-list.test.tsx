@@ -55,7 +55,9 @@ describe('定时任务列表（25 §3）', () => {
     const items = screen.getAllByTestId('schedule-row')
     expect(items).toHaveLength(2)
     expect(items[0]?.textContent).toContain('每天早上拟一版今天的安排')
-    expect(items[0]?.textContent).toContain('cron 0 8 * * *')
+    // WP416：cron 说人话
+    expect(items[0]?.textContent).toContain('每天 08:00')
+    expect(items[0]?.textContent).not.toContain('cron')
     expect(items[0]?.textContent).toContain('跑过 3 次')
     // 暂停的那条打上标记
     expect(items[1]?.getAttribute('data-state')).toBe('paused')
@@ -95,12 +97,15 @@ describe('定时任务列表（25 §3）', () => {
     expect(screen.queryAllByTestId('schedule-row')).toHaveLength(0)
   })
 
-  it('triggerText：cron 原样给（不翻译成自然语言，会翻错）', () => {
+  it('WP416 triggerText：常见 cron 说人话，认不出的说「定时」，不露 cron 原文', () => {
     expect(triggerText({ kind: 'cron', expr: '0 6 * * 1', tz: 'Asia/Shanghai' })).toBe(
-      'cron 0 6 * * 1（Asia/Shanghai）',
+      '每周一 06:00',
     )
-    expect(triggerText({ kind: 'interval', every_ms: 3_600_000 })).toBe('每 60 分钟')
-    expect(triggerText({ kind: 'once', at: '2026-09-11T00:00:00.000Z' })).toContain('一次：')
-    expect(triggerText({ kind: 'after_event' })).toBe('after_event')
+    expect(triggerText({ kind: 'cron', expr: '0 8 * * *', tz: '+08:00' })).toBe('每天 08:00')
+    expect(triggerText({ kind: 'cron', expr: '45 20 28-31 * *', tz: '+08:00' })).toBe(
+      '每月月底 20:45',
+    )
+    expect(triggerText({ kind: 'cron', expr: '0 * * * *', tz: '+08:00' })).toBe('每小时')
+    expect(triggerText({ kind: 'cron', expr: '*/5 1-3 * 2 *', tz: '+08:00' })).toBe('定时')
   })
 })

@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { LayerMemory } from '@/components/work/layer-memory'
 import {
+  getMySchedules,
   getPositionConnections,
   getRoleDefinition,
   getSchedules,
@@ -37,6 +38,7 @@ import {
 import { useApp } from '@/lib/app-context'
 import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
+import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
 import { ShopAdminBanner } from './shop-admin-banner'
 import { SiteThemeBanner } from './site-theme-banner'
@@ -260,19 +262,70 @@ function Connections({
   )
 }
 
-function ScheduleRows({ assignments }: { assignments: readonly string[] }): ReactNode {
+/**
+ * WP416（自查 kol U11）：同一件事（同名、同一个点）在几条职责上各有一条——合成一行「N 条职责 · 每天 08:00」，
+ * 一个开关一起停 / 开；时间说人话，不露 cron。红人岗位顺带列出系统那条「每天看一眼哪几封开发信该跟进了」。
+ */
+const POSITION_SYSTEM_TASKS: Readonly<Record<string, string>> = {
+  'kol.outreach_sequence': 'kol.',
+  'b2b.outreach_sequence': 'b2b.',
+}
+
+export interface ScheduleGroup {
+  key: string
+  title: string
+  when: string
+  items: { row: ScheduledTaskRow; assignment: string }[]
+}
+
+/** WP416：同名、同一个点的几条（各条职责一条）合成一组；顺序按第一次出现。 */
+export function groupSchedules(
+  rows: readonly { row: ScheduledTaskRow; assignment: string }[],
+  lang: Lang,
+): ScheduleGroup[] {
+  const groups: ScheduleGroup[] = []
+  for (const x of rows) {
+    const title = x.row.title ?? x.row.handler ?? x.row.id
+    const when = triggerText(x.row.trigger, lang)
+    const key = `${title}\u0000${when}`
+    const hit = groups.find((g) => g.key === key)
+    if (hit === undefined) groups.push({ key, title, when, items: [x] })
+    else hit.items.push(x)
+  }
+  return groups
+}
+
+function ScheduleRows({
+  assignments,
+  roleIds = [],
+}: {
+  assignments: readonly string[]
+  roleIds?: readonly string[]
+}): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
   const lists = useQuery({
-    queryKey: ['schedules', 'position', assignments.join(',')],
+    queryKey: ['schedules', 'position', assignments.join(','), roleIds.join(',')],
     queryFn: async () => {
       const parts = await Promise.all(
         assignments.map(async (a) =>
           (await getSchedules(a)).map((row) => ({ row, assignment: a })),
         ),
       )
+      // 系统那几条（不挂在职责上）：只列跟这个岗位有关的那一条
+      const first = assignments[0]
+      const system =
+        first === undefined
+          ? []
+          : (await getMySchedules().catch(() => []))
+              .filter((row) => {
+                const prefix =
+                  row.handler === undefined ? undefined : POSITION_SYSTEM_TASKS[row.handler]
+                return prefix !== undefined && roleIds.some((r) => r.startsWith(prefix))
+              })
+              .map((row) => ({ row, assignment: first }))
       const seen = new Set<string>()
-      return parts.flat().filter((x) => {
+      return [...parts.flat(), ...system].filter((x) => {
         if (seen.has(x.row.id)) return false
         seen.add(x.row.id)
         return true
@@ -280,12 +333,11 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
     },
   })
   const toggle = useMutation({
-    mutationFn: (input: { row: ScheduledTaskRow; assignment: string }) =>
-      patchSchedule(
-        input.row.id,
-        { action: input.row.state === 'paused' ? 'resume' : 'pause' },
-        input.assignment,
-      ),
+    mutationFn: async (group: ScheduleGroup) => {
+      const paused = group.items.every((x) => x.row.state === 'paused')
+      for (const x of group.items)
+        await patchSchedule(x.row.id, { action: paused ? 'resume' : 'pause' }, x.assignment)
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['schedules'] })
       void client.invalidateQueries({ queryKey: ['position-work'] })
@@ -295,26 +347,34 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
   const rows = (lists.data ?? []).filter((x) => x.row.state !== 'cancelled')
   if (rows.length === 0)
     return <p className="text-sm text-muted-foreground">{t('pos2.set.schedules.empty')}</p>
+  const groups = groupSchedules(rows, lang)
   return (
     <ul className="overflow-hidden rounded-xl border bg-card" data-testid="settings-schedules">
-      {rows.map(({ row, assignment }) => {
-        const paused = row.state === 'paused'
+      {groups.map((g) => {
+        const paused = g.items.every((x) => x.row.state === 'paused')
+        const next = g.items
+          .map((x) => x.row.next_fire_at)
+          .filter((x): x is string => x !== undefined)
+          .sort()[0]
+        const duties = new Set(g.items.map((x) => x.row.role_id ?? x.assignment)).size
         return (
           <li
-            key={row.id}
+            key={g.key}
             data-testid="schedule-row"
-            data-state={row.state}
+            data-state={paused ? 'paused' : 'active'}
+            data-count={g.items.length}
             className={`flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0 ${paused ? 'opacity-70' : ''}`}
           >
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{row.title ?? row.handler ?? row.id}</p>
+              <p className="text-sm font-medium">{g.title}</p>
               <p className="text-xs text-ws-muted-fg">
-                {triggerText(row.trigger, lang)}
+                {duties > 1 ? `${t('pos2.set.schedules.duties', { n: duties })} · ` : ''}
+                {g.when}
                 {paused
                   ? ` · ${t('pos2.set.schedules.paused')}`
-                  : row.next_fire_at === undefined
+                  : next === undefined
                     ? ''
-                    : ` · ${t('pos2.set.schedules.next', { at: formatDate(row.next_fire_at, lang) })}`}
+                    : ` · ${t('pos2.set.schedules.next', { at: formatDate(next, lang) })}`}
               </p>
             </div>
             <Switch
@@ -323,7 +383,7 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
               aria-label={paused ? t('pos2.set.schedules.off') : t('pos2.set.schedules.on')}
               data-testid="schedule-switch"
               onCheckedChange={() => {
-                toggle.mutate({ row, assignment })
+                toggle.mutate(g)
               }}
             />
           </li>
@@ -547,7 +607,7 @@ export function PositionSettings({
             title={t('pos2.set.schedules')}
             sub={t('pos2.set.schedules.sub')}
           />
-          <ScheduleRows assignments={assignments} />
+          <ScheduleRows assignments={assignments} roleIds={view.roles.map((r) => r.role_id)} />
         </section>
 
         <section>
