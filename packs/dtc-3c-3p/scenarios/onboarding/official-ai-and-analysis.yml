@@ -34,11 +34,12 @@ expected:
   onboarding:
     who: p_wang
     connected: true
-    signup_credits: 10
+    # 10-19 注册赠送改为 5 积分（main 上改了替身，这两条场景没跟上）
+    signup_credits: 5
     analysed: true
     capped: false
-    # 送 10 减去这一轮的 1.05
-    balance_credits: ">=8"
+    # 送 5 减去这一轮的 1.05
+    balance_credits: ">=3"
   event_types: [simulation.onboarding_done]
   metrics:
     runs_failed: 0
