@@ -68,6 +68,17 @@ describe('选主题卡（WP304）', () => {
     expect(within(bar).queryByText('都不是')).toBeNull()
   })
 
+  it('WP418 U8：卡头不出「剩 N 天」，也不出「AI」角标', () => {
+    const card = choiceCard(payload())
+    render({
+      ...card,
+      expires_at: new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString(),
+    })
+    const row = screen.getByTestId('deck-tag-row')
+    expect(within(row).queryByTestId('deck-wait')).toBeNull()
+    expect(row.textContent).not.toContain('AI')
+  })
+
   it('即将开放那一行只看不选；免费主题照常', () => {
     render(
       choiceCard(

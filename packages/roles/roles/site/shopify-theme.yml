@@ -103,7 +103,8 @@ grounding:
       intent_terms: [主题, theme, 模板, template, 首页, homepage],
       cue_terms: [改, change, 换, switch, 发布, publish, 预览, preview],
       tool: theme_list,
-      prefetch: true,
+      # WP418：工具名改对之后不预取（以前名字不对、这一条从来没生效过；预取要真跑一次 CLI / 店铺查询）
+      prefetch: false,
     }
   - {
       name: graphql_docs,

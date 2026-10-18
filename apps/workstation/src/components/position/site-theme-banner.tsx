@@ -103,8 +103,9 @@ export function SiteThemeBanner({
 
   /** 从找到的那几家里选（选了即存）。 */
   const picker = (current: string | undefined, testid: string): ReactNode => (
+    // WP418（审计 U3）：宽度限在 280px 内，别把横幅标题挤成两行；样式跟输入框一套（ws 色）
     <select
-      className="h-7 max-w-full rounded-md border bg-card px-2 text-xs"
+      className="h-7 max-w-[280px] min-w-0 truncate rounded-md border border-ws-line bg-ws-card px-2 text-xs text-ws-ink"
       aria-label={t('site_theme.pick.label')}
       data-testid={testid}
       value={current ?? ''}

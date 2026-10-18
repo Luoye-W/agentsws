@@ -25,6 +25,12 @@ import { useApp } from '@/lib/app-context'
 
 /** 最多几个（决策 1019：4–6 个）。 */
 export const LANDING_MAX = 6
+
+/**
+ * WP418（审计 U11）：中文模板「连上{name}」——名字是中文时紧挨着写（「连上店铺后台」），
+ * 英文 / 数字开头才隔一个空格（「连上 Shopify」）。
+ */
+export const zhAfterVerb = (name: string): string => (/^[A-Za-z0-9]/.test(name) ? ` ${name}` : name)
 /** 其中「打开卡」那一类最多几个（留位置给能直接发的提示）。 */
 const OPEN_MAX = 3
 
@@ -97,7 +103,9 @@ export function useLandingActions(
     open.push({
       id: 'connect',
       kind: 'open',
-      label: t('landing.connect', { name: lang === 'en' ? missing.name.en : missing.name.zh }),
+      label: t('landing.connect', {
+        name: lang === 'en' ? missing.name.en : zhAfterVerb(missing.name.zh),
+      }),
       run: () => {
         if (missing.connect_service === undefined) rail.openCard('connections')
         else openConnect(missing.connect_service)

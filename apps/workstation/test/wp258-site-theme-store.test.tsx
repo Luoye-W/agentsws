@@ -94,8 +94,10 @@ describe('WP258 登录后自动找店', () => {
     )
     const banner = await screen.findByTestId('site-theme-banner')
     expect(banner.getAttribute('data-store-mode')).toBe('pick')
-    expect(banner.textContent).toContain('让 AI 改网站，选一下是哪家店')
+    // WP418（审计 U3）：标题只写「选店铺」，下拉宽度限在 280px 内
+    expect(banner.textContent).toContain('选店铺')
     const select = screen.getByTestId('site-theme-store-pick') as HTMLSelectElement
+    expect(select.className).toContain('max-w-[280px]')
     expect([...select.options].map((o) => o.textContent)).toEqual([
       '选一家店',
       'My Store · 6demox-md.myshopify.com · basic',

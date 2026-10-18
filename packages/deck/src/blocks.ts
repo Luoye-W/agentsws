@@ -492,7 +492,10 @@ const PR_MONITORING_BLOCKS = (): BlockDef[] => [
  * 一个人同时挂着两条时看到的是两个岗位视图，不是一个视图里十块（同 48 §5.1）。
  */
 const SITE_CHECKLIST_BLOCKS = (): BlockDef[] => [
-  block('site.checklist', 'table', '上线检查单', 'site.launch_checklist'),
+  // WP418（自查 A8）：块头「现在检查」（以前 AI 调不动、界面也点不到）
+  block('site.checklist', 'table', '上线检查单', 'site.launch_checklist', {
+    rerun: { path: '/v1/site/checklist/run', label: '现在检查' },
+  }),
   block('site.themes', 'table', '主题副本与预览', 'site.theme_copies'),
   block('site.apps', 'table', '已装 App', 'site.installed_apps'),
 ]

@@ -24,6 +24,21 @@ export function DeckBattleReport({
   onBackToAll: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  /*
+   * WP418（审计 U2）：四个数全是 0 时不画一个三百多像素高、四块 0 的大卡——只留一行
+   * 「✓ 没有要你处理的」，与岗位页刚开张时那一行同一个样子（不在两种样子之间来回换）。
+   * 筛空了照旧走下面那张（要给「回到全部」）。
+   */
+  if (!filtered && ROWS.every((key) => (report?.[key] ?? 0) === 0))
+    return (
+      <p
+        className="text-sm text-muted-foreground"
+        data-testid="deck-battle-report"
+        data-empty="true"
+      >
+        ✓ {t('pos2.deck.empty')}
+      </p>
+    )
   return (
     <div
       data-testid="deck-battle-report"

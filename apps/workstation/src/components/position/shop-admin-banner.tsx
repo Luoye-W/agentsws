@@ -73,6 +73,13 @@ export function shopAdminUntil(
       : t('shop_admin.until', { time: formatDateTime(v.expires_at, lang) })
 }
 
+/** WP418（审计 C6）：授权一天内到期、又不会自动续期（还没过期）。 */
+export function shopAdminExpiringSoon(v: ShopAdminView, now: number = Date.now()): boolean {
+  if (v.state !== 'authorized' || v.refreshable === true || v.expires_at === undefined) return false
+  const left = Date.parse(v.expires_at) - now
+  return Number.isFinite(left) && left > 0 && left <= 24 * 60 * 60 * 1000
+}
+
 export function ShopAdminBanner({
   duties,
   variant = 'page',
@@ -132,7 +139,19 @@ export function ShopAdminBanner({
   if (assignment === undefined || v === undefined || !v.applicable || v.state === undefined)
     return null
   // WP288：页上只出问题那几行；设置里只出授权好了那一行
-  if (variant === 'page' && v.state === 'authorized') return null
+  // WP418（审计 C6）：例外是快到期了（一天内、不会自动续期）——页上提前说一句
+  if (variant === 'page' && v.state === 'authorized') {
+    if (!shopAdminExpiringSoon(v)) return null
+    return (
+      <div
+        className="flex flex-wrap items-center gap-1.5 px-1 text-xs text-ws-warn"
+        data-testid="shop-admin-expiring"
+      >
+        <KeyRound className="size-3.5 shrink-0" aria-hidden />
+        <span>{t('shop_admin.expiring', { time: formatDateTime(v.expires_at ?? '', lang) })}</span>
+      </div>
+    )
+  }
   if (variant === 'settings' && v.state !== 'authorized') return null
   if (themeHere && (v.state === 'no_cli' || v.state === 'no_store')) return null
 
@@ -260,10 +279,11 @@ export function ShopAdminBanner({
         </form>,
       )
     case 'unauthorized':
+      // WP418（审计 U5）：同一个岗位上刚为改主题登录过 CLI，这里说清这一步是另一件事（改商品、页面、菜单）
       return row(
         'info',
         storeIcon,
-        t('shop_admin.unauthorized'),
+        t(themeHere ? 'shop_admin.unauthorized.after_theme' : 'shop_admin.unauthorized'),
         authorizeButton(t('shop_admin.authorize')),
       )
     case 'authorizing':
@@ -318,6 +338,8 @@ export function ShopAdminBanner({
           <span>
             {t('shop_admin.authorized')}
             {until === undefined ? '' : ` · ${until}`}
+            {/* WP418（审计 C7）：明示现在管的是哪家店 */}
+            {v.store === undefined ? '' : ` · ${t('shop_admin.store_is', { store: v.store })}`}
           </span>
           <Hint
             text={t('shop_admin.granted', {

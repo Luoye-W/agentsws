@@ -59,6 +59,25 @@ describe('WP381 块头「现在体检」', () => {
     await screen.findByText('GPTBot')
   })
 
+  it('WP418 A8：上线检查单块没写 rerun 也有「现在检查」，点了 POST 检查单地址', async () => {
+    renderWithProviders(
+      <BlockCard
+        block={{
+          ...def(),
+          id: 'site.checklist',
+          title: '上线检查单',
+          query: 'site.launch_checklist',
+        }}
+        range="last_7d"
+        assignment="asg_3"
+      />,
+    )
+    const btn = await screen.findByTestId('block-rerun')
+    expect(btn.getAttribute('aria-label')).toBe('现在检查')
+    fireEvent.click(btn)
+    await waitFor(() => expect(calls).toContain('/v1/site/checklist/run'))
+  })
+
   it('没写 rerun 的块没有这个钮', async () => {
     renderWithProviders(<BlockCard block={def()} range="last_7d" assignment="asg_2" />)
     await screen.findByText(/还没体检|GPTBot/)

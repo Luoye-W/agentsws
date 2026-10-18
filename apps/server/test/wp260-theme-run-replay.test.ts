@@ -286,7 +286,9 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
       1,
     )
     // 顺序：起底在前；写 → 检查 → 推，最后一个工具是推未发布
-    expect(names[0]).toBe('theme_init_from_base')
+    // WP418（自查 A16）：grounding 工具名改对之后（`theme_list`），命中「首页 / 主题」先强制看一眼店里的主题
+    expect(names.filter((n) => n !== 'theme_list')[0]).toBe('theme_init_from_base')
+    expect(names.filter((n) => n === 'theme_list').length).toBeLessThanOrEqual(1)
     expect(names.slice(-4)).toEqual([
       'theme_write_file',
       'theme_write_file',

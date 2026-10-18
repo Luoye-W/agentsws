@@ -18,7 +18,7 @@ export const PANEL_ZH: Record<string, string> = {
   'duty.entry.title': '交给这条职责一件事',
   'landing.report': '看「{title}」',
   'landing.waiting': '看等你的 {n} 个对话',
-  'landing.connect': '连上 {name}',
+  'landing.connect': '连上{name}',
   'landing.plans': '看等你点头的 {n} 个计划',
   'duty.boards_moved': '这条职责的看板在右上角「报表」里',
   'rail.card.reports': '报表',

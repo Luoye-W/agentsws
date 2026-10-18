@@ -326,13 +326,18 @@ describe('WP265 Shopify 卡：老表单收进「高级」', () => {
         onCancel={() => undefined}
         onSubmit={() => undefined}
         oneClick={<div data-testid="one-click-slot" />}
-        advancedLabel="高级：用自己的 Shopify 应用"
+        advancedLabel="其他接法"
+        advancedNote="用你自己在 Shopify 建的应用来连"
       />,
     )
     expect(screen.getByTestId('one-click-slot')).toBeTruthy()
     expect(screen.queryByTestId('provider-legacy')).toBeNull()
+    // WP418（审计 U17）：折叠钮只写「其他接法」，解释在展开之后
+    expect(screen.getByTestId('provider-advanced-toggle').textContent).toBe('其他接法')
+    expect(screen.queryByTestId('provider-advanced-note')).toBeNull()
     fireEvent.click(screen.getByTestId('provider-advanced-toggle'))
     expect(screen.getByTestId('provider-legacy')).toBeTruthy()
+    expect(screen.getByTestId('provider-advanced-note').textContent).toContain('自己在 Shopify 建')
   })
 
   it('权限名翻人话：读写只说名字，只读标「只看」，认不得的原样', () => {
