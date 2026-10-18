@@ -63,8 +63,7 @@ export async function runAdsScript(exec: Exec): Promise<ScriptOutcome> {
     return { answer: `没查到广告数据：${q.reason ?? '这一步没走通'}。`, staged, readTools }
   readTools.push(QUERY_ADS_DATA_TOOL)
   const d = q.data
-  if (d.needs_setup !== undefined)
-    return { answer: '还没设是哪个广告账户：已出一张卡，设好我接着查。', staged, readTools }
+  if (d.needs_setup !== undefined) return { answer: '还没设是哪个广告账户。', staged, readTools }
   if (d.needs_connection !== undefined || d.connection_card === true)
     return {
       answer: '插件还没连上你的广告后台，今天的数导不进来：已出一张连接卡，连好我接着查。',
@@ -125,7 +124,7 @@ export async function runAmazonScript(
     return {
       answer:
         d.needs_setup !== undefined
-          ? '还没定盯哪几款对标款：已出一张方案卡（每家几款、各对标你哪一款、什么算重要），点头我就先读一次。'
+          ? '还没定盯哪几款对标款。'
           : (strOf(d.say) ?? strOf(d.message) ?? '读了一次，变化在右边面板「竞品动向」里。'),
       staged,
       readTools,
@@ -163,7 +162,8 @@ export async function runAmazonScript(
   if (d.needs_setup !== undefined)
     return {
       answer:
-        '还不知道你在 Amazon 上卖的是哪几个商品：已出一张卡，按品牌名搜了候选，勾好我就体检。',
+        // WP420（自查 U16）：「在下面这张卡上点头」卡头已经说了，这里不再说一遍
+        '还不知道你在 Amazon 上卖的是哪几个商品。',
       staged,
       readTools,
     }

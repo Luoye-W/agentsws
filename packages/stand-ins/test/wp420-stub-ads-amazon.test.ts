@@ -77,14 +77,14 @@ describe('投放剧本（A11）', () => {
 })
 
 describe('Amazon 剧本（B2）', () => {
-  it('「看看我的 Listing」：没体检过 → 体检一次；没设自家 ASIN → 照实说出了方案卡', async () => {
+  it('「看看我的 Listing」：没体检过 → 体检一次；没设自家 ASIN → 照实说一句（卡头说怎么做，不重复）', async () => {
     const { exec, calls } = fakeExec({
       get_listing_checkup: { status: 'ok', data: { ok: false, message: '还没体检过' } },
       read_amazon_listings: { status: 'ok', data: { ok: false, needs_setup: 'amazon.own_asins' } },
     })
     const out = await runAmazonScript(exec, '看看我的 Listing')
     expect(calls.map((c) => c.tool)).toEqual(['get_listing_checkup', 'read_amazon_listings'])
-    expect(out.answer).toContain('已出一张卡')
+    expect(out.answer).toContain('还不知道你在 Amazon 上卖的是哪几个商品')
     expect(out.answer).not.toContain('回复')
   })
 
@@ -109,7 +109,7 @@ describe('Amazon 剧本（B2）', () => {
     expect(out.answer).toContain('102 个词，22 个')
   })
 
-  it('说到竞品 → 读一次竞品（没配好 → 方案卡）', async () => {
+  it('说到竞品 → 读一次竞品（没配好 → 一句话，卡由运行时出）', async () => {
     const { exec, calls } = fakeExec({
       read_amazon_competitors: {
         status: 'ok',
@@ -118,6 +118,6 @@ describe('Amazon 剧本（B2）', () => {
     })
     const out = await runAmazonScript(exec, '帮我盯 Amazon 竞品', ['read_amazon_competitors'])
     expect(calls.map((c) => c.tool)).toEqual(['read_amazon_competitors'])
-    expect(out.answer).toContain('方案卡')
+    expect(out.answer).toContain('还没定盯哪几款')
   })
 })

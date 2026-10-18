@@ -299,3 +299,35 @@ describe('B14 Amazon 客服不再同时挂在两个岗位下', () => {
     ).toBe(true)
   })
 })
+
+describe('B15 自家 ASIN 在 Amazon 运营面板上能看能改', () => {
+  it('看：view 里带自家清单；改：ASIN / 商品链接整份替换，认不出的照实说', async () => {
+    const { createAmazonListingCheckup } = await import('../src/amazon-listing/service.js')
+    let own: { marketplace: string; asin: string; label?: string }[] = [
+      { marketplace: 'US', asin: 'B0DEMONV01', label: 'Trail Power 1000' },
+    ]
+    const svc = createAmazonListingCheckup({
+      workspace_id: 'ws_1',
+      now: () => '2026-10-19T00:00:00Z',
+      newId: (p) => `${p}_1`,
+      reader: () => undefined,
+      brand: async () => ({ name: 'NordVolt', own, markets: ['US'] }),
+      saveOwn: async (items) => {
+        own = items
+      },
+    })
+    expect((await svc.view()).own).toEqual([
+      { marketplace: 'US', asin: 'B0DEMONV01', label: 'Trail Power 1000' },
+    ])
+    const bad = await svc.setOwn({ value: 'B0DEMONV01，不是商品' })
+    expect(bad).toMatchObject({ ok: false })
+    const out = await svc.setOwn({
+      value: 'b0demonv01, https://www.amazon.com/dp/B0DEMONV02',
+    })
+    expect(out.ok).toBe(true)
+    expect(own).toEqual([
+      { marketplace: 'US', asin: 'B0DEMONV01', label: 'Trail Power 1000' },
+      { marketplace: 'US', asin: 'B0DEMONV02' },
+    ])
+  })
+})

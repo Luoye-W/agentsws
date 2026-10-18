@@ -47,7 +47,7 @@ const queryOf = (f: Filter): AmazonKeywordQuery =>
         ? { other_brand: true }
         : { source: f }
 
-/** `B0DEMOEB02` → `B0…02`（一行里放得下几个）。 */
+/** `B0DEMONV02` → `B0…02`（一行里放得下几个）。 */
 export const shortAsin = (asin: string): string =>
   asin.length > 6 ? `${asin.slice(0, 2)}…${asin.slice(-2)}` : asin
 

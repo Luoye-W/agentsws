@@ -168,6 +168,7 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
           ok: true,
           already: true,
           message: `${target.name}已经是这样了，不用卡，直接接着做。`,
+          say: `${target.name}已经是这样了，接着做。`,
         }
         return { status: 'ok', data }
       }
@@ -180,6 +181,8 @@ export function createSetupRequestTool(options: SetupRequestToolOptions): ToolEx
         ok: true,
         already: true,
         message: `${target.name}已经设好了，不用卡，直接接着做。要改就带上 suggestions（新值）再调一次。`,
+        // WP420（自查 U17）：给人看的那句不带工具用法
+        say: `${target.name}已经设好了，接着做。`,
       }
       return { status: 'ok', data }
     }

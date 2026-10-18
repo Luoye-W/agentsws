@@ -89,6 +89,11 @@ export interface SetupRequestData {
   change?: boolean
   /** 给模型的那一句（照实转告用户）。 */
   message: string
+  /**
+   * WP420（自查 U17）：给人看的那一句（只加）。`message` 里有给 AI 的工具用法（「带上 suggestions 再调一次」），
+   * 原样转给人就把工具说明漏出去了；有这一格的时候人看这一格。
+   */
+  say?: string
 }
 
 /** 话里点名要连 / 要设的那几种说法 → 服务名 / 设置目标（stub 剧本用）。 */
@@ -206,7 +211,7 @@ export function renderSetupRequestAnswer(input: {
 }): string {
   const d = input.data
   if (d === undefined) return `这一步没走通：${input.failed || '工具没回话'}。`
-  if (d.already === true) return d.message
+  if (d.already === true) return d.say ?? d.message
   if (d.needs_connection !== undefined)
     return `要先连上${d.connection_name ?? d.needs_connection}：在下面这张卡上连好，我就接着做。`
   if (d.needs_setup !== undefined && d.change === true)

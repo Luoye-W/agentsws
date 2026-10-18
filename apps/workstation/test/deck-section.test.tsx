@@ -184,7 +184,7 @@ describe('37 §1 第 9 行：空态 = 今日战报四格', () => {
     home = homeData({ queue: [] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     const report = await screen.findByTestId('deck-battle-report')
-    expect(within(report).getByText('AI 自主处理')).toBeDefined()
+    expect(within(report).getByText('AI 处理')).toBeDefined()
     expect(screen.getByTestId('recap-ai_handled').textContent).toBe(String(REPORT.ai_handled))
     expect(screen.getByTestId('recap-handled').textContent).toBe(String(REPORT.handled))
     expect(screen.getByTestId('recap-auto_sent').textContent).toBe(String(REPORT.auto_sent))

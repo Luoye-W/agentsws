@@ -14231,6 +14231,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ws: WorkspaceId,
                 patch: Parameters<AmazonListingCheckup['setRule']>[0],
               ) => (await of(ws)).setRule(patch),
+              // WP420（自查 B15）：Amazon 运营面板上直接改自家 ASIN
+              setOwn: async (ws: WorkspaceId, input: { value: string; marketplace?: string }) =>
+                (await of(ws)).setOwn(input),
             }
           })(),
           // WP413：插件常驻侧边栏 `/v1/extension/panel*`（进度 / 要你处理 / 记录；卡由路由从审批总线取）

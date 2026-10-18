@@ -22,6 +22,7 @@ import {
   type ListingIssue,
   requestListingDesign,
   runAmazonListing,
+  setAmazonOwnAsins,
 } from '@/lib/amazon-listing-api'
 import { useApp } from '@/lib/app-context'
 
@@ -31,41 +32,41 @@ const SEV_TONE: Record<ListingIssue['severity'], string> = {
   improve: 'bg-ws-muted-fg',
 }
 
-function IssueRow({ issue, assignment }: { issue: ListingIssue; assignment: string }): ReactNode {
+/**
+ * 一处问题。WP420（自查 U21）：以前每处四行（规则名 / 出处 / 现在 / 建议），一张卡 8 处就是 30 多行；
+ * 现在两行——规则名（出处收进问号）+「现在 → 建议」；向设计岗下需求单的按钮挪到卡底只放一个。
+ */
+function IssueRow({ issue }: { issue: ListingIssue }): ReactNode {
   const { t } = useApp()
   const [copied, setCopied] = useState(false)
-  const design = useMutation({
-    mutationFn: () =>
-      requestListingDesign(assignment, issue.design_request ?? { title: '', need: '' }),
-  })
+  const sourceText =
+    issue.source.kind === 'practice' && !issue.source.title.startsWith(t('alst.practice'))
+      ? `${t('alst.practice')} · ${issue.source.title}`
+      : issue.source.title
   return (
     <li
-      className="flex flex-col gap-1 border-t border-border/60 pt-2"
+      className="flex flex-col gap-0.5 border-t border-border/60 pt-2"
       data-testid="alst-issue"
       data-rule={issue.rule_id}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <span
           className={`inline-block size-2 shrink-0 rounded-full ${SEV_TONE[issue.severity]}`}
           title={t(`alst.sev.${issue.severity}`)}
         />
         <span className="text-sm font-medium">{issue.rule_name}</span>
         {issue.source.url === undefined ? (
-          <span className="text-xs text-muted-foreground" data-testid="alst-source">
-            {issue.source.kind === 'practice' && !issue.source.title.startsWith(t('alst.practice'))
-              ? `${t('alst.practice')} · `
-              : ''}
-            {issue.source.title}
-          </span>
+          <Hint text={sourceText} testId="alst-source" />
         ) : (
           <a
             href={issue.source.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline-offset-2 hover:underline"
+            title={sourceText}
+            aria-label={sourceText}
+            className="inline-flex items-center text-muted-foreground hover:text-foreground"
             data-testid="alst-source"
           >
-            {issue.source.title}
             <ExternalLink className="size-3" />
           </a>
         )}
@@ -84,12 +85,9 @@ function IssueRow({ issue, assignment }: { issue: ListingIssue; assignment: stri
           </span>
         ) : null}
       </div>
-      <p className="text-sm">
-        <span className="text-muted-foreground">{t('alst.now')}：</span>
-        {issue.now}
-      </p>
-      <p className="text-sm">
-        <span className="text-muted-foreground">{t('alst.fix')}：</span>
+      <p className="text-sm" data-testid="alst-now-fix">
+        <span className="text-muted-foreground">{issue.now}</span>
+        <span className="text-muted-foreground"> → </span>
         {issue.suggestion}
       </p>
       {issue.draft === undefined ? null : (
@@ -111,23 +109,61 @@ function IssueRow({ issue, assignment }: { issue: ListingIssue; assignment: stri
           </Button>
         </div>
       )}
-      {issue.design_request === undefined ? null : (
-        <div>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={design.isPending || design.isSuccess}
-            onClick={() => design.mutate()}
-            data-testid="alst-design"
-          >
-            {design.isSuccess ? t('alst.design.sent') : t('alst.design')}
-          </Button>
-          {design.isError ? (
-            <span className="ml-2 text-xs text-ws-bad">{String(design.error?.message ?? '')}</span>
-          ) : null}
-        </div>
-      )}
     </li>
+  )
+}
+
+/** WP420（自查 U21）：一张卡里所有图片类问题合成一张设计需求单（第一处的标题，各处的需要逐条列）。 */
+export function mergedDesignRequest(
+  issues: readonly ListingIssue[],
+): { title: string; need: string; n: number } | undefined {
+  const reqs = issues.flatMap((i) => (i.design_request === undefined ? [] : [i.design_request]))
+  const first = reqs[0]
+  if (first === undefined) return undefined
+  const needs = [...new Set(reqs.map((r) => r.need))]
+  return {
+    title: first.title,
+    need: needs.length === 1 ? (needs[0] as string) : needs.map((n) => `- ${n}`).join('\n'),
+    n: reqs.length,
+  }
+}
+
+function DesignButton({
+  issues,
+  assignment,
+}: {
+  issues: readonly ListingIssue[]
+  assignment: string
+}): ReactNode {
+  const { t } = useApp()
+  const merged = mergedDesignRequest(issues)
+  const design = useMutation({
+    mutationFn: () =>
+      requestListingDesign(assignment, {
+        title: merged?.title ?? '',
+        need: merged?.need ?? '',
+      }),
+  })
+  if (merged === undefined) return null
+  return (
+    <div>
+      <Button
+        size="xs"
+        variant="outline"
+        disabled={design.isPending || design.isSuccess}
+        onClick={() => design.mutate()}
+        data-testid="alst-design"
+      >
+        {design.isSuccess
+          ? t('alst.design.sent')
+          : merged.n > 1
+            ? t('alst.design.n', { n: merged.n })
+            : t('alst.design')}
+      </Button>
+      {design.isError ? (
+        <span className="ml-2 text-xs text-ws-bad">{String(design.error?.message ?? '')}</span>
+      ) : null}
+    </div>
   )
 }
 
@@ -204,10 +240,11 @@ export function ListingCheckupCard({
       {item.issues.length === 0 ? null : (
         <ul className="flex flex-col gap-2">
           {item.issues.map((issue) => (
-            <IssueRow key={`${issue.rule_id}|${issue.now}`} issue={issue} assignment={assignment} />
+            <IssueRow key={`${issue.rule_id}|${issue.now}`} issue={issue} />
           ))}
         </ul>
       )}
+      <DesignButton issues={item.issues} assignment={assignment} />
       {item.human_checks.length === 0 ? null : (
         <ul
           className="flex flex-col gap-1 border-t border-border/60 pt-2 text-sm"
@@ -304,6 +341,7 @@ export function ListingCheckupBlock({ assignment }: { assignment: string }): Rea
       {v.reader_ready ? null : (
         <p className="text-xs text-muted-foreground">{t('alst.no_reader')}</p>
       )}
+      {v.own === undefined ? null : <OwnAsinsRow assignment={assignment} own={v.own} />}
       {items.length === 0 ? null : (
         <ul className="flex flex-col gap-1.5">
           {items.map((item) => {
@@ -360,6 +398,79 @@ export function ListingCheckupBlock({ assignment }: { assignment: string }): Rea
           <Hint text={footer} />
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * WP420（自查 B15）：自家商品那一行——在 Amazon 运营面板上就能看、能改（以前只在「内容与搜索」的关注设置里，
+ * 只做 Amazon 的公司看不到也改不了）。点「改」就地一个输入框：ASIN 或商品链接，逗号 / 换行隔开。
+ */
+function OwnAsinsRow({
+  assignment,
+  own,
+}: {
+  assignment: string
+  own: NonNullable<ListingCheckupView['own']>
+}): ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [error, setError] = useState<string | undefined>(undefined)
+  const save = useMutation({
+    mutationFn: () => setAmazonOwnAsins(assignment, value),
+    onSuccess: async (r) => {
+      if (!r.ok) {
+        setError(r.message)
+        return
+      }
+      setError(undefined)
+      setEditing(false)
+      await client.invalidateQueries({ queryKey: amazonListingKey(assignment) })
+    },
+  })
+  return (
+    <div className="flex flex-col gap-1 text-xs" data-testid="alst-own">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-muted-foreground">{t('alst.own')}</span>
+        <span className="min-w-0 flex-1 truncate font-mono" data-testid="alst-own-list">
+          {own.length === 0 ? t('alst.own.none') : own.map((o) => o.asin).join('、')}
+        </span>
+        {editing ? null : (
+          <button
+            type="button"
+            className="shrink-0 rounded-md border border-ws-line px-1.5 py-0.5 text-[11px] text-ws-muted-fg hover:bg-ws-surface"
+            data-testid="alst-own-edit"
+            onClick={() => {
+              setValue(own.map((o) => o.asin).join('，'))
+              setEditing(true)
+            }}
+          >
+            {t('alst.own.edit')}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            className="min-w-0 flex-1 rounded-md border border-ws-line bg-transparent px-2 py-1 font-mono text-xs"
+            value={value}
+            placeholder={t('alst.own.placeholder')}
+            onChange={(e) => setValue(e.target.value)}
+            data-testid="alst-own-input"
+          />
+          <Button
+            size="xs"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+            data-testid="alst-own-save"
+          >
+            {t('alst.own.save')}
+          </Button>
+        </div>
+      ) : null}
+      {error === undefined ? null : <p className="text-ws-bad">{error}</p>}
     </div>
   )
 }
