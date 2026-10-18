@@ -464,6 +464,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
+import { createExtensionPanelPort, withApprovalVia } from './extension-panel.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -5497,7 +5498,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         apiConnected: () => socialChannels.transport.connected('reddit'),
         officialReady: () => redditOfficial?.port.ready() === true,
       }),
-      record: (input) => outboundLog.record(ws, input),
+      // WP413：发出记录那一行补上「在哪儿批的」（在插件侧边栏里批的记 extension）
+      record: (input) =>
+        outboundLog.record(
+          ws,
+          withApprovalVia(input, (id) => txn.runtime.store.getApproval(id)),
+        ),
       // 批了过取消窗口由执行器施行（交给插件）；每分钟补扫一遍（重启后 / 定时器丢了也接得上）
       applyApproval: (id) => txn.executor.applyApproval(id),
       cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
@@ -13826,6 +13832,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ) => (await of(ws)).setRule(patch),
             }
           })(),
+          // WP413：插件常驻侧边栏 `/v1/extension/panel*`（进度 / 要你处理 / 记录；卡由路由从审批总线取）
+          extensionPanel: createExtensionPanelPort({
+            now: () => clock.now(),
+            tzOffsetMinutes: (ws) => outboundTz.get(ws) ?? 0,
+            workspaceName: async (ws) => (await identity.getWorkspace(ws))?.name,
+            watch: async (ws) => (await brandModules.forWorkspace(ws)).redditWatch,
+            writes: async (ws) => (await brandModules.forWorkspace(ws)).redditWrites,
+            outbound: outboundLog,
+            // 插件里点「填进页面」：批完马上交出去，不等取消窗口（发送那一下仍由人在 Reddit 上点）
+            applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+          }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {
             const rw = (await brandModules.forWorkspace(ws)).redditWatch

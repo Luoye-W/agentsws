@@ -154,7 +154,8 @@ export interface PanelRecord {
 /** 一个记录去处的总状态（去处列表那一行）。 */
 export interface PanelSinkView {
   name: string
-  state: 'proposed' | 'active' | 'paused' | 'broken' | 'removed'
+  /** 与 `SinkState` 同名同义：等确认规矩 / 在写 / 停了 / 出问题了。 */
+  state: 'pending_confirm' | 'active' | 'paused' | 'broken'
   written: number
   pending: number
   last_error?: string

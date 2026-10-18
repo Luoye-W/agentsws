@@ -26,6 +26,7 @@ import {
   type RecordSinkView,
   type SinkErrorCode,
   type SinkFilter,
+  type SinkWrite,
   type WorkspaceId,
 } from '@agentsws/contracts'
 import type { SinkAdapters } from './adapters.js'
@@ -138,6 +139,8 @@ export interface OutboundLog {
   /** 对方删了原话（平台 id）→ 清掉我们这边存的原话，标「对方已删」。回改了几行。 */
   counterpartDeleted(workspace_id: WorkspaceId, external_id: string): number
   sinks(workspace_id: WorkspaceId): RecordSinkView[]
+  /** WP413：这一行发出记录写进各去处的状态（插件侧边栏「记录」那一块；没进任何去处 = 空）。 */
+  writesOf?(workspace_id: WorkspaceId, record_id: string): SinkWrite[]
   inspect(workspace_id: WorkspaceId, url: string): Promise<InspectResult>
   propose(workspace_id: WorkspaceId, input: ProposeInput): Promise<ProposeResult>
   /** 「定规矩」卡被决定了（不是这种卡什么都不做）。 */
