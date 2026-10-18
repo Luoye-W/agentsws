@@ -3682,9 +3682,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         mine.find((a) => isThemeRoleId(a.role_id))
       )
     }
+    const ownerId = (await identity.getWorkspace(ws))?.owner_id
     const assembly = createWorkshopServices({
       workspace_id: ws,
       clock,
+      ...(ownerId === undefined ? {} : { owner: String(ownerId) }),
       ...(brand.dir === undefined ? {} : { dir: brand.dir }),
       cloud: () => brandModules.cloud(ws),
       approvals: () => txn.approvals,

@@ -13,6 +13,9 @@
  * 5. **落点**（§3.5，一期两种）：主题副本 → 网站运营的发布审批卡（发布永远 L1）；「做成了」回执 → 回到卡住的
  *    那一步接着做（决策 690）。其余三种（发出记录、草稿、知识库文件）留口子（{@link WorkshopLandings}）。
  *
+ * 6. **WP403**：追加费用（云上 `extras` 里有一条在等你 → 出一张下单卡 `stage: 'extra'`，点「同意并支付」才扣；
+ *    不同意 = 一分不扣）；订单附件（订单面板传补材料、取交付文件，经 `CloudAssembly.callBytes` 那一跳）。
+ *
  * 纪律：AI 不自己下单（工具只出卡）；令牌只在 `cloud.call` 那一跳进头；联系方式只在用户点同意时随那一跳出去，
  * 本机不另存。
  */
@@ -37,6 +40,7 @@ import type {
   ServiceMatch,
   ServiceMenuCardPayload,
   ServiceOffer,
+  ServiceOrderAttachment,
   ServiceOrderCardPayload,
   ServiceOrderLine,
   ServiceOrderList,
@@ -62,6 +66,8 @@ import {
   matchServices,
   normalizeServiceLines,
   normalizeServiceRequirements,
+  pendingServiceExtra,
+  SERVICE_ATTACHMENT_LIMITS,
   SERVICE_EXPIRY_NOTICE_DAYS,
   SERVICE_ORDER_CARD_KIND,
   SERVICE_ORDER_CLOUD_PATHS,
@@ -186,7 +192,7 @@ export interface WorkshopServicesOptions {
   clock: Clock
   /** 品牌目录（落盘缓存 / 账本）；不给 = 只在内存（测试）。 */
   dir?: string
-  cloud: () => Promise<Pick<CloudAssembly, 'call' | 'linked'>>
+  cloud: () => Promise<Pick<CloudAssembly, 'call' | 'linked' | 'callBytes'>>
   approvals: () => ApprovalBus | undefined
   /** 卡挂到事项上（`brand.work.onCard`）。 */
   onCard?: (item: ApprovalItem) => void
@@ -208,6 +214,11 @@ export interface WorkshopServicesOptions {
   /** 有没结束的单时多久看一遍云上；0 = 不自己跑（测试手动 `sync()`）。 */
   syncMs?: number
   newKey?: () => string
+  /**
+   * WP403：这个品牌的主人（人员 id）。别的设备 / 网页上下的单本机不知道是谁下的，卡（报价、追加、验收）发给他；
+   * 不给就落到占位的 `owner`（那张卡没人点得了——WP390 的老样子）。
+   */
+  owner?: string
 }
 
 export interface WorkshopServices {
@@ -259,6 +270,16 @@ export interface WorkshopServices {
   postMessage(id: string, text: string): Promise<ServiceOrderMessage>
   draftReply(id: string): Promise<WorkshopServiceReplyDraft>
   cancel(id: string): Promise<ServiceOrderView>
+  /** WP403：传一份补材料（定制件；「等你补材料」时传 = 补上了）。 */
+  uploadAttachment(
+    id: string,
+    file: { name: string; content_type?: string; bytes: Uint8Array },
+  ): Promise<ServiceOrderAttachment>
+  /** WP403：取一份附件（你补的材料 / 服务方的交付文件）。 */
+  attachment(
+    id: string,
+    attachment_id: string,
+  ): Promise<{ name: string; content_type: string; sha256?: string; bytes: Uint8Array }>
   /** 岗位页「在做」里的服务订单（和事项排在一起）。 */
   workItems(position_id: string): PositionWorkItem[]
   ledger(order_id?: string): WorkshopServiceLedgerEntry[]
@@ -671,6 +692,9 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
     quote_note?: string | undefined
     milestones?: ServicePayCardPayload['milestones']
     key?: string
+    /** WP403：`extra` 那一种。 */
+    extra_id?: string
+    extra_reason?: string
   }): Promise<ApprovalItem> => {
     const key = input.key ?? newKey()
     const { s } = input
@@ -679,6 +703,8 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
       stage: input.stage,
       service: serviceCardSnapshot(s),
       credits: input.credits,
+      ...(input.extra_id === undefined ? {} : { extra_id: input.extra_id }),
+      ...(input.extra_reason === undefined ? {} : { extra_reason: input.extra_reason }),
       ...(input.deliver_hours === undefined ? {} : { deliver_hours: input.deliver_hours }),
       ...(input.order_id === undefined ? {} : { order_id: input.order_id }),
       ...(input.requirements === undefined ? {} : { requirements: input.requirements }),
@@ -689,6 +715,20 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
       idempotency_key: key,
       ...origin(input.o),
     }
+    if (input.stage === 'extra')
+      return createCard({
+        payload,
+        title: `${s.label_zh} · 追加费用`,
+        summary: [
+          `追加 ${credits(input.credits)}`,
+          input.deliver_hours === undefined ? '' : `交付顺延${days(input.deliver_hours)}`,
+          input.extra_reason === undefined ? '' : `「${short(input.extra_reason, 60)}」`,
+        ]
+          .filter((x) => x !== '')
+          .join(' · '),
+        actor: input.actor,
+        dedupe: `service_order:extra:${input.order_id ?? key}:${input.extra_id ?? key}`,
+      })
     const autoDays = Math.round(s.auto_accept_hours / 24)
     return createCard({
       payload,
@@ -740,7 +780,7 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
   }
 
   const actorOf = (local: LocalOrder): WorkshopServicesActor => ({
-    person_id: local.person_id ?? 'owner',
+    person_id: local.person_id ?? options.owner ?? 'owner',
     ...(local.role_id === undefined ? {} : { role_id: local.role_id }),
     ...(local.assignment_id === undefined ? {} : { assignment_id: local.assignment_id }),
     ...(local.position_id === undefined ? {} : { position_id: local.position_id }),
@@ -803,11 +843,16 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
   }
 
   /** 交付了还没点的那张验收卡：状态往前走了（自动通过 / 别处点了），就收起来。 */
-  const retireStale = async (local: LocalOrder, keep: string | undefined): Promise<void> => {
+  const retireStale = async (local: LocalOrder, keep: readonly string[]): Promise<void> => {
     const bus = options.approvals()
     for (const [stage, id] of Object.entries(local.cards)) {
-      if (!stage.startsWith('accept:') && !stage.startsWith('quote:')) continue
-      if (stage === keep) continue
+      if (
+        !stage.startsWith('accept:') &&
+        !stage.startsWith('quote:') &&
+        !stage.startsWith('extra:')
+      )
+        continue
+      if (keep.includes(stage)) continue
       if (!(await pendingCard(local, stage))) continue
       await bus?.expireNow?.(id, '订单已经往前走了').catch(() => undefined)
     }
@@ -1068,7 +1113,40 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
         if (card !== undefined) local.cards[stage] = card.id
       }
     }
-    await retireStale(local, keep)
+    // ── WP403：追加费用（服务方发起、在等你点头）→ 一张下单卡；不在等了（撤回 / 结束 / 别处点了）就收起来
+    const extra = pendingServiceExtra(view)
+    const keepStages = keep === undefined ? [] : [keep]
+    if (extra !== undefined) {
+      const stage = `extra:${extra.id}`
+      keepStages.push(stage)
+      if (local.cards[stage] === undefined) {
+        const card = await payCard({
+          s,
+          o: originOf(local),
+          actor: actorOf(local),
+          stage: 'extra',
+          credits: extra.credits,
+          deliver_hours: extra.deliver_hours,
+          order_id: view.id,
+          extra_id: extra.id,
+          extra_reason: extra.reason,
+          key: `extra-${view.id}-${extra.id}`,
+        }).catch(() => undefined)
+        if (card !== undefined) {
+          local.cards[stage] = card.id
+          book({
+            order_id: view.id,
+            kind: 'message',
+            text: `${prov}要追加 ${credits(extra.credits)}：${short(extra.reason, 60)}`,
+          })
+          say(
+            local.matter_id,
+            `${prov}想追加 ${credits(extra.credits)}：「${short(extra.reason)}」。你点「同意并支付」才扣；不同意就接着按原来的做。`,
+          )
+        }
+      }
+    }
+    await retireStale(local, keepStages)
     local.open_cards = await waitingCards(local)
     // ── 结束
     if (SERVICE_ORDER_TERMINAL_STATUSES.includes(view.status) && !local.noted.includes('final')) {
@@ -1090,7 +1168,7 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
     // ── P10：交付物快到期，提醒一次
     if (
       view.deliverables_expire_at !== undefined &&
-      view.deliverables.length > 0 &&
+      (view.deliverables.length > 0 || (view.attachments ?? []).length > 0) &&
       local.expiry_noted !== true &&
       Date.parse(view.deliverables_expire_at) - nowMs() < SERVICE_EXPIRY_NOTICE_DAYS * 86_400_000
     ) {
@@ -1331,6 +1409,20 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
       case 'service_pay': {
         const s = await serviceFor(p.service)
         if (!approved) {
+          if (p.stage === 'extra' && p.order_id !== undefined && p.extra_id !== undefined) {
+            await cloudCall(
+              orderPath(p.order_id, '/extra'),
+              {
+                method: 'POST',
+                body: { extra_id: p.extra_id, accept: false, idempotency_key: p.idempotency_key },
+              },
+              '回追加费用',
+            )
+              .then(() => refreshOrder(p.order_id as string))
+              .catch(() => undefined)
+            say(p.matter_id, `没同意追加，一分没扣；「${p.service.label_zh}」接着按原来的做。`)
+            return
+          }
           if (p.stage === 'accept_quote' && p.order_id !== undefined) {
             await cloudCall(orderPath(p.order_id, '/cancel'), { method: 'POST', body: {} }, '取消')
               .then(() => refreshOrder(p.order_id as string))
@@ -1351,14 +1443,41 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
             ...(p.requirements === undefined ? {} : { requirements: p.requirements }),
             quote_note: p.quote_note,
             ...(p.milestones === undefined ? {} : { milestones: p.milestones }),
+            ...(p.extra_id === undefined ? {} : { extra_id: p.extra_id }),
+            ...(p.extra_reason === undefined ? {} : { extra_reason: p.extra_reason }),
             key: p.idempotency_key,
+          }).then((card) => {
+            // 追加那一张：重出的卡记回这一单（订单面板「在等你点的卡」读它）
+            const local = p.order_id === undefined ? undefined : state.orders[p.order_id]
+            if (p.stage === 'extra' && local !== undefined && p.extra_id !== undefined) {
+              local.cards[`extra:${p.extra_id}`] = card.id
+              save()
+            }
+            return card
           })
         try {
-          if (p.stage === 'extra')
-            throw new ApiError(
-              'not_implemented',
-              '追加费用云上还没开这个口：先在订单里跟对方说清楚。',
+          if (p.stage === 'extra') {
+            if (p.order_id === undefined || p.extra_id === undefined)
+              throw new ApiError('invalid_input', '这张追加卡缺了订单号。')
+            const view = await cloudCall<ServiceOrderView>(
+              orderPath(p.order_id, '/extra'),
+              {
+                method: 'POST',
+                body: { extra_id: p.extra_id, accept: true, idempotency_key: p.idempotency_key },
+                timeout_ms: ORDER_TIMEOUT_MS,
+              },
+              '付款',
             )
+            const local = track(view, p, actor)
+            await react(local, view)
+            save()
+            arm()
+            say(
+              p.matter_id,
+              `追加好了：${credits(p.credits)} 进了「${p.service.label_zh}」的托管，随这一段验收才算给对方。`,
+            )
+            return
+          }
           if (p.stage === 'accept_quote' && p.order_id !== undefined) {
             const view = await cloudCall<ServiceOrderView>(
               orderPath(p.order_id, '/accept-quote'),
@@ -1388,7 +1507,12 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
             `付好了：「${p.service.label_zh}」托管 ${credits(p.credits)}，每一段你验收了才算给对方。`,
           )
         } catch (e) {
-          await failed(item, e, p.stage === 'extra' ? undefined : again)
+          // 追加那一条已经不在了（撤回 / 订单结束）：不再重出
+          const gone =
+            p.stage === 'extra' &&
+            e instanceof ApiError &&
+            (e.code === 'conflict' || e.code === 'not_found')
+          await failed(item, e, gone ? undefined : again)
         }
         return
       }
@@ -1707,6 +1831,67 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
     return view
   }
 
+  /* ── WP403：订单附件 ──────────────────────────────────────────── */
+
+  const bytesCall = async () => {
+    const cloud = await options.cloud()
+    if (!cloud.linked()) throw new ApiError('not_implemented', WORKSHOP_SERVICES_NOT_LINKED)
+    if (cloud.callBytes === undefined)
+      throw new ApiError('not_implemented', '这个进程传不了文件（没有装配字节那一跳）。')
+    return cloud.callBytes
+  }
+
+  const uploadAttachment: WorkshopServices['uploadAttachment'] = async (id, file) => {
+    const size = file.bytes.byteLength
+    if (size === 0) throw new ApiError('invalid_input', '这是个空文件。')
+    if (size > SERVICE_ATTACHMENT_LIMITS.max_bytes)
+      throw new ApiError(
+        'invalid_input',
+        `文件太大了（单个最多 ${String(SERVICE_ATTACHMENT_LIMITS.max_bytes / 1024 / 1024)} MB）。大文件放网盘，在订单里发链接。`,
+      )
+    const call = await bytesCall()
+    const res = await call<ServiceOrderAttachment>(
+      orderPath(id, `/attachments?name=${encodeURIComponent(file.name)}`),
+      {
+        method: 'POST',
+        bytes: file.bytes,
+        ...(file.content_type === undefined ? {} : { content_type: file.content_type }),
+        timeout_ms: 120_000,
+      },
+    )
+    if (!res.ok || res.data === undefined) throw serviceCloudError(res, '传文件')
+    const att = res.data
+    book({ order_id: id, kind: 'message', text: `你传了文件「${short(att.name, 60)}」` })
+    emit('workshop_service.attachment_uploaded', { order_id: id, size: att.size })
+    await refreshOrder(id)
+    return att
+  }
+
+  const attachment: WorkshopServices['attachment'] = async (id, attachment_id) => {
+    const call = await bytesCall()
+    const res = await call<never>(
+      orderPath(id, `/attachments/${encodeURIComponent(attachment_id)}`),
+      { timeout_ms: 120_000 },
+    )
+    if (!res.ok || res.bytes === undefined) throw serviceCloudError(res, '取文件')
+    const known = state.orders[id]?.view?.attachments?.find((a) => a.id === attachment_id)
+    const h = res.headers ?? {}
+    const fromHeader = /filename\*=UTF-8''([^;]+)/iu.exec(h['content-disposition'] ?? '')?.[1]
+    let name = known?.name
+    if (name === undefined && fromHeader !== undefined)
+      try {
+        name = decodeURIComponent(fromHeader)
+      } catch {
+        name = undefined
+      }
+    return {
+      name: name ?? attachment_id,
+      content_type: h['x-content-type'] ?? known?.content_type ?? 'application/octet-stream',
+      ...(h['x-content-sha256'] === undefined ? {} : { sha256: h['x-content-sha256'] }),
+      bytes: res.bytes,
+    }
+  }
+
   /* ── 岗位页「在做」 ────────────────────────────────────────────── */
 
   const workItems: WorkshopServices['workItems'] = (position_id) => {
@@ -1765,6 +1950,8 @@ export function createWorkshopServices(options: WorkshopServicesOptions): Worksh
     postMessage,
     draftReply,
     cancel,
+    uploadAttachment,
+    attachment,
     workItems,
     ledger: (order_id) =>
       state.ledger
@@ -1816,5 +2003,9 @@ export function workshopServicesPort(
     postMessage: async (a, id, text) => (await need(a.workspace_id)).postMessage(id, text),
     draftReply: async (a, id) => (await need(a.workspace_id)).draftReply(id),
     cancel: async (a, id) => (await need(a.workspace_id)).cancel(id),
+    uploadAttachment: async (a, id, file) =>
+      (await need(a.workspace_id)).uploadAttachment(id, file),
+    attachment: async (a, id, attachment_id) =>
+      (await need(a.workspace_id)).attachment(id, attachment_id),
   }
 }

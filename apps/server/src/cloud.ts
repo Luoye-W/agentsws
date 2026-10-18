@@ -87,6 +87,27 @@ export const CREDITS_CACHE_MS = 60_000
 /** 打云侧最多等多久：卡住不该拖着设置页。 */
 export const CLOUD_TIMEOUT_MS = 8_000
 
+/** WP403：字节那一跳的结果（JSON 回包照 `KolCloudCall`；文件回包多 `bytes` 与 `headers`）。 */
+export interface CloudBytesCall<T> extends KolCloudCall<T> {
+  bytes?: Uint8Array
+  /** 响应头（小写键；只带回我们认的那几个）。 */
+  headers?: Record<string, string>
+}
+
+export type CloudBytesCallFn = <T>(
+  path: string,
+  init?: {
+    method?: 'GET' | 'POST'
+    /** 正文字节（传文件）。 */
+    bytes?: Uint8Array
+    content_type?: string
+    timeout_ms?: number
+  },
+) => Promise<CloudBytesCall<T>>
+
+/** 文件回包里带回给调用方的那几个头。 */
+const BYTES_HEADERS = ['content-type', 'content-disposition', 'x-content-type', 'x-content-sha256']
+
 export type CloudFetch = (
   input: string,
   init: { method: string; headers: Record<string, string>; signal?: AbortSignal },
@@ -228,6 +249,11 @@ export interface CloudAssembly {
    * 数据能力口（`/v1/data/capabilities`、`/v1/data/call/*`、`/v1/data/tasks*`）经它走。
    */
   call: KolCloudCallFn
+  /**
+   * WP403：打云侧一跳、正文或回包是**字节**的那几条（工坊服务订单附件的传与取）。令牌同样只在这一处进头；
+   * 回的是 JSON 时照 {@link call} 解出信封，回的是文件时带回字节与响应头。
+   */
+  callBytes?: CloudBytesCallFn
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
   /**
@@ -444,6 +470,94 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     } catch (err) {
       // 超时 / 断网 / DNS：状态 0，界面上是"联系不上"，不是"出错了"
       // WP272：带上根本原因的码（问号里给，排查网络 / 代理用）
+      const code = controller.signal.aborted ? 'timeout' : netCauseOf(err).code
+      return { ok: false, status: 0, ...(code === undefined ? {} : { cause_code: code }) }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** WP403：字节那一跳（缺动作集补签一次的做法与 `cloudCall` 一样）。 */
+  const cloudCallBytes: CloudBytesCallFn = async <T>(
+    path: string,
+    init: Parameters<CloudBytesCallFn>[1] = {},
+  ): Promise<CloudBytesCall<T>> => {
+    const out = await cloudCallBytesOnce<T>(path, init)
+    if (
+      out.ok ||
+      out.status !== 403 ||
+      typeof out.details?.required_scope !== 'string' ||
+      options.scopeUpgrade === undefined
+    )
+      return out
+    const upgraded = await options.scopeUpgrade().catch(() => false)
+    return upgraded ? cloudCallBytesOnce<T>(path, init) : out
+  }
+  const cloudCallBytesOnce = async <T>(
+    path: string,
+    init: Parameters<CloudBytesCallFn>[1] = {},
+  ): Promise<CloudBytesCall<T>> => {
+    const token = tokenOf()
+    if (token === undefined) return { ok: false, status: 0 }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      controller.abort()
+    }, init.timeout_ms ?? CLOUD_TIMEOUT_MS)
+    try {
+      const res = (await doFetch(`${base}${path}`, {
+        method: init.method ?? 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          accept: 'application/json, application/octet-stream',
+          ...(init.bytes === undefined
+            ? {}
+            : { 'content-type': init.content_type ?? 'application/octet-stream' }),
+          ...currentCloudHeaders(),
+        },
+        ...(init.bytes === undefined ? {} : { body: init.bytes }),
+        signal: controller.signal,
+      } as Parameters<CloudFetch>[1])) as unknown as {
+        ok: boolean
+        status: number
+        json(): Promise<unknown>
+        arrayBuffer?(): Promise<ArrayBuffer>
+        headers?: { get(name: string): string | null }
+      }
+      const type = res.headers?.get('content-type') ?? ''
+      if (res.ok && !type.includes('application/json') && res.arrayBuffer !== undefined) {
+        const headers: Record<string, string> = {}
+        for (const h of BYTES_HEADERS) {
+          const v = res.headers?.get(h)
+          if (v !== null && v !== undefined) headers[h] = v
+        }
+        return {
+          ok: true,
+          status: res.status,
+          bytes: new Uint8Array(await res.arrayBuffer()),
+          headers,
+        }
+      }
+      const payload = (await res.json().catch(() => undefined)) as
+        | { data?: T; code?: string; message?: string; details?: unknown }
+        | undefined
+      const details =
+        payload?.details !== null && typeof payload?.details === 'object'
+          ? (payload.details as Record<string, unknown>)
+          : undefined
+      if (!res.ok)
+        return {
+          ok: false,
+          status: res.status,
+          ...(payload?.code === undefined ? {} : { code: payload.code }),
+          message: payload?.message ?? `云上回了 ${String(res.status)}，这一次没有动你的数据。`,
+          ...(details === undefined ? {} : { details }),
+        }
+      return {
+        ok: true,
+        status: res.status,
+        ...(payload?.data === undefined ? {} : { data: payload.data }),
+      }
+    } catch (err) {
       const code = controller.signal.aborted ? 'timeout' : netCauseOf(err).code
       return { ok: false, status: 0, ...(code === undefined ? {} : { cause_code: code }) }
     } finally {
@@ -975,6 +1089,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
       ...(state.reddit_browser_read ?? DEFAULT_REDDIT_BROWSER_READ_LIMITS),
     }),
     call: cloudCall,
+    callBytes: cloudCallBytes,
     priceOf: async (capability) => {
       /*
        * WP165：关联了账号才去云上按需刷新（与以前「关联了才打云」同一个口径：搜红人每一次都要问价，
