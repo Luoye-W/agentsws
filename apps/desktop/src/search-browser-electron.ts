@@ -239,7 +239,7 @@ export function createElectronSearchBrowser(deps: {
     view.webContents.on('did-navigate-in-page', check)
   }
 
-  /** WP394：开站点首页 → 在页面里走 Amazon 自己的改地址接口交邮编 → 再开一次首页读「配送到」那一行。 */
+  /** WP394：开站点首页 → 在页面里走 Amazon 自己的改地址接口交邮编（一页额度）。 */
   async function deliveryOnce(req: {
     workspace_id: string
     url: string
@@ -264,16 +264,8 @@ export function createElectronSearchBrowser(deps: {
       message?: string
     }
     if (!r.ok) return { ok: false, reason: 'failed', message: r.message ?? '没设上' }
-    const again = await load(wc, `${req.url}/`, req.timeout_ms)
-    if (!again.ok) return { ok: true }
-    const line = (await wc
-      .executeJavaScriptInIsolatedWorld(WORLD_ID, [
-        {
-          code: `(document.getElementById('glow-ingress-line2')?.textContent ?? '').replace(/\\s+/g, ' ').trim()`,
-        },
-      ])
-      .catch(() => '')) as string
-    return line === '' ? { ok: true } : { ok: true, deliver_to: line.slice(0, 120) }
+    // 不再开一次首页确认：下一页商品页页头那一行就是「配送到」，服务进程在那里核对（省一页额度）
+    return { ok: true }
   }
 
   return {
