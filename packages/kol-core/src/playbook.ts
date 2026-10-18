@@ -9,7 +9,10 @@
  * 纯函数：没有 `Date.now()`、没有 IO、没有模型调用（本包的纪律）。
  */
 import { KOL_CHANNELS, type KolChannel } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
 import type { OutreachStep } from './outreach.js'
+import INTENTS_FILE from './playbook-intents.content.json' with { type: 'json' }
+import WORDS_FILE from './playbook-words.content.json' with { type: 'json' }
 
 /**
  * 一件事落在红人这条链的哪一步。
@@ -34,6 +37,7 @@ export interface KolIntentHit {
 }
 
 interface IntentRule {
+  id: string
   intent: KolIntent
   terms: readonly string[]
 }
@@ -41,80 +45,72 @@ interface IntentRule {
 /**
  * 判据表。顺序即优先级：**越具体的排越前**——「审一下这条视频」同时命中
  * 「视频」（找人那条也有）与「审」，该判成审稿而不是找人。
+ *
+ * WP404（docs/107 §3）：表是数据（`playbook-intents.content.json`，每条带 id；当初为什么这么排的原注释
+ * 原样留在每条的 `notes` 里）。按品牌可覆盖：`readContentTable`。
  */
-const RULES: readonly IntentRule[] = [
-  {
-    intent: 'deliverable_review',
-    terms: [
-      '审稿',
-      '审一下',
-      '审一条',
-      // WP295：岗位快捷提示「红人交的这条视频审一遍：……折扣码对不对」以前判成了归因（「折扣码」命中）
-      '审一遍',
-      '审一审',
-      '广告标识',
-      '禁用词',
-      '审核',
-      '验收',
-      '交付物',
-      '交稿',
-      '打回',
-      '不合格',
-      'review',
-    ],
-  },
-  {
-    intent: 'follow_up',
-    terms: ['跟进', '没回', '没回音', '没有回复', '催一下', '再发一封', 'follow up', 'follow-up'],
-  },
-  /*
-   * 起草类排在议价前面：**要的是一封信还是一个价钱**，这是分界。
-   * 「起草一封开发信……不提具体报价」里有「报价」，但它是否定句里的词——
-   * 判成议价的话这次运行就不起草了，而人明明要的是那封信。
-   */
-  {
-    intent: 'outreach',
-    terms: ['开发信', '建联', '邀约', '合作意向', '写信', '发信', '联系他', '联系她', 'outreach'],
-  },
-  /*
-   * WP295：归因排到建联后面——TikTok 的快捷提示「起草一条建联私信：说清合作形式、寄样和带货方式」
-   * 里有「带货」，以前先命中归因，这次运行就去读归因表了。
-   */
-  {
-    intent: 'attribution',
-    terms: ['归因', '带货', '带来订单', '追踪链接', '折扣码', '联盟码', 'utm', '效果', '转化'],
-  },
-  {
-    intent: 'negotiate',
-    terms: ['报价', '议价', '谈价', '多少钱', '预算', '砍价', '费用', '佣金', 'quote', 'price'],
-  },
-  {
-    intent: 'collab_status',
-    terms: ['到哪一步', '进展', '状态', '合作清单', '寄样', '推进', '阶段', 'status'],
-  },
-  {
-    intent: 'find',
-    terms: [
-      '找',
-      '搜',
-      '挑',
-      '候选',
-      '名单',
-      '红人',
-      '达人',
-      '博主',
-      '频道',
-      'up 主',
-      'creator',
-      'channel',
-    ],
-  },
-]
+const INTENTS_TABLE = builtinContentTable<IntentRule>(INTENTS_FILE)
+
+const isIntentRule = (r: unknown): r is IntentRule =>
+  typeof (r as IntentRule).intent === 'string' &&
+  Array.isArray((r as IntentRule).terms) &&
+  (r as IntentRule).terms.every((t) => typeof t === 'string')
+
+/**
+ * WP404：剧本的几张词表（去噪词、中文渠道词、渠道词、一句话里点名的渠道）也是数据
+ * （`playbook-words.content.json`，一个词一行、带 id）。
+ */
+interface WordRow {
+  id: string
+  list: 'noise' | 'cjk_channel' | 'channel' | 'in_text'
+  word: string
+  /** `in_text` 那几行：这个词指的是哪条渠道。 */
+  channel?: KolChannel
+}
+
+const WORDS_TABLE = builtinContentTable<WordRow>(WORDS_FILE)
+
+const isWordRow = (r: unknown): r is WordRow =>
+  typeof (r as WordRow).word === 'string' && typeof (r as WordRow).list === 'string'
+
+interface Words {
+  noise: readonly string[]
+  cjkChannel: readonly string[]
+  channel: readonly string[]
+  /** 按渠道出现的顺序，每条渠道一组词。 */
+  inText: readonly (readonly [KolChannel, readonly string[]])[]
+}
+
+const wordsCache = new WeakMap<readonly WordRow[], Words>()
+
+function words(brand?: string): Words {
+  const rows = readContentTable(WORDS_TABLE, { brand, accepts: isWordRow })
+  let hit = wordsCache.get(rows)
+  if (hit === undefined) {
+    const of = (list: WordRow['list']): string[] =>
+      rows.filter((r) => r.list === list).map((r) => r.word)
+    const inText = new Map<KolChannel, string[]>()
+    for (const r of rows)
+      if (r.list === 'in_text' && r.channel !== undefined)
+        inText.set(r.channel, [...(inText.get(r.channel) ?? []), r.word])
+    hit = {
+      noise: of('noise'),
+      cjkChannel: of('cjk_channel'),
+      channel: of('channel'),
+      inText: [...inText.entries()],
+    }
+    wordsCache.set(rows, hit)
+  }
+  return hit
+}
 
 /** 一句话 → 意图。大小写不敏感；命中的词都留在 `signals` 里。 */
-export function classifyKolTask(text: string): KolIntentHit {
+export function classifyKolTask(text: string, options: { brand?: string } = {}): KolIntentHit {
   const lower = text.toLowerCase()
-  for (const rule of RULES) {
+  for (const rule of readContentTable(INTENTS_TABLE, {
+    brand: options.brand,
+    accepts: isIntentRule,
+  })) {
     const hits = rule.terms.filter((t) => lower.includes(t.toLowerCase()))
     if (hits.length > 0) return { intent: rule.intent, signals: hits }
   }
@@ -170,119 +166,35 @@ export function parseOutreachStep(text: string): OutreachStep {
  *
  * 一个关键词都不剩是**正常结局**：那句话本来就没说要什么样的人，只说了渠道与
  * 粉丝区间。这时回空串，调用方按"不加关键词、只按区间筛"去搜。
- */
-const NOISE = [
-  '帮我',
-  '请',
-  '按',
-  '这个',
-  '在',
-  '上',
-  '找',
-  '搜',
-  '挑',
-  '一批',
-  '一个',
-  '给我',
-  '排',
-  '按匹配度',
-  '粉丝',
-  '的',
-  '个',
-  /*
-   * WP295：快捷提示「按这个品类……按匹配度排给我」原样发出去，剩下的是「品类 匹配度」——
-   * 拿它当关键词，库里一个人都对不上（回「一个合适的都没找到」）。这几个词说的是
-   * "怎么排、按什么挑"，不是"要什么样的人"。
-   */
-  '品类',
-  '匹配度',
-  '匹配',
-  '排序',
-  '列出来',
-  '列一下',
-  '一下',
-  '有哪些',
-  '哪些',
-  '合适',
-  '推荐',
-  '一些',
-  '做',
-  // 另外四条渠道的快捷提示：「按互动率和匹配度排」「按近 30 天出片率和匹配度排」
-  '互动率和',
-  '出片率和',
-  '互动率',
-  '出片率',
-  '天',
-  '近',
-  '或',
-]
-
-/**
+ *
  * WP295：渠道词常粘在品类词后面（「数码频道」「美妆博主」「科技油管主」）——中文没有空格，
  * 按词拆不开，整串当关键词又对不上库里的「数码」。中文的渠道词按**子串**去掉；
  * 英文的（`ins` 这种短词）仍只按整词去，免得把 `insulated` 切坏。
+ *
+ * 说的是"哪条渠道"而不是"什么样的人"的那些词与 {@link channelInText} 同一份口径。
+ * WP404：去噪词、中文渠道词、渠道词三张表在 `playbook-words.content.json`（list = noise / cjk_channel /
+ * channel），见 `words()`。
  */
-const CJK_CHANNEL_WORDS = [
-  // 「主页或活跃群组博主」「……的账号」说的也是在哪儿找，不是找什么样的人
-  '活跃群组',
-  '群组',
-  '主页',
-  '账号',
-  '频道',
-  '油管主',
-  '油管',
-  '红人',
-  '达人',
-  '博主',
-  '脸书',
-  '推特',
-  'up 主',
-  'up主',
-  'UP 主',
-  'UP主',
-  '抖音国际',
-]
-
-/** 说的是"哪条渠道"而不是"什么样的人"的那些词（与 {@link channelInText} 同一份口径）。 */
-const CHANNEL_WORDS = [
-  'youtube',
-  '油管',
-  '频道',
-  'instagram',
-  'ins',
-  'tiktok',
-  '抖音国际',
-  'facebook',
-  '脸书',
-  'twitter',
-  '推特',
-  'up 主',
-  '红人',
-  '达人',
-  '博主',
-  'creator',
-  'channel',
-]
-
-export function searchQueryOf(text: string): string {
+export function searchQueryOf(text: string, options: { brand?: string } = {}): string {
+  const w = words(options.brand)
   let out = text.replace(/\d+(?:\.\d+)?\s*万?/g, ' ').replace(/[，。,.!！?？;；:：、]/g, ' ')
-  for (const n of CJK_CHANNEL_WORDS) out = out.split(n).join(' ')
-  for (const n of NOISE) out = out.split(n).join(' ')
-  const words = out
+  for (const n of w.cjkChannel) out = out.split(n).join(' ')
+  for (const n of w.noise) out = out.split(n).join(' ')
+  const kept = out
     .split(/\s+/)
-    .filter((w) => w.length > 1)
-    .filter((w) => !CHANNEL_WORDS.includes(w.toLowerCase()))
-  return words.slice(0, 6).join(' ').trim()
+    .filter((x) => x.length > 1)
+    .filter((x) => !w.channel.includes(x.toLowerCase()))
+  return kept.slice(0, 6).join(' ').trim()
 }
 
 /** 一句话里的渠道词（用户点名了「油管」就按 youtube，哪怕这条职责是别的）。 */
-export function channelInText(text: string): KolChannel | undefined {
+export function channelInText(
+  text: string,
+  options: { brand?: string } = {},
+): KolChannel | undefined {
   const lower = text.toLowerCase()
-  if (['youtube', '油管', 'yt', '频道'].some((t) => lower.includes(t))) return 'youtube'
-  if (['instagram', 'ins', 'ig'].some((t) => lower.includes(t))) return 'instagram'
-  if (['tiktok', '抖音国际', 'tt'].some((t) => lower.includes(t))) return 'tiktok'
-  if (['facebook', 'fb', '脸书'].some((t) => lower.includes(t))) return 'facebook'
-  if (['twitter', ' x ', '推特'].some((t) => lower.includes(t))) return 'x'
+  for (const [channel, terms] of words(options.brand).inText)
+    if (terms.some((t) => lower.includes(t))) return channel
   return undefined
 }
 

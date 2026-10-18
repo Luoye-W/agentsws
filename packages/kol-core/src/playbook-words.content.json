@@ -1,0 +1,463 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：红人剧本的几张词表，从 playbook.ts 原样挪来（判法留在 playbook.ts）。",
+    "noise：拿一句话当搜索词时去掉的没信息量的词（按子串去）。WP295：快捷提示里「按这个品类……按匹配度排给我」「按互动率和匹配度排」「按近 30 天出片率和匹配度排」这几种说法说的是怎么排、不是要什么样的人。",
+    "cjk_channel：中文渠道词按子串去掉（常粘在品类词后面：数码频道、美妆博主）；「主页或活跃群组博主」「……的账号」说的也是在哪儿找。",
+    "channel：说的是哪条渠道而不是什么样的人的词（整词去，免得把 insulated 切坏）。",
+    "in_text：一句话里点名了哪条渠道（按小写子串，按渠道出现的顺序先命中先返回；' x ' 两边的空格是有意的）。"
+  ],
+  "table": "kol.playbook_words",
+  "rows": [
+    {
+      "id": "noise.帮我",
+      "list": "noise",
+      "word": "帮我"
+    },
+    {
+      "id": "noise.请",
+      "list": "noise",
+      "word": "请"
+    },
+    {
+      "id": "noise.按",
+      "list": "noise",
+      "word": "按"
+    },
+    {
+      "id": "noise.这个",
+      "list": "noise",
+      "word": "这个"
+    },
+    {
+      "id": "noise.在",
+      "list": "noise",
+      "word": "在"
+    },
+    {
+      "id": "noise.上",
+      "list": "noise",
+      "word": "上"
+    },
+    {
+      "id": "noise.找",
+      "list": "noise",
+      "word": "找"
+    },
+    {
+      "id": "noise.搜",
+      "list": "noise",
+      "word": "搜"
+    },
+    {
+      "id": "noise.挑",
+      "list": "noise",
+      "word": "挑"
+    },
+    {
+      "id": "noise.一批",
+      "list": "noise",
+      "word": "一批"
+    },
+    {
+      "id": "noise.一个",
+      "list": "noise",
+      "word": "一个"
+    },
+    {
+      "id": "noise.给我",
+      "list": "noise",
+      "word": "给我"
+    },
+    {
+      "id": "noise.排",
+      "list": "noise",
+      "word": "排"
+    },
+    {
+      "id": "noise.按匹配度",
+      "list": "noise",
+      "word": "按匹配度"
+    },
+    {
+      "id": "noise.粉丝",
+      "list": "noise",
+      "word": "粉丝"
+    },
+    {
+      "id": "noise.的",
+      "list": "noise",
+      "word": "的"
+    },
+    {
+      "id": "noise.个",
+      "list": "noise",
+      "word": "个"
+    },
+    {
+      "id": "noise.品类",
+      "list": "noise",
+      "word": "品类"
+    },
+    {
+      "id": "noise.匹配度",
+      "list": "noise",
+      "word": "匹配度"
+    },
+    {
+      "id": "noise.匹配",
+      "list": "noise",
+      "word": "匹配"
+    },
+    {
+      "id": "noise.排序",
+      "list": "noise",
+      "word": "排序"
+    },
+    {
+      "id": "noise.列出来",
+      "list": "noise",
+      "word": "列出来"
+    },
+    {
+      "id": "noise.列一下",
+      "list": "noise",
+      "word": "列一下"
+    },
+    {
+      "id": "noise.一下",
+      "list": "noise",
+      "word": "一下"
+    },
+    {
+      "id": "noise.有哪些",
+      "list": "noise",
+      "word": "有哪些"
+    },
+    {
+      "id": "noise.哪些",
+      "list": "noise",
+      "word": "哪些"
+    },
+    {
+      "id": "noise.合适",
+      "list": "noise",
+      "word": "合适"
+    },
+    {
+      "id": "noise.推荐",
+      "list": "noise",
+      "word": "推荐"
+    },
+    {
+      "id": "noise.一些",
+      "list": "noise",
+      "word": "一些"
+    },
+    {
+      "id": "noise.做",
+      "list": "noise",
+      "word": "做"
+    },
+    {
+      "id": "noise.互动率和",
+      "list": "noise",
+      "word": "互动率和"
+    },
+    {
+      "id": "noise.出片率和",
+      "list": "noise",
+      "word": "出片率和"
+    },
+    {
+      "id": "noise.互动率",
+      "list": "noise",
+      "word": "互动率"
+    },
+    {
+      "id": "noise.出片率",
+      "list": "noise",
+      "word": "出片率"
+    },
+    {
+      "id": "noise.天",
+      "list": "noise",
+      "word": "天"
+    },
+    {
+      "id": "noise.近",
+      "list": "noise",
+      "word": "近"
+    },
+    {
+      "id": "noise.或",
+      "list": "noise",
+      "word": "或"
+    },
+    {
+      "id": "cjk_channel.活跃群组",
+      "list": "cjk_channel",
+      "word": "活跃群组"
+    },
+    {
+      "id": "cjk_channel.群组",
+      "list": "cjk_channel",
+      "word": "群组"
+    },
+    {
+      "id": "cjk_channel.主页",
+      "list": "cjk_channel",
+      "word": "主页"
+    },
+    {
+      "id": "cjk_channel.账号",
+      "list": "cjk_channel",
+      "word": "账号"
+    },
+    {
+      "id": "cjk_channel.频道",
+      "list": "cjk_channel",
+      "word": "频道"
+    },
+    {
+      "id": "cjk_channel.油管主",
+      "list": "cjk_channel",
+      "word": "油管主"
+    },
+    {
+      "id": "cjk_channel.油管",
+      "list": "cjk_channel",
+      "word": "油管"
+    },
+    {
+      "id": "cjk_channel.红人",
+      "list": "cjk_channel",
+      "word": "红人"
+    },
+    {
+      "id": "cjk_channel.达人",
+      "list": "cjk_channel",
+      "word": "达人"
+    },
+    {
+      "id": "cjk_channel.博主",
+      "list": "cjk_channel",
+      "word": "博主"
+    },
+    {
+      "id": "cjk_channel.脸书",
+      "list": "cjk_channel",
+      "word": "脸书"
+    },
+    {
+      "id": "cjk_channel.推特",
+      "list": "cjk_channel",
+      "word": "推特"
+    },
+    {
+      "id": "cjk_channel.up 主",
+      "list": "cjk_channel",
+      "word": "up 主"
+    },
+    {
+      "id": "cjk_channel.up主",
+      "list": "cjk_channel",
+      "word": "up主"
+    },
+    {
+      "id": "cjk_channel.UP 主",
+      "list": "cjk_channel",
+      "word": "UP 主"
+    },
+    {
+      "id": "cjk_channel.UP主",
+      "list": "cjk_channel",
+      "word": "UP主"
+    },
+    {
+      "id": "cjk_channel.抖音国际",
+      "list": "cjk_channel",
+      "word": "抖音国际"
+    },
+    {
+      "id": "channel.youtube",
+      "list": "channel",
+      "word": "youtube"
+    },
+    {
+      "id": "channel.油管",
+      "list": "channel",
+      "word": "油管"
+    },
+    {
+      "id": "channel.频道",
+      "list": "channel",
+      "word": "频道"
+    },
+    {
+      "id": "channel.instagram",
+      "list": "channel",
+      "word": "instagram"
+    },
+    {
+      "id": "channel.ins",
+      "list": "channel",
+      "word": "ins"
+    },
+    {
+      "id": "channel.tiktok",
+      "list": "channel",
+      "word": "tiktok"
+    },
+    {
+      "id": "channel.抖音国际",
+      "list": "channel",
+      "word": "抖音国际"
+    },
+    {
+      "id": "channel.facebook",
+      "list": "channel",
+      "word": "facebook"
+    },
+    {
+      "id": "channel.脸书",
+      "list": "channel",
+      "word": "脸书"
+    },
+    {
+      "id": "channel.twitter",
+      "list": "channel",
+      "word": "twitter"
+    },
+    {
+      "id": "channel.推特",
+      "list": "channel",
+      "word": "推特"
+    },
+    {
+      "id": "channel.up 主",
+      "list": "channel",
+      "word": "up 主"
+    },
+    {
+      "id": "channel.红人",
+      "list": "channel",
+      "word": "红人"
+    },
+    {
+      "id": "channel.达人",
+      "list": "channel",
+      "word": "达人"
+    },
+    {
+      "id": "channel.博主",
+      "list": "channel",
+      "word": "博主"
+    },
+    {
+      "id": "channel.creator",
+      "list": "channel",
+      "word": "creator"
+    },
+    {
+      "id": "channel.channel",
+      "list": "channel",
+      "word": "channel"
+    },
+    {
+      "id": "in_text.youtube.youtube",
+      "list": "in_text",
+      "channel": "youtube",
+      "word": "youtube"
+    },
+    {
+      "id": "in_text.youtube.油管",
+      "list": "in_text",
+      "channel": "youtube",
+      "word": "油管"
+    },
+    {
+      "id": "in_text.youtube.yt",
+      "list": "in_text",
+      "channel": "youtube",
+      "word": "yt"
+    },
+    {
+      "id": "in_text.youtube.频道",
+      "list": "in_text",
+      "channel": "youtube",
+      "word": "频道"
+    },
+    {
+      "id": "in_text.instagram.instagram",
+      "list": "in_text",
+      "channel": "instagram",
+      "word": "instagram"
+    },
+    {
+      "id": "in_text.instagram.ins",
+      "list": "in_text",
+      "channel": "instagram",
+      "word": "ins"
+    },
+    {
+      "id": "in_text.instagram.ig",
+      "list": "in_text",
+      "channel": "instagram",
+      "word": "ig"
+    },
+    {
+      "id": "in_text.tiktok.tiktok",
+      "list": "in_text",
+      "channel": "tiktok",
+      "word": "tiktok"
+    },
+    {
+      "id": "in_text.tiktok.抖音国际",
+      "list": "in_text",
+      "channel": "tiktok",
+      "word": "抖音国际"
+    },
+    {
+      "id": "in_text.tiktok.tt",
+      "list": "in_text",
+      "channel": "tiktok",
+      "word": "tt"
+    },
+    {
+      "id": "in_text.facebook.facebook",
+      "list": "in_text",
+      "channel": "facebook",
+      "word": "facebook"
+    },
+    {
+      "id": "in_text.facebook.fb",
+      "list": "in_text",
+      "channel": "facebook",
+      "word": "fb"
+    },
+    {
+      "id": "in_text.facebook.脸书",
+      "list": "in_text",
+      "channel": "facebook",
+      "word": "脸书"
+    },
+    {
+      "id": "in_text.x.twitter",
+      "list": "in_text",
+      "channel": "x",
+      "word": "twitter"
+    },
+    {
+      "id": "in_text.x.x",
+      "list": "in_text",
+      "channel": "x",
+      "word": " x "
+    },
+    {
+      "id": "in_text.x.推特",
+      "list": "in_text",
+      "channel": "x",
+      "word": "推特"
+    }
+  ]
+}
