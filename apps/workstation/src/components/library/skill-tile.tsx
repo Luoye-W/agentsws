@@ -81,6 +81,15 @@ export function SkillTile({
               {t('skills.shared')}
             </WsTag>
           ) : null}
+          {skill.origin === undefined ? null : (
+            <WsTag
+              className="bg-ws-tint text-ws-brand-ink"
+              data-testid="skill-tile-origin"
+              data-origin={skill.origin}
+            >
+              {t(`skills.source.${skill.origin}`)}
+            </WsTag>
+          )}
           {skill.excluded ? <WsTag>{t('skills.excluded')}</WsTag> : null}
           {roles.length === 0 && skill.roles !== undefined ? (
             <span className="text-xs text-ws-muted-fg">{t('skills.roles.none')}</span>

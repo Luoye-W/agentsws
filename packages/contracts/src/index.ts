@@ -8,6 +8,9 @@ export * from './ads-wiring.js'
 export * from './amazon-listing.js'
 // WP398（docs/106 §13 A8）：Amazon 词库（联想词 + 竞品 / 自家 Listing 拆词、竞品有你没有的差距）
 export * from './amazon-keywords.js'
+// WP397（docs/106 §13）：Amazon 库存补货公式与 FBA 赔偿复核算式（数由公式算，不让模型估）
+export * from './amazon-inventory.js'
+export * from './amazon-reimbursement.js'
 export * from './answer.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）

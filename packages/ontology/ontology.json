@@ -7,8 +7,10 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-inventory.ts",
     "packages/contracts/src/amazon-keywords.ts",
     "packages/contracts/src/amazon-listing.ts",
+    "packages/contracts/src/amazon-reimbursement.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -144,7 +146,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "5359a9a88b92bad9693b49c72d91f7fa",
+  "source_digest": "3fc823c675ea4ce8ff5f8597b5cf6061",
   "objects": [
     {
       "id": "ad",

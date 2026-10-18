@@ -1,0 +1,31 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-seller-analytics",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/seller-analytics",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：经营数据",
+    "display_name_en": "Amazon official: seller analytics",
+    "summary": "销量、流量、库存指标：先查指标名再取数（只读）",
+    "summary_en": "Sales, traffic and inventory metrics, read-only",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": ["references/metrics-catalog.md", "references/request-reference.md"],
+  "sha256": {
+    "SKILL.md": "751d72ed0ba671fcdc9073dc5faef1561a8d18cbb0a966ca65287bed94beefda",
+    "references/metrics-catalog.md": "59d61b1198485d4afc36c2d09dc246ecefc570bb987307566ebcda967e4b6ea1",
+    "references/request-reference.md": "1b9e15ed0bffc8e91a4e24c23dad25fed63c85414ae37568fa60bf8cdc59e82a",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

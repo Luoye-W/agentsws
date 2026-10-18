@@ -889,6 +889,81 @@ upstreams:
       - packages/skills/test/official-skills.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP397（docs/106 §13，A13）：Amazon 官方卖家技能 12 本，**原样收录**（Apache-2.0）。上游没打 tag，
+  # 钉提交；每本收进 packages/skills/bundled/amazon-sp-<名>/（SKILL.md + references/ + LICENSE 原样，
+  # sha256 记在各自的 agentsws.json），我们的话在 AGENTSWS.md 与 evals/。上游 eval/（要它的模拟服务器）、
+  # commands/、.mcp.json 不带；连官方卖家连接是 WP399 的事。升级 = 换文件 + 改旁注的提交 / sha256 / version。
+  - id: amazon-sp-agentic-toolkit
+    kind: ported
+    why: Amazon 运营岗位（亚马逊店铺运营）按需加载的 12 本官方技能：断货预防、FBA 入库、Listing 四件套与分诊、月结对账、开工单、经营数据、子账号授权、SP-API 问答
+    repo: amzn/selling-partner-agentic-toolkit
+    pinned_commit: 8d90d3b7c1537254b53c82651ac31fdbf0089368
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills
+      - LICENSE
+      - .mcp.json
+    we_depend_on:
+      - 'skills/<名>/SKILL.md 与 references/*.md → packages/skills/bundled/amazon-sp-<名>/（原样，sha256 记在 agentsws.json）'
+      - 'frontmatter 的 name / description / version（入库名换成 amazon-sp-<名>，上游原名记 upstream_name）'
+      - '工具名（listings_patchListingsItem、fbaInventory_getInventorySummaries、fbaInbound_* …）——WP399 接上官方卖家连接后要对得上'
+      - 'stockout-prevention / listing-issues 里「DO NOT EXECUTE without approval」两句（bundled.ts 的 AUTHORIZATION_PHRASE_EXCEPTIONS 逐字放行）'
+      - 'Apache-2.0 许可证（换了许可证就不能再原样分发）'
+    wishlist:
+      - 新增技能目录（例如请求评价、Coupon / Deal、广告）
+      - 许可证变化
+      - 写动作的确认方式变了（AGENTSWS.md 第 2 条要跟着改）
+    covered_by:
+      - packages/skills/test/wp397-amazon-official.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  # WP397（docs/106 §13.2）：SeaLeap 的中文 Amazon 技能（MIT；NOTICE 写明第三方原文 / 转写不在 MIT 里）。
+  # **只从 amazon-official/ 与 public-research/ 两个目录挑**，广告类这次一本不搬（留给二期「亚马逊广告」），
+  # 社媒个人经验那五个目录一本不搬。改写过（四档对齐我们的出卡、会话授权一律改成逐条出卡），上游改了只对照。
+  - id: sealeap-amazon-skills
+    kind: ported
+    why: Amazon 运营岗位 15 本改写技能（Listing 优化、品牌筹备、本地化、旺季、全球开站、品牌阶段与工具、消费电子品类、FBA 赔偿复核、Data Kiosk 与 SQP 对账、工单跟踪、多渠道、欧盟包装、官方连接核验）
+    repo: xjli360/sealeap-amazon-skills
+    pinned_commit: 1283764556e61cbe56c600bbe504b8731b2254cb
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - amazon-skills/amazon-official
+      - amazon-skills/public-research
+      - LICENSE
+      - NOTICE
+    we_depend_on:
+      - 'amazon-skills/{amazon-official,public-research}/sealeap-amazon-*/SKILL.md 与 references/ → packages/skills/bundled/amazon-*/SKILL.md（改写，第一行写出处、核对日期）'
+      - 'public-research/sealeap-amazon-fba-reimbursement-audit/references/input-contract.md 的算式 → packages/contracts/src/amazon-reimbursement.ts（TypeScript 重写，脚本没拷）'
+      - '各技能的 verified_at（frontmatter 照抄，上游更新了核对日期要对照内容）'
+    wishlist:
+      - 新的非广告类官方材料技能（账户健康、请求评价、Coupon / Deal）
+      - 广告类技能的更新（二期「亚马逊广告」职责引进时看）
+      - 许可证或 NOTICE 变化
+    covered_by:
+      - packages/skills/test/wp397-amazon-skills.test.ts
+      - packages/contracts/test/wp397-amazon-formulas.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  # WP397（docs/106 §2.5）：kangise 的跨境电商知识库（CC0）。只提炼岗位知识（运营节奏、硬约束、库存公式），
+  # 每条带出处与那边的核对月份；不整块搬章节。
+  - id: kangise-ecommerce-ai-skills
+    kind: ported
+    why: amazon-ops-playbook（节奏与红线）与 amazon-inventory（库存公式）的素材、packages/contracts/src/amazon-inventory.ts 的口径
+    repo: kangise/ecommerce-ai-skills
+    pinned_commit: b1a727c3b2c2d27f2793e0d0fcd655ea446ba635
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - ontology/constraints.yaml
+      - src/a-operators
+    we_depend_on:
+      - 'ontology/constraints.yaml 的 amazon.violation.response_deadline、amazon.safety_complaint.response_deadline、inventory.*、amazon.fba.inventory.aged_surcharge_*、amazon.listing.search_terms.*、forecast.stockout_data_handling'
+      - 'src/a-operators/a4、a5、a6、a11、a12、a14 的规矩 → packages/skills/bundled/{amazon-ops-playbook,amazon-inventory}/SKILL.md'
+    wishlist:
+      - 约束表里 Amazon 规则的核对月份更新（数变了要跟）
+    covered_by:
+      - packages/skills/test/wp397-amazon-skills.test.ts
+      - packages/contracts/test/wp397-amazon-formulas.test.ts
+
   # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
   # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
   - id: tremor-raw

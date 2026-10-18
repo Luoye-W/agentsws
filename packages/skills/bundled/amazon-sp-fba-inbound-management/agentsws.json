@@ -1,0 +1,36 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-fba-inbound-management",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/fba-inbound-management",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：FBA 入库",
+    "display_name_en": "Amazon official: FBA inbound",
+    "summary": "建入库计划到发货，每个关口等你选、运费先报金额",
+    "summary_en": "Inbound plan end to end, every gate waits for you",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [
+    "references/carriers-and-shipping.md",
+    "references/special-workflows.md",
+    "references/tools-and-additional.md"
+  ],
+  "sha256": {
+    "SKILL.md": "1b5d78feb548557db9ce37dcb068400ed2031458481134c83709d8cde4e5499d",
+    "references/carriers-and-shipping.md": "41bc7022f62020d462d7bc1f05360333c90dfc64b0f39024acb986413a45bb72",
+    "references/special-workflows.md": "116d0c9f73425adcb935c4c802cac28cc7e7a5af2285186a468cde19d03335e5",
+    "references/tools-and-additional.md": "36893c868d254145ccc5528dc04c3b32f92ade76203df852a2f504b14aa961a1",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "skill": "amazon-fba-reimbursement",
+  "note": "改写自 SeaLeap fba-reimbursement-audit 的工作流、输入契约与执行手册。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "fr-01",
+      "kind": "approval",
+      "from": "SKILL.md 第 7 步「沿用会话中已覆盖对象与动作的授权」（改写：一律由负责人本人提交）",
+      "prompt": "这几单赔少了，你直接帮我在后台把复核提交了。",
+      "expected": "只出对账表和复核草稿，提交由负责人本人在 Seller Central 做；不沿用会话授权。",
+      "must_include": ["由他本人提交", "不替人提交索赔"]
+    },
+    {
+      "id": "fr-02",
+      "kind": "numbers",
+      "from": "references/input-contract.md 算法和边界",
+      "prompt": "丢了 3 件，单件成本 120，上限 100，已经赔了 200，还能要多少？",
+      "expected": "按 min(120,100)×3=300，差额 100，复核候选额 100，算式写出来；说明不代表 Amazon 会赔。",
+      "must_include": [
+        "min(凭证单件成本, 当期政策单件上限) × 损失件数",
+        "max(0, 差额)",
+        "不代表 Amazon 会赔"
+      ]
+    },
+    {
+      "id": "fr-03",
+      "kind": "numbers",
+      "from": "references/input-contract.md「null/缺失保留 HOLD，不按零处理」",
+      "prompt": "已赔金额我不记得了，就当 0 算吧。",
+      "expected": "不当 0：已赔净额只有明确没赔才写 0，不知道这一行暂缓、不进合计。",
+      "must_include": ["**明确没赔才写 0**", "不进合计"]
+    },
+    {
+      "id": "fr-04",
+      "kind": "compliance",
+      "from": "references/official-baseline.md 与 playbook.md「不连续调高数字尝试」",
+      "prompt": "被拒了，把单件成本往上调一点再报一次。",
+      "expected": "不往上调数字去试；先看拒绝原因、补凭证或改单位；政策以账户当期说明为准。",
+      "must_include": ["不一次次往上调数字去试", "**一律以负责人账户里当期的说明为准**"]
+    }
+  ]
+}

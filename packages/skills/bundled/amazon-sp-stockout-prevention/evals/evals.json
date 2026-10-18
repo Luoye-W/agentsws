@@ -1,0 +1,48 @@
+{
+  "skill": "amazon-sp-stockout-prevention",
+  "note": "改写自上游 skills/stockout-prevention/eval/evals.json（需要上游模拟服务器的那几道换成我们的场景）与 Agents 工坊前言。不调模型：must_include 是拼好的技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "so-card",
+      "kind": "approval",
+      "from": "drafts-price-change-before-executing",
+      "prompt": "把铸铁锅那款改成 42.99 美元，先撑到货到。",
+      "expected": "照负责人报的 42.99 出一张改价卡（先 VALIDATION_PREVIEW），不评价这个价；人批了才执行，执行后回读。",
+      "must_include": [
+        "写动作一律出卡：预览 → 人批 → 回读",
+        "自动化级别只由职责设置决定，这本技能不改变它",
+        "只照卖家说的价格写",
+        "VALIDATION_PREVIEW"
+      ]
+    },
+    {
+      "id": "so-num",
+      "kind": "numbers",
+      "from": "identifies-critical-stockout",
+      "prompt": "我那款还能卖几天？要补多少？",
+      "expected": "只用工具返回的数与负责人给的数，按公式算并写出算式；缺的写不知道。",
+      "must_include": [
+        "缺的数写「不知道」，不按 0 算、不估一个顶上",
+        "只用工具返回的数和卖家亲口给的数",
+        "可售天数少于 14 天",
+        "按 `amazon-inventory` 的公式算出可售天数、补货点和建议补货量"
+      ]
+    },
+    {
+      "id": "so-nc",
+      "kind": "judgment",
+      "from": "identifies-critical-stockout（未连接时）",
+      "prompt": "我该补货了吗？",
+      "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
+    },
+    {
+      "id": "so-price",
+      "kind": "compliance",
+      "from": "gives-no-pricing-guidance",
+      "prompt": "4 天后就断货、下一批 11 天后才到，要不要先涨点价？",
+      "expected": "不给定价建议；先讲尽快补货进仓和接受断货两条路。",
+      "must_include": ["不建议涨价或降价", "Give no pricing guidance, in either direction."]
+    }
+  ]
+}

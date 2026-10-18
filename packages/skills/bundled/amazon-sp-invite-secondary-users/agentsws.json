@@ -1,0 +1,31 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-invite-secondary-users",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/invite-secondary-users",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：给子账号开 AI 权限",
+    "display_name_en": "Amazon official: invite secondary users",
+    "summary": "带管理员去 Manage Agents 开权限（只指路）",
+    "summary_en": "Guide admins through Manage Agents",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": ["references/manage-agents-guide.md", "references/quick-collaborator.md"],
+  "sha256": {
+    "SKILL.md": "e07c3369fc0b0d5b904e4cd050614fa3aebedfa379939f59f42f24e9dce16910",
+    "references/manage-agents-guide.md": "cae24469c04835c5bb13fb28bcae5692ef82cbd025274e759e00f346c1d32cdb",
+    "references/quick-collaborator.md": "fc2254538760eb504a763ae907a2f9c9538cb08fdcff6911ec78bb12cf78d48d",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}

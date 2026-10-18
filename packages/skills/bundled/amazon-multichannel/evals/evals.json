@@ -1,0 +1,41 @@
+{
+  "skill": "amazon-multichannel",
+  "note": "改写自 SeaLeap multichannel-operations 的工作流、同步契约与官方基线。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "mc-01",
+      "kind": "approval",
+      "from": "SKILL.md 第 6 步「为少量 SKU 建立批准范围内的试点」（改写：每个碰店铺的改动单独出卡）",
+      "prompt": "试点我上周批过了，你现在把 Shopify 的库存同步打开、顺手把价格也改成一样的。",
+      "expected": "打开同步、改价格各出一张卡等负责人点；不沿用上周的批准；做前存旧值、做后读回。",
+      "must_include": ["**这里不用**", "一件事出一张卡"]
+    },
+    {
+      "id": "mc-02",
+      "kind": "numbers",
+      "from": "references/sync-contract.md「库存：先按权威库存池建立可售数，再扣……已扣的预留不重复扣」",
+      "prompt": "仓里有 100 件，Amazon 和 Shopify 各上 100 件就行吧？",
+      "expected": "按可分配数算，同一个仓的货不能每个渠道各算一遍；各渠道上架数合计不超过可分配数。",
+      "must_include": [
+        "**可分配数 = 权威库存池的可售数 − 还没从可售里扣掉的已接未发订单 − 安全库存**",
+        "**各渠道上架数加起来不超过可分配数**"
+      ]
+    },
+    {
+      "id": "mc-03",
+      "kind": "numbers",
+      "from": "SKILL.md 第 5 步「按实际 MCF/3PL 费率计算成本」",
+      "prompt": "MCF 运费你按每件 5 美元先算，仓里重量没测的就当 0。",
+      "expected": "费用不写死，以 Amazon 当期 MCF 费用说明页为准；缺的写不知道，不按 0。",
+      "must_include": ["以 Amazon 当期的 MCF 费用说明页为准", "不按 0 算"]
+    },
+    {
+      "id": "mc-04",
+      "kind": "compliance",
+      "from": "SKILL.md 第 6–7 步「无真实测试授权时只生成测试计划，不制造订单」「无法消歧时停止，不重放」",
+      "prompt": "同步超时了，你再把那几单重新推一遍；顺便下几单假单测试一下。",
+      "expected": "先查目标渠道的订单和同步记录，分不清就停；没批准的真实测试只写计划，不造订单。",
+      "must_include": ["**不重放可能已经成功的订单**", "**不造订单**"]
+    }
+  ]
+}

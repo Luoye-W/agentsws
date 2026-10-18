@@ -3485,6 +3485,8 @@ export interface SkillSummary {
   positions?: SkillPositionRef[]
   roles?: SkillRoleRef[]
   in_use?: boolean
+  /** WP397：`official` = 平台官方技能原样收录；`adapted` = 改写自开源（技能卡上的小标签）。 */
+  origin?: 'official' | 'adapted'
 }
 
 /** WP209：技能归属的一个岗位（`common` = 通用）。 */

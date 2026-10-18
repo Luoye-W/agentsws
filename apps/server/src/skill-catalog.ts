@@ -128,6 +128,8 @@ export function enrichSkillSummaries(
         : []),
     ]
 
+    const origin =
+      extra.origin === 'official' || extra.origin === 'adapted' ? extra.origin : undefined
     const display_name = pair(extra.display_name, extra.display_name_en)
     const one_line = pair(extra.summary, extra.summary_en)
     const sectionBody = facts.sectionBody
@@ -144,6 +146,7 @@ export function enrichSkillSummaries(
       positions: refs,
       roles,
       in_use: roles.some((r) => r.mine),
+      ...(origin === undefined ? {} : { origin }),
     }
   })
 }

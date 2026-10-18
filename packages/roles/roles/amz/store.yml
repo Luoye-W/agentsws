@@ -119,9 +119,49 @@ grounding:
       prefetch: false,
     }
 
-# 单品利润的算式（售价 − 佣金 − FBA 配送费 − 头程 − 广告 …）；其余 skill 由 WP397 补
+# 单品利润的算式（售价 − 佣金 − FBA 配送费 − 头程 − 广告 …）
+# WP397（docs/106 §13，A13）：全部按需加载——索引里只有名字和一句话，用到哪本才读哪本。
+#   amazon-sp-*：Amazon 官方卖家技能原样收录（工具来自官方卖家连接，连上之前照实说做不了）
+#   amazon-*：SeaLeap（MIT）挑选改写的一批，加上我们自己写的库存公式与岗位节奏 / 红线
+# 广告类（ACOS、广告结构、SB / SD / 视频……）一本没挂，留给二期「亚马逊广告」职责。
 skills:
   - { name: unit-economics, tier: open, load: on_demand }
+  - { name: amazon-ops-playbook, tier: open, load: on_demand }
+  - { name: amazon-inventory, tier: open, load: on_demand }
+  # ① 账户健康与合规
+  - { name: amazon-sp-support-case-helper, tier: open, load: on_demand }
+  - { name: amazon-sp-invite-secondary-users, tier: open, load: on_demand }
+  - { name: amazon-case-tracking, tier: open, load: on_demand }
+  - { name: amazon-eu-packaging, tier: open, load: on_demand }
+  - { name: amazon-connection-check, tier: open, load: on_demand }
+  # ② Listing 与关键词
+  - { name: amazon-sp-listing-troubleshooter, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-issues, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-buyability, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-searchability, tier: open, load: on_demand }
+  - { name: amazon-sp-listing-compliance, tier: open, load: on_demand }
+  - { name: amazon-listing-optimizer, tier: open, load: on_demand }
+  - { name: amazon-localization, tier: open, load: on_demand }
+  - { name: amazon-sqp-recon, tier: open, load: on_demand }
+  # ③ 库存、补货与入库
+  - { name: amazon-sp-stockout-prevention, tier: open, load: on_demand }
+  - { name: amazon-sp-fba-inbound-management, tier: open, load: on_demand }
+  - { name: amazon-multichannel, tier: open, load: on_demand }
+  # ④ 定价与促销
+  - { name: amazon-peak-season, tier: open, load: on_demand }
+  - { name: amazon-brand-tools-promo, tier: open, load: on_demand }
+  # ⑥ 利润与对账
+  - { name: amazon-sp-finance-month-end-closer, tier: open, load: on_demand }
+  - { name: amazon-sp-seller-analytics, tier: open, load: on_demand }
+  - { name: amazon-fba-reimbursement, tier: open, load: on_demand }
+  - { name: amazon-data-kiosk-recon, tier: open, load: on_demand }
+  # ⑦ 新品上市与品牌
+  - { name: amazon-brand-prep-listing, tier: open, load: on_demand }
+  - { name: amazon-brand-stage, tier: open, load: on_demand }
+  - { name: amazon-ce-category, tier: open, load: on_demand }
+  - { name: amazon-global-expansion, tier: open, load: on_demand }
+  # 给开发者的（负责人一般用不上）
+  - { name: amazon-sp-sp-api-knowledge, tier: open, load: on_demand }
 
 # 岗位面板的四块（每日巡检 / 竞品动向 / Listing 体检 / 词库）由工作台按职责画，不走 home_blocks
 home_blocks: []

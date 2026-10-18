@@ -153,3 +153,34 @@ describe('WP209 技能按岗位分组', () => {
     expect(parsePositionsField(undefined)).toEqual([])
   })
 })
+
+describe('WP397 技能来源小标签（frontmatter 的 origin）', () => {
+  it('官方原样收录 / 改写自开源照回；自己写的、写了别的值的不回', () => {
+    const fm = (origin?: string): Frontmatter => ({
+      name: 'x',
+      extra: origin === undefined ? {} : { origin },
+      order: origin === undefined ? [] : ['origin'],
+    })
+    const table: Record<string, Frontmatter> = {
+      'amazon-sp-stockout-prevention': fm('official'),
+      'amazon-fba-reimbursement': fm('adapted'),
+      'amazon-inventory': fm('own'),
+      'brand-voice': fm(),
+    }
+    const out = enrichSkillSummaries(Object.keys(table).map(base), {
+      positions: POSITIONS,
+      roles: ROLES,
+      held_roles: [],
+      frontmatterOf: (name) => table[name],
+    })
+    expect(out.map((s) => s.origin)).toEqual(['official', 'adapted', undefined, undefined])
+    expect('origin' in (out[3] ?? {})).toBe(false)
+  })
+
+  it('真技能：Amazon 官方那本拼出来带 origin: official，改写那本带 adapted', () => {
+    const official = splitFrontmatter(readBundledSkill('amazon-sp-stockout-prevention').markdown)
+    expect(official.frontmatter.extra.origin).toBe('official')
+    const adapted = splitFrontmatter(readBundledSkill('amazon-fba-reimbursement').markdown)
+    expect(adapted.frontmatter.extra.origin).toBe('adapted')
+  })
+})

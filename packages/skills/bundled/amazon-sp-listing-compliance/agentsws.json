@@ -1,0 +1,36 @@
+{
+  "kind": "official",
+  "name": "amazon-sp-listing-compliance",
+  "upstream": {
+    "publisher": "Amazon",
+    "repo": "amzn/selling-partner-agentic-toolkit",
+    "tag": "1.0.0@8d90d3b",
+    "commit": "8d90d3b7c1537254b53c82651ac31fdbf0089368",
+    "path": "skills/listing-compliance",
+    "license": "Apache-2.0"
+  },
+  "frontmatter": {
+    "license": "Apache-2.0",
+    "tier": "open",
+    "version": "1.0.0",
+    "origin": "official",
+    "display_name": "Amazon 官方：改前合规预检",
+    "display_name_en": "Amazon official: listing compliance",
+    "summary": "改宣称、品类、图片前先过一遍合规清单",
+    "summary_en": "Compliance gate before sensitive listing changes",
+    "positions": "amazon-ops"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": [
+    "references/regulatory-map.md",
+    "references/seller-assistant-protocol.md",
+    "references/seller-questions.md"
+  ],
+  "sha256": {
+    "SKILL.md": "b282f36598015ebb0755c3daf0db8f402f5cf90cddbac227238372c687e9b815",
+    "references/regulatory-map.md": "bcbe4b38b96a5068adc8a5816abf4ff96c9a225e09596d67b64dbc69bc848fa6",
+    "references/seller-assistant-protocol.md": "2d6f26c8430f244b90ff6f7c57736a31c3b54a9666a29fe0b02e0b3578c4688d",
+    "references/seller-questions.md": "702e97b5ab789a50c78b74a677b577ff4e2bbdd2d22cff92aea55ae07608ad12",
+    "LICENSE": "ef84525456da16b7ad7d6eee7794f826db0d69e7aca55ad5abfc6b6b6fb6e609"
+  }
+}
