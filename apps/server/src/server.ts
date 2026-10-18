@@ -238,6 +238,7 @@ import {
   scheduleConflicts,
   scheduleRulesFor,
 } from '@agentsws/social-core'
+import type { ToolExecutor } from '@agentsws/stand-ins'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -4144,6 +4145,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.shopAdmin?.spawn === undefined ? {} : { spawn: options.shopAdmin.spawn }),
   })
   const shops = new Map<WorkspaceId, { auth: ShopAdminAssembly; ops: ShopOps }>()
+  /** WP418（自查 C1）：每个品牌那一份 CLI 店铺授权（同步判断「店铺后台连上没有」用；没数据目录时只在内存里）。 */
+  const cliShopAuths = new Map<WorkspaceId, ShopAdminAssembly>()
   /** WP268：每个品牌一份素材库与生图服务（装品牌时登记；决定钩子与 `/v1/brand-assets` 按品牌取）。 */
   const brandAssetsByWs = new Map<WorkspaceId, BrandAssets>()
   const imageServices = new Map<WorkspaceId, ImageService>()
@@ -4155,6 +4158,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (lib === undefined) throw new ApiError('not_implemented', '这个品牌没有素材库')
     return lib
   }
+  /**
+   * WP418（自查 U8）：工具回来带着 `approval_item_id`（出了卡）、这次运行挂在某件事项上 → 把卡挂进那件事项的时间线。
+   * 变更账本出的卡 subject 上没有事项（账本不认识事项），所以由这里补一跳；挂不上不影响工具结果。
+   */
+  const linkStagedCards =
+    (ws: WorkspaceId, exec: ToolExecutor): ToolExecutor =>
+    async (call) => {
+      const res = await exec(call)
+      const data =
+        res.data !== null && typeof res.data === 'object'
+          ? (res.data as Record<string, unknown>)
+          : {}
+      const matter_id = call.request.work_item?.id
+      if (
+        res.status === 'ok' &&
+        typeof data.approval_item_id === 'string' &&
+        matter_id !== undefined
+      )
+        try {
+          const item = await txn.approvals.get(data.approval_item_id as never)
+          const work = (await brands?.forWorkspace(ws))?.work
+          // 已经挂过的（选主题卡这种由模块自己挂）不再挂第二次
+          const already = work?.store
+            .listMatterEvents(matter_id as never, { limit: 500 })
+            .some((e) => e.approval_item_id === data.approval_item_id)
+          if (item !== undefined && already !== true)
+            work?.onCard({
+              ...cardRefOf(item),
+              matter_id: matter_id as never,
+              run_id: call.request.id as never,
+            })
+        } catch {
+          // 挂不上：卡照样在待批里
+        }
+      return res
+    }
+  const linkStagedSurface = (
+    ws: WorkspaceId,
+    surface: ReturnType<typeof createShopToolSurface>,
+  ): ReturnType<typeof createShopToolSurface> => ({
+    ...surface,
+    executeTool: linkStagedCards(ws, surface.executeTool),
+  })
   const shopOf = async (
     ws: WorkspaceId,
   ): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined> => {
@@ -4238,6 +4284,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP265（Fable 追加）：这个品牌在连接页一键授权连着店 → **优先走云端代发**（查询不带、批过的卡带
      * `allow_mutations`），岗位页那一行、工具面、出卡都按云端那一条；没有才回退上面的 CLI 授权。
      */
+    cliShopAuths.set(ws, cliAuth)
     const auth = preferCloudShopAdmin(cliAuth, {
       link: () => cloudShopLinks.link(ws),
       call: async () => {
@@ -4491,7 +4538,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(hasLiveStoreGrant(
           dir === undefined ? undefined : join(dir, 'shop-admin.json'),
           clock.now(),
-        )
+        ) || cliShopAuths.get(ws)?.hasLiveGrant?.() === true
           ? ['shopify', 'shop']
           : []),
         // WP386：有监控源 = 信息监控那张连接卡算连上
@@ -6685,7 +6732,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP253：网页模板的九个受限主题工具（起底 / 列 / 拉 / 检查 / 看改文件 / 推未发布 / 发布出卡）。
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
-            themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            // WP418（自查 U8）：改店 / 发布主题这几类工具出的卡挂进这次运行的事项（以前卡和事项没连上，时间线里找不到）
+            themeTools: linkStagedCards(
+              ws,
+              createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            ),
             // WP316：改广告的两个工具（提一批只出卡、列广告改动记录）；Google / Meta 两条投放职责才摆
             ...(adsActions === undefined
               ? {}
@@ -6699,33 +6750,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
              */
-            shopTools: createShopToolSurface({
-              module: () => shopOf(ws),
-              // WP418（自查 A8）：整站搭建跑一遍上线检查单（只读，不出卡；结论落进面板「上线检查单」）
-              siteChecklist: async (request) => {
-                const site = (await brandModules.forWorkspace(ws)).siteService.port
-                const { run } = await site.runChecklist({
-                  workspace_id: ws,
-                  person_id: request.actor.person_id as never,
-                  assignment_id: request.actor.assignment_id as never,
-                  role_id: request.actor.role_id as never,
-                })
-                return siteChecklistToolData(run)
-              },
-              // WP418（自查 A16）：插件 / 邮件模板两条职责读本机建站库
-              siteRead: async (tool, request) => {
-                const site = (await brandModules.forWorkspace(ws)).siteService.port
-                const actor = {
-                  workspace_id: ws,
-                  person_id: request.actor.person_id as never,
-                  assignment_id: request.actor.assignment_id as never,
-                  role_id: request.actor.role_id as never,
-                }
-                return tool === 'site_apps_list'
-                  ? siteAppsToolData((await site.apps(actor)).rows)
-                  : siteEmailsToolData((await site.emailTemplates(actor)).rows)
-              },
-            }),
+            shopTools: linkStagedSurface(
+              ws,
+              createShopToolSurface({
+                module: () => shopOf(ws),
+                // WP418（自查 A8）：整站搭建跑一遍上线检查单（只读，不出卡；结论落进面板「上线检查单」）
+                siteChecklist: async (request) => {
+                  const site = (await brandModules.forWorkspace(ws)).siteService.port
+                  const { run } = await site.runChecklist({
+                    workspace_id: ws,
+                    person_id: request.actor.person_id as never,
+                    assignment_id: request.actor.assignment_id as never,
+                    role_id: request.actor.role_id as never,
+                  })
+                  return siteChecklistToolData(run)
+                },
+                // WP418（自查 A16）：插件 / 邮件模板两条职责读本机建站库
+                siteRead: async (tool, request) => {
+                  const site = (await brandModules.forWorkspace(ws)).siteService.port
+                  const actor = {
+                    workspace_id: ws,
+                    person_id: request.actor.person_id as never,
+                    assignment_id: request.actor.assignment_id as never,
+                    role_id: request.actor.role_id as never,
+                  }
+                  return tool === 'site_apps_list'
+                    ? siteAppsToolData((await site.apps(actor)).rows)
+                    : siteEmailsToolData((await site.emailTemplates(actor)).rows)
+                },
+              }),
+            ),
             // WP268：生图 / 改图 / 素材库（设计岗五条 + 网页模板；生图配了才摆）
             imageTools: imageService,
             vertical: () => brandProfileOf(ws).vertical,

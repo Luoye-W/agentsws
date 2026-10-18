@@ -262,7 +262,18 @@ export function createStoreAuthRunner(options: {
 export function hasLiveStoreGrant(settingsFile: string | undefined, nowIso: string): boolean {
   if (settingsFile === undefined || !existsSync(settingsFile)) return false
   try {
-    const raw = JSON.parse(readFileSync(settingsFile, 'utf8')) as Partial<ShopAdminFile>
+    return liveGrantIn(
+      JSON.parse(readFileSync(settingsFile, 'utf8')) as Partial<ShopAdminFile>,
+      nowIso,
+    )
+  } catch {
+    return false
+  }
+}
+
+/** 同上，按一份已经读进来的授权记录判（没有数据目录、只在内存里的那一份也认）。 */
+function liveGrantIn(raw: Partial<ShopAdminFile>, nowIso: string): boolean {
+  try {
     const nowMs = Date.parse(nowIso)
     return Object.values(raw.grants ?? {}).some((g) => {
       if (g === undefined || typeof g.store !== 'string') return false
@@ -332,6 +343,8 @@ export interface ShopAdminAssembly {
   reader(): Promise<ShopifyAdminReader>
   /** 执行器那一侧（人批过的卡）：查与改都行。 */
   admin(): Promise<ShopifyAdmin>
+  /** WP418（自查 C1）：同步看一眼有没有一份没过期、没被收回的授权（只在内存里的那一份也认）。 */
+  hasLiveGrant?(): boolean
 }
 
 const isExpired = (g: ShopGrant, nowMs: number): boolean => {
@@ -661,5 +674,6 @@ export function createShopAdmin(options: ShopAdminOptions): ShopAdminAssembly {
       const { store, s } = await usable()
       return adminFor(store, s)
     },
+    hasLiveGrant: () => liveGrantIn(load(), now()),
   }
 }
