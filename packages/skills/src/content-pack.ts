@@ -255,8 +255,8 @@ export interface VerifyManifestOptions {
   source?: ContentSource
 }
 
-/** 条目 id：`<种类>:<名字>`。WP406 起种类与名字都可以带下划线（只放宽，老 id 照认）。 */
-export const CONTENT_ITEM_ID = /^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$/
+/** 条目 id：`<种类>:<名字>`。WP406 起种类与名字都可以带下划线（只放宽，老 id 照认；与 WP407 内容仓的验法同一条规则）。 */
+export const CONTENT_ITEM_ID = /^[a-z_]+:[a-z0-9][a-z0-9._-]*$/
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

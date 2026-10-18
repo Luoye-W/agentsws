@@ -88,7 +88,7 @@ export interface ContentDigestPort {
 }
 
 const POSITION_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
-const ITEM_ID = /^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$/
+const ITEM_ID = /^[a-z_]+:[a-z0-9][a-z0-9._-]*$/
 
 const PolicyBody = z.object({ policy: z.enum(POSITION_UPDATE_POLICIES) })
 const ApplyBody = z.object({

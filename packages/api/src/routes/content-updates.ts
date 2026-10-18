@@ -57,7 +57,7 @@ export interface ContentUpdatesPort {
 const ModeBody = z.object({ mode: z.enum(['auto', 'ask']) })
 
 // WP406：种类 / 名字可以带下划线（只放宽）
-const ITEM_ID = /^[a-z][a-z_]*:[a-z0-9][a-z0-9._-]*$/
+const ITEM_ID = /^[a-z_]+:[a-z0-9][a-z0-9._-]*$/
 
 function portOf(deps: GatewayDeps): ContentUpdatesPort {
   const p = deps.contentUpdates
