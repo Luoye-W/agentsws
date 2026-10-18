@@ -32,10 +32,7 @@
       "from": "factual-lookup-grounded-with-visual（未连接时）",
       "prompt": "帮我查查 Orders API 的限流。",
       "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
-      "must_include": [
-        "连上 Amazon 店铺后才能做",
-        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
-      ]
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
     }
   ]
 }

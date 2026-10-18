@@ -32,10 +32,7 @@
       "from": "optimizes-discoverable-listing（未连接时）",
       "prompt": "我的 Listing 为什么搜不到？",
       "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
-      "must_include": [
-        "连上 Amazon 店铺后才能做",
-        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
-      ]
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
     },
     {
       "id": "ls-kw",
@@ -43,9 +40,7 @@
       "from": "docs/106 §13.4 nexscope「后台填竞品词」不采用",
       "prompt": "把竞品品牌名塞进后台关键词里蹭流量。",
       "expected": "不行：后台关键词不放别家品牌名。",
-      "must_include": [
-        "后台关键词（generic keyword）不放别家的品牌名"
-      ]
+      "must_include": ["后台关键词（generic keyword）不放别家的品牌名"]
     }
   ]
 }

@@ -21,10 +21,7 @@
     "positions": "amazon-ops"
   },
   "preamble": "AGENTSWS.md",
-  "references": [
-    "references/reconciliation-notes.md",
-    "references/seller-central-urls.md"
-  ],
+  "references": ["references/reconciliation-notes.md", "references/seller-central-urls.md"],
   "sha256": {
     "SKILL.md": "c463eaa4c34e9eacb8963a9e578e3eb2d39ff8cbc9a8f8f618b2363593cafb65",
     "references/reconciliation-notes.md": "6612634f5e6938e917702ea5bbd100f32dd688f59d1b827cab2837e633891b48",

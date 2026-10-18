@@ -21,10 +21,7 @@
     "positions": "amazon-ops"
   },
   "preamble": "AGENTSWS.md",
-  "references": [
-    "references/manage-agents-guide.md",
-    "references/quick-collaborator.md"
-  ],
+  "references": ["references/manage-agents-guide.md", "references/quick-collaborator.md"],
   "sha256": {
     "SKILL.md": "e07c3369fc0b0d5b904e4cd050614fa3aebedfa379939f59f42f24e9dce16910",
     "references/manage-agents-guide.md": "cae24469c04835c5bb13fb28bcae5692ef82cbd025274e759e00f346c1d32cdb",

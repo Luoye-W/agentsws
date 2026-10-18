@@ -21,10 +21,7 @@
     "positions": "amazon-ops"
   },
   "preamble": "AGENTSWS.md",
-  "references": [
-    "references/price-change-guardrails.md",
-    "references/reports-vs-ordermetrics.md"
-  ],
+  "references": ["references/price-change-guardrails.md", "references/reports-vs-ordermetrics.md"],
   "sha256": {
     "SKILL.md": "eb583b963d71c2f44f89a9f601e26ee8f6e993918904ea2ffbd0bf5e34cddfad",
     "references/price-change-guardrails.md": "d5975fe4f1cbe6211500b400b79aac7ca8efa8738ecc8b110b79b6ab2633f84d",

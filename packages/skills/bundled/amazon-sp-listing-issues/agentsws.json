@@ -21,10 +21,7 @@
     "positions": "amazon-ops"
   },
   "preamble": "AGENTSWS.md",
-  "references": [
-    "references/fix-playbook.md",
-    "references/issue-taxonomy.md"
-  ],
+  "references": ["references/fix-playbook.md", "references/issue-taxonomy.md"],
   "sha256": {
     "SKILL.md": "5d1b3357f7df2af643b75d947f4fe0fa8782f9b8bcc31dc14da953c425de4838",
     "references/fix-playbook.md": "ad45a325213ff5ae0bad6d5584fc3f01dad6f85896f72094f070fd0a3d0b1f69",

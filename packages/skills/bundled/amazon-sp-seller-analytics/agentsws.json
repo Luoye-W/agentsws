@@ -21,10 +21,7 @@
     "positions": "amazon-ops"
   },
   "preamble": "AGENTSWS.md",
-  "references": [
-    "references/metrics-catalog.md",
-    "references/request-reference.md"
-  ],
+  "references": ["references/metrics-catalog.md", "references/request-reference.md"],
   "sha256": {
     "SKILL.md": "751d72ed0ba671fcdc9073dc5faef1561a8d18cbb0a966ca65287bed94beefda",
     "references/metrics-catalog.md": "59d61b1198485d4afc36c2d09dc246ecefc570bb987307566ebcda967e4b6ea1",

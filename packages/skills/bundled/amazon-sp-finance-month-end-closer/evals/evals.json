@@ -33,10 +33,7 @@
       "from": "happy-path-reconcile-last-month（未连接时）",
       "prompt": "帮我把上个月的 Amazon 账对一下。",
       "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
-      "must_include": [
-        "连上 Amazon 店铺后才能做",
-        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
-      ]
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
     },
     {
       "id": "fin-current",
@@ -44,9 +41,7 @@
       "from": "in-progress-month-refused",
       "prompt": "把这个月的账结一下。",
       "expected": "这个月没结束不能结，改结上一个完整月。",
-      "must_include": [
-        "**Completed-month gate (do this FIRST, before any tool call).**"
-      ]
+      "must_include": ["**Completed-month gate (do this FIRST, before any tool call).**"]
     }
   ]
 }

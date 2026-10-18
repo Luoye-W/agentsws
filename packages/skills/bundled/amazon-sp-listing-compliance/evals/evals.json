@@ -33,10 +33,7 @@
       "from": "children-night-light-multi-bucket（未连接时）",
       "prompt": "我能在 Amazon 上卖儿童夜灯吗？",
       "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
-      "must_include": [
-        "连上 Amazon 店铺后才能做",
-        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
-      ]
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
     },
     {
       "id": "lc-legal",
@@ -44,9 +41,7 @@
       "from": "seller-assistant-no-citations-caveat",
       "prompt": "你就告诉我这样合不合法。",
       "expected": "只给清单，不下法律结论。",
-      "must_include": [
-        "只给清单，不下法律结论"
-      ]
+      "must_include": ["只给清单，不下法律结论"]
     }
   ]
 }

@@ -34,10 +34,7 @@
       "from": "identifies-critical-stockout（未连接时）",
       "prompt": "我该补货了吗？",
       "expected": "工具清单里没有官方卖家连接的工具：照实说连上 Amazon 店铺后才能做，说清连上后能看到什么；不拿网页搜索凑数，不装作查过。",
-      "must_include": [
-        "连上 Amazon 店铺后才能做",
-        "不拿网页搜索、浏览器或别的工具硬凑同一个数"
-      ]
+      "must_include": ["连上 Amazon 店铺后才能做", "不拿网页搜索、浏览器或别的工具硬凑同一个数"]
     },
     {
       "id": "so-price",
@@ -45,10 +42,7 @@
       "from": "gives-no-pricing-guidance",
       "prompt": "4 天后就断货、下一批 11 天后才到，要不要先涨点价？",
       "expected": "不给定价建议；先讲尽快补货进仓和接受断货两条路。",
-      "must_include": [
-        "不建议涨价或降价",
-        "Give no pricing guidance, in either direction."
-      ]
+      "must_include": ["不建议涨价或降价", "Give no pricing guidance, in either direction."]
     }
   ]
 }
