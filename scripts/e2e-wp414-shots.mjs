@@ -138,6 +138,20 @@ async function main() {
       ),
     })
     const state = async (id) => (await demo.server.txn.approvals.get(id))?.state
+    /** 截图收尾 / 挪开用：在服务端直接定一张（不经工作台，不触发跟随）。 */
+    const settle = async (id, action) => {
+      const item = await demo.server.txn.approvals.get(id)
+      const tok = [...(item?.deliveries ?? [])].reverse().find((d) => d.status === 'sent')
+      if (tok === undefined) return
+      await demo.server.txn.approvals.decide(id, person, {
+        decision_token: tok.decision_token,
+        action,
+        ...(action === 'reject'
+          ? { reason: '截图收尾' }
+          : { defer_until: '2026-10-30T00:00:00.000Z' }),
+        via: 'api',
+      })
+    }
     const owner = await login(OWNER)
 
     const open = async (theme) => {
@@ -161,8 +175,16 @@ async function main() {
       return { context, page }
     }
 
-    /** 进 Reddit 运营那条职责的页面，翻到标题里有 `who` 的那张卡。 */
-    const toCard = async (page, who) => {
+    const TITLES = [
+      'Switching from Pixel to iPhone',
+      'Which phone has the best battery',
+      'Upgrading my old Galaxy',
+    ]
+    /**
+     * 进 Reddit 运营那条职责的页面，拿当前那张 r/Smartphones 卡（Reddit 卡同族，牌堆把它们合成一摞，
+     * 露在面上的那张就是代表），认出它是这一组里的哪一张。
+     */
+    const toCard = async (page, ids, own) => {
       await page.goto(`${BASE}/positions/${asg.id}/duties/social.reddit`, {
         waitUntil: 'networkidle',
       })
@@ -170,24 +192,36 @@ async function main() {
       await card.first().waitFor({ timeout: 30_000 })
       for (let i = 0; i < 40; i += 1) {
         const text = (await card.first().textContent()) ?? ''
-        if (text.includes(who) && text.includes('Smartphones')) return card.first()
+        // 同族的卡合成一摞、露在面上的是哪张不固定：自家版块那张在面上就先在服务端推迟它（不算跟随）
+        if (own !== undefined && text.includes('Air3 captions')) {
+          await settle(own, 'defer')
+          await page.reload({ waitUntil: 'networkidle' })
+          await card.first().waitFor({ timeout: 30_000 })
+          continue
+        }
+        const k = TITLES.findIndex((title) => text.includes(title))
+        if (k >= 0)
+          return { card: card.first(), leader: ids[k], others: ids.filter((_, j) => j !== k) }
         const next = page.getByTestId('deck-next')
         if ((await next.count()) === 0 || (await next.isDisabled())) break
         await next.click()
         await page.waitForTimeout(250)
       }
-      throw new Error(`牌堆里翻不到「${who}」那张`)
+      await page.screenshot({ path: join(SHOTS, 'debug.png') })
+      throw new Error(
+        `牌堆里翻不到 r/Smartphones 那几张：${((await card.first().textContent()) ?? '').slice(0, 200)}`,
+      )
     }
     const deck = (page) => page.getByTestId('deck-section')
 
     for (const theme of ['light', 'dark']) {
       console.log(`— ${theme}`)
       const { ids, own } = await group()
-      const [first, second, third] = ids
       const { context, page } = await open(theme)
 
       // 1. 卡底按钮
-      const card = await toCard(page, 'alice')
+      const { card, leader: first, others } = await toCard(page, ids, own)
+      const [second, third] = others
       const bar = card.getByTestId('deck-action-bar')
       const labels = (await bar.getByRole('button').allTextContents()).map((s) => s.trim())
       if (theme === 'light') {
@@ -220,7 +254,8 @@ async function main() {
             (await state(third)) === 'rejected',
           '服务端：第一张不发，同类两张跟着不发',
         )
-        check((await state(own)) === 'pending', '自家版块那张没动')
+        const mine = await demo.server.txn.approvals.get(own)
+        check(mine?.decision?.followed === undefined, '自家版块那张没被跟着处理')
       }
       await shot(page, `2-drop-follow-${theme}`, deck(page))
 
@@ -266,7 +301,8 @@ async function main() {
 
       // 6. 「发送」：只问要不要一起发
       const next = await group()
-      const sendCard = await toCard(page, 'alice')
+      const sent = await toCard(page, next.ids, next.own)
+      const sendCard = sent.card
       await sendCard.getByTestId('reddit-write-send').click()
       const suggested = page.getByTestId('deck-follow-suggested')
       await suggested.waitFor({ timeout: 20_000 })
@@ -276,12 +312,13 @@ async function main() {
           '点「发送」之后：只问「这 2 张和刚才那张类似，要一起发送吗？」',
         )
         check(
-          (await state(next.ids[1])) === 'pending' && (await state(next.ids[2])) === 'pending',
+          (await state(sent.others[0])) === 'pending' &&
+            (await state(sent.others[1])) === 'pending',
           '服务端：同类卡一张都没自动发',
         )
       }
       await shot(page, `6-send-suggest-${theme}`, deck(page))
-      for (const id of [...next.ids.slice(1), next.own]) {
+      for (const id of [...sent.others, next.own]) {
         const item = await demo.server.txn.approvals.get(id)
         const tok = [...(item?.deliveries ?? [])].reverse().find((d) => d.status === 'sent')
         if (tok !== undefined)
@@ -300,6 +337,8 @@ async function main() {
   }
   if (failed) process.exit(1)
   console.log('WP414 端到端通过')
+  // demo 里还挂着几个后台定时器：截完就走，不等它们
+  process.exit(0)
 }
 
 main().catch((err) => {

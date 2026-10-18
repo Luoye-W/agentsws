@@ -237,7 +237,7 @@ describe('指导抽屉顶部的示例任务（WP84）', () => {
     // 37 §1 第 7 行：点开之前折叠区根本不在 DOM 里，示例任务也一样
     expect(screen.queryByTestId('task-examples')).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: '改一下' }))
+    await user.click(screen.getByRole('button', { name: '修改' }))
     const examples = await screen.findByTestId('task-examples')
     expect(examples).toBeDefined()
     expect(screen.getAllByTestId('task-example')).toHaveLength(2)
@@ -254,7 +254,7 @@ describe('指导抽屉顶部的示例任务（WP84）', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={vi.fn()} onOpen={() => {}} />,
     )
-    await user.click(screen.getByRole('button', { name: '改一下' }))
+    await user.click(screen.getByRole('button', { name: '修改' }))
     const box = screen.getByLabelText('一句话说清楚要怎么改') as HTMLTextAreaElement
     await user.type(box, '先道歉')
     await user.click(await screen.findByText('一封退货来信'))
