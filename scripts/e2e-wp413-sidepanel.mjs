@@ -8,8 +8,11 @@
  * 「人」在页面上点 save（Playwright 的真输入，isTrusted）→ 插件读回 → 侧边栏这一条「已发 · 已记录」→
  * 记录里标「在插件里批的」；服务端那张卡 `via: 'extension'`、发出记录 `approved_via: 'extension'`。
  *
+ * WP419：WP411 之后自动起草前要**先读整串、先定品牌号口吻**——这里照真流程走：插件把整串也读了、口吻没定时
+ * 侧边栏照实说「等你先定品牌号怎么说话」（带「去定」），定了才出卡；卡上带「品牌号在这串里说过」。
+ *
  * 用法（先 `npx tsc -b` 与 `pnpm -F @agentsws/extension build`）：
- *   node scripts/e2e-wp413-sidepanel.mjs [--headed] [--keep] [--shots=<目录>]
+ *   node scripts/e2e-wp413-sidepanel.mjs [--headed] [--keep] [--shots=<目录>] [--port=<本机端口>]
  *   （`--shots` 把侧边栏浅 / 深两套与替身 Reddit 页截到那个目录；截图放私有文档仓，不进本仓）
  * 退出码：0 全过；1 有一步没过；2 起不来。
  */
@@ -24,6 +27,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
 const flag = (n) => args.includes(n)
 const SHOTS = args.find((a) => a.startsWith('--shots='))?.slice('--shots='.length)
+const LISTEN = Number(args.find((a) => a.startsWith('--port='))?.slice('--port='.length) ?? 0)
 const BUILD = join(ROOT, 'apps/extension/build/chrome-mv3')
 const imp = (p) => import(pathToFileURL(join(ROOT, p)).href)
 
@@ -72,6 +76,54 @@ const JSON_ROUTES = {
     post('p2', 'Firmware 2.1 notes', 'ivra_official', 7200),
   ]),
   '/r/ivraxr/comments/.json': listing([]),
+  // WP411：起草前读整串——原帖 + 品牌号以前那一条 + alice 回它的这一条
+  '/comments/abc/.json': [
+    listing([
+      {
+        kind: 't3',
+        data: {
+          id: 'abc',
+          name: 't3_abc',
+          title: 'Does the Air3 work with glasses?',
+          selftext: '',
+          author: 'carol',
+          subreddit: 'ivraxr',
+          permalink: '/r/ivraxr/comments/abc/slug/',
+          created_utc: NOW_S - 86_400,
+        },
+      },
+    ]),
+    listing([
+      {
+        kind: 't1',
+        data: {
+          id: 'ours',
+          name: 't1_ours',
+          author: 'ivra_official',
+          body: 'We have a clip-on insert for most frames.',
+          subreddit: 'ivraxr',
+          link_id: 't3_abc',
+          parent_id: 't3_abc',
+          permalink: '/r/ivraxr/comments/abc/slug/ours/',
+          created_utc: NOW_S - 7200,
+        },
+      },
+      {
+        kind: 't1',
+        data: {
+          id: 'c1',
+          name: 't1_c1',
+          author: 'alice',
+          body: 'Mine fogs up a bit when I wear glasses. Does the Air3 work with prescription frames?',
+          subreddit: 'ivraxr',
+          link_id: 't3_abc',
+          parent_id: 't1_ours',
+          permalink: '/r/ivraxr/comments/abc/slug/c1/',
+          created_utc: NOW_S - 900,
+        },
+      },
+    ]),
+  ],
   '/r/ivraxr/about/rules.json': {
     rules: [{ short_name: 'No referral links', description: 'Do not post affiliate links.' }],
   },
@@ -121,7 +173,7 @@ const server = await createServer({
   scheduleIntervalMs: 0,
   startRun: false,
 })
-const { port: PORT } = await server.listen(0)
+const { port: PORT } = await server.listen(LISTEN)
 const BASE = `http://127.0.0.1:${PORT}`
 const ws = server.bootstrap.workspace.id
 const me = server.bootstrap.person.id
@@ -176,14 +228,36 @@ const read = await ba.runRedditRead(got.job, {
   gapMs: 0,
 })
 await rw.result(got.job.id, read)
-const autoCard = await until(
+// WP411：插件在线 → 起草前先读整串（又是一件活，插件下次来问时领）
+let threadRead = false
+for (let i = 0; i < 20 && !threadRead; i += 1) {
+  await new Promise((r) => setTimeout(r, 30))
+  const next = rw.next({ connected: true })
+  if (next.job === undefined) continue
+  threadRead = next.job.reads.some((r) => r.kind === 'post_comments')
+  await rw.result(
+    next.job.id,
+    await ba.runRedditRead(next.job, {
+      fetch: fakeFetch,
+      sleep: async () => {},
+      stopped: () => false,
+      gapMs: 0,
+    }),
+  )
+}
+check('起草前插件先把整串读了', threadRead)
+const autoCards = () =>
+  server.txn.runtime.store
+    .listApprovals({ workspace_id: ws, kind: 'outbound_draft' })
+    .filter((c) => c.payload?.form === 'reddit_write')
+const personaCard = await until(
   () =>
     server.txn.runtime.store
-      .listApprovals({ workspace_id: ws, kind: 'outbound_draft' })
-      .some((c) => c.payload?.form === 'reddit_write'),
+      .listApprovals({ workspace_id: ws, kind: 'setup_request' })
+      .some((c) => c.title.startsWith('品牌号怎么说话')),
   10_000,
 )
-check('巡查读到 alice 的回复 → 自动起草出一张「发出去」卡', autoCard)
+check('口吻没定：不起草，先出「品牌号怎么说话」卡', personaCard && autoCards().length === 0)
 // 再出一张（人在工作台点的那种），让「要你处理」里有两张
 await http(
   '/v1/social/reddit/stage',
@@ -283,6 +357,30 @@ try {
   const pairedOk = await until(() => panel.locator('[data-testid="ws-tab-todo"]').isVisible())
   check('侧边栏里就地输配对码 → 配上，出三块', pairedOk)
 
+  // WP419：口吻没定 → 「要你处理」顶上照实说卡在哪、带「去定」
+  const stageOk = await until(
+    async () =>
+      (
+        (await panel
+          .locator('[data-testid="ws-stage"]')
+          .textContent()
+          .catch(() => '')) ?? ''
+      ).includes('等你先定品牌号怎么说话'),
+    15_000,
+  )
+  check(
+    '侧边栏照实说：等你先定品牌号怎么说话（带「去定」）',
+    stageOk && (await panel.locator('[data-testid="ws-stage-open"]').count()) === 1,
+  )
+  await shot(panel, '2a-persona-light')
+  await panel.emulateMedia({ colorScheme: 'dark' })
+  await shot(panel, '2a-persona-dark')
+  await panel.emulateMedia({ colorScheme: 'light' })
+  // 人在工坊里定了口吻 → 等着的那条接着起草出卡
+  await brand.redditPersona.setupTarget().apply({ stance: 'team' })
+  const autoCard = await until(() => autoCards().length > 0, 15_000)
+  check('定了口吻 → 巡查读到 alice 的回复自动起草出一张「发出去」卡', autoCard)
+
   const cards = panel.locator('[data-testid="ws-card"]')
   await until(async () => (await cards.count()) === 2, 15_000)
   check('「要你处理」里是这个人的两张卡', (await cards.count()) === 2)
@@ -304,6 +402,16 @@ try {
   // ① 改草稿 → 填进页面（alice 那一张：插件新开标签页、点 reply、把改过的字填好、等人点）
   const alice = cards.filter({ hasText: 'alice' }).first()
   if ((await alice.getAttribute('data-open')) !== '1') await alice.locator('.ws-card-head').click()
+  check(
+    'alice 那张卡上带「品牌号在这串里说过 1 次」',
+    (
+      (await alice
+        .locator('[data-testid="ws-prior"]')
+        .textContent()
+        .catch(() => '')) ?? ''
+    ).includes('说过 1 次'),
+  )
+  await shot(panel, '2b-card-checks-light')
   await alice.locator('[data-testid="ws-draft"]').fill(EDITED)
   await alice.locator('[data-testid="ws-fill"]').click()
   let pg
