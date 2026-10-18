@@ -1,0 +1,206 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：GEO 候选问题的句子模板，从 geo-prompts.ts 的 templates() 原样挪来（WP310 按方向分组）。",
+    "顺序即出句顺序。占位：{cat} 品类、{name} 品牌名、{rival0} / {rival1} 前两个竞品、{use} 使用场景（最多前三个）。",
+    "needs：cat = 有品类才出；rivals2 = 至少两个竞品；rival0 = 至少一个竞品；each_use = 每个使用场景出一句；no_uses = 一个使用场景都没有时才出。lang 不是 zh 的一律用 en 那几行。"
+  ],
+  "table": "seo.geo_prompt_templates",
+  "rows": [
+    {
+      "id": "zh.category.1",
+      "lang": "zh",
+      "topic": "category",
+      "text": "{cat}哪个牌子好？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.category.2",
+      "lang": "zh",
+      "topic": "category",
+      "text": "现在口碑最好的{cat}有哪些？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.buying_guide.1",
+      "lang": "zh",
+      "topic": "buying_guide",
+      "text": "买{cat}要注意什么？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.buying_guide.2",
+      "lang": "zh",
+      "topic": "buying_guide",
+      "text": "怎么选一款合适的{cat}？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.comparison.1",
+      "lang": "zh",
+      "topic": "comparison",
+      "text": "{rival0}和{rival1}的{cat}哪个好？",
+      "needs": ["cat", "rivals2"]
+    },
+    {
+      "id": "zh.comparison.2",
+      "lang": "zh",
+      "topic": "comparison",
+      "text": "有没有比{rival0}更好的{cat}？",
+      "needs": ["cat", "rival0"]
+    },
+    {
+      "id": "zh.use_case.1",
+      "lang": "zh",
+      "topic": "use_case",
+      "text": "{use}用什么{cat}比较好？",
+      "needs": ["cat", "each_use"]
+    },
+    {
+      "id": "zh.use_case.2",
+      "lang": "zh",
+      "topic": "use_case",
+      "text": "新手适合用什么{cat}？",
+      "needs": ["cat", "no_uses"]
+    },
+    {
+      "id": "zh.price_value.1",
+      "lang": "zh",
+      "topic": "price_value",
+      "text": "性价比最高的{cat}是哪款？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.price_value.2",
+      "lang": "zh",
+      "topic": "price_value",
+      "text": "便宜的{cat}值得买吗？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.reviews.1",
+      "lang": "zh",
+      "topic": "reviews",
+      "text": "哪些{cat}品牌评价最好、最耐用？",
+      "needs": ["cat"]
+    },
+    {
+      "id": "zh.branded.1",
+      "lang": "zh",
+      "topic": "branded",
+      "text": "{name}怎么样，值得买吗？",
+      "needs": []
+    },
+    {
+      "id": "zh.branded.2",
+      "lang": "zh",
+      "topic": "branded",
+      "text": "{name}的口碑如何？",
+      "needs": []
+    },
+    {
+      "id": "zh.branded.3",
+      "lang": "zh",
+      "topic": "branded",
+      "text": "{name}和{rival0}哪个好？",
+      "needs": ["rival0"]
+    },
+    {
+      "id": "en.category.1",
+      "lang": "en",
+      "topic": "category",
+      "text": "What is the best {cat}?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.category.2",
+      "lang": "en",
+      "topic": "category",
+      "text": "Which {cat} brands are the most recommended right now?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.buying_guide.1",
+      "lang": "en",
+      "topic": "buying_guide",
+      "text": "What should I look for when buying a {cat}?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.buying_guide.2",
+      "lang": "en",
+      "topic": "buying_guide",
+      "text": "How do I choose the right {cat}?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.comparison.1",
+      "lang": "en",
+      "topic": "comparison",
+      "text": "{rival0} vs {rival1}: which {cat} is better?",
+      "needs": ["cat", "rivals2"]
+    },
+    {
+      "id": "en.comparison.2",
+      "lang": "en",
+      "topic": "comparison",
+      "text": "What are the best alternatives to {rival0}?",
+      "needs": ["cat", "rival0"]
+    },
+    {
+      "id": "en.use_case.1",
+      "lang": "en",
+      "topic": "use_case",
+      "text": "What is the best {cat} for {use}?",
+      "needs": ["cat", "each_use"]
+    },
+    {
+      "id": "en.use_case.2",
+      "lang": "en",
+      "topic": "use_case",
+      "text": "What is the best {cat} for beginners?",
+      "needs": ["cat", "no_uses"]
+    },
+    {
+      "id": "en.price_value.1",
+      "lang": "en",
+      "topic": "price_value",
+      "text": "What is the best budget {cat}?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.price_value.2",
+      "lang": "en",
+      "topic": "price_value",
+      "text": "Is an expensive {cat} worth it?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.reviews.1",
+      "lang": "en",
+      "topic": "reviews",
+      "text": "Which {cat} brands have the best reviews for reliability?",
+      "needs": ["cat"]
+    },
+    {
+      "id": "en.branded.1",
+      "lang": "en",
+      "topic": "branded",
+      "text": "Is {name} worth it?",
+      "needs": []
+    },
+    {
+      "id": "en.branded.2",
+      "lang": "en",
+      "topic": "branded",
+      "text": "What do customers say about {name}?",
+      "needs": []
+    },
+    {
+      "id": "en.branded.3",
+      "lang": "en",
+      "topic": "branded",
+      "text": "{name} vs {rival0}: which is better?",
+      "needs": ["rival0"]
+    }
+  ]
+}
