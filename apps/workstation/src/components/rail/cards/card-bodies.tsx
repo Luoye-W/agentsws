@@ -344,7 +344,7 @@ function MonitorRow({
 
 /* ── 设定 ───────────────────────────────────────────────────────────── */
 
-export function SettingsCard({ limit }: RailCardBodyProps): ReactNode {
+export function SettingsCard({ limit, tier }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const models = useQuery({ queryKey: MODEL_CHOICES_KEY, queryFn: getFreeChatModels, retry: false })
@@ -357,7 +357,17 @@ export function SettingsCard({ limit }: RailCardBodyProps): ReactNode {
       open: () => undefined,
       href: settingsHref('models'),
     },
-    ...(['memory', 'knowledge', 'skills', 'role', 'caps'] as const).map((id) => ({
+    // WP406：岗位层多一行「岗位更新」（官方更新的三档设置、挑着看、退回）
+    ...(
+      [
+        'memory',
+        'knowledge',
+        'skills',
+        'role',
+        'caps',
+        ...(tier === 'position' ? (['updates'] as const) : []),
+      ] as const
+    ).map((id) => ({
       id,
       label: t(`rail.panel.${id}`),
       open: () => {

@@ -271,6 +271,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   geo_watch: 'geo_watch',
   // WP390
   service_order: 'service_order',
+  // WP406
+  content_update_digest: 'content_update_digest',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

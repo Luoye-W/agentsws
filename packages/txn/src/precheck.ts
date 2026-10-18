@@ -68,6 +68,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'geo_watch',
   // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 交换联系方式；永远 L1）
   'service_order',
+  // WP406：岗位更新（只换最底下那一层，可退回）
+  'content_update_digest',
 ])
 
 export function isKnownKind(kind: string): boolean {

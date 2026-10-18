@@ -219,6 +219,12 @@ export interface DemoOptions {
    * demo 默认不装配内容更新（设置里没有那一行，deck 里也不会多出卡）。
    */
   contentUpdates?: ServerOptions['contentUpdates']
+  /**
+   * WP406（私有 docs/107）：官方订阅的岗位更新（现生成的钥匙、临时存放处）+ 云替身上那几条路的包。
+   * **只给截图脚本用**（`scripts/e2e-wp406-shots.mjs`）；demo 默认不装配（岗位设定里没有那一页的内容，deck 不多出卡）。
+   */
+  officialContent?: ServerOptions['officialContent']
+  officialCloud?: NonNullable<Parameters<typeof cloudStandIn>[0]>['officialContent']
 }
 
 export interface Demo {
@@ -1458,6 +1464,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     ...(options.cloudAutoLinkAfterMs === undefined
       ? {}
       : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),
+    ...(options.officialCloud === undefined ? {} : { officialContent: options.officialCloud }),
   })
   /*
    * WP173：开发信那几跳在 demo 里全是替身——不做真 DNS 查询、没有真邮箱、不真发信。
@@ -1548,6 +1555,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
     ...(options.officialPlugins === undefined ? {} : { officialPlugins: options.officialPlugins }),
     ...(options.contentUpdates === undefined ? {} : { contentUpdates: options.contentUpdates }),
+    ...(options.officialContent === undefined ? {} : { officialContent: options.officialContent }),
     // WP158：Search Console 读数层配替身连接器（两个站点 → 先出「选一下」那张小卡）
     googleReadsFor: (ws) => {
       const hit = demoGoogle.get(ws) ?? demoGoogleReads({ workspace_id: ws, clock: world.clock })

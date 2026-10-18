@@ -16,6 +16,7 @@ import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import { DigestCardBody } from '@/components/content-updates/digest-card-body'
 import {
   GoogleAlertChangeBody,
   isGoogleAlertChangePayload,
@@ -29,6 +30,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
 import { useApp } from '@/lib/app-context'
+import { isContentDigestPayload } from '@/lib/content-digest-api'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
@@ -356,6 +358,8 @@ export function DeckCardBody({
           return <SetupDeckBody card={card} />
         // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 联系方式）——主按钮在卡身里
         if (isServiceCard(card)) return <ServiceCardBody card={card} />
+        // WP406（私有 docs/107 §5.1）：岗位更新——逐项「改了什么 / 你改过没」+ 卡身里「全部应用 / 挑着看 / 这次跳过」
+        if (isContentDigestPayload(payload)) return <DigestCardBody card={card} payload={payload} />
         // WP304（决策 445）：买高级主题（「花钱」家族）——一个大数（积分）+ 一句这家店一次买断；不出双格、不出「以后都这样」
         if (payload.form === 'theme_purchase')
           return (

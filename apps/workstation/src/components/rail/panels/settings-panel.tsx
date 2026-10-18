@@ -38,12 +38,18 @@ export const DUTY_TABS: Readonly<Record<string, readonly string[]>> = {
   'dtc.content': ['geo-watch'],
 }
 
-type TabId = SettingsTab | 'geo-watch'
+type TabId = SettingsTab | 'geo-watch' | 'updates'
 
-/** 这一层有哪些标签（五个通用的 + 这条职责自己的）。 */
+/**
+ * 这一层有哪些标签（五个通用的 + 这条职责自己的）。
+ * WP406（私有 docs/107 §5）：岗位层多一个「岗位更新」（官方更新的三档设置、挑着看、退回）。
+ */
 export function tabsOf(scope: RailScope): TabId[] {
-  const extra = scope.tier === 'role' ? (DUTY_TABS[scope.scope_id] ?? []) : []
-  return [...SETTINGS_TABS, ...(extra as TabId[])]
+  const extra =
+    scope.tier === 'role'
+      ? ((DUTY_TABS[scope.scope_id] ?? []) as TabId[])
+      : (['updates'] as TabId[])
+  return [...SETTINGS_TABS, ...extra]
 }
 
 type ScopedBody = ComponentType<{ scope: RailScope }>
@@ -51,6 +57,9 @@ type ScopedBody = ComponentType<{ scope: RailScope }>
 const BODIES: Record<TabId, LazyExoticComponent<ScopedBody>> = {
   'geo-watch': lazy(async () => ({
     default: (await import('@/components/seo/geo-watch-settings')).GeoWatchSettingsPanel,
+  })),
+  updates: lazy(async () => ({
+    default: (await import('./content-updates-panel')).ContentUpdatesTab,
   })),
   role: lazy(async () => ({ default: (await import('./role-panel')).RolePanel })),
   memory: lazy(async () => ({ default: (await import('./memory-panel')).MemoryPanel })),

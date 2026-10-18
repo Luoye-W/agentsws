@@ -74,6 +74,7 @@ import type { CompetitorWatchPort } from './routes/competitor-watch.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { ContentDigestPort } from './routes/content-digest.js'
 import type { ContentUpdatesPort } from './routes/content-updates.js'
 import type { DataServiceApiPort } from './routes/data-service.js'
 import type { DesignPort } from './routes/design.js'
@@ -1228,6 +1229,11 @@ export interface GatewayDeps {
    * 按品牌；没装配时 `/v1/settings/content-updates*` 回 not_implemented（设置页那一行不出）。
    */
   contentUpdates?: ContentUpdatesPort
+  /**
+   * WP406（私有 docs/107）：岗位更新——第三栏「设定 · 岗位更新」与「挑着看」、订阅、现在查一次。
+   * 按品牌；没装配时 `/v1/content-updates/*` 回 not_implemented（第三栏那一页不出）。
+   */
+  contentDigest?: ContentDigestPort
   /**
    * WP216：这个品牌的平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）。按品牌档案判断；
    * 没装配时 `/v1/platform-kit*` 回 not_implemented。

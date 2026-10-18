@@ -79,6 +79,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   geo_watch: ['approve', 'reject', 'snooze', 'open'],
   // WP390：花钱卡——批 / 不要 / 稍后；**没有「指导」**（不落成「以后都这样」，下单永远人点）
   service_order: ['approve', 'reject', 'snooze', 'open'],
+  // WP406：岗位更新——「全部应用 / 这次跳过」在卡身里（选项），「挑着看」开第三栏；没有「指导」
+  content_update_digest: ['approve', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -116,6 +118,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   setup_request: { approve: '保存并接着做', reject: '先不设', snooze: '稍后' },
   geo_watch: { approve: '就这样', reject: '不要', snooze: '稍后' },
   service_order: { approve: '同意', reject: '先不要', snooze: '稍后' },
+  content_update_digest: { approve: '全部应用', snooze: '稍后', open: '挑着看' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -169,6 +172,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   geo_watch: 'low',
   // WP390：批了就扣积分进托管（验收 / 联系方式卡也在这一档：动的是钱或个人联系方式）
   service_order: 'medium',
+  // WP406：只换最底下那一层（你改的、AI 学的不动），整批 / 单项都能退回
+  content_update_digest: 'low',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -221,6 +226,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   setup_request: 1,
   geo_watch: 2,
   service_order: 1,
+  content_update_digest: 1,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

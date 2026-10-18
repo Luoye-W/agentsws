@@ -196,6 +196,12 @@ export type ApprovalKind =
    * 失败一律不动钱，在事项里照实说一句、重出一张同键的卡。
    */
   | 'service_order'
+  /**
+   * WP406（私有 docs/107 §5）：**岗位更新**——官方订阅的岗位内容本周更新了几项，一个岗位一周最多一张
+   * （急件单出）。「全部应用」/「这次跳过」是卡上的两个选项（`selected_option_id`），「挑着看」开第三栏。
+   * 公司模式只发给品牌负责人与这个岗位的负责人。payload = `ContentDigestCardPayload`。
+   */
+  | 'content_update_digest'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

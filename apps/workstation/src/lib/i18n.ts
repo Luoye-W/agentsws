@@ -16,6 +16,7 @@ import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
+import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
@@ -8673,6 +8674,8 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_LISTING_ZH,
     // WP401：积木表格的筛选
     ...TABLE_FILTER_ZH,
+    // WP406：岗位更新
+    ...CONTENT_DIGEST_ZH,
   },
   en: {
     ...en,
@@ -8719,6 +8722,7 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_KEYWORDS_EN,
     ...AMAZON_LISTING_EN,
     ...TABLE_FILTER_EN,
+    ...CONTENT_DIGEST_EN,
   },
 }
 

@@ -115,6 +115,12 @@ export interface PersonasOptions {
    * 这个回调回 `undefined` 或空对象时，persona 里一句品牌的话都不出现（69 §5「别编」）。
    */
   brand?(workspace_id?: string): PersonaBrandContext | undefined
+  /**
+   * WP406（私有 docs/107 §4）：官方岗位内容里这个岗位的角色定位（应用过才有）。给了就当「包里的原文」用——
+   * 公司按段改过的那几段照旧叠在它上面，没改的段跟着官方新版走。职责那一份不用这一口：官方内容层直接叠进了
+   * 职责定义（`roles.roles`），这里读到的就是叠好的。
+   */
+  packagedPositionPersona?(position_id: string): PersonaText | undefined
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
 }
 
@@ -205,6 +211,8 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
     } catch {
       packaged = undefined
     }
+    const official = options.packagedPositionPersona?.(id)
+    if (official !== undefined) return { ...stored, persona: official }
     return packaged?.persona === undefined ? stored : { ...stored, persona: packaged.persona }
   }
 
