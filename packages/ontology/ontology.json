@@ -43,6 +43,7 @@
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/execution.ts",
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
@@ -151,7 +152,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "f7e8c2ca52adf9070195ffe2bbf10bb0",
+  "source_digest": "d32c3c0a059ee5de2394c13d0db6c9ab",
   "objects": [
     {
       "id": "ad",
@@ -4984,6 +4985,12 @@
         {
           "name": "apply.error",
           "type": "ApplyError",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "apply.readback",
+          "type": "import('./execution.js').ExecutionReadback",
           "sensitivity": "internal",
           "optional": true
         },
