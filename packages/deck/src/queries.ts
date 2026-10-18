@@ -10,6 +10,7 @@
  * GA4 / Search Console / 广告后台没接连接，一律回 `not_connected`（界面显示「去连接」而不是空图）。
  */
 import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
+import { executionOutcomeOf } from '@agentsws/contracts'
 import {
   ADS_PLATFORMS,
   adsPlatformOfRole,
@@ -1774,6 +1775,8 @@ const QUERY_LIST: QueryDef[] = [
           summary: i.summary,
           state: i.state,
           ref: i.subject.object,
+          // WP415：执行过的照实说办没办成（已核对 / 没能回读 / 没做 + 原因 / 演示）
+          ...executionOf(i),
         }))
       /*
        * WP299（决策 387）：红人职责的记录里加「合作复盘」——一条合作一行「花了多少、带来多少、
@@ -2783,4 +2786,10 @@ function regionName(code: string): string {
   } catch {
     return code
   }
+}
+
+/** WP415：时间线那一行的执行结果（还没执行到的卡没有这一格）。 */
+function executionOf(i: ApprovalItem): Pick<RecordRow, 'execution'> {
+  const execution = executionOutcomeOf(i)
+  return execution === undefined ? {} : { execution }
 }

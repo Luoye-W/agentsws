@@ -385,6 +385,13 @@ export interface ApplyRecord {
   }[]
   guardrail_rerun?: { passed: boolean; caps_hit: string[] }
   outcome_ref?: ObjectRef
+  /**
+   * WP415（只加）：执行器回 ok 时有没有读回来核对过（`execution.ts`）。
+   * 没有这一格 = 老卡或执行器没说——读成「已执行未能回读」，不往好里猜。
+   */
+  readback?: import('./execution.js').ExecutionReadback
+  /** WP415（只加）：没做的原因是「这一步还没接通」（生产里没有真执行器）。 */
+  not_wired?: true
 }
 
 export interface Delivery {

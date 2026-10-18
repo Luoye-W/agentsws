@@ -6,6 +6,7 @@
  * 拿到的一定是同一份。
  */
 import type { ApprovalItem, Iso8601, ObjectRef, RiskClass } from '@agentsws/contracts'
+import { executionOutcomeOf } from '@agentsws/contracts'
 import { layoutFor } from './layout.js'
 import { actionsFor, labelsFor, minutesFor, riskClassFor } from './matrix.js'
 import type {
@@ -784,10 +785,19 @@ function manualSendLabels(actions: DeckAction[]): Partial<Record<DeckAction, str
   return out
 }
 
+/**
+ * WP415：没接通的卡只留「不要」（按钮写「知道了」）与「稍后」——「通过」「改一下」都拿掉：
+ * 批了也不会真去做，改了也一样。
+ */
+const NOT_WIRED_KEEP: ReadonlySet<DeckAction> = new Set(['reject', 'snooze', 'open'])
+
 export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const kind = item.kind as DeckKind
   const risk = ctx.riskClass?.(item) ?? riskClassFor(kind)
-  const actions = actionsFor(kind, item.state)
+  const wiring = ctx.wiring?.(item)
+  const notWired = wiring?.state === 'not_wired'
+  const actions = actionsFor(kind, item.state).filter((a) => !notWired || NOT_WIRED_KEEP.has(a))
+  const execution = executionOutcomeOf(item)
   const options = optionsOf(item)
   const payload = isRecord(item.payload) ? item.payload : {}
   const to = isObjectRef(payload.to) ? payload.to : undefined
@@ -846,7 +856,13 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     evidence_chips: evidenceChipsOf(item, ctx),
     entity_chips: entities.chips,
     available_actions: actions,
-    action_labels: manualSend ? manualSendLabels(actions) : labelsFor(kind, actions),
+    action_labels: notWired
+      ? { ...labelsFor(kind, actions), ...(actions.includes('reject') ? { reject: '知道了' } : {}) }
+      : manualSend
+        ? manualSendLabels(actions)
+        : labelsFor(kind, actions),
+    ...(wiring === undefined ? {} : { wiring }),
+    ...(execution === undefined ? {} : { execution }),
     ...(options === undefined ? {} : { options }),
     detail: {
       payload: item.payload,

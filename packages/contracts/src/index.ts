@@ -27,6 +27,7 @@ export * from './brand-insights.js'
 export * from './brand-intake.js'
 export * from './byo-data-source.js'
 export * from './changes.js'
+export * from './execution.js'
 export * from './channels.js'
 // WP164：聊天转发器的协议、owner 面与访客面（开源侧与官方托管转发器之间的约定）
 export * from './chat-relay.js'

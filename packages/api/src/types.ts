@@ -15,6 +15,7 @@ import type {
   EffectiveAction,
   EventEnvelope,
   EventId,
+  ExecutionWiring,
   FactCard,
   GuardrailResult,
   Halt,
@@ -867,6 +868,11 @@ export interface SchedulePort {
 
 export interface GatewayDeps {
   identity: IdentityService
+  /**
+   * WP415（只加）：一张卡这一步接没接通（执行器登记表 × 运行形态）。卡片投影时问它：
+   * `not_wired` 的卡不出「通过」、决定时也批不了；`demo` 的卡标「演示」。不给 = 不标（老行为）。
+   */
+  executionWiring?: (item: ApprovalItem) => ExecutionWiring | undefined
   /**
    * WP194（只加）：一次请求绑定好分配之后，路由在这个作用域里跑。宿主用它开一个
    * 「这一次算在谁头上」的作用域（本机公司成员 + 岗位），底下打云的客户端据此带归属头。

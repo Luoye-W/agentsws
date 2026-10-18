@@ -97,6 +97,7 @@ import type {
   ContentPublicKey,
   DataSourceLevel,
   EventEnvelope,
+  ExecutionMode,
   Halt,
   ImageProvider,
   KolChannel,
@@ -306,6 +307,13 @@ import { type B2bSalesAssembly, b2bLetterheadOf, createB2bSales } from './b2b-sa
 import { type B2bServiceAssembly, createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
+import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
+import {
+  INLINE_EXECUTION_PREFIX,
+  inlineApply,
+  readbackFor,
+  wiringOfItem,
+} from './execution/registry.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { attachBootBrandToCompany } from './boot-brand-org.js'
 import {
@@ -1134,6 +1142,13 @@ export interface ServerOptions {
   random?: () => number
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
+  /**
+   * WP415（决策 1236）：执行兜底怎么走。`live` = 真用（没有真执行器的卡出卡就标「还没接通」，
+   * 批了也照实回「没做」，绝不进内存空桩回成功）；`demo` = 演示（空桩照走、标「演示」）；
+   * `memory` = 测试与一次性任务（老行为）。不给：接了模拟世界 = `demo`，否则 `memory`。
+   * **生产入口 `index.ts` 必须显式给 `live`**（守卫测试盯着）。
+   */
+  execution?: ExecutionMode
   /**
    * 决策 945：局域网档的主人设置码印到哪。不给写 stderr（`docker compose logs server` 看得到）；
    * 本机档不印。测试注入它来读码。
@@ -2512,6 +2527,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let scheduleRef: ScheduleAssembly | undefined
 
   const backend = new MemoryBackend()
+  /**
+   * WP415（决策 1236）：谁都不认的卡最后落到哪。生产（`index.ts` 给 `execution: 'live'`）不进空桩、
+   * 照实回「还没接通」；演示（接了模拟世界）走空桩但标「演示」；测试与一次性任务照旧。
+   */
+  const executionMode = resolveExecutionMode({
+    execution: options.execution,
+    mounted: options.mount !== undefined,
+  })
+  const fallback = createExecutionFallback(executionMode, backend)
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
   const idempotencyStore =
     dbDir === undefined
@@ -2532,19 +2556,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       /^(dlv|exec)_\d+$/.test(id) ||
       // WP329：Reddit 写交给了插件 / 已由 Reddit 写那一份自己记过（带编号与链接）——这里不再记一行
       id.startsWith('reddit_fill_') ||
-      id.startsWith('reddit_direct_')
+      id.startsWith('reddit_direct_') ||
+      // WP415：出卡时已办完 / 交给排期的那几类——真发的那一拍自己记
+      id.startsWith(INLINE_EXECUTION_PREFIX)
     )
   }
   type TxnOptions = Parameters<typeof createTxn>[0]
   const recordingChange =
     (fn: NonNullable<TxnOptions['backendApply']>): NonNullable<TxnOptions['backendApply']> =>
     async (change, opts) => {
-      const res = await fn(change, opts)
+      const raw = await fn(change, opts)
+      // WP415：执行器回 ok 没说回读结论的，按执行器登记补一句（空桩 / 测试注入的不补）
+      const readback = readbackFor(change, raw)
+      const res = readback === undefined || readback === raw.readback ? raw : { ...raw, readback }
       if (res.status === 'ok' && !sandboxed(res))
         try {
           await outboundApprover(change.approval?.by)
           for (const row of recordsFromChange(change, (id) => outboundNames.get(id)))
-            outboundLog.record(change.workspace_id, row)
+            outboundLog.record(change.workspace_id, {
+              ...row,
+              ...(res.readback === undefined ? {} : { verified: res.readback === 'verified' }),
+            })
         } catch {
           // 记不上不挡施行结果
         }
@@ -2553,12 +2585,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const recordingDelivery =
     (fn: NonNullable<TxnOptions['deliverOutbound']>): NonNullable<TxnOptions['deliverOutbound']> =>
     async (item, opts) => {
-      const res = await fn(item, opts)
+      const raw = await fn(item, opts)
+      // WP415：演练红人那一路（进演练收件箱）不是真发——回读结论标「演示」
+      const res: typeof raw =
+        raw.status === 'ok' &&
+        raw.readback === undefined &&
+        raw.execution_id?.startsWith('ex_sandbox_') === true
+          ? { ...raw, readback: 'demo' }
+          : raw
       if (res.status === 'ok' && !sandboxed(res))
         try {
           await outboundApprover(item.decision?.by)
           const row = recordFromApproval(item, (id) => outboundNames.get(id))
-          if (row !== undefined) outboundLog.record(item.workspace_id, row)
+          if (row !== undefined)
+            outboundLog.record(item.workspace_id, {
+              ...row,
+              ...(res.readback === undefined ? {} : { verified: res.readback === 'verified' }),
+            })
         } catch {
           // 记不上不挡发送结果
         }
@@ -2652,7 +2695,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP261：独立站运营的卡批了 → 由服务端带 `--allow-mutations` 去改、读回确认（整条路上唯一改店铺数据的地方）
       const shopped = await (await shopOf(change.workspace_id))?.ops.apply(change)
       if (shopped !== undefined) return shopped
-      return backend.apply(change, opts)
+      // WP415：出卡时已办完 / 批了交给排期去做的那几类（登记表里 `inline` 的）
+      const inline = inlineApply(change)
+      if (inline !== undefined) return inline
+      // WP415：谁都不认 → 生产照实回「还没接通」，演示走空桩并标「演示」（加真执行器的同时在
+      // `execution/registry.ts` 登记一行，出卡时才不会被标成「还没接通」）
+      return fallback.apply(change, opts)
     }),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
@@ -2679,7 +2727,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return (
         (await brand?.chat.deliver(item, opts)) ??
         (await brand?.channels.deliver(item, opts)) ??
-        backend.deliver(item, opts)
+        // WP415：渠道都接不住 → 生产照实回「没发出去」，演示走空桩并标「演示」
+        fallback.deliver(item, opts)
       )
     }),
   })
@@ -13432,6 +13481,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const deps: GatewayDeps = {
     identity,
+    // WP415：出卡时就标「这一步还没接通」（生产）/「演示」（接了模拟世界）
+    executionWiring: (item) => wiringOfItem(item, executionMode),
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
     requestScope: (scope, next) =>
       withCloudAttribution(cloudAttributionOf(scope.assignment.id), next),

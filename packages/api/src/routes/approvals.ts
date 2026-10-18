@@ -696,6 +696,8 @@ export function approvalRoutes(): Route[] {
             now: deps.clock.now(),
             position_id: c.req.header('X-Assignment') ?? '',
             ...(deps.workstation === undefined ? {} : { label: (r) => deps.workstation?.label(r) }),
+            // WP415：没接通的卡批不了（与牌堆上不出「通过」同一把尺子）
+            ...(deps.executionWiring === undefined ? {} : { wiring: deps.executionWiring }),
           })
           try {
             resolved = resolveDecision(
@@ -721,6 +723,14 @@ export function approvalRoutes(): Route[] {
             ...optional(input.edited_payload, 'edited_payload'),
             ...optional(input.defer_until, 'defer_until'),
           }
+          // WP415：绕过卡片动词直接批也不行——没接通的卡批了不会真去做
+          if (
+            (resolved.action === 'approve' || resolved.action === 'approve_edited') &&
+            deps.executionWiring?.(item)?.state === 'not_wired'
+          )
+            throw new ApiError('conflict', '这一步还没接通：批了也不会真去做', {
+              details: { reason: 'NOT_WIRED' },
+            })
         }
 
         /**

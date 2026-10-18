@@ -13,6 +13,7 @@
  * 作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更），
  * 那一步在 WP6 / WP3 的机器里，v1 只把 scope 原样带出去（见交付报告「未完成项」）。
  */
+import { NOT_WIRED_ACK_REASON } from '@agentsws/contracts'
 import { DeckError } from './errors.js'
 import type { DeckCard, DeckDecideInput, InstructionScope, ResolvedDecision } from './types.js'
 
@@ -118,6 +119,10 @@ export function resolveDecision(
         (card.kind === 'connect_request' || card.kind === 'setup_request')
       ) {
         return { action: 'reject', reason: card.kind === 'connect_request' ? '先不连' : '先不设' }
+      }
+      // WP415：没接通的卡上「知道了」——不是对内容说不，不用写理由
+      if ((reason === undefined || reason.trim() === '') && card.wiring?.state === 'not_wired') {
+        return { action: 'reject', reason: NOT_WIRED_ACK_REASON }
       }
       if (reason === undefined || reason.trim() === '') {
         throw new DeckError('REASON_REQUIRED', '14 §4：驳回必须写原因（它是最强的学习信号）')

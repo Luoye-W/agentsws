@@ -74,6 +74,7 @@ import { B2B_POSITION_ID, B2B_ROLES, mergedPositionName } from '@agentsws/contra
 import { canonicalJson, sha256 } from '@agentsws/core'
 import {
   bundledPositionIcon,
+  changeKindOf,
   hasApprovalFlow,
   parseRole,
   type RangeExpanded,
@@ -84,6 +85,7 @@ import {
   shopifyLineQuery,
 } from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
+import { actionWiring } from './execution/registry.js'
 import {
   belongsTo,
   createMemoryPlacements,
@@ -971,6 +973,13 @@ export function createOrg(options: OrgOptions): OrgAssembly {
 
   // ── 视图拼装 ───────────────────────────────────────────────────────
 
+  const wiringView = (
+    action_id: string,
+  ): { change_kind?: string; wired?: 'wired' | 'partly' | 'not_wired' } => {
+    const w = actionWiring(action_id, changeKindOf)
+    return w === undefined ? {} : { change_kind: w.change_kind, wired: w.wired }
+  }
+
   const summaryOf = (role: RoleDefinitionFull): RoleSummaryView => ({
     id: role.id,
     name: role.name.zh,
@@ -992,6 +1001,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       target: a.target,
       route_to: typeof a.route_to === 'string' ? a.route_to : `role:${a.route_to.role}`,
       review_cannot_be_disabled: a.review_cannot_be_disabled ?? false,
+      // WP415（决策 1230）：这一条在生产里有没有真执行器（职责页「还没接通」从这里来，不手写）
+      ...wiringView(a.id),
       caps: Object.entries(a.mandate.caps).map(([key, value]) => ({
         key,
         value: capText(value),

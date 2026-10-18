@@ -79,6 +79,11 @@ export interface OutboundRecord {
   /** WP413（只加）：在哪儿批的（`extension` = 在浏览器插件侧边栏里批的；没有 = 工坊里）。 */
   approved_via?: 'workstation' | 'im_card' | 'email' | 'api' | 'batch' | 'extension'
   status: OutboundStatus
+  /**
+   * WP415（只加）：发出去之后读回来核对过（链接 / 平台 id 对得上）。`false` = 发了但没能核对；
+   * 没有这一格 = 老记录或写入点没说。
+   */
+  verified?: boolean
   /** 失败时的原话。 */
   failure?: string
   follow_ups: OutboundFollowUp[]
