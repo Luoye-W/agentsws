@@ -48,6 +48,11 @@ export interface CompetitorWatchDeps {
    * （同一行两边都认得时 Amazon 那一口优先）。不给 = 只有 Amazon 那一口。
    */
   extraOwnRef?(): Promise<((row: CatalogSnapshotRow) => OwnRef | undefined) | undefined>
+  /**
+   * WP402（决策 1137）：独立站那一路没有对标款时比的那一款——自家店里最便宜的那件（没连店 = `undefined`）。
+   * Amazon 那一路的「最便宜」从自家那几条 Amazon 源的快照里取。
+   */
+  extraOwnLowest?(): Promise<OwnRef | undefined>
   /** WP393：一轮读完、`onRun` 之前（第一次读完配对标款）。出错不拦这一轮。 */
   afterRun?(run: CompetitorWatchRun): Promise<void>
 }
@@ -151,10 +156,33 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
     }
   }
 
+  /** WP402（决策 1137）：自家那几条 Amazon 源快照里最便宜的那一款（没有对标款时两边最低价比）。 */
+  const amazonOwnLowest = (marketplace: string | undefined): OwnRef | undefined => {
+    let best: CatalogSnapshotRow | undefined
+    for (const s of store.sources())
+      if (
+        s.competitor_id === OWN_BRAND_COMPETITOR_ID &&
+        s.kind === 'amazon_asin' &&
+        (marketplace === undefined || s.marketplace === marketplace)
+      )
+        for (const r of store.snapshot(s.id)?.rows ?? [])
+          if (r.removed !== true && r.price !== undefined && (best?.price ?? Infinity) > r.price)
+            best = r
+    return best?.price === undefined
+      ? undefined
+      : {
+          own_key: best.product_key,
+          own_title: best.title,
+          own_price: best.price,
+          ...(best.currency === undefined ? {} : { currency: best.currency }),
+        }
+  }
+
   const readOne = async (
     src: CompetitorWatchSource,
     adapter: CompetitorIntakeAdapter | undefined,
     ownRef: ((row: CatalogSnapshotRow) => OwnRef | undefined) | undefined,
+    shopLowest?: OwnRef,
   ): Promise<{ part: CompetitorWatchRunPart; changes: CompetitorChange[]; note?: string }> => {
     const now = deps.now()
     const base = { source_id: src.id, label: src.label, fetched: 0, fresh: 0, kept: 0, changes: 0 }
@@ -194,6 +222,12 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
       competitor_id: src.competitor_id,
     }))
     const previous = store.snapshot(src.id)
+    const lowest =
+      src.competitor_id === OWN_BRAND_COMPETITOR_ID
+        ? undefined
+        : src.kind === 'amazon_asin'
+          ? amazonOwnLowest(src.marketplace)
+          : shopLowest
     const out = diffCatalog({
       workspace_id: deps.workspace_id,
       source: src,
@@ -203,6 +237,7 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
       now,
       new_within_days: store.settings().new_within_days,
       ...(ownRef === undefined || src.competitor_id === OWN_BRAND_COMPETITOR_ID ? {} : { ownRef }),
+      ...(lowest === undefined ? {} : { ownLowest: lowest }),
     })
     store.putSnapshot(out.snapshot)
     if (out.changes.length > 0) store.putChanges(out.changes)
@@ -277,6 +312,7 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
     const adapters = deps.adapters()
     const found: CompetitorChange[] = []
     let ownRef: Awaited<ReturnType<typeof ownRefOf>>
+    let shopLowest: OwnRef | undefined
     let ownDone = false
     for (const src of list) {
       if (!ownDone && src.competitor_id !== OWN_BRAND_COMPETITOR_ID) {
@@ -290,8 +326,9 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
             : shop === undefined
               ? amazon
               : (row) => amazon(row) ?? shop(row)
+        shopLowest = await deps.extraOwnLowest?.().catch(() => undefined)
       }
-      const r = await readOne(src, adapters[src.kind], ownRef)
+      const r = await readOne(src, adapters[src.kind], ownRef, shopLowest)
       run.parts.push(r.part)
       found.push(...r.changes)
       if (r.note !== undefined) run.notes.push(r.note)

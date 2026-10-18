@@ -52,6 +52,10 @@ export interface CatalogDiffInput {
   new_within_days?: number
   /** C8：这一行对标自家哪一款（不给 = 不比）。 */
   ownRef?(row: CatalogSnapshotRow): OwnRef | undefined
+  /**
+   * WP402（决策 1137）：没有对标款时拿什么比——自家店里最便宜的那一款（两边最低价比）。不给 = 没对标款就不比。
+   */
+  ownLowest?: OwnRef
 }
 
 export interface CatalogDiffOutput {
@@ -375,23 +379,35 @@ function merge(entries: Entry[], input: CatalogDiffInput): CompetitorChange[] {
   )
 }
 
-/** C8：和自家对标款比差价（价有关的几种才比；币种不一样不比）。 */
+/**
+ * C8 / WP402（决策 1137）：「比你便宜 $N」——**拿竞品这一款的起价**（这一次读到的各款式里最低的现价，同币种）
+ * 和**自家对应款**（对标款）比；没有对标款再比两边最低价（竞品这一款的起价 vs 自家店里最便宜的那一款）。
+ * 价有关的几种才比；币种不一样不比。
+ */
 function vsOwnOf(e: Entry, input: CatalogDiffInput): CompetitorVsOwn | undefined {
-  if (input.ownRef === undefined) return undefined
   if (!['price', 'discount_start', 'discount_end', 'new'].includes(e.kind)) return undefined
-  const price = e.row.price
-  if (price === undefined) return undefined
-  const own = input.ownRef(e.row)
+  if (e.row.price === undefined) return undefined
+  const paired = input.ownRef?.(e.row)
+  const own = paired ?? input.ownLowest
   if (own === undefined) return undefined
+  const currency = own.currency ?? e.row.currency
+  const prices = input.read.rows
+    .filter(
+      (r) =>
+        r.product_key === e.row.product_key &&
+        r.price !== undefined &&
+        (currency === undefined || r.currency === undefined || r.currency === currency),
+    )
+    .map((r) => r.price as number)
+  const start = prices.length > 0 ? Math.min(...prices) : e.row.price
   if (own.currency !== undefined && e.row.currency !== undefined && own.currency !== e.row.currency)
     return undefined
   return {
     own_key: own.own_key,
     ...(own.own_title === undefined ? {} : { own_title: own.own_title }),
     own_price: own.own_price,
-    diff: round2(price - own.own_price),
-    ...((own.currency ?? e.row.currency) === undefined
-      ? {}
-      : { currency: (own.currency ?? e.row.currency) as string }),
+    diff: round2(start - own.own_price),
+    ...(currency === undefined ? {} : { currency }),
+    basis: paired === undefined ? 'lowest' : 'pair',
   }
 }
