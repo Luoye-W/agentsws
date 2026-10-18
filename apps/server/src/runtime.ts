@@ -143,6 +143,8 @@ import {
   SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
   SITE_HEALTH_TOOL_NAMES,
+  SOCIAL_WORK_TOOL_NAMES,
+  socialWorkToolsFor,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
@@ -240,6 +242,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...WORKSHOP_SERVICE_TOOL_NAMES,
     // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
     ...AMAZON_COMPETITOR_TOOL_NAMES,
+    // WP419：社媒发帖 / Reddit 起草——查只读本机；起草只出卡（发不发永远人点）
+    ...SOCIAL_WORK_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -551,6 +555,11 @@ export interface RuntimeOptions {
    * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   siteHealthTools?: ToolExecutor
+  /**
+   * WP419（自查 R10 / S3）：社媒发帖 / Reddit 起草出卡的工具（`social-tools.ts` 建的那一份）。
+   * Reddit 那两个给官方版块 / 外部版块，发帖那两个给社媒内容账号那几条。不给 = 没有（老装配、模拟世界字节不变）。
+   */
+  socialWorkTools?: ToolExecutor
   /**
    * WP387（docs/103 v2 §3.3）：浏览器建完 / 读完 Google 提醒后交代结果的 `report_google_alerts`
    * （`pr-alerts/tool.ts`）。只给信息监控那条职责；不给 = 没有这个工具（老装配、模拟世界字节不变）。
@@ -1350,6 +1359,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const amazonKeywordTools = options.amazonKeywordTools
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
+    const socialWork = options.socialWorkTools
     const googleAlerts = options.googleAlertsTool
     const competitorStore = options.competitorStoreTools
     const prMonitor = options.prMonitorTools
@@ -1387,6 +1397,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       adsDataTools === undefined &&
       setupRequest === undefined &&
       siteHealthTools === undefined &&
+      socialWork === undefined &&
       prMonitor === undefined &&
       googleAlerts === undefined &&
       workshopTools === undefined &&
@@ -1473,6 +1484,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
         return siteHealthTools(call)
       }
+      // WP419：社媒发帖 / Reddit 起草（名字与别处不重名；职责在执行器里再判一次）
+      if (socialWork !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bareOf(call.name))) {
+        return socialWork(call)
+      }
       // WP387：交代建 / 读 Google 提醒的结果（名字与别处不重名）
       if (googleAlerts !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bareOf(call.name))) {
         return googleAlerts(call)
@@ -1545,6 +1560,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
+    if (options.socialWorkTools !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bare)) return true
     if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
       return true
     if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
@@ -2085,6 +2101,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
           ? SITE_HEALTH_TOOL_NAMES
           : []),
+        // WP419：社媒发帖 / Reddit 起草出卡（按职责：Reddit 两条、社媒内容账号几条；服务端接了才有）
+        ...(options.socialWorkTools === undefined ? [] : socialWorkToolsFor(config.role_id)),
         // WP387：信息监控交代建 / 读 Google 提醒的结果（服务端接了才有）
         ...(config.role_id === GOOGLE_ALERTS_ROLE && options.googleAlertsTool !== undefined
           ? GOOGLE_ALERTS_TOOL_NAMES

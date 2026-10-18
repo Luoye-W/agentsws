@@ -469,7 +469,12 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
-import { createExtensionPanelPort, withApprovalVia } from './extension-panel.js'
+import {
+  createExtensionPanelPort,
+  type PanelDraftGate,
+  watchStage,
+  withApprovalVia,
+} from './extension-panel.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -825,6 +830,7 @@ import { isSocialExecutableApproval } from './social-executor.js'
 import { modelReplyDrafter } from './social-reply-draft.js'
 import { createSocialService } from './social-service.js'
 import { modelTagReviewer } from './social-tags.js'
+import { createSocialToolExecutor } from './social-tools.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -6285,6 +6291,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP385（决策 1076）：网站运营 / 内容与搜索读体检结论（只读；正在体检就等它跑完）
             siteHealthTools: createSiteHealthToolExecutor({ service: () => siteHealth }),
+            // WP419（自查 R10 / S3）：Reddit 起草出卡、社媒发帖排期出卡（只出卡；发不发永远人点）
+            socialWorkTools: createSocialToolExecutor({
+              redditWatch: () => redditWatchLate.current,
+              redditWrites: () => redditWrites,
+              social: () => socialService.port,
+              now: () => clock.now(),
+              stageLine: async () => {
+                const rw = redditWatchLate.current
+                if (rw === undefined) return undefined
+                return watchStage(rw, await redditDraftGateOf(ws))?.text
+              },
+              askPersona: async (actor) => {
+                if (redditPersona.shouldAsk())
+                  await (await setupCardsOf(ws))
+                    ?.askSetup({ target: REDDIT_PERSONA_TARGET, actor: actor as never })
+                    .catch(() => undefined)
+              },
+            }),
             setupRequestTool: createSetupRequestTool({
               directory: async () =>
                 (directoryAssemblies.get(ws)?.directory() ?? []).flatMap((d) =>
@@ -9575,6 +9599,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles.assignments
       .listByRole(role_id, { workspace_id: ws })
       .some((a) => a.revoked_at === undefined)
+
+  /**
+   * WP419（自查 R5）：Reddit 起草前那两道门——有没有人担（官方版块或外部版块）、品牌号口吻定了没有
+   * （没定时带上工坊里那张「品牌号怎么说话」卡）。侧边栏与 AI 的 `list_reddit_pending` 用同一份。
+   */
+  const redditDraftGateOf = async (ws: WorkspaceId): Promise<PanelDraftGate> => {
+    const brand = await brandModules.forWorkspace(ws)
+    const has_owner = roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit')
+    const persona_needed =
+      brand.redditPersona !== undefined && brand.redditPersona.get() === undefined
+    const card = persona_needed
+      ? (await txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'setup_request' }))
+          .filter(
+            (c) =>
+              (c.state === 'pending' || c.state === 'in_review') &&
+              c.subject.object.id === REDDIT_PERSONA_TARGET,
+          )
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]
+      : undefined
+    return {
+      has_owner,
+      persona_needed,
+      ...(card === undefined ? {} : { persona_card_id: card.id }),
+    }
+  }
   /** 一个品牌一轮收信（邮箱轮询 + 整只邮箱同步），一个账号坏了不拖垮别的。 */
   const pollMailOf = async (
     brand: BrandModuleSet,
@@ -14173,31 +14222,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // 插件里点「填进页面」：批完马上交出去，不等取消窗口（发送那一下仍由人在 Reddit 上点）
             applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
             // WP419（自查 R5）：起草前那两道门——有没有人担、品牌号口吻定了没有（侧边栏照实说卡在哪）
-            draftGate: async (ws) => {
-              const brand = await brandModules.forWorkspace(ws)
-              const has_owner = roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit')
-              const persona_needed =
-                brand.redditPersona !== undefined && brand.redditPersona.get() === undefined
-              const card = persona_needed
-                ? (
-                    await txn.runtime.store.listApprovals({
-                      workspace_id: ws,
-                      kind: 'setup_request',
-                    })
-                  )
-                    .filter(
-                      (c) =>
-                        (c.state === 'pending' || c.state === 'in_review') &&
-                        c.subject.object.id === REDDIT_PERSONA_TARGET,
-                    )
-                    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]
-                : undefined
-              return {
-                has_owner,
-                persona_needed,
-                ...(card === undefined ? {} : { persona_card_id: card.id }),
-              }
-            },
+            draftGate: redditDraftGateOf,
             // U16：侧边栏顶上写品牌名（不写内部工作区名）
             workspaceName: async (ws) => brandNameOfWorkspace(ws),
           }),

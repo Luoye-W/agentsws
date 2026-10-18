@@ -116,6 +116,20 @@ import {
 } from './site-health.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
+  demoWeekSlots,
+  LIST_REDDIT_PENDING_TOOL,
+  LIST_SOCIAL_POSTS_TOOL,
+  redditPendingDataOf,
+  renderRedditPending,
+  renderStaged,
+  SOCIAL_WORK_TOOL_DEF_BY_NAME,
+  STAGE_REDDIT_WRITE_TOOL,
+  STAGE_SOCIAL_POST_TOOL,
+  socialPostsDataOf,
+  socialWorkBranch,
+  stagedDataOf,
+} from './social-tools.js'
+import {
   boundariesToAsk,
   boundaryGate,
   describeRun,
@@ -400,7 +414,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）
       PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ??
       // WP390：工坊服务的两个工具（服务端接了才有）
-      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ?? {
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP419：社媒发帖 / Reddit 起草出卡（服务端接了才有）
+      SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -899,6 +915,104 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             res.status === 'ok' ? siteHealthQueryDataOf(res.data) : undefined,
             failedOf(res),
           )
+        }
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP419：**社媒发帖 / Reddit 起草出卡**（演示用剧本）。工具面里有这几个工具、话里是「有哪些等着回」→ 列出来、
+       * 给前三条出回复卡；「发一条 / 置顶公告」→ 按原话当要点出一张发帖卡；「排下周」→ 看一眼日历、排三条；「起草一条」→ 一条。
+       */
+      const socialStep = socialWorkBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (socialStep !== undefined) {
+        const callHost = async (
+          tool: string,
+          input: Record<string, unknown>,
+        ): Promise<{ status: string; data?: unknown; reason?: string }> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status === 'ok') readTools.push(tool)
+          return res
+        }
+        const failedOf = (res: { reason?: string }): string =>
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? '')
+        let answer: string
+        if (socialStep.kind === 'reddit_pending') {
+          const res = await callHost(LIST_REDDIT_PENDING_TOOL, { state: 'all' })
+          const data = res.status === 'ok' ? redditPendingDataOf(res.data) : undefined
+          answer = renderRedditPending(data, failedOf(res))
+          const waiting = (data?.rows ?? []).filter((r) => r.state === 'waiting').slice(0, 3)
+          if (waiting.length > 0 && req.tools.allow.includes(STAGE_REDDIT_WRITE_TOOL)) {
+            const staged = []
+            for (const r of waiting) {
+              const s = await callHost(STAGE_REDDIT_WRITE_TOOL, {
+                mode: 'reply',
+                item_id: r.item_id,
+              })
+              staged.push(s.status === 'ok' ? stagedDataOf(s.data) : undefined)
+            }
+            answer = `${answer}\n${renderStaged(staged)}`
+          }
+        } else if (socialStep.kind === 'reddit_post') {
+          const res = await callHost(STAGE_REDDIT_WRITE_TOOL, socialStep.input)
+          answer = renderStaged(
+            [res.status === 'ok' ? stagedDataOf(res.data) : undefined],
+            failedOf(res),
+          )
+        } else {
+          const look = await callHost(LIST_SOCIAL_POSTS_TOOL, {})
+          const cal = look.status === 'ok' ? socialPostsDataOf(look.data) : undefined
+          if (cal !== undefined && cal.accounts.length === 0)
+            answer = cal.note ?? '这条渠道还没登记要发帖的号，先连上再排。'
+          else {
+            const slots =
+              socialStep.kind === 'social_week'
+                ? demoWeekSlots(clock.now())
+                : [demoWeekSlots(clock.now())[0] ?? clock.now()]
+            const staged = []
+            for (const [i, at] of slots.entries()) {
+              const body =
+                socialStep.kind === 'social_one'
+                  ? `【演示草稿】${socialStep.text.slice(0, 200)}`
+                  : `【演示草稿 ${i + 1}/${slots.length}】这周的新内容（演示里没有真文案，接上真模型会按素材和表现写）`
+              const s = await callHost(STAGE_SOCIAL_POST_TOOL, { body, scheduled_at: at })
+              staged.push(s.status === 'ok' ? stagedDataOf(s.data) : undefined)
+            }
+            answer = renderStaged(staged, failedOf(look))
+          }
         }
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)

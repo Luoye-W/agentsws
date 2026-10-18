@@ -87,6 +87,8 @@ export * from './runtime/shop.js'
 // WP385：网站运营 / 内容与搜索读体检结论（只读）
 export * from './runtime/site-health.js'
 export * from './runtime/skills.js'
+// WP419：社媒发帖 / Reddit 起草出卡的干活工具（三个运行时同一份）
+export * from './runtime/social-tools.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
 export * from './runtime/theme.js'

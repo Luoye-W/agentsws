@@ -151,6 +151,31 @@ export function stageOf(input: {
   }
 }
 
+/** 巡查那一份 → 起草卡在哪一步（侧边栏「进度」与 AI 的 `list_reddit_pending` 同一句）。 */
+export function watchStage(
+  watch: PanelWatch,
+  gate?: PanelDraftGate,
+  view: RedditWatchView = watch.view(),
+): PanelStage | undefined {
+  const waiting = view.pending.filter((x) => x.status === 'open' && x.dup_of === undefined)
+  const conflicts = waiting.filter((x) => x.conflict !== undefined).length
+  // 起草没成、记了原因的（宿主把原因写在条目的 note 上）
+  const failedRows = waiting.filter((x) => x.conflict === undefined && x.draft_failed === true)
+  const ds = watch.draftState?.()
+  return stageOf({
+    open: waiting.length - conflicts,
+    conflicts,
+    ...(failedRows.length === 0
+      ? {}
+      : { failed: failedRows.length, failed_why: failedRows[0]?.note ?? '原因没记下' }),
+    queued: ds?.queued ?? 0,
+    reading_threads: ds?.reading_threads ?? false,
+    plugin_ready: ds?.plugin_ready ?? true,
+    ...(ds?.plugin_why === undefined ? {} : { plugin_why: ds.plugin_why }),
+    ...(gate === undefined ? {} : { gate }),
+  })
+}
+
 /** 最近 7 天品牌号已经回过、没再起草的几条。 */
 export function repliedBefore(items: readonly unknown[], now: Iso8601): number {
   const since = Date.parse(now) - PANEL_WRITES_DAYS * DAY_MS
@@ -355,24 +380,8 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
           })
     if (view !== undefined && watch !== undefined) {
       // WP419：「起草中」只数真在起草的（以前数的是已经出了卡的）；卡在哪一步照实说
-      const waiting = view.pending.filter((x) => x.status === 'open' && x.dup_of === undefined)
-      const conflicts = waiting.filter((x) => x.conflict !== undefined).length
-      // 起草没成、记了原因的（宿主把原因写在条目的 note 上）
-      const failedRows = waiting.filter((x) => x.conflict === undefined && x.draft_failed === true)
-      const ds = watch.draftState?.()
       const gate = await options.draftGate?.(ws).catch(() => undefined)
-      const stage = stageOf({
-        open: waiting.length - conflicts,
-        conflicts,
-        ...(failedRows.length === 0
-          ? {}
-          : { failed: failedRows.length, failed_why: failedRows[0]?.note ?? '原因没记下' }),
-        queued: ds?.queued ?? 0,
-        reading_threads: ds?.reading_threads ?? false,
-        plugin_ready: ds?.plugin_ready ?? true,
-        ...(ds?.plugin_why === undefined ? {} : { plugin_why: ds.plugin_why }),
-        ...(gate === undefined ? {} : { gate }),
-      })
+      const stage = watchStage(watch, gate, view)
       const replied = repliedBefore(watch.items({ status: 'done' }), now)
       progress = {
         ...progress,
