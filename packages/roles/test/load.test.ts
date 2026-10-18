@@ -57,7 +57,12 @@ describe('loadRole (05 §5)', () => {
     expect(role.automation.reply_customer?.ceiling).toBe('L3')
     expect(role.automation.draft_chargeback_evidence?.hard_ceiling).toBe(true)
     expect(role.skills.map((s) => s.name)).toContain('customer-care')
-    expect(role.grounding?.map((g) => g.tool)).toEqual(['get_order', 'search_policies'])
+    expect(role.grounding?.map((g) => g.tool)).toEqual([
+      'get_order',
+      'search_policies',
+      // WP417：查超时没回的来信
+      'list_support_threads',
+    ])
     expect(role.home_blocks).toHaveLength(4)
     expect(role.notifications).toHaveLength(5)
     expect(role.handover.fallback).toBe('scope_manager')

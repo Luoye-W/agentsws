@@ -128,14 +128,6 @@ automation:
     demotion_triggers: [manual]
 
 grounding:
-  # WP417（自查 A8 / A43）：「超时没回的来信」这类查询要有能查的工具，不进起草路径
-  - {
-      name: waiting_mail,
-      intent_terms: [没回, 还没回, 超时, 等着回, unanswered, overdue],
-      cue_terms: [有哪些, 哪些, 多少, 几封, which, how many, 列],
-      tool: list_support_threads,
-      prefetch: false,
-    }
   - {
       name: order_status,
       intent_terms: [订单, order, 包裹, package],
@@ -149,6 +141,14 @@ grounding:
       cue_terms: [可以, can, 能, 政策, policy],
       tool: search_policies,
       prefetch: true,
+    }
+  # WP417（自查 A8 / A43）：「超时没回的来信」这类查询要有能查的工具，不进起草路径
+  - {
+      name: waiting_mail,
+      intent_terms: [没回, 还没回, 超时, 等着回, unanswered, overdue],
+      cue_terms: [有哪些, 哪些, 多少, 几封, which, how many, 列],
+      tool: list_support_threads,
+      prefetch: false,
     }
 
 skills:

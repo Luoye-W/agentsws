@@ -69,14 +69,6 @@ automation:
     demotion_triggers: [guardrail_hit, manual]
 
 grounding:
-  # WP417（自查 B7）：「快超 24 小时的」要查得到每条买家消息离回复线还剩多久
-  - {
-      name: reply_deadline,
-      intent_terms: [24 小时, 24小时, 回复期限, 快超, 没回, deadline, overdue],
-      cue_terms: [有哪些, 哪些, 多少, 几条, which, how many, 列],
-      tool: list_support_threads,
-      prefetch: false,
-    }
   - {
       name: order_status,
       intent_terms: [订单, order, 包裹, package, shipment],
@@ -90,6 +82,14 @@ grounding:
       cue_terms: [可以, can, 能, 政策, policy],
       tool: search_policies,
       prefetch: true,
+    }
+  # WP417（自查 B7）：「快超 24 小时的」要查得到每条买家消息离回复线还剩多久
+  - {
+      name: reply_deadline,
+      intent_terms: [24 小时, 24小时, 回复期限, 快超, 没回, deadline, overdue],
+      cue_terms: [有哪些, 哪些, 多少, 几条, which, how many, 列],
+      tool: list_support_threads,
+      prefetch: false,
     }
 
 skills:
