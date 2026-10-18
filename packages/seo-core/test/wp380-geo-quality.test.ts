@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest'
 import {
   consistencyPrompt,
   factValuesOf,
-  figureLine,
   GEO_SAMPLE_ANSWERS,
   GEO_SAMPLE_BRAND,
   GEO_SAMPLE_FACTS,

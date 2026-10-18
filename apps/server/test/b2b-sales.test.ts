@@ -684,7 +684,7 @@ describe('WP421 B2B 卡「不要」回写、「改一下」真重写', () => {
     expect(out?.approval_item_id).toBeDefined()
     expect(prompts.at(-1)).toContain('语气再客气一点')
     const next = await h.txn.approvals.get(out?.approval_item_id ?? '')
-    const body = String((next?.payload as { after: { body: string } }).after.body)
+    const body = String((next?.payload as { after?: { body?: string } } | undefined)?.after?.body)
     expect(body).toContain('Thank you!')
     expect(body).not.toBe(before)
     expect(h.store.inquiries()[0]?.reply_approval_id).toBe(out?.approval_item_id)
@@ -700,7 +700,9 @@ describe('WP421 B2B 卡「不要」回写、「改一下」真重写', () => {
     const out = await h.sales.redraft(card, 'MOQ 写低一点', 'p_he' as PersonId)
     expect(out?.message).toContain('没能自动改')
     const next = await h.txn.approvals.get(out?.approval_item_id ?? '')
-    expect(String((next?.payload as { after: { body: string } }).after.body)).toBe(before)
+    expect(String((next?.payload as { after?: { body?: string } } | undefined)?.after?.body)).toBe(
+      before,
+    )
     expect(next?.summary).toContain('请直接在卡上改')
   })
 
@@ -730,7 +732,7 @@ describe('WP421 B2B 卡「不要」回写、「改一下」真重写', () => {
     })
     const s1 = await port.submitDraft(h.actor, 'b2b_quote', d1.draft.id)
     const card = await h.txn.approvals.get(s1.approval_item_id ?? '')
-    const change_id = String((card?.payload as { change_id: string }).change_id)
+    const change_id = String((card?.payload as { change_id?: string } | undefined)?.change_id)
     expect(h.service.onRejected({ change_id, reason: '价格不对' })?.message).toContain('不提了')
     expect(h.store.draft(d1.draft.id)?.status).toBe('rejected')
     expect(
