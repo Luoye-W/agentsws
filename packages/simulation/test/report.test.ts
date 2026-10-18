@@ -276,6 +276,7 @@ describe('套件与报告落盘（26 §5）', () => {
     // WP380 再加一条（GEO 第二层：比较胜率、描述准确度、对外说法、复查）→ 71
     // WP395 再加一条（卖 Amazon 的品牌划出 Amazon 运营、没数据照实说）→ 72
     // WP396 再加一条（自家 Listing 体检）→ 73
+    // WP398 再加一条（Amazon 词库：出差距词、标出他牌名、被拦就停）→ 73
     expect(result.reports).toHaveLength(73)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)

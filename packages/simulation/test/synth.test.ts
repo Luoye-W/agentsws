@@ -87,6 +87,7 @@ describe('合成公司生成器（26 §2）', () => {
     // WP380 再加一条（GEO 第二层：比较胜率、描述准确度、对外说法、复查）→ 71
     // WP395 再加一条（卖 Amazon 的品牌划出 Amazon 运营、没数据照实说）→ 72
     // WP396 再加一条（自家 Listing 体检出 3 处问题、给草稿、被拦停、下设计需求单）→ 73
+    // WP398 再加一条（Amazon 词库：出差距词、标出他牌名、被拦就停）→ 73
     expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(73)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })

@@ -8,6 +8,13 @@
 // WP396（docs/106 §13）：Listing 体检读页口子（WP394 的读页积木、demo 替身接这里）
 export type { AmazonListingReader, ListingPageRead } from './amazon-listing/index.js'
 export { amazonProductUrl } from './amazon-listing/index.js'
+// WP398：Amazon 词库读联想词的口子（demo 注入替身）与拆词用的 Listing 文本转换
+export {
+  type AmazonAutocompleteReader,
+  type AutocompleteRead,
+  listingTextsFromFacts,
+  listingTextsFromSnapshots,
+} from './amazon-keywords/index.js'
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {

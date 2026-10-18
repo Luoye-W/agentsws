@@ -28,6 +28,14 @@ export {
   isBlocked,
   storefrontCards,
 } from './amazon.js'
+// WP398（docs/106 §13 A8）：Amazon 搜索框联想词（地址 + 读回来的那一页；读页的是内置浏览器）
+export {
+  type AmazonSuggestionParse,
+  amazonAutocompletePrefixes,
+  amazonAutocompleteSupported,
+  amazonAutocompleteUrl,
+  parseAmazonSuggestions,
+} from './amazon-autocomplete.js'
 // WP335（决策 659）：品类一格——AI 填、人可改
 export {
   CATEGORY_MAX_CHARS,

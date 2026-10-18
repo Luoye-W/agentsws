@@ -56,6 +56,7 @@ import type { ActivityPort } from './routes/activity.js'
 import type { AdCreativePort } from './routes/ad-creative.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AmazonListingPort } from './routes/amazon-listing.js'
+import type { AmazonKeywordsPort } from './routes/amazon-keywords.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
 import type { BackgroundPort } from './routes/background.js'
@@ -1258,6 +1259,8 @@ export interface GatewayDeps {
   updatePause?: UpdatePausePort
   /** WP381：网站 / 商品体检与 AI 来源流量。没装配时 `/v1/site-health*` 回 not_implemented。 */
   siteHealth?: SiteHealthPort
+  /** WP398：Amazon 词库。没装配时 `/v1/amazon-keywords*` 回 not_implemented。 */
+  amazonKeywords?: AmazonKeywordsPort
 }
 
 /**

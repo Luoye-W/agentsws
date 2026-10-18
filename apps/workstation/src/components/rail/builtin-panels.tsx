@@ -36,8 +36,10 @@ import {
   Plug,
   ScrollText,
   SlidersHorizontal,
+  Tags,
 } from 'lucide-react'
 import { lazy } from 'react'
+import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
 import {
   useConnectionsStatus,
   useConversationsStatus,
@@ -61,12 +63,17 @@ import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
+import { AMAZON_KEYWORDS_ADDRESS_PREFIX } from '@/lib/amazon-keywords-api'
 import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 import { SERVICE_ORDER_ADDRESS_PREFIX } from '@/lib/workshop-services-api'
 
 /* ── 面板身体（`lazy()`） ─────────────────────────────────────────── */
 
+const AmazonKeywordsBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/amazon-keywords-panel')
+  return { default: m.AmazonKeywordsPanel }
+})
 const GeoAnswerBody = lazy(async () => {
   const m = await import('@/components/rail/panels/geo-answer-panel')
   return { default: m.GeoAnswerPanel }
@@ -444,4 +451,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('workshop-services', WorkshopServicesBody)
+  // WP398：Amazon 词表——对话里「帮我看看关键词」、岗位页「词库」块的「看词表」在第三栏开
+  registerPanelType({
+    id: 'amazon-keywords',
+    label: 'rail.panel.amazon-keywords',
+    icon: Tags,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${AMAZON_KEYWORDS_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('amazon-keywords', AmazonKeywordsBody)
+  // WP398：岗位页「词库」块（WP395 的面板留的那一块）
+  registerKeywordBankBlock()
 }

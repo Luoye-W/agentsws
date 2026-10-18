@@ -1,0 +1,2 @@
+Pretty-print
+{"alias":"aps","prefix":"electric bike f","suffix":null,"suggestions":[{"suggType":"KeywordSuggestion","type":"KEYWORD","value":"electric bike fat tire","refTag":"x","candidateSources":"local","strategyId":"organic-ses","prior":0.0,"ghost":false,"help":false},{"suggType":"KeywordSuggestion","type":"KEYWORD","value":"electric bike folding","refTag":"y","candidateSources":"local","strategyId":"organic-ses","prior":0.0,"ghost":false,"help":false}],"responseId":"WP398RECORDED0003"}
