@@ -38329,6 +38329,7 @@ export interface operations {
           support_email?: '' | string
           currency?: string
           category?: string
+          email_service?: string
           subcategory?: string
           positioning?: string
           price_band?: string
@@ -40002,6 +40003,7 @@ export interface operations {
             category?: string
             /** Format: email */
             support_email?: string
+            email_service?: string
             currency?: string
             markets?: string[]
           }
