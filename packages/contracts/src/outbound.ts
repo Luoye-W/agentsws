@@ -76,6 +76,8 @@ export interface OutboundRecord {
   /** 谁批的（人名；系统自动批 = 「自动」）。 */
   approved_by?: string
   approved_at?: Iso8601
+  /** WP413（只加）：在哪儿批的（`extension` = 在浏览器插件侧边栏里批的；没有 = 工坊里）。 */
+  approved_via?: 'workstation' | 'im_card' | 'email' | 'api' | 'batch' | 'extension'
   status: OutboundStatus
   /** 失败时的原话。 */
   failure?: string
