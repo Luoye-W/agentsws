@@ -13,6 +13,7 @@ import type {
   BrandWatchCompetitor,
   CatalogSnapshotRow,
   CompetitorIntakeAdapter,
+  OwnShopProduct,
 } from '@agentsws/contracts'
 
 interface DemoProduct {
@@ -150,3 +151,14 @@ export function demoShopAdapter(): CompetitorIntakeAdapter {
     },
   }
 }
+
+/**
+ * WP393（docs/104 C8）：demo 里「自家店」的几件商品（比价用；不连真店）。pack 里是 3C 小件，竞品替身是三家储能站，
+ * 所以加一款自家的储能站（`.example` 域名的合成品牌）——方案卡存下、第一次读完，AI 按标题和价位把它配给
+ * Jackery 那款 Explorer 1000 v2，第二天降价时简报能写出「比你的 PowerHub 1000 便宜 $N」。
+ */
+export const DEMO_OWN_PRODUCTS: OwnShopProduct[] = [
+  { key: 'powerhub-1000', title: 'PowerHub 1000', price: 799, currency: 'USD' },
+  { key: 'usb-c-65w-charger', title: 'USB-C 65W Charger', price: 129, currency: 'USD' },
+  { key: 'gan-travel-adapter', title: 'GaN Travel Adapter', price: 89, currency: 'USD' },
+]

@@ -20,6 +20,7 @@ import type {
   InvariantName,
   Scenario,
   ScenarioActor,
+  ScenarioCompetitorPlan,
   ScenarioEvent,
   ScenarioExpected,
   ScenarioStandIns,
@@ -186,6 +187,8 @@ const EVENT_KEYS = [
   'assistant.fanout',
   // WP392 竞品监控读一次（快照对比）
   'competitor.read',
+  // WP393 店铺管理「竞品动向」配好了
+  'competitor.plan',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -323,6 +326,8 @@ const EXPECTED_KEYS = [
   'assistant_dispatched_to',
   // WP392：竞品监控比出了哪几种变化
   'competitor_changes',
+  // WP393：简报里「竞品动向」那一段
+  'competitor_brief',
   'assistant_fanout_tasks',
   'assistant_fanout_notes',
   'secretary_kinds',
@@ -1012,6 +1017,63 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(error === undefined ? {} : { error }),
         },
       }
+    }
+    case 'competitor.plan': {
+      known(source, `${path}.${key}`, body, ['rules', 'own', 'pairs'])
+      if (!isRec(body.rules)) fail(source, `${path}.${key}.rules`, '必须是对象')
+      const rulesIn = body.rules as Record<string, unknown>
+      known(source, `${path}.${key}.rules`, rulesIn, [
+        'price_drop_pct',
+        'cheaper_than_own',
+        'new_products',
+        'discounts',
+        'stock',
+        'removed',
+      ])
+      const rules: ScenarioCompetitorPlan['rules'] = {}
+      if (rulesIn.price_drop_pct !== undefined)
+        rules.price_drop_pct = num(
+          source,
+          `${path}.${key}.rules.price_drop_pct`,
+          rulesIn.price_drop_pct,
+        )
+      for (const k of [
+        'cheaper_than_own',
+        'new_products',
+        'discounts',
+        'stock',
+        'removed',
+      ] as const) {
+        const v = rulesIn[k]
+        if (v === undefined) continue
+        if (typeof v !== 'boolean') fail(source, `${path}.${key}.rules.${k}`, '必须是 true / false')
+        rules[k] = v
+      }
+      const list = (k: 'own' | 'pairs'): Record<string, unknown>[] => {
+        const v = body[k] ?? []
+        if (!Array.isArray(v) || v.some((x) => !isRec(x)))
+          fail(source, `${path}.${key}.${k}`, '必须是对象列表')
+        return v as Record<string, unknown>[]
+      }
+      const own = list('own').map((o, i) => {
+        known(source, `${path}.${key}.own[${i}]`, o, ['key', 'title', 'price'])
+        return {
+          key: str(source, `${path}.${key}.own[${i}].key`, o.key),
+          title: str(source, `${path}.${key}.own[${i}].title`, o.title),
+          ...(o.price === undefined
+            ? {}
+            : { price: num(source, `${path}.${key}.own[${i}].price`, o.price) }),
+        }
+      })
+      const pairs = list('pairs').map((o, i) => {
+        known(source, `${path}.${key}.pairs[${i}]`, o, ['competitor', 'product', 'own'])
+        return {
+          competitor: str(source, `${path}.${key}.pairs[${i}].competitor`, o.competitor),
+          product: str(source, `${path}.${key}.pairs[${i}].product`, o.product),
+          own: str(source, `${path}.${key}.pairs[${i}].own`, o.own),
+        }
+      })
+      return { at, type: 'competitor.plan', competitor_plan: { rules, own, pairs } }
     }
     case 'shop.price_change': {
       known(source, `${path}.${key}`, body, ['who', 'product', 'price', 'graphql', 'note'])
@@ -2680,6 +2742,15 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.competitor_changes,
   )
   if (competitorChanges !== undefined) out.competitor_changes = competitorChanges
+  // WP393：简报里「竞品动向」那一段要有的几句（空列表 = 不该出）
+  if (raw.competitor_brief !== undefined) {
+    if (
+      !Array.isArray(raw.competitor_brief) ||
+      raw.competitor_brief.some((x) => typeof x !== 'string')
+    )
+      fail(source, 'expected.competitor_brief', '必须是字符串列表')
+    out.competitor_brief = raw.competitor_brief as string[]
+  }
   const fanoutTasks = optStrList(
     source,
     'expected.assistant_fanout_tasks',

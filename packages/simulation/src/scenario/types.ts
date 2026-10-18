@@ -240,6 +240,23 @@ export interface ScenarioCompetitorRead {
 }
 
 /**
+ * WP393（docs/104 一期 A，C5 / C8）：店铺管理「竞品动向」配好了——方案卡上用户确认的「什么算要紧」、
+ * 自家店里的几款（比价用）、竞品哪一款对标自家哪一款。之后每次读完，有要紧的才出简报那一段。
+ */
+export interface ScenarioCompetitorPlan {
+  rules: {
+    price_drop_pct?: number
+    cheaper_than_own?: boolean
+    new_products?: boolean
+    discounts?: boolean
+    stock?: boolean
+    removed?: boolean
+  }
+  own: { key: string; title: string; price?: number }[]
+  pairs: { competitor: string; product: string; own: string }[]
+}
+
+/**
  * WP350（决策 900）：「我的助理」把一份资料（会议记录）拆给几个岗位。`drop` 是人在方案卡上勾掉的那几条
  * （卡内编号 `i1`…），`move` 是人改了归属的那几条（`i3=web-ops`）。
  */
@@ -1133,6 +1150,8 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
   /** WP392：竞品监控读了一次（和上一次快照比出变化；第一次只当底子）。 */
   | { at: string; type: 'competitor.read'; competitor_read: ScenarioCompetitorRead }
+  /** WP393：店铺管理「竞品动向」配好了（什么算要紧 + 自家几款 + 对标款）。 */
+  | { at: string; type: 'competitor.plan'; competitor_plan: ScenarioCompetitorPlan }
   /** WP44：推一份未发布主题副本（造预览）。 */
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
@@ -1545,6 +1564,10 @@ export interface ScenarioExpected {
    * 竞品监控自己零写（不出卡、不改任何外部账号）。
    */
   competitor_changes?: string[]
+  /**
+   * WP393：简报里「竞品动向」那一段要有这几句（子串，全都要在）；给空列表 = 这一段一次都不该出。
+   */
+  competitor_brief?: string[]
   /**
    * WP350：「我的助理」一次拆成多份——要做的事按顺序开到了哪几个岗位（岗位模板 id），
    * 同一批（一份资料一个来源批次）；助理自己零写。
