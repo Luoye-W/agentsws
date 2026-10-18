@@ -122,6 +122,8 @@ import {
   ADS_DEFAULT_CAPS,
   ADS_PLATFORMS,
   AI_IMAGE_EDIT_CAPABILITY,
+  AMAZON_EXTENSION_CONSENT_TARGET,
+  type AmazonBlockState,
   type AmazonListingText,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
@@ -262,7 +264,10 @@ import {
   type AmazonCloudPort,
   type AmazonFrontReader,
   type AmazonFrontState,
+  type AmazonOwnBrowserState,
+  createAmazonBlock,
   createAmazonFrontReader,
+  createAmazonOwnBrowser,
   readAmazonCloud,
 } from './amazon-front/index.js'
 // WP398（docs/106 §13 A8）：Amazon 词库（前台联想词 + 竞品 / 自家 Listing 拆词 + 差距）
@@ -411,6 +416,8 @@ import {
   nodePageFetch,
   type OwnShopRead,
   readOwnShopProducts,
+  type ShopPageCloudPort,
+  shopPageCloudRead,
 } from './competitor-watch/index.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
@@ -825,10 +832,13 @@ import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
 import {
   type BrowserWebSearch,
+  bskJsonOf,
   createBrowserWebSearch,
+  createOwnBrowserReader,
   createSearchThrottle,
   type KeylessSearch,
   type NativeSearchPort,
+  type OwnBrowserReader,
   type SearchBrowserChannel,
   type SearchWho,
   searchBrowserChannelFromEnv,
@@ -1090,6 +1100,9 @@ const REPORT_WATCH_ROLES: ReadonlySet<string> = new Set(['social.reddit', 'pr.re
  * 报告积木里「竞品变化表」只给它们；它们查巡查数据时默认查的是竞品那一份。
  */
 const REPORT_COMPETITOR_ROLES: ReadonlySet<string> = new Set(['dtc.store', 'amz.store'])
+/** WP402：竞品监控库杂项里那两样品牌级状态的键（「被 Amazon 拦了」、走你自己的浏览器的同意与每天一次）。 */
+const AMAZON_BLOCK_KEY = 'amazon_block'
+const AMAZON_OWN_BROWSER_KEY = 'amazon_own_browser'
 
 export interface ServerOptions {
   /**
@@ -1161,6 +1174,13 @@ export interface ServerOptions {
   amazonCloud?: (workspace_id: WorkspaceId) => AmazonCloudPort | undefined
   /** WP394：读 Amazon 前台那一块的替身（测试 / demo；不给 = 用桌面壳的内置浏览器，没有桌面壳 = 没有）。 */
   amazonFront?: (workspace_id: WorkspaceId) => AmazonFrontReader | undefined
+  /**
+   * WP402（决策 1140 / 1146）：取数链第 3 条路——通过插件在用户自己的浏览器里读一页（测试 / demo 塞替身；
+   * 不给 = 「用你正在用的浏览器」那一种装好了就用 BrowserSkill，没装 = 没有这条路）。
+   */
+  ownBrowserReader?: (workspace_id: WorkspaceId) => OwnBrowserReader | undefined
+  /** WP402：独立站云端代读（`shop.page`）的数据能力口（测试 / demo 塞替身；不给 = 关联了账号就走工坊云端）。 */
+  competitorShopCloud?: (workspace_id: WorkspaceId) => ShopPageCloudPort | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -3626,6 +3646,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP394：亚马逊店铺运营「竞品动向」方案卡（盯哪些 ASIN、各对标谁、什么算重要、频率）
     if (brand.amazonCompetitor !== undefined)
       assembly.registerTarget(brand.amazonCompetitor.setupTarget())
+    // WP402（决策 1140 / 1146）：「用你自己的浏览器读 Amazon」那张同意卡（第一次要用时出一次）
+    if (brand.amazonOwnBrowser !== undefined)
+      assembly.registerTarget(brand.amazonOwnBrowser.setupTarget())
     // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
@@ -3682,9 +3705,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         mine.find((a) => isThemeRoleId(a.role_id))
       )
     }
+    const ownerId = (await identity.getWorkspace(ws))?.owner_id
     const assembly = createWorkshopServices({
       workspace_id: ws,
       clock,
+      ...(ownerId === undefined ? {} : { owner: String(ownerId) }),
       ...(brand.dir === undefined ? {} : { dir: brand.dir }),
       cloud: () => brandModules.cloud(ws),
       approvals: () => txn.approvals,
@@ -7970,12 +7995,63 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP398（docs/106 §13 A8）：Amazon 词库（品牌目录下 `amazon-keywords.json`）。联想词走内置浏览器
      * （桌面壳那一条队，固定间隔、算进每小时额度、被拦就停）；托管实例不装（云上没有内置浏览器）。
      */
+    /*
+     * WP402（决策 1140 / 1146）：取数链的两样品牌级状态——①「被 Amazon 拦了」竞品读页和联想词共用一份（一边被拦，
+     * 两边同时换路）；② 第 3 条路「通过插件在你自己的浏览器里读」：BrowserSkill 装好了才有，Amazon 那边要同意、每家每天一次。
+     */
+    const cwKv = competitorWatchDb.forWorkspace(ws)
+    const amazonBlock = createAmazonBlock({
+      get: () => cwKv.kv<AmazonBlockState>(AMAZON_BLOCK_KEY) ?? undefined,
+      set: (next) => cwKv.setKv(AMAZON_BLOCK_KEY, next),
+      nowMs: () => Date.parse(clock.now()),
+    })
+    let ownBrowserMemo: { path: string; reader: OwnBrowserReader } | undefined
+    const ownBrowserReader = (): OwnBrowserReader | undefined => {
+      if (hostedBoot !== undefined) return undefined
+      if (options.ownBrowserReader !== undefined) return options.ownBrowserReader(ws)
+      const run = browserSettings.forRun()
+      const path = run?.mode === 'browserskill' ? run.bsk_path : undefined
+      if (path === undefined) return undefined
+      if (ownBrowserMemo?.path !== path)
+        ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
+      return ownBrowserMemo.reader
+    }
+    const amazonOwnHolder = ():
+      | { person_id: string; assignment_id: string; role_id: string }
+      | undefined => {
+      const a = roles.assignments
+        .listByRole('amz.store')
+        .find((x) => x.workspace_id === ws && x.revoked_at === undefined)
+      return a === undefined
+        ? undefined
+        : { person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
+    }
+    const amazonOwnBrowser = createAmazonOwnBrowser({
+      reader: ownBrowserReader,
+      state: () => cwKv.kv<AmazonOwnBrowserState>(AMAZON_OWN_BROWSER_KEY) ?? undefined,
+      saveState: (next) => cwKv.setKv(AMAZON_OWN_BROWSER_KEY, next),
+      now: () => clock.now(),
+      tzOffsetMinutes: () => workData.tz_offset_minutes,
+      askConsent: async () => {
+        const actor = amazonOwnHolder()
+        if (actor === undefined) return
+        await (await setupCardsOf(ws))?.askSetup({
+          target: AMAZON_EXTENSION_CONSENT_TARGET,
+          actor: { workspace_id: ws, ...actor } as never,
+        })
+      },
+    })
     const amazonKeywords: AmazonKeywordBank | undefined =
       hostedBoot !== undefined
         ? undefined
         : createAmazonKeywordBank({
             workspace_id: ws,
             ...(dir === undefined ? {} : { dir }),
+            block: amazonBlock,
+            ownBrowser: () => amazonOwnBrowser.keywords(),
+            onNeedsConsent: () => {
+              void amazonOwnBrowser.needConsent()
+            },
             now: () => clock.now(),
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             reader: () =>
@@ -8211,10 +8287,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP393（docs/104 一期 A）：独立站进料口（先直接读、被挡改走内置浏览器；每页排进内置浏览器那条节流队）+
      * 店铺管理「竞品动向」（方案卡、探平台、自家店比价、简报那一段）。测试 / demo 给了替身进料口就用替身。
      */
+    const shopCloudPort = (): ShopPageCloudPort | undefined =>
+      options.competitorShopCloud !== undefined
+        ? options.competitorShopCloud(ws)
+        : ownCloud.linked()
+          ? createDataService(ownCloud)
+          : undefined
     const competitorIo = {
       fetch: options.competitorShopFetch ?? nodePageFetch,
       browser: () =>
         webSearchChannel === undefined ? undefined : browserTextReadOf(webSearchChannel, ws),
+      // WP402：② 工坊云端代读（按次扣积分）→ ③ 通过插件在你自己的浏览器里读（独立站不用额外同意）
+      cloud: (onCredits: (credits: number) => void) => {
+        const port = shopCloudPort()
+        return port === undefined ? undefined : shopPageCloudRead(port, onCredits)
+      },
+      extension: () => ownBrowserReader()?.dataRead,
       page: <T>(task: () => Promise<T>) => webSearchThrottle.run(task),
     }
     const builtinShopAdapter = createShopCatalogAdapter(competitorIo)
@@ -8224,7 +8312,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * `Agent/AgentsWorkshop`、配送邮编、被拦就停）、排进和搜索同一条节流队（固定间隔、每小时额度共用）；
      * 云端兜底走工坊云端数据 `amazon.product`（关联了账号才有）。托管实例不装。
      */
-    const cwStore = competitorWatchDb.forWorkspace(ws)
+    const cwStore = cwKv
     const AMAZON_FRONT_KEY = 'amazon_front'
     const amazonFront: AmazonFrontReader | undefined =
       hostedBoot !== undefined
@@ -8237,6 +8325,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 channel: () => webSearchChannel,
                 page: (task) => webSearchThrottle.run(task, { steady: true }),
                 nowMs: () => Date.parse(clock.now()),
+                block: amazonBlock,
                 state: () => cwStore.kv<AmazonFrontState>(AMAZON_FRONT_KEY) ?? {},
                 saveState: (next) => cwStore.setKv(AMAZON_FRONT_KEY, next),
               })))
@@ -8261,6 +8350,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       store: () => cwStore,
       onCredits: (source_id, credits) => amazonCompetitor?.noteCredits(source_id, credits),
+      // WP402：③ 通过插件在你自己的浏览器里读（前两条都失败时；先问同意、每家每天至多一次）
+      ownBrowser: (source_id) => amazonOwnBrowser.route(source_id),
+      onNeedsConsent: () => {
+        void amazonOwnBrowser.needConsent()
+      },
     })
     const competitorWatch: CompetitorWatchAssembly | undefined =
       hostedBoot !== undefined
@@ -8278,6 +8372,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ...(options.competitorAdapters?.(ws) ?? {}),
             }),
             extraOwnRef: async () => competitorStore?.ownRef(),
+            extraOwnLowest: async () => competitorStore?.ownLowest(),
             afterRun: async (run) => competitorStore?.afterRun(run),
           })
     if (competitorWatch !== undefined) {
@@ -8316,23 +8411,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 }),
           }
         },
-        probe: (url) =>
-          options.competitorProbe?.(url, clock.now()) ??
-          probeStore(
+        probe: (url) => {
+          if (options.competitorProbe !== undefined) {
+            const stub = options.competitorProbe(url, clock.now())
+            if (stub !== undefined) return stub
+          }
+          const browser = competitorIo.browser()
+          const cloud = competitorIo.cloud(() => undefined)
+          const extension = competitorIo.extension()
+          return probeStore(
             {
               fetch: competitorIo.fetch,
-              ...(competitorIo.browser() === undefined
-                ? {}
-                : {
-                    browser: competitorIo.browser() as NonNullable<
-                      ReturnType<typeof competitorIo.browser>
-                    >,
-                  }),
+              ...(browser === undefined ? {} : { browser }),
+              ...(cloud === undefined ? {} : { cloud }),
+              ...(extension === undefined ? {} : { extension }),
               page: competitorIo.page,
             },
             url,
             clock.now(),
-          ),
+          )
+        },
         ownShop,
       })
     }
@@ -8678,6 +8776,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(competitorStore === undefined ? {} : { competitorStore }),
       ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
       ...(amazonFront === undefined ? {} : { amazonFront }),
+      ...(hostedBoot !== undefined ? {} : { amazonOwnBrowser, amazonBlock }),
       redditLimits,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
@@ -13743,7 +13842,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               return cw
             }
             return {
-              view: async (ws: WorkspaceId) => (await cwOf(ws)).view(),
+              view: async (ws: WorkspaceId) => {
+                const m = await brandModules.forWorkspace(ws)
+                const cw = m.competitorWatch
+                if (cw === undefined)
+                  throw new ApiError('not_implemented', '这个品牌没有装竞品监控。')
+                const v = await cw.view()
+                const own = m.amazonOwnBrowser
+                // WP402：Amazon 走你自己的浏览器（同意了没有、这台有没有这条路）与品牌级「被 Amazon 拦了」
+                return own === undefined
+                  ? v
+                  : {
+                      ...v,
+                      own_browser: { ...own.consent(), available: own.available() },
+                      ...(m.amazonBlock === undefined
+                        ? {}
+                        : { amazon_block: m.amazonBlock.state() }),
+                    }
+              },
               changes: async (
                 ws: WorkspaceId,
                 q: Parameters<CompetitorWatchAssembly['changes']>[0],
@@ -13760,6 +13876,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 patch: Parameters<CompetitorWatchAssembly['updateSettings']>[0],
               ) => (await cwOf(ws)).updateSettings(patch),
               runNow: async (ws: WorkspaceId) => (await cwOf(ws)).runNow({ trigger: 'manual' }),
+              // WP402：设置里同意 / 撤回「用你自己的浏览器读 Amazon」
+              setOwnBrowserConsent: async (ws: WorkspaceId, consent: 'granted' | 'revoked') => {
+                const own = (await brandModules.forWorkspace(ws)).amazonOwnBrowser
+                if (own === undefined)
+                  throw new ApiError('not_implemented', '这个品牌没有装 Amazon 竞品监控。')
+                return own.setConsent(consent)
+              },
             }
           })(),
         }

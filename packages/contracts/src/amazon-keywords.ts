@@ -11,7 +11,9 @@
  *
  * 词库按品牌存本机（品牌目录下一份），不上云。
  */
+
 import type { Iso8601 } from './common.js'
+import type { ReadRouteAttempt } from './read-chain.js'
 
 /* ── 来源与标记 ───────────────────────────────────────────────────── */
 
@@ -219,6 +221,10 @@ export interface AmazonKeywordRefresh {
     added: number
     /** 人话（没读成为什么；被拦照实说）。 */
     message?: string
+    /** WP402：这一批走的哪条路（内置浏览器 / 你自己的浏览器）。 */
+    via?: 'browser' | 'extension'
+    /** WP402：取数链上试过的路。 */
+    attempts?: ReadRouteAttempt[]
   }
   /** 这一次拆了几条 Listing 文本（自家 / 竞品）。 */
   listings: { own: number; competitor: number }

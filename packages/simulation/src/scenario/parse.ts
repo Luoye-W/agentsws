@@ -998,6 +998,8 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         'blocked_at',
         'no_browser',
         'cloud_credits',
+        'cloud_down',
+        'own_browser',
       ])
       const kind = str(source, `${path}.${key}.source`, body.source)
       if (kind !== 'shop' && kind !== 'amazon')
@@ -1054,16 +1056,25 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       if (body.complete !== undefined && typeof body.complete !== 'boolean')
         fail(source, `${path}.${key}.complete`, '必须是 true / false')
       const error = optStr(source, `${path}.${key}.error`, body.error)
-      for (const k of ['own', 'no_browser'] as const)
+      for (const k of ['own', 'no_browser', 'cloud_down'] as const)
         if (body[k] !== undefined && typeof body[k] !== 'boolean')
           fail(source, `${path}.${key}.${k}`, '必须是 true / false')
+      const ownBrowser = optStr(source, `${path}.${key}.own_browser`, body.own_browser)
+      if (ownBrowser !== undefined && ownBrowser !== 'granted' && ownBrowser !== 'unasked')
+        fail(source, `${path}.${key}.own_browser`, '只认 granted / unasked')
       const blockedAt = optStr(source, `${path}.${key}.blocked_at`, body.blocked_at)
       const cloudCredits =
         body.cloud_credits === undefined
           ? undefined
           : num(source, `${path}.${key}.cloud_credits`, body.cloud_credits)
-      if (kind !== 'amazon' && (body.own !== undefined || blockedAt !== undefined))
-        fail(source, `${path}.${key}`, 'own / blocked_at 只给 amazon')
+      if (
+        kind !== 'amazon' &&
+        (body.own !== undefined ||
+          blockedAt !== undefined ||
+          body.cloud_down !== undefined ||
+          ownBrowser !== undefined)
+      )
+        fail(source, `${path}.${key}`, 'own / blocked_at / cloud_down / own_browser 只给 amazon')
       return {
         at,
         type: 'competitor.read',
@@ -1077,6 +1088,8 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(blockedAt === undefined ? {} : { blocked_at: blockedAt }),
           ...(body.no_browser === true ? { no_browser: true } : {}),
           ...(cloudCredits === undefined ? {} : { cloud_credits: cloudCredits }),
+          ...(body.cloud_down === true ? { cloud_down: true } : {}),
+          ...(ownBrowser === undefined ? {} : { own_browser: ownBrowser as 'granted' | 'unasked' }),
         },
       }
     }

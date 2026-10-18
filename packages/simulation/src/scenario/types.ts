@@ -297,6 +297,13 @@ export interface ScenarioCompetitorRead {
   no_browser?: boolean
   /** WP394（Amazon）：云端替身每个 ASIN 扣几个积分（缺省 0.18）。 */
   cloud_credits?: number
+  /** WP402（Amazon）：这一次工坊云端也没读到（替身回错）。 */
+  cloud_down?: boolean
+  /**
+   * WP402（Amazon，决策 1140 / 1146）：第 3 条路「通过插件在你自己的浏览器里读」——`granted` 同意过了；
+   * `unasked` 还没问过（这一次只出同意卡、一页都不开）。不给 = 这台没装插件，没有这条路。
+   */
+  own_browser?: 'granted' | 'unasked'
 }
 
 /**

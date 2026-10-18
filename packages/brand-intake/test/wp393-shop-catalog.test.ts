@@ -207,7 +207,8 @@ describe('WP393 · 探平台', () => {
       'https://rival.example/products.json?limit=1': { status: 429 },
       'https://rival.example/wp-json/wc/store/v1/products?per_page=1': { status: 429 },
     })
-    const blocked = await probeStore({ fetch }, 'rival.example', NOW)
+    // WP402：429 先退避再试同一条（测试里不真的等）
+    const blocked = await probeStore({ fetch, sleep: async () => {} }, 'rival.example', NOW)
     expect(blocked).toMatchObject({ platform: 'unknown', route: 'blocked' })
     expect(blocked.reason).toContain('429')
 
@@ -216,7 +217,7 @@ describe('WP393 · 探平台', () => {
       opened.push(url)
       return { ok: true, status: 200, final_url: url, text: f('shopify-products-p1.json') }
     }
-    const out = await probeStore({ fetch, browser }, 'rival.example', NOW)
+    const out = await probeStore({ fetch, browser, sleep: async () => {} }, 'rival.example', NOW)
     expect(out).toMatchObject({ platform: 'shopify', route: 'browser', via: 'browser' })
     expect(opened).toEqual(['https://rival.example/products.json?limit=1'])
   })
@@ -289,7 +290,7 @@ describe('WP393 · 读商品目录', () => {
       [`${SHOP}/collections/all.atom`]: { body: f('shopify-all.atom') },
     })
     const out = await readShopCatalog(
-      { fetch },
+      { fetch, sleep: async () => {} },
       { url: SHOP, platform: 'shopify', now: NOW, pageSize: 2 },
     )
     expect(out.complete).toBe(false)

@@ -11,7 +11,12 @@
  * 只出建议，不写 Amazon；数字格一期一律空着。词库按品牌存本机。
  */
 
-import { amazonAutocompletePrefixes, amazonAutocompleteSupported } from '@agentsws/brand-intake'
+import {
+  amazonAutocompletePrefixes,
+  amazonAutocompleteSupported,
+  type BatchStep,
+  readBatchChain,
+} from '@agentsws/brand-intake'
 import {
   AMAZON_KEYWORD_SORT_NOTE_EN,
   AMAZON_KEYWORD_SORT_NOTE_ZH,
@@ -41,7 +46,8 @@ import {
   sightingsFromListing,
   sightingsFromSuggestions,
 } from '@agentsws/seo-core'
-import type { AmazonAutocompleteReader } from './reader.js'
+import type { AmazonBlockPort } from '../amazon-front/block.js'
+import type { AmazonAutocompleteReader, AutocompleteRead } from './reader.js'
 import { createKeywordStore, type KeywordStateFile } from './store.js'
 
 /** 被拦之后多久不再去读联想词。 */
@@ -73,6 +79,22 @@ export interface AmazonKeywordBankOptions {
   /** 竞品 Listing 文本（WP392 快照 / WP394 读的页）。 */
   competitorListings?(): Promise<AmazonListingText[]>
   emit?(type: string, payload: Record<string, unknown>): void
+  /**
+   * WP402（决策 1146）：品牌级「被 Amazon 拦了」（和竞品读页共用一份）：任一边被拦，这边也不再用内置浏览器读、
+   * 直接换下一条路。不给 = 只看词库自己记的那一份（测试 / 老装配）。
+   */
+  block?: AmazonBlockPort
+  /** WP402：第 3 条路——通过插件在用户自己的浏览器里读联想词（要同意、每天至多一批；没装插件 = 不给）。 */
+  ownBrowser?(): OwnBrowserKeywords | undefined
+  /** WP402：取数链说「要问一句同意」。 */
+  onNeedsConsent?(): void
+}
+
+/** WP402：用户自己的浏览器读联想词的那一口（`amazon-front/own-browser.ts` 给）。 */
+export interface OwnBrowserKeywords {
+  gate: 'ok' | 'needs_consent' | 'limited'
+  suggest(input: { marketplace: string; prefix: string }): Promise<AutocompleteRead>
+  used(): void
 }
 
 export interface RefreshInput {
@@ -248,43 +270,137 @@ export function createAmazonKeywordBank(o: AmazonKeywordBankOptions): AmazonKeyw
         'no_seeds',
         '没有种子词：说一个英文品类词（比如 portable power station），或者先读到自家商品标题',
       )
-    const reader = o.reader()
-    if (reader === undefined)
-      return out('unavailable', '这里没有工坊的内置浏览器（桌面版才有），联想词这次没读')
     if (!amazonAutocompleteSupported(market)) return out('failed', `${market} 站点的联想词还读不了`)
-    const until = st().blocked_until
-    if (until !== undefined && until > o.now())
-      return out('blocked', `Amazon 之前出过验证页，联想词停到 ${hhmm(until)} 再读（不绕、不重试）`)
+    const reader = o.reader()
+    const pausedUntil = (): string | undefined => {
+      if (o.block !== undefined) {
+        const t = o.block.pausedUntil()
+        return t === undefined ? undefined : new Date(t).toISOString()
+      }
+      const until = st().blocked_until
+      return until !== undefined && until > o.now() ? until : undefined
+    }
     const seed = given[0] ?? seeds[st().seed_cursor % seeds.length] ?? seeds[0] ?? ''
     const prefixes = amazonAutocompletePrefixes(seed)
-    const got: { prefix: string; values: string[] }[] = []
     let status: AmazonAutocompleteStatus | undefined
     let message: string | undefined
-    let fails = 0
-    for (const prefix of prefixes) {
-      const r = await reader.suggest({ marketplace: market, prefix })
-      if (r.status === 'ok') {
-        fails = 0
-        got.push({ prefix, values: r.suggestions })
-        continue
+    const mine = o.ownBrowser?.()
+
+    /** 一页一页读（内置浏览器 / 你自己的浏览器同一个读法）；被拦就停这条路、剩下的往下传。 */
+    const pageByPage = async (
+      keys: string[],
+      suggest: (i: { marketplace: string; prefix: string }) => Promise<AutocompleteRead>,
+      who: 'browser' | 'extension',
+    ): Promise<BatchStep<string, string[]>> => {
+      const step: BatchStep<string, string[]> = { got: [], next: [], stop: [] }
+      let fails = 0
+      for (let i = 0; i < keys.length; i += 1) {
+        const prefix = keys[i] as string
+        const r = await suggest({ marketplace: market, prefix })
+        if (r.status === 'ok') {
+          fails = 0
+          step.got.push({ key: prefix, value: r.suggestions })
+          continue
+        }
+        if (r.status === 'blocked') {
+          if (who === 'browser') {
+            const until =
+              o.block !== undefined
+                ? new Date(o.block.block('keywords')).toISOString()
+                : new Date(Date.parse(o.now()) + AUTOCOMPLETE_BLOCK_PAUSE_MS).toISOString()
+            if (o.block === undefined)
+              store.update((st0) => {
+                st0.blocked_until = until
+              })
+            message = `${r.message ?? 'Amazon 出了验证页'}，联想词这一轮停了（读了 ${step.got.length} 页）；${hhmm(until)} 前不再用内置浏览器去读，不绕、不重试`
+          } else message = `${r.message ?? '你自己的浏览器里 Amazon 也要验证'}，这一批先不读了`
+          status = 'blocked'
+          step.next = keys.slice(i)
+          step.outcome = 'blocked'
+          return step
+        }
+        if (r.status === 'quota') {
+          status = 'quota'
+          message = `${r.message ?? '内置浏览器这一小时的额度满了'}（这一批读了 ${step.got.length} / ${prefixes.length} 页）`
+          step.stop = keys.slice(i).map((key) => ({ key, kind: 'quota' as const }))
+          step.outcome = step.got.length > 0 ? 'ok' : 'quota'
+          return step
+        }
+        fails += 1
+        message = `有几页没读成：${r.message}`
+        if (fails >= MAX_FAILS_IN_A_ROW) {
+          step.stop = keys.slice(i + 1).map((key) => ({ key, kind: 'failed' as const }))
+          break
+        }
+        step.stop?.push({ key: prefix, kind: 'failed' })
       }
-      if (r.status === 'blocked') {
-        const pauseUntil = new Date(Date.parse(o.now()) + AUTOCOMPLETE_BLOCK_PAUSE_MS).toISOString()
-        store.update((s) => {
-          s.blocked_until = pauseUntil
-        })
-        status = 'blocked'
-        message = `${r.message ?? 'Amazon 出了验证页'}，联想词这一轮停了（读了 ${got.length} 页）；${hhmm(pauseUntil)} 前不再去读，不绕、不重试`
-        break
-      }
-      if (r.status === 'quota') {
-        status = 'quota'
-        message = `${r.message ?? '内置浏览器这一小时的额度满了'}（这一批读了 ${got.length} / ${prefixes.length} 页）`
-        break
-      }
-      fails += 1
-      message = `有几页没读成：${r.message}`
-      if (fails >= MAX_FAILS_IN_A_ROW) break
+      return step
+    }
+
+    const chain = await readBatchChain<string, string[]>(prefixes, [
+      {
+        route: 'browser',
+        async read(keys) {
+          if (reader === undefined)
+            return { got: [], next: keys, outcome: 'unavailable', reason: '没有内置浏览器' }
+          const until = pausedUntil()
+          if (until !== undefined) {
+            status = 'blocked'
+            message = `Amazon 之前出过验证页，内置浏览器停到 ${hhmm(until)} 再读联想词（不绕、不重试）`
+            return { got: [], next: keys, outcome: 'blocked', reason: message }
+          }
+          return pageByPage(keys, (i) => reader.suggest(i), 'browser')
+        },
+      },
+      {
+        route: 'cloud',
+        read: async (keys) => ({
+          got: [],
+          next: keys,
+          outcome: 'unavailable',
+          reason: '工坊云端没有联想词这一项',
+        }),
+      },
+      {
+        route: 'extension',
+        async read(keys) {
+          if (mine === undefined)
+            return { got: [], next: keys, outcome: 'unavailable', reason: '没装 Agents 工坊插件' }
+          if (mine.gate === 'needs_consent') {
+            o.onNeedsConsent?.()
+            message = `${message ?? '内置浏览器读不了联想词'}；要不要用你自己的浏览器读，得先问你一句（卡上点同意才读）`
+            return { got: [], next: keys, outcome: 'needs_consent' }
+          }
+          if (mine.gate === 'limited') {
+            message = `${message ?? '内置浏览器读不了联想词'}；今天已经用你自己的浏览器读过一批了，明天再试`
+            return { got: [], next: keys, outcome: 'limited' }
+          }
+          mine.used()
+          status = undefined
+          const before = message
+          const step = await pageByPage(keys, (i) => mine.suggest(i), 'extension')
+          if (step.got.length > 0 && status === undefined) message = before
+          return step
+        },
+      },
+    ])
+    const got = prefixes
+      .map((prefix) => {
+        const g = chain.got.find((x) => x.key === prefix)
+        return g === undefined ? undefined : { prefix, values: g.value }
+      })
+      .filter((x): x is { prefix: string; values: string[] } => x !== undefined)
+    const via =
+      chain.via === 'extension'
+        ? ('extension' as const)
+        : chain.via === 'browser'
+          ? ('browser' as const)
+          : undefined
+    if (got.length === 0 && reader === undefined && mine === undefined)
+      return out('unavailable', '这里没有工坊的内置浏览器（桌面版才有），联想词这次没读')
+    if (got.length === 0 && status === undefined && reader === undefined) {
+      status = 'unavailable'
+      message ??= '这里没有工坊的内置浏览器（桌面版才有），联想词这次没读'
     }
     status ??= got.length === prefixes.length ? 'ok' : got.length > 0 ? 'partial' : 'failed'
     if (status === 'ok' && given.length === 0)
@@ -302,6 +418,8 @@ export function createAmazonKeywordBank(o: AmazonKeywordBankOptions): AmazonKeyw
         suggestions: unique.size,
         added: 0,
         ...(message === undefined || status === 'ok' ? {} : { message }),
+        ...(via === undefined ? {} : { via }),
+        attempts: chain.attempts,
       },
       suggestions: got,
       marketplace: market,

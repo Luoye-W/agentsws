@@ -29,12 +29,14 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import {
-  applyPersonaOverride,
+  applyPersonaSectionOverride,
   hasChineseText,
   loadBundledPosition,
+  overriddenPersonaSections,
   type PersonaBrandContext,
   type PersonaLang,
   personaKey,
+  personaSectionDiff,
   personaSections,
   personaTextIn,
   personaUntranslated,
@@ -227,7 +229,8 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
   const viewOf = (subject: PersonaSubject): PersonaView => {
     const packaged = packagedOf(subject)
     const override = overrideOf(subject)
-    const effective = applyPersonaOverride(packaged.persona, override?.text) ?? packaged.persona
+    // WP404（docs/107 §4）：按段存的改写逐段叠（没改的段跟着包里走）；拆不开的老写法照旧整段替换
+    const effective = applyPersonaSectionOverride(packaged.persona, override) ?? packaged.persona
     const overridden =
       override !== undefined &&
       (personaTextIn(effective, 'zh') !== personaTextIn(packaged.persona, 'zh') ||
@@ -240,6 +243,9 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
       overridden,
       // WP226：中文还没有对应的英文（公司改了中文 / 包里生成的英文过期）→ 英文界面标「未翻译」
       ...(personaUntranslated(effective) ? { untranslated: true } : {}),
+      ...(override?.sections === undefined
+        ? {}
+        : { overridden_sections: overriddenPersonaSections(override.sections) }),
       ...(override?.updated_at === undefined ? {} : { updated_at: override.updated_at }),
       ...(override?.updated_by === undefined ? {} : { updated_by: override.updated_by }),
     }
@@ -269,7 +275,7 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
           '角色定位是公司对外的口径，只有 owner 改得动（要个性化的东西写在个人技能层里）',
         )
       // 先确认这个岗位 / 职责真的在册（不在册的先抛 not_found，别落一条孤儿覆盖）
-      packagedOf(subject)
+      const packaged = packagedOf(subject)
       for (const lang of ['zh', 'en'] as const) {
         const body = personaTextIn(text, lang)
         if (body.length > MAX_OVERRIDE_CHARS)
@@ -286,10 +292,17 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
           'invalid_input',
           '英文那一份里混着中文。公司改角色定位只改中文那一份，英文会标成「未翻译」',
         )
+      /*
+       * WP404（docs/107 §4）：**按语言、按段**存——只记和包里不一样的那几段，包里出了新版，
+       * 没改过的段跟着新版走（WP406 的按段三方合并就靠它）。拆不成六段的改写（写成一整段、
+       * 段落顺序乱了）照旧整段替换；`text` 两种情况都记着拼好的整段（排障时第一个要看的）。
+       */
+      const sections = personaSectionDiff(packaged.persona, text)
       backend.put({
         workspace_id: options.workspace_id,
         subject,
         text,
+        ...(sections === undefined ? {} : { sections }),
         updated_at: options.clock.now(),
         updated_by: by,
       })

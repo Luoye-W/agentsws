@@ -1,0 +1,100 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：红人剧本的意图判据（WP117），从 playbook.ts 的 RULES 原样挪来。",
+    "顺序即优先级：越具体的排越前（先命中先返回）；terms 按小写子串判。notes 是当初为什么这么排 / 为什么加这个词的原注释，判法不读它。"
+  ],
+  "table": "kol.playbook_intents",
+  "rows": [
+    {
+      "id": "intent.deliverable_review",
+      "intent": "deliverable_review",
+      "terms": [
+        "审稿",
+        "审一下",
+        "审一条",
+        "审一遍",
+        "审一审",
+        "广告标识",
+        "禁用词",
+        "审核",
+        "验收",
+        "交付物",
+        "交稿",
+        "打回",
+        "不合格",
+        "review"
+      ],
+      "notes": [
+        "WP295：岗位快捷提示「红人交的这条视频审一遍：……折扣码对不对」以前判成了归因（「折扣码」命中）"
+      ]
+    },
+    {
+      "id": "intent.follow_up",
+      "intent": "follow_up",
+      "terms": [
+        "跟进",
+        "没回",
+        "没回音",
+        "没有回复",
+        "催一下",
+        "再发一封",
+        "follow up",
+        "follow-up"
+      ]
+    },
+    {
+      "id": "intent.outreach",
+      "intent": "outreach",
+      "terms": [
+        "开发信",
+        "建联",
+        "邀约",
+        "合作意向",
+        "写信",
+        "发信",
+        "联系他",
+        "联系她",
+        "outreach"
+      ],
+      "notes": [
+        "起草类排在议价前面：**要的是一封信还是一个价钱**，这是分界。 「起草一封开发信……不提具体报价」里有「报价」，但它是否定句里的词—— 判成议价的话这次运行就不起草了，而人明明要的是那封信。"
+      ]
+    },
+    {
+      "id": "intent.attribution",
+      "intent": "attribution",
+      "terms": ["归因", "带货", "带来订单", "追踪链接", "折扣码", "联盟码", "utm", "效果", "转化"],
+      "notes": [
+        "WP295：归因排到建联后面——TikTok 的快捷提示「起草一条建联私信：说清合作形式、寄样和带货方式」 里有「带货」，以前先命中归因，这次运行就去读归因表了。"
+      ]
+    },
+    {
+      "id": "intent.negotiate",
+      "intent": "negotiate",
+      "terms": ["报价", "议价", "谈价", "多少钱", "预算", "砍价", "费用", "佣金", "quote", "price"]
+    },
+    {
+      "id": "intent.collab_status",
+      "intent": "collab_status",
+      "terms": ["到哪一步", "进展", "状态", "合作清单", "寄样", "推进", "阶段", "status"]
+    },
+    {
+      "id": "intent.find",
+      "intent": "find",
+      "terms": [
+        "找",
+        "搜",
+        "挑",
+        "候选",
+        "名单",
+        "红人",
+        "达人",
+        "博主",
+        "频道",
+        "up 主",
+        "creator",
+        "channel"
+      ]
+    }
+  ]
+}

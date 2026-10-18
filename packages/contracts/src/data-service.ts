@@ -684,6 +684,28 @@ export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
       { name: 'limit', type: 'number', min: 1, max: 500, label_zh: '最多几条' },
     ],
   },
+  /*
+   * WP402（决策 1140 / 1146）：独立站的云端代读——本机直接读和内置浏览器都被挡时，工坊云端去读同一个公开数据地址
+   * （只认 `SHOP_PAGE_PATHS` 那几种，见 `read-chain.ts`），照实自报身份、原文交回，本机用同一份解析。按次扣积分。
+   * 云上先开（私有仓 `CLOUD_FIRST_SPECS` 里逐字同一份）。
+   */
+  {
+    id: 'shop.page',
+    label_zh: '独立站公开商品数据（代读）',
+    label_en: 'Online store public product data (relay read)',
+    group: 'other',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      {
+        name: 'url',
+        type: 'string',
+        required: true,
+        max: 500,
+        label_zh: '公开数据地址（products.json / all.atom / Store API）',
+      },
+    ],
+  },
 ]
 
 /** 按 id 找一项能力的规格（认不出回 `undefined`）。 */

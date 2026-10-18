@@ -1,0 +1,323 @@
+{
+  "roles": {
+    "ads.google": {
+      "zh": "eb17dcc6b25a89bd",
+      "en": "8f65221d8f02008e",
+      "content": "feb91f63c2a02f13",
+      "def": "6138d6b84199d6d2"
+    },
+    "ads.meta": {
+      "zh": "247ae54fe811f3b3",
+      "en": "458dd2a81627cd72",
+      "content": "49404902d0b982ad",
+      "def": "7ba5331245906185"
+    },
+    "ads.tiktok": {
+      "zh": "8c0b55c6ebde25b6",
+      "en": "d4ab187d41adb38d",
+      "content": "320ad1fbebeda8a4",
+      "def": "f6994c478b673b6e"
+    },
+    "ads.x": {
+      "zh": "e6903427751b4794",
+      "en": "839ffd80971cd29b",
+      "content": "dc4871177bfcfa66",
+      "def": "3b76f32e071befd9"
+    },
+    "amz.store": {
+      "zh": "6155bc5889e503d4",
+      "en": "9aacff4d955cde01",
+      "content": "52a88458996647d3",
+      "def": "e53821c20c32bb75"
+    },
+    "amz.support": {
+      "zh": "ef088ee45332e86b",
+      "en": "a99718b6b3367895",
+      "content": "c56012e6f16fb2b3",
+      "def": "5293acbef50e93e7"
+    },
+    "b2b.exhibition": {
+      "zh": "16c04883171f5be3",
+      "en": "20e53bbebc616d6d",
+      "content": "8e26677be581e599",
+      "def": "8a3cdbf4efd9f6b1"
+    },
+    "b2b.fulfillment": {
+      "zh": "7380653c7051a33c",
+      "en": "175add58c6ae8ce9",
+      "content": "ae25e1f6bcb90cdb",
+      "def": "219ff85071107b44"
+    },
+    "b2b.marketplace": {
+      "zh": "bdfdc0fc48f50f0b",
+      "en": "2977448025e1b89f",
+      "content": "a7a90bf298b39340",
+      "def": "d8efbdcdda64379d"
+    },
+    "b2b.outbound": {
+      "zh": "0bf1a68d52460a27",
+      "en": "b6b5e409df7b1eef",
+      "content": "2602c1e1c3060036",
+      "def": "a57cc92a61771eef"
+    },
+    "b2b.sales": {
+      "zh": "3b495f3e2ec7d755",
+      "en": "4c8d3a1c584ecb5f",
+      "content": "8f44d3fd6fb4db9f",
+      "def": "a97dfdb4a6323906"
+    },
+    "common.member": {
+      "zh": "fe619f3c95a75673",
+      "en": "1244fad3b6cfdfab",
+      "content": "b156d8010ca49f42",
+      "def": "d891b03da64fc3fb"
+    },
+    "common.owner": {
+      "zh": "e8b3bcfab2a6ac82",
+      "en": "809039d21d902908",
+      "content": "05cce6e3f6605356",
+      "def": "91bd1e92faadf02b"
+    },
+    "design.ads": {
+      "zh": "06c69e13b6f5730a",
+      "en": "054305159e01910c",
+      "content": "33032191f96ad182",
+      "def": "e98c67a2fb63367c"
+    },
+    "design.amazon": {
+      "zh": "567e9aeec373e94d",
+      "en": "3681be24466d5b70",
+      "content": "15522f0f34bc98c3",
+      "def": "d7250c8f892598b6"
+    },
+    "design.dtc": {
+      "zh": "64da393afb71b0e5",
+      "en": "757b41b34b3b938f",
+      "content": "18f3932499465abe",
+      "def": "6c3dec979dcfcaae"
+    },
+    "design.exhibition": {
+      "zh": "fe341bd689cfe173",
+      "en": "e5c4d35fcba78863",
+      "content": "4998e163a312dad2",
+      "def": "c1ba84205658736c"
+    },
+    "design.social": {
+      "zh": "bab2693b67c6f10a",
+      "en": "8a8faec90b790478",
+      "content": "c3b66a23ab51c889",
+      "def": "fa53bc1a69036dd2"
+    },
+    "dtc.community-support": {
+      "zh": "d4f06895a5bf9936",
+      "en": "e913007db7cea011",
+      "content": "cf4249182b0fee83",
+      "def": "16f7bd12ac4544a5"
+    },
+    "dtc.content": {
+      "zh": "e43efc0a512a8bb5",
+      "en": "015b067f205c757e",
+      "content": "669f4ea889f256ca",
+      "def": "ede5439433823e82"
+    },
+    "dtc.email-marketing": {
+      "zh": "7f824de093ab4f3b",
+      "en": "ca8db98c59d19e2e",
+      "content": "ffaea70426d2040f",
+      "def": "85f9b683b4f11d72"
+    },
+    "dtc.fulfillment": {
+      "zh": "74dd8e106b5d458c",
+      "en": "90860f964aadd39c",
+      "content": "ba21e1d3f0ac0f5e",
+      "def": "9d72832ec3e4a404"
+    },
+    "dtc.live-chat": {
+      "zh": "d0ebf75a1ae79e4e",
+      "en": "42f666da69991db4",
+      "content": "69ed307d4ccb6046",
+      "def": "6081a09266749e89"
+    },
+    "dtc.store": {
+      "zh": "9f7b349adc093888",
+      "en": "606171301e6676a9",
+      "content": "347d052e781ba85c",
+      "def": "92c42520c20184f6"
+    },
+    "dtc.support": {
+      "zh": "9819a497de49657e",
+      "en": "cba4b77e8fd81a39",
+      "content": "d22f45deaeef7161",
+      "def": "27af5df9e3009540"
+    },
+    "kol.facebook": {
+      "zh": "bbab3e2d4dea31f4",
+      "en": "ca88f84bcc7ee139",
+      "content": "33536e1134b12620",
+      "def": "8c5548c5de5410a2"
+    },
+    "kol.instagram": {
+      "zh": "1e960ec2b235daf6",
+      "en": "2b9de6f6c8a54765",
+      "content": "7508799971ac7e48",
+      "def": "7deefdde3606a63a"
+    },
+    "kol.tiktok": {
+      "zh": "12dab19c903f113b",
+      "en": "22336f045896f4d2",
+      "content": "47b67406aaf0c601",
+      "def": "672fd3f8a8f95671"
+    },
+    "kol.x": {
+      "zh": "7468ec14a9261f50",
+      "en": "07ed9beb2a081b59",
+      "content": "b276b7709afb4313",
+      "def": "6969aeb6b5afaa7a"
+    },
+    "kol.youtube": {
+      "zh": "c8761a25f439efc8",
+      "en": "759b5b1066efdca9",
+      "content": "745cd4da897dad4a",
+      "def": "e321f355c52f068f"
+    },
+    "pr.forums": {
+      "zh": "eef45b0614777c81",
+      "en": "a4a4fd7b1534864f",
+      "content": "6a4bcb6ec65f152c",
+      "def": "aae5cd189c79f8a3"
+    },
+    "pr.monitoring": {
+      "zh": "0ea4f0fb925202b0",
+      "en": "8bc8a1271dde6381",
+      "content": "4dd3b3b8a418c083",
+      "def": "bce228d860b9a9bd"
+    },
+    "pr.press": {
+      "zh": "05dc0d61d3335fbf",
+      "en": "98cd80a874b00a07",
+      "content": "8ca8dc0680dc6785",
+      "def": "02c758a7ef475d0d"
+    },
+    "pr.reddit": {
+      "zh": "15e1c2fbaecd851d",
+      "en": "9573c7533e0502fe",
+      "content": "afb41cd37da61857",
+      "def": "451056d4cf2e8a70"
+    },
+    "site.shopify-apps": {
+      "zh": "41f2661b31feff86",
+      "en": "3a23ed1dccba2319",
+      "content": "a57457b3a52c42df",
+      "def": "e2e987f019b30074"
+    },
+    "site.shopify-build": {
+      "zh": "3aa69a1f0eea1588",
+      "en": "77296bc920c0196b",
+      "content": "71e484419c36dd37",
+      "def": "3d627fbe3a27fee9"
+    },
+    "site.shopify-email": {
+      "zh": "3006b16e764503a6",
+      "en": "4cfef27e3119aabb",
+      "content": "654e65c867c806bf",
+      "def": "2b29366a439ee0f3"
+    },
+    "site.shopify-theme": {
+      "zh": "5a8dbfe190fcace3",
+      "en": "1e8de5a8d16e30f3",
+      "content": "115c89c5b7f5d26f",
+      "def": "793a6d049676726c"
+    },
+    "social.discord": {
+      "zh": "f0379e8c235edc9b",
+      "en": "06b735a1ad18956a",
+      "content": "35cf3c47a2f01f31",
+      "def": "532f86ff6e3239b8"
+    },
+    "social.facebook-group": {
+      "zh": "eb15e0ae6f2f97fc",
+      "en": "2e6ce342d22b1361",
+      "content": "c7089d3d458082e9",
+      "def": "f471bfdb4fbb1421"
+    },
+    "social.facebook": {
+      "zh": "57b33b9a799b37df",
+      "en": "970e51d8328431f1",
+      "content": "d0e7f4f7fbed646f",
+      "def": "00ff8d259d90ac40"
+    },
+    "social.instagram": {
+      "zh": "e9147cca46b10248",
+      "en": "63e3b0ac4e43846a",
+      "content": "e5a18293d7ee6a35",
+      "def": "1d84dbd71e56ab0f"
+    },
+    "social.linkedin": {
+      "zh": "7e279db59c067d51",
+      "en": "53284e4001b95864",
+      "content": "f9a615ad1a2f1ed7",
+      "def": "a78ea0e416277ffd"
+    },
+    "social.meta": {
+      "zh": "610d0d66b5485006",
+      "en": "1ba513bda6948f27",
+      "content": "330b08394b28c2ee",
+      "def": "9133549a8969525c"
+    },
+    "social.reddit": {
+      "zh": "238232251d43589f",
+      "en": "78e972f4d11c4b34",
+      "content": "6db26b417fa8038d",
+      "def": "6a5cbb68dd4b2aa0"
+    },
+    "social.telegram-group": {
+      "zh": "42d6c386d21262d0",
+      "en": "7a2908331a010ee3",
+      "content": "52b86bfe87c48433",
+      "def": "a087d91343af0b7f"
+    },
+    "social.threads": {
+      "zh": "fe62de0ce77294de",
+      "en": "4c8e1a01a098a7c9",
+      "content": "7f26a208e9e7d9e3",
+      "def": "a639bbaa8c2fceff"
+    },
+    "social.tiktok": {
+      "zh": "ab50241aa63fca70",
+      "en": "98bb52ed5dfe0ca3",
+      "content": "bdc5b61ebbd291c9",
+      "def": "7499790399a560f6"
+    },
+    "social.whatsapp": {
+      "zh": "952448e8be3e6f9b",
+      "en": "26f91a94d0e445e4",
+      "content": "aafda2445a72bfc0",
+      "def": "76b73454c1391ade"
+    },
+    "social.x": {
+      "zh": "77a9a675abe75ed6",
+      "en": "db2cc473f11b30f2",
+      "content": "0caa1a573fd68757",
+      "def": "724e747c7e31b7e1"
+    },
+    "social.youtube": {
+      "zh": "acf4dbb71b92d549",
+      "en": "67692894474d4bc2",
+      "content": "91213a14e6460265",
+      "def": "d60853ed55ab7bc4"
+    }
+  },
+  "positions": {
+    "ads": "de4829ec7fc2db48",
+    "amazon-ops": "899c6afa4681fbcc",
+    "b2b": "351dee74496ff3a2",
+    "customer-care": "33f1ff1992779f4b",
+    "design": "5fbcd54f33015d8a",
+    "dtc-ops": "685a70ea9be05f72",
+    "kol-marketing": "c27ff1849b31fece",
+    "pr": "f0f54b5884c4a7e0",
+    "site": "71b9666f662bfee8",
+    "social-media": "c80364238231011b",
+    "web-ops": "e3fd05eeb69581f2"
+  }
+}

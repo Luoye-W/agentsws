@@ -3,7 +3,7 @@
  * 连接卡的监控源状态（坏了亮红点、照实说是哪家）、计划卡的下次读。只在担店铺管理 / 亚马逊店铺运营的那一层出。
  */
 import type { CompetitorChange, CompetitorWatchView } from '@agentsws/contracts'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { RailScope } from '@/components/rail/rail-scope'
 import {
@@ -141,17 +141,40 @@ describe('WP392 竞品监控在右侧面板', () => {
     expect(priceTrend(ROWS, ROWS[2] as CompetitorChange)).toEqual([])
   })
 
-  it('竞品变化表：按竞品、按种类筛；价格变化旁边一条走势线', async () => {
+  // WP402（决策 1145）：手写表改成积木表格，筛选走 WP401 那一套（竞品 / 种类勾、日期选起止、说了什么能搜）
+  it('竞品变化表：按竞品、按种类筛；价格变化旁边一条走势线', { timeout: 120_000 }, async () => {
+    // Node 25 自带那个全局 localStorage 是残的：换一份内存的（筛法记在本机）
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        mem.set(k, v)
+      },
+      removeItem: (k: string) => {
+        mem.delete(k)
+      },
+    })
     current = view()
     renderWithProviders(<CompetitorChangesTable scope={STORE} />)
-    await waitFor(() => expect(screen.getAllByTestId('competitor-change-row')).toHaveLength(3))
-    expect(screen.getAllByTestId('competitor-trend').length).toBeGreaterThan(0)
+    const rows = () => within(screen.getByTestId('competitor-table')).getAllByRole('row').length - 1
+    await waitFor(() => expect(rows()).toBe(3))
+    expect(screen.getAllByTestId('table-sparkline').length).toBeGreaterThan(0)
     expect(screen.getByText('Explorer 1000 v2：降价15%（$799 → $679）')).toBeTruthy()
-    fireEvent.change(screen.getByTestId('competitor-filter'), { target: { value: 'c_ecoflow' } })
-    expect(screen.getAllByTestId('competitor-change-row')).toHaveLength(1)
-    fireEvent.change(screen.getByTestId('competitor-filter'), { target: { value: '' } })
-    fireEvent.change(screen.getByTestId('competitor-kind-filter'), { target: { value: 'price' } })
-    expect(screen.getAllByTestId('competitor-change-row')).toHaveLength(2)
+    const pick = async (col: string, value: string) => {
+      fireEvent.click(screen.getByTestId(`table-filter-${col}`))
+      const panel = await screen.findByTestId(`table-filter-panel-${col}`)
+      const opt = within(panel)
+        .getAllByTestId(`table-filter-opt-${col}`)
+        .find((b) => b.getAttribute('data-value') === value)
+      if (opt === undefined) throw new Error(`没有 ${value}`)
+      fireEvent.click(opt)
+    }
+    await pick('competitor', 'EcoFlow')
+    expect(rows()).toBe(1)
+    fireEvent.click(screen.getByTestId('table-filtered-clear'))
+    await pick('change', '改价')
+    expect(rows()).toBe(2)
+    vi.unstubAllGlobals()
   })
 
   it('连接卡一行：有没读到的亮红、写出是哪家；计划卡：下次读的时刻', async () => {

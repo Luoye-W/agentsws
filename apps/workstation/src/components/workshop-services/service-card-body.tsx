@@ -344,6 +344,37 @@ function PayBody({ card, payload }: { card: DeckCard; payload: ServicePayCardPay
   const s = payload.service
   const decidable = card.available_actions.includes('approve')
   const ms = payload.milestones ?? []
+  // WP403：追加费用那一种——加多少、为什么、交付顺延多久；随那一段验收结算
+  if (payload.stage === 'extra')
+    return (
+      <div className="mt-2.5 flex flex-col gap-2" data-testid="service-pay" data-stage="extra">
+        <p className="text-2xl font-semibold text-ws-ink tabular-nums">
+          {t('svc.extra.price', { credits: creditsText(payload.credits, lang) })}
+        </p>
+        {payload.extra_reason === undefined ? null : (
+          <p className="text-[12.5px] text-ws-body">「{payload.extra_reason}」</p>
+        )}
+        <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg">
+          {payload.deliver_hours === undefined
+            ? t('svc.extra.same_time')
+            : t('svc.extra.later', {
+                n: String(Math.max(1, Math.round(payload.deliver_hours / 24))),
+              })}
+          <Hint text={t('svc.extra.tip')} />
+        </p>
+        {decidable ? (
+          <Button
+            size="sm"
+            className="w-fit"
+            data-testid="service-pay-go"
+            disabled={go.isPending}
+            onClick={() => go.mutate({})}
+          >
+            {t('svc.pay.go')}
+          </Button>
+        ) : null}
+      </div>
+    )
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="service-pay">
       <p className="text-2xl font-semibold text-ws-ink tabular-nums">
@@ -363,12 +394,10 @@ function PayBody({ card, payload }: { card: DeckCard; payload: ServicePayCardPay
       {payload.quote_note === undefined ? null : (
         <p className="text-[12.5px] text-ws-body">「{payload.quote_note}」</p>
       )}
-      {payload.stage !== 'extra' ? (
-        <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg">
-          {t('svc.pay.shares')}
-          <Hint text={t('svc.pay.shares.tip')} />
-        </p>
-      ) : null}
+      <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg">
+        {t('svc.pay.shares')}
+        <Hint text={t('svc.pay.shares.tip')} />
+      </p>
       {decidable ? (
         <Button
           size="sm"

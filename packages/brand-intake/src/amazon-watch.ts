@@ -26,6 +26,7 @@ import {
   amazonMarketCurrency,
   amazonProductUrlOf,
 } from './amazon.js'
+import { type BatchRoute, type BatchStep, readBatchChain } from './read-chain.js'
 
 /** 读一页商品页的结局（读页那一块交回来的）。 */
 export type AmazonPageOutcome =
@@ -59,11 +60,26 @@ export interface AmazonCloudItem {
 
 export type AmazonCloudRead = { items: AmazonCloudItem[]; credits: number } | { error: string }
 
+/**
+ * WP402（决策 1140 / 1146）：第 3 条路——通过插件在**用户自己的浏览器**里读 Amazon 商品页（只读）。
+ * 用户的浏览器里多半登着他的真实账号：只在内置浏览器和工坊云端**都失败**时用、每家竞品每天至多一次、
+ * 第一次用前问一次同意（`gate`）。他浏览器里的配送地址不替他改：币种对不上就作废、照实说。
+ */
+export interface AmazonOwnBrowserRoute {
+  /** `ok` 能用；`needs_consent` 还没同意（出卡问）；`limited` 今天这一家已经用过一次。 */
+  gate: 'ok' | 'needs_consent' | 'limited'
+  read(input: { marketplace: string; asin: string }): Promise<AmazonPageOutcome>
+  /** 真用了（记下今天这一家用过了）。 */
+  used?(): void
+}
+
 export interface AmazonAsinReadDeps {
   /** 内置浏览器读一页；没有（没有桌面壳）= 不给。 */
   browser?: (input: { marketplace: string; asin: string }) => Promise<AmazonPageOutcome>
   /** 云端兜底（一次一批）；没接上（没关联账号）= 不给。 */
   cloud?: (input: { marketplace: string; asins: string[] }) => Promise<AmazonCloudRead>
+  /** WP402：第 3 条路（插件、用户自己的浏览器）；没装插件 = 不给。 */
+  extension?: AmazonOwnBrowserRoute
   now: Iso8601
   /** 先读哪几个（上次读得最早的在前）；不给按源里的顺序。 */
   order?: readonly string[]
@@ -77,6 +93,8 @@ export interface AmazonAsinReadResult extends CatalogReadResult {
   cloud_asins?: string[]
   /** 这一次没读的（额度满了 / 作废 / 读不到）。 */
   unread?: string[]
+  /** WP402：走用户自己的浏览器读到的那几个。 */
+  extension_asins?: string[]
 }
 
 const rowBase = (src: Pick<CompetitorWatchSource, 'id' | 'competitor_id'>) => ({
@@ -146,7 +164,8 @@ export const AMAZON_CLOUD_LABEL = '工坊云端数据'
 const fmtCredits = (n: number): string => String(Math.round(n * 100) / 100)
 
 /**
- * 读一条 `amazon_asin` 源的那几个 ASIN（见文件头的五条）。读不到别抛：回 `{ rows: [], complete: false, error }`。
+ * 读一条 `amazon_asin` 源的那几个 ASIN（见文件头的五条；WP402 用取数链：内置浏览器 → 工坊云端 → 你自己的浏览器）。
+ * 读不到别抛：回 `{ rows: [], complete: false, error }`。
  */
 export async function readAmazonAsins(
   src: Pick<CompetitorWatchSource, 'id' | 'competitor_id' | 'label' | 'marketplace' | 'asins'>,
@@ -162,119 +181,181 @@ export async function readAmazonAsins(
     (a, b) => (rank.get(a) ?? wanted.indexOf(a) + 1e6) - (rank.get(b) ?? wanted.indexOf(b) + 1e6),
   )
   const expected = amazonMarketCurrency(marketplace)
-  const rows: CatalogSnapshotRow[] = []
   const notes: string[] = []
-  const unread: string[] = []
-  const toCloud: string[] = []
-  let complete = true
   let blocked = false
-  let quotaHit = false
-  let browserRows = 0
-
-  if (deps.browser === undefined) toCloud.push(...queue)
-  else
-    for (let i = 0; i < queue.length; i += 1) {
-      const asin = queue[i] as string
-      if (quotaHit) {
-        unread.push(asin)
-        continue
-      }
-      const got = await deps.browser({ marketplace, asin })
-      if (got.status === 'blocked') {
-        // 被拦就停：这一轮不再碰 Amazon、不重试、不绕；剩下的（含这一个）转云端
-        blocked = true
-        toCloud.push(...queue.slice(i))
-        notes.push('Amazon 要人机验证，内置浏览器这一轮不再读、不绕，剩下的改走工坊云端数据')
-        break
-      }
-      if (got.status === 'quota') {
-        quotaHit = true
-        complete = false
-        unread.push(asin)
-        continue
-      }
-      if (got.status === 'missing') continue // 找不到这一页：不在这次读到的里面（连两次 = 下架）
-      if (got.status === 'wrong_region' || got.status === 'failed') {
-        complete = false
-        unread.push(asin)
-        notes.push(`${asin}：${got.message}`)
-        continue
-      }
-      const f = got.facts
-      if (
-        f.undeliverable ||
-        (expected !== undefined && f.currency !== undefined && f.currency !== expected)
-      ) {
-        complete = false
-        unread.push(asin)
-        notes.push(`${asin}：读到的价格不是这个站的币种（配送地址不对），这次作废`)
-        continue
-      }
-      rows.push(amazonFactsToRow(src, f, marketplace, deps.now))
-      browserRows += 1
-    }
-  if (quotaHit)
-    notes.push(
-      `内置浏览器这一小时的额度满了：读了 ${browserRows} 个，还有 ${unread.length} 个下一拍先读`,
-    )
-
   let credits: number | undefined
-  if (toCloud.length > 0) {
-    if (deps.cloud === undefined) {
-      complete = false
-      unread.push(...toCloud)
-      notes.push(
-        deps.browser === undefined
-          ? '这台电脑没有工坊内置浏览器，工坊云端数据也还没接上（先关联账号），这次没读'
-          : '工坊云端数据还没接上（先关联账号），剩下的这次没读',
-      )
-    } else {
-      const got = await deps.cloud({ marketplace, asins: toCloud }).catch((e: unknown) => ({
-        error: e instanceof Error ? e.message : String(e),
-      }))
-      if ('error' in got) {
-        complete = false
-        unread.push(...toCloud)
-        notes.push(`工坊云端数据这次没读到：${got.error}`)
-      } else {
-        credits = got.credits
-        const byAsin = new Map(got.items.map((it) => [it.asin.trim().toUpperCase(), it]))
-        let n = 0
-        for (const asin of toCloud) {
-          const it = byAsin.get(asin)
-          if (it === undefined) {
-            complete = false
-            unread.push(asin)
-            continue
-          }
-          if (expected !== undefined && it.currency !== undefined && it.currency !== expected) {
-            complete = false
-            unread.push(asin)
-            continue
-          }
-          rows.push(amazonCloudToRow(src, it, marketplace, deps.now))
-          n += 1
-        }
-        notes.push(
-          `${n} 个走了工坊云端数据，扣了 ${fmtCredits(got.credits)} 积分（云端读不到划线价和优惠券，这两格空着）`,
-        )
+  let toCloud: string[] = []
+  let needsConsent = false
+  const wrongCurrency = (f: { currency?: string; undeliverable?: boolean }): boolean =>
+    f.undeliverable === true ||
+    (expected !== undefined && f.currency !== undefined && f.currency !== expected)
+
+  /** 一页一页读（内置浏览器 / 你自己的浏览器同一个读法）。 */
+  const pageByPage = async (
+    keys: string[],
+    read: (i: { marketplace: string; asin: string }) => Promise<AmazonPageOutcome>,
+    who: 'browser' | 'extension',
+  ): Promise<BatchStep<string, CatalogSnapshotRow>> => {
+    const got: { key: string; value: CatalogSnapshotRow }[] = []
+    const stop: NonNullable<BatchStep<string, CatalogSnapshotRow>['stop']> = []
+    let quotaHit = false
+    for (let i = 0; i < keys.length; i += 1) {
+      const asin = keys[i] as string
+      if (quotaHit) {
+        stop.push({ key: asin, kind: 'quota' })
+        continue
       }
+      const r = await read({ marketplace, asin })
+      if (r.status === 'blocked') {
+        // 被拦就停：这一轮这条路不再碰 Amazon、不重试、不绕；剩下的（含这一个）换下一条路
+        if (who === 'browser') {
+          blocked = true
+          notes.push('Amazon 要人机验证，内置浏览器这一轮不再读、不绕，剩下的改走工坊云端数据')
+        } else notes.push('你自己的浏览器里 Amazon 也要人机验证，AI 不碰验证码，这一轮先不读了')
+        return {
+          got,
+          next: keys.slice(i),
+          stop,
+          outcome: 'blocked',
+          ...(r.message === undefined ? {} : { reason: r.message }),
+        }
+      }
+      if (r.status === 'quota') {
+        quotaHit = true
+        stop.push({ key: asin, kind: 'quota' })
+        continue
+      }
+      // 找不到这一页：不在这次读到的里面（连两次 = 下架）
+      if (r.status === 'missing') {
+        stop.push({ key: asin, kind: 'not_found' })
+        continue
+      }
+      if (r.status === 'wrong_region' || r.status === 'failed') {
+        stop.push({ key: asin, kind: 'failed', reason: r.message })
+        notes.push(`${asin}：${r.message}`)
+        continue
+      }
+      if (wrongCurrency(r.facts)) {
+        stop.push({ key: asin, kind: 'failed' })
+        notes.push(
+          who === 'browser'
+            ? `${asin}：读到的价格不是这个站的币种（配送地址不对），这次作废`
+            : `${asin}：你浏览器里的配送地址不是这个站的（不替你改地址），这次作废`,
+        )
+        continue
+      }
+      got.push({ key: asin, value: amazonFactsToRow(src, r.facts, marketplace, deps.now) })
+    }
+    if (quotaHit && who === 'browser')
+      notes.push(
+        `内置浏览器这一小时的额度满了：读了 ${got.length} 个，还有 ${stop.filter((x) => x.kind === 'quota').length} 个下一拍先读`,
+      )
+    return {
+      got,
+      next: [],
+      stop,
+      outcome: got.length > 0 ? 'ok' : quotaHit ? 'quota' : 'failed',
     }
   }
 
-  const via =
-    toCloud.length > 0 && credits !== undefined ? ('cloud' as const) : ('browser' as const)
+  const browserRoute: BatchRoute<string, CatalogSnapshotRow> = {
+    route: 'browser',
+    read: async (keys) =>
+      deps.browser === undefined
+        ? { got: [], next: keys, outcome: 'unavailable', reason: '这台电脑没有工坊内置浏览器' }
+        : pageByPage(keys, deps.browser, 'browser'),
+  }
+
+  const cloudRoute: BatchRoute<string, CatalogSnapshotRow> = {
+    route: 'cloud',
+    async read(keys) {
+      toCloud = keys
+      if (deps.cloud === undefined) {
+        notes.push(
+          deps.browser === undefined
+            ? '这台电脑没有工坊内置浏览器，工坊云端数据也还没接上（先关联账号），这次没读'
+            : '工坊云端数据还没接上（先关联账号），剩下的这次没读',
+        )
+        return { got: [], next: keys, outcome: 'unavailable', reason: '工坊云端数据还没接上' }
+      }
+      const got = await deps.cloud({ marketplace, asins: keys }).catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : String(e),
+      }))
+      if ('error' in got) {
+        notes.push(`工坊云端数据这次没读到：${got.error}`)
+        return { got: [], next: keys, outcome: 'failed', reason: got.error }
+      }
+      credits = got.credits
+      const byAsin = new Map(got.items.map((it) => [it.asin.trim().toUpperCase(), it]))
+      const out: BatchStep<string, CatalogSnapshotRow> = { got: [], next: [], stop: [] }
+      for (const asin of keys) {
+        const it = byAsin.get(asin)
+        if (it === undefined) out.next.push(asin)
+        else if (expected !== undefined && it.currency !== undefined && it.currency !== expected)
+          out.stop?.push({ key: asin, kind: 'failed' })
+        else out.got.push({ key: asin, value: amazonCloudToRow(src, it, marketplace, deps.now) })
+      }
+      notes.push(
+        `${out.got.length} 个走了工坊云端数据，扣了 ${fmtCredits(got.credits)} 积分（云端读不到划线价和优惠券，这两格空着）`,
+      )
+      out.outcome = out.got.length > 0 ? 'ok' : 'failed'
+      return out
+    },
+  }
+
+  const extensionRoute: BatchRoute<string, CatalogSnapshotRow> = {
+    route: 'extension',
+    async read(keys) {
+      const ext = deps.extension
+      if (ext === undefined)
+        return { got: [], next: keys, outcome: 'unavailable', reason: '没装 Agents 工坊插件' }
+      if (ext.gate === 'needs_consent') {
+        needsConsent = true
+        notes.push('要不要用你自己的浏览器读一下这几款，得先问你一句（卡上点同意才读）')
+        return { got: [], next: keys, outcome: 'needs_consent' }
+      }
+      if (ext.gate === 'limited') {
+        notes.push(`${src.label} 今天已经用你自己的浏览器读过一次了，明天再试`)
+        return { got: [], next: keys, outcome: 'limited' }
+      }
+      ext.used?.()
+      const step = await pageByPage(keys, ext.read, 'extension')
+      if (step.got.length > 0)
+        notes.push(`${step.got.length} 个是通过插件在你自己的浏览器里读的（只读，没点没填）`)
+      return step
+    },
+  }
+
+  const chain = await readBatchChain(queue, [browserRoute, cloudRoute, extensionRoute])
+  const rows = chain.got.map((g) => g.value)
+  const unread = [
+    ...chain.stopped.filter((x) => x.kind !== 'not_found').map((x) => x.key),
+    ...chain.left,
+  ]
+  const complete = unread.length === 0
+  const byExtension = chain.got.filter((g) => g.via === 'extension').map((g) => g.key)
+  const via: CatalogReadResult['via'] =
+    byExtension.length > 0
+      ? 'extension'
+      : credits !== undefined && toCloud.length > 0
+        ? 'cloud'
+        : rows.length > 0
+          ? 'browser'
+          : undefined
   const base: AmazonAsinReadResult = {
     rows,
     complete,
     notes,
-    ...(rows.length > 0 || credits !== undefined ? { via } : {}),
+    attempts: chain.attempts,
+    ...(via === undefined ? {} : { via }),
     ...(credits === undefined ? {} : { credits }),
     ...(blocked ? { blocked: true } : {}),
     ...(toCloud.length === 0 ? {} : { cloud_asins: toCloud }),
     ...(unread.length === 0 ? {} : { unread }),
+    ...(byExtension.length === 0 ? {} : { extension_asins: byExtension }),
+    ...(needsConsent ? { needs_consent: true } : {}),
   }
-  if (rows.length === 0 && wanted.length > 0 && !(complete && unread.length === 0))
+  if (rows.length === 0 && !complete)
     return {
       ...base,
       complete: false,

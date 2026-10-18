@@ -22,8 +22,10 @@
  * - 读不到就照实说：一条源失败记 `status: 'failed'` + `last_error`（人话），面板与简报照实写「没读到」，**不显示成 0**；
  * - 用户看得到的字不提任何数据供应商名，只说「从他店里公开的商品数据读的」「工坊云端数据」。
  */
+
 import type { Iso8601, WorkspaceId } from './common.js'
 import type { MonitorRunPart, MonitorSource } from './pr-watch.js'
+import type { AmazonBlockState, AmazonOwnBrowserConsent, ReadRouteAttempt } from './read-chain.js'
 
 /* ── 监控源 ───────────────────────────────────────────────────────── */
 
@@ -38,8 +40,11 @@ export const COMPETITOR_SOURCE_KINDS: readonly CompetitorSourceKind[] = [
 /** 自家（C8 对照）在 `competitor_id` 里的写法（竞品用 `BrandWatchCompetitor.id`）。 */
 export const OWN_BRAND_COMPETITOR_ID = '_own'
 
-/** 这一次是走哪条路读到的（连接卡 / 方案卡上用一句话说清，不提供应商名）。 */
-export type CatalogReadVia = 'direct' | 'browser' | 'cloud' | 'official'
+/**
+ * 这一次是走哪条路读到的（连接卡 / 方案卡上用一句话说清，不提供应商名）。
+ * WP402：加 `extension`（通过插件在用户自己的浏览器里读的，决策 1140 / 1146 的第 3 条路）。
+ */
+export type CatalogReadVia = 'direct' | 'browser' | 'cloud' | 'official' | 'extension'
 
 /**
  * 一条竞品监控源（一家竞品的独立站，或一家竞品在某个 Amazon 站点上的那几款）。
@@ -65,6 +70,8 @@ export interface CompetitorWatchSource extends MonitorSource {
   last_rows?: number
   /** 上一次走哪条路读到的。 */
   last_via?: CatalogReadVia
+  /** WP402：上一次取数链上试过的路（连接卡那一行用）。 */
+  last_attempts?: ReadRouteAttempt[]
 }
 
 /* ── 快照 ─────────────────────────────────────────────────────────── */
@@ -163,6 +170,10 @@ export interface CatalogReadResult {
   credits?: number
   /** 给简报 / 连接卡的几句（`第 2 页没读到`、`被拦了，改走工坊云端数据`）。 */
   notes?: string[]
+  /** WP402：这一次取数链上试过哪几条路、各自怎样（按试的顺序；连接卡 / 报告用）。 */
+  attempts?: ReadRouteAttempt[]
+  /** WP402：Amazon 想走用户自己的浏览器、但还没得到同意（服务端据此出一张同意卡）。 */
+  needs_consent?: boolean
 }
 
 /** 进料口读一次时的上下文。 */
@@ -239,6 +250,11 @@ export interface CompetitorVsOwn {
   /** 竞品现价 − 自家现价（负数 = 他比你便宜）。 */
   diff: number
   currency?: string
+  /**
+   * WP402（决策 1137）：拿什么比的——`pair` 竞品这一款的起价 vs 自家对标款；`lowest` 没有对标款时两边最低价比
+   * （竞品这一款的起价 vs 自家店里最便宜的那一款）。不给 = 老数据（按对标款）。
+   */
+  basis?: 'pair' | 'lowest'
 }
 
 /** 比出来的一条变化（竞品变化表的一行）。 */
@@ -320,6 +336,8 @@ export interface CompetitorWatchRunPart extends MonitorRunPart {
   via?: CatalogReadVia
   /** 第一次读、只建了底子。 */
   baseline?: true
+  /** WP402：取数链上试过的路（连接卡那一行「走了哪条路」）。 */
+  attempts?: ReadRouteAttempt[]
 }
 
 /** 一轮竞品监控（定时 / 立即）。 */
@@ -390,4 +408,11 @@ export interface CompetitorWatchView {
   last_run?: CompetitorWatchRun
   /** 有源、但这类进料口这台机器还没接上（WP393 / WP394 还没装时照实说）。 */
   missing_adapters: CompetitorSourceKind[]
+  /**
+   * WP402（决策 1140 / 1146）：Amazon 走你自己的浏览器（取数链第 3 条路）——同意了没有、这台有没有这条路
+   * （设置里撤回 / 重新打开用）。托管实例没有。
+   */
+  own_browser?: AmazonOwnBrowserConsent & { available: boolean }
+  /** WP402：品牌级「被 Amazon 拦了」（竞品读页与联想词共用；面板那一句「暂停到几点」用）。 */
+  amazon_block?: AmazonBlockState
 }

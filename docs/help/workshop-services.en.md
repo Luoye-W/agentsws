@@ -28,13 +28,16 @@ Some things AI can't finish alone — building a store, writing a press piece, o
 - **Nothing is taken until you click**: Order / Agree & pay takes credits into **escrow**; they go to the team only after you accept. The AI never orders for you.
 - **Acceptance**: after delivery you get a card — **Accept / Ask for changes / Request refund**. If you don't click, standard work is accepted after 24 hours and each custom step after 7 days (the card shows when). The number of revisions is on the order card.
 - **Refunds**: unclaimed or late work is refunded automatically; undone standard units are refunded per unit; for poor work, request a refund and Workshop staff decide, with a one-line reason. Refunds go back the way they came.
+- **Extra charges**: if more work is agreed along the way (say, two more pages), the team sends an "Extra charge" card — how much, why, and how much later delivery moves. Nothing is taken until you click Agree & pay; the credits go into this order's escrow and are paid with the current step. Say no and the work goes on as agreed, nothing charged.
 - **Billing**: "Account & credits" has a "Workshop services" block — three lines per order: escrow, done, refunded. Add them up for what you actually spent.
 
 ## The order panel
 
 Click an order to open the panel on the right: progress and due date, what's "waiting on you" (e.g. upload your logo), and messages with the team. Stuck on a reply? "Draft for me" explains what they're asking and drafts a reply — **it never agrees to extra cost or scope for you**.
 
-Deliverables are kept for 90 days; you get one reminder before they're deleted.
+When they need material from you (logo files, product photos, a brief), click Upload in the "waiting on you" row — uploading counts as done. Files up to 25 MB each; share a link in the messages for anything bigger. Files the team delivers are under Files in the order panel; click Download to save them.
+
+Deliverables and files are kept for 90 days after the order ends; you get one reminder before they're deleted.
 
 ## "Sign in again"
 

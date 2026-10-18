@@ -1,0 +1,530 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：Amazon 词库（WP398）切词用的两张英文词表，从 amazon-keywords.ts 原样挪来。",
+    "stop_en：英文停用词（介词、冠词、连词、代词、空泛的修饰）——切词时当断点，也不进归一化的键。",
+    "keep_s：结尾是 s 但不是复数的词（单复数归一时不去 s）。id = 表名.词本身。"
+  ],
+  "table": "seo.amazon_keyword_lexicon",
+  "rows": [
+    {
+      "id": "stop_en.a",
+      "list": "stop_en",
+      "word": "a"
+    },
+    {
+      "id": "stop_en.an",
+      "list": "stop_en",
+      "word": "an"
+    },
+    {
+      "id": "stop_en.the",
+      "list": "stop_en",
+      "word": "the"
+    },
+    {
+      "id": "stop_en.and",
+      "list": "stop_en",
+      "word": "and"
+    },
+    {
+      "id": "stop_en.or",
+      "list": "stop_en",
+      "word": "or"
+    },
+    {
+      "id": "stop_en.nor",
+      "list": "stop_en",
+      "word": "nor"
+    },
+    {
+      "id": "stop_en.but",
+      "list": "stop_en",
+      "word": "but"
+    },
+    {
+      "id": "stop_en.for",
+      "list": "stop_en",
+      "word": "for"
+    },
+    {
+      "id": "stop_en.with",
+      "list": "stop_en",
+      "word": "with"
+    },
+    {
+      "id": "stop_en.without",
+      "list": "stop_en",
+      "word": "without"
+    },
+    {
+      "id": "stop_en.of",
+      "list": "stop_en",
+      "word": "of"
+    },
+    {
+      "id": "stop_en.to",
+      "list": "stop_en",
+      "word": "to"
+    },
+    {
+      "id": "stop_en.in",
+      "list": "stop_en",
+      "word": "in"
+    },
+    {
+      "id": "stop_en.on",
+      "list": "stop_en",
+      "word": "on"
+    },
+    {
+      "id": "stop_en.at",
+      "list": "stop_en",
+      "word": "at"
+    },
+    {
+      "id": "stop_en.by",
+      "list": "stop_en",
+      "word": "by"
+    },
+    {
+      "id": "stop_en.from",
+      "list": "stop_en",
+      "word": "from"
+    },
+    {
+      "id": "stop_en.into",
+      "list": "stop_en",
+      "word": "into"
+    },
+    {
+      "id": "stop_en.onto",
+      "list": "stop_en",
+      "word": "onto"
+    },
+    {
+      "id": "stop_en.over",
+      "list": "stop_en",
+      "word": "over"
+    },
+    {
+      "id": "stop_en.under",
+      "list": "stop_en",
+      "word": "under"
+    },
+    {
+      "id": "stop_en.as",
+      "list": "stop_en",
+      "word": "as"
+    },
+    {
+      "id": "stop_en.is",
+      "list": "stop_en",
+      "word": "is"
+    },
+    {
+      "id": "stop_en.are",
+      "list": "stop_en",
+      "word": "are"
+    },
+    {
+      "id": "stop_en.be",
+      "list": "stop_en",
+      "word": "be"
+    },
+    {
+      "id": "stop_en.been",
+      "list": "stop_en",
+      "word": "been"
+    },
+    {
+      "id": "stop_en.being",
+      "list": "stop_en",
+      "word": "being"
+    },
+    {
+      "id": "stop_en.was",
+      "list": "stop_en",
+      "word": "was"
+    },
+    {
+      "id": "stop_en.were",
+      "list": "stop_en",
+      "word": "were"
+    },
+    {
+      "id": "stop_en.it",
+      "list": "stop_en",
+      "word": "it"
+    },
+    {
+      "id": "stop_en.its",
+      "list": "stop_en",
+      "word": "its"
+    },
+    {
+      "id": "stop_en.this",
+      "list": "stop_en",
+      "word": "this"
+    },
+    {
+      "id": "stop_en.that",
+      "list": "stop_en",
+      "word": "that"
+    },
+    {
+      "id": "stop_en.these",
+      "list": "stop_en",
+      "word": "these"
+    },
+    {
+      "id": "stop_en.those",
+      "list": "stop_en",
+      "word": "those"
+    },
+    {
+      "id": "stop_en.your",
+      "list": "stop_en",
+      "word": "your"
+    },
+    {
+      "id": "stop_en.you",
+      "list": "stop_en",
+      "word": "you"
+    },
+    {
+      "id": "stop_en.our",
+      "list": "stop_en",
+      "word": "our"
+    },
+    {
+      "id": "stop_en.we",
+      "list": "stop_en",
+      "word": "we"
+    },
+    {
+      "id": "stop_en.us",
+      "list": "stop_en",
+      "word": "us"
+    },
+    {
+      "id": "stop_en.they",
+      "list": "stop_en",
+      "word": "they"
+    },
+    {
+      "id": "stop_en.them",
+      "list": "stop_en",
+      "word": "them"
+    },
+    {
+      "id": "stop_en.their",
+      "list": "stop_en",
+      "word": "their"
+    },
+    {
+      "id": "stop_en.his",
+      "list": "stop_en",
+      "word": "his"
+    },
+    {
+      "id": "stop_en.her",
+      "list": "stop_en",
+      "word": "her"
+    },
+    {
+      "id": "stop_en.my",
+      "list": "stop_en",
+      "word": "my"
+    },
+    {
+      "id": "stop_en.me",
+      "list": "stop_en",
+      "word": "me"
+    },
+    {
+      "id": "stop_en.i",
+      "list": "stop_en",
+      "word": "i"
+    },
+    {
+      "id": "stop_en.he",
+      "list": "stop_en",
+      "word": "he"
+    },
+    {
+      "id": "stop_en.she",
+      "list": "stop_en",
+      "word": "she"
+    },
+    {
+      "id": "stop_en.up",
+      "list": "stop_en",
+      "word": "up"
+    },
+    {
+      "id": "stop_en.out",
+      "list": "stop_en",
+      "word": "out"
+    },
+    {
+      "id": "stop_en.off",
+      "list": "stop_en",
+      "word": "off"
+    },
+    {
+      "id": "stop_en.per",
+      "list": "stop_en",
+      "word": "per"
+    },
+    {
+      "id": "stop_en.via",
+      "list": "stop_en",
+      "word": "via"
+    },
+    {
+      "id": "stop_en.than",
+      "list": "stop_en",
+      "word": "than"
+    },
+    {
+      "id": "stop_en.then",
+      "list": "stop_en",
+      "word": "then"
+    },
+    {
+      "id": "stop_en.so",
+      "list": "stop_en",
+      "word": "so"
+    },
+    {
+      "id": "stop_en.too",
+      "list": "stop_en",
+      "word": "too"
+    },
+    {
+      "id": "stop_en.very",
+      "list": "stop_en",
+      "word": "very"
+    },
+    {
+      "id": "stop_en.can",
+      "list": "stop_en",
+      "word": "can"
+    },
+    {
+      "id": "stop_en.will",
+      "list": "stop_en",
+      "word": "will"
+    },
+    {
+      "id": "stop_en.just",
+      "list": "stop_en",
+      "word": "just"
+    },
+    {
+      "id": "stop_en.also",
+      "list": "stop_en",
+      "word": "also"
+    },
+    {
+      "id": "stop_en.more",
+      "list": "stop_en",
+      "word": "more"
+    },
+    {
+      "id": "stop_en.most",
+      "list": "stop_en",
+      "word": "most"
+    },
+    {
+      "id": "stop_en.any",
+      "list": "stop_en",
+      "word": "any"
+    },
+    {
+      "id": "stop_en.each",
+      "list": "stop_en",
+      "word": "each"
+    },
+    {
+      "id": "stop_en.every",
+      "list": "stop_en",
+      "word": "every"
+    },
+    {
+      "id": "stop_en.other",
+      "list": "stop_en",
+      "word": "other"
+    },
+    {
+      "id": "stop_en.such",
+      "list": "stop_en",
+      "word": "such"
+    },
+    {
+      "id": "stop_en.only",
+      "list": "stop_en",
+      "word": "only"
+    },
+    {
+      "id": "stop_en.own",
+      "list": "stop_en",
+      "word": "own"
+    },
+    {
+      "id": "stop_en.same",
+      "list": "stop_en",
+      "word": "same"
+    },
+    {
+      "id": "stop_en.both",
+      "list": "stop_en",
+      "word": "both"
+    },
+    {
+      "id": "stop_en.few",
+      "list": "stop_en",
+      "word": "few"
+    },
+    {
+      "id": "stop_en.some",
+      "list": "stop_en",
+      "word": "some"
+    },
+    {
+      "id": "stop_en.no",
+      "list": "stop_en",
+      "word": "no"
+    },
+    {
+      "id": "stop_en.not",
+      "list": "stop_en",
+      "word": "not"
+    },
+    {
+      "id": "stop_en.yes",
+      "list": "stop_en",
+      "word": "yes"
+    },
+    {
+      "id": "stop_en.etc",
+      "list": "stop_en",
+      "word": "etc"
+    },
+    {
+      "id": "stop_en.incl",
+      "list": "stop_en",
+      "word": "incl"
+    },
+    {
+      "id": "stop_en.including",
+      "list": "stop_en",
+      "word": "including"
+    },
+    {
+      "id": "stop_en.include",
+      "list": "stop_en",
+      "word": "include"
+    },
+    {
+      "id": "stop_en.includes",
+      "list": "stop_en",
+      "word": "includes"
+    },
+    {
+      "id": "stop_en.plus",
+      "list": "stop_en",
+      "word": "plus"
+    },
+    {
+      "id": "stop_en.pcs",
+      "list": "stop_en",
+      "word": "pcs"
+    },
+    {
+      "id": "stop_en.pc",
+      "list": "stop_en",
+      "word": "pc"
+    },
+    {
+      "id": "stop_en.pack",
+      "list": "stop_en",
+      "word": "pack"
+    },
+    {
+      "id": "stop_en.set",
+      "list": "stop_en",
+      "word": "set"
+    },
+    {
+      "id": "keep_s.series",
+      "list": "keep_s",
+      "word": "series"
+    },
+    {
+      "id": "keep_s.species",
+      "list": "keep_s",
+      "word": "species"
+    },
+    {
+      "id": "keep_s.news",
+      "list": "keep_s",
+      "word": "news"
+    },
+    {
+      "id": "keep_s.glasses",
+      "list": "keep_s",
+      "word": "glasses"
+    },
+    {
+      "id": "keep_s.gps",
+      "list": "keep_s",
+      "word": "gps"
+    },
+    {
+      "id": "keep_s.abs",
+      "list": "keep_s",
+      "word": "abs"
+    },
+    {
+      "id": "keep_s.lbs",
+      "list": "keep_s",
+      "word": "lbs"
+    },
+    {
+      "id": "keep_s.mph",
+      "list": "keep_s",
+      "word": "mph"
+    },
+    {
+      "id": "keep_s.plus",
+      "list": "keep_s",
+      "word": "plus"
+    },
+    {
+      "id": "keep_s.bus",
+      "list": "keep_s",
+      "word": "bus"
+    },
+    {
+      "id": "keep_s.gas",
+      "list": "keep_s",
+      "word": "gas"
+    },
+    {
+      "id": "keep_s.lens",
+      "list": "keep_s",
+      "word": "lens"
+    },
+    {
+      "id": "keep_s.canvas",
+      "list": "keep_s",
+      "word": "canvas"
+    },
+    {
+      "id": "keep_s.chassis",
+      "list": "keep_s",
+      "word": "chassis"
+    }
+  ]
+}

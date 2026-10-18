@@ -134,9 +134,15 @@ export function describeChange(
   if (vs !== undefined && vs.diff !== 0) {
     const d = formatMoney(Math.abs(vs.diff), vs.currency ?? c.currency)
     const own = vs.own_title ?? vs.own_key
-    line += en
-      ? `; ${d} ${vs.diff < 0 ? 'cheaper' : 'pricier'} than your ${own}`
-      : `，比你的 ${own} ${vs.diff < 0 ? '便宜' : '贵'} ${d}`
+    // WP402（决策 1137）：没有对标款时比的是你店里最便宜的那一款，照实说
+    line +=
+      vs.basis === 'lowest'
+        ? en
+          ? `; starts ${d} ${vs.diff < 0 ? 'below' : 'above'} your cheapest item (${own})`
+          : `，起价比你店里最便宜的 ${own} ${vs.diff < 0 ? '便宜' : '贵'} ${d}`
+        : en
+          ? `; ${d} ${vs.diff < 0 ? 'cheaper' : 'pricier'} than your ${own}`
+          : `，比你的 ${own} ${vs.diff < 0 ? '便宜' : '贵'} ${d}`
   }
   return `${who}${line}`
 }

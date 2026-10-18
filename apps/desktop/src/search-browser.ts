@@ -104,6 +104,15 @@ export function userAgentFor(url: string, ua: string): string {
 }
 
 /**
+ * WP402（决策 1140 / 1146「不伪装 UA」）：内置浏览器读**数据地址原文**（`kind: 'data'`，竞品独立站公开商品数据那一路）时，
+ * 那一次导航的 User-Agent 也在末尾自报 {@link AMAZON_AGENT_TOKEN}——和本机直接读一样认得出是我们；对方要拦随时能拦，
+ * 拦了就换下一条路，不绕。普通网页（搜索、读正文）照旧 {@link cleanUserAgent}。
+ */
+export function dataUserAgent(ua: string): string {
+  return ua.includes(AMAZON_AGENT_TOKEN) ? ua : `${ua} ${AMAZON_AGENT_TOKEN}`.trim()
+}
+
+/**
  * WP394：这个网址是不是 Amazon 的（读 HTML 原文、设配送邮编只认它；按 {@link isAmazonHost} 判）。
  * 认不出的网址一律不算。
  */

@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "WP404（docs/107 §3）：所有职责的提示词公共段（「说话规矩」那一节，order 25）——从 persona.ts 的 HOUSE_RULES 原样挪来。",
+    "每一行一条规矩、带稳定 id（冻结那刻定，之后改字不改 id）；几行按顺序用换行接成那一节的正文。判法 / 装配代码在 persona.ts。"
+  ],
+  "table": "roles.house_rules",
+  "rows": [
+    {
+      "id": "no_tool_names",
+      "zh": "对用户说话时不提工具名、函数名、内部 id，用人话说做了什么（说「查了规矩与政策库」，不说 search_policies）。",
+      "en": "When talking to the user, never mention tool names, function names or internal ids — say in plain words what you did (“checked the policy library”, not search_policies)."
+    }
+  ]
+}

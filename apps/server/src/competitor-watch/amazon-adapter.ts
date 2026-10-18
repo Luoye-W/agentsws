@@ -8,9 +8,12 @@
  * - **ASIN 多的分几个小时读完**：这一小时额度满了，读到的先记在这一批里、标「没读全」（管道不判下架），
  *   隔一小时再接着读剩下的（`due.ts` 对没读全的 Amazon 源隔一小时再试）；一批读全了才算这一天读完；
  *   同一个 ASIN 一批里读两次都不成（配送地址设不对 / 打不开）就先放下，照实说，不一直撞。
+ * - WP402（决策 1140 / 1146）：内置浏览器和云端都没读到的，第 3 条路通过插件在用户自己的浏览器里读
+ *   （第一次先出卡问同意、每家每天至多一次；规矩在 `amazon-front/own-browser.ts`）。
  */
 import {
   type AmazonCloudRead,
+  type AmazonOwnBrowserRoute,
   type AmazonPageOutcome,
   readAmazonAsins,
 } from '@agentsws/brand-intake'
@@ -46,6 +49,12 @@ export interface AmazonAsinAdapterDeps {
   store(): CompetitorWatchStore
   /** 这一次走云端扣了积分（记一笔：「这次扣了多少」那一句用）。 */
   onCredits?(source_id: string, credits: number): void
+  /**
+   * WP402（决策 1140 / 1146）：第 3 条路——通过插件在用户自己的浏览器里读（按竞品源 id 管每天一次；没装插件 = 不给）。
+   */
+  ownBrowser?(source_id: string): AmazonOwnBrowserRoute | undefined
+  /** WP402：取数链说「要问一句同意」（第一次出卡）。 */
+  onNeedsConsent?(source_id: string): void
 }
 
 export function createAmazonAsinAdapter(deps: AmazonAsinAdapterDeps): CompetitorIntakeAdapter {
@@ -79,15 +88,18 @@ export function createAmazonAsinAdapter(deps: AmazonAsinAdapterDeps): Competitor
           : (i: { marketplace: string; asin: string }): Promise<AmazonPageOutcome> =>
               live.readFacts(i)
       const cloud = deps.cloud()
+      const extension = deps.ownBrowser?.(source.id)
       const got = await readAmazonAsins(
         { ...source, asins: todo },
         {
           ...(browser === undefined ? {} : { browser }),
           ...(cloud === undefined ? {} : { cloud }),
+          ...(extension === undefined ? {} : { extension }),
           now: ctx.now,
           order,
         },
       )
+      if (got.needs_consent === true) deps.onNeedsConsent?.(source.id)
       for (const a of got.unread ?? []) tries[a] = (tries[a] ?? 0) + 1
       if (got.credits !== undefined && got.credits > 0) deps.onCredits?.(source.id, got.credits)
       const rows = [...done.values(), ...got.rows]
@@ -114,6 +126,8 @@ export function createAmazonAsinAdapter(deps: AmazonAsinAdapterDeps): Competitor
         notes,
         ...(got.via === undefined ? {} : { via: got.via }),
         ...(got.credits === undefined ? {} : { credits: got.credits }),
+        ...(got.attempts === undefined ? {} : { attempts: got.attempts }),
+        ...(got.needs_consent === true ? { needs_consent: true } : {}),
       }
       if (rows.length === 0 && got.error !== undefined) out.error = got.error
       return out

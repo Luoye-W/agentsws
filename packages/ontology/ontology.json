@@ -73,10 +73,12 @@
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/premium-theme.ts",
     "packages/contracts/src/pricing-catalog.ts",
+    "packages/contracts/src/read-chain.ts",
     "packages/contracts/src/read-routes.ts",
     "packages/contracts/src/reddit-watch.ts",
     "packages/contracts/src/reddit-write.ts",
     "packages/contracts/src/report.ts",
+    "packages/contracts/src/role-content.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
@@ -148,7 +150,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "b73bc67e7654e3d2970dca5f50a26350",
+  "source_digest": "6c35108634ad6e43a2e2c4f092f18074",
   "objects": [
     {
       "id": "ad",

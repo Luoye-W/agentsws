@@ -115,12 +115,17 @@ function parseDocument(text: string, source: string): unknown {
 
 /** 从 YAML 文本解析一个职责定义。 */
 export function parseRole(text: string, source = '<string>'): RoleDefinitionFull {
-  const role = validate<RoleDefinitionFull>(
-    parseDocument(text, source),
-    ROLE_SCHEMA,
-    source,
-    'role',
-  )
+  return roleFromDocument(parseDocument(text, source), source)
+}
+
+/**
+ * 已经解析成对象的一份职责定义 → 校验后的定义（`parseRole` 的后半截）。
+ *
+ * WP404：内容层叠上去之后（`applyRoleContent`）走的是同一条路——叠出来的东西和 yml 里直接写的
+ * 一样要过 schema、未知字段、id 重名、persona 六段这几刀，不另开一条松一点的门。
+ */
+export function roleFromDocument(doc: unknown, source = '<object>'): RoleDefinitionFull {
+  const role = validate<RoleDefinitionFull>(doc, ROLE_SCHEMA, source, 'role')
   // WP84：条数上限归 schemastery，id 重名归这一刀（schemastery 看不见"这几条之间"）
   const dup = checkRoleExtras(role)
   if (dup !== undefined) throw new RoleSchemaError(source, dup.field, dup.message)
@@ -142,14 +147,21 @@ function withPersonaEnSlot<T extends { persona?: RoleDefinitionFull['persona'] }
  *
  * 只在读包里的文件时补：外部 / 公司自建的职责 yml 不在生成产物里，补了也是张冠李戴。
  */
-function bundledRole(role: RoleDefinitionFull): RoleDefinitionFull {
+export function bundledRole(role: RoleDefinitionFull): RoleDefinitionFull {
   const persona = withGeneratedEn({ kind: 'role', id: role.id }, role.persona)
   return persona === undefined ? role : { ...role, persona }
 }
 
-function bundledPosition(position: Position): Position {
+export function bundledPosition(position: Position): Position {
   const persona = withGeneratedEn({ kind: 'position', id: position.id }, position.persona)
   return persona === undefined ? position : { ...position, persona }
+}
+
+/** 内置职责 id → 它的 yml 路径（旧 id 先换成新 id）。 */
+export function bundledRoleFile(id: RoleId): string {
+  const [domain, slug] = resolveRoleId(id).split('.')
+  if (!domain || !slug) throw new RoleSchemaError(id, 'id', 'role id must be `<domain>.<slug>`')
+  return `${BUNDLED_ROLES_DIR}${domain}/${slug}.yml`
 }
 
 /** 从 YAML 文件读取一个职责定义。 */
@@ -162,19 +174,17 @@ export function loadRole(file: string): RoleDefinitionFull {
  * 旧 id（`dtc.aftersales` …）先过 `resolveRoleId` 换成新 id 再找文件。
  */
 export function loadBundledRole(id: RoleId): RoleDefinitionFull {
-  const [domain, slug] = resolveRoleId(id).split('.')
-  if (!domain || !slug) throw new RoleSchemaError(id, 'id', 'role id must be `<domain>.<slug>`')
-  return bundledRole(loadRole(`${BUNDLED_ROLES_DIR}${domain}/${slug}.yml`))
+  return bundledRole(loadRole(bundledRoleFile(id)))
 }
 
 /** 从 YAML 文本解析一个岗位模板。 */
 export function parsePosition(text: string, source = '<string>'): Position {
-  const position = validate<Position>(
-    parseDocument(text, source),
-    POSITION_SCHEMA,
-    source,
-    'position',
-  )
+  return positionFromDocument(parseDocument(text, source), source)
+}
+
+/** 已经解析成对象的一份岗位模板 → 校验后的模板（`parsePosition` 的后半截；WP404 内容层叠完也走这里）。 */
+export function positionFromDocument(doc: unknown, source = '<object>'): Position {
+  const position = validate<Position>(doc, POSITION_SCHEMA, source, 'position')
   // WP120（69 §2）：填了 persona 就得填对（六段骨架、不超长、不是空的）
   const bad = checkPositionExtras(position)
   if (bad !== undefined) throw new RoleSchemaError(source, bad.field, bad.message)

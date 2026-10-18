@@ -9600,6 +9600,409 @@
         }
       }
     },
+    "/v1/services/orders/{id}/extra": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdExtra",
+        "summary": "WP403：回服务方发起的追加费用——同意（扣进这一单的托管，随它算进的那一段验收结算）或不同意。",
+        "description": "同一个幂等键只扣一次；钱不够 402、这一条原样等着",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceExtraAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "insufficient_credits",
+            "x-error-codes": ["insufficient_credits"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/attachments": {
+      "post": {
+        "operationId": "postV1ServicesOrdersIdAttachments",
+        "summary": "WP403：传一份补材料（正文就是文件本身；只有定制件、订单没结束时）。在「等你补材料」时传 = 补上了。",
+        "description": "单个 25 MB、一单 50 个 / 200 MB；按订单隔离，订单结束后 90 天删",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "description": "文件名（URL 编码）。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "传好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceOrderAttachment"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项服务 / 没有这一单（别的组织的单也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这一单现在不能这么做（状态不对、返工次数用完了、这项服务下架了）",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "文件太大 / 这一单的附件满了",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这个节点没开通附件存储",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包 / 订单对象没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/services/orders/{id}/attachments/{attachment_id}": {
+      "get": {
+        "operationId": "getV1ServicesOrdersIdAttachmentsAttachmentId",
+        "summary": "WP403：取一份附件（你补的材料或服务方的交付文件）：文件流，sha256 在响应头；到期删了的回 404",
+        "tags": ["services"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "services",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "content-disposition": {
+                "description": "`attachment; filename*=UTF-8''…`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-content-sha256": {
+                "description": "文件内容的 sha256（十六进制）。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-content-type": {
+                "description": "文件原本的类型（传的时候声明的那个，`type/subtype`）。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not_implemented",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/services/intents": {
       "post": {
         "operationId": "postV1ServicesIntents",
@@ -10095,7 +10498,10 @@
             "description": "成功",
             "content": {
               "application/octet-stream": {
-                "schema": {}
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             },
             "headers": {
@@ -14879,6 +15285,10 @@
             "type": "string",
             "description": "定制件：属于哪一段。"
           },
+          "attachment_id": {
+            "type": "string",
+            "description": "WP403：是一份订单附件（服务方传的交付文件）——取文件走 `…/attachments/{attachment_id}`。"
+          },
           "delivered_at": {
             "type": "string"
           }
@@ -14952,6 +15362,22 @@
         },
         "required": ["reason", "opened_at"],
         "description": "争议与运营的判定（P6：用户看得到一句理由）。"
+      },
+      "ServiceExtraAnswer": {
+        "type": "object",
+        "properties": {
+          "extra_id": {
+            "type": "string"
+          },
+          "accept": {
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": ["extra_id", "accept", "idempotency_key"],
+        "description": "`POST /v1/services/orders/{id}/extra` 的请求：同意（扣进托管）或不同意。同一个幂等键只扣一次； 钱不够回 402，这一条原样等着（充了再点就成）。"
       },
       "ServiceIntentReport": {
         "type": "object",
@@ -15090,6 +15516,63 @@
         "required": ["credits", "status", "id", "label_zh", "label_en", "share_percent"],
         "description": "定制件一段的状态。"
       },
+      "ServiceOrderAttachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "description": "字节数。"
+          },
+          "sha256": {
+            "type": "string",
+            "description": "文件内容的 sha256（十六进制）。"
+          },
+          "from": {
+            "type": "string",
+            "enum": ["user", "provider"]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["delivery", "material"]
+          },
+          "milestone_id": {
+            "type": "string",
+            "description": "定制件：交付文件属于哪一段。"
+          },
+          "uploaded_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "什么时候删（订单结束后 90 天；没结束时没有）。"
+          },
+          "expired": {
+            "type": "boolean",
+            "const": true,
+            "description": "到期删掉了（文件取不到了，这一行留着）。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "content_type",
+          "size",
+          "sha256",
+          "from",
+          "purpose",
+          "uploaded_at"
+        ],
+        "description": "一份**订单附件**：存在云端（按订单隔离——只有这一单的组织拿得到），和交付物一起保留到订单结束后 90 天（P10），到期删文件、这一行留着标 `expired`。"
+      },
       "ServiceOrderCancelRequest": {
         "type": "object",
         "properties": {
@@ -15098,6 +15581,41 @@
           }
         },
         "description": "`POST /v1/services/orders/{id}/cancel` 的请求（接单之前才能取消；已付的全退）。"
+      },
+      "ServiceOrderExtra": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "description": "服务方说的为什么（「会上定了加两页」）。"
+          },
+          "deliver_hours": {
+            "type": "number",
+            "description": "加了这笔交付时限往后顺延多少小时（不给 = 不顺延）。"
+          },
+          "milestone_id": {
+            "type": "string",
+            "description": "算进哪一段（随那一段一起验收结算；同意那一刻在做 / 在验的那一段，没有就下一段）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "accepted", "declined", "withdrawn"]
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "answered_at": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "credits", "reason", "status", "requested_at"],
+        "description": "**追加费用**（docs/105 §3.4「要加钱就出一张追加下单卡，照样 L1」）：服务方（运营代回填）发起， 用户在下单卡（`service_pay`、`stage: 'extra'`）上点「同意并支付」才扣进**同一单的托管**；钱随它算进的 那一段一起验收结算、一起按原路退（记账照 WP389 三行：托管 / 完成 / 退回）。只有定制件有。 同一时间最多一条在等你。"
       },
       "ServiceOrderLine": {
         "type": "object",
@@ -15374,6 +15892,20 @@
           "message_count": {
             "type": "number",
             "description": "消息条数（定制件；取消息走 `…/messages`）。"
+          },
+          "extras": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderExtra"
+            },
+            "description": "WP403：追加费用（服务方发起、你在下单卡上点头才扣进托管；只有定制件有）。最新的在后面； 在等你点的那一条 `status: 'pending'`。"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceOrderAttachment"
+            },
+            "description": "WP403：订单附件（你补的材料 + 服务方的交付文件；按订单隔离，结束后 90 天删）。"
           },
           "actions": {
             "type": "array",

@@ -12,6 +12,14 @@
  * 全列为订单 / 物流信号，原样搬过来会让 digital 的每一次故障报告都被判成查快递。
  */
 
+import {
+  classifierRulesFromRows,
+  labelsFromRows,
+  missingInfoFromRows,
+  normalizeEnumLineFromRows,
+  openingStrategiesFromRows,
+  planTextFromRows,
+} from '../content.js'
 import type {
   VerticalChatClassifierRule,
   VerticalChatPlanPack,
@@ -19,6 +27,7 @@ import type {
   VerticalPresalesPack,
 } from '../types.js'
 import { DIGITAL_TRIAGE_SCOPE } from './rules.js'
+import { DIGITAL_TABLES } from './tables.js'
 
 /** `DigitalChatIntent` 十值（产品 doc §3.2 表），顺序即标签表顺序。 */
 export const DIGITAL_INTENT_VALUES = [
@@ -34,18 +43,9 @@ export const DIGITAL_INTENT_VALUES = [
   'general_support',
 ] as const
 
-export const DIGITAL_INTENT_LABELS_ZH: Record<string, string> = {
-  presales_plan: '售前与套餐',
-  how_to: '使用方法',
-  bug_report: '故障报告',
-  billing_credits: '账单与用量',
-  account_access: '账号与登录',
-  integration_setup: '接入与集成',
-  data_privacy: '数据与隐私',
-  feature_request: '功能建议',
-  human_handoff: '联系人工',
-  general_support: '其他客服问题',
-}
+export const DIGITAL_INTENT_LABELS_ZH: Record<string, string> = labelsFromRows(
+  DIGITAL_TABLES.intents.rows,
+)
 
 /**
  * 顺序即优先级：先命中先返回，最后一条无 `terms` 是兜底。
@@ -65,365 +65,8 @@ export const DIGITAL_INTENT_LABELS_ZH: Record<string, string> = {
  * - `how_to` 的 `can i` 极宽，所以它排在倒数第二 —— 前面那些更具体的意图先取走
  *   "can i get a refund" / "can i change my email" 这类。
  */
-export const DIGITAL_CLASSIFIER_RULES: readonly VerticalChatClassifierRule[] = [
-  {
-    intent: 'billing_credits',
-    terms: [
-      'invoice',
-      'charged',
-      'charge me',
-      'billing',
-      'refund',
-      'subscription',
-      'renew',
-      'cancel my plan',
-      'cancel my subscription',
-      'upgrade',
-      'downgrade',
-      'credits',
-      'quota',
-      'usage limit',
-      'chargeback',
-      '扣费',
-      '发票',
-      '账单',
-      '退款',
-      '订阅',
-      '续费',
-      '积分',
-      '额度',
-      '收费',
-      '拒付',
-    ],
-    confidenceScore: 90,
-    riskLevel: 'normal',
-    riskEscalation: {
-      terms: [
-        'refund',
-        'charged twice',
-        'double charged',
-        'charged me twice',
-        'chargeback',
-        'dispute',
-        'unauthorized charge',
-        '退款',
-        '重复扣费',
-        '多扣',
-        '拒付',
-      ],
-      riskLevel: 'high',
-    },
-    reasonZh:
-      '客户在问账单、扣费或额度，只能引用已核实的账户事实；涉及退款或重复扣费需保守处理并转人工。',
-  },
-  {
-    intent: 'account_access',
-    terms: [
-      'log in',
-      'login',
-      'logged in',
-      'sign in',
-      'signin',
-      'sign up',
-      'password',
-      'reset link',
-      'reset my',
-      '2fa',
-      'two-factor',
-      'two factor',
-      'verification code',
-      'locked out',
-      'magic link',
-      // 盗号/未授权访问同时出现在 riskEscalation 里：这里让它命中本条，那里让它
-      // 升到 high。少了这一份，"my account was hacked" 会一路落到兜底类——那是
-      // digital 最不该被当成「其他问题」的一句话。
-      'hacked',
-      'compromised',
-      'unauthorized access',
-      'unauthorised access',
-      '登录',
-      '登陆',
-      '密码',
-      '验证码',
-      '账号',
-      '帐号',
-      '注册不了',
-      '被盗',
-      '盗号',
-    ],
-    confidenceScore: 88,
-    riskLevel: 'normal',
-    riskEscalation: {
-      terms: [
-        'hacked',
-        'compromised',
-        'unauthorized access',
-        'unauthorised access',
-        'someone else',
-        'stolen',
-        'breach',
-        '被盗',
-        '盗号',
-        '未授权',
-        '未经授权',
-        '入侵',
-      ],
-      riskLevel: 'high',
-    },
-    reasonZh:
-      '客户登录或账号出了问题，只能指路自助入口、不得代办账号操作；涉及盗号或未授权访问一律转人工。',
-  },
-  {
-    intent: 'data_privacy',
-    terms: [
-      'gdpr',
-      'ccpa',
-      'delete my data',
-      'delete my account',
-      'delete all my',
-      'erase my',
-      'remove my data',
-      'export my data',
-      'download my data',
-      'data retention',
-      'privacy',
-      'dpa',
-      'where is my data',
-      'data stored',
-      '删除数据',
-      '删除我的',
-      '注销账号',
-      '导出数据',
-      '隐私',
-      '数据存在哪',
-      '数据保留',
-    ],
-    confidenceScore: 90,
-    riskLevel: 'normal',
-    riskEscalation: {
-      terms: [
-        'delete my data',
-        'delete my account',
-        'delete all my',
-        'erase my',
-        'gdpr',
-        'ccpa',
-        'right to be forgotten',
-        '删除数据',
-        '删除我的',
-        '注销账号',
-      ],
-      riskLevel: 'high',
-    },
-    reasonZh: '客户在提数据或隐私请求，删除/导出有法定时限，绝不能自行承诺，必须转人工。',
-  },
-  {
-    intent: 'feature_request',
-    terms: [
-      'feature request',
-      'would be great',
-      'would be nice',
-      'can you add',
-      'please add',
-      'roadmap',
-      'roadmap for',
-      'any plans to',
-      'when will you support',
-      'when will you add',
-      // 「什么时候有」的其余问法。本条排在 `integration_setup` 之前是**故意**的，
-      // 而这几个词面让那个顺序真正生效："when will you ship the API?" 里既有
-      // 路线图词面又有 `api`，按本条判是问路线图、按 integration 判是来配集成
-      // 的 —— 后者会让 AI 认真讲一遍一个还不存在的东西怎么接。
-      'when will you ship',
-      'when will you release',
-      'when do you plan to',
-      'release date',
-      // 「修复什么时候好」同样落这里：chatRules 2 把「功能上线时间」与「修复
-      // 时限」并列为一律 needs_handoff，二者的正确动作完全相同（记录 + 转人工、
-      // 绝不给日期），而 bug_report 的动作是收集复现信息。
-      'eta for',
-      'any eta',
-      '路线图',
-      '建议',
-      '希望增加',
-      '什么时候上线',
-      '什么时候支持',
-      '什么时候发布',
-      '会不会做',
-      '能加个',
-    ],
-    confidenceScore: 78,
-    riskLevel: 'normal',
-    reasonZh: '客户在提功能建议或问路线图，记录诉求但绝不承诺上线时间，需要转人工。',
-  },
-  {
-    intent: 'bug_report',
-    terms: [
-      'error',
-      'errors',
-      'not working',
-      "doesn't work",
-      'does not work',
-      'stopped working',
-      'broken',
-      'crash',
-      'crashed',
-      'crashing',
-      'failed',
-      'failing',
-      'fails',
-      'bug',
-      'blank screen',
-      'stuck on',
-      'timed out',
-      'timeout',
-      '500',
-      '502',
-      'outage',
-      'downtime',
-      'is down',
-      'was down',
-      'are down',
-      'were down',
-      'went down',
-      'unavailable',
-      '报错',
-      '打不开',
-      '失败',
-      '崩溃',
-      '挂了',
-      '卡住',
-      '用不了',
-      '没反应',
-      '白屏',
-      '宕机',
-      '停机',
-    ],
-    confidenceScore: 86,
-    riskLevel: 'normal',
-    riskEscalation: {
-      terms: [
-        'outage',
-        'is down',
-        'was down',
-        'are down',
-        'were down',
-        'went down',
-        'downtime',
-        'unavailable',
-        'sla',
-        'data loss',
-        'lost all my',
-        '宕机',
-        '停机',
-        '全线',
-        '数据丢失',
-      ],
-      riskLevel: 'high',
-    },
-    reasonZh:
-      '客户在报故障，先收集复现信息（在哪一步、什么提示、大致时间），不要断言原因或声称已修复。',
-  },
-  {
-    intent: 'integration_setup',
-    terms: [
-      'api',
-      'api key',
-      'webhook',
-      'sdk',
-      'integrate',
-      'integration',
-      'oauth',
-      'sso',
-      'saml',
-      'zapier',
-      'endpoint',
-      'rate limit',
-      'sandbox',
-      '接入',
-      '集成',
-      '对接',
-      '回调',
-      '密钥',
-    ],
-    confidenceScore: 82,
-    riskLevel: 'normal',
-    reasonZh: '客户在做接入或集成，应结合文档与已学知识给出配置口径，不要编造字段或限额。',
-  },
-  {
-    intent: 'presales_plan',
-    terms: [
-      'pricing',
-      'price',
-      'how much',
-      'plan',
-      'plans',
-      'trial',
-      'free tier',
-      'free plan',
-      'does it support',
-      'do you support',
-      'can it',
-      'compare',
-      'seats',
-      'enterprise',
-      '价格',
-      '多少钱',
-      '套餐',
-      '试用',
-      '免费版',
-      '支持吗',
-      '能不能做',
-      '对比',
-    ],
-    // 提到 workspace 学到的产品/品牌词本身就是售前信号（同 goods 语义）。
-    matchProductTerms: true,
-    confidenceScore: 84,
-    riskLevel: 'normal',
-    reasonZh:
-      '客户在付费前确认套餐、价格或能力，只能基于真实在售套餐与知识库作答，不要替产品承诺功能。',
-    dropOrderRef: true,
-  },
-  {
-    intent: 'how_to',
-    terms: [
-      'how do i',
-      'how to',
-      'how can i',
-      'where can i',
-      'where do i',
-      'can i',
-      'is there a way',
-      'tutorial',
-      'set up',
-      'setup',
-      '怎么',
-      '如何',
-      '在哪',
-      '怎样',
-      '教程',
-      '设置',
-    ],
-    confidenceScore: 80,
-    riskLevel: 'normal',
-    reasonZh: '客户在问使用方法，应引用文档与知识库里的步骤作答；有官方文档链接就附上。',
-  },
-  {
-    intent: 'human_handoff',
-    terms: ['human', 'agent', 'real person', '人工', '真人', '客服'],
-    confidenceScore: 90,
-    riskLevel: 'normal',
-    reasonZh: '客户明确要求人工，需要给出接管预期并通知值班人员。',
-    dropOrderRef: true,
-  },
-  {
-    intent: 'general_support',
-    terms: [],
-    confidenceScore: 58,
-    riskLevel: 'normal',
-    reasonZh: '客户问题还不够明确，AI 应先追问关键上下文，而不是直接泛泛回答。',
-  },
-]
+export const DIGITAL_CLASSIFIER_RULES: readonly VerticalChatClassifierRule[] =
+  classifierRulesFromRows(DIGITAL_TABLES.intents.rows)
 
 /**
  * 开场引导类目 —— `values` 的**刻意真子集**（同 goods 的设计，research D-06）。
@@ -450,19 +93,9 @@ export const DIGITAL_GUIDE_CATEGORIES = [
  * 仍然用客户的语言、按既有硬性边界作答。一旦有一句被当成 reply 发出去，那是
  * bug 而不是翻译问题。
  */
-export const DIGITAL_GUIDE_OPENING_STRATEGIES: Record<string, string> = {
-  presales_plan:
-    '客户在对比套餐或确认能不能做某件事。只依据 plans 与知识库里真实存在的套餐、额度和能力作答，不要编造价格或限额；文档没写的能力，说会向团队确认，不要替产品承诺。',
-  how_to:
-    '客户想知道怎么用。先确认他要完成的是哪一步，按知识库里的步骤答；有官方文档链接就附上，不要自己编操作路径。',
-  bug_report:
-    '先问清在哪一步、看到什么提示、大致发生时间；有 troubleshooting 条目就按条目答；不要断言原因，也不要说"已修复"。',
-  billing_credits:
-    '先确认身份已核实，再只引用 account_context 里的事实；身份未核实时不要透露任何账单与用量细节。退款、补偿、折扣一律不承诺，设 needs_handoff。',
-  account_access:
-    '客户登录不上或要改账号。只能指路到自助入口，绝不代替对方执行账号操作；涉及被盗号或未授权访问一律设 needs_handoff。',
-  general_support: '客户点的是「其他问题」。用一句话邀请他把具体问题说出来，不要预设是哪类诉求。',
-}
+export const DIGITAL_GUIDE_OPENING_STRATEGIES: Record<string, string> = openingStrategiesFromRows(
+  DIGITAL_TABLES.intents.rows,
+)
 
 /**
  * 归一化 prompt 的铁律第 5 条 —— 枚举 + 中文释义。
@@ -471,11 +104,7 @@ export const DIGITAL_GUIDE_OPENING_STRATEGIES: Record<string, string> = {
  * `normalizeGuideCategory` 静默降级成兜底类，商家在候选表里就会看到一堆
  * 「其他」。跨三行是为了和 goods 的换行形态一致（同一个 join('\n')）。
  */
-export const DIGITAL_NORMALIZE_ENUM_LINE = [
-  '5. intent 只能取：presales_plan（售前与套餐）/ how_to（使用方法）/',
-  '   bug_report（故障报告）/ billing_credits（账单与用量）/ account_access（账号与登录）/',
-  '   general_support（其他）。',
-].join('\n')
+export const DIGITAL_NORMALIZE_ENUM_LINE = normalizeEnumLineFromRows(DIGITAL_TABLES.intents.rows)
 
 /**
  * shadow 质检的第三套词汇。
@@ -517,29 +146,13 @@ export const DIGITAL_SHADOW_EVAL_CATEGORIES = [
  * （退款/重复扣费/拒付、盗号/未授权访问），走的是同一道审核门，一步没放宽。
  */
 export const DIGITAL_CHAT_PLAN: VerticalChatPlanPack = {
-  missingInfo: [
-    {
-      intents: ['billing_credits', 'account_access'],
-      label: '注册邮箱',
-      labelEn: 'the email address your account is registered with',
-      satisfiedBy: ['email'],
-    },
-    {
-      intents: ['bug_report'],
-      label: '出问题的步骤、看到的提示和大致发生时间',
-      labelEn: 'the step where it happens, the exact message you see, and roughly when it started',
-      satisfiedBy: [],
-    },
-  ],
+  missingInfo: missingInfoFromRows(DIGITAL_TABLES.intents.rows),
   nonBlockingIntents: ['billing_credits', 'account_access', 'bug_report'],
   mustReviewIntents: ['data_privacy', 'feature_request'],
   handoffIntent: 'human_handoff',
-  defaultNextQuestionZh: '我会根据产品文档和已学的客服知识继续帮你处理。',
-  // goods 版那句请客户"留邮箱和订单号"。digital 没有订单可留，按 chatRules 10
-  // （坦诚在向同事/主管核实、邀请留邮箱、不承诺时限）与 1a（要的是**注册**邮箱）
-  // 改写。仍是英文：这是对客文案，不是给模型的策略。
-  handoffReplyEn:
-    "Thanks for the details — I want to make sure you get an accurate answer, so I'm checking with my team on this. It may take a little while. If you'd like, leave the email address your account is registered with and we'll follow up there, so you don't have to wait here.",
+  defaultNextQuestionZh: planTextFromRows(DIGITAL_TABLES.intents.rows, 'defaultNextQuestionZh'),
+  // WP404：两句计划文案（与原注释）在 `intents.content.json`（kind = plan_text）
+  handoffReplyEn: planTextFromRows(DIGITAL_TABLES.intents.rows, 'handoffReplyEn'),
 }
 
 /**

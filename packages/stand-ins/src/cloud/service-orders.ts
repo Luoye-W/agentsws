@@ -14,7 +14,13 @@
  *
  * 「服务方 / 运营」那一侧（报价、接单、要材料、交付、发消息、要联系方式、判争议、到期）是方法，测试和 demo
  * 直接调，不走 HTTP（一期合作方本来就不登录系统，docs/105 §6）。纯内存、不出进程、不联网。
+ *
+ * WP403：追加费用（{@link ServiceOrdersStandIn.requestExtra} 发起 → `POST …/extra` 点头才扣进托管、
+ * 随那一段结算 / 原路退；钱不够 402 原样等着）与订单附件（`POST …/attachments` 正文就是文件、
+ * `GET …/attachments/{号}` 取回字节；服务方 {@link ServiceOrdersStandIn.attach} 传交付文件、交付时按附件号挂上）。
  */
+
+import { createHash } from 'node:crypto'
 import type {
   Iso8601,
   ServiceAcceptance,
@@ -28,6 +34,8 @@ import type {
   ServiceMilestoneView,
   ServiceOrderAction,
   ServiceOrderActor,
+  ServiceOrderAttachment,
+  ServiceOrderExtra,
   ServiceOrderLineView,
   ServiceOrderList,
   ServiceOrderMessage,
@@ -40,9 +48,11 @@ import type {
 import {
   normalizeServiceLines,
   normalizeServiceRequirements,
+  SERVICE_ATTACHMENT_LIMITS,
   SERVICE_LEDGER_CAPABILITIES,
   SERVICE_ORDER_DEFAULTS,
   SERVICE_ORDER_TERMINAL_STATUSES,
+  serviceAttachmentName,
   serviceMilestoneCredits,
   serviceOrderActions,
   serviceOrderTransition,
@@ -193,7 +203,9 @@ interface OrderRecord {
   segment: number
   provider_contact?: ServiceContact
   /** 自动驾驶（demo）走过的那几步。 */
-  auto?: { said?: true; asked?: true }
+  auto?: { said?: true; asked?: true; extra?: true }
+  /** WP403：附件的字节（附件号 → 字节；到期删了就没有）。 */
+  files: Map<string, Uint8Array>
 }
 
 export interface ServiceOrdersStandInOptions {
@@ -336,7 +348,7 @@ export class ServiceOrdersStandIn {
       created_at: at,
       updated_at: at,
     }
-    const rec: OrderRecord = { view, key, service, messages: [], segment: 0 }
+    const rec: OrderRecord = { view, key, service, messages: [], segment: 0, files: new Map() }
     if (service.kind === 'custom' && total !== undefined) this.splitMilestones(rec, total)
     this.orders.set(id, rec)
     this.byKey.set(key, id)
@@ -529,7 +541,143 @@ export class ServiceOrdersStandIn {
     return this.touch(r)
   }
 
+  /* ── WP403：追加费用与附件（用户那一侧） ─────────────────────────── */
+
+  /** 回一条追加：同意 = 先看钱够不够再扣进托管（不够 402、这一条原样等着）；不同意一分不扣。 */
+  answerExtra(id: string, body: Record<string, unknown>): ServiceOrderView {
+    const r = this.rec(id)
+    const e = r.view.extras?.find((x) => x.id === body.extra_id)
+    if (e === undefined) throw new StandInServiceError(409, 'conflict', '这条追加费用已经不在了。')
+    const accept = body.accept === true
+    if ((e.status === 'accepted' && accept) || (e.status === 'declined' && !accept))
+      return this.view(id)
+    if (e.status !== 'pending' || SERVICE_ORDER_TERMINAL_STATUSES.includes(r.view.status))
+      throw new StandInServiceError(409, 'conflict', '这条追加费用已经不在了。')
+    const at = this.now()
+    if (!accept) {
+      e.status = 'declined'
+      e.answered_at = at
+      this.pushMessage(r, 'system', 'status', `没同意追加 ${e.credits} 积分。`)
+      return this.touch(r)
+    }
+    const ms = r.view.milestones ?? []
+    const target = ms[r.segment] ?? ms.find((m) => m.status === 'pending')
+    this.charge(id, e.credits)
+    e.status = 'accepted'
+    e.answered_at = at
+    if (target !== undefined) {
+      e.milestone_id = target.id
+      target.credits = round4(target.credits + e.credits)
+    }
+    r.view.total_credits = round4((r.view.total_credits ?? 0) + e.credits)
+    r.view.escrow_credits = round4(r.view.escrow_credits + e.credits)
+    if (e.deliver_hours !== undefined && r.view.deliver_by !== undefined)
+      r.view.deliver_by = new Date(
+        Date.parse(r.view.deliver_by) + e.deliver_hours * HOUR,
+      ).toISOString()
+    this.pushMessage(r, 'system', 'status', `同意追加 ${e.credits} 积分，进了托管。`)
+    return this.touch(r)
+  }
+
+  /** 传一份附件（用户的是补材料：只有定制件；「等你补材料」时传 = 补上了）。 */
+  attach(
+    id: string,
+    input: { name: string; content_type?: string; bytes: Uint8Array; from: 'user' | 'provider' },
+  ): ServiceOrderAttachment {
+    const r = this.rec(id)
+    if (input.from === 'user' && r.view.kind !== 'custom')
+      throw new StandInServiceError(409, 'conflict', '这项服务不用补材料，下单时填的就够了。')
+    if (SERVICE_ORDER_TERMINAL_STATUSES.includes(r.view.status))
+      throw new StandInServiceError(409, 'conflict', '这一单已经结束了，传不了文件。')
+    const name = serviceAttachmentName(input.name)
+    if (name === undefined) throw new StandInServiceError(400, 'invalid_input', '文件要有个名字。')
+    const size = input.bytes.byteLength
+    if (size === 0) throw new StandInServiceError(400, 'invalid_input', '这是个空文件。')
+    const list = r.view.attachments ?? []
+    const used = list.reduce((n, a) => n + (a.expired === true ? 0 : a.size), 0)
+    const L = SERVICE_ATTACHMENT_LIMITS
+    if (size > L.max_bytes || list.length >= L.max_files || used + size > L.max_total_bytes)
+      throw new StandInServiceError(413, 'invalid_input', '文件太大了 / 这一单的附件满了。')
+    const t = (input.content_type ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
+    const att: ServiceOrderAttachment = {
+      id: `att_${createHash('sha256').update(this.options.newId('att')).digest('hex').slice(0, 16)}`,
+      name,
+      content_type: /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/u.test(t) ? t : 'application/octet-stream',
+      size,
+      sha256: createHash('sha256').update(input.bytes).digest('hex'),
+      from: input.from,
+      purpose: input.from === 'user' ? 'material' : 'delivery',
+      ...(input.from === 'provider' && r.view.milestones?.[r.segment] !== undefined
+        ? { milestone_id: r.view.milestones[r.segment]?.id as string }
+        : {}),
+      uploaded_at: this.now(),
+    }
+    r.view.attachments = [...list, att]
+    r.files.set(att.id, new Uint8Array(input.bytes))
+    if (input.from === 'user') {
+      this.pushMessage(r, 'user', 'text', `传了文件「${name}」`)
+      if (r.view.status === 'waiting_user') {
+        this.step(r, 'user_reply', 'user')
+        delete r.view.waiting_for
+      }
+    } else this.pushMessage(r, 'provider', 'text', `传了交付文件「${name}」`)
+    this.touch(r)
+    return { ...att }
+  }
+
+  /** 取一份附件的字节（没有 / 到期删了 404）。 */
+  attachment(
+    id: string,
+    attachment_id: string,
+  ): { attachment: ServiceOrderAttachment; bytes: Uint8Array } {
+    const r = this.rec(id)
+    const a = r.view.attachments?.find((x) => x.id === attachment_id)
+    const bytes = r.files.get(attachment_id)
+    if (a === undefined || bytes === undefined)
+      throw new StandInServiceError(404, 'not_found', '没有这份附件（可能已经过了保留期）。')
+    return { attachment: { ...a }, bytes: new Uint8Array(bytes) }
+  }
+
   /* ── 服务方 / 运营那一侧（测试、demo 直接调） ─────────────────────── */
+
+  /** WP403：服务方发起一条追加费用（定制件；同一时间最多一条在等）。 */
+  requestExtra(
+    id: string,
+    input: { credits: number; reason: string; deliver_hours?: number },
+  ): ServiceOrderExtra {
+    const r = this.rec(id)
+    if (r.view.kind !== 'custom')
+      throw new StandInServiceError(409, 'conflict', '标准件不走追加费用。')
+    if (!['paid', 'in_progress', 'waiting_user', 'delivered'].includes(r.view.status))
+      throw new StandInServiceError(409, 'conflict', '这一单现在不能追加费用。')
+    if (r.view.extras?.some((e) => e.status === 'pending') === true)
+      throw new StandInServiceError(409, 'conflict', '上一条追加用户还没回。')
+    const extra: ServiceOrderExtra = {
+      id: this.options.newId('x'),
+      credits: round4(input.credits),
+      reason: input.reason,
+      ...(input.deliver_hours === undefined ? {} : { deliver_hours: input.deliver_hours }),
+      status: 'pending',
+      requested_at: this.now(),
+    }
+    r.view.extras = [...(r.view.extras ?? []), extra]
+    this.pushMessage(
+      r,
+      'provider',
+      'text',
+      `想追加 ${extra.credits} 积分：${input.reason}（你点头才扣）`,
+    )
+    this.touch(r)
+    return { ...extra }
+  }
+
+  /** WP403：到期删附件文件（demo / 测试替真云的闹钟）。 */
+  purgeFiles(id: string): void {
+    const r = this.rec(id)
+    r.files.clear()
+    for (const a of r.view.attachments ?? []) a.expired = true
+    this.touch(r)
+  }
 
   quote(
     id: string,
@@ -602,9 +750,23 @@ export class ServiceOrdersStandIn {
     input: {
       proof?: ServiceDeliveryProof
       deliverables?: Omit<ServiceDeliverable, 'delivered_at'>[]
+      /** WP403：先传好的交付文件（附件号）。 */
+      attachment_ids?: string[]
     },
   ): ServiceOrderView {
     const r = this.rec(id)
+    const files = (input.attachment_ids ?? []).map((aid) => {
+      const a = r.view.attachments?.find((x) => x.id === aid && x.from === 'provider')
+      if (a === undefined)
+        throw new StandInServiceError(400, 'invalid_input', `没有这份交付文件：${aid}`)
+      const d: Omit<ServiceDeliverable, 'delivered_at'> = {
+        type: 'file',
+        label: a.name,
+        attachment_id: a.id,
+      }
+      return d
+    })
+    input = { ...input, deliverables: [...(input.deliverables ?? []), ...files] }
     this.step(r, 'deliver', 'provider')
     const at = this.now()
     const auto = this.plus(r.service.auto_accept_hours)
@@ -721,9 +883,30 @@ export class ServiceOrdersStandIn {
       this.askUser(v.id, '上传 Logo 原图')
       return
     }
+    // WP403：第二段起，服务方提一次追加（会上说定加一页），等你在下单卡上点头
+    if (v.kind === 'custom' && r.segment >= 1 && auto.extra !== true) {
+      auto.extra = true
+      this.requestExtra(v.id, {
+        credits: Math.max(10, Math.round((v.total_credits ?? 100) * 0.1)),
+        reason: '会上说定加一页「品牌故事」',
+        deliver_hours: 24,
+      })
+      return
+    }
     const last = (v.milestones ?? []).length - 1
     const isLast = v.kind === 'standard' || r.segment >= last
+    // WP403：定制件不是最后一段时，交一份说明文件（订单附件）
+    const note =
+      v.kind === 'custom' && !isLast
+        ? this.attach(v.id, {
+            name: '这一段的说明.txt',
+            content_type: 'text/plain',
+            bytes: new TextEncoder().encode('演示：这一段做了什么、下一段做什么。'),
+            from: 'provider',
+          })
+        : undefined
     this.deliver(v.id, {
+      ...(note === undefined ? {} : { attachment_ids: [note.id] }),
       ...(v.kind === 'standard'
         ? {
             proof: {
@@ -758,13 +941,19 @@ export class ServiceOrdersStandIn {
 
   /* ── HTTP ─────────────────────────────────────────────────────── */
 
-  /** `/v1/services*` 一跳；不是这几条路径回 `undefined`。 */
+  /**
+   * `/v1/services*` 一跳；不是这几条路径回 `undefined`。WP403：传附件时 `raw` 是正文字节、`contentType`
+   * 是它的类型；取附件回 `bytes` + `headers`（一律 octet-stream，原本的类型在 `x-content-type`）。
+   */
   handle(
     method: string,
     path: string,
     query: URLSearchParams,
     body: Record<string, unknown>,
-  ): { status: number; body: unknown } | undefined {
+    raw?: { bytes: Uint8Array; contentType?: string },
+  ):
+    | { status: number; body: unknown; bytes?: Uint8Array; headers?: Record<string, string> }
+    | undefined {
     const ok = (data: unknown, status = 200) => ({ status, body: { data } })
     try {
       if (method === 'GET' && path === '/v1/services') return ok(this.catalog())
@@ -777,6 +966,24 @@ export class ServiceOrdersStandIn {
         if (method === 'POST') {
           const out = this.submit(body)
           return ok(out.order, out.created ? 201 : 200)
+        }
+      }
+      const att = /^\/v1\/services\/orders\/([^/]+)\/attachments\/([^/]+)$/u.exec(path)
+      if (att !== null && method === 'GET') {
+        const got = this.attachment(
+          decodeURIComponent(att[1] as string),
+          decodeURIComponent(att[2] as string),
+        )
+        return {
+          status: 200,
+          body: undefined,
+          bytes: got.bytes,
+          headers: {
+            'content-type': 'application/octet-stream',
+            'x-content-type': got.attachment.content_type,
+            'x-content-sha256': got.attachment.sha256,
+            'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(got.attachment.name)}`,
+          },
         }
       }
       const m = /^\/v1\/services\/orders\/([^/]+)(?:\/([a-z-]+))?$/u.exec(path)
@@ -793,6 +1000,17 @@ export class ServiceOrdersStandIn {
       if (sub === 'revise') return ok(this.revise(id, body))
       if (sub === 'dispute') return ok(this.dispute(id, body))
       if (sub === 'cancel') return ok(this.cancel(id))
+      if (sub === 'extra') return ok(this.answerExtra(id, body))
+      if (sub === 'attachments')
+        return ok(
+          this.attach(id, {
+            name: query.get('name') ?? '',
+            ...(raw?.contentType === undefined ? {} : { content_type: raw.contentType }),
+            bytes: raw?.bytes ?? new Uint8Array(),
+            from: 'user',
+          }),
+          201,
+        )
       return undefined
     } catch (err) {
       if (err instanceof StandInServiceError)
@@ -905,6 +1123,15 @@ export class ServiceOrdersStandIn {
   private finish(r: OrderRecord): void {
     const at = this.now()
     r.view.finished_at = at
+    for (const e of r.view.extras ?? [])
+      if (e.status === 'pending') {
+        e.status = 'withdrawn'
+        e.answered_at = at
+      }
+    const expires = new Date(
+      Date.parse(at) + SERVICE_ORDER_DEFAULTS.deliverable_retention_days * 24 * HOUR,
+    ).toISOString()
+    for (const a of r.view.attachments ?? []) a.expires_at = expires
     delete r.view.respond_by
     delete r.view.deliver_by
     delete r.view.waiting_for

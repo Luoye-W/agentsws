@@ -52,6 +52,8 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
   /** WP394：竞品款 → 对标自家哪一款（场景行里的 `vs_own`）。 */
   const vsOwn = new Map<string, string>()
   const OWN_SOURCE = 'cw_amz__own'
+  /** WP402：「用你自己的浏览器读」那张同意卡出过没有（只出一次）。 */
+  let consentAsked = false
   return {
     plan(input) {
       plan = input
@@ -103,26 +105,47 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
                     ? { status: 'blocked' }
                     : { status: 'ok', facts: facts(asin) },
               }),
-          cloud: async ({ asins }) => ({
-            credits: Math.round(perItem * asins.length * 100) / 100,
-            items: asins.map((asin): AmazonCloudItem => {
-              const f = facts(asin)
-              return {
-                asin,
-                ...(f.title === undefined ? {} : { title: f.title }),
-                ...(f.price === undefined ? {} : { price: f.price, currency: 'USD' }),
-                ...(f.rating === undefined ? {} : { rating: f.rating }),
-                ...(f.reviews === undefined ? {} : { reviews_count: f.reviews }),
-                ...(f.available === undefined ? {} : { in_stock: f.available }),
-                ...(f.bsr[0] === undefined
-                  ? {}
-                  : { bsr: f.bsr[0].rank, category: f.bsr[0].category }),
-              }
-            }),
-          }),
+          // WP402：第 3 条路（通过插件在你自己的浏览器里读）——同意过了才读，没问过 = 只出同意卡
+          ...(input.own_browser === undefined
+            ? {}
+            : {
+                extension: {
+                  gate:
+                    input.own_browser === 'granted' ? ('ok' as const) : ('needs_consent' as const),
+                  read: async ({ asin }): Promise<AmazonPageOutcome> => ({
+                    status: 'ok',
+                    facts: facts(asin),
+                  }),
+                },
+              }),
+          cloud: async ({ asins }) =>
+            input.cloud_down === true
+              ? { error: '工坊云端这次没回来' }
+              : {
+                  credits: Math.round(perItem * asins.length * 100) / 100,
+                  items: asins.map((asin): AmazonCloudItem => {
+                    const f = facts(asin)
+                    return {
+                      asin,
+                      ...(f.title === undefined ? {} : { title: f.title }),
+                      ...(f.price === undefined ? {} : { price: f.price, currency: 'USD' }),
+                      ...(f.rating === undefined ? {} : { rating: f.rating }),
+                      ...(f.reviews === undefined ? {} : { reviews_count: f.reviews }),
+                      ...(f.available === undefined ? {} : { in_stock: f.available }),
+                      ...(f.bsr[0] === undefined
+                        ? {}
+                        : { bsr: f.bsr[0].rank, category: f.bsr[0].category }),
+                    }
+                  }),
+                },
           now,
         },
       )
+      // WP402：要问一句同意（第一次时出卡，只出一次）
+      if (got.needs_consent === true && !consentAsked) {
+        consentAsked = true
+        world.appendEvent('simulation.competitor_consent', { competitor: input.competitor })
+      }
       const own = new Map((snapshots.get(OWN_SOURCE)?.rows ?? []).map((r) => [r.product_key, r]))
       const ownRef = (row: CatalogSnapshotRow): OwnRef | undefined => {
         const key = vsOwn.get(`${row.competitor_id}|${row.product_key}`)
@@ -155,6 +178,7 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
         ...(got.via === undefined ? {} : { via: got.via }),
         ...(got.credits === undefined ? {} : { credits: got.credits }),
         ...(got.blocked === true ? { blocked: true } : {}),
+        ...(got.needs_consent === true ? { needs_consent: true } : {}),
         ...(input.own === true ? { own: true } : {}),
       })
       for (const c of out.changes)

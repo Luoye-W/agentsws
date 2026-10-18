@@ -506,6 +506,7 @@ export type {
   AmazonBenchmarkPick,
   AmazonCloudItem,
   AmazonCloudRead,
+  AmazonOwnBrowserRoute,
   AmazonOwnItem,
   AmazonPageOutcome,
 } from './amazon-watch.js'
@@ -532,6 +533,19 @@ export {
   parseInsightsReply,
   sourcedCompetitors,
 } from './insights.js'
+// WP402（决策 1140 / 1146）：取数链——内置浏览器 → 工坊云端 → 你自己的浏览器 → 照实说（一页一页读 / 一批一起读）
+export type {
+  BatchChainResult,
+  BatchRoute,
+  BatchStep,
+  ChainFailKind,
+  ChainResult,
+  ChainRoute,
+  ChainStep,
+  ReadChain,
+  ReadChainOptions,
+} from './read-chain.js'
+export { createReadChain, noteAttempt, readBatchChain } from './read-chain.js'
 // WP246：网页转文字（本机那一级）——任意网页 → 干净正文 markdown
 export type { ReadableResult } from './readable.js'
 export { htmlToReadable, parseHtmlTree, READABLE_MAX_CHARS } from './readable.js'

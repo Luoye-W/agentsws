@@ -8,7 +8,9 @@
  */
 import type { GeoPromptTopic, GeoQuestion } from '@agentsws/contracts'
 import { GEO_PROMPT_DEFAULT_SELECTED, GEO_PROMPT_TOPICS } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
 import { looksLikeQuestion } from './geo.js'
+import GEO_TEMPLATES_FILE from './geo-prompts.content.json' with { type: 'json' }
 import { normalizeQuery } from './signals.js'
 
 /** 出候选要的品牌档案那几格。 */
@@ -80,8 +82,35 @@ export function promptId(text: string): string {
   return `gp_${h.toString(36)}`
 }
 
+/**
+ * WP404（docs/107 §3）：句子模板是数据（`geo-prompts.content.json`，每句带稳定 id、方向、出句条件），
+ * 这里只管按品牌档案套。按品牌可覆盖：`readContentTable`；没登记覆盖源就是随软件带的那一份。
+ */
+interface GeoPromptTemplate {
+  id: string
+  lang: 'zh' | 'en'
+  topic: GeoPromptTopic
+  text: string
+  /** 出句条件（见数据文件头注释）。 */
+  needs: ('cat' | 'rivals2' | 'rival0' | 'each_use' | 'no_uses')[]
+}
+
+const GEO_TEMPLATES_TABLE = builtinContentTable<GeoPromptTemplate>(GEO_TEMPLATES_FILE)
+
+const isGeoTemplate = (r: unknown): r is GeoPromptTemplate => {
+  const x = r as GeoPromptTemplate
+  return (
+    (x.lang === 'zh' || x.lang === 'en') &&
+    typeof x.topic === 'string' &&
+    typeof x.text === 'string' &&
+    Array.isArray(x.needs)
+  )
+}
+
+const SLOT = /\{(cat|name|rival0|rival1|use)\}/gu
+
 /** 品牌档案 → 每个方向几句（英文 / 中文两套）。 */
-function templates(seed: PromptSeed): [GeoPromptTopic, string][] {
+function templates(seed: PromptSeed, brand?: string): [GeoPromptTopic, string][] {
   const cat = seed.category?.trim() ?? ''
   const name = seed.brand.name.trim()
   const rivals = (seed.competitors ?? [])
@@ -92,47 +121,29 @@ function templates(seed: PromptSeed): [GeoPromptTopic, string][] {
     .map((u) => u.trim())
     .filter((u) => u !== '')
     .slice(0, 3)
+  const lang = seed.language === 'zh' ? 'zh' : 'en'
   const out: [GeoPromptTopic, string][] = []
-  const add = (topic: GeoPromptTopic, text: string): void => {
-    out.push([topic, text])
+  const fill = (text: string, use: string): string =>
+    text.replace(SLOT, (_m, slot: string) =>
+      slot === 'cat'
+        ? cat
+        : slot === 'name'
+          ? name
+          : slot === 'rival0'
+            ? (rivals[0] ?? '')
+            : slot === 'rival1'
+              ? (rivals[1] ?? '')
+              : use,
+    )
+  for (const t of readContentTable(GEO_TEMPLATES_TABLE, { brand, accepts: isGeoTemplate })) {
+    if (t.lang !== lang) continue
+    if (t.needs.includes('cat') && cat === '') continue
+    if (t.needs.includes('rivals2') && rivals.length < 2) continue
+    if (t.needs.includes('rival0') && rivals[0] === undefined) continue
+    if (t.needs.includes('no_uses') && uses.length > 0) continue
+    if (t.needs.includes('each_use')) for (const u of uses) out.push([t.topic, fill(t.text, u)])
+    else out.push([t.topic, fill(t.text, '')])
   }
-  if (seed.language === 'zh') {
-    if (cat !== '') {
-      add('category', `${cat}哪个牌子好？`)
-      add('category', `现在口碑最好的${cat}有哪些？`)
-      add('buying_guide', `买${cat}要注意什么？`)
-      add('buying_guide', `怎么选一款合适的${cat}？`)
-      if (rivals.length >= 2) add('comparison', `${rivals[0]}和${rivals[1]}的${cat}哪个好？`)
-      if (rivals[0] !== undefined) add('comparison', `有没有比${rivals[0]}更好的${cat}？`)
-      for (const u of uses) add('use_case', `${u}用什么${cat}比较好？`)
-      if (uses.length === 0) add('use_case', `新手适合用什么${cat}？`)
-      add('price_value', `性价比最高的${cat}是哪款？`)
-      add('price_value', `便宜的${cat}值得买吗？`)
-      add('reviews', `哪些${cat}品牌评价最好、最耐用？`)
-    }
-    add('branded', `${name}怎么样，值得买吗？`)
-    add('branded', `${name}的口碑如何？`)
-    if (rivals[0] !== undefined) add('branded', `${name}和${rivals[0]}哪个好？`)
-    return out
-  }
-  if (cat !== '') {
-    add('category', `What is the best ${cat}?`)
-    add('category', `Which ${cat} brands are the most recommended right now?`)
-    add('buying_guide', `What should I look for when buying a ${cat}?`)
-    add('buying_guide', `How do I choose the right ${cat}?`)
-    if (rivals.length >= 2)
-      add('comparison', `${rivals[0]} vs ${rivals[1]}: which ${cat} is better?`)
-    if (rivals[0] !== undefined)
-      add('comparison', `What are the best alternatives to ${rivals[0]}?`)
-    for (const u of uses) add('use_case', `What is the best ${cat} for ${u}?`)
-    if (uses.length === 0) add('use_case', `What is the best ${cat} for beginners?`)
-    add('price_value', `What is the best budget ${cat}?`)
-    add('price_value', `Is an expensive ${cat} worth it?`)
-    add('reviews', `Which ${cat} brands have the best reviews for reliability?`)
-  }
-  add('branded', `Is ${name} worth it?`)
-  add('branded', `What do customers say about ${name}?`)
-  if (rivals[0] !== undefined) add('branded', `${name} vs ${rivals[0]}: which is better?`)
   return out
 }
 
@@ -146,7 +157,10 @@ const asQuestion = (q: string): string => {
  * 出候选（还没选，`selected: false`）：品牌档案套句 + Search Console 里像问句的查询。
  * 按方向的展示顺序排；同一句（归一后）只出一次。不带品牌名的占多数（带品牌名的只在 `branded` 方向）。
  */
-export function generatePromptCandidates(seed: PromptSeed): GeoQuestion[] {
+export function generatePromptCandidates(
+  seed: PromptSeed,
+  options: { brand?: string } = {},
+): GeoQuestion[] {
   const seen = new Set<string>()
   const out: GeoQuestion[] = []
   const push = (topic: GeoPromptTopic, text: string, origin: GeoQuestion['origin']): void => {
@@ -163,7 +177,7 @@ export function generatePromptCandidates(seed: PromptSeed): GeoQuestion[] {
       selected: false,
     })
   }
-  for (const [topic, text] of templates(seed)) push(topic, text, 'brand')
+  for (const [topic, text] of templates(seed, options.brand)) push(topic, text, 'brand')
   for (const q of seed.top_queries ?? [])
     if (looksLikeQuestion(q)) push(guessPromptTopic(q, seed.brand), asQuestion(q), 'top_query')
   const order = (t: GeoPromptTopic | undefined): number =>

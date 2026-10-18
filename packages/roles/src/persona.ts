@@ -9,6 +9,8 @@
  */
 import type {
   PersonaOverride,
+  PersonaSectionId,
+  PersonaSectionOverrides,
   PersonaSubject,
   PersonaText,
   PersonaView,
@@ -16,6 +18,8 @@ import type {
   PromptSection,
   RoleDefinition,
 } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
+import HOUSE_RULES_FILE from './house-rules.content.json' with { type: 'json' }
 
 /** persona 用哪种语言（界面语言）。 */
 export type PersonaLang = 'zh' | 'en'
@@ -225,7 +229,7 @@ export function personaView(input: {
   packaged: PersonaText
   override?: PersonaOverride | undefined
 }): PersonaView {
-  const effective = applyPersonaOverride(input.packaged, input.override?.text) ?? input.packaged
+  const effective = applyPersonaSectionOverride(input.packaged, input.override) ?? input.packaged
   const overridden =
     input.override !== undefined &&
     (personaTextIn(effective, 'zh') !== personaTextIn(input.packaged, 'zh') ||
@@ -237,9 +241,209 @@ export function personaView(input: {
     packaged: input.packaged,
     overridden,
     ...(personaUntranslated(effective) ? { untranslated: true } : {}),
+    ...(input.override?.sections === undefined
+      ? {}
+      : { overridden_sections: overriddenPersonaSections(input.override.sections) }),
     ...(input.override?.updated_at === undefined ? {} : { updated_at: input.override.updated_at }),
     ...(input.override?.updated_by === undefined ? {} : { updated_by: input.override.updated_by }),
   }
+}
+
+/* ── WP404（docs/107 §4）：按段覆盖 ─────────────────────────────────────── */
+
+/** 六段的稳定 id，与 `PERSONA_SECTIONS_ZH` / `PERSONA_SECTIONS_EN` 一一对应（段名就是天然的 id）。 */
+export const PERSONA_SECTION_IDS: readonly PersonaSectionId[] = [
+  'who',
+  'handles',
+  'not_yours',
+  'how',
+  'tone',
+  'always_ask',
+]
+
+/** 拆开的一段：小标题、它后面那个冒号（照原样，中文全角 / 英文半角）、正文。 */
+export interface PersonaSectionPart {
+  id: PersonaSectionId
+  heading: string
+  sep: string
+  body: string
+}
+
+/** 拆开的一份 persona：六段之前的那几行（通常没有）+ 六段。 */
+export interface SplitPersona {
+  preamble: string
+  sections: PersonaSectionPart[]
+}
+
+/**
+ * 把一份 persona 拆成六段。只认 69 §2 的固定骨架：六个小标题**各占一行开头、各出现一次、按顺序**，
+ * 后面跟一个冒号（`：` 或 `:`）。拆不开（用户自己写成一整段、少了段、顺序乱了）→ `undefined`，
+ * 调用方照旧按整段处理。拆开再拼回去与原文逐字节相同（`joinPersonaSections`）。
+ */
+export function splitPersonaSections(text: string, lang: PersonaLang): SplitPersona | undefined {
+  const headings = lang === 'zh' ? PERSONA_SECTIONS_ZH : PERSONA_SECTIONS_EN
+  const starts: { at: number; sep: string }[] = []
+  let from = 0
+  for (const h of headings) {
+    let at = -1
+    let sep = ''
+    for (let i = text.indexOf(h, from); i >= 0; i = text.indexOf(h, i + 1)) {
+      const lineStart = i === 0 || text[i - 1] === '\n'
+      const next = text[i + h.length]
+      if (lineStart && (next === '：' || next === ':')) {
+        at = i
+        sep = next
+        break
+      }
+    }
+    if (at < 0) return undefined
+    starts.push({ at, sep })
+    from = at + h.length + 1
+  }
+  const first = starts[0]
+  if (first === undefined) return undefined
+  const sections: PersonaSectionPart[] = []
+  for (const [i, h] of headings.entries()) {
+    const cur = starts[i]
+    const id = PERSONA_SECTION_IDS[i]
+    if (cur === undefined || id === undefined) return undefined
+    const bodyStart = cur.at + h.length + cur.sep.length
+    const next = starts[i + 1]
+    // 下一段的小标题前面那个换行不属于这一段
+    const bodyEnd = next === undefined ? text.length : next.at - 1
+    sections.push({ id, heading: h, sep: cur.sep, body: text.slice(bodyStart, bodyEnd) })
+  }
+  return { preamble: text.slice(0, first.at), sections }
+}
+
+/** `splitPersonaSections` 的反过程（逐字节）。 */
+export function joinPersonaSections(split: SplitPersona): string {
+  return split.preamble + split.sections.map((s) => `${s.heading}${s.sep}${s.body}`).join('\n')
+}
+
+/**
+ * 用户交上来的整段改写 → 按语言、按段的改写（只记和包里那一份不一样的段）。
+ *
+ * 拆不开、或者拆开再拼回去和交上来的不是同一串字（多了段外的话、段落顺序乱了）→ `undefined`：
+ * 这种改写没法按段存，调用方照旧整段替换（行为与改造前一样）。老的纯字符串写法也不按段存。
+ */
+export function personaSectionDiff(
+  packaged: PersonaText | undefined,
+  text: PersonaText,
+): PersonaSectionOverrides | undefined {
+  if (packaged === undefined || typeof packaged === 'string' || typeof text === 'string')
+    return undefined
+  const out: PersonaSectionOverrides = {}
+  for (const lang of ['zh', 'en'] as const) {
+    const mine = rawIn(text, lang)
+    if (mine === '') continue
+    const base = splitPersonaSections(rawIn(packaged, lang), lang)
+    const split = splitPersonaSections(mine, lang)
+    if (base === undefined || split === undefined) return undefined
+    if (joinPersonaSections(split) !== mine || split.preamble !== base.preamble) return undefined
+    const changed: Partial<Record<PersonaSectionId, string>> = {}
+    for (const [i, part] of split.sections.entries()) {
+      const was = base.sections[i]
+      if (was === undefined) return undefined
+      if (part.body !== was.body || part.sep !== was.sep) changed[part.id] = part.body
+    }
+    if (Object.keys(changed).length > 0) out[lang] = changed
+  }
+  return out
+}
+
+/** 一种语言：包里那一份逐段换上改写（拆不开就回 `undefined`）。 */
+function withSections(
+  base: string,
+  lang: PersonaLang,
+  changed: Partial<Record<PersonaSectionId, string>> | undefined,
+): string | undefined {
+  const split = splitPersonaSections(base, lang)
+  if (split === undefined) return undefined
+  return joinPersonaSections({
+    preamble: split.preamble,
+    sections: split.sections.map((s) =>
+      changed?.[s.id] === undefined ? s : { ...s, body: changed[s.id] ?? s.body },
+    ),
+  })
+}
+
+/**
+ * WP404：包里的原文 + 按段的改写 → 现在生效的那一份。
+ *
+ * - **中文**：包里的中文逐段换上改写过的段；没改的段跟着包里走（包里出了新版，那几段自然是新的）。
+ * - **英文**（与 WP226「公司只改中文」同一条规矩）：改写里给了英文 → 包里的英文逐段换上改过的那几段；
+ *   没给英文、中文却改了 → 英文那一格**留空**（= 未翻译，取英文时回落中文）；中文也没改 → 包里的英文。
+ * - 包里那一份拆不开（外部自建的职责写成一整段）→ 回落整段替换（`applyPersonaOverride(packaged, text)`）。
+ */
+export function applyPersonaSectionOverride(
+  packaged: PersonaText | undefined,
+  override: { text: PersonaText; sections?: PersonaSectionOverrides | undefined } | undefined,
+): PersonaText | undefined {
+  if (override === undefined) return packaged
+  if (override.sections === undefined || packaged === undefined || typeof packaged === 'string')
+    return applyPersonaOverride(packaged, override.text)
+  const zhBase = rawIn(packaged, 'zh')
+  const zh = withSections(zhBase, 'zh', override.sections.zh)
+  if (zh === undefined) return applyPersonaOverride(packaged, override.text)
+  const zhChanged = Object.keys(override.sections.zh ?? {}).length > 0
+  const enGiven = rawIn(override.text, 'en')
+  const enBase = rawIn(packaged, 'en')
+  // 与 `applyPersonaOverride` 同一个判法：给了英文就用（按段叠到包里的英文上）；没给英文时，
+  // 中文一段都没改 → 包里的英文，改了 → 留空（未翻译）
+  const en =
+    enGiven !== ''
+      ? (withSections(enBase, 'en', override.sections.en) ?? enGiven)
+      : zhChanged
+        ? ''
+        : enBase
+  return { zh, en }
+}
+
+/**
+ * 一份 persona 摊成「段」（id / 小标题 / 正文），形状与技能的段合并（`planContentMerge`，`@agentsws/skills`）
+ * 要的一样——persona 的官方更新（WP406）直接复用那一套按段三方合并，不另写一份。拆不开 → 空数组。
+ */
+export function personaMergeSections(
+  persona: PersonaText | undefined,
+  lang: PersonaLang,
+): { id: PersonaSectionId; heading: string; body: string }[] {
+  if (persona === undefined) return []
+  const split = splitPersonaSections(personaTextIn(persona, lang), lang)
+  return split === undefined
+    ? []
+    : split.sections.map((s) => ({ id: s.id, heading: s.heading, body: s.body }))
+}
+
+/** 按段改写摊成段合并要的「上层改动」（整段替换那一种）。 */
+export function personaSectionEdits(
+  sections: PersonaSectionOverrides | undefined,
+  lang: PersonaLang,
+  owner: { tier: string; owner: string },
+): {
+  tier: string
+  owner: string
+  source: 'layer'
+  op: 'replace'
+  section_id: string
+  body: string
+}[] {
+  const changed = sections?.[lang] ?? {}
+  return PERSONA_SECTION_IDS.filter((id) => changed[id] !== undefined).map((id) => ({
+    ...owner,
+    source: 'layer',
+    op: 'replace',
+    section_id: id,
+    body: changed[id] ?? '',
+  }))
+}
+
+/** 按段改写里改了哪几段（中文那份；面板标「改过」用）。 */
+export function overriddenPersonaSections(
+  sections: PersonaSectionOverrides | undefined,
+): PersonaSectionId[] {
+  const zh = sections?.zh ?? {}
+  return PERSONA_SECTION_IDS.filter((id) => zh[id] !== undefined)
 }
 
 /* ── 69 §3：装配成系统提示的那几段 ───────────────────────────────────────── */
@@ -414,18 +618,40 @@ export const PERSONA_ORDER = { brand: 5, position: 10, role: 20 } as const
  */
 export const HOUSE_RULES_ORDER = 25
 
+/**
+ * WP404（docs/107 §3）：规矩原文外置成数据（`house-rules.content.json`，每条带 id），这里只管拼。
+ * 几条按顺序用换行接起来；现在只有一条，所以和外置前逐字节相同。
+ */
+const HOUSE_RULES_TABLE = builtinContentTable<HouseRuleRow>(HOUSE_RULES_FILE)
+
+interface HouseRuleRow {
+  id: string
+  zh: string
+  en: string
+}
+
+const isHouseRuleRow = (r: unknown): r is HouseRuleRow =>
+  typeof (r as HouseRuleRow).zh === 'string' && typeof (r as HouseRuleRow).en === 'string'
+
+/** 公共段的正文（按品牌可覆盖：`readContentTable`；没登记覆盖源就是随软件带的那一份）。 */
+function houseRulesText(lang: PersonaLang, brand?: string): string {
+  return readContentTable(HOUSE_RULES_TABLE, { brand, accepts: isHouseRuleRow })
+    .map((r) => r[lang])
+    .join('\n')
+}
+
 export const HOUSE_RULES: Readonly<Record<PersonaLang, string>> = {
-  zh: '对用户说话时不提工具名、函数名、内部 id，用人话说做了什么（说「查了规矩与政策库」，不说 search_policies）。',
-  en: 'When talking to the user, never mention tool names, function names or internal ids — say in plain words what you did (“checked the policy library”, not search_policies).',
+  zh: houseRulesText('zh'),
+  en: houseRulesText('en'),
 }
 
 /** 公共段那一节（每条职责、每个运行时都带同一份）。 */
-export function houseRulesSection(lang: PersonaLang = 'zh'): PromptSection {
+export function houseRulesSection(lang: PersonaLang = 'zh', brand?: string): PromptSection {
   return {
     id: 'house',
     name: lang === 'zh' ? '说话规矩' : 'house rules',
     order: HOUSE_RULES_ORDER,
-    text: HOUSE_RULES[lang],
+    text: houseRulesText(lang, brand),
   }
 }
 
