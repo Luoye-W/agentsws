@@ -18,7 +18,9 @@ interface TitleBarBridgeLike {
 }
 
 function titleBarBridge(): TitleBarBridgeLike | undefined {
-  const w = globalThis.window as unknown as { agentsws?: { titleBar?: TitleBarBridgeLike } } | undefined
+  const w = globalThis.window as unknown as
+    | { agentsws?: { titleBar?: TitleBarBridgeLike } }
+    | undefined
   return w?.agentsws?.titleBar
 }
 
