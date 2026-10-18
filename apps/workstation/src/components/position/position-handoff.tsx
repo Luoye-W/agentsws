@@ -2,7 +2,7 @@
  * 岗位页的输入框（WP241「交给它」→ WP287 Luoye 10-09 真机后重做）。
  *
  * - **和事项页 / 随便聊同一个输入框**（`MatterComposer`：发送是框内的箭头，不写「交给它」；
- *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。岗位页没有「私聊 AI」——这里发出去就是开一段会话。
+ *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。这里发出去就是开一段会话。
  * - WP291（决策 356）：发出去服务端三分——**当场问答**就在框下面答（`QuickAnswer`：一句话 + 组件）；
  *   **会话 / 任务**马上进它的线程。框里的字发出去就清，等回答时框下出「…」。
  * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
@@ -134,13 +134,10 @@ export function PositionHandoff({
         onStop={() => undefined}
         running={false}
         closed={false}
-        privateMode={false}
-        onTogglePrivate={() => undefined}
         // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
         suggestion={suggestions[0]?.prompt}
         sending={false}
         docked={false}
-        showPrivate={false}
         placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
         label={t(role_id === undefined ? 'position.entry.title' : 'duty.entry.title')}
         testId="position-entry-input"

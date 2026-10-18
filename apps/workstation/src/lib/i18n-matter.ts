@@ -78,20 +78,12 @@ export const MATTER_ZH: Record<string, string> = {
   'matter.cmp.placeholder': '回复，或交代新要求…',
   'matter.cmp.placeholder.running': '还能接着说，会排在这一轮后面…',
   'matter.cmp.placeholder.closed': '这件事已关闭，说一句就重新打开',
-  'matter.cmp.placeholder.private': '问 AI 一句，只你看得见…',
   'matter.cmp.send': '发送（Enter）',
   'matter.cmp.stop': '停下这一轮',
   'matter.cmp.hint': '↵ 发送 · ⇧↵ 换行',
-  // WP357：只在私聊 AI 时置灰（「即将推出」那类占位字删了，「@」也去掉了）
-  'matter.cmp.attach': '私聊 AI 时不收附件',
-  'matter.cmp.private': '私聊 AI',
-  'matter.cmp.private.tip': '打开：只问 AI 一句，不让它去做事',
-  'matter.cmp.private.tag': '私聊 AI · 只你看得见，不会让它去做事',
+  // WP357：「即将推出」那类占位字删了，「@」也去掉了；WP412（决策 1221）：私聊 AI 去掉，只剩「这里不收」
+  'matter.cmp.attach': '这里不收附件',
   'matter.cmp.suggest': '建议：{text}，按 Tab 收下',
-  'matter.private.head': '只你看得见 · 不进这件事的记录',
-  'matter.private.close': '关掉',
-  'matter.private.forward': '转给 AI',
-  'matter.private.asking': '正在问…',
 }
 
 export const MATTER_EN: Record<string, string> = {
@@ -167,17 +159,9 @@ export const MATTER_EN: Record<string, string> = {
   'matter.cmp.placeholder': 'Reply, or give a new instruction…',
   'matter.cmp.placeholder.running': 'Keep talking — it queues after this round…',
   'matter.cmp.placeholder.closed': 'This matter is closed — say something to reopen it',
-  'matter.cmp.placeholder.private': 'Ask AI — only you can see this…',
   'matter.cmp.send': 'Send (Enter)',
   'matter.cmp.stop': 'Stop this round',
   'matter.cmp.hint': '↵ send · ⇧↵ new line',
-  'matter.cmp.attach': 'No attachments in private AI chat',
-  'matter.cmp.private': 'Ask AI privately',
-  'matter.cmp.private.tip': "On: just ask AI, it won't act on anything",
-  'matter.cmp.private.tag': "Private · only you see this, AI won't act on it",
+  'matter.cmp.attach': 'Attachments not accepted here',
   'matter.cmp.suggest': 'Suggestion: {text} — press Tab to accept',
-  'matter.private.head': 'Only you see this · not saved to the matter',
-  'matter.private.close': 'Dismiss',
-  'matter.private.forward': 'Hand to AI',
-  'matter.private.asking': 'Asking…',
 }
