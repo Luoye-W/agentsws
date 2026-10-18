@@ -144,8 +144,10 @@ function source() {
   })
 }
 
-const call = (name: string, input: Record<string, unknown>, role_id = 'dtc.support') =>
-  source().executeTool?.({
+const call = async (name: string, input: Record<string, unknown>, role_id = 'dtc.support') => {
+  const exec = source().executeTool
+  if (exec === undefined) throw new Error('no executor')
+  return exec({
     name,
     input,
     request: {
@@ -153,6 +155,7 @@ const call = (name: string, input: Record<string, unknown>, role_id = 'dtc.suppo
       actor: { role_id, person_id: 'p', assignment_id: 'a' },
     } as unknown as RunRequest,
   })
+}
 
 describe('WP417 客服查询类工具', () => {
   it('等着回的来信：最后一封是客户的才算；从回信之后客户第一封算起', () => {
@@ -171,34 +174,34 @@ describe('WP417 客服查询类工具', () => {
 
   it('A8 / A43：「超过 8 小时没回的」查得到，等得久的在前', async () => {
     const res = await call('list_support_threads', { min_waiting_hours: 8 })
-    expect(res?.status).toBe('ok')
-    const rows = (res?.data as { threads: { thread_id: string; waiting_hours: number }[] }).threads
+    expect(res.status).toBe('ok')
+    const rows = (res.data as { threads: { thread_id: string; waiting_hours: number }[] }).threads
     expect(rows.map((r) => r.thread_id)).toEqual(['t3', 't1'])
   })
 
   it('B7：「快超 24 小时的」只看 Amazon，带离回复线还剩几小时', async () => {
     const res = await call('list_support_threads', { due_within_hours: 4 }, 'amz.support')
-    const rows = (res?.data as { threads: { thread_id: string; due_in_hours?: number }[] }).threads
+    const rows = (res.data as { threads: { thread_id: string; due_in_hours?: number }[] }).threads
     expect(rows).toEqual([expect.objectContaining({ thread_id: 't3', due_in_hours: 3 })])
   })
 
   it('C23：聊天里等人工的会话', async () => {
     const res = await call('list_chat_sessions', {}, 'dtc.live-chat')
-    const rows = (res?.data as { sessions: { session_id: string; waiting_minutes?: number }[] })
+    const rows = (res.data as { sessions: { session_id: string; waiting_minutes?: number }[] })
       .sessions
     expect(rows).toEqual([expect.objectContaining({ session_id: 's1', waiting_minutes: 12 })])
   })
 
   it('D3：社群管理缺省看得到社媒运营转过来的；handed_over 只看转过来的；since_days 数近期', async () => {
     const all = await call('list_community_threads', {}, 'dtc.community-support')
-    const ids = (all?.data as { threads: { id: string }[] }).threads.map((t) => t.id)
+    const ids = (all.data as { threads: { id: string }[] }).threads.map((t) => t.id)
     expect(ids).toEqual(['ct_open', 'ct_routed'])
     const handed = await call(
       'list_community_threads',
       { handed_over: true },
       'dtc.community-support',
     )
-    expect((handed?.data as { threads: { id: string }[] }).threads.map((t) => t.id)).toEqual([
+    expect((handed.data as { threads: { id: string }[] }).threads.map((t) => t.id)).toEqual([
       'ct_routed',
     ])
     const recent = await call(
@@ -206,7 +209,7 @@ describe('WP417 客服查询类工具', () => {
       { open: false, since_days: 1 },
       'dtc.community-support',
     )
-    expect((recent?.data as { threads: { id: string }[] }).threads.map((t) => t.id)).toEqual([
+    expect((recent.data as { threads: { id: string }[] }).threads.map((t) => t.id)).toEqual([
       'ct_open',
     ])
   })
