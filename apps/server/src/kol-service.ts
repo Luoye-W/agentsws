@@ -433,7 +433,18 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const workspace_id = options.workspace_id
   /** 人点过"不是同一个人"的那几对，进程内记着（重启后会再问一次——建议本来就是算出来的）。 */
   // WP416（自查 kol B「同一人合并卡」）：点过「不是同一个人」的落盘（以前只在内存里，重启又冒出来）
-  const rejectedMerges = new Set<string>(store.setting<string[]>('merge_rejected') ?? [])
+  const rejectedMerges = new Set<string>()
+  let mergesLoaded = false
+  /** 头一次用到时从库里读（库替身可能没有设置口：读不到就当没有）。 */
+  const loadRejectedMerges = (): void => {
+    if (mergesLoaded) return
+    mergesLoaded = true
+    try {
+      for (const id of store.setting<string[]>('merge_rejected') ?? []) rejectedMerges.add(id)
+    } catch {
+      // 读不到就从空的开始
+    }
+  }
 
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -716,9 +727,17 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const ownerOfChannel = (channel: KolChannel): Assignment | undefined =>
     options.holdersOf(roleIdOfChannel(channel))[0]
 
+  const savedDefaults = (): SavedOutreachDefaults => {
+    try {
+      return store.setting<SavedOutreachDefaults>('outreach_defaults') ?? {}
+    } catch {
+      return {}
+    }
+  }
+
   /** WP416（决策 531）：起草那两格的默认值——存过的 → 品牌档案 → 空。 */
   const outreachDefaultsOf = (): KolOutreachDefaultsView => {
-    const saved = store.setting<SavedOutreachDefaults>('outreach_defaults') ?? {}
+    const saved = savedDefaults()
     const profile = options.brandProfile?.()
     const profilePitch = profile?.one_liner?.trim() ?? ''
     const savedPitch = saved.brand_pitch?.trim() ?? ''
@@ -2130,7 +2149,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     saveOutreachDefaults(actor, input) {
-      const prev = store.setting<SavedOutreachDefaults>('outreach_defaults') ?? {}
+      const prev = savedDefaults()
       const next: SavedOutreachDefaults = {
         ...prev,
         ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch.trim() }),
@@ -2570,6 +2589,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     async mergeSuggestions(actor) {
       const names = new Map(store.creators().map((c) => [c.id, c.display_name]))
       const rows: KolMergeSuggestionView[] = []
+      loadRejectedMerges()
       for (const s of suggestMerges(profilesOf())) {
         const id = mergeSuggestionId(s.keep_id, s.merge_id)
         if (rejectedMerges.has(id)) continue
@@ -2666,8 +2686,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     rejectMerge(actor, id) {
       if (parseMergeSuggestionId(id) === undefined)
         throw new ApiError('invalid_input', '这不是一条合并建议的 id')
+      loadRejectedMerges()
       rejectedMerges.add(id)
-      store.saveSetting('merge_rejected', [...rejectedMerges], clock.now())
+      try {
+        store.saveSetting('merge_rejected', [...rejectedMerges], clock.now())
+      } catch {
+        // 落不了盘：这一次进程里照样不再提
+      }
       emit('kol.merge_rejected', actor.person_id, { suggestion_id: id })
       return { id, rejected: true as const }
     },
