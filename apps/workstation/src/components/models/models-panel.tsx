@@ -29,10 +29,7 @@ import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { QuotaNotice } from '@/components/models/quota-notice'
-import {
-  SubscriptionPlan,
-  subscriptionTemplateShown,
-} from '@/components/models/subscription-plan'
+import { SubscriptionPlan, subscriptionTemplateShown } from '@/components/models/subscription-plan'
 import { WebSearchToggle } from '@/components/models/web-search-toggle'
 import { CloudPlanActions } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
