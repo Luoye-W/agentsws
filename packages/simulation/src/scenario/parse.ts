@@ -256,6 +256,8 @@ const EVENT_KEYS = [
   'content.seo_daily',
   // WP380 GEO 第二层
   'content.geo_quality',
+  // WP398 Amazon 词库
+  'amazon.keywords',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -394,6 +396,8 @@ const EXPECTED_KEYS = [
   'seo_daily',
   // WP380
   'geo_quality',
+  // WP398
+  'amazon_keywords',
   // WP96（36 §2）：只有要人决定的才是卡
   'queue_cards',
   'panel_reports',
@@ -2117,6 +2121,19 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         geo_quality: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
+    case 'amazon.keywords': {
+      known(source, `${path}.${key}`, body, ['who', 'blocked_at'])
+      return {
+        at,
+        type: 'amazon.keywords',
+        amazon_keywords: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(body.blocked_at === undefined
+            ? {}
+            : { blocked_at: num(source, `${path}.${key}.blocked_at`, body.blocked_at) }),
+        },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -2774,6 +2791,25 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       ...(d.advice === undefined
         ? {}
         : { advice: str(source, 'expected.geo_quality.advice', d.advice) }),
+    }
+  }
+  // WP398：Amazon 词库那一次
+  if (raw.amazon_keywords !== undefined) {
+    const d = raw.amazon_keywords
+    if (!isRec(d)) fail(source, 'expected.amazon_keywords', '必须是对象')
+    known(source, 'expected.amazon_keywords', d, ['top_gaps', 'other_brands', 'autocomplete'])
+    if (d.autocomplete !== undefined && d.autocomplete !== 'ok' && d.autocomplete !== 'blocked')
+      fail(source, 'expected.amazon_keywords.autocomplete', '只能是 ok / blocked')
+    out.amazon_keywords = {
+      ...(d.top_gaps === undefined
+        ? {}
+        : { top_gaps: strList(source, 'expected.amazon_keywords.top_gaps', d.top_gaps) }),
+      ...(d.other_brands === undefined
+        ? {}
+        : {
+            other_brands: strList(source, 'expected.amazon_keywords.other_brands', d.other_brands),
+          }),
+      ...(d.autocomplete === undefined ? {} : { autocomplete: d.autocomplete }),
     }
   }
   // WP96（36 §2）：队列里剩几张、面板报表块有几条

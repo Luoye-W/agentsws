@@ -826,6 +826,40 @@ export function checkExpectations(
       )
     }
   }
+  // WP398：Amazon 词库——差距词按竞品数排、他牌名标出来、被拦就停
+  if (expected.amazon_keywords !== undefined) {
+    const want = expected.amazon_keywords
+    const last = evidence.events.filter((e) => e.type === 'simulation.amazon_keywords').pop()
+    if (last === undefined) add('amazon_keywords', false, '词库一次都没刷新')
+    else {
+      const p = payloadOf(last)
+      const gaps = Array.isArray(p.gaps) ? (p.gaps as [string, number][]).map((g) => g[0]) : []
+      const others = Array.isArray(p.other_brand_terms) ? (p.other_brand_terms as string[]) : []
+      const problems: string[] = []
+      if (want.top_gaps !== undefined) {
+        const head = gaps.slice(0, want.top_gaps.length)
+        if (head.join('|') !== want.top_gaps.join('|'))
+          problems.push(`差距词开头 ${head.join('、')}（期望 ${want.top_gaps.join('、')}）`)
+      }
+      if (want.other_brands !== undefined) {
+        const a = [...others].sort().join('|')
+        const b = [...want.other_brands].sort().join('|')
+        if (a !== b)
+          problems.push(
+            `他牌名 ${others.join('、') || '（没有）'}（期望 ${want.other_brands.join('、')}）`,
+          )
+      }
+      if (want.autocomplete !== undefined && p.autocomplete !== want.autocomplete)
+        problems.push(`联想词 ${String(p.autocomplete)}（期望 ${want.autocomplete}）`)
+      add(
+        'amazon_keywords',
+        problems.length === 0,
+        problems.length === 0
+          ? `差距词 ${gaps.slice(0, 3).join('、')}…；他牌名 ${others.join('、') || '（没有）'}；联想词 ${String(p.autocomplete)}（读了 ${String(p.pages_read)} 页）`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
   if (expected.scope_disjoint !== undefined) {
     const seen = new Map<string, { orders: string[]; products: string[] }>()
