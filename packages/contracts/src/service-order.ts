@@ -724,3 +724,440 @@ export function serviceMilestoneCredits(
   }
   return out
 }
+
+/* ================================================================== */
+/* 本机那一半（WP390，docs/105 §4 / §5 / §7）                           */
+/* ================================================================== */
+
+/** 用户说「不用」之后，这项服务在这个品牌上多少天不主动推（P7）。 */
+export const SERVICE_RECOMMEND_QUIET_DAYS = 30
+
+/** 岗位页「这个岗位能用的服务」最多列几项（§4.1 ③）。 */
+export const SERVICE_POSITION_LIMIT = 3
+
+/** 交付物到期前几天在订单面板提醒（P10：提醒一次）。 */
+export const SERVICE_EXPIRY_NOTICE_DAYS = 7
+
+/**
+ * 一项服务的「起价」：一口价 → 那个价；先报价 → 起价参考；价目单 → 最便宜那一项按最少数量算。
+ * 推荐卡与列表上那一个数（「起价 800 积分」）。算不出回 `undefined`（卡上就不写价）。
+ */
+export function serviceStartCredits(s: ServiceView): number | undefined {
+  if (s.pricing_mode === 'fixed' && s.price_credits !== undefined) return s.price_credits
+  if (s.from_credits !== undefined) return s.from_credits
+  if (s.price_credits !== undefined) return s.price_credits
+  const menu = s.menu ?? []
+  if (menu.length === 0) return undefined
+  return Math.min(...menu.map((m) => round4(m.credits_per_unit * Math.max(1, m.min_quantity))))
+}
+
+/**
+ * 意向说法里不带意思的那些字（「我想找人帮我…」）：匹配前两边都拿掉，免得「想找人建站」和「想找人拍视频」
+ * 只因为都有「想找人」就算像。
+ */
+const FILLER = /[我你想要找人帮个一的了吗呢吧请给能可以]/gu
+
+/** 一段话里的字与相邻两字（拿掉标点与 {@link FILLER} 之后）。 */
+function grams(s: string): Set<string> {
+  const chars = Array.from(core(s))
+  const out = new Set<string>(chars)
+  for (let i = 0; i + 1 < chars.length; i++) out.add(`${chars[i]}${chars[i + 1]}`)
+  return out
+}
+
+/**
+ * 一句意向说法和用户的话有多像（0–1）：说法被整句包含 = 1；否则看说法里的字 / 相邻两字有多少出现在话里
+ * （两边先拿掉「我想找人帮…」这类不带意思的字）。在 WP389 后台「试匹配」那一套上多了这一步（过
+ * {@link SERVICE_MATCH_THRESHOLD} 算命中）。
+ */
+const core = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
+    .replace(FILLER, '')
+
+export function serviceIntentScore(phrase: string, text: string): number {
+  const p = phrase.trim().toLowerCase()
+  const t = text.toLowerCase()
+  if (p === '' || t.trim() === '') return 0
+  if (t.includes(p)) return 1
+  const pc = core(p)
+  if (pc === '') return 0
+  if (core(t).includes(pc)) return 1
+  const want = grams(p)
+  if (want.size === 0) return 0
+  const have = grams(t)
+  let hit = 0
+  for (const g of want) if (have.has(g)) hit += 1
+  return Math.round((hit / want.size) * 1000) / 1000
+}
+
+/** 过这个分算命中。 */
+export const SERVICE_MATCH_THRESHOLD = 0.5
+
+export interface ServiceMatch {
+  service: ServiceView
+  /** 命中那句意向说法的分（0–1）。 */
+  score: number
+  /** 命中的那句说法。 */
+  phrase: string
+  /** 是不是当前岗位的服务。 */
+  position_hit: boolean
+}
+
+/**
+ * `find_service` 的匹配（意向 + 当前岗位 → 匹配项）：只看能下单的；过线才算；
+ * 排序 = 工坊团队自营的在前 → 当前岗位的在前 → 分高的在前 → id。
+ */
+export function matchServices(
+  services: readonly ServiceView[],
+  text: string,
+  position_id?: string,
+): ServiceMatch[] {
+  const out: ServiceMatch[] = []
+  for (const s of services) {
+    if (!s.available) continue
+    let best = 0
+    let phrase = ''
+    for (const p of [...s.intents, s.label_zh, s.label_en]) {
+      const score = serviceIntentScore(p, text)
+      if (score > best) {
+        best = score
+        phrase = p
+      }
+    }
+    if (best < SERVICE_MATCH_THRESHOLD) continue
+    out.push({
+      service: s,
+      score: best,
+      phrase,
+      position_hit: position_id !== undefined && s.positions.includes(position_id),
+    })
+  }
+  const own = (m: ServiceMatch): number => (m.service.provider_label === 'workshop_team' ? 0 : 1)
+  return out.sort(
+    (a, b) =>
+      own(a) - own(b) ||
+      Number(b.position_hit) - Number(a.position_hit) ||
+      b.score - a.score ||
+      a.service.id.localeCompare(b.service.id),
+  )
+}
+
+/** 岗位页「这个岗位能用的服务」：关联了这个岗位、能下单的，自营在前，最多 {@link SERVICE_POSITION_LIMIT} 项。 */
+export function servicesForPosition(
+  services: readonly ServiceView[],
+  position_id: string,
+  limit: number = SERVICE_POSITION_LIMIT,
+): ServiceView[] {
+  return services
+    .filter((s) => s.available && s.positions.includes(position_id))
+    .sort(
+      (a, b) =>
+        Number(a.provider_label !== 'workshop_team') -
+          Number(b.provider_label !== 'workshop_team') || a.id.localeCompare(b.id),
+    )
+    .slice(0, limit)
+}
+
+/**
+ * 卡点 → 服务：「缺设置」卡上的「交给工坊办」挂哪一项。服务目录里「关联卡点」写机器键
+ * （`connect:<服务>` / `setup:<设置目标>`）就按键对上；写人话的按名字试匹配。自营优先。
+ */
+export function serviceForBlocker(
+  services: readonly ServiceView[],
+  blocker: { key: string; name?: string },
+): ServiceView | undefined {
+  const hits = services.filter((s) => {
+    if (!s.available) return false
+    return (s.blockers ?? []).some(
+      (b) =>
+        b.trim().toLowerCase() === blocker.key.toLowerCase() ||
+        (blocker.name !== undefined &&
+          !b.includes(':') &&
+          serviceIntentScore(b, blocker.name) >= SERVICE_MATCH_THRESHOLD),
+    )
+  })
+  return hits.sort(
+    (a, b) =>
+      Number(a.provider_label !== 'workshop_team') - Number(b.provider_label !== 'workshop_team'),
+  )[0]
+}
+
+/**
+ * **推荐卡**（docs/105 §4 / §5）：挂在 AI 那段话末尾的一行「名字 · 起价 · 看看」。**不是审批卡**、
+ * 不进卡片队列；卡上不写风险、不写合作方名字（只有 {@link ServiceProviderLabel}）。
+ */
+export interface ServiceOffer {
+  service_id: string
+  kind: ServiceKind
+  label_zh: string
+  label_en: string
+  pricing_mode: ServicePricingMode
+  /** 起价（{@link serviceStartCredits}；算不出就没有）。 */
+  from_credits?: number
+  provider_label: ServiceProviderLabel
+}
+
+export function serviceOfferOf(s: ServiceView): ServiceOffer {
+  const from = serviceStartCredits(s)
+  return {
+    service_id: s.id,
+    kind: s.kind,
+    label_zh: s.label_zh,
+    label_en: s.label_en,
+    pricing_mode: s.pricing_mode,
+    ...(from === undefined ? {} : { from_credits: from }),
+    provider_label: s.provider_label,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 审批卡 `service_order`（永远 L1）的五种卡面                            */
+/* ------------------------------------------------------------------ */
+
+/** 审批卡种（`ApprovalKind`）。永远 L1、不能升级成自动（下单就是花钱）。 */
+export const SERVICE_ORDER_CARD_KIND = 'service_order' as const
+
+/**
+ * 卡上要的服务那几格（出卡那一刻的快照；卡面照它画，下单前本机再按最新目录校验一遍）。
+ */
+export type ServiceCardSnapshot = Pick<
+  ServiceView,
+  | 'id'
+  | 'kind'
+  | 'label_zh'
+  | 'label_en'
+  | 'summary_zh'
+  | 'summary_en'
+  | 'provider_label'
+  | 'pricing_mode'
+  | 'price_credits'
+  | 'from_credits'
+  | 'menu'
+  | 'milestones'
+  | 'questions'
+  | 'promise'
+  | 'revisions'
+  | 'auto_accept_hours'
+  | 'landing'
+>
+
+export function serviceCardSnapshot(s: ServiceView): ServiceCardSnapshot {
+  return {
+    id: s.id,
+    kind: s.kind,
+    label_zh: s.label_zh,
+    label_en: s.label_en,
+    summary_zh: s.summary_zh,
+    summary_en: s.summary_en,
+    provider_label: s.provider_label,
+    pricing_mode: s.pricing_mode,
+    ...(s.price_credits === undefined ? {} : { price_credits: s.price_credits }),
+    ...(s.from_credits === undefined ? {} : { from_credits: s.from_credits }),
+    ...(s.menu === undefined ? {} : { menu: s.menu }),
+    ...(s.milestones === undefined ? {} : { milestones: s.milestones }),
+    questions: s.questions,
+    promise: s.promise,
+    revisions: s.revisions,
+    auto_accept_hours: s.auto_accept_hours,
+    landing: s.landing,
+  }
+}
+
+/** 这张卡挂在哪件事上、办成后回哪一步（卡点入口带 `resume`，决策 690）。 */
+export interface ServiceCardOrigin {
+  matter_id?: string
+  position_id?: string
+  assignment_id?: string
+  /** 「交给工坊办」那一类：办成后按原话接着做的那件事。 */
+  resume?: { matter_id: string; person_id: string; assignment_id: string }
+  /** 卡点的机器键（`connect:google` / `setup:site.store`）。 */
+  blocker?: string
+}
+
+/** 标准件的**价目单**：勾几项、各填数量与对象，合计当场算；点「下单」= 批（扣进托管）。 */
+export interface ServiceMenuCardPayload extends ServiceCardOrigin {
+  form: 'service_menu'
+  service: ServiceCardSnapshot
+  /** AI 预填的几行（人在卡上改；批的时候带改过的）。 */
+  lines: ServiceOrderLine[]
+  idempotency_key: string
+}
+
+/** 定制件的**需求单**（AI 在对话里一问一答整理的）：提交等报价 / 再改改。 */
+export interface ServiceRequirementsCardPayload extends ServiceCardOrigin {
+  form: 'service_requirements'
+  service: ServiceCardSnapshot
+  answers: ServiceRequirementAnswer[]
+  idempotency_key: string
+}
+
+/**
+ * **下单卡**（同意并支付）：一口价的定制件交完需求单（`pay`）、报价回来了（`accept_quote`）、
+ * 会上说定要加钱（`extra`，一期云上还没有这个口，见 WP390 报告）。
+ */
+export interface ServicePayCardPayload extends ServiceCardOrigin {
+  form: 'service_pay'
+  stage: 'pay' | 'accept_quote' | 'extra'
+  service: ServiceCardSnapshot
+  /** 先报价的那一单（`accept_quote`）。 */
+  order_id?: string
+  credits: number
+  /** 接单后多久交付（小时）。 */
+  deliver_hours?: number
+  milestones?: ServiceMilestone[]
+  /** 一口价的定制件：交给做的人的需求单。 */
+  requirements?: ServiceRequirementAnswer[]
+  /** 报价里那一句说明。 */
+  quote_note?: string
+  idempotency_key: string
+}
+
+/** 验收卡的三个选项（选项就是答案：通过 / 要改 / 申请退款）。 */
+export const SERVICE_ACCEPTANCE_OPTIONS = ['accept', 'revise', 'dispute'] as const
+export type ServiceAcceptanceOption = (typeof SERVICE_ACCEPTANCE_OPTIONS)[number]
+
+/** **验收卡**：标准件看凭证；定制件按段。写明几时自动通过。 */
+export interface ServiceAcceptanceCardPayload extends ServiceCardOrigin {
+  form: 'service_acceptance'
+  order_id: string
+  service: ServiceCardSnapshot
+  milestone_id?: string
+  milestone_label_zh?: string
+  milestone_label_en?: string
+  /** 这一次验的是多少积分（这一段 / 整单）。 */
+  credits: number
+  proof?: ServiceDeliveryProof
+  lines?: ServiceOrderLineView[]
+  deliverables: ServiceDeliverable[]
+  revisions_left: number
+  auto_accept_at?: Iso8601
+  /** 要改 / 申请退款时那一句（批的时候带上；申请退款必填）。 */
+  reason?: string
+}
+
+/** **交换联系方式请求卡**（N1）：同意才把你自己选的那一种给这一单的服务方。 */
+export interface ServiceContactCardPayload extends ServiceCardOrigin {
+  form: 'service_contact'
+  order_id: string
+  service: ServiceCardSnapshot
+  request_id: string
+  /** 服务方为什么要。 */
+  reason: string
+  /** 你选给哪一种（批的时候带上；卡里不预填）。 */
+  contact?: ServiceContact
+}
+
+export type ServiceOrderCardPayload =
+  | ServiceMenuCardPayload
+  | ServiceRequirementsCardPayload
+  | ServicePayCardPayload
+  | ServiceAcceptanceCardPayload
+  | ServiceContactCardPayload
+
+export const SERVICE_ORDER_CARD_FORMS = [
+  'service_menu',
+  'service_requirements',
+  'service_pay',
+  'service_acceptance',
+  'service_contact',
+] as const
+
+export function isServiceOrderCardPayload(p: unknown): p is ServiceOrderCardPayload {
+  const o = p !== null && typeof p === 'object' ? (p as Record<string, unknown>) : {}
+  const svc = o.service !== null && typeof o.service === 'object' ? o.service : undefined
+  return (
+    typeof o.form === 'string' &&
+    (SERVICE_ORDER_CARD_FORMS as readonly string[]).includes(o.form) &&
+    svc !== undefined
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* 本机接口（`/v1/workshop-services/*`）的样子                           */
+/* ------------------------------------------------------------------ */
+
+/** 本机缓存的服务目录（云上改了刷新一次；断网用上一份）。 */
+export interface WorkshopServiceCatalogView {
+  /** 关联了工坊账号没有（没关联就是空目录 + 一句人话）。 */
+  linked: boolean
+  services: ServiceView[]
+  /** 云上那一份的时刻。 */
+  at?: Iso8601
+  /** 本机上一次取到的时刻。 */
+  fetched_at?: Iso8601
+  /** 一句人话（没关联 / 取不到用的是上一份 / 要重新登录）。 */
+  notice?: string
+  /** 老令牌缺 `services` 动作集、自动补签也没成：要重新登录一次（决策 1098）。 */
+  reauth?: true
+}
+
+/** 一张订单在本机的样子：云上那一份 + 本机记的挂在哪件事上、在等你的卡。 */
+export interface WorkshopServiceOrderRow {
+  order: ServiceOrderView
+  matter_id?: string
+  position_id?: string
+  /** 等你点的那张卡（下单 / 验收 / 联系方式）。 */
+  card_id?: string
+  /** 交付物快到期了（P10：到期前提醒一次）。 */
+  expiring?: boolean
+}
+
+export interface WorkshopServiceOrdersView {
+  orders: WorkshopServiceOrderRow[]
+  at: Iso8601
+  notice?: string
+  reauth?: true
+}
+
+/** 本机账本一行：下单、托管、每条沟通、交付、验收、退款各一条。 */
+export interface WorkshopServiceLedgerEntry {
+  at: Iso8601
+  order_id: string
+  kind:
+    | 'order'
+    | 'escrow'
+    | 'message'
+    | 'delivery'
+    | 'acceptance'
+    | 'settle'
+    | 'refund'
+    | 'cancel'
+    | 'landing'
+  /** 这一笔动了多少积分（托管正数、退回负数）。 */
+  credits?: number
+  text: string
+}
+
+export interface WorkshopServiceOrderDetail extends WorkshopServiceOrderRow {
+  messages: ServiceOrderMessage[]
+  ledger: WorkshopServiceLedgerEntry[]
+}
+
+/** 「看看」/「交给工坊办」/ 列表里点一项：出价目单，或者让 AI 在对话里问清需求。 */
+export interface WorkshopServiceStartInput {
+  service_id: string
+  matter_id?: string
+  position_id?: string
+  /** 从哪张「缺设置」卡来的（卡点入口）。 */
+  from_card?: string
+}
+
+export interface WorkshopServiceStartResult {
+  /** `card` 出了一张卡（价目单 / 下单卡）；`ask` AI 在对话里问需求。 */
+  next: 'card' | 'ask'
+  card_id?: string
+  matter_id?: string
+  message: string
+}
+
+/** 「帮我起草回复」：AI 帮读懂对方在问什么、起一句回复（**不替你答应加钱或改范围**）。 */
+export interface WorkshopServiceReplyDraft {
+  /** 对方在问什么（一句话）。 */
+  summary: string
+  /** 起草的回复（你改了再发）。 */
+  text: string
+  /** 对方提到加钱 / 改范围：草稿里没替你答应，要你自己定。 */
+  needs_you?: true
+}

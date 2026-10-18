@@ -29,6 +29,7 @@ import {
   FolderOpen,
   Globe,
   GraduationCap,
+  Handshake,
   MessageSquareQuote,
   MessagesSquare,
   Package,
@@ -59,8 +60,10 @@ import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
+import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
 import { GEO_ANSWER_ADDRESS_PREFIX } from '@/lib/geo-watch-api'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
+import { SERVICE_ORDER_ADDRESS_PREFIX } from '@/lib/workshop-services-api'
 
 /* ── 面板身体（`lazy()`） ─────────────────────────────────────────── */
 
@@ -137,6 +140,19 @@ const PlansCardBody = lazy(async () => {
 const ConnectionsCardBody = lazy(async () => {
   const m = await import('@/components/rail/cards/card-bodies')
   return { default: m.ConnectionsCard }
+})
+// WP390：工坊服务（订单面板、服务列表、右栏那张卡）
+const ServiceOrderBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/order-panel')
+  return { default: m.ServiceOrderPanel }
+})
+const WorkshopServicesBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/services-panel')
+  return { default: m.WorkshopServicesPanel }
+})
+const WorkshopServicesCardBody = lazy(async () => {
+  const m = await import('@/components/workshop-services/services-panel')
+  return { default: m.WorkshopServicesCard }
 })
 const SettingsCardBody = lazy(async () => {
   const m = await import('@/components/rail/cards/card-bodies')
@@ -234,6 +250,16 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     useStatus: useSettingsStatus,
   })
   registerRailCardBody('settings', SettingsCardBody)
+  // WP390（docs/105 §4.1 ③）：第七张卡「工坊服务」排在最下面——岗位页 = 这个岗位能用的服务（最多三项）+ 在做的单
+  registerRailCard({
+    id: 'workshop-services',
+    label: 'rail.card.workshop-services',
+    icon: Handshake,
+    order: DEFAULT_CARD_ORDER.length + 1,
+    panel: 'workshop-services',
+    useStatus: useWorkshopServicesStatus,
+  })
+  registerRailCardBody('workshop-services', WorkshopServicesCardBody)
 
   // ── 卡的完整列表（「显示更多」开的那一格；不进「⋮」） ─────────────────
   registerPanelType({
@@ -396,4 +422,26 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('geo-answer', GeoAnswerBody)
+  // WP390：一张工坊服务订单（`agentsws://service-order/<订单号>`）——进度、在等你的事、消息、钱
+  registerPanelType({
+    id: 'service-order',
+    label: 'rail.panel.service-order',
+    icon: Handshake,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${SERVICE_ORDER_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('service-order', ServiceOrderBody)
+  // WP390：账号菜单「工坊服务」那一页（我的订单 + 全部服务，按岗位分组）
+  registerPanelType({
+    id: 'workshop-services',
+    label: 'rail.panel.workshop-services',
+    icon: Handshake,
+    priority: 'builtin',
+    group: 'tools',
+    card: 'workshop-services',
+    hidden: true,
+  })
+  registerPanelBody('workshop-services', WorkshopServicesBody)
 }

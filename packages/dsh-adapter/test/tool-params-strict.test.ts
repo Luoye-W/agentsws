@@ -15,6 +15,7 @@ import {
   SITE_HEALTH_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
   THEME_TOOL_DEF_BY_NAME,
+  WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
 import { describe, expect, it } from 'vitest'
 import { buildToolDefinitions } from '../src/index.js'
@@ -33,6 +34,8 @@ const ALL = [
   ...SETUP_REQUEST_TOOL_DEF_BY_NAME.keys(),
   // WP385：读网站体检结论（网站运营 / 内容与搜索）
   ...SITE_HEALTH_TOOL_DEF_BY_NAME.keys(),
+  // WP390：工坊服务两个工具（所有职责都有）
+  ...WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.keys(),
   'get_order',
 ]
 
@@ -114,5 +117,23 @@ describe('dsh 参数表：每个工具都过 dsh 的编译', () => {
     expect(schema.required ?? []).toEqual([])
     expect(def?.description).toContain('只读')
     expect(def?.description).toContain('site.health')
+  })
+
+  it('WP390 find_service / draft_service_order：描述是写给模型的人话（不推销、只出卡不下单），对象按 name / value 填', () => {
+    const find = build().find((d) => d.name === 'find_service')
+    expect(find?.description).toContain('不要在正文里推销')
+    const findSchema = find?.parameters as unknown as { required: string[] } | undefined
+    expect(findSchema?.required).toEqual(['intent'])
+    const draft = build().find((d) => d.name === 'draft_service_order')
+    expect(draft?.description).toContain('只出卡不下单')
+    const schema = draft?.parameters as unknown as {
+      properties: {
+        lines: { items: { properties: { target: { items: { required: string[] } } } } }
+      }
+    }
+    expect(schema.properties.lines.items.properties.target.items.required).toEqual([
+      'name',
+      'value',
+    ])
   })
 })

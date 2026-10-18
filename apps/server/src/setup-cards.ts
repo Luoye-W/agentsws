@@ -30,6 +30,7 @@ import {
   isSecretLikeSetupKey,
   type MatterRunBlock,
   type RunRequest,
+  type ServiceOffer,
   type SetupField,
   type SetupRequestPayload,
   type SetupResumeTarget,
@@ -102,6 +103,11 @@ const RISK_BY_SERVICE: Readonly<Record<string, string>> = {
 export interface SetupCardsOptions {
   workspace_id: string
   clock: Clock
+  /**
+   * WP390（docs/105 §4.1 ②）：服务目录里声明了这个卡点的工坊服务（`connect:<服务>` / `setup:<设置目标>`）
+   * → 卡上多一个可选项「交给工坊办」。不给 / 查不到就没有这一格。
+   */
+  workshopOffer?(blocker: { key: string; name?: string }): Promise<ServiceOffer | undefined>
   /** 这个品牌的落盘目录（记「哪张卡上等着哪几件事」）；不给就全内存。 */
   dir?: string
   approvals(): ApprovalBus | undefined
@@ -390,12 +396,20 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       needs
         .map((n) => (n.service === undefined ? undefined : RISK_BY_SERVICE[n.service]))
         .find((r) => r !== undefined)
+    const first = needs[0]
+    const offer =
+      first === undefined
+        ? undefined
+        : await options
+            .workshopOffer?.({ key: `connect:${first.service ?? first.kind}`, name: first.name })
+            .catch(() => undefined)
     const payload: ConnectRequestPayload = {
       form: 'connect_request',
       why: input.why ?? `这件事要用到${namesOf(needs)}，连上我就接着做。`,
       needs,
       ...(risk === undefined ? {} : { risk }),
       ...(resume === undefined ? {} : { resume }),
+      ...(offer === undefined ? {} : { workshop_service: offer }),
     }
     const item = await bus.create({
       ...cardBase({
@@ -530,6 +544,11 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       steps = planned.steps
     }
     if (fields.length === 0) return undefined
+    const offer = change
+      ? undefined
+      : await options
+          .workshopOffer?.({ key: `setup:${target.id}`, name: target.name })
+          .catch(() => undefined)
     const payload: SetupRequestPayload = {
       form: 'setup_request',
       target: target.id,
@@ -538,6 +557,7 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
       mode: change ? 'change' : 'plan',
       ...(steps.length === 0 ? {} : { steps }),
       ...(resume === undefined ? {} : { resume }),
+      ...(offer === undefined ? {} : { workshop_service: offer }),
     }
     const item = await bus.create({
       ...cardBase({

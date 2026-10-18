@@ -10259,7 +10259,7 @@
       },
       "AllocationNoticeLevel": {
         "type": "number",
-        "enum": [80, 100],
+        "enum": [100, 80],
         "description": "用到上限的几成时提醒（各一次，本人与管理员都看得到）。"
       },
       "AllocationReport": {
@@ -13919,7 +13919,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["text", "file", "link", "receipt", "platform_object"]
+            "enum": ["file", "link", "text", "receipt", "platform_object"]
           },
           "label": {
             "type": "string"
@@ -14332,16 +14332,16 @@
             "enum": [
               "cancelled",
               "paid",
-              "completed",
-              "expired",
-              "delivered",
               "draft",
               "quote_requested",
               "quoted",
               "in_progress",
               "waiting_user",
+              "delivered",
               "disputed",
-              "refunded"
+              "completed",
+              "refunded",
+              "expired"
             ]
           },
           "provider_label": {
@@ -14728,12 +14728,12 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["text", "file", "link", "receipt", "platform_object"]
+              "enum": ["file", "link", "text", "receipt", "platform_object"]
             }
           },
           "landing": {
             "type": "string",
-            "enum": ["theme", "draft", "outbound_record", "resume_step", "knowledge_file"]
+            "enum": ["theme", "outbound_record", "draft", "resume_step", "knowledge_file"]
           },
           "positions": {
             "type": "array",

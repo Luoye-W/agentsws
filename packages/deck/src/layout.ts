@@ -124,6 +124,9 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   setup_request: 'policy',
   // WP321：GEO 关注设置——AI 给的策略（追几条、竞品、关注的 AI 与每月积分），通过 / 改 / 不要（「改东西」家族）
   geo_watch: 'change',
+  // WP390（docs/105 §5）：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 交换联系方式）——主体与主按钮在卡身里，
+  // 排版借「策略」那一种的是非题骨架（同连接卡 / 配置卡）
+  service_order: 'policy',
 }
 
 /**

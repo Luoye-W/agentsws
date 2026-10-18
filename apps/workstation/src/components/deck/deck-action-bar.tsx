@@ -43,12 +43,14 @@ export function quickActions(card: DeckCard): DeckAction[] {
   // WP324：连接卡 / 配置卡的主按钮（连接 / 保存）在卡身里——底下那排不再出一个点不对的「接着做」
   const form = (card.detail.payload as { form?: unknown } | undefined)?.form
   // WP329：Reddit「发出去」卡的「发送」也在卡身里（要带上卡上改过的字）
+  // WP390：工坊服务卡的主按钮（下单 / 提交 / 同意并支付 / 通过…）也在卡身里
   const bodyPrimary =
     form === 'connect_request' ||
     form === 'setup_request' ||
     form === 'reddit_write' ||
     // WP387：建 / 改 Google 提醒——「确认」要带上卡上的勾选，在卡身里
-    (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change'
+    (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
+    (typeof form === 'string' && form.startsWith('service_'))
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
     .filter((a) => !(bodyPrimary && a === 'approve'))

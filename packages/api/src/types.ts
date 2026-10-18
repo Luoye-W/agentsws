@@ -118,6 +118,7 @@ import type { StoragePort } from './routes/storage.js'
 import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
 import type { WorkArchivePort } from './routes/work-archive.js'
+import type { WorkshopServicesApiPort } from './routes/workshop-services.js'
 import type { WsOptions } from './routes/ws.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -1079,6 +1080,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/data-service*` 回 not_implemented。
    */
   dataService?: DataServiceApiPort
+  /**
+   * WP390（docs/105）：工坊服务（目录缓存、看看 / 交给工坊办、订单面板）。按品牌取。
+   * 没装配时 `/v1/workshop-services*` 回 not_implemented。下单 / 验收都走卡（`service_order`），不在这里。
+   */
+  workshopServices?: WorkshopServicesApiPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**

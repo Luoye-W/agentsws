@@ -862,6 +862,11 @@ export {
   type WorkRailView,
   workArchiveRoutes,
 } from './routes/work-archive.js'
+export {
+  type WorkshopServicesActor,
+  type WorkshopServicesApiPort,
+  workshopServicesRoutes,
+} from './routes/workshop-services.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
 export {
   classify,

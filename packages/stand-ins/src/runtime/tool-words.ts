@@ -88,6 +88,9 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   shop_create_discount: '折扣码卡',
   // WP385：读网站体检结论（只读）
   query_site_health: '网站体检结论',
+  // WP390：工坊服务
+  find_service: '工坊服务目录',
+  draft_service_order: '工坊服务的卡',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */

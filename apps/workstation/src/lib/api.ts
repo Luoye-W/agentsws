@@ -1921,7 +1921,7 @@ export interface PricingEntry {
   label_zh: string
   label_en: string
   /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
-  block?: 'data' | 'ai' | 'service'
+  block?: 'data' | 'ai' | 'service' | 'workshop_service'
   models?: PricingModelEntry[]
 }
 

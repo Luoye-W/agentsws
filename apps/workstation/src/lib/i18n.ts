@@ -36,6 +36,7 @@ import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
+import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
 import { SHELL_EN, SHELL_ZH } from './i18n-shell'
@@ -8551,6 +8552,7 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_ZH,
     // WP304：选主题卡、买高级主题卡
     ...THEMES_ZH,
+    ...SERVICES_ZH,
     ...SETUP_ZH,
     // WP386：信息监控（多条监控源、贴 RSS、Google 账号）
     ...PR_WATCH_ZH,
@@ -8603,6 +8605,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
     ...THEMES_EN,
+    ...SERVICES_EN,
     ...SETUP_EN,
     ...PR_WATCH_EN,
     ...ANSWER_EN,

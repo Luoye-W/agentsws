@@ -30,6 +30,7 @@ import type {
   PersonId,
   Position,
   PositionInstance,
+  PositionWorkItem,
   PositionWorkView,
   ReasoningEffort,
   RoleId,
@@ -140,6 +141,11 @@ export interface PositionsOptions {
   ): Promise<readonly WorkScheduleLike[]> | readonly WorkScheduleLike[]
   /** WP241：这个品牌的社媒帖子（「排期」那一类；按渠道 → 职责只留本岗位的）。 */
   socialPosts?(): readonly WorkPostLike[]
+  /**
+   * WP390（docs/105 §2）：岗位页「工作」里另外几行（工坊服务订单——别人替你做的那一件，和事项排在一起）。
+   * 不给就没有。
+   */
+  extraWork?(position_id: string, person_id: PersonId): PositionWorkItem[]
   /**
    * WP244：现在有运行在跑的事项（运行时的 `activeRuns`）。不给 = 不知道谁在跑——
    * 那时开着的事项照旧一律算「进行中」（老口径）。
@@ -1324,7 +1330,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     )
     const schedules = (await options.schedules?.(person_id)) ?? []
     const running = options.runningMatters?.()
-    return buildPositionWork({
+    const extra = options.extraWork?.(template.id, person_id) ?? []
+    const built = buildPositionWork({
       position_id: template.id,
       now: clock.now(),
       today: work.todayRange(),
@@ -1369,6 +1376,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
             .at(-1)?.text,
         ),
     })
+    // WP390：工坊服务订单和事项排在一起
+    return extra.length === 0 ? built : { ...built, items: [...built.items, ...extra] }
   }
 
   return {

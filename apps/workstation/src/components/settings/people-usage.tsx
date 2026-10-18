@@ -15,7 +15,8 @@ import { getCloudMemberUsage, listPeopleUsage } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 
-const BLOCKS = ['ai', 'data', 'service'] as const
+/** 价目表那几块（WP390 加第四块「工坊服务」，docs/105 §3.3）。 */
+const BLOCKS = ['ai', 'data', 'service', 'workshop_service'] as const
 
 const fmt = (n: number): string =>
   n >= 10_000 ? `${(n / 10_000).toFixed(1)} 万` : n.toLocaleString('zh-CN')
@@ -57,9 +58,10 @@ function MemberCredits({
       <td
         key={b}
         className="py-1 text-right tabular-nums text-muted-foreground"
-        title={t('usage.members.calls_of', { n: blocks[b].calls })}
+        title={t('usage.members.calls_of', { n: blocks[b]?.calls ?? 0 })}
       >
-        {credits(blocks[b].credits, locale)}
+        {/* 老云没有「工坊服务」那一块：当 0 */}
+        {credits(blocks[b]?.credits ?? 0, locale)}
       </td>
     ))
   return (

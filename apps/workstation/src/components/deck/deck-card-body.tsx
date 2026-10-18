@@ -27,6 +27,7 @@ import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-car
 import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
 import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
@@ -353,6 +354,8 @@ export function DeckCardBody({
         // WP324（决策 690）：连接卡 / 配置卡——就地连 / 就地填（主按钮在卡身里），补完原任务自动接着做
         if (payload.form === 'connect_request' || payload.form === 'setup_request')
           return <SetupDeckBody card={card} />
+        // WP390：工坊服务卡（价目单 / 需求单 / 下单 / 验收 / 联系方式）——主按钮在卡身里
+        if (isServiceCard(card)) return <ServiceCardBody card={card} />
         // WP304（决策 445）：买高级主题（「花钱」家族）——一个大数（积分）+ 一句这家店一次买断；不出双格、不出「以后都这样」
         if (payload.form === 'theme_purchase')
           return (

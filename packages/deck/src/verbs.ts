@@ -195,6 +195,11 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
     approve: 'verb.setup_request.approve',
     reject: 'verb.setup_request.reject',
   },
+  // WP390：工坊服务卡（主按钮在卡身里；底下那排只剩「先不要 / 稍后」）
+  service_order: {
+    approve: 'verb.service_order.approve',
+    reject: 'verb.service_order.reject',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',
@@ -264,6 +269,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   setup_request: 'setup_request',
   // WP321
   geo_watch: 'geo_watch',
+  // WP390
+  service_order: 'service_order',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

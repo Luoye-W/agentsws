@@ -52,10 +52,15 @@ const zh = {
   },
   blocks: {
     eyebrow: '钱花在哪',
-    title: '三块，花法各不一样。',
+    title: '四块，花法各不一样。',
     data: { h: '数据接口', p: '红人查询、社媒抓取、网页、转写', unit: '按次 · 按页 · 按分钟' },
     ai: { h: 'AI 使用', p: '对话、写稿、生图', unit: '按 token · 生图按张' },
     service: { h: '增值服务', p: '红人库云端同步、客服云端值守', unit: '按月' },
+    workshop_service: {
+      h: '工坊服务',
+      p: '建站、发稿这类人替你做成的事',
+      unit: '每项单独定价 · 验收后才结算',
+    },
   },
   table: {
     title: '价目表',
@@ -146,7 +151,7 @@ const en: PricingCopy = {
   },
   blocks: {
     eyebrow: 'Where credits go',
-    title: 'Three kinds of spend.',
+    title: 'Four kinds of spend.',
     data: {
       h: 'Data APIs',
       p: 'Creator lookups, social data, web pages, transcripts',
@@ -157,6 +162,11 @@ const en: PricingCopy = {
       h: 'Add-on services',
       p: 'Cloud sync for your creator list, cloud support standby',
       unit: 'Monthly',
+    },
+    workshop_service: {
+      h: 'Workshop services',
+      p: 'Site builds, press and other work people do for you',
+      unit: 'Priced per service · paid out on acceptance',
     },
   },
   table: {

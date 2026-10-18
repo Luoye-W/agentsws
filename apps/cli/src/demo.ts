@@ -1442,6 +1442,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    */
   const cloud = cloudStandIn({
     clock: world.clock,
+    // WP390：工坊服务的服务方在 demo 里是替身，自己往前走（报价 → 接单 → 要材料 → 交付），等你的那几步停着
+    services: {
+      autopilot: true,
+      // 截图脚本要走完一整单建站时多给一点演示积分（默认不给，余额与平时一样）
+      ...(Number(process.env.AGENTSWS_DEMO_SERVICE_CREDITS ?? '') > 0
+        ? { extra_credits: Number(process.env.AGENTSWS_DEMO_SERVICE_CREDITS) }
+        : {}),
+    },
     ...(options.cloudAutoLinkAfterMs === undefined
       ? {}
       : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),

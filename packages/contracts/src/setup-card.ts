@@ -14,6 +14,7 @@
  * 2. **同一缺项不重复出卡**：去重键只看「缺的是哪几样」，还有一张没处理就把新卡的事项挂到那一张上。
  * 3. **补完自动接着做**：照 WP304 选主题卡——按这件事原来那段话再跑一次（时间线记「接着做」，不伪造人话）。
  */
+import type { ServiceOffer } from './service-order.js'
 
 /** 连接卡上的一样「要连的」。 */
 export interface ConnectNeed {
@@ -53,6 +54,11 @@ export interface ConnectRequestPayload {
   risk?: string
   /** 连好之后接着做的第一件事（同一缺项还在等的别的事项由服务端记着）。 */
   resume?: SetupResumeTarget
+  /**
+   * WP390（docs/105 §4.1 ②）：服务目录里有声明了这个卡点的服务 → 卡上多一个可选项「交给工坊办」
+   * （办成后回到这一步接着做，决策 690）。没有就没有这一格。
+   */
+  workshop_service?: ServiceOffer
 }
 
 /** 配置卡上一格的样子（只收不是秘密的设置）。 */
@@ -136,6 +142,8 @@ export interface SetupRequestPayload {
   mode?: 'plan' | 'change'
   /** WP348：出卡前查了什么（几行；没查就没有）。 */
   steps?: SetupPlanStep[]
+  /** WP390：同连接卡那一格——「交给工坊办」。 */
+  workshop_service?: ServiceOffer
 }
 
 /** WP348：一个来源地址能不能点开（只认 http / https，别的一律不给链接）。 */

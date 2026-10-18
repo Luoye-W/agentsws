@@ -39,6 +39,7 @@ import {
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
   THEME_TOOL_DEF_BY_NAME,
+  WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -369,6 +370,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ??
     // WP387：浏览器建完 / 读完 Google 提醒后交代结果（定义在 stand-ins 的 `runtime/google-alerts.ts`）
     GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
+    // WP390：工坊服务（定义在 stand-ins 的 `runtime/workshop-service.ts`）
+    WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
@@ -534,6 +537,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       SITE_HEALTH_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP387：浏览器建完 / 读完 Google 提醒后交代结果
       GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP390：工坊服务（查目录只读本机缓存；出卡不下单）
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:
