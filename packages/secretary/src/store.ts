@@ -37,6 +37,8 @@ export interface SecretaryStore {
   listProfiles(workspace_id: WorkspaceId): ProfileRecord[]
 
   appendAsked(record: AskedRecord): void
+  /** WP417：本人放行 / 改了一条之后整条写回（同 id 覆盖）。 */
+  updateAsked?(record: AskedRecord): void
   /** 「谁问过我」——`person_id` 是**被问的人**，也就是这条记录的主人。 */
   listAsked(workspace_id: WorkspaceId, person_id: PersonId, filter?: AskedFilter): AskedRecord[]
 
@@ -78,6 +80,11 @@ export class MemorySecretaryStore implements SecretaryStore {
 
   appendAsked(record: AskedRecord): void {
     this.#asked.push(structuredClone(record))
+  }
+
+  updateAsked(record: AskedRecord): void {
+    const i = this.#asked.findIndex((r) => r.id === record.id)
+    if (i >= 0) this.#asked[i] = structuredClone(record)
   }
 
   listAsked(

@@ -104,6 +104,11 @@ export interface WorkPortOptions {
    */
   acceptHandoff?(actor: WorkActor, item: ApprovalItem): Promise<void>
   /**
+   * WP417（自查 F11 / F12）：替我答那几张卡（`meet` 约时间、`secretary_answer` 先给本人看）点了之后真生效
+   * ——以前「约时间」卡批了会议不建、状态不变。
+   */
+  acceptSecretary?(actor: WorkActor, item: ApprovalItem): Promise<void>
+  /**
    * WP342（决策 853）：这个模型 id（`provider_id/model`）现在能不能选（= 在「设置 → 模型」已接的里面）。
    * 不给 = 不判（单测里的老装配）。认不出的：开事项时不记、换模型时拒。
    */
@@ -678,8 +683,13 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      */
     async acceptClaim(actor, item) {
       const payload = item.payload as ClaimPayload | undefined
-      if ((payload as { form?: string } | undefined)?.form === 'support_handoff') {
+      const form = (payload as { form?: string } | undefined)?.form
+      if (form === 'support_handoff') {
         await options.acceptHandoff?.(actor, item)
+        return undefined
+      }
+      if (form === 'meet' || form === 'secretary_answer') {
+        await options.acceptSecretary?.(actor, item)
         return undefined
       }
       if (payload?.form !== 'claim') return undefined

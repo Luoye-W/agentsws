@@ -497,6 +497,7 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { type ImAskCandidate, imAskLabels, pickImAssignment } from './im-ask-route.js'
+import { pickNamedPerson } from './im-ask-target.js'
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { askPositionAgent } from './im-position-ask.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
@@ -11826,6 +11827,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           detach: true,
         })
       },
+      // WP417（自查 F11 / F12）：约时间卡批了真建会；「先给本人看」那张点了「就这样回 / 我自己回」才回给同事
+      acceptSecretary: async (actor, item) => {
+        const payload = item.payload as {
+          form?: string
+          meet_id?: string
+          asked_id?: string
+          answer?: string
+        }
+        const choice = item.decision?.selected_option_id
+        const { secretary } = await secretaryOf(ws)
+        if (payload.form === 'meet' && typeof payload.meet_id === 'string') {
+          await secretary
+            .decideMeet(
+              payload.meet_id,
+              actor.person_id as PersonId,
+              choice === 'decline' ? { action: 'decline' } : { action: 'accept' },
+            )
+            .catch(() => undefined)
+          return
+        }
+        if (payload.form === 'secretary_answer' && typeof payload.asked_id === 'string') {
+          const edited = (item.decision?.edited_payload as { answer?: unknown } | undefined)?.answer
+          await secretary.releaseAnswer(
+            actor.person_id as PersonId,
+            payload.asked_id,
+            choice === 'self'
+              ? `${(await identity.getPerson(actor.person_id as PersonId))?.name ?? '本人'}会直接回你。`
+              : typeof edited === 'string'
+                ? edited
+                : undefined,
+          )
+        }
+      },
       // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
       liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
       stopRuns: async (matter_id, reason) => {
@@ -14481,10 +14515,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // ——名册刷新了也照样抛。所以这里自己开一个 trace 作用域。
         const target = input.workspace_id ?? ws
         const port = (await secretaryOf(target)).port
+        /*
+         * WP417（自查 F7）：问的是**点名的那位同事**（「小王今天忙吗」），不是提问人自己。
+         * 认不出点名的就还是问自己（「我今天有什么会」）。
+         */
+        const people = await Promise.all(
+          (await identity.members(target))
+            .filter((m) => m.left_at === undefined)
+            .map(async (m) => ({
+              id: m.person_id,
+              name: (await identity.getPerson(m.person_id))?.name ?? '',
+            })),
+        )
+        const named = pickNamedPerson(input.question, people, input.viewer)
         const out = await traceScope.run(`trc_im_${Math.floor(random() * 1e12).toString(36)}`, () =>
           port.ask(
             { workspace_id: target, person_id: input.viewer, assignment_id: input.assignment_id },
-            input.viewer,
+            (named?.id ?? input.viewer) as PersonId,
             input.question,
           ),
         )
