@@ -154,13 +154,15 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
     <div className="flex flex-col gap-2" data-testid="caps-role" data-role={view.id}>
       <div className="flex flex-wrap items-baseline gap-1">
         <span className="text-sm font-medium">{view.name}</span>
-        <span className="font-mono text-[11px] text-muted-foreground">v{view.version}</span>
-        <span
-          className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
-          data-testid="caps-source"
-        >
-          {view.source === 'bundled' ? t('rail.caps.bundled') : t('rail.caps.custom')}
-        </span>
+        {/* WP421（真机 #12 / 自查 general）：版本号与「内置只读」不上屏；只有本公司的副本标一下 */}
+        {view.source === 'bundled' ? null : (
+          <span
+            className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            data-testid="caps-source"
+          >
+            {t('rail.caps.custom')}
+          </span>
+        )}
       </div>
       {view.editable ? null : (
         <div className="flex flex-col gap-1">

@@ -76,6 +76,17 @@ export const SUBSCRIPTION_UNAVAILABLE =
   '那个账号只属于你本人，放在共用的机器上就是共享账号，违反 OpenAI / Anthropic 的条款。' +
   '公司要用，请在设置里填这两家的 API key。'
 
+/**
+ * WP421（自查 general 2.5）：Claude 订阅登录能登上，但登上了也接不进模型网关与模型下拉（虚来源只做了 ChatGPT 订阅），
+ * 界面却写「已登录」——状态不真实。接上之前照实说暂不可用、不让登录、不显示已登录。
+ */
+export const CLAUDE_SUBSCRIPTION_NOT_WIRED =
+  'Claude 订阅暂时用不了：登录了也还接不进模型（目前只接上了 ChatGPT 订阅）。要用 Claude，请选「填 API key」。'
+
+/** 这一家订阅登录接没接上模型（没接上的照实说，不让登录）。 */
+export const subscriptionNotWired = (provider: string): string | undefined =>
+  provider === 'anthropic' ? CLAUDE_SUBSCRIPTION_NOT_WIRED : undefined
+
 export interface SubscriptionOptions {
   clock: Clock
   /** 本机加密秘密库（**不按品牌分**：订阅账号是这台机器上这个人的事）。 */
@@ -380,7 +391,7 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
     const all = facts()
     const fact = all.find((f) => f.id === provider)
     if (fact === undefined) throw new SubscriptionInvalid(`未知的订阅 provider：${provider}`)
-    const reason = unavailableReason()
+    const reason = unavailableReason() ?? subscriptionNotWired(provider)
     const base: SubscriptionView = {
       provider,
       label: fact.label,
@@ -440,6 +451,8 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
       async login(actor, input) {
         requireAvailable()
         const provider = await known(input.provider)
+        const notWired = subscriptionNotWired(provider)
+        if (notWired !== undefined) throw new SubscriptionForbidden(notWired)
         const state = await stateOf(actor.person_id)
         const running = state.attempts.get(provider)
         if (running !== undefined && !running.settled) {

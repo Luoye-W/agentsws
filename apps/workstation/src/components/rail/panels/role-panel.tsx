@@ -104,12 +104,15 @@ function PersonaBody({
     <div className="flex flex-col gap-2" data-testid="role-persona" data-subject={view.subject.id}>
       <div className="flex flex-wrap items-baseline gap-1">
         <span className="text-sm font-medium">{lang === 'zh' ? view.name.zh : view.name.en}</span>
-        <span
-          className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
-          data-testid="role-source"
-        >
-          {view.overridden ? t('rail.role.overridden') : t('rail.role.bundled')}
-        </span>
+        {/* WP421（自查 general）：「包里自带」不上屏；只有公司改写过的标一下 */}
+        {view.overridden ? (
+          <span
+            className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            data-testid="role-source"
+          >
+            {t('rail.role.overridden')}
+          </span>
+        ) : null}
         {untranslated ? (
           <span
             className="inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[11px] text-muted-foreground"

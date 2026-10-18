@@ -1367,6 +1367,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'social.discord',
     'pr.monitoring',
     'pr.reddit',
+    // WP421（自查 general）：新闻稿 / 外部论坛两条也挂上——只挂两条时「起草一篇新闻稿」被路由到信息监控
+    'pr.press',
+    'pr.forums',
     // WP75（57 §3）：投放挂一条 `ads.meta`，四条平台职责的面板骨架相同
     'ads.meta',
     // WP77（59 §3）：建站岗位四条（模板默认全勾；只挂一条时另三块面板看不见）
@@ -1375,7 +1378,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'site.shopify-email',
     'site.shopify-apps',
     // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
+    // WP421（自查 general UI #4）：页头写「5 条职责」、左栏只有 1 条——五条全挂（别的岗位下单时各有人接）
     'design.dtc',
+    'design.amazon',
+    'design.social',
+    'design.ads',
+    'design.exhibition',
     // WP171（docs/84）：B2B 岗位五条全挂（岗位页写「5 条职责」，左栏就得展开出 5 条）。
     // 四条的面板有演示数据（`apps/server/src/b2b.ts`）；第二批的平台运营那一条是空态——
     // 两种样子在 demo 里都看得见。

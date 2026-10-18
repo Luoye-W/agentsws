@@ -168,7 +168,8 @@ describe('角色面板：看（69 §4）', () => {
     expect(blocks[1]?.dataset.subject).toBe('web-ops')
     expect(within(panel).getByText('这条职责所属的岗位')).toBeDefined()
     // 包里自带的那一份：没有「还原」，也没有"公司改写过"那个标
-    expect(within(panel).getAllByText('包里自带').length).toBeGreaterThan(0)
+    // WP421：「包里自带」不上屏
+    expect(within(panel).queryAllByText('包里自带')).toHaveLength(0)
     expect(within(panel).queryByTestId('role-revert')).toBeNull()
   })
 

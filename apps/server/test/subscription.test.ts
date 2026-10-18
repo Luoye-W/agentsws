@@ -249,19 +249,14 @@ describe('登录 → 落库 → 选模型 → 登出', () => {
     await a.close()
   })
 
-  it('浏览器流问"把授权码贴回来"：问题露给界面，答完就消失', async () => {
+  it('WP421：Claude 订阅接上模型之前照实说暂不可用——不让登录、不显示已登录', async () => {
     const a = assembly()
-    await a.port.login(actor(), { provider: 'anthropic', method: 'browser' })
-    a.login.askNow()
-    await new Promise((r) => setTimeout(r, 0))
-
-    const asking = await a.port.get(actor(), 'anthropic')
-    expect(asking.question?.message).toBe('把授权码贴回来')
-    expect(asking.question?.kind).toBe('text')
-
-    await a.port.answer(actor(), 'anthropic', 'code-from-browser')
-    expect(a.login.answered).toEqual(['code-from-browser'])
-    expect((await a.port.get(actor(), 'anthropic')).question).toBeUndefined()
+    await expect(
+      a.port.login(actor(), { provider: 'anthropic', method: 'browser' }),
+    ).rejects.toThrow(/Claude 订阅暂时用不了/)
+    const row = await a.port.get(actor(), 'anthropic')
+    expect(row).toMatchObject({ available: false, signed_in: false })
+    expect(row.unavailable_reason).toContain('填 API key')
     await a.close()
   })
 
