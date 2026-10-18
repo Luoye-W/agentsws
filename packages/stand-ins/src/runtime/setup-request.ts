@@ -9,6 +9,12 @@
  * 纪律：参数里**没有一格收凭据**。口令 / 密钥只在卡上的本机原生表单里填；「为什么」「建议值」里像秘密的整条拒收。
  */
 import type { RunRequest, ToolDef } from '@agentsws/contracts'
+import {
+  AMAZON_COMPETITOR_ASK,
+  AMAZON_COMPETITOR_SETTING,
+  AMAZON_COMPETITOR_SITE,
+  AMAZON_COMPETITOR_WORDS,
+} from './amazon-competitor.js'
 
 export const REQUEST_SETUP_TOOL = 'request_setup'
 
@@ -124,6 +130,19 @@ export function setupRequestBranch(
   text: string,
 ): { tool: string; input: Record<string, unknown> } | undefined {
   if (!req.tools.allow.includes(REQUEST_SETUP_TOOL)) return undefined
+  // WP394：「帮我盯 Amazon 上的竞品」→ 亚马逊店铺运营「竞品动向」的方案卡（要在独立站那条之前认：话里也有「价格」）
+  if (
+    AMAZON_COMPETITOR_SITE.test(text) &&
+    AMAZON_COMPETITOR_ASK.test(text) &&
+    AMAZON_COMPETITOR_WORDS.test(text)
+  )
+    return {
+      tool: REQUEST_SETUP_TOOL,
+      input: {
+        setting: AMAZON_COMPETITOR_SETTING,
+        why: '盯哪几款、各对标你哪一款、什么算重要，我先在 Amazon 上查了一遍定了个方案。',
+      },
+    }
   if (CONNECT_ASK.test(text)) {
     const hit = CONNECT_WORDS.find(([re]) => re.test(text))
     if (hit !== undefined)

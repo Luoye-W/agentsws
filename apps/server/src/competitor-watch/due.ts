@@ -6,6 +6,7 @@
  * - **新加的源马上读一次当底子**（方案卡上点了「就这样」就先读，不等明早）；
  * - 关机期间错过的**只补一次**（开机后下一拍看「隔了几天」，到了就读一次，不连读好几轮）；
  * - 读失败了**隔一小时再试**，不连着撞；
+ * - WP394：Amazon 一批没读全（这一小时额度满了）也隔一小时接着读剩下的；
  * - 暂停的源、总开关关了，都不读。
  */
 import type { CompetitorWatchSettings, CompetitorWatchSource, Iso8601 } from '@agentsws/contracts'
@@ -21,11 +22,16 @@ export interface DueInput {
   now: Iso8601
   tz_offset_minutes: number
   settings: CompetitorWatchSettings
-  sources: readonly Pick<
+  sources: readonly (Pick<
     CompetitorWatchSource,
     'id' | 'status' | 'last_ok_at' | 'last_try_at' | 'paused'
-  >[]
+  > &
+    Partial<Pick<CompetitorWatchSource, 'kind' | 'last_complete'>>)[]
 }
+
+/** WP394：Amazon 这一批没读全、上一次是读成了的（没读全的那几个隔一小时接着读）。 */
+const amazonUnfinished = (src: DueInput['sources'][number]): boolean =>
+  src.kind === 'amazon_asin' && src.status === 'ok' && src.last_complete === false
 
 const dayOf = (ms: number, tz: number): number => Math.floor((ms + tz * 60_000) / DAY_MS)
 const hourOf = (ms: number, tz: number): number => new Date(ms + tz * 60_000).getUTCHours()
@@ -45,6 +51,8 @@ export function dueSources(input: DueInput): string[] {
       const ok = src.last_ok_at === undefined ? undefined : Date.parse(src.last_ok_at)
       // 还没读成过：马上读一次当底子（失败过的照「隔一小时再试」）
       if (ok === undefined) return true
+      // WP394：Amazon 这一批没读全（这一小时内置浏览器额度满了）：隔一小时接着读剩下的（ASIN 多的分几个小时读完）
+      if (amazonUnfinished(src)) return true
       if (!daily) return now - ok >= s.every_hours * HOUR_MS - SLACK_MS
       if (hourOf(now, tz) < s.day_start_hour) return false
       return dayOf(now, tz) - dayOf(ok, tz) >= Math.max(1, Math.round(s.every_hours / 24))
@@ -64,7 +72,11 @@ export function nextReadAt(input: DueInput): Iso8601 | undefined {
     const tried = src.last_try_at === undefined ? undefined : Date.parse(src.last_try_at)
     const retryAt = tried === undefined ? now : tried + RETRY_GAP_MS
     const ok = src.last_ok_at === undefined ? undefined : Date.parse(src.last_ok_at)
-    if (ok === undefined || (src.status === 'failed' && tried !== undefined && tried > ok))
+    if (
+      ok === undefined ||
+      amazonUnfinished(src) ||
+      (src.status === 'failed' && tried !== undefined && tried > ok)
+    )
       return Math.max(now, retryAt)
     if (!daily) return Math.max(now, ok + s.every_hours * HOUR_MS - SLACK_MS, retryAt)
     // 一天一次：上次读成那天 + N 天，当地 day_start_hour

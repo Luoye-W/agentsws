@@ -103,8 +103,11 @@ const webError = (code: string, message: string): Error =>
 // ── 节流（全进程一份）─────────────────────────────────────────────────────
 
 export interface SearchThrottle {
-  /** 排队跑一个「开一页」：等到轮到、隔够随机间隔才开；这一小时满了回 `undefined`（不开）。 */
-  run<T>(task: () => Promise<T>): Promise<T | undefined>
+  /**
+   * 排队跑一个「开一页」：等到轮到、隔够随机间隔才开；这一小时满了回 `undefined`（不开）。
+   * WP394：`steady` = 固定间隔（取下限），不加随机停顿——读 Amazon 用（docs/106 A9：不模仿人的节奏）。
+   */
+  run<T>(task: () => Promise<T>, opts?: { steady?: boolean }): Promise<T | undefined>
   /** 这一小时已经开了几页。 */
   usedThisHour(): number
   readonly maxPerHour: number
@@ -134,12 +137,13 @@ export function createSearchThrottle(o: {
       prune()
       return opened.length
     },
-    run(task) {
+    run(task, opts) {
       const next = queue.then(async () => {
         prune()
         if (opened.length >= maxPerHour) return undefined
         if (last !== undefined) {
-          const gap = minGap + Math.floor(o.random() * (maxGap - minGap))
+          const gap =
+            opts?.steady === true ? minGap : minGap + Math.floor(o.random() * (maxGap - minGap))
           const wait = last + gap - o.now()
           if (wait > 0) await o.sleep(wait)
         }

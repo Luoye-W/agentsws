@@ -130,7 +130,7 @@ handover:
   revoke_context_on_removal: true
 requires: []
 
-# 快捷问题（五条，界面少字）。分组写在每条上面的注释里，对应上面那七块；
+# 快捷问题（六条，界面少字；WP394 加了「竞品最近有什么动静」）。分组写在每条上面的注释里，对应上面那七块；
 # 利润（⑥）放在下面的示例任务里。
 quick_prompts:
   # ② Listing 与关键词
@@ -143,6 +143,11 @@ quick_prompts:
     label: { zh: "盯 Amazon 竞品", en: "Watch Amazon competitors" }
     prompt: "帮我盯 Amazon 上的竞品：先挑几款对标款，说说它们的价格、评分和排名"
     kind: start_task
+  # ② Listing 与关键词（竞品对标：最近的变化；WP394）
+  - id: competitor_moves
+    label: { zh: "竞品最近有什么动静", en: "Competitor moves" }
+    prompt: "竞品最近在 Amazon 上有什么动静？按变化表说：谁降价了、比我便宜多少、评分和排名怎么变，没读到的照实说"
+    kind: ask
   # ③ 库存、补货与入库
   - id: restock_check
     label: { zh: "该补货了吗", en: "Do I need to restock" }

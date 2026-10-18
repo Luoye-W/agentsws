@@ -244,6 +244,14 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
+// WP394（docs/104 一期 B）：读 Amazon 前台的那一块（自报 Agent、配送邮编、被拦就停）与云端兜底
+import {
+  type AmazonCloudPort,
+  type AmazonFrontReader,
+  type AmazonFrontState,
+  createAmazonFrontReader,
+  readAmazonCloud,
+} from './amazon-front/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -357,8 +365,12 @@ import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 // WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
 import {
+  type AmazonCompetitorAssembly,
   type CompetitorWatchAssembly,
   competitorWatchSourceOf,
+  createAmazonAsinAdapter,
+  createAmazonCompetitor,
+  createAmazonCompetitorTools,
   createCompetitorWatch,
   createCompetitorWatchDb,
 } from './competitor-watch/index.js'
@@ -1063,6 +1075,13 @@ export interface ServerOptions {
   competitorAdapters?: (
     workspace_id: WorkspaceId,
   ) => Partial<Record<CompetitorSourceKind, CompetitorIntakeAdapter>>
+  /**
+   * WP394（docs/104 C4）：Amazon 对标款云端兜底那一路的数据能力口（测试 / demo 塞替身；不给 = 关联了账号就走
+   * 工坊云端数据 `amazon.product`，没关联 = 没有这一路）。
+   */
+  amazonCloud?: (workspace_id: WorkspaceId) => AmazonCloudPort | undefined
+  /** WP394：读 Amazon 前台那一块的替身（测试 / demo；不给 = 用桌面壳的内置浏览器，没有桌面壳 = 没有）。 */
+  amazonFront?: (workspace_id: WorkspaceId) => AmazonFrontReader | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -3498,6 +3517,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP328：Reddit 巡查的版块 / 关键词 / 频率（缺了出配置卡）
     const rw = brand.redditWatch
     if (rw !== undefined) assembly.registerTarget(rw.setupTarget())
+    // WP394：亚马逊店铺运营「竞品动向」方案卡（盯哪些 ASIN、各对标谁、什么算重要、频率）
+    if (brand.amazonCompetitor !== undefined)
+      assembly.registerTarget(brand.amazonCompetitor.setupTarget())
     // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
@@ -5727,6 +5749,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               target: async (id) => (await setupCardsOf(ws))?.target(id),
               targetIds: async () => (await setupCardsOf(ws))?.targetIds() ?? [],
             }),
+            // WP394：亚马逊店铺运营「竞品动向」现在读一次（只给 amz.store；托管实例没有）
+            ...(hostedBoot !== undefined
+              ? {}
+              : {
+                  amazonCompetitorTools: createAmazonCompetitorTools({
+                    of: async (w) =>
+                      (await brandModules.forWorkspace(w).catch(() => undefined))?.amazonCompetitor,
+                  }),
+                }),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -7701,18 +7732,88 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP392（docs/104）：竞品监控——监控源从唯一工作清单（GEO 关注设置）同步，进料口读一次、和上一次快照比、入库。
      * 托管实例不装（一、二期在本机跑，docs/104 §3.6）。
      */
+    /*
+     * WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的那一块——桌面壳的内置浏览器（每个请求自报
+     * `Agent/AgentsWorkshop`、配送邮编、被拦就停）、排进和搜索同一条节流队（固定间隔、每小时额度共用）；
+     * 云端兜底走工坊云端数据 `amazon.product`（关联了账号才有）。托管实例不装。
+     */
+    const cwStore = competitorWatchDb.forWorkspace(ws)
+    const AMAZON_FRONT_KEY = 'amazon_front'
+    const amazonFront: AmazonFrontReader | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : (options.amazonFront?.(ws) ??
+          (webSearchChannel === undefined
+            ? undefined
+            : createAmazonFrontReader({
+                workspace_id: ws,
+                channel: () => webSearchChannel,
+                page: (task) => webSearchThrottle.run(task, { steady: true }),
+                nowMs: () => Date.parse(clock.now()),
+                state: () => cwStore.kv<AmazonFrontState>(AMAZON_FRONT_KEY) ?? {},
+                saveState: (next) => cwStore.setKv(AMAZON_FRONT_KEY, next),
+              })))
+    const amazonCloudPort = (): AmazonCloudPort | undefined =>
+      options.amazonCloud !== undefined
+        ? options.amazonCloud(ws)
+        : ownCloud.linked()
+          ? createDataService(ownCloud)
+          : undefined
+    let amazonCompetitor: AmazonCompetitorAssembly | undefined
+    const amazonAsinAdapter = createAmazonAsinAdapter({
+      reader: () => amazonFront,
+      cloud: () => {
+        const port = amazonCloudPort()
+        return port === undefined
+          ? undefined
+          : (input) =>
+              readAmazonCloud(port, input, {
+                sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+                nowMs: () => Date.now(),
+              })
+      },
+      store: () => cwStore,
+      onCredits: (source_id, credits) => amazonCompetitor?.noteCredits(source_id, credits),
+    })
     const competitorWatch: CompetitorWatchAssembly | undefined =
       hostedBoot !== undefined
         ? undefined
         : createCompetitorWatch({
             workspace_id: ws,
-            store: competitorWatchDb.forWorkspace(ws),
+            store: cwStore,
             now: () => clock.now(),
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             tzOffsetMinutes: () => workData.tz_offset_minutes,
             brandWatch: async () => (await seoService.geoHistory()).watch(),
-            adapters: () => options.competitorAdapters?.(ws) ?? {},
+            adapters: () => ({
+              amazon_asin: amazonAsinAdapter,
+              ...(options.competitorAdapters?.(ws) ?? {}),
+            }),
           })
+    if (competitorWatch !== undefined)
+      amazonCompetitor = createAmazonCompetitor({
+        workspace_id: ws,
+        store: cwStore,
+        now: () => clock.now(),
+        watch: () => competitorWatch,
+        brandWatch: async () => (await seoService.geoHistory()).watch(),
+        saveWatch: async (patch) => {
+          await seoService.watchAmazonApply(patch)
+        },
+        profile: () => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            name: brandNameOfWorkspace(ws),
+            ...(p?.category === undefined ? {} : { category: p.category }),
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.markets === undefined ? {} : { markets: p.markets }),
+            ...(p?.competitors === undefined
+              ? {}
+              : { competitors: p.competitors.map((c) => ({ name: c.name })) }),
+          }
+        },
+        reader: () => amazonFront,
+      })
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
@@ -7908,6 +8009,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       redditWrites,
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
+      ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
+      ...(amazonFront === undefined ? {} : { amazonFront }),
       redditLimits,
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,

@@ -3,6 +3,7 @@
  * WP355：名单里的模型来源（第一版只有 ChatGPT 订阅）先用它自带的搜索，不行再走上面那条链。
  */
 export {
+  type AmazonDeliveryResult,
   type OpenResult,
   SEARCH_BROWSER_TOKEN_ENV,
   SEARCH_BROWSER_URL_ENV,
