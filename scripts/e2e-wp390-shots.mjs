@@ -14,7 +14,7 @@
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist
  * npx tsc -b
- * node scripts/e2e-wp390-shots.mjs [--port 4399]
+ * node scripts/e2e-wp390-shots.mjs [--port 4399] [--out <截图目录>]
  * ```
  */
 import { spawn } from 'node:child_process'
@@ -25,9 +25,10 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SHOTS = join(ROOT, 'docs/assets/wp390')
 const args = process.argv.slice(2)
 const argOf = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
+// 审稿截图不进公开仓（WP383）：默认写到私有仓旁边那份 agentsws-internal 的 docs/assets/wp390，`--out` 可改
+const SHOTS = resolve(argOf('--out') ?? join(ROOT, '../../agentsws-internal/docs/assets/wp390'))
 const PORT = Number(argOf('--port') ?? '4399') || 4399
 const BASE = `http://127.0.0.1:${PORT}`
 const OWNER = 'wang@nordvolt.example'
