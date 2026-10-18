@@ -349,6 +349,8 @@ describe('WP416 起草默认值（决策 531）', () => {
     )
     expect(out.staged).toBe(true)
     expect(out.body).toContain('We make desk chargers.')
+    // 署名人是中文名（演示里的「王岚」这类）→ 英文信不署中文，用「品牌 team」，开头也顺
+    if (out.body.includes(' team')) expect(out.body).not.toMatch(/I'm The .* team from/)
     const change = (
       await server.txn.ledger.list({
         workspace_id: server.bootstrap.workspace.id,
