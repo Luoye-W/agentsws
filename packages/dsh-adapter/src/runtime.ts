@@ -26,7 +26,7 @@ import type {
   RuntimeAdapter,
   ToolDef,
 } from '@agentsws/contracts'
-import { cancelledEvent } from '@agentsws/contracts'
+import { cancelledEvent, MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
@@ -355,6 +355,14 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             })
           },
           onCompletion: (c) => {
+            // WP425：这一跳从自己的 AI 切到了工坊积分——运行记录里照实记一行（与 direct 同一个 step）
+            if (c.source_switch !== undefined) {
+              emit({
+                type: 'progress',
+                step: MODEL_SOURCE_SWITCHED_STEP,
+                note: c.source_switch.message,
+              })
+            }
             usage.input_tokens += c.usage.input_tokens
             usage.output_tokens += c.usage.output_tokens
             usage.cached_tokens += c.usage.cached_tokens

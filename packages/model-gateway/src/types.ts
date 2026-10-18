@@ -17,6 +17,7 @@ import type {
   ToolDef,
   TranscriptionAudioDigest,
 } from '@agentsws/contracts'
+import type { SourceFallbackPolicy } from './source-fallback.js'
 
 /**
  * 22 §2 工作区模型策略。`default` + 按 purpose 覆盖 + 降级备选 + 价格表 + 三级预算。
@@ -51,6 +52,11 @@ export interface ModelGatewayPolicy {
   by_purpose?: Partial<Record<ModelPurpose, ModelRef>>
   /** 同档备选：按 `provider/model` 键，或 `*` 兜底。provider 5xx / 超时时依次尝试。 */
   fallbacks?: Record<string, ModelRef[]>
+  /**
+   * WP425：AI 来源顺序的「备用」——自己的（订阅 / key）额度用完、连不上、key 失效时切到工坊积分；
+   * 一轮里切过一次就用到底，下一轮自动回主用。不给 = 没有备用（没登录工坊账号）。
+   */
+  source_fallback?: SourceFallbackPolicy
   prices: PriceTable
   budget?: BudgetPolicy
   estimate?: EstimatePolicy
@@ -61,6 +67,7 @@ export type ModelEventType =
   | 'model.usage'
   | 'model.provider_down'
   | 'model.budget_frozen'
+  | 'model.source_switched'
   | 'budget.exhausted'
 
 export interface ModelUsagePayload {

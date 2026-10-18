@@ -539,6 +539,7 @@ export type {
   DeepSeekQuotaView,
   DeepSeekWalletView,
   DiscoverModelsInput,
+  ModelAiSourceView,
   ModelDefaultsView,
   ModelImageUsing,
   ModelImageView,

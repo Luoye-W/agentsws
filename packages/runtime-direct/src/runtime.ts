@@ -15,7 +15,7 @@ import type {
   RunUsage,
   ToolDef,
 } from '@agentsws/contracts'
-import { cancelledEvent } from '@agentsws/contracts'
+import { cancelledEvent, MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import {
   canonicalJson,
   EXTERNAL_FENCE,
@@ -24,7 +24,7 @@ import {
   redactOutboundText,
   sha256,
 } from '@agentsws/core'
-import { deepseekQuotaKindOf } from '@agentsws/model-gateway'
+import { deepseekQuotaKindOf, sourceFallbackOffOf } from '@agentsws/model-gateway'
 import type {
   CreateDraftFn,
   CreatePolicyQuestionFn,
@@ -604,12 +604,22 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             // WP362：ChatGPT 订阅被限流（`rate_limited`）那句也是给人看的
             error.code === 'unauthenticated' ||
               error.code === 'rate_limited' ||
-              deepseekQuotaKindOf(err) !== undefined
+              deepseekQuotaKindOf(err) !== undefined ||
+              // WP425：开关关着、自己的用不了——那一句也是给人看的
+              sourceFallbackOffOf(err) !== undefined
               ? error.message
               : `模型调用失败：${error.code}`,
           )
         }
 
+        // WP425：这一跳从自己的 AI 切到了工坊积分——运行记录里照实记一行（三个运行时同一个 step）
+        if (completion.source_switch !== undefined) {
+          sink({
+            type: 'progress',
+            step: MODEL_SOURCE_SWITCHED_STEP,
+            note: completion.source_switch.message,
+          })
+        }
         usage.input_tokens += completion.usage.input_tokens
         usage.output_tokens += completion.usage.output_tokens
         usage.cached_tokens += completion.usage.cached_tokens

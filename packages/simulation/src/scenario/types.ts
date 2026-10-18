@@ -1216,6 +1216,8 @@ export type ScenarioEvent =
   | { at: string; type: 'clock.advance'; advance: Record<string, never> }
   | { at: string; type: 'inject.fault'; fault: ScenarioFault }
   | { at: string; type: 'model.outage'; outage: ScenarioOutage }
+  /** WP425：自己的 AI 出一次错（额度用完 / key 失效 / 连不上），看切不切到工坊积分、下一轮回不回主用。 */
+  | { at: string; type: 'model.own_fault'; own_fault: ScenarioOwnFault }
   | { at: string; type: 'inject.budget'; budget: ScenarioBudget }
   /** 25：装上「一天的例行公事」（早上计划卡 / 晚上复盘卡 / 复盘后的接力）。 */
   | { at: string; type: 'routine.start'; routine: ScenarioRoutine }
@@ -1521,6 +1523,16 @@ export interface ScenarioOutage {
   duration?: string
 }
 
+/**
+ * WP425：自己的 AI（主用）接下来 `times` 次调用回 `code`（429 额度用完 / 401 key 失效 / 503 连不上）。
+ * `backup` 是开关「自己的用不了时用工坊积分接着做」：`on`（缺省）= 切到工坊积分接着做；`off` = 照实停下。
+ */
+export interface ScenarioOwnFault {
+  code: 429 | 401 | 403 | 503
+  times?: number
+  backup?: 'on' | 'off'
+}
+
 /** 25：例行公事的两个钟点（本地时区）。 */
 export interface ScenarioRoutine {
   plan_hour?: number
@@ -1623,6 +1635,10 @@ export interface ScenarioExpected {
   metrics?: Record<string, NumericAssertion>
   /** 26 扩展：本次模拟里 `run.failed` 的错误码集合（冻结 / 熔断场景）。 */
   run_failed_codes?: string[]
+  /** WP425：运行记录里「这一轮用工坊积分」那一行出现几次（`progress.step = model_source_switched`）。 */
+  model_source_switches?: NumericAssertion
+  /** WP425：用量里出现过的模型来源（provider id），「切过去、下一轮又回来」靠它钉住。 */
+  model_providers_used?: string[]
   /** 26 扩展：收到通知的人（owner 熔断通知）。 */
   notifications_to?: string[]
   /** 26 扩展：被门禁挡下的规则（`authorization_check` 等），毒样本场景断言用。 */

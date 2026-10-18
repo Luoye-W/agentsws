@@ -83,6 +83,11 @@ export type KnownEventType =
   | 'model.provider_down'
   | 'model.budget_frozen'
   /**
+   * WP425：这一轮从自己的 AI 切到了工坊积分（额度用完 / 连不上 / key 失效）。payload 只有
+   * 从哪个模型、到哪个模型、原因码与给人看的那一句——没有 key、没有请求正文。
+   */
+  | 'model.source_switched'
+  /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */

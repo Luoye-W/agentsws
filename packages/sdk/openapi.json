@@ -23499,6 +23499,9 @@
                       "maxLength": 256
                     }
                   },
+                  "fallback_to_cloud": {
+                    "type": "boolean"
+                  },
                   "budget": {
                     "type": "object",
                     "properties": {
