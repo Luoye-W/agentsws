@@ -260,6 +260,7 @@ import {
   createAmazonKeywordBank,
   createAmazonKeywordToolExecutor,
   createBrowserAutocompleteReader,
+  listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -7668,12 +7669,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ),
               }
             },
-            ...(options.amazonKeywordListings === undefined
-              ? {}
-              : {
-                  competitorListings: () =>
-                    options.amazonKeywordListings?.(ws) ?? Promise.resolve([]),
-                }),
+            // WP394：竞品 / 自家对标款的标题和五点从竞品监控的快照里拿（`amazon_asin` 进料口读商品页时填的）；
+            // 测试 / demo 给了替身就用替身
+            competitorListings: async () => {
+              if (options.amazonKeywordListings !== undefined)
+                return options.amazonKeywordListings(ws)
+              const db = competitorWatchDb.forWorkspace(ws)
+              const w = (await seoService.geoHistory()).watch()
+              return listingTextsFromSnapshots({
+                sources: db.sources(),
+                snapshot: (id) => db.snapshot(id),
+                names: new Map((w?.competitors ?? []).map((c) => [c.id, c.name])),
+              })
+            },
             emit: (type, payload) =>
               appendEvent({
                 schema_version: 1,
