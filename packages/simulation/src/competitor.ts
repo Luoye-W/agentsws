@@ -11,12 +11,14 @@ import type {
   CompetitorChange,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { diffCatalog } from '@agentsws/social-core'
-import type { ScenarioCompetitorRead } from './scenario/types.js'
+import { competitorBriefSection, diffCatalog, ownRefFromPairs } from '@agentsws/social-core'
+import type { ScenarioCompetitorPlan, ScenarioCompetitorRead } from './scenario/types.js'
 import type { World } from './world.js'
 
 export interface CompetitorWatchLoop {
   read(input: ScenarioCompetitorRead): CompetitorChange[]
+  /** WP393：店铺管理「竞品动向」配好了（什么算要紧 + 自家几款 + 对标款）。 */
+  plan(input: ScenarioCompetitorPlan): void
 }
 
 const slug = (s: string): string =>
@@ -28,7 +30,16 @@ const slug = (s: string): string =>
 
 export function installCompetitorWatch(world: World): CompetitorWatchLoop {
   const snapshots = new Map<string, CatalogSnapshot>()
+  let plan: ScenarioCompetitorPlan | undefined
   return {
+    plan(input) {
+      plan = input
+      world.appendEvent('simulation.competitor_plan', {
+        rules: input.rules,
+        own: input.own.length,
+        pairs: input.pairs.length,
+      })
+    },
     read(input) {
       const now = world.clock.now()
       const competitor_id = `c_${slug(input.competitor)}`
@@ -41,6 +52,16 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
           status: 'failed',
           message: input.error,
         })
+        const brief = competitorBriefSection({
+          changes: [],
+          rules: plan?.rules,
+          failed: [input.competitor],
+        })
+        if (brief !== undefined)
+          world.appendEvent('simulation.competitor_brief', {
+            title: brief.title,
+            lines: [...brief.lines, ...brief.failed],
+          })
         return []
       }
       const rows: CatalogSnapshotRow[] = input.rows.map((r) => ({
@@ -58,6 +79,19 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
         ...(r.created_at === undefined ? {} : { product_created_at: r.created_at }),
         read_at: now,
       }))
+      // WP393（C8）：配好了就按对标款和自家价比（和服务进程同一份比价口）
+      const ownRef =
+        plan === undefined
+          ? undefined
+          : ownRefFromPairs(
+              plan.pairs.map((p) => ({
+                competitor_id: `c_${slug(p.competitor)}`,
+                product_key: p.product,
+                own_key: p.own,
+                by: 'user' as const,
+              })),
+              plan.own.map((o) => ({ ...o, currency: 'USD' })),
+            )
       const out = diffCatalog({
         workspace_id: world.workspace_id as WorkspaceId,
         source: { id: source_id, kind, competitor_id },
@@ -65,6 +99,7 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
         previous: snapshots.get(source_id),
         read: { rows, complete: input.complete ?? true },
         now,
+        ...(ownRef === undefined ? {} : { ownRef }),
       })
       snapshots.set(source_id, out.snapshot)
       world.appendEvent('simulation.competitor_read', {
@@ -86,6 +121,10 @@ export function installCompetitorWatch(world: World): CompetitorWatchLoop {
           ...(c.pct === undefined ? {} : { pct: c.pct }),
           ...(c.variants === undefined ? {} : { variants: c.variants }),
         })
+      // WP393：简报那一段——配好了、有要紧的（或这家没读到）才出
+      const brief = competitorBriefSection({ changes: out.changes, rules: plan?.rules })
+      if (brief !== undefined)
+        world.appendEvent('simulation.competitor_brief', { title: brief.title, lines: brief.lines })
       return out.changes
     },
   }

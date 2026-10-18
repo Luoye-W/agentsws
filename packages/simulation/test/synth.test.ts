@@ -84,9 +84,11 @@ describe('合成公司生成器（26 §2）', () => {
     // WP291 再加一条（岗位入口三分：当场问答出表格 / 会话 / 任务）→ 68
     // WP343 再加一条（「我的助理」派活 → 岗位出审批，助理零写）→ 69
     // WP350 再加一条（会议记录分派：一份资料拆给几个岗位）→ 70
-    // WP386 再加两条（信息监控：拉到了 / feed 404 照实说）→ 72
-    // WP387 再加一条（让工坊替你建 Google 提醒：一张卡一次同意）→ 73
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(73)
+    // WP380 再加一条（GEO 第二层：比较胜率、描述准确度、对外说法、复查）→ 71
+    // WP386 再加两条（信息监控拉到了 / feed 404 照实说）→ 73
+    // WP392 再加一条（竞品监控：第一天只建底子，第二天比出一条降价）→ 74
+    // WP393 再加一条（店铺管理「竞品动向」：配好 → 第二天降价并说比你便宜多少）→ 75
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(75)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

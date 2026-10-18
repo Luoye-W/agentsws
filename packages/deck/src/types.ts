@@ -1298,6 +1298,15 @@ export interface DesignDeckData {
   }
 }
 
+/** WP393：日报里「竞品动向」那一段（有才出）。 */
+export interface CompetitorDeckData {
+  title: string
+  /** 一条要紧的变化一句（带竞品名、和自家比的差价）。 */
+  lines: string[]
+  /** 没读到的那几家（「Aventon 这次没读到」）。 */
+  failed: string[]
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -1365,6 +1374,11 @@ export interface QueryContext {
   b2b?: B2bDeckData
   /** WP158：Search Console 与 GA4 的真读数（不给 = 那几块照旧空）。 */
   search?: SearchDeckData
+  /**
+   * WP393（docs/104 一期 A）：店铺管理「竞品动向」——简报那一段（宿主算好递进来，数字不经模型手）。
+   * 不给 = 没配竞品监控、或者这一天没有要紧的变化也没有哪家没读到——日报里就**不出**这一段（docs/96 P3）。
+   */
+  competitor?: CompetitorDeckData
   /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *

@@ -1289,6 +1289,11 @@ async function execute(
         competitorLoop().read(event.competitor_read)
         return
       }
+      // WP393：店铺管理「竞品动向」配好了
+      case 'competitor.plan': {
+        competitorLoop().plan(event.competitor_plan)
+        return
+      }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
       case 'shop.price_change': {
         const out = await world.shop.priceChange(event.price_change)

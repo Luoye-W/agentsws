@@ -33,6 +33,8 @@ export * from './channels/index.js'
 // WP392：竞品监控的快照对比引擎、变化表查询与一句人话
 export * from './competitor/diff.js'
 export * from './competitor/query.js'
+// WP393：店铺管理「竞品动向」——哪条算重要、简报那一段、对标款
+export * from './competitor/store-plan.js'
 export * from './moderation.js'
 export * from './own-sub-queue.js'
 export * from './platform.js'

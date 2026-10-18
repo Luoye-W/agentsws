@@ -47,7 +47,8 @@ export function cleanUserAgent(ua: string): string {
   return out.join(' ')
 }
 
-export type OpenKind = 'google' | 'bing' | 'page'
+/** WP393：`data` = 读数据地址的原文（竞品店公开的商品数据，直接请求被挡时用）。 */
+export type OpenKind = 'google' | 'bing' | 'page' | 'data'
 
 export interface OpenRequest {
   workspace_id: string
@@ -95,7 +96,9 @@ export interface SearchBrowserDriver {
   status(workspace_id: string): SearchBrowserStatus
 }
 
-const KINDS: readonly OpenKind[] = ['google', 'bing', 'page']
+const KINDS: readonly OpenKind[] = ['google', 'bing', 'page', 'data']
+/** WP393：数据原文一页最多多少字（Shopify 一页 250 件商品的 JSON 有几 MB）。 */
+export const DATA_MAX_CHARS = 8_000_000
 
 const isWorkspace = (v: unknown): v is string =>
   typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,120}$/.test(v)
@@ -122,14 +125,17 @@ export function validateOpen(body: unknown): OpenRequest | string {
   const b = (body ?? {}) as Record<string, unknown>
   if (!isWorkspace(b.workspace_id)) return 'workspace_id 不对'
   if (!isWebUrl(b.url)) return '只开 http / https 网址'
-  if (!KINDS.includes(b.kind as OpenKind)) return 'kind 只认 google / bing / page'
+  if (!KINDS.includes(b.kind as OpenKind)) return 'kind 只认 google / bing / page / data'
   return {
     workspace_id: b.workspace_id,
     url: b.url,
     kind: b.kind as OpenKind,
     timeout_ms: clampInt(b.timeout_ms, 1_000, 60_000, 15_000),
     settle_ms: clampInt(b.settle_ms, 0, 10_000, 1_200),
-    max_chars: clampInt(b.max_chars, 1_000, 200_000, 60_000),
+    max_chars:
+      b.kind === 'data'
+        ? clampInt(b.max_chars, 1_000, DATA_MAX_CHARS, DATA_MAX_CHARS)
+        : clampInt(b.max_chars, 1_000, 200_000, 60_000),
   }
 }
 

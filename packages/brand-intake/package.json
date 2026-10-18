@@ -18,6 +18,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@agentsws/contracts": "workspace:*"
+    "@agentsws/contracts": "workspace:*",
+    "feedsmith": "3.0.1"
   }
 }

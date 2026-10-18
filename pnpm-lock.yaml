@@ -737,6 +737,9 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
+      feedsmith:
+        specifier: 3.0.1
+        version: 3.0.1
 
   packages/browser-action:
     devDependencies:

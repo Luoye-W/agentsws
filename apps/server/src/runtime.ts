@@ -110,6 +110,8 @@ import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  COMPETITOR_STORE_ROLES,
+  COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
   GOOGLE_ALERTS_TOOL_NAMES,
@@ -220,6 +222,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SITE_HEALTH_TOOL_NAMES,
     // WP387：交代建 / 读 Google 提醒的结果——只写本机信息监控库（先拉一次 feed 是读）
     ...GOOGLE_ALERTS_TOOL_NAMES,
+    // WP393：店铺管理「竞品动向」——探平台 / 现在读一次只读外部公开页面；写的只是本机竞品清单
+    ...COMPETITOR_STORE_TOOL_NAMES,
     // WP386：信息监控查提及——只读本机提及库
     ...PR_MONITOR_TOOL_NAMES,
     // WP390：工坊服务——查目录只读本机缓存；出卡不下单（下单永远人点）
@@ -543,6 +547,11 @@ export interface RuntimeOptions {
       found?: string
     }): Promise<ServiceOffer | undefined>
   }
+  /**
+   * WP393（docs/104 一期 A）：店铺管理「竞品动向」那两个工具（探平台 / 现在读一次；`competitor-watch/store-tools.ts`）。
+   * 只给 `dtc.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  competitorStoreTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1307,6 +1316,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
     const googleAlerts = options.googleAlertsTool
+    const competitorStore = options.competitorStoreTools
     const prMonitor = options.prMonitorTools
     const workshopTools = options.workshopServices?.execute
     /*
@@ -1343,7 +1353,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       siteHealthTools === undefined &&
       prMonitor === undefined &&
       googleAlerts === undefined &&
-      workshopTools === undefined
+      workshopTools === undefined &&
+      competitorStore === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1417,6 +1428,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (workshopTools !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bareOf(call.name))) {
         return workshopTools(call)
       }
+      // WP393：店铺管理「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        competitorStore !== undefined &&
+        COMPETITOR_STORE_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return competitorStore(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1466,6 +1484,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
       return true
     if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
+      return true
+    if (options.competitorStoreTools !== undefined && COMPETITOR_STORE_TOOL_NAMES.includes(bare))
       return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
@@ -1997,6 +2017,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP390：工坊服务（所有职责）
         ...(options.workshopServices === undefined ? [] : WORKSHOP_SERVICE_TOOL_NAMES),
+        // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给店铺管理）
+        ...(options.competitorStoreTools !== undefined &&
+        COMPETITOR_STORE_ROLES.includes(config.role_id)
+          ? COMPETITOR_STORE_TOOL_NAMES
+          : []),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))

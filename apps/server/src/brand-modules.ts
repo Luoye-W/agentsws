@@ -43,7 +43,7 @@ import type { ChannelsAssembly } from './channels.js'
 import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
-import type { CompetitorWatchAssembly } from './competitor-watch/index.js'
+import type { CompetitorStoreAssembly, CompetitorWatchAssembly } from './competitor-watch/index.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { EconomicsService } from './economics.js'
@@ -314,6 +314,8 @@ export interface BrandModuleSet {
   redditWatch?: RedditWatchAssembly
   /** WP392（docs/104）：竞品监控（托管实例没有）。 */
   competitorWatch?: CompetitorWatchAssembly
+  /** WP393（docs/104 一期 A）：店铺管理「竞品动向」（方案卡、探平台、自家比价、简报那一段；跟着竞品监控走）。 */
+  competitorStore?: CompetitorStoreAssembly
   /** WP338（决策 783）：Reddit 每天 / 每周上限——用户自己设，默认不限（配置卡 `reddit.limits`）。 */
   redditLimits?: RedditLimits
   /**

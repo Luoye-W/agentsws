@@ -19,7 +19,7 @@ import {
   type SearchBrowserStatus,
   searchPartitionOf,
 } from './search-browser.js'
-import { extractReadable, extractSerp, pageScript } from './search-extract.js'
+import { extractData, extractReadable, extractSerp, pageScript } from './search-extract.js'
 
 /** 交给人的那一页（第三栏亮出来的）。 */
 export interface SearchHandover {
@@ -164,14 +164,16 @@ export function createElectronSearchBrowser(deps: {
     const script =
       req.kind === 'page'
         ? pageScript(extractReadable, { maxChars: req.max_chars })
-        : pageScript(extractSerp, { engine: req.kind, limit: 10 })
+        : req.kind === 'data'
+          ? pageScript(extractData, { maxChars: req.max_chars })
+          : pageScript(extractSerp, { engine: req.kind, limit: 10 })
     try {
       const data = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: script }])
       return {
         ok: true,
         status: got.status,
         final_url: wc.getURL(),
-        ...(req.kind === 'page' ? { page: data } : { serp: data }),
+        ...(req.kind === 'page' || req.kind === 'data' ? { page: data } : { serp: data }),
       }
     } catch (err) {
       return { ok: false, reason: 'failed', message: `读不出这一页：${String(err)}` }

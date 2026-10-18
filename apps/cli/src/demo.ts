@@ -68,7 +68,7 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
-import { DEMO_COMPETITORS, demoShopAdapter } from './demo-competitors.js'
+import { DEMO_COMPETITORS, DEMO_OWN_PRODUCTS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
@@ -1514,6 +1514,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     random: world.random,
     mount,
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
+    // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）
+    competitorOwnShop: async () => ({ connected: true, products: DEMO_OWN_PRODUCTS }),
+    competitorProbe: async (url, now) => ({
+      url,
+      platform: 'other',
+      route: 'unsupported',
+      reason: '这家网站暂时读不了商品数据',
+      checked_at: now,
+    }),
     b2bStandIns,
     staticDir,
     // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，

@@ -40,7 +40,7 @@ describe('规则', () => {
       '只开 http / https 网址',
     )
     expect(validateOpen({ workspace_id: 'ws_1', url: 'https://a.com', kind: 'click' })).toBe(
-      'kind 只认 google / bing / page',
+      'kind 只认 google / bing / page / data',
     )
     expect(validateOpen(null)).toBe('workspace_id 不对')
     expect(
@@ -53,6 +53,22 @@ describe('规则', () => {
       settle_ms: 1_200,
       max_chars: 60_000,
     })
+  })
+
+  it('WP393：data（读数据地址原文）允许大一些的字数上限，别的种类仍是 20 万', () => {
+    const d = validateOpen({
+      workspace_id: 'ws_1',
+      url: 'https://shop.example/products.json',
+      kind: 'data',
+    })
+    expect(d).toMatchObject({ kind: 'data', max_chars: 8_000_000 })
+    const p = validateOpen({
+      workspace_id: 'ws_1',
+      url: 'https://a.com',
+      kind: 'page',
+      max_chars: 9e9,
+    })
+    expect(p).toMatchObject({ max_chars: 200_000 })
   })
 
   it('reveal 请求只认这几种形状', () => {

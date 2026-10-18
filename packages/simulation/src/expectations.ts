@@ -607,6 +607,23 @@ export function checkExpectations(
         (firstReads.length === 0 ? '；没有一次「只建底子」的首读' : ''),
     )
   }
+  // WP393：简报里「竞品动向」那一段（有要紧的才出；空列表 = 不该出）
+  if (expected.competitor_brief !== undefined) {
+    const lines = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_brief')
+      .flatMap((e) => {
+        const l = payloadOf(e).lines
+        return Array.isArray(l) ? l.map(String) : []
+      })
+    const want = expected.competitor_brief
+    const text = lines.join('\n')
+    const ok = want.length === 0 ? lines.length === 0 : want.every((w) => text.includes(w))
+    add(
+      'competitor_brief',
+      ok,
+      `简报「竞品动向」：${lines.length === 0 ? '没出' : lines.join('；')}；期望 ${want.length === 0 ? '不出' : `含 ${want.join(' / ')}`}`,
+    )
+  }
   // WP343：「我的助理」按顺序交给了哪几个岗位；助理那一步自己不 stage、不 apply
   if (expected.assistant_dispatched_to !== undefined) {
     const got = evidence.events

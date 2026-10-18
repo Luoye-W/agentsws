@@ -43,6 +43,13 @@ export interface CompetitorWatchDeps {
   adapters(): Partial<Record<CompetitorSourceKind, CompetitorIntakeAdapter>>
   /** 一轮跑完（简报 / 推送二期接这里）。 */
   onRun?(run: CompetitorWatchRun, changes: readonly CompetitorChange[]): void
+  /**
+   * WP393（docs/104 C8）：独立站那一路的比价口（竞品款对标自家哪一款 + 自家店现价）；和 Amazon 的 `vs_own` 合起来用
+   * （同一行两边都认得时 Amazon 那一口优先）。不给 = 只有 Amazon 那一口。
+   */
+  extraOwnRef?(): Promise<((row: CatalogSnapshotRow) => OwnRef | undefined) | undefined>
+  /** WP393：一轮读完、`onRun` 之前（第一次读完配对标款）。出错不拦这一轮。 */
+  afterRun?(run: CompetitorWatchRun): Promise<void>
 }
 
 export interface CompetitorWatchAssembly {
@@ -259,7 +266,15 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
     for (const src of list) {
       if (!ownDone && src.competitor_id !== OWN_BRAND_COMPETITOR_ID) {
         ownDone = true
-        ownRef = await ownRefOf()
+        const amazon = await ownRefOf()
+        // WP393：独立站对标款那一口（读不到自家店就没有，不拦这一轮）
+        const shop = await deps.extraOwnRef?.().catch(() => undefined)
+        ownRef =
+          amazon === undefined
+            ? shop
+            : shop === undefined
+              ? amazon
+              : (row) => amazon(row) ?? shop(row)
       }
       const r = await readOne(src, adapters[src.kind], ownRef)
       run.parts.push(r.part)
@@ -269,6 +284,7 @@ export function createCompetitorWatch(deps: CompetitorWatchDeps): CompetitorWatc
     run.changes = found.length
     run.finished_at = deps.now()
     store.putRun(run)
+    await deps.afterRun?.(run).catch(() => undefined)
     deps.onRun?.(run, found)
     return run
   }

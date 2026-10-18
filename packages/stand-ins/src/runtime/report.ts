@@ -15,6 +15,7 @@
  * | `list_competitor_changes` | WP392：查竞品变化表（上新 / 下架 / 改价 / 打折 / 断货 / 评分 / 评论数 / 排名）：按竞品、种类、时间窗、来源筛 |
  */
 import type { ToolDef } from '@agentsws/contracts'
+import { COMPETITOR_STORE_TOOL_DEFS } from './competitor-store.js'
 
 export const QUERY_WATCH_ITEMS_TOOL = 'query_watch_items'
 export const RUN_WATCH_NOW_TOOL = 'run_watch_now'
@@ -217,7 +218,12 @@ const LIST_COMPETITOR_CHANGES_DEF: ToolDef = {
   },
 }
 
-export const REPORT_TOOL_DEFS: readonly ToolDef[] = [...BASE_TOOL_DEFS, LIST_COMPETITOR_CHANGES_DEF]
+/** WP393：店铺管理「竞品动向」那两个（名字不在 `REPORT_TOOL_NAMES` 里：执行器与职责门禁另走一份）的定义也挂在这张表上，三个运行时都查得到。 */
+export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
+  ...BASE_TOOL_DEFS,
+  LIST_COMPETITOR_CHANGES_DEF,
+  ...COMPETITOR_STORE_TOOL_DEFS,
+]
 
 export const REPORT_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
   REPORT_TOOL_DEFS.map((d) => [d.name, d]),

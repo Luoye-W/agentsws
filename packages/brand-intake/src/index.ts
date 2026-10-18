@@ -471,6 +471,25 @@ export {
 // WP246：网页转文字（本机那一级）——任意网页 → 干净正文 markdown
 export type { ReadableResult } from './readable.js'
 export { htmlToReadable, parseHtmlTree, READABLE_MAX_CHARS } from './readable.js'
+// WP393（docs/104 一期 A）：竞品独立站——探平台、读公开商品目录（直接读 → 被挡改走内置浏览器）
+export type { BrowserTextRead, ShopCatalogIo, ShopCatalogRead } from './shop-catalog.js'
+export {
+  CATALOG_MAX_PAGES,
+  COMPETITOR_WATCH_USER_AGENT,
+  normalizeStoreUrl,
+  probeStore,
+  readShopCatalog,
+  SHOPIFY_PAGE_SIZE,
+  WOO_PAGE_SIZE,
+} from './shop-catalog.js'
+export type { AtomProduct, CatalogPage, CatalogRowDraft } from './shop-catalog-parse.js'
+export {
+  parseShopifyAtom,
+  parseShopifyProductsPage,
+  parseWooProductsPage,
+  priceOf,
+  wooPrice,
+} from './shop-catalog-parse.js'
 // WP349：品牌分析联网查（搜什么、按什么顺序、竞品候选怎么认、没来源的竞品怎么丢）
 export type { IntakeWebHit, IntakeWebSearch, NumberedHit, WebResearch } from './web.js'
 export {
