@@ -575,3 +575,37 @@ describe('决策 748：dsh 调试工具前端不进安装包', () => {
     }
   })
 })
+
+describe('beta.13：包内自带的 node_modules 目录补回来', () => {
+  it('feedsmith 式的 dist/node_modules 缺了就从原包补；包根 node_modules 不管；已有的不覆盖', async () => {
+    const { restoreVendoredNodeModules } = await import('../scripts/after-pack.mjs')
+    const root = mkdtempSync(join(tmpdir(), 'vendored-'))
+    try {
+      const nm = join(root, 'app')
+      const src = join(root, 'src')
+      // 包里：feedsmith 只剩 dist，没有 dist/node_modules
+      mkdirSync(join(nm, 'feedsmith', 'dist'), { recursive: true })
+      writeFileSync(join(nm, 'feedsmith', 'package.json'), '{"version":"3.0.1"}')
+      // 原包：dist/node_modules/trousse，外加包根 node_modules（不该被拷）
+      mkdirSync(join(src, 'feedsmith', 'dist', 'node_modules', 'trousse', 'dist'), {
+        recursive: true,
+      })
+      writeFileSync(
+        join(src, 'feedsmith', 'dist', 'node_modules', 'trousse', 'dist', 'is.mjs'),
+        'x',
+      )
+      mkdirSync(join(src, 'feedsmith', 'node_modules', 'other'), { recursive: true })
+      const sourceOf = (name: string, version: string) =>
+        name === 'feedsmith' && version === '3.0.1' ? join(src, 'feedsmith') : undefined
+      const out = restoreVendoredNodeModules(nm, sourceOf)
+      expect(out).toEqual(['feedsmith/dist/node_modules'])
+      expect(
+        existsSync(join(nm, 'feedsmith', 'dist', 'node_modules', 'trousse', 'dist', 'is.mjs')),
+      ).toBe(true)
+      expect(existsSync(join(nm, 'feedsmith', 'node_modules'))).toBe(false)
+      expect(restoreVendoredNodeModules(nm, sourceOf)).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
