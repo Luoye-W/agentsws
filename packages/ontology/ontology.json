@@ -7,6 +7,7 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-competitor.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -38,6 +39,7 @@
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
+    "packages/contracts/src/geo-quality.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
@@ -76,6 +78,7 @@
     "packages/contracts/src/seo.ts",
     "packages/contracts/src/setup-card.ts",
     "packages/contracts/src/shopify-cloud.ts",
+    "packages/contracts/src/site-health.ts",
     "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
@@ -89,6 +92,7 @@
     "packages/roles/roles/ads/meta.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
+    "packages/roles/roles/amz/store.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/b2b/exhibition.yml",
     "packages/roles/roles/b2b/fulfillment.yml",
@@ -136,7 +140,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a6787d1cd9ef561c6e1a7b24ba04b672",
+  "source_digest": "8cafce963d6325569ef7069a8c011ae5",
   "objects": [
     {
       "id": "ad",
@@ -10465,6 +10469,7 @@
         "ads.meta",
         "ads.tiktok",
         "ads.x",
+        "amz.store",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",
