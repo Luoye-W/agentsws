@@ -54,3 +54,13 @@ export const getCompetitorChanges = async (
 
 export const runCompetitorWatch = (assignment: string): Promise<CompetitorWatchRun> =>
   api('/v1/competitor-watch/run', { method: 'POST', assignment })
+
+/**
+ * WP402（决策 1140 / 1146）：Amazon 读不到时用你自己的浏览器读（只读、每家每天至多一次）——同意 / 撤回
+ * （撤回 = 不用、不再问）。
+ */
+export const setOwnBrowserConsent = (
+  assignment: string,
+  consent: 'granted' | 'revoked',
+): Promise<{ state: string; at?: string }> =>
+  api('/v1/competitor-watch/own-browser', { method: 'PUT', assignment, body: { consent } })
