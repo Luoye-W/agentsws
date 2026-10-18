@@ -79,7 +79,9 @@ export function readRedditDescription(price?: number): string {
     `${cost}——先少取，看清了再按需加大；` +
     '同一个问题换词搜别超过 3 次，这次运行的取数预算快用完时会提醒你收尾。' +
     '走这个品牌设置的 Reddit 取数路由（接口中台 → 浏览器只读），每条带链接与时间，另附一条「从哪一路取的、命中缓存没有」。' +
-    '两路都没取到会照实说原因——那不是「0 条」。不发帖、不回帖、不点赞。'
+    '两路都没取到会照实说原因——那不是「0 条」。' +
+    '要某一段时间的给 since / until（按发帖时间筛；每次只给最近 limit 条，窗口太早可能筛完一条不剩，会照实说——' +
+    '要把一段时间补齐用 run_watch_now 带 since / until，在用户浏览器里读）。不发帖、不回帖、不点赞。'
   )
 }
 
@@ -114,6 +116,12 @@ function readRedditDef(price?: number): ToolDef {
           description: `取几条，缺省 ${READ_REDDIT_DEFAULT_LIMIT}；按条计积分，先少取`,
         },
         post_url: { type: 'string', description: '帖子地址（comments 必填）' },
+        since: {
+          type: 'string',
+          description:
+            '只要这之后发的（本地日期 YYYY-MM-DD 或 ISO 时间）；time_window 不给时按它选最小的时间档',
+        },
+        until: { type: 'string', description: '只要这之前发的（本地日期含那一天，或 ISO 时间）' },
       },
     },
   }

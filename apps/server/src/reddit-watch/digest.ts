@@ -37,7 +37,10 @@ export function buildDigest(input: {
   const count = (xs: RedditWatchEntry[], kind: RedditWatchEntry['kind']): number =>
     xs.filter((x) => x.kind === kind).length
   const ownOurs = own.filter((x) => x.ours === true)
-  const voices = [...own, ...inbox].filter((x) => x.ours !== true && x.deleted !== true)
+  // WP411：同一条在收件箱和自家版块都有时只算一次（`dup_of` 那一份不算 VOC / UGC）
+  const voices = [...own, ...inbox].filter(
+    (x) => x.ours !== true && x.deleted !== true && x.dup_of === undefined,
+  )
 
   const groups = new Map<string, RedditWatchTopicGroup>()
   for (const it of external) {

@@ -118,6 +118,8 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     const rw = brand.redditWatch
     if (rw === undefined) throw new Error('没装 Reddit 巡查')
     rw.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
+    // WP411：品牌号怎么说话要先定（没定不起草、先出设置卡）
+    brand.redditPersona?.set({ stance: 'personal' })
 
     // ① 巡查：插件来问 → 读替身 Reddit → 交回
     // 插件刚连上会马上起一轮（异步）；没起就点一次「现在巡查」
@@ -137,6 +139,19 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     })
     expect(res.outcome).toBe('done')
     await rw.result(got.job.id, res)
+    // WP411：起草前先读整串（插件在线）——插件再来领一件「读整串」交回
+    const thread = rw.next({ connected: true })
+    expect(thread.job?.reads.map((r) => r.kind)).toEqual(['post_comments'])
+    if (thread.job !== undefined)
+      await rw.result(
+        thread.job.id,
+        await runRedditRead(thread.job, {
+          fetch: fakeFetch,
+          sleep: async () => {},
+          stopped: () => false,
+          gapMs: 0,
+        }),
+      )
     const entry = rw.items({ reply: true }).find((x) => x.fullname === 't1_c9')
     expect(entry?.judgement?.reply).toBe(true)
     // 版规是插件只读读回来的（决策 764）

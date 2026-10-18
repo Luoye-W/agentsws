@@ -8,11 +8,12 @@
  * - 设置读 `settings` 原值（不补建议值、不补 AI 猜的）；
  * - 最近一轮巡查：什么时候、每块读成没有、读了几条；正在跑就说正在跑。
  */
-import type {
-  Iso8601,
-  RedditWatchPart,
-  RedditWatchRun,
-  RedditWatchSettings,
+import {
+  type Iso8601,
+  REDDIT_EXTERNAL_BACKFILL_DAYS,
+  type RedditWatchPart,
+  type RedditWatchRun,
+  type RedditWatchSettings,
 } from '@agentsws/contracts'
 import type { SetupTargetState } from '../setup-cards.js'
 import { formatSubList, isConfigured } from './settings.js'
@@ -98,6 +99,11 @@ export function patrolState(input: {
       标签词: (s.tag_words ?? []).join(', '),
       品牌号: s.brand_username === undefined ? '' : `u/${s.brand_username}`,
       收件箱和关键词: everyLabel(s.every_hours),
+      // WP411（#10）：第一次外部巡查往回补几天——没设就是随软件带的默认（照实标「默认」）
+      第一次外部巡查往回补:
+        s.external_backfill_days === undefined
+          ? `${REDDIT_EXTERNAL_BACKFILL_DAYS} 天（默认）`
+          : `${s.external_backfill_days} 天`,
     },
     connections: {
       'Chrome 插件（巡查走这条）': pluginLine(input.ext),

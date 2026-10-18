@@ -20,6 +20,7 @@ import {
   type RunRequest,
 } from '@agentsws/contracts'
 import {
+  coveringTimeWindow,
   createRedditReadRouter,
   type RedditHubPort,
   type RedditReadBrowser,
@@ -50,6 +51,30 @@ export interface ResearchToolsOptions {
   creditBudget?(request: RunRequest): number | undefined
   /** WP236：一项能力每条多少积分（价目表；取不到回 `undefined`，那就不按价收条数）。 */
   priceOf?(capability: string): Promise<number | undefined>
+  /** WP411：本地日期（`since` / `until` 写成 YYYY-MM-DD 时）按哪个时区算（分钟；不给 = UTC）。 */
+  tzOffsetMinutes?(): number
+}
+
+/**
+ * WP411（#13）：`since` / `until`（本地日期或 ISO）→ 毫秒。`until` 的日期含那一天。认不出回一句人话。
+ */
+export function readWindowOf(
+  input: Record<string, unknown>,
+  tzOffsetMinutes: number,
+): { since?: number; until?: number } | { error: string } {
+  const one = (v: unknown, end: boolean): number | undefined | null => {
+    if (typeof v !== 'string' || v.trim() === '') return undefined
+    const t = v.trim()
+    const ms = /^\d{4}-\d{2}-\d{2}$/u.test(t)
+      ? Date.parse(`${t}T00:00:00.000Z`) - tzOffsetMinutes * 60_000 + (end ? 86_400_000 - 1 : 0)
+      : Date.parse(t)
+    return Number.isFinite(ms) ? ms : null
+  }
+  const since = one(input.since, false)
+  const until = one(input.until, true)
+  if (since === null || until === null)
+    return { error: 'since / until 认不出：用本地日期（2026-10-11）或 ISO 时间。' }
+  return { ...(since === undefined ? {} : { since }), ...(until === undefined ? {} : { until }) }
 }
 
 /** 一次运行花了多少积分（按运行 id 记；只留最近这么多次运行的账）。 */
@@ -166,6 +191,15 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
       return { status: 'error', reason: `unsupported_tool: ${call.name}` }
     const req = redditReadRequestOf(call.input)
     if ('error' in req) return { status: 'error', reason: req.error }
+    // WP411（#13）：按时间窗筛——没给时间档时按起点选最小的那一档；搜索按最新排
+    const win = readWindowOf(call.input, options.tzOffsetMinutes?.() ?? 0)
+    if ('error' in win) return { status: 'error', reason: win.error }
+    if (win.since !== undefined) {
+      if (req.input.time_window === undefined)
+        req.input.time_window = coveringTimeWindow(win.since, options.nowMs())
+      if (req.capability === 'social.reddit.search' && req.input.sort === undefined)
+        req.input.sort = 'new'
+    }
     /*
      * WP236 ⑨：每次运行的取数预算。用完了就不再取（两路都不走）、照实说；按价把这一次的条数收进
      * 剩下的预算里（一条都放不下就当用完）。10-06 真机：一次「看一眼」五次各 25 条，花了约 6.7 积分。
@@ -214,6 +248,37 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
       budget === undefined
         ? {}
         : { credits: { used, budget }, ...(notice === undefined ? {} : { notice }) }
+    if (got.ok && (win.since !== undefined || win.until !== undefined)) {
+      const inside = got.items.filter((it) => {
+        const at = it.created_at === undefined ? Number.NaN : Date.parse(it.created_at)
+        if (!Number.isFinite(at)) return false
+        return (
+          (win.since === undefined || at >= win.since) &&
+          (win.until === undefined || at <= win.until)
+        )
+      })
+      const outside = got.items.length - inside.length
+      const window = {
+        ...(win.since === undefined ? {} : { since: new Date(win.since).toISOString() }),
+        ...(win.until === undefined ? {} : { until: new Date(win.until).toISOString() }),
+        outside,
+      }
+      return {
+        status: 'ok',
+        data: {
+          rows: inside.length,
+          items: inside,
+          window,
+          source: got.record,
+          ...budgetInfo,
+          ...(inside.length === 0 && got.items.length > 0
+            ? {
+                missing: `取回 ${got.items.length} 条都不在这段时间里（这一路每次只给最近 ${String(req.input.limit ?? '')} 条，时间太早的取不到）——那不是「这段时间 0 条」。要把这段补齐，用 run_watch_now 带 since / until 在用户浏览器里读。`,
+              }
+            : {}),
+        },
+      }
+    }
     return got.ok
       ? {
           status: 'ok',

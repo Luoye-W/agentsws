@@ -1,0 +1,47 @@
+# WP411（客户真机 10-18 #10 #11，客户名用假名 IVRA）：**Reddit 巡查的噪音过滤 + 去重**。
+#
+# 一批读回来的：数据渠道对「IVRA」「translation glasses」做了宽松匹配，混进 HFY 小说、炉石卡组、背单词这类；
+# 同一条评论在收件箱和自家版块各读到一次；外部还有别人的个人主页、竞品自己的版、只聊换手机的帖。
+# 过质量闸（和服务进程同一份纯函数）：没整词出现的丢掉不判不计；同一条只留一份、只起草一次；
+# 外部帖只有真提到我们、不在个人主页、不在竞品版才交给起草。巡查自己零写（不出卡、不发）。
+id: social/reddit-watch-noise-dedupe
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-17T19:49:00+08:00' }
+events:
+  - at: '+0m'
+    reddit.watch_batch:
+      brand_names: [IVRA, IVRA XR]
+      models: [Air3, Go2]
+      competitors: [Even Realities, Xreal]
+      items:
+        - { fullname: t3_aa1, source: external, subreddit: SmartGlasses, keyword: IVRA, title: 'IVRA Air3 vs Xreal?', text: which one for travel, reply: true }
+        - { fullname: t3_aa2, source: external, subreddit: HFY, keyword: IVRA, title: 'The Ivrakan Empire, ch. 12', text: the fleet jumped }
+        - { fullname: t3_aa3, source: external, subreddit: hearthstone, keyword: IVRA, title: Immortal combo deck, text: ivra-ish tempo }
+        - { fullname: t3_bb2, source: external, subreddit: vocabulary, keyword: translation glasses, title: Translation help, text: what do glasses mean here }
+        - { fullname: t3_ee1, source: external, subreddit: EvenRealities, keyword: AI glasses, title: 'G2 or IVRA?', text: thinking about the G2 AI glasses, reply: true }
+        - { fullname: t3_uu1, source: external, subreddit: u_PositiveConnection20, keyword: IVRA, title: IVRA Air3 unboxing, text: my new toy, reply: true }
+        - { fullname: t3_ss1, source: external, subreddit: Smartphones, keyword: AI glasses, title: AI glasses or a new phone?, text: budget 500, reply: true }
+        - { fullname: t1_c9, source: inbox, subreddit: ivraxr, text: 'Is the recall real? Mine got hot.', reply: true }
+        - { fullname: t1_c9, source: own_sub, subreddit: ivraxr, text: 'Is the recall real? Mine got hot.', reply: true }
+        - { fullname: t3_p2, source: own_sub, subreddit: ivraxr, title: My Go2 setup, text: love it }
+expected:
+  reddit_watch:
+    kept: [t3_aa1, t3_ee1, t3_uu1, t3_ss1, t1_c9, t3_p2]
+    filtered: 3
+    dupes: 1
+    draftable: [t3_aa1, t1_c9]
+  event_types:
+    - simulation.reddit_watch_filtered
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  HFY、炉石、背单词这类只是字面撞上的，是不是入库前就丢了？同一条评论是不是只起草一次？
+  竞品版、个人主页、只聊换手机的外部帖，是不是没交给起草？

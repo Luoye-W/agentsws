@@ -105238,6 +105238,11 @@
                       "type": "string",
                       "maxLength": 40
                     }
+                  },
+                  "external_backfill_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31
                   }
                 },
                 "additionalProperties": false

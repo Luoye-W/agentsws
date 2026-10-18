@@ -516,6 +516,8 @@ describe('#9 当前设置快照：连接以插件交回为准、设置读原值'
     expect(s?.values.自家版块).toBe('ivraxr')
     expect(s?.values.品牌号).toBe('u/IVRA_Official')
     expect(s?.values.重点版块).toBe('（空）')
+    // WP411 新加的设置格也在快照里（没设 = 随软件带的默认，照实标出）
+    expect(s?.values.第一次外部巡查往回补).toBe('7 天（默认）')
     expect(s?.notes[0]).toContain('最近一轮巡查 2026-10-18T11:49:00.000Z')
     expect(s?.notes[0]).toContain('外部关键词读成了 29 条（新 28）')
     expect(c.open_cards).toEqual([{ kind: '连接卡', title: '先连上Reddit API' }])

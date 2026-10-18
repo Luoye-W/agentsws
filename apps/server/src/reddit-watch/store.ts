@@ -61,6 +61,8 @@ export interface RedditWatchStore {
   get(workspace_id: WorkspaceId, id: string): RedditWatchEntry | undefined
   /** 任一来源里的这一条（挂后续 / 对方删了用）。 */
   byFullname(workspace_id: WorkspaceId, fullname: string): RedditWatchEntry[]
+  /** WP411：同一帖（`t3_…`）的帖子本身与它下面的评论（任一来源；起草前读整串用）。 */
+  byLink(workspace_id: WorkspaceId, link: string): RedditWatchEntry[]
   /** 新的在前（按发帖时间）。 */
   list(workspace_id: WorkspaceId, query?: RedditWatchItemQuery): RedditWatchEntry[]
   putRun(run: RedditWatchRun): void
@@ -116,6 +118,14 @@ export function createRedditWatchStore(dbPath?: string): RedditWatchStore {
         db
           .prepare('SELECT json FROM rw_items WHERE workspace_id = ? AND fullname = ?')
           .all(ws, fullname) as { json: string }[]
+      ).map((r) => JSON.parse(r.json) as RedditWatchEntry),
+    byLink: (ws, link) =>
+      (
+        db
+          .prepare(
+            `SELECT json FROM rw_items WHERE workspace_id = ? AND (lower(fullname) = ? OR lower(json_extract(json, '$.link_fullname')) = ?) ORDER BY created_at LIMIT 500`,
+          )
+          .all(ws, link.toLowerCase(), link.toLowerCase()) as { json: string }[]
       ).map((r) => JSON.parse(r.json) as RedditWatchEntry),
     list: (ws, q = {}) => {
       const where = ['workspace_id = ?']

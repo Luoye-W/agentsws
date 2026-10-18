@@ -680,12 +680,14 @@ import {
 import {
   createRedditWatch,
   createRedditWatchStore,
+  type RedditWatchAssembly,
   redditWatchPort,
   redditWatchSourceOf,
 } from './reddit-watch/index.js'
 import { modelRedditDrafter } from './reddit-write/draft.js'
 import { createRedditLimits } from './reddit-write/limits.js'
 import { redditParentLinker } from './reddit-write/parent-link.js'
+import { createRedditPersona, REDDIT_PERSONA_TARGET } from './reddit-write/persona.js'
 import {
   createRedditWriteService,
   isRedditWriteCard,
@@ -3653,6 +3655,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    // WP411：品牌号怎么说话（巡查出的要回条目起草前要先定）
+    if (brand.redditPersona !== undefined)
+      assembly.registerTarget(brand.redditPersona.setupTarget())
     /*
      * WP385（决策 1076 → 690）：网站体检设置（商品 feed、其他平台上架页、两张清单的加减）在对话里说一句、
      * 卡上点头就存；存好在后台重新体检一次（同一时间只跑一次），原来那件事按原话接着做。
@@ -4156,6 +4161,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       nowMs: () => Date.parse(clock.now()),
       ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
     })
+    /*
+     * WP411（客户 10-18 #11）：品牌号在 Reddit 上怎么说话（个人 / 团队口吻）——没配之前巡查出的要回条目不起草，
+     * 先出设置卡（AI 从品牌号以前发过的话里猜一个建议）；存好就把等着的条目重新交给起草。
+     */
+    const redditPersona = createRedditPersona({
+      nowMs: () => Date.parse(clock.now()),
+      ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+      history: () =>
+        (redditWatchLate.current?.items({ limit: 500 }) ?? [])
+          .filter((x) => x.ours === true && x.deleted !== true && x.text.trim() !== '')
+          .map((x) => x.text),
+      onSet: () => {
+        redditWatchLate.current?.redispatch()
+      },
+    })
+    const redditWatchLate: { current: RedditWatchAssembly | undefined } = { current: undefined }
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
     // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
@@ -5423,6 +5444,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     redditWrites = createRedditWriteService({
       // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
       limits: redditLimits,
+      // WP411：品牌号怎么说话（没配 → 自动起草先不出卡，宿主出设置卡）
+      persona: () => redditPersona.get(),
       workspace_id: ws,
       clock,
       approvals: txn.approvals,
@@ -6200,6 +6223,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                       limiter: redditReadLimiterOf(readonlyBrowser),
                     }),
                 nowMs: () => Date.parse(clock.now()),
+                // WP411：since / until 写成本地日期时按品牌时区算
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
                 /*
                  * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
                  * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
@@ -8265,6 +8290,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   : { competitors: full.competitors.map((c) => c.name) }),
               }
             },
+            // WP411：品牌名的写法变体（档案里的品牌词）与竞品名——外部关键词整词匹配、外部帖闸用
+            brandTerms: () => {
+              const full = onboardingRef?.brandProfile(ws)
+              return {
+                ...(full?.keywords?.brand === undefined
+                  ? {}
+                  : { brand_names: full.keywords.brand }),
+                ...(full?.competitors === undefined
+                  ? {}
+                  : { competitors: full.competitors.map((c) => c.name) }),
+              }
+            },
             setupCards: () => setupCardsOf(ws),
             actor: () => {
               const h = redditHolder()
@@ -8461,9 +8498,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
         reader: () => amazonFront,
       })
+    redditWatchLate.current = redditWatch
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
+     * WP411（#11）：交过来之前巡查那边已按全名去重、读过整串；这里带上整串起草——品牌号已经回过这一条的不起草
+     * （条目标「回过了」并写明）；品牌号怎么说话还没定 → 一条都不起草，先出设置卡（定了再交回来）。
      */
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()
@@ -8474,17 +8514,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         assignment_id: holder.id,
         role_id: holder.role_id,
       }
+      if (redditPersona.get() === undefined) {
+        if (redditPersona.shouldAsk())
+          void (async () =>
+            (await setupCardsOf(ws))
+              ?.askSetup({ target: REDDIT_PERSONA_TARGET, actor })
+              .catch(() => undefined))()
+        return
+      }
       void (async () => {
         for (const entry of entries) {
           if (entry.status !== 'open') continue
           const target = redditTargetFromItem(entry)
           if (target === undefined) continue
-          await redditWrites
+          const thread = redditWatch.thread(entry.id)
+          const got = await redditWrites
             ?.draftAndStage(actor, {
               target,
               ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
+              ...(thread === undefined ? {} : { thread }),
             })
             .catch(() => undefined)
+          if (got !== undefined && !got.staged && got.skipped === 'already_replied')
+            redditWatch.setStatus(entry.id, 'done', { note: got.message })
         }
       })()
     })
@@ -8781,6 +8833,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(amazonFront === undefined ? {} : { amazonFront }),
       ...(hostedBoot !== undefined ? {} : { amazonOwnBrowser, amazonBlock }),
       redditLimits,
+      redditPersona,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照

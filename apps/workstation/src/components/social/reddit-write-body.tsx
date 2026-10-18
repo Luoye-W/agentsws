@@ -6,6 +6,8 @@
  * - 依据：用上的 FAQ 卡、版规条数（说明进问号，界面少字）；
  * - 主按钮「发送」在卡身里（同连接卡的做法，卡底那排不再出一个）：批了两分钟后插件把它填进 Reddit 页面，
  *   **你自己点发送**。
+ * - WP411（#11）：品牌号在这串里已经说过的（「你 10-12 已回：……」）放在被回那句下面；几道检查没过的
+ *   （和已说过的对不上 / 没依据已换掉 / 口吻不符 / 整串没现读成）一条一行标黄，细节进问号。
  */
 import { REDDIT_WRITE_FORM, type RedditWritePayload } from '@agentsws/contracts'
 import type { DeckCard } from '@agentsws/deck'
@@ -69,6 +71,8 @@ export function RedditWriteBody({
     },
   })
   const facts = (payload.facts ?? []).filter((f) => f.text !== '')
+  const prior = payload.prior_replies ?? []
+  const checks = payload.checks ?? []
   const rules = payload.rules ?? []
   const blank = text.trim() === '' || (target.kind === 'submit' && title.trim() === '')
   const field =
@@ -90,6 +94,41 @@ export function RedditWriteBody({
         >
           {payload.in_reply_to}
         </blockquote>
+      )}
+      {prior.length === 0 ? null : (
+        <div className="flex flex-col gap-1" data-testid="reddit-write-prior">
+          {prior.map((c) => (
+            <p key={c.fullname} className="text-xs leading-5 text-ws-muted-fg">
+              {t('redditw.prior', { day: (c.created_at ?? '').slice(5, 10) })}
+              <span className="whitespace-pre-wrap">「{c.text.slice(0, 200)}」</span>
+            </p>
+          ))}
+        </div>
+      )}
+      {checks.length === 0 ? null : (
+        <ul className="flex flex-col gap-1" data-testid="reddit-write-checks">
+          {checks.map((c, i) => (
+            <li
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同一张卡上的检查不重排
+              key={i}
+              className="w-fit rounded-[8px] bg-ws-warn-bg px-2 py-1 text-xs text-ws-warn"
+              data-check={c.kind}
+            >
+              <InfoTip
+                text={[
+                  c.quote,
+                  c.prior === undefined ? undefined : t('redditw.check.prior', { text: c.prior }),
+                ]
+                  .filter((x): x is string => x !== undefined && x !== '')
+                  .join('\n')}
+              >
+                <span>
+                  {c.fixed === true ? t('redditw.check.fixed', { message: c.message }) : c.message}
+                </span>
+              </InfoTip>
+            </li>
+          ))}
+        </ul>
       )}
       {target.kind === 'submit' ? (
         <input

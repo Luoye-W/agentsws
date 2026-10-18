@@ -37,6 +37,7 @@ import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
 import { installPositions, type PositionsLoop } from './positions.js'
+import { runRedditWatchBatch } from './reddit-watch.js'
 import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
 import type { RuntimeName } from './runtime-name.js'
@@ -1319,6 +1320,11 @@ async function execute(
       // WP393：店铺管理「竞品动向」配好了
       case 'competitor.plan': {
         competitorLoop().plan(event.competitor_plan)
+        return
+      }
+      // WP411：Reddit 巡查读回来一批（整词匹配、去重、外部帖闸；零写）
+      case 'reddit.watch_batch': {
+        runRedditWatchBatch(world, event.reddit_watch)
         return
       }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────

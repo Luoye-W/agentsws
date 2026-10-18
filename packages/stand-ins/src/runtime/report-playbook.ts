@@ -299,3 +299,65 @@ export function composeStubReport(
       .trimEnd()}\n`,
   }
 }
+
+/* ── WP411（#13）：按时间窗回补 ───────────────────────────────────────── */
+
+const pad = (n: number): string => String(n).padStart(2, '0')
+
+/**
+ * 「把 10-11 到 10-16 的外部补一下 / 补搜 10/11–10/16」→ 回补哪一段（本地日期，年份按现在）。
+ * 工具面里没有 `run_watch_now`、话里没在要补、认不出两个日期 → `undefined`（stub 其余路径一个字节不变）。
+ */
+export function backfillAsk(
+  allow: readonly string[],
+  text: string,
+  nowIso: string,
+): { since: string; until: string } | undefined {
+  if (!allow.includes(RUN_WATCH_NOW_TOOL) || !/补/u.test(text)) return undefined
+  const dates = [...text.matchAll(/(?:(\d{4})[-/.年])?(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*[日号]?/gu)]
+  if (dates.length < 2) return undefined
+  const year = new Date(nowIso).getUTCFullYear()
+  const iso = (m: RegExpMatchArray): string | undefined => {
+    const mo = Number(m[2])
+    const d = Number(m[3])
+    if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return undefined
+    return `${m[1] ?? year}-${pad(mo)}-${pad(d)}`
+  }
+  const since = dates[0] === undefined ? undefined : iso(dates[0])
+  const until = dates[1] === undefined ? undefined : iso(dates[1])
+  return since === undefined || until === undefined ? undefined : { since, until }
+}
+
+/** 回补那两步（先看计划、再照做）的结果 → 一段人话（数都来自工具回的）。 */
+export function backfillAnswer(preview: unknown, done: unknown): string {
+  const why = (preview as { message?: string } | undefined)?.message ?? '这一步没走通'
+  const p = (preview ?? {}) as { ok?: boolean; message?: string; can?: string; say?: string }
+  if (p.ok !== true)
+    return `${why.startsWith('补不了') ? why : `补不了：${why}`}${p.can === undefined ? '' : `\n能做的：${p.can}`}`
+  const d = (done ?? {}) as {
+    ok?: boolean
+    message?: string
+    can?: string
+    parts?: {
+      part?: string
+      status?: string
+      fresh?: number
+      filtered?: number
+      message?: string
+    }[]
+  }
+  const head = p.say ?? ''
+  if (d.ok !== true)
+    return `${head}\n没补成：${d.message ?? '这一步没走通'}${d.can === undefined ? '' : `\n能做的：${d.can}`}`
+  const ZH: Record<string, string> = {
+    own_sub: '自家版块',
+    watch_sub: '重点版块',
+    external: '外部社区',
+    inbox: '收件箱',
+  }
+  const lines = (d.parts ?? []).map(
+    (x) =>
+      `- ${ZH[x.part ?? ''] ?? x.part}：${x.status === 'ok' ? `新补进 ${x.fresh ?? 0} 条` : `没补成（${x.message ?? x.status}）`}${(x.filtered ?? 0) > 0 ? `，丢掉不相关的 ${x.filtered} 条` : ''}`,
+  )
+  return [head, '补完了：', ...lines].join('\n')
+}
