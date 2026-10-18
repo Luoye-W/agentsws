@@ -65,7 +65,6 @@ import {
   createRunWatchdog,
   GENUI_DISPLAY_RULE,
   type MatterLiveRun,
-  NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
@@ -100,6 +99,7 @@ import {
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import {
   houseRulesSection,
+  nextSuggestionSection,
   personaTextIn,
   type RoleStore,
   replyLanguageSection,
@@ -2240,7 +2240,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * WP264（决策 179）：**下一步建议**——交代末尾有明确下一步就单独一行 `<next>…</next>`，
            * 宿主进时间线前取出来记在 `next_suggestion` 上（事项页按 Tab 收下）。所有职责同一份，紧跟公共段。
            */
-          { id: 'next_step', name: '下一步建议', order: 27, text: NEXT_SUGGESTION_RULE },
+          // WP407（决策 1179）：原文在公共规矩表（`section: next_step`），与契约 NEXT_SUGGESTION_RULE 逐字节相同
+          nextSuggestionSection('zh'),
           /*
            * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一次：只查只答，末尾附 ```answer
            * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
