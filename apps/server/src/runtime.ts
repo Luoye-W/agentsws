@@ -118,6 +118,7 @@ import {
   COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
+  DRAFT_REPLY_TOOL,
   FIND_SERVICE_TOOL,
   GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
@@ -1190,6 +1191,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     })
     if (item.state === 'blocked') return undefined
     backfill(item)
+    /*
+     * WP417（自查客服 A18）：邮箱还没连上——卡照出（草稿不丢），这一轮收尾就地出「连邮箱」的连接卡；
+     * 真点「发送」时渠道照实回「没发出去：邮箱没连」，不再掉到内存桩显示发成功。
+     */
+    if (payload.channel === 'email' && to !== undefined) {
+      const emailNeed = (options.missingConnectionNeeds?.(assignment?.role_id ?? '') ?? []).find(
+        (n) => n.kind === 'email',
+      )
+      if (emailNeed !== undefined)
+        runWatch.get(s.run_id)?.blocks.noteSetup(DRAFT_REPLY_TOOL, {
+          kind: 'connect',
+          need: emailNeed,
+          why: '回信写好了，但邮箱还没连上，现在发不出去。连上就能发。',
+        })
+    }
     return { approval_item_id: item.id }
   }
 

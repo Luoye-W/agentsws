@@ -1182,7 +1182,35 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       if (typeof thread !== 'string' || thread.length === 0) return undefined
       // 收件人只从线程台账取（31 §3.3），所以要找到**认识这个线程**的那个账号
       const channel = await pick(channels, thread)
-      if (channel === undefined) return undefined
+      /*
+       * WP417（自查客服 A18）：接不住就**照实失败**——以前回 `undefined` 掉到内存桩，桩回 ok，
+       * 卡显示发成功、客户其实一封没收到。现在说清是邮箱没连，还是连着的邮箱认不出这封信。
+       */
+      if (channel === undefined) {
+        refresh()
+        const none = channels.length === 0
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'delivery.failed',
+          actor: { kind: 'system', id: 'channel:email' },
+          subject: { type: 'approval_item', id: item.id },
+          correlation: { trace_id: `tr_mail_unrouted_${item.id}` },
+          payload: {
+            reason: none ? 'mailbox_not_connected' : 'thread_unknown',
+            thread_ref: thread,
+          },
+        })
+        return {
+          status: 'failed',
+          error: {
+            message: none
+              ? '没发出去：邮箱还没连上。去「设置 → 账号连接」连上邮箱，再在这件事里点一次「发送」。'
+              : '没发出去：连着的邮箱里找不到这封来信（可能换了邮箱或信被挪走了）。请在邮箱里直接回复。',
+            retryable: false,
+          },
+        }
+      }
 
       // 15 §5.8 / 28 §1：出站急停。对账没完、或人按了托盘的「暂停」，这里一律不发。
       if (options.halt.isHalted('outbound')) {

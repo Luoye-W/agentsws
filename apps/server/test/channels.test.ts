@@ -415,6 +415,20 @@ describe('出站发信（18 §3）', () => {
     ).toMatchObject({ status: 'ok' })
   })
 
+  it('WP417（自查 A18）：邮箱没连 / 认不出线程 → 照实「没发出去」，不交回去让内存桩回成功', async () => {
+    const none = harness({ accounts: [] })
+    const a = await none.channels.deliver(draft('<m-1@mail.example>'), { idempotencyKey: 'k1' })
+    expect(a).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect(a?.error?.message).toContain('邮箱还没连上')
+    const h = harness()
+    await h.channels.poll()
+    const b = await h.channels.deliver(draft('<nope@mail.example>'), { idempotencyKey: 'k2' })
+    // 只连了一只邮箱时由它的收件人门禁照实拒（同样是失败，不是成功）
+    expect(b?.status).toBe('failed')
+    expect(h.mailer.sent).toHaveLength(0)
+    expect(none.events.some((e) => e.type === 'delivery.failed')).toBe(true)
+  })
+
   it('不是邮件 / 没有线程的卡不归渠道管，交回给调用方', async () => {
     const h = harness()
     expect(
