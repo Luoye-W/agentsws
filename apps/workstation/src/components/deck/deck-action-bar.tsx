@@ -68,6 +68,8 @@ export function quickActions(card: DeckCard): DeckAction[] {
  * 两张表都没有的（`open`）才退回服务端那份与通用动词。
  */
 export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) => string): string {
+  // WP415：没接通的卡上「不要」写成「知道了」（批不了，只能记下来自己去办）
+  if (card.wiring?.state === 'not_wired' && a === 'reject') return t('exec.ack')
   // WP276：「X 想把「…」交给你」——接下 / 不接（不是「认领 / 不是客户问题」）
   if ((card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff') {
     if (a === 'approve') return t('handoff.accept')

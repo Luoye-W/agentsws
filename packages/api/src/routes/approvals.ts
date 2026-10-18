@@ -591,13 +591,18 @@ export function approvalRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
-        returns: 'ApprovalItem',
+        returns: 'ApprovalItem & { execution_wiring? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
         assignmentOf(c)
         const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
-        return ok(c, redactItem(item, p.person_id))
+        // WP415（只加）：这张卡这一步接没接通——单卡页（通知里点进来的那一页）也照实标
+        const wiring = deps.executionWiring?.(item)
+        return ok(c, {
+          ...redactItem(item, p.person_id),
+          ...(wiring === undefined ? {} : { execution_wiring: wiring }),
+        })
       },
     ),
     route(

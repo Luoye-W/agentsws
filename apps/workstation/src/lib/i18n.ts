@@ -1169,6 +1169,8 @@ const zh: Table = {
   'card.done': '已处理',
   // WP415（自查 R1，决策 1236–1238）：接没接通、办没办成
   'exec.not_wired': '这一步还没接通',
+  'exec.ack': '知道了',
+  'exec.ack.reason': '还没接通，我自己去做',
   'exec.not_wired.hint': '批了也不会真去做。点「知道了」收起，自己去后台办。',
   'exec.demo': '演示',
   'exec.demo.hint': '演示里这一步只走一遍，没有真去做。',
@@ -5418,6 +5420,8 @@ const en: Table = {
   'card.snoozed': 'Snoozed until {at}',
   'card.done': 'Handled',
   'exec.not_wired': 'Not connected yet',
+  'exec.ack': 'Got it',
+  'exec.ack.reason': 'Not connected yet; I will do it myself',
   'exec.not_wired.hint':
     'Approving would not actually do it. Tap “Got it” and do it in the admin yourself.',
   'exec.demo': 'Demo',

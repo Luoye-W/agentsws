@@ -5,7 +5,8 @@
  * - 「这条职责能做什么」照服务端的 `wired` 标「还没接通」（不手写）；
  * - 连接那一句只有真连好才说「都连好了」，只缺可选的说「可选 N 个没连」；要开发者应用的不诱导去填。
  */
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { DeckCardView } from '@/components/deck/deck-card'
 import { connectionsSummary } from '@/components/rail/card-status'
@@ -23,7 +24,8 @@ const t = (key: string): string =>
   })[key] ?? key
 
 describe('卡上那一格：接没接通、办没办成', () => {
-  it('没接通：标「这一步还没接通」，没有通过按钮，「不要」写成「知道了」', () => {
+  it('没接通：标「这一步还没接通」，没有通过按钮，「不要」写成「知道了」，点一下就收起（不开写理由的面板）', async () => {
+    const decided: unknown[] = []
     renderWithProviders(
       <DeckCardView
         card={draftCard({
@@ -33,7 +35,9 @@ describe('卡上那一格：接没接通、办没办成', () => {
           wiring: { state: 'not_wired', reason: '这一步还没接通' },
         })}
         mode="zh_summary"
-        onDecide={noop}
+        onDecide={(r) => {
+          decided.push(r)
+        }}
         onOpen={noop}
       />,
     )
@@ -41,7 +45,10 @@ describe('卡上那一格：接没接通、办没办成', () => {
     expect(note.getAttribute('data-wiring')).toBe('not_wired')
     expect(note.textContent).toContain('这一步还没接通')
     expect(screen.queryByRole('button', { name: /通过|批准|发送/ })).toBeNull()
-    expect(screen.getByRole('button', { name: /知道了/ })).toBeTruthy()
+    await userEvent.click(within(screen.getByTestId('deck-action-bar')).getByText('知道了'))
+    expect(decided).toEqual([
+      expect.objectContaining({ action: 'reject', reason: '还没接通，我自己去做' }),
+    ])
   })
 
   it('演示：标「演示」', () => {

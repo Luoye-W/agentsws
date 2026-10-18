@@ -8,6 +8,7 @@
  *
  * 卡的长相与首页牌堆同一个 `DeckCardView`；决定走同一个 `decide`。
  */
+import type { ExecutionWiring } from '@agentsws/contracts'
 import { DECIDABLE_STATES, type DeckCard, projectCard } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
@@ -112,7 +113,13 @@ export function CardPage(): ReactNode {
     positions.data?.positions.find((p) => p.role_id === item.data.role_id)?.position_id ??
     assignmentId() ??
     ''
-  const card = projectCard(item.data, { now: new Date().toISOString(), position_id })
+  // WP415：服务端说这一步还没接通 / 是演示，卡上照实标（与牌堆同一把尺子）
+  const wiring = (item.data as { execution_wiring?: ExecutionWiring }).execution_wiring
+  const card = projectCard(item.data, {
+    now: new Date().toISOString(),
+    position_id,
+    ...(wiring === undefined ? {} : { wiring: () => wiring }),
+  })
   const settled = !DECIDABLE_STATES.includes(item.data.state)
 
   return (

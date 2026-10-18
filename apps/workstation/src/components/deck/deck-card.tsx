@@ -330,6 +330,11 @@ export function DeckCardView({
       setGoMessages(true)
       return
     }
+    // WP415：没接通的卡上「知道了」——不是对内容说不，不开写理由的面板，一下就收起
+    if (card.wiring?.state === 'not_wired' && action === 'reject') {
+      onDecide({ action, reason: t('exec.ack.reason'), version: card.version })
+      return
+    }
     // 不对 / 指导都先就地开面板——卡只有在人真说了句话之后才离开。
     if (action === 'reject' || action === 'instruct') {
       setPanel(action)
