@@ -44,6 +44,20 @@ export {
 } from './automation.js'
 export type { AssignmentFilter, StoreBackend } from './backend.js'
 export { createMemoryBackend, createSqliteBackend } from './backend.js'
+// WP404（docs/107）：岗位内容叠到骨架上（白名单外整份拒收）、抽内容那一半
+export {
+  applyPositionContent,
+  applyRoleContent,
+  checkContentFile,
+  checkPositionContent,
+  checkRoleContent,
+  loadBundledPositionWithContent,
+  loadBundledRoleWithContent,
+  positionContentFileOf,
+  positionContentOf,
+  roleContentFileOf,
+  roleContentOf,
+} from './content.js'
 export { changeKindOf, effectiveConfig, riskClassOf, webOf } from './effective.js'
 export type {
   EntryClassifyComplete,
@@ -67,6 +81,7 @@ export {
   BUNDLED_ROLES_DIR,
   bundledPositionIcon,
   bundledPositionOfRole,
+  bundledRoleFile,
   loadBundledPosition,
   loadBundledPositions,
   loadBundledRole,
@@ -75,9 +90,11 @@ export {
   loadRole,
   parsePosition,
   parseRole,
+  positionFromDocument,
   ROLE_ID_ALIASES,
   ROLE_ID_SPLITS,
   resolveRoleId,
+  roleFromDocument,
   SUPERSEDED_POSITION_IDS,
 } from './load.js'
 export { assertTighterOverrides } from './overrides.js'

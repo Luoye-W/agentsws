@@ -668,9 +668,25 @@ export interface PersonaOverride {
   subject: PersonaSubject
   /** 改写后的正文。中英各一份；只填一边的话另一边回落包里的原文。 */
   text: PersonaText
+  /**
+   * WP404（docs/107 §4）：**按语言、按段**存的改写——只记改了的那几段（段名就是 id）。
+   *
+   * 有这一格时以它为准：生效的那一份 = 包里的原文逐段换上这几段（包里换了新版，没改过的段跟着新版走）。
+   * `text` 仍写着改写那一刻拼出来的整段（给人看、排障用）。改写不是六段骨架的写法（拆不成段）时
+   * 不写这一格，照旧按 `text` 整段替换。
+   */
+  sections?: PersonaSectionOverrides
   updated_at: Iso8601
   updated_by: PersonId
 }
+
+/** WP404：persona 六段的稳定 id（69 §2 的六个小标题；改标题不改 id）。 */
+export type PersonaSectionId = 'who' | 'handles' | 'not_yours' | 'how' | 'tone' | 'always_ask'
+
+/** WP404：按语言、按段的改写（每段是去掉小标题后的正文）。 */
+export type PersonaSectionOverrides = Partial<
+  Record<'zh' | 'en', Partial<Record<PersonaSectionId, string>>>
+>
 
 /** 右栏「角色」面板要的那一份：现在生效的 + 包里的原文（「还原」拿它比）。 */
 export interface PersonaView {
@@ -688,6 +704,8 @@ export interface PersonaView {
    * 英文界面据此显示中文原文 + 一个「未翻译」标记。不出现 = 有英文。
    */
   untranslated?: boolean
+  /** WP404：按段改写时，改了哪几段（中文那份）。整段替换的老写法不出这一格。 */
+  overridden_sections?: PersonaSectionId[]
   updated_at?: Iso8601
   updated_by?: PersonId
 }
