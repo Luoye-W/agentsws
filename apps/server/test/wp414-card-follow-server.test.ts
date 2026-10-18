@@ -96,7 +96,7 @@ async function setup(): Promise<{ asg: string; ids: string[]; own: string }> {
     await stage('Smartphones', 'p3', 'cat', 'Upgrading my old Galaxy, need advice', OFF_TOPIC),
   ]
   const own = await stage(
-    'inmoxr',
+    'ivraxr',
     'p9',
     'dan',
     'Air3 captions keep lagging',
@@ -250,8 +250,8 @@ describe('similarTo（哪几张算同类）', () => {
   })
 
   it('同一来源但判断依据不同 → 不算（自家版块不会被一锅端）', () => {
-    const a = card({ id: 'a', sub: 'inmoxr', post: 'p1', reason: '用户问字幕延迟' })
-    const b = card({ id: 'b', sub: 'inmoxr', post: 'p2', reason: '用户夸续航，顺手道谢' })
+    const a = card({ id: 'a', sub: 'ivraxr', post: 'p1', reason: '用户问字幕延迟' })
+    const b = card({ id: 'b', sub: 'ivraxr', post: 'p2', reason: '用户夸续航，顺手道谢' })
     expect(similarTo(a, b)).toBeUndefined()
   })
 

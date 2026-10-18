@@ -1,5 +1,5 @@
 /**
- * WP414（Luoye 10-19 真机，INMO Reddit 回信卡）：**哪几张算「同类」**——给网关 `similarCards` 用。
+ * WP414（Luoye 10-19 真机，Reddit 回信卡）：**哪几张算「同类」**——给网关 `similarCards` 用。
  *
  * 不另造轮子：分词用技能层那把中英混排粗分词（`@agentsws/skills` 的 `tokenize`），停用词用学习回路
  * 语义钥匙那一份（`@agentsws/learning` 的 `keyTokens` 判一个词有没有区分力），重合度照 `keySimilarity`
