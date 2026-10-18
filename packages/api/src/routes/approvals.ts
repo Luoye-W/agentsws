@@ -536,11 +536,18 @@ export function approvalRoutes(): Route[] {
         assignmentOf(c)
         const input = await body(c, BatchDecideBody)
         const entries: { id: string; decision_token: string }[] = []
+        // WP415：没接通的卡在批量里也批不了（单张照实回一条错，别的照常）
+        const notWired: string[] = []
+        const approving = input.action === 'approve' || input.action === 'approve_edited'
         for (const e of input.entries) {
           const item = await mustGet(deps, e.id, p.workspace_id)
           const token = e.decision_token ?? tokenFor(item, p.person_id)
           if (token === undefined)
             throw new ApiError('forbidden', `没有属于本人的 decision_token：${e.id}`)
+          if (approving && deps.executionWiring?.(item)?.state === 'not_wired') {
+            notWired.push(e.id)
+            continue
+          }
           entries.push({ id: e.id, decision_token: token })
         }
         const rest: Omit<DecideInput, 'decision_token' | 'via'> = {
@@ -550,7 +557,17 @@ export function approvalRoutes(): Route[] {
           ...optional(input.redirect_to, 'redirect_to'),
           ...optional(input.defer_until, 'defer_until'),
         }
-        const results = await deps.approvals.decideBatch(entries, p.person_id, rest)
+        const decided = await deps.approvals.decideBatch(entries, p.person_id, rest)
+        const results = [
+          ...decided,
+          ...notWired.map((id) => ({
+            id,
+            item: undefined,
+            error: new ApiError('conflict', '这一步还没接通：批了也不会真去做', {
+              details: { reason: 'NOT_WIRED' },
+            }) as unknown,
+          })),
+        ]
         return ok(c, {
           results: results.map((r) => {
             const err = r.error === undefined ? undefined : normalizeError(r.error)

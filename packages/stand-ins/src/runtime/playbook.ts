@@ -31,7 +31,6 @@ export type PlaybookId = 'support' | 'kol'
  * 正是这一单要拆掉的那种串岗。所以它走下面那张按职责的表。
  */
 const PLAYBOOK_BY_DOMAIN: Readonly<Record<string, PlaybookId>> = {
-  amz: 'support',
   kol: 'kol',
 }
 
@@ -45,6 +44,12 @@ const PLAYBOOK_BY_ROLE: Readonly<Record<string, PlaybookId>> = {
   'dtc.support': 'support',
   'dtc.live-chat': 'support',
   'dtc.community-support': 'support',
+  /*
+   * WP415（自查 R8）：`amz` 以前整域映射到客服剧本——那时这个域里只有客服一条。WP395 加了
+   * `amz.store`（Amazon 店铺运营）之后，「看看我的 Listing」在演示里出的是一张「回复草稿（收件人待定）」。
+   * 所以 `amz` 改成按职责：只有客服这一条走客服剧本。
+   */
+  'amz.support': 'support',
 }
 
 /** 职责 id 的域（`kol.youtube` → `kol`）。 */
@@ -78,25 +83,45 @@ const DOMAIN_ZH: Readonly<Record<string, string>> = {
 }
 
 /**
- * 没有剧本时回给人的那一句（36 §3「算不出就说没有」）。
+ * 没有剧本时回给人的那一句（36 §3「算不出就说没有」；WP415 / 自查 R8 改成照实说）。
  *
  * 三条纪律：
- * 1. **说清是哪条职责**——"演示里还没有剧本"这句话只有带上职责名才有用；
- * 2. **说清这是演示的限制，不是这条职责做不了**——真模型下它照样干活；
- * 3. **不出任何卡、不 stage、不起草**。出一张"请批准"的卡去问一件桩根本没做的事，
- *    比什么都不做糟得多。
+ * 1. **开头就说「演示里没有这段」**——不绕弯；
+ * 2. **不露内部 id**（`site.shopify-build` 这种），只说是哪一摊（域的中文名）或职责的中文名；
+ * 3. **不出任何卡、不 stage、不起草**，也**不替真环境打包票**（以前那句「接上真模型之后它照常工作」
+ *    不一定是真的——有的职责真环境里也还没接通，见职责页「这条职责能做什么」）。
  */
 export function noPlaybookAnswer(role_id: string, role_name?: string): string {
-  const domain = DOMAIN_ZH[domainOfRole(role_id)] ?? domainOfRole(role_id)
-  const who = role_name === undefined || role_name === '' ? role_id : role_name
+  const domain = DOMAIN_ZH[domainOfRole(role_id)] ?? '这条职责'
+  const who = role_name === undefined || role_name === '' ? domain : role_name
   return [
-    `这条职责（${who}，${domain}）在演示里还没有剧本，所以这一次我没有动手。`,
-    '这是演示环境的限制，不是这条职责做不了——接上真模型之后它照常工作。',
-    '我也没有出任何待你批的卡：一张问不出所以然的卡比没有更麻烦。',
+    `演示里没有这段：「${who}」在演示里没有写好的剧本，这一次我没有动手。`,
+    '我也没有出待你批的卡。这条职责真环境里能做什么、哪些还没接通，看职责页「这条职责能做什么」。',
   ].join('\n')
 }
 
-/** 没有剧本时那次运行的摘要（进事项时间线与下一次运行的上下文）。 */
+/** 没有剧本时那次运行的摘要（进事项时间线与下一次运行的上下文；不露内部 id）。 */
 export function noPlaybookSummary(role_id: string): string {
-  return `${role_id} 在演示里还没有剧本：没有调工具、没有起草、没有出卡`
+  const domain = DOMAIN_ZH[domainOfRole(role_id)] ?? '这条职责'
+  return `演示里没有这段（${domain}）：没有调工具、没有起草、没有出卡`
+}
+
+/**
+ * WP415（自查 R8）：客服剧本只会「回一封信」。没有真来信、问的又是一句**查询**
+ * （「超时没回的来信有哪些」「快超 24 小时的」「有哪些转过来的问题」）时，以前它把问题本身当成要回的信，
+ * 出一张「回复草稿（收件人待定）：Re: 超过 8 小时还没回的…」。现在照实说演示里没有这段。
+ *
+ * 判据只看这件事的原话像不像查询（问句、列清单），不看意图词——「起草退货回复」这种要写信的照旧走剧本。
+ */
+const QUERY_RE = /(有哪些|哪些|几条|几封|怎么样|是不是|列一下|列出|汇总|[吗呢][？?]?$|[？?]\s*$)/u
+
+export function isQueryBrief(text: string): boolean {
+  return QUERY_RE.test(text.trim())
+}
+
+export function noSceneForQueryAnswer(): string {
+  return [
+    '演示里没有这段：这是一句查询，演示的客服剧本只会照着一封来信写回信，手里没有能查的数据。',
+    '我没有起草回信，也没有出卡。',
+  ].join('\n')
 }

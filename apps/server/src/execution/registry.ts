@@ -130,7 +130,14 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
   },
   {
     id: 'ads.extension',
-    kinds: ['ads_sheet', 'ads_activate', 'ads_undo', 'create_campaign', 'budget_change', 'pause_ad'],
+    kinds: [
+      'ads_sheet',
+      'ads_activate',
+      'ads_undo',
+      'create_campaign',
+      'budget_change',
+      'pause_ad',
+    ],
     readback: 'queued',
     label: '广告：插件在你自己的后台里执行',
   },

@@ -62,7 +62,13 @@ import {
   positionsOf,
   renderOwnerAnswer,
 } from './owner.js'
-import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import {
+  isQueryBrief,
+  noPlaybookAnswer,
+  noPlaybookSummary,
+  noSceneForQueryAnswer,
+  playbookOf,
+} from './playbook.js'
 import { PR_MONITOR_TOOL_DEF_BY_NAME } from './pr-monitor.js'
 import {
   RECORD_SINK_TOOL_DEF_BY_NAME,
@@ -1749,6 +1755,36 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = noPlaybookSummary(req.actor.role_id)
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: 0,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP415（自查 R8）：客服剧本只会照着一封来信写回信。没有真来信（只有这件事的原话）、
+       * 原话又是一句查询时，不再把问题本身当成要回的信——照实说演示里没有这段，不起草、不出卡。
+       */
+      const realThread = itemsOfKind(req, 'thread').find(
+        (i) => typeof i.source_ref === 'string' || i.source_ref.type !== 'matter',
+      )
+      if (
+        realThread === undefined &&
+        itemsOfKind(req, 'order').length === 0 &&
+        isQueryBrief(threadText)
+      ) {
+        const answer = noSceneForQueryAnswer()
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = '演示里没有这段（查询类）：没有调工具、没有起草、没有出卡'
         sink({
           type: 'run.completed',
           usage: {
