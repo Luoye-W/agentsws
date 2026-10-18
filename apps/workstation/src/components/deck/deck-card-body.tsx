@@ -14,6 +14,7 @@ import { isAssistantNotesPayload } from '@agentsws/contracts'
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
+import { AdsChangeBody, isAdsChangePayload } from '@/components/ads/ads-change-body'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
@@ -323,6 +324,9 @@ export function DeckCardBody({
       case 'change':
         // WP316：上传表 / 开始投放 / 撤销卡——一句话 + 表格预览 + 可下载的原表
         if (isAdsSheetPayload(payload)) return <AdsSheetBody payload={payload} />
+        // WP420：改预算 / 暂停卡——一行「日预算 $300 → $330」，不露字段名，总闸只留卡头小标签
+        if (isAdsChangePayload(payload))
+          return <AdsChangeBody payload={payload} reason={reasonText} title={card.title} />
         // WP249：自家版版务卡——原文、举报原因、AI 建议 + 理由、将执行的动作
         if (isOwnSubPayload(payload)) return <OwnSubCardBody payload={payload} />
         // WP254：别的社群的版务卡——将执行什么、原话、依据（批了才经渠道适配器去做）

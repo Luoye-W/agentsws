@@ -54,6 +54,8 @@ export interface LedgerEntry {
   actor?: LedgerActor
   title: string
   sentence?: string
+  /** WP420（自查 A17）：一行人话「老客再营销 日预算 300 → 330」（账本面板每行就写它）。 */
+  line?: string
   state: AdsLedgerState
   stop_loss?: boolean
   /** 上传表（按顺序一张一张传）。 */

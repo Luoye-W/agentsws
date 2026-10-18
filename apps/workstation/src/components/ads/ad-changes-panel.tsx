@@ -119,7 +119,9 @@ function Row({ assignment, row }: { assignment: string; row: AdsLedgerEntryView 
           {t(`adsc.state.${row.state}`)}
         </StatusPill>
         {row.stop_loss === true ? <StatusPill tone="warn">{t('adsc.stop_loss')}</StatusPill> : null}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{row.title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium" data-testid="ads-change-line">
+          {row.line ?? row.title}
+        </span>
         {row.readback === undefined ? null : (
           <InfoTip text={row.readback.sentence} testId="ads-change-readback">
             <StatusPill tone={row.readback.ok ? 'good' : 'bad'}>
