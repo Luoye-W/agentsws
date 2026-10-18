@@ -63,6 +63,25 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
     },
   },
   {
+    name: 'save_creator',
+    description:
+      '把找人结果里的一个人收进红人库（不花钱、不出卡；同渠道同账号已在库里就回那一个）。收进来之后才能对他打分、起草开发信。联系方式要另外取（公共库取邮箱要花积分，先报价）。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: CHANNEL_ENUM,
+        handle: str('账号名（找人结果里的 handle）'),
+        display_name: str('名字'),
+        url: str('主页链接'),
+        followers: { type: 'number', description: '粉丝数（找人结果里有就带上）' },
+        category: str('做什么内容'),
+        language: str('语言'),
+        region: str('地区'),
+      },
+      required: ['handle'],
+    },
+  },
+  {
     name: 'get_creator',
     description: '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史。',
     input_schema: {
@@ -222,7 +241,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       type: 'object',
       properties: {
         collaboration_id: str('合作 id'),
-        target_url: str('落地页地址'),
+        target_url: str('落地页地址（必填：不知道就先问人，不要编一个）'),
         campaign: str('UTM 的 campaign'),
         discount_code: str('联盟折扣码，不给就不带码'),
       },

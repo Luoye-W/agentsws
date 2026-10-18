@@ -253,6 +253,38 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         return { status: 'error', reason: res.message ?? res.reason ?? '这条渠道这次没答上来。' }
       }
 
+      /*
+       * WP416（自查 kol A「搜到的新人接后续动作」）：搜出来的人收进库——以前搜到的人没有 creator_id，
+       * 接不上 get_creator / draft_outreach，AI 只能对库里原有的人做事。不花钱、不出卡（同 POST /v1/kol/creators）。
+       */
+      case 'save_creator': {
+        const handle = str(input.handle)
+        if (handle === undefined) return missing('handle')
+        try {
+          const detail = await port.createCreator(actor, {
+            channel,
+            handle,
+            display_name: str(input.display_name) ?? handle.replace(/^@/, ''),
+            ...(str(input.url) === undefined ? {} : { url: str(input.url) }),
+            ...(num(input.followers) === undefined ? {} : { followers: num(input.followers) }),
+            ...(str(input.category) === undefined ? {} : { category: str(input.category) }),
+            ...(str(input.language) === undefined ? {} : { language: str(input.language) }),
+            ...(str(input.region) === undefined ? {} : { region: str(input.region) }),
+          })
+          return {
+            status: 'ok',
+            data: {
+              creator_id: detail.creator.id,
+              display_name: detail.creator.display_name,
+              has_contact: detail.contacts.length > 0,
+            },
+            provenance: [{ type: 'creator', id: detail.creator.id }],
+          }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
+
       case 'get_creator': {
         const id = str(input.creator_id)
         if (id === undefined) return missing('creator_id')
@@ -405,9 +437,11 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          */
         const view = await port.planCampaign(actor, {
           goal: str(input.campaign) ?? str(input.product) ?? '新品建联',
+          // WP416：没给预算由服务端按职责的合作预算上限起一个数；名单就是 AI 给的这几个
           budget: num(input.budget) ?? 0,
           channels: [channel],
           headcount: ids.length,
+          creator_ids: ids,
         })
         const picks = view.by_channel.flatMap((g) => g.picks)
         return {
@@ -472,6 +506,19 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         if (stage === undefined) {
           return { status: 'error', reason: `不认识「${String(input.stage)}」这个阶段。` }
         }
+        /*
+         * WP416（自查 kol A「advance_collaboration」）：「谈成」「已寄样」不许 AI 直接写库——
+         * 谈成要人点头（议价 / 建合作那张卡），已寄样要有寄样记录（寄样那一步，有成本还要出花钱卡）。
+         */
+        if (stage === 'agreed' || stage === 'sample_sent') {
+          return {
+            status: 'blocked',
+            reason:
+              stage === 'agreed'
+                ? '「谈成」要人点头：报价走议价那张卡，批了才算谈成。不能直接推。'
+                : '「已寄样」要有寄样记录：在合作线程上记一笔寄样（有成本会出花钱卡），记了才算。不能直接推。',
+          }
+        }
         try {
           const collab = await port.advanceCollaboration(actor, id, { stage })
           return {
@@ -523,9 +570,16 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
       case 'create_tracked_link': {
         const collaboration_id = str(input.collaboration_id)
         if (collaboration_id === undefined) return missing('collaboration_id')
+        const target = str(input.target_url) ?? str(input.url)
+        if (target === undefined)
+          return {
+            status: 'error',
+            reason: '缺落地页地址：这条链接要指到哪一页（商品页 / 活动页）？先问人，不要编一个。',
+          }
         const row = await port.createTrackedLink(actor, {
           collaboration_id,
-          url: str(input.target_url) ?? str(input.url) ?? 'https://example.com',
+          // WP416（自查 kol A「create_tracked_link」）：没给落地页就问，不默认 example.com
+          url: target,
           campaign: str(input.campaign) ?? 'kol',
           ...(str(input.discount_code) === undefined
             ? {}

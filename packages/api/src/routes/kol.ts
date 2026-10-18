@@ -513,6 +513,11 @@ export interface KolCampaignBrief {
   currency?: string | undefined
   channels: KolChannel[]
   headcount: number
+  /**
+   * WP416（自查 kol A「add_to_campaign」）：就排这几个人（AI 已经挑好的）——不再只拿来当人数、系统重挑。
+   * 不给 = 按条件从库里挑（老行为）。HTTP 不收这一格。
+   */
+  creator_ids?: string[] | undefined
   /** 打分条件（类目 / 语言 / 地区 / 粉丝带）。 */
   criteria?:
     | {

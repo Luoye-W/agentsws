@@ -1735,7 +1735,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
         approval: {
           title: `寄样：${creator.display_name}（${cost} ${currency}）`,
-          summary: `给 ${creator.display_name} 寄一份样品，成本 ${cost} ${currency}。批了才记账，合作进「已寄样」。`,
+          // WP416（自查 kol B「寄样」）：照实说这一步只记录，不替你下单发货
+          summary: `给 ${creator.display_name} 寄一份样品，成本 ${cost} ${currency}。批了只记一笔账、合作进「已寄样」——不会替你下单发货，货要你自己寄。`,
           recipients: [{ person: actor.person_id, via: 'owner' }],
           proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
           rule: 'owner',
@@ -2204,9 +2205,24 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     async planCampaign(actor, input) {
+      /*
+       * WP416：AI 给了名单就排这几个人；预算没给（0）时按这条职责的合作预算上限 × 人数起一个数
+       * （卡上照样能改）——以前预算缺省 0 被判为「缺口」，这张卡永远出不来。
+       */
+      const named = input.creator_ids === undefined ? undefined : new Set(input.creator_ids)
+      const cap = (() => {
+        const mine = assignmentForChannel(actor.person_id, input.channels[0] ?? 'youtube')
+        if (mine === undefined) return undefined
+        const c = actionOf(mine.id, COLLAB_ACTION).mandate.caps.max_collab_budget
+        return typeof c === 'number' && c > 0 ? c : undefined
+      })()
+      const budget =
+        input.budget > 0 || named === undefined || cap === undefined
+          ? input.budget
+          : cap * named.size
       const brief: CampaignBrief = {
         goal: input.goal,
-        budget: input.budget,
+        budget,
         currency: input.currency ?? 'USD',
         channels: input.channels,
         headcount: input.headcount,
@@ -2227,7 +2243,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               },
             }),
       }
-      const plan = planCampaign(brief, store.accounts(), clock.now())
+      const plan = planCampaign(
+        brief,
+        store.accounts().filter((a) => named === undefined || named.has(a.creator_id)),
+        clock.now(),
+      )
       const campaign_id = nextId('cmp')
       const existing = store.collaborations()
       const by_channel: KolCampaignGroup[] = plan.by_channel.map((group) => {
