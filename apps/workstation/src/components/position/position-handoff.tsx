@@ -64,12 +64,19 @@ export function PositionHandoff({
   )
   const pin = role_id === undefined ? {} : { role_id }
   // 建议只从本人那几条职责来（54 §1：拿别人那条去开就是借岗位扩权）
-  const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
+  // WP420：同一个岗位里几条职责写了同名的快捷问题（Google / Meta 都有「今天花了多少」）只留一颗
+  const sameLabelOnce = <Q extends { label: { zh: string } }>(q: Q, i: number, all: Q[]): boolean =>
+    all.findIndex((x) => x.label.zh === q.label.zh) === i
+  const suggestions = mine
+    .flatMap((r) => r.quick_prompts ?? [])
+    .filter(sameLabelOnce)
+    .slice(0, MAX_SUGGESTIONS)
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
   const [started, setStarted] = useState(false)
   const actions = useLandingActions(
     mine
       .flatMap((r) => r.quick_prompts ?? [])
+      .filter(sameLabelOnce)
       .map((q) => ({
         id: q.id,
         label: lang === 'en' ? q.label.en : q.label.zh,

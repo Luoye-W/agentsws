@@ -63,13 +63,17 @@ export async function runAdsScript(exec: Exec): Promise<ScriptOutcome> {
     return { answer: `没查到广告数据：${q.reason ?? '这一步没走通'}。`, staged, readTools }
   readTools.push(QUERY_ADS_DATA_TOOL)
   const d = q.data
-  if (d.needs_setup !== undefined) return { answer: '还没设是哪个广告账户。', staged, readTools }
-  if (d.needs_connection !== undefined || d.connection_card === true)
-    return {
-      answer: '插件还没连上你的广告后台，今天的数导不进来：已出一张连接卡，连好我接着查。',
-      staged,
-      readTools,
-    }
+  const gate0 = isRecord(d.spend_gate) ? d.spend_gate : {}
+  const hasNumbers =
+    (num(gate0.spent) ?? 0) > 0 || (Array.isArray(d.stop_loss) && d.stop_loss.length > 0)
+  // 缺账户 / 插件：广告库里也没数就照实说一句停下（卡由运行时出）；广告库里有数就照样说数，末尾补一句缺什么
+  const missing =
+    d.needs_setup !== undefined
+      ? '还没设是哪个广告账户（插件每天导数要用）。'
+      : d.needs_connection !== undefined || d.connection_card === true
+        ? '插件还没连上你的广告后台，之后的数导不进来。'
+        : undefined
+  if (missing !== undefined && !hasNumbers) return { answer: missing, staged, readTools }
   const gate = isRecord(d.spend_gate) ? d.spend_gate : {}
   const spent = num(gate.spent)
   const remaining = num(gate.remaining)
@@ -101,6 +105,7 @@ export async function runAdsScript(exec: Exec): Promise<ScriptOutcome> {
         ? '没有在跑、今天有花费的广告系列，不用判止损。'
         : '没有越线的广告系列，不用止损。',
     )
+  if (missing !== undefined) lines.push(missing)
   return { answer: lines.join('\n'), staged, readTools }
 }
 

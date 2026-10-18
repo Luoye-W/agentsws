@@ -4,6 +4,7 @@
  */
 export const ADS_OVERVIEW_ZH: Record<string, string> = {
   'adsov.title': '今天',
+  'adsov.title.platform': '今天 · {platform}',
   'adsov.hint': '数从你的广告后台每天导出的报表里来（插件导），不经 AI。白天每 3 小时再导一次。',
   'adsov.spend': '今天花了',
   'adsov.gate': '总闸还剩',
@@ -26,6 +27,7 @@ export const ADS_OVERVIEW_ZH: Record<string, string> = {
 
 export const ADS_OVERVIEW_EN: Record<string, string> = {
   'adsov.title': 'Today',
+  'adsov.title.platform': 'Today · {platform}',
   'adsov.hint':
     'Numbers come from the reports the helper exports from your ad account daily — not from AI. Re-exported every 3 hours during the day.',
   'adsov.spend': 'Spent today',

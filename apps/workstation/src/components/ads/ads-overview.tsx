@@ -18,6 +18,13 @@ import { useApp } from '@/lib/app-context'
 
 const MAX_ROWS = 8
 
+const PLATFORM_LABEL: Record<string, string> = {
+  google: 'Google',
+  meta: 'Meta',
+  tiktok: 'TikTok',
+  x: 'X',
+}
+
 /** 日报数据那一行说什么（纯函数，测试直接测）。 */
 export function dataLineKey(data: AdsOverviewView['data']): {
   key: string
@@ -70,7 +77,8 @@ export function AdsOverview({ assignment }: { assignment: string }): ReactNode {
   return (
     <section className="flex flex-col gap-2" data-testid="ads-overview">
       <h4 className="flex items-center gap-1.5 text-sm font-medium">
-        {t('adsov.title')}
+        {/* 岗位层同时有 Google / Meta 两块时分得清是哪家 */}
+        {t('adsov.title.platform', { platform: PLATFORM_LABEL[v.platform] ?? v.platform })}
         <Hint text={t('adsov.hint')} />
       </h4>
       <div className="grid grid-cols-2 gap-1.5">
