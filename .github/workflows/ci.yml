@@ -58,7 +58,10 @@ jobs:
 
       # WP383：公开仓只放代码。派工单与报告、决策表、开发日志、编号的讨论文档、审稿截图
       # 都在私有仓；docs/ 只认白名单（README、ARCHITECTURE、help、品牌标记、三张架构图）。
-      - name: check-no-internal-docs（公开仓不收内部文档）
+      #   第二道查客户名：名单不公开，从 secret 读（没配 / fork 的 PR 拿不到 secret 时这一道跳过）。
+      - name: check-no-internal-docs（公开仓不收内部文档、不出现客户名）
+        env:
+          AGENTSWS_FORBIDDEN_NAMES: ${{ secrets.AGENTSWS_FORBIDDEN_NAMES }}
         run: node scripts/check-no-internal-docs.mjs
 
       # WP197：官网 apps/site 只构建、不部署（部署由 Fable 找 Luoye 确认后手动做）。
