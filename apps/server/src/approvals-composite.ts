@@ -121,5 +121,14 @@ export function compositeApprovals(primary: ApprovalBus, secondary: ApprovalBus)
       const [a, b] = await Promise.all([primary.expire(now), secondary.expire(now)])
       return [...a, ...b]
     },
+    // WP414：撤回跟着处理的卡 / 事后补理由——落到卡住的那一本（那一本没实现就当撤不了）
+    async reopen(id, by, input) {
+      const bus = await ownerOf(id)
+      return bus?.reopen === undefined ? undefined : bus.reopen(id, by, input)
+    },
+    async annotate(id, by, input) {
+      const bus = await ownerOf(id)
+      return bus?.annotate === undefined ? undefined : bus.annotate(id, by, input)
+    },
   } satisfies ApprovalBus
 }

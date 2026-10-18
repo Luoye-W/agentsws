@@ -293,6 +293,7 @@ import {
   createAmazonListingToolExecutor,
 } from './amazon-listing/index.js'
 import { compositeApprovals } from './approvals-composite.js'
+import { similarApprovals } from './card-follow.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
 import { createAssistantNotes, isAssistantNotesCard } from './assistant-notes.js'
@@ -13445,6 +13446,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modules: kernel.modules,
     reconcile,
     approvals,
+    // WP414：同类卡跟着前一个决定——「同类」按同一个对象 / 同一话题 / 同一来源 + 同一判断依据算
+    similarCards: similarApprovals,
     // WP174：`POST /v1/approvals` 的 `scope_manager` 也走岗位上级 → 老板
     routeScopeManager,
     changes: txn.ledger,
