@@ -102,7 +102,7 @@ grounding:
       name: theme_list,
       intent_terms: [主题, theme, 模板, template, 首页, homepage],
       cue_terms: [改, change, 换, switch, 发布, publish, 预览, preview],
-      tool: shopify.theme.list,
+      tool: theme_list,
       prefetch: true,
     }
   - {

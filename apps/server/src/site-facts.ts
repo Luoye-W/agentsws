@@ -10,7 +10,7 @@
  * 支付与税没有可靠的只读口：支付只认「Shopify Payments 已开通」这一种（没开通不等于没有收款方式——可能用的是
  * PayPal，所以那时留空、不写「缺」）；税一律留空（真账号测过再补）。
  */
-import { type LaunchCheckFacts, launchChecklistHeadline } from '@agentsws/site-core'
+import { type LaunchCheckFacts, launchChecklistHeadline, shopApp } from '@agentsws/site-core'
 import type { ShopifyAdminReader } from './shop-admin.js'
 import { MENUS, nodes, o, s } from './shop-graphql.js'
 import type { SiteFactsPort } from './site.js'
@@ -200,5 +200,59 @@ export function siteChecklistToolData(run: import('@agentsws/contracts').LaunchC
       ...(i.state === 'ok' || i.fix.zh === '' ? {} : { fix: i.fix.zh }),
       who_fixes: i.fixable_by === undefined ? '店主自己去后台' : i.fixable_by,
     })),
+  }
+}
+
+/** WP418（自查 A16）：`site_apps_list` 回给模型的那一份（装没装、连没连、目录里干什么、收不收钱）。 */
+export function siteAppsToolData(rows: readonly import('@agentsws/api').SiteAppRow[]): {
+  apps: {
+    id: string
+    name: string
+    installed: boolean
+    connected: boolean
+    what?: string
+    pricing?: string
+  }[]
+  note: string
+} {
+  return {
+    apps: rows.map((r) => {
+      const entry = shopApp(r.id)
+      return {
+        id: r.id,
+        name: r.name,
+        installed: r.installed,
+        connected: r.connection_id !== undefined,
+        ...(entry === undefined ? {} : { what: entry.what.zh, pricing: entry.pricing }),
+      }
+    }),
+    note: '装 / 卸 App 工坊替你做不了（还没接通）：给 App Store 链接让人自己装，装好下次巡检读回。',
+  }
+}
+
+/** WP418（自查 A16）：`site_email_templates` 回给模型的那一份（不带正文，正文是外部长文本）。 */
+export function siteEmailsToolData(
+  rows: readonly import('@agentsws/contracts').ShopEmailTemplate[],
+): {
+  templates: {
+    type: string
+    name: string
+    enabled: boolean
+    subject: string
+    draft_pending: boolean
+    missing_variables: string[]
+  }[]
+  note: string
+} {
+  return {
+    templates: rows.map((t) => ({
+      type: t.notification_type,
+      name: t.name.zh,
+      enabled: t.enabled,
+      subject: t.subject,
+      draft_pending: t.pending_change_id !== undefined,
+      missing_variables: [...t.missing_variables],
+    })),
+    note: '改通知邮件工坊替你做不了（还没接通）：把改好的那一版给人，去后台「设置 → 通知」贴进去。',
   }
 }

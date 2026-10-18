@@ -807,7 +807,12 @@ import {
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
-import { createLayeredSiteFacts, siteChecklistToolData } from './site-facts.js'
+import {
+  createLayeredSiteFacts,
+  siteAppsToolData,
+  siteChecklistToolData,
+  siteEmailsToolData,
+} from './site-facts.js'
 import {
   createSiteHealthService,
   type PageRenderer,
@@ -6706,6 +6711,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   role_id: request.actor.role_id as never,
                 })
                 return siteChecklistToolData(run)
+              },
+              // WP418（自查 A16）：插件 / 邮件模板两条职责读本机建站库
+              siteRead: async (tool, request) => {
+                const site = (await brandModules.forWorkspace(ws)).siteService.port
+                const actor = {
+                  workspace_id: ws,
+                  person_id: request.actor.person_id as never,
+                  assignment_id: request.actor.assignment_id as never,
+                  role_id: request.actor.role_id as never,
+                }
+                return tool === 'site_apps_list'
+                  ? siteAppsToolData((await site.apps(actor)).rows)
+                  : siteEmailsToolData((await site.emailTemplates(actor)).rows)
               },
             }),
             // WP268：生图 / 改图 / 素材库（设计岗五条 + 网页模板；生图配了才摆）

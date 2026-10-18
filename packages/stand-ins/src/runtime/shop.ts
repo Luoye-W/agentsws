@@ -56,6 +56,10 @@ export const SHOP_GET_ORDER_TOOL = 'shop_get_order'
 export const SHOP_FULFILL_ORDER_TOOL = 'shop_fulfill_order'
 /** WP418（自查 A8）：跑一遍上线检查单（只读，不出卡）。 */
 export const SITE_CHECKLIST_TOOL = 'site_checklist_run'
+/** WP418（自查 A16）：插件这条职责看「装了哪些 App、目录里推荐哪些」（只读本机建站库）。 */
+export const SITE_APPS_TOOL = 'site_apps_list'
+/** WP418（自查 A16）：邮件模板这条职责看几封通知邮件现在的样子（只读本机建站库）。 */
+export const SITE_EMAILS_TOOL = 'site_email_templates'
 
 export const SHOP_READ_TOOL_NAMES: readonly string[] = [
   SHOP_GET_ORDER_TOOL,
@@ -89,7 +93,9 @@ export const SHOP_WRITE_TOOL_NAMES: readonly string[] = [
 export const SHOP_TOOL_NAMES: readonly string[] = [
   ...SHOP_READ_TOOL_NAMES,
   ...SHOP_WRITE_TOOL_NAMES,
+  SITE_APPS_TOOL,
   SITE_CHECKLIST_TOOL,
+  SITE_EMAILS_TOOL,
 ].sort()
 
 export const isShopTool = (name: string): boolean =>
@@ -122,7 +128,11 @@ export const SHOP_TOOL_SCOPE: Readonly<Record<string, string>> = {
 }
 
 /** WP418：不看店铺授权也摆出来的那几个（检查单没授权时照实说「没读到」，所以不靠授权出现）。 */
-export const SHOP_TOOLS_WITHOUT_SCOPE: readonly string[] = [SITE_CHECKLIST_TOOL]
+export const SHOP_TOOLS_WITHOUT_SCOPE: readonly string[] = [
+  SITE_APPS_TOOL,
+  SITE_CHECKLIST_TOOL,
+  SITE_EMAILS_TOOL,
+]
 
 /**
  * 每条职责登记了哪几个（与 `PlatformStoreAdminSpec.scopes_by_role` 对得上：要的权限够用这几个）。
@@ -165,6 +175,9 @@ export const SHOP_TOOLS_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
     SHOP_SAVE_MENU_TOOL,
     SHOP_SAVE_PAGE_TOOL,
   ].sort(),
+  // WP418（自查 A16）：插件 / 邮件模板两条职责以前 grounding 写的工具全仓没有执行器
+  'site.shopify-apps': [SITE_APPS_TOOL],
+  'site.shopify-email': [SITE_EMAILS_TOOL],
   'site.shopify-theme': [
     SHOP_GET_COLLECTION_TOOL,
     SHOP_GET_PRODUCT_TOOL,
@@ -533,6 +546,20 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
       },
       required: ['order_id', 'tracking_number', 'carrier'],
     },
+  },
+  {
+    name: SITE_APPS_TOOL,
+    description:
+      '看这家店装了哪些 App、装了却还没连上的是哪几个，以及目录里按类别推荐的那几个（收不收钱、干什么）。只读。' +
+      '装 / 卸 App 工坊替你做不了（Shopify 不让第三方装）：只能给 App Store 链接让人自己装。',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: SITE_EMAILS_TOOL,
+    description:
+      '看几封通知邮件（订单确认、发货通知……）现在的标题、是否在用、有没有改过的草稿、缺不缺必需变量。只读。' +
+      '改通知邮件工坊替你做不了（Shopify 接口改不了）：只能把改好的那一版给人，让人去后台「设置 → 通知」贴进去。',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: SITE_CHECKLIST_TOOL,

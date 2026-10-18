@@ -34,6 +34,8 @@ export interface ShopToolsOptions {
   module(): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined>
   /** WP418（自查 A8）：跑一遍上线检查单（只读、不出卡）；不给 = 这个工具回「没装」。 */
   siteChecklist?(request: RunRequest): Promise<unknown>
+  /** WP418（自查 A16）：读本机建站库（`site_apps_list` / `site_email_templates`）；不给 = 回「没装」。 */
+  siteRead?(tool: string, request: RunRequest): Promise<unknown>
 }
 
 const bareOf = (name: string): string =>
@@ -43,8 +45,10 @@ export function createShopToolSurface(options: ShopToolsOptions): ShopToolSurfac
   return {
     async offered(role_id) {
       // WP418：检查单不靠店铺授权出现（没授权它照实说「没读到」）
-      const always = (SHOP_TOOLS_BY_ROLE[role_id] ?? []).filter(
-        (n) => SHOP_TOOLS_WITHOUT_SCOPE.includes(n) && options.siteChecklist !== undefined,
+      const always = (SHOP_TOOLS_BY_ROLE[role_id] ?? []).filter((n) =>
+        n === SITE_CHECKLIST_TOOL
+          ? options.siteChecklist !== undefined
+          : SHOP_TOOLS_WITHOUT_SCOPE.includes(n) && options.siteRead !== undefined,
       )
       const m = await options.module()
       if (m === undefined) return always
@@ -61,6 +65,15 @@ export function createShopToolSurface(options: ShopToolsOptions): ShopToolSurfac
         return { status: 'error', reason: `not_a_shop_tool:${bare}` }
       if (!roleHasTool(request.actor.role_id, bare))
         return { status: 'blocked', reason: `${request.actor.role_id} 这条职责用不了「${bare}」。` }
+      if (SHOP_TOOLS_WITHOUT_SCOPE.includes(bare) && bare !== SITE_CHECKLIST_TOOL) {
+        if (options.siteRead === undefined)
+          return { status: 'error', reason: '这个品牌没装建站库。' }
+        try {
+          return { status: 'ok', data: await options.siteRead(bare, request) }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
       if (bare === SITE_CHECKLIST_TOOL) {
         if (options.siteChecklist === undefined)
           return { status: 'error', reason: '这个品牌没装上线检查单。' }

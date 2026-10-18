@@ -17,7 +17,7 @@ id: site.shopify-build
 version: 1.0.0
 domain: dev
 name: { zh: Shopify 整站搭建, en: Shopify Store Build }
-description: 新店从零到能开门：导航与页面结构、店铺基础信息、政策页挂载、上线检查单。管的是**结构**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事；结账 / 支付 / 税没有写动作，检查单只说得出缺什么。
+description: 新店从零到能开门：导航与页面结构、政策页、上线检查单（店名、联系邮箱、地址这类基础信息还没接通，请在后台改）。管的是**结构**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事；结账 / 支付 / 税没有写动作，检查单只说得出缺什么。
 
 scopes:
   # 店铺设置、导航、页面结构都算 store_config 与 content；商品只读（改价不是这个岗位的事）
@@ -88,14 +88,14 @@ grounding:
       name: store_settings,
       intent_terms: [店铺设置, store settings, 导航, navigation, menu, 政策页, policy],
       cue_terms: [改, change, 加, add, 配, configure, 上线, launch],
-      tool: shopify.shop.get,
+      tool: shop_list_menus,
       prefetch: true,
     }
   - {
       name: launch_checklist,
       intent_terms: [上线, launch, 检查单, checklist, 开门, go live, 缺什么],
       cue_terms: [能不能, can we, 还差, missing, 查一遍, check],
-      tool: site.checklist.run,
+      tool: site_checklist_run,
       prefetch: false,
     }
 
@@ -109,7 +109,7 @@ home_blocks:
       id: site.launch_checklist,
       placement: focus,
       component: card_list,
-      query: 'changes.by_kind(site.shopify-build, launch_check)',
+      query: site.launch_checklist,
       default_order: 10,
       pinnable: true,
       adaptive: true,
@@ -150,7 +150,7 @@ quick_prompts:
     kind: start_task
   - id: policy_pages
     label: { zh: "补齐政策页", en: "Fill in the policy pages" }
-    prompt: "退换货、隐私、服务条款、配送这四张政策页缺哪几张，缺的先起个草"
+    prompt: "退换货、隐私、服务条款、配送这四张政策缺哪几张，缺的先起个草（写进 Shopify 的「政策」，不是普通页面）"
     kind: start_task
   - id: why_blocked
     label: { zh: "为什么这项补不了", en: "Why can't this one be fixed" }
@@ -165,7 +165,7 @@ task_examples:
   - id: pre_launch
     title: { zh: "上线前最后一遍", en: "One last check before going live" }
     description: "这周就要开门了，想确认没漏。"
-    expected_output: "八项逐条的结论 + 每条缺项配一个具体改法；读不到的项会明说是「没读到」而不是「没有」。"
+    expected_output: "九项逐条的结论（含店面密码）+ 每条缺项配一个具体改法；读不到的项会明说是「没读到」而不是「没有」。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
@@ -173,7 +173,7 @@ task_examples:
 persona:
   zh: |
     你是谁：建站岗位里从零把一家新店搭起来的人。
-    你负责：导航与页面结构、店铺基础信息、政策页挂载、上线检查单。
+    你负责：导航与页面结构、政策页、上线检查单。店名、联系邮箱、地址这类基础信息还没接通：照实说，请人去后台改。
     你不负责：页面里放什么商品、写什么文案、做什么促销→网站运营；主题与模板→网页模板；客户问题→客服。结账、支付、税你没有写口，只说得出缺什么。
     怎么做：先把检查单跑一遍，缺什么照实列出来；说不准的地方写"查不到"，别拿默认值当事实。
     口气：像做工程的人，先说影响面，再说怎么回滚。

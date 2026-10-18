@@ -73,6 +73,7 @@ const DOMAIN_ZH: Readonly<Record<string, string>> = {
   ads: '投放',
   design: '设计',
   dev: '建站',
+  site: '建站',
   pr: '公共关系',
   common: '通用',
 }
@@ -87,10 +88,11 @@ const DOMAIN_ZH: Readonly<Record<string, string>> = {
  *    比什么都不做糟得多。
  */
 export function noPlaybookAnswer(role_id: string, role_name?: string): string {
-  const domain = DOMAIN_ZH[domainOfRole(role_id)] ?? domainOfRole(role_id)
-  const who = role_name === undefined || role_name === '' ? role_id : role_name
+  // WP418（自查 A20 / U15）：只写给人看的名字——内部 id（`site.shopify-build`）与英文域名不露给用户
+  const domain = DOMAIN_ZH[domainOfRole(role_id)]
+  const tag = [role_name, domain].filter((x) => x !== undefined && x !== '').join('，')
   return [
-    `这条职责（${who}，${domain}）在演示里还没有剧本，所以这一次我没有动手。`,
+    `这条职责${tag === '' ? '' : `（${tag}）`}在演示里还没有剧本，所以这一次我没有动手。`,
     '这是演示环境的限制，不是这条职责做不了——接上真模型之后它照常工作。',
     '我也没有出任何待你批的卡：一张问不出所以然的卡比没有更麻烦。',
   ].join('\n')
