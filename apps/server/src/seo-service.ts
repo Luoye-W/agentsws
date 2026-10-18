@@ -30,6 +30,7 @@ import type {
   AssignmentId,
   BrandCompetitor,
   BrandWatch,
+  BrandWatchAmazonItem,
   BrandWatchCompetitor,
   ClaimMarketGroup,
   ClaimRulesView,
@@ -349,6 +350,14 @@ export interface SeoServiceAssembly {
    * **不**把 GEO 的设定卡标成「已定」——这是竞品监控那边的确认，不是 GEO 策略。
    */
   watchCompetitorsApply(competitors: BrandWatchCompetitor[]): Promise<BrandWatch>
+  /**
+   * WP394（docs/104 C3 / C8）：Amazon 竞品方案卡写回唯一工作清单——竞品（含 Amazon 对标款格）+ 自家 ASIN（整份替换）。
+   * **不**把 GEO 的设定卡标成「已定」——这是竞品监控那边的确认，不是 GEO 策略。
+   */
+  watchAmazonApply(patch: {
+    competitors: BrandWatchCompetitor[]
+    brand_amazon: BrandWatchAmazonItem[]
+  }): Promise<BrandWatch>
   /**
    * WP392（docs/104 C3）：品牌档案里**新查到**的竞品（不在关注设置的竞品里、没被拒过、没问过）——沿用「要不要加进竞品」
    * 那张卡问一次（不另建清单）。卡给担竞品监控 / 内容与搜索的那个人；没人担就不问。
@@ -2195,6 +2204,12 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
     async watchCompetitorsApply(competitors) {
       return monitor.apply({ competitors }, { markSetup: false })
+    },
+    async watchAmazonApply(patch) {
+      return monitor.apply(
+        { competitors: patch.competitors, brand_amazon: patch.brand_amazon },
+        { markSetup: false },
+      )
     },
     async watchApply(patch) {
       await monitor.apply(patch)

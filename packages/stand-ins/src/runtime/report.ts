@@ -16,6 +16,8 @@
  */
 import type { ToolDef } from '@agentsws/contracts'
 import { COMPETITOR_STORE_TOOL_DEFS } from './competitor-store.js'
+// WP394：亚马逊店铺运营「竞品动向」的现在读一次（定义并进这张表，三个运行时同一份）
+import { AMAZON_COMPETITOR_TOOL_DEFS } from './amazon-competitor.js'
 
 export const QUERY_WATCH_ITEMS_TOOL = 'query_watch_items'
 export const RUN_WATCH_NOW_TOOL = 'run_watch_now'
@@ -223,6 +225,8 @@ export const REPORT_TOOL_DEFS: readonly ToolDef[] = [
   ...BASE_TOOL_DEFS,
   LIST_COMPETITOR_CHANGES_DEF,
   ...COMPETITOR_STORE_TOOL_DEFS,
+  // WP394：名字不在 `REPORT_TOOL_NAMES` 里（执行器与职责门禁另走一份），只是定义挂在这张表上
+  ...AMAZON_COMPETITOR_TOOL_DEFS,
 ]
 
 export const REPORT_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(

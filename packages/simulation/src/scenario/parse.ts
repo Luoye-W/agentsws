@@ -344,6 +344,10 @@ const EXPECTED_KEYS = [
   'competitor_changes',
   // WP393：简报里「竞品动向」那一段
   'competitor_brief',
+  // WP394：Amazon 对标款的差价 / 走哪条路 / 云端扣了几个积分
+  'competitor_vs_own',
+  'competitor_via',
+  'competitor_credits',
   'assistant_fanout_tasks',
   'assistant_fanout_notes',
   'secretary_kinds',
@@ -984,7 +988,17 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'competitor.read': {
-      known(source, `${path}.${key}`, body, ['competitor', 'source', 'rows', 'complete', 'error'])
+      known(source, `${path}.${key}`, body, [
+        'competitor',
+        'source',
+        'rows',
+        'complete',
+        'error',
+        'own',
+        'blocked_at',
+        'no_browser',
+        'cloud_credits',
+      ])
       const kind = str(source, `${path}.${key}.source`, body.source)
       if (kind !== 'shop' && kind !== 'amazon')
         fail(source, `${path}.${key}.source`, '只认 shop / amazon')
@@ -1002,6 +1016,10 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           'rating',
           'reviews',
           'created_at',
+          'coupon',
+          'bsr',
+          'bsr_category',
+          'vs_own',
         ])
         const optNum = (k: string): number | undefined =>
           r[k] === undefined ? undefined : num(source, `${at2}.${k}`, r[k])
@@ -1011,6 +1029,10 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         const compare_at = optNum('compare_at')
         const rating = optNum('rating')
         const reviews = optNum('reviews')
+        const bsr = optNum('bsr')
+        const coupon = optStr(source, `${at2}.coupon`, r.coupon)
+        const bsrCategory = optStr(source, `${at2}.bsr_category`, r.bsr_category)
+        const vsOwn = optStr(source, `${at2}.vs_own`, r.vs_own)
         if (r.available !== undefined && typeof r.available !== 'boolean')
           fail(source, `${at2}.available`, '必须是 true / false')
         return {
@@ -1023,11 +1045,25 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(rating === undefined ? {} : { rating }),
           ...(reviews === undefined ? {} : { reviews }),
           ...(created === undefined ? {} : { created_at: created }),
+          ...(coupon === undefined ? {} : { coupon }),
+          ...(bsr === undefined ? {} : { bsr }),
+          ...(bsrCategory === undefined ? {} : { bsr_category: bsrCategory }),
+          ...(vsOwn === undefined ? {} : { vs_own: vsOwn }),
         }
       })
       if (body.complete !== undefined && typeof body.complete !== 'boolean')
         fail(source, `${path}.${key}.complete`, '必须是 true / false')
       const error = optStr(source, `${path}.${key}.error`, body.error)
+      for (const k of ['own', 'no_browser'] as const)
+        if (body[k] !== undefined && typeof body[k] !== 'boolean')
+          fail(source, `${path}.${key}.${k}`, '必须是 true / false')
+      const blockedAt = optStr(source, `${path}.${key}.blocked_at`, body.blocked_at)
+      const cloudCredits =
+        body.cloud_credits === undefined
+          ? undefined
+          : num(source, `${path}.${key}.cloud_credits`, body.cloud_credits)
+      if (kind !== 'amazon' && (body.own !== undefined || blockedAt !== undefined))
+        fail(source, `${path}.${key}`, 'own / blocked_at 只给 amazon')
       return {
         at,
         type: 'competitor.read',
@@ -1037,6 +1073,10 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           rows,
           ...(typeof body.complete === 'boolean' ? { complete: body.complete } : {}),
           ...(error === undefined ? {} : { error }),
+          ...(body.own === true ? { own: true } : {}),
+          ...(blockedAt === undefined ? {} : { blocked_at: blockedAt }),
+          ...(body.no_browser === true ? { no_browser: true } : {}),
+          ...(cloudCredits === undefined ? {} : { cloud_credits: cloudCredits }),
         },
       }
     }
@@ -2955,6 +2995,17 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       fail(source, 'expected.competitor_brief', '必须是字符串列表')
     out.competitor_brief = raw.competitor_brief as string[]
   }
+  if (raw.competitor_vs_own !== undefined) {
+    if (!Array.isArray(raw.competitor_vs_own))
+      fail(source, 'expected.competitor_vs_own', '必须是数的列表')
+    out.competitor_vs_own = raw.competitor_vs_own.map((v, i) =>
+      num(source, `expected.competitor_vs_own[${i}]`, v),
+    )
+  }
+  const competitorVia = optStrList(source, 'expected.competitor_via', raw.competitor_via)
+  if (competitorVia !== undefined) out.competitor_via = competitorVia
+  if (raw.competitor_credits !== undefined)
+    out.competitor_credits = num(source, 'expected.competitor_credits', raw.competitor_credits)
   const fanoutTasks = optStrList(
     source,
     'expected.assistant_fanout_tasks',

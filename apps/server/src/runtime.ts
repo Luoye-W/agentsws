@@ -109,8 +109,10 @@ import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agents
 import {
   ADS_DATA_TOOL_NAMES,
   ADS_TOOL_NAMES,
-  AMAZON_LISTING_TOOL_NAMES,
+  AMAZON_COMPETITOR_ROLES,
+  AMAZON_COMPETITOR_TOOL_NAMES,
   AMAZON_KEYWORD_TOOL_NAMES,
+  AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   COMPETITOR_STORE_ROLES,
   COMPETITOR_STORE_TOOL_NAMES,
@@ -236,6 +238,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...PR_MONITOR_TOOL_NAMES,
     // WP390：工坊服务——查目录只读本机缓存；出卡不下单（下单永远人点）
     ...WORKSHOP_SERVICE_TOOL_NAMES,
+    // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
+    ...AMAZON_COMPETITOR_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -570,6 +574,11 @@ export interface RuntimeOptions {
    * 只给 `dtc.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   competitorStoreTools?: ToolExecutor
+  /**
+   * WP394（docs/104 一期 B）：亚马逊店铺运营「竞品动向」现在读一次（`competitor-watch/amazon-tools.ts`）。
+   * 只给 `amz.store`。不给 = 没有这一个（老装配、模拟世界字节不变）。
+   */
+  amazonCompetitorTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1339,6 +1348,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const competitorStore = options.competitorStoreTools
     const prMonitor = options.prMonitorTools
     const workshopTools = options.workshopServices?.execute
+    const amazonCompetitor = options.amazonCompetitorTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1376,7 +1386,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       workshopTools === undefined &&
       competitorStore === undefined &&
       amazonListingTools === undefined &&
-      amazonKeywordTools === undefined
+      amazonKeywordTools === undefined &&
+      amazonCompetitor === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1471,6 +1482,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ) {
         return competitorStore(call)
       }
+      // WP394：亚马逊店铺运营「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        amazonCompetitor !== undefined &&
+        AMAZON_COMPETITOR_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return amazonCompetitor(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1526,6 +1544,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
       return true
     if (options.competitorStoreTools !== undefined && COMPETITOR_STORE_TOOL_NAMES.includes(bare))
+      return true
+    if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
       return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
@@ -2069,6 +2089,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(options.competitorStoreTools !== undefined &&
         COMPETITOR_STORE_ROLES.includes(config.role_id)
           ? COMPETITOR_STORE_TOOL_NAMES
+          : []),
+        // WP394：亚马逊店铺运营「竞品动向」（现在读一次；只给亚马逊店铺运营）
+        ...(options.amazonCompetitorTools !== undefined &&
+        AMAZON_COMPETITOR_ROLES.includes(config.role_id)
+          ? AMAZON_COMPETITOR_TOOL_NAMES
           : []),
       ]),
     ]

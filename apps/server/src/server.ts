@@ -257,13 +257,14 @@ import { createAdsToolExecutor } from './ads-tools.js'
 import { createAdsLedger } from './ads-wiring/ledger.js'
 import { adsNoticeCards } from './ads-wiring/notices.js'
 import { type AdsWiring, createAdsWiring } from './ads-wiring/service.js'
-// WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
+// WP394（docs/104 一期 B）：读 Amazon 前台的那一块（自报 Agent、配送邮编、被拦就停）与云端兜底
 import {
-  type AmazonListingCheckup,
-  type AmazonListingReader,
-  createAmazonListingCheckup,
-  createAmazonListingToolExecutor,
-} from './amazon-listing/index.js'
+  type AmazonCloudPort,
+  type AmazonFrontReader,
+  type AmazonFrontState,
+  createAmazonFrontReader,
+  readAmazonCloud,
+} from './amazon-front/index.js'
 // WP398（docs/106 §13 A8）：Amazon 词库（前台联想词 + 竞品 / 自家 Listing 拆词 + 差距）
 import {
   type AmazonAutocompleteReader,
@@ -271,7 +272,15 @@ import {
   createAmazonKeywordBank,
   createAmazonKeywordToolExecutor,
   createBrowserAutocompleteReader,
+  listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
+// WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
+import {
+  type AmazonListingCheckup,
+  type AmazonListingReader,
+  createAmazonListingCheckup,
+  createAmazonListingToolExecutor,
+} from './amazon-listing/index.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -385,10 +394,14 @@ import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 // WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
 import {
+  type AmazonCompetitorAssembly,
   browserTextReadOf,
   type CompetitorStoreAssembly,
   type CompetitorWatchAssembly,
   competitorWatchSourceOf,
+  createAmazonAsinAdapter,
+  createAmazonCompetitor,
+  createAmazonCompetitorTools,
   createCompetitorStore,
   createCompetitorStoreTools,
   createCompetitorWatch,
@@ -1103,12 +1116,6 @@ export interface ServerOptions {
    */
   clientErrorLog?: (line: string) => void
   /**
-   * WP396（docs/106 §13）：Listing 体检读 Amazon 前台商品页用的那一块（WP394 的读页积木：内置浏览器、
-   * `Agent/AgentsWorkshop` 标识、配送邮编、被拦就停）。demo / 测试注入替身。
-   * 不给 = 这里读不了 Amazon 前台，体检照实说「读不了」（不退回去用别的办法读）。
-   */
-  amazonListingReader?: (workspace_id: WorkspaceId) => AmazonListingReader | undefined
-  /**
    * WP398（docs/106 §13 A8）：词库读 Amazon 搜索框联想词用的那一块。不给 = 有桌面壳的内置浏览器时用它读
    * （`Agent/AgentsWorkshop` 标识、固定间隔、算进每小时额度、被拦就停），没有就照实说「读不了」。demo / 测试注入替身。
    */
@@ -1118,6 +1125,12 @@ export interface ServerOptions {
    * 不给 = 只拆读页那几单交进来的（`ingestListings`）。
    */
   amazonKeywordListings?: (workspace_id: WorkspaceId) => Promise<AmazonListingText[]>
+  /**
+   * WP396（docs/106 §13）：Listing 体检读 Amazon 前台商品页用的那一块（WP394 的读页积木：内置浏览器、
+   * `Agent/AgentsWorkshop` 标识、配送邮编、被拦就停）。demo / 测试注入替身。
+   * 不给 = 这里读不了 Amazon 前台，体检照实说「读不了」（不退回去用别的办法读）。
+   */
+  amazonListingReader?: (workspace_id: WorkspaceId) => AmazonListingReader | undefined
   /**
    * WP323：记录去处的飞书适配器发请求用的 `fetch`（测试注入替身飞书；不给用全局 `fetch`）。
    */
@@ -1140,6 +1153,13 @@ export interface ServerOptions {
   competitorProbe?: (url: string, now: string) => Promise<StoreProbeResult> | undefined
   /** WP393：自家店商品的替身（测试 / demo；不给 = 从已连店铺读）。 */
   competitorOwnShop?: (workspace_id: WorkspaceId) => Promise<OwnShopRead>
+  /**
+   * WP394（docs/104 C4）：Amazon 对标款云端兜底那一路的数据能力口（测试 / demo 塞替身；不给 = 关联了账号就走
+   * 工坊云端数据 `amazon.product`，没关联 = 没有这一路）。
+   */
+  amazonCloud?: (workspace_id: WorkspaceId) => AmazonCloudPort | undefined
+  /** WP394：读 Amazon 前台那一块的替身（测试 / demo；不给 = 用桌面壳的内置浏览器，没有桌面壳 = 没有）。 */
+  amazonFront?: (workspace_id: WorkspaceId) => AmazonFrontReader | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -3602,6 +3622,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP393：店铺管理「竞品动向」方案卡（盯哪几家、每家走哪条路、什么算要紧、对标款）
     if (brand.competitorStore !== undefined)
       assembly.registerTarget(brand.competitorStore.setupTarget())
+    // WP394：亚马逊店铺运营「竞品动向」方案卡（盯哪些 ASIN、各对标谁、什么算重要、频率）
+    if (brand.amazonCompetitor !== undefined)
+      assembly.registerTarget(brand.amazonCompetitor.setupTarget())
     // WP315：看哪个广告账户（缺了出配置卡：贴后台网址或填编号）
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
@@ -6061,6 +6084,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                     of: async () => competitorStore,
                   }),
                 }),
+            // WP394：亚马逊店铺运营「竞品动向」现在读一次（只给 amz.store；托管实例没有）
+            ...(hostedBoot !== undefined
+              ? {}
+              : {
+                  amazonCompetitorTools: createAmazonCompetitorTools({
+                    of: async (w) =>
+                      (await brandModules.forWorkspace(w).catch(() => undefined))?.amazonCompetitor,
+                  }),
+                }),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -6232,17 +6264,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 return false
               },
             }),
-            // WP396：Listing 体检（读自家前台页 / 看最近一次 / 改规则；只给 amz.store）
-            amazonListingTools: createAmazonListingToolExecutor({
-              checkup: async (w) =>
-                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
-                  ?.amazonListing,
-            }),
             // WP398：Amazon 词库（刷新 / 看词库 / 标一个词；只给 amz.store）
             amazonKeywordTools: createAmazonKeywordToolExecutor({
               bank: async (w) =>
                 (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
                   ?.amazonKeywords,
+            }),
+            // WP396：Listing 体检（读自家前台页 / 看最近一次 / 改规则；只给 amz.store）
+            amazonListingTools: createAmazonListingToolExecutor({
+              checkup: async (w) =>
+                (await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined))
+                  ?.amazonListing,
             }),
             // WP315：投放岗看数据（查数 / 现在导一次 / 提止损卡；只给 ads.*）
             adsDataTools: createAdsDataToolExecutor({
@@ -7934,56 +7966,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       nowMs: () => Date.parse(clock.now()),
     })
     /*
-     * WP396（docs/106 §13）：自家 Listing 体检。自家 ASIN 是关注设置那一格（WP392 `BrandWatch.brand.amazon`，唯一一份）；
-     * 读页走 WP394 的积木（`options.amazonListingReader`）。托管实例不装（云上没有内置浏览器）。
-     */
-    const brandWatchOf = async () => {
-      await seoService.watchView().catch(() => undefined)
-      return (await seoService.geoHistory()).watch()
-    }
-    const amazonListing: AmazonListingCheckup | undefined =
-      hostedBoot !== undefined
-        ? undefined
-        : createAmazonListingCheckup({
-            workspace_id: ws,
-            ...(dir === undefined ? {} : { dir }),
-            now: () => clock.now(),
-            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
-            reader: () => options.amazonListingReader?.(ws),
-            brand: async () => {
-              const w = await brandWatchOf()
-              const profile = onboardingRef?.brandProfile(ws) as { markets?: unknown } | undefined
-              return {
-                name: w?.brand.name ?? brandNameOfWorkspace(ws),
-                own: w?.brand.amazon ?? [],
-                markets: Array.isArray(profile?.markets)
-                  ? profile.markets.filter((m): m is string => typeof m === 'string')
-                  : [],
-              }
-            },
-            // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」）
-            saveOwn: async (items) => {
-              const store = await seoService.geoHistory()
-              const cur = await brandWatchOf()
-              if (cur === undefined) throw new Error('关注设置还没建好，存不了自家 ASIN')
-              const { prompts: _p, prompt_candidates: _c, ...settings } = cur
-              const { amazon: _old, ...brand } = settings.brand
-              store.saveSettings({
-                ...settings,
-                brand: items.length === 0 ? brand : { ...brand, amazon: items },
-              })
-            },
-            emit: (type, payload) =>
-              appendEvent({
-                schema_version: 1,
-                workspace_id: ws,
-                type,
-                actor: { kind: 'system', id: 'amazon-listing' },
-                correlation: { trace_id: `tr_amazon_listing_${clock.now()}` },
-                payload,
-              }),
-          })
-    /*
      * WP398（docs/106 §13 A8）：Amazon 词库（品牌目录下 `amazon-keywords.json`）。联想词走内置浏览器
      * （桌面壳那一条队，固定间隔、算进每小时额度、被拦就停）；托管实例不装（云上没有内置浏览器）。
      */
@@ -8020,12 +8002,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ),
               }
             },
-            ...(options.amazonKeywordListings === undefined
-              ? {}
-              : {
-                  competitorListings: () =>
-                    options.amazonKeywordListings?.(ws) ?? Promise.resolve([]),
-                }),
+            // WP394：竞品 / 自家对标款的标题和五点从竞品监控的快照里拿（`amazon_asin` 进料口读商品页时填的）；
+            // 测试 / demo 给了替身就用替身
+            competitorListings: async () => {
+              if (options.amazonKeywordListings !== undefined)
+                return options.amazonKeywordListings(ws)
+              const db = competitorWatchDb.forWorkspace(ws)
+              const w = (await seoService.geoHistory()).watch()
+              return listingTextsFromSnapshots({
+                sources: db.sources(),
+                snapshot: (id) => db.snapshot(id),
+                names: new Map((w?.competitors ?? []).map((c) => [c.id, c.name])),
+              })
+            },
             emit: (type, payload) =>
               appendEvent({
                 schema_version: 1,
@@ -8035,6 +8024,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 correlation: {
                   trace_id: `tr_amazon_keywords_${Date.parse(clock.now()).toString(36)}`,
                 },
+                payload,
+              }),
+          })
+    /*
+     * WP396（docs/106 §13）：自家 Listing 体检。自家 ASIN 是关注设置那一格（WP392 `BrandWatch.brand.amazon`，唯一一份）；
+     * 读页走 WP394 的积木（`options.amazonListingReader`）。托管实例不装（云上没有内置浏览器）。
+     */
+    const brandWatchOf = async () => {
+      await seoService.watchView().catch(() => undefined)
+      return (await seoService.geoHistory()).watch()
+    }
+    const amazonListing: AmazonListingCheckup | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : createAmazonListingCheckup({
+            workspace_id: ws,
+            ...(dir === undefined ? {} : { dir }),
+            now: () => clock.now(),
+            newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+            // WP394：读页走竞品对标款同一块（内置浏览器、Agent 标识、配送邮编、被拦就停）；测试 / demo 给了替身就用替身
+            reader: () => options.amazonListingReader?.(ws) ?? amazonFront,
+            brand: async () => {
+              const w = await brandWatchOf()
+              const profile = onboardingRef?.brandProfile(ws) as { markets?: unknown } | undefined
+              return {
+                name: w?.brand.name ?? brandNameOfWorkspace(ws),
+                own: w?.brand.amazon ?? [],
+                markets: Array.isArray(profile?.markets)
+                  ? profile.markets.filter((m): m is string => typeof m === 'string')
+                  : [],
+              }
+            },
+            // 直接写关注设置那一格（不走「改设置」：那条会把 GEO 设定卡记成「定过了」）
+            saveOwn: async (items) => {
+              const store = await seoService.geoHistory()
+              const cur = await brandWatchOf()
+              if (cur === undefined) throw new Error('关注设置还没建好，存不了自家 ASIN')
+              const { prompts: _p, prompt_candidates: _c, ...settings } = cur
+              const { amazon: _old, ...brand } = settings.brand
+              store.saveSettings({
+                ...settings,
+                brand: items.length === 0 ? brand : { ...brand, amazon: items },
+              })
+            },
+            emit: (type, payload) =>
+              appendEvent({
+                schema_version: 1,
+                workspace_id: ws,
+                type,
+                actor: { kind: 'system', id: 'amazon-listing' },
+                correlation: { trace_id: `tr_amazon_listing_${clock.now()}` },
                 payload,
               }),
           })
@@ -8176,18 +8216,62 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     const builtinShopAdapter = createShopCatalogAdapter(competitorIo)
     let competitorStore: CompetitorStoreAssembly | undefined
+    /*
+     * WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的那一块——桌面壳的内置浏览器（每个请求自报
+     * `Agent/AgentsWorkshop`、配送邮编、被拦就停）、排进和搜索同一条节流队（固定间隔、每小时额度共用）；
+     * 云端兜底走工坊云端数据 `amazon.product`（关联了账号才有）。托管实例不装。
+     */
+    const cwStore = competitorWatchDb.forWorkspace(ws)
+    const AMAZON_FRONT_KEY = 'amazon_front'
+    const amazonFront: AmazonFrontReader | undefined =
+      hostedBoot !== undefined
+        ? undefined
+        : (options.amazonFront?.(ws) ??
+          (webSearchChannel === undefined
+            ? undefined
+            : createAmazonFrontReader({
+                workspace_id: ws,
+                channel: () => webSearchChannel,
+                page: (task) => webSearchThrottle.run(task, { steady: true }),
+                nowMs: () => Date.parse(clock.now()),
+                state: () => cwStore.kv<AmazonFrontState>(AMAZON_FRONT_KEY) ?? {},
+                saveState: (next) => cwStore.setKv(AMAZON_FRONT_KEY, next),
+              })))
+    const amazonCloudPort = (): AmazonCloudPort | undefined =>
+      options.amazonCloud !== undefined
+        ? options.amazonCloud(ws)
+        : ownCloud.linked()
+          ? createDataService(ownCloud)
+          : undefined
+    let amazonCompetitor: AmazonCompetitorAssembly | undefined
+    const amazonAsinAdapter = createAmazonAsinAdapter({
+      reader: () => amazonFront,
+      cloud: () => {
+        const port = amazonCloudPort()
+        return port === undefined
+          ? undefined
+          : (input) =>
+              readAmazonCloud(port, input, {
+                sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+                nowMs: () => Date.now(),
+              })
+      },
+      store: () => cwStore,
+      onCredits: (source_id, credits) => amazonCompetitor?.noteCredits(source_id, credits),
+    })
     const competitorWatch: CompetitorWatchAssembly | undefined =
       hostedBoot !== undefined
         ? undefined
         : createCompetitorWatch({
             workspace_id: ws,
-            store: competitorWatchDb.forWorkspace(ws),
+            store: cwStore,
             now: () => clock.now(),
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             tzOffsetMinutes: () => workData.tz_offset_minutes,
             brandWatch: async () => (await seoService.geoHistory()).watch(),
             adapters: () => ({
               shop_catalog: builtinShopAdapter,
+              amazon_asin: amazonAsinAdapter,
               ...(options.competitorAdapters?.(ws) ?? {}),
             }),
             extraOwnRef: async () => competitorStore?.ownRef(),
@@ -8249,6 +8333,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ownShop,
       })
     }
+    if (competitorWatch !== undefined)
+      amazonCompetitor = createAmazonCompetitor({
+        workspace_id: ws,
+        store: cwStore,
+        now: () => clock.now(),
+        watch: () => competitorWatch,
+        brandWatch: async () => (await seoService.geoHistory()).watch(),
+        saveWatch: async (patch) => {
+          await seoService.watchAmazonApply(patch)
+        },
+        profile: () => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            name: brandNameOfWorkspace(ws),
+            ...(p?.category === undefined ? {} : { category: p.category }),
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.markets === undefined ? {} : { markets: p.markets }),
+            ...(p?.competitors === undefined
+              ? {}
+              : { competitors: p.competitors.map((c) => ({ name: c.name })) }),
+          }
+        },
+        reader: () => amazonFront,
+      })
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
@@ -8565,6 +8673,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
       ...(competitorStore === undefined ? {} : { competitorStore }),
+      ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
+      ...(amazonFront === undefined ? {} : { amazonFront }),
       redditLimits,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),

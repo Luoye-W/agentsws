@@ -4,12 +4,19 @@
  * 读页本身（内置浏览器、`Agent/AgentsWorkshop` 标识、配送邮编、被拦就停）不在这里：那是 WP394 的积木，
  * 这里只认它交回来的 HTML。和 {@link ./amazon.js} 的分工：那边是建档案要的（标题、品牌、五点、价、评分、
  * 类目），这里补体检要的（图片张数、视频、A+、描述、变体子体、有没有货、购物车谁卖、优惠券）。
- * 共用的那几样（五点、划线价、验证页）直接用那边的函数，不另写一份。
+ * 共用的那几样（五点、划线价、验证页；WP394 起还有评分、评论数、优惠券、有没有货）直接用那边的函数，不另写一份。
  *
  * **读不到的格子不出现，不猜**：页面 id 会变，变了那一格就是「没读到」，体检卡照实写。
  */
 import type { AmazonListingFacts } from '@agentsws/contracts'
-import { amazonListPrice, isBlocked } from './amazon.js'
+import {
+  amazonAvailability,
+  amazonCoupon,
+  amazonListPrice,
+  amazonRating,
+  amazonReviews,
+  isBlocked,
+} from './amazon.js'
 import { decodeEntities, squash } from './html.js'
 
 const strip = (s: string): string => squash(decodeEntities(s.replace(/<[^>]*>/g, ' ')))
@@ -147,29 +154,6 @@ function variants(html: string): AmazonListingFacts['variants'] {
   }
 }
 
-function availability(
-  html: string,
-): Pick<AmazonListingFacts, 'availability' | 'availability_text'> {
-  const text =
-    textOfId(html, 'availability') ??
-    (/id=["']outOfStock["']/i.test(html) ? textOfId(html, 'outOfStock') : undefined)
-  if (text === undefined) return { availability: 'unknown' }
-  const t = text.slice(0, 160)
-  if (
-    /currently unavailable|out of stock|nicht verfügbar|actuellement indisponible|non disponibile|no disponible|在庫切れ|現在お取り扱いできません/i.test(
-      t,
-    )
-  )
-    return { availability: 'out_of_stock', availability_text: t }
-  if (
-    /in stock|only \d+ left|auf lager|en stock|disponibilità immediata|en stock|在庫あり|usually ships|available to ship/i.test(
-      t,
-    )
-  )
-    return { availability: 'in_stock', availability_text: t }
-  return { availability: 'unknown', availability_text: t }
-}
-
 /** 购物车：「Sold by / Ships from」两格（新版 `offer-display-feature`，老版 `merchant-info`）。 */
 function buybox(html: string): AmazonListingFacts['buybox'] {
   const hasCart = /id=["'](?:add-to-cart-button|buy-now-button)["']/i.test(html)
@@ -201,38 +185,6 @@ function buybox(html: string): AmazonListingFacts['buybox'] {
   }
 }
 
-function coupon(html: string): string | undefined {
-  const block =
-    blockOfId(html, 'promoPriceBlockMessage_feature_div', 3_000) ??
-    blockOfId(html, 'couponBadgeRegularVpc', 3_000)
-  const scope = block ?? html
-  const m =
-    /((?:apply|save)\s+[^<]{0,40}?coupon[^<]{0,30}|[^<>]{0,20}coupon\s+applied[^<]{0,20})/i.exec(
-      scope,
-    )?.[1]
-  const t = m === undefined ? undefined : strip(m)
-  return t === undefined || t === '' ? undefined : t.slice(0, 120)
-}
-
-function rating(html: string): number | undefined {
-  const pop =
-    /id=["']acrPopover["'][^>]*title=["']([0-9.,]+)\s*(?:out of|von|sur|su|de|5つ星のうち)/i.exec(
-      html,
-    )?.[1]
-  const raw = pop ?? /([0-9.,]+)\s*out of\s*5\s*stars/i.exec(html)?.[1]
-  if (raw === undefined) return undefined
-  const n = Number(raw.replace(',', '.'))
-  return Number.isFinite(n) && n >= 0 && n <= 5 ? n : undefined
-}
-
-function reviews(html: string): number | undefined {
-  const text = textOfId(html, 'acrCustomerReviewText')
-  const raw = /([\d.,\s]+)/.exec(text ?? '')?.[1]
-  if (raw === undefined) return undefined
-  const n = Number(raw.replace(/[.,\s]/g, ''))
-  return Number.isFinite(n) && n > 0 ? n : undefined
-}
-
 /**
  * 一页商品页 → 体检要的那几格。验证页回 `undefined`（调用方照实说「被拦了」，不重试）。
  */
@@ -252,9 +204,10 @@ export function readAmazonListingFacts(
   const listPrice = amazonListPrice(html)
   const currency = price === undefined ? undefined : currencyOfPrice(price)
   const img = images(html)
-  const r = rating(html)
-  const n = reviews(html)
-  const c = coupon(html)
+  // WP394：评分、评论数、优惠券、有没有货和竞品对标款那一路共用 `amazon.ts` 的同一份读法
+  const r = amazonRating(html)
+  const n = amazonReviews(html)
+  const c = amazonCoupon(html)
   return {
     asin: at.asin,
     marketplace: at.marketplace,
@@ -275,7 +228,7 @@ export function readAmazonListingFacts(
     ...(listPrice === undefined || listPrice === price ? {} : { list_price: listPrice }),
     ...(currency === undefined ? {} : { currency }),
     ...(c === undefined ? {} : { coupon: c }),
-    ...availability(html),
+    ...amazonAvailability(html),
     buybox: buybox(html),
     undeliverable:
       /cannot be shipped to your selected delivery location|doesn['’]t ship to your selected location|kann nicht an den ausgewählten Lieferort|ne peut pas être expédié/i.test(

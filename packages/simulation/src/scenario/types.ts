@@ -267,6 +267,13 @@ export interface ScenarioCompetitorRow {
   reviews?: number
   /** 商品创建时间（ISO；判「上新」用）。 */
   created_at?: string
+  /** WP394：Amazon 优惠券文字。 */
+  coupon?: string
+  /** WP394：Amazon 大类 BSR 名次与类目。 */
+  bsr?: number
+  bsr_category?: string
+  /** WP394：对标自家哪一款（自家 ASIN；C8 比价）。 */
+  vs_own?: string
 }
 
 /**
@@ -280,6 +287,16 @@ export interface ScenarioCompetitorRead {
   rows: ScenarioCompetitorRow[]
   complete?: boolean
   error?: string
+  /**
+   * WP394（Amazon）：这一次读的是自家的对照款（`competitor` 写品牌名；竞品比价时用它的价）。
+   */
+  own?: boolean
+  /** WP394（Amazon）：内置浏览器读到这个 ASIN 时碰到验证页（之后这一轮不再碰 Amazon，剩下的走云端替身）。 */
+  blocked_at?: string
+  /** WP394（Amazon）：这一次没有内置浏览器（没有桌面壳），全走云端替身。 */
+  no_browser?: boolean
+  /** WP394（Amazon）：云端替身每个 ASIN 扣几个积分（缺省 0.18）。 */
+  cloud_credits?: number
 }
 
 /**
@@ -1661,6 +1678,12 @@ export interface ScenarioExpected {
    * 竞品监控自己零写（不出卡、不改任何外部账号）。
    */
   competitor_changes?: string[]
+  /** WP394：比出来的变化里，带「和自家对标款比」的那几条差价（竞品现价 − 自家现价，按顺序）。 */
+  competitor_vs_own?: number[]
+  /** WP394：Amazon 那几次读按顺序走了哪条路（`browser` / `cloud`）。 */
+  competitor_via?: string[]
+  /** WP394：Amazon 走云端一共扣了几个积分。 */
+  competitor_credits?: number
   /**
    * WP393：简报里「竞品动向」那一段要有这几句（子串，全都要在）；给空列表 = 这一段一次都不该出。
    */

@@ -624,6 +624,43 @@ export function checkExpectations(
       `简报「竞品动向」：${lines.length === 0 ? '没出' : lines.join('；')}；期望 ${want.length === 0 ? '不出' : `含 ${want.join(' / ')}`}`,
     )
   }
+  // WP394：Amazon 对标款——带自家比价的那几条差价、每次读走了哪条路、云端一共扣了几个积分
+  if (expected.competitor_vs_own !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_change' && payloadOf(e).vs_own !== undefined)
+      .map((e) => Number(payloadOf(e).vs_own))
+    const want = expected.competitor_vs_own
+    add(
+      'competitor_vs_own',
+      got.length === want.length &&
+        got.every((g, i) => Math.abs(g - (want[i] ?? Number.NaN)) < 0.005),
+      `和自家对标款比出的差价 [${got.join(', ')}]，期望 [${want.join(', ')}]`,
+    )
+  }
+  if (expected.competitor_via !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.competitor_read' && payloadOf(e).source === 'amazon')
+      .map((e) => String(payloadOf(e).via ?? 'none'))
+    const want = expected.competitor_via
+    add(
+      'competitor_via',
+      got.length === want.length && got.every((g, i) => g === want[i]),
+      `Amazon 每次读走了 [${got.join(', ')}]，期望 [${want.join(', ')}]`,
+    )
+  }
+  if (expected.competitor_credits !== undefined) {
+    const got =
+      Math.round(
+        evidence.events
+          .filter((e) => e.type === 'simulation.competitor_read')
+          .reduce((n, e) => n + Number(payloadOf(e).credits ?? 0), 0) * 100,
+      ) / 100
+    add(
+      'competitor_credits',
+      Math.abs(got - expected.competitor_credits) < 0.005,
+      `云端一共扣了 ${got} 积分，期望 ${expected.competitor_credits}`,
+    )
+  }
   // WP343：「我的助理」按顺序交给了哪几个岗位；助理那一步自己不 stage、不 apply
   if (expected.assistant_dispatched_to !== undefined) {
     const got = evidence.events

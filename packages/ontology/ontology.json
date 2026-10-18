@@ -7,6 +7,7 @@
     "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/amazon-competitor.ts",
     "packages/contracts/src/amazon-inventory.ts",
     "packages/contracts/src/amazon-keywords.ts",
     "packages/contracts/src/amazon-listing.ts",
@@ -146,7 +147,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3fc823c675ea4ce8ff5f8597b5cf6061",
+  "source_digest": "71acf085afaf907edccd84b0536783d4",
   "objects": [
     {
       "id": "ad",

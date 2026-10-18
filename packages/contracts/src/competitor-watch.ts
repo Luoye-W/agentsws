@@ -116,7 +116,15 @@ export interface CatalogSnapshotRow {
   product_created_at?: Iso8601
   /** 这一行是什么时候读到的。 */
   read_at: Iso8601
+  /**
+   * WP394：这一次**这条路读不到**的格子（云端那一路没有划线价、优惠券）。写在这里的格子照实空着，
+   * 对比时不拿「空」当「没了」（不报「打折结束」），快照里留着上一次读到的值。
+   */
+  fields_unread?: CatalogUnreadField[]
 }
+
+/** WP394：一条路可能读不到的那几格。 */
+export type CatalogUnreadField = 'compare_at_price' | 'coupon'
 
 /** 快照里存的一行：这一行的最新值 + 每次读到过的时间。 */
 export interface CatalogStateRow extends CatalogSnapshotRow {

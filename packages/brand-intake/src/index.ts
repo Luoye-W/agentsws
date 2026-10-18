@@ -463,7 +463,36 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
   return out as BrandIntakeProfile
 }
 
-export { amazonListPrice, amazonSpecs } from './amazon.js'
+// WP394（docs/104 一期 B，docs/106 §13 A9）：读 Amazon 前台的积木——站点 / 地址 / 商品页那几格 / 搜索卡片（联想词用 WP398 的 amazon-autocomplete），
+// 以及读对标款那一轮（内置浏览器先读、被拦就停退云端）与挑对标款、什么算重要。WP396 / WP398 直接用这一套。
+export type { AmazonProductFacts, AmazonSearchCard } from './amazon.js'
+export {
+  AMAZON_RESOURCE_HOSTS,
+  AMAZON_SITE_HOSTS,
+  type AmazonAvailability,
+  amazonAvailability,
+  amazonAvailable,
+  amazonBsr,
+  amazonCoupon,
+  amazonDeliverTo,
+  amazonHostOfMarket,
+  amazonListPrice,
+  amazonMarketCurrency,
+  amazonMoney,
+  amazonPriceText,
+  amazonProductUrlOf,
+  amazonRating,
+  amazonReviews,
+  amazonSearchCards,
+  amazonSearchUrlOf,
+  amazonSpecs,
+  amazonUndeliverable,
+  currencyOfAmazonPrice,
+  isAmazonChallenge,
+  isAmazonHost,
+  isAmazonMissingPage,
+  parseAmazonProduct,
+} from './amazon.js'
 // WP396（docs/106 §13）：自家 Listing 体检要的那几格（读页本身是 WP394 的积木）
 export {
   currencyOfPrice,
@@ -471,6 +500,26 @@ export {
   listingPrice,
   readAmazonListingFacts,
 } from './amazon-listing.js'
+export type {
+  AmazonAsinReadDeps,
+  AmazonAsinReadResult,
+  AmazonBenchmarkPick,
+  AmazonCloudItem,
+  AmazonCloudRead,
+  AmazonOwnItem,
+  AmazonPageOutcome,
+} from './amazon-watch.js'
+export {
+  AMAZON_CLOUD_LABEL,
+  amazonCloudToRow,
+  amazonFactsToRow,
+  cardIsBrand,
+  isImportantAmazonChange,
+  readAmazonAsins,
+  suggestAmazonBenchmarks,
+  suggestAmazonRules,
+  titleTokens,
+} from './amazon-watch.js'
 // WP346（决策 872）：AI 归纳那一步（移植自 KOLAgents enrichment.ts）
 export type { InsightsModel, InsightsPage, InsightsReply, SourcedField } from './insights.js'
 export {
