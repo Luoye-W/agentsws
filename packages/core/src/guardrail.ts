@@ -9,6 +9,7 @@ import type {
   ObjectRef,
   RiskClass,
 } from '@agentsws/contracts'
+import { GOOGLE_ALERT_CHANGE_MAX_LINES } from '@agentsws/contracts'
 import { B2B_GUARDED_KINDS, evaluateB2bChange } from './b2b-guardrail.js'
 import { capBool, capList, capNumber, mandateHash } from './mandate.js'
 import type { Provenance } from './provenance.js'
@@ -152,6 +153,8 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   marketplace_spend: 'high',
   // WP172：B2B 库里建 / 改一条客户、联系人、商机、展会、线索、出运单——不动钱、不对外发信
   b2b_record: 'low',
+  // WP387：在用户自己的 Google 账号里建 / 改提醒——不动钱、不对外发声，但改的是外部账号（永远人审，见 `HARD_L1`）
+  google_alert_change: 'medium',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -243,6 +246,11 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   'ads_sheet',
   'ads_activate',
   'ads_undo',
+  /**
+   * WP387（docs/103 v2 T1）：**在用户的 Google 账号里建 / 改提醒永远人审**。
+   * 改的是用户自己的外部账号；一批一张卡、一次同意（不是一条一张），同意了那一次运行才放行写操作。
+   */
+  'google_alert_change',
   /**
    * WP76（58 §1 / 04 §6）：**素材入库永远人审**。
    *
@@ -1443,6 +1451,24 @@ export function evaluateGuardrail(
      * 里的一个，情绪必须是三档里的一档。一条说不清"负面还是正面、该谁接"的
      * 分类结论，下游没有任何一条路走得下去（同 `community_membership.decision`）。
      */
+    /*
+     * WP387（docs/103 v2 T1）：建 / 改 Google 提醒那一张。人审是 `HARD_L1` 管的；这里只拦**形状不对**的：
+     * 一行都没有、行数超过一批的上限、查询语句是空的、op 不认识——那样的卡同意了也没法照着建。
+     */
+    case 'google_alert_change': {
+      const op = after.op
+      if (op !== 'create' && op !== 'to_rss') block('google_alert_op', 'create|to_rss', String(op))
+      const lines = Array.isArray(after.lines) ? (after.lines as unknown[]) : []
+      if (lines.length === 0) block('google_alert_lines_required', 1, 0)
+      if (lines.length > GOOGLE_ALERT_CHANGE_MAX_LINES)
+        block('google_alert_lines_max', GOOGLE_ALERT_CHANGE_MAX_LINES, lines.length)
+      const blank = lines.filter((l) => {
+        const q = (l as { query?: unknown } | null)?.query
+        return typeof q !== 'string' || q.trim() === ''
+      }).length
+      if (blank > 0) block('google_alert_query_required', 0, blank)
+      break
+    }
     case 'mention_triage': {
       const klass = after.triage
       const allowedTriage = ['customer_issue', 'reputation', 'media_inquiry', 'praise', 'noise']

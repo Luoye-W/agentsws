@@ -1658,6 +1658,47 @@ export function checkExpectations(
    * 两件事：版规不让 / 冷却没过是 **block**（不是转人审）；能发的那一条
    * **永远人审**（`HARD_L1`，报 L3 也会被按回来）。
    */
+  /*
+   * WP387：替你建 Google 提醒——一张卡列 N 条、永远等人点；批了之后建好的条数、写成的监控源、
+   * 账号里卡外的提醒一条都没动。
+   */
+  if (expected.pr_alerts_build !== undefined) {
+    const want = expected.pr_alerts_build
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_alerts_card_staged')
+    const built = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_alerts_built')
+    const sp = staged === undefined ? {} : payloadOf(staged)
+    const bp = built === undefined ? {} : payloadOf(built)
+    const problems: string[] = []
+    if (staged === undefined) problems.push('没出那张「要在你的 Google 账号里建 N 条提醒」的卡')
+    if (want.card_lines !== undefined && Number(sp.lines) !== want.card_lines)
+      problems.push(`卡上列了 ${String(sp.lines)} 条，期望 ${want.card_lines}`)
+    if (want.auto_approved !== undefined && (sp.auto_approved === true) !== want.auto_approved)
+      problems.push(want.auto_approved ? '这张卡没自己过' : '改用户的 Google 账号不该自动放行')
+    if ((want.built !== undefined || want.sources !== undefined) && built === undefined)
+      problems.push('卡批了之后浏览器没去建')
+    const done = Number(bp.created ?? 0) + Number(bp.existing ?? 0)
+    if (want.built !== undefined && built !== undefined && done !== want.built)
+      problems.push(`建好 / 读回 ${done} 条，期望 ${want.built}`)
+    if (want.sources !== undefined && built !== undefined && Number(bp.sources) !== want.sources)
+      problems.push(`写成 ${String(bp.sources)} 条监控源，期望 ${want.sources}`)
+    if (
+      want.others_untouched !== undefined &&
+      built !== undefined &&
+      (bp.others_untouched === true) !== want.others_untouched
+    )
+      problems.push('账号里卡外的提醒被动了')
+    add(
+      'pr_alerts_build',
+      problems.length === 0,
+      problems.length === 0
+        ? `一张卡 ${String(sp.lines)} 条，批了建好 ${done} 条、监控源 ${String(bp.sources ?? 0)} 条`
+        : problems.join('；'),
+    )
+  }
   if (expected.pr_external_post !== undefined) {
     const want = expected.pr_external_post
     const staged = [...evidence.events]

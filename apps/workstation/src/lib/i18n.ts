@@ -14,6 +14,12 @@ import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
+import {
+  GOOGLE_ALERTS_EN,
+  GOOGLE_ALERTS_ZH,
+  PR_ALERTS_EN,
+  PR_ALERTS_ZH,
+} from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -1837,6 +1843,7 @@ const zh: Table = {
   'verb.change.approve.ads_sheet': '批准上传',
   'verb.change.approve.ads_activate': '开始投放',
   'verb.change.approve.ads_undo': '撤销',
+  'verb.change.approve.google_alert_change': '确认，去建',
   'verb.aftermath.approve.community_moderation': '解除禁言',
   'deck.more': '更多',
   // ── WP100：头一行那个**类别写人话**（"网站运营 · 改价"，不是"变更待批"）──
@@ -1924,6 +1931,7 @@ const zh: Table = {
   'category.marketplace_listing': '平台产品',
   'category.marketplace_spend': '平台花钱',
   'category.trade_record': 'B2B 记录',
+  'category.google_alerts': 'Google 提醒',
   'category.fraud_alert': '疑似诈骗',
   'category.sender_choice': '发信邮箱',
   'category.collection_edit': '改集合',
@@ -6038,6 +6046,7 @@ const en: Table = {
   'verb.change.approve.ads_sheet': 'Approve upload',
   'verb.change.approve.ads_activate': 'Start delivery',
   'verb.change.approve.ads_undo': 'Undo',
+  'verb.change.approve.google_alert_change': 'Confirm and create',
   'verb.aftermath.approve.community_moderation': 'Unmute',
   'deck.more': 'More',
   // WP100：头一行的类别（人话，不是账本枚举名）
@@ -6124,6 +6133,7 @@ const en: Table = {
   'category.marketplace_listing': 'Marketplace listing',
   'category.marketplace_spend': 'Marketplace spend',
   'category.trade_record': 'B2B record',
+  'category.google_alerts': 'Google Alerts',
   'category.fraud_alert': 'Possible fraud',
   'category.sender_choice': 'Sending mailbox',
   'category.collection_edit': 'Collection edit',
@@ -8540,6 +8550,8 @@ const TABLES: Record<Lang, Table> = {
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
     ...REDDIT_WRITE_ZH,
+    ...GOOGLE_ALERTS_ZH,
+    ...PR_ALERTS_ZH,
     ...ADS_CHANGES_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
@@ -8584,6 +8596,8 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
+    ...GOOGLE_ALERTS_EN,
+    ...PR_ALERTS_EN,
     ...ADS_CHANGES_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,

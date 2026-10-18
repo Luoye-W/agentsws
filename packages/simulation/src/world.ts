@@ -81,6 +81,7 @@ import type {
   ModelGateway,
   ModelProvider,
   ModelRef,
+  MonitorSource,
   ObjectRef,
   PersonId,
   PlatformAccount,
@@ -174,13 +175,18 @@ import {
  * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
  */
 import {
+  alertChangeOf,
+  alertLinesFromPlan,
+  approvedLines,
   checkSubredditRules,
   dedupeMentions,
   explainRuleCheck,
   fetchFeed,
   handoffOfMention,
   hoursSinceLastPost,
+  ingestAlertsReport,
   keywordFilter,
+  normalizeAlertQuery,
   parseSubredditRules,
   triageMention,
 } from '@agentsws/pr-core'
@@ -1361,6 +1367,28 @@ export interface PrOps {
     last_post_hours_ago?: number
     level?: 'L1' | 'L2' | 'L3'
   }): Promise<PrExternalPostResult>
+  /**
+   * WP387（docs/103 v2 §3.3、T1）：「让工坊替你建」Google 提醒。
+   *
+   * 清单（配置卡上确认过的）→ **一张**「要在你的 Google 账号里建 N 条提醒」的卡（`google_alert_change`，
+   * 永远 L1）。卡批了由执行器交给替身浏览器（这个世界里的一个 Google 账号：`existing` 是账号里本来就有的提醒）
+   * 一条条建、读回 RSS 链接，写成监控源。`unchecked` = 人在卡上勾掉的那几条（卡面的勾选在这个世界里由场景替人做）。
+   */
+  alertsBuild(input: {
+    who: PersonId
+    lines: { label: string; query: string; language?: string; region?: string }[]
+    unchecked?: string[]
+    existing?: { query: string; delivery: 'rss' | 'email' }[]
+  }): Promise<PrAlertsBuildResult>
+}
+
+/** WP387：替你建 Google 提醒那张卡出没出。 */
+export interface PrAlertsBuildResult {
+  staged: boolean
+  lines: number
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
 }
 
 /* ── WP171（docs/84）：B2B 那两件事 ─────────────────────────────────── */
@@ -2685,6 +2713,75 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           error: {
             message: '邮件营销连接器还没接（51 §2.3）：这条变更批得下来，但现在没有地方施行它',
           },
+        }
+      }
+      /*
+       * WP387：「在你的 Google 账号里建 N 条提醒」批了 → 替身浏览器在这个世界的 Google 账号里一条条建
+       * （已有同样查询语句的不重复建；还在发邮件的不改、单独记下），读回 RSS 链接写成监控源。
+       * 账号里卡外的提醒一条都不碰（事件里报 `others_untouched`）。
+       */
+      if (change.kind === 'google_alert_change') {
+        const all = (change.after as { lines?: { id: string }[] }).lines ?? []
+        const off = prAlertsUnchecked.get(change.id) ?? []
+        const job = {
+          change_id: change.id,
+          op: 'create' as const,
+          lines: approvedLines(change.after, {
+            after: { lines: all.map((l) => ({ id: l.id, selected: !off.includes(l.id) })) },
+          }),
+          status: 'running' as const,
+          created_at: now(clock),
+          updated_at: now(clock),
+        }
+        const before = JSON.stringify([...prAlertsAccount.entries()])
+        const touched = new Set<string>()
+        const feed = (id: number) =>
+          `https://www.google.com/alerts/feeds/00000000000000000000/${id}`
+        const results = job.lines.map((l) => {
+          const key = normalizeAlertQuery(l.query)
+          const had = prAlertsAccount.get(key)
+          if (had !== undefined)
+            return had.delivery === 'rss'
+              ? { id: l.id, outcome: 'existing' as const, feed_url: feed(had.id) }
+              : { id: l.id, outcome: 'existing_email' as const }
+          const id = prAlertSeq++
+          prAlertsAccount.set(key, { query: l.query, delivery: 'rss', id })
+          touched.add(key)
+          return { id: l.id, outcome: 'created' as const, feed_url: feed(id) }
+        })
+        const others = [...prAlertsAccount.entries()].filter(([k]) => !touched.has(k))
+        const untouched = JSON.stringify(others) === before
+        const res = ingestAlertsReport({
+          workspace_id,
+          job,
+          report: { change_id: change.id, lines: results, stop: 'done' },
+          sources: prMonitorSources,
+          now: now(clock),
+          newId: () => String(prMonitorSources.length + 1),
+        })
+        prMonitorSources.push(...res.sources.map((x) => ({ ...x, status: 'ok' as const })))
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.pr_alerts_built',
+          actor: { kind: 'system', id: 'sim.executor' },
+          correlation: { trace_id: traceId() },
+          payload: {
+            change_id: change.id,
+            card_lines: all.length,
+            approved: job.lines.length,
+            created: results.filter((r) => r.outcome === 'created').length,
+            existing: results.filter((r) => r.outcome === 'existing').length,
+            email: res.email.length,
+            failed: res.failed.length,
+            sources: prMonitorSources.filter((x) => x.added_via === 'browser').length,
+            others_untouched: untouched,
+          },
+        })
+        return {
+          status: 'ok',
+          execution_id: `alerts_${change.id}`,
+          outcome_ref: { type: 'google_alerts_job', id: change.id },
         }
       }
       /*
@@ -7521,6 +7618,17 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   /** 这个世界里我们在各个版上一条帖子是什么时候发的（冷却那一道要它）。 */
   const prLastPostAt = new Map<string, string>()
+  /**
+   * WP387：这个世界里那个 Google 账号（查询语句 → 投递方式 + feed）与已存的监控源。
+   * `prAlertsUnchecked`：人在卡上勾掉的那几条（按卡上的行号，卡批了执行器读它）。
+   */
+  const prAlertsAccount = new Map<
+    string,
+    { query: string; delivery: 'rss' | 'email'; id: number }
+  >()
+  const prMonitorSources: MonitorSource[] = []
+  const prAlertsUnchecked = new Map<string, string[]>()
+  let prAlertSeq = 100
 
   const xmlEscape = (v: string): string =>
     v.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;').replace(/"/gu, '&quot;')
@@ -7995,6 +8103,94 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       return {
         ...base,
         staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    /*
+     * WP387：清单 → 一张卡（真账本、真 guardrail：`google_alert_change` 在 `HARD_L1` 里，报什么都落 L1）。
+     * 卡批了之后由执行器（`backendApply` 那一段）交给替身浏览器去建。
+     */
+    async alertsBuild({ who, lines, unchecked, existing }) {
+      const role_id = prRoleOf('pr.monitoring')
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const at = now(clock)
+      for (const e of existing ?? [])
+        prAlertsAccount.set(normalizeAlertQuery(e.query), {
+          query: e.query,
+          delivery: e.delivery,
+          id: prAlertSeq++,
+        })
+      const planItems = lines.map((l, i) => ({
+        id: `mp_${i + 1}`,
+        workspace_id,
+        group: 'competitor' as const,
+        label: l.label,
+        query: l.query,
+        language: l.language ?? 'en',
+        region: l.region ?? 'US',
+        competitor: l.label,
+        why: '配置卡上确认过的',
+        selected: true,
+        status: 'planned' as const,
+        created_at: at,
+        updated_at: at,
+      }))
+      const cardLines = alertLinesFromPlan(planItems, prMonitorSources)
+      const card = alertChangeOf('create', cardLines)
+      const target: ObjectRef = { type: 'google_alerts', id: workspace_id }
+      const { mandate, level } = actionOf(asg, 'stage_google_alert_change')
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_alerts_${run_id}`,
+        kind: 'google_alert_change',
+        target,
+        field: 'create',
+        before: null,
+        after: { form: 'google_alert_change', ...card.after },
+        notes: [card.summary],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level,
+        provenance: run.finish({ seen: [target], outputs: [], summary: card.title }),
+        approval: {
+          title: card.title,
+          summary: card.summary,
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) return { staged: false, lines: cardLines.length, reason: outcome.message }
+      const off = new Set(unchecked ?? [])
+      prAlertsUnchecked.set(
+        outcome.change.id,
+        cardLines.filter((l) => off.has(l.label)).map((l) => l.id),
+      )
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.pr_alerts_card_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          lines: cardLines.length,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+        },
+      })
+      return {
+        staged: true,
+        lines: cardLines.length,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
       }

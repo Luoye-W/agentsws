@@ -381,6 +381,14 @@ export type ChangeKind =
    * L1 起；联系人没写来源 → block（GDPR 第 14 条）。
    */
   | 'b2b_record'
+  /**
+   * WP387（docs/103 v2 §3.3、T1）：**在用户自己的 Google 账号里建 / 改提醒**（你的浏览器去点）。
+   *
+   * 一批一张卡（`after.lines[]`，每行可勾掉），不是一条一张。`after.op`：`create` 新建、`to_rss` 把投递从邮箱改成 RSS。
+   * 改的是用户的外部账号，所以**永远人审**（`HARD_L1`）；个人模式下卡上叫「确认」不叫审批。
+   * 同意之后那一次运行带 `RunRequest.browser_grants`，门禁才放行 `google.com/alerts` 上的写操作。
+   */
+  | 'google_alert_change'
 
 export type ChangeStatus =
   | 'staged'

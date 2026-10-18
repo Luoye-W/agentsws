@@ -13,6 +13,7 @@
  * | `subreddits` | 版规解析（禁推广 / 要 flair / 冷却）→ 可发 / 不可发 + 原因 |
  * | `monitor` | 提及归一 + 去重（URL / guid / 同站相近标题）+ 本地整词过滤 + 情绪三档 + 客户问题 vs 舆情 |
  * | `channels` | Reddit（社媒那份适配器 + 三口）、论坛（浏览器）、Alerts（任意 RSS / Atom，feedsmith） |
+ * | `alerts-build` | WP387：你的浏览器替你建 / 导入 Google 提醒（清单 → 一张卡 → 读回 RSS 链接） |
  *
  * **不在这里的东西**（各有去处，免得有人在这里找）：
  *
@@ -25,6 +26,7 @@
  *   （职责 yml 放宽不了）；
  * - 四条职责的清单 → `@agentsws/contracts` 的 `PR_ROLES`。
  */
+export * from './alerts-build.js'
 export * from './channels/index.js'
 export * from './media.js'
 export * from './monitor.js'

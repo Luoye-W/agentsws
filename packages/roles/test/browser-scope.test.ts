@@ -96,6 +96,8 @@ describe('内置职责填了什么（55 §3）', () => {
       'sellercentral-europe.amazon.com',
       'sellercentral-japan.amazon.com',
     ],
+    // WP387（docs/103 v2 §3.3）：信息监控在你的浏览器里建 / 读 Google 提醒（提醒页上的点击另有一道「先有卡」的门）
+    'pr.monitoring': ['www.google.com', 'google.com'],
   }
 
   it('红人五条各自的平台 + Amazon 只开卖家后台，逐条对上', () => {

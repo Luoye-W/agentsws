@@ -235,6 +235,7 @@ const EVENT_KEYS = [
   'pr.feed',
   'pr.release',
   'pr.external_post',
+  'pr.alerts_build',
   // WP67 红人营销（48 §5.1）
   'kol.outreach',
   'kol.collaboration',
@@ -379,6 +380,7 @@ const EXPECTED_KEYS = [
   'pr_feed',
   'pr_release',
   'pr_external_post',
+  'pr_alerts_build',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -1716,6 +1718,50 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         b2b_member_left: { who: str(source, `${path}.${key}.who`, body.who), accounts },
       }
     }
+    case 'pr.alerts_build': {
+      known(source, `${path}.${key}`, body, ['who', 'lines', 'unchecked', 'existing'])
+      if (!Array.isArray(body.lines) || body.lines.length === 0)
+        fail(source, `${path}.${key}.lines`, '必须是非空数组')
+      const lines = (body.lines as unknown[]).map((l, i) => {
+        const at2 = `${path}.${key}.lines[${i}]`
+        if (!isRec(l)) fail(source, at2, '必须是对象')
+        known(source, at2, l, ['label', 'query', 'language', 'region'])
+        const language = optStr(source, `${at2}.language`, l.language)
+        const region = optStr(source, `${at2}.region`, l.region)
+        return {
+          label: str(source, `${at2}.label`, l.label),
+          query: str(source, `${at2}.query`, l.query),
+          ...(language === undefined ? {} : { language }),
+          ...(region === undefined ? {} : { region }),
+        }
+      })
+      const rawExisting = body.existing
+      if (rawExisting !== undefined && !Array.isArray(rawExisting))
+        fail(source, `${path}.${key}.existing`, '必须是数组')
+      const existing = ((rawExisting as unknown[] | undefined) ?? []).map((e, i) => {
+        const at2 = `${path}.${key}.existing[${i}]`
+        if (!isRec(e)) fail(source, at2, '必须是对象')
+        known(source, at2, e, ['query', 'delivery'])
+        const delivery = str(source, `${at2}.delivery`, e.delivery)
+        if (delivery !== 'rss' && delivery !== 'email')
+          fail(source, `${at2}.delivery`, 'delivery 只能是 rss / email')
+        return {
+          query: str(source, `${at2}.query`, e.query),
+          delivery: delivery as 'rss' | 'email',
+        }
+      })
+      const unchecked = optStrList(source, `${path}.${key}.unchecked`, body.unchecked)
+      return {
+        at,
+        type: 'pr.alerts_build',
+        alerts_build: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          lines,
+          ...(unchecked === undefined ? {} : { unchecked }),
+          ...(existing.length === 0 ? {} : { existing }),
+        },
+      }
+    }
     case 'pr.external_post': {
       known(source, `${path}.${key}`, body, [
         'who',
@@ -3038,6 +3084,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       requested_level: 'str',
       auto_approved: 'bool',
       stated_on_card: 'bool',
+    },
+    pr_alerts_build: {
+      card_lines: 'num',
+      built: 'num',
+      sources: 'num',
+      auto_approved: 'bool',
+      others_untouched: 'bool',
     },
     pr_external_post: {
       blocked: 'bool',

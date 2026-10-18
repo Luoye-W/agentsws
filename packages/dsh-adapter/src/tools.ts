@@ -22,6 +22,7 @@ import {
   DRAFT_NOT_CREATED,
   DRAFT_SUBJECT_DESCRIPTION,
   DRAFT_TOOL_DESCRIPTION,
+  GOOGLE_ALERTS_TOOL_DEF_BY_NAME,
   IMAGE_TOOL_DEF_BY_NAME,
   isMcpReadTool,
   isScheduleTool,
@@ -366,6 +367,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
     // WP385：读网站体检结论（定义在 stand-ins 的 `runtime/site-health.ts`）
     SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ??
+    // WP387：浏览器建完 / 读完 Google 提醒后交代结果（定义在 stand-ins 的 `runtime/google-alerts.ts`）
+    GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
@@ -529,6 +532,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP385：读网站体检结论（只读；不现跑体检）
       SITE_HEALTH_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP387：浏览器建完 / 读完 Google 提醒后交代结果
+      GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

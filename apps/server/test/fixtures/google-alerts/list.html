@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Google Alerts - Monitor the Web for interesting new content</title></head>
+<body>
+<header><span class="logo">Google</span> <span>Alerts</span></header>
+<main>
+  <h1>Alerts</h1>
+  <p>Monitor the web for interesting new content</p>
+  <div class="create">
+    <input type="text" aria-label="Create an alert about…" placeholder="Create an alert about…" value="{{QUERY}}">
+    <a href="#" role="button" aria-expanded="{{OPEN}}">Show options</a>
+{{OPTIONS}}
+    <button type="button">{{SUBMIT}}</button>
+  </div>
+  <section class="my-alerts">
+    <h2>My alerts ({{COUNT}})</h2>
+    <ul>
+{{ALERTS}}
+    </ul>
+  </section>
+</main>
+</body></html>

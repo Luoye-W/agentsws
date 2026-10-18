@@ -11,6 +11,7 @@ import type {
 } from './common.js'
 import type { WorkspaceVertical } from './identity.js'
 import type { ReasoningEffort } from './model.js'
+import type { RunBrowserGrant } from './pr-alerts.js'
 import type { RunCancelReason } from './run-limits.js'
 
 /** 17 §1 RunRequest：协同服务 → 运行时适配器。无状态：运行自带全部上下文。 */
@@ -435,6 +436,14 @@ export interface RunRequest {
    * 与它们当初根本没有浏览器工具的事实一致（所以这里是可选字段，不是必填）。
    */
   allowed_hosts?: string[]
+  /**
+   * WP387：这次运行**可以在哪几种受保护的页面上动手**（`pr-alerts.ts` 的 `BROWSER_WRITE_GUARDS`）。
+   *
+   * 个人档里浏览器的写操作本来放行；但 `google.com/alerts` 上的点击改的是用户外部账号里的提醒，
+   * 只有服务端在那张卡同意之后、给**那一次**运行写上同一种 `change_kind` 的凭据才放行。
+   * 不给 ≡ 空数组 ≡ 受保护页面上的写一律拦（老的运行记录回放出来也是拦）。
+   */
+  browser_grants?: RunBrowserGrant[]
   /**
    * WP86（55 §4 第三层）：**这条职责连了哪些 MCP 服务器**。
    *

@@ -60,6 +60,7 @@
     "packages/contracts/src/platform-kits.ts",
     "packages/contracts/src/position-plan.ts",
     "packages/contracts/src/position-work.ts",
+    "packages/contracts/src/pr-alerts.ts",
     "packages/contracts/src/pr-watch.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/premium-theme.ts",
@@ -137,7 +138,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "58eeae9a23a6c34c06135b12d763d4e1",
+  "source_digest": "173e828fc33b267a02431ae3cfb4994d",
   "objects": [
     {
       "id": "ad",
@@ -10881,6 +10882,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.email-marketing"],
       "what": "stage flow edit"
+    },
+    {
+      "id": "stage_google_alert_change",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "change_kind": "google_alert_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "what": "stage google alert change"
     },
     {
       "id": "stage_internal_link_edit",

@@ -24,6 +24,7 @@ import type {
   AssignmentId,
   ExternalPost,
   ExternalPostRuleCheck,
+  GoogleAlertsPanelView,
   Iso8601,
   MaybePromise,
   MediaContact,
@@ -336,6 +337,18 @@ export interface PrPort {
   ): MaybePromise<PrWatchView>
   watchRemoveSource?(actor: PrActor, id: string): MaybePromise<PrWatchView>
   watchUpdateSettings?(actor: PrActor, patch: Partial<MonitorSettings>): MaybePromise<PrWatchView>
+
+  /* ── WP387：你的浏览器替你建 / 导入 Google 提醒（没装就 501）──────────── */
+  /** 最近几趟、读到的已有提醒、你的浏览器接上没有（链接只出脱敏那一格）。 */
+  alertsView?(actor: PrActor): MaybePromise<GoogleAlertsPanelView>
+  /** 出一张「要在你的 Google 账号里建 N 条提醒」的卡（清单取配置卡上确认过、还没挂上源的）。 */
+  alertsBuild?(
+    actor: PrActor,
+  ): Promise<{ ok: true; approval_id: string; count: number } | { ok: false; reason: string }>
+  /** 让你的浏览器只读一遍已有的提醒（不出卡；读完 RSS 的出勾选导入卡、邮箱的出「改成 RSS」卡）。 */
+  alertsReadExisting?(
+    actor: PrActor,
+  ): Promise<{ ok: true; matter_id: string } | { ok: false; reason: string }>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -468,6 +481,9 @@ type WatchMethod =
   | 'watchUpdateSource'
   | 'watchRemoveSource'
   | 'watchUpdateSettings'
+  | 'alertsView'
+  | 'alertsBuild'
+  | 'alertsReadExisting'
 
 /** 信息监控那几口（没装 = 501，说清楚）。 */
 function watchOf<K extends WatchMethod>(deps: GatewayDeps, name: K): NonNullable<PrPort[K]> {
@@ -818,6 +834,52 @@ export function prRoutes(): Route[] {
           if (v !== undefined) (clean as Record<string, unknown>)[k] = v
         return ok(c, await watchOf(deps, 'watchUpdateSettings')(actorOf(c), clean))
       },
+    ),
+    /* ── WP387：你的浏览器替你建 / 导入 Google 提醒 ─────────────────────── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/pr/watch/alerts',
+        operationId: 'prWatchAlertsView',
+        summary:
+          '你的浏览器替你建 Google 提醒：最近几趟（建好几条、哪几条没成）、读到的已有提醒、浏览器接上没有。链接只出脱敏那一格',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_MENTION,
+        returns: 'GoogleAlertsPanelView',
+      },
+      async (c, deps) => ok(c, await watchOf(deps, 'alertsView')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/pr/watch/alerts/build',
+        operationId: 'prWatchAlertsBuild',
+        summary:
+          '让工坊替你建：出一张「要在你的 Google 账号里建 N 条提醒」的卡（一批一张、每行可勾掉、一次同意）。同意了你的浏览器才去建',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        returns: '{ ok: true; approval_id: string; count: number } | { ok: false; reason: string }',
+      },
+      async (c, deps) => ok(c, await watchOf(deps, 'alertsBuild')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/pr/watch/alerts/read',
+        operationId: 'prWatchAlertsReadExisting',
+        summary:
+          '让你的浏览器只读一遍已有的 Google 提醒（只看不改）：RSS 投递的出一张勾选导入的卡，还在发邮件的出一张「改成 RSS」的卡',
+        tag: 'pr',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MENTION,
+        returns: '{ ok: true; matter_id: string } | { ok: false; reason: string }',
+      },
+      async (c, deps) => ok(c, await watchOf(deps, 'alertsReadExisting')(actorOf(c))),
     ),
   ]
 }

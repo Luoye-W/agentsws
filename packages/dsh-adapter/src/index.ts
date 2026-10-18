@@ -12,6 +12,11 @@ export {
   browserProviderConfig,
   checkBrowserNavigation,
 } from './browser.js'
+export {
+  type BrowserWriteGuardApi,
+  type BrowserWriteGuardState,
+  createBrowserWriteGuard,
+} from './browser-guard.js'
 export type { BrowserSkillPluginConfig } from './browserskill.js'
 export {
   applyBskEnv,

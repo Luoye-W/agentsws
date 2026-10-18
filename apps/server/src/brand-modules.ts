@@ -54,6 +54,7 @@ import type { LiveDataSource } from './live-data.js'
 import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
+import type { PrAlertsService } from './pr-alerts/service.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { PrWatchAssembly, PrWatchStoreHandle } from './pr-watch/index.js'
 import type { ReadRoutesAssembly } from './read-routes/index.js'
@@ -238,6 +239,8 @@ export interface BrandModuleSet {
   prWatchStore: PrWatchStoreHandle
   /** WP386：信息监控（托管模式没有）。 */
   prWatch?: PrWatchAssembly
+  /** WP387：你的浏览器替你建 / 导入 Google 提醒（托管模式不装）。 */
+  prAlerts?: PrAlertsService
   /**
    * WP172（docs/84）：这个品牌的 B2B 库（九类对象 + 询盘 / 草稿 / 抑制名单），落在这个品牌自己的目录下。
    * 客户名单与报价是一家外贸公司的命根子，品牌 A 的在 B 的任何路由里都读不到。

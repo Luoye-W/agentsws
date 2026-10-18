@@ -26,6 +26,7 @@ import {
   runPrWatch,
 } from '@/lib/pr-watch-api'
 import { cn } from '@/lib/utils'
+import { PrAlertsActions } from './pr-alerts-actions'
 
 /** 本人「信息监控」那条职责的分配（给了岗位就只在那个岗位里找）。 */
 export function useMonitorAssignment(position_id?: string): string | undefined {
@@ -210,6 +211,8 @@ export function PrWatchSources({
           </Button>
         )}
       </div>
+      {/* WP387：让工坊替你建 / 读一遍我已有的（你的浏览器去做，建之前再问一次） */}
+      <PrAlertsActions assignment={assignment} />
       {results.length === 0 && note === undefined ? null : (
         <ul className="flex flex-col gap-0.5 text-xs" data-testid="prwatch-results">
           {results.map((r, i) => (

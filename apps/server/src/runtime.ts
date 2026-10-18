@@ -43,6 +43,7 @@ import type {
   PromptSection,
   ReasoningEffort,
   RunBrowser,
+  RunBrowserGrant,
   RunConnection,
   RunEvent,
   RunId,
@@ -109,6 +110,7 @@ import {
   ADS_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
+  GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
@@ -153,6 +155,10 @@ import {
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
+
+/** WP387：交代建 / 读 Google 提醒结果的那条职责（信息监控）。 */
+const GOOGLE_ALERTS_ROLE = 'pr.monitoring'
+
 import { PartialRunLog, pausedForUpdateLine, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 import { SUBSCRIPTION_SOURCE_ID } from './subscription-model.js'
@@ -208,6 +214,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SETUP_REQUEST_TOOL_NAMES,
     // WP385：读网站体检结论——只读本机体检记录（不现跑体检）
     ...SITE_HEALTH_TOOL_NAMES,
+    // WP387：交代建 / 读 Google 提醒的结果——只写本机信息监控库（先拉一次 feed 是读）
+    ...GOOGLE_ALERTS_TOOL_NAMES,
     // WP386：信息监控查提及——只读本机提及库
     ...PR_MONITOR_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
@@ -497,6 +505,16 @@ export interface RuntimeOptions {
    * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   siteHealthTools?: ToolExecutor
+  /**
+   * WP387（docs/103 v2 §3.3）：浏览器建完 / 读完 Google 提醒后交代结果的 `report_google_alerts`
+   * （`pr-alerts/tool.ts`）。只给信息监控那条职责；不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  googleAlertsTool?: ToolExecutor
+  /**
+   * WP387：这件事这次运行带不带「可以改 Google 提醒」的凭据（`RunRequest.browser_grants`）。
+   * 只有那张卡同意过、那一趟还在跑的那件事才有；不给 / 回空 = 不写这个字段（受保护页面上的写一律拦）。
+   */
+  browserGrants?: (input: { role_id: string; matter_id: string }) => RunBrowserGrant[]
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1258,6 +1276,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const adsDataTools = options.adsDataTools
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
+    const googleAlerts = options.googleAlertsTool
     const prMonitor = options.prMonitorTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
@@ -1291,7 +1310,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       adsDataTools === undefined &&
       setupRequest === undefined &&
       siteHealthTools === undefined &&
-      prMonitor === undefined
+      prMonitor === undefined &&
+      googleAlerts === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1357,6 +1377,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
         return siteHealthTools(call)
       }
+      // WP387：交代建 / 读 Google 提醒的结果（名字与别处不重名）
+      if (googleAlerts !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bareOf(call.name))) {
+        return googleAlerts(call)
+      }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
@@ -1403,6 +1427,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
+    if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
+      return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1916,6 +1942,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
           ? SITE_HEALTH_TOOL_NAMES
           : []),
+        // WP387：信息监控交代建 / 读 Google 提醒的结果（服务端接了才有）
+        ...(config.role_id === GOOGLE_ALERTS_ROLE && options.googleAlertsTool !== undefined
+          ? GOOGLE_ALERTS_TOOL_NAMES
+          : []),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
@@ -1934,6 +1964,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       matter_id: input.matter.id,
     })
     const granted = computer_use?.granted_until !== undefined
+    // WP387：这件事有没有一趟同意过、还在跑的「改 Google 提醒」（有才给凭据）
+    const browser_grants =
+      options.browserGrants?.({ role_id: config.role_id, matter_id: input.matter.id }) ?? []
     // WP237（#67）：按条计费的工具（现在只有 read_reddit）每次运行按价目现填单价
     const tool_prices: Record<string, number> = {}
     if (options.toolPrice !== undefined)
@@ -2151,6 +2184,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(connections.length === 0 ? {} : { connections }),
       // WP144：不给就不写这个字段——老的运行记录回放出来仍是「碰不到电脑」
       ...(computer_use === undefined ? {} : { computer_use }),
+      // WP387：只有挂了浏览器、这件事有同意过的卡时才写（不写 = 受保护页面上的写一律拦）
+      ...(browser === undefined || browser_grants.length === 0 ? {} : { browser_grants }),
       // WP179：同上——不给就不写，没挂网页工具的运行 RunRequest 一个字节不变
       ...(web === undefined ? {} : { web }),
       // WP237：取不到价就不写这个字段（描述里只说「按条计积分」），老运行的请求一个字节不变

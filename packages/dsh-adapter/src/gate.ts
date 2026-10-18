@@ -41,6 +41,7 @@ import type { PostToolDecision, PreToolDecision, ToolExecutionResult } from '@de
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { anyBrowserToolName, browserBrief, checkBrowserNavigation } from './browser.js'
+import { createBrowserWriteGuard } from './browser-guard.js'
 import { browserSkillToolName, isBrowserSkillHandoff } from './browserskill.js'
 import {
   checkComputerUse,
@@ -271,6 +272,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 挂上了还要过这一关：每条运行的次数上限（与 stub / direct 同一份 `WebUsageCounter`）。
    */
   const webCounter = new WebUsageCounter(request)
+  /*
+   * WP387：受保护页面（`google.com/alerts`）上的写操作，只在带着同意过的卡的那次运行里放行
+   * （`RunRequest.browser_grants`，服务端在卡同意之后才写上）。状态跟着这次运行走。
+   */
+  const writeGuard = createBrowserWriteGuard(request.browser_grants)
   const allowed = (name: string): boolean =>
     allow.has(name) ||
     presetTools.has(name) ||
@@ -674,6 +680,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     const effect = classifySideEffect(exec.name, options.sideEffects, args, mcpReadTools)
     if (effect === 'write_external' && request.tools.side_effect_policy === 'executor') {
       return deny(`write_external_requires_executor: ${exec.name}`)
+    }
+    // WP387：受保护页面上的点击 / 输入要先有卡（个人档也一样；打开页面本身只是去看，不拦）
+    if (anyBrowserToolName(exec.name) !== undefined) {
+      const guarded = writeGuard.check({ tool: exec.name, args, effect })
+      if (guarded !== undefined) return deny(guarded)
     }
     /*
      * WP82：个人档放行浏览器的写操作（点击、输入、提交）——那是用户自己的浏览器、

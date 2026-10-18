@@ -247,6 +247,8 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   b2b_account_transfer: 'handoff',
   // WP172：B2B 库里建 / 改一条记录——前后两格就说得清
   b2b_record: 'change',
+  // WP387：在你的 Google 账号里建 N 条提醒——一张清单，前后两格不合身，走改动卡（卡身自己画清单）
+  google_alert_change: 'change',
 }
 
 /** 兜底：表里没有的（第十二种 kind 出现那天）走改动卡，它的双格对任何 diff 都成立。 */

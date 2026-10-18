@@ -53,6 +53,8 @@ export * from './runtime/ads-data.js'
 export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'
 export * from './runtime/dev-stub.js'
+// WP387：浏览器建完 / 读完 Google 提醒后交代结果
+export * from './runtime/google-alerts.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具
 export * from './runtime/image.js'
 export * from './runtime/kol.js'

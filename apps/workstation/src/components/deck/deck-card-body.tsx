@@ -16,6 +16,10 @@ import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import {
+  GoogleAlertChangeBody,
+  isGoogleAlertChangePayload,
+} from '@/components/pr/google-alert-change-body'
 import { GeoWatchCardBody, isGeoWatchPayload } from '@/components/seo/geo-watch-card-body'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
@@ -326,6 +330,9 @@ export function DeckCardBody({
         if (isAssistantNotesPayload(payload)) return <AssistantNotesBody payload={payload} />
         // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
         if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
+        // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
+        if (isGoogleAlertChangePayload(payload))
+          return <GoogleAlertChangeBody card={card} payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />

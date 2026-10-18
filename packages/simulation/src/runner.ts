@@ -1604,6 +1604,22 @@ async function execute(
         await tick()
         return
       }
+      case 'pr.alerts_build': {
+        const e = event.alerts_build
+        const out = await world.pr.alertsBuild({
+          who: e.who,
+          lines: e.lines,
+          ...(e.unchecked === undefined ? {} : { unchecked: e.unchecked }),
+          ...(e.existing === undefined ? {} : { existing: e.existing }),
+        })
+        world.appendEvent('simulation.pr_alerts_requested', {
+          staged: out.staged,
+          lines: out.lines,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
       case 'pr.external_post': {
         const e = event.external_post
         const out = await world.pr.externalPost({
