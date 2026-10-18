@@ -44,11 +44,19 @@ export function embedCode(endpoint: string | undefined): string {
   return `<script src="${base.replace(/\/$/, '')}/widget.js" async></script>`
 }
 
-/** 预览：同一段脚本跑在 iframe 里（srcdoc，无外部请求时脚本安静退出）。 */
-function previewDoc(code: string): string {
-  return `<!doctype html><html><body style="margin:0;font-family:sans-serif;background:#f6f7f8">
+const escapeHtml = (t: string): string =>
+  t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/**
+ * 预览：画出挂件在网页上的样子（右下角的按钮 + 欢迎语气泡），按现在的主色与欢迎语。
+ * WP417（自查 C28 / U19）：以前把嵌入脚本塞进一个禁了脚本的 iframe，框里只剩「你的网页」四个字。
+ */
+export function previewDoc(accent: string, greeting: string): string {
+  const color = /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : '#2563eb'
+  return `<!doctype html><html><body style="margin:0;font-family:sans-serif;background:#f6f7f8;height:100vh;position:relative">
   <p style="padding:16px;color:#9aa0a6;font-size:13px">你的网页</p>
-  ${code.replace('<script', '<script data-preview="1"')}
+  <div style="position:absolute;right:16px;bottom:72px;max-width:70%;background:#fff;border-radius:12px;padding:10px 12px;font-size:13px;color:#202124;box-shadow:0 2px 8px rgba(0,0,0,.12)">${escapeHtml(greeting)}</div>
+  <div style="position:absolute;right:16px;bottom:16px;width:44px;height:44px;border-radius:50%;background:${color};box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>
   </body></html>`
 }
 
@@ -406,7 +414,10 @@ export function ChatWidgetSettings(): React.ReactNode {
             title={t('chat.window.preview')}
             data-testid="chat-preview"
             className="h-64 w-full rounded-md border bg-white"
-            srcDoc={previewDoc(code)}
+            srcDoc={previewDoc(
+              accent,
+              greeting === '' ? t('chat.window.greeting.placeholder') : greeting,
+            )}
             sandbox=""
           />
         </CardContent>

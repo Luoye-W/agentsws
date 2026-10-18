@@ -158,7 +158,11 @@ export function ChatSandboxPage(): React.ReactNode {
                 >
                   {t('chat.visitor.send')}
                 </Button>
-                <span className="text-xs text-muted-foreground" data-testid="chat-status">
+                {/* WP417（自查 U15）：状态做成胶囊，看得出是状态不是开关 */}
+                <span
+                  className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+                  data-testid="chat-status"
+                >
                   {t(`chat.status.${status}`)}
                 </span>
               </div>

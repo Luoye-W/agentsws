@@ -149,7 +149,7 @@ export interface AnswerInput {
 }
 
 const ASK_HIM = (name: string): string =>
-  `这个要问${name}本人——秘书只答四类：他的岗位与范围、手上在做什么、忙不忙、擅长什么。`
+  `这个要问${name}本人——助理只答四类：他的岗位与范围、手上在做什么、忙不忙、擅长什么。`
 
 /** 规则版代答。给同样的输入永远出同样的一句话（可回放）。 */
 export function answerQuestion(input: AnswerInput): SecretaryAnswer {
@@ -160,7 +160,7 @@ export function answerQuestion(input: AnswerInput): SecretaryAnswer {
   if (kind === 'private')
     return {
       kind,
-      answer: `这个秘书不能说——私有待办、个人记忆、对话正文、跟谁开会都只有${name}本人看得到。${ASK_HIM(name)}`,
+      answer: `这个助理不能说——私有待办、个人记忆、对话正文、跟谁开会都只有${name}本人看得到。${ASK_HIM(name)}`,
       fields: [],
       refused: true,
     }
@@ -171,8 +171,9 @@ export function answerQuestion(input: AnswerInput): SecretaryAnswer {
       kind,
       answer:
         refer === undefined
-          ? `这是专业问题，秘书不答。${ASK_HIM(name)}`
-          : `这是${refer.role_name}的专业问题，秘书不答——去问${refer.role_name}岗位的 Agent${
+          ? `这是专业问题，助理不答。${ASK_HIM(name)}`
+          : // WP417（自查 F25）：界面上叫「助理」，答案里也叫助理
+            `这是${refer.role_name}的专业问题，助理不答——去问${refer.role_name}岗位的 Agent${
               refer.person_id === undefined ? '' : `（或者直接问${refer.person_id}）`
             }。`,
       fields: [],

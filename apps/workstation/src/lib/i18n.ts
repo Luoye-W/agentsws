@@ -3384,7 +3384,7 @@ const zh: Table = {
   'chat.visitor.why':
     '这里发出去的消息与真访客走同一条流水线：同一条入站管线、同一套知识与订单只读、同一条审批队列。',
   'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
-  'chat.visitor.send': '发',
+  'chat.visitor.send': '发送',
   'chat.transcript.empty': '还没有消息。发一句试试。',
   // WP112：线程末尾那行——这一轮交给 AI 了、还没回来
   'chat.thinking': '客服 AI 正在判这一轮…',
