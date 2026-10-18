@@ -5,8 +5,8 @@
  * 起一个 demo（演示世界；竞品是三家 `.example` 替身店、进料口是替身、自家店是替身），浅 / 深各拍一套：
  *
  * 1. `1-plan-card-<theme>`：店铺管理里一句「帮我盯一下竞品的上新和价格」→ 方案卡（盯哪几家、每家走哪条路、什么算要紧）；
- * 2. 点「就这样」→ 先读一次当底子（不报上新）、配好对标款；再读一次（替身：Jackery 那款降价 15%）；
- * 3. `2-report-changes-<theme>`：右栏报表卡里的竞品变化表（「降价 15%，比你的 PowerHub 1000 便宜 $N」）；
+ * 2. 点「就这样」→ 先读一次当底子（不报上新）、配好对标款；再读一次（替身开关：Jackery 整店再降一成）；
+ * 3. `2-report-changes-<theme>`：右栏报表卡里的竞品变化表（「降价 N%，比你的 PowerHub 1000 便宜 $N」）；
  * 4. `3-daily-brief-<theme>`：店铺管理日报里的「竞品动向」那一段；
  * 5. 把一家店改坏（替身开关文件）再读一次 → `4-connection-red-<theme>`：连接卡亮红点、日报写「这家没读到」。
  *
@@ -111,6 +111,67 @@ async function openRailCard(page, id) {
   return card
 }
 
+/** 店铺授权（demo 替身：装 CLI → 填店 → 授权；日报那张表挂在「店铺后台」上，连上才出）。 */
+async function authorizeShop(token, store) {
+  const q = '/v1/shop-admin?roles=dtc.store'
+  let view = await api(token, store, 'GET', q)
+  if (view.state === 'no_cli') {
+    await api(token, store, 'POST', '/v1/shop-admin/run', {
+      action: 'install',
+      roles: ['dtc.store'],
+    })
+    for (let i = 0; i < 90 && view.state === 'no_cli'; i += 1) {
+      await sleep(1000)
+      view = await api(token, store, 'GET', q)
+    }
+  }
+  if (view.state === 'no_store')
+    view = await api(token, store, 'PUT', '/v1/shop-admin/store', {
+      store: 'nordvolt.myshopify.com',
+      roles: ['dtc.store'],
+    })
+  if (view.state !== 'authorized')
+    await api(token, store, 'POST', '/v1/shop-admin/run', {
+      action: 'authorize',
+      roles: ['dtc.store'],
+    })
+  for (let i = 0; i < 90 && view.state !== 'authorized'; i += 1) {
+    await sleep(1000)
+    view = await api(token, store, 'GET', q)
+  }
+  console.log(`  店铺授权：${view.state}`)
+}
+
+/** 右栏「报表」卡 → 显示更多 → 加宽；看板里「看图表」全展开（日报那张表在里面）。 */
+async function openReports(page) {
+  await openRailCard(page, 'reports')
+  const more = page.getByTestId('rail-card-more-reports')
+  if ((await more.count()) > 0) {
+    await more.click()
+    await page
+      .getByTestId('reports-panel')
+      .waitFor({ timeout: 20_000 })
+      .catch(() => undefined)
+    const wide = page.getByTestId('rail-panel-wide')
+    if ((await wide.count()) > 0) await wide.click()
+  }
+  await page.waitForTimeout(800)
+}
+
+/** 日报那张表在岗位层的数据看板里（「看图表」全展开）。 */
+async function openPositionBoard(page) {
+  await page.getByText('岗位层', { exact: true }).first().click()
+  await page
+    .getByTestId('data-charts-toggle')
+    .first()
+    .waitFor({ timeout: 20_000 })
+    .catch(() => undefined)
+  const toggles = page.getByTestId('data-charts-toggle')
+  for (let i = 0; i < (await toggles.count()); i += 1)
+    if ((await toggles.nth(i).getAttribute('aria-expanded')) !== 'true')
+      await toggles.nth(i).click()
+}
+
 async function main() {
   const { chromium } = require(
     join(ROOT, 'node_modules/.pnpm/playwright@1.63.0/node_modules/playwright'),
@@ -124,6 +185,8 @@ async function main() {
     const me = await api(token, undefined, 'GET', '/v1/me')
     const owner = me.assignments.find((a) => a.role_id === 'common.owner').id
     const store = await ensureAssignment(token, owner, me, 'dtc.store')
+    await api(token, owner, 'PUT', '/v1/platform-kit/platform', { storefront_platform: 'shopify' })
+    await authorizeShop(token, store)
 
     const cardOf = async (matter, kind) => {
       for (let i = 0; i < 240; i += 1) {
@@ -194,9 +257,16 @@ async function main() {
       const { context, page } = await pageFor(theme)
       await page.goto(`${BASE}/matters/${matter}`, { waitUntil: 'networkidle' })
       await page.waitForSelector('[data-testid="matter-setup-card"]', { timeout: 30_000 })
+      const steps = page.locator('[data-testid="setup-plan-steps"] summary').last()
+      if ((await steps.count()) > 0) await steps.click()
+      await shot(page, page.locator('main'), `1-plan-card-${theme}`)
       const edit = page.locator('[data-testid="setup-plan-edit"]').last()
       if ((await edit.count()) > 0) await edit.click()
-      await shot(page, page.locator('main'), `1-plan-card-${theme}`)
+      await shot(
+        page,
+        page.locator('[data-testid="matter-setup-card"]').last(),
+        `1b-plan-edit-${theme}`,
+      )
       if (theme === 'dark') {
         // ② 就这样 → 先读一次当底子（不报上新）
         const fold = page.locator('[data-testid="setup-plan-fold"]').last()
@@ -228,27 +298,20 @@ async function main() {
     for (const theme of ['light', 'dark']) {
       const { context, page } = await pageFor(theme)
       await page.goto(duty, { waitUntil: 'networkidle' })
-      const reports = await openRailCard(page, 'reports')
-      const more = page.getByTestId('rail-card-more-reports')
-      if ((await more.count()) > 0) {
-        await more.click()
-        await page
-          .getByTestId('reports-panel')
-          .waitFor({ timeout: 20_000 })
-          .catch(() => undefined)
-        const wide = page.getByTestId('rail-panel-wide')
-        if ((await wide.count()) > 0) await wide.click()
-      }
+      await openReports(page)
       const table = page.getByTestId('competitor-changes').first()
       await table.waitFor({ timeout: 20_000 }).catch(() => undefined)
-      await table.scrollIntoViewIfNeeded().catch(() => undefined)
       await shot(page, page, `2-report-changes-${theme}`)
-      await page.goto(duty, { waitUntil: 'networkidle' })
-      const brief = page.locator('[data-block-id="store.daily_report"]').first()
+      await openPositionBoard(page)
+      const brief = page.locator('[data-block-id="store.daily_report"]').last()
       await brief.waitFor({ timeout: 20_000 }).catch(() => undefined)
+      await brief
+        .getByText('竞品动向')
+        .first()
+        .waitFor({ timeout: 20_000 })
+        .catch(() => undefined)
       await brief.scrollIntoViewIfNeeded().catch(() => undefined)
       await shot(page, (await brief.count()) > 0 ? brief : page, `3-daily-brief-${theme}`)
-      void reports
       await context.close()
     }
 
@@ -265,9 +328,17 @@ async function main() {
       const { context, page } = await pageFor(theme)
       await page.goto(duty, { waitUntil: 'networkidle' })
       const conn = await openRailCard(page, 'connections')
+      await conn.scrollIntoViewIfNeeded().catch(() => undefined)
       await shot(page, page, `4-connection-red-${theme}`)
-      void conn
-      const brief = page.locator('[data-block-id="store.daily_report"]').first()
+      await openReports(page)
+      await openPositionBoard(page)
+      const brief = page.locator('[data-block-id="store.daily_report"]').last()
+      await brief.waitFor({ timeout: 20_000 }).catch(() => undefined)
+      await brief
+        .getByText('竞品动向')
+        .first()
+        .waitFor({ timeout: 20_000 })
+        .catch(() => undefined)
       await brief.scrollIntoViewIfNeeded().catch(() => undefined)
       await shot(page, (await brief.count()) > 0 ? brief : page, `5-daily-brief-failed-${theme}`)
       await context.close()
