@@ -4,6 +4,8 @@ export * from './ad-creative.js'
 // 那两边的主语是"号"（我们自己的 / 别人的），这边的主语是**广告账户**——一个独立的计费主体。
 export * from './ads.js'
 export * from './ads-wiring.js'
+// WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
+export * from './amazon-competitor.js'
 export * from './answer.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）
@@ -31,8 +33,6 @@ export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'
-// WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
-export * from './amazon-competitor.js'
 // WP392（docs/104）：竞品监控积木（快照、变化、进料口适配器、存储接口；和信息监控共用监控源）
 export * from './competitor-watch.js'
 // WP144 / docs/80：电脑操控（官方 dsh-computer-use + Cua Driver MCP 提供方）的设置与授权卡
