@@ -256,6 +256,7 @@ import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-s
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
+import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
 import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
 import { adsMailSourceOf, adsReportSetupNotice, seedAdsDailyReport } from './ads-data/wire.js'
@@ -5329,6 +5330,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       changeOf: (id) => txn.ledger.get(id),
       // WP224：止损卡上判据旁边并排一格盈亏线（只显示）
       breakEven: breakEvenNow,
+      // WP420（自查 A4）：止损判据按昨天整天再判一次（看数据在下面才建，取值时才碰它）
+      stopLossBasis: (c) => {
+        const d = adsData
+        if (d === undefined) return undefined
+        const day = dayBefore(d.today())
+        return yesterdayBasis(d.rows({ since: day, until: day }), d.today(), c.id)
+      },
       store: ads,
       clock,
       ledger: txn.ledger,
@@ -5340,6 +5348,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP315（docs/101 §5.1①，决策 560）：广告看数据——插件每天在用户已登录的后台点导出 → 读下载的文件 →
      * 按天入库（「今天」那份同步进上面的广告库）；插件不在时读邮箱里的定时报表。托管实例不装。
      */
+    /** WP420：哪条广告系列今天已经自动判过止损出过卡（一天一次）。 */
+    const autoStopLossDone = new Map<string, string>()
     const adsHolder = (p: 'google' | 'meta') =>
       roles.assignments
         .listByWorkspace(ws)
@@ -5370,6 +5380,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 attachment: async (id, aid) =>
                   (await messages.port.attachment?.({} as never, id, aid)) ?? undefined,
               }),
+            // WP420（自查 A4）：数一入库就判一遍止损，成立就出卡（L3 自动，不经 AI）
+            afterIngest: async (platform) => {
+              const d = adsData
+              const holder = adsHolder(platform)
+              if (d === undefined || holder === undefined) return
+              const day = dayBefore(d.today())
+              let caps = {}
+              try {
+                caps =
+                  roles.effectiveConfig(holder.id).actions.find((x) => x.id === 'pause_ads')
+                    ?.mandate.caps ?? {}
+              } catch {
+                caps = {}
+              }
+              const doneKey = `${d.today()}`
+              await autoStopLoss({
+                platform,
+                ads,
+                rows: d.rows({ since: day, until: d.today(), platform }),
+                today: d.today(),
+                caps,
+                port: adsService.port,
+                actor: {
+                  workspace_id: ws,
+                  person_id: holder.person_id,
+                  assignment_id: holder.id,
+                  role_id: holder.role_id,
+                } as never,
+                done: (id) => autoStopLossDone.get(id) === doneKey,
+                markDone: (id) => autoStopLossDone.set(id, doneKey),
+              })
+            },
             seedDailyReport: () =>
               seedAdsDailyReport({
                 workspace_id: ws,

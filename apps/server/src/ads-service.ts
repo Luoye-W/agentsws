@@ -47,6 +47,7 @@ import type {
 import { ADS_DEFAULT_CAPS, adsPlatformOfRole } from '@agentsws/contracts'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { AdsStore } from './ads.js'
+import type { StopLossBasis } from './ads-data/stop-loss.js'
 import { createAdsProposals } from './ads-wiring/propose.js'
 import { type AdsWiring, actionPlatformOf } from './ads-wiring/service.js'
 import { cardFileOf, cardFingerprint } from './ads-wiring/sheet-card.js'
@@ -79,6 +80,11 @@ export interface AdsServiceOptions {
   wiring?: AdsWiring
   /** WP316：按 id 读回一条变更（撤销要原来的改前值、作废了要原样重出）。 */
   changeOf?: (id: string) => Promise<StagedChange | undefined>
+  /**
+   * WP420（自查 A4）：止损判据的第二份底数——这条广告系列**昨天整天**的花费与 ROAS（看数据库里有就给）。
+   * 今天的数判不成立、昨天整天成立，就按昨天出卡（卡上写「昨天整天花了」）。不给只按今天判（单测）。
+   */
+  stopLossBasis?: (c: AdCampaign) => StopLossBasis | undefined
 }
 
 export interface AdsServiceAssembly {
@@ -634,12 +640,38 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
        * 转人审。两处都判**不是重复**——这一处是给人看的话，那一处是门。
        */
       const breakEven = options.breakEven?.()
-      const verdict = stopLossVerdict({
+      const todayVerdict = stopLossVerdict({
         ...(campaign.metrics?.roas === undefined ? {} : { roas: campaign.metrics.roas }),
         ...(campaign.metrics?.spend === undefined ? {} : { spend: campaign.metrics.spend }),
         ...(campaign.daily_budget === undefined ? {} : { daily_budget: campaign.daily_budget }),
         caps,
       })
+      /*
+       * WP420（自查 A4）：今天才跑了几个小时，「花费占日预算」那条几乎不会成立。今天不成立就再按
+       * 昨天整天判一次；昨天成立就用昨天那份数出卡（guardrail 拿 `after` 里这几格再核一遍）。
+       */
+      const basis =
+        input.reason === 'stop_loss' && todayVerdict.outcome !== 'trigger'
+          ? options.stopLossBasis?.(campaign)
+          : undefined
+      const basisVerdict =
+        basis === undefined
+          ? undefined
+          : stopLossVerdict({
+              ...(basis.roas === undefined ? {} : { roas: basis.roas }),
+              spend: basis.spend,
+              ...(campaign.daily_budget === undefined
+                ? {}
+                : { daily_budget: campaign.daily_budget }),
+              caps,
+            })
+      const useBasis = basisVerdict?.outcome === 'trigger' && basis !== undefined
+      const verdict = useBasis
+        ? { ...basisVerdict, reason: basisVerdict.reason.replace('今天花了', `${basis.label}花了`) }
+        : todayVerdict
+      const metrics = useBasis
+        ? { ...(basis.roas === undefined ? {} : { roas: basis.roas }), spend: basis.spend }
+        : campaign.metrics
       return stageOne({
         actor,
         action: 'pause_ads',
@@ -648,8 +680,9 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         after: {
           status: 'paused',
           reason: input.reason,
-          ...(campaign.metrics?.roas === undefined ? {} : { roas: campaign.metrics.roas }),
-          ...(campaign.metrics?.spend === undefined ? {} : { spend: campaign.metrics.spend }),
+          ...(metrics?.roas === undefined ? {} : { roas: metrics.roas }),
+          ...(metrics?.spend === undefined ? {} : { spend: metrics.spend }),
+          ...(useBasis ? { stop_loss_basis: basis.day } : {}),
           ...(campaign.daily_budget === undefined ? {} : { daily_budget: campaign.daily_budget }),
           // 卡面上那一格放的是**判据**不是"止损"两个字（`HighlightType.stop_loss`）
           stop_loss_reason: verdict.reason,

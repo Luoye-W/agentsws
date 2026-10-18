@@ -21,6 +21,7 @@ import type { AdsStore } from '../ads.js'
 import { ADS_ACCOUNTS_TARGET } from './accounts.js'
 import { type AdsSort, queryAdsRows, resolveAdsWindow } from './query.js'
 import type { AdsDataService } from './service.js'
+import { dayBefore, yesterdayBasis } from './stop-loss.js'
 import type { AdsDataPlatform } from './store.js'
 
 export interface AdsDataToolsOptions {
@@ -107,6 +108,8 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
       caps,
       expected_platforms: wanted,
     })
+    const yDay = dayBefore(today)
+    const yRows = svc.rows({ since: yDay, until: yDay })
     const stop_loss = ads
       .campaigns()
       .filter((c) => wanted.includes(c.platform as AdsDataPlatform) && c.status === 'active')
@@ -119,12 +122,25 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
           ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
           caps,
         })
+        // WP420（自查 A4）：今天不成立再按昨天整天判（和止损卡、导数后自动判同一套）
+        const basis = v.outcome === 'trigger' ? undefined : yesterdayBasis(yRows, today, c.id)
+        const y =
+          basis === undefined
+            ? undefined
+            : stopLossVerdict({
+                ...(basis.roas === undefined ? {} : { roas: basis.roas }),
+                spend: basis.spend,
+                ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+                caps,
+              })
+        const pick = y?.outcome === 'trigger' ? y : v
         return {
           campaign_id: c.id,
           platform: c.platform,
           name: c.name,
-          outcome: v.outcome,
-          reason: v.reason,
+          outcome: pick.outcome,
+          basis: pick === v ? 'today' : 'yesterday',
+          reason: pick === v ? v.reason : pick.reason.replace('今天花了', '昨天整天花了'),
         }
       })
       .sort((a, b) => (a.outcome === b.outcome ? 0 : a.outcome === 'trigger' ? -1 : 1))
