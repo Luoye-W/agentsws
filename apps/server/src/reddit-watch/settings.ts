@@ -95,6 +95,9 @@ export function normalizeSettings(
     tag_words: terms(raw?.tag_words, MAX_TAG_WORDS),
   }
   if (USER.test(user)) out.brand_username = user
+  // WP411：第一次外部巡查往回补几天（1–31；不给 = 默认 7 天）
+  if (raw?.external_backfill_days !== undefined)
+    out.external_backfill_days = clampInt(raw.external_backfill_days, 1, 31, 7)
   return out
 }
 

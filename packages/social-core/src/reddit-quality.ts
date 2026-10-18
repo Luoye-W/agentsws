@@ -16,8 +16,9 @@
 
 const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 const LATIN = /^[\p{Script=Latin}\d\s.'’&_+-]+$/u
-const EDGE_L = '(?:^|[^\\p{L}\\p{N}])'
-const EDGE_R = '(?=$|[^\\p{L}\\p{N}])'
+/** 词边界：前后不是字母数字，也不是「字母-」连着（`ivra-ish`、`pre-ivra` 是别的词）。 */
+const EDGE_L = '(?<![\\p{L}\\p{N}])(?<![\\p{L}\\p{N}]-)'
+const EDGE_R = '(?![\\p{L}\\p{N}])(?!-[\\p{L}\\p{N}])'
 
 /** 一个词 → 拉丁字母 / 数字段（段与段之间的空格、连字符、点、下划线可有可无）。 */
 function chunks(term: string): string[] {

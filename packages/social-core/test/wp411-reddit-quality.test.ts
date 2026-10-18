@@ -27,6 +27,10 @@ describe('外部关键词：本地整词匹配', () => {
     // 数据渠道宽松匹配撞上的：前缀、别的词
     expect(keywordHit('ivrabiliaria en Madrid', 'IVRA', CTX)).toBe(false)
     expect(keywordHit('The Ivrakan empire rose (HFY chapter 12)', 'IVRA', CTX)).toBe(false)
+    // 连字符连着别的字母是另一个词；连着型号照认
+    expect(keywordHit('ivra-ish tempo deck', 'IVRA', CTX)).toBe(false)
+    expect(keywordHit('my IVRA-Air3 arrived', 'IVRA', CTX)).toBe(true)
+    expect(keywordHit('IVRA - great glasses', 'IVRA', CTX)).toBe(true)
   })
   it('短语要整串连续出现；连字符 / 空格可有可无；中文按包含', () => {
     expect(keywordHit('Are AI glasses worth it?', 'AI glasses', CTX)).toBe(true)

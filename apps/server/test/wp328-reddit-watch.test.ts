@@ -182,10 +182,10 @@ describe('缺设置 / 缺连接：出卡（一天最多一次）', () => {
     ])
     expect(run.finished_at).toBeDefined()
     expect(s.connects[0]?.[0]).toMatchObject({ kind: 'extension', service: 'extension' })
-    // 外部：自家版块那条不算外部；ivrabiliaria 只是撞字 → 相关度不高
+    // 外部：自家版块那条不算外部；ivrabiliaria 只是撞字 → WP411 起入库前就按整词丢掉（不判、不计）
     const ext = s.watch.items({ source: 'external' })
-    expect(ext.map((x) => x.fullname).sort()).toEqual(['t3_aa1', 't3_aa2'])
-    expect(ext.find((x) => x.fullname === 't3_aa2')?.judgement?.verdict).toBe('low_relevance')
+    expect(ext.map((x) => x.fullname).sort()).toEqual(['t3_aa1'])
+    expect(run.parts.find((p) => p.part === 'external')?.filtered).toBe(1)
   })
 })
 
@@ -432,7 +432,8 @@ describe('给报告积木（WP331）：sweepNow 与 WatchSource', () => {
     expect(items.some((x) => x.id === 't1_m1')).toBe(false)
     expect(items.find((x) => x.id === 't3_p2')).toMatchObject({ scope: 'own', kind: 'post' })
     const ext = items.filter((x) => x.scope === 'external')
-    expect(ext.map((x) => x.id).sort()).toEqual(['t3_aa1', 't3_aa2'])
+    // WP411：ivrabiliaria 只是撞字，入库前就丢了
+    expect(ext.map((x) => x.id).sort()).toEqual(['t3_aa1'])
     expect(ext.every((x) => x.topic?.key.startsWith('t:') === true)).toBe(true)
     expect((await src.sweeps(w)).length).toBe(1)
   })

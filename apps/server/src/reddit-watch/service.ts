@@ -35,7 +35,10 @@ import {
 import {
   type ConnectNeed,
   type Iso8601,
+  REDDIT_EXTERNAL_BACKFILL_DAYS,
   REDDIT_WATCH_ALERT_DAYS,
+  type RedditBackfillPlan,
+  type RedditThreadContext,
   type RedditWatchDigest,
   type RedditWatchEntry,
   type RedditWatchItemStatus,
@@ -48,9 +51,15 @@ import {
   redditWeekWindow,
   type WorkspaceId,
 } from '@agentsws/contracts'
-import type { RedditItem } from '@agentsws/social-core'
+import {
+  type ExternalGateContext,
+  externalReplyGate,
+  keywordNoise,
+  type RedditItem,
+} from '@agentsws/social-core'
 import type { OutboundLog } from '../outbound/log.js'
 import type { SetupCardsAssembly, SetupTarget } from '../setup-cards.js'
+import { BACKFILL_PREFIX, backfillPlan, chunkReads, parseWhen } from './backfill.js'
 import { buildDigest } from './digest.js'
 import { dueParts, dueSubs, type PartClock } from './due.js'
 import { externalItemOf, type IngestContext, watchItemOf } from './ingest.js'
@@ -67,6 +76,13 @@ import {
 import type { RedditWatchItemQuery, RedditWatchStore } from './store.js'
 import { type PatrolBrandBrief, type PatrolSuggestion, suggestPatrol } from './suggest.js'
 import { applyLocalMarks } from './terms.js'
+import {
+  linkOf,
+  snapshotOf,
+  THREAD_FRESH_MS,
+  type ThreadSnapshot,
+  threadContextOf,
+} from './thread.js'
 
 /** 第三方数据渠道那一跳（全站搜关键词）。 */
 export type RedditSearchResult =
@@ -84,7 +100,8 @@ export interface RedditWatchOptions {
   /** 外部社区：全站搜一个关键词（按最新、限定时间窗）。不给 = 这一块没配。 */
   search?(input: {
     query: string
-    time_window: 'day' | 'week'
+    /** WP411：第一次外部巡查（插件不在线时）往回补 N 天要 `month`。 */
+    time_window: 'day' | 'week' | 'month'
     limit: number
   }): Promise<RedditSearchResult>
   /** AI 判断（不给 / 回 undefined = 只按规则）。 */
@@ -93,6 +110,11 @@ export interface RedditWatchOptions {
   suggestions?(): SettingsSuggestions | undefined
   /** WP340：品牌档案（给 AI 出配置卡建议值用；没有就不建议）。 */
   brandBrief?(): MaybePromise<PatrolBrandBrief | undefined>
+  /**
+   * WP411：品牌名的写法变体（档案里的品牌词）与竞品名——外部关键词的整词匹配、外部帖要不要起草用。
+   * 不给 = 只认品牌名本身、不认竞品版。
+   */
+  brandTerms?(): MaybePromise<{ brand_names?: string[]; competitors?: string[] } | undefined>
   setupCards?(): Promise<SetupCardsAssembly | undefined>
   /** 缺连接 / 缺设置的卡挂在谁名下（持有 `social.reddit` 的人）；没人持有就不出卡。 */
   actor?(): RunRequest['actor'] | undefined
@@ -165,6 +187,24 @@ export interface RedditWatchAssembly {
   }): Promise<PatrolSuggestion | undefined>
   /** WP348：插件那一侧现在怎样（配置卡方案里品牌号只从这里来）。 */
   pluginState(): PatrolPluginState
+  /**
+   * WP411（#13）：按时间窗回补（在你浏览器里读）。`preview` = 只回那一句计划、不读；
+   * 补不了回 `plan.ok: false`（原因 + 能做的）。读完回这一轮（有哪块没读成照实写在 `run.parts`）。
+   */
+  backfill(input: {
+    since: string
+    until?: string
+    preview?: boolean
+    timeoutMs?: number
+    pollMs?: number
+  }): Promise<{ plan: RedditBackfillPlan; run?: RedditWatchRun }>
+  /** WP411（#11）：这一条的整串上下文（原帖、上下文评论、品牌号已说过的）。找不到条目回 `undefined`。 */
+  thread(id: string): RedditThreadContext | undefined
+  /**
+   * WP411：把还开着、要回、没起草的条目重新交给起草（人设刚配好时用）。回交了几条。
+   * 照样先读整串（插件在线时）。
+   */
+  redispatch(): number
 }
 
 /** WP329：版规多久算旧（旧了下一轮再读一次）。 */
@@ -211,7 +251,18 @@ interface JobRec {
    * 时排一件，配置卡的方案里品牌号就是插件里登着的那个；不占读的次数，真巡查来了直接顶掉它。
    */
   whoami?: true
+  /** WP411（#11）：起草前读整串的那一件（每一路一帖）；排着时真巡查来了直接顶掉它（条目还在队里）。 */
+  threads?: true
+  /** WP411：同一轮还没读的几件（一件最多 12 路，回补拆成几件按顺序读）。 */
+  rest?: RedditReadRequest[][]
 }
+/** WP411：同一轮拆成几件时，各块的数累到这里（kv `acc:<run>`）。 */
+type PartAcc = Partial<
+  Record<
+    RedditWatchPart,
+    { fetched: number; fresh: number; bad: string[]; gap: boolean; filtered: number; dupes: number }
+  >
+>
 type Parts = Partial<Record<RedditWatchPart, PartClock>>
 type MaybePromise<T> = T | Promise<T>
 
@@ -327,10 +378,47 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     })
   }
 
-  /** 新条目判一遍、存、要回的通知 WP329。 */
+  /** WP411：整词匹配 / 外部帖闸要的那几样（品牌名写法、型号、竞品名）。 */
+  const qualityCtx = async (): Promise<ExternalGateContext> => {
+    const s = settings()
+    const t = await Promise.resolve(options.brandTerms?.()).catch(() => undefined)
+    const brand = options.brandName?.()
+    const names = [...(brand === undefined ? [] : [brand]), ...(t?.brand_names ?? [])]
+    return {
+      brand_names: [...new Set(names.map((x) => x.trim()).filter((x) => x !== ''))],
+      models: s.tag_words ?? [],
+      competitors: t?.competitors ?? [],
+    }
+  }
+
+  /**
+   * 新条目判一遍、存、要回的交给起草（WP329）。
+   * WP411：同一条（全名）在别的来源已经有了 → 不再判、不再起草（照抄第一份的判断、不要回）；
+   * 外部帖判了要回、但过不了外部帖闸（个人主页 / 竞品版 / 没提到我们）→ 改成不回、写明为什么；
+   * 要回的先进起草队列（插件在线时先读整串再起草）。
+   */
   const judgeAndStore = async (run: RedditWatchRun, fresh: RedditWatchEntry[]): Promise<void> => {
-    const todo = fresh.filter((x) => x.ours !== true && x.deleted !== true)
-    if (todo.length === 0) return
+    const all = fresh.filter((x) => x.ours !== true && x.deleted !== true)
+    if (all.length === 0) return
+    const batch = new Set(all.map((x) => x.id))
+    const firstOf = new Map<string, RedditWatchEntry>()
+    const todo: RedditWatchEntry[] = []
+    const dups: RedditWatchEntry[] = []
+    for (const it of all) {
+      const k = it.fullname.toLowerCase()
+      const prior =
+        firstOf.get(k) ??
+        store
+          .byFullname(ws, it.fullname)
+          .find((x) => !batch.has(x.id) && x.dup_of === undefined && x.ours !== true)
+      if (prior !== undefined) {
+        it.dup_of = prior.id
+        dups.push(it)
+        continue
+      }
+      firstOf.set(k, it)
+      todo.push(it)
+    }
     const s = settings()
     const { since } = redditWeekWindow(options.now(), options.tzOffsetMinutes())
     const topics = [
@@ -353,16 +441,134 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       },
       options.complete?.(),
     )
+    const ctx = await qualityCtx()
     const pending: RedditWatchEntry[] = []
     for (const it of todo) {
-      const j = verdicts.get(it.id)
+      let j = verdicts.get(it.id)
       if (j === undefined) continue
+      if (j.reply && it.source === 'external') {
+        const gate = externalReplyGate(it, ctx)
+        if (!gate.ok) {
+          j = { ...j, reply: false }
+          it.note = gate.why
+        }
+      }
       it.judgement = j
       store.put(it)
       if (j.reply) pending.push(it)
     }
+    for (const d of dups) {
+      const orig = firstOf.get(d.fullname.toLowerCase()) ?? store.get(ws, d.dup_of ?? '')
+      if (orig?.judgement !== undefined) d.judgement = { ...orig.judgement, reply: false }
+      d.note = '同一条在别的来源已经有了，只算一次'
+      store.put(d)
+    }
     run.pending += pending.length
-    if (pending.length > 0) for (const l of pendingListeners) safely(() => l(pending))
+    enqueueDrafts(pending)
+  }
+
+  /** WP411：第一次外部巡查要不要在浏览器里补（`tried_at` = 上次试过没成，隔一小时再试）。 */
+  const backfillWanted = (): { days: number; tried_at?: Iso8601 } | undefined =>
+    store.kv<{ days: number; tried_at?: Iso8601 } | null>(ws, 'ext_backfill_wanted') ?? undefined
+
+  /* ── WP411：起草队列（插件在线时先读整串再交给起草）──────────────────── */
+  /** 插件这会儿能不能读（不能就说为什么）。 */
+  const pluginReady = (): { ok: true } | { ok: false; why: string } => {
+    const e = ext()
+    if (e.seen_at === undefined) return { ok: false, why: '插件还没配对' }
+    if (e.reddit_connected !== true) return { ok: false, why: '插件里还没连接 Reddit' }
+    if (nowMs() - ms(e.seen_at) > EXT_FRESH_MS)
+      return { ok: false, why: 'Chrome 没开着（插件这一阵没来问）' }
+    if (e.outcome === 'not_logged_in' || e.outcome === 'wrong_user')
+      return { ok: false, why: 'Chrome 里的 Reddit 没登录品牌号' }
+    return { ok: true }
+  }
+  const draftQueue = (): string[] => store.kv<string[]>(ws, 'draft_queue') ?? []
+  const enqueueDrafts = (items: readonly RedditWatchEntry[]): void => {
+    if (items.length === 0) return
+    const q = draftQueue()
+    for (const it of items) if (!q.includes(it.id)) q.push(it.id)
+    store.setKv(ws, 'draft_queue', q.slice(-300))
+    pump()
+  }
+  /** 交给起草（从队里拿掉；还开着、要回的才交）。 */
+  const release = (ids: readonly string[]): void => {
+    if (ids.length === 0) return
+    store.setKv(
+      ws,
+      'draft_queue',
+      draftQueue().filter((x) => !ids.includes(x)),
+    )
+    const out = ids
+      .map((id) => store.get(ws, id))
+      .filter(
+        (x): x is RedditWatchEntry =>
+          x !== undefined && x.status === 'open' && x.judgement?.reply === true,
+      )
+    if (out.length > 0) for (const l of pendingListeners) safely(() => l(out))
+  }
+  /** 队里的：整串新读过的 / 认不出是哪一帖的直接交；剩下的排一件「读整串」（插件不在线就直接交）。 */
+  const pumpThreads = (): void => {
+    const q = draftQueue()
+    if (q.length === 0) return
+    if (!pluginReady().ok) {
+      release(q)
+      return
+    }
+    const ready: string[] = []
+    const need = new Map<string, string[]>()
+    for (const id of q) {
+      const it = store.get(ws, id)
+      const link = it === undefined ? undefined : linkOf(it)
+      if (link === undefined) {
+        ready.push(id)
+        continue
+      }
+      const snap = store.kv<ThreadSnapshot | null>(ws, `thread:${link}`)
+      if (snap !== undefined && snap !== null && nowMs() - ms(snap.at) < THREAD_FRESH_MS) {
+        ready.push(id)
+        continue
+      }
+      need.set(link, [...(need.get(link) ?? []), id])
+    }
+    release(ready)
+    if (need.size === 0) return
+    const s = settings()
+    const links = [...need.keys()].slice(0, REDDIT_READ_MAX_PARTS)
+    setJob({
+      job: {
+        id: options.newId('rj'),
+        workspace_id: ws,
+        ...(s.brand_username === undefined ? {} : { expect_user: s.brand_username }),
+        reads: links.map((l) => ({
+          key: `thread:${l}`,
+          kind: 'post_comments' as const,
+          post_id: l.slice(3),
+          max_pages: 1,
+        })),
+        title: '起草前读一下整串',
+        created_at: options.now(),
+      },
+      run_id: '',
+      status: 'queued',
+      queued_at: options.now(),
+      pace_key: redditPaceKey(s.brand_username, ws),
+      threads: true,
+    })
+  }
+  /** 整串读回来了：存快照、交给起草（没读成的也交：只看库里有的，卡上标出来）。 */
+  const ingestThreads = (rec: JobRec, res: RedditReadResultInput): void => {
+    for (const part of res.parts)
+      if (part.ok && part.key.startsWith('thread:'))
+        store.setKv(ws, part.key, snapshotOf(part.items, options.now()))
+    const links = new Set(rec.job.reads.map((r) => r.key.slice('thread:'.length)))
+    release(
+      draftQueue().filter((id) => {
+        const it = store.get(ws, id)
+        const link = it === undefined ? undefined : linkOf(it)
+        return link === undefined || links.has(link)
+      }),
+    )
   }
 
   /**
@@ -399,6 +605,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   })
 
   /* ── 外部社区：每个关键词搜一次（第三方数据渠道）──────────────────────── */
+  /**
+   * WP411（#10）：结果入库前先在本地做整词匹配（没整词出现的是数据渠道宽松匹配撞上的，丢掉不判不计）；
+   * 同一条在收件箱等别的来源已有的照样入库但只算一次（`judgeAndStore` 标 `dup_of`）。
+   * 第一次外部巡查往回补 N 天：插件在线 → 这一轮照常、读完再在你浏览器里补（不扣积分）；
+   * 插件不在线 → 这一次数据渠道放宽到覆盖 N 天的时间档，按发帖时间截掉更早的。
+   */
   const runExternal = async (run: RedditWatchRun): Promise<void> => {
     const s = settings()
     const search = options.search
@@ -409,14 +621,31 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       })
       return
     }
+    const days = s.external_backfill_days ?? REDDIT_EXTERNAL_BACKFILL_DAYS
+    const first = store.kv(ws, 'ext_backfill') === undefined
+    const viaBrowser = first && pluginReady().ok
+    if (viaBrowser && backfillWanted() === undefined)
+      store.setKv(ws, 'ext_backfill_wanted', { days })
+    const wide = first && !viaBrowser
+    const cut = wide ? nowMs() - days * 86_400_000 : undefined
+    const window: 'day' | 'week' | 'month' = wide
+      ? days <= 7
+        ? 'week'
+        : 'month'
+      : s.every_hours > 24
+        ? 'week'
+        : 'day'
+    const ctx = await qualityCtx()
     const own = new Set(s.own_subreddits.map((x) => x.toLowerCase()))
     const fresh: RedditWatchEntry[] = []
     const failures: string[] = []
     let fetched = 0
+    let filtered = 0
+    let dupes = 0
     for (const keyword of s.keywords) {
       const got = await search({
         query: keyword,
-        time_window: s.every_hours > 24 ? 'week' : 'day',
+        time_window: window,
         limit: s.keyword_limit,
       }).catch(
         (e: unknown): RedditSearchResult => ({
@@ -433,18 +662,37 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         if (r.subreddit !== undefined && own.has(r.subreddit.toLowerCase())) continue
         const it = externalItemOf(r, keyword, ingestCtx(run))
         if (it === undefined) continue
+        if (cut !== undefined && Date.parse(it.created_at) < cut) continue
         fetched += 1
+        if (!keywordNoise(it, keyword, ctx).keep) {
+          filtered += 1
+          continue
+        }
+        if (store.byFullname(ws, it.fullname).some((x) => x.source !== 'external')) dupes += 1
         if (store.insert(applyLocalMarks(it, s))) fresh.push(it)
       }
     }
     await judgeAndStore(run, fresh)
     notifyAlerts(fresh)
+    if (wide && failures.length < s.keywords.length)
+      store.setKv(ws, 'ext_backfill', { at: options.now(), via: 'data_channel', days })
     const allFailed = failures.length > 0 && failures.length === s.keywords.length
+    const notes = [
+      ...failures.slice(0, 3),
+      ...(wide
+        ? [
+            `第一次往回补 ${days} 天走的数据渠道（插件不在线），每个词只取 ${s.keyword_limit} 条，可能补不全`,
+          ]
+        : []),
+      ...(viaBrowser ? [`第一次往回补 ${days} 天：读完这一轮在你浏览器里补`] : []),
+    ]
     setPart(run, 'external', {
       status: allFailed ? 'failed' : 'ok',
       fetched,
       fresh: fresh.length,
-      ...(failures.length === 0 ? {} : { message: failures.slice(0, 3).join('；').slice(0, 300) }),
+      ...(filtered === 0 ? {} : { filtered }),
+      ...(dupes === 0 ? {} : { dupes }),
+      ...(notes.length === 0 ? {} : { message: notes.join('；').slice(0, 300) }),
     })
   }
 
@@ -522,7 +770,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     }
     const cur = jobRec()
     // WP348：「只看登着哪个号」那一件直接被真巡查顶掉（真巡查照样先读登着哪个号）
-    if (cur !== undefined && cur.whoami !== true) {
+    // WP411：排着还没领走的「读整串」那一件也顶掉（条目还在起草队里，巡查读完再排）
+    if (
+      cur !== undefined &&
+      cur.whoami !== true &&
+      !(cur.threads === true && cur.status === 'queued')
+    ) {
       for (const p of want) setPart(run, p, { status: 'skipped', message: '上一轮还没读完。' })
       return
     }
@@ -622,8 +875,17 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   }
 
   /* ── 插件交回来的 ───────────────────────────────────────────────── */
-  const partOfKey = (key: string): RedditWatchPart =>
-    key === 'inbox' ? 'inbox' : key.startsWith('watch_new:') ? 'watch_sub' : 'own_sub'
+  const partOfKey = (raw: string): RedditWatchPart => {
+    // WP411：回补那几路（`bf:` 开头）按去掉前缀后的认；全站搜帖子算外部
+    const key = raw.startsWith(BACKFILL_PREFIX) ? raw.slice(BACKFILL_PREFIX.length) : raw
+    return key === 'inbox'
+      ? 'inbox'
+      : key.startsWith('watch_new:')
+        ? 'watch_sub'
+        : key.startsWith('search:')
+          ? 'external'
+          : 'own_sub'
+  }
   /** 这一路是哪个版块的（收件箱 / 版规回 `undefined`）。 */
   const subOfKey = (key: string): string | undefined => {
     const m = /^(?:sub_new|sub_comments|watch_new):(.+)$/u.exec(key)
@@ -673,13 +935,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     if (s.brand_username === undefined && res.outcome === 'done' && res.user !== undefined)
       s = writeSettings(store, ws, { brand_username: res.user })
     const brandUser = s.brand_username ?? res.user
+    const ctx = await qualityCtx()
     const fresh: RedditWatchEntry[] = []
     // WP340：每个版块这一次是不是都读成了（自家版块两路都成才算）
     const subOk = new Map<string, boolean>()
-    const stats = new Map<
-      RedditWatchPart,
-      { fetched: number; fresh: number; bad: string[]; gap: boolean }
-    >()
+    // WP411：同一轮拆成几件时，前几件的数累在 kv 里
+    const acc = store.kv<PartAcc | null>(ws, `acc:${run.id}`) ?? {}
     for (const part of res.parts) {
       // WP329：版规那几路不是条目，记下就走（读不成不算这一块失败）
       if (part.key.startsWith('rules:')) {
@@ -691,11 +952,16 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         }
         continue
       }
+      const backfill = part.key.startsWith(BACKFILL_PREFIX)
       const p = partOfKey(part.key)
       const sub = subOfKey(part.key)
+      // WP411：全站搜帖子那一路（回补）：键里带着关键词
+      const searchWord = part.key.startsWith(`${BACKFILL_PREFIX}search:`)
+        ? part.key.slice(`${BACKFILL_PREFIX}search:`.length)
+        : undefined
       if (sub !== undefined) subOk.set(sub, (subOk.get(sub) ?? true) && part.ok)
-      const st = stats.get(p) ?? { fetched: 0, fresh: 0, bad: [], gap: false }
-      stats.set(p, st)
+      const st = acc[p] ?? { fetched: 0, fresh: 0, bad: [], gap: false, filtered: 0, dupes: 0 }
+      acc[p] = st
       const req = rec.job.reads.find((r) => r.key === part.key)
       if (!part.ok) st.bad.push(part.message ?? '没读成')
       // 翻到页数上限还没读到上次那一条：中间可能漏了（照实说，不装）
@@ -707,15 +973,27 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         if (newest === undefined || raw.created_utc > newest.created_utc) newest = raw
         if (raw.deleted === true) markDeleted(raw)
         // 重点版块（别人的版）读到的进「外部社区」那一类（按话题归组）
-        const source = p === 'inbox' ? 'inbox' : p === 'watch_sub' ? 'external' : 'own_sub'
+        const source = p === 'inbox' ? 'inbox' : p === 'own_sub' ? 'own_sub' : 'external'
         const it = applyLocalMarks(watchItemOf(raw, source, ingestCtx(run), brandUser), s)
+        if (searchWord !== undefined) {
+          // 自家版块里的不算外部；没整词出现的丢掉（不入库、不判、不计）
+          if (raw.subreddit !== undefined && isOwn(raw.subreddit)) continue
+          it.keyword = searchWord
+          if (!keywordNoise(it, searchWord, ctx).keep) {
+            st.filtered += 1
+            continue
+          }
+        }
+        const elsewhere = store.byFullname(ws, it.fullname).some((x) => x.source !== source)
         if (!store.insert(it)) continue
+        if (elsewhere) st.dupes += 1
         st.fresh += 1
         if (p === 'inbox') followUp(it)
         if (it.reply_to_ours === true) store.put(it)
         fresh.push(it)
       }
-      if (part.ok && newest !== undefined)
+      // 回补那几路不动日常的「上次读到哪」
+      if (part.ok && newest !== undefined && !backfill)
         store.setKv(ws, `cursor:${part.key}`, {
           name: newest.name,
           created_utc: newest.created_utc,
@@ -725,10 +1003,34 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     notifyAlerts(fresh)
     for (const [sub, ok] of subOk) if (ok) touchSub(sub, { last_ok_at: options.now() })
     const loginLike = res.outcome === 'not_logged_in' || res.outcome === 'wrong_user'
+    // WP411：同一轮还有没读的几件 → 排下一件（被拦 / 没登录就不排了，照实收尾）
+    const rest = rec.rest ?? []
+    if (res.outcome === 'done' && rest.length > 0) {
+      store.setKv(ws, `acc:${run.id}`, acc)
+      const [next, ...more] = rest
+      setJob({
+        ...rec,
+        job: { ...rec.job, id: options.newId('rj'), reads: next ?? [], created_at: options.now() },
+        status: 'queued',
+        queued_at: options.now(),
+        ...(more.length === 0 ? { rest: [] } : { rest: more }),
+      })
+      setExt({ outcome: res.outcome, ...(res.user === undefined ? {} : { user: res.user }) })
+      store.putRun(run)
+      return
+    }
+    store.setKv(ws, `acc:${run.id}`, null)
     for (const p of run.parts) {
-      if (p.part === 'external' || p.status !== 'waiting') continue
-      const st = stats.get(p.part)
-      const counts = { fetched: st?.fetched ?? 0, fresh: st?.fresh ?? 0 }
+      if (p.status !== 'waiting') continue
+      const st = acc[p.part]
+      const filtered = st?.filtered ?? 0
+      const dupes = st?.dupes ?? 0
+      const counts = {
+        fetched: st?.fetched ?? 0,
+        fresh: st?.fresh ?? 0,
+        ...(filtered === 0 ? {} : { filtered }),
+        ...(dupes === 0 ? {} : { dupes }),
+      }
       if (loginLike)
         setPart(run, p.part, { status: 'needs_connection', message: res.message, ...counts })
       else if (st === undefined)
@@ -745,6 +1047,14 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
           ...counts,
           ...(st.gap ? { message: '这次新内容太多，没读完，可能有漏的。' } : {}),
         })
+    }
+    // WP411：第一次外部回补（在你浏览器里搜）读成了就记下，之后不再补
+    const want = backfillWanted()
+    if (run.trigger === 'backfill' && want !== undefined) {
+      if (partOf(run, 'external')?.status === 'ok') {
+        store.setKv(ws, 'ext_backfill', { at: options.now(), via: 'browser', days: want.days })
+        store.setKv(ws, 'ext_backfill_wanted', null)
+      } else store.setKv(ws, 'ext_backfill_wanted', { ...want, tried_at: options.now() })
     }
     setExt({
       outcome: res.outcome,
@@ -764,8 +1074,21 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     if (age < ttl) return
     setJob(undefined)
     if (rec.status === 'running' && rec.whoami !== true) pace.endKey(rec.pace_key, rec.job.id)
+    // WP411：「读整串」那一件没人领 / 没交回：条目照样交给起草（只看库里有的，卡上标出来）
+    if (rec.threads === true) {
+      const links = new Set(rec.job.reads.map((r) => r.key.slice('thread:'.length)))
+      release(
+        draftQueue().filter((id) => {
+          const it = store.get(ws, id)
+          const link = it === undefined ? undefined : linkOf(it)
+          return link === undefined || links.has(link)
+        }),
+      )
+      return
+    }
     const run = store.run(ws, rec.run_id)
     if (run === undefined) return
+    store.setKv(ws, `acc:${run.id}`, null)
     const message =
       rec.status === 'queued'
         ? 'Chrome 没开着，插件没来领这一轮。'
@@ -843,6 +1166,166 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     return got
   }
 
+  /* ── WP411：回补（在你浏览器里读）────────────────────────────────── */
+  /** 回补那几路属于哪几块。 */
+  const partsOfReads = (reads: readonly RedditReadRequest[]): RedditWatchPart[] => {
+    const set = new Set(reads.map((r) => partOfKey(r.key)))
+    return (['inbox', 'own_sub', 'watch_sub', 'external'] as const).filter((p) => set.has(p))
+  }
+  /** 起一轮回补（拆成几件、按顺序读；排着的「读整串」顶掉）。调用前插件那一侧要空着。 */
+  const startBackfill = (
+    window: { since: Iso8601; until: Iso8601 },
+    reads: readonly RedditReadRequest[],
+  ): RedditWatchRun => {
+    const chunks = chunkReads(reads)
+    const s = settings()
+    const run: RedditWatchRun = {
+      id: options.newId('rwr'),
+      workspace_id: ws,
+      started_at: options.now(),
+      final: false,
+      trigger: 'backfill',
+      window,
+      parts: partsOfReads(reads).map((part) => ({ part, status: 'waiting', fetched: 0, fresh: 0 })),
+      pending: 0,
+    }
+    store.putRun(run)
+    store.setKv(ws, 'active_run', run.id)
+    const [first, ...rest] = chunks
+    setJob({
+      job: {
+        id: options.newId('rj'),
+        workspace_id: ws,
+        ...(s.brand_username === undefined ? {} : { expect_user: s.brand_username }),
+        reads: first ?? [],
+        title: 'Reddit 回补',
+        created_at: options.now(),
+      },
+      run_id: run.id,
+      status: 'queued',
+      queued_at: options.now(),
+      pace_key: redditPaceKey(s.brand_username, ws),
+      ...(rest.length === 0 ? {} : { rest }),
+    })
+    emit('reddit_watch.run_started', {
+      run_id: run.id,
+      final: false,
+      trigger: 'backfill',
+      parts: run.parts.map((p) => p.part),
+      reads: reads.length,
+    })
+    return run
+  }
+
+  /** 插件那一侧空着（没有活，或只有排着的「读整串」）。 */
+  const slotFree = (): boolean => {
+    const cur = jobRec()
+    return (
+      cur === undefined ||
+      (cur.status === 'queued' && (cur.threads === true || cur.whoami === true))
+    )
+  }
+
+  /**
+   * 插件那一侧空下来时做什么：① 第一次外部巡查的回补（插件在线、上次没成的隔一小时）；② 起草前读整串。
+   */
+  const pump = (): void => {
+    if (!slotFree()) return
+    const want = backfillWanted()
+    const s = settings()
+    if (
+      activeRun() === undefined &&
+      want !== undefined &&
+      s.keywords.length > 0 &&
+      pluginReady().ok &&
+      (want.tried_at === undefined || nowMs() - ms(want.tried_at) > 3_600_000)
+    ) {
+      const until = nowMs()
+      const since = until - want.days * 86_400_000
+      const { plan, requests } = backfillPlan({
+        settings: s,
+        sinceMs: since,
+        untilMs: until,
+        nowMs: until,
+        tzOffsetMinutes: options.tzOffsetMinutes(),
+        plugin: { ok: true },
+        parts: { external: true, own: false, watch: false },
+      })
+      if (plan.ok) {
+        startBackfill({ since: plan.since, until: plan.until }, requests)
+        return
+      }
+    }
+    if (jobRec() === undefined) pumpThreads()
+  }
+
+  /** 等这一轮做完（插件交回或超时；超时抛一句人话）。 */
+  const waitRun = async (
+    id: string,
+    o: { timeoutMs?: number; pollMs?: number },
+  ): Promise<RedditWatchRun> => {
+    const poll = o.pollMs ?? 5_000
+    const timeout = o.timeoutMs ?? WEEKLY_WAIT_MS
+    const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    for (let waited = 0; ; waited += poll) {
+      const cur = store.run(ws, id)
+      if (cur?.finished_at !== undefined) return cur
+      if (waited >= timeout)
+        throw new Error('插件还没交回这一轮（Chrome 没开着？），先用已经读到的。')
+      await sleep(poll)
+      sweep()
+    }
+  }
+
+  const backfill: RedditWatchAssembly['backfill'] = async (input) => {
+    sweep()
+    const tz = options.tzOffsetMinutes()
+    const now = nowMs()
+    const sinceMs = parseWhen(input.since, tz, false)
+    const untilMs = input.until === undefined ? now : parseWhen(input.until, tz, true)
+    if (sinceMs === undefined || untilMs === undefined)
+      return {
+        plan: {
+          ok: false,
+          message: '时间认不出：用本地日期（2026-10-11）或 ISO 时间。',
+          can: '换个写法再说一次。',
+        },
+      }
+    const s = settings()
+    const made = backfillPlan({
+      settings: s,
+      sinceMs,
+      untilMs,
+      nowMs: now,
+      tzOffsetMinutes: tz,
+      plugin: isConfigured(s) ? pluginReady() : { ok: true },
+    })
+    if (!isConfigured(s))
+      return {
+        plan: { ok: false, message: '还没配 Reddit 巡查，没有要补的。', can: '先把巡查设好。' },
+      }
+    const plan = made.plan
+    if (!plan.ok || input.preview === true) return { plan }
+    emit('reddit_watch.backfill_planned', {
+      days: plan.days,
+      pages: plan.pages,
+      reads: made.requests.length,
+    })
+    // 正在跑的那一轮先等它读完（同一个号一次一件）
+    const active = activeRun()
+    if (active !== undefined) await waitRun(active.id, input)
+    for (let waited = 0; !slotFree(); waited += input.pollMs ?? 5_000) {
+      if (waited >= (input.timeoutMs ?? WEEKLY_WAIT_MS))
+        throw new Error('插件那一侧一直有活没读完，这次没补成。')
+      await (options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(
+        input.pollMs ?? 5_000,
+      )
+      sweep()
+    }
+    const run = startBackfill({ since: plan.since, until: plan.until }, made.requests)
+    return { plan, run: await waitRun(run.id, input) }
+  }
+
   /* ── 定时 / 人点 ────────────────────────────────────────────────── */
   const tick: RedditWatchAssembly['tick'] = async () => {
     sweep()
@@ -878,20 +1361,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       if (!isConfigured(s)) throw new Error('没配 Reddit 巡查（自家版块、外部关键词都没有）。')
       run = await start('manual', false, applicable(s), allSubs(s))
     }
-    const poll = o.pollMs ?? 5_000
-    const timeout = o.timeoutMs ?? WEEKLY_WAIT_MS
-    const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
-    for (let waited = 0; ; waited += poll) {
-      const cur = store.run(ws, run.id)
-      if (cur?.finished_at !== undefined) {
-        run = cur
-        break
-      }
-      if (waited >= timeout)
-        throw new Error('插件还没交回这一轮（Chrome 没开着？），先用已经读到的。')
-      await sleep(poll)
-      sweep()
-    }
+    run = await waitRun(run.id, o)
     const bad = run.parts.filter((p) => p.status !== 'ok' && p.status !== 'skipped')
     if (bad.length > 0)
       throw new Error(
@@ -949,6 +1419,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         pace_key: redditPaceKey(undefined, ws),
         whoami: true,
       })
+    // WP411：插件那一侧空着：该补的补、该读整串的读
+    if (input.connected && jobRec() === undefined) pump()
     const rec = jobRec()
     if (!input.connected || rec === undefined || rec.status !== 'queued')
       return { retry_after_ms: 60_000 }
@@ -986,7 +1458,10 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       outcome: input.outcome,
       items: input.parts.reduce((n, p) => n + p.items.length, 0),
     })
-    await ingest(rec, input)
+    // WP411：「读整串」那一件：存快照、交给起草
+    if (rec.threads === true) ingestThreads(rec, input)
+    else await ingest(rec, input)
+    pump()
     return { accepted: true }
   }
 
@@ -1092,5 +1567,30 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     sessionReady,
     sweep,
     pace,
+    backfill,
+    thread: (id) => {
+      const it = store.get(ws, id)
+      if (it === undefined) return undefined
+      const link = linkOf(it)
+      const snap =
+        link === undefined ? undefined : store.kv<ThreadSnapshot | null>(ws, `thread:${link}`)
+      return threadContextOf({
+        item: it,
+        ...(snap === undefined || snap === null ? {} : { snapshot: snap }),
+        stored: link === undefined ? [it] : store.byLink(ws, link),
+        ...(() => {
+          const u = settings().brand_username ?? ext().user
+          return u === undefined ? {} : { brandUser: u }
+        })(),
+        nowMs: nowMs(),
+      })
+    },
+    redispatch: () => {
+      const open = store
+        .list(ws, { reply: true, status: 'open', limit: 300 })
+        .filter((x) => x.dup_of === undefined)
+      enqueueDrafts(open)
+      return open.length
+    },
   }
 }
