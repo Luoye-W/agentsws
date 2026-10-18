@@ -16,6 +16,7 @@
  * 两者差十天的结果就是截图里满屏"已过期"、日历把所有到期堆在同一天。
  * 起点定下之后，世界里一切照旧走合成时钟（**模拟仍是虚拟时钟，基线一个数没动**）。
  */
+
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -68,6 +69,7 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
+import { demoListingReader } from './demo-amazon-listing.js'
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
@@ -1464,6 +1466,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       return { ok: true, outbox_id: `demo_ob_${demoMailSeq}`, message_id, account }
     },
   }
+  const listingReader = demoListingReader()
   const server = await createServer({
     clock: world.clock,
     random: world.random,
@@ -1477,6 +1480,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         ? { ok: true, data_uri: `data:image/png;base64,${DEMO_BANNER_PNG}` }
         : { ok: false, reason: 'http_error' },
     brandData: (ws) => extraBrandData.get(ws),
+    // WP396：Listing 体检的替身读页（三个演示 ASIN，不连 Amazon）
+    amazonListingReader: () => listingReader,
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),

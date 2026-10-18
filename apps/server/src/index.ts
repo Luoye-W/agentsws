@@ -4,6 +4,10 @@
  * `createServer()` 装配内核与全部已合并模块并返回一个可 listen 的句柄；
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
+
+// WP396（docs/106 §13）：Listing 体检读页口子（WP394 的读页积木、demo 替身接这里）
+export type { AmazonListingReader, ListingPageRead } from './amazon-listing/index.js'
+export { amazonProductUrl } from './amazon-listing/index.js'
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
