@@ -5368,7 +5368,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         subject: { object: { type: 'workspace', id: workspace_id } },
         dedupe_key: `dk_${workspace_id}|seo_report|geo_quality|${week}`,
         title: `AI 回答：说得对不对、比得过谁（${week}）`,
-        summary: `比较胜率 ${Math.round((point?.win_rate ?? 0) * 100)}%（推算，n=${point?.compared ?? 0}）· 描述准确度 ${Math.round((point?.accuracy ?? 0) * 100)}%（推算，n=${point?.claims ?? 0}）`,
+        summary: `比较胜率 ${point?.win_rate === undefined ? '样本太少' : `${Math.round(point.win_rate * 100)}%`}（推算，n=${point?.compared ?? 0}）· 描述准确度 ${Math.round((point?.accuracy ?? 0) * 100)}%（推算，n=${point?.claims ?? 0}）`,
         payload,
         evidence: {
           run_id: `run_geo_${week}`,
