@@ -24,6 +24,8 @@ export function Options(): React.ReactNode {
   const [port, setPort] = useState(String(DEFAULT_PORT))
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | undefined>(undefined)
+  /** WP409：刚配上——下面的配对那一节随即换掉了，结果要在顶上说清楚。 */
+  const [justPaired, setJustPaired] = useState(false)
 
   const refresh = useCallback(() => {
     void send({ type: 'status' }).then((r) => {
@@ -43,6 +45,7 @@ export function Options(): React.ReactNode {
       setMessage({ ok: r.ok, text: r.message })
       setStatus(r.status)
       if (r.ok) setCode('')
+      setJustPaired(r.ok)
     })
   }, [code])
 
@@ -64,6 +67,12 @@ export function Options(): React.ReactNode {
         <BrandMark />
         <h1>Agents 工坊助手</h1>
       </header>
+
+      {justPaired && status?.paired === true ? (
+        <p className="ws-note ws-note--good" data-testid="ws-paired-banner">
+          配好了，可以回工坊了。工坊那边会出一行「插件已连上」，工具栏图标上也挂了绿勾。
+        </p>
+      ) : null}
 
       <section className="ws-card">
         <h2>这台电脑上的连接</h2>

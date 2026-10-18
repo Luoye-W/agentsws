@@ -607,6 +607,31 @@ export function checkExpectations(
         (firstReads.length === 0 ? '；没有一次「只建底子」的首读' : ''),
     )
   }
+  // WP411：Reddit 巡查那一批过完质量闸（整词匹配、按全名去重、外部帖闸）
+  if (expected.reddit_watch !== undefined) {
+    const want = expected.reddit_watch
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.reddit_watch_filtered')
+      .map((e) => payloadOf(e))
+    const kept = got.flatMap((p) => (Array.isArray(p.kept) ? p.kept.map(String) : []))
+    const draftable = got.flatMap((p) =>
+      Array.isArray(p.draftable) ? p.draftable.map(String) : [],
+    )
+    const filtered = got.reduce((n, p) => n + Number(p.filtered ?? 0), 0)
+    const dupes = got.reduce((n, p) => n + Number(p.dupes ?? 0), 0)
+    const same = (a: string[], b: string[]): boolean =>
+      a.length === b.length && a.every((x, i) => x === b[i])
+    add(
+      'reddit_watch',
+      got.length > 0 &&
+        same(kept, want.kept) &&
+        same(draftable, want.draftable) &&
+        filtered === want.filtered &&
+        dupes === want.dupes,
+      `留下 [${kept.join(', ')}]、丢 ${filtered}、重复 ${dupes}、起草 [${draftable.join(', ')}]；` +
+        `期望留下 [${want.kept.join(', ')}]、丢 ${want.filtered}、重复 ${want.dupes}、起草 [${want.draftable.join(', ')}]`,
+    )
+  }
   // WP393：简报里「竞品动向」那一段（有要紧的才出；空列表 = 不该出）
   if (expected.competitor_brief !== undefined) {
     const lines = evidence.events

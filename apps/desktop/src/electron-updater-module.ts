@@ -35,3 +35,17 @@ export async function loadAutoUpdater<T>(importer: () => Promise<unknown>): Prom
     throw new Error('electron-updater 里没有 autoUpdater（安装包里的依赖不全？）')
   return updater as T
 }
+
+/**
+ * WP409：从同一个模块里拿别的导出（例如 `CancellationToken`）——和 `autoUpdater` 一样，具名导出层可能认不出，
+ * 就到 `default`（CJS 的 `module.exports`）上找。拿不到回 undefined。
+ */
+export function moduleExport(mod: unknown, name: string): unknown {
+  if (typeof mod !== 'object' || mod === null) return undefined
+  const ns = mod as Record<string, unknown>
+  if (name in ns && ns[name] !== undefined) return ns[name]
+  const cjs = ns.default
+  if (typeof cjs === 'object' && cjs !== null && name in cjs)
+    return (cjs as Record<string, unknown>)[name]
+  return undefined
+}

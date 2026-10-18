@@ -11,7 +11,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { createMemoryExtensionStore, type ExtensionStore } from '../src/extension-store.js'
+import {
+  browserLabelFromUserAgent,
+  createMemoryExtensionStore,
+  type ExtensionStore,
+} from '../src/extension-store.js'
 import { SqliteExtensionStore } from '../src/sqlite-extension-store.js'
 
 const WS = 'ws_1' as WorkspaceId
@@ -43,6 +47,46 @@ const VARIANTS = describe.each([
   name: string,
   fn: (name: string, make: (clock: Clock) => ExtensionStore) => void,
 ) => void
+
+VARIANTS('%s：令牌名（WP409）', (_name, make) => {
+  it('配对码没起名字：按插件那边认出的浏览器起名；起过名字就不换', () => {
+    // 替身随机数是常数（令牌每次一样）：一个场景一个库
+    const label = (name: string | undefined, hint: string | undefined): string | undefined => {
+      const store = make(fakeClock())
+      const p = store.createPairing({
+        workspace_id: WS,
+        person_id: PERSON,
+        ...(name === undefined ? {} : { label: name }),
+      })
+      const out = store.redeem({
+        code: p.code,
+        origin: ORIGIN,
+        ...(hint === undefined ? {} : { label_hint: hint }),
+      })
+      expect(out.ok).toBe(true)
+      return store.list(WS)[0]?.label
+    }
+    expect(label(undefined, 'Chrome · Windows')).toBe('Chrome · Windows')
+    expect(label('办公室那台', 'Edge · Mac')).toBe('办公室那台')
+    expect(label(undefined, undefined)).toBe('浏览器插件')
+  })
+})
+
+describe('browserLabelFromUserAgent（WP409）', () => {
+  it('认浏览器与系统；认不出回 undefined', () => {
+    const win =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+    expect(browserLabelFromUserAgent(win)).toBe('Chrome · Windows')
+    expect(browserLabelFromUserAgent(`${win} Edg/141.0.0.0`)).toBe('Edge · Windows')
+    expect(
+      browserLabelFromUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+      ),
+    ).toBe('Chrome · Mac')
+    expect(browserLabelFromUserAgent('curl/8.0')).toBeUndefined()
+    expect(browserLabelFromUserAgent(undefined)).toBeUndefined()
+  })
+})
 
 VARIANTS('%s：配对与令牌（WP119b）', (_name, make) => {
   it('配对 → 兑换 → 令牌 + Origin 双校验；搬到别的扩展里不认', () => {

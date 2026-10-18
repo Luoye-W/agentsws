@@ -101,8 +101,9 @@ async function ensureAssignment(token, owner, me, role_id) {
 /** 打开右栏、展开某张卡；回那张卡。 */
 async function openRailCard(page, id) {
   if ((await page.getByTestId('rail-cards').count()) === 0) {
-    const more = page.getByTestId('rail-overflow')
-    if ((await more.count()) > 0) await more.click()
+    // WP412：面板由右上角专门的开关开（干活的页默认就开着）
+    const toggle = page.getByTestId('rail-toggle')
+    if ((await toggle.count()) > 0) await toggle.click()
   }
   const card = page.getByTestId(`rail-card-${id}`)
   await card.waitFor({ timeout: 20_000 })

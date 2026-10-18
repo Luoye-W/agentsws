@@ -101,6 +101,8 @@ nsis:
   # WP111：未签名的 NSIS 照样能做应用内自动更新。
   # WP218：差分下载打开（出 `.exe.blockmap`，只下变了的块）。electron-updater 差分失败会自己退回整包下载，
   # 下完照样校 sha512——「更新到一半起不来」靠的是那道校验与装前自检，不靠整包。
+  # WP409：客户端差分走「一段一个请求」（setFeedURL 的 useMultipleRangeRequest: false），断线时库能接住错误、
+  # 退回整包；整包也断了由客户端续传（src/update-download.ts）。
   differentialPackage: true
   # 装 / 更新完自动打开（应用内「重启并更新」那一步也靠它重开）
   runAfterFinish: true

@@ -32,11 +32,15 @@ import type {
   ObjectRef,
   OutboundRecord,
   OutboundRecordInput,
+  RedditDraftCheck,
+  RedditDraftConflict,
   RedditDraftFact,
   RedditDraftInput,
   RedditDraftView,
+  RedditPersona,
   RedditStageInput,
   RedditStageResult,
+  RedditThreadContext,
   RedditWritePayload,
   RedditWriteSource,
   RedditWriteTarget,
@@ -44,11 +48,18 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { REDDIT_WRITE_FORM } from '@agentsws/contracts'
-import { checkOutbound, resolveVoice, voicePrompt } from '@agentsws/social-core'
+import { checkOutbound, resolveVoice, stripUngrounded, voicePrompt } from '@agentsws/social-core'
 import { finalPayload } from '@agentsws/txn'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
 import { replyBlockedReason } from '../social-reply-draft.js'
-import { factQuery, type RedditDrafter, templateRedditDraft } from './draft.js'
+import {
+  conflictNote,
+  factQuery,
+  fixNotes,
+  type RedditDrafter,
+  reviewRedditDraft,
+  templateRedditDraft,
+} from './draft.js'
 import type { RedditLimitKey, RedditLimits } from './limits.js'
 
 /** 插件多久没来过就不算「连着 Reddit」（一周：电脑关了几天回来照样能接着做）。 */
@@ -112,6 +123,11 @@ export interface RedditWriteServiceOptions {
   facts?(actor: SocialActor, query: string): Promise<RedditDraftFact[]>
   /** 品牌话术（公司层技能 `brand-voice` 的正文；没有 = undefined）。 */
   voice?(actor: SocialActor): Promise<string | undefined>
+  /**
+   * WP411（#11）：品牌号怎么说话（个人 / 团队口吻）。给了这个口子而还没配 → 自动起草不出卡（`needs_persona`），
+   * 先出设置卡；不给 = 老行为（不问人设）。
+   */
+  persona?(): RedditPersona | undefined
   /** 这个版的版规原文（读不到 = undefined；读不到就不放进提示词，不替用户判能不能推广）。 */
   rules?(subreddit: string): Promise<string[] | undefined>
   /** 插件动作通道（每品牌一份；托管实例没有）。 */
@@ -160,7 +176,12 @@ export interface RedditWriteService {
    */
   draftAndStage(
     actor: SocialActor,
-    input: { target: RedditWriteTarget; reason?: string },
+    input: {
+      target: RedditWriteTarget
+      reason?: string
+      /** WP411：整串上下文（品牌号已经回过这一条就不起草；起草照这一串的口径）。 */
+      thread?: RedditThreadContext
+    },
   ): Promise<RedditStageResult>
   /** 执行器调：是 Reddit 写卡就交出去并回结果，不是回 undefined。 */
   deliver(item: ApprovalItem): Promise<RedditWriteResult | undefined>
@@ -557,10 +578,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       const rules = await options.rules?.(subOf(target.subreddit)).catch(() => undefined)
       const account = options.account?.()
       const drafter = options.drafter?.(actor)
-      const ai =
+      const persona = options.persona?.()
+      const thread = input.thread
+      const ask = (fix?: string[]) =>
         drafter === undefined
-          ? undefined
-          : await drafter({
+          ? Promise.resolve(undefined)
+          : drafter({
               target,
               brand: options.brand(),
               ...(account === undefined ? {} : { account }),
@@ -568,23 +591,54 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
               facts,
               ...(rules === undefined ? {} : { rules }),
               ...(input.instruction === undefined ? {} : { instruction: input.instruction }),
+              ...(thread === undefined ? {} : { thread }),
+              ...(persona === undefined ? {} : { persona }),
+              ...(fix === undefined ? {} : { fix }),
             }).catch(() => undefined)
+      let ai = await ask()
+      // WP411（#11）：几道检查（矛盾 / 没依据 / 口吻）；没过就照着问题重写一次
+      const review = (text: string): RedditDraftCheck[] =>
+        reviewRedditDraft(text, {
+          facts,
+          ...(thread === undefined ? {} : { thread }),
+          ...(persona === undefined ? {} : { persona }),
+        })
+      let checks = ai === undefined ? [] : review(ai.text)
+      if (ai !== undefined && checks.length > 0) {
+        const again = await ask(fixNotes(checks))
+        if (again !== undefined && again.text.trim() !== '') {
+          ai = again
+          checks = review(again.text)
+        }
+      }
       const out = ai ?? templateRedditDraft(target, input.instruction)
-      const scan = checkOutbound(`${out.title ?? ''}\n${out.text}`)
+      // 还没依据的那几句：换成「我去确认一下」（宁可不说也不猜）
+      const bad = checks.filter((c) => c.kind === 'ungrounded').map((c) => c.quote ?? '')
+      const text = stripUngrounded(out.text, bad)
+      checks = checks.map((c) => (c.kind === 'ungrounded' ? { ...c, fixed: true } : c))
+      if (thread?.read === 'store')
+        checks.push({ kind: 'thread', message: thread.note ?? '这一串没现读成，只看了库里有的。' })
+      if (options.persona !== undefined && persona === undefined)
+        checks.push({ kind: 'persona', message: '品牌号的口吻还没定，这一份按中性口吻写的。' })
+      const scan = checkOutbound(`${out.title ?? ''}\n${text}`)
       options.emit('reddit.write_drafted', actor.person_id, {
         kind: target.kind,
         source: ai === undefined ? 'template' : 'ai',
         facts: facts.length,
         flagged: !scan.ok,
+        checks: checks.map((c) => c.kind),
       })
+      const prior = thread?.ours ?? []
       return {
-        text: out.text,
+        text,
         ...(out.title === undefined ? {} : { title: out.title }),
         source: ai === undefined ? 'template' : 'ai',
         facts,
         ...(rules === undefined || rules.length === 0 ? {} : { rules }),
         ...(scan.ok ? {} : { warning: replyBlockedReason(scan) }),
         ...(ai === undefined ? { note: '这次没用 AI：先给一句开头，你接着写。' } : {}),
+        ...(checks.length === 0 ? {} : { checks }),
+        ...(prior.length === 0 ? {} : { prior_replies: prior.slice(-5) }),
       }
     },
 
@@ -632,6 +686,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         ...(facts.length === 0 ? {} : { facts }),
         ...(rules === undefined || rules.length === 0 ? {} : { rules }),
         ...(input.reason === undefined ? {} : { reason: input.reason }),
+        ...(input.checks === undefined || input.checks.length === 0
+          ? {}
+          : { checks: input.checks }),
+        ...(input.prior_replies === undefined || input.prior_replies.length === 0
+          ? {}
+          : { prior_replies: input.prior_replies }),
       }
       const item = await options.approvals.create({
         workspace_id: ws,
@@ -698,18 +758,58 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     async draftAndStage(actor, input) {
       if (input.target.kind === 'submit')
         return { staged: false, message: '发新帖要你给一句要点，不自动起草。' }
+      // WP411（#11）：品牌号在这串里已经直接回过这一条 → 不再起草
+      const parent = input.target.parent_fullname?.toLowerCase()
+      const done =
+        parent === undefined
+          ? undefined
+          : input.thread?.ours.find((c) => (c.parent_fullname ?? '').toLowerCase() === parent)
+      if (done !== undefined)
+        return {
+          staged: false,
+          skipped: 'already_replied',
+          message: `品牌号${done.created_at === undefined ? '' : ` ${done.created_at.slice(5, 10)} `}已经回过这一条：「${done.text.slice(0, 80)}」，不再起草。`,
+        }
+      // WP411：品牌号怎么说话还没定 → 先不起草（宿主出设置卡，定了再交回来）
+      if (options.persona !== undefined && options.persona() === undefined)
+        return {
+          staged: false,
+          skipped: 'needs_persona',
+          message: '品牌号怎么说话还没定：先出一张设置卡，定了再起草。',
+        }
       let draft: RedditDraftView
       try {
-        draft = await service.draft(actor, { target: input.target })
+        draft = await service.draft(actor, {
+          target: input.target,
+          ...(input.thread === undefined ? {} : { thread: input.thread }),
+        })
       } catch (err) {
         return { staged: false, message: err instanceof Error ? err.message : String(err) }
       }
       if (draft.text.trim() === '') return { staged: false, message: '起草出来是空的，没出卡。' }
+      // 决策 1199（Luoye 10-19 改）：重写一次后仍和品牌号说过的矛盾 → 不出卡、也不标黄出卡，
+      // 条目留在待处理里「和你 <日期> 说的矛盾，要你看」（附原话与日期），由人决定
+      const clash = draft.checks?.find((c) => c.kind === 'contradiction')
+      if (clash !== undefined) {
+        const conflict: RedditDraftConflict = {
+          quote: clash.quote ?? '',
+          prior: clash.prior ?? '',
+          ...(clash.prior_at === undefined ? {} : { prior_at: clash.prior_at }),
+        }
+        return {
+          staged: false,
+          skipped: 'contradiction',
+          conflict,
+          message: conflictNote(conflict),
+        }
+      }
       return service.stage(actor, {
         target: input.target,
         text: draft.text,
         ...(draft.facts.length === 0 ? {} : { fact_ids: draft.facts.map((f) => f.id) }),
         ...(input.reason === undefined ? {} : { reason: input.reason }),
+        ...(draft.checks === undefined ? {} : { checks: draft.checks }),
+        ...(draft.prior_replies === undefined ? {} : { prior_replies: draft.prior_replies }),
       })
     },
 

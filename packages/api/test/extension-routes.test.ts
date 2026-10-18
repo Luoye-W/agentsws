@@ -136,9 +136,10 @@ async function wired() {
   const plugin = (
     method: string,
     path: string,
-    init: { token?: string; origin?: string; fetchSite?: string; body?: unknown } = {},
+    init: { token?: string; origin?: string; fetchSite?: string; ua?: string; body?: unknown } = {},
   ): Promise<Response> => {
     const headers = new Headers()
+    if (init.ua !== undefined) headers.set('User-Agent', init.ua)
     if (init.token !== undefined) headers.set('Authorization', `Bearer ${init.token}`)
     if (init.origin !== undefined) headers.set('Origin', init.origin)
     if (init.fetchSite !== undefined) headers.set('Sec-Fetch-Site', init.fetchSite)
@@ -313,6 +314,21 @@ describe('插件这一侧：Origin 与令牌要同时对', () => {
     expect(res.status).toBe(403)
     // 「你不是扩展」与「码不对」是两句话——混成一句用户不知道该改哪一边
     expect(((await res.json()) as { message: string }).message).toContain('chrome-extension')
+  })
+
+  it('WP409：配上的令牌按插件那个浏览器起名（配对码没起名字时）', async () => {
+    const w = await wired()
+    const made = await w.owner('POST', '/v1/extension/pairings', {})
+    const code = ((await made.json()) as { data: { code: string } }).data.code
+    const res = await w.plugin('POST', '/v1/extension/pair', {
+      origin: EXT_ORIGIN,
+      ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+      body: { code },
+    })
+    expect(res.status).toBe(200)
+    const list = await w.owner('GET', '/v1/extension/tokens')
+    const tokens = ((await list.json()) as { data: { tokens: { label: string }[] } }).data.tokens
+    expect(tokens.map((t) => t.label)).toEqual(['Chrome · Windows'])
   })
 
   it('码不对 → 401，而且不说到底哪儿不对（区分等于给人一台探测机）', async () => {

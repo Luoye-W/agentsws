@@ -11,6 +11,7 @@
  */
 
 import type { ActionPlatform } from '@agentsws/browser-action'
+import type { PanelActOutcome, PanelState } from './panel/broker.js'
 import type { ExtensionHello, ExtensionObservationInput } from './wire.js'
 
 export type ExtensionMessage =
@@ -48,6 +49,17 @@ export type ExtensionMessage =
   /* ── WP345：跟着工坊更新（只加）──────────────────────────────────── */
   /** 马上问一次「工坊换了新版插件没有」（不等定时；换了就等空闲重载）。 */
   | { type: 'update-check' }
+  /* ── WP413：常驻侧边栏（只加）──────────────────────────────────── */
+  /** 侧边栏一屏（进度 / 要你处理 / 记录）。 */
+  | { type: 'panel-state' }
+  /** 「填进页面」：批这张卡（改过就按改过的）并马上交给插件填。 */
+  | { type: 'panel-fill'; id: string; text?: string; title?: string; version?: number }
+  /** 「不发」。 */
+  | { type: 'panel-skip'; id: string; version?: number }
+  /** 没发出去的那一条「再填一次」。 */
+  | { type: 'panel-refill'; job: string }
+  /** 打开设置页（侧边栏里「设置」那一下）。 */
+  | { type: 'open-options' }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {
@@ -105,6 +117,8 @@ export type ExtensionResponse =
   | { type: 'ads-consent'; ok: boolean; message: string; ads: AdsPanelStatus }
   | { type: 'observe'; outcome: ObserveOutcome }
   | { type: 'pair'; ok: boolean; message: string; status: ExtensionStatus }
+  | { type: 'panel-state'; state: PanelState }
+  | ({ type: 'panel-act' } & PanelActOutcome)
   | { type: 'ack' }
 
 /** content script 侧：给 background 发一条，拿回一条。 */

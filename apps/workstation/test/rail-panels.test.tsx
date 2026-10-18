@@ -218,9 +218,9 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('WP375：「⋮」开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；再点「⋮」收起', async () => {
+  it('WP375 / WP412：面板开关开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；再点开关收起', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(screen.getByTestId('rail-toggle'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
     expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
     expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
@@ -233,7 +233,7 @@ describe('第三栏骨架（36 §9）', () => {
     fireEvent.click(screen.getByTestId('rail-panel-back'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
 
-    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(screen.getByTestId('rail-toggle'))
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
@@ -254,7 +254,7 @@ describe('第三栏骨架（36 §9）', () => {
       expect(screen.queryByTestId(`rail-icon-${id}`)).toBeNull()
   })
 
-  it('WP208：「设定」顶上五个标签，默认第一个（角色）；切一个标签换一份正文', async () => {
+  it('WP208：「设定」顶上五个标签（WP406 起岗位层多一个「岗位更新」），默认第一个（角色）；切一个标签换一份正文', async () => {
     renderRail()
     await openRailPanel('settings')
     const panel = await screen.findByTestId('settings-panel')
@@ -263,7 +263,7 @@ describe('第三栏骨架（36 §9）', () => {
       within(panel)
         .getAllByRole('tab')
         .map((b) => b.textContent),
-    ).toEqual(['角色', '记忆', '知识', '技能', '额度'])
+    ).toEqual(['角色', '记忆', '知识', '技能', '额度', '岗位更新'])
     fireEvent.click(screen.getByTestId('settings-tab-skills'))
     await waitFor(() => {
       expect(screen.getByTestId('settings-panel').getAttribute('data-tab')).toBe('skills')

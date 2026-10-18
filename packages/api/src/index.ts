@@ -39,8 +39,10 @@ export {
  * `createMemoryExtensionStore` 建那张表，拿 `ExtensionPort` 装配它的实现。
  */
 export {
+  browserLabelFromUserAgent,
   browserSaysExtensionRequest,
   createMemoryExtensionStore,
+  DEFAULT_EXTENSION_LABEL,
   EXTENSION_SCOPES,
   EXTENSION_TOKEN_TTL_MS,
   type ExtensionScope,
@@ -52,6 +54,7 @@ export {
   PAIRING_TTL_MS,
   type PairingView,
   type RedeemedToken,
+  tokenLabel,
 } from './extension-store.js'
 export {
   assignmentOf,
@@ -310,6 +313,11 @@ export type {
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
 export {
+  type ContentDigestActor,
+  type ContentDigestPort,
+  contentDigestRoutes,
+} from './routes/content-digest.js'
+export {
   type ContentUpdatesActor,
   type ContentUpdatesPort,
   contentUpdatesRoutes,
@@ -417,6 +425,14 @@ export type {
   ExtensionOnboardingPort,
 } from './routes/extension-onboarding.js'
 export { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
+// WP413：插件常驻侧边栏
+export type { ExtensionPanelFacts, ExtensionPanelPort } from './routes/extension-panel.js'
+export {
+  editedPayloadOf,
+  extensionPanelRoutes,
+  isPanelCard,
+  panelCardOf,
+} from './routes/extension-panel.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」

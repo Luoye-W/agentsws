@@ -26,6 +26,10 @@ export const REDDIT_WATCH_ZH: Record<string, string> = {
   'rwatch.dismiss': '不回',
   'rwatch.open': '打开原帖',
   'rwatch.priority': '优先',
+  'rwatch.conflict': '和你 {date} 说的矛盾，要你看',
+  'rwatch.conflict.nodate': '和你之前说的矛盾，要你看',
+  'rwatch.conflict.hint':
+    '你说过：「{prior}」\nAI 这次写成：「{quote}」\n没出卡，回不回、怎么回由你定。',
   'rwatch.alert.title': '优先：{words}',
   'rwatch.alert.dismiss': '收起',
   'rwatch.alert.more': '还有 {n} 条',
@@ -56,6 +60,10 @@ export const REDDIT_WATCH_EN: Record<string, string> = {
   'rwatch.dismiss': 'Skip',
   'rwatch.open': 'Open',
   'rwatch.priority': 'Priority',
+  'rwatch.conflict': 'Contradicts what you said on {date} — please check',
+  'rwatch.conflict.nodate': 'Contradicts what you said before — please check',
+  'rwatch.conflict.hint':
+    'You said: "{prior}"\nThe AI draft said: "{quote}"\nNo card was made — you decide whether and how to reply.',
   'rwatch.alert.title': 'Priority: {words}',
   'rwatch.alert.dismiss': 'Dismiss',
   'rwatch.alert.more': '{n} more',

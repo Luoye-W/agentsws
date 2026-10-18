@@ -70,8 +70,10 @@ import {
   recordSinkDataOf,
   renderRecordSinkAnswer,
 } from './record-sink.js'
-import { PUBLISH_REPORT_TOOL, REPORT_TOOL_DEF_BY_NAME } from './report.js'
+import { PUBLISH_REPORT_TOOL, REPORT_TOOL_DEF_BY_NAME, RUN_WATCH_NOW_TOOL } from './report.js'
 import {
+  backfillAnswer,
+  backfillAsk,
   composeStubReport,
   type ReportNeed,
   reorderAsk,
@@ -94,6 +96,7 @@ import {
   setupRequestBranch,
   setupRequestDataOf,
 } from './setup-request.js'
+import { setupStateBranch } from './setup-state.js'
 import {
   firstProductOf,
   SHOP_GET_PRODUCT_TOOL,
@@ -1047,6 +1050,38 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       /*
+       * WP410（真机 #9）：**问连接 / 设置现在怎样**（演示用剧本）。上下文里有「当前设置快照」
+       * （服务端每次运行现取：插件交回的连接、设置原值、最近一轮）就照它原样说，不靠记忆。
+       * 没有快照的职责 / 别的问法一个字节不变。
+       */
+      const stateAnswer = setupStateBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (stateAnswer !== undefined) {
+        outputs.push({ kind: 'answer', text: stateAnswer })
+        usage.output_tokens = Math.ceil(stateAnswer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: stateAnswer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
        * WP153（09-26 真账号冒烟 §3）：**店主问岗位 / 连接**。
        *
        * 店主职责、工具面里有 `list_positions` / `list_connections`、问的又是岗位或连接，
@@ -1129,14 +1164,19 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * 工具面里没有 `publish_report` / `schedule_update` 的运行一个字节不变。
        */
       const plan = reportPlan(req.tools.allow, threadText)
+      // WP411（#13）：「把 10-11 到 10-16 补一下」→ 先看计划、说一句，再照做
+      const fill =
+        plan === undefined ? backfillAsk(req.tools.allow, threadText, clock.now()) : undefined
       const reorder =
         plan === undefined &&
+        fill === undefined &&
         req.tools.allow.includes(SCHEDULE_UPDATE_TOOL) &&
         req.tools.allow.includes(SCHEDULE_LIST_TOOL)
           ? reorderAsk(threadText)
           : undefined
       if (
         (plan !== undefined && req.tools.allow.includes(PUBLISH_REPORT_TOOL)) ||
+        fill !== undefined ||
         reorder !== undefined
       ) {
         const callTool = async (
@@ -1183,6 +1223,13 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             res.status === 'ok'
               ? `已发布「${doc.title}」${typeof data.version === 'number' && data.version > 1 ? `（第 ${data.version} 版）` : ''}，在报表区。`
               : `报告没发出去：${res.reason ?? '这一步没走通'}`
+        } else if (fill !== undefined) {
+          const reddit = /reddit|(^|[\s（(])r\//iu.test(threadText) ? { platform: 'reddit' } : {}
+          const preview = await callTool(RUN_WATCH_NOW_TOOL, { ...reddit, ...fill, preview: true })
+          const p = (preview.data ?? {}) as { ok?: boolean }
+          const done =
+            p.ok === true ? await callTool(RUN_WATCH_NOW_TOOL, { ...reddit, ...fill }) : undefined
+          answer = backfillAnswer(preview.data, done?.data)
         } else {
           const ask = reorder as { from: number; to: 'first' | 'last' }
           const listed = await callTool(SCHEDULE_LIST_TOOL, {})

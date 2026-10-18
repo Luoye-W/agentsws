@@ -114,7 +114,9 @@ describe('WP324 连接卡', () => {
     expect(env.resumed).toHaveLength(1)
     const two = await env.cards.askConnect({ actor, needs: [ADS], matter_id: 'mat_9' })
     await env.cards.onDecided(decide(env.bus, two?.item.id ?? '', 'reject'))
-    expect(env.notes.at(-1)).toMatch(/先不连了/)
+    // WP410：只说这张卡不要了，不说「这件事停在这儿」
+    expect(env.notes.at(-1)).toMatch(/^先不连.+了；/)
+    expect(env.notes.at(-1)).not.toContain('停在这儿')
     expect(env.resumed).toHaveLength(1)
   })
 })

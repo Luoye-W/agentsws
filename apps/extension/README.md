@@ -14,6 +14,13 @@
   在看得见的后台标签页上按写死的步骤表执行（规矩在 `@agentsws/browser-action`），顶上「正在操作 · 停止」横条。
   真浏览器走法：`node scripts/e2e-ext-actions.mjs`（本地假后台，不碰真站）。
 
+- **常驻侧边栏**（WP413，`src/entrypoints/sidepanel/`、`src/ui/side-panel.tsx`）：点工具栏图标打开 Chrome 侧边栏
+  （YouTube / Instagram / TikTok 页面上照旧开 / 关页面面板）。三块：**要你处理**（「发出去」类卡：看 / 改 / 不发 /
+  填进页面——插件新开标签页填好草稿，发送永远由人点）、**进度**（读了什么、几点、下次几点、起草中几条）、**记录**
+  （发出记录、记录去处写进去没有）。接口是 `GET /v1/extension/panel` 与 `POST /v1/extension/panel/cards/:id/{fill,skip}`、
+  `POST /v1/extension/panel/writes/:job/refill`（插件令牌；插件里批 = 工坊里批，决定记 `via: 'extension'`）。
+  真浏览器走法：`node scripts/e2e-wp413-sidepanel.mjs`（真本机服务 + 替身 Reddit 页面，不碰真站）。
+
 想自己写一个采集插件：只要做配对与上报两步（照 `src/lib/local-client.ts` 的写法），不需要整份代码。想看面板、打分、体检这些功能长什么样：用官方完整版。
 
 ## 开发

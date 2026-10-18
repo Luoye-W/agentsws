@@ -33,6 +33,11 @@ export type RedditReadKind =
   | 'post_comments'
   /** WP329（决策 764）：某个版块的版规（起草时当上下文；只读，一页）。 */
   | 'sub_rules'
+  /**
+   * WP411（#13）：全站搜关键词的帖子（按最新排、限定时间档）——回补指定时间窗、第一次外部巡查回补用。
+   * 借品牌号会话只读，不扣积分；Reddit 的搜索只给帖子（评论搜不到）。
+   */
+  | 'search'
 
 export interface RedditReadRequest {
   /** 这一路的键（本机服务按它记「上次读到哪」）：`inbox`、`sub_new:ivraxr`… */
@@ -42,6 +47,10 @@ export interface RedditReadRequest {
   subreddit?: string
   /** `post_comments` 要：帖子 id（不带 `t3_`）。 */
   post_id?: string
+  /** WP411：`search` 要：搜什么（短语自己加引号）。 */
+  query?: string
+  /** WP411：`search` 的时间档（Reddit 的 `t`；不给 = week）。 */
+  time?: RedditSearchTime
   /** 读到这一条（全名 `t1_xxx`）就停，不再往后翻。 */
   stop_at?: string
   /** 比这个时间（秒）更早的不要（第一次读时防止把几个月前的老帖当新的）。 */
@@ -49,6 +58,10 @@ export interface RedditReadRequest {
   /** 最多翻几页（每页最多 100 条）。 */
   max_pages: number
 }
+
+/** WP411：搜索的时间档。 */
+export type RedditSearchTime = 'hour' | 'day' | 'week' | 'month' | 'year' | 'all'
+const SEARCH_TIMES: readonly RedditSearchTime[] = ['hour', 'day', 'week', 'month', 'year', 'all']
 
 /** 一页多少条（Reddit 上限 100）。 */
 export const REDDIT_PAGE_LIMIT = 100
@@ -98,6 +111,12 @@ export function redditReadUrl(req: RedditReadRequest, after?: string): string {
       path = `/r/${req.subreddit ?? ''}/about/rules.json`
       q.delete('limit')
       break
+    case 'search':
+      path = '/search.json'
+      q.set('q', req.query ?? '')
+      q.set('sort', 'new')
+      q.set('t', req.time ?? 'week')
+      break
   }
   return `${REDDIT_READ_ORIGIN}${path}?${q.toString()}`
 }
@@ -113,6 +132,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   // WP329：版规（只读）
   /^\/r\/[A-Za-z0-9_]{2,21}\/about\/rules\.json$/u,
   /^\/api\/me\.json$/u,
+  // WP411：全站搜帖子（只读）
+  /^\/search\.json$/u,
 ]
 
 /**
@@ -143,6 +164,11 @@ export function checkRedditReadRequest(req: RedditReadRequest): string | undefin
   )
     return '版块名不对。'
   if (req.kind === 'post_comments' && !POST_ID.test(req.post_id ?? '')) return '帖子 id 不对。'
+  if (req.kind === 'search') {
+    const q = (req.query ?? '').trim()
+    if (q === '' || q.length > 200) return '搜索词要 1–200 个字。'
+    if (req.time !== undefined && !SEARCH_TIMES.includes(req.time)) return '搜索时间档不对。'
+  }
   if (req.stop_at !== undefined && !FULLNAME.test(req.stop_at)) return '「读到哪」的编号不对。'
   if (!Number.isInteger(req.max_pages) || req.max_pages < 1 || req.max_pages > REDDIT_MAX_PAGES)
     return `一路最多翻 ${REDDIT_MAX_PAGES} 页。`

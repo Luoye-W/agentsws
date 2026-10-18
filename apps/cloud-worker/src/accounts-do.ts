@@ -247,7 +247,7 @@ export class AccountsCore {
       idempotency: this.idempotency,
       modules,
       /*
-       * WP121（70 §2）：注册赠送 10 积分。**与 Compose 形态同一个函数**——
+       * WP121（70 §2）：注册赠送 5 积分。**与 Compose 形态同一个函数**——
        * 差的只有"钱在哪"：这边一笔积分要跨对象敲 `WalletDO(org_id)` 的门，
        * 所以 port 是 `WalletAdminPort.grant` 那一跳。别名台账与审计都在这个
        * 对象自己的库里（`AdminStore`），与账号同一张库。

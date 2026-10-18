@@ -46,6 +46,63 @@ export interface RedditWriteTarget {
 export interface RedditDraftInput {
   target: RedditWriteTarget
   instruction?: string
+  /** WP411（#11）：这一串的上下文（原帖 + 上下文评论 + 品牌号在这串里已有的回复）。不给 = 只看 `target` 里那几句。 */
+  thread?: RedditThreadContext
+}
+
+/** WP411：一串里的一条（外部文本，进模型上下文前要围栏）。 */
+export interface RedditThreadComment {
+  fullname: string
+  author?: string
+  text: string
+  created_at?: Iso8601
+  /** 回的是哪一条（`t1_` / `t3_`）。 */
+  parent_fullname?: string
+  url?: string
+}
+
+/**
+ * WP411（#11）：起草前读的「整串」——原帖、上下文评论、品牌号在这串里已经说过的话。
+ * `read`：`plugin` = 插件这次借品牌号会话现读了整串；`store` = 只有巡查库里已有的那几条（插件不在线 / 没读成）。
+ */
+export interface RedditThreadContext {
+  post?: { fullname: string; title?: string; text: string; author?: string }
+  /** 上下文评论（按时间，最多几十条；不含品牌号自己的）。 */
+  comments: RedditThreadComment[]
+  /** 品牌号在这串里已经发过的（帖子或评论）。 */
+  ours: RedditThreadComment[]
+  read: 'plugin' | 'store'
+  /** 没现读成时那一句（插件不在线 / 读失败）。 */
+  note?: string
+}
+
+/** WP411（#11）：品牌号在 Reddit 上怎么说话——个人口吻（「我以前在这家工作」）或团队口吻（「我们」）。 */
+export interface RedditPersona {
+  stance: 'personal' | 'team'
+  /** 怎么介绍自己（个人口吻常见：「I used to work at IVRA」）；起草照用，不另编身份。 */
+  intro?: string
+  /** 别说的话（一句一条，例如「不说 DM me」）。 */
+  avoid?: string[]
+}
+
+/**
+ * WP411（#11）：草稿过了哪几道检查、哪一道没过（卡上照实标出来）。
+ * - `contradiction`：和品牌号在这串里已经说过的话对不上；
+ * - `ungrounded`：没依据的技术细节（已换成「我去确认一下」时 `fixed: true`）；
+ * - `persona`：和配好的口吻不符；
+ * - `thread`：这一串没现读成，只看了库里有的。
+ */
+export interface RedditDraftCheck {
+  kind: 'contradiction' | 'ungrounded' | 'persona' | 'thread'
+  /** 一句人话。 */
+  message: string
+  /** 草稿里那一句 / 那几个词。 */
+  quote?: string
+  /** 对不上的那一句品牌号原话与时间（`contradiction`）。 */
+  prior?: string
+  prior_at?: Iso8601
+  /** 已经改掉了（换成「我去确认一下」）。 */
+  fixed?: boolean
 }
 
 /** 起草时用上的一张 FAQ / 知识卡。 */
@@ -69,6 +126,10 @@ export interface RedditDraftView {
   warning?: string
   /** 没用 AI 时那一句。 */
   note?: string
+  /** WP411：几道检查的结果（只列没过 / 改过的）。 */
+  checks?: RedditDraftCheck[]
+  /** WP411：品牌号在这串里已经说过的（卡上「你 10-12 已回：……」）。 */
+  prior_replies?: RedditThreadComment[]
 }
 
 /** 出卡的入参（人在起草框里改完的字）。 */
@@ -80,11 +141,36 @@ export interface RedditStageInput {
   fact_ids?: string[]
   /** 为什么回（WP328 的判断理由；进卡与发出记录）。 */
   reason?: string
+  /** WP411：起草时几道检查的结果、品牌号在这串里已经说过的（原样上卡）。 */
+  checks?: RedditDraftCheck[]
+  prior_replies?: RedditThreadComment[]
 }
 
 export type RedditStageResult =
   | { staged: true; approval_item_id: string }
-  | { staged: false; message: string }
+  /**
+   * WP411：`skipped` = 不该出卡（品牌号已经回过这一条 / 等人设）——不是出错。
+   * 决策 1199（Luoye 10-19 改）：`contradiction` = 重写一次后草稿仍和品牌号说过的矛盾——不出卡，
+   * 巡查条目标「和你 <日期> 说的矛盾，要你看」留在待处理（`conflict` 带品牌号原话与日期）。
+   */
+  | {
+      staged: false
+      message: string
+      skipped?: 'already_replied' | 'needs_persona' | 'contradiction'
+      conflict?: RedditDraftConflict
+    }
+
+/**
+ * 决策 1199：自动起草时草稿和品牌号已说过的话矛盾——不出「发出去」卡，条目上记这一份由人决定。
+ */
+export interface RedditDraftConflict {
+  /** 草稿里对不上的那一句。 */
+  quote: string
+  /** 品牌号原话。 */
+  prior: string
+  /** 品牌号那句是哪天说的（拿得到才有）。 */
+  prior_at?: Iso8601
+}
 
 /** 卡上 `payload` 的形状（`outbound_draft` + `form: 'reddit_write'`）。 */
 export interface RedditWritePayload {
@@ -105,6 +191,10 @@ export interface RedditWritePayload {
   facts?: RedditDraftFact[]
   rules?: string[]
   reason?: string
+  /** WP411：几道检查没过 / 改过的（卡上标出来）。 */
+  checks?: RedditDraftCheck[]
+  /** WP411：品牌号在这串里已经说过的（卡上「你 10-12 已回：……」）。 */
+  prior_replies?: RedditThreadComment[]
 }
 
 /** 插件那边这一条做到哪了（工作台看）。 */

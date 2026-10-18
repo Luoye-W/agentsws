@@ -16,6 +16,7 @@ import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
+import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
@@ -3634,8 +3635,13 @@ const zh: Table = {
   'update.ready.tip': '{version} 已下载好。点一下退出、更新、自动重新打开；你的数据和设置都在',
   'update.installing': '正在重启…',
   'update.failed.download': '下载没成功',
+  // WP409（内测 10-18 #1）：开着代理时下到一半被断——说「断了」，点了接着下；旁边给「去下载页」
+  'update.failed.download.network': '下载断了 · 重试',
+  'update.download_page': '去下载页',
+  'update.download_page.tip': '打开官网下载页，下载安装包手动装（你的数据和设置都在）',
   'update.failed.install': '没装上',
-  'update.error.network': '连不上下载站。检查网络后点这里重试',
+  'update.error.network':
+    '下载被断开了（开着代理时常见）。点这里接着下，已下的不用重下；还不行就去下载页手动装',
   'update.error.not_found': '下载站上暂时没有这个版本。过一会儿点这里重试',
   'update.error.checksum': '下下来的文件校验没过，已丢弃。点这里重新下载',
   'update.error.disk': '磁盘空间不够。清出一些空间后点这里重试',
@@ -7926,9 +7932,13 @@ const en: Table = {
     '{version} is ready. Click to quit, update and reopen by itself. Your data and settings stay',
   'update.installing': 'Restarting…',
   'update.failed.download': 'Download failed',
+  'update.failed.download.network': 'Download interrupted · Retry',
+  'update.download_page': 'Download page',
+  'update.download_page.tip':
+    'Open the download page and install it by hand (your data and settings stay)',
   'update.failed.install': 'Update not installed',
   'update.error.network':
-    'Cannot reach the download server. Check your network, then click to retry',
+    'The download was cut off (common with a proxy on). Click to resume where it stopped; if it keeps failing, use the download page',
   'update.error.not_found': 'This version is not on the download server yet. Click to retry later',
   'update.error.checksum':
     'The download failed its integrity check and was discarded. Click to download again',
@@ -8664,6 +8674,8 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_LISTING_ZH,
     // WP401：积木表格的筛选
     ...TABLE_FILTER_ZH,
+    // WP406：岗位更新
+    ...CONTENT_DIGEST_ZH,
   },
   en: {
     ...en,
@@ -8710,6 +8722,7 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_KEYWORDS_EN,
     ...AMAZON_LISTING_EN,
     ...TABLE_FILTER_EN,
+    ...CONTENT_DIGEST_EN,
   },
 }
 

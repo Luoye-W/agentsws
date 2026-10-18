@@ -4,7 +4,7 @@
  *
  * 页头一行（短标题就地改 / 状态 / 「⋯」归档置灰说原因）、对话式时间线（右气泡、左 AI + Markdown、
  * 预览结果卡、运行摘要一行灰字点开看步骤、卡住卡、内嵌审批卡批了缩成一行、同日一条日期）、运行中「正在做…」、
- * 输入卡（发送 / 停 / 私聊 AI / Tab 收建议，什么时候不给建议）。
+ * 输入卡（发送 / 停 / Tab 收建议，什么时候不给建议）。
  */
 import type { ApprovalItem, MatterEvent, MatterView } from '@agentsws/contracts'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'

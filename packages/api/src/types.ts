@@ -74,6 +74,7 @@ import type { CompetitorWatchPort } from './routes/competitor-watch.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { ContentDigestPort } from './routes/content-digest.js'
 import type { ContentUpdatesPort } from './routes/content-updates.js'
 import type { DataServiceApiPort } from './routes/data-service.js'
 import type { DesignPort } from './routes/design.js'
@@ -83,6 +84,7 @@ import type { ExtensionPort } from './routes/extension.js'
 import type { ExtensionActionsPort } from './routes/extension-actions.js'
 import type { ExtensionInstallPort } from './routes/extension-install.js'
 import type { ExtensionOnboardingPort } from './routes/extension-onboarding.js'
+import type { ExtensionPanelPort } from './routes/extension-panel.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { GenuiImageHostsPort } from './routes/genui-image-hosts.js'
 import type { HandoffPort } from './routes/handoff.js'
@@ -964,6 +966,11 @@ export interface GatewayDeps {
    */
   extensionOnboarding?: ExtensionOnboardingPort
   /**
+   * WP413（真机联调 R1）：插件常驻侧边栏（进度 / 要你处理 / 记录）。没装配时 `/v1/extension/panel*` 回
+   * not_implemented，插件侧边栏照实说「先升级 Agents 工坊」。会话仍由 {@link extension} 那一套令牌判。
+   */
+  extensionPanel?: ExtensionPanelPort
+  /**
    * WP328（docs/102）：Reddit 每日巡查（插件只读 + 工作台看 / 改 / 现在巡查 / 周汇总）。
    * 没装配时那几条路由回 not_implemented。插件的会话仍由 {@link extension} 那一套令牌判（scope `reddit.read`）。
    */
@@ -1228,6 +1235,11 @@ export interface GatewayDeps {
    * 按品牌；没装配时 `/v1/settings/content-updates*` 回 not_implemented（设置页那一行不出）。
    */
   contentUpdates?: ContentUpdatesPort
+  /**
+   * WP406（私有 docs/107）：岗位更新——第三栏「设定 · 岗位更新」与「挑着看」、订阅、现在查一次。
+   * 按品牌；没装配时 `/v1/content-updates/*` 回 not_implemented（第三栏那一页不出）。
+   */
+  contentDigest?: ContentDigestPort
   /**
    * WP216：这个品牌的平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）。按品牌档案判断；
    * 没装配时 `/v1/platform-kit*` 回 not_implemented。

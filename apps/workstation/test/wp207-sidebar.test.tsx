@@ -333,9 +333,10 @@ describe('WP259 一句话交给职责：长文本照收（WP372 起在右侧面�
   })
 })
 
-/** WP372：对话不挂左栏了——点右上角「对话」，卡底「显示更多」是完整列表。 */
+/** WP372：对话不挂左栏了——在右侧面板「对话」卡里，卡底「显示更多」是完整列表。WP412：面板收着才点开关。 */
 async function openConversations(more = false): Promise<HTMLElement> {
-  fireEvent.click(screen.getByTestId('rail-overflow'))
+  if (screen.queryByTestId('rail-cards') === null)
+    fireEvent.click(screen.getByTestId('rail-toggle'))
   const card = await screen.findByTestId('conv-card')
   if (!more) return card
   fireEvent.click(screen.getByTestId('rail-card-more-conversations'))

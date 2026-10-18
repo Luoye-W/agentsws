@@ -24,6 +24,7 @@ import type {
   ScenarioEvent,
   ScenarioExpected,
   ScenarioListingPage,
+  ScenarioRedditWatchItem,
   ScenarioStandIns,
   ScenarioTxnPolicy,
   Tier,
@@ -194,6 +195,8 @@ const EVENT_KEYS = [
   'competitor.read',
   // WP393 店铺管理「竞品动向」配好了
   'competitor.plan',
+  // WP411 Reddit 巡查读回来一批（整词匹配、去重、外部帖闸）
+  'reddit.watch_batch',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -342,6 +345,8 @@ const EXPECTED_KEYS = [
   'assistant_dispatched_to',
   // WP392：竞品监控比出了哪几种变化
   'competitor_changes',
+  // WP411
+  'reddit_watch',
   // WP393：简报里「竞品动向」那一段
   'competitor_brief',
   // WP394：Amazon 对标款的差价 / 走哪条路 / 云端扣了几个积分
@@ -1149,6 +1154,56 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         }
       })
       return { at, type: 'competitor.plan', competitor_plan: { rules, own, pairs } }
+    }
+    case 'reddit.watch_batch': {
+      known(source, `${path}.${key}`, body, ['brand_names', 'models', 'competitors', 'items'])
+      if (!Array.isArray(body.items) || body.items.some((x) => !isRec(x)))
+        fail(source, `${path}.${key}.items`, '必须是对象列表')
+      const items = (body.items as Record<string, unknown>[]).map(
+        (o, i): ScenarioRedditWatchItem => {
+          const at_ = `${path}.${key}.items[${i}]`
+          known(source, at_, o, [
+            'fullname',
+            'source',
+            'subreddit',
+            'keyword',
+            'title',
+            'text',
+            'post_title',
+            'reply',
+          ])
+          const src = str(source, `${at_}.source`, o.source)
+          if (src !== 'inbox' && src !== 'own_sub' && src !== 'external')
+            fail(source, `${at_}.source`, '只能是 inbox / own_sub / external')
+          if (o.reply !== undefined && typeof o.reply !== 'boolean')
+            fail(source, `${at_}.reply`, '必须是 true / false')
+          const keyword = optStr(source, `${at_}.keyword`, o.keyword)
+          const title = optStr(source, `${at_}.title`, o.title)
+          const postTitle = optStr(source, `${at_}.post_title`, o.post_title)
+          return {
+            fullname: str(source, `${at_}.fullname`, o.fullname),
+            source: src,
+            subreddit: str(source, `${at_}.subreddit`, o.subreddit),
+            text: str(source, `${at_}.text`, o.text),
+            ...(keyword === undefined ? {} : { keyword }),
+            ...(title === undefined ? {} : { title }),
+            ...(postTitle === undefined ? {} : { post_title: postTitle }),
+            ...(o.reply === undefined ? {} : { reply: o.reply as boolean }),
+          }
+        },
+      )
+      const models = optStrList(source, `${path}.${key}.models`, body.models)
+      const competitors = optStrList(source, `${path}.${key}.competitors`, body.competitors)
+      return {
+        at,
+        type: 'reddit.watch_batch',
+        reddit_watch: {
+          brand_names: strList(source, `${path}.${key}.brand_names`, body.brand_names),
+          items,
+          ...(models === undefined ? {} : { models }),
+          ...(competitors === undefined ? {} : { competitors }),
+        },
+      }
     }
     case 'shop.price_change': {
       known(source, `${path}.${key}`, body, ['who', 'product', 'price', 'graphql', 'note'])
@@ -2999,6 +3054,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.competitor_changes,
   )
   if (competitorChanges !== undefined) out.competitor_changes = competitorChanges
+  // WP411：Reddit 巡查那一批过完质量闸
+  if (raw.reddit_watch !== undefined) {
+    const rw = raw.reddit_watch
+    if (!isRec(rw)) fail(source, 'expected.reddit_watch', '必须是对象')
+    known(source, 'expected.reddit_watch', rw, ['kept', 'filtered', 'dupes', 'draftable'])
+    out.reddit_watch = {
+      kept: strList(source, 'expected.reddit_watch.kept', rw.kept),
+      filtered: num(source, 'expected.reddit_watch.filtered', rw.filtered),
+      dupes: num(source, 'expected.reddit_watch.dupes', rw.dupes),
+      draftable: strList(source, 'expected.reddit_watch.draftable', rw.draftable),
+    }
+  }
   // WP393：简报里「竞品动向」那一段要有的几句（空列表 = 不该出）
   if (raw.competitor_brief !== undefined) {
     if (

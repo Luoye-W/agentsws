@@ -30,6 +30,11 @@ export interface ExtensionNeedsView {
   roles: { role_id: string; name: { zh: string; en: string } }[]
   /** 这个品牌已经有一个没撤掉的插件配上了。 */
   paired: boolean
+  /**
+   * WP409（内测 10-18 #4，只加）：配上的是哪一个（最近配的那把）——工坊出一行「插件已连上 · Chrome · Windows」。
+   * `label` 是令牌名（配对码没起名字时按浏览器认）；没配上 / 老服务没有这一格。
+   */
+  paired_with?: { label: string; paired_at: string; last_used_at?: string }
   /** 配上之后还要在插件里做的几步；`done` 不知道（查不了）就没有这一格。 */
   steps: { step: ExtensionFollowStep; done?: boolean }[]
   /** 都连好之后要接的方案卡（WP348 设置目标；这个品牌没登记的不列）。 */

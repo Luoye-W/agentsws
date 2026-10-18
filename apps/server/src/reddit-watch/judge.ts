@@ -145,6 +145,8 @@ export function judgePrompt(items: RedditWatchEntry[], ctx: JudgeContext): strin
     '每条判：',
     'verdict：follow_up（需跟进）/ no_action（日常讨论无需处理）/ low_relevance（相关度不高不建议回复）；',
     'reply：品牌号要不要回它（true / false）；reason：一句中文，为什么；',
+    '外部（自家版块以外）的只有真跟我们有关（提到我们的品牌 / 产品，或我们能直接解决的问题）才 reply=true；' +
+      '别人的个人主页、竞品自己的版、只是泛泛聊品类或换手机这类与我们无关的帖，一律 reply=false；',
     `topic：话题概括（中文，10 个字以内）；本周已有的话题：${ctx.topics.slice(0, 30).join('、') || '（还没有）'}，能归进去就用原名；`,
     'voc：是有效的用户声音（对产品的反馈、需求、抱怨、比较）就写一句中文概括，不是就写空串；',
     'ugc：是用户自发的内容（开箱、体验分享、作品、教程）就写一句中文概括，不是就写空串；',

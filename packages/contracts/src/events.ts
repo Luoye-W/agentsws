@@ -120,6 +120,17 @@ export type KnownEventType =
   | 'content_update.conflict'
   | 'content_update.resolved'
   /**
+   * WP406（私有 docs/107）：官方岗位更新。`digest_carded`（一个岗位出 / 并了一张本周更新卡：岗位、几项、急不急）/
+   * `digest_applied`（应用了一批：岗位、条目 id、自动还是人点的）/ `digest_skipped`（这次跳过）/
+   * `batch_rolled_back`（整批 / 单项退回）/ `subscription_checked`（问了一次订阅：状态码）。
+   * payload 只有岗位、条目 id、版本、状态——**内容正文不进事件**。
+   */
+  | 'content_update.digest_carded'
+  | 'content_update.digest_applied'
+  | 'content_update.digest_skipped'
+  | 'content_update.batch_rolled_back'
+  | 'content_update.subscription_checked'
+  /**
    * WP181：模型调了官方「自动化任务」的一个工具（建 / 查 / 改 / 删提醒）。payload 只有工具名、这次运行、
    * 任务 id、结果（建了 / 等批 / 改了 / 删了 / 被拒）与原因码——**提醒正文不进**。
    */

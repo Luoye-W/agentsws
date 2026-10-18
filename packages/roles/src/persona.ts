@@ -621,23 +621,50 @@ export const HOUSE_RULES_ORDER = 25
 /**
  * WP404（docs/107 §3）：规矩原文外置成数据（`house-rules.content.json`，每条带 id），这里只管拼。
  * 几条按顺序用换行接起来；现在只有一条，所以和外置前逐字节相同。
+ *
+ * WP407（决策 1179）：「回复语言」「下一步建议」两句全职责公共规矩也并进这张表——每行多一格可选的
+ * `section`，说它进哪一节：不写 / `house` = 说话规矩（25），`reply_language` = 回复语言（22），
+ * `next_step` = 下一步建议（27）。三节的位置、标题、正文与并表前逐字节相同（测试钉住），只是文字的真源
+ * 换成了数据，能随官方岗位更新改、能按品牌覆盖。
  */
 const HOUSE_RULES_TABLE = builtinContentTable<HouseRuleRow>(HOUSE_RULES_FILE)
+
+/** 公共规矩表里一行能进的那几节（WP407，决策 1179）。 */
+export const HOUSE_RULE_SECTIONS = ['house', 'reply_language', 'next_step'] as const
+export type HouseRuleSection = (typeof HOUSE_RULE_SECTIONS)[number]
 
 interface HouseRuleRow {
   id: string
   zh: string
   en: string
+  /** 不写 = `house`。 */
+  section?: HouseRuleSection
 }
 
 const isHouseRuleRow = (r: unknown): r is HouseRuleRow =>
-  typeof (r as HouseRuleRow).zh === 'string' && typeof (r as HouseRuleRow).en === 'string'
+  typeof (r as HouseRuleRow).zh === 'string' &&
+  typeof (r as HouseRuleRow).en === 'string' &&
+  ((r as HouseRuleRow).section === undefined ||
+    (HOUSE_RULE_SECTIONS as readonly unknown[]).includes((r as HouseRuleRow).section))
 
-/** 公共段的正文（按品牌可覆盖：`readContentTable`；没登记覆盖源就是随软件带的那一份）。 */
-function houseRulesText(lang: PersonaLang, brand?: string): string {
-  return readContentTable(HOUSE_RULES_TABLE, { brand, accepts: isHouseRuleRow })
-    .map((r) => r[lang])
-    .join('\n')
+const sectionOf = (r: HouseRuleRow): HouseRuleSection => r.section ?? 'house'
+
+/**
+ * 某一节的正文（按品牌可覆盖：`readContentTable`；没登记覆盖源就是随软件带的那一份）。
+ * 覆盖来的表里**这一节一行都没有**（例如一份只写了说话规矩的老表），这一节照旧用随软件带的那几行——
+ * 公共规矩不能因为覆盖表缺行就从提示词里整节消失。
+ */
+function houseRulesText(
+  lang: PersonaLang,
+  brand?: string,
+  section: HouseRuleSection = 'house',
+): string {
+  const rows = readContentTable(HOUSE_RULES_TABLE, { brand, accepts: isHouseRuleRow }).filter(
+    (r) => sectionOf(r) === section,
+  )
+  const use =
+    rows.length > 0 ? rows : HOUSE_RULES_TABLE.rows.filter((r) => sectionOf(r) === section)
+  return use.map((r) => r[lang]).join('\n')
 }
 
 export const HOUSE_RULES: Readonly<Record<PersonaLang, string>> = {
@@ -670,31 +697,39 @@ export function houseRulesSection(lang: PersonaLang = 'zh', brand?: string): Pro
  * 而且「说明」没点到"边做边说的那几句"。改成**先说对内**、点名过程话，再把"跟来信语言"
  * 收窄到「要发出去的那份稿子（起草工具的正文与主题）」；起草工具的参数描述里另有同一句
  * （`@agentsws/stand-ins` 的 `DRAFT_BODY_DESCRIPTION`）。
+ *
+ * WP407（决策 1179）：原文挪进公共规矩表（`section: reply_language` 那一行），这里只管拼。
  */
 export const REPLY_LANGUAGE_ORDER = 22
 
 export const REPLY_LANGUAGE_RULE: Readonly<Record<PersonaLang, string>> = {
-  zh:
-    '你对用户说的每一句话都用中文：边做边说的过程话（比如"我先查一下……"）、给用户的回复、' +
-    '摘要和卡片，哪怕来信、资料、工具结果是英文。只有要发出去的那份稿子（起草工具里的正文和主题，' +
-    '给客户、红人、媒体、平台上的人）用对方来信的语言：对方写英文就写英文；没有来信可对照时' +
-    '（主动开发信、发帖），用目标市场的语言。',
-  en:
-    'Everything you say to the user is in English: progress notes while you work ("let me check…"), ' +
-    'replies to the user, summaries and cards, even when the message, the material or tool results ' +
-    'are in another language. Only the text going out (the body and subject in the drafting tool, to ' +
-    'customers, creators, press, people on a platform) follows the language of the message you are ' +
-    'answering: if they wrote in German, write in German; with no message to match (cold outreach, ' +
-    'posts), use the language of the target market.',
+  zh: houseRulesText('zh', undefined, 'reply_language'),
+  en: houseRulesText('en', undefined, 'reply_language'),
 }
 
 /** 回复语言那一节（每条职责、每个运行时都带同一份；`lang` = 界面语言）。 */
-export function replyLanguageSection(lang: PersonaLang = 'zh'): PromptSection {
+export function replyLanguageSection(lang: PersonaLang = 'zh', brand?: string): PromptSection {
   return {
     id: 'reply_language',
     name: lang === 'zh' ? '回复语言' : 'reply language',
     order: REPLY_LANGUAGE_ORDER,
-    text: REPLY_LANGUAGE_RULE[lang],
+    text: houseRulesText(lang, brand, 'reply_language'),
+  }
+}
+
+/**
+ * WP264（决策 179）：**下一步建议**那一节（27，紧跟公共段）——交代末尾有明确下一步就单独一行
+ * `<next>…</next>`。原文是契约里的 `NEXT_SUGGESTION_RULE`（只有中文）；WP407（决策 1179）起真源是
+ * 公共规矩表 `section: next_step` 那一行（补了英文），契约那个常量留着不删，测试钉住两边逐字节相同。
+ */
+export const NEXT_SUGGESTION_ORDER = 27
+
+export function nextSuggestionSection(lang: PersonaLang = 'zh', brand?: string): PromptSection {
+  return {
+    id: 'next_step',
+    name: lang === 'zh' ? '下一步建议' : 'next step',
+    order: NEXT_SUGGESTION_ORDER,
+    text: houseRulesText(lang, brand, 'next_step'),
   }
 }
 

@@ -138,14 +138,16 @@ export function SetupPlanBody({
 }): ReactNode {
   const { t } = useApp()
   const text = useFieldText(payload.target)
-  const [editing, setEditing] = useState(false)
+  // WP410（真机 #6）：出卡前没查成——照实说原因，直接摊开表单问人要不要填（不装成方案）
+  const failed = payload.research_failed !== undefined
+  const [editing, setEditing] = useState(failed)
   const change = payload.mode === 'change'
   const fields = payload.fields.filter((f) => !isSecretLikeSetupKey(f.key, f.label))
   const rows = change ? fields.filter((f) => (f.suggested ?? '') !== (f.current ?? '')) : fields
   // 必填又空着（需要你填）：「就这样」存不了，先展开表单
-  const blocked = fields.some(
-    (f) => f.required && (f.suggested === undefined || f.suggested.trim() === ''),
-  )
+  const blocked =
+    failed ||
+    fields.some((f) => f.required && (f.suggested === undefined || f.suggested.trim() === ''))
   const steps = payload.steps ?? []
   if (editing)
     return (
@@ -155,6 +157,11 @@ export function SetupPlanBody({
         data-mode={payload.mode}
         data-editing="true"
       >
+        {failed ? (
+          <p className="text-sm leading-6 text-ws-warn" data-testid="setup-plan-research-failed">
+            {payload.why}
+          </p>
+        ) : null}
         <SetupFieldsBody payload={{ ...payload, why: '' }} saving={saving} onSave={onSave} />
         <div>
           <Button

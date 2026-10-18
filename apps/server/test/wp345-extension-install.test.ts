@@ -42,7 +42,12 @@ function setup(over: Partial<ExtensionInstallOptions> = {}) {
     ],
   ])
   const dirs = new Set([DIR, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'])
-  const launched: { command: string; args: string[]; env: Record<string, string> }[] = []
+  const launched: {
+    command: string
+    args: string[]
+    env: Record<string, string>
+    options?: { verbatim?: boolean }
+  }[] = []
   const events: { ws: string; type: string; payload: Record<string, string> }[] = []
   const port = createExtensionInstall({
     dir: DIR,
@@ -50,8 +55,8 @@ function setup(over: Partial<ExtensionInstallOptions> = {}) {
     env: { HOME: '/Users/a', PATH: '/bin', AGENTSWS_SECRETS_KEY: 'sekret' },
     readText: (p) => files.get(p),
     exists: (p) => dirs.has(p),
-    launch: async (command, args, env) => {
-      launched.push({ command, args, env })
+    launch: async (command, args, env, options) => {
+      launched.push({ command, args, env, ...(options === undefined ? {} : { options }) })
       return true
     },
     browserEnv: (env) => ({ HOME: env.HOME ?? '', PATH: env.PATH ?? '' }),
@@ -171,9 +176,23 @@ describe('插件报版本', () => {
 
 describe('打开文件夹 / 扩展页', () => {
   it('命令按平台挑；Edge 开 edge://extensions', () => {
-    expect(folderOpener('darwin', '/x')).toEqual(['open', ['/x']])
-    expect(folderOpener('win32', 'C:\\x')).toEqual(['explorer.exe', ['C:\\x']])
-    expect(folderOpener('linux', '/x')).toEqual(['xdg-open', ['/x']])
+    // WP409：在上一级里选中这个文件夹（人看得见它、能拖进 Chrome 扩展页），不是进到它里面
+    expect(folderOpener('darwin', '/a/chrome-extension')).toEqual([
+      'open',
+      ['-R', '/a/chrome-extension'],
+    ])
+    expect(
+      folderOpener(
+        'win32',
+        'C:\\Users\\张 三\\AppData\\Roaming\\@agentsws\\desktop\\chrome-extension',
+      ),
+    ).toEqual([
+      'explorer.exe',
+      ['/select,"C:\\Users\\张 三\\AppData\\Roaming\\@agentsws\\desktop\\chrome-extension"'],
+      { verbatim: true },
+    ])
+    expect(folderOpener('linux', '/a/b/chrome-extension/')).toEqual(['xdg-open', ['/a/b']])
+    expect(folderOpener('linux', '/x')).toEqual(['xdg-open', ['/']])
     expect(extensionsPageFor('C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe')).toBe(
       'edge://extensions',
     )
@@ -182,12 +201,23 @@ describe('打开文件夹 / 扩展页', () => {
     )
   })
 
-  it('打开文件夹：起 open <文件夹>，环境变量是干净的那份', async () => {
+  it('打开文件夹：起 open -R <文件夹>（选中它），环境变量是干净的那份', async () => {
     const { port, launched } = setup()
     expect(await port.open('folder')).toEqual({ opened: true })
     expect(launched).toEqual([
-      { command: 'open', args: [DIR], env: { HOME: '/Users/a', PATH: '/bin' } },
+      { command: 'open', args: ['-R', DIR], env: { HOME: '/Users/a', PATH: '/bin' } },
     ])
+  })
+
+  it('WP409：Windows 上 explorer /select 原样拼命令行（verbatim 交给起进程的那一层）', async () => {
+    const { port, launched, dirs } = setup({ dir: 'C:\\d\\chrome-extension', platform: 'win32' })
+    dirs.add('C:\\d\\chrome-extension')
+    expect(await port.open('folder')).toEqual({ opened: true })
+    expect(launched[0]).toMatchObject({
+      command: 'explorer.exe',
+      args: ['/select,"C:\\d\\chrome-extension"'],
+      options: { verbatim: true },
+    })
   })
 
   it('打开扩展页：直接起 Chrome 带 chrome://extensions（已开着就交给开着的那个；Chrome 不认就是个新标签页，地址交回去给卡片复制），不带本机密钥', async () => {

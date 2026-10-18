@@ -65,7 +65,6 @@ import {
   createRunWatchdog,
   GENUI_DISPLAY_RULE,
   type MatterLiveRun,
-  NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
@@ -100,6 +99,7 @@ import {
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import {
   houseRulesSection,
+  nextSuggestionSection,
   personaTextIn,
   type RoleStore,
   replyLanguageSection,
@@ -435,6 +435,12 @@ export interface RuntimeOptions {
    * 晚绑定、每次现取（用户改了时区下一次运行就用新的）。不给 = 不写这一条（老的单测与回放照旧）。
    */
   timeZone?: () => string | undefined | Promise<string | undefined>
+  /**
+   * WP410（真机 #9）：这条职责的「当前设置快照」——连接（以插件交回 / 连接表为准）与设置原值，
+   * 每次运行现取、注进上下文（排在事项材料后、时间那一条前；三个运行时同一份字节）。AI 说状态只按它，
+   * 不凭记忆或旧对话。回 `undefined` = 这条职责没有要带的（上下文一个字节不变）。不给 = 老行为。
+   */
+  setupState?: (input: { role_id: string }) => Promise<ContextItem | undefined>
   /**
    * WP29：技能库。给了就把 `resolve` 出来的技能正文当 persona 段拼进 prompt——
    * 学习回路采纳的那条 overlay 是靠这一步生效的（"下次运行用新版本"）。
@@ -2152,6 +2158,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
          * 放后面让前面那些字节稳定的部分多吃缓存）。为什么不挂官方 `dsh-time-context` 见 `@agentsws/core` 的
          * `time-context.ts` 头注释。
          */
+        // WP410：当前设置快照（这条职责登记了才有；读不出就不带，不拦这次运行）
+        ...[await options.setupState?.({ role_id: config.role_id }).catch(() => undefined)].filter(
+          (c): c is ContextItem => c !== undefined,
+        ),
         ...(options.timeZone === undefined
           ? []
           : [timeContextItem({ now: clock.now(), companyTz: await options.timeZone() })]),
@@ -2230,7 +2240,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * WP264（决策 179）：**下一步建议**——交代末尾有明确下一步就单独一行 `<next>…</next>`，
            * 宿主进时间线前取出来记在 `next_suggestion` 上（事项页按 Tab 收下）。所有职责同一份，紧跟公共段。
            */
-          { id: 'next_step', name: '下一步建议', order: 27, text: NEXT_SUGGESTION_RULE },
+          // WP407（决策 1179）：原文在公共规矩表（`section: next_step`），与契约 NEXT_SUGGESTION_RULE 逐字节相同
+          nextSuggestionSection('zh'),
           /*
            * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一次：只查只答，末尾附 ```answer
            * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
@@ -2497,7 +2508,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       try {
         work?.appendEvent(input.matter.id, {
           kind: 'status',
-          text: blockedLine(block),
+          text: blockedLine(
+            block,
+            card === undefined ? undefined : (card.payload as { research_failed?: string }),
+          ),
           actor: { kind: 'system', id: 'runtime' },
           run_id,
           blocked: block,

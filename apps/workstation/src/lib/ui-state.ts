@@ -272,3 +272,29 @@ export function readRailWide(): number | null {
 export function writeRailWide(width: number | null): void {
   write(RIGHT_RAIL_WIDE_KEY, width === null ? '' : String(clampWideWidth(width)))
 }
+
+/**
+ * WP412（真机 10-18 #8，决策 1035 更正）：进岗位 / 职责 / 事项页时右侧面板**默认打开**；
+ * 人手动开 / 关过就**按页面类型记住**（岗位页一份、职责页一份、事项页一份，不分是哪个岗位）。
+ * 值只有页面类型 → 布尔（`true` = 开着，`false` = 人关了），没有一个字的内容。
+ */
+export const RIGHT_RAIL_PAGE_OPEN_KEY = 'agentsws.rightrail.page_open'
+
+/** 记这一格的页面类型（`rail-layout.ts` 的 `railPageKind`）。 */
+export type RailPageKind = 'position' | 'role' | 'matter'
+
+export function readRailPageOpen(): Partial<Record<RailPageKind, boolean>> {
+  const all = readObject(RIGHT_RAIL_PAGE_OPEN_KEY)
+  const out: Partial<Record<RailPageKind, boolean>> = {}
+  for (const kind of ['position', 'role', 'matter'] as const) {
+    const v = all[kind]
+    if (typeof v === 'boolean') out[kind] = v
+  }
+  return out
+}
+
+export function writeRailPageOpen(kind: RailPageKind, open: boolean): void {
+  const all = readRailPageOpen()
+  all[kind] = open
+  write(RIGHT_RAIL_PAGE_OPEN_KEY, JSON.stringify(all))
+}

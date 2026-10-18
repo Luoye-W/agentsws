@@ -55,8 +55,24 @@ export interface ContentPublicKey {
   public_key: string
 }
 
-/** 条目种类。`skill` 本单实现；`role` / `declarative` 格式先定、客户端以后随程序版本支持。 */
-export const CONTENT_ITEM_KINDS = ['skill', 'role', 'declarative'] as const
+/**
+ * 条目种类。`skill` 是 WP219 实现的；`role` / `declarative` 只定了格式。
+ *
+ * WP406（私有 docs/107 §3 / §7，只加）：官方订阅的岗位内容——
+ * - `role_content`：一条职责的内容层（`RoleContentFile`，过 WP404 的白名单；白名单外整包拒收）；
+ * - `position_content`：一个岗位的内容层（`PositionContentFile`）；
+ * - `rules`：一张外置规则表（`ContentTableFile`，每行带 id）；
+ * - `knowledge`：一个官方行业知识包（知识包 v1 格式）。
+ */
+export const CONTENT_ITEM_KINDS = [
+  'skill',
+  'role',
+  'declarative',
+  'role_content',
+  'position_content',
+  'rules',
+  'knowledge',
+] as const
 export type ContentItemKind = (typeof CONTENT_ITEM_KINDS)[number]
 
 /**

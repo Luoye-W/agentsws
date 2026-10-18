@@ -87,6 +87,45 @@ export interface RedeemedToken {
 }
 
 /** 兑换失败的原因——都给人话，不给码。 */
+/** 生成配对码时没起名字的默认名。 */
+export const DEFAULT_EXTENSION_LABEL = '浏览器插件'
+
+/** WP409：令牌叫什么——配对码起过名字就用那个，没起（默认名）就用插件那边认出来的浏览器。 */
+export function tokenLabel(pairingLabel: string, hint: string | undefined): string {
+  const h = hint?.trim()
+  return pairingLabel === DEFAULT_EXTENSION_LABEL && h !== undefined && h !== ''
+    ? h.slice(0, 60)
+    : pairingLabel
+}
+
+/**
+ * WP409：从 User-Agent 认出「哪个浏览器 · 哪个系统」（插件配对那一下由扩展的后台发，UA 就是那个浏览器的）。
+ * 认不出回 undefined。Chrome 不让扩展在没有额外权限时知道是哪个 Chrome 用户，这里只到浏览器 + 系统。
+ */
+export function browserLabelFromUserAgent(ua: string | undefined): string | undefined {
+  if (ua === undefined || ua === '') return undefined
+  const browser = /\bEdg\//.test(ua)
+    ? 'Edge'
+    : /\bOPR\//.test(ua)
+      ? 'Opera'
+      : /\bBrave\b/.test(ua)
+        ? 'Brave'
+        : /\bChrome\//.test(ua)
+          ? 'Chrome'
+          : undefined
+  if (browser === undefined) return undefined
+  const os = /Windows NT/.test(ua)
+    ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua)
+      ? 'Mac'
+      : /CrOS/.test(ua)
+        ? 'ChromeOS'
+        : /Linux/.test(ua)
+          ? 'Linux'
+          : undefined
+  return os === undefined ? browser : `${browser} · ${os}`
+}
+
 export type RedeemFailure = 'bad_origin' | 'bad_code' | 'expired' | 'used' | 'no_pairing'
 
 export interface ExtensionStore {
@@ -100,6 +139,11 @@ export interface ExtensionStore {
   redeem(input: {
     code: string
     origin: string | undefined
+    /**
+     * WP409（只加）：生成配对码时没起名字（还是默认「浏览器插件」），就用它当这把令牌的名字——
+     * 由 `/v1/extension/pair` 按请求的 User-Agent 认出「Chrome · Windows」这类，配上后工坊那一行好认是哪个浏览器。
+     */
+    label_hint?: string | undefined
   }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure }
   list(workspace_id: WorkspaceId): ExtensionTokenView[]
   revoke(workspace_id: WorkspaceId, id: string): ExtensionTokenView | undefined
@@ -245,7 +289,7 @@ export class MemoryExtensionStore implements ExtensionStore {
       code_hash: sha256(code),
       workspace_id: input.workspace_id,
       person_id: input.person_id,
-      label: input.label ?? '浏览器插件',
+      label: input.label ?? DEFAULT_EXTENSION_LABEL,
       expires_at_ms,
       used: false,
     })
@@ -255,6 +299,7 @@ export class MemoryExtensionStore implements ExtensionStore {
   redeem(input: {
     code: string
     origin: string | undefined
+    label_hint?: string | undefined
   }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure } {
     const extension_id = extensionIdOfOrigin(input.origin)
     if (extension_id === undefined) return { ok: false, reason: 'bad_origin' }
@@ -285,7 +330,7 @@ export class MemoryExtensionStore implements ExtensionStore {
     this.#tokens.push({
       id,
       token_hash: sha256(token),
-      label: hit.label,
+      label: tokenLabel(hit.label, input.label_hint),
       extension_id,
       workspace_id: hit.workspace_id,
       person_id: hit.person_id,

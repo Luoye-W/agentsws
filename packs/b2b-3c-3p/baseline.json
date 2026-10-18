@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-09-29T04:00:00.000Z",
+  "generated_at": "2026-10-17T12:49:00.000Z",
   "runtimes": {
     "stub": {
       "scenarios": {
@@ -761,6 +761,27 @@
           }
         },
         "sales/competitor-price-drop": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/reddit-watch-noise-dedupe": {
           "metrics": {
             "adoption_rate": 1,
             "applied_changes": 0,
@@ -1561,6 +1582,27 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "social/reddit-watch-noise-dedupe": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -2323,6 +2365,27 @@
           }
         },
         "sales/competitor-price-drop": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/reddit-watch-noise-dedupe": {
           "metrics": {
             "adoption_rate": 1,
             "applied_changes": 0,

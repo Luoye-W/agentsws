@@ -24,6 +24,10 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.notice.kind.comment': '回帖（r/{sub}）',
   'redditw.notice.kind.submit': '发帖（r/{sub}）',
   'redditw.parent': '原评论',
+  // WP411：品牌号在这串里已经说过的、几道检查
+  'redditw.prior': '你 {day} 已回：',
+  'redditw.check.prior': '你之前说的：{text}',
+  'redditw.check.fixed': '{message}，已换成「我去确认一下」',
 }
 
 export const REDDIT_WRITE_EN: Record<string, string> = {
@@ -45,4 +49,7 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.notice.kind.comment': 'Comment (r/{sub})',
   'redditw.notice.kind.submit': 'Post (r/{sub})',
   'redditw.parent': 'Original comment',
+  'redditw.prior': 'You replied on {day}: ',
+  'redditw.check.prior': 'What you said before: {text}',
+  'redditw.check.fixed': '{message}; replaced with "let me check"',
 }

@@ -3,7 +3,7 @@
  *
  * 页头一行（短标题就地改 / 状态 / 「⋯」归档置灰说原因）、对话式时间线（右气泡、左 AI + Markdown、
  * 预览结果卡、运行摘要一行灰字点开看步骤、卡住卡、内嵌审批卡批了缩成一行、同日一条日期）、运行中「正在做…」、
- * 输入卡（发送 / 停 / 私聊 AI / Tab 收建议，什么时候不给建议）。
+ * 输入卡（发送 / 停 / Tab 收建议，什么时候不给建议；WP412 起没有「私聊 AI」）。
  */
 import type { ApprovalItem, MatterEvent, MatterView } from '@agentsws/contracts'
 import { screen, waitFor, within } from '@testing-library/react'
@@ -541,32 +541,20 @@ describe('WP264 输入卡', () => {
     expect(box.getAttribute('placeholder')).toBe('回复，或交代新要求…')
   })
 
-  it('私聊 AI：整卡换模式、问一句只你看得见；关掉就没了；可「转给 AI」', async () => {
+  it('WP412（决策 1221）：没有「私聊 AI」开关了——框里说的一句直接进这件事', async () => {
     renderMatter()
     await screen.findByTestId('matter-say')
+    expect(screen.queryByRole('switch', { name: /私聊 AI/ })).toBeNull()
+    expect(screen.queryByTestId('matter-private-toggle')).toBeNull()
+    expect(screen.getByTestId('matter-say').textContent).not.toContain('私聊')
     const u = user()
-    const toggle = screen.getByRole('switch', { name: /私聊 AI/ })
-    await u.click(toggle)
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByTestId('matter-private-tag')).toBeDefined()
-    // 私聊模式不给建议
-    expect(screen.queryByTestId('matter-suggest')).toBeNull()
-    const box = screen.getByLabelText('问 AI 一句，只你看得见…')
-    await u.type(box, '只想首页深色要改哪里？{Enter}')
+    const box = screen.getByLabelText('在这个事项里说一句')
+    await u.clear(box)
+    await u.type(box, '首页深色要改哪里？{Enter}')
     await waitFor(() => {
-      expect(askAi).toHaveBeenCalledWith({
-        scope: { matter_id: 'mat_r' },
-        question: '只想首页深色要改哪里？',
-      })
+      expect(postMatterMessage).toHaveBeenCalledWith('mat_r', '首页深色要改哪里？')
     })
-    const pair = await screen.findByTestId('matter-private-pair')
-    await within(pair).findByTestId('ask-ai-answer')
-    expect(postMatterMessage).not.toHaveBeenCalled()
-    await u.click(within(pair).getByTestId('matter-private-forward'))
-    await waitFor(() => {
-      expect(postMatterMessage).toHaveBeenCalledWith('mat_r', '只想首页深色要改哪里？')
-    })
-    expect(screen.queryByTestId('matter-private-pair')).toBeNull()
+    expect(askAi).not.toHaveBeenCalled()
   })
 
   it('已关闭的事项：输入框还在，占位「说一句就重新打开」', async () => {

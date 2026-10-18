@@ -18,23 +18,31 @@
  * WP372（决策 1001 / 1004 / 1005，Luoye 10-17）：右侧面板多一种样子——**五张卡**
  * （`open === RAIL_CARDS`）。每张卡展开 / 收起按桶记（没记过只展开「对话」），
  * 顺序按人记（全部岗位一份）。按资源地址开一个「归卡」的面板（连接卡）= 展开那张卡并滚到那一条。
+ *
+ * WP412（真机 10-18 #8，决策 1035 更正）：进**岗位 / 职责 / 事项页**时面板**默认打开**（开成卡片；
+ * 这个桶上次开的是某一格就开那一格）；人手动开 / 关过（右上角面板开关、面板头 ×、`]`、窄屏遮罩）就**按页面类型记住**——
+ * 在一个岗位页关了，进别的岗位页也是关着；职责页、事项页各记各的。窗口窄于 900 时没记过的一律先收着（不挡主区）。
+ * 别处自动弹开（连接卡、浏览器要人点、快捷按钮开报表）只开这一次，不改记住的那一份。
  */
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { railLayoutBucket } from '@/components/rail/rail-layout'
+import { railLayoutBucket, railPageKind } from '@/components/rail/rail-layout'
 import { resolvePanel } from '@/components/rail/registry'
 import { useApp } from '@/lib/app-context'
 import {
   clampRailWidth,
   DEFAULT_RAIL_LAYOUT,
   type RailLayoutEntry,
+  type RailPageKind,
   readRailCardFlags,
   readRailCardOrder,
   readRailLayout,
+  readRailPageOpen,
   readRailWide,
   writeRailCardFlags,
   writeRailCardOrder,
   writeRailLayout,
+  writeRailPageOpen,
   writeRailWide,
 } from '@/lib/ui-state'
 
@@ -112,13 +120,38 @@ const Ctx = createContext<RailState | null>(null)
 
 interface BucketState {
   bucket: string
+  /** WP412：这一页是哪类干活的页（岗位 / 职责 / 事项）；别的页没有。 */
+  kind: RailPageKind | undefined
   layout: RailLayoutEntry
   cards: Record<string, boolean>
 }
 
-const readBucket = (bucket: string): BucketState => ({
+/** WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。 */
+const NARROW_DEFAULT = '(max-width: 899px)'
+
+function narrowWindow(): boolean {
+  try {
+    return globalThis.matchMedia?.(NARROW_DEFAULT).matches ?? false
+  } catch {
+    return false
+  }
+}
+
+/**
+ * WP412（决策 1035 更正）：进岗位 / 职责 / 事项页时面板开没开——人按页面类型记过的为准，
+ * 没记过 = 打开（窄窗收着）。开着时开的是这个桶上次那一格，没有就开卡片。
+ */
+function withPageDefault(layout: RailLayoutEntry, kind: RailPageKind | undefined): RailLayoutEntry {
+  if (kind === undefined) return layout
+  const open = readRailPageOpen()[kind] ?? !narrowWindow()
+  const panel = open ? (layout.open_panel_id ?? RAIL_CARDS) : null
+  return panel === layout.open_panel_id ? layout : { ...layout, open_panel_id: panel }
+}
+
+const readBucket = (bucket: string, kind: RailPageKind | undefined): BucketState => ({
   bucket,
-  layout: readRailLayout(bucket),
+  kind,
+  layout: withPageDefault(readRailLayout(bucket), kind),
   cards: readRailCardFlags(bucket),
 })
 
@@ -126,11 +159,13 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   const location = useLocation()
   const { position } = useApp()
   const bucket = railLayoutBucket(location.pathname, position)
+  const kind = railPageKind(location.pathname)
 
   // 换桶 = 换一份布局。用 render 期比较而不是 `useEffect`：effect 那一版
   // 会先拿旧桶的值画一帧，人眼看得见第三栏"闪"一下别的岗位的面板。
-  const [state, setState] = useState<BucketState>(() => readBucket(bucket))
-  const current = state.bucket === bucket ? state : readBucket(bucket)
+  // WP412：同一个桶换了页面类型（首页 → 那个岗位页）也重读一次——进干活的页要按「默认打开」算。
+  const [state, setState] = useState<BucketState>(() => readBucket(bucket, kind))
+  const current = state.bucket === bucket && state.kind === kind ? state : readBucket(bucket, kind)
   if (current !== state) setState(current)
   const layout = current.layout
 
@@ -153,13 +188,18 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
     })
   }, [])
 
+  /**
+   * WP412：人手动开 / 关（右上角面板开关、面板头 ×、`]`、遮罩、工具图标）——在岗位 / 职责 / 事项页上
+   * 按页面类型记住开没开。别处自动弹开走 `openCard` / `openAddress`，不经过这里。
+   */
   const show = useCallback(
     (panel: string | null) => {
       setAddress(null)
       setFocus(null)
+      if (current.kind !== undefined) writeRailPageOpen(current.kind, panel !== null)
       setOpen(panel)
     },
-    [setOpen],
+    [setOpen, current.kind],
   )
 
   const toggle = useCallback((panel: string) => {
@@ -171,6 +211,7 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
         open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
       }
       writeRailLayout(prev.bucket, next)
+      if (prev.kind !== undefined) writeRailPageOpen(prev.kind, next.open_panel_id !== null)
       return { ...prev, layout: next }
     })
   }, [])
@@ -192,7 +233,7 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
         options.pathname === undefined ? undefined : railLayoutBucket(options.pathname, position)
       if (target !== undefined && target !== bucket) {
         // 马上要换页：写进那一页的桶，换过去时 render 期那一下读到的就是开着的
-        expandIn(readBucket(target), id)
+        expandIn(readBucket(target, railPageKind(options.pathname ?? '')), id)
         return
       }
       setState((prev) => expandIn(prev, id))

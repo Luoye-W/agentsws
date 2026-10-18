@@ -574,8 +574,12 @@ export interface Executor {
   ): Promise<ApplyOutcome>
   /** 批准后取消窗口内可撤 */
   cancel(change_id: string): Promise<StagedChange>
-  /** 含子变更的父项（回信）：所有子 applied 之后才施行父 */
-  applyApproval(item_id: string): Promise<ApprovalItem>
+  /**
+   * 含子变更的父项（回信）：所有子 applied 之后才施行父。
+   * WP413（只加）：`skip_cancel_window` 不等批准后的取消窗口——只给「交出去之后还要人亲手点发送」的出站
+   * （插件把草稿填进页面、人在页面上点）用，由调用方判，执行器不认平台。
+   */
+  applyApproval(item_id: string, opts?: { skip_cancel_window?: boolean }): Promise<ApprovalItem>
 }
 
 export interface GuardrailEvaluator {

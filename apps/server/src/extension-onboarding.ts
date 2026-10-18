@@ -34,6 +34,8 @@ export interface ExtensionOnboardingOptions {
   heldRoleIds(workspace_id: string, person_id: string): string[]
   /** 这个品牌有没有一个没撤掉的插件配上了。 */
   paired(workspace_id: string): boolean
+  /** WP409：配上的是哪一个（最近配的那把；没配上回 undefined）。不给 = 不说。 */
+  pairedWith?(workspace_id: string): ExtensionNeedsView['paired_with']
   /** 配对之后那一步做完没有（查不了回 `undefined`）。 */
   stepDone(workspace_id: string, step: ExtensionFollowStep): Promise<boolean | undefined>
   /** 一张方案卡的设置目标（没登记回 `undefined`）。 */
@@ -102,6 +104,8 @@ export function createExtensionOnboarding(
   ): Promise<ExtensionNeedsView> => {
     const ws = actor.workspace_id
     const defs = defsOf(role_ids ?? options.heldRoleIds(ws, actor.person_id))
+    const pairedWith = options.paired(ws) ? options.pairedWith?.(ws) : undefined
+    const withWhom = pairedWith === undefined ? {} : { paired_with: pairedWith }
     const need = extensionNeedOf(defs)
     if (need === undefined)
       return {
@@ -109,6 +113,7 @@ export function createExtensionOnboarding(
         uses: [],
         roles: [],
         paired: options.paired(ws),
+        ...withWhom,
         steps: [],
         plans: [],
         snoozed: false,
@@ -131,6 +136,7 @@ export function createExtensionOnboarding(
         .filter((d) => need.role_ids.includes(d.id))
         .map((d) => ({ role_id: d.id, name: { zh: d.name.zh, en: d.name.en ?? d.name.zh } })),
       paired: options.paired(ws),
+      ...withWhom,
       steps,
       plans,
       snoozed: options.snoozedToday(ws),

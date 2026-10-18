@@ -59,6 +59,10 @@ import {
   StandInDataError,
   StandInWallet,
 } from '@agentsws/stand-ins'
+import {
+  type OfficialContentStandInOptions,
+  officialContentStandIn,
+} from './official-content-stand-in.js'
 import { type PremiumThemeStandIn, premiumThemeStandIn } from './premium-theme-stand-in.js'
 import {
   type ShopifyCloudStandIn,
@@ -90,6 +94,11 @@ export interface CloudStandInOptions {
    * WP390：工坊服务（`/v1/services*`）那几条。`scope_missing` = 演老令牌缺 `services` 动作集（403 +
    * `required_scope`，决策 1098）；`services` = 换一份目录（默认示意三项）。
    */
+  /**
+   * WP406（私有 docs/107）：云上「岗位更新」那几条（`/v1/content/*`）。截图脚本现打、现签一份包传进来；
+   * 不给 = 像还没开通的云一样回 404。
+   */
+  officialContent?: OfficialContentStandInOptions
   services?: {
     scope_missing?: boolean
     catalog?: ServiceView[]
@@ -198,7 +207,8 @@ function respondBytes(
     json: async () => {
       throw new Error('不是 JSON')
     },
-    arrayBuffer: async () => bytes.slice().buffer as ArrayBuffer,
+    // WP406：`Buffer#slice` 是视图、`.buffer` 会带上整个内存池——拷一份正好这么长的
+    arrayBuffer: async () => new Uint8Array(bytes).buffer as ArrayBuffer,
     headers: { get: (name) => lower.get(name.toLowerCase()) ?? null },
   }
 }
@@ -556,6 +566,12 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
             premiumSpent = round(premiumSpent + credits)
           },
         })
+
+  /** WP406：岗位更新（订阅、清单、签名、文件、摘要）。 */
+  const official =
+    options.officialContent === undefined
+      ? undefined
+      : officialContentStandIn(options.officialContent, now)
 
   /** WP390：工坊服务（示意目录；托管从上面那份合成余额里扣、退回加回）。 */
   let servicesScopeMissing = options.services?.scope_missing === true
@@ -1001,6 +1017,14 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (token === undefined || !workspaceTokens.has(token))
         return fail(401, 'unauthenticated', '令牌无效')
       const out = premium.handle(method, path, url.searchParams, body)
+      if (out?.bytes !== undefined) return respondBytes(out.status, out.bytes, out.headers ?? {})
+      if (out !== undefined) return respond(out.status, out.body)
+    }
+    // ── WP406：岗位更新（只认替身签过的工作区令牌）
+    if (path.startsWith('/v1/content/') && official !== undefined) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      const out = official.handle(method, path, url.searchParams)
       if (out?.bytes !== undefined) return respondBytes(out.status, out.bytes, out.headers ?? {})
       if (out !== undefined) return respond(out.status, out.body)
     }

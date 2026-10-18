@@ -72,7 +72,8 @@ const BASE_TOOL_DEFS: readonly ToolDef[] = [
       '按时间窗筛（按平台上的发出时间），回计数（帖子 / 评论、自家 / 外部、有效 VOC / UGC）和原文引用（作者、地点、时间、链接）；' +
       '可按判断档（follow_up 需跟进 / no_action 日常讨论无需处理 / low_relevance 相关度不高不建议回复）、话题、关键词、' +
       '有效 VOC / UGC、「优先」（命中告警词）、本地标签筛，group_by=topic 按话题归组（每组带 post / comment 数和组里最重的判断档）。' +
-      '只读；数字是数出来的，写报告时照抄，不要估。被删的原文照样计数但不引用。结果里的 window.start_date 可作发布报告的 period_start。',
+      '只读；数字是数出来的，写报告时照抄，不要估。被删的原文照样计数但不引用。结果里的 window.start_date 可作发布报告的 period_start。' +
+      '结果里带 coverage 时（这段时间某一块没采过），照实告诉用户那是「没采到」不是 0，并可用 run_watch_now 带 since / until 回补。',
     input_schema: {
       type: 'object',
       properties: {
@@ -117,11 +118,27 @@ const BASE_TOOL_DEFS: readonly ToolDef[] = [
     name: RUN_WATCH_NOW_TOOL,
     description:
       '现在巡查一次（收件箱、自家版块、外部关键词），等它做完再回（最多等几分钟；已经在跑的那一轮直接等它）。' +
-      '出报告前想要最新数据时用；没读成的那几块会照实说，照样可以用已入库的数据出报告。只读；外部关键词按条计积分。',
+      '出报告前想要最新数据时用；没读成的那几块会照实说，照样可以用已入库的数据出报告。只读；外部关键词按条计积分。' +
+      '要补一段过去的时间（用户说「补一下 10-11 到 10-16」、出上一期报告而那段没采过）：给 since / until，' +
+      '先带 preview=true 拿到那一句计划（「要补 X 天，约 N 页，在你浏览器里读」），原样告诉用户，然后不用等确认、' +
+      '去掉 preview 再调一次照做（在用户的浏览器里借品牌号只读，不扣积分）。补不了会回原因（message）和能做的（can），' +
+      '照实转告，不要只说库里 0 条。',
     input_schema: {
       type: 'object',
       properties: {
         platform: { type: 'string', description: '哪个平台（不给 = 这个岗位配的那一个）' },
+        since: {
+          type: 'string',
+          description: '回补起点：本地日期 YYYY-MM-DD 或 ISO 时间（不给 = 只巡查新的）',
+        },
+        until: {
+          type: 'string',
+          description: '回补终点：本地日期 YYYY-MM-DD（含那一天）或 ISO 时间（不给 = 现在）',
+        },
+        preview: {
+          type: 'boolean',
+          description: 'true = 只回那一句回补计划，不读（先说给用户听，再去掉它照做）',
+        },
       },
     },
   },

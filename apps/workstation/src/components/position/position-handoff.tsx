@@ -2,7 +2,7 @@
  * 岗位页的输入框（WP241「交给它」→ WP287 Luoye 10-09 真机后重做）。
  *
  * - **和事项页 / 随便聊同一个输入框**（`MatterComposer`：发送是框内的箭头，不写「交给它」；
- *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。岗位页没有「私聊 AI」——这里发出去就是开一段会话。
+ *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。这里发出去就是开一段会话。
  * - WP291（决策 356）：发出去服务端三分——**当场问答**就在框下面答（`QuickAnswer`：一句话 + 组件）；
  *   **会话 / 任务**马上进它的线程。框里的字发出去就清，等回答时框下出「…」。
  * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
@@ -13,6 +13,9 @@
  * 运行拿到「话 + 附件」。只附不说话时用「看一下附上的资料：…」当这句话。
  *
  * `hero`：新岗位、什么都还没有时（`position-v2-empty.html`），它放大当主角。
+ *
+ * **WP412（真机 10-18 #12）**：职责页也用这一个对话框（给 `role_id`）——发出去钉到这条职责
+ * （服务端照样三分），快捷按钮只取这条职责的提示，当场回答只出在这条职责上问的。
  */
 import { Send } from 'lucide-react'
 import { useState } from 'react'
@@ -37,10 +40,13 @@ export function PositionHandoff({
   id,
   view,
   hero = false,
+  role_id,
 }: {
   id: string
   view: PositionInstanceData
   hero?: boolean
+  /** WP412：职责页上用——钉到这条职责。 */
+  role_id?: string
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [text, setText] = useState('')
@@ -53,7 +59,10 @@ export function PositionHandoff({
     setText('')
   })
 
-  const mine = view.roles.filter((r) => r.my_assignment_id !== undefined)
+  const mine = view.roles.filter(
+    (r) => r.my_assignment_id !== undefined && (role_id === undefined || r.role_id === role_id),
+  )
+  const pin = role_id === undefined ? {} : { role_id }
   // 建议只从本人那几条职责来（54 §1：拿别人那条去开就是借岗位扩权）
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
@@ -69,7 +78,7 @@ export function PositionHandoff({
     (prompt) => {
       clearError()
       setStarted(true)
-      open.mutate({ title: prompt.slice(0, TASK_TEXT_MAX), model, files: [] })
+      open.mutate({ title: prompt.slice(0, TASK_TEXT_MAX), model, files: [], ...pin })
     },
   )
 
@@ -87,7 +96,7 @@ export function PositionHandoff({
     setStarted(true)
     const files = attached.take().map((d) => ({ name: d.name, data: d.data }))
     open.mutate(
-      { title, model, ...(effort === undefined ? {} : { effort }), files },
+      { title, model, ...(effort === undefined ? {} : { effort }), files, ...pin },
       {
         // WP259：没交出去，字放回框里（框下说一句人话）；WP357：附件也放回去
         onError: () => {
@@ -102,6 +111,7 @@ export function PositionHandoff({
     <section
       data-testid="position-handoff"
       data-hero={hero ? 'true' : 'false'}
+      data-role={role_id}
       className={
         hero
           ? 'flex flex-col gap-3 rounded-2xl border bg-card p-6 shadow-sm'
@@ -124,15 +134,12 @@ export function PositionHandoff({
         onStop={() => undefined}
         running={false}
         closed={false}
-        privateMode={false}
-        onTogglePrivate={() => undefined}
         // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
         suggestion={suggestions[0]?.prompt}
         sending={false}
         docked={false}
-        showPrivate={false}
         placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
-        label={t('position.entry.title')}
+        label={t(role_id === undefined ? 'position.entry.title' : 'duty.entry.title')}
         testId="position-entry-input"
         modelSlot={
           <ComposerModelPicker
@@ -162,7 +169,7 @@ export function PositionHandoff({
       */}
       {started ? null : <LandingActions actions={actions} />}
       {/* WP291：当场回答（输入框之下、要你处理之上）；会话 / 任务这里不画，直接进线程 */}
-      <QuickAnswer position={id} />
+      <QuickAnswer position={id} {...pin} />
       {hero ? (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('pos2.handoff.first.note')}

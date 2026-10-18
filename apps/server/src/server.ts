@@ -139,6 +139,7 @@ import {
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
   normalizeGenuiHost,
+  OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   platformKitOf,
@@ -154,6 +155,7 @@ import {
   evaluateGuardrail,
   extractFigures,
   isInstructionRuleCard,
+  registerContentTableProvider,
   resolveTimeZone,
   roleRulesSection,
   uncitedFigures,
@@ -170,9 +172,12 @@ import {
 import type { OfficialSelector } from '@agentsws/dsh-adapter/official-schedule'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
+  canActivatePackEntry,
   cardsToPack,
   createKnowledge,
   type Knowledge,
+  packEntryToCard,
+  parseKnowledgePack,
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
@@ -464,6 +469,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
+import { createExtensionPanelPort, withApprovalVia } from './extension-panel.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -548,6 +554,12 @@ import {
 } from './models.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
+import {
+  createOfficialContent,
+  OFFICIAL_CONTENT_DIR,
+  type OfficialContent,
+  type OfficialContentOptions,
+} from './official-content.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import {
   createOnboarding,
@@ -600,6 +612,7 @@ import {
 } from './peers.js'
 import {
   createFilePersonaBackend,
+  createMemoryPersonaBackend,
   createPersonas,
   PersonaError,
   type PersonasAssembly,
@@ -680,12 +693,14 @@ import {
 import {
   createRedditWatch,
   createRedditWatchStore,
+  type RedditWatchAssembly,
   redditWatchPort,
   redditWatchSourceOf,
 } from './reddit-watch/index.js'
 import { modelRedditDrafter } from './reddit-write/draft.js'
 import { createRedditLimits } from './reddit-write/limits.js'
 import { redditParentLinker } from './reddit-write/parent-link.js'
+import { createRedditPersona, REDDIT_PERSONA_TARGET } from './reddit-write/persona.js'
 import {
   createRedditWriteService,
   isRedditWriteCard,
@@ -1293,6 +1308,20 @@ export interface ServerOptions {
     schedule?: boolean
   }
   /**
+   * WP406（私有 docs/107）：官方订阅的岗位更新（测试 / demo 用：现生成的钥匙、临时存放处、AI 一句建议的替身）。
+   * 生产不传：开关同内容更新（`AGENTSWS_CONTENT_UPDATES=on`），钥匙用内置公钥 `OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS`，
+   * 存放处在 `content-updates/official/`，取数经品牌的云连接（`/v1/content/official/*`）。
+   */
+  officialContent?: {
+    enabled?: boolean
+    root?: string
+    keys?: readonly ContentPublicKey[]
+    appVersion?: string
+    schedule?: boolean
+    advise?: OfficialContentOptions['advise']
+    aiMerge?: OfficialContentOptions['aiMerge']
+  }
+  /**
    * WP216：检测本机平台 CLI 用的子进程（测试 / demo 换成替身，不跑真的 `shopify`）。
    * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
    */
@@ -1668,6 +1697,8 @@ export interface Server {
    * 设置里那一行不出，卡也不会出。
    */
   contentUpdates?: ContentUpdates
+  /** WP406（私有 docs/107）：官方订阅的岗位更新（存放处在才有；截图脚本 / 测试直接调 `check()`）。 */
+  officialContent?: OfficialContent
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /** WP181：官方「自动化任务」包的那一层（四个工具的执行器、到点的处理器、`scheduled_task` 卡）。 */
@@ -2905,8 +2936,172 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
   // 启动：各品牌更新过的基础层装回技能库（软件自带版追上了就丢掉覆盖）
   await contentUpdates?.restore()
-  const contentWrap = <B extends ApprovalBus>(bus: B): B =>
-    contentUpdates === undefined ? bus : contentUpdates.wrap(bus)
+
+  /*
+   * WP406（私有 docs/107）：**官方订阅的岗位更新**。开关同上（装好的桌面版才开）；存放处在内容更新底下的
+   * `official/`；验签只认官方那张公钥表。出卡走同一条审批总线（「全部应用 / 这次跳过」在 `officialContent.wrap` 里接住）。
+   * 公司改的角色定位那一层（`personas.json`）在这里先建好，官方更新与 `personas.ts` 用同一份。
+   */
+  const personaBackend =
+    dbDir === undefined
+      ? createMemoryPersonaBackend()
+      : createFilePersonaBackend(personaFileIn(dbDir))
+  const officialOpts = options.officialContent
+  const officialRoot =
+    officialOpts?.root ??
+    (contentRoot === undefined ? undefined : join(contentRoot, OFFICIAL_CONTENT_DIR))
+  const officialEnabled = officialOpts?.enabled ?? contentEnabled
+  const officialKeys = officialOpts?.keys ?? OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS
+  const officialAppVersion = officialOpts?.appVersion ?? contentAppVersion
+  const officialOff = !officialEnabled
+    ? '这台没开岗位更新（装好的桌面版才开）。'
+    : officialKeys.length === 0
+      ? CONTENT_REJECT_TEXT.no_keys
+      : undefined
+  /** 品牌负责人那条分配（AI 一句建议 / 合一版记账记在它头上）。 */
+  const ownerAssignmentOf = async (ws: WorkspaceId) => {
+    const owner = (await identity.getWorkspace(ws))?.owner_id
+    if (owner === undefined) return undefined
+    return roles.assignments
+      .listByPerson(owner, { workspace_id: ws, role_id: 'common.owner' })
+      .find((a) => a.revoked_at === undefined)
+  }
+  /** 品牌默认模型的一次短问答（没接真模型就 `undefined`——卡上不写那句建议）。 */
+  const officialModelText = async (
+    ws: WorkspaceId,
+    prompt: string,
+    run: string,
+  ): Promise<string | undefined> => {
+    const own = ws === workspace.id
+    const models = own ? boot.ownModels : await brandModules.models(ws)
+    const ref = models.configured() ? models.defaultRef() : undefined
+    const asg = await ownerAssignmentOf(ws)
+    if (ref === undefined || ref.provider === 'stub' || asg === undefined) return undefined
+    const gateway = own ? boot.ownGateway : await brandModules.gateway(ws)
+    const completion = await gateway.complete({
+      messages: [{ role: 'user', content: prompt }],
+      meta: {
+        workspace_id: ws,
+        assignment_id: asg.id,
+        role_id: asg.role_id,
+        run_id: `${run}_${suggestSha(prompt).slice(0, 16)}` as never,
+        purpose: 'extraction',
+      },
+      model: ref,
+      max_output_tokens: SUGGEST_MAX_OUTPUT_TOKENS,
+      thinking: 'off',
+    })
+    return completion.text
+  }
+  let officialContent: OfficialContent | undefined
+  if (officialRoot !== undefined)
+    officialContent = createOfficialContent({
+      root: officialRoot,
+      appVersion: officialAppVersion,
+      channel: contentChannelOf(officialAppVersion),
+      keys: officialKeys,
+      clock,
+      registry: skills.registry,
+      bootWorkspace: workspace.id,
+      brands: contentBrands,
+      positions: (ws) => {
+        const held = new Set(
+          roles.assignments
+            .listByWorkspace(ws)
+            .filter((a) => a.revoked_at === undefined)
+            .map((a) => String(a.role_id)),
+        )
+        return org
+          .positions()
+          .filter((p) => p.roles.some((r) => !r.role.startsWith('common.') && held.has(r.role)))
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            roles: p.roles.map((r) => String(r.role)),
+            ...(p.supervisor_person_id === undefined
+              ? {}
+              : { supervisor_person_id: p.supervisor_person_id }),
+          }))
+      },
+      company: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
+      isOwner: async (ws, person) =>
+        roles.assignments
+          .listByPerson(person, { workspace_id: ws, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      platformOf: (ws) => brandProfileOf(ws).storefront_platform,
+      cloud: (ws) => brandModules.cloud(ws),
+      approvals: () => approvalsForContent,
+      appendEvent,
+      roles: { get: (id) => roles.roles.get(id), register: (def) => roles.roles.register(def) },
+      personas: {
+        get: (subject) =>
+          personaBackend
+            .all()
+            .find((r) => r.subject.kind === subject.kind && r.subject.id === subject.id),
+        put: (row) => personaBackend.put(row),
+        remove: (subject) => personaBackend.remove(subject),
+      },
+      knowledge: {
+        // 官方知识包：照知识包 v1 的规矩逐条提议，够格的才激活（承诺类一律落候选）
+        import: async (ws, files) => {
+          const asg = await ownerAssignmentOf(ws)
+          const parsed = parseKnowledgePack([...files])
+          if (asg === undefined || !parsed.ok) return []
+          const ids: string[] = []
+          for (const entry of parsed.entries) {
+            const card = await knowledge.store.propose(
+              packEntryToCard(entry, {
+                workspace_id: ws,
+                owner: asg.person_id,
+                scope: [],
+                created_by_id: asg.id,
+                at: clock.now(),
+              }),
+            )
+            ids.push(card.id)
+            if (canActivatePackEntry(entry))
+              await knowledge.store.activate(card.id, asg.person_id, { by_agent: true })
+          }
+          return ids
+        },
+        retire: async (ws, ids) => {
+          const asg = await ownerAssignmentOf(ws)
+          if (asg === undefined) return
+          for (const id of ids)
+            await knowledge.store.retire(id, asg.person_id).catch(() => undefined)
+        },
+      },
+      advise:
+        officialOpts?.advise ??
+        (async (ws, input) => {
+          const lines = input.items.map((i) => `- ${i.title}（${i.summary}；${i.mine}）`).join('\n')
+          const text = await officialModelText(
+            ws,
+            `你是「${input.position}」岗位的助手。官方这周给这个岗位更新了下面几项（括号里是改了什么、和用户自己改过的关系）：\n${lines}\n\n用一句不超过 40 个字的中文给负责人一个建议（要不要全部应用、哪几项值得留意）。只回这一句，不要解释。`,
+            'content_digest_advice',
+          )
+          return text?.split('\n')[0]?.trim()
+        }),
+      aiMerge:
+        officialOpts?.aiMerge ??
+        (async (ws, input) =>
+          officialModelText(
+            ws,
+            `下面是「${input.label}」这一段的三个版本。请把「用户的版本」里用户自己加的意思，合进「官方新版」里，出一段合好的正文。只回合好的正文，不要解释、不要加标题。\n\n【原来】\n${input.before ?? '（没有）'}\n\n【官方新版】\n${input.after ?? '（删掉了）'}\n\n【用户的版本】\n${input.mine ?? '（没有）'}`,
+            'content_ai_merge',
+          )),
+      ...(officialOff === undefined ? {} : { off: officialOff }),
+    })
+  // 启动：应用过的官方版装回去（技能库、职责定义）；规则表经读取口按品牌覆盖
+  await officialContent?.restore()
+  if (officialContent !== undefined) {
+    const oc = officialContent
+    registerContentTableProvider((table, brand) => oc.tableRows(brand as WorkspaceId, table))
+  }
+  const contentWrap = <B extends ApprovalBus>(bus: B): B => {
+    const inner = contentUpdates === undefined ? bus : contentUpdates.wrap(bus)
+    return officialContent === undefined ? inner : officialContent.wrap(inner)
+  }
 
   const approvals = seoDecided(
     // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
@@ -2946,18 +3141,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   outboundWithdraw = async (id) => {
     if (approvals.expireNow !== undefined) await approvals.expireNow(id, '记录去处已删')
   }
-  // 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器
+  /*
+   * 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器。
+   * WP406（私有 docs/107 §15 连带改动）：内容只从「官方订阅」那条路收——docs/90 的公开通道代码留着，**不再定时查**
+   * （测试 / demo 显式给 `schedule: true` 才查）；官方那条照同一个节奏查。
+   */
   const contentTimers: ReturnType<typeof setTimeout>[] = []
-  if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule !== false) {
-    const run = (): void => {
-      void contentUpdates.check().catch(() => undefined)
-    }
+  const every6h = (run: () => void): void => {
     const first = setTimeout(run, 30_000)
     const every = setInterval(run, CONTENT_CHECK_INTERVAL_MS)
     first.unref?.()
     every.unref?.()
     contentTimers.push(first, every)
   }
+  if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule === true)
+    every6h(() => {
+      void contentUpdates.check().catch(() => undefined)
+    })
+  if (
+    officialContent !== undefined &&
+    officialOff === undefined &&
+    officialOpts?.schedule !== false
+  )
+    every6h(() => {
+      void officialContent?.check().catch(() => undefined)
+    })
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
   //
   // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
@@ -3304,7 +3512,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     roles,
     positions: () => org.positions(),
-    ...(dbDir === undefined ? {} : { backend: createFilePersonaBackend(personaFileIn(dbDir)) }),
+    backend: personaBackend,
+    // WP406：官方岗位内容应用过的岗位角色定位当「包里的原文」（公司按段改的照旧叠上）
+    packagedPositionPersona: (id) => officialContent?.positionPersona(id),
     // WP276（决策 243 / 274 第 4 条）：② 同事互联里角色定位谁都能改（留名字、同岗位的人可撤回）
     isOwner: (person_id) =>
       modeOfWorkspaceSync?.(workspace.id) === 'peers' ||
@@ -3653,6 +3863,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.adsData !== undefined) assembly.registerTarget(brand.adsData.setupTarget())
     // WP338（决策 783）：Reddit 每天上限（默认不限；人说要设 / 改时才出卡）
     if (brand.redditLimits !== undefined) assembly.registerTarget(brand.redditLimits.setupTarget())
+    // WP411：品牌号怎么说话（巡查出的要回条目起草前要先定）
+    if (brand.redditPersona !== undefined)
+      assembly.registerTarget(brand.redditPersona.setupTarget())
     /*
      * WP385（决策 1076 → 690）：网站体检设置（商品 feed、其他平台上架页、两张清单的加减）在对话里说一句、
      * 卡上点头就存；存好在后台重新体检一次（同一时间只跑一次），原来那件事按原话接着做。
@@ -3675,6 +3888,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (brand.amazonListing !== undefined)
       assembly.registerTarget(brand.amazonListing.setupTarget())
     setupCards.set(ws, assembly)
+    // WP410（真机 #5）：升级迁移——旧版留下的空表单配置卡作废、没设好的换成方案卡（每个品牌一次）
+    void assembly.migrateLegacy?.().catch(() => undefined)
     return assembly
   }
   /** WP386（docs/103 S5）：这个品牌连过任一 Google 服务没有（有 = Google 账号这一步算过了）。 */
@@ -4154,6 +4369,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       nowMs: () => Date.parse(clock.now()),
       ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
     })
+    /*
+     * WP411（客户 10-18 #11）：品牌号在 Reddit 上怎么说话（个人 / 团队口吻）——没配之前巡查出的要回条目不起草，
+     * 先出设置卡（AI 从品牌号以前发过的话里猜一个建议）；存好就把等着的条目重新交给起草。
+     */
+    const redditPersona = createRedditPersona({
+      nowMs: () => Date.parse(clock.now()),
+      ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+      history: () =>
+        (redditWatchLate.current?.items({ limit: 500 }) ?? [])
+          .filter((x) => x.ours === true && x.deleted !== true && x.text.trim() !== '')
+          .map((x) => x.text),
+      onSet: () => {
+        redditWatchLate.current?.redispatch()
+      },
+    })
+    const redditWatchLate: { current: RedditWatchAssembly | undefined } = { current: undefined }
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
     // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
@@ -5421,6 +5652,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     redditWrites = createRedditWriteService({
       // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
       limits: redditLimits,
+      // WP411：品牌号怎么说话（没配 → 自动起草先不出卡，宿主出设置卡）
+      persona: () => redditPersona.get(),
       workspace_id: ws,
       clock,
       approvals: txn.approvals,
@@ -5497,7 +5730,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         apiConnected: () => socialChannels.transport.connected('reddit'),
         officialReady: () => redditOfficial?.port.ready() === true,
       }),
-      record: (input) => outboundLog.record(ws, input),
+      // WP413：发出记录那一行补上「在哪儿批的」（在插件侧边栏里批的记 extension）
+      record: (input) =>
+        outboundLog.record(
+          ws,
+          withApprovalVia(input, (id) => txn.runtime.store.getApproval(id)),
+        ),
       // 批了过取消窗口由执行器施行（交给插件）；每分钟补扫一遍（重启后 / 定时器丢了也接得上）
       applyApproval: (id) => txn.executor.applyApproval(id),
       cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
@@ -6198,6 +6436,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                       limiter: redditReadLimiterOf(readonlyBrowser),
                     }),
                 nowMs: () => Date.parse(clock.now()),
+                // WP411：since / until 写成本地日期时按品牌时区算
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
                 /*
                  * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
                  * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
@@ -6398,6 +6638,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             storefrontPlatform: () => brandPlatformOf(ws),
             // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
             timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+            // WP410（真机 #9）：当前设置快照（Reddit 巡查的连接与设置原值；只给登记了的职责）
+            setupState: async ({ role_id }) => (await setupCardsOf(ws))?.stateFor?.(role_id),
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
             automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
@@ -8261,6 +8503,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   : { competitors: full.competitors.map((c) => c.name) }),
               }
             },
+            // WP411：品牌名的写法变体（档案里的品牌词）与竞品名——外部关键词整词匹配、外部帖闸用
+            brandTerms: () => {
+              const full = onboardingRef?.brandProfile(ws)
+              return {
+                ...(full?.keywords?.brand === undefined
+                  ? {}
+                  : { brand_names: full.keywords.brand }),
+                ...(full?.competitors === undefined
+                  ? {}
+                  : { competitors: full.competitors.map((c) => c.name) }),
+              }
+            },
             setupCards: () => setupCardsOf(ws),
             actor: () => {
               const h = redditHolder()
@@ -8372,7 +8626,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ...(options.competitorAdapters?.(ws) ?? {}),
             }),
             extraOwnRef: async () => competitorStore?.ownRef(),
-            extraOwnLowest: async () => competitorStore?.ownLowest(),
             afterRun: async (run) => competitorStore?.afterRun(run),
           })
     if (competitorWatch !== undefined) {
@@ -8458,9 +8711,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
         reader: () => amazonFront,
       })
+    redditWatchLate.current = redditWatch
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
+     * WP411（#11）：交过来之前巡查那边已按全名去重、读过整串；这里带上整串起草——品牌号已经回过这一条的不起草
+     * （条目标「回过了」并写明）；品牌号怎么说话还没定 → 一条都不起草，先出设置卡（定了再交回来）。
+     * 决策 1199：重写一次后还和品牌号说过的矛盾 → 不出卡，条目留在待处理、标「和你 <日期> 说的矛盾，要你看」。
      */
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()
@@ -8471,17 +8728,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         assignment_id: holder.id,
         role_id: holder.role_id,
       }
+      if (redditPersona.get() === undefined) {
+        if (redditPersona.shouldAsk())
+          void (async () =>
+            (await setupCardsOf(ws))
+              ?.askSetup({ target: REDDIT_PERSONA_TARGET, actor })
+              .catch(() => undefined))()
+        return
+      }
       void (async () => {
         for (const entry of entries) {
           if (entry.status !== 'open') continue
           const target = redditTargetFromItem(entry)
           if (target === undefined) continue
-          await redditWrites
+          const thread = redditWatch.thread(entry.id)
+          const got = await redditWrites
             ?.draftAndStage(actor, {
               target,
               ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
+              ...(thread === undefined ? {} : { thread }),
             })
             .catch(() => undefined)
+          if (got !== undefined && !got.staged && got.skipped === 'already_replied')
+            redditWatch.setStatus(entry.id, 'done', { note: got.message })
+          // 决策 1199：和品牌号说过的矛盾 → 不出卡，条目留在待处理里「和你 <日期> 说的矛盾，要你看」
+          if (got !== undefined && !got.staged && got.skipped === 'contradiction')
+            redditWatch.setStatus(entry.id, 'open', {
+              note: got.message,
+              ...(got.conflict === undefined ? {} : { conflict: got.conflict }),
+            })
         }
       })()
     })
@@ -8778,6 +9053,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(amazonFront === undefined ? {} : { amazonFront }),
       ...(hostedBoot !== undefined ? {} : { amazonOwnBrowser, amazonBlock }),
       redditLimits,
+      redditPersona,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
@@ -9621,6 +9897,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     await ensureBrandTasks(ws)
     await applyRoleGates(ws)
     await retireTasks(ws)
+    // WP410（真机 #5）：配置卡装配懒建时跑一次升级迁移（旧版空表单卡作废、换方案卡）——开机就建，不等第一次出卡
+    void setupCardsOf(ws).catch(() => undefined)
   }
 
   /**
@@ -12589,6 +12867,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         .filter((a) => a.revoked_at === undefined)
         .map((a) => a.role_id),
     paired: (ws) => extensionPairedRef?.(ws as WorkspaceId) === true,
+    // WP409：配上的是哪一把（最近配的、没撤的）——工坊那一行「插件已连上 · Chrome · Windows」
+    pairedWith: (ws) => {
+      const live = extensionStore
+        .list(ws as WorkspaceId)
+        .filter((t) => t.revoked_at === undefined)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+      return live === undefined
+        ? undefined
+        : {
+            label: live.label,
+            paired_at: live.created_at,
+            ...(live.last_used_at === undefined ? {} : { last_used_at: live.last_used_at }),
+          }
+    },
     stepDone: async (ws, step) => {
       const brand = await brandModules.forWorkspace(ws as WorkspaceId).catch(() => undefined)
       if (step === 'reddit') {
@@ -13275,6 +13567,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         }),
     /*
+     * WP406（私有 docs/107）：岗位更新。**按品牌、按岗位**；谁能应用 / 退回在引擎里判一处（公司模式只有品牌负责人
+     * 与这个岗位的负责人）。
+     */
+    ...(officialContent === undefined
+      ? {}
+      : (() => {
+          const oc = officialContent
+          const ws = (a: { workspace_id: string }) => a.workspace_id as WorkspaceId
+          const who = (a: { person_id: string }) => a.person_id as PersonId
+          return {
+            contentDigest: {
+              view: (a, pos) => oc.view(ws(a), pos, who(a)),
+              setPolicy: (a, pos, policy) => oc.setPolicy(ws(a), pos, who(a), policy),
+              diff: (a, pos, id) => oc.diff(ws(a), pos, id),
+              apply: (a, pos, input) => oc.apply(ws(a), pos, who(a), input),
+              skip: (a, pos) => oc.skip(ws(a), pos, who(a)),
+              aiMerge: (a, pos, input) => oc.aiMerge(ws(a), pos, who(a), input),
+              rollback: (a, pos, input) => oc.rollback(ws(a), pos, who(a), input),
+              dismissNudge: (a, pos) => oc.dismissNudge(ws(a), pos, who(a)),
+              subscription: (a) => oc.subscription(ws(a)),
+              subscribe: (a) => oc.subscribe(ws(a), who(a)),
+              check: async () => {
+                const r = await oc.check()
+                return { state: r.state, carded: r.carded.length, applied: r.applied.length }
+              },
+            } satisfies NonNullable<GatewayDeps['contentDigest']>,
+          }
+        })()),
+    /*
      * WP216：平台专属那一套（官方技能 / Dev MCP / 官方 CLI 卡）。**按品牌档案**判断平台；
      * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。
      */
@@ -13826,6 +14147,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ) => (await of(ws)).setRule(patch),
             }
           })(),
+          // WP413：插件常驻侧边栏 `/v1/extension/panel*`（进度 / 要你处理 / 记录；卡由路由从审批总线取）
+          extensionPanel: createExtensionPanelPort({
+            now: () => clock.now(),
+            tzOffsetMinutes: (ws) => outboundTz.get(ws) ?? 0,
+            workspaceName: async (ws) => (await identity.getWorkspace(ws))?.name,
+            watch: async (ws) => (await brandModules.forWorkspace(ws)).redditWatch,
+            writes: async (ws) => (await brandModules.forWorkspace(ws)).redditWrites,
+            outbound: outboundLog,
+            // 插件里点「填进页面」：批完马上交出去，不等取消窗口（发送那一下仍由人在 Reddit 上点）
+            applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+          }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {
             const rw = (await brandModules.forWorkspace(ws)).redditWatch
@@ -14228,6 +14560,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudAccount,
     pricingCatalog,
     ...(contentUpdates === undefined ? {} : { contentUpdates }),
+    ...(officialContent === undefined ? {} : { officialContent }),
     schedule,
     automation,
     reconcile,

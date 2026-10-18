@@ -12031,7 +12031,15 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["skill", "role", "declarative"]
+            "enum": [
+              "skill",
+              "knowledge",
+              "role",
+              "declarative",
+              "role_content",
+              "position_content",
+              "rules"
+            ]
           },
           "name": {
             "type": "string",
