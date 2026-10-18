@@ -44,6 +44,10 @@ The Content & search duty page gets one more block: sales and revenue from ChatG
 
 ## Lists, feeds and marketplace pages
 
-The AI crawler and AI source lists are data and are updated with the app. By default we compare the product page, the structured data and your store's public product data; your product feed and marketplace listings are compared only once their addresses are added — the place to add them is still being built, so for now they're simply skipped, never counted as "missing".
+The AI crawler and AI source lists are data and are updated with the app. By default we compare the product page, the structured data and your store's public product data; your product feed and marketplace listings are compared only once their addresses are added — until then they're skipped, never counted as "missing".
+
+**Just say it in the chat**: in a Website operations or Content & search conversation, say something like "our Google product feed is https://…", "our Amazon listing is https://…, it's power-bank-20000 in our store", "stop checking GPTBot" or "count Kimi as an AI source". A card shows just what will change; click "Looks good" to save it, and the site is checked again with the new settings.
+
+To ask "can AI get into our site?" or "how many orders did AI bring last week?", just ask in the chat — the assistant reads the latest check to answer.
 
 Ideas from Aleyda Solis' *AI Search Optimization Checklist*; the crawler list draws on the open-source ai.robots.txt project and each vendor's documentation.

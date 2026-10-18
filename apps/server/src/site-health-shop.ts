@@ -20,6 +20,18 @@ export const HEALTH_PRODUCTS = `query AgentswsHealthProducts($first: Int!) {
   }
 }`
 
+/** WP385：设置里填了上架页的那几件（按 handle 补读；字段同上）。 */
+export const HEALTH_PRODUCTS_BY_HANDLE = `query AgentswsHealthProductsListed($first: Int!, $query: String!) {
+  shop { name currencyCode }
+  products(first: $first, query: $query) {
+    nodes { id title handle onlineStoreUrl descriptionHtml vendor productType
+      featuredMedia { preview { image { url } } }
+      options { name }
+      variants(first: 50) { nodes { id title sku price barcode availableForSale } }
+    }
+  }
+}`
+
 export const AI_TRAFFIC_ORDERS = `query AgentswsAiTrafficOrders($first: Int!, $after: String, $query: String) {
   shop { currencyCode }
   orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {

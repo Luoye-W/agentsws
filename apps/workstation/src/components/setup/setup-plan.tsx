@@ -19,7 +19,7 @@ import { ArrowRight, ExternalLink } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
-import { SetupFieldsBody } from './setup-card'
+import { SetupFieldsBody, useFieldText } from './setup-card'
 
 type T = ReturnType<typeof useApp>['t']
 
@@ -65,7 +65,17 @@ function Sources({ sources }: { sources: readonly SetupSource[] }): ReactNode {
   )
 }
 
-function Row({ field, change, t }: { field: SetupField; change: boolean; t: T }): ReactNode {
+function Row({
+  field,
+  change,
+  label,
+  t,
+}: {
+  field: SetupField
+  change: boolean
+  label: string
+  t: T
+}): ReactNode {
   const value = shown(field, field.suggested, t)
   const needsYou = field.needs_you === true && value === undefined
   return (
@@ -76,7 +86,7 @@ function Row({ field, change, t }: { field: SetupField; change: boolean; t: T })
       {...(needsYou ? { 'data-needs-you': 'true' } : {})}
     >
       <div className="flex items-baseline gap-2">
-        <span className="w-24 shrink-0 text-xs text-ws-muted-fg">{field.label}</span>
+        <span className="w-24 shrink-0 text-xs text-ws-muted-fg">{label}</span>
         <span className="min-w-0 flex-1 text-sm break-words text-ws-ink">
           {change ? (
             <span className="inline-flex flex-wrap items-center gap-1">
@@ -127,6 +137,7 @@ export function SetupPlanBody({
   onSave: (values: Record<string, string>) => void
 }): ReactNode {
   const { t } = useApp()
+  const text = useFieldText(payload.target)
   const [editing, setEditing] = useState(false)
   const change = payload.mode === 'change'
   const fields = payload.fields.filter((f) => !isSecretLikeSetupKey(f.key, f.label))
@@ -162,7 +173,7 @@ export function SetupPlanBody({
       {payload.why === '' ? null : <p className="text-sm leading-6 text-ws-body">{payload.why}</p>}
       <ul className="divide-y divide-ws-line" data-testid="setup-plan-rows">
         {rows.map((f) => (
-          <Row key={f.key} field={f} change={change} t={t} />
+          <Row key={f.key} field={f} change={change} label={text(f).label} t={t} />
         ))}
       </ul>
       {change && rows.length < fields.length ? (

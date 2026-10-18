@@ -70,6 +70,11 @@ export interface SetupTarget {
    * 的建议都不填；查不到就标「需要你填」。
    */
   noGuess?: readonly string[]
+  /**
+   * WP385：AI 给的建议值里**还没生效**的那几格（已经是这样的去掉）。没有「缺」、只收增减的目标用它
+   * （如体检设置：「加一条上架页」已经在了就不再出卡）。不给 = 按格子现值比（{@link changeFields}）。
+   */
+  pending?(suggestions: Record<string, string>): Promise<Record<string, string>>
 }
 
 export class SetupCardError extends Error {
@@ -153,7 +158,12 @@ export interface SetupCardsAssembly {
   /** 连接清单变了：还在等的连接卡里，缺的都连上了的那几张自动收起、接着做。回接着做了几张。 */
   recheck(): Promise<number>
   /** WP334：一个登记过的设置目标（AI 要卡时认目标用；没登记回 `undefined`）。 */
-  target(id: string): Pick<SetupTarget, 'id' | 'name' | 'satisfied'> | undefined
+  target(
+    id: string,
+  ):
+    | (Pick<SetupTarget, 'id' | 'name' | 'satisfied'> &
+        Partial<Pick<SetupTarget, 'fields' | 'pending'>>)
+    | undefined
   /** WP334：登记过的设置目标 id（认不出时列给模型看）。 */
   targetIds(): string[]
   /**
