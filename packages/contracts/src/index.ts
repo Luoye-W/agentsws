@@ -4,6 +4,9 @@ export * from './ad-creative.js'
 // 那两边的主语是"号"（我们自己的 / 别人的），这边的主语是**广告账户**——一个独立的计费主体。
 export * from './ads.js'
 export * from './ads-wiring.js'
+// WP397（docs/106 §13）：Amazon 库存补货公式与 FBA 赔偿复核算式（数由公式算，不让模型估）
+export * from './amazon-inventory.js'
+export * from './amazon-reimbursement.js'
 export * from './answer.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）
