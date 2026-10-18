@@ -1411,7 +1411,7 @@ export interface TableResult {
      * WP224：`ratio` 是倍数（ROAS 1.8，不是 US$1.80）；`flag` 是提示图标——
      * 格子里非空就画一个小三角，字进 tooltip（不是一列字）。
      */
-    format?: 'money' | 'count' | 'percent' | 'ratio' | 'flag'
+    format?: 'money' | 'count' | 'percent' | 'ratio' | 'flag' | 'sparkline'
     /**
      * WP401（决策 1090）：这一列能不能筛、怎么筛。表头出一个小漏斗，点开才有选项；筛的状态记在本机（按积木 id）。
      *
@@ -1420,6 +1420,11 @@ export interface TableResult {
      * - 不给 = 这一列不出漏斗（老积木一个字不变）。
      */
     filter?: true | 'search' | 'select' | 'date'
+    /**
+     * WP402（决策 1145）：这一格点了去哪——同一行里哪一列放着链接（`https://…`）。不给 = 不是链接。
+     * `sparkline` 那种格子是一串数（空格隔开），画成一条小折线（价格走势）。
+     */
+    link_key?: string
   }[]
   rows: Record<string, string | number>[]
   /**

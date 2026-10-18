@@ -181,7 +181,11 @@ quick_prompts:
     label: { zh: "看看我的 Listing", en: "Check my listings" }
     prompt: "看看我的 Listing 有什么问题：每条说清是哪条 Amazon 规矩，先说影响能不能买、能不能被搜到的"
     kind: ask
-  # ② Listing 与关键词（竞品对标）
+  # ② Listing 与关键词（竞品对标）——WP402（决策 1148）：上限放到 6，加「竞品最近有什么动静」（看变化表）
+  - id: competitor_moves
+    label: { zh: "竞品最近有什么动静", en: "What competitors changed" }
+    prompt: "Amazon 上的对标竞品最近有什么动静？降价、优惠券、断货、评分和排名按要紧程度说，能和我的对应款比的就说差多少钱"
+    kind: ask
   - id: watch_competitors
     label: { zh: "盯 Amazon 竞品", en: "Watch Amazon competitors" }
     prompt: "帮我盯 Amazon 上的竞品：先挑几款对标款，说说它们的价格、评分和排名"

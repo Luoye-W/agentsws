@@ -127,6 +127,8 @@ export interface CompetitorStoreAssembly {
   ownRef(): Promise<
     ((row: import('@agentsws/contracts').CatalogSnapshotRow) => OwnRef | undefined) | undefined
   >
+  /** WP402（决策 1137）：没有对标款时比的那一款——自家店里最便宜的那件（没连店 = `undefined`）。 */
+  ownLowest(): Promise<OwnRef | undefined>
   /** 一轮读完：第一次读完自动配对标款（人改过 / 清空过的不动）。 */
   afterRun(run: CompetitorWatchRun): Promise<void>
   /** 简报那一段（方案没确认过、没有要紧的、也没有哪家没读到 → 不出）。 */
@@ -639,6 +641,22 @@ export function createCompetitorStore(deps: CompetitorStoreDeps): CompetitorStor
       if (plan === undefined || plan.pairs.length === 0) return undefined
       const own = await deps.ownShop()
       return own.connected ? ownRefFromPairs(plan.pairs, own.products) : undefined
+    },
+    async ownLowest() {
+      if (readPlan() === undefined) return undefined
+      const own = await deps.ownShop()
+      if (!own.connected) return undefined
+      const best = own.products
+        .filter((p) => p.price !== undefined)
+        .sort((a, b) => (a.price as number) - (b.price as number))[0]
+      return best?.price === undefined
+        ? undefined
+        : {
+            own_key: best.key,
+            own_title: best.title,
+            own_price: best.price,
+            ...(best.currency === undefined ? {} : { currency: best.currency }),
+          }
     },
     async afterRun(_run) {
       const plan = readPlan()

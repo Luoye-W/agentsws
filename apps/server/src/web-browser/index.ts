@@ -27,6 +27,16 @@ export {
   nativeSearchSourceOf,
   type SearchWho,
 } from './native.js'
+// WP402（决策 1140 / 1146）：取数链第 3 条路——通过插件在用户自己的浏览器里读一页（只读）
+export {
+  type BskJson,
+  bskJsonOf,
+  createOwnBrowserReader,
+  dataTextOfHtml,
+  OWN_BROWSER_PAGE_TIMEOUT_MS,
+  type OwnBrowserReader,
+  type OwnBrowserReaderOptions,
+} from './own-browser.js'
 export {
   BROWSER_FETCH_HOSTS,
   type BrowserSearchResult,

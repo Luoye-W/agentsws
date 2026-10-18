@@ -26,6 +26,7 @@ import {
 } from 'recharts'
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { ColumnFilter, FilteredLine, useTableFilters } from '@/components/design/table-filter'
+import { Sparkline } from '@/components/stat-tile'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getBlockData, rerunBlock } from '@/lib/api'
@@ -121,6 +122,8 @@ function cellDisplay(
   lang: Lang,
 ): string {
   if (c.format === 'flag') return String(value ?? '')
+  // WP402：走势那一格画成小折线，不念字（也不进筛选）
+  if (c.format === 'sparkline') return ''
   return c.key === 'created_at' && typeof value === 'string'
     ? formatDate(value, lang)
     : typeof value === 'number'
@@ -131,16 +134,49 @@ function cellDisplay(
         cellText(c.key, String(value ?? ''), lang)
 }
 
+/** WP402：`sparkline` 那一格（一串数，空格隔开）→ 小折线；不到两个点不画。 */
+function SparkCell({ text }: { text: string }): React.ReactNode {
+  const points = text
+    .split(/\s+/u)
+    .map(Number)
+    .filter((n) => Number.isFinite(n))
+  if (points.length < 2) return null
+  return <Sparkline points={points} testId="table-sparkline" className="h-4 w-12 text-ws-brand" />
+}
+
 /**
  * WP401（决策 1090）：列声明里写了 `filter` 的列，表头多一个小漏斗（点开才有选项）；筛法按积木 id 记在本机。
  * 没写的列、没给 `tableId` 的地方一个字不变。
+ *
+ * WP402（决策 1145）：导出给别的面板用（竞品变化表）。`dense` = 右栏那种窄地方（格子小一号、不往两边伸）。
  */
+export function BlockTable(props: {
+  payload: TableResult
+  tableId?: string | undefined
+  dense?: boolean
+  testId?: string
+  /** 筛完之后最多列几行（卡里只放几条；不给 = 全列）。 */
+  limit?: number
+  /** 一行都没有时那一句（不给 = 「—」）。 */
+  empty?: string
+}): React.ReactNode {
+  return <TableBlock {...props} />
+}
+
 function TableBlock({
   payload,
   tableId,
+  dense = false,
+  testId = 'block-table',
+  limit,
+  empty,
 }: {
   payload: TableResult
   tableId?: string | undefined
+  dense?: boolean
+  testId?: string
+  limit?: number | undefined
+  empty?: string | undefined
 }): React.ReactNode {
   const { lang } = useApp()
   const { state, setColumn, clear } = useTableFilters(tableId)
@@ -161,17 +197,23 @@ function TableBlock({
     [payload.rows, cols, state, display],
   )
   const filtering = activeFilterCount(cols, state) > 0
+  const shown = limit === undefined ? rows : rows.slice(0, limit)
   if (payload.rows.length === 0)
     return (
       <>
-        <p className="text-sm text-ws-muted-fg">—</p>
+        <p className="text-sm text-ws-muted-fg" data-testid={`${testId}-empty`}>
+          {empty ?? '—'}
+        </p>
         {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
       </>
     )
   return (
     <div>
-      <div className="-mx-4 overflow-x-auto">
-        <table className="w-full text-[13.5px]" data-testid="block-table">
+      <div className={dense ? 'overflow-x-auto' : '-mx-4 overflow-x-auto'}>
+        <table
+          className={dense ? 'w-full text-[12px]' : 'w-full text-[13.5px]'}
+          data-testid={testId}
+        >
           <thead>
             {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
             <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
@@ -181,7 +223,7 @@ function TableBlock({
                   <th
                     key={c.key}
                     scope="col"
-                    className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
+                    className={`${dense ? 'px-1.5 py-1.5' : 'px-4 py-3'} first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
                   >
                     {col === undefined ? (
                       c.label
@@ -202,7 +244,7 @@ function TableBlock({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {shown.map((row) => (
               <tr
                 key={rowKey(row, payload.columns)}
                 className="border-b border-ws-line last:border-0"
@@ -211,16 +253,30 @@ function TableBlock({
                   const value = row[c.key]
                   if (c.format === 'flag')
                     return (
-                      <td key={c.key} className="px-2 py-3.5">
+                      <td key={c.key} className={dense ? 'px-1 py-1.5' : 'px-2 py-3.5'}>
                         <FlagCell text={String(value ?? '')} />
                       </td>
                     )
+                  if (c.format === 'sparkline')
+                    return (
+                      <td key={c.key} className={dense ? 'px-1.5 py-1.5' : 'px-4 py-3.5'}>
+                        <SparkCell text={String(value ?? '')} />
+                      </td>
+                    )
+                  const text = cellDisplay(c, value, row, lang)
+                  const href = c.link_key === undefined ? undefined : row[c.link_key]
                   return (
                     <td
                       key={c.key}
-                      className={`px-4 py-3.5 ${c.align === 'right' ? 'ws-num text-right' : ''}`}
+                      className={`${dense ? 'px-1.5 py-1.5' : 'px-4 py-3.5'} ${c.align === 'right' ? 'ws-num text-right' : ''}`}
                     >
-                      {cellDisplay(c, value, row, lang)}
+                      {typeof href === 'string' && /^https?:\/\//u.test(href) ? (
+                        <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
+                          {text}
+                        </a>
+                      ) : (
+                        text
+                      )}
                     </td>
                   )
                 })}

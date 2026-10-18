@@ -241,6 +241,7 @@ describe('WP392 快照对比：价、打折、库存', () => {
       own_price: 599,
       diff: -200,
       currency: 'USD',
+      basis: 'pair',
     })
     expect(describeChange(out.changes[0] as never)).toContain('比你的 Ranger 便宜 $200')
   })

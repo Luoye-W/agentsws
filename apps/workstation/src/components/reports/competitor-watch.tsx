@@ -1,7 +1,8 @@
 /**
  * WP392（docs/104 §3.5）：竞品监控在右侧面板里的三处——
  *
- * - **报表卡**：竞品变化表（按竞品 / 种类筛；价格变化旁边一条迷你走势线）。卡里列几条，「显示更多」里是整张表；
+ * - **报表卡**：竞品变化表（WP402 决策 1145：积木表格 + 通用筛选——竞品、种类、日期；价格变化带迷你走势线）。
+ *   卡里列几条，「显示更多」里是整张表；
  * - **连接卡**：各监控源状态汇总成一句（「3 家 · 1 家没读到」），有没读到的亮红点、照实写是哪家；
  * - **计划卡**：下一次读的时刻（「竞品监控 · 明早 9:00」）。
  *
@@ -9,16 +10,16 @@
  * 一句话由服务端拼好（`describeChange`，不提任何数据供应商名），这里不算任何数。
  */
 import type { CompetitorChange, CompetitorChangeKind } from '@agentsws/contracts'
-import { COMPETITOR_CHANGE_KINDS } from '@agentsws/contracts'
+import type { TableResult } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useMemo } from 'react'
+import { BlockTable } from '@/components/blocks/block-view'
 import { whenLabel } from '@/components/rail/card-status'
 import type { RailScope } from '@/components/rail/rail-scope'
-import { shortDate } from '@/components/reports/report-data'
-import { Sparkline } from '@/components/stat-tile'
 import { useApp } from '@/lib/app-context'
 import {
   COMPETITOR_WATCH_ROLES,
+  type CompetitorChangeRow,
   type CompetitorWatchView,
   competitorChangesKey,
   competitorWatchKey,
@@ -60,18 +61,36 @@ export function competitorStatusText(
   if (view === undefined || view.summary.sources === 0) return undefined
   const s = view.summary
   const n = s.competitors
+  // WP402：这一次换了路读的那几家（进问号，不多占一行字）
+  const viaOf = (via: 'cloud' | 'extension'): string | undefined => {
+    const who = [
+      ...new Set(
+        view.sources.filter((x) => x.paused !== true && x.last_via === via).map((x) => x.label),
+      ),
+    ]
+    return who.length === 0 ? undefined : t(`cwatch.via.${via}`, { who: who.join('、') })
+  }
+  const routes = [viaOf('cloud'), viaOf('extension')].filter((x): x is string => x !== undefined)
+  const withRoutes = (who: string | undefined): { who?: string } => {
+    const all = [who, ...routes].filter((x): x is string => x !== undefined)
+    return all.length === 0 ? {} : { who: all.join('；') }
+  }
   if (s.failed > 0)
     return {
       text: t('cwatch.status.failed', { n, failed: s.failed_labels.length || s.failed }),
       bad: true,
-      who: t('cwatch.failed_who', { who: s.failed_labels.join('、') }),
+      ...withRoutes(t('cwatch.failed_who', { who: s.failed_labels.join('、') })),
     }
   if (view.missing_adapters.length > 0 && s.ok === 0)
     return { text: t('cwatch.status.missing', { n }), bad: false }
   if (s.partial > 0)
-    return { text: t('cwatch.status.partial', { n, partial: s.partial }), bad: false }
+    return {
+      text: t('cwatch.status.partial', { n, partial: s.partial }),
+      bad: false,
+      ...withRoutes(undefined),
+    }
   if (s.ok === 0) return { text: t('cwatch.status.unchecked', { n }), bad: false }
-  return { text: t('cwatch.status.ok', { n }), bad: false }
+  return { text: t('cwatch.status.ok', { n }), bad: false, ...withRoutes(undefined) }
 }
 
 /** 连接卡里竞品监控那一行（坏了亮红点、照实说是哪家）。 */
@@ -148,11 +167,38 @@ export function priceTrend(all: readonly CompetitorChange[], c: CompetitorChange
   return points
 }
 
-const SELECT =
-  'h-6 min-w-0 rounded-md border border-ws-border bg-transparent px-1 text-[12px] text-ws-body'
+/** WP402（决策 1145）：竞品变化表记筛法用的那个 id（卡里和「显示更多」那张整表同一份）。 */
+export const COMPETITOR_TABLE_ID = 'competitor-watch.changes'
+
+/** 变化表 → 积木表格那一份（竞品 / 种类能勾、说了什么能搜、时间能选起止；价格那几行带走势）。 */
+export function competitorChangesPayload(
+  all: readonly CompetitorChangeRow[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  lang: 'zh' | 'en',
+): TableResult {
+  return {
+    columns: [
+      { key: 'competitor', label: t('cwatch.col.competitor'), filter: 'select' },
+      { key: 'change', label: t('cwatch.col.change'), filter: 'select' },
+      { key: 'what', label: t('cwatch.col.what'), filter: 'search', link_key: 'url' },
+      { key: 'trend', label: t('cwatch.col.trend'), format: 'sparkline' },
+      { key: 'detected_at', label: t('cwatch.col.when'), filter: 'date' },
+    ],
+    rows: all.map((c) => ({
+      id: c.id,
+      competitor: c.competitor,
+      change: t(`cwatch.kind.${c.kind}`),
+      what: lang === 'en' ? c.text.en || c.text.zh : c.text.zh,
+      trend: priceTrend(all, c).join(' '),
+      detected_at: c.detected_at,
+      ...(c.url === undefined || c.url === '' ? {} : { url: c.url }),
+    })),
+  }
+}
 
 /**
- * 竞品变化表（按竞品 / 种类筛；价格变化带走势）。`limit` 给了就只列那么多（卡里）；不给 = 整张（「显示更多」）。
+ * 竞品变化表（WP402 决策 1145：积木表格 + WP401 的筛选——竞品、种类、日期；说了什么能搜；价格变化带走势）。
+ * `limit` 给了就只列那么多（卡里）；不给 = 整张（「显示更多」）。筛法记在本机，卡里和整表同一份。
  */
 export function CompetitorChangesTable({
   scope,
@@ -164,8 +210,6 @@ export function CompetitorChangesTable({
   const { t, lang } = useApp()
   const client = useQueryClient()
   const { assignment, view } = useCompetitorWatch(scope)
-  const [who, setWho] = useState('')
-  const [kind, setKind] = useState('')
   const q = useQuery({
     queryKey: competitorChangesKey(assignment ?? ''),
     queryFn: () => getCompetitorChanges(assignment as string),
@@ -180,15 +224,8 @@ export function CompetitorChangesTable({
     },
   })
   const all = q.data ?? []
-  const competitors = useMemo(
-    () => [...new Map(all.map((c) => [c.competitor_id, c.competitor])).entries()],
-    [all],
-  )
+  const payload = useMemo(() => competitorChangesPayload(all, t, lang), [all, t, lang])
   if (assignment === undefined || view === undefined || view.summary.sources === 0) return null
-  const rows = all.filter(
-    (c) => (who === '' || c.competitor_id === who) && (kind === '' || c.kind === kind),
-  )
-  const shown = limit === undefined ? rows : rows.slice(0, limit)
   return (
     <section className="flex flex-col gap-1.5" data-testid="competitor-changes">
       <header className="flex items-center gap-1.5">
@@ -207,86 +244,15 @@ export function CompetitorChangesTable({
           {run.isPending ? t('cwatch.running') : t('cwatch.run')}
         </button>
       </header>
-      <div className="flex items-center gap-1.5">
-        <select
-          className={SELECT}
-          aria-label={t('cwatch.col.competitor')}
-          data-testid="competitor-filter"
-          value={who}
-          onChange={(e) => {
-            setWho(e.target.value)
-          }}
-        >
-          <option value="">{t('cwatch.all_competitors')}</option>
-          {competitors.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select
-          className={SELECT}
-          aria-label={t('cwatch.col.change')}
-          data-testid="competitor-kind-filter"
-          value={kind}
-          onChange={(e) => {
-            setKind(e.target.value)
-          }}
-        >
-          <option value="">{t('cwatch.all_kinds')}</option>
-          {COMPETITOR_CHANGE_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {t(`cwatch.kind.${k}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-      {shown.length === 0 ? (
-        q.isPending ? null : (
-          <p className="px-1.5 text-[12px] text-ws-muted-fg" data-testid="competitor-empty">
-            {t('cwatch.empty')}
-          </p>
-        )
-      ) : (
-        <ul className="flex flex-col gap-1.5" data-testid="competitor-table">
-          {shown.map((c) => {
-            const trend = priceTrend(all, c)
-            const text = lang === 'en' ? c.text.en : c.text.zh
-            return (
-              <li
-                key={c.id}
-                className="flex flex-col gap-0.5 px-1.5 text-[12px]"
-                data-testid="competitor-change-row"
-                data-kind={c.kind}
-              >
-                <div className="flex items-baseline gap-2 text-[11px] text-ws-muted-fg">
-                  <span className="min-w-0 truncate">{c.competitor}</span>
-                  <span className="ml-auto shrink-0 ws-num">{shortDate(c.detected_at)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 text-ws-body">
-                    {c.url === undefined || c.url === '' ? (
-                      text
-                    ) : (
-                      <a href={c.url} target="_blank" rel="noreferrer" className="hover:underline">
-                        {text}
-                      </a>
-                    )}
-                  </span>
-                  {trend.length >= 2 ? (
-                    <span className="shrink-0" title={t('cwatch.trend')}>
-                      <Sparkline
-                        points={trend}
-                        testId="competitor-trend"
-                        className="h-4 w-12 text-ws-brand"
-                      />
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+      {all.length === 0 && q.isPending ? null : (
+        <BlockTable
+          payload={payload}
+          tableId={COMPETITOR_TABLE_ID}
+          dense
+          testId="competitor-table"
+          empty={t('cwatch.empty')}
+          {...(limit === undefined ? {} : { limit })}
+        />
       )}
     </section>
   )

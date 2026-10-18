@@ -1,7 +1,7 @@
 # WP393（docs/104 一期 A，C5 / C8）：**店铺管理「竞品动向」——配好之后第二天出一条降价，并说比你便宜多少**。
 #
 # 方案卡上用户确认了「降价 ≥10% 或降完比你便宜算要紧」、Trail 500 对标自家的 Ridge 500（$899）。
-# 第一次读只建底子（简报不出）；第二天 Trail 500 两个款式降了 10%–12%，合成一条改价、写出「比你的 Ridge 500 便宜 $20」（按变得最多的那一款 $879 比），
+# 第一次读只建底子（简报不出）；第二天 Trail 500 两个款式降了 10%–12%，合成一条改价、写出「比你的 Ridge 500 便宜 $90」（WP402 决策 1137：拿 Trail 500 的起价 $809 和对应款比），
 # 进简报「竞品动向」。竞品监控自己零写：只读外部公开页面，不出卡、不改任何外部账号（docs/104 §5 第 4 条）。
 id: sales/competitor-store-vs-own
 version: 1
@@ -37,7 +37,7 @@ events:
         - { product: '1002', variant: '1002-1', title: Camp Lite, price: 299, available: true }
 expected:
   competitor_changes: [price]
-  competitor_brief: ['Rival Gear · Trail 500', '比你的 Ridge 500 便宜 $20']
+  competitor_brief: ['Rival Gear · Trail 500', '比你的 Ridge 500 便宜 $90']
   event_types:
     - simulation.competitor_plan
     - simulation.competitor_read
@@ -53,4 +53,4 @@ invariants:
   - provenance_respected
 rubric: >-
   第一天是不是只建了底子、简报没出？第二天是不是一条「Trail 500 两个款式降价 10%–12%」，
-  并且直接说出「比你的 Ridge 500 便宜 $20」，而不是让人自己去算？
+  并且直接说出「比你的 Ridge 500 便宜 $90」（拿起价和对应款比），而不是让人自己去算？

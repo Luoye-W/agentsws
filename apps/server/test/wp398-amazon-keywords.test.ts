@@ -277,7 +277,8 @@ describe('WP398 词库刷新', () => {
     const again = await s.bank.refresh({ trigger: 'tool' })
     expect(rec.calls).toHaveLength(3)
     expect(again.refresh.autocomplete.status).toBe('blocked')
-    expect(again.refresh.autocomplete.planned).toBe(0)
+    // WP402：暂停期里这一批照样排上（取数链会试下一条路），只是内置浏览器一页都不开
+    expect(again.refresh.autocomplete.read).toBe(0)
     s.advance(24 * 3_600_000)
     await s.bank.refresh({ trigger: 'tool' })
     expect(rec.calls.length).toBeGreaterThan(3)

@@ -113,6 +113,8 @@ export * from './pr-watch.js'
 export * from './premium-theme.js'
 // WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
 export * from './pricing-catalog.js'
+// WP402（决策 1140 / 1146）：读外部网页取数据的备用路（内置浏览器 → 云端 → 你自己的浏览器 → 照实说）
+export * from './read-chain.js'
 // WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
 export * from './read-routes.js'
 // WP328：Reddit 每日巡查（收件箱 / 自家版块 / 外部关键词）、待处理、周报汇总
