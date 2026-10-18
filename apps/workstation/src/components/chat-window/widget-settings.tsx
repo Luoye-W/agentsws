@@ -246,8 +246,9 @@ export function ChatWidgetSettings(): React.ReactNode {
             </select>
           </div>
           {/* WP417（决策 1232）：在线客服缺省每一句先出卡要你批；常见问题可以手动打开「直接发」 */}
-          <label className="flex items-center gap-2 text-[13px]">
+          <div className="flex items-center gap-2 text-[13px]">
             <Switch
+              id="chat-auto-send-faq"
               checked={cfg?.auto_send_faq === true}
               aria-label={t('chat.window.auto_send_faq')}
               data-testid="chat-auto-send-faq"
@@ -263,9 +264,9 @@ export function ChatWidgetSettings(): React.ReactNode {
                 })
               }
             />
-            <span>{t('chat.window.auto_send_faq')}</span>
+            <label htmlFor="chat-auto-send-faq">{t('chat.window.auto_send_faq')}</label>
             <Hint text={t('chat.window.auto_send_faq.hint')} />
-          </label>
+          </div>
         </CardContent>
       </Card>
 
