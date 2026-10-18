@@ -340,6 +340,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/product-line-isolation',
       'ops/theme-publish-needs-approval',
       'ops/two-desks-no-union',
+      // WP395（docs/104 C2）：只说独立站不划 Amazon 运营；说了亚马逊 / FBA 才有，问补货照实说没数据
+      'org/amazon-ops-only-for-amazon-brands',
       // WP343「我的助理」派活 → 岗位出审批，助理零写
       'org/assistant-dispatch-to-position',
       // WP350「我的助理」一次拆成多份：会议记录分派给几个岗位、几个岗位记待确认的口径

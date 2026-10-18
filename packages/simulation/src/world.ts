@@ -2011,6 +2011,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // 职责筛掉）。服务进程侧的 `BUNDLED_ROLES` 早就是这三条，两边别再错位。
     loadBundledRole('dtc.live-chat'),
     loadBundledRole('amz.support'),
+    // WP395（docs/106 §13）：Amazon 运营岗位的亚马逊店铺运营。pack 里没人挂它，躺着不产生任何行为；
+    // 场景里配岗（`position.staff` amazon-ops）时才挂上
+    loadBundledRole('amz.store'),
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
     // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效。
     // WP77（59 §1）：改名为 `site.shopify-theme`（建站岗位四条里的网页模板），

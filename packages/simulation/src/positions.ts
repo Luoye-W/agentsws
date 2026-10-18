@@ -40,7 +40,7 @@ import type {
   PersonId,
   RoleId,
 } from '@agentsws/contracts'
-import { splitAnswer } from '@agentsws/contracts'
+import { mentionsAmazon, proposePositions, splitAnswer } from '@agentsws/contracts'
 import {
   applyFanoutEdits,
   type EntryKind,
@@ -48,6 +48,7 @@ import {
   type FanoutEdit,
   fanoutNoteCard,
   loadBundledPosition,
+  loadBundledPositions,
   type PickPosition,
   type Position,
   pickDispatchTarget,
@@ -55,6 +56,7 @@ import {
   resolveFanout,
   roleRouteTerms,
   routeWithinPosition,
+  SUPERSEDED_POSITION_IDS,
   settleAlways,
   settleCloseCall,
   settleNoHit,
@@ -77,6 +79,14 @@ export interface PositionRouteRecord {
 export interface PositionsLoop {
   /** 把一个岗位模板的默认职责一次挂给一个人（已经有的那条不重复挂）。 */
   staff(who: PersonId, position_id: string): { role_id: RoleId; assignment_id: string }[]
+  /**
+   * WP395：首次设置第 ③ 步——原话 + 勾选 → 划分建议 → 照建议配岗。回划分出来的岗位
+   * （模板 id，自建的 `custom`）与各自的职责。
+   */
+  plan(input: { who: PersonId; text: string; roles: string[] }): {
+    template_id: string
+    role_ids: RoleId[]
+  }[]
   /** 交给这个岗位一件事。 */
   open(input: {
     who: PersonId
@@ -129,31 +139,75 @@ export function installPositions(world: World): PositionsLoop {
   /** WP343：这个人配过哪几个岗位（助理只在这里面挑）。 */
   const staffed = new Map<PersonId, string[]>()
 
-  const staff: PositionsLoop['staff'] = (who, position_id) => {
-    const template = templateOf(position_id)
+  /** 给这个人挂一条职责（已经有就用那一条）。 */
+  const assign = (who: PersonId, role: RoleId): { role_id: RoleId; assignment_id: string } => {
+    const existing = activeOf(who).find((a) => a.role_id === role)
+    if (existing !== undefined) return { role_id: role, assignment_id: existing.id }
+    const made = world.roles.assignments.create({
+      person_id: who,
+      workspace_id: world.workspace_id,
+      role_id: role,
+      granted_by: who,
+      ranges: [...world.assignment.ranges],
+    })
+    // 05 §4 的"不做并集"断言数的是世界建出来的分配，现配的这条也要登记进去
+    world.registerAssignment(made)
+    return { role_id: role, assignment_id: made.id }
+  }
+
+  const markStaffed = (who: PersonId, position_id: string): void => {
     const list = staffed.get(who) ?? []
     if (!list.includes(position_id)) staffed.set(who, [...list, position_id])
+  }
+
+  const staff: PositionsLoop['staff'] = (who, position_id) => {
+    const template = templateOf(position_id)
+    markStaffed(who, position_id)
     const out: { role_id: RoleId; assignment_id: string }[] = []
     for (const entry of template.roles) {
       if (!entry.default) continue
       // 这台机器上没有这条职责的定义就跳过（与 `org.ts` 种岗位时同一条规则）
       if (world.roles.roles.get(entry.role) === undefined) continue
-      const existing = activeOf(who).find((a) => a.role_id === entry.role)
-      if (existing !== undefined) {
-        out.push({ role_id: entry.role, assignment_id: existing.id })
-        continue
-      }
-      const made = world.roles.assignments.create({
-        person_id: who,
-        workspace_id: world.workspace_id,
-        role_id: entry.role,
-        granted_by: who,
-        ranges: [...world.assignment.ranges],
-      })
-      // 05 §4 的"不做并集"断言数的是世界建出来的分配，现配的这条也要登记进去
-      world.registerAssignment(made)
-      out.push({ role_id: entry.role, assignment_id: made.id })
+      out.push(assign(who, entry.role))
     }
+    return out
+  }
+
+  /**
+   * WP395：类别目录 = 包里的岗位模板（跳过已拆掉的），只留这台机器上有定义、不是底座的职责。
+   * 带 `default`：一条职责挂在几个模板里时归默认勾的那个（`categoryOfRole`），与目录顺序无关。
+   */
+  const catalog = () =>
+    loadBundledPositions()
+      .filter((p) => !SUPERSEDED_POSITION_IDS.includes(p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.name.zh,
+        roles: p.roles
+          .filter(
+            (r) => !r.role.startsWith('common.') && world.roles.roles.get(r.role) !== undefined,
+          )
+          .map((r) => ({ id: r.role, default: r.default })),
+      }))
+      .filter((p) => p.roles.length > 0)
+
+  const plan: PositionsLoop['plan'] = ({ who, text, roles }) => {
+    // 与推荐同一道：原话没提 Amazon，Amazon 专属的职责一条都不留（docs/104 C2）
+    const amazonOk = mentionsAmazon(text)
+    const picked = roles.filter((id) => amazonOk || !/^amz\.|amazon/i.test(id))
+    const out = proposePositions(picked, catalog()).map((p) => ({
+      template_id: p.template_id ?? 'custom',
+      role_ids: p.role_ids as RoleId[],
+    }))
+    for (const p of out) {
+      if (p.template_id !== 'custom') markStaffed(who, p.template_id)
+      for (const role of p.role_ids) assign(who, role)
+    }
+    world.appendEvent('simulation.position_planned', {
+      who,
+      positions: out,
+      dropped: roles.filter((id) => !picked.includes(id)),
+    })
     return out
   }
 
@@ -261,7 +315,7 @@ export function installPositions(world: World): PositionsLoop {
       // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```dsh-ui），再按契约取「一句话 + 组件」
       world.work.appendEvent(matter.id, {
         kind: 'agent_message',
-        text: quickAnswerStandIn(world, text),
+        text: quickAnswerStandIn(world, text, picked.role_id),
         actor: { kind: 'agent', id: picked.id },
       })
       const answer = splitAnswer(
@@ -278,6 +332,8 @@ export function installPositions(world: World): PositionsLoop {
       world.appendEvent('simulation.position_answered', {
         position_id: template.id,
         role_id: picked.role_id,
+        // WP395：照实说没数据（Amazon 店铺没连）——场景的 `position_answer_no_data` 看它
+        ...(noAmazonStore(picked.role_id) ? { no_data: true } : {}),
         // WP336：genui 块再列出里面的节点类型（`genui:table`…），场景按它断言
         components: answer.components.flatMap((c: AnswerComponent) =>
           c.kind === 'genui' ? ['genui', ...c.spec.items.map((n) => `genui:${n.type}`)] : [c.kind],
@@ -516,10 +572,20 @@ export function installPositions(world: World): PositionsLoop {
     })
   }
 
-  return { staff, open, routed, dispatch, fanout }
+  return { staff, plan, open, routed, dispatch, fanout }
 }
 
 const PRODUCTS = /商品|产品|product/iu
+
+/** WP395：Amazon 店铺没连时当场回答那一句（不出组件、不出数）。 */
+export const AMAZON_NOT_CONNECTED =
+  '这个要连上 Amazon 店铺后才能算，现在拿不到库存、销量和账户数据。'
+
+/**
+ * WP395：这条职责要读 Amazon 店铺，而模拟世界里没有接 Amazon 店铺（只有亚马逊店铺运营；
+ * Amazon 客服读的是客服邮箱里的买家消息，不在这里）。
+ */
+const noAmazonStore = (role_id: RoleId): boolean => role_id === 'amz.store'
 
 /** 过滤后的 genui 节点 → 事件里记的那几样：类型、表格行数、数字（测试拿它比 mock 店铺）。 */
 function genuiDigest(items: readonly GenuiNodeLite[]): {
@@ -548,7 +614,9 @@ function genuiDigest(items: readonly GenuiNodeLite[]): {
  * WP341（决策 847）：按钮 / 图片 / 链接放开了，夹带的换成仍是红线的那几样（不认识的组件、`javascript:` 图、带事件的 svg、
  * 完整 ECharts 配置、空 3D）和自定义配色。
  */
-function quickAnswerStandIn(world: World, text: string): string {
+function quickAnswerStandIn(world: World, text: string, role_id: RoleId): string {
+  // WP395（docs/36 §3）：Amazon 那几条要读的是 Amazon 店铺——模拟世界里没有这家店，照实说，不拿独立站的数凑
+  if (noAmazonStore(role_id)) return AMAZON_NOT_CONNECTED
   if (!PRODUCTS.test(text)) return '这一问不用读数据，直接答：照岗位的规矩来就行。'
   const products = world.connect.state.products
   const live = products.filter((p) => p.status === 'active').length

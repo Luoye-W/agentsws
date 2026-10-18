@@ -94,6 +94,7 @@
     "packages/roles/roles/ads/meta.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
+    "packages/roles/roles/amz/store.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/b2b/exhibition.yml",
     "packages/roles/roles/b2b/fulfillment.yml",
@@ -141,7 +142,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "083bbd867977dc369d001fd87b30c9c7",
+  "source_digest": "62df8b67770b05c60d6a9bec4e88084c",
   "objects": [
     {
       "id": "ad",
@@ -10470,6 +10471,7 @@
         "ads.meta",
         "ads.tiktok",
         "ads.x",
+        "amz.store",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",

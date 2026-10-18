@@ -670,6 +670,53 @@ export function checkExpectations(
         (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
     )
   }
+  // WP395（docs/104 C2 / docs/106 A3）：首次设置划分出来的岗位与各自的职责，按先后逐个对上
+  if (expected.positions_planned !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.position_planned')
+      .flatMap((e) => {
+        const ps = payloadOf(e).positions
+        return Array.isArray(ps) ? (ps as { template_id: string; role_ids: string[] }[]) : []
+      })
+    const want = Object.entries(expected.positions_planned)
+    const show = (ps: [string, string[]][]): string =>
+      ps.map(([k, v]) => `${k}: [${v.join(', ')}]`).join('；')
+    const gotPairs = got.map((p): [string, string[]] => [p.template_id, p.role_ids])
+    const same =
+      gotPairs.length === want.length &&
+      gotPairs.every(
+        ([k, v], i) =>
+          k === want[i]?.[0] &&
+          v.length === (want[i]?.[1].length ?? -1) &&
+          v.every((r, j) => r === want[i]?.[1][j]),
+      )
+    add(
+      'positions_planned',
+      same,
+      `划分出 ${show(gotPairs) || '（没有）'}，期望 ${show(want) || '（没有）'}`,
+    )
+  }
+  // WP395（docs/36 §3）：这几条职责的当场回答照实说没数据——不出组件、不出数
+  if (expected.position_answer_no_data !== undefined) {
+    const answered = evidence.events
+      .filter((e) => e.type === 'simulation.position_answered')
+      .map(payloadOf)
+    const bad: string[] = []
+    for (const role of expected.position_answer_no_data) {
+      const mine = answered.filter((p) => p.role_id === role)
+      const honest = mine.filter(
+        (p) => p.no_data === true && Array.isArray(p.components) && p.components.length === 0,
+      )
+      if (mine.length === 0 || honest.length !== mine.length) bad.push(role)
+    }
+    add(
+      'position_answer_no_data',
+      bad.length === 0,
+      bad.length === 0
+        ? `[${expected.position_answer_no_data.join(', ')}] 没数据时都照实说了`
+        : `没照实说（或一次没答）：${bad.join(', ')}`,
+    )
+  }
   if (expected.position_answer_components !== undefined) {
     const seen = new Set(
       evidence.events

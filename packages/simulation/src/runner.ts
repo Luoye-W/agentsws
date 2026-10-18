@@ -1260,6 +1260,15 @@ async function execute(
         await positionOpen(event.open_at_position)
         return
       }
+      // WP395：首次设置按原话与勾选划分岗位、照建议配岗
+      case 'position.plan': {
+        positionsLoop().plan({
+          who: event.plan.who as never,
+          text: event.plan.text,
+          roles: event.plan.roles,
+        })
+        return
+      }
       // WP343：「我的助理」派活
       case 'assistant.dispatch': {
         try {
