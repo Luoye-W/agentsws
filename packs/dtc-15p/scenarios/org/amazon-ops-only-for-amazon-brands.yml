@@ -1,0 +1,51 @@
+# WP395（docs/104 C2 / docs/106 §13）：**Amazon 运营只在卖 Amazon 的时候出现，出现了没数据也照实说**。
+#
+# 1. 赵宁只说「我们做独立站」，却把店铺管理和亚马逊店铺运营都勾上了 → 原话没提 Amazon，Amazon 那条拿掉
+#    （与首次设置推荐同一道 `mentionsAmazon`），只划出「网站运营」；
+# 2. 钱多说「亚马逊上也卖，货走 FBA」，勾亚马逊店铺运营 → 划出「Amazon 运营」；网站客服在客服岗，
+#    这里没勾 Amazon 客服，Amazon 运营里就只有店铺运营那一条；
+# 3. 在 Amazon 运营里问「我该补货了吗」→ 落到亚马逊店铺运营，照实说要连上 Amazon 店铺才能算（不出 0）。
+id: org/amazon-ops-only-for-amazon-brands
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-18T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.plan:
+      who: p_zhao
+      text: 我们做独立站，商品详情的 listing 要常改
+      roles: [dtc.store, amz.store]
+  - at: '+5m'
+    position.plan:
+      who: p_qian
+      text: 亚马逊上也卖，货走 FBA
+      roles: [amz.store]
+  - at: '+10m'
+    position.open:
+      who: p_qian
+      position: amazon-ops
+      text: 我该补货了吗，还能撑几天
+      judge: quick
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  positions_planned:
+    web-ops: [dtc.store]
+    amazon-ops: [amz.store]
+  position_routed_to: [amz.store]
+  position_entries: [quick]
+  position_answer_no_data: [amz.store]
+  event_types:
+    - simulation.position_planned
+    - simulation.position_routed
+    - simulation.position_answered
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  只说做独立站的人是不是没被划进 Amazon 运营？说了亚马逊和 FBA 的人是不是有了 Amazon 运营，
+  而且问补货时照实说了要连上 Amazon 店铺才能算？

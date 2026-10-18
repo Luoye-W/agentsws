@@ -25,6 +25,8 @@ export const DUTY_ICONS: Record<string, DutyIconSpec> = {
   'dtc.support': { glyph: 'dtc.support' },
   'dtc.live-chat': { glyph: 'dtc.live-chat' },
   'amz.support': { glyph: 'customer-care', badge: 'amazon' },
+  // WP395：亚马逊店铺运营 = 店铺管理那枚 + Amazon 角标（同一件事，换了平台）
+  'amz.store': { glyph: 'dtc.store', badge: 'amazon' },
   'dtc.community-support': { glyph: 'dtc.community-support' },
   // ── 网站运营 ─────────────────────────────────────────────────────────
   'dtc.store': { glyph: 'dtc.store' },
@@ -102,5 +104,6 @@ export const POSITION_GLYPH_BY_ID: Record<string, string> = {
   design: 'design',
   pr: 'pr',
   b2b: 'b2b',
+  'amazon-ops': 'amazon-ops',
   'dtc-ops': 'dtc-ops',
 }

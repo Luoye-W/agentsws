@@ -89,7 +89,12 @@ import {
   type InvitesIdentity,
   OnboardingError,
 } from './invites.js'
-import { catalogRoles, type Suggester, suggestPositions } from './onboarding-suggest.js'
+import {
+  brandOnAmazon,
+  catalogRoles,
+  type Suggester,
+  suggestPositions,
+} from './onboarding-suggest.js'
 import { WORKSPACE_BASE_ROLES } from './position-placements.js'
 
 export { OnboardingError } from './invites.js'
@@ -1407,6 +1412,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         catalog,
         roles: list,
         suggester: await options.suggester?.(_actor),
+        // WP395（docs/104 C2）：品牌档案看得出在 Amazon 上卖（市场是从 Amazon 读出来的 / 一句话介绍提到）
+        ...(brandOnAmazon(profileOf(_actor.workspace_id)) ? { brand_on_amazon: true } : {}),
       })
       // 原话不进日志（21 §5）：只记来源与条数
       emit(

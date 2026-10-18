@@ -1,0 +1,21 @@
+# we use Shopify's robots.txt file
+User-agent: *
+Disallow: /admin
+Disallow: /cart
+Disallow: /orders
+Disallow: /checkouts/
+Disallow: /checkout
+Disallow: /*/cart/
+Disallow: /search
+Allow: /search/
+Sitemap: https://nordvolt.example/sitemap.xml
+
+# added by the theme app
+User-agent: GPTBot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /products/
+
+User-agent: CCBot
+Disallow: /

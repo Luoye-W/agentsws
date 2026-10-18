@@ -164,6 +164,8 @@ describe('三条「向设计岗下需求单」是独立段落', () => {
     'ads.google',
     'ads.tiktok',
     'ads.x',
+    // WP395（docs/106）：亚马逊店铺运营要换主图 / A+ 时向设计岗下单（→ `design.amazon`）
+    'amz.store',
   ]
 
   it('三条都加上了，动作与自动化等级一致', () => {
@@ -182,6 +184,7 @@ describe('三条「向设计岗下需求单」是独立段落', () => {
     expect(designDutyOfRole('design.social')?.request_sources).toContain('kol.youtube')
     for (const id of ['ads.meta', 'ads.google', 'ads.tiktok', 'ads.x'])
       expect(designDutyForSource(id)?.role_id, id).toBe('design.ads')
+    expect(designDutyForSource('amz.store')?.role_id).toBe('design.amazon')
   })
 
   it('只动了这三个文件——别的职责一条 request_design 都没有', () => {

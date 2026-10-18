@@ -174,6 +174,17 @@ export interface ScenarioPositionStaff {
   position: string
 }
 
+/**
+ * WP395（docs/104 C2 / docs/106 A3）：首次设置第 ③ 步——他的原话 + 勾了哪几条职责 → 划分建议
+ * （`proposePositions`，与服务进程 / 工作台同一份）→ 照建议配岗。原话没提 Amazon 时 Amazon 专属的
+ * 职责拿掉（`mentionsAmazon`，与推荐同一道）。
+ */
+export interface ScenarioPositionPlan {
+  who: string
+  text: string
+  roles: string[]
+}
+
 /** WP199：升级链留痕断言（`expected.escalation_trail`）。 */
 export interface ScenarioEscalationTrail {
   /** 卡上 `routing.escalation.trail` 按顺序的级别。 */
@@ -617,6 +628,14 @@ export interface ScenarioStoreDailyReport {
  * （`@agentsws/seo-core` 的合成数据），搜索数据接口按"还没接"——SERP 跳过、其余照跑。
  */
 export interface ScenarioSeoDaily {
+  who: string
+}
+
+/**
+ * WP380：GEO 第二层——用录好的 AI 回答与判断回文（`@agentsws/seo-core` 的样本）算比较胜率与描述准确度、
+ * 拿官方事实对两张夹具页（规则 + 录好的模型回文）、按岗位分组，再给一条复查出建议。不调模型、不联网。
+ */
+export interface ScenarioGeoQuality {
   who: string
 }
 
@@ -1097,6 +1116,8 @@ export type ScenarioEvent =
   /* ── WP69（54）：岗位是任务主入口 ── */
   /** WP69：给一个人配上一个岗位（它的默认职责全挂上）。 */
   | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
+  /** WP395：首次设置按原话与勾选划分岗位、照建议配岗。 */
+  | { at: string; type: 'position.plan'; plan: ScenarioPositionPlan }
   /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
   | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   | { at: string; type: 'assistant.dispatch'; assistant_dispatch: ScenarioAssistantDispatch }
@@ -1200,6 +1221,7 @@ export type ScenarioEvent =
   | { at: string; type: 'store.daily_report'; daily_report: ScenarioStoreDailyReport }
   /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */
   | { at: string; type: 'content.seo_daily'; seo_daily: ScenarioSeoDaily }
+  | { at: string; type: 'content.geo_quality'; geo_quality: ScenarioGeoQuality }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -1520,6 +1542,16 @@ export interface ScenarioExpected {
   assistant_fanout_notes?: string[]
   /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
   position_answer_components?: string[]
+  /**
+   * WP395：首次设置划分出来的岗位，按先后：模板 id（自建的写 `custom`）→ 职责。
+   * `{ amazon-ops: [amz.store, amz.support] }`；写 `{}` = 一个岗位都没划出来。
+   */
+  positions_planned?: Record<string, string[]>
+  /**
+   * WP395（docs/36 §3）：这几条职责的当场回答都照实说「没有数据」——不出组件、不出数
+   * （Amazon 店铺没连时问补货 / 账户健康）。每条至少答过一次。
+   */
+  position_answer_no_data?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**
@@ -2012,6 +2044,16 @@ export interface ScenarioExpected {
    * - `no_dump`：没有数据倾倒——卡上只有挑出来的那几件，读进来的其余行一行都不上卡。
    */
   seo_daily?: { picks?: NumericAssertion; fix_before_write?: boolean; no_dump?: boolean }
+  /**
+   * WP380：GEO 第二层那张报告——比较胜率、描述准确度（0–1）、一致性分到哪几个岗位（按顺序）、
+   * 复查建议。
+   */
+  geo_quality?: {
+    win_rate?: NumericAssertion
+    accuracy?: NumericAssertion
+    owners?: string[]
+    advice?: string
+  }
   /**
    * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。
    *

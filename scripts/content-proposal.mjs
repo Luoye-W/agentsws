@@ -7,7 +7,7 @@
  * # 已经把候选新版放在一个目录里（改写类技能：人把上游改动移植进来之后）
  * node scripts/content-proposal.mjs --item skill:cold-email --to /tmp/cold-email-new \
  *   --repo coreyhaines31/marketingskills --commit <sha> --published-at 2026-10-02 \
- *   [--out docs/upstream/proposals/2026-10-05-cold-email.md]
+ *   [--out ~/Documents/agentsws-internal/docs/upstream/proposals/2026-10-05-cold-email.md]
  *
  * # 官方原样收录的（目录里有 agentsws.json，WP216）：按旁注把官方文件下到临时目录再比（要出网）
  * node scripts/content-proposal.mjs --item skill:shopify --fetch --ref v2.2.0 [--published-at …]

@@ -28,6 +28,9 @@ fi
 # 2. 代码规范：只查相对基准改过的文件
 step "biome（只查改动）" npx biome check --changed --since="$base" --no-errors-on-unmatched .
 
+# 2bis. 公开仓只放代码（WP383）：派工单、报告、决策表、开发日志、编号文档、审稿截图都在私有仓
+step "内部文档守卫" node scripts/check-no-internal-docs.mjs
+
 # 3. 测试：只跑「改过的包」自己的测试，并限制并发。
 #    （vitest --changed 在本仓会因为某个包按目录路径引用资源而建图失败，所以按包选。
 #     依赖它的下游包靠上面的增量 tsc 兜类型；行为回归留给合并关口的全量。）

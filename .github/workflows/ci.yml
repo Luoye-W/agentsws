@@ -56,6 +56,11 @@ jobs:
       - name: biome check
         run: pnpm exec biome check .
 
+      # WP383：公开仓只放代码。派工单与报告、决策表、开发日志、编号的讨论文档、审稿截图
+      # 都在私有仓；docs/ 只认白名单（README、ARCHITECTURE、help、品牌标记、三张架构图）。
+      - name: check-no-internal-docs（公开仓不收内部文档）
+        run: node scripts/check-no-internal-docs.mjs
+
       # WP197：官网 apps/site 只构建、不部署（部署由 Fable 找 Luoye 确认后手动做）。
       # CI 里不打网取价目（AGENTSWS_SITE_OFFLINE=1 → 用仓库样例），构建结果不随云上改价而变；
       # 取价目那段逻辑由 apps/site/test 覆盖。wrangler dry-run 只校验部署配置，不上传。

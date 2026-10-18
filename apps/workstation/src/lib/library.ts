@@ -28,6 +28,7 @@ export const POSITION_ORDER: readonly string[] = [
   'design',
   'pr',
   'web-ops',
+  'amazon-ops',
 ]
 
 export interface SkillGroup {
@@ -355,6 +356,8 @@ const POSITION_KNOWLEDGE: Readonly<Record<string, readonly KnowledgeGroupId[]>> 
   pr: ['brand_voice', 'policy', 'uploads'],
   site: ['product', 'policy', 'logistics', 'uploads'],
   'web-ops': ['product', 'policy', 'logistics', 'brand_voice', 'uploads'],
+  // WP395：Amazon 运营先看商品、政策（含 Amazon 规矩）与物流
+  'amazon-ops': ['product', 'policy', 'logistics', 'brand_voice', 'uploads'],
 }
 
 export function knowledgeGroupsForPosition(position_id: string | undefined): KnowledgeGroupId[] {

@@ -111,6 +111,7 @@ import type { SeoPort } from './routes/seo.js'
 import type { ShopAdminPort } from './routes/shop-admin.js'
 import type { ShopifyConnectPort } from './routes/shopify-connect.js'
 import type { SitePort } from './routes/site.js'
+import type { SiteHealthPort } from './routes/site-health.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
@@ -1242,6 +1243,8 @@ export interface GatewayDeps {
    * （壳当「不知道」：不弹三选一、照旧问一句就重启）。
    */
   updatePause?: UpdatePausePort
+  /** WP381：网站 / 商品体检与 AI 来源流量。没装配时 `/v1/site-health*` 回 not_implemented。 */
+  siteHealth?: SiteHealthPort
 }
 
 /**

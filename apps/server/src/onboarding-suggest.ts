@@ -18,6 +18,7 @@ import {
   categoryOfRole,
   channelOfRole,
   checkSuggestedPositions,
+  mentionsAmazon,
   type PlannedPosition,
   type PositionCatalogEntry,
   proposePositions,
@@ -57,12 +58,17 @@ export interface SuggestResult {
 /** 一次推荐用的引擎：给原话与目录，回原始结果（拿不到回 `undefined`，抛错也算拿不到）。 */
 export interface Suggester {
   source: 'ai' | 'keyword'
-  run(input: { text: string; catalog: SuggestCatalogRole[] }): Promise<RawSuggestion | undefined>
+  run(input: {
+    text: string
+    catalog: SuggestCatalogRole[]
+    /** WP395：品牌档案里看得出在 Amazon 上卖（原话没提也算提到了 Amazon）。 */
+    amazon?: boolean
+  }): Promise<RawSuggestion | undefined>
 }
 
 export const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex')
 
-/** 把岗位模板摊成「目录里的一条条职责」（一条职责挂在几个类别里时归第一个）。 */
+/** 把岗位模板摊成「目录里的一条条职责」（一条职责挂在几个类别里时归它的家，见 `categoryOfRole`）。 */
 export function catalogRoles(
   catalog: readonly (Omit<PositionCatalogEntry, 'roles'> & {
     roles: readonly { id: string; default?: boolean }[]
@@ -76,6 +82,8 @@ export function catalogRoles(
   for (const cat of catalog) {
     for (const r of cat.roles) {
       if (seen.has(r.id)) continue
+      // WP395：挂在几个类别里的归它的家（默认勾的那个，`categoryOfRole`）
+      if (categoryOfRole(r.id, catalog)?.id !== cat.id) continue
       const d = describe(r.id)
       if (d === undefined) continue
       seen.add(r.id)
@@ -109,7 +117,11 @@ export const SUGGEST_MAX_OUTPUT_TOKENS = 2048
  * `p` 每个岗位 `[名字, [id…]]`）——同样的内容少一半 token；理由与原话都限了字数。
  * 目录一条一行照旧（职责说明留着：推荐准不准靠它）。
  */
-export function buildSuggestPrompt(text: string, catalog: readonly SuggestCatalogRole[]): string {
+export function buildSuggestPrompt(
+  text: string,
+  catalog: readonly SuggestCatalogRole[],
+  hints: { amazon?: boolean } = {},
+): string {
   const lines = catalog.map(
     (r) => `- ${r.id} | ${r.name} | 类别：${r.category} | ${r.what_it_does}`,
   )
@@ -123,6 +135,8 @@ export function buildSuggestPrompt(text: string, catalog: readonly SuggestCatalo
     '',
     '规矩：',
     '1. 只推荐他话里有依据的职责。每条三样：职责 id、理由（中文，15 字以内）、原话（他原话里最能说明的那几个字，原样抄、不改字，12 字以内）。',
+    // WP395（docs/104 C2）：Amazon 那几条只给卖 Amazon 的品牌
+    `1b. id 以 amz. 开头的职责只在他提到 Amazon 时推${hints.amazon === true ? '（品牌档案显示这个品牌在 Amazon 上卖，算提到了）' : ''}。`,
     '2. 把推荐的职责分成几个岗位：一个人通常一起干的放一个岗位；同一个渠道的几条可以放一起；一个岗位不超过 6 条；岗位名用中文，短。',
     '3. 直接回一个紧凑的 JSON（不换行、不加空格、不要解释、不要 ``` ），格式：',
     '{"r":[["职责id","理由","原话"]],"p":[["岗位名",["职责id","职责id"]]]}',
@@ -203,8 +217,10 @@ export function parseSuggestion(raw: string): RawSuggestion | undefined {
 export function modelSuggester(complete: (prompt: string) => Promise<string>): Suggester {
   return {
     source: 'ai',
-    run: async ({ text, catalog }) =>
-      parseSuggestion(await complete(buildSuggestPrompt(text, catalog))),
+    run: async ({ text, catalog, amazon }) =>
+      parseSuggestion(
+        await complete(buildSuggestPrompt(text, catalog, amazon === undefined ? {} : { amazon })),
+      ),
   }
 }
 
@@ -224,10 +240,27 @@ export const KEYWORD_SYNONYMS: readonly { terms: readonly string[]; category_id:
   { terms: ['广告', '投放'], category_id: 'ads' },
   { terms: ['客服', '售前', '售后'], category_id: 'customer-care' },
   { terms: ['设计', '出图'], category_id: 'design' },
+  // WP395（docs/106 §13 / docs/104 C2）：Amazon 运营。只推默认勾的「亚马逊店铺运营」；
+  // 「Listing」单说不算提到 Amazon（独立站也说 listing）——下面 `amazonOnly` 那一刀照样拦
+  { terms: ['Amazon', '亚马逊', 'FBA', 'ASIN', '卖家后台', 'Listing'], category_id: 'amazon-ops' },
 ]
 
+/** WP395：同 contracts 那一份（首次设置推荐与模拟共用）。 */
+export { mentionsAmazon }
+
+/**
+ * WP395（docs/104 C2）：品牌档案里看不看得出这个品牌在 Amazon 上卖——目标市场是从 Amazon 读出来的，
+ * 或一句话介绍里提到 Amazon。看不出就当没提（不猜）。
+ */
+export function brandOnAmazon(
+  profile: { markets_source?: { from: string }; one_liner?: string } | undefined,
+): boolean {
+  if (profile === undefined) return false
+  return profile.markets_source?.from === 'amazon' || mentionsAmazon(profile.one_liner ?? '')
+}
+
 /** 这条职责是不是 Amazon 专属的（只在原话提到 Amazon / 亚马逊时才推）。 */
-const amazonOnly = (r: SuggestCatalogRole): boolean =>
+export const amazonOnly = (r: SuggestCatalogRole): boolean =>
   /^amz\./.test(r.id) || /amazon/i.test(r.id) || /amazon|亚马逊/i.test(r.name)
 
 /**
@@ -238,9 +271,9 @@ const amazonOnly = (r: SuggestCatalogRole): boolean =>
  */
 export const keywordSuggester: Suggester = {
   source: 'keyword',
-  run: async ({ text, catalog }) => {
+  run: async ({ text, catalog, amazon: brandOnAmazon }) => {
     const lower = text.toLowerCase()
-    const mentionsAmazon = /amazon|亚马逊/i.test(text)
+    const amazon = brandOnAmazon === true || mentionsAmazon(text)
     const hit = (term: string | undefined): string | undefined => {
       if (term === undefined || term.trim().length < 2) return undefined
       const at = lower.indexOf(term.toLowerCase())
@@ -263,7 +296,7 @@ export const keywordSuggester: Suggester = {
         push(r.id, `你说要做 ${byChannel}`, byChannel)
         continue
       }
-      if (amazonOnly(r) && !mentionsAmazon) continue
+      if (amazonOnly(r) && !amazon) continue
       const byCategory = hit(r.category)
       if (byCategory !== undefined) push(r.id, `你提到了「${byCategory}」，这条属于它`, byCategory)
     }
@@ -273,10 +306,15 @@ export const keywordSuggester: Suggester = {
       if (term === undefined) continue
       for (const r of catalog) {
         if (r.category_id !== group.category_id || r.default === false) continue
-        if (amazonOnly(r) && !mentionsAmazon) continue
+        if (amazonOnly(r) && !amazon) continue
         push(r.id, `你提到了「${term}」，这条属于${r.category}`, term)
       }
     }
+    // WP395（docs/104 C2）：原话没提、品牌档案看得出在 Amazon 上卖 → 推 Amazon 运营默认勾的那几条
+    if (brandOnAmazon === true)
+      for (const r of catalog)
+        if (r.category_id === 'amazon-ops' && r.default !== false)
+          push(r.id, '品牌档案里看得出你在 Amazon 上卖', '')
     return { roles }
   },
 }
@@ -297,6 +335,8 @@ export async function suggestPositions(input: {
   catalog: readonly PositionCatalogEntry[]
   roles: readonly SuggestCatalogRole[]
   suggester: Suggester | undefined
+  /** WP395：品牌档案里看得出在 Amazon 上卖（原话没提 Amazon 也照样推 Amazon 那几条）。 */
+  brand_on_amazon?: boolean
 }): Promise<SuggestResult> {
   const text = input.text.trim().slice(0, MAX_SUGGEST_TEXT)
   const unavailable: SuggestResult = {
@@ -306,23 +346,28 @@ export async function suggestPositions(input: {
     positions: [],
   }
   if (text === '') return unavailable
+  const amazonHint = input.brand_on_amazon === true ? { amazon: true } : {}
+  // WP395（docs/104 C2）：原话和品牌档案都没提 Amazon → Amazon 专属的职责一条都不推（AI 推了也拿掉）
+  const amazonOk = input.brand_on_amazon === true || mentionsAmazon(text)
+  const amazonIds = new Set(input.roles.filter(amazonOnly).map((r) => r.id))
   let engine: Suggester = input.suggester ?? keywordSuggester
   let raw: RawSuggestion | undefined
   try {
-    raw = await engine.run({ text, catalog: [...input.roles] })
+    raw = await engine.run({ text, catalog: [...input.roles], ...amazonHint })
   } catch {
     raw = undefined
   }
   // AI 不在 / 抛错 / 没按格式回话 → 退回按词对（Luoye 10-06）
   if (raw === undefined && engine !== keywordSuggester) {
     engine = keywordSuggester
-    raw = await keywordSuggester.run({ text, catalog: [...input.roles] })
+    raw = await keywordSuggester.run({ text, catalog: [...input.roles], ...amazonHint })
   }
   if (raw === undefined) return unavailable
   const known = new Set(input.roles.map((r) => r.id))
   const roles: SuggestResult['roles'] = []
   for (const r of raw.roles) {
     if (!known.has(r.role_id) || roles.some((x) => x.role_id === r.role_id)) continue
+    if (!amazonOk && amazonIds.has(r.role_id)) continue
     const reason = r.reason.trim().slice(0, 120)
     if (reason === '') continue
     // 「原话依据」必须真在他原话里——对不上就不引（理由留着）
@@ -338,10 +383,12 @@ export async function suggestPositions(input: {
   const checked = given.length > 0 && checkSuggestedPositions(given, ids).ok
   const positions = checked
     ? given.map((p) => {
-        // 整份落在一个类别里的，带上那个类别（复用模板时用）
-        const cats = new Set(p.role_ids.map((id) => categoryOfRole(id, input.catalog)?.id))
-        const only = [...cats][0]
-        return cats.size === 1 && only !== undefined ? { ...p, template_id: only } : p
+        // 整份落在一个类别里的，带上那个类别（复用模板时用）。WP395：一条职责挂在几个类别里
+        // （`amz.support`）时按「哪个类别装得下这一整份」认，不只看它归的第一个
+        const tpl = input.catalog.find((c) =>
+          p.role_ids.every((id) => c.roles.some((r) => r.id === id)),
+        )
+        return tpl === undefined ? p : { ...p, template_id: tpl.id }
       })
     : proposePositions(ids, input.catalog)
   return {

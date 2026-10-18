@@ -155,7 +155,6 @@ upstreams:
       # WP147：截图进模型（官方 MCP 桥 + 附件库 + 旧图换占位）
       - packages/dsh-adapter/test/screenshots-to-model.test.ts
       - packages/dsh-adapter/UPGRADE.md
-      - docs/42-上游升级流程-v1.md
 
   # 34 §核实里的"共享兄弟包"：dsh vendored 出来独立发，packages/kernel 也在用。
   # 跟着 dsh 升是"必要时"才做的事，不是默认动作（改了就要跑 kernel 全部测试）。
@@ -728,7 +727,6 @@ upstreams:
       - packages/core/src/fencing.ts
       - packages/core/src/guardrail.ts
       - packages/core/src/provenance.ts
-      - docs/15-变更账本与Guardrail规范-v1.md
       - packages/support-core/src/prompts/customer-care.ts
       - packages/support-core/src/verticals/goods/rules.ts
 

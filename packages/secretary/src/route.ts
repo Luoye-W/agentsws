@@ -108,7 +108,7 @@ export function routeTask(input: RouteInput): RouteVerdict {
     return {
       kind,
       confidence: 0,
-      reason: '代理判断：看不出这属于哪个岗位，先进"没人认领"的车道',
+      reason: '助理判断：看不出这属于哪个岗位，先进"没人认领"的车道',
       scores: allScores,
     }
   const second = scores[1]?.score ?? 0
@@ -126,7 +126,7 @@ export function routeTask(input: RouteInput): RouteVerdict {
     return {
       kind,
       confidence,
-      reason: `代理判断：像是${first.role_name}的活（${why}），但不够有把握，先进"没人认领"的车道`,
+      reason: `助理判断：像是${first.role_name}的活（${why}），但不够有把握，先进"没人认领"的车道`,
       scores: allScores,
     }
   return {
@@ -136,8 +136,8 @@ export function routeTask(input: RouteInput): RouteVerdict {
     confidence,
     reason:
       kind === 'question'
-        ? `代理判断：这是${first.role_name}的专业问题（${why}），代理不答，转给岗位`
-        : `代理判断：${first.role_name}，因为你说了${why}`,
+        ? `助理判断：这是${first.role_name}的专业问题（${why}），助理不答，转给岗位`
+        : `助理判断：${first.role_name}，因为你说了${why}`,
     scores: allScores,
     ...(holder === undefined ? {} : { position_id: holder.position_id, owner: holder.person_id }),
   }

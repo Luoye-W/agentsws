@@ -55,6 +55,7 @@ export * from './genui.js'
 // WP341（决策 847）：genui 完全融合——动作写法、口令格、媒体来源、表单交上来的结构化回话
 export * from './genui-host.js'
 export * from './genui-reply.js'
+export * from './geo-quality.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
 // WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
@@ -120,6 +121,8 @@ export * from './setup-card.js'
 // WP265：云端 Shopify 一键授权（私有云 WP263）在本机这一侧的约定（不进 CloudApi，决策 191）
 export * from './shopify-cloud.js'
 export * from './site.js'
+// WP381：网站 / 商品体检（AI 爬虫、原始 HTML、商品信息一致性、ChatGPT 购物评估）与 AI 来源流量
+export * from './site-health.js'
 export * from './skills.js'
 // 56 §1 / §2 社媒运营的九条渠道与四个对象（WP72）。与 kol.ts 一条都不共用：
 // 那边的主语是别人的账号（`Creator`），这边是我们自己的号（`SocialAccount`）。

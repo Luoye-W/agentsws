@@ -634,6 +634,53 @@ export function checkExpectations(
         (writes === 0 ? '' : `；助理自己写了 ${writes} 笔`),
     )
   }
+  // WP395（docs/104 C2 / docs/106 A3）：首次设置划分出来的岗位与各自的职责，按先后逐个对上
+  if (expected.positions_planned !== undefined) {
+    const got = evidence.events
+      .filter((e) => e.type === 'simulation.position_planned')
+      .flatMap((e) => {
+        const ps = payloadOf(e).positions
+        return Array.isArray(ps) ? (ps as { template_id: string; role_ids: string[] }[]) : []
+      })
+    const want = Object.entries(expected.positions_planned)
+    const show = (ps: [string, string[]][]): string =>
+      ps.map(([k, v]) => `${k}: [${v.join(', ')}]`).join('；')
+    const gotPairs = got.map((p): [string, string[]] => [p.template_id, p.role_ids])
+    const same =
+      gotPairs.length === want.length &&
+      gotPairs.every(
+        ([k, v], i) =>
+          k === want[i]?.[0] &&
+          v.length === (want[i]?.[1].length ?? -1) &&
+          v.every((r, j) => r === want[i]?.[1][j]),
+      )
+    add(
+      'positions_planned',
+      same,
+      `划分出 ${show(gotPairs) || '（没有）'}，期望 ${show(want) || '（没有）'}`,
+    )
+  }
+  // WP395（docs/36 §3）：这几条职责的当场回答照实说没数据——不出组件、不出数
+  if (expected.position_answer_no_data !== undefined) {
+    const answered = evidence.events
+      .filter((e) => e.type === 'simulation.position_answered')
+      .map(payloadOf)
+    const bad: string[] = []
+    for (const role of expected.position_answer_no_data) {
+      const mine = answered.filter((p) => p.role_id === role)
+      const honest = mine.filter(
+        (p) => p.no_data === true && Array.isArray(p.components) && p.components.length === 0,
+      )
+      if (mine.length === 0 || honest.length !== mine.length) bad.push(role)
+    }
+    add(
+      'position_answer_no_data',
+      bad.length === 0,
+      bad.length === 0
+        ? `[${expected.position_answer_no_data.join(', ')}] 没数据时都照实说了`
+        : `没照实说（或一次没答）：${bad.join(', ')}`,
+    )
+  }
   if (expected.position_answer_components !== undefined) {
     const seen = new Set(
       evidence.events
@@ -746,6 +793,35 @@ export function checkExpectations(
         problems.length === 0,
         problems.length === 0
           ? `卡上 ${lanes.length} 件：${lanes.join(' → ')}`
+          : problems.join('；'),
+      )
+    }
+  }
+  // WP380：GEO 第二层——胜率、准确度、一致性分到哪几个岗位、复查建议
+  if (expected.geo_quality !== undefined) {
+    const want = expected.geo_quality
+    const last = evidence.events.filter((e) => e.type === 'digest.geo_quality').pop()
+    if (last === undefined) add('geo_quality', false, '一张「说得对不对、比得过谁」都没出')
+    else {
+      const p = payloadOf(last)
+      const problems: string[] = []
+      const num = (v: unknown) => (typeof v === 'number' ? v : Number.NaN)
+      if (want.win_rate !== undefined && !matchNumeric(num(p.win_rate), want.win_rate))
+        problems.push(`比较胜率 ${String(p.win_rate)}（期望 ${String(want.win_rate)}）`)
+      if (want.accuracy !== undefined && !matchNumeric(num(p.accuracy), want.accuracy))
+        problems.push(`描述准确度 ${String(p.accuracy)}（期望 ${String(want.accuracy)}）`)
+      const owners = Array.isArray(p.groups)
+        ? (p.groups as { owner?: unknown }[]).map((g) => String(g.owner))
+        : []
+      if (want.owners !== undefined && owners.join(',') !== want.owners.join(','))
+        problems.push(`分到 ${owners.join('、')}（期望 ${want.owners.join('、')}）`)
+      if (want.advice !== undefined && p.advice !== want.advice)
+        problems.push(`复查建议 ${String(p.advice)}（期望 ${want.advice}）`)
+      add(
+        'geo_quality',
+        problems.length === 0,
+        problems.length === 0
+          ? `胜率 ${String(p.win_rate)}、准确度 ${String(p.accuracy)}、分到 ${owners.join('、')}、建议 ${String(p.advice)}`
           : problems.join('；'),
       )
     }

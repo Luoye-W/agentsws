@@ -48,8 +48,10 @@ describe('README 顶上那一张', () => {
       '<source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mark-idle-dark.svg">',
     )
     expect(readme).toContain('<img src="docs/assets/brand/mark-idle-light.svg"')
-    // 标记出现在第一行之前——它是门面，不是正文里的插图
-    expect(readme.indexOf('<picture>')).toBeLessThan(readme.indexOf('# agentsws'))
+    // 标记出现在标题之前——它是门面，不是正文里的插图（WP384 起标题是居中的 <h1>）
+    const title = readme.indexOf('<h1')
+    expect(title).toBeGreaterThan(-1)
+    expect(readme.indexOf('<picture>')).toBeLessThan(title)
   })
 })
 
