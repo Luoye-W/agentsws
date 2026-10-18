@@ -33,7 +33,7 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getHome: (...args: unknown[]) => getHome(...(args as [])),
     decide: (...args: unknown[]) => decide(...(args as [])),
-    undoFollow: (...args: unknown[]) => undoFollow(...(args as [])),
+    undoFollow: (...args: unknown[]) => undoFollow(...(args as [string, string[]])),
     addDecisionReason: (...args: unknown[]) => addDecisionReason(...(args as [])),
     approveBatch: (...args: unknown[]) => approveBatch(...(args as [])),
   }
