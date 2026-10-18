@@ -193,3 +193,69 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+================================================================================
+xjli360/sealeap-amazon-skills
+https://github.com/xjli360/sealeap-amazon-skills
+pinned commit 1283764556e61cbe56c600bbe504b8731b2254cb
+Used in: amazon-brand-prep-listing, amazon-brand-stage, amazon-brand-tools-promo,
+         amazon-case-tracking, amazon-ce-category, amazon-connection-check,
+         amazon-data-kiosk-recon, amazon-eu-packaging, amazon-fba-reimbursement,
+         amazon-global-expansion, amazon-localization, amazon-listing-optimizer,
+         amazon-multichannel, amazon-peak-season, amazon-sqp-recon
+         (Chinese rewrites of SeaLeap's own workflows from amazon-skills/amazon-official/ and
+         amazon-skills/public-research/ only; no scripts, datasets or third-party course
+         materials were copied. The FBA reimbursement arithmetic was re-implemented in
+         TypeScript in packages/contracts/src/amazon-reimbursement.ts.)
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 SeaLeap
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTICE (reproduced from the upstream repository):
+
+SeaLeap Amazon Skills — licensing and trademark notice
+
+The MIT License applies to original software and documentation authored by
+SeaLeap for this repository.
+
+It does not grant trademark rights or permission to reuse brand assets,
+including the Amazon Advertising and SeaLeap names and logos. The Amazon
+Advertising logo included in this repository is used with permission and
+remains subject to Amazon's applicable brand and marketing guidelines.
+
+Third-party source materials, transcripts, excerpts, and other content
+identified as originating from third parties remain subject to the rights and
+terms of their respective owners and are not relicensed under the MIT License.
+
+================================================================================
+kangise/ecommerce-ai-skills
+https://github.com/kangise/ecommerce-ai-skills
+pinned commit b1a727c3b2c2d27f2793e0d0fcd655ea446ba635
+Used in: amazon-inventory, amazon-ops-playbook (operating rhythm, hard constraints and inventory
+         formulas distilled from src/a-operators/ and ontology/constraints.yaml); the same
+         formulas in packages/contracts/src/amazon-inventory.ts. Released under CC0 1.0; credited
+         here although attribution is not required.
+--------------------------------------------------------------------------------
+CC0 1.0 Universal
+
+(Full text: https://creativecommons.org/publicdomain/zero/1.0/legalcode)
+

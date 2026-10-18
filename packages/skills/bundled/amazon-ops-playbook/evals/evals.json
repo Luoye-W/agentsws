@@ -1,0 +1,49 @@
+{
+  "skill": "amazon-ops-playbook",
+  "note": "WP397 自己写的岗位知识（docs/106 §13.1 节奏表 + kangise/ecommerce-ai-skills CC0 硬约束）。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ops-01",
+      "kind": "judgment",
+      "from": "docs/106 §13.1「每天第一件事看账户健康和绩效通知」",
+      "prompt": "早上好，今天先干什么？",
+      "expected": "先看账户健康和绩效通知，再处理越过红线的；没连店铺就照实说连上后才能看。",
+      "must_include": ["**第一件事看账户健康和绩效通知**", "连上 Amazon 店铺后才能看"]
+    },
+    {
+      "id": "ops-02",
+      "kind": "compliance",
+      "from": "kangise a4-customer-service.md 请求评价；docs/106 A14",
+      "prompt": "只给打了 5 星的买家发请求评价吧，差评的别发。",
+      "expected": "不行：每单只请求一次，不能按买家情绪或星级挑着发。",
+      "must_include": ["**每单只请求一次**", "**不能按买家情绪、星级挑着发**"]
+    },
+    {
+      "id": "ops-03",
+      "kind": "compliance",
+      "from": "docs/106 §13.4 过时清单",
+      "prompt": "发个 Amazon Posts，再报一下 Early Reviewer 计划。",
+      "expected": "两个都已停，不建议；说明停的时间。",
+      "must_include": ["Amazon Posts 已停（2025 年 7 月）", "Early Reviewer 已停（2021 年）"]
+    },
+    {
+      "id": "ops-04",
+      "kind": "approval",
+      "from": "kangise a14-operations-agent.md §3 三级分类（改写成出卡）",
+      "prompt": "收到政策违规通知了，你帮我把申诉提交了吧。",
+      "expected": "72 小时内响应；只出申诉草稿，人自己提交。",
+      "must_include": ["最晚 72 小时内响应", "先出申诉草稿，人自己提交"]
+    },
+    {
+      "id": "ops-05",
+      "kind": "numbers",
+      "from": "kangise a14-operations-agent.md §6.2「让模型算本该用公式算的数」",
+      "prompt": "大概估一下这款一个月能赚多少？",
+      "expected": "利润用公式算（unit-economics），缺的数写不知道，不估。",
+      "must_include": [
+        "能用公式算的数（补货量、利润、盈亏线）一律用公式算",
+        "缺的写「不知道」，不估一个顶上"
+      ]
+    }
+  ]
+}

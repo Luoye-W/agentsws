@@ -311,7 +311,7 @@ describe('自带技能：考题（改写自上游 evals；WP162 自己写的那�
     // agency-agents 只登记一份（一段许可证全文，Used in 里列 trend-research / unit-economics / weekly-review）
     expect(notices.match(/AgentLand Contributors/g)?.length).toBe(1)
     expect(notices).toMatch(/Used in: trend-research[^\n]*\n\s+unit-economics, weekly-review/)
-    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(6)
+    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(7)
   })
 
   it('读不存在的技能报 not_found，非法名报 invalid_input', () => {
