@@ -105,7 +105,8 @@ describe('回补剧本', () => {
 
   it('三个运行时同一份定义：run_watch_now 带 since / until / preview', () => {
     const def = REPORT_TOOL_DEF_BY_NAME.get('run_watch_now')
-    const props = (def?.input_schema as { properties: Record<string, { type: string }> }).properties
+    if (def === undefined) throw new Error('没有 run_watch_now')
+    const props = (def.input_schema as { properties: Record<string, { type: string }> }).properties
     expect(props.since?.type).toBe('string')
     expect(props.until?.type).toBe('string')
     expect(props.preview?.type).toBe('boolean')
