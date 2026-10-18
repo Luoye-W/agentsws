@@ -10,6 +10,8 @@ export const OUTBOUND_ZH: Record<string, string> = {
   'outbound.export': '导出',
   'outbound.followups': '回了 {count} 条',
   'outbound.deleted': '对方已删',
+  // WP413：在浏览器插件侧边栏里批的
+  'outbound.via_extension': '在插件里批的',
   'outbound.status.failed': '没发成',
   'outbound.status.deleted': '已删',
   'outbound.action.reply': '回复',
@@ -43,6 +45,7 @@ export const OUTBOUND_EN: Record<string, string> = {
   'outbound.export': 'Export',
   'outbound.followups': '{count} replies',
   'outbound.deleted': 'Deleted by them',
+  'outbound.via_extension': 'Approved in the extension',
   'outbound.status.failed': 'Not sent',
   'outbound.status.deleted': 'Deleted',
   'outbound.action.reply': 'Reply',

@@ -131,6 +131,9 @@ function RecordRow({ record: r }: { record: OutboundRecord }): ReactNode {
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {replies === 0 ? null : <span>{t('outbound.followups', { count: replies })}</span>}
         {r.counterpart_deleted === true ? <span>{t('outbound.deleted')}</span> : null}
+        {r.approved_via === 'extension' ? (
+          <span data-testid="outbound-via-extension">{t('outbound.via_extension')}</span>
+        ) : null}
         {r.link === undefined ? null : (
           <a
             href={r.link}
