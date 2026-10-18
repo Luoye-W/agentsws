@@ -53,6 +53,8 @@ interface UpdateBridge {
   readiness?(): Promise<RestartReadinessView>
   restart?(choice: 'now' | 'idle'): Promise<string>
   cancelWait?(): Promise<boolean>
+  /** WP409：下载断了时「去下载页」（地址由壳定）。旧壳没有：先判空，没有就不出那个小按钮。 */
+  openDownloadPage?(): Promise<boolean>
 }
 
 /** WP351：更新状态补拉的间隔。 */
@@ -155,8 +157,25 @@ export function UpdateButton(): React.ReactNode {
     }
     void bridge.restart?.(choice).then(done, done)
   }
+  // WP409：下载那一步失败了，除了「重试」再给一条出路：去下载页手动装
+  const pageButton =
+    status.state === 'error' &&
+    status.stage === 'download' &&
+    bridge.openDownloadPage !== undefined ? (
+      <button
+        type="button"
+        data-testid="update-download-page"
+        title={t('update.download_page.tip')}
+        onClick={() => {
+          void bridge.openDownloadPage?.()
+        }}
+        className="shrink-0 rounded-md px-2 py-1.5 text-xs text-ws-muted-fg hover:bg-sidebar-accent/60 hover:text-ws-fg"
+      >
+        {t('update.download_page')}
+      </button>
+    ) : null
   return (
-    <>
+    <div className="flex w-full items-center gap-1">
       <button
         type="button"
         data-testid="update-button"
@@ -166,7 +185,7 @@ export function UpdateButton(): React.ReactNode {
         disabled={view.disabled || busy}
         onClick={act}
         className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
           view.tone === 'bad'
             ? 'text-ws-bad hover:bg-ws-bad-bg'
             : 'font-medium text-ws-brand hover:bg-sidebar-accent/60',
@@ -181,6 +200,7 @@ export function UpdateButton(): React.ReactNode {
           </span>
         ) : null}
       </button>
+      {pageButton}
       <UpdateRestartDialog
         readiness={asking}
         busy={busy}
@@ -189,7 +209,7 @@ export function UpdateButton(): React.ReactNode {
           setAsking(undefined)
         }}
       />
-    </>
+    </div>
   )
 }
 
@@ -257,7 +277,13 @@ function describe(
         ...base,
         tone: 'bad',
         Icon: AlertCircle,
-        label: t(s.stage === 'download' ? 'update.failed.download' : 'update.failed.install'),
+        label: t(
+          s.stage === 'install'
+            ? 'update.failed.install'
+            : s.code === 'network'
+              ? 'update.failed.download.network'
+              : 'update.failed.download',
+        ),
         tip: t(`update.error.${s.code}`),
       }
   }

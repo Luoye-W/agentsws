@@ -99,10 +99,37 @@ describe('UpdateButton', () => {
     })
     renderWithProviders(<UpdateButton />)
     const button = await screen.findByTestId('update-button')
-    expect(button.textContent).toContain('下载没成功')
-    expect(button.getAttribute('title')).toBe('连不上下载站。检查网络后点这里重试')
+    expect(button.textContent).toContain('下载断了 · 重试')
+    expect(button.getAttribute('title')).toContain('点这里接着下')
     await userEvent.click(button)
     expect(bridge.download).toHaveBeenCalledOnce()
+    // 旧壳（桥上没有 openDownloadPage）：不出「去下载页」
+    expect(screen.queryByTestId('update-download-page')).toBeNull()
+  })
+
+  it('WP409：下载断了——「重试」旁边给「去下载页」，点了交给壳开下载页', async () => {
+    const bridge = fakeBridge({
+      state: 'error',
+      stage: 'download',
+      code: 'network',
+      version: '0.2.1',
+    })
+    const openDownloadPage = vi.fn(async () => true)
+    ;(bridge as unknown as { openDownloadPage: typeof openDownloadPage }).openDownloadPage =
+      openDownloadPage
+    renderWithProviders(<UpdateButton />)
+    const page = await screen.findByTestId('update-download-page')
+    expect(page.textContent).toBe('去下载页')
+    await userEvent.click(page)
+    expect(openDownloadPage).toHaveBeenCalledOnce()
+    expect(bridge.download).not.toHaveBeenCalled()
+    // 别的下载错误（不是断线）仍说「下载没成功」，照样给去下载页
+    bridge.push({ state: 'error', stage: 'download', code: 'checksum', version: '0.2.1' })
+    expect(screen.getByTestId('update-button').textContent).toContain('下载没成功')
+    expect(screen.getByTestId('update-download-page')).toBeTruthy()
+    // 安装失败不给（那是重试安装，不是重下）
+    bridge.push({ state: 'error', stage: 'install', code: 'smoke', version: '0.2.1' })
+    expect(screen.queryByTestId('update-download-page')).toBeNull()
   })
 
   it('安装前自检没过：点了重试安装（不是重下）', async () => {
