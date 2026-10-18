@@ -125,6 +125,14 @@ describe('WP360 引导装插件（替身）', () => {
     void state
   })
 
+  it('WP416：「要你处理」里还开着装插件那张连接卡 → needs 带上卡 id；配上了就不带', async () => {
+    const { ob, state } = make({ openConnectCard: async () => 'card_ext' })
+    const v = await ob.needs(actor, ['social.reddit'])
+    expect(v.connect_card_id).toBe('card_ext')
+    state.paired = true
+    expect((await ob.needs(actor, ['social.reddit'])).connect_card_id).toBeUndefined()
+  })
+
   it('卡上那一句为什么按用途拼', () => {
     expect(extensionWhy(['reddit', 'kol'])).toBe(
       '这个岗位要靠浏览器插件读 Reddit、把批过的回复填进页面、在 YouTube / Instagram / TikTok 页面上收红人。装一次、配个对，以后跟着工坊自己更新。',

@@ -6721,6 +6721,8 @@ export interface ExtensionNeedsView {
   steps: { step: ExtensionFollowStepView; done?: boolean }[]
   plans: { target: string; name: string; satisfied: boolean }[]
   snoozed: boolean
+  /** WP416：「要你处理」里还开着的装插件连接卡（有就不在岗位页顶上再出一张）。 */
+  connect_card_id?: string
 }
 
 export const getExtensionNeeds = (

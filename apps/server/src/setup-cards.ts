@@ -188,6 +188,10 @@ export interface SetupCardsAssembly {
   askConnect(input: AskConnectInput): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
   /** 别的模块直接要一张配置卡；设好了就不出、回 `undefined`。 */
   askSetup(input: AskSetupInput): Promise<{ item: ApprovalItem; attach: boolean } | undefined>
+  /**
+   * WP416：只缺这几样（按 kind）的那张连接卡还开着吗——开着回卡 id（岗位页顶上的引导卡据此不再重复出）。
+   */
+  openConnectCard?(kinds: readonly string[]): Promise<string | undefined>
   /** 这两种卡被决定了（接着做 / 保存 / 先不连 / 先不设）。别的卡什么都不做。 */
   onDecided(item: ApprovalItem): Promise<void>
   /** 连接清单变了：还在等的连接卡里，缺的都连上了的那几张自动收起、接着做。回接着做了几张。 */
@@ -1049,6 +1053,15 @@ export function createSetupCards(options: SetupCardsOptions): SetupCardsAssembly
     askSetup,
     onDecided,
     recheck,
+    async openConnectCard(kinds) {
+      const bus = options.approvals()
+      if (bus === undefined) return undefined
+      const key = connectRequestDedupeKey(
+        ws,
+        kinds.map((kind) => ({ kind, name: kind, required: true })),
+      )
+      return (await activeCard(bus, key))?.id
+    },
     target: (id) => targets.get(id),
     targetIds: () => [...targets.keys()].sort(),
     researchCache,

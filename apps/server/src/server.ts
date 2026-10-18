@@ -12974,6 +12974,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kernel.eventLog
         .readSync({ workspace_id: ws as WorkspaceId, types: ['extension.onboarding_prompted'] })
         .some((e) => (e.payload as { assignment_id?: string }).assignment_id === assignment_id),
+    // WP416：「要你处理」里还开着装插件那张连接卡 → 岗位页顶上那张不再重复出
+    openConnectCard: async (ws) =>
+      (await setupCardsOf(ws as WorkspaceId))?.openConnectCard?.(['extension']),
     askConnect: async ({ actor, matter_id, why }) => {
       const need = builtinConnectNeed('extension')
       if (need === undefined) return undefined
