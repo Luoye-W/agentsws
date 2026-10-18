@@ -77,19 +77,22 @@ afterEach(() => {
 })
 
 describe('还没配上：第一次装', () => {
-  it('一句 + 两个按钮 + 三步小字；打开文件夹顺手复制路径', async () => {
+  it('一句 + 两个按钮 + 一行小字（拖进扩展页）；打开文件夹 = 选中它，顺手复制路径', async () => {
     renderWithProviders(<ExtensionInstall assignment="asg_owner" paired={false} />)
     await screen.findByTestId('extension-install')
     expect(
       screen.getByText('插件随工坊带着：在 Chrome 里装一次，以后跟着工坊自己更新。'),
     ).toBeTruthy()
+    // WP409：小字说「把这个文件夹拖进扩展页」
     expect(screen.getByTestId('extension-install-steps').textContent).toContain(
-      '加载已解压的扩展程序',
+      '把这个文件夹拖进扩展页',
     )
     fireEvent.click(screen.getByTestId('extension-install-folder'))
     await waitFor(() => expect(state.opened).toEqual(['folder']))
     expect(writeText).toHaveBeenCalledWith(FOLDER)
-    expect((await screen.findByTestId('extension-install-note')).textContent).toBe('路径已复制')
+    expect((await screen.findByTestId('extension-install-note')).textContent).toBe(
+      '已选中 chrome-extension 文件夹：把它拖进 Chrome 扩展页',
+    )
     state.openResult = { opened: true, address: 'chrome://extensions' }
     fireEvent.click(screen.getByTestId('extension-install-chrome'))
     await waitFor(() => expect(state.opened).toEqual(['folder', 'chrome']))

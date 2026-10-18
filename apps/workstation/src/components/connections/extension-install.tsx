@@ -2,7 +2,7 @@
  * WP345（决策 871）：连接卡 / 连接页「浏览器插件」一节里**装插件**那一块。
  *
  * 插件不上架商店，随工坊带着：桌面版把它放在数据目录下一个固定文件夹里。用户只在第一次动一次手——
- * 一句话 + 「打开插件文件夹」「打开 Chrome 扩展页」两个按钮 + 三步小字（开发者模式 → 加载已解压 → 选这个文件夹）。
+ * 一句话 + 「打开插件文件夹」「打开 Chrome 扩展页」两个按钮 + 一行小字（开发者模式 → 把选中的文件夹拖进扩展页；WP409）。
  * 之后插件跟着工坊自己更新，这一块就不出了（配上对之后卡自己收起：WP324 规则，看的是有没有配上的令牌）。
  *
  * 只在两种时候说话：
@@ -40,7 +40,8 @@ export function ExtensionInstall(props: {
     mutationFn: (target: 'folder' | 'chrome') => openExtensionInstall(target, props.assignment),
     onSuccess: (out, target) => {
       if (!out.opened) setNote(out.message)
-      else if (target === 'folder') setNote(t('extinstall.copied'))
+      // WP409：文件夹在访达 / 资源管理器里被选中了——告诉人下一步就是拖
+      else if (target === 'folder') setNote(t('extinstall.selected'))
       else {
         // Chrome 不让从外面直接打开扩展页（实测开成新标签页）：地址复制好，请人粘贴
         const address = out.address ?? 'chrome://extensions'
