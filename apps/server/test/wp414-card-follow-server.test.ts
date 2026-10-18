@@ -4,18 +4,26 @@
  * 外部版块 r/Smartphones 里三张同类的「发出去」卡（换手机的帖子，AI 判断都是「和我们无关」）+
  * 一张自家版块的正常回复卡：
  *
- * 1. 否掉第一张（**不写理由**，一下生效）→ 同类的另外两张自动「不发」，每张决定上写着为什么算同类；
- *    自家版块那张不动；账本里有一条 `approval.followed`；
- * 2. 事后补一句理由 → 带头那张与跟着的两张都补上；
- * 3. 撤回 → 那两张回到待处理（能再批），带头那张保持「不发」；
- * 4. 「发送」同类卡：只列回「要一起发吗」，一张都不自动发。
+ * 1. 否掉第一张（**不写理由**，一下生效）→ **一张都不带**（10-19 更正：没理由只处理这一张）；
+ * 2. 事后补理由「不相关」→ 这一刻才按理由去找：AI（这里是 stub 剧本，同一份输入）逐张判，判为是的两张
+ *    自动「不发」，每张决定上写着为什么属于这个理由；自家版块那张不动；账本有一条 `approval.followed`；
+ * 3. 单张恢复一张 → 只那张回待处理；整批撤回 → 剩下那张也回来；带头那张保持「不发」；
+ * 4. 「稍后」同理：没理由不跟，有理由才跟；
+ * 5. 「发送」同类卡：只列回「要一起发吗」，一张都不自动发。
+ * 另有「按理由判」那几件的单元：预筛、读模型回话、模型判是 / 不是、模型出错一张都不带。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ApprovalItem } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { similarTo } from '../src/card-follow.js'
+import {
+  createReasonJudge,
+  parseVerdicts,
+  prefilterByReason,
+  reasonPrompt,
+  similarTo,
+} from '../src/card-follow.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import { createServer, type Server } from '../src/server.js'
 
@@ -138,11 +146,11 @@ interface Follow {
 }
 
 describe('WP414 同类卡跟着前一个决定（替身 Reddit 回信卡）', () => {
-  it('否掉第一张 → 后两张自动不发（自家版块那张不动）→ 补理由 → 撤回', async () => {
+  it('没理由只处理这一张 → 补理由才按理由找 → 单张恢复 → 整批撤回', async () => {
     const { asg, ids, own } = await setup()
     const [first, second, third] = ids as [string, string, string]
 
-    // 1. 否掉第一张：不写理由，一下生效
+    // 1. 否掉第一张：不写理由，一下生效，一张都不带
     const out = await call<{ state: string; follow?: Follow }>(
       asg,
       `/v1/approvals/${first}/decide`,
@@ -150,37 +158,51 @@ describe('WP414 同类卡跟着前一个决定（替身 Reddit 回信卡）', ()
     )
     expect(out.status).toBe(200)
     expect(out.data.state).toBe('rejected')
-    expect(out.data.follow?.applied.map((a) => a.id).sort()).toEqual([second, third].sort())
+    expect(out.data.follow).toBeUndefined()
+    expect((await get(second)).state).toBe('pending')
+    expect((await get(third)).state).toBe('pending')
+    expect((await get(first)).decision?.reason).toBe('不要')
+
+    // 2. 事后补理由：这一刻才按理由去找（stub 剧本判），判为是的两张一并不发
+    const reason = await call<{ followers: number; follow?: Follow & { reason?: string } }>(
+      asg,
+      `/v1/approvals/${first}/reason`,
+      { reason: '不相关' },
+    )
+    expect(reason.status).toBe(200)
+    expect(reason.data.follow?.reason).toBe('不相关')
+    expect(reason.data.follow?.applied.map((a) => a.id).sort()).toEqual([second, third].sort())
+    expect((await get(first)).decision?.reason).toBe('不相关')
     for (const id of [second, third]) {
       const item = await get(id)
       expect(item.state).toBe('rejected')
       expect(item.decision?.via).toBe('batch')
       expect(item.decision?.followed?.leader_id).toBe(first)
-      // 判断「同类」的理由写在每张被处理的卡上
-      expect(item.decision?.followed?.why).toContain('r/Smartphones')
+      // 为什么判它属于这个理由，写在每张被处理的卡上
+      expect(item.decision?.followed?.why).toContain('不相关')
+      expect(item.decision?.reason).toContain('不相关')
     }
     expect((await get(own)).state).toBe('pending')
-    expect((await get(first)).decision?.reason).toBe('不要')
 
-    // 2. 事后补理由（快捷理由 chip）
-    const reason = await call<{ followers: number }>(asg, `/v1/approvals/${first}/reason`, {
-      reason: '不相关',
-      follower_ids: [second, third],
-    })
-    expect(reason.status).toBe(200)
-    expect(reason.data.followers).toBe(2)
-    expect((await get(first)).decision?.reason).toBe('不相关')
-    expect((await get(second)).decision?.reason).toContain('不相关')
+    // 3. 单张恢复
+    const one = await call<{ restored: { id: string }[] }>(
+      asg,
+      `/v1/approvals/${first}/follow/undo`,
+      { ids: [second] },
+    )
+    expect(one.data.restored.map((r) => r.id)).toEqual([second])
+    expect((await get(second)).state).toBe('pending')
+    expect((await get(third)).state).toBe('rejected')
 
-    // 3. 撤回：两张回到待处理，带头那张不动
+    // 整批撤回（已恢复的那张跳过）
     const undo = await call<{ restored: { id: string }[]; skipped: string[] }>(
       asg,
       `/v1/approvals/${first}/follow/undo`,
       { ids: [second, third] },
     )
     expect(undo.status).toBe(200)
-    expect(undo.data.restored.map((r) => r.id).sort()).toEqual([second, third].sort())
-    expect((await get(second)).state).toBe('pending')
+    expect(undo.data.restored.map((r) => r.id)).toEqual([third])
+    expect(undo.data.skipped).toEqual([second])
     expect((await get(third)).state).toBe('pending')
     expect((await get(first)).state).toBe('rejected')
 
@@ -189,6 +211,17 @@ describe('WP414 同类卡跟着前一个决定（替身 Reddit 回信卡）', ()
       action: 'snooze',
     })
     expect(again.status).toBe(200)
+  })
+
+  it('决定时就带了理由：当场按理由跟', async () => {
+    const { asg, ids, own } = await setup()
+    const [first, second, third] = ids as [string, string, string]
+    const out = await call<{ follow?: Follow }>(asg, `/v1/approvals/${first}/decide`, {
+      action: 'reject',
+      reason: '时机不对',
+    })
+    expect(out.data.follow?.applied.map((a) => a.id).sort()).toEqual([second, third].sort())
+    expect((await get(own)).state).toBe('pending')
   })
 
   it('「发送」：同类卡只列回「要一起发吗」，一张都不自动发', async () => {
@@ -206,13 +239,18 @@ describe('WP414 同类卡跟着前一个决定（替身 Reddit 回信卡）', ()
     expect((await get(third)).state).toBe('pending')
   })
 
-  it('「稍后」：同类卡一并推迟', async () => {
+  it('「稍后」：没理由不跟；补了理由才一并推迟', async () => {
     const { asg, ids, own } = await setup()
     const [first, second] = ids as [string, string]
     const out = await call<{ follow?: Follow }>(asg, `/v1/approvals/${first}/decide`, {
       action: 'snooze',
     })
-    expect(out.data.follow?.applied).toHaveLength(2)
+    expect(out.data.follow).toBeUndefined()
+    expect((await get(second)).state).toBe('pending')
+    const reason = await call<{ follow?: Follow }>(asg, `/v1/approvals/${first}/reason`, {
+      reason: '等产品资料',
+    })
+    expect(reason.data.follow?.applied).toHaveLength(2)
     expect((await get(second)).state).toBe('deferred')
     expect((await get(own)).state).toBe('pending')
   })
@@ -265,5 +303,80 @@ describe('similarTo（哪几张算同类）', () => {
     const a = card({ id: 'a', sub: 'x', post: 'p1' })
     const b = card({ id: 'b', sub: 'x', post: 'p1', form: 'other' })
     expect(similarTo(a, b)).toBeUndefined()
+  })
+})
+
+describe('按理由判（AI 逐张；词重合只预筛）', () => {
+  const card = (id: string, sub: string, title: string, reason: string): ApprovalItem =>
+    ({
+      id,
+      kind: 'outbound_draft',
+      role_id: 'social.reddit',
+      title: `回帖：${title}`,
+      summary: title,
+      subject: { object: { type: 'external_post', id: `reddit:${id}` } },
+      payload: {
+        form: 'reddit_write',
+        reddit: { subreddit: sub, permalink: `/r/${sub}/comments/${id}/x/`, post_title: title },
+        body: { text: 'Thanks!' },
+        reason,
+      },
+    }) as unknown as ApprovalItem
+  const leader = card('a', 'Smartphones', 'Switching from Pixel to iPhone', OFF_TOPIC)
+  const pool = [
+    card('b', 'Smartphones', 'Best battery phone this year', OFF_TOPIC),
+    card('c', 'ivraxr', 'Air3 captions keep lagging', '自家版块用户问字幕延迟，要回'),
+  ]
+  const base = {
+    leader,
+    pool,
+    reason: '不相关',
+    action: 'reject' as const,
+    person_id: 'per_1',
+    assignment_id: 'asg_1',
+  }
+
+  it('预筛：同来源 / 词重合的排前面；提示里有理由、每张候选的 id，外部文本进围栏', () => {
+    const picked = prefilterByReason(leader, pool, '不相关')
+    expect(picked[0]?.id).toBe('b')
+    const prompt = reasonPrompt({ leader, candidates: picked, reason: '不相关', action: 'reject' })
+    expect(prompt).toContain('「不相关」')
+    expect(prompt).toContain('[b]')
+    expect(prompt).toContain('只按这条理由判断')
+  })
+
+  it('读模型回话：只认 match 为真、id 认得出、带一句为什么的', () => {
+    const text =
+      '好的：[{"id":"b","match":true,"why":"也是换手机的帖子"},{"id":"c","match":false,"why":"x"},{"id":"zz","match":true,"why":"y"}]'
+    expect(parseVerdicts(text, ['b', 'c'])).toEqual([{ id: 'b', why: '也是换手机的帖子' }])
+    expect(parseVerdicts('不是 JSON', ['b'])).toEqual([])
+  })
+
+  it('有模型：按模型逐张判的结果（判「不是」的不带）；模型出错一张都不带', async () => {
+    const prompts: string[] = []
+    const judge = createReasonJudge({
+      complete: () => async (prompt) => {
+        prompts.push(prompt)
+        return '[{"id":"b","match":true,"why":"也是和眼镜无关的换手机帖"},{"id":"c","match":false,"why":"自家用户问题"}]'
+      },
+    })
+    expect(await judge(base)).toEqual([
+      { id: 'b', why: '也是和眼镜无关的换手机帖', basis: ['same_reason'] },
+    ])
+    expect(prompts[0]).toContain('不相关')
+    const broken = createReasonJudge({
+      complete: () => async () => {
+        throw new Error('上游 500')
+      },
+    })
+    expect(await broken(base)).toEqual([])
+  })
+
+  it('没有模型（stub）：同一份输入走剧本，可重跑；自家版块那张不算', async () => {
+    const judge = createReasonJudge({ complete: () => undefined })
+    const out = await judge(base)
+    expect(out.map((o) => o.id)).toEqual(['b'])
+    expect(out[0]?.why).toContain('不相关')
+    expect(await judge(base)).toEqual(out)
   })
 })

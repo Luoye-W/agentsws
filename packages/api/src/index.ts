@@ -14,6 +14,8 @@ export {
   type FollowedCard,
   followDecision,
   followReason,
+  givenReason,
+  type ReasonJudgeInput,
   type SimilarCard,
 } from './card-follow.js'
 export {

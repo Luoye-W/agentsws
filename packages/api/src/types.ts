@@ -51,7 +51,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
-import type { SimilarCard } from './card-follow.js'
+import type { ReasonJudgeInput, SimilarCard } from './card-follow.js'
 import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
 import type { AdCreativePort } from './routes/ad-creative.js'
@@ -890,13 +890,18 @@ export interface GatewayDeps {
   modules: ModulesPort
   approvals: ApprovalBus
   /**
-   * WP414（只加）：同类卡跟随——给一张刚定了的卡和同一个人、同一条职责的待处理卡，回其中**同类**的
-   * （同一来源 / 同一话题 / 同一判断依据；宿主用现有的意图与相似度工具算）。不给 = 不跟随（老行为）。
+   * WP414（只加）：「发送 / 通过」之后问「要一起发吗」用——给一张刚批了的卡和同一个人、同一条职责的
+   * 待处理卡，回其中**像**的（宿主用现有的相似度工具算）。不给 = 不问（老行为）。
    */
   similarCards?(
     leader: ApprovalItem,
     pool: readonly ApprovalItem[],
   ): SimilarCard[] | Promise<SimilarCard[]>
+  /**
+   * WP414（10-19 更正，只加）：「不要 / 稍后」**给了理由**之后，按这条理由逐张判候选卡是不是也属于这种情况
+   * （AI 判；词重合只做预筛），回判为是的（每张一句为什么）。不给 = 不跟随。
+   */
+  judgeByReason?(input: ReasonJudgeInput): Promise<SimilarCard[]>
   /**
    * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板）。`POST /v1/approvals` 给了
    * `rule: 'scope_manager'` 却没给收件人时用它；没装配就照旧落在提的人自己身上。

@@ -792,7 +792,8 @@ export function approvalRoutes(): Route[] {
         }
         /*
          * WP414：同类卡跟着这一下——只跟工作台里人亲手点的「不要 / 稍后 / 通过」（指导、选择题、
-         * 卡片回调都不跟）。「不要 / 稍后」照办并记账；「通过」只把同类列回去，绝不自动发。
+         * 卡片回调都不跟）。「不要 / 稍后」**给了理由才跟**（AI 按理由逐张判、照办并记账）；
+         * 「通过」只把同类列回去，绝不自动发。
          */
         let follow: CardFollowResult | undefined
         if (
@@ -805,7 +806,9 @@ export function approvalRoutes(): Route[] {
             follow = await followDecision(deps, {
               item: out,
               person_id: p.person_id,
+              assignment_id: assignment.id,
               action: deckAction,
+              ...optional(input.reason, 'reason'),
               trace_id: c.get('rctx').trace_id,
             })
           } catch {
@@ -876,18 +879,19 @@ export function approvalRoutes(): Route[] {
         method: 'post',
         path: '/v1/approvals/:id/reason',
         operationId: 'addApprovalReason',
-        summary: 'WP414：决定之后补一句理由（「不要」理由可选；跟着处理的那几张一起补）',
+        summary:
+          'WP414：决定之后补一句理由（「不要 / 稍后」理由可选；第一次补理由时按这条理由找同类一并处理，已跟着处理的那几张一起补）',
         tag: 'approval',
         auth: 'bearer',
         assignment: true,
         authz: DECIDE,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
         body: ReasonBody,
-        returns: '{ item: ApprovalItem, followers: number }',
+        returns: '{ item: ApprovalItem, followers: number, follow?: CardFollowResult }',
       },
       async (c, deps) => {
         const p = principalOf(c)
-        assignmentOf(c)
+        const assignment = assignmentOf(c)
         const id = param(c, 'id')
         await mustGet(deps, id, p.workspace_id)
         const input = await body(c, ReasonBody)
@@ -910,7 +914,32 @@ export function approvalRoutes(): Route[] {
           })
           if (done !== undefined) followers += 1
         }
-        return ok(c, { item: redactItem(out, p.person_id), followers })
+        /*
+         * WP414（10-19 更正）：理由是事后补的——补的那一刻才去找同类（按这条理由，AI 逐张判）。
+         * 已经跟着处理过（带了 follower_ids）就不再找第二遍。
+         */
+        let follow: CardFollowResult | undefined
+        const action =
+          out.state === 'rejected' ? 'reject' : out.state === 'deferred' ? 'snooze' : undefined
+        if ((input.follower_ids ?? []).length === 0 && action !== undefined) {
+          try {
+            follow = await followDecision(deps, {
+              item: out,
+              person_id: p.person_id,
+              assignment_id: assignment.id,
+              action,
+              reason: input.reason,
+              trace_id: c.get('rctx').trace_id,
+            })
+          } catch {
+            follow = undefined
+          }
+        }
+        return ok(c, {
+          item: redactItem(out, p.person_id),
+          followers,
+          ...optional(follow, 'follow'),
+        })
       },
     ),
     ...(
