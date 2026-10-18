@@ -282,7 +282,7 @@ describe('WP406 技能：AI 学的那几层不动', () => {
     const { h, snapshot } = await setup('other')
     const before = snapshot()
     const card = h.bus.open()[0]
-    expect((card?.payload as { items: { mine: string }[] }).items[0]?.mine).toBe('kept')
+    expect(((card?.payload ?? {}) as { items: { mine: string }[] }).items[0]?.mine).toBe('kept')
     await decideDigest(h, card as ApprovalItem, 'apply_all')
     expect(h.registry.peek(NAME, 'package', { workspace_id: WS })?.version).toBe('1.1.0')
     expect(snapshot()).toBe(before)
@@ -296,7 +296,7 @@ describe('WP406 技能：AI 学的那几层不动', () => {
     const { h, snapshot, target } = await setup('same')
     const before = snapshot()
     const card = h.bus.open()[0]
-    expect((card?.payload as { items: { mine: string }[] }).items[0]?.mine).toBe('clash')
+    expect(((card?.payload ?? {}) as { items: { mine: string }[] }).items[0]?.mine).toBe('clash')
     await decideDigest(h, card as ApprovalItem, 'apply_all')
     expect(snapshot()).toBe(before)
     await h.oc.apply(WS, POSITION, OWNER, {
