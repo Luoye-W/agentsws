@@ -265,13 +265,18 @@ async function main() {
         viewport: { width: 1360, height: 900 },
         colorScheme: scheme,
       })
-      await context.addInitScript((t) => {
-        try {
-          window.localStorage.setItem('agentsws.session_token', t)
-        } catch {
-          /* 写不进就走 demo 自动登录 */
-        }
-      }, token)
+      await context.addInitScript(
+        ([t, th]) => {
+          try {
+            window.localStorage.setItem('agentsws.session_token', t)
+            // 工作台的深浅色是自己记的（不跟系统），一起塞进去
+            window.localStorage.setItem('agentsws.theme', th)
+          } catch {
+            /* 写不进就走 demo 自动登录 */
+          }
+        },
+        [token, scheme],
+      )
       const page = await context.newPage()
       page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
       pageForFailure = page
