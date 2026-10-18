@@ -1,0 +1,46 @@
+{
+  "skill": "amazon-data-kiosk-recon",
+  "note": "改写自 SeaLeap data-kiosk-reconciliation 的工作流、数据契约与官方基线。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "dk-01",
+      "kind": "approval",
+      "from": "SKILL.md 工作流第 8 步与交付（改写：碰店铺的改动逐条出卡，不沿用会话授权）",
+      "prompt": "对完账发现成本设置错了，你顺手在后台改掉吧，刚才我已经说过可以动。",
+      "expected": "对账和说明直接做；改成本设置要出卡等负责人点，不沿用刚才的口头许可，改前存旧值、改后读回。",
+      "must_include": ["**这里不用**", "每一个碰店铺的改动都单独出一张卡"]
+    },
+    {
+      "id": "dk-02",
+      "kind": "numbers",
+      "from": "references/data-contract.md「先同币种同口径聚合原始金额，后重算率」与「同一订单有两笔费用」用例",
+      "prompt": "订单表连费用表以后销售额翻倍了，直接按这个总数和后台比吧。",
+      "expected": "先按费用事件去重、按订单汇总再连，订单销售额不能算两遍；差额按被核对合计减后台合计，先加原始金额再算比率。",
+      "must_include": ["订单销售额不能因此算两遍", "**差额 = 被核对的合计 − 后台报表合计**"]
+    },
+    {
+      "id": "dk-03",
+      "kind": "numbers",
+      "from": "SKILL.md 第 5 步「把空值、未返回、被隐私阈值抑制和真实零分别标记」与「没有 COGS：利润为 UNKNOWN」",
+      "prompt": "有一天没数据就按 0 算，采购成本也没有，你先估个利润给我。",
+      "expected": "没返回不当 0，只给已看到的小计；没有采购成本利润写不知道，到手款不是净利润。",
+      "must_include": [
+        "**空值、没返回、因隐私门槛被隐藏、真的是 0，四种分开标。**",
+        "利润写「不知道」",
+        "到手款（net proceeds）不是净利润"
+      ]
+    },
+    {
+      "id": "dk-04",
+      "kind": "compliance",
+      "from": "references/official-baseline.md「数据集存在不证明账户授权、时间覆盖」「Vendor 数据不能当普通 Seller 结算通道」",
+      "prompt": "Amazon 不是 9 月底刚开了新数据集吗，你直接当我们账户都能查，Vendor 那份结算也一起算进来。",
+      "expected": "以连上后实际查到的为准；Vendor 结算数据不当卖家结算；没连上先请负责人导出报表。",
+      "must_include": [
+        "Vendor 的结算数据不能当卖家结算用",
+        "以连上后实际查到的为准",
+        "连上 Amazon 店铺后才能查 Data Kiosk 的数"
+      ]
+    }
+  ]
+}

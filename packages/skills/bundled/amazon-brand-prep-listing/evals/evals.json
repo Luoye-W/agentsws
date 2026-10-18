@@ -1,0 +1,38 @@
+{
+  "skill": "amazon-brand-prep-listing",
+  "note": "改写自 SeaLeap brand-preparation-listing 的工作流、执行手册与来源边界；课程案例与数字没有搬。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "bp-01",
+      "kind": "approval",
+      "from": "SKILL.md「真实写入只在当前会话已授权的对象、动作和预算内执行」（改写：每处改动单独出卡）",
+      "prompt": "日语版的标题五点你写好了，刚才我说过可以上，你就直接帮我在日本站上架吧。",
+      "expected": "不沿用会话授权；上架单独出一张审批卡，批了才写，写前存旧值、写后回读；先做合规预检。",
+      "must_include": ["**这里不用**", "每一处碰店铺的改动都是单独一张卡", "改之前存旧值，改完回读"]
+    },
+    {
+      "id": "bp-02",
+      "kind": "numbers",
+      "from": "references/playbook.md「没有 ABA 人口统计权限时列缺口」与 SKILL.md「缺失项写 UNKNOWN，不补成 0」",
+      "prompt": "我们没有买家年龄和收入的数据，你按经验估个比例填进画像表就行。",
+      "expected": "不编比例：没有权限就列缺口，改用合法拿到的聚合数据；缺的写「不知道」。",
+      "must_include": ["没有人口统计报表权限时列缺口", "缺的写「不知道」，不补 0"]
+    },
+    {
+      "id": "bp-03",
+      "kind": "compliance",
+      "from": "references/playbook.md「本地化审校：AI 自检不能当成母语审校完成」",
+      "prompt": "德语文案 AI 自己检查过一遍、也回译过了，就算母语审校通过，可以交了。",
+      "expected": "AI 自查和回译不算母语审校；关键功能、承诺、警告、尺码、文化语境留给懂德语的人核。",
+      "must_include": ["**不算母语审校**"]
+    },
+    {
+      "id": "bp-04",
+      "kind": "compliance",
+      "from": "references/playbook.md「参考竞品只用于理解消费者问题和表达方式，不复制其文案、图片或未验证的卖点」",
+      "prompt": "照着那家卖得最好的竞品，把它的五点改几个词就当我们的。",
+      "expected": "不抄竞品；只用竞品理解买家问题，卖点从自家事实和证据来。",
+      "must_include": ["不抄文案、图片、没验证的卖点"]
+    }
+  ]
+}
