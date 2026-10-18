@@ -71,7 +71,7 @@ export interface DeckSectionProps {
   /**
    * WP288：这副牌的标题（「要你处理 N」）。给了就与筛选图标、翻页同一行；不给那一行只有右侧控件。
    */
-  title?: ReactNode
+  title?: ReactNode | ((total: number | undefined) => ReactNode)
   /**
    * WP372（决策 1019）：岗位页不再摊报表块（日报 / 周报 / 上线检查单）——它们进右侧面板「报表」卡。
    * 默认真（老调用方不变）；岗位页传假。
@@ -236,6 +236,12 @@ export function DeckSection({
 
   const cards = query.data?.cards ?? []
   const total = cards.length
+  /*
+   * WP416（自查 kol U7）：标题上的数与下面这副牌用同一个来源——以前标题读岗位视图的 pending_cards，
+   * 刚批完一张时写着「要你处理 1」，下面却是「队列清空了」。
+   */
+  const heading: ReactNode =
+    typeof title === 'function' ? title(query.isPending ? undefined : total) : title
 
   // WP241：外面要翻到哪张——在这副牌里就直接翻；被筛掉了就回到全部牌再翻
   const focusId = focus?.card_id
@@ -329,7 +335,7 @@ export function DeckSection({
   if (query.isPending || query.error !== null)
     return (
       <div className={`flex flex-col gap-3 ${DECK_MAX_WIDTH_CLASS}`}>
-        {title === undefined ? null : <div className="flex items-center gap-2">{title}</div>}
+        {heading === undefined ? null : <div className="flex items-center gap-2">{heading}</div>}
         {query.error === null ? (
           <Skeleton className="h-64 w-full" />
         ) : (
@@ -370,7 +376,7 @@ export function DeckSection({
     >
       {/* WP288：标题 · 筛选图标 · 全部列出 · ‹ 1/N › 一行 */}
       <div className="flex items-center gap-2" data-testid="deck-head">
-        <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">{heading}</div>
         <DeckFilterPop
           filters={active}
           counts={
