@@ -13754,7 +13754,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description ApprovalItem */
+      /** @description ApprovalItem & { execution_wiring? } */
       200: {
         headers: {
           [name: string]: unknown

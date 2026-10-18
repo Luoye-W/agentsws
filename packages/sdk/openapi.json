@@ -2426,7 +2426,7 @@
         ],
         "responses": {
           "200": {
-            "description": "ApprovalItem",
+            "description": "ApprovalItem & { execution_wiring? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -2517,7 +2517,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "ApprovalItem"
+        "x-returns": "ApprovalItem & { execution_wiring? }"
       }
     },
     "/v1/approvals/{id}/children": {
