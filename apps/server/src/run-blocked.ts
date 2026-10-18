@@ -290,13 +290,18 @@ export class RunBlockLog {
   }
 }
 
-/** 时间线上那一句人话（标记本身在 `blocked` 里）。 */
-export function blockedLine(block: MatterRunBlock): string {
+/**
+ * 时间线上那一句人话（标记本身在 `blocked` 里）。
+ * WP410（真机 #6）：`card.research_failed` = 出卡前没查成——照实说原因、问要不要手填，不说「定了个方案」。
+ */
+export function blockedLine(block: MatterRunBlock, card?: { research_failed?: string }): string {
   const what = block.connections.length > 0 ? block.connections.join('、') : undefined
   // WP324：出了连接卡 / 配置卡——就在下面那张卡上补，补完自动接着做（不再叫人去连接页）
   if (block.card_id !== undefined) {
     if (block.reason === 'needs_setup' && what === undefined)
-      return '这一步我先定了个方案：在下面这张卡上点头，我就接着做。'
+      return card?.research_failed === undefined
+        ? '这一步我先查了一遍、定了个方案：在下面这张卡上点头，我就接着做。'
+        : `这一步没查成（${card.research_failed}）：下面这张卡要不要你来填？填好我就接着做。`
     return what === undefined
       ? '这次卡在缺连接上：在下面这张卡上连好，我就接着做。'
       : `这次卡在缺连接上（${what}）：在下面这张卡上连好，我就接着做。`

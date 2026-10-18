@@ -94,6 +94,7 @@ import {
   setupRequestBranch,
   setupRequestDataOf,
 } from './setup-request.js'
+import { setupStateBranch } from './setup-state.js'
 import {
   firstProductOf,
   SHOP_GET_PRODUCT_TOOL,
@@ -1030,6 +1031,38 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           readTools,
           drafted: false,
           reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP410（真机 #9）：**问连接 / 设置现在怎样**（演示用剧本）。上下文里有「当前设置快照」
+       * （服务端每次运行现取：插件交回的连接、设置原值、最近一轮）就照它原样说，不靠记忆。
+       * 没有快照的职责 / 别的问法一个字节不变。
+       */
+      const stateAnswer = setupStateBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (stateAnswer !== undefined) {
+        outputs.push({ kind: 'answer', text: stateAnswer })
+        usage.output_tokens = Math.ceil(stateAnswer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: stateAnswer,
           tools: req.tools.allow,
         })
         sink({
