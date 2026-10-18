@@ -27,8 +27,16 @@ export type CompetitorStorePlatform = 'shopify' | 'woocommerce' | 'other' | 'unk
  * - `unsupported`：不是 Shopify / WooCommerce，暂时读不了商品数据（三期再做）；
  * - `blocked`：直接读和内置浏览器都被挡了；
  * - `unreachable`：打不开这个网站（域名不对 / 连不上）。
+ * - WP402：`cloud` 前两条都被挡，工坊云端代读同一份公开数据；`extension` 再不行，通过插件在你自己的浏览器里读。
  */
-export type CompetitorStoreRoute = 'direct' | 'browser' | 'unsupported' | 'blocked' | 'unreachable'
+export type CompetitorStoreRoute =
+  | 'direct'
+  | 'browser'
+  | 'unsupported'
+  | 'blocked'
+  | 'unreachable'
+  | 'cloud'
+  | 'extension'
 
 export const COMPETITOR_STORE_ROUTE_TEXT: Readonly<
   Record<CompetitorStoreRoute, { zh: string; en: string }>
@@ -44,6 +52,14 @@ export const COMPETITOR_STORE_ROUTE_TEXT: Readonly<
   },
   blocked: { zh: '对方把读取挡了，这次没读到', en: 'The site blocked reading this time' },
   unreachable: { zh: '打不开这个网站', en: "Couldn't open this site" },
+  cloud: {
+    zh: '直接读和内置浏览器都被挡了，改由工坊云端读同一份公开数据（按次扣积分）',
+    en: 'Blocked locally; the workshop cloud reads the same public data (credits per read)',
+  },
+  extension: {
+    zh: '前几条路都没读到，通过插件在你自己的浏览器里读同一份公开数据',
+    en: 'Other routes failed; reads the same public data in your own browser via the extension',
+  },
 }
 
 /** 探平台的结果（写进 `BrandWatchCompetitor.store`；地址按跳转后的存）。 */
@@ -52,8 +68,8 @@ export interface StoreProbeResult {
   url: string
   platform: CompetitorStorePlatform
   route: CompetitorStoreRoute
-  /** 这一次是怎么探出来的。 */
-  via?: 'direct' | 'browser'
+  /** 这一次是怎么探出来的（WP402 加云端代读 / 你自己的浏览器）。 */
+  via?: 'direct' | 'browser' | 'cloud' | 'extension'
   /** 没探出来的那一句人话。 */
   reason?: string
   checked_at: Iso8601
