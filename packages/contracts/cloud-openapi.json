@@ -10498,7 +10498,10 @@
             "description": "成功",
             "content": {
               "application/octet-stream": {
-                "schema": {}
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             },
             "headers": {
