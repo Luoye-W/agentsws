@@ -108,6 +108,10 @@ export interface CatalogSnapshotRow {
   bsr?: CatalogBsr[]
   /** Amazon：优惠券文字（`Save $50 with coupon`）；没有不填。 */
   coupon?: string
+  /**
+   * Amazon：五点（WP398 词库拆词用；只加的一格，`amazon_asin` 进料口读商品页时顺手填，读不到不填）。
+   */
+  bullets?: string[]
   /** 商品创建时间（Shopify `created_at`；判「上新」用）。读不到不填，就只看「第一次出现」。 */
   product_created_at?: Iso8601
   /** 这一行是什么时候读到的。 */

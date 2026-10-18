@@ -4,6 +4,8 @@ export * from './ad-creative.js'
 // 那两边的主语是"号"（我们自己的 / 别人的），这边的主语是**广告账户**——一个独立的计费主体。
 export * from './ads.js'
 export * from './ads-wiring.js'
+// WP398（docs/106 §13 A8）：Amazon 词库（联想词 + 竞品 / 自家 Listing 拆词、竞品有你没有的差距）
+export * from './amazon-keywords.js'
 export * from './answer.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）
