@@ -1154,7 +1154,7 @@ const zh: Table = {
   // WP84：指导抽屉顶部的示例任务（选择题优先，36 §1）
   'card.examples.title': '示例任务',
   'card.examples.hint': '这条职责典型能接的活。点一条会填进下面的框，还要你改完再发。',
-  'card.instruct.scope': '这条指导管到哪里？',
+  'card.instruct.scope': '这次修改管到哪里？',
   'card.instruct.scope.single_reply': '只这一条',
   'card.instruct.scope.similar_cases': '类似情况都这样',
   'card.instruct.scope.global_rule': '以后都这样（进策略变更审批）',
