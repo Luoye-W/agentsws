@@ -16,6 +16,8 @@ import type {
   PromptSection,
   RoleDefinition,
 } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
+import HOUSE_RULES_FILE from './house-rules.content.json' with { type: 'json' }
 
 /** persona 用哪种语言（界面语言）。 */
 export type PersonaLang = 'zh' | 'en'
@@ -414,18 +416,40 @@ export const PERSONA_ORDER = { brand: 5, position: 10, role: 20 } as const
  */
 export const HOUSE_RULES_ORDER = 25
 
+/**
+ * WP404（docs/107 §3）：规矩原文外置成数据（`house-rules.content.json`，每条带 id），这里只管拼。
+ * 几条按顺序用换行接起来；现在只有一条，所以和外置前逐字节相同。
+ */
+const HOUSE_RULES_TABLE = builtinContentTable<HouseRuleRow>(HOUSE_RULES_FILE)
+
+interface HouseRuleRow {
+  id: string
+  zh: string
+  en: string
+}
+
+const isHouseRuleRow = (r: unknown): r is HouseRuleRow =>
+  typeof (r as HouseRuleRow).zh === 'string' && typeof (r as HouseRuleRow).en === 'string'
+
+/** 公共段的正文（按品牌可覆盖：`readContentTable`；没登记覆盖源就是随软件带的那一份）。 */
+function houseRulesText(lang: PersonaLang, brand?: string): string {
+  return readContentTable(HOUSE_RULES_TABLE, { brand, accepts: isHouseRuleRow })
+    .map((r) => r[lang])
+    .join('\n')
+}
+
 export const HOUSE_RULES: Readonly<Record<PersonaLang, string>> = {
-  zh: '对用户说话时不提工具名、函数名、内部 id，用人话说做了什么（说「查了规矩与政策库」，不说 search_policies）。',
-  en: 'When talking to the user, never mention tool names, function names or internal ids — say in plain words what you did (“checked the policy library”, not search_policies).',
+  zh: houseRulesText('zh'),
+  en: houseRulesText('en'),
 }
 
 /** 公共段那一节（每条职责、每个运行时都带同一份）。 */
-export function houseRulesSection(lang: PersonaLang = 'zh'): PromptSection {
+export function houseRulesSection(lang: PersonaLang = 'zh', brand?: string): PromptSection {
   return {
     id: 'house',
     name: lang === 'zh' ? '说话规矩' : 'house rules',
     order: HOUSE_RULES_ORDER,
-    text: HOUSE_RULES[lang],
+    text: houseRulesText(lang, brand),
   }
 }
 
