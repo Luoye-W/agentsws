@@ -416,3 +416,24 @@ describe('连接目录：要开发者应用 / 令牌的都标出来（决策 123
     }
   })
 })
+
+describe('「能查什么」：grounding 里写的工具有没有执行器（决策 1230）', () => {
+  it('真有执行器的认得出，审计点名没有执行器的标没接通', async () => {
+    const { toolWired, toolWiringView } = await import('../src/execution/tools.js')
+    for (const name of [
+      'get_order',
+      'search_policies',
+      'list_community_threads',
+      'list_mentions',
+      'search_creators',
+    ])
+      expect(toolWired(name), name).toBe(true)
+    for (const name of ['list_design_requests', 'get_brand_system', 'list_social_posts'])
+      expect(toolWired(name), name).toBe(false)
+    expect(toolWiringView('get_order')).toEqual({
+      name: 'get_order',
+      label: '订单查询',
+      wired: true,
+    })
+  })
+})

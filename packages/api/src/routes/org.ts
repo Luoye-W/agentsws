@@ -105,6 +105,8 @@ export interface RoleSummaryView {
 export interface RoleDetailView extends RoleSummaryView {
   scopes: { domain: string; ops: string[]; range: string; max_sensitivity: string }[]
   skills: { name: string; tier: string; load: string }[]
+  /** WP415（只加，决策 1230）：「能查什么」——这条职责先查的那几个工具，有没有执行器。 */
+  tools?: { name: string; label: string; wired: boolean }[]
 }
 
 /** 05 §2 岗位模板 + "谁在做"。 */

@@ -77,6 +77,16 @@ export function actionLines(
   })
 }
 
+/** WP415（决策 1230）：能查什么：「订单查询」「需求单 · 还没接通」（有没有执行器服务端算好）。 */
+export function toolLines(view: Pick<RoleDetailView, 'tools'>, t: T): CapabilityLine[] {
+  return (view.tools ?? []).map((tool) => ({
+    key: tool.name,
+    text: tool.wired ? tool.label : `${tool.label} · ${t('duty.wired.not_wired')}`,
+    raw: `${tool.name}${tool.wired ? '' : ' · not_wired'}`,
+    ...(tool.wired ? {} : { not_wired: true as const }),
+  }))
+}
+
 /** 挂着的技能：「技能：品牌话术（常驻）」。 */
 export function skillLines(view: Pick<RoleDetailView, 'skills'>, t: T): CapabilityLine[] {
   return view.skills.map((s) => ({

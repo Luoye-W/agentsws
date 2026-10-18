@@ -2772,6 +2772,8 @@ export interface RoleSummaryView {
 export interface RoleDetailView extends RoleSummaryView {
   scopes: { domain: string; ops: string[]; range: string; max_sensitivity: string }[]
   skills: { name: string; tier: string; load: string }[]
+  /** WP415（只加）：「能查什么」——工具人话名 + 有没有执行器（老服务端没有）。 */
+  tools?: { name: string; label: string; wired: boolean }[]
 }
 
 export interface OrgPositionView {

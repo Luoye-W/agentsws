@@ -86,6 +86,7 @@ import {
 } from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
 import { actionWiring } from './execution/registry.js'
+import { toolWiringView } from './execution/tools.js'
 import {
   belongsTo,
   createMemoryPlacements,
@@ -1033,6 +1034,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       max_sensitivity: s.max_sensitivity,
     })),
     skills: role.skills.map((s) => ({ name: s.name, tier: s.tier, load: s.load })),
+    // WP415（决策 1230）：「能查什么」——grounding 里写的工具有没有执行器（没有的职责页标「还没接通」）
+    tools: [...new Set((role.grounding ?? []).map((g) => g.tool))].map(toolWiringView),
   })
 
   const personName = async (id: PersonId): Promise<string> =>

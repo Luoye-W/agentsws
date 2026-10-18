@@ -48,6 +48,7 @@ import {
   connectorLines,
   scopeLines,
   skillLines,
+  toolLines,
 } from '@/lib/duty-capabilities'
 import { matterUrl } from '@/lib/work'
 
@@ -66,6 +67,8 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
       lines: actionLines(view, t),
       empty: t('duty.actions.none'),
     },
+    // WP415：能查什么（没有执行器的标「还没接通」）
+    { id: 'tool', title: t('duty.tools'), lines: toolLines(view, t) },
     { id: 'skill', title: t('duty.skills'), lines: skillLines(view, t) },
     { id: 'connector', title: t('duty.connectors.title'), lines: connectorLines(view, t, lang) },
   ]
