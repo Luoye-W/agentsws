@@ -15,17 +15,17 @@ const at = (base: string, seconds: number): string =>
   new Date(Date.parse(base) + seconds * 1000).toISOString()
 
 describe('求助等待时长（WP124 修订第 3 条）', () => {
-  it('默认 30 秒；范围 10–600；非法值回落默认而不是最长档', () => {
-    expect(ASSIST_WAIT_DEFAULT_SECONDS).toBe(30)
+  it('默认 3 分钟（WP417）；范围 10–600；非法值回落默认而不是最长档', () => {
+    expect(ASSIST_WAIT_DEFAULT_SECONDS).toBe(180)
     expect(ASSIST_WAIT_MIN_SECONDS).toBe(10)
     expect(ASSIST_WAIT_MAX_SECONDS).toBe(600)
     expect(ASSIST_WAIT_QUICK_OPTIONS).toEqual([30, 60, 180, 300, 600])
     expect(normalizeAssistWaitSeconds(45)).toBe(45)
-    expect(normalizeAssistWaitSeconds(0)).toBe(30)
-    expect(normalizeAssistWaitSeconds(-5)).toBe(30)
-    expect(normalizeAssistWaitSeconds(601)).toBe(30)
-    expect(normalizeAssistWaitSeconds('abc')).toBe(30)
-    expect(normalizeAssistWaitSeconds(30.5)).toBe(30)
+    expect(normalizeAssistWaitSeconds(0)).toBe(180)
+    expect(normalizeAssistWaitSeconds(-5)).toBe(180)
+    expect(normalizeAssistWaitSeconds(601)).toBe(180)
+    expect(normalizeAssistWaitSeconds('abc')).toBe(180)
+    expect(normalizeAssistWaitSeconds(30.5)).toBe(180)
   })
 
   it('30 秒档：没有中途提醒（死线即提醒），死线在 +30s 固化', () => {

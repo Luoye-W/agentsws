@@ -81,9 +81,11 @@ import {
   LEAK_REWRITE_INSTRUCTION,
   normalizeAssistWaitSeconds,
   sanitizeExternal,
+  scanOutboundCommitment,
 } from '@agentsws/support-core'
 import type { BackendResult } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
+import type { DirectMailInput, DirectMailResult } from './channels.js'
 import type { MatterRecordSource } from './runtime.js'
 
 /** 求助超时巡检的 handler 名（25 §5：调度器只认识这个名字）。 */
@@ -159,6 +161,17 @@ export interface ChatLaneOptions {
   /** 这条会话挂谁名下。 */
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
+   * WP417（决策 1232）：常见问题能不能**直接发**（商家在聊天窗设置里手动打开；缺省 = 每一句都先出卡要人批）。
+   * 开了也只放「答案出自知识卡、过了承诺扫描」的那一句；别的照旧出卡。
+   */
+  autoSendFaq?(): boolean
+  /** WP417（自查 C10）：访客报了订单号 → 只读查这一单（查不到 / 没连店 = undefined）。 */
+  lookupOrder?(order_ref: string): Promise<unknown | undefined>
+  /** WP417（自查 C15）：超时转邮件那封跟进信从这里真发（`channels.sendMail`）。 */
+  sendMail?(input: DirectMailInput): Promise<DirectMailResult>
+  /** WP417（自查 C15）：跟进邮件卡挂谁名下（网站客服那条职责；没有就挂聊天这条）。 */
+  emailPosition?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
+  /**
    * 求助超时到点转邮件跟进时，把跟进交给谁。
    * 不给就只把会话标成 `email_follow_up` 并在会话里说一句——**不会假装发了邮件**。
    */
@@ -170,7 +183,7 @@ export interface ChatLaneOptions {
   route?(): { role_id?: RoleId; confidence: number }
   /**
    * WP124（修订第 3 条）：求助等待时长（秒）。商家在聊天窗设置里改，
-   * 默认 30 秒、范围 10–600（非法回落 30）。死线在求助那一刻固化进会话行，
+   * 默认 3 分钟（WP417 由 30 秒改）、范围 10–600（非法回落默认）。死线在求助那一刻固化进会话行，
    * 之后改设置只影响新的求助。
    */
   assistWaitSeconds?(): number | undefined
@@ -269,6 +282,20 @@ export interface ChatLane {
 const MAX_KNOWLEDGE_HITS = 4
 const MAX_TRANSCRIPT = 12
 const MAX_ANSWER_CHARS = 1200
+
+/** WP417（自查 C10）：访客话里的订单号（`#1001`、「订单 1001」、order 1001）。 */
+export function orderRefIn(text: string): string | undefined {
+  const m =
+    /#\s?(\d{3,10})\b/.exec(text) ??
+    /(?:订单号?|单号|order(?:\s*(?:no\.?|number|id))?)\s*[:：#]?\s*(\d{3,10})\b/i.exec(text)
+  return m?.[1] === undefined ? undefined : `#${m[1]}`
+}
+
+/** WP417（自查 C15）：访客话里留的邮箱（第一个）。 */
+export function emailIn(text: string): string | undefined {
+  const m = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(text)
+  return m?.[0]?.toLowerCase()
+}
 
 /** 会话 → 事项上钉的那条 thread ref（与邮件线程同一套钉法）。 */
 const threadRef = (external_id: string): ObjectRef => ({ type: 'thread', id: external_id })
@@ -398,18 +425,34 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     plan_action: string,
   ): Promise<ChatMessage> => adapter.say(session.id, 'agent', text, { plan_action })
 
-  /** `answer`：一次轻模型单轮调用。材料是已经读到的那些，不再去查。 */
+  /**
+   * `answer`：一次轻模型单轮调用。材料是已经读到的那些，不再去查——
+   * WP417（自查 C10）例外一处：访客报了订单号就现查这一单（只读），查到的进材料。
+   *
+   * `mode: 'review'`（WP417 自查 C11）：这一轮要出卡给人批（涉钱 / 要人工），模型起草的是**卡上那句建议回复**——
+   * 说清查到的事实、不替商家定退不退；人批了才发。
+   */
   const answerWith = async (
     session: ChatSession,
     turn_text: string,
     plan: ChatResponsePlan,
-  ): Promise<{ text?: string; blocked?: string }> => {
+    mode: 'answer' | 'review' = 'answer',
+  ): Promise<{ text?: string; blocked?: string; grounded: boolean }> => {
     const models = options.models
     const position = options.position?.()
     if (models === undefined || position === undefined) {
-      return { blocked: 'no_model' }
+      return { blocked: 'no_model', grounded: false }
     }
     const parts: string[] = []
+    const orderRef = orderRefIn(turn_text)
+    if (orderRef !== undefined && options.lookupOrder !== undefined) {
+      const order = await options.lookupOrder(orderRef).catch(() => undefined)
+      parts.push(
+        order === undefined
+          ? `访客说的订单 ${orderRef}：店里没查到（或店铺没连上）。照实说查不到，请他核对订单号或留邮箱。`
+          : `访客说的订单 ${orderRef}（刚查的）：${JSON.stringify(order).slice(0, 1500)}`,
+      )
+    }
     const matter = matterOf(session)
     if (matter !== undefined) {
       if (matter.context.summary !== '') parts.push(`这条会话到哪了：${matter.context.summary}`)
@@ -430,6 +473,11 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)
     }
     parts.push(`意图：${plan.intent}；这一轮的收尾问句（可用可不用）：${plan.next_question}`)
+    if (mode === 'review')
+      parts.push(
+        '这一轮涉及钱、订单变更或访客要人工：写一句给同事审的建议回复——说清你查到的事实，' +
+          '不替商家决定退不退、补不补、赔不赔；同事批了才发给访客。',
+      )
     /*
      * WP125（72 §P0-2 / §6.6 #2）：访客原话进 prompt 之前**先打码再围栏**。
      *
@@ -459,10 +507,12 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         },
       })
       const text = completion.text.trim().slice(0, MAX_ANSWER_CHARS)
-      return text.length === 0 ? { blocked: 'empty_completion' } : { text }
+      return text.length === 0
+        ? { blocked: 'empty_completion', grounded: false }
+        : { text, grounded: hits.length > 0 }
     } catch (e) {
       // 模型挂了 / 预算耗尽 / 急停：聊天里**不编一句话**顶上去，说实话并转求助
-      return { blocked: (e as { code?: string }).code ?? 'model_unavailable' }
+      return { blocked: (e as { code?: string }).code ?? 'model_unavailable', grounded: false }
     }
   }
 
@@ -471,6 +521,10 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     session: ChatSession,
     plan: ChatResponsePlan,
     turn_text: string,
+    /** WP417（自查 C11）：卡上那句建议回复（模型起草的）；没有模型时退回包里那句安抚话。 */
+    draft?: string,
+    /** WP417（决策 1232）：能答但要人批的那一句（不是涉钱 / 要人工）。 */
+    review_kind?: 'answer',
   ): Promise<string | undefined> => {
     const approvals = options.approvals
     const position = options.position?.()
@@ -488,12 +542,18 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         conversation_id: session.id,
       },
       // 同一条会话、同一个动作只出一张卡：访客在等，连发三张卡不会让人更快回复
-      dedupe_key: `${workspace_id}:chat:${session.id}:${plan.action}`,
+      // 能答的那一句每一轮一张（访客问了新问题就是新的一张）；要人工 / 涉钱的同一条会话只出一张
+      dedupe_key:
+        review_kind === 'answer'
+          ? `${workspace_id}:chat:${session.id}:answer:${clock.now()}`
+          : `${workspace_id}:chat:${session.id}:${plan.action}`,
       title:
-        plan.action === 'assist'
-          ? `${who} 在聊天里要人工`
-          : `${who} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
-      summary: plan.summary,
+        review_kind === 'answer'
+          ? `回 ${who} 的聊天`
+          : plan.action === 'assist'
+            ? `${who} 在聊天里要人工`
+            : `${who} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
+      summary: review_kind === 'answer' ? '批了就发回聊天窗' : plan.summary,
       payload: {
         channel: 'chat',
         session_id: session.id,
@@ -507,8 +567,8 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
          * 漏了这一格，卡会被预检直接打成 `blocked`，人永远看不到它。
          */
         to: { type: 'contact', id: session.visitor_id },
-        // 卡上给的是**建议话术**，不是已发出的话。人点头之后才推进会话
-        body: { text: plan.next_question },
+        // 卡上给的是**建议回复**（WP417：模型起草的真回复，不是系统说明 / 安抚话），人点头之后才发
+        body: { text: draft ?? plan.next_question },
         visitor_said: sanitizeExternal(turn_text).slice(0, 500),
       },
       evidence: {
@@ -550,9 +610,109 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     return item.state === 'blocked' ? undefined : item.id
   }
 
+  /** WP417：每条会话最近一次起草的回复（跟进邮件拿它当正文初稿）。 */
+  const lastDraft = new Map<string, string>()
+
+  /**
+   * WP417（自查 C15）：超时转邮件 → 一张**跟进邮件卡**（`channel: 'email'` + `compose_to`），挂网站客服；
+   * 正文初稿是这条会话最近一次起草的回复（没有就写一句「正在确认」），人批了经已连的邮箱真发。
+   */
+  const raiseEmailFollowUp = async (
+    session: ChatSession,
+    address: string,
+  ): Promise<string | undefined> => {
+    const approvals = options.approvals
+    const position = options.emailPosition?.() ?? options.position?.()
+    if (approvals === undefined || position === undefined) return undefined
+    const matter = matterOf(session)
+    const transcript = await store.listMessages(session.id, { limit: MAX_TRANSCRIPT })
+    const asked = [...transcript].reverse().find((m) => m.role === 'visitor')?.text ?? ''
+    const text =
+      lastDraft.get(session.id) ??
+      `你好，关于你在网站聊天里问的「${sanitizeExternal(asked).slice(0, 120)}」：我们正在确认，确认好了第一时间回复你。`
+    const item = await approvals.create({
+      schema_version: 1,
+      workspace_id,
+      kind: 'outbound_draft',
+      role_id: position.role_id,
+      subject: {
+        object: threadRef(session.thread_external_id),
+        ...(matter === undefined ? {} : { matter_id: matter.id, work_item_id: matter.id }),
+        conversation_id: session.id,
+      },
+      dedupe_key: `${workspace_id}:chat:${session.id}:email_follow_up`,
+      title: `邮件跟进 ${session.visitor_display ?? '访客'}（聊天里没等到）`,
+      summary: `批了发到 ${address}`,
+      payload: {
+        channel: 'email',
+        compose_to: address,
+        session_id: session.id,
+        to: { type: 'contact', id: session.visitor_id },
+        body: { subject: '关于你在网站聊天里的问题', text },
+      },
+      evidence: {
+        run_id: `run_chat_${session.id}`,
+        source_events: [],
+        provenance: {
+          seen: [
+            threadRef(session.thread_external_id),
+            { type: 'contact', id: session.visitor_id },
+          ],
+        },
+        precheck: {},
+        citations: [],
+      },
+      proposer: {
+        kind: 'agent',
+        id: position.assignment_id,
+        assignment_id: position.assignment_id,
+      },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: position.person_id, via: 'role_holder' }],
+        rule: 'role_holder',
+        escalation: { after_hours: 8, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: true,
+      },
+      priority: 'queue',
+      context: {
+        thread_participants: [session.visitor_id],
+        verified_contacts: [session.visitor_id],
+      },
+    })
+    emit('chat.email_follow_up', session, { approval_item_id: item.id })
+    return item.state === 'blocked' ? undefined : item.id
+  }
+
   /* ── 一轮的分叉 ────────────────────────────────────────────────── */
 
   const runTurn = async (session: ChatSession, turn_text: string): Promise<ChatTurnOutcome> => {
+    /*
+     * WP417（自查 C15）：已经转邮件跟进的会话里，访客留了邮箱 → 记下来、出一张跟进邮件卡（批了真发），
+     * 回一句「收到」。以前留了也没人接：AI 不回、不出卡、不发信。
+     */
+    if (session.status === 'email_follow_up' && session.visitor_email === undefined) {
+      const address = emailIn(turn_text)
+      if (address !== undefined) {
+        const patched = await store.patchSession(session.id, {
+          visitor_email: address,
+          at: clock.now(),
+        })
+        const approval_item_id = await raiseEmailFollowUp(patched, address)
+        const said = await say(patched, `收到，确认好了会发到 ${address}。`, 'email_follow_up')
+        return {
+          session_id: session.id,
+          used_model: false,
+          reply: said.text,
+          ...(approval_item_id === undefined ? {} : { approval_item_id }),
+        }
+      }
+    }
     const status = session.status as ChatSessionStatus
     const classification = classifyChatTurn(turn_text, { pack })
     const plan = buildChatPlan({
@@ -576,7 +736,9 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
 
     // ② 客户要人工 → 出卡 + 起超时钟 + 说一句
     if (plan.action === 'assist') {
-      const approval_item_id = await raiseCard(session, plan, turn_text)
+      const drafted = await answerWith(session, turn_text, plan, 'review')
+      const approval_item_id = await raiseCard(session, plan, turn_text, drafted.text)
+      if (drafted.text !== undefined) lastDraft.set(session.id, drafted.text)
       const wait = normalizeAssistWaitSeconds(options.assistWaitSeconds?.())
       await store.patchSession(session.id, {
         status: 'assist_requested',
@@ -602,7 +764,10 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
 
     // ③ 涉钱 / 高风险 → 出卡，聊天里只安抚不承诺
     if (plan.action === 'human_review') {
-      const approval_item_id = await raiseCard(session, plan, turn_text)
+      // WP417（自查 C11）：卡上放模型起草的真回复（说清查到的事实、不替商家定钱），不是系统说明
+      const drafted = await answerWith(session, turn_text, plan, 'review')
+      const approval_item_id = await raiseCard(session, plan, turn_text, drafted.text)
+      if (drafted.text !== undefined) lastDraft.set(session.id, drafted.text)
       const said = await say(session, pack.money_handoff_reply, plan.action)
       return {
         ...base,
@@ -646,8 +811,45 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         ...(approval_item_id === undefined ? {} : { approval_item_id }),
       }
     }
-    const said = await say(session, answer.text, plan.action)
-    return { ...base, reply: said.text, used_model: true }
+    /*
+     * WP417（决策 1232 + 自查 C8 / C9）：**在线客服缺省要人批**。模型起草的这一句先出卡（卡上就是这句回复），
+     * 访客那边说一句「稍等」、起求助钟（到点转邮件跟进）；人批了才发回聊天窗。
+     * 商家手动打开「常见问题直接发」时，只有答案出自知识卡、而且过了承诺扫描（没写退款 / 赔偿 / 补发这类话）
+     * 的那一句才直接发；扫出承诺的一律出卡。
+     */
+    const scan = scanOutboundCommitment(answer.text)
+    const promised = scan.hits.length > 0 || scan.unsourced_concession
+    if (options.autoSendFaq?.() === true && answer.grounded && !promised) {
+      const said = await say(session, answer.text, plan.action)
+      return { ...base, reply: said.text, used_model: true }
+    }
+    const approval_item_id = await raiseCard(session, plan, turn_text, answer.text, 'answer')
+    lastDraft.set(session.id, answer.text)
+    emit('chat.reply_held', session, {
+      reason: promised ? 'commitment' : 'needs_approval',
+      ...(approval_item_id === undefined ? {} : { approval_item_id }),
+    })
+    const wait = normalizeAssistWaitSeconds(options.assistWaitSeconds?.())
+    await store.patchSession(session.id, {
+      status: 'assist_requested',
+      assist_requested_at: now,
+      assist_deadline_at: new Date(Date.parse(now) + wait * 1000).toISOString(),
+      assist_reminded_at: null,
+      at: now,
+    })
+    const said = await say(session, pack.assist_reply, 'assist')
+    stream.publish(session.id, {
+      type: 'session',
+      session_id: session.id,
+      status: 'assist_requested',
+      takeover: session.takeover,
+    })
+    return {
+      ...base,
+      reply: said.text,
+      used_model: true,
+      ...(approval_item_id === undefined ? {} : { approval_item_id }),
+    }
   }
 
   /** 入站消息的序号（`receive` 自编 `external_id` 时用；见那里的注释）。 */
@@ -911,10 +1113,27 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         }
         if (decision.action === 'email_follow_up') {
           const transcript = await store.listMessages(session.id, { limit: MAX_TRANSCRIPT })
-          const handed = (await options.emailFollowUp?.({ session, transcript })) ?? {
-            sent: false,
-            detail: 'no_email_channel',
-          }
+          // WP417（自查 C15）：访客早留过邮箱（会话上记着，或聊天里写过）→ 现在就出跟进邮件卡；
+          // 没留就照旧请他留，留了在下一轮接住（见 `runTurn` 开头）
+          const known =
+            session.visitor_email ??
+            [...transcript]
+              .reverse()
+              .filter((m) => m.role === 'visitor')
+              .map((m) => emailIn(m.text))
+              .find((x) => x !== undefined)
+          const handed =
+            (await options.emailFollowUp?.({ session, transcript })) ??
+            (known === undefined
+              ? { sent: false, detail: 'asked_for_email' }
+              : await (async () => {
+                  if (session.visitor_email === undefined)
+                    await store.patchSession(session.id, { visitor_email: known, at: now })
+                  const id = await raiseEmailFollowUp(session, known)
+                  return id === undefined
+                    ? { sent: false, detail: 'no_card' }
+                    : { sent: true, detail: 'card' }
+                })())
           await adapter.say(session.id, 'agent', pack.email_follow_up_reply, {
             external_id: `assist_email_${session.id}`,
             plan_action: 'assist',
@@ -943,7 +1162,43 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     },
 
     async deliver(item, opts): Promise<BackendResult | undefined> {
-      const payload = item.payload as { channel?: string; thread_ref?: string; body?: unknown }
+      const payload = item.payload as {
+        channel?: string
+        thread_ref?: string
+        body?: unknown
+        compose_to?: unknown
+        session_id?: unknown
+      }
+      // WP417（自查 C15）：聊天转邮件的跟进信——经已连的邮箱真发（没连就照实失败，不假装发了）
+      if (payload.channel === 'email' && typeof payload.compose_to === 'string') {
+        if (options.halt.isHalted('outbound'))
+          return { status: 'failed', error: { message: CHAT_OUTBOUND_HALTED, retryable: true } }
+        const body = payload.body as { text?: string; subject?: string } | undefined
+        if (options.sendMail === undefined)
+          return {
+            status: 'failed',
+            error: {
+              message: '没发出去：这台机器还没连邮箱。去「设置 → 账号连接」连上邮箱再发。',
+              retryable: false,
+            },
+          }
+        const sent = await options.sendMail({
+          to: [payload.compose_to],
+          subject: typeof body?.subject === 'string' ? body.subject : '关于你在网站聊天里的问题',
+          text: typeof body?.text === 'string' ? body.text : '',
+          idempotency_key: opts.idempotencyKey,
+          thread_ref:
+            typeof payload.session_id === 'string'
+              ? `chat:${payload.session_id}`
+              : `compose:${opts.idempotencyKey}`,
+        })
+        return sent.ok
+          ? { status: 'ok', execution_id: sent.message_id }
+          : {
+              status: 'failed',
+              error: { message: `没发出去：${sent.error ?? '邮箱没接住'}`, retryable: false },
+            }
+      }
       if (payload.channel !== 'chat') return undefined
       const thread = payload.thread_ref
       if (typeof thread !== 'string' || thread.length === 0) return undefined
@@ -957,6 +1212,27 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           connect_token: '',
           idempotency_key: opts.idempotencyKey,
         })
+        /*
+         * WP417（自查 C13）：人已经回了 → 清掉求助死线（不然到点还会对访客说「别在这里干等了」），
+         * 会话回到「答过了」，AI 接着能答下一句。人工接管 / 已转邮件的不动。
+         */
+        const session = await store.findByThread(thread)
+        if (session !== undefined && session.status === 'assist_requested') {
+          const at = clock.now()
+          await store.patchSession(session.id, {
+            status: 'assist_answered',
+            assist_requested_at: null,
+            assist_deadline_at: null,
+            assist_reminded_at: null,
+            at,
+          })
+          stream.publish(session.id, {
+            type: 'session',
+            session_id: session.id,
+            status: 'assist_answered',
+            takeover: session.takeover,
+          })
+        }
         return { status: 'ok', execution_id: sent.external_id }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)

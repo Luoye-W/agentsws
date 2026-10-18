@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   type ChatRelayTestView,
   getChatRelaySettings,
@@ -223,7 +224,7 @@ export function ChatWidgetSettings(): React.ReactNode {
             <select
               aria-label={t('chat.window.assist_wait')}
               className="h-9 rounded-md border bg-transparent px-2 text-[13px]"
-              value={cfg?.assist_wait_seconds ?? 30}
+              value={cfg?.assist_wait_seconds ?? 180}
               data-testid="chat-assist-wait"
               onChange={(e) =>
                 saveSettings.mutate({
@@ -236,11 +237,35 @@ export function ChatWidgetSettings(): React.ReactNode {
             >
               {[30, 60, 180, 300, 600].map((s) => (
                 <option key={s} value={s}>
-                  {t('chat.window.assist_wait.option', { n: s < 60 ? String(s) : `${s / 60}` })}
+                  {/* WP417：60 秒以上按分钟说（以前 180 秒显示成「3 秒」） */}
+                  {s < 60
+                    ? t('chat.window.assist_wait.option', { n: String(s) })
+                    : t('chat.window.assist_wait.option_min', { n: String(s / 60) })}
                 </option>
               ))}
             </select>
           </div>
+          {/* WP417（决策 1232）：在线客服缺省每一句先出卡要你批；常见问题可以手动打开「直接发」 */}
+          <label className="flex items-center gap-2 text-[13px]">
+            <Switch
+              checked={cfg?.auto_send_faq === true}
+              aria-label={t('chat.window.auto_send_faq')}
+              data-testid="chat-auto-send-faq"
+              onCheckedChange={(on) =>
+                saveSettings.mutate({
+                  allowed_origins: cfg?.allowed_origins ?? [],
+                  ...(accent === undefined ? {} : { accent }),
+                  ...(greeting === '' ? {} : { greeting }),
+                  ...(cfg?.assist_wait_seconds === undefined
+                    ? {}
+                    : { assist_wait_seconds: cfg.assist_wait_seconds }),
+                  auto_send_faq: on,
+                })
+              }
+            />
+            <span>{t('chat.window.auto_send_faq')}</span>
+            <Hint text={t('chat.window.auto_send_faq.hint')} />
+          </label>
         </CardContent>
       </Card>
 

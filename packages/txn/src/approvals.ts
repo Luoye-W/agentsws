@@ -854,10 +854,19 @@ export class ApprovalBusImpl implements ApprovalBus {
       }
       let changed = false
       for (const tier of item.routing.escalation.chain) {
-        const hours =
+        const policyHours =
           tier === 'scope_manager'
             ? this.rt.policy.escalation_hours.scope_manager
             : this.rt.policy.escalation_hours.owner
+        /*
+         * WP417（自查客服 C18）：「现在就看」的卡（聊天里访客在等）按卡自己写的 `after_hours` 升级
+         * ——以前一律 24 / 48 小时，聊天卡写的 1 小时从来不生效。别的卡照旧（只认策略那两档）。
+         */
+        const own = item.routing.escalation.after_hours
+        const hours =
+          item.priority === 'immediate' && typeof own === 'number' && own > 0
+            ? Math.min(own, policyHours)
+            : policyHours
         if (elapsed < hours) continue
         const already = item.routing.escalation.escalated_at.length
         const idx = item.routing.escalation.chain.indexOf(tier)

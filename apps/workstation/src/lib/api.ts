@@ -4418,6 +4418,8 @@ export interface ChatWidgetSettingsView {
   accent?: string
   greeting?: string
   assist_wait_seconds?: number
+  /** WP417（决策 1232）：常见问题直接发（缺省关 = 每一句先出卡要人批）。 */
+  auto_send_faq?: boolean
   updated_at?: string
 }
 
@@ -4430,6 +4432,7 @@ export const setChatWidgetSettings = (
     accent?: string
     greeting?: string
     assist_wait_seconds?: number
+    auto_send_faq?: boolean
   },
   assignment?: string,
 ): Promise<ChatWidgetSettingsView> =>

@@ -89,7 +89,14 @@ interface Rig {
 }
 
 function rig(
-  over: { models?: boolean; answer?: string; rules?: string; voice?: string } = {},
+  over: {
+    models?: boolean
+    answer?: string
+    rules?: string
+    voice?: string
+    /** WP417（决策 1232）：「常见问题直接发」开没开（缺省关 = 每一句先出卡）。 */
+    autoSend?: boolean
+  } = {},
 ): Rig {
   const clock = new StepClock()
   const approvals = new RecordingApprovals()
@@ -117,6 +124,7 @@ function rig(
     position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
     ...(over.rules === undefined ? {} : { roleRules: () => over.rules }),
     ...(over.voice === undefined ? {} : { brandVoice: async () => over.voice }),
+    ...(over.autoSend === undefined ? {} : { autoSendFaq: () => over.autoSend === true }),
     emailFollowUp: async ({ session }) => {
       emails.push({ session_id: session.id })
       return { sent: true }
@@ -146,8 +154,36 @@ async function say(r: Rig, session_id: string, text: string, external_id?: strin
 }
 
 describe('实时车道：五种动作各走一遍', () => {
-  it('answer：问运费 → 词表命中售前 → 轻模型答，并推进会话', async () => {
+  it('WP417（决策 1232）answer：缺省先出卡要人批——卡上就是起草的那句，访客那边说「稍等」、起求助钟', async () => {
     const r = rig()
+    const s = await open(r)
+    const out = await say(r, s.id, 'how much is shipping to the US?')
+    expect(out.plan?.action).toBe('answer')
+    expect(out.used_model).toBe(true)
+    expect(out.approval_item_id).toBeDefined()
+    expect(out.reply).not.toContain('free over $50')
+    const card = r.approvals.items[0] as ApprovalItem
+    expect((card.payload as { body: { text: string } }).body.text).toContain('free over $50')
+    expect((await r.chat.session(s.id))?.status).toBe('assist_requested')
+    // 批了 → 发回聊天窗、清掉求助钟（自查 C13：人回了就不再说「别干等了」）
+    const sent = await r.chat.deliver(card, { idempotencyKey: card.id })
+    expect(sent?.status).toBe('ok')
+    const after = await r.chat.session(s.id)
+    expect(after?.status).toBe('assist_answered')
+    expect(after?.assist_deadline_at).toBeUndefined()
+    expect((await r.chat.messages(s.id)).at(-1)?.text).toContain('free over $50')
+  })
+
+  it('WP417（自查 C9）：开了「常见问题直接发」，答案里写了退款承诺照样出卡', async () => {
+    const r = rig({ autoSend: true, answer: 'Sure, we will refund you in full today.' })
+    const s = await open(r)
+    const out = await say(r, s.id, 'how much is shipping to the US?')
+    expect(out.approval_item_id).toBeDefined()
+    expect(out.reply).not.toContain('refund')
+  })
+
+  it('answer：开了「常见问题直接发」→ 词表命中售前 → 轻模型答，并推进会话', async () => {
+    const r = rig({ autoSend: true })
     const s = await open(r)
     const out = await say(r, s.id, 'how much is shipping to the US?')
     expect(out.plan?.action).toBe('answer')
@@ -214,7 +250,12 @@ describe('实时车道：五种动作各走一遍', () => {
     })
     // **卡上的话还没说出去**：会话里 AI 说的是那句安抚，不是卡上的建议话术
     expect(out.reply).not.toContain('退款')
-    expect(r.models.calls).toHaveLength(0)
+    // WP417（自查 C11）：卡上是模型起草的建议回复（不是系统说明）；起草时提示里写明不替商家定钱
+    expect(r.models.calls).toHaveLength(1)
+    expect(r.models.calls[0]?.user).toContain('不替商家决定退不退')
+    expect((card.payload as { body: { text: string } }).body.text).toBe(
+      'Shipping to the US is free over $50.',
+    )
   })
 
   it('assist：要人工 → 出卡 + 起超时钟', async () => {
@@ -540,7 +581,7 @@ describe('死线在求助那一刻固化（WP124 修订第 3 条）', () => {
     ).toBe(600_000)
   })
 
-  it('没配等待时长的老装配：默认 30 秒（修订第 3 条）', async () => {
+  it('没配等待时长的老装配：默认 3 分钟（WP417 由 30 秒改）', async () => {
     const clock = new StepClock()
     const events: unknown[] = []
     const bare = createChatLane({
@@ -562,6 +603,6 @@ describe('死线在求助那一刻固化（WP124 修订第 3 条）', () => {
     expect(
       Date.parse(after?.assist_deadline_at as string) -
         Date.parse(after?.assist_requested_at as string),
-    ).toBe(30_000)
+    ).toBe(180_000)
   })
 })

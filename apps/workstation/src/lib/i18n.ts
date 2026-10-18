@@ -3318,6 +3318,10 @@ const zh: Table = {
   'chat.window.origins.hint': '逗号分隔；留空一个都不放行（默认安全）。',
   'chat.window.assist_wait': '求助等待时长',
   'chat.window.assist_wait.option': '{n} 秒',
+  'chat.window.assist_wait.option_min': '{n} 分钟',
+  'chat.window.auto_send_faq': '常见问题直接发',
+  'chat.window.auto_send_faq.hint':
+    '关着时 AI 每一句都先给你批。打开后，答案来自知识卡、又没提退款赔偿的那一句直接发。',
   'chat.window.assist_wait.hint':
     '超时要人拍板的问题，访客最多等这么久，然后自动转邮件跟进。改了只影响之后的新求助。',
   'chat.window.relay': '转发方式',
@@ -7591,6 +7595,10 @@ const en: Table = {
   'chat.window.origins.hint': 'Comma separated; empty means none may embed (safe default).',
   'chat.window.assist_wait': 'Handoff wait time',
   'chat.window.assist_wait.option': '{n} sec',
+  'chat.window.assist_wait.option_min': '{n} min',
+  'chat.window.auto_send_faq': 'Send FAQ answers directly',
+  'chat.window.auto_send_faq.hint':
+    'Off: every AI reply waits for your OK. On: replies taken from your knowledge cards that promise no refund or compensation go out directly.',
   'chat.window.assist_wait.hint':
     'When the AI needs you, the visitor waits at most this long before we switch to email follow-up. Changes only affect new requests.',
   'chat.window.relay': 'Relay mode',

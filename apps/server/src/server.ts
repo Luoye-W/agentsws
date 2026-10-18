@@ -7651,6 +7651,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
       },
       position: () => positionFor(ws, LIVE_CHAT_DUTIES),
+      // WP417（决策 1232）：缺省每一句先出卡要人批；商家在聊天窗设置里手动开「常见问题直接发」才直接发
+      autoSendFaq: () => lateWidget.current?.config().auto_send_faq === true,
+      // WP417（自查 C10）：访客报了订单号 → 只读查这一单（与运行时同一个记录源）
+      lookupOrder: async (order_ref) => {
+        const res = await records.executeTool?.({
+          name: 'get_order',
+          input: { order_id: order_ref },
+          request: { tools: { allow: ['get_order'] } } as unknown as RunRequest,
+        })
+        return res?.status === 'ok' ? res.data : undefined
+      },
+      // WP417（自查 C15）：超时转邮件的跟进信经已连的邮箱真发；卡挂网站客服
+      sendMail: (input) => channels.sendMail(input),
+      emailPosition: () => positionFor(ws, ['dtc.support']),
       // WP289（决策 318）：聊天窗里教的「以后都这样」落在客服那几条职责的规矩上；聊天 AI 每一轮照做
       roleRules: () => chatRoleRulesText(ws),
       // WP333：聊天回复也带上品牌话术（这个品牌自己写过 `brand-voice` 才有；只有基础版 = 照旧）
