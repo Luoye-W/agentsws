@@ -9957,7 +9957,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          */
         kol: KOL_CHANNEL_IDS.some((channel) => held(`kol.${channel}`)),
         // WP73：有人持有社媒那九条渠道职责之一时才建那条巡检
-        social: SOCIAL_ROLE_IDS.some((role_id) => held(role_id)),
+        // WP417（自查客服 D6）：只开了「社群管理」、没开社媒运营的品牌也要收帖（自动进帖挂在这一拍上）
+        social:
+          SOCIAL_ROLE_IDS.some((role_id) => held(role_id)) || held('dtc.community-support'),
         // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
         pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
         // WP173：有人持有「主动开发」才建开发信序列那条定时
