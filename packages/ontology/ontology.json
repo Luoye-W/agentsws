@@ -8,6 +8,8 @@
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/amazon-competitor.ts",
+    "packages/contracts/src/amazon-keywords.ts",
+    "packages/contracts/src/amazon-listing.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
@@ -140,7 +142,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "8cafce963d6325569ef7069a8c011ae5",
+  "source_digest": "39ec830c9a6b6ed36dcf9089556ebd42",
   "objects": [
     {
       "id": "ad",
