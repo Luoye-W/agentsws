@@ -8372,7 +8372,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ...(options.competitorAdapters?.(ws) ?? {}),
             }),
             extraOwnRef: async () => competitorStore?.ownRef(),
-            extraOwnLowest: async () => competitorStore?.ownLowest(),
             afterRun: async (run) => competitorStore?.afterRun(run),
           })
     if (competitorWatch !== undefined) {

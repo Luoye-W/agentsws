@@ -470,7 +470,7 @@ describe('WP402 · 品牌级暂停（一边被拦，另一边同时换路）', (
     expect(reader.ready()).toBe(true)
   })
 
-  it('联想词被拦：竞品读页那边同时停用内置浏览器（这一轮走云端）；同意过就在你自己的浏览器里读完这一批', async () => {
+  it('联想词被拦：竞品读页那边同时停用内置浏览器（这一轮走云端）；同意过就在你自己的浏览器里读（一批至多 9 页）', async () => {
     const db = createCompetitorWatchDb()
     const store = db.forWorkspace(WS)
     const now = NOW
@@ -509,9 +509,10 @@ describe('WP402 · 品牌级暂停（一边被拦，另一边同时换路）', (
     })
     const r = await bank.refresh({ trigger: 'tool', seeds: ['electric bike'] })
     expect(builtIn).toHaveLength(2)
-    expect(own.length).toBe(r.refresh.autocomplete.planned - 1)
+    // WP408（决策 1155）：你自己的浏览器一批只读 9 页，其余留给下一轮
+    expect(own.length).toBe(9)
     expect(used).toBe(1)
-    expect(r.refresh.autocomplete.read).toBe(r.refresh.autocomplete.planned)
+    expect(r.refresh.autocomplete.read).toBe(10)
     expect(r.refresh.autocomplete.via).toBe('extension')
     expect(block.state().by).toBe('keywords')
 

@@ -102,6 +102,12 @@ export const AMAZON_EXTENSION_CONSENT_TARGET = 'amazon.own_browser_read'
 /** 每家竞品每天至多用几次用户自己的浏览器读 Amazon。 */
 export const AMAZON_EXTENSION_DAILY_LIMIT = 1
 
+/**
+ * WP408（决策 1155）：联想词那一批在用户自己的浏览器里一次至多读几页——种子词本身 + a–h（9 页）；
+ * 其余留给下一轮（同一个种子词下一轮先读上一轮剩下的）。内置浏览器 / 工坊云端那两条路不受这一条管。
+ */
+export const AMAZON_EXTENSION_KEYWORD_PAGES = 9
+
 /** 同意的状态（一个品牌一份）：同意后不再问；在设置里撤回 = 不再用、也不再问（设置里能重新打开）；点「先不用」同样不再问。 */
 export interface AmazonOwnBrowserConsent {
   state: 'unasked' | 'asked' | 'granted' | 'revoked' | 'declined'

@@ -53,7 +53,7 @@ export interface CatalogDiffInput {
   /** C8：这一行对标自家哪一款（不给 = 不比）。 */
   ownRef?(row: CatalogSnapshotRow): OwnRef | undefined
   /**
-   * WP402（决策 1137）：没有对标款时拿什么比——自家店里最便宜的那一款（两边最低价比）。不给 = 没对标款就不比。
+   * @deprecated WP408（决策 1154）：没有对标款就**不比**，这一项不再用（给了也不看）；只为不改已有签名留着。
    */
   ownLowest?: OwnRef
 }
@@ -381,14 +381,13 @@ function merge(entries: Entry[], input: CatalogDiffInput): CompetitorChange[] {
 
 /**
  * C8 / WP402（决策 1137）：「比你便宜 $N」——**拿竞品这一款的起价**（这一次读到的各款式里最低的现价，同币种）
- * 和**自家对应款**（对标款）比；没有对标款再比两边最低价（竞品这一款的起价 vs 自家店里最便宜的那一款）。
- * 价有关的几种才比；币种不一样不比。
+ * 和**自家对应款**（对标款）比。WP408（决策 1154）：没有对标款就不比，只报竞品自己的价格变化
+ * （跨品类比「贵 $1,760」没有意义）。价有关的几种才比；币种不一样不比。
  */
 function vsOwnOf(e: Entry, input: CatalogDiffInput): CompetitorVsOwn | undefined {
   if (!['price', 'discount_start', 'discount_end', 'new'].includes(e.kind)) return undefined
   if (e.row.price === undefined) return undefined
-  const paired = input.ownRef?.(e.row)
-  const own = paired ?? input.ownLowest
+  const own = input.ownRef?.(e.row)
   if (own === undefined) return undefined
   const currency = own.currency ?? e.row.currency
   const prices = input.read.rows
@@ -408,6 +407,6 @@ function vsOwnOf(e: Entry, input: CatalogDiffInput): CompetitorVsOwn | undefined
     own_price: own.own_price,
     diff: round2(start - own.own_price),
     ...(currency === undefined ? {} : { currency }),
-    basis: paired === undefined ? 'lowest' : 'pair',
+    basis: 'pair',
   }
 }

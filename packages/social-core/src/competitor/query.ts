@@ -134,7 +134,7 @@ export function describeChange(
   if (vs !== undefined && vs.diff !== 0) {
     const d = formatMoney(Math.abs(vs.diff), vs.currency ?? c.currency)
     const own = vs.own_title ?? vs.own_key
-    // WP402（决策 1137）：没有对标款时比的是你店里最便宜的那一款，照实说
+    // WP402（决策 1137）：没有对标款时比的是你店里最便宜的那一款，照实说（WP408 / 决策 1154 起不再这样比，只剩老数据会有 `lowest`）
     line +=
       vs.basis === 'lowest'
         ? en
