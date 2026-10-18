@@ -3,7 +3,7 @@
  *
  * 上游没有 workspace 概念，命名连接在同一个 provider 下按名字唯一。WP66 起每个品牌各有一个适配器、
  * 各有一份 `connect-adapter.json`，可连接名默认都叫 `default`，而且「本品牌没记录过的连接」也算成本品牌的——
- * 两个品牌连同一家服务（INMO 与 Rollout 都连 Shopify）就会互相覆盖、互相看见。
+ * 两个品牌连同一家服务（IVRA 与 Rovella 都连 Shopify）就会互相覆盖、互相看见。
  *
  * 这里收三样东西：
  * 1. **连接名带品牌**（{@link brandConnectionName}）：新建的连接叫 `<别名>--<品牌段>`，同一个 provider 在

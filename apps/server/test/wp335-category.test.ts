@@ -120,7 +120,7 @@ describe('WP335 品类：品牌档案里人可改', () => {
       tokenRefreshIntervalMs: 0,
       scheduleIntervalMs: 0,
       liveDataIntervalMs: 0,
-      env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'INMO' },
+      env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'IVRA' },
       mdns: () => ({ reason: '测试里不开局域网' }),
       brandIntakeFetch: async () => ({ ok: false, status: 429, text: async () => '' }),
     })
@@ -144,18 +144,18 @@ describe('WP335 品类：品牌档案里人可改', () => {
       }
     }
     const set = await call('PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO',
+      legal_name: 'IVRA',
       category: '  AR   眼镜 ',
     })
     expect(set.status).toBe(200)
     expect(set.data?.category).toBe('AR 眼镜')
     expect(server.onboarding.brandProfile(ws).category).toBe('AR 眼镜')
-    const kept = await call('PUT', '/v1/workspace/profile', { legal_name: 'INMO Tech' })
+    const kept = await call('PUT', '/v1/workspace/profile', { legal_name: 'IVRA Tech' })
     expect(kept.data?.category).toBe('AR 眼镜')
-    const cleared = await call('PUT', '/v1/workspace/profile', { legal_name: 'INMO', category: '' })
+    const cleared = await call('PUT', '/v1/workspace/profile', { legal_name: 'IVRA', category: '' })
     expect(cleared.data?.category).toBeUndefined()
     expect(
-      (await call('PUT', '/v1/workspace/profile', { legal_name: 'INMO', category: 'x'.repeat(81) }))
+      (await call('PUT', '/v1/workspace/profile', { legal_name: 'IVRA', category: 'x'.repeat(81) }))
         .status,
     ).toBe(400)
 

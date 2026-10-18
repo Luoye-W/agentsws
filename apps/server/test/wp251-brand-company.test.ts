@@ -2,9 +2,9 @@
  * WP251：品牌 / 公司口径修正。
  *
  * Fable 10-07 Windows 真机（只读查的）：
- * - 公司 `org_…` 的全称是在 Rollout 的设置页改的新名字；
- * - 启动品牌 INMO **没有 `org_id`**、`kind: personal`；加的品牌 Rollout `kind: shared`、挂在公司下；
- * - `onboarding_profiles` 每个品牌各存一份公司全称（INMO 那份还是 "INMO"），老表 `onboarding_profile` 也是 "INMO"。
+ * - 公司 `org_…` 的全称是在 Rovella 的设置页改的新名字；
+ * - 启动品牌 IVRA **没有 `org_id`**、`kind: personal`；加的品牌 Rovella `kind: shared`、挂在公司下；
+ * - `onboarding_profiles` 每个品牌各存一份公司全称（IVRA 那份还是 "IVRA"），老表 `onboarding_profile` 也是 "IVRA"。
  *
  * 这一档钉住：公司级字段只认公司（设置页「公司」改的是公司）、启动品牌挂进公司（迁移幂等、
  * 一条数据不丢）、AI 上下文「品牌：」按运行所在品牌 +「公司：」另起一行、加的品牌走完第 ④ 步才算设置完。
@@ -86,7 +86,7 @@ async function boot(dbDir?: string, start?: string): Promise<Server> {
     tokenRefreshIntervalMs: 0,
     scheduleIntervalMs: 0,
     liveDataIntervalMs: 0,
-    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'INMO' },
+    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'IVRA' },
     mdns: () => ({ reason: '测试里不开局域网' }),
     brandIntakeFetch: replay,
   })
@@ -130,7 +130,7 @@ async function call<T>(
   }
 }
 
-function inmo(server: Server): Who {
+function ivra(server: Server): Who {
   return {
     workspace_id: server.bootstrap.workspace.id,
     token: server.bootstrap.internalToken,
@@ -139,7 +139,7 @@ function inmo(server: Server): Who {
 }
 
 async function orgId(server: Server): Promise<string> {
-  const orgs = await call<{ id: string }[]>(server, inmo(server), 'GET', '/v1/orgs')
+  const orgs = await call<{ id: string }[]>(server, ivra(server), 'GET', '/v1/orgs')
   const id = orgs.data?.[0]?.id
   if (id === undefined) throw new Error('启动之后应该有一个组织')
   return id
@@ -150,7 +150,7 @@ async function enter(server: Server, workspace_id: string): Promise<Who> {
   const org = await orgId(server)
   const switched = await call<{ session_token?: string }>(
     server,
-    inmo(server),
+    ivra(server),
     'POST',
     `/v1/orgs/${org}/brands/${workspace_id}/switch`,
   )
@@ -166,7 +166,7 @@ async function addBrand(server: Server, name: string): Promise<Who> {
   const org = await orgId(server)
   const created = await call<{ workspace_id: string }>(
     server,
-    inmo(server),
+    ivra(server),
     'POST',
     `/v1/orgs/${org}/brands`,
     { name },
@@ -230,18 +230,18 @@ const brandText = (server: Server, workspace_id: string): string =>
     ?.text ?? ''
 
 describe('WP251 公司全称归公司（设置页「公司」改的是公司）', () => {
-  it('在 Rollout 的设置页改公司全称 / 地址：INMO 也是新的；「这个品牌」那几格只改 Rollout', async () => {
+  it('在 Rovella 的设置页改公司全称 / 地址：IVRA 也是新的；「这个品牌」那几格只改 Rovella', async () => {
     const server = await boot()
-    await putProfile(server, inmo(server), { legal_name: 'INMO', brand_name: 'INMO' })
-    const rollout = await addBrand(server, 'Rollout')
-    await putProfile(server, rollout, {
+    await putProfile(server, ivra(server), { legal_name: 'IVRA', brand_name: 'IVRA' })
+    const rovella = await addBrand(server, 'Rovella')
+    await putProfile(server, rovella, {
       legal_name: COMPANY,
       postal_address: '深圳市南山区科技路 8 号',
       one_liner: '户外滑板与配件',
     })
 
-    const r = await state(server, rollout)
-    const i = await state(server, inmo(server))
+    const r = await state(server, rovella)
+    const i = await state(server, ivra(server))
     for (const s of [r, i]) {
       expect(s.profile?.legal_name).toBe(COMPANY)
       expect(s.profile?.postal_address).toBe('深圳市南山区科技路 8 号')
@@ -249,41 +249,41 @@ describe('WP251 公司全称归公司（设置页「公司」改的是公司）'
     // 品牌那几格各是各的
     expect(r.profile?.one_liner).toBe('户外滑板与配件')
     expect(i.profile?.one_liner).toBeUndefined()
-    expect(r.brand_name).toBe('Rollout')
-    expect(i.brand_name).toBe('INMO')
+    expect(r.brand_name).toBe('Rovella')
+    expect(i.brand_name).toBe('IVRA')
     // 真源是公司
     const org = server.identity.getOrganization(await orgId(server))
     expect(org?.legal_name).toBe(COMPANY)
     expect(org?.postal_address).toBe('深圳市南山区科技路 8 号')
     // 开发信页脚那一格（B2B 读 `brandProfile().postal_address`）两个品牌一样
-    expect(server.onboarding.brandProfile(inmo(server).workspace_id as never).postal_address).toBe(
+    expect(server.onboarding.brandProfile(ivra(server).workspace_id as never).postal_address).toBe(
       '深圳市南山区科技路 8 号',
     )
 
-    // 在 INMO 下清掉地址：公司没有地址了，Rollout 也看不到
-    await putProfile(server, inmo(server), { legal_name: COMPANY, postal_address: '' })
-    expect((await state(server, rollout)).profile?.postal_address).toBeUndefined()
+    // 在 IVRA 下清掉地址：公司没有地址了，Rovella 也看不到
+    await putProfile(server, ivra(server), { legal_name: COMPANY, postal_address: '' })
+    expect((await state(server, rovella)).profile?.postal_address).toBeUndefined()
     expect(server.identity.getOrganization(await orgId(server))?.postal_address).toBeUndefined()
   })
 })
 
 describe('WP251 AI 上下文（决策 119）', () => {
-  it('Rollout 跑 AI 看到「品牌：Rollout」+「公司：深圳卢耶科技有限公司」；INMO 看到自己的品牌名', async () => {
+  it('Rovella 跑 AI 看到「品牌：Rovella」+「公司：深圳卢耶科技有限公司」；IVRA 看到自己的品牌名', async () => {
     const server = await boot()
-    await putProfile(server, inmo(server), { legal_name: 'INMO', brand_name: 'INMO' })
+    await putProfile(server, ivra(server), { legal_name: 'IVRA', brand_name: 'IVRA' })
     // 公司全称与品牌名一样时不重复写「公司：」
-    expect(brandText(server, inmo(server).workspace_id)).toContain('品牌：INMO')
-    expect(brandText(server, inmo(server).workspace_id)).not.toContain('公司：')
+    expect(brandText(server, ivra(server).workspace_id)).toContain('品牌：IVRA')
+    expect(brandText(server, ivra(server).workspace_id)).not.toContain('公司：')
 
-    const rollout = await addBrand(server, 'Rollout')
-    await putProfile(server, rollout, { legal_name: COMPANY })
-    const r = brandText(server, rollout.workspace_id)
-    expect(r).toContain('品牌：Rollout')
+    const rovella = await addBrand(server, 'Rovella')
+    await putProfile(server, rovella, { legal_name: COMPANY })
+    const r = brandText(server, rovella.workspace_id)
+    expect(r).toContain('品牌：Rovella')
     expect(r).toContain(`公司：${COMPANY}`)
-    expect(r).not.toContain('品牌：INMO')
+    expect(r).not.toContain('品牌：IVRA')
     expect(r).not.toContain(`品牌：${COMPANY}`)
-    const i = brandText(server, inmo(server).workspace_id)
-    expect(i).toContain('品牌：INMO')
+    const i = brandText(server, ivra(server).workspace_id)
+    expect(i).toContain('品牌：IVRA')
     expect(i).toContain(`公司：${COMPANY}`)
   })
 })
@@ -291,21 +291,21 @@ describe('WP251 AI 上下文（决策 119）', () => {
 describe('WP251 加的品牌走完第 ④ 步才算设置完（决策 92）', () => {
   it('②做完、③④没做：回首页仍拉回首次设置（停在第 ③ 步）；走完 ④ 才算完；启动品牌口径不变', async () => {
     const server = await boot()
-    await putProfile(server, inmo(server), { legal_name: 'INMO', brand_name: 'INMO' })
+    await putProfile(server, ivra(server), { legal_name: 'IVRA', brand_name: 'IVRA' })
     // 启动品牌：第 ① 步存过档案就算设过（口径不变）
-    expect((await state(server, inmo(server))).needs_setup).toBe(false)
+    expect((await state(server, ivra(server))).needs_setup).toBe(false)
 
-    const rollout = await addBrand(server, 'Rollout')
-    expect((await state(server, rollout)).needs_setup).toBe(true)
-    await analyzeAndConfirm(server, rollout)
-    const mid = await state(server, rollout)
+    const rovella = await addBrand(server, 'Rovella')
+    expect((await state(server, rovella)).needs_setup).toBe(true)
+    await analyzeAndConfirm(server, rovella)
+    const mid = await state(server, rovella)
     expect(mid.needs_setup).toBe(true)
     expect(mid.business_done).toBe(true)
     expect(mid.added_brand).toBe(true)
 
-    await applyCustomerCare(server, rollout)
-    expect((await state(server, rollout)).needs_setup).toBe(false)
-    expect((await state(server, inmo(server))).needs_setup).toBe(false)
+    await applyCustomerCare(server, rovella)
+    expect((await state(server, rovella)).needs_setup).toBe(false)
+    expect((await state(server, ivra(server))).needs_setup).toBe(false)
   })
 })
 
@@ -375,46 +375,46 @@ function connectionFiles(dir: string): Map<string, string> {
 
 describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
   /*
-   * 两种形状都钉：真机实际是 INMO 一直挂着公司、只是 kind = personal（Fable 10-07 复查）；
+   * 两种形状都钉：真机实际是 IVRA 一直挂着公司、只是 kind = personal（Fable 10-07 复查）；
    * 另一种是工单最初以为的「没有 org_id」——也要挂得进去。
    */
   it.each([
-    ['真机：INMO 挂着公司、kind = personal', true],
-    ['INMO 没有 org_id', false],
+    ['真机：IVRA 挂着公司、kind = personal', true],
+    ['IVRA 没有 org_id', false],
   ] as const)(
     '%s、各品牌各存一份公司全称 → 升级后以公司为准；一条数据不丢；再启动不再变',
     async (_label, keepOrg) => {
       const dir = mkdtempSync(join(tmpdir(), 'wp251-brandco-'))
       try {
-        // ── 上一版的样子：INMO 设过、有岗位 / 事项 / 知识；加 Rollout，也有岗位 / 事项 / 知识
+        // ── 上一版的样子：IVRA 设过、有岗位 / 事项 / 知识；加 Rovella，也有岗位 / 事项 / 知识
         const first = await boot(dir)
-        await analyzeAndConfirm(first, inmo(first))
-        await putProfile(first, inmo(first), { legal_name: 'INMO', brand_name: 'INMO' })
-        await applyCustomerCare(first, inmo(first))
-        const m1 = await call(first, inmo(first), 'POST', '/v1/matters', {
+        await analyzeAndConfirm(first, ivra(first))
+        await putProfile(first, ivra(first), { legal_name: 'IVRA', brand_name: 'IVRA' })
+        await applyCustomerCare(first, ivra(first))
+        const m1 = await call(first, ivra(first), 'POST', '/v1/matters', {
           kind: 'adhoc',
-          title: 'INMO 的一件事',
+          title: 'IVRA 的一件事',
         })
         expect(m1.status).toBe(201)
-        const rollout = await addBrand(first, 'Rollout')
-        await analyzeAndConfirm(first, rollout)
-        await applyCustomerCare(first, rollout)
-        const m2 = await call(first, rollout, 'POST', '/v1/matters', {
+        const rovella = await addBrand(first, 'Rovella')
+        await analyzeAndConfirm(first, rovella)
+        await applyCustomerCare(first, rovella)
+        const m2 = await call(first, rovella, 'POST', '/v1/matters', {
           kind: 'adhoc',
-          title: 'Rollout 的一件事',
+          title: 'Rovella 的一件事',
         })
         expect(m2.status).toBe(201)
-        // Rollout 的设置页改了公司全称（真机就是这么改的）
-        await putProfile(first, rollout, { legal_name: COMPANY })
-        const INMO = inmo(first).workspace_id
-        const ROLLOUT = rollout.workspace_id
+        // Rovella 的设置页改了公司全称（真机就是这么改的）
+        await putProfile(first, rovella, { legal_name: COMPANY })
+        const IVRA = ivra(first).workspace_id
+        const ROVELLA = rovella.workspace_id
         const ORG = await orgId(first)
         await shut(first)
 
         // ── 把数据目录改成真机那一刻的形状
         {
           const id = openDb(join(dir, 'identity.sqlite'))
-          const row = id.prepare('SELECT json FROM workspaces WHERE id = ?').get(INMO) as {
+          const row = id.prepare('SELECT json FROM workspaces WHERE id = ?').get(IVRA) as {
             json: string
           }
           const parsed = JSON.parse(row.json) as Record<string, unknown>
@@ -422,7 +422,7 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
           if (keepOrg) ws.org_id = parsed.org_id
           id.prepare('UPDATE workspaces SET json = ? WHERE id = ?').run(
             JSON.stringify({ ...ws, kind: 'personal' }),
-            INMO,
+            IVRA,
           )
           const orgRow = id.prepare('SELECT json FROM organizations WHERE id = ?').get(ORG) as {
             json: string
@@ -433,18 +433,18 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
           const ob = openDb(join(dir, 'onboarding.sqlite'))
           const mine = ob
             .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
-            .get(INMO) as { json: string }
-          const inmoProfile = {
+            .get(IVRA) as { json: string }
+          const ivraProfile = {
             ...(JSON.parse(mine.json) as Record<string, unknown>),
-            legal_name: 'INMO',
-            postal_address: 'INMO 的老地址',
+            legal_name: 'IVRA',
+            postal_address: 'IVRA 的老地址',
           }
           ob.prepare('UPDATE onboarding_profiles SET json = ? WHERE workspace_id = ?').run(
-            JSON.stringify(inmoProfile),
-            INMO,
+            JSON.stringify(ivraProfile),
+            IVRA,
           )
           ob.prepare('UPDATE onboarding_profile SET json = ? WHERE id = 1').run(
-            JSON.stringify(inmoProfile),
+            JSON.stringify(ivraProfile),
           )
           // 上一版没有这几样记号
           ob.prepare("DELETE FROM onboarding_migrations WHERE key LIKE 'wp251_%'").run()
@@ -456,35 +456,35 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
 
         // ── 升级后第一次启动
         const second = await boot(dir, '2026-10-08T09:00:00.000Z')
-        const inmoWs = await second.identity.getWorkspace(INMO as never)
-        expect(inmoWs?.org_id).toBe(ORG)
-        expect(inmoWs?.kind).toBe('shared')
-        expect((await second.identity.getWorkspace(ROLLOUT as never))?.kind).toBe('shared')
+        const ivraWs = await second.identity.getWorkspace(IVRA as never)
+        expect(ivraWs?.org_id).toBe(ORG)
+        expect(ivraWs?.kind).toBe('shared')
+        expect((await second.identity.getWorkspace(ROVELLA as never))?.kind).toBe('shared')
         expect(second.identity.listOrganizations()).toHaveLength(1)
-        // 以公司为准：全称是 Rollout 设置页改的那个；公司没有地址 → 从品牌档案搬上来
+        // 以公司为准：全称是 Rovella 设置页改的那个；公司没有地址 → 从品牌档案搬上来
         const org = second.identity.getOrganization(ORG as never)
         expect(org?.legal_name).toBe(COMPANY)
-        expect(org?.postal_address).toBe('INMO 的老地址')
+        expect(org?.postal_address).toBe('IVRA 的老地址')
         // 两个品牌读到的公司一样
-        const r = await state(second, await enter(second, ROLLOUT))
-        const i = await state(second, inmo(second))
+        const r = await state(second, await enter(second, ROVELLA))
+        const i = await state(second, ivra(second))
         expect(r.profile?.legal_name).toBe(COMPANY)
         expect(i.profile?.legal_name).toBe(COMPANY)
-        expect(i.profile?.postal_address).toBe('INMO 的老地址')
+        expect(i.profile?.postal_address).toBe('IVRA 的老地址')
         // 存量加的品牌已经有岗位：不被拉回向导
         expect(r.needs_setup).toBe(false)
         expect(i.needs_setup).toBe(false)
-        // Rollout 自己没接模型：挂进来之后跟随公司（INMO 成了公司默认品牌）
-        expect(second.brands.orgDefaultOf(ROLLOUT as never)).toBe(INMO)
+        // Rovella 自己没接模型：挂进来之后跟随公司（IVRA 成了公司默认品牌）
+        expect(second.brands.orgDefaultOf(ROVELLA as never)).toBe(IVRA)
         // AI 上下文
-        expect(brandText(second, ROLLOUT)).toContain('品牌：Rollout')
-        expect(brandText(second, ROLLOUT)).toContain(`公司：${COMPANY}`)
+        expect(brandText(second, ROVELLA)).toContain('品牌：Rovella')
+        expect(brandText(second, ROVELLA)).toContain(`公司：${COMPANY}`)
         await shut(second)
 
         // 档案里的影子刷成公司的值（老表也是）；迁移前的原样留了一份备份
         {
           const ob = openDb(join(dir, 'onboarding.sqlite'))
-          for (const ws of [INMO, ROLLOUT]) {
+          for (const ws of [IVRA, ROVELLA]) {
             const row = ob
               .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
               .get(ws) as { json: string }
@@ -498,13 +498,13 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
             .prepare(
               "SELECT json FROM onboarding_profiles_backup WHERE key = 'wp251' AND workspace_id = ?",
             )
-            .get(INMO) as { json: string }
-          expect(JSON.parse(backup.json).legal_name).toBe('INMO')
-          expect(JSON.parse(backup.json).postal_address).toBe('INMO 的老地址')
+            .get(IVRA) as { json: string }
+          expect(JSON.parse(backup.json).legal_name).toBe('IVRA')
+          expect(JSON.parse(backup.json).postal_address).toBe('IVRA 的老地址')
           ob.close()
         }
 
-        // 一条不丢：业务表一行不差，其余的表只多不少（启动会记事件、Rollout 的后台这次起来了）
+        // 一条不丢：业务表一行不差，其余的表只多不少（启动会记事件、Rovella 的后台这次起来了）
         const after = rowCounts(dir)
         const businessKeys = [...before.keys()].filter((k) => BUSINESS.test(k))
         expect(businessKeys.length).toBeGreaterThan(5)
@@ -515,8 +515,8 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
         {
           const work = openDb(join(dir, 'work.sqlite'))
           for (const [ws, title] of [
-            [INMO, 'INMO 的一件事'],
-            [ROLLOUT, 'Rollout 的一件事'],
+            [IVRA, 'IVRA 的一件事'],
+            [ROVELLA, 'Rovella 的一件事'],
           ] as const) {
             const titles = (
               work.prepare('SELECT json FROM matters WHERE workspace_id = ?').all(ws) as {
@@ -532,8 +532,8 @@ describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
         const settled = rowCounts(dir)
         const third = await boot(dir, '2026-10-09T09:00:00.000Z')
         expect(third.identity.listOrganizations()).toHaveLength(1)
-        expect((await third.identity.getWorkspace(INMO as never))?.org_id).toBe(ORG)
-        expect(third.identity.getOrganization(ORG as never)?.postal_address).toBe('INMO 的老地址')
+        expect((await third.identity.getWorkspace(IVRA as never))?.org_id).toBe(ORG)
+        expect(third.identity.getOrganization(ORG as never)?.postal_address).toBe('IVRA 的老地址')
         await shut(third)
         const again = rowCounts(dir)
         for (const k of [...settled.keys()].filter((key) => BUSINESS.test(key)))

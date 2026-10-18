@@ -1,5 +1,5 @@
 /**
- * WP301（决策 399 = A）：已经用旧的自带主题（agentsws-theme v0.9.x / v0.10）起过底的工作目录（Windows 上 Rollout 那一份）。
+ * WP301（决策 399 = A）：已经用旧的自带主题（agentsws-theme v0.9.x / v0.10）起过底的工作目录（Windows 上 Rovella 那一份）。
  *
  * 钉住：不删、不自动迁；运行里照实说「这份是旧的自带主题，工坊已改用 Horizon」；旧目录上不再改、不再推；
  * 下一次起底在 Horizon 上新起一份，旧目录整份挪去 `theme-work/<品牌>/legacy/` 原样留着、时间线记一句；
@@ -30,8 +30,8 @@ import {
 import { createThemeToolExecutor } from '../src/theme-tools.js'
 
 const T0 = '2026-10-13T09:00:00.000Z'
-const SHOP = '6suegp-md.myshopify.com'
-const WS = 'ws_rollout'
+const SHOP = '6demox-md.myshopify.com'
+const WS = 'ws_rovella'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -189,7 +189,7 @@ describe('旧的自带主题那一份工作目录', () => {
       (
         await exec({
           name: 'theme_push_unpublished',
-          input: { name: 'Rollout 首页 v2' },
+          input: { name: 'Rovella 首页 v2' },
           request: request(),
         })
       ).status,
@@ -236,7 +236,7 @@ describe('旧的自带主题那一份工作目录', () => {
   })
 })
 
-describe('真装配线（stub）：Rollout 那份旧目录上说「首页再改一版」', () => {
+describe('真装配线（stub）：Rovella 那份旧目录上说「首页再改一版」', () => {
   let server: Server | undefined
   afterEach(async () => {
     await server?.close()
@@ -288,7 +288,7 @@ describe('真装配线（stub）：Rollout 那份旧目录上说「首页再改�
       return parsed.data
     }
     await call(s.bootstrap.ownerAssignment.id, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'Rollout',
+      legal_name: 'Rovella',
       storefront_platform: 'shopify',
     })
     await call(theme.id, 'GET', '/v1/site/theme?fresh=1')

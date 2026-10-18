@@ -1,5 +1,5 @@
 /**
- * WP252（决策 125）端到端：一台机一个 OpenConnector、两个品牌都连 Shopify（INMO 与 Rollout 那种）。
+ * WP252（决策 125）端到端：一台机一个 OpenConnector、两个品牌都连 Shopify（IVRA 与 Rovella 那种）。
  *
  * 走真装配线（真 connect-adapter + 真连接面 + 真路由）；「OpenConnector」是本机一个小 http 服务，
  * 按真上游的脾气写——`PUT /api/connections/:service` 按 (service, 连接名) **就地覆盖**，匿名一律 401
@@ -157,7 +157,7 @@ async function boot(rt: FakeRuntime, dbDir?: string): Promise<Server> {
     shopifyFetch,
     env: {
       AGENTSWS_OWNER_EMAIL: 'owner@example.test',
-      AGENTSWS_WORKSPACE_NAME: 'INMO',
+      AGENTSWS_WORKSPACE_NAME: 'IVRA',
       AGENTSWS_CONNECT_URL: rt.url,
       OOMOL_CONNECT_ENCRYPTION_KEY: 'k'.repeat(64),
       OOMOL_CONNECT_ADMIN_TOKEN: 'a'.repeat(64),
@@ -259,10 +259,10 @@ describe('WP252 两个品牌都连 Shopify（一台机一个连接器）', () =>
     const rt = await fakeRuntime()
     const server = await boot(rt)
     const a = startupWho(server)
-    const b = await addBrand(server, 'Rollout')
+    const b = await addBrand(server, 'Rovella')
 
-    const ca = await connectShop(server, a, 'inmo')
-    const cb = await connectShop(server, b, 'rollout')
+    const ca = await connectShop(server, a, 'ivra')
+    const cb = await connectShop(server, b, 'rovella')
 
     // 上游两条，名字各带各的品牌段；先连的那家令牌没被后连的顶掉
     expect(rt.puts).toEqual([
@@ -270,16 +270,16 @@ describe('WP252 两个品牌都连 Shopify（一台机一个连接器）', () =>
       `shopify_admin/default--${seg(b.workspace_id)}`,
     ])
     expect(rt.conns.map((c) => [c.id, c.secret.split('_')[1]])).toEqual([
-      [ca.id, 'inmo'],
-      [cb.id, 'rollout'],
+      [ca.id, 'ivra'],
+      [cb.id, 'rovella'],
     ])
     expect(ca.alias).toBe('default')
 
     const la = await list(server, a)
     const lb = await list(server, b)
-    expect(la.map((c) => [c.id, c.identity?.display_name])).toEqual([[ca.id, 'inmo.myshopify.com']])
+    expect(la.map((c) => [c.id, c.identity?.display_name])).toEqual([[ca.id, 'ivra.myshopify.com']])
     expect(lb.map((c) => [c.id, c.identity?.display_name])).toEqual([
-      [cb.id, 'rollout.myshopify.com'],
+      [cb.id, 'rovella.myshopify.com'],
     ])
 
     // B 断不了 A 那条（对 B 来说它不存在）
@@ -318,7 +318,7 @@ describe('WP252 迁移：WP252 之前两个品牌都用 `default` 连了 Shopify
       configured: true,
       default: true,
       secret: 'shpat_whoever-wrote-last',
-      profile: { accountId: 'acct-legacy', displayName: 'rollout.myshopify.com' },
+      profile: { accountId: 'acct-legacy', displayName: 'rovella.myshopify.com' },
     }
     const rt = await fakeRuntime([legacy])
     const dir = mkdtempSync(join(tmpdir(), 'wp252-srv-'))
@@ -326,7 +326,7 @@ describe('WP252 迁移：WP252 之前两个品牌都用 `default` 连了 Shopify
 
     // 第一次起：建好第二个品牌，然后把数据目录做成「WP252 之前」的样子
     const first = await boot(rt, dir)
-    const bId = (await addBrand(first, 'Rollout')).workspace_id
+    const bId = (await addBrand(first, 'Rovella')).workspace_id
     const aId = first.bootstrap.workspace.id
     await first.close()
     servers.splice(servers.indexOf(first), 1)
@@ -366,7 +366,7 @@ describe('WP252 迁移：WP252 之前两个品牌都用 `default` 连了 Shopify
     expect(tested.data).toMatchObject({ ok: false, reason: 'reconnect_required' })
 
     // B 重新连接：另起一条只属于 B 的，「请重新连接」结掉；A 那条一个字节没动
-    const fresh = await connectShop(server, b, 'rollout')
+    const fresh = await connectShop(server, b, 'rovella')
     expect(fresh.id).not.toBe('legacy-1')
     expect((await list(server, b)).map((c) => c.id)).toEqual([fresh.id])
     expect(rt.conns.find((c) => c.id === 'legacy-1')?.secret).toBe('shpat_whoever-wrote-last')
@@ -392,7 +392,7 @@ describe('WP252 迁移：WP252 之前两个品牌都用 `default` 连了 Shopify
     const dir = mkdtempSync(join(tmpdir(), 'wp252-srv-'))
     dirs.push(dir)
     const first = await boot(rt, dir)
-    const bId = (await addBrand(first, 'Rollout')).workspace_id
+    const bId = (await addBrand(first, 'Rovella')).workspace_id
     const aId = first.bootstrap.workspace.id
     await first.close()
     servers.splice(servers.indexOf(first), 1)
@@ -404,7 +404,7 @@ describe('WP252 迁移：WP252 之前两个品牌都用 `default` 连了 Shopify
       configured: true,
       default: true,
       secret: 'x',
-      profile: { accountId: 'acct', displayName: 'inmo.myshopify.com' },
+      profile: { accountId: 'acct', displayName: 'ivra.myshopify.com' },
     })
     const old = (ws: string) =>
       JSON.stringify({ connections: [{ connection_id: 'legacy-1', workspace_id: ws }] })

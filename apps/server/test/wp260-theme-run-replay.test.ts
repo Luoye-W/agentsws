@@ -1,5 +1,5 @@
 /**
- * WP260 回放：10-07 真机 ci.16（Rollout 建站「Shopify 网页模板」，搭英文首页、推未发布主题给预览）。
+ * WP260 回放：10-07 真机 ci.16（Rovella 建站「Shopify 网页模板」，搭英文首页、推未发布主题给预览）。
  *
  * 真装配线（`createRuntime` direct 档 + 真主题工具执行器 + 真主题工坊），只换掉三样：模型是下面这个**会看
  * 历史的假模型**、`shopify theme …` 是进程内替身、店里线上那一份是 `fixtures/wp260-theme.ts`（WP301 起是 Horizon 形状、
@@ -36,7 +36,7 @@ import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 import { createThemeToolExecutor } from '../src/theme-tools.js'
 import { wp260ThemeFiles } from './fixtures/wp260-theme.js'
 
-const SHOP = '6suegp-md.myshopify.com'
+const SHOP = '6demox-md.myshopify.com'
 const MODEL: ModelRef = { provider: 'stub', model: 'replay-ci16', region: 'cn' }
 const CI16 = '现在读首页模板、FAQ/容器分区、标题块的 schema，并顺手看店里有没有可引用的商品。'
 const spec = platformKitOf('shopify')?.cli
@@ -58,7 +58,7 @@ const NEEDS: { input: Record<string, unknown>; marker: string }[] = [
 
 const NEW_INDEX = JSON.stringify({
   sections: {
-    hero: { type: 'hero', settings: { heading: 'Ride further with Rollout' } },
+    hero: { type: 'hero', settings: { heading: 'Ride further with Rovella' } },
     featured: { type: 'featured-product', settings: {} },
     story: { type: 'rich-text', settings: { heading: 'Our story' } },
     faq: { type: 'faq', settings: { heading: 'FAQ' } },
@@ -126,9 +126,9 @@ function ci16Model(quitAfter = 8) {
       ])
     if (!did('theme_check')) return reply('', [{ name: 'theme_check', input: {} }])
     if (!did('theme_push_unpublished'))
-      return reply('', [{ name: 'theme_push_unpublished', input: { name: 'Rollout 首页 v1' } }])
+      return reply('', [{ name: 'theme_push_unpublished', input: { name: 'Rovella 首页 v1' } }])
     return reply(
-      '预览好了：首页换成横幅、主推（占位，等你在编辑器里挑商品）、品牌故事、FAQ、订阅五块，推成了一份未发布主题「Rollout 首页 v1」，线上没动。不满意就不发布，原来的首页一个字没变。',
+      '预览好了：首页换成横幅、主推（占位，等你在编辑器里挑商品）、品牌故事、FAQ、订阅五块，推成了一份未发布主题「Rovella 首页 v1」，线上没动。不满意就不发布，原来的首页一个字没变。',
     )
   }
   const gateway = {
@@ -173,7 +173,7 @@ afterEach(() => {
 
 function themeExecutor() {
   const module = createSiteTheme({
-    workspace_id: 'ws_rollout',
+    workspace_id: 'ws_rovella',
     clock: { now: () => new Date().toISOString() },
     dataDir: join(dir, 'data'),
     cliSpec: () => spec,
@@ -214,7 +214,7 @@ const roles = {
 const matter = {
   id: 'mat_01M4AYRX8G7V90KDZ3R41',
   schema_version: 1,
-  workspace_id: 'ws_rollout',
+  workspace_id: 'ws_rovella',
   kind: 'task',
   title: '用 Horizon 搭英文首页，推未发布主题给预览',
   status: 'open',
@@ -236,7 +236,7 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
     const timeline: (Partial<MatterEvent> & { kind: string; text: string })[] = []
     let request: RunRequest | undefined
     const runtime = createRuntime({
-      workspace_id: 'ws_rollout',
+      workspace_id: 'ws_rovella',
       clock: { now: () => new Date().toISOString() },
       random: () => 0.5,
       seed: 42,
@@ -342,7 +342,7 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
     const req = {
       id: 'run_ci16',
       schema_version: 1,
-      workspace_id: 'ws_rollout',
+      workspace_id: 'ws_rovella',
       kind: 'work_item',
       actor: { person_id: 'per_owner', assignment_id: 'asg_theme', role_id: 'site.shopify-theme' },
       work_item: { id: matter.id, conversation_id: matter.id, role_id: 'site.shopify-theme' },

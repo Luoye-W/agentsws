@@ -13,19 +13,19 @@ import { renderWithProviders } from './helpers'
 const NOW = '2026-10-07T08:00:00.000Z'
 
 const fullView = (): OwnSubQueueView => ({
-  subreddits: [{ account_id: 'sa_1', name: 'inmoxr', display_name: 'INMO XR' }],
+  subreddits: [{ account_id: 'sa_1', name: 'ivraxr', display_name: 'IVRA XR' }],
   channel: 'browser',
   browser: {
     state: 'logged_in',
-    username: 'inmo_official',
+    username: 'ivra_official',
     writes_last_day: 0,
     max_writes_per_day: 30,
   },
   sources: [
-    { subreddit: 'inmoxr', source: 'modqueue', status: 'ok', count: 2 },
-    { subreddit: 'inmoxr', source: 'unmoderated', status: 'ok', count: 1 },
+    { subreddit: 'ivraxr', source: 'modqueue', status: 'ok', count: 2 },
+    { subreddit: 'ivraxr', source: 'unmoderated', status: 'ok', count: 1 },
     {
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       source: 'join_requests',
       status: 'unsupported',
       message: 'Reddit 没有公开的「入群申请」读口',
@@ -35,14 +35,14 @@ const fullView = (): OwnSubQueueView => ({
     {
       id: 't3_spam1',
       account_id: 'sa_1',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       kind: 'reported',
       thing: 'post',
-      title: 'Cheap INMO Air3, DM me on telegram',
+      title: 'Cheap IVRA Air3, DM me on telegram',
       excerpt: 'wholesale https://bit.ly/x',
       author: 'spammer1',
       report_reasons: ['No spam or self-promotion'],
-      url: 'https://www.reddit.com/r/inmoxr/comments/spam1/x/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/spam1/x/',
       suggestion: {
         verdict: 'remove',
         reason: '像广告 / 引流：出现「dm me」，违反版规「No spam or self-promotion」。',
@@ -52,7 +52,7 @@ const fullView = (): OwnSubQueueView => ({
     {
       id: 't3_held1',
       account_id: 'sa_1',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       kind: 'held',
       thing: 'post',
       title: 'My review',
@@ -69,7 +69,7 @@ const fullView = (): OwnSubQueueView => ({
     {
       id: 't3_new1',
       account_id: 'sa_1',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       kind: 'new_post',
       thing: 'post',
       title: 'Hello from Berlin',
@@ -80,7 +80,7 @@ const fullView = (): OwnSubQueueView => ({
       suggestion: { verdict: 'ignore', reason: '正常新帖，不用管。' },
     },
   ],
-  rules: [{ subreddit: 'inmoxr', rules: ['No spam or self-promotion', 'Be civil'] }],
+  rules: [{ subreddit: 'ivraxr', rules: ['No spam or self-promotion', 'Be civil'] }],
   observed_at: NOW,
 })
 
@@ -124,7 +124,7 @@ describe('WP249 自家版待处理', () => {
       'held',
       'new_post',
     ])
-    expect(screen.getByTestId('own-sub-via').textContent).toContain('官方号 u/inmo_official')
+    expect(screen.getByTestId('own-sub-via').textContent).toContain('官方号 u/ivra_official')
     const spam = screen.getAllByTestId('own-sub-item')[0] as HTMLElement
     expect(within(spam).getByTestId('own-sub-reports').textContent).toContain(
       'No spam or self-promotion',
@@ -182,10 +182,10 @@ describe('WP249 自家版待处理', () => {
       expect(state.login).toHaveBeenCalled()
     })
     const reg = screen.getByTestId('own-sub-register')
-    fireEvent.change(within(reg).getByRole('textbox'), { target: { value: 'r/inmoxr' } })
+    fireEvent.change(within(reg).getByRole('textbox'), { target: { value: 'r/ivraxr' } })
     fireEvent.click(within(reg).getByRole('button', { name: '登记' }))
     await waitFor(() => {
-      expect(state.register).toHaveBeenCalledWith('r/inmoxr', 'asg_social')
+      expect(state.register).toHaveBeenCalledWith('r/ivraxr', 'asg_social')
     })
   })
 })

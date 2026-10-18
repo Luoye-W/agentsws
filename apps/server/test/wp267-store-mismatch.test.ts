@@ -17,8 +17,8 @@ import {
 } from './fixtures/fake-shopify-theme.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
-const WS = 'ws_rollout'
-const ROLLOUT = '6suegp-md.myshopify.com'
+const WS = 'ws_rovella'
+const ROVELLA = '6demox-md.myshopify.com'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -64,7 +64,7 @@ function make(): SiteThemeAssembly {
 }
 
 const ONE: FakeOrg[] = [
-  { id: '111', name: 'My Store', stores: [{ store: ROLLOUT, name: 'My Store', plan: 'basic' }] },
+  { id: '111', name: 'My Store', stores: [{ store: ROVELLA, name: 'My Store', plan: 'basic' }] },
 ]
 
 beforeEach(() => {
@@ -82,50 +82,50 @@ afterEach(() => {
 describe('WP267 只有一家店但与官网不符', () => {
   it('不自动定：next = store，清单里就那一家，官网那家照实带出；AI 工具说「换个账号或就用这家」', async () => {
     cli.setOrgs(ONE)
-    machine.site = 'inmo-official.myshopify.com'
+    machine.site = 'ivra-official.myshopify.com'
     const t = make()
     const r = await t.readiness()
     expect(r.store).toBeUndefined()
     expect(r.next).toBe('store')
-    expect(r.site_store).toBe('inmo-official.myshopify.com')
-    expect(r.store_lookup).toMatchObject({ status: 'ok', stores: [{ store: ROLLOUT }] })
+    expect(r.site_store).toBe('ivra-official.myshopify.com')
+    expect(r.store_lookup).toMatchObject({ status: 'ok', stores: [{ store: ROVELLA }] })
     expect(events.some((e) => e.type === 'site_theme.store_auto')).toBe(false)
     await expect(t.list()).rejects.toThrow(STORE_LOOKUP_TEXT.mismatch)
   })
 
   it('「就用这家」= 从清单里选（source: list），之后照常；再找一次也不被清掉', async () => {
     cli.setOrgs(ONE)
-    machine.site = 'inmo-official.myshopify.com'
+    machine.site = 'ivra-official.myshopify.com'
     const t = make()
     await t.readiness()
-    const r = await t.setStore(ROLLOUT, { source: 'list' })
-    expect(r).toMatchObject({ store: ROLLOUT, store_source: 'cli' })
+    const r = await t.setStore(ROVELLA, { source: 'list' })
+    expect(r).toMatchObject({ store: ROVELLA, store_source: 'cli' })
     expect(r.next).toBeUndefined()
     await t.refreshStores({ relogin: true })
-    expect((await t.readiness()).store).toBe(ROLLOUT)
+    expect((await t.readiness()).store).toBe(ROVELLA)
   })
 
   it('「换个账号」登进官网那家所在的账号：自动定成官网那家', async () => {
     cli.setOrgs(ONE)
-    machine.site = 'inmo-official.myshopify.com'
+    machine.site = 'ivra-official.myshopify.com'
     const t = make()
     expect((await t.readiness()).store).toBeUndefined()
     cli.setOrgs([
       {
         id: '444',
-        name: 'INMO',
-        stores: [{ store: 'inmo-official.myshopify.com', name: 'INMO', plan: 'Shopify' }],
+        name: 'IVRA',
+        stores: [{ store: 'ivra-official.myshopify.com', name: 'IVRA', plan: 'Shopify' }],
       },
     ])
     await t.refreshStores({ relogin: true })
-    expect((await t.readiness()).store).toBe('inmo-official.myshopify.com')
+    expect((await t.readiness()).store).toBe('ivra-official.myshopify.com')
   })
 
   it('官网没读到店（档案里没有 shopify_domain）/ 官网就是这一家：照旧只有一家就定它', async () => {
     cli.setOrgs(ONE)
-    expect((await make().readiness()).store).toBe(ROLLOUT)
+    expect((await make().readiness()).store).toBe(ROVELLA)
     rmSync(join(dir, 'data'), { recursive: true, force: true })
-    machine.site = ROLLOUT
-    expect((await make().readiness()).store).toBe(ROLLOUT)
+    machine.site = ROVELLA
+    expect((await make().readiness()).store).toBe(ROVELLA)
   })
 })

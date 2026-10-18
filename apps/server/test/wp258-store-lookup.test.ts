@@ -26,8 +26,8 @@ import {
 } from './fixtures/fake-shopify-theme.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
-const WS = 'ws_rollout'
-const ROLLOUT = '6suegp-md.myshopify.com'
+const WS = 'ws_rovella'
+const ROVELLA = '6demox-md.myshopify.com'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -73,20 +73,20 @@ function make(): SiteThemeAssembly {
 }
 
 const ONE: FakeOrg[] = [
-  { id: '111', name: 'My Store', stores: [{ store: ROLLOUT, name: 'My Store', plan: 'basic' }] },
+  { id: '111', name: 'My Store', stores: [{ store: ROVELLA, name: 'My Store', plan: 'basic' }] },
 ]
 const MANY: FakeOrg[] = [
   {
     id: '111',
-    name: 'Rollout Org',
+    name: 'Rovella Org',
     stores: [
-      { store: ROLLOUT, name: 'My Store', plan: 'basic' },
-      { store: 'inmo-dev.myshopify.com', name: 'INMO Dev', plan: 'Development' },
+      { store: ROVELLA, name: 'My Store', plan: 'basic' },
+      { store: 'ivra-dev.myshopify.com', name: 'IVRA Dev', plan: 'Development' },
     ],
   },
 ]
 const TWO_ORGS: FakeOrg[] = [
-  { id: '111', name: 'Rollout Org', stores: [{ store: ROLLOUT, name: 'My Store', plan: 'basic' }] },
+  { id: '111', name: 'Rovella Org', stores: [{ store: ROVELLA, name: 'My Store', plan: 'basic' }] },
   {
     id: '222',
     name: 'Agency',
@@ -116,11 +116,11 @@ describe('只有一家店：自动定，岗位页那一格不再出现', () => {
   it('一条 store list --json 就够；不带店铺、不带令牌、用本品牌那一份会话', async () => {
     cli.setOrgs(ONE)
     const r = await make().readiness()
-    expect(r).toMatchObject({ store: ROLLOUT, store_source: 'cli', cli: 'ready' })
+    expect(r).toMatchObject({ store: ROVELLA, store_source: 'cli', cli: 'ready' })
     expect(r.next).toBeUndefined()
     expect(r.store_lookup).toMatchObject({
       status: 'ok',
-      stores: [{ store: ROLLOUT, name: 'My Store', plan: 'basic', organization: 'My Store' }],
+      stores: [{ store: ROVELLA, name: 'My Store', plan: 'basic', organization: 'My Store' }],
     })
     expect(lookupCalls()).toEqual([['store', 'list', '--json']])
     const call = cli.calls().find((c) => c.argv[0] === 'store')
@@ -143,10 +143,10 @@ describe('只有一家店：自动定，岗位页那一格不再出现', () => {
     await make().readiness()
     const before = lookupCalls().length
     const again = await make().readiness()
-    expect(again).toMatchObject({ store: ROLLOUT, store_source: 'cli' })
+    expect(again).toMatchObject({ store: ROVELLA, store_source: 'cli' })
     expect(lookupCalls().length).toBe(before)
     const saved = JSON.parse(readFileSync(settingsFile(), 'utf8')) as Record<string, unknown>
-    expect(saved).toMatchObject({ store: ROLLOUT, store_by: 'cli', lookup: { status: 'ok' } })
+    expect(saved).toMatchObject({ store: ROVELLA, store_by: 'cli', lookup: { status: 'ok' } })
   })
 })
 
@@ -158,15 +158,15 @@ describe('好几家店：岗位页给下拉框，选了即存', () => {
     expect(r.next).toBe('store')
     expect(r.store).toBeUndefined()
     expect(r.store_lookup?.stores.map((s) => [s.store, s.name, s.plan])).toEqual([
-      [ROLLOUT, 'My Store', 'basic'],
-      ['inmo-dev.myshopify.com', 'INMO Dev', 'Development'],
+      [ROVELLA, 'My Store', 'basic'],
+      ['ivra-dev.myshopify.com', 'IVRA Dev', 'Development'],
     ])
     await expect(t.initFromBase({})).rejects.toMatchObject({ message: STORE_LOOKUP_TEXT.pick })
-    const picked = await t.setStore('inmo-dev.myshopify.com', { source: 'list' })
-    expect(picked).toMatchObject({ store: 'inmo-dev.myshopify.com', store_source: 'cli' })
+    const picked = await t.setStore('ivra-dev.myshopify.com', { source: 'list' })
+    expect(picked).toMatchObject({ store: 'ivra-dev.myshopify.com', store_source: 'cli' })
     expect(picked.next).toBeUndefined()
     // 下拉框里换一家
-    expect((await t.setStore(ROLLOUT, { source: 'list' })).store).toBe(ROLLOUT)
+    expect((await t.setStore(ROVELLA, { source: 'list' })).store).toBe(ROVELLA)
     // 不在清单里的不能当「选的」
     await expect(t.setStore('evil.myshopify.com', { source: 'list' })).rejects.toMatchObject({
       code: 'invalid_input',
@@ -175,12 +175,12 @@ describe('好几家店：岗位页给下拉框，选了即存', () => {
 
   it('与品牌档案里官网读到的那家对上：默认选它', async () => {
     cli.setOrgs(MANY)
-    machine.site = 'inmo-dev.myshopify.com'
+    machine.site = 'ivra-dev.myshopify.com'
     const r = await make().readiness()
     expect(r).toMatchObject({
-      store: 'inmo-dev.myshopify.com',
+      store: 'ivra-dev.myshopify.com',
       store_source: 'cli',
-      site_store: 'inmo-dev.myshopify.com',
+      site_store: 'ivra-dev.myshopify.com',
     })
     expect(r.next).toBeUndefined()
     // 下拉框照样有（可以换）
@@ -209,7 +209,7 @@ describe('好几家店：岗位页给下拉框，选了即存', () => {
       ['store', 'list', '--json', '--organization-id', '222'],
     ])
     expect(r.store_lookup?.stores.map((s) => [s.store, s.organization])).toEqual([
-      [ROLLOUT, 'Rollout Org'],
+      [ROVELLA, 'Rovella Org'],
       ['client-a.myshopify.com', 'Agency'],
     ])
     expect(r.next).toBe('store')
@@ -238,7 +238,7 @@ describe('零家 / 失败 / 会话过期', () => {
     expect(lookupCalls()).toHaveLength(1)
     // 网好了：fresh 现找一次
     cli.setStoresFail(false)
-    expect((await t.readiness({ fresh: true })).store).toBe(ROLLOUT)
+    expect((await t.readiness({ fresh: true })).store).toBe(ROVELLA)
     expect(lookupCalls()).toHaveLength(2)
   })
 
@@ -249,7 +249,7 @@ describe('零家 / 失败 / 会话过期', () => {
     await t.readiness()
     cli.setStoresFail(false)
     clock.at = '2026-10-07T09:06:00.000Z'
-    expect((await t.readiness()).store).toBe(ROLLOUT)
+    expect((await t.readiness()).store).toBe(ROVELLA)
   })
 
   it('CLI 不认识这条命令（老版本）：当没找成，手填照旧', async () => {
@@ -322,25 +322,25 @@ describe('重新登录（可能换了账号）', () => {
   it('自动取的那家不在新账号下：清掉重定；新账号只有一家就它', async () => {
     cli.setOrgs(ONE)
     const t = make()
-    expect((await t.readiness()).store).toBe(ROLLOUT)
+    expect((await t.readiness()).store).toBe(ROVELLA)
     cli.setOrgs([
       {
         id: '333',
-        name: 'INMO',
-        stores: [{ store: 'inmo.myshopify.com', name: 'INMO', plan: 'Shopify' }],
+        name: 'IVRA',
+        stores: [{ store: 'ivra.myshopify.com', name: 'IVRA', plan: 'Shopify' }],
       },
     ])
     await t.refreshStores({ relogin: true })
-    expect((await t.readiness()).store).toBe('inmo.myshopify.com')
+    expect((await t.readiness()).store).toBe('ivra.myshopify.com')
   })
 
   it('人选的那家还在新账号下：不动', async () => {
     cli.setOrgs(MANY)
     const t = make()
     await t.readiness()
-    await t.setStore('inmo-dev.myshopify.com', { source: 'list' })
+    await t.setStore('ivra-dev.myshopify.com', { source: 'list' })
     await t.refreshStores({ relogin: true })
-    expect((await t.readiness()).store).toBe('inmo-dev.myshopify.com')
+    expect((await t.readiness()).store).toBe('ivra-dev.myshopify.com')
   })
 
   it('重登后找店没跑成：原来那家留着', async () => {
@@ -349,7 +349,7 @@ describe('重新登录（可能换了账号）', () => {
     await t.readiness()
     cli.setStoresFail(true)
     await t.refreshStores({ relogin: true })
-    expect((await t.readiness()).store).toBe(ROLLOUT)
+    expect((await t.readiness()).store).toBe(ROVELLA)
   })
 })
 

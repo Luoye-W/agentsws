@@ -1,8 +1,8 @@
 /**
  * WP251：启动品牌挂到公司下（启动时一次，幂等）。
  *
- * Fable 10-07 Windows 真机：启动品牌 INMO 挂在公司下，但 `kind: personal`；加的品牌 Rollout 是 `kind: shared`。
- * 真机上要做的只有第 3 条（`kind` 口径统一）——工单最初以为 INMO 没有 `org_id`，Fable 复查更正。
+ * Fable 10-07 Windows 真机：启动品牌 IVRA 挂在公司下，但 `kind: personal`；加的品牌 Rovella 是 `kind: shared`。
+ * 真机上要做的只有第 3 条（`kind` 口径统一）——工单最初以为 IVRA 没有 `org_id`，Fable 复查更正。
  * 第 1、2 条是兜底：真遇到启动品牌没挂公司、负责人却已有公司的数据，也挂得进去。
  *
  * 只改身份库里工作区那一行，别的一个字节不动：

@@ -234,7 +234,7 @@ quick_prompts:
     kind: start_task
   - id: week_buzz
     label: { zh: "这周大家在聊什么", en: "This week's buzz" }
-    prompt: "这周 INMO 在 Reddit 和 X 上大家在聊什么？按话题和情绪分组，每条带链接和时间、写清从哪一路取的；没取到的平台照实说，别写成 0"
+    prompt: "这周 IVRA 在 Reddit 和 X 上大家在聊什么？按话题和情绪分组，每条带链接和时间、写清从哪一路取的；没取到的平台照实说，别写成 0"
     kind: ask
 
 task_examples:
@@ -252,7 +252,7 @@ task_examples:
     expected_output: "面板上那一块照实说「这条 feed 不存在（404），多半是提醒被删了」，而不是显示今天 0 条提及。"
   - id: weekly_buzz
     title: { zh: "这周大家在聊我们什么", en: "What people said this week" }
-    description: "老板问：「这周 INMO 在 Reddit 和 X 上大家在聊什么？」"
+    description: "老板问：「这周 IVRA 在 Reddit 和 X 上大家在聊什么？」"
     expected_output: "一份报告：按话题、情绪、平台分组，每条带链接与日期、写明来自接口中台还是浏览器只读；X 没连官方接口就写「没取到」而不是 0 条；值得回应、正在扩散的最多三张卡。"
 
 # WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。

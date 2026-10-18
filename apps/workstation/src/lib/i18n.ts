@@ -3023,7 +3023,7 @@ const zh: Table = {
   'onboarding.company.legal_name.hint':
     '写营业执照上的全称，别写简称。同事那边写法稍有出入没关系——多打的空格、大小写、"有限公司"这类尾缀都会自动对齐。',
   'onboarding.company.domain': '公司邮箱后缀',
-  'onboarding.company.domain.placeholder': '例如 inmoxr.com',
+  'onboarding.company.domain.placeholder': '例如 ivraxr.com',
   'onboarding.company.domain.hint':
     '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
   'onboarding.company.vertical': '你卖的是',
@@ -7271,7 +7271,7 @@ const en: Table = {
   'onboarding.company.legal_name.hint':
     'Use the name on the business licence, not a short form. It is fine if a colleague types it slightly differently — extra spaces, casing and suffixes like "Co., Ltd." are lined up automatically.',
   'onboarding.company.domain': 'Company email suffix',
-  'onboarding.company.domain.placeholder': 'e.g. inmoxr.com',
+  'onboarding.company.domain.placeholder': 'e.g. ivraxr.com',
   'onboarding.company.domain.hint':
     'When colleagues ask to join with an email on this suffix, they are easier to recognise as the same company; they still need your approval. Optional.',
   'onboarding.company.platform': 'What your site is built with',

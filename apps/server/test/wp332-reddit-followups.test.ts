@@ -50,7 +50,7 @@ function make() {
     clock: { now: () => new Date(now.ms).toISOString() },
     approvals: { create: async () => ({}) as never },
     emit: (type) => emitted.push(type),
-    brand: () => 'INMO',
+    brand: () => 'IVRA',
     actions,
     record: (input) => {
       records.push(input)
@@ -72,7 +72,7 @@ const record: OutboundRecordInput = {
 const replyWrite = {
   kind: 'reply' as const,
   parent: 't1_c1',
-  permalink: '/r/inmoxr/comments/abc/s/c1/',
+  permalink: '/r/ivraxr/comments/abc/s/c1/',
 }
 
 /** 交一条给插件、插件领走、回一个结局。回那一件活的 id。 */
@@ -85,9 +85,9 @@ async function sendAndEnd(
     approval_item_id: 'ap_1',
     write: replyWrite,
     text: 'Hi Alice',
-    subreddit: 'inmoxr',
+    subreddit: 'ivraxr',
     record,
-    label: '回复 alice（Reddit · r/inmoxr）',
+    label: '回复 alice（Reddit · r/ivraxr）',
   })
   const job = (await m.actions.next(['reddit'], 0)).job
   m.actions.result(job?.id as string, { outcome, message, step: 6, reads: {} })
@@ -112,7 +112,7 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
         message,
         outcome,
         can_refill: true,
-        label: '回复 alice（Reddit · r/inmoxr）',
+        label: '回复 alice（Reddit · r/ivraxr）',
       })
       expect(redditWriteNotices(m.svc.writes(), m.iso())).toHaveLength(1)
     })
@@ -135,13 +135,13 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(job?.plan.allow.values).toEqual(['Hi Alice'])
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/inmoxr/comments/abc/s/c1/',
+      url: 'https://old.reddit.com/r/ivraxr/comments/abc/s/c1/',
     })
     m.actions.result(job?.id as string, {
       outcome: 'done',
       message: '做完了。',
       step: 6,
-      reads: { fullname: 't1_n1', permalink: '/r/inmoxr/comments/abc/s/n1/' },
+      reads: { fullname: 't1_n1', permalink: '/r/ivraxr/comments/abc/s/n1/' },
     })
     expect(m.svc.writes()[0]).toMatchObject({ state: 'sent', record_id: 'ob_1' })
     expect(m.records).toHaveLength(1)
@@ -157,7 +157,7 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
       approval_item_id: 'ap_1',
       write: replyWrite,
       text: 'Hi Alice',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       record,
     })
     m.now.ms += 25 * 60 * 60 * 1000
@@ -197,7 +197,7 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
       approval_item_id: 'ap_1',
       write: replyWrite,
       text: 'Hi Alice',
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       record,
     })
     const queued = m.svc.writes()[0]?.job_id as string

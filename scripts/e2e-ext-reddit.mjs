@@ -38,11 +38,11 @@ const shell = (title, body, script = '', loggedIn = true) =>
   `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
   <style>body{font:14px system-ui;margin:56px 24px}.thing{border-left:2px solid #ddd;padding:6px 10px;margin:8px 0}
   textarea{display:block;width:520px;height:90px;margin:6px 0}button{padding:4px 12px}</style></head>
-  <body>${body}<div class="side">${loggedIn ? '<span class="user">u/inmo_official（本地假页面）</span>' : '<form><input name="user"><input type="password" name="passwd"></form>'}</div>
+  <body>${body}<div class="side">${loggedIn ? '<span class="user">u/ivra_official（本地假页面）</span>' : '<form><input name="user"><input type="password" name="passwd"></form>'}</div>
   <script>const report=(trusted,text)=>fetch('/__fake/sent',{method:'POST',body:JSON.stringify({trusted,text})});${script}</script></body></html>`
 
 const comment = (id, author, text, child = '') =>
-  `<div class="thing comment" id="thing_t1_${id}" data-fullname="t1_${id}" data-permalink="/r/inmoxr/comments/abc/slug/${id}/">
+  `<div class="thing comment" id="thing_t1_${id}" data-fullname="t1_${id}" data-permalink="/r/ivraxr/comments/abc/slug/${id}/">
     <div class="entry"><p class="tagline">${author}</p><form class="usertext"><div class="usertext-body"><div class="md"><p>${text}</p></div></div></form>
     <ul class="flat-list buttons"><li class="reply-button"><a href="javascript:void(0)">reply</a></li></ul></div>
     <div class="child">${child}</div></div>`
@@ -50,28 +50,28 @@ const comment = (id, author, text, child = '') =>
 function fakeReddit(raw) {
   const u = new URL(raw, 'http://x')
   const p = u.pathname
-  if (p === '/r/inmoxr/submit')
+  if (p === '/r/ivraxr/submit')
     return shell(
-      'submit to r/inmoxr（假）',
-      `<h1>submit to r/inmoxr（本地假页面）</h1><form id="newlink" onsubmit="return false">
+      'submit to r/ivraxr（假）',
+      `<h1>submit to r/ivraxr（本地假页面）</h1><form id="newlink" onsubmit="return false">
        <div id="title-field"><textarea name="title"></textarea></div>
        <div id="text-field"><textarea name="text"></textarea></div>
        <button name="submit" type="submit">submit</button></form>`,
       `document.querySelector('button[name=submit]').addEventListener('click',async e=>{
          const t=document.querySelector('#title-field textarea').value
          await report(e.isTrusted,t)
-         location.href='/r/inmoxr/comments/new2/weekly/?t='+encodeURIComponent(t)})`,
+         location.href='/r/ivraxr/comments/new2/weekly/?t='+encodeURIComponent(t)})`,
     )
-  if (p === '/r/inmoxr/comments/new2/weekly/')
+  if (p === '/r/ivraxr/comments/new2/weekly/')
     return shell(
       'post（假）',
-      `<div id="siteTable"><div class="thing link" data-fullname="t3_new2" data-permalink="/r/inmoxr/comments/new2/weekly/">
+      `<div id="siteTable"><div class="thing link" data-fullname="t3_new2" data-permalink="/r/ivraxr/comments/new2/weekly/">
        <div class="entry"><a class="title">${(u.searchParams.get('t') ?? '').replace(/</g, '&lt;')}</a></div></div></div>
        <div class="commentarea"></div>`,
     )
-  if (p.startsWith('/r/inmoxr/comments/login/'))
+  if (p.startsWith('/r/ivraxr/comments/login/'))
     return shell('reddit（假）', '<p>log in to reply</p>', '', false)
-  if (p.startsWith('/r/inmoxr/comments/abc/'))
+  if (p.startsWith('/r/ivraxr/comments/abc/'))
     return shell(
       'Does the Air3 work with glasses?（假）',
       `<div id="siteTable"><div class="thing link" data-fullname="t3_abc"><div class="entry"><a class="title">Does the Air3 work with glasses?</a></div></div></div>
@@ -83,7 +83,7 @@ function fakeReddit(raw) {
          child.querySelector('button.save').addEventListener('click',async e=>{
            const box=child.querySelector('textarea');await report(e.isTrusted,box.value)
            child.querySelector('form').remove()
-           child.insertAdjacentHTML('beforeend','<div class="sitetable">'+${JSON.stringify(comment('new1', 'inmo_official', '__TEXT__'))}.replace('__TEXT__',box.value.replace(/</g,'&lt;'))+'</div>')})})`,
+           child.insertAdjacentHTML('beforeend','<div class="sitetable">'+${JSON.stringify(comment('new1', 'ivra_official', '__TEXT__'))}.replace('__TEXT__',box.value.replace(/</g,'&lt;'))+'</div>')})})`,
     )
   return undefined
 }
@@ -155,21 +155,21 @@ const job = (id, action, patch) => {
   const j = ba.buildRedditJob({
     id,
     workspace_id: 'ws',
-    account_id: 'inmo_official',
+    account_id: 'ivra_official',
     action,
     approval_id: `ap_${id}`,
     approval_level: 'L1',
     title:
       action.write.kind === 'submit'
-        ? '发帖：Weekly Q&A（Reddit · r/inmoxr）'
-        : '回复 alice（Reddit · r/inmoxr）',
+        ? '发帖：Weekly Q&A（Reddit · r/ivraxr）'
+        : '回复 alice（Reddit · r/ivraxr）',
     created_at: new Date().toISOString(),
     origin: BASE,
   })
   if (patch !== undefined) patch(j)
   return j
 }
-const DRAFT = 'Hi Alice, INMO here. The anti-fog insert in the box helps a lot with glasses.'
+const DRAFT = 'Hi Alice, IVRA here. The anti-fog insert in the box helps a lot with glasses.'
 
 // ── 插件副本：可选权限改成「已授予」（真浏览器里那一步是用户点弹窗）──────────────
 const work = mkdtempSync(join(tmpdir(), 'agentsws-wp329-e2e-'))
@@ -225,14 +225,14 @@ try {
   // ① 楼中楼：插件开新标签页、点 reply、填草稿、等人点发送 → 人点 → 读回
   state.queue.push(
     job('rw_reply', {
-      write: { kind: 'reply', parent: 't1_c1', permalink: '/r/inmoxr/comments/abc/slug/c1/' },
+      write: { kind: 'reply', parent: 't1_c1', permalink: '/r/ivraxr/comments/abc/slug/c1/' },
       text: DRAFT,
     }),
   )
   await poll()
   let pg
   const filled = await until(async () => {
-    pg = pageAt('/r/inmoxr/comments/abc/')
+    pg = pageAt('/r/ivraxr/comments/abc/')
     if (pg === undefined) return false
     const v = await pg
       .locator('#thing_t1_c1 > .child textarea')
@@ -255,7 +255,7 @@ try {
     '人点了发送 → 做完，读回编号与链接',
     r1?.outcome === 'done' &&
       r1?.reads?.fullname === 't1_new1' &&
-      r1?.reads?.permalink === '/r/inmoxr/comments/abc/slug/new1/',
+      r1?.reads?.permalink === '/r/ivraxr/comments/abc/slug/new1/',
     JSON.stringify(r1 ?? {}),
   )
   check(
@@ -267,14 +267,14 @@ try {
   // ② 发新帖：填标题和正文；人点 submit 后页面跳到新帖页 → 插件放回脚本、认出新帖
   state.queue.push(
     job('rw_post', {
-      write: { kind: 'submit', subreddit: 'inmoxr', title: 'Weekly Q&A' },
+      write: { kind: 'submit', subreddit: 'ivraxr', title: 'Weekly Q&A' },
       text: 'Ask us anything about the Air3.',
     }),
   )
   await poll()
   let sp
   const ready = await until(async () => {
-    sp = pageAt('/r/inmoxr/submit')
+    sp = pageAt('/r/ivraxr/submit')
     if (sp === undefined) return false
     const t = await sp
       .locator('#title-field textarea')
@@ -307,7 +307,7 @@ try {
     job(
       'rw_idle',
       {
-        write: { kind: 'comment', post: 't3_abc', permalink: '/r/inmoxr/comments/abc/slug/' },
+        write: { kind: 'comment', post: 't3_abc', permalink: '/r/ivraxr/comments/abc/slug/' },
         text: 'Thanks for asking!',
       },
       (j) => {
@@ -330,7 +330,7 @@ try {
   // ④ 没登录 → 打开页面就停
   state.queue.push(
     job('rw_login', {
-      write: { kind: 'reply', parent: 't1_c1', permalink: '/r/inmoxr/comments/login/s/c1/' },
+      write: { kind: 'reply', parent: 't1_c1', permalink: '/r/ivraxr/comments/login/s/c1/' },
       text: DRAFT,
     }),
   )

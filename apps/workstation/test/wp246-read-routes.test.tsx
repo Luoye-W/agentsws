@@ -163,8 +163,8 @@ describe('连接页「取数路线」', () => {
       ...base(),
       reddit_account: {
         state: 'refused',
-        username: 'inmo_mod',
-        message: 'u/inmo_mod 是品牌登记的号（官方号 / 版主号），读取不用它。',
+        username: 'ivra_mod',
+        message: 'u/ivra_mod 是品牌登记的号（官方号 / 版主号），读取不用它。',
       },
     }
     renderWithProviders(<ReadRoutesSection />)

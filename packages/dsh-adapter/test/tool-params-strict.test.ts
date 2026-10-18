@@ -1,5 +1,5 @@
 /**
- * 10-09 真机（Rollout，店铺管理）：`shop_add_images` 的 `images[]` 是嵌套对象，原样转给 dsh
+ * 10-09 真机（Rovella，店铺管理）：`shop_add_images` 的 `images[]` 是嵌套对象，原样转给 dsh
  * 时没写 `additionalProperties`，运行一启动就挂——「parameters.images.items.additionalProperties
  * must be explicitly true or false」，店铺管理一个字都答不出来。
  *

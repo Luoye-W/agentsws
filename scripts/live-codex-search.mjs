@@ -43,10 +43,10 @@ const flag = (name) => args.includes(name)
 
 const QUERIES = [
   { markets: ['US'], query: 'site:reddit.com smart glasses' },
-  { markets: ['US'], query: 'INMO Air3 review reddit' },
-  { markets: ['US'], query: 'site:linkedin.com INMO' },
+  { markets: ['US'], query: 'XREAL One review reddit' },
+  { markets: ['US'], query: 'site:linkedin.com XREAL' },
   { markets: ['DE'], query: 'smarte Brille Test' },
-  { markets: ['US'], query: 'INMO 智能眼镜 国内 竞品' },
+  { markets: ['US'], query: 'XREAL 智能眼镜 国内 竞品' },
 ]
 /** `--variants`：web_search 工具的几种写法（默认那一种 = Codex CLI 的写法）。 */
 const VARIANTS = [

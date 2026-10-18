@@ -38,7 +38,7 @@ const t = (id: string, kind: 't1' | 't3', sub: string, over: Record<string, unkn
 const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
 
 /** 替身 Reddit：认得的地址回给定的 JSON；别的版块列表回空（不当 404）。 */
-function fakeReddit(routes: Record<string, unknown>, user = 'inmo_official') {
+function fakeReddit(routes: Record<string, unknown>, user = 'ivra_official') {
   const calls: string[] = []
   const fetch = async (url: string): Promise<RedditFetched> => {
     calls.push(url)
@@ -73,7 +73,7 @@ function setup(over: Partial<RedditWatchOptions> = {}, start = WED_10) {
     now: () => now,
     newId: (p) => `${p}_${++n}`,
     tzOffsetMinutes: () => 480,
-    brandName: () => 'INMO',
+    brandName: () => 'IVRA',
     setupCards: async () => cards as never,
     actor: () => ACTOR,
     ...over,
@@ -120,41 +120,41 @@ describe('按版块分频率（纯函数）', () => {
 
   it('每周的版块：读过就等下周一；没设的跟总频率（每天）；关机错过只补一次；失败隔一小时再试', () => {
     const settings = normalizeSettings({
-      own_subreddits: ['inmoxr'],
+      own_subreddits: ['ivraxr'],
       watch_subreddits: ['SmartGlasses', 'Xreal'],
       sub_per_week: { xreal: 1 },
     })
     const clocks = {
-      inmoxr: { last_ok_at: '2026-10-13T02:00:00.000Z' },
+      ivraxr: { last_ok_at: '2026-10-13T02:00:00.000Z' },
       smartglasses: { last_ok_at: '2026-10-14T01:30:00.000Z' },
       xreal: { last_ok_at: '2026-10-12T02:00:00.000Z' },
     }
-    const subs = ['inmoxr', 'SmartGlasses', 'Xreal']
+    const subs = ['ivraxr', 'SmartGlasses', 'Xreal']
     const due = (now: string, c: Record<string, object> = clocks) =>
       dueSubs({ now, tz_offset_minutes: 480, settings, subs, clocks: c })
-    expect(due(WED_10)).toEqual(['inmoxr'])
+    expect(due(WED_10)).toEqual(['ivraxr'])
     // 下周一 10 点：每周那个也到了；一个多星期没开机（上次读成是两周前）也只算该读一次
-    expect(due('2026-10-19T02:00:00.000Z')).toEqual(['inmoxr', 'SmartGlasses', 'Xreal'])
+    expect(due('2026-10-19T02:00:00.000Z')).toEqual(['ivraxr', 'SmartGlasses', 'Xreal'])
     // 刚试过（失败）：一小时内不再试
     expect(
       due('2026-10-19T02:00:00.000Z', {
         ...clocks,
         xreal: { ...clocks.xreal, last_try_at: '2026-10-19T01:30:00.000Z' },
       }),
-    ).toEqual(['inmoxr', 'SmartGlasses'])
+    ).toEqual(['ivraxr', 'SmartGlasses'])
   })
 })
 
 describe('版块后面写频率（配置卡那一格）', () => {
   it('认「（每周）」「每周3次」「weekly」「:每天」；格式不对的照原样回', () => {
     const got = parseSubList(
-      'r/inmoxr, SmartGlasses（每周3次）, Xreal 每周, AR_MR_XR(weekly), RayNeo:每天, bad name!',
+      'r/ivraxr, SmartGlasses（每周3次）, Xreal 每周, AR_MR_XR(weekly), RayNeo:每天, bad name!',
     )
-    expect(got.subs).toEqual(['inmoxr', 'SmartGlasses', 'Xreal', 'AR_MR_XR', 'RayNeo'])
+    expect(got.subs).toEqual(['ivraxr', 'SmartGlasses', 'Xreal', 'AR_MR_XR', 'RayNeo'])
     expect(got.per_week).toEqual({ smartglasses: 3, xreal: 1, ar_mr_xr: 1, rayneo: 7 })
     expect(got.bad).toEqual(['bad name!'])
     expect(formatSubList(got.subs, got.per_week)).toBe(
-      'inmoxr, SmartGlasses（每周3次）, Xreal（每周）, AR_MR_XR（每周）, RayNeo（每天）',
+      'ivraxr, SmartGlasses（每周3次）, Xreal（每周）, AR_MR_XR（每周）, RayNeo（每天）',
     )
     expect(parseSubList(formatSubList(got.subs, got.per_week)).per_week).toEqual(got.per_week)
   })
@@ -162,14 +162,14 @@ describe('版块后面写频率（配置卡那一格）', () => {
 
 describe('本地词匹配', () => {
   it('标签词：空格 / 连字符可有可无；告警词放过常见词尾；拉丁字母按整词', () => {
-    expect(termHits('My INMO Air 3 arrived', ['Air3'], false)).toEqual(['Air3'])
+    expect(termHits('My IVRA Air 3 arrived', ['Air3'], false)).toEqual(['Air3'])
     expect(termHits('air-3 vs go2', ['Air3', 'Go 2'], false)).toEqual(['Air3', 'Go 2'])
     expect(termHits('they refunded me; it was overheating', ['refund', 'overheat'], true)).toEqual([
       'refund',
       'overheat',
     ])
     expect(termHits('a refundable deposit', ['refund'], true)).toEqual([])
-    expect(termHits('inmobiliaria', ['INMO'], true)).toEqual([])
+    expect(termHits('ivrabiliaria', ['IVRA'], true)).toEqual([])
     expect(termHits('眼镜被召回了', ['召回'], true)).toEqual(['召回'])
   })
 })
@@ -178,10 +178,10 @@ describe('巡查：按版块分频率（替身插件 × 替身 Reddit）', () =>
   it('第一次全读；第二天每周的那个不读；下周一再读', async () => {
     const s = setup()
     s.watch.updateSettings({
-      own_subreddits: ['inmoxr'],
+      own_subreddits: ['ivraxr'],
       watch_subreddits: ['SmartGlasses', 'Xreal'],
       sub_per_week: { xreal: 1 },
-      brand_username: 'inmo_official',
+      brand_username: 'ivra_official',
     })
     const reddit = fakeReddit({
       '/r/SmartGlasses/new/.json': listing([t('g1', 't3', 'SmartGlasses')]),
@@ -191,8 +191,8 @@ describe('巡查：按版块分频率（替身插件 × 替身 Reddit）', () =>
     expect(first).toEqual(
       expect.arrayContaining([
         'inbox',
-        'sub_new:inmoxr',
-        'sub_comments:inmoxr',
+        'sub_new:ivraxr',
+        'sub_comments:ivraxr',
         'watch_new:smartglasses',
         'watch_new:xreal',
       ]),
@@ -225,7 +225,7 @@ describe('巡查：按版块分频率（替身插件 × 替身 Reddit）', () =>
     s.watch.updateSettings({
       own_subreddits: ['a1', 'a2', 'a3', 'a4', 'a5'],
       watch_subreddits: ['w1', 'w2', 'w3'],
-      brand_username: 'inmo_official',
+      brand_username: 'ivra_official',
     })
     const reddit = fakeReddit({})
     await s.watch.tick()
@@ -241,7 +241,7 @@ describe('巡查：按版块分频率（替身插件 × 替身 Reddit）', () =>
     const s = setup()
     // 老版本存下的设置与「自家版块」那一块的钟
     s.store.setKv('ws_1' as never, 'settings', {
-      own_subreddits: ['inmoxr'],
+      own_subreddits: ['ivraxr'],
       keywords: [],
       every_hours: 24,
       day_start_hour: 9,
@@ -253,7 +253,7 @@ describe('巡查：按版块分频率（替身插件 × 替身 Reddit）', () =>
       own_sub: { last_ok_at: '2026-10-14T01:30:00.000Z' },
     })
     expect(s.watch.settings()).toMatchObject({
-      own_subreddits: ['inmoxr'],
+      own_subreddits: ['ivraxr'],
       watch_subreddits: [],
       sub_per_week: {},
       alert_words: [],
@@ -273,7 +273,7 @@ const SEARCH = vi.fn(async () => ({
       kind: 'post' as const,
       url: 'https://www.reddit.com/r/smartglasses/comments/aa1/x/',
       id: 'aa1',
-      title: 'INMO Air 3 overheating?',
+      title: 'IVRA Air 3 overheating?',
       text: 'gets hot after 10 min',
       subreddit: 'smartglasses',
       author: 'zed',
@@ -283,7 +283,7 @@ const SEARCH = vi.fn(async () => ({
       kind: 'post' as const,
       url: 'https://www.reddit.com/r/smartglasses/comments/aa2/x/',
       id: 'aa2',
-      title: 'INMO Go 2 review',
+      title: 'IVRA Go 2 review',
       text: 'solid',
       subreddit: 'smartglasses',
       author: 'yan',
@@ -295,23 +295,23 @@ const SEARCH = vi.fn(async () => ({
 describe('告警词：标「优先」、单独提醒一次；标签词可筛', () => {
   const routes = {
     '/message/inbox/.json?mark=false': listing([
-      t('c7', 't1', 'inmoxr', { type: 'comment_reply', body: 'I want a refund please' }),
+      t('c7', 't1', 'ivraxr', { type: 'comment_reply', body: 'I want a refund please' }),
     ]),
     // 同一条评论在自家版块的评论流里也读到了
-    '/r/inmoxr/comments/.json': listing([
-      t('c7', 't1', 'inmoxr', { body: 'I want a refund please' }),
-      t('c6', 't1', 'inmoxr', { author: 'inmo_official', body: 'refund policy is 30 days' }),
+    '/r/ivraxr/comments/.json': listing([
+      t('c7', 't1', 'ivraxr', { body: 'I want a refund please' }),
+      t('c6', 't1', 'ivraxr', { author: 'ivra_official', body: 'refund policy is 30 days' }),
     ]),
   }
 
   it('同一条从几处读到只提醒一次；我们自己发的不标；收起后不再出', async () => {
     const s = setup({ search: SEARCH })
     s.watch.updateSettings({
-      own_subreddits: ['inmoxr'],
-      keywords: ['INMO'],
+      own_subreddits: ['ivraxr'],
+      keywords: ['IVRA'],
       alert_words: ['refund', 'overheat'],
       tag_words: ['Air3'],
-      brand_username: 'inmo_official',
+      brand_username: 'ivra_official',
     })
     const alerts: RedditWatchEntry[][] = []
     s.watch.onAlert((items) => alerts.push(items))
@@ -337,7 +337,7 @@ describe('告警词：标「优先」、单独提醒一次；标签词可筛', (
   it('查巡查数据：按「优先」、按标签筛；后加的标签词对老条目也生效', async () => {
     const s = setup({ search: SEARCH })
     s.watch.updateSettings({
-      keywords: ['INMO'],
+      keywords: ['IVRA'],
       alert_words: ['overheat'],
       tag_words: ['Air3'],
     })
@@ -363,13 +363,13 @@ describe('告警词：标「优先」、单独提醒一次；标签词可筛', (
 })
 
 const AI_REPLY = JSON.stringify({
-  own_subreddits: ['inmoxr'],
+  own_subreddits: ['ivraxr'],
   watch_subreddits: [
     { name: 'SmartGlasses', per_week: 7 },
     { name: 'r/Xreal', per_week: 1 },
     { name: 'not a sub!', per_week: 1 },
   ],
-  keywords: ['INMO', 'AI glasses'],
+  keywords: ['IVRA', 'AI glasses'],
   alert_words: ['recall', 'refund'],
   tag_words: ['Air3', 'Go2'],
   why: {
@@ -386,7 +386,7 @@ describe('配置卡默认带 AI 建议值', () => {
     const complete = vi.fn(async () => `好的：${AI_REPLY}`)
     const s = setup({
       complete: () => complete,
-      brandBrief: () => ({ name: 'INMO', one_liner: 'AR translation glasses', markets: ['US'] }),
+      brandBrief: () => ({ name: 'IVRA', one_liner: 'AR translation glasses', markets: ['US'] }),
     })
     const target = s.watch.setupTarget()
     // WP348：AI 的方案由「怎么查」在出卡前给（fields() 只给已存的与事实）
@@ -399,11 +399,11 @@ describe('配置卡默认带 AI 建议值', () => {
     const fields = await plan()
     const by = (k: string) => fields.find((f) => f.key === k)
     expect(by('own_subreddits')).toMatchObject({
-      suggested: 'inmoxr',
+      suggested: 'ivraxr',
       suggested_why: '品牌名 + xr',
     })
     expect(by('watch_subreddits')?.suggested).toBe('SmartGlasses, Xreal（每周）')
-    expect(by('keywords')?.suggested).toBe('INMO, AI glasses')
+    expect(by('keywords')?.suggested).toBe('IVRA, AI glasses')
     expect(by('alert_words')).toMatchObject({
       suggested: 'recall, refund',
       suggested_why: '售后风险',
@@ -422,10 +422,10 @@ describe('配置卡默认带 AI 建议值', () => {
     )
     await target.apply(values)
     expect(s.watch.settings()).toMatchObject({
-      own_subreddits: ['inmoxr'],
+      own_subreddits: ['ivraxr'],
       watch_subreddits: ['SmartGlasses', 'Xreal'],
       sub_per_week: { xreal: 1 },
-      keywords: ['INMO', 'AI glasses'],
+      keywords: ['IVRA', 'AI glasses'],
       alert_words: ['recall', 'refund'],
       tag_words: ['Air3', 'Go2'],
     })
@@ -440,11 +440,11 @@ describe('配置卡默认带 AI 建议值', () => {
   })
 
   it('没模型：留空；连接里登记的自家版照样预填；写错了照实说', async () => {
-    const s = setup({ suggestions: () => ({ own_subreddits: ['inmoxr'] }) })
+    const s = setup({ suggestions: () => ({ own_subreddits: ['ivraxr'] }) })
     const target = s.watch.setupTarget()
     const fields = await target.fields()
     expect(fields.find((f) => f.key === 'own_subreddits')).toMatchObject({
-      suggested: 'inmoxr',
+      suggested: 'ivraxr',
       suggested_why: '连接里登记的自家版',
     })
     for (const k of ['watch_subreddits', 'keywords', 'alert_words', 'tag_words'])
@@ -457,7 +457,7 @@ describe('配置卡默认带 AI 建议值', () => {
 
   it('模型回话认不出 / 档案全空：不建议、不记下（下次再问）', async () => {
     const complete = vi.fn(async () => 'sorry')
-    const s = setup({ complete: () => complete, brandBrief: () => ({ name: 'INMO' }) })
+    const s = setup({ complete: () => complete, brandBrief: () => ({ name: 'IVRA' }) })
     expect(await s.watch.aiSuggestions()).toBeUndefined()
     expect(await s.watch.aiSuggestions()).toBeUndefined()
     expect(complete).toHaveBeenCalledTimes(2)

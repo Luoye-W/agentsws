@@ -38,7 +38,7 @@
       "id": "trend-04",
       "kind": "judgment",
       "from": "last30days CONCEPTS 的 Entity grounding 与 Nothing-solid",
-      "prompt": "搜 INMO 搜出来一条 5000 赞的智能眼镜综述帖，里面没提我们，要不要写成本周最热？这周别的都很零星。",
+      "prompt": "搜 IVRA 搜出来一条 5000 赞的智能眼镜综述帖，里面没提我们，要不要写成本周最热？这周别的都很零星。",
       "expected": "主体对不上的是跑题，重罚；没有站得住的讨论就照实说，并点出最接近的那一条。",
       "must_include": ["主体对不上的重罚", "这段时间没有站得住的讨论"]
     },

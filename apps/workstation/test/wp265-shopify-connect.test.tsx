@@ -34,17 +34,17 @@ const IDLE: ShopifyConnectView = {
   linked: true,
   email: 'owner@example.com',
   connections: [],
-  suggested_shop: '6suegp-md.myshopify.com',
-  candidates: [{ shop: '6suegp-md.myshopify.com', source: 'profile' }],
+  suggested_shop: '6demox-md.myshopify.com',
+  candidates: [{ shop: '6demox-md.myshopify.com', source: 'profile' }],
 }
 
 const CONNECTED: ShopifyConnectView = {
   ...IDLE,
   connections: [
     {
-      shop: '6suegp-md.myshopify.com',
-      name: 'Rollout',
-      app: 'rollout',
+      shop: '6demox-md.myshopify.com',
+      name: 'Rovella',
+      app: 'rovella',
       status: 'connected',
       scopes: ['read_products', 'write_products', 'read_orders'],
       missing_scopes: [],
@@ -79,17 +79,17 @@ vi.mock('@/lib/api', async () => {
       return {
         attempt_id: 'sha_1',
         authorize_url: 'https://shopify.demo.invalid/admin/oauth/authorize?state=sha_1',
-        shop: input.shop ?? '6suegp-md.myshopify.com',
+        shop: input.shop ?? '6demox-md.myshopify.com',
         expires_at: '2026-10-08T10:00:00.000Z',
       }
     },
     getShopifyConnectAttempt: async () => {
       if (state.attempt === 'connected') state.view = CONNECTED
-      return { status: state.attempt, shop: '6suegp-md.myshopify.com' }
+      return { status: state.attempt, shop: '6demox-md.myshopify.com' }
     },
     testShopifyConnect: async (shop: string) => {
       state.tests.push(shop)
-      return { ok: true, shop, name: 'Rollout', domain: shop, checked_at: '2026-10-08T00:00:00Z' }
+      return { ok: true, shop, name: 'Rovella', domain: shop, checked_at: '2026-10-08T00:00:00Z' }
     },
     disconnectShopifyConnect: async (shop: string) => {
       state.disconnects.push(shop)
@@ -212,15 +212,15 @@ describe('WP265 卡片：一键授权', () => {
   it('自动带店铺域名 → 连接 → 打开授权页、等安装 → 连上之后是已连接', async () => {
     renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
     expect((await screen.findByTestId('shopconnect-suggested')).textContent).toContain(
-      '6suegp-md.myshopify.com',
+      '6demox-md.myshopify.com',
     )
     fireEvent.click(screen.getByTestId('shopconnect-connect'))
     expect(await screen.findByText('在浏览器里点「安装」，回来就好')).toBeTruthy()
-    expect(state.starts).toEqual([{ shop: '6suegp-md.myshopify.com' }])
+    expect(state.starts).toEqual([{ shop: '6demox-md.myshopify.com' }])
     expect(opened).toEqual(['https://shopify.demo.invalid/admin/oauth/authorize?state=sha_1'])
     state.attempt = 'connected'
     const row = await screen.findByTestId('shopconnect-row', {}, { timeout: 5000 })
-    expect(row.textContent).toContain('Rollout')
+    expect(row.textContent).toContain('Rovella')
     expect(screen.queryByTestId('shopconnect-waiting')).toBeNull()
   })
 
@@ -245,7 +245,7 @@ describe('WP265 卡片：一键授权', () => {
     renderWithProviders(<ShopifyConnect />)
     const input = (await screen.findByTestId('shopconnect-shop')) as HTMLInputElement
     expect((screen.getByTestId('shopconnect-connect') as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.change(input, { target: { value: 'inmo-global.myshopify.com' } })
+    fireEvent.change(input, { target: { value: 'ivra-global.myshopify.com' } })
     expect((screen.getByTestId('shopconnect-connect') as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -265,15 +265,15 @@ describe('WP265 卡片：已连接', () => {
     vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
     renderWithProviders(<ShopifyConnect />)
     const row = await screen.findByTestId('shopconnect-row')
-    expect(row.textContent).toContain('Rollout')
-    expect(row.textContent).toContain('6suegp-md.myshopify.com')
+    expect(row.textContent).toContain('Rovella')
+    expect(row.textContent).toContain('6demox-md.myshopify.com')
     expect(screen.getByTestId('shopconnect-can').textContent).toBe('能管：商品、订单（只看）')
     expect(screen.queryByTestId('shopconnect-reauth')).toBeNull()
     fireEvent.click(screen.getByTestId('shopconnect-test'))
-    expect((await screen.findByTestId('shopconnect-test-result')).textContent).toBe('通了：Rollout')
+    expect((await screen.findByTestId('shopconnect-test-result')).textContent).toBe('通了：Rovella')
     fireEvent.click(screen.getByTestId('shopconnect-disconnect'))
     await waitFor(() => {
-      expect(state.disconnects).toEqual(['6suegp-md.myshopify.com'])
+      expect(state.disconnects).toEqual(['6demox-md.myshopify.com'])
     })
   })
 
@@ -282,7 +282,7 @@ describe('WP265 卡片：已连接', () => {
       ...CONNECTED,
       connections: [
         {
-          shop: '6suegp-md.myshopify.com',
+          shop: '6demox-md.myshopify.com',
           status: 'reauth_required',
           reauth_reason: 'app_uninstalled',
           scopes: [],
@@ -296,7 +296,7 @@ describe('WP265 卡片：已连接', () => {
     )
     fireEvent.click(screen.getByTestId('shopconnect-reauth'))
     await waitFor(() => {
-      expect(state.starts).toEqual([{ shop: '6suegp-md.myshopify.com' }])
+      expect(state.starts).toEqual([{ shop: '6demox-md.myshopify.com' }])
     })
   })
 })

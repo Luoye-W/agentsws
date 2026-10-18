@@ -59,13 +59,13 @@ const paired = () => memoryStore({ [SETTINGS_KEY]: { port: 4399, token: 'ext_t' 
 describe('从哪取：后台取，没登录时借开着的 Reddit 标签页', () => {
   it('后台取到了就不碰标签页', async () => {
     const tabs: RedditTabs = { find: vi.fn(), fetchIn: vi.fn() }
-    const f = sessionFetch(async (u) => json(u, { kind: 't2', data: { name: 'inmo' } }), tabs)
+    const f = sessionFetch(async (u) => json(u, { kind: 't2', data: { name: 'ivra' } }), tabs)
     await f('https://old.reddit.com/api/me.json?raw_json=1')
     expect(tabs.find).not.toHaveBeenCalled()
   })
   it('后台看着没登录 + 开着标签页 → 改在标签页里取（同一路径、换成标签页的站）', async () => {
     const fetchIn = vi.fn(async (_id: number, u: string) =>
-      json(u, { kind: 't2', data: { name: 'inmo' } }),
+      json(u, { kind: 't2', data: { name: 'ivra' } }),
     )
     const tabs: RedditTabs = {
       find: async () => ({ id: 7, origin: 'https://www.reddit.com' }),
@@ -123,7 +123,7 @@ describe('领活', () => {
       readFetch: () => async (u) => {
         reddit.push(u)
         return u.includes('/api/me.json')
-          ? json(u, { kind: 't2', data: { name: 'inmo_official' } })
+          ? json(u, { kind: 't2', data: { name: 'ivra_official' } })
           : json(
               u,
               listing([
@@ -150,7 +150,7 @@ describe('领活', () => {
       reddit.filter((u) => u.includes('/message/')).every((u) => u.includes('mark=false')),
     ).toBe(true)
     expect(local.calls.at(-1)).toBe('POST /v1/extension/reddit/rj_1/result')
-    expect(local.results[0]).toMatchObject({ outcome: 'done', user: 'inmo_official' })
+    expect(local.results[0]).toMatchObject({ outcome: 'done', user: 'ivra_official' })
     expect((await readRedditStatus(store)).last_result).toMatchObject({ outcome: 'done', items: 1 })
   })
 })

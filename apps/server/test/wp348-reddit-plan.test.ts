@@ -26,7 +26,7 @@ import { brandFactsOf, createResearchKit, mergePlan } from '../src/setup-researc
 const ACTOR = { person_id: 'p1', assignment_id: 'as1', role_id: 'social.reddit' } as never
 
 const HITS = [
-  { url: 'https://www.reddit.com/r/inmoxr/comments/a/b/', title: 'r/inmoxr - INMO Air3 review' },
+  { url: 'https://www.reddit.com/r/ivraxr/comments/a/b/', title: 'r/ivraxr - IVRA Air3 review' },
   {
     url: 'https://www.reddit.com/r/SmartGlasses/comments/c/',
     title: 'Best AR glasses? : r/SmartGlasses',
@@ -34,7 +34,7 @@ const HITS = [
   { url: 'https://www.reddit.com/r/SmartGlasses/', title: 'r/SmartGlasses' },
   {
     url: 'https://www.reddit.com/r/Xreal/comments/d/',
-    title: 'Xreal vs INMO',
+    title: 'Xreal vs IVRA',
     snippet: 'also on r/augmentedreality',
   },
 ]
@@ -43,10 +43,10 @@ const facts = () =>
   brandFactsOf(
     {
       category: 'AR glasses',
-      keywords: { brand: ['INMO Air3'], category: ['translation glasses'], scenario: [] },
+      keywords: { brand: ['IVRA Air3'], category: ['translation glasses'], scenario: [] },
       competitors: [{ name: 'Xreal', reason: '同品类' }],
     },
-    { name: 'INMO' },
+    { name: 'IVRA' },
   )
 
 describe('researchPatrol', () => {
@@ -55,26 +55,26 @@ describe('researchPatrol', () => {
     const { kit, steps } = createResearchKit({ profile: facts, search })
     const plan = await researchPatrol(kit, {
       registered: () => undefined,
-      plugin: () => ({ state: 'connected', user: 'INMO_Official' }),
+      plugin: () => ({ state: 'connected', user: 'IVRA_Official' }),
       suggest: async () => undefined,
     })
     expect(plan.brand_username).toMatchObject({
-      value: 'INMO_Official',
+      value: 'IVRA_Official',
       sources: [{ kind: 'connected' }],
     })
-    expect(plan.own_subreddits?.value).toBe('inmoxr')
+    expect(plan.own_subreddits?.value).toBe('ivraxr')
     expect(plan.own_subreddits?.sources?.[0]?.url).toBe(HITS[0]?.url)
     // 搜到次数多的前两个每天、其余每周；自家版不进重点版块
     expect(plan.watch_subreddits?.value).toBe('SmartGlasses, Xreal, augmentedreality（每周）')
-    expect(plan.keywords?.value).toBe('INMO, INMO Air3, translation glasses, Xreal')
+    expect(plan.keywords?.value).toBe('IVRA, IVRA Air3, translation glasses, Xreal')
     expect(plan.keywords?.sources?.map((s) => s.label)).toContain('品牌档案 · 竞品')
     expect(plan.every_hours).toMatchObject({ value: '24', why: '默认每天一次' })
     expect(plan.alert_words).toBeUndefined()
     expect(search).toHaveBeenCalledTimes(3)
     expect(steps().map((s) => s.text)).toEqual([
-      '看了品牌档案：INMO · AR glasses · 关键词 2 个 · 竞品 1 个',
-      '插件里登着的 Reddit 号：u/INMO_Official',
-      '搜了 Reddit 上的相关版块：r/SmartGlasses、r/inmoxr、r/Xreal、r/augmentedreality',
+      '看了品牌档案：IVRA · AR glasses · 关键词 2 个 · 竞品 1 个',
+      '插件里登着的 Reddit 号：u/IVRA_Official',
+      '搜了 Reddit 上的相关版块：r/SmartGlasses、r/ivraxr、r/Xreal、r/augmentedreality',
     ])
   })
 
@@ -95,9 +95,9 @@ describe('researchPatrol', () => {
     expect((await run({ state: 'not_connected' })).plan.brand_username?.why).toMatch(
       /还没连 Reddit/,
     )
-    const reg = await run({ state: 'connected' }, { brand_username: 'inmo_brand' })
+    const reg = await run({ state: 'connected' }, { brand_username: 'ivra_brand' })
     expect(reg.plan.brand_username).toMatchObject({
-      value: 'inmo_brand',
+      value: 'ivra_brand',
       sources: [{ kind: 'connected', label: '连接里登记的 Reddit 号' }],
     })
     expect(reg.steps).toContain('这次搜不了网（联网搜索没开）')
@@ -106,7 +106,7 @@ describe('researchPatrol', () => {
   it('subsInHits：网址与标题里的 r/x 都认，同一条只算一次', () => {
     expect(subsInHits(HITS).map((x) => [x.name, x.count])).toEqual([
       ['SmartGlasses', 2],
-      ['inmoxr', 1],
+      ['ivraxr', 1],
       ['Xreal', 1],
       ['augmentedreality', 1],
     ])
@@ -138,7 +138,7 @@ describe('Reddit 巡查方案卡（替身插件）', () => {
     let n = 0
     const complete = vi.fn(
       async () =>
-        '{"own_subreddits":["inmoxr"],"watch_subreddits":[{"name":"SmartGlasses","per_week":7}],"keywords":["INMO"],"alert_words":["recall"],"tag_words":["Air3"],"why":{}}',
+        '{"own_subreddits":["ivraxr"],"watch_subreddits":[{"name":"SmartGlasses","per_week":7}],"keywords":["IVRA"],"alert_words":["recall"],"tag_words":["Air3"],"why":{}}',
     )
     const watch = createRedditWatch({
       workspace_id: 'ws_1' as never,
@@ -146,9 +146,9 @@ describe('Reddit 巡查方案卡（替身插件）', () => {
       now: () => '2026-10-14T02:00:00.000Z',
       newId: (p) => `${p}_${++n}`,
       tzOffsetMinutes: () => 480,
-      brandName: () => 'INMO',
+      brandName: () => 'IVRA',
       complete: () => complete,
-      brandBrief: () => ({ name: 'INMO' }),
+      brandBrief: () => ({ name: 'IVRA' }),
       actor: () => ACTOR,
     })
     const got = watch.next({ connected: true })
@@ -158,14 +158,14 @@ describe('Reddit 巡查方案卡（替身插件）', () => {
         status: 200,
         url,
         content_type: 'application/json',
-        body: JSON.stringify({ kind: 't2', data: { name: 'INMO_Official' } }),
+        body: JSON.stringify({ kind: 't2', data: { name: 'IVRA_Official' } }),
       }),
       sleep: async () => {},
       stopped: () => false,
       gapMs: 0,
     })
     expect(await watch.result(got.job?.id as string, res)).toEqual({ accepted: true })
-    expect(watch.pluginState()).toEqual({ state: 'connected', user: 'INMO_Official' })
+    expect(watch.pluginState()).toEqual({ state: 'connected', user: 'IVRA_Official' })
     // 没占读的次数；之后不再排
     const at = Date.parse('2026-10-14T02:00:00.000Z')
     expect(watch.pace.leftKey(redditPaceKey(undefined, 'ws_1'), at)).toEqual(
@@ -185,19 +185,19 @@ describe('Reddit 巡查方案卡（替身插件）', () => {
     const out = await cards.askSetup({
       target: 'reddit.watch',
       actor: ACTOR,
-      suggestions: { brand_username: 'model_guess', keywords: 'INMO, AR glasses' },
+      suggestions: { brand_username: 'model_guess', keywords: 'IVRA, AR glasses' },
     })
     const p = out?.item.payload as SetupRequestPayload
     expect(out?.item.title).toBe('Reddit 巡查：我打算这样设')
     const by = (k: string) => p.fields.find((f) => f.key === k)
     expect(by('brand_username')).toMatchObject({
-      suggested: 'INMO_Official',
+      suggested: 'IVRA_Official',
       sources: [{ kind: 'connected', label: '插件里登着的 Reddit 号' }],
     })
-    expect(by('keywords')?.suggested).toBe('INMO, AR glasses')
-    expect(by('own_subreddits')?.suggested).toBe('inmoxr')
+    expect(by('keywords')?.suggested).toBe('IVRA, AR glasses')
+    expect(by('own_subreddits')?.suggested).toBe('ivraxr')
     expect(by('every_hours')).toMatchObject({ suggested: '24', suggested_why: '默认每天一次' })
-    expect(p.steps?.map((s) => s.text)).toContain('插件里登着的 Reddit 号：u/INMO_Official')
+    expect(p.steps?.map((s) => s.text)).toContain('插件里登着的 Reddit 号：u/IVRA_Official')
     expect(complete).toHaveBeenCalledTimes(1)
 
     // 真巡查来了：顶掉还没领的「只看登着哪个号」
@@ -210,7 +210,7 @@ describe('Reddit 巡查方案卡（替身插件）', () => {
       actor: () => ACTOR,
     })
     fresh.next({ connected: true })
-    fresh.updateSettings({ own_subreddits: ['inmoxr'] })
+    fresh.updateSettings({ own_subreddits: ['ivraxr'] })
     const run = await fresh.runNow()
     expect(run.parts.every((x) => x.status === 'waiting')).toBe(true)
     expect(fresh.next({ connected: true }).job?.reads.length).toBeGreaterThan(0)

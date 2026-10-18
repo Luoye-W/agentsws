@@ -1,7 +1,7 @@
 /**
  * WP242：第二个品牌用「Agents 工坊接口」（agentsws 云）调模型。
  *
- * 起因（Fable 10-06，Windows 真机 ci.9）：已有品牌 INMO 用云接口跑通过真模型；新建品牌 Rollout
+ * 起因（Fable 10-06，Windows 真机 ci.9）：已有品牌 IVRA 用云接口跑通过真模型；新建品牌 Rovella
  * 「跟随公司」，第 ③ 步「帮我推荐」三次都是 `model.provider_down … fetch failed`。
  *
  * 这一档**不替换出站 fetch**：起一个本机 HTTP 云替身（关联 / 补签 / 模型口都在它上面），
@@ -25,7 +25,7 @@ import {
   type Server,
 } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
-import { ROLLOUT_TEXT } from './wp242-fixtures.js'
+import { ROVELLA_TEXT } from './wp242-fixtures.js'
 
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -130,7 +130,7 @@ async function boot(cloudBase: string): Promise<{ server: Server; url: string; d
       [SECRETS_KEY_ENV]: 'e'.repeat(64),
       AGENTSWS_CLOUD_BASE_URL: cloudBase,
       AGENTSWS_OWNER_EMAIL: 'luoye@example.com',
-      AGENTSWS_WORKSPACE_NAME: 'INMO',
+      AGENTSWS_WORKSPACE_NAME: 'IVRA',
     },
     mdns: () => ({ reason: '测试里不开局域网' }),
   })
@@ -167,58 +167,58 @@ async function call<T>(
   }
 }
 
-const inmoOf = (server: Server): Who => ({
+const ivraOf = (server: Server): Who => ({
   token: server.bootstrap.internalToken,
   assignment: server.bootstrap.ownerAssignment.id,
 })
 
-/** INMO：关联账号（替身自动点链接）→ 存「Agents 工坊（用积分）」那一条当默认。 */
-async function linkInmo(server: Server, url: string, standIn: CloudStandIn): Promise<void> {
-  const inmo = inmoOf(server)
-  const linked = await call(url, inmo, 'POST', '/v1/cloud/account/link', {
+/** IVRA：关联账号（替身自动点链接）→ 存「Agents 工坊（用积分）」那一条当默认。 */
+async function linkIvra(server: Server, url: string, standIn: CloudStandIn): Promise<void> {
+  const ivra = ivraOf(server)
+  const linked = await call(url, ivra, 'POST', '/v1/cloud/account/link', {
     email: 'boss@example.com',
   })
   expect(linked.status, linked.message).toBeLessThan(300)
   await standIn.settled()
   // 等关联落地（替身点链接是异步的）
   for (let i = 0; i < 100; i++) {
-    const acct = await call<{ linked: boolean }>(url, inmo, 'GET', '/v1/cloud/account')
+    const acct = await call<{ linked: boolean }>(url, ivra, 'GET', '/v1/cloud/account')
     if (acct.data?.linked === true) break
     await new Promise((r) => setTimeout(r, 20))
   }
-  const saved = await call(url, inmo, 'PUT', '/v1/models/providers/agentsws', {
+  const saved = await call(url, ivra, 'PUT', '/v1/models/providers/agentsws', {
     kind: 'agentsws_cloud',
     model: 'deepseek-flash',
     region: 'cn',
   })
   expect(saved.status, saved.message).toBe(200)
-  // INMO 的首次设置走过（公司那一层有了）：后加的 Rollout 才算「加的品牌」
-  const profile = await call(url, inmo, 'PUT', '/v1/workspace/profile', {
-    legal_name: 'INMO',
-    brand_name: 'INMO',
+  // IVRA 的首次设置走过（公司那一层有了）：后加的 Rovella 才算「加的品牌」
+  const profile = await call(url, ivra, 'PUT', '/v1/workspace/profile', {
+    legal_name: 'IVRA',
+    brand_name: 'IVRA',
     storefront_platform: 'shopify',
   })
   expect(profile.status).toBe(200)
 }
 
-async function addRollout(server: Server, url: string): Promise<Who & { workspace_id: string }> {
-  const inmo = inmoOf(server)
-  const orgs = await call<{ id: string }[]>(url, inmo, 'GET', '/v1/orgs')
+async function addRovella(server: Server, url: string): Promise<Who & { workspace_id: string }> {
+  const ivra = ivraOf(server)
+  const orgs = await call<{ id: string }[]>(url, ivra, 'GET', '/v1/orgs')
   const org = orgs.data?.[0]?.id ?? ''
   const created = await call<{ workspace_id: string }>(
     url,
-    inmo,
+    ivra,
     'POST',
     `/v1/orgs/${org}/brands`,
     {
-      name: 'Rollout',
+      name: 'Rovella',
     },
   )
   expect(created.status).toBe(201)
   const workspace_id = created.data?.workspace_id ?? ''
   const switched = await call<{ session_token?: string }>(
     url,
-    inmo,
+    ivra,
     'POST',
     `/v1/orgs/${org}/brands/${workspace_id}/switch`,
   )
@@ -235,22 +235,22 @@ interface Suggested {
 }
 
 describe('WP242 第二个品牌用云接口调模型', () => {
-  it('INMO 与 Rollout（跟随公司）都走 AI 推荐；Rollout 那一次的令牌能用', async () => {
+  it('IVRA 与 Rovella（跟随公司）都走 AI 推荐；Rovella 那一次的令牌能用', async () => {
     const cloud = await localCloud()
     cleanups.push(cloud.close)
     const { server, url } = await boot(cloud.base)
-    await linkInmo(server, url, cloud.standIn)
+    await linkIvra(server, url, cloud.standIn)
 
-    const inmo = await call<Suggested>(url, inmoOf(server), 'POST', '/v1/onboarding/suggest', {
-      text: ROLLOUT_TEXT,
+    const ivra = await call<Suggested>(url, ivraOf(server), 'POST', '/v1/onboarding/suggest', {
+      text: ROVELLA_TEXT,
     })
-    expect(inmo.status).toBe(200)
-    expect(inmo.data?.source).toBe('ai')
+    expect(ivra.status).toBe(200)
+    expect(ivra.data?.source).toBe('ai')
 
-    const rollout = await addRollout(server, url)
+    const rovella = await addRovella(server, url)
     const state = await call<{ model_configured?: boolean; added_brand?: boolean }>(
       url,
-      rollout,
+      rovella,
       'GET',
       '/v1/onboarding/state',
     )
@@ -258,30 +258,30 @@ describe('WP242 第二个品牌用云接口调模型', () => {
     expect(state.data?.model_configured).toBe(true)
 
     cloud.hits.length = 0
-    const out = await call<Suggested>(url, rollout, 'POST', '/v1/onboarding/suggest', {
-      text: ROLLOUT_TEXT,
+    const out = await call<Suggested>(url, rovella, 'POST', '/v1/onboarding/suggest', {
+      text: ROVELLA_TEXT,
     })
     expect(out.status).toBe(200)
     expect(out.data?.source).toBe('ai')
     const ai = cloud.hits.filter((h) => h.path === '/v1/ai/chat/completions')
     expect(ai).toHaveLength(1)
     expect(ai[0]?.auth).toMatch(/^Bearer \S+$/)
-    // 记账：记在 Rollout、记在点推荐的这个人头上（以前记在启动品牌的负责人头上）
+    // 记账：记在 Rovella、记在点推荐的这个人头上（以前记在启动品牌的负责人头上）
     expect(ai[0]?.member).toBe(server.bootstrap.person.id)
     const usage = (ws: string) =>
       server.kernel.eventLog
         .readSync({ workspace_id: ws as never })
         .filter((e) => e.type === 'model.usage')
-    expect(usage(rollout.workspace_id)).toHaveLength(1)
+    expect(usage(rovella.workspace_id)).toHaveLength(1)
 
-    // 随便聊（流式那条路）在 Rollout 里也通
-    const session = await call<{ id: string }>(url, rollout, 'POST', '/v1/free-chat/sessions', {})
+    // 随便聊（流式那条路）在 Rovella 里也通
+    const session = await call<{ id: string }>(url, rovella, 'POST', '/v1/free-chat/sessions', {})
     expect(session.status).toBe(201)
     const res = await fetch(`${url}/v1/free-chat/sessions/${session.data?.id}/messages`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${rollout.token}`,
-        'X-Assignment': rollout.assignment,
+        Authorization: `Bearer ${rovella.token}`,
+        'X-Assignment': rovella.assignment,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ text: '在吗' }),
@@ -294,12 +294,12 @@ describe('WP242 第二个品牌用云接口调模型', () => {
   it('云真打不通：provider_down 带真原因（ECONNREFUSED），推荐退回按词也对得上', async () => {
     const cloud = await localCloud()
     const { server, url } = await boot(cloud.base)
-    await linkInmo(server, url, cloud.standIn)
-    const rollout = await addRollout(server, url)
+    await linkIvra(server, url, cloud.standIn)
+    const rovella = await addRovella(server, url)
     // 云这一头关掉：之后的连接一律被拒
     await cloud.close()
-    const out = await call<Suggested>(url, rollout, 'POST', '/v1/onboarding/suggest', {
-      text: ROLLOUT_TEXT,
+    const out = await call<Suggested>(url, rovella, 'POST', '/v1/onboarding/suggest', {
+      text: ROVELLA_TEXT,
     })
     expect(out.data?.source).toBe('keyword')
     // 真目录上按词对（WP242 补的说法）：建站、社媒、红人、投放、客服都推上；没提 Amazon 不推 Amazon 客服
@@ -315,7 +315,7 @@ describe('WP242 第二个品牌用云接口调模型', () => {
     )
     expect(got).not.toContain('amz.support')
     const down = server.kernel.eventLog
-      .readSync({ workspace_id: rollout.workspace_id as never })
+      .readSync({ workspace_id: rovella.workspace_id as never })
       .filter((e) => e.type === 'model.provider_down')
     const message = JSON.stringify(down.at(-1)?.payload ?? {})
     expect(message).toContain('fetch failed')

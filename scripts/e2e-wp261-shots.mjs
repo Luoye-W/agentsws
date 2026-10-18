@@ -201,7 +201,7 @@ async function main() {
     await page.goto(`${BASE}/positions/${store}`, { waitUntil: 'networkidle' })
     const card = page
       .locator('[data-testid="deck-card"]')
-      .filter({ hasText: 'Rollout 折叠收纳箱' })
+      .filter({ hasText: 'Rovella 折叠收纳箱' })
       .first()
     // 「要你处理」是一叠：改价 / 上架 / 改商品合成一组，一张张往后翻到这一张
     for (let i = 0; i < 8 && !(await card.isVisible().catch(() => false)); i += 1) {

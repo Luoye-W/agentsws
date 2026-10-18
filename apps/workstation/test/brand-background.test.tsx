@@ -60,7 +60,7 @@ const BRAND_A: BrandView = {
 
 const BRAND_B: BrandView = {
   workspace_id: 'ws_b',
-  name: '变形金刚耳机',
+  name: '星际机甲耳机',
   current: false,
   pending_approvals: 0,
   alerts: 0,
@@ -71,7 +71,7 @@ const SETTINGS: BackgroundSettingsView = {
   max_concurrent: 2,
   limits: { min: 1, max: 4 },
   global_halted: false,
-  brands: [{ ...RUNNING, name: '变形金刚耳机', current: false }],
+  brands: [{ ...RUNNING, name: '星际机甲耳机', current: false }],
   runs_on: 'this_device',
 }
 

@@ -161,7 +161,7 @@ export function isPlaceholderStoreName(name: string | undefined): boolean {
 }
 
 /**
- * WP244（Fable 10-07 真机，rolloutgear.com）：**刚开的 Shopify 空店**。
+ * WP244（Fable 10-07 真机，rovellagear.com）：**刚开的 Shopify 空店**。
  *
  * 店名还是 My Store、首页还是默认主题的欢迎语、只有 Shopify 自动生成的那份隐私政策——
  * 这时读出来的「品牌名 = My Store（把握度高）」「一句话 = My Store」全是占位，

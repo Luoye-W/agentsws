@@ -20,7 +20,7 @@ const NOW = '2026-10-14T09:00:00.000Z'
 const ORIGIN = 'https://old.reddit.com'
 
 const comment = (id: string, text: string) =>
-  `<div class="thing comment" id="thing_t1_${id}" data-fullname="t1_${id}" data-permalink="/r/inmoxr/comments/abc/s/${id}/">
+  `<div class="thing comment" id="thing_t1_${id}" data-fullname="t1_${id}" data-permalink="/r/ivraxr/comments/abc/s/${id}/">
     <div class="entry"><div class="usertext-body"><p>${text}</p></div>
     <ul class="buttons"><li class="reply-button"><a href="#">reply</a></li></ul></div>
     <div class="child"></div></div>`
@@ -43,7 +43,7 @@ class FakeRedditTab {
     let body = ''
     if (u.pathname.endsWith('/submit'))
       body = `<div id="title-field"><textarea name="title"></textarea></div><div id="text-field"><textarea name="text"></textarea></div><button name="submit">submit</button>`
-    else if (u.pathname.startsWith('/r/inmoxr/comments/new'))
+    else if (u.pathname.startsWith('/r/ivraxr/comments/new'))
       body = `<div id="siteTable"><div class="thing link" data-fullname="t3_new1" data-permalink="${u.pathname}"><div class="entry"><a class="title">${this.posted[0]?.text ?? ''}</a></div></div></div>`
     else
       body = `<div class="commentarea"><form class="usertext"><textarea name="text"></textarea></form><div class="sitetable">${comment('c1', 'Mine fogs up')}</div></div>`
@@ -70,7 +70,7 @@ class FakeRedditTab {
       this.posted.push({ id: 'new1', text: title.value })
       this.gone = true
       this.status = 'loading'
-      this.load(`${ORIGIN}/r/inmoxr/comments/new1/t/`)
+      this.load(`${ORIGIN}/r/ivraxr/comments/new1/t/`)
       return
     }
     const box = this.doc.querySelector<HTMLTextAreaElement>('#thing_t1_c1 > .child > form textarea')
@@ -112,7 +112,7 @@ const job = (action: Parameters<typeof buildRedditJob>[0]['action']) =>
   buildRedditJob({
     id: 'rdw_1',
     workspace_id: 'ws',
-    account_id: 'inmo_official',
+    account_id: 'ivra_official',
     action,
     approval_id: 'ap_1',
     approval_level: 'L1',
@@ -152,7 +152,7 @@ describe('WP329 插件填草稿、人点发送', () => {
     const { result, local } = await run(
       tab,
       job({
-        write: { kind: 'reply', parent: 't1_c1', permalink: '/r/inmoxr/comments/abc/s/c1/' },
+        write: { kind: 'reply', parent: 't1_c1', permalink: '/r/ivraxr/comments/abc/s/c1/' },
         text: 'Hi Alice, the anti-fog insert helps.',
       }),
       3,
@@ -160,7 +160,7 @@ describe('WP329 插件填草稿、人点发送', () => {
     expect(result.outcome).toBe('done')
     expect(result.reads).toMatchObject({
       fullname: 't1_r1',
-      permalink: '/r/inmoxr/comments/abc/s/r1/',
+      permalink: '/r/ivraxr/comments/abc/s/r1/',
     })
     expect(tab.clicks).toEqual([REDDIT_WRITE_SELECTORS.replyLink('t1_c1')])
     // 横条上说了「填好了，等你点发送」
@@ -173,7 +173,7 @@ describe('WP329 插件填草稿、人点发送', () => {
     const tab = new FakeRedditTab()
     const { result } = await run(
       tab,
-      job({ write: { kind: 'submit', subreddit: 'inmoxr', title: 'Weekly Q&A' }, text: 'Ask us.' }),
+      job({ write: { kind: 'submit', subreddit: 'ivraxr', title: 'Weekly Q&A' }, text: 'Ask us.' }),
       2,
     )
     expect(result.outcome).toBe('done')

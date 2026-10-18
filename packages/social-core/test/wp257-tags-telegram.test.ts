@@ -26,7 +26,7 @@ import {
 
 const NOW = '2026-10-07T10:00:00.000Z'
 const CHAT = -1001234567890
-const BOT = { id: 4242, username: 'inmo_helper_bot', is_bot: true }
+const BOT = { id: 4242, username: 'ivra_helper_bot', is_bot: true }
 
 type Route = (url: string, body: Record<string, unknown>) => { status: number; body: unknown }
 
@@ -56,7 +56,7 @@ const ok = (result: unknown) => ({ status: 200, body: { ok: true, result } })
 const tgMsg = (id: number, extra: Record<string, unknown> = {}) => ({
   message_id: id,
   date: Date.parse(NOW) / 1000,
-  chat: { id: CHAT, type: 'supergroup', title: 'INMO 用户群' },
+  chat: { id: CHAT, type: 'supergroup', title: 'IVRA 用户群' },
   from: { id: 100 + id, is_bot: false, username: `fan${id}` },
   text: `第 ${id} 条`,
   ...extra,
@@ -119,10 +119,10 @@ describe('WP257 判类打标签（规则）', () => {
     // 正文里提到品牌名也算
     expect(
       tagThread({
-        text: 'Does INMO Air3 support prescription lenses?',
+        text: 'Does IVRA Air3 support prescription lenses?',
         channel: 'telegram_group',
         surface: 'thread',
-        brand_terms: ['INMO'],
+        brand_terms: ['IVRA'],
       }).klass,
     ).toBe('customer_question')
     // 太短的品牌名不认（免得误中）
@@ -203,7 +203,7 @@ describe('WP257 Telegram 收件流一页', () => {
         {
           update_id: 1,
           message: tgMsg(1, {
-            text: '@INMO_helper_bot 怎么连手机',
+            text: '@IVRA_helper_bot 怎么连手机',
             entities: [{ type: 'mention', offset: 0, length: 16 }],
           }),
         },
@@ -228,8 +228,8 @@ describe('WP257 Telegram 收件流一页', () => {
   it('认群地址：私有群消息链接 / 公开群 / 数字 id；邀请链接认不出', () => {
     expect(parseTelegramGroup('https://t.me/c/1234567890/55')).toBe('-1001234567890')
     expect(parseTelegramGroup('t.me/c/1234567890')).toBe('-1001234567890')
-    expect(parseTelegramGroup('https://t.me/inmo_users')).toBe('@inmo_users')
-    expect(parseTelegramGroup('@inmo_users')).toBe('@inmo_users')
+    expect(parseTelegramGroup('https://t.me/ivra_users')).toBe('@ivra_users')
+    expect(parseTelegramGroup('@ivra_users')).toBe('@ivra_users')
     expect(parseTelegramGroup('-1001234567890')).toBe('-1001234567890')
     expect(parseTelegramGroup('https://t.me/+AbCdEf123')).toBeUndefined()
     expect(parseTelegramGroup('https://t.me/joinchat/AbCdEf')).toBeUndefined()
@@ -265,7 +265,7 @@ describe('WP257 Telegram 适配器（只读）', () => {
         return ok({ status: opts.status ?? 'member' })
       }
       if (method === 'getChat')
-        return ok({ id: CHAT, type: 'supergroup', title: 'INMO 用户群', username: 'inmo_users' })
+        return ok({ id: CHAT, type: 'supergroup', title: 'IVRA 用户群', username: 'ivra_users' })
       if (method === 'getUpdates') {
         if (opts.failUpdates !== undefined)
           return {
@@ -348,8 +348,8 @@ describe('WP257 Telegram 适配器（只读）', () => {
   })
 
   it('登记时读群名：@用户名换成数字 id', async () => {
-    const r = await createTelegramAdapter(site({})).describeTarget?.('@inmo_users')
-    expect(r).toMatchObject({ ok: true, data: { name: 'INMO 用户群', external_id: String(CHAT) } })
+    const r = await createTelegramAdapter(site({})).describeTarget?.('@ivra_users')
+    expect(r).toMatchObject({ ok: true, data: { name: 'IVRA 用户群', external_id: String(CHAT) } })
   })
 })
 

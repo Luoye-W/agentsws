@@ -10,12 +10,12 @@ import { renderWithProviders } from './helpers'
 
 const payload: ReportPayload = {
   kind: 'report',
-  series: 'r/inmoxr 周报',
-  title: 'r/inmoxr 周报（10/11 – 10/16）',
+  series: 'r/ivraxr 周报',
+  title: 'r/ivraxr 周报（10/11 – 10/16）',
   period: '10/11 – 10/16',
   period_start: '2026-10-11',
   markdown:
-    '# r/inmoxr 周报\n\n## 1. 外部舆情\n\n### 1. 和别家对比（post × 1 / comment × 2）\n\n评估：需跟进\n\n> Anyone compared?\n\nhttps://www.reddit.com/r/ar/comments/9/\n\n![截图](https://example.test/x.png)\n',
+    '# r/ivraxr 周报\n\n## 1. 外部舆情\n\n### 1. 和别家对比（post × 1 / comment × 2）\n\n评估：需跟进\n\n> Anyone compared?\n\nhttps://www.reddit.com/r/ar/comments/9/\n\n![截图](https://example.test/x.png)\n',
   published_at: '2026-10-16T09:00:00.000Z',
   version: 2,
 }
@@ -42,7 +42,7 @@ describe('报告报表块', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(payload.markdown))
     fireEvent.click(screen.getByTestId('report-export'))
     expect(created).toHaveBeenCalledTimes(1)
-    expect(reportFilename(payload)).toBe('r inmoxr 周报（10 11 – 10 16）.md')
+    expect(reportFilename(payload)).toBe('r ivraxr 周报（10 11 – 10 16）.md')
   })
 
   it('长的先收着一截，点开看全', () => {

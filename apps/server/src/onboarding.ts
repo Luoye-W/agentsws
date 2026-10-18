@@ -390,7 +390,7 @@ export interface OnboardingOptions {
   extensionPaired?(workspace_id: WorkspaceId): boolean
   /**
    * 已连 Shopify 的店（46 I6：连上就自动挂，没连就挂空并在面板明说）。
-   * WP240：按品牌问（Rollout 的分配不该挂到 INMO 的店上）。
+   * WP240：按品牌问（Rovella 的分配不该挂到 IVRA 的店上）。
    */
   shopifyStores(
     workspace_id?: WorkspaceId,

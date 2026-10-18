@@ -37,7 +37,7 @@ vi.mock('@/lib/api', async () => {
     },
     setSiteThemeStore: async (store: string) => {
       api.stores.push(store)
-      api.view = view(undefined, { store: '6suegp-md.myshopify.com' })
+      api.view = view(undefined, { store: '6demox-md.myshopify.com' })
       return api.view
     },
     runPlatformCli: async (action: string) => {
@@ -80,9 +80,9 @@ describe('WP253 建站岗位页引导', () => {
   it('不知道店：填地址保存，好了这一行就消失', async () => {
     api.view = view('store')
     renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
-    await userEvent.type(await screen.findByTestId('site-theme-store-input'), '6suegp-md')
+    await userEvent.type(await screen.findByTestId('site-theme-store-input'), '6demox-md')
     await userEvent.click(screen.getByTestId('site-theme-store-save'))
-    await waitFor(() => expect(api.stores).toEqual(['6suegp-md']))
+    await waitFor(() => expect(api.stores).toEqual(['6demox-md']))
     await waitFor(() => expect(screen.queryByTestId('site-theme-banner')).toBeNull())
   })
 

@@ -23,20 +23,20 @@ import {
 } from '../src/index.js'
 import { FakeReddit, type FakeRedditState, fakeRedditState } from './fake-reddit.js'
 
-const PERMALINK = '/r/inmoxr/comments/abc/slug/c1/'
+const PERMALINK = '/r/ivraxr/comments/abc/slug/c1/'
 const DRAFT =
-  'Hi Alice, INMO here — the **Air3** has an anti-fog insert in the box.\n\nMore: [FAQ](https://inmo.example/faq)'
+  'Hi Alice, IVRA here — the **Air3** has an anti-fog insert in the box.\n\nMore: [FAQ](https://ivra.example/faq)'
 
 const reply: RedditWriteAction = {
   write: { kind: 'reply', parent: 't1_c1', permalink: PERMALINK },
   text: DRAFT,
 }
 const comment: RedditWriteAction = {
-  write: { kind: 'comment', post: 't3_abc', permalink: '/r/inmoxr/comments/abc/slug/' },
+  write: { kind: 'comment', post: 't3_abc', permalink: '/r/ivraxr/comments/abc/slug/' },
   text: 'Thanks for asking! It works with most frames.',
 }
 const submit: RedditWriteAction = {
-  write: { kind: 'submit', subreddit: 'r/inmoxr', title: 'Weekly Q&A thread' },
+  write: { kind: 'submit', subreddit: 'r/ivraxr', title: 'Weekly Q&A thread' },
   text: 'Ask anything about the Air3 here.',
 }
 
@@ -44,7 +44,7 @@ const job = (action: RedditWriteAction, id = 'job_1') =>
   buildRedditJob({
     id,
     workspace_id: 'ws',
-    account_id: 'inmo_official',
+    account_id: 'ivra_official',
     action,
     approval_id: `ap_${id}`,
     approval_level: 'L1',
@@ -116,7 +116,7 @@ describe('WP329 Reddit 写的计划', () => {
       redditWritePlan({ ...submit, write: { kind: 'submit', subreddit: 'a b', title: 'x' } }),
     ).toThrow(RedditPlanError)
     expect(
-      redditCommentsPath('https://www.reddit.com/r/inmoxr/comments/abc/slug/c1/?context=3'),
+      redditCommentsPath('https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/?context=3'),
     ).toBe(PERMALINK)
     expect(
       redditWritePlan({ ...comment, write: { kind: 'comment', post: 'abc' } }).steps[0],
@@ -134,9 +134,9 @@ describe('WP329 Reddit 写的计划', () => {
   })
 
   it('草稿 → 认「发出去那一条」的那一截：Markdown 渲染前后对得上', () => {
-    expect(sentSnippet(DRAFT)).toBe('hialiceinmoheretheair3hasanantifoginsertinthebox')
+    expect(sentSnippet(DRAFT)).toBe('hialiceivraheretheair3hasanantifoginsertinthebox')
     const doc = new DOMParser().parseFromString(
-      `<div class="thing" data-fullname="t1_z" data-permalink="/p/"><div class="entry"><div class="usertext-body"><p>Hi Alice, INMO here — the <strong>Air3</strong> has an anti-fog insert in the box.</p></div></div></div>`,
+      `<div class="thing" data-fullname="t1_z" data-permalink="/p/"><div class="entry"><div class="usertext-body"><p>Hi Alice, IVRA here — the <strong>Air3</strong> has an anti-fog insert in the box.</p></div></div></div>`,
       'text/html',
     )
     expect(domFindPosted(doc, '.thing', REDDIT_WRITE_SELECTORS.commentBody, DRAFT)).toEqual([
@@ -153,7 +153,7 @@ describe('WP329 Reddit 写在假 old.reddit 上', () => {
     const r: ActionResult = await run(page, reply, { sendAt: 2 })
     expect(r.outcome).toBe('done')
     expect(r.reads.fullname).toBe('t1_new1')
-    expect(r.reads.permalink).toBe('/r/inmoxr/comments/abc/slug/new1/')
+    expect(r.reads.permalink).toBe('/r/ivraxr/comments/abc/slug/new1/')
     expect(page.visited[0]).toBe(`https://old.reddit.com${PERMALINK}`)
     expect(page.clicks).toEqual([REDDIT_WRITE_SELECTORS.replyLink('t1_c1')])
     expect(page.state.sent[0]?.parent).toBe('t1_c1')
@@ -192,7 +192,7 @@ describe('WP329 Reddit 写在假 old.reddit 上', () => {
     const r = await run(page, submit, { sendAt: 1 })
     expect(r.outcome).toBe('done')
     expect(r.reads.fullname).toBe('t3_new1')
-    expect(r.reads.permalink).toBe('/r/inmoxr/comments/new1/title/')
+    expect(r.reads.permalink).toBe('/r/ivraxr/comments/new1/title/')
   })
 
   it('人一直没点发送 → 停下交给人，不算发出去（不代点）', async () => {
@@ -244,13 +244,13 @@ describe('WP329（决策 764）：插件只读版规', () => {
       '../src/index.js'
     )
     const req = {
-      key: 'rules:inmoxr',
+      key: 'rules:ivraxr',
       kind: 'sub_rules' as const,
-      subreddit: 'inmoxr',
+      subreddit: 'ivraxr',
       max_pages: 1,
     }
     expect(checkRedditReadRequest(req)).toBeUndefined()
-    expect(redditReadUrl(req)).toBe('https://old.reddit.com/r/inmoxr/about/rules.json?raw_json=1')
+    expect(redditReadUrl(req)).toBe('https://old.reddit.com/r/ivraxr/about/rules.json?raw_json=1')
     expect(checkRedditReadRequest({ ...req, subreddit: '../x' })).toBe('版块名不对。')
     expect(
       redditRulesOf({
@@ -265,7 +265,7 @@ describe('WP329（决策 764）：插件只读版规', () => {
           url,
           content_type: 'application/json',
           body: url.includes('/api/me.json')
-            ? JSON.stringify({ kind: 't2', data: { name: 'inmo_official' } })
+            ? JSON.stringify({ kind: 't2', data: { name: 'ivra_official' } })
             : JSON.stringify({ rules: [{ short_name: 'No links' }] }),
         }),
         sleep: async () => {},
@@ -273,6 +273,6 @@ describe('WP329（决策 764）：插件只读版规', () => {
         gapMs: 0,
       },
     )
-    expect(res.parts[0]).toMatchObject({ key: 'rules:inmoxr', ok: true, rules: ['No links'] })
+    expect(res.parts[0]).toMatchObject({ key: 'rules:ivraxr', ok: true, rules: ['No links'] })
   })
 })

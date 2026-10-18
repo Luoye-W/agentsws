@@ -61,8 +61,8 @@ const plugin = (path: string, token: string, init: { method?: string; body?: unk
 const NOW_S = Math.floor(Date.now() / 1000)
 const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
 const ROUTES: Record<string, unknown> = {
-  '/r/inmoxr/about/rules.json': { rules: [{ short_name: 'Be civil', description: 'No insults' }] },
-  '/api/me.json': { kind: 't2', data: { name: 'inmo_official' } },
+  '/r/ivraxr/about/rules.json': { rules: [{ short_name: 'Be civil', description: 'No insults' }] },
+  '/api/me.json': { kind: 't2', data: { name: 'ivra_official' } },
   '/message/inbox/.json': listing([
     {
       kind: 't1',
@@ -72,14 +72,14 @@ const ROUTES: Record<string, unknown> = {
         type: 'comment_reply',
         author: 'alice',
         body: 'does it work with iPhone?',
-        subreddit: 'inmoxr',
+        subreddit: 'ivraxr',
         parent_id: 't1_ours',
-        context: '/r/inmoxr/comments/p1/x/c9/?context=3',
+        context: '/r/ivraxr/comments/p1/x/c9/?context=3',
         created_utc: NOW_S - 600,
       },
     },
   ]),
-  '/r/inmoxr/new/.json': listing([
+  '/r/ivraxr/new/.json': listing([
     {
       kind: 't3',
       data: {
@@ -88,13 +88,13 @@ const ROUTES: Record<string, unknown> = {
         author: 'bob',
         title: 'My Air3 unboxing',
         selftext: 'pics inside',
-        subreddit: 'inmoxr',
-        permalink: '/r/inmoxr/comments/p2/x/',
+        subreddit: 'ivraxr',
+        permalink: '/r/ivraxr/comments/p2/x/',
         created_utc: NOW_S - 900,
       },
     },
   ]),
-  '/r/inmoxr/comments/.json': listing([]),
+  '/r/ivraxr/comments/.json': listing([]),
 }
 const fakeFetch = async (url: string): Promise<RedditFetched> => {
   const body = ROUTES[new URL(url).pathname]
@@ -150,7 +150,7 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     const ws = server.bootstrap.workspace.id
     const rw = (await server.brands.forWorkspace(ws)).redditWatch
     if (rw === undefined) throw new Error('没装 Reddit 巡查')
-    rw.updateSettings({ own_subreddits: ['inmoxr'] })
+    rw.updateSettings({ own_subreddits: ['ivraxr'] })
     const reddit = server.roles.assignments
       .listByRole('social.reddit')
       .find((a) => a.workspace_id === ws)
@@ -172,9 +172,9 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     // WP329（决策 764）：顺手读自家版块的版规（起草时当上下文）
     expect(job.reads.map((r) => r.key)).toEqual([
       'inbox',
-      'sub_new:inmoxr',
-      'sub_comments:inmoxr',
-      'rules:inmoxr',
+      'sub_new:ivraxr',
+      'sub_comments:ivraxr',
+      'rules:ivraxr',
     ])
     const res = await runRedditRead(job, {
       fetch: fakeFetch,
@@ -189,7 +189,7 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     })
     expect(accepted.status).toBe(200)
     expect(
-      (await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWatch?.rules('inmoxr')
+      (await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWatch?.rules('ivraxr')
         ?.rules,
     ).toEqual(['Be civil：No insults'])
 
@@ -228,6 +228,6 @@ describe('WP328 Reddit 每日巡查（服务进程）', () => {
     })
     expect(q.totals.own).toEqual({ posts: 1, comments: 1 })
     expect((await src.sweeps(w)).length).toBeGreaterThanOrEqual(1)
-    expect(q.items.some((x) => x.place === 'inmoxr')).toBe(true)
+    expect(q.items.some((x) => x.place === 'ivraxr')).toBe(true)
   })
 })

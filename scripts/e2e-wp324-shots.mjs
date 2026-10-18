@@ -31,7 +31,7 @@ const argOf = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : un
 const PORT = Number(argOf('--port') ?? '4399') || 4399
 const BASE = `http://127.0.0.1:${PORT}`
 const OWNER = 'wang@nordvolt.example'
-const SHOP = '6suegp-md.myshopify.com'
+const SHOP = '6demox-md.myshopify.com'
 
 function startDemo() {
   const child = spawn(

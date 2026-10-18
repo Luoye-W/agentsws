@@ -258,19 +258,19 @@ describe('WP253：登录带 --alias，会话按品牌分开（4.8.5 非交互登
   it('两个品牌各登各的：别名 + 各自一份 CLI 配置目录；同一品牌重登不撞「选哪个账号」；重登失败挪回原来那份', async () => {
     const m = await installed()
     const sessionA = {
-      alias: cliSessionAlias('ws_rollout'),
-      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rollout'),
+      alias: cliSessionAlias('ws_rovella'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rovella'),
     }
     const sessionB = {
-      alias: cliSessionAlias('ws_inmo'),
-      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_inmo'),
+      alias: cliSessionAlias('ws_ivra'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_ivra'),
     }
     m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionA })
     expect((await m.settle()).phase).toBe('done')
     m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionB })
     expect((await m.settle()).phase).toBe('done')
     const seen = logins(m.entry)
-    expect(seen[0]?.args).toEqual(['auth', 'login', '--alias', 'agentsws-ws_rollout'])
+    expect(seen[0]?.args).toEqual(['auth', 'login', '--alias', 'agentsws-ws_rovella'])
     expect(seen[0]?.home).toBe(sessionA.home)
     expect(seen[0]?.appdata).toBe(join(sessionA.home, 'AppData', 'Roaming'))
     expect(seen[1]?.home).toBe(sessionB.home)
@@ -351,8 +351,8 @@ describe('WP267：登录前在本品牌那份配置目录里关掉 CLI 的自动
   it('先跑 config autoupgrade off（带 CI、指到本品牌目录），登录本身照旧不带 CI；同一份目录只跑一次，重登新目录再关一次', async () => {
     const m = await installed()
     const session = {
-      alias: cliSessionAlias('ws_rollout'),
-      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rollout'),
+      alias: cliSessionAlias('ws_rovella'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rovella'),
     }
     m.runner.start(SPEC, 'login', { ...m.ctx, session })
     expect((await m.settle()).phase).toBe('done')

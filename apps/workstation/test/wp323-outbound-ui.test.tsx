@@ -51,9 +51,9 @@ beforeEach(() => {
       channel: 'reddit',
       action: 'reply',
       kind: 'social_reply',
-      destination: 'r/inmoxr',
+      destination: 'r/ivraxr',
       content: 'About 3 hours of active use.',
-      link: 'https://www.reddit.com/r/inmoxr/comments/abc/_/def/',
+      link: 'https://www.reddit.com/r/ivraxr/comments/abc/_/def/',
       status: 'sent',
       follow_ups: [{ id: 'f1', at: T0, from: 'them', text: 'thanks' }],
     },
@@ -62,7 +62,7 @@ beforeEach(() => {
     {
       id: 'sink_1',
       workspace_id: 'ws_1' as never,
-      name: 'INMO 回复记录',
+      name: 'IVRA 回复记录',
       instruction: 'x',
       adapter: 'feishu_bitable',
       url: 'https://x.feishu.cn/base/bascnAAA111',
@@ -89,7 +89,7 @@ function sinkCard(): DeckCard {
     id: 'ap_sink',
     kind: 'policy_change',
     layout: 'policy',
-    title: '记录去处：INMO 回复记录',
+    title: '记录去处：IVRA 回复记录',
     summary: '之后每发出去一条，照这样记一行。',
     content_variants: { zh_summary: '之后每发出去一条，照这样记一行。' },
     options,
@@ -98,14 +98,14 @@ function sinkCard(): DeckCard {
       payload: {
         form: 'record_sink',
         sink_id: 'sink_1',
-        name: 'INMO 回复记录',
+        name: 'IVRA 回复记录',
         options,
         target: 'workspace_policy',
         before: null,
-        after: { name: 'INMO 回复记录' },
+        after: { name: 'IVRA 回复记录' },
         preview: [
           ['日期', '2026/10/14'],
-          ['版块', 'r/inmoxr'],
+          ['版块', 'r/ivraxr'],
           ['备注', ''],
         ],
         sample: false,
@@ -143,7 +143,7 @@ describe('WP323 右栏「发出记录」', () => {
     expect(screen.getByText('About 3 hours of active use.')).toBeDefined()
     expect(screen.getByText('回了 1 条')).toBeDefined()
     const sink = screen.getByTestId('outbound-sink')
-    expect(sink.textContent).toContain('INMO 回复记录')
+    expect(sink.textContent).toContain('IVRA 回复记录')
     expect(sink.textContent).toContain('待补写 2')
     expect(screen.getByTestId('outbound-sink-error').textContent).toBe('没有权限写这张表。')
     // 没有任何一家表格的专属设置区（没有输入框、没有应用凭据 / 表格 token 之类的字）；

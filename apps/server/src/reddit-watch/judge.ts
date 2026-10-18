@@ -43,7 +43,7 @@ const INBOX_WHY: Record<string, string> = {
 
 const LATIN = /^[\p{Script=Latin}\d\s.+-]+$/u
 
-/** 关键词是不是真出现了（拉丁字母的按整词认，免得 INMO 撞上 inmobiliaria；中文按包含）。 */
+/** 关键词是不是真出现了（拉丁字母的按整词认，免得 IVRA 撞上 ivrabiliaria；中文按包含）。 */
 export function keywordHit(text: string, keyword: string): boolean {
   const k = keyword.trim().toLowerCase()
   if (k === '') return false

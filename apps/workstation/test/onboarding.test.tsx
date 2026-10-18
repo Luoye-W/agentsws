@@ -2038,8 +2038,8 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     state.peers = { ...PEERS, peers: [] }
     state.account = {
       linked: true,
-      email: 'boss@inmoxr.com',
-      org_name: 'inmoxr',
+      email: 'boss@ivraxr.com',
+      org_name: 'ivraxr',
       expires_at: T0,
       scopes: ['ai'],
       linked_at: T0,
@@ -2052,7 +2052,7 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     const person = await screen.findByTestId('onboarding-person')
     await waitFor(() => {
       expect(within(person).getByTestId('person-account').textContent).toBe(
-        '你的账号：boss@inmoxr.com',
+        '你的账号：boss@ivraxr.com',
       )
     })
     expect(person.textContent).not.toContain('owner@localhost')
@@ -2075,7 +2075,7 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     renderWithProviders(
       <ProfileForm
         emailHint="owner@localhost"
-        suggestFrom={['me@gmail.com', 'support@inmoxr.com']}
+        suggestFrom={['me@gmail.com', 'support@ivraxr.com']}
         busy={false}
         saved={false}
         onSave={() => undefined}
@@ -2083,11 +2083,11 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     )
     const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
     expect(screen.getByText('公司邮箱后缀')).toBeTruthy()
-    expect(input.placeholder).toBe('例如 inmoxr.com')
+    expect(input.placeholder).toBe('例如 ivraxr.com')
     expect(screen.getByTestId('company-domain-hint').getAttribute('data-hint')).toBe(
       '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
     )
-    expect(input.value).toBe('inmoxr.com')
+    expect(input.value).toBe('ivraxr.com')
   })
 
   it('后缀：只有公共邮箱 / 占位时那一格空着', async () => {
@@ -2108,19 +2108,19 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     const saved: { domain: string }[] = []
     renderWithProviders(<ProfileForm busy={false} saved={false} onSave={(d) => saved.push(d)} />)
     const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
-    await user.type(input, 'wang@InmoXR.com')
-    expect(input.value).toBe('inmoxr.com')
+    await user.type(input, 'wang@IvraXR.com')
+    expect(input.value).toBe('ivraxr.com')
     await user.type(screen.getByTestId('company-legal-name'), '深圳映墨科技')
     await user.click(screen.getByTestId('company-save'))
-    expect(saved.at(-1)?.domain).toBe('inmoxr.com')
+    expect(saved.at(-1)?.domain).toBe('ivraxr.com')
   })
 })
 
 describe('WP240 加的品牌走首次设置', () => {
   const ADDED: OnboardingStateView = {
     ...STATE,
-    workspace_name: 'Rollout',
-    brand_name: 'Rollout',
+    workspace_name: 'Rovella',
+    brand_name: 'Rovella',
     added_brand: true,
     model_configured: true,
   }
@@ -2130,7 +2130,7 @@ describe('WP240 加的品牌走首次设置', () => {
     state.state = ADDED
     renderWithProviders(<OnboardingPage />)
     await screen.findByTestId('onboarding-business')
-    expect(screen.getByTestId('onboarding-title').textContent).toContain('Rollout')
+    expect(screen.getByTestId('onboarding-title').textContent).toContain('Rovella')
     // 公司那一层的（公司全称、你的称呼、加入一家公司）这里不再问
     expect(screen.queryByTestId('join-panel')).toBeNull()
     await user.click(screen.getByTestId('intake-no-site'))
@@ -2138,7 +2138,7 @@ describe('WP240 加的品牌走首次设置', () => {
     expect(screen.queryByTestId('person-name')).toBeNull()
     // WP242：不再只说「之后在设置里填」——就地手填那张小表摆出来，品牌名预填建品牌时起的
     expect(((await screen.findByTestId('manual-brand_name')) as HTMLInputElement).value).toBe(
-      'Rollout',
+      'Rovella',
     )
     // 回第 ① 步：不是接 AI 的那几张卡，是一句「已接上（跟随公司）」
     await user.click(screen.getByTestId('onboarding-back'))
@@ -2219,8 +2219,8 @@ describe('WP240 第 ② 步：读不到网站时照实说、给下一步', () =>
 describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手填', () => {
   const ADDED: OnboardingStateView = {
     ...STATE,
-    workspace_name: 'Rollout',
-    brand_name: 'Rollout',
+    workspace_name: 'Rovella',
+    brand_name: 'Rovella',
     added_brand: true,
     model_configured: true,
   }
@@ -2241,15 +2241,15 @@ describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手�
     const form = await screen.findByTestId('manual-profile-form')
     // 一格都没动之外的（品牌名预填了）也能存；先填几格
     await user.type(within(form).getByTestId('manual-one_liner'), '户外滑板')
-    await user.type(within(form).getByTestId('manual-support_email'), 'support@rollout.example')
+    await user.type(within(form).getByTestId('manual-support_email'), 'support@rovella.example')
     await user.type(within(form).getByTestId('manual-currency'), 'usd')
     await user.click(within(form).getByTestId('manual-save'))
     await waitFor(() => {
       expect(state.manuals).toEqual([
         {
-          brand_name: 'Rollout',
+          brand_name: 'Rovella',
           one_liner: '户外滑板',
-          support_email: 'support@rollout.example',
+          support_email: 'support@rovella.example',
           currency: 'USD',
         },
       ])
@@ -2269,10 +2269,10 @@ describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手�
       await screen.findByTestId('intake-working')
       await vi.advanceTimersByTimeAsync(31_000)
       const other = (await screen.findByTestId('intake-other-url')) as HTMLInputElement
-      fireEvent.change(other, { target: { value: 'https://rollout.example' } })
+      fireEvent.change(other, { target: { value: 'https://rovella.example' } })
       fireEvent.click(screen.getByTestId('intake-other-start'))
       await waitFor(() => {
-        expect(state.starts).toEqual([{ urls: ['https://rollout.example'] }])
+        expect(state.starts).toEqual([{ urls: ['https://rovella.example'] }])
       })
     } finally {
       vi.useRealTimers()
@@ -2283,21 +2283,21 @@ describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手�
 describe('WP244 新开的 Shopify 空店 / 接着上次的进度', () => {
   const ADDED: OnboardingStateView = {
     ...STATE,
-    workspace_name: 'Rollout',
-    brand_name: 'Rollout',
+    workspace_name: 'Rovella',
+    brand_name: 'Rovella',
     added_brand: true,
     model_configured: true,
   }
   /** Shopify 默认店分析出来的样子：品牌名 / 一句话 / 政策都没填，只认出了平台。 */
   const freshRun = (overrides: Partial<BrandIntakeRun> = {}): BrandIntakeRun =>
     websiteRun({
-      inputs: [{ url: 'https://rolloutgear.com', kind: 'website' }],
-      pages: [{ url: 'https://rolloutgear.com/', kind: 'home', ok: true }],
+      inputs: [{ url: 'https://rovellagear.com', kind: 'website' }],
+      pages: [{ url: 'https://rovellagear.com/', kind: 'home', ok: true }],
       profile: {
         storefront_platform: {
           value: 'shopify',
           confidence: 'medium',
-          evidence: [{ url: 'https://rolloutgear.com/', locator: 'page:cdn.shopify.com' }],
+          evidence: [{ url: 'https://rovellagear.com/', locator: 'page:cdn.shopify.com' }],
         },
       },
       fresh_store: true,
@@ -2314,10 +2314,10 @@ describe('WP244 新开的 Shopify 空店 / 接着上次的进度', () => {
     expect(screen.getByTestId('intake-value-one_liner').textContent).toBe('没填')
     expect(screen.queryByTestId('intake-policies')).toBeNull()
     await user.click(screen.getByTestId('intake-edit-brand_name'))
-    await user.type(screen.getByTestId('intake-input-brand_name'), 'Rollout Gear')
+    await user.type(screen.getByTestId('intake-input-brand_name'), 'Rovella Gear')
     await user.click(screen.getByTestId('intake-confirm'))
     await waitFor(() => {
-      expect(state.confirms.at(-1)?.edits).toEqual({ brand_name: 'Rollout Gear' })
+      expect(state.confirms.at(-1)?.edits).toEqual({ brand_name: 'Rovella Gear' })
     })
   })
 

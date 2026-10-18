@@ -29,7 +29,7 @@ const view = (
 ): ShopAdminView => ({
   applicable: true,
   state,
-  store: 'rollout-test.myshopify.com',
+  store: 'rovella-test.myshopify.com',
   scopes_needed: ['write_products', 'write_discounts'],
   scopes_granted: [],
   missing: [],
@@ -51,7 +51,7 @@ vi.mock('@/lib/api', async () => {
           action: 'authorize',
           phase: 'waiting_browser',
           started_at: 't1',
-          auth_url: 'https://rollout-test.myshopify.com/admin/oauth/authorize?x=1',
+          auth_url: 'https://rovella-test.myshopify.com/admin/oauth/authorize?x=1',
           browser_opened: false,
         },
       })

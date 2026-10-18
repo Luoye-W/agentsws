@@ -29,8 +29,8 @@ import { createShopifyConnect } from '../src/shopify-connect.js'
 
 const clock: Clock = { now: () => '2026-10-08T09:00:00.000Z' }
 const KEY = { AGENTSWS_SECRETS_KEY: 'e'.repeat(64) }
-const ROLLOUT = 'ws_rollout' as WorkspaceId
-const INMO = 'ws_inmo' as WorkspaceId
+const ROVELLA = 'ws_rovella' as WorkspaceId
+const IVRA = 'ws_ivra' as WorkspaceId
 
 async function reasonOf(p: Promise<unknown>): Promise<{ code: string; reason?: string }> {
   try {
@@ -68,13 +68,13 @@ function accountWith(reply: (token: string) => { status: number; body?: unknown 
     }
   }
   const account = createCloudAccount({
-    secrets: vaultOf(ROLLOUT),
+    secrets: vaultOf(ROVELLA),
     clock,
     env: { AGENTSWS_CLOUD_BASE_URL: 'https://cloud.example.invalid' },
     fetch,
     appendEvent: () => {},
-    workspace_id: () => ROLLOUT,
-    brands: () => [ROLLOUT, INMO],
+    workspace_id: () => ROVELLA,
+    brands: () => [ROVELLA, IVRA],
     secretsFor: vaultOf,
     localBaseUrl: () => undefined,
   })
@@ -99,39 +99,39 @@ describe('WP267 一点补签（cloud-account.upgradeScopes）', () => {
       status: 200,
       body: { data: { link: { id: 'lnk_1' }, scopes: full, added: ['store'] } },
     }))
-    t.seed(ROLLOUT, 'wst_old_rollout', 'ai,wallet:read')
-    t.seed(INMO, 'wst_old_inmo', 'ai,wallet:read')
-    expect((await t.account.port.status(ROLLOUT)).missing_scopes).toContain('store')
-    const out = await t.account.upgradeScopes(ROLLOUT)
+    t.seed(ROVELLA, 'wst_old_rovella', 'ai,wallet:read')
+    t.seed(IVRA, 'wst_old_ivra', 'ai,wallet:read')
+    expect((await t.account.port.status(ROVELLA)).missing_scopes).toContain('store')
+    const out = await t.account.upgradeScopes(ROVELLA)
     expect(out).toEqual({ scopes: full, added: ['store'] })
     expect(t.seen[0]).toMatchObject({
       url: 'https://cloud.example.invalid/v1/cloud/links/current/upgrade',
       method: 'POST',
-      auth: 'Bearer wst_old_rollout',
+      auth: 'Bearer wst_old_rovella',
     })
-    // INMO 那一把也补了（本机记的也缺）
-    expect(t.seen.map((x) => x.auth)).toEqual(['Bearer wst_old_rollout', 'Bearer wst_old_inmo'])
-    const after = t.vaultOf(ROLLOUT).get(CLOUD_TOKEN_SECRET_ID)
-    expect(after?.token).toBe('wst_old_rollout')
+    // IVRA 那一把也补了（本机记的也缺）
+    expect(t.seen.map((x) => x.auth)).toEqual(['Bearer wst_old_rovella', 'Bearer wst_old_ivra'])
+    const after = t.vaultOf(ROVELLA).get(CLOUD_TOKEN_SECRET_ID)
+    expect(after?.token).toBe('wst_old_rovella')
     expect(after?.scopes).toBe(full.join(','))
-    expect((await t.account.port.status(ROLLOUT)).missing_scopes).toBeUndefined()
+    expect((await t.account.port.status(ROVELLA)).missing_scopes).toBeUndefined()
   })
 
   it('云上没这一条（404）/ 令牌不认（401）→ upgrade_unavailable；断网 → offline；没令牌 → not_linked', async () => {
     for (const status of [404, 405, 401, 501]) {
       const t = accountWith(() => ({ status, body: { code: 'x', message: 'no' } }))
-      t.seed(ROLLOUT, 'wst_old', 'ai,wallet:read')
-      expect(await reasonOf(t.account.upgradeScopes(ROLLOUT))).toMatchObject({
+      t.seed(ROVELLA, 'wst_old', 'ai,wallet:read')
+      expect(await reasonOf(t.account.upgradeScopes(ROVELLA))).toMatchObject({
         reason: 'upgrade_unavailable',
       })
       // 没成就不改本机记的
-      expect(t.vaultOf(ROLLOUT).get(CLOUD_TOKEN_SECRET_ID)?.scopes).toBe('ai,wallet:read')
+      expect(t.vaultOf(ROVELLA).get(CLOUD_TOKEN_SECRET_ID)?.scopes).toBe('ai,wallet:read')
     }
     const off = accountWith(() => 'offline')
-    off.seed(ROLLOUT, 'wst_old', 'ai,wallet:read')
-    expect(await reasonOf(off.account.upgradeScopes(ROLLOUT))).toMatchObject({ reason: 'offline' })
+    off.seed(ROVELLA, 'wst_old', 'ai,wallet:read')
+    expect(await reasonOf(off.account.upgradeScopes(ROVELLA))).toMatchObject({ reason: 'offline' })
     const none = accountWith(() => ({ status: 200 }))
-    expect(await reasonOf(none.account.upgradeScopes(ROLLOUT))).toMatchObject({
+    expect(await reasonOf(none.account.upgradeScopes(ROVELLA))).toMatchObject({
       reason: 'not_linked',
     })
     expect(none.seen).toEqual([])
@@ -149,10 +149,10 @@ describe('WP267 连接卡的 upgrade', () => {
         linked: () => true,
       }),
       shopHints: () => [],
-      startupBrand: ROLLOUT,
+      startupBrand: ROVELLA,
       ...(upgrade === undefined ? {} : { upgrade }),
     })
-  const actor = { workspace_id: ROLLOUT, person_id: 'p_owner' }
+  const actor = { workspace_id: ROVELLA, person_id: 'p_owner' }
 
   it('补完有 store = 成；补完仍没有（云上默认集还没加）/ 没装配 = upgrade_unavailable', async () => {
     const ok = portWith(async () => ({ scopes: ['ai', 'wallet:read', 'store'], added: ['store'] }))
@@ -267,17 +267,17 @@ describe('WP267 cloudShopErrorOf：我们这头 vs Shopify 那头', () => {
 
   it('经 createCloudShopifyAdmin 端到端：成功套一层 data、失败信封都翻对', async () => {
     const replies: KolCloudCall<unknown>[] = [
-      { ok: true, status: 200, data: { data: { shop: { name: 'Rollout' } } } },
+      { ok: true, status: 200, data: { data: { shop: { name: 'Rovella' } } } },
       fail(403, 'forbidden', { required_scope: 'store' }),
     ]
     const problems: string[] = []
     const admin = createCloudShopifyAdmin({
-      store: '6suegp-md.myshopify.com',
+      store: '6demox-md.myshopify.com',
       call: async <T>() => replies.shift() as KolCloudCall<T>,
       onAuthProblem: (e) => problems.push(e.code),
     })
     expect(await admin.query({ name: 't', document: '{ shop { name } }' })).toEqual({
-      shop: { name: 'Rollout' },
+      shop: { name: 'Rovella' },
     })
     await expect(admin.query({ name: 't', document: '{ shop { name } }' })).rejects.toThrow(
       CLOUD_SHOP_TEXT.scope_store,
@@ -421,14 +421,14 @@ function cloudRecords(
           : [],
     },
     clock,
-    workspace_id: ROLLOUT,
+    workspace_id: ROVELLA,
     cloudShop: () =>
       cloudShopReader(
         {
           link: async () =>
             opts.cloud === false
               ? undefined
-              : { shop: '6suegp-md.myshopify.com', scopes: ['read_orders', 'read_products'] },
+              : { shop: '6demox-md.myshopify.com', scopes: ['read_orders', 'read_products'] },
           call: async () => call,
         },
         ['read_orders'],

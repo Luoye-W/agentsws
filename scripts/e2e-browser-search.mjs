@@ -25,10 +25,10 @@ const out = outIdx >= 0 ? resolve(args[outIdx + 1]) : join(userData, 'result.jso
 
 const QUERIES = [
   { brand: 'brand_us', markets: ['US'], query: 'site:reddit.com smart glasses' },
-  { brand: 'brand_us', markets: ['US'], query: 'INMO Air3 review reddit' },
-  { brand: 'brand_us', markets: ['US'], query: 'site:linkedin.com INMO' },
+  { brand: 'brand_us', markets: ['US'], query: 'XREAL One review reddit' },
+  { brand: 'brand_us', markets: ['US'], query: 'site:linkedin.com XREAL' },
   { brand: 'brand_de', markets: ['DE'], query: 'smarte Brille Test' },
-  { brand: 'brand_us', markets: ['US'], query: 'INMO 智能眼镜 国内 竞品' },
+  { brand: 'brand_us', markets: ['US'], query: 'XREAL 智能眼镜 国内 竞品' },
 ]
 
 const child = spawn(electron, [join(ROOT, 'scripts/e2e-browser-search/main.mjs')], {

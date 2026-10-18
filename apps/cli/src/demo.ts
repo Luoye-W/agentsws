@@ -113,12 +113,12 @@ const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
     'User-agent: PerplexityBot',
     'Disallow: /products/',
   ].join('\n'),
-  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Rollout 折叠收纳箱","offers":[{"@type":"Offer","price":"27.90","priceCurrency":"USD","availability":"https://schema.org/InStock"},{"@type":"Offer","price":"19.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}]}</script>
-</head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
-  '/products/rollout-storage-box.js': JSON.stringify({
+  '/products/rovella-storage-box': `<!doctype html><html><head><title>Rovella 折叠收纳箱</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Rovella 折叠收纳箱","offers":[{"@type":"Offer","price":"27.90","priceCurrency":"USD","availability":"https://schema.org/InStock"},{"@type":"Offer","price":"19.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}]}</script>
+</head><body><main><h1>Rovella 折叠收纳箱</h1><div data-price></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+  '/products/rovella-storage-box.js': JSON.stringify({
     id: 1001,
-    handle: 'rollout-storage-box',
+    handle: 'rovella-storage-box',
     updated_at: '2026-10-10T09:00:00+08:00',
     variants: [
       { id: 2001, price: 2990, available: true },
@@ -130,7 +130,7 @@ const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
   '/policies/privacy-policy': '<html><body><main><h1>Privacy policy</h1></main></body></html>',
 }
 const DEMO_SITE_HEALTH_RENDERED: Record<string, string> = {
-  '/products/rollout-storage-box': `<!doctype html><html><head><title>Rollout 折叠收纳箱</title></head><body><main><h1>Rollout 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
+  '/products/rovella-storage-box': `<!doctype html><html><head><title>Rovella 折叠收纳箱</title></head><body><main><h1>Rovella 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
 }
 
 const DEMO_BANNER_PNG =

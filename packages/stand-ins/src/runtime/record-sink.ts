@@ -56,7 +56,7 @@ export const RECORD_SINK_TOOL_DEFS: readonly ToolDef[] = [
         instruction: { type: 'string', description: '用户的原话（照抄）' },
         name: {
           type: 'string',
-          description: '去处的名字（用户怎么叫就怎么写，例如「INMO 回复记录」）',
+          description: '去处的名字（用户怎么叫就怎么写，例如「IVRA 回复记录」）',
         },
         columns: {
           type: 'array',

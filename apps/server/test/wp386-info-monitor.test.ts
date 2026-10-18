@@ -302,7 +302,7 @@ describe('贴链接、第一轮、拉取', () => {
     expect(s.keywords).toEqual(['Super73', 'Aventon'])
     const fresh = harness({ routes: { [SITE]: { status: 200, body: fx('site-rss2.xml') } } })
     const { last_ok_at: _ok, last_try_at: _try, ...rest } = s
-    fresh.store.putSource({ ...rest, keywords: ['Aventon', 'INMO'], exclude: ['job', 'hiring'] })
+    fresh.store.putSource({ ...rest, keywords: ['Aventon', 'IVRA'], exclude: ['job', 'hiring'] })
     const pulled = await fresh.watch.pull()
     expect(pulled.ok).toBe(true)
     if (!pulled.ok) return

@@ -168,7 +168,7 @@ export function telegramUpdatesPage(
  * 粘贴进来的 Telegram 群地址 → 登记用的 `chat_id`。
  *
  * - `https://t.me/c/1234567890/55`（私有超级群里某条消息的链接）→ `-1001234567890`
- * - `https://t.me/inmo_users` / `@inmo_users`（公开群）→ `@inmo_users`（登记时再换成数字 id）
+ * - `https://t.me/ivra_users` / `@ivra_users`（公开群）→ `@ivra_users`（登记时再换成数字 id）
  * - `-1001234567890` / `-12345`（数字 id）→ 原样
  *
  * 邀请链接（`t.me/+…` / `t.me/joinchat/…`）看不出是哪个群，认不出来回 `undefined`。

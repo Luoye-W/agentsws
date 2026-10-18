@@ -7,7 +7,7 @@ import {
   parseSuggestion,
   SUGGEST_MAX_OUTPUT_TOKENS,
 } from '../src/onboarding-suggest.js'
-import { ROLLOUT_COMPACT_ANSWER } from './wp243-fixtures.js'
+import { ROVELLA_COMPACT_ANSWER } from './wp243-fixtures.js'
 
 describe('WP243 推荐的紧凑写法', () => {
   it('提示词要的是紧凑数组 JSON，理由与原话限字数', () => {
@@ -28,7 +28,7 @@ describe('WP243 推荐的紧凑写法', () => {
   })
 
   it('新格式：职责三格、岗位两格', () => {
-    const got = parseSuggestion(ROLLOUT_COMPACT_ANSWER)
+    const got = parseSuggestion(ROVELLA_COMPACT_ANSWER)
     expect(got?.roles).toHaveLength(21)
     expect(got?.roles[0]).toEqual({
       role_id: 'site.shopify-build',
@@ -50,13 +50,13 @@ describe('WP243 推荐的紧凑写法', () => {
   })
 
   it('被截断（JSON 没收尾）：救回写完整了的职责，岗位交给算法版', () => {
-    const cut = ROLLOUT_COMPACT_ANSWER.slice(0, ROLLOUT_COMPACT_ANSWER.indexOf('kol.tiktok') + 6)
+    const cut = ROVELLA_COMPACT_ANSWER.slice(0, ROVELLA_COMPACT_ANSWER.indexOf('kol.tiktok') + 6)
     const got = parseSuggestion(cut)
     expect(got?.roles.map((r) => r.role_id)).toContain('kol.instagram')
     expect(got?.roles.map((r) => r.role_id)).not.toContain('kol.tiktok')
     expect(got?.positions).toBeUndefined()
     // 截在岗位那段里：职责全救回，岗位那段里的 id 数组不会被当成职责
-    const inPositions = ROLLOUT_COMPACT_ANSWER.slice(0, ROLLOUT_COMPACT_ANSWER.length - 30)
+    const inPositions = ROVELLA_COMPACT_ANSWER.slice(0, ROVELLA_COMPACT_ANSWER.length - 30)
     expect(parseSuggestion(inPositions)?.roles).toHaveLength(21)
     expect(parseSuggestion('{"r":[["a.b","理')).toBeUndefined()
     expect(parseSuggestion('什么都没有')).toBeUndefined()

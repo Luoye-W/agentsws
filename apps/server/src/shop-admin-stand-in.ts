@@ -76,12 +76,12 @@ export function demoShop(): FakeShop {
     products: [
       {
         id: 'gid://shopify/Product/1001',
-        title: 'Rollout 折叠收纳箱',
-        handle: 'rollout-storage-box',
+        title: 'Rovella 折叠收纳箱',
+        handle: 'rovella-storage-box',
         status: 'ACTIVE',
         descriptionHtml: '<p>一只能折起来的收纳箱，放车里、放衣柜都行。</p>',
         productType: '收纳',
-        vendor: 'Rollout',
+        vendor: 'Rovella',
         tags: ['收纳', '新品'],
         variants: [v(2001, '大号', '29.90', 48), v(2002, '小号', '19.90', 120)],
         media: [
@@ -96,12 +96,12 @@ export function demoShop(): FakeShop {
       },
       {
         id: 'gid://shopify/Product/1002',
-        title: 'Rollout 车载挂钩',
-        handle: 'rollout-hook',
+        title: 'Rovella 车载挂钩',
+        handle: 'rovella-hook',
         status: 'DRAFT',
         descriptionHtml: '<p>挂在头枕上的小挂钩。</p>',
         productType: '车品',
-        vendor: 'Rollout',
+        vendor: 'Rovella',
         tags: [],
         variants: [v(2003, 'Default Title', '9.90', 300)],
         media: [],
@@ -123,7 +123,7 @@ export function demoShop(): FakeShop {
         id: 'gid://shopify/Page/5001',
         title: '关于我们',
         handle: 'about-us',
-        body: '<p>Rollout 做好用的小东西。</p>',
+        body: '<p>Rovella 做好用的小东西。</p>',
         isPublished: true,
       },
     ],
@@ -178,7 +178,7 @@ const productNode = (p: FakeProduct): Obj => ({
   tags: p.tags,
   updatedAt: NOW(),
   onlineStoreUrl:
-    p.published && p.status === 'ACTIVE' ? `https://rollout.test/products/${p.handle}` : null,
+    p.published && p.status === 'ACTIVE' ? `https://rovella.test/products/${p.handle}` : null,
   totalInventory: p.variants.reduce((n, v) => n + v.inventoryQuantity, 0),
   options: [{ name: 'Title', values: p.variants.map((v) => v.title) }],
   variants: {
@@ -361,7 +361,7 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
     // WP381：网站 / 商品体检读商品（上架中的）；AI 来源流量读订单进店来源与会话来源
     case 'AgentswsHealthProducts':
       return {
-        shop: { name: 'Rollout', currencyCode: 'USD' },
+        shop: { name: 'Rovella', currencyCode: 'USD' },
         products: {
           nodes: shop.products
             .filter((p) => p.status === 'ACTIVE')
@@ -402,7 +402,7 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
               '29.90',
               {
                 referrerUrl: 'https://chatgpt.com/',
-                landingPage: '/products/rollout-storage-box?utm_source=chatgpt.com',
+                landingPage: '/products/rovella-storage-box?utm_source=chatgpt.com',
                 source: 'chatgpt.com',
               },
               null,

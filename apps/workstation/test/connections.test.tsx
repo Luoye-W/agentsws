@@ -866,7 +866,7 @@ describe('WP252 多品牌共用连接名留下的提醒', () => {
         ...RECONNECT_ROW,
         id: 'oc-legacy',
         status: 'active',
-        identity: { display_name: 'inmo.myshopify.com' },
+        identity: { display_name: 'ivra.myshopify.com' },
         brand_conflict: { kind: 'kept', hint: '点一次「测试」核对账号。' },
       },
     ]

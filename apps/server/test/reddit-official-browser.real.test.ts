@@ -93,15 +93,15 @@ describe.skipIf(!RUN)('官方号浏览器 × 本机 Chrome × 本地假 old.redd
     expect(rob.status().state).toBe('unknown')
     await rob.openLogin()
     const s = await rob.checkLogin()
-    expect(s).toMatchObject({ state: 'logged_in', username: 'inmo_official' })
+    expect(s).toMatchObject({ state: 'logged_in', username: 'ivra_official' })
   }, 60_000)
 
   it('读：两个队列（.json）+ 版规；读的时候一个写请求都没放出去', async () => {
-    const mq = await rob.port.readModQueue('inmoxr', 'modqueue', 50)
+    const mq = await rob.port.readModQueue('ivraxr', 'modqueue', 50)
     expect(mq.ok && mq.data.map((e) => e.id)).toEqual(['t3_spam1', 't3_held1'])
-    const un = await rob.port.readModQueue('inmoxr', 'unmoderated', 50)
+    const un = await rob.port.readModQueue('ivraxr', 'unmoderated', 50)
     expect(un.ok && un.data.map((e) => e.id)).toEqual(['t3_new1'])
-    const rules = await rob.port.readRules('inmoxr')
+    const rules = await rob.port.readRules('ivraxr')
     expect(rules).toEqual({ ok: true, data: ['No spam or self-promotion', 'Be civil'] })
     expect(writes()).toEqual([])
   }, 60_000)
@@ -109,7 +109,7 @@ describe.skipIf(!RUN)('官方号浏览器 × 本机 Chrome × 本地假 old.redd
   it('批准：真点了页面上的 approve，只发出 /api/approve；页面里偷偷点赞的脚本被掐了', async () => {
     const r = await rob.port.run({
       kind: 'approve',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       fullname: 't3_held1',
       queue: 'modqueue',
     })
@@ -127,17 +127,17 @@ describe.skipIf(!RUN)('官方号浏览器 × 本机 Chrome × 本地假 old.redd
     }
     await ok({
       kind: 'remove',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       fullname: 't3_spam1',
       queue: 'modqueue',
       removal_message: 'Removed: rule 1',
     })
     expect(site.comments.spam1).toEqual(['Removed: rule 1'])
-    await ok({ kind: 'ban', sub: 'inmoxr', username: 'spammer1', days: 7 })
+    await ok({ kind: 'ban', sub: 'ivraxr', username: 'spammer1', days: 7 })
     expect(site.banned).toEqual(['spammer1'])
     const made = await ok({
       kind: 'submit',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       title: 'Weekend AMA',
       text: 'Ask us',
       sticky: true,
@@ -166,7 +166,7 @@ describe.skipIf(!RUN)('官方号浏览器 × 本机 Chrome × 本地假 old.redd
     const before = writes().length
     const r = await rob.port.run({
       kind: 'approve',
-      sub: 'inmoxr',
+      sub: 'ivraxr',
       fullname: 't3_new2',
       queue: 'unmoderated',
     })

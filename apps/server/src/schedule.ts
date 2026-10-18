@@ -433,7 +433,7 @@ export async function draftPlansFor(deps: PlanDeps): Promise<{ plans: string[] }
       position_id: position.assignment_id,
     })
     /*
-     * WP244（Fable 10-07 真机，INMO Reddit 运营）：**0 条建议不出卡**。「今天的安排：0 条建议」
+     * WP244（Fable 10-07 真机，IVRA Reddit 运营）：**0 条建议不出卡**。「今天的安排：0 条建议」
      * 也做成一张要你选「采纳 / 调整 / 稍后」的卡，是让人对着空气做决定（36：只有要人拍板的才是卡）。
      * 计划照样记下（一天一条），只是不出卡；明早有建议了照常出。
      */

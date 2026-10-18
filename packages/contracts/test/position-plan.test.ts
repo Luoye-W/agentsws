@@ -33,7 +33,7 @@ const CATALOG: PositionCatalogEntry[] = [
 ]
 
 describe('WP234 岗位划分建议（docs/54 §6.3）', () => {
-  it('INMO 只做 Reddit：公关的 Reddit + 社媒的 Reddit 并成一个「Reddit 运营」', () => {
+  it('IVRA 只做 Reddit：公关的 Reddit + 社媒的 Reddit 并成一个「Reddit 运营」', () => {
     expect(proposePositions(['pr.reddit', 'social.reddit'], CATALOG)).toEqual([
       { name: 'Reddit 运营', role_ids: ['social.reddit', 'pr.reddit'] },
     ])

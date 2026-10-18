@@ -35,26 +35,26 @@ function route(req: IncomingMessage, res: ServerResponse, origin: string) {
     res.end(body)
   }
   const p = url.pathname
-  if (p === '/r/inmo/new/')
+  if (p === '/r/ivra/new/')
     return html(
       200,
       page(
-        post('a1', 'inmo', 'INMO Air3 first impressions', 120, 34) +
-          post('a2', 'inmo', 'Battery life question', 15, 8) +
-          post('a3', 'inmo', 'Subtitles in AR are great', 64, 12) +
+        post('a1', 'ivra', 'IVRA Air3 first impressions', 120, 34) +
+          post('a2', 'ivra', 'Battery life question', 15, 8) +
+          post('a3', 'ivra', 'Subtitles in AR are great', 64, 12) +
           SPY,
       ),
       { 'set-cookie': 'session=should-not-come-back; Path=/' },
     )
-  if (p === '/r/inmo/comments/a1/inmo_air3_first_impressions/')
+  if (p === '/r/ivra/comments/a1/ivra_air3_first_impressions/')
     return html(
       200,
       page(
-        post('a1', 'inmo', 'INMO Air3 first impressions', 120, 2) +
-          '<shreddit-comment thingid="t1_c1" author="alice" score="9" permalink="/r/inmo/comments/a1/x/c1/">' +
+        post('a1', 'ivra', 'IVRA Air3 first impressions', 120, 2) +
+          '<shreddit-comment thingid="t1_c1" author="alice" score="9" permalink="/r/ivra/comments/a1/x/c1/">' +
           '<faceplate-timeago ts="2026-10-04T09:00:00.000Z"></faceplate-timeago>' +
           '<div slot="comment"><p>Mine arrived yesterday, display is sharp.</p></div></shreddit-comment>' +
-          '<shreddit-comment thingid="t1_c2" author="bob" score="3" permalink="/r/inmo/comments/a1/x/c2/">' +
+          '<shreddit-comment thingid="t1_c2" author="bob" score="3" permalink="/r/ivra/comments/a1/x/c2/">' +
           '<div slot="comment"><p>How is the battery?</p></div></shreddit-comment>',
       ),
     )
@@ -68,13 +68,13 @@ function route(req: IncomingMessage, res: ServerResponse, origin: string) {
           '<faceplate-number number="42"></faceplate-number><faceplate-number number="7"></faceplate-number></div>',
       ),
     )
-  if (p === '/old/r/inmo/')
+  if (p === '/old/r/ivra/')
     return html(
       200,
       page(
-        '<div class="thing link" data-fullname="t3_o1" data-permalink="/r/inmo/comments/o1/old/" ' +
-          'data-author="carol" data-subreddit="inmo" data-score="5" data-comments-count="1" data-timestamp="1759651200000">' +
-          '<a class="title" href="/r/inmo/comments/o1/old/">Old layout post</a></div>',
+        '<div class="thing link" data-fullname="t3_o1" data-permalink="/r/ivra/comments/o1/old/" ' +
+          'data-author="carol" data-subreddit="ivra" data-score="5" data-comments-count="1" data-timestamp="1759651200000">' +
+          '<a class="title" href="/r/ivra/comments/o1/old/">Old layout post</a></div>',
       ),
     )
   if (p === '/r/private/') return html(302, '', { location: '/login/?dest=%2Fr%2Fprivate%2F' })
@@ -96,7 +96,7 @@ function route(req: IncomingMessage, res: ServerResponse, origin: string) {
   if (p === '/r/changed/') return html(200, page('<div>new layout we do not know</div>'))
   // WP246：读号——「登录」只是种一个 cookie（假站点，不是真登录）；旧版首页的页头按 cookie 显示用户名
   if (p === '/set-reader/')
-    return html(200, page(post('r1', 'inmo', 'Reader set', 1, 0)), {
+    return html(200, page(post('r1', 'ivra', 'Reader set', 1, 0)), {
       'set-cookie': `reader=${url.searchParams.get('u') ?? 'reader_bob'}; Path=/; Max-Age=86400`,
     })
   if (p === '/old-home/') {
@@ -109,8 +109,8 @@ function route(req: IncomingMessage, res: ServerResponse, origin: string) {
       200,
       page(
         header +
-          '<div class="thing link" data-fullname="t3_h1" data-permalink="/r/inmo/comments/h1/x/" data-author="z" data-subreddit="inmo">' +
-          '<a class="title" href="/r/inmo/comments/h1/x/">Home post</a></div>' +
+          '<div class="thing link" data-fullname="t3_h1" data-permalink="/r/ivra/comments/h1/x/" data-author="z" data-subreddit="ivra">' +
+          '<a class="title" href="/r/ivra/comments/h1/x/">Home post</a></div>' +
           SPY,
       ),
     )

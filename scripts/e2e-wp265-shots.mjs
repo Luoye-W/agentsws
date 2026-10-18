@@ -89,7 +89,7 @@ const SCOPES = [
   'read_orders',
   'read_themes',
 ]
-const SHOP = '6suegp-md.myshopify.com'
+const SHOP = '6demox-md.myshopify.com'
 const IDLE = {
   linked: true,
   email: 'demo@example.com',
@@ -104,8 +104,8 @@ const CONNECTED = {
   connections: [
     {
       shop: SHOP,
-      name: 'Rollout',
-      app: 'rollout',
+      name: 'Rovella',
+      app: 'rovella',
       status: 'connected',
       scopes: SCOPES,
       missing_scopes: [],
@@ -211,7 +211,7 @@ async function main() {
         return ok({
           ok: true,
           shop: SHOP,
-          name: 'Rollout',
+          name: 'Rovella',
           domain: SHOP,
           checked_at: new Date().toISOString(),
         })
@@ -262,7 +262,7 @@ async function main() {
       connections: [
         {
           shop: SHOP,
-          name: 'Rollout',
+          name: 'Rovella',
           status: 'reauth_required',
           reauth_reason: 'app_uninstalled',
           scopes: SCOPES,
@@ -271,7 +271,7 @@ async function main() {
       ],
     })
     await shot('7-reauth-missing')
-    await load({ ...IDLE, suggested_shop: 'inmoglobal.myshopify.com', candidates: [] })
+    await load({ ...IDLE, suggested_shop: 'ivraglobal.myshopify.com', candidates: [] })
     startError = '这家店暂不支持一键授权，等公开应用上线。'
     await page.click('[data-testid="shopconnect-connect"]')
     await page.locator('[data-testid="shopconnect-outcome"]').waitFor()

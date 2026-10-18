@@ -1,8 +1,8 @@
 /**
  * WP240：第二个品牌走首次设置，**一个字节都不许写到第一个品牌身上**。
  *
- * 起因（Fable 10-06，Windows 真机 ci.8）：已有品牌 INMO（启动品牌），新建品牌 Rollout、切过去，
- * `GET /v1/onboarding/state` 回 `brand_name: "INMO"`、`needs_setup: false`。往下查发现首次设置
+ * 起因（Fable 10-06，Windows 真机 ci.8）：已有品牌 IVRA（启动品牌），新建品牌 Rovella、切过去，
+ * `GET /v1/onboarding/state` 回 `brand_name: "IVRA"`、`needs_setup: false`。往下查发现首次设置
  * 那一面整个是按启动品牌装的：分析确认写的是启动品牌的档案 / 品牌名 / 知识库，向导建的分配也
  * 落在启动品牌。这一档两个品牌各走一遍首次设置，逐项钉住互不串。
  *
@@ -82,7 +82,7 @@ async function boot(dbDir?: string): Promise<Server> {
     tokenRefreshIntervalMs: 0,
     scheduleIntervalMs: 0,
     liveDataIntervalMs: 0,
-    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'INMO' },
+    env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com', AGENTSWS_WORKSPACE_NAME: 'IVRA' },
     mdns: () => ({ reason: '测试里不开局域网' }),
     brandIntakeFetch: replay,
   })
@@ -121,7 +121,7 @@ async function call<T>(
   }
 }
 
-function inmo(server: Server): Who {
+function ivra(server: Server): Who {
   return {
     workspace_id: server.bootstrap.workspace.id,
     token: server.bootstrap.internalToken,
@@ -130,7 +130,7 @@ function inmo(server: Server): Who {
 }
 
 async function orgId(server: Server): Promise<string> {
-  const orgs = await call<{ id: string }[]>(server, inmo(server), 'GET', '/v1/orgs')
+  const orgs = await call<{ id: string }[]>(server, ivra(server), 'GET', '/v1/orgs')
   const id = orgs.data?.[0]?.id
   if (id === undefined) throw new Error('启动之后应该有一个组织')
   return id
@@ -141,7 +141,7 @@ async function addBrand(server: Server, name: string): Promise<Who> {
   const org = await orgId(server)
   const created = await call<{ workspace_id: string }>(
     server,
-    inmo(server),
+    ivra(server),
     'POST',
     `/v1/orgs/${org}/brands`,
     { name },
@@ -150,7 +150,7 @@ async function addBrand(server: Server, name: string): Promise<Who> {
   const workspace_id = created.data?.workspace_id ?? ''
   const switched = await call<{ session_token?: string }>(
     server,
-    inmo(server),
+    ivra(server),
     'POST',
     `/v1/orgs/${org}/brands/${workspace_id}/switch`,
   )
@@ -178,11 +178,11 @@ const state = async (server: Server, who: Who): Promise<State> => {
   return res.data
 }
 
-/** 第 ① 步：INMO 首次设置把公司全称填成 INMO（真机上就是这么填的）。 */
-async function setUpInmo(server: Server): Promise<void> {
-  const res = await call(server, inmo(server), 'PUT', '/v1/workspace/profile', {
-    legal_name: 'INMO',
-    brand_name: 'INMO',
+/** 第 ① 步：IVRA 首次设置把公司全称填成 IVRA（真机上就是这么填的）。 */
+async function setUpIvra(server: Server): Promise<void> {
+  const res = await call(server, ivra(server), 'PUT', '/v1/workspace/profile', {
+    legal_name: 'IVRA',
+    brand_name: 'IVRA',
     storefront_platform: 'shopify',
   })
   expect(res.status).toBe(200)
@@ -205,56 +205,56 @@ async function analyze(server: Server, who: Who): Promise<string> {
 describe('WP240 第二个品牌的首次设置不串品牌', () => {
   it('新建品牌：state 按这个品牌回（品牌名、要不要设置、是不是加的品牌）', async () => {
     const server = await boot()
-    await setUpInmo(server)
-    const rollout = await addBrand(server, 'Rollout')
+    await setUpIvra(server)
+    const rovella = await addBrand(server, 'Rovella')
 
-    const r = await state(server, rollout)
-    expect(r.brand_name).toBe('Rollout')
-    expect(r.workspace_name).toBe('Rollout')
+    const r = await state(server, rovella)
+    expect(r.brand_name).toBe('Rovella')
+    expect(r.workspace_name).toBe('Rovella')
     // 建品牌那一刻起的那份影子档案不算"设过"：新品牌要走首次设置
     expect(r.needs_setup).toBe(true)
     expect(r.added_brand).toBe(true)
-    // 公司全称照旧是公司的（组织级），品牌名是 Rollout 自己的
-    expect(r.profile?.legal_name ?? 'INMO').toBe('INMO')
+    // 公司全称照旧是公司的（组织级），品牌名是 Rovella 自己的
+    expect(r.profile?.legal_name ?? 'IVRA').toBe('IVRA')
 
-    const i = await state(server, inmo(server))
-    expect(i.brand_name).toBe('INMO')
+    const i = await state(server, ivra(server))
+    expect(i.brand_name).toBe('IVRA')
     expect(i.needs_setup).toBe(false)
     expect(i.added_brand).toBeUndefined()
   })
 
-  it('在 Rollout 下做分析并确认：写的是 Rollout 的档案与知识，INMO 一个字节不动', async () => {
+  it('在 Rovella 下做分析并确认：写的是 Rovella 的档案与知识，IVRA 一个字节不动', async () => {
     const server = await boot()
-    await setUpInmo(server)
+    await setUpIvra(server)
     const before = server.onboarding.brandProfile(server.bootstrap.workspace.id)
-    const rollout = await addBrand(server, 'Rollout')
+    const rovella = await addBrand(server, 'Rovella')
 
-    const run = await analyze(server, rollout)
+    const run = await analyze(server, rovella)
     const confirmed = await call<{ status: string }>(
       server,
-      rollout,
+      rovella,
       'POST',
       `/v1/brand-intake/runs/${run}/confirm`,
       {},
     )
     expect(confirmed.status).toBe(200)
 
-    // INMO：品牌名、档案、公司全称都没变
-    const i = await state(server, inmo(server))
-    expect(i.brand_name).toBe('INMO')
-    expect(i.profile?.legal_name).toBe('INMO')
+    // IVRA：品牌名、档案、公司全称都没变
+    const i = await state(server, ivra(server))
+    expect(i.brand_name).toBe('IVRA')
+    expect(i.profile?.legal_name).toBe('IVRA')
     expect(server.onboarding.brandProfile(server.bootstrap.workspace.id)).toEqual(before)
-    // Rollout：平台从站上看出来了，档案是它自己的；品牌名仍是建品牌时起的那个
-    const r = await state(server, rollout)
-    expect(r.brand_name).toBe('Rollout')
+    // Rovella：平台从站上看出来了，档案是它自己的；品牌名仍是建品牌时起的那个
+    const r = await state(server, rovella)
+    expect(r.brand_name).toBe('Rovella')
     // WP251（决策 92）：加的品牌第 ② 步做完还不算设置完——走完第 ④ 步才算（停在第 ③ 步接着走）
     expect(r.needs_setup).toBe(true)
     expect(r.business_done).toBe(true)
-    expect(server.onboarding.brandProfile(rollout.workspace_id).storefront_platform).toBe('shopify')
+    expect(server.onboarding.brandProfile(rovella.workspace_id).storefront_platform).toBe('shopify')
     // 公司全称没被分析结果顶掉（公司级的已经有了，加品牌不再问）
-    expect(server.onboarding.companyProfile()?.legal_name).toBe('INMO')
+    expect(server.onboarding.companyProfile()?.legal_name).toBe('IVRA')
 
-    // 知识：首批条目进 Rollout，INMO 那边一条都没有
+    // 知识：首批条目进 Rovella，IVRA 那边一条都没有
     const cardsOf = async (who: Who) =>
       (
         await call<{ workspace_id: string }[]>(
@@ -264,29 +264,29 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
           '/v1/knowledge/cards?status=proposed',
         )
       ).data ?? []
-    const rolloutCards = await cardsOf(rollout)
-    expect(rolloutCards.length).toBeGreaterThan(0)
-    expect(rolloutCards.every((c) => c.workspace_id === rollout.workspace_id)).toBe(true)
+    const rovellaCards = await cardsOf(rovella)
+    expect(rovellaCards.length).toBeGreaterThan(0)
+    expect(rovellaCards.every((c) => c.workspace_id === rovella.workspace_id)).toBe(true)
     expect(
-      (await cardsOf(inmo(server))).filter((c) => c.workspace_id === rollout.workspace_id),
+      (await cardsOf(ivra(server))).filter((c) => c.workspace_id === rovella.workspace_id),
     ).toEqual([])
     expect(
-      (await cardsOf(inmo(server))).some((c) => JSON.stringify(c).includes('brand-intake')),
+      (await cardsOf(ivra(server))).some((c) => JSON.stringify(c).includes('brand-intake')),
     ).toBe(false)
   })
 
-  it('在 Rollout 下完成第 ④ 步：分配建在 Rollout，INMO 的分配一条不多', async () => {
+  it('在 Rovella 下完成第 ④ 步：分配建在 Rovella，IVRA 的分配一条不多', async () => {
     const server = await boot()
-    await setUpInmo(server)
-    const inmoBefore = server.roles.assignments
+    await setUpIvra(server)
+    const ivraBefore = server.roles.assignments
       .listByWorkspace(server.bootstrap.workspace.id)
       .filter((a) => a.revoked_at === undefined).length
-    const rollout = await addBrand(server, 'Rollout')
+    const rovella = await addBrand(server, 'Rovella')
 
     const applied = await call<{
       created_assignments: { id: string }[]
       ranges: { kind: string; id: string; label: string }[]
-    }>(server, rollout, 'POST', '/v1/onboarding/apply', {
+    }>(server, rovella, 'POST', '/v1/onboarding/apply', {
       position_ids: [],
       role_ids: [],
       positions: [{ name: '客服', role_ids: ['dtc.support'], template_id: 'customer-care' }],
@@ -295,62 +295,62 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
     const ids = applied.data?.created_assignments.map((a) => a.id) ?? []
     expect(ids.length).toBeGreaterThan(0)
     for (const id of ids)
-      expect(server.roles.assignments.get(id)?.workspace_id).toBe(rollout.workspace_id)
-    // 没连店就挂整个品牌——挂的是 Rollout，不是 INMO
+      expect(server.roles.assignments.get(id)?.workspace_id).toBe(rovella.workspace_id)
+    // 没连店就挂整个品牌——挂的是 Rovella，不是 IVRA
     expect(applied.data?.ranges).toEqual([
-      { kind: 'brand', id: rollout.workspace_id, label: '整个品牌（Rollout）' },
+      { kind: 'brand', id: rovella.workspace_id, label: '整个品牌（Rovella）' },
     ])
     expect(
       server.roles.assignments
         .listByWorkspace(server.bootstrap.workspace.id)
         .filter((a) => a.revoked_at === undefined).length,
-    ).toBe(inmoBefore)
+    ).toBe(ivraBefore)
     // 跳过了网址分析也算走完了：下次打开不再被拉回向导
-    expect((await state(server, rollout)).needs_setup).toBe(false)
+    expect((await state(server, rovella)).needs_setup).toBe(false)
   })
 
-  it('设置页在 Rollout 下保存：品牌名写 Rollout；公司全称没改就不碰组织', async () => {
+  it('设置页在 Rovella 下保存：品牌名写 Rovella；公司全称没改就不碰组织', async () => {
     const server = await boot()
-    await setUpInmo(server)
-    const rollout = await addBrand(server, 'Rollout')
+    await setUpIvra(server)
+    const rovella = await addBrand(server, 'Rovella')
     const org = await orgId(server)
     const orgBefore = server.onboarding.companyProfile()
 
-    const r = await state(server, rollout)
-    const saved = await call(server, rollout, 'PUT', '/v1/workspace/profile', {
-      legal_name: r.profile?.legal_name ?? 'INMO',
+    const r = await state(server, rovella)
+    const saved = await call(server, rovella, 'PUT', '/v1/workspace/profile', {
+      legal_name: r.profile?.legal_name ?? 'IVRA',
       brand_name: r.brand_name,
       vertical: 'goods',
       storefront_platform: 'shopify',
     })
     expect(saved.status).toBe(200)
-    expect((await state(server, rollout)).brand_name).toBe('Rollout')
-    expect((await state(server, inmo(server))).brand_name).toBe('INMO')
+    expect((await state(server, rovella)).brand_name).toBe('Rovella')
+    expect((await state(server, ivra(server))).brand_name).toBe('IVRA')
     expect(server.onboarding.companyProfile()).toEqual(orgBefore)
 
-    // 在 Rollout 下改品牌名：只改 Rollout
-    await call(server, rollout, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'INMO',
-      brand_name: 'Rollout Audio',
+    // 在 Rovella 下改品牌名：只改 Rovella
+    await call(server, rovella, 'PUT', '/v1/workspace/profile', {
+      legal_name: 'IVRA',
+      brand_name: 'Rovella Audio',
     })
-    expect((await state(server, rollout)).brand_name).toBe('Rollout Audio')
-    expect((await state(server, inmo(server))).brand_name).toBe('INMO')
+    expect((await state(server, rovella)).brand_name).toBe('Rovella Audio')
+    expect((await state(server, ivra(server))).brand_name).toBe('IVRA')
     const brands = await call<{ name: string }[]>(
       server,
-      inmo(server),
+      ivra(server),
       'GET',
       `/v1/orgs/${org}/brands`,
     )
-    expect(brands.data?.map((b) => b.name).sort()).toEqual(['INMO', 'Rollout Audio'])
+    expect(brands.data?.map((b) => b.name).sort()).toEqual(['IVRA', 'Rovella Audio'])
   })
 
   it('两个品牌各走一遍首次设置：档案、品牌名、岗位、分析结果互不串', async () => {
     const server = await boot()
-    const a = inmo(server)
-    // INMO：第一个品牌，分析确认会顺带定下公司全称
+    const a = ivra(server)
+    // IVRA：第一个品牌，分析确认会顺带定下公司全称
     const runA = await analyze(server, a)
     await call(server, a, 'POST', `/v1/brand-intake/runs/${runA}/confirm`, {
-      edits: { brand_name: 'INMO' },
+      edits: { brand_name: 'IVRA' },
     })
     const plan = {
       position_ids: [],
@@ -366,7 +366,7 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
     )
     const company = server.onboarding.companyProfile()?.legal_name
 
-    const b = await addBrand(server, 'Rollout')
+    const b = await addBrand(server, 'Rovella')
     expect((await state(server, b)).needs_setup).toBe(true)
     const runB = await analyze(server, b)
     await call(server, b, 'POST', `/v1/brand-intake/runs/${runB}/confirm`, {})
@@ -378,9 +378,9 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
       plan,
     )
 
-    // 品牌名各是各的；公司全称还是 INMO 那一轮定下的
-    expect((await state(server, a)).brand_name).toBe('INMO')
-    expect((await state(server, b)).brand_name).toBe('Rollout')
+    // 品牌名各是各的；公司全称还是 IVRA 那一轮定下的
+    expect((await state(server, a)).brand_name).toBe('IVRA')
+    expect((await state(server, b)).brand_name).toBe('Rovella')
     expect(server.onboarding.companyProfile()?.legal_name).toBe(company)
     // 岗位分配：各建在自己品牌里，同一条职责两边各一条
     const wsOf = (r: typeof appliedA) =>
@@ -409,31 +409,31 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
 
   it('切品牌后品牌一览的「当前」跟着会话走', async () => {
     const server = await boot()
-    await setUpInmo(server)
-    const rollout = await addBrand(server, 'Rollout')
+    await setUpIvra(server)
+    const rovella = await addBrand(server, 'Rovella')
     const org = await orgId(server)
-    const asRollout = await call<{ workspace_id: string; current: boolean }[]>(
+    const asRovella = await call<{ workspace_id: string; current: boolean }[]>(
       server,
-      rollout,
+      rovella,
       'GET',
       `/v1/orgs/${org}/brands`,
     )
-    expect(asRollout.data?.find((b) => b.current)?.workspace_id).toBe(rollout.workspace_id)
-    const asInmo = await call<{ workspace_id: string; current: boolean }[]>(
+    expect(asRovella.data?.find((b) => b.current)?.workspace_id).toBe(rovella.workspace_id)
+    const asIvra = await call<{ workspace_id: string; current: boolean }[]>(
       server,
-      inmo(server),
+      ivra(server),
       'GET',
       `/v1/orgs/${org}/brands`,
     )
-    expect(asInmo.data?.find((b) => b.current)?.workspace_id).toBe(server.bootstrap.workspace.id)
+    expect(asIvra.data?.find((b) => b.current)?.workspace_id).toBe(server.bootstrap.workspace.id)
   })
 
   it('存量自检：上一版建的品牌（影子档案没标记、没人分过岗位）重启后进首次设置；分过岗位的不碰', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp240-'))
     try {
       const first = await boot(dir)
-      await setUpInmo(first)
-      const fresh = await addBrand(first, 'Rollout')
+      await setUpIvra(first)
+      const fresh = await addBrand(first, 'Rovella')
       const used = await addBrand(first, 'Busy')
       await call(first, used, 'POST', '/v1/onboarding/apply', {
         position_ids: [],
@@ -470,7 +470,7 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
       const whoIn = async (ws: string): Promise<Who> => {
         const switched = await call<{ session_token?: string }>(
           again,
-          inmo(again),
+          ivra(again),
           'POST',
           `/v1/orgs/${org}/brands/${ws}/switch`,
         )
@@ -485,7 +485,7 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
       }
       expect((await state(again, await whoIn(fresh.workspace_id))).needs_setup).toBe(true)
       expect((await state(again, await whoIn(used.workspace_id))).needs_setup).toBe(false)
-      expect((await state(again, inmo(again))).needs_setup).toBe(false)
+      expect((await state(again, ivra(again))).needs_setup).toBe(false)
     } finally {
       for (const s of servers.splice(0)) await s.close()
       rmSync(dir, { recursive: true, force: true })

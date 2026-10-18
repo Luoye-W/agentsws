@@ -27,9 +27,9 @@ import {
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import {
   estimateDeepSeekTokens,
-  ROLLOUT_COMPACT_ANSWER,
-  ROLLOUT_OLD_ANSWER,
-  ROLLOUT_TEXT,
+  ROVELLA_COMPACT_ANSWER,
+  ROVELLA_OLD_ANSWER,
+  ROVELLA_TEXT,
 } from './wp243-fixtures.js'
 
 vi.setConfig({ testTimeout: 30_000 })
@@ -95,7 +95,7 @@ async function localCloud(breakFirst = false): Promise<LocalCloud> {
     }
     const usage = {
       prompt_tokens: 3126,
-      completion_tokens: estimateDeepSeekTokens(ROLLOUT_COMPACT_ANSWER),
+      completion_tokens: estimateDeepSeekTokens(ROVELLA_COMPACT_ANSWER),
     }
     try {
       if (parsed.stream !== true) {
@@ -103,12 +103,12 @@ async function localCloud(breakFirst = false): Promise<LocalCloud> {
         if (gone) return
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(
-          JSON.stringify({ choices: [{ message: { content: ROLLOUT_COMPACT_ANSWER } }], usage }),
+          JSON.stringify({ choices: [{ message: { content: ROVELLA_COMPACT_ANSWER } }], usage }),
         )
         return
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' })
-      const pieces = ROLLOUT_COMPACT_ANSWER.match(/[\s\S]{1,40}/g) ?? []
+      const pieces = ROVELLA_COMPACT_ANSWER.match(/[\s\S]{1,40}/g) ?? []
       const every = Math.ceil(ANSWER_MS / pieces.length)
       for (const [i, piece] of pieces.entries()) {
         await sleep(every)
@@ -160,7 +160,7 @@ async function boot(cloudBase: string): Promise<{ server: Server; url: string }>
       [SECRETS_KEY_ENV]: 'e'.repeat(64),
       AGENTSWS_CLOUD_BASE_URL: cloudBase,
       AGENTSWS_OWNER_EMAIL: 'luoye@example.com',
-      AGENTSWS_WORKSPACE_NAME: 'Rollout',
+      AGENTSWS_WORKSPACE_NAME: 'Rovella',
     },
     mdns: () => ({ reason: '测试里不开局域网' }),
   })
@@ -235,14 +235,14 @@ const usageOf = (server: Server) =>
     .map((e) => e.payload as { purpose: string; output_tokens: number; net_retries?: unknown[] })
 
 describe('WP243 推荐经云：快、短、不怕空闲掐线', () => {
-  it('Rollout 那句：走流式 + 输出上限 + 关思考；回答比掐线时间长也不断；建站 / 社媒 / 红人 / 客服都在', async () => {
+  it('Rovella 那句：走流式 + 输出上限 + 关思考；回答比掐线时间长也不断；建站 / 社媒 / 红人 / 客服都在', async () => {
     const cloud = await localCloud()
     cleanups.push(cloud.close)
     const { server, url } = await boot(cloud.base)
     const who = await linkCloud(server, url, cloud.standIn)
 
     const out = await call<Suggested>(url, who, 'POST', '/v1/onboarding/suggest', {
-      text: ROLLOUT_TEXT,
+      text: ROVELLA_TEXT,
     })
     expect(out.status, out.message).toBe(200)
     expect(out.data?.source).toBe('ai')
@@ -286,7 +286,7 @@ describe('WP243 推荐经云：快、短、不怕空闲掐线', () => {
     const { server, url } = await boot(cloud.base)
     const who = await linkCloud(server, url, cloud.standIn)
     const out = await call<Suggested>(url, who, 'POST', '/v1/onboarding/suggest', {
-      text: ROLLOUT_TEXT,
+      text: ROVELLA_TEXT,
     })
     expect(out.data?.source).toBe('ai')
     expect(out.data?.roles).toHaveLength(21)
@@ -298,8 +298,8 @@ describe('WP243 推荐经云：快、短、不怕空闲掐线', () => {
   })
 
   it('新写法比老写法短：二十一条职责 + 六个岗位 < 1500 token（DeepSeek 估算口径）', () => {
-    const compact = estimateDeepSeekTokens(ROLLOUT_COMPACT_ANSWER)
-    const old = estimateDeepSeekTokens(ROLLOUT_OLD_ANSWER)
+    const compact = estimateDeepSeekTokens(ROVELLA_COMPACT_ANSWER)
+    const old = estimateDeepSeekTokens(ROVELLA_OLD_ANSWER)
     expect(compact).toBeLessThan(1500)
     expect(compact).toBeLessThan(old)
   })

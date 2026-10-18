@@ -17,12 +17,12 @@ const row = (
     approval_item_id: 'ap_1',
     job_id: 'rdw_1',
     kind: 'reply',
-    subreddit: 'inmoxr',
+    subreddit: 'ivraxr',
     state: 'failed',
     message: '你点了停止，已停下。',
     outcome: 'stopped',
     can_refill: true,
-    label: '回复 alice（Reddit · r/inmoxr）',
+    label: '回复 alice（Reddit · r/ivraxr）',
     queued_at: at(),
     finished_at: at(),
     ...over,
@@ -61,7 +61,7 @@ describe('WP332 没发出去提醒条', () => {
     renderWithProviders(<RedditWriteNotice duties={duties} />)
     const rows = await screen.findAllByTestId('reddit-write-notice-row')
     expect(rows).toHaveLength(1)
-    expect(rows[0]?.textContent).toContain('没发出去：回复 alice（Reddit · r/inmoxr）')
+    expect(rows[0]?.textContent).toContain('没发出去：回复 alice（Reddit · r/ivraxr）')
     expect(rows[0]?.textContent).toContain('你点了停止')
     fireEvent.click(screen.getByTestId('reddit-write-refill'))
     await waitFor(() => expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
@@ -76,7 +76,7 @@ describe('WP332 没发出去提醒条', () => {
     state.rows = [row({ can_refill: undefined, label: undefined })]
     renderWithProviders(<RedditWriteNotice duties={[duties[1] as (typeof duties)[number]]} />)
     const r = await screen.findByTestId('reddit-write-notice-row')
-    expect(r.textContent).toContain('回复（r/inmoxr）')
+    expect(r.textContent).toContain('回复（r/ivraxr）')
     expect(screen.queryByTestId('reddit-write-refill')).toBeNull()
   })
 

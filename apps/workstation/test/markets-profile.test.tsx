@@ -195,8 +195,8 @@ describe('WP240 目标市场多了不平铺', () => {
 describe('WP240（Luoye 10-06）网站上能选的国家太多', () => {
   it('分析默认只选了美国：一句提示铺在外面；人改过之后（出处 human）不再出', () => {
     const base = {
-      legal_name: 'Rollout Ltd',
-      brand_name: 'Rollout',
+      legal_name: 'Rovella Ltd',
+      brand_name: 'Rovella',
       discoverable: true,
       vertical: 'goods' as const,
       storefront_platform: 'shopify' as const,
@@ -211,7 +211,7 @@ describe('WP240（Luoye 10-06）网站上能选的国家太多', () => {
             from: 'site',
             evidence: [
               {
-                url: 'https://rollout.example/',
+                url: 'https://rovella.example/',
                 locator: 'markets:many-default-us',
                 quote: 'shopify:localization: 214',
               },

@@ -162,7 +162,7 @@ describe('52 O2 顶栏品牌切换器', () => {
     const assign = vi.fn()
     vi.spyOn(globalThis, 'location', 'get').mockReturnValue({
       ...globalThis.location,
-      pathname: '/positions/asg_inmo_support',
+      pathname: '/positions/asg_ivra_support',
       reload,
       assign,
     } as Location)
@@ -177,7 +177,7 @@ describe('52 O2 顶栏品牌切换器', () => {
     await waitFor(() => {
       expect(assign).toHaveBeenCalledWith('/')
     })
-    // 不是原地重载（那样会停在 INMO 的 /positions/asg_… 上，Rollout 下打开是一片空白）
+    // 不是原地重载（那样会停在 IVRA 的 /positions/asg_… 上，Rovella 下打开是一片空白）
     expect(reload).not.toHaveBeenCalled()
     vi.restoreAllMocks()
   })

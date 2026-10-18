@@ -39,9 +39,9 @@ const item = (over: Partial<WatchItem>): WatchItem => ({
   platform: 'reddit',
   kind: 'comment',
   scope: 'own',
-  place: 'inmoxr',
+  place: 'ivraxr',
   created_at: '2026-10-13T03:00:00.000Z',
-  url: 'https://www.reddit.com/r/inmoxr/comments/a/',
+  url: 'https://www.reddit.com/r/ivraxr/comments/a/',
   text: 'hello',
   ...over,
 })
@@ -58,7 +58,7 @@ function setup(opts: { source?: WatchSource | undefined; sinks?: RecordSinkView[
       action: 'reply',
       status: 'sent',
       content: 'hi',
-      link: 'https://www.reddit.com/r/inmoxr/comments/1/x/our1/',
+      link: 'https://www.reddit.com/r/ivraxr/comments/1/x/our1/',
       parent_external_id: 't1_x',
     },
   ] as OutboundRecord[]
@@ -68,7 +68,7 @@ function setup(opts: { source?: WatchSource | undefined; sinks?: RecordSinkView[
       : {
           platform: 'reddit',
           configured: () => true,
-          ownPlaces: () => ['inmoxr'],
+          ownPlaces: () => ['ivraxr'],
           items: () => [
             item({}),
             item({
@@ -189,7 +189,7 @@ describe('查发出记录', () => {
     const r = await run(QUERY_SENT_RECORDS_TOOL, { period: 'this_week', channel: 'Reddit' })
     expect(r.data).toMatchObject({
       totals: { all: 1, replies_to_comments: 1 },
-      records: [{ link: 'https://www.reddit.com/r/inmoxr/comments/1/x/our1/' }],
+      records: [{ link: 'https://www.reddit.com/r/ivraxr/comments/1/x/our1/' }],
     })
   })
 })
@@ -210,10 +210,10 @@ describe('发布报告', () => {
   it('报表块、同一系列同一周期 = 同一个键、第几版；没点名的去处不记', async () => {
     const { run, created, recorded } = setup()
     const input = {
-      title: 'r/inmoxr 周报（10/11 – 10/16）',
+      title: 'r/ivraxr 周报（10/11 – 10/16）',
       period: '10/11 – 10/16',
       period_start: '2026-10-11',
-      series: 'r/inmoxr 周报',
+      series: 'r/ivraxr 周报',
       markdown: '# 周报\n\n## 1. 帖子\n',
     }
     const first = await run(PUBLISH_REPORT_TOOL, input)
@@ -225,7 +225,7 @@ describe('发布报告', () => {
       reportDedupeKey({
         workspace_id: WS,
         assignment_id: 'asg_1',
-        series: 'r/inmoxr 周报',
+        series: 'r/ivraxr 周报',
         period_key: '2026-10-11',
       }),
     )

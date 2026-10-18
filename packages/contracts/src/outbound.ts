@@ -183,7 +183,7 @@ export type SinkErrorCode =
 export interface RecordSink {
   id: string
   workspace_id: WorkspaceId
-  /** 用户交代的去处名字（「INMO 回复记录表」）；界面上只显示它。 */
+  /** 用户交代的去处名字（「IVRA 回复记录表」）；界面上只显示它。 */
   name: string
   /** 用户的原话（留底，改的时候 AI 再读）。 */
   instruction: string

@@ -19,8 +19,8 @@ import {
 } from '../src/index.js'
 import { TestClock } from './helpers.js'
 
-const A = 'ws_0llwvcm2' // 启动品牌（INMO 那种）
-const B = 'ws_19cxxs7l' // 后加的品牌（Rollout 那种）
+const A = 'ws_0llwvcm2' // 启动品牌（IVRA 那种）
+const B = 'ws_19cxxs7l' // 后加的品牌（Rovella 那种）
 
 interface WireConn {
   id: string
@@ -212,8 +212,8 @@ describe('WP252 两个品牌连同一个 provider', () => {
     const a = brand(rt, A, owners)
     const b = brand(rt, B, owners)
 
-    const ca = await submit(a, A, 'secret-of-inmo')
-    const cb = await submit(b, B, 'secret-of-rollout')
+    const ca = await submit(a, A, 'secret-of-ivra')
+    const cb = await submit(b, B, 'secret-of-rovella')
 
     expect(rt.puts.map((p) => p.connectionName)).toEqual([
       'default--ws_0llwvcm2',
@@ -221,8 +221,8 @@ describe('WP252 两个品牌连同一个 provider', () => {
     ])
     expect(rt.conns).toHaveLength(2)
     expect(ca.id).not.toBe(cb.id)
-    expect(rt.conns.find((c) => c.id === ca.id)?.secret).toBe('secret-of-inmo')
-    expect(rt.conns.find((c) => c.id === cb.id)?.secret).toBe('secret-of-rollout')
+    expect(rt.conns.find((c) => c.id === ca.id)?.secret).toBe('secret-of-ivra')
+    expect(rt.conns.find((c) => c.id === cb.id)?.secret).toBe('secret-of-rovella')
     // 界面上的别名不带品牌段
     expect(ca.alias).toBe('default')
     expect(cb.alias).toBe('default')
@@ -519,7 +519,7 @@ describe('WP252 OAuth 那条路', () => {
       configured: true,
       default: true,
       secret: 'oauth-token',
-      profile: { accountId: 'g', displayName: 'hello@rollout.example' },
+      profile: { accountId: 'g', displayName: 'hello@rovella.example' },
     })
     expect(await b.pollConnect(started.request_id)).toBe('connected')
     expect(owners.ownerOf('g-1')?.workspace_id).toBe(B)

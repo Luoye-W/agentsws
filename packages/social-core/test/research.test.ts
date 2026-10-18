@@ -64,8 +64,8 @@ function browserStandIn(kind: ReadBrowserSessionKind = 'readonly_isolated') {
         status: 'ok' as const,
         items: [
           {
-            url: '/r/augmentedreality/comments/abc/inmo_air3/',
-            title: 'INMO Air3 after a week',
+            url: '/r/augmentedreality/comments/abc/ivra_air3/',
+            title: 'IVRA Air3 after a week',
             subreddit: 'r/augmentedreality',
             score: 120,
             num_comments: 45,
@@ -99,7 +99,7 @@ function router(opts: {
 
 const SEARCH = {
   capability: 'social.reddit.search' as const,
-  input: { query: 'INMO', time_window: 'week' },
+  input: { query: 'IVRA', time_window: 'week' },
 }
 
 describe('研究取数白名单', () => {
@@ -147,7 +147,7 @@ describe('Reddit 两路取数', () => {
   it('默认先走接口中台；成了就不碰浏览器；记来源与是否命中缓存', async () => {
     const hub = hubStandIn({
       ok: true,
-      items: [{ url: 'https://www.reddit.com/r/a/comments/1/x/', title: 'INMO', score: 3 }],
+      items: [{ url: 'https://www.reddit.com/r/a/comments/1/x/', title: 'IVRA', score: 3 }],
       cached: true,
       credits: 0.4,
       fetched_at: NOW,
@@ -181,7 +181,7 @@ describe('Reddit 两路取数', () => {
     ])
     expect(got.items[0]).toMatchObject({
       kind: 'post',
-      url: 'https://www.reddit.com/r/augmentedreality/comments/abc/inmo_air3/',
+      url: 'https://www.reddit.com/r/augmentedreality/comments/abc/ivra_air3/',
       subreddit: 'augmentedreality',
       score: 120,
       comments: 45,
@@ -254,7 +254,7 @@ describe('Reddit 两路取数', () => {
   it('浏览器那一路只读、只开 Reddit 的页面', () => {
     for (const req of [
       SEARCH,
-      { capability: 'social.reddit.search' as const, input: { query: 'INMO', subreddit: 'r/Foo' } },
+      { capability: 'social.reddit.search' as const, input: { query: 'IVRA', subreddit: 'r/Foo' } },
       { capability: 'social.reddit.posts' as const, input: { subreddit: 'augmentedreality' } },
       {
         capability: 'social.reddit.comments' as const,
@@ -346,7 +346,7 @@ function item(p: Partial<ResearchItem> & { url: string }): ResearchItem {
 
 describe('最近 N 天在聊什么（排序）', () => {
   it('主体：去掉意图词取第一个词', () => {
-    expect(primaryEntityHead('INMO reddit 这周')).toBe('inmo')
+    expect(primaryEntityHead('IVRA reddit 这周')).toBe('ivra')
     expect(primaryEntityHead('review Xreal One')).toBe('xreal')
   })
 
@@ -354,19 +354,19 @@ describe('最近 N 天在聊什么（排序）', () => {
     const items: ResearchItem[] = [
       item({
         url: 'https://www.reddit.com/r/a/comments/1/x/?utm_source=x',
-        title: 'INMO Air3 review',
+        title: 'IVRA Air3 review',
         published_at: '2026-10-04T12:00:00Z',
         engagement: { score: 50 },
       }),
       item({
         url: 'https://old.reddit.com/r/a/comments/1/x',
-        title: 'INMO Air3 review',
+        title: 'IVRA Air3 review',
         published_at: '2026-10-04T12:00:00Z',
         engagement: { score: 50, comments: 10 },
       }),
       item({
         url: 'https://www.reddit.com/r/a/comments/2/y/',
-        title: 'Old INMO thread',
+        title: 'Old IVRA thread',
         published_at: '2026-06-01T00:00:00Z',
       }),
       item({
@@ -381,20 +381,20 @@ describe('最近 N 天在聊什么（排序）', () => {
           platform: 'x',
           route: 'official_api',
           author: 'Spammy',
-          title: `INMO post ${n}`,
+          title: `IVRA post ${n}`,
           published_at: '2026-10-03T00:00:00Z',
         }),
       ),
     ]
-    const res = rankTrendItems(items, { topic: 'INMO 这周', now: NOW, window_days: 30 })
+    const res = rankTrendItems(items, { topic: 'IVRA 这周', now: NOW, window_days: 30 })
     expect(res.out_of_window).toBe(1)
     expect(res.duplicates).toBe(1)
-    const merged = res.ranked.find((r) => r.item.title === 'INMO Air3 review')
+    const merged = res.ranked.find((r) => r.item.title === 'IVRA Air3 review')
     expect(merged?.seen_count).toBe(2)
     expect(merged?.item.engagement?.comments).toBe(10)
     const viral = res.ranked.find((r) => r.item.title?.startsWith('Best'))
     expect(viral?.entity_miss).toBe(true)
-    expect(res.ranked[0]?.item.title).toBe('INMO Air3 review')
+    expect(res.ranked[0]?.item.title).toBe('IVRA Air3 review')
     expect(res.ranked.filter((r) => r.item.author === 'Spammy')).toHaveLength(3)
   })
 })
@@ -519,7 +519,7 @@ describe('报告与进卡片流的建议', () => {
 
   it('按话题 / 情绪 / 平台分组；正文里每条带链接、平台、日期、来自哪一路', () => {
     const report = buildResearchReport({
-      topic: 'INMO',
+      topic: 'IVRA',
       window_days: 7,
       now: NOW,
       ranked: [

@@ -10,12 +10,12 @@ import {
 } from '../src/index.js'
 
 const BRIEF =
-  '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+  '用 agentsws-theme 给 Rovella 搭英文首页（星际机甲正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 
 describe('WP264 短标题', () => {
   it('退路：原话前 20 字宽加「…」（中文一格、英文半格），换行压成一个空格', () => {
     expect(fallbackShortTitle(`  ${BRIEF.replace('：', '：\n')}`)).toBe(
-      '用 agentsws-theme 给 Rollout 搭英文首页…',
+      '用 agentsws-theme 给 Rovella 搭英文首页…',
     )
     expect(fallbackShortTitle('字'.repeat(30))).toBe(`${'字'.repeat(SHORT_TITLE_FALLBACK)}…`)
   })
@@ -25,10 +25,10 @@ describe('WP264 短标题', () => {
   })
 
   it('模型回来的去引号、前缀、句号；只取第一行', () => {
-    expect(cleanShortTitle('标题：「Rollout 英文首页 · 深色科技风」。\n解释：……')).toBe(
-      'Rollout 英文首页 · 深色科技风',
+    expect(cleanShortTitle('标题：「Rovella 英文首页 · 深色科技风」。\n解释：……')).toBe(
+      'Rovella 英文首页 · 深色科技风',
     )
-    expect(cleanShortTitle('**Rollout 首页**')).toBe('Rollout 首页')
+    expect(cleanShortTitle('**Rovella 首页**')).toBe('Rovella 首页')
   })
 
   it('超长截到上限；空话回空串', () => {

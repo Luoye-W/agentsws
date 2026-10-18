@@ -58,7 +58,7 @@ function exec(h: ReturnType<typeof hub>, budget?: number, price?: number) {
   })
 }
 
-const search = (request: RunRequest, input: Record<string, unknown> = { query: 'INMO' }) => ({
+const search = (request: RunRequest, input: Record<string, unknown> = { query: 'IVRA' }) => ({
   name: 'read_reddit',
   input,
   request,
@@ -66,14 +66,14 @@ const search = (request: RunRequest, input: Record<string, unknown> = { query: '
 
 describe('WP236 ③ action 缺省推断', () => {
   it('有 query → search；有 subreddit → posts；有 post_url → comments', () => {
-    expect(inferRedditAction({ query: 'INMO glasses' })).toBe('search')
+    expect(inferRedditAction({ query: 'IVRA glasses' })).toBe('search')
     expect(inferRedditAction({ subreddit: 'smartglasses' })).toBe('posts')
     expect(inferRedditAction({ post_url: 'https://www.reddit.com/r/a/comments/1/' })).toBe(
       'comments',
     )
     // 搜某个版里的词：query 带 subreddit 仍是搜帖子
-    expect(inferRedditAction({ query: 'INMO', subreddit: 'smartglasses' })).toBe('search')
-    expect(redditReadRequestOf({ query: 'INMO' })).toMatchObject({
+    expect(inferRedditAction({ query: 'IVRA', subreddit: 'smartglasses' })).toBe('search')
+    expect(redditReadRequestOf({ query: 'IVRA' })).toMatchObject({
       capability: 'social.reddit.search',
     })
     expect(redditReadRequestOf({ subreddit: 'smartglasses' })).toMatchObject({
@@ -106,7 +106,7 @@ describe('WP236 ⑦ 默认 10 条', () => {
     const h = hub()
     const run = exec(h)
     await run(search(run1))
-    await run(search(run1, { query: 'INMO', limit: 30 }))
+    await run(search(run1, { query: 'IVRA', limit: 30 }))
     expect(h.asked).toEqual([10, 30])
   })
 })

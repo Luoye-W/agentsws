@@ -33,7 +33,7 @@ describe('YouTube 字幕（page_captions）', () => {
       ok: true,
       video_id: 'okvideo0001',
       title: 'Air3 unboxing',
-      channel: 'INMO Official',
+      channel: 'IVRA Official',
       duration_seconds: 95,
       language: 'en',
       auto_generated: false,

@@ -155,7 +155,7 @@ describe('判定：codex → 自带搜索；其他 → 我们的链', () => {
     const native = fakeNative(async () => ({ sources: [{ url: 'https://heise.de/a' }] }))
     const { search } = setup({ native: native.port, markets: ['DE'] })
     await search.search('smarte Brille Test', 5, CODEX)
-    await search.search('INMO 智能眼镜 竞品', 5, CODEX)
+    await search.search('IVRA 智能眼镜 竞品', 5, CODEX)
     expect(native.calls.map((c) => c.locale)).toEqual([
       { language: 'de', market: 'DE' },
       { language: 'zh-CN' },

@@ -102,7 +102,7 @@ export function similarTitles(a: string | undefined, b: string | undefined): boo
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * 一个词在正文里有没有**整词**出现（大小写不敏感）：`INMO` 不命中 `inmobiliaria`，`e-bike` 命中 `E-Bike`。
+ * 一个词在正文里有没有**整词**出现（大小写不敏感）：`IVRA` 不命中 `ivrabiliaria`，`e-bike` 命中 `E-Bike`。
  * 带中日韩字的词按子串算（这些文字没有词边界）。引号包着的当一个短语。
  */
 export function termHit(haystack: string, term: string): boolean {

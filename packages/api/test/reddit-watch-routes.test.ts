@@ -129,7 +129,7 @@ describe('插件这一侧', () => {
     const body = {
       outcome: 'done',
       message: 'ok',
-      user: 'inmo_official',
+      user: 'ivra_official',
       parts: [{ key: 'inbox', ok: true, items: [item], pages: 1, reached_stop: true }],
     }
     expect((await w.plugin('POST', '/v1/extension/reddit/rj_1/result', w.token, body)).status).toBe(
@@ -149,7 +149,7 @@ describe('工作台这一侧', () => {
     expect(
       (
         await w.owner('PUT', '/v1/reddit-watch/settings', {
-          own_subreddits: ['inmoxr'],
+          own_subreddits: ['ivraxr'],
           every_hours: 12,
         })
       ).status,
@@ -176,7 +176,7 @@ describe('工作台这一侧', () => {
     ).toBe(200)
     expect(w.calls).toContain('items:{"source":"inbox","reply":true}')
     expect(w.calls).toContain('digest:2026-10-11T00:00:00.000Z')
-    expect(w.calls).toContain('settings:{"own_subreddits":["inmoxr"],"every_hours":12}')
+    expect(w.calls).toContain('settings:{"own_subreddits":["ivraxr"],"every_hours":12}')
   })
 
   it('WP340：设置收重点版块 / 各版块一周几次 / 告警词 / 标签词；收起优先提醒', async () => {

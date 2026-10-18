@@ -68,17 +68,17 @@ describe('WP341 外部图片白名单', () => {
 
     // 已连店铺：品牌档案里的 Shopify 店铺地址 + 公司 / 官网域名
     await call(s, 'PUT', '/v1/workspace/profile', {
-      legal_name: 'Rollout',
+      legal_name: 'Rovella',
       storefront_platform: 'shopify',
-      domain: 'shop.rollout.example',
+      domain: 'shop.rovella.example',
     })
     s.onboarding.setShopifyDomain(
       s.bootstrap.workspace.id as WorkspaceId,
-      'rollout-test.myshopify.com',
+      'rovella-test.myshopify.com',
     )
     const withShop = await view(await call(s, 'GET', '/v1/settings/image-hosts'))
     expect(withShop.shop_hosts).toEqual(
-      expect.arrayContaining(['rollout-test.myshopify.com', 'shop.rollout.example']),
+      expect.arrayContaining(['rovella-test.myshopify.com', 'shop.rovella.example']),
     )
 
     // 对话里的分配是职责那一条（不是负责人）：照样看得到、加得了

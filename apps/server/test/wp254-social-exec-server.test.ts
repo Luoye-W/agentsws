@@ -91,10 +91,10 @@ describe('WP254 回帖卡批了就发（Reddit：没有 OAuth → 官方号浏�
     const account = await data<{ id: string }>(
       await post('/v1/social/accounts', {
         channel: 'reddit',
-        handle: 'r/inmoxr',
-        display_name: 'INMO XR',
-        url: 'https://www.reddit.com/r/inmoxr/',
-        external_id: 'inmoxr',
+        handle: 'r/ivraxr',
+        display_name: 'IVRA XR',
+        url: 'https://www.reddit.com/r/ivraxr/',
+        external_id: 'ivraxr',
         own_subreddit: true,
       }),
     )

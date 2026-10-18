@@ -14,7 +14,7 @@ import type { ShopifyCloudConnection, ShopifyOauthAttemptStatus } from '@agentsw
 /** 授权页的假地址（`.invalid` 保留域，RFC 2606：永远解析不出来）。 */
 export const SHOPIFY_STAND_IN_AUTHORIZE_BASE = 'https://shopify.demo.invalid/admin/oauth/authorize'
 
-/** 应用 B（Rollout 指定店铺应用）的那套权限（docs/92 第一步）。 */
+/** 应用 B（Rovella 指定店铺应用）的那套权限（docs/92 第一步）。 */
 export const SHOPIFY_STAND_IN_SCOPES = [
   'read_products',
   'write_products',
@@ -93,7 +93,7 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
     a.status = 'connected'
     bound.set(`${a.brand ?? ''}|${a.shop}`, {
       shop: a.shop,
-      app: 'rollout',
+      app: 'rovella',
       ...(a.brand === undefined ? {} : { brand: a.brand }),
       status: 'connected',
       scopes: [...(options.scopes ?? SHOPIFY_STAND_IN_SCOPES)],
@@ -120,7 +120,7 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
           {
             attempt_id: id,
             authorize_url: `${SHOPIFY_STAND_IN_AUTHORIZE_BASE}?shop=${encodeURIComponent(shop)}&state=${id}`,
-            app: 'rollout',
+            app: 'rovella',
             scopes: [...(options.scopes ?? SHOPIFY_STAND_IN_SCOPES)],
             expires_at: new Date(Date.parse(now()) + 10 * 60_000).toISOString(),
           },

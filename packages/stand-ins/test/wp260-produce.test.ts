@@ -27,7 +27,7 @@ describe('looksUnfinished：「我接下来要…」', () => {
   })
 
   it.each([
-    '预览好了：推成了一份未发布主题「Rollout 首页 v1」，线上没动。预览：https://x/?preview_theme_id=1',
+    '预览好了：推成了一份未发布主题「Rovella 首页 v1」，线上没动。预览：https://x/?preview_theme_id=1',
     '首页加载慢主要在三处：首屏大图没压缩、第三方脚本、字体。按影响从大到小……',
     '还没登录 Shopify。请到建站岗位页点「登录 Shopify」，登好再让我接着做。',
     '首屏横幅的文案你想用中文还是英文？',

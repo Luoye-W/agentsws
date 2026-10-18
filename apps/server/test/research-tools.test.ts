@@ -23,7 +23,7 @@ function browser(): RedditReadBrowser & { opened: BrowserAction[] } {
       opened.push(a)
       return {
         status: 'ok',
-        items: [{ url: 'https://www.reddit.com/r/a/comments/1/x/', title: 'INMO' }],
+        items: [{ url: 'https://www.reddit.com/r/a/comments/1/x/', title: 'IVRA' }],
       }
     },
   }
@@ -48,7 +48,7 @@ function exec(opts: {
 
 const SEARCH = {
   name: 'read_reddit',
-  input: { action: 'search', query: 'INMO', time_window: 'week' },
+  input: { action: 'search', query: 'IVRA', time_window: 'week' },
   request,
 }
 
@@ -58,10 +58,10 @@ describe('WP220 read_reddit 执行器', () => {
       callData: async (capability, input) => {
         expect(capability).toBe('social.reddit.search')
         // WP236：不给条数就取 10 条
-        expect(input).toEqual({ query: 'INMO', time_window: 'week', limit: 10 })
+        expect(input).toEqual({ query: 'IVRA', time_window: 'week', limit: 10 })
         return {
           capability,
-          items: [{ url: 'https://www.reddit.com/r/a/comments/9/y/', title: 'INMO Air3' }],
+          items: [{ url: 'https://www.reddit.com/r/a/comments/9/y/', title: 'IVRA Air3' }],
           quantity: 1,
           credits: 0.2,
           cached: true,

@@ -35,7 +35,7 @@ export type RedditReadKind =
   | 'sub_rules'
 
 export interface RedditReadRequest {
-  /** 这一路的键（本机服务按它记「上次读到哪」）：`inbox`、`sub_new:inmoxr`… */
+  /** 这一路的键（本机服务按它记「上次读到哪」）：`inbox`、`sub_new:ivraxr`… */
   key: string
   kind: RedditReadKind
   /** `sub_new` / `sub_comments` 要。不带 `r/`。 */

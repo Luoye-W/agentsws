@@ -123,10 +123,10 @@ async function registerOwnSub(own = true): Promise<string> {
   const account = await data<{ id: string }>(
     await post('/v1/social/accounts', {
       channel: 'reddit',
-      handle: 'r/inmoxr',
-      display_name: 'INMO XR',
-      url: 'https://www.reddit.com/r/inmoxr/',
-      external_id: 'inmoxr',
+      handle: 'r/ivraxr',
+      display_name: 'IVRA XR',
+      url: 'https://www.reddit.com/r/ivraxr/',
+      external_id: 'ivraxr',
       own_subreddit: own,
     }),
   )
@@ -150,7 +150,7 @@ describe('WP256 Reddit 自家版新帖进「群里的帖子」', () => {
     expect(rows.find((r) => r.external_id === 't3_new1')).toMatchObject({
       id: 'ct_reddit_t3_new1',
       text: 'First impressions\nHinge feels solid.',
-      account_name: 'INMO XR',
+      account_name: 'IVRA XR',
     })
     // WP257（决策 152）：入库就按规则打标签（仍不出卡、不转客服）
     expect(rows.every((r) => r.triage !== undefined && r.triage_by === 'rule')).toBe(true)

@@ -217,6 +217,7 @@ describe('WP344：岗位与首页同步到 10-15', () => {
         readFileSync(join(root, CHANGELOG_DIR, f), 'utf8'),
       ),
     ].join('\n')
-    expect(all).not.toMatch(/DataForSEO|Apify|INMO|Treg|Hunter|OpenRouter|Rollout/iu)
+    // 客户名不在这里列（列了就等于公开了）：全仓的客户名检查在 scripts/check-no-internal-docs.mjs，名单从环境变量读。
+    expect(all).not.toMatch(/DataForSEO|Apify|Treg|Hunter|OpenRouter/iu)
   })
 })

@@ -60,7 +60,7 @@ async function boot(
     liveDataIntervalMs: 0,
     env: {
       AGENTSWS_OWNER_EMAIL: 'wang@nordvolt.cn',
-      AGENTSWS_WORKSPACE_NAME: 'INMO 代运营',
+      AGENTSWS_WORKSPACE_NAME: 'IVRA 代运营',
       [SECRETS_KEY_ENV]: SECRETS_KEY,
     },
     mdns: () => ({ reason: '测试里不开局域网' }),
@@ -167,7 +167,7 @@ const plansIn = (server: Server, ws: string) =>
 describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
   it('新品牌一建好，它那一套系统任务就在（不用重启），挂在它自己的工作区与负责人名下', async () => {
     const { server } = await boot()
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const tasks = server.schedule.scheduler.list({ workspace_id: b.workspace_id })
     const ids = tasks.map((t) => t.id)
     expect(ids).toContain(`sched_mail_poll__${b.workspace_id}`)
@@ -187,7 +187,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
   it('视图停在 A：B 的定时任务准点触发，计划卡只进 B 的队列、事件只记在 B 名下', async () => {
     const { server, clock } = await boot()
     const a = bootstrapWho(server)
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const at = new Date(Date.parse(T0) + 60_000).toISOString()
     const taskA = await planTask(server, a, 'A 品牌的早报', at)
     const taskB = await planTask(server, b, 'B 品牌的早报', at)
@@ -229,7 +229,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
   it('B 的收信照常：B 那条收信任务只拉 B 的邮箱，A 那条只拉 A 的', async () => {
     const { server } = await boot()
     const a = bootstrapWho(server)
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const connect = async (who: Who, email: string) => {
       const res = await call(server, who, 'POST', '/v1/connections/imap_smtp/submit', {
         alias: email,
@@ -244,7 +244,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
       })
       expect([200, 201]).toContain(res.status)
     }
-    await connect(a, 'ops@inmo.example')
+    await connect(a, 'ops@ivra.example')
     await connect(b, 'hello@tws.example')
     const outB = await server.schedule.scheduler.runNow(`sched_mail_poll__${b.workspace_id}`)
     const outA = await server.schedule.scheduler.runNow('sched_mail_poll')
@@ -253,15 +253,15 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     expect(reportB.accounts).toBe(1)
     expect(reportA.accounts).toBe(1)
     expect(reportB.failed.join()).toContain('hello@tws.example')
-    expect(reportB.failed.join()).not.toContain('ops@inmo.example')
-    expect(reportA.failed.join()).toContain('ops@inmo.example')
+    expect(reportB.failed.join()).not.toContain('ops@ivra.example')
+    expect(reportA.failed.join()).toContain('ops@ivra.example')
     expect(reportA.failed.join()).not.toContain('hello@tws.example')
   })
 
   it('B 品牌急停只停 B：B 到点不跑、对外与模型被拦；A 照常；放开之后补跑', async () => {
     const { server, clock } = await boot()
     const a = bootstrapWho(server)
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     // 视图停在 A，从 A 这边按下 B 的急停
     const halted = await call<BrandBackgroundView>(
       server,
@@ -321,7 +321,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     const dbDir = mkdtempSync(join(tmpdir(), 'agentsws-wp215-'))
     const { server, clock } = await boot(makeClock(), { dbDir })
     const a = bootstrapWho(server)
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     clock.advance(2 * 60_000)
     await server.schedule.scheduler.runNow(`sched_mail_poll__${b.workspace_id}`)
 
@@ -358,7 +358,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
   it('学习回路不串品牌：B 里批的口径卡写进 B 的知识库，A 一条都看不到', async () => {
     const { server } = await boot()
     const a = bootstrapWho(server)
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const gap = await call<{ id: string }>(server, b, 'POST', '/v1/knowledge/gaps', {
       question: '耳机保修几个月？',
       subject: { type: 'policy', key: 'tws_warranty' },
@@ -386,7 +386,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
 
   it('公司管理员（不是 B 的负责人、也不在 B 里）也能停 B；普通成员不行（Fable 10-05）', async () => {
     const { server } = await boot()
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const org = await orgOf(server)
     const a = server.bootstrap.workspace.id
     const join = async (email: string, role: 'admin' | 'member'): Promise<Who> => {
@@ -425,7 +425,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
 
   it('先建品牌、再分配 Reddit 职责：监控任务立即出现并按时触发；撤销后停，再分配又放开（不用重启）', async () => {
     const { server, clock } = await boot()
-    const b = await addBrand(server, 'INMO Reddit 代运营')
+    const b = await addBrand(server, 'IVRA Reddit 代运营')
     const id = `sched_pr_monitor__${b.workspace_id}`
     // 还没人担公关职责：没有这一条
     expect(server.schedule.scheduler.get(id)).toBeUndefined()
@@ -482,7 +482,7 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
 
   it('分配一条新岗位：这个人在 B 的每日计划 / 复盘立即建上；撤了就停', async () => {
     const { server } = await boot()
-    const b = await addBrand(server, '变形金刚耳机独立站')
+    const b = await addBrand(server, '星际机甲耳机独立站')
     const asg = server.roles.assignments.create({
       person_id: server.bootstrap.person.id,
       workspace_id: b.workspace_id,

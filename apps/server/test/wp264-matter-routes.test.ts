@@ -8,7 +8,7 @@ import { createServer, type Server } from '../src/index.js'
 
 const T0 = '2026-10-08T01:00:00.000Z'
 const BRIEF =
-  '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+  '用 agentsws-theme 给 Rovella 搭英文首页（星际机甲正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 
 let server: Server
 let runs = 0
@@ -61,7 +61,7 @@ describe('WP264 事项标题', () => {
     const { matter } = await data<{ matter: Matter }>(res)
     await new Promise((r) => setTimeout(r, 0))
     const now = server.work.getMatter(matter.id)
-    expect(now?.title).toBe('用 agentsws-theme 给 Rollout 搭英文首页…')
+    expect(now?.title).toBe('用 agentsws-theme 给 Rovella 搭英文首页…')
     expect(now?.title_source).toBe('brief')
     // 原话全文还是时间线第一条人话
     const said = server.work.store

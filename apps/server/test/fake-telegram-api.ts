@@ -65,7 +65,7 @@ export function createFakeTelegram(options: { now: () => string }): FakeTelegram
   let updateSeq = 500_000
   const messageSeq = new Map<number, number>()
   const site: FakeTelegram = {
-    bot: { id: 4242, username: 'inmo_helper_bot' },
+    bot: { id: 4242, username: 'ivra_helper_bot' },
     privacy: false,
     webhook: '',
     chats: new Map(),

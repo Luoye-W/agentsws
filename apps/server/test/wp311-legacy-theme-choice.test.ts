@@ -1,5 +1,5 @@
 /**
- * WP311（决策 480，高级主题 v0.11.0 已上架）：工作目录是**旧的自带主题**（WP301 之前从 agentsws-theme 起底的，Rollout 那种）时，
+ * WP311（决策 480，高级主题 v0.11.0 已上架）：工作目录是**旧的自带主题**（WP301 之前从 agentsws-theme 起底的，Rovella 那种）时，
  * 第一次起底 / 说「换主题」不再直接复制 Horizon，照 WP304 出**选主题卡**（高级主题一行 + 店里已装主题）。
  *
  * 钉住：出卡就停、店里与工作目录一个字节不动；选了店里的主题 → 新起一份未发布的、旧目录挪去 legacy/ 原样留着、线上不动；
@@ -32,8 +32,8 @@ import {
 import { createThemeToolExecutor } from '../src/theme-tools.js'
 
 const T0 = '2026-10-14T09:00:00.000Z'
-const SHOP = '6suegp-md.myshopify.com'
-const WS = 'ws_rollout'
+const SHOP = '6demox-md.myshopify.com'
+const WS = 'ws_rovella'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 

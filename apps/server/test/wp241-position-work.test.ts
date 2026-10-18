@@ -103,7 +103,7 @@ describe('buildPositionWork', () => {
           id: 'post_1',
           channel: 'reddit',
           status: 'scheduled',
-          body: 'r/INMO 每周问答帖',
+          body: 'r/IVRA 每周问答帖',
           scheduled_at: '2026-10-09T01:00:00.000Z',
         },
         { id: 'post_x', channel: 'tiktok', status: 'scheduled', body: '不是这个岗位的' },
@@ -247,7 +247,7 @@ describe('GET /v1/positions/:id/work', () => {
         await call(
           'POST',
           '/v1/schedules',
-          { title: 'r/INMO 入群审核', trigger: { kind: 'interval', every_ms: 7_200_000 } },
+          { title: 'r/IVRA 入群审核', trigger: { kind: 'interval', every_ms: 7_200_000 } },
           social,
         )
       ).status,
@@ -258,7 +258,7 @@ describe('GET /v1/positions/:id/work', () => {
     const kinds = view.items.map((i) => `${i.kind}:${i.title}`)
     expect(kinds).toContain('matter:帮我做一份 Reddit 调研')
     expect(kinds).toContain('todo:私信版主问 flair')
-    expect(kinds).toContain('schedule:r/INMO 入群审核')
+    expect(kinds).toContain('schedule:r/IVRA 入群审核')
     const todoItem = view.items.find((i) => i.kind === 'todo')
     expect(todoItem?.role_id).toBe('social.reddit')
     expect(todoItem?.assignment_id).toBe(social)
@@ -271,7 +271,7 @@ describe('GET /v1/positions/:id/work', () => {
   it('#73 拆出去：自家版那条职责的待办、定时、事项跟着走，原岗位不再列', async () => {
     const social = held.get('social.reddit') ?? ''
     await call('POST', `/v1/positions/${positionId}/matters`, {
-      title: '整理 r/INMO 版规',
+      title: '整理 r/IVRA 版规',
       role_id: 'social.reddit',
     })
     await call('POST', '/v1/todos', { title: '回复新成员' }, social)
@@ -291,9 +291,9 @@ describe('GET /v1/positions/:id/work', () => {
     expect(created).not.toBe('')
     const moved = await workOf(created)
     const titles = moved.items.map((i) => i.title)
-    expect(titles).toEqual(expect.arrayContaining(['整理 r/INMO 版规', '回复新成员', '每周问答帖']))
+    expect(titles).toEqual(expect.arrayContaining(['整理 r/IVRA 版规', '回复新成员', '每周问答帖']))
     const left = (await workOf(positionId)).items.map((i) => i.title)
-    expect(left).not.toContain('整理 r/INMO 版规')
+    expect(left).not.toContain('整理 r/IVRA 版规')
     expect(left).not.toContain('回复新成员')
     expect(left).not.toContain('每周问答帖')
   })

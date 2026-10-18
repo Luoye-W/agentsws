@@ -75,8 +75,8 @@ const input = (i: number, over: Partial<OutboundRecordInput> = {}): OutboundReco
   channel: 'reddit',
   action: 'reply',
   kind: 'outbound_draft',
-  destination: 'r/inmoxr',
-  thread_url: `https://www.reddit.com/r/inmoxr/comments/p${i}/`,
+  destination: 'r/ivraxr',
+  thread_url: `https://www.reddit.com/r/ivraxr/comments/p${i}/`,
   content: `reply ${i}`,
   external_id: `t1_r${i}`,
   parent_external_id: `t3_p${i}`,
@@ -107,7 +107,7 @@ async function confirmed(s: ReturnType<typeof setup>) {
   const p = await s.log.propose(WS, {
     url: URL_A,
     instruction: '以后每发一条 Reddit 都记到这张表，日期写成 2026/10/14',
-    name: 'INMO 回复记录',
+    name: 'IVRA 回复记录',
     columns: [{ column: '日期', source: { field: 'sent_date', format: { date: 'YYYY/MM/DD' } } }],
     filter: { channels: ['reddit'] },
     actor,
@@ -168,7 +168,7 @@ describe('记录去处', () => {
     const p = await s.log.propose(WS, {
       url: URL_A,
       instruction: '记到这张表',
-      name: 'INMO 回复记录',
+      name: 'IVRA 回复记录',
       columns: [{ column: '日期', source: { field: 'sent_date', format: { date: 'YYYY/MM/DD' } } }],
       actor,
     })
@@ -183,8 +183,8 @@ describe('记录去处', () => {
     expect(p.sample).toBe(false)
     expect(s.cards[0]?.preview).toEqual([
       ['日期', '2026/10/14'],
-      ['版块', 'r/inmoxr'],
-      ['帖子链接', 'https://www.reddit.com/r/inmoxr/comments/p1/'],
+      ['版块', 'r/ivraxr'],
+      ['帖子链接', 'https://www.reddit.com/r/ivraxr/comments/p1/'],
       ['我们回复的内容', 'reply 1'],
       ['状态', '已发'],
     ])
@@ -193,16 +193,16 @@ describe('记录去处', () => {
     await s.log.flush()
     expect(s.rows()).toHaveLength(0)
     await s.log.onDecided(decided(p.card_id as string, p.sink_id, 'approved'))
-    expect(s.log.sinks(WS)[0]).toMatchObject({ state: 'active', name: 'INMO 回复记录' })
+    expect(s.log.sinks(WS)[0]).toMatchObject({ state: 'active', name: 'IVRA 回复记录' })
     s.log.record(WS, input(3))
     await s.log.flush()
     expect(s.rows()).toEqual([
       {
         日期: '2026/10/14',
-        版块: 'r/inmoxr',
+        版块: 'r/ivraxr',
         帖子链接: {
-          text: 'https://www.reddit.com/r/inmoxr/comments/p3/',
-          link: 'https://www.reddit.com/r/inmoxr/comments/p3/',
+          text: 'https://www.reddit.com/r/ivraxr/comments/p3/',
+          link: 'https://www.reddit.com/r/ivraxr/comments/p3/',
         },
         我们回复的内容: 'reply 3',
         状态: '已发',

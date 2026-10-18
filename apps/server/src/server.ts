@@ -3301,7 +3301,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP251（决策 119）：「品牌：」按**这次运行所在的品牌**取品牌名（品牌档案里的品牌名 = 工作区的
      * `brand.name`），公司全称另起一行「公司：」（这个品牌挂的那家公司）。以前这一行一直是公司全称、
-     * 每个品牌都一样——Rollout 跑 AI 看到的是「品牌：INMO 的公司全称」。
+     * 每个品牌都一样——Rovella 跑 AI 看到的是「品牌：IVRA 的公司全称」。
      */
     brand: (ws) => {
       const target = (ws ?? workspace.id) as WorkspaceId
@@ -8912,8 +8912,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   await deepseekAccount.resume()
   /*
-   * WP251：启动品牌没挂在公司下、而它的负责人已经有一家公司（Fable 10-07 真机：INMO 没有 org_id，
-   * 加的品牌 Rollout 挂在公司下）——挂进去，kind 与加的品牌一致。放在建任何一个品牌那一套之前之后都行，
+   * WP251：启动品牌没挂在公司下、而它的负责人已经有一家公司（Fable 10-07 真机：IVRA 没有 org_id，
+   * 加的品牌 Rovella 挂在公司下）——挂进去，kind 与加的品牌一致。放在建任何一个品牌那一套之前之后都行，
    * 但必须在品牌后台起来之前（它们按「这家公司有哪些品牌」起），也必须在 DeepSeek 账号挂回来之后
    * （判"原来的公司默认品牌自己接没接模型"要建它那一套）。幂等：挂过就只剩 kind 的核对。
    */

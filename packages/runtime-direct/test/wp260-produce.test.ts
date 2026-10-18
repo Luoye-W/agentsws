@@ -28,7 +28,7 @@ const THEME_TOOLS = {
     status: 'ok' as const,
     data: {
       theme_id: '200001',
-      theme_name: 'Rollout 首页 v1',
+      theme_name: 'Rovella 首页 v1',
       preview_url: 'https://x.myshopify.com/?preview_theme_id=200001',
       changed_files: ['templates/index.json'],
     },
@@ -63,10 +63,10 @@ describe('WP260 说了要做却停下 → 续跑（direct）', () => {
           return {
             tool_calls: [
               { name: 'theme_write_file', input: { path: 'templates/index.json', content: '{}' } },
-              { name: 'theme_push_unpublished', input: { name: 'Rollout 首页 v1' } },
+              { name: 'theme_push_unpublished', input: { name: 'Rovella 首页 v1' } },
             ],
           }
-        return { text: '预览好了：推成了一份未发布主题「Rollout 首页 v1」。' }
+        return { text: '预览好了：推成了一份未发布主题「Rovella 首页 v1」。' }
       },
     })
     const result = await h.run(themeRequest(PRODUCE))
@@ -80,7 +80,7 @@ describe('WP260 说了要做却停下 → 续跑（direct）', () => {
       'theme_push_unpublished',
     ])
     expect(result.outputs).toEqual([
-      { kind: 'answer', text: '预览好了：推成了一份未发布主题「Rollout 首页 v1」。' },
+      { kind: 'answer', text: '预览好了：推成了一份未发布主题「Rovella 首页 v1」。' },
     ])
   })
 

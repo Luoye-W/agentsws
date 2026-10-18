@@ -8,8 +8,8 @@ import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-
 import { renderWithProviders } from './helpers'
 
 const base = {
-  legal_name: 'INMO Tech',
-  brand_name: 'INMO',
+  legal_name: 'IVRA Tech',
+  brand_name: 'IVRA',
   discoverable: true,
   vertical: 'goods' as const,
   storefront_platform: 'shopify' as const,

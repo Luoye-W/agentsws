@@ -142,10 +142,10 @@ function setup(host?: Partial<SetupResearchHost>) {
         brandFactsOf(
           {
             // WP346 之后的形状（有就用）
-            keywords: { brand: ['INMO'], category: ['AR glasses'], scenario: [] },
+            keywords: { brand: ['IVRA'], category: ['AR glasses'], scenario: [] },
             competitors: [{ name: 'Xreal', reason: '同品类' }],
           },
-          { name: 'INMO' },
+          { name: 'IVRA' },
         ),
       search,
       ask,
@@ -166,7 +166,7 @@ describe('出卡前先查，卡面是方案', () => {
     expect(p.mode).toBe('plan')
     const by = (k: string) => p.fields.find((f) => f.key === k)
     expect(by('keywords')).toMatchObject({
-      suggested: 'INMO, AR glasses',
+      suggested: 'IVRA, AR glasses',
       suggested_why: '品牌词和品类词',
       sources: [{ kind: 'profile' }],
     })
@@ -178,8 +178,8 @@ describe('出卡前先查，卡面是方案', () => {
     expect(by('account')).toMatchObject({ needs_you: true })
     expect(by('account')?.suggested).toBeUndefined()
     expect(by('address')).toMatchObject({ needs_you: true, required: true })
-    expect(p.steps?.map((x) => x.text)).toEqual(['看了档案：INMO', '搜到 1 条'])
-    expect(s.notes).toEqual(['看了档案：INMO', '搜到 1 条'])
+    expect(p.steps?.map((x) => x.text)).toEqual(['看了档案：IVRA', '搜到 1 条'])
+    expect(s.notes).toEqual(['看了档案：IVRA', '搜到 1 条'])
   })
 
   it('「就这样」= 方案原样存、接着做；「改一下」= 人改的值为准', async () => {
@@ -200,11 +200,11 @@ describe('出卡前先查，卡面是方案', () => {
     await s.cards.onDecided(
       decide(s.bus, again.id, 'approve_edited', {
         ...(again.payload as SetupRequestPayload),
-        values: { address: '1 Main St, Springfield', keywords: 'INMO only' },
+        values: { address: '1 Main St, Springfield', keywords: 'IVRA only' },
       }),
     )
     expect(one.applied.at(-1)).toMatchObject({
-      keywords: 'INMO only',
+      keywords: 'IVRA only',
       forums: 'r/SmartGlasses',
       alerts: 'recall, refund',
       address: '1 Main St, Springfield',
@@ -223,7 +223,7 @@ describe('出卡前先查，卡面是方案', () => {
       data: {
         ok: false,
         needs_setup: 'demo.watch',
-        suggestions: { keywords: 'INMO, Air3', account: 'u_guess' },
+        suggestions: { keywords: 'IVRA, Air3', account: 'u_guess' },
         suggestion_why: { keywords: '加上型号' },
         message: '',
       },
@@ -240,7 +240,7 @@ describe('出卡前先查，卡面是方案', () => {
     })
     const p = out?.item.payload as SetupRequestPayload
     expect(p.fields.find((f) => f.key === 'keywords')).toMatchObject({
-      suggested: 'INMO, Air3',
+      suggested: 'IVRA, Air3',
       suggested_why: '加上型号',
     })
     expect(p.fields.find((f) => f.key === 'account')?.needs_you).toBe(true)
@@ -287,7 +287,7 @@ describe('已设好再改：我打算改成这样', () => {
   it('现值 → 新值；确认后生效、不确认不动；一格都没变不出卡；账号不改', async () => {
     const s = setup()
     const t = demoTarget({
-      keywords: 'INMO',
+      keywords: 'IVRA',
       forums: 'SmartGlasses',
       account: 'brand_one',
       address: '1 Main St',
@@ -299,7 +299,7 @@ describe('已设好再改：我打算改成这样', () => {
         target: 'demo.watch',
         actor,
         change: true,
-        suggestions: { keywords: 'INMO' },
+        suggestions: { keywords: 'IVRA' },
       }),
     ).toBeUndefined()
     const out = await s.cards.askSetup({
@@ -335,7 +335,7 @@ describe('已设好再改：我打算改成这样', () => {
     })
     await s.cards.onDecided(decide(s.bus, two?.item.id as string, 'approve'))
     expect(t.saved).toMatchObject({
-      keywords: 'INMO',
+      keywords: 'IVRA',
       forums: 'SmartGlasses, Xreal',
       account: 'brand_one',
     })
@@ -427,13 +427,13 @@ describe('内置几个目标的「怎么查」', () => {
       profile: () =>
         brandFactsOf(
           { markets: ['GB'], positioning: '给通勤族的翻译眼镜。第二句不要。' },
-          { domain: 'inmo.example' },
+          { domain: 'ivra.example' },
         ),
       search: async () => [
         {
-          url: 'https://inmo.example/contact',
+          url: 'https://ivra.example/contact',
           title: 'Contact',
-          snippet: 'mail support@inmo.example or sales@other.example',
+          snippet: 'mail support@ivra.example or sales@other.example',
         },
       ],
       ask: async () => '{"one_liner":"不该问到这里"}',
@@ -447,8 +447,8 @@ describe('内置几个目标的「怎么查」', () => {
       sources: [{ kind: 'profile' }],
     })
     expect(by('support_email')).toMatchObject({
-      suggested: 'support@inmo.example',
-      sources: [{ kind: 'web', url: 'https://inmo.example/contact' }],
+      suggested: 'support@ivra.example',
+      sources: [{ kind: 'web', url: 'https://ivra.example/contact' }],
     })
     expect(steps().length).toBeGreaterThan(0)
   })
@@ -457,13 +457,13 @@ describe('内置几个目标的「怎么查」', () => {
     const t = byId('company.address')
     const hits = [
       {
-        url: 'https://inmo.example/contact',
+        url: 'https://ivra.example/contact',
         snippet: 'Visit us at 88 Harbor Road, Shenzhen 518000.',
       },
     ]
     const run = async (answer: string) => {
       const { kit } = createResearchKit({
-        profile: () => brandFactsOf({}, { domain: 'inmo.example' }),
+        profile: () => brandFactsOf({}, { domain: 'ivra.example' }),
         search: async () => hits,
         ask: async () => answer,
       })
@@ -500,19 +500,19 @@ describe('品牌档案按 WP346 的真名读', () => {
       positioning: '给通勤族的翻译眼镜。',
       subcategory: '翻译眼镜',
       audience: { buyers: '常出差的人', payer: '公司', concerns: ['续航'] },
-      keywords: { brand: ['INMO'], category: ['AR glasses'], scenario: ['meeting'] },
+      keywords: { brand: ['IVRA'], category: ['AR glasses'], scenario: ['meeting'] },
       competitors: [{ name: 'Xreal', reason: '同品类', url: 'https://xreal.example' }, { bad: 1 }],
-      website: 'https://www.inmo.example/en',
+      website: 'https://www.ivra.example/en',
       price_band: '$300–$600',
     })
     expect(f).toMatchObject({
       positioning: '给通勤族的翻译眼镜。',
       subcategory: '翻译眼镜',
       audience: { buyers: '常出差的人', concerns: ['续航'] },
-      keywords: { brand: ['INMO'], category: ['AR glasses'], scenario: ['meeting'] },
+      keywords: { brand: ['IVRA'], category: ['AR glasses'], scenario: ['meeting'] },
       competitors: [{ name: 'Xreal', reason: '同品类', url: 'https://xreal.example' }],
-      domain: 'www.inmo.example',
+      domain: 'www.ivra.example',
     })
-    expect(brandFactsOf({ website: 'x' }, { domain: 'inmo.example' }).domain).toBe('inmo.example')
+    expect(brandFactsOf({ website: 'x' }, { domain: 'ivra.example' }).domain).toBe('ivra.example')
   })
 })

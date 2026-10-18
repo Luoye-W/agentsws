@@ -36,8 +36,8 @@ import { createThemeToolExecutor } from '../src/theme-tools.js'
 import { type FakeShopifyTheme, writeFakeShopifyTheme } from './fixtures/fake-shopify-theme.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
-const SHOP = '6suegp-md.myshopify.com'
-const WS = 'ws_rollout'
+const SHOP = '6demox-md.myshopify.com'
+const WS = 'ws_rovella'
 const spec = platformKitOf('shopify')?.cli
 if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
@@ -120,7 +120,7 @@ describe('还差哪一步（岗位页与工具同一套判断）', () => {
     expect((await t.readiness()).next).toBe('login')
     machine.loggedIn = true
     expect((await t.readiness()).next).toBe('store')
-    const r = await t.setStore('https://admin.shopify.com/store/6suegp-md/themes')
+    const r = await t.setStore('https://admin.shopify.com/store/6demox-md/themes')
     expect(r).toMatchObject({
       store: SHOP,
       store_source: 'manual',
@@ -227,7 +227,7 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
           hero_1: {
             type: 'hero',
             blocks: {
-              heading: { type: '_heading', static: true, settings: { text: 'Rollout' } },
+              heading: { type: '_heading', static: true, settings: { text: 'Rovella' } },
               b1: {
                 type: 'button',
                 settings: { label: 'Shop', link: 'shopify://collections/all' },
@@ -282,9 +282,9 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
     expect((await t.check()).errors).toBe(0)
 
     // 推未发布：第一次推到起底时复制出来的那一份上、改成人起的名字；预览链接 + 改了哪些文件
-    const pushed = await t.push({ name: 'Rollout 首页 v1', request: request() })
+    const pushed = await t.push({ name: 'Rovella 首页 v1', request: request() })
     expect(pushed.theme_id).toBe(init.copy.theme_id)
-    expect(pushed.theme_name).toBe('Rollout 首页 v1')
+    expect(pushed.theme_name).toBe('Rovella 首页 v1')
     expect(pushed.preview_url).toBe(`https://${SHOP}?preview_theme_id=${pushed.theme_id}`)
     expect(pushed.changed_files).toEqual([
       'locales/en.default.json',
@@ -292,14 +292,14 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
       'templates/page.json',
     ])
     expect(previews).toEqual([
-      { matter: 'mat_1', url: pushed.preview_url, label: 'Rollout 首页 v1' },
+      { matter: 'mat_1', url: pushed.preview_url, label: 'Rovella 首页 v1' },
     ])
     expect(cli.themes().find((x) => x.id === pushed.theme_id)).toMatchObject({
       role: 'unpublished',
-      name: 'Rollout 首页 v1',
+      name: 'Rovella 首页 v1',
     })
     // 同名再推：更新同一份，不在店里堆一份又一份
-    const again = await t.push({ name: 'Rollout 首页 v1' })
+    const again = await t.push({ name: 'Rovella 首页 v1' })
     expect(again.theme_id).toBe(pushed.theme_id)
     expect(cli.themes()).toHaveLength(2)
     const pushArgs = cli
@@ -315,7 +315,7 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
     expect(remoteFiles).toContain('templates/index.json')
     expect(remoteFiles).not.toContain('CATALOG.json')
     // 换个名字再推：照老规矩另推一份未发布主题
-    const v2 = await t.push({ name: 'Rollout 首页 v2' })
+    const v2 = await t.push({ name: 'Rovella 首页 v2' })
     expect(v2.theme_id).not.toBe(pushed.theme_id)
     expect(cli.themes()).toHaveLength(3)
 
@@ -326,8 +326,8 @@ describe('起底（店里复制一份 Horizon）→ 改 → 检查 → 推未发
     const card = staged[0] as StageInput
     expect(card.kind).toBe('publish_theme')
     expect(card.level).toBe('L1')
-    expect(card.approval.title).toBe('将把主题「Rollout 首页 v1」设为线上主题')
-    expect(card.approval.summary).toContain('从「Horizon」换成「Rollout 首页 v1」')
+    expect(card.approval.title).toBe('将把主题「Rovella 首页 v1」设为线上主题')
+    expect(card.approval.summary).toContain('从「Horizon」换成「Rovella 首页 v1」')
     expect(card.approval.summary).toContain('templates/index.json')
     expect(card.before).toEqual({ theme_id: '100001', theme_name: 'Horizon' })
     expect(card.after).toMatchObject({

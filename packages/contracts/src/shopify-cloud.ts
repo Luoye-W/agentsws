@@ -37,7 +37,7 @@ export interface ShopifyOauthStart {
   attempt_id: string
   /** Shopify 自己的授权页（店主在那里点「安装」）。 */
   authorize_url: string
-  /** 用的是哪个应用（`rollout` 指定店铺应用 / `public` 公开应用）。 */
+  /** 用的是哪个应用（`rovella` 指定店铺应用 / `public` 公开应用）。 */
   app: string
   scopes: string[]
   expires_at: string

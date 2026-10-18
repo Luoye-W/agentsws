@@ -20,12 +20,12 @@ describe('WP264 retitle', () => {
     const work = make()
     const m = work.createMatter({
       kind: 'adhoc',
-      title: '用 agentsws-theme 给 Rollout 搭英文首页…',
+      title: '用 agentsws-theme 给 Rovella 搭英文首页…',
     })
-    const next = work.retitle(m.id, '  Rollout 英文首页 ·  深色科技风 ', 'ai')
-    expect(next.title).toBe('Rollout 英文首页 · 深色科技风')
+    const next = work.retitle(m.id, '  Rovella 英文首页 ·  深色科技风 ', 'ai')
+    expect(next.title).toBe('Rovella 英文首页 · 深色科技风')
     expect(next.title_source).toBe('ai')
-    expect(work.getMatter(m.id)?.title).toBe('Rollout 英文首页 · 深色科技风')
+    expect(work.getMatter(m.id)?.title).toBe('Rovella 英文首页 · 深色科技风')
   })
 
   it('人改过的不被 AI / 退路覆盖；人还能再改', () => {

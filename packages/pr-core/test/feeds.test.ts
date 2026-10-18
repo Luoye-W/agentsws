@@ -126,9 +126,9 @@ describe('拉取与贴链接校验', () => {
 })
 
 describe('本地整词过滤', () => {
-  it('整词：INMO 不命中 inmobiliaria；短语与大小写', () => {
-    expect(termHit('Inmobiliaria market update', 'INMO')).toBe(false)
-    expect(termHit('New INMO Air3 glasses', 'INMO')).toBe(true)
+  it('整词：IVRA 不命中 ivrabiliaria；短语与大小写', () => {
+    expect(termHit('Ivrabiliaria market update', 'IVRA')).toBe(false)
+    expect(termHit('New IVRA Air3 glasses', 'IVRA')).toBe(true)
     expect(termHit('The E-Bike of the year', 'e-bike')).toBe(true)
     expect(termHit('aventon level 3', '"Aventon Level"')).toBe(true)
     expect(termHit('我买了九号电动车', '九号')).toBe(true)
@@ -137,7 +137,7 @@ describe('本地整词过滤', () => {
   it('至少命中一个关键词、排除词生效', () => {
     const rows = parseFeedDoc(fx('site-rss2.xml'), NOW)?.rows ?? []
     const kept = rows.filter(
-      (r) => keywordFilter(r, { keywords: ['Aventon', 'INMO'], exclude: ['job', 'hiring'] }).keep,
+      (r) => keywordFilter(r, { keywords: ['Aventon', 'IVRA'], exclude: ['job', 'hiring'] }).keep,
     )
     expect(kept.map((r) => r.title)).toEqual([
       'Aventon Level 3 long-term review',

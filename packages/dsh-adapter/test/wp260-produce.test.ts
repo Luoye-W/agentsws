@@ -68,7 +68,7 @@ const options = (gateway: ModelGatewayLike, calls: string[]) =>
   })
 
 const READ = { id: 'c1', name: 'theme_read_file', input: { path: 'AGENTS.md' } }
-const PUSH = { id: 'c2', name: 'theme_push_unpublished', input: { name: 'Rollout 首页 v1' } }
+const PUSH = { id: 'c2', name: 'theme_push_unpublished', input: { name: 'Rovella 首页 v1' } }
 const MODES: Exclude<DshRuntimeMode, 'auto'>[] = ['in-process', 'subprocess']
 
 describe.each(MODES)('WP260 dsh（%s）：说了要做却停下 → 续跑', (mode) => {

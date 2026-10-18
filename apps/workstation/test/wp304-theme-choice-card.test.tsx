@@ -15,7 +15,7 @@ const noop = (): void => {}
 
 const payload = (over: Partial<ThemeChoicePayload> = {}): ThemeChoicePayload => ({
   form: 'theme_choice',
-  shop: 'rollout-gear.myshopify.com',
+  shop: 'rovella-gear.myshopify.com',
   premium: { status: 'buy', price_credits: 560, price_usd: 80 },
   store_themes: [
     { id: '1', name: 'Horizon', role: 'main', theme_name: 'Horizon', usable: true },

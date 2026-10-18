@@ -37,7 +37,7 @@ import {
   shopifyCloudStandIn,
 } from '../src/shopify-cloud-stand-in.js'
 
-const SHOP = 'rollout-test.myshopify.com'
+const SHOP = 'rovella-test.myshopify.com'
 const kitSpec = () => PLATFORM_KITS.find((k) => k.platform === 'shopify')?.cli?.store_admin
 const clock: Clock = { now: () => new Date().toISOString() }
 
@@ -318,7 +318,7 @@ describe('WP265 端到端：没装 CLI，连接页一键授权之后运营工具
     await call(
       'PUT',
       '/v1/workspace/profile',
-      { legal_name: 'Rollout', storefront_platform: 'shopify' },
+      { legal_name: 'Rovella', storefront_platform: 'shopify' },
       owner,
     )
     await call(
@@ -374,7 +374,7 @@ describe('WP265 端到端：没装 CLI，连接页一键授权之后运营工具
       'shop_get_product',
       'shop_save_product',
     ])
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱')
     // 到此为止云上只收到查询
     expect(cloud.shopify.graphqlCalls().every((c) => !c.allow_mutations)).toBe(true)
 
@@ -394,7 +394,7 @@ describe('WP265 端到端：没装 CLI，连接页一键授权之后运营工具
     })
     now = '2026-10-08T10:00:00.000Z'
     await server.txn.executor.applyApproval(card?.id ?? '')
-    expect(shop.products[0]?.title).toBe('Rollout 折叠收纳箱（新版）')
+    expect(shop.products[0]?.title).toBe('Rovella 折叠收纳箱（新版）')
     expect(cloud.shopify.graphqlCalls().some((c) => c.allow_mutations)).toBe(true)
   })
 })
