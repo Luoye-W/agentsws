@@ -5,17 +5,19 @@
  * 本进程里起一个 demo（真服务进程 + 演示世界 + stub 运行时，内存里，跑完即停），给店主挂上 Reddit 运营职责，
  * 用替身出四张「发出去」卡：r/Smartphones 里三张同类（换手机的帖子，AI 判断都是「和我们无关」）+ 自家版块一张。
  *
- * **端到端**（浅色那一轮）：卡底是「修改 / 不发 / 稍后」按钮 → 否掉第一张（不写理由）→ 顶上一行「另外 2 张也一并不发了」
- * → 服务端那两张真的「不发」了、自家版块那张没动 → 点快捷理由「不相关」补记 → 撤回 → 那两张回到待处理。
+ * **端到端**（浅色那一轮；10-19 更正后）：卡底是「修改 / 不发 / 稍后」按钮 → 否掉第一张（不写理由）→ 只处理这一张
+ * → 点快捷理由「不相关」→ 这一刻才按理由找（stub 剧本）→「按你的理由「不相关」，另外 2 张也一并不发了」+ 摊开清单
+ * → 服务端那两张真的「不发」了、自家版块那张没动 → 单张恢复 → 全部撤回 → 都回到待处理。
  * 再起一组：在卡身里点「发送」→ 顶上只问「要一起发送吗」，服务端一张都没自动发。不通过就退出码 1。
  *
  * **截图**（`--out` 目录，默认 `docs/assets/wp414`；审稿截图放私有仓，别提交进公开仓）：
  * 1. `1-buttons-{light,dark}`：卡底「修改 / 不发 / 稍后」按钮（「发送」在卡身里）；
- * 2. `2-drop-follow-{light,dark}`：点「不发」之后：可选快捷理由 + 「另外 2 张也一并不发了 · 看是哪几张 · 撤回」；
- * 3. `3-follow-list-{light,dark}`：展开「看是哪几张」——每张写着为什么算同类；
- * 4. `4-undone-{light,dark}`：补了理由、撤回之后；
- * 5. `5-revise-{light,dark}`：点「修改」开的那个框（说一句怎么改，或贴素材）；
- * 6. `6-send-suggest-{light,dark}`：点「发送」之后「这 2 张和刚才那张类似，要一起发送吗？」。
+ * 2. `2-drop-no-reason-{light,dark}`：点「不发」、没给理由——只处理这一张，顶上只有可选理由；
+ * 3. `3-reason-follow-{light,dark}`：点「不相关」后——「按你的理由…另外 2 张也一并不发了」+ 清单（为什么 / 恢复）；
+ * 4. `4-restore-one-{light,dark}`：单张恢复一张；
+ * 5. `5-undone-{light,dark}`：全部撤回之后；
+ * 6. `6-revise-{light,dark}`：点「修改」开的那个框（说一句怎么改，或贴素材）；
+ * 7. `7-send-suggest-{light,dark}`：点「发送」之后「这 2 张和刚才那张类似，要一起发送吗？」。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
@@ -236,56 +238,76 @@ async function main() {
       // 5. 「修改」开的框
       await bar.getByText('修改').click()
       await page.getByTestId('deck-panel-instruct').waitFor({ timeout: 10_000 })
-      await shot(page, `5-revise-${theme}`, card)
+      await shot(page, `6-revise-${theme}`, card)
       await page.getByRole('button', { name: '返回' }).click()
 
-      // 2. 否掉第一张：一下就生效
+      // 2. 否掉第一张：一下就生效；没给理由 → 只处理这一张
       await card.getByTestId('deck-action-bar').getByText('不发').click()
+      await page.getByTestId('deck-drop-reasons').waitFor({ timeout: 20_000 })
+      await page.waitForTimeout(800)
+      if (theme === 'light') {
+        check(
+          (await page.getByTestId('deck-follow-applied').count()) === 0,
+          '没给理由：顶上没有「另外 N 张」那一行',
+        )
+        check(
+          (await state(first)) === 'rejected' &&
+            (await state(second)) === 'pending' &&
+            (await state(third)) === 'pending',
+          '服务端：只处理了这一张，同类两张没动',
+        )
+      }
+      await shot(page, `2-drop-no-reason-${theme}`, deck(page))
+
+      // 3. 点理由「不相关」→ 这一刻才按理由找（stub 走剧本），清单摊开
+      await page.getByTestId('deck-drop-reasons').getByText('不相关').click()
       const applied = page.getByTestId('deck-follow-applied')
       await applied.waitFor({ timeout: 20_000 })
       if (theme === 'light') {
         check(
-          ((await applied.textContent()) ?? '').includes('另外 2 张也一并不发了'),
-          '顶上一行：另外 2 张也一并不发了',
+          ((await applied.textContent()) ?? '').includes(
+            '按你的理由「不相关」，另外 2 张也一并不发了',
+          ),
+          '顶上一行：按你的理由「不相关」，另外 2 张也一并不发了',
         )
         check(
-          (await state(first)) === 'rejected' &&
-            (await state(second)) === 'rejected' &&
-            (await state(third)) === 'rejected',
-          '服务端：第一张不发，同类两张跟着不发',
+          (await state(second)) === 'rejected' && (await state(third)) === 'rejected',
+          '服务端：判为属于这个理由的两张跟着不发',
         )
         const mine = await demo.server.txn.approvals.get(own)
         check(mine?.decision?.followed === undefined, '自家版块那张没被跟着处理')
+        check(
+          ((await page.getByTestId('deck-follow-list').textContent()) ?? '').includes('不相关'),
+          '清单每张写着为什么属于这个理由',
+        )
+        const reason = (await demo.server.txn.approvals.get(first))?.decision?.reason
+        check(reason === '不相关', `理由补记上了（${reason}）`)
       }
-      await shot(page, `2-drop-follow-${theme}`, deck(page))
+      await shot(page, `3-reason-follow-${theme}`, deck(page))
 
-      // 3. 看是哪几张
-      await page.getByTestId('deck-follow-list-toggle').click()
-      await page.getByTestId('deck-follow-list').waitFor({ timeout: 10_000 })
+      // 4. 单张恢复
+      const item = page.getByTestId('deck-follow-item').first()
+      const restoredId = await item.getAttribute('data-id')
+      await item.getByTestId('deck-follow-restore').click()
+      await item.getByTestId('deck-follow-restored').waitFor({ timeout: 10_000 })
       if (theme === 'light')
         check(
-          ((await page.getByTestId('deck-follow-list').textContent()) ?? '').includes(
-            '同在 r/Smartphones',
-          ),
-          '每张写着为什么算同类',
+          restoredId !== null && (await state(restoredId)) === 'pending',
+          '单张恢复：那张回到待处理',
         )
-      await shot(page, `3-follow-list-${theme}`, deck(page))
+      await shot(page, `4-restore-one-${theme}`, deck(page))
 
-      // 4. 补理由 + 撤回
-      await page.getByTestId('deck-drop-reasons').getByText('不相关').click()
-      await page.getByTestId('deck-drop-reason-saved').waitFor({ timeout: 10_000 })
+      // 5. 全部撤回
       await page.getByTestId('deck-follow-undo').click()
       await page.getByTestId('deck-follow-undone').waitFor({ timeout: 10_000 })
       if (theme === 'light') {
-        const reason = (await demo.server.txn.approvals.get(first))?.decision?.reason
-        check(reason === '不相关', `理由补记上了（${reason}）`)
         check(
           (await state(second)) === 'pending' && (await state(third)) === 'pending',
-          '撤回：同类两张回到待处理',
+          '全部撤回：同类两张都回到待处理',
         )
         check((await state(first)) === 'rejected', '带头那张还是不发')
       }
-      await shot(page, `4-undone-${theme}`, deck(page))
+      await shot(page, `5-undone-${theme}`, deck(page))
       // 收拾：这一轮剩下的卡不发，免得下一组翻不到
       for (const id of [second, third, own]) {
         const item = await demo.server.txn.approvals.get(id)
@@ -317,7 +339,7 @@ async function main() {
           '服务端：同类卡一张都没自动发',
         )
       }
-      await shot(page, `6-send-suggest-${theme}`, deck(page))
+      await shot(page, `7-send-suggest-${theme}`, deck(page))
       for (const id of [...sent.others, next.own]) {
         const item = await demo.server.txn.approvals.get(id)
         const tok = [...(item?.deliveries ?? [])].reverse().find((d) => d.status === 'sent')
