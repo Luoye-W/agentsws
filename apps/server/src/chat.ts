@@ -83,7 +83,7 @@ import {
   sanitizeExternal,
   scanOutboundCommitment,
 } from '@agentsws/support-core'
-import type { BackendResult } from '@agentsws/txn'
+import { type BackendResult, finalPayload } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
 import type { DirectMailInput, DirectMailResult } from './channels.js'
 import type { MatterRecordSource } from './runtime.js'
@@ -1167,7 +1167,9 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     },
 
     async deliver(item, opts): Promise<BackendResult | undefined> {
-      const payload = item.payload as {
+      // WP417（自查 C12）：「改了再发」发改过的那一版（同客服回信、回帖卡）
+      const final = finalPayload(item)
+      const payload = (final !== null && typeof final === 'object' ? final : item.payload) as {
         channel?: string
         thread_ref?: string
         body?: unknown
