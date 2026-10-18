@@ -10,11 +10,11 @@
  * GA4 / Search Console / 广告后台没接连接，一律回 `not_connected`（界面显示「去连接」而不是空图）。
  */
 import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
-import { executionOutcomeOf } from '@agentsws/contracts'
 import {
   ADS_PLATFORMS,
   adsPlatformOfRole,
   designDutyOfRole,
+  executionOutcomeOf,
   SOCIAL_CHANNELS,
   socialChannelOfRole,
 } from '@agentsws/contracts'

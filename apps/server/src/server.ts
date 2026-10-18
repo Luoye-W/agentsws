@@ -307,13 +307,6 @@ import { type B2bSalesAssembly, b2bLetterheadOf, createB2bSales } from './b2b-sa
 import { type B2bServiceAssembly, createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
-import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
-import {
-  INLINE_EXECUTION_PREFIX,
-  inlineApply,
-  readbackFor,
-  wiringOfItem,
-} from './execution/registry.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { attachBootBrandToCompany } from './boot-brand-org.js'
 import {
@@ -473,6 +466,13 @@ import {
 } from './dsh-scenes.js'
 import { createEconomicsService } from './economics.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
+import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
+import {
+  INLINE_EXECUTION_PREFIX,
+  inlineApply,
+  readbackFor,
+  wiringOfItem,
+} from './execution/registry.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
