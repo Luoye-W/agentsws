@@ -6,7 +6,8 @@
  *
  * 另外两件它管的事：
  * - 工具栏图标被按了 → 让当前页面开 / 关那块面板（插件没有 popup 窗口，
- *   面板长在页面上，因为用户要一边看那个人的主页一边看体检结果）；
+ *   面板长在页面上，因为用户要一边看那个人的主页一边看体检结果）；别的页面上打开设置页（WP409）；
+ *   图标角标跟着配对状态（配上了绿勾，WP409）；
  * - 每隔一会儿把排着的观测补上去（桌面应用可能是刚刚才打开的）。
  * - WP313：广告动作通道——连上了广告后台（可选权限）才每分钟问一次本机「有没有批好的活」，
  *   问到了就在看得见的广告后台标签页上做；页面顶上的横条点了停止 / 确认，消息回到这里。
@@ -20,6 +21,7 @@ import type { RunControl } from '@/lib/ads/executor'
 import { openAdsTab, seenAdsAccounts } from '@/lib/ads/open-tab'
 import { chromePermissions } from '@/lib/ads/permissions'
 import { pollAdsOnce } from '@/lib/ads/poller'
+import { syncPairedBadge } from '@/lib/badge'
 import type { BrokerDeps } from '@/lib/broker'
 import { flush, observe, pair, status, unpair } from '@/lib/broker'
 import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
@@ -46,6 +48,12 @@ export default defineBackground(() => {
   const deps: BrokerDeps = { store: chromeStore(), now: () => new Date().toISOString() }
 
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES })
+  // WP409：图标角标跟着配对状态走（配上了绿勾）——起来时、配上 / 解除时、每次补传时各对一次
+  const badge = (): Promise<unknown> =>
+    readSettings(deps.store)
+      .then((s) => syncPairedBadge(chrome.action, s.token !== undefined))
+      .catch(() => undefined)
+  void badge()
   // WP313：广告动作通道
   const perms = chromePermissions()
   const control: RunControl = { stop: false }
@@ -100,7 +108,9 @@ export default defineBackground(() => {
       return
     }
     if (alarm.name !== FLUSH_ALARM) return
-    void flush(deps)
+    void flush(deps).finally(() => {
+      void badge()
+    })
   })
   // 用户在设置页里给了 / 收回了广告后台的权限：马上问一次
   chrome.permissions.onAdded.addListener(() => {
@@ -110,12 +120,18 @@ export default defineBackground(() => {
 
   // 工具栏图标：没有 popup，按一下是让页面上那块面板开 / 关。
   chrome.action.onClicked.addListener((tab) => {
-    if (tab.id === undefined) return
+    // WP409（内测 10-18 #4）：不是三个平台的页面（没有 content script 在听）以前是静默——用户第一反应就是点图标，
+    // 以为插件坏了。现在打开设置页（配对、连 Reddit 都在那儿）。完整的侧边栏另见 R1。
+    const openOptions = (): void => {
+      void chrome.runtime.openOptionsPage().catch(() => undefined)
+    }
+    if (tab.id === undefined) {
+      openOptions()
+      return
+    }
     // WP313：执行器正在这个标签页上等截图授权——这一下点击就是授权（activeTab），不开红人面板
     if (noteActionClick(tab.id)) return
-    chrome.tabs.sendMessage(tab.id, { type: 'toggle-panel' }).catch(() => {
-      // 不是三个平台的页面 = 没有 content script 在听。静默。
-    })
+    chrome.tabs.sendMessage(tab.id, { type: 'toggle-panel' }).catch(openOptions)
   })
 
   chrome.runtime.onMessage.addListener(
@@ -132,6 +148,7 @@ export default defineBackground(() => {
             const out = await pair(deps, message.code)
             // WP345：配上就把版本报一次（连接卡上马上看得到）
             if (out.ok) void checkUpdate()
+            void badge()
             reply({ type: 'pair', ...out, status: await status(deps) })
             return
           }
@@ -141,6 +158,7 @@ export default defineBackground(() => {
             return
           case 'unpair':
             await unpair(deps)
+            void badge()
             reply({ type: 'status', status: await status(deps) })
             return
           case 'clear-queue':

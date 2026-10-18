@@ -16,6 +16,7 @@ import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import {
   browserSaysExtensionRequest,
+  DEFAULT_EXTENSION_LABEL,
   EXTENSION_SCOPES,
   EXTENSION_TOKEN_TTL_MS,
   type ExtensionSession,
@@ -26,6 +27,7 @@ import {
   type PairingView,
   type RedeemedToken,
   type RedeemFailure,
+  tokenLabel,
 } from './extension-store.js'
 
 /** 与内存档同一把尺：库里只存哈希。 */
@@ -173,7 +175,7 @@ export class SqliteExtensionStore implements ExtensionStore {
         sha256(code),
         input.workspace_id,
         input.person_id,
-        input.label ?? '浏览器插件',
+        input.label ?? DEFAULT_EXTENSION_LABEL,
         expires_at_ms,
       )
     return { code, expires_at: new Date(expires_at_ms).toISOString() as Iso8601 }
@@ -182,6 +184,7 @@ export class SqliteExtensionStore implements ExtensionStore {
   redeem(input: {
     code: string
     origin: string | undefined
+    label_hint?: string | undefined
   }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure } {
     const extension_id = extensionIdOfOrigin(input.origin)
     if (extension_id === undefined) return { ok: false, reason: 'bad_origin' }
@@ -209,7 +212,7 @@ export class SqliteExtensionStore implements ExtensionStore {
       .run(
         id,
         sha256(token),
-        hit.label,
+        tokenLabel(hit.label, input.label_hint),
         extension_id,
         hit.workspace_id,
         hit.person_id,

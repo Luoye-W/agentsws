@@ -22,6 +22,10 @@ export const EXT_ONBOARD_ZH: Record<string, string> = {
   'extonboard.onboarding.later': '稍后再装',
   'extonboard.onboarding.later.line': '可以先完成设置，回头在岗位页顶上那张卡里装。',
   'extonboard.paired': '插件已配上',
+  // WP409（内测 10-18 #4）：配对成功后工坊这边的明确反馈
+  'extonboard.paired.with': '插件已连上 · {who}',
+  'extonboard.paired.line': '插件已连上',
+  'extonboard.paired.hint': '在这个浏览器里配上的；插件图标右下角的绿勾也说明连着',
 }
 
 export const EXT_ONBOARD_EN: Record<string, string> = {
@@ -46,4 +50,8 @@ export const EXT_ONBOARD_EN: Record<string, string> = {
   'extonboard.onboarding.later.line':
     'You can finish setup now and install it from the card at the top of the position page.',
   'extonboard.paired': 'Extension paired',
+  'extonboard.paired.with': 'Extension connected · {who}',
+  'extonboard.paired.line': 'Extension connected',
+  'extonboard.paired.hint':
+    'Paired in this browser; the green check on the extension icon means it is connected',
 }

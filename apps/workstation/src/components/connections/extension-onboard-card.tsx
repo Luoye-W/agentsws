@@ -12,7 +12,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, CircleDashed, Puzzle } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExtensionPairingCode } from '@/components/connections/browser-extension'
 import { ExtensionInstall } from '@/components/connections/extension-install'
@@ -44,6 +44,29 @@ export function ExtensionInstallAndPair(props: { owner: string | undefined }): R
       <ExtensionPairingCode assignment={props.owner} />
       <SafetyNote text={t('extension.local_only')} />
     </div>
+  )
+}
+
+/** 令牌没起名字时的默认名（服务端 `DEFAULT_EXTENSION_LABEL`）：这时只说「插件已连上」。 */
+const DEFAULT_TOKEN_LABEL = '浏览器插件'
+
+/**
+ * WP409（内测 10-18 #4）：配对成功后工坊这边的那一行——「插件已连上 · Chrome · Windows」。
+ * 名字来自令牌（配对时按插件那个浏览器认出来的）；Chrome 不让扩展知道是哪个 Chrome 用户，只到浏览器 + 系统。
+ */
+export function ExtensionPairedLine(props: {
+  withWhom: ExtensionNeedsView['paired_with']
+}): React.ReactNode {
+  const { t } = useApp()
+  const label = props.withWhom?.label
+  return (
+    <p className="flex items-center gap-2 text-sm" data-testid="extension-onboard-paired-line">
+      <CheckCircle2 className="size-4 shrink-0 text-ws-good" aria-hidden />
+      {label === undefined || label === DEFAULT_TOKEN_LABEL
+        ? t('extonboard.paired.line')
+        : t('extonboard.paired.with', { who: label })}
+      <Hint text={t('extonboard.paired.hint')} />
+    </p>
   )
 }
 
@@ -102,6 +125,23 @@ export function ExtensionOnboardCard(props: {
 
   const v = needs.data
   const phase = onboardPhase(v, props.mode, planSent)
+  /*
+   * WP409：看着它从「没配上」变成「配上了」——就算之后整张卡要收起（都连好了），也先留一行「插件已连上」，
+   * 人在 Chrome 里输完配对码回到工坊时看得到结果。
+   */
+  const sawUnpaired = useRef(false)
+  const [justPaired, setJustPaired] = useState(false)
+  useEffect(() => {
+    if (v === undefined) return
+    if (!v.paired) sawUnpaired.current = true
+    else if (sawUnpaired.current) setJustPaired(true)
+  }, [v])
+  if (v !== undefined && phase === 'hidden' && justPaired && v.paired && !later)
+    return (
+      <div data-testid="extension-onboard" data-phase="just-paired">
+        <ExtensionPairedLine withWhom={v.paired_with} />
+      </div>
+    )
   if (v === undefined || phase === 'hidden' || later) return null
 
   const what = v.uses.map((u) => t(`extonboard.use.${u}`)).join(lang === 'en' ? ', ' : '、')
@@ -109,14 +149,9 @@ export function ExtensionOnboardCard(props: {
 
   if (phase === 'paired')
     return (
-      <p
-        className="flex items-center gap-2 text-sm"
-        data-testid="extension-onboard"
-        data-phase="paired"
-      >
-        <CheckCircle2 className="size-4 text-ws-good" aria-hidden />
-        {t('extonboard.paired')}
-      </p>
+      <div data-testid="extension-onboard" data-phase="paired">
+        <ExtensionPairedLine withWhom={v.paired_with} />
+      </div>
     )
 
   const laterButton =
@@ -167,6 +202,9 @@ export function ExtensionOnboardCard(props: {
             <p className="text-xs text-ws-muted-fg">{t('extonboard.onboarding.later.line')}</p>
           ) : null}
         </>
+      ) : null}
+      {phase === 'steps' || phase === 'plan' ? (
+        <ExtensionPairedLine withWhom={v.paired_with} />
       ) : null}
       {phase === 'steps' ? (
         <ul className="flex flex-col gap-1" data-testid="extension-onboard-steps">

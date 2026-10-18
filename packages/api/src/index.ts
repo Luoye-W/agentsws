@@ -39,8 +39,10 @@ export {
  * `createMemoryExtensionStore` 建那张表，拿 `ExtensionPort` 装配它的实现。
  */
 export {
+  browserLabelFromUserAgent,
   browserSaysExtensionRequest,
   createMemoryExtensionStore,
+  DEFAULT_EXTENSION_LABEL,
   EXTENSION_SCOPES,
   EXTENSION_TOKEN_TTL_MS,
   type ExtensionScope,
@@ -52,6 +54,7 @@ export {
   PAIRING_TTL_MS,
   type PairingView,
   type RedeemedToken,
+  tokenLabel,
 } from './extension-store.js'
 export {
   assignmentOf,
