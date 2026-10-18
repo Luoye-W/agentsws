@@ -219,6 +219,9 @@ handover:
 
 requires: []
 
+# WP419（决策 1231）：发帖不要开发者应用——到点插件打开你登录着的发帖页（能预填就预填）、你点发布；官方接口只作可选加速。
+browser_extension: { uses: [social] }
+
 quick_prompts:
   - id: week_plan
     label: { zh: "排下周的内容", en: "Plan next week" }

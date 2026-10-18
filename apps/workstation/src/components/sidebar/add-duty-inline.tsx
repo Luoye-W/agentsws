@@ -19,6 +19,7 @@ import {
   updateOrgPosition,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutyChipLabel } from '@/lib/duty-chip'
 import { cn } from '@/lib/utils'
 import { RAIL_KEY } from '@/lib/work-archive'
 
@@ -126,7 +127,7 @@ export function AddDutyInline({
               >
                 <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
                 <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
-                {lang === 'en' && r.name_en !== '' ? r.name_en : r.name}
+                {dutyChipLabel(r.id, lang === 'en' && r.name_en !== '' ? r.name_en : r.name)}
               </button>
             )
           })}

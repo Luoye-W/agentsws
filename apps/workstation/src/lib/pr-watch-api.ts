@@ -68,3 +68,26 @@ export function monitorAssignmentOf(
   }
   return undefined
 }
+
+/** WP419（自查 P5）：拉回来的提及（`/v1/pr/mentions`，最近 30 天、最多 200 条）。 */
+export interface PrMentionRowView {
+  id: string
+  url: string
+  title?: string
+  text: string
+  origin: string
+  published_at: string
+  observed_at: string
+  sentiment?: 'negative' | 'neutral' | 'positive'
+  group?: MonitorGroup
+  competitor?: string
+  seen_count: number
+}
+
+export const prMentionsKey = (assignment: string) => ['pr-mentions', assignment] as const
+
+export const getPrMentions = (assignment: string): Promise<{ rows: PrMentionRowView[] }> =>
+  api(
+    `/v1/pr/mentions?limit=200&since=${encodeURIComponent(new Date(Date.now() - 30 * 86_400_000).toISOString())}`,
+    { assignment },
+  )

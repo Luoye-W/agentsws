@@ -158,6 +158,8 @@ describe('令牌', () => {
       'ads.act',
       'reddit.read',
       'reddit.write',
+      // WP419（决策 1231）：社媒发帖交给人时回「发好了 / 不发了」
+      'social.post',
     ])
   })
 })

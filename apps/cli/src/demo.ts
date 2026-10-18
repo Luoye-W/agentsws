@@ -1371,6 +1371,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'social.facebook',
     'social.instagram',
     'social.discord',
+    // WP419（自查 R14）：Reddit 官方版块也挂上——不然左栏没有「官方版块」，截图与人工验收都看不到它
+    'social.reddit',
     'pr.monitoring',
     'pr.reddit',
     // WP75（57 §3）：投放挂一条 `ads.meta`，四条平台职责的面板骨架相同

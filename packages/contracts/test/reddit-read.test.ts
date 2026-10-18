@@ -77,13 +77,14 @@ describe('WP220 Reddit 取数路由', () => {
 })
 
 describe('WP220 研究取数白名单', () => {
-  it('只有五种取数方式', () => {
+  it('只有六种取数方式（WP419 加了用户 Chrome 里的插件）', () => {
     expect([...RESEARCH_FETCH_ROUTES]).toEqual([
       'web_search',
       'web_fetch',
       'workshop',
       'browser_readonly',
       'official_api',
+      'extension',
     ])
   })
 })

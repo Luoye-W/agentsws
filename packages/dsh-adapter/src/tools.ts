@@ -39,6 +39,7 @@ import {
   SHOP_TOOL_DEF_BY_NAME,
   SITE_HEALTH_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
+  SOCIAL_WORK_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
   SUPPORT_TOOL_DEF_BY_NAME,
   THEME_TOOL_DEF_BY_NAME,
@@ -379,6 +380,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
     // WP390：工坊服务（定义在 stand-ins 的 `runtime/workshop-service.ts`）
     WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+    // WP419：社媒发帖 / Reddit 起草出卡（定义在 stand-ins 的 `runtime/social-tools.ts`）
+    SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name) ??
     // WP343：「我的助理」五个工具
     ASSISTANT_TOOL_DEF_BY_NAME.get(name) ??
     // WP417：客服查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
@@ -554,6 +557,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP417：客服查询类工具（只读本机消息库 / 聊天库 / 社媒库）
       SUPPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP419：社媒发帖 / Reddit 起草（查只读本机；出卡不发）
+      SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

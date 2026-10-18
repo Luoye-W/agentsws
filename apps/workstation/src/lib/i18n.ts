@@ -38,6 +38,7 @@ import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { PANEL_EN, PANEL_ZH } from './i18n-panel'
 import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
+import { PR_MENTIONS_EN, PR_MENTIONS_ZH } from './i18n-pr-mentions'
 import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
@@ -1490,7 +1491,8 @@ const zh: Table = {
   'extension.ads.job.confirm': '确认提交',
   'extension.generate': '生成配对码',
   'extension.generating': '正在生成…',
-  'extension.code.once': '码 5 分钟内有效，只能用一次；去插件的设置页填进去。',
+  // WP419（自查 U12）：侧边栏里已经能就地配对
+  'extension.code.once': '码 5 分钟内有效、只能用一次：点工具栏上的工坊图标，在侧边栏里输入。',
   'extension.code.left': '还剩 {time}',
   'extension.code.left.hint':
     '去插件设置页把这 6 位数字填进去。关掉这一页它就没了，到时候再生成一个就是。',
@@ -3507,6 +3509,17 @@ const zh: Table = {
   'social.calendar.staged': '草稿建好了，已经提上去等人点头。',
   'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
   'social.calendar.no_account': '内容日历：这条渠道还没登记号',
+  // WP419（决策 1231）：登记号只要主页链接；到点插件打开你登录着的发帖页、你点发布
+  'social.summary.count': '这两周 {n} 条',
+  'social.summary.next': '这两周 {n} 条 · 下一条 {when}',
+  'social.summary.expand': '在这里排',
+  'social.summary.collapse': '收起',
+  'social.register.url': '主页链接',
+  'social.register.name': '显示名（可不填）',
+  'social.register.save': '登记',
+  'social.register.why': '不用开发者应用：到点插件打开你登录着的发帖页，你点发布。',
+  'social.media.pick': '带图',
+  'social.media.need': '这条渠道要带图片或视频：在这挑一张，或到时候在发帖页里自己选。',
   'social.empty.connect': '去连接',
   'social.calendar.compose.placeholder': '写这条要发的正文。价格、时效、保修只写事实卡里有的。',
   'social.calendar.compose.submit': '提上去',
@@ -3522,7 +3535,7 @@ const zh: Table = {
   'social.broadcast.template.placeholder': 'WhatsApp 的模板名（后台批过的那一个）',
   'social.broadcast.opt_in': '这批人都 opt-in 过，而且我举证得出来',
   'social.broadcast.copy.placeholder': '群发正文。承诺类的话（"一定""保证""包退"）会被当场拦下来。',
-  'social.broadcast.submit': '算一下受众并提上去',
+  'social.broadcast.submit': '提交群发',
   'social.broadcast.always_l1': '群发永远要人点一下：一次发出去收不回来，收的是群里的人。',
   'social.broadcast.no_account': '群发：这条渠道还没登记号 / 群',
   'social.broadcast.whatsapp_note':
@@ -5794,7 +5807,8 @@ const en: Table = {
   'extension.ads.job.confirm': 'Submit',
   'extension.generate': 'Generate a pairing code',
   'extension.generating': 'Generating…',
-  'extension.code.once': 'Valid for 5 minutes, once only; enter it in the extension settings.',
+  'extension.code.once':
+    'Valid for 5 minutes, once only: click the Workshop icon in the toolbar and enter it in the side panel.',
   'extension.code.left': '{time} left',
   'extension.code.left.hint':
     'Type these 6 digits into the extension settings. Close this page and it is gone — just generate another.',
@@ -7873,6 +7887,18 @@ const en: Table = {
   'social.calendar.always_l1':
     'Publishing always needs a human tap. Once approved it goes out at the time you set.',
   'social.calendar.no_account': 'Content calendar: no account registered on this channel yet',
+  'social.summary.count': '{n} posts in these two weeks',
+  'social.summary.next': '{n} posts in these two weeks · next {when}',
+  'social.summary.expand': 'Plan here',
+  'social.summary.collapse': 'Collapse',
+  'social.register.url': 'Profile link',
+  'social.register.name': 'Display name (optional)',
+  'social.register.save': 'Add',
+  'social.register.why':
+    'No developer app needed: on time the extension opens your signed-in composer and you click Post.',
+  'social.media.pick': 'Add image',
+  'social.media.need':
+    'This channel needs an image or video: pick one here, or choose it yourself in the composer.',
   'social.empty.connect': 'Connect',
   'social.calendar.compose.placeholder':
     'Write the post. Prices, delivery times and warranties: only what the fact cards say.',
@@ -8779,6 +8805,8 @@ const TABLES: Record<Lang, Table> = {
     ...REDDIT_WATCH_ZH,
     // WP392：竞品监控（报表卡的变化表、连接卡、计划卡）
     ...COMPETITOR_WATCH_ZH,
+    // WP419：信息监控的提及表
+    ...PR_MENTIONS_ZH,
     // WP323：「发出记录」面板与记录去处
     ...OUTBOUND_ZH,
     // WP254：下载源（换国内源再试）
@@ -8853,6 +8881,7 @@ const TABLES: Record<Lang, Table> = {
     ...OWN_SUB_EN,
     ...REDDIT_WATCH_EN,
     ...COMPETITOR_WATCH_EN,
+    ...PR_MENTIONS_EN,
     ...OUTBOUND_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,

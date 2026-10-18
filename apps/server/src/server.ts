@@ -110,6 +110,7 @@ import type {
   PersonId,
   PlatformCliSpec,
   PromptSection,
+  ReportPayload,
   RoleId,
   RunRequest,
   SearchDataPort,
@@ -482,7 +483,12 @@ import {
 import { createExtensionContributor } from './extension-contribute.js'
 import { createExtensionInstall, spawnDetached } from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
-import { createExtensionPanelPort, withApprovalVia } from './extension-panel.js'
+import {
+  createExtensionPanelPort,
+  type PanelDraftGate,
+  watchStage,
+  withApprovalVia,
+} from './extension-panel.js'
 import { brandExtensionPort } from './extension-port.js'
 import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 // WP322：FAQ 表导入（认列 → 定规矩卡 → 一行一张知识卡）
@@ -671,6 +677,7 @@ import { createPrAlertsService, type PrAlertsService } from './pr-alerts/service
 import { markManualFallback, withBrowserBuild } from './pr-alerts/setup.js'
 import { createGoogleAlertsTool } from './pr-alerts/tool.js'
 import { createPrService } from './pr-service.js'
+import { buildMonitorBrief, localDate as localBriefDate } from './pr-watch/brief.js'
 import {
   createPrMonitorToolExecutor,
   createPrWatch,
@@ -733,7 +740,12 @@ import {
   settleRedditWrite,
   socialRedditFill,
 } from './reddit-write/wire.js'
-import { combineWatchSources, createReportToolExecutor, type WatchSource } from './report-tools.js'
+import {
+  combineWatchSources,
+  createReportToolExecutor,
+  reportDedupeKey,
+  type WatchSource,
+} from './report-tools.js'
 import { createResearchToolExecutor, redditHubOf, redditReadPrice } from './research-tools.js'
 import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
@@ -863,6 +875,7 @@ import { isSocialExecutableApproval } from './social-executor.js'
 import { modelReplyDrafter } from './social-reply-draft.js'
 import { createSocialService } from './social-service.js'
 import { modelTagReviewer } from './social-tags.js'
+import { createSocialToolExecutor } from './social-tools.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -5396,14 +5409,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
         if (workRef === undefined || holder === undefined) return undefined
         const todo = workRef.createTodo({
-          title: `复制文案去 ${channel_label} 发`,
+          title: `去 ${channel_label} 发这一条（插件侧边栏里能打开发帖页）`,
           owner: holder.person_id,
           note: `${post.body}\n\n——\n原定时间：${post.scheduled_at ?? '批了就发'}。没自动发出去的原因：${reason}`,
           horizon: 'today',
           source: 'card',
           position_id: holder.id,
         })
-        return { todo_id: todo.id }
+        return { todo_id: todo.id, owner: holder.person_id }
+      },
+      // WP419：交给人发的那一条在插件里回了话（发好了 / 不发了）→ 那条待办收掉
+      closeManualTask: (todo_id) => {
+        try {
+          workRef?.complete(todo_id as never)
+        } catch {
+          // 人已经自己勾过 / 删了：不管
+        }
       },
     })
 
@@ -6518,6 +6539,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP385（决策 1076）：网站运营 / 内容与搜索读体检结论（只读；正在体检就等它跑完）
             siteHealthTools: createSiteHealthToolExecutor({ service: () => siteHealth }),
+            // WP419（自查 R10 / S3）：Reddit 起草出卡、社媒发帖排期出卡（只出卡；发不发永远人点）
+            socialWorkTools: createSocialToolExecutor({
+              redditWatch: () => redditWatchLate.current,
+              redditWrites: () => redditWrites,
+              social: () => socialService.port,
+              now: () => clock.now(),
+              stageLine: async () => {
+                const rw = redditWatchLate.current
+                if (rw === undefined) return undefined
+                return watchStage(rw, await redditDraftGateOf(ws))?.text
+              },
+              askPersona: async (actor) => {
+                if (redditPersona.shouldAsk())
+                  await (await setupCardsOf(ws))
+                    ?.askSetup({ target: REDDIT_PERSONA_TARGET, actor: actor as never })
+                    .catch(() => undefined)
+              },
+            }),
             setupRequestTool: createSetupRequestTool({
               directory: async () =>
                 (directoryAssemblies.get(ws)?.directory() ?? []).flatMap((d) =>
@@ -6656,6 +6695,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             researchTools: chainResearchTools(
               createResearchToolExecutor({
+                // WP419：前两路都不行 → 借用户 Chrome 里的插件现读一次（巡查那一份的 readOnce；不入巡查库）
+                pluginRead: async (reads) => {
+                  const rw = redditWatchLate.current
+                  if (rw === undefined)
+                    return { ok: false, why: '这个品牌没装 Reddit 巡查（插件那一路没接）' }
+                  const got = await rw.readOnce(reads)
+                  return got.ok ? { ok: true, parts: got.result.parts } : got
+                },
                 route: () => ownCloud.redditReadRoute(),
                 limits: () => ownCloud.redditBrowserReadLimits(),
                 callData: (capability, input) =>
@@ -8567,10 +8614,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 外部关键词走与 `read_reddit` 同一条取数路由（接口中台 → 只读浏览器）。托管实例不装（云上没有用户的浏览器）。
      * AI 判断用这个品牌的默认模型、记在持有「Reddit」那条社媒职责的人头上；没人持有就只按规则、也不出卡。
      */
-    const redditHolder = () =>
+    const redditHeldBy = (role_id: string) =>
       roles.assignments
-        .listByRole('social.reddit')
+        .listByRole(role_id)
         .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+    /*
+     * WP419（自查 R4）：只担「外部版块」（公关 `pr.reddit`）也装巡查、也起草——担官方版块的人优先，没有就是
+     * 担外部版块的人；外部那一半（外部关键词 / 关注版块读到的）草稿归担外部版块的人（没人担就归官方版块那位）。
+     */
+    const redditHolder = () => redditHeldBy('social.reddit') ?? redditHeldBy('pr.reddit')
+    const redditExternalHolder = () => redditHeldBy('pr.reddit') ?? redditHeldBy('social.reddit')
     const redditSearch = createRedditReadRouter({
       route: () => ownCloud.redditReadRoute(),
       limits: () => ownCloud.redditBrowserReadLimits(),
@@ -9074,12 +9127,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()
       if (holder === undefined || redditWrites === undefined) return
-      const actor = {
+      const actorOf = (h: NonNullable<ReturnType<typeof redditHolder>>) => ({
         workspace_id: ws,
-        person_id: holder.person_id,
-        assignment_id: holder.id,
-        role_id: holder.role_id,
-      }
+        person_id: h.person_id,
+        assignment_id: h.id,
+        role_id: h.role_id,
+      })
+      const actor = actorOf(holder)
+      // WP419：外部读到的归担外部版块的人
+      const externalActor = actorOf(redditExternalHolder() ?? holder)
       if (redditPersona.get() === undefined) {
         if (redditPersona.shouldAsk())
           void (async () =>
@@ -9095,15 +9151,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           if (target === undefined) continue
           const thread = redditWatch.thread(entry.id)
           const got = await redditWrites
-            ?.draftAndStage(actor, {
+            ?.draftAndStage(entry.source === 'external' ? externalActor : actor, {
               target,
               ...(entry.judgement?.reason === undefined ? {} : { reason: entry.judgement.reason }),
               ...(thread === undefined ? {} : { thread }),
             })
             .catch(() => undefined)
           if (got !== undefined && !got.staged && got.skipped === 'already_replied')
-            redditWatch.setStatus(entry.id, 'done', { note: got.message })
+            redditWatch.setStatus(entry.id, 'done', { note: got.message, replied_before: true })
           // 决策 1199：和品牌号说过的矛盾 → 不出卡，条目留在待处理里「和你 <日期> 说的矛盾，要你看」
+          // WP419：别的原因没出卡（到了上限 / 起草出来是空的…）——条目上记一句，侧边栏照实说
+          if (got !== undefined && !got.staged && got.skipped === undefined)
+            redditWatch.setStatus(entry.id, 'open', { note: got.message, draft_failed: true })
           if (got !== undefined && !got.staged && got.skipped === 'contradiction')
             redditWatch.setStatus(entry.id, 'open', {
               note: got.message,
@@ -9197,6 +9256,95 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
     prWatchRef = prWatch
     /*
+     * WP419（自查 P8）：信息监控每天一份简报——拉完一轮之后出（同一天只一份），进担信息监控那个人的岗位报表区
+     * （与 AI 发布的报告同一种报表块；看一眼就过，不进审批队列）。没配源、没人担都不出。
+     */
+    const publishMonitorBrief = async (): Promise<boolean> => {
+      if (prWatch === undefined) return false
+      const view = prWatch.view()
+      if (view.sources.length === 0 || view.last_run === undefined) return false
+      const holder = roles.assignments
+        .listByRole('pr.monitoring')
+        .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+      if (holder === undefined) return false
+      const now = clock.now()
+      const tz = workData.tz_offset_minutes
+      const date = localBriefDate(now, tz)
+      const dedupe_key = reportDedupeKey({
+        workspace_id: ws,
+        assignment_id: holder.id,
+        series: '监控简报',
+        period_key: date,
+      })
+      if (
+        txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'weekly_review', dedupe_key })
+          .length > 0
+      )
+        return false
+      const actor = {
+        workspace_id: ws,
+        person_id: holder.person_id,
+        assignment_id: holder.id,
+        role_id: holder.role_id,
+      }
+      const since = new Date(Date.parse(now) - 7 * 86_400_000).toISOString()
+      const mentions = (await prService.port.mentions(actor as never, { since, limit: 500 })).rows
+      const brief = buildMonitorBrief({
+        now,
+        tzOffsetMinutes: tz,
+        mentions,
+        sources: view.sources.map((s) => ({
+          label: s.label,
+          group: s.group,
+          status: s.status,
+          ...(s.last_error === undefined ? {} : { last_error: s.last_error }),
+          ...(s.paused === true ? { paused: true } : {}),
+        })),
+      })
+      const payload: ReportPayload = {
+        kind: 'report',
+        series: '监控简报',
+        title: brief.title,
+        period: brief.period,
+        period_start: brief.date,
+        markdown: `${brief.markdown}\n`,
+        published_at: now,
+        version: 1,
+      }
+      await approvals.create<ReportPayload>({
+        workspace_id: ws,
+        schema_version: 1,
+        kind: 'weekly_review',
+        role_id: holder.role_id,
+        subject: { object: { type: 'workspace', id: ws } },
+        dedupe_key,
+        title: brief.title,
+        summary: brief.period,
+        payload,
+        evidence: {
+          run_id: `pr_brief_${date}`,
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+        proposer: { kind: 'system', id: 'pr_monitor_brief', assignment_id: holder.id },
+        automation: {
+          level_at_creation: 'L3',
+          auto_approved: true,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [{ person: holder.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 72, business_hours: true, chain: [], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'digest',
+      } as never)
+      return true
+    }
+    /*
      * WP387（docs/103 v2 §3.3、T1）：你的浏览器替你建 / 导入 Google 提醒。清单确认后出一张卡（一批一张、每行可勾掉），
      * 同意了才开一件事、带着凭据让你的浏览器去建；读回的 RSS 链接交给上面那份信息监控存成源（先拉一次）。
      */
@@ -9238,7 +9386,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ? { ready: true }
                 : {
                     ready: false,
-                    reason: '你的浏览器还没接上（设置 → 浏览器 → 选「我正在用的浏览器」）',
+                    reason: '你的浏览器还没接上，可以在设置里的「浏览器」选你正在用的那个',
                   },
             runs: {
               open: ({ actor, title }) =>
@@ -9283,10 +9431,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               await (await setupCardsOf(ws))
                 ?.askSetup({
                   target: PR_WATCH_TARGET,
-                  why: `${lines
-                    .map((l) => l.label)
-                    .slice(0, 6)
-                    .join('、')}没自动建成（${why}）：在这几行贴 RSS 链接就行，卡上有教程。`,
+                  // WP419（自查 U8）：一句话说清、不套括号
+                  why: `这 ${lines.length} 条没建成，贴 RSS 链接就行——${why}。`,
                   actor: actor as never,
                 })
                 .catch(() => undefined)
@@ -9398,6 +9544,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
+      // WP419：信息监控每天一份简报
+      publishMonitorBrief,
       redditWrites,
       // WP414（10-19 更正）：「不要 / 稍后」给了理由后按理由逐张判同类卡（stub / 没配走剧本）
       reasonComplete: () => {
@@ -9980,6 +10128,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles.assignments
       .listByRole(role_id, { workspace_id: ws })
       .some((a) => a.revoked_at === undefined)
+
+  /**
+   * WP419（自查 R5）：Reddit 起草前那两道门——有没有人担（官方版块或外部版块）、品牌号口吻定了没有
+   * （没定时带上工坊里那张「品牌号怎么说话」卡）。侧边栏与 AI 的 `list_reddit_pending` 用同一份。
+   */
+  const redditDraftGateOf = async (ws: WorkspaceId): Promise<PanelDraftGate> => {
+    const brand = await brandModules.forWorkspace(ws)
+    const has_owner = roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit')
+    const persona_needed =
+      brand.redditPersona !== undefined && brand.redditPersona.get() === undefined
+    const card = persona_needed
+      ? (await txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'setup_request' }))
+          .filter(
+            (c) =>
+              (c.state === 'pending' || c.state === 'in_review') &&
+              c.subject.object.id === REDDIT_PERSONA_TARGET,
+          )
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]
+      : undefined
+    return {
+      has_owner,
+      persona_needed,
+      ...(card === undefined ? {} : { persona_card_id: card.id }),
+    }
+  }
   /** 一个品牌一轮收信（邮箱轮询 + 整只邮箱同步），一个账号坏了不拖垮别的。 */
   const pollMailOf = async (
     brand: BrandModuleSet,
@@ -10187,7 +10360,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (await (await of()).siteHealth?.run()) ?? { skipped: 'not_installed' },
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
-    registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
+    registerPrMonitor(s, {
+      sweep: async () => {
+        const brand = await of()
+        const out = await brand.prService.monitorSweep()
+        // WP419（自查 P8）：拉完一轮出当天的监控简报（同一天只一份）
+        await brand.publishMonitorBrief?.().catch(() => false)
+        return out
+      },
+    })
     // WP328：Reddit 每日巡查（这个品牌的插件、版块、关键词）；没装（托管）就什么都不做
     registerRedditPatrol(s, {
       tick: async () =>
@@ -10300,8 +10481,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
         weeklyReview: held('common.owner'),
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
-        // WP328：有人持有社媒「Reddit」那条职责才建每日巡查
-        redditPatrol: held('social.reddit'),
+        // WP328：有人持有社媒「Reddit」那条职责才建每日巡查；WP419：只担公关「外部版块」也建
+        redditPatrol: held('social.reddit') || held('pr.reddit'),
         // WP392：有人担「店铺管理」或「亚马逊店铺运营」才建竞品监控那一条
         competitorWatch: held('dtc.store') || held('amz.store'),
         // WP315：有人担 Google / Meta 投放才建看数据那一条
@@ -10361,7 +10542,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
     // WP328
-    { ids: ['sched_reddit_patrol'], held: (ws) => roleHeldIn(ws, 'social.reddit') },
+    // WP328；WP419：只担「外部版块」也算
+    {
+      ids: ['sched_reddit_patrol'],
+      held: (ws) => roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit'),
+    },
     // WP315
     {
       ids: ['sched_ads_daily_export'],
@@ -14673,12 +14858,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           extensionPanel: createExtensionPanelPort({
             now: () => clock.now(),
             tzOffsetMinutes: (ws) => outboundTz.get(ws) ?? 0,
-            workspaceName: async (ws) => (await identity.getWorkspace(ws))?.name,
             watch: async (ws) => (await brandModules.forWorkspace(ws)).redditWatch,
             writes: async (ws) => (await brandModules.forWorkspace(ws)).redditWrites,
             outbound: outboundLog,
             // 插件里点「填进页面」：批完马上交出去，不等取消窗口（发送那一下仍由人在 Reddit 上点）
             applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+            // WP419（自查 R5）：起草前那两道门——有没有人担、品牌号口吻定了没有（侧边栏照实说卡在哪）
+            draftGate: redditDraftGateOf,
+            // WP419（决策 1231）：到点交给人发的社媒帖子（侧边栏里打开发帖页、人点发布、回来点发好了）
+            handoffs: async (ws) => {
+              const brand = await brandModules.forWorkspace(ws)
+              return brand.socialService.handoffs().map((post) => {
+                const account = brand.social.account(post.account_id)
+                return account === undefined ? { post } : { post, account }
+              })
+            },
+            answerPost: async (ws, post_id, answer) =>
+              (await brandModules.forWorkspace(ws)).socialService.answerHandoff(post_id, answer) !==
+              undefined,
+            // U16：侧边栏顶上写品牌名（不写内部工作区名）
+            workspaceName: async (ws) => brandNameOfWorkspace(ws),
           }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {

@@ -234,11 +234,12 @@ export function redditWatchSetupTarget(input: {
         ownWhy = '连接里登记的自家版'
       }
       return [
-        textField('own_subreddits', '自家版块', 'ivraxr', own, ownWhy),
+        // WP419（自查 U20）：占位字用通用写法，不拿某个品类的版名举例
+        textField('own_subreddits', '自家版块', '版块名，不带 r/', own, ownWhy),
         textField(
           'watch_subreddits',
           '重点版块',
-          'SmartGlasses, Xreal（每周）',
+          '版块名，逗号分开；可写「（每周）」',
           formatSubList(s.watch_subreddits ?? [], per),
           undefined,
         ),
@@ -253,7 +254,7 @@ export function redditWatchSetupTarget(input: {
         textField(
           'tag_words',
           '标签词',
-          '型号写法，如 Air3',
+          '型号写法，逗号分开',
           (s.tag_words ?? []).join(', '),
           undefined,
         ),

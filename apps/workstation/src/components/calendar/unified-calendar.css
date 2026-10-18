@@ -110,12 +110,28 @@
   line-height: 15px;
 }
 
+/*
+ * WP419（自查 U5）：非今天的表头（星期名、日期）用正文次级色——原来落在库的中性色上，
+ * 浅色下几乎看不见（只有今天是正常颜色）。和左侧小月历同一级。
+ */
+.sx-host .sx__week-grid__date,
+.sx-host .sx__week-grid__day-name,
+.sx-host .sx__week-grid__date-number {
+  color: var(--ws-body);
+}
+
 /* 今天那一列：淡绿头 + 下面一条品牌色实线（画布上一眼看出"今天在这儿"） */
 .sx-host .sx__week-grid__date--is-today,
 .sx-host .sx__month-grid-day--today .sx__month-grid-day__header-day-name {
   background: var(--ws-tint);
   border-bottom: 2px solid var(--ws-brand);
   color: var(--ws-brand-ink);
+}
+
+/* 今天那一列里的星期名、日期跟着今天的颜色走（不被上面那条正文次级色盖掉） */
+.sx-host .sx__week-grid__date--is-today .sx__week-grid__day-name,
+.sx-host .sx__week-grid__date--is-today .sx__week-grid__date-number {
+  color: inherit;
 }
 
 /* 现在线：品牌色，左端一个圆点 */

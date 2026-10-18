@@ -24,7 +24,7 @@ import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { listPeople } from '@/lib/api'
+import { getPositions, listPeople } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
   CALENDAR_VIEWS,
@@ -59,6 +59,23 @@ export function CalendarPage(): React.ReactNode {
   const [layers, setLayers] = useState<CalendarSource[]>(
     () => parseLayers(params.get('layers')) ?? loadLayers() ?? defaultLayersFor(roleHint),
   )
+  // WP419（自查 U6）：第一次直接进日历（URL 没写、本机也没记）——担着社媒职责就把「社媒排期」勾上
+  const [firstVisit] = useState(
+    () => parseLayers(params.get('layers')) === undefined && loadLayers() === undefined,
+  )
+  const positions = useQuery({
+    queryKey: ['positions'],
+    queryFn: getPositions,
+    staleTime: 60_000,
+    enabled: firstVisit && roleHint === undefined,
+  })
+  useEffect(() => {
+    if (!firstVisit || roleHint !== undefined || positions.data === undefined) return
+    const held = (positions.data.instances ?? []).flatMap((p) =>
+      p.roles.filter((r) => r.my_assignment_id !== undefined).map((r) => r.role_id),
+    )
+    setLayers(defaultLayersFor(undefined, held))
+  }, [firstVisit, roleHint, positions.data])
   const [view, setView] = useState<CalendarView>(() => loadView() ?? 'week')
   const [anchor, setAnchor] = useState(() => new Date())
   // 41 §1.2：约别人 = 向对方的代理发一张卡，对方点头才进双方日历

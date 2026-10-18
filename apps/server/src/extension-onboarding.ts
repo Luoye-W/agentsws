@@ -71,6 +71,7 @@ const USE_ZH: Record<BrowserExtensionUse, string> = {
   kol: '在 YouTube / Instagram / TikTok 页面上收红人',
   google_ads: '在你的 Google 广告后台执行批过的改动',
   meta_ads: '在你的 Meta 广告后台执行批过的改动',
+  social: '到点打开你登录着的社媒发帖页、你点发布',
 }
 
 /** 卡上与时间线上那一句为什么。 */
@@ -169,6 +170,8 @@ export function createExtensionOnboarding(
     },
     nudge: async ({ actor, matter_id, role_ids }) => {
       const ws = actor.workspace_id
+      // WP419（自查 P7）：插件需求按这件事落到的那条职责判——信息监控问提及不弹「装插件」（同岗位的外部版块才要）
+      if (extensionNeedOf(defsOf([actor.role_id])) === undefined) return false
       const need = extensionNeedOf(defsOf(role_ids ?? [actor.role_id]))
       if (need === undefined || options.paired(ws)) return false
       // 今天点过「稍后」就不在对话里再提（下一次说话、过了今天再带）；同一条分配只主动带一次

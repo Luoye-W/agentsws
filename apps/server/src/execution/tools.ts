@@ -31,6 +31,7 @@ import {
   SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
   SITE_HEALTH_TOOL_NAMES,
+  SOCIAL_WORK_TOOL_NAMES,
   THEME_TOOL_NAMES,
   toolWordZh,
   WEB_FETCH_TOOL,
@@ -78,6 +79,8 @@ export const HOST_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...WORKSHOP_SERVICE_TOOL_NAMES,
   ...COMPETITOR_STORE_TOOL_NAMES,
   ...AMAZON_COMPETITOR_TOOL_NAMES,
+  // WP419：社媒发帖 / Reddit 起草（查只读本机，起草只出卡）
+  ...SOCIAL_WORK_TOOL_NAMES,
 ])
 
 /** `mcp__shopify__get_order` → `get_order`。 */

@@ -429,9 +429,11 @@ describe('「能查什么」：grounding 里写的工具有没有执行器（决
       'list_community_threads',
       'list_mentions',
       'search_creators',
+      // WP419 接上了
+      'list_social_posts',
     ])
       expect(toolWired(name), name).toBe(true)
-    for (const name of ['list_design_requests', 'get_brand_system', 'list_social_posts'])
+    for (const name of ['list_design_requests', 'get_brand_system'])
       expect(toolWired(name), name).toBe(false)
     expect(toolWiringView('get_order')).toEqual({
       name: 'get_order',

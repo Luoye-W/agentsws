@@ -40,7 +40,7 @@ export function ExtensionInstallAndPair(props: { owner: string | undefined }): R
     <div className="flex flex-col gap-2" data-testid="extension-install-pair">
       {/* WP345：随工坊带的插件装一次（打开文件夹 / 扩展页 + 三步）；不是桌面版就不出这块 */}
       <ExtensionInstall assignment={props.owner} paired={false} />
-      {/* WP416（自查 kol U4）：一句话 + 问号；「只连本机」那句技术话收进问号 */}
+      {/* WP416（自查 kol U4）/ WP419（自查 U12）：一句话 + 问号；「只连本机 127.0.0.1」那句技术话收进问号 */}
       <p className="flex items-center gap-1 text-xs text-ws-muted-fg">
         {t('extonboard.pair')}
         <Hint text={t('extension.local_only')} />

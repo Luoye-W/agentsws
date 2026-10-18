@@ -133,6 +133,19 @@ describe('WP360 引导装插件（替身）', () => {
     expect((await ob.needs(actor, ['social.reddit'])).connect_card_id).toBeUndefined()
   })
 
+  it('WP419（自查 P7）：这件事落到的那条职责不要插件（信息监控）就不带——同岗位别的职责要也不带', async () => {
+    const { ob, log } = make()
+    const monitoring = { ...actor, role_id: 'ads.tiktok' }
+    expect(
+      await ob.nudge({
+        actor: monitoring,
+        matter_id: 'm1',
+        role_ids: ['ads.tiktok', 'social.reddit'],
+      }),
+    ).toBe(false)
+    expect(log).toEqual([])
+  })
+
   it('卡上那一句为什么按用途拼', () => {
     expect(extensionWhy(['reddit', 'kol'])).toBe(
       '这个岗位要靠浏览器插件读 Reddit、把批过的回复填进页面、在 YouTube / Instagram / TikTok 页面上收红人。装一次、配个对，以后跟着工坊自己更新。',

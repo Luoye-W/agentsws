@@ -88,6 +88,9 @@ export const PANEL_ZH: Record<string, string> = {
   'conncard.dev_setup': '需要开发者配置',
   'conncard.dev_setup.hint': '要去平台的开发者后台建应用、抄令牌。后续会换成登录态，现在先不用管。',
   'conncard.summary.no_platform': '还没选建站平台',
+  // WP419：要插件的岗位，插件没配上 / 还差一步时不说「都连好了」
+  'conncard.summary.ext_install': '插件还没装好',
+  'conncard.summary.ext_step': '插件还差一步',
   'conncard.empty': '这里不用连什么',
   'conncard.connect': '去连接',
   'conncard.connected': '已连好',
@@ -182,6 +185,8 @@ export const PANEL_EN: Record<string, string> = {
   'conncard.dev_setup.hint':
     'Requires creating an app in the platform developer console. This will move to a sign-in flow later; you can skip it for now.',
   'conncard.summary.no_platform': 'Pick a site platform first',
+  'conncard.summary.ext_install': 'Extension not set up',
+  'conncard.summary.ext_step': 'Extension needs one more step',
   'conncard.empty': 'Nothing to connect here',
   'conncard.connect': 'Connect',
   'conncard.connected': 'Connected',

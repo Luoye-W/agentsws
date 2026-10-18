@@ -110,3 +110,50 @@ export const ACTION_LABEL: Readonly<Record<string, string>> = {
   comment: '回帖',
   post: '发帖',
 }
+
+/**
+ * WP419：工坊里一张卡的本机地址（侧边栏「去定」打开它）。id 只认字母数字、下划线、连字符——别的一律不拼。
+ */
+export function workshopCardUrl(port: number, id: string): string | undefined {
+  if (!/^[A-Za-z0-9_-]{1,80}$/u.test(id) || !Number.isInteger(port) || port <= 0 || port > 65535)
+    return undefined
+  return `http://127.0.0.1:${port}/cards/${id}`
+}
+
+/** WP419：起草那一头卡在哪一步——那一行的色调（要你动手的是 warn）。 */
+export function stageTone(kind: string): 'warn' | 'wait' {
+  return kind === 'reading_thread' || kind === 'drafting' ? 'wait' : 'warn'
+}
+
+/** WP419：一道检查 → 卡上那一枚小标签。 */
+export const CHECK_LABEL: Readonly<Record<string, string>> = {
+  ungrounded: '没依据的已改掉',
+  persona: '口吻',
+  thread: '整串没现读成',
+  contradiction: '和以前说的矛盾',
+}
+
+/** WP419（决策 1231）：插件「打开发帖页」只认这几家（与契约 `SOCIAL_COMPOSE_HOSTS` 同一份写法）。 */
+export const COMPOSE_HOSTS: readonly string[] = [
+  'x.com',
+  '*.threads.net',
+  '*.linkedin.com',
+  '*.facebook.com',
+  '*.instagram.com',
+  '*.tiktok.com',
+  'studio.youtube.com',
+]
+
+/** 这个地址能不能由插件打开（https、主机在上面那张表里）。 */
+export function composeUrlAllowed(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'https:') return false
+    const host = u.hostname.toLowerCase()
+    return COMPOSE_HOSTS.some((h) =>
+      h.startsWith('*.') ? host === h.slice(2) || host.endsWith(h.slice(1)) : host === h,
+    )
+  } catch {
+    return false
+  }
+}

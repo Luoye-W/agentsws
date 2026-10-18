@@ -57,6 +57,8 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
   const suggestions = view.roles
     .filter((r) => r.my_assignment_id !== undefined)
     .flatMap((r) => r.quick_prompts ?? [])
+    // WP419（自查 U1）：几条职责的同名快捷按钮只留一个
+    .filter((q, i, all) => all.findIndex((x) => x.label.zh === q.label.zh) === i)
     .slice(0, MAX_ENTRY_SUGGESTIONS)
 
   /*

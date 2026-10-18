@@ -17,6 +17,7 @@
 import type {
   PanelCard,
   PanelFillResult,
+  PanelPost,
   PanelProgress,
   PanelRecord,
   PanelSinkView,
@@ -44,6 +45,8 @@ export interface ExtensionPanelFacts {
   /** 发出记录（新的在前；路由再按 `approval_item_id` 按人筛，筛完去掉这一格）。 */
   records: (PanelRecord & { approval_item_id?: string })[]
   sinks: PanelSinkView[]
+  /** WP419：交给人发的社媒帖子（`owner` = 担那条渠道的人；路由按人筛，筛完去掉这一格）。 */
+  posts?: (PanelPost & { owner?: string })[]
 }
 
 export interface ExtensionPanelPort {
@@ -61,6 +64,12 @@ export interface ExtensionPanelPort {
     session: ExtensionSession,
     job_id: string,
   ): MaybePromise<{ ok: true; write: PanelWrite } | { ok: false; message: string }>
+  /** WP419：交给人发的那一条，人回话（发好了 / 不发了）。不是这个品牌交给人的那一条回 `ok: false`。 */
+  answerPost?(
+    session: ExtensionSession,
+    post_id: string,
+    answer: { done: true; link?: string } | { done: false; reason?: string },
+  ): MaybePromise<{ ok: true } | { ok: false; message: string }>
 }
 
 function portOf(deps: GatewayDeps): ExtensionPanelPort {
@@ -138,25 +147,56 @@ export function panelCardOf(item: ApprovalItem): PanelCard | undefined {
   const rules = Array.isArray(p.rules)
     ? p.rules.filter((x): x is string => typeof x === 'string')
     : []
+  // WP419：几道检查（矛盾的不出卡，这里只有没依据 / 口吻 / 整串没现读成）、品牌号在这串里说过的
+  const checks = Array.isArray(p.checks)
+    ? p.checks
+        .filter(isRecord)
+        .map((x) => ({
+          kind: String(x.kind ?? ''),
+          message: String(x.message ?? ''),
+          ...(x.fixed === true ? { fixed: true } : {}),
+        }))
+        .filter((x) => x.message !== '')
+        .slice(0, 6)
+    : []
+  const prior = Array.isArray(p.prior_replies)
+    ? p.prior_replies
+        .filter(isRecord)
+        .map((x) => ({
+          text: String(x.text ?? '').slice(0, 400),
+          ...(typeof x.created_at === 'string' ? { created_at: x.created_at } : {}),
+        }))
+        .filter((x) => x.text !== '')
+        .slice(-5)
+    : []
   const title = str(b.subject)
   const opt = <K extends string>(k: K, v: string | undefined): Partial<Record<K, string>> =>
     v === undefined ? {} : ({ [k]: v } as Record<K, string>)
+  const postTitle = str(r.post_title)
+  // WP419（自查 U15）：回帖子时「回的那一句」就是原帖标题（`in_reply_to` 兜底取的标题）——不再重复一遍
+  const parentRaw = str(r.parent_text) ?? str(p.in_reply_to)
+  const parentText =
+    parentRaw !== undefined && postTitle !== undefined && parentRaw.trim() === postTitle.trim()
+      ? undefined
+      : parentRaw
   return {
     id: item.id,
     version: item.revision,
     kind,
     subreddit: sub.replace(/^\/?r\//u, ''),
     title: item.title,
-    ...opt('post_title', str(r.post_title)),
+    ...opt('post_title', postTitle),
     ...opt('post_text', str(r.post_text)),
     ...opt('parent_author', str(r.parent_author) ?? str(p.author)),
-    ...opt('parent_text', str(r.parent_text) ?? str(p.in_reply_to)),
+    ...opt('parent_text', parentText),
     ...opt('link', linkOf(str(r.permalink))),
     draft: { text: str(b.text) ?? '', ...(title === undefined ? {} : { title }) },
     ...opt('reason', str(p.reason)),
     ...(facts.length === 0 ? {} : { facts }),
     ...(rules.length === 0 ? {} : { rules }),
     ...opt('warning', str(p.warning)),
+    ...(checks.length === 0 ? {} : { checks }),
+    ...(prior.length === 0 ? {} : { prior_replies: prior }),
     created_at: item.created_at,
   }
 }
@@ -275,6 +315,10 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     if (it === undefined || !mine(it, session.person_id)) continue
     records.push(row)
   }
+  // WP419：交给人发的帖子只给担那条渠道的人（没记是谁的就给配对的人看）
+  const posts = (facts.posts ?? [])
+    .filter((p) => p.owner === undefined || p.owner === session.person_id)
+    .map(({ owner: _o, ...p }) => p)
   const person = await deps.identity.getPerson(session.person_id).catch(() => undefined)
   return {
     at: deps.clock.now(),
@@ -286,7 +330,43 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     writes,
     records,
     sinks: facts.sinks,
+    ...(posts.length === 0 ? {} : { posts }),
+    can_post: session.scopes.includes('social.post'),
   }
+}
+
+const postDoneSchema = z.object({ link: z.string().max(500).optional() }).strict()
+const postSkipSchema = z.object({ reason: z.string().max(300).optional() }).strict()
+
+/** WP419：回「发好了 / 不发了」要 `social.post`（老令牌没有：重新配对一次）。 */
+function posterOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
+  const session = viewerOf(c, deps)
+  if (!session.scopes.includes('social.post'))
+    throw new ApiError(
+      'forbidden',
+      '这把配对还不能回社媒发帖的结果。在工作台重新生成配对码、插件里再配一次。',
+    )
+  return session
+}
+
+async function answerPostOf(
+  c: Parameters<Route['handler']>[0],
+  deps: GatewayDeps,
+  answer: { done: true; link?: string } | { done: false; reason?: string },
+) {
+  const session = posterOf(c, deps)
+  const port = portOf(deps)
+  const id = param(c, 'id')
+  // 只认交给这个人的那一条（别人的一律 404，不泄漏存在性）
+  const facts = await port.facts(session)
+  const post = (facts.posts ?? []).find((p) => p.id === id)
+  if (post === undefined || (post.owner !== undefined && post.owner !== session.person_id))
+    throw new ApiError('not_found', '没有这一条，或者它不是交给你发的。')
+  if (port.answerPost === undefined)
+    throw new ApiError('not_implemented', '这个本机服务版本还不能回发帖结果，先升级 Agents 工坊。')
+  const out = await port.answerPost(session, id, answer)
+  if (!out.ok) throw new ApiError('conflict', out.message)
+  return ok(c, { ok: true as const })
 }
 
 export function extensionPanelRoutes(): Route[] {
@@ -367,6 +447,49 @@ export function extensionPanelRoutes(): Route[] {
           })
           .catch(decideError)
         return ok(c, { ok: true as const })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/posts/:id/done',
+        operationId: 'extensionPanelPostDone',
+        summary:
+          '交给你发的社媒帖子：你在自己的后台里发好了（贴回那一条的链接 = 读回确认；不贴 = 只记你说发了）',
+        tag: 'extension',
+        auth: 'public',
+        params: [{ name: 'id', in: 'path', required: true, description: '帖子 id' }],
+        body: postDoneSchema,
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => {
+        const input = await body(c, postDoneSchema)
+        const link = input.link?.trim()
+        return answerPostOf(c, deps, {
+          done: true,
+          ...(link === undefined || link === '' ? {} : { link }),
+        })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/posts/:id/skip',
+        operationId: 'extensionPanelPostSkip',
+        summary: '交给你发的社媒帖子：不发了（帖子记「没发」，待办收掉）',
+        tag: 'extension',
+        auth: 'public',
+        params: [{ name: 'id', in: 'path', required: true, description: '帖子 id' }],
+        body: postSkipSchema,
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => {
+        const input = await body(c, postSkipSchema)
+        const reason = input.reason?.trim()
+        return answerPostOf(c, deps, {
+          done: false,
+          ...(reason === undefined || reason === '' ? {} : { reason }),
+        })
       },
     ),
     route(

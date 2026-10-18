@@ -328,12 +328,14 @@ export const ROLE_SCHEMA: Node = Schema.object({
   requires: Schema.array(Schema.string()),
   /**
    * WP360（决策 947）：这条职责干活要浏览器插件，拿它做哪几样（契约 `BrowserExtensionUse`）。
-   * 枚举只认那四个词——拼错一个字就在加载时拒，不让它静默变成「不需要插件」。
+   * 枚举只认那五个词（WP419 加了 `social`）——拼错一个字就在加载时拒，不让它静默变成「不需要插件」。
    */
   // 写成「对象 | 不写」：只写 `Schema.object` 的话，不写的职责会被补成 `{}` 再判 `uses` 缺失
   browser_extension: Schema.union([
     Schema.object({
-      uses: Schema.array(Schema.union(['reddit', 'kol', 'google_ads', 'meta_ads'] as const))
+      uses: Schema.array(
+        Schema.union(['reddit', 'kol', 'google_ads', 'meta_ads', 'social'] as const),
+      )
         .min(1)
         .required(),
     }),

@@ -152,7 +152,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "af9dfc28680c6ef161dcd080c058ba9a",
+  "source_digest": "bd36a2588a102fe2d2b31553465b1717",
   "objects": [
     {
       "id": "ad",
@@ -4776,6 +4776,48 @@
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "handoff.at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handoff.owner",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "handoff.todo_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "handoff.reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_via",
+          "type": "'api' | 'extension'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "post_url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "readback",
+          "type": "'link' | 'self_report'",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": ["list_social_posts"],
@@ -7933,6 +7975,14 @@
       "lookup": []
     },
     {
+      "from": "social_post",
+      "to": "todo",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "handoff.todo_id",
+      "lookup": []
+    },
+    {
       "from": "staged_change",
       "to": "ad_account",
       "direction": "out",
@@ -8683,6 +8733,14 @@
       "cardinality": "one",
       "via": "origin.review_id",
       "lookup": ["reviews.negative"]
+    },
+    {
+      "from": "todo",
+      "to": "social_post",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_post.handoff.todo_id",
+      "lookup": ["list_social_posts"]
     },
     {
       "from": "todo",

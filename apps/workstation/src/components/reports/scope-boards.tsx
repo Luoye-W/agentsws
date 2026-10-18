@@ -27,7 +27,8 @@ import { requestCardJump, useWorkFilterRequest } from '@/components/reports/posi
 import { GeoBoard } from '@/components/seo/geo-board'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
-import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
+import { socialChannelOfRole } from '@/components/social/social-calendar'
+import { SocialCalendarSummary } from '@/components/social/social-calendar-summary'
 import { getPosition, getPositions, getPositionWork } from '@/lib/api'
 import {
   loadWorkPrefs,
@@ -193,7 +194,12 @@ export function DutyBoards({
     <div className="flex flex-col gap-4" data-testid="duty-boards" data-duty={role_id}>
       {socialChannel === undefined ? null : (
         <>
-          <SocialCalendar assignment={assignment} channel={socialChannel} />
+          {/* WP419（自查 U4）：窄栏只放一行摘要 + 去日历；要在这里排再展开 */}
+          <SocialCalendarSummary
+            assignment={assignment}
+            channel={socialChannel}
+            role_id={role_id}
+          />
           {COMMUNITY_CHANNELS.includes(socialChannel) ? (
             <SocialBroadcast assignment={assignment} channel={socialChannel} />
           ) : null}
