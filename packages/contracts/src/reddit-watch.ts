@@ -118,6 +118,10 @@ export interface RedditWatchEntry {
    * 决策 1199：自动起草出来的和品牌号说过的矛盾——没出卡，留在待处理里「要你看」（附品牌号原话与日期）。
    */
   conflict?: RedditDraftConflict
+  /** WP419：品牌号在这一串里已经回过这一条（WP411 不再起草）——侧边栏「进度」照实数出来。 */
+  replied_before?: true
+  /** WP419：自动起草没成（到了上限 / 起草出来是空的…），原因在 `note`；再起草成了就去掉。 */
+  draft_failed?: boolean
 }
 
 /** 每品牌的巡查设置（缺版块 / 缺关键词就出配置卡，按 WP324）。 */

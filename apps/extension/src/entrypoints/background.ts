@@ -33,6 +33,7 @@ import {
   panelSkipCard,
   panelState,
 } from '@/lib/panel/broker'
+import { workshopCardUrl } from '@/lib/panel/format'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
 import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
@@ -249,6 +250,14 @@ export default defineBackground(() => {
             void chrome.runtime.openOptionsPage().catch(() => undefined)
             reply({ type: 'ack' })
             return
+          case 'open-workshop-card': {
+            // WP419：只拼本机回环地址的 /cards/<id>（id 认不出就不开）
+            const url = workshopCardUrl((await readSettings(deps.store)).port, message.id)
+            if (url !== undefined)
+              void chrome.tabs.create({ url, active: true }).catch(() => undefined)
+            reply({ type: 'ack' })
+            return
+          }
           case 'ads-stop':
             control.stop = true
             reply({ type: 'ack' })

@@ -89,7 +89,12 @@ export function SidePanel(props: {
     refill: (job) => act({ type: 'panel-refill', job }),
   }
 
-  const todoCount = snap === undefined ? 0 : snap.cards.length
+  // WP419：等你定口吻那一张（在工坊里）也算一件要你处理的
+  const todoCount =
+    snap === undefined
+      ? 0
+      : snap.cards.length + (snap.progress.stage?.card_id === undefined ? 0 : 1)
+  const openCard = (id: string) => void send({ type: 'open-workshop-card', id })
   // 第一次拿到快照时定下停在哪一块（有卡 / 有正在处理的写 → 要你处理；否则进度），之后不跟着数据跳
   const opening: Tab =
     snap !== undefined && (todoCount > 0 || snap.writes.length > 0) ? 'todo' : 'progress'
@@ -169,9 +174,13 @@ export function SidePanel(props: {
               writes={snap.writes}
               actions={actions}
               canAct={snap.can_act}
+              {...(snap.progress.stage === undefined ? {} : { stage: snap.progress.stage })}
+              openCard={openCard}
             />
           ) : null}
-          {current === 'progress' ? <PanelProgressView progress={snap.progress} /> : null}
+          {current === 'progress' ? (
+            <PanelProgressView progress={snap.progress} openCard={openCard} />
+          ) : null}
           {current === 'records' ? (
             <PanelRecords records={snap.records} sinks={snap.sinks} />
           ) : null}

@@ -138,25 +138,56 @@ export function panelCardOf(item: ApprovalItem): PanelCard | undefined {
   const rules = Array.isArray(p.rules)
     ? p.rules.filter((x): x is string => typeof x === 'string')
     : []
+  // WP419：几道检查（矛盾的不出卡，这里只有没依据 / 口吻 / 整串没现读成）、品牌号在这串里说过的
+  const checks = Array.isArray(p.checks)
+    ? p.checks
+        .filter(isRecord)
+        .map((x) => ({
+          kind: String(x.kind ?? ''),
+          message: String(x.message ?? ''),
+          ...(x.fixed === true ? { fixed: true } : {}),
+        }))
+        .filter((x) => x.message !== '')
+        .slice(0, 6)
+    : []
+  const prior = Array.isArray(p.prior_replies)
+    ? p.prior_replies
+        .filter(isRecord)
+        .map((x) => ({
+          text: String(x.text ?? '').slice(0, 400),
+          ...(typeof x.created_at === 'string' ? { created_at: x.created_at } : {}),
+        }))
+        .filter((x) => x.text !== '')
+        .slice(-5)
+    : []
   const title = str(b.subject)
   const opt = <K extends string>(k: K, v: string | undefined): Partial<Record<K, string>> =>
     v === undefined ? {} : ({ [k]: v } as Record<K, string>)
+  const postTitle = str(r.post_title)
+  // WP419（自查 U15）：回帖子时「回的那一句」就是原帖标题（`in_reply_to` 兜底取的标题）——不再重复一遍
+  const parentRaw = str(r.parent_text) ?? str(p.in_reply_to)
+  const parentText =
+    parentRaw !== undefined && postTitle !== undefined && parentRaw.trim() === postTitle.trim()
+      ? undefined
+      : parentRaw
   return {
     id: item.id,
     version: item.revision,
     kind,
     subreddit: sub.replace(/^\/?r\//u, ''),
     title: item.title,
-    ...opt('post_title', str(r.post_title)),
+    ...opt('post_title', postTitle),
     ...opt('post_text', str(r.post_text)),
     ...opt('parent_author', str(r.parent_author) ?? str(p.author)),
-    ...opt('parent_text', str(r.parent_text) ?? str(p.in_reply_to)),
+    ...opt('parent_text', parentText),
     ...opt('link', linkOf(str(r.permalink))),
     draft: { text: str(b.text) ?? '', ...(title === undefined ? {} : { title }) },
     ...opt('reason', str(p.reason)),
     ...(facts.length === 0 ? {} : { facts }),
     ...(rules.length === 0 ? {} : { rules }),
     ...opt('warning', str(p.warning)),
+    ...(checks.length === 0 ? {} : { checks }),
+    ...(prior.length === 0 ? {} : { prior_replies: prior }),
     created_at: item.created_at,
   }
 }

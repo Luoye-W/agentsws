@@ -145,7 +145,15 @@ export interface RedditWatchAssembly {
      * WP411：`note` = 一句人话（「品牌号 10-12 已经回过这一条」）。
      * 决策 1199：`conflict` = 自动起草和品牌号说过的矛盾（没出卡，留在待处理里要人看）。
      */
-    extra?: { outbound_record_id?: string; note?: string; conflict?: RedditDraftConflict },
+    extra?: {
+      outbound_record_id?: string
+      note?: string
+      conflict?: RedditDraftConflict
+      /** WP419：品牌号已经回过这一条（不再起草）。 */
+      replied_before?: true
+      /** WP419：自动起草没成（原因在 `note`）；`false` = 去掉这个标记。 */
+      draft_failed?: boolean
+    },
   ): RedditWatchEntry | undefined
   /** 人点「现在巡查」。正在跑的那一轮没结束就回那一轮。 */
   runNow(): Promise<RedditWatchRun>
@@ -216,6 +224,16 @@ export interface RedditWatchAssembly {
    * 照样先读整串（插件在线时）。
    */
   redispatch(): number
+  /**
+   * WP419（自查 R5）：起草那一头卡在哪——队里等着读整串的几条、读整串那件活排着 / 在读没有、插件这会儿能不能读。
+   * 侧边栏「进度」照实说「等读整串 / 等你定口吻 / 起草中」用。
+   */
+  draftState(): {
+    queued: number
+    reading_threads: boolean
+    plugin_ready: boolean
+    plugin_why?: string
+  }
 }
 
 /** WP329：版规多久算旧（旧了下一轮再读一次）。 */
@@ -1552,6 +1570,9 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         next.outbound_record_id = extra.outbound_record_id
       if (extra?.note !== undefined) next.note = extra.note
       if (extra?.conflict !== undefined) next.conflict = extra.conflict
+      if (extra?.replied_before === true) next.replied_before = true
+      if (extra?.draft_failed === true) next.draft_failed = true
+      else if (extra?.draft_failed === false || status !== 'open') delete next.draft_failed
       store.put(next)
       emit('reddit_watch.item_status', { item_id: id, status })
       return next
@@ -1663,6 +1684,16 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         })(),
         nowMs: nowMs(),
       })
+    },
+    draftState: () => {
+      const job = jobRec()
+      const ready = pluginReady()
+      return {
+        queued: draftQueue().length,
+        reading_threads: job?.threads === true,
+        plugin_ready: ready.ok,
+        ...(ready.ok ? {} : { plugin_why: ready.why }),
+      }
     },
     redispatch: () => {
       const open = store

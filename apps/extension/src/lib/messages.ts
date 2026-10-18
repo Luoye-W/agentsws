@@ -60,6 +60,8 @@ export type ExtensionMessage =
   | { type: 'panel-refill'; job: string }
   /** 打开设置页（侧边栏里「设置」那一下）。 */
   | { type: 'open-options' }
+  /** WP419：在工坊里打开一张卡（侧边栏「去定」那一下；只认 `/cards/<id>`，后台拼本机地址）。 */
+  | { type: 'open-workshop-card'; id: string }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

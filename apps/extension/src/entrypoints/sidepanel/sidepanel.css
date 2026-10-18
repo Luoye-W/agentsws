@@ -161,6 +161,18 @@ body {
   color: var(--ws-bad);
 }
 
+/* WP419：起草卡在哪一步（一行字 + 要你动手时一个按钮） */
+.ws-stage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-stage > span {
+  flex: 1;
+  min-width: 0;
+}
+
 .ws-banner {
   display: flex;
   align-items: center;

@@ -8759,8 +8759,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             })
             .catch(() => undefined)
           if (got !== undefined && !got.staged && got.skipped === 'already_replied')
-            redditWatch.setStatus(entry.id, 'done', { note: got.message })
+            redditWatch.setStatus(entry.id, 'done', { note: got.message, replied_before: true })
           // 决策 1199：和品牌号说过的矛盾 → 不出卡，条目留在待处理里「和你 <日期> 说的矛盾，要你看」
+          // WP419：别的原因没出卡（到了上限 / 起草出来是空的…）——条目上记一句，侧边栏照实说
+          if (got !== undefined && !got.staged && got.skipped === undefined)
+            redditWatch.setStatus(entry.id, 'open', { note: got.message, draft_failed: true })
           if (got !== undefined && !got.staged && got.skipped === 'contradiction')
             redditWatch.setStatus(entry.id, 'open', {
               note: got.message,
@@ -14164,12 +14167,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           extensionPanel: createExtensionPanelPort({
             now: () => clock.now(),
             tzOffsetMinutes: (ws) => outboundTz.get(ws) ?? 0,
-            workspaceName: async (ws) => (await identity.getWorkspace(ws))?.name,
             watch: async (ws) => (await brandModules.forWorkspace(ws)).redditWatch,
             writes: async (ws) => (await brandModules.forWorkspace(ws)).redditWrites,
             outbound: outboundLog,
             // 插件里点「填进页面」：批完马上交出去，不等取消窗口（发送那一下仍由人在 Reddit 上点）
             applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+            // WP419（自查 R5）：起草前那两道门——有没有人担、品牌号口吻定了没有（侧边栏照实说卡在哪）
+            draftGate: async (ws) => {
+              const brand = await brandModules.forWorkspace(ws)
+              const has_owner = roleHeldIn(ws, 'social.reddit') || roleHeldIn(ws, 'pr.reddit')
+              const persona_needed =
+                brand.redditPersona !== undefined && brand.redditPersona.get() === undefined
+              const card = persona_needed
+                ? (
+                    await txn.runtime.store.listApprovals({
+                      workspace_id: ws,
+                      kind: 'setup_request',
+                    })
+                  )
+                    .filter(
+                      (c) =>
+                        (c.state === 'pending' || c.state === 'in_review') &&
+                        c.subject.object.id === REDDIT_PERSONA_TARGET,
+                    )
+                    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]
+                : undefined
+              return {
+                has_owner,
+                persona_needed,
+                ...(card === undefined ? {} : { persona_card_id: card.id }),
+              }
+            },
+            // U16：侧边栏顶上写品牌名（不写内部工作区名）
+            workspaceName: async (ws) => brandNameOfWorkspace(ws),
           }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {

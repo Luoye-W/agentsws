@@ -3,11 +3,12 @@
  * 点「填进页面」= 批这张卡（插件里批 = 工坊里批），插件新开一个标签页跳到那个帖子、把草稿填好；
  * **你自己在 Reddit 上点 Reply**，插件读回确认后这一条变成「已发 · 已记录」。工坊那边是同一张卡、同一份记录。
  */
-import type { PanelCard, PanelWrite } from '@agentsws/browser-action'
+import type { PanelCard, PanelStage, PanelWrite } from '@agentsws/browser-action'
 import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
 import { useState } from 'react'
-import { writeLine, writeTone } from '@/lib/panel/format'
+import { CHECK_LABEL, stageTone, writeLine, writeTone } from '@/lib/panel/format'
 import { IconCheck, IconClock, IconExternal, IconX } from './panel-icons'
+import { StageLine } from './panel-progress'
 
 export interface CardActions {
   fill(card: PanelCard, draft: { text: string; title?: string }): Promise<string | undefined>
@@ -137,6 +138,34 @@ export function CardItem(props: {
             )}
           </div>
           {c.warning === undefined ? null : <p className="ws-note ws-note--warn">{c.warning}</p>}
+          {c.checks === undefined && c.prior_replies === undefined ? null : (
+            <div className="ws-meta" data-testid="ws-checks">
+              {c.prior_replies === undefined ? null : (
+                <span
+                  className="ws-pill"
+                  title={c.prior_replies
+                    .map(
+                      (r) =>
+                        `${r.created_at === undefined ? '' : `${r.created_at.slice(5, 10)} `}${r.text}`,
+                    )
+                    .join('\n')}
+                  data-testid="ws-prior"
+                >
+                  品牌号在这串里说过 {c.prior_replies.length} 次
+                </span>
+              )}
+              {(c.checks ?? []).map((k) => (
+                <span
+                  key={`${k.kind}:${k.message}`}
+                  className={k.fixed === true ? 'ws-pill' : 'ws-pill ws-pill--warn'}
+                  title={k.message}
+                  data-testid="ws-check"
+                >
+                  {CHECK_LABEL[k.kind] ?? k.kind}
+                </span>
+              ))}
+            </div>
+          )}
           {c.kind === 'submit' ? (
             <input
               className="ws-input"
@@ -188,11 +217,20 @@ export function PanelCards(props: {
   writes: PanelWrite[]
   actions: CardActions
   canAct: boolean
+  /** WP419：起草卡在要你动手的那一步（等定口吻 / 矛盾 / 没人担…）——放在最上面一行。 */
+  stage?: PanelStage
+  openCard?: (id: string) => void
 }): React.ReactNode {
   const [openId, setOpenId] = useState<string | undefined>(props.cards[0]?.id)
   const open = openId ?? props.cards[0]?.id
   return (
     <section className="ws-sec" data-testid="ws-todo">
+      {props.stage === undefined || stageTone(props.stage.kind) !== 'warn' ? null : (
+        <StageLine
+          stage={props.stage}
+          {...(props.openCard === undefined ? {} : { openCard: props.openCard })}
+        />
+      )}
       {props.writes.length === 0 ? null : (
         <ul className="ws-writes" data-testid="ws-writes">
           {props.writes.map((w) => (

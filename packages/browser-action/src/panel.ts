@@ -36,6 +36,35 @@ export interface PanelReadPartView {
   finished_at?: string
 }
 
+/**
+ * WP419（自查 R5 / U17）：起草那一头现在卡在哪（读到了要回的、却还没出卡时才有）。照实说，不让人以为插件坏了：
+ * - `no_owner`：没人担 Reddit 运营 / 外部版块，读到的不会起草；
+ * - `reading_thread`：先在你的浏览器里读整串（插件下次来问就读），读完就起草；
+ * - `needs_plugin`：要读整串但插件这会儿读不了（Chrome 没开 / 没连 Reddit）；
+ * - `needs_persona`：等你先定品牌号怎么说话（`card_id` = 工坊里那张卡，点「去定」打开）；
+ * - `conflict`：草稿和品牌号以前说的矛盾，没出卡，等你在工坊里看；
+ * - `draft_failed`：起草没成（到了你设的上限 / 起草出来是空的…），照实说第一条原因；
+ * - `drafting`：正在起草。
+ */
+export type PanelStageKind =
+  | 'no_owner'
+  | 'reading_thread'
+  | 'needs_plugin'
+  | 'needs_persona'
+  | 'conflict'
+  | 'draft_failed'
+  | 'drafting'
+
+export interface PanelStage {
+  kind: PanelStageKind
+  /** 一句人话（「3 条等你先定品牌号怎么说话」）。 */
+  text: string
+  /** 卡在这一步的条数。 */
+  count: number
+  /** 去工坊里处理的那张卡（口吻卡）。 */
+  card_id?: string
+}
+
 /** ① 进度。 */
 export interface PanelProgress {
   /** 巡查设好了没有（自家版块 / 关键词至少一样）。 */
@@ -63,6 +92,10 @@ export interface PanelProgress {
   drafting: number
   /** 读到的、要回还没处理的几条。 */
   pending: number
+  /** WP419：起草卡在哪一步（读到了要回的、还没出卡时才有）。 */
+  stage?: PanelStage
+  /** WP419：最近 7 天品牌号已经回过、没再起草的几条（WP411）。 */
+  replied_before?: number
 }
 
 /** ② 要你处理：一张「发出去」卡（只给这个人收得到、有权批的）。 */
@@ -94,6 +127,10 @@ export interface PanelCard {
   rules?: string[]
   /** 卡上的提醒（草稿过不了检查那一句）。 */
   warning?: string
+  /** WP419：起草时那几道检查的结果（WP411：没依据 / 口吻 / 整串没现读成…；矛盾的不出卡）。 */
+  checks?: { kind: string; message: string; fixed?: boolean }[]
+  /** WP419：品牌号在这一串里已经说过的（最近几条；外部文本只当文字）。 */
+  prior_replies?: { text: string; created_at?: string }[]
   created_at: string
 }
 

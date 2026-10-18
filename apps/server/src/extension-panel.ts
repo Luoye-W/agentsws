@@ -15,6 +15,7 @@ import type {
   PanelRecord,
   PanelSinkResult,
   PanelSinkView,
+  PanelStage,
   PanelWrite,
 } from '@agentsws/browser-action'
 import type {
@@ -40,6 +41,23 @@ export const PANEL_RECORDS_MAX = 20
 export interface PanelWatch {
   view(): RedditWatchView
   items(query?: { status?: 'open' | 'drafting' | 'done' | 'dismissed' }): unknown[]
+  /** WP419：起草那一头卡在哪（老实现没有 = 不说卡在哪）。 */
+  draftState?(): {
+    queued: number
+    reading_threads: boolean
+    plugin_ready: boolean
+    plugin_why?: string
+  }
+}
+
+/** WP419：起草前那两道门（有没有人担、品牌号口吻定了没有）。 */
+export interface PanelDraftGate {
+  /** 有人担 Reddit 运营或外部版块（没人担 = 读到的不起草）。 */
+  has_owner: boolean
+  /** 口吻还没定（WP411：没定一条都不起草）。 */
+  persona_needed: boolean
+  /** 工坊里那张「品牌号怎么说话」卡（开着才有）。 */
+  persona_card_id?: string
 }
 
 /** Reddit 写那一份里侧边栏用得到的（`RedditWriteService` 的子集）。 */
@@ -68,6 +86,78 @@ export interface ExtensionPanelOptions {
   outbound: PanelOutbound
   /** 施行这张卡、不等取消窗口（`txn.executor.applyApproval(id, { skip_cancel_window: true })`）。 */
   applyNow(item_id: string): Promise<unknown>
+  /** WP419：起草前那两道门（不给 = 不说卡在哪一道门）。 */
+  draftGate?(ws: WorkspaceId): Promise<PanelDraftGate | undefined>
+}
+
+/**
+ * WP419（自查 R5 / U17）：读到了要回的、却还没出卡——照实说卡在哪一步。顺序就是起草那一头真正的先后：
+ * 没人担 → 等读整串（插件读不了就说为什么）→ 等你定口吻 → 和品牌号说过的矛盾（等你看）→ 正在起草。
+ * 什么都没卡（全出卡了 / 没有要回的）回 `undefined`。
+ */
+export function stageOf(input: {
+  /** 开着、要回、还没出卡、不是矛盾的条数。 */
+  open: number
+  /** 和品牌号说过的矛盾、没出卡的条数。 */
+  conflicts: number
+  /** 起草没成（带原因）的条数与第一条原因。 */
+  failed?: number
+  failed_why?: string
+  queued: number
+  reading_threads: boolean
+  plugin_ready: boolean
+  plugin_why?: string
+  gate?: PanelDraftGate
+}): PanelStage | undefined {
+  const { open, conflicts } = input
+  if (open === 0 && conflicts === 0) return undefined
+  if (open > 0 && input.gate?.has_owner === false)
+    return {
+      kind: 'no_owner',
+      count: open,
+      text: `读到 ${open} 条要回的，但没人担 Reddit 运营，不会起草`,
+    }
+  if (input.queued > 0 && input.reading_threads)
+    return {
+      kind: 'reading_thread',
+      count: input.queued,
+      text: `先在你的浏览器里读整串（${input.queued} 条），读完就起草`,
+    }
+  if (input.queued > 0 && !input.plugin_ready)
+    return {
+      kind: 'needs_plugin',
+      count: input.queued,
+      text: `${input.queued} 条要先读整串：${input.plugin_why ?? '插件这会儿读不了'}`,
+    }
+  if (open > 0 && input.gate?.persona_needed === true)
+    return {
+      kind: 'needs_persona',
+      count: open,
+      text: `${open} 条等你先定品牌号怎么说话`,
+      ...(input.gate.persona_card_id === undefined ? {} : { card_id: input.gate.persona_card_id }),
+    }
+  const failed = Math.min(input.failed ?? 0, open)
+  if (failed > 0)
+    return {
+      kind: 'draft_failed',
+      count: failed,
+      text: `${failed} 条没起草成：${input.failed_why ?? '原因没记下'}`,
+    }
+  if (open > 0) return { kind: 'drafting', count: open, text: `正在起草 ${open} 条` }
+  return {
+    kind: 'conflict',
+    count: conflicts,
+    text: `${conflicts} 条草稿和品牌号以前说的矛盾，没出卡，等你在工坊里看`,
+  }
+}
+
+/** 最近 7 天品牌号已经回过、没再起草的几条。 */
+export function repliedBefore(items: readonly unknown[], now: Iso8601): number {
+  const since = Date.parse(now) - PANEL_WRITES_DAYS * DAY_MS
+  return items.filter((x) => {
+    const it = x as { replied_before?: boolean; status_at?: string }
+    return it.replied_before === true && Date.parse(it.status_at ?? '') >= since
+  }).length
 }
 
 /**
@@ -254,15 +344,43 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       options.writes(ws).catch(() => undefined),
     ])
     const view = watch?.view()
-    const progress: PanelProgress =
+    let progress: PanelProgress =
       view === undefined
         ? { configured: false, reading: false, drafting: 0, pending: 0 }
         : progressOf({
             view,
-            drafting: watch?.items({ status: 'drafting' }).length ?? 0,
+            drafting: 0,
             now,
             tz_offset_minutes: options.tzOffsetMinutes(ws),
           })
+    if (view !== undefined && watch !== undefined) {
+      // WP419：「起草中」只数真在起草的（以前数的是已经出了卡的）；卡在哪一步照实说
+      const waiting = view.pending.filter((x) => x.status === 'open' && x.dup_of === undefined)
+      const conflicts = waiting.filter((x) => x.conflict !== undefined).length
+      // 起草没成、记了原因的（宿主把原因写在条目的 note 上）
+      const failedRows = waiting.filter((x) => x.conflict === undefined && x.draft_failed === true)
+      const ds = watch.draftState?.()
+      const gate = await options.draftGate?.(ws).catch(() => undefined)
+      const stage = stageOf({
+        open: waiting.length - conflicts,
+        conflicts,
+        ...(failedRows.length === 0
+          ? {}
+          : { failed: failedRows.length, failed_why: failedRows[0]?.note ?? '原因没记下' }),
+        queued: ds?.queued ?? 0,
+        reading_threads: ds?.reading_threads ?? false,
+        plugin_ready: ds?.plugin_ready ?? true,
+        ...(ds?.plugin_why === undefined ? {} : { plugin_why: ds.plugin_why }),
+        ...(gate === undefined ? {} : { gate }),
+      })
+      const replied = repliedBefore(watch.items({ status: 'done' }), now)
+      progress = {
+        ...progress,
+        drafting: stage?.kind === 'drafting' ? stage.count : 0,
+        ...(stage === undefined ? {} : { stage }),
+        ...(replied === 0 ? {} : { replied_before: replied }),
+      }
+    }
     const sinks = options.outbound.sinks(ws)
     const writesOf =
       options.outbound.writesOf === undefined
