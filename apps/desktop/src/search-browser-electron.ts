@@ -16,6 +16,7 @@ import {
   AMAZON_URL_PATTERNS,
   type AmazonDeliveryResult,
   cleanUserAgent,
+  dataUserAgent,
   type OpenRequest,
   type OpenResult,
   type SearchBrowserDriver,
@@ -128,6 +129,7 @@ export function createElectronSearchBrowser(deps: {
     wc: Electron.WebContents,
     url: string,
     timeoutMs: number,
+    userAgent?: string,
   ): Promise<
     { ok: true; status: number } | { ok: false; reason: 'timeout' | 'failed'; message: string }
   > {
@@ -170,7 +172,7 @@ export function createElectronSearchBrowser(deps: {
         }
         wc.once('dom-ready', onReady)
         wc.on('did-fail-load', onFail)
-        wc.loadURL(url).catch(() => undefined)
+        wc.loadURL(url, userAgent === undefined ? undefined : { userAgent }).catch(() => undefined)
       })
     } finally {
       wc.removeListener('did-navigate', onNavigate)
@@ -179,7 +181,13 @@ export function createElectronSearchBrowser(deps: {
 
   async function openOnce(req: OpenRequest): Promise<OpenResult> {
     const wc = slotOf(req.workspace_id).view.webContents
-    const got = await load(wc, req.url, req.timeout_ms)
+    // WP402（不伪装 UA）：读数据地址原文那一次导航自报 Agent 身份
+    const got = await load(
+      wc,
+      req.url,
+      req.timeout_ms,
+      req.kind === 'data' ? dataUserAgent(wc.session.getUserAgent()) : undefined,
+    )
     if (!got.ok) return got
     if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
     const script =
