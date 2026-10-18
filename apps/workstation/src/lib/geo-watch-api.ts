@@ -5,6 +5,7 @@
  */
 import type {
   GeoAnswerDetail,
+  GeoConsistencyRun,
   GeoMetricsView,
   GeoWatchPatch,
   GeoWatchRunResult,
@@ -63,6 +64,10 @@ export const getGeoMetrics = (assignment?: string): Promise<GeoMetricsView> =>
 /** 一条回答（全文、引用、上一期、时间线）。 */
 export const getGeoAnswer = (id: string, assignment?: string): Promise<GeoAnswerDetail> =>
   api(`/v1/seo/watch/answers/${encodeURIComponent(id)}`, as(assignment))
+
+/** WP380：现在对一次对外说法（查出东西会出一张按岗位分好的卡）。 */
+export const runGeoConsistency = (assignment?: string): Promise<GeoConsistencyRun> =>
+  api('/v1/seo/watch/consistency', { method: 'POST', body: {}, ...as(assignment) })
 
 /** 第三栏「一条回答」的资源地址：`agentsws://geo-answer/<分配>/<回答 id>`。 */
 export const GEO_ANSWER_ADDRESS_PREFIX = 'agentsws://geo-answer/'

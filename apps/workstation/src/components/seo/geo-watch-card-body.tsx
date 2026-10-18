@@ -5,6 +5,7 @@
  *   （Claude 那一份单写）；点「改」就地改：追几条、勾哪几条问题、关注哪几家 AI、去掉竞品；
  *   「改好了，就这样」= 带着改过的策略批（`approve` + `edited_payload`，服务端落成关注设置）。
  * - 竞品卡（`geo_watch_competitors`）：回答里反复出现的品牌，勾掉不要的再批。
+ * - WP380：对外说法分派卡（`geo_consistency`）、复查卡（`geo_recheck`），卡面在 `geo-quality-cards.tsx`。
  *
  * 卡底那排「就这样」照旧是不改直接批。
  */
@@ -25,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { decide } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { ConsistencyCardBody, RecheckCardBody } from './geo-quality-cards'
 
 type SetupPayload = Extract<GeoWatchCardPayload, { form: 'geo_watch_setup' }>
 type RivalsPayload = Extract<GeoWatchCardPayload, { form: 'geo_watch_competitors' }>
@@ -37,7 +39,10 @@ export function isGeoWatchPayload(p: unknown): p is GeoWatchCardPayload {
   return (
     isRecord(p) &&
     ((p.form === 'geo_watch_setup' && isRecord(p.strategy) && isRecord(p.estimate)) ||
-      (p.form === 'geo_watch_competitors' && Array.isArray(p.competitors)))
+      (p.form === 'geo_watch_competitors' && Array.isArray(p.competitors)) ||
+      // WP380：对外说法分派卡、复查卡
+      (p.form === 'geo_consistency' && Array.isArray(p.groups)) ||
+      (p.form === 'geo_recheck' && isRecord(p.recheck)))
   )
 }
 
@@ -78,7 +83,7 @@ export function editedStrategy(
   }
 }
 
-function useApprove(card: DeckCard) {
+export function useApprove(card: DeckCard) {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (edited: GeoWatchCardPayload | undefined) =>
@@ -314,6 +319,9 @@ export function GeoWatchCardBody({
   card: DeckCard
   payload: GeoWatchCardPayload
 }): ReactNode {
+  if (payload.form === 'geo_consistency')
+    return <ConsistencyCardBody card={card} payload={payload} />
+  if (payload.form === 'geo_recheck') return <RecheckCardBody payload={payload} />
   return payload.form === 'geo_watch_setup' ? (
     <SetupBody card={card} payload={payload} />
   ) : (

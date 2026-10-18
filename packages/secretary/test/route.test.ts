@@ -47,6 +47,9 @@ describe('一件活该谁做', () => {
     expect(v.owner).toBe('p_chen')
     expect(v.confidence).toBeGreaterThanOrEqual(MIN_CONFIDENCE)
     expect(v.reason).toContain('独立站售后客服')
+    // WP382（决策 1061）：中文叫「助理」，不再叫「代理」
+    expect(v.reason.startsWith('助理判断')).toBe(true)
+    expect(v.reason).not.toContain('代理')
   })
 
   it('改详情页价格 → 运营', () => {
@@ -113,6 +116,7 @@ describe('一件活该谁做', () => {
     expect(v.role_id).toBeUndefined()
     expect(v.owner).toBeUndefined()
     expect(v.reason).toContain('没人认领')
+    expect(v.reason.startsWith('助理判断')).toBe(true)
   })
 })
 
@@ -122,6 +126,8 @@ describe('专业问题不是一件活', () => {
     expect(v.kind).toBe('question')
     expect(v.role_id).toBe('dtc.support')
     expect(v.reason).toContain('专业问题')
+    expect(v.reason).toContain('助理不答')
+    expect(v.reason).not.toContain('代理')
   })
 
   it('分不清的时候当成一件活（出一张等人认领的卡比替人回答安全）', () => {

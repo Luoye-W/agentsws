@@ -91,6 +91,7 @@ import { seoRoutes } from './routes/seo.js'
 import { shopAdminRoutes } from './routes/shop-admin.js'
 import { shopifyConnectRoutes } from './routes/shopify-connect.js'
 import { siteRoutes } from './routes/site.js'
+import { siteHealthRoutes } from './routes/site-health.js'
 import { skillRoutes } from './routes/skills.js'
 import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
@@ -316,6 +317,8 @@ export function collectRoutes(): Route[] {
     ...updatePauseRoutes(),
     // WP392：竞品监控。`/v1/competitor-watch*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...competitorWatchRoutes(),
+    // WP381：网站 / 商品体检与 AI 来源流量。`/v1/site-health*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...siteHealthRoutes(),
   ]
 }
 

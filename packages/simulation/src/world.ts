@@ -214,11 +214,25 @@ import { wallClock } from '@agentsws/schedule'
  */
 import {
   buildDaily as buildSeoDaily,
+  GEO_SAMPLE_ANSWERS,
+  GEO_SAMPLE_BRAND,
+  GEO_SAMPLE_FACTS,
+  GEO_SAMPLE_PAGES,
+  groupFindings,
+  type MetricAnswer,
+  mergeFindings,
+  parseConsistencyReply,
+  parseInsightReply,
+  recheckAdvice,
+  recheckSide,
+  ruleFindings,
   DEMO_BRAND_TERMS as SEO_DEMO_BRAND,
   DEMO_OUR_DOMAINS as SEO_DEMO_DOMAINS,
   DEMO_PAGES as SEO_DEMO_PAGES,
   DEMO_GSC_ROWS as SEO_DEMO_ROWS,
+  surfaceOf,
   unconfiguredSearchData,
+  weekPoints,
 } from '@agentsws/seo-core'
 // WP77（59 §2）：上线检查单与两条 `after` 的组装——判断在纯函数里，世界只递事实
 import {
@@ -1890,6 +1904,11 @@ export interface ShopOps {
    * 按"还没接"（SERP 跳过、其余照跑）。同日报：L3 自动出、不进队列，数不经模型手。
    */
   seoDaily(input: { who: PersonId }): Promise<{ approval_item_id: string; picks: number }>
+  /**
+   * WP380：GEO 第二层。判断全在 `@agentsws/seo-core`（与服务端同一份代码），回答与模型回文都是录好的样本；
+   * 出一张 L3 报告卡并记一条 `digest.geo_quality`（胜率、准确度、一致性分到哪几个岗位、复查建议）。
+   */
+  geoQuality(input: { who: PersonId }): Promise<{ approval_item_id: string }>
   /** 提一条"把这份副本发布上线"的变更（`publish_theme`，15 §2 永远 L1）。 */
   themePublish(input: {
     who: PersonId
@@ -5159,6 +5178,129 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       })
       await flushCards()
       return { approval_item_id: item.id, picks: payload.picks.length }
+    },
+
+    async geoQuality({ who }) {
+      const asg = assignmentFor(who, 'dtc.content')
+      const at = now(clock)
+      const week = at.slice(0, 10)
+      // ① 录好的回答 + 录好的判断回文 → 比较胜率、描述准确度（原话对不上的不算）
+      const rows: MetricAnswer[] = GEO_SAMPLE_ANSWERS.map((x) => {
+        const mentioned = x.text.includes(GEO_SAMPLE_BRAND.name)
+        const id = `geo_${x.id}`
+        return {
+          answer: {
+            id,
+            run_id: `run_geo_${week}`,
+            prompt_id: x.prompt,
+            prompt_text: x.prompt,
+            asked_text: x.prompt,
+            platform: x.platform,
+            model: 'web',
+            via: 'web_ui',
+            market: 'US',
+            language: 'en',
+            status: 'ok',
+            answer_md: x.text,
+            answer_hash: x.id,
+            fetched_at: at,
+            credits: 0,
+          },
+          week,
+          mentions: [
+            {
+              answer_id: id,
+              entity: 'ours',
+              name_snapshot: GEO_SAMPLE_BRAND.name,
+              mentioned,
+              cited: false,
+              rules_version: 1,
+            },
+          ],
+          citations: [],
+          insight: {
+            answer_id: id,
+            ...parseInsightReply(x.reply, x.text, {
+              mentioned,
+              facts: GEO_SAMPLE_FACTS,
+              rivals: x.rivals,
+            }),
+            judged_at: at,
+          },
+        }
+      })
+      const [point] = weekPoints(rows)
+      // ② 官方事实对两张夹具页：规则一层 + 录好的模型回文一层，按岗位分
+      const findings = mergeFindings(
+        GEO_SAMPLE_PAGES.flatMap((p) => {
+          const page = {
+            url: p.url,
+            surface: surfaceOf(p.url, GEO_SAMPLE_BRAND.domains),
+            text: p.text,
+            jsonld: p.jsonld,
+          }
+          return [
+            ...ruleFindings(page, GEO_SAMPLE_FACTS),
+            ...parseConsistencyReply(p.reply, page, GEO_SAMPLE_FACTS),
+          ]
+        }),
+        (_f, i) => `f${i + 1}`,
+      )
+      const groups = groupFindings(findings)
+      // ③ 复查：同一组问题前后一比（这里前后是同一份回答 → 没动静 → 修改）
+      const prompts = [...new Set(GEO_SAMPLE_ANSWERS.map((x) => x.prompt))]
+      const side = recheckSide(rows, 'mention_rate', prompts)
+      const advice = recheckAdvice(side, side)?.advice
+      const payload = {
+        week,
+        win_rate: point?.win_rate,
+        compared: point?.compared,
+        accuracy: point?.accuracy,
+        claims: point?.claims,
+        groups: groups.map((g) => ({ owner: g.owner, n: g.findings.length })),
+        ...(advice === undefined ? {} : { advice }),
+      }
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'seo_report',
+        role_id: asg.role_id,
+        subject: { object: { type: 'workspace', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|seo_report|geo_quality|${week}`,
+        title: `AI 回答：说得对不对、比得过谁（${week}）`,
+        summary: `比较胜率 ${Math.round((point?.win_rate ?? 0) * 100)}%（推算，n=${point?.compared ?? 0}）· 描述准确度 ${Math.round((point?.accuracy ?? 0) * 100)}%（推算，n=${point?.claims ?? 0}）`,
+        payload,
+        evidence: {
+          run_id: `run_geo_${week}`,
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: 'L3',
+          auto_approved: true,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [recipientOf('role_holder')],
+          rule: 'role_holder',
+          escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'digest',
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'digest.geo_quality',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: { ...payload, findings: findings.length },
+      })
+      await flushCards()
+      return { approval_item_id: item.id }
     },
 
     themePush({ who, name }) {

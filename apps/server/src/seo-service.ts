@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   AiPlatform,
+  AiTrafficSummary,
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
@@ -37,13 +38,18 @@ import type {
   EventEnvelope,
   FactCard,
   GeoAnswerDetail,
+  GeoConsistencyRun,
   GeoCostEstimate,
+  GeoFactsPatch,
   GeoHistoryDeleteInput,
   GeoHistoryDeleteResult,
   GeoHistoryExport,
   GeoMarketSummary,
   GeoMetricsView,
+  GeoOfficialFact,
   GeoQuestion,
+  GeoRecheck,
+  GeoRecheckInput,
   GeoRunEstimate,
   GeoSettings,
   GeoWatchCardPayload,
@@ -70,6 +76,7 @@ import type {
 import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
+  aiTrafficBrief,
   type BrandProfileLike,
   buildDaily,
   CLAIM_MARKET_GROUPS,
@@ -94,6 +101,7 @@ import {
   SITE_FACADE_NOTE,
   type SignalOptions,
   seoDraftPrompt,
+  shiftDay,
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import {
@@ -104,6 +112,7 @@ import {
   SETUP_DECLINED,
   type WatchDataPort,
 } from './geo-monitor.js'
+import { createGeoQuality } from './geo-quality-service.js'
 import {
   createGeoStore,
   type GeoStore,
@@ -163,10 +172,19 @@ export interface SeoBrandInfo extends BrandProfileLike {
   one_liner?: string
   /** WP392：品牌档案里 AI 联网查到的竞品（只当建议来源；工作清单是关注设置那份）。 */
   competitors?: readonly BrandCompetitor[]
+  /** WP380：官方事实表要的几格（品牌档案第二版：子品类、价格带、定位）。 */
+  subcategory?: string
+  price_band?: string
+  positioning?: string
 }
 
 export interface SeoServiceOptions {
   workspace_id: WorkspaceId
+  /**
+   * WP381：AI 来源流量（Shopify 自己记的来源，实测）——周报和引用数并排写一行。
+   * 不给 / 回 `undefined`（没连店、没读到）= 周报那一格不出。永不让周报失败。
+   */
+  aiTraffic?: () => Promise<AiTrafficSummary | undefined>
   clock: Clock
   random(): number
   approvals: ApprovalBus
@@ -261,6 +279,22 @@ export interface SeoServiceOptions {
   watchSleep?(ms: number): Promise<void>
   watchWaitBudgetMs?: number
   /**
+   * WP380：对外说法一致性检查取一页公开网页（只 GET、不带凭据、遵 robots；取不到回 `undefined`）。
+   * 不给 = 一致性检查只能说「这台电脑取不了网页」。
+   */
+  pageFetch?(url: string): Promise<{ html: string } | undefined>
+  /**
+   * WP380：WP381 的体检与 AI 来源流量放进周报的位置（没有就不显示）；`site` 是网站体检给的两个
+   * 硬信号（AI 爬虫被挡 / 原始网页里没正文），缺位主因先看它们。
+   */
+  geoReportExtras?(): Promise<
+    | {
+        slots?: SeoWeeklyGeoPayload['slots']
+        site?: { blocked?: boolean; js_only?: boolean }
+      }
+    | undefined
+  >
+  /**
    * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
@@ -320,6 +354,16 @@ export interface SeoServiceAssembly {
   watchAnswer(id: string): Promise<GeoAnswerDetail | undefined>
   /** WP321：取回排队档任务（每天早上那一轮顺手做；回记完的那几轮）。 */
   watchCollect(): Promise<WatchRun[]>
+  /** WP380：官方事实表（读之前先跟品牌档案同步）。 */
+  watchFacts(): Promise<GeoOfficialFact[]>
+  /** WP380：人改官方事实（空值 = 退回跟档案走）。 */
+  watchSetFacts(patch: GeoFactsPatch): Promise<GeoOfficialFact[]>
+  /** WP380：现在对一次对外说法（查出东西就出一张按岗位分好的卡）。没人持有内容职责回 `undefined`。 */
+  watchConsistency(input?: { urls?: string[] }): Promise<GeoConsistencyRun | undefined>
+  /** WP380：登记一条复查（人在别处改了东西也能登记）。 */
+  watchRecheck(input: GeoRecheckInput): Promise<GeoRecheck>
+  /** WP380：跑到期的复查（每天早上那一轮顺手做；测试与手动也可以直接调）。 */
+  watchRecheckDue(): Promise<GeoRecheck[]>
   /** 账本 stage 之前的改写口：`publish_post` 要发出去时跑质检。 */
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
@@ -550,6 +594,14 @@ export function claimRuleCard(input: {
 }
 
 export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly {
+  /** WP381：AI 来源流量（实测）；读不到 / 抛了都当没有，周报照出。 */
+  const aiTrafficOf = async (): Promise<AiTrafficSummary | undefined> => {
+    try {
+      return await options.aiTraffic?.()
+    } catch {
+      return undefined
+    }
+  }
   const { workspace_id, clock } = options
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -1192,6 +1244,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         ...(b.markets === undefined ? {} : { markets: b.markets }),
         ...(b.category === undefined ? {} : { category: b.category }),
         ...(b.one_liner === undefined ? {} : { one_liner: b.one_liner }),
+        ...(b.subcategory === undefined ? {} : { subcategory: b.subcategory }),
+        ...(b.price_band === undefined ? {} : { price_band: b.price_band }),
+        ...(b.positioning === undefined ? {} : { positioning: b.positioning }),
       }
     },
     searchData: () => options.searchData(),
@@ -1228,6 +1283,22 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     gscConnected: () => options.searchConsole().connected(),
     ...(options.watchSleep === undefined ? {} : { sleep: options.watchSleep }),
     ...(options.watchWaitBudgetMs === undefined ? {} : { waitBudgetMs: options.watchWaitBudgetMs }),
+  })
+
+  // WP380：比较胜率 / 描述准确度之外的那几件——复查、对外说法一致性、周报模板
+  const quality = createGeoQuality({
+    workspace_id,
+    clock,
+    nextId,
+    monitor,
+    store: geoHistory,
+    approvals: options.approvals,
+    openMatter,
+    holderOf: options.holderOf,
+    model: (actor) => options.watchModel?.({ actor, run_id: `run_seo_${nextId('c')}` }),
+    ...(options.pageFetch === undefined ? {} : { pageFetch: options.pageFetch }),
+    thresholds: options.thresholds,
+    emit,
   })
 
   const PLATFORM_NAME: Record<string, string> = {
@@ -1361,6 +1432,31 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       .reduce((a, t) => a + t.items.length, 0)
     const questions = new Set(store.answers({ run_id: run.id }).map((a) => a.prompt_id)).size
     const legacy = est === undefined ? undefined : legacyEstimate(est, probing)
+    // WP380：周报第二层——缺位主因与先后、数字标来路、站外来源地图、一致性与复查、WP381 的位置
+    const outside = await options.geoReportExtras?.().catch(() => undefined)
+    // WP381：AI 来源流量（实测）——结构化的进 `ai_traffic`，那一行插进 WP380 留的 `ai_traffic` 位置
+    const traffic = await aiTrafficOf()
+    const slots =
+      traffic === undefined
+        ? outside?.slots
+        : {
+            ...outside?.slots,
+            ai_traffic: {
+              title: 'AI 来源流量',
+              lines: [aiTrafficBrief(traffic)],
+              basis: 'measured' as const,
+              as_of: traffic.until,
+            },
+          }
+    const extra = await quality.weeklyExtras({
+      run,
+      gaps,
+      point,
+      view,
+      estimate: est,
+      ...(slots === undefined ? {} : { slots }),
+      ...(outside?.site === undefined ? {} : { site: outside.site }),
+    })
     const payload: SeoWeeklyGeoPayload = {
       variant: 'weekly_geo',
       week_of: run.period,
@@ -1376,6 +1472,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       ...(pendingCells === 0 ? {} : { pending_cells: pendingCells }),
       // WP335：简报那一行（这一周拿到回答才有）
       ...(brief === undefined ? {} : { brief }),
+      ...extra.payload,
+      // WP381：AI 来源流量（实测）
+      ...(traffic === undefined ? {} : { ai_traffic: traffic }),
     }
     const seen = new Set(
       rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
@@ -1389,7 +1488,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           )
           .join('；')}。${cost}`
       : `${questions} 个买家问题，${seen.size} 个在某个 AI 上提到或引用了我们；缺位 ${gaps.length} 个。${cost}`
-    const lead = brief === undefined ? '' : `${brief}\n`
+    // AI 来源流量那一行已经随 `slots.ai_traffic` 进了 extra.lines，不再在末尾另起一行
+    const lead = [...(brief === undefined ? [] : [brief]), ...extra.lines]
+      .map((l) => `${l}\n`)
+      .join('')
     const approval_item_id = await report(
       actor,
       'weekly_geo',
@@ -1490,6 +1592,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         a.kind === 'prompt_missing'
           ? [
               {
+                prompt_id: a.prompt_id,
                 question: a.prompt_text,
                 market: a.market,
                 platforms: a.platforms,
@@ -1500,6 +1603,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           : a.lost
               .filter((l) => !missing.has(`${l.prompt_text}|${l.market}`))
               .map((l) => ({
+                prompt_id: l.prompt_id,
                 question: l.prompt_text,
                 market: l.market,
                 platforms: [a.platform],
@@ -1514,22 +1618,39 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           a.kind === 'prompt_missing'
             ? `${it.platforms.map((p) => PLATFORM_NAME[p] ?? p).join('、')} 连续两周回答时都没提到我们${it.rivals.length > 0 ? `（提到了 ${it.rivals.join('、')}）` : ''}。`
             : `${PLATFORM_NAME[a.platform] ?? a.platform} 上提到我们的比例这周跌了 ${Math.abs(a.change_pp)} 个百分点，这一问从「提到」变成了「没提到」。`
-        const id =
-          gap.lane === 'pr_handoff'
-            ? toPr(
-                `geo_pr|${it.question}|${it.market}`,
-                `交公关：AI 回答「${it.question}」时没提我们`,
-                `${where}${why}\n${gap.suggestion}`,
-              )
-            : toContent(
-                `geo_fix|${it.question}|${it.market}`,
-                gap.page === undefined
-                  ? `写一页回答「${it.question}」`
-                  : `改这页，让 AI 回答「${it.question}」时用上它`,
-                `${where}${why}\n${gap.suggestion}`,
-                gap.page,
-              )
-        if (id !== undefined) n += 1
+        // WP380：每张 GEO 改动记「改了什么、期望哪个数动、哪天复查」（交公关的等站外改，四周后复查）
+        const offsite = gap.lane === 'pr_handoff'
+        const waitDays = Math.round(
+          options.thresholds()[offsite ? 'geo_recheck_days_offsite' : 'geo_recheck_days'] ??
+            (offsite ? 28 : 14),
+        )
+        const recheck = {
+          due: shiftDay(date(), waitDays),
+          prompt_ids: [it.prompt_id],
+          metric: 'mention_rate' as const,
+        }
+        const title = offsite
+          ? `交公关：AI 回答「${it.question}」时没提我们`
+          : gap.page === undefined
+            ? `写一页回答「${it.question}」`
+            : `改这页，让 AI 回答「${it.question}」时用上它`
+        const body = `${where}${why}\n${gap.suggestion}\n${quality.recheckLine(recheck)}`
+        const id = offsite
+          ? toPr(`geo_pr|${it.question}|${it.market}`, title, body)
+          : toContent(`geo_fix|${it.question}|${it.market}`, title, body, gap.page)
+        if (id !== undefined) {
+          n += 1
+          await quality.registerRecheck({
+            source: 'alert',
+            change: title,
+            metric: 'mention_rate',
+            prompt_ids: [it.prompt_id],
+            markets: [it.market],
+            due_days: waitDays,
+            matter_id: id,
+            owner: offsite ? 'pr' : 'content',
+          })
+        }
       }
     }
     // 新竞品：没在名单里、人也没说过「不要」的，出一张「改东西」卡（同一周一张）
@@ -1586,6 +1707,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     run: WatchRun,
     est?: GeoRunEstimate,
   ): Promise<{ approval_item_id: string; gaps: number }> => {
+    // WP380：对外说法一致性约每月一次（跟着每周那一轮看到期没有），放在报告前面，报告里就有它
+    if (run.status === 'done' && (await quality.consistencyDue()))
+      await quality.runConsistency(actor).catch(() => undefined)
     const out = await reportGeoRun(actor, run, est ?? (await monitor.estimate()))
     if (run.status === 'done') {
       const store = await geoHistory()
@@ -1610,6 +1734,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
    * 不要 → 先按现在的（兜底）设置跑、不再自动出卡。竞品卡批了 → 加进竞品；不要 → 记下不再问。
    */
   const decideWatchCard = async (item: ApprovalItem): Promise<void> => {
+    // WP380：一致性分派卡、复查卡
+    if (await quality.onDecided(item)) return
     const approved = item.state === 'approved' || item.state === 'approved_edited'
     const base = item.payload as GeoWatchCardPayload
     const edited = item.state === 'approved_edited' ? item.decision?.edited_payload : undefined
@@ -1631,6 +1757,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       await monitor.setSetupCard(undefined)
       return
     }
+    if (p.form !== 'geo_watch_competitors') return
     if (item.state === 'rejected') {
       const was = JSON.parse(store.meta(DECLINED_RIVALS_KEY) ?? '[]') as string[]
       store.setMeta(
@@ -1668,6 +1795,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       if (actor === undefined) return { skipped, picks: 0, changes: 0, topics: 0, matters: 0 }
       // WP321：上周排队档没回来的顺手收（收完一轮就出它的报告卡）；收不成不挡每日判断
       await collectAndReport(actor).catch(() => undefined)
+      // WP380：到期的复查顺手跑（重问那组问题、前后一比出建议卡）；跑不成不挡每日判断
+      await quality.processDue(actor).catch(() => undefined)
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
       // WP166：搜索结果页人群核对按每个目标市场分别看（面板上关掉的市场不看）
@@ -1832,12 +1961,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes: out.notes,
         ...(watch.enabled ? { estimate: legacyEstimate(out.estimate, probing) } : {}),
       }
+      // WP381：这周没问 AI，AI 来源流量（实测）照样写
+      const traffic = await aiTrafficOf()
+      if (traffic !== undefined) payload.ai_traffic = traffic
       const approval_item_id = await report(
         actor,
         'weekly_geo',
         week,
         `AI 平台可见度（${week} 那一周）`,
-        out.notes[0] ?? '',
+        [out.notes[0] ?? '', ...(traffic === undefined ? [] : [aiTrafficBrief(traffic)])]
+          .filter((x) => x !== '')
+          .join('\n'),
         payload,
       )
       emit('seo.weekly_geo', actor.assignment_id, {
@@ -2085,6 +2219,18 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     async watchCollect() {
       const actor = options.holderOf('dtc.content')
       return actor === undefined ? monitor.collect() : collectAndReport(actor)
+    },
+
+    watchFacts: () => monitor.officialFacts(),
+    watchSetFacts: (patch) => monitor.setFacts(patch),
+    async watchConsistency(input) {
+      const actor = options.holderOf('dtc.content')
+      return actor === undefined ? undefined : quality.runConsistency(actor, input ?? {})
+    },
+    watchRecheck: (input) => quality.registerRecheck({ ...input, source: 'human' }),
+    async watchRecheckDue() {
+      const actor = options.holderOf('dtc.content')
+      return actor === undefined ? [] : quality.processDue(actor)
     },
 
     async gatePublish(input) {
