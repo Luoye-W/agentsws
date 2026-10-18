@@ -1070,7 +1070,7 @@ const zh: Table = {
     '秘书按这个时间把经营一页纸推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
   // WP388：周报类定时（经营一页纸、周复盘、SEO 周报）默认周一 16:30 出上周
   'settings.weekly.last_week': '出上周',
-  'settings.weekly.this_week': '出本周',
+  'settings.weekly.last_7_days': '出前 7 天',
   'settings.weekly.why': '美国那边上一周刚结束、数据也到齐了；想换时间跟我说一声。',
   'settings.weekly_reports': '周报时间',
   'settings.weekly_reports.review_week': '周复盘',
@@ -5259,7 +5259,7 @@ const en: Table = {
   'settings.weekly_review.hint':
     'When the secretary sends you the one-pager (workspace time zone). Each brand has its own; changing it here changes only this brand.',
   'settings.weekly.last_week': 'covers last week',
-  'settings.weekly.this_week': 'covers this week',
+  'settings.weekly.last_7_days': 'covers the 7 days before',
   'settings.weekly.why':
     'By then last week has just ended in the US and the data is in. Want another time? Just tell me.',
   'settings.weekly_reports': 'Weekly report times',

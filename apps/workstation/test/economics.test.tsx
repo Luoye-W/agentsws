@@ -195,7 +195,7 @@ describe('一页纸在岗位页上整张摊开（它不属于任何事项，没�
 })
 
 describe('设置 → 经营一页纸什么时候推', () => {
-  it('默认周一 16:30 出上周（问号里是为什么）；改成周五就存周五、写「出本周」（只改这个品牌那一条）', async () => {
+  it('默认周一 16:30 出上周（问号里是为什么）；改成周五就存周五、写「出前 7 天」（只改这个品牌那一条）', async () => {
     renderWithProviders(<WeeklyReviewCard assignment="asg_owner" />)
     const day = (await screen.findByTestId('settings-weekly-review-weekday')) as HTMLSelectElement
     expect(day.value).toBe('1')
@@ -210,6 +210,6 @@ describe('设置 → 经营一页纸什么时候推', () => {
     await waitFor(() => {
       expect(schedule).toEqual({ weekday: 5, time: '16:30', paused: false })
     })
-    expect(await screen.findByText('出本周')).toBeDefined()
+    expect(await screen.findByText('出前 7 天')).toBeDefined()
   })
 })

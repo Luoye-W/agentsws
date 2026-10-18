@@ -184,6 +184,8 @@ export interface SeoServiceOptions {
   ga4?(): Promise<readonly LandingConversion[] | undefined>
   /** WP158：GA4 连上了却没数的那句人话（还没选媒体资源 / 这次没读到）；没连或有数回 `undefined`。 */
   ga4Note?(): string | undefined
+  /** WP388（决策 1093）：GA4 那一份覆盖哪几天（含）；不知道 = `undefined`。 */
+  ga4Window?(): { start: string; end: string } | undefined
   /**
    * 近 7 天的订单（带 Shopify `landing_site`）。WP388：给了窗口就取那一段（周报取上一周：
    * 目标市场时区的周一 00:00 到下周一 00:00，不含）。
@@ -1718,10 +1720,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
       const ga4 = (await options.ga4?.()) ?? undefined
-      // WP388：上一周（目标市场时区）；周四起出的照旧近 7 天
+      // WP388（决策 1091）：订单取到出报告前一天为止最近完整的 7 天（目标市场时区）
       const tz = options.reportTz?.()
-      const week = tz === undefined ? undefined : reportWeek(clock.now(), tz)
-      const last = week?.kind === 'last_week' ? week : undefined
+      const last = tz === undefined ? undefined : reportWeek(clock.now(), tz)
       const out = pageRevenue({
         gsc: consoleRead.rows ?? [],
         orders: options.orders(last === undefined ? undefined : { from: last.start, to: last.end }),
@@ -1733,6 +1734,21 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         },
       })
       const notes: string[] = []
+      // WP388（决策 1093）：几栏各是哪几天——订单按我们的 7 天；搜索数据 / GA4 是 Google 已出齐的最近 7 天
+      const range = (w: { start: string; end: string }): string =>
+        `${w.start.slice(5)} 至 ${w.end.slice(5)}`
+      const spans: string[] = []
+      if (last !== undefined)
+        spans.push(`订单 ${range({ start: last.from_date, end: last.to_date })}`)
+      const gscWindow =
+        consoleRead.rows === undefined ? undefined : options.searchConsole().window?.()
+      if (gscWindow !== undefined) spans.push(`搜索数据 ${range(gscWindow)}`)
+      const ga4Window = ga4 === undefined ? undefined : options.ga4Window?.()
+      if (ga4Window !== undefined) spans.push(`GA4 ${range(ga4Window)}`)
+      if (spans.length > 0)
+        notes.push(
+          `${spans.join('；')}${gscWindow !== undefined || ga4Window !== undefined ? '（Google 的数晚两三天，取的是它已出齐的最近 7 天）' : ''}。`,
+        )
       if (consoleRead.rows === undefined)
         notes.push('Search Console 还没连：点击那一列是 0，订单与收入照 Shopify 的落地页算。')
       const ga4Note = options.ga4Note?.()
@@ -1745,7 +1761,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes.push(`${out.unmatched_orders} 张订单没有落地页记录，归不上任何一页（照实报，不猜）。`)
       const payload: SeoWeeklyRevenuePayload = {
         variant: 'weekly_revenue',
-        week_of: last?.monday ?? date(),
+        week_of: last?.from_date ?? date(),
         rows: out.rows,
         unmatched_orders: out.unmatched_orders,
         ga4: ga4 === undefined ? 'not_connected' : 'connected',
@@ -1757,7 +1773,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         actor,
         'weekly_revenue',
         payload.week_of,
-        `按页面收入小结（${payload.week_of} 那一周）`,
+        last === undefined
+          ? `按页面收入小结（${payload.week_of} 那一周）`
+          : `按页面收入小结（${last.from_date} 至 ${last.to_date}）`,
         `${out.rows.length} 页；点击多没订单 ${leaks} 页，点击少出订单 ${gems} 页。`,
         payload,
       )

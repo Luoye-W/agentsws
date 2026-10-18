@@ -2,7 +2,8 @@
  * WP388：「每 [周一] [16:30] 出上周 (?)」——周报类定时的星期几 / 几点（经营一页纸、周复盘、SEO 周报共用）。
  *
  * 可见的只有这一句；问号里是为什么默认周一（美国那边上一周刚结束、数据也到齐了；想换时间跟我说一声）。
- * 周一到周三出的是上一周，周四起出的是这一周到现在（与服务端 `reportWeek` 同一条线）。
+ * 取的是到出报告前一天为止最近完整的 7 天（决策 1091，与服务端 `reportWeek` 同一条线）：
+ * 周一出 = 上周（周一到周日），别的日子出 = 前 7 天（例如周五出 = 上周五到本周四）。
  */
 import type { ReactNode } from 'react'
 import { Hint } from '@/components/ui/hint'
@@ -11,8 +12,8 @@ import { useApp } from '@/lib/app-context'
 /** 周一在前（cron 的 0 是周日）。 */
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0] as const
 
-/** 周一到周三出的是上一周（同服务端 `LAST_WEEK_BEFORE_DOW`）。 */
-export const coversLastWeek = (weekday: number): boolean => weekday >= 1 && weekday <= 3
+/** 周一出的正好是上周一到周日。 */
+export const coversLastWeek = (weekday: number): boolean => weekday === 1
 
 export function WeeklyTimePicker({
   weekday,
@@ -60,7 +61,7 @@ export function WeeklyTimePicker({
         }}
       />
       <span data-testid={`${testId}-covers`}>
-        {t(coversLastWeek(weekday) ? 'settings.weekly.last_week' : 'settings.weekly.this_week')}
+        {t(coversLastWeek(weekday) ? 'settings.weekly.last_week' : 'settings.weekly.last_7_days')}
       </span>
       <Hint text={t('settings.weekly.why')} testId={`${testId}-why`} />
     </span>

@@ -1,9 +1,9 @@
 /**
  * WP224（docs/91 §2.2 #1）：**经营一页纸**的服务端那一半——取面板、出卡。
  *
- * WP388：默认每周一 16:30 出**上一周**的（品牌目标市场时区的周一到周日）：面板上下文的「现在」挪到
- * 那一周的最后一刻、日界线按那个市场的偏移切，「近 7 天」就正好是那一周。周四起出的（用户把时间改了）
- * 照旧是到现在为止的近 7 天，标题写「本周」。
+ * WP388（决策 1091）：取**到出报告前一天为止最近完整的 7 天**（日界线按品牌目标市场时区）——默认周一 16:30 出
+ * = 上周一到周日。面板上下文的「现在」挪到那 7 天的最后一刻、日界线按那个市场的偏移切，「近 7 天」就正好是它。
+ * 标题：周一到周日写「上周经营一页纸」，别的（改到周五出那种）写「经营一页纸 · 起 至 止」。
  *
  * 一页纸怎么写在 `@agentsws/deck` 的 `composeWeeklyReview`（纯函数）；这里只做两件事：
  *
@@ -85,8 +85,8 @@ export function createWeeklyReviewService(
     const owner = holderOf(OWNER_ROLE)
     if (owner === undefined) return undefined
     const port = await options.port()
-    const last = week?.kind === 'last_week' ? week : undefined
-    // 上一周：「现在」= 那一周的最后一刻，日界线按目标市场那时的偏移——「近 7 天」就是周一到周日
+    const last = week
+    // 「现在」= 那 7 天的最后一刻，日界线按目标市场那时的偏移——面板的「近 7 天」就是那 7 天
     const now =
       last === undefined ? options.clock.now() : new Date(Date.parse(last.end) - 1).toISOString()
     const shift = (ctx: QueryContext | undefined): QueryContext | undefined =>
@@ -98,7 +98,7 @@ export function createWeeklyReviewService(
     const content = shift(await contextOf(port, holderOf('dtc.content')))
     const support = shift(await contextOf(port, holderOf('dtc.support')))
     const brand = options.brandName()
-    return composeWeeklyReview({
+    const payload = composeWeeklyReview({
       now,
       base,
       ...(content === undefined ? {} : { content }),
@@ -113,6 +113,8 @@ export function createWeeklyReviewService(
         ),
       ],
     })
+    // 那 7 天从哪天起（改到周五出时不是周一）：去重键与标题都按它
+    return last === undefined ? payload : { ...payload, week_of: last.from_date }
   }
 
   const build = (): Promise<WeeklyReviewPayload | undefined> => compose(weekOf())
@@ -134,7 +136,12 @@ export function createWeeklyReviewService(
         role_id: OWNER_ROLE,
         subject: { object: { type: 'workspace', id: ws } },
         dedupe_key: `dk_${ws}|weekly_review|${payload.week_of}`,
-        title: `${week?.kind === 'last_week' ? '上周' : '本周'}经营一页纸 · ${payload.week_of}`,
+        title:
+          week === undefined
+            ? `本周经营一页纸 · ${payload.week_of}`
+            : week.mon_to_sun
+              ? `上周经营一页纸 · ${week.from_date}`
+              : `经营一页纸 · ${week.from_date} 至 ${week.to_date}`,
         summary: payload.situation,
         payload,
         evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },

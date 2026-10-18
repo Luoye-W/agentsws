@@ -40,7 +40,6 @@ export {
   type ScheduleEffect,
 } from './policy.js'
 export {
-  LAST_WEEK_BEFORE_DOW,
   marketTimeZone,
   type ReportWeek,
   reportTimeZone,

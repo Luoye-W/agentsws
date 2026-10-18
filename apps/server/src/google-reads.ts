@@ -130,6 +130,8 @@ export interface GoogleReads {
   ga4Conversions(): Promise<LandingConversion[] | undefined>
   /** GA4 为什么没有数（没连不说；连了没选 / 读不到说一句）。 */
   ga4Note(): string | undefined
+  /** WP388（决策 1093）：GA4 落地页那一份覆盖哪几天（含）；没缓存 = `undefined`。 */
+  ga4Window?(): DateWindow | undefined
   sources(): Promise<GoogleSourcesView>
   select(input: { gsc_site?: string | undefined; ga4_property?: string | undefined }): Promise<{
     view: GoogleSourcesView
@@ -645,7 +647,11 @@ export function createGoogleReads(options: GoogleReadsOptions): GoogleReads {
       },
       pages: async () => (gsc.cache?.pages ?? []).map((p) => ({ ...p })),
       note: () => (gsc.stale ? gsc.note : undefined),
+      // WP388（决策 1093）：周报上标明搜索数据是哪几天
+      window: () => (gsc.cache === undefined ? undefined : { ...gsc.cache.weeks.current }),
     }),
+
+    ga4Window: () => (ga4.cache === undefined ? undefined : { ...ga4.cache.window }),
 
     async ga4Conversions() {
       await ensureFresh()

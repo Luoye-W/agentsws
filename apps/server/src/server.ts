@@ -6209,6 +6209,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       ga4: () => googleReads.ga4Conversions(),
       ga4Note: () => googleReads.ga4Note(),
+      ga4Window: () => googleReads.ga4Window?.(),
       // WP155：这个品牌的搜索数据接口（官方 / 自带 key / 不接）；测试与 demo 可以换替身
       searchData: () => options.searchDataFor?.(ws) ?? searchData,
       // WP388：周报取上一周（目标市场时区）；不给窗口 = 近 7 天

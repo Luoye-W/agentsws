@@ -1,5 +1,5 @@
 /**
- * WP388：周报类取的是**上一周**——品牌目标市场时区的周一 00:00 到周日 24:00。
+ * WP388（决策 1091）：周报类取**到出报告前一天为止最近完整的 7 天**——日界线按品牌目标市场时区。
  * 北京时间周一 16:30 = 美西周一凌晨：美西的上一周刚过完，取的就是它。
  */
 import type { WorkstationPort } from '@agentsws/api'
@@ -89,16 +89,21 @@ describe('WP388 经营一页纸：上一周（目标市场时区）', () => {
     expect(p?.findings.find((f) => f.panel === 'store_sales')?.text).toContain('、2 单')
   })
 
-  it('改到周五出：照旧近 7 天到现在，标题写「本周」', async () => {
+  it('改到周五出（决策 1091）：上周五到本周四，标题写起止日期', async () => {
     const { svc, created } = service('2026-10-23T09:00:00.000Z', 'America/Los_Angeles')
+    const p = await svc.build()
+    expect(p?.week_of).toBe('2026-10-16')
+    expect(p?.situation).toContain('2026-10-16 到 2026-10-22')
+    // 美西 10-16 到 10-22：o_sun（美西 10-18 22:00）、o_now（美西 10-19 01:00）在，o_mon / o_prev 不在
+    expect(p?.findings.find((f) => f.panel === 'store_sales')?.text).toContain('、2 单')
     await svc.run()
-    expect(created[0]?.title).toBe('本周经营一页纸 · 2026-10-19')
+    expect(created[0]?.title).toBe('经营一页纸 · 2026-10-16 至 2026-10-22')
   })
 })
 
 describe('WP388 岗位周复盘的窗口', () => {
   const todayEnd = '2026-10-19T16:00:00.000Z'
-  it('周：上一周（目标市场时区）；日 / 月照旧到今天结束往回数', () => {
+  it('周：到前一天为止最近完整的 7 天（目标市场时区）；日 / 月照旧到今天结束往回数', () => {
     expect(reviewWindow('week', MONDAY_1630_BEIJING, todayEnd, 'America/Los_Angeles')).toEqual({
       start: '2026-10-12T07:00:00.000Z',
       end: '2026-10-19T07:00:00.000Z',
@@ -109,9 +114,9 @@ describe('WP388 岗位周复盘的窗口', () => {
     })
   })
 
-  it('改到周五出：这一周周一 00:00 到今天结束', () => {
+  it('改到周五出：上周五 00:00 到本周五 00:00（北京）', () => {
     expect(
       reviewWindow('week', '2026-10-23T09:00:00.000Z', '2026-10-23T16:00:00.000Z', '+08:00'),
-    ).toEqual({ start: '2026-10-18T16:00:00.000Z', end: '2026-10-23T16:00:00.000Z' })
+    ).toEqual({ start: '2026-10-15T16:00:00.000Z', end: '2026-10-22T16:00:00.000Z' })
   })
 })

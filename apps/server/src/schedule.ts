@@ -517,8 +517,8 @@ const SPAN_DAYS = { day: 1, week: 7, month: 30 } as const
 /**
  * 复盘回看哪一段。日 / 月：到今天结束往回数 1 / 30 天。
  *
- * WP388 周：**上一周**（目标市场时区的周一 00:00 到周日 24:00）——默认周一 16:30 出；
- * 用户把时间改到周四以后，就是这一周（周一 00:00 到今天结束）。
+ * WP388 周（决策 1091）：**到出报告前一天为止最近完整的 7 天**（目标市场时区的日界线）——默认周一 16:30 出
+ * = 上周一到周日；改到周五出 = 上周五到本周四。
  */
 export function reviewWindow(
   kind: 'day' | 'week' | 'month',
@@ -528,9 +528,7 @@ export function reviewWindow(
 ): { start: Iso8601; end: Iso8601 } {
   if (kind === 'week') {
     const w = reportWeek(now, reportTz)
-    return w.kind === 'last_week'
-      ? { start: w.start, end: w.end }
-      : { start: w.start, end: todayEnd }
+    return { start: w.start, end: w.end }
   }
   return { start: iso(Date.parse(todayEnd) - SPAN_DAYS[kind] * DAY_MS), end: todayEnd }
 }
@@ -561,7 +559,14 @@ async function createReviewCard(
     role_id: position.role_id,
     subject: { object: { type: 'review', id: review.id } },
     dedupe_key: `${deps.workspace_id}:review:${position.assignment_id}:${review.period.kind}:${review.period.end}`,
-    title: reviewTitle(review),
+    // WP388：周复盘正好是周一到周日 = 「上周」，别的 7 天（改到周五出那种）=「近 7 天」
+    title: reviewTitle(
+      review,
+      review.period.kind === 'week' &&
+        !reportWeek(review.created_at, deps.reportTz?.() ?? deps.tz).mon_to_sun
+        ? '近 7 天'
+        : undefined,
+    ),
     summary: reviewSummary(review),
     payload: review,
     evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
