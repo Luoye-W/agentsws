@@ -178,7 +178,9 @@ export function createAmazonListingCheckup(
       const got = await reader.readProduct({ marketplace, asin })
       if (got.status === 'blocked') {
         stopped = 'blocked'
+        // WP420（自查 B1）：取数链说清停到几点、能不能用你自己的浏览器读（没说就用老那句）
         stopped_message =
+          got.message ??
           'Amazon 出了验证页，这一轮停了：不过验证码、不重试、不换办法绕。读到的那几个照常出结果，剩下的过一阵再体检。'
         items.push({ ...base, status: 'blocked', message: '被 Amazon 拦了（验证页）' })
         continue

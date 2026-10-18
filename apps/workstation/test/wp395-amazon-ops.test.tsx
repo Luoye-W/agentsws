@@ -23,13 +23,14 @@ import { knowledgeGroupsForPosition } from '@/lib/library'
 import { renderWithProviders } from './helpers'
 
 describe('Amazon 运营面板', () => {
-  it('四块都在；每日巡检三行照实说「连上后才有」；一个数字都不出', () => {
+  it('四块都在；每日巡检并成一行照实说「要连 Amazon 店铺（还没开放）」（WP420 B12）；一个数字都不出', () => {
     renderWithProviders(<AmazonOpsBoard assignment="asg_amz" />)
     const blocks = screen.getAllByTestId('amzops-block').map((b) => b.getAttribute('data-block'))
     expect(blocks).toEqual([...AMAZON_BLOCKS])
     const rows = screen.getAllByTestId('amzops-daily-row')
-    expect(rows).toHaveLength(3)
-    for (const row of rows) expect(row.textContent).toContain('连上 Amazon 店铺后才有')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.textContent).toContain('账户健康、断货、买不了')
+    expect(rows[0]?.textContent).toContain('还没开放')
     expect(screen.getByTestId('amzops-empty-competitors').textContent).toBe('还没有在盯的竞品')
     expect(screen.getByTestId('amzops-empty-listing').textContent).toBe('还没体检过')
     expect(screen.getByTestId('amzops-empty-keywords').textContent).toBe('还没有词库')

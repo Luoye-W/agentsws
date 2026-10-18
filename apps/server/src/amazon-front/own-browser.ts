@@ -69,6 +69,18 @@ export interface AmazonOwnBrowser {
         used(): void
       }
     | undefined
+  /**
+   * WP420（自查 B1）：Listing 体检的第 2 条路——读自家商品页的**原文**（体检要整页：标题、五点、图……）。
+   * 规矩同上：要先同意、同一个键每天至多一次（体检按 ASIN 一个键）。没有插件 = `undefined`。
+   */
+  rawProduct?(
+    key: string,
+    input: { marketplace: string; asin: string },
+  ): Promise<
+    | { status: 'ok'; url: string; html: string }
+    | { status: 'needs_consent' | 'limited' }
+    | { status: 'blocked' | 'failed'; message: string }
+  >
   /** 取数链说「要问一句」：第一次时出卡（问过了就不再出）。 */
   needConsent(): Promise<void>
   setupTarget(): SetupTarget
@@ -139,6 +151,20 @@ export function createAmazonOwnBrowser(deps: AmazonOwnBrowserDeps): AmazonOwnBro
         read: (input) => readFacts(reader, input),
         used: () => markUsed(key),
       }
+    },
+    async rawProduct(key, input) {
+      const reader = deps.reader()
+      if (reader === undefined) return { status: 'failed', message: '这台没装好插件那条路' }
+      const gate = gateOf(key)
+      if (gate !== 'ok') return { status: gate }
+      const url = amazonProductUrlOf(input.marketplace.trim().toUpperCase(), input.asin)
+      if (url === undefined) return { status: 'failed', message: `认不出站点 ${input.marketplace}` }
+      const r = await reader.read(url, 'html')
+      markUsed(key)
+      if (!r.ok) return { status: 'failed', message: r.message }
+      if (r.challenge === true || isAmazonChallenge(r.text))
+        return { status: 'blocked', message: CHALLENGE_MSG }
+      return { status: 'ok', url, html: r.text }
     },
     keywords() {
       const reader = deps.reader()

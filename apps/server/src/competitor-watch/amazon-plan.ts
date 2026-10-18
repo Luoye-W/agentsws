@@ -245,6 +245,23 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
   }
 
   /** 自家几款（标题、价）：先看自家那条源的快照，没有就用档案里读到过的。 */
+  /** WP420（自查 B5）：按品牌名搜一页，标题里带品牌名、不是广告位的前几款当自家候选。 */
+  const ownByBrandName = async (
+    mk: string,
+    name: string | undefined,
+  ): Promise<BrandWatchAmazonItem[]> => {
+    const reader = deps.reader()
+    const brand = (name ?? '').trim()
+    if (brand === '' || reader === undefined || !reader.ready()) return []
+    const got = await reader.searchCards({ marketplace: mk, query: brand }).catch(() => undefined)
+    if (got?.status !== 'ok') return []
+    return ownCandidatesFromCards(got.cards, brand).map((c) => ({
+      marketplace: mk,
+      asin: c.asin,
+      label: c.title.slice(0, 80),
+    }))
+  }
+
   const ownList = (mk: string, own: readonly BrandWatchAmazonItem[]) => {
     const rows = store.snapshot(`cw_amz__own_${mk}`)?.rows ?? []
     const fromProfile = new Map(
@@ -398,11 +415,30 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
         why: '品牌档案里读到的你的商品',
         sources: [{ kind: 'profile', label: '品牌档案' }],
       }
-    } else if (savedOwn.length === 0)
-      plan.own = {
-        needs_you: true,
-        why: '贴一个你在 Amazon 上的店铺或商品链接，我从那里读你卖哪几款（对标、比价用）',
-      }
+    } else if (savedOwn.length === 0) {
+      /*
+       * WP420（自查 B5）：自家 ASIN 不知道时，先按品牌名在 Amazon 搜一页给候选（和 Listing 体检那张卡同一个做法），
+       * 标题里带品牌名、不是广告位的前几款——人看一眼勾掉不对的就行，不让他从零贴链接。
+       */
+      const found = await ownByBrandName(mk, watch?.brand.name ?? prof.name)
+      if (found.length > 0) {
+        own = found
+        plan.own = {
+          value: found.map((o) => o.asin).join('；'),
+          why: `按品牌名在 Amazon 搜到的，看一眼去掉不是你的`,
+          sources: [
+            {
+              kind: 'web',
+              label: `${amazonHostOfMarket(mk) ?? 'Amazon'} 搜「${watch?.brand.name ?? prof.name ?? ''}」`,
+            },
+          ],
+        }
+      } else
+        plan.own = {
+          needs_you: true,
+          why: '贴一个你在 Amazon 上的店铺或商品链接，我从那里读你卖哪几款（对标、比价用）',
+        }
+    }
     const reader = deps.reader()
     // 自家几款的标题和价：快照里没有（还没读过）就用内置浏览器读一下前台页（最多 5 页，算进额度）
     const mine: { asin: string; title?: string; price?: number }[] = []
@@ -768,4 +804,26 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
       }
     },
   }
+}
+
+/**
+ * WP420（自查 B5）：搜索结果卡片里挑自家候选——标题里带品牌名（不分大小写）、不是广告位，最多 5 款。
+ */
+export function ownCandidatesFromCards(
+  cards: readonly { asin: string; title: string; sponsored: boolean }[],
+  brand: string,
+  max = 5,
+): { asin: string; title: string }[] {
+  const b = brand.trim().toLowerCase()
+  if (b === '') return []
+  const seen = new Set<string>()
+  const out: { asin: string; title: string }[] = []
+  for (const c of cards) {
+    const asin = c.asin.trim().toUpperCase()
+    if (c.sponsored || seen.has(asin) || !c.title.toLowerCase().includes(b)) continue
+    seen.add(asin)
+    out.push({ asin, title: c.title })
+    if (out.length >= max) break
+  }
+  return out
 }

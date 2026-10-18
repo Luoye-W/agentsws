@@ -191,15 +191,11 @@ quick_prompts:
     label: { zh: "盯 Amazon 竞品", en: "Watch Amazon competitors" }
     prompt: "帮我盯 Amazon 上的竞品：先挑几款对标款，说说它们的价格、评分和排名"
     kind: start_task
-  # ③ 库存、补货与入库
-  - id: restock_check
-    label: { zh: "该补货了吗", en: "Do I need to restock" }
-    prompt: "我该补货了吗？按最近的卖法算算还能撑几天，拿不到库存数就直接说"
-    kind: ask
-  # ① 账户健康与合规
-  - id: account_health
-    label: { zh: "账户健康怎么样", en: "Account health" }
-    prompt: "我的 Amazon 账户健康怎么样，有没有要马上处理的通知？拿不到就直接说"
+  # ② 词库差距——WP420（自查 B13）：「该补货了吗」「账户健康怎么样」要 Amazon 官方卖家连接（还没开放），
+  #   点了最好也只能说拿不到；先换成现在做得到的
+  - id: keyword_gaps
+    label: { zh: "看词库差距", en: "Keyword gaps" }
+    prompt: "看看词库：竞品常用、我没写进标题和五点的词有哪些？按 ASIN 说，先说竞品用得最多的"
     kind: ask
   # ② Listing 与关键词（出图走设计岗）
   - id: request_images

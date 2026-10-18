@@ -296,6 +296,8 @@ export interface AmazonKeywordRow extends AmazonKeyword {
   in_own_text: boolean
   /** 是不是差距词（任一自家 ASIN 缺）。 */
   gap: boolean
+  /** WP420（只加）：差距词是哪几个自家 ASIN 没写（界面写「B0…02 没写」，不和「已写进」打架）。 */
+  gap_asins?: string[]
 }
 
 export interface AmazonKeywordPage {

@@ -141,7 +141,8 @@ function SparkCell({ text }: { text: string }): React.ReactNode {
     .map(Number)
     .filter((n) => Number.isFinite(n))
   if (points.length < 2) return null
-  return <Sparkline points={points} testId="table-sparkline" className="h-4 w-12 text-ws-brand" />
+  // WP420（自查 U20）：走势线用中性色——品牌色在深色里是绿，降价被读成「好」
+  return <Sparkline points={points} testId="table-sparkline" className="h-4 w-12 text-ws-body" />
 }
 
 /**

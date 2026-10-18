@@ -286,6 +286,7 @@ import {
   listingTextsFromFacts,
   listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
+import { createListingChain } from './amazon-listing/chain.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
 import {
   type AmazonListingCheckup,
@@ -293,6 +294,7 @@ import {
   createAmazonListingCheckup,
   createAmazonListingToolExecutor,
 } from './amazon-listing/index.js'
+import { AMAZON_WEEKLY_KV, seedAmazonWeekly } from './amazon-listing/weekly.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -8418,7 +8420,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             now: () => clock.now(),
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             // WP394：读页走竞品对标款同一块（内置浏览器、Agent 标识、配送邮编、被拦就停）；测试 / demo 给了替身就用替身
-            reader: () => options.amazonListingReader?.(ws) ?? amazonFront,
+            // WP420（自查 B1）：内置浏览器被拦 / 暂停 → 你自己的浏览器（先问同意、每款每天一次）→ 照实说停到几点
+            reader: () =>
+              options.amazonListingReader?.(ws) ??
+              createListingChain({
+                front: () => amazonFront,
+                own: () => amazonOwnBrowser,
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
+              }),
             // WP398：体检读到的自家页（标题、五点）交给词库拆词，词库的「自家写了什么」就有了
             onFacts: (facts) => amazonKeywords?.ingestListings(listingTextsFromFacts(facts)),
             brand: async () => {
@@ -9111,6 +9120,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       redditPersona,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
+      // WP420（自查 B4 / B9）：每周一次的 Amazon 体检 + 词库刷新（官方自动化任务，只种一次）
+      ...(amazonListing === undefined
+        ? {}
+        : {
+            amazonWeekly: () =>
+              seedAmazonWeekly({
+                workspace_id: ws,
+                holder: () =>
+                  roles.assignments
+                    .listByRole('amz.store')
+                    .find((x) => x.workspace_id === ws && x.revoked_at === undefined),
+                createMatter: (input) => work.createMatter(input as never),
+                automation,
+                kv: {
+                  get: () => cwKv.kv<unknown>(AMAZON_WEEKLY_KV) ?? undefined,
+                  set: (v) => cwKv.setKv(AMAZON_WEEKLY_KV, v),
+                },
+                now: () => clock.now(),
+              }),
+          }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -9832,6 +9861,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const b = await of()
         // C3：品牌档案里新查到的竞品，沿用「要不要加进竞品」那张卡问一次（问过不再问）
         await b.seoService.askProfileCompetitors().catch(() => undefined)
+        // WP420（自查 B4 / B9）：有人担亚马逊店铺运营 → 种每周体检那条定时（只种一次）
+        await b.amazonWeekly?.().catch(() => undefined)
         return (await b.competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' }
       },
     })
