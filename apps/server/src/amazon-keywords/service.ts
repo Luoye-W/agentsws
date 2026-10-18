@@ -6,6 +6,7 @@
  *    标题 / 五点拆成词组进词库，品牌名去掉；
  * 2. 读前台联想词（内置浏览器，自报 Agent 身份）：种子词来自用户 / AI 给的、自家商品标题的核心词；
  *    每次最多一批（种子词本身 + a–z），**被拦就停**（这一轮停、之后 24 小时不再去读），额度满了就停，读不到照实说；
+ *    被拦后走用户自己的浏览器时（WP408 / 决策 1155）一批只读 9 页（种子词本身 + a–h），其余留给下一轮；
  * 3. 算差距：每个自家 ASIN「竞品标题 / 五点里出现、你这里缺词」的词组，按出现在几家竞品里排（没有搜索量）。
  *
  * 只出建议，不写 Amazon；数字格一期一律空着。词库按品牌存本机。
@@ -18,6 +19,7 @@ import {
   readBatchChain,
 } from '@agentsws/brand-intake'
 import {
+  AMAZON_EXTENSION_KEYWORD_PAGES,
   AMAZON_KEYWORD_SORT_NOTE_EN,
   AMAZON_KEYWORD_SORT_NOTE_ZH,
   AMAZON_KEYWORD_SOURCES,
@@ -285,6 +287,7 @@ export function createAmazonKeywordBank(o: AmazonKeywordBankOptions): AmazonKeyw
     let status: AmazonAutocompleteStatus | undefined
     let message: string | undefined
     const mine = o.ownBrowser?.()
+    let ownBrowserUsed = false
 
     /** 一页一页读（内置浏览器 / 你自己的浏览器同一个读法）；被拦就停这条路、剩下的往下传。 */
     const pageByPage = async (
@@ -375,11 +378,40 @@ export function createAmazonKeywordBank(o: AmazonKeywordBankOptions): AmazonKeyw
             message = `${message ?? '内置浏览器读不了联想词'}；今天已经用你自己的浏览器读过一批了，明天再试`
             return { got: [], next: keys, outcome: 'limited' }
           }
+          // WP408（决策 1155）：在用户自己的浏览器里一批至多读 9 页；同一个种子词上一轮剩下的那几页先读，其余留给下一轮
+          const rest = st().own_browser_rest
+          const left =
+            rest !== undefined && rest.seed === seed && rest.marketplace === market
+              ? new Set(rest.prefixes)
+              : undefined
+          const order =
+            left === undefined
+              ? keys
+              : [...keys.filter((k) => left.has(k)), ...keys.filter((k) => !left.has(k))]
+          const batch = order.slice(0, AMAZON_EXTENSION_KEYWORD_PAGES)
+          const later = order.slice(AMAZON_EXTENSION_KEYWORD_PAGES)
+          // 真正还没读过的那几页（上一轮之前读过的不算「留给下一轮」）
+          const owed = left === undefined ? later.length : later.filter((k) => left.has(k)).length
           mine.used()
+          ownBrowserUsed = true
           status = undefined
           const before = message
-          const step = await pageByPage(keys, (i) => mine.suggest(i), 'extension')
-          if (step.got.length > 0 && status === undefined) message = before
+          const step = await pageByPage(batch, (i) => mine.suggest(i), 'extension')
+          if (step.got.length > 0 && status === undefined) {
+            message =
+              owed === 0
+                ? before
+                : `${before === undefined ? '' : `${before}；`}在你自己的浏览器里这一批只读 ${String(batch.length)} 页，其余 ${String(owed)} 页留给下一轮`
+          }
+          if (later.length > 0)
+            step.stop = [
+              ...(step.stop ?? []),
+              ...later.map((key) => ({
+                key,
+                kind: 'limited' as const,
+                reason: '你自己的浏览器一批只读 9 页，留给下一轮',
+              })),
+            ]
           return step
         },
       },
@@ -403,7 +435,24 @@ export function createAmazonKeywordBank(o: AmazonKeywordBankOptions): AmazonKeyw
       message ??= '这里没有工坊的内置浏览器（桌面版才有），联想词这次没读'
     }
     status ??= got.length === prefixes.length ? 'ok' : got.length > 0 ? 'partial' : 'failed'
-    if (status === 'ok' && given.length === 0)
+    // WP408（决策 1155）：用户自己的浏览器读过这一批 → 记下这个种子词还剩哪几页（这一轮和之前几轮都没读到的）；
+    // 整批读全了 / 剩下的读完了就清掉，种子词往下轮
+    const prevRest = st().own_browser_rest
+    const carried =
+      prevRest !== undefined && prevRest.seed === seed && prevRest.marketplace === market
+        ? new Set(prevRest.prefixes)
+        : undefined
+    const readNow = new Set(got.map((g) => g.prefix))
+    const restNow = ownBrowserUsed
+      ? prefixes.filter((p) => !readNow.has(p) && (carried === undefined || carried.has(p)))
+      : undefined
+    const finishedRest = restNow !== undefined && restNow.length === 0 && got.length > 0
+    if (restNow !== undefined || status === 'ok')
+      store.update((s) => {
+        if (restNow === undefined || restNow.length === 0) delete s.own_browser_rest
+        else s.own_browser_rest = { seed, marketplace: market, prefixes: restNow }
+      })
+    if ((status === 'ok' || finishedRest) && given.length === 0)
       store.update((s) => {
         s.seed_cursor = (s.seed_cursor + 1) % Math.max(1, seeds.length)
       })
