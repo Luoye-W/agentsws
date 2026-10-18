@@ -62612,6 +62612,14 @@
                   "greeting": {
                     "type": "string",
                     "maxLength": 200
+                  },
+                  "assist_wait_seconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 600
+                  },
+                  "auto_send_faq": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["allowed_origins"]

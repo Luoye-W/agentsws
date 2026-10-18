@@ -53893,6 +53893,8 @@ export interface operations {
           allowed_origins: string[]
           accent?: string
           greeting?: string
+          assist_wait_seconds?: number
+          auto_send_faq?: boolean
         }
       }
     }
