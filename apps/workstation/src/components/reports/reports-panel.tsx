@@ -20,7 +20,6 @@ import {
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
-import { dutyHasBoards } from '@/components/reports/scope-boards'
 import { useApp } from '@/lib/app-context'
 import { matterUrl } from '@/lib/work'
 
@@ -72,6 +71,22 @@ export function ReportPanel({ scope, address }: RailPanelBodyProps): ReactNode {
   return <ReportView item={item} />
 }
 
+/**
+ * WP420（自查 U9）：这条职责下面有没有看板（有就不说「还没有报表」）。和 `scope-boards.tsx` 的 `dutyHasBoards`
+ * 同一份名单，但不 import 那个文件——它连着社媒日历、B2B、投放素材一大串，挂进报表面板会拖慢懒加载。
+ */
+export function dutyMayHaveBoards(role_id: string): boolean {
+  return (
+    role_id.startsWith('social.') ||
+    role_id === 'b2b.outbound' ||
+    role_id === 'b2b.sales' ||
+    role_id === 'ads.google' ||
+    role_id === 'ads.meta' ||
+    role_id === 'dtc.content' ||
+    role_id === 'amz.store'
+  )
+}
+
 /** 全部（「显示更多」）：报表一行一份，点了看那一份；下面是这一层的看板。 */
 export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
   const { t } = useApp()
@@ -79,7 +94,8 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
   const { reports, ready } = useScopeReports(props.scope)
   const scope = props.scope
   const hasBoards =
-    scope?.assignment !== undefined && (scope.tier === 'position' || dutyHasBoards(scope.scope_id))
+    scope?.assignment !== undefined &&
+    (scope.tier === 'position' || dutyMayHaveBoards(scope.scope_id))
   return (
     <div className="flex flex-col gap-5" data-testid="reports-panel">
       <section className="flex flex-col gap-1">

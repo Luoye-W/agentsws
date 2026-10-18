@@ -121,3 +121,22 @@ describe('投放看板（A6 / A8）', () => {
     expect(screen.getByTestId('ads-overview-data').textContent).toContain('导进来了')
   })
 })
+
+describe('报表面板：有看板时不说「还没有报表」（U9）', () => {
+  it('哪几条职责下面有看板（不 import 看板那一大串）', async () => {
+    const { dutyMayHaveBoards } = await import('@/components/reports/reports-panel')
+    const { dutyHasBoards } = await import('@/components/reports/scope-boards')
+    for (const r of [
+      'ads.meta',
+      'ads.google',
+      'amz.store',
+      'b2b.outbound',
+      'b2b.sales',
+      'dtc.content',
+      'social.reddit',
+      'dtc.support',
+      'ads.x',
+    ])
+      expect(dutyMayHaveBoards(r), r).toBe(dutyHasBoards(r))
+  })
+})
