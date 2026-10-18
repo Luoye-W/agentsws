@@ -1267,6 +1267,8 @@ export type ScenarioEvent =
   | { at: string; type: 'competitor.read'; competitor_read: ScenarioCompetitorRead }
   /** WP393：店铺管理「竞品动向」配好了（什么算要紧 + 自家几款 + 对标款）。 */
   | { at: string; type: 'competitor.plan'; competitor_plan: ScenarioCompetitorPlan }
+  /** WP411：Reddit 巡查读回来一批（外部关键词结果 + 收件箱 / 自家版块），过整词匹配、去重、外部帖闸。 */
+  | { at: string; type: 'reddit.watch_batch'; reddit_watch: ScenarioRedditWatchBatch }
   /** WP44：推一份未发布主题副本（造预览）。 */
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
@@ -1685,6 +1687,11 @@ export interface ScenarioExpected {
    * 竞品监控自己零写（不出卡、不改任何外部账号）。
    */
   competitor_changes?: string[]
+  /**
+   * WP411：Reddit 巡查那一批过完质量闸——留下哪几条（全名，按读到的顺序）、整词匹配丢了几条、
+   * 同一条重复的几条、会交给起草的哪几条（同时钉住：巡查自己零写）。
+   */
+  reddit_watch?: { kept: string[]; filtered: number; dupes: number; draftable: string[] }
   /** WP394：比出来的变化里，带「和自家对标款比」的那几条差价（竞品现价 − 自家现价，按顺序）。 */
   competitor_vs_own?: number[]
   /** WP394：Amazon 那几次读按顺序走了哪条路（`browser` / `cloud`）。 */
@@ -2302,4 +2309,26 @@ export interface Scenario {
   control_for?: string
   /** 场景文件的来源路径，解析时填。 */
   source?: string
+}
+
+/** WP411：Reddit 巡查读回来的一条（场景里写死）。 */
+export interface ScenarioRedditWatchItem {
+  fullname: string
+  source: 'inbox' | 'own_sub' | 'external'
+  subreddit: string
+  /** 外部那一路命中的关键词（数据渠道宽松匹配给的）。 */
+  keyword?: string
+  title?: string
+  text: string
+  post_title?: string
+  /** 这一条要不要回（AI 判的；外部帖还要过外部帖闸）。 */
+  reply?: boolean
+}
+
+/** WP411：一批巡查结果 + 品牌名写法 / 型号 / 竞品名。 */
+export interface ScenarioRedditWatchBatch {
+  brand_names: string[]
+  models?: string[]
+  competitors?: string[]
+  items: ScenarioRedditWatchItem[]
 }
