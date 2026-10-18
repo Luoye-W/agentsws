@@ -93,6 +93,11 @@ const api = async (demo, token, path, init = {}) => {
 }
 
 async function shoot(page, name, scheme) {
+  // 工作台的深浅色存在本机设置里（`agentsws.theme`），切完重载一次
+  await page.evaluate((t) => {
+    localStorage.setItem('agentsws.theme', t)
+    document.documentElement.classList.toggle('dark', t === 'dark')
+  }, scheme)
   await page.emulateMedia({ colorScheme: scheme })
   await page.waitForTimeout(400)
   const file = join(OUT, `${name}-${scheme === 'dark' ? 'dark' : 'light'}.png`)
