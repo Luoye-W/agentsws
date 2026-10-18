@@ -68,6 +68,7 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
+import { demoAmazon } from './demo-amazon.js'
 import { DEMO_COMPETITORS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
 
@@ -1501,11 +1502,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   }
   // WP392：竞品监控的替身进料口（一个 demo 一份：第一次原样、之后 Jackery 那款降价）
   const competitorShop = demoShopAdapter()
+  // WP394：Amazon 前台与云端兜底的替身（编的 ASIN；第二次读起 Jackery 那款降价；想演被拦见 `demo-amazon.ts`）
+  const amazonDemo = demoAmazon()
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
+    amazonFront: () => amazonDemo.reader,
+    amazonCloud: () => amazonDemo.cloud,
     b2bStandIns,
     staticDir,
     // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，

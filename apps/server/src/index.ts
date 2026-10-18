@@ -4,6 +4,16 @@
  * `createServer()` 装配内核与全部已合并模块并返回一个可 listen 的句柄；
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
+
+// WP394（docs/104 一期 B）：读 Amazon 前台那一块与云端兜底的口子（demo / 测试塞替身用）
+export type {
+  AmazonCardsRead,
+  AmazonCloudPort,
+  AmazonFrontReader,
+  AmazonRawRead,
+  AmazonStorefrontRead,
+  AmazonSuggestRead,
+} from './amazon-front/index.js'
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
