@@ -24,6 +24,8 @@ import type {
   Iso8601,
 } from '@agentsws/contracts'
 import { AMAZON_KEYWORD_SOURCES } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
+import LEXICON_FILE from './amazon-keywords.content.json' with { type: 'json' }
 
 /* ── 站点与语言 ───────────────────────────────────────────────────── */
 
@@ -65,39 +67,51 @@ export function amazonMarketOf(marketplace: string): string {
 
 /* ── 切词与归一化 ─────────────────────────────────────────────────── */
 
-/** 英文停用词（介词、冠词、连词、代词、空泛的修饰）。当断点，也不进键。 */
-const STOP_EN = new Set(
-  (
-    'a an the and or nor but for with without of to in on at by from into onto over under ' +
-    'as is are be been being was were it its this that these those your you our we us they them ' +
-    'their his her my me i he she up out off per via than then so too very can will just also ' +
-    'more most any each every other such only own same both few some no not yes ' +
-    'etc incl including include includes plus pcs pc pack set'
-  ).split(' '),
-)
+/**
+ * WP404（docs/107 §3）：两张英文词表是数据（`amazon-keywords.content.json`：`stop_en` 停用词——当断点、
+ * 不进键；`keep_s` 结尾是 s 但不是复数的词），这里只管用。按品牌可覆盖：`readContentTable`。
+ */
+interface LexiconRow {
+  id: string
+  list: 'stop_en' | 'keep_s'
+  word: string
+}
 
-/** 单复数不改的词（结尾是 s 但不是复数）。 */
-const KEEP_S = new Set([
-  'series',
-  'species',
-  'news',
-  'glasses',
-  'gps',
-  'abs',
-  'lbs',
-  'mph',
-  'plus',
-  'bus',
-  'gas',
-  'lens',
-  'canvas',
-  'chassis',
-])
+const LEXICON_TABLE = builtinContentTable<LexiconRow>(LEXICON_FILE)
+
+const isLexiconRow = (r: unknown): r is LexiconRow =>
+  ((r as LexiconRow).list === 'stop_en' || (r as LexiconRow).list === 'keep_s') &&
+  typeof (r as LexiconRow).word === 'string'
+
+interface Lexicon {
+  stop: ReadonlySet<string>
+  keepS: ReadonlySet<string>
+}
+
+const lexiconCache = new WeakMap<readonly LexiconRow[], Lexicon>()
+
+/** 这一次用的两张词表（同一份行只建一次 Set）。 */
+function lexicon(brand?: string): Lexicon {
+  const rows = readContentTable(LEXICON_TABLE, { brand, accepts: isLexiconRow })
+  let hit = lexiconCache.get(rows)
+  if (hit === undefined) {
+    hit = {
+      stop: new Set(rows.filter((r) => r.list === 'stop_en').map((r) => r.word)),
+      keepS: new Set(rows.filter((r) => r.list === 'keep_s').map((r) => r.word)),
+    }
+    lexiconCache.set(rows, hit)
+  }
+  return hit
+}
 
 /** 英文复数 → 单数（只管常见规则；键用的，不用于显示）。 */
 export function singularEn(word: string): string {
+  return singularWith(word, lexicon().keepS)
+}
+
+function singularWith(word: string, keepS: ReadonlySet<string>): string {
   const w = word
-  if (w.length <= 3 || KEEP_S.has(w)) return w
+  if (w.length <= 3 || keepS.has(w)) return w
   if (w.endsWith('ies') && w.length > 4) return `${w.slice(0, -3)}y`
   if (w.endsWith('sses')) return w.slice(0, -2)
   if (/(ches|shes|xes|zes)$/.test(w)) return w.slice(0, -2)
@@ -137,6 +151,8 @@ export interface KeywordContext {
   language: string
   /** 品牌名（这条文本自己的 + 已知的别家），拆词时当断点去掉。 */
   brands: readonly string[]
+  /** WP404：这次在哪个品牌里（词表按品牌可覆盖；不给 = 随软件带的那一份）。 */
+  brand?: string
 }
 
 /** 品牌名 → 归一化后的词序列（`Rad Power Bikes` → `rad power bike`）。 */
@@ -158,7 +174,7 @@ export function keyWord(word: string, language: string): string {
 
 /** 一串字的归一化键（停用词不进键）。联想词整句当一个词时用。 */
 export function normalizeKeyword(text: string, language = 'en'): string {
-  const stop = language === 'en' ? STOP_EN : undefined
+  const stop = language === 'en' ? lexicon().stop : undefined
   return wordsOf(text)
     .map((w) => (language === 'en' ? singularEn(w) : w))
     .filter((w) => stop === undefined || !stop.has(w))
@@ -191,8 +207,9 @@ type Run = { raw: string; key: string }[]
 /** 一段字按断点（停用词、品牌名、数字开头的规格、太短的词）切成几串。 */
 function runsOf(segment: string, ctx: KeywordContext, brands: readonly string[][]): Run[] {
   const en = ctx.language === 'en'
+  const lex = lexicon(ctx.brand)
   const raw = rawWordsOf(segment)
-  const keys = raw.map((w) => (en ? singularEn(cleanWord(w)) : cleanWord(w)))
+  const keys = raw.map((w) => (en ? singularWith(cleanWord(w), lex.keepS) : cleanWord(w)))
   const runs: Run[] = []
   let cur: Run = []
   const cut = (): void => {
@@ -207,7 +224,7 @@ function runsOf(segment: string, ctx: KeywordContext, brands: readonly string[][
       continue
     }
     const k = keys[i] ?? ''
-    if ((en && STOP_EN.has(k)) || isSpecToken(k) || k.length < 2) cut()
+    if ((en && lex.stop.has(k)) || isSpecToken(k) || k.length < 2) cut()
     else cur.push({ raw: raw[i] ?? '', key: k })
     i += 1
   }

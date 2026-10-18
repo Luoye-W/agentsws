@@ -22,14 +22,27 @@ import type {
   ListingSeverity,
 } from '@agentsws/contracts'
 import { LISTING_RULE_STALE_DAYS, LISTING_SEVERITY_ORDER } from '@agentsws/contracts'
+import { builtinContentTable, readContentTable } from '@agentsws/core'
 import RULES_FILE from './amazon-listing-rules.json' with { type: 'json' }
 import { builtinClaimRule } from './claim-rules.js'
 import { claimRuleMatches, splitSentences } from './quality.js'
 
+/**
+ * WP404（docs/107 §3）：这张表本来就是数据（`amazon-listing-rules.json`，每条带 id）；现在经同一个读取口拿
+ * （表名 `seo.amazon_listing_rules`），按品牌可覆盖。没登记覆盖源就是数据文件原样。
+ */
+const LISTING_RULES_TABLE = builtinContentTable<ListingRule>({
+  table: 'seo.amazon_listing_rules',
+  rows: (RULES_FILE as unknown as { rules: ListingRule[] }).rules,
+})
+
+const isListingRule = (r: unknown): r is ListingRule => {
+  const x = r as ListingRule
+  return typeof x.check === 'string' && typeof x.params === 'object' && x.params !== null
+}
+
 /** 自带的那一份规则（数据文件原样）。 */
-export const BUILTIN_LISTING_RULES: readonly ListingRule[] = (
-  RULES_FILE as unknown as { rules: ListingRule[] }
-).rules
+export const BUILTIN_LISTING_RULES: readonly ListingRule[] = LISTING_RULES_TABLE.rows
 
 const BUILTIN = new Map(BUILTIN_LISTING_RULES.map((r) => [r.id, r]))
 
@@ -46,8 +59,13 @@ const isParam = (v: unknown): v is ListingRuleParam =>
 /** 自带规则 + 用户改过的（只认自带规则里有的参数名、类型对得上的值）。 */
 export function resolveListingRules(
   overrides: Readonly<Record<string, ListingRuleOverride>> = {},
+  options: { brand?: string } = {},
 ): ListingRule[] {
-  return BUILTIN_LISTING_RULES.map((base) => {
+  const table = readContentTable(LISTING_RULES_TABLE, {
+    brand: options.brand,
+    accepts: isListingRule,
+  })
+  return table.map((base) => {
     const o = overrides[base.id]
     if (o === undefined) return base
     const params: Record<string, ListingRuleParam> = { ...base.params }
