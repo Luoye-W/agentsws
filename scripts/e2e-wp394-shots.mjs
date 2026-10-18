@@ -102,7 +102,8 @@ async function main() {
     const amz = (me.assignments ?? []).find((a) => a.role_id === 'amz.store')?.id
     check(amz !== undefined, '有亚马逊店铺运营那条分配')
     // 自家两款写进关注设置那一格（和 WP396 同一格；demo 里是编的 ASIN）
-    assignment = amz
+    // 关注设置那一格要「内容与搜索」那条分配来写（demo 里负责人自己担着）
+    assignment = (me.assignments ?? []).find((a) => a.role_id === 'dtc.content')?.id ?? amz
     await call('GET', '/v1/seo/watch', owner).catch(() => undefined)
     await call('PUT', '/v1/seo/watch', owner, {
       brand_amazon: [
@@ -110,6 +111,7 @@ async function main() {
         { marketplace: 'US', asin: 'B0DEMONV02', label: 'Trail Power 300' },
       ],
     })
+    assignment = amz
     const opened = await call('POST', `/v1/positions/${amz}/matters`, owner, {
       title: '帮我盯 Amazon 上的竞品：先挑几款对标款，说说它们的价格、评分和排名',
       role_id: 'amz.store',
