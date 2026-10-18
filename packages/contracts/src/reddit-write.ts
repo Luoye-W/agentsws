@@ -148,8 +148,29 @@ export interface RedditStageInput {
 
 export type RedditStageResult =
   | { staged: true; approval_item_id: string }
-  /** WP411：`skipped` = 不该出卡（品牌号已经回过这一条 / 等人设）——不是出错。 */
-  | { staged: false; message: string; skipped?: 'already_replied' | 'needs_persona' }
+  /**
+   * WP411：`skipped` = 不该出卡（品牌号已经回过这一条 / 等人设）——不是出错。
+   * 决策 1199（Luoye 10-19 改）：`contradiction` = 重写一次后草稿仍和品牌号说过的矛盾——不出卡，
+   * 巡查条目标「和你 <日期> 说的矛盾，要你看」留在待处理（`conflict` 带品牌号原话与日期）。
+   */
+  | {
+      staged: false
+      message: string
+      skipped?: 'already_replied' | 'needs_persona' | 'contradiction'
+      conflict?: RedditDraftConflict
+    }
+
+/**
+ * 决策 1199：自动起草时草稿和品牌号已说过的话矛盾——不出「发出去」卡，条目上记这一份由人决定。
+ */
+export interface RedditDraftConflict {
+  /** 草稿里对不上的那一句。 */
+  quote: string
+  /** 品牌号原话。 */
+  prior: string
+  /** 品牌号那句是哪天说的（拿得到才有）。 */
+  prior_at?: Iso8601
+}
 
 /** 卡上 `payload` 的形状（`outbound_draft` + `form: 'reddit_write'`）。 */
 export interface RedditWritePayload {

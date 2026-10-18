@@ -10,7 +10,11 @@ import type {
   RedditWriteTarget,
 } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { type RedditDraftPromptInput, redditDraftPrompt } from '../src/reddit-write/draft.js'
+import {
+  conflictNote,
+  type RedditDraftPromptInput,
+  redditDraftPrompt,
+} from '../src/reddit-write/draft.js'
 import { createRedditPersona } from '../src/reddit-write/persona.js'
 import { createRedditWriteService } from '../src/reddit-write/service.js'
 import { createResearchKit } from '../src/setup-research.js'
@@ -136,10 +140,28 @@ describe('起草：读整串、照口径、没依据不写、口吻照用', () =
     expect(m.cards[0]?.prior_replies?.[0]?.text).toBe(PRIOR)
   })
 
-  it('重写还矛盾：出卡但标出来（对上哪一句、哪天说的）', async () => {
+  it('重写还矛盾（决策 1199）：不出卡，回「和你 10-12 说的矛盾，要你看」并带原话与日期', async () => {
     const m = make(["I can't speak to recall claims, sorry."], { stance: 'personal' })
-    await m.svc.draftAndStage(ACTOR, { target: TARGET, thread: THREAD })
-    expect(m.cards[0]?.checks).toEqual([
+    const r = await m.svc.draftAndStage(ACTOR, { target: TARGET, thread: THREAD })
+    expect(m.calls).toHaveLength(2)
+    expect(m.cards).toHaveLength(0)
+    expect(r).toEqual({
+      staged: false,
+      skipped: 'contradiction',
+      conflict: {
+        quote: expect.stringContaining("can't speak to recall"),
+        prior: PRIOR,
+        prior_at: '2026-10-12T03:00:00.000Z',
+      },
+      message: expect.stringContaining('和你 10-12 说的矛盾，要你看'),
+    })
+    expect(r.staged === false && r.message).toContain(PRIOR)
+  })
+
+  it('人手动点「起草」那条路照旧：矛盾在草稿上标出来（对上哪一句、哪天说的），由人决定出不出卡', async () => {
+    const m = make(["I can't speak to recall claims, sorry."], { stance: 'personal' })
+    const d = await m.svc.draft(ACTOR, { target: TARGET, thread: THREAD })
+    expect(d.checks).toEqual([
       expect.objectContaining({
         kind: 'contradiction',
         prior: PRIOR,
@@ -147,6 +169,13 @@ describe('起草：读整串、照口径、没依据不写、口吻照用', () =
         message: '和品牌号 10-12 在这串里说的对不上',
       }),
     ])
+    expect(m.cards).toHaveLength(0)
+  })
+
+  it('conflictNote：拿不到日期说「之前」', () => {
+    expect(conflictNote({ quote: 'no recall', prior: 'there was a recall' })).toBe(
+      '和你之前说的矛盾，要你看：你说过「there was a recall」，AI 这次写成了「no recall」，没出卡。',
+    )
   })
 
   it('编的技术细节（显示索引问题、切语言能绕过）：重写还编 → 换成「我去确认一下」', async () => {

@@ -33,6 +33,7 @@ import type {
   OutboundRecord,
   OutboundRecordInput,
   RedditDraftCheck,
+  RedditDraftConflict,
   RedditDraftFact,
   RedditDraftInput,
   RedditDraftView,
@@ -52,6 +53,7 @@ import { finalPayload } from '@agentsws/txn'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
 import { replyBlockedReason } from '../social-reply-draft.js'
 import {
+  conflictNote,
   factQuery,
   fixNotes,
   type RedditDrafter,
@@ -785,6 +787,22 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         return { staged: false, message: err instanceof Error ? err.message : String(err) }
       }
       if (draft.text.trim() === '') return { staged: false, message: '起草出来是空的，没出卡。' }
+      // 决策 1199（Luoye 10-19 改）：重写一次后仍和品牌号说过的矛盾 → 不出卡、也不标黄出卡，
+      // 条目留在待处理里「和你 <日期> 说的矛盾，要你看」（附原话与日期），由人决定
+      const clash = draft.checks?.find((c) => c.kind === 'contradiction')
+      if (clash !== undefined) {
+        const conflict: RedditDraftConflict = {
+          quote: clash.quote ?? '',
+          prior: clash.prior ?? '',
+          ...(clash.prior_at === undefined ? {} : { prior_at: clash.prior_at }),
+        }
+        return {
+          staged: false,
+          skipped: 'contradiction',
+          conflict,
+          message: conflictNote(conflict),
+        }
+      }
       return service.stage(actor, {
         target: input.target,
         text: draft.text,

@@ -276,6 +276,27 @@ describe('#10 第 3 条 / #11：同一条只算一次；起草前读整串', () 
     // 品牌号在自家版块里发过的那条照样在
     expect(ctx?.ours).toHaveLength(1)
   })
+
+  it('决策 1199：起草出来和品牌号说过的矛盾 → 条目留在待处理、标「要你看」，不再自动重起草', async () => {
+    const s = setup()
+    s.watch.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
+    await s.watch.runNow()
+    await round(s.watch, fakeReddit(routes))
+    s.setNow('2026-10-14T09:00:00.000Z')
+    s.watch.sweep()
+    const id = s.pending.flat()[0]?.id ?? ''
+    const conflict = {
+      quote: "I can't speak to recall claims.",
+      prior: 'It is true that some IVRA Air3 units were recalled due to overheating.',
+      prior_at: '2026-10-12T03:00:00.000Z',
+    }
+    const got = s.watch.setStatus(id, 'open', { note: '和你 10-12 说的矛盾，要你看', conflict })
+    expect(got).toMatchObject({ status: 'open', conflict, note: '和你 10-12 说的矛盾，要你看' })
+    // 还在待处理里（人看得到）
+    expect(s.watch.view().pending.map((x) => x.id)).toContain(id)
+    // 再交一次起草（如口吻刚定）时跳过它：回不回由人定
+    expect(s.watch.redispatch()).toBe(0)
+  })
 })
 
 describe('#11 第 5 条：外部帖只在真相关时起草', () => {

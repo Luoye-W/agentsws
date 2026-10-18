@@ -3,6 +3,7 @@
  *
  * 一屏：一行状态（上次什么时候、三块各自好了没有 + 「现在巡查」，说明进问号）→ 要回的清单
  * （来源 · 作者 · 一行原文 · AI 的一句理由 · 打开原帖 · 不回）。起草与发出在 WP329（「发出去」卡）。
+ * 决策 1199：自动起草和品牌号说过的矛盾的那条不出卡，在这一行下面标「和你 <日期> 说的矛盾，要你看」。
  *
  * 界面纪律：读不成就照实说（缺连接 / 缺设置在卡片流里有卡）；正文是外部文本，原样截一行，不渲染。
  */
@@ -111,6 +112,23 @@ function Row({ item, onDismiss }: { item: RedditWatchEntry; onDismiss(): void })
         <p className="truncate">{line}</p>
         {item.judgement === undefined ? null : (
           <p className="text-xs text-muted-foreground">{item.judgement.reason}</p>
+        )}
+        {item.conflict === undefined ? null : (
+          // 决策 1199：自动起草和品牌号说过的矛盾——没出卡，留在这里要人看（原话与草稿进问号）
+          <p
+            className="flex items-center gap-1 text-xs text-ws-warn"
+            data-testid="reddit-watch-conflict"
+          >
+            {item.conflict.prior_at === undefined
+              ? t('rwatch.conflict.nodate')
+              : t('rwatch.conflict', { date: item.conflict.prior_at.slice(5, 10) })}
+            <Hint
+              text={t('rwatch.conflict.hint', {
+                prior: item.conflict.prior,
+                quote: item.conflict.quote,
+              })}
+            />
+          </p>
         )}
       </div>
       {item.url === undefined ? null : (

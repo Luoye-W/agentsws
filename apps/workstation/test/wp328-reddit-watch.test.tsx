@@ -87,6 +87,25 @@ describe('WP328 Reddit 巡查', () => {
     fireEvent.click(screen.getByTestId('reddit-watch-run'))
     await waitFor(() => expect(state.run).toHaveBeenCalledWith('asg_reddit'))
   })
+  it('决策 1199：起草和品牌号说过的矛盾的那条留在清单里，标「和你 10-12 说的矛盾，要你看」', async () => {
+    const base = view().pending[0]
+    if (base === undefined) throw new Error('no item')
+    state.view = view({
+      pending: [
+        {
+          ...base,
+          conflict: {
+            quote: "I can't speak to recall claims.",
+            prior: 'Some Air3 units were recalled.',
+            prior_at: '2026-10-12T03:00:00.000Z',
+          },
+        },
+      ],
+    })
+    renderWithProviders(<RedditWatch assignment="asg_reddit" />)
+    const line = await screen.findByTestId('reddit-watch-conflict')
+    expect(line.textContent).toContain('和你 10-12 说的矛盾，要你看')
+  })
   it('没配版块和关键词、没有要回的：照实说', async () => {
     state.view = view({ configured: false, pending: [] })
     renderWithProviders(<RedditWatch assignment="asg_reddit" />)

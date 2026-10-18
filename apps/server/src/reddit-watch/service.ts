@@ -38,6 +38,7 @@ import {
   REDDIT_EXTERNAL_BACKFILL_DAYS,
   REDDIT_WATCH_ALERT_DAYS,
   type RedditBackfillPlan,
+  type RedditDraftConflict,
   type RedditThreadContext,
   type RedditWatchDigest,
   type RedditWatchEntry,
@@ -140,8 +141,11 @@ export interface RedditWatchAssembly {
   setStatus(
     id: string,
     status: RedditWatchItemStatus,
-    /** WP411：`note` = 一句人话（「品牌号 10-12 已经回过这一条」）。 */
-    extra?: { outbound_record_id?: string; note?: string },
+    /**
+     * WP411：`note` = 一句人话（「品牌号 10-12 已经回过这一条」）。
+     * 决策 1199：`conflict` = 自动起草和品牌号说过的矛盾（没出卡，留在待处理里要人看）。
+     */
+    extra?: { outbound_record_id?: string; note?: string; conflict?: RedditDraftConflict },
   ): RedditWatchEntry | undefined
   /** 人点「现在巡查」。正在跑的那一轮没结束就回那一轮。 */
   runNow(): Promise<RedditWatchRun>
@@ -1547,6 +1551,7 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       if (extra?.outbound_record_id !== undefined)
         next.outbound_record_id = extra.outbound_record_id
       if (extra?.note !== undefined) next.note = extra.note
+      if (extra?.conflict !== undefined) next.conflict = extra.conflict
       store.put(next)
       emit('reddit_watch.item_status', { item_id: id, status })
       return next
@@ -1662,7 +1667,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     redispatch: () => {
       const open = store
         .list(ws, { reply: true, status: 'open', limit: 300 })
-        .filter((x) => x.dup_of === undefined)
+        // 决策 1199：和品牌号说过的矛盾、等人看的那几条不再自动重起草（人决定）
+        .filter((x) => x.dup_of === undefined && x.conflict === undefined)
       enqueueDrafts(open)
       return open.length
     },

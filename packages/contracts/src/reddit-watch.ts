@@ -12,6 +12,7 @@
  * **不替用户定运营规矩**（664 被否）：这里没有冷却、占比、身份声明之类的格子；版块名、关键词、频率由用户配。
  */
 import type { Iso8601, WorkspaceId } from './common.js'
+import type { RedditDraftConflict } from './reddit-write.js'
 
 /** 从哪来：收件箱 / 自家版块 / 外部社区（关键词）。 */
 export type RedditWatchSource = 'inbox' | 'own_sub' | 'external'
@@ -113,6 +114,10 @@ export interface RedditWatchEntry {
   dup_of?: string
   /** WP411：为什么没起草 / 起草时标了什么（一句人话：「品牌号 10-12 已经回过这一条」「外部帖没提到我们」）。 */
   note?: string
+  /**
+   * 决策 1199：自动起草出来的和品牌号说过的矛盾——没出卡，留在待处理里「要你看」（附品牌号原话与日期）。
+   */
+  conflict?: RedditDraftConflict
 }
 
 /** 每品牌的巡查设置（缺版块 / 缺关键词就出配置卡，按 WP324）。 */

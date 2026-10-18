@@ -8504,6 +8504,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
      * WP411（#11）：交过来之前巡查那边已按全名去重、读过整串；这里带上整串起草——品牌号已经回过这一条的不起草
      * （条目标「回过了」并写明）；品牌号怎么说话还没定 → 一条都不起草，先出设置卡（定了再交回来）。
+     * 决策 1199：重写一次后还和品牌号说过的矛盾 → 不出卡，条目留在待处理、标「和你 <日期> 说的矛盾，要你看」。
      */
     redditWatch?.onPending((entries) => {
       const holder = redditHolder()
@@ -8537,6 +8538,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             .catch(() => undefined)
           if (got !== undefined && !got.staged && got.skipped === 'already_replied')
             redditWatch.setStatus(entry.id, 'done', { note: got.message })
+          // 决策 1199：和品牌号说过的矛盾 → 不出卡，条目留在待处理里「和你 <日期> 说的矛盾，要你看」
+          if (got !== undefined && !got.staged && got.skipped === 'contradiction')
+            redditWatch.setStatus(entry.id, 'open', {
+              note: got.message,
+              ...(got.conflict === undefined ? {} : { conflict: got.conflict }),
+            })
         }
       })()
     })

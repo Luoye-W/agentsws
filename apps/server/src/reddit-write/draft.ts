@@ -14,6 +14,7 @@
  */
 import type {
   RedditDraftCheck,
+  RedditDraftConflict,
   RedditDraftFact,
   RedditPersona,
   RedditThreadContext,
@@ -206,6 +207,15 @@ export function reviewRedditDraft(
       })
   }
   return out
+}
+
+/**
+ * 决策 1199：自动起草仍和品牌号说过的矛盾时，巡查条目上那一句——「和你 10-12 说的矛盾，要你看：你说过「……」」。
+ * 日期按 UTC 取月-日（同卡上「你 10-12 已回」的写法）；拿不到日期就说「之前」。
+ */
+export function conflictNote(c: RedditDraftConflict): string {
+  const when = c.prior_at === undefined ? '之前' : ` ${c.prior_at.slice(5, 10)} `
+  return `和你${when}说的矛盾，要你看：你说过「${c.prior.slice(0, 160)}」，AI 这次写成了「${c.quote.slice(0, 160)}」，没出卡。`
 }
 
 /** 检查没过的几处 → 重写一次时告诉模型的话。 */
