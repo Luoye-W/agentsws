@@ -37,6 +37,7 @@ import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
+import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 
 export type Lang = 'zh' | 'en'
@@ -8552,6 +8553,8 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
     ...PANEL_ZH,
+    // WP401：积木表格的筛选
+    ...TABLE_FILTER_ZH,
   },
   en: {
     ...en,
@@ -8588,6 +8591,7 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
     ...PANEL_EN,
+    ...TABLE_FILTER_EN,
   },
 }
 

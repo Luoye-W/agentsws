@@ -9,7 +9,7 @@
  * - 口令格 / 「点开看」的外部媒体是宿主自己画的（`host-nodes.tsx`）；日期 / 数字两种格子在插件校验之后接回去。
  * - 链接一律外部浏览器打开（站内 `/…` 走路由），悬停显示真实域名。
  * - 有 echart / mermaid / scene3d 才去拉本机打包的那个引擎（登记到插件约定的位置，不插外部 `<script>`）。
- * - 交互状态不写本机存储。
+ * - 交互状态不写本机存储（WP401 例外：表格的筛法按表记在本机，见 `table-filter-node.tsx`）。
  */
 import {
   type GenuiDispatch,
@@ -44,11 +44,14 @@ import { useApp } from '@/lib/app-context'
 import { useGenuiHost } from './genui-host'
 import { MediaGateNode, SECRET_DONE_ACTION, SecretNode } from './host-nodes'
 import { registerHostGenuiComponent } from './primitives-shim'
+import { TABLE_HOST_TYPE, TableFilterNode, wrapGenuiTables } from './table-filter-node'
 import { ToolResult } from './tool-result'
 import './genui-view.css'
 
 registerHostGenuiComponent('ws-secret', SecretNode)
 registerHostGenuiComponent('ws-media', MediaGateNode)
+// WP401：每张表外面包一层筛选（`table-filter-node.tsx`）
+registerHostGenuiComponent(TABLE_HOST_TYPE, TableFilterNode)
 
 type Engine = 'echart' | 'mermaid' | 'scene3d'
 const engines: Partial<Record<Engine, Promise<unknown>>> = {}
@@ -112,7 +115,8 @@ export default function GenuiView({
   const openConnect = useOpenConnect()
   const processed = useMemo(() => processGenuiSpec(forPlugin(spec)), [spec])
   const rendered = useMemo(
-    () => (processed.spec === null ? null : withHostInputTypes(processed.spec, spec)),
+    () =>
+      processed.spec === null ? null : wrapGenuiTables(withHostInputTypes(processed.spec, spec)),
     [processed, spec],
   )
   const nodes = useMemo(() => genuiNodes(spec), [spec])

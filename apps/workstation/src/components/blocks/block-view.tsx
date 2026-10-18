@@ -13,7 +13,7 @@ import type {
 } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CartesianGrid,
@@ -25,12 +25,15 @@ import {
   YAxis,
 } from 'recharts'
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
+import { ColumnFilter, FilteredLine, useTableFilters } from '@/components/design/table-filter'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getBlockData, rerunBlock } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate, formatValue } from '@/lib/format'
 import { approvalStateLabel, cellText } from '@/lib/humanize'
+import type { Lang } from '@/lib/i18n'
+import { activeFilterCount, applyFilters, filterColumns } from '@/lib/table-filter'
 
 /** 前端的组件注册表：名字对不上就不渲染（29 原则 ①）。 */
 const RENDERERS = [
@@ -110,8 +113,54 @@ function TableFooter({ footer }: { footer: NonNullable<TableResult['footer']> })
   )
 }
 
-function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
+/** 一格怎么念（表格里画的、筛选弹层里选项显示的、搜的都是这几个字）。 */
+function cellDisplay(
+  c: TableResult['columns'][number],
+  value: string | number | undefined,
+  row: Record<string, string | number>,
+  lang: Lang,
+): string {
+  if (c.format === 'flag') return String(value ?? '')
+  return c.key === 'created_at' && typeof value === 'string'
+    ? formatDate(value, lang)
+    : typeof value === 'number'
+      ? // WP63：列自己说它是什么（不说就按金额——老积木的行为一个字不变）。
+        // 件数 / 评分不是钱，渲染成 `US$2.00` 是把真话说成了假话。
+        formatValue(value, c.format ?? 'money', lang, String(row.currency ?? 'USD'))
+      : // WP141：渠道 / 形态 / ISO 时间这几种字串说人话（lib/humanize）
+        cellText(c.key, String(value ?? ''), lang)
+}
+
+/**
+ * WP401（决策 1090）：列声明里写了 `filter` 的列，表头多一个小漏斗（点开才有选项）；筛法按积木 id 记在本机。
+ * 没写的列、没给 `tableId` 的地方一个字不变。
+ */
+function TableBlock({
+  payload,
+  tableId,
+}: {
+  payload: TableResult
+  tableId?: string | undefined
+}): React.ReactNode {
   const { lang } = useApp()
+  const { state, setColumn, clear } = useTableFilters(tableId)
+  const display = useCallback(
+    (key: string, raw: string): string => {
+      const c = payload.columns.find((x) => x.key === key)
+      return c === undefined ? raw : cellDisplay(c, raw, {}, lang)
+    },
+    [payload.columns, lang],
+  )
+  const cols = useMemo(
+    () => filterColumns(payload.columns, payload.rows, (r, k) => r[k], 'declared', display),
+    [payload.columns, payload.rows, display],
+  )
+  const byKey = useMemo(() => new Map(cols.map((c) => [c.key, c])), [cols])
+  const rows = useMemo(
+    () => applyFilters(payload.rows, cols, state, (r, k) => r[k], display),
+    [payload.rows, cols, state, display],
+  )
+  const filtering = activeFilterCount(cols, state) > 0
   if (payload.rows.length === 0)
     return (
       <>
@@ -125,19 +174,34 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
         <thead>
           {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
           <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
-            {payload.columns.map((c) => (
-              <th
-                key={c.key}
-                scope="col"
-                className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
-              >
-                {c.label}
-              </th>
-            ))}
+            {payload.columns.map((c) => {
+              const col = byKey.get(c.key)
+              return (
+                <th
+                  key={c.key}
+                  scope="col"
+                  className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
+                >
+                  {col === undefined ? (
+                    c.label
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      {c.label}
+                      <ColumnFilter
+                        col={col}
+                        value={state[c.key]}
+                        onChange={(v) => setColumn(c.key, v)}
+                        display={display}
+                      />
+                    </span>
+                  )}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {payload.rows.map((row) => (
+          {rows.map((row) => (
             <tr
               key={rowKey(row, payload.columns)}
               className="border-b border-ws-line last:border-0"
@@ -150,21 +214,12 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
                       <FlagCell text={String(value ?? '')} />
                     </td>
                   )
-                // WP63：列自己说它是什么（不说就按金额——老积木的行为一个字不变）。
-                // 件数 / 评分不是钱，渲染成 `US$2.00` 是把真话说成了假话。
-                const text =
-                  c.key === 'created_at' && typeof value === 'string'
-                    ? formatDate(value, lang)
-                    : typeof value === 'number'
-                      ? formatValue(value, c.format ?? 'money', lang, String(row.currency ?? 'USD'))
-                      : // WP141：渠道 / 形态 / ISO 时间这几种字串说人话（lib/humanize）
-                        cellText(c.key, String(value ?? ''), lang)
                 return (
                   <td
                     key={c.key}
                     className={`px-4 py-3.5 ${c.align === 'right' ? 'ws-num text-right' : ''}`}
                   >
-                    {text}
+                    {cellDisplay(c, value, row, lang)}
                   </td>
                 )
               })}
@@ -172,6 +227,9 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
           ))}
         </tbody>
       </table>
+      {filtering ? (
+        <FilteredLine shown={rows.length} total={payload.rows.length} onClear={clear} />
+      ) : null}
       {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
     </div>
   )
@@ -396,7 +454,7 @@ export function BlockBody({ data }: { data: BlockData }): React.ReactNode {
     case 'stat_tile':
       return <ScalarBlock payload={data.payload as ScalarResult} />
     case 'table':
-      return <TableBlock payload={data.payload as TableResult} />
+      return <TableBlock payload={data.payload as TableResult} tableId={data.block.id} />
     case 'chart_line':
       return <ChartLineBlock payload={data.payload as SeriesResult} />
     case 'funnel':
