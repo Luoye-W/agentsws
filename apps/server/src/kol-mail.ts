@@ -107,6 +107,24 @@ export function isKolCollaborationCard(item: Pick<ApprovalItem, 'kind' | 'payloa
   return item.kind === 'staged_change' && rec(item.payload).kind === 'kol_collaboration'
 }
 
+/** WP416：「这两个是不是同一个人」那张合并建议卡。 */
+export function isKolMergeCard(item: Pick<ApprovalItem, 'kind' | 'proposer'>): boolean {
+  return item.kind === 'policy_change' && item.proposer.id === 'kol-merge'
+}
+
+/** 合并建议卡上选的是哪一项（`merge` / `keep_apart`；驳回 = `keep_apart`、裸同意 = `merge`；没定回 `undefined`）。 */
+export function mergeChoiceOf(item: ApprovalItem): 'merge' | 'keep_apart' | undefined {
+  if (item.state === 'rejected') return 'keep_apart'
+  if (item.state !== 'approved' && item.state !== 'approved_edited' && item.state !== 'applied')
+    return undefined
+  const edited = rec(item.decision?.edited_payload)
+  const picked =
+    item.decision?.selected_option_id ??
+    (typeof edited.selected_option_id === 'string' ? edited.selected_option_id : undefined)
+  // 没带选项的「同意」（卡上主按钮）就是「是同一个人，合」
+  return picked === 'keep_apart' ? 'keep_apart' : 'merge'
+}
+
 export function createKolMail(options: KolMailOptions): KolMailAssembly {
   const { store, secrets, clock, workspace_id } = options
 

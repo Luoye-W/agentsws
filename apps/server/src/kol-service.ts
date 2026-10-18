@@ -432,7 +432,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const { store, secrets, clock, approvals, ledger, appendEvent } = options
   const workspace_id = options.workspace_id
   /** 人点过"不是同一个人"的那几对，进程内记着（重启后会再问一次——建议本来就是算出来的）。 */
-  const rejectedMerges = new Set<string>()
+  // WP416（自查 kol B「同一人合并卡」）：点过「不是同一个人」的落盘（以前只在内存里，重启又冒出来）
+  const rejectedMerges = new Set<string>(store.setting<string[]>('merge_rejected') ?? [])
 
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -2599,6 +2600,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             merge_id: s.merge_id,
             reasons: s.reasons,
             confidence: s.confidence,
+            /*
+             * WP416（自查 kol B「同一人合并卡」）：选项也放进载荷——卡片投影只认载荷里的 options，
+             * 以前只放在卡本身上，卡面成了一个是非题，选了也没效果。
+             */
+            options: [
+              { id: 'merge', label: '是同一个人，合' },
+              { id: 'keep_apart', label: '不是同一个人' },
+            ],
           },
           evidence: {
             source_events: [],
@@ -2658,6 +2667,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       if (parseMergeSuggestionId(id) === undefined)
         throw new ApiError('invalid_input', '这不是一条合并建议的 id')
       rejectedMerges.add(id)
+      store.saveSetting('merge_rejected', [...rejectedMerges], clock.now())
       emit('kol.merge_rejected', actor.person_id, { suggestion_id: id })
       return { id, rejected: true as const }
     },

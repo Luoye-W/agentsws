@@ -510,7 +510,13 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
-import { createKolMail, isKolCollaborationCard, type KolMailPort } from './kol-mail.js'
+import {
+  createKolMail,
+  isKolCollaborationCard,
+  isKolMergeCard,
+  type KolMailPort,
+  mergeChoiceOf,
+} from './kol-mail.js'
 import { kolPaymentApply, kolSampleApply } from './kol-money.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import {
@@ -9216,6 +9222,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP416：建合作卡点了「不要」→ 等着点头的那一行删掉（批了由执行器落库）
     if (isKolCollaborationCard(item)) return brand?.kolMail?.onDecided(item)
+    // WP416：同一人合并卡——卡上选「合」= 面板上点「接受」；选「不是同一个人」/ 驳回 = 记下、不再提
+    if (isKolMergeCard(item)) {
+      const choice = mergeChoiceOf(item)
+      const id = (item.payload as { suggestion_id?: unknown }).suggestion_id
+      const by = item.decision?.by
+      if (choice === undefined || typeof id !== 'string' || brand === undefined) return
+      const actor = {
+        workspace_id: item.workspace_id,
+        person_id: (by === undefined || by === 'mandate'
+          ? item.routing.recipients[0]?.person
+          : by) as PersonId,
+        assignment_id: item.proposer.assignment_id ?? '',
+        role_id: item.role_id,
+      }
+      try {
+        if (choice === 'merge') await brand.kolService.port.acceptMerge(actor as never, id)
+        else await brand.kolService.port.rejectMerge(actor as never, id)
+      } catch {
+        // 两条里有一条已经不在了：卡照样是决定了的
+      }
+      return
+    }
     // WP416：挑人清单卡在「要你处理」里批了 = 面板上点「接受」（按清单为每个人提一张建合作卡）
     if (item.kind === 'kol_campaign') {
       const by = item.decision?.by
@@ -14821,7 +14849,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isRecordSinkCard(out) ||
           // WP416：建合作卡点了「不要」→ 那一行删掉；挑人清单卡批了 → 按清单建合作
           isKolCollaborationCard(out) ||
-          out.kind === 'kol_campaign'
+          out.kind === 'kol_campaign' ||
+          // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
+          isKolMergeCard(out)
         ) {
           try {
             await hook.current?.(out)

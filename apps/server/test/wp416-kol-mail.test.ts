@@ -394,3 +394,52 @@ describe('WP416 挑人清单卡在「要你处理」里批了也建合作', () =
     expect((await brand()).kol.collaborations().length).toBeGreaterThan(before)
   })
 })
+
+describe('WP416 同一人合并卡：卡上选了就生效', () => {
+  beforeEach(async () => {
+    await boot(true)
+  })
+
+  const twins = async (): Promise<{ a: string; b: string; card: string }> => {
+    const make = async (name: string, handle: string): Promise<string> => {
+      const d = await data<{ creator: { id: string } }>(
+        await post('/v1/kol/creators', { display_name: name, channel: 'youtube', handle }),
+      )
+      await post(`/v1/kol/creators/${d.creator.id}/contacts`, {
+        kind: 'email',
+        value: 'same@creator.example',
+      })
+      return d.creator.id
+    }
+    const a = await make('Gadget Jonas', 'gadgetjonas')
+    const b = await make('Jonas G', 'jonasg')
+    const rows = await data<{ rows: { approval_item_id?: string }[] }>(
+      await api('/v1/kol/merge-suggestions'),
+    )
+    return { a, b, card: rows.rows[0]?.approval_item_id as string }
+  }
+
+  it('选「是同一个人，合」→ 真合成一个', async () => {
+    const { card } = await twins()
+    const res = await post(`/v1/approvals/${card}/decide`, {
+      action: 'approve',
+      selected_option_id: 'merge',
+    })
+    expect(res.status).toBe(200)
+    expect((await brand()).kol.creators()).toHaveLength(1)
+  })
+
+  it('选「不是同一个人」→ 记下（落盘），建议不再冒出来', async () => {
+    const { card } = await twins()
+    const res = await post(`/v1/approvals/${card}/decide`, {
+      action: 'approve',
+      selected_option_id: 'keep_apart',
+    })
+    expect(res.status, await res.clone().text()).toBe(200)
+    const store = (await brand()).kol
+    expect(store.creators()).toHaveLength(2)
+    expect(store.setting<string[]>('merge_rejected')).toHaveLength(1)
+    const again = await data<{ rows: unknown[] }>(await api('/v1/kol/merge-suggestions'))
+    expect(again.rows).toHaveLength(0)
+  })
+})
