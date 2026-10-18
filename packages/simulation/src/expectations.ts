@@ -750,6 +750,35 @@ export function checkExpectations(
       )
     }
   }
+  // WP380：GEO 第二层——胜率、准确度、一致性分到哪几个岗位、复查建议
+  if (expected.geo_quality !== undefined) {
+    const want = expected.geo_quality
+    const last = evidence.events.filter((e) => e.type === 'digest.geo_quality').pop()
+    if (last === undefined) add('geo_quality', false, '一张「说得对不对、比得过谁」都没出')
+    else {
+      const p = payloadOf(last)
+      const problems: string[] = []
+      const num = (v: unknown) => (typeof v === 'number' ? v : Number.NaN)
+      if (want.win_rate !== undefined && !matchNumeric(num(p.win_rate), want.win_rate))
+        problems.push(`比较胜率 ${String(p.win_rate)}（期望 ${String(want.win_rate)}）`)
+      if (want.accuracy !== undefined && !matchNumeric(num(p.accuracy), want.accuracy))
+        problems.push(`描述准确度 ${String(p.accuracy)}（期望 ${String(want.accuracy)}）`)
+      const owners = Array.isArray(p.groups)
+        ? (p.groups as { owner?: unknown }[]).map((g) => String(g.owner))
+        : []
+      if (want.owners !== undefined && owners.join(',') !== want.owners.join(','))
+        problems.push(`分到 ${owners.join('、')}（期望 ${want.owners.join('、')}）`)
+      if (want.advice !== undefined && p.advice !== want.advice)
+        problems.push(`复查建议 ${String(p.advice)}（期望 ${want.advice}）`)
+      add(
+        'geo_quality',
+        problems.length === 0,
+        problems.length === 0
+          ? `胜率 ${String(p.win_rate)}、准确度 ${String(p.accuracy)}、分到 ${owners.join('、')}、建议 ${String(p.advice)}`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
   if (expected.scope_disjoint !== undefined) {
     const seen = new Map<string, { orders: string[]; products: string[] }>()

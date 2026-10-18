@@ -37,6 +37,7 @@
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
+    "packages/contracts/src/geo-quality.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
@@ -75,6 +76,7 @@
     "packages/contracts/src/service-order.ts",
     "packages/contracts/src/setup-card.ts",
     "packages/contracts/src/shopify-cloud.ts",
+    "packages/contracts/src/site-health.ts",
     "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
@@ -135,7 +137,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "22f236a2542366813a482c7611a8d33c",
+  "source_digest": "daa415bdc9ce5956f1a782b4234d7513",
   "objects": [
     {
       "id": "ad",

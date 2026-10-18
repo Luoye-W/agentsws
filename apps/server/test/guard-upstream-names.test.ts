@@ -45,19 +45,8 @@ const USER_FACING_TARGETS: readonly string[] = [
   'apps/workstation/src',
   'apps/extension/src',
   'apps/cloud/src/pages.ts',
-  'docs/60-公共关系岗位-v1.md',
-  'docs/61-云端测试环境部署-v1.md',
-  'docs/62-内测安装与升级-v1.md',
-  'docs/63-消息与邮箱全量接入-v1.md',
-  'docs/66-红人营销全流程验证-v1.md',
-  'docs/67-付费三块与红人营销增值服务-v1.md',
-  'docs/68-浏览器插件-v1.md',
-  'docs/69-岗位与职责的角色定位-v1.md',
-  'docs/70-初始化设置：先接AI与网址自动分析-v1.md',
-  'docs/71-品牌设计规范DESIGN.md-v1.md',
-  'docs/72-客服岗对标KefuAgent-差距与融入方案-v1.md',
-  'docs/75-数据接口路由与自带数据接口-v1.md',
-  'docs/76-插件开放接口-v1.md',
+  // WP383：编号文档已搬去私有仓；对外的文字只剩帮助文章
+  'docs/help',
   'packages/sdk/openapi.json',
 ]
 

@@ -95,7 +95,7 @@ const MESSAGES: Readonly<Record<LoginView, string>> = {
   scanned: '扫到了，正在你手机上确认。',
   need_verify_code: '手机微信上会显示几位数字，把它填进来。',
   verify_code_blocked: '数字连续填错了几次，微信暂时挡住了。过一会儿再来。',
-  confirmed: '连上了。从现在起你可以在微信里直接跟自己的代理说话。',
+  confirmed: '连上了。从现在起你可以在微信里直接跟自己的助理说话。',
   already_connected: '这台机器已经连过这个微信了，不用再连一次。',
   expired: '二维码过期了，重新生成一个。',
   failed: '没连上。',

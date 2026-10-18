@@ -59,6 +59,8 @@ export const HELP_SLUGS = [
   'ai-answer-tracking',
   // WP343：我的助理（随便聊 + 问全局 + 交代事情 + 记忆 + 替我答同事）
   'my-assistant',
+  // WP381：网站体检（AI 爬虫、不开 JS 看得到吗、商品信息对不对得上、ChatGPT 购物、AI 带来的访问与成交）
+  'site-health',
   // WP390：工坊服务（推荐、价目单 / 需求单、托管与验收、订单面板）
   'workshop-services',
 ] as const
@@ -170,6 +172,10 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
   // WP343：通用
   'my-assistant': { positions: [], roles: [] },
+  'site-health': {
+    positions: ['web-ops', 'site', 'dtc-ops'],
+    roles: ['dtc.store', 'site.shopify-build', 'dtc.content'],
+  },
   'workshop-services': { positions: [], roles: [] },
 }
 

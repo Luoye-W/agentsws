@@ -1007,6 +1007,12 @@ export const getBlockData = (
 ): Promise<BlockData> =>
   api<BlockData>(`/v1/blocks/${encodeURIComponent(id)}/data?range=${range}`, { assignment })
 
+/** WP381：块头「现在体检」——`POST` 块上写的那个地址（只收 `/v1/` 下的），跑完由调用方刷新块。 */
+export const rerunBlock = (path: string, assignment: string): Promise<unknown> => {
+  if (!path.startsWith('/v1/')) return Promise.reject(new Error('不认这个地址'))
+  return api<unknown>(path, { method: 'POST', body: {}, assignment })
+}
+
 export const decide = (id: string, input: DecideInput, assignment: string): Promise<unknown> =>
   api<unknown>(`/v1/approvals/${encodeURIComponent(id)}/decide`, {
     method: 'POST',
