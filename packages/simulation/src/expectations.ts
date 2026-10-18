@@ -1073,13 +1073,27 @@ export function checkExpectations(
         )
       }
     }
-    if (want.brief_auto_approved !== undefined) {
-      const auto = evidence.approvals.some(
-        (a) => a.kind === 'staged_change' && a.automation.auto_approved,
-      )
+    // 看**这一张** brief 自己那张卡——之前是"这一轮随便哪张卡自动放行了"，
+    // 同一轮里别的卡（需求单 / 变体）一自动就会冒名顶替
+    if (want.brief_auto_approved !== undefined && last !== undefined) {
+      const auto = payloadOf(last).auto_approved === true
       if (auto !== want.brief_auto_approved) {
         problems.push(want.brief_auto_approved ? 'brief 没能 L3 自动出' : 'brief 不该自动放行')
       }
+    }
+    if (want.brief_level !== undefined && last !== undefined) {
+      const level = payloadOf(last).level
+      if (String(level) !== want.brief_level) {
+        problems.push(
+          `brief 那张卡落 ${String(level ?? '（没进队列）')}，不合期望 ${want.brief_level}`,
+        )
+      }
+    }
+    if (
+      last === undefined &&
+      (want.brief_auto_approved !== undefined || want.brief_level !== undefined)
+    ) {
+      problems.push('没有 brief，看不了它那张卡')
     }
     add(
       'design_request',
@@ -1120,13 +1134,12 @@ export function checkExpectations(
           problems.push(said ? '不该有"没有图片模型"那句话' : '没有图片模型，却没说出为什么')
         }
       }
-      if (want.auto_approved !== undefined) {
-        const auto = evidence.approvals.some(
-          (a) => a.kind === 'staged_change' && a.automation.auto_approved,
-        )
-        if (auto !== want.auto_approved) {
-          problems.push(want.auto_approved ? '变体没能自动出' : '出变体不该自动放行')
-        }
+      // 看**这一次**出变体那张卡自己（同一轮里 L3 自动出的 brief 不算数）
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(want.auto_approved ? '变体没能自动出' : '出变体不该自动放行')
+      }
+      if (want.level !== undefined && String(p.level) !== want.level) {
+        problems.push(`出变体那张卡落 ${String(p.level ?? '（没进队列）')}，不合期望 ${want.level}`)
       }
       add(
         'design_variants',
@@ -1162,6 +1175,9 @@ export function checkExpectations(
       }
       if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
         problems.push('入库永远要人点，不该自动放行')
+      }
+      if (want.level !== undefined && String(p.level) !== want.level) {
+        problems.push(`入库卡落 ${String(p.level ?? '（没进队列）')}，不合期望 ${want.level}`)
       }
       add(
         'design_pick',

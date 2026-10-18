@@ -2522,6 +2522,8 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
   }
 }
 
+type ShapeKind = 'bool' | 'str' | 'strs' | 'num' | 'int'
+
 /**
  * 一块**结构化断言**（`expected.kol_outreach` 那一类）的通用解析。
  *
@@ -2531,13 +2533,14 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
  * 一条永远为真的断言比没有断言更糟：它让人以为那件事验过了。
  *
  * `spec` 说每一格是什么形状：`bool` / `str` / `strs` / `num`（数值断言，
- * 允许 `'>=1'` 这种写法）。不认识的键当场报错——拼错一个字段名不该被忽略。
+ * 允许 `'>=1'` 这种写法）/ `int`（只收一个数——判定那边拿 `!==` 比的格子用它，
+ * 写成 `'>=1'` 会永远不等）。不认识的键当场报错——拼错一个字段名不该被忽略。
  */
 function shaped(
   source: string,
   key: string,
   raw: unknown,
-  spec: Record<string, 'bool' | 'str' | 'strs' | 'num'>,
+  spec: Record<string, ShapeKind>,
 ): Record<string, unknown> | undefined {
   if (raw === undefined) return undefined
   const path = `expected.${key}`
@@ -2555,7 +2558,9 @@ function shaped(
           ? str(source, at, v)
           : kind === 'strs'
             ? strList(source, at, v)
-            : numeric(source, at, v)
+            : kind === 'int'
+              ? num(source, at, v)
+              : numeric(source, at, v)
   }
   return out
 }
@@ -2850,7 +2855,7 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
    * WP72 之前这几块**一个都没抄进来**（见 {@link shaped} 的注释）——写了等于没写。
    * 现在一次补齐，顺序照 `EXPECTED_KEYS`。
    */
-  const shapes: Record<string, Record<string, 'bool' | 'str' | 'strs' | 'num'>> = {
+  const shapes: Record<string, Record<string, ShapeKind>> = {
     overdue_orders: { count: 'num', worst_days: 'num' },
     // WP121b（70 §1–§3）：那一趟初始化设置走成了什么样
     onboarding: {
@@ -2924,6 +2929,28 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       browse_credits: 'num',
       reveal_credits: 'str',
     },
+    /*
+     * WP76（58 §1）：需求单 / 出变体 / 定稿。这三块在 `EXPECTED_KEYS` 里待了很久，
+     * 判定也写好了，却一直没抄进 `out`——场景里写的全被静默丢掉（WP72 修过的同一个洞）。
+     * 数字格判定处是精确比（`!==`），所以用 `int` 不收比较式。
+     */
+    design_request: {
+      routed_to: 'str',
+      brief_drafted: 'bool',
+      brief_auto_approved: 'bool',
+      brief_level: 'str',
+      questions_at_least: 'int',
+      brand_system_missing: 'bool',
+    },
+    design_variants: {
+      n: 'int',
+      generated: 'int',
+      image_model: 'bool',
+      reason_stated: 'bool',
+      auto_approved: 'bool',
+      level: 'str',
+    },
+    design_pick: { staged: 'bool', auto_approved: 'bool', level: 'str', blocked: 'bool' },
     // WP72（56 §2 / §4）
     social_post: {
       requested_level: 'str',
