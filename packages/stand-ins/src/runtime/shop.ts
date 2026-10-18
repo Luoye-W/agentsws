@@ -619,3 +619,32 @@ export function firstProductOf(data: unknown): { id: string; title: string } | u
     ? { id: p.id, title: p.title }
     : undefined
 }
+
+// ── WP418：stub 剧本「还差什么才能开门」（演示用：跑一遍上线检查单，照实念结论） ──────────────
+
+const CHECKLIST_ASK = /检查单|开门|上线|还差什么|还缺什么|checklist|launch|go live/i
+
+/** stub 的岔口：工具面里有检查单、话里问的是上线 / 检查单，才走这一边。 */
+export function siteChecklistBranch(req: RunRequest, text: string): ShopStep | undefined {
+  if (!req.tools.allow.includes(SITE_CHECKLIST_TOOL)) return undefined
+  return CHECKLIST_ASK.test(text) ? { tool: SITE_CHECKLIST_TOOL, input: {} } : undefined
+}
+
+/** 检查单工具回的那一份 → 一段人话（只念结论，数一个都不改）。 */
+export function renderSiteChecklistAnswer(data: unknown, failed?: string): string {
+  const d = obj(data)
+  const items = Array.isArray(d.items) ? d.items.map(obj) : []
+  if (typeof d.headline !== 'string')
+    return `这次没跑成上线检查单${failed === undefined || failed === '' ? '' : `：${failed}`}。`
+  const line = (i: Record<string, unknown>): string =>
+    `· ${String(i.item)}：${String(i.detail)}${typeof i.fix === 'string' && i.fix !== '' ? `（${String(i.fix)}）` : ''}`
+  const block = items.filter((i) => i.state === '缺' && i.severity === '顾客买不成')
+  const later = items.filter((i) => i.state === '缺' && i.severity !== '顾客买不成')
+  const unread = items.filter((i) => i.state === '没读到')
+  return [
+    d.headline,
+    ...(block.length === 0 ? [] : ['顾客买不成的：', ...block.map(line)]),
+    ...(later.length === 0 ? [] : ['迟早出事的：', ...later.map(line)]),
+    ...(unread.length === 0 ? [] : ['这次没读到的（不是没有，是没读到）：', ...unread.map(line)]),
+  ].join('\n')
+}

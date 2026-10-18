@@ -32,6 +32,10 @@ export type PremiumThemeErrorCode =
   | 'unavailable'
   /** 没登录工坊账号（本机没有工作区令牌 / 令牌不认） */
   | 'not_linked'
+  /** WP418：登录了，令牌少了「店铺」那一项动作集（403 forbidden） */
+  | 'missing_scope'
+  /** WP418：这一次连不上云（断网 / 超时）——与「云上还没开」分开说 */
+  | 'offline'
   /** 积分不够（云上那句人话原样给） */
   | 'insufficient_credits'
   /** 这家店没买（下载被拒） */
@@ -55,6 +59,8 @@ export class PremiumThemeError extends Error {
 
 /** 「即将开放」那一句。 */
 export const PREMIUM_SOON_TEXT = '高级主题即将开放，现在先用店里的免费主题（推荐 Horizon）。'
+/** WP418：这一次连不上工坊云端。 */
+export const PREMIUM_OFFLINE_TEXT = '暂时连不上 Agents 工坊云端，过一会儿再选一次。'
 /** 没登录工坊账号。 */
 export const PREMIUM_NOT_LINKED_TEXT =
   '买高级主题要先登录 Agents 工坊账号（设置 →「账号与积分」），登好了再选一次。'
@@ -128,7 +134,7 @@ export function createPremiumThemeClient(options: {
       return new PremiumThemeError('not_owned', '这家店还没买高级主题。')
     if (status === 403)
       return new PremiumThemeError(
-        'not_linked',
+        'missing_scope',
         '这把工坊账号令牌没有「店铺」那一项权限，重新登录一次工坊账号再试。',
       )
     // WP305：指定的版本没有（带 latest_version）
@@ -177,7 +183,8 @@ export function createPremiumThemeClient(options: {
         signal: controller.signal,
       })
     } catch {
-      throw new PremiumThemeError('unavailable', PREMIUM_SOON_TEXT)
+      // WP418（自查 A7）：连不上 ≠ 还没上架
+      throw new PremiumThemeError('offline', PREMIUM_OFFLINE_TEXT)
     } finally {
       clearTimeout(timer)
     }

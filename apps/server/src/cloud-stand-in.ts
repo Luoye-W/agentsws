@@ -91,6 +91,11 @@ export interface CloudStandInOptions {
    */
   premiumTheme?: false | { extra_credits?: number }
   /**
+   * WP418（自查 A6）：替身签的工作区令牌带哪几项动作集。不给 = 老样子（`ai` + `wallet:read`，演「老令牌要补签」）；
+   * demo 给默认全集——否则选主题卡上高级主题永远是「登录后可买」，买卡演不出来。
+   */
+  linkScopes?: readonly string[]
+  /**
    * WP390：工坊服务（`/v1/services*`）那几条。`scope_missing` = 演老令牌缺 `services` 动作集（403 +
    * `required_scope`，决策 1098）；`services` = 换一份目录（默认示意三项）。
    */
@@ -517,7 +522,11 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     const token = mint('cwt')
     workspaceTokens.add(token)
     return {
-      link: { expires_at: days(90), scopes: ['ai', 'wallet:read'], cloud_org_id: STAND_IN_ORG.id },
+      link: {
+        expires_at: days(90),
+        scopes: [...(options.linkScopes ?? ['ai', 'wallet:read'])],
+        cloud_org_id: STAND_IN_ORG.id,
+      },
       token,
     }
   }

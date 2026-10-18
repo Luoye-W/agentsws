@@ -105,6 +105,10 @@ export type PremiumThemeStatus =
   | 'soon'
   /** 还没登录工坊账号：不能选（登录后再出卡） */
   | 'needs_account'
+  /** WP418（自查 A7）：登录了，但工坊账号令牌少了「店铺」那一项——重新登录一次补上，不是「去登录」 */
+  | 'needs_scope'
+  /** WP418（自查 A7）：这一次连不上工坊云端（断网 / 超时）——不是「即将开放」 */
+  | 'offline'
 
 /** 选主题卡（`theme_choice`）的载荷。选项 id：`premium` 或 `store:<主题 id>`。 */
 export interface ThemeChoicePayload {

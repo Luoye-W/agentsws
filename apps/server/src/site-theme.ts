@@ -75,6 +75,7 @@ import type { PlatformCliProbe } from './platform-cli.js'
 import {
   extractThemePackage,
   PREMIUM_NOT_LINKED_TEXT,
+  PREMIUM_OFFLINE_TEXT,
   PREMIUM_SOON_TEXT,
   type PremiumThemeClient,
   PremiumThemeError,
@@ -1447,6 +1448,10 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     } catch (err) {
       if (err instanceof PremiumThemeError && err.code === 'not_linked')
         return { status: 'needs_account' }
+      // WP418（自查 A7）：登录了但少一项权限 / 一时连不上——各说各的，不都说成「即将开放」「去登录」
+      if (err instanceof PremiumThemeError && err.code === 'missing_scope')
+        return { status: 'needs_scope' }
+      if (err instanceof PremiumThemeError && err.code === 'offline') return { status: 'offline' }
       return { status: 'soon' }
     }
   }
@@ -1759,7 +1764,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
             return
           }
           if (prem.status !== 'owned') {
-            note(prem.status === 'needs_account' ? PREMIUM_NOT_LINKED_TEXT : PREMIUM_SOON_TEXT)
+            note(
+              prem.status === 'needs_account'
+                ? PREMIUM_NOT_LINKED_TEXT
+                : prem.status === 'needs_scope'
+                  ? '工坊账号令牌少了「店铺」那一项权限：重新登录一次工坊账号，再选一次。'
+                  : prem.status === 'offline'
+                    ? PREMIUM_OFFLINE_TEXT
+                    : PREMIUM_SOON_TEXT,
+            )
             return
           }
           await initBase({ source: 'premium', replace, matter_id })

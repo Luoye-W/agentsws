@@ -8,12 +8,15 @@ import { loadBundledRoles } from '@agentsws/roles'
 import {
   COMPETITOR_STORE_TOOL_NAMES,
   noPlaybookAnswer,
+  renderSiteChecklistAnswer,
   SHOP_TOOL_NAMES,
   SHOP_TOOLS_BY_ROLE,
   SITE_HEALTH_TOOL_NAMES,
   THEME_TOOL_NAMES,
 } from '@agentsws/stand-ins'
 import { describe, expect, it } from 'vitest'
+import { createPremiumThemeClient, type PremiumFetch } from '../src/premium-theme.js'
+import type { SecretStore } from '../src/secret-store.js'
 import { DOCS_TOOL, SCHEMA_TOOL } from '../src/shopify-devmcp.js'
 
 const WIRED = new Set([
@@ -79,5 +82,56 @@ describe('演示没有剧本那句话不露内部 id（自查 A20 / U15）', () 
     expect(text).toContain('这条职责（Shopify 整站搭建，建站）')
     expect(text).not.toContain('site.shopify-build')
     expect(noPlaybookAnswer('site.shopify-email')).not.toMatch(/site\.|，site）/)
+  })
+})
+
+describe('高级主题暂时不能买的原因分开说（自查 A7）', () => {
+  const secrets = { available: true, get: () => ({ token: 'wst_x' }) } as unknown as SecretStore
+  const client = (fetch: PremiumFetch) =>
+    createPremiumThemeClient({
+      secrets,
+      baseUrl: 'https://cloud.invalid',
+      tokenSecretId: 'tok',
+      fetch,
+    })
+
+  it('令牌缺「店铺」那一项 → missing_scope（不是「去登录」）；连不上 → offline（不是「即将开放」）', async () => {
+    const forbidden = client(async () => ({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ code: 'forbidden', message: 'no store' }),
+    }))
+    await expect(forbidden.entitlement('a.myshopify.com')).rejects.toMatchObject({
+      code: 'missing_scope',
+    })
+    const down = client(async () => {
+      throw new Error('ECONNREFUSED')
+    })
+    await expect(down.entitlement('a.myshopify.com')).rejects.toMatchObject({ code: 'offline' })
+  })
+})
+
+describe('演示剧本：「还差什么才能开门」照实念检查单（自查 A8）', () => {
+  it('分「买不成 / 迟早出事 / 没读到」三段念，标题原样', () => {
+    const text = renderSiteChecklistAnswer({
+      headline: '上线检查单：1 项会让顾客买不成',
+      items: [
+        {
+          item: '店面密码',
+          state: '缺',
+          severity: '顾客买不成',
+          detail: '店面还挂着密码',
+          fix: '去后台关',
+        },
+        { item: '政策页', state: '缺', severity: '迟早出事', detail: '缺 privacy' },
+        { item: '税', state: '没读到', severity: '迟早出事', detail: '没读到税务设置' },
+        { item: '域名', state: '过了', severity: '迟早出事', detail: 'x.com' },
+      ],
+    })
+    expect(text.split('\n')[0]).toBe('上线检查单：1 项会让顾客买不成')
+    expect(text).toContain('· 店面密码：店面还挂着密码（去后台关）')
+    expect(text).toContain('这次没读到的（不是没有，是没读到）')
+    expect(text).not.toContain('域名')
+    expect(renderSiteChecklistAnswer(undefined, '这个进程没接工具')).toContain('没跑成')
   })
 })
