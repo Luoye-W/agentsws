@@ -1021,7 +1021,13 @@ export const decide = (id: string, input: DecideInput, assignment: string): Prom
   })
 
 /** WP414：为什么算同类（前端按它出中英文）。 */
-export type FollowBasis = 'same_object' | 'same_topic' | 'same_source' | 'same_judgement'
+/** `same_reason` = AI 按人给的理由判的（直接显示 `why`）；其余是「要一起发吗」那一路的词重合。 */
+export type FollowBasis =
+  | 'same_reason'
+  | 'same_object'
+  | 'same_topic'
+  | 'same_source'
+  | 'same_judgement'
 
 /** WP414：一张同类卡（已跟着处理的 / 要人确认的）。 */
 export interface FollowedCardData {
@@ -1037,6 +1043,8 @@ export interface DecideFollowData {
   action: 'reject' | 'snooze' | 'approve'
   leader_id: string
   leader_title: string
+  /** 按哪条理由判的（「不要 / 稍后」才有） */
+  reason?: string
   applied: FollowedCardData[]
   suggested: FollowedCardData[]
 }
@@ -1062,12 +1070,15 @@ export const undoFollow = (
     assignment,
   })
 
-/** WP414：「不要」之后补一句理由（快捷理由 / 一句话）；跟着处理的那几张一起补。 */
+/**
+ * WP414：「不要 / 稍后」之后补一句理由（快捷理由 / 一句话）；已跟着处理的那几张一起补。
+ * 第一次补（还没跟着处理过）时服务端按这条理由去找同类，回包里带 `follow`。
+ */
 export const addDecisionReason = (
   id: string,
   input: { reason: string; follower_ids?: readonly string[] },
   assignment: string,
-): Promise<{ followers: number }> =>
+): Promise<{ followers: number; follow?: DecideFollowData }> =>
   api(`/v1/approvals/${encodeURIComponent(id)}/reason`, {
     method: 'POST',
     body: {

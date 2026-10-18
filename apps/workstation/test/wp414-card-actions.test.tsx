@@ -2,8 +2,9 @@
  * WP414（Luoye 10-19 真机，Reddit 回信卡）：审批卡底部操作重排 +「不要」理由可选 + 同类卡跟着前一个决定。
  *
  * - 按钮样式：主按钮 +「修改 / 不要 / 稍后」都是按钮，「稍后」外露，没有「需要补素材」与 `···`；
- * - 「不要」一下就生效；卡流顶上出一行可选的快捷理由（不相关 / 时机不对 / 不想回 / 其他…），点了补记；
- * - 同类卡跟着处理了：「另外 N 张也一并不发了 · 看是哪几张 · 撤回」；
+ * - 「不要」一下就生效；卡流顶上出一行可选的快捷理由（不相关 / 时机不对 / 不想回 / 其他…）；
+ * - 10-19 更正：**没理由只处理这一张**；点了理由才按理由找同类——「按你的理由「X」，另外 N 张也一并不发了」，
+ *   清单摊开（标题 + AI 说为什么属于这个理由 + 单张恢复）+ 全部撤回；「稍后」同理；
  * - 「发送」之后：「这 N 张和刚才那张类似，要一起发送吗？」——一起发要再点一次，逐张看翻到第一张。
  */
 import { screen, waitFor, within } from '@testing-library/react'
@@ -18,8 +19,12 @@ let decideOut: unknown = {}
 
 const getHome = vi.fn(async () => home)
 const decide = vi.fn(async () => decideOut)
-const undoFollow = vi.fn(async () => ({ restored: [{ id: 'ap_2' }, { id: 'ap_3' }], skipped: [] }))
-const addDecisionReason = vi.fn(async () => ({ followers: 2 }))
+const undoFollow = vi.fn(async (_leader: string, ids: string[]) => ({
+  restored: ids.map((id) => ({ id })),
+  skipped: [],
+}))
+let reasonOut: unknown = { followers: 0 }
+const addDecisionReason = vi.fn(async () => reasonOut)
 const approveBatch = vi.fn(async () => ({ results: [{ id: 'ap_2' }, { id: 'ap_3' }] }))
 
 vi.mock('@/lib/api', async () => {
@@ -50,21 +55,28 @@ const follow = (action: DecideFollowData['action'], key: 'applied' | 'suggested'
     action,
     leader_id: 'ap_1',
     leader_title: '回复 u/alice（r/Smartphones）',
+    ...(key === 'applied' ? { reason: '不相关' } : {}),
     applied: [],
     suggested: [],
     [key]: [
       {
         id: 'ap_2',
         title: '回复 u/bob（r/Smartphones）',
-        why: '同在 r/Smartphones，AI 出卡的理由相近',
-        basis: ['same_source', 'same_judgement'],
+        why:
+          key === 'applied'
+            ? '也是换手机的帖子，和眼镜无关'
+            : '同在 r/Smartphones，AI 出卡的理由相近',
+        basis: key === 'applied' ? ['same_reason'] : ['same_source', 'same_judgement'],
         source: 'r/Smartphones',
       },
       {
         id: 'ap_3',
         title: '回复 u/cat（r/Smartphones）',
-        why: '同在 r/Smartphones，AI 出卡的理由相近',
-        basis: ['same_source', 'same_judgement'],
+        why:
+          key === 'applied'
+            ? '也是问手机电池，和我们无关'
+            : '同在 r/Smartphones，AI 出卡的理由相近',
+        basis: key === 'applied' ? ['same_reason'] : ['same_source', 'same_judgement'],
         source: 'r/Smartphones',
       },
     ],
@@ -74,6 +86,7 @@ const follow = (action: DecideFollowData['action'], key: 'applied' | 'suggested'
 beforeEach(() => {
   home = three()
   decideOut = {}
+  reasonOut = { followers: 0 }
   for (const f of [getHome, decide, undoFollow, addDecisionReason, approveBatch]) f.mockClear()
 })
 
@@ -90,10 +103,9 @@ describe('WP414 卡底部按钮', () => {
   })
 })
 
-describe('WP414「不要」不强制写理由', () => {
-  it('点「不发」一下就生效；快捷理由可选，点了补记（跟着的那几张一起）', async () => {
+describe('WP414「不要」不强制写理由；没理由只处理这一张', () => {
+  it('点「不发」一下就生效；没给理由就不带动任何一张（没有跟随那一行）', async () => {
     const user = userEvent.setup()
-    decideOut = follow('reject', 'applied')
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await user.click(await screen.findByText('不发'))
     await waitFor(() => {
@@ -103,25 +115,17 @@ describe('WP414「不要」不强制写理由', () => {
     expect(reasons.textContent).toContain('已不发')
     for (const r of ['不相关', '时机不对', '不想回', '其他…'])
       expect(within(reasons).getByText(r)).toBeDefined()
-    await user.click(within(reasons).getByText('不相关'))
-    await waitFor(() => {
-      expect(addDecisionReason).toHaveBeenCalledWith(
-        'ap_1',
-        { reason: '不相关', follower_ids: ['ap_2', 'ap_3'] },
-        'asg_1',
-      )
-    })
-    expect((await screen.findByTestId('deck-drop-reason-saved')).textContent).toContain('不相关')
+    expect(screen.queryByTestId('deck-follow-applied')).toBeNull()
+    expect(addDecisionReason).not.toHaveBeenCalled()
   })
 
-  it('「其他…」开一个可选的输入框；不填也不影响那次「不发」', async () => {
+  it('「其他…」开一个可选的输入框；写了就补记', async () => {
     const user = userEvent.setup()
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await user.click(await screen.findByText('不发'))
     const reasons = await screen.findByTestId('deck-drop-reasons')
     await user.click(within(reasons).getByText('其他…'))
-    const box = within(reasons).getByRole('textbox')
-    await user.type(box, '这个用户在钓鱼')
+    await user.type(within(reasons).getByRole('textbox'), '这个用户在钓鱼')
     await user.click(within(reasons).getByText('记下'))
     await waitFor(() => {
       expect(addDecisionReason).toHaveBeenCalledWith(
@@ -130,31 +134,67 @@ describe('WP414「不要」不强制写理由', () => {
         'asg_1',
       )
     })
+    expect((await screen.findByTestId('deck-drop-reason-saved')).textContent).toContain('钓鱼')
   })
 })
 
-describe('WP414 同类卡跟着前一个决定', () => {
-  it('否掉第一张 → 顶上一行「另外 2 张也一并不发了」，能看是哪几张、能整批撤回', async () => {
+describe('WP414 按理由跟着处理（10-19 更正）', () => {
+  it('点了理由才去找：「按你的理由「不相关」，另外 2 张也一并不发了」，清单摊开写为什么，单张恢复、全部撤回', async () => {
     const user = userEvent.setup()
-    decideOut = follow('reject', 'applied')
+    reasonOut = { followers: 0, ...follow('reject', 'applied') }
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await user.click(await screen.findByText('不发'))
+    const reasons = await screen.findByTestId('deck-drop-reasons')
+    await user.click(within(reasons).getByText('不相关'))
+    await waitFor(() => {
+      expect(addDecisionReason).toHaveBeenCalledWith(
+        'ap_1',
+        { reason: '不相关', follower_ids: [] },
+        'asg_1',
+      )
+    })
     const line = await screen.findByTestId('deck-follow-applied')
-    expect(line.textContent).toContain('另外 2 张也一并不发了')
-    expect(line.textContent).toContain('回复 u/alice')
-    await user.click(within(line).getByTestId('deck-follow-list-toggle'))
+    expect(line.textContent).toContain('按你的理由「不相关」，另外 2 张也一并不发了')
+    // 清单直接摊开：标题 + AI 说为什么属于这个理由
     const list = within(line).getByTestId('deck-follow-list')
     expect(list.textContent).toContain('回复 u/bob')
-    // 每张为什么算同类（一句话）
-    expect(list.textContent).toContain('同在 r/Smartphones')
-    expect(list.textContent).toContain('AI 出卡的理由相近')
+    expect(list.textContent).toContain('也是换手机的帖子，和眼镜无关')
+    // 单张恢复
+    const items = within(list).getAllByTestId('deck-follow-item')
+    await user.click(within(items[0] as HTMLElement).getByTestId('deck-follow-restore'))
+    await waitFor(() => {
+      expect(undoFollow).toHaveBeenCalledWith('ap_1', ['ap_2'], 'asg_1')
+    })
+    expect(await within(line).findByTestId('deck-follow-restored')).toBeDefined()
+    expect(line.textContent).toContain('另外 1 张也一并不发了')
+    // 全部撤回（只撤还没恢复的那张）
     await user.click(within(line).getByTestId('deck-follow-undo'))
     await waitFor(() => {
-      expect(undoFollow).toHaveBeenCalledWith('ap_1', ['ap_2', 'ap_3'], 'asg_1')
+      expect(undoFollow).toHaveBeenLastCalledWith('ap_1', ['ap_3'], 'asg_1')
     })
     expect((await screen.findByTestId('deck-follow-undone')).textContent).toContain(
       '2 张放回待处理',
     )
+  })
+
+  it('「稍后」：有一个可选的小框，写了理由才去找同类', async () => {
+    const user = userEvent.setup()
+    reasonOut = { followers: 0, ...follow('snooze', 'applied') }
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    await user.click(await screen.findByText('稍后'))
+    const reasons = await screen.findByTestId('deck-drop-reasons')
+    expect(reasons.textContent).toContain('已稍后')
+    expect(screen.queryByTestId('deck-follow-applied')).toBeNull()
+    await user.type(within(reasons).getByRole('textbox'), '等产品资料')
+    await user.click(within(reasons).getByText('记下'))
+    await waitFor(() => {
+      expect(addDecisionReason).toHaveBeenCalledWith(
+        'ap_1',
+        { reason: '等产品资料', follower_ids: [] },
+        'asg_1',
+      )
+    })
+    expect((await screen.findByTestId('deck-follow-applied')).textContent).toContain('一并稍后了')
   })
 
   it('「发送」之后只问要不要一起发：一起发要再点一次确认；绝不自动发', async () => {

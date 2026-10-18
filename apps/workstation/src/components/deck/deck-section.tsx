@@ -166,7 +166,8 @@ function receiptKey(body: DecideInput, card: DeckCard): string | undefined {
     return `deck.receipt.instruct.${body.instruction?.scope ?? 'single_reply'}`
   // WP414：「不要」之后那一行（可选理由 / 同类跟着处理）自己会说「不发了」，这里不再说一遍
   if (body.action === 'reject') return undefined
-  if (body.action === 'snooze') return 'deck.receipt.snooze'
+  // WP414：「稍后」也由那一行说（还能补一句为什么）
+  if (body.action === 'snooze') return undefined
   if (body.action === 'approve' && body.selected_option_id !== undefined)
     return 'deck.receipt.choice'
   if (body.action === 'approve' && card.layout === 'policy') return 'deck.receipt.choice'
@@ -239,13 +240,13 @@ export function DeckSection({
       setError('')
       const key = receiptKey(input.body, input.card)
       setReceipt(key === undefined ? '' : t(key))
-      // WP414：「不要」出可选理由那一行；同类卡跟着处理了 / 要不要一起发，也在这一行
+      // WP414：「不要 / 稍后」出可选理由那一行（填了理由才去找同类）；「发送」后同类要不要一起发，也在这一行
       const follow = followOf(out)
       const action = input.body.action
       const followed =
         follow !== undefined && (follow.applied.length > 0 || follow.suggested.length > 0)
       if (
-        (action === 'reject' || followed) &&
+        (action === 'reject' || action === 'snooze' || followed) &&
         (action === 'approve' || action === 'reject' || action === 'snooze')
       )
         setAfter({
