@@ -251,13 +251,15 @@ export class FakeBus {
   async decide(id: string, _by: never, input: DecideInput): Promise<ApprovalItem> {
     const c = this.cards.get(id)
     if (c === undefined) throw new Error('no card')
+    const edited = input.edited_payload !== undefined
     const next = {
       ...c,
-      state: input.action === 'reject' ? 'rejected' : 'approved',
+      state: input.action === 'reject' ? 'rejected' : edited ? 'approved_edited' : 'approved',
       decision: {
         ...(input.selected_option_id === undefined
           ? {}
           : { selected_option_id: input.selected_option_id }),
+        ...(edited ? { edited_payload: input.edited_payload } : {}),
       },
     } as unknown as ApprovalItem
     this.cards.set(id, next)

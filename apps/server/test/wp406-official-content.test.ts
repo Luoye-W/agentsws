@@ -171,6 +171,22 @@ describe('WP406 每周岗位更新卡', () => {
     ).toEqual(['role_content:dtc.store', 'rules:roles.house_rules'])
   })
 
+  it('卡身里的按钮：选的放在 edited_payload（卡上不挂选项列表）也认', async () => {
+    const h = harness()
+    h.publish(1, [rulesItem('1.0.1', '按钮在卡身里。')])
+    await firstCheck(h)
+    const card = h.bus.open()[0]
+    expect(card?.options).toBeUndefined()
+    const wrapped = h.oc.wrap(h.bus as never) as unknown as typeof h.bus
+    await wrapped.decide(card?.id ?? '', OWNER as never, {
+      decision_token: 't',
+      action: 'approve',
+      edited_payload: { ...(card?.payload as object), selected_option_id: 'skip' },
+      via: 'workstation',
+    })
+    expect((await h.oc.view('ws_brand' as never, POSITION, OWNER)).skipped_this_week).toBe(true)
+  })
+
   it('挑着应用：只应用勾了的那几项，卡作废，没勾的下周带上', async () => {
     const h = harness()
     h.publish(1, [rulesItem('1.0.1', '挑这一条。'), roleItem('1.1.0', { description: '没挑' })])
