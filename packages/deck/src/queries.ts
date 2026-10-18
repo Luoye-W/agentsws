@@ -925,12 +925,13 @@ const PR_QUERIES: QueryDef[] = [
     source: 'google_alerts',
     returns: 'table',
     run: (ctx) => ({
+      // WP401：提及表能筛——日期范围、在哪儿 / 情绪 / 归谁 下拉多选、说了什么 搜文字
       columns: [
-        { key: 'published_at', label: '什么时候' },
-        { key: 'origin', label: '在哪儿' },
-        { key: 'sentiment', label: '情绪' },
-        { key: 'triage', label: '归谁' },
-        { key: 'body', label: '说了什么' },
+        { key: 'published_at', label: '什么时候', filter: 'date' as const },
+        { key: 'origin', label: '在哪儿', filter: 'select' as const },
+        { key: 'sentiment', label: '情绪', filter: 'select' as const },
+        { key: 'triage', label: '归谁', filter: 'select' as const },
+        { key: 'body', label: '说了什么', filter: 'search' as const },
       ],
       rows: (ctx.pr?.mentions ?? []).map((r) => ({
         published_at: r.published_at,
@@ -1630,10 +1631,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '履约' },
+          { key: 'status', label: '履约', filter: 'select' as const },
         ],
         rows,
       }
@@ -1659,10 +1660,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '支付' },
+          { key: 'status', label: '支付', filter: 'select' as const },
         ],
         rows,
       }
@@ -1746,10 +1747,10 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'order', label: '订单' },
-          { key: 'created_at', label: '下单时间' },
+          { key: 'order', label: '订单', filter: 'search' as const },
+          { key: 'created_at', label: '下单时间', filter: 'date' as const },
           { key: 'total', label: '金额', align: 'right' as const },
-          { key: 'status', label: '支付' },
+          { key: 'status', label: '支付', filter: 'select' as const },
         ],
         rows,
       }
