@@ -821,6 +821,30 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const sandboxDrill = input.creator.sandbox === true
     // WP416：真红人、可这台机器上没有能发信的邮箱——卡照样出（信先写好），但照实说、不许自动批
     const noMailbox = !sandboxDrill && options.mailConnected?.() === false
+    /*
+     * 卡面上要人先看一眼的几句（WP416 自查 kol U5：以前写在 notes 里、卡面看不见）——同时进 notes
+     * 与 `after.heads_up`（卡面一行一句）。
+     */
+    const headsUp: string[] = [
+      ...(noMailbox
+        ? ['还没连发信邮箱：现在批了也发不出去。先在下面那张连接卡上连好邮箱，再点「发送」。']
+        : []),
+      ...(input.pitch_note === undefined ? [] : [input.pitch_note]),
+      /*
+       * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
+       * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
+       */
+      ...(input.vars.language === 'en' &&
+      hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
+        ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
+        : []),
+      // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
+      ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
+        ? [
+            '公司档案里还没填公司地址：英文开发信页脚要用它（法规要求）。去「设置 → 通用 → 公司档案」填一下。',
+          ]
+        : []),
+    ]
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -842,28 +866,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         suppression_checked: true,
         // 跟进那一封要用首封同一组变量——跟进信提到的产品必须和首封是同一个
         vars: input.vars,
+        ...(headsUp.length === 0 ? {} : { heads_up: headsUp }),
+        creator_name: input.creator.display_name,
       },
-      notes: [
-        `给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`,
-        ...(noMailbox
-          ? ['还没连发信邮箱：现在批了也发不出去。先在下面那张连接卡上连好邮箱，再点「发送」。']
-          : []),
-        ...(input.pitch_note === undefined ? [] : [input.pitch_note]),
-        /*
-         * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
-         * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
-         */
-        ...(input.vars.language === 'en' &&
-        hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
-          ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
-          : []),
-        // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
-        ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
-          ? [
-              '公司档案里还没填公司地址：英文开发信页脚要用它（法规要求）。去「设置 → 通用 → 公司档案」填一下。',
-            ]
-          : []),
-      ],
+      notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`, ...headsUp],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
       level: sandboxDrill || noMailbox ? 'L1' : level,
