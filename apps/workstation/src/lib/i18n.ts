@@ -6,6 +6,7 @@
  */
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
+import { ADS_OVERVIEW_EN, ADS_OVERVIEW_ZH } from './i18n-ads-overview'
 import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
 import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
 import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
@@ -2094,10 +2095,10 @@ const zh: Table = {
   'deck.back': '返回',
   'deck.empty.title': '队列清空了',
   'deck.recap.hint': '今天到这儿为止发生了这些',
-  'deck.recap.ai_handled': 'AI 自主处理',
-  'deck.recap.handled': '你已处理',
-  'deck.recap.auto_sent': '自动发送',
-  'deck.recap.intercepted': '拦截待确认',
+  'deck.recap.ai_handled': 'AI 处理',
+  'deck.recap.handled': '你处理',
+  'deck.recap.auto_sent': '自动发',
+  'deck.recap.intercepted': '待确认',
   // ── WP113（63）：消息——统一收件处 ───────────────────────────────────
   'nav.messages': '消息',
   'messages.folders': '文件夹',
@@ -8844,6 +8845,7 @@ const TABLES: Record<Lang, Table> = {
     ...GOOGLE_ALERTS_ZH,
     ...PR_ALERTS_ZH,
     ...ADS_CHANGES_ZH,
+    ...ADS_OVERVIEW_ZH,
     // WP333：一张卡自己的页面（个人微信卡片链接落到这里）
     ...CARD_PAGE_ZH,
     // WP335：AI 回答监测（看板、一条回答、关注设置、设定卡、品牌档案「品类」）
@@ -8903,6 +8905,7 @@ const TABLES: Record<Lang, Table> = {
     ...GOOGLE_ALERTS_EN,
     ...PR_ALERTS_EN,
     ...ADS_CHANGES_EN,
+    ...ADS_OVERVIEW_EN,
     ...CARD_PAGE_EN,
     ...GEO_EN,
     ...EXT_INSTALL_EN,

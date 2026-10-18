@@ -154,6 +154,7 @@ export type {
   AdsAccountRow,
   AdsCampaignRow,
   AdsChangesView,
+  AdsOverviewView,
   AdsPort,
   AdsStagedView,
 } from './routes/ads.js'

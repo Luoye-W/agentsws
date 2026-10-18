@@ -346,6 +346,8 @@ export interface BrandModuleSet {
   amazonFront?: AmazonFrontReader
   /** WP398（docs/106 §13 A8）：Amazon 词库（托管实例没有）。 */
   amazonKeywords?: AmazonKeywordBank
+  /** WP420（自查 B4 / B9）：有人担亚马逊店铺运营就种一条每周体检的自动化任务（只种一次）。 */
+  amazonWeekly?: () => Promise<unknown>
   /**
    * WP402（决策 1140 / 1146）：Amazon 走你自己的浏览器（取数链第 3 条路）的同意与每家每天一次（同意卡、设置里撤回）。
    * 托管实例没有。

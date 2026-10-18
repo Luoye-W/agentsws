@@ -145,8 +145,8 @@ export function daySpendGate(input: {
     remaining,
     by_platform,
     reason: open
-      ? `今天四个平台一共花了 ${spent}，总闸 ${cap}，还剩 ${remaining}${missingNote}。`
-      : `今天四个平台一共花了 ${spent}，再加 ${adding} 就是 ${spent + adding}，超过总闸 ${cap}${missingNote}。`,
+      ? `今天各平台一共花了 ${spent}，总闸 ${cap}，还剩 ${remaining}${missingNote}。`
+      : `今天各平台一共花了 ${spent}，再加 ${adding} 就是 ${spent + adding}，超过总闸 ${cap}${missingNote}。`,
   }
 }
 

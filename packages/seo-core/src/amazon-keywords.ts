@@ -249,6 +249,8 @@ export function extractPhrases(text: string, ctx: KeywordContext): ExtractedPhra
       for (let n = 2; n <= 3; n++)
         for (let i = 0; i + n <= run.length; i++) {
           const part = run.slice(i, i + n)
+          // WP420（自查 B10）：同一个词在词组里出现两次的不要（「power station power」是标题里同一个词组重复拼出来的）
+          if (new Set(part.map((p) => p.key)).size < part.length) continue
           const norm = part.map((p) => p.key).join(' ')
           if (!out.has(norm)) out.set(norm, part.map((p) => p.raw).join(' '))
         }
@@ -602,6 +604,9 @@ export function keywordRows(input: {
   }))
   const own = input.own.map((t) => ({ m: amazonMarketOf(t.marketplace), words: wordsInListing(t) }))
   const gapIds = new Set(input.gaps.flatMap((g) => g.terms.map((t) => t.id)))
+  // WP420（自查 B10 / U22）：差距按 ASIN 说——哪几个自家 ASIN 没写（「✓你已写进」和「差距词」不再同时出现）
+  const gapAsinsOf = (id: string): string[] =>
+    input.gaps.filter((g) => g.terms.some((t) => t.id === id)).map((g) => g.asin)
   const rows = input.bank.map((k): AmazonKeywordRow => {
     const words = k.norm.split(' ')
     const hits = new Set(
@@ -614,6 +619,7 @@ export function keywordRows(input: {
       competitors: hits.size,
       in_own_text: own.some((o) => o.m === k.marketplace && words.every((w) => o.words.has(w))),
       gap: gapIds.has(k.id),
+      ...(gapIds.has(k.id) ? { gap_asins: gapAsinsOf(k.id) } : {}),
     }
   })
   return rows.sort(

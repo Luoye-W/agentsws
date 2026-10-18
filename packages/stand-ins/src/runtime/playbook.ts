@@ -21,9 +21,9 @@ export type PlaybookId = 'support' | 'kol'
 /**
  * **域 → 剧本**（69 §3：按 `role.domain` 选）。
  *
- * 只有两个域进得来，因为 stub 手里也只有两套桩：
- * - `amz`：这个域里只有 `amz.support` 一条，就是客服；
+ * 只有一个域整域进得来：
  * - `kol`：五条渠道职责，剧本在 `kol-core`（WP117）。
+ * （`amz` 以前整域走客服；WP420 起只有 `amz.support` 走客服，见下面那张按职责的表。）
  *
  * **`dtc` 故意不在这张表里**。它是唯一一个"一个域里两种活"的域：客服那三条
  * （`dtc.support` / `dtc.live-chat` / `dtc.community-support`）与运营那四条
@@ -45,9 +45,10 @@ const PLAYBOOK_BY_ROLE: Readonly<Record<string, PlaybookId>> = {
   'dtc.live-chat': 'support',
   'dtc.community-support': 'support',
   /*
-   * WP415（自查 R8）：`amz` 以前整域映射到客服剧本——那时这个域里只有客服一条。WP395 加了
+   * WP415 / WP420（自查 R8 / B2 / U23）：`amz` 以前整域映射到客服剧本——那时这个域里只有客服一条。WP395 加了
    * `amz.store`（Amazon 店铺运营）之后，「看看我的 Listing」在演示里出的是一张「回复草稿（收件人待定）」。
-   * 所以 `amz` 改成按职责：只有客服这一条走客服剧本。
+   * 所以 `amz` 改成按职责：只有客服这一条走客服剧本；店铺运营在 stub 里另有一套（`stub-ads-amazon.ts`），
+   * 工具不在手边就照实说没有剧本。
    */
   'amz.support': 'support',
 }

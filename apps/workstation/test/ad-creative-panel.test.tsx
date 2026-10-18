@@ -187,7 +187,7 @@ describe('素材流水线面板', () => {
 })
 
 describe('投放岗位页的快捷入口（决策 629）', () => {
-  it('本人持有 Google / Meta 才画，各一个链接到职责页', () => {
+  it('本人持有 Google / Meta 才画，各一个按钮（WP420 A16：点了就地打开右栏「报表」，不跳职责页）', () => {
     renderWithProviders(
       <AdCreativeEntry
         duties={[
@@ -196,10 +196,9 @@ describe('投放岗位页的快捷入口（决策 629）', () => {
         ]}
       />,
     )
-    const links = screen.getByTestId('ad-creative-entry').querySelectorAll('a')
-    expect([...links].map((a) => a.getAttribute('href'))).toEqual([
-      '/positions/asg_g/duties/ads.google',
-    ])
+    const buttons = screen.getAllByTestId('ad-creative-entry-open')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Google'])
+    expect(screen.getByTestId('ad-creative-entry').querySelectorAll('a')).toHaveLength(0)
   })
 
   it('一条都没有就不画', () => {

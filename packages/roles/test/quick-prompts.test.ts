@@ -135,9 +135,12 @@ describe('内置职责都写了内容（WP84 §2）', () => {
     }
     // 1136：店铺管理实留 6；1148：亚马逊店铺运营加了「竞品最近有什么动静」
     expect(loadBundledRole('dtc.store').quick_prompts).toHaveLength(6)
+    // WP420（自查 B13）：「该补货了吗」「账户健康怎么样」要官方卖家连接（还没开放），换成「看词库差距」、去掉一颗
     const amz = loadBundledRole('amz.store').quick_prompts ?? []
-    expect(amz).toHaveLength(6)
+    expect(amz).toHaveLength(5)
     expect(amz.find((p) => p.id === 'competitor_moves')?.label.zh).toBe('竞品最近有什么动静')
+    expect(amz.map((p) => p.id)).toContain('keyword_gaps')
+    expect(amz.map((p) => p.id)).not.toContain('account_health')
   })
 
   it('中英各一份，句子不空，id 在本职责内唯一', () => {

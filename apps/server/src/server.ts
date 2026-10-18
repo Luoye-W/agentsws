@@ -261,6 +261,7 @@ import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-s
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
+import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
 import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
 import { adsMailSourceOf, adsReportSetupNotice, seedAdsDailyReport } from './ads-data/wire.js'
@@ -291,6 +292,7 @@ import {
   listingTextsFromFacts,
   listingTextsFromSnapshots,
 } from './amazon-keywords/index.js'
+import { createListingChain } from './amazon-listing/chain.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检（读页积木由 WP394 接到 `amazonListingReader`）
 import {
   type AmazonListingCheckup,
@@ -298,6 +300,7 @@ import {
   createAmazonListingCheckup,
   createAmazonListingToolExecutor,
 } from './amazon-listing/index.js'
+import { AMAZON_WEEKLY_KV, seedAmazonWeekly } from './amazon-listing/weekly.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { createAssistant } from './assistant.js'
@@ -2734,7 +2737,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (outreachSent !== undefined) return outreachSent
       // WP316：广告卡批了 → 插件在用户自己的后台里执行（进了队就回 ok，结局记广告变更账本）
       const adsApplied = await brand?.adsWiring?.apply(change)
-      if (adsApplied !== undefined) return adsApplied
+      // WP415 统一口径：WP420 照实回「没做 · 还没接通」的那几种（`not_wired`），演示里照走兜底（标「演示」）
+      if (adsApplied !== undefined && !(adsApplied.not_wired === true && executionMode === 'demo'))
+        return adsApplied
       // WP418（自查 A11 / A18 / A19）：建站自己的卡——检查单（只读，查完即好）；装 App / 改 App / 改通知邮件做不到，照实回「没做」
       const siteApplied = brand?.siteService.apply(change)
       // WP415 统一口径：做不到的那几类（`not_wired`）演示里照走兜底（标「演示」），生产照实回「没做」+ 去哪里自己点
@@ -5552,6 +5557,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       changeOf: (id) => txn.ledger.get(id),
       // WP224：止损卡上判据旁边并排一格盈亏线（只显示）
       breakEven: breakEvenNow,
+      // WP420（自查 A8）：投放看板上那一行「日报数据到没到」（看数据在下面才建，取值时才碰它）
+      dataStatus: (p) => {
+        const st = adsData?.status().find((x) => x.platform === p)
+        if (st === undefined) return undefined
+        return {
+          plugin: st.plugin,
+          ...(st.account === undefined ? {} : { account: st.account }),
+          ...(st.last_import === undefined ? {} : { last_import_at: st.last_import.at }),
+          ...(st.newest_day === undefined ? {} : { newest_day: st.newest_day }),
+          ...(st.message === undefined ? {} : { message: st.message }),
+        }
+      },
+      tzOffsetMinutes: () => workData.tz_offset_minutes,
+      // WP420（自查 A4）：止损判据按昨天整天再判一次（看数据在下面才建，取值时才碰它）
+      stopLossBasis: (c) => {
+        const d = adsData
+        if (d === undefined) return undefined
+        const day = dayBefore(d.today())
+        return yesterdayBasis(d.rows({ since: day, until: day }), d.today(), c.id)
+      },
       store: ads,
       clock,
       ledger: txn.ledger,
@@ -5563,6 +5588,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP315（docs/101 §5.1①，决策 560）：广告看数据——插件每天在用户已登录的后台点导出 → 读下载的文件 →
      * 按天入库（「今天」那份同步进上面的广告库）；插件不在时读邮箱里的定时报表。托管实例不装。
      */
+    /** WP420：哪条广告系列今天已经自动判过止损出过卡（一天一次）。 */
+    const autoStopLossDone = new Map<string, string>()
     const adsHolder = (p: 'google' | 'meta') =>
       roles.assignments
         .listByWorkspace(ws)
@@ -5593,6 +5620,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 attachment: async (id, aid) =>
                   (await messages.port.attachment?.({} as never, id, aid)) ?? undefined,
               }),
+            // WP420（自查 A4）：数一入库就判一遍止损，成立就出卡（L3 自动，不经 AI）
+            afterIngest: async (platform) => {
+              const d = adsData
+              const holder = adsHolder(platform)
+              if (d === undefined || holder === undefined) return
+              const day = dayBefore(d.today())
+              let caps = {}
+              try {
+                caps =
+                  roles.effectiveConfig(holder.id).actions.find((x) => x.id === 'pause_ads')
+                    ?.mandate.caps ?? {}
+              } catch {
+                caps = {}
+              }
+              const doneKey = `${d.today()}`
+              await autoStopLoss({
+                platform,
+                ads,
+                rows: d.rows({ since: day, until: d.today(), platform }),
+                today: d.today(),
+                caps,
+                port: adsService.port,
+                actor: {
+                  workspace_id: ws,
+                  person_id: holder.person_id,
+                  assignment_id: holder.id,
+                  role_id: holder.role_id,
+                } as never,
+                done: (id) => autoStopLossDone.get(id) === doneKey,
+                markDone: (id) => autoStopLossDone.set(id, doneKey),
+              })
+            },
             seedDailyReport: () =>
               seedAdsDailyReport({
                 workspace_id: ws,
@@ -8768,7 +8827,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             now: () => clock.now(),
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             // WP394：读页走竞品对标款同一块（内置浏览器、Agent 标识、配送邮编、被拦就停）；测试 / demo 给了替身就用替身
-            reader: () => options.amazonListingReader?.(ws) ?? amazonFront,
+            // WP420（自查 B1）：内置浏览器被拦 / 暂停 → 你自己的浏览器（先问同意、每款每天一次）→ 照实说停到几点
+            reader: () =>
+              options.amazonListingReader?.(ws) ??
+              createListingChain({
+                front: () => amazonFront,
+                own: () => amazonOwnBrowser,
+                tzOffsetMinutes: () => workData.tz_offset_minutes,
+              }),
             // WP398：体检读到的自家页（标题、五点）交给词库拆词，词库的「自家写了什么」就有了
             onFacts: (facts) => amazonKeywords?.ingestListings(listingTextsFromFacts(facts)),
             brand: async () => {
@@ -9579,6 +9645,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       redditPersona,
       ...(amazonListing === undefined ? {} : { amazonListing }),
       ...(amazonKeywords === undefined ? {} : { amazonKeywords }),
+      // WP420（自查 B4 / B9）：每周一次的 Amazon 体检 + 词库刷新（官方自动化任务，只种一次）
+      ...(amazonListing === undefined
+        ? {}
+        : {
+            amazonWeekly: () =>
+              seedAmazonWeekly({
+                workspace_id: ws,
+                holder: () =>
+                  roles.assignments
+                    .listByRole('amz.store')
+                    .find((x) => x.workspace_id === ws && x.revoked_at === undefined),
+                createMatter: (input) => work.createMatter(input as never),
+                automation,
+                kv: {
+                  get: () => cwKv.kv<unknown>(AMAZON_WEEKLY_KV) ?? undefined,
+                  set: (v) => cwKv.setKv(AMAZON_WEEKLY_KV, v),
+                },
+                now: () => clock.now(),
+              }),
+          }),
       // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
       economics,
       weeklyReview,
@@ -10380,6 +10466,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const b = await of()
         // C3：品牌档案里新查到的竞品，沿用「要不要加进竞品」那张卡问一次（问过不再问）
         await b.seoService.askProfileCompetitors().catch(() => undefined)
+        // WP420（自查 B4 / B9）：有人担亚马逊店铺运营 → 种每周体检那条定时（只种一次）
+        await b.amazonWeekly?.().catch(() => undefined)
         return (await b.competitorWatch?.tick()) ?? { ran: false, skipped: 'not_installed' }
       },
     })
@@ -14852,6 +14940,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 ws: WorkspaceId,
                 patch: Parameters<AmazonListingCheckup['setRule']>[0],
               ) => (await of(ws)).setRule(patch),
+              // WP420（自查 B15）：Amazon 运营面板上直接改自家 ASIN
+              setOwn: async (ws: WorkspaceId, input: { value: string; marketplace?: string }) =>
+                (await of(ws)).setOwn(input),
             }
           })(),
           // WP413：插件常驻侧边栏 `/v1/extension/panel*`（进度 / 要你处理 / 记录；卡由路由从审批总线取）

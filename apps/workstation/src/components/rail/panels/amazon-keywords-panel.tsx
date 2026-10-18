@@ -47,6 +47,10 @@ const queryOf = (f: Filter): AmazonKeywordQuery =>
         ? { other_brand: true }
         : { source: f }
 
+/** `B0DEMONV02` → `B0…02`（一行里放得下几个）。 */
+export const shortAsin = (asin: string): string =>
+  asin.length > 6 ? `${asin.slice(0, 2)}…${asin.slice(-2)}` : asin
+
 function Row({
   row,
   onMark,
@@ -61,6 +65,7 @@ function Row({
       data-testid="amzkw-row"
       data-id={row.id}
     >
+      {/* WP420（自查 B10 / U22）：一行说完——词 · 几家竞品 · 哪个 ASIN 没写（或已写进）· 来源 */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="text-sm font-medium" data-testid="amzkw-term">
           {row.term}
@@ -70,27 +75,27 @@ function Row({
             {t('amzkw.gap.competitors', { n: row.competitors })}
           </span>
         )}
-        {row.in_own_text && (
+        {row.gap ? (
+          <Badge variant="outline" data-testid="amzkw-gap-asins">
+            {row.gap_asins === undefined || row.gap_asins.length === 0
+              ? t('amzkw.filter.gap')
+              : t('amzkw.gap.asins', { asins: row.gap_asins.map(shortAsin).join('、') })}
+          </Badge>
+        ) : row.in_own_text ? (
           <span className="inline-flex items-center gap-0.5 text-xs text-ws-muted-fg">
             <Check className="size-3" />
             {t('amzkw.own.has')}
           </span>
-        )}
-        {row.gap && <Badge variant="outline">{t('amzkw.filter.gap')}</Badge>}
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        {row.sources.map((s) => (
-          <span
-            key={s}
-            className="text-xs text-ws-muted-fg"
-            data-testid="amzkw-source"
-            data-source={s}
-          >
-            {lang === 'en'
-              ? AMAZON_KEYWORD_SOURCE_LABELS[s].en
-              : AMAZON_KEYWORD_SOURCE_LABELS[s].zh}
-          </span>
-        ))}
+        ) : null}
+        <span className="text-xs text-ws-muted-fg" data-testid="amzkw-sources">
+          {row.sources.map((s) => (
+            <span key={s} data-testid="amzkw-source" data-source={s} className="mr-1.5">
+              {lang === 'en'
+                ? AMAZON_KEYWORD_SOURCE_LABELS[s].en
+                : AMAZON_KEYWORD_SOURCE_LABELS[s].zh}
+            </span>
+          ))}
+        </span>
       </div>
       {row.other_brand !== undefined && (
         <p className="text-xs text-ws-warn" data-testid="amzkw-other-brand">
@@ -105,10 +110,11 @@ function Row({
               key={m}
               type="button"
               aria-pressed={on}
+              // WP420（自查 U22）：做成看得出能点的小按钮（有边框）
               className={
                 on
-                  ? 'rounded-sm bg-ws-surface px-1.5 py-0.5 text-xs font-medium text-foreground'
-                  : 'rounded-sm px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-ws-surface'
+                  ? 'rounded-md border border-ws-ink/30 bg-ws-surface px-1.5 py-0.5 text-xs font-medium text-foreground'
+                  : 'rounded-md border border-ws-line px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-ws-surface'
               }
               onClick={() => onMark(m, !on)}
               data-testid="amzkw-mark"

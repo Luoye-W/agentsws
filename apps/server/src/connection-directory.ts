@@ -20,6 +20,7 @@
  *
  * 36 §2：目录条目里不出现任何原始店铺 id / 账号 id——目录说的是"哪一类东西"。
  */
+
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type {
@@ -49,6 +50,7 @@ import {
   validateMcpServer,
 } from '@agentsws/contracts'
 import type { RoleStore } from '@agentsws/roles'
+import { bundledPositionOfRole } from '@agentsws/roles'
 import { catalogEntry, ROLE_CONNECTOR_KIND } from './catalog.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -411,6 +413,20 @@ export function createConnectionDirectory(
       .filter((a) => a.revoked_at === undefined)
 
   /**
+   * WP420（自查 ads-amazon B14 / U12）：这个岗位「自己的」职责——在这里只是「列着、默认不勾」、家在别的岗位的
+   * （`amz.support` 在 Amazon 运营里，家是客服岗）不算：不然客服岗那条 Amazon 客服的「邮箱」会让
+   * Amazon 运营页顶上冒出「还缺必需的连接：邮箱」。
+   */
+  const ownRolesOf = (p: { id: string; roles: readonly { role: RoleId; default?: boolean }[] }) =>
+    p.roles
+      .filter((r) => {
+        if (r.default !== false) return true
+        const home = bundledPositionOfRole(r.role)
+        return home === undefined || home.id === p.id
+      })
+      .map((r) => r.role)
+
+  /**
    * `:id` 两种都收：岗位模板 id，或者本人持有的一条分配 id。
    *
    * 与 `positionPortFor` 的 `resolveId` 同一条规矩（server.ts）——两处都收，
@@ -423,7 +439,7 @@ export function createConnectionDirectory(
     const held = activeOf(person_id)
     const template = options.positions().find((p) => p.id === id)
     if (template !== undefined) {
-      const inTemplate = template.roles.map((r) => r.role)
+      const inTemplate = ownRolesOf(template)
       // 他自己持有的那几条优先；一条都没持有就按整个岗位算（还没上岗的人也该看得见要连什么）
       const mine = inTemplate.filter((r) => held.some((a) => a.role_id === r))
       return {
@@ -445,7 +461,7 @@ export function createConnectionDirectory(
         role_ids: [assignment.role_id],
       }
     }
-    const inTemplate = hit.roles.map((r) => r.role)
+    const inTemplate = ownRolesOf(hit)
     const mine = inTemplate.filter((r) => held.some((a) => a.role_id === r))
     return {
       position_id: hit.id,

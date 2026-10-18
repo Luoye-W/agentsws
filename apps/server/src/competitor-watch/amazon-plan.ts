@@ -63,15 +63,16 @@ const EVERY = [
 ]
 type RuleToggle = 'cheaper_than_own' | 'discounts' | 'stock'
 type RuleNumber = 'price_drop_pct' | 'rating_below' | 'bsr_move_pct'
+// WP420（自查 U15）：标签改短（标签列窄，长的折成两三行）；「算重要」的意思在卡头那一句里说一次
 const TOGGLES: readonly [RuleToggle, string][] = [
-  ['cheaper_than_own', '降到比你便宜就算重要'],
-  ['discounts', '划线价 / 优惠券开始或结束算重要'],
-  ['stock', '断货 / 补货算重要'],
+  ['cheaper_than_own', '比我便宜'],
+  ['discounts', '优惠券 / 划线价'],
+  ['stock', '断货 / 补货'],
 ]
 const NUMBERS: readonly [RuleNumber, string, number, number][] = [
-  ['price_drop_pct', '降价多少算重要（%）', 1, 90],
-  ['rating_below', '评分跌破多少算重要（星）', 1, 5],
-  ['bsr_move_pct', '排名变化多少算重要（%）', 1, 1000],
+  ['price_drop_pct', '降价线（%）', 1, 90],
+  ['rating_below', '评分线（星）', 1, 5],
+  ['bsr_move_pct', '排名线（%）', 1, 1000],
 ]
 
 export interface AmazonCompetitorDeps {
@@ -245,6 +246,23 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
   }
 
   /** 自家几款（标题、价）：先看自家那条源的快照，没有就用档案里读到过的。 */
+  /** WP420（自查 B5）：按品牌名搜一页，标题里带品牌名、不是广告位的前几款当自家候选。 */
+  const ownByBrandName = async (
+    mk: string,
+    name: string | undefined,
+  ): Promise<BrandWatchAmazonItem[]> => {
+    const reader = deps.reader()
+    const brand = (name ?? '').trim()
+    if (brand === '' || reader === undefined || !reader.ready()) return []
+    const got = await reader.searchCards({ marketplace: mk, query: brand }).catch(() => undefined)
+    if (got?.status !== 'ok') return []
+    return ownCandidatesFromCards(got.cards, brand).map((c) => ({
+      marketplace: mk,
+      asin: c.asin,
+      label: c.title.slice(0, 80),
+    }))
+  }
+
   const ownList = (mk: string, own: readonly BrandWatchAmazonItem[]) => {
     const rows = store.snapshot(`cw_amz__own_${mk}`)?.rows ?? []
     const fromProfile = new Map(
@@ -274,7 +292,7 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
   const target: SetupTarget = {
     id: AMAZON_COMPETITOR_TARGET,
     name: 'Amazon 竞品',
-    why: '我打算盯这几家竞品在 Amazon 上的对标款：每家几款、各对标你哪一款写在下面；哪几种变化算重要是按你的品类给的建议。点「就这样」我就先读一次当底子，之后每天读一次。',
+    why: '我打算盯这几家竞品在 Amazon 上的对标款：每家几款、各对标你哪一款写在下面；下面几条线（越过就算重要）是按你的品类给的建议。点「就这样」我就先读一次当底子，之后每天读一次。',
     async fields() {
       const plan = readPlan()
       const watch = await deps.brandWatch()
@@ -291,7 +309,7 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
         },
         {
           key: 'own',
-          label: '你的商品（ASIN 或链接）',
+          label: '你的商品',
           kind: 'text',
           placeholder: 'B0XXXXXXXX；或贴一个你的店铺 / 商品链接',
           ...(own.length === 0
@@ -398,11 +416,30 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
         why: '品牌档案里读到的你的商品',
         sources: [{ kind: 'profile', label: '品牌档案' }],
       }
-    } else if (savedOwn.length === 0)
-      plan.own = {
-        needs_you: true,
-        why: '贴一个你在 Amazon 上的店铺或商品链接，我从那里读你卖哪几款（对标、比价用）',
-      }
+    } else if (savedOwn.length === 0) {
+      /*
+       * WP420（自查 B5）：自家 ASIN 不知道时，先按品牌名在 Amazon 搜一页给候选（和 Listing 体检那张卡同一个做法），
+       * 标题里带品牌名、不是广告位的前几款——人看一眼勾掉不对的就行，不让他从零贴链接。
+       */
+      const found = await ownByBrandName(mk, watch?.brand.name ?? prof.name)
+      if (found.length > 0) {
+        own = found
+        plan.own = {
+          value: found.map((o) => o.asin).join('；'),
+          why: `按品牌名在 Amazon 搜到的，看一眼去掉不是你的`,
+          sources: [
+            {
+              kind: 'web',
+              label: `${amazonHostOfMarket(mk) ?? 'Amazon'} 搜「${watch?.brand.name ?? prof.name ?? ''}」`,
+            },
+          ],
+        }
+      } else
+        plan.own = {
+          needs_you: true,
+          why: '贴一个你在 Amazon 上的店铺或商品链接，我从那里读你卖哪几款（对标、比价用）',
+        }
+    }
     const reader = deps.reader()
     // 自家几款的标题和价：快照里没有（还没读过）就用内置浏览器读一下前台页（最多 5 页，算进额度）
     const mine: { asin: string; title?: string; price?: number }[] = []
@@ -474,10 +511,8 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
           ? { needs_you: true, why: `在 Amazon 上没搜到 ${c.name} 自家的同类商品，填上 ASIN 也行` }
           : {
               value: formatPicks(picks),
-              why: picks
-                .map((p) => `${p.asin}：${p.why}`)
-                .join('；')
-                .slice(0, 600),
+              // WP420（自查 U15）：每款一行「短名 · $价格 · ★评分」，不再一大段「B0…：EcoFlow 自家的，3,120 条评论；…」
+              why: picks.map((p) => pickLine(p.asin, got.cards)).join('\n'),
               sources: [src],
             }
     }
@@ -491,9 +526,13 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
     )
     const s = model ?? suggestAmazonRules(category)
     const src = model === undefined ? [DEFAULT_SOURCE] : [MODEL_SOURCE]
+    // WP420（自查 U15）：几格共用的那句理由只放在第一格（以前「降价」「评分」下面是同一句）
+    let whyShown = false
     for (const [k] of NUMBERS) {
       const v = s.rules[k]
-      if (typeof v === 'number') plan[k] = { value: String(v), why: s.why, sources: src }
+      if (typeof v !== 'number') continue
+      plan[k] = { value: String(v), ...(whyShown ? {} : { why: s.why }), sources: src }
+      whyShown = true
     }
     for (const [k] of TOGGLES)
       plan[k] = {
@@ -768,4 +807,52 @@ export function createAmazonCompetitor(deps: AmazonCompetitorDeps): AmazonCompet
       }
     },
   }
+}
+
+/**
+ * WP420（自查 B5）：搜索结果卡片里挑自家候选——标题里带品牌名（不分大小写）、不是广告位，最多 5 款。
+ */
+export function ownCandidatesFromCards(
+  cards: readonly { asin: string; title: string; sponsored: boolean }[],
+  brand: string,
+  max = 5,
+): { asin: string; title: string }[] {
+  const b = brand.trim().toLowerCase()
+  if (b === '') return []
+  const seen = new Set<string>()
+  const out: { asin: string; title: string }[] = []
+  for (const c of cards) {
+    const asin = c.asin.trim().toUpperCase()
+    if (c.sponsored || seen.has(asin) || !c.title.toLowerCase().includes(b)) continue
+    seen.add(asin)
+    out.push({ asin, title: c.title })
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/** WP420（自查 U15）：方案卡上一款一行——「短名 · $价格 · ★评分」（搜索卡片里有什么写什么）。 */
+export function pickLine(
+  asin: string,
+  cards: readonly {
+    asin: string
+    title: string
+    price?: number
+    currency?: string
+    rating?: number
+  }[],
+): string {
+  const c = cards.find((x) => x.asin.toUpperCase() === asin.toUpperCase())
+  if (c === undefined) return asin
+  const name =
+    c.title
+      .split(/[,，|–—-]/u)[0]
+      ?.trim()
+      .slice(0, 32) ?? asin
+  const sym = c.currency === undefined || c.currency === 'USD' ? '$' : `${c.currency} `
+  return [
+    name === '' ? asin : name,
+    ...(c.price === undefined ? [] : [`${sym}${c.price}`]),
+    ...(c.rating === undefined ? [] : [`★${c.rating}`]),
+  ].join(' · ')
 }

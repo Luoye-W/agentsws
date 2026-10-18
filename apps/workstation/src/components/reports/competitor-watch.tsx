@@ -179,6 +179,8 @@ export function competitorChangesPayload(
   return {
     columns: [
       { key: 'competitor', label: t('cwatch.col.competitor'), filter: 'select' },
+      // WP420（自查 B7 / U19）：「在哪」——Amazon 上的价还是官网的价，分得清
+      { key: 'where', label: t('cwatch.col.where'), filter: 'select' },
       { key: 'change', label: t('cwatch.col.change'), filter: 'select' },
       { key: 'what', label: t('cwatch.col.what'), filter: 'search', link_key: 'url' },
       { key: 'trend', label: t('cwatch.col.trend'), format: 'sparkline' },
@@ -187,6 +189,7 @@ export function competitorChangesPayload(
     rows: all.map((c) => ({
       id: c.id,
       competitor: c.competitor,
+      where: t(c.source_kind === 'amazon_asin' ? 'cwatch.where.amazon' : 'cwatch.where.site'),
       change: t(`cwatch.kind.${c.kind}`),
       what: lang === 'en' ? c.text.en || c.text.zh : c.text.zh,
       trend: priceTrend(all, c).join(' '),
@@ -223,7 +226,12 @@ export function CompetitorChangesTable({
       await client.invalidateQueries({ queryKey: ['competitor-watch', assignment ?? ''] })
     },
   })
-  const all = q.data ?? []
+  // WP420（自查 B7）：Amazon 运营那条职责只看 Amazon 上的变化（独立站的竞品变化归店铺管理）
+  const amazonOnly = scope?.tier === 'role' && scope.scope_id === 'amz.store'
+  const all = useMemo(
+    () => (q.data ?? []).filter((c) => !amazonOnly || c.source_kind === 'amazon_asin'),
+    [q.data, amazonOnly],
+  )
   const payload = useMemo(() => competitorChangesPayload(all, t, lang), [all, t, lang])
   if (assignment === undefined || view === undefined || view.summary.sources === 0) return null
   return (

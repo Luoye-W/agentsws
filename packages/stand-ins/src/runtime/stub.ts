@@ -138,6 +138,12 @@ import {
   stagedDataOf,
 } from './social-tools.js'
 import {
+  adsAmazonScriptOf,
+  runAdsScript,
+  runAmazonScript,
+  type ScriptStep,
+} from './stub-ads-amazon.js'
+import {
   boundariesToAsk,
   boundaryGate,
   describeRun,
@@ -1839,6 +1845,59 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * WP261：**独立站运营**（演示用剧本）。工具面里有改商品的工具、说的是改商品，就：列商品 → 读第一件 →
        * 出一张改标题的卡（不直接改；人批了执行器才去店里改）。stub 不会写文案，标题只加「（新版）」。
        */
+      /*
+       * WP420（自查 ads-amazon A11 / B2）：**投放**与 **Amazon 运营**的演示剧本（查数 → 止损卡；Listing 体检 / 词库）。
+       * 工具面里没有那几个工具（托管实例、别的职责）就不进来，一个字节不变。
+       */
+      const adsAmazon = adsAmazonScriptOf(req)
+      if (adsAmazon !== undefined) {
+        const exec = async (step: ScriptStep): Promise<ToolExecution> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: step.tool, input: step.input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: step.tool, input: step.input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          return res
+        }
+        const out =
+          adsAmazon === 'ads'
+            ? await runAdsScript(exec)
+            : await runAmazonScript(exec, b2bText, req.tools.allow)
+        for (const change_id of out.staged) {
+          sink({ type: 'change.staged', change_id })
+          outputs.push({ kind: 'staged_change', change_id })
+        }
+        readTools.push(...out.readTools)
+        outputs.push({ kind: 'answer', text: out.answer })
+        usage.output_tokens = Math.ceil(out.answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: out.answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
       const shopCalls = shopBranch(req, b2bText)
       if (shopCalls !== undefined) {
         const failed: string[] = []

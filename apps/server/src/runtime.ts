@@ -591,6 +591,11 @@ export interface RuntimeOptions {
    */
   competitorStoreTools?: ToolExecutor
   /**
+   * WP420（自查 B11）：这个品牌连上 Amazon 官方卖家连接（SP-API）没有。不给 = 没连上
+   * （连接还没开放）——`amazon-sp-*` 那几本官方技能不进按需索引（正文里的工具全来自那条连接）。
+   */
+  amazonSellerConnected?: (workspace_id: string) => boolean | Promise<boolean>
+  /**
    * WP394（docs/104 一期 B）：亚马逊店铺运营「竞品动向」现在读一次（`competitor-watch/amazon-tools.ts`）。
    * 只给 `amz.store`。不给 = 没有这一个（老装配、模拟世界字节不变）。
    */
@@ -2047,7 +2052,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       options.skills === undefined
         ? []
         : await onDemandSkillIndex({
-            skills: config.skills,
+            // WP420（自查 B11）：要 Amazon 官方卖家连接（SP-API）的那几本，没连上就不进可加载清单
+            skills: usableSkills(config.skills, {
+              amazonSeller: (await options.amazonSellerConnected?.(workspace_id)) === true,
+            }),
             actor: skillActor,
             registry: options.skills,
           })
@@ -3130,4 +3138,15 @@ export const THEME_PRODUCE: RunProduce = {
   max_nudges: 3,
   compact_at_tokens: 48_000,
   keep_recent_results: 6,
+}
+
+/** WP420（自查 B11）：要 Amazon 官方卖家连接（SP-API）的技能（官方 12 本，统一 `amazon-sp-` 前缀）。 */
+export const SP_API_SKILL_RE = /^amazon-sp-/u
+
+/** 这次运行能读的技能：要 SP-API 的那几本，没连上就拿掉（工具不在手边，读了只能说做不了）。 */
+export function usableSkills<T extends { name: string }>(
+  skills: readonly T[],
+  ctx: { amazonSeller: boolean },
+): T[] {
+  return ctx.amazonSeller ? [...skills] : skills.filter((s) => !SP_API_SKILL_RE.test(s.name))
 }

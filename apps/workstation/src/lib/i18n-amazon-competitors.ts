@@ -5,6 +5,7 @@
 export const AMAZON_COMPETITORS_ZH: Record<string, string> = {
   'amzcw.summary': '盯 {n} 家 · {asins} 款',
   'amzcw.next': '下次 {when}',
+  'amzcw.see_table': '最近 {n} 条变化在上面的竞品变化表里',
   // WP402（决策 1140 / 1146）：Amazon 读不到时用你自己的浏览器读（同意 / 撤回）；品牌级暂停那一句
   'amzcw.own.label': '读不到时用你的浏览器',
   'amzcw.own.tip':
@@ -19,6 +20,7 @@ export const AMAZON_COMPETITORS_ZH: Record<string, string> = {
 export const AMAZON_COMPETITORS_EN: Record<string, string> = {
   'amzcw.summary': '{n} rivals · {asins} products',
   'amzcw.next': 'next {when}',
+  'amzcw.see_table': '{n} recent changes — see the competitor changes table above',
   'amzcw.own.label': 'Fallback to your browser',
   'amzcw.own.tip':
     'When the built-in browser and the workshop cloud both fail, the extension opens product pages in your own browser to read price and rating (read-only, no clicks or forms, nothing on your account; at most once per competitor per day)',

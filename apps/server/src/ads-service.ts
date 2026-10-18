@@ -24,7 +24,13 @@ import {
   daySpendGate,
   stopLossVerdict,
 } from '@agentsws/ads-core'
-import type { AdsActor, AdsCampaignRow, AdsPort, AdsStagedView } from '@agentsws/api'
+import type {
+  AdsActor,
+  AdsCampaignRow,
+  AdsOverviewView,
+  AdsPort,
+  AdsStagedView,
+} from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
   AdAccount,
@@ -47,6 +53,7 @@ import type {
 import { ADS_DEFAULT_CAPS, adsPlatformOfRole } from '@agentsws/contracts'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { AdsStore } from './ads.js'
+import type { StopLossBasis } from './ads-data/stop-loss.js'
 import { createAdsProposals } from './ads-wiring/propose.js'
 import { type AdsWiring, actionPlatformOf } from './ads-wiring/service.js'
 import { cardFileOf, cardFingerprint } from './ads-wiring/sheet-card.js'
@@ -79,10 +86,38 @@ export interface AdsServiceOptions {
   wiring?: AdsWiring
   /** WP316：按 id 读回一条变更（撤销要原来的改前值、作废了要原样重出）。 */
   changeOf?: (id: string) => Promise<StagedChange | undefined>
+  /**
+   * WP420（自查 A4）：止损判据的第二份底数——这条广告系列**昨天整天**的花费与 ROAS（看数据库里有就给）。
+   * 今天的数判不成立、昨天整天成立，就按昨天出卡（卡上写「昨天整天花了」）。不给只按今天判（单测）。
+   */
+  stopLossBasis?: (c: AdCampaign) => StopLossBasis | undefined
+  /** WP420（自查 A8）：日报数据到没到（看数据那一份的状态；托管实例 / 单测不给）。 */
+  dataStatus?: (platform: AdsPlatform) => AdsOverviewView['data'] | undefined
+  /** 品牌时区偏移（「今天」从几点算；不给按 UTC）。 */
+  tzOffsetMinutes?: () => number
 }
 
 export interface AdsServiceAssembly {
   port: AdsPort
+}
+
+/** WP420（自查 A3）：托管实例没有插件动作通道——广告写卡不出，照实说去哪儿做。 */
+export const HOSTED_NO_PLUGIN =
+  '这台没有浏览器插件，批了也改不到你的广告后台。去装了插件的桌面版里提这件事。'
+/** WP420（自查 A12 / U4）：插件没连时卡底那一行。 */
+export const QUEUE_NOTE = '插件没连：批了先排队，连上就做。'
+/** 账本里「还没做完」的几种状态。 */
+const OPEN_STATES: ReadonlySet<string> = new Set(['queued', 'running', 'waiting_confirm'])
+/** 账本状态的人话（卡面与回执用）。 */
+export const STATE_ZH: Record<string, string> = {
+  queued: '等插件',
+  running: '插件在做',
+  waiting_confirm: '等你确认',
+  done: '做完',
+  failed: '没做成',
+  rejected: '退回了',
+  expired: '没人领，作废了',
+  stopped: '停下了',
 }
 
 /** 动作 id → ChangeKind（契约 `ADS_KIND_ALIASES` 那张对照的另一半）。 */
@@ -96,6 +131,16 @@ const KIND_OF: Record<string, ChangeKind> = {
   stage_ads_sheet: 'ads_sheet',
   stage_ads_activate: 'ads_activate',
   stage_ads_undo: 'ads_undo',
+}
+
+/**
+ * WP420（自查 A1 / A2）：改出价、换素材还没有真执行器——不出卡，照实说怎么办。
+ * 文案给人看（也原样回给 AI），不写内部名。
+ */
+export function notWiredMessage(what: 'bid' | 'creative', name: string, value?: number): string {
+  return what === 'bid'
+    ? `还没接通：改出价工坊还不能替你去后台点。「${name}」${value === undefined ? '' : `要改到 ${value}，`}请你自己在广告后台改；改完下一次导数会读回来。`
+    : `还没接通：换素材不单独出卡。要换「${name}」，用「改广告」那条路——新建一条带新素材的广告、把旧的停掉，批了插件在你的后台里上传并读回核对。`
 }
 
 export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly {
@@ -178,8 +223,42 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
 
   const campaignOr404 = (id: string): AdCampaign => {
     const found = store.campaign(id)
-    if (found === undefined) throw new ApiError('not_found', `没有这条 campaign：${id}`)
+    if (found === undefined) throw new ApiError('not_found', `没有这条广告系列：${id}`)
     return found
+  }
+
+  /**
+   * WP420：同一条广告系列在广告变更账本里还有没有一件没做完的（排队 / 在做 / 等你确认）。
+   * 回一句「改预算 → 330」这样的话和它的状态（给卡面与回执用）。
+   */
+  const sameTargetQueued = (
+    target: ObjectRef,
+    acct: AdAccount | undefined,
+  ): { kind: string; name: string; sentence: string; state: string } | undefined => {
+    const wiring = options.wiring
+    if (wiring === undefined || acct === undefined || target.type !== 'campaign') return undefined
+    const c = store.campaign(target.id)
+    if (c === undefined) return undefined
+    for (const e of wiring.entries()) {
+      if (e.account_id !== acct.id || !OPEN_STATES.has(e.state)) continue
+      const full = wiring.entry(e.change_id)
+      const hit = full?.form?.find((f) => f.entity_id === c.external_id)
+      if (hit === undefined) continue
+      return {
+        kind: e.kind,
+        name: c.name,
+        sentence:
+          hit.action === 'set_budget' && hit.amount !== undefined
+            ? `改日预算 → ${hit.amount}`
+            : hit.action === 'pause'
+              ? '暂停'
+              : hit.action === 'enable'
+                ? '开始投放'
+                : e.title,
+        state: STATE_ZH[e.state] ?? e.state,
+      }
+    }
+    return undefined
   }
 
   /** 岗位级总闸当时的样子（纪律 3）。 */
@@ -265,12 +344,54 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         )
       }
     }
+    /*
+     * WP420（自查 A3）：这台没有插件动作通道（托管实例）——批了也没人去后台点。
+     * 以前照样出卡、批了落进内存桩显示「已施行」；现在不出卡，照实说去哪儿做。
+     */
+    if (options.wiring !== undefined && !options.wiring.available())
+      return {
+        staged: false,
+        message: HOSTED_NO_PLUGIN,
+        level,
+        spend_gate: gate.view,
+      }
+    // WP420：X / TikTok 的后台插件还不会点（第一期只接 Google / Meta），出了卡也做不了
+    if (
+      options.wiring !== undefined &&
+      acct !== undefined &&
+      acct.platform !== 'google' &&
+      acct.platform !== 'meta'
+    )
+      return {
+        staged: false,
+        message: `还没接通：${adsPlatformOfRole(input.actor.role_id)?.zh ?? acct.platform} 的后台工坊还不能替你去改，请你自己在后台改。`,
+        level,
+        spend_gate: gate.view,
+      }
     // WP316：插件没配对 / 没连这家后台 → 卡照出（批了排队等插件，决策 558），回执里带上连接那一格（WP324）
     const needsExtension =
       options.wiring?.available() === true &&
       acct !== undefined &&
       (acct.platform === 'google' || acct.platform === 'meta') &&
       !options.wiring.extensionReady(acct.platform)
+    /*
+     * WP420（自查 A12 / A13）：同一条广告系列已经有一件排着（还在等插件 / 在做）——
+     * 暂停不再重复排；改预算照出，但卡上写清前面还排着哪一件。
+     */
+    const queuedSame = sameTargetQueued(input.target, acct)
+    if (
+      queuedSame !== undefined &&
+      KIND_OF[input.action] === 'pause_ad' &&
+      queuedSame.kind === 'pause_ad'
+    )
+      return {
+        staged: false,
+        message: `「${queuedSame.name}」已经排着暂停了（${queuedSame.state}），不再重复排。`,
+        level,
+        spend_gate: gate.view,
+      }
+    if (queuedSame !== undefined)
+      extNotes.push(`同一条广告系列前面还排着一件：${queuedSame.sentence}（${queuedSame.state}）。`)
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -290,10 +411,16 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         platform: platformOf(input.actor),
         platform_label: adsPlatformOfRole(input.actor.role_id)?.zh ?? platformOf(input.actor),
         spend_gate_note: gate.reason,
+        // WP420（自查 A12 / U4）：卡底那一行灰字——插件没连，批了只会先排队
+        ...(needsExtension ? { queue_note: QUEUE_NOTE } : {}),
+        ...(queuedSame === undefined ? {} : { queued_ahead: queuedSame.sentence }),
+        ...(acct?.currency === undefined || acct.currency === ''
+          ? {}
+          : { currency: acct.currency }),
       },
       ...(input.field === undefined ? {} : { field: input.field }),
       // 总闸那句话跟着卡走（纪律 3）
-      notes: [...input.notes, ...extNotes, gate.reason],
+      notes: [...input.notes, ...extNotes, ...(needsExtension ? [QUEUE_NOTE] : []), gate.reason],
       /*
        * **岗位级总闸的分子**（纪律 3）：四个平台加起来今天花了多少。
        *
@@ -460,11 +587,11 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         },
         notes: [
           // 04 §5：新开花钱口子永远人审——这句话写在卡上，不只写在文档里
-          '新建一条 campaign 是**开一个新的花钱口子**，永远要人点一下（04 §5）。',
+          '新建一条广告系列是**开一个新的花钱口子**，永远要人点一下（04 §5）。',
           '批了之后它是**停着**建出来的——让它开始花钱是另一张卡。',
           ...sheet.notes,
         ],
-        title: `新建 campaign：${input.name}`,
+        title: `新建广告系列：${input.name}`,
         summary: `${account.name}｜日预算 ${input.daily_budget}｜${input.audience_summary ?? '受众没写'}`,
         seen: [{ type: 'ad_account', id: account.id }],
         rule: 'owner',
@@ -498,27 +625,18 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
       })
     },
 
+    /*
+     * WP420（自查 A1）：改出价**还没接通**——插件第一期只点预算 / 暂停 / 上传表（决策 552），出价那一格
+     * 没人去点。以前照样出卡、批了落进内存桩显示「已施行」，后台一格没动。现在不出卡，照实说。
+     */
     async changeBid(actor, campaign_id, input) {
       const campaign = campaignOr404(campaign_id)
-      const set =
-        input.ad_set_id === undefined
-          ? store.adSets({ campaign_id: campaign.id })[0]
-          : store.adSets({ campaign_id: campaign.id }).find((s) => s.id === input.ad_set_id)
-      const before = set?.bid_amount ?? 0
-      return stageOne({
-        actor,
-        action: 'stage_bid_change',
-        target: { type: 'ad_set', id: set?.id ?? campaign.id },
-        before: { value: before },
-        after: { value: input.value },
-        notes: [input.reason ?? '没写理由。'],
-        title: `改出价：${set?.name ?? campaign.name}`,
-        summary: `${before} → ${input.value}`,
-        seen: [{ type: 'ad_set', id: set?.id ?? campaign.id }],
-        rule: 'scope_manager',
-        // 改出价不直接占总闸（预算才是闸）：它改的是单次竞价，花多少还看预算
-        adding: 0,
-      })
+      platformOf(actor)
+      return {
+        staged: false,
+        message: notWiredMessage('bid', campaign.name, input.value),
+        spend_gate: gateOf(capsOf(actor.assignment_id, 'stage_bid_change'), 0).view,
+      }
     },
 
     async pauseCampaign(actor, campaign_id, input) {
@@ -532,12 +650,38 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
        * 转人审。两处都判**不是重复**——这一处是给人看的话，那一处是门。
        */
       const breakEven = options.breakEven?.()
-      const verdict = stopLossVerdict({
+      const todayVerdict = stopLossVerdict({
         ...(campaign.metrics?.roas === undefined ? {} : { roas: campaign.metrics.roas }),
         ...(campaign.metrics?.spend === undefined ? {} : { spend: campaign.metrics.spend }),
         ...(campaign.daily_budget === undefined ? {} : { daily_budget: campaign.daily_budget }),
         caps,
       })
+      /*
+       * WP420（自查 A4）：今天才跑了几个小时，「花费占日预算」那条几乎不会成立。今天不成立就再按
+       * 昨天整天判一次；昨天成立就用昨天那份数出卡（guardrail 拿 `after` 里这几格再核一遍）。
+       */
+      const basis =
+        input.reason === 'stop_loss' && todayVerdict.outcome !== 'trigger'
+          ? options.stopLossBasis?.(campaign)
+          : undefined
+      const basisVerdict =
+        basis === undefined
+          ? undefined
+          : stopLossVerdict({
+              ...(basis.roas === undefined ? {} : { roas: basis.roas }),
+              spend: basis.spend,
+              ...(campaign.daily_budget === undefined
+                ? {}
+                : { daily_budget: campaign.daily_budget }),
+              caps,
+            })
+      const useBasis = basisVerdict?.outcome === 'trigger' && basis !== undefined
+      const verdict = useBasis
+        ? { ...basisVerdict, reason: basisVerdict.reason.replace('今天花了', `${basis.label}花了`) }
+        : todayVerdict
+      const metrics = useBasis
+        ? { ...(basis.roas === undefined ? {} : { roas: basis.roas }), spend: basis.spend }
+        : campaign.metrics
       return stageOne({
         actor,
         action: 'pause_ads',
@@ -546,8 +690,9 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         after: {
           status: 'paused',
           reason: input.reason,
-          ...(campaign.metrics?.roas === undefined ? {} : { roas: campaign.metrics.roas }),
-          ...(campaign.metrics?.spend === undefined ? {} : { spend: campaign.metrics.spend }),
+          ...(metrics?.roas === undefined ? {} : { roas: metrics.roas }),
+          ...(metrics?.spend === undefined ? {} : { spend: metrics.spend }),
+          ...(useBasis ? { stop_loss_basis: basis.day } : {}),
           ...(campaign.daily_budget === undefined ? {} : { daily_budget: campaign.daily_budget }),
           // 卡面上那一格放的是**判据**不是"止损"两个字（`HighlightType.stop_loss`）
           stop_loss_reason: verdict.reason,
@@ -580,34 +725,73 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
       })
     },
 
-    async swapCreative(actor, ad_id, input) {
+    /*
+     * WP420（自查 A2）：换素材**还没接通**（同改出价）。换素材统一走「改广告」那条路：
+     * 上传表里新建一条广告、把旧的停掉——那条路批了插件真去传、读回核对。这里不出卡。
+     */
+    async swapCreative(actor, ad_id, _input) {
       const ad = store.ad(ad_id)
       if (ad === undefined) throw new ApiError('not_found', `没有这条广告：${ad_id}`)
-      return stageOne({
-        actor,
-        action: 'stage_creative_swap',
-        target: { type: 'ad', id: ad.id },
-        before: {
-          ...(ad.primary_text === undefined ? {} : { primary_text: ad.primary_text }),
-          ...(ad.headline === undefined ? {} : { headline: ad.headline }),
-          ...(ad.creative_refs === undefined ? {} : { creative_refs: ad.creative_refs }),
-        },
-        after: {
-          ...(input.primary_text === undefined ? {} : { primary_text: input.primary_text }),
-          ...(input.headline === undefined ? {} : { headline: input.headline }),
-          ...(input.creative_ref === undefined ? {} : { creative_refs: [input.creative_ref] }),
-        },
-        notes: [
-          '换素材不动受众与账户——那两格是受保护字段，动了 guardrail 当场拦。',
-          '新文案会过承诺扫描：效果保证、极限词、没人批准过的促销一律拦死（不是转人审）。',
-        ],
-        title: `换素材：${ad.name}`,
-        summary: `${input.headline ?? ad.headline ?? ''}｜${(input.primary_text ?? '').slice(0, 80)}`,
-        seen: [{ type: 'ad', id: ad.id }],
-        rule: 'scope_manager',
-        adding: 0,
-      })
+      platformOf(actor)
+      return {
+        staged: false,
+        message: notWiredMessage('creative', ad.name),
+        spend_gate: gateOf(capsOf(actor.assignment_id, 'stage_creative_swap'), 0).view,
+      }
     },
+  }
+
+  /*
+   * WP420（自查 A6 / A8）：投放看板——以前 `home_blocks` 定义了 8 块，界面一块都没画；
+   * 广告库里明明有数，用户只能问 AI。这里把那几个数从广告库直接算出来（不打平台、不经 AI）。
+   */
+  port.overview = (actor) => overviewOf(platformOf(actor), actor)
+
+  const overviewOf = (platform: AdsPlatform, actor: AdsActor): AdsOverviewView => {
+    const caps = capsOf(actor.assignment_id, 'stage_budget_change')
+    const gate = gateOf(caps, 0)
+    const rows = store.campaigns({ platform })
+    const withSpend = rows.filter((c) => c.metrics?.spend !== undefined)
+    const spend = withSpend.reduce((sum, c) => sum + (c.metrics?.spend ?? 0), 0)
+    const valued = withSpend.filter((c) => c.metrics?.roas !== undefined)
+    const valuedSpend = valued.reduce((sum, c) => sum + (c.metrics?.spend ?? 0), 0)
+    const value = valued.reduce(
+      (sum, c) => sum + (c.metrics?.spend ?? 0) * (c.metrics?.roas ?? 0),
+      0,
+    )
+    const conv = withSpend.filter((c) => c.metrics?.conversions !== undefined)
+    const tz = options.tzOffsetMinutes?.() ?? 0
+    const localDay = (iso: string): string =>
+      new Date(Date.parse(iso) + tz * 60_000).toISOString().slice(0, 10)
+    const today = localDay(clock.now())
+    const stops = store.stopLosses({ platform }).filter((s) => localDay(s.at) === today)
+    const currency = store.accounts({ platform }).find((a) => a.currency !== '')?.currency
+    const data = options.dataStatus?.(platform)
+    return {
+      platform,
+      ...(currency === undefined ? {} : { currency }),
+      ...(withSpend.length === 0 ? {} : { spend_today: Math.round(spend * 100) / 100 }),
+      spend_gate: gate.view,
+      ...(valuedSpend > 0 ? { roas_today: Math.round((value / valuedSpend) * 100) / 100 } : {}),
+      ...(conv.length === 0
+        ? {}
+        : {
+            conversions_today: conv.reduce((sum, c) => sum + (c.metrics?.conversions ?? 0), 0),
+          }),
+      stop_losses_today: stops.length,
+      campaigns: rows
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+          ...(c.metrics?.spend === undefined ? {} : { spend: c.metrics.spend }),
+          ...(c.metrics?.roas === undefined ? {} : { roas: c.metrics.roas }),
+          ...(c.metrics?.conversions === undefined ? {} : { conversions: c.metrics.conversions }),
+        }))
+        .sort((a, b) => (b.spend ?? -1) - (a.spend ?? -1)),
+      ...(data === undefined ? {} : { data }),
+    }
   }
 
   if (proposals !== undefined && options.wiring !== undefined) {

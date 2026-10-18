@@ -113,11 +113,12 @@ export function adsAccountsSetupTarget(options: {
           continue
         }
         const state = seen?.plugin.find((x) => x.platform === p)?.state
+        // WP420（自查 A15）：插件没好时先说配插件（配好我自己认账户），不让人对着空表猜
         const why =
           seen === undefined || state === 'unavailable'
-            ? '插件还没配对，看不到账户，要你填'
+            ? '先配插件：配好了我自己在后台里认账户（急的话也可以贴后台网址）'
             : state === 'not_connected'
-              ? `插件还没连${LABEL[p].replace('账户', '后台')}，要你填`
+              ? `先在插件里连上${LABEL[p].replace('账户', '后台')}：连好我自己认账户（也可以贴后台网址）`
               : '插件还没在后台里看到账户（打开一次后台就有），要你填'
         plan[p] = { needs_you: true, why }
         kit.note(why)

@@ -34,6 +34,10 @@ export const PLUGIN_AWAY_MS = 24 * 60 * 60 * 1000
 export const EXPORT_RETRY_MS = 55 * 60_000
 /** 建报表没建成，隔多久再试（不连着撞）。 */
 export const SETUP_RETRY_MS = 24 * 60 * 60 * 1000
+/** WP420：白天每隔多久再导一次今天的数（插件在时）。 */
+export const INTRADAY_EXPORT_MS = 3 * 60 * 60 * 1000
+/** WP420：几点以后不再白天加导（品牌时区）。 */
+export const INTRADAY_LAST_HOUR = 22
 /** 「现在导一次」默认等多久。 */
 export const FETCH_WAIT_MS = 2 * 60_000
 
@@ -112,7 +116,12 @@ export interface AdsDataOptions {
   /** 读下载的文件（默认读本机磁盘）。 */
   readFile?(path: string): Promise<Uint8Array>
   mail?(): AdsMailSource | undefined
-  /** 第一次有数之后种一条日报定时（回任务 / 事项编号；没人担投放回 undefined，下次有数再种）。 */
+  /**
+   * WP420（自查 A4）：一份数入库之后（插件 / 邮箱都算）——服务端自己按判据判一遍止损，成立就出卡。
+   * 不等、不挡入库（出错吞掉）。
+   */
+  afterIngest?(platform: AdsDataPlatform): Promise<void> | void
+  /** 有人担投放就种一条日报定时（回任务 / 事项编号；没人担投放回 undefined，下次再种）。 */
   seedDailyReport?(): Promise<{ task_id?: string; matter_id?: string } | undefined>
   emit?(type: string, payload: Record<string, unknown>): void
   sleep?(ms: number): Promise<void>
@@ -355,6 +364,11 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
       rows: parsed.import.rows,
       days: parsed.import.days.length,
     })
+    // WP420（自查 A4）：数到了就判止损（不靠 AI 记得调）
+    if (options.afterIngest !== undefined)
+      void Promise.resolve()
+        .then(() => options.afterIngest?.(parsed.import.platform))
+        .catch(() => undefined)
     return { ok: true, import: parsed.import }
   }
 
@@ -510,6 +524,11 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
   const tick: AdsDataService['tick'] = async () => {
     const queued: string[] = []
     let imported = 0
+    /*
+     * WP420（自查 A9）：有人担投放就种日报那条定时，不等第一次有数——插件那一段没通的时候，
+     * 日报照常出、写清哪家没到、为什么（提示词里就这么要求），而不是永远没有日报、界面上也没提示。
+     */
+    if (options.wanted().length > 0) await seedOnce()
     const want = options.wanted().filter((p) => accounts()[p] !== undefined)
     if (want.length === 0) return { queued, imported, skipped: 'no_account' }
     const nowMs = Date.parse(options.now())
@@ -528,7 +547,18 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
       }
       const ex = exportsOf()[p] ?? {}
       if (live(ex.job_id)) continue
-      if (localHour() < exportHour || ex.last_ok_day === today()) continue
+      if (localHour() < exportHour) continue
+      /*
+       * WP420（自查 A4 ③）：白天加导——今天导过了，隔 3 小时（插件在时）再导一次今天的数，
+       * 止损按「今天到现在」也能判得上；晚上 10 点以后不再导。
+       */
+      if (
+        ex.last_ok_day === today() &&
+        (localHour() >= INTRADAY_LAST_HOUR ||
+          ex.last_ok_at === undefined ||
+          nowMs - Date.parse(ex.last_ok_at) < INTRADAY_EXPORT_MS)
+      )
+        continue
       if (ex.last_try_at !== undefined && nowMs - Date.parse(ex.last_try_at) < EXPORT_RETRY_MS)
         continue
       const out = await startExport(p, 'daily')
