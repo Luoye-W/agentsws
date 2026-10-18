@@ -68,6 +68,7 @@ import {
   type PositionSummary,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { desktopChrome, useDesktopChromeTheme } from '@/lib/desktop-chrome'
 import { dutyHref } from '@/lib/duty-href'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
@@ -305,7 +306,22 @@ export function AppShell({
   me?: Me
   onAddTile: (position_id: string, tile_id: string) => void
 }): ReactNode {
-  const { t, position } = useApp()
+  const { t, position, theme } = useApp()
+  /*
+   * WP424（Luoye 10-19，学 Claude 桌面版）：桌面壳把系统标题栏藏了——Mac 红绿灯嵌在左栏顶部，
+   * Windows 三个按钮叠在顶栏右上。浏览器里打开时是 `undefined`，照普通网页排（不留那块空）。
+   */
+  const chrome = desktopChrome()
+  useDesktopChromeTheme(theme)
+  // 外壳在的时候，根上那条「没有外壳时的拖动条」（`DesktopDragStrip`）收起来——顶栏自己就能拖
+  useEffect(() => {
+    if (chrome === undefined) return
+    const root = globalThis.document?.documentElement
+    root?.setAttribute('data-shell', '1')
+    return () => {
+      root?.removeAttribute('data-shell')
+    }
+  }, [chrome])
   // WP271：① 个人里左栏「公司」叫「岗位与品牌」、「我的代理」收起（都是对同事的事）
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
@@ -417,7 +433,17 @@ export function AppShell({
             WP195（Luoye 09-29「静态的 logo 其实不好看」）：改成**待机**——大部分时间一动不动，
             隔几秒轻轻动一下；鼠标移上去播一次「一变一队」再回待机。点了回首页不变。
           */}
-              <div className="px-2 pt-1 pb-3">
+              <div
+                className={cn(
+                  'px-2 pt-1 pb-3',
+                  // WP424：Mac 红黄绿三个按钮落在这一行左边（与顶栏同高、同一条线），字标让到它们右边；
+                  // 这一行空着的地方能拖动窗口
+                  chrome === 'inset' &&
+                    'ws-drag -mx-3 -mt-3 mb-2 flex h-11 items-center border-b border-ws-line pt-0 pr-3 pb-0 pl-[84px]',
+                )}
+                data-testid="rail-brand-row"
+                data-chrome={chrome}
+              >
                 <NavLink
                   to="/"
                   end
@@ -588,16 +614,27 @@ export function AppShell({
             左边只剩几条整个工作区的状态（演示数据 / 值守中 / 还没接 AI / 余额不足），右边是六张卡的图标
             与「⋮」（`RailTopBar`；WP412 起：露出的工具 →「⋮」溢出菜单 → 最右专门的面板开关）。原来中间那个「交给某个岗位一件事… ⌘K」搜索框去掉了——派活由助理做（WP343），
             ⌘K 快捷键还在（跳转岗位、搜卡片 / 教程 / 设置、找回归档），只是不再画一个框。
-            窗口是系统标题栏（Electron 没开无边框），所以这一排在标题栏下面：Mac 红绿灯、Windows 窗口按钮都挡不到；
-            右边留的那一截 `env(titlebar-area-*)` 只在以后开了窗口控件叠加（Window Controls Overlay）时才生效。
+            WP424 起桌面壳藏了系统标题栏（`desktopChrome()`）：这一排就是标题栏——Mac 红绿灯在左栏顶部，
+            Windows 窗口按钮叠在右上（右边按 `env(titlebar-area-*)` 让出那一截）。
           */}
+              {/*
+                WP424：桌面壳藏了系统标题栏之后，这一排就是窗口的标题栏——空白处能拖动窗口（上面的按钮不能）。
+                Mac：窄窗左栏收起时左边让出红绿灯那一截；Windows：右边让出三个系统按钮（壳没给 env 时按 140px 让）。
+              */}
               <header
-                className="sticky top-0 z-50 flex h-11 shrink-0 items-center gap-2 border-b border-ws-line bg-ws-paper pl-4"
+                className={cn(
+                  'sticky top-0 z-50 flex h-11 shrink-0 items-center gap-2 border-b border-ws-line bg-ws-paper pl-4',
+                  chrome !== undefined && 'ws-drag',
+                  chrome === 'inset' && 'pl-[84px] md:pl-4',
+                )}
                 style={{
                   paddingRight:
-                    'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
+                    chrome === 'overlay'
+                      ? 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))))'
+                      : 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
                 }}
                 data-testid="top-bar"
+                data-chrome={chrome}
               >
                 {/* WP125：合成世界的「演示数据」标记——不显眼但始终在 */}
                 <DemoBadge />

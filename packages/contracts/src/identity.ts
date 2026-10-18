@@ -506,6 +506,11 @@ export interface WorkspaceProfile {
   /** WP248（决策 83）：客服邮箱（给客人写信、话术里留的那一个）。没写过就没有。 */
   support_email?: string
   /**
+   * WP424（Luoye 10-19）：邮件营销用的是哪一家（「Klaviyo」「Omnisend」……人说的原话）。
+   * 首次设置第 ④ 步只有它对得上连接目录里的某一家时，才把那一家列进「要连的平台」；没写过就没有。
+   */
+  email_service?: string
+  /**
    * WP258：官网里读到的 Shopify 店铺地址（`xxx.myshopify.com`，品牌分析确认时顺手存下）。
    * 建站岗位找店时拿它和登录账号下的店对一下；没读到就没有。
    */

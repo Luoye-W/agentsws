@@ -3867,6 +3867,8 @@ export interface WorkspaceProfileView {
   one_liner?: string
   /** WP248（决策 83）：客服邮箱（没写过就没有）。 */
   support_email?: string
+  /** WP424：邮件营销用的哪一家（没写过就没有）。 */
+  email_service?: string
   /** WP248（决策 83）：币种（新服务端总会给，没写过 = USD）。 */
   currency?: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
@@ -4085,6 +4087,8 @@ export const setWorkspaceProfile = (
     /** WP248（决策 83）：品牌三格（不给 = 不改；空串 = 清空）。 */
     one_liner?: string
     support_email?: string
+    /** WP424：邮件营销用的哪一家（不给 = 不改；空串 = 清空）。 */
+    email_service?: string
     currency?: string
     /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
     category?: string
@@ -6561,6 +6565,8 @@ export interface ManualBrandProfile {
   brand_name?: string
   one_liner?: string
   support_email?: string
+  /** WP424：邮件营销用的哪一家。 */
+  email_service?: string
   currency?: string
   markets?: string[]
 }

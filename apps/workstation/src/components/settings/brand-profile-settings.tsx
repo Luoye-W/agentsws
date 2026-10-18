@@ -99,6 +99,10 @@ export function BrandProfileSettings({ ownerId }: { ownerId?: string }): React.R
           ...(draft.support_email.trim() === (onboarding.data?.profile?.support_email ?? '')
             ? {}
             : { support_email: draft.support_email.trim() }),
+          // WP424：邮件营销用的哪一家——只在改过时发（空 = 清空）
+          ...(draft.email_service.trim() === (onboarding.data?.profile?.email_service ?? '')
+            ? {}
+            : { email_service: draft.email_service.trim() }),
           ...(draft.currency.trim().toUpperCase() ===
           (onboarding.data?.profile?.currency ?? DEFAULT_BRAND_CURRENCY)
             ? {}

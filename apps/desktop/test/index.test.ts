@@ -74,6 +74,8 @@ describe('bridge-types', () => {
       launchAtLoginChanged: 'agentsws:launch-at-login-changed',
       // WP358：会话丢了让壳重换
       sessionRenew: 'agentsws:session-renew',
+      // WP424：藏了系统标题栏后，Windows 叠加按钮跟主题换色
+      titleBarTheme: 'agentsws:title-bar-theme',
     })
   })
 

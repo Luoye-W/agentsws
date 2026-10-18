@@ -247,6 +247,24 @@ export function detectPlatform(
   return undefined
 }
 
+/**
+ * WP424：邮件营销用的哪一家——同样只看页面自己漏出来的脚本（订阅弹窗 / 埋点）。
+ * 只认得出脚本域名的几家；认不出回 `undefined`（不替人猜，第 ④ 步就不会把哪一家列成要连的）。
+ */
+const EMAIL_SERVICE_SIGNS: readonly [RegExp, string, string][] = [
+  [/static\.klaviyo\.com|klaviyo\.com\/onsite|_learnq/i, 'Klaviyo', 'static.klaviyo.com'],
+  [/omnisnippet1\.com|omnisrc\.com|omnisend/i, 'Omnisend', 'omnisend'],
+  [/chimpstatic\.com|list-manage\.com/i, 'Mailchimp', 'chimpstatic.com'],
+  [/privy\.com\/widget|widget\.privy\.com/i, 'Privy', 'privy.com'],
+  [/sendlane\.com/i, 'Sendlane', 'sendlane.com'],
+  [/attn\.tv|attentivemobile/i, 'Attentive', 'attn.tv'],
+]
+
+export function detectEmailService(html: string): { label: string; hint: string } | undefined {
+  for (const [re, label, hint] of EMAIL_SERVICE_SIGNS) if (re.test(html)) return { label, hint }
+  return undefined
+}
+
 /** 从 JSON-LD 的 `Product` 节点上取一张商品卡。 */
 function productFromJsonLd(
   node: Record<string, unknown>,
@@ -556,6 +574,15 @@ export async function analyzeSite(
       url: entryUrl,
       locator: `page:${platform.hint}`,
       quote: platform.hint,
+    })
+
+  // WP424：邮件营销用的哪一家（首页挂着它的脚本才填；人在档案卡上可改）
+  const esp = detectEmailService(home)
+  if (esp !== undefined)
+    profile.email_service = field(esp.label, 'selector', {
+      url: entryUrl,
+      locator: `page:${esp.hint}`,
+      quote: esp.hint,
     })
 
   // 社媒：首页上指向那几个域的链接

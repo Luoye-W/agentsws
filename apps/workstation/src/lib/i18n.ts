@@ -2799,6 +2799,10 @@ const zh: Table = {
   'intake.field.one_liner': '一句话',
   'intake.field.category': '品类',
   'intake.field.support_email': '客服邮箱',
+  'intake.field.email_service': '邮件营销用的',
+  'intake.field.email_service.placeholder': '比如 Klaviyo；没用就空着',
+  'intake.field.email_service.hint':
+    '填了你在用的那一家，「要连的平台」才会列它；没填就放在可选里。',
   'intake.field.currency': '币种',
   // ── WP346（决策 872）品牌档案第二版：AI 归纳的几格，一律由人确认 ──────
   'intake.field.subcategory': '子品类',
@@ -3059,7 +3063,7 @@ const zh: Table = {
   'onboarding.roles.picked': '已勾 {n} 条职责',
   // WP234（docs/70 §5 / docs/54 §6.2）：第 ③ 步「说说你要做什么 → 推荐 → 你的岗位」
   'onboarding.plan3.intent.label': '说说你要做什么工作',
-  'onboarding.plan3.intent.placeholder': '比如：做了三年 Shopify 店，接下来想做 Reddit 和红人',
+  'onboarding.plan3.intent.placeholder': '比如：做了三年独立站，接下来想做 Reddit 和红人',
   'onboarding.plan3.intent.go': '帮我推荐',
   'onboarding.plan3.intent.busy': '正在看…',
   'onboarding.plan3.recs.title': '推荐给你',
@@ -3067,6 +3071,8 @@ const zh: Table = {
   'onboarding.plan3.recs.adopt': '按推荐来',
   'onboarding.plan3.recs.split': '建议分成：{list}',
   'onboarding.plan3.catalog.title': '按类别浏览全部职责',
+  'onboarding.plan3.catalog.all': '全选',
+  'onboarding.plan3.catalog.none': '全不选',
   'onboarding.plan3.board.title': '你的岗位',
   'onboarding.plan3.board.hint': '拖动职责换岗位；一个岗位超过 6 条建议拆开。改完以你为准。',
   'onboarding.plan3.board.empty': '点上面的职责，它会出现在这里',
@@ -3096,7 +3102,7 @@ const zh: Table = {
   'onboarding.plan.needed_by': '{roles} 要它',
   'onboarding.plan.already_held': '你已经有这个岗位了',
   'onboarding.plan.ranges': '管：{ranges}',
-  'onboarding.plan.ranges.none': '还没挂店铺——连上 Shopify 之后回"公司"页补上。',
+  'onboarding.plan.ranges.none': '还没挂店铺——连上店铺后台之后回"公司"页补上。',
   'onboarding.plan.applied': '建好了 {n} 个岗位。',
   // WP79 ⑤：向导第 ① 步这一整块默认折叠成这一行（局域网上真看见同伴了才自己展开）
   'onboarding.join.toggle': '已有邀请码？',
@@ -3589,6 +3595,8 @@ const zh: Table = {
   'models.image.saved': '已保存，下一次出图就用它。',
   // WP134：第三种模型来源「用我的 DeepSeek 账号登录」（dsh 官方模块，系统浏览器授权）
   'onboarding.ai.account': 'DeepSeek 官方',
+  'onboarding.ai.sub.chatgpt': 'ChatGPT 订阅',
+  'onboarding.ai.sub.claude': 'Claude 订阅',
   'dsa.title': '用我的 DeepSeek 账号登录',
   'dsa.summary': '不用建 key：在浏览器里登录一次 DeepSeek 账号，按账号里的余额扣。',
   'dsa.login': '用 DeepSeek 账号登录',
@@ -7056,6 +7064,10 @@ const en: Table = {
   'intake.field.one_liner': 'In one line',
   'intake.field.category': 'Category',
   'intake.field.support_email': 'Support email',
+  'intake.field.email_service': 'Email marketing',
+  'intake.field.email_service.placeholder': 'e.g. Klaviyo; leave blank if none',
+  'intake.field.email_service.hint':
+    'Name the one you use and it shows up under platforms to connect; otherwise it stays optional.',
   'intake.field.currency': 'Currency',
   // ── WP346 brand profile v2 ──────
   'intake.field.subcategory': 'Subcategory',
@@ -7309,7 +7321,7 @@ const en: Table = {
   'onboarding.roles.picked': '{n} duties ticked',
   'onboarding.plan3.intent.label': 'Tell us what work you do',
   'onboarding.plan3.intent.placeholder':
-    'e.g. Ran a Shopify store for three years; next I want to do Reddit and creators',
+    'e.g. Ran an online store for three years; next I want to do Reddit and creators',
   'onboarding.plan3.intent.go': 'Suggest for me',
   'onboarding.plan3.intent.busy': 'Reading…',
   'onboarding.plan3.recs.title': 'Suggested for you',
@@ -7317,6 +7329,8 @@ const en: Table = {
   'onboarding.plan3.recs.adopt': 'Take the suggestion',
   'onboarding.plan3.recs.split': 'Suggested positions: {list}',
   'onboarding.plan3.catalog.title': 'Browse all duties by category',
+  'onboarding.plan3.catalog.all': 'Select all',
+  'onboarding.plan3.catalog.none': 'Clear',
   'onboarding.plan3.board.title': 'Your positions',
   'onboarding.plan3.board.hint':
     'Drag a duty to another position; split a position with more than 6 duties. Your edits win.',
@@ -7349,7 +7363,7 @@ const en: Table = {
   'onboarding.plan.already_held': 'You already hold this position',
   'onboarding.plan.ranges': 'Covers: {ranges}',
   'onboarding.plan.ranges.none':
-    'No store attached yet — connect Shopify, then add it from the Company page.',
+    'No store attached yet — connect your store admin, then add it from the Company page.',
   'onboarding.plan.applied': '{n} positions created.',
   'onboarding.join.toggle': 'Have an invite code?',
   'onboarding.join.title': 'Join a company',
@@ -7880,6 +7894,8 @@ const en: Table = {
   'models.image.saved': 'Saved — the next picture uses it.',
   // WP134: the third model source, "Sign in with my DeepSeek account" (official dsh module, system browser)
   'onboarding.ai.account': 'DeepSeek (official)',
+  'onboarding.ai.sub.chatgpt': 'ChatGPT subscription',
+  'onboarding.ai.sub.claude': 'Claude subscription',
   'dsa.title': 'Sign in with my DeepSeek account',
   'dsa.summary':
     'No key to create: sign in to your DeepSeek account once in the browser; usage is billed to that account.',

@@ -533,7 +533,9 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
             : 'sticky top-11 h-[calc(100vh-2.75rem)]',
         )}
         // 并排时面板最多占窗口的 38%（加宽时 60%），窗口窄了自己收，给对话留地方
-        style={narrow ? { width } : { width, maxWidth: wide === null ? '38vw' : '60vw', minWidth: 300 }}
+        style={
+          narrow ? { width } : { width, maxWidth: wide === null ? '38vw' : '60vw', minWidth: 300 }
+        }
         data-testid="rail-panel-frame"
         data-panel={open}
         data-wide={wide === null ? undefined : 'true'}

@@ -188,6 +188,12 @@ import {
   requestRestore,
   type UpgradeFailureNote,
 } from './upgrade.js'
+import {
+  parseChromeTheme,
+  titleBarOverlay,
+  titleBarStyleOf,
+  windowChromeOptions,
+} from './window-chrome.js'
 import { watchWindowFit } from './window-fit.js'
 import { openWorkBrowser } from './work-browser.js'
 
@@ -915,8 +921,26 @@ async function bootstrap(): Promise<void> {
     isLocalOrigin(event.senderFrame?.url ?? '', allowedOrigins())
 
   ipcMain.on(BRIDGE_CHANNELS.info, (event) => {
-    const info: BridgeInfo = { platform: process.platform, version }
+    // WP424：只有主窗口藏了系统标题栏（场景窗口等其它窗口照旧），所以只对主窗口报 `title_bar`
+    const chrome = titleBarStyleOf(process.platform)
+    const isMain =
+      window !== undefined && !window.isDestroyed() && event.sender === window.webContents
+    const info: BridgeInfo = {
+      platform: process.platform,
+      version,
+      ...(chrome === undefined || !isMain ? {} : { title_bar: chrome }),
+    }
     event.returnValue = info
+  })
+  // WP424：工作台换了深 / 浅色 → Windows 叠在右上的系统按钮那一块跟着换底色
+  ipcMain.handle(BRIDGE_CHANNELS.titleBarTheme, (event, raw: unknown) => {
+    if (!fromLocalWindow(event)) return false
+    const theme = parseChromeTheme(raw)
+    if (theme === undefined || titleBarStyleOf(process.platform) !== 'overlay') return false
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target === null || target !== window) return false
+    target.setTitleBarOverlay(titleBarOverlay(theme))
+    return true
   })
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false
@@ -1068,6 +1092,8 @@ async function bootstrap(): Promise<void> {
         height: 840,
         show: false,
         title: 'Agents 工坊',
+        // WP424：系统标题栏藏起来，窗口按钮嵌进工作台自己的顶栏（学 Claude 桌面版；Linux 照旧）
+        ...windowChromeOptions(process.platform),
         webPreferences: {
           preload: join(here, 'preload.cjs'),
           contextIsolation: true,

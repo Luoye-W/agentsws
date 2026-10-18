@@ -45,7 +45,15 @@ import { useApp } from '@/lib/app-context'
  * 已经有一格，两处各写一个值，用户不知道哪个算数。分析出来的全称直接预填进那一格
  * （`BusinessStep`），只有一个来源。
  */
-const TEXT_FIELDS = ['brand_name', 'one_liner', 'category', 'support_email', 'currency'] as const
+const TEXT_FIELDS = [
+  'brand_name',
+  'one_liner',
+  'category',
+  'support_email',
+  // WP424：邮件营销用的哪一家——这一格空着也摆出来（第 ④ 步只按它列邮件平台）
+  'email_service',
+  'currency',
+] as const
 
 type TextField = (typeof TEXT_FIELDS)[number]
 
@@ -188,6 +196,9 @@ function insightValuesOf(
 
 /** WP244：空店时这两格空着也要摆出来（让人自己填）。 */
 const FRESH_FIELDS: readonly TextField[] = ['brand_name', 'one_liner']
+
+/** WP424：不管读没读到都摆出来的格子（「邮件营销用的」——没人说过，第 ④ 步就不替他列 Klaviyo）。 */
+const ALWAYS_FIELDS: readonly TextField[] = ['email_service']
 
 /** 一格的当前值：用户改过就是他改的那个，否则是分析出来的。 */
 function currentValue(
@@ -385,7 +396,7 @@ export function BrandProfileCard({
             profile={profile}
             edits={edits}
             onEdit={onEdit}
-            always={freshStore && FRESH_FIELDS.includes(f)}
+            always={(freshStore && FRESH_FIELDS.includes(f)) || ALWAYS_FIELDS.includes(f)}
           />
         ))}
       </div>

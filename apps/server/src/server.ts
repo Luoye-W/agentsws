@@ -10460,12 +10460,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           typeof f?.value === 'string' && f.value.trim() !== '' ? f.value : undefined
         const one_liner = text(profile.one_liner)
         const support_email = text(profile.support_email)
+        // WP424：邮件营销用的哪一家（官网脚本认出来的，或人在档案卡上填的）
+        const email_service = text(profile.email_service)
         const currency = text(profile.currency)
         // WP335（决策 659）：品类（Amazon 面包屑或 AI 读出来的；人在档案卡上可改）
         const category = text(profile.category)
         const facts = {
           ...(one_liner === undefined ? {} : { one_liner }),
           ...(support_email === undefined ? {} : { support_email }),
+          ...(email_service === undefined ? {} : { email_service }),
           ...(currency === undefined ? {} : { currency }),
           ...(category === undefined ? {} : { category }),
           // WP346（决策 872）：第二版那几格 + 哪几格还是 AI 建议（人在卡上改过的不算）

@@ -82,6 +82,7 @@ export function PositionPlanner({
   recommendations,
   board,
   onToggleDuty,
+  onSetDuties,
   onAdopt,
   onRegroup,
   onBoard,
@@ -96,6 +97,11 @@ export function PositionPlanner({
   recommendations: DutyRecommendation[]
   board: Board
   onToggleDuty(role_id: string): void
+  /**
+   * WP424（Luoye 10-19）：类别标题行的「全选 / 全不选」——一次选上 / 去掉这一类的全部职责。
+   * 不给就不出那个钮（老调用方）。
+   */
+  onSetDuties?(role_ids: string[], on: boolean): void
   /** 「按推荐来」：把推荐的都选上，并按建议分好。 */
   onAdopt(): void
   /** 「按建议重新分」。 */
@@ -204,40 +210,62 @@ export function PositionPlanner({
             const recs = c.roles.filter((r) => recommended.has(r.id)).length
             return (
               <div key={c.id} className="rounded-md border" data-testid="onboarding-category">
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  data-testid="onboarding-category-toggle"
-                  data-category={c.id}
-                  className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted"
-                  onClick={() => {
-                    setOpen((cur) => (isOpen ? cur.filter((x) => x !== c.id) : [...cur, c.id]))
-                  }}
-                >
-                  <PositionIcon
-                    position_id={c.id}
-                    {...(c.icon === undefined ? {} : { icon: c.icon })}
-                    role_ids={c.roles.map((r) => r.id)}
-                    className="text-ws-muted-fg"
-                  />
-                  {c.name}
-                  {c.factory_name === undefined ? null : (
-                    <span
-                      className="text-[11px] text-muted-foreground"
-                      data-testid="onboarding-category-factory"
-                    >
-                      （{c.factory_name}）
+                <div className="flex items-center hover:bg-muted">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    data-testid="onboarding-category-toggle"
+                    data-category={c.id}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
+                    onClick={() => {
+                      setOpen((cur) => (isOpen ? cur.filter((x) => x !== c.id) : [...cur, c.id]))
+                    }}
+                  >
+                    <PositionIcon
+                      position_id={c.id}
+                      {...(c.icon === undefined ? {} : { icon: c.icon })}
+                      role_ids={c.roles.map((r) => r.id)}
+                      className="text-ws-muted-fg"
+                    />
+                    {c.name}
+                    {c.factory_name === undefined ? null : (
+                      <span
+                        className="text-[11px] text-muted-foreground"
+                        data-testid="onboarding-category-factory"
+                      >
+                        （{c.factory_name}）
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {count > 0 ? `${String(count)}/${String(c.roles.length)}` : c.roles.length}
                     </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {count > 0 ? `${String(count)}/${String(c.roles.length)}` : c.roles.length}
-                  </span>
-                  {recs > 0 ? (
-                    <Badge variant="secondary" className="px-1 py-0 text-[10.5px]">
-                      {t('onboarding.plan3.recs.tag')} {recs}
-                    </Badge>
+                    {recs > 0 ? (
+                      <Badge variant="secondary" className="px-1 py-0 text-[10.5px]">
+                        {t('onboarding.plan3.recs.tag')} {recs}
+                      </Badge>
+                    ) : null}
+                  </button>
+                  {/* WP424：展开后标题行右边「全选 / 全不选」（全选上了才换成「全不选」） */}
+                  {isOpen && onSetDuties !== undefined && c.roles.length > 0 ? (
+                    <button
+                      type="button"
+                      data-testid="onboarding-category-all"
+                      data-category={c.id}
+                      data-all={count === c.roles.length ? 'true' : 'false'}
+                      className="shrink-0 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        onSetDuties(
+                          c.roles.map((r) => r.id),
+                          count !== c.roles.length,
+                        )
+                      }}
+                    >
+                      {count === c.roles.length
+                        ? t('onboarding.plan3.catalog.none')
+                        : t('onboarding.plan3.catalog.all')}
+                    </button>
                   ) : null}
-                </button>
+                </div>
                 {isOpen ? (
                   <div className="flex flex-wrap gap-2 border-t p-2">
                     {c.roles.map((r) => (

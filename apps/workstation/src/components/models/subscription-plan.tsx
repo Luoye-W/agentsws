@@ -19,7 +19,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Loader2, LogOut, TriangleAlert, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { StatusIcons } from '@/components/design'
 import { Button } from '@/components/ui/button'
@@ -40,9 +40,12 @@ const POLL_MS = 2000
 export function SubscriptionPlan({
   provider,
   assignment,
+  onReady,
 }: {
   provider: SubscriptionProviderId
   assignment?: string
+  /** WP424：首次设置第 ① 步——登上了就算接上 AI（向导据此亮「下一步」）。 */
+  onReady?: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -104,6 +107,10 @@ export function SubscriptionPlan({
   })
 
   const data = state.data
+  const ready = data?.available === true && data.signed_in
+  useEffect(() => {
+    if (ready) onReady?.()
+  }, [ready, onReady])
   if (data === undefined) {
     return (
       <p className="mt-2 text-xs text-muted-foreground" data-testid="subscription-loading">
