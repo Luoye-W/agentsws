@@ -141,7 +141,7 @@ afterEach(() => {
 })
 
 describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
-  it('从左到右：浏览器、变更审阅、「⋮」、面板开关；「⋮」里是教程与记忆，点「⋮」不开关面板', async () => {
+  it('从左到右：浏览器、变更审阅、「⋮」、面板开关；「⋮」里是设定那几格 + 教程，点「⋮」不开关面板', async () => {
     renderRail('/')
     const bar = screen.getByTestId('right-rail')
     expect(
@@ -158,7 +158,16 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-menu-help', 'rail-menu-memory'])
+    ).toEqual([
+      'rail-menu-role',
+      'rail-menu-skills',
+      'rail-menu-knowledge',
+      'rail-menu-memory',
+      'rail-menu-caps',
+      'rail-menu-help',
+    ])
+    // 不在职责页：叫「岗位定义」
+    expect(screen.getByTestId('rail-menu-role').textContent).toBe('岗位定义')
     // 「⋮」只是菜单：面板没被它打开
     expect(panelOpen()).toBe(false)
     expect(more.getAttribute('aria-expanded')).toBe('true')
@@ -166,6 +175,27 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
     fireEvent.click(screen.getByTestId('rail-menu-memory'))
     expect(screen.queryByTestId('rail-menu')).toBeNull()
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('settings')
+  })
+
+  it.each([
+    ['role', 'role'],
+    ['skills', 'skills'],
+    ['knowledge', 'knowledge'],
+    ['memory', 'memory'],
+    ['caps', 'caps'],
+  ])('「⋮ → %s」打开面板并直达「设定」的那一格', async (item, tab) => {
+    renderRail('/positions/asg_sup/duties/dtc.support')
+    await screen.findByTestId('rail-cards')
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId(`rail-menu-${item}`))
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('settings')
+    expect((await screen.findByTestId('settings-panel')).getAttribute('data-tab')).toBe(tab)
+  })
+
+  it('职责页上第一项叫「职责定义」', async () => {
+    renderRail('/positions/asg_sup/duties/dtc.support')
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    expect((await screen.findByTestId('rail-menu-role')).textContent).toBe('职责定义')
   })
 
   it('面板开关有自己的图标与读屏说法，开 / 关跟着变', async () => {

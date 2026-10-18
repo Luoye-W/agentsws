@@ -18,7 +18,16 @@
  *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
-import { Brain, type LucideIcon, MoreVertical, PanelRight } from 'lucide-react'
+import {
+  BookOpen,
+  Brain,
+  Gauge,
+  IdCard,
+  type LucideIcon,
+  MoreVertical,
+  PanelRight,
+  Wrench,
+} from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -64,6 +73,18 @@ function useMedia(query: string): boolean {
 
 /** 窄屏（< 1200）：面板盖在主区上，逻辑一个字不变。 */
 const NARROW = '(max-width: 1199px)'
+/**
+ * WP412（Luoye 10-19）：「⋮」里先列「设定」卡的几个标签——岗位定义（职责页叫职责定义）、技能、知识、记忆、额度，
+ * 顺序照 Luoye 给的；`id` 就是 `registerPanelAlias` 的那几个 sub。
+ */
+const SETTINGS_SHORTCUTS: readonly { id: string; icon: LucideIcon }[] = [
+  { id: 'role', icon: IdCard },
+  { id: 'skills', icon: Wrench },
+  { id: 'knowledge', icon: BookOpen },
+  { id: 'memory', icon: Brain },
+  { id: 'caps', icon: Gauge },
+]
+
 /** WP412：窗口窄于 900 时，露在右上角的工具也收进「⋮」。 */
 const COMPACT = '(max-width: 899px)'
 
@@ -106,7 +127,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
  * WP412（真机 10-18 #8，决策 1035 更正，照 Claude 桌面版）：右上角从左到右——
  *
  * - 露出来的工具（浏览器、变更审阅；注册表 `pinned` 排序）；
- * - 「⋮」**溢出菜单**：放不下 / 不常用的工具（教程、记忆，以及没给 `pinned` 的第三方面板）；窗口窄于 900 时
+ * - 「⋮」**溢出菜单**：先是「设定」卡的几个标签（岗位 / 职责定义、技能、知识、记忆、额度，直达那一格），
+ *   再是放不下 / 不常用的工具（教程，以及没给 `pinned` 的第三方面板）；窗口窄于 900 时
  *   露出来的那几个也收进来。它**不再**开关面板；
  * - 最右一个专门的**面板开关**（侧栏图标）：点它开 / 关右侧面板；任何一张卡有红 / 黄点时汇总点挂在它上面（红的压过黄的）。
  */
@@ -193,6 +215,28 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
             data-testid="rail-menu"
             className="absolute top-9 right-0 z-50 flex w-48 flex-col gap-px rounded-[10px] border border-ws-line bg-popover p-1 text-[13px] shadow-lg"
           >
+            {/*
+              「设定」卡里那几个标签（Luoye 10-19：只藏在卡里会以为没了）：点了打开面板直达那一格
+              （别名 role / skills / knowledge / memory / caps 落回「设定」的对应标签）
+            */}
+            {SETTINGS_SHORTCUTS.map((item) => (
+              <MenuItem
+                key={item.id}
+                testId={`rail-menu-${item.id}`}
+                icon={item.icon}
+                label={t(
+                  item.id === 'role'
+                    ? ctx.tier === 'role'
+                      ? 'rail.menu.role.duty'
+                      : 'rail.menu.role.position'
+                    : `rail.menu.${item.id}`,
+                )}
+                onClick={() => {
+                  pick(item.id)
+                }}
+              />
+            ))}
+            {overflow.length === 0 ? null : <div className="my-1 border-t border-ws-line" />}
             {overflow.map((p) => (
               <MenuItem
                 key={p.id}
@@ -204,15 +248,6 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
                 }}
               />
             ))}
-            {/* 记忆：「设定」卡里的一个标签，不常用，收在这里直达 */}
-            <MenuItem
-              testId="rail-menu-memory"
-              icon={Brain}
-              label={t('rail.menu.memory')}
-              onClick={() => {
-                pick('memory')
-              }}
-            />
           </div>
         ) : null}
       </div>
