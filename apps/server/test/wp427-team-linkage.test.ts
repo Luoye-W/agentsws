@@ -295,6 +295,30 @@ describe('WP427 不在同一个网络：经工坊云（替身）', () => {
       (await remote(base, 'GET', '/v1/me', { token: A.server.bootstrap.internalToken })).status,
     ).toBe(401)
 
+    // 门外来的申请只收不转：不替别的电脑去敲局域网里别人的门、去问云；经云来的只认码
+    const asked = { name: '路人', email: 'x@example.com' }
+    expect(
+      (
+        await remote(base, 'POST', '/v1/memberships/requests', {
+          body: { ...asked, peer_id: 'peer_x' },
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await remote(base, 'POST', '/v1/memberships/requests', {
+          body: { ...asked, code: 'ZZZZ2222' },
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await remote(base, 'POST', '/v1/memberships/requests', {
+          body: { ...asked, company_key: 'k'.repeat(64), from_peer: 'peer_x' },
+        })
+      ).status,
+    ).toBe(404)
+
     // A 给两人分 B2B，开一件事交给林峰
     const give = async (person_id: string): Promise<string> => {
       const granted = await own<{ assignment_id: string; role_id: string }[]>(

@@ -625,6 +625,10 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
 
       // ① 局域网那条路的**收件端**：对方带着同一把公司钥匙找过来
       const withKey = input as MembershipRequestInput & { company_key?: string; from_peer?: string }
+      // WP427：门外来的（别的电脑）只收、不转；经云来的只认邀请码（公司钥匙是公司名的哈希，猜得出来）
+      const door = input.via_door
+      if (door === 'cloud' && input.code === undefined)
+        throw new OnboardingError('not_found', '这个邀请码不对，或者已经过期 / 用完了')
       if (withKey.company_key !== undefined) {
         if (withKey.company_key !== options.companyKey())
           throw new OnboardingError('forbidden', '公司对不上，这条申请不属于这个工作区')
@@ -654,6 +658,9 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
             ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
           })
         }
+        // 门外来的：不是我们的码就到此为止（不替别的电脑去问局域网、问云）
+        if (door !== undefined)
+          throw new OnboardingError('not_found', '这个邀请码不对，或者已经过期 / 用完了')
         // 不是我们的码 → 挨个问局域网上的同伴（同一个网络时的快路）
         for (const peer_id of options.peerIds()) {
           const out = await forward(peer_id, { code, name, email }, { name, email })
@@ -677,7 +684,8 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
         throw new OnboardingError('not_found', '这个邀请码不对，或者已经过期 / 用完了')
       }
 
-      // ③ 挑了一位局域网同伴：带上我们的公司钥匙去敲他的门
+      // ③ 挑了一位局域网同伴：带上我们的公司钥匙去敲他的门（门外来的不替他敲）
+      if (door !== undefined) throw new OnboardingError('invalid_input', '不知道要加入谁')
       const peer_id = input.peer_id
       if (peer_id === undefined) throw new OnboardingError('invalid_input', '不知道要加入谁')
       const key = options.companyKey()

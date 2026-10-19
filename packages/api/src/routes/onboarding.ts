@@ -29,6 +29,7 @@ import type {
   MembershipRequestVia,
   StorefrontPlatform,
 } from '@agentsws/contracts'
+import { TEAM_DOOR_HEADER } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import {
@@ -456,6 +457,12 @@ export interface MembershipRequestInput {
   company_key?: string | undefined
   /** 转发方自己的 peer id（46 I3 要知道"这条申请是谁递过来的"）。 */
   from_peer?: string | undefined
+  /**
+   * WP427：这一条是经「团队门」从别的电脑来的（`lan` / `cloud`）。门外来的只收（码对得上 / 局域网那条
+   * 带公司钥匙），**不替对方往外转**——否则门外的人能借这台电脑去敲局域网里别人的门、去问云。
+   * 经云来的只认邀请码（公司钥匙是公司名的哈希，猜得出来）。人从界面上填不到它。
+   */
+  via_door?: 'lan' | 'cloud' | undefined
   /**
    * WP427：申请人那台机器发的「票」的哈希（`sha256(票)`）。批了之后申请人拿票本身来
    * `POST /v1/memberships/requests/:id/claim` 换一次性登录——不用再走邮箱验证码。
@@ -992,6 +999,10 @@ export function onboardingRoutes(): Route[] {
             ...(input.company_key === undefined ? {} : { company_key: input.company_key }),
             ...(input.from_peer === undefined ? {} : { from_peer: input.from_peer }),
             ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
+            ...(() => {
+              const door = c.req.header(TEAM_DOOR_HEADER)
+              return door === 'lan' || door === 'cloud' ? { via_door: door } : {}
+            })(),
           }),
           201,
         )

@@ -26,10 +26,11 @@
 import { createServer as createHttpServer, type IncomingMessage, type Server } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import { collectRoutes } from '@agentsws/api'
+import { TEAM_DOOR_HEADER } from '@agentsws/contracts'
 import { getRequestListener } from '@hono/node-server'
 
 /** 转进去时带的头（值是 `lan` / `cloud`）。 */
-export const DOOR_HEADER = 'x-agentsws-door'
+export const DOOR_HEADER = TEAM_DOOR_HEADER
 
 export type DoorVia = 'lan' | 'cloud'
 

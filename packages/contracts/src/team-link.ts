@@ -18,6 +18,12 @@
  */
 import type { Iso8601 } from './common.js'
 
+/**
+ * 「团队门」转进本机服务进程时带的头（值 `lan` / `cloud`；外面带进来的同名头门先抹掉）。
+ * 服务进程据此知道「这一条是从别的电脑来的」：只收申请，不替对方往外转申请。
+ */
+export const TEAM_DOOR_HEADER = 'x-agentsws-door'
+
 /** 当前协议版本。改了帧的形状就 +1。 */
 export const TEAM_TUNNEL_PROTOCOL_VERSION = 1
 
