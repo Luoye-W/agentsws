@@ -79,7 +79,8 @@ describe('职责 yml 写的工具都有执行器（自查 A16）', () => {
 describe('演示没有剧本那句话不露内部 id（自查 A20 / U15）', () => {
   it('只写职责名与中文岗位名', () => {
     const text = noPlaybookAnswer('site.shopify-build', 'Shopify 整站搭建')
-    expect(text).toContain('这条职责（Shopify 整站搭建，建站）')
+    // int/1022：没剧本那句用 WP415 的「演示里没有这段：「职责名」…」（不露内部 id 这一条两单一致）
+    expect(text).toContain('演示里没有这段：「Shopify 整站搭建」')
     expect(text).not.toContain('site.shopify-build')
     expect(noPlaybookAnswer('site.shopify-email')).not.toMatch(/site\.|，site）/)
   })

@@ -219,8 +219,8 @@ describe('agentsws demo（合成世界当后端）', () => {
       payload: { rows: { item: string; state: string }[] }
     }>(await call('/v1/blocks/site.checklist/data', { assignment: build?.id ?? '' }))
     expect(block.status).toBe('ok')
-    // 八项全在，运费那一项是缺的——而且面板上写的是"买不成"，不是一个色块
-    expect(block.payload.rows).toHaveLength(8)
+    // 九项全在（WP418 加了「店面密码」），运费那一项是缺的——而且面板上写的是"买不成"，不是一个色块
+    expect(block.payload.rows).toHaveLength(9)
     expect(block.payload.rows.find((r) => r.item === '运费')?.state).toBe('缺（买不成）')
     // 支付与税是过了的：那两项建站岗位改不了，留成缺口只会刷屏同一句话
     expect(block.payload.rows.find((r) => r.item === '收款方式')?.state).toBe('过了')
