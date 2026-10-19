@@ -156,7 +156,7 @@ async function main() {
           [...nav.querySelectorAll('[data-testid]')]
             .map((e) => e.getAttribute('data-testid'))
             .filter((id) =>
-              /^(rail-toggle|top-bar-divider|rail-icon-.*|position-settings-link|rail-overflow)$/.test(
+              /^(rail-toggle|top-bar-divider|rail-icon-.*|notify-bell|position-settings-link|rail-overflow)$/.test(
                 id,
               ),
             ),
@@ -166,8 +166,11 @@ async function main() {
         order[0] === 'rail-toggle' &&
           order[1] === 'top-bar-divider' &&
           order.at(-1) === 'rail-overflow' &&
-          order.at(-2) === 'position-settings-link',
-        '右上：面板开关 → 细竖线 → 工具 → 岗位设置 → ⋮',
+          order.at(-2) === 'position-settings-link' &&
+          // int/1023：WP429 的铃铛接进 top-bar-bell-slot——变更审阅之后、岗位设置之前
+          order.at(-3) === 'notify-bell' &&
+          order.indexOf('rail-icon-changes') === order.length - 4,
+        '右上：面板开关 → 细竖线 → 工具 → 通知铃铛 → 岗位设置 → ⋮',
       )
       const banner = page.getByTestId('position-missing-banner')
       if ((await banner.count()) > 0) {

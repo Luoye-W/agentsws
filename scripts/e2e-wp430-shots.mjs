@@ -231,8 +231,10 @@ async function main() {
         )
       }
       if (shown) {
-        await section.scrollIntoViewIfNeeded()
-        await shot(page, `1-order-${theme}`, section)
+        // int/1023：WP426 重做后，顺序列表和备用开关都在「正在用」下面那张小表（model-defaults）里
+        const card = page.getByTestId('model-defaults')
+        await card.scrollIntoViewIfNeeded()
+        await shot(page, `1-order-${theme}`, card)
       }
       await context.close()
     }
