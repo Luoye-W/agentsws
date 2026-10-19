@@ -29,7 +29,7 @@
  * 职责名带下拉：回到岗位、职责设置、换一条职责；介绍在旁边的问号里），「职责设置」是顶栏右边那排里的一颗滑杆图标。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowLeftRight, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CalendarLink } from '@/components/calendar/calendar-link'
@@ -273,7 +273,6 @@ export function DutyPage(): React.ReactNode {
                     {siblings.map((r) => (
                       <TitleMenuItem
                         key={r.role_id}
-                        icon={ArrowLeftRight}
                         label={
                           <span className="inline-flex items-center gap-1.5">
                             <DutyIcon role_id={r.role_id} size={14} />

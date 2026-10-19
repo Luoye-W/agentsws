@@ -27,7 +27,7 @@
  * （「刚建好，还没开工 · N 条职责」）去掉。「卡住了 / 今天的待办」是要人留意的事，有才出，挪到主区顶上那一行提醒里。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeftRight, Link2Off, PencilLine, SlidersHorizontal } from 'lucide-react'
+import { Link2Off, PencilLine, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
@@ -250,7 +250,6 @@ export function PositionPage(): React.ReactNode {
                     {duties.map((d) => (
                       <TitleMenuItem
                         key={d.role_id}
-                        icon={ArrowLeftRight}
                         label={
                           <span className="inline-flex items-center gap-1.5">
                             <DutyIcon role_id={d.role_id} size={14} />
