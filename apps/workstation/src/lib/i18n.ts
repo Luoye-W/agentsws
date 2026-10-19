@@ -514,7 +514,8 @@ const zh: Table = {
   'org.roles.automation.none': '没有可自动的动作。',
   // WP284（决策 275）：「以后都这样」批了落下的那几句
   'role_rules.title': '以后都这样',
-  'role_rules.hint': '卡上点「修改」时选「以后都这样」，点了通过就记在这里。AI 每次干这条活都照做。',
+  'role_rules.hint':
+    '卡上点「修改」时选「以后都这样」，点了通过就记在这里。AI 每次干这条活都照做。',
   'role_rules.empty': '还没有。',
   'role_rules.by': '{who} 定的',
   'role_rules.edited_by': '{who} 改的',

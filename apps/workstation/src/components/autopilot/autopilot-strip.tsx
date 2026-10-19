@@ -39,7 +39,9 @@ export function AutopilotStrip({ assignment }: { assignment: string }): React.Re
           data-on={s.on ? 'true' : 'false'}
         >
           <span className="font-medium">
-            {s.on ? t('autopilot.on', { title: s.title }) : t('autopilot.ready', { title: s.title })}
+            {s.on
+              ? t('autopilot.on', { title: s.title })
+              : t('autopilot.ready', { title: s.title })}
           </span>
           <Hint text={`${s.on ? '' : `${s.why}。`}${s.grants}；${s.keeps}。`} />
           <Button
