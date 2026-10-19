@@ -852,11 +852,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       ...(input.pitch_note === undefined ? [] : [input.pitch_note]),
       /*
        * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
-       * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
+       * 人点「修改」换成英文再发。不拦：有的品牌名本来就是中文。
        */
       ...(input.vars.language === 'en' &&
       hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
-        ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
+        ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「修改」换成英文。']
         : []),
       // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
       ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
@@ -2182,12 +2182,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       const pitch_note =
         given !== undefined && given !== ''
           ? input.pitch_by_ai === true
-            ? '「一句话介绍我们」是 AI 按品牌情况写的（品牌档案里还没有这一句）；不对就点「改一下」。'
+            ? '「一句话介绍我们」是 AI 按品牌情况写的（品牌档案里还没有这一句）；不对就点「修改」。'
             : undefined
           : brand_pitch === undefined
             ? undefined
             : defaults.source === 'brand_profile'
-              ? '「一句话介绍我们」取自品牌档案；不对就点「改一下」。'
+              ? '「一句话介绍我们」取自品牌档案；不对就点「修改」。'
               : undefined
       // WP416（自查 kol U-x5）：英文信默认不署中文名——取不到英文名就用「品牌名 + team」
       const person = input.sender_name ?? (await options.personName(actor.person_id))
