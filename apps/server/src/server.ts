@@ -2409,6 +2409,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       stop: async (reason: string) => {
         await Promise.all(
           deepseekAccountRuns().map(({ brand, run }) => {
+            /*
+             * WP430（决策 1289，作废 953 那一套）：登录失效时，这个品牌按「AI 来源」顺序还有下一个能接的——
+             * 不停下、不出卡，下一跳网关自己接上并在对话里照实说一句；「要重新登录」走站内通知。
+             * 人自己点登出的那一次照旧先停（那是人的决定）。
+             */
+            if (
+              reason === DEEPSEEK_EXPIRED_STOPPED &&
+              brand.ownModels.canSwitchFrom(run.model.provider)
+            )
+              return undefined
             // WP334（决策 726）：登录过期停下的 → 收尾时出连接卡，卡里就地重新登录、登好接着做
             if (reason === DEEPSEEK_EXPIRED_STOPPED)
               brand.runtime?.noteNeed?.(run.run_id, DEEPSEEK_ACCOUNT_NEED)

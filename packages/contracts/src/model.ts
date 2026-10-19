@@ -147,12 +147,17 @@ export interface Completion {
 /** WP425：为什么切到工坊积分——额度用完 / 连不上 / key（或登录）失效。 */
 export type ModelSourceSwitchReason = 'quota' | 'unreachable' | 'auth'
 
-/** WP425：一次「自己的 AI → 工坊积分」的切换。`message` 是给人看的那一句。 */
+/** WP425：一次「自己的 AI → 工坊积分」的切换（WP430：也可能是切到自己的另一条）。`message` 是给人看的那一句。 */
 export interface ModelSourceSwitch {
   from: ModelRef
   to: ModelRef
   reason: ModelSourceSwitchReason
   message: string
+  /**
+   * WP430（只加；决策 1288）：切到了谁——`own` = 用户自己配的另一条（订阅 / key / 账号，不扣积分），
+   * `workshop` = 工坊积分。老的网关不带这一格，一律当 `workshop`。
+   */
+  target?: 'own' | 'workshop'
 }
 
 /** WP425：切换那一行在运行记录里的 `progress.step`（三个运行时同一个名字）。 */

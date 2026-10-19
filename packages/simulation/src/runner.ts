@@ -1165,6 +1165,11 @@ async function execute(
           code: event.own_fault.code,
           times: event.own_fault.times ?? 1,
           backup: event.own_fault.backup ?? 'on',
+          // WP430：自己的第二条（不写 = 不挂，WP425 老剧本一个字节不变）
+          ...(event.own_fault.second === undefined ? {} : { second: event.own_fault.second }),
+          ...(event.own_fault.second_times === undefined
+            ? {}
+            : { second_times: event.own_fault.second_times }),
         }
         world.injectOwnFault(fault)
         world.appendEvent('simulation.own_model_fault', fault)

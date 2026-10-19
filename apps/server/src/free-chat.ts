@@ -1119,7 +1119,8 @@ async function answer(
           sink({ type: 'delta', text: t })
         },
       })
-      if (out.source_switch !== undefined && switched === undefined) {
+      // WP430：同一轮里切到的那条后来也不行、又往下切了——记最后用的那条，每次切都照实一行
+      if (out.source_switch !== undefined) {
         switched = out.source_switch
         sink({ type: 'notice', text: out.source_switch.message })
       }
@@ -1192,6 +1193,8 @@ async function answer(
     stopped = true
   }
   // WP425：切到了工坊积分——这条回复记在工坊积分那一条上（积分照工坊积分那个模型估）
+  // WP430：切到的是自己的另一条（订阅 / key / 账号）——记在那一条上，不扣积分
+  const toWorkshop = switched !== undefined && switched.target !== 'own'
   const backupId =
     switched === undefined ? undefined : `${switched.to.provider}/${switched.to.model}`
   const answered =
@@ -1201,14 +1204,18 @@ async function answer(
           ...withModel,
           model: {
             id: backupId ?? choice.id,
-            label: choices.find((c) => c.id === backupId)?.label ?? CLOUD_LABEL,
-            official: true,
+            label:
+              choices.find((c) => c.id === backupId)?.label ??
+              (toWorkshop ? CLOUD_LABEL : (backupId ?? choice.label)),
+            official: toWorkshop,
           },
           source_switch: switched.message,
         }
   const credits =
     switched !== undefined
-      ? options.credits?.(switched.to.model, usage)
+      ? toWorkshop
+        ? options.credits?.(switched.to.model, usage)
+        : undefined
       : choice.official
         ? options.credits?.(model.model, usage)
         : undefined

@@ -87,11 +87,17 @@ describe('WP425 自己的 AI 优先，用不了再用工坊积分', () => {
     const out = await gw.complete(ask())
     expect(out.model).toEqual(cloud)
     expect(out.text).toBe('from cloud')
-    expect(out.source_switch).toEqual({ from: own, to: cloud, reason, message })
+    expect(out.source_switch).toEqual({ from: own, to: cloud, reason, message, target: 'workshop' })
     // 运行记录里那一条（只有模型、原因与那句话）
     const switched = rec.ofType('model.source_switched')
     expect(switched).toHaveLength(1)
-    expect(switched[0]?.payload).toEqual({ from: own, to: cloud, reason, message })
+    expect(switched[0]?.payload).toEqual({
+      from: own,
+      to: cloud,
+      reason,
+      message,
+      target: 'workshop',
+    })
     expect(switched[0]?.correlation.run_id).toBe('run_1')
     // 用量记在实际用的那一条上
     expect(rec.ofType('model.usage').at(-1)?.payload).toMatchObject({ model: cloud })

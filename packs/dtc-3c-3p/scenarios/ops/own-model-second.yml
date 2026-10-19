@@ -1,0 +1,40 @@
+# WP430（决策 1288）：这次选的 → 自己配的其它 → 工坊积分。
+# 第一封信那一轮：原选回 429（额度用完）→ 自己的第二条（AI 来源里排第二）接上，这一轮不花积分，运行记录里照实一行；
+# 第二封信是下一轮：先试原选（它好了），不用人点。
+id: ops/own-model-second
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    model.own_fault: { code: 429, times: 1, backup: on, second: ok }
+  - at: '+10m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+2h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+8h'
+    clock.advance: {}
+expected:
+  model_source_switches: 1
+  model_providers_used: [stub, own2]
+  event_types: [model.source_switched]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

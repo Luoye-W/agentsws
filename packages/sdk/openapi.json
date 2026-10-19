@@ -23832,6 +23832,15 @@
                   "fallback_to_cloud": {
                     "type": "boolean"
                   },
+                  "source_order": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
                   "budget": {
                     "type": "object",
                     "properties": {

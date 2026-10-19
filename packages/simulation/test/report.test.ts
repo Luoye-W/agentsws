@@ -286,7 +286,8 @@ describe('套件与报告落盘（26 §5）', () => {
     // WP411 再加一条（Reddit 巡查噪音过滤 + 去重：整词匹配、同一条只起草一次、外部帖闸）→ 83
     // WP423 再加一条（查资料查到一半预算到了 → 四个运行时都收尾、交出同一段话）→ 84
     // WP425 再加两条（自己的 AI 额度用完 → 这一轮用工坊积分、下一轮回主用 / 开关关着照实停下）→ 86
-    expect(result.reports).toHaveLength(86)
+    // WP430 再加三条（原选 429 → 自己的第二条接上 / 两条都不行 → 工坊积分 / 连续失败后冷却期内跳过）→ 89
+    expect(result.reports).toHaveLength(89)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -294,7 +295,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(86)
+    expect(summary.scenarios).toHaveLength(89)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
     // 跑一整个 pack 不是 5 秒的活，而且并行跑别的项目时还要抢 CPU。
     // WP121b 把题目加到 60 条之后，机器忙起来时 120s 会压线——放宽到 180s。

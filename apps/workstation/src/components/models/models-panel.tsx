@@ -24,6 +24,7 @@ import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { BrandMark, InfoTip, testedMs, useFresh } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
+import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
@@ -498,6 +499,9 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 onToggle={(on) => {
                   saveDefaults.mutate({ fallback_to_cloud: on })
                 }}
+                onReorder={(ids) => {
+                  saveDefaults.mutate({ source_order: ids })
+                }}
               />
             )}
             {/* ③ 默认模型 + 驻留 + 预算 */}
@@ -697,10 +701,13 @@ function AiSourceSection({
   view,
   busy,
   onToggle,
+  onReorder,
 }: {
   view: ModelAiSourceView
   busy: boolean
   onToggle: (on: boolean) => void
+  /** WP430：拖动排序之后的新顺序。 */
+  onReorder: (ids: string[]) => void
 }): React.ReactNode {
   const { t } = useApp()
   return (
@@ -711,17 +718,16 @@ function AiSourceSection({
       </div>
       <div className="flex items-start justify-between gap-3 text-xs">
         <span className="shrink-0 text-muted-foreground">{t('models.ai_source.primary')}</span>
-        <span className="flex flex-wrap justify-end gap-1" data-testid="model-ai-source-own">
-          {view.own.length === 0 ? (
-            <span className="text-muted-foreground">{t('models.ai_source.no_own')}</span>
-          ) : (
-            view.own.map((o) => (
-              <span key={o.provider_id} className="rounded-md border px-1.5 py-0.5">
-                {o.label}
-              </span>
-            ))
-          )}
-        </span>
+        {/* WP430（决策 1288）：按顺序接，可拖动排序（视觉由 WP426 整页重做时接上） */}
+        {view.own.length === 0 ? (
+          <span className="text-muted-foreground" data-testid="model-ai-source-own">
+            {t('models.ai_source.no_own')}
+          </span>
+        ) : (
+          <div className="min-w-0 max-w-64 flex-1">
+            <AiSourceOrder own={view.own} busy={busy} onReorder={onReorder} />
+          </div>
+        )}
       </div>
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="shrink-0 text-muted-foreground">{t('models.ai_source.backup')}</span>

@@ -135,7 +135,8 @@ describe('WP425 AI 来源顺序（装配）', () => {
     const { models } = setup({ linked: true })
     const view = await models.port.defaults(actor)
     expect(view.ai_source).toEqual({
-      own: [{ provider_id: 'own', label: 'Kimi', group: 'own' }],
+      // WP430：多了 `ready`（没测过的 key 不会被自动接上）与 `model`
+      own: [{ provider_id: 'own', label: 'Kimi', group: 'own', ready: false, model: 'kimi-k3' }],
       backup: { available: true, label: 'Agents 工坊（用积分）', model: 'deepseek-flash' },
       fallback_to_cloud: true,
     })

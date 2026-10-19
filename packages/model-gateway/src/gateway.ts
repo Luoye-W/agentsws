@@ -38,12 +38,14 @@ import {
   priceKey,
 } from './pricing.js'
 import { deepseekQuotaKindOf } from './providers/deepseek-quota.js'
-import type { SourceFallbackPolicy } from './source-fallback.js'
+import type { ModelSourceReloginPayload, SourceFallbackPolicy } from './source-fallback.js'
 import {
+  SOURCE_COOLDOWN,
+  sourceChainMessage,
   sourceFallbackOffError,
   sourceLabelOf,
-  sourceSwitchMessage,
   sourceSwitchReasonOf,
+  WORKSHOP_SOURCE_LABEL,
 } from './source-fallback.js'
 import type {
   BudgetExhaustedPayload,
@@ -156,6 +158,18 @@ const HALT_ENV = 'AGENTSWS_MODEL_HALT'
 
 /** WP425：记几轮「这一轮切过了」（够一台机器同时在跑的那些；多了最旧的先忘）。 */
 const SWITCHED_RUNS_KEPT = 500
+
+/** WP430：来源顺序里的一跳。`workshop` = 工坊积分那一条。 */
+interface SourceHop {
+  ref: ModelRef
+  workshop: boolean
+}
+
+/** WP430：换来的那一家报这些错时不再往下换——预算 / 急停是同一本账，换谁都一样。 */
+function stopsChain(e: unknown): boolean {
+  if (!(e instanceof GatewayError)) return false
+  return e.code === 'budget_exhausted' || e.code === 'halted'
+}
 
 class Gateway implements ModelGatewayApi {
   /**
@@ -336,27 +350,47 @@ class Gateway implements ModelGatewayApi {
   // ---- 契约实现 ----
 
   /**
-   * WP425：这一次要不要、能不能切到工坊积分。主用本身就是工坊积分、设置页「测试」那一次（测的就是这一家）
-   * 都不切；没登录工坊账号（策略里没有这一格）也不切。
+   * WP425 / WP430：这一次走不走 AI 来源顺序。设置页「测试」那一次（测的就是这一家）不走；策略里没有这一格也不走。
    */
-  private sourceFallbackFor(
-    req: CompleteRequest,
-    primary: ModelRef,
-  ): SourceFallbackPolicy | undefined {
+  private sourceFallbackFor(req: CompleteRequest): SourceFallbackPolicy | undefined {
     const fb = this.opts.policy.source_fallback
     if (fb === undefined || req.capability_probe === true) return undefined
-    if (primary.provider === fb.to.provider) return undefined
-    // 网关上没挂工坊积分那一条：切过去也是「没注册」，不如照原样报
-    if (!this.opts.providers.some((p) => p.ref.provider === fb.to.provider)) return undefined
     return fb
   }
 
-  /** WP425：这一轮切过了（run_id → 原因）。只留最近的一批，旧的自然淘汰。 */
-  private readonly switchedRuns = new Map<string, ModelSourceSwitchReason>()
+  /**
+   * WP430（决策 1288）：这一次的来源顺序——这次选的 → 自己配的其它（按「AI 来源」里排的顺序，同一家只算一次）
+   * → 工坊积分（开关开着才有）。网关上没挂的那一家跳过（切过去也是「没注册」）。
+   * `cloudOff` = 登录了工坊账号、但开关关着（排到最后都不行时，照实停下并出「用工坊积分接着做」那张卡）。
+   */
+  private sourceChain(
+    fb: SourceFallbackPolicy,
+    primary: ModelRef,
+  ): { chain: SourceHop[]; cloudOff: boolean } {
+    const registered = (provider: string): boolean =>
+      this.opts.providers.some((p) => p.ref.provider === provider)
+    const chain: SourceHop[] = [{ ref: primary, workshop: fb.to?.provider === primary.provider }]
+    const has = (provider: string): boolean => chain.some((h) => h.ref.provider === provider)
+    for (const ref of fb.own ?? []) {
+      if (ref.provider === fb.to?.provider || has(ref.provider) || !registered(ref.provider))
+        continue
+      chain.push({ ref, workshop: false })
+    }
+    let cloudOff = false
+    const cloud = fb.to
+    if (cloud !== undefined && !has(cloud.provider) && registered(cloud.provider)) {
+      if (fb.enabled) chain.push({ ref: cloud, workshop: true })
+      else cloudOff = true
+    }
+    return { chain, cloudOff }
+  }
 
-  private markSwitched(runId: string, reason: ModelSourceSwitchReason): void {
+  /** WP425：这一轮切过了（run_id → 切到的那一条）。只留最近的一批，旧的自然淘汰。 */
+  private readonly switchedRuns = new Map<string, ModelRef>()
+
+  private markSwitched(runId: string, to: ModelRef): void {
     this.switchedRuns.delete(runId)
-    this.switchedRuns.set(runId, reason)
+    this.switchedRuns.set(runId, to)
     while (this.switchedRuns.size > SWITCHED_RUNS_KEPT) {
       const oldest = this.switchedRuns.keys().next().value
       if (oldest === undefined) break
@@ -364,41 +398,172 @@ class Gateway implements ModelGatewayApi {
     }
   }
 
+  /**
+   * WP430（决策 1290）：按来源记的连续失败与冷却（本机内存，重启清零；改了模型设置也清零——
+   * 重新登录 / 换了 key 之后应当马上再试）。
+   */
+  private readonly sourceHealth = new Map<
+    string,
+    { fails: number; until?: number; reason: ModelSourceSwitchReason }
+  >()
+
+  /** WP430：已经发过「要重新登录」的来源（重新能用之前不再发）。 */
+  private readonly reloginSent = new Set<string>()
+
+  private nowMs(): number {
+    const t = Date.parse(this.opts.clock.now())
+    return Number.isNaN(t) ? Date.now() : t
+  }
+
+  private coolingDown(provider: string, now: number): ModelSourceSwitchReason | undefined {
+    const h = this.sourceHealth.get(provider)
+    return h?.until !== undefined && h.until > now ? h.reason : undefined
+  }
+
+  private noteSourceFailure(
+    fb: SourceFallbackPolicy,
+    provider: string,
+    reason: ModelSourceSwitchReason,
+    now: number,
+  ): void {
+    const rule = fb.cooldown ?? SOURCE_COOLDOWN
+    const prev = this.sourceHealth.get(provider)
+    const fails = (prev?.fails ?? 0) + 1
+    // 到了次数就冷却；冷却过了再试一次还不行，马上再冷却一轮（不用重新攒两次）
+    const until = fails >= rule.failures ? now + rule.ms : undefined
+    this.sourceHealth.set(provider, { fails, reason, ...(until === undefined ? {} : { until }) })
+  }
+
+  private noteSourceOk(provider: string): void {
+    this.sourceHealth.delete(provider)
+    this.reloginSent.delete(provider)
+  }
+
+  /** WP430（决策 1289）：登录类来源登录失效——发一次「要重新登录」，站内通知接。 */
+  private maybeRelogin(
+    fb: SourceFallbackPolicy,
+    req: CompleteRequest,
+    ref: ModelRef,
+    reason: ModelSourceSwitchReason,
+  ): void {
+    if (reason !== 'auth' || !(fb.relogin ?? []).includes(ref.provider)) return
+    if (this.reloginSent.has(ref.provider)) return
+    this.reloginSent.add(ref.provider)
+    const payload: ModelSourceReloginPayload = {
+      provider: ref.provider,
+      label: sourceLabelOf(fb, ref),
+    }
+    this.emit('model_source.relogin_needed', ctxOf(req.meta), payload)
+  }
+
   async complete(req: CompleteRequest): Promise<Completion> {
     this.assertNotHalted()
     const primary = this.resolveRef(req.meta, req.model)
-    const fb = this.sourceFallbackFor(req, primary)
+    const fb = this.sourceFallbackFor(req)
     if (fb === undefined) return this.completeOn(req, primary)
+    const { chain, cloudOff } = this.sourceChain(fb, primary)
+    if (chain.length === 1 && !cloudOff) return this.completeOn(req, primary)
     const runId = req.meta.run_id
-    // 一轮里切过一次就用到底（不来回切）；下一轮 run_id 不同，自然回到主用
-    if (fb.enabled && this.switchedRuns.has(runId)) return this.completeOn(req, fb.to)
-    // 已经往外吐过字的不切（换一家从头说会把两段拼在一起）
-    let streamed = false
-    const onDelta = req.on_delta
-    const watched: CompleteRequest =
-      onDelta === undefined
-        ? req
-        : {
-            ...req,
-            on_delta: (text: string) => {
-              if (text !== '') streamed = true
-              onDelta(text)
-            },
-          }
-    try {
-      return await this.completeOn(watched, primary)
-    } catch (e) {
-      const reason = sourceSwitchReasonOf(e)
-      if (reason === undefined || streamed || isAborted(req.signal)) throw e
-      const label = sourceLabelOf(fb, primary)
-      if (!fb.enabled) throw sourceFallbackOffError(e, reason, primary, label)
-      this.markSwitched(runId, reason)
-      const message = sourceSwitchMessage(reason, label)
-      const out = await this.completeOn(req, fb.to)
-      const source_switch: ModelSourceSwitch = { from: primary, to: fb.to, reason, message }
-      this.emit('model.source_switched', ctxOf(req.meta), source_switch)
-      return { ...out, source_switch }
+    // 一轮里切过就用到底（不来回切）；下一轮 run_id 不同，自然先试原选
+    const sticky = this.switchedRuns.get(runId)
+    const at =
+      sticky === undefined ? -1 : chain.findIndex((h) => priceKey(h.ref) === priceKey(sticky))
+    const hops = at > 0 ? chain.slice(at) : chain
+    // WP430（决策 1290）：冷却中的直接跳过；全都在冷却就照顺序都试（不至于一个都不试就停）
+    const now = this.nowMs()
+    const skipCooling = hops.some((h) => this.coolingDown(h.ref.provider, now) === undefined)
+    const failed: { hop: SourceHop; reason: ModelSourceSwitchReason }[] = []
+    let firstError: unknown
+    for (const hop of hops) {
+      const cooling = skipCooling ? this.coolingDown(hop.ref.provider, now) : undefined
+      if (cooling !== undefined) {
+        failed.push({ hop, reason: cooling })
+        continue
+      }
+      /*
+       * 这次选的那一家已经不在网关上了（DeepSeek 账号登录失效被摘掉、跑到一半删了那条 key…）：
+       * 算「登录或 key 失效」，直接往下接，不再停下（决策 1289）
+       */
+      if (
+        hop === hops[0] &&
+        hops.length > 1 &&
+        !this.opts.providers.some((p) => p.ref.provider === hop.ref.provider)
+      ) {
+        firstError ??= new GatewayError('invalid_input', 'no provider registered for model', {
+          model: priceKey(hop.ref),
+        })
+        failed.push({ hop, reason: 'auth' })
+        continue
+      }
+      // 已经往外吐过字的不切（换一家从头说会把两段拼在一起）
+      let streamed = false
+      const onDelta = req.on_delta
+      const watched: CompleteRequest =
+        onDelta === undefined
+          ? req
+          : {
+              ...req,
+              on_delta: (text: string) => {
+                if (text !== '') streamed = true
+                onDelta(text)
+              },
+            }
+      try {
+        const out = await this.completeOn(watched, hop.ref)
+        this.noteSourceOk(hop.ref.provider)
+        if (failed.length === 0) return out
+        this.markSwitched(runId, hop.ref)
+        const steps = failed.map((f) => ({ label: this.hopLabel(fb, f.hop), reason: f.reason }))
+        const message = sourceChainMessage(
+          steps,
+          hop.workshop ? undefined : sourceLabelOf(fb, hop.ref),
+        )
+        const first = failed[0] as (typeof failed)[number]
+        const source_switch: ModelSourceSwitch = {
+          from: first.hop.ref,
+          to: hop.ref,
+          reason: first.reason,
+          message,
+          target: hop.workshop ? 'workshop' : 'own',
+        }
+        this.emit('model.source_switched', ctxOf(req.meta), source_switch)
+        return { ...out, source_switch }
+      } catch (e) {
+        if (streamed || isAborted(req.signal)) throw e
+        const reason = sourceSwitchReasonOf(e)
+        if (reason === undefined) {
+          // 第一跳的「请求本身不对 / 预算用完」照原样报；换来的那一家不认这次请求（比如看不了图）就再往下
+          if (firstError === undefined || stopsChain(e)) throw e
+          continue
+        }
+        firstError ??= e
+        this.noteSourceFailure(fb, hop.ref.provider, reason, now)
+        this.maybeRelogin(fb, req, hop.ref, reason)
+        failed.push({ hop, reason })
+      }
     }
+    // 排到最后都不行
+    const first = failed.find((f) => f.hop.ref.provider === primary.provider) ?? failed[0]
+    if (cloudOff && first !== undefined) {
+      const rest = failed
+        .filter((f) => f !== first)
+        .map((f) => ({ label: this.hopLabel(fb, f.hop), reason: f.reason }))
+      throw sourceFallbackOffError(
+        firstError ?? new GatewayError('provider_unavailable', 'all sources cooling down'),
+        first.reason,
+        first.hop.ref,
+        this.hopLabel(fb, first.hop),
+        rest,
+      )
+    }
+    if (firstError !== undefined) throw firstError
+    // 全在冷却里又都跳过了（不会走到：全在冷却时一个都不跳）——照原选再试一次
+    return this.completeOn(req, primary)
+  }
+
+  /** 给人看的来源名：工坊积分那一条就叫工坊积分。 */
+  private hopLabel(fb: SourceFallbackPolicy, hop: SourceHop): string {
+    return hop.workshop ? WORKSHOP_SOURCE_LABEL : sourceLabelOf(fb, hop.ref)
   }
 
   private async completeOn(req: CompleteRequest, primary: ModelRef): Promise<Completion> {
@@ -784,7 +949,12 @@ class Gateway implements ModelGatewayApi {
     policy?: ModelGatewayPolicy
     images?: ImageProvider | null
   }): void {
-    if (next.providers !== undefined) this.opts.providers = next.providers
+    if (next.providers !== undefined) {
+      this.opts.providers = next.providers
+      // WP430：改了模型设置（重新登录、换了 key…）——冷却与「要重新登录」清零，下一次马上再试
+      this.sourceHealth.clear()
+      this.reloginSent.clear()
+    }
     if (next.images !== undefined) this.currentImages = next.images ?? this.initialImages
     if (next.policy !== undefined) {
       this.opts.policy = next.policy
