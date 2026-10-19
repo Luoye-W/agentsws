@@ -317,7 +317,8 @@ export async function notificationsOfEvent(
       workspace_id: ws,
       person_id,
       category: 'connection' as const,
-      text: `你的 ${source}要重新登录`,
+      // 来源名以英文结尾（WP430 给的是「ChatGPT」）时和后面的中文之间留一个空格
+      text: `你的 ${source}${/[A-Za-z0-9]$/.test(source) ? ' ' : ''}要重新登录`,
       href: '/settings/models',
       key: `relogin:${source}`,
     }))
@@ -509,7 +510,17 @@ export function createNotifications(options: NotificationsOptions): Notification
     }
     const ctx = resolvers.get(e.workspace_id) ?? makeResolver?.(e.workspace_id)
     if (ctx === undefined) return
-    for (const n of await notificationsOfEvent(e, ctx)) notify(n)
+    for (const n of await notificationsOfEvent(e, ctx)) {
+      /*
+       * int/1023：「要重新登录」是一个状态、不是一件件的事——同一来源还没读时又来一条（DeepSeek 账号过期时
+       * 网关那一跳和摘账号那一路各发一条 `model_source.relogin_needed`）不加计数，铃铛里只有一条、没有 ×2。
+       */
+      if (e.type === RELOGIN_NEEDED_EVENT && n.key !== undefined) {
+        const prev = backend.byKey(n.workspace_id, n.person_id, n.key)
+        if (prev !== undefined && prev.read_at === undefined) continue
+      }
+      notify(n)
+    }
   }
 
   const INTERESTING = new Set([

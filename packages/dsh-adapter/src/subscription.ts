@@ -33,7 +33,6 @@ import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { DshAdapterError } from './errors.js'
-import { type BrandedCallback, startBrandedCallback } from './subscription-callback.js'
 import type { GatewayBudget } from './llm.js'
 import { toChatMessages, toToolDefs } from './llm.js'
 import {
@@ -43,6 +42,7 @@ import {
   type NativeSearchRequest,
   type NativeSearchResult,
 } from './native-search.js'
+import { type BrandedCallback, startBrandedCallback } from './subscription-callback.js'
 import {
   createSubscriptionChat,
   type SubscriptionChat,

@@ -263,7 +263,7 @@ describe('从事件认出来的', () => {
     ).toEqual([])
   })
 
-  it('WP430：模型订阅要重新登录 → 「你的 ChatGPT 订阅要重新登录」，到设置 → 模型；同一来源合并', async () => {
+  it('WP430：模型订阅要重新登录 → 「你的 ChatGPT 订阅要重新登录」，到设置 → 模型；同一来源没读时再来不加计数（int/1023）', async () => {
     const { svc } = make()
     svc.register(WS, resolver())
     const e = {
@@ -280,9 +280,28 @@ describe('从事件认出来的', () => {
       text: '你的 ChatGPT 订阅要重新登录',
       href: '/settings/models',
       category: 'connection',
-      count: 2,
+      count: 1,
       system: true,
     })
+  })
+
+  it('int/1023：DeepSeek 账号过期——网关那一跳与摘账号那一路各发一条 → 铃铛里一条；WP430 的 payload（provider / label）照认', async () => {
+    const { svc } = make()
+    svc.register(WS, resolver())
+    const at = (payload: Record<string, unknown>) => ({
+      ...ev(RELOGIN_NEEDED_EVENT, payload),
+      schema_version: 1,
+      correlation: { trace_id: 't' },
+    })
+    svc.onEvent(at({ provider: 'deepseek-account', label: 'DeepSeek 账号' }))
+    svc.onEvent(at({ provider: 'deepseek-account', label: 'DeepSeek 账号' }))
+    svc.onEvent(at({ provider: 'codex', label: 'ChatGPT' }))
+    await svc.flush()
+    const list = svc.list(me, { view: 'unread', limit: 5 })
+    expect(list.items.map((n) => [n.text, n.count]).sort()).toEqual([
+      ['你的 ChatGPT 要重新登录', 1],
+      ['你的 DeepSeek 账号要重新登录', 1],
+    ])
   })
 
   it('卡定了 / 撤了：它那条通知收成已读', async () => {
