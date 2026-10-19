@@ -462,6 +462,11 @@ interface BootstrapConfig {
    * 主人用服务日志里的设置码进门，同事走邀请链接。不出这个键 = 只给本机用，照旧。
    */
   login?: 'shared'
+  /**
+   * WP427：这一页是经「团队门」从别的电脑打开的（同事连进发起人的工坊）。登录页不出设置码那一栏
+   * （那是 NAS 主人用的），只出工坊账号；批过申请的同事从自己的工坊点「打开」会直接带一次性登录进来。
+   */
+  team?: boolean
 }
 
 async function bootstrapConfig(): Promise<BootstrapConfig> {
@@ -4110,6 +4115,35 @@ export interface DiscoveryStateView {
   peers: DiscoveryPeerView[]
 }
 
+/** WP427：同事怎么连进来（同一个网络那条路、经工坊云那条路、邀请链接用哪个地址）。 */
+export interface TeamLinkView {
+  open: boolean
+  lan: { on: boolean; url?: string; reason?: string }
+  cloud: {
+    state:
+      | 'stopped'
+      | 'needs_account'
+      | 'registering'
+      | 'connecting'
+      | 'online'
+      | 'backoff'
+      | 'unavailable'
+    url?: string
+    reason?: string
+  }
+  invite_base?: string
+}
+
+/** WP427：我递出去的申请（加入别人那边）。 */
+export interface TeamJoinView {
+  id: string
+  workspace_label: string
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  via: 'lan' | 'cloud'
+  created_at: string
+  can_enter: boolean
+}
+
 export interface InviteView {
   code: string
   expires_at: string
@@ -4267,6 +4301,21 @@ export const requestMembership = (input: {
   email: string
 }): Promise<MembershipRequestView> =>
   api<MembershipRequestView>('/v1/memberships/requests', { method: 'POST', body: input })
+
+/** WP427：同事怎么连进来。 */
+export const getTeamLink = (assignment?: string): Promise<TeamLinkView> =>
+  api<TeamLinkView>('/v1/team/link', { ...(assignment === undefined ? {} : { assignment }) })
+
+/** WP427：我递出去的申请（顺手问一遍对方批了没有）。 */
+export const listTeamJoins = (assignment?: string): Promise<TeamJoinView[]> =>
+  api<TeamJoinView[]>('/v1/team/joins', { ...(assignment === undefined ? {} : { assignment }) })
+
+/** WP427：批了的那一条：换一个带一次性登录的地址（在浏览器里打开就进去了）。 */
+export const enterTeamJoin = (id: string, assignment?: string): Promise<{ url: string }> =>
+  api<{ url: string }>(`/v1/team/joins/${encodeURIComponent(id)}/enter`, {
+    method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 export const decideMembershipRequest = (
   id: string,

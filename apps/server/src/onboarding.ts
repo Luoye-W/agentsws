@@ -1575,6 +1575,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     },
 
     teamLink(_actor) {
+      // 顺手对一遍（刚登录了工坊账号、刚换了网络：不用等每分钟那一下）
+      options.team?.changed?.()
       const view = options.team?.status()
       if (view === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
       return view
