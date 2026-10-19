@@ -317,7 +317,7 @@ export async function notificationsOfEvent(
       workspace_id: ws,
       person_id,
       category: 'connection' as const,
-      text: `你的${source}要重新登录`,
+      text: `你的 ${source}要重新登录`,
       href: '/settings/models',
       key: `relogin:${source}`,
     }))

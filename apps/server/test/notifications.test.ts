@@ -277,7 +277,7 @@ describe('从事件认出来的', () => {
     const list = svc.list(me, { view: 'unread', limit: 5 })
     expect(list.items).toHaveLength(1)
     expect(list.items[0]).toMatchObject({
-      text: '你的ChatGPT 订阅要重新登录',
+      text: '你的 ChatGPT 订阅要重新登录',
       href: '/settings/models',
       category: 'connection',
       count: 2,
@@ -414,7 +414,7 @@ describe('真装配线', () => {
     }
     expect(list.status).toBe(200)
     expect(list.data.unread).toBe(2)
-    expect(list.data.items.map((n) => n.text)).toContain('你的ChatGPT 订阅要重新登录')
+    expect(list.data.items.map((n) => n.text)).toContain('你的 ChatGPT 订阅要重新登录')
     const one = list.data.items[0]?.id ?? ''
     expect((await call(s, 'POST', '/v1/notifications/read', { ids: [one] })).data).toEqual({
       unread: 1,
