@@ -48,7 +48,9 @@ async function login(email) {
 }
 
 const shot = async (page, name, target) => {
-  await page.waitForTimeout(600)
+  // 机器忙时网络不一定静下来：等页面主体画出来再多等一会
+  await page.getByTestId('top-bar').waitFor({ timeout: 30_000 })
+  await page.waitForTimeout(1500)
   await (target ?? page).screenshot({ path: join(SHOTS, `${name}.png`) })
   console.log(`  📷 ${name}.png`)
 }
@@ -112,7 +114,7 @@ async function main() {
     let matterUrl = ''
     {
       const { context, page } = await open('light')
-      await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
+      await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 })
       const corner = page.getByTestId('rail-brand-row')
       await corner.waitFor({ timeout: 20_000 })
       check(!(await corner.innerText()).includes('Agents 工坊'), '左上角没有「Agents 工坊」字标')
@@ -187,6 +189,7 @@ async function main() {
       await page.waitForURL(/\/duties\//, { timeout: 20_000 })
       dutyUrl = page.url()
       check(await cardsShown(page), '进职责页：右侧面板默认打开')
+      await page.getByTestId('top-bar').getByTestId('duty-name').waitFor({ timeout: 20_000 })
       check(
         (await page.getByTestId('top-bar').getByTestId('duty-name').count()) === 1 &&
           (await page.getByTestId('top-bar').getByTestId('duty-breadcrumb').count()) === 1,
@@ -206,6 +209,11 @@ async function main() {
         await recents.first().click()
         await page.waitForURL(/\/matters\//, { timeout: 20_000 })
         matterUrl = page.url()
+        await page
+          .getByTestId('top-bar')
+          .getByTestId('matter-title')
+          .waitFor({ timeout: 20_000 })
+          .catch(() => undefined)
         check(
           (await page.getByTestId('top-bar').getByTestId('matter-title').count()) === 1,
           '事项页标题在顶栏左边',
@@ -229,7 +237,7 @@ async function main() {
         (await page.getByTestId('sidebar').getAttribute('data-collapsed')) === 'true',
         '左栏开关：收成图标列',
       )
-      await page.reload({ waitUntil: 'networkidle' })
+      await page.reload({ waitUntil: 'load', timeout: 90_000 })
       check(
         (await page.getByTestId('sidebar').getAttribute('data-collapsed')) === 'true',
         '刷新后左栏还收着（本机记住）',
@@ -240,7 +248,7 @@ async function main() {
 
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open(theme)
-      await page.goto(positionUrl, { waitUntil: 'networkidle' })
+      await page.goto(positionUrl, { waitUntil: 'load', timeout: 90_000 })
       await cardsShown(page)
       await page.waitForTimeout(800)
       await shot(page, `${theme}-1-position`)
@@ -259,16 +267,16 @@ async function main() {
         screenshot: (o) => page.screenshot({ ...o, clip: { x: 0, y: 0, width: 760, height: 420 } }),
       })
       await page.keyboard.press('Escape')
-      await page.goto(dutyUrl, { waitUntil: 'networkidle' })
+      await page.goto(dutyUrl, { waitUntil: 'load', timeout: 90_000 })
       await cardsShown(page)
       await page.waitForTimeout(600)
       await shot(page, `${theme}-4-duty`)
       if (matterUrl !== '') {
-        await page.goto(matterUrl, { waitUntil: 'networkidle' })
+        await page.goto(matterUrl, { waitUntil: 'load', timeout: 90_000 })
         await page.waitForTimeout(1200)
         await shot(page, `${theme}-5-matter`)
       }
-      await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
+      await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 })
       await page.waitForTimeout(800)
       await shot(page, `${theme}-6-home`)
       await page.getByTestId('shell-search').click()
@@ -276,7 +284,7 @@ async function main() {
       await page.waitForTimeout(800)
       await shot(page, `${theme}-7-search`)
       await page.keyboard.press('Escape')
-      await page.goto(positionUrl, { waitUntil: 'networkidle' })
+      await page.goto(positionUrl, { waitUntil: 'load', timeout: 90_000 })
       await page.getByTestId('sidebar-toggle').click()
       await page.waitForTimeout(600)
       await shot(page, `${theme}-8-collapsed`)
@@ -285,7 +293,7 @@ async function main() {
     }
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open(theme, { width: 860, height: 760 })
-      await page.goto(dutyUrl, { waitUntil: 'networkidle' })
+      await page.goto(dutyUrl, { waitUntil: 'load', timeout: 90_000 })
       await page.waitForTimeout(800)
       check(!(await panelOpen(page)), '窄于 900：面板先收着')
       await shot(page, `${theme}-9-narrow`)
