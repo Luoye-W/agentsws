@@ -2268,11 +2268,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   /**
    * WP430（决策 1288）：这一条能不能被自动接上——只算真能跑活的：登录着的订阅 / DeepSeek 账号（在清单里就是登录着），
-   * 填了 key 且最近一次测试通过的。没测过、测没过的不接（换过去多半也是失败，白耽误一跳）。
+   * 填了 key 且最近一次测试文字那一步过了的（看不了图不要紧）。没测过、连不上 / 文字不通的不接（换过去多半也是失败，白耽误一跳）。
    */
   const ownReady = (c: ModelProviderConfig): boolean => {
     if (c.kind === 'openai-codex' || c.kind === 'deepseek_account') return true
-    return state.tests[c.id]?.ok === true
+    const t = state.tests[c.id]
+    if (t === undefined) return false
+    // 只是看不了图（DeepSeek 官方 API 这类纯文字的）也算能跑活：文字那一步过了就行
+    return (
+      t.ok ||
+      t.reason === NO_VISION_REASON ||
+      (t.steps?.some((s) => s.step === 'text' && s.ok) ?? false)
+    )
   }
 
   const sourceFallbackOf = (): ModelGatewayPolicy['source_fallback'] => {

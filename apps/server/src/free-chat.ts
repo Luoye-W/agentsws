@@ -1210,6 +1210,8 @@ async function answer(
             official: toWorkshop,
           },
           source_switch: switched.message,
+          // WP430：AI 钮按这一格回到原选（下一轮先试原选）
+          chosen_model: choice.id,
         }
   const credits =
     switched !== undefined

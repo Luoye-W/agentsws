@@ -37,7 +37,7 @@ type Who = keyof typeof URLS
 
 const passed = { ok: true, checked_at: '2026-10-19T09:00:00.000Z' }
 
-function setup(opts: { linked: boolean; tested?: Who[] }) {
+function setup(opts: { linked: boolean; tested?: Who[]; tests?: Record<string, unknown> }) {
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp430-'))
   dirs.push(dir)
   const tested = opts.tested ?? ['ds', 'glm']
@@ -72,7 +72,7 @@ function setup(opts: { linked: boolean; tested?: Who[] }) {
         },
       ],
       defaults: { default: 'kimi/kimi-k3' },
-      tests: Object.fromEntries(tested.map((id) => [id, passed])),
+      tests: { ...Object.fromEntries(tested.map((id) => [id, passed])), ...opts.tests },
     }),
   )
   const secrets = createSecretStore({
@@ -169,6 +169,40 @@ describe('WP430 AI 来源顺序（装配）', () => {
     const out = await gateway.complete(ask('run_a'))
     expect(out.model.provider).toBe('glm')
     expect(hits).not.toContain('ds')
+  })
+
+  it('只是看不了图（纯文字的 key，测试停在第 ③ 步）也算能接；连不上的不算', async () => {
+    const { models, gateway, status } = setup({
+      linked: true,
+      tested: [],
+      tests: {
+        ds: {
+          ok: false,
+          reason: 'no_vision',
+          checked_at: '2026-10-19T09:00:00.000Z',
+          steps: [
+            { step: 'connect', ok: true },
+            { step: 'text', ok: true },
+            { step: 'vision', ok: false },
+          ],
+        },
+        glm: {
+          ok: false,
+          reason: 'provider_unavailable',
+          checked_at: '2026-10-19T09:00:00.000Z',
+          steps: [{ step: 'connect', ok: false }],
+        },
+      },
+    })
+    const view = await models.port.defaults(actor)
+    expect(view.ai_source?.own.map((o) => [o.provider_id, o.ready])).toEqual([
+      ['kimi', false],
+      ['ds', true],
+      ['glm', false],
+    ])
+    status.kimi = 429
+    const out = await gateway.complete(ask('run_a'))
+    expect(out.model.provider).toBe('ds')
   })
 
   it('拖动排序：存进品牌模型设置，设置那一处按同一个顺序列，切的时候也按这个顺序', async () => {

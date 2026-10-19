@@ -51,6 +51,8 @@ export interface FreeChatMessage {
   error?: string
   /** WP425：这一轮从自己的 AI 切到了工坊积分（那一句）。 */
   source_switch?: string
+  /** WP430：切过来源的那一轮原来选的是哪一个——AI 钮按它回到原选（下一轮先试原选）。 */
+  chosen_model?: string
   /** WP425：自己的 AI 用不了、开关关着，这一轮停下了（出「用工坊积分接着做」那张卡）。 */
   source_fallback_off?: boolean
   /** WP207：模型找回归档时给出的候选（卡片；人点了才恢复）。 */
