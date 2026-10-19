@@ -15,10 +15,12 @@
  * 4. **灰着的东西要说得出为什么**。campaign 清单里本人没有那条职责的整组
  *    灰显 + 一句话，而不是悄悄少几行。
  */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { AutopilotStrip } from '@/components/autopilot/autopilot-strip'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1446,6 +1448,8 @@ export function KolPanel({
     <div className="flex flex-col gap-4" data-testid="kol-panel" data-channel={channel}>
       {/* 演练开关 + 状态带：三个视图共用一条，永远在最上面 */}
       <KolSandboxBar assignment={assignment} channel={channel} />
+      {/* WP428（决策 1244 改）：够条件后可以交给 AI 全自动（开着 / 够条件了才出这一条） */}
+      <AutopilotStrip assignment={assignment} />
 
       <nav className="flex flex-wrap items-center gap-1" data-testid="kol-subviews">
         {SUBVIEWS.map((v) => (

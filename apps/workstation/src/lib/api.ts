@@ -4462,6 +4462,34 @@ export interface ChatMessageView {
   auto_answer?: { score: number; sources: { kind: string; label: string }[]; flagged: boolean }
 }
 
+/** WP428（决策 1244 改）：一类能交给 AI 全自动的事，在这条岗位上的样子。 */
+export interface AutopilotScopeView {
+  scope_id: string
+  title: string
+  grants: string
+  keeps: string
+  on: boolean
+  since?: string
+  eligible: boolean
+  streak: number
+  needed: number
+  why: string
+}
+
+export const getAutopilot = (assignment?: string): Promise<AutopilotScopeView[]> =>
+  api('/v1/autopilot', withAssignment(assignment))
+
+export const setAutopilot = (
+  scope_id: string,
+  on: boolean,
+  assignment?: string,
+): Promise<AutopilotScopeView> =>
+  api(`/v1/autopilot/${encodeURIComponent(scope_id)}`, {
+    method: 'PUT',
+    body: { on },
+    ...withAssignment(assignment),
+  })
+
 /** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
 export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
 

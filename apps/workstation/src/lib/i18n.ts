@@ -3387,6 +3387,10 @@ const zh: Table = {
   'chat.auto.sources': '出处：{list}',
   'chat.auto.flag': '这句不该直接答',
   'chat.auto.flagged': '记下了，同类以后先给你看',
+  'autopilot.on': '全自动开着：{title}',
+  'autopilot.ready': '够条件了，可以交给 AI 全自动：{title}',
+  'autopilot.turn_on': '开全自动',
+  'autopilot.turn_off': '关掉',
   'chat.window.assist_wait.hint':
     '超时要人拍板的问题，访客最多等这么久，然后自动转邮件跟进。改了只影响之后的新求助。',
   'chat.window.relay': '转发方式',
@@ -7792,6 +7796,10 @@ const en: Table = {
   'chat.auto.sources': 'Source: {list}',
   'chat.auto.flag': 'Should not have answered directly',
   'chat.auto.flagged': 'Noted — similar questions will come to you first',
+  'autopilot.on': 'Full auto is on: {title}',
+  'autopilot.ready': 'Ready to hand over to the AI: {title}',
+  'autopilot.turn_on': 'Turn on full auto',
+  'autopilot.turn_off': 'Turn off',
   'chat.window.assist_wait.hint':
     'When the AI needs you, the visitor waits at most this long before we switch to email follow-up. Changes only affect new requests.',
   'chat.window.relay': 'Relay mode',

@@ -401,6 +401,10 @@ export type KnownEventType =
   // WP428（决策 1246 改）：按置信度直接答了一句（payload：分数、档位、出处 id）；人说「这句不该直接答」（payload：消息 id）
   | 'chat.auto_answered'
   | 'chat.auto_answer_flagged'
+  // WP428（决策 1244 改）：够条件 → 建议开全自动（payload：哪一类、哪条岗位、卡 id）；开了 / 关了（关的原因：人关 / 出事）
+  | 'autopilot.suggested'
+  | 'autopilot.turned_on'
+  | 'autopilot.turned_off'
   // WP57：商家在聊天里「教 AI」之后沉淀下来的知识候选（承诺类永不自动发布，19）
   | 'knowledge.candidate_created'
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。
