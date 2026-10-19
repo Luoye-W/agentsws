@@ -314,8 +314,6 @@ export function ModelPicker({
     list[next]?.focus()
   }
 
-  // WP426：能力小标只标例外（过半都有的不逐行写；看图反过来只标看不了的）
-  const marks = capabilityMarks(choices, LONG_CONTEXT_TOKENS)
   const current =
     choices.find((c) => c.id === value) ?? choices.find((c) => c.id === defaultId) ?? choices[0]
   if (current === undefined) {
@@ -504,7 +502,7 @@ export function ModelPicker({
                       selected={c.id === current.id}
                       isDefault={c.id === defaultId}
                       price={priceOf(c)}
-                      marks={marks}
+                      marks={capabilityMarks(g.rows, LONG_CONTEXT_TOKENS)}
                       testId={testId}
                       onPick={() => {
                         onChange(c.id)
