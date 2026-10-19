@@ -219,7 +219,8 @@ describe('右上角：没有卡片图标；面板开关开 / 关面板并亮汇�
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow', 'rail-toggle'])
+      // WP431（照 Claude）：面板开关挪到最左，后面一条细竖线
+    ).toEqual(['rail-toggle', 'rail-icon-browser', 'rail-icon-changes', 'rail-overflow'])
     expect(await screen.findByTestId('rail-cards')).toBeTruthy()
     const toggle = screen.getByTestId('rail-toggle')
     expect(toggle.getAttribute('aria-pressed')).toBe('true')

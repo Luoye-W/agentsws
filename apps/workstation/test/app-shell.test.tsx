@@ -121,7 +121,8 @@ describe('左栏 / 顶栏新风格（WP96）', () => {
     expect(screen.queryByTestId('top-command')).toBeNull()
     expect(screen.getByTestId('top-bar').textContent).not.toContain('交给某个岗位一件事')
     fireEvent.keyDown(document, { key: 'k', metaKey: true })
-    expect(await screen.findByPlaceholderText('搜卡片、岗位、教程，或加一个数字块…')).toBeTruthy()
+    // WP431：⌘K 打开的就是左上角「搜索」那个弹窗（照 Claude）
+    expect(await screen.findByPlaceholderText('搜索事项、对话、岗位、设置…')).toBeTruthy()
   })
 
   it('品牌与账号还在左栏最下面（WP71 定的位置没被换皮挪走）', () => {

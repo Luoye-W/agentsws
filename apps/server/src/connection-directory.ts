@@ -53,6 +53,7 @@ import type { RoleStore } from '@agentsws/roles'
 import { bundledPositionOfRole } from '@agentsws/roles'
 import { catalogEntry, ROLE_CONNECTOR_KIND } from './catalog.js'
 import type { SecretStore } from './secret-store.js'
+import { matchVendorService, VENDOR_CHOICE_KINDS } from './vendor-choice.js'
 
 /** 加密库里 MCP 请求头的 key 前缀（与 `conn:` / `model:` / `storage:` 并列）。 */
 const MCP_SECRET_PREFIX = 'mcp:'
@@ -147,6 +148,12 @@ export interface ConnectionDirectoryOptions {
    * 都不通回 `undefined`。给了它，只读需求已被这条路由满足的连接不算缺（{@link CONNECTION_READ_ROUTES}）。
    */
   readRouteLevel?(route: string): DataSourceLevel | undefined
+  /**
+   * WP431（与 WP424 首次设置同一套规矩）：品牌档案里「用哪一家」那几格（今天只有 `email_service`：邮件营销用的哪家）。
+   * 给了它，好几家都能干的连接（{@link VENDOR_CHOICE_KINDS}）只有用户说过 / 官网认出的那一家才算「要连」，
+   * 而且「去连接」落到那一家；没说过的只算可选，岗位页不提示（真要发的时候再就地弹连接卡，决策 690）。
+   */
+  statedVendor?(field: 'email_service'): string | undefined
   probeMcp?: McpProbe
 }
 
@@ -478,6 +485,23 @@ export function createConnectionDirectory(
     return options.readRouteLevel(via.route) !== undefined
   }
 
+  /**
+   * WP431：好几家都能干的一类（邮件营销）——档案说的那一家：对上了回那一家（`service` + 卡上名字），
+   * 没说过 / 对不上回 `null`（只算可选）；不归这条规矩管（或装配没给档案）回 `undefined`（照旧）。
+   */
+  const vendorOf = (kind: string): { service: string; label: string } | null | undefined => {
+    const field = VENDOR_CHOICE_KINDS[kind]
+    if (field === undefined || options.statedVendor === undefined) return undefined
+    const candidates = Object.entries(ROLE_CONNECTOR_KIND)
+      .filter(([, k]) => canonicalConnectionKind(k) === kind)
+      .map(([service]) => ({ service, label: catalogEntry(service)?.label ?? service }))
+    const service = matchVendorService(options.statedVendor(field), candidates)
+    if (service === undefined) return null
+    const label = candidates.find((c) => c.service === service)?.label ?? service
+    // 卡上名字常带「（邮件营销）」这种说明，提示行里只要那一家的名字
+    return { service, label: label.replace(/\s*[（(].*$/u, '') }
+  }
+
   /** 这几条职责要、但还没连上的连接（岗位连接清单与店主的 `list_connections` 共用这一份）。 */
   const gapsOf = (
     role_ids: readonly RoleId[],
@@ -533,6 +557,9 @@ export function createConnectionDirectory(
     const linked: string[] = []
     for (const [kind, row] of merged) {
       const isConnected = connected.has(kind)
+      // WP431：好几家都能干的那几类，按档案说的那一家（没说过 = 只是可选，不算缺）
+      const vendor = isConnected ? undefined : vendorOf(kind)
+      if (vendor === null) row.required = false
       if (row.required && !isConnected) missing_required.push(kind)
       // "连上这 N 个就能开工"：已连的那几条**不出现在卡上**（连上就少一条）
       if (isConnected) {
@@ -540,10 +567,18 @@ export function createConnectionDirectory(
         continue
       }
       const entry = row.entry
-      const connect_service = entry === undefined ? undefined : connectServiceOf(entry)
+      const connect_service =
+        typeof vendor === 'object' && vendor !== null
+          ? vendor.service
+          : entry === undefined
+            ? undefined
+            : connectServiceOf(entry)
       items.push({
         kind,
-        name: entry?.name ?? { zh: kind, en: kind },
+        name:
+          typeof vendor === 'object' && vendor !== null
+            ? { zh: vendor.label, en: vendor.label }
+            : (entry?.name ?? { zh: kind, en: kind }),
         required: row.required,
         ...(row.recommended && !row.required ? { recommended: true } : {}),
         connected: false,

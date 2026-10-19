@@ -24,9 +24,12 @@
  * 服务端照样三分，当场答 / 会话 / 任务）+ 快捷按钮 →「要你拍板」的卡。原来那一行灰字输入框、版本号、
  * 「内置只读」胶囊、「N 个人在做」、折着的「高级」都不在中间栏了（能力说明、日历 / 看板入口收进「⋯」）。
  * 所有职责（外部版块、官方版块……）都走这一页，所以一处改完全部换新。
+ *
+ * **WP431（Luoye 10-19，照 Claude 桌面版）**：主区不再有面包屑与页头——「岗位 / 职责」进**顶栏左边**（岗位名淡一档、点了回岗位；
+ * 职责名带下拉：回到岗位、职责设置、换一条职责；介绍在旁边的问号里），「职责设置」是顶栏右边那排里的一颗滑杆图标。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CalendarLink } from '@/components/calendar/calendar-link'
@@ -37,6 +40,17 @@ import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 import { dutyHasBoards } from '@/components/reports/scope-boards'
 import { DutyIcon } from '@/components/role-icons/role-icon'
+import {
+  TitleMenu,
+  TitleMenuItem,
+  TitleMenuLabel,
+  TitleMenuSeparator,
+  TOPBAR_ICON,
+  TOPBAR_ICON_ACTIVE,
+  TOPBAR_ICON_IDLE,
+  TopBarAction,
+  TopBarTitle,
+} from '@/components/shell/top-bar-slots'
 import { Hint } from '@/components/ui/hint'
 import { MarkdownInline } from '@/components/ui/safe-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -50,6 +64,8 @@ import {
   skillLines,
   toolLines,
 } from '@/lib/duty-capabilities'
+import { dutyHref } from '@/lib/duty-href'
+import { cn } from '@/lib/utils'
 import { matterUrl } from '@/lib/work'
 
 /**
@@ -190,6 +206,11 @@ export function DutyPage(): React.ReactNode {
     instance === undefined ? '' : lang === 'en' ? instance.name.en : instance.name.zh
   // 问号里是纯文字：markdown 的一对 ** 去掉（整段原话照留，粗体在「⋯」那一页里照样认）
   const description = role.data?.description.trim().replace(/\*\*/g, '') ?? ''
+  const dutyName = role.data?.name ?? here?.role_name ?? role_id
+  /** 同一个岗位里本人做的别的几条职责（顶栏下拉「换一条职责」）。 */
+  const siblings = (instance?.roles ?? []).filter(
+    (r) => r.my_assignment_id !== undefined && r.role_id !== role_id,
+  )
 
   return (
     <div
@@ -198,51 +219,99 @@ export function DutyPage(): React.ReactNode {
       data-duty={role_id}
       data-view={view}
     >
-      <nav className="flex items-center gap-1 text-xs text-ws-muted-fg" aria-label="breadcrumb">
-        <Link to={`/positions/${encodeURIComponent(assignment)}`} data-testid="duty-breadcrumb">
-          {positionName === '' ? t('nav.positions') : positionName}
-        </Link>
-        <span aria-hidden>›</span>
-        <span>{here?.role_name ?? role_id}</span>
-      </nav>
-
-      {/* WP412：与岗位页同一个页头——图标 + 名字（这条职责干什么在旁边的问号里），右边「⋯」 */}
-      <header className="flex items-start gap-3" data-testid="duty-header">
-        <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-ws-surface">
-          <DutyIcon role_id={role_id} size={22} selected />
-        </span>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 self-center">
-          {/* WP418 / WP420（审计 U14）：右栏加宽 / 窄的时候标题换行（最多两行），不截成「Shopify 整...」 */}
-          <h1
-            className="ws-display line-clamp-2 min-w-0 text-[26px] leading-tight break-words"
-            data-testid="duty-name"
-          >
-            {role.data?.name ?? here?.role_name ?? role_id}
-          </h1>
-          {description === '' ? null : <Hint text={description} testId="duty-description" />}
+      {/* ── 顶栏：岗位 / 职责 + 下拉（WP431，照 Claude；没有外壳时就地画） ── */}
+      <TopBarTitle>
+        <div className="flex min-w-0 items-center gap-0.5" data-testid="duty-header">
+          <TitleMenu
+            before={
+              <>
+                <Link
+                  to={`/positions/${encodeURIComponent(assignment)}`}
+                  data-testid="duty-breadcrumb"
+                  className="shrink-0 truncate rounded-md px-1.5 py-1 text-[13.5px] text-ws-muted-fg hover:bg-foreground/[0.06] hover:text-foreground"
+                >
+                  {positionName === '' ? t('nav.positions') : positionName}
+                </Link>
+                <span aria-hidden className="shrink-0 text-[13px] text-ws-muted-fg/70">
+                  /
+                </span>
+              </>
+            }
+            title={dutyName}
+            testId="duty-name"
+            menuTestId="duty-title-menu"
+            menuLabel={t('topbar.menu.duty', { name: dutyName })}
+            after={
+              description === '' ? null : <Hint text={description} testId="duty-description" />
+            }
+            menu={(close) => (
+              <>
+                <TitleMenuItem
+                  icon={ArrowLeft}
+                  label={t('topbar.duty.back', {
+                    name: positionName === '' ? t('nav.positions') : positionName,
+                  })}
+                  testId="duty-menu-back"
+                  onSelect={() => {
+                    close()
+                    navigate(`/positions/${encodeURIComponent(assignment)}`)
+                  }}
+                />
+                <TitleMenuItem
+                  icon={SlidersHorizontal}
+                  label={t(view === 'about' ? 'topbar.settings.close' : 'topbar.duty.about')}
+                  testId="duty-menu-about"
+                  onSelect={() => {
+                    close()
+                    setView(view === 'about' ? 'work' : 'about')
+                  }}
+                />
+                {siblings.length === 0 ? null : (
+                  <>
+                    <TitleMenuSeparator />
+                    <TitleMenuLabel>{t('topbar.duty.switch')}</TitleMenuLabel>
+                    {siblings.map((r) => (
+                      <TitleMenuItem
+                        key={r.role_id}
+                        icon={ArrowLeftRight}
+                        label={
+                          <span className="inline-flex items-center gap-1.5">
+                            <DutyIcon role_id={r.role_id} size={14} />
+                            {r.role_name}
+                          </span>
+                        }
+                        testId="duty-menu-switch"
+                        onSelect={() => {
+                          close()
+                          navigate(dutyHref(r.my_assignment_id ?? '', r.role_id))
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          />
         </div>
+      </TopBarTitle>
+      {/* WP431：「职责设置」进顶栏右边那排图标（滑杆）；在里面再点一次回到对话框 */}
+      <TopBarAction>
         <button
           type="button"
           data-testid="duty-about-link"
           aria-pressed={view === 'about'}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs hover:bg-accent"
+          title={t(view === 'about' ? 'pos2.settings.back' : 'topbar.duty.about')}
+          className={cn(TOPBAR_ICON, view === 'about' ? TOPBAR_ICON_ACTIVE : TOPBAR_ICON_IDLE)}
           onClick={() => {
             setView(view === 'about' ? 'work' : 'about')
           }}
         >
-          {view === 'about' ? (
-            <>
-              <ChevronLeft className="size-4" aria-hidden />
-              {t('pos2.settings.back')}
-            </>
-          ) : (
-            <>
-              <MoreHorizontal className="size-4" aria-hidden />
-              {t('duty.about')}
-            </>
-          )}
+          <SlidersHorizontal aria-hidden className="size-4" />
+          <span className="sr-only">
+            {t(view === 'about' ? 'pos2.settings.back' : 'topbar.duty.about')}
+          </span>
         </button>
-      </header>
+      </TopBarAction>
 
       {view === 'about' ? (
         <DutyAbout role_id={role_id} onBoards={() => rail.show('reports')} />

@@ -72,7 +72,14 @@ function useBalance(): { available?: number; low: boolean; canTopup: boolean } {
   }
 }
 
-export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
+export function AccountBlock({
+  me,
+  compact = false,
+}: {
+  me?: Me
+  /** WP431：左栏收成图标列时只画头像（菜单照旧往右上开）。 */
+  compact?: boolean
+}): React.ReactNode {
   const { t, theme, toggleTheme } = useApp()
   // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
   const { solo, mode, known, t: tm } = useMode()
@@ -204,7 +211,11 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
         aria-haspopup="menu"
         aria-label={t('account.menu')}
         data-testid="account-toggle"
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent/60"
+        {...(compact ? { title: name } : {})}
+        className={cn(
+          'flex items-center gap-2 rounded-md text-left hover:bg-sidebar-accent/60',
+          compact ? 'size-9 justify-center' : 'w-full px-2 py-1.5',
+        )}
         onClick={() => {
           setOpen(!open)
         }}
@@ -222,7 +233,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             />
           ) : null}
         </span>
-        <span className="min-w-0 flex-1">
+        <span className={cn('min-w-0 flex-1', compact && 'sr-only')}>
           <span className="block truncate text-sm font-medium" data-testid="account-name">
             {name}
           </span>
@@ -230,7 +241,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             {plain && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
           </span>
         </span>
-        <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />
+        {compact ? null : <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />}
       </button>
       {open ? (
         // 与品牌切换器同一种朴素下拉：一个按钮 + 一张列表，不引浮层引擎
