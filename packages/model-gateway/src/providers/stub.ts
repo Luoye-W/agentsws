@@ -29,7 +29,16 @@ export interface StubProviderOptions {
    * demo 里给一点点，界面上看得出"一个词一个词冒出来"。
    */
   streamDelayMs?: number
+  /**
+   * WP428：剧本。按顺序问一遍，谁回了字就用谁的（不回 = 照旧出确定性假话）。
+   * 例：聊天直答那一次起草（`@agentsws/support-core` 的 `chatAnswerStubScript`）——
+   * 演示与模拟里没有真模型，也要能看出「知识库有 → 直答；没有 → 转人」。
+   */
+  scripts?: readonly StubScript[]
 }
+
+/** 一段 stub 剧本：认得出这次请求就回一段字，认不出回 `undefined`。 */
+export type StubScript = (messages: readonly ChatMessage[]) => string | undefined
 
 const VOCAB = [
   'order',
@@ -128,7 +137,12 @@ export function stubProvider(options: StubProviderOptions): ModelProvider {
           seed: req.seed ?? options.seed,
         }),
       )
-      const out = { text: text(hash), usage: usageOf(hash, req.messages, req.tools) }
+      let scripted: string | undefined
+      for (const script of options.scripts ?? []) {
+        scripted = script(req.messages)
+        if (scripted !== undefined) break
+      }
+      const out = { text: scripted ?? text(hash), usage: usageOf(hash, req.messages, req.tools) }
       // WP188：要流式就一个词一个词吐；中途被喊停就像真上游那样抛 AbortError
       if (req.on_delta !== undefined) {
         const parts = out.text.split(/(?<= )/)

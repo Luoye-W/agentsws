@@ -228,7 +228,7 @@ export {
   routeEffortOf,
   routeKey,
 } from './providers/pi-route.js'
-export type { StubProviderOptions } from './providers/stub.js'
+export type { StubProviderOptions, StubScript } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'
 export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'

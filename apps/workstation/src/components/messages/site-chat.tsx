@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Settings2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AutoAnswerMark } from '@/components/chat/auto-answer-mark'
 import { StatusPill } from '@/components/design'
 import { DutyNeeded } from '@/components/duty-needed'
 import { PageError } from '@/components/page-error'
@@ -407,6 +408,8 @@ export function SiteChatView({
                 >
                   <span className="mr-1 text-xs text-ws-muted-fg">{t(`chat.role.${m.role}`)}:</span>
                   {m.text}
+                  {/* WP428：AI 直接答的那一句标出处，旁边「这句不该直接答」 */}
+                  <AutoAnswerMark sessionId={selected} message={m} assignment={asg} />
                 </li>
               ))}
             </ul>

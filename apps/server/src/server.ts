@@ -243,7 +243,11 @@ import {
   scheduleRulesFor,
 } from '@agentsws/social-core'
 import type { ToolExecutor } from '@agentsws/stand-ins'
-import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
+import {
+  chatAnswerStubScript,
+  detectAnsweredBoundaries,
+  SUPPORT_BOUNDARIES,
+} from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
@@ -2449,7 +2453,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7 })],
+      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -8126,11 +8130,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ranges: config.ranges,
           },
         })
-        return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          statement: h.statement_redacted,
+          layer: h.layer,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        }))
       },
       position: () => positionFor(ws, LIVE_CHAT_DUTIES),
-      // WP417（决策 1232）：缺省每一句先出卡要人批；商家在聊天窗设置里手动开「常见问题直接发」才直接发
-      autoSendFaq: () => lateWidget.current?.config().auto_send_faq === true,
+      // WP428（决策 1246 改）：缺省按置信度直接答（适中档）；商家在聊天窗设置里可关、可调严松
+      autoAnswer: () => {
+        const config = lateWidget.current?.config()
+        return {
+          on: config?.auto_answer !== false,
+          ...(config?.auto_answer_strictness === undefined
+            ? {}
+            : { strictness: config.auto_answer_strictness }),
+        }
+      },
       // WP417（自查 C10）：访客报了订单号 → 只读查这一单（与运行时同一个记录源）
       lookupOrder: async (order_ref) => {
         const res = await records.executeTool?.({
@@ -12329,13 +12346,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return found === undefined ? undefined : chatView(found)
       },
       messages: async (session_id, limit) =>
-        (await lane.messages(session_id, limit)).map((m) => ({
-          id: m.id,
-          role: m.role,
-          text: m.text,
-          at: m.at,
-          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
-        })),
+        (await lane.messages(session_id, limit)).map((m) => {
+          // WP428：AI 直接答的那一句带上出处与把握（对话记录里标「AI 直接答 · 出处」）
+          const auto = m.role === 'agent' ? lane.autoAnswerOf(m.id) : undefined
+          return {
+            id: m.id,
+            role: m.role,
+            text: m.text,
+            at: m.at,
+            ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
+            ...(auto === undefined ? {} : { auto_answer: auto }),
+          }
+        }),
+      flagAutoAnswer: (input) =>
+        lane.flagAutoAnswer({
+          session_id: input.session_id,
+          message_id: input.message_id,
+          by: input.by as PersonId,
+        }),
       send: async (input) => chatTurnView(await lane.receive(input)),
       // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
       // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。

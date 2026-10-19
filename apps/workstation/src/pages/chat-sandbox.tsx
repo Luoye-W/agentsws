@@ -134,7 +134,12 @@ export function ChatSandboxPage(): React.ReactNode {
               <Skeleton className="h-40 w-full" />
             ) : (
               // WP112：这一轮交出去了、还没回来——线程末尾那个呼吸的标记
-              <ChatTranscript messages={thread.data?.messages ?? []} busy={send.isPending} />
+              <ChatTranscript
+                messages={thread.data?.messages ?? []}
+                busy={send.isPending}
+                sessionId={id}
+                assignment={asg}
+              />
             )}
             <div className="flex flex-col gap-2">
               <Textarea

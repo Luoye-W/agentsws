@@ -3376,9 +3376,17 @@ const zh: Table = {
   'chat.window.assist_wait': '求助等待时长',
   'chat.window.assist_wait.option': '{n} 秒',
   'chat.window.assist_wait.option_min': '{n} 分钟',
-  'chat.window.auto_send_faq': '常见问题直接发',
-  'chat.window.auto_send_faq.hint':
-    '关着时 AI 每一句都先给你批。打开后，答案来自知识卡、又没提退款赔偿的那一句直接发。',
+  'chat.window.auto_answer': '有把握就直接答',
+  'chat.window.auto_answer.hint':
+    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、个人信息一律先给你批。',
+  'chat.window.auto_answer.strictness': '把握要多大',
+  'chat.window.auto_answer.strict': '严一点',
+  'chat.window.auto_answer.balanced': '适中',
+  'chat.window.auto_answer.loose': '松一点',
+  'chat.action.auto_answer': 'AI 直接答',
+  'chat.auto.sources': '出处：{list}',
+  'chat.auto.flag': '这句不该直接答',
+  'chat.auto.flagged': '记下了，同类以后先给你看',
   'chat.window.assist_wait.hint':
     '超时要人拍板的问题，访客最多等这么久，然后自动转邮件跟进。改了只影响之后的新求助。',
   'chat.window.relay': '转发方式',
@@ -3473,8 +3481,8 @@ const zh: Table = {
   'chat.action.answer': '直接答',
   'chat.action.answer_held': '先给你批',
   'chat.action.answer_held.why':
-    '能答，回复已经起草好；你批了才发给访客（常见问题可以在聊天窗设置里打开「直接发」）。',
-  'chat.action.answer.why': '低风险、资料齐：按知识与订单事实答一句，不承诺任何事。',
+    '能答，但没把握（知识库里没出处、对不上，或涉及钱 / 时间 / 个人信息）：回复起草好了，你批了才发。卡上写着为什么。',
+  'chat.action.answer.why': '知识库里有出处、AI 有把握：直接发给访客，对话记录里标着出处。',
   'chat.action.collect_info': '先问清楚',
   'chat.action.collect_info.why': '这一类缺了关键资料就走不下去（比如查订单没给单号），先问出来。',
   'chat.action.human_review': '要你定',
@@ -7773,9 +7781,17 @@ const en: Table = {
   'chat.window.assist_wait': 'Handoff wait time',
   'chat.window.assist_wait.option': '{n} sec',
   'chat.window.assist_wait.option_min': '{n} min',
-  'chat.window.auto_send_faq': 'Send FAQ answers directly',
-  'chat.window.auto_send_faq.hint':
-    'Off: every AI reply waits for your OK. On: replies taken from your knowledge cards that promise no refund or compensation go out directly.',
+  'chat.window.auto_answer': 'Answer directly when sure',
+  'chat.window.auto_answer.hint':
+    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and personal details always wait for you.',
+  'chat.window.auto_answer.strictness': 'How sure',
+  'chat.window.auto_answer.strict': 'Stricter',
+  'chat.window.auto_answer.balanced': 'Balanced',
+  'chat.window.auto_answer.loose': 'Looser',
+  'chat.action.auto_answer': 'AI answered directly',
+  'chat.auto.sources': 'Source: {list}',
+  'chat.auto.flag': 'Should not have answered directly',
+  'chat.auto.flagged': 'Noted — similar questions will come to you first',
   'chat.window.assist_wait.hint':
     'When the AI needs you, the visitor waits at most this long before we switch to email follow-up. Changes only affect new requests.',
   'chat.window.relay': 'Relay mode',
@@ -7872,9 +7888,9 @@ const en: Table = {
   'chat.action.answer': 'Answer it',
   'chat.action.answer_held': 'Waiting for your OK',
   'chat.action.answer_held.why':
-    'The AI can answer and has drafted the reply; it goes to the visitor once you approve (turn on “Send FAQ answers directly” in chat window settings to skip this for FAQs).',
+    'The AI could answer but is not sure (no matching source, or it touches money, dates or personal details). The reply is drafted and goes out once you approve; the card says why.',
   'chat.action.answer.why':
-    'Low risk and nothing missing: answer from knowledge and order facts, commit to nothing.',
+    'Backed by your knowledge base and the AI is confident: sent to the visitor directly, with the source noted in the transcript.',
   'chat.action.collect_info': 'Ask first',
   'chat.action.collect_info.why':
     'This kind cannot proceed without the key detail (an order lookup with no order number), so ask for it first.',

@@ -253,6 +253,7 @@ export {
 // WP57（48 §4 L3 #11）：网站在线客服的本地 API；WP60 加公开访客面与 widget 配置
 export {
   CHAT_SSE_HEARTBEAT_MS,
+  type ChatAutoAnswerView,
   type ChatFrame,
   type ChatMessageView,
   type ChatPort,

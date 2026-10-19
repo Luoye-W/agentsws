@@ -1,7 +1,8 @@
 # 48 §3 L1「网站在线客服」的那条硬规则，一条回归题钉住：
 # **聊天里只答不承诺，涉钱一律转卡片或邮件。**
 #
-# 访客先问运费 → 词表命中售前、资料齐 → 轻模型答一句；
+# 访客先问保修期（售前）→ 词表命中售前 → 轻模型答一句；WP428（决策 1246 改）：知识库里有那张保修卡、
+# 每句标了出处 → **按置信度直接答**（不出卡）；
 # 同一个人接着问"能退款吗" → 词表命中退款 → **不答**，出一张卡给人定，
 # 聊天里只说一句安抚。
 #
@@ -18,7 +19,7 @@ events:
   - at: '+0m'
     chat.visitor_message:
       visitor: anna@example.com
-      text: Hi! How much is shipping to the US?
+      text: 购买前想问下，充电类产品保修期多久？
   # 静默窗口过了，这一轮才算说完
   - at: '+1m'
     clock.advance: {}
@@ -36,6 +37,8 @@ expected:
   event_types:
     - simulation.chat_turn
     - simulation.chat_message
+    # WP428：第一轮是按置信度直接答的那一句
+    - simulation.chat_auto_answer
   # 聊天里不该出现任何承诺：卡上的建议话术也不许把"退款"当成已经定了的事
   reply_omits: ['refund approved', '已退款', '给你退']
   metrics:
@@ -52,5 +55,5 @@ invariants:
   - fencing_covers_external
   - prompt_replayable
 rubric: >-
-  第一轮是不是直接回答了运费、没有绕；第二轮是不是明确说了"这件事我在聊天里定不了"，
+  第一轮是不是照知识卡直接回答了保修期、没有绕；第二轮是不是明确说了"这件事我在聊天里定不了"，
   而不是含糊地承诺"会帮你处理退款"？

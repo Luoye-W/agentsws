@@ -110,7 +110,8 @@ describe('WP417 聊天', () => {
     const r = rig()
     const s = await r.chat.openSandbox('p_me')
     await r.say(s.id, 'has order #1001 shipped yet?')
-    expect(r.calls.join('\n')).toContain('访客说的订单 #1001（刚查的）')
+    // WP428：直答那一轮订单现查结果当一条带编号的出处（O1）进材料
+    expect(r.calls.join('\n')).toContain('[O1]')
     expect(r.calls.join('\n')).toContain('unfulfilled')
   })
 
