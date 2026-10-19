@@ -98,7 +98,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP423 再加一条（查资料查到一半预算到了 → 四个运行时都收尾、交出同一段话）→ 84
     // WP425 再加两条（自己的 AI 额度用完 → 这一轮用工坊积分、下一轮回主用 / 开关关着照实停下）→ 86
     // WP430 再加三条（原选 429 → 自己的第二条接上 / 两条都不行 → 工坊积分 / 连续失败后冷却期内跳过）→ 89
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(89)
+    // WP428 再加一条（聊天里知识库没出处 → 转人）→ 90
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(90)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

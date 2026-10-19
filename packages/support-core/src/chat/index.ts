@@ -8,6 +8,7 @@
 export * from './aggregate.js'
 export * from './assist-timeout.js'
 export * from './classify.js'
+export * from './confidence.js'
 export * from './pack.js'
 export * from './plan.js'
 export * from './teach.js'

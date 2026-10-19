@@ -177,6 +177,13 @@ export { amazonListingRoutes } from './routes/amazon-listing.js'
 export { isSelfCard, SELF_CARD_FORMS } from './routes/approvals.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export { autoMemoryRoutes } from './routes/auto-memory.js'
+// WP428（决策 1244 改）：全自动（够条件 → 建议开、人点了才开、随时能关）
+export {
+  type AutopilotActor,
+  type AutopilotPort,
+  type AutopilotScopeView,
+  autopilotRoutes,
+} from './routes/autopilot.js'
 // WP172（docs/84）：B2B 库的列表 / 详情 / 草稿 / 提交改动卡 / CSV 导入
 export type {
   B2bActor,
@@ -253,6 +260,7 @@ export {
 // WP57（48 §4 L3 #11）：网站在线客服的本地 API；WP60 加公开访客面与 widget 配置
 export {
   CHAT_SSE_HEARTBEAT_MS,
+  type ChatAutoAnswerView,
   type ChatFrame,
   type ChatMessageView,
   type ChatPort,

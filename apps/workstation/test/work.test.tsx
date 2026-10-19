@@ -112,7 +112,7 @@ const plan: DailyPlan = {
   suggestions: [],
   options: [
     { id: 'adopt', label: '就按这个来' },
-    { id: 'adjust', label: '我改几条' },
+    { id: 'adjust', label: '修改' },
     { id: 'later', label: '稍后再说' },
   ],
   state: 'drafted',

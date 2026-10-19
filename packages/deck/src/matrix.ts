@@ -102,7 +102,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   claim: { approve: '接', reject: '不接', snooze: '稍后' },
   system_alert: { open: '去处理', snooze: '稍后' },
   digest: { open: '看', snooze: '稍后' },
-  daily_plan: { approve: '采纳', instruct: '我改几条', snooze: '稍后', open: '打开' },
+  daily_plan: { approve: '采纳', instruct: '修改', snooze: '稍后', open: '打开' },
   review: { approve: '按建议排明天', reject: '我来排', snooze: '稍后', open: '看完' },
   membership: { approve: '让他进来', reject: '不让', open: '看看是谁' },
   computer_use: { approve: '允许', reject: '不允许', snooze: '稍后' },

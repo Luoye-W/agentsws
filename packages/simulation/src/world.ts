@@ -298,6 +298,7 @@ import {
   AMAZON_CHANNEL,
   buildAmazonChannelMeta,
   buildAmazonRewriteInstruction,
+  chatAnswerStubScript,
   // WP113：分拣的 stand-in 模型用它判"这是不是客服诉求"（纯函数，与真运行时同一份）
   classifyText,
   describeAmazonDetection,
@@ -2332,6 +2333,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             ...(pack.workspace.vertical === undefined ? {} : { vertical: pack.workspace.vertical }),
           })
         : stubProvider({ seed, ref: MODEL })
+  /*
+   * WP428：没给真模型时，聊天直答那一次起草走 stub 剧本（知识库对得上 → 照说并标出处；对不上 → 去确认）。
+   * 三个运行时同一份剧本（stub 的 provider 与 direct / dsh 的规则脑都在这里套），口径一致；用量照原 provider 记。
+   */
+  const scripted = (
+    req: Parameters<ModelProvider['complete']>[0],
+    out: Awaited<ReturnType<ModelProvider['complete']>>,
+  ): Awaited<ReturnType<ModelProvider['complete']>> => {
+    if (opts.model !== undefined) return out
+    const text = chatAnswerStubScript(req.messages)
+    return text === undefined ? out : { ...out, text }
+  }
   const gatedProvider: ModelProvider = {
     ref: modelRef,
     ...(base.supports_tool_choice === undefined
@@ -2347,7 +2360,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           status: ownFault.code,
         })
       }
-      return base.complete(req)
+      return scripted(req, await base.complete(req))
     },
     async embed(texts: string[]) {
       if (clock.nowMs() < outageUntilMs) {
@@ -2370,7 +2383,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       if (clock.nowMs() < outageUntilMs) {
         throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
       }
-      return base.complete(req)
+      return scripted(req, await base.complete(req))
     },
   }
   /*

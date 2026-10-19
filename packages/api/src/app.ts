@@ -21,6 +21,7 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { autoMemoryRoutes } from './routes/auto-memory.js'
+import { autopilotRoutes } from './routes/autopilot.js'
 import { b2bRoutes } from './routes/b2b.js'
 // WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
 import { backgroundRoutes } from './routes/background.js'
@@ -202,6 +203,7 @@ export function collectRoutes(): Route[] {
     ...personaRoutes(),
     // WP284（决策 275）：职责规矩里那几句「以后都这样」
     ...roleRuleRoutes(),
+    ...autopilotRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。

@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import {
+  type ChatAutoAnswerStrictnessView,
   type ChatRelayTestView,
   getChatRelaySettings,
   getChatRelayStatus,
@@ -253,13 +254,13 @@ export function ChatWidgetSettings(): React.ReactNode {
               ))}
             </select>
           </div>
-          {/* WP417（决策 1232）：在线客服缺省每一句先出卡要你批；常见问题可以手动打开「直接发」 */}
-          <div className="flex items-center gap-2 text-[13px]">
+          {/* WP428（决策 1246 改）：按把握直接答（缺省开）+「严一点 / 适中 / 松一点」，不让人填数字 */}
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <Switch
-              id="chat-auto-send-faq"
-              checked={cfg?.auto_send_faq === true}
-              aria-label={t('chat.window.auto_send_faq')}
-              data-testid="chat-auto-send-faq"
+              id="chat-auto-answer"
+              checked={cfg?.auto_answer !== false}
+              aria-label={t('chat.window.auto_answer')}
+              data-testid="chat-auto-answer"
               onCheckedChange={(on) =>
                 saveSettings.mutate({
                   allowed_origins: cfg?.allowed_origins ?? [],
@@ -268,12 +269,37 @@ export function ChatWidgetSettings(): React.ReactNode {
                   ...(cfg?.assist_wait_seconds === undefined
                     ? {}
                     : { assist_wait_seconds: cfg.assist_wait_seconds }),
-                  auto_send_faq: on,
+                  auto_answer: on,
                 })
               }
             />
-            <label htmlFor="chat-auto-send-faq">{t('chat.window.auto_send_faq')}</label>
-            <Hint text={t('chat.window.auto_send_faq.hint')} />
+            <label htmlFor="chat-auto-answer">{t('chat.window.auto_answer')}</label>
+            <Hint text={t('chat.window.auto_answer.hint')} />
+            {cfg?.auto_answer === false ? null : (
+              <select
+                aria-label={t('chat.window.auto_answer.strictness')}
+                className="ml-auto h-8 rounded-md border bg-transparent px-2 text-[13px]"
+                value={cfg?.auto_answer_strictness ?? 'balanced'}
+                data-testid="chat-auto-answer-strictness"
+                onChange={(e) =>
+                  saveSettings.mutate({
+                    allowed_origins: cfg?.allowed_origins ?? [],
+                    ...(accent === undefined ? {} : { accent }),
+                    ...(greeting === '' ? {} : { greeting }),
+                    ...(cfg?.assist_wait_seconds === undefined
+                      ? {}
+                      : { assist_wait_seconds: cfg.assist_wait_seconds }),
+                    auto_answer_strictness: e.target.value as ChatAutoAnswerStrictnessView,
+                  })
+                }
+              >
+                {(['strict', 'balanced', 'loose'] as const).map((k) => (
+                  <option key={k} value={k}>
+                    {t(`chat.window.auto_answer.${k}`)}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </CardContent>
       </Card>

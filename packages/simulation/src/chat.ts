@@ -19,6 +19,9 @@
 import type { Iso8601, PersonId } from '@agentsws/contracts'
 import {
   buildChatPlan,
+  CHAT_ANSWER_CITE_INSTRUCTION,
+  CHAT_HELD_REPLY,
+  type ChatAnswerSource,
   type ChatPlanAction,
   type ChatResponsePlan,
   type ChatSessionStatus,
@@ -28,6 +31,9 @@ import {
   DEFAULT_CHAT_PACK,
   evaluateChatAssist,
   evaluateChatTurn,
+  fenceForPrompt,
+  formatChatSources,
+  scoreChatAutoAnswer,
 } from '@agentsws/support-core'
 import type { World } from './world.js'
 
@@ -52,6 +58,8 @@ export interface SimChatTurn {
   used_model: boolean
   reply?: string
   approval_item_id?: string
+  /** WP428：能答的那一句按置信度直接发了（`sent`）还是转人（`held`）。 */
+  auto?: 'sent' | 'held'
 }
 
 export interface ChatLoop {
@@ -132,11 +140,12 @@ export function installChat(world: World): ChatLoop {
     return message
   }
 
-  /** 出一张真卡（`human_review` / `assist`）。 */
+  /** 出一张真卡（`human_review` / `assist`；WP428：能答但没把握的那一句 `held`）。 */
   const raiseCard = async (
     session: SimChatSession,
     plan: ChatResponsePlan,
     turn_text: string,
+    held?: { draft: string; kind: string; reasons: string[] },
   ): Promise<string | undefined> => {
     const item = await world.txn.approvals.create({
       workspace_id: world.workspace_id,
@@ -147,11 +156,16 @@ export function installChat(world: World): ChatLoop {
         object: { type: 'thread', id: threadIdOf(session) },
         conversation_id: session.id,
       },
-      dedupe_key: `${world.workspace_id}:chat:${session.id}:${plan.action}`,
+      dedupe_key:
+        held === undefined
+          ? `${world.workspace_id}:chat:${session.id}:${plan.action}`
+          : `${world.workspace_id}:chat:${session.id}:answer:${world.clock.now()}`,
       title:
-        plan.action === 'assist'
-          ? `${session.visitor} 在聊天里要人工`
-          : `${session.visitor} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
+        held !== undefined
+          ? `回 ${session.visitor} 的聊天`
+          : plan.action === 'assist'
+            ? `${session.visitor} 在聊天里要人工`
+            : `${session.visitor} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
       summary: plan.summary,
       payload: {
         channel: 'chat',
@@ -166,8 +180,11 @@ export function installChat(world: World): ChatLoop {
          * 漏了这一格，卡会被预检直接打成 `blocked`，人永远看不到它。
          */
         to: { type: 'contact', id: session.visitor },
-        body: { text: plan.next_question },
+        body: { text: held?.draft ?? plan.next_question },
         visitor_said: turn_text.slice(0, 500),
+        ...(held === undefined
+          ? {}
+          : { auto_answer: { held: held.kind, reasons: held.reasons.slice(0, 6) } }),
       },
       evidence: {
         source_events: [],
@@ -212,12 +229,44 @@ export function installChat(world: World): ChatLoop {
   const answerWith = async (
     session: SimChatSession,
     turn_text: string,
-  ): Promise<string | undefined> => {
+  ): Promise<{ text: string; sources: ChatAnswerSource[] } | undefined> => {
+    // WP428：与服务进程同一个口径——知识带编号进材料，模型按编号标出处、末尾给把握
+    const sources: ChatAnswerSource[] = []
+    try {
+      const res = await world.knowledge.retrieval.search({
+        text: turn_text,
+        k: 4,
+        actor: {
+          person_id: world.assignment.person_id,
+          workspace_id: world.workspace_id,
+          assignment_id: world.assignment.id,
+          role_id: world.assignment.role_id,
+          grants: [...world.effective.scopes],
+          ranges: [...world.effective.ranges],
+        },
+      })
+      for (const [i, h] of res.hits.entries())
+        sources.push({
+          ref: `K${i + 1}`,
+          kind: h.layer === 'policy' ? 'policy' : 'fact_card',
+          id: h.fact_card_id,
+          label: h.statement_redacted.slice(0, 24),
+          text: h.statement_redacted,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        })
+    } catch {
+      // 知识层不可用：没有出处，照样问模型（之后按「没有出处」转人）
+    }
+    const user = [
+      ...(sources.length === 0 ? [] : [`材料：\n${formatChatSources(sources)}`]),
+      CHAT_ANSWER_CITE_INSTRUCTION,
+      `访客说：\n${fenceForPrompt(turn_text).text}`,
+    ].join('\n\n')
     try {
       const completion = await world.gateway().complete({
         messages: [
           { role: 'system', content: '你是网站聊天窗里的客服。短、具体、不承诺钱。' },
-          { role: 'user', content: turn_text },
+          { role: 'user', content: user },
         ],
         meta: {
           workspace_id: world.workspace_id,
@@ -227,7 +276,9 @@ export function installChat(world: World): ChatLoop {
           purpose: 'run',
         },
       })
-      return completion.text.trim().length === 0 ? undefined : completion.text.trim()
+      return completion.text.trim().length === 0
+        ? undefined
+        : { text: completion.text.trim(), sources }
     } catch {
       // 模型挂了 / 预算耗尽：聊天里不编一句话顶上去
       return undefined
@@ -309,7 +360,40 @@ export function installChat(world: World): ChatLoop {
       turns.push(record)
       return record
     }
-    record.reply = say(session, 'agent', answer, plan.action).text
+    // WP428（决策 1246 改）：按置信度直接答——与服务进程同一个判定（`scoreChatAutoAnswer`）
+    const verdict = scoreChatAutoAnswer({
+      plan,
+      turn_text,
+      reply: answer.text,
+      sources: answer.sources,
+    })
+    world.appendEvent(
+      'simulation.chat_auto_answer',
+      {
+        session_id: session.id,
+        decision: verdict.send ? 'sent' : 'held',
+        score: verdict.score,
+        ...(verdict.hold === undefined ? {} : { hold: verdict.hold.kind }),
+      },
+      { subject: { type: 'thread', id: threadIdOf(session) } },
+    )
+    if (verdict.send) {
+      record.auto = 'sent'
+      record.reply = say(session, 'agent', verdict.text, 'auto_answer').text
+      turns.push(record)
+      return record
+    }
+    record.auto = 'held'
+    const card = await raiseCard(session, plan, turn_text, {
+      draft: verdict.text === '' ? answer.text : verdict.text,
+      kind: verdict.hold?.kind ?? 'low_confidence',
+      reasons: verdict.reasons,
+    })
+    if (card !== undefined) record.approval_item_id = card
+    session.status = 'assist_requested'
+    session.assist_requested_at = world.clock.now()
+    delete session.assist_reminded_at
+    record.reply = say(session, 'agent', CHAT_HELD_REPLY, 'answer_held').text
     turns.push(record)
     return record
   }

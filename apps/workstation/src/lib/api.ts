@@ -4470,7 +4470,51 @@ export interface ChatMessageView {
   text: string
   at: string
   plan_action?: string
+  /** WP428：AI 按把握直接答的那一句——出处、把握、点没点过「这句不该直接答」。 */
+  auto_answer?: { score: number; sources: { kind: string; label: string }[]; flagged: boolean }
 }
+
+/** WP428（决策 1244 改）：一类能交给 AI 全自动的事，在这条岗位上的样子。 */
+export interface AutopilotScopeView {
+  scope_id: string
+  title: string
+  grants: string
+  keeps: string
+  on: boolean
+  since?: string
+  eligible: boolean
+  streak: number
+  needed: number
+  why: string
+}
+
+export const getAutopilot = (assignment?: string): Promise<AutopilotScopeView[]> =>
+  api('/v1/autopilot', withAssignment(assignment))
+
+export const setAutopilot = (
+  scope_id: string,
+  on: boolean,
+  assignment?: string,
+): Promise<AutopilotScopeView> =>
+  api(`/v1/autopilot/${encodeURIComponent(scope_id)}`, {
+    method: 'PUT',
+    body: { on },
+    ...withAssignment(assignment),
+  })
+
+/** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
+export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
+
+/** WP428：「这句不该直接答」——记进学习回路，同类以后先转人。 */
+export const flagChatAutoAnswer = (
+  session_id: string,
+  message_id: string,
+  assignment?: string,
+): Promise<{ learned: boolean }> =>
+  api(
+    `/v1/chat/sessions/${encodeURIComponent(session_id)}/messages/${encodeURIComponent(message_id)}/not-direct`,
+    { method: 'POST', body: {}, ...withAssignment(assignment) },
+  )
 
 export interface ChatPlanView {
   action: string
@@ -4535,8 +4579,9 @@ export interface ChatWidgetSettingsView {
   accent?: string
   greeting?: string
   assist_wait_seconds?: number
-  /** WP417（决策 1232）：常见问题直接发（缺省关 = 每一句先出卡要人批）。 */
-  auto_send_faq?: boolean
+  /** WP428（决策 1246 改）：按把握直接答（没有这一格 = 开；只有关了才是 false）。 */
+  auto_answer?: boolean
+  auto_answer_strictness?: ChatAutoAnswerStrictnessView
   updated_at?: string
 }
 
@@ -4549,7 +4594,8 @@ export const setChatWidgetSettings = (
     accent?: string
     greeting?: string
     assist_wait_seconds?: number
-    auto_send_faq?: boolean
+    auto_answer?: boolean
+    auto_answer_strictness?: ChatAutoAnswerStrictnessView
   },
   assignment?: string,
 ): Promise<ChatWidgetSettingsView> =>

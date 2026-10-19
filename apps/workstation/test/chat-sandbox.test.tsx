@@ -176,7 +176,7 @@ describe('聊天沙盒', () => {
     await waitFor(() => {
       expect(screen.getByTestId('chat-plan-why')).not.toBeNull()
     })
-    expect(screen.getByTestId('chat-plan-why').dataset.hint).toContain('低风险')
+    expect(screen.getByTestId('chat-plan-why').dataset.hint).toContain('有出处')
     // WP124（修订第 1 条）：接管开关拆掉了，沙盒页只剩教 AI——守卫测试
     // test/no-direct-reply.test.ts 钉住「对客直发入口数 = 0」。
   })

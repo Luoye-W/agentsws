@@ -41,6 +41,11 @@ export interface KolToolsOptions {
    * 读不到回 `undefined`（照旧不带关键词）。
    */
   brandQuery?(): string | undefined
+  /**
+   * WP428（决策 1244 改）：这条岗位开没开「全自动」（够条件后人点了才开）。开着时 AI 可以把合作推进到
+   * 「谈成 / 已寄样」；花钱的（报价、寄样成本、付款）照旧出卡、受额度管。不给 = 没开。
+   */
+  autopilot?(actor: KolActor): boolean
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
@@ -509,8 +514,11 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         /*
          * WP416（自查 kol A「advance_collaboration」）：「谈成」「已寄样」不许 AI 直接写库——
          * 谈成要人点头（议价 / 建合作那张卡），已寄样要有寄样记录（寄样那一步，有成本还要出花钱卡）。
+         * WP428（决策 1244 改）：这条岗位开了全自动（最近 N 张同类卡都原样批了、出过建议卡、人点了开）
+         * 才放行这两步；花钱的仍走卡、受额度管。
          */
-        if (stage === 'agreed' || stage === 'sample_sent') {
+        const auto = options.autopilot?.(actor) === true
+        if ((stage === 'agreed' || stage === 'sample_sent') && !auto) {
           return {
             status: 'blocked',
             reason:
@@ -521,9 +529,20 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         }
         try {
           const collab = await port.advanceCollaboration(actor, id, { stage })
+          const byAutopilot = auto && (stage === 'agreed' || stage === 'sample_sent')
           return {
             status: 'ok',
-            data: { collaboration_id: id, stage: collab.stage },
+            data: {
+              collaboration_id: id,
+              stage: collab.stage,
+              // WP428：全自动推的这一步，回执里照实说（花钱的另走卡）
+              ...(byAutopilot
+                ? {
+                    autopilot: true,
+                    note: '全自动：已推进。花钱的（报价、寄样成本、付款）照旧出卡、受额度管。',
+                  }
+                : {}),
+            },
             provenance: [{ type: 'collaboration', id }],
           }
         } catch (e) {

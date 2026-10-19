@@ -121,6 +121,7 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
+import { chatAnswerStubScript } from '@agentsws/support-core'
 import { deepseekThinkingOf } from './deepseek-thinking.js'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
 import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
@@ -2360,7 +2361,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       const provider = buildProvider(backup)
       if (provider !== undefined) providers.push(provider)
     }
-    if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
+    if (providers.length === 0)
+      providers.push(stubProvider({ seed: 7, scripts: [chatAnswerStubScript] }))
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
     gateway.reconfigure({
       providers,

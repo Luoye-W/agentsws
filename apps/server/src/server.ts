@@ -245,7 +245,11 @@ import {
   scheduleRulesFor,
 } from '@agentsws/social-core'
 import type { ToolExecutor } from '@agentsws/stand-ins'
-import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
+import {
+  chatAnswerStubScript,
+  detectAnsweredBoundaries,
+  SUPPORT_BOUNDARIES,
+} from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
@@ -309,6 +313,7 @@ import { createAssistant } from './assistant.js'
 import { createAssistantNotes, isAssistantNotesCard } from './assistant-notes.js'
 import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
 import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
+import { createAutopilot, isAutopilotCard, KOL_AUTOPILOT_SCOPE } from './autopilot.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
@@ -2485,7 +2490,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7 })],
+      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -3301,6 +3306,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
+  /*
+   * WP428（决策 1244 改）：够条件 → 建议开全自动（通用积木）。历史读这张总线里的账本卡，
+   * 建议卡也从这条总线出；每张卡定了之后在 `seoDecidedHook` 里喊它一声。
+   */
+  const autopilot = createAutopilot({
+    clock,
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    listChangeCards: (ws) =>
+      txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'staged_change' }),
+    createCard: (input) => approvals.create(input),
+    appendEvent: (e) => {
+      appendEvent(e)
+    },
+  })
   // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——WP357（决策 902）起点「就这样」即生效，可改可删可撤销
   const assistantNotes = createAssistantNotes({
     clock,
@@ -6875,6 +6894,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               now: () => clock.now(),
               // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
               brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
+              // WP428（决策 1244 改）：这条岗位开了全自动，AI 才能把合作推进到「谈成 / 已寄样」
+              autopilot: (actor) =>
+                autopilot.isOn(actor.workspace_id, actor.assignment_id, KOL_AUTOPILOT_SCOPE),
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -8217,11 +8239,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ranges: config.ranges,
           },
         })
-        return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          statement: h.statement_redacted,
+          layer: h.layer,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        }))
       },
       position: () => positionFor(ws, LIVE_CHAT_DUTIES),
-      // WP417（决策 1232）：缺省每一句先出卡要人批；商家在聊天窗设置里手动开「常见问题直接发」才直接发
-      autoSendFaq: () => lateWidget.current?.config().auto_send_faq === true,
+      // WP428（决策 1246 改）：缺省按置信度直接答（适中档）；商家在聊天窗设置里可关、可调严松
+      autoAnswer: () => {
+        const config = lateWidget.current?.config()
+        return {
+          on: config?.auto_answer !== false,
+          ...(config?.auto_answer_strictness === undefined
+            ? {}
+            : { strictness: config.auto_answer_strictness }),
+        }
+      },
       // WP417（自查 C10）：访客报了订单号 → 只读查这一单（与运行时同一个记录源）
       lookupOrder: async (order_ref) => {
         const res = await records.executeTool?.({
@@ -9918,6 +9953,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP428：全自动——建议卡点了 → 开 / 记下先不开；同类卡定了 → 看够不够条件、出没出事
+    await autopilot.afterDecided(item).catch(() => undefined)
+    if (isAutopilotCard(item)) return
     // WP350：助理扇出的「要记的 N 条」确认卡被点了 → 这一批生效 / 作废
     if (isAssistantNotesCard(item)) return assistantNotes.onDecided(item)
     // WP322：「按问答导入」定规矩卡 / ③ 的整批卡被点了 → 一行一张知识卡（或整批生效 / 作废）
@@ -12465,13 +12503,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return found === undefined ? undefined : chatView(found)
       },
       messages: async (session_id, limit) =>
-        (await lane.messages(session_id, limit)).map((m) => ({
-          id: m.id,
-          role: m.role,
-          text: m.text,
-          at: m.at,
-          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
-        })),
+        (await lane.messages(session_id, limit)).map((m) => {
+          // WP428：AI 直接答的那一句带上出处与把握（对话记录里标「AI 直接答 · 出处」）
+          const auto = m.role === 'agent' ? lane.autoAnswerOf(m.id) : undefined
+          return {
+            id: m.id,
+            role: m.role,
+            text: m.text,
+            at: m.at,
+            ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
+            ...(auto === undefined ? {} : { auto_answer: auto }),
+          }
+        }),
+      flagAutoAnswer: (input) =>
+        lane.flagAutoAnswer({
+          session_id: input.session_id,
+          message_id: input.message_id,
+          by: input.by as PersonId,
+        }),
       send: async (input) => chatTurnView(await lane.receive(input)),
       // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
       // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。
@@ -15167,6 +15216,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     personas: personaPort,
     // WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）
     roleRules: roleRules.port,
+    // WP428（决策 1244 改）：全自动——够条件 → 建议开、人点了才开、随时能关
+    autopilot: {
+      status: (actor) => autopilot.status(actor.workspace_id, actor.assignment_id, actor.role_id),
+      set: (actor, scope_id, on) =>
+        autopilot.set({
+          workspace_id: actor.workspace_id,
+          assignment_id: actor.assignment_id,
+          role_id: actor.role_id,
+          scope_id,
+          on,
+          by: actor.person_id,
+        }),
+    },
     // WP323：发出记录与记录去处（按请求人所在品牌）
     outbound: createOutboundPort(outboundLog),
     // WP284（docs/95 §5）：③ 里「以后都这样」那张卡发给老板（与改职责规矩同一条路：品牌所有者），① ② 本人

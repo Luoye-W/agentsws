@@ -33,7 +33,10 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { DEFAULT_CHAT_WIDGET_CONFIG } from '@agentsws/contracts'
-import { normalizeAssistWaitSeconds } from '@agentsws/support-core'
+import {
+  normalizeAssistWaitSeconds,
+  normalizeChatAutoAnswerStrictness,
+} from '@agentsws/support-core'
 import type { ChatLane } from './chat.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -132,7 +135,15 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
             : {
                 assist_wait_seconds: normalizeAssistWaitSeconds(parsed.config.assist_wait_seconds),
               }),
-          ...(parsed.config?.auto_send_faq === true ? { auto_send_faq: true } : {}),
+          // WP428：直接答缺省开——只记「关了」与档位
+          ...(parsed.config?.auto_answer === false ? { auto_answer: false } : {}),
+          ...(parsed.config?.auto_answer_strictness === undefined
+            ? {}
+            : {
+                auto_answer_strictness: normalizeChatAutoAnswerStrictness(
+                  parsed.config.auto_answer_strictness,
+                ),
+              }),
         },
         ...(parsed.updated_at === undefined ? {} : { updated_at: parsed.updated_at }),
       }
@@ -214,10 +225,17 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
               ? {}
               : { assist_wait_seconds: state.config.assist_wait_seconds }
             : { assist_wait_seconds: normalizeAssistWaitSeconds(input.assist_wait_seconds) }),
-          // WP417（决策 1232）：没带这一格 = 保持原样（老界面只改外观时不能把它悄悄关掉 / 打开）
-          ...((input.auto_send_faq ?? state.config.auto_send_faq) === true
-            ? { auto_send_faq: true }
+          // WP428（决策 1246 改）：没带这一格 = 保持原样（只改外观时不能把直接答悄悄关掉 / 打开）
+          ...((input.auto_answer ?? state.config.auto_answer) === false
+            ? { auto_answer: false }
             : {}),
+          ...((input.auto_answer_strictness ?? state.config.auto_answer_strictness) === undefined
+            ? {}
+            : {
+                auto_answer_strictness: normalizeChatAutoAnswerStrictness(
+                  input.auto_answer_strictness ?? state.config.auto_answer_strictness,
+                ),
+              }),
         },
         updated_at: clock.now(),
       }
