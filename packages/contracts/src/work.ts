@@ -204,6 +204,11 @@ export interface MatterRunDigest {
   outcome: 'completed' | 'stopped' | 'failed'
   /** 最多 40 步；多的不列。 */
   steps: MatterRunStep[]
+  /**
+   * WP423：这次是**预算到了**停下的（哪一项）——界面在这一行写人话原因（「查的东西太多，这一轮先停在这里」）、
+   * 在收尾那段话下面出「接着做」。没有 = 不是预算停的（老事件也没有）。
+   */
+  budget?: 'max_tokens' | 'max_tool_calls' | 'max_seconds' | 'max_cost_base' | 'max_turns'
 }
 
 /**

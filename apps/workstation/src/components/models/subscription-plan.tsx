@@ -19,7 +19,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Loader2, LogOut, TriangleAlert, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { StatusIcons } from '@/components/design'
 import { Button } from '@/components/ui/button'
@@ -35,14 +35,46 @@ import {
 import { useApp } from '@/lib/app-context'
 
 /** 登录途中每隔这么久问一次服务端"好了没"。 */
+/**
+ * WP424（Luoye 10-19）：与「DeepSeek 官方」同一级的订阅登录卡。登录走的是设置页那条订阅登录
+ * （`SubscriptionPlan`，scripts/dev-subscription-login.md）。
+ *
+ * `enabled: false` 的是**留好的口子**：Claude 订阅登录上了还不能拿来跑活（服务端只把 ChatGPT 订阅
+ * 当成模型来源），接通之前不显示——不放一个点了也用不上的入口。
+ */
+export const AI_SUBSCRIPTION_CARDS: readonly {
+  provider: SubscriptionProviderId
+  label: string
+  enabled: boolean
+}[] = [
+  { provider: 'openai-codex', label: 'onboarding.ai.sub.chatgpt', enabled: true },
+  { provider: 'anthropic', label: 'onboarding.ai.sub.claude', enabled: false },
+]
+
+/**
+ * 这张订阅登录模板现在显示不显示：没登记在上表里的照旧显示；登记了但 `enabled: false`（Claude 订阅）的不显示——
+ * 首次设置第 ① 步与设置页的模型面板同一个口径（int/1022：WP421 曾在设置页写「暂不可用」，按 WP424 的做法改成不显示）。
+ */
+export function subscriptionTemplateShown(tpl: {
+  auth?: string
+  subscription_provider?: string
+}): boolean {
+  if (tpl.auth !== 'subscription') return true
+  const card = AI_SUBSCRIPTION_CARDS.find((c) => c.provider === tpl.subscription_provider)
+  return card === undefined || card.enabled
+}
+
 const POLL_MS = 2000
 
 export function SubscriptionPlan({
   provider,
   assignment,
+  onReady,
 }: {
   provider: SubscriptionProviderId
   assignment?: string
+  /** WP424：首次设置第 ① 步——登上了就算接上 AI（向导据此亮「下一步」）。 */
+  onReady?: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -104,6 +136,10 @@ export function SubscriptionPlan({
   })
 
   const data = state.data
+  const ready = data?.available === true && data.signed_in
+  useEffect(() => {
+    if (ready) onReady?.()
+  }, [ready, onReady])
   if (data === undefined) {
     return (
       <p className="mt-2 text-xs text-muted-foreground" data-testid="subscription-loading">

@@ -133,6 +133,8 @@ export interface AdsLedgerEntryView {
   account_id: string
   title: string
   sentence?: string
+  /** WP420（自查 A17）：一行人话「老客再营销 日预算 300 → 330」；面板后面接状态（等插件 / 做完）。 */
+  line?: string
   state: AdsLedgerState
   /** 止损（L3 自动）。 */
   stop_loss?: boolean

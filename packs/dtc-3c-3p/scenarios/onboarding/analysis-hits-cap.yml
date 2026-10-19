@@ -27,7 +27,7 @@ expected:
   onboarding:
     who: p_wang
     connected: true
-    signup_credits: 10
+    signup_credits: 5
     capped: true
     # 停是停了，但品牌名已经读出来了——断言里 `capped` 那一条会一并检查"交了没有"
     analysed: true

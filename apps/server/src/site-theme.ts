@@ -75,6 +75,7 @@ import type { PlatformCliProbe } from './platform-cli.js'
 import {
   extractThemePackage,
   PREMIUM_NOT_LINKED_TEXT,
+  PREMIUM_OFFLINE_TEXT,
   PREMIUM_SOON_TEXT,
   type PremiumThemeClient,
   PremiumThemeError,
@@ -414,6 +415,8 @@ export interface SiteThemeAssembly {
   /** WP304：选主题卡 / 买高级主题卡被决定了 → 起底（下载 / 买）、记时间线、按原话接着做。别的卡什么都不做。 */
   onThemeCardDecided?(item: ApprovalItem): Promise<void>
   list(): Promise<ThemeSummary[]>
+  /** WP418（自查 A17）：最近一次列出来的那一份（同步读，不跑 CLI；没列过 = 空）。 */
+  lastListed?(): ThemeSummary[]
   pull(input: { theme_id?: string }): Promise<{ files: number }>
   check(): Promise<ThemeCheckResult>
   files(dir?: string): Promise<{ files: string[]; truncated: boolean }>
@@ -970,12 +973,16 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   const listWithPreview = async (shop: string, t: ShopifyTheme): Promise<ThemeSummary[]> => {
     const rows = await wrap(() => t.list(shop))
     const pushes = stateOf(shop).pushes
-    return rows.map((row) => {
+    const out = rows.map((row) => {
       if (row.preview_url !== undefined) return row
       const pushed = pushes.find((p) => p.theme_id === row.id)?.preview_url
       return { ...row, preview_url: pushed ?? `https://${shop}/?preview_theme_id=${row.id}` }
     })
+    lastListed = out
+    return out
   }
+  /** WP418（自查 A17）：最近一次列出来的主题（面板「主题副本与预览」读它；没列过 = 空）。 */
+  let lastListed: ThemeSummary[] = []
 
   /** 往这次运行的事项时间线记一句（没有事项 / 事项没了就算了，事件里照样有）。 */
   const noteRun = (request: RunRequest | undefined, text: string): void => {
@@ -1441,6 +1448,10 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     } catch (err) {
       if (err instanceof PremiumThemeError && err.code === 'not_linked')
         return { status: 'needs_account' }
+      // WP418（自查 A7）：登录了但少一项权限 / 一时连不上——各说各的，不都说成「即将开放」「去登录」
+      if (err instanceof PremiumThemeError && err.code === 'missing_scope')
+        return { status: 'needs_scope' }
+      if (err instanceof PremiumThemeError && err.code === 'offline') return { status: 'offline' }
       return { status: 'soon' }
     }
   }
@@ -1753,7 +1764,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
             return
           }
           if (prem.status !== 'owned') {
-            note(prem.status === 'needs_account' ? PREMIUM_NOT_LINKED_TEXT : PREMIUM_SOON_TEXT)
+            note(
+              prem.status === 'needs_account'
+                ? PREMIUM_NOT_LINKED_TEXT
+                : prem.status === 'needs_scope'
+                  ? '工坊账号令牌少了「店铺」那一项权限：重新登录一次工坊账号，再选一次。'
+                  : prem.status === 'offline'
+                    ? PREMIUM_OFFLINE_TEXT
+                    : PREMIUM_SOON_TEXT,
+            )
             return
           }
           await initBase({ source: 'premium', replace, matter_id })
@@ -1958,6 +1977,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     initFromBase: initBase,
 
+    lastListed: () => lastListed,
     async list() {
       const { shop, spec } = await need('remote')
       return listWithPreview(shop, theme(spec))
@@ -2148,6 +2168,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       const live = themeLanes(themes as ThemeSummaryLike[]).published
       const state = stateOf(shop)
       const record = state.pushes.find((p) => p.theme_id === theme_id)
+      /*
+       * WP418（自查 A5）：只发**工坊推过预览**的那几份。别的未发布主题（店里本来就有的、太老改不了的）
+       * 没在工坊里看过预览，直接发上线就是盲发——这是建站岗位唯一会直接改线上店面的动作。
+       */
+      if (record === undefined)
+        return {
+          status: 'blocked',
+          message: `「${target.name}」不是在工坊里推的预览，没看过不能直接发上线。要用它，先让我在它上面起底、推一份预览给你看。`,
+        }
       const files = record?.changed_files ?? []
       const preview = record?.preview_url ?? target.preview_url
       const assignment_id = request.actor.assignment_id
@@ -2277,8 +2306,49 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
               retryable: false,
             },
           }
-        if (target.role !== 'main' && target.role !== 'live')
-          await wrap(() => t.publish({ shop, theme_id }))
+        const isLive = (row: { role?: string }): boolean =>
+          row.role === 'main' || row.role === 'live'
+        // WP418（自查 A5）：卡上写的「原来」与店里现在的线上主题对不上（有人在后台换过）→ 不发、照实说
+        const before =
+          change.before !== null && typeof change.before === 'object'
+            ? (change.before as Record<string, unknown>)
+            : {}
+        const liveNow = rows.find(isLive)
+        if (
+          !isLive(target) &&
+          typeof before.theme_id === 'string' &&
+          before.theme_id !== '' &&
+          liveNow !== undefined &&
+          liveNow.id !== before.theme_id
+        )
+          return {
+            status: 'failed',
+            error: {
+              message: `卡出来之后线上主题被换过（现在是「${liveNow.name}」，卡上写的是「${String(before.theme_name ?? before.theme_id)}」），这次没发。让我重新出一张卡。`,
+              retryable: false,
+            },
+          }
+        if (!isLive(target)) await wrap(() => t.publish({ shop, theme_id }))
+        // 读回：再列一次，这一份真成了线上主题才算好了
+        const after = await wrap(() => t.list(shop)).catch(() => undefined)
+        const confirmed = after?.find((row) => row.id === theme_id)
+        if (confirmed === undefined || !isLive(confirmed)) {
+          emit('site_theme.publish_unverified', {
+            workspace_id: ws,
+            theme_id,
+            change_id: change.id,
+          })
+          return {
+            status: 'unknown',
+            execution_id: `theme_publish_${change.id}`,
+            outcome_ref: { type: 'theme', id: theme_id },
+            error: {
+              message:
+                '发布命令跑完了，但读回来它还不是线上主题——去后台「在线商店 → 主题」看一眼。',
+              retryable: false,
+            },
+          }
+        }
         emit('site_theme.published', { workspace_id: ws, theme_id, change_id: change.id })
         return {
           status: 'ok',

@@ -5,6 +5,19 @@
  * 由 `apps/server` 用具体模块装配。本包不 import 任何实现包，只依赖契约类型。
  */
 export { bearerToken, collectRoutes, createGateway, type Gateway, OPENAPI_PATH } from './app.js'
+// WP414：同类卡跟着前一个决定（「同类」由宿主注入 `similarCards`）
+export {
+  type CardFollowResult,
+  FOLLOW_KINDS,
+  FOLLOW_LIMIT,
+  type FollowBasis,
+  type FollowedCard,
+  followDecision,
+  followReason,
+  givenReason,
+  type ReasonJudgeInput,
+  type SimilarCard,
+} from './card-follow.js'
 export {
   type CloudAuth,
   type CloudEnv,
@@ -141,6 +154,7 @@ export type {
   AdsAccountRow,
   AdsCampaignRow,
   AdsChangesView,
+  AdsOverviewView,
   AdsPort,
   AdsStagedView,
 } from './routes/ads.js'
@@ -506,6 +520,7 @@ export type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,
   KolRevealPrice,
@@ -539,6 +554,7 @@ export type {
   DeepSeekQuotaView,
   DeepSeekWalletView,
   DiscoverModelsInput,
+  ModelAiSourceView,
   ModelDefaultsView,
   ModelImageUsing,
   ModelImageView,

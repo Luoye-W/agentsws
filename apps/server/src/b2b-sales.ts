@@ -46,6 +46,7 @@ import {
   planHandover,
   quoteBreachText,
   renderQuotePdf,
+  reviewInquiryReply,
   SAMPLE_STATUS_ZH,
   sampleReminders,
   sampleShippedNotice,
@@ -53,6 +54,7 @@ import {
 } from '@agentsws/b2b-core'
 import type {
   ApprovalBus,
+  ApprovalItem,
   AssignmentId,
   B2bAccount,
   B2bContact,
@@ -230,6 +232,21 @@ export interface B2bSalesAssembly {
   ): Promise<{ handover_id?: string; approval_item_id?: string }>
   /** 面板「业务」四块里这一单补的几格（询盘分级、样品超期）。 */
   deckPatch(now: string, base: B2bDeckData): B2bDeckData
+  /**
+   * WP421（自查 general 2.3）：这一单的卡被驳回了——回写（询盘的「首回已起草」摘掉、交接单标「不交」），
+   * 面板不再永远挂「待审」。不是这一单的卡什么都不做。
+   */
+  onRejected(item: ApprovalItem): void
+  /**
+   * WP421：卡上点了「改一下」→ 按指导重写这封信，出一张新卡（有模型时模型改、过一遍数字与泄露自查；
+   * 没模型 / 改出来不合规就把原稿原样再出一张，照实说「请直接在卡上改」——卡不丢）。
+   * 不是这一单的回信卡回 `undefined`。
+   */
+  redraft(
+    item: ApprovalItem,
+    text: string,
+    by: PersonId,
+  ): Promise<{ approval_item_id?: string; message: string } | undefined>
 }
 
 const DAY = 86_400_000
@@ -1492,6 +1509,118 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
   void quoteBreachText
   void maskAddress
 
+  /** 账本卡上那一份改动（`staged_change` 的 payload）。 */
+  const changeOf = (
+    item: ApprovalItem,
+  ): { kind: string; change_id: string; after: Record<string, unknown> } | undefined => {
+    const p = (item.payload ?? {}) as Record<string, unknown>
+    if (item.kind !== 'staged_change' || typeof p.kind !== 'string') return undefined
+    return {
+      kind: p.kind,
+      change_id: String(p.change_id ?? ''),
+      after:
+        p.after !== null && typeof p.after === 'object' ? (p.after as Record<string, unknown>) : {},
+    }
+  }
+
+  const onRejected = (item: ApprovalItem): void => {
+    const c = changeOf(item)
+    if (c === undefined || item.workspace_id !== workspace_id) return
+    if (c.kind === 'b2b_reply') {
+      const id = str(c.after.inquiry_id)
+      const inquiry = id === undefined ? undefined : store.inquiry(id)
+      if (inquiry !== undefined && inquiry.reply_approval_id === item.id) {
+        const { reply_approval_id: _a, reply_change_id: _c, ...rest } = inquiry
+        store.saveInquiry(rest)
+      }
+      return
+    }
+    if (c.kind === 'b2b_account_transfer') {
+      const h = store.handovers().find((x) => x.change_id === c.change_id)
+      if (h !== undefined && h.status === 'pending')
+        store.saveHandover({ ...h, status: 'rejected' })
+    }
+  }
+
+  const REWRITE_PROMPT = (input: {
+    subject: string
+    body: string
+    instruction: string
+    facts: readonly B2bFactRef[]
+  }): string =>
+    [
+      '下面是一封要发给海外客户的英文邮件草稿。按这条指导改一遍，只改指导说到的地方，其余照原文：',
+      `指导：${input.instruction}`,
+      '规矩：数字（价格、MOQ、交期、认证）只能用下面事实卡里有的；事实卡里没有的就写「we will confirm」，不要编。只回改好的正文，不要解释。',
+      `事实卡：\n${input.facts.map((f) => `- [${f.id}] ${f.statement}`).join('\n') || '（没有）'}`,
+      `主题：${input.subject}`,
+      `正文：\n${input.body}`,
+    ].join('\n\n')
+
+  const redraft: B2bSalesAssembly['redraft'] = async (item, text, by) => {
+    const c = changeOf(item)
+    if (c === undefined || c.kind !== 'b2b_reply' || item.workspace_id !== workspace_id)
+      return undefined
+    const assignment_id = String(item.proposer.assignment_id ?? '')
+    const holder: B2bHolder = { person_id: by, assignment_id, role_id: item.role_id }
+    const subject = str(c.after.subject) ?? ''
+    const body = str(c.after.body) ?? ''
+    const purpose = str(c.after.purpose)
+    const facts = await activeFacts()
+    const model = options.drafter?.({
+      assignment_id,
+      role_id: item.role_id,
+      run_id: `run_b2b_redraft_${nextId('d')}`,
+    })
+    let next = body
+    let why: string | undefined
+    if (model === undefined) why = '没接 AI 模型'
+    else {
+      try {
+        const out = (
+          await model({ prompt: REWRITE_PROMPT({ subject, body, instruction: text, facts }) })
+        ).text.trim()
+        const review = reviewInquiryReply(out, facts, options.companyInstructions?.() ?? [], 1)
+        const problems = review.problems.filter(
+          (p) => purpose === 'inquiry_first_reply' || p !== '首回里报了价',
+        )
+        if (out === '') why = '模型没写出东西'
+        else if (problems.length > 0) why = problems.join('；')
+        else next = out
+      } catch {
+        why = '模型这次没写成'
+      }
+    }
+    const outcome = await stageCard({
+      holder,
+      action: B2B_REPLY_ACTION,
+      kind: 'b2b_reply',
+      target: item.subject.object,
+      after: { ...c.after, body: next, redraft_of: item.id, instruction: text },
+      title: `${why === undefined ? '（按你说的改过）' : '（请直接改）'}${item.title.replace(/^（[^）]*）/u, '')}`,
+      summary:
+        why === undefined
+          ? `按你说的「${text.slice(0, 60)}」改过了，再看一眼。`
+          : `没能按你说的自动改（${why}）：原稿照旧，请直接在卡上改正文再发。你说的是「${text.slice(0, 60)}」。`,
+    })
+    if (!outcome.ok) return { message: `没出成新卡：${outcome.message}` }
+    const id = str(c.after.inquiry_id)
+    const inquiry = id === undefined ? undefined : store.inquiry(id)
+    if (inquiry !== undefined && purpose === 'inquiry_first_reply')
+      store.saveInquiry({
+        ...inquiry,
+        reply_change_id: outcome.change.id,
+        reply_approval_id: outcome.approval.id,
+      })
+    return {
+      approval_item_id: outcome.approval.id,
+      message:
+        why === undefined
+          ? '按你说的改好了，新卡在这里。'
+          : `没能自动改（${why}），原稿再出了一张，请直接改。`,
+    }
+  }
+
   return {
     port,
     onInquiry,
@@ -1501,6 +1630,8 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
     sweep,
     onMemberLeft,
     deckPatch,
+    onRejected,
+    redraft,
   }
 }
 

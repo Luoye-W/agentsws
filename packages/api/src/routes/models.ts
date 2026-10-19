@@ -594,6 +594,21 @@ export interface ModelDefaultsView {
   org_default?: boolean
   /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
   org_default_brand?: string
+  /** WP425：「AI 来源」那一处（主用 / 备用 / 开关）。老服务端没有这一格。 */
+  ai_source?: ModelAiSourceView
+}
+
+/**
+ * WP425：AI 来源顺序。主用是自己的（订阅 / API key / DeepSeek 账号，可多个），备用是工坊积分（登录了工坊账号才有）；
+ * 开关「自己的用不了时用工坊积分接着做」登录了就默认开。与输入框 AI 钮同一份数据（同样的来源名与分组）。
+ */
+export interface ModelAiSourceView {
+  /** 主用：自己的那几条（按「已配的」次序）。 */
+  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  /** 备用：工坊积分。`available` = 登录了工坊账号；`model` = 切过去时用哪个模型。 */
+  backup: { available: boolean; label: string; model?: string }
+  /** 开关现在是不是开着（没登录工坊账号时一律 `false`）。 */
+  fallback_to_cloud: boolean
 }
 
 /** WP66（52 O3）：改"跟随公司默认"。 */
@@ -629,6 +644,8 @@ export interface SetModelDefaultsInput {
         assignment_daily_base?: number | undefined
       }
     | undefined
+  /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
+  fallback_to_cloud?: boolean | undefined
 }
 
 export interface ModelsActor {
@@ -845,6 +862,8 @@ const DefaultsBody = z.object({
    */
   by_purpose: z.partialRecord(PURPOSE, z.string().min(1).max(256)).optional(),
   // 决策 291（WP281）：老客户端还会带 `data_residency`——不列在这里，zod 默认把多余的键剥掉，不报错也不生效
+  // WP425：开关「自己的用不了时用工坊积分接着做」
+  fallback_to_cloud: z.boolean().optional(),
   budget: z
     .object({
       workspace_daily_base: z.number().min(0).max(1_000_000).optional(),

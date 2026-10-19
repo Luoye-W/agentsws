@@ -407,7 +407,73 @@ export interface SocialPost {
   metrics?: SocialPostMetrics
   /** 这份数字什么时候看到的（有 `metrics` 就必须有它）。 */
   metrics_observed_at?: Iso8601
+  /**
+   * WP419（决策 1231）：到点了、没有接官方接口（或接口发不了）——交给人在自己登录着的后台里发：插件侧边栏里
+   * 「打开发帖页」（能预填就预填文案）、人点发布，回来点「发好了」。同时开一条待办兜底（插件没装也看得到）。
+   * 有这一格的不再按到点重发。
+   */
+  handoff?: { at: Iso8601; owner?: string; todo_id?: string; reason?: string }
+  /** WP419：怎么发出去的：`api` 官方接口代发；`extension` 人在自己的后台里发（插件打开发帖页）。 */
+  published_via?: 'api' | 'extension'
+  /** WP419：发出去那一条的链接（人贴回来的；接口代发时由平台 id 拼）。 */
+  post_url?: string
+  /**
+   * WP419：发没发出去是怎么确认的——`link` 人贴回了那一条的链接；`self_report` 只有人说「发好了」，
+   * 工坊没读回确认（照实标，不当成已核实）。
+   */
+  readback?: 'link' | 'self_report'
 }
+
+/**
+ * WP419（决策 1231）：插件打开的发帖页。能预填正文的平台（X / Threads / LinkedIn）把正文放进地址；
+ * 别的打开发帖入口，人粘贴（侧边栏有「复制文案」）。主页链接（FB 主页）给了就用它。
+ * 只会是下面 {@link SOCIAL_COMPOSE_HOSTS} 里的站。
+ */
+export function socialComposeUrl(
+  channel: string,
+  body: string,
+  account_url?: string,
+): { url: string; prefilled: boolean } | undefined {
+  const text = encodeURIComponent(body.slice(0, 2800))
+  switch (channel) {
+    case 'x':
+      return { url: `https://x.com/intent/post?text=${text}`, prefilled: true }
+    case 'threads':
+      return { url: `https://www.threads.net/intent/post?text=${text}`, prefilled: true }
+    case 'linkedin':
+      return {
+        url: `https://www.linkedin.com/feed/?shareActive=true&text=${text}`,
+        prefilled: true,
+      }
+    case 'facebook':
+    case 'meta': {
+      const page =
+        account_url !== undefined && /^https:\/\/(www\.)?facebook\.com\//iu.test(account_url)
+          ? account_url
+          : 'https://www.facebook.com/'
+      return { url: page, prefilled: false }
+    }
+    case 'instagram':
+      return { url: 'https://www.instagram.com/', prefilled: false }
+    case 'tiktok':
+      return { url: 'https://www.tiktok.com/tiktokstudio/upload', prefilled: false }
+    case 'youtube':
+      return { url: 'https://studio.youtube.com/', prefilled: false }
+    default:
+      return undefined
+  }
+}
+
+/** WP419：插件「打开发帖页」只认这几家（`*.` 前缀认子域）。 */
+export const SOCIAL_COMPOSE_HOSTS: readonly string[] = [
+  'x.com',
+  '*.threads.net',
+  '*.linkedin.com',
+  '*.facebook.com',
+  '*.instagram.com',
+  '*.tiktok.com',
+  'studio.youtube.com',
+]
 
 /**
  * 一条帖子的表现。

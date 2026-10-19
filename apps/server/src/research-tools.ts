@@ -8,8 +8,16 @@
  * 顺序与停用来自设置（`reddit.read`），限速来自设置（默认保守）。两路都不行回 `status: 'ok'`
  * 加一句人话（「没取到，这不等于没人在聊」），不当错误抛——研究那一边要把它写进报告的「从哪取的」。
  *
+ * WP419：两路都不行时，**第三路借用户 Chrome 里的插件**（品牌号会话、只读、不入巡查库）现读一次；
+ * 三路都不行就照实说「读不了 Reddit，先装好并连上插件」，并叮嘱模型**不去第三方镜像 / 统计站凑数**。
+ *
  * 这一跳不往外写任何东西；正文是外部文本，由运行时围栏后再进模型上下文。
  */
+
+import type {
+  RedditReadRequest as PluginReadRequest,
+  RedditListingItem,
+} from '@agentsws/browser-action'
 import {
   DATA_CREDIT_WARN_RATIO,
   type DataCallResult,
@@ -23,6 +31,7 @@ import {
   coveringTimeWindow,
   createRedditReadRouter,
   type RedditHubPort,
+  type RedditItem,
   type RedditReadBrowser,
   type RedditReadLimiter,
   type RedditReadRequest,
@@ -53,6 +62,76 @@ export interface ResearchToolsOptions {
   priceOf?(capability: string): Promise<number | undefined>
   /** WP411：本地日期（`since` / `until` 写成 YYYY-MM-DD 时）按哪个时区算（分钟；不给 = UTC）。 */
   tzOffsetMinutes?(): number
+  /**
+   * WP419：第三路——借用户 Chrome 里的插件现读一次（Reddit 巡查那一份的 `readOnce`）。不给 = 没有这一路。
+   */
+  pluginRead?(
+    reads: PluginReadRequest[],
+  ): Promise<
+    | { ok: true; parts: { ok: boolean; items: RedditListingItem[]; message?: string }[] }
+    | { ok: false; why: string }
+  >
+}
+
+/** WP419：三路都读不了时给模型的那一句（照实说、不找第三方站凑）。 */
+export function redditUnreadableText(detail: string): string {
+  return (
+    `读不了 Reddit：${detail}。Reddit 拦服务器直读，**不要**去第三方镜像 / 统计站（redlib、subredditstats 之类）凑数——` +
+    '照实告诉用户这次没读到，并请他在 Chrome 里装好、连上「Agents 工坊助手」插件（用他自己的登录态读），装好后再读。'
+  )
+}
+
+/** WP419：路由要读的那一件 → 插件读法（搜帖子 / 读版 / 读一帖评论）。认不出回 `undefined`。 */
+export function pluginReadOf(req: RedditReadRequest): PluginReadRequest | undefined {
+  const i = req.input
+  const str = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined
+  const times = ['hour', 'day', 'week', 'month', 'year', 'all'] as const
+  const t = str(i.time_window)
+  // 不给时间档：和只读浏览器那一路一样按一个月
+  const time = times.find((x) => x === t) ?? 'month'
+  if (req.capability === 'social.reddit.search') {
+    const q = str(i.query)
+    if (q === undefined) return undefined
+    return {
+      key: 'adhoc:search',
+      kind: 'search',
+      query: q.slice(0, 200),
+      time,
+      max_pages: 1,
+    }
+  }
+  if (req.capability === 'social.reddit.posts') {
+    const sub = str(i.subreddit)?.replace(/^\/?r\//iu, '')
+    return sub === undefined
+      ? undefined
+      : { key: `adhoc:sub_new:${sub}`, kind: 'sub_new', subreddit: sub, max_pages: 1 }
+  }
+  const id = /\/comments\/([a-z0-9]+)/iu.exec(str(i.post_url) ?? '')?.[1]
+  return id === undefined
+    ? undefined
+    : { key: `adhoc:post:${id}`, kind: 'post_comments', post_id: id.toLowerCase(), max_pages: 1 }
+}
+
+/** 插件读回的一条 → 和别的路同一个样子。 */
+function itemOfListing(x: RedditListingItem): RedditItem | undefined {
+  if (x.kind === 'message' || x.url === undefined) return undefined
+  return {
+    kind: x.kind,
+    url: x.url,
+    id: x.name,
+    ...(x.title === undefined
+      ? x.link_title === undefined
+        ? {}
+        : { title: x.link_title }
+      : { title: x.title }),
+    text: x.text,
+    ...(x.subreddit === undefined ? {} : { subreddit: x.subreddit }),
+    ...(x.author === undefined ? {} : { author: x.author }),
+    created_at: new Date(x.created_utc * 1000).toISOString(),
+    ...(x.score === undefined ? {} : { score: x.score }),
+    ...(x.num_comments === undefined ? {} : { comments: x.num_comments }),
+  }
 }
 
 /**
@@ -232,7 +311,37 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
         }
       }
     }
-    const got = await router.read(req)
+    let got = await router.read(req)
+    // WP419：两路都不行 → 借插件现读一次；还不行就照实说、叮嘱别找第三方站
+    if (!got.ok) {
+      const plug = pluginReadOf(req)
+      const viaPlugin =
+        plug === undefined || options.pluginRead === undefined
+          ? { ok: false as const, why: '这台电脑上没有连着的「Agents 工坊助手」插件' }
+          : await options.pluginRead([plug]).catch((err: unknown) => ({
+              ok: false as const,
+              why: err instanceof Error ? err.message : String(err),
+            }))
+      const part = viaPlugin.ok ? viaPlugin.parts[0] : undefined
+      if (part?.ok === true) {
+        const limit =
+          typeof req.input.limit === 'number' ? req.input.limit : READ_REDDIT_DEFAULT_LIMIT
+        got = {
+          ok: true,
+          items: part.items.flatMap((x) => itemOfListing(x) ?? []).slice(0, limit),
+          record: {
+            ...got.record,
+            route: 'extension',
+            items: part.items.length,
+            attempts: [...got.record.attempts, { route: 'extension', outcome: 'ok' }],
+          },
+        }
+        options.onRecord?.(got.record)
+      } else {
+        const why = viaPlugin.ok ? (part?.message ?? '插件没读到') : viaPlugin.why
+        got = { ...got, message: redditUnreadableText(`${got.message}；插件：${why}`) }
+      }
+    }
     const used = budget === undefined ? before : addSpent(run, got.record.credits ?? 0)
     const notice =
       budget === undefined

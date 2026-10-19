@@ -69,10 +69,18 @@ afterPack: scripts/after-pack.mjs
 mac:
   category: public.app-category.productivity
   icon: build/icon.png
-  # 托盘常驻、不进 Dock（13 §5「无主窗口启动」）。
-  extendInfo:
-    LSUIElement: 1
+  # Luoye 10-19：要像普通 Mac 应用一样进程序坞（以前 LSUIElement 让它只蹲菜单栏，找不到）；
+  # 关窗不退出、菜单栏图标照旧在。
   identity: null
+  # WP424（决策 1281）：「应用程序」文件夹、程序坞、⌘Tab 里显示「Agents 工坊」。
+  # **只改显示名**：包还叫 agentsws.app（productName 不动），appId、userData（@agentsws/desktop）、
+  # Windows 安装目录、更新 feed 文件名都不动。做法是 macOS 的「本地化显示名」：
+  # LSHasLocalizedDisplayName + 各语言 InfoPlist.strings 里的 CFBundleDisplayName（afterPack 写，见
+  # writeMacDisplayName）。Info.plist 里的 CFBundleDisplayName 必须**等于包名 agentsws**——不等的话
+  # 系统当成「用户改过文件名」，就不显示本地化名（10-19 在本机用一份 Electron.app 实测过）。
+  extendInfo:
+    CFBundleDisplayName: agentsws
+    LSHasLocalizedDisplayName: true
   # WP218：架构不写在这里——写了的话 `--mac --arm64` 也会顺手打 x64（那台机器上没有 x64 的捆绑 Node，
   # afterPack 直接失败）。架构由命令行给：release.yml 里两台 mac 各打自己那一个。
   # zip 也要：electron-builder 只在有 zip 时才写 latest-mac.yml（mac 提示「有新版」读它），

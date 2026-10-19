@@ -317,7 +317,12 @@ export interface KolAutoAudit {
 }
 
 /** WP131：这个品牌的开关键。现在只有一个。 */
-export type KolSettingKey = 'auto_score'
+export type KolSettingKey =
+  | 'auto_score'
+  /** WP416：起草开发信那两格（「一句话介绍我们」「想聊的产品」）存过的值。 */
+  | 'outreach_defaults'
+  /** WP416：点过「不是同一个人」的合并建议（以前只记在内存里，重启后又冒出来）。 */
+  | 'merge_rejected'
 
 /** `setting` 表里的一行。 */
 export interface KolSettingRow {

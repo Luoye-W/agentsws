@@ -37,3 +37,10 @@ export const requestListingDesign = (
   input: { title: string; need: string },
 ): Promise<{ request: { id: string } }> =>
   api('/v1/design/requests', { method: 'POST', assignment, body: input })
+
+/** WP420（自查 B15）：改自家 ASIN（ASIN / 商品链接，逗号或换行隔开；空 = 清掉）。只动本机。 */
+export const setAmazonOwnAsins = (
+  assignment: string,
+  value: string,
+): Promise<{ ok: boolean; message?: string }> =>
+  api('/v1/amazon-listing/own', { method: 'PUT', assignment, body: { value } })

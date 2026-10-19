@@ -60,6 +60,13 @@ export type ExtensionMessage =
   | { type: 'panel-refill'; job: string }
   /** 打开设置页（侧边栏里「设置」那一下）。 */
   | { type: 'open-options' }
+  /** WP419：在工坊里打开一张卡（侧边栏「去定」那一下；只认 `/cards/<id>`，后台拼本机地址）。 */
+  | { type: 'open-workshop-card'; id: string }
+  /** WP419（决策 1231）：打开社媒发帖页（只认那几家的站，后台再判一次）。 */
+  | { type: 'open-social-compose'; url: string }
+  /** WP419：交给你发的那一条：发好了（可带链接）/ 不发了。 */
+  | { type: 'panel-post-done'; id: string; link?: string }
+  | { type: 'panel-post-skip'; id: string; reason?: string }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

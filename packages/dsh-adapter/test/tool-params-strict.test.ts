@@ -14,6 +14,7 @@ import {
   SHOP_TOOL_DEF_BY_NAME,
   SITE_HEALTH_TOOL_DEF_BY_NAME,
   SKILL_TOOL_DEF_BY_NAME,
+  SOCIAL_WORK_TOOL_DEF_BY_NAME,
   THEME_TOOL_DEF_BY_NAME,
   WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
@@ -36,6 +37,8 @@ const ALL = [
   ...SITE_HEALTH_TOOL_DEF_BY_NAME.keys(),
   // WP390：工坊服务两个工具（所有职责都有）
   ...WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.keys(),
+  // WP419：社媒发帖 / Reddit 起草出卡
+  ...SOCIAL_WORK_TOOL_DEF_BY_NAME.keys(),
   'get_order',
 ]
 

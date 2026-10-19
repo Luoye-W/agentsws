@@ -48,6 +48,18 @@ export function LayerMemory({
   if (memory.error !== null || memory.data === undefined) return null
   const view = memory.data
 
+  // WP416（自查 kol U12）：这一层是空的——只说一句，不再「总述 + 还没攒下东西」两遍，也不出点了没用的「提到这一层」
+  if (view.entries.length === 0)
+    return (
+      <p
+        className="text-sm text-muted-foreground"
+        data-testid="layer-memory-empty"
+        data-tier={tier}
+      >
+        {t('memory.empty')}
+      </p>
+    )
+
   return (
     <div className="flex flex-col gap-3" data-testid="layer-memory" data-tier={tier}>
       <p className="text-sm text-muted-foreground">{view.summary}</p>

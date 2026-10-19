@@ -145,6 +145,10 @@ function harness(
      * 说得清"找到 / 找不到"的收信端。
      */
     makeSource?: (account: MailAccount) => MailSource
+    /** WP417：回信发出去了（首响 SLA 停表）。 */
+    noteOutbound?: (thread_id: string) => void
+    /** WP417：入站挂谁名下（收路由算出来的职责）。 */
+    position?: (role_id?: string) => { person_id: string; assignment_id: string; role_id: string }
   } = {},
 ): Harness {
   const clock = over.clock ?? baseClock
@@ -171,8 +175,14 @@ function harness(
     accounts: () => accounts,
     credentials: { password: () => PASS },
     work,
-    position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
+    position: (over.position ??
+      (() => ({
+        person_id: 'p_owner',
+        assignment_id: 'asg_1',
+        role_id: 'dtc.support',
+      }))) as never,
     ...(over.resolveActor === undefined ? {} : { resolveActor: over.resolveActor }),
+    ...(over.noteOutbound === undefined ? {} : { noteOutbound: over.noteOutbound }),
     ...(over.batch === undefined ? {} : { batch: over.batch }),
     startRun: (input) => {
       runs.push({ matter: input.matter, brief: input.brief })
@@ -280,6 +290,27 @@ describe('IMAP 轮询 → 入站管线 → 岗位事项 → 起 Run（39 待办 
     expect(matters[0]?.context.pinned).toEqual([first?.context.pinned[0], contact])
   })
 
+  it('WP417（自查 A15）：来信起的运行挂到路由算出来的客服职责，不是「第一条岗位」', async () => {
+    const asked: (string | undefined)[] = []
+    const h = harness({
+      position: (role_id) => {
+        asked.push(role_id)
+        return role_id === 'dtc.support'
+          ? { person_id: 'p_owner', assignment_id: 'asg_support', role_id: 'dtc.support' }
+          : { person_id: 'p_owner', assignment_id: 'asg_store', role_id: 'dtc.store' }
+      },
+    })
+    await h.channels.poll()
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.every((r) => r === 'dtc.support')).toBe(true)
+    const matter = h.work.listMatters({ kind: 'conversation' })[0]
+    expect(matter?.position_id).toBe('asg_support')
+    const run = h.work
+      .matterView(matter?.id as string, { limit: 20 })
+      .timeline.find((e) => e.kind === 'run')
+    expect(run?.actor).toEqual({ kind: 'agent', id: 'dtc.support' })
+  })
+
   it('同一封信再拉一次不重复出事项（去重 24h 窗口）', async () => {
     const h = harness()
     await h.channels.poll()
@@ -364,13 +395,15 @@ describe('出站发信（18 §3）', () => {
       payload: { channel: 'email', thread_ref: thread, body: { text } },
     }) as unknown as ApprovalItem
 
-  it('批准的回信真发出去，收件人只从线程台账取', async () => {
-    const h = harness()
+  it('批准的回信真发出去，收件人只从线程台账取；WP417（自查 A33）发出去就给首响 SLA 停表', async () => {
+    const stopped: string[] = []
+    const h = harness({ noteOutbound: (t) => stopped.push(t) })
     await h.channels.poll()
     const out = await h.channels.deliver(draft('<m-1@mail.example>'), { idempotencyKey: 'chg_1' })
     expect(out).toMatchObject({ status: 'ok' })
     expect(h.mailer.sent).toHaveLength(1)
     expect(h.mailer.sent[0]?.to).toEqual(['ann@customer.com'])
+    expect(stopped).toEqual(['<m-1@mail.example>'])
   })
 
   it('急停 outbound 档挡住发信（对账没完 / 人按了暂停都走这一条）', async () => {
@@ -385,6 +418,20 @@ describe('出站发信（18 §3）', () => {
     expect(
       await h.channels.deliver(draft('<m-1@mail.example>'), { idempotencyKey: 'chg_2' }),
     ).toMatchObject({ status: 'ok' })
+  })
+
+  it('WP417（自查 A18）：邮箱没连 / 认不出线程 → 照实「没发出去」，不交回去让内存桩回成功', async () => {
+    const none = harness({ accounts: [] })
+    const a = await none.channels.deliver(draft('<m-1@mail.example>'), { idempotencyKey: 'k1' })
+    expect(a).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect(a?.error?.message).toContain('邮箱还没连上')
+    const h = harness()
+    await h.channels.poll()
+    const b = await h.channels.deliver(draft('<nope@mail.example>'), { idempotencyKey: 'k2' })
+    // 只连了一只邮箱时由它的收件人门禁照实拒（同样是失败，不是成功）
+    expect(b?.status).toBe('failed')
+    expect(h.mailer.sent).toHaveLength(0)
+    expect(none.events.some((e) => e.type === 'delivery.failed')).toBe(true)
   })
 
   it('不是邮件 / 没有线程的卡不归渠道管，交回给调用方', async () => {

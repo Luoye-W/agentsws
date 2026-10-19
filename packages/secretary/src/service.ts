@@ -191,6 +191,18 @@ export interface SecretaryOptions {
   }): Promise<string>
   /** 现在生效的默认模型（进 `RunRequest.runtime.model`） */
   modelRef?(): ModelRef
+  /**
+   * WP417（决策 1234）：同事问到的答案**先给本人看一眼**再回（缺省不开 = 老行为当场答；服务进程开）。
+   * 开了：助理起草好那一句、记成 `held`，问的人收到「交给本人了」；{@link onHeld} 给本人出一张卡，
+   * 本人点了「就这样回」（{@link Secretary.releaseAnswer}）才回给问的人。
+   */
+  reviewFirst?(person_id: PersonId): boolean
+  /** WP417：一问被扣下等本人看 → 给本人出卡。 */
+  onHeld?(record: AskedRecord): Promise<void> | void
+  /** WP417（自查 F17）：本人选了「直接找我」→ 助理不代答，告诉本人有人找他。 */
+  onDirect?(record: AskedRecord): Promise<void> | void
+  /** WP417：本人放行了 → 把答案交给问的人。 */
+  onReleased?(record: AskedRecord): Promise<void> | void
 }
 
 export interface MeetingBriefSource {
@@ -217,6 +229,8 @@ export interface AskOutcome extends SecretaryAnswer {
   run_id: string
   /** "谁问过我"清单里那条的 id */
   asked_id: string
+  /** WP417（决策 1234）：`held` = 交给本人看了、还没回；`direct` = 本人选了直接找他。 */
+  status?: 'held' | 'direct'
 }
 
 export interface MeetInput {
@@ -385,6 +399,21 @@ export class Secretary {
       }
     })
 
+    /*
+     * WP417（决策 1234 / 自查 F11 · F17）：问的是**别人**时——
+     * 本人选了「直接找我」→ 助理不代答，告诉问的人去找本人、告诉本人有人找；
+     * 开了「先给本人看」→ 答案扣下等本人点头，问的人先收到「交给本人了」。
+     */
+    const name = this.#options.personName(person_id) ?? person_id
+    const asksOther = viewer !== person_id
+    const direct = asksOther && this.profile(person_id).contact_policy?.prefer === 'direct'
+    const held =
+      asksOther && !direct && this.#options.reviewFirst?.(person_id) === true && !ruled.refused
+    const shown = direct
+      ? `${name}选了「直接找我」，助理不替${name}答——直接找${name}吧，已经告诉${name}有人找。`
+      : held
+        ? `已经交给${name}本人看一眼，${name}点头后回你。`
+        : answer
     const record: AskedRecord = {
       id: this.#newId('asked'),
       schema_version: 1,
@@ -395,13 +424,20 @@ export class Secretary {
       run_id,
       kind: ruled.kind,
       question: input.question,
-      answer,
+      answer: shown,
       question_hash: sha256(input.question),
-      answer_hash: sha256(answer),
-      fields: ruled.fields,
-      refused: ruled.refused,
+      answer_hash: sha256(shown),
+      fields: direct ? [] : ruled.fields,
+      refused: direct ? true : ruled.refused,
+      ...(direct
+        ? { status: 'direct' as const }
+        : held
+          ? { status: 'held' as const, draft: answer }
+          : {}),
     }
     this.store.appendAsked(record)
+    if (direct) await this.#options.onDirect?.(record)
+    if (held) await this.#options.onHeld?.(record)
     // 21 §5：审计得到「谁问了、答的是哪一类、用了哪些字段」，但拿不到正文
     this.#emit('secretary.answered', { kind: 'person', id: viewer }, run_id, {
       about: person_id,
@@ -413,7 +449,53 @@ export class Secretary {
       answer_hash: record.answer_hash,
       answer_chars: answer.length,
     })
-    return { ...ruled, answer, run_id, asked_id: record.id }
+    return {
+      ...ruled,
+      answer: shown,
+      ...(direct ? { refused: true, fields: [] } : {}),
+      run_id,
+      asked_id: record.id,
+      ...(record.status === 'held' || record.status === 'direct' ? { status: record.status } : {}),
+    }
+  }
+
+  /**
+   * WP417（决策 1234）：本人看过了，「就这样回」（或改一句再回）。只有被问的本人能放行；放行过的不再放第二次。
+   */
+  async releaseAnswer(
+    person_id: PersonId,
+    asked_id: string,
+    edited?: string,
+  ): Promise<AskedRecord> {
+    const record = this.store
+      .listAsked(this.workspace_id, person_id, { limit: 500 })
+      .find((r) => r.id === asked_id)
+    if (record === undefined) throw notFound('这一问', asked_id)
+    if (record.status !== 'held') return record
+    const text = redactOutboundText('answer', (edited ?? record.draft ?? '').trim()).trim()
+    if (text === '') throw new SecretaryError('invalid_input', '回给同事的那句话是空的')
+    const at = this.now()
+    const next: AskedRecord = {
+      ...record,
+      status: 'answered',
+      answer: text,
+      answer_hash: sha256(text),
+      released_at: at,
+    }
+    this.store.updateAsked?.(next)
+    this.#emit('secretary.answered', { kind: 'person', id: person_id }, record.run_id, {
+      about: person_id,
+      asked_by: record.asked_by,
+      kind: record.kind,
+      fields: record.fields,
+      refused: false,
+      released: true,
+      question_hash: record.question_hash,
+      answer_hash: next.answer_hash,
+      answer_chars: text.length,
+    })
+    await this.#options.onReleased?.(next)
+    return next
   }
 
   /** 「谁问过我」——只有本人看得到（41 §1.2）。 */

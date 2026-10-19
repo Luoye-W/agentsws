@@ -116,7 +116,9 @@ function rig(replyText = 'Shipping to the US is free over $50.'): {
     work: createWork({ workspace_id: WS, clock, random: () => 0.5, tz_offset_minutes: 0 }),
     approvals,
     models: models.api,
-    searchKnowledge: async () => [],
+    // WP417（决策 1232）：这一组钉的是转发器那一路；开着「常见问题直接发」+ 一条知识命中，AI 那句才直接出站
+    searchKnowledge: async () => [{ fact_card_id: 'fc_1', statement: '美国订单满 $50 免邮。' }],
+    autoSendFaq: () => true,
     position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
     // 真访客那一路靠静默窗口的定时器推进；测试里在定时器里推进合成时钟
     //（StepClock 不走，2s 窗口永远等不满——时钟与定时器必须一起动）

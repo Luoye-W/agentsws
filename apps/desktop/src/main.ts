@@ -65,6 +65,7 @@ import {
 import { loadAutoUpdater, moduleExport } from './electron-updater-module.js'
 import { bundledExtensionDir, extensionFolder, syncBundledExtension } from './extension-sync.js'
 import {
+  appDirName,
   cleanupPlan,
   confirmSwitch,
   consumeDrill,
@@ -78,11 +79,12 @@ import {
   takeRollback,
   uninstallKeyOf,
 } from './fast-update.js'
+import { carryFirewall, describeOutcome, nodePowerShell } from './firewall.js'
 import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
-import { createLaunchAtLogin, loginItemSettings } from './launch-at-login.js'
+import { createLaunchAtLogin, loginItemSettings, wasLaunchedAtLogin } from './launch-at-login.js'
 import { nodeLayoutFs } from './layout-fs.js'
 import { createLogger } from './logging.js'
 import {
@@ -188,6 +190,12 @@ import {
   requestRestore,
   type UpgradeFailureNote,
 } from './upgrade.js'
+import {
+  parseChromeTheme,
+  titleBarOverlay,
+  titleBarStyleOf,
+  windowChromeOptions,
+} from './window-chrome.js'
 import { watchWindowFit } from './window-fit.js'
 import { openWorkBrowser } from './work-browser.js'
 
@@ -915,8 +923,26 @@ async function bootstrap(): Promise<void> {
     isLocalOrigin(event.senderFrame?.url ?? '', allowedOrigins())
 
   ipcMain.on(BRIDGE_CHANNELS.info, (event) => {
-    const info: BridgeInfo = { platform: process.platform, version }
+    // WP424：只有主窗口藏了系统标题栏（场景窗口等其它窗口照旧），所以只对主窗口报 `title_bar`
+    const chrome = titleBarStyleOf(process.platform)
+    const isMain =
+      window !== undefined && !window.isDestroyed() && event.sender === window.webContents
+    const info: BridgeInfo = {
+      platform: process.platform,
+      version,
+      ...(chrome === undefined || !isMain ? {} : { title_bar: chrome }),
+    }
     event.returnValue = info
+  })
+  // WP424：工作台换了深 / 浅色 → Windows 叠在右上的系统按钮那一块跟着换底色
+  ipcMain.handle(BRIDGE_CHANNELS.titleBarTheme, (event, raw: unknown) => {
+    if (!fromLocalWindow(event)) return false
+    const theme = parseChromeTheme(raw)
+    if (theme === undefined || titleBarStyleOf(process.platform) !== 'overlay') return false
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target === null || target !== window) return false
+    target.setTitleBarOverlay(titleBarOverlay(theme))
+    return true
   })
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false
@@ -1068,6 +1094,8 @@ async function bootstrap(): Promise<void> {
         height: 840,
         show: false,
         title: 'Agents 工坊',
+        // WP424：系统标题栏藏起来，窗口按钮嵌进工作台自己的顶栏（学 Claude 桌面版；Linux 照旧）
+        ...windowChromeOptions(process.platform),
         webPreferences: {
           preload: join(here, 'preload.cjs'),
           contextIsolation: true,
@@ -1851,6 +1879,11 @@ async function bootstrap(): Promise<void> {
 
   // ── 健康轮询：托盘状态、"打开工作台"是否可点都看它。
   let firstRunOpened = false
+  const launchedAtLogin = wasLaunchedAtLogin(
+    process.platform,
+    process.argv,
+    () => app.getLoginItemSettings().wasOpenedAtLogin,
+  )
   const pollHealth = async (): Promise<void> => {
     health = await probeHealth(serverUrl(), {
       fetchImpl: globalThis.fetch as never,
@@ -1869,10 +1902,11 @@ async function bootstrap(): Promise<void> {
         healthy: health.ok,
         alreadyOpened: firstRunOpened,
         remote,
+        launchedAtLogin,
       })
     ) {
       firstRunOpened = true
-      logger.info('第一次打开：自动端出工作台')
+      logger.info(firstRun ? '第一次打开：自动端出工作台' : '打开应用：端出工作台')
       void openWorkstation()
     }
   }
@@ -2058,6 +2092,24 @@ async function bootstrap(): Promise<void> {
       ? undefined
       : `import 服务入口退出码 ${String(out.code)}：${out.stderr.trim().split(/\r?\n/).slice(0, 6).join(' / ')}`
   }
+  /*
+   * WP422：防火墙的「允许」随更新带过去（用户对旧版的 Node 点过允许 → 新版的 Node 也加一条；
+   * 指向已删版本目录的规则清掉）。改规则要管理员权限，应用一般没有——那就跳过、记一句，不弹 UAC。
+   * 安装程序那条路由 `build/installer.nsh` 做同一件事（同一份 `firewall.ts`）。
+   */
+  const carryFirewallTo = async (dir: string): Promise<void> => {
+    if (layout === undefined || process.platform !== 'win32') return
+    const outcome = await carryFirewall({
+      root: layout.root,
+      dir,
+      exists: existsSync,
+      run: nodePowerShell(),
+    })
+    if (outcome.kind === 'nothing') return
+    const line = describeOutcome(outcome)
+    if (outcome.kind === 'done' && outcome.failed.length === 0) logger.info(line, { dir })
+    else logger.warn(line, { dir })
+  }
   const cleanupVersions = async (): Promise<void> => {
     if (layout === undefined) return
     let running = ''
@@ -2083,6 +2135,8 @@ async function bootstrap(): Promise<void> {
         logger.warn('旧的版本目录没清掉（下次再试）', { dir: name, error: String(err) })
       }
     }
+    // WP422：删过版本目录 → 指向它们的防火墙规则一并清掉（顺手补上当前这一版漏加的允许）
+    if (plan.length > 0) await carryFirewallTo(layout.currentDir)
   }
   /** 「重启并更新」那一刻要用的东西（在下面 updates 建好之后才填上）。 */
   let quiesceForSwitch: () => Promise<void> = async () => undefined
@@ -2295,6 +2349,8 @@ async function bootstrap(): Promise<void> {
           if (problem === undefined) {
             staged = found
             logger.info('新版在旁边摆好了，重启只切换', { version: found })
+            // WP422：切过去之前就把防火墙的「允许」带给新版的 Node（后台做，不占切换的那几秒）
+            void carryFirewallTo(join(layout.root, appDirName(found)))
           } else
             logger.warn('新版没摆好，点「重启并更新」时照旧走安装程序', { version: found, problem })
         } finally {
@@ -2718,6 +2774,12 @@ async function bootstrap(): Promise<void> {
     // 托盘壳：关掉窗口不退出应用（13 §5「托盘常驻」）。
     if (!quitting) return
     app.quit()
+  })
+  // Luoye 10-19：Mac 上点程序坞图标 / 从「应用程序」再打开一次，来的是 activate（不是 second-instance）——
+  // 没这条，窗口关了以后只有菜单栏那一项能把它叫回来
+  app.on('activate', () => {
+    if (quitting) return
+    void openWorkstation()
   })
 }
 

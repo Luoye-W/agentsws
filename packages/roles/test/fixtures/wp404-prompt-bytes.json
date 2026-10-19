@@ -3,14 +3,14 @@
     "ads.google": {
       "zh": "eb17dcc6b25a89bd",
       "en": "8f65221d8f02008e",
-      "content": "feb91f63c2a02f13",
-      "def": "6138d6b84199d6d2"
+      "content": "67f0ade4ecf68945",
+      "def": "bb0895e6b75bbc22"
     },
     "ads.meta": {
-      "zh": "247ae54fe811f3b3",
+      "zh": "acc11f649e8391e8",
       "en": "458dd2a81627cd72",
-      "content": "49404902d0b982ad",
-      "def": "7ba5331245906185"
+      "content": "106ed88902fe7641",
+      "def": "1d876e69cb7b523f"
     },
     "ads.tiktok": {
       "zh": "8c0b55c6ebde25b6",
@@ -27,14 +27,14 @@
     "amz.store": {
       "zh": "6155bc5889e503d4",
       "en": "9aacff4d955cde01",
-      "content": "52a88458996647d3",
-      "def": "e53821c20c32bb75"
+      "content": "dd3617e00e6c6258",
+      "def": "2632e5c19367d88a"
     },
     "amz.support": {
       "zh": "ef088ee45332e86b",
       "en": "a99718b6b3367895",
-      "content": "c56012e6f16fb2b3",
-      "def": "5293acbef50e93e7"
+      "content": "66d196e28b81004f",
+      "def": "ef68de70e222d159"
     },
     "b2b.exhibition": {
       "zh": "16c04883171f5be3",
@@ -127,28 +127,28 @@
       "def": "85f9b683b4f11d72"
     },
     "dtc.fulfillment": {
-      "zh": "74dd8e106b5d458c",
-      "en": "90860f964aadd39c",
-      "content": "ba21e1d3f0ac0f5e",
-      "def": "9d72832ec3e4a404"
+      "zh": "6ef651654c7ff204",
+      "en": "bf31d22a6aaf236c",
+      "content": "8c69bd5252eec28f",
+      "def": "4260ab36eb5740cf"
     },
     "dtc.live-chat": {
       "zh": "d0ebf75a1ae79e4e",
       "en": "42f666da69991db4",
-      "content": "69ed307d4ccb6046",
-      "def": "6081a09266749e89"
+      "content": "0f944613672597de",
+      "def": "99e9e66d6e994a8e"
     },
     "dtc.store": {
-      "zh": "9f7b349adc093888",
-      "en": "606171301e6676a9",
-      "content": "347d052e781ba85c",
-      "def": "92c42520c20184f6"
+      "zh": "ac2cec4f74cfbec7",
+      "en": "7476cb2f9cdd9892",
+      "content": "3e6d1cc3a9f5c00f",
+      "def": "2ccc6e995484ead9"
     },
     "dtc.support": {
       "zh": "9819a497de49657e",
       "en": "cba4b77e8fd81a39",
-      "content": "d22f45deaeef7161",
-      "def": "27af5df9e3009540"
+      "content": "d385f82a49703016",
+      "def": "2002da10b4574785"
     },
     "kol.facebook": {
       "zh": "bbab3e2d4dea31f4",
@@ -205,28 +205,28 @@
       "def": "451056d4cf2e8a70"
     },
     "site.shopify-apps": {
-      "zh": "41f2661b31feff86",
-      "en": "3a23ed1dccba2319",
-      "content": "a57457b3a52c42df",
-      "def": "e2e987f019b30074"
+      "zh": "42cefb3603d7a447",
+      "en": "f1243972aafbd086",
+      "content": "35f2dc5b8bd646e4",
+      "def": "f7201bf2713e9270"
     },
     "site.shopify-build": {
-      "zh": "3aa69a1f0eea1588",
-      "en": "77296bc920c0196b",
-      "content": "71e484419c36dd37",
-      "def": "3d627fbe3a27fee9"
+      "zh": "3ea591a84a2466ad",
+      "en": "2ff5de5889ccffcb",
+      "content": "3b9f07a0fef74fcb",
+      "def": "ca448e2e6cb4f151"
     },
     "site.shopify-email": {
-      "zh": "3006b16e764503a6",
-      "en": "4cfef27e3119aabb",
-      "content": "654e65c867c806bf",
-      "def": "2b29366a439ee0f3"
+      "zh": "7456fad9d016718f",
+      "en": "e41fa24c38c6a26f",
+      "content": "d4be43ee81fcc064",
+      "def": "17dc9e69c2ca4a56"
     },
     "site.shopify-theme": {
       "zh": "5a8dbfe190fcace3",
       "en": "1e8de5a8d16e30f3",
       "content": "115c89c5b7f5d26f",
-      "def": "793a6d049676726c"
+      "def": "fd306e0d97fc6e26"
     },
     "social.discord": {
       "zh": "f0379e8c235edc9b",
@@ -244,19 +244,19 @@
       "zh": "57b33b9a799b37df",
       "en": "970e51d8328431f1",
       "content": "d0e7f4f7fbed646f",
-      "def": "00ff8d259d90ac40"
+      "def": "7ca5d322f7ae587f"
     },
     "social.instagram": {
       "zh": "e9147cca46b10248",
       "en": "63e3b0ac4e43846a",
       "content": "e5a18293d7ee6a35",
-      "def": "1d84dbd71e56ab0f"
+      "def": "af877d8ecfd4b345"
     },
     "social.linkedin": {
       "zh": "7e279db59c067d51",
       "en": "53284e4001b95864",
       "content": "f9a615ad1a2f1ed7",
-      "def": "a78ea0e416277ffd"
+      "def": "f98d8923ee689ade"
     },
     "social.meta": {
       "zh": "610d0d66b5485006",
@@ -280,13 +280,13 @@
       "zh": "fe62de0ce77294de",
       "en": "4c8e1a01a098a7c9",
       "content": "7f26a208e9e7d9e3",
-      "def": "a639bbaa8c2fceff"
+      "def": "e5644b004e154e22"
     },
     "social.tiktok": {
       "zh": "ab50241aa63fca70",
       "en": "98bb52ed5dfe0ca3",
       "content": "bdc5b61ebbd291c9",
-      "def": "7499790399a560f6"
+      "def": "ab892bfd06b32676"
     },
     "social.whatsapp": {
       "zh": "952448e8be3e6f9b",
@@ -298,13 +298,13 @@
       "zh": "77a9a675abe75ed6",
       "en": "db2cc473f11b30f2",
       "content": "0caa1a573fd68757",
-      "def": "724e747c7e31b7e1"
+      "def": "d92bf053d05b0580"
     },
     "social.youtube": {
       "zh": "acf4dbb71b92d549",
       "en": "67692894474d4bc2",
       "content": "91213a14e6460265",
-      "def": "d60853ed55ab7bc4"
+      "def": "433b84694ea9bedb"
     }
   },
   "positions": {

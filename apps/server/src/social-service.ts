@@ -63,7 +63,7 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { SOCIAL_CHANNELS, socialChannelSpec } from '@agentsws/contracts'
+import { SOCIAL_CHANNELS, SOCIAL_COMPOSE_HOSTS, socialChannelSpec } from '@agentsws/contracts'
 import type { CommunityRule, ModerationAction } from '@agentsws/social-core'
 import {
   ACTION_WORDS,
@@ -212,7 +212,9 @@ export interface SocialServiceOptions {
     channel_label: string
     /** 为什么发不出去（平台原话或"没连上"），写进待办备注。 */
     reason: string
-  }): { todo_id: string } | undefined
+  }): { todo_id: string; owner?: string } | undefined
+  /** WP419：交给人发的那一条发好了 / 不发了——把那条待办收掉。不给 = 待办留着人自己勾。 */
+  closeManualTask?(todo_id: string): void
   /**
    * WP249（决策 81 / 89）：「自家版待处理」要的那几样（官方号浏览器、施行口）。不给 = 不装配
    * 这一块（那几个路由照实说没装配）。审批、额度、事件与库由这里注入，不另起一套。
@@ -285,6 +287,13 @@ export interface SocialServiceAssembly {
    * {@link publishDue} 之后接着跑它；不另起一条定时，各频道按自己的频率决定这一拍读不读）。
    */
   ingest: SocialIngest
+  /** WP419（决策 1231）：到点交给人发、还没回话的那几条（插件侧边栏「等你发的帖子」）。 */
+  handoffs(): SocialPost[]
+  /**
+   * WP419：人回话——发好了（贴了链接 = 读回确认；没贴 = 只是你说发了，照实标）/ 不发了。
+   * 不是交给人发的那一条回 `undefined`。
+   */
+  answerHandoff(post_id: string, answer: SocialHandoffAnswer): SocialPost | undefined
 }
 
 /** {@link SocialServiceAssembly.broadcastDue} 回的那一份。 */
@@ -313,7 +322,14 @@ export interface SocialPublishSweep {
   skipped: { post_id: string; reason: string }[]
   /** WP191：发不出去、已转成「复制文案去平台发」待办的那几条（LinkedIn）。 */
   manual_tasks?: { post_id: string; todo_id: string }[]
+  /** WP419（决策 1231）：交给人在自己登录着的后台里发的那几条（内容账号组，插件侧边栏里出）。 */
+  handed_off?: string[]
 }
+
+/** WP419：交给人发的那一条，人回来说了什么。 */
+export type SocialHandoffAnswer =
+  | { done: true; by: string; link?: string }
+  | { done: false; by: string; reason?: string }
 
 export function createSocialService(options: SocialServiceOptions): SocialServiceAssembly {
   const { workspace_id, store, clock, approvals, ledger, appendEvent } = options
@@ -1369,7 +1385,13 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     const nowMs = Date.parse(now)
     const due = store
       .posts({ status: 'scheduled' })
-      .filter((p) => p.scheduled_at !== undefined && Date.parse(p.scheduled_at) <= nowMs)
+      // WP419：已经交给人发的不再按到点重发
+      .filter(
+        (p) =>
+          p.scheduled_at !== undefined &&
+          Date.parse(p.scheduled_at) <= nowMs &&
+          p.handoff === undefined,
+      )
     const out: SocialPublishSweep = { due: due.length, published: 0, failed: 0, skipped: [] }
     if (due.length === 0) return out
 
@@ -1391,29 +1413,43 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         continue
       }
       const adapter = options.channels?.adapters[post.channel]
-      // WP191（docs/86 §4）：这条渠道发不出去是常态（LinkedIn）→ 转成待办，人去发
+      /*
+       * WP419（决策 1231）：内容账号组到点了官方接口发不出去（没接 / 没批 / 这一版不能代发）→ 交给人在自己登录着的
+       * 后台里发：帖子挂上「交给你了」（插件侧边栏里打开发帖页、人点发布、回来点「发好了」），同时开一条待办兜底。
+       * WP191 的 LinkedIn 待办并进这里（所有内容渠道都这样，不只 LinkedIn）。社群组照旧。
+       */
       const toManual = (reason: string): boolean => {
-        if (socialChannelSpec(post.channel)?.publish_fallback !== 'manual_task') return false
+        if (socialChannelSpec(post.channel)?.group !== 'content') return false
+        const label = socialChannelSpec(post.channel)?.zh ?? post.channel
         const task = options.manualPublishTask?.({
           post,
           account: store.account(post.account_id),
-          channel_label: socialChannelSpec(post.channel)?.zh ?? post.channel,
+          channel_label: label,
           reason,
         })
-        if (task === undefined) return false
         store.savePost({
           ...post,
-          status: 'failed',
-          failure_reason: `${reason}——已转成一条待办，复制文案去平台发。`,
+          handoff: {
+            at: now,
+            reason,
+            ...(task === undefined ? {} : { todo_id: task.todo_id }),
+            ...(task?.owner === undefined ? {} : { owner: task.owner }),
+          },
         })
-        out.manual_tasks = [
-          ...(out.manual_tasks ?? []),
-          { post_id: post.id, todo_id: task.todo_id },
-        ]
-        emit('social.post_manual_task', 'system' as never, {
+        if (task !== undefined)
+          out.manual_tasks = [
+            ...(out.manual_tasks ?? []),
+            { post_id: post.id, todo_id: task.todo_id },
+          ]
+        out.handed_off = [...(out.handed_off ?? []), post.id]
+        out.skipped.push({
+          post_id: post.id,
+          reason: `${label}这一条到点了，官方接口发不出去（${reason}）——已交给你：插件侧边栏里打开发帖页、你点发布${task === undefined ? '' : '；也开了一条待办'}。`,
+        })
+        emit('social.post_handoff', 'system' as never, {
           post_id: post.id,
           channel: post.channel,
-          todo_id: task.todo_id,
+          ...(task === undefined ? {} : { todo_id: task.todo_id }),
         })
         return true
       }
@@ -1578,9 +1614,87 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     return out
   }
 
+  /** WP419：人贴回来的链接——只认这条渠道自己的站（别的当没贴）。 */
+  const linkOk = (channel: string, link: string | undefined): string | undefined => {
+    if (link === undefined) return undefined
+    try {
+      const u = new URL(link.trim())
+      if (u.protocol !== 'https:') return undefined
+      const hosts = SOCIAL_COMPOSE_HOSTS
+      const host = u.hostname.toLowerCase()
+      const fits = hosts.some((h) =>
+        h.startsWith('*.') ? host === h.slice(2) || host.endsWith(h.slice(1)) : host === h,
+      )
+      const youtube = channel === 'youtube' && /(^|\.)youtube\.com$|^youtu\.be$/u.test(host)
+      return fits || youtube ? u.toString() : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  const handoffs = (): SocialPost[] =>
+    store.posts({ status: 'scheduled' }).filter((p) => p.handoff !== undefined)
+
+  const answerHandoff = (post_id: string, answer: SocialHandoffAnswer): SocialPost | undefined => {
+    const post = store.post(post_id)
+    if (post === undefined || post.handoff === undefined || post.status !== 'scheduled')
+      return undefined
+    const now = clock.now()
+    const todo = post.handoff.todo_id
+    let next: SocialPost
+    if (answer.done) {
+      const link = linkOk(post.channel, answer.link)
+      next = {
+        ...post,
+        status: 'published',
+        published_at: now,
+        published_via: 'extension',
+        readback: link === undefined ? 'self_report' : 'link',
+        ...(link === undefined ? {} : { post_url: link }),
+      }
+      const account = store.account(post.account_id)
+      recordSent({
+        source_key: `post:${post.id}`,
+        channel: post.channel,
+        action: 'post',
+        kind: 'social_post',
+        ...(account === undefined ? {} : { destination: account.display_name }),
+        content: post.body,
+        ...(link === undefined ? {} : { link }),
+      })
+      emit('social.post_published', answer.by as never, {
+        post_id: post.id,
+        channel: post.channel,
+        via: 'extension',
+        readback: next.readback,
+      })
+    } else {
+      next = {
+        ...post,
+        status: 'failed',
+        failure_reason: `交给你发的这一条没发${answer.reason === undefined || answer.reason.trim() === '' ? '' : `：${answer.reason.trim().slice(0, 200)}`}`,
+      }
+      emit('social.post_failed', answer.by as never, {
+        post_id: post.id,
+        channel: post.channel,
+        reason: 'handoff_skipped',
+      })
+    }
+    store.savePost(next)
+    if (todo !== undefined)
+      try {
+        options.closeManualTask?.(todo)
+      } catch {
+        // 待办收不掉不挡这一条的结果（人自己勾）
+      }
+    return next
+  }
+
   return {
     port,
     publishDue,
+    handoffs,
+    answerHandoff,
     ingest,
     broadcastDue,
     executor,

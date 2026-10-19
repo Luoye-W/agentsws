@@ -42,6 +42,8 @@ export interface HomeInput {
   range?: RangeName
   label?: ProjectContext['label']
   riskClass?: ProjectContext['riskClass']
+  /** WP415：这张卡接没接通（见 `ProjectContext.wiring`）。 */
+  wiring?: ProjectContext['wiring']
 }
 
 /**
@@ -83,6 +85,7 @@ export function assembleHome(input: HomeInput): HomeAssembly {
       position_id: p.position_id,
       ...(input.label === undefined ? {} : { label: input.label }),
       ...(input.riskClass === undefined ? {} : { riskClass: input.riskClass }),
+      ...(input.wiring === undefined ? {} : { wiring: input.wiring }),
     }
     for (const item of p.items) {
       const card = projectCard(item, ctx)

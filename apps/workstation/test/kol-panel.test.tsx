@@ -229,6 +229,18 @@ const importKolTable = vi.fn(async () => ({
 // WP299（决策 386 / 387）：寄样与付款
 const shipKolSample = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_s' }))
 const recordKolPayment = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_p' }))
+const getKolOutreachDefaults = vi.fn(async () => ({
+  brand_pitch: 'We make desk chargers.',
+  product: '',
+  source: 'brand_profile' as const,
+  mailbox_connected: false,
+}))
+const saveKolOutreachDefaults = vi.fn(async () => ({
+  brand_pitch: 'We make desk chargers.',
+  product: 'the 65W charger',
+  source: 'saved' as const,
+  mailbox_connected: false,
+}))
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -250,6 +262,8 @@ vi.mock('@/lib/api', async () => {
     startKolSandbox: (...a: unknown[]) => startKolSandbox(...(a as [])),
     shipKolSample: (...a: unknown[]) => shipKolSample(...(a as [])),
     recordKolPayment: (...a: unknown[]) => recordKolPayment(...(a as [])),
+    getKolOutreachDefaults: (...a: unknown[]) => getKolOutreachDefaults(...(a as [])),
+    saveKolOutreachDefaults: (...a: unknown[]) => saveKolOutreachDefaults(...(a as [])),
   }
 })
 
@@ -366,6 +380,32 @@ describe('WP68 红人岗位面板', () => {
     expect(document.body.textContent).not.toContain('jonas@example.com')
     // 合作历史看得见
     expect(screen.getByTestId('kol-history').textContent).toContain('已建联')
+  })
+
+  it('WP416：起草那两格从品牌档案预填；没连邮箱照实说并给「连邮箱」；改了的产品记成默认', async () => {
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const rows = await screen.findAllByTestId('kol-library-row')
+    fireEvent.click(rows[0] as HTMLElement)
+    await screen.findByTestId('kol-creator-detail')
+    await waitFor(() => {
+      expect((screen.getByTestId('kol-outreach-pitch') as HTMLInputElement).value).toBe(
+        'We make desk chargers.',
+      )
+    })
+    expect(screen.getByTestId('kol-outreach-prefilled').textContent).toContain('品牌档案')
+    expect(screen.getByTestId('kol-outreach-no-mailbox').textContent).toContain('发不出去')
+    // 「只显示脱敏形态…」那句技术话不常驻
+    expect(screen.queryByText(/只显示脱敏形态/)).toBeNull()
+    fireEvent.change(screen.getByTestId('kol-outreach-product'), {
+      target: { value: 'the 65W charger' },
+    })
+    fireEvent.click(screen.getByTestId('kol-outreach-go'))
+    await waitFor(() => {
+      expect(saveKolOutreachDefaults).toHaveBeenCalledWith(
+        { brand_pitch: 'We make desk chargers.', product: 'the 65W charger' },
+        'asg_yt',
+      )
+    })
   })
 
   it('开发信草稿卡：写了承诺的那一封照实说被拦下，不假装进了队列', async () => {

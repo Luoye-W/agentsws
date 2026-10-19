@@ -11,6 +11,8 @@ export const AMAZON_OPS_ZH: Record<string, string> = {
   'amzops.daily': '每日巡检',
   'amzops.daily.hint': '每天先看这三样：账户有没有红线、哪些货快断了、哪些 Listing 买不了。',
   'amzops.daily.health': '账户健康',
+  'amzops.daily.one': '账户健康、断货、买不了',
+  'amzops.empty.planned': '要连 Amazon 店铺（还没开放）',
   'amzops.daily.stock': '断货风险',
   'amzops.daily.buyable': 'Listing 买不了',
   'amzops.empty.connect': '连上 Amazon 店铺后才有',
@@ -35,6 +37,8 @@ export const AMAZON_OPS_EN: Record<string, string> = {
   'amzops.daily.hint':
     'Three things first each day: account health red flags, products about to run out, and listings buyers cannot buy.',
   'amzops.daily.health': 'Account health',
+  'amzops.daily.one': 'Account health, stock-outs, unbuyable listings',
+  'amzops.empty.planned': 'Needs an Amazon store connection (coming soon)',
   'amzops.daily.stock': 'Stock-out risk',
   'amzops.daily.buyable': 'Listings not buyable',
   'amzops.empty.connect': 'Available once your Amazon store is connected',

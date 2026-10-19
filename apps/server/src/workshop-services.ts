@@ -286,6 +286,11 @@ export interface WorkshopServices {
   close(): void
 }
 
+/** 云上那句「没有这个入口：GET /v1/…」（路由不存在）。 */
+const ROUTE_MISSING = /没有这个入口|no such route|not found:\s*(GET|POST|PUT|DELETE)/iu
+/** WP421：云上还没开通工坊服务时的那一句。 */
+export const SERVICES_NOT_LIVE = '工坊服务还没上线，没有扣积分。'
+
 /** 云上那一跳的失败 → 一句人话 + 本机的码（云上的话原样带回）。 */
 export function serviceCloudError(res: KolCloudCall<unknown>, action: string): ApiError {
   const said = res.message
@@ -303,6 +308,12 @@ export function serviceCloudError(res: KolCloudCall<unknown>, action: string): A
     return new ApiError('budget_exhausted', said ?? '积分不够了，去"账号与积分"里充值后再试。', {
       details: { reason: 'insufficient_credits', ...(res.details ?? {}) },
     })
+  // WP421（自查 general 2.5）：云上还没这个入口（路由 404 / 501）→ 说「还没上线」，不把「没有这个入口：GET /v1/services」原文给人看
+  if (
+    (res.status === 404 && (said === undefined || ROUTE_MISSING.test(said))) ||
+    res.status === 501
+  )
+    return new ApiError('not_implemented', SERVICES_NOT_LIVE)
   if (res.status === 404) return new ApiError('not_found', said ?? '没有这项服务或这一单。')
   if (res.status === 409) return new ApiError('conflict', said ?? '这一单现在不能这样做。')
   if (res.status === 429) return new ApiError('rate_limited', said ?? '太频繁了，过一会儿再试。')

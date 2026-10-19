@@ -10,9 +10,11 @@
  *
  * 原来两页各写了一份（岗位页 `RecordRows`、职责页 `RecordsTab`），这里合成一份。
  */
+import type { ExecutionOutcomeView } from '@agentsws/contracts'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { ExecutionPill } from '@/components/deck/execution-note'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPositionAnswers, getPositionRecords, listReviews } from '@/lib/api'
@@ -27,6 +29,8 @@ interface Row {
   title: string
   summary: string
   state?: string | undefined
+  /** WP415：执行过的那几条到底办没办成。 */
+  execution?: ExecutionOutcomeView | undefined
   /** WP291：点了去哪儿（当场问答 → 那一问一答的线程） */
   href?: string | undefined
 }
@@ -109,7 +113,10 @@ export function RecordsPanel({ scope }: RailPanelBodyProps): ReactNode {
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            {row.state === undefined || row.state === '' ? null : (
+            {/* WP415：执行过的照实说办没办成（已核对 / 没能回读 / 没做 / 演示），别的照旧写审批状态 */}
+            {row.execution !== undefined ? (
+              <ExecutionPill view={row.execution} />
+            ) : row.state === undefined || row.state === '' ? null : (
               <span>{approvalStateLabel(row.state, lang)}</span>
             )}
           </div>

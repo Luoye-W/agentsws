@@ -24,7 +24,7 @@ import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyLine } from '@/components/ui/empty-line'
-import { SafetyNote } from '@/components/ui/hint'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -204,8 +204,8 @@ export function SocialBroadcast({
               >
                 {t('social.broadcast.submit')}
               </Button>
-              {/* 纪律 3：这句话在按钮旁边，不在点完之后才出现 */}
-              <SafetyNote text={t('social.broadcast.always_l1')} />
+              {/* 纪律 3：这句话在按钮旁边，不在点完之后才出现；WP419（自查 U18）：收进问号 */}
+              <Hint text={t('social.broadcast.always_l1')} testId="social-broadcast-l1" />
             </div>
 
             {result === undefined ? null : (

@@ -37,6 +37,7 @@ import type {
   FactCard,
   FindArchivedWorkInput,
   ModelRef,
+  ModelSourceSwitch,
   PricingEntry,
   ToolDef,
 } from '@agentsws/contracts'
@@ -49,6 +50,7 @@ import {
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import { sourceFallbackOffOf } from '@agentsws/model-gateway'
 import {
   ASSISTANT_DISPATCH_TOOL,
   ASSISTANT_FANOUT_TOOL,
@@ -88,7 +90,7 @@ import type {
 } from './free-chat-store.js'
 import { RATE_NOTE } from './model-rates.js'
 import { hasThinkingEffort } from './model-thinking.js'
-import type { ModelChatChoice } from './models.js'
+import { CLOUD_LABEL, type ModelChatChoice } from './models.js'
 
 /** 一条会话最多带多少条历史进模型（再往前的就不带了——随便聊不是长程任务）。 */
 export const FREE_CHAT_HISTORY = 30
@@ -931,7 +933,8 @@ async function answer(
     choices[0]
   if (choice === undefined)
     // WP334（决策 726）：不再叫人去设置页——输入框旁那个「还没接模型，接一个」就地开连接卡
-    return fail('还没接模型，点「接一个」就地接上再来聊。')
+    // WP417（自查 F2 / U24）：页面上叫「还没接 AI」，照这个说
+    return fail('还没接 AI：点输入框旁的「还没接 AI」接一个，再来聊。')
   const withModel = {
     ...base,
     model: { id: choice.id, label: choice.label, official: choice.official },
@@ -1083,6 +1086,8 @@ async function answer(
   const sources: FreeChatSource[] = []
   const usage = { input_tokens: 0, output_tokens: 0 }
   let stopped = false
+  // WP425：这一轮从自己的 AI 切到了工坊积分（第一次切的那一跳带回来；同一轮后面的补全网关直接走工坊积分）
+  let switched: ModelSourceSwitch | undefined
   try {
     const rounds =
       max +
@@ -1114,6 +1119,10 @@ async function answer(
           sink({ type: 'delta', text: t })
         },
       })
+      if (out.source_switch !== undefined && switched === undefined) {
+        switched = out.source_switch
+        sink({ type: 'notice', text: out.source_switch.message })
+      }
       usage.input_tokens += out.usage.input_tokens
       usage.output_tokens += out.usage.output_tokens
       if (out.stopped === true) {
@@ -1165,10 +1174,13 @@ async function answer(
     }
   } catch (e) {
     if (!signal.aborted) {
-      const reason = options.humanize(e)
+      // WP425：开关关着、自己的 AI 用不了——照实那一句，消息上带一格，界面出「用工坊积分接着做」
+      const off = sourceFallbackOffOf(e) !== undefined
+      const reason = off && e instanceof Error ? e.message : options.humanize(e)
       sink({ type: 'error', message: reason })
       return {
         ...withModel,
+        ...(off ? { source_fallback_off: true } : {}),
         text: assistant === undefined ? text : splitTopicTag(splitRememberTags(text).text).text,
         error: reason,
         ...(sources.length === 0 ? {} : { sources }),
@@ -1179,7 +1191,27 @@ async function answer(
     }
     stopped = true
   }
-  const credits = choice.official ? options.credits?.(model.model, usage) : undefined
+  // WP425：切到了工坊积分——这条回复记在工坊积分那一条上（积分照工坊积分那个模型估）
+  const backupId =
+    switched === undefined ? undefined : `${switched.to.provider}/${switched.to.model}`
+  const answered =
+    switched === undefined
+      ? withModel
+      : {
+          ...withModel,
+          model: {
+            id: backupId ?? choice.id,
+            label: choices.find((c) => c.id === backupId)?.label ?? CLOUD_LABEL,
+            official: true,
+          },
+          source_switch: switched.message,
+        }
+  const credits =
+    switched !== undefined
+      ? options.credits?.(switched.to.model, usage)
+      : choice.official
+        ? options.credits?.(model.model, usage)
+        : undefined
   // WP343：回答末尾的 <remember> 不给人看；正常答完才记（停下的不记）
   const remembered = splitRememberTags(text)
   // WP352：开头的「换话题了」记号不给人看；正常答完才算（回填给这一轮，答完挪段）
@@ -1200,7 +1232,7 @@ async function answer(
     for (const row of written) options.memory.changed(actor, 'added', row)
   }
   return {
-    ...withModel,
+    ...answered,
     text: assistant === undefined ? text : said.text,
     ...(recalled.length === 0 ? {} : { recalled: recalled.map(publicHit) }),
     ...(dispatches.length === 0 ? {} : { dispatches }),

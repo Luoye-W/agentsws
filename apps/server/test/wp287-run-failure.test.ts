@@ -23,4 +23,12 @@ describe('WP287 runFailureText', () => {
     expect(runFailureText({ code: 'provider_error', message: 'x' })).toContain('重试')
     expect(runFailureText({ code: 'budget_exhausted', message: 'x' })).toContain('额度')
   })
+  it('WP421：上游英文原句（余额不足 / 登录失效）换成中文固定句，不原样给人看', () => {
+    expect(runFailureText({ code: 'provider_error', message: 'Insufficient Balance' })).toBe(
+      '模型那边的余额或额度不够了，去充值或换一个模型后点重试',
+    )
+    expect(runFailureText({ code: 'unauthenticated', message: 'invalid x-api-key' })).toContain(
+      '登录过期了',
+    )
+  })
 })

@@ -80,6 +80,13 @@ export interface RoleSummaryView {
     target: string
     route_to: string
     review_cannot_be_disabled: boolean
+    /** WP415（只加）：这一条落到哪类改动（认不出的没有这一格）。 */
+    change_kind?: string
+    /**
+     * WP415（只加，决策 1230）：生产里有没有真执行器——`not_wired` 职责页标「还没接通」，
+     * `partly` 标「部分接通」。没有这一格 = 看渠道（对外发信）或认不出，不标。
+     */
+    wired?: 'wired' | 'partly' | 'not_wired'
     /** 额度里的数字，人话（"单笔最多退 50 USD"由前端拼；这里只给键值） */
     caps: { key: string; value: string }[]
     window?: { max_count: number; per: string }
@@ -98,6 +105,8 @@ export interface RoleSummaryView {
 export interface RoleDetailView extends RoleSummaryView {
   scopes: { domain: string; ops: string[]; range: string; max_sensitivity: string }[]
   skills: { name: string; tier: string; load: string }[]
+  /** WP415（只加，决策 1230）：「能查什么」——这条职责先查的那几个工具，有没有执行器。 */
+  tools?: { name: string; label: string; wired: boolean }[]
 }
 
 /** 05 §2 岗位模板 + "谁在做"。 */

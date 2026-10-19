@@ -31,6 +31,11 @@ import {
   type PositionOption,
 } from '@/components/deck/deck-filters'
 import {
+  type DeckAfter,
+  DeckAfterContext,
+  DeckFollowStrip,
+} from '@/components/deck/deck-follow-strip'
+import {
   directionForDeckAction,
   directionForDeckKey,
   isTypingTarget,
@@ -39,7 +44,14 @@ import { deckKeyHints, deckKeys } from '@/components/deck/deck-keys'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { Skeleton } from '@/components/ui/skeleton'
-import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
+import {
+  type CardsData,
+  type DecideInput,
+  decide,
+  followOf,
+  getHome,
+  getPositionCards,
+} from '@/lib/api'
 import { useMode } from '@/lib/mode'
 
 export interface DeckSectionProps {
@@ -71,7 +83,7 @@ export interface DeckSectionProps {
   /**
    * WP288：这副牌的标题（「要你处理 N」）。给了就与筛选图标、翻页同一行；不给那一行只有右侧控件。
    */
-  title?: ReactNode
+  title?: ReactNode | ((total: number | undefined) => ReactNode)
   /**
    * WP372（决策 1019）：岗位页不再摊报表块（日报 / 周报 / 上线检查单）——它们进右侧面板「报表」卡。
    * 默认真（老调用方不变）；岗位页传假。
@@ -152,8 +164,10 @@ async function fetchDeck(
 function receiptKey(body: DecideInput, card: DeckCard): string | undefined {
   if (body.action === 'instruct')
     return `deck.receipt.instruct.${body.instruction?.scope ?? 'single_reply'}`
-  if (body.action === 'reject') return 'deck.receipt.reject'
-  if (body.action === 'snooze') return 'deck.receipt.snooze'
+  // WP414：「不要」之后那一行（可选理由 / 同类跟着处理）自己会说「不发了」，这里不再说一遍
+  if (body.action === 'reject') return undefined
+  // WP414：「稍后」也由那一行说（还能补一句为什么）
+  if (body.action === 'snooze') return undefined
   if (body.action === 'approve' && body.selected_option_id !== undefined)
     return 'deck.receipt.choice'
   if (body.action === 'approve' && card.layout === 'policy') return 'deck.receipt.choice'
@@ -188,6 +202,8 @@ export function DeckSection({
   const [exiting, setExiting] = useState<DeckExitDirection | null>(null)
   const [error, setError] = useState<string>('')
   const [receipt, setReceipt] = useState<string>('')
+  /** WP414：刚做完的那一次决定（「不要」的可选理由、同类卡跟着处理 / 要不要一起发）。 */
+  const [after, setAfter] = useState<DeckAfter | null>(null)
 
   const ids =
     positionIds !== undefined && positionIds.length > 0
@@ -220,22 +236,53 @@ export function DeckSection({
       setReceipt('')
       setExiting(null)
     },
-    onSuccess: (_out, input) => {
+    onSuccess: (out, input) => {
       setError('')
+      // WP421：「改一下」后服务端真重写了（或照实说重写不了）就说那一句，不再一律许诺「改好再给你看」
+      const redraft = (out as { redraft?: { message?: unknown } } | undefined)?.redraft?.message
+      if (typeof redraft === 'string' && redraft !== '') {
+        setReceipt(redraft)
+        return
+      }
       const key = receiptKey(input.body, input.card)
       setReceipt(key === undefined ? '' : t(key))
+      // WP414：「不要 / 稍后」出可选理由那一行（填了理由才去找同类）；「发送」后同类要不要一起发，也在这一行
+      const follow = followOf(out)
+      const action = input.body.action
+      const followed =
+        follow !== undefined && (follow.applied.length > 0 || follow.suggested.length > 0)
+      if (
+        (action === 'reject' || action === 'snooze' || followed) &&
+        (action === 'approve' || action === 'reject' || action === 'snooze')
+      )
+        setAfter({
+          card: input.card,
+          action,
+          ...(follow === undefined ? {} : { follow }),
+        })
     },
     onSettled: () => {
-      void client.invalidateQueries({ queryKey: ['deck'] })
-      void client.invalidateQueries({ queryKey: ['home'] })
-      // 页头「N 张待审」与左栏岗位旁的数字也跟着变（同一屏的卡数对得上）
-      void client.invalidateQueries({ queryKey: ['positions'] })
-      void client.invalidateQueries({ queryKey: ['position-instance'] })
+      refresh()
     },
   })
 
+  /** 牌堆与页头 / 左栏的数一起刷新（决定、撤回跟随、一起发之后）。 */
+  function refresh(): void {
+    void client.invalidateQueries({ queryKey: ['deck'] })
+    void client.invalidateQueries({ queryKey: ['home'] })
+    // 页头「N 张待审」与左栏岗位旁的数字也跟着变（同一屏的卡数对得上）
+    void client.invalidateQueries({ queryKey: ['positions'] })
+    void client.invalidateQueries({ queryKey: ['position-instance'] })
+  }
+
   const cards = query.data?.cards ?? []
   const total = cards.length
+  /*
+   * WP416（自查 kol U7）：标题上的数与下面这副牌用同一个来源——以前标题读岗位视图的 pending_cards，
+   * 刚批完一张时写着「要你处理 1」，下面却是「队列清空了」。
+   */
+  const heading: ReactNode =
+    typeof title === 'function' ? title(query.isPending ? undefined : total) : title
 
   // WP241：外面要翻到哪张——在这副牌里就直接翻；被筛掉了就回到全部牌再翻
   const focusId = focus?.card_id
@@ -277,6 +324,7 @@ export function DeckSection({
     if (card === undefined || exiting !== null) return
     setExiting(directionForDeckAction(request.action))
     setReceipt('')
+    setAfter(null)
     mutation.mutate({
       card,
       body: {
@@ -329,7 +377,7 @@ export function DeckSection({
   if (query.isPending || query.error !== null)
     return (
       <div className={`flex flex-col gap-3 ${DECK_MAX_WIDTH_CLASS}`}>
-        {title === undefined ? null : <div className="flex items-center gap-2">{title}</div>}
+        {heading === undefined ? null : <div className="flex items-center gap-2">{heading}</div>}
         {query.error === null ? (
           <Skeleton className="h-64 w-full" />
         ) : (
@@ -370,7 +418,7 @@ export function DeckSection({
     >
       {/* WP288：标题 · 筛选图标 · 全部列出 · ‹ 1/N › 一行 */}
       <div className="flex items-center gap-2" data-testid="deck-head">
-        <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">{heading}</div>
         <DeckFilterPop
           filters={active}
           counts={
@@ -418,6 +466,18 @@ export function DeckSection({
           {receipt}
         </p>
       )}
+      {/* WP414：「不要」的可选理由 / 同类卡跟着处理（可撤回）/ 同类要不要一起发——卡流顶上那一行 */}
+      {after === null ? null : (
+        <DeckFollowStrip
+          key={after.card.id}
+          after={after}
+          onJump={(id) => {
+            setCursor(id)
+            setError('')
+          }}
+          onChanged={refresh}
+        />
+      )}
 
       {card === undefined ? (
         <DeckBattleReport
@@ -453,16 +513,19 @@ export function DeckSection({
                 className="absolute inset-x-6 top-4 h-full -rotate-1 rounded-2xl border bg-card/40"
               />
             ) : null}
-            <DeckCardView
-              key={card.id}
-              card={card}
-              mode={mode}
-              busy={mutation.isPending}
-              exiting={exiting}
-              {...(error === '' ? {} : { error })}
-              onDecide={dispatch}
-              onOpen={onOpen}
-            />
+            {/* WP414：卡身里自带主按钮的卡（Reddit「发送」）决定完，同类卡也报到顶上那一行 */}
+            <DeckAfterContext.Provider value={setAfter}>
+              <DeckCardView
+                key={card.id}
+                card={card}
+                mode={mode}
+                busy={mutation.isPending}
+                exiting={exiting}
+                {...(error === '' ? {} : { error })}
+                onDecide={dispatch}
+                onOpen={onOpen}
+              />
+            </DeckAfterContext.Provider>
           </div>
           {/* WP141：提示行按这张卡真有的动作生成（没有「稍后」就不写 ↑ 稍后） */}
           {hints.length === 0 ? null : (

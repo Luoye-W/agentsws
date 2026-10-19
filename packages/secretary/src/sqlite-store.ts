@@ -140,6 +140,12 @@ export class SqliteSecretaryStore implements SecretaryStore {
       )
   }
 
+  updateAsked(record: AskedRecord): void {
+    this.db
+      .prepare('UPDATE secretary_asked SET json = ? WHERE id = ?')
+      .run(JSON.stringify(record), record.id)
+  }
+
   listAsked(
     workspace_id: WorkspaceId,
     person_id: PersonId,

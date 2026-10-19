@@ -69,6 +69,11 @@ const COMMON_PROPS = {
     items: { type: 'string' },
     description: '用途标，素材库按它分组：hero / banner / story / social / ad / product',
   },
+  request_id: {
+    type: 'string',
+    description:
+      '可选：在做哪张设计需求单（list_design_requests 查到的 id）。给了，人挑中那张就算交付，结果回到下单的岗位',
+  },
   place: {
     type: 'object',
     description:
@@ -223,6 +228,14 @@ export function imageBranch(req: RunRequest, text: string): ImageStep[] | undefi
 
 /** stub 给出图那一段回话。没走通照实说。 */
 export function renderImageAnswer(input: { data?: ImageToolData; failed?: string }): string {
+  /*
+   * WP421（自查 general UI #18）：工具回执（「人挑之前别把它当定稿。别再重出同一批。」）是写给模型的，
+   * 回话里不照抄——出了图只说出了几张、在下面挑。
+   */
+  if (input.data?.status === 'awaiting_pick') {
+    const n = input.data.asset_ids?.length
+    return n === undefined ? '出了图，在下面挑一张。' : `出了 ${n} 张图，在下面挑一张。`
+  }
   if (input.data !== undefined) return input.data.message
   return `没出成图：${input.failed ?? '这一步没走通'}`
 }

@@ -57,6 +57,8 @@ export interface ExtensionOnboardingOptions {
     matter_id: string
     why: string
   }): Promise<{ card_id: string; reused: boolean } | undefined>
+  /** WP416：「要你处理」里还开着的那张装插件连接卡（没有回 `undefined`）。不给 = 不查。 */
+  openConnectCard?(workspace_id: string): Promise<string | undefined>
   /** 事项时间线上说一句（不在乎成没成）。 */
   note(workspace_id: string, matter_id: string, text: string): void | Promise<void>
   /** 记一笔「主动带过」（只有 id）。 */
@@ -69,6 +71,7 @@ const USE_ZH: Record<BrowserExtensionUse, string> = {
   kol: '在 YouTube / Instagram / TikTok 页面上收红人',
   google_ads: '在你的 Google 广告后台执行批过的改动',
   meta_ads: '在你的 Meta 广告后台执行批过的改动',
+  social: '到点打开你登录着的社媒发帖页、你点发布',
 }
 
 /** 卡上与时间线上那一句为什么。 */
@@ -129,7 +132,11 @@ export function createExtensionOnboarding(
       const t = await options.planTarget(ws, target).catch(() => undefined)
       if (t !== undefined) plans.push({ target, name: t.name, satisfied: t.satisfied })
     }
+    const open = options.paired(ws)
+      ? undefined
+      : await options.openConnectCard?.(ws).catch(() => undefined)
     return {
+      ...(open === undefined ? {} : { connect_card_id: open }),
       needed: true,
       uses: need.uses,
       roles: defs
@@ -163,6 +170,11 @@ export function createExtensionOnboarding(
     },
     nudge: async ({ actor, matter_id, role_ids }) => {
       const ws = actor.workspace_id
+      /*
+       * WP421（自查 general 界面 #3）/ WP419（自查 P7）：这一次做事的那条职责自己用不上插件（例如公关岗位里写新闻稿）就不在对话里带——
+       * 以前按整个岗位判，写新闻稿时第一屏先是「先装好 Chrome 插件、读 Reddit」的大卡，跟这件事毫无关系。
+       */
+      if (extensionNeedOf(defsOf([actor.role_id])) === undefined) return false
       const need = extensionNeedOf(defsOf(role_ids ?? [actor.role_id]))
       if (need === undefined || options.paired(ws)) return false
       // 今天点过「稍后」就不在对话里再提（下一次说话、过了今天再带）；同一条分配只主动带一次

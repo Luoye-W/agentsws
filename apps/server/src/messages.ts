@@ -231,6 +231,23 @@ export interface MessagesOptions {
    */
   b2b?: B2bMail
   /**
+   * WP416（自查 kol C1）：红人那一路——回我们开发信的那一封认得出来（分拣按线程归到红人），
+   * 交接时对上红人与合作、记往来、推阶段。不给 = 老行为（只开一件事项，不认人、不认合作）。
+   */
+  kol?: {
+    isOurThread(thread_id: string, refs: readonly string[]): boolean
+    intake(mail: {
+      from_email: string
+      subject: string
+      text: string
+      message_id?: string
+      in_reply_to?: string
+      references?: readonly string[]
+      account?: string
+      at?: string
+    }): { matched: boolean; creator_id?: string; collaboration_id?: string }
+  }
+  /**
    * WP204：「显示图片」的本机代取（{@link createRemoteImageLoader}：只取公网 http(s)、
    * 只收图片、限大小）。测试与 demo 注入替身；不给 = 真代取。
    */
@@ -516,7 +533,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     isB2bThread: (id, refs) => followUp && (options.b2b?.isOurThread(id, refs) ?? false),
     isB2bSender: (email) => options.b2b?.isKnownSender(email) ?? false,
     isSupportThread: (id, refs) => followUp && supportEnabled() && knownThread(id, refs),
-    isKolThread: (id, refs) => followUp && kolEnabled() && knownThread(id, refs),
+    isKolThread: (id, refs) =>
+      followUp &&
+      kolEnabled() &&
+      (knownThread(id, refs) || (options.kol?.isOurThread(id, refs) ?? false)),
     senderRules: rulesCache,
     model_halted: options.halt.isHalted('model') || options.halt.isHalted('all'),
     at: clock.now(),
@@ -634,6 +654,23 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const matter_id = out.matter_id ?? matterOfThread(record.thread_id)
       await link(matter_id)
       return matter_id === undefined ? { accepted: true } : { accepted: true, matter_id }
+    }
+    // WP416：红人回信先对上人和合作（记往来、推阶段）；对不上照旧只开一件事项
+    if (route === 'kol') {
+      try {
+        options.kol?.intake({
+          from_email: record.from.email,
+          subject: record.subject,
+          text: record.text,
+          ...(record.message_id === undefined ? {} : { message_id: record.message_id }),
+          ...(record.in_reply_to === undefined ? {} : { in_reply_to: record.in_reply_to }),
+          references: record.references,
+          account: record.account,
+          at: record.date,
+        })
+      } catch (e) {
+        logQuiet('kol_reply_intake_failed', record.account, e)
+      }
     }
     const ref = { type: 'thread' as const, id: record.thread_id }
     const existing = work
@@ -1569,7 +1606,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
                   ? '红人营销岗位没开，开了才能交。'
                   : route === 'b2b' && !b2bEnabledFor(row.account)
                     ? 'B2B 岗位没开（或这只邮箱不收 B2B 信），开了才能交。'
-                    : '这封信没交出去（原信取不回，或那一路没接住）。',
+                    : // WP417（自查 U13）：说人话、给下一步
+                      '没交成功：这封信的原文没取回来。可以再点一次，或者点「我自己回」。',
           }
       }
       const event = (handed_off: boolean): void =>

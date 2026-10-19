@@ -125,6 +125,40 @@ export { companyKey, normalizeCompanyName, normalizeDomain } from '@agentsws/cor
  */
 export const SHOP_CONNECTOR_KINDS: ReadonlySet<string> = new Set(['shop', 'shopify'])
 
+/**
+ * WP424（Luoye 10-19）：「邮件营销」不等于 Klaviyo——这类**好几家都能干**的连接器，只有用户说过
+ * 自己在用哪一家（品牌档案的 `email_service`，第 ② 步档案卡 / 设置页填）才把那一家列进「要连的平台」；
+ * 没说过（或说的那家目录里还没有）就进「还有 N 个可选」。值是这条 kind 去档案里读哪一格。
+ */
+export const VENDOR_CHOICE_KINDS: Readonly<Record<string, 'email_service'>> = {
+  email_marketing: 'email_service',
+}
+
+/** 名字归一：小写、去掉空白与标点、去掉「（邮件营销）」这类括号说明。 */
+function vendorKey(value: string): string {
+  return value
+    .replace(/[（(].*$/u, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gu, '')
+}
+
+/**
+ * WP424：用户说的那一家（「Klaviyo」「shopify email」）对上连接目录里的哪一个 provider。
+ * 按 provider id 与卡上名字认，大小写、空格、括号说明都不算；对不上回 `undefined`。
+ */
+export function matchVendorService(
+  stated: string | undefined,
+  candidates: readonly { service: string; label: string }[],
+): string | undefined {
+  if (stated === undefined) return undefined
+  const key = vendorKey(stated)
+  if (key.length < 3) return undefined
+  return candidates.find((c) => {
+    const keys = [vendorKey(c.service), vendorKey(c.label)].filter((k) => k.length >= 3)
+    return keys.some((k) => k === key || key.includes(k) || k.includes(key))
+  })?.service
+}
+
 /** 非法值与缺省一律回 `undefined`（调用方按 Shopify 处理）。 */
 /** 工作区的底座职责（"是这个工作区的成员"本身）。向导里不算进任何岗位（WP142）。 */
 const WORKSPACE_BASE_ROLE: RoleId = 'common.member'
@@ -501,6 +535,8 @@ export interface OnboardingAssembly {
     /** WP248（决策 83）：品牌一句话介绍 / 客服邮箱 / 币种（没写过就没有；币种读的人自己按 USD 补）。 */
     one_liner?: string
     support_email?: string
+    /** WP424：邮件营销用的哪一家（没写过就没有）。 */
+    email_service?: string
     currency?: string
     /** WP335（决策 659）：品类（没写过就没有）。 */
     category?: string
@@ -924,6 +960,32 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   }
 
   /**
+   * 一条职责连接器 → 清单上的那一行（哪个 provider、算不算「要连的」）。
+   *
+   * WP424：好几家都能干的那几类（{@link VENDOR_CHOICE_KINDS}，今天是邮件营销）——用户在档案里说过
+   * 用哪一家、目录里有它，就列那一家并照职责定义算「要连」；已经连上同类的一家也照旧算「要连」；
+   * 都没有就列目录里的第一家、但只进「可选」（不替用户认定他用 Klaviyo）。
+   */
+  function pickProvider(
+    kind: string,
+    required: boolean,
+    ws: WorkspaceId,
+    connected: ReadonlySet<string>,
+  ): { service: string; required: boolean } | undefined {
+    const services = providersOf(kind, ws)
+    const first = services[0]
+    if (first === undefined) return undefined
+    const field = VENDOR_CHOICE_KINDS[kind]
+    if (field === undefined) return { service: first, required }
+    const stated = matchVendorService(
+      profileOf(ws)?.[field],
+      services.map((service) => ({ service, label: catalogEntry(service)?.label ?? service })),
+    )
+    if (stated !== undefined) return { service: stated, required }
+    return { service: first, required: required && connected.has(kind) }
+  }
+
+  /**
    * WP216：向导最后那句「要现在装 CLI 吗？」——平台那一行有 CLI、而且勾的职责里有要用它的才问。
    * 判据全在 `PLATFORM_KITS` 里，这里没有一个平台名。
    */
@@ -959,20 +1021,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       for (const c of def.connectors) {
         // 目录里没有对应 provider 的 kind（tracking / payment_dispute）不进清单——
         // 点进去无处可点的条目就是噪音。等目录里真有它们的那天自然会出现。
-        const service = providersOf(c.kind, ws)[0]
-        if (service === undefined) continue
+        const pick = pickProvider(c.kind, c.required, ws, connected)
+        if (pick === undefined) continue
+        const { service, required } = pick
         const existing = connectors.get(service)
         if (existing === undefined) {
           connectors.set(service, {
             service,
             label: catalogEntry(service)?.label ?? service,
-            required: c.required,
+            required,
             // kind 是平台中立的（`shop`），连上没连上要按**解析出来的那个 provider** 算
             connected: connected.has(ROLE_CONNECTOR_KIND[service] ?? c.kind),
             needed_by: [def.name.zh],
           })
         } else {
-          existing.required = existing.required || c.required
+          existing.required = existing.required || required
           if (!existing.needed_by.includes(def.name.zh)) existing.needed_by.push(def.name.zh)
         }
       }
@@ -1116,9 +1179,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // WP240：建品牌时自动起的那份影子档案（`provisional`）不算"设过"
         // WP251（决策 92）：加的品牌要**走完第 ④ 步**才算设置完——第 ② 步确认了、③④ 没做就离开，
         // 回首页照样拉回它的首次设置（停在上次那一步：`business_done`）。启动品牌口径不变。
+        // Luoye 10-19 真机：第 ② 步公司名和组织上已有的一样就不写档案 → 档案一直是空的，走完第 ④ 步回首页
+        // 又被拉回向导。**走完过第 ④ 步（`completed`）就永远不算没设置**，不再只看档案。
         needs_setup:
           others === 0 &&
-          (added ? !backend.completed(ws) : profile === undefined || profile.provisional === true),
+          !backend.completed(ws) &&
+          (added || profile === undefined || profile.provisional === true),
         workspace_name: options.workspaceName(ws),
         brand_name: brandNameOf(ws),
         ...(profile === undefined ? {} : { profile: viewOf(profile, ws) }),
@@ -1506,6 +1572,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         p.postal_address !== undefined ||
         p.one_liner !== undefined ||
         p.support_email !== undefined ||
+        p.email_service !== undefined ||
         p.currency !== undefined ||
         p.category !== undefined
       )
@@ -1620,7 +1687,14 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     setBrandFacts(ws, facts) {
       const previous = profileOf(ws)
       if (previous === undefined) return false
-      const { one_liner: _o, support_email: _e, currency: _c, category: _g, ...kept } = previous
+      const {
+        one_liner: _o,
+        support_email: _e,
+        email_service: _m,
+        currency: _c,
+        category: _g,
+        ...kept
+      } = previous
       // WP346：第二版那几格同样由 nextBrandFacts 重算（没给的沿用）
       const rest = { ...kept } as Record<string, unknown>
       for (const key of BRAND_INSIGHT_FACT_KEYS) delete rest[key]
@@ -1770,6 +1844,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 export interface BrandFactsInput extends BrandInsightFactsInput {
   one_liner?: string | undefined
   support_email?: string | undefined
+  /** WP424：邮件营销用的哪一家。 */
+  email_service?: string | undefined
   currency?: string | undefined
   /** WP335（决策 659）：品类。 */
   category?: string | undefined
@@ -1777,14 +1853,21 @@ export interface BrandFactsInput extends BrandInsightFactsInput {
 
 /** 档案上已经写着的那几格（币种没写过就不出现——读的人按 USD 补）。WP346：加第二版那几格。 */
 function brandFactsOf(
-  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category' | BrandInsightFactKey>,
-): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'category' | BrandInsightFactKey> {
+  p: Pick<
+    WorkspaceProfile,
+    'one_liner' | 'support_email' | 'email_service' | 'category' | BrandInsightFactKey
+  >,
+): Pick<
+  WorkspaceProfile,
+  'one_liner' | 'support_email' | 'email_service' | 'category' | BrandInsightFactKey
+> {
   const out: Pick<
     WorkspaceProfile,
-    'one_liner' | 'support_email' | 'category' | BrandInsightFactKey
+    'one_liner' | 'support_email' | 'email_service' | 'category' | BrandInsightFactKey
   > = {
     ...(p.one_liner === undefined ? {} : { one_liner: p.one_liner }),
     ...(p.support_email === undefined ? {} : { support_email: p.support_email }),
+    ...(p.email_service === undefined ? {} : { email_service: p.email_service }),
     ...(p.category === undefined ? {} : { category: p.category }),
   }
   for (const key of BRAND_INSIGHT_FACT_KEYS)
@@ -1797,13 +1880,18 @@ export function nextBrandFacts(
   previous:
     | Pick<
         WorkspaceProfile,
-        'one_liner' | 'support_email' | 'currency' | 'category' | BrandInsightFactKey
+        | 'one_liner'
+        | 'support_email'
+        | 'email_service'
+        | 'currency'
+        | 'category'
+        | BrandInsightFactKey
       >
     | undefined,
   input: BrandFactsInput,
 ): Pick<
   WorkspaceProfile,
-  'one_liner' | 'support_email' | 'currency' | 'category' | BrandInsightFactKey
+  'one_liner' | 'support_email' | 'email_service' | 'currency' | 'category' | BrandInsightFactKey
 > {
   const pick = (
     given: string | undefined,
@@ -1812,16 +1900,24 @@ export function nextBrandFacts(
   ): string | undefined => (given === undefined ? old : norm(given))
   const one_liner = pick(input.one_liner, previous?.one_liner, normalizeOneLiner)
   const support_email = pick(input.support_email, previous?.support_email, normalizeSupportEmail)
+  const email_service = pick(input.email_service, previous?.email_service, normalizeEmailService)
   const currency = pick(input.currency, previous?.currency, normalizeCurrency)
   const category = pick(input.category, previous?.category, normalizeCategory)
   return {
     ...(one_liner === undefined ? {} : { one_liner }),
     ...(support_email === undefined ? {} : { support_email }),
+    ...(email_service === undefined ? {} : { email_service }),
     ...(currency === undefined ? {} : { currency }),
     ...(category === undefined ? {} : { category }),
     // WP346：第二版那几格 + 哪几格还是 AI 建议
     ...nextInsightFacts(previous, input, category),
   }
+}
+
+/** WP424：邮件营销用的哪一家——空白收成一个、去两端，封顶 60 字；空 = 没有。 */
+export function normalizeEmailService(value: string): string | undefined {
+  const line = value.replace(/\s+/g, ' ').trim()
+  return line === '' ? undefined : line.slice(0, 60)
 }
 
 /** WP335（决策 659）：品类——空白收成一个、去两端，封顶 80 字；空 = 没有。 */

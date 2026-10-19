@@ -343,7 +343,9 @@ describe('WP394 · 方案卡（挑对标款）', () => {
     expect(plan?.[key]?.value).toBe(
       'B0TESTRG01 = B0OWNMINE1；B0TESTRG03 = B0OWNMINE1；B0TESTRG02 = B0OWNMINE2',
     )
-    expect(plan?.[key]?.why).toContain('2,318 条评论')
+    // WP420（自查 U15）：每款一行「短名 · $价格 · ★评分」（不再一大段理由）
+    expect(plan?.[key]?.why?.split('\n')).toHaveLength(3)
+    expect(plan?.[key]?.why).toMatch(/Rival Gear[^\n]* · \$\d/u)
     expect(t.amz.opened.some((u) => u.includes('/s?k=Rival%20Gear%20Electric%20Bicycles'))).toBe(
       true,
     )

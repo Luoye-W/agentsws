@@ -24,6 +24,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { ExecutionPill } from '@/components/deck/execution-note'
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { ColumnFilter, FilteredLine, useTableFilters } from '@/components/design/table-filter'
 import { Sparkline } from '@/components/stat-tile'
@@ -141,7 +142,8 @@ function SparkCell({ text }: { text: string }): React.ReactNode {
     .map(Number)
     .filter((n) => Number.isFinite(n))
   if (points.length < 2) return null
-  return <Sparkline points={points} testId="table-sparkline" className="h-4 w-12 text-ws-brand" />
+  // WP420（自查 U20）：走势线用中性色——品牌色在深色里是绿，降价被读成「好」
+  return <Sparkline points={points} testId="table-sparkline" className="h-4 w-12 text-ws-body" />
 }
 
 /**
@@ -488,7 +490,12 @@ function TimelineBlock({ payload }: { payload: { rows: RecordRow[] } }): React.R
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-ws-muted-fg">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            <span>{approvalStateLabel(row.state, lang)}</span>
+            {/* WP415：执行过的照实说办没办成 */}
+            {row.execution === undefined ? (
+              <span>{approvalStateLabel(row.state, lang)}</span>
+            ) : (
+              <ExecutionPill view={row.execution} />
+            )}
           </div>
           <div className="text-sm">{row.title}</div>
         </li>
@@ -526,6 +533,16 @@ export function BlockBody({ data }: { data: BlockData }): React.ReactNode {
 }
 
 /**
+ * WP418（审计 A8）：上线检查单只有 `POST /v1/site/checklist/run` 这个口，块定义里没写 `rerun`——
+ * 在这里给这一块补一个「现在检查」，别的块不受影响。块定义里自己写了 `rerun` 的以块定义为准。
+ */
+const LOCAL_RERUN: Readonly<Record<string, NonNullable<BlockDef['rerun']>>> = {
+  'site.checklist': { path: '/v1/site/checklist/run', label: '现在检查' },
+}
+
+export const rerunOf = (block: BlockDef): BlockDef['rerun'] => block.rerun ?? LOCAL_RERUN[block.id]
+
+/**
  * WP381：块头一个小钮（「现在体检」）——点了 `POST` 块上写的地址，跑完把这个岗位的块都刷新。
  * 只有图标，字进 tooltip（界面少字）。
  */
@@ -542,11 +559,13 @@ function RerunButton({
     mutationFn: () => rerunBlock(rerun.path, assignment),
     onSettled: () => client.invalidateQueries({ queryKey: ['block'] }),
   })
+  /* 检查单那一块说「现在检查」，其余（体检）照旧说「现在体检」。 */
+  const checklist = rerun.path === '/v1/site/checklist/run'
   const label = run.isPending
-    ? t('block.rerun.running')
+    ? t(checklist ? 'block.rerun.checklist.running' : 'block.rerun.running')
     : run.isError
-      ? t('block.rerun.failed')
-      : t('block.rerun')
+      ? t(checklist ? 'block.rerun.checklist.failed' : 'block.rerun.failed')
+      : t(checklist ? 'block.rerun.checklist' : 'block.rerun')
   return (
     <TooltipProvider>
       <Tooltip>
@@ -579,6 +598,7 @@ export function BlockCard({
   assignment: string
 }): React.ReactNode {
   const { t } = useApp()
+  const rerun = rerunOf(block)
   const query = useQuery({
     queryKey: ['block', block.id, range, assignment],
     queryFn: () => getBlockData(block.id, range, assignment),
@@ -601,9 +621,7 @@ export function BlockCard({
     >
       <div className="flex items-start gap-2">
         <h3 className="ws-display flex-1 text-[15px]">{block.title}</h3>
-        {block.rerun === undefined ? null : (
-          <RerunButton rerun={block.rerun} assignment={assignment} />
-        )}
+        {rerun === undefined ? null : <RerunButton rerun={rerun} assignment={assignment} />}
         {block.report_url === undefined ? null : (
           <a
             className="inline-flex items-center gap-1 text-xs text-ws-muted-fg hover:underline"

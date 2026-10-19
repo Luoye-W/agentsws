@@ -299,6 +299,8 @@ async function main() {
         waitUntil: 'networkidle',
       })
       // WP372 起职责自己的看板在右侧面板「报表」下半截：点小链接打开，再「显示更多」加宽
+      // WP421：WP412 起这个链接收进「⋯ 这条职责能做什么」里——先打开那一页
+      await page.getByTestId('duty-about-link').click({ timeout: 20_000 })
       await page.getByTestId('duty-boards-link').click({ timeout: 20_000 })
       const more = page.getByTestId('rail-card-more-reports')
       if ((await more.count()) > 0) await more.click()

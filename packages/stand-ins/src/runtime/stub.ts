@@ -33,6 +33,12 @@ import {
   sequencesOf,
   startRoundOf,
 } from './b2b-outbound.js'
+import {
+  DESK_TOOL_DEF_BY_NAME,
+  deskBranch,
+  deskToolDataOf,
+  renderDeskAnswer,
+} from './desk-tools.js'
 import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
@@ -62,7 +68,13 @@ import {
   positionsOf,
   renderOwnerAnswer,
 } from './owner.js'
-import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import {
+  isQueryBrief,
+  noPlaybookAnswer,
+  noPlaybookSummary,
+  noSceneForQueryAnswer,
+  playbookOf,
+} from './playbook.js'
 import { PR_MONITOR_TOOL_DEF_BY_NAME } from './pr-monitor.js'
 import {
   RECORD_SINK_TOOL_DEF_BY_NAME,
@@ -99,6 +111,7 @@ import {
 import { setupStateBranch } from './setup-state.js'
 import {
   firstProductOf,
+  renderSiteChecklistAnswer,
   SHOP_GET_PRODUCT_TOOL,
   SHOP_LIST_PRODUCTS_TOOL,
   SHOP_SAVE_PRODUCT_TOOL,
@@ -107,6 +120,7 @@ import {
   type ShopStep,
   shopBranch,
   shopStagedOf,
+  siteChecklistBranch,
 } from './shop.js'
 import {
   renderSiteHealthAnswer,
@@ -116,12 +130,33 @@ import {
 } from './site-health.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
+  demoWeekSlots,
+  LIST_REDDIT_PENDING_TOOL,
+  LIST_SOCIAL_POSTS_TOOL,
+  redditPendingDataOf,
+  renderRedditPending,
+  renderStaged,
+  SOCIAL_WORK_TOOL_DEF_BY_NAME,
+  STAGE_REDDIT_WRITE_TOOL,
+  STAGE_SOCIAL_POST_TOOL,
+  socialPostsDataOf,
+  socialWorkBranch,
+  stagedDataOf,
+} from './social-tools.js'
+import {
+  adsAmazonScriptOf,
+  runAdsScript,
+  runAmazonScript,
+  type ScriptStep,
+} from './stub-ads-amazon.js'
+import {
   boundariesToAsk,
   boundaryGate,
   describeRun,
   marketplaceLinkSlip,
   rewriteForChannelGuard,
 } from './support.js'
+import { SUPPORT_TOOL_DEF_BY_NAME } from './support-tools.js'
 import {
   checkOf,
   choiceOf,
@@ -164,6 +199,7 @@ import {
   WORKSHOP_SERVICE_TOOL_DEF_BY_NAME,
   workshopServiceBranch,
 } from './workshop-service.js'
+import { renderWrapUp, WEB_WRAP_UP_MISSING_FETCH, WRAP_UP_STEP, wrapUpFallback } from './wrap-up.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -400,7 +436,13 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）
       PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ??
       // WP390：工坊服务的两个工具（服务端接了才有）
-      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ?? {
+      WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP417：客服查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
+      SUPPORT_TOOL_DEF_BY_NAME.get(name) ??
+      // WP419：社媒发帖 / Reddit 起草出卡（服务端接了才有）
+      SOCIAL_WORK_TOOL_DEF_BY_NAME.get(name) ??
+      // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
+      DESK_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -679,12 +721,28 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             fetched = { url, status: webStatusOf(res.data) }
           }
         }
-        const answer = renderWebAnswer({
+        const found = renderWebAnswer({
           query: webPlan.query,
           sources,
           ...(fetched === undefined ? {} : { fetched }),
           ...(failed === undefined ? {} : { failed }),
         })
+        /*
+         * WP423：预算到了也要交东西——收尾那一段（为什么停 + 已经查到的 + 还差什么 + 接着做），
+         * 与 direct / dsh 的替身规则脑在收尾回合拼出同一段话。
+         */
+        if (exhausted !== undefined)
+          sink({ type: 'progress', step: WRAP_UP_STEP, note: exhausted.which })
+        const answer =
+          exhausted === undefined
+            ? found
+            : renderWrapUp({
+                which: exhausted.which,
+                body: found,
+                ...(webPlan.fetch && fetched === undefined
+                  ? { missing: WEB_WRAP_UP_MISSING_FETCH }
+                  : {}),
+              })
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = describeRun({
@@ -846,6 +904,113 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       /*
+       * WP418（自查 A8 / A20）：**上线检查单**（演示用剧本）。工具面里有 site_checklist_run、话里问「还差什么才能开门」
+       * → 真跑一遍检查单（服务端那一份，读不到的照实写「没读到」），把结论念出来。别的问法一个字节不变。
+       */
+      const checklistStep = siteChecklistBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (checklistStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: checklistStep.tool, input: checklistStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: checklistStep.tool,
+                input: checklistStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(checklistStep.tool)
+        const answer = renderSiteChecklistAnswer(
+          res.status === 'ok' ? res.data : undefined,
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : res.reason,
+        )
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（演示用剧本）。
+       * 工具面里有、话对得上才走：调一次工具，把它回的那句结论 + 明细照抄成回话；别的问法一个字节不变。
+       */
+      const deskText = [
+        threadText,
+        plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? ''),
+      ].join('\n')
+      const deskStep = deskBranch(req, deskText)
+      if (deskStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: deskStep.tool, input: deskStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: deskStep.tool,
+                input: deskStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(deskStep.tool)
+        const answer = renderDeskAnswer(
+          res.status === 'ok' ? deskToolDataOf(res.data) : undefined,
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+        )
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
        * WP385（决策 1076）：**网站体检**（演示用剧本）。工具面里有 query_site_health：
        * 话里给了商品 feed / 平台上架页网址 → 要一张体检设置卡（已经是这样了就读一次体检结论接着说）；
        * 问体检 / AI 爬虫 / AI 带来的成交 → 读体检结论。别的问法一个字节不变。
@@ -899,6 +1064,104 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             res.status === 'ok' ? siteHealthQueryDataOf(res.data) : undefined,
             failedOf(res),
           )
+        }
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP419：**社媒发帖 / Reddit 起草出卡**（演示用剧本）。工具面里有这几个工具、话里是「有哪些等着回」→ 列出来、
+       * 给前三条出回复卡；「发一条 / 置顶公告」→ 按原话当要点出一张发帖卡；「排下周」→ 看一眼日历、排三条；「起草一条」→ 一条。
+       */
+      const socialStep = socialWorkBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (socialStep !== undefined) {
+        const callHost = async (
+          tool: string,
+          input: Record<string, unknown>,
+        ): Promise<{ status: string; data?: unknown; reason?: string }> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status === 'ok') readTools.push(tool)
+          return res
+        }
+        const failedOf = (res: { reason?: string }): string =>
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? '')
+        let answer: string
+        if (socialStep.kind === 'reddit_pending') {
+          const res = await callHost(LIST_REDDIT_PENDING_TOOL, { state: 'all' })
+          const data = res.status === 'ok' ? redditPendingDataOf(res.data) : undefined
+          answer = renderRedditPending(data, failedOf(res))
+          const waiting = (data?.rows ?? []).filter((r) => r.state === 'waiting').slice(0, 3)
+          if (waiting.length > 0 && req.tools.allow.includes(STAGE_REDDIT_WRITE_TOOL)) {
+            const staged = []
+            for (const r of waiting) {
+              const s = await callHost(STAGE_REDDIT_WRITE_TOOL, {
+                mode: 'reply',
+                item_id: r.item_id,
+              })
+              staged.push(s.status === 'ok' ? stagedDataOf(s.data) : undefined)
+            }
+            answer = `${answer}\n${renderStaged(staged)}`
+          }
+        } else if (socialStep.kind === 'reddit_post') {
+          const res = await callHost(STAGE_REDDIT_WRITE_TOOL, socialStep.input)
+          answer = renderStaged(
+            [res.status === 'ok' ? stagedDataOf(res.data) : undefined],
+            failedOf(res),
+          )
+        } else {
+          const look = await callHost(LIST_SOCIAL_POSTS_TOOL, {})
+          const cal = look.status === 'ok' ? socialPostsDataOf(look.data) : undefined
+          if (cal !== undefined && cal.accounts.length === 0)
+            answer = cal.note ?? '这条渠道还没登记要发帖的号，先连上再排。'
+          else {
+            const slots =
+              socialStep.kind === 'social_week'
+                ? demoWeekSlots(clock.now())
+                : [demoWeekSlots(clock.now())[0] ?? clock.now()]
+            const staged = []
+            for (const [i, at] of slots.entries()) {
+              const body =
+                socialStep.kind === 'social_one'
+                  ? `【演示草稿】${socialStep.text.slice(0, 200)}`
+                  : `【演示草稿 ${i + 1}/${slots.length}】这周的新内容（演示里没有真文案，接上真模型会按素材和表现写）`
+              const s = await callHost(STAGE_SOCIAL_POST_TOOL, { body, scheduled_at: at })
+              staged.push(s.status === 'ok' ? stagedDataOf(s.data) : undefined)
+            }
+            answer = renderStaged(staged, failedOf(look))
+          }
         }
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
@@ -1661,6 +1924,59 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * WP261：**独立站运营**（演示用剧本）。工具面里有改商品的工具、说的是改商品，就：列商品 → 读第一件 →
        * 出一张改标题的卡（不直接改；人批了执行器才去店里改）。stub 不会写文案，标题只加「（新版）」。
        */
+      /*
+       * WP420（自查 ads-amazon A11 / B2）：**投放**与 **Amazon 运营**的演示剧本（查数 → 止损卡；Listing 体检 / 词库）。
+       * 工具面里没有那几个工具（托管实例、别的职责）就不进来，一个字节不变。
+       */
+      const adsAmazon = adsAmazonScriptOf(req)
+      if (adsAmazon !== undefined) {
+        const exec = async (step: ScriptStep): Promise<ToolExecution> => {
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: step.tool, input: step.input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: step.tool, input: step.input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          return res
+        }
+        const out =
+          adsAmazon === 'ads'
+            ? await runAdsScript(exec)
+            : await runAmazonScript(exec, b2bText, req.tools.allow)
+        for (const change_id of out.staged) {
+          sink({ type: 'change.staged', change_id })
+          outputs.push({ kind: 'staged_change', change_id })
+        }
+        readTools.push(...out.readTools)
+        outputs.push({ kind: 'answer', text: out.answer })
+        usage.output_tokens = Math.ceil(out.answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: out.answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
       const shopCalls = shopBranch(req, b2bText)
       if (shopCalls !== undefined) {
         const failed: string[] = []
@@ -1749,6 +2065,36 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = noPlaybookSummary(req.actor.role_id)
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: 0,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP415（自查 R8）：客服剧本只会照着一封来信写回信。没有真来信（只有这件事的原话）、
+       * 原话又是一句查询时，不再把问题本身当成要回的信——照实说演示里没有这段，不起草、不出卡。
+       */
+      const realThread = itemsOfKind(req, 'thread').find(
+        (i) => typeof i.source_ref === 'string' || i.source_ref.type !== 'matter',
+      )
+      if (
+        realThread === undefined &&
+        itemsOfKind(req, 'order').length === 0 &&
+        isQueryBrief(threadText)
+      ) {
+        const answer = noSceneForQueryAnswer()
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = '演示里没有这段（查询类）：没有调工具、没有起草、没有出卡'
         sink({
           type: 'run.completed',
           usage: {
@@ -1965,6 +2311,18 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       usage.output_tokens = Math.ceil(body.length / 4) + (seed % 7)
+
+      /*
+       * WP423：预算到了也要交东西（与 direct / dsh 同口径）——要答复的运行交一段照实拼的收尾：
+       * 为什么停、已经做了什么、还差什么、点「接着做」。只要草稿 / 变更的运行（客服回信）一个字节不变。
+       */
+      if (exhausted !== undefined && req.expectations.outputs.includes('answer')) {
+        sink({ type: 'progress', step: WRAP_UP_STEP, note: exhausted.which })
+        outputs.push({
+          kind: 'answer',
+          text: wrapUpFallback({ which: exhausted.which, readTools }),
+        })
+      }
 
       const noStage = req.expectations.must_stage_if_change_requested && wantsChange && !staged
       // 17 §3：摘要是给下一次运行与人看的，写成一句人话（三个运行时同一份拼法）

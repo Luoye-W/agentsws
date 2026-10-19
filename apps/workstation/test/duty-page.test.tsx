@@ -133,6 +133,8 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
     await waitFor(() => {
       expect(screen.getByTestId('duty-name').textContent).toBe('店铺管理')
     })
+    // WP418（审计 U14）：标题能换行，不截断
+    expect(screen.getByTestId('duty-name').className).not.toContain('truncate')
     expect(screen.getByTestId('duty-breadcrumb').textContent).toBe('网站运营')
     expect(screen.getByTestId('duty-breadcrumb').getAttribute('href')).toBe('/positions/asg_store')
     const header = screen.getByTestId('duty-header')
@@ -177,7 +179,8 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
     expect(screen.getByTestId('duty-page').getAttribute('data-view')).toBe('about')
     expect(screen.queryByTestId('duty-body')).toBeNull()
     expect((await screen.findByTestId('duty-line')).textContent).toBe('管商品、价格、库存')
-    expect(screen.getByTestId('duty-holders').textContent).toContain('2')
+    // WP421：「N 个人在做」不上屏
+    expect(screen.queryByTestId('duty-holders')).toBeNull()
     const scope = await screen.findByTestId('duty-scope')
     // 认不出的数据域退回原名，ops 翻成人话
     expect(scope.textContent).toContain('看store · 可提议改动')

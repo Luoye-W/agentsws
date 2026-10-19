@@ -52,7 +52,12 @@ const CONFIG = {
 }
 
 function assemble(
-  opts: { holders?: { person: string; role: string }[]; facts?: B2bFactCardLite[] } = {},
+  opts: {
+    holders?: { person: string; role: string }[]
+    facts?: B2bFactCardLite[]
+    /** WP421：「改一下」重写用的模型替身。 */
+    drafter?: (input: { prompt: string }) => Promise<{ text: string }>
+  } = {},
 ) {
   let now = T0
   const clock: Clock = { now: () => now, sleep: async () => undefined }
@@ -149,6 +154,7 @@ function assemble(
       website: 'https://zhilian.example',
     }),
     inquirySkill: () => '## b2b-inquiry（测试用正文）',
+    ...(opts.drafter === undefined ? {} : { drafter: () => opts.drafter }),
     companyName: () => 'Shenzhen Zhilian Tech',
     companyAddress: () => 'Bldg 5, Demo Park, Shenzhen',
     letterhead: () => ({ color: '#0F766E', font_family: 'Inter' }),
@@ -368,7 +374,7 @@ describe('WP182 询盘接客服那条管线：分级 → 首回卡 / 红卡', ()
 })
 
 describe('WP182 六类事实卡', () => {
-  it('按官网行业预填：六类各提议一张（认证清单预填 3C 那几张证），已有的不重复提', async () => {
+  it('按官网行业预填：六类各提议一张（认证只给 3C 常见证名当参考），已有的不重复提', async () => {
     const h = assemble()
     const first = await h.sales.port.setupFacts(h.actor)
     expect(first.proposed).toBe(6)
@@ -376,6 +382,10 @@ describe('WP182 六类事实卡', () => {
     const cert = first.categories.find((c) => c.category === 'certifications')
     expect(cert?.card).toMatchObject({ status: 'proposed', prefilled: true })
     expect(cert?.card?.statement).toMatch(/CE、FCC、RoHS、UKCA、PSE/)
+    // WP421：行业常见的证名只当参考，不预填进「已有认证」、不写可引用的英文句（人核实了自己填）
+    expect(cert?.card?.statement).toContain('不代表你有')
+    const proposed = h.facts.find((f) => f.key === 'b2b:certifications')
+    expect((proposed?.structured as { reply_en?: string } | undefined)?.reply_en).toBe('')
     expect(first.ready).toBe(0)
     const again = await h.sales.port.setupFacts(h.actor)
     expect(again.proposed).toBe(0)
@@ -631,5 +641,108 @@ describe('WP182 面板「该唤醒的老客户」', () => {
     const dormant = b2bDeckFromStore(h.store, T0).dormant
     expect(dormant.map((d) => d.account)).toEqual(['OLD'])
     expect(dormant[0]?.days).toBe(200)
+  })
+})
+
+describe('WP421 B2B 卡「不要」回写、「改一下」真重写', () => {
+  const inquiryCard = async (h: ReturnType<typeof assemble>) => {
+    await h.mail.intake(record({}), TRIAGE, 'triage')
+    const [inq] = h.store.inquiries()
+    const card = await h.txn.approvals.get(inq?.reply_approval_id ?? '')
+    if (card === undefined) throw new Error('没出首回卡')
+    return { inq, card }
+  }
+
+  it('首回卡被驳回：询盘上「首回已起草」摘掉（面板不再挂着）', async () => {
+    const h = assemble({ facts: FACTS })
+    const { card } = await inquiryCard(h)
+    const token = card.deliveries.find((d) => d.to === 'p_he')?.decision_token ?? ''
+    const out = await h.txn.approvals.decide(card.id, 'p_he' as PersonId, {
+      action: 'reject',
+      reason: '不回了',
+      decision_token: token,
+      via: 'workstation',
+    })
+    h.sales.onRejected(out)
+    expect(h.store.inquiries()[0]?.reply_approval_id).toBeUndefined()
+  })
+
+  it('「改一下」有模型：按指导重写、过数字自查、出新卡，询盘指到新卡', async () => {
+    const prompts: string[] = []
+    const h = assemble({
+      facts: FACTS,
+      drafter: async ({ prompt }) => {
+        prompts.push(prompt)
+        return {
+          text: 'Dear Anna,\n\nThank you! The MOQ for the GaN 65W is 500 pcs per model.\n\nBest,\nHe Jia',
+        }
+      },
+    })
+    const { card } = await inquiryCard(h)
+    const before = String((card.payload as { after: { body: string } }).after.body)
+    const out = await h.sales.redraft(card, '语气再客气一点', 'p_he' as PersonId)
+    expect(out?.approval_item_id).toBeDefined()
+    expect(prompts.at(-1)).toContain('语气再客气一点')
+    const next = await h.txn.approvals.get(out?.approval_item_id ?? '')
+    const body = String((next?.payload as { after?: { body?: string } } | undefined)?.after?.body)
+    expect(body).toContain('Thank you!')
+    expect(body).not.toBe(before)
+    expect(h.store.inquiries()[0]?.reply_approval_id).toBe(out?.approval_item_id)
+  })
+
+  it('「改一下」模型编了事实卡里没有的数：不用它，原稿再出一张、照实说请直接改', async () => {
+    const h = assemble({
+      facts: FACTS,
+      drafter: async () => ({ text: 'Our MOQ is only 50 pcs and lead time is 3 days.' }),
+    })
+    const { card } = await inquiryCard(h)
+    const before = String((card.payload as { after: { body: string } }).after.body)
+    const out = await h.sales.redraft(card, 'MOQ 写低一点', 'p_he' as PersonId)
+    expect(out?.message).toContain('没能自动改')
+    const next = await h.txn.approvals.get(out?.approval_item_id ?? '')
+    expect(String((next?.payload as { after?: { body?: string } } | undefined)?.after?.body)).toBe(
+      before,
+    )
+    expect(next?.summary).toContain('请直接在卡上改')
+  })
+
+  it('「改一下」没接模型：原稿再出一张（卡不丢），照实说', async () => {
+    const h = assemble({ facts: FACTS })
+    const { card } = await inquiryCard(h)
+    const out = await h.sales.redraft(card, '语气再客气一点', 'p_he' as PersonId)
+    expect(out?.message).toContain('没接 AI 模型')
+    expect(out?.approval_item_id).toBeDefined()
+  })
+
+  it('报价卡被驳回：草稿标「被驳回」，面板不再算待审；「改一下」退回草稿、记下那句话', async () => {
+    const h = assemble({ facts: FACTS })
+    h.store.put('b2b_account', account('acc_volthaus', 'p_he', 'EU', 'GaN'))
+    const port = h.service.port
+    const d1 = await port.saveDraft(h.actor, 'b2b_quote', {
+      record: { account_id: 'acc_volthaus', number: 'Q-1' },
+      quote_version: {
+        lines: [{ sku: 'GaN65', description: 'GaN 65W', qty: 100, unit_price_usd: 6.2 }],
+        margin_pct: 30,
+        discount_pct: 0,
+        payment_terms_days: 30,
+        incoterm: 'FOB' as const,
+        incoterm_place: 'Shenzhen',
+        valid_until: '2026-10-31T00:00:00.000Z',
+      },
+    })
+    const s1 = await port.submitDraft(h.actor, 'b2b_quote', d1.draft.id)
+    const card = await h.txn.approvals.get(s1.approval_item_id ?? '')
+    const change_id = String((card?.payload as { change_id?: string } | undefined)?.change_id)
+    expect(h.service.onRejected({ change_id, reason: '价格不对' })?.message).toContain('不提了')
+    expect(h.store.draft(d1.draft.id)?.status).toBe('rejected')
+    expect(
+      (await h.sales.port.view(h.actor)).quotes.find((q) => q.pending !== undefined),
+    ).toBeUndefined()
+    const back = h.service.onRejected({ change_id, instruction: '单价改成 5.9' })
+    expect(back?.message).toContain('退回成草稿')
+    expect(h.store.draft(d1.draft.id)).toMatchObject({
+      status: 'draft',
+      message: '按你说的改：单价改成 5.9',
+    })
   })
 })

@@ -149,6 +149,8 @@ export interface BrandIntakeProfile {
   currency?: BrandIntakeField<string>
   social_links?: BrandIntakeField<BrandIntakeSocialLink[]>
   support_email?: BrandIntakeField<string>
+  /** WP424：邮件营销用的哪一家（官网上挂着它的脚本就填；人可改、可清空）。 */
+  email_service?: BrandIntakeField<string>
   policies?: BrandIntakeField<BrandIntakePolicy[]>
   /** 口吻样例：站上的原话，给 WP120 的 persona 当语气参考。 */
   tone_samples?: BrandIntakeField<string[]>

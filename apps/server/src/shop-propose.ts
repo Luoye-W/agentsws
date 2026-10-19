@@ -31,6 +31,7 @@ import {
   ShopOpsError,
   str,
 } from './shop-ops.js'
+import { draftExtra } from './shop-ops-extra.js'
 
 export interface ShopDraft {
   op: ShopOp
@@ -747,7 +748,11 @@ export async function draftOf(
       return saveMenu(ctx, input)
     case 'shop_create_discount':
       return createDiscount(ctx, input)
-    default:
+    default: {
+      // WP418：政策 / 库存 / 全站自动折扣 / 发货与回填单号
+      const extra = await draftExtra(tool, ctx, input)
+      if (extra !== undefined) return extra
       throw new ShopOpsError('not_allowed', `不认识的改动：${tool}`)
+    }
   }
 }

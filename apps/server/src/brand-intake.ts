@@ -129,6 +129,8 @@ export const ADOPTABLE_FIELDS = [
   'one_liner',
   'category',
   'support_email',
+  // WP424：邮件营销用的哪一家
+  'email_service',
   'currency',
   'subcategory',
   'positioning',

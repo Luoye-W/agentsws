@@ -20,6 +20,7 @@ import {
   returnWindowPolicy,
 } from '@agentsws/support-core'
 import { replyHeadline } from './tool-words.js'
+import { type BudgetWhich, budgetStopReason } from './wrap-up.js'
 
 // ---------- 上下文读取（三个运行时同一份口径） ----------
 
@@ -282,7 +283,8 @@ export function describeRun(input: RunSummaryInput): string {
 
   if (input.exhausted !== undefined) {
     const head = parts.length > 0 ? `${parts.join('，')}；` : ''
-    return `${head}预算不够（${input.exhausted}）就停了，没结的工具调用已经收尾。`
+    // WP423：停的原因说人话（不露 `max_tokens` 这类键名）；查到的那一段由收尾回合交出
+    return `${head}${budgetStopReason(input.exhausted as BudgetWhich)}。`
   }
   if (parts.length === 0) return '这次什么也没做：没查到东西，也没出草稿。'
   return `${parts.join('，')}。`

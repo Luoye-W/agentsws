@@ -26,8 +26,13 @@ describe('shouldOpenOnFirstRun', () => {
     expect(at({ alreadyOpened: true })).toBe(false)
   })
 
-  it('不是第一次就不开 —— 平时它是个托盘壳', () => {
-    expect(at({ firstRun: false })).toBe(false)
+  it('Luoye 10-19：不是第一次、人自己打开的 → 也开（Mac 从「应用程序」打开不能什么都不出来）', () => {
+    expect(at({ firstRun: false })).toBe(true)
+  })
+
+  it('开机自动启动的那一次不开窗；第一次装完哪怕是登录项拉起的也开', () => {
+    expect(at({ firstRun: false, launchedAtLogin: true })).toBe(false)
+    expect(at({ firstRun: true, launchedAtLogin: true })).toBe(true)
   })
 
   it('连公司服务器那一档不自动开：那边要先登录，自动开只会落到登录页', () => {

@@ -31,7 +31,15 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 
 /** 登记了运营工具的职责（与服务端 `PlatformStoreAdminSpec.scopes_by_role` 同一张表）。 */
-export const SHOP_ADMIN_ROLES = ['dtc.store', 'site.shopify-build', 'site.shopify-theme']
+export const SHOP_ADMIN_ROLES = [
+  'dtc.store',
+  'dtc.fulfillment',
+  'site.shopify-build',
+  'site.shopify-theme',
+  // WP417：客服退款 / 改地址 / 补发 / 发码也走这一份店铺授权
+  'dtc.support',
+  'dtc.community-support',
+]
 /** 有这两条之一的岗位上，「装 CLI / 填店铺」由网页模板那一行带。 */
 const THEME_ROLES = ['site.shopify-theme', 'site.builder']
 
@@ -66,6 +74,13 @@ export function shopAdminUntil(
     : v.expires_at === undefined
       ? undefined
       : t('shop_admin.until', { time: formatDateTime(v.expires_at, lang) })
+}
+
+/** WP418（审计 C6）：授权一天内到期、又不会自动续期（还没过期）。 */
+export function shopAdminExpiringSoon(v: ShopAdminView, now: number = Date.now()): boolean {
+  if (v.state !== 'authorized' || v.refreshable === true || v.expires_at === undefined) return false
+  const left = Date.parse(v.expires_at) - now
+  return Number.isFinite(left) && left > 0 && left <= 24 * 60 * 60 * 1000
 }
 
 export function ShopAdminBanner({
@@ -127,14 +142,30 @@ export function ShopAdminBanner({
   if (assignment === undefined || v === undefined || !v.applicable || v.state === undefined)
     return null
   // WP288：页上只出问题那几行；设置里只出授权好了那一行
-  if (variant === 'page' && v.state === 'authorized') return null
+  // WP418（审计 C6）：例外是快到期了（一天内、不会自动续期）——页上提前说一句
+  if (variant === 'page' && v.state === 'authorized') {
+    if (!shopAdminExpiringSoon(v)) return null
+    return (
+      <div
+        className="flex flex-wrap items-center gap-1.5 px-1 text-xs text-ws-warn"
+        data-testid="shop-admin-expiring"
+      >
+        <KeyRound className="size-3.5 shrink-0" aria-hidden />
+        <span>{t('shop_admin.expiring', { time: formatDateTime(v.expires_at ?? '', lang) })}</span>
+      </div>
+    )
+  }
   if (variant === 'settings' && v.state !== 'authorized') return null
   if (themeHere && (v.state === 'no_cli' || v.state === 'no_store')) return null
 
+  // WP418（自查 C2 / U6）：认不出的权限写原名，不能留空
   const scopeWords = (list: readonly string[]): string =>
     list
-      .map((s) => t(`shop_admin.scope.${s}`))
-      .filter((w, i, all) => !w.startsWith('shop_admin.') && all.indexOf(w) === i)
+      .map((s) => {
+        const w = t(`shop_admin.scope.${s}`)
+        return w.startsWith('shop_admin.') ? s : w
+      })
+      .filter((w, i, all) => all.indexOf(w) === i)
       .join(lang === 'zh' ? '、' : ', ')
   const hint = <Hint text={t('shop_admin.hint')} />
   const failure =
@@ -251,10 +282,11 @@ export function ShopAdminBanner({
         </form>,
       )
     case 'unauthorized':
+      // WP418（审计 U5）：同一个岗位上刚为改主题登录过 CLI，这里说清这一步是另一件事（改商品、页面、菜单）
       return row(
         'info',
         storeIcon,
-        t('shop_admin.unauthorized'),
+        t(themeHere ? 'shop_admin.unauthorized.after_theme' : 'shop_admin.unauthorized'),
         authorizeButton(t('shop_admin.authorize')),
       )
     case 'authorizing':
@@ -309,6 +341,8 @@ export function ShopAdminBanner({
           <span>
             {t('shop_admin.authorized')}
             {until === undefined ? '' : ` · ${until}`}
+            {/* WP418（审计 C7）：明示现在管的是哪家店 */}
+            {v.store === undefined ? '' : ` · ${t('shop_admin.store_is', { store: v.store })}`}
           </span>
           <Hint
             text={t('shop_admin.granted', {

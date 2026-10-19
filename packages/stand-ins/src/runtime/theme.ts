@@ -470,6 +470,14 @@ const legacyNewBase = (init: ThemeInitData | undefined): string =>
       : `「${init.theme.name}」`
 
 /** stub 给网页模板的那段回话（markdown）。没走通的那一步照实说，不编。 */
+/** WP418（自查 A7）：高级主题为什么暂时不能选（一句人话，与卡上那一格同一套）。 */
+const PREMIUM_WHY: Readonly<Record<string, string>> = {
+  needs_account: '登录工坊账号后可买',
+  needs_scope: '要重新登录一次工坊账号补上权限',
+  offline: '暂时连不上工坊云端',
+  soon: '即将开放',
+}
+
 export function renderThemeAnswer(input: {
   initialized?: boolean
   /** WP301：起底回来的那一份（复制自哪一份、复制出来叫什么）。 */
@@ -488,7 +496,7 @@ export function renderThemeAnswer(input: {
     lines.push(
       input.choice.premium === 'buy' || input.choice.premium === 'owned'
         ? '先选主题：出了一张选主题卡（我们的高级主题排第一，也可以用店里已装的免费主题）。选好了我起底、接着做。'
-        : `先选主题：出了一张选主题卡（高级主题${input.choice.premium === 'needs_account' ? '登录工坊账号后可买' : '即将开放'}，先选店里已装的免费主题）。选好了我起底、接着做。`,
+        : `先选主题：出了一张选主题卡（高级主题${PREMIUM_WHY[input.choice.premium] ?? '即将开放'}，先选店里已装的免费主题）。选好了我起底、接着做。`,
     )
   const old = input.legacy
   if (old !== undefined)

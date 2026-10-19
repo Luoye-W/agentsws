@@ -25,6 +25,11 @@ export type ChannelFailure =
   | 'quota_exhausted'
   | 'needs_approval'
   | 'upstream_error'
+  /**
+   * WP416（自查 kol A3）：这家的官方接口**只能按账号名查**，给的是关键词（「skincare yoga」）。
+   * 不再把关键词拆成 @skincare、@yoga 去查——照实说，关键词找人走插件 / 公共库，调用方退回本地库。
+   */
+  | 'handle_only'
 
 export interface ChannelError {
   ok: false
@@ -125,5 +130,32 @@ export function notImplemented(label: string, plan: string): ChannelError {
     ok: false,
     reason: 'not_implemented',
     message: `${label} 的适配器还没做（${plan}）。这条职责的找人、建联、合作、审核、归因照常能用——数据先靠导入与公共库。`,
+  }
+}
+
+/**
+ * WP416：一句查询里**账号名**是哪几个（只能按账号查的那几家用：Instagram / TikTok / X）。
+ *
+ * - 带 `@`、用逗号隔开、或者只有一个词（`gadgetjonas`）→ 当账号名；
+ * - 几个词用空格隔开、一个 `@` 都没有（`skincare yoga`）→ 这是关键词，回 `undefined`。
+ */
+export function handlesOf(q: string, limit: number): string[] | undefined {
+  const text = q.trim()
+  if (text === '') return undefined
+  const tokens = text
+    .split(/[,，\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+  const explicit = /[@,，]/.test(text) || tokens.length === 1
+  if (!explicit) return undefined
+  return tokens.slice(0, limit)
+}
+
+/** WP416：只能按账号查、给的却是关键词（或空的）时那一句。 */
+export function handleOnly(label: string): ChannelError {
+  return {
+    ok: false,
+    reason: 'handle_only',
+    message: `${label} 的官方接口只能按账号名查（@开头那个），没有「按关键词搜人」这个接口。按关键词找：在浏览器里打开 ${label} 搜索页，用 Agents 工坊插件把人收进来；或者用公共红人库。`,
   }
 }

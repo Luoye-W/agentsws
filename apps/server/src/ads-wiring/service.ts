@@ -40,6 +40,7 @@ import type {
   EventEnvelope,
   StagedChange,
 } from '@agentsws/contracts'
+import { NOT_WIRED_ERROR_PREFIX } from '@agentsws/contracts'
 import type { BackendResult } from '@agentsws/txn'
 import type { AdsStore } from '../ads.js'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
@@ -460,6 +461,7 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
       account_id: e.account_id,
       title: e.title,
       ...(e.sentence === undefined ? {} : { sentence: e.sentence }),
+      ...(e.line === undefined ? {} : { line: e.line }),
       state,
       ...(e.stop_loss === true ? { stop_loss: true } : {}),
       jobs: e.jobs,
@@ -484,12 +486,16 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
 
   return {
     async apply(change) {
-      if (!WIRED_KINDS.has(change.kind)) return undefined
-      if (options.actions() === undefined) return undefined
+      /*
+       * WP420（自查 A1 / A2 / A3）：投放职责的广告卡**都归这里**，不再掉回内存桩假装成功。
+       * 没有真执行器的（改出价 / 换素材、托管实例、X / TikTok、账户不在库里）一律照实回「没做」。
+       */
+      if (!isAdsRoleChange(change)) return undefined
+      if (!WIRED_KINDS.has(change.kind)) return notDone(NOT_WIRED_KIND)
+      if (options.actions() === undefined) return notDone(NOT_WIRED_HOSTED)
       const after = isRecord(change.after) ? change.after : {}
       const where = accountOf(change, after)
-      // X / TikTok、账户不在库里：不归插件，照旧走原来那条路
-      if (where === undefined) return undefined
+      if (where === undefined) return notDone(NOT_WIRED_ACCOUNT)
       const approval_id = change.approval?.item_id
       if (approval_id === undefined)
         return {
@@ -537,6 +543,7 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
         ...(actor === undefined ? {} : { actor }),
         title: str(after.title) ?? titleOf(change, after),
         ...sentenceOf(after),
+        ...lineOf(change, after, form),
         state: 'queued',
         ...(change.kind === 'pause_ad' &&
         reason === 'stop_loss' &&
@@ -694,6 +701,49 @@ export function createAdsWiring(options: AdsWiringOptions): AdsWiring {
   }
 }
 
+/** 投放职责的那几种广告卡（这几种不许掉回内存桩）。 */
+const ADS_ROLE_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
+  ...WIRED_KINDS,
+  'bid_change',
+  'creative_swap',
+])
+
+/** WP420：这张卡是不是投放职责的广告卡（别的职责同名的 kind 不归这里）。 */
+export function isAdsRoleChange(change: Pick<StagedChange, 'kind' | 'role_id'>): boolean {
+  return ADS_ROLE_KINDS.has(change.kind) && String(change.role_id ?? '').startsWith('ads.')
+}
+
+export const NOT_WIRED_KIND = `${NOT_WIRED_ERROR_PREFIX}还没接通：改出价 / 换素材工坊还不能替你去后台改，这一下没做。请你自己在广告后台改。`
+export const NOT_WIRED_HOSTED = `${NOT_WIRED_ERROR_PREFIX}还没接通：这台没有浏览器插件，改不到你的广告后台，这一下没做。去装了插件的桌面版里再提一次。`
+export const NOT_WIRED_ACCOUNT = `${NOT_WIRED_ERROR_PREFIX}还没接通：这个广告账户插件还不会点（只接了 Google / Meta），这一下没做。请你自己在后台改。`
+
+// WP415 统一口径：带 `not_wired` 与前缀，卡、时间线、记录面板照「没做 · 还没接通」显示（前缀上屏前去掉）
+const notDone = (message: string): BackendResult => ({
+  status: 'failed',
+  not_wired: true,
+  error: { message, retryable: false },
+})
+
+/** WP420（自查 A17）：账本那一行人话。 */
+function lineOf(
+  change: StagedChange,
+  after: Record<string, unknown>,
+  form: LedgerEntry['form'],
+): { line?: string } {
+  const f = form?.[0]
+  const name = f?.entity_name ?? str(after.name)
+  const before = isRecord(change.before) ? change.before : {}
+  if (change.kind === 'budget_change' && f?.amount !== undefined) {
+    const was = typeof before.value === 'number' ? `${amountText(before.value)} → ` : '→ '
+    return { line: `${name ?? ''} 日预算 ${was}${f.amount}`.trim() }
+  }
+  if (change.kind === 'pause_ad')
+    return {
+      line: `${str(after.reason) === 'stop_loss' ? '止损暂停' : '暂停'}${name === undefined ? '' : ` ${name}`}`,
+    }
+  return name === undefined ? {} : { line: `${titleOf(change, after)}（${name}）` }
+}
+
 function sentenceOf(after: Record<string, unknown>): { sentence?: string } {
   const s = str(after.sentence) ?? str(after.stop_loss_reason)
   return s === undefined ? {} : { sentence: s }
@@ -712,7 +762,7 @@ function titleOf(change: StagedChange, after: Record<string, unknown>): string {
     case 'budget_change':
       return '改预算'
     case 'create_campaign':
-      return `新建 campaign${name === undefined ? '' : `：${name}`}`
+      return `新建广告系列${name === undefined ? '' : `：${name}`}`
     case 'ads_activate':
       return '开始投放'
     case 'ads_undo':

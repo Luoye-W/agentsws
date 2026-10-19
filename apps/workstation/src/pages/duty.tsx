@@ -48,6 +48,7 @@ import {
   connectorLines,
   scopeLines,
   skillLines,
+  toolLines,
 } from '@/lib/duty-capabilities'
 import { matterUrl } from '@/lib/work'
 
@@ -66,6 +67,8 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
       lines: actionLines(view, t),
       empty: t('duty.actions.none'),
     },
+    // WP415：能查什么（没有执行器的标「还没接通」）
+    { id: 'tool', title: t('duty.tools'), lines: toolLines(view, t) },
     { id: 'skill', title: t('duty.skills'), lines: skillLines(view, t) },
     { id: 'connector', title: t('duty.connectors.title'), lines: connectorLines(view, t, lang) },
   ]
@@ -85,7 +88,13 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
               ) : (
                 <ul className="flex flex-col gap-0.5">
                   {g.lines.map((line) => (
-                    <li key={line.key} data-testid={`duty-${g.id}`} data-raw={line.raw}>
+                    <li
+                      key={line.key}
+                      data-testid={`duty-${g.id}`}
+                      data-raw={line.raw}
+                      data-not-wired={line.not_wired === true ? 'true' : undefined}
+                      className={line.not_wired === true ? 'text-ws-muted-fg' : undefined}
+                    >
                       <InfoTip text={line.raw}>{line.text}</InfoTip>
                     </li>
                   ))}
@@ -123,9 +132,6 @@ function DutyAbout({
       <div className="flex flex-col gap-1">
         <p className="text-sm" data-testid="duty-line">
           <MarkdownInline text={view.description} />
-        </p>
-        <p className="text-xs text-ws-muted-fg" data-testid="duty-holders">
-          {t('duty.holders', { count: view.holders ?? 0 })}
         </p>
       </div>
       <DutyAdvanced view={view} />
@@ -206,7 +212,11 @@ export function DutyPage(): React.ReactNode {
           <DutyIcon role_id={role_id} size={22} selected />
         </span>
         <div className="flex min-w-0 flex-1 items-center gap-1.5 self-center">
-          <h1 className="ws-display truncate text-[26px] leading-tight" data-testid="duty-name">
+          {/* WP418 / WP420（审计 U14）：右栏加宽 / 窄的时候标题换行（最多两行），不截成「Shopify 整...」 */}
+          <h1
+            className="ws-display line-clamp-2 min-w-0 text-[26px] leading-tight break-words"
+            data-testid="duty-name"
+          >
             {role.data?.name ?? here?.role_name ?? role_id}
           </h1>
           {description === '' ? null : <Hint text={description} testId="duty-description" />}

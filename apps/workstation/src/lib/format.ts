@@ -14,6 +14,8 @@ export function formatValue(
   format: TileFormat,
   lang: Lang,
   currency?: string,
+  /** WP416：窄格子里用短币符（`$64` 而不是 `US$64`）。 */
+  narrow = false,
 ): string {
   if (value === undefined) return '—'
   const locale = LOCALE[lang]
@@ -23,6 +25,7 @@ export function formatValue(
         style: 'currency',
         currency: currency ?? 'USD',
         maximumFractionDigits: 2,
+        ...(narrow ? { currencyDisplay: 'narrowSymbol' as const } : {}),
       }).format(value)
     case 'percent':
       return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`

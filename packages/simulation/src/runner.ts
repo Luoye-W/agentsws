@@ -17,6 +17,7 @@ import type {
   RunEvent,
   RunResult,
 } from '@agentsws/contracts'
+import { MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import { instructionRuleCard, isInstructionRuleCard, ruleFromCard } from '@agentsws/core'
 import type { ActorPolicy } from '@agentsws/stand-ins'
 import { runAmazonKeywordSample } from './amazon-keywords.js'
@@ -389,7 +390,7 @@ async function execute(
     try {
       const { assemblePrompt } = await import('@agentsws/stand-ins')
       const prompt = assemblePrompt(request)
-      await world.gateway().complete({
+      const checked = await world.gateway().complete({
         messages: prompt.messages,
         tools: prompt.tools,
         seed,
@@ -402,6 +403,16 @@ async function execute(
           purpose: 'run',
         },
       })
+      /*
+       * WP425（stub 剧本）：预检这一跳就从自己的 AI 切到了工坊积分——这一轮后面的补全都直接走工坊积分
+       * （网关按 run_id 记着），所以那一行由这里记，三个运行时同一处、同一句。
+       */
+      if (checked.source_switch !== undefined)
+        sink({
+          type: 'progress',
+          step: MODEL_SOURCE_SWITCHED_STEP,
+          note: checked.source_switch.message,
+        })
     } catch (err) {
       const e = err as { code?: string; message?: string }
       const code =
@@ -1147,6 +1158,16 @@ async function execute(
           times: event.fault.times,
         })
         world.appendEvent('simulation.fault_injected', { ...event.fault })
+        return
+      }
+      case 'model.own_fault': {
+        const fault = {
+          code: event.own_fault.code,
+          times: event.own_fault.times ?? 1,
+          backup: event.own_fault.backup ?? 'on',
+        }
+        world.injectOwnFault(fault)
+        world.appendEvent('simulation.own_model_fault', fault)
         return
       }
       case 'model.outage': {
@@ -2016,6 +2037,7 @@ async function execute(
           who: e.who,
           role: e.role,
           ask: e.ask,
+          ...(e.max_tool_calls === undefined ? {} : { max_tool_calls: e.max_tool_calls }),
         })
         world.appendEvent('simulation.web_research', {
           who: e.who,

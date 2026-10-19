@@ -41,6 +41,12 @@ export type KnownEventType =
   | 'approval.expired'
   | 'approval.withdrawn'
   | 'approval.superseded'
+  /** WP414：一张卡的「不要 / 稍后」带动了同类卡一并处理（账本：谁的哪个决定带动了哪几张）。 */
+  | 'approval.followed'
+  /** WP414：跟着处理的卡被撤回、放回待处理。 */
+  | 'approval.reopened'
+  /** WP414：决定之后补了一句理由（「不要」理由可选）。 */
+  | 'approval.reason_added'
   // changes (15)
   | 'change.staged'
   | 'change.blocked'
@@ -82,6 +88,11 @@ export type KnownEventType =
   | 'model.usage'
   | 'model.provider_down'
   | 'model.budget_frozen'
+  /**
+   * WP425：这一轮从自己的 AI 切到了工坊积分（额度用完 / 连不上 / key 失效）。payload 只有
+   * 从哪个模型、到哪个模型、原因码与给人看的那一句——没有 key、没有请求正文。
+   */
+  | 'model.source_switched'
   /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
@@ -383,6 +394,10 @@ export type KnownEventType =
   | 'chat.turn_planned'
   | 'chat.takeover_changed'
   | 'chat.assist_timeout'
+  // WP417（决策 1232）：在线客服缺省要人批——这一句起草好了、先出卡等人批（payload：原因、卡 id）
+  | 'chat.reply_held'
+  // WP417（自查 C15）：聊天里没等到人 → 出了一张跟进邮件卡（payload：卡 id；邮箱不进日志）
+  | 'chat.email_follow_up'
   // WP57：商家在聊天里「教 AI」之后沉淀下来的知识候选（承诺类永不自动发布，19）
   | 'knowledge.candidate_created'
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。

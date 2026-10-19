@@ -10,6 +10,7 @@ import type {
   Decision,
   ErrorCode,
   EventEnvelope,
+  ExecutionReadback,
   ExecutionSnapshot,
   Iso8601,
   Level,
@@ -52,6 +53,13 @@ export interface BackendResult {
   execution_id?: string
   outcome_ref?: ObjectRef
   error?: { message: string; retryable?: boolean }
+  /**
+   * WP415（只加）：回 ok 时说一句「读回来核对过没有」（`verified` / `unverified` / `demo`）。
+   * 不给 = 没说，界面上照实写「已执行，没能回读核对」。
+   */
+  readback?: ExecutionReadback
+  /** WP415（只加）：失败是因为「这一步还没接通」（生产里没有真执行器），不是这一次出错。 */
+  not_wired?: true
 }
 /**
  * 施行回调收到的那一组东西。`fencing_token` 是 31 §3.2「单一施行者」的凭据：

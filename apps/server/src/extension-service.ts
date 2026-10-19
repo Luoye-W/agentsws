@@ -303,16 +303,25 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   }
 
   /** 找到「这条渠道上的这个人」：handle 与平台的稳定 id（`UC…`）都认。 */
-  function findAccount(channel: KolChannel, key: string): PlatformAccount | undefined {
+  function findAccount(
+    channel: KolChannel,
+    key: string,
+    external_id?: string,
+  ): PlatformAccount | undefined {
     const bare = normalizeHandle(key)
-    return options.kol
-      .accounts({ channel })
-      .find(
-        (a) =>
-          normalizeHandle(a.handle) === bare ||
-          (a.external_id !== undefined && a.external_id !== '' && a.external_id === key),
-      )
+    const ids = new Set([key, external_id].filter((x): x is string => x !== undefined && x !== ''))
+    return options.kol.accounts({ channel }).find(
+      (a) =>
+        normalizeHandle(a.handle) === bare ||
+        (a.external_id !== undefined && a.external_id !== '' && ids.has(a.external_id)) ||
+        // WP416（自查 kol D「插件收录」）：先从 `/channel/UC…` 收（handle 就是 UC…）、再从 `/@name` 收
+        (external_id !== undefined && external_id !== '' && a.handle === external_id),
+    )
   }
+
+  /** 这个 handle 是不是只是平台的 id（`UC…`，从 `/channel/UC…` 收进来时就是它）。 */
+  const isBareId = (handle: string, external_id: string | undefined): boolean =>
+    (external_id !== undefined && handle === external_id) || /^UC[\w-]{20,}$/.test(handle)
 
   /** WP130：一次观测的来源那几格（`ExtensionObservation` / 显式存入都可能带）。 */
   type ListSource = {
@@ -348,10 +357,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       observed_at: string
     } & ListSource,
   ): { creator: Creator; account: PlatformAccount } {
-    const key = normalizeHandle(one.handle)
-    const existing = options.kol
-      .accounts({ channel: one.channel })
-      .find((a) => normalizeHandle(a.handle) === key)
+    // WP416：同一频道两种链接（`/channel/UC…` 与 `/@name`）收成同一个人——handle 与稳定 id 都比
+    const existing = findAccount(one.channel, one.handle, one.external_id)
 
     if (existing !== undefined) {
       const creator =
@@ -366,8 +373,15 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       if (creator.display_name === '' && one.display_name !== undefined) {
         options.kol.saveCreator({ ...creator, display_name: one.display_name })
       }
+      // 原来那一条的 handle 只是 UC… 而这次看到了真名字：换成真名字（链接也跟着换成能读的那个）
+      const betterHandle =
+        isBareId(existing.handle, existing.external_id ?? one.external_id) &&
+        !isBareId(one.handle, one.external_id)
       const account: PlatformAccount = {
         ...existing,
+        ...(betterHandle
+          ? { handle: one.handle, url: one.url ?? urlOf(one.channel, one.handle) }
+          : {}),
         ...(one.external_id === undefined ? {} : { external_id: one.external_id }),
         ...(one.followers === undefined ? {} : { followers: one.followers }),
         ...(one.country === undefined ? {} : { region: one.country }),
@@ -983,7 +997,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
 
     saveCreator: (session, input): ExtensionCreatorSaveResult => {
       void session
-      const existingBefore = findAccount(input.channel, input.handle)
+      const existingBefore = findAccount(input.channel, input.handle, input.external_id)
       const { creator, account } = upsert(input)
       // 页面上看到的商务邮箱：存入是一次显式动作，明文当场进加密库（同观测那条路）。
       if (input.contact !== undefined) storeContact(creator.id, input.contact)

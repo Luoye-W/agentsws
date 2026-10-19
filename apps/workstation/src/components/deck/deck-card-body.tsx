@@ -14,9 +14,17 @@ import { isAssistantNotesPayload } from '@agentsws/contracts'
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
+import { AdsChangeBody, isAdsChangePayload } from '@/components/ads/ads-change-body'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
+import { openExternal } from '@/components/connections/bridge'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
+import {
+  isKolOutreachPayload,
+  isKolReviewPayload,
+  KolOutreachBody,
+  KolReviewBody,
+} from '@/components/kol/kol-card-bodies'
 import {
   GoogleAlertChangeBody,
   isGoogleAlertChangePayload,
@@ -26,6 +34,7 @@ import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
@@ -137,6 +146,67 @@ function KeyValues({
         </div>
       ))}
     </dl>
+  )
+}
+
+/**
+ * WP418（审计 U9）：发布主题卡的主体——「打开预览」按钮（在浏览器里开）+ 换哪一份 + 改了几个文件。
+ * 全从 payload 的 before / after 取；取不到主题名就退回整段说明。
+ */
+function PublishThemeBody({
+  card,
+  payload,
+  fallback,
+}: {
+  card: DeckCard
+  payload: Record<string, unknown>
+  fallback: string
+}): React.ReactNode {
+  const { t } = useApp()
+  const after = isRecord(payload.after) ? payload.after : {}
+  const before = isRecord(payload.before) ? payload.before : {}
+  const preview = str(after.preview_url) ?? highlightText(card, 'preview')
+  const to = str(after.theme_name)
+  const from = str(before.theme_name)
+  const files = Array.isArray(after.files)
+    ? after.files.filter((f): f is string => typeof f === 'string')
+    : undefined
+  return (
+    <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-publish-theme">
+      {preview === undefined ? null : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-fit gap-1.5"
+          data-testid="deck-publish-theme-preview"
+          title={preview}
+          onClick={() => {
+            openExternal(preview)
+          }}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+          {t('deck.publish_theme.preview')}
+        </Button>
+      )}
+      {to === undefined ? (
+        <Note>{fallback}</Note>
+      ) : (
+        <ul className="flex flex-col gap-1 text-[13px] leading-5 text-ws-body">
+          <li>
+            {from === undefined
+              ? t('deck.publish_theme.first', { to })
+              : t('deck.publish_theme.swap', { from, to })}
+          </li>
+          {files === undefined ? null : (
+            <li className="text-ws-muted-fg" title={files.join('\n')}>
+              {files.length === 0
+                ? t('deck.publish_theme.files.none')
+                : t('deck.publish_theme.files', { n: files.length })}
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -323,6 +393,9 @@ export function DeckCardBody({
       case 'change':
         // WP316：上传表 / 开始投放 / 撤销卡——一句话 + 表格预览 + 可下载的原表
         if (isAdsSheetPayload(payload)) return <AdsSheetBody payload={payload} />
+        // WP420：改预算 / 暂停卡——一行「日预算 $300 → $330」，不露字段名，总闸只留卡头小标签
+        if (isAdsChangePayload(payload))
+          return <AdsChangeBody payload={payload} reason={reasonText} title={card.title} />
         // WP249：自家版版务卡——原文、举报原因、AI 建议 + 理由、将执行的动作
         if (isOwnSubPayload(payload)) return <OwnSubCardBody payload={payload} />
         // WP254：别的社群的版务卡——将执行什么、原话、依据（批了才经渠道适配器去做）
@@ -336,6 +409,8 @@ export function DeckCardBody({
         // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
         if (isGoogleAlertChangePayload(payload))
           return <GoogleAlertChangeBody card={card} payload={payload} />
+        // WP416：红人验收结论——一句话，不露字段名
+        if (isKolReviewPayload(payload)) return <KolReviewBody payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />
@@ -422,30 +497,46 @@ export function DeckCardBody({
 
       // ③ 发布：左预览右说明；排期时间与受众数**必现**（15 §2 / 56 §2）
       case 'publish': {
+        // WP418（审计 U9）：发布主题卡不是发帖——只要「打开预览」+ 改了哪几处，不要排期 / 受众 / 空缩略图
+        if (card.change_kind === 'publish_theme')
+          return <PublishThemeBody card={card} payload={payload} fallback={content.text} />
         const preview = str(payload.preview_image) ?? str(payload.image_url)
         const scheduled = highlightText(card, 'scheduled')
         const audience = highlightText(card, 'audience')
         // WP332：公关在别人帖子下回一条评论——被回的那一条点得开（插件也按它找回复框）
         const parentUrl = isRecord(payload.after) ? str(payload.after.parent_url) : undefined
+        // WP421（自查 general）：批了也不会自动发（新闻稿分发、外部论坛还没接）——卡上照实写「要你自己发」
+        const manual = isRecord(payload.after) && payload.after.manual_send === true
         return (
           <div className="mt-2.5 flex gap-3" data-testid="deck-layout-publish">
-            <div
-              data-testid="deck-publish-preview"
-              className="size-24 flex-none overflow-hidden rounded-xl bg-ws-tint"
-            >
-              {preview === undefined ? null : (
+            {/* WP418（审计 U10）/ WP421（界面清单 #1）：没有封面就不画占位块 */}
+            {preview === undefined ? null : (
+              <div
+                data-testid="deck-publish-preview"
+                className="size-24 flex-none overflow-hidden rounded-xl bg-ws-tint"
+              >
                 <img src={preview} alt="" className="size-full object-cover" />
-              )}
-            </div>
+              </div>
+            )}
             <div className="min-w-0 flex-1 text-[13px] leading-5 text-ws-body">
               <p className="whitespace-pre-wrap">{content.text}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
-                  {t('deck.publish.when', { when: scheduled ?? t('deck.publish.now') })}
+                <span
+                  className={`inline-flex h-[22px] items-center rounded-md px-2 text-xs ${
+                    manual ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-surface'
+                  }`}
+                  data-testid={manual ? 'deck-publish-manual' : undefined}
+                >
+                  {manual
+                    ? t('deck.publish.manual')
+                    : t('deck.publish.when', { when: scheduled ?? t('deck.publish.now') })}
                 </span>
-                <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
-                  {t('deck.publish.audience', { n: audience ?? '—' })}
-                </span>
+                {/* WP418（审计 U10）：没有受众数就不出「受众 · —」 */}
+                {audience === undefined ? null : (
+                  <span className="inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs">
+                    {t('deck.publish.audience', { n: audience })}
+                  </span>
+                )}
               </div>
               {parentUrl === undefined ? null : (
                 <a
@@ -662,6 +753,8 @@ export function DeckCardBody({
       default:
         // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
         if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
+        // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
+        if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (
           <div data-testid="deck-layout-outbound">
             <OutboundBody card={card} mode={mode} />

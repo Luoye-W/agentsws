@@ -103,6 +103,9 @@ function pointOf(week: string, rows: readonly MetricAnswer[]): GeoWeekPoint {
   }
 }
 
+/** WP421：比较胜率至少几条分出高下的样本才出百分比。 */
+export const MIN_WIN_SAMPLES = 5
+
 /**
  * WP380：比较胜率与描述准确度（AI 判断那一步已附原话；这里只数）。没分高下的不进胜率分母；
  * 一条都没有就不写（不出 0）。
@@ -114,9 +117,12 @@ function qualityOf(ok: readonly MetricAnswer[]): Partial<GeoWeekPoint> {
   const claims = ok.flatMap((r) => r.insight?.claims ?? [])
   const n = (v: string) => claims.filter((c) => c.verdict === v).length
   return {
+    // WP421（自查 general 2.2）：少于 {@link MIN_WIN_SAMPLES} 条只给条数、不出百分比（1 条样本就是 100% / 0%）
     ...(decided.length === 0
       ? {}
-      : { compared: decided.length, wins, win_rate: round(wins / decided.length) }),
+      : decided.length < MIN_WIN_SAMPLES
+        ? { compared: decided.length, wins }
+        : { compared: decided.length, wins, win_rate: round(wins / decided.length) }),
     ...(claims.length === 0
       ? {}
       : {

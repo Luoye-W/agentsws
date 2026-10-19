@@ -29,6 +29,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
+import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
@@ -221,7 +222,8 @@ export function PositionPage(): React.ReactNode {
           </div>
           {view === undefined ? null : fresh ? (
             <p className="text-xs text-ws-muted-fg" data-testid="position-status">
-              {t('pos2.status.new', { n: view.roles.length })}
+              {/* WP420（自查 U6）：只数自己担着的那几条（左栏只有一条却写「4 条职责」） */}
+              {t('pos2.status.new', { n: duties.length > 0 ? duties.length : view.roles.length })}
             </p>
           ) : stuck === 0 && today === 0 ? null : (
             <p
@@ -333,6 +335,15 @@ export function PositionPage(): React.ReactNode {
           mode="position"
         />
       )}
+      {/* WP418（自查 A1）：建站平台还没选 → 顶上一行「先选建站平台」+ 下拉（设置页签里那张 CLI 卡自己会出） */}
+      {tab === 'settings' ? null : (
+        <PlatformChooseBanner
+          {...(view?.position_id === undefined ? {} : { positionId: view.position_id })}
+          {...(duties[0]?.assignment_id === undefined
+            ? {}
+            : { assignment: duties[0].assignment_id })}
+        />
+      )}
       {/* WP253：建站岗位「让 AI 改网站还差哪一步」（没装 CLI / 没登录 / 没店铺地址）；补上就消失 */}
       <SiteThemeBanner positionId={view?.position_id} duties={duties} />
       {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」——WP288 起只在出问题时出 */}
@@ -389,15 +400,22 @@ export function PositionPage(): React.ReactNode {
                 onOpen={(card) => {
                   navigate(matterUrl(card))
                 }}
-                title={
-                  <h3 className="flex min-w-0 items-center gap-2" data-testid="position-deck-title">
-                    <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
-                    {pending === 0 ? null : (
-                      <span className="ws-num text-xs text-ws-muted-fg">{pending}</span>
-                    )}
-                    <Hint text={t('pos2.deck.hint')} />
-                  </h3>
-                }
+                title={(total) => {
+                  // WP416（自查 kol U7）：数跟下面这副牌走（还没取到时先用岗位视图那个数）
+                  const n = total ?? pending
+                  return (
+                    <h3
+                      className="flex min-w-0 items-center gap-2"
+                      data-testid="position-deck-title"
+                    >
+                      <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
+                      {n === 0 ? null : (
+                        <span className="ws-num text-xs text-ws-muted-fg">{n}</span>
+                      )}
+                      <Hint text={t('pos2.deck.hint')} />
+                    </h3>
+                  )
+                }}
               />
             )}
           </div>

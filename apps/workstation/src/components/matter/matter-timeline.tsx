@@ -11,6 +11,7 @@ import {
   type MatterLiveRun,
   type MatterRunStep,
   splitGenuiReply,
+  type ThemeChoicePayload,
 } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
@@ -40,6 +41,7 @@ import {
 import { type ReactNode, useEffect, useState } from 'react'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
+import { isThemeChoicePayload, ThemeChoiceBody } from '@/components/deck/theme-choice-body'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { Button } from '@/components/ui/button'
@@ -397,6 +399,7 @@ export function AiEntry({
   publishing,
   onResume,
   resuming,
+  resumeLabel,
 }: {
   item: Extract<MatterItem, { kind: 'ai' }>
   roleId?: string | undefined
@@ -407,6 +410,8 @@ export function AiEntry({
   /** WP236：这一条是被停下来的那次的部分结果——下面出「接着跑」。 */
   onResume?: (() => void) | undefined
   resuming?: boolean
+  /** WP423：按钮上的字（预算停的那次写「接着做」）；不给 = 「接着跑」。 */
+  resumeLabel?: string
 }): ReactNode {
   const { t } = useApp()
   const raw = item.event?.text ?? ''
@@ -490,7 +495,7 @@ export function AiEntry({
           disabled={resuming === true}
           onClick={onResume}
         >
-          {t('matter.resume')}
+          {resumeLabel ?? t('matter.resume')}
         </Button>
       )}
     </AiShell>
@@ -547,6 +552,7 @@ export function SysLine({
   routing,
   onResume,
   resuming,
+  resumeLabel,
   onRetry,
   retrying,
 }: {
@@ -557,6 +563,8 @@ export function SysLine({
   routing?: boolean
   onResume?: (() => void) | undefined
   resuming?: boolean
+  /** WP423：按钮上的字（预算停的那次写「接着做」）；不给 = 「接着跑」。 */
+  resumeLabel?: string
   /** WP287：「没跑成」那一行下面的「重试」（只给最近那一条、后面没人接着做时） */
   onRetry?: (() => void) | undefined
   retrying?: boolean
@@ -595,7 +603,10 @@ export function SysLine({
         d.outcome === 'completed'
           ? 'matter.sys.done'
           : d.outcome === 'stopped'
-            ? 'matter.sys.stopped'
+            ? // WP423：预算停的写人话原因（「查的东西太多，这一轮先停在这里」）
+              d.budget === undefined
+              ? 'matter.sys.stopped'
+              : `matter.sys.budget.${d.budget}`
             : 'matter.sys.failed',
       ),
       durationText(d.seconds, t),
@@ -712,7 +723,7 @@ export function SysLine({
             disabled={resuming === true}
             onClick={onResume}
           >
-            {t('matter.resume')}
+            {resumeLabel ?? t('matter.resume')}
           </Button>
         )}
         {onRetry === undefined || item.variant !== 'failed' ? null : (
@@ -1080,6 +1091,18 @@ export function InlineCard({
         </div>
       </AiShell>
     )
+  // WP418（审计 A3 / U7）：选主题卡在事项里也画成富卡（高级主题排第一、不能买也灰着列出原因），不是一排平铺按钮
+  if (card.kind === 'theme_choice' && isThemeChoicePayload(card.detail.payload))
+    return (
+      <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
+        <MatterThemeChoice
+          card={card}
+          payload={card.detail.payload}
+          onDecide={onDecide}
+          deciding={deciding}
+        />
+      </AiShell>
+    )
   const approve = deckActionLabel(card, 'approve', t)
   const summary = (card.content_variants.zh_summary ?? card.summary)
     .split('\n')
@@ -1164,6 +1187,72 @@ export function InlineCard({
         </div>
       </div>
     </AiShell>
+  )
+}
+
+/** WP418：事项里的选主题卡——同卡片页一样先在富卡里选一个，再点「就用这个」。 */
+function MatterThemeChoice({
+  card,
+  payload,
+  onDecide,
+  deciding,
+}: {
+  card: DeckCard
+  payload: ThemeChoicePayload
+  onDecide: (card: DeckCard, action: Exclude<DeckAction, 'open'>, option?: string) => void
+  deciding: boolean
+}): ReactNode {
+  const { t } = useApp()
+  const [option, setOption] = useState('')
+  return (
+    <div
+      className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
+      data-testid="matter-card"
+      data-card={card.id}
+    >
+      <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+        <Stamp aria-hidden className="size-3.5" />
+        {t('matter.card.choice')}
+      </div>
+      <div className="px-3.5 pt-2.5 pb-3">
+        <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
+          {card.title}
+        </p>
+        <ThemeChoiceBody
+          payload={payload}
+          options={card.options ?? []}
+          option={option}
+          onOption={setOption}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+        <Button
+          size="sm"
+          className="gap-1.5"
+          data-testid="matter-card-approve"
+          disabled={deciding || option === '' || !card.available_actions.includes('approve')}
+          onClick={() => {
+            onDecide(card, 'approve', option)
+          }}
+        >
+          <Check aria-hidden />
+          {deckActionLabel(card, 'approve', t)}
+        </Button>
+        {card.available_actions.includes('reject') ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="matter-card-reject"
+            disabled={deciding}
+            onClick={() => {
+              onDecide(card, 'reject')
+            }}
+          >
+            {deckActionLabel(card, 'reject', t)}
+          </Button>
+        ) : null}
+      </div>
+    </div>
   )
 }
 

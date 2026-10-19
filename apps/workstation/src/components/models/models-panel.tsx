@@ -29,7 +29,7 @@ import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { QuotaNotice } from '@/components/models/quota-notice'
-import { SubscriptionPlan } from '@/components/models/subscription-plan'
+import { SubscriptionPlan, subscriptionTemplateShown } from '@/components/models/subscription-plan'
 import { WebSearchToggle } from '@/components/models/web-search-toggle'
 import { CloudPlanActions } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import type {
+  ModelAiSourceView,
   ModelDefaultsView,
   ModelPricingRefreshResult,
   ModelPricingView,
@@ -489,6 +490,16 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         {settings === undefined || (active.length === 0 && settings.choices.length === 0) ? null : (
           <>
             <Separator />
+            {/* WP425：AI 来源顺序（主用：自己的；备用：工坊积分；开关） */}
+            {settings.ai_source === undefined ? null : (
+              <AiSourceSection
+                view={settings.ai_source}
+                busy={saveDefaults.isPending}
+                onToggle={(on) => {
+                  saveDefaults.mutate({ fallback_to_cloud: on })
+                }}
+              />
+            )}
             {/* ③ 默认模型 + 驻留 + 预算 */}
             <DefaultsSection
               settings={settings}
@@ -678,6 +689,60 @@ function ProviderRow({
   )
 }
 
+/**
+ * WP425：AI 来源——主用是自己的（订阅 / API key，可多个），备用是工坊积分（登录了工坊账号才有）；
+ * 开关「自己的用不了时用工坊积分接着做」登录了默认开。长说明进问号（界面少字）。
+ */
+function AiSourceSection({
+  view,
+  busy,
+  onToggle,
+}: {
+  view: ModelAiSourceView
+  busy: boolean
+  onToggle: (on: boolean) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <section className="flex flex-col gap-2" data-testid="model-ai-source">
+      <div className="flex items-center gap-1">
+        <h4 className="text-xs font-medium text-muted-foreground">{t('models.ai_source')}</h4>
+        <Hint text={t('models.ai_source.hint')} />
+      </div>
+      <div className="flex items-start justify-between gap-3 text-xs">
+        <span className="shrink-0 text-muted-foreground">{t('models.ai_source.primary')}</span>
+        <span className="flex flex-wrap justify-end gap-1" data-testid="model-ai-source-own">
+          {view.own.length === 0 ? (
+            <span className="text-muted-foreground">{t('models.ai_source.no_own')}</span>
+          ) : (
+            view.own.map((o) => (
+              <span key={o.provider_id} className="rounded-md border px-1.5 py-0.5">
+                {o.label}
+              </span>
+            ))
+          )}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="shrink-0 text-muted-foreground">{t('models.ai_source.backup')}</span>
+        <span className={view.backup.available ? '' : 'text-muted-foreground'}>
+          {view.backup.available ? view.backup.label : t('models.ai_source.backup_off')}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span>{t('models.ai_source.switch')}</span>
+        <Switch
+          checked={view.fallback_to_cloud}
+          disabled={busy || !view.backup.available}
+          aria-label={t('models.ai_source.switch')}
+          data-testid="model-ai-source-switch"
+          onCheckedChange={onToggle}
+        />
+      </div>
+    </section>
+  )
+}
+
 function DefaultsSection({
   settings,
   busy,
@@ -836,7 +901,8 @@ export interface VendorCardData {
 export function groupTemplates(templates: ModelProviderTemplate[]): VendorCardData[] {
   const cards: VendorCardData[] = []
   const byId = new Map<string, VendorCardData>()
-  for (const tpl of templates) {
+  // WP424：还没接通的订阅登录（Claude 订阅）留了位置、不显示
+  for (const tpl of templates.filter(subscriptionTemplateShown)) {
     const id = tpl.vendor ?? templateSlug(tpl.kind, tpl.default_base_url)
     let card = byId.get(id)
     if (card === undefined) {

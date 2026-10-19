@@ -67,6 +67,11 @@ export function PositionHandoff({
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
   /** WP372（决策 1019）：开始对话后快捷按钮收起（这一页还开着就不再出）。 */
   const [started, setStarted] = useState(false)
+  /*
+   * WP416 / WP419 / WP420（自查 kol U13、社媒 U1、投放）：几条职责的快捷按钮同名（红人五条渠道各一个
+   * 「找一批红人」、Google / Meta 都有「今天花了多少」）只留第一个——去重只在一处做：
+   * `useLandingActions` 里的 `uniqueByLabel`（landing-actions.tsx）。
+   */
   const actions = useLandingActions(
     mine
       .flatMap((r) => r.quick_prompts ?? [])
@@ -78,7 +83,14 @@ export function PositionHandoff({
     (prompt) => {
       clearError()
       setStarted(true)
-      open.mutate({ title: prompt.slice(0, TASK_TEXT_MAX), model, files: [], ...pin })
+      // WP421（自查 general 2.5）：快捷按钮开的事项也带上已选的思考档（以前只带模型）
+      open.mutate({
+        title: prompt.slice(0, TASK_TEXT_MAX),
+        model,
+        ...(effort === undefined ? {} : { effort }),
+        files: [],
+        ...pin,
+      })
     },
   )
 

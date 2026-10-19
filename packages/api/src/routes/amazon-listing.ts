@@ -5,7 +5,8 @@
  * - `POST /v1/amazon-listing/run`：现在体检一次（只读 Amazon 前台公开页，不改 Amazon 上任何东西）；
  * - `PUT /v1/amazon-listing/rules`：改一条规则的建议值 / 开关 / 核对日期，或记下自家店铺名（只动本机）。
  *
- * 自家 ASIN 清单不在这里改（唯一一份在关注设置 `PUT /v1/seo/watch` 的 `brand_amazon`，WP392）。
+ * - `PUT /v1/amazon-listing/own`：WP420（自查 B15）改自家 ASIN 清单——唯一一份仍在关注设置的 `brand_amazon`
+ *   （WP392），这里直接写那一格；只做 Amazon、没有内容岗位的公司以前看不到也改不了。
  * 权限：亚马逊店铺运营读商品（`product` read）；体检只读外部公开页、改规则只动本机，同一把闸。
  */
 import type {
@@ -43,7 +44,19 @@ export interface AmazonListingPort {
     workspace_id: WorkspaceId,
     patch: AmazonListingRulePatch,
   ): MaybePromise<{ ok: boolean; problems?: string[]; rule?: ListingRule }>
+  /** WP420（自查 B15）：改自家 ASIN（一段文字：ASIN / 商品链接，逗号或换行隔开；空 = 清掉）。 */
+  setOwn?(
+    workspace_id: WorkspaceId,
+    input: { value: string; marketplace?: string },
+  ): Promise<{ ok: boolean; message?: string; own?: ListingCheckupView['own'] }>
 }
+
+const ownSchema = z
+  .object({
+    value: z.string().max(4000),
+    marketplace: z.string().min(2).max(4).optional(),
+  })
+  .strict()
 
 const READ = {
   domain: 'product',
@@ -124,6 +137,28 @@ export function amazonListingRoutes(): Route[] {
       async (c, deps) => {
         const patch = clean(await body(c, ruleSchema)) as AmazonListingRulePatch
         return ok(c, await portOf(deps).setRule(principalOf(c).workspace_id, patch))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/amazon-listing/own',
+        operationId: 'updateAmazonOwnAsins',
+        summary:
+          '改自家 Amazon 商品（ASIN / 商品链接；写回关注设置那一格，体检与竞品比价共用）。只动本机，不改 Amazon',
+        tag: 'store',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: ownSchema,
+        returns: '{ ok: boolean; message?: string; own?: { marketplace; asin; label? }[] }',
+      },
+      async (c, deps) => {
+        const input = clean(await body(c, ownSchema)) as { value: string; marketplace?: string }
+        const port = portOf(deps)
+        if (port.setOwn === undefined)
+          throw new ApiError('not_implemented', '这个本机服务版本还不能在这里改自家商品。')
+        return ok(c, await port.setOwn(principalOf(c).workspace_id, input))
       },
     ),
   ]

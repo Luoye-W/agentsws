@@ -13,9 +13,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { AmazonEmpty, registerAmazonBlockBody } from '@/components/amazon/amazon-ops-board'
 import { whenLabel } from '@/components/rail/card-status'
-import { priceTrend } from '@/components/reports/competitor-watch'
-import { shortDate } from '@/components/reports/report-data'
-import { Sparkline } from '@/components/stat-tile'
 import { useApp } from '@/lib/app-context'
 import {
   competitorChangesKey,
@@ -31,7 +28,7 @@ import { cn } from '@/lib/utils'
 const SHOWN = 5
 
 export function AmazonCompetitorsBlock({ assignment }: { assignment: string }): ReactNode {
-  const { t, lang } = useApp()
+  const { t } = useApp()
   const client = useQueryClient()
   const view = useQuery({
     queryKey: competitorWatchKey(assignment),
@@ -135,6 +132,7 @@ export function AmazonCompetitorsBlock({ assignment }: { assignment: string }): 
           </button>
         </div>
       ) : null}
+      {/* WP420（自查 B7 / U19）：变化只列在「报表」最上面那张竞品变化表里，这一块不再重复一遍 */}
       {rows.length === 0 ? (
         changes.isPending ? null : (
           <p className="text-[12px] text-ws-muted-fg" data-testid="amzcw-none">
@@ -142,43 +140,9 @@ export function AmazonCompetitorsBlock({ assignment }: { assignment: string }): 
           </p>
         )
       ) : (
-        <ul className="flex flex-col gap-1.5" data-testid="amzcw-changes">
-          {rows.map((c) => {
-            const trend = priceTrend(all, c)
-            const text = lang === 'en' ? c.text.en : c.text.zh
-            return (
-              <li
-                key={c.id}
-                className="flex flex-col gap-0.5 text-[12px]"
-                data-testid="amzcw-change"
-                data-kind={c.kind}
-                data-cheaper={c.vs_own !== undefined && c.vs_own.diff < 0 ? 'true' : undefined}
-              >
-                <div className="flex items-baseline gap-2 text-[11px] text-ws-muted-fg">
-                  <span className="min-w-0 truncate">{c.competitor}</span>
-                  <span className="shrink-0">{t(`cwatch.kind.${c.kind}`)}</span>
-                  <span className="ml-auto shrink-0 ws-num">{shortDate(c.detected_at)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 text-ws-body">
-                    {c.url === undefined || c.url === '' ? (
-                      text
-                    ) : (
-                      <a href={c.url} target="_blank" rel="noreferrer" className="hover:underline">
-                        {text}
-                      </a>
-                    )}
-                  </span>
-                  {trend.length >= 2 ? (
-                    <span className="shrink-0" title={t('cwatch.trend')}>
-                      <Sparkline points={trend} className="h-4 w-12 text-ws-brand" />
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <p className="text-[12px] text-ws-muted-fg" data-testid="amzcw-see-table">
+          {t('amzcw.see_table', { n: all.filter((c) => c.competitor_id !== '_own').length })}
+        </p>
       )}
     </div>
   )

@@ -1,0 +1,32 @@
+# WP425：开关「自己的用不了时用工坊积分接着做」关着——自己的 AI 回 401（key 失效）时不切，
+# 照实停下（这一轮没跑成），不悄悄花积分；下一次重试回到自己的 AI 接着做。
+id: ops/own-model-backup-off
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    model.own_fault: { code: 401, times: 1, backup: off }
+  - at: '+10m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+8h'
+    clock.advance: {}
+expected:
+  model_source_switches: 0
+  run_failed_codes: [provider_unavailable]
+  metrics:
+    runs_failed: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

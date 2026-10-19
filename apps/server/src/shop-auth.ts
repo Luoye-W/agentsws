@@ -255,6 +255,43 @@ export function createStoreAuthRunner(options: {
   }
 }
 
+/**
+ * WP418（自查 C1）：**同步**看一眼这个品牌有没有一份没过期、没被收回的 CLI 店铺授权（只读那份记录文件）。
+ * 「还缺必需的连接：店铺后台」那种同步判断用它——CLI 授权做完以后不该还说没连。
+ */
+export function hasLiveStoreGrant(settingsFile: string | undefined, nowIso: string): boolean {
+  if (settingsFile === undefined || !existsSync(settingsFile)) return false
+  try {
+    return liveGrantIn(
+      JSON.parse(readFileSync(settingsFile, 'utf8')) as Partial<ShopAdminFile>,
+      nowIso,
+    )
+  } catch {
+    return false
+  }
+}
+
+/** 同上，按一份已经读进来的授权记录判（没有数据目录、只在内存里的那一份也认）。 */
+function liveGrantIn(raw: Partial<ShopAdminFile>, nowIso: string): boolean {
+  try {
+    const nowMs = Date.parse(nowIso)
+    return Object.values(raw.grants ?? {}).some((g) => {
+      if (g === undefined || typeof g.store !== 'string') return false
+      const p = raw.problem
+      if (
+        p !== undefined &&
+        p.store === g.store &&
+        p.code !== 'missing_scope' &&
+        Date.parse(p.at) >= Date.parse(g.acquired_at)
+      )
+        return false
+      return !isExpired(g, nowMs)
+    })
+  } catch {
+    return false
+  }
+}
+
 // ── 一个品牌一份 ─────────────────────────────────────────────────────────
 
 export interface ShopAdminOptions {
@@ -282,6 +319,11 @@ export interface ShopAdminOptions {
   env?: NodeJS.ProcessEnv
   nodeExec?: string
   appendEvent?(type: string, payload: Record<string, unknown>): void
+  /**
+   * WP418（自查 C2）：这个品牌所有担着的职责（授权时按**整个品牌**用得到的权限并集要，
+   * 不再按点授权的那个岗位——否则换个岗位又要再授权一次）。不给 = 只按传进来的那几条。
+   */
+  brandRoles?(): readonly string[]
 }
 
 export interface ShopAccess {
@@ -301,6 +343,8 @@ export interface ShopAdminAssembly {
   reader(): Promise<ShopifyAdminReader>
   /** 执行器那一侧（人批过的卡）：查与改都行。 */
   admin(): Promise<ShopifyAdmin>
+  /** WP418（自查 C1）：同步看一眼有没有一份没过期、没被收回的授权（只在内存里的那一份也认）。 */
+  hasLiveGrant?(): boolean
 }
 
 const isExpired = (g: ShopGrant, nowMs: number): boolean => {
@@ -480,7 +524,9 @@ export function createShopAdmin(options: ShopAdminOptions): ShopAdminAssembly {
     // 只能取登记表里的权限：岗位要的 ∪ 以前给过的（CLI 自己也会把店里已有的并进来）
     const registry = new Set(storeAdminAllScopes(s.sa))
     const before = (v.grant?.scopes ?? []).filter((x) => registry.has(x))
-    const scopes = [...new Set([...v.scopes_needed, ...before])]
+    // WP418（自查 C2）：一次要齐整个品牌用得到的（建站 + 网站运营……），换岗位不用再授权
+    const brandWide = storeAdminScopesFor(s.sa, options.brandRoles?.() ?? [])
+    const scopes = [...new Set([...v.scopes_needed, ...brandWide, ...before])]
       .filter((x) => registry.has(x))
       .sort()
     if (scopes.length === 0) return
@@ -628,5 +674,6 @@ export function createShopAdmin(options: ShopAdminOptions): ShopAdminAssembly {
       const { store, s } = await usable()
       return adminFor(store, s)
     },
+    hasLiveGrant: () => liveGrantIn(load(), now()),
   }
 }

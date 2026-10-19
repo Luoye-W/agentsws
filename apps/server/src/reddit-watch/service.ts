@@ -145,7 +145,15 @@ export interface RedditWatchAssembly {
      * WP411：`note` = 一句人话（「品牌号 10-12 已经回过这一条」）。
      * 决策 1199：`conflict` = 自动起草和品牌号说过的矛盾（没出卡，留在待处理里要人看）。
      */
-    extra?: { outbound_record_id?: string; note?: string; conflict?: RedditDraftConflict },
+    extra?: {
+      outbound_record_id?: string
+      note?: string
+      conflict?: RedditDraftConflict
+      /** WP419：品牌号已经回过这一条（不再起草）。 */
+      replied_before?: true
+      /** WP419：自动起草没成（原因在 `note`）；`false` = 去掉这个标记。 */
+      draft_failed?: boolean
+    },
   ): RedditWatchEntry | undefined
   /** 人点「现在巡查」。正在跑的那一轮没结束就回那一轮。 */
   runNow(): Promise<RedditWatchRun>
@@ -216,6 +224,24 @@ export interface RedditWatchAssembly {
    * 照样先读整串（插件在线时）。
    */
   redispatch(): number
+  /**
+   * WP419（自查 R5）：起草那一头卡在哪——队里等着读整串的几条、读整串那件活排着 / 在读没有、插件这会儿能不能读。
+   * 侧边栏「进度」照实说「等读整串 / 等你定口吻 / 起草中」用。
+   */
+  draftState(): {
+    queued: number
+    reading_threads: boolean
+    plugin_ready: boolean
+    plugin_why?: string
+  }
+  /**
+   * WP419：借插件（用户自己的 Chrome、品牌号会话、只读）现读一次——`read_reddit` 的最后一路。不入巡查库。
+   * 插件不在线 / 在忙 / 到点没来领都照实回 `ok: false` + 一句人话。
+   */
+  readOnce(
+    reads: RedditReadRequest[],
+    opts?: { timeoutMs?: number; pollMs?: number },
+  ): Promise<{ ok: true; result: RedditReadResultInput } | { ok: false; why: string }>
 }
 
 /** WP329：版规多久算旧（旧了下一轮再读一次）。 */
@@ -270,6 +296,8 @@ interface JobRec {
   threads?: true
   /** WP411：同一轮还没读的几件（一件最多 12 路，回补拆成几件按顺序读）。 */
   rest?: RedditReadRequest[][]
+  /** WP419：AI 的 `read_reddit` 在别的路都读不了时，借插件现读一次（不入巡查库，原样交回）。 */
+  adhoc?: true
 }
 /** WP411：同一轮拆成几件时，各块的数累到这里（kv `acc:<run>`）。 */
 type PartAcc = Partial<
@@ -1475,10 +1503,78 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     return { job: rec.job, retry_after_ms: 0 }
   }
 
+  /** WP419：借插件现读一次的那几件（等着的人）。 */
+  const adhocWaiters = new Map<string, (r: RedditReadResultInput) => void>()
+  const readOnce: RedditWatchAssembly['readOnce'] = async (reads, opts = {}) => {
+    const ready = pluginReady()
+    if (!ready.ok) return { ok: false, why: ready.why }
+    if (reads.length === 0) return { ok: false, why: '没有要读的。' }
+    const timeoutMs = opts.timeoutMs ?? 90_000
+    const pollMs = opts.pollMs ?? 500
+    const end = Date.now() + timeoutMs
+    // 插件那一侧在巡查：等它空下来（只读整串 / 只看号的那种可以先让开）
+    while (!slotFree()) {
+      if (Date.now() > end) return { ok: false, why: '插件这会儿在巡查，没空，过一会儿再读。' }
+      await new Promise((r) => setTimeout(r, pollMs))
+    }
+    const s = settings()
+    const id = options.newId('rj')
+    setJob({
+      job: {
+        id,
+        workspace_id: ws,
+        ...(s.brand_username === undefined ? {} : { expect_user: s.brand_username }),
+        reads: reads.slice(0, REDDIT_READ_MAX_PARTS),
+        title: '替 AI 读一下 Reddit',
+        created_at: options.now(),
+      },
+      run_id: '',
+      status: 'queued',
+      queued_at: options.now(),
+      pace_key: redditPaceKey(s.brand_username, ws),
+      adhoc: true,
+    })
+    const got = await new Promise<RedditReadResultInput | undefined>((resolve) => {
+      const timer = setTimeout(
+        () => {
+          adhocWaiters.delete(id)
+          resolve(undefined)
+        },
+        Math.max(0, end - Date.now()),
+      )
+      timer.unref?.()
+      adhocWaiters.set(id, (r) => {
+        clearTimeout(timer)
+        resolve(r)
+      })
+    })
+    if (got === undefined) {
+      const rec = jobRec()
+      // 到点没来领 / 没读完：撤掉这一件（巡查那边照常）
+      if (rec?.job.id === id) {
+        if (rec.status === 'running') pace.endKey(rec.pace_key, id)
+        setJob(undefined)
+      }
+      return {
+        ok: false,
+        why: `插件 ${Math.round(timeoutMs / 1000)} 秒没读完（Chrome 没开着或断了）。`,
+      }
+    }
+    return { ok: true, result: got }
+  }
+
   const result: RedditWatchAssembly['result'] = async (id, input) => {
     const rec = jobRec()
     if (rec === undefined || rec.job.id !== id || rec.status !== 'running') return undefined
     setJob(undefined)
+    if (rec.adhoc === true) {
+      pace.endKey(rec.pace_key, rec.job.id)
+      const wake = adhocWaiters.get(id)
+      adhocWaiters.delete(id)
+      wake?.(input)
+      pump()
+      return { accepted: true }
+    }
     if (rec.whoami === true) {
       // 只记登着哪个号（没登录也记下：方案里说清楚）
       setExt({ outcome: input.outcome, ...(input.user === undefined ? {} : { user: input.user }) })
@@ -1552,6 +1648,9 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         next.outbound_record_id = extra.outbound_record_id
       if (extra?.note !== undefined) next.note = extra.note
       if (extra?.conflict !== undefined) next.conflict = extra.conflict
+      if (extra?.replied_before === true) next.replied_before = true
+      if (extra?.draft_failed === true) next.draft_failed = true
+      else if (extra?.draft_failed === false || status !== 'open') delete next.draft_failed
       store.put(next)
       emit('reddit_watch.item_status', { item_id: id, status })
       return next
@@ -1663,6 +1762,17 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
         })(),
         nowMs: nowMs(),
       })
+    },
+    readOnce,
+    draftState: () => {
+      const job = jobRec()
+      const ready = pluginReady()
+      return {
+        queued: draftQueue().length,
+        reading_threads: job?.threads === true,
+        plugin_ready: ready.ok,
+        ...(ready.ok ? {} : { plugin_why: ready.why }),
+      }
     },
     redispatch: () => {
       const open = store

@@ -810,6 +810,33 @@ function looseMachOFiles(dir) {
   return out
 }
 
+/**
+ * WP424（决策 1281）：Mac 上给人看的名字。包名（`agentsws.app`）、appId、userData 都不动——
+ * 用 macOS 的「本地化显示名」：Info.plist 里 `LSHasLocalizedDisplayName: true`、`CFBundleDisplayName`
+ * 仍等于包名（electron-builder.yml 的 `mac.extendInfo`），这里在各语言目录写 `InfoPlist.strings`，
+ * 访达 /「应用程序」/ 程序坞 / ⌘Tab / 菜单栏就显示「Agents 工坊」。
+ */
+export const MAC_DISPLAY_NAME = 'Agents 工坊'
+/** 写 InfoPlist.strings 的语言目录：只写 Electron 自带的那两个（`electronLanguages`）——多建一个语言目录会改掉界面语言的挑法。 */
+export const MAC_DISPLAY_LPROJ = ['en.lproj', 'zh_CN.lproj']
+
+/** `InfoPlist.strings` 的内容（UTF-8 文本格式的 strings 文件，macOS 认）。 */
+export function infoPlistStrings(name) {
+  const quoted = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return `CFBundleDisplayName = "${quoted}";\nCFBundleName = "${quoted}";\n`
+}
+
+/** 在 `<resources>` 下各语言目录写 InfoPlist.strings；回写了哪几个目录。 */
+export function writeMacDisplayName(resources, name = MAC_DISPLAY_NAME) {
+  const written = []
+  for (const dir of MAC_DISPLAY_LPROJ) {
+    mkdirSync(join(resources, dir), { recursive: true })
+    writeFileSync(join(resources, dir, 'InfoPlist.strings'), infoPlistStrings(name), 'utf8')
+    written.push(dir)
+  }
+  return written
+}
+
 export function adhocSignMacApp(appPath, log, run = execFileSync) {
   const loose = looseMachOFiles(join(appPath, 'Contents', 'Resources'))
   for (const file of loose) run('codesign', ['--force', '--sign', '-', file], { stdio: 'pipe' })
@@ -983,6 +1010,12 @@ export default async function afterPack(context) {
     }
   } else {
     log(`跨平台打包（${platformName} ≠ ${hostPlatform()}），冒烟跳过`)
+  }
+
+  // ⑭ WP424（决策 1281）：mac 显示名「Agents 工坊」（只改显示名；放在自签之前）
+  if (platformName === 'darwin') {
+    const dirs = writeMacDisplayName(resources)
+    log(`Mac 显示名「${MAC_DISPLAY_NAME}」：${dirs.join('、')}（包名仍是 ${productName}.app）`)
   }
 
   // ⑬ 10-15：mac 整包本机自签（放在最后——之后不能再改 .app 里任何文件）

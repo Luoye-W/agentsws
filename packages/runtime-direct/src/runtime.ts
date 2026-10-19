@@ -15,7 +15,7 @@ import type {
   RunUsage,
   ToolDef,
 } from '@agentsws/contracts'
-import { cancelledEvent } from '@agentsws/contracts'
+import { cancelledEvent, MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import {
   canonicalJson,
   EXTERNAL_FENCE,
@@ -24,7 +24,7 @@ import {
   redactOutboundText,
   sha256,
 } from '@agentsws/core'
-import { deepseekQuotaKindOf } from '@agentsws/model-gateway'
+import { deepseekQuotaKindOf, sourceFallbackOffOf } from '@agentsws/model-gateway'
 import type {
   CreateDraftFn,
   CreatePolicyQuestionFn,
@@ -42,11 +42,15 @@ import {
   deliversWith,
   describeRun,
   fileTouch,
+  finalizeWrapUp,
+  GENERAL_MAX_NUDGES,
+  GENERAL_UNFINISHED_NUDGE,
   looksLikeToolCallText,
   looksUnfinished,
   renderThemeRead,
   renderTrustedToolResult,
   rewriteForChannelGuard,
+  shouldNudgeGeneral,
   TOOL_CALL_TEXT_FAILURE,
   TOOL_CALL_TEXT_NUDGE,
   TOOL_CALL_TEXT_RETRIES,
@@ -54,6 +58,8 @@ import {
   UNFINISHED_NUDGE,
   UNFINISHED_STEP,
   WebUsageCounter,
+  WRAP_UP_STEP,
+  wrapUpPrompt,
 } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
@@ -604,12 +610,22 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             // WP362：ChatGPT 订阅被限流（`rate_limited`）那句也是给人看的
             error.code === 'unauthenticated' ||
               error.code === 'rate_limited' ||
-              deepseekQuotaKindOf(err) !== undefined
+              deepseekQuotaKindOf(err) !== undefined ||
+              // WP425：开关关着、自己的用不了——那一句也是给人看的
+              sourceFallbackOffOf(err) !== undefined
               ? error.message
               : `模型调用失败：${error.code}`,
           )
         }
 
+        // WP425：这一跳从自己的 AI 切到了工坊积分——运行记录里照实记一行（三个运行时同一个 step）
+        if (completion.source_switch !== undefined) {
+          sink({
+            type: 'progress',
+            step: MODEL_SOURCE_SWITCHED_STEP,
+            note: completion.source_switch.message,
+          })
+        }
         usage.input_tokens += completion.usage.input_tokens
         usage.output_tokens += completion.usage.output_tokens
         usage.cached_tokens += completion.usage.cached_tokens
@@ -683,6 +699,29 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             })
             messages.push({ role: 'user', content: UNFINISHED_NUDGE })
             // 续的这一回合正好是最后一回合：照「回合用完」收（不把那半句当答复）
+            if (turn === turnCap - 1) ranOut = true
+            continue
+          }
+          /*
+           * WP423：普通运行（没有 `produce`）也一样——只回了一句「我接下来要…」、什么都还没交，追一句「接着做」，
+           * 最多 `GENERAL_MAX_NUDGES` 次（与 stub / dsh 同一个判定、同一句话）。
+           */
+          if (
+            produce === undefined &&
+            shouldNudgeGeneral({
+              text: completion.text,
+              hasTools: tools.length > 0,
+              delivered: outputs.length > 0 || drafted || staged,
+              nudges,
+            })
+          ) {
+            nudges += 1
+            sink({
+              type: 'progress',
+              step: UNFINISHED_STEP,
+              note: `${nudges}/${GENERAL_MAX_NUDGES}`,
+            })
+            messages.push({ role: 'user', content: GENERAL_UNFINISHED_NUDGE })
             if (turn === turnCap - 1) ranOut = true
             continue
           }
@@ -789,6 +828,57 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         sink({ type: 'budget.exhausted', ...exhausted })
       }
 
+      /*
+       * WP423：**预算到了也要交东西**。任何上限（token / 调用次数 / 回合 / 时长）到了，再跑一次收尾：
+       * 工具照旧摆着（换掉工具面会让整段缓存失效，有的接口历史里有工具调用时还要求带着工具），但这一跳回来的
+       * 工具调用一律不执行；只要它把已经查到的整理交出、说清还差什么、为什么停。收尾不受 token / 回合上限管
+       * （就一次），花费仍由网关的 `max_cost_base` 兜底。收回来的还是空话 / 开场白就换成照实拼的那一段。
+       * 只给要答复的运行（服务端的运行都要）；只出草稿 / 变更的运行一个字节不变。
+       */
+      if (exhausted !== undefined && req.expectations.outputs.includes('answer')) {
+        const which = exhausted.which
+        sink({ type: 'progress', step: WRAP_UP_STEP, note: which })
+        messages.push({ role: 'user', content: wrapUpPrompt(which) })
+        let wrapText = ''
+        try {
+          const wrapArgs: CompleteArgsBase = {
+            ...(req.runtime.model_pinned === true ? { model: req.runtime.model } : {}),
+            ...(req.runtime.model_pinned === true && req.runtime.reasoning_effort !== undefined
+              ? { reasoning_effort: req.runtime.reasoning_effort }
+              : {}),
+            messages: [...messages],
+            tools,
+            meta: {
+              workspace_id: req.workspace_id,
+              assignment_id: req.actor.assignment_id,
+              role_id: req.actor.role_id,
+              run_id: req.id,
+              purpose: 'run',
+              person_id: req.actor.person_id,
+            },
+            max_cost_base: req.budget.max_cost_base,
+            ...(req.runtime.seed === undefined ? {} : { seed: req.runtime.seed }),
+          }
+          const wrap = await gateway.complete(wrapArgs)
+          usage.input_tokens += wrap.usage.input_tokens
+          usage.output_tokens += wrap.usage.output_tokens
+          usage.cached_tokens += wrap.usage.cached_tokens
+          usage.cost_base += wrap.usage.cost_base
+          wrapText = wrap.text
+        } catch {
+          // 收尾这一跳没调通（花费到顶、模型挂了…）：照实拼的那一段兜住，停的原因仍是预算
+        }
+        if (signal.aborted) {
+          sink(cancelledEvent(signal))
+          return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
+        }
+        const wrapped = finalizeWrapUp(wrapText, { which, readTools, said: finalText })
+        sink({ type: 'text.delta', text: wrapped })
+        messages.push({ role: 'assistant', content: wrapped })
+        finalText = wrapped
+        callText = false
+      }
+
       // WP230：重试过还是「用文字调工具」——照实报格式异常：假文字不当答案、不出卡
       if (callText && exhausted === undefined) {
         sink({
@@ -836,10 +926,11 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         ...(stagedMoney === undefined ? {} : { staged: stagedMoney }),
         ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
       })
-      if (exhausted !== undefined) return complete(summary, 'budget_exhausted')
       if (answered) {
         outputs.push({ kind: 'answer', text: finalText })
       }
+      // WP423：预算到了照样交出收尾那一段（上面已经进了 outputs），状态仍记成预算用完
+      if (exhausted !== undefined) return complete(summary, 'budget_exhausted')
       return complete(summary, 'completed')
     },
   }

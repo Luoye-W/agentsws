@@ -81,6 +81,8 @@ export interface PositionConnectionItemView {
   status: 'available' | 'planned'
   connect_service?: string
   note?: { zh: string; en: string }
+  /** WP415（只加）：连它要去平台开发者后台建应用 / 抄令牌（界面标「需要开发者配置」）。 */
+  developer_setup?: true
 }
 
 export interface PositionConnectionsView {
@@ -89,6 +91,8 @@ export interface PositionConnectionsView {
   ready: boolean
   missing_required: string[]
   items: PositionConnectionItemView[]
+  /** WP415（只加）：职责要、且已经连上的那几条（kind）。 */
+  connected?: string[]
 }
 
 export interface ConnectionDirectoryPort {

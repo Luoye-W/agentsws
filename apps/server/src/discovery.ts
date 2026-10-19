@@ -300,18 +300,31 @@ export function createDiscovery(options: DiscoveryOptions): Discovery {
   }
 
   const stop = (): void => {
-    if (!started) return
     started = false
-    mdns?.stop()
+    seen.clear()
+    // WP422：造出来了就一定拆掉——哪怕没开始广播（比如还没设公司名，`start` 造完就停在那儿）。
+    // 造出来的实例已经绑着 5353，关开关却留着它，就还是在碰网络。
+    if (mdns === undefined) return
+    mdns.stop()
     // 重新开时要能再 publish 一遍：`bonjour-service` 的实例 destroy 过就不能再用了
     mdns = undefined
     probed = false
-    seen.clear()
   }
+
+  /*
+   * WP422：开关关着就**一下网络都不碰**。造 mDNS 会在所有网卡上绑 UDP 5353——Windows 防火墙
+   * 一见到对外绑口就弹「Node 要联网」。以前首次设置 / 公司页一打开就会走 `ensure()`，
+   * 开关关着的人也被弹。现在只有开关打开（或用户刚点了打开）才去试。
+   *
+   * 没试过的时候 `available` 回 true：这一格的意思收窄成「试过、起不来」才是 false——
+   * 没试过就不说用不了；真起不来，用户打开开关那一刻就知道了。
+   */
+  const probeAllowed = (): boolean => probed || options.enabled()
 
   return {
     peerId: () => peerId,
     status() {
+      if (!probeAllowed()) return { available: true }
       ensure()
       return mdns === undefined
         ? { available: false, reason: reason ?? '局域网发现不可用' }
@@ -334,22 +347,21 @@ export function createDiscovery(options: DiscoveryOptions): Discovery {
       start()
     },
     async peers(): Promise<DiscoveryStateView> {
-      ensure()
       const enabled = options.enabled()
-      if (enabled) {
-        start()
-        ensurePort()
-      }
-      const available = mdns !== undefined
       if (!enabled) {
-        // 开关关着 = 不广播、不查询、不登记（46 §2 末段）
+        // 开关关着 = 不广播、不查询、不登记（46 §2 末段）；WP422：也不去造 mDNS。
+        // 以前试过、起不来的那句原因照旧带上（那是试过才知道的实情）
+        const failed = probed && mdns === undefined
         return {
-          available,
+          available: !failed,
           enabled: false,
-          ...(available ? {} : { reason: reason ?? '局域网发现不可用' }),
+          ...(failed ? { reason: reason ?? '局域网发现不可用' } : {}),
           peers: [],
         }
       }
+      start()
+      ensurePort()
+      const available = mdns !== undefined
       // 看见了才去问"你是谁"——展示名是对方自己报的，不是我们从广播包里猜的
       const rows = [...seen.values()]
       await Promise.all(

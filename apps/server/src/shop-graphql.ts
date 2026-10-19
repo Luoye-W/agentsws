@@ -247,6 +247,52 @@ export const DISCOUNT_CREATE = `mutation AgentswsDiscountCreate($input: Discount
   discountCodeBasicCreate(basicCodeDiscount: $input) { codeDiscountNode { id } ${USER_ERRORS} }
 }`
 
+// ── WP417（自查客服 A24–A26）：客服动订单（退款 / 改收货地址 / 补发） ──────────────────
+//
+// 改前现读一次这一单（`ORDER_FOR_CHANGE`）：已付、已退、发货状态、收货地址、每一行还能退几件、可退的那笔收款。
+// 收货地址是 Shopify 的「受保护的顾客数据」，应用没过审时整条查询会报错——所以有一份不带地址的 `lite`，
+// 报这一类错时退一步再查（退款照样能出卡；改地址 / 补发就照实说「读不到原地址」）。
+
+const ORDER_CHANGE_FIELDS = (address: boolean) => `
+    id name currencyCode displayFinancialStatus displayFulfillmentStatus cancelledAt
+    totalPriceSet { shopMoney { amount currencyCode } }
+    totalRefundedSet { shopMoney { amount currencyCode } }${
+      address
+        ? `
+    shippingAddress { firstName lastName name address1 address2 city provinceCode zip countryCodeV2 phone }`
+        : ''
+    }
+    lineItems(first: 50) { nodes { id title quantity refundableQuantity variant { id }
+      originalUnitPriceSet { shopMoney { amount } } } }
+    transactions(first: 20) { id kind status gateway amountSet { shopMoney { amount } } }`
+
+export const orderForChangeDoc = (
+  address: boolean,
+): string => `query AgentswsOrderForChange($id: ID!) {
+  order(id: $id) {${ORDER_CHANGE_FIELDS(address)}
+  }
+}`
+
+export const ORDER_BY_NAME = `query AgentswsOrderByName($query: String!) {
+  orders(first: 5, query: $query) { nodes { id name } }
+}`
+
+export const REFUND_CREATE = `mutation AgentswsRefundCreate($input: RefundInput!) {
+  refundCreate(input: $input) { refund { id totalRefundedSet { shopMoney { amount } } } ${USER_ERRORS} }
+}`
+
+export const ORDER_UPDATE = `mutation AgentswsOrderUpdate($input: OrderInput!) {
+  orderUpdate(input: $input) { order { id } ${USER_ERRORS} }
+}`
+
+export const DRAFT_ORDER_CREATE = `mutation AgentswsDraftOrderCreate($input: DraftOrderInput!) {
+  draftOrderCreate(input: $input) { draftOrder { id } ${USER_ERRORS} }
+}`
+
+export const DRAFT_ORDER_COMPLETE = `mutation AgentswsDraftOrderComplete($id: ID!) {
+  draftOrderComplete(id: $id) { draftOrder { id status order { id name } } ${USER_ERRORS} }
+}`
+
 // ── 收窄形状 ─────────────────────────────────────────────────────────────
 
 type Obj = Record<string, unknown>

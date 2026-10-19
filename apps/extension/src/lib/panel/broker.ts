@@ -8,7 +8,7 @@
  */
 import type { PanelFillInput, PanelSnapshot, PanelWrite } from '@agentsws/browser-action'
 import type { PermissionsLike } from '../ads/permissions'
-import { panelFill, panelRefill, panelSkip, panelSnapshot } from '../local-client'
+import { panelFill, panelPostAnswer, panelRefill, panelSkip, panelSnapshot } from '../local-client'
 import { redditConnected } from '../reddit/permissions'
 import type { KeyValueStore } from '../storage'
 import { readSettings } from '../storage'
@@ -89,6 +89,19 @@ export async function panelSkipCard(
   const c = await client(deps)
   if (c === undefined) return { ok: false, message: NOT_PAIRED }
   const got = await panelSkip(c, id, version === undefined ? {} : { version })
+  return got.ok ? { ok: true } : { ok: false, message: got.message }
+}
+
+/** WP419：交给你发的社媒帖子：发好了（带链接 = 读回确认）/ 不发了。 */
+export async function panelAnswerPost(
+  deps: PanelBrokerDeps,
+  id: string,
+  answer: 'done' | 'skip',
+  input: { link?: string; reason?: string },
+): Promise<PanelActOutcome> {
+  const c = await client(deps)
+  if (c === undefined) return { ok: false, message: NOT_PAIRED }
+  const got = await panelPostAnswer(c, id, answer, input)
   return got.ok ? { ok: true } : { ok: false, message: got.message }
 }
 

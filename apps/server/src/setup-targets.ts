@@ -343,3 +343,53 @@ export function builtinSetupTargets(options: BuiltinSetupTargetsOptions): SetupT
     ? [siteStore, companyAddress]
     : [siteStore, companyAddress, companyProfile]
 }
+
+/** WP425：「用工坊积分接着做」那张卡的设置目标 id。 */
+export const MODEL_FALLBACK_CLOUD_TARGET = 'model.fallback_cloud'
+
+/** WP425：卡上那一格的键。 */
+const FALLBACK_KEY = 'fallback_to_cloud'
+
+/**
+ * WP425（决策 690）：自己的 AI 用不了（额度用完 / 连不上 / key 失效）、开关「自己的用不了时用工坊积分接着做」
+ * 关着时，运行照实停下、在对话里出这张卡——一格开关（建议值「开」），点一下就打开开关、按原话接着做。
+ * 没登录工坊账号时不算「缺」（那种情况出的是关联账号的连接卡，不是这一张）。
+ */
+export function modelFallbackCloudTarget(
+  models: () => Promise<{
+    fallbackCloud(): { available: boolean; on: boolean }
+    setFallbackCloud(on: boolean): void
+  }>,
+): SetupTarget {
+  return {
+    id: MODEL_FALLBACK_CLOUD_TARGET,
+    name: '用工坊积分接着做',
+    why: '你自己的 AI 这一轮用不了，打开下面这个开关就用工坊积分接着做；以后再遇到也自动切，下一轮自动回到你自己的。',
+    async fields(): Promise<SetupField[]> {
+      return [
+        {
+          key: FALLBACK_KEY,
+          label: '自己的用不了时用工坊积分接着做',
+          kind: 'toggle',
+          suggested: 'true',
+          suggested_why: '只在你自己的 AI 用不了的那一轮用积分，恢复后自动回到你自己的',
+          required: true,
+        },
+      ]
+    },
+    async satisfied(): Promise<boolean> {
+      const now = (await models()).fallbackCloud()
+      return !now.available || now.on
+    },
+    async apply(values): Promise<void> {
+      const on = values[FALLBACK_KEY]?.trim() !== 'false'
+      const m = await models()
+      if (!m.fallbackCloud().available)
+        throw new SetupCardError(
+          'invalid_input',
+          '还没登录工坊账号，先在「设置 → 账号与积分」里登录。',
+        )
+      m.setFallbackCloud(on)
+    },
+  }
+}

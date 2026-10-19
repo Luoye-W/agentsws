@@ -14,6 +14,7 @@ import {
   ADS_PLATFORMS,
   adsPlatformOfRole,
   designDutyOfRole,
+  executionOutcomeOf,
   SOCIAL_CHANNELS,
   socialChannelOfRole,
 } from '@agentsws/contracts'
@@ -773,7 +774,11 @@ const SOCIAL_QUERIES: QueryDef[] = [
         { key: 'body', label: '问的是什么' },
       ],
       // 这条职责**没有**答客户问题，但它要看得见自己转出去了多少（56 边界行）
-      rows: ofChannel(ctx.social?.handoffs ?? [], ctx).map((r) => ({
+      // WP417（自查客服 D11）：社群管理（接的那一边）认不出渠道——它要看**全部**转过来的，不按渠道筛
+      rows: (ctx.role_id === 'dtc.community-support'
+        ? (ctx.social?.handoffs ?? [])
+        : ofChannel(ctx.social?.handoffs ?? [], ctx)
+      ).map((r) => ({
         created_at: r.created_at,
         author: r.author,
         status: r.status,
@@ -1774,6 +1779,8 @@ const QUERY_LIST: QueryDef[] = [
           summary: i.summary,
           state: i.state,
           ref: i.subject.object,
+          // WP415：执行过的照实说办没办成（已核对 / 没能回读 / 没做 + 原因 / 演示）
+          ...executionOf(i),
         }))
       /*
        * WP299（决策 387）：红人职责的记录里加「合作复盘」——一条合作一行「花了多少、带来多少、
@@ -2783,4 +2790,10 @@ function regionName(code: string): string {
   } catch {
     return code
   }
+}
+
+/** WP415：时间线那一行的执行结果（还没执行到的卡没有这一格）。 */
+function executionOf(i: ApprovalItem): Pick<RecordRow, 'execution'> {
+  const execution = executionOutcomeOf(i)
+  return execution === undefined ? {} : { execution }
 }

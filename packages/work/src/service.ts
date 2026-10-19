@@ -618,6 +618,7 @@ export class Work {
               seconds: input.run_digest.seconds,
               outcome: input.run_digest.outcome,
               steps: input.run_digest.steps.map((st) => ({ ...st })),
+              ...(input.run_digest.budget === undefined ? {} : { budget: input.run_digest.budget }),
             },
           }),
       ...(input.next_suggestion === undefined || input.next_suggestion === ''

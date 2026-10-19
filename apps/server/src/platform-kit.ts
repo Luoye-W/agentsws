@@ -78,6 +78,10 @@ export interface PlatformKitPortOptions {
   /** 首次设置同一份平台清单（灰显的照样给）。 */
   platformChoices?(): { key: string; label: string; supported: boolean }[]
   /**
+   * WP418（自查 A1）：这个岗位上有没有要平台的职责（`site.*` / 店铺管理）。平台没设时按它决定出不出「先选建站平台」。
+   */
+  positionNeedsPlatform?(workspace_id: string, position_id: string): boolean
+  /**
    * WP245：替用户跑登记过的命令（一键安装 / 一键登录）。不给 = 卡上只有老的复制命令那一套。
    */
   runner?: PlatformCliRunner
@@ -140,7 +144,11 @@ export function createPlatformKitPort(options: PlatformKitPortOptions): Platform
     const platform = options.platformOf(ws)
     if (platform === undefined) {
       // 没设平台：一样都不启用。只在平台专属工具会出现的那个岗位页上提示一句「先选一下」
-      const ask = input.position_id !== undefined && platformPositions().includes(input.position_id)
+      // WP418（自查 A1）：按职责判，不按岗位 id——用户自己建的岗位 id 是 `pos-xxxx`，永远对不上 `site`
+      const ask =
+        input.position_id !== undefined &&
+        (platformPositions().includes(input.position_id) ||
+          options.positionNeedsPlatform?.(ws, input.position_id) === true)
       return {
         kit: null,
         ...(ask ? { choose_platform: { choices: options.platformChoices?.() ?? [] } } : {}),

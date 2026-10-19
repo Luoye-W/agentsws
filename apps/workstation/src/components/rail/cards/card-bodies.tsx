@@ -11,9 +11,11 @@ import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'rea
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
+import { MentionsTable } from '@/components/pr/mentions-table'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
+import { ExtensionRows, useScopeExtension } from '@/components/rail/cards/extension-rows'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailCardBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
@@ -31,6 +33,7 @@ import {
 } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-open-connect'
+import { Hint } from '@/components/ui/hint'
 import { getMySchedules, getPositionRecords, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { getFreeChatModels } from '@/lib/free-chat'
@@ -63,11 +66,15 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
     competitorAssignmentOf(scope) === undefined ? null : (
       <CompetitorChangesTable scope={scope} limit={limit} />
     )
+  // WP419（自查 P5）：担信息监控的这一层，卡里放拉回来的提及表（按组 / 情绪 / 来源筛）
+  const mentions = <MentionsTable scope={scope} {...(limit === undefined ? {} : { limit })} />
+  const monitored = useScopeMonitor(scope) !== undefined
   if (reports.length === 0)
     return (
       <div className="flex flex-col gap-2">
-        {ready ? <Empty text={t('reports.empty')} /> : null}
+        {ready && !monitored ? <Empty text={t('reports.empty')} /> : null}
         {competitor}
+        {mentions}
       </div>
     )
   return (
@@ -91,6 +98,7 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
         ))}
       </ul>
       {competitor}
+      {mentions}
     </div>
   )
 }
@@ -232,6 +240,8 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   )
   // WP386：信息监控的监控源（一行汇总；拉不到的亮红点，点开就地看 / 贴）
   const monitor = useScopeMonitor(scope)
+  // WP420：要插件的这一层，先列插件那几行（配对、后台在插件里连上没有）
+  const extension = useScopeExtension(scope)
   return (
     <div className="flex flex-col gap-1.5" data-testid="connections-card">
       {live ? (
@@ -248,6 +258,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
       {monitor === undefined ? null : (
         <MonitorRow assignment={monitor.assignment} view={monitor.view} />
       )}
+      {extension === undefined ? null : <ExtensionRows rows={extension} />}
       {/* WP392：竞品监控各监控源的状态（坏了亮红点、照实说是哪家） */}
       {competitorAssignmentOf(scope) === undefined ? null : (
         <ul className="flex flex-col gap-px">
@@ -258,6 +269,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
         live ||
         !ready ||
         monitor !== undefined ||
+        extension !== undefined ||
         competitorAssignmentOf(scope) !== undefined ? null : (
           <Empty text={t('conncard.empty')} />
         )
@@ -280,6 +292,15 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
                     className="ml-auto size-3.5 shrink-0 text-ws-good"
                     aria-label={t('conncard.connected')}
                   />
+                ) : i.developer_setup === true ? (
+                  // WP415（决策 1239）：要去开发者后台建应用的，不拿「去连接」诱导人去填
+                  <span
+                    className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-ws-muted-fg"
+                    data-testid="connection-dev-setup"
+                  >
+                    {t('conncard.dev_setup')}
+                    <Hint text={t('conncard.dev_setup.hint')} />
+                  </span>
                 ) : i.connect_service === undefined ? null : (
                   <button
                     type="button"

@@ -9,7 +9,8 @@ export const EXT_ONBOARD_ZH: Record<string, string> = {
   'extonboard.use.kol': '在 YouTube / Instagram / TikTok 上收红人',
   'extonboard.use.google_ads': '在 Google 广告后台执行批过的改动',
   'extonboard.use.meta_ads': '在 Meta 广告后台执行批过的改动',
-  'extonboard.pair': '装好后点插件图标，输入下面的配对码',
+  'extonboard.use.social': '到点打开你登录着的发帖页、你点发布',
+  'extonboard.pair': '装好后点插件图标，填配对码',
   'extonboard.next.title': '插件配上了，还差一步',
   'extonboard.step.reddit': '在插件里点「连接 Reddit」，并在这个 Chrome 登录品牌号',
   'extonboard.step.google_ads': '在插件里连上 Google 广告后台',
@@ -35,6 +36,7 @@ export const EXT_ONBOARD_EN: Record<string, string> = {
   'extonboard.use.kol': 'save creators from YouTube / Instagram / TikTok',
   'extonboard.use.google_ads': 'carry out approved changes in Google Ads',
   'extonboard.use.meta_ads': 'carry out approved changes in Meta Ads',
+  'extonboard.use.social': 'open your signed-in post composer on time so you click Post',
   'extonboard.pair': 'Once installed, click the extension icon and enter this pairing code',
   'extonboard.next.title': 'Extension paired — one more step',
   'extonboard.step.reddit':

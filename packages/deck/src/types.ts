@@ -12,6 +12,8 @@ import type {
   ApprovalState,
   AssignmentId,
   BreakEvenView,
+  ExecutionOutcomeView,
+  ExecutionWiring,
   Iso8601,
   ObjectRef,
   RiskClass,
@@ -328,6 +330,13 @@ export interface DeckCard {
   available_actions: DeckAction[]
   /** 服务端给动词（outbound_draft 是「发送」而不是「批准」） */
   action_labels?: Partial<Record<DeckAction, string>>
+  /**
+   * WP415（只加）：这一步接没接通。`not_wired` = 生产里没有真执行器，卡上不出「通过」、
+   * 只有「知道了」（你自己去做）；`demo` = 演示里只走空桩。没有这一格 = 接通了（或宿主没说）。
+   */
+  wiring?: ExecutionWiring
+  /** WP415（只加）：已经执行过的卡，到底办没办成（已核对 / 没能回读 / 没做 + 原因 / 演示）。 */
+  execution?: ExecutionOutcomeView
   /** 选择题卡才有 */
   options?: DeckOption[]
   detail: DeckDetail
@@ -375,6 +384,12 @@ export interface ProjectContext {
   riskClass?: (item: ApprovalItem) => RiskClass | undefined
   /** 契约的 ApprovalItem 没有 snooze 计数器（见交付报告的契约建议） */
   snoozeCount?: (item: ApprovalItem) => number
+  /**
+   * WP415（只加）：这张卡这一步接没接通（宿主按执行器登记表与运行形态算）。
+   * 回 `not_wired` 的卡上不出「通过 / 改一下」，「不要」换成「知道了」；回 `demo` 的照常、卡上标「演示」。
+   * 不给 = 不标（老行为）。
+   */
+  wiring?: (item: ApprovalItem) => ExecutionWiring | undefined
 }
 
 // ── 29 积木 / 数字块 ───────────────────────────────────────────────────
@@ -611,6 +626,8 @@ export interface RecordRow {
   summary: string
   state: string
   ref?: ObjectRef
+  /** WP415（只加）：执行过的那几条，到底办没办成（时间线上照实说）。 */
+  execution?: ExecutionOutcomeView
 }
 
 /** 一条库存行（WP63 库存告急表与「库存告急数」都从它算）。 */

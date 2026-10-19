@@ -12,7 +12,9 @@
  * 2. **没有安放行的老分配照老规则算**（= WP69 现状，逐字不变）：属于每一个职责清单里
  *    含它的岗位。老工作区升级上来，界面上的岗位一个都不变。
  */
+
 import type { PersonId, RoleId } from '@agentsws/contracts'
+import { bundledPositionOfRole } from '@agentsws/roles'
 
 /** 工作区底座职责：不算任何岗位的职责（docs/54 §6.1 最后一条）。 */
 export const WORKSPACE_BASE_ROLES: ReadonlySet<string> = new Set(['common.member', 'common.owner'])
@@ -44,7 +46,24 @@ export function belongsTo(
 ): boolean {
   const placed = placementOf?.(assignment.id)
   if (placed !== undefined && exists(placed)) return placed === position.id
-  return position.roles.some((r) => r.role === assignment.role_id)
+  /*
+   * WP420（自查 ads-amazon B14）：在这个岗位里只是「列着、默认不勾」的职责（`amz.support` 在 Amazon 运营里），
+   * 没安放的老分配**不算**这里的——它的家是默认勾它的那个岗位（客服）。以前两个岗位都算，左栏出两份，
+   * Amazon 运营页还因此冒出「还缺必需的连接：邮箱」。勾了它的会被安放在这里（建岗位时就安放），照常算。
+   * 只挂在一个模板里的「默认不勾」职责（`social.reddit` 等）家就是这一个，照旧算。
+   */
+  const entry = position.roles.find((r) => r.role === assignment.role_id)
+  if (entry === undefined) return false
+  if (entry.default !== false) return true
+  const home = homeOf(assignment.role_id)
+  return home === undefined || home === position.id
+}
+
+/** 内置模板里一条职责的「家」（默认勾它的那个模板；读一次记住——模板随安装包走，进程里不会变）。 */
+const homes = new Map<string, string | undefined>()
+function homeOf(role_id: RoleId): string | undefined {
+  if (!homes.has(role_id)) homes.set(role_id, bundledPositionOfRole(role_id)?.id)
+  return homes.get(role_id)
 }
 
 /** 「负责人」那一行：身份，不是干活的岗位（docs/54 §6.5）。 */

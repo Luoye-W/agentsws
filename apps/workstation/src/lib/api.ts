@@ -1020,6 +1020,87 @@ export const decide = (id: string, input: DecideInput, assignment: string): Prom
     assignment,
   })
 
+/** WP414：为什么算同类（前端按它出中英文）。 */
+/** `same_reason` = AI 按人给的理由判的（直接显示 `why`）；其余是「要一起发吗」那一路的词重合。 */
+export type FollowBasis =
+  | 'same_reason'
+  | 'same_object'
+  | 'same_topic'
+  | 'same_source'
+  | 'same_judgement'
+
+/** WP414：一张同类卡（已跟着处理的 / 要人确认的）。 */
+export interface FollowedCardData {
+  id: string
+  title: string
+  why: string
+  basis: FollowBasis[]
+  source?: string
+}
+
+/** WP414：决定之后带回来的「同类卡跟着处理」（decide 的回包里 `follow` 那一格）。 */
+export interface DecideFollowData {
+  action: 'reject' | 'snooze' | 'approve'
+  leader_id: string
+  leader_title: string
+  /** 按哪条理由判的（「不要 / 稍后」才有） */
+  reason?: string
+  applied: FollowedCardData[]
+  suggested: FollowedCardData[]
+}
+
+/** 从 decide 的回包里取 `follow`（老服务进程没有就是 `undefined`）。 */
+export function followOf(out: unknown): DecideFollowData | undefined {
+  const f = (out as { follow?: unknown } | null | undefined)?.follow
+  if (typeof f !== 'object' || f === null) return undefined
+  const v = f as Partial<DecideFollowData>
+  if (!Array.isArray(v.applied) || !Array.isArray(v.suggested)) return undefined
+  return v as DecideFollowData
+}
+
+/** WP414：撤回「跟着这张一并处理」的那几张（放回待处理）。 */
+export const undoFollow = (
+  leaderId: string,
+  ids: readonly string[],
+  assignment: string,
+): Promise<{ restored: { id: string }[]; skipped: string[] }> =>
+  api(`/v1/approvals/${encodeURIComponent(leaderId)}/follow/undo`, {
+    method: 'POST',
+    body: { ids: [...ids] },
+    assignment,
+  })
+
+/**
+ * WP414：「不要 / 稍后」之后补一句理由（快捷理由 / 一句话）；已跟着处理的那几张一起补。
+ * 第一次补（还没跟着处理过）时服务端按这条理由去找同类，回包里带 `follow`。
+ */
+export const addDecisionReason = (
+  id: string,
+  input: { reason: string; follower_ids?: readonly string[] },
+  assignment: string,
+): Promise<{ followers: number; follow?: DecideFollowData }> =>
+  api(`/v1/approvals/${encodeURIComponent(id)}/reason`, {
+    method: 'POST',
+    body: {
+      reason: input.reason,
+      ...(input.follower_ids === undefined || input.follower_ids.length === 0
+        ? {}
+        : { follower_ids: [...input.follower_ids] }),
+    },
+    assignment,
+  })
+
+/** WP414：同类卡「一起发」——走 14 §8 的批量决定（同 kind 同职责；每张单独记一次）。 */
+export const approveBatch = (
+  ids: readonly string[],
+  assignment: string,
+): Promise<{ results: { id: string; error?: { code: string; message: string } }[] }> =>
+  api('/v1/approvals/batch/decide', {
+    method: 'POST',
+    body: { entries: ids.map((id) => ({ id })), action: 'approve' },
+    assignment,
+  })
+
 export const setHomeTiles = (
   position_id: string,
   tile_ids: string[],
@@ -1667,6 +1748,8 @@ export interface PositionConnectionItem {
   status: 'available' | 'planned'
   connect_service?: string
   note?: { zh: string; en: string }
+  /** WP415（只加）：连它要去平台开发者后台建应用 / 抄令牌（标「需要开发者配置」，不诱导去填）。 */
+  developer_setup?: true
 }
 
 export interface PositionConnectionsView {
@@ -1675,6 +1758,8 @@ export interface PositionConnectionsView {
   ready: boolean
   missing_required: string[]
   items: PositionConnectionItem[]
+  /** WP415（只加）：职责要、且已经连上的那几条。 */
+  connected?: string[]
 }
 
 export interface McpServerRecord {
@@ -2515,6 +2600,15 @@ export interface ModelDefaultsView {
   org_default?: boolean
   /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
   org_default_brand?: string
+  /** WP425：AI 来源（主用：自己的；备用：工坊积分；开关）。老服务端没有。 */
+  ai_source?: ModelAiSourceView
+}
+
+/** WP425：AI 来源顺序（与输入框 AI 钮同一份数据）。 */
+export interface ModelAiSourceView {
+  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  backup: { available: boolean; label: string; model?: string }
+  fallback_to_cloud: boolean
 }
 
 export interface ModelUsageRow {
@@ -2617,6 +2711,8 @@ export const setModelDefaults = (
       workspace_monthly_base?: number
       assignment_daily_base?: number
     }
+    /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
+    fallback_to_cloud?: boolean
   },
   assignment?: string,
 ): Promise<ModelDefaultsView> =>
@@ -2755,6 +2851,9 @@ export interface RoleSummaryView {
     review_cannot_be_disabled: boolean
     caps: { key: string; value: string }[]
     window?: { max_count: number; per: string }
+    /** WP415（只加）：落到哪类改动 / 生产里有没有真执行器（没有这一格 = 看渠道，不标）。 */
+    change_kind?: string
+    wired?: 'wired' | 'partly' | 'not_wired'
   }[]
   automation: { action_id: string; ceiling: string; initial: string; hard_ceiling: boolean }[]
   connectors: { kind: string; required: boolean }[]
@@ -2765,6 +2864,8 @@ export interface RoleSummaryView {
 export interface RoleDetailView extends RoleSummaryView {
   scopes: { domain: string; ops: string[]; range: string; max_sensitivity: string }[]
   skills: { name: string; tier: string; load: string }[]
+  /** WP415（只加）：「能查什么」——工具人话名 + 有没有执行器（老服务端没有）。 */
+  tools?: { name: string; label: string; wired: boolean }[]
 }
 
 export interface OrgPositionView {
@@ -3867,6 +3968,8 @@ export interface WorkspaceProfileView {
   one_liner?: string
   /** WP248（决策 83）：客服邮箱（没写过就没有）。 */
   support_email?: string
+  /** WP424：邮件营销用的哪一家（没写过就没有）。 */
+  email_service?: string
   /** WP248（决策 83）：币种（新服务端总会给，没写过 = USD）。 */
   currency?: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
@@ -4085,6 +4188,8 @@ export const setWorkspaceProfile = (
     /** WP248（决策 83）：品牌三格（不给 = 不改；空串 = 清空）。 */
     one_liner?: string
     support_email?: string
+    /** WP424：邮件营销用的哪一家（不给 = 不改；空串 = 清空）。 */
+    email_service?: string
     currency?: string
     /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
     category?: string
@@ -4418,6 +4523,8 @@ export interface ChatWidgetSettingsView {
   accent?: string
   greeting?: string
   assist_wait_seconds?: number
+  /** WP417（决策 1232）：常见问题直接发（缺省关 = 每一句先出卡要人批）。 */
+  auto_send_faq?: boolean
   updated_at?: string
 }
 
@@ -4430,6 +4537,7 @@ export const setChatWidgetSettings = (
     accent?: string
     greeting?: string
     assist_wait_seconds?: number
+    auto_send_faq?: boolean
   },
   assignment?: string,
 ): Promise<ChatWidgetSettingsView> =>
@@ -5154,6 +5262,8 @@ export interface KolCollaborationData {
   last_activity_at?: string
   /** 演练数据（列表行上带一个角标）。 */
   sandbox?: boolean
+  /** WP416：建这条合作的卡还没人点头。 */
+  awaiting_approval?: boolean
   /** WP299（决策 386）：寄样（地址只有脱敏样子）。 */
   sample?: {
     address_masked: string
@@ -5246,7 +5356,26 @@ export interface KolOutreachData extends KolStagedData {
   forbidden_hits: string[]
   missing_vars: string[]
   quota: { cap: number; sent_today: number; remaining: number; allowed: boolean }
+  /** WP416：还没连发信邮箱（卡出了，批了也发不出去）。 */
+  needs_mailbox?: boolean
 }
+
+/** WP416（决策 531）：起草那两格的默认值。 */
+export interface KolOutreachDefaultsData {
+  brand_pitch: string
+  product: string
+  source: 'saved' | 'brand_profile' | 'none'
+  mailbox_connected: boolean
+}
+
+export const getKolOutreachDefaults = (assignment?: string): Promise<KolOutreachDefaultsData> =>
+  api('/v1/kol/outreach/defaults', withAssignment(assignment))
+
+export const saveKolOutreachDefaults = (
+  input: { brand_pitch?: string; product?: string },
+  assignment?: string,
+): Promise<KolOutreachDefaultsData> =>
+  api('/v1/kol/outreach/defaults', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
 export interface KolImportData {
   summary: string
@@ -5360,7 +5489,7 @@ export const draftKolOutreach = (
     creator_id: string
     channel: KolChannelId
     product: string
-    /** 一句话说我们是做什么的。**服务端不编一个**，缺了就不起草。 */
+    /** 一句话说我们是做什么的。不给服务端从品牌档案补（WP416）；都没有就不起草。 */
     brand_pitch?: string
     reason?: string
     step?: 'first' | 'follow_up' | 'final'
@@ -5843,10 +5972,43 @@ export const getSocialAccounts = (
 }
 
 export const createSocialPost = (
-  input: { account_id: string; kind: string; body: string; scheduled_at?: string },
+  input: {
+    account_id: string
+    kind: string
+    body: string
+    scheduled_at?: string
+    /** WP419：素材库里的图（发帖时带上）。 */
+    media_refs?: string[]
+  },
   assignment?: string,
 ): Promise<SocialPostData> =>
   api('/v1/social/posts', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/**
+ * WP419（决策 1231，自查 S2）：登记一个要发帖的号——只要主页链接（不用开发者应用）。发帖时插件打开你登录着的发帖页。
+ */
+export const registerSocialAccount = (
+  input: { channel: SocialChannelId; url: string; display_name: string },
+  assignment?: string,
+): Promise<{ id: string }> => {
+  const u = new URL(input.url)
+  const handle =
+    u.pathname
+      .split('/')
+      .filter((x) => x !== '')[0]
+      ?.replace(/^@/u, '') ?? u.hostname
+  return api('/v1/social/accounts', {
+    method: 'POST',
+    body: {
+      channel: input.channel,
+      handle,
+      display_name: input.display_name.trim() === '' ? handle : input.display_name.trim(),
+      url: u.toString(),
+      external_id: u.toString(),
+    },
+    ...withAssignment(assignment),
+  })
+}
 
 /** 周视图上拖一下 = 改排期。换个时间发也是一次发布，所以服务端会重新出一张卡。 */
 export const rescheduleSocialPost = (
@@ -6561,6 +6723,8 @@ export interface ManualBrandProfile {
   brand_name?: string
   one_liner?: string
   support_email?: string
+  /** WP424：邮件营销用的哪一家。 */
+  email_service?: string
   currency?: string
   markets?: string[]
 }
@@ -6708,7 +6872,7 @@ export const openExtensionInstall = (
  * 岗位页顶上那张卡读这一份：要不要、配上没有、配上之后还差哪步、接哪张方案卡、今天点过「稍后」没有。
  * 带的是**本岗位那条分配**（不是所有者的）；配对码那一块另走所有者那条。
  */
-export type BrowserExtensionUseView = 'reddit' | 'kol' | 'google_ads' | 'meta_ads'
+export type BrowserExtensionUseView = 'reddit' | 'kol' | 'google_ads' | 'meta_ads' | 'social'
 export type ExtensionFollowStepView = 'reddit' | 'google_ads' | 'meta_ads'
 
 export interface ExtensionNeedsView {
@@ -6721,6 +6885,8 @@ export interface ExtensionNeedsView {
   steps: { step: ExtensionFollowStepView; done?: boolean }[]
   plans: { target: string; name: string; satisfied: boolean }[]
   snoozed: boolean
+  /** WP416：「要你处理」里还开着的装插件连接卡（有就不在岗位页顶上再出一张）。 */
+  connect_card_id?: string
 }
 
 export const getExtensionNeeds = (
@@ -7507,6 +7673,21 @@ export const startB2bSequence = (
   assignment?: string,
 ): Promise<B2bSequenceStartData> =>
   api('/v1/b2b/outbound/sequences', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** WP421：导入一张客户 / 联系人名单（CSV）——导入本身出卡，批了才进库。 */
+export interface B2bImportResultData {
+  staged: boolean
+  message?: string
+  approval_item_id?: string
+  rows: number
+  suppressed: number
+}
+
+export const importB2bCsv = (
+  input: { name: string; csv: string; source_url?: string },
+  assignment?: string,
+): Promise<B2bImportResultData> =>
+  api('/v1/b2b/imports/csv', { method: 'POST', body: input, ...withAssignment(assignment) })
 
 export const checkB2bSender = (assignment?: string): Promise<B2bOutboundData> =>
   api('/v1/b2b/outbound/sender/check', { method: 'POST', ...withAssignment(assignment) })

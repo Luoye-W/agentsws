@@ -136,7 +136,27 @@ export interface Completion {
    * `text` 是停下那一刻已经吐出来的部分，`usage` 是网关按已吐出的字数估的（上游没来得及报）。
    */
   stopped?: boolean
+  /**
+   * WP425（只加）：这一次**从自己的 AI 切到了工坊积分**（主用来源额度用完 / 连不上 / key 失效，
+   * 开关「自己的用不了时用工坊积分接着做」开着）。只在切过去的那一次补全上带；同一轮后面的补全
+   * 直接走工坊积分、不再带。运行时据此记一行进度（{@link MODEL_SOURCE_SWITCHED_STEP}），界面照实那一句。
+   */
+  source_switch?: ModelSourceSwitch
 }
+
+/** WP425：为什么切到工坊积分——额度用完 / 连不上 / key（或登录）失效。 */
+export type ModelSourceSwitchReason = 'quota' | 'unreachable' | 'auth'
+
+/** WP425：一次「自己的 AI → 工坊积分」的切换。`message` 是给人看的那一句。 */
+export interface ModelSourceSwitch {
+  from: ModelRef
+  to: ModelRef
+  reason: ModelSourceSwitchReason
+  message: string
+}
+
+/** WP425：切换那一行在运行记录里的 `progress.step`（三个运行时同一个名字）。 */
+export const MODEL_SOURCE_SWITCHED_STEP = 'model_source_switched'
 
 /**
  * WP188（只加）：流式与停止。调用方给了 `on_delta` 就一段一段收正文；provider 不会流式时，

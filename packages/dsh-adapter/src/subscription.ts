@@ -166,7 +166,9 @@ export function watchSubscriptionCalls(ctx: Context, watch: SubscriptionCallWatc
       }
       const budget = watch.budget
       steps += 1
-      if (budget !== undefined) {
+      // WP423：收尾回合不按步数 / token 拦；回来的工具调用丢掉、只留文字
+      const wrapping = budget?.wrapUp?.() === true
+      if (budget !== undefined && !wrapping) {
         if (steps > budget.max_steps) {
           budget.exhausted('max_turns', steps, budget.max_steps)
           yield { type: 'finish', reason: { kind: 'stop' } }
@@ -186,6 +188,11 @@ export function watchSubscriptionCalls(ctx: Context, watch: SubscriptionCallWatc
       let text = ''
       let reported = false
       for await (const chunk of next()) {
+        if (wrapping && droppedInWrapUp(chunk)) continue
+        if (wrapping && chunk.type === 'finish' && chunk.reason.kind === 'tool-calls') {
+          yield { type: 'finish', reason: { kind: 'stop' } }
+          continue
+        }
         if (chunk.type === 'text-delta') text += chunk.text
         if (chunk.type === 'usage') {
           reported = true
@@ -201,6 +208,15 @@ export function watchSubscriptionCalls(ctx: Context, watch: SubscriptionCallWatc
   return () => {
     off()
   }
+}
+
+/** WP423：收尾回合里属于工具调用的那几种流块（丢掉，只留文字）。 */
+function droppedInWrapUp(chunk: StreamChunk): boolean {
+  const c = chunk as { type: string; blockType?: string; block?: { type?: string } }
+  if (c.type === 'tool-call-delta') return true
+  if (c.type === 'block-start' && c.blockType === 'tool-call') return true
+  if (c.type === 'block-end' && c.block?.type === 'tool-call') return true
+  return false
 }
 
 /** 一次订阅补全的记账形状。**`cost_base` 恒为 0**——这是这条路唯一的计费真相。 */

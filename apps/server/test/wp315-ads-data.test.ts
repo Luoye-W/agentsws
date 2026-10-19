@@ -190,8 +190,8 @@ describe('建「工坊日报」→ 马上导一次 → 每天 9 点后一次', (
     expect(ads.campaign('google:1234567890:112')).toMatchObject({ status: 'paused' })
     expect(ads.campaign('google:1234567890:112')?.metrics?.spend).toBeUndefined()
     expect(ads.account('google:1234567890')).toMatchObject({ spend_today: 90, currency: 'USD' })
-    // 同一天再一拍：导过了，不再导；明天 8 点不到也不导；9 点后导
-    clock.iso = at('2026-10-14', 15)
+    // 同一天晚上 10 点以后：导过了，不再导（白天每 3 小时加导见 wp420-ads-stop-loss）；明天 8 点不到也不导；9 点后导
+    clock.iso = at('2026-10-14', 23)
     expect((await svc.tick()).queued).toEqual([])
     clock.iso = at('2026-10-15', 8, 10)
     expect((await svc.tick()).queued).toEqual([])
@@ -203,7 +203,7 @@ describe('建「工坊日报」→ 马上导一次 → 每天 9 点后一次', (
     expect(seeds).toEqual([1])
   })
 
-  it('下载的不是 CSV / 报表被删了：照实记一句，不入库、不种日报', async () => {
+  it('下载的不是 CSV / 报表被删了：照实记一句，不入库（日报定时照种——WP420 A9：有人担投放就种）', async () => {
     const { svc, plugin, seeds, acts, files, flush } = make()
     svc.setAccounts({ google: { id: '1234567890' } })
     plugin.connect('google_ads')
@@ -216,7 +216,7 @@ describe('建「工坊日报」→ 马上导一次 → 每天 9 点后一次', (
     await plugin.finish(exp, [], 'handover')
     expect(svc.status()[0]?.message).toContain('不是 CSV')
     expect(svc.status()[0]?.last_import).toBeUndefined()
-    expect(seeds).toEqual([])
+    expect(seeds).toEqual([1])
   })
 
   it('排了一天没人领（Chrome 没开）：作废、照实说；隔一小时再排', async () => {

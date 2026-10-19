@@ -12,7 +12,17 @@
  * 回复里拆出来的方案卡（{@link FanoutCard}）与点过之后的汇总（{@link FanoutSummary}）。
  */
 import { splitGenuiReply } from '@agentsws/contracts'
-import { AtSign, Check, Copy, FileText, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  AtSign,
+  Check,
+  Copy,
+  FileText,
+  Globe,
+  Library,
+  Loader2,
+  RotateCcw,
+} from 'lucide-react'
 import { useState } from 'react'
 import { DispatchLine, ReportNote } from '@/components/free-chat/assistant-bits'
 import { FanoutCard, FanoutSummary } from '@/components/free-chat/fanout-card'
@@ -20,6 +30,7 @@ import { ChoiceIcon, modelNameOf } from '@/components/free-chat/model-picker'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
+import { setModelDefaults } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
   type FreeChatFanoutEdit,
@@ -134,6 +145,47 @@ export function Sources({ sources }: { sources: FreeChatSource[] }): React.React
   )
 }
 
+/**
+ * WP425：自己的 AI 用不了、开关「自己的用不了时用工坊积分接着做」关着时的那张卡。
+ * 点一下 = 打开开关 + 重答这一轮（以后再遇到也自动切，设置 → 模型里随时关）。
+ */
+function BackupCard({ onDone }: { onDone: () => void }): React.ReactNode {
+  const { t } = useApp()
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | undefined>(undefined)
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-ws-card px-3 py-2"
+      data-testid="free-chat-backup-card"
+    >
+      <span className="text-xs text-muted-foreground">
+        {failed ?? t('free_chat.backup_card.text')}
+      </span>
+      <Button
+        size="sm"
+        disabled={busy}
+        data-testid="free-chat-backup-use"
+        onClick={() => {
+          setBusy(true)
+          setFailed(undefined)
+          setModelDefaults({ fallback_to_cloud: true })
+            .then(() => {
+              onDone()
+            })
+            .catch((e: unknown) => {
+              setFailed(e instanceof Error ? e.message : String(e))
+            })
+            .finally(() => {
+              setBusy(false)
+            })
+        }}
+      >
+        {t('free_chat.backup_card.use')}
+      </Button>
+    </div>
+  )
+}
+
 export function AssistantMessage({
   message,
   live,
@@ -169,6 +221,16 @@ export function AssistantMessage({
       data-testid="free-chat-assistant"
       data-live={live === true}
     >
+      {/* WP425：这一轮从自己的 AI 切到了工坊积分——照实一行 */}
+      {message.source_switch === undefined ? null : (
+        <p
+          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-testid="free-chat-source-switch"
+        >
+          <ArrowRightLeft aria-hidden className="size-3.5" />
+          {message.source_switch}
+        </p>
+      )}
       {text === '' && live === true ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -186,6 +248,10 @@ export function AssistantMessage({
           {message.error}
         </p>
       )}
+      {/* WP425：开关关着停下了——就地一张卡「用工坊积分接着做」（决策 690：配置在对话流里完成） */}
+      {message.source_fallback_off === true && last && live !== true ? (
+        <BackupCard onDone={onRegenerate} />
+      ) : null}
       {message.fanout === undefined ? null : (
         <FanoutCard
           plan={message.fanout}

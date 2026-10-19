@@ -11,7 +11,7 @@
  * - 定时任务：原来压在「记录」底下，**本人在这个岗位每条职责上的**都列出来，一个开关停 / 开；
  * - 高级：WP238 的人话权限（`lib/duty-capabilities`），原始 id 只在「开发者视图」。
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, ExternalLink, MoreHorizontal, Plus, Split } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -26,6 +26,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { LayerMemory } from '@/components/work/layer-memory'
 import {
+  getLayerMemory,
+  getMySchedules,
   getPositionConnections,
   getRoleDefinition,
   getSchedules,
@@ -37,6 +39,7 @@ import {
 import { useApp } from '@/lib/app-context'
 import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
+import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
 import { ShopAdminBanner } from './shop-admin-banner'
 import { SiteThemeBanner } from './site-theme-banner'
@@ -260,19 +263,70 @@ function Connections({
   )
 }
 
-function ScheduleRows({ assignments }: { assignments: readonly string[] }): ReactNode {
+/**
+ * WP416（自查 kol U11）：同一件事（同名、同一个点）在几条职责上各有一条——合成一行「N 条职责 · 每天 08:00」，
+ * 一个开关一起停 / 开；时间说人话，不露 cron。红人岗位顺带列出系统那条「每天看一眼哪几封开发信该跟进了」。
+ */
+const POSITION_SYSTEM_TASKS: Readonly<Record<string, string>> = {
+  'kol.outreach_sequence': 'kol.',
+  'b2b.outreach_sequence': 'b2b.',
+}
+
+export interface ScheduleGroup {
+  key: string
+  title: string
+  when: string
+  items: { row: ScheduledTaskRow; assignment: string }[]
+}
+
+/** WP416：同名、同一个点的几条（各条职责一条）合成一组；顺序按第一次出现。 */
+export function groupSchedules(
+  rows: readonly { row: ScheduledTaskRow; assignment: string }[],
+  lang: Lang,
+): ScheduleGroup[] {
+  const groups: ScheduleGroup[] = []
+  for (const x of rows) {
+    const title = x.row.title ?? x.row.handler ?? x.row.id
+    const when = triggerText(x.row.trigger, lang)
+    const key = `${title}\u0000${when}`
+    const hit = groups.find((g) => g.key === key)
+    if (hit === undefined) groups.push({ key, title, when, items: [x] })
+    else hit.items.push(x)
+  }
+  return groups
+}
+
+function ScheduleRows({
+  assignments,
+  roleIds = [],
+}: {
+  assignments: readonly string[]
+  roleIds?: readonly string[]
+}): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
   const lists = useQuery({
-    queryKey: ['schedules', 'position', assignments.join(',')],
+    queryKey: ['schedules', 'position', assignments.join(','), roleIds.join(',')],
     queryFn: async () => {
       const parts = await Promise.all(
         assignments.map(async (a) =>
           (await getSchedules(a)).map((row) => ({ row, assignment: a })),
         ),
       )
+      // 系统那几条（不挂在职责上）：只列跟这个岗位有关的那一条
+      const first = assignments[0]
+      const system =
+        first === undefined
+          ? []
+          : (await getMySchedules().catch(() => []))
+              .filter((row) => {
+                const prefix =
+                  row.handler === undefined ? undefined : POSITION_SYSTEM_TASKS[row.handler]
+                return prefix !== undefined && roleIds.some((r) => r.startsWith(prefix))
+              })
+              .map((row) => ({ row, assignment: first }))
       const seen = new Set<string>()
-      return parts.flat().filter((x) => {
+      return [...parts.flat(), ...system].filter((x) => {
         if (seen.has(x.row.id)) return false
         seen.add(x.row.id)
         return true
@@ -280,12 +334,11 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
     },
   })
   const toggle = useMutation({
-    mutationFn: (input: { row: ScheduledTaskRow; assignment: string }) =>
-      patchSchedule(
-        input.row.id,
-        { action: input.row.state === 'paused' ? 'resume' : 'pause' },
-        input.assignment,
-      ),
+    mutationFn: async (group: ScheduleGroup) => {
+      const paused = group.items.every((x) => x.row.state === 'paused')
+      for (const x of group.items)
+        await patchSchedule(x.row.id, { action: paused ? 'resume' : 'pause' }, x.assignment)
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['schedules'] })
       void client.invalidateQueries({ queryKey: ['position-work'] })
@@ -295,26 +348,34 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
   const rows = (lists.data ?? []).filter((x) => x.row.state !== 'cancelled')
   if (rows.length === 0)
     return <p className="text-sm text-muted-foreground">{t('pos2.set.schedules.empty')}</p>
+  const groups = groupSchedules(rows, lang)
   return (
     <ul className="overflow-hidden rounded-xl border bg-card" data-testid="settings-schedules">
-      {rows.map(({ row, assignment }) => {
-        const paused = row.state === 'paused'
+      {groups.map((g) => {
+        const paused = g.items.every((x) => x.row.state === 'paused')
+        const next = g.items
+          .map((x) => x.row.next_fire_at)
+          .filter((x): x is string => x !== undefined)
+          .sort()[0]
+        const duties = new Set(g.items.map((x) => x.row.role_id ?? x.assignment)).size
         return (
           <li
-            key={row.id}
+            key={g.key}
             data-testid="schedule-row"
-            data-state={row.state}
+            data-state={paused ? 'paused' : 'active'}
+            data-count={g.items.length}
             className={`flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0 ${paused ? 'opacity-70' : ''}`}
           >
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{row.title ?? row.handler ?? row.id}</p>
+              <p className="text-sm font-medium">{g.title}</p>
               <p className="text-xs text-ws-muted-fg">
-                {triggerText(row.trigger, lang)}
+                {duties > 1 ? `${t('pos2.set.schedules.duties', { n: duties })} · ` : ''}
+                {g.when}
                 {paused
                   ? ` · ${t('pos2.set.schedules.paused')}`
-                  : row.next_fire_at === undefined
+                  : next === undefined
                     ? ''
-                    : ` · ${t('pos2.set.schedules.next', { at: formatDate(row.next_fire_at, lang) })}`}
+                    : ` · ${t('pos2.set.schedules.next', { at: formatDate(next, lang) })}`}
               </p>
             </div>
             <Switch
@@ -323,7 +384,7 @@ function ScheduleRows({ assignments }: { assignments: readonly string[] }): Reac
               aria-label={paused ? t('pos2.set.schedules.off') : t('pos2.set.schedules.on')}
               data-testid="schedule-switch"
               onCheckedChange={() => {
-                toggle.mutate({ row, assignment })
+                toggle.mutate(g)
               }}
             />
           </li>
@@ -435,6 +496,60 @@ function Advanced({ roles }: { roles: PositionInstanceData['roles'] }): ReactNod
   )
 }
 
+/**
+ * WP416（自查 kol U12）：记忆那一节——岗位层 + 每条职责一层；**全空时只说一行「还没有记忆」**
+ * （以前六段各说两遍「还没攒下东西」、外加六个点了没用的「提到这一层」）。
+ */
+export function MemoryLayers({
+  positionId,
+  name,
+  roles,
+}: {
+  positionId: string
+  name: string
+  roles: readonly { role_id: string; role_name: string }[]
+}): ReactNode {
+  const { t } = useApp()
+  const layers = useQueries({
+    queries: [
+      { tier: 'position' as const, scope: positionId },
+      ...roles.map((r) => ({ tier: 'role' as const, scope: r.role_id })),
+    ].map((l) => ({
+      queryKey: ['layer-memory', l.tier, l.scope],
+      queryFn: () => getLayerMemory(l.tier, l.scope),
+    })),
+  })
+  if (layers.some((q) => q.isPending)) return <Skeleton className="h-16 w-full" />
+  const empty = layers.every((q) => (q.data?.entries.length ?? 0) === 0)
+  if (empty)
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="memory-none">
+        {t('memory.none')}
+      </p>
+    )
+  const has = (i: number): boolean => (layers[i]?.data?.entries.length ?? 0) > 0
+  return (
+    <div className="flex flex-col gap-4">
+      {has(0) ? (
+        <div>
+          <h4 className="mb-1.5 text-sm font-medium">{t('memory.position', { name })}</h4>
+          <LayerMemory tier="position" scopeId={positionId} />
+        </div>
+      ) : null}
+      {roles.map((r, i) =>
+        has(i + 1) ? (
+          <div key={r.role_id} data-testid="role-memory" data-role={r.role_id}>
+            <h4 className="mb-1.5 text-sm font-medium">
+              {t('memory.role', { name: r.role_name })}
+            </h4>
+            <LayerMemory tier="role" scopeId={r.role_id} />
+          </div>
+        ) : null,
+      )}
+    </div>
+  )
+}
+
 export function PositionSettings({
   id,
   view,
@@ -523,22 +638,7 @@ export function PositionSettings({
 
         <section data-testid="position-memory">
           <SectionHead id="memory" title={t('pos2.set.memory')} sub={t('pos2.set.memory.sub')} />
-          <div className="flex flex-col gap-4">
-            <div>
-              <h4 className="mb-1.5 text-sm font-medium">
-                {t('memory.position', { name: view.name.zh })}
-              </h4>
-              <LayerMemory tier="position" scopeId={view.position_id} />
-            </div>
-            {view.roles.map((r) => (
-              <div key={r.role_id} data-testid="role-memory" data-role={r.role_id}>
-                <h4 className="mb-1.5 text-sm font-medium">
-                  {t('memory.role', { name: r.role_name })}
-                </h4>
-                <LayerMemory tier="role" scopeId={r.role_id} />
-              </div>
-            ))}
-          </div>
+          <MemoryLayers positionId={view.position_id} name={view.name.zh} roles={view.roles} />
         </section>
 
         <section>
@@ -547,7 +647,7 @@ export function PositionSettings({
             title={t('pos2.set.schedules')}
             sub={t('pos2.set.schedules.sub')}
           />
-          <ScheduleRows assignments={assignments} />
+          <ScheduleRows assignments={assignments} roleIds={view.roles.map((r) => r.role_id)} />
         </section>
 
         <section>

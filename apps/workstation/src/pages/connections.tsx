@@ -330,7 +330,8 @@ export function ConnectionsPage({
         <BrandScopeNote testId="connections-brand-scope" />
       </header>
 
-      {runtime.data === undefined ? null : (
+      {/* WP416（自查 kol U18）：「开发替身」只在 demo / 开发时出现，对用户没有意义——不出这一行 */}
+      {runtime.data === undefined || runtime.data.state === 'stand_in' ? null : (
         <RuntimeBar status={runtime.data} {...(asId === undefined ? {} : { assignment: asId })} />
       )}
       <DownloadConfirm
@@ -424,6 +425,7 @@ export function ConnectionsPage({
                       />
                     ),
                     advancedLabel: t('shopconnect.advanced'),
+                    advancedNote: t('shopconnect.advanced.note'),
                   }
                 : p.service === 'google_alerts'
                   ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS

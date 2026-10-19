@@ -249,7 +249,9 @@ describe('WP380 比较胜率 / 描述准确度进监测与周报', () => {
     expect(judged.some((p) => p.includes('"compare"') && p.includes('<<<FACTS'))).toBe(true)
     const view = await service.watchMetrics()
     const point = view.trends.find((l) => l.kind === 'all')?.points.at(-1)
-    expect(point).toMatchObject({ compared: 2, wins: 1, win_rate: 0.5 })
+    // WP421：少于 5 条只给条数、不出百分比
+    expect(point).toMatchObject({ compared: 2, wins: 1 })
+    expect(point?.win_rate).toBeUndefined()
     expect(point).toMatchObject({
       claims: 6,
       claims_correct: 3,
@@ -275,7 +277,7 @@ describe('WP380 比较胜率 / 描述准确度进监测与周报', () => {
     expect(payload.figures?.map((f) => [f.key, f.basis])).toEqual(
       expect.arrayContaining([
         ['mention_rate', 'measured'],
-        ['win_rate', 'derived'],
+        // WP421：样本少于 5 条不出胜率百分比
         ['accuracy', 'derived'],
       ]),
     )
@@ -287,7 +289,8 @@ describe('WP380 比较胜率 / 描述准确度进监测与周报', () => {
     expect(payload.source_map?.map((m) => m.group)).toEqual(
       expect.arrayContaining(['media', 'community']),
     )
-    expect(report?.summary).toContain('比较胜率 50%（推算，n=2）')
+    // WP421：2 条样本不出胜率百分比
+    expect(report?.summary).not.toContain('比较胜率')
     expect(report?.summary).toContain('先做：')
     expect(report?.summary).not.toMatch(/DataForSEO/i)
     // 每周那一轮顺手查了一次对外说法（第一次）

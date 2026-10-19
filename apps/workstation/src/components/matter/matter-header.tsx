@@ -30,6 +30,8 @@ const STATE_DOT: Record<MatterState, string> = {
   running: 'bg-ws-brand animate-pulse motion-reduce:animate-none',
   doing: 'bg-ws-brand',
   awaiting: 'bg-ws-warn',
+  connect: 'bg-ws-warn',
+  setup: 'bg-ws-warn',
   blocked: 'bg-ws-bad',
   done: 'bg-ws-good',
 }
@@ -37,6 +39,8 @@ const STATE_FG: Record<MatterState, string> = {
   running: 'text-ws-brand-ink dark:text-ws-brand',
   doing: 'text-ws-brand-ink dark:text-ws-brand',
   awaiting: 'text-ws-warn',
+  connect: 'text-ws-warn',
+  setup: 'text-ws-warn',
   blocked: 'text-ws-bad',
   done: 'text-ws-good',
 }

@@ -64,12 +64,20 @@ export function InfluencerPage({ setup = false }: { setup?: boolean }): React.Re
   if (channel === undefined) return null
 
   return (
-    <KolPanelLoader
-      assignment={kol.position_id}
-      channel={channel}
-      {...(search.get('creator') === null ? {} : { focusCreator: search.get('creator') as string })}
-      {...(setup ? { defaultSubview: 'campaign' as const } : {})}
-    />
+    <div className="flex flex-col gap-3">
+      {/* WP416（自查 kol U9）：页面有标题，一上来知道自己在哪 */}
+      <h1 className="text-lg font-semibold" data-testid="influencer-title">
+        {t('influencer.title')}
+      </h1>
+      <KolPanelLoader
+        assignment={kol.position_id}
+        channel={channel}
+        {...(search.get('creator') === null
+          ? {}
+          : { focusCreator: search.get('creator') as string })}
+        {...(setup ? { defaultSubview: 'campaign' as const } : {})}
+      />
+    </div>
   )
 }
 

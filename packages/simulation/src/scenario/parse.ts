@@ -159,6 +159,7 @@ const EVENT_KEYS = [
   'clock.advance',
   'inject.fault',
   'model.outage',
+  'model.own_fault',
   'inject.budget',
   'routine.start',
   'learning.start',
@@ -313,6 +314,9 @@ const EXPECTED_KEYS = [
   'max_tool_calls',
   'metrics',
   'run_failed_codes',
+  // WP425
+  'model_source_switches',
+  'model_providers_used',
   'notifications_to',
   'blocked_rules',
   'event_types',
@@ -2410,7 +2414,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'web.research': {
-      known(source, `${path}.${key}`, body, ['who', 'role', 'ask'])
+      known(source, `${path}.${key}`, body, ['who', 'role', 'ask', 'max_tool_calls'])
       return {
         at,
         type: 'web.research',
@@ -2418,6 +2422,11 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           who: str(source, `${path}.${key}.who`, body.who),
           role: str(source, `${path}.${key}.role`, body.role),
           ask: str(source, `${path}.${key}.ask`, body.ask),
+          ...(body.max_tool_calls === undefined
+            ? {}
+            : {
+                max_tool_calls: num(source, `${path}.${key}.max_tool_calls`, body.max_tool_calls),
+              }),
         },
       }
     }
@@ -2896,6 +2905,26 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'model.own_fault': {
+      known(source, `${path}.${key}`, body, ['code', 'times', 'backup'])
+      const code = num(source, `${path}.${key}.code`, body.code)
+      if (code !== 429 && code !== 401 && code !== 403 && code !== 503)
+        fail(source, `${path}.${key}.code`, '只认 429 / 401 / 403 / 503')
+      const times =
+        body.times === undefined ? undefined : num(source, `${path}.${key}.times`, body.times)
+      const backup = optStr(source, `${path}.${key}.backup`, body.backup)
+      if (backup !== undefined && backup !== 'on' && backup !== 'off')
+        fail(source, `${path}.${key}.backup`, '只认 on / off')
+      return {
+        at,
+        type: 'model.own_fault',
+        own_fault: {
+          code,
+          ...(times === undefined ? {} : { times }),
+          ...(backup === undefined ? {} : { backup }),
+        },
+      }
+    }
     case 'model.outage': {
       known(source, `${path}.${key}`, body, ['duration'])
       const duration = optStr(source, `${path}.${key}.duration`, body.duration)
@@ -3030,6 +3059,19 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   }
   const codes = optStrList(source, 'expected.run_failed_codes', raw.run_failed_codes)
   if (codes !== undefined) out.run_failed_codes = codes
+  // WP425
+  if (raw.model_source_switches !== undefined)
+    out.model_source_switches = numeric(
+      source,
+      'expected.model_source_switches',
+      raw.model_source_switches,
+    )
+  const usedProviders = optStrList(
+    source,
+    'expected.model_providers_used',
+    raw.model_providers_used,
+  )
+  if (usedProviders !== undefined) out.model_providers_used = usedProviders
   const notified = optStrList(source, 'expected.notifications_to', raw.notifications_to)
   if (notified !== undefined) out.notifications_to = notified
   const blocked = optStrList(source, 'expected.blocked_rules', raw.blocked_rules)

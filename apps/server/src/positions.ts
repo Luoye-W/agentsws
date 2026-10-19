@@ -87,7 +87,8 @@ const POSITION_ERROR = (
 /** WP287 / WP291：一开始就判成要动手的，线程里头一句（带上按哪条职责做）。 */
 export const taskLine = (role_name: string): string => `记成了任务，按「${role_name}」做`
 /** WP287：问的那一句答的时候要动手（出了卡），转成任务时线程里那一句。 */
-export const PROMOTED_LINE = '这件事要动手，转成了任务，在岗位「工作」里看进展'
+// WP421（自查 general UI #18）：岗位页早就没有叫「工作」的地方了
+export const PROMOTED_LINE = '这件事要动手，转成了任务，进展就在这件事里'
 /** WP311（决策 390）：只读问题「当成任务做」——用上面的回答，不重跑。 */
 export const PROMOTED_AS_IS_LINE = '转成了任务，用的是上面这段回答，在岗位「工作」里跟进'
 

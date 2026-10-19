@@ -300,6 +300,11 @@ export interface GatewayBudget {
    * 回调之后这一轮收成一个空的 `stop`，让 loop 干净地结束。
    */
   exhausted(which: 'max_tokens' | 'max_seconds' | 'max_turns', used: number, cap: number): void
+  /**
+   * WP423：现在是不是**收尾回合**（预算已经到了，再跑一次把查到的交出来）。是的话这一跳不再按步数 / token
+   * 拦（就一次），回来的工具调用一律丢掉（只留文字，这一轮以 `stop` 收）——工具面照旧摆着，缓存不失效。
+   */
+  wrapUp?: () => boolean
 }
 
 export interface GatewayAdapterOptions {
@@ -430,7 +435,8 @@ export class GatewayLlmAdapter extends LlmAdapter {
     const prepared = await this.prepareImages(options)
     const budget = this.options.budget
     this.steps += 1
-    if (budget !== undefined) {
+    const wrapping = budget?.wrapUp?.() === true
+    if (budget !== undefined && !wrapping) {
       if (this.steps > budget.max_steps) {
         // WP260：步数用完记成回合用完（以前借 `max_seconds` 这一格，排障时看着像超时）
         budget.exhausted('max_turns', this.steps, budget.max_steps)
@@ -480,7 +486,8 @@ export class GatewayLlmAdapter extends LlmAdapter {
       yield { type: 'block-end', index, block: { type: 'text', text: completion.text } }
       index += 1
     }
-    const calls = completion.tool_calls ?? []
+    // WP423：收尾回合回来的工具调用不执行（只要那段文字）
+    const calls = wrapping ? [] : (completion.tool_calls ?? [])
     for (const call of calls) {
       const id = (call.id.length > 0 ? call.id : `call_${index + 1}`) as ToolCallId
       // 推理跟着这一轮的调用 id 走：下一轮历史里认得出是哪一条 assistant

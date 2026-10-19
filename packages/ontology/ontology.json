@@ -43,6 +43,7 @@
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/execution.ts",
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
@@ -151,7 +152,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "f7e8c2ca52adf9070195ffe2bbf10bb0",
+  "source_digest": "7e04765eea17e2955b9255c79eea07b5",
   "objects": [
     {
       "id": "ad",
@@ -1461,6 +1462,12 @@
         },
         {
           "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "awaiting_approval",
           "type": "boolean",
           "sensitivity": "internal",
           "optional": true
@@ -4769,6 +4776,48 @@
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "handoff.at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handoff.owner",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "handoff.todo_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "handoff.reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_via",
+          "type": "'api' | 'extension'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "post_url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "readback",
+          "type": "'link' | 'self_report'",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": ["list_social_posts"],
@@ -4984,6 +5033,12 @@
         {
           "name": "apply.error",
           "type": "ApplyError",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "apply.readback",
+          "type": "import('./execution.js').ExecutionReadback",
           "sensitivity": "internal",
           "optional": true
         },
@@ -7920,6 +7975,14 @@
       "lookup": []
     },
     {
+      "from": "social_post",
+      "to": "todo",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "handoff.todo_id",
+      "lookup": []
+    },
+    {
       "from": "staged_change",
       "to": "ad_account",
       "direction": "out",
@@ -8670,6 +8733,14 @@
       "cardinality": "one",
       "via": "origin.review_id",
       "lookup": ["reviews.negative"]
+    },
+    {
+      "from": "todo",
+      "to": "social_post",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_post.handoff.todo_id",
+      "lookup": ["list_social_posts"]
     },
     {
       "from": "todo",

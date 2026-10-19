@@ -60,6 +60,8 @@ export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'
 // WP393：店铺管理「竞品动向」的探平台 / 现在读一次（定义并进报告积木那张表，三个运行时同一份）
 export * from './runtime/competitor-store.js'
+// WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
+export * from './runtime/desk-tools.js'
 export * from './runtime/dev-stub.js'
 // WP387：浏览器建完 / 读完 Google 提醒后交代结果
 export * from './runtime/google-alerts.js'
@@ -87,13 +89,18 @@ export * from './runtime/shop.js'
 // WP385：网站运营 / 内容与搜索读体检结论（只读）
 export * from './runtime/site-health.js'
 export * from './runtime/skills.js'
+// WP419：社媒发帖 / Reddit 起草出卡的干活工具（三个运行时同一份）
+export * from './runtime/social-tools.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
+// WP417：客服四条职责的查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
+export * from './runtime/support-tools.js'
 export * from './runtime/theme.js'
 export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'
 export * from './runtime/web.js'
 export * from './runtime/workshop-service.js'
+export * from './runtime/wrap-up.js'
 
 export const DEFAULT_START: Iso8601 = '2026-09-07T01:00:00.000Z'
 

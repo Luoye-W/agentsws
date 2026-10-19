@@ -89,6 +89,12 @@ export interface SetRuleInput {
 
 export interface AmazonListingCheckup {
   view(): Promise<ListingCheckupView>
+  /** WP420（自查 B15）：改自家 ASIN（整份替换；空 = 清掉）。 */
+  setOwn(input: { value: string; marketplace?: string }): Promise<{
+    ok: boolean
+    message?: string
+    own?: BrandWatchAmazonItem[]
+  }>
   run(input: { trigger: 'manual' | 'tool'; asins?: string[] }): Promise<ListingRunResult>
   latest(): ListingCheckupRun | undefined
   rules(): ListingRule[]
@@ -178,7 +184,9 @@ export function createAmazonListingCheckup(
       const got = await reader.readProduct({ marketplace, asin })
       if (got.status === 'blocked') {
         stopped = 'blocked'
+        // WP420（自查 B1）：取数链说清停到几点、能不能用你自己的浏览器读（没说就用老那句）
         stopped_message =
+          got.message ??
           'Amazon 出了验证页，这一轮停了：不过验证码、不重试、不换办法绕。读到的那几个照常出结果，剩下的过一阵再体检。'
         items.push({ ...base, status: 'blocked', message: '被 Amazon 拦了（验证页）' })
         continue
@@ -314,9 +322,15 @@ export function createAmazonListingCheckup(
   return {
     async view() {
       const latest = store.state().runs.at(-1)
+      const own = (await options.brand()).own
       return {
         ...(latest === undefined ? {} : { latest }),
-        own_asins: (await options.brand()).own.length,
+        own_asins: own.length,
+        own: own.map((o) => ({
+          marketplace: o.marketplace,
+          asin: o.asin,
+          ...(o.label === undefined ? {} : { label: o.label }),
+        })),
         rules: rules(),
         reader_ready: options.reader() !== undefined,
         footer: { zh: LISTING_CHECKUP_FOOTER_ZH, en: LISTING_CHECKUP_FOOTER_EN },
@@ -383,6 +397,35 @@ export function createAmazonListingCheckup(
       }
     },
     ownSellers,
+    async setOwn(input) {
+      const brand = await options.brand()
+      const fallback = (input.marketplace ?? marketOf(brand.markets)).toUpperCase()
+      const out: BrandWatchAmazonItem[] = []
+      for (const raw of input.value.split(/[\s,，、;；]+/)) {
+        const t = raw.trim()
+        if (t === '') continue
+        const entry = classifyAmazonUrl(t)
+        if (entry?.kind === 'amazon_listing')
+          out.push({ marketplace: entry.country ?? fallback, asin: entry.asin.toUpperCase() })
+        else if (ASIN.test(t.toUpperCase()))
+          out.push({ marketplace: fallback, asin: t.toUpperCase() })
+        else return { ok: false, message: `认不出这是个 Amazon 商品：${t}` }
+      }
+      const seen = new Set<string>()
+      const keep = out.filter((x) => {
+        const k = `${x.marketplace}|${x.asin}`
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+      })
+      // 原来有的保留标题（只改了清单，不丢名字）
+      const merged = keep.map((x) => {
+        const was = brand.own.find((o) => o.asin === x.asin && o.marketplace === x.marketplace)
+        return was?.label === undefined ? x : { ...x, label: was.label }
+      })
+      await options.saveOwn(merged.slice(0, 100))
+      return { ok: true, own: merged.slice(0, 100) }
+    },
     setupTarget: () => ({
       id: AMAZON_OWN_ASINS_TARGET,
       name: '自家 Amazon 商品',

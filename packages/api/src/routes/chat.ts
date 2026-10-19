@@ -231,6 +231,9 @@ const WidgetBody = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, '主色要写成 #RRGGBB')
     .optional(),
   greeting: z.string().max(200).optional(),
+  // WP417：等待时长以前界面上能改、接口却不收（改了不生效）；「常见问题直接发」（决策 1232）
+  assist_wait_seconds: z.number().int().min(10).max(600).optional(),
+  auto_send_faq: z.boolean().optional(),
 })
 
 const TeachBody = z.object({
@@ -599,6 +602,10 @@ export function chatRoutes(): Route[] {
             allowed_origins: input.allowed_origins,
             ...(input.accent === undefined ? {} : { accent: input.accent }),
             ...(input.greeting === undefined ? {} : { greeting: input.greeting }),
+            ...(input.assist_wait_seconds === undefined
+              ? {}
+              : { assist_wait_seconds: input.assist_wait_seconds }),
+            ...(input.auto_send_faq === undefined ? {} : { auto_send_faq: input.auto_send_faq }),
           }),
         )
       },

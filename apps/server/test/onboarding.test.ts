@@ -437,6 +437,16 @@ describe('46 §1 首次设置', () => {
     const state = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
     expect(state.needs_setup).toBe(true)
   })
+
+  it('Luoye 10-19 真机：没写过档案、但走完了第 ④ 步 → 不再拉回向导', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const before = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(before.needs_setup).toBe(true)
+    await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } })
+    const after = await data<{ needs_setup: boolean }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(after.needs_setup).toBe(false)
+  })
 })
 
 /* ── 46 §3：勾选 → 清单 → 真建分配 ──────────────────────────────────── */
@@ -600,6 +610,51 @@ describe('46 §3 岗位与职责 → 清单', () => {
     // 不依赖平台的那几条照样在（他现在能配的就是这些）
     expect(none.connectors.length).toBeGreaterThan(0)
   })
+
+  // WP424（Luoye 10-19）：邮件营销不等于 Klaviyo——没说过用哪一家就进「可选」，说了才列成要连的
+  it('邮件营销：没说用哪一家 → Klaviyo 只在可选里；档案写了 Klaviyo → 列成要连的；说的是目录里没有的一家 → 仍是可选', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const plan = async () =>
+      data<PlanView>(
+        await m.call('POST', '/v1/onboarding/plan', {
+          body: { role_ids: ['dtc.email-marketing'] },
+        }),
+      )
+    const klaviyo = (p: PlanView) => p.connectors.find((c) => c.service === 'klaviyo')
+
+    const unsaid = await plan()
+    expect(klaviyo(unsaid)?.required).toBe(false)
+
+    const profile = await data<{ email_service?: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家卖灯的公司', email_service: ' klaviyo ' },
+      }),
+    )
+    expect(profile.email_service).toBe('klaviyo')
+    const said = await plan()
+    expect(klaviyo(said)?.required).toBe(true)
+
+    // 说的是 Shopify Email → 列的就是那一家
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: 'Shopify Email' },
+    })
+    const shopifyEmail = await plan()
+    expect(shopifyEmail.connectors.find((c) => c.service === 'shopify_email')?.required).toBe(true)
+    expect(klaviyo(shopifyEmail)).toBeUndefined()
+
+    // 目录里没有的一家（Omnisend）→ 不替他认定是 Klaviyo，照旧进可选
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: 'Omnisend' },
+    })
+    expect(klaviyo(await plan())?.required).toBe(false)
+
+    // 清空 = 没说过
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家卖灯的公司', email_service: '' },
+    })
+    expect(klaviyo(await plan())?.required).toBe(false)
+  }, 60_000)
 
   it('只勾职责 → 一个自定义岗位；名字不给就是"我的岗位"', async () => {
     const lan = createLanBus()
@@ -785,6 +840,18 @@ describe('46 §2 I2 局域网发现', () => {
       mdns: () => ({ reason: '这台机器没有可用网卡' }),
     })
     servers.push(server)
+    // WP422：开关关着不去试；打开开关那一刻才知道起不来
+    await server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/workspace/profile', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${server.bootstrap.internalToken}`,
+          'X-Assignment': server.bootstrap.ownerAssignment.id,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ legal_name: '诺伏特', discoverable: true }),
+      }),
+    )
     const res = await server.gateway.fetch(
       new Request('http://127.0.0.1/v1/discovery/peers', {
         headers: {

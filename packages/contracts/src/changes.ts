@@ -470,6 +470,8 @@ export interface StagedChange {
     execution_id?: string
     outcome_ref?: ObjectRef
     error?: ApplyError
+    /** WP415（只加）：执行后读回来核对过没有（见 `execution.ts`）。 */
+    readback?: import('./execution.js').ExecutionReadback
   }
   /** 15 §3.2（09-09）：软额度已被人批准的例外，apply 不因它失败 */
   approved_exception?: boolean

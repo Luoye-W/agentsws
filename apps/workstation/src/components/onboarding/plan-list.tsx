@@ -139,9 +139,15 @@ function ConnectorRow({ c }: { c: ConnectorItem }): React.ReactNode {
         <div>
           <p>
             {c.label}
-            <span className="ml-2 text-xs text-muted-foreground">
-              {c.required ? t('onboarding.plan.required') : t('onboarding.plan.optional')}
-            </span>
+            {/*
+              WP424（Luoye 10-19）：要连的不再挂「必须」——这一块本身就叫「要连的平台」；
+              只有展开后的可选那几条挂「可选」
+            */}
+            {c.required ? null : (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {t('onboarding.plan.optional')}
+              </span>
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
             {t('onboarding.plan.needed_by', { roles: c.needed_by.join('、') })}

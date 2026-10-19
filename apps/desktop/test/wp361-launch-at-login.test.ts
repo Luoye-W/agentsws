@@ -95,3 +95,18 @@ describe('WP361 桥与托盘接的是同一个', () => {
     )
   })
 })
+
+describe('wasLaunchedAtLogin（Luoye 10-19：开机自动启动那次不开窗）', () => {
+  it('Mac 问系统；Windows 看参数', async () => {
+    const { wasLaunchedAtLogin, LAUNCHED_AT_LOGIN_ARG } = await import('../src/launch-at-login.js')
+    expect(wasLaunchedAtLogin('darwin', [], () => true)).toBe(true)
+    expect(wasLaunchedAtLogin('darwin', [], () => false)).toBe(false)
+    expect(
+      wasLaunchedAtLogin('darwin', [], () => {
+        throw new Error('x')
+      }),
+    ).toBe(false)
+    expect(wasLaunchedAtLogin('win32', ['app.exe', LAUNCHED_AT_LOGIN_ARG], () => false)).toBe(true)
+    expect(wasLaunchedAtLogin('win32', ['app.exe'], () => true)).toBe(false)
+  })
+})

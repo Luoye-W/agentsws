@@ -35,6 +35,7 @@ export {
   DEFAULT_SNOOZE_MS,
   HANDOFF_DECLINE_NO_REASON,
   INSTRUCTION_SCOPES,
+  REJECT_NO_REASON,
   type ResolveOptions,
   resolveDecision,
 } from './decide.js'

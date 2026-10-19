@@ -26,7 +26,7 @@ import type {
   RuntimeAdapter,
   ToolDef,
 } from '@agentsws/contracts'
-import { cancelledEvent } from '@agentsws/contracts'
+import { cancelledEvent, MODEL_SOURCE_SWITCHED_STEP } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
@@ -35,14 +35,20 @@ import {
   boundariesToAsk,
   deliversWith,
   describeRun,
+  finalizeWrapUp,
+  GENERAL_MAX_NUDGES,
+  GENERAL_UNFINISHED_NUDGE,
   looksUnfinished,
   promptHash,
+  shouldNudgeGeneral,
   TOOL_CALL_TEXT_FAILURE,
   TOOL_CALL_TEXT_NUDGE,
   TOOL_CALL_TEXT_RETRIES,
   TOOL_CALL_TEXT_STEP,
   UNFINISHED_NUDGE,
   UNFINISHED_STEP,
+  WRAP_UP_STEP,
+  wrapUpPrompt,
 } from '@agentsws/stand-ins'
 import { replySubject } from '@agentsws/support-core'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -137,6 +143,8 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
       const usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, cost_base: 0 }
       let exhausted: { which: keyof RunRequest['budget']; used: number; cap: number } | undefined
       let modelError: string | undefined
+      /** WP423：正在跑收尾回合（预算到了之后那一次，不按步数 / token 拦、不执行工具）。 */
+      let wrapping = false
 
       const preset = writePreset(req, options.presetRoot)
       const hasConnections = (req.connections ?? []).length > 0
@@ -346,6 +354,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             harness?.cancel()
           },
           tokensSpent: () => usage.input_tokens + usage.output_tokens,
+          wrapUp: () => wrapping,
           onModelRequest: ({ messages, tools }) => {
             // Model-visible ⟺ logged：这一步模型看见了几段、哪些工具
             emit({
@@ -355,6 +364,14 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             })
           },
           onCompletion: (c) => {
+            // WP425：这一跳从自己的 AI 切到了工坊积分——运行记录里照实记一行（与 direct 同一个 step）
+            if (c.source_switch !== undefined) {
+              emit({
+                type: 'progress',
+                step: MODEL_SOURCE_SWITCHED_STEP,
+                note: c.source_switch.message,
+              })
+            }
             usage.input_tokens += c.usage.input_tokens
             usage.output_tokens += c.usage.output_tokens
             usage.cached_tokens += c.usage.cached_tokens
@@ -480,6 +497,69 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             note: `${nudge + 1}/${produce.max_nudges}`,
           })
           turn = await harness.runTurn(UNFINISHED_NUDGE)
+        }
+        /*
+         * WP423：普通运行（没有 `produce`）也一样——只回了一句「我接下来要…」、什么都还没交，追一句「接着做」，
+         * 最多 `GENERAL_MAX_NUDGES` 次（与 stub / direct 同一个判定、同一句话）。
+         */
+        const hasTools =
+          req.tools.allow.length > 0 || req.browser !== undefined || req.computer_use !== undefined
+        for (
+          let nudge = 0;
+          produce === undefined &&
+          turn.tool_call_text !== true &&
+          !signal.aborted &&
+          exhausted === undefined &&
+          modelError === undefined &&
+          shouldNudgeGeneral({
+            text: turn.text,
+            hasTools,
+            delivered:
+              harness.gate.outputs.length > 0 || harness.gate.drafted || harness.gate.staged,
+            nudges: nudge,
+          });
+          nudge += 1
+        ) {
+          emit({
+            type: 'progress',
+            step: UNFINISHED_STEP,
+            note: `${nudge + 1}/${GENERAL_MAX_NUDGES}`,
+          })
+          turn = await harness.runTurn(GENERAL_UNFINISHED_NUDGE)
+        }
+        /*
+         * WP423：**预算到了也要交东西**。任何上限（token / 调用次数 / 回合）到了，在同一个 Agent 上再跑一次收尾：
+         * 这一跳不按步数 / token 拦（就一次）、回来的工具调用不执行，只要它把已经查到的整理交出、说清还差什么、
+         * 为什么停（与 stub / direct 同一句提示）。花费仍由网关的 `max_cost_base` 兜底；收尾这一跳出错不算
+         * 「模型不可用」（停的原因仍是预算），收回来的还是空话 / 开场白就换成照实拼的那一段。
+         */
+        if (
+          exhausted !== undefined &&
+          req.expectations.outputs.includes('answer') &&
+          !signal.aborted &&
+          modelError === undefined
+        ) {
+          const which = exhausted.which
+          const before = turn.text
+          emit({ type: 'progress', step: WRAP_UP_STEP, note: which })
+          wrapping = true
+          let wrapText = ''
+          try {
+            const wrap = await harness.runTurn(wrapUpPrompt(which))
+            if (wrap.tool_call_text !== true) wrapText = wrap.text
+          } catch {
+            // 收尾没跑成：下面照实拼的那一段兜住
+          } finally {
+            wrapping = false
+            modelError = undefined
+          }
+          const wrapped = finalizeWrapUp(wrapText, {
+            which,
+            readTools: harness.gate.readTools,
+            said: before,
+          })
+          if (wrapped !== wrapText.trim()) emit({ type: 'text.delta', text: wrapped })
+          turn = { text: wrapped, reason: 'completed' }
         }
         offProjection()
         toolCalls = harness.gate.toolCalls

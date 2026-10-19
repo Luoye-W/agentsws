@@ -81,6 +81,14 @@ grounding:
       tool: search_policies,
       prefetch: true,
     }
+  # WP417（自查 C23）：「现在等着回的」要拿得到聊天会话
+  - {
+      name: waiting_chats,
+      intent_terms: [等着回, 等人工, 还在等, 没回, 会话, 聊天窗, waiting],
+      cue_terms: [有哪些, 哪些, 多少, 谁, which, how many, 列],
+      tool: list_chat_sessions,
+      prefetch: false,
+    }
 
 skills:
   - { name: customer-care, tier: open, load: always }

@@ -6,6 +6,7 @@
  * 拿到的一定是同一份。
  */
 import type { ApprovalItem, Iso8601, ObjectRef, RiskClass } from '@agentsws/contracts'
+import { executionOutcomeOf } from '@agentsws/contracts'
 import { layoutFor } from './layout.js'
 import { actionsFor, labelsFor, minutesFor, riskClassFor } from './matrix.js'
 import type {
@@ -627,6 +628,9 @@ export function entityChipsOf(
   return { chips, dropped }
 }
 
+/** WP421：B2B 回信卡默认那一格接上正文的前多少个字。 */
+const B2B_BODY_LEAD = 320
+
 /** 内容盒的三种语言变体；只从结构化字段里取，一个字不编（37 §1 第 4 行）。 */
 export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
   const payload = isRecord(item.payload) ? item.payload : {}
@@ -644,8 +648,18 @@ export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
     str(body.text) ??
     b2bBody
   const en = str(payload.summary_en) ?? str(payload.en)
+  /*
+   * WP421（自查 general 界面 #2）：B2B 回信卡默认那一格只有 AI 的判断理由，看不到要发出去的信——
+   * 判断理由后面接上正文的前几行（全文仍在「原文」那一档）。
+   */
+  const lead =
+    b2bBody === undefined
+      ? undefined
+      : b2bBody.length > B2B_BODY_LEAD
+        ? `${b2bBody.slice(0, B2B_BODY_LEAD).trimEnd()}…`
+        : b2bBody
   return {
-    zh_summary: item.summary,
+    zh_summary: lead === undefined ? item.summary : `${item.summary}\n\n${lead}`,
     ...(original === undefined ? {} : { original }),
     ...(en === undefined ? {} : { en }),
   }
@@ -784,10 +798,19 @@ function manualSendLabels(actions: DeckAction[]): Partial<Record<DeckAction, str
   return out
 }
 
+/**
+ * WP415：没接通的卡只留「不要」（按钮写「知道了」）与「稍后」——「通过」「改一下」都拿掉：
+ * 批了也不会真去做，改了也一样。
+ */
+const NOT_WIRED_KEEP: ReadonlySet<DeckAction> = new Set(['reject', 'snooze', 'open'])
+
 export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const kind = item.kind as DeckKind
   const risk = ctx.riskClass?.(item) ?? riskClassFor(kind)
-  const actions = actionsFor(kind, item.state)
+  const wiring = ctx.wiring?.(item)
+  const notWired = wiring?.state === 'not_wired'
+  const actions = actionsFor(kind, item.state).filter((a) => !notWired || NOT_WIRED_KEEP.has(a))
+  const execution = executionOutcomeOf(item)
   const options = optionsOf(item)
   const payload = isRecord(item.payload) ? item.payload : {}
   const to = isObjectRef(payload.to) ? payload.to : undefined
@@ -846,7 +869,13 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     evidence_chips: evidenceChipsOf(item, ctx),
     entity_chips: entities.chips,
     available_actions: actions,
-    action_labels: manualSend ? manualSendLabels(actions) : labelsFor(kind, actions),
+    action_labels: notWired
+      ? { ...labelsFor(kind, actions), ...(actions.includes('reject') ? { reject: '知道了' } : {}) }
+      : manualSend
+        ? manualSendLabels(actions)
+        : labelsFor(kind, actions),
+    ...(wiring === undefined ? {} : { wiring }),
+    ...(execution === undefined ? {} : { execution }),
     ...(options === undefined ? {} : { options }),
     detail: {
       payload: item.payload,

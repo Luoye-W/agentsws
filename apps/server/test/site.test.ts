@@ -41,6 +41,7 @@ const FULL_FACTS = {
   navigation: { main_menu_items: 5, footer_menu_items: 4 },
   apps: { installed: ['judge-me'] },
   theme: { published: { id: 't1', name: 'Dawn 定制版' } },
+  storefront: { password_enabled: false },
 }
 
 function harness(options: { facts?: Record<string, unknown> } = {}) {
@@ -89,15 +90,17 @@ describe('WP77 上线检查单（59 §2）', () => {
   it('跑一次就落一条巡检记录，并且出一张 L3 的卡', async () => {
     const { service, store, staged } = harness()
     const out = await service.port.runChecklist(actor)
-    expect(out.run.items).toHaveLength(8)
+    expect(out.run.items).toHaveLength(9)
     expect(out.run.ready).toBe(true)
     expect(out.run.shop).toBe('glassbowl.myshopify.com')
     expect(out.staged.staged).toBe(true)
     expect(staged[0]?.kind).toBe('launch_check')
     // 只读巡检不进人的待办：路由到本人
     expect(staged[0]?.rule).toBe('role_holder')
+    // WP418（自查 A11）：只读巡检一律 L3（自动过，不进人的待批）
+    expect(staged[0]?.level).toBe('L3')
     // 卡上带的是每一格，不是一个总分——空清单会被 guardrail 当场拦下
-    expect((staged[0]?.after as { checked: number } | undefined)?.checked).toBe(8)
+    expect((staged[0]?.after as { checked: number } | undefined)?.checked).toBe(9)
     // 落库了，而且带着那张卡的 id
     expect(store.lastRun()?.id).toBe(out.run.id)
     expect(store.lastRun()?.approval_item_id).toBe(out.staged.approval_item_id)
@@ -110,12 +113,14 @@ describe('WP77 上线检查单（59 §2）', () => {
     expect((await service.port.lastChecklist(actor)).run).toBeDefined()
   })
 
-  it('一条都没读到 = 八项里七项 unknown，而不是"这家店什么都缺"', async () => {
+  it('一条都没读到 = 九项里八项 unknown，而不是"这家店什么都缺"；也不许说「没有拦路」', async () => {
     const { service } = harness({ facts: {} })
     const out = await service.port.runChecklist(actor)
-    expect(out.run.items.filter((i) => i.state === 'unknown')).toHaveLength(7)
+    expect(out.run.items.filter((i) => i.state === 'unknown')).toHaveLength(8)
     expect(out.run.items.filter((i) => i.state === 'missing')).toHaveLength(0)
     expect(out.run.blockers).toBe(0)
+    // WP418（自查 A10）：读不到的拦路项不能当成「能开门」
+    expect(out.run.ready).toBe(false)
   })
 
   it('支付与税那两项的 fixable_by 为空（51 §3 N2）；其余六项说得出谁来补', async () => {
@@ -233,7 +238,7 @@ describe('WP77 面板投影（59 §3）', () => {
     const { service, store } = harness()
     await service.port.runChecklist(actor)
     const data = siteDeckData(store, { apps: [], templates: [] })
-    expect(data.checklist).toHaveLength(8)
+    expect(data.checklist).toHaveLength(9)
     expect(data.checklist.find((r) => r.id === 'payment')?.fixable).toBe(false)
     expect(data.checklist.find((r) => r.id === 'navigation')?.fixable).toBe(true)
     expect(data.checked_at).toBe(NOW)

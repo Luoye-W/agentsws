@@ -301,6 +301,23 @@ export function panelSkip(
   return call<{ ok: true }>(options, panelCardPath(id, 'skip'), { method: 'POST', body: input })
 }
 
+/** WP419：交给你发的社媒帖子，回「发好了」（可带那一条的链接）/「不发了」。 */
+export function panelPostAnswer(
+  options: LocalClientOptions,
+  id: string,
+  answer: 'done' | 'skip',
+  input: { link?: string; reason?: string },
+): Promise<LocalCallResult<{ ok: true }>> {
+  return call<{ ok: true }>(
+    options,
+    `/v1/extension/panel/posts/${encodeURIComponent(id)}/${answer}`,
+    {
+      method: 'POST',
+      body: input,
+    },
+  )
+}
+
 /** 没发出去的那一条再填一次。 */
 export function panelRefill(
   options: LocalClientOptions,

@@ -104,7 +104,7 @@ describe('WP394 · 竞品动向块', () => {
     )
   })
 
-  it('盯着：几家几款、下次读；只列 Amazon 竞品的变化（不列自家、不列独立站），带比你便宜多少', async () => {
+  it('盯着：几家几款、下次读；变化不在块里重复（WP420 B7：只在竞品变化表里列），块里一句「最近 N 条」只数 Amazon 竞品', async () => {
     current = view([
       src({}),
       src({
@@ -117,10 +117,8 @@ describe('WP394 · 竞品动向块', () => {
     ])
     renderWithProviders(<AmazonOpsBoard assignment="asg_amz" />)
     expect((await screen.findByTestId('amzcw-summary')).textContent).toContain('盯 1 家 · 3 款')
-    const rows = await screen.findAllByTestId('amzcw-change')
-    expect(rows).toHaveLength(1)
-    expect(rows[0]?.textContent).toContain('比你的 Ranger 便宜 $250')
-    expect(rows[0]?.getAttribute('data-cheaper')).toBe('true')
+    expect((await screen.findByTestId('amzcw-see-table')).textContent).toContain('最近 1 条')
+    expect(screen.queryAllByTestId('amzcw-change')).toHaveLength(0)
     expect(screen.getByTestId('amzcw-block').textContent).not.toMatch(/apify|keepa/i)
     fireEvent.click(screen.getByTestId('amzcw-run'))
     await waitFor(() => {

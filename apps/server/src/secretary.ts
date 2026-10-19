@@ -92,6 +92,10 @@ export interface SecretaryAssemblyOptions {
   role_id?: RoleId
   /** WP181：公司时区（工作区档案的 `tz`，每次现取）——代答 / 路由的运行也写一条「现在时间 + 公司时区」。 */
   timeZone?(): string | undefined | Promise<string | undefined>
+  /**
+   * WP417（决策 1234）：同事问到的答案先给本人看一眼再回（缺省开）。`false` = 老行为当场答。
+   */
+  reviewFirst?: boolean
   /** WP234（docs/54 §6.1）：一条分配归哪个岗位（`org.positionLabelOf`）；人员页岗位徽章按它归堆。 */
   positionOfAssignment?(a: {
     id: string
@@ -207,9 +211,90 @@ export function createSecretaryAssembly(options: SecretaryAssemblyOptions): Secr
       }))
   }
 
+  /**
+   * WP417（决策 1234 / 自查 F9 · F11 · F17）：替我答的三张卡——都给**本人**（或问的人）看，`claim` 形态、不进待办：
+   * - `secretary_answer`：同事问你，助理起草好了，「就这样回 / 我自己回」；
+   * - `secretary_direct`：你选了「直接找我」，有同事找你（只是告诉你）；
+   * - `secretary_reply`：给问的人——本人回你了。
+   */
+  const secretaryCard = async (input: {
+    to: PersonId
+    form: 'secretary_answer' | 'secretary_direct' | 'secretary_reply'
+    dedupe: string
+    title: string
+    summary: string
+    payload: Record<string, unknown>
+    options: { id: string; label: string }[]
+  }): Promise<void> => {
+    await options.approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'claim',
+      role_id,
+      subject: { object: { type: 'person', id: input.to } },
+      dedupe_key: `${workspace_id}:${input.form}:${input.dedupe}`,
+      title: input.title,
+      summary: input.summary,
+      payload: { form: input.form, ...input.payload },
+      evidence: { source_events: [], provenance: { seen: [] }, precheck: { fencing: 'ok' } },
+      proposer: { kind: 'agent', id: 'secretary' },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: input.to, via: 'explicit' }],
+        explicit: input.to,
+        rule: 'explicit',
+        escalation: { after_hours: 24, business_hours: true, chain: [], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+      options: input.options,
+    })
+  }
+  const nameOf = (id: PersonId): string => dir.names.get(id) ?? id
+  const short = (t: string, n = 60): string => (t.length > n ? `${t.slice(0, n)}…` : t)
+
   const secretary = createSecretary({
     workspace_id,
     clock,
+    reviewFirst: () => options.reviewFirst !== false,
+    onHeld: (r) =>
+      secretaryCard({
+        to: r.person_id,
+        form: 'secretary_answer',
+        dedupe: r.id,
+        title: `${nameOf(r.asked_by)}问你：${short(r.question)}`,
+        summary: `助理准备这样回：${short(r.draft ?? '', 120)}`,
+        payload: { asked_id: r.id, asked_by: r.asked_by, question: r.question, answer: r.draft },
+        options: [
+          { id: 'send', label: '就这样回' },
+          { id: 'self', label: '我自己回' },
+        ],
+      }),
+    onDirect: (r) =>
+      secretaryCard({
+        to: r.person_id,
+        form: 'secretary_direct',
+        dedupe: r.id,
+        title: `${nameOf(r.asked_by)}找你：${short(r.question)}`,
+        summary: '你选了「直接找我」，助理没替你答。',
+        payload: { asked_id: r.id, asked_by: r.asked_by, question: r.question },
+        options: [{ id: 'ok', label: '知道了' }],
+      }),
+    onReleased: (r) =>
+      secretaryCard({
+        to: r.asked_by,
+        form: 'secretary_reply',
+        dedupe: r.id,
+        title: `${nameOf(r.person_id)}回你了：${short(r.answer)}`,
+        summary: `你问的：${short(r.question)}`,
+        payload: { asked_id: r.id, about: r.person_id, question: r.question, answer: r.answer },
+        options: [{ id: 'ok', label: '知道了' }],
+      }),
     random: options.random,
     appendEvent: options.appendEvent,
     ...(store === undefined ? {} : { store }),

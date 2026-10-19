@@ -98,23 +98,21 @@ function Block({
   )
 }
 
-/** 每日巡检那三行：一行一个名字 + 同一句「连上后才有」；能连的时候第一行带「连上」。 */
+/**
+ * 每日巡检：WP420（自查 B12 / U18）——以前三行一模一样的「连上 Amazon 店铺后才有」，现在并成一行
+ * 「账户健康、断货、买不了：要连 Amazon 店铺（还没开放）」；能连的时候带「连上」。
+ */
 function DailyEmpty(): ReactNode {
   const { t } = useApp()
   const connect = amazonConnectService()
   return (
-    <ul className="flex flex-col gap-1.5">
-      {(['health', 'stock', 'buyable'] as const).map((k, i) => (
-        <li
-          key={k}
-          className="flex flex-wrap items-baseline gap-x-3"
-          data-testid="amzops-daily-row"
-        >
-          <span className="w-28 shrink-0 text-sm">{t(`amzops.daily.${k}`)}</span>
-          <AmazonEmpty text={t('amzops.empty.connect')} connect={i === 0 ? connect : undefined} />
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-1" data-testid="amzops-daily-row">
+      <span className="text-sm">{t('amzops.daily.one')}</span>
+      <AmazonEmpty
+        text={connect === undefined ? t('amzops.empty.planned') : t('amzops.empty.connect')}
+        connect={connect}
+      />
+    </div>
   )
 }
 

@@ -25,6 +25,12 @@ import { useApp } from '@/lib/app-context'
 
 /** 最多几个（决策 1019：4–6 个）。 */
 export const LANDING_MAX = 6
+
+/**
+ * WP418（审计 U11）：中文模板「连上{name}」——名字是中文时紧挨着写（「连上店铺后台」），
+ * 英文 / 数字开头才隔一个空格（「连上 Shopify」）。
+ */
+export const zhAfterVerb = (name: string): string => (/^[A-Za-z0-9]/.test(name) ? ` ${name}` : name)
 /** 其中「打开卡」那一类最多几个（留位置给能直接发的提示）。 */
 const OPEN_MAX = 3
 
@@ -39,6 +45,17 @@ export interface LandingAction {
   label: string
   kind: 'open' | 'send'
   run: () => void
+}
+
+/** WP419（自查 U1）：同一个岗位里几条职责的同名快捷按钮（FB、IG 都有「起草一条」）只留第一个。 */
+export function uniqueByLabel<T extends { label: string }>(prompts: readonly T[]): T[] {
+  const seen = new Set<string>()
+  return prompts.filter((p) => {
+    const k = p.label.trim()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
 }
 
 /** 这一页对应的那一层（岗位页 = 岗位层；职责页 = 职责层），与右侧面板同一套算法。 */
@@ -97,7 +114,9 @@ export function useLandingActions(
     open.push({
       id: 'connect',
       kind: 'open',
-      label: t('landing.connect', { name: lang === 'en' ? missing.name.en : missing.name.zh }),
+      label: t('landing.connect', {
+        name: lang === 'en' ? missing.name.en : zhAfterVerb(missing.name.zh),
+      }),
       run: () => {
         if (missing.connect_service === undefined) rail.openCard('connections')
         else openConnect(missing.connect_service)
@@ -123,7 +142,7 @@ export function useLandingActions(
     })
 
   const shown = open.slice(0, OPEN_MAX)
-  const sends: LandingAction[] = prompts.map((p) => ({
+  const sends: LandingAction[] = uniqueByLabel(prompts).map((p) => ({
     id: `prompt:${p.id}`,
     kind: 'send',
     label: p.label,

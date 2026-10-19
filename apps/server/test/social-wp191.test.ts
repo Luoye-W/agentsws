@@ -2,7 +2,7 @@
  * WP191（docs/86 §4 / §6）服务进程这一侧的三件事：
  *
  * 1. **LinkedIn 到点发不出去 → 一条「复制文案去 LinkedIn 发」的待办**（没连、403 没批、
- *    带素材这一版还不能代发），帖子记 `failed` 并写清"已转成待办"，下一轮不再碰它；
+ *    带素材这一版还不能代发），帖子挂上「交给你发」（WP419 起不再记 failed），下一轮不再碰它；
  *    别的渠道照旧只记一句"没发"（不凭空多出待办）。
  * 2. **老库里 `channel: 'meta'` 的账号按 URL 迁到 FB 主页或 IG**，帖子 / 线程跟着账号走；可重复跑。
  * 3. **FB 主页与 IG 共用一条 `meta_graph` 连接**：连一次，两条渠道都算连上。
@@ -125,9 +125,11 @@ describe('WP191 LinkedIn：到点发不出去变成一条待办（docs/86 §4）
     expect(h.tasks[0]?.title).toBe('复制文案去 LinkedIn 发')
     expect(h.tasks[0]?.body).toBe('我们为什么只做一种桌垫')
     expect(h.calls).toHaveLength(0)
+    // WP419（决策 1231）：不再记 failed——交给人在自己登录着的后台里发（插件侧边栏里出），待办兜底
     const post = h.store.post('sp_li')
-    expect(post?.status).toBe('failed')
-    expect(post?.failure_reason).toContain('已转成一条待办')
+    expect(post?.status).toBe('scheduled')
+    expect(post?.handoff).toMatchObject({ at: NOW, todo_id: 'td_1' })
+    expect(out.handed_off).toEqual(['sp_li'])
     // 下一轮不再碰它（不会开第二条待办）
     const again = await h.service.publishDue()
     expect(again.due).toBe(0)

@@ -393,14 +393,19 @@ describe('POST /v1/approvals/:id/decide 的卡片扩展（36 §2.1）', () => {
     expect(res.status).toBe(400)
   })
 
-  it('reject 必须写原因（14 §4）', async () => {
+  it('WP414：reject 理由可选——不写也一下生效（记一次「不要」），写了照记', async () => {
     const h = await harness()
     const bare = await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'reject' })
-    expect(bare.status).toBe(400)
-    expect((await err(bare)).details?.reason).toBe('REASON_REQUIRED')
+    expect(bare.status).toBe(200)
+    expect(h.approvals.log).toContain(`decide:${h.item.id}:${h.person_id}`)
+    const other = await harness()
     expect(
-      (await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'reject', reason: '太长' }))
-        .status,
+      (
+        await other.post(`/v1/approvals/${other.item.id}/decide`, {
+          action: 'reject',
+          reason: '太长',
+        })
+      ).status,
     ).toBe(200)
   })
 

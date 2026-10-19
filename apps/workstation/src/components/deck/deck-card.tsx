@@ -38,8 +38,9 @@ import {
   DECK_CARD_BODY_SCROLL_CLASS,
   DECK_CARD_MIN_HEIGHT_CLASS,
 } from '@/components/deck/deck-layout'
-import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
+import { DeckNotePanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
+import { ExecutionPill, WiringNote } from '@/components/deck/execution-note'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
 import {
   HandoffDecide,
@@ -255,7 +256,7 @@ export function DeckCardView({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [detail, setDetail] = useState(false)
-  const [panel, setPanel] = useState<NoteMode | 'supplement' | null>(null)
+  const [panel, setPanel] = useState<NoteMode | null>(null)
   const [option, setOption] = useState<string>('')
   /** WP278：「我要退出」点了，先问一句（框里列出会断开的个人连接）。 */
   const [leaving, setLeaving] = useState(false)
@@ -275,6 +276,8 @@ export function DeckCardView({
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
+  /** WP418（审计 U8）：选主题卡——头一行不出期限、不出「AI」角标（只按这一种 kind 收，通用头别的卡照旧）。 */
+  const pickOne = card.kind === 'theme_choice'
   /**
    * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 外部版块」），
    * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
@@ -329,9 +332,19 @@ export function DeckCardView({
       setGoMessages(true)
       return
     }
-    // 不对 / 指导都先就地开面板——卡只有在人真说了句话之后才离开。
-    if (action === 'reject' || action === 'instruct') {
+    // WP415：没接通的卡上「知道了」——不是对内容说不，不开写理由的面板，一下就收起
+    if (card.wiring?.state === 'not_wired' && action === 'reject') {
+      onDecide({ action, reason: t('exec.ack.reason'), version: card.version })
+      return
+    }
+    // WP414：「修改」就地开一个框（说一句怎么改，或贴素材）——卡在人真说了句话之后才离开
+    if (action === 'instruct') {
       setPanel(action)
+      return
+    }
+    // WP414（Luoye 10-19）：「不要」一下就生效、不强制写理由——可选的快捷理由在卡流顶上那一行补
+    if (action === 'reject') {
+      onDecide({ action, version: card.version })
       return
     }
     onDecide({
@@ -363,7 +376,8 @@ export function DeckCardView({
       ) : null}
       {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。
           WP276：交给你的卡标题里已经写了是哪件事，这一行不再说一遍 */}
-      {card.matter_id === undefined || handoffOffer ? null : (
+      {/* WP416（自查 kol U16）：事项还没起名就不出这一行（「属于：一件还没起名的事项」等于没说） */}
+      {card.matter_id === undefined || card.matter_label === undefined || handoffOffer ? null : (
         <button
           type="button"
           data-testid="deck-matter-link"
@@ -372,10 +386,7 @@ export function DeckCardView({
             onOpen(card)
           }}
         >
-          {/* WP141：查不到展示名就说「一件还没起名的事项」，事项 id 不上屏 */}
-          {card.matter_label === undefined
-            ? t('deck.matter.untitled')
-            : t('deck.matter', { title: card.matter_label })}
+          {t('deck.matter', { title: card.matter_label })}
         </button>
       )}
 
@@ -395,7 +406,8 @@ export function DeckCardView({
           WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
           WP278：交给你的卡正文里已经有「几号前不接就退回」——不再出「剩 N 天」说第二遍。
         */}
-        {peerNotice || handoffOffer ? null : <WaitPill card={card} />}
+        {/* WP418（审计 U8）：选主题这种「选一个」的卡没有期限可言——不出「剩 N 天」 */}
+        {peerNotice || handoffOffer || pickOne ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -425,12 +437,15 @@ export function DeckCardView({
               }}
             />
           )}
-          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
-          <WsAvatar
-            name={t(`deck.proposer.${card.detail.proposer.kind}`)}
-            tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
-            className="size-[22px] text-[10px]"
-          />
+          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。
+              WP418（审计 U8）：选主题卡上「AI」这个角标对人没用，不出 */}
+          {pickOne ? null : (
+            <WsAvatar
+              name={t(`deck.proposer.${card.detail.proposer.kind}`)}
+              tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
+              className="size-[22px] text-[10px]"
+            />
+          )}
         </span>
       </div>
 
@@ -457,6 +472,13 @@ export function DeckCardView({
         {card.routed_note === undefined ? null : (
           <p className="mt-0.5 text-xs text-muted-foreground" data-testid="deck-routed-note">
             {card.routed_note}
+          </p>
+        )}
+        {/* WP415：这一步接没接通（生产里没有真执行器 = 还没接通；演示 = 演示）；执行过的照实说办没办成 */}
+        <WiringNote wiring={card.wiring} />
+        {card.execution === undefined ? null : (
+          <p className="mt-1">
+            <ExecutionPill view={card.execution} />
           </p>
         )}
 
@@ -503,17 +525,7 @@ export function DeckCardView({
               {error}
             </p>
           )}
-          {panel === 'supplement' ? (
-            <DeckSupplementPanel
-              onCancel={() => {
-                setPanel(null)
-              }}
-              onSnooze={() => {
-                setPanel(null)
-                onDecide({ action: 'snooze', version: card.version })
-              }}
-            />
-          ) : panel === null && handoffOffer ? (
+          {panel === null && handoffOffer ? (
             <HandoffDecide
               options={card.options ?? []}
               busy={busy === true}
@@ -577,9 +589,6 @@ export function DeckCardView({
               disabled={busy === true}
               optionMissing={isQuestion && option === ''}
               onAction={act}
-              onSupplement={() => {
-                setPanel('supplement')
-              }}
               {...(isContentCard
                 ? {
                     extra: (

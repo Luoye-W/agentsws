@@ -243,13 +243,22 @@ export function hoursSinceLastPost(input: {
 }
 
 /** `reasons` → 给人看的一句话（卡面与 block 消息共用这一份）。 */
-export function explainRuleCheck(check: ExternalPostRuleCheck, venue: string): string {
-  if (check.ok) return `r/${venue} 的版规看过了：这一条发得了。`
+export function explainRuleCheck(
+  check: ExternalPostRuleCheck,
+  venue: string,
+  /** WP421：哪个平台（不给 / Reddit 才加 `r/` 前缀；别的论坛写「平台「版块」」）。 */
+  platform?: string,
+): string {
+  const at =
+    platform === undefined || platform.trim().toLowerCase() === 'reddit'
+      ? `r/${venue}`
+      : `${platform}「${venue}」`
+  if (check.ok) return `${at} 的版规看过了：这一条发得了。`
   const words: Readonly<Record<string, string>> = {
-    no_self_promotion: `r/${venue} 的版规明写着禁自我推广——我们在人家的地盘上，这一条不发。要露出就换个方式：回答别人的问题，不发自己的帖子。`,
-    flair_required: `r/${venue} 要求每条帖子带 flair，这一条没带。`,
-    flair_unknown: `r/${venue} 不认识这个 flair（它只认：${check.flair ?? ''}）。`,
-    cooldown: `我们上一条在 r/${venue} 的帖子还没过冷却期。同一个版连着发，多数版会自动删并警告。`,
+    no_self_promotion: `${at} 的版规明写着禁自我推广——我们在人家的地盘上，这一条不发。要露出就换个方式：回答别人的问题，不发自己的帖子。`,
+    flair_required: `${at} 要求每条帖子带 flair，这一条没带。`,
+    flair_unknown: `${at} 不认识这个 flair（它只认：${check.flair ?? ''}）。`,
+    cooldown: `我们上一条在 ${at} 的帖子还没过冷却期。同一个版连着发，多数版会自动删并警告。`,
   }
   return check.reasons.map((r) => words[r] ?? r).join(' ')
 }

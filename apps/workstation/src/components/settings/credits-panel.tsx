@@ -246,6 +246,10 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
+        {/* WP425：一句话说清——AI 用自己的不扣积分，别的付费服务照常扣 */}
+        <p className="text-xs text-muted-foreground" data-testid="credits-own-ai-note">
+          {t('credits.own_ai_note')}
+        </p>
         {/*
           还没关联账号：一句人话 + 一个去处，而不是一堆 0。
           WP142：**价目三块、充值四档、增值服务卡照常显示**——只把「充值 / 订阅」换成「先关联」。

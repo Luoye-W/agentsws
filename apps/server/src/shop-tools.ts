@@ -8,8 +8,18 @@
  * 3. **还差哪一步说人话**：没授权 / 过期 / 缺权限 → 一句「去岗位页点授权」+ `needs: 'authorize'`；
  * 4. 工具面（{@link ShopToolSurface.offered}）按「职责表 × 授权里的权限」给：没授权一个都不出。
  */
+
+import type { RunRequest } from '@agentsws/contracts'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
-import { SHOP_READ_TOOL_NAMES, SHOP_TOOL_NAMES, shopToolsFor } from '@agentsws/stand-ins'
+import {
+  SHOP_ORDER_TOOL_NAMES,
+  SHOP_READ_TOOL_NAMES,
+  SHOP_TOOL_NAMES,
+  SHOP_TOOLS_BY_ROLE,
+  SHOP_TOOLS_WITHOUT_SCOPE,
+  SITE_CHECKLIST_TOOL,
+  shopToolsFor,
+} from '@agentsws/stand-ins'
 import { AUTH_PROBLEM_CODES, ShopAdminError } from './shop-admin.js'
 import type { ShopAdminAssembly } from './shop-auth.js'
 import { roleHasTool, type ShopOps, ShopOpsError } from './shop-ops.js'
@@ -23,6 +33,10 @@ export interface ShopToolSurface {
 export interface ShopToolsOptions {
   /** 这个品牌的店铺授权与运营（懒取：比运行时晚建出来）；不是 Shopify 品牌 = undefined。 */
   module(): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined>
+  /** WP418（自查 A8）：跑一遍上线检查单（只读、不出卡）；不给 = 这个工具回「没装」。 */
+  siteChecklist?(request: RunRequest): Promise<unknown>
+  /** WP418（自查 A16）：读本机建站库（`site_apps_list` / `site_email_templates`）；不给 = 回「没装」。 */
+  siteRead?(tool: string, request: RunRequest): Promise<unknown>
 }
 
 const bareOf = (name: string): string =>
@@ -31,10 +45,27 @@ const bareOf = (name: string): string =>
 export function createShopToolSurface(options: ShopToolsOptions): ShopToolSurface {
   return {
     async offered(role_id) {
+      // WP418：检查单不靠店铺授权出现（没授权它照实说「没读到」）
+      const always = (SHOP_TOOLS_BY_ROLE[role_id] ?? []).filter((n) =>
+        n === SITE_CHECKLIST_TOOL
+          ? options.siteChecklist !== undefined
+          : SHOP_TOOLS_WITHOUT_SCOPE.includes(n) && options.siteRead !== undefined,
+      )
       const m = await options.module()
-      if (m === undefined) return []
-      const access = await m.auth.access()
-      return access === undefined ? [] : shopToolsFor(role_id, access.scopes)
+      if (m === undefined) return always
+      const access = await m.auth.access().catch(() => undefined)
+      if (access === undefined) return always
+      const granted = shopToolsFor(role_id, access.scopes).filter(
+        (n) => !SHOP_TOOLS_WITHOUT_SCOPE.includes(n) || always.includes(n),
+      )
+      /*
+       * WP417（自查客服 A24–A26）：客服的订单改动（退款 / 改地址 / 补发）缺权限也摆出来——
+       * 调的时候照实说「店铺授权里缺这一项，去重新授权」，而不是让模型以为根本做不了、凭空答一段。
+       */
+      const asks = (SHOP_TOOLS_BY_ROLE[role_id] ?? []).filter(
+        (n) => SHOP_ORDER_TOOL_NAMES.includes(n) && !granted.includes(n),
+      )
+      return [...granted, ...asks].sort()
     },
     executeTool: async ({ name, input, request }): Promise<ToolExecution> => {
       const bare = bareOf(name)
@@ -42,6 +73,24 @@ export function createShopToolSurface(options: ShopToolsOptions): ShopToolSurfac
         return { status: 'error', reason: `not_a_shop_tool:${bare}` }
       if (!roleHasTool(request.actor.role_id, bare))
         return { status: 'blocked', reason: `${request.actor.role_id} 这条职责用不了「${bare}」。` }
+      if (SHOP_TOOLS_WITHOUT_SCOPE.includes(bare) && bare !== SITE_CHECKLIST_TOOL) {
+        if (options.siteRead === undefined)
+          return { status: 'error', reason: '这个品牌没装建站库。' }
+        try {
+          return { status: 'ok', data: await options.siteRead(bare, request) }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
+      if (bare === SITE_CHECKLIST_TOOL) {
+        if (options.siteChecklist === undefined)
+          return { status: 'error', reason: '这个品牌没装上线检查单。' }
+        try {
+          return { status: 'ok', data: await options.siteChecklist(request) }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
       const m = await options.module()
       if (m === undefined) return { status: 'error', reason: '这个品牌的建站平台不能这样管店。' }
       try {

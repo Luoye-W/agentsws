@@ -22,6 +22,8 @@ export interface CapabilityLine {
   key: string
   text: string
   raw: string
+  /** WP415：这一条生产里还没接通（界面上灰一档）。 */
+  not_wired?: true
 }
 
 /** 数据域 → 人话（没有译文就原名，下划线换空格）。 */
@@ -63,12 +65,26 @@ export function actionLines(
     const fallback = generic === `duty.kind.${a.kind}` ? domainLabel(t, a.target) : generic
     const name = tOr(t, `duty.action.${a.id}`, tOr(t, `org.action.${a.id}`, fallback))
     const level = view.automation.find((x) => x.action_id === a.id)?.initial ?? 'L1'
+    // WP415（决策 1230）：生产里没有真执行器的照实标「还没接通」（服务端按执行器登记表算，不手写）
+    const wired =
+      a.wired === 'not_wired' || a.wired === 'partly' ? ` · ${t(`duty.wired.${a.wired}`)}` : ''
     return {
       key: a.id,
-      text: `${name} · ${tOr(t, `duty.level.${level}`, level)}`,
-      raw: `${a.id} · ${a.kind} → ${a.target}`,
+      text: `${name} · ${tOr(t, `duty.level.${level}`, level)}${wired}`,
+      raw: `${a.id} · ${a.kind} → ${a.target}${a.wired === undefined ? '' : ` · ${a.wired}`}`,
+      ...(a.wired === 'not_wired' ? { not_wired: true as const } : {}),
     }
   })
+}
+
+/** WP415（决策 1230）：能查什么：「订单查询」「需求单 · 还没接通」（有没有执行器服务端算好）。 */
+export function toolLines(view: Pick<RoleDetailView, 'tools'>, t: T): CapabilityLine[] {
+  return (view.tools ?? []).map((tool) => ({
+    key: tool.name,
+    text: tool.wired ? tool.label : `${tool.label} · ${t('duty.wired.not_wired')}`,
+    raw: `${tool.name}${tool.wired ? '' : ' · not_wired'}`,
+    ...(tool.wired ? {} : { not_wired: true as const }),
+  }))
 }
 
 /** 挂着的技能：「技能：品牌话术（常驻）」。 */

@@ -60,74 +60,81 @@ export function SegmentedProgress({
   if (segments.length === 0) return null
   return (
     <TooltipProvider>
-      <ul
-        className={cn(
-          'flex w-full list-none items-end',
-          layout === 'mini' ? 'gap-0.5' : 'gap-1',
-          className,
-        )}
-        aria-label={ariaLabel}
-        data-testid="kol-progress"
-        data-layout={layout}
-      >
-        {segments.map((segment) => {
-          const body = (
-            <span
-              className="flex w-full min-w-0 flex-col items-stretch gap-1"
-              data-testid="kol-progress-segment"
-              data-state={segment.state}
-            >
+      <div className={layout === 'stepper' ? '@container w-full' : 'contents'}>
+        <ul
+          className={cn(
+            'flex w-full list-none items-end',
+            layout === 'mini' ? 'gap-0.5' : 'gap-1',
+            className,
+          )}
+          aria-label={ariaLabel}
+          data-testid="kol-progress"
+          data-layout={layout}
+        >
+          {segments.map((segment) => {
+            const body = (
               <span
-                className={cn(
-                  'block w-full rounded-full transition-colors',
-                  layout === 'mini' ? 'h-1.5' : 'h-2',
-                  BAR_COLOR[segment.state],
-                )}
-              />
-              {layout === 'stepper' ? (
-                <span className="grid min-w-0 justify-items-center gap-0.5 text-center">
-                  <span
-                    className={cn(
-                      'w-full truncate text-[11px] leading-tight',
-                      TEXT_COLOR[segment.state],
-                    )}
-                  >
-                    {segment.label}
-                  </span>
-                  {segment.caption === undefined ? null : (
+                className="flex w-full min-w-0 flex-col items-stretch gap-1"
+                data-testid="kol-progress-segment"
+                data-state={segment.state}
+              >
+                <span
+                  className={cn(
+                    'block w-full rounded-full transition-colors',
+                    layout === 'mini' ? 'h-1.5' : 'h-2',
+                    BAR_COLOR[segment.state],
+                  )}
+                />
+                {layout === 'stepper' ? (
+                  <span className="grid min-w-0 justify-items-center gap-0.5 text-center">
+                    {/* WP416（自查 kol U14）：当前那一段加粗；窄的时候只留当前 / 卡住那一段的字 */}
                     <span
                       className={cn(
-                        'w-full truncate text-[10px] leading-tight',
-                        segment.state === 'stalled'
-                          ? TEXT_COLOR.stalled
-                          : 'text-muted-foreground/70',
+                        'w-full truncate text-[11px] leading-tight',
+                        TEXT_COLOR[segment.state],
+                        segment.state === 'current' || segment.state === 'stalled'
+                          ? 'font-semibold'
+                          : 'invisible @md:visible',
                       )}
                     >
-                      {segment.caption}
+                      {segment.label}
                     </span>
-                  )}
-                </span>
-              ) : null}
-            </span>
-          )
-          return (
-            <li key={segment.key} className="flex min-w-0 flex-1 basis-0">
-              {segment.hint === undefined ? (
-                body
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex w-full min-w-0" title={segment.hint}>
-                      {body}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">{segment.hint}</TooltipContent>
-                </Tooltip>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+                    {segment.caption === undefined ? null : (
+                      <span
+                        className={cn(
+                          'w-full truncate text-[10px] leading-tight',
+                          segment.state === 'stalled'
+                            ? TEXT_COLOR.stalled
+                            : 'text-muted-foreground/70',
+                        )}
+                      >
+                        {segment.caption}
+                      </span>
+                    )}
+                  </span>
+                ) : null}
+              </span>
+            )
+            return (
+              <li key={segment.key} className="flex min-w-0 flex-1 basis-0">
+                {/* 步进条下面已经写着字：不再另起一个悬浮标签压在条上（只留原生 title） */}
+                {segment.hint === undefined || layout === 'stepper' ? (
+                  body
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex w-full min-w-0" title={segment.hint}>
+                        {body}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">{segment.hint}</TooltipContent>
+                  </Tooltip>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </TooltipProvider>
   )
 }

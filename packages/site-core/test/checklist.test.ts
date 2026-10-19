@@ -5,7 +5,7 @@
  * **支付与税那两项补不了**——`fixable_by` 为空是 51 §3 N2 在代码里的样子。
  */
 import { describe, expect, it } from 'vitest'
-import { launchCheckAfter, runLaunchChecklist } from '../src/index.js'
+import { launchCheckAfter, launchChecklistHeadline, runLaunchChecklist } from '../src/index.js'
 
 const full = {
   domain: { primary: 'glassbowl.com', custom: true, ssl: true },
@@ -16,21 +16,23 @@ const full = {
   navigation: { main_menu_items: 5, footer_menu_items: 4 },
   apps: { installed: ['judge-me'] },
   theme: { published: { id: 't1', name: 'Dawn 定制版' }, is_default_untouched: false },
+  storefront: { password_enabled: false },
 }
 
 describe('上线检查单（59 §2）', () => {
-  it('八项齐了 = 能开门，一个缺项都没有', () => {
+  it('九项齐了 = 能开门，一个缺项都没有', () => {
     const r = runLaunchChecklist(full, { at: '2026-09-17T02:00:00Z' })
-    expect(r.items).toHaveLength(8)
+    expect(r.items).toHaveLength(9)
     expect(r.missing).toEqual([])
     expect(r.ready).toBe(true)
     expect(r.blockers).toBe(0)
     expect(r.checked_at).toBe('2026-09-17T02:00:00Z')
   })
 
-  it('没读到 ≠ 缺：空事实进去，八项全是 unknown，不算缺项也不算过', () => {
+  it('没读到 ≠ 缺：空事实进去，全是 unknown，不算缺项也不算过（WP418：也不算「能开门」）', () => {
     const r = runLaunchChecklist({})
     expect(r.unknown.map((i) => i.id)).toEqual([
+      'storefront_password',
       'domain',
       'payment',
       'tax',
@@ -42,7 +44,30 @@ describe('上线检查单（59 §2）', () => {
     // 必装 App 默认不判（没指定清单），所以它是 ok 不是 unknown
     expect(r.items.find((i) => i.id === 'required_apps')?.state).toBe('ok')
     expect(r.missing).toEqual([])
-    expect(r.ready).toBe(true)
+    // WP418（自查 A10）：拦路项一项都没读到，不能说「能开门」
+    expect(r.ready).toBe(false)
+    expect(r.unread_blockers).toBe(4)
+    expect(launchChecklistHeadline(r)).toBe('上线检查单：8 项没读到，先连店再查')
+  })
+
+  it('WP418：标题照实——有缺的说缺几项；拦路的都过了但还有没读到的也要说', () => {
+    expect(launchChecklistHeadline(runLaunchChecklist(full))).toBe('上线检查单：没有拦路的缺项')
+    const { tax: _t, ...noTax } = full
+    expect(launchChecklistHeadline(runLaunchChecklist(noTax))).toBe(
+      '上线检查单：拦路的都过了，还有 1 项没读到',
+    )
+    const gaps = runLaunchChecklist({ ...full, shipping: { zones: 1, rates: 0 } })
+    expect(launchChecklistHeadline(gaps)).toBe('上线检查单：1 项会让顾客买不成')
+  })
+
+  it('WP418（自查 A15）：店面还挂着密码 = 拦路（其余全绿也开不了门），补法是去后台关', () => {
+    const r = runLaunchChecklist({ ...full, storefront: { password_enabled: true } })
+    const pw = r.items.find((i) => i.id === 'storefront_password')
+    expect(pw?.state).toBe('missing')
+    expect(pw?.severity).toBe('blocker')
+    expect(pw?.fixable_by).toBeUndefined()
+    expect(pw?.fix.zh).toContain('偏好设置')
+    expect(r.ready).toBe(false)
   })
 
   it('缺项按 blocker 在前排；能不能开门只看 blocker', () => {
@@ -109,8 +134,8 @@ describe('上线检查单（59 §2）', () => {
 
   it('launchCheckAfter 把每一格都带上——空清单会被 guardrail 当场拦下', () => {
     const after = launchCheckAfter(runLaunchChecklist(full, { at: '2026-09-17T02:00:00Z' }))
-    expect((after.items as unknown[]).length).toBe(8)
-    expect(after.checked).toBe(8)
+    expect((after.items as unknown[]).length).toBe(9)
+    expect(after.checked).toBe(9)
     expect(after.ready).toBe(true)
   })
 })

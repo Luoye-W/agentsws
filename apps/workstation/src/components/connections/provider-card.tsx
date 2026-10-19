@@ -58,6 +58,7 @@ export function ProviderCard({
   onSubmit,
   oneClick,
   advancedLabel,
+  advancedNote,
 }: {
   provider: ProviderView
   /** 从「去连接」跳过来时高亮这一张。 */
@@ -79,6 +80,8 @@ export function ProviderCard({
   oneClick?: React.ReactNode
   /** 「高级」折叠按钮上的字（缺省「高级」）。 */
   advancedLabel?: string
+  /** WP418（审计 U17）：展开之后第一行的那一句解释（这条接法是什么、什么时候用）。 */
+  advancedNote?: string
 }): React.ReactNode {
   const { t } = useApp()
   const oauth = provider.auth === 'oauth2'
@@ -174,6 +177,11 @@ export function ProviderCard({
             className="flex flex-col gap-2"
             data-testid={oneClick === undefined ? undefined : 'provider-legacy'}
           >
+            {oneClick === undefined || advancedNote === undefined ? null : (
+              <p className="text-xs text-ws-muted-fg" data-testid="provider-advanced-note">
+                {advancedNote}
+              </p>
+            )}
             {provider.available || oneClick === undefined ? null : (
               <p
                 className="flex items-center gap-1 text-xs text-destructive"

@@ -4,7 +4,7 @@
  * 五动作矩阵是界面的说法，14 的状态机只认 `approve / approve_edited / reject / defer …`。
  * 这里做那一层翻译，并把三条硬规则挡在网关之前：
  *
- * 1. 选择题卡裸 `approve` → `OPTION_REQUIRED`
+ * 1. 选择题卡裸 `approve` → `OPTION_REQUIRED`（WP414：驳回不再要求写理由，没写记 {@link REJECT_NO_REASON}）
  * 2. `instruct` 必须先选作用域 → `SCOPE_REQUIRED`
  * 3. `version` 与卡片不一致 → `VERSION_MISMATCH`（14 §5：revision 变了旧决定就作废）
  *
@@ -13,11 +13,18 @@
  * 作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更），
  * 那一步在 WP6 / WP3 的机器里，v1 只把 scope 原样带出去（见交付报告「未完成项」）。
  */
+import { NOT_WIRED_ACK_REASON } from '@agentsws/contracts'
 import { DeckError } from './errors.js'
 import type { DeckCard, DeckDecideInput, InstructionScope, ResolvedDecision } from './types.js'
 
 /** WP276：交给你的那张卡点「不接」没写理由时记的那一句（服务端认它 = 没写理由）。 */
 export const HANDOFF_DECLINE_NO_REASON = '不接'
+
+/**
+ * WP414（Luoye 10-19）：「不要」一下就生效、**理由可选**。没写理由时记这一句——
+ * 不填也记一次「不要」（学习回路认它 = 没写理由；事后点快捷理由会用 `annotate` 补上）。
+ */
+export const REJECT_NO_REASON = '不要'
 
 function isHandoffCard(card: DeckCard): boolean {
   const p = card.detail.payload
@@ -119,8 +126,13 @@ export function resolveDecision(
       ) {
         return { action: 'reject', reason: card.kind === 'connect_request' ? '先不连' : '先不设' }
       }
+      // WP415：没接通的卡上「知道了」——不是对内容说不，不用写理由
+      if ((reason === undefined || reason.trim() === '') && card.wiring?.state === 'not_wired') {
+        return { action: 'reject', reason: NOT_WIRED_ACK_REASON }
+      }
+      // WP414：理由可选——不写也记一次「不要」（REASON_REQUIRED 这个错误码留着，契约只加不删）
       if (reason === undefined || reason.trim() === '') {
-        throw new DeckError('REASON_REQUIRED', '14 §4：驳回必须写原因（它是最强的学习信号）')
+        return { action: 'reject', reason: REJECT_NO_REASON }
       }
       return {
         action: 'reject',

@@ -63,27 +63,82 @@ describe('② 改动卡', () => {
 })
 
 describe('③ 发布卡', () => {
-  it('左预览右说明；排期时间与受众数必现（没有就是「批了就发」与 —，不留空）', () => {
+  it('左预览右说明；有图才有图位，排期与受众数照实出', () => {
     renderCard(
-      layoutCard('publish', {
-        kind: 'staged_change',
-        highlights: [
-          { type: 'scheduled', text: '明天 14:00' },
-          { type: 'audience', text: '1,204 人' },
-        ],
-      }),
+      layoutCard(
+        'publish',
+        {
+          kind: 'staged_change',
+          highlights: [
+            { type: 'scheduled', text: '明天 14:00' },
+            { type: 'audience', text: '1,204 人' },
+          ],
+        },
+        { preview_image: 'https://cdn.example.com/p.png' },
+      ),
     )
     const body = screen.getByTestId('deck-layout-publish')
+    // WP418：有图才有图位（没图不画占位块见下一条，WP421 同一件事）
     expect(screen.getByTestId('deck-publish-preview')).toBeTruthy()
     expect(body.textContent).toContain('明天 14:00')
     expect(body.textContent).toContain('1,204 人')
   })
 
-  it('没有排期与受众时那两格照样在', () => {
+  it('WP418 U10：没图不留图位；没有受众数不出「受众 · —」，排期写「批了就发」', () => {
     renderCard(layoutCard('publish', { kind: 'staged_change', highlights: [] }))
     const body = screen.getByTestId('deck-layout-publish')
+    expect(screen.queryByTestId('deck-publish-preview')).toBeNull()
     expect(body.textContent).toContain('批了就发')
-    expect(body.textContent).toContain('受众')
+    expect(body.textContent).not.toContain('受众')
+  })
+
+  it('WP418 U9：发布主题卡只有「打开预览」+ 换哪一份 + 几个文件；按钮「发布 / 不发」，没有「改时间」', () => {
+    renderCard(
+      layoutCard(
+        'publish',
+        {
+          kind: 'staged_change',
+          change_kind: 'publish_theme',
+          available_actions: ['approve', 'reject', 'instruct', 'snooze', 'open'],
+          highlights: [{ type: 'preview', text: 'https://shop.example.com/?preview_theme_id=5' }],
+        },
+        {
+          before: { theme_id: '1', theme_name: 'Horizon' },
+          after: {
+            theme_id: '5',
+            theme_name: '首页草稿',
+            preview_url: 'https://shop.example.com/?preview_theme_id=5',
+            files: ['sections/hero.liquid', 'templates/index.json'],
+          },
+        },
+      ),
+    )
+    expect(screen.queryByTestId('deck-layout-publish')).toBeNull()
+    const body = screen.getByTestId('deck-publish-theme')
+    expect(within(body).getByTestId('deck-publish-theme-preview').textContent).toContain('打开预览')
+    expect(body.textContent).toContain('线上主题从「Horizon」换成「首页草稿」')
+    expect(body.textContent).toContain('改了 2 个文件')
+    expect(body.textContent).not.toContain('排期')
+    expect(screen.queryByTestId('deck-publish-preview')).toBeNull()
+    const bar = screen.getByTestId('deck-action-bar')
+    expect(within(bar).getByText('发布')).toBeTruthy()
+    expect(within(bar).getByText('不发')).toBeTruthy()
+    expect(within(bar).queryByText('改时间')).toBeNull()
+  })
+})
+
+describe('WP421 发布卡：批了也不会自动发的照实写', () => {
+  it('payload.after.manual_send → 「批了要你自己发」，不写「批了就发」', () => {
+    renderCard(
+      layoutCard(
+        'publish',
+        { kind: 'staged_change', highlights: [] },
+        { kind: 'press_release', after: { distributed: true, manual_send: true } },
+      ),
+    )
+    const body = screen.getByTestId('deck-layout-publish')
+    expect(screen.getByTestId('deck-publish-manual').textContent).toBe('批了要你自己发')
+    expect(body.textContent).not.toContain('批了就发')
   })
 })
 
@@ -324,7 +379,7 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
     expect(within(screen.getByTestId('deck-action-bar')).getByText('批准')).toBeTruthy()
   })
 
-  it('「指导」在选择卡上排不进按钮行，收进 ···（动作还在，位置换了）', async () => {
+  it('WP414：选择卡上「我来说」（修改）也外露成按钮，没有 ···', () => {
     renderCard(
       layoutCard('choice', {
         kind: 'ai_question',
@@ -335,10 +390,8 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
       }),
     )
     const bar = screen.getByTestId('deck-action-bar')
-    expect(within(bar).queryByText('我来说')).toBeNull()
-    await userEvent.click(screen.getByTestId('deck-more'))
-    const menu = screen.getByTestId('deck-more-menu')
-    expect(within(menu).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
+    expect(within(bar).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
+    expect(screen.queryByTestId('deck-more')).toBeNull()
   })
 })
 

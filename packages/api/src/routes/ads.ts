@@ -93,6 +93,41 @@ export interface AdsChangesView {
   needs_connection?: 'extension'
 }
 
+/**
+ * WP420（自查 ads-amazon A6 / A8）：投放「报表」里那一块看板——今天花了多少、总闸还剩多少、ROAS、
+ * 今天止损几条、广告系列表、日报数据到没到。全部读广告库与看数据库，不打平台。
+ */
+export interface AdsOverviewView {
+  platform: AdsPlatform
+  currency?: string
+  /** 今天这一家花了多少（今天还没数 = 没有这一格）。 */
+  spend_today?: number
+  /** 岗位级总闸（四个平台加起来）。 */
+  spend_gate: { spent: number; cap: number; remaining: number; note: string }
+  /** 今天按花费加权的 ROAS（没有转化价值 = 没有这一格）。 */
+  roas_today?: number
+  conversions_today?: number
+  /** 今天止损了几条（自动停的那几条）。 */
+  stop_losses_today: number
+  campaigns: {
+    id: string
+    name: string
+    status: string
+    daily_budget?: number
+    spend?: number
+    roas?: number
+    conversions?: number
+  }[]
+  /** 日报数据：这家插件连没连、最近一次什么时候导进来、为什么没到（一句）。 */
+  data?: {
+    plugin: 'ready' | 'away' | 'not_connected' | 'unavailable'
+    account?: string
+    last_import_at?: string
+    newest_day?: string
+    message?: string
+  }
+}
+
 export interface AdsPort {
   accounts(
     actor: AdsActor,
@@ -165,6 +200,8 @@ export interface AdsPort {
   ): MaybePromise<{ ok: boolean; message: string }>
   /** WP316：广告变更账本（最近的在前，180 天）。 */
   ledger?(actor: AdsActor): MaybePromise<{ rows: AdsLedgerEntryView[] }>
+  /** WP420：投放看板那一块（今天花费 / 总闸 / ROAS / 止损 / 广告系列表 / 日报数据到没到）。 */
+  overview?(actor: AdsActor): MaybePromise<AdsOverviewView>
   /** WP316：账本里的一张截图（只截广告后台那个标签页；决策 556）。 */
   evidence?(actor: AdsActor, id: string): MaybePromise<{ png_base64: string } | undefined>
   /** WP316：让插件导出一份改前表（读操作；Meta 改已有要它，决策 612）。 */
@@ -587,6 +624,24 @@ export function adsRoutes(): Route[] {
             submit: input.submit,
           }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/ads/overview',
+        operationId: 'getAdsOverview',
+        summary:
+          '投放看板：今天花了多少、总闸还剩多少、ROAS、今天止损几条、广告系列表、日报数据到没到（只读本机库）',
+        tag: 'ads',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ADS,
+        returns: 'AdsOverviewView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, await need(port.overview, '投放看板').call(port, actorOf(c)))
       },
     ),
     route(

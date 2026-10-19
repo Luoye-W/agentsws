@@ -236,6 +236,11 @@ export interface ListingCheckupRun {
 export interface ListingCheckupView {
   latest?: ListingCheckupRun
   own_asins: number
+  /**
+   * WP420（自查 B15，只加）：自家那几个 ASIN（Amazon 运营在面板上就能看、能改——以前只存在
+   * 「内容与搜索」的关注设置里，只做 Amazon 的公司看不到也改不了）。
+   */
+  own?: { marketplace: string; asin: string; label?: string }[]
   rules: ListingRule[]
   /** 这里能不能读 Amazon 前台（没有桌面壳 / 读页那块还没接上 = false）。 */
   reader_ready: boolean

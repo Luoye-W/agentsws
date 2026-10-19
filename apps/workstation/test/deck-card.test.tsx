@@ -276,7 +276,8 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
       <DeckCardView card={card} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     // WP100：顺序由 LAYOUT_VERBS 说了算（主 → 次），不再是服务端 actions 的原序
-    expect(quickActions(card)).toEqual(['approve', 'instruct', 'reject'])
+    // WP414：主按钮 + 「修改 / 不要 / 稍后」，全是按钮
+    expect(quickActions(card)).toEqual(['approve', 'instruct', 'reject', 'snooze'])
     expect(quickActions(card).length).toBeLessThanOrEqual(MAX_QUICK_ACTIONS)
     const bar = screen.getByTestId('deck-action-bar')
     expect(within(bar).getByText('发送')).toBeDefined()
@@ -285,7 +286,7 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
       true,
     )
     expect(within(bar).getByText('发送').closest('button')?.dataset.rank).toBe('primary')
-    expect(within(bar).getByText('改一下').closest('button')?.dataset.rank).toBe('secondary')
+    expect(within(bar).getByText('修改').closest('button')?.dataset.rank).toBe('secondary')
   })
 
   it('WP232 收件人待定的草稿卡：主动词是「我来发」、次动词「不用」，没有「发送」', () => {
@@ -303,19 +304,29 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
     expect(within(bar).getByText('不用')).toBeDefined()
   })
 
-  it('安静区收进 ···：点开才有「需要补素材」与「稍后」，收着时按钮行上没有它们', async () => {
+  it('WP414：「稍后」外露、没有「需要补素材」也没有 ···；次按钮都是描边按钮', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     const bar = screen.getByTestId('deck-action-bar')
     expect(within(bar).queryByText('需要补素材')).toBeNull()
-    expect(within(bar).queryByText('稍后')).toBeNull()
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(within(bar).queryByText('改一下')).toBeNull()
+    expect(screen.queryByTestId('deck-more')).toBeNull()
+    for (const label of ['修改', '不发', '稍后']) {
+      const button = within(bar).getByText(label).closest('button')
+      expect(button?.dataset.rank).toBe('secondary')
+      // 描边按钮（不是一行说明文字）
+      expect(button?.className.includes('border')).toBe(true)
+    }
+  })
 
-    await userEvent.click(screen.getByTestId('deck-more'))
-    const menu = screen.getByTestId('deck-more-menu')
-    expect(within(menu).getByText('需要补素材')).toBeDefined()
-    expect(within(menu).getByText('稍后')).toBeDefined()
+  it('WP414：点「稍后」一下就推迟', async () => {
+    const onDecide = vi.fn()
+    renderWithProviders(
+      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
+    )
+    await userEvent.click(screen.getByText('稍后'))
+    expect(onDecide).toHaveBeenCalledWith({ action: 'snooze', version: 1 })
   })
 
   it('没有「详情 ▾」按钮（详情还是点卡面展开）', () => {
@@ -392,7 +403,7 @@ describe('选择题卡（36 §2.1：裸 approve 服务端会拒）', () => {
 })
 
 describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
-  it('指导 / 拒绝理由 / 补素材 / 问 AI 四块，收起时一个都不在', () => {
+  it('修改 / 问 AI，收起时一个都不在（WP414：没有拒绝理由框、没有补素材框了）', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
@@ -403,13 +414,16 @@ describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
-  it('点「指导」才挂出 textarea + 作用域；写了字才提交，落成 instruct + scope', async () => {
+  it('点「修改」才挂出 textarea + 作用域（能贴素材的提示在框里）；写了字才提交，落成 instruct + scope', async () => {
     const onDecide = vi.fn()
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
-    await userEvent.click(screen.getByText('改一下'))
+    await userEvent.click(screen.getByText('修改'))
     const panel = screen.getByTestId('deck-panel-instruct')
+    expect(
+      within(panel).getByLabelText('一句话说清楚要怎么改').getAttribute('placeholder'),
+    ).toContain('贴上')
     expect(within(panel).getByTestId('deck-scopes')).toBeDefined()
     // 问 AI 只在指导区里出现，且是禁用占位
     expect(within(panel).getByTestId('ask-ai-panel')).toBeDefined()
@@ -428,38 +442,22 @@ describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
     })
   })
 
-  it('点「不发」开的是拒绝理由框（14 §4：原因必填），没有作用域选择', async () => {
+  it('WP414：点「不发」一下就生效，不开写理由的框', async () => {
     const onDecide = vi.fn()
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
     await userEvent.click(screen.getByText('不发'))
-    const panel = screen.getByTestId('deck-panel-reject')
-    expect(within(panel).queryByTestId('deck-scopes')).toBeNull()
-    expect(within(panel).queryByTestId('ask-ai-panel')).toBeNull()
-    expect(within(panel).getByRole('button', { name: '提交' }).hasAttribute('disabled')).toBe(true)
-    await userEvent.type(within(panel).getByRole('textbox'), '客户没说要退')
-    await userEvent.click(within(panel).getByRole('button', { name: '提交' }))
-    expect(onDecide).toHaveBeenCalledWith({ action: 'reject', version: 1, reason: '客户没说要退' })
-  })
-
-  it('「需要补素材」开的是 ai_question 的反向入口占位，可以先放一放', async () => {
-    const onDecide = vi.fn()
-    renderWithProviders(
-      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
-    )
-    await userEvent.click(screen.getByTestId('deck-more'))
-    await userEvent.click(screen.getByText('需要补素材'))
-    const panel = screen.getByTestId('deck-panel-supplement')
-    await userEvent.click(within(panel).getByText('先放一放'))
-    expect(onDecide).toHaveBeenCalledWith({ action: 'snooze', version: 1 })
+    expect(screen.queryByTestId('deck-panel-reject')).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(onDecide).toHaveBeenCalledWith({ action: 'reject', version: 1 })
   })
 
   it('返回把折叠区收回 DOM 之外', async () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    await userEvent.click(screen.getByText('改一下'))
+    await userEvent.click(screen.getByText('修改'))
     await userEvent.click(screen.getByRole('button', { name: '返回' }))
     expect(screen.queryByTestId('deck-panel-instruct')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
@@ -484,7 +482,7 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
     expect(onOpen).toHaveBeenCalledWith(card)
   })
 
-  it('WP141：没有展示名时说「一件还没起名的事项」，事项 id 也不上屏', () => {
+  it('WP416：没有展示名时这一行不出（不说「一件还没起名的事项」），事项 id 也不上屏', () => {
     renderWithProviders(
       <DeckCardView
         card={draftCard({ matter_id: 'mat_7' })}
@@ -493,9 +491,9 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
         onOpen={noop}
       />,
     )
-    const link = screen.getByTestId('deck-matter-link').textContent ?? ''
-    expect(link).not.toContain('mat_7')
-    expect(link).toContain('还没起名')
+    expect(screen.queryByTestId('deck-matter-link')).toBeNull()
+    expect(document.body.textContent).not.toContain('mat_7')
+    expect(document.body.textContent).not.toContain('还没起名')
   })
 })
 

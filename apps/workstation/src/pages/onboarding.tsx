@@ -133,7 +133,7 @@ function DoneMark() {
  * 第 ① 步是怎么过去的：接上了官方接口 / 自己的模型 / 走了演示旁路；
  * WP240：`inherited` = 公司加的品牌、AI 跟随公司已经接上（第 ① 步显示「已接上（跟随公司）」直接过）。
  */
-type AiState = 'official' | 'own' | 'account' | 'demo' | 'inherited' | undefined
+type AiState = 'official' | 'own' | 'account' | 'subscription' | 'demo' | 'inherited' | undefined
 
 /**
  * WP240：加的品牌从哪一步开始。公司那一层已经设过、AI 也接上了（跟随公司默认）——
@@ -489,6 +489,18 @@ export function OnboardingPage(): React.ReactNode {
                     b.selected.includes(id)
                       ? deselectDuty(b, id, catalog, suggested)
                       : selectDuty(b, id, catalog, suggested),
+                  )
+                }}
+                onSetDuties={(ids, on) => {
+                  // WP424：整组全选 / 全不选——逐条走同一套选 / 去规则（动过手的板也只增减，不重排）
+                  setBoard((b) =>
+                    ids.reduce(
+                      (acc, id) =>
+                        on
+                          ? selectDuty(acc, id, catalog, suggested)
+                          : deselectDuty(acc, id, catalog, suggested),
+                      b,
+                    ),
                   )
                 }}
                 onAdopt={() => {

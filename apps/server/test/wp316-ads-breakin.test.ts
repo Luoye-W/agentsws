@@ -69,6 +69,8 @@ function make(wiring: Partial<AdsWiring> | undefined) {
             extensionReady: () => true,
             breakIn: () => ({ active: false }),
             setFollowUps: () => undefined,
+            entries: () => [],
+            entry: () => undefined,
             ...wiring,
           } as AdsWiring,
         }),
@@ -100,9 +102,16 @@ describe('磨合期（554）', () => {
     expect(staged[0]?.notes.join('')).not.toContain('磨合期')
   })
 
-  it('托管实例（没有插件通道）不升', async () => {
-    const { svc, actor } = make({ available: () => false, breakIn: () => ({ active: true }) })
-    expect((await svc.port.changeBudget(actor, 'cmp_1', { value: 210 })).level).toBe('L2')
+  it('托管实例（没有插件通道）不升——而且不出卡，照实说去桌面版（WP420 自查 A3）', async () => {
+    const { svc, staged, actor } = make({
+      available: () => false,
+      breakIn: () => ({ active: true }),
+    })
+    const hosted = await svc.port.changeBudget(actor, 'cmp_1', { value: 210 })
+    expect(hosted.level).toBe('L2')
+    expect(hosted.staged).toBe(false)
+    expect(hosted.message).toContain('桌面版')
+    expect(staged).toHaveLength(0)
     const plain = make(undefined)
     expect((await plain.svc.port.changeBudget(plain.actor, 'cmp_1', { value: 210 })).level).toBe(
       'L2',

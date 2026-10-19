@@ -13,6 +13,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { useLocation } from 'react-router-dom'
 import { AdChangesPanel } from '@/components/ads/ad-changes-panel'
 import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
+import { AdsOverview } from '@/components/ads/ads-overview'
 import { AMAZON_STORE_ROLE, AmazonOpsBoard } from '@/components/amazon/amazon-ops-board'
 // WP394：「竞品动向」块（模块里自己登记进 Amazon 运营面板）
 import '@/components/amazon/amazon-competitors'
@@ -27,7 +28,8 @@ import { requestCardJump, useWorkFilterRequest } from '@/components/reports/posi
 import { GeoBoard } from '@/components/seo/geo-board'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
-import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
+import { socialChannelOfRole } from '@/components/social/social-calendar'
+import { SocialCalendarSummary } from '@/components/social/social-calendar-summary'
 import { getPosition, getPositions, getPositionWork } from '@/lib/api'
 import {
   loadWorkPrefs,
@@ -123,6 +125,7 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
 
   // WP395：岗位里有亚马逊店铺运营 → Amazon 那四块（每日巡检 / 竞品动向 / Listing 体检 / 词库）
   const amazon = duties.find((d) => d.role_id === AMAZON_STORE_ROLE)
+  const adsDuties = duties.filter((d) => adCreativePlatformOf(d.role_id) !== undefined)
   const pending = view?.pending_cards ?? 0
   const fresh =
     view !== undefined && work.data !== undefined && work.data.items.length === 0 && pending === 0
@@ -147,6 +150,19 @@ export function PositionBoards({ id }: { id: string }): ReactNode {
         }}
       />
       {amazon === undefined ? null : <AmazonOpsBoard assignment={amazon.assignment_id} />}
+      {/* WP420（自查 A6）：岗位里有投放职责 → 每条一块「今天」看板（数从广告库来） */}
+      {adsDuties.map((d) => {
+        const platform = adCreativePlatformOf(d.role_id)
+        return (
+          <div key={d.assignment_id} className="flex flex-col gap-4">
+            <AdsOverview assignment={d.assignment_id} />
+            {/* WP420（自查 A16 / U7）：岗位页「素材流水线」点了打开的就是这里 */}
+            {platform === undefined ? null : (
+              <AdCreativePanel assignment={d.assignment_id} platform={platform} />
+            )}
+          </div>
+        )
+      })}
       <DataBoard
         duties={boardDuties}
         expanded={charts}
@@ -193,7 +209,12 @@ export function DutyBoards({
     <div className="flex flex-col gap-4" data-testid="duty-boards" data-duty={role_id}>
       {socialChannel === undefined ? null : (
         <>
-          <SocialCalendar assignment={assignment} channel={socialChannel} />
+          {/* WP419（自查 U4）：窄栏只放一行摘要 + 去日历；要在这里排再展开 */}
+          <SocialCalendarSummary
+            assignment={assignment}
+            channel={socialChannel}
+            role_id={role_id}
+          />
           {COMMUNITY_CHANNELS.includes(socialChannel) ? (
             <SocialBroadcast assignment={assignment} channel={socialChannel} />
           ) : null}
@@ -203,6 +224,7 @@ export function DutyBoards({
       {role_id === 'b2b.sales' ? <B2bSalesPanel assignment={assignment} /> : null}
       {platform === undefined ? null : (
         <>
+          <AdsOverview assignment={assignment} />
           <AdCreativePanel assignment={assignment} platform={platform} />
           <AdChangesPanel assignment={assignment} />
         </>

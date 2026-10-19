@@ -35,6 +35,7 @@ import type {
   GenuiToolOutcome,
   Matter,
   MatterRunBlock,
+  MatterRunDigest,
   MaybePromise,
   MemoryFact,
   ModelRef,
@@ -65,6 +66,7 @@ import {
   createRunWatchdog,
   GENUI_DISPLAY_RULE,
   type MatterLiveRun,
+  MODEL_SOURCE_SWITCHED_STEP,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
@@ -97,6 +99,7 @@ import {
   skillPromptSections,
 } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import { isSourceFallbackOffText } from '@agentsws/model-gateway'
 import {
   houseRulesSection,
   nextSuggestionSection,
@@ -114,10 +117,14 @@ import {
   AMAZON_KEYWORD_TOOL_NAMES,
   AMAZON_LISTING_TOOL_NAMES,
   B2B_OUTBOUND_TOOL_NAMES,
+  budgetStopReason,
   COMPETITOR_STORE_ROLES,
   COMPETITOR_STORE_TOOL_NAMES,
   COMPETITOR_TOOL_NAMES,
   createStubRuntime,
+  DESK_TOOL_NAMES,
+  DRAFT_REPLY_TOOL,
+  deskToolsFor,
   FIND_SERVICE_TOOL,
   GOOGLE_ALERTS_TOOL_NAMES,
   humanizeToolNames,
@@ -143,6 +150,8 @@ import {
   SETUP_REQUEST_TOOL_NAMES,
   SHOP_TOOL_NAMES,
   SITE_HEALTH_TOOL_NAMES,
+  SOCIAL_WORK_TOOL_NAMES,
+  socialWorkToolsFor,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
@@ -167,6 +176,7 @@ import {
 } from './run-blocked.js'
 import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
+import { MODEL_FALLBACK_CLOUD_TARGET } from './setup-targets.js'
 
 /** WP387：交代建 / 读 Google 提醒结果的那条职责（信息监控）。 */
 const GOOGLE_ALERTS_ROLE = 'pr.monitoring'
@@ -240,6 +250,10 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...WORKSHOP_SERVICE_TOOL_NAMES,
     // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
     ...AMAZON_COMPETITOR_TOOL_NAMES,
+    // WP419：社媒发帖 / Reddit 起草——查只读本机；起草只出卡（发不发永远人点）
+    ...SOCIAL_WORK_TOOL_NAMES,
+    // WP421：公关 / 内容与搜索 / B2B / 设计——读本机库只读；起草只出卡（人批了才算数）
+    ...DESK_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -478,6 +492,11 @@ export interface RuntimeOptions {
    */
   b2bOutboundTools?: ToolExecutor
   /**
+   * WP421（决策 1266–1270）：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（`deskToolsFor` 那一张表按职责给）。
+   * 不给 = 这几条职责照旧没有这些工具。
+   */
+  deskTools?: ToolExecutor
+  /**
    * WP316：改广告的两个工具（`ads-tools.ts` 建的那一份）。给了才进 Google / Meta 两条投放职责的工具面；
    * 执行器里还会再判一次职责。提一批只出卡，批了插件才去用户自己的后台里做。
    */
@@ -552,6 +571,11 @@ export interface RuntimeOptions {
    */
   siteHealthTools?: ToolExecutor
   /**
+   * WP419（自查 R10 / S3）：社媒发帖 / Reddit 起草出卡的工具（`social-tools.ts` 建的那一份）。
+   * Reddit 那两个给官方版块 / 外部版块，发帖那两个给社媒内容账号那几条。不给 = 没有（老装配、模拟世界字节不变）。
+   */
+  socialWorkTools?: ToolExecutor
+  /**
    * WP387（docs/103 v2 §3.3）：浏览器建完 / 读完 Google 提醒后交代结果的 `report_google_alerts`
    * （`pr-alerts/tool.ts`）。只给信息监控那条职责；不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
@@ -580,6 +604,11 @@ export interface RuntimeOptions {
    * 只给 `dtc.store`。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   competitorStoreTools?: ToolExecutor
+  /**
+   * WP420（自查 B11）：这个品牌连上 Amazon 官方卖家连接（SP-API）没有。不给 = 没连上
+   * （连接还没开放）——`amazon-sp-*` 那几本官方技能不进按需索引（正文里的工具全来自那条连接）。
+   */
+  amazonSellerConnected?: (workspace_id: string) => boolean | Promise<boolean>
   /**
    * WP394（docs/104 一期 B）：亚马逊店铺运营「竞品动向」现在读一次（`competitor-watch/amazon-tools.ts`）。
    * 只给 `amz.store`。不给 = 没有这一个（老装配、模拟世界字节不变）。
@@ -628,6 +657,19 @@ export interface RuntimeOptions {
    * 不接 = 老行为：草稿照常建卡，只是 `context.gates` 是空的、没有泄漏守卫。
    * 真服务进程一定接（`server.ts` 把它接到 `support-judgment.ts` 上）。
    */
+  /**
+   * WP417（自查客服 C2 / C24 / D9）：这件事的回复**该回到哪个渠道**。事项上钉着聊天会话 / 社群线程时，
+   * 起草出来的回复要回原来那个聊天窗 / 群，而不是变成一张「收件人待定」的邮件卡。
+   * 装配方认得出就自己出那张卡、回卡 id；认不出（普通邮件线程 / 没钉东西）回 `undefined`，照旧出邮件卡；
+   * 那个渠道出卡被拦下回 `{ error }`（不再退回邮件卡，免得人以为发得出去）。
+   */
+  routeDraft?(input: {
+    matter: Matter
+    run_id: string
+    subject: string
+    body: string
+    actor: { person_id: string; assignment_id: string; role_id: string }
+  }): Promise<{ approval_item_id: string } | { error: string } | undefined>
   judgeDraft?(input: {
     matter: Matter
     run_id: string
@@ -787,6 +829,8 @@ export function declaresImageInput(
 export interface DraftVerdict {
   action: 'send' | 'rewrite' | 'card'
   rewrite_instruction?: string
+  /** WP417：打回重写时时间线上那一句（不给 = 泄漏守卫那一句）。 */
+  note?: string
   /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
   gate_context: GateDecision[]
 }
@@ -1069,11 +1113,38 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // 打回重写：原因回给写正文的那一跳，**不建卡**（这一版根本没成形）
       work.appendEvent(s.matter.id, {
         kind: 'status',
-        text: '这一版回信照抄了内部指导的原文，已打回重写。',
+        text: verdict.note ?? '这一版回信照抄了内部指导的原文，已打回重写。',
         actor: { kind: 'system', id: 'runtime' },
         run_id: s.run_id,
       })
       return { rewrite: verdict.rewrite_instruction ?? '重写一版，不要引用内部指导的原文。' }
+    }
+    // WP417（自查 C2 / D9）：聊天会话 / 社群线程上的事——回复回原渠道（那张卡由装配方出）
+    const routedAssignment = roles.assignments.get(s.assignment_id)
+    const routed = await options
+      .routeDraft?.({
+        matter: s.matter,
+        run_id: s.run_id,
+        subject: payload.subject,
+        body: payload.body,
+        actor: {
+          person_id: s.person_id,
+          assignment_id: s.assignment_id,
+          role_id: routedAssignment?.role_id ?? 'common.member',
+        },
+      })
+      .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }))
+    if (routed !== undefined) {
+      if ('error' in routed) {
+        work.appendEvent(s.matter.id, {
+          kind: 'status',
+          text: `回复没出成卡：${routed.error}`,
+          actor: { kind: 'system', id: 'runtime' },
+          run_id: s.run_id,
+        })
+        return undefined
+      }
+      return { approval_item_id: routed.approval_item_id }
     }
     const subject =
       seen.find((r) => r.type === 'thread') ??
@@ -1150,6 +1221,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     })
     if (item.state === 'blocked') return undefined
     backfill(item)
+    /*
+     * WP417（自查客服 A18）：邮箱还没连上——卡照出（草稿不丢），这一轮收尾就地出「连邮箱」的连接卡；
+     * 真点「发送」时渠道照实回「没发出去：邮箱没连」，不再掉到内存桩显示发成功。
+     */
+    if (payload.channel === 'email' && to !== undefined) {
+      const emailNeed = (options.missingConnectionNeeds?.(assignment?.role_id ?? '') ?? []).find(
+        (n) => n.kind === 'email',
+      )
+      if (emailNeed !== undefined)
+        runWatch.get(s.run_id)?.blocks.noteSetup(DRAFT_REPLY_TOOL, {
+          kind: 'connect',
+          need: emailNeed,
+          why: '回信写好了，但邮箱还没连上，现在发不出去。连上就能发。',
+        })
+    }
     return { approval_item_id: item.id }
   }
 
@@ -1350,11 +1436,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const amazonKeywordTools = options.amazonKeywordTools
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
+    const socialWork = options.socialWorkTools
     const googleAlerts = options.googleAlertsTool
     const competitorStore = options.competitorStoreTools
     const prMonitor = options.prMonitorTools
     const workshopTools = options.workshopServices?.execute
     const amazonCompetitor = options.amazonCompetitorTools
+    const deskTools = options.deskTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1387,13 +1475,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       adsDataTools === undefined &&
       setupRequest === undefined &&
       siteHealthTools === undefined &&
+      socialWork === undefined &&
       prMonitor === undefined &&
       googleAlerts === undefined &&
       workshopTools === undefined &&
       competitorStore === undefined &&
       amazonListingTools === undefined &&
       amazonKeywordTools === undefined &&
-      amazonCompetitor === undefined
+      amazonCompetitor === undefined &&
+      deskTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1473,6 +1563,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
         return siteHealthTools(call)
       }
+      // WP419：社媒发帖 / Reddit 起草（名字与别处不重名；职责在执行器里再判一次）
+      if (socialWork !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bareOf(call.name))) {
+        return socialWork(call)
+      }
       // WP387：交代建 / 读 Google 提醒的结果（名字与别处不重名）
       if (googleAlerts !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bareOf(call.name))) {
         return googleAlerts(call)
@@ -1494,6 +1588,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         AMAZON_COMPETITOR_TOOL_NAMES.includes(bareOf(call.name))
       ) {
         return amazonCompetitor(call)
+      }
+      // WP421：公关 / 内容与搜索 / B2B / 设计（名字与别处不重名；职责在执行器里再判一次）
+      if (deskTools !== undefined && DESK_TOOL_NAMES.includes(bareOf(call.name))) {
+        return deskTools(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1545,6 +1643,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
+    if (options.socialWorkTools !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bare)) return true
     if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
       return true
     if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
@@ -1553,6 +1652,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       return true
     if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
       return true
+    if (options.deskTools !== undefined && DESK_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1973,7 +2073,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       options.skills === undefined
         ? []
         : await onDemandSkillIndex({
-            skills: config.skills,
+            // WP420（自查 B11）：要 Amazon 官方卖家连接（SP-API）的那几本，没连上就不进可加载清单
+            skills: usableSkills(config.skills, {
+              amazonSeller: (await options.amazonSellerConnected?.(workspace_id)) === true,
+            }),
             actor: skillActor,
             registry: options.skills,
           })
@@ -2085,6 +2188,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
           ? SITE_HEALTH_TOOL_NAMES
           : []),
+        // WP419：社媒发帖 / Reddit 起草出卡（按职责：Reddit 两条、社媒内容账号几条；服务端接了才有）
+        ...(options.socialWorkTools === undefined ? [] : socialWorkToolsFor(config.role_id)),
         // WP387：信息监控交代建 / 读 Google 提醒的结果（服务端接了才有）
         ...(config.role_id === GOOGLE_ALERTS_ROLE && options.googleAlertsTool !== undefined
           ? GOOGLE_ALERTS_TOOL_NAMES
@@ -2101,6 +2206,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         AMAZON_COMPETITOR_ROLES.includes(config.role_id)
           ? AMAZON_COMPETITOR_TOOL_NAMES
           : []),
+        // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具（按职责那一张表给；服务端接了才有）
+        ...(options.deskTools === undefined ? [] : deskToolsFor(config.role_id)),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
@@ -2462,9 +2569,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     // WP264：步骤记录（事项页「正在做…」与跑完那一行灰字）
     const steps = new RunStepLog(nowMs())
     runSteps.set(run_id, { matter_id: input.matter.id, started_at: clock.now(), log: steps })
+    /** WP423：这次是哪一项预算到了（`budget.exhausted`；第一次那条为准）。 */
+    let budgetHit: MatterRunDigest['budget']
     /** WP264：跑完 / 停下 / 没跑成都记一条运行摘要（排在 AI 那段话前面）。 */
-    const recordDigest = (outcome: 'completed' | 'stopped' | 'failed'): void => {
+    const recordDigest = (outcome: 'completed' | 'stopped' | 'failed', budget?: boolean): void => {
       try {
+        const byBudget = budget === true && budgetHit !== undefined ? budgetHit : undefined
         // 记成 `status`（不是 `run`）：「跑了几次」仍只数开跑那一条
         work?.appendEvent(input.matter.id, {
           kind: 'status',
@@ -2474,11 +2584,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               : outcome === 'stopped'
                 ? pausing.has(run_id)
                   ? '因更新暂停'
-                  : '这次被停下了'
+                  : byBudget !== undefined
+                    ? // WP423：预算停的说人话原因（「查的东西太多，这一轮先停在这里」）
+                      budgetStopReason(byBudget)
+                    : '这次被停下了'
                 : '这次没跑成',
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
-          run_digest: steps.digest(outcome, nowMs()),
+          run_digest: {
+            ...steps.digest(outcome, nowMs()),
+            ...(byBudget === undefined ? {} : { budget: byBudget }),
+          },
         })
       } catch {
         // 事项已经没了：摘要只是给人看的一行，少一条不影响别的
@@ -2574,6 +2690,23 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (e.type === 'run.cancelled')
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
       if (e.type === 'run.failed') failure ??= e.error
+      if (e.type === 'budget.exhausted') budgetHit ??= e.which
+      /*
+       * WP425：这一轮从自己的 AI 切到了工坊积分——对话（事项时间线）里照实一行
+       * 「你的 ChatGPT 额度用完了，这一轮用工坊积分」；运行记录（事件日志）里那条 progress 照记。
+       */
+      if (e.type === 'progress' && e.step === MODEL_SOURCE_SWITCHED_STEP && e.note !== undefined) {
+        try {
+          work?.appendEvent(input.matter.id, {
+            kind: 'status',
+            text: e.note,
+            actor: { kind: 'system', id: 'runtime' },
+            run_id,
+          })
+        } catch {
+          // 事项已经没了
+        }
+      }
       appendRunEvent(request, e)
       // 15 §6 provenance：只证明「读过」——注入的记录与工具真回来的实体
       if (e.type === 'context.injected') {
@@ -2730,6 +2863,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             error.message.includes('ChatGPT 订阅'))
         )
           runBlocks.noteSetup('model', { kind: 'connect', need: CHATGPT_SUBSCRIPTION_NEED })
+        /*
+         * WP425：自己的 AI 用不了、开关「自己的用不了时用工坊积分接着做」关着——照实停下，并在对话里出
+         * 「用工坊积分接着做」那张卡（配置卡：点一下打开开关、按原话接着做；决策 690）。三个运行时同一句话。
+         */
+        if (isSourceFallbackOffText(error.message))
+          runBlocks.noteSetup('model', { kind: 'setup', target: MODEL_FALLBACK_CLOUD_TARGET })
         recordFailure(error)
         await recordBlocked()
         // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带
@@ -2744,7 +2883,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       // WP287：额度 / 回合用完停下的，摘要那一行写「被停下了」，不写「跑完了」
-      recordDigest(result.status === 'budget_exhausted' ? 'stopped' : 'completed')
+      // WP423：预算停的那一行写人话原因，收尾那段话下面出「接着做」（`run_digest.budget`）
+      recordDigest(result.status === 'budget_exhausted' ? 'stopped' : 'completed', true)
       /*
        * WP264（决策 179）：下一步建议——运行时结构化给的优先，否则取答复末尾的 `<next>…</next>`；
        * 标记从正文里拿掉。没有就没有，不从正文里猜。
@@ -3013,8 +3153,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 /**
  * 一次职责运行的 token / 工具调用上限（时间与花费另算）。
  *
- * - 缺省 6 万 token、12 次；
- * - WP144：批过电脑操控授权的 40 次；WP148 / WP179：真挂了浏览器或网页工具的 30 次；
+ * - 缺省 15 万 token、12 次（WP423：原来 6 万）；
+ * - WP144：批过电脑操控授权的 40 次、60 万 token；WP148 / WP179：真挂了浏览器或网页工具的 30 次、40 万 token（WP423）；
  * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
  *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次；
  *   WP260：再放到 80 万 token、40 回合（见下）。
@@ -3032,10 +3172,22 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
    * 花费另有 `max_cost_base` 兜底。
    */
   if (input.themeRun) return { max_tokens: 800_000, max_tool_calls: 60, max_turns: 40 }
-  return {
-    max_tokens: 60_000,
-    max_tool_calls: input.granted ? 40 : input.browsing ? 30 : 12,
-  }
+  /*
+   * WP423（10-19 Mac 自测）：查 subreddit 的运行 12 步、累计 6.96 万 token 就撞上 6 万停了（实际只花了约 0.012 元，
+   * 缓存命中 4.99 万）——这一格是**累计**输入（每回合把整段历史再送一遍），不是「这次读了多少」。
+   * 照 WP260 的算法按「步数 × 每步历史」估：
+   *
+   * - 查资料 / 浏览（30 次调用、约 31 步）：每步历史从提示词的 6 千左右涨到二三万（网页摘要、帖子列表），
+   *   平均按 1.2 万算 ≈ 37 万——放到 **40 万**；
+   * - 批过授权的电脑操控（40 次、41 步，带截图）：平均按 1.4 万算 ≈ 57 万——放到 **60 万**；
+   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**。
+   *
+   * 真正的护栏是花费（`max_cost_base`，按价目表算、命中缓存的那部分很便宜）：40 万 token 在 DeepSeek 上大半是缓存，
+   * 约一两毛钱；token 上限只防「死循环把历史越滚越大」。到了也不是白停——运行时再跑一次收尾，把查到的交出来。
+   */
+  if (input.granted) return { max_tokens: 600_000, max_tool_calls: 40 }
+  if (input.browsing) return { max_tokens: 400_000, max_tool_calls: 30 }
+  return { max_tokens: 150_000, max_tool_calls: 12 }
 }
 
 /**
@@ -3054,4 +3206,15 @@ export const THEME_PRODUCE: RunProduce = {
   max_nudges: 3,
   compact_at_tokens: 48_000,
   keep_recent_results: 6,
+}
+
+/** WP420（自查 B11）：要 Amazon 官方卖家连接（SP-API）的技能（官方 12 本，统一 `amazon-sp-` 前缀）。 */
+export const SP_API_SKILL_RE = /^amazon-sp-/u
+
+/** 这次运行能读的技能：要 SP-API 的那几本，没连上就拿掉（工具不在手边，读了只能说做不了）。 */
+export function usableSkills<T extends { name: string }>(
+  skills: readonly T[],
+  ctx: { amazonSeller: boolean },
+): T[] {
+  return ctx.amazonSeller ? [...skills] : skills.filter((s) => !SP_API_SKILL_RE.test(s.name))
 }

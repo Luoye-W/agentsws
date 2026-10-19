@@ -13,10 +13,13 @@ import { chatContentText } from '@agentsws/contracts'
 import {
   looksLikeResearch,
   renderWebAnswer,
+  renderWrapUp,
   researchQueryOf,
   urlsIn,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
+  WEB_WRAP_UP_MISSING_FETCH,
+  wrapUpWhichOf,
 } from '@agentsws/stand-ins'
 import type { ScriptedTurn } from './scripted.js'
 
@@ -74,6 +77,53 @@ export function webBrainTurn(
       ...(fetchText === undefined || first === undefined
         ? {}
         : { fetched: { url: first, status: failed(fetchText) ? 0 : 200 } }),
+    }),
+  }
+}
+
+/**
+ * WP423：**收尾回合**（预算到了，运行时追加了收尾那句提示）。规则脑不再调工具，把已经查到的交出来：
+ * 查资料那一类拼成与 stub 剧本同一段话（`renderWrapUp`）；别的运行列一句读过哪些。
+ * 不是收尾回合回 `undefined`（往下照旧）。
+ */
+export function wrapUpBrainTurn(
+  messages: readonly ChatMessage[],
+  tools: readonly ToolDef[] | undefined,
+): ScriptedTurn | undefined {
+  const last = messages[messages.length - 1]
+  if (last === undefined || last.role !== 'user') return undefined
+  const which = wrapUpWhichOf(chatContentText(last.content))
+  if (which === undefined) return undefined
+  const names = new Set((tools ?? []).map((t) => t.name))
+  const body = threadBody(messages)
+  if (names.has(WEB_SEARCH_TOOL) && looksLikeResearch(body)) {
+    const query = researchQueryOf(body)
+    const searched = toolTexts(messages, WEB_SEARCH_TOOL).filter((t) => !failed(t))
+    const urls = urlsIn(searched[searched.length - 1] ?? '')
+    const first = urls[0]
+    const fetchText = toolTexts(messages, WEB_FETCH_TOOL).filter((t) => !failed(t))[0]
+    const found = renderWebAnswer({
+      query,
+      sources: urls.map((url) => ({ url })),
+      ...(fetchText === undefined || first === undefined
+        ? {}
+        : { fetched: { url: first, status: 200 } }),
+    })
+    return {
+      text: renderWrapUp({
+        which,
+        body: found,
+        ...(names.has(WEB_FETCH_TOOL) && fetchText === undefined
+          ? { missing: WEB_WRAP_UP_MISSING_FETCH }
+          : {}),
+      }),
+    }
+  }
+  const read = messages.filter((m) => m.role === 'tool' && !failed(chatContentText(m.content)))
+  return {
+    text: renderWrapUp({
+      which,
+      body: read.length > 0 ? `读过 ${read.length} 份材料。` : '这一轮还没来得及查到东西。',
     }),
   }
 }

@@ -246,6 +246,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       createDeliverable: async () => ({ id: 'dv_2', kind: 'video', due_at: T0 }),
       reviewDeliverable: async () => ({ staged: true, approval_item_id: 'ap_2' }),
       createTrackedLink: async () => ({ id: 'tl_1', url: 'https://x/?utm_source=y' }),
+      createCreator: async (_a: unknown, i: { display_name: string }) => ({
+        creator: { id: 'cr_new', display_name: i.display_name },
+        accounts: [],
+        contacts: [],
+      }),
       planCampaign: async () => ({
         campaign_id: 'cp_1',
         ready: true,
@@ -299,8 +304,13 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         (r) => expect((r.data as { approval_item_id: string }).approval_item_id).toBe('ap_2'),
       ],
       [
+        'save_creator',
+        { handle: '@deskrosa', followers: 31_000 },
+        (r) => expect((r.data as { creator_id: string }).creator_id).toBe('cr_new'),
+      ],
+      [
         'create_tracked_link',
-        { collaboration_id: 'cb_1' },
+        { collaboration_id: 'cb_1', target_url: 'https://shop.example/p/charger' },
         (r) => expect((r.data as { tracked_link_id: string }).tracked_link_id).toBe('tl_1'),
       ],
       [
@@ -316,6 +326,42 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     }
     // 十一个全走过了（目录里有几个，这里就该测几个）
     expect(cases).toHaveLength(KOL_TOOL_NAMES.length)
+  })
+
+  it('WP416：谈成 / 已寄样不许 AI 直接推；追踪链接没给落地页就问；挑人清单用 AI 给的名单', async () => {
+    let brief: { creator_ids?: string[] } | undefined
+    const run = exec(
+      fakePort({
+        planCampaign: async (_a: unknown, b: { creator_ids?: string[] }) => {
+          brief = b
+          return {
+            campaign_id: 'cp_1',
+            ready: true,
+            gaps: [],
+            message: '',
+            by_channel: [{ picks: [] }],
+            budget_per_creator: 0,
+          }
+        },
+      }),
+    )
+    for (const stage of ['agreed', 'sample_sent']) {
+      const r = await run({
+        name: 'advance_collaboration',
+        input: { collaboration_id: 'cb_1', stage },
+        request,
+      })
+      expect(r.status).toBe('blocked')
+    }
+    const link = await run({
+      name: 'create_tracked_link',
+      input: { collaboration_id: 'cb_1' },
+      request,
+    })
+    expect(link.status).toBe('error')
+    expect(link.reason).toContain('落地页')
+    await run({ name: 'add_to_campaign', input: { creator_ids: ['cr_1', 'cr_2'] }, request })
+    expect(brief?.creator_ids).toEqual(['cr_1', 'cr_2'])
   })
 
   it('缺 id 的写工具说人话，不静默成功', async () => {
@@ -479,6 +525,27 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     expect(data.source).toBe('local_library')
     expect(data.note).toContain('还没连上')
     expect(data.rows).toHaveLength(1)
+  })
+
+  it('WP416：只能按账号查（关键词找人走插件）/ 上游没答上来——一样退到本地库并照实说为什么', async () => {
+    for (const reason of ['handle_only', 'upstream_error', 'quota_exhausted']) {
+      const run = exec(
+        fakePort({
+          search: async () => ({
+            ok: false,
+            reason,
+            rows: [],
+            message: 'Instagram 的官方接口只能按账号名查，用插件把人收进来。',
+          }),
+        }),
+      )
+      const res = await run({ name: 'search_creators', input: { q: 'skincare yoga' }, request })
+      expect(res.status).toBe('ok')
+      const data = res.data as { source: string; note: string; rows: unknown[] }
+      expect(data.source).toBe('local_library')
+      expect(data.note).toContain('只能按账号名查')
+      expect(data.note).toContain('你自己库里的人')
+    }
   })
 
   it('红人装配没起来 / 名字不是红人工具：都照实说', async () => {

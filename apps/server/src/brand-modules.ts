@@ -42,6 +42,7 @@ import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bSalesAssembly } from './b2b-sales.js'
 import type { B2bServiceAssembly } from './b2b-service.js'
 import type { B2bStore } from './b2b-store.js'
+import type { ReasonComplete } from './card-follow.js'
 import type { ChannelsAssembly } from './channels.js'
 import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
@@ -56,6 +57,7 @@ import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { EconomicsService } from './economics.js'
 import type { GoogleReads } from './google-reads.js'
 import type { KolStore } from './kol.js'
+import type { KolMailAssembly } from './kol-mail.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
@@ -80,6 +82,7 @@ import type { SiteHealthService } from './site-health.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
+import type { StoreDigest } from './store-digest.js'
 import type { SupportJudgment } from './support-judgment.js'
 import type { WeeklyReviewService } from './weekly-review.js'
 import type { WorkstationDataSource } from './workstation.js'
@@ -181,6 +184,11 @@ export interface BrandModuleSet {
    */
   kolSandbox: KolSandboxAssembly
   /**
+   * WP416：红人这一路的真执行器（开发信经已连的邮箱真发、回信对合作、建合作 / 验收卡批了才生效）。
+   * 可选：老装配 / 测试替身没有它（那几张卡照旧掉回原来那条路）。
+   */
+  kolMail?: KolMailAssembly
+  /**
    * WP131：这个品牌连云端公共红人库的那个客户端（`kol-public-client`）。插件「采集后
    * 自动评分」的体检那一半经它走（令牌是这个品牌那一把）。可选：老装配没有它。
    */
@@ -248,6 +256,11 @@ export interface BrandModuleSet {
   prWatchStore: PrWatchStoreHandle
   /** WP386：信息监控（托管模式没有）。 */
   prWatch?: PrWatchAssembly
+  /**
+   * WP419（自查 P8）：信息监控每天一份简报（拉完一轮之后调；同一天只一份，进岗位报表区）。
+   * 回出了没有（没配源 / 没人担 / 今天已经出过 = 不出）。
+   */
+  publishMonitorBrief?(): Promise<boolean>
   /** WP387：你的浏览器替你建 / 导入 Google 提醒（托管模式不装）。 */
   prAlerts?: PrAlertsService
   /**
@@ -333,6 +346,8 @@ export interface BrandModuleSet {
   amazonFront?: AmazonFrontReader
   /** WP398（docs/106 §13 A8）：Amazon 词库（托管实例没有）。 */
   amazonKeywords?: AmazonKeywordBank
+  /** WP420（自查 B4 / B9）：有人担亚马逊店铺运营就种一条每周体检的自动化任务（只种一次）。 */
+  amazonWeekly?: () => Promise<unknown>
   /**
    * WP402（决策 1140 / 1146）：Amazon 走你自己的浏览器（取数链第 3 条路）的同意与每家每天一次（同意卡、设置里撤回）。
    * 托管实例没有。
@@ -351,11 +366,18 @@ export interface BrandModuleSet {
    */
   redditWrites: RedditWriteService
   /**
+   * WP414（10-19 更正）：「不要 / 稍后」给了理由之后，按理由逐张判同类卡用的那一份模型
+   * （这个品牌真在用的默认模型；stub / 没配回 `undefined`，走剧本）。
+   */
+  reasonComplete?: () => ReasonComplete | undefined
+  /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
   economics: EconomicsService
   /** WP224（docs/91 §2.2 #1）：这个品牌的经营一页纸（秘书每周推给老板；WP388 默认周一 16:30 出上一周）。 */
   weeklyReview: WeeklyReviewService
+  /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常提醒。 */
+  storeDigest?: StoreDigest
   /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
   lineCompareSnapshot(): Promise<{ rows: number; date: string }>
   work: Work

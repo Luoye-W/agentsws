@@ -137,9 +137,12 @@ describe('WP396 「Listing 体检」块', () => {
     fireEvent.click((await screen.findAllByTestId('alst-asin'))[0] as HTMLElement)
     const card = screen.getByTestId('alst-card')
     expect(screen.getAllByTestId('alst-issue')).toHaveLength(3)
+    // WP420（自查 U21）：出处收进问号 / 链接图标的提示里；「现在 → 建议」一行
     const sources = screen.getAllByTestId('alst-source')
-    expect(sources[0]?.textContent).toContain('通行做法')
+    expect(sources[0]?.getAttribute('aria-label')).toContain('通行做法')
     expect(sources[1]?.getAttribute('href')).toMatch(/^https:\/\/sellercentral/)
+    expect(screen.getAllByTestId('alst-now-fix')[0]?.textContent).toContain('→')
+    expect(screen.getAllByTestId('alst-design')).toHaveLength(1)
     expect(screen.getAllByTestId('alst-stale')).toHaveLength(1)
     expect(screen.getByTestId('alst-stale').textContent).toBe('这条规则可能过时')
     expect(screen.getByTestId('alst-draft').textContent).toContain('Nordvik Granite Wallet for Men')

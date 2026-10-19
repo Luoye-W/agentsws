@@ -10,6 +10,12 @@ import type {
 } from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
+import {
+  type CardFollowResult,
+  FOLLOW_LIMIT,
+  followDecision,
+  followReason,
+} from '../card-follow.js'
 import { ApiError, normalizeError } from '../errors.js'
 import {
   assignmentOf,
@@ -94,6 +100,15 @@ const DecideBody = z.object({
    * `409 similar_exists`；"我这个不一样，仍新建"要写一句为什么。
    */
   duplicate_ack: DuplicateAck.optional(),
+})
+
+/** WP414：撤回跟着处理的那几张（id 由工作台那条「另外 N 张也一并…」带回来）。 */
+const FollowUndoBody = z.object({ ids: z.array(z.string().min(1)).min(1).max(FOLLOW_LIMIT) })
+
+/** WP414：事后补理由（快捷理由 chip 或一句话）；`follower_ids` = 跟着处理的那几张一起补。 */
+const ReasonBody = z.object({
+  reason: z.string().trim().min(1).max(300),
+  follower_ids: z.array(z.string().min(1)).max(FOLLOW_LIMIT).optional(),
 })
 
 const KINDS = [
@@ -536,11 +551,18 @@ export function approvalRoutes(): Route[] {
         assignmentOf(c)
         const input = await body(c, BatchDecideBody)
         const entries: { id: string; decision_token: string }[] = []
+        // WP415：没接通的卡在批量里也批不了（单张照实回一条错，别的照常）
+        const notWired: string[] = []
+        const approving = input.action === 'approve' || input.action === 'approve_edited'
         for (const e of input.entries) {
           const item = await mustGet(deps, e.id, p.workspace_id)
           const token = e.decision_token ?? tokenFor(item, p.person_id)
           if (token === undefined)
             throw new ApiError('forbidden', `没有属于本人的 decision_token：${e.id}`)
+          if (approving && deps.executionWiring?.(item)?.state === 'not_wired') {
+            notWired.push(e.id)
+            continue
+          }
           entries.push({ id: e.id, decision_token: token })
         }
         const rest: Omit<DecideInput, 'decision_token' | 'via'> = {
@@ -550,7 +572,17 @@ export function approvalRoutes(): Route[] {
           ...optional(input.redirect_to, 'redirect_to'),
           ...optional(input.defer_until, 'defer_until'),
         }
-        const results = await deps.approvals.decideBatch(entries, p.person_id, rest)
+        const decided = await deps.approvals.decideBatch(entries, p.person_id, rest)
+        const results = [
+          ...decided,
+          ...notWired.map((id) => ({
+            id,
+            item: undefined,
+            error: new ApiError('conflict', '这一步还没接通：批了也不会真去做', {
+              details: { reason: 'NOT_WIRED' },
+            }) as unknown,
+          })),
+        ]
         return ok(c, {
           results: results.map((r) => {
             const err = r.error === undefined ? undefined : normalizeError(r.error)
@@ -574,13 +606,18 @@ export function approvalRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
-        returns: 'ApprovalItem',
+        returns: 'ApprovalItem & { execution_wiring? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
         assignmentOf(c)
         const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
-        return ok(c, redactItem(item, p.person_id))
+        // WP415（只加）：这张卡这一步接没接通——单卡页（通知里点进来的那一页）也照实标
+        const wiring = deps.executionWiring?.(item)
+        return ok(c, {
+          ...redactItem(item, p.person_id),
+          ...(wiring === undefined ? {} : { execution_wiring: wiring }),
+        })
       },
     ),
     route(
@@ -696,6 +733,8 @@ export function approvalRoutes(): Route[] {
             now: deps.clock.now(),
             position_id: c.req.header('X-Assignment') ?? '',
             ...(deps.workstation === undefined ? {} : { label: (r) => deps.workstation?.label(r) }),
+            // WP415：没接通的卡批不了（与牌堆上不出「通过」同一把尺子）
+            ...(deps.executionWiring === undefined ? {} : { wiring: deps.executionWiring }),
           })
           try {
             resolved = resolveDecision(
@@ -721,6 +760,14 @@ export function approvalRoutes(): Route[] {
             ...optional(input.edited_payload, 'edited_payload'),
             ...optional(input.defer_until, 'defer_until'),
           }
+          // WP415：绕过卡片动词直接批也不行——没接通的卡批了不会真去做
+          if (
+            (resolved.action === 'approve' || resolved.action === 'approve_edited') &&
+            deps.executionWiring?.(item)?.state === 'not_wired'
+          )
+            throw new ApiError('conflict', '这一步还没接通：批了也不会真去做', {
+              details: { reason: 'NOT_WIRED' },
+            })
         }
 
         /**
@@ -760,6 +807,22 @@ export function approvalRoutes(): Route[] {
                 assignment_id: assignmentOf(c).id,
                 guard: ruleGuard,
               })
+        // WP421：「改一下」（这一条）→ 服务端起草的卡按指导重写、出新卡（不归它管的回 undefined，界面照旧）
+        const redraft =
+          resolved.instruction_scope === 'single_reply' &&
+          input.instruction !== undefined &&
+          deps.redraft !== undefined
+            ? await deps
+                .redraft({
+                  item: out,
+                  text: input.instruction.text,
+                  person_id: p.person_id,
+                  assignment_id: assignmentOf(c).id,
+                })
+                .catch((e: unknown) => ({
+                  message: `没重写成：${e instanceof Error ? e.message : String(e)}`,
+                }))
+            : undefined
         // 37 §4.1：认领卡接下来才形成责任（31 I13）——建一条挂在会议事项上的待办
         let claimed: Todo | undefined
         if (
@@ -775,13 +838,156 @@ export function approvalRoutes(): Route[] {
             out,
           )) as Todo | undefined
         }
+        /*
+         * WP414：同类卡跟着这一下——只跟工作台里人亲手点的「不要 / 稍后 / 通过」（指导、选择题、
+         * 卡片回调都不跟）。「不要 / 稍后」**给了理由才跟**（AI 按理由逐张判、照办并记账）；
+         * 「通过」只把同类列回去，绝不自动发。
+         */
+        let follow: CardFollowResult | undefined
+        if (
+          via === 'workstation' &&
+          input.instruction === undefined &&
+          input.selected_option_id === undefined &&
+          (deckAction === 'reject' || deckAction === 'snooze' || deckAction === 'approve')
+        ) {
+          try {
+            follow = await followDecision(deps, {
+              item: out,
+              person_id: p.person_id,
+              assignment_id: assignment.id,
+              action: deckAction,
+              ...optional(input.reason, 'reason'),
+              trace_id: c.get('rctx').trace_id,
+            })
+          } catch {
+            // 跟随是锦上添花：找同类出错不影响这一次决定
+            follow = undefined
+          }
+        }
         return ok(c, {
           ...redactItem(out, p.person_id),
+          ...optional(follow, 'follow'),
           // 指导的作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更）；
           // v1 只原样回给调用方，路由到 24 / 05 的机器留给后续 WP（见交付报告）。
           ...optional(resolved.instruction_scope, 'instruction_scope'),
           ...optional(landed, 'instruction_proposal'),
           ...optional(claimed, 'todo'),
+          ...optional(redraft, 'redraft'),
+        })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/approvals/:id/follow/undo',
+        operationId: 'undoApprovalFollow',
+        summary: 'WP414：撤回「跟着这张卡一并处理」的那几张（放回待处理）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: DECIDE,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '人亲手点的那张（带头的）' },
+        ],
+        body: FollowUndoBody,
+        returns: '{ restored: ApprovalItem[], skipped: string[] }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const leader = param(c, 'id')
+        await mustGet(deps, leader, p.workspace_id)
+        const input = await body(c, FollowUndoBody)
+        const reopen = deps.approvals.reopen
+        if (reopen === undefined) throw new ApiError('not_implemented', '这里撤不回来')
+        const restored: ApprovalItem[] = []
+        const skipped: string[] = []
+        for (const id of new Set(input.ids)) {
+          const item = await deps.approvals.get(id)
+          // 只认「跟着这张、由本人那一下带动」的；别的（自己点的、别人点的、已经撤过的）一律跳过
+          if (
+            item === undefined ||
+            item.workspace_id !== p.workspace_id ||
+            item.decision?.followed?.leader_id !== leader ||
+            item.decision.by !== p.person_id
+          ) {
+            skipped.push(id)
+            continue
+          }
+          const back = await reopen.call(deps.approvals, id, p.person_id, {
+            reason: '撤回「跟着处理」',
+          })
+          if (back === undefined) skipped.push(id)
+          else restored.push(redactItem(back, p.person_id))
+        }
+        return ok(c, { restored, skipped })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/approvals/:id/reason',
+        operationId: 'addApprovalReason',
+        summary:
+          'WP414：决定之后补一句理由（「不要 / 稍后」理由可选；第一次补理由时按这条理由找同类一并处理，已跟着处理的那几张一起补）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: DECIDE,
+        params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
+        body: ReasonBody,
+        returns: '{ item: ApprovalItem, followers: number, follow?: CardFollowResult }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const assignment = assignmentOf(c)
+        const id = param(c, 'id')
+        await mustGet(deps, id, p.workspace_id)
+        const input = await body(c, ReasonBody)
+        const annotate = deps.approvals.annotate
+        if (annotate === undefined) throw new ApiError('not_implemented', '这里补不了理由')
+        const out = await annotate.call(deps.approvals, id, p.person_id, { reason: input.reason })
+        if (out === undefined) throw new ApiError('conflict', '这张卡还没定，补不了理由')
+        let followers = 0
+        for (const fid of new Set(input.follower_ids ?? [])) {
+          const f = await deps.approvals.get(fid)
+          if (
+            f === undefined ||
+            f.workspace_id !== p.workspace_id ||
+            f.decision?.followed?.leader_id !== id ||
+            f.decision.by !== p.person_id
+          )
+            continue
+          const done = await annotate.call(deps.approvals, fid, p.person_id, {
+            reason: followReason(out.title, input.reason),
+          })
+          if (done !== undefined) followers += 1
+        }
+        /*
+         * WP414（10-19 更正）：理由是事后补的——补的那一刻才去找同类（按这条理由，AI 逐张判）。
+         * 已经跟着处理过（带了 follower_ids）就不再找第二遍。
+         */
+        let follow: CardFollowResult | undefined
+        const action =
+          out.state === 'rejected' ? 'reject' : out.state === 'deferred' ? 'snooze' : undefined
+        if ((input.follower_ids ?? []).length === 0 && action !== undefined) {
+          try {
+            follow = await followDecision(deps, {
+              item: out,
+              person_id: p.person_id,
+              assignment_id: assignment.id,
+              action,
+              reason: input.reason,
+              trace_id: c.get('rctx').trace_id,
+            })
+          } catch {
+            follow = undefined
+          }
+        }
+        return ok(c, {
+          item: redactItem(out, p.person_id),
+          followers,
+          ...optional(follow, 'follow'),
         })
       },
     ),

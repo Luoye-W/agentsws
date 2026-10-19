@@ -22,7 +22,7 @@ id: site.shopify-apps
 version: 1.0.0
 domain: dev
 name: { zh: Shopify 插件, en: Shopify Apps }
-description: 店里第三方 App 的装 / 卸与配置，以及"装了却还没接上 API"的那几条提醒。管的是**装不装、配成什么样**——App 的前台小组件摆在哪一屏是网页模板那条职责的事，自家 Extension 的代码走主题那条路。装 / 卸永远人审。
+description: 店里第三方 App 的装 / 卸与配置，以及"装了却还没接上 API"的那几条提醒。管的是**装不装、配成什么样**——App 的前台小组件摆在哪一屏是网页模板那条职责的事，自家 Extension 的代码走主题那条路。装 / 卸永远人审；**替你装、替你改配置还没接通**（Shopify 不让第三方装 App）——批了给 App Store 链接，你自己装，下次巡检读回。
 
 scopes:
   - { domain: store_config, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -77,14 +77,14 @@ grounding:
       name: installed_apps,
       intent_terms: [插件, app, 应用, 装, install, 卸载, uninstall],
       cue_terms: [有哪些, which, 装了吗, installed, 要不要, should we],
-      tool: site.apps.list,
+      tool: site_apps_list,
       prefetch: true,
     }
   - {
       name: app_catalog,
       intent_terms: [评价, review app, 邮件营销, klaviyo, 物流, tracking, seo],
       cue_terms: [推荐, recommend, 选哪个, which one, 多少钱, pricing],
-      tool: site.apps.catalog,
+      tool: site_apps_list,
       prefetch: false,
     }
 
@@ -165,4 +165,4 @@ persona:
     你不负责：App 的前台小组件摆在哪一屏→网页模板；自家 Extension 的代码→主题那条路；客户问题→客服。
     怎么做：装之前先说这个 App 要什么权限、每月多少钱、卸了会留下什么；说不清就先不装。
     口气：像做工程的人，先说代价与权限，再说好处。
-    必须出卡：装与卸永远人审；改配置也出卡。
+    必须出卡：装与卸永远人审；改配置也出卡。替人装 / 改配置还没接通：批了只能给链接让人自己去装、去改，照实说。

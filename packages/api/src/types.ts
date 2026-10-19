@@ -15,6 +15,7 @@ import type {
   EffectiveAction,
   EventEnvelope,
   EventId,
+  ExecutionWiring,
   FactCard,
   GuardrailResult,
   Halt,
@@ -51,6 +52,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
+import type { ReasonJudgeInput, SimilarCard } from './card-follow.js'
 import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
 import type { AdCreativePort } from './routes/ad-creative.js'
@@ -868,6 +870,11 @@ export interface SchedulePort {
 export interface GatewayDeps {
   identity: IdentityService
   /**
+   * WP415（只加）：一张卡这一步接没接通（执行器登记表 × 运行形态）。卡片投影时问它：
+   * `not_wired` 的卡不出「通过」、决定时也批不了；`demo` 的卡标「演示」。不给 = 不标（老行为）。
+   */
+  executionWiring?: (item: ApprovalItem) => ExecutionWiring | undefined
+  /**
    * WP194（只加）：一次请求绑定好分配之后，路由在这个作用域里跑。宿主用它开一个
    * 「这一次算在谁头上」的作用域（本机公司成员 + 岗位），底下打云的客户端据此带归属头。
    * 不给 = 直接跑（老行为）。
@@ -889,6 +896,19 @@ export interface GatewayDeps {
   modules: ModulesPort
   approvals: ApprovalBus
   /**
+   * WP414（只加）：「发送 / 通过」之后问「要一起发吗」用——给一张刚批了的卡和同一个人、同一条职责的
+   * 待处理卡，回其中**像**的（宿主用现有的相似度工具算）。不给 = 不问（老行为）。
+   */
+  similarCards?(
+    leader: ApprovalItem,
+    pool: readonly ApprovalItem[],
+  ): SimilarCard[] | Promise<SimilarCard[]>
+  /**
+   * WP414（10-19 更正，只加）：「不要 / 稍后」**给了理由**之后，按这条理由逐张判候选卡是不是也属于这种情况
+   * （AI 判；词重合只做预筛），回判为是的（每张一句为什么）。不给 = 不跟随。
+   */
+  judgeByReason?(input: ReasonJudgeInput): Promise<SimilarCard[]>
+  /**
    * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板）。`POST /v1/approvals` 给了
    * `rule: 'scope_manager'` 却没给收件人时用它；没装配就照旧落在提的人自己身上。
    */
@@ -897,6 +917,17 @@ export interface GatewayDeps {
     role_id: RoleId
     proposer: PersonId
   }): Promise<Recipient>
+  /**
+   * WP421（只加）：卡上点了「改一下」（指导，作用域「这一条」）之后**按指导重写**。
+   * 不是 AI 跑出来的卡（B2B 询盘首回 / 报价单这类由服务端起草的）没有运行可以接着改——宿主在这里按卡的种类
+   * 重起草、出一张新卡。回新卡的 id；这种卡不归它管 / 重写不了回 `undefined`（界面照旧）。不给 = 老行为。
+   */
+  redraft?(input: {
+    item: ApprovalItem
+    text: string
+    person_id: PersonId
+    assignment_id: string
+  }): Promise<{ approval_item_id?: string; message: string } | undefined>
   changes: ChangesPort
   /**
    * WP95（36 §11，`docs/upstream/sidebar-compare.md` #11）：一条变更改了哪几个文件。

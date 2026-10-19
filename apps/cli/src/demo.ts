@@ -32,6 +32,7 @@ import type {
   SearchDataPort,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from '@agentsws/deck'
 import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import { contentHashOf } from '@agentsws/knowledge'
@@ -191,6 +192,11 @@ export interface DemoOptions {
    * 也用来一眼看出"第十二种排版出现了却没人给它样子"。
    */
   cardGallery?: boolean
+  /**
+   * WP415：执行兜底按哪种形态走。不给 = 演示（没有真执行器的卡标「演示」、批了走空桩）；
+   * `agentsws demo --execution live` 用演示数据看生产里的样子（没接通的卡标「还没接通」、批不了）。
+   */
+  execution?: 'live' | 'demo'
   /**
    * WP100：把"今天"定在哪一刻（毫秒）。**只给测试用**；不给就是启动的这一刻。
    *
@@ -1365,8 +1371,13 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'social.facebook',
     'social.instagram',
     'social.discord',
+    // WP419（自查 R14）：Reddit 官方版块也挂上——不然左栏没有「官方版块」，截图与人工验收都看不到它
+    'social.reddit',
     'pr.monitoring',
     'pr.reddit',
+    // WP421（自查 general）：新闻稿 / 外部论坛两条也挂上——只挂两条时「起草一篇新闻稿」被路由到信息监控
+    'pr.press',
+    'pr.forums',
     // WP75（57 §3）：投放挂一条 `ads.meta`，四条平台职责的面板骨架相同
     'ads.meta',
     // WP77（59 §3）：建站岗位四条（模板默认全勾；只挂一条时另三块面板看不见）
@@ -1375,7 +1386,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'site.shopify-email',
     'site.shopify-apps',
     // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
+    // WP421（自查 general UI #4）：页头写「5 条职责」、左栏只有 1 条——五条全挂（别的岗位下单时各有人接）
     'design.dtc',
+    'design.amazon',
+    'design.social',
+    'design.ads',
+    'design.exhibition',
     // WP171（docs/84）：B2B 岗位五条全挂（岗位页写「5 条职责」，左栏就得展开出 5 条）。
     // 四条的面板有演示数据（`apps/server/src/b2b.ts`）；第二批的平台运营那一条是空态——
     // 两种样子在 demo 里都看得见。
@@ -1453,6 +1469,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    */
   const cloud = cloudStandIn({
     clock: world.clock,
+    // WP418（自查 A6）：demo 的工坊账号带全套默认动作集（含 `store`），选主题卡上演得出「买高级主题」
+    linkScopes: DEFAULT_CLOUD_SCOPES,
     // WP390：工坊服务的服务方在 demo 里是替身，自己往前走（报价 → 接单 → 要材料 → 交付），等你的那几步停着
     services: {
       autopilot: true,
@@ -1527,6 +1545,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     clock: world.clock,
     random: world.random,
     mount,
+    ...(options.execution === undefined ? {} : { execution: options.execution }),
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
     // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）
     competitorOwnShop: async () => ({ connected: true, products: DEMO_OWN_PRODUCTS }),

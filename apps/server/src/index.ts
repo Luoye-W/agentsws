@@ -549,6 +549,8 @@ export async function main(): Promise<void> {
   try {
     server = await createServer({
       ...(dbDir === undefined ? {} : { dbDir }),
+      // WP415（决策 1236）：真用的服务进程——没有真执行器的卡照实说「还没接通」，绝不进内存空桩回成功
+      execution: 'live',
       // WP228：本机只读浏览器（Reddit「浏览器只读」那一路）只在真正的服务进程里装
       readonlyBrowser: {},
       // WP249：Reddit 官方号浏览器通道（每品牌一个独立目录；要用时才起）

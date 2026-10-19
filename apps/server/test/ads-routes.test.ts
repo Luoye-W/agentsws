@@ -259,11 +259,13 @@ describe('04 §5 ③ 额度内调整 L2、超了升 L1', () => {
     expect(item?.automation.mandate_check.caps_hit ?? []).not.toContain('max_daily_spend')
   })
 
-  it('改出价超 15% → 卡上记着 `max_bid_delta_pct`', async () => {
+  it('改出价还没接通（WP420 自查 A1）→ 不出卡，照实说自己去后台改', async () => {
     await seed()
     const out = await data<Staged>(await post('/v1/ads/campaigns/cmp_1/bid', { value: 2.6 }))
-    const item = await server.txn.approvals.get(out.approval_item_id ?? '')
-    expect(item?.automation.mandate_check.caps_hit ?? []).toContain('max_bid_delta_pct')
+    expect(out.staged).toBe(false)
+    expect(out.approval_item_id).toBeUndefined()
+    expect(out.message).toContain('还没接通')
+    expect(out.spend_gate?.cap).toBe(1000)
   })
 })
 
@@ -298,30 +300,17 @@ describe('04 §5 ④ 止损要名副其实', () => {
   })
 })
 
-describe('04 §5 ⑤ 广告文案里不许有承诺', () => {
-  it('效果保证 → **block**，不给"点一下就发出去"的路径', async () => {
+describe('换素材还没接通（WP420 自查 A2）', () => {
+  it('不出卡，照实说走「改广告」那条路（文案承诺扫描在上传表那条路上）', async () => {
     await seed()
-    const out = await data<Staged>(
-      await post('/v1/ads/ads/ad_1/creative', { primary_text: '投了就保证出单，无效退款。' }),
-    )
-    expect(out.staged).toBe(false)
-    expect(out.message).toContain('ad_copy_commitment')
-  })
-
-  it('极限词（广告法第九条）→ block', async () => {
-    await seed()
-    const out = await data<Staged>(
-      await post('/v1/ads/ads/ad_1/creative', { headline: '全网最低价' }),
-    )
-    expect(out.staged).toBe(false)
-  })
-
-  it('干净的新文案照常提上去', async () => {
-    await seed()
-    const out = await data<Staged>(
-      await post('/v1/ads/ads/ad_1/creative', { primary_text: '三档可调，桌面一次收齐。' }),
-    )
-    expect(out.staged).toBe(true)
+    for (const body of [
+      { primary_text: '投了就保证出单，无效退款。' },
+      { primary_text: '三档可调，桌面一次收齐。' },
+    ]) {
+      const out = await data<Staged>(await post('/v1/ads/ads/ad_1/creative', body))
+      expect(out.staged).toBe(false)
+      expect(out.message).toContain('改广告')
+    }
   })
 })
 
@@ -341,5 +330,28 @@ describe('每张卡上都有总闸剩余（04 §5）', () => {
       if (out.approval_item_id !== undefined)
         expect((await server.txn.approvals.get(out.approval_item_id))?.summary).toContain('总闸')
     }
+  })
+})
+
+describe('投放看板（WP420 自查 A6 / A8）', () => {
+  it('今天花了多少、总闸还剩多少、ROAS、今天止损几条、广告系列表——从广告库直接算', async () => {
+    await seed({ spend: 300, roas: 2, dailyBudget: 1000 })
+    const res = await api('/v1/ads/overview')
+    expect(res.status).toBe(200)
+    const v = await data<{
+      spend_today?: number
+      roas_today?: number
+      currency?: string
+      stop_losses_today: number
+      spend_gate: { remaining: number; cap: number }
+      campaigns: { name: string; spend?: number }[]
+      data?: { plugin: string }
+    }>(res)
+    expect(v.spend_today).toBe(300)
+    expect(v.roas_today).toBe(2)
+    expect(v.currency).toBe('CNY')
+    expect(v.stop_losses_today).toBe(0)
+    expect(v.spend_gate.cap).toBe(1000)
+    expect(v.campaigns).toEqual([expect.objectContaining({ name: '九月桌面收纳', spend: 300 })])
   })
 })

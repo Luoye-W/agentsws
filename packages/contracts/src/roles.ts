@@ -356,15 +356,18 @@ export interface RoleDefinition {
  * WP360：职责拿插件做的事（一样一个词，界面按它说人话）。
  * - `reddit`：读 Reddit（巡查收件箱 / 版块）、把批过的回复填进页面；
  * - `kol`：在 YouTube / Instagram / TikTok 页面上看红人、收进红人库；
- * - `google_ads` / `meta_ads`：在自己的广告后台里执行批过的动作、导数据。
+ * - `google_ads` / `meta_ads`：在自己的广告后台里执行批过的动作、导数据；
+ * - `social`：WP419，到点打开你登录着的社媒发帖页（能预填就预填）、人点发布。
  */
-export type BrowserExtensionUse = 'reddit' | 'kol' | 'google_ads' | 'meta_ads'
+export type BrowserExtensionUse = 'reddit' | 'kol' | 'google_ads' | 'meta_ads' | 'social'
 
 export const BROWSER_EXTENSION_USES: readonly BrowserExtensionUse[] = [
   'reddit',
   'kol',
   'google_ads',
   'meta_ads',
+  // WP419（决策 1231）：社媒发帖——到点打开你登录着的发帖页、人点发布（不用开发者应用）
+  'social',
 ]
 
 /**
@@ -378,6 +381,7 @@ export const EXTENSION_USE_FOLLOW: Readonly<
   kol: {},
   google_ads: { step: 'google_ads', plan: 'ads.accounts' },
   meta_ads: { step: 'meta_ads', plan: 'ads.accounts' },
+  social: {},
 }
 
 /**

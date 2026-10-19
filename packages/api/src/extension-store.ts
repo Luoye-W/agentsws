@@ -34,6 +34,8 @@ export const EXTENSION_SCOPES = [
   'reddit.read',
   // WP329：领 Reddit 的写活（把批过的草稿填进页面、人点发送、回报读回）。老令牌没有，要用就重新配一次对
   'reddit.write',
+  // WP419（决策 1231）：社媒发帖交给人时，在侧边栏里回「发好了 / 不发了」。老令牌没有，要用就重新配一次对
+  'social.post',
 ] as const
 
 export type ExtensionScope = (typeof EXTENSION_SCOPES)[number]

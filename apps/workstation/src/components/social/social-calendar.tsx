@@ -32,6 +32,8 @@ import { SafetyNote } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
 import { createSocialPost, getSocialAccounts, type SocialChannelId } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { canRegisterAccount, SocialAccountRegister } from './social-account-register'
+import { SocialMediaPick } from './social-media-pick'
 
 const DAY_MS = 86_400_000
 
@@ -75,6 +77,8 @@ export function SocialCalendar({
   const [composing, setComposing] = useState<string | undefined>(undefined)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState<string | undefined>(undefined)
+  // WP419（自查 S4）：带素材库里的图
+  const [media, setMedia] = useState<string[]>([])
 
   const anchor = new Date(Date.now() + offset * 7 * DAY_MS)
 
@@ -87,12 +91,19 @@ export function SocialCalendar({
   const compose = useMutation({
     mutationFn: (input: { account_id: string; at: string }) =>
       createSocialPost(
-        { account_id: input.account_id, kind: 'post', body: draft, scheduled_at: input.at },
+        {
+          account_id: input.account_id,
+          kind: media.length === 0 ? 'post' : 'image',
+          body: draft,
+          scheduled_at: input.at,
+          ...(media.length === 0 ? {} : { media_refs: media }),
+        },
         assignment,
       ),
     onSuccess: (res) => {
       setComposing(undefined)
       setDraft('')
+      setMedia([])
       setNote(
         res.conflicts.length > 0
           ? `${t('social.calendar.staged')} ${res.conflicts.join(' ')}`
@@ -107,6 +118,17 @@ export function SocialCalendar({
    * 36 §3：没有号就说没有号，不画一张空日历让人以为是自己没排。
    * WP238（36 §7）：而且不再占一张大卡——一行灰字 + 一个去处按钮。
    */
+  // WP419（决策 1231）：内容账号组没登记号 → 就地贴主页链接登记（不用开发者应用）
+  if (accounts.isSuccess && accountRows.length === 0 && canRegisterAccount(channel))
+    return (
+      <div className="flex flex-col gap-1.5" data-testid="social-calendar-no-account">
+        <p className="flex items-center gap-1.5 text-[13px] text-ws-muted-fg">
+          <CalendarDays className="size-4" aria-hidden />
+          {t('social.calendar.no_account')}
+        </p>
+        <SocialAccountRegister channel={channel} assignment={assignment} />
+      </div>
+    )
   if (accounts.isSuccess && accountRows.length === 0)
     return (
       <EmptyLine
@@ -188,6 +210,7 @@ export function SocialCalendar({
                 setDraft(e.target.value)
               }}
             />
+            <SocialMediaPick channel={channel} picked={media} onChange={setMedia} />
             <div className="flex items-center gap-2">
               <Button
                 size="sm"

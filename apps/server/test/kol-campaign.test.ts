@@ -403,9 +403,15 @@ describe('WP68 campaign 向导：不并集权限（05 §4）', () => {
 describe('WP68 序列跟进：定时提，不是定时发', () => {
   it('首封之后第 3 天提跟进那一封；没到时候不提；每一封仍走 guardrail', async () => {
     const id = await creatorWithEmail('Gadget Jonas')
-    // 先建一条合作（阶段 sourced），首封提上去之后它变成"已建联"
+    // 先建一条合作（阶段 sourced），首封**真发出去**之后它变成"已建联"（WP416：提卡不算）
     await post('/v1/kol/collaborations', { creator_id: id, channel: 'youtube' })
-    const first = await data<{ staged: boolean }>(
+    const brandNow = await server.brands.forWorkspace(server.bootstrap.workspace.id)
+    const row = brandNow.kol.collaborations()[0]
+    if (row !== undefined) {
+      const { awaiting_approval: _a, ...rest } = row
+      brandNow.kol.saveCollaboration({ ...rest, stage: 'contacted' })
+    }
+    const first = await data<{ staged: boolean; change_id?: string }>(
       await post('/v1/kol/outreach', {
         creator_id: id,
         channel: 'youtube',
@@ -414,6 +420,19 @@ describe('WP68 序列跟进：定时提，不是定时发', () => {
       }),
     )
     expect(first.staged).toBe(true)
+    // WP416：跟进只跟真发出去的——这里直接记一条「发出去了」的往来（真发那一跳见 wp416-kol-mail.test.ts）
+    brandNow.kol.saveExchange({
+      id: 'xch_first',
+      creator_id: id,
+      ...(row === undefined ? {} : { collaboration_id: row.id }),
+      channel: 'youtube',
+      direction: 'out',
+      subject: '首封',
+      body: '',
+      at: clock.now(),
+      step: 'first',
+      ...(first.change_id === undefined ? {} : { change_id: first.change_id }),
+    })
 
     const brand = await server.brands.forWorkspace(server.bootstrap.workspace.id)
     // 当天：还没到时候

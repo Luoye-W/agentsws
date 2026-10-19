@@ -99,6 +99,6 @@ describe('describeRun（三个运行时同一份拼法）', () => {
     ).toBe('这次没跑完：模型不可用。')
     expect(
       describeRun({ readTools: [], drafted: false, reply: '好的', exhausted: 'max_tool_calls' }),
-    ).toContain('预算不够')
+    ).toContain('查的次数到上限了')
   })
 })
