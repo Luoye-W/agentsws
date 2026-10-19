@@ -926,6 +926,9 @@ importers:
       '@240xu/dsh-websearch':
         specifier: 2.8.3
         version: 2.8.3(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-credentials@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-launch-environment@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-settings@0.2.1-rc.2(f19463d923a7a6aadc4d6ed675af1c31))(@deepseek-ai/dsh-web@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/schemastery@3.18.5)
+      '@agentsws/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
