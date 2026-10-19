@@ -117,6 +117,7 @@ import {
   sleep,
   systemClock,
 } from './node-runtime.js'
+import { notificationPathOf } from './notify-path.js'
 import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile, workstationDir } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
@@ -947,11 +948,23 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false
     if (!Notification.isSupported()) return false
-    const input = raw as { title?: unknown; body?: unknown } | null
+    const input = raw as { title?: unknown; body?: unknown; path?: unknown } | null
     const title = typeof input?.title === 'string' ? input.title : ''
     if (title === '') return false
     const body = typeof input?.body === 'string' ? input.body : undefined
-    new Notification({ title, ...(body === undefined ? {} : { body }) }).show()
+    const path = notificationPathOf(input?.path)
+    const note = new Notification({ title, ...(body === undefined ? {} : { body }) })
+    // WP429：点了通知 → 主窗口叫到前面，地址交回页面（页面自己跳；窗口没了就不管）
+    if (path !== undefined)
+      note.on('click', () => {
+        const win = window
+        if (win === undefined || win.isDestroyed()) return
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        win.webContents.send(BRIDGE_CHANNELS.notifyClicked, path)
+      })
+    note.show()
     return true
   })
   ipcMain.handle(BRIDGE_CHANNELS.openExternal, async (event, raw: unknown) => {

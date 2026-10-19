@@ -31,6 +31,7 @@ import {
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
@@ -197,6 +198,8 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
           }}
         />
       ))}
+      {/* WP429：通知铃铛——排在露出来的工具（浏览器、变更审阅）之后、「⋮」之前 */}
+      <NotificationBell />
       <div ref={box} className="relative">
         <button
           type="button"

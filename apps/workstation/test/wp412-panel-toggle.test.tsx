@@ -141,14 +141,20 @@ afterEach(() => {
 })
 
 describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
-  it('从左到右：浏览器、变更审阅、「⋮」、面板开关；「⋮」里是设定那几格 + 教程，点「⋮」不开关面板', async () => {
+  it('从左到右：浏览器、变更审阅、通知铃铛（WP429）、「⋮」、面板开关；「⋮」里是设定那几格 + 教程，点「⋮」不开关面板', async () => {
     renderRail('/')
     const bar = screen.getByTestId('right-rail')
     expect(
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow', 'rail-toggle'])
+    ).toEqual([
+      'rail-icon-browser',
+      'rail-icon-changes',
+      'notify-bell',
+      'rail-overflow',
+      'rail-toggle',
+    ])
     expect(panelOpen()).toBe(false)
     const more = screen.getByTestId('rail-overflow')
     expect(more.getAttribute('aria-haspopup')).toBe('menu')

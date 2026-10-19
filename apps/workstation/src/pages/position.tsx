@@ -27,11 +27,9 @@ import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
-import { ModeNotice } from '@/components/company/company-mode'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
 import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
-import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
@@ -354,16 +352,7 @@ export function PositionPage(): React.ReactNode {
       <RedditWatchAlertNotice duties={duties} />
       {/* WP317（决策 629）：投放岗位上素材流水线的快捷入口（点进 Google / Meta 职责页那一块） */}
       <AdCreativeEntry duties={duties} />
-      {/*
-        WP277：只有一个岗位的人首页就是这一页（WP69）——首页那几行通知（交接结果、上级派活、
-        改回同事互联）在这里也出，不然他永远看不到。两个及以上岗位的人在首页看。
-      */}
-      {mine.data?.instances?.length === 1 ? (
-        <>
-          <HandoffNotices />
-          <ModeNotice />
-        </>
-      ) : null}
+      {/* WP429：交接结果、上级派活、改回同事互联都进顶栏铃铛（站内通知），这一页不再单出一行 */}
 
       {tab === 'settings' ? (
         <PositionSettings id={id} view={view} />

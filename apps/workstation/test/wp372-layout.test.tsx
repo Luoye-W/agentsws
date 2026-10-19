@@ -289,6 +289,8 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
     expect(icons).toEqual([
       'rail-icon-browser',
       'rail-icon-changes',
+      // WP429：通知铃铛在变更审阅之后、「⋮」之前
+      'notify-bell',
       'rail-overflow',
       'rail-toggle',
     ])

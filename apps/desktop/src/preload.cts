@@ -24,6 +24,7 @@ const { contextBridge, ipcRenderer } = electron
 const CHANNELS = {
   info: 'agentsws:bridge-info',
   notify: 'agentsws:notify',
+  notifyClicked: 'agentsws:notify-clicked',
   openExternal: 'agentsws:open-external',
   openScene: 'agentsws:open-scene',
   updateStatus: 'agentsws:update-status',
@@ -54,7 +55,18 @@ const bridge: DesktopBridge = {
     ipcRenderer.invoke(CHANNELS.notify, {
       title: input.title,
       body: input.body,
+      path: input.path,
     }) as Promise<boolean>,
+  // WP429：点了系统通知 → 页面跳到那一页（只转一个地址字符串）
+  onNotificationClick: (listener: (path: string) => void): (() => void) => {
+    const handler = (_event: unknown, path: unknown): void => {
+      if (typeof path === 'string') listener(path)
+    }
+    ipcRenderer.on(CHANNELS.notifyClicked, handler)
+    return () => {
+      ipcRenderer.removeListener(CHANNELS.notifyClicked, handler)
+    }
+  },
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<boolean>,
   // WP184：场景名与「要不要重启」两样，网址由主进程自己去拿

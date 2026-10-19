@@ -51,6 +51,8 @@ describe('bridge-types', () => {
     expect(BRIDGE_CHANNELS).toEqual({
       info: 'agentsws:bridge-info',
       notify: 'agentsws:notify',
+      // WP429：点了系统通知把地址交回页面
+      notifyClicked: 'agentsws:notify-clicked',
       openExternal: 'agentsws:open-external',
       openScene: 'agentsws:open-scene',
       updateStatus: 'agentsws:update-status',
