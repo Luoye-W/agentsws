@@ -38,6 +38,7 @@ import type {
   OnboardingPositionView,
   OnboardingSkillItem,
   OnboardingStateView,
+  TeamLinkView,
   WorkspaceProfileInput,
   WorkspaceProfileView,
 } from '@agentsws/api'
@@ -401,8 +402,25 @@ export interface OnboardingOptions {
   ): { id: string; label: string }[] | Promise<{ id: string; label: string }[]>
   /** 给了就落盘（`onboarding.sqlite`）；不给就纯内存。 */
   dbDir?: string
-  /** 服务进程监听的端口（局域网广播要报它）。 */
+  /**
+   * 局域网广播报的端口。WP427 起报的是「团队门」那个端口（服务进程本身只听 127.0.0.1，
+   * 同伴连不上）；门没开就是 undefined。
+   */
   port?: () => number | undefined
+  /**
+   * WP427：同事怎么连进来（团队通道）。三样都是懒取——团队通道在服务进程 listen 之后才起来。
+   */
+  team?: {
+    status(): TeamLinkView | undefined
+    /** 本机、局域网都找不到的码：问工坊云。 */
+    resolveCode(code: string): Promise<string | undefined>
+    /** 新发了一个码：登记到云上。 */
+    onInviteCreated(code: string, expires_at: string): void
+    /** 给某个人签一张一次性登录（申请人拿票来换）。 */
+    issueLogin(person_id: PersonId): Promise<{ token: string; expires_at: string } | undefined>
+    /** 开关 / 人数变了：团队通道按新情况开或关。 */
+    changed?(): void
+  }
   /** 测试注入的假 mDNS；不给就用 `bonjour-service`。 */
   mdns?: MdnsFactory
   /**
@@ -764,6 +782,25 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(options.join === undefined ? {} : { join: options.join }),
     ...(options.mode === undefined ? {} : { mode: options.mode }),
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
+    ...(options.team === undefined
+      ? {}
+      : {
+          resolveCode: (code: string) =>
+            options.team?.resolveCode(code) ?? Promise.resolve(undefined),
+          onInviteCreated: (code: string, expires_at: string) => {
+            options.team?.onInviteCreated(code, expires_at)
+          },
+          issueLogin: (person_id: PersonId) =>
+            options.team?.issueLogin(person_id) ?? Promise.resolve(undefined),
+        }),
+    selfLabel: async () => (await label()).text,
+    // 测试注入了「问同伴你是谁」就用同一个（不真去敲地址）
+    ...(options.helloFetch === undefined
+      ? {}
+      : {
+          hello: (base: string) =>
+            options.helloFetch?.(`${base}/v1/discovery/hello`) ?? Promise.resolve(undefined),
+        }),
   })
 
   /**
@@ -1294,6 +1331,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // 名字改了 → 钥匙变了 → 重新广播（否则还在用旧钥匙找同事）
         discovery.refresh()
       }
+      // WP427：开关变了 → 团队通道跟着开 / 关
+      if (before !== next.discoverable) options.team?.changed?.()
       return viewOf(next, ws)
     },
 
@@ -1490,12 +1529,35 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return invites.request(input)
     },
 
-    decideRequest(actor, id, input): Promise<MembershipRequestView> {
-      return invites.decide(actor.person_id, id, input)
+    async decideRequest(actor, id, input): Promise<MembershipRequestView> {
+      const out = await invites.decide(actor.person_id, id, input)
+      // WP427：批进一个人 = 不再是 ①：团队通道要开着（哪怕开关后来关了）
+      if (out.status === 'approved') options.team?.changed?.()
+      return out
     },
 
     superseded(input) {
       return invites.supersede(input)
+    },
+
+    claim(id, input) {
+      return invites.claim(id, input)
+    },
+
+    teamLink(_actor) {
+      // 顺手对一遍（刚登录了工坊账号、刚换了网络：不用等每分钟那一下）
+      options.team?.changed?.()
+      const view = options.team?.status()
+      if (view === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
+      return view
+    },
+
+    joins(_actor) {
+      return invites.joins()
+    },
+
+    enterJoin(_actor, id) {
+      return invites.enter(id)
     },
   }
 

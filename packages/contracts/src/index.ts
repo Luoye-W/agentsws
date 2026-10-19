@@ -157,4 +157,6 @@ export * from './standby.js'
 // 67 §3 WP118：按月订阅的增值服务（一份引擎，红人是第一个实例，客服 WP124 在后）
 export * from './subscription.js'
 export * from './task-text.js'
+// WP427：团队通道（发起人电脑 ↔ 工坊云的长连接、邀请码登记与查找、申请人换登录）
+export * from './team-link.js'
 export * from './work.js'

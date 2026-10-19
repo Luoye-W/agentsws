@@ -196,6 +196,14 @@ vi.mock('@/lib/api', async () => {
     listMembers: async () => [member('per_wang', '王岚'), member('per_li', '李默')],
     listInvitations: async () => [],
     listInvites: async () => [INVITE],
+    // WP427：邀请链接用团队通道的地址开头（本机回环口发给同事没有用）
+    getTeamLink: async () => ({
+      open: true,
+      lan: { on: true },
+      cloud: { state: 'online', url: 'https://tabc.team.agentsws.com' },
+      invite_base: 'https://tabc.team.agentsws.com',
+    }),
+    listTeamJoins: async () => [],
     listMembershipRequests: async () => [REQUEST],
     listDiscoveryPeers: async () => ({ available: true, enabled: true, peers: [] }),
     getOnboardingState: async () => ({

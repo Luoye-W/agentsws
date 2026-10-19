@@ -577,6 +577,9 @@ const zh: Table = {
   'login.shared.code': '设置码',
   'login.shared.codeTip': '在服务日志里（docker compose logs server），用一次就换一个新的。',
   'login.shared.submit': '用设置码进入',
+  // WP427：经「团队门」从别的电脑打开时
+  'login.team':
+    '对方同意你的申请之后，在你自己的工坊里点「打开」就直接进来了；也可以用工坊账号登录。',
   'login.shared.colleague': '是同事？请工作区负责人在「公司 → 成员」里给你发一条邀请链接。',
   'login.account.open': '用工坊账号进入',
   'login.account.email': '工坊账号邮箱',
@@ -4936,6 +4939,8 @@ const en: Table = {
   'login.shared.codeTip':
     'Find it in the server log (docker compose logs server). Each code works once.',
   'login.shared.submit': 'Enter with setup code',
+  'login.team':
+    'Once they accept your request, click Open in your own Workshop to come straight in, or sign in with your Agents Workshop account.',
   'login.shared.colleague':
     'A colleague? Ask the workspace owner to send you an invite link from Company → Members.',
   'login.account.open': 'Use my Agents Workshop account',

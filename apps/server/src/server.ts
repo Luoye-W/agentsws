@@ -420,6 +420,7 @@ import {
 } from './cloud-account.js'
 import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
+import { CLOUD_STAND_IN_BASE_URL } from './cloud-stand-in.js'
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 // WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
 import {
@@ -925,6 +926,13 @@ import {
   needsSupportVoice,
   supportVoiceSection,
 } from './support-voice.js'
+import { createTeamLink, type TeamLink } from './team-link.js'
+import {
+  resolveTeamCode,
+  TEAM_TUNNEL_SECRET_ID,
+  type TunnelFetch,
+  type TunnelSocketFactory,
+} from './team-tunnel.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
 import {
@@ -1626,6 +1634,24 @@ export interface ServerOptions {
   discoveryPost?: (url: string, body: unknown) => Promise<{ ok: boolean; data?: unknown }>
   /** WP51：问同伴"你是谁"。 */
   discoveryHello?: (url: string) => Promise<DiscoveryHelloView | undefined>
+  /**
+   * WP427：团队通道（同事从别的电脑连进来）的注入点。生产一个都不传：局域网那扇门听所有网卡、
+   * 端口系统给；云那条路连 `AGENTSWS_TEAM_CLOUD_URL`（默认就是工坊云）、令牌用关联账号时签的那把。
+   * `false` = 整个不要（托管实例、只跑单测的服务）。
+   */
+  team?:
+    | false
+    | {
+        lanHost?: string
+        lanPort?: number
+        lanOff?: boolean
+        /** 云那条路的地址（不给按环境变量 / 默认云）。 */
+        cloudBase?: string
+        /** 云那条路的令牌（不给 = 读本机加密库里关联账号时签的那把）。 */
+        cloudToken?: () => string | undefined
+        fetch?: TunnelFetch
+        socketFactory?: TunnelSocketFactory
+      }
   /**
    * WP46：活数据源的刷新间隔（毫秒）。不传按 `AGENTSWS_LIVE_DATA_REFRESH_SECONDS`
    * / 默认 5 分钟；传 `0` = 不起后台定时器（测试与一次性任务）。
@@ -11178,6 +11204,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 三个取值函数是故意的——连接、技能、模型都是会在运行期变的，向导第 ④ 步那张
    * 清单必须现算，不能在装配那一刻定死（否则"去连"回来之后清单还说没连）。
    */
+  /** WP427：团队通道（局域网那扇门 + 经工坊云的长连接）。在 onboarding 之后装，这里先留个口。 */
+  let teamRef: TeamLink | undefined
+  // 托管实例（云上值守）没有同事连进来这回事；单测进程里没显式给就不开（不占测试端口段之外的端口）
+  const teamOptions =
+    options.team === false || hostedBoot !== undefined
+      ? undefined
+      : (options.team ?? (process.env.VITEST === undefined ? {} : undefined))
+  /** 云那条路的地址：`AGENTSWS_TEAM_CLOUD_URL` > 测试注入 > 工坊云。演示里的云替身不走（那是个不存在的域名）。 */
+  const teamCloudBase = ((): string | undefined => {
+    if (teamOptions === undefined) return undefined
+    const fromEnv = env.AGENTSWS_TEAM_CLOUD_URL?.trim()
+    const base = (
+      teamOptions.cloudBase ??
+      (fromEnv === undefined || fromEnv === '' ? undefined : fromEnv) ??
+      cloudBaseUrl(env)
+    ).replace(/\/+$/, '')
+    return base === CLOUD_STAND_IN_BASE_URL ? undefined : base
+  })()
   const onboarding = createOnboarding({
     // WP276：申请卡在 ① ② 说「想一起用」，同意后不出空的并进来对照卡
     mode: async () => (await modeOfWorkspace?.(workspace.id)) ?? 'company',
@@ -11289,7 +11333,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? list(boot.connections)
         : brandModules.forWorkspace(ws).then((b) => list(b.connections))
     },
-    port: () => boundPort,
+    // WP427：局域网广播报的是「团队门」那个端口（服务进程本身只听 127.0.0.1）
+    port: () => teamRef?.lanPort(),
+    ...(teamOptions === undefined
+      ? {}
+      : {
+          team: {
+            status: () => teamRef?.status(),
+            resolveCode: (code: string) =>
+              teamCloudBase === undefined
+                ? Promise.resolve(undefined)
+                : resolveTeamCode(teamCloudBase, code, teamOptions.fetch),
+            onInviteCreated: (code: string, expires_at: string) => {
+              teamRef?.registerCode(code, expires_at)
+            },
+            issueLogin: async (person_id: PersonId) => {
+              const who = await identity.getPerson(person_id)
+              if (who === undefined) return undefined
+              return identity.issueLogin(who.email)
+            },
+            changed: () => {
+              void teamRef?.sync()
+            },
+          },
+        }),
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
     ...(options.discoveryPost === undefined ? {} : { post: options.discoveryPost }),
@@ -11336,6 +11403,107 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （只补店主自己给自己建的、要范围却一条都没有的；跑过一次就不再跑）。
    */
   onboarding.backfillWizardRanges()
+
+  /*
+   * WP427：同事怎么连进来。打开「和同事一起用」或者这里不止一个人时才开：局域网那扇门（另一个端口，
+   * 只放申请 / 登录这几条，其余要会话）+ 经工坊云的长连接（不开端口、要工坊账号）。① 个人、没打开时
+   * 一下网络都不碰（WP422 的口径）。
+   */
+  const discoverableNow = (): boolean => {
+    const org = bootstrapOrg === undefined ? undefined : identity.getOrganization(bootstrapOrg)
+    return org?.discoverable === true
+  }
+  if (teamOptions !== undefined) {
+    const devToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
+    const memoryTunnel: { value?: import('@agentsws/contracts').TeamTunnelIssued | undefined } = {}
+    teamRef = createTeamLink({
+      wanted: async () => {
+        if (discoverableNow()) return true
+        const mode = await modeOfWorkspace?.(workspace.id)
+        return mode !== undefined && mode !== 'solo'
+      },
+      mainPort: () => boundPort,
+      authenticate: (token) => identity.authenticate(token),
+      cookieName: SESSION_COOKIE,
+      lan: {
+        ...(teamOptions.lanOff === true || env.AGENTSWS_TEAM_LAN === 'off' ? { off: true } : {}),
+        ...(teamOptions.lanHost === undefined ? {} : { host: teamOptions.lanHost }),
+        ...(() => {
+          const raw = teamOptions.lanPort ?? Number(env.AGENTSWS_TEAM_LAN_PORT ?? '0')
+          return Number.isInteger(raw) && raw > 0 && raw < 65536 ? { port: raw } : {}
+        })(),
+      },
+      ...(teamCloudBase === undefined
+        ? {}
+        : {
+            cloud: {
+              base: () => teamCloudBase,
+              token:
+                teamOptions.cloudToken ??
+                (() => {
+                  try {
+                    const linked = boot.secrets.available
+                      ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+                      : undefined
+                    if (linked !== undefined && linked !== '') return linked
+                  } catch {
+                    // 读不出来当没关联
+                  }
+                  // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认这个
+                  return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
+                    devToken !== undefined &&
+                    devToken !== ''
+                    ? devToken
+                    : undefined
+                }),
+              vault: {
+                get: () => {
+                  if (!boot.secrets.available) return memoryTunnel.value
+                  try {
+                    const f = boot.secrets.get(TEAM_TUNNEL_SECRET_ID)
+                    return f?.tunnel_id !== undefined &&
+                      f.url !== undefined &&
+                      f.secret !== undefined
+                      ? { tunnel_id: f.tunnel_id, url: f.url, secret: f.secret }
+                      : undefined
+                  } catch {
+                    return memoryTunnel.value
+                  }
+                },
+                set: (value) => {
+                  memoryTunnel.value = value
+                  if (!boot.secrets.available) return
+                  try {
+                    if (value === undefined) boot.secrets.remove(TEAM_TUNNEL_SECRET_ID)
+                    else
+                      boot.secrets.put(TEAM_TUNNEL_SECRET_ID, {
+                        tunnel_id: value.tunnel_id,
+                        url: value.url,
+                        secret: value.secret,
+                      })
+                  } catch {
+                    // 存不进加密库：这一次用内存那份，重启后重新申请
+                  }
+                },
+              },
+              ...(teamOptions.fetch === undefined ? {} : { fetch: teamOptions.fetch }),
+              ...(teamOptions.socketFactory === undefined
+                ? {}
+                : { socketFactory: teamOptions.socketFactory }),
+            },
+          }),
+      liveInvites: () =>
+        onboarding.invites.list().map((i) => ({ code: i.code, expires_at: i.expires_at })),
+      // 门换了端口：局域网广播用新端口重来一轮（开关开着才广播）
+      onLanChanged: () => {
+        if (discoverableNow()) onboarding.discovery.refresh()
+      },
+      onEvent: (e) => {
+        if (options.quiet !== true)
+          process.stderr.write(`[team] ${e.type}${e.detail === undefined ? '' : ` ${e.detail}`}\n`)
+      },
+    })
+  }
 
   /**
    * WP121（70 §3）：贴一个网址，自动分析出品牌档案。
@@ -11704,6 +11872,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onCompanyChanged: ({ by, discoverable, key_changed }) => {
       // WP251：公司页改了公司——各品牌档案里公司那几格的影子跟着刷（读一律读公司）
       onboardingRef?.syncCompanyShadows(workspace.id)
+      // WP427：团队通道跟着开 / 关（打开「和同事一起用」= 开门、拨云）
+      void teamRef?.sync()
       if (!discoverable) {
         onboarding.discovery.disable(by)
         return
@@ -15638,6 +15808,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let httpServer: ServerType | undefined
   let unmountWs: (() => Promise<void>) | undefined
   let closed = false
+  let teamTimer: ReturnType<typeof setInterval> | undefined
 
   const server: Server = {
     gateway,
@@ -15787,6 +15958,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       boundPort = bound
       const url = `http://${HOST}:${bound}`
       server.url = url
+      // WP427：端口有了——团队通道按现在的情况开（① 个人没打开就什么都不开）；之后每分钟对一遍
+      // （同事退出 / 被请离开、关联账号之后都靠这一下跟上）
+      await teamRef?.sync()
+      teamTimer = setInterval(() => {
+        void teamRef?.sync()
+      }, 60_000)
+      teamTimer.unref?.()
       if (options.quiet !== true) {
         // 开发期：健康检查地址与内部凭据只在 stdout 出现一次（21 §5：不进事件日志）。
         process.stdout.write(`agentsws server listening on ${url}\n`)
@@ -15802,6 +15980,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (closed) return
       closed = true
       for (const t of contentTimers) clearTimeout(t)
+      if (teamTimer !== undefined) clearInterval(teamTimer)
+      await teamRef?.close()
       // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写
       await background.settled()
       // WP322：后台还在认的表先认完（别在关库之后再写卡）

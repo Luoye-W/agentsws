@@ -79,7 +79,30 @@ export const PEERS_ZH: Record<string, string> = {
   'team.invite.copied': '已复制',
   // ── 「和同事一起用」（① 里的入口，决策 234 / 245）
   'together.entry': '和同事一起用',
-  'together.entry.hint': '打开后同一局域网的同事能找到你；发个邀请码，他申请、你同意就能一起用。',
+  'together.entry.hint':
+    '打开后同事能连到你这台电脑：同一个网络里直接找到你，不在同一个网络时经工坊云转过来（要登录工坊账号）。发个邀请码，他申请、你同意就能一起用。',
+  // WP427：同事怎么连进来
+  'team.link.lan.on': '同一个网络：已开',
+  'team.link.lan.off': '同一个网络：没开',
+  'team.link.cloud.online': '不在同一个网络：已开',
+  'team.link.cloud.needs_account': '不在同一个网络：要先登录工坊账号',
+  'team.link.cloud.connecting': '不在同一个网络：连接中',
+  'team.link.cloud.backoff': '不在同一个网络：没连上，稍后自动重试',
+  'team.link.cloud.off': '不在同一个网络：没开',
+  'team.link.login': '登录工坊账号',
+  'team.link.hint':
+    '同事用的数据都在你这台电脑上：你的电脑开着、工坊开着，同事才用得了。不在同一个网络时经工坊云转过来，不用开端口、不用装别的。',
+  'team.link.firewall':
+    'Windows 若问「是否允许访问网络」，点「允许」——同一个网络里的同事才连得上你。只问这一次。',
+  'team.joins.title': '我申请加入的',
+  'team.joins.pending': '等对方同意',
+  'team.joins.approved': '对方同意了',
+  'team.joins.rejected': '对方没同意',
+  'team.joins.superseded': '已失效',
+  'team.joins.left': '已退出',
+  'team.joins.unreachable': '对方的电脑这会儿连不上',
+  'team.joins.enter': '打开',
+  'team.joins.enter.hint': '在浏览器里打开对方的工坊，直接登录进去。',
   // ── 用邀请链接进来（两套邀请合一：链接就是带着码的申请）
   'joincode.title': '和同事一起用',
   'joincode.name': '你的称呼',
@@ -209,7 +232,29 @@ export const PEERS_EN: Record<string, string> = {
   'team.invite.copied': 'Copied',
   'together.entry': 'Use it with teammates',
   'together.entry.hint':
-    'Teammates on your local network can find you once this is on. Send an invite code; they ask, you say yes.',
+    'Once on, teammates can reach this computer: directly on the same network, or relayed through Agents Workshop cloud from elsewhere (needs your Workshop account). Send an invite code; they ask, you say yes.',
+  // WP427
+  'team.link.lan.on': 'Same network: on',
+  'team.link.lan.off': 'Same network: off',
+  'team.link.cloud.online': 'Other networks: on',
+  'team.link.cloud.needs_account': 'Other networks: sign in to your Agents Workshop account first',
+  'team.link.cloud.connecting': 'Other networks: connecting',
+  'team.link.cloud.backoff': 'Other networks: not connected, retrying shortly',
+  'team.link.cloud.off': 'Other networks: off',
+  'team.link.login': 'Sign in to Agents Workshop',
+  'team.link.hint':
+    'Teammates work on the data on this computer: keep it on and the Workshop running. From other networks their traffic is relayed through Agents Workshop cloud; no ports to open, nothing else to install.',
+  'team.link.firewall':
+    'If Windows asks whether to allow network access, click Allow so teammates on your network can reach you. It only asks once.',
+  'team.joins.title': 'Teams I asked to join',
+  'team.joins.pending': 'Waiting for them to accept',
+  'team.joins.approved': 'Accepted',
+  'team.joins.rejected': 'Not accepted',
+  'team.joins.superseded': 'No longer valid',
+  'team.joins.left': 'You left',
+  'team.joins.unreachable': 'Their computer is not reachable right now',
+  'team.joins.enter': 'Open',
+  'team.joins.enter.hint': 'Opens their Workshop in your browser, already signed in.',
   'joincode.title': 'Use it with your teammates',
   'joincode.name': 'Your name',
   'joincode.email': 'Email',
