@@ -187,6 +187,8 @@ export interface NotificationResolver {
   personName(id: PersonId): MaybeAsync<string | undefined>
   /** 整个品牌的事（连接、积分、模型登录）告诉谁：工作区所有者。 */
   owners(): MaybeAsync<PersonId[]>
+  /** 这个品牌里还在的人（整个团队都该知道的事：比如改回了同事互联）。 */
+  members?(): MaybeAsync<PersonId[]>
   /** 一张卡（审批到你 / 交给你 / 岗位更新）。 */
   approval?(id: string): MaybeAsync<ApprovalItem | undefined>
   /** 一件交接出去的事的标题与地址（事项 / 待办）。 */
@@ -293,6 +295,20 @@ export async function notificationsOfEvent(
     return []
   }
 
+  // WP277（决策 240）：老板把公司改回同事互联——同事们知道一声（原来是首页一行「知道了」）
+  if (e.type === 'organization.mode_changed' && p.mode === 'peers' && p.from === 'company') {
+    const by = e.actor.kind === 'person' ? e.actor.id : undefined
+    const who = await name(by)
+    const people = ((await ctx.members?.()) ?? []).filter((m) => m !== by)
+    return people.map((person_id) => ({
+      workspace_id: ws,
+      person_id,
+      category: 'team' as const,
+      text: `${who} 把这里改回了同事互联`,
+      key: `mode:${str(p.organization_id) ?? ws}`,
+    }))
+  }
+
   if (e.type === RELOGIN_NEEDED_EVENT) {
     const source = str(p.source_name) ?? str(p.source) ?? str(p.label) ?? str(p.name) ?? 'AI 订阅'
     const person = str(p.person_id) ?? (e.actor.kind === 'person' ? str(e.actor.id) : undefined)
@@ -318,8 +334,13 @@ export interface NotificationsOptions {
 }
 
 export interface NotificationsService {
-  /** 发一条（设置里关了这一类就不记，回 undefined）。 */
-  notify(input: NotificationInput): InboxNotification | undefined
+  /**
+   * 发一条（设置里关了这一类就不记，回 undefined）。`opts` 只给演示种子用（定时间、直接算已读）。
+   */
+  notify(
+    input: NotificationInput,
+    opts?: { at?: string; read?: boolean },
+  ): InboxNotification | undefined
   /** 这件事办完了：同键还没读的都收成已读（不给人 = 这个品牌里所有人的）。 */
   settle(ws: WorkspaceId, key: string, person?: PersonId): void
   list(actor: NotificationActor, query: { view: 'unread' | 'all'; limit: number }): NotificationList
@@ -390,13 +411,16 @@ export function createNotifications(options: NotificationsOptions): Notification
     backend.remove(drop.map((r) => r.id))
   }
 
-  const notify = (input: NotificationInput): InboxNotification | undefined => {
+  const notify = (
+    input: NotificationInput,
+    opts?: { at?: string; read?: boolean },
+  ): InboxNotification | undefined => {
     const text = input.text.trim()
     if (text === '') return undefined
     const prefs = prefsOf(input.workspace_id, input.person_id)[input.category]
     if (!prefs.inbox) return undefined
     maybePrune()
-    const at = now()
+    const at = opts?.at ?? now()
     const key = input.key ?? `once:${newId()}`
     const prev =
       input.key === undefined ? undefined : backend.byKey(input.workspace_id, input.person_id, key)
@@ -429,9 +453,10 @@ export function createNotifications(options: NotificationsOptions): Notification
             updated_at: at,
             system: prefs.system,
           }
-    backend.put(row)
+    const stored = opts?.read === true ? { ...row, read_at: at } : row
+    backend.put(stored)
     cap(input.workspace_id, input.person_id)
-    return row
+    return stored
   }
 
   const settle = (ws: WorkspaceId, key: string, person?: PersonId): void => {
@@ -492,6 +517,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     'handoff.declined',
     'handoff.returned',
     'approval.delivered',
+    'organization.mode_changed',
     RELOGIN_NEEDED_EVENT,
     ...CARD_SETTLED,
   ])
@@ -610,3 +636,79 @@ export function creditsLowNotification(
 }
 
 export const CREDITS_LOW_KEY = 'credits_low'
+
+/**
+ * 演示世界里给所有者放几条（截图与演示看得出铃铛长什么样）。只在挂了合成世界时放；放过就不再放。
+ */
+export function seedDemoNotifications(
+  svc: NotificationsService,
+  ws: WorkspaceId,
+  person_id: PersonId,
+  now: string,
+): void {
+  if (svc.list({ workspace_id: ws, person_id }, { view: 'all', limit: 1 }).items.length > 0) return
+  const t = Date.parse(now)
+  const ago = (min: number): string => new Date(t - min * 60_000).toISOString()
+  const rows: [NotificationInput, number, boolean?][] = [
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'update',
+        text: '岗位更新到了：网站运营 · 本周更新 · 3 项',
+        href: '/',
+        key: 'demo:update',
+      },
+      60 * 26,
+      true,
+    ],
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'credits',
+        text: '工坊积分快用完了，还剩 18',
+        href: '/settings/account#credits',
+        key: CREDITS_LOW_KEY,
+      },
+      60 * 5,
+    ],
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'connection',
+        text: 'Shopify 店铺 连接断了，要重新连一下',
+        href: '/settings/connections',
+        key: 'demo:conn',
+      },
+      95,
+    ],
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'task',
+        text: '「找 5 个值得回的 Reddit 帖子」跑完了',
+        href: '/in-progress',
+        key: 'demo:run',
+      },
+      18,
+    ],
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'team',
+        text: '陈晓回你了：退款单都核对完了，有两单要你定',
+        href: '/assistant?peers=1',
+        key: 'demo:reply',
+      },
+      3,
+    ],
+  ]
+  for (const [input, min, read] of rows) svc.notify(input, { at: ago(min), read: read === true })
+  // 同一件事又来了两次（合并成一条 ×3）
+  svc.notify(rows[2]?.[0] as NotificationInput, { at: ago(40) })
+  svc.notify(rows[2]?.[0] as NotificationInput, { at: ago(12) })
+}

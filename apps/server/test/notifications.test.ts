@@ -235,6 +235,34 @@ describe('从事件认出来的', () => {
     expect(await of('mine')).toEqual([])
   })
 
+  it('③ 降回 ②：除了改的人，同事们各一条「X 把这里改回了同事互联」（原来首页一行「知道了」）', async () => {
+    const ctx = { ...resolver(), members: () => [ME, PEER] }
+    const out = await notificationsOfEvent(
+      {
+        ...ev('organization.mode_changed', {
+          organization_id: 'org_1',
+          mode: 'peers',
+          from: 'company',
+        }),
+        actor: { kind: 'person', id: PEER },
+      },
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({
+        person_id: ME,
+        text: '陈晓 把这里改回了同事互联',
+        key: 'mode:org_1',
+      }),
+    ])
+    expect(
+      await notificationsOfEvent(
+        ev('organization.mode_changed', { mode: 'company', from: 'peers' }),
+        ctx,
+      ),
+    ).toEqual([])
+  })
+
   it('WP430：模型订阅要重新登录 → 「你的 ChatGPT 订阅要重新登录」，到设置 → 模型；同一来源合并', async () => {
     const { svc } = make()
     svc.register(WS, resolver())

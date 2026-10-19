@@ -596,6 +596,7 @@ import {
   creditsLowNotification,
   type NotificationsService,
   runEndedNotification,
+  seedDemoNotifications,
 } from './notifications.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
@@ -10130,6 +10131,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const owner = (await identity.getWorkspace(ws))?.owner_id
       return owner === undefined ? [] : [owner]
     },
+    members: async () =>
+      (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
     approval: (id) => approvals.get(id),
     handoff: (ref) => {
       const brandWork = brandModules.peek(ws)?.work
@@ -10221,6 +10224,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
+  // WP429：演示世界里铃铛里放几条（截图看得出样子）
+  if (mount !== undefined) {
+    const owner = (await identity.getWorkspace(workspace.id))?.owner_id
+    if (owner !== undefined) seedDemoNotifications(notifications, workspace.id, owner, clock.now())
+  }
   if (mount !== undefined) {
     seedDemoKol(boot.kol, clock.now())
     /*
