@@ -13,6 +13,10 @@
  * 3. 指向的程序已经不在了的规则（旧版本目录已删）→ 删掉；
  * 4. 改规则要管理员权限：拿不到就跳过、记一句，**不弹 UAC**。
  *
+ * WP427（决策 1273 ②）起服务进程跑在 `<根>\node\node.exe`（不随版本变），一次允许一直有效，这一套
+ * 退成兜底：给了 `target` 就把以前对版本目录里 Node 点过的允许带到那份身上（要管理员，按机器装的安装程序
+ * 那一次做得到）；不随版本变的那份没备好时照旧带给新版本目录里那份。
+ *
  * 两个入口用同一份：安装程序（`build/installer.nsh` 用新版自带的 Node 跑 `firewall-cli.js`），
  * 应用内快速更新（`main.ts` 摆好新版之后、清完旧版本目录之后）。读写走 PowerShell 的 NetSecurity
  * （`netsh` 的输出按系统语言翻译，中文系统上不好认；NetSecurity 的字段不翻译）。
@@ -94,10 +98,16 @@ export function planFirewall(input: {
   root: string
   /** 新版（或当前）版本目录。 */
   dir: string
+  /**
+   * WP427：服务进程真正跑的那份 Node。给了（`<根>\node\node.exe`，不随版本变）就把允许落在它身上——
+   * 以前对某一版 Node 点过的允许也算数，带到它身上；之后再换版本它不变，就不用再带了。
+   * 不给 = 新版版本目录里那份（WP422 原样，留作兜底：不随版本变的那份没备好时）。
+   */
+  target?: string
   rules: readonly FirewallRule[]
   exists: (path: string) => boolean
 }): FirewallPlan {
-  const target = nodeExeOf(input.dir)
+  const target = input.target ?? nodeExeOf(input.dir)
   const ours = input.rules.filter((r) => under(input.root, r.program))
   const evidence = ours.filter(
     (r) => isInboundAllow(r) && isNodeExe(r.program) && norm(r.program) !== norm(target),
@@ -237,6 +247,8 @@ function parseRead(stdout: string): { admin: boolean; rules: FirewallRule[] } | 
 export async function carryFirewall(input: {
   root: string
   dir: string
+  /** WP427：服务进程真正跑的那份 Node（见 {@link planFirewall}）。 */
+  target?: string
   exists: (path: string) => boolean
   run: PowerShellRunner
 }): Promise<FirewallOutcome> {
@@ -251,6 +263,7 @@ export async function carryFirewall(input: {
     const plan = planFirewall({
       root: input.root,
       dir: input.dir,
+      ...(input.target === undefined ? {} : { target: input.target }),
       rules: parsed.rules,
       exists: input.exists,
     })

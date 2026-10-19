@@ -147,6 +147,7 @@ import {
 } from './server-process.js'
 import { createSessionKeeper } from './session-keeper.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
+import { ensureStableNode, nodeStableNodeFs, stableNodePath } from './stable-node.js'
 import { proxyUrlFromResolution } from './system-proxy.js'
 import {
   TRAY_ICON_2X_DATA_URL,
@@ -454,6 +455,26 @@ async function bootstrap(): Promise<void> {
         ],
         (p) => files.exists(p),
       )
+  /*
+   * WP427（决策 1273 ②）：Windows 版本目录布局下，服务进程的 Node 从 `<根>\node\node.exe` 起——
+   * 路径不随版本变，防火墙的「允许」一次一直有效（按用户装也成立，不要管理员权限）。这一版自带的
+   * 那份同步过去（一样就不动；Node 升级了才换，正在跑的旧 Node 改名让位）；不成就用版本目录里那份。
+   */
+  const stableNode = ((): string | undefined => {
+    if (remote || layout === undefined || process.platform !== 'win32') return undefined
+    const outcome = ensureStableNode({
+      root: layout.root,
+      bundledDir: join(process.resourcesPath, 'node'),
+      version,
+      fs: nodeStableNodeFs(),
+    })
+    if (outcome.kind === 'fallback') {
+      logger.warn('不随版本变的 Node 没备好，这次用版本目录里那份', { reason: outcome.reason })
+      return undefined
+    }
+    if (outcome.kind !== 'kept') logger.info('不随版本变的 Node 已同步', { action: outcome.kind })
+    return outcome.path
+  })()
   const serverRuntime: ServerRuntime = remote
     ? { kind: 'node', execPath: process.execPath }
     : resolveServerRuntime({
@@ -462,6 +483,7 @@ async function bootstrap(): Promise<void> {
         exists: (p) => files.exists(p),
         electronExecPath: process.execPath,
         platform: process.platform,
+        ...(stableNode === undefined ? {} : { stableNode }),
       })
   if (!remote)
     logger.info('服务进程入口', {
@@ -2099,9 +2121,12 @@ async function bootstrap(): Promise<void> {
    */
   const carryFirewallTo = async (dir: string): Promise<void> => {
     if (layout === undefined || process.platform !== 'win32') return
+    const stable = stableNodePath(layout.root)
     const outcome = await carryFirewall({
       root: layout.root,
       dir,
+      // WP427：服务进程跑在不随版本变的那份 Node 上时，规则落在它身上（一次允许一直有效）
+      ...(existsSync(stable) ? { target: stable } : {}),
       exists: existsSync,
       run: nodePowerShell(),
     })
