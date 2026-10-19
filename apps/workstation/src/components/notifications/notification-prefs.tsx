@@ -63,7 +63,7 @@ export function NotificationPrefsCard(): ReactNode {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <table className="w-full text-sm">
+        <table className="w-full max-w-md text-sm">
           <thead>
             <tr>
               <th className="sr-only">{t('notify.title')}</th>
