@@ -50,6 +50,18 @@ export interface ChatMessageView {
   text: string
   at: string
   plan_action?: string
+  /**
+   * WP428（决策 1246 改）：这一句是 AI 按置信度**直接答**的——出处（给人看的短名）、把握（0–1）、
+   * 人有没有点过「这句不该直接答」。不是直接答的没有这一格。
+   */
+  auto_answer?: ChatAutoAnswerView
+}
+
+/** WP428：对话记录里「AI 直接答 · 出处」那一行。 */
+export interface ChatAutoAnswerView {
+  score: number
+  sources: { kind: string; label: string }[]
+  flagged: boolean
 }
 
 /** 一轮判完之后端给沙盒页看的东西。 */
@@ -115,6 +127,16 @@ export interface ChatPort {
      */
     rule_card_id?: string
   }): Promise<{ outcome: string; reply?: string; sediment: string; rule_card_id?: string }>
+  /**
+   * WP428（决策 1246 改）：人点了「这句不该直接答」→ 进学习回路，同类以后转人。
+   * 不是直接答的那一句回 `undefined`（路由回 404）。
+   */
+  flagAutoAnswer(input: {
+    session_id: string
+    message_id: string
+    by: string
+    note?: string
+  }): Promise<{ learned: boolean } | undefined>
   /** 访客还在页面上（SSE 挂着时的心跳）。 */
   touch(session_id: string): Promise<void>
   /** 订阅这条会话的推送；返回一个停订阅的函数。 */
@@ -209,6 +231,7 @@ export interface ChatPort {
 
 const SendBody = z.object({ text: z.string().min(1).max(4000) })
 const TakeoverBody = z.object({ on: z.boolean() })
+const FlagBody = z.object({ note: z.string().max(500).optional() })
 /**
  * widget 设置。**整张表一次给全**（不是逐项 patch）：这张表小，又是一个
  * "现在到底谁能嵌我"的快照，一次给全才能在界面上看见全貌，也不会因为
@@ -231,9 +254,11 @@ const WidgetBody = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, '主色要写成 #RRGGBB')
     .optional(),
   greeting: z.string().max(200).optional(),
-  // WP417：等待时长以前界面上能改、接口却不收（改了不生效）；「常见问题直接发」（决策 1232）
+  // WP417：等待时长以前界面上能改、接口却不收（改了不生效）
   assist_wait_seconds: z.number().int().min(10).max(600).optional(),
-  auto_send_faq: z.boolean().optional(),
+  // WP428（决策 1246 改）：按置信度直接答（缺省开）+「严一点 / 适中 / 松一点」
+  auto_answer: z.boolean().optional(),
+  auto_answer_strictness: z.enum(['strict', 'balanced', 'loose']).optional(),
 })
 
 const TeachBody = z.object({
@@ -430,6 +455,41 @@ export function chatRoutes(): Route[] {
     route(
       {
         method: 'post',
+        path: '/v1/chat/sessions/:id/messages/:message_id/not-direct',
+        operationId: 'flagChatAutoAnswer',
+        summary: '「这句不该直接答」：AI 直接答的那一句记进学习回路，同类问题以后先转人',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        // 只会让 AI 更保守（同类以后转人），看得见这条会话的人就能点
+        authz: LIVE_CHAT,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '会话 id' },
+          { name: 'message_id', in: 'path', required: true, description: '那一句的消息 id' },
+        ],
+        body: FlagBody,
+        returns: '{ learned }',
+      },
+      async (c, deps) => {
+        const principal = principalOf(c)
+        const port = await scopedPortOf(deps, c)
+        const id = param(c, 'id')
+        await requireSession(port, id)
+        const input = await body(c, FlagBody)
+        const out = await port.flagAutoAnswer({
+          session_id: id,
+          message_id: param(c, 'message_id'),
+          by: principal.person_id,
+          ...(input.note === undefined ? {} : { note: input.note }),
+        })
+        if (out === undefined)
+          throw new ApiError('not_found', '这一句不是 AI 直接答的（或已经找不到了）')
+        return ok(c, out)
+      },
+    ),
+    route(
+      {
+        method: 'post',
         path: '/v1/chat/sessions/:id/advance',
         operationId: 'advanceChatTurn',
         summary: '静默窗口到了：把这一轮判完（沙盒页自己点，不等真定时器）',
@@ -605,7 +665,10 @@ export function chatRoutes(): Route[] {
             ...(input.assist_wait_seconds === undefined
               ? {}
               : { assist_wait_seconds: input.assist_wait_seconds }),
-            ...(input.auto_send_faq === undefined ? {} : { auto_send_faq: input.auto_send_faq }),
+            ...(input.auto_answer === undefined ? {} : { auto_answer: input.auto_answer }),
+            ...(input.auto_answer_strictness === undefined
+              ? {}
+              : { auto_answer_strictness: input.auto_answer_strictness }),
           }),
         )
       },

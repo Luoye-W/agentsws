@@ -93,6 +93,8 @@ export * from './meetings.js'
 // WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
 export * from './messages.js'
 export * from './model.js'
+// WP429：站内通知（铃铛）——「告诉你一声」的事，不是卡
+export * from './notifications.js'
 // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装）与配置写回
 export * from './official-plugins.js'
 // WP323（docs/102 §5）：发出记录与记录去处（去处的种类是藏在通用机制后面的适配器）
@@ -155,4 +157,6 @@ export * from './standby.js'
 // 67 §3 WP118：按月订阅的增值服务（一份引擎，红人是第一个实例，客服 WP124 在后）
 export * from './subscription.js'
 export * from './task-text.js'
+// WP427：团队通道（发起人电脑 ↔ 工坊云的长连接、邀请码登记与查找、申请人换登录）
+export * from './team-link.js'
 export * from './work.js'

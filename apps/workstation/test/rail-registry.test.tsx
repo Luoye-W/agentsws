@@ -357,7 +357,8 @@ describe('布局只存结构、按作用域分桶（#5）', () => {
   })
 
   it('本机那一份里只有 open_panel_id 与 width，面板内容一个字都没有', async () => {
-    renderRail()
+    // WP431：卡片堆只在岗位 / 职责 / 事项页上有
+    renderRail('/positions/asg_store')
     await openSettingsTab('memory')
     // 等面板真把内容取回来（这时候本机那一份是最容易被写脏的）
     expect(await screen.findByTestId('settings-panel-memory')).toBeDefined()
@@ -434,7 +435,8 @@ describe('启动不激活（#6）', () => {
     expect(screen.queryByTestId('rail-icon-ask')).toBeNull()
     // 占位的数据面板 / 运行中 / 文件内测期间藏着
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
-    expect(screen.getByTestId('rail-toggle').getAttribute('aria-pressed')).toBe('false')
+    // WP431：首页没有右侧面板，也就没有面板开关
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
@@ -466,18 +468,19 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
       row({ handler: 'mail.poll', params: { awaiting_approval: true } }),
       row({ state: 'done' }),
     ])
-    renderRail()
+    // WP431：岗位页上面板默认开着（首页没有面板开关）
+    renderRail('/positions/asg_store')
     const dot = await screen.findByTestId('rail-toggle-dot')
     expect(dot.getAttribute('data-card')).toBe('plans')
     expect(dot.getAttribute('data-dot')).toBe('attention')
     expect(dot.getAttribute('aria-label')).toBe('2 个计划等你点头')
-    fireEvent.click(screen.getByTestId('rail-toggle'))
     const summary = await screen.findByTestId('rail-card-summary-plans')
     expect(summary.textContent).toContain('下次')
     expect(screen.getByTestId('rail-card-dot-plans').getAttribute('data-dot')).toBe('attention')
     // 决策 1035：计划默认展开，等你点头的排最上
     expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
-    const rows = await screen.findAllByTestId('plan-row')
+    // 卡身是 lazy 的，机器忙时第一次下载慢一点
+    const rows = await screen.findAllByTestId('plan-row', {}, { timeout: 5000 })
     expect(rows[0]?.getAttribute('data-waiting')).toBe('true')
     expect(rows).toHaveLength(4)
     getMySchedules.mockResolvedValue([])

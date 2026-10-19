@@ -24,6 +24,7 @@ const { contextBridge, ipcRenderer } = electron
 const CHANNELS = {
   info: 'agentsws:bridge-info',
   notify: 'agentsws:notify',
+  notifyClicked: 'agentsws:notify-clicked',
   openExternal: 'agentsws:open-external',
   openScene: 'agentsws:open-scene',
   updateStatus: 'agentsws:update-status',
@@ -34,6 +35,7 @@ const CHANNELS = {
   updateRestart: 'agentsws:update-restart',
   updateCancelWait: 'agentsws:update-cancel-wait',
   updateOpenPage: 'agentsws:update-open-page',
+  updateCheck: 'agentsws:update-check',
   searchPending: 'agentsws:search-pending',
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
@@ -54,7 +56,18 @@ const bridge: DesktopBridge = {
     ipcRenderer.invoke(CHANNELS.notify, {
       title: input.title,
       body: input.body,
+      path: input.path,
     }) as Promise<boolean>,
+  // WP429：点了系统通知 → 页面跳到那一页（只转一个地址字符串）
+  onNotificationClick: (listener: (path: string) => void): (() => void) => {
+    const handler = (_event: unknown, path: unknown): void => {
+      if (typeof path === 'string') listener(path)
+    }
+    ipcRenderer.on(CHANNELS.notifyClicked, handler)
+    return () => {
+      ipcRenderer.removeListener(CHANNELS.notifyClicked, handler)
+    }
+  },
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<boolean>,
   // WP184：场景名与「要不要重启」两样，网址由主进程自己去拿
@@ -92,6 +105,9 @@ const bridge: DesktopBridge = {
     // WP409：下载断了时「去下载页」（地址由壳定）
     openDownloadPage: (): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.updateOpenPage) as Promise<boolean>,
+    // WP426：设置里「检查更新」
+    check: (): Promise<DesktopUpdateStatus> =>
+      ipcRenderer.invoke(CHANNELS.updateCheck) as Promise<DesktopUpdateStatus>,
   },
   // WP353：搜索要人介入的那一页（只转话；位置是几个数字，页面内容不经过这里）
   searchBrowser: {

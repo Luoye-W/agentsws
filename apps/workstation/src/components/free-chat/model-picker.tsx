@@ -27,16 +27,7 @@
  * 一个轻量的下拉，不用弹层库。键盘：↑↓ 换（搜索框里按 ↓ 进清单）、回车选、Esc 收起并回到钮上。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Check,
-  ChevronDown,
-  Eye,
-  EyeOff,
-  Globe,
-  ScrollText,
-  Search,
-  TriangleAlert,
-} from 'lucide-react'
+import { Check, ChevronDown, Search, TriangleAlert } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
@@ -49,6 +40,7 @@ import { getCloudCredits, getMyCloudAllocation, getPositions, setModelDefaults }
 import { useApp } from '@/lib/app-context'
 import { type FreeChatModelChoice, getFreeChatModels, type ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
+import { type CapabilityMarks, capabilityMarks, compactChoices } from '@/lib/model-picker-compact'
 import { cn } from '@/lib/utils'
 import { ThinkingControl } from './thinking-control'
 
@@ -255,7 +247,13 @@ export function ModelPicker({
         ? 3
         : undefined
     }
-    const scored = choices
+    /*
+     * WP426：不搜的时候清单收短——实验 / 预览型号不进、别名与带版本号的同一个只留一个
+     * （当前选着的、品牌默认的永远留着）；一搜就整份都在。
+     */
+    const keep = new Set([value, defaultId].filter((x): x is string => x !== undefined))
+    const pool = q === '' ? compactChoices(choices, keep) : choices
+    const scored = pool
       .map((c, i) => ({ c, i, score: scoreOf(c) }))
       .filter(
         (x): x is { c: FreeChatModelChoice; i: number; score: number } => x.score !== undefined,
@@ -285,7 +283,7 @@ export function ModelPicker({
     }
     const rank = { workshop: 0, subscription: 1, own: 2 } as const
     return out.sort((a, b) => rank[a.group] - rank[b.group])
-  }, [choices, query, t])
+  }, [choices, query, t, value, defaultId])
 
   const close = (): void => {
     setOpen(false)
@@ -504,6 +502,7 @@ export function ModelPicker({
                       selected={c.id === current.id}
                       isDefault={c.id === defaultId}
                       price={priceOf(c)}
+                      marks={capabilityMarks(g.rows, LONG_CONTEXT_TOKENS)}
                       testId={testId}
                       onPick={() => {
                         onChange(c.id)
@@ -573,6 +572,7 @@ function PickerRow({
   selected,
   isDefault,
   price,
+  marks,
   testId,
   onPick,
 }: {
@@ -581,6 +581,7 @@ function PickerRow({
   selected: boolean
   isDefault: boolean
   price: RowPrice | undefined
+  marks: CapabilityMarks
   testId: string
   onPick: () => void
 }): React.ReactNode {
@@ -606,42 +607,34 @@ function PickerRow({
         </span>
       ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
-        {/* WP370：自带联网 / 长上下文——只画图标，悬停出一句 */}
-        {choice.native_search === true ? (
-          <Globe
-            role="img"
-            aria-label={t('model.pick.cap.web')}
-            data-testid={`${testId}-cap-web`}
-            className="size-3"
-          >
-            <title>{t('model.pick.cap.web')}</title>
-          </Globe>
+        {/*
+          WP370 → WP426：能力小标只标例外，而且是看得懂的小字（悬停一句为什么）：
+          看不了图的那几行写「不能看图」；自带联网、长上下文只在少数有的时候标出来。
+        */}
+        {marks.web && choice.native_search === true ? (
+          <CapTag
+            text={t('model.pick.cap.web.short')}
+            tip={t('model.pick.cap.web')}
+            testId={`${testId}-cap-web`}
+          />
         ) : null}
-        {(choice.context_window ?? 0) >= LONG_CONTEXT_TOKENS ? (
-          <ScrollText
-            role="img"
-            aria-label={t('model.pick.cap.long', {
+        {marks.long && (choice.context_window ?? 0) >= LONG_CONTEXT_TOKENS ? (
+          <CapTag
+            text={t('model.pick.cap.long.short')}
+            tip={t('model.pick.cap.long', {
               k: Math.round((choice.context_window ?? 0) / 1000),
             })}
-            data-testid={`${testId}-cap-long`}
-            className="size-3"
-          >
-            <title>
-              {t('model.pick.cap.long', { k: Math.round((choice.context_window ?? 0) / 1000) })}
-            </title>
-          </ScrollText>
+            testId={`${testId}-cap-long`}
+          />
         ) : null}
-        {choice.vision === 'no' ? (
-          <EyeOff aria-label={t('free_chat.model.no_vision')} className="size-3" />
-        ) : (
-          <span
-            className="inline-flex items-center gap-0.5 rounded bg-muted px-1 text-[10.5px]"
-            title={t('free_chat.model.vision')}
-          >
-            <Eye aria-label={t('free_chat.model.vision')} className="size-3" />
-            {t('model.pick.vision')}
-          </span>
-        )}
+        {marks.noVision && choice.vision === 'no' ? (
+          <CapTag
+            text={t('model.pick.cap.no_vision.short')}
+            tip={t('free_chat.model.no_vision')}
+            testId={`${testId}-cap-no-vision`}
+            warn
+          />
+        ) : null}
         {price?.discount === undefined ? null : (
           <span
             data-testid={`${testId}-discount`}
@@ -665,6 +658,33 @@ function PickerRow({
         </span>
       </span>
     </button>
+  )
+}
+
+/** WP426：一行里的能力小标——几个字 + 悬停一句（不是让人猜的小图标）。 */
+function CapTag({
+  text,
+  tip,
+  testId,
+  warn = false,
+}: {
+  text: string
+  tip: string
+  testId: string
+  warn?: boolean
+}): React.ReactNode {
+  return (
+    <span
+      data-testid={testId}
+      title={tip}
+      data-hint={tip}
+      className={cn(
+        'rounded px-1 text-[10.5px] leading-4',
+        warn ? 'bg-ws-warn-bg text-ws-warn' : 'bg-muted text-muted-foreground',
+      )}
+    >
+      {text}
+    </span>
   )
 }
 

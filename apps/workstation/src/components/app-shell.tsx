@@ -21,6 +21,12 @@
  * WP372（决策 1001 / 1002，Luoye 10-17 定 C3，学 Claude 桌面版）：岗位 → 职责 → 对话三层里**左栏只放两层**
  * （岗位、挂在细竖线上的职责），**对话进右侧面板**；第三栏那一竖条图标改成**窗口右上角一排**（六张卡 + 「⋮」），
  * 顶栏那个「交给某个岗位一件事… ⌘K」搜索框去掉（⌘K 快捷键保留）。
+ *
+ * WP431（Luoye 10-19，照 Claude 桌面版）：
+ * - 左上角不再是「Agents 工坊」标记与字，换成两颗图标：**左栏开关**（收起后左栏只剩一列图标，本机记住）与**搜索**
+ *   （点了 / ⌘K 弹出居中的搜索框，就是原来 ⌘K 那个面板换了样子）；
+ * - 顶栏左边是**这一页的标题**（岗位 / 职责 / 事项页自己放进来，带下拉箭头；别的页按地址写页名），
+ *   右边那一排见 `RailTopBar`，中间插着外壳给的两个插槽（WP429 的通知铃铛、这一页的设置按钮）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -33,6 +39,8 @@ import {
   ListTodo,
   type LucideIcon,
   MessageCircle,
+  PanelLeft,
+  Search,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -43,15 +51,22 @@ import {
   type ConversationActions,
   ConversationActionsProvider,
 } from '@/components/conversations/actions'
-import { BrandMark } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { type ComposeTarget, type Handoff, PaletteProvider } from '@/components/palette-context'
 import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
 import { RailHost, RailTopBar } from '@/components/rail/right-rail'
 import { PositionIcon } from '@/components/role-icons/role-icon'
+import {
+  TOPBAR_ICON,
+  TOPBAR_ICON_IDLE,
+  TopBarSlotsProvider,
+  useTopBarSlotState,
+} from '@/components/shell/top-bar-slots'
+import { SHELL_PAGES } from '@/components/shell-pages'
 import { AddDutyInline } from '@/components/sidebar/add-duty-inline'
 import { ArchivedDialog, type ArchivedScope } from '@/components/sidebar/archived-dialog'
 import { NewPositionInline } from '@/components/sidebar/new-position-inline'
@@ -71,7 +86,14 @@ import { useApp } from '@/lib/app-context'
 import { desktopChrome, useDesktopChromeTheme } from '@/lib/desktop-chrome'
 import { dutyHref } from '@/lib/duty-href'
 import { myAssignments } from '@/lib/positions'
-import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
+import {
+  RAIL_EXPANDED_KEY,
+  readFlags,
+  readString,
+  SIDEBAR_COLLAPSED_KEY,
+  writeFlags,
+  writeString,
+} from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
 import { archiveMatter, type RailMatter, unarchiveMatter } from '@/lib/work-archive'
 
@@ -290,6 +312,121 @@ function MessagesUnread(): ReactNode {
   )
 }
 
+function useMedia(query: string): boolean {
+  const [hit, setHit] = useState(() => {
+    try {
+      return globalThis.matchMedia?.(query).matches ?? false
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    const mql = globalThis.matchMedia?.(query)
+    if (mql === undefined) return
+    setHit(mql.matches)
+    const on = (e: MediaQueryListEvent): void => {
+      setHit(e.matches)
+    }
+    mql.addEventListener?.('change', on)
+    return () => {
+      mql.removeEventListener?.('change', on)
+    }
+  }, [query])
+  return hit
+}
+
+/** ⌘K 还是 Ctrl+K（只用来写在悬停提示里）。 */
+function searchShortcut(): string {
+  const platform = globalThis.navigator?.platform ?? ''
+  return /mac/i.test(platform) ? '⌘K' : 'Ctrl+K'
+}
+
+/**
+ * WP431：左上角那两颗（照 Claude）——左栏开关 + 搜索。展开时在左栏顶部（红绿灯右边），
+ * 左栏收成图标列时挪到顶栏最左。`toggle` 不给 = 不画开关（窗口太窄、左栏本来就只能是图标列）。
+ */
+function ShellCorner({
+  collapsed,
+  onToggle,
+  onSearch,
+}: {
+  collapsed: boolean
+  onToggle?: () => void
+  onSearch: () => void
+}): ReactNode {
+  const { t } = useApp()
+  const label = t(collapsed ? 'topbar.sidebar.expand' : 'topbar.sidebar.collapse')
+  const search = `${t('topbar.search')} (${searchShortcut()})`
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" data-testid="shell-corner">
+      {onToggle === undefined ? null : (
+        <button
+          type="button"
+          aria-label={label}
+          title={label}
+          aria-pressed={!collapsed}
+          data-testid="sidebar-toggle"
+          className={cn(TOPBAR_ICON, TOPBAR_ICON_IDLE)}
+          onClick={onToggle}
+        >
+          <PanelLeft aria-hidden className="size-4" />
+        </button>
+      )}
+      <button
+        type="button"
+        aria-label={search}
+        title={search}
+        data-testid="shell-search"
+        className={cn(TOPBAR_ICON, TOPBAR_ICON_IDLE)}
+        onClick={onSearch}
+      >
+        <Search aria-hidden className="size-4" />
+      </button>
+    </div>
+  )
+}
+
+/** WP431：没有页面往顶栏放标题时，按地址写一个页名（首页、消息……；对不上就空着）。 */
+function pageNameKey(pathname: string): string | undefined {
+  if (pathname === '/') return 'nav.home'
+  if (pathname.startsWith('/assistant')) return 'nav.free_chat'
+  if (pathname.startsWith('/messages')) return 'nav.messages'
+  if (pathname.startsWith('/todos')) return 'nav.todos'
+  if (pathname.startsWith('/calendar')) return 'nav.calendar'
+  return SHELL_PAGES.find((p) => pathname === p.to || pathname.startsWith(`${p.to}/`))?.key
+}
+
+/** 左栏收成图标列时的一颗（悬停出名字）。 */
+const ICON_ROW =
+  'relative flex size-9 shrink-0 items-center justify-center rounded-[8px] transition-colors'
+
+function IconNavLink({
+  to,
+  end,
+  label,
+  testId,
+  children,
+}: {
+  to: string
+  end?: boolean
+  label: string
+  testId?: string
+  children: ReactNode
+}): ReactNode {
+  return (
+    <NavLink
+      to={to}
+      {...(end === true ? { end: true } : {})}
+      aria-label={label}
+      title={label}
+      {...(testId === undefined ? {} : { 'data-testid': testId })}
+      className={({ isActive }) => cn(ICON_ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
+    >
+      {children}
+    </NavLink>
+  )
+}
+
 export function AppShell({
   children,
   positions,
@@ -309,7 +446,7 @@ export function AppShell({
   me?: Me
   onAddTile: (position_id: string, tile_id: string) => void
 }): ReactNode {
-  const { t, position, theme } = useApp()
+  const { t, lang, position, theme } = useApp()
   /*
    * WP424（Luoye 10-19，学 Claude 桌面版）：桌面壳把系统标题栏藏了——Mac 红绿灯嵌在左栏顶部，
    * Windows 三个按钮叠在顶栏右上。浏览器里打开时是 `undefined`，照普通网页排（不留那块空）。
@@ -358,6 +495,18 @@ export function AppShell({
   const owner = me?.assignments.find(
     (a) => a.role_id === 'common.owner' && a.revoked_at === undefined,
   )?.id
+  /** WP431：左栏收成图标列（本机记住）；窗口窄于 768 时一律只是图标列（不再整条藏掉）。 */
+  const [collapsed, setCollapsed] = useState(() => readString(SIDEBAR_COLLAPSED_KEY) === '1')
+  const narrow = useMedia('(max-width: 767px)')
+  const iconRail = collapsed || narrow
+  const toggleSidebar = useCallback(() => {
+    setCollapsed((prev) => {
+      writeString(SIDEBAR_COLLAPSED_KEY, prev ? '0' : '1')
+      return !prev
+    })
+  }, [])
+  const topBar = useTopBarSlotState()
+  const pageName = pageNameKey(pathname)
   const [creating, setCreating] = useState(false)
   const [archived, setArchived] = useState<ArchivedScope | undefined>(undefined)
   /*
@@ -418,201 +567,254 @@ export function AppShell({
 
   return (
     <RailStateProvider>
-      <PaletteProvider value={palette}>
-        <ConversationActionsProvider value={conversationActions}>
-          <div className="flex min-h-screen bg-background text-foreground">
-            {/*
+      <TopBarSlotsProvider value={topBar.slots}>
+        <PaletteProvider value={palette}>
+          <ConversationActionsProvider value={conversationActions}>
+            <div className="flex min-h-screen bg-background text-foreground">
+              {/*
           WP71：左栏**钉在视口上**（`sticky` + `h-screen`）。
           账号块在最下面，而主区经常比一屏长——不钉住的话它会跟着页面滚走，
           "最下面"就成了"文档的最下面"，滚三屏才见得到。
         */}
-            <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ws-line bg-sidebar p-3 md:flex">
-              {/*
-            WP112：左栏顶部 = **母品牌标记 + 字标**，点了回首页。
-
-            标记给 24（Luoye 09-18 定：再缩一点）；再小就退单色，见 `@agentsws/brand` 的 `MIN_GRADIENT_PX`。
-            字标是产品名「Agents 工坊」（Luoye 09-18 定；`agentsws` 只留作仓库 / 包 / 域名），
-            走 Outfit（WP96：与页面大标题同一种字）；整句留给读屏当 aria-label。
-            WP195（Luoye 09-29「静态的 logo 其实不好看」）：改成**待机**——大部分时间一动不动，
-            隔几秒轻轻动一下；鼠标移上去播一次「一变一队」再回待机。点了回首页不变。
-          */}
-              <div
+              <aside
                 className={cn(
-                  'px-2 pt-1 pb-3',
-                  // WP424：Mac 红黄绿三个按钮落在这一行左边（与顶栏同高、同一条线），字标让到它们右边；
-                  // 这一行空着的地方能拖动窗口
-                  chrome === 'inset' &&
-                    'ws-drag -mx-3 -mt-3 mb-2 flex h-11 items-center border-b border-ws-line pt-0 pr-3 pb-0 pl-[84px]',
+                  'sticky top-0 flex h-screen shrink-0 flex-col border-r border-ws-line bg-sidebar',
+                  iconRail ? 'w-[52px] items-center px-2 pb-3' : 'w-60 p-3',
                 )}
-                data-testid="rail-brand-row"
-                data-chrome={chrome}
-              >
-                <NavLink
-                  to="/"
-                  end
-                  aria-label={t('app.title')}
-                  data-testid="brand-home"
-                  className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
-                >
-                  <BrandMark size={24} motion="idle" playOnHover />
-                  <span className="ws-display text-[14px]">Agents 工坊</span>
-                </NavLink>
-              </div>
-              <nav
-                className="flex flex-1 flex-col gap-px overflow-y-auto"
-                aria-label={t('nav.main')}
-                data-testid="main-nav"
+                data-testid="sidebar"
+                data-collapsed={iconRail ? 'true' : undefined}
               >
                 {/*
+            WP431（Luoye 10-19，照 Claude 桌面版）：左栏顶部原来是母品牌标记 + 字标（WP112 / WP195），
+            现在换成两颗图标——左栏开关与搜索。Mac 红黄绿三个按钮落在这一行左边（WP424：与顶栏同高、同一条线），
+            图标让到它们右边；这一行空着的地方能拖动窗口。收成图标列时这一行空着（红绿灯在这），两颗图标挪到顶栏最左。
+          */}
+                <div
+                  className={cn(
+                    'mb-2 flex h-11 shrink-0 items-center border-b border-ws-line',
+                    iconRail ? '-mx-2 w-[calc(100%+1rem)] px-2' : '-mx-3 -mt-3 px-2.5',
+                    chrome !== undefined && 'ws-drag',
+                    chrome === 'inset' && !iconRail && 'pl-[84px]',
+                  )}
+                  data-testid="rail-brand-row"
+                  data-chrome={chrome}
+                >
+                  {iconRail ? null : (
+                    <ShellCorner
+                      collapsed={false}
+                      onToggle={toggleSidebar}
+                      onSearch={() => {
+                        palette.open()
+                      }}
+                    />
+                  )}
+                </div>
+                {iconRail ? (
+                  <nav
+                    className="flex flex-1 flex-col items-center gap-1 overflow-y-auto"
+                    aria-label={t('nav.main')}
+                    data-testid="main-nav"
+                  >
+                    <IconNavLink to="/assistant" label={t('nav.free_chat')} testId="nav-free-chat">
+                      <NavIcon icon={MessageCircle} />
+                    </IconNavLink>
+                    <IconNavLink to="/" end label={t('nav.home')}>
+                      <NavIcon icon={Home} />
+                    </IconNavLink>
+                    <IconNavLink to="/messages" label={t('nav.messages')} testId="nav-messages">
+                      <NavIcon icon={Inbox} />
+                      <span className="absolute top-1.5 right-1.5 flex">
+                        <MessagesUnread />
+                      </span>
+                    </IconNavLink>
+                    <IconNavLink to="/todos" label={t('nav.todos')}>
+                      <NavIcon icon={ListTodo} />
+                    </IconNavLink>
+                    <IconNavLink to="/calendar" label={t('nav.calendar')}>
+                      <NavIcon icon={CalendarDays} />
+                    </IconNavLink>
+                    <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-ws-line" />
+                    {byPosition.map((p) => {
+                      const first = myAssignments(p)[0] as string
+                      const name = lang === 'en' ? p.name.en : p.name.zh
+                      return (
+                        <IconNavLink
+                          key={p.position_id}
+                          to={`/positions/${first}`}
+                          end
+                          label={name}
+                          testId="nav-position-icon"
+                        >
+                          <PositionIcon
+                            position_id={p.position_id}
+                            icon={p.icon}
+                            role_ids={p.roles.map((r) => r.role_id)}
+                          />
+                        </IconNavLink>
+                      )
+                    })}
+                  </nav>
+                ) : (
+                  <nav
+                    className="flex flex-1 flex-col gap-px overflow-y-auto"
+                    aria-label={t('nav.main')}
+                    data-testid="main-nav"
+                  >
+                    {/*
               WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
               不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
               WP343（决策 334 / 859）：改名「我的助理」（并进了「我的代理」），仍在最上面。
             */}
-                <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
-                  <NavIcon icon={MessageCircle} />
-                  {t('nav.free_chat')}
-                </NavLink>
-                <NavLink to="/" end className={navClass}>
-                  <NavIcon icon={Home} />
-                  {t('nav.home')}
-                </NavLink>
-                {/*
+                    <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
+                      <NavIcon icon={MessageCircle} />
+                      {t('nav.free_chat')}
+                    </NavLink>
+                    <NavLink to="/" end className={navClass}>
+                      <NavIcon icon={Home} />
+                      {t('nav.home')}
+                    </NavLink>
+                    {/*
               WP113（63 §1）：这一格原来是「目标」。Luoye 定：换成**消息**——
               一只邮箱是人每天真正会去的地方，而目标是每周看一次的东西。
               目标模型**没删**（37 的每日计划与复盘都靠它），入口收进「待办」页的
               一个 tab，`/goals` 路由留着，⌘K 里仍然搜得到。
               顺序：首页 / 消息 / 待办 / 日历。
             */}
-                <NavLink to="/messages" className={navClass} data-testid="nav-messages">
-                  <NavIcon icon={Inbox} />
-                  {t('nav.messages')}
-                  <MessagesUnread />
-                </NavLink>
-                {/*
+                    <NavLink to="/messages" className={navClass} data-testid="nav-messages">
+                      <NavIcon icon={Inbox} />
+                      {t('nav.messages')}
+                      <MessagesUnread />
+                    </NavLink>
+                    {/*
               WP351（Luoye 10-16）：左栏不再有「聊天窗」。访客的对话并进「消息」（来源「网站聊天」），
               挂件设置在账号菜单「设置」组的「消息渠道」页（渠道「网站聊天窗」）；老地址跳到消息里，⌘K 两处都搜得到。
             */}
-                {/* 37 工作模型：待办 / 日历 */}
-                <NavLink to="/todos" className={navClass}>
-                  <NavIcon icon={ListTodo} />
-                  {t('nav.todos')}
-                </NavLink>
-                <NavLink to="/calendar" className={navClass}>
-                  <NavIcon icon={CalendarDays} />
-                  {t('nav.calendar')}
-                </NavLink>
-                {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
-                <div className="flex items-center justify-between px-2 pt-3 pb-1">
-                  <span className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
-                    {t('nav.positions')}
-                  </span>
-                  {owner === undefined || me === undefined ? null : (
-                    <RailPlus
-                      label={t('rail.new_position')}
-                      testId="rail-new-position-plus"
-                      expanded={creating}
-                      onClick={() => {
-                        setCreating((v) => !v)
-                      }}
-                    />
-                  )}
-                </div>
-                {creating && owner !== undefined && me !== undefined ? (
-                  <NewPositionInline
-                    owner={owner}
-                    person_id={me.person.id}
-                    onCancel={() => {
-                      setCreating(false)
-                    }}
-                    onDone={(position_id) => {
-                      setCreating(false)
-                      // 建完展开它（记成显式展开，下次进来还开着）
-                      setFlags((prev) => {
-                        const next = { ...prev, [position_id]: true }
-                        writeFlags(RAIL_EXPANDED_KEY, next)
-                        return next
-                      })
-                    }}
-                  />
-                ) : null}
-                {byPosition.length > 0
-                  ? byPosition.map((p) => {
-                      const open = flags[p.position_id] ?? p.position_id === current?.position_id
-                      return (
-                        <PositionNav
-                          key={p.position_id}
-                          instance={p}
-                          open={open}
-                          onToggle={() => {
-                            toggle(p.position_id, open)
+                    {/* 37 工作模型：待办 / 日历 */}
+                    <NavLink to="/todos" className={navClass}>
+                      <NavIcon icon={ListTodo} />
+                      {t('nav.todos')}
+                    </NavLink>
+                    <NavLink to="/calendar" className={navClass}>
+                      <NavIcon icon={CalendarDays} />
+                      {t('nav.calendar')}
+                    </NavLink>
+                    {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
+                    <div className="flex items-center justify-between px-2 pt-3 pb-1">
+                      <span className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+                        {t('nav.positions')}
+                      </span>
+                      {owner === undefined || me === undefined ? null : (
+                        <RailPlus
+                          label={t('rail.new_position')}
+                          testId="rail-new-position-plus"
+                          expanded={creating}
+                          onClick={() => {
+                            setCreating((v) => !v)
                           }}
-                          {...(owner === undefined || me === undefined
-                            ? {}
-                            : { owner, person_id: me.person.id })}
                         />
-                      )
-                    })
-                  : // WP234（docs/54 §6.5）：「负责人」是身份不是岗位——底座职责不进左栏「岗位」
-                    positions
-                      .filter((p) => !WORKSPACE_BASE_ROLES.has(p.role_id))
-                      .map((p) => (
-                        <NavLink
-                          key={p.position_id}
-                          to={`/positions/${p.position_id}`}
-                          className={navClass}
-                          data-testid="nav-position"
-                        >
-                          <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
-                          <span className="truncate">{p.role_name}</span>
-                        </NavLink>
-                      ))}
-                {/*
+                      )}
+                    </div>
+                    {creating && owner !== undefined && me !== undefined ? (
+                      <NewPositionInline
+                        owner={owner}
+                        person_id={me.person.id}
+                        onCancel={() => {
+                          setCreating(false)
+                        }}
+                        onDone={(position_id) => {
+                          setCreating(false)
+                          // 建完展开它（记成显式展开，下次进来还开着）
+                          setFlags((prev) => {
+                            const next = { ...prev, [position_id]: true }
+                            writeFlags(RAIL_EXPANDED_KEY, next)
+                            return next
+                          })
+                        }}
+                      />
+                    ) : null}
+                    {byPosition.length > 0
+                      ? byPosition.map((p) => {
+                          const open =
+                            flags[p.position_id] ?? p.position_id === current?.position_id
+                          return (
+                            <PositionNav
+                              key={p.position_id}
+                              instance={p}
+                              open={open}
+                              onToggle={() => {
+                                toggle(p.position_id, open)
+                              }}
+                              {...(owner === undefined || me === undefined
+                                ? {}
+                                : { owner, person_id: me.person.id })}
+                            />
+                          )
+                        })
+                      : // WP234（docs/54 §6.5）：「负责人」是身份不是岗位——底座职责不进左栏「岗位」
+                        positions
+                          .filter((p) => !WORKSPACE_BASE_ROLES.has(p.role_id))
+                          .map((p) => (
+                            <NavLink
+                              key={p.position_id}
+                              to={`/positions/${p.position_id}`}
+                              className={navClass}
+                              data-testid="nav-position"
+                            >
+                              <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
+                              <span className="truncate">{p.role_name}</span>
+                            </NavLink>
+                          ))}
+                    {/*
               WP342（决策 853）：会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置收进了
               左下角账号菜单的两组里（`account-block.tsx`），路由与 ⌘K 照旧。左栏只剩去干活的地方。
             */}
-                {/* 41 §1 的「我的代理」WP343 起并进「我的助理」（右上角「替我答同事」），左栏不再单独占一行 */}
-              </nav>
-              {/*
+                    {/* 41 §1 的「我的代理」WP343 起并进「我的助理」（右上角「替我答同事」），左栏不再单独占一行 */}
+                  </nav>
+                )}
+                {/*
           WP71（36 §10）：品牌与账号在**最下面**。
           个人用户（一个人一个品牌）看不到品牌切换器，那一块自己不渲染（52 O1）。
         */}
-              {undo === undefined && undoError === undefined ? null : (
+                {iconRail || (undo === undefined && undoError === undefined) ? null : (
+                  <div
+                    role="status"
+                    className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
+                    data-testid="rail-undo"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {undo === undefined ? undoError : t('archive.done', { title: undo.title })}
+                    </span>
+                    {undo === undefined ? null : (
+                      <button
+                        type="button"
+                        data-testid="rail-undo-button"
+                        disabled={restoreOne.isPending}
+                        className="shrink-0 font-medium underline-offset-2 hover:underline"
+                        onClick={() => {
+                          restoreOne.mutate(undo.id)
+                        }}
+                      >
+                        {t('archive.undo')}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div
-                  role="status"
-                  className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
-                  data-testid="rail-undo"
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {undo === undefined ? undoError : t('archive.done', { title: undo.title })}
-                  </span>
-                  {undo === undefined ? null : (
-                    <button
-                      type="button"
-                      data-testid="rail-undo-button"
-                      disabled={restoreOne.isPending}
-                      className="shrink-0 font-medium underline-offset-2 hover:underline"
-                      onClick={() => {
-                        restoreOne.mutate(undo.id)
-                      }}
-                    >
-                      {t('archive.undo')}
-                    </button>
+                  className={cn(
+                    'mt-2 flex flex-col gap-1 border-t border-ws-line pt-2',
+                    iconRail && 'items-center',
                   )}
+                  data-testid="rail-bottom"
+                >
+                  {iconRail ? null : <BrandSwitcher />}
+                  {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
+                  {iconRail ? null : <UpdateButton />}
+                  <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
                 </div>
-              )}
-              <div
-                className="mt-2 flex flex-col gap-1 border-t border-ws-line pt-2"
-                data-testid="rail-bottom"
-              >
-                <BrandSwitcher />
-                {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
-                <UpdateButton />
-                <AccountBlock {...(me === undefined ? {} : { me })} />
-              </div>
-            </aside>
+              </aside>
 
-            <div className="flex min-w-0 flex-1 flex-col">
-              {/*
+              <div className="flex min-w-0 flex-1 flex-col">
+                {/*
             WP372（决策 1001 / 1002，Luoye 10-17，学 Claude 桌面版）：顶栏 = **窗口右上角那一排**。
             左边只剩几条整个工作区的状态（演示数据 / 值守中 / 还没接 AI / 余额不足），右边是六张卡的图标
             与「⋮」（`RailTopBar`；WP412 起：露出的工具 →「⋮」溢出菜单 → 最右专门的面板开关）。原来中间那个「交给某个岗位一件事… ⌘K」搜索框去掉了——派活由助理做（WP343），
@@ -620,82 +822,128 @@ export function AppShell({
             WP424 起桌面壳藏了系统标题栏（`desktopChrome()`）：这一排就是标题栏——Mac 红绿灯在左栏顶部，
             Windows 窗口按钮叠在右上（右边按 `env(titlebar-area-*)` 让出那一截）。
           */}
-              {/*
+                {/*
                 WP424：桌面壳藏了系统标题栏之后，这一排就是窗口的标题栏——空白处能拖动窗口（上面的按钮不能）。
                 Mac：窄窗左栏收起时左边让出红绿灯那一截；Windows：右边让出三个系统按钮（壳没给 env 时按 140px 让）。
               */}
-              <header
-                className={cn(
-                  'sticky top-0 z-50 flex h-11 shrink-0 items-center gap-2 border-b border-ws-line bg-ws-paper pl-4',
-                  chrome !== undefined && 'ws-drag',
-                  chrome === 'inset' && 'pl-[84px] md:pl-4',
-                )}
-                style={{
-                  paddingRight:
-                    chrome === 'overlay'
-                      ? 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))))'
-                      : 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
-                }}
-                data-testid="top-bar"
-                data-chrome={chrome}
-              >
-                {/* WP125：合成世界的「演示数据」标记——不显眼但始终在 */}
-                <DemoBadge />
-                <StandbyBadge />
-                {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
-                {onboarding ? null : <NoModelBanner variant="chip" />}
-                {onboarding ? null : <QuotaChip />}
-                <div className="ml-auto flex items-center">
-                  <RailTopBar {...(instances === undefined ? {} : { instances })} />
+                <header
+                  className={cn(
+                    'sticky top-0 z-50 flex h-11 shrink-0 items-center gap-1 border-b border-ws-line bg-ws-paper',
+                    chrome !== undefined && 'ws-drag',
+                    // WP424 / WP431：左栏收成图标列时 Mac 红绿灯伸到顶栏这边来（52 + 34 ≥ 84），左边让出那一截
+                    chrome === 'inset' && iconRail ? 'pl-[34px]' : 'pl-3',
+                  )}
+                  style={{
+                    paddingRight:
+                      chrome === 'overlay'
+                        ? 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))))'
+                        : 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
+                  }}
+                  data-testid="top-bar"
+                  data-chrome={chrome}
+                >
+                  {iconRail ? (
+                    <>
+                      <ShellCorner
+                        collapsed
+                        {...(narrow ? {} : { onToggle: toggleSidebar })}
+                        onSearch={() => {
+                          palette.open()
+                        }}
+                      />
+                      <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-ws-line" />
+                    </>
+                  ) : null}
+                  {/* WP431：这一页的标题（岗位 / 职责 / 事项页自己放进来）；没有就按地址写页名 */}
+                  <div
+                    ref={topBar.setTitle}
+                    className="flex min-w-0 items-center"
+                    data-testid="top-bar-title-slot"
+                  />
+                  {topBar.claimed || pageName === undefined ? null : (
+                    <span
+                      className="truncate px-1.5 text-[13.5px] font-medium"
+                      data-testid="top-bar-page-name"
+                    >
+                      {t(pageName)}
+                    </span>
+                  )}
+                  {/* WP125：合成世界的「演示数据」标记——不显眼但始终在 */}
+                  <span className="ml-1 flex shrink-0 items-center gap-2">
+                    <DemoBadge />
+                    <StandbyBadge />
+                    {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
+                    {onboarding ? null : <NoModelBanner variant="chip" />}
+                    {onboarding ? null : <QuotaChip />}
+                  </span>
+                  <div className="ml-auto flex shrink-0 items-center">
+                    <RailTopBar
+                      {...(instances === undefined ? {} : { instances })}
+                      extra={
+                        <>
+                          {/* WP429：通知铃铛（变更审阅之后、这一页的设置之前） */}
+                          <span className="contents" data-testid="top-bar-bell-slot">
+                            <NotificationBell />
+                          </span>
+                          {/* 这一页的设置（岗位设置 / 职责设置的滑杆），页面自己放进来 */}
+                          <span
+                            ref={topBar.setAction}
+                            className="contents"
+                            data-testid="top-bar-action-slot"
+                          />
+                        </>
+                      }
+                    />
+                  </div>
+                </header>
+                <div className="flex min-w-0 flex-1">
+                  <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
+                    {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
+                    <ErrorBoundary scope="page" resetKey={pathname}>
+                      {children}
+                    </ErrorBoundary>
+                  </main>
+                  {/* WP372：右侧面板（六张卡 / 一格）；宽屏挤在主区右边，< 1200 盖在主区上 */}
+                  <RailHost {...(instances === undefined ? {} : { instances })} />
                 </div>
-              </header>
-              <div className="flex min-w-0 flex-1">
-                <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
-                  {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
-                  <ErrorBoundary scope="page" resetKey={pathname}>
-                    {children}
-                  </ErrorBoundary>
-                </main>
-                {/* WP372：右侧面板（六张卡 / 一格）；宽屏挤在主区右边，< 1200 盖在主区上 */}
-                <RailHost {...(instances === undefined ? {} : { instances })} />
               </div>
-            </div>
 
-            {/* WP320：「记住了：……」小提醒（点了跳到那条记忆） */}
-            <MemoryNotice {...(instances === undefined ? {} : { instances })} />
+              {/* WP320：「记住了：……」小提醒（点了跳到那条记忆） */}
+              <MemoryNotice {...(instances === undefined ? {} : { instances })} />
 
-            {/* WP207：「已归档（n）」点开的列表（筛好那条职责；筛子都能改） */}
-            {archived === undefined ? null : (
-              <ArchivedDialog
-                open
+              {/* WP207：「已归档（n）」点开的列表（筛好那条职责；筛子都能改） */}
+              {archived === undefined ? null : (
+                <ArchivedDialog
+                  open
+                  onOpenChange={(next) => {
+                    if (!next) setArchived(undefined)
+                  }}
+                  scope={archived}
+                  instances={byPosition}
+                />
+              )}
+
+              <CommandPalette
+                open={paletteOpen}
                 onOpenChange={(next) => {
-                  if (!next) setArchived(undefined)
+                  setPaletteOpen(next)
+                  if (!next) {
+                    setHandoff(undefined)
+                    setCompose(undefined)
+                  }
                 }}
-                scope={archived}
-                instances={byPosition}
+                {...(handoff === undefined ? {} : { handoff })}
+                {...(compose === undefined ? {} : { compose })}
+                positions={positions}
+                {...(instances === undefined ? {} : { instances })}
+                cards={cards}
+                tileLibrary={tileLibrary}
+                onAddTile={onAddTile}
               />
-            )}
-
-            <CommandPalette
-              open={paletteOpen}
-              onOpenChange={(next) => {
-                setPaletteOpen(next)
-                if (!next) {
-                  setHandoff(undefined)
-                  setCompose(undefined)
-                }
-              }}
-              {...(handoff === undefined ? {} : { handoff })}
-              {...(compose === undefined ? {} : { compose })}
-              positions={positions}
-              {...(instances === undefined ? {} : { instances })}
-              cards={cards}
-              tileLibrary={tileLibrary}
-              onAddTile={onAddTile}
-            />
-          </div>
-        </ConversationActionsProvider>
-      </PaletteProvider>
+            </div>
+          </ConversationActionsProvider>
+        </PaletteProvider>
+      </TopBarSlotsProvider>
     </RailStateProvider>
   )
 }

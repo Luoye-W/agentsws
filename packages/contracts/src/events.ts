@@ -94,6 +94,12 @@ export type KnownEventType =
    */
   | 'model.source_switched'
   /**
+   * WP430（决策 1289）：登录类的 AI 来源（ChatGPT 订阅、DeepSeek 账号）登录失效 / 过期，要人重新登录。
+   * 这一轮已经按 AI 来源顺序切到下一个接着做，不停下、不出卡；站内通知（WP429）接这条提醒人去重登。
+   * payload 只有来源 id 与来源名（`{ provider, label }`），没有账号名、没有令牌。同一来源在重新能用之前只发一次。
+   */
+  | 'model_source.relogin_needed'
+  /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */
@@ -398,6 +404,13 @@ export type KnownEventType =
   | 'chat.reply_held'
   // WP417（自查 C15）：聊天里没等到人 → 出了一张跟进邮件卡（payload：卡 id；邮箱不进日志）
   | 'chat.email_follow_up'
+  // WP428（决策 1246 改）：按置信度直接答了一句（payload：分数、档位、出处 id）；人说「这句不该直接答」（payload：消息 id）
+  | 'chat.auto_answered'
+  | 'chat.auto_answer_flagged'
+  // WP428（决策 1244 改）：够条件 → 建议开全自动（payload：哪一类、哪条岗位、卡 id）；开了 / 关了（关的原因：人关 / 出事）
+  | 'autopilot.suggested'
+  | 'autopilot.turned_on'
+  | 'autopilot.turned_off'
   // WP57：商家在聊天里「教 AI」之后沉淀下来的知识候选（承诺类永不自动发布，19）
   | 'knowledge.candidate_created'
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。

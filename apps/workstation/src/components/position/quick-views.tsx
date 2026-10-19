@@ -149,7 +149,7 @@ export function QuickViewPanel({ view }: { view: QuickView }): ReactNode {
         <h4 className="text-sm font-medium">{quickTitle(t, view)}</h4>
         <Hint text={t('pos2.quick.note')} testId="work-quick-note" />
         <Link
-          className="ml-auto inline-flex items-center gap-0.5 text-xs text-ws-muted-fg hover:text-foreground"
+          className="ws-link-muted ml-auto inline-flex items-center gap-0.5 text-xs"
           to={`/positions/${encodeURIComponent(view.assignment_id)}/duties/${encodeURIComponent(view.role_id)}`}
           data-testid="work-quick-open-duty"
         >

@@ -413,7 +413,7 @@ describe('矩阵表本身', () => {
     expect(actionsFor('daily_plan', 'pending')).toEqual(['approve', 'instruct', 'snooze', 'open'])
     expect(labelsFor('daily_plan', ['approve', 'instruct', 'snooze'])).toEqual({
       approve: '采纳',
-      instruct: '我改几条',
+      instruct: '修改',
       snooze: '稍后',
     })
     expect(actionsFor('review', 'pending')).toEqual(['approve', 'reject', 'snooze', 'open'])

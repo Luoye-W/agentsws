@@ -252,7 +252,7 @@ export function PositionPlanner({
                       data-testid="onboarding-category-all"
                       data-category={c.id}
                       data-all={count === c.roles.length ? 'true' : 'false'}
-                      className="shrink-0 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      className="ws-link-muted shrink-0 px-2 py-1.5 text-xs"
                       onClick={() => {
                         onSetDuties(
                           c.roles.map((r) => r.id),

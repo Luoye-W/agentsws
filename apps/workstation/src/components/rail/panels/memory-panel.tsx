@@ -279,7 +279,7 @@ function Inherited({ scope }: { scope: RailScope }): React.ReactNode {
         type="button"
         aria-expanded={open}
         data-testid="memory-inherited-toggle"
-        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="ws-link-muted flex w-fit items-center gap-1 text-xs"
         onClick={() => {
           setOpen((v) => !v)
         }}

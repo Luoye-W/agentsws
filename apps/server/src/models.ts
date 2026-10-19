@@ -121,11 +121,13 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
+import { chatAnswerStubScript } from '@agentsws/support-core'
 import { deepseekThinkingOf } from './deepseek-thinking.js'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
 import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
+import { DEEPSEEK_ACCOUNT_RUN_PROVIDER } from './run-blocked.js'
 import type { SecretStore } from './secret-store.js'
 import { SECRETS_KEY_ENV } from './secret-store.js'
 import {
@@ -385,6 +387,11 @@ interface ModelsStateFile {
      * 放在 `defaults` 里：跟随公司默认 / 从别的品牌复制时一起走。
      */
     fallback_cloud?: boolean
+    /**
+     * WP430（决策 1288）：「AI 来源」里自己配的那几条的先后（provider id，拖动排序）。没排过的接在后面，
+     * 次序同输入框 AI 钮。也放在 `defaults` 里：跟随公司默认 / 从别的品牌复制时一起走。
+     */
+    source_order?: string[]
     budget?: {
       workspace_daily_base?: number
       workspace_monthly_base?: number
@@ -503,6 +510,11 @@ export interface ModelsAssembly {
   fallbackCloud(): { available: boolean; on: boolean }
   /** WP425：改那个开关（保存即生效；对话里那张「用工坊积分接着做」卡也走这里）。 */
   setFallbackCloud(on: boolean): void
+  /**
+   * WP430（决策 1289）：这一家用不了时，按「AI 来源」顺序还有没有下一个能接（自己配的另一条能跑活的，
+   * 或开关开着的工坊积分）。DeepSeek 账号登录失效时据此决定正在跑的事要不要停：有得接就不停。
+   */
+  canSwitchFrom(provider_id: string): boolean
   /** 这台机器上有没有能用的模型（运行时与首页黄条问它，不再看环境变量）。 */
   configured(): boolean
   /** 现在生效的默认模型（运行时组 `RunRequest.runtime.model` 用）。 */
@@ -2228,15 +2240,71 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return providerDisplayLabel(c)
   }
 
+  /**
+   * WP430（决策 1288）：自己配的那几条（不含工坊积分），按「AI 来源」里排的顺序。没排过的接在后面，
+   * 次序同输入框 AI 钮（订阅 → DeepSeek 账号 → DeepSeek → 别家）。
+   */
+  const ownSourcesOrdered = (
+    active: readonly ModelProviderConfig[] = textConfigs(),
+  ): ModelProviderConfig[] => {
+    const rank = (c: ModelProviderConfig): number =>
+      c.kind === 'openai-codex'
+        ? 0
+        : c.kind === 'deepseek_account'
+          ? 1
+          : c.kind === 'deepseek'
+            ? 2
+            : 3
+    const order = state.defaults.source_order ?? []
+    const pos = (c: ModelProviderConfig): number => {
+      const i = order.indexOf(c.id)
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i
+    }
+    return active
+      .filter((c) => c.kind !== 'agentsws_cloud')
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => pos(a.c) - pos(b.c) || rank(a.c) - rank(b.c) || a.i - b.i)
+      .map(({ c }) => c)
+  }
+
+  /**
+   * WP430（决策 1288）：这一条能不能被自动接上——只算真能跑活的：登录着的订阅 / DeepSeek 账号（在清单里就是登录着），
+   * 填了 key 且最近一次测试文字那一步过了的（看不了图不要紧）。没测过、连不上 / 文字不通的不接（换过去多半也是失败，白耽误一跳）。
+   */
+  const ownReady = (c: ModelProviderConfig): boolean => {
+    if (c.kind === 'openai-codex' || c.kind === 'deepseek_account') return true
+    const t = state.tests[c.id]
+    if (t === undefined) return false
+    // 只是看不了图（DeepSeek 官方 API 这类纯文字的）也算能跑活：文字那一步过了就行
+    return (
+      t.ok ||
+      t.reason === NO_VISION_REASON ||
+      (t.steps?.some((s) => s.step === 'text' && s.ok) ?? false)
+    )
+  }
+
   const sourceFallbackOf = (): ModelGatewayPolicy['source_fallback'] => {
     const cloud = cloudFallbackConfig()
-    if (cloud === undefined) return undefined
-    const labels: Record<string, string> = {}
-    for (const c of textConfigs()) if (c.kind !== 'agentsws_cloud') labels[c.id] = sourceLabelFor(c)
+    const mine = ownSourcesOrdered()
+    const own = mine
+      .filter(ownReady)
+      .map((c) => ({ provider: c.id, model: c.model, region: c.region }))
+    // 没有能接的、又没有工坊积分：没得切（老样子）。只有一条能接的也给——原选可能是没测过的那条
+    if (cloud === undefined && own.length === 0) return undefined
+    // DeepSeek 账号登录失效后那一条会被摘掉；正在跑的事下一跳说「你的 DeepSeek 账号…」还要认得它
+    const labels: Record<string, string> = { [DEEPSEEK_ACCOUNT_RUN_PROVIDER]: 'DeepSeek 账号' }
+    for (const c of mine) labels[c.id] = sourceLabelFor(c)
+    const relogin = mine
+      .filter((c) => c.kind === 'openai-codex' || c.kind === 'deepseek_account')
+      .map((c) => c.id)
     return {
-      to: { provider: cloud.id, model: cloud.model, region: cloud.region },
+      ...(cloud === undefined
+        ? {}
+        : { to: { provider: cloud.id, model: cloud.model, region: cloud.region } }),
       enabled: fallbackCloudOn(),
       labels,
+      own,
+      ...(relogin.length === 0 ? {} : { relogin }),
     }
   }
 
@@ -2260,7 +2328,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     const budget = state.defaults.budget ?? {}
     // WP425：备用那一条（虚的那条也要有一行价，不然网关预留时说「价目里没有」）
     const source_fallback = sourceFallbackOf()
-    if (source_fallback !== undefined) {
+    if (source_fallback?.to !== undefined) {
       const key = `${source_fallback.to.provider}/${source_fallback.to.model}`
       prices[key] ??= { in: 0, out: 0, cached: 0 }
     }
@@ -2293,7 +2361,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       const provider = buildProvider(backup)
       if (provider !== undefined) providers.push(provider)
     }
-    if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
+    if (providers.length === 0)
+      providers.push(stubProvider({ seed: 7, scripts: [chatAnswerStubScript] }))
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
     gateway.reconfigure({
       providers,
@@ -2773,13 +2842,14 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 与 AI 钮同一份数据（同样的来源名、同样的分组）。
    */
   const aiSourceView = (active: readonly ModelProviderConfig[]): ModelAiSourceView => {
-    const own = active
-      .filter((c) => c.kind !== 'agentsws_cloud')
-      .map((c) => ({
-        provider_id: c.id,
-        label: providerDisplayLabel(c),
-        group: c.kind === 'openai-codex' ? ('subscription' as const) : ('own' as const),
-      }))
+    // WP430：按「AI 来源」里排的顺序；`ready` = 会被自动接上（登录着的订阅 / 账号、测试通过的 key）
+    const own = ownSourcesOrdered(active).map((c) => ({
+      provider_id: c.id,
+      label: providerDisplayLabel(c),
+      group: c.kind === 'openai-codex' ? ('subscription' as const) : ('own' as const),
+      ready: ownReady(c),
+      model: c.model,
+    }))
     const cloud = cloudFallbackConfig()
     return {
       own,
@@ -3197,6 +3267,14 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       // WP425：开关「自己的用不了时用工坊积分接着做」
       if (input.fallback_to_cloud !== undefined)
         state.defaults.fallback_cloud = input.fallback_to_cloud
+      // WP430：「AI 来源」拖动排序（只认 provider id；去重，空的就是回到默认次序）
+      if (input.source_order !== undefined) {
+        const order = [
+          ...new Set(input.source_order.map((id) => id.trim()).filter((id) => id !== '')),
+        ]
+        if (order.length === 0) delete state.defaults.source_order
+        else state.defaults.source_order = order
+      }
       flush()
       reassemble()
       return defaultsView()
@@ -3346,6 +3424,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       flush()
       reassemble()
     },
+    canSwitchFrom(provider_id) {
+      const fb = sourceFallbackOf()
+      if (fb === undefined) return false
+      if (fb.to !== undefined && fb.enabled && fb.to.provider !== provider_id) return true
+      return (fb.own ?? []).some((r) => r.provider !== provider_id)
+    },
     configured: () => textConfigs().length > 0,
     defaultRef,
     imageView: () => imageView(),
@@ -3396,6 +3480,21 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         correlation: { trace_id: `dsa_${reason}_${clock.now()}` },
         payload: { providers: rows.map((r) => r.id), reason },
       })
+      /*
+       * WP430（决策 1289）：登录失效（不是人自己登出的）——要重新登录。正在跑的事按 AI 来源顺序接着做，
+       * 站内通知（WP429）接这一条提醒人去重登。payload 只有来源 id 与来源名。
+       */
+      if (reason === 'expired') {
+        for (const row of rows)
+          options.appendEvent?.({
+            schema_version: 1,
+            workspace_id: options.workspace_id?.() ?? 'ws_local',
+            type: 'model_source.relogin_needed',
+            actor: { kind: 'system', id: 'models.deepseek_account' },
+            correlation: { trace_id: `relogin_${row.id}_${clock.now()}` },
+            payload: { provider: row.id, label: sourceLabelFor(row) },
+          })
+      }
       return true
     },
     importSettings(snapshot) {

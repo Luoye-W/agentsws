@@ -258,6 +258,64 @@ describe('(b) 设备码登录：记录进本机库，状态脱敏', () => {
   })
 })
 
+describe('(b′) WP426 浏览器登录：回来那一页由我们画，地址由我们代贴', () => {
+  it('浏览器回到我们占的回调 → 上游拿这条地址自己核 state、自己换令牌 → 记录落库；用完就关', async () => {
+    fakeOpenAi()
+    const records = memoryRecords()
+    let deliver: (url: string) => void = () => undefined
+    const received = new Promise<string>((resolve) => {
+      deliver = resolve
+    })
+    let closed = false
+    const handle = await createSubscriptionLogin({
+      credentials: credentialsPlugin(records),
+      brandedCallback: async () => ({
+        received,
+        close: () => {
+          closed = true
+        },
+      }),
+    })
+    logins.push(handle)
+    const outcome = await handle.begin({
+      provider: 'openai-codex',
+      method: 'browser',
+      notify: (n) => {
+        if (n.url === undefined) return
+        const state = new URL(n.url).searchParams.get('state')
+        deliver(`http://localhost:1455/auth/callback?code=c1&state=${state ?? ''}`)
+      },
+      // 界面上那一格「贴回来」一直没人填：照样登上
+      ask: () => new Promise<string>(() => undefined),
+    })
+    expect(outcome).toBe('authorized')
+    expect([...records.rows.keys()]).toEqual(['openai-codex'])
+    expect(closed).toBe(true)
+  })
+
+  it('state 对不上：上游当场拒，不落库', async () => {
+    fakeOpenAi()
+    const records = memoryRecords()
+    const handle = await createSubscriptionLogin({
+      credentials: credentialsPlugin(records),
+      brandedCallback: async () => ({
+        received: Promise.resolve('http://localhost:1455/auth/callback?code=c1&state=forged'),
+        close: () => undefined,
+      }),
+    })
+    logins.push(handle)
+    await expect(
+      handle.begin({
+        provider: 'openai-codex',
+        method: 'browser',
+        notify: () => undefined,
+        ask: () => new Promise<string>(() => undefined),
+      }),
+    ).rejects.toThrow()
+    expect(records.rows.size).toBe(0)
+  })
+})
+
 // ── (c) 刷新 ───────────────────────────────────────────────────────────
 
 describe('(c) 刷新：到期前那一次经官方 modifyRecord 回写', () => {

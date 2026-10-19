@@ -94,8 +94,8 @@ function rig(
     answer?: string
     rules?: string
     voice?: string
-    /** WP417（决策 1232）：「常见问题直接发」开没开（缺省关 = 每一句先出卡）。 */
-    autoSend?: boolean
+    /** WP428（决策 1246 改）：按置信度直接答开没开（缺省开）。 */
+    autoAnswer?: boolean
   } = {},
 ): Rig {
   const clock = new StepClock()
@@ -124,7 +124,9 @@ function rig(
     position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
     ...(over.rules === undefined ? {} : { roleRules: () => over.rules }),
     ...(over.voice === undefined ? {} : { brandVoice: async () => over.voice }),
-    ...(over.autoSend === undefined ? {} : { autoSendFaq: () => over.autoSend === true }),
+    ...(over.autoAnswer === undefined
+      ? {}
+      : { autoAnswer: () => ({ on: over.autoAnswer === true }) }),
     emailFollowUp: async ({ session }) => {
       emails.push({ session_id: session.id })
       return { sent: true }
@@ -154,16 +156,36 @@ async function say(r: Rig, session_id: string, text: string, external_id?: strin
 }
 
 describe('实时车道：五种动作各走一遍', () => {
-  it('WP417（决策 1232）answer：缺省先出卡要人批——卡上就是起草的那句，访客那边说「稍等」、起求助钟', async () => {
-    const r = rig()
+  it('WP428（决策 1246 改）answer：知识库有、每句标了出处 → 直接答，对话记录里记着出处', async () => {
+    const r = rig({ answer: 'Shipping to the US is free over $50[K1].\n把握：85' })
     const s = await open(r)
     const out = await say(r, s.id, 'how much is shipping to the US?')
     expect(out.plan?.action).toBe('answer')
     expect(out.used_model).toBe(true)
+    expect(out.approval_item_id).toBeUndefined()
+    // 出处标记与自评那一行不发给访客
+    expect(out.reply).toBe('Shipping to the US is free over $50.')
+    const messages = await r.chat.messages(s.id)
+    expect(messages.map((m) => m.role)).toEqual(['visitor', 'agent'])
+    expect(messages[1]?.plan_action).toBe('auto_answer')
+    const auto = r.chat.autoAnswerOf(messages[1]?.id as string)
+    expect(auto?.sources[0]?.label).toContain('美国订单满')
+    expect(auto?.flagged).toBe(false)
+    expect(r.events.some((e) => e.type === 'chat.auto_answered')).toBe(true)
+    expect((await r.chat.session(s.id))?.status).toBe('open')
+  })
+
+  it('WP428：对不上出处（数字没有出处）→ 出卡转人，访客那边说「稍等，马上帮你问」、起求助钟；批了发回聊天窗', async () => {
+    const r = rig({ answer: 'Shipping to the US is free over $30[K1].\n把握：95' })
+    const s = await open(r)
+    const out = await say(r, s.id, 'how much is shipping to the US?')
     expect(out.approval_item_id).toBeDefined()
-    expect(out.reply).not.toContain('free over $50')
+    expect(out.reply).toContain('马上帮你问')
     const card = r.approvals.items[0] as ApprovalItem
-    expect((card.payload as { body: { text: string } }).body.text).toContain('free over $50')
+    expect(card.title).toContain('把握不够')
+    const payload = card.payload as { body: { text: string }; auto_answer: { reasons: string[] } }
+    expect(payload.body.text).toBe('Shipping to the US is free over $30.')
+    expect(payload.auto_answer.reasons.join(' ')).toContain('30')
     expect((await r.chat.session(s.id))?.status).toBe('assist_requested')
     // 批了 → 发回聊天窗、清掉求助钟（自查 C13：人回了就不再说「别干等了」）
     const sent = await r.chat.deliver(card, { idempotencyKey: card.id })
@@ -171,27 +193,50 @@ describe('实时车道：五种动作各走一遍', () => {
     const after = await r.chat.session(s.id)
     expect(after?.status).toBe('assist_answered')
     expect(after?.assist_deadline_at).toBeUndefined()
-    expect((await r.chat.messages(s.id)).at(-1)?.text).toContain('free over $50')
+    expect((await r.chat.messages(s.id)).at(-1)?.text).toContain('free over $30')
   })
 
-  it('WP417（自查 C9）：开了「常见问题直接发」，答案里写了退款承诺照样出卡', async () => {
-    const r = rig({ autoSend: true, answer: 'Sure, we will refund you in full today.' })
+  it('WP428：答案里写了退款承诺 → 不管把握多高照样出卡', async () => {
+    const r = rig({ answer: 'Sure, we will refund you in full today[K1].\n把握：100' })
     const s = await open(r)
     const out = await say(r, s.id, 'how much is shipping to the US?')
     expect(out.approval_item_id).toBeDefined()
     expect(out.reply).not.toContain('refund')
   })
 
-  it('answer：开了「常见问题直接发」→ 词表命中售前 → 轻模型答，并推进会话', async () => {
-    const r = rig({ autoSend: true })
+  it('WP428：商家关了直接答 → 每一句先出卡', async () => {
+    const r = rig({
+      autoAnswer: false,
+      answer: 'Shipping to the US is free over $50[K1].\n把握：85',
+    })
     const s = await open(r)
     const out = await say(r, s.id, 'how much is shipping to the US?')
-    expect(out.plan?.action).toBe('answer')
-    expect(out.used_model).toBe(true)
-    expect(out.reply).toContain('free over $50')
-    const messages = await r.chat.messages(s.id)
-    expect(messages.map((m) => m.role)).toEqual(['visitor', 'agent'])
-    expect(messages[1]?.plan_action).toBe('answer')
+    expect(out.approval_item_id).toBeDefined()
+    expect((r.approvals.items[0] as ApprovalItem).title).toContain('直接答已关')
+  })
+
+  it('WP428：人点「这句不该直接答」→ 同类问题以后转人', async () => {
+    const r = rig({ answer: 'Shipping to the US is free over $50[K1].\n把握：85' })
+    const s = await open(r)
+    await say(r, s.id, 'how much is shipping to the US?')
+    const first = (await r.chat.messages(s.id)).at(-1)
+    expect(first?.plan_action).toBe('auto_answer')
+    const flagged = await r.chat.flagAutoAnswer({
+      session_id: s.id,
+      message_id: first?.id as string,
+      by: 'p_wang',
+    })
+    expect(flagged?.learned).toBe(true)
+    expect(r.chat.autoAnswerOf(first?.id as string)?.flagged).toBe(true)
+    expect(r.events.some((e) => e.type === 'chat.auto_answer_flagged')).toBe(true)
+    r.clock.advance(60_000)
+    const again = await say(r, s.id, 'what does shipping to the US cost?')
+    expect(again.approval_item_id).toBeDefined()
+    expect((r.approvals.items.at(-1) as ApprovalItem).title).toContain('同类你说过先给你看')
+    // 不是直接答的那一句点不了
+    expect(
+      await r.chat.flagAutoAnswer({ session_id: s.id, message_id: 'nope', by: 'p_wang' }),
+    ).toBeUndefined()
   })
 
   it('answer 的材料里有知识命中，访客原话在围栏里', async () => {

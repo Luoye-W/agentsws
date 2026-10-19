@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-09-07T08:00:00.000Z",
+  "generated_at": "2026-10-19T02:03:00.000Z",
   "runtimes": {
     "stub": {
       "scenarios": {
@@ -387,7 +387,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000059,
+            "cost_base": 0.000315,
             "escalations": 1,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1809,6 +1809,90 @@
             "tokens_per_item": 1049,
             "tool_calls": 4
           }
+        },
+        "ops/own-model-second": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.002125,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 2,
+            "queue_latency_ms": 1300000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 1049,
+            "tool_calls": 4
+          }
+        },
+        "ops/own-model-both-down": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.001052,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 1350000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 1044,
+            "tool_calls": 2
+          }
+        },
+        "ops/own-model-cooldown": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.003426,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 4,
+            "queue_latency_ms": 1296000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 1056,
+            "tool_calls": 7
+          }
+        },
+        "chat/no-source-goes-to-human": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000304,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.7,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -2197,7 +2281,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000043,
+            "cost_base": 0.000307,
             "escalations": 1,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -3619,6 +3703,90 @@
             "tokens_per_item": 8634,
             "tool_calls": 7
           }
+        },
+        "ops/own-model-second": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.017314,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 2,
+            "queue_latency_ms": 1300000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 8634,
+            "tool_calls": 7
+          }
+        },
+        "ops/own-model-both-down": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.009622,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 1350000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 9601,
+            "tool_calls": 4
+          }
+        },
+        "ops/own-model-cooldown": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.030981,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 4,
+            "queue_latency_ms": 1296000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 7724,
+            "tool_calls": 12
+          }
+        },
+        "chat/no-source-goes-to-human": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000312,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.7,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -4028,7 +4196,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000043,
+            "cost_base": 0.000307,
             "escalations": 1,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -5428,6 +5596,90 @@
             "staged_changes": 1,
             "tokens_per_item": 10506,
             "tool_calls": 7
+          }
+        },
+        "ops/own-model-second": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.021052,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 2,
+            "queue_latency_ms": 1300000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 10506,
+            "tool_calls": 7
+          }
+        },
+        "ops/own-model-both-down": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.011696,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 1350000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 11677,
+            "tool_calls": 4
+          }
+        },
+        "ops/own-model-cooldown": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0.037672,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 4,
+            "queue_latency_ms": 1296000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 9395,
+            "tool_calls": 12
+          }
+        },
+        "chat/no-source-goes-to-human": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000312,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.7,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
           }
         }
       }

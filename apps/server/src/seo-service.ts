@@ -1016,7 +1016,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               kind === 'page_seo_edit'
                 ? `改页面标题、描述与开头：${page?.title ?? pick.page}`
                 : `给页面加一个小节：${page?.title ?? pick.page}`,
-              `${body}\n初稿由模型按品牌口吻写好了${drafted.body === 'none' ? '（没读到这一页的正文，只按查询与标题写的）' : '（读过这一页的正文）'}，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
+              `${body}\n初稿由模型按品牌口吻写好了${drafted.body === 'none' ? '（没读到这一页的正文，只按查询与标题写的）' : '（读过这一页的正文）'}，可以在卡上改字、删掉不想改的那格，或者点「修改」让它重写。`,
             )
             return id === undefined
               ? {
@@ -1047,7 +1047,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               { url: pick.page, ...(page?.title === undefined ? {} : { title: page.title }) },
               { title, h1: title, target_query: pick.query },
               `改页面标题与 H1：${page?.title ?? pick.page}`,
-              `${body}\n这是规则版的第一稿（把查询原样放进标题与 H1）${why}；描述与开头两句可以在卡上改，或者点「指导」让它重写。`,
+              `${body}\n这是规则版的第一稿（把查询原样放进标题与 H1）${why}；描述与开头两句可以在卡上改，或者点「修改」让它重写。`,
             )
             return id === undefined
               ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'rules' }

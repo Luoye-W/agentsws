@@ -30,11 +30,25 @@ export const SETTINGS_ZH: Record<string, string> = {
   'sp.workshop_account': '工坊账号',
   'sp.workshop_account.desc': '关联后可以用积分、云端服务',
   'sp.credits.desc': '余额、充值、花在哪了',
-  'sp.mode': '使用方式',
+  'sp.mode': '个人与团队',
   'sp.mode.desc': '一个人用、和同事一起用，还是整个公司用',
   'sp.mode.solo': '一个人用',
   'sp.mode.peers': '和同事一起用',
-  'sp.mode.company': '公司集体用',
+  'sp.mode.company': '整个公司用',
+  // WP426：三张可选卡（一句话说明进问号；换不了的按钮旁边问号说为什么）
+  'mode.card.solo.hint': '只有你自己，岗位和事都归你。默认就是这个。',
+  'mode.card.peers.hint':
+    '打开后同一局域网的同事能找到你；发个邀请码，他申请、你同意，就一起用了。大家平级。',
+  'mode.card.company.hint':
+    '要分上下级、给成员设额度时再开。开了以后每位同事收一张卡，可以选择退出。',
+  'mode.current': '正在用',
+  'mode.switch': '换成这个',
+  'mode.waiting': '等同事加入',
+  'mode.why.only_initiator': '只有最早建这个工作区的人能开公司模式。',
+  'mode.why.only_boss': '只有老板能改回同事互联。',
+  'mode.why.solo_from_peers': '同事都离开后会自动回到一个人用；要请人离开，去「同事」。',
+  'mode.why.solo_leave': '在「同事」里点「退出」，就回到你自己一个人用。',
+  'mode.why.solo_from_company': '先改回同事互联；同事都离开后才回到一个人用。',
   'sp.together.desc': '同一个局域网里的同事能找到你、加进来',
   'sp.notifications': '通知',
   'sp.weekly_review.desc': '每周什么时候把经营一页纸推给你',
@@ -95,7 +109,11 @@ export const SETTINGS_ZH: Record<string, string> = {
 
   // 这台电脑
   'sp.desktop': '桌面端',
-  'sp.app_update': '更新',
+  'sp.app_update': '版本与更新',
+  'sp.version.current': '当前版本 {version}',
+  'sp.version.check': '检查更新',
+  'sp.version.check_failed': '没查到，稍后再试',
+  'account.version': 'Agents 工坊 {version}',
   'sp.app_update.desc': '有新版时这里和左下角都会出「更新」',
   'sp.app_update.none': '已是最新',
   'sp.launch_at_login': '开机自启',
@@ -127,7 +145,7 @@ export const SETTINGS_ZH: Record<string, string> = {
   'sp.collab': '交接',
   'sp.handoff_days.desc': '交给同事的事几天没人理就退回给你',
   'sp.company': '公司',
-  'sp.company.desc': '公司名、几个品牌几个人、开或关公司模式',
+  'sp.company.desc': '公司名、几个品牌、几个人',
   'sp.inprogress.desc': '大家手上正在做的事',
 }
 
@@ -155,11 +173,26 @@ export const SETTINGS_EN: Record<string, string> = {
   'sp.workshop_account': 'Workshop account',
   'sp.workshop_account.desc': 'Link it to use credits and cloud services',
   'sp.credits.desc': 'Balance, top-ups and where it went',
-  'sp.mode': 'How you use it',
+  'sp.mode': 'You & team',
   'sp.mode.desc': 'On your own, with teammates, or as a company',
   'sp.mode.solo': 'On your own',
   'sp.mode.peers': 'With teammates',
   'sp.mode.company': 'As a company',
+  'mode.card.solo.hint': 'Just you; every position and task is yours. This is the default.',
+  'mode.card.peers.hint':
+    'Teammates on the same network can find you; share an invite code, they apply, you approve. Everyone is equal.',
+  'mode.card.company.hint':
+    'Turn it on when you need a hierarchy and member budgets. Each teammate gets a card and can choose to leave.',
+  'mode.current': 'In use',
+  'mode.switch': 'Switch to this',
+  'mode.waiting': 'Waiting for teammates',
+  'mode.why.only_initiator': 'Only the person who set up this workspace can turn on company mode.',
+  'mode.why.only_boss': 'Only the boss can switch back to working as peers.',
+  'mode.why.solo_from_peers':
+    'It goes back to just you once everyone else has left; to ask someone to leave, open Teammates.',
+  'mode.why.solo_leave': 'Click "Leave" under Teammates to go back to working on your own.',
+  'mode.why.solo_from_company':
+    'Switch back to working as peers first; once everyone else leaves, it is just you again.',
   'sp.together.desc': 'Teammates on the same network can find you and join',
   'sp.notifications': 'Notifications',
   'sp.weekly_review.desc': 'When the weekly one-pager is sent to you',
@@ -218,7 +251,11 @@ export const SETTINGS_EN: Record<string, string> = {
   'sp.brands.desc': 'Add, switch or pause brands',
 
   'sp.desktop': 'Desktop app',
-  'sp.app_update': 'Updates',
+  'sp.app_update': 'Version & updates',
+  'sp.version.current': 'Current version {version}',
+  'sp.version.check': 'Check for updates',
+  'sp.version.check_failed': 'Could not check; try again later',
+  'account.version': 'Agents Workshop {version}',
   'sp.app_update.desc': 'When a new version is out, "Update" shows here and bottom-left',
   'sp.app_update.none': 'Up to date',
   'sp.launch_at_login': 'Launch at login',
@@ -249,6 +286,6 @@ export const SETTINGS_EN: Record<string, string> = {
   'sp.collab': 'Handoffs',
   'sp.handoff_days.desc': 'Work handed to a teammate comes back if untouched this long',
   'sp.company': 'Company',
-  'sp.company.desc': 'Company name, brands and people, company mode on or off',
+  'sp.company.desc': 'Company name, brands and people',
   'sp.inprogress.desc': 'What everyone is working on right now',
 }

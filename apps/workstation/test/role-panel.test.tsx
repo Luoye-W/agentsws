@@ -174,7 +174,8 @@ describe('角色面板：看（69 §4）', () => {
   })
 
   it('岗位页 → 岗位那一段 + 下属职责清单（点一条看它自己的定位）', async () => {
-    const panel = await openRolePanel('/')
+    // WP431：卡片堆只在岗位 / 职责 / 事项页上有
+    const panel = await openRolePanel('/positions/asg_store')
     expect(panel.dataset.scope).toBe('web-ops')
     const links = within(panel).getAllByTestId('role-duty-link')
     expect(links.map((l) => l.getAttribute('data-duty'))).toEqual(['dtc.store', 'dtc.content'])

@@ -38,6 +38,8 @@ const ALLOWED_KEYS = [
   'agentsws.rail.expanded',
   // WP342（决策 853）：左下角账号菜单里「工作内容 / 设置」两组哪组展开着——纯界面折叠态，同上
   'agentsws.account.groups',
+  // WP431（照 Claude）：左栏收成图标列了没有（'1' / '0'）——纯界面折叠态，同上
+  'agentsws.sidebar.collapsed',
   // WP95（36 §11，`docs/upstream/sidebar-compare.md` #5）：第三栏的**布局**。
   // 它替掉了 WP71 那两个键（`agentsws.rightrail.panel` / `.width`），值的形状是
   // `{ 作用域桶: { open_panel_id, width } }`——**只有结构，没有内容**：

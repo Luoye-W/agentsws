@@ -196,7 +196,7 @@ export function Composer({
         <button
           type="button"
           data-testid="composer-show-cc"
-          className="w-fit text-[12px] text-ws-muted-fg hover:text-foreground"
+          className="ws-link-muted w-fit text-[12px]"
           onClick={() => {
             setShowCc(true)
           }}

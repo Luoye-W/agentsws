@@ -203,6 +203,11 @@ export interface RuntimeChoiceInput {
   electronExecPath: string
   /** `process.platform`；不给就按 node 的。Windows 上捆绑的 Node 叫 `node.exe`。 */
   platform?: string
+  /**
+   * WP427（决策 1273 ②）：Windows 版本目录布局下那份不随版本变的 Node（`<根>\node\node.exe`）。
+   * 给了就用它（防火墙认的路径不变，「允许」一次一直有效）；不给 = 用这一版自带的那份。
+   */
+  stableNode?: string
 }
 
 /**
@@ -212,6 +217,7 @@ export interface RuntimeChoiceInput {
  * （见 README「原生模块」）。顺序：
  * 1. `AGENTSWS_SIDECAR_RUNTIME=electron` —— 明确要求借 Electron 自带 Node 的逃生口；
  * 2. `AGENTSWS_NODE` —— 指定 node 可执行文件；
+ * 2½. WP427：Windows 版本目录布局下不随版本变的那一份（`<根>\node\node.exe`，由这一版同步过去）；
  * 3. 安装包里随包携带的那一份（WP111 起真的有了：`<resources>/node/bin/node`，
  *    Windows 上是 `<resources>/node/node.exe`）；
  * 4. `PATH` 上的 `node`。
@@ -225,6 +231,8 @@ export function resolveServerRuntime(input: RuntimeChoiceInput): ServerRuntime {
     return { kind: 'electron', execPath: input.electronExecPath }
   const explicit = input.env.AGENTSWS_NODE
   if (explicit !== undefined && explicit !== '') return { kind: 'node', execPath: explicit }
+  if (input.stableNode !== undefined && input.exists(input.stableNode))
+    return { kind: 'node', execPath: input.stableNode }
   const bundled = findBundledNode(
     input.resourcesPath,
     input.platform ?? process.platform,

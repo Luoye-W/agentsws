@@ -69,7 +69,7 @@ export function HelpPanel({ address, scope }: RailPanelBodyProps): ReactNode {
       <button
         type="button"
         data-testid="help-back"
-        className="inline-flex items-center gap-0.5 self-start text-xs text-ws-muted-fg hover:text-foreground"
+        className="ws-link-muted inline-flex items-center gap-0.5 self-start text-xs"
         onClick={() => {
           go('index')
         }}
@@ -167,7 +167,7 @@ function HelpIndex({
             <button
               type="button"
               data-testid="help-show-all"
-              className="self-start px-2 text-xs text-ws-muted-fg hover:text-foreground"
+              className="ws-link-muted self-start px-2 text-xs"
               onClick={() => {
                 setAll(true)
               }}

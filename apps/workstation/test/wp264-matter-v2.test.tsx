@@ -237,12 +237,13 @@ beforeEach(() => {
 })
 
 describe('WP264 页头', () => {
-  it('短标题一行；点了就地改，Enter 存（PATCH）', async () => {
+  it('短标题一行；WP431：标题下拉里「改名」就地改，Enter 存（PATCH）', async () => {
     renderMatter()
     const title = await screen.findByTestId('matter-title')
     expect(title.textContent).toContain('Rovella 英文首页 · 深色科技风')
     const u = user()
-    await u.click(title)
+    await u.click(screen.getByTestId('matter-menu'))
+    await u.click(screen.getByTestId('matter-rename'))
     const input = screen.getByTestId('matter-title-input')
     await u.clear(input)
     await u.type(input, 'Rovella 首页{Enter}')

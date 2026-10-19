@@ -48,7 +48,7 @@ import { useConnectAs } from '@/components/connections/use-connect-as'
 import { DataMapPanel } from '@/components/data-map'
 import { useHoldsSiteChat } from '@/components/messages/site-chat'
 import { ModelsPanel } from '@/components/models/models-panel'
-import { NoModelBanner } from '@/components/models/no-model-banner'
+import { NotificationPrefsCard } from '@/components/notifications/notification-prefs'
 import { BrandAssetsCard } from '@/components/org/brand-assets-card'
 import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { GrossMarginCard } from '@/components/org/gross-margin-card'
@@ -196,6 +196,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         keywords: '动画 animation',
         render: () => <MotionRow />,
       },
+      {
+        // WP426：版本与更新挪到「通用」——网页里也看得到版本（服务端报的）；桌面壳里能检查更新
+        id: 'app-update',
+        title: 'sp.app_update',
+        desc: 'sp.app_update.desc',
+        keywords: '版本 升级 更新 检查更新 version update',
+        render: () => <AppUpdateRow />,
+      },
     ],
   },
   {
@@ -235,19 +243,12 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     icon: Users,
     items: [
       {
+        // WP426：三张可选卡；①「和同事一起用」那一块（邀请、局域网）在卡下面就地展开
         id: 'usage-mode',
         title: 'sp.mode',
         desc: 'sp.mode.desc',
-        keywords: '个人 同事 公司 模式 mode',
+        keywords: '个人 同事 公司 模式 使用方式 一起用 邀请 局域网 团队 mode team invite',
         render: () => <UsageModeRow />,
-      },
-      {
-        id: 'together',
-        title: 'together.entry',
-        desc: 'sp.together.desc',
-        keywords: '邀请 局域网 invite',
-        show: (c) => c.solo,
-        render: () => <OrgPage only="together" />,
       },
       {
         id: 'company',
@@ -265,6 +266,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     title: 'sp.notifications',
     icon: Bell,
     items: [
+      {
+        // WP429：每类通知「站内 / 系统」两个开关
+        id: 'notify-prefs',
+        title: 'notify.prefs.title',
+        desc: 'sp.notify_prefs.desc',
+        keywords: '通知 铃铛 系统通知 弹窗 提醒 notification',
+        render: () => <NotificationPrefsCard />,
+      },
       {
         id: 'weekly-review',
         title: 'settings.weekly_review',
@@ -358,12 +367,8 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         title: 'models.title',
         desc: 'sp.models.desc',
         keywords: 'DeepSeek 默认模型 生图 API key AI',
-        render: (c) => (
-          <div className="flex flex-col gap-3">
-            <NoModelBanner />
-            <ModelsPanel assignment={as(c)} />
-          </div>
-        ),
+        // WP426：「还没接模型」那条黄条不在这里重复——「正在用」的空态就是它
+        render: (c) => <ModelsPanel assignment={as(c)} />,
       },
     ],
   },
@@ -595,13 +600,6 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     icon: Monitor,
     show: (c) => c.desktop,
     items: [
-      {
-        id: 'app-update',
-        title: 'sp.app_update',
-        desc: 'sp.app_update.desc',
-        keywords: '版本 升级 update',
-        render: () => <AppUpdateRow />,
-      },
       {
         // WP361（决策 927）：开机自启从「在托盘菜单里」变成这里的开关（托盘那一项照旧、两边同步）
         id: 'launch-at-login',

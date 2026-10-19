@@ -33,6 +33,8 @@ import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
+import { MODELS_EN, MODELS_ZH } from './i18n-models'
+import { NOTIFY_EN, NOTIFY_ZH } from './i18n-notifications'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
@@ -55,6 +57,7 @@ import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
 import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
+import { TOPBAR_EN, TOPBAR_ZH } from './i18n-topbar'
 
 export type Lang = 'zh' | 'en'
 
@@ -514,7 +517,8 @@ const zh: Table = {
   'org.roles.automation.none': '没有可自动的动作。',
   // WP284（决策 275）：「以后都这样」批了落下的那几句
   'role_rules.title': '以后都这样',
-  'role_rules.hint': '卡上指导时选「以后都这样」，点了通过就记在这里。AI 每次干这条活都照做。',
+  'role_rules.hint':
+    '卡上点「修改」时选「以后都这样」，点了通过就记在这里。AI 每次干这条活都照做。',
   'role_rules.empty': '还没有。',
   'role_rules.by': '{who} 定的',
   'role_rules.edited_by': '{who} 改的',
@@ -573,6 +577,9 @@ const zh: Table = {
   'login.shared.code': '设置码',
   'login.shared.codeTip': '在服务日志里（docker compose logs server），用一次就换一个新的。',
   'login.shared.submit': '用设置码进入',
+  // WP427：经「团队门」从别的电脑打开时
+  'login.team':
+    '对方同意你的申请之后，在你自己的工坊里点「打开」就直接进来了；也可以用工坊账号登录。',
   'login.shared.colleague': '是同事？请工作区负责人在「公司 → 成员」里给你发一条邀请链接。',
   'login.account.open': '用工坊账号进入',
   'login.account.email': '工坊账号邮箱',
@@ -1156,7 +1163,7 @@ const zh: Table = {
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
   'card.options.hint.content_conflict': '选一个：新版的这一段，还是你改过的那一段',
-  'card.instruct.title': '指导',
+  'card.instruct.title': '修改',
   // WP84：指导抽屉顶部的示例任务（选择题优先，36 §1）
   'card.examples.title': '示例任务',
   'card.examples.hint': '这条职责典型能接的活。点一条会填进下面的框，还要你改完再发。',
@@ -1165,7 +1172,7 @@ const zh: Table = {
   'card.instruct.scope.similar_cases': '类似情况都这样',
   'card.instruct.scope.global_rule': '以后都这样（进策略变更审批）',
   'card.instruct.text': '一句话说清楚要怎么改',
-  'card.instruct.submit': '发出指导',
+  'card.instruct.submit': '提交修改',
   'card.ask.title': '问 AI',
   'card.ask.hint': '单轮、只你可见、不会发给客户',
   'card.ask.unavailable': '问 AI 要先有边界：在某张卡或某个事项里问',
@@ -1862,7 +1869,7 @@ const zh: Table = {
   'verb.handoff.reject': '不是客户问题',
   'verb.handoff.instruct': '转给别人',
   'verb.handoff.approve.account_transfer': '按这份交接',
-  'verb.handoff.instruct.account_transfer': '改一下分法',
+  'verb.handoff.instruct.account_transfer': '修改',
   'verb.handoff.reject.account_transfer': '先不转',
   'verb.takeover.approve': '打开浏览器',
   'verb.takeover.reject': '放弃这一步',
@@ -2010,7 +2017,7 @@ const zh: Table = {
   'channel.chat': '聊天',
   'channel.system': '系统',
   'deck.progress': '第 {index} / {total} 张',
-  'deck.keyboard': '→ 批准 · ← 拒绝 · ↑ 稍后 · ↓ 指导',
+  'deck.keyboard': '→ 批准 · ← 拒绝 · ↑ 稍后 · ↓ 修改',
   'deck.filter.all': '全部 {n}',
   'deck.filter.waiting': '客户在等 {n}',
   'deck.filter.nobody': '无人等待 {n}',
@@ -2359,7 +2366,7 @@ const zh: Table = {
   'matter.route.switch': '换成「{role}」',
   'matter.cards': '未决的卡：{count} 张',
   'plan.adopt': '就按这个来',
-  'plan.adjust': '我改几条',
+  'plan.adjust': '修改',
   'plan.later': '稍后再说',
   'plan.hint': '这只是建议，采纳之后才会写进待办。',
   'plan.empty': '今天没有要调整的安排。',
@@ -2778,8 +2785,11 @@ const zh: Table = {
   'models.defaults': '哪件事用哪个模型',
   'models.ai_source': 'AI 来源',
   'models.ai_source.hint':
-    '先用你自己的 AI（订阅或 API key）；额度用完、连不上或 key 失效时，那一轮自动换成工坊积分接着做，下一轮自动回到你自己的。数据、云浏览器等付费服务不管 AI 用谁，都照常扣积分。',
-  'models.ai_source.primary': '主用',
+    '这次选的 AI 额度用完、连不上或登录 / key 失效时，按下面的顺序换你自己的另一个接着做（拖动可调顺序），都不行再用工坊积分；下一轮先试回原来选的。同一个连着两次不行，10 分钟内先跳过它。数据、云浏览器等付费服务不管 AI 用谁，都照常扣积分。',
+  'models.ai_source.primary': '自己的',
+  'models.ai_source.not_ready': '测试通过后才会被自动接上（去上面那张卡点「测试」）',
+  'models.ai_source.drag': '拖动调整「{name}」的顺序',
+  'models.ai_source.moved': '「{name}」排到第 {n} 个',
   'models.ai_source.backup': '备用',
   'models.ai_source.no_own': '还没接你自己的 AI',
   'models.ai_source.backup_off': '登录工坊账号后可用',
@@ -2876,7 +2886,7 @@ const zh: Table = {
   'intake.edit.done': '改好了',
   'intake.tag.ai': 'AI 建议',
   'intake.tag.ai.hint':
-    'AI 按你网站上的文字和联网查到的网页归纳的，还没人核过。改一下或点 ✓ 就算你确认了。',
+    'AI 按你网站上的文字和联网查到的网页归纳的，还没人核过。修改或点 ✓ 就算你确认了。',
   'intake.ai.accept': '对，就这样',
   'intake.insights.no_model':
     '还没接模型，人群、关键词、竞品这几格先空着。接上模型后可以在设置里重新分析一次。',
@@ -3376,9 +3386,21 @@ const zh: Table = {
   'chat.window.assist_wait': '求助等待时长',
   'chat.window.assist_wait.option': '{n} 秒',
   'chat.window.assist_wait.option_min': '{n} 分钟',
-  'chat.window.auto_send_faq': '常见问题直接发',
-  'chat.window.auto_send_faq.hint':
-    '关着时 AI 每一句都先给你批。打开后，答案来自知识卡、又没提退款赔偿的那一句直接发。',
+  'chat.window.auto_answer': '有把握就直接答',
+  'chat.window.auto_answer.hint':
+    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、个人信息一律先给你批。',
+  'chat.window.auto_answer.strictness': '把握要多大',
+  'chat.window.auto_answer.strict': '严一点',
+  'chat.window.auto_answer.balanced': '适中',
+  'chat.window.auto_answer.loose': '松一点',
+  'chat.action.auto_answer': 'AI 直接答',
+  'chat.auto.sources': '出处：{list}',
+  'chat.auto.flag': '这句不该直接答',
+  'chat.auto.flagged': '记下了，同类以后先给你看',
+  'autopilot.on': '全自动开着：{title}',
+  'autopilot.ready': '够条件了，可以交给 AI 全自动：{title}',
+  'autopilot.turn_on': '开全自动',
+  'autopilot.turn_off': '关掉',
   'chat.window.assist_wait.hint':
     '超时要人拍板的问题，访客最多等这么久，然后自动转邮件跟进。改了只影响之后的新求助。',
   'chat.window.relay': '转发方式',
@@ -3473,8 +3495,8 @@ const zh: Table = {
   'chat.action.answer': '直接答',
   'chat.action.answer_held': '先给你批',
   'chat.action.answer_held.why':
-    '能答，回复已经起草好；你批了才发给访客（常见问题可以在聊天窗设置里打开「直接发」）。',
-  'chat.action.answer.why': '低风险、资料齐：按知识与订单事实答一句，不承诺任何事。',
+    '能答，但没把握（知识库里没出处、对不上，或涉及钱 / 时间 / 个人信息）：回复起草好了，你批了才发。卡上写着为什么。',
+  'chat.action.answer.why': '知识库里有出处、AI 有把握：直接发给访客，对话记录里标着出处。',
   'chat.action.collect_info': '先问清楚',
   'chat.action.collect_info.why': '这一类缺了关键资料就走不下去（比如查订单没给单号），先问出来。',
   'chat.action.human_review': '要你定',
@@ -4016,7 +4038,7 @@ const zh: Table = {
   'verb.review.approve': '按建议排明天',
   'verb.review.reject': '我来排',
   'verb.plan.approve': '采纳',
-  'verb.plan.instruct': '我改几条',
+  'verb.plan.instruct': '修改',
   'verb.manual_send.reject': '不用',
   'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP219：已审的内容更新（docs/90）──
@@ -4857,7 +4879,7 @@ const en: Table = {
   'org.roles.automation.none': 'Nothing automatable.',
   'role_rules.title': 'Always do this',
   'role_rules.hint':
-    'When you coach a card and pick “Always do this”, it lands here once approved. AI follows it every time it does this duty.',
+    'When you revise a card and pick “Always do this”, it lands here once approved. AI follows it every time it does this duty.',
   'role_rules.empty': 'None yet.',
   'role_rules.by': 'set by {who}',
   'role_rules.edited_by': 'edited by {who}',
@@ -4917,6 +4939,8 @@ const en: Table = {
   'login.shared.codeTip':
     'Find it in the server log (docker compose logs server). Each code works once.',
   'login.shared.submit': 'Enter with setup code',
+  'login.team':
+    'Once they accept your request, click Open in your own Workshop to come straight in, or sign in with your Agents Workshop account.',
   'login.shared.colleague':
     'A colleague? Ask the workspace owner to send you an invite link from Company → Members.',
   'login.account.open': 'Use my Agents Workshop account',
@@ -5514,7 +5538,7 @@ const en: Table = {
   'card.options.hint': 'Pick one; the answer becomes policy',
   'card.options.hint.content_conflict':
     'Pick one: the new version of this section, or the one you changed',
-  'card.instruct.title': 'Instruct',
+  'card.instruct.title': 'Revise',
   // WP84: example tasks at the top of the instruct panel (pick one, do not type from scratch)
   'card.examples.title': 'Example tasks',
   'card.examples.hint':
@@ -5524,7 +5548,7 @@ const en: Table = {
   'card.instruct.scope.similar_cases': 'Similar cases',
   'card.instruct.scope.global_rule': 'From now on (policy change)',
   'card.instruct.text': 'One sentence on what to change',
-  'card.instruct.submit': 'Send instruction',
+  'card.instruct.submit': 'Send revision',
   'card.ask.title': 'Ask AI',
   'card.ask.hint': 'One turn, only you see it, never sent to the customer',
   'card.ask.unavailable': 'Ask AI needs a scope: ask from a card or a matter',
@@ -6232,7 +6256,7 @@ const en: Table = {
   'verb.handoff.reject': 'Not a support issue',
   'verb.handoff.instruct': 'Reassign',
   'verb.handoff.approve.account_transfer': 'Hand over as listed',
-  'verb.handoff.instruct.account_transfer': 'Change the split',
+  'verb.handoff.instruct.account_transfer': 'Revise',
   'verb.handoff.reject.account_transfer': 'Not now',
   'verb.takeover.approve': 'Open browser',
   'verb.takeover.reject': 'Skip this step',
@@ -6378,7 +6402,7 @@ const en: Table = {
   'channel.chat': 'Chat',
   'channel.system': 'System',
   'deck.progress': 'Card {index} of {total}',
-  'deck.keyboard': '→ approve · ← reject · ↑ later · ↓ instruct',
+  'deck.keyboard': '→ approve · ← reject · ↑ later · ↓ revise',
   'deck.filter.all': 'All {n}',
   'deck.filter.waiting': 'Customer waiting {n}',
   'deck.filter.nobody': 'Nobody waiting {n}',
@@ -7168,8 +7192,12 @@ const en: Table = {
   'models.defaults': 'Which model for what',
   'models.ai_source': 'AI source',
   'models.ai_source.hint':
-    'Your own AI (subscription or API key) goes first. When it runs out of quota, can’t be reached or its key stops working, that round switches to Workshop credits and the next round goes back to yours. Paid services like data and the cloud browser use credits no matter which AI you use.',
-  'models.ai_source.primary': 'Primary',
+    'When the AI you picked runs out of quota, can’t connect or its sign-in / key fails, the next one of yours in this order takes over (drag to reorder); Workshop credits come last. Next round tries your pick first again. A source that fails twice in a row is skipped for 10 minutes. Paid services such as data and the cloud browser use credits no matter which AI runs.',
+  'models.ai_source.primary': 'Yours',
+  'models.ai_source.not_ready':
+    'Taken over automatically only after it passes a test (click “Test” on its card above)',
+  'models.ai_source.drag': 'Drag to reorder “{name}”',
+  'models.ai_source.moved': '“{name}” moved to position {n}',
   'models.ai_source.backup': 'Backup',
   'models.ai_source.no_own': 'No AI of your own yet',
   'models.ai_source.backup_off': 'Sign in to a Workshop account to use it',
@@ -7773,9 +7801,21 @@ const en: Table = {
   'chat.window.assist_wait': 'Handoff wait time',
   'chat.window.assist_wait.option': '{n} sec',
   'chat.window.assist_wait.option_min': '{n} min',
-  'chat.window.auto_send_faq': 'Send FAQ answers directly',
-  'chat.window.auto_send_faq.hint':
-    'Off: every AI reply waits for your OK. On: replies taken from your knowledge cards that promise no refund or compensation go out directly.',
+  'chat.window.auto_answer': 'Answer directly when sure',
+  'chat.window.auto_answer.hint':
+    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and personal details always wait for you.',
+  'chat.window.auto_answer.strictness': 'How sure',
+  'chat.window.auto_answer.strict': 'Stricter',
+  'chat.window.auto_answer.balanced': 'Balanced',
+  'chat.window.auto_answer.loose': 'Looser',
+  'chat.action.auto_answer': 'AI answered directly',
+  'chat.auto.sources': 'Source: {list}',
+  'chat.auto.flag': 'Should not have answered directly',
+  'chat.auto.flagged': 'Noted — similar questions will come to you first',
+  'autopilot.on': 'Full auto is on: {title}',
+  'autopilot.ready': 'Ready to hand over to the AI: {title}',
+  'autopilot.turn_on': 'Turn on full auto',
+  'autopilot.turn_off': 'Turn off',
   'chat.window.assist_wait.hint':
     'When the AI needs you, the visitor waits at most this long before we switch to email follow-up. Changes only affect new requests.',
   'chat.window.relay': 'Relay mode',
@@ -7872,9 +7912,9 @@ const en: Table = {
   'chat.action.answer': 'Answer it',
   'chat.action.answer_held': 'Waiting for your OK',
   'chat.action.answer_held.why':
-    'The AI can answer and has drafted the reply; it goes to the visitor once you approve (turn on “Send FAQ answers directly” in chat window settings to skip this for FAQs).',
+    'The AI could answer but is not sure (no matching source, or it touches money, dates or personal details). The reply is drafted and goes out once you approve; the card says why.',
   'chat.action.answer.why':
-    'Low risk and nothing missing: answer from knowledge and order facts, commit to nothing.',
+    'Backed by your knowledge base and the AI is confident: sent to the visitor directly, with the source noted in the transcript.',
   'chat.action.collect_info': 'Ask first',
   'chat.action.collect_info.why':
     'This kind cannot proceed without the key detail (an order lookup with no order number), so ask for it first.',
@@ -8447,7 +8487,7 @@ const en: Table = {
   'verb.review.approve': 'Plan tomorrow as suggested',
   'verb.review.reject': "I'll plan it",
   'verb.plan.approve': 'Adopt',
-  'verb.plan.instruct': "I'll tweak a few",
+  'verb.plan.instruct': 'Revise',
   'verb.manual_send.reject': 'Discard',
   'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP219: reviewed content updates (docs/90) ──
@@ -8917,6 +8957,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
+    ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
     ...PANEL_ZH,
     // WP395：Amazon 运营岗位面板四块
@@ -8929,6 +8971,10 @@ const TABLES: Record<Lang, Table> = {
     ...TABLE_FILTER_ZH,
     // WP406：岗位更新
     ...CONTENT_DIGEST_ZH,
+    // WP429：站内通知（铃铛、面板、设置 → 通知开关）
+    ...NOTIFY_ZH,
+    // WP431：顶栏标题下拉、左上角、搜索弹窗
+    ...TOPBAR_ZH,
   },
   en: {
     ...en,
@@ -8971,6 +9017,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,
     ...AMAZON_COMPETITORS_EN,
@@ -8978,6 +9025,8 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_LISTING_EN,
     ...TABLE_FILTER_EN,
     ...CONTENT_DIGEST_EN,
+    ...NOTIFY_EN,
+    ...TOPBAR_EN,
   },
 }
 

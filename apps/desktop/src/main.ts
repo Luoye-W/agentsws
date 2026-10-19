@@ -117,6 +117,7 @@ import {
   sleep,
   systemClock,
 } from './node-runtime.js'
+import { notificationPathOf } from './notify-path.js'
 import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile, workstationDir } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
@@ -147,6 +148,7 @@ import {
 } from './server-process.js'
 import { createSessionKeeper } from './session-keeper.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
+import { ensureStableNode, nodeStableNodeFs, stableNodePath } from './stable-node.js'
 import { proxyUrlFromResolution } from './system-proxy.js'
 import {
   TRAY_ICON_2X_DATA_URL,
@@ -454,6 +456,26 @@ async function bootstrap(): Promise<void> {
         ],
         (p) => files.exists(p),
       )
+  /*
+   * WP427（决策 1273 ②）：Windows 版本目录布局下，服务进程的 Node 从 `<根>\node\node.exe` 起——
+   * 路径不随版本变，防火墙的「允许」一次一直有效（按用户装也成立，不要管理员权限）。这一版自带的
+   * 那份同步过去（一样就不动；Node 升级了才换，正在跑的旧 Node 改名让位）；不成就用版本目录里那份。
+   */
+  const stableNode = ((): string | undefined => {
+    if (remote || layout === undefined || process.platform !== 'win32') return undefined
+    const outcome = ensureStableNode({
+      root: layout.root,
+      bundledDir: join(process.resourcesPath, 'node'),
+      version,
+      fs: nodeStableNodeFs(),
+    })
+    if (outcome.kind === 'fallback') {
+      logger.warn('不随版本变的 Node 没备好，这次用版本目录里那份', { reason: outcome.reason })
+      return undefined
+    }
+    if (outcome.kind !== 'kept') logger.info('不随版本变的 Node 已同步', { action: outcome.kind })
+    return outcome.path
+  })()
   const serverRuntime: ServerRuntime = remote
     ? { kind: 'node', execPath: process.execPath }
     : resolveServerRuntime({
@@ -462,6 +484,7 @@ async function bootstrap(): Promise<void> {
         exists: (p) => files.exists(p),
         electronExecPath: process.execPath,
         platform: process.platform,
+        ...(stableNode === undefined ? {} : { stableNode }),
       })
   if (!remote)
     logger.info('服务进程入口', {
@@ -947,11 +970,23 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false
     if (!Notification.isSupported()) return false
-    const input = raw as { title?: unknown; body?: unknown } | null
+    const input = raw as { title?: unknown; body?: unknown; path?: unknown } | null
     const title = typeof input?.title === 'string' ? input.title : ''
     if (title === '') return false
     const body = typeof input?.body === 'string' ? input.body : undefined
-    new Notification({ title, ...(body === undefined ? {} : { body }) }).show()
+    const path = notificationPathOf(input?.path)
+    const note = new Notification({ title, ...(body === undefined ? {} : { body }) })
+    // WP429：点了通知 → 主窗口叫到前面，地址交回页面（页面自己跳；窗口没了就不管）
+    if (path !== undefined)
+      note.on('click', () => {
+        const win = window
+        if (win === undefined || win.isDestroyed()) return
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        win.webContents.send(BRIDGE_CHANNELS.notifyClicked, path)
+      })
+    note.show()
     return true
   })
   ipcMain.handle(BRIDGE_CHANNELS.openExternal, async (event, raw: unknown) => {
@@ -2099,9 +2134,12 @@ async function bootstrap(): Promise<void> {
    */
   const carryFirewallTo = async (dir: string): Promise<void> => {
     if (layout === undefined || process.platform !== 'win32') return
+    const stable = stableNodePath(layout.root)
     const outcome = await carryFirewall({
       root: layout.root,
       dir,
+      // WP427：服务进程跑在不随版本变的那份 Node 上时，规则落在它身上（一次允许一直有效）
+      ...(existsSync(stable) ? { target: stable } : {}),
       exists: existsSync,
       run: nodePowerShell(),
     })
@@ -2679,6 +2717,10 @@ async function bootstrap(): Promise<void> {
     await shell.openExternal(DOWNLOAD_PAGE)
     return true
   })
+  // WP426：设置里「检查更新」（与托盘「检查更新」同一个 check）
+  ipcMain.handle(BRIDGE_CHANNELS.updateCheck, async (event) =>
+    fromLocalWindow(event) ? publicStatus(await updates.check()) : { state: 'idle' },
+  )
   // WP361：设置弹窗「这台电脑 → 桌面端」的开机自启开关（只认 true / false）
   ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginGet, (event) =>
     fromLocalWindow(event) ? launchAtLogin.get() : false,
@@ -2737,7 +2779,7 @@ async function bootstrap(): Promise<void> {
       tray?.popUpContextMenu()
     })
   refreshTray()
-  app.dock?.hide()
+  // Luoye 10-19：Mac 上要进程序坞（以前这里 dock.hide()，加上 LSUIElement，只能去菜单栏找）
   setLoginItem(config.launchAtLogin)
   // WP327：上次「只切换」的更新新版没起来、已回到这一版——说一声（只说一次）
   if (rolledBack !== undefined && Notification.isSupported())

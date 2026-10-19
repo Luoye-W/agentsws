@@ -63,6 +63,7 @@
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
+    "packages/contracts/src/notifications.ts",
     "packages/contracts/src/official-plugins.ts",
     "packages/contracts/src/outbound.ts",
     "packages/contracts/src/own-sub.ts",
@@ -97,6 +98,7 @@
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/subscription.ts",
     "packages/contracts/src/task-text.ts",
+    "packages/contracts/src/team-link.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -152,7 +154,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7e04765eea17e2955b9255c79eea07b5",
+  "source_digest": "a47a88aee0090b50f5cfc601a55e48ba",
   "objects": [
     {
       "id": "ad",

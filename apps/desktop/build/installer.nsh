@@ -141,12 +141,24 @@
       ${EndIf}
       FileWrite $R6 "${UNINSTALL_REGISTRY_KEY}$\r$\n"
       FileClose $R6
+      ; WP427（决策 1273 ②）：服务进程的 Node 改从不随版本变的 <安装目录>\node\node.exe 起，防火墙的「允许」
+      ; 一次一直有效。这里把这一版自带的那份拷过去（按机器装时只有安装程序有权限写）；拷不成不挡安装，
+      ; 应用启动时会按「大小 + 哈希」再核对、同步一遍。更新前卸旧版那一步不删这个目录（只有真卸载才删）。
+      ${If} ${FileExists} "$R8\resources\node\node.exe"
+        CreateDirectory "$INSTDIR\node"
+        ClearErrors
+        CopyFiles /SILENT "$R8\resources\node\*.*" "$INSTDIR\node"
+        ${If} ${Errors}
+          DetailPrint "agentsws: could not refresh $INSTDIR\node (the app retries on start)"
+        ${EndIf}
+      ${EndIf}
       ; WP422：防火墙按真实路径（app-<版本>\resources\node\node.exe）记「允许」，换一版就又问一次。
       ; 用户对旧版点过允许 → 给这一版的 Node 加一条「Agents 工坊（局域网发现）」允许规则，并删掉指向已经不在的
       ; 旧版本的规则；从没点过的不加。按用户装没有管理员权限 → 只记一句、不弹 UAC。失败不挡安装（脚本总是退 0）。
       ${If} ${FileExists} "$R8\resources\node\node.exe"
       ${AndIf} ${FileExists} "$R8\resources\app\dist\firewall-cli.js"
-        nsExec::ExecToLog /TIMEOUT=90000 '"$R8\resources\node\node.exe" "$R8\resources\app\dist\firewall-cli.js" --root "$INSTDIR" --dir "$R8"'
+        ; WP427：--node 是服务进程真正跑的那份（不随版本变）；以前对版本目录里 Node 点过的允许带到它身上
+        nsExec::ExecToLog /TIMEOUT=90000 '"$R8\resources\node\node.exe" "$R8\resources\app\dist\firewall-cli.js" --root "$INSTDIR" --dir "$R8" --node "$INSTDIR\node\node.exe"'
         Pop $R7
         DetailPrint "agentsws: firewall carry-over finished ($R7)"
       ${EndIf}
@@ -219,6 +231,10 @@
         ; 更早的平铺安装：确认根上真是我们的 exe 才按条目删
         ${If} ${FileExists} "$R1\${APP_EXECUTABLE_FILENAME}"
           !insertmacro agentswsAppEntries agentswsRemoveFromOld
+        ${EndIf}
+        ; WP427：按用户那一份不随版本变的 Node（认得出是我们的才删）
+        ${If} ${FileExists} "$R1\node\.agentsws-node.json"
+          RMDir /r "$R1\node"
         ${EndIf}
         Delete "$R1\${UNINSTALL_FILENAME}"
         Delete "$R1\agentsws-install.txt"

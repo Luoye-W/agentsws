@@ -29,7 +29,8 @@
  * 卡片在审批总线里，钱在 guardrail 里。本文件只负责把口子接上。
  */
 
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import {
   ChannelInboundPipeline,
   ChatChannelAdapter,
@@ -65,23 +66,32 @@ import {
   acceptChatTeaching,
   buildChatPlan,
   buildChatTeachingRequest,
+  CHAT_ANSWER_CITE_INSTRUCTION,
+  CHAT_HELD_REPLY,
+  type ChatAnswerSource,
+  type ChatAutoAnswerStrictness,
+  type ChatAutoAnswerVerdict,
   type ChatKnowledgeCandidate,
+  type ChatLearnedHold,
   type ChatPack,
   type ChatResponsePlan,
   type ChatSessionStatus,
   type ChatTeachingResult,
   type ChatTeachingScope,
   type ChatTurnMessage,
+  chatTokens,
   classifyChatTurn,
+  DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS,
   DEFAULT_CHAT_PACK,
   evaluateChatAssist,
   evaluateChatTurn,
   evaluateLeakGuard,
   fenceForPrompt,
+  formatChatSources,
   LEAK_REWRITE_INSTRUCTION,
   normalizeAssistWaitSeconds,
   sanitizeExternal,
-  scanOutboundCommitment,
+  scoreChatAutoAnswer,
 } from '@agentsws/support-core'
 import { type BackendResult, finalPayload } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
@@ -112,6 +122,62 @@ export const CHAT_OUTBOUND_HALTED = '出站已急停（AGENTSWS_HALT=outbound）
 export interface ChatKnowledgeHit {
   fact_card_id: string
   statement: string
+  /** WP428：知识层（`policy` 的出处标成「政策」）。 */
+  layer?: string
+  /** WP428：这条知识过时了（还在用，置信度打折）。 */
+  stale?: boolean
+}
+
+/** WP428：直接答的那一句记一笔（对话记录里「AI 直接答 · 出处」与「这句不该直接答」都读它）。 */
+interface AutoAnswerRecord {
+  message_id: string
+  session_id: string
+  /** 访客那句话的词面（不存原话）。 */
+  tokens: string[]
+  intent: string
+  sources: { kind: string; id: string; label: string }[]
+  score: number
+  strictness: ChatAutoAnswerStrictness
+  at: string
+  flagged?: { by: string; at: string }
+}
+
+interface AutoAnswerFile {
+  version: 1
+  records: AutoAnswerRecord[]
+  holds: (ChatLearnedHold & { at: string; message_id: string })[]
+}
+
+const AUTO_ANSWER_FILE = 'chat-auto-answer.json'
+const MAX_AUTO_ANSWER_RECORDS = 2000
+
+/** 卡标题后面那一句「为什么没直接答」。 */
+const HELD_SHORT: Record<string, string> = {
+  money: '涉及钱或改单',
+  commitment: '有承诺',
+  time_promise: '许了时间',
+  personal_info: '涉及个人信息',
+  learned: '同类你说过先给你看',
+  no_source: '知识库里没有',
+  low_confidence: '把握不够',
+  off: '直接答已关',
+}
+
+/** 订单上的个人信息（姓名、地址、邮箱、电话）——回复里出现就转人。 */
+function privateValuesOf(value: unknown, key = '', out: string[] = []): string[] {
+  if (out.length > 40) return out
+  if (typeof value === 'string') {
+    if (/(name|address|addr|email|phone|street|city|zip|postal|province)/i.test(key))
+      if (value.trim().length >= 3) out.push(value.trim())
+    return out
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) privateValuesOf(v, key, out)
+    return out
+  }
+  if (value !== null && typeof value === 'object')
+    for (const [k, v] of Object.entries(value)) privateValuesOf(v, k, out)
+  return out
 }
 
 export interface ChatLaneOptions {
@@ -161,10 +227,11 @@ export interface ChatLaneOptions {
   /** 这条会话挂谁名下。 */
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
-   * WP417（决策 1232）：常见问题能不能**直接发**（商家在聊天窗设置里手动打开；缺省 = 每一句都先出卡要人批）。
-   * 开了也只放「答案出自知识卡、过了承诺扫描」的那一句；别的照旧出卡。
+   * WP428（决策 1246 改）：**按置信度直接答**（缺省开、适中档）。答案有知识 / 订单出处、置信度过线的那一句
+   * 直接发；否则出卡转人。退款、赔偿、改单、许时间、个人信息一律转人（`scoreChatAutoAnswer`）。
+   * 每一轮现读（商家在聊天窗设置里改了下一句就跟着变）。
    */
-  autoSendFaq?(): boolean
+  autoAnswer?(): { on: boolean; strictness?: ChatAutoAnswerStrictness }
   /** WP417（自查 C10）：访客报了订单号 → 只读查这一单（查不到 / 没连店 = undefined）。 */
   lookupOrder?(order_ref: string): Promise<unknown | undefined>
   /** WP417（自查 C15）：超时转邮件那封跟进信从这里真发（`channels.sendMail`）。 */
@@ -279,6 +346,18 @@ export interface ChatLane {
   proposeReply(thread_external_id: string, text: string): Promise<string | undefined>
   /** 出站：批准了的聊天草稿真推进会话。不归聊天管就回 `undefined`。 */
   deliver(item: ApprovalItem, opts: { idempotencyKey: string }): Promise<BackendResult | undefined>
+  /**
+   * WP428：人点「这句不该直接答」→ 记进学习回路（同类以后转人）。不是直接答的那一句回 `undefined`。
+   */
+  flagAutoAnswer(input: {
+    session_id: string
+    message_id: string
+    by: PersonId
+  }): Promise<{ learned: boolean } | undefined>
+  /** WP428：这一句是不是直接答的（出处、把握、点没点过「不该直接答」）。 */
+  autoAnswerOf(
+    message_id: string,
+  ): { score: number; sources: { kind: string; label: string }[]; flagged: boolean } | undefined
   /** 21 §4 随主体删除。 */
   eraseVisitor(visitor_id: string): Promise<number>
   close(): Promise<void>
@@ -442,21 +521,36 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     turn_text: string,
     plan: ChatResponsePlan,
     mode: 'answer' | 'review' = 'answer',
-  ): Promise<{ text?: string; blocked?: string; grounded: boolean }> => {
+  ): Promise<{ text?: string; blocked?: string; sources: ChatAnswerSource[] }> => {
     const models = options.models
     const position = options.position?.()
     if (models === undefined || position === undefined) {
-      return { blocked: 'no_model', grounded: false }
+      return { blocked: 'no_model', sources: [] }
     }
     const parts: string[] = []
+    /*
+     * WP428：直答那一轮的材料带编号（K = 知识，O = 订单现查），模型按编号标每一句的出处——
+     * 置信度的「逐句有出处」就靠它（再拿句子里的数字回去对原文，见 `scoreChatAutoAnswer`）。
+     */
+    const sources: ChatAnswerSource[] = []
     const orderRef = orderRefIn(turn_text)
     if (orderRef !== undefined && options.lookupOrder !== undefined) {
       const order = await options.lookupOrder(orderRef).catch(() => undefined)
-      parts.push(
-        order === undefined
-          ? `访客说的订单 ${orderRef}：店里没查到（或店铺没连上）。照实说查不到，请他核对订单号或留邮箱。`
-          : `访客说的订单 ${orderRef}（刚查的）：${JSON.stringify(order).slice(0, 1500)}`,
-      )
+      if (order === undefined)
+        parts.push(
+          `访客说的订单 ${orderRef}：店里没查到（或店铺没连上）。照实说查不到，请他核对订单号或留邮箱。`,
+        )
+      else if (mode === 'review')
+        parts.push(`访客说的订单 ${orderRef}（刚查的）：${JSON.stringify(order).slice(0, 1500)}`)
+      else
+        sources.push({
+          ref: 'O1',
+          kind: 'order',
+          id: orderRef,
+          label: `订单 ${orderRef}（刚查的）`,
+          text: JSON.stringify(order).slice(0, 1500),
+          private_values: privateValuesOf(order),
+        })
     }
     const matter = matterOf(session)
     if (matter !== undefined) {
@@ -474,8 +568,21 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     const voice = await options.brandVoice?.().catch(() => undefined)
     if (voice !== undefined && voice !== '') parts.push(voice)
     const hits = (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS)) ?? []
-    if (hits.length > 0) {
-      parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)
+    if (mode === 'review') {
+      if (hits.length > 0)
+        parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)
+    } else {
+      for (const [i, h] of hits.entries())
+        sources.push({
+          ref: `K${i + 1}`,
+          kind: h.layer === 'policy' ? 'policy' : 'fact_card',
+          id: h.fact_card_id,
+          label: h.statement.replace(/\s+/g, ' ').slice(0, 24),
+          text: h.statement,
+          ...(h.stale === true ? { stale: true } : {}),
+        })
+      if (sources.length > 0) parts.push(`材料：\n${formatChatSources(sources)}`)
+      parts.push(CHAT_ANSWER_CITE_INSTRUCTION)
     }
     parts.push(`意图：${plan.intent}；这一轮的收尾问句（可用可不用）：${plan.next_question}`)
     if (mode === 'review')
@@ -512,12 +619,10 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         },
       })
       const text = completion.text.trim().slice(0, MAX_ANSWER_CHARS)
-      return text.length === 0
-        ? { blocked: 'empty_completion', grounded: false }
-        : { text, grounded: hits.length > 0 }
+      return text.length === 0 ? { blocked: 'empty_completion', sources } : { text, sources }
     } catch (e) {
       // 模型挂了 / 预算耗尽 / 急停：聊天里**不编一句话**顶上去，说实话并转求助
-      return { blocked: (e as { code?: string }).code ?? 'model_unavailable', grounded: false }
+      return { blocked: (e as { code?: string }).code ?? 'model_unavailable', sources }
     }
   }
 
@@ -530,6 +635,8 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     draft?: string,
     /** WP417（决策 1232）：能答但要人批的那一句（不是涉钱 / 要人工）。 */
     review_kind?: 'answer',
+    /** WP428：为什么没直接答（卡标题后面那一句 + 载荷里的理由清单）。 */
+    held?: { kind: string; score?: number; reasons: string[] },
   ): Promise<string | undefined> => {
     const approvals = options.approvals
     const position = options.position?.()
@@ -554,7 +661,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           : `${workspace_id}:chat:${session.id}:${plan.action}`,
       title:
         review_kind === 'answer'
-          ? `回 ${who} 的聊天`
+          ? `回 ${who} 的聊天${held === undefined ? '' : `（${HELD_SHORT[held.kind] ?? '先给你看'}）`}`
           : plan.action === 'assist'
             ? `${who} 在聊天里要人工`
             : `${who} 的聊天涉及${plan.money_touch ? '金额或订单变更' : '高风险问题'}`,
@@ -581,6 +688,16 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         // 卡上给的是**建议回复**（WP417：模型起草的真回复，不是系统说明 / 安抚话），人点头之后才发
         body: { text: draft ?? plan.next_question },
         visitor_said: sanitizeExternal(turn_text).slice(0, 500),
+        // WP428：没直接答的理由（卡上看得见「凭什么转给你」）
+        ...(held === undefined
+          ? {}
+          : {
+              auto_answer: {
+                held: held.kind,
+                ...(held.score === undefined ? {} : { score: held.score }),
+                reasons: held.reasons.slice(0, 6),
+              },
+            }),
       },
       evidence: {
         run_id: `run_chat_${session.id}`,
@@ -623,6 +740,32 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
 
   /** WP417：每条会话最近一次起草的回复（跟进邮件拿它当正文初稿）。 */
   const lastDraft = new Map<string, string>()
+
+  /*
+   * WP428：直接答的记录与「这句不该直接答」学来的那几条（落盘：`chat-auto-answer.json`；没有数据目录 = 内存）。
+   * 只存问句词面与出处 id，不存访客原话。
+   */
+  const autoFile = options.dbDir === undefined ? undefined : join(options.dbDir, AUTO_ANSWER_FILE)
+  let auto: AutoAnswerFile = { version: 1, records: [], holds: [] }
+  if (autoFile !== undefined && existsSync(autoFile)) {
+    try {
+      const parsed = JSON.parse(readFileSync(autoFile, 'utf8')) as Partial<AutoAnswerFile>
+      auto = {
+        version: 1,
+        records: Array.isArray(parsed.records) ? parsed.records : [],
+        holds: Array.isArray(parsed.holds) ? parsed.holds : [],
+      }
+    } catch {
+      // 读坏了从空开始（它只是学习信号，不是账）
+    }
+  }
+  const flushAuto = (): void => {
+    if (auto.records.length > MAX_AUTO_ANSWER_RECORDS)
+      auto.records = auto.records.slice(-MAX_AUTO_ANSWER_RECORDS)
+    if (autoFile === undefined) return
+    mkdirSync(dirname(autoFile), { recursive: true })
+    writeFileSync(autoFile, `${JSON.stringify(auto)}\n`, 'utf8')
+  }
 
   /**
    * WP417（自查 C15）：超时转邮件 → 一张**跟进邮件卡**（`channel: 'email'` + `compose_to`），挂网站客服；
@@ -823,21 +966,55 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       }
     }
     /*
-     * WP417（决策 1232 + 自查 C8 / C9）：**在线客服缺省要人批**。模型起草的这一句先出卡（卡上就是这句回复），
-     * 访客那边说一句「稍等」、起求助钟（到点转邮件跟进）；人批了才发回聊天窗。
-     * 商家手动打开「常见问题直接发」时，只有答案出自知识卡、而且过了承诺扫描（没写退款 / 赔偿 / 补发这类话）
-     * 的那一句才直接发；扫出承诺的一律出卡。
+     * WP428（决策 1246 改）：**按置信度直接答**。这一句有知识 / 订单出处、逐句对得上、把握过线 → 直接发，
+     * 对话记录里标「AI 直接答 · 出处」；否则出卡转人（卡上就是这句回复和没直接答的理由），访客那边说
+     * 「稍等，马上帮你问」、起求助钟。退款 / 赔偿 / 改单 / 许时间 / 个人信息一律转人（`scoreChatAutoAnswer`）。
      */
-    const scan = scanOutboundCommitment(answer.text)
-    const promised = scan.hits.length > 0 || scan.unsourced_concession
-    if (options.autoSendFaq?.() === true && answer.grounded && !promised) {
-      const said = await say(session, answer.text, plan.action)
+    const setting = options.autoAnswer?.() ?? { on: true }
+    const strictness = setting.strictness ?? DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS
+    const verdict: ChatAutoAnswerVerdict = scoreChatAutoAnswer({
+      plan,
+      turn_text,
+      reply: answer.text,
+      sources: answer.sources,
+      strictness,
+      learned_holds: auto.holds,
+    })
+    if (setting.on && verdict.send) {
+      const said = await say(session, verdict.text, 'auto_answer')
+      auto.records.push({
+        message_id: said.id,
+        session_id: session.id,
+        tokens: [...chatTokens(turn_text)].slice(0, 80),
+        intent: plan.intent,
+        sources: verdict.sources_used.map((x) => ({ kind: x.kind, id: x.id, label: x.label })),
+        score: verdict.score,
+        strictness,
+        at: now,
+      })
+      flushAuto()
+      emit('chat.auto_answered', session, {
+        message_id: said.id,
+        score: verdict.score,
+        strictness,
+        source_ids: verdict.sources_used.map((x) => x.id),
+        factors: verdict.factors,
+      })
       return { ...base, reply: said.text, used_model: true }
     }
-    const approval_item_id = await raiseCard(session, plan, turn_text, answer.text, 'answer')
-    lastDraft.set(session.id, answer.text)
+    const held = setting.on
+      ? {
+          kind: verdict.hold?.kind ?? 'low_confidence',
+          score: verdict.score,
+          reasons: verdict.reasons,
+        }
+      : { kind: 'off', score: verdict.score, reasons: ['聊天窗设置里关了「按把握直接答」'] }
+    const draft = verdict.text === '' ? answer.text : verdict.text
+    const approval_item_id = await raiseCard(session, plan, turn_text, draft, 'answer', held)
+    lastDraft.set(session.id, draft)
     emit('chat.reply_held', session, {
-      reason: promised ? 'commitment' : 'needs_approval',
+      reason: held.kind,
+      score: verdict.score,
       ...(approval_item_id === undefined ? {} : { approval_item_id }),
     })
     const wait = normalizeAssistWaitSeconds(options.assistWaitSeconds?.())
@@ -848,7 +1025,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       assist_reminded_at: null,
       at: now,
     })
-    const said = await say(session, pack.assist_reply, 'assist')
+    const said = await say(session, CHAT_HELD_REPLY, 'answer_held')
     stream.publish(session.id, {
       type: 'session',
       session_id: session.id,
@@ -1271,7 +1448,53 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       return raiseCard(session, plan, '', text, 'answer')
     },
 
-    eraseVisitor: async (visitor_id) => store.eraseVisitor(visitor_id),
+    async flagAutoAnswer(input): Promise<{ learned: boolean } | undefined> {
+      const record = auto.records.find(
+        (r) => r.message_id === input.message_id && r.session_id === input.session_id,
+      )
+      if (record === undefined) return undefined
+      if (record.flagged === undefined) {
+        const at = clock.now()
+        record.flagged = { by: input.by, at }
+        auto.holds.push({
+          tokens: record.tokens,
+          intent: record.intent,
+          source_ids: record.sources.filter((x) => x.kind !== 'order').map((x) => x.id),
+          at,
+          message_id: record.message_id,
+        })
+        flushAuto()
+        const session = await store.getSession(input.session_id)
+        if (session !== undefined)
+          emit('chat.auto_answer_flagged', session, { message_id: record.message_id })
+      }
+      return { learned: true }
+    },
+
+    autoAnswerOf(message_id) {
+      const record = auto.records.find((r) => r.message_id === message_id)
+      return record === undefined
+        ? undefined
+        : {
+            score: record.score,
+            sources: record.sources.map((x) => ({ kind: x.kind, label: x.label })),
+            flagged: record.flagged !== undefined,
+          }
+    },
+
+    async eraseVisitor(visitor_id): Promise<number> {
+      // WP428：这位访客那几条会话上的直答记录一起删（学来的那几条只有词面，留着）
+      const mine = new Set(
+        (await store.listSessions(workspace_id, {}))
+          .filter((x) => x.visitor_id === visitor_id)
+          .map((x) => x.id),
+      )
+      if (mine.size > 0) {
+        auto.records = auto.records.filter((r) => !mine.has(r.session_id))
+        flushAuto()
+      }
+      return store.eraseVisitor(visitor_id)
+    },
 
     async close(): Promise<void> {
       await adapter.stop()

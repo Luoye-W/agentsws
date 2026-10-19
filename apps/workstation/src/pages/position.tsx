@@ -21,17 +21,19 @@
  * **WP372（决策 1019，Luoye 10-17）：中间栏回到普通对话框形态**——页头 + 对话框 + 按状态现出的快捷按钮 +
  * 「要你拍板」的卡。上面 3、4 两块（工作、数据看板）和报表块都搬进右侧面板「报表」
  * （`components/reports/scope-boards.tsx`）；`?tab=view` 打开那一格，页头「卡住了 / 今天的待办」点了也打开它并筛好。
+ *
+ * **WP431（Luoye 10-19，照 Claude 桌面版）**：主区不再有页头——岗位名进**顶栏左边**（名字 + 下拉箭头：改名、岗位设置、
+ * 换职责；连接正常的绿勾跟在名字后面），「岗位设置」是顶栏右边那排里的一颗滑杆图标；名字下面那行小字
+ * （「刚建好，还没开工 · N 条职责」）去掉。「卡住了 / 今天的待办」是要人留意的事，有才出，挪到主区顶上那一行提醒里。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
+import { Link2Off, PencilLine, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
-import { ModeNotice } from '@/components/company/company-mode'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
 import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
-import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { ConnectionTick } from '@/components/position/connection-tick'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
@@ -39,15 +41,29 @@ import { ShopAdminBanner } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import { useRailState } from '@/components/rail/rail-state'
 import { requestWorkFilter, useCardJumpRequest } from '@/components/reports/position-bridge'
-import { PositionIcon } from '@/components/role-icons/role-icon'
+import { DutyIcon } from '@/components/role-icons/role-icon'
+import { settingsHref } from '@/components/settings-panel/route'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
+import {
+  TitleMenu,
+  TitleMenuItem,
+  TitleMenuLabel,
+  TitleMenuSeparator,
+  TOPBAR_ICON,
+  TOPBAR_ICON_ACTIVE,
+  TOPBAR_ICON_IDLE,
+  TopBarAction,
+  TopBarTitle,
+} from '@/components/shell/top-bar-slots'
 import { RedditWatchAlertNotice } from '@/components/social/reddit-watch-alert'
 import { RedditWriteNotice } from '@/components/social/reddit-write-notice'
 import { Hint } from '@/components/ui/hint'
 import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutyHref } from '@/lib/duty-href'
 import { NO_FILTERS, type WorkPrefs } from '@/lib/position-work'
 import { assignmentForPosition, myAssignments } from '@/lib/positions'
+import { cn } from '@/lib/utils'
 import { matterUrl } from '@/lib/work'
 
 // 老入口与别处还从这里拿它（WP138）；实现挪到了数据看板
@@ -179,6 +195,8 @@ export function PositionPage(): React.ReactNode {
   /** 卡住了 / 今天的待办：有才出（点了打开右侧「报表」，「工作」筛到那一组）。 */
   const stuck = counts?.stuck ?? 0
   const today = counts?.todos_today ?? 0
+  const name =
+    view === undefined ? (here?.role_name ?? '') : lang === 'en' ? view.name.en : view.name.zh
   const filterWork = (filters: WorkPrefs['filters']): void => {
     setTab('work')
     requestWorkFilter(id, filters)
@@ -192,109 +210,129 @@ export function PositionPage(): React.ReactNode {
       data-position={id}
       data-view={tab}
     >
-      {/* ── 页头 ── */}
-      <header className="flex items-start gap-3" data-testid="position-header">
-        {view === undefined ? null : (
-          <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-ws-surface">
-            <PositionIcon
-              position_id={view.position_id}
-              icon={view.icon}
-              role_ids={view.roles.map((r) => r.role_id)}
-              size={22}
-              selected
-            />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h1
-              className="ws-display truncate text-[26px] leading-tight"
-              data-testid="position-name"
-            >
-              {view === undefined
-                ? (here?.role_name ?? '')
-                : lang === 'en'
-                  ? view.name.en
-                  : view.name.zh}
-            </h1>
-            {/* WP288：连接正常 = 一个绿勾（悬停说连了什么、点了去连接页）；出问题时不画，下面出提示行 */}
-            <ConnectionTick id={id} duties={duties} />
-          </div>
-          {view === undefined ? null : fresh ? (
-            <p className="text-xs text-ws-muted-fg" data-testid="position-status">
-              {/* WP420（自查 U6）：只数自己担着的那几条（左栏只有一条却写「4 条职责」） */}
-              {t('pos2.status.new', { n: duties.length > 0 ? duties.length : view.roles.length })}
-            </p>
-          ) : stuck === 0 && today === 0 ? null : (
-            <p
-              className="flex flex-wrap items-center gap-x-1.5 text-xs text-ws-muted-fg"
-              data-testid="position-status"
-            >
-              {/* WP244：卡住了的单独说出来（点了筛到「卡住了」那一组） */}
-              {stuck === 0 ? null : (
-                <button
-                  type="button"
-                  data-testid="status-stuck"
-                  className="inline-flex items-center gap-1 text-ws-warn hover:text-foreground"
-                  onClick={() => {
-                    filterWork({ ...NO_FILTERS, group: ['stuck'] })
+      {/* ── 顶栏：岗位名 + 下拉（WP431，照 Claude；没有外壳时就地画） ── */}
+      <TopBarTitle>
+        <div className="flex min-w-0 items-center gap-1" data-testid="position-header">
+          <TitleMenu
+            title={name}
+            testId="position-name"
+            menuTestId="position-title-menu"
+            menuLabel={t('topbar.menu.position', { name })}
+            after={<ConnectionTick id={id} duties={duties} />}
+            menu={(close) => (
+              <>
+                <TitleMenuItem
+                  icon={PencilLine}
+                  label={t('topbar.position.rename')}
+                  testId="position-menu-rename"
+                  onSelect={() => {
+                    close()
+                    navigate(settingsHref('positions'))
                   }}
-                >
-                  <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
-                  {t('pos2.status.stuck', { n: stuck })}
-                </button>
-              )}
-              {stuck === 0 || today === 0 ? null : <span aria-hidden>·</span>}
-              {counts === undefined || today === 0 ? null : (
-                <button
-                  type="button"
-                  data-testid="status-today"
-                  className="inline-flex items-center gap-1 hover:text-foreground"
-                  onClick={() => {
-                    // WP248（决策 79）：数里含已过期的，筛选也用「今天及已过期」
-                    filterWork({ ...NO_FILTERS, due: 'by_today' })
+                />
+                <TitleMenuItem
+                  icon={SlidersHorizontal}
+                  label={t(
+                    tab === 'settings' ? 'topbar.settings.close' : 'topbar.position.settings',
+                  )}
+                  testId="position-menu-settings"
+                  onSelect={() => {
+                    close()
+                    setTab(tab === 'settings' ? 'work' : 'settings')
                   }}
-                >
-                  <span
-                    className={`size-1.5 rounded-full ${(counts.todos_overdue ?? 0) > 0 ? 'bg-ws-bad' : 'bg-ws-info'}`}
-                    aria-hidden
-                  />
-                  {(counts.todos_overdue ?? 0) > 0
-                    ? t('pos2.status.today_overdue', {
-                        n: today,
-                        m: counts.todos_overdue ?? 0,
-                      })
-                    : t('pos2.status.today', { n: today })}
-                </button>
-              )}
-            </p>
-          )}
+                />
+                {duties.length === 0 ? null : (
+                  <>
+                    <TitleMenuSeparator />
+                    <TitleMenuLabel>{t('topbar.position.duties')}</TitleMenuLabel>
+                    {duties.map((d) => (
+                      <TitleMenuItem
+                        key={d.role_id}
+                        label={
+                          <span className="inline-flex items-center gap-1.5">
+                            <DutyIcon role_id={d.role_id} size={14} />
+                            {d.role_name}
+                          </span>
+                        }
+                        testId="position-menu-duty"
+                        onSelect={() => {
+                          close()
+                          navigate(dutyHref(d.assignment_id, d.role_id))
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          />
         </div>
-        {/* WP288：设置只有这一个入口（没有「设置」页签了）；在设置里它变成「返回」 */}
+      </TopBarTitle>
+      {/* WP431：「岗位设置」进顶栏右边那排图标（滑杆）；在设置里再点一次回到工作 */}
+      <TopBarAction>
         <button
           type="button"
           data-testid="position-settings-link"
           aria-pressed={tab === 'settings'}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs hover:bg-accent"
+          title={t(tab === 'settings' ? 'pos2.settings.back' : 'pos2.settings')}
+          className={cn(TOPBAR_ICON, tab === 'settings' ? TOPBAR_ICON_ACTIVE : TOPBAR_ICON_IDLE)}
           onClick={() => {
             setTab(tab === 'settings' ? 'work' : 'settings')
           }}
         >
-          {tab === 'settings' ? (
-            <>
-              <ChevronLeft className="size-4" aria-hidden />
-              {t('pos2.settings.back')}
-            </>
-          ) : (
-            <>
-              <MoreHorizontal className="size-4" aria-hidden />
-              {t('pos2.settings')}
-            </>
-          )}
+          <SlidersHorizontal aria-hidden className="size-4" />
+          <span className="sr-only">
+            {t(tab === 'settings' ? 'pos2.settings.back' : 'pos2.settings')}
+          </span>
         </button>
-      </header>
+      </TopBarAction>
 
-      {/* WP238：只在真缺**必需**的连接时出一行；补上了自己消失 */}
+      {/* WP244 / WP431：卡住了、今天的待办——有才出（点了打开右侧「报表」，「工作」筛到那一组） */}
+      {view === undefined || (stuck === 0 && today === 0) ? null : (
+        <p
+          className="flex flex-wrap items-center gap-x-1.5 text-xs text-ws-muted-fg"
+          data-testid="position-status"
+        >
+          {stuck === 0 ? null : (
+            <button
+              type="button"
+              data-testid="status-stuck"
+              className="inline-flex items-center gap-1 text-ws-warn hover:text-foreground"
+              onClick={() => {
+                filterWork({ ...NO_FILTERS, group: ['stuck'] })
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
+              {t('pos2.status.stuck', { n: stuck })}
+            </button>
+          )}
+          {stuck === 0 || today === 0 ? null : <span aria-hidden>·</span>}
+          {counts === undefined || today === 0 ? null : (
+            <button
+              type="button"
+              data-testid="status-today"
+              className="inline-flex items-center gap-1 hover:text-foreground"
+              onClick={() => {
+                // WP248（决策 79）：数里含已过期的，筛选也用「今天及已过期」
+                filterWork({ ...NO_FILTERS, due: 'by_today' })
+              }}
+            >
+              <span
+                className={`size-1.5 rounded-full ${(counts.todos_overdue ?? 0) > 0 ? 'bg-ws-bad' : 'bg-ws-info'}`}
+                aria-hidden
+              />
+              {(counts.todos_overdue ?? 0) > 0
+                ? t('pos2.status.today_overdue', {
+                    n: today,
+                    m: counts.todos_overdue ?? 0,
+                  })
+                : t('pos2.status.today', { n: today })}
+            </button>
+          )}
+        </p>
+      )}
+
+      {/* WP238：只在真缺要连的连接时出一行；补上了自己消失（WP431：不再说「必需」，邮件营销按档案说过的那家才算） */}
       {firstMissing === undefined ? null : (
         <div
           className="flex items-center gap-2 rounded-lg bg-ws-warn-bg px-3 py-2 text-sm"
@@ -354,16 +392,7 @@ export function PositionPage(): React.ReactNode {
       <RedditWatchAlertNotice duties={duties} />
       {/* WP317（决策 629）：投放岗位上素材流水线的快捷入口（点进 Google / Meta 职责页那一块） */}
       <AdCreativeEntry duties={duties} />
-      {/*
-        WP277：只有一个岗位的人首页就是这一页（WP69）——首页那几行通知（交接结果、上级派活、
-        改回同事互联）在这里也出，不然他永远看不到。两个及以上岗位的人在首页看。
-      */}
-      {mine.data?.instances?.length === 1 ? (
-        <>
-          <HandoffNotices />
-          <ModeNotice />
-        </>
-      ) : null}
+      {/* WP429：交接结果、上级派活、改回同事互联都进顶栏铃铛（站内通知），这一页不再单出一行 */}
 
       {tab === 'settings' ? (
         <PositionSettings id={id} view={view} />

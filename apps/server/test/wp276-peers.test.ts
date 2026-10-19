@@ -313,6 +313,41 @@ describe('WP276 ② 同事互联（真服务进程）', () => {
     expect(await server.organizations.modeOf(ws())).toBe('solo')
   })
 
+  it('WP429：交给同事 → 他的铃铛里有一条（点了到卡）；他接下 → 我的铃铛「林峰 接下了」，他那条收成已读', async () => {
+    const lin = await joinWithCode('林峰', 'lin@ex.com')
+    const linToken = await login('lin@ex.com')
+    const linB2b = await giveB2b(lin)
+    const mine = await giveB2b(owner())
+    const as = { token: linToken, assignment: linB2b }
+    const made = await data<{ matter: { id: string } }>(
+      await call('POST', '/v1/matters', {
+        assignment: mine,
+        body: { kind: 'project', title: 'Acme 报价' },
+      }),
+    )
+    await call('POST', `/v1/handoffs/matter/${made.matter.id}`, {
+      assignment: mine,
+      body: { to: lin },
+    })
+    await server.notifications.flush()
+    type Inbox = { items: { text: string; href?: string; category: string }[]; unread: number }
+    const linInbox = await data<Inbox>(await call('GET', '/v1/notifications', as))
+    expect(linInbox.unread).toBe(1)
+    expect(linInbox.items[0]?.category).toBe('team')
+    expect(linInbox.items[0]?.href).toMatch(/^\/cards\//)
+
+    await call('POST', `/v1/handoffs/matter/${made.matter.id}/accept`, as)
+    await server.notifications.flush()
+    const mineInbox = await data<Inbox>(
+      await call('GET', '/v1/notifications', { assignment: mine }),
+    )
+    expect(mineInbox.items.map((n) => n.text)).toContain('林峰 接下了「Acme 报价」')
+    expect(mineInbox.items.find((n) => n.text.includes('接下了'))?.href).toBe(
+      `/matters/${made.matter.id}`,
+    )
+    expect((await data<Inbox>(await call('GET', '/v1/notifications', as))).unread).toBe(0)
+  })
+
   it('② 提到岗位层、工具箱合并：当场生效，同岗位的人 / 两条的主人收「知道了 / 撤回」，撤回就改回去', async () => {
     const lin = await joinWithCode('林峰', 'lin@ex.com')
     const linToken = await login('lin@ex.com')

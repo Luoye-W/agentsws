@@ -5,8 +5,7 @@
  * - 向导三步：全称（带出主体信息里填过的）→ 谁是老板（默认自己）→ 管理员（带出以前的），发出去的是这三样；
  * - 回到同事互联：说一遍会怎样；离职交接没做完时按钮不能点、写原因；
  * - 同事收的卡：「知道了 / 我要退出」两个按钮、类别「公司模式」、退之前能导出（老板那张只有「知道了」）；
- * - 降回 ② 之后同事首页一行通知（不是卡），点掉就没了；
- * - 上级派活：下属首页一行「X 派给你「…」」。
+ * - 降回 ② 之后、上级派活：WP429 起进顶栏铃铛（服务端 `notifications.test.ts` 钉住）。
  */
 import type { DeckCard } from '@agentsws/deck'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
@@ -20,7 +19,6 @@ import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 import { SOLO_ORG } from './mode-words'
 
-const T0 = '2026-10-08T09:00:00.000Z'
 const PEERS_ORG: OrganizationView = {
   ...SOLO_ORG,
   legal_name: '深圳诺伏特科技有限公司',
@@ -113,8 +111,7 @@ vi.mock('@/lib/api-peers', async () => {
   }
 })
 
-const { CompanyModeEntry, ModeNotice } = await import('@/components/company/company-mode')
-const { HandoffNotices } = await import('@/components/peers/handoff-strip')
+const { CompanyModeEntry } = await import('@/components/company/company-mode')
 
 beforeEach(() => {
   state.me = 'per_wang'
@@ -308,71 +305,5 @@ describe('WP277 同事收的卡（决策 239）', () => {
     )
     expect(screen.queryByText('我要退出')).toBeNull()
     expect(screen.queryByTestId('company-notice-export')).toBeNull()
-  })
-})
-
-describe('WP277 通知（不是卡）', () => {
-  it('降回 ② 之后别的同事首页一行「X 把这里改回了同事互联」，点掉就没了；改的人自己不出', async () => {
-    state.me = 'per_lin'
-    state.orgs = [
-      {
-        ...PEERS_ORG,
-        mode_changed_at: T0,
-        mode_changed_by: 'per_wang',
-        mode_changed_by_name: '王岚',
-      },
-    ]
-    const user = userEvent.setup()
-    const { unmount } = renderWithProviders(<ModeNotice />)
-    const line = await screen.findByTestId('mode-notice')
-    expect(line.textContent).toBe('王岚 把这里改回了同事互联')
-    await user.click(screen.getByTestId('mode-notice-ok'))
-    await waitFor(() => {
-      expect(screen.queryByTestId('mode-notice')).toBeNull()
-    })
-    // 记在组织上（换电脑也不再出），不记在浏览器里
-    expect(seenCalls).toEqual(['org_1'])
-    unmount()
-
-    // 点掉过的（服务端回 mode_notice_seen）不出
-    state.orgs = [{ ...(state.orgs[0] as OrganizationView), mode_notice_seen: true }]
-    const again = renderWithProviders(<ModeNotice />)
-    await new Promise((r) => setTimeout(r, 20))
-    expect(again.container.textContent).toBe('')
-    again.unmount()
-
-    state.me = 'per_wang'
-    const { container } = renderWithProviders(<ModeNotice />)
-    await new Promise((r) => setTimeout(r, 20))
-    expect(container.textContent).toBe('')
-  })
-
-  it('上级派活：下属首页一行「何佳 派给你「…」」', async () => {
-    state.lists = {
-      to_me: [],
-      from_me: [],
-      dispatched: [
-        {
-          kind: 'matter',
-          id: 'mat_1',
-          title: 'Volthaus 的报价跟进',
-          handoff: {
-            state: 'accepted',
-            from: 'per_he',
-            to: 'per_lin',
-            at: T0,
-            expires_at: T0,
-            dispatched: true,
-            seen: true,
-          },
-          from_label: '何佳',
-          to_label: '林峰',
-          status: 'open',
-        },
-      ],
-    }
-    renderWithProviders(<HandoffNotices />)
-    const notices = await screen.findByTestId('handoff-notices')
-    expect(notices.textContent).toBe('何佳 派给你「Volthaus 的报价跟进」')
   })
 })

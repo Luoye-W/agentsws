@@ -42,6 +42,14 @@ export {
   suggestPromotion,
   Z_95_ONE_SIDED,
 } from './automation.js'
+// WP428（决策 1244 改）：够条件 → 建议开全自动（判定这一半；开关与「开了能多做什么」由各职责自己接）
+export {
+  type AutopilotEligibility,
+  type AutopilotHistoryItem,
+  type AutopilotOutcome,
+  autopilotOutcomeOf,
+  evaluateAutopilot,
+} from './autopilot.js'
 export type { AssignmentFilter, StoreBackend } from './backend.js'
 export { createMemoryBackend, createSqliteBackend } from './backend.js'
 // WP404（docs/107）：岗位内容叠到骨架上（白名单外整份拒收）、抽内容那一半

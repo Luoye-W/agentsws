@@ -133,8 +133,8 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
     await waitFor(() => {
       expect(screen.getByTestId('duty-name').textContent).toBe('店铺管理')
     })
-    // WP418（审计 U14）：标题能换行，不截断
-    expect(screen.getByTestId('duty-name').className).not.toContain('truncate')
+    // WP431：名字进了顶栏（照 Claude 一行截断），完整名字在悬停提示里
+    expect(screen.getByTestId('duty-name').getAttribute('title')).toBe('店铺管理')
     expect(screen.getByTestId('duty-breadcrumb').textContent).toBe('网站运营')
     expect(screen.getByTestId('duty-breadcrumb').getAttribute('href')).toBe('/positions/asg_store')
     const header = screen.getByTestId('duty-header')
@@ -147,7 +147,9 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
     expect(screen.getByTestId('duty-description').getAttribute('data-hint')).toBe(
       '管商品、价格、库存',
     )
-    expect(screen.getByTestId('duty-about-link').textContent).toContain('这条职责能做什么')
+    // WP431：「职责设置」是顶栏右边那排里的一颗滑杆（字在读屏与悬停里）
+    expect(screen.getByTestId('duty-about-link').textContent).toContain('职责设置')
+    expect(screen.getByTestId('duty-about-link').getAttribute('title')).toBe('职责设置')
   })
 
   it('没有页签、没有「打开右栏」按钮；中间栏 = 对话框 +「要你拍板」', async () => {

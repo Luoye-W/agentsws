@@ -182,7 +182,7 @@ export function ChangesPanel({ pathname }: RailPanelBodyProps): ReactNode {
                 type="button"
                 aria-expanded={open}
                 data-testid={`rail-changes-item-${c.id}`}
-                className="flex w-full items-center gap-1 text-left"
+                className="ws-disclosure -m-1 flex w-[calc(100%+0.5rem)] items-center gap-1 p-1 text-left"
                 onClick={() => {
                   setOpenChange(open ? null : c.id)
                 }}

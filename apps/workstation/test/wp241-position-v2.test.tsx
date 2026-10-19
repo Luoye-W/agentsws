@@ -601,7 +601,8 @@ describe('空岗位', () => {
     expect(screen.queryByTestId('deck-section')).toBeNull()
     expect(screen.getByTestId('work-empty')).toBeTruthy()
     expect(screen.getByTestId('data-board').getAttribute('data-empty')).toBe('true')
-    expect(screen.getByTestId('position-status').textContent).toContain('刚建好')
+    // WP431：名字下面那行「刚建好，还没开工 · N 条职责」去掉了（Luoye 10-19）
+    expect(screen.queryByTestId('position-status')).toBeNull()
   })
 })
 

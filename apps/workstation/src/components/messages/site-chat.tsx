@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Settings2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AutoAnswerMark } from '@/components/chat/auto-answer-mark'
 import { StatusPill } from '@/components/design'
 import { DutyNeeded } from '@/components/duty-needed'
 import { PageError } from '@/components/page-error'
@@ -294,7 +295,7 @@ export function SiteChatView({
           <button
             type="button"
             data-testid="messages-source-chat"
-            className="ml-auto text-[12px] text-ws-muted-fg hover:text-foreground"
+            className="ws-link-muted ml-auto text-[12px]"
             onClick={onOfflineMessages}
           >
             {t('site_chat.offline')}
@@ -382,7 +383,7 @@ export function SiteChatView({
           <div className="flex flex-col gap-3" data-testid="chat-conversation-view">
             <button
               type="button"
-              className="flex w-fit items-center gap-1 text-[12px] text-ws-muted-fg md:hidden"
+              className="ws-link-muted flex w-fit items-center gap-1 text-[12px] md:hidden"
               onClick={() => {
                 setSelected(undefined)
               }}
@@ -407,6 +408,8 @@ export function SiteChatView({
                 >
                   <span className="mr-1 text-xs text-ws-muted-fg">{t(`chat.role.${m.role}`)}:</span>
                   {m.text}
+                  {/* WP428：AI 直接答的那一句标出处，旁边「这句不该直接答」 */}
+                  <AutoAnswerMark sessionId={selected} message={m} assignment={asg} />
                 </li>
               ))}
             </ul>

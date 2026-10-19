@@ -141,14 +141,15 @@ afterEach(() => {
 })
 
 describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
-  it('从左到右：浏览器、变更审阅、「⋮」、面板开关；「⋮」里是设定那几格 + 教程，点「⋮」不开关面板', async () => {
+  it('从左到右：浏览器、变更审阅、通知铃铛（WP429）、「⋮」、面板开关；「⋮」里是设定那几格 + 教程，点「⋮」不开关面板', async () => {
     renderRail('/')
     const bar = screen.getByTestId('right-rail')
     expect(
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow', 'rail-toggle'])
+      // WP431：首页没有右侧面板，也就没有面板开关（岗位 / 职责 / 事项页上它在最左，见 wp375）
+    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow'])
     expect(panelOpen()).toBe(false)
     const more = screen.getByTestId('rail-overflow')
     expect(more.getAttribute('aria-haspopup')).toBe('menu')
@@ -199,14 +200,18 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
   })
 
   it('面板开关有自己的图标与读屏说法，开 / 关跟着变', async () => {
-    renderRail('/')
+    // WP431：面板开关只在岗位 / 职责 / 事项页上有；岗位页默认开着
+    renderRail(PAGES[0] as string)
     const toggle = screen.getByTestId('rail-toggle')
     expect(toggle.querySelector('svg')?.getAttribute('class')).toContain('panel-right')
-    expect(toggle.getAttribute('aria-pressed')).toBe('false')
-    expect(toggle.getAttribute('aria-label')).toBe('打开右侧面板')
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    expect(toggle.getAttribute('aria-label')).toBe('收起右侧面板')
     fireEvent.click(toggle)
+    await waitFor(() => {
+      expect(screen.getByTestId('rail-toggle').getAttribute('aria-label')).toBe('打开右侧面板')
+    })
+    fireEvent.click(screen.getByTestId('rail-toggle'))
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    expect(screen.getByTestId('rail-toggle').getAttribute('aria-label')).toBe('收起右侧面板')
   })
 })
 
@@ -247,10 +252,11 @@ describe('岗位 / 职责 / 事项页面板默认打开（决策 1035 更正）'
     expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ position: true })
   })
 
-  it('面板头 × 收起也算手动关', async () => {
+  it('WP431：面板没有自己的 ×（照 Claude）；顶栏面板开关收起也算手动关', async () => {
     renderRail('/matters/mat_1')
     await screen.findByTestId('rail-cards')
-    fireEvent.click(screen.getByTestId('rail-panel-close'))
+    expect(screen.queryByTestId('rail-panel-close')).toBeNull()
+    fireEvent.click(screen.getByTestId('rail-toggle'))
     expect(panelOpen()).toBe(false)
     expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ matter: false })
   })

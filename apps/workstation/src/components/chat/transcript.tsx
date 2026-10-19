@@ -10,6 +10,7 @@
  * 按钮里那种普通的加载转圈还是 `Loader2`，不换成它。
  */
 import { cn } from 'cn'
+import { AutoAnswerMark } from '@/components/chat/auto-answer-mark'
 import { AgentBusyMark } from '@/components/design'
 import type { ChatMessageView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -18,10 +19,15 @@ import { formatDate } from '@/lib/format'
 export function ChatTranscript({
   messages,
   busy = false,
+  sessionId,
+  assignment,
 }: {
   messages: ChatMessageView[]
   /** 这一轮交给 AI 了、还没回来。 */
   busy?: boolean
+  /** WP428：直接答那一句下面的「这句不该直接答」要知道是哪条会话、用哪条分配。 */
+  sessionId?: string | undefined
+  assignment?: string | undefined
 }): React.ReactNode {
   const { t, lang } = useApp()
   if (messages.length === 0 && !busy) {
@@ -48,9 +54,15 @@ export function ChatTranscript({
           <div className="flex flex-wrap items-baseline gap-2 text-[11px] text-muted-foreground">
             <span>{t(`chat.role.${m.role}`)}</span>
             <time dateTime={m.at}>{formatDate(m.at, lang)}</time>
-            {m.plan_action === undefined ? null : <span>{t(`chat.action.${m.plan_action}`)}</span>}
+            {m.plan_action === undefined || m.auto_answer !== undefined ? null : (
+              <span>{t(`chat.action.${m.plan_action}`)}</span>
+            )}
           </div>
           <p className="whitespace-pre-wrap">{m.text}</p>
+          {/* WP428：AI 直接答的那一句标出处，旁边「这句不该直接答」 */}
+          {sessionId === undefined ? null : (
+            <AutoAnswerMark sessionId={sessionId} message={m} assignment={assignment} />
+          )}
           {m.role === 'operator' ? (
             <p className="text-[11px] text-muted-foreground">{t('chat.role.operator.note')}</p>
           ) : null}

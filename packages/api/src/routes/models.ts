@@ -603,8 +603,17 @@ export interface ModelDefaultsView {
  * 开关「自己的用不了时用工坊积分接着做」登录了就默认开。与输入框 AI 钮同一份数据（同样的来源名与分组）。
  */
 export interface ModelAiSourceView {
-  /** 主用：自己的那几条（按「已配的」次序）。 */
-  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  /**
+   * 主用：自己的那几条。WP430（决策 1288）：按「AI 来源」里排的顺序（可拖动）；这次选的用不了时按这个顺序往下接。
+   * `ready` = 会被自动接上（登录着的订阅 / 账号、测试通过的 key；老服务端没有这一格）；`model` = 接上时用哪个模型。
+   */
+  own: {
+    provider_id: string
+    label: string
+    group: 'subscription' | 'own'
+    ready?: boolean
+    model?: string
+  }[]
   /** 备用：工坊积分。`available` = 登录了工坊账号；`model` = 切过去时用哪个模型。 */
   backup: { available: boolean; label: string; model?: string }
   /** 开关现在是不是开着（没登录工坊账号时一律 `false`）。 */
@@ -646,6 +655,8 @@ export interface SetModelDefaultsInput {
     | undefined
   /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
   fallback_to_cloud?: boolean | undefined
+  /** WP430（决策 1288）：「AI 来源」里自己配的那几条的先后（provider id）。空数组 = 回到默认次序。 */
+  source_order?: string[] | undefined
 }
 
 export interface ModelsActor {
@@ -864,6 +875,8 @@ const DefaultsBody = z.object({
   // 决策 291（WP281）：老客户端还会带 `data_residency`——不列在这里，zod 默认把多余的键剥掉，不报错也不生效
   // WP425：开关「自己的用不了时用工坊积分接着做」
   fallback_to_cloud: z.boolean().optional(),
+  // WP430：「AI 来源」拖动排序
+  source_order: z.array(z.string().min(1).max(256)).max(64).optional(),
   budget: z
     .object({
       workspace_daily_base: z.number().min(0).max(1_000_000).optional(),

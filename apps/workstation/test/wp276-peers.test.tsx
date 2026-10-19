@@ -196,6 +196,14 @@ vi.mock('@/lib/api', async () => {
     listMembers: async () => [member('per_wang', '王岚'), member('per_li', '李默')],
     listInvitations: async () => [],
     listInvites: async () => [INVITE],
+    // WP427：邀请链接用团队通道的地址开头（本机回环口发给同事没有用）
+    getTeamLink: async () => ({
+      open: true,
+      lan: { on: true },
+      cloud: { state: 'online', url: 'https://tabc.team.agentsws.com' },
+      invite_base: 'https://tabc.team.agentsws.com',
+    }),
+    listTeamJoins: async () => [],
     listMembershipRequests: async () => [REQUEST],
     listDiscoveryPeers: async () => ({ available: true, enabled: true, peers: [] }),
     getOnboardingState: async () => ({
@@ -234,7 +242,7 @@ vi.mock('@/lib/api-peers', async () => {
 
 const { OrgPage } = await import('@/pages/org')
 const { HandoffDialog } = await import('@/components/peers/handoff-dialog')
-const { HandoffNotices, MatterHandoffBar } = await import('@/components/peers/handoff-strip')
+const { MatterHandoffBar } = await import('@/components/peers/handoff-strip')
 
 beforeEach(() => {
   state.me = 'per_li'
@@ -467,28 +475,6 @@ describe('WP276 交给同事', () => {
     fireEvent.click(within(offered).getByTestId('matter-handoff-accept'))
     await waitFor(() => {
       expect(calls.some((c) => c.fn === 'accept')).toBe(true)
-    })
-  })
-
-  it('首页：接下 / 没接 / 退回各一行，点掉就不再出（不是卡）', async () => {
-    state.lists = {
-      to_me: [],
-      from_me: [
-        view({ handoff: { ...view({}).handoff, state: 'accepted' } }),
-        view({
-          id: 'mat_2',
-          title: '寄样',
-          handoff: { ...view({}).handoff, state: 'declined', reason: '太忙' },
-        }),
-      ],
-    }
-    renderWithProviders(<HandoffNotices />)
-    const list = await screen.findByTestId('handoff-notices')
-    expect(list.textContent).toContain('王岚 接下了「Acme 的报价」')
-    expect(list.textContent).toContain('王岚 没接「寄样」：太忙')
-    fireEvent.click(within(list).getAllByRole('button')[0] as HTMLElement)
-    await waitFor(() => {
-      expect(calls.find((c) => c.fn === 'seen')?.args).toEqual(['matter', 'mat_1'])
     })
   })
 })

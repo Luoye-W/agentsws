@@ -228,21 +228,29 @@ export {
   routeEffortOf,
   routeKey,
 } from './providers/pi-route.js'
-export type { StubProviderOptions } from './providers/stub.js'
+export type { StubProviderOptions, StubScript } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'
 export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'
 // WP425：AI 来源顺序——自己的用不了时切到工坊积分
-export type { SourceFallbackOff, SourceFallbackPolicy } from './source-fallback.js'
+export type {
+  ModelSourceReloginPayload,
+  SourceFallbackOff,
+  SourceFallbackPolicy,
+  SourceStep,
+} from './source-fallback.js'
 export {
   isSourceFallbackOffText,
+  SOURCE_COOLDOWN,
   SOURCE_FALLBACK_OFF_MARK,
+  sourceChainMessage,
   sourceFallbackOffError,
   sourceFallbackOffMessage,
   sourceFallbackOffOf,
   sourceLabelOf,
   sourceSwitchMessage,
   sourceSwitchReasonOf,
+  WORKSHOP_SOURCE_LABEL,
 } from './source-fallback.js'
 // WP145：语音识别器选择层（对齐官方 ctx.speechToText；现在只有网关这一个识别器）
 export type {

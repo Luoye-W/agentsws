@@ -272,6 +272,8 @@ describe('边界', () => {
       'get /v1/chat/sessions': 'bearer',
       'get /v1/chat/sessions/:id/messages': 'bearer',
       'post /v1/chat/sessions/:id/messages': 'bearer',
+      // WP428：「这句不该直接答」（商家那一面）
+      'post /v1/chat/sessions/:id/messages/:message_id/not-direct': 'bearer',
       'post /v1/chat/sessions/:id/advance': 'bearer',
       'put /v1/chat/sessions/:id/takeover': 'bearer',
       'post /v1/chat/sessions/:id/teach': 'bearer',

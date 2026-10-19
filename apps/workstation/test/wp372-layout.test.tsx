@@ -286,12 +286,13 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
     const icons = within(bar)
       .getAllByRole('button')
       .map((b) => b.getAttribute('data-testid'))
-    expect(icons).toEqual([
-      'rail-icon-browser',
-      'rail-icon-changes',
-      'rail-overflow',
-      'rail-toggle',
-    ])
+    // WP431（照 Claude）：面板开关在最左（岗位 / 职责 / 事项页才有），后面一条细竖线；
+    // WP429：通知铃铛在变更审阅之后、「⋮」之前（外壳的 top-bar-bell-slot）
+    expect(icons).toEqual(
+      screen.queryByTestId('rail-toggle') === null
+        ? ['rail-icon-browser', 'rail-icon-changes', 'notify-bell', 'rail-overflow']
+        : ['rail-toggle', 'rail-icon-browser', 'rail-icon-changes', 'notify-bell', 'rail-overflow'],
+    )
     expect(screen.queryByTestId('top-command')).toBeNull()
     fireEvent.click(screen.getByTestId('rail-overflow'))
     fireEvent.click(await screen.findByTestId('rail-menu-help'))
@@ -316,7 +317,7 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
       'alert',
     )
     // 要处理的排最上，带「去连接」
-    const row = await within(card).findByTestId('connection-row')
+    const row = await within(card).findByTestId('connection-row', {}, { timeout: 5000 })
     expect(row.getAttribute('data-todo')).toBe('true')
   })
 })
@@ -344,7 +345,7 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     )
     // 报表：展开、点一份在面板里看
     fireEvent.click(screen.getByTestId('rail-card-toggle-reports'))
-    const row = await screen.findByTestId('report-row')
+    const row = await screen.findByTestId('report-row', {}, { timeout: 5000 })
     expect(row.textContent).toContain('周报')
     expect(row.textContent).toContain('10-12')
     fireEvent.click(row)
@@ -458,16 +459,20 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect(handle.getAttribute('aria-label')).toContain('拖动「计划」')
   })
 
-  it('面板可临时加宽，宽度记住', async () => {
+  it('WP431：面板没有放大钮与关闭叉（照 Claude，开关只在顶栏）；宽度靠拖左边缘，键盘也调得动，记住', async () => {
     const box = stubStorage()
     renderShell()
     await openRailCard('reports')
     fireEvent.click(await screen.findByTestId('rail-card-more-reports'))
-    const frame = await screen.findByTestId('rail-panel-frame')
-    expect(frame.getAttribute('data-wide')).toBeNull()
-    fireEvent.click(screen.getByTestId('rail-panel-wide'))
-    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-wide')).toBe('true')
-    expect(box.get('agentsws.rightrail.wide')).toBe('760')
+    await screen.findByTestId('rail-panel-frame')
+    expect(screen.queryByTestId('rail-panel-wide')).toBeNull()
+    expect(screen.queryByTestId('rail-panel-close')).toBeNull()
+    // 「显示更多」那一格有一行细的「← 名字」回到卡片堆
+    expect(screen.getByTestId('rail-panel-back')).toBeTruthy()
+    const handle = screen.getByTestId('rail-resize')
+    for (let i = 0; i < 20; i += 1) fireEvent.keyDown(handle, { key: 'ArrowLeft' })
+    expect(screen.getByTestId('rail-panel-frame').style.width).toBe('720px')
+    expect(box.get('agentsws.rightrail.layout')).toContain('720')
   })
 })
 

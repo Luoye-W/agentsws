@@ -184,7 +184,8 @@ const { railContextOf } = await import('@/components/rail/rail-scope')
  * 第三栏的开合态住在 `RailStateProvider` 里（职责页头部那四个按钮也要用它），
  * 所以单测里也得把它套上——真应用里这一层由 `AppShell` 提供。
  */
-function renderRail(route = '/', position = 'asg_store'): void {
+// WP431：卡片堆只在岗位 / 职责 / 事项页上有（首页没有右侧面板，也没有开关），默认就在岗位页上测
+function renderRail(route = '/positions/asg_store', position = 'asg_store'): void {
   renderWithProviders(
     <RailStateProvider>
       <RightRail instances={[INSTANCE]} />
@@ -212,15 +213,15 @@ beforeEach(() => {
 })
 
 describe('第三栏骨架（36 §9）', () => {
-  it('默认收着：只有图标轨，没有面板', () => {
-    renderRail()
+  it('首页（WP431）：没有右侧面板，也没有面板开关', () => {
+    renderRail('/')
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
     expect(screen.getByTestId('right-rail')).toBeDefined()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('WP375 / WP412：面板开关开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；再点开关收起', async () => {
+  it('WP375 / WP412 / WP431：岗位页面板默认开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；点开关收起', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-toggle'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
     expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
     expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')

@@ -19,6 +19,11 @@
 export interface NotifyInput {
   title: string
   body?: string
+  /**
+   * WP429：点了这条系统通知去哪（工作台里的地址，`/` 开头）。新壳点了把主窗口叫到前面、
+   * 经 {@link DesktopBridge.onNotificationClick} 交回页面去跳；旧壳不认这一格（只弹不跳）。
+   */
+  path?: string
 }
 
 export interface DesktopBridge {
@@ -28,6 +33,11 @@ export interface DesktopBridge {
   readonly version: string
   /** 原生通知；系统不支持时返回 false。 */
   notify(input: NotifyInput): Promise<boolean>
+  /**
+   * WP429：点了带 `path` 的系统通知——主进程把窗口叫到前面，再把地址交给这里（页面自己跳）。
+   * 旧壳没有这一项：先判空。回取消订阅的函数。
+   */
+  onNotificationClick?(listener: (path: string) => void): () => void
   /** 用系统浏览器打开；只接受 http / https / mailto，其余返回 false。 */
   openExternal(url: string): Promise<boolean>
   /**
@@ -171,6 +181,11 @@ export interface DesktopUpdateBridge {
    * 旧壳没有：先判空（没有就不出「去下载页」）。
    */
   openDownloadPage?(): Promise<boolean>
+  /**
+   * WP426：设置里「检查更新」——立刻去查一次（与托盘那一项同一个 `check`），回查完的状态。
+   * 旧壳没有：先判空（没有就不出那个按钮）。
+   */
+  check?(): Promise<DesktopUpdateStatus>
 }
 
 /** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
@@ -192,6 +207,8 @@ export const BRIDGE_KEY = 'agentsws'
 export const BRIDGE_CHANNELS = {
   info: 'agentsws:bridge-info',
   notify: 'agentsws:notify',
+  /** WP429：点了系统通知（主进程 → 页面，带地址） */
+  notifyClicked: 'agentsws:notify-clicked',
   openExternal: 'agentsws:open-external',
   /** WP184 */
   openScene: 'agentsws:open-scene',
@@ -206,6 +223,8 @@ export const BRIDGE_CHANNELS = {
   updateCancelWait: 'agentsws:update-cancel-wait',
   /** WP409 */
   updateOpenPage: 'agentsws:update-open-page',
+  /** WP426 */
+  updateCheck: 'agentsws:update-check',
   /** WP353 */
   searchPending: 'agentsws:search-pending',
   searchChanged: 'agentsws:search-changed',

@@ -102,6 +102,7 @@ import type {
   Halt,
   ImageProvider,
   KolChannel,
+  MatterId,
   OrganizationMode,
   Person,
   PersonaSubject,
@@ -118,6 +119,7 @@ import type {
   StartRun,
   StorefrontPlatform,
   StoreProbeResult,
+  TodoId,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
@@ -243,7 +245,11 @@ import {
   scheduleRulesFor,
 } from '@agentsws/social-core'
 import type { ToolExecutor } from '@agentsws/stand-ins'
-import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
+import {
+  chatAnswerStubScript,
+  detectAnsweredBoundaries,
+  SUPPORT_BOUNDARIES,
+} from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
@@ -307,6 +313,7 @@ import { createAssistant } from './assistant.js'
 import { createAssistantNotes, isAssistantNotesCard } from './assistant-notes.js'
 import { type AutoMemory, createAutoMemory, createAutoMemorySettings } from './auto-memory.js'
 import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
+import { createAutopilot, isAutopilotCard, KOL_AUTOPILOT_SCOPE } from './autopilot.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
@@ -379,6 +386,7 @@ import {
   readLock,
 } from './browserskill-install.js'
 import { createReasonJudge, similarApprovals } from './card-follow.js'
+import { catalogEntry } from './catalog.js'
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
@@ -412,6 +420,7 @@ import {
 } from './cloud-account.js'
 import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
+import { CLOUD_STAND_IN_BASE_URL } from './cloud-stand-in.js'
 import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 // WP392：竞品监控（同一条管道；进料口由 WP393 / WP394 接）
 import {
@@ -585,6 +594,16 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import {
+  CREDITS_LOW_KEY,
+  connectionBrokenNotification,
+  connectionKey,
+  createNotifications,
+  creditsLowNotification,
+  type NotificationsService,
+  runEndedNotification,
+  seedDemoNotifications,
+} from './notifications.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import {
@@ -907,6 +926,13 @@ import {
   needsSupportVoice,
   supportVoiceSection,
 } from './support-voice.js'
+import { createTeamLink, type TeamLink } from './team-link.js'
+import {
+  resolveTeamCode,
+  TEAM_TUNNEL_SECRET_ID,
+  type TunnelFetch,
+  type TunnelSocketFactory,
+} from './team-tunnel.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
 import {
@@ -1208,6 +1234,8 @@ export interface ServerOptions {
   random?: () => number
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
+  /** WP429：换一份站内通知（测试注入）；不给按 `dbDir` 建（`notifications.db`）。 */
+  notifications?: NotificationsService
   /**
    * WP415（决策 1236）：执行兜底怎么走。`live` = 真用（没有真执行器的卡出卡就标「还没接通」，
    * 批了也照实回「没做」，绝不进内存空桩回成功）；`demo` = 演示（空桩照走、标「演示」）；
@@ -1607,6 +1635,24 @@ export interface ServerOptions {
   /** WP51：问同伴"你是谁"。 */
   discoveryHello?: (url: string) => Promise<DiscoveryHelloView | undefined>
   /**
+   * WP427：团队通道（同事从别的电脑连进来）的注入点。生产一个都不传：局域网那扇门听所有网卡、
+   * 端口系统给；云那条路连 `AGENTSWS_TEAM_CLOUD_URL`（默认就是工坊云）、令牌用关联账号时签的那把。
+   * `false` = 整个不要（托管实例、只跑单测的服务）。
+   */
+  team?:
+    | false
+    | {
+        lanHost?: string
+        lanPort?: number
+        lanOff?: boolean
+        /** 云那条路的地址（不给按环境变量 / 默认云）。 */
+        cloudBase?: string
+        /** 云那条路的令牌（不给 = 读本机加密库里关联账号时签的那把）。 */
+        cloudToken?: () => string | undefined
+        fetch?: TunnelFetch
+        socketFactory?: TunnelSocketFactory
+      }
+  /**
    * WP46：活数据源的刷新间隔（毫秒）。不传按 `AGENTSWS_LIVE_DATA_REFRESH_SECONDS`
    * / 默认 5 分钟；传 `0` = 不起后台定时器（测试与一次性任务）。
    */
@@ -1684,6 +1730,8 @@ export interface Server {
   learning: LearningAssembly
   /** WP320：AI 随工作自动记（提示词里的「记忆」那一段 + 跑完提炼写入 + 「自动记忆」开关）。 */
   autoMemory: AutoMemory
+  /** WP429：站内通知（测试直接发 / 读；界面走 `/v1/notifications*`）。 */
+  notifications: NotificationsService
   models: ModelGatewayApi
   txn: Txn
   /** WP323：发出记录与记录去处（测试直接看它；界面走 `/v1/outbound/*`）。 */
@@ -1981,6 +2029,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
+  /*
+   * WP429：站内通知（顶栏铃铛）。一台机器一张表、每人各自的；事件日志的每一条都过一下
+   * （同事接下了 / 审批到你 / 岗位更新到了 / 模型订阅要重新登录…），别的由各装配处直接发。
+   */
+  const notifications =
+    options.notifications ??
+    createNotifications({ clock, random, dbPath: file('notifications.db') })
 
   // 21 §1：所有模块的事件都进同一条日志；请求内的 trace_id 覆盖模块自造的那个。
   const appendEvent = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void => {
@@ -1993,6 +2048,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         trace_id: traceScope.current() ?? rest.correlation.trace_id,
       },
     })
+    // WP429：该告诉谁一声的事进站内通知（不抛、不等）
+    notifications.onEvent(e)
     // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
@@ -2409,6 +2466,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       stop: async (reason: string) => {
         await Promise.all(
           deepseekAccountRuns().map(({ brand, run }) => {
+            /*
+             * WP430（决策 1289，作废 953 那一套）：登录失效时，这个品牌按「AI 来源」顺序还有下一个能接的——
+             * 不停下、不出卡，下一跳网关自己接上并在对话里照实说一句；「要重新登录」走站内通知。
+             * 人自己点登出的那一次照旧先停（那是人的决定）。
+             */
+            if (
+              reason === DEEPSEEK_EXPIRED_STOPPED &&
+              brand.ownModels.canSwitchFrom(run.model.provider)
+            )
+              return undefined
             // WP334（决策 726）：登录过期停下的 → 收尾时出连接卡，卡里就地重新登录、登好接着做
             if (reason === DEEPSEEK_EXPIRED_STOPPED)
               brand.runtime?.noteNeed?.(run.run_id, DEEPSEEK_ACCOUNT_NEED)
@@ -2449,7 +2516,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7 })],
+      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -3265,6 +3332,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     seoDecidedHook,
   )
   approvalsForContent = approvals
+  /*
+   * WP428（决策 1244 改）：够条件 → 建议开全自动（通用积木）。历史读这张总线里的账本卡，
+   * 建议卡也从这条总线出；每张卡定了之后在 `seoDecidedHook` 里喊它一声。
+   */
+  const autopilot = createAutopilot({
+    clock,
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    listChangeCards: (ws) =>
+      txn.runtime.store.listApprovals({ workspace_id: ws, kind: 'staged_change' }),
+    createCard: (input) => approvals.create(input),
+    appendEvent: (e) => {
+      appendEvent(e)
+    },
+  })
   // WP350（决策 900）：助理把一份资料拆给几个岗位时要记的那几条——WP357（决策 902）起点「就这样」即生效，可改可删可撤销
   const assistantNotes = createAssistantNotes({
     clock,
@@ -6453,6 +6534,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(rbLoginUrl === undefined ? {} : { loginUrl: rbLoginUrl }),
             ...(rbWhoamiUrl === undefined ? {} : { whoamiUrl: rbWhoamiUrl }),
           })
+    /** WP429：上一次看到的余额是不是「快用完」（启动后第一次看到快用完也算一次变化）。 */
+    let creditsLow: boolean | undefined
     const ownCloud = createCloud({
       ...(readonlyBrowser !== undefined
         ? { readonlyBrowserStatus: () => readonlyBrowser.status() }
@@ -6476,6 +6559,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
       pricingCatalog,
+      /*
+       * WP429：积分从够用变成快用完（云钱包 `low_balance`）→ 告诉所有者一声；回到够用就收成已读。
+       * 只在「变了」那一刻发（余额每几分钟取一次，不能每次都发）。
+       */
+      onBalance: (b) => {
+        const was = creditsLow
+        creditsLow = b.low_balance
+        if (!b.low_balance) {
+          if (was === true) notifications.settle(ws, CREDITS_LOW_KEY)
+          return
+        }
+        if (was === true) return
+        void identity
+          .getWorkspace(ws)
+          .then((w) => {
+            if (w?.owner_id !== undefined)
+              notifications.notify(creditsLowNotification(ws, w.owner_id, b.available))
+          })
+          .catch(() => undefined)
+      },
       // WP194：打云时带「谁 / 哪个岗位」；公司「积分」页只给 owner / admin；改额度顺手推公司时区
       positionOf: (role_id) => cloudPositionOf(ws, role_id),
       canManage: (actor) => creditsRoleOf(actor.person_id, ws),
@@ -6625,6 +6728,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(options.runtime?.dshMode === undefined ? {} : { dshMode: options.runtime.dshMode }),
             // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
             runLimits: () => runLimitsSettings.get(),
+            // WP429：运行收尾告诉跑它的人一声（站内通知）
+            onRunEnded: (e) => {
+              const n = runEndedNotification(ws, { ...e, person_id: e.person_id as PersonId })
+              if (n !== undefined) notifications.notify(n)
+            },
             // WP320：「记忆」那一段 + 跑完自动记
             memory: {
               section: (actor, loaded) => autoMemory.section(actor, loaded),
@@ -6812,6 +6920,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               now: () => clock.now(),
               // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
               brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
+              // WP428（决策 1244 改）：这条岗位开了全自动，AI 才能把合作推进到「谈成 / 已寄样」
+              autopilot: (actor) =>
+                autopilot.isOn(actor.workspace_id, actor.assignment_id, KOL_AUTOPILOT_SCOPE),
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -7427,6 +7538,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections.onConnectionChange(() => {
       void storeMarkets.check()
     })
+    /*
+     * WP429：连接从「连着」变成要重连 / 停用 → 告诉工作区所有者一声（站内通知，点了到连接页）；
+     * 又连上了就把那条收成已读。启动时那一份只当底，不发。
+     */
+    {
+      const seen = new Map(connections.liveConnections().map((c) => [c.id, c.status]))
+      connections.onConnectionChange(() => {
+        const now = connections.liveConnections()
+        const broken: { id: string; label: string }[] = []
+        for (const c of now) {
+          const before = seen.get(c.id)
+          if (before === 'active' && c.status !== 'active')
+            broken.push({ id: c.id, label: catalogEntry(c.service)?.label ?? c.service })
+          if (c.status === 'active' && before !== undefined && before !== 'active')
+            notifications.settle(ws, connectionKey(c.id))
+          seen.set(c.id, c.status)
+        }
+        if (broken.length === 0) return
+        void identity
+          .getWorkspace(ws)
+          .then((w) => {
+            if (w?.owner_id === undefined) return
+            for (const c of broken)
+              notifications.notify(connectionBrokenNotification(ws, w.owner_id, c))
+          })
+          .catch(() => undefined)
+      })
+    }
     // WP324（决策 690）：连接清单变了（在连接页 / 第三栏连好了）→ 还在等的连接卡复查一遍，缺的都连上了就接着做
     connections.onConnectionChange(() => {
       void setupCardsOf(ws)
@@ -8126,11 +8265,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ranges: config.ranges,
           },
         })
-        return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          statement: h.statement_redacted,
+          layer: h.layer,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        }))
       },
       position: () => positionFor(ws, LIVE_CHAT_DUTIES),
-      // WP417（决策 1232）：缺省每一句先出卡要人批；商家在聊天窗设置里手动开「常见问题直接发」才直接发
-      autoSendFaq: () => lateWidget.current?.config().auto_send_faq === true,
+      // WP428（决策 1246 改）：缺省按置信度直接答（适中档）；商家在聊天窗设置里可关、可调严松
+      autoAnswer: () => {
+        const config = lateWidget.current?.config()
+        return {
+          on: config?.auto_answer !== false,
+          ...(config?.auto_answer_strictness === undefined
+            ? {}
+            : { strictness: config.auto_answer_strictness }),
+        }
+      },
       // WP417（自查 C10）：访客报了订单号 → 只读查这一单（与运行时同一个记录源）
       lookupOrder: async (order_ref) => {
         const res = await records.executeTool?.({
@@ -9827,6 +9979,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP428：全自动——建议卡点了 → 开 / 记下先不开；同类卡定了 → 看够不够条件、出没出事
+    await autopilot.afterDecided(item).catch(() => undefined)
+    if (isAutopilotCard(item)) return
     // WP350：助理扇出的「要记的 N 条」确认卡被点了 → 这一批生效 / 作废
     if (isAssistantNotesCard(item)) return assistantNotes.onDecided(item)
     // WP322：「按问答导入」定规矩卡 / ③ 的整批卡被点了 → 一行一张知识卡（或整批生效 / 作废）
@@ -10041,6 +10196,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   const brandModules: BrandModules = brands
   /*
+   * WP429：站内通知从事件里认人、认标题——按品牌现取（名字走身份层、卡走审批总线、
+   * 交出去的那件事走那个品牌的工作模型；那个品牌还没装起来就只给标题兜底）。
+   */
+  notifications.fallback((ws) => ({
+    personName: async (id) => (await identity.getPerson(id))?.name || undefined,
+    owners: async () => {
+      const owner = (await identity.getWorkspace(ws))?.owner_id
+      return owner === undefined ? [] : [owner]
+    },
+    members: async () =>
+      (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
+    approval: (id) => approvals.get(id),
+    handoff: (ref) => {
+      const brandWork = brandModules.peek(ws)?.work
+      if (ref.kind === 'matter') {
+        const m = brandWork?.getMatter(ref.id as MatterId)
+        return m === undefined
+          ? undefined
+          : { title: m.title, href: `/matters/${encodeURIComponent(m.id)}` }
+      }
+      const t = brandWork?.getTodo(ref.id as TodoId)
+      if (t === undefined) return undefined
+      return {
+        title: t.title,
+        href: t.matter_id === undefined ? '/todos' : `/matters/${encodeURIComponent(t.matter_id)}`,
+      }
+    },
+  }))
+  /*
    * WP134：上次选过「用我的 DeepSeek 账号登录」就把官方模块挂回来（只读本机凭据库，不出网）。
    * WP150：挪到建品牌**之前**——运行时在建品牌那一刻问一次"有没有模型"定走 direct 还是 stub，
    * 挂回来之前问，只接了 DeepSeek 账号的机器重启后就一直是 stub（账号任务根本跑不到模型上）。
@@ -10114,6 +10298,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
+  // WP429：演示世界里铃铛里放几条（截图看得出样子）
+  if (mount !== undefined) {
+    const owner = (await identity.getWorkspace(workspace.id))?.owner_id
+    if (owner !== undefined) seedDemoNotifications(notifications, workspace.id, owner, clock.now())
+  }
   if (mount !== undefined) {
     seedDemoKol(boot.kol, clock.now())
     /*
@@ -11015,6 +11204,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 三个取值函数是故意的——连接、技能、模型都是会在运行期变的，向导第 ④ 步那张
    * 清单必须现算，不能在装配那一刻定死（否则"去连"回来之后清单还说没连）。
    */
+  /** WP427：团队通道（局域网那扇门 + 经工坊云的长连接）。在 onboarding 之后装，这里先留个口。 */
+  let teamRef: TeamLink | undefined
+  // 托管实例（云上值守）没有同事连进来这回事；单测进程里没显式给就不开（不占测试端口段之外的端口）
+  const teamOptions =
+    options.team === false || hostedBoot !== undefined
+      ? undefined
+      : (options.team ?? (process.env.VITEST === undefined ? {} : undefined))
+  /** 云那条路的地址：`AGENTSWS_TEAM_CLOUD_URL` > 测试注入 > 工坊云。演示里的云替身不走（那是个不存在的域名）。 */
+  const teamCloudBase = ((): string | undefined => {
+    if (teamOptions === undefined) return undefined
+    const fromEnv = env.AGENTSWS_TEAM_CLOUD_URL?.trim()
+    const base = (
+      teamOptions.cloudBase ??
+      (fromEnv === undefined || fromEnv === '' ? undefined : fromEnv) ??
+      cloudBaseUrl(env)
+    ).replace(/\/+$/, '')
+    return base === CLOUD_STAND_IN_BASE_URL ? undefined : base
+  })()
   const onboarding = createOnboarding({
     // WP276：申请卡在 ① ② 说「想一起用」，同意后不出空的并进来对照卡
     mode: async () => (await modeOfWorkspace?.(workspace.id)) ?? 'company',
@@ -11126,7 +11333,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? list(boot.connections)
         : brandModules.forWorkspace(ws).then((b) => list(b.connections))
     },
-    port: () => boundPort,
+    // WP427：局域网广播报的是「团队门」那个端口（服务进程本身只听 127.0.0.1）
+    port: () => teamRef?.lanPort(),
+    ...(teamOptions === undefined
+      ? {}
+      : {
+          team: {
+            status: () => teamRef?.status(),
+            resolveCode: (code: string) =>
+              teamCloudBase === undefined
+                ? Promise.resolve(undefined)
+                : resolveTeamCode(teamCloudBase, code, teamOptions.fetch),
+            onInviteCreated: (code: string, expires_at: string) => {
+              teamRef?.registerCode(code, expires_at)
+            },
+            issueLogin: async (person_id: PersonId) => {
+              const who = await identity.getPerson(person_id)
+              if (who === undefined) return undefined
+              return identity.issueLogin(who.email)
+            },
+            changed: () => {
+              void teamRef?.sync()
+            },
+          },
+        }),
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
     ...(options.discoveryPost === undefined ? {} : { post: options.discoveryPost }),
@@ -11173,6 +11403,107 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （只补店主自己给自己建的、要范围却一条都没有的；跑过一次就不再跑）。
    */
   onboarding.backfillWizardRanges()
+
+  /*
+   * WP427：同事怎么连进来。打开「和同事一起用」或者这里不止一个人时才开：局域网那扇门（另一个端口，
+   * 只放申请 / 登录这几条，其余要会话）+ 经工坊云的长连接（不开端口、要工坊账号）。① 个人、没打开时
+   * 一下网络都不碰（WP422 的口径）。
+   */
+  const discoverableNow = (): boolean => {
+    const org = bootstrapOrg === undefined ? undefined : identity.getOrganization(bootstrapOrg)
+    return org?.discoverable === true
+  }
+  if (teamOptions !== undefined) {
+    const devToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
+    const memoryTunnel: { value?: import('@agentsws/contracts').TeamTunnelIssued | undefined } = {}
+    teamRef = createTeamLink({
+      wanted: async () => {
+        if (discoverableNow()) return true
+        const mode = await modeOfWorkspace?.(workspace.id)
+        return mode !== undefined && mode !== 'solo'
+      },
+      mainPort: () => boundPort,
+      authenticate: (token) => identity.authenticate(token),
+      cookieName: SESSION_COOKIE,
+      lan: {
+        ...(teamOptions.lanOff === true || env.AGENTSWS_TEAM_LAN === 'off' ? { off: true } : {}),
+        ...(teamOptions.lanHost === undefined ? {} : { host: teamOptions.lanHost }),
+        ...(() => {
+          const raw = teamOptions.lanPort ?? Number(env.AGENTSWS_TEAM_LAN_PORT ?? '0')
+          return Number.isInteger(raw) && raw > 0 && raw < 65536 ? { port: raw } : {}
+        })(),
+      },
+      ...(teamCloudBase === undefined
+        ? {}
+        : {
+            cloud: {
+              base: () => teamCloudBase,
+              token:
+                teamOptions.cloudToken ??
+                (() => {
+                  try {
+                    const linked = boot.secrets.available
+                      ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+                      : undefined
+                    if (linked !== undefined && linked !== '') return linked
+                  } catch {
+                    // 读不出来当没关联
+                  }
+                  // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认这个
+                  return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
+                    devToken !== undefined &&
+                    devToken !== ''
+                    ? devToken
+                    : undefined
+                }),
+              vault: {
+                get: () => {
+                  if (!boot.secrets.available) return memoryTunnel.value
+                  try {
+                    const f = boot.secrets.get(TEAM_TUNNEL_SECRET_ID)
+                    return f?.tunnel_id !== undefined &&
+                      f.url !== undefined &&
+                      f.secret !== undefined
+                      ? { tunnel_id: f.tunnel_id, url: f.url, secret: f.secret }
+                      : undefined
+                  } catch {
+                    return memoryTunnel.value
+                  }
+                },
+                set: (value) => {
+                  memoryTunnel.value = value
+                  if (!boot.secrets.available) return
+                  try {
+                    if (value === undefined) boot.secrets.remove(TEAM_TUNNEL_SECRET_ID)
+                    else
+                      boot.secrets.put(TEAM_TUNNEL_SECRET_ID, {
+                        tunnel_id: value.tunnel_id,
+                        url: value.url,
+                        secret: value.secret,
+                      })
+                  } catch {
+                    // 存不进加密库：这一次用内存那份，重启后重新申请
+                  }
+                },
+              },
+              ...(teamOptions.fetch === undefined ? {} : { fetch: teamOptions.fetch }),
+              ...(teamOptions.socketFactory === undefined
+                ? {}
+                : { socketFactory: teamOptions.socketFactory }),
+            },
+          }),
+      liveInvites: () =>
+        onboarding.invites.list().map((i) => ({ code: i.code, expires_at: i.expires_at })),
+      // 门换了端口：局域网广播用新端口重来一轮（开关开着才广播）
+      onLanChanged: () => {
+        if (discoverableNow()) onboarding.discovery.refresh()
+      },
+      onEvent: (e) => {
+        if (options.quiet !== true)
+          process.stderr.write(`[team] ${e.type}${e.detail === undefined ? '' : ` ${e.detail}`}\n`)
+      },
+    })
+  }
 
   /**
    * WP121（70 §3）：贴一个网址，自动分析出品牌档案。
@@ -11541,6 +11872,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onCompanyChanged: ({ by, discoverable, key_changed }) => {
       // WP251：公司页改了公司——各品牌档案里公司那几格的影子跟着刷（读一律读公司）
       onboardingRef?.syncCompanyShadows(workspace.id)
+      // WP427：团队通道跟着开 / 关（打开「和同事一起用」= 开门、拨云）
+      void teamRef?.sync()
       if (!discoverable) {
         onboarding.discovery.disable(by)
         return
@@ -12213,6 +12546,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       tz_offset_minutes,
       // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+      // WP429：「X 回你了」「X 找你」只是告诉一声——进站内通知，不出「知道了」卡
+      notify: (n) => {
+        notifications.notify({
+          workspace_id: ws,
+          person_id: n.to,
+          category: 'team',
+          text: n.text,
+          key: n.key,
+          href: n.href,
+        })
+      },
       ...(brandDirOf(dbDir, ws, workspace.id) === undefined
         ? {}
         : { dbDir: brandDirOf(dbDir, ws, workspace.id) as string }),
@@ -12329,13 +12673,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return found === undefined ? undefined : chatView(found)
       },
       messages: async (session_id, limit) =>
-        (await lane.messages(session_id, limit)).map((m) => ({
-          id: m.id,
-          role: m.role,
-          text: m.text,
-          at: m.at,
-          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
-        })),
+        (await lane.messages(session_id, limit)).map((m) => {
+          // WP428：AI 直接答的那一句带上出处与把握（对话记录里标「AI 直接答 · 出处」）
+          const auto = m.role === 'agent' ? lane.autoAnswerOf(m.id) : undefined
+          return {
+            id: m.id,
+            role: m.role,
+            text: m.text,
+            at: m.at,
+            ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
+            ...(auto === undefined ? {} : { auto_answer: auto }),
+          }
+        }),
+      flagAutoAnswer: (input) =>
+        lane.flagAutoAnswer({
+          session_id: input.session_id,
+          message_id: input.message_id,
+          by: input.by as PersonId,
+        }),
       send: async (input) => chatTurnView(await lane.receive(input)),
       // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
       // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。
@@ -14102,6 +14457,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connectedKinds: () => brand.connections.connectedKinds(),
       connections: () => brand.connections.liveConnections(),
       storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+      // WP431：邮件营销只有档案说过 / 官网认出用哪一家才算「要连」（与 WP424 首次设置同一套）
+      statedVendor: (field) => onboardingRef?.brandProfile(ws)[field],
       // WP238：读 Reddit 已经能经接口中台 / 本机只读浏览器取到，就不算缺 Reddit API
       readRouteLevel: readRouteLevelOf(
         brand.ownCloud,
@@ -15021,12 +15378,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         enabled: autoMemorySettings.set(actor.workspace_id, actor.person_id, enabled),
       }),
     },
+    // WP429：站内通知（铃铛）与「设置 → 通知」开关
+    notifications: notifications.port,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
     personas: personaPort,
     // WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）
     roleRules: roleRules.port,
+    // WP428（决策 1244 改）：全自动——够条件 → 建议开、人点了才开、随时能关
+    autopilot: {
+      status: (actor) => autopilot.status(actor.workspace_id, actor.assignment_id, actor.role_id),
+      set: (actor, scope_id, on) =>
+        autopilot.set({
+          workspace_id: actor.workspace_id,
+          assignment_id: actor.assignment_id,
+          role_id: actor.role_id,
+          scope_id,
+          on,
+          by: actor.person_id,
+        }),
+    },
     // WP323：发出记录与记录去处（按请求人所在品牌）
     outbound: createOutboundPort(outboundLog),
     // WP284（docs/95 §5）：③ 里「以后都这样」那张卡发给老板（与改职责规矩同一条路：品牌所有者），① ② 本人
@@ -15436,6 +15808,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let httpServer: ServerType | undefined
   let unmountWs: (() => Promise<void>) | undefined
   let closed = false
+  let teamTimer: ReturnType<typeof setInterval> | undefined
 
   const server: Server = {
     gateway,
@@ -15447,6 +15820,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills,
     learning,
     autoMemory,
+    notifications,
     models,
     txn,
     outbound: outboundLog,
@@ -15584,6 +15958,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       boundPort = bound
       const url = `http://${HOST}:${bound}`
       server.url = url
+      // WP427：端口有了——团队通道按现在的情况开（① 个人没打开就什么都不开）；之后每分钟对一遍
+      // （同事退出 / 被请离开、关联账号之后都靠这一下跟上）
+      await teamRef?.sync()
+      teamTimer = setInterval(() => {
+        void teamRef?.sync()
+      }, 60_000)
+      teamTimer.unref?.()
       if (options.quiet !== true) {
         // 开发期：健康检查地址与内部凭据只在 stdout 出现一次（21 §5：不进事件日志）。
         process.stdout.write(`agentsws server listening on ${url}\n`)
@@ -15599,6 +15980,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (closed) return
       closed = true
       for (const t of contentTimers) clearTimeout(t)
+      if (teamTimer !== undefined) clearInterval(teamTimer)
+      await teamRef?.close()
       // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写
       await background.settled()
       // WP322：后台还在认的表先认完（别在关库之后再写卡）
@@ -15649,6 +16032,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await subscription.close()
       await deepseekAccount.close()
       outboundLog.close()
+      // WP429：注入的那一份由测试自己关
+      if (options.notifications === undefined) notifications.close()
       outboundStore.close()
       redditWatchStore.close()
       secrets.close()

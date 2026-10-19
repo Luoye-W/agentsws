@@ -12,17 +12,41 @@
  * 界面上一个内部 id 都不出：同伴报的是"王岚的工作区 · 3 人"，申请人只有名字与邮箱。
  */
 import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PickToggle } from '@/components/onboarding/pick-toggle'
+import { TEAM_LINK_KEY, TeamJoins, TeamLinkLine } from '@/components/onboarding/team-link'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import type { DiscoveryStateView, InviteView, MembershipRequestView } from '@/lib/api'
+import {
+  type DiscoveryStateView,
+  getTeamLink,
+  type InviteView,
+  type MembershipRequestView,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import { useMode } from '@/lib/mode'
+
+/** 本机回环口（桌面版只给自己看的那个地址：拼进邀请链接发给同事没有用）。 */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
+/**
+ * WP427：邀请链接用哪个地址开头——团队通道给的（经工坊云 / 局域网）优先；没有的话，页面本身不是
+ * 本机回环口（NAS 那种开给局域网的）就用页面地址；都不行就不给链接（只给码，贴码也能找到）。
+ */
+export function teamInviteLink(
+  fallback: ((code: string) => string) | undefined,
+  base: string | undefined,
+): ((code: string) => string) | undefined {
+  if (fallback === undefined) return undefined
+  if (base !== undefined) return (code) => `${base}/join/${encodeURIComponent(code)}`
+  const host = globalThis.location?.hostname ?? ''
+  return LOOPBACK_HOSTS.has(host) || host === '' ? undefined : fallback
+}
 
 export interface JoinSubmit {
   code?: string
@@ -94,6 +118,14 @@ export function JoinPanel({
   const [copied, setCopied] = useState<string | null>(null)
 
   const when = (iso: string): string => formatDateTime(iso, lang)
+  // WP427：邀请链接要发给别的电脑上的同事——用团队通道的地址，不用本机回环口
+  const team = useQuery({
+    queryKey: [...TEAM_LINK_KEY, undefined],
+    queryFn: () => getTeamLink(),
+    retry: false,
+    enabled: invites !== undefined && inviteLink !== undefined,
+  })
+  const linkOf = teamInviteLink(inviteLink, team.data?.invite_base)
 
   const statusText = (r: MembershipRequestView): string => t(`onboarding.requests.${r.status}`)
 
@@ -201,6 +233,8 @@ export function JoinPanel({
               {t('onboarding.join.sent')}
             </p>
           ) : null}
+          {/* WP427：我申请加入的——对方同意了就能「打开」 */}
+          <TeamJoins />
           {error === undefined ? null : (
             <p role="alert" className="text-destructive" data-testid="join-error">
               {error}
@@ -221,6 +255,8 @@ export function JoinPanel({
               {t('onboarding.invite.title')}
               <Hint text={t('onboarding.invite.hint')} />
             </p>
+            {/* WP427：同事怎么连进来（同一个网络 / 不在同一个网络） */}
+            <TeamLinkLine />
             {invites.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('onboarding.invite.empty')}</p>
             ) : (
@@ -234,13 +270,13 @@ export function JoinPanel({
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     {t('onboarding.invite.uses', { n: String(i.uses_left) })} ·{' '}
                     {t('onboarding.invite.expires', { at: when(i.expires_at) })}
-                    {inviteLink === undefined ? null : (
+                    {linkOf === undefined ? null : (
                       <Button
                         size="xs"
                         variant="ghost"
                         data-testid="invite-copy-link"
                         onClick={() => {
-                          void globalThis.navigator?.clipboard?.writeText(inviteLink(i.code)).then(
+                          void globalThis.navigator?.clipboard?.writeText(linkOf(i.code)).then(
                             () => {
                               setCopied(i.code)
                             },

@@ -60,6 +60,7 @@ import type { AdsPort } from './routes/ads.js'
 import type { AmazonKeywordsPort } from './routes/amazon-keywords.js'
 import type { AmazonListingPort } from './routes/amazon-listing.js'
 import type { AskPort } from './routes/ask.js'
+import type { AutopilotPort } from './routes/autopilot.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
 import type { BackgroundPort } from './routes/background.js'
 import type { BackupPort } from './routes/backup.js'
@@ -96,6 +97,7 @@ import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { MessagesPort } from './routes/messages.js'
 import type { ModelsPort } from './routes/models.js'
+import type { NotificationsPort } from './routes/notifications.js'
 import type { NpmRegistryPort } from './routes/npm-registry.js'
 import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
@@ -960,6 +962,11 @@ export interface GatewayDeps {
    */
   roleRules?: RoleRulesPort
   /**
+   * WP428（决策 1244 改）：全自动——够条件 → 建议开、人点了才开、随时能关（`/v1/autopilot*`）。
+   * 没装配时回 not_implemented。
+   */
+  autopilot?: AutopilotPort
+  /**
    * WP323（docs/102 §5）：发出记录与记录去处 `/v1/outbound/*`。
    * 没装配时回 not_implemented。
    */
@@ -1106,6 +1113,8 @@ export interface GatewayDeps {
   imageHosts?: GenuiImageHostsPort
   /** WP320：「自动记忆」开关。没装配时 `/v1/settings/auto-memory` 回 not_implemented。 */
   autoMemory?: AutoMemoryPort
+  /** WP429：站内通知。没装配时 `/v1/notifications*` 回 not_implemented。 */
+  notifications?: NotificationsPort
   /**
    * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。

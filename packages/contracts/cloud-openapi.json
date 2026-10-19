@@ -52,6 +52,9 @@
     },
     {
       "name": "content"
+    },
+    {
+      "name": "team"
     }
   ],
   "paths": {
@@ -10664,6 +10667,227 @@
           }
         }
       }
+    },
+    "/v1/team/tunnel": {
+      "post": {
+        "operationId": "postV1TeamTunnel",
+        "summary": "申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamTunnelIssued"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/tunnel/connect": {
+      "get": {
+        "operationId": "getV1TeamTunnelConnect",
+        "summary": "发起人电脑连上通道（WebSocket）。HTTP 层不验身份：第一帧必须是 `hello`（通道 id + 握手密钥 +",
+        "description": "协议版本）；之后云下发 `request` / `cancel`，本机回 `response_*`；15 秒没动静就发 `ping`。\n同一条通道新连上来的那一条赢（旧的断掉）。",
+        "tags": ["team"],
+        "security": [],
+        "responses": {
+          "101": {
+            "description": "切到 WebSocket"
+          },
+          "426": {
+            "description": "upgrade_required",
+            "x-error-codes": ["upgrade_required"]
+          }
+        },
+        "x-websocket": {
+          "client": {
+            "$ref": "#/components/schemas/TeamTunnelClientFrame"
+          },
+          "server": {
+            "$ref": "#/components/schemas/TeamTunnelServerFrame"
+          }
+        }
+      }
+    },
+    "/v1/team/codes": {
+      "post": {
+        "operationId": "postV1TeamCodes",
+        "summary": "登记一个邀请码（只给哈希与到期时间；到期自动作废）",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamCodeRegister"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamCodeRegistered"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "这个组织还没申请过通道",
+            "x-error-codes": ["no_tunnel"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/codes/resolve": {
+      "post": {
+        "operationId": "postV1TeamCodesResolve",
+        "summary": "贴码的同事那边：这个码是哪条通道的（公开；按来源限流，猜码没有意义——拿到地址也只是能去敲门，",
+        "description": "进不进来要那边有人同意）",
+        "tags": ["team"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamCodeResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamCodeResolved"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这个码，或者过期了",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -16433,6 +16657,308 @@
         },
         "required": ["status", "service_id", "workspace"],
         "description": "`GET /v1/support/subscription`。从没订过就只有 `status: 'none'` 与两格标识。"
+      },
+      "TeamCodeRegister": {
+        "type": "object",
+        "properties": {
+          "code_hash": {
+            "type": "string",
+            "description": "`sha256(邀请码大写)` 的十六进制。"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": ["code_hash", "expires_at"],
+        "description": "登记一个邀请码（只给哈希；云上按哈希查，原码不出本机之外的任何日志）。"
+      },
+      "TeamCodeRegistered": {
+        "type": "object",
+        "properties": {
+          "code_hash": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": ["code_hash", "expires_at"]
+      },
+      "TeamCodeResolved": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "那条通道的地址；同事那边的服务进程拿它去递申请。"
+          }
+        },
+        "required": ["url"]
+      },
+      "TeamCodeResolveRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "description": "同事贴了一个本机、局域网里都找不到的码：问云这是谁的。"
+      },
+      "TeamTunnelClientFrame": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "hello"
+              },
+              "protocol_version": {
+                "type": "number"
+              },
+              "tunnel_id": {
+                "type": "string"
+              },
+              "secret": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "protocol_version", "tunnel_id", "secret"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "response_head",
+                "description": "一次请求的响应头（每个 `request` 恰好一条，或者一条 `response_error`）。"
+              },
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number"
+              },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TeamTunnelHeader"
+                }
+              }
+            },
+            "required": ["type", "id", "status", "headers"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "response_chunk",
+                "description": "响应体的一块（base64）。"
+              },
+              "id": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "id", "data"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "response_end"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "id"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "response_error",
+                "description": "这一次没能回（本机服务没起来、超时……）：云给同事回 502 + 这句人话。"
+              },
+              "id": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "id", "message"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ping"
+              }
+            },
+            "required": ["type"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "pong"
+              }
+            },
+            "required": ["type"]
+          }
+        ],
+        "description": "发起人电脑 → 云。"
+      },
+      "TeamTunnelHeader": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2,
+        "description": "一个 HTTP 头（保持顺序、允许重复，比如多条 `set-cookie`）。"
+      },
+      "TeamTunnelIssued": {
+        "type": "object",
+        "properties": {
+          "tunnel_id": {
+            "type": "string",
+            "description": "通道 id（小写字母数字，进 Host 的那一段）。"
+          },
+          "url": {
+            "type": "string",
+            "description": "同事打开的地址（不带尾斜杠）。"
+          },
+          "secret": {
+            "type": "string",
+            "description": "握手密钥（`tts_…`）：只回这一次，本机存进加密库。"
+          }
+        },
+        "required": ["tunnel_id", "url", "secret"],
+        "description": "申请（或取回）一条通道。同一个组织一条；再调一次换一把新密钥，旧的作废。"
+      },
+      "TeamTunnelRejectReason": {
+        "type": "string",
+        "enum": ["bad_secret", "version_mismatch"],
+        "description": "握手被拒的原因：密钥错与通道不存在是同一句话（不让人探哪些通道在）。"
+      },
+      "TeamTunnelServerFrame": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "welcome"
+              },
+              "protocol_version": {
+                "type": "number"
+              },
+              "url": {
+                "type": "string",
+                "description": "同事打开的地址（与申请时回的一样）。"
+              }
+            },
+            "required": ["type", "protocol_version", "url"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "rejected"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/TeamTunnelRejectReason"
+              },
+              "supported": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": ["type", "reason"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "request",
+                "description": "同事那边来的一次请求。`path` 带查询串；`body` 是 base64（没有正文就不给）。"
+              },
+              "id": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TeamTunnelHeader"
+                }
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "id", "method", "path", "headers"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cancel",
+                "description": "同事那边断开了（关了页面 / 取消了流式回复）：别再往回送这一条。"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "id"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ping"
+              }
+            },
+            "required": ["type"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "pong"
+              }
+            },
+            "required": ["type"]
+          }
+        ],
+        "description": "云 → 发起人电脑。"
       },
       "TopupOrder": {
         "type": "object",

@@ -41,6 +41,8 @@ import { SHELL_PAGES, type ShellPage, shellPageVisible } from '@/components/shel
 import { Separator } from '@/components/ui/separator'
 import { clearToken, getCloudCredits, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useAppVersion } from '@/lib/app-version'
+import { creditsLow } from '@/lib/credits-runway'
 import { useMode } from '@/lib/mode'
 import { ACCOUNT_GROUPS_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
@@ -67,12 +69,20 @@ function useBalance(): { available?: number; low: boolean; canTopup: boolean } {
   const balance = credits.data?.linked === true ? credits.data.balance : undefined
   return {
     ...(balance === undefined ? {} : { available: balance.available }),
-    low: balance?.low_balance === true,
+    // WP426：按「还够几轮」判，不再用钱包写死的 50
+    low: balance !== undefined && creditsLow(balance.available),
     canTopup: credits.data?.linked === true && credits.data.can_topup !== false,
   }
 }
 
-export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
+export function AccountBlock({
+  me,
+  compact = false,
+}: {
+  me?: Me
+  /** WP431：左栏收成图标列时只画头像（菜单照旧往右上开）。 */
+  compact?: boolean
+}): React.ReactNode {
   const { t, theme, toggleTheme } = useApp()
   // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
   const { solo, mode, known, t: tm } = useMode()
@@ -84,6 +94,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const toggle = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const { available, low, canTopup } = useBalance()
+  const { version } = useAppVersion()
 
   /**
    * 「角色」那一格：持有 `common.owner` 就是所有者，否则是成员。
@@ -204,7 +215,11 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
         aria-haspopup="menu"
         aria-label={t('account.menu')}
         data-testid="account-toggle"
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent/60"
+        {...(compact ? { title: name } : {})}
+        className={cn(
+          'flex items-center gap-2 rounded-md text-left hover:bg-sidebar-accent/60',
+          compact ? 'size-9 justify-center' : 'w-full px-2 py-1.5',
+        )}
         onClick={() => {
           setOpen(!open)
         }}
@@ -222,7 +237,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             />
           ) : null}
         </span>
-        <span className="min-w-0 flex-1">
+        <span className={cn('min-w-0 flex-1', compact && 'sr-only')}>
           <span className="block truncate text-sm font-medium" data-testid="account-name">
             {name}
           </span>
@@ -230,7 +245,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             {plain && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
           </span>
         </span>
-        <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />
+        {compact ? null : <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />}
       </button>
       {open ? (
         // 与品牌切换器同一种朴素下拉：一个按钮 + 一张列表，不引浮层引擎
@@ -350,6 +365,15 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             <LogOut aria-hidden className="size-4" />
             {t('account.logout')}
           </button>
+          {/* WP426：一行小字看得到装的是哪个版本（桌面壳的安装包版本；网页里是服务端报的） */}
+          {version === undefined ? null : (
+            <p
+              className="ws-num px-2 pt-1 pb-0.5 text-[11px] text-ws-muted-fg select-text"
+              data-testid="account-version"
+            >
+              {t('account.version', { version })}
+            </p>
+          )}
         </div>
       ) : null}
     </div>

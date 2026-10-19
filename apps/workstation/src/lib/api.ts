@@ -462,6 +462,11 @@ interface BootstrapConfig {
    * 主人用服务日志里的设置码进门，同事走邀请链接。不出这个键 = 只给本机用，照旧。
    */
   login?: 'shared'
+  /**
+   * WP427：这一页是经「团队门」从别的电脑打开的（同事连进发起人的工坊）。登录页不出设置码那一栏
+   * （那是 NAS 主人用的），只出工坊账号；批过申请的同事从自己的工坊点「打开」会直接带一次性登录进来。
+   */
+  team?: boolean
 }
 
 async function bootstrapConfig(): Promise<BootstrapConfig> {
@@ -2606,7 +2611,17 @@ export interface ModelDefaultsView {
 
 /** WP425：AI 来源顺序（与输入框 AI 钮同一份数据）。 */
 export interface ModelAiSourceView {
-  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  /**
+   * WP430（决策 1288）：按「AI 来源」里排的顺序（可拖动）。`ready` = 会被自动接上（登录着的订阅 / 账号、
+   * 测试通过的 key）；老服务端没有这两格。
+   */
+  own: {
+    provider_id: string
+    label: string
+    group: 'subscription' | 'own'
+    ready?: boolean
+    model?: string
+  }[]
   backup: { available: boolean; label: string; model?: string }
   fallback_to_cloud: boolean
 }
@@ -2713,6 +2728,8 @@ export const setModelDefaults = (
     }
     /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
     fallback_to_cloud?: boolean
+    /** WP430：「AI 来源」里自己配的那几条的先后（provider id）。空数组 = 回到默认次序。 */
+    source_order?: string[]
   },
   assignment?: string,
 ): Promise<ModelDefaultsView> =>
@@ -4110,6 +4127,35 @@ export interface DiscoveryStateView {
   peers: DiscoveryPeerView[]
 }
 
+/** WP427：同事怎么连进来（同一个网络那条路、经工坊云那条路、邀请链接用哪个地址）。 */
+export interface TeamLinkView {
+  open: boolean
+  lan: { on: boolean; url?: string; reason?: string }
+  cloud: {
+    state:
+      | 'stopped'
+      | 'needs_account'
+      | 'registering'
+      | 'connecting'
+      | 'online'
+      | 'backoff'
+      | 'unavailable'
+    url?: string
+    reason?: string
+  }
+  invite_base?: string
+}
+
+/** WP427：我递出去的申请（加入别人那边）。 */
+export interface TeamJoinView {
+  id: string
+  workspace_label: string
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  via: 'lan' | 'cloud'
+  created_at: string
+  can_enter: boolean
+}
+
 export interface InviteView {
   code: string
   expires_at: string
@@ -4267,6 +4313,21 @@ export const requestMembership = (input: {
   email: string
 }): Promise<MembershipRequestView> =>
   api<MembershipRequestView>('/v1/memberships/requests', { method: 'POST', body: input })
+
+/** WP427：同事怎么连进来。 */
+export const getTeamLink = (assignment?: string): Promise<TeamLinkView> =>
+  api<TeamLinkView>('/v1/team/link', { ...(assignment === undefined ? {} : { assignment }) })
+
+/** WP427：我递出去的申请（顺手问一遍对方批了没有）。 */
+export const listTeamJoins = (assignment?: string): Promise<TeamJoinView[]> =>
+  api<TeamJoinView[]>('/v1/team/joins', { ...(assignment === undefined ? {} : { assignment }) })
+
+/** WP427：批了的那一条：换一个带一次性登录的地址（在浏览器里打开就进去了）。 */
+export const enterTeamJoin = (id: string, assignment?: string): Promise<{ url: string }> =>
+  api<{ url: string }>(`/v1/team/joins/${encodeURIComponent(id)}/enter`, {
+    method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 export const decideMembershipRequest = (
   id: string,
@@ -4458,7 +4519,51 @@ export interface ChatMessageView {
   text: string
   at: string
   plan_action?: string
+  /** WP428：AI 按把握直接答的那一句——出处、把握、点没点过「这句不该直接答」。 */
+  auto_answer?: { score: number; sources: { kind: string; label: string }[]; flagged: boolean }
 }
+
+/** WP428（决策 1244 改）：一类能交给 AI 全自动的事，在这条岗位上的样子。 */
+export interface AutopilotScopeView {
+  scope_id: string
+  title: string
+  grants: string
+  keeps: string
+  on: boolean
+  since?: string
+  eligible: boolean
+  streak: number
+  needed: number
+  why: string
+}
+
+export const getAutopilot = (assignment?: string): Promise<AutopilotScopeView[]> =>
+  api('/v1/autopilot', withAssignment(assignment))
+
+export const setAutopilot = (
+  scope_id: string,
+  on: boolean,
+  assignment?: string,
+): Promise<AutopilotScopeView> =>
+  api(`/v1/autopilot/${encodeURIComponent(scope_id)}`, {
+    method: 'PUT',
+    body: { on },
+    ...withAssignment(assignment),
+  })
+
+/** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
+export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
+
+/** WP428：「这句不该直接答」——记进学习回路，同类以后先转人。 */
+export const flagChatAutoAnswer = (
+  session_id: string,
+  message_id: string,
+  assignment?: string,
+): Promise<{ learned: boolean }> =>
+  api(
+    `/v1/chat/sessions/${encodeURIComponent(session_id)}/messages/${encodeURIComponent(message_id)}/not-direct`,
+    { method: 'POST', body: {}, ...withAssignment(assignment) },
+  )
 
 export interface ChatPlanView {
   action: string
@@ -4523,8 +4628,9 @@ export interface ChatWidgetSettingsView {
   accent?: string
   greeting?: string
   assist_wait_seconds?: number
-  /** WP417（决策 1232）：常见问题直接发（缺省关 = 每一句先出卡要人批）。 */
-  auto_send_faq?: boolean
+  /** WP428（决策 1246 改）：按把握直接答（没有这一格 = 开；只有关了才是 false）。 */
+  auto_answer?: boolean
+  auto_answer_strictness?: ChatAutoAnswerStrictnessView
   updated_at?: string
 }
 
@@ -4537,7 +4643,8 @@ export const setChatWidgetSettings = (
     accent?: string
     greeting?: string
     assist_wait_seconds?: number
-    auto_send_faq?: boolean
+    auto_answer?: boolean
+    auto_answer_strictness?: ChatAutoAnswerStrictnessView
   },
   assignment?: string,
 ): Promise<ChatWidgetSettingsView> =>
@@ -8399,3 +8506,11 @@ export const updateAdExperiment = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP426：设置「版本」那一行、账号菜单那一行小字——浏览器里（没有桌面壳）用服务端报的版本 ──────
+
+/** `GET /v1/health`（public）里我们只要版本号；桌面壳把安装包版本通过 `AGENTSWS_VERSION` 交给服务进程。 */
+export const getServerVersion = async (): Promise<string | undefined> => {
+  const data = await api<{ version?: unknown }>('/v1/health')
+  return typeof data.version === 'string' && data.version !== '' ? data.version : undefined
+}

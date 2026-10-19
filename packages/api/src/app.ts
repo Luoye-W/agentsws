@@ -21,6 +21,7 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { autoMemoryRoutes } from './routes/auto-memory.js'
+import { autopilotRoutes } from './routes/autopilot.js'
 import { b2bRoutes } from './routes/b2b.js'
 // WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
 import { backgroundRoutes } from './routes/background.js'
@@ -71,6 +72,7 @@ import { meetingRoutes } from './routes/meetings.js'
 // WP113（63）：消息——统一收件处 `/v1/messages/*`
 import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
+import { notificationsRoutes } from './routes/notifications.js'
 import { npmRegistryRoutes } from './routes/npm-registry.js'
 import { officialPluginsRoutes } from './routes/official-plugins.js'
 import { onboardingRoutes } from './routes/onboarding.js'
@@ -201,6 +203,7 @@ export function collectRoutes(): Route[] {
     ...personaRoutes(),
     // WP284（决策 275）：职责规矩里那几句「以后都这样」
     ...roleRuleRoutes(),
+    ...autopilotRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
@@ -245,6 +248,8 @@ export function collectRoutes(): Route[] {
     ...runLimitsRoutes(),
     ...genuiImageHostsRoutes(),
     ...autoMemoryRoutes(),
+    // WP429：站内通知（铃铛）与「设置 → 通知」开关
+    ...notificationsRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）

@@ -38,6 +38,7 @@ import type {
   OnboardingPositionView,
   OnboardingSkillItem,
   OnboardingStateView,
+  TeamLinkView,
   WorkspaceProfileInput,
   WorkspaceProfileView,
 } from '@agentsws/api'
@@ -96,6 +97,7 @@ import {
   suggestPositions,
 } from './onboarding-suggest.js'
 import { WORKSPACE_BASE_ROLES } from './position-placements.js'
+import { matchVendorService, VENDOR_CHOICE_KINDS } from './vendor-choice.js'
 
 export { OnboardingError } from './invites.js'
 
@@ -125,39 +127,8 @@ export { companyKey, normalizeCompanyName, normalizeDomain } from '@agentsws/cor
  */
 export const SHOP_CONNECTOR_KINDS: ReadonlySet<string> = new Set(['shop', 'shopify'])
 
-/**
- * WP424（Luoye 10-19）：「邮件营销」不等于 Klaviyo——这类**好几家都能干**的连接器，只有用户说过
- * 自己在用哪一家（品牌档案的 `email_service`，第 ② 步档案卡 / 设置页填）才把那一家列进「要连的平台」；
- * 没说过（或说的那家目录里还没有）就进「还有 N 个可选」。值是这条 kind 去档案里读哪一格。
- */
-export const VENDOR_CHOICE_KINDS: Readonly<Record<string, 'email_service'>> = {
-  email_marketing: 'email_service',
-}
-
-/** 名字归一：小写、去掉空白与标点、去掉「（邮件营销）」这类括号说明。 */
-function vendorKey(value: string): string {
-  return value
-    .replace(/[（(].*$/u, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff]+/gu, '')
-}
-
-/**
- * WP424：用户说的那一家（「Klaviyo」「shopify email」）对上连接目录里的哪一个 provider。
- * 按 provider id 与卡上名字认，大小写、空格、括号说明都不算；对不上回 `undefined`。
- */
-export function matchVendorService(
-  stated: string | undefined,
-  candidates: readonly { service: string; label: string }[],
-): string | undefined {
-  if (stated === undefined) return undefined
-  const key = vendorKey(stated)
-  if (key.length < 3) return undefined
-  return candidates.find((c) => {
-    const keys = [vendorKey(c.service), vendorKey(c.label)].filter((k) => k.length >= 3)
-    return keys.some((k) => k === key || key.includes(k) || k.includes(key))
-  })?.service
-}
+// WP424 / WP431：好几家都能干的连接器按档案说的那一家选——判据挪到 `vendor-choice.ts`（岗位连接清单也用）
+export { matchVendorService, VENDOR_CHOICE_KINDS } from './vendor-choice.js'
 
 /** 非法值与缺省一律回 `undefined`（调用方按 Shopify 处理）。 */
 /** 工作区的底座职责（"是这个工作区的成员"本身）。向导里不算进任何岗位（WP142）。 */
@@ -431,8 +402,25 @@ export interface OnboardingOptions {
   ): { id: string; label: string }[] | Promise<{ id: string; label: string }[]>
   /** 给了就落盘（`onboarding.sqlite`）；不给就纯内存。 */
   dbDir?: string
-  /** 服务进程监听的端口（局域网广播要报它）。 */
+  /**
+   * 局域网广播报的端口。WP427 起报的是「团队门」那个端口（服务进程本身只听 127.0.0.1，
+   * 同伴连不上）；门没开就是 undefined。
+   */
   port?: () => number | undefined
+  /**
+   * WP427：同事怎么连进来（团队通道）。三样都是懒取——团队通道在服务进程 listen 之后才起来。
+   */
+  team?: {
+    status(): TeamLinkView | undefined
+    /** 本机、局域网都找不到的码：问工坊云。 */
+    resolveCode(code: string): Promise<string | undefined>
+    /** 新发了一个码：登记到云上。 */
+    onInviteCreated(code: string, expires_at: string): void
+    /** 给某个人签一张一次性登录（申请人拿票来换）。 */
+    issueLogin(person_id: PersonId): Promise<{ token: string; expires_at: string } | undefined>
+    /** 开关 / 人数变了：团队通道按新情况开或关。 */
+    changed?(): void
+  }
   /** 测试注入的假 mDNS；不给就用 `bonjour-service`。 */
   mdns?: MdnsFactory
   /**
@@ -794,6 +782,25 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(options.join === undefined ? {} : { join: options.join }),
     ...(options.mode === undefined ? {} : { mode: options.mode }),
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
+    ...(options.team === undefined
+      ? {}
+      : {
+          resolveCode: (code: string) =>
+            options.team?.resolveCode(code) ?? Promise.resolve(undefined),
+          onInviteCreated: (code: string, expires_at: string) => {
+            options.team?.onInviteCreated(code, expires_at)
+          },
+          issueLogin: (person_id: PersonId) =>
+            options.team?.issueLogin(person_id) ?? Promise.resolve(undefined),
+        }),
+    selfLabel: async () => (await label()).text,
+    // 测试注入了「问同伴你是谁」就用同一个（不真去敲地址）
+    ...(options.helloFetch === undefined
+      ? {}
+      : {
+          hello: (base: string) =>
+            options.helloFetch?.(`${base}/v1/discovery/hello`) ?? Promise.resolve(undefined),
+        }),
   })
 
   /**
@@ -1324,6 +1331,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // 名字改了 → 钥匙变了 → 重新广播（否则还在用旧钥匙找同事）
         discovery.refresh()
       }
+      // WP427：开关变了 → 团队通道跟着开 / 关
+      if (before !== next.discoverable) options.team?.changed?.()
       return viewOf(next, ws)
     },
 
@@ -1520,12 +1529,35 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return invites.request(input)
     },
 
-    decideRequest(actor, id, input): Promise<MembershipRequestView> {
-      return invites.decide(actor.person_id, id, input)
+    async decideRequest(actor, id, input): Promise<MembershipRequestView> {
+      const out = await invites.decide(actor.person_id, id, input)
+      // WP427：批进一个人 = 不再是 ①：团队通道要开着（哪怕开关后来关了）
+      if (out.status === 'approved') options.team?.changed?.()
+      return out
     },
 
     superseded(input) {
       return invites.supersede(input)
+    },
+
+    claim(id, input) {
+      return invites.claim(id, input)
+    },
+
+    teamLink(_actor) {
+      // 顺手对一遍（刚登录了工坊账号、刚换了网络：不用等每分钟那一下）
+      options.team?.changed?.()
+      const view = options.team?.status()
+      if (view === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
+      return view
+    },
+
+    joins(_actor) {
+      return invites.joins()
+    },
+
+    enterJoin(_actor, id) {
+      return invites.enter(id)
     },
   }
 

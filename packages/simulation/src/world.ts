@@ -298,6 +298,7 @@ import {
   AMAZON_CHANNEL,
   buildAmazonChannelMeta,
   buildAmazonRewriteInstruction,
+  chatAnswerStubScript,
   // WP113：分拣的 stand-in 模型用它判"这是不是客服诉求"（纯函数，与真运行时同一份）
   classifyText,
   describeAmazonDetection,
@@ -424,6 +425,9 @@ const CONNECTIONS = ['conn_shopify_admin', 'conn_gmail']
 const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 /** WP425：模拟里「工坊积分」备用那一条的 provider id（场景注入了「自己的 AI 出错」才挂）。 */
 export const WORKSHOP_BACKUP_PROVIDER = 'workshop'
+
+/** WP430：模拟里「自己的第二条」的 provider id（场景 `model.own_fault.second` 给了才挂）。 */
+export const OWN_SECOND_PROVIDER = 'own2'
 
 export interface RunContext {
   run_id: string
@@ -648,7 +652,14 @@ export interface World {
    * WP425 场景 `model.own_fault`：自己的 AI（主用）接下来 `times` 次调用回 `code`；挂上「工坊积分」备用，
    * 开关按 `backup`（缺省开）。
    */
-  injectOwnFault(fault: { code: number; times: number; backup: 'on' | 'off' }): void
+  injectOwnFault(fault: {
+    code: number
+    times: number
+    backup: 'on' | 'off'
+    /** WP430：自己的第二条——`ok` 好好的；数字 = 它也回这个码（`second_times` 次，缺省一直）。 */
+    second?: 'ok' | number
+    second_times?: number
+  }): void
   modelDown(): boolean
   /** 17 §2 事件 → 事件日志（含 correlation.run_id）。 */
   appendRunEvent(req: RunRequest, e: RunEvent): void
@@ -2300,6 +2311,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   // WP425：自己的 AI 还要出几次错、出什么错；备用（工坊积分）挂没挂、开关开没开
   let ownFault: { code: number; left: number } | undefined
   let backupMode: 'on' | 'off' | undefined
+  // WP430：自己的第二条挂没挂、它还要出几次错
+  let secondMode: { code?: number; left: number } | undefined
   // `direct` 与 `dsh` 两条分支：22 的 stub provider 只出文本、不出 tool_calls，
   // **回合就跑不起来**——direct 的 turn loop 空转，dsh 的 agent-loop 一轮就 idle。
   // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）。
@@ -2320,6 +2333,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             ...(pack.workspace.vertical === undefined ? {} : { vertical: pack.workspace.vertical }),
           })
         : stubProvider({ seed, ref: MODEL })
+  /*
+   * WP428：没给真模型时，聊天直答那一次起草走 stub 剧本（知识库对得上 → 照说并标出处；对不上 → 去确认）。
+   * 三个运行时同一份剧本（stub 的 provider 与 direct / dsh 的规则脑都在这里套），口径一致；用量照原 provider 记。
+   */
+  const scripted = (
+    req: Parameters<ModelProvider['complete']>[0],
+    out: Awaited<ReturnType<ModelProvider['complete']>>,
+  ): Awaited<ReturnType<ModelProvider['complete']>> => {
+    if (opts.model !== undefined) return out
+    const text = chatAnswerStubScript(req.messages)
+    return text === undefined ? out : { ...out, text }
+  }
   const gatedProvider: ModelProvider = {
     ref: modelRef,
     ...(base.supports_tool_choice === undefined
@@ -2335,7 +2360,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           status: ownFault.code,
         })
       }
-      return base.complete(req)
+      return scripted(req, await base.complete(req))
     },
     async embed(texts: string[]) {
       if (clock.nowMs() < outageUntilMs) {
@@ -2358,6 +2383,26 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       if (clock.nowMs() < outageUntilMs) {
         throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
       }
+      return scripted(req, await base.complete(req))
+    },
+  }
+  /*
+   * WP430：「自己的第二条」——同一个确定性替身挂在 `own2` 上（AI 来源里排在原选后面）；场景给了 `second` 才挂。
+   */
+  const secondRef: ModelRef = { provider: OWN_SECOND_PROVIDER, model: modelRef.model }
+  const secondProvider: ModelProvider = {
+    ...gatedProvider,
+    ref: secondRef,
+    async complete(req: Parameters<ModelProvider['complete']>[0]) {
+      if (clock.nowMs() < outageUntilMs) {
+        throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
+      }
+      if (secondMode?.code !== undefined && secondMode.left > 0) {
+        secondMode.left -= 1
+        throw new ProviderError(`注入的模型故障：provider http ${secondMode.code}`, {
+          status: secondMode.code,
+        })
+      }
       return base.complete(req)
     },
   }
@@ -2365,22 +2410,46 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const gatewayPolicy = (budget: ModelGatewayPolicy['budget']): ModelGatewayPolicy => {
     const prices = opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } }
     const own = prices[`${modelRef.provider}/${modelRef.model}`]
+    const extra =
+      own === undefined
+        ? {}
+        : {
+            ...(backupMode === undefined
+              ? {}
+              : { [`${backupRef.provider}/${backupRef.model}`]: own }),
+            ...(secondMode === undefined
+              ? {}
+              : { [`${secondRef.provider}/${secondRef.model}`]: own }),
+          }
     return {
       default: modelRef,
-      prices:
-        backupMode === undefined || own === undefined
-          ? prices
-          : { ...prices, [`${backupRef.provider}/${backupRef.model}`]: own },
+      prices: { ...prices, ...extra },
       ...(budget === undefined ? {} : { budget }),
       ...(backupMode === undefined
         ? {}
-        : { source_fallback: { to: backupRef, enabled: backupMode === 'on' } }),
+        : {
+            source_fallback: {
+              to: backupRef,
+              enabled: backupMode === 'on',
+              ...(secondMode === undefined
+                ? {}
+                : {
+                    labels: { [modelRef.provider]: 'ChatGPT', [OWN_SECOND_PROVIDER]: 'DeepSeek' },
+                    own: [secondRef],
+                  }),
+            },
+          }),
     }
   }
+  const providersNow = (): ModelProvider[] => [
+    gatedProvider,
+    ...(secondMode === undefined ? [] : [secondProvider]),
+    ...(backupMode === undefined ? [] : [backupProvider]),
+  ]
   const buildGateway = (budget: ModelGatewayPolicy['budget']): ModelGatewayApi => {
     currentBudget = budget
     const built = createModelGateway({
-      providers: backupMode === undefined ? [gatedProvider] : [gatedProvider, backupProvider],
+      providers: providersNow(),
       policy: gatewayPolicy(budget),
       clock,
       env: {},
@@ -3609,9 +3678,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     injectOwnFault(fault) {
       ownFault = { code: fault.code, left: fault.times }
       backupMode = fault.backup
+      // WP430：自己的第二条
+      secondMode =
+        fault.second === undefined
+          ? undefined
+          : fault.second === 'ok'
+            ? { left: 0 }
+            : { code: fault.second, left: fault.second_times ?? Number.MAX_SAFE_INTEGER }
       // 备用挂上 / 开关变了：换一套 provider 与策略（账照留：同一个网关实例）
       gateway.reconfigure({
-        providers: [gatedProvider, backupProvider],
+        providers: providersNow(),
         policy: gatewayPolicy(currentBudget),
       })
     },

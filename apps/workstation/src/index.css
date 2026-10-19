@@ -385,6 +385,64 @@
     background-color: var(--ws-brand);
     color: var(--ws-brand-fg);
   }
+
+  /*
+   * WP426（Luoye 10-19「能点但看不出能点」）：能点的小字一律有一道下划线——
+   * 灰字里不加下划线的就是说明，加了的就是能点；hover 变深、键盘聚焦有一圈。
+   * `ws-link` 是主要动作（品牌色），`ws-link-muted` 是次要动作（灰字 + 淡下划线）。
+   */
+  .ws-link,
+  .ws-link-muted {
+    cursor: pointer;
+    border-radius: 3px;
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition:
+      color 120ms ease-out,
+      text-decoration-color 120ms ease-out;
+  }
+  .ws-link {
+    color: var(--ws-brand-ink);
+    text-decoration-color: color-mix(in oklab, var(--ws-brand-ink) 40%, transparent);
+  }
+  .ws-link-muted {
+    color: var(--ws-muted-fg);
+    text-decoration-color: color-mix(in oklab, var(--ws-muted-fg) 45%, transparent);
+  }
+  .ws-link:hover,
+  .ws-link-muted:hover {
+    color: var(--ws-ink);
+    text-decoration-color: currentColor;
+  }
+  .ws-link:focus-visible,
+  .ws-link-muted:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .ws-link:disabled,
+  .ws-link-muted:disabled {
+    cursor: default;
+    opacity: 0.5;
+    text-decoration-line: none;
+  }
+
+  /*
+   * WP426：「看起来像标题、其实能点开」的那一行（带 ▸ 的折叠标题、整行可点的列表行）：
+   * hover 有一层底色、键盘聚焦有一圈，指针是手。
+   */
+  .ws-disclosure {
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 120ms ease-out;
+  }
+  .ws-disclosure:hover:not(:disabled) {
+    background-color: color-mix(in oklab, var(--ws-surface) 85%, transparent);
+  }
+  .ws-disclosure:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
 }
 
 /*

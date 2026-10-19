@@ -139,6 +139,8 @@ export interface CloudOptions {
   dbDir?: string
   /** WP228：本机只读浏览器的状态（连接页 Reddit 卡那一格）；不给 = 这个进程没装。 */
   readonlyBrowserStatus?: () => ReadonlyBrowserStatus
+  /** WP429：每次从云上取到一份新余额叫一声（宿主据此发「积分快用完了」的站内通知）。 */
+  onBalance?: (balance: WalletBalance) => void
   /**
    * WP228（Luoye 10-05）：托管实例——Reddit「浏览器只读」那一路一律停用（存过的设置也压住），
    * 取数只走接口中台。
@@ -769,6 +771,12 @@ export function createCloud(options: CloudOptions): CloudAssembly {
             account_url: accountUrl,
           }
     cached = { at: nowMs, view }
+    if (balance !== undefined)
+      try {
+        options.onBalance?.(balance)
+      } catch {
+        // 通知发不出不影响余额
+      }
     return view
   }
 

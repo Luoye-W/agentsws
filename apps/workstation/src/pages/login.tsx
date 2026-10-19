@@ -64,6 +64,8 @@ export function LoginPage(): React.ReactNode {
 
   const ownerHint = hint.data?.owner_email
   const shared = hint.data?.login === 'shared'
+  // WP427：经「团队门」从别的电脑打开的——不出设置码（NAS 主人用的），只出工坊账号 + 一句怎么进
+  const team = hint.data?.team === true
   useEffect(() => {
     // 决策 945：局域网档的邀请接受完就带登录 token，直接到「进去」那一步
     if (invite.data?.login_token !== undefined) setLinkToken(invite.data.login_token)
@@ -134,9 +136,15 @@ export function LoginPage(): React.ReactNode {
           {!shared ? null : inviteToken === undefined ? (
             <>
               <AccountLoginPanel onToken={setLinkToken} />
-              <div className="border-t pt-3">
-                <SharedLoginPanel onToken={setLinkToken} />
-              </div>
+              {team ? (
+                <p className="text-xs text-muted-foreground" data-testid="login-team">
+                  {t('login.team')}
+                </p>
+              ) : (
+                <div className="border-t pt-3">
+                  <SharedLoginPanel onToken={setLinkToken} />
+                </div>
+              )}
             </>
           ) : invite.error === null ? null : (
             <p className="text-xs text-muted-foreground" data-testid="login-shared-colleague">

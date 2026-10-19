@@ -32,6 +32,8 @@ export const RAIL_EXPANDED_KEY = 'agentsws.rail.expanded'
  */
 /** WP342：左下角账号菜单里「工作内容 / 设置」两组哪组展开着（没记过 = 都收着）。 */
 export const ACCOUNT_GROUPS_KEY = 'agentsws.account.groups'
+/** WP431（照 Claude）：左栏收成图标列了没有（`'1'` = 收着）。只有这一个布尔，没有内容。 */
+export const SIDEBAR_COLLAPSED_KEY = 'agentsws.sidebar.collapsed'
 
 export const RIGHT_RAIL_LAYOUT_KEY = 'agentsws.rightrail.layout'
 
@@ -72,7 +74,8 @@ export const POSITION_WORK_KEY_PREFIX = 'agentsws.position_work.'
 export const TABLE_FILTER_KEY_PREFIX = 'agentsws.table_filter.'
 
 export const RIGHT_RAIL_MIN_WIDTH = 320
-export const RIGHT_RAIL_MAX_WIDTH = 520
+// WP431：面板头「放大」钮去掉了（照 Claude），拖的上限从 520 放到 720
+export const RIGHT_RAIL_MAX_WIDTH = 720
 export const RIGHT_RAIL_DEFAULT_WIDTH = 380
 
 function read(key: string): string | null {

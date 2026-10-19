@@ -254,13 +254,9 @@ describe('WP134 那一个件：登录 → 浏览器 → 账号与余额 → 三�
     await screen.findByTestId('dsa-ok')
     expect(state.saves).toEqual(['deepseek-flash'])
     expect(state.tests).toBe(1)
-    // 三步合成一排图标：连通 / 回文字 / 看图都通
-    const icons = within(screen.getByTestId('model-status')).getAllByTestId('status-icon')
-    expect(icons.map((i) => [i.dataset.key, i.dataset.state])).toEqual([
-      ['connect', 'ok'],
-      ['text', 'ok'],
-      ['vision', 'ok'],
-    ])
+    // WP426：三步合成一枚看得懂的标签：能用 · 能看图（三步各自的结果在 tooltip）
+    expect(screen.getByTestId('model-status').getAttribute('data-kind')).toBe('ok_vision')
+    expect(screen.getByTestId('model-status').textContent).toBe('能用 · 能看图')
     expect(connected).toHaveBeenCalledTimes(1)
   })
 
