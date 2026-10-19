@@ -28541,6 +28541,7 @@ export interface operations {
             [key: string]: string
           }
           fallback_to_cloud?: boolean
+          source_order?: string[]
           budget?: {
             workspace_daily_base?: number
             workspace_monthly_base?: number

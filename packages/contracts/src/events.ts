@@ -94,6 +94,12 @@ export type KnownEventType =
    */
   | 'model.source_switched'
   /**
+   * WP430（决策 1289）：登录类的 AI 来源（ChatGPT 订阅、DeepSeek 账号）登录失效 / 过期，要人重新登录。
+   * 这一轮已经按 AI 来源顺序切到下一个接着做，不停下、不出卡；站内通知（WP429）接这条提醒人去重登。
+   * payload 只有来源 id 与来源名（`{ provider, label }`），没有账号名、没有令牌。同一来源在重新能用之前只发一次。
+   */
+  | 'model_source.relogin_needed'
+  /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */

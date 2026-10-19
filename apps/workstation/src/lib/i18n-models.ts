@@ -22,6 +22,8 @@ export const MODELS_ZH: Record<string, string> = {
   'models.by_purpose': '按用途分别选',
   'models.default_badge': '默认',
   'models.fallback': '自己的用不了时用工坊积分',
+  // WP430：自己配的不止一个时，按这个顺序接（可拖动）
+  'models.ai_source.order': '自己的按这个顺序接',
 
   // ── 「加一个」里的名字与一句话（同一家的「登录」与「填 key」分在两组）
   'models.add.login.deepseek': 'DeepSeek 账号',
@@ -78,6 +80,7 @@ export const MODELS_EN: Record<string, string> = {
   'models.by_purpose': 'Per task',
   'models.default_badge': 'Default',
   'models.fallback': 'Use workshop credits when yours fail',
+  'models.ai_source.order': 'Yours, in this order',
 
   'models.add.login.deepseek': 'DeepSeek account',
   'models.add.login.deepseek.line': 'Sign in with DeepSeek; no key needed.',

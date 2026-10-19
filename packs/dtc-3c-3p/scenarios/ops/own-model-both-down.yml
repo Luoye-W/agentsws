@@ -1,0 +1,33 @@
+# WP430（决策 1288）：原选连不上、自己的第二条也连不上 → 这一轮用工坊积分接着做；
+# 那一句把两条各自怎么了都说上（「你的 ChatGPT 连不上，你的 DeepSeek 连不上，这一轮用工坊积分」）。
+id: ops/own-model-both-down
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    model.own_fault: { code: 503, times: 1, backup: on, second: 503, second_times: 1 }
+  - at: '+10m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+8h'
+    clock.advance: {}
+expected:
+  model_source_switches: 1
+  model_providers_used: [workshop]
+  event_types: [model.source_switched]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

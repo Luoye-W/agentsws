@@ -154,7 +154,9 @@ function AssistantThreadPage(): React.ReactNode {
   const choices = models.data?.choices ?? []
   const rows = id === undefined ? [] : (messages.data ?? [])
   const segs = thread.data?.segments ?? []
-  const lastUsed = [...rows].reverse().find((m) => m.model !== undefined)?.model?.id
+  // WP430：切过来源的那一轮按原来选的算（下一轮先试原选，不跟着切过去的那一条走）
+  const lastMessage = [...rows].reverse().find((m) => m.model !== undefined)
+  const lastUsed = lastMessage?.chosen_model ?? lastMessage?.model?.id
   const picked =
     pick ??
     (lastUsed !== undefined && choices.some((c) => c.id === lastUsed) ? lastUsed : undefined) ??

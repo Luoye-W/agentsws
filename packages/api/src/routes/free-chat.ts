@@ -83,6 +83,11 @@ export interface FreeChatMessageView {
    */
   source_switch?: string
   /**
+   * WP430（决策 1290）：切过来源的那一轮，原来选的是哪一个（`provider/model`）。`model` 是实际答的那一条；
+   * 界面的 AI 钮按这一格回到原选——下一轮先试原选，而不是跟着切过去的那一条走。
+   */
+  chosen_model?: string
+  /**
    * WP425：自己的 AI 用不了、开关「自己的用不了时用工坊积分接着做」关着——这一轮照实停下，
    * 界面在这条下面出「用工坊积分接着做」那张卡（点了打开开关、重答这一轮）。
    */

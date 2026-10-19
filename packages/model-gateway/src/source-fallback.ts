@@ -18,16 +18,46 @@ import { deepseekQuotaKindOf } from './providers/deepseek-quota.js'
 import { GatewayError, ProviderError } from './types.js'
 
 /**
- * 网关策略里的「备用」那一格。宿主（设置页那一处）装配：登录了工坊账号才给；
- * `enabled` 是开关「自己的用不了时用工坊积分接着做」（登录了默认开）。
+ * 网关策略里的「备用」那一格。宿主（设置页那一处）装配。
+ *
+ * WP430（决策 1288）：顺序是 **这次选的 → 自己配的其它（`own`，按「AI 来源」里排的顺序）→ 工坊积分（`to`，
+ * 开关开着才有）**。`to` 只有登录了工坊账号才给；`enabled` 是开关「自己的用不了时用工坊积分接着做」（登录了默认开），
+ * 只管工坊积分那一跳，自己的几条之间互相接不受它管。
  */
 export interface SourceFallbackPolicy {
-  /** 工坊积分那一条（provider id + 模型）。 */
-  to: ModelRef
-  /** 开关。`false` = 不切、照实停下（错误上带 {@link SourceFallbackOff}，界面据此出「用工坊积分接着做」那张卡）。 */
+  /** 工坊积分那一条（provider id + 模型）。WP430：没登录工坊账号时不给（只在自己的几条之间接）。 */
+  to?: ModelRef
+  /** 开关。`false` = 不切到工坊积分、照实停下（错误上带 {@link SourceFallbackOff}，界面据此出「用工坊积分接着做」那张卡）。 */
   enabled: boolean
   /** provider id → 给人看的来源名（「ChatGPT」「DeepSeek 官方」）。没有就说「你自己的 AI」。 */
   labels?: Record<string, string>
+  /**
+   * WP430（决策 1288）：自己配的其它来源，按「AI 来源」里排的顺序；只含真能跑活的（登录着的订阅 / 账号、测试通过的 key），
+   * 不含工坊积分。每条用它自己的默认模型。这次选的那一条在里面也没关系（网关跳过同一家）。
+   */
+  own?: ModelRef[]
+  /**
+   * WP430（决策 1289）：登录类来源（ChatGPT 订阅、DeepSeek 账号）的 provider id——这些登录失效（`auth`）时
+   * 网关发 `model_source.relogin_needed`（带来源名），供站内通知接；不出卡、不停下。
+   */
+  relogin?: string[]
+  /** WP430（决策 1290）：同一来源连续失败几次后冷却多久（缺省 {@link SOURCE_COOLDOWN}）。 */
+  cooldown?: { failures: number; ms: number }
+}
+
+/** WP430（决策 1290）：同一来源连续失败 2 次，10 分钟内直接跳过它走下一个；10 分钟后再试。 */
+export const SOURCE_COOLDOWN = { failures: 2, ms: 10 * 60_000 } as const
+
+/** WP430：切换那一句里的一步——哪个来源、为什么没用上。 */
+export interface SourceStep {
+  label: string
+  reason: ModelSourceSwitchReason
+}
+
+/** WP430：`model_source.relogin_needed` 的 payload——只有来源 id 与来源名，没有账号名、没有令牌。 */
+export interface ModelSourceReloginPayload {
+  provider: string
+  label: string
 }
 
 /** 开关关着、因此停下时挂在错误 `details.source_fallback` 上的那一格。 */
@@ -86,6 +116,9 @@ function statusInAttempts(details: unknown): number | undefined {
 
 const OWN_AI = '你自己的 AI'
 
+/** WP430：工坊积分那一跳在那一句里的名字（这次选的就是工坊积分、它连不上时会说到它）。 */
+export const WORKSHOP_SOURCE_LABEL = '工坊积分'
+
 /** 主用来源给人看的名字。 */
 export function sourceLabelOf(policy: SourceFallbackPolicy, from: ModelRef): string {
   const label = policy.labels?.[from.provider]?.trim()
@@ -94,7 +127,7 @@ export function sourceLabelOf(policy: SourceFallbackPolicy, from: ModelRef): str
 
 /** 「你的 X 额度用完了」那半句。 */
 function whatHappened(reason: ModelSourceSwitchReason, label: string): string {
-  const name = label === OWN_AI ? label : `你的 ${label}`
+  const name = label === OWN_AI || label === WORKSHOP_SOURCE_LABEL ? label : `你的 ${label}`
   // 中英文之间空一格（「你的 ChatGPT 额度」「你的 DeepSeek 官方额度」）
   const who = /[A-Za-z0-9)]$/u.test(name) ? `${name} ` : name
   if (reason === 'quota') return `${who}额度用完了`
@@ -104,15 +137,43 @@ function whatHappened(reason: ModelSourceSwitchReason, label: string): string {
 
 /** 切过去那一轮的那一句（运行记录与对话里同一句）。 */
 export function sourceSwitchMessage(reason: ModelSourceSwitchReason, label: string): string {
-  return `${whatHappened(reason, label)}，这一轮用工坊积分`
+  return sourceChainMessage([{ label, reason }], undefined)
+}
+
+/** WP430：前面几条各自怎么了（同一个来源只说一次）。 */
+function whatHappenedAll(steps: readonly SourceStep[]): string {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const s of steps) {
+    if (seen.has(s.label)) continue
+    seen.add(s.label)
+    parts.push(whatHappened(s.reason, s.label))
+  }
+  return parts.join('，')
+}
+
+/**
+ * WP430（决策 1288）：切过去那一轮的那一句——前面几条怎么了，这一轮用的是谁。
+ * `to` 是自己的另一条的来源名；`undefined` = 工坊积分。
+ * 例：「你的 ChatGPT 额度用完了，这一轮用了你的 DeepSeek」「你的 ChatGPT 额度用完了，你的 DeepSeek 连不上，这一轮用工坊积分」。
+ */
+export function sourceChainMessage(steps: readonly SourceStep[], to: string | undefined): string {
+  const head = whatHappenedAll(steps)
+  if (to === undefined) return `${head}，这一轮用工坊积分`
+  const name = to === OWN_AI ? '你自己的另一个 AI' : `你的 ${to}`
+  return `${head}，这一轮用了${name}`
 }
 
 /** 开关关着时停下的那一句里固定的那半句（dsh 那一档的模型错不带码，宿主认这半句出卡）。 */
 export const SOURCE_FALLBACK_OFF_MARK = '「自己的用不了时用工坊积分接着做」关着'
 
-/** 开关关着时停下的那一句。 */
-export function sourceFallbackOffMessage(reason: ModelSourceSwitchReason, label: string): string {
-  return `${whatHappened(reason, label)}。${SOURCE_FALLBACK_OFF_MARK}，这一轮先停下`
+/** 开关关着时停下的那一句（WP430：自己的几条都试过了，就把每一条怎么了都说上）。 */
+export function sourceFallbackOffMessage(
+  reason: ModelSourceSwitchReason,
+  label: string,
+  more: readonly SourceStep[] = [],
+): string {
+  return `${whatHappenedAll([{ label, reason }, ...more])}。${SOURCE_FALLBACK_OFF_MARK}，这一轮先停下`
 }
 
 /** 一句失败原因是不是「开关关着、停下了」（认 {@link SOURCE_FALLBACK_OFF_MARK}）。 */
@@ -144,6 +205,7 @@ export function sourceFallbackOffError(
   reason: ModelSourceSwitchReason,
   from: ModelRef,
   label: string,
+  more: readonly SourceStep[] = [],
 ): GatewayError {
   const code = e instanceof GatewayError ? e.code : 'provider_unavailable'
   const base =
@@ -156,7 +218,7 @@ export function sourceFallbackOffError(
     from: `${from.provider}/${from.model}`,
     label,
   }
-  return new GatewayError(code, sourceFallbackOffMessage(reason, label), {
+  return new GatewayError(code, sourceFallbackOffMessage(reason, label, more), {
     ...base,
     source_fallback: off,
   })

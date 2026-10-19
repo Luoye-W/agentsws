@@ -1533,6 +1533,12 @@ export interface ScenarioOwnFault {
   code: 429 | 401 | 403 | 503
   times?: number
   backup?: 'on' | 'off'
+  /**
+   * WP430：挂上「自己的第二条」（AI 来源里排在原选后面的那一条，provider id `own2`）。
+   * `ok` = 它好好的；数字 = 它接下来 `second_times` 次（缺省一直）也回这个码。不写 = 不挂（WP425 老剧本一个字节不变）。
+   */
+  second?: 'ok' | 429 | 401 | 403 | 503
+  second_times?: number
 }
 
 /** 25：例行公事的两个钟点（本地时区）。 */

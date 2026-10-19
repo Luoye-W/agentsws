@@ -1,0 +1,53 @@
+# WP430（决策 1290）：同一来源连续失败 2 次后，10 分钟内直接跳过它走下一个；10 分钟后再试。
+# 前两封信：原选各回一次 429 → 都切到自己的第二条（第二次之后原选进冷却）；
+# 第三封信在冷却期内：原选其实已经好了，但不再去碰它，直接用第二条（运行记录里照样一行）；
+# 第四封信在 10 分钟之后：先试原选，好了，不切。所以一共切 3 次。
+id: ops/own-model-cooldown
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    model.own_fault: { code: 429, times: 2, backup: on, second: ok }
+  - at: '+10m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+12m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+15m'
+    inbound.email:
+      from: cara@example.com
+      thread: new
+      subject: Can't log in
+      body_ref: fixtures/cara-login.txt
+  - at: '+3h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Still waiting on #1002
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+8h'
+    clock.advance: {}
+expected:
+  model_source_switches: 3
+  model_providers_used: [stub, own2]
+  event_types: [model.source_switched]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

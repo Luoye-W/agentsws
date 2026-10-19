@@ -2781,8 +2781,11 @@ const zh: Table = {
   'models.defaults': '哪件事用哪个模型',
   'models.ai_source': 'AI 来源',
   'models.ai_source.hint':
-    '先用你自己的 AI（订阅或 API key）；额度用完、连不上或 key 失效时，那一轮自动换成工坊积分接着做，下一轮自动回到你自己的。数据、云浏览器等付费服务不管 AI 用谁，都照常扣积分。',
-  'models.ai_source.primary': '主用',
+    '这次选的 AI 额度用完、连不上或登录 / key 失效时，按下面的顺序换你自己的另一个接着做（拖动可调顺序），都不行再用工坊积分；下一轮先试回原来选的。同一个连着两次不行，10 分钟内先跳过它。数据、云浏览器等付费服务不管 AI 用谁，都照常扣积分。',
+  'models.ai_source.primary': '自己的',
+  'models.ai_source.not_ready': '测试通过后才会被自动接上（去上面那张卡点「测试」）',
+  'models.ai_source.drag': '拖动调整「{name}」的顺序',
+  'models.ai_source.moved': '「{name}」排到第 {n} 个',
   'models.ai_source.backup': '备用',
   'models.ai_source.no_own': '还没接你自己的 AI',
   'models.ai_source.backup_off': '登录工坊账号后可用',
@@ -7171,8 +7174,12 @@ const en: Table = {
   'models.defaults': 'Which model for what',
   'models.ai_source': 'AI source',
   'models.ai_source.hint':
-    'Your own AI (subscription or API key) goes first. When it runs out of quota, can’t be reached or its key stops working, that round switches to Workshop credits and the next round goes back to yours. Paid services like data and the cloud browser use credits no matter which AI you use.',
-  'models.ai_source.primary': 'Primary',
+    'When the AI you picked runs out of quota, can’t connect or its sign-in / key fails, the next one of yours in this order takes over (drag to reorder); Workshop credits come last. Next round tries your pick first again. A source that fails twice in a row is skipped for 10 minutes. Paid services such as data and the cloud browser use credits no matter which AI runs.',
+  'models.ai_source.primary': 'Yours',
+  'models.ai_source.not_ready':
+    'Taken over automatically only after it passes a test (click “Test” on its card above)',
+  'models.ai_source.drag': 'Drag to reorder “{name}”',
+  'models.ai_source.moved': '“{name}” moved to position {n}',
   'models.ai_source.backup': 'Backup',
   'models.ai_source.no_own': 'No AI of your own yet',
   'models.ai_source.backup_off': 'Sign in to a Workshop account to use it',

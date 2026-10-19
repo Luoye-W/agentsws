@@ -53,8 +53,9 @@ export interface ModelGatewayPolicy {
   /** 同档备选：按 `provider/model` 键，或 `*` 兜底。provider 5xx / 超时时依次尝试。 */
   fallbacks?: Record<string, ModelRef[]>
   /**
-   * WP425：AI 来源顺序的「备用」——自己的（订阅 / key）额度用完、连不上、key 失效时切到工坊积分；
-   * 一轮里切过一次就用到底，下一轮自动回主用。不给 = 没有备用（没登录工坊账号）。
+   * WP425 / WP430：AI 来源顺序——这次选的额度用完、连不上、key 失效时，按顺序切到自己配的其它来源，
+   * 再到工坊积分；一轮里切过就用到底，下一轮先试原选；同一来源连续失败后冷却一阵直接跳过。
+   * 不给 = 不切（老样子）。
    */
   source_fallback?: SourceFallbackPolicy
   prices: PriceTable
@@ -68,6 +69,7 @@ export type ModelEventType =
   | 'model.provider_down'
   | 'model.budget_frozen'
   | 'model.source_switched'
+  | 'model_source.relogin_needed'
   | 'budget.exhausted'
 
 export interface ModelUsagePayload {

@@ -24,6 +24,7 @@ import type {
   ScenarioEvent,
   ScenarioExpected,
   ScenarioListingPage,
+  ScenarioOwnFault,
   ScenarioRedditWatchItem,
   ScenarioStandIns,
   ScenarioTxnPolicy,
@@ -2906,7 +2907,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'model.own_fault': {
-      known(source, `${path}.${key}`, body, ['code', 'times', 'backup'])
+      known(source, `${path}.${key}`, body, ['code', 'times', 'backup', 'second', 'second_times'])
       const code = num(source, `${path}.${key}.code`, body.code)
       if (code !== 429 && code !== 401 && code !== 403 && code !== 503)
         fail(source, `${path}.${key}.code`, '只认 429 / 401 / 403 / 503')
@@ -2915,6 +2916,21 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       const backup = optStr(source, `${path}.${key}.backup`, body.backup)
       if (backup !== undefined && backup !== 'on' && backup !== 'off')
         fail(source, `${path}.${key}.backup`, '只认 on / off')
+      // WP430：自己的第二条（`ok` 或它也回的错误码）
+      let second: ScenarioOwnFault['second']
+      if (body.second !== undefined) {
+        if (body.second === 'ok') second = 'ok'
+        else {
+          const c = num(source, `${path}.${key}.second`, body.second)
+          if (c !== 429 && c !== 401 && c !== 403 && c !== 503)
+            fail(source, `${path}.${key}.second`, '只认 ok / 429 / 401 / 403 / 503')
+          second = c
+        }
+      }
+      const secondTimes =
+        body.second_times === undefined
+          ? undefined
+          : num(source, `${path}.${key}.second_times`, body.second_times)
       return {
         at,
         type: 'model.own_fault',
@@ -2922,6 +2938,8 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           code,
           ...(times === undefined ? {} : { times }),
           ...(backup === undefined ? {} : { backup }),
+          ...(second === undefined ? {} : { second }),
+          ...(secondTimes === undefined ? {} : { second_times: secondTimes }),
         },
       }
     }

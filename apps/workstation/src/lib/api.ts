@@ -2606,7 +2606,17 @@ export interface ModelDefaultsView {
 
 /** WP425：AI 来源顺序（与输入框 AI 钮同一份数据）。 */
 export interface ModelAiSourceView {
-  own: { provider_id: string; label: string; group: 'subscription' | 'own' }[]
+  /**
+   * WP430（决策 1288）：按「AI 来源」里排的顺序（可拖动）。`ready` = 会被自动接上（登录着的订阅 / 账号、
+   * 测试通过的 key）；老服务端没有这两格。
+   */
+  own: {
+    provider_id: string
+    label: string
+    group: 'subscription' | 'own'
+    ready?: boolean
+    model?: string
+  }[]
   backup: { available: boolean; label: string; model?: string }
   fallback_to_cloud: boolean
 }
@@ -2713,6 +2723,8 @@ export const setModelDefaults = (
     }
     /** WP425：开关「自己的用不了时用工坊积分接着做」。 */
     fallback_to_cloud?: boolean
+    /** WP430：「AI 来源」里自己配的那几条的先后（provider id）。空数组 = 回到默认次序。 */
+    source_order?: string[]
   },
   assignment?: string,
 ): Promise<ModelDefaultsView> =>

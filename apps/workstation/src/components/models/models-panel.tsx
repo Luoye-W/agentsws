@@ -26,6 +26,7 @@ import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { BrandMark, InfoTip, testedMs, useFresh } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
+import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
@@ -965,34 +966,48 @@ function AiSourceRow({
   view,
   busy,
   onToggle,
+  onReorder,
 }: {
   view: ModelAiSourceView
   busy: boolean
   onToggle: (on: boolean) => void
+  /** WP430：拖动排序之后的新顺序。 */
+  onReorder: (ids: string[]) => void
 }): React.ReactNode {
   const { t } = useApp()
   return (
-    <div
-      className="flex items-center justify-between gap-3 px-4 py-3"
-      data-testid="model-ai-source"
-    >
-      <div className="min-w-0">
-        <p className="flex items-center gap-1 text-sm text-ws-ink">
-          {t('models.fallback')}
-          <Hint text={t('models.ai_source.hint')} />
-        </p>
-        <p className="mt-0.5 text-[12px] text-ws-muted-fg" data-testid="model-ai-source-own">
-          {view.backup.available ? view.backup.label : t('models.ai_source.backup_off')}
-        </p>
+    <>
+      {/* WP430（决策 1288）：自己配的不止一个时，按这里的顺序接（可拖动）；只有一个就不用排 */}
+      {view.own.length < 2 ? null : (
+        <div className="flex items-start justify-between gap-3 px-4 py-3">
+          <span className="text-sm text-ws-ink">{t('models.ai_source.order')}</span>
+          <div className="min-w-0 max-w-64 flex-1">
+            <AiSourceOrder own={view.own} busy={busy} onReorder={onReorder} />
+          </div>
+        </div>
+      )}
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-3"
+        data-testid="model-ai-source"
+      >
+        <div className="min-w-0">
+          <p className="flex items-center gap-1 text-sm text-ws-ink">
+            {t('models.fallback')}
+            <Hint text={t('models.ai_source.hint')} />
+          </p>
+          <p className="mt-0.5 text-[12px] text-ws-muted-fg" data-testid="model-ai-source-backup">
+            {view.backup.available ? view.backup.label : t('models.ai_source.backup_off')}
+          </p>
+        </div>
+        <Switch
+          checked={view.fallback_to_cloud}
+          disabled={busy || !view.backup.available}
+          aria-label={t('models.ai_source.switch')}
+          data-testid="model-ai-source-switch"
+          onCheckedChange={onToggle}
+        />
       </div>
-      <Switch
-        checked={view.fallback_to_cloud}
-        disabled={busy || !view.backup.available}
-        aria-label={t('models.ai_source.switch')}
-        data-testid="model-ai-source-switch"
-        onCheckedChange={onToggle}
-      />
-    </div>
+    </>
   )
 }
 
@@ -1049,6 +1064,9 @@ function DefaultsSection({
           busy={busy}
           onToggle={(on) => {
             onChange({ fallback_to_cloud: on })
+          }}
+          onReorder={(ids) => {
+            onChange({ source_order: ids })
           }}
         />
       )}
