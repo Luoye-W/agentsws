@@ -2737,7 +2737,7 @@ async function bootstrap(): Promise<void> {
       tray?.popUpContextMenu()
     })
   refreshTray()
-  app.dock?.hide()
+  // Luoye 10-19：Mac 上要进程序坞（以前这里 dock.hide()，加上 LSUIElement，只能去菜单栏找）
   setLoginItem(config.launchAtLogin)
   // WP327：上次「只切换」的更新新版没起来、已回到这一版——说一声（只说一次）
   if (rolledBack !== undefined && Notification.isSupported())
