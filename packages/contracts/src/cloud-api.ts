@@ -144,6 +144,15 @@ import type {
   ServiceQuoteAcceptRequest,
 } from './service-order.js'
 import type { StandbyWorkspace } from './standby.js'
+import type {
+  TeamCodeRegister,
+  TeamCodeRegistered,
+  TeamCodeResolved,
+  TeamCodeResolveRequest,
+  TeamTunnelClientFrame,
+  TeamTunnelIssued,
+  TeamTunnelServerFrame,
+} from './team-link.js'
 
 /* ------------------------------------------------------------------ */
 /* 表的形状                                                             */
@@ -2417,6 +2426,74 @@ export interface CloudContentApi {
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* WP427 团队通道（同事互联 / 公司模式，不在同一个网络时）              */
+/* ------------------------------------------------------------------ */
+
+/** 团队通道 owner 面：任何有效的工作区令牌都行（不查动作集）。 */
+interface TeamOwnerErrors {
+  400: 'invalid_input'
+  401: 'unauthenticated'
+}
+
+/**
+ * 同事打开的地址是 `https://{tunnel_id}.team.agentsws.com/*`（按 Host 分流，整条转给发起人电脑上的
+ * 「团队门」）。它是**整站反代**、不是 API，所以不在下面的表里；云上要做的只有三件：按 Host 找到那条
+ * 长连接、把请求打成 `request` 帧、把 `response_*` 帧原样流回去（去掉逐跳头；请求体超过 8 MiB 回 413；
+ * 那台电脑不在线回 503 人话页）。
+ */
+export interface CloudTeamApi {
+  /** 申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥 */
+  'POST /v1/team/tunnel': {
+    auth: 'workspace_token'
+    tag: 'team'
+    ok: { status: 200; body: CloudDataEnvelope<TeamTunnelIssued> }
+    errors: TeamOwnerErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * 发起人电脑连上通道（WebSocket）。HTTP 层不验身份：第一帧必须是 `hello`（通道 id + 握手密钥 +
+   * 协议版本）；之后云下发 `request` / `cancel`，本机回 `response_*`；15 秒没动静就发 `ping`。
+   * 同一条通道新连上来的那一条赢（旧的断掉）。
+   */
+  'GET /v1/team/tunnel/connect': {
+    auth: 'public'
+    tag: 'team'
+    ok: { status: 101; description: '切到 WebSocket' }
+    errors: { 426: 'upgrade_required' }
+    ws: { client: TeamTunnelClientFrame; server: TeamTunnelServerFrame }
+  }
+  /** 登记一个邀请码（只给哈希与到期时间；到期自动作废） */
+  'POST /v1/team/codes': {
+    auth: 'workspace_token'
+    tag: 'team'
+    body: TeamCodeRegister
+    ok: { status: 200; body: CloudDataEnvelope<TeamCodeRegistered> }
+    errors: TeamOwnerErrors & {
+      /** 这个组织还没申请过通道 */
+      409: 'no_tunnel'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * 贴码的同事那边：这个码是哪条通道的（公开；按来源限流，猜码没有意义——拿到地址也只是能去敲门，
+   * 进不进来要那边有人同意）
+   */
+  'POST /v1/team/codes/resolve': {
+    auth: 'public'
+    tag: 'team'
+    body: TeamCodeResolveRequest
+    ok: { status: 200; body: CloudDataEnvelope<TeamCodeResolved> }
+    errors: {
+      400: 'invalid_input'
+      /** 没有这个码，或者过期了 */
+      404: 'not_found'
+      429: 'rate_limited'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+}
+
 /**
  * 云端对外契约：客户端与其他产品会调的全部云端路径（docs/83 §2 第 1 条）。
  *
@@ -2441,7 +2518,8 @@ export interface CloudApi
     CloudStandbyApi,
     CloudPremiumThemeApi,
     CloudServiceOrderApi,
-    CloudContentApi {}
+    CloudContentApi,
+    CloudTeamApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

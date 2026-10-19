@@ -25,6 +25,7 @@ import type {
   BrowserExtensionUse,
   MarketsSource,
   MaybePromise,
+  MembershipClaimView,
   MembershipRequestVia,
   StorefrontPlatform,
 } from '@agentsws/contracts'
@@ -455,6 +456,53 @@ export interface MembershipRequestInput {
   company_key?: string | undefined
   /** 转发方自己的 peer id（46 I3 要知道"这条申请是谁递过来的"）。 */
   from_peer?: string | undefined
+  /**
+   * WP427：申请人那台机器发的「票」的哈希（`sha256(票)`）。批了之后申请人拿票本身来
+   * `POST /v1/memberships/requests/:id/claim` 换一次性登录——不用再走邮箱验证码。
+   * 人从界面上填不到它（只有服务进程之间转申请时带）。
+   */
+  ticket_hash?: string | undefined
+}
+
+/** WP427：同事怎么连进来（「和同事一起用」那一块的状态行）。 */
+export interface TeamLinkView {
+  /** 现在开着没有（打开了「和同事一起用」，或者这里不止一个人）。 */
+  open: boolean
+  /** 同一个网络里的快路。 */
+  lan: { on: boolean; url?: string; reason?: string }
+  /** 不在同一个网络时：经工坊云的通道。`needs_account` = 这台电脑还没登录工坊账号。 */
+  cloud: {
+    state:
+      | 'stopped'
+      | 'needs_account'
+      | 'registering'
+      | 'connecting'
+      | 'online'
+      | 'backoff'
+      | 'unavailable'
+    url?: string
+    reason?: string
+  }
+  /** 邀请链接用哪个地址开头（没有 = 只给码）。 */
+  invite_base?: string
+}
+
+/** WP427：我递出去的申请（加入别人那边）。 */
+export interface TeamJoinView {
+  id: string
+  /** 对方自报的展示名。 */
+  workspace_label: string
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  via: 'lan' | 'cloud'
+  created_at: string
+  /** 批了：能直接点「打开」。 */
+  can_enter: boolean
+}
+
+export interface MembershipClaimRequest {
+  ticket: string
+  /** 要不要顺手换一张一次性登录（不给 = 只问状态）。 */
+  login?: boolean | undefined
 }
 
 /** 46 I3：对方说"我这边已经定了，你那条别等了"。 */
@@ -498,6 +546,14 @@ export interface OnboardingPort {
   ): MaybePromise<MembershipRequestView>
   /** **公开**：同伴的服务进程告诉我们"先批的那一边已经定了"。 */
   superseded(input: SupersedeInput): MaybePromise<{ voided: number }>
+  /** WP427 **公开**：申请人拿票来问批了没有（批了可以换一次性登录）。没装回 501。 */
+  claim?(id: string, input: MembershipClaimRequest): MaybePromise<MembershipClaimView>
+  /** WP427：同事怎么连进来。 */
+  teamLink?(actor: OnboardingActor): MaybePromise<TeamLinkView>
+  /** WP427：我递出去的申请（顺手问一遍对方批了没有）。 */
+  joins?(actor: OnboardingActor): MaybePromise<TeamJoinView[]>
+  /** WP427：批了的那一条：换一个带一次性登录的地址（在浏览器里打开就进去了）。 */
+  enterJoin?(actor: OnboardingActor, id: string): MaybePromise<{ url: string }>
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -620,11 +676,20 @@ const RequestBody = z
     // 机器之间转发时带的那两样（界面永远不填）
     company_key: z.string().min(16).max(128).optional(),
     from_peer: z.string().min(1).max(128).optional(),
+    // WP427：申请人那台机器的票的哈希（sha256 十六进制）
+    ticket_hash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
   })
   .refine((v) => v.code !== undefined || v.peer_id !== undefined || v.company_key !== undefined, {
     message: '要么贴一个邀请码，要么挑一位局域网上的同伴',
   })
 
+const ClaimBody = z.object({
+  ticket: z.string().min(16).max(200),
+  login: z.boolean().optional(),
+})
 const SupersedeBody = z.object({
   peer_id: z.string().min(1).max(128),
   company_key: z.string().min(16).max(128),
@@ -926,6 +991,7 @@ export function onboardingRoutes(): Route[] {
             ...(input.peer_id === undefined ? {} : { peer_id: input.peer_id }),
             ...(input.company_key === undefined ? {} : { company_key: input.company_key }),
             ...(input.from_peer === undefined ? {} : { from_peer: input.from_peer }),
+            ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
           }),
           201,
         )
@@ -954,6 +1020,93 @@ export function onboardingRoutes(): Route[] {
             ...(input.reason === undefined ? {} : { reason: input.reason }),
           }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/memberships/requests/:id/claim',
+        operationId: 'claimMembershipRequest',
+        summary: 'WP427：申请人拿票来问批了没有；批了换一张一次性登录（不用走邮箱验证码）',
+        tag: TAG,
+        // 公开：申请人这会儿在这里还没有会话，只有申请时那张票。票不对一律 404（不说有没有这条）
+        auth: 'public',
+        params: [{ name: 'id', in: 'path', required: true, description: '申请 id（对方那边的）' }],
+        body: ClaimBody,
+        returns: 'MembershipClaimView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.claim === undefined)
+          throw new ApiError('not_implemented', '这个服务不支持用申请票换登录')
+        const input = await body(c, ClaimBody)
+        return ok(
+          c,
+          await port.claim(param(c, 'id'), {
+            ticket: input.ticket,
+            ...(input.login === undefined ? {} : { login: input.login }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/team/link',
+        operationId: 'getTeamLink',
+        summary: 'WP427：同事怎么连进来——局域网那条路、经工坊云那条路、邀请链接用哪个地址',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: () => true,
+        returns: 'TeamLinkView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.teamLink === undefined)
+          throw new ApiError('not_implemented', '这个服务没有团队通道')
+        return ok(c, await port.teamLink(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/team/joins',
+        operationId: 'listTeamJoins',
+        summary: 'WP427：我递出去的申请（加入别人那边），顺手问一遍对方批了没有',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: () => true,
+        returns: 'TeamJoinView[]',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.joins === undefined) return ok(c, [])
+        return ok(c, await port.joins(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/team/joins/:id/enter',
+        operationId: 'enterTeamJoin',
+        summary: 'WP427：批了的那一条——换一个带一次性登录的地址（浏览器里打开就进去了）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: () => true,
+        params: [{ name: 'id', in: 'path', required: true, description: '我这边记的申请 id' }],
+        returns: '{ url }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.enterJoin === undefined)
+          throw new ApiError('not_implemented', '这个服务没有团队通道')
+        return ok(c, await port.enterJoin(actorOf(c), param(c, 'id')))
       },
     ),
     route(

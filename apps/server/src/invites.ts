@@ -20,13 +20,18 @@
  * 理由是它要能再看一眼——owner 关掉页面之后还得把码念给同事听；而它本身不是凭据，
  * 拿着它最多能让对方的队列里多一张卡。事件日志里仍然只有指纹（`code_fp`）。
  */
+
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type {
+  DiscoveryHelloView,
   InviteView,
   JoinPort,
+  MembershipClaimRequest,
   MembershipRequestInput,
   MembershipRequestView,
+  TeamJoinView,
 } from '@agentsws/api'
 import type {
   ApprovalBus,
@@ -34,6 +39,7 @@ import type {
   EventEnvelope,
   Invite,
   JoinExportBundle,
+  MembershipClaimView,
   MembershipRequest,
   MembershipRequestVia,
   PersonId,
@@ -93,6 +99,41 @@ interface RequestRow extends MembershipRequest {
   /** 局域网上的对方（有的话）。 */
   peer_id?: string
   approval_item_id?: string
+  /** WP427（inbound）：申请人那台机器发的票的哈希——批了之后拿票来换一次性登录。 */
+  ticket_hash?: string
+  /**
+   * WP427（outbound）：递到哪儿去了、对方那边的申请 id、我们这张票本身（只在本机库里，
+   * 不进任何视图与日志）、对方自报的展示名、走的哪条路。
+   */
+  remote?: {
+    base: string
+    request_id: string
+    ticket: string
+    label?: string
+    via: 'lan' | 'cloud'
+    /** 最近一次问到的状态。 */
+    status?: TeamJoinView['status']
+  }
+}
+
+/** WP427：本机身份是占位邮箱（没关联工坊账号）的申请人，在这边建人时换一个只在这边用的地址。 */
+export const COLLEAGUE_EMAIL_DOMAIN = 'colleague.localhost'
+
+/** 这个邮箱是不是本机造的、不能拿去发信的那种（占位 / 同事替身）。 */
+export function isLocalOnlyEmail(email: string | undefined): boolean {
+  return (
+    email !== undefined &&
+    (isPlaceholderOwnerEmail(email) ||
+      email.trim().toLowerCase().endsWith(`@${COLLEAGUE_EMAIL_DOMAIN}`))
+  )
+}
+
+const ticketHashOf = (ticket: string): string => sha256(ticket)
+
+const sameHash = (a: string, b: string): boolean => {
+  const x = Buffer.from(a)
+  const y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
 }
 
 interface InvitesBackend {
@@ -191,7 +232,10 @@ export interface InvitesOptions {
   /** 现在看得见的全部同伴（贴码时挨个试）。 */
   peerIds(): string[]
   /** 往同伴那边发一条请求；默认 `fetch`，测试注入内存实现。 */
-  post?: (url: string, body: unknown) => Promise<{ ok: boolean; data?: unknown }>
+  post?: (
+    url: string,
+    body: unknown,
+  ) => Promise<{ ok: boolean; data?: unknown; status?: number; message?: string }>
   /**
    * 20 §4 的 Join 入口（WP50）。**懒取**：Join 装在 onboarding 之后，
    * 直接传值会拿到 undefined；这里在 `decide` 那一刻才去要它。
@@ -206,6 +250,18 @@ export interface InvitesOptions {
    */
   mode?: () => Promise<'solo' | 'peers' | 'company'>
   dbDir?: string
+  /**
+   * WP427：本机、局域网里都找不到的码，问工坊云这是哪条通道的（回通道地址）。不给 = 不问云。
+   */
+  resolveCode?: (code: string) => Promise<string | undefined>
+  /** WP427：新发了一个码（登记到云上，不在同一个网络的同事才贴得进来）。 */
+  onInviteCreated?: (code: string, expires_at: string) => void
+  /** WP427：给某个人签一张一次性登录（申请人拿票来换）。 */
+  issueLogin?: (person_id: PersonId) => Promise<{ token: string; expires_at: string } | undefined>
+  /** WP427：问对方「你是谁」（拿展示名）。默认 `fetch`。 */
+  hello?: (base: string) => Promise<DiscoveryHelloView | undefined>
+  /** WP427：我们自己的展示名（申请人拿票来问时一起回）。 */
+  selfLabel?: () => Promise<string>
 }
 
 export interface InvitesAssembly {
@@ -222,21 +278,51 @@ export interface InvitesAssembly {
   supersede(input: { peer_id: string; company_key: string; reason?: string | undefined }): {
     voided: number
   }
+  /** WP427 公开：申请人拿票来问批了没有（批了可以换一次性登录）。票不对一律 not_found。 */
+  claim(id: string, input: MembershipClaimRequest): Promise<MembershipClaimView>
+  /** WP427：我递出去的申请（顺手问一遍对方）。 */
+  joins(): Promise<TeamJoinView[]>
+  /** WP427：批了的那一条：带一次性登录的地址。 */
+  enter(id: string): Promise<{ url: string }>
   close(): void
 }
 
-async function defaultPost(url: string, body: unknown): Promise<{ ok: boolean; data?: unknown }> {
+async function defaultPost(
+  url: string,
+  body: unknown,
+): Promise<{ ok: boolean; data?: unknown; status?: number; message?: string }> {
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     })
     const text = await res.text()
-    const parsed: unknown = text === '' ? {} : JSON.parse(text)
-    return { ok: res.ok, data: (parsed as { data?: unknown }).data }
+    let parsed: { data?: unknown; message?: unknown } = {}
+    try {
+      parsed = text === '' ? {} : (JSON.parse(text) as typeof parsed)
+    } catch {
+      parsed = {}
+    }
+    return {
+      ok: res.ok,
+      status: res.status,
+      data: parsed.data,
+      ...(typeof parsed.message === 'string' ? { message: parsed.message } : {}),
+    }
   } catch {
     return { ok: false }
+  }
+}
+
+async function defaultHello(base: string): Promise<DiscoveryHelloView | undefined> {
+  try {
+    const res = await fetch(`${base}/v1/discovery/hello`, { signal: AbortSignal.timeout(10_000) })
+    if (!res.ok) return undefined
+    return ((await res.json()) as { data?: DiscoveryHelloView }).data
+  } catch {
+    return undefined
   }
 }
 
@@ -247,6 +333,7 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       ? createMemoryBackend()
       : createSqliteBackend(join(options.dbDir, 'onboarding.sqlite'))
   const post = options.post ?? defaultPost
+  const hello = options.hello ?? defaultHello
 
   let seq = 0
   const nextId = (prefix: string): string => {
@@ -308,7 +395,23 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
     email: string
     via: MembershipRequestVia
     peer_id?: string
+    ticket_hash?: string
   }): Promise<MembershipRequestView> {
+    /*
+     * WP427：申请里的邮箱如果已经是这里的人（含负责人自己），不收——申请人没证明过这个邮箱是他的，
+     * 批了就等于把那个人的身份交出去（拿票换登录换到的是他）。本机占位邮箱（没关联账号）不算：
+     * 批的时候在这边给他另建一个人。
+     */
+    if (!isLocalOnlyEmail(input.email)) {
+      const here = (await options.members()).some(
+        (m) => m.email.trim().toLowerCase() === input.email.trim().toLowerCase(),
+      )
+      if (here)
+        throw new OnboardingError(
+          'conflict',
+          '这个邮箱已经在对方那边了——直接用工坊账号登录进去就行，不用再申请。',
+        )
+    }
     const now = clock.now()
     const row: RequestRow = {
       id: nextId('mrq'),
@@ -319,6 +422,7 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       created_at: now,
       direction: 'inbound',
       ...(input.peer_id === undefined ? {} : { peer_id: input.peer_id }),
+      ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
     }
     // 14：目标工作区的 owner 收一张 membership 卡。**不是通知，是审批项**——
     // 通过后有明确的施行（建成员 + 交给 Join），失败就回到 pending。
@@ -392,7 +496,57 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
     }
   }
 
-  /** 往某位同伴那边转发一条申请（我们的人要进他那儿）。 */
+  /**
+   * 往别人那边递一条申请（我们的人要进他那儿）：局域网上的同伴、或者经云查到的通道地址。
+   *
+   * WP427：顺手发一张「票」——对方只拿到票的哈希；批了之后我们拿票本身去换一次性登录，
+   * 用不着邮箱验证码，也用不着工坊账号。票只存在本机库里，不进任何视图与日志。
+   */
+  async function forwardTo(
+    base: string,
+    body: Record<string, unknown>,
+    input: { name: string; email: string },
+    meta: { via: 'lan' | 'cloud'; peer_id?: string },
+  ): Promise<MembershipRequestView | undefined> {
+    const ticket = randomBytes(24).toString('base64url')
+    const out = await post(`${base}/v1/memberships/requests`, {
+      ...body,
+      ticket_hash: ticketHashOf(ticket),
+    })
+    if (!out.ok || out.data === undefined) {
+      // 对方明说不收（邮箱已经在那边了 / 公司对不上）：把那句话原样告诉申请人
+      if (out.status === 409 || out.status === 403)
+        throw new OnboardingError(
+          out.status === 409 ? 'conflict' : 'forbidden',
+          out.message ?? '对方没收这条申请',
+        )
+      return undefined
+    }
+    const remote = out.data as MembershipRequestView
+    const said = await hello(base).catch(() => undefined)
+    // 我们这边也记一条：46 I3 要知道"我朝谁申请过"，先批的那一方才好让另一条失效
+    const row: RequestRow = {
+      id: nextId('mrq'),
+      workspace_id,
+      person: { name: input.name, email: input.email },
+      via: meta.via === 'lan' ? 'lan' : 'invite',
+      status: 'pending',
+      created_at: clock.now(),
+      direction: 'outbound',
+      ...(meta.peer_id === undefined ? {} : { peer_id: meta.peer_id }),
+      remote: {
+        base,
+        request_id: remote.id,
+        ticket,
+        via: meta.via,
+        ...(said?.workspace_label === undefined ? {} : { label: said.workspace_label }),
+      },
+    }
+    backend.putRequest(row)
+    return remote
+  }
+
+  /** 往某位局域网同伴那边递。 */
   async function forward(
     peer_id: string,
     body: Record<string, unknown>,
@@ -400,22 +554,34 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
   ): Promise<MembershipRequestView | undefined> {
     const address = options.peerAddress(peer_id)
     if (address === undefined) return undefined
-    const out = await post(`http://${address.host}:${address.port}/v1/memberships/requests`, body)
-    if (!out.ok || out.data === undefined) return undefined
-    const remote = out.data as MembershipRequestView
-    // 我们这边也记一条：46 I3 要知道"我朝谁申请过"，先批的那一方才好让另一条失效
-    const row: RequestRow = {
-      id: nextId('mrq'),
-      workspace_id,
-      person: { name: input.name, email: input.email },
-      via: 'lan',
-      status: 'pending',
-      created_at: clock.now(),
-      direction: 'outbound',
-      peer_id,
+    return forwardTo(`http://${address.host}:${address.port}`, body, input, { via: 'lan', peer_id })
+  }
+
+  /** 问对方那边：我这条批了没有（`login` = 批了就顺手换一张一次性登录）。 */
+  async function ask(
+    row: RequestRow,
+    login: boolean,
+  ): Promise<MembershipClaimView | 'unreachable' | 'gone'> {
+    const remote = row.remote
+    if (remote === undefined) return 'gone'
+    const out = await post(
+      `${remote.base}/v1/memberships/requests/${encodeURIComponent(remote.request_id)}/claim`,
+      { ticket: remote.ticket, login },
+    )
+    if (!out.ok) return out.status === undefined || out.status >= 500 ? 'unreachable' : 'gone'
+    return out.data as MembershipClaimView
+  }
+
+  const joinViewOf = (r: RequestRow): TeamJoinView => {
+    const status: TeamJoinView['status'] = r.remote?.status ?? r.status
+    return {
+      id: r.id,
+      workspace_label: r.remote?.label ?? '对方的工作区',
+      status,
+      via: r.remote?.via ?? 'lan',
+      created_at: r.created_at,
+      can_enter: status === 'approved',
     }
-    backend.putRequest(row)
-    return remote
   }
 
   return {
@@ -439,6 +605,8 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       }
       backend.putInvite(invite)
       emit('invite.created', by, { code_fp: fingerprint(code), uses: invite.uses_left })
+      // WP427：登记到云上（不在同一个网络的同事贴码时，靠云查到是这边）
+      options.onInviteCreated?.(code, invite.expires_at)
       return viewOfInvite(invite, now)
     },
 
@@ -465,6 +633,7 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
           email,
           via: 'lan',
           ...(withKey.from_peer === undefined ? {} : { peer_id: withKey.from_peer }),
+          ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
         })
       }
 
@@ -478,12 +647,32 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
             code_fp: fingerprint(code),
             uses_left: invite.uses_left - 1,
           })
-          return accept({ name, email, via: 'invite' })
+          return accept({
+            name,
+            email,
+            via: 'invite',
+            ...(input.ticket_hash === undefined ? {} : { ticket_hash: input.ticket_hash }),
+          })
         }
-        // 不是我们的码 → 挨个问局域网上的同伴（v1 没有云目录，只能这么找）
+        // 不是我们的码 → 挨个问局域网上的同伴（同一个网络时的快路）
         for (const peer_id of options.peerIds()) {
           const out = await forward(peer_id, { code, name, email }, { name, email })
           if (out !== undefined) return out
+        }
+        // WP427：局域网里也没有 → 问工坊云这是谁的码（对方可能在另一个网络里）
+        const base = await options.resolveCode?.(code).catch(() => undefined)
+        if (base !== undefined) {
+          const out = await forwardTo(
+            base,
+            { code, name, email },
+            { name, email },
+            { via: 'cloud' },
+          )
+          if (out !== undefined) return out
+          throw new OnboardingError(
+            'not_found',
+            '找到了发码的人，但他的电脑这会儿连不上，等一会儿再试',
+          )
         }
         throw new OnboardingError('not_found', '这个邀请码不对，或者已经过期 / 用完了')
       }
@@ -524,10 +713,29 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       // 同意 = 真建人 + 真建成员 + 一条"工作区成员"职责（20 §1：加入就有它）。
       // 20 §4 的 Join（导入 + 映射确认）是**下一步**：这一步只把人放进来，
       // 品牌 / 产品线 / 店铺范围的对照由 45 的合并向导接着走。
-      const existing = options.identity.personByEmail(row.person.email)
+      /*
+       * WP427：申请人那台机器没关联工坊账号时，递过来的是本机占位邮箱（owner@localhost）——
+       * 这边的负责人多半也是这个占位邮箱。按邮箱找人会找到负责人自己（于是「批了」等于把负责人的
+       * 身份交出去）。占位的一律在这边另建一个人，邮箱换成只在这边用的地址。
+       * 真邮箱：已经是这里的在职成员就不收（申请人没证明过邮箱是他的）；以前来过又走了的照旧复用。
+       */
+      const localOnly = isLocalOnlyEmail(row.person.email)
+      const existing = localOnly ? undefined : options.identity.personByEmail(row.person.email)
+      if (
+        existing !== undefined &&
+        (await options.members()).some((m) => m.person_id === existing.id)
+      )
+        throw new OnboardingError('conflict', '这个邮箱已经在这里了，不用再批。')
       const person_id =
         existing?.id ??
-        (await options.identity.createPerson({ email: row.person.email, name: row.person.name })).id
+        (
+          await options.identity.createPerson({
+            email: localOnly
+              ? `peer-${randomBytes(5).toString('hex')}@${COLLEAGUE_EMAIL_DOMAIN}`
+              : row.person.email,
+            name: row.person.name,
+          })
+        ).id
       await options.identity.addMember({
         workspace_id,
         person_id,
@@ -650,6 +858,92 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       }
       if (voided > 0) emit('membership.rejected', 'system', { superseded: voided })
       return { voided }
+    },
+
+    async claim(id, input): Promise<MembershipClaimView> {
+      const row = backend.requests().find((r) => r.id === id && r.direction === 'inbound')
+      // 票不对、没这条、没带票的老申请：一律同一句（不说有没有这条）
+      if (
+        row === undefined ||
+        row.ticket_hash === undefined ||
+        !sameHash(row.ticket_hash, ticketHashOf(input.ticket))
+      )
+        throw new OnboardingError('not_found', '没有这条申请')
+      const label = await options.selfLabel?.().catch(() => undefined)
+      const base = label === undefined ? {} : { workspace_label: label }
+      if (row.status !== 'approved' || row.person_id === undefined)
+        return { status: row.status, ...base }
+      const person_id = row.person_id
+      // 批过、后来又走了（退出 / 被请离开）：票不再换得到登录
+      if (!(await options.members()).some((m) => m.person_id === person_id))
+        return { status: 'left', ...base }
+      if (input.login !== true || options.issueLogin === undefined)
+        return { status: 'approved', ...base }
+      const issued = await options.issueLogin(person_id)
+      if (issued === undefined) return { status: 'approved', ...base }
+      emit('membership.claimed', 'system', { request_id: row.id })
+      return {
+        status: 'approved',
+        ...base,
+        login_token: issued.token,
+        expires_at: issued.expires_at,
+      }
+    },
+
+    async joins(): Promise<TeamJoinView[]> {
+      const rows = backend
+        .requests()
+        .filter((r) => r.direction === 'outbound' && r.remote !== undefined)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      await Promise.all(
+        rows.map(async (row) => {
+          const remote = row.remote
+          if (remote === undefined) return
+          // 定了的（不收 / 失效）不用再问
+          if (remote.status === 'rejected' || remote.status === 'superseded') return
+          const said = await ask(row, false)
+          const status: TeamJoinView['status'] =
+            said === 'unreachable'
+              ? remote.status === 'approved'
+                ? 'approved'
+                : 'unreachable'
+              : said === 'gone'
+                ? 'rejected'
+                : said.status
+          const label = said !== 'unreachable' && said !== 'gone' ? said.workspace_label : undefined
+          const next: RequestRow = {
+            ...row,
+            ...(status === 'approved' || status === 'rejected' || status === 'superseded'
+              ? { status: status === 'approved' ? 'approved' : status }
+              : {}),
+            remote: { ...remote, status, ...(label === undefined ? {} : { label }) },
+          }
+          backend.putRequest(next)
+          Object.assign(row, next)
+        }),
+      )
+      return rows.map(joinViewOf)
+    },
+
+    async enter(id): Promise<{ url: string }> {
+      const row = backend
+        .requests()
+        .find((r) => r.id === id && r.direction === 'outbound' && r.remote !== undefined)
+      if (row?.remote === undefined) throw new OnboardingError('not_found', `没有这条申请：${id}`)
+      const said = await ask(row, true)
+      if (said === 'unreachable')
+        throw new OnboardingError('not_found', '对方的电脑这会儿连不上（工坊没开，或者睡着了）')
+      if (said === 'gone' || said.status !== 'approved' || said.login_token === undefined)
+        throw new OnboardingError(
+          'conflict',
+          said !== 'gone' && said.status === 'pending'
+            ? '对方还没同意'
+            : said !== 'gone' && said.status === 'left'
+              ? '你已经不在对方那边了'
+              : '对方没同意这条申请',
+        )
+      // 决策 942 的同一个口子：一次性 token 放在 # 后面（不发给服务端、不进访问日志），工作台落地就抹掉
+      return { url: `${row.remote.base}/#agentsws-enter=${encodeURIComponent(said.login_token)}` }
     },
 
     close() {
