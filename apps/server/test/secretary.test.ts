@@ -237,10 +237,16 @@ describe('代答（41 §1.2 第一行）', () => {
       selected_option_id: 'send',
     })
     expect(decided.status).toBe(200)
-    // 问的人收到「陈晓回你了」
+    // WP429：问的人收到「陈晓回你了」——站内通知，不是「知道了」卡
     const asker = await dataOf<Card[]>(await call('GET', '/v1/approvals?lane=mine'))
-    const reply = asker.find((i) => i.payload.form === 'secretary_reply')
-    expect(reply?.payload.answer).toContain('核对昨天的退款单')
+    expect(asker.some((i) => i.payload.form === 'secretary_reply')).toBe(false)
+    const inbox = await dataOf<{ items: { text: string; href?: string; category: string }[] }>(
+      await call('GET', '/v1/notifications'),
+    )
+    const reply = inbox.items.find((n) => n.text.startsWith('陈晓回你了'))
+    expect(reply?.text).toContain('核对昨天的退款单')
+    expect(reply?.category).toBe('team')
+    expect(reply?.href).toBe('/assistant?peers=1')
   })
 
   it('WP417（自查 F17）：选了「直接找我」→ 助理不代答，本人收到「有人找你」', async () => {
@@ -254,7 +260,13 @@ describe('代答（41 §1.2 第一行）', () => {
     expect(out.answer).toContain('直接找我')
     type Card = { payload: { form?: string } }
     const mine = await dataOf<Card[]>(await chenCall('GET', '/v1/approvals?lane=mine'))
-    expect(mine.some((i) => i.payload.form === 'secretary_direct')).toBe(true)
+    // WP429：只是告诉一声——进站内通知，不出卡
+    expect(mine.some((i) => i.payload.form === 'secretary_direct')).toBe(false)
+    const inbox = await dataOf<{ items: { text: string }[]; unread: number }>(
+      await chenCall('GET', '/v1/notifications'),
+    )
+    expect(inbox.items.some((n) => n.text.includes('找你：陈晓在忙什么'))).toBe(true)
+    expect(inbox.unread).toBeGreaterThan(0)
   })
 
   it('问私有待办被拒', async () => {

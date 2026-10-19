@@ -219,7 +219,14 @@ describe('右上角：没有卡片图标；面板开关开 / 关面板并亮汇�
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow', 'rail-toggle'])
+    ).toEqual([
+      'rail-icon-browser',
+      'rail-icon-changes',
+      // WP429：通知铃铛
+      'notify-bell',
+      'rail-overflow',
+      'rail-toggle',
+    ])
     expect(await screen.findByTestId('rail-cards')).toBeTruthy()
     const toggle = screen.getByTestId('rail-toggle')
     expect(toggle.getAttribute('aria-pressed')).toBe('true')

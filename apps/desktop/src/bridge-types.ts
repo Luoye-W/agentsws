@@ -19,6 +19,11 @@
 export interface NotifyInput {
   title: string
   body?: string
+  /**
+   * WP429：点了这条系统通知去哪（工作台里的地址，`/` 开头）。新壳点了把主窗口叫到前面、
+   * 经 {@link DesktopBridge.onNotificationClick} 交回页面去跳；旧壳不认这一格（只弹不跳）。
+   */
+  path?: string
 }
 
 export interface DesktopBridge {
@@ -28,6 +33,11 @@ export interface DesktopBridge {
   readonly version: string
   /** 原生通知；系统不支持时返回 false。 */
   notify(input: NotifyInput): Promise<boolean>
+  /**
+   * WP429：点了带 `path` 的系统通知——主进程把窗口叫到前面，再把地址交给这里（页面自己跳）。
+   * 旧壳没有这一项：先判空。回取消订阅的函数。
+   */
+  onNotificationClick?(listener: (path: string) => void): () => void
   /** 用系统浏览器打开；只接受 http / https / mailto，其余返回 false。 */
   openExternal(url: string): Promise<boolean>
   /**
@@ -197,6 +207,8 @@ export const BRIDGE_KEY = 'agentsws'
 export const BRIDGE_CHANNELS = {
   info: 'agentsws:bridge-info',
   notify: 'agentsws:notify',
+  /** WP429：点了系统通知（主进程 → 页面，带地址） */
+  notifyClicked: 'agentsws:notify-clicked',
   openExternal: 'agentsws:open-external',
   /** WP184 */
   openScene: 'agentsws:open-scene',

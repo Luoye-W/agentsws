@@ -350,6 +350,21 @@ export interface RuntimeOptions {
    */
   runLimits?(): Partial<RunTimeLimits> | undefined
   /**
+   * WP429：一次运行收尾（跑完 / 被停下 / 没跑成）时叫一声——宿主据此发站内通知（跑得久的跑完了、
+   * 停下了、没跑成；人自己点停的不发）。不给就不叫；它抛错不影响运行。
+   */
+  onRunEnded?(e: {
+    run_id: string
+    matter_id: string
+    matter_title: string
+    person_id: string
+    outcome: 'completed' | 'stopped' | 'failed'
+    /** 停下的原因（看门狗 / 运行时报的 / 人点的；因更新暂停 = `update`）。 */
+    reason?: string
+    started_at: string
+    ended_at: string
+  }): void
+  /**
    * WP251（决策 91）：这条职责现在**没连上**的连接（人话名，必需的在前；必需的全连上了才列可选的）。
    * 工具回 `not_connected` / 缺凭据时，运行时拿它说清「缺哪个连接」。不给 = 只记卡住了、不说缺哪个。
    */
@@ -2568,7 +2583,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     runWatch.set(run_id, { watchdog, log: runLog, blocks: runBlocks })
     // WP264：步骤记录（事项页「正在做…」与跑完那一行灰字）
     const steps = new RunStepLog(nowMs())
-    runSteps.set(run_id, { matter_id: input.matter.id, started_at: clock.now(), log: steps })
+    const runStartedAt = clock.now()
+    runSteps.set(run_id, { matter_id: input.matter.id, started_at: runStartedAt, log: steps })
     /** WP423：这次是哪一项预算到了（`budget.exhausted`；第一次那条为准）。 */
     let budgetHit: MatterRunDigest['budget']
     /** WP264：跑完 / 停下 / 没跑成都记一条运行摘要（排在 AI 那段话前面）。 */
@@ -2598,6 +2614,29 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         })
       } catch {
         // 事项已经没了：摘要只是给人看的一行，少一条不影响别的
+      }
+      // WP429：告诉跑它的人一声（站内通知；跑得久的跑完了、停下了、没跑成）
+      try {
+        const reason =
+          outcome !== 'stopped'
+            ? undefined
+            : pausing.has(run_id)
+              ? 'update'
+              : budgetHit !== undefined
+                ? 'budget'
+                : (watchdog.fired() ?? cancelledReason ?? cancelReasonOf(controller.signal))
+        options.onRunEnded?.({
+          run_id,
+          matter_id: input.matter.id,
+          matter_title: input.matter.title,
+          person_id: input.actor.person_id,
+          outcome,
+          ...(reason === undefined ? {} : { reason }),
+          started_at: runStartedAt,
+          ended_at: clock.now(),
+        })
+      } catch {
+        // 通知发不出不影响运行
       }
     }
     /** WP251：这一轮卡住了就在时间线上记一条带结构化标记的（收尾时调一次）。 */

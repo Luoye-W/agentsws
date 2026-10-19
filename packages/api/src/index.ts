@@ -583,6 +583,12 @@ export type {
   SubscriptionView,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
+// WP429：站内通知
+export {
+  type NotificationActor,
+  type NotificationsPort,
+  notificationsRoutes,
+} from './routes/notifications.js'
 // WP254：下载源（官方源 / 国内源，每台机一份）
 export {
   type NpmRegistryPort,

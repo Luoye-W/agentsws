@@ -48,6 +48,7 @@ import { useConnectAs } from '@/components/connections/use-connect-as'
 import { DataMapPanel } from '@/components/data-map'
 import { useHoldsSiteChat } from '@/components/messages/site-chat'
 import { ModelsPanel } from '@/components/models/models-panel'
+import { NotificationPrefsCard } from '@/components/notifications/notification-prefs'
 import { BrandAssetsCard } from '@/components/org/brand-assets-card'
 import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { GrossMarginCard } from '@/components/org/gross-margin-card'
@@ -265,6 +266,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     title: 'sp.notifications',
     icon: Bell,
     items: [
+      {
+        // WP429：每类通知「站内 / 系统」两个开关
+        id: 'notify-prefs',
+        title: 'notify.prefs.title',
+        desc: 'sp.notify_prefs.desc',
+        keywords: '通知 铃铛 系统通知 弹窗 提醒 notification',
+        render: () => <NotificationPrefsCard />,
+      },
       {
         id: 'weekly-review',
         title: 'settings.weekly_review',

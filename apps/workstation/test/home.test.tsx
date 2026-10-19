@@ -376,7 +376,7 @@ describe('WP271 三种模式：首页', () => {
     expect(screen.queryByTestId('home-inprogress')).toBeNull()
   })
 
-  it('WP276 ② 同事互联：交给同事的结果一行一条；整页不像公司（决策 256）', async () => {
+  it('WP276 ② 同事互联：整页不像公司（决策 256）；WP429 交给同事的结果进铃铛、首页不再单出一行', async () => {
     modeState.orgs = [{ ...SOLO_ORG, members: 2, solo: false, mode: 'peers' }]
     peersState.from_me = [
       {
@@ -397,10 +397,8 @@ describe('WP271 三种模式：首页', () => {
     ]
     try {
       renderWithProviders(<HomePage />)
-      expect((await screen.findByTestId('handoff-notices')).textContent).toContain(
-        '李默 接下了「Acme 的报价」',
-      )
-      expect(screen.getByTestId('home-inprogress')).toBeTruthy()
+      expect(await screen.findByTestId('home-inprogress')).toBeTruthy()
+      expect(screen.queryByTestId('handoff-notices')).toBeNull()
       const text = document.body.textContent ?? ''
       for (const word of [
         '主管',

@@ -63,6 +63,7 @@
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
+    "packages/contracts/src/notifications.ts",
     "packages/contracts/src/official-plugins.ts",
     "packages/contracts/src/outbound.ts",
     "packages/contracts/src/own-sub.ts",
@@ -152,7 +153,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7e04765eea17e2955b9255c79eea07b5",
+  "source_digest": "a157405752ae35daf8b98923bf1da599",
   "objects": [
     {
       "id": "ad",

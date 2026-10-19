@@ -96,12 +96,20 @@ export interface SecretaryAssemblyOptions {
    * WP417（决策 1234）：同事问到的答案先给本人看一眼再回（缺省开）。`false` = 老行为当场答。
    */
   reviewFirst?: boolean
+  /**
+   * WP429：只是告诉一声的两件（同事回你了、你选了「直接找我」时有同事找你）走站内通知，不再出
+   * 「知道了」卡（卡 ≠ 通知）。不给就照旧出卡（老装配 / 测试）。
+   */
+  notify?(n: { to: PersonId; text: string; key: string; href: string }): void
   /** WP234（docs/54 §6.1）：一条分配归哪个岗位（`org.positionLabelOf`）；人员页岗位徽章按它归堆。 */
   positionOfAssignment?(a: {
     id: string
     role_id: RoleId
   }): { id: string; name: string } | undefined
 }
+
+/** WP429：问同事的地方（助理页「同事」那一栏）——「X 回你了」「X 找你」点了去这里。 */
+export const PEERS_HREF = '/assistant?peers=1'
 
 export interface SecretaryAssembly {
   secretary: Secretary
@@ -276,25 +284,39 @@ export function createSecretaryAssembly(options: SecretaryAssemblyOptions): Secr
         ],
       }),
     onDirect: (r) =>
-      secretaryCard({
-        to: r.person_id,
-        form: 'secretary_direct',
-        dedupe: r.id,
-        title: `${nameOf(r.asked_by)}找你：${short(r.question)}`,
-        summary: '你选了「直接找我」，助理没替你答。',
-        payload: { asked_id: r.id, asked_by: r.asked_by, question: r.question },
-        options: [{ id: 'ok', label: '知道了' }],
-      }),
+      options.notify !== undefined
+        ? options.notify({
+            to: r.person_id,
+            text: `${nameOf(r.asked_by)}找你：${short(r.question)}`,
+            key: `secretary:${r.id}`,
+            href: PEERS_HREF,
+          })
+        : secretaryCard({
+            to: r.person_id,
+            form: 'secretary_direct',
+            dedupe: r.id,
+            title: `${nameOf(r.asked_by)}找你：${short(r.question)}`,
+            summary: '你选了「直接找我」，助理没替你答。',
+            payload: { asked_id: r.id, asked_by: r.asked_by, question: r.question },
+            options: [{ id: 'ok', label: '知道了' }],
+          }),
     onReleased: (r) =>
-      secretaryCard({
-        to: r.asked_by,
-        form: 'secretary_reply',
-        dedupe: r.id,
-        title: `${nameOf(r.person_id)}回你了：${short(r.answer)}`,
-        summary: `你问的：${short(r.question)}`,
-        payload: { asked_id: r.id, about: r.person_id, question: r.question, answer: r.answer },
-        options: [{ id: 'ok', label: '知道了' }],
-      }),
+      options.notify !== undefined
+        ? options.notify({
+            to: r.asked_by,
+            text: `${nameOf(r.person_id)}回你了：${short(r.answer)}`,
+            key: `secretary:${r.id}`,
+            href: PEERS_HREF,
+          })
+        : secretaryCard({
+            to: r.asked_by,
+            form: 'secretary_reply',
+            dedupe: r.id,
+            title: `${nameOf(r.person_id)}回你了：${short(r.answer)}`,
+            summary: `你问的：${short(r.question)}`,
+            payload: { asked_id: r.id, about: r.person_id, question: r.question, answer: r.answer },
+            options: [{ id: 'ok', label: '知道了' }],
+          }),
     random: options.random,
     appendEvent: options.appendEvent,
     ...(store === undefined ? {} : { store }),

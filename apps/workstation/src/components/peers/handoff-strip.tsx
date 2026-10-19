@@ -3,25 +3,16 @@
  *
  * - {@link MatterHandoffBar}：事项页页头下面——发起人看到「等 Y 接 · 撤回」；接手人看到
  *   「X 想把这件事交给你 · 接下 / 不接」（同一件事卡片队列里也有那张卡，这里只是就地能点）。
- * - {@link HandoffNotices}：首页一行通知——接下 / 不接 / 退回了，点「知道了」就不再出（不是卡）。
+ * - 接下 / 不接 / 退回了、上级派活：WP429 起进顶栏铃铛（站内通知），首页不再单出一行。
  * - {@link HandoffDecide}：卡片上的动作行——选项是自己的岗位（只有一个就是「接下」）+「不接」
  *   （理由可选：太忙 / 不归我 / 自己写一句）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getPositions } from '@/lib/api'
-import {
-  acceptHandoff,
-  declineHandoff,
-  type HandoffKind,
-  type HandoffView,
-  listHandoffs,
-  seenHandoff,
-  withdrawHandoff,
-} from '@/lib/api-peers'
+import { acceptHandoff, declineHandoff, listHandoffs, withdrawHandoff } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 
 export const HANDOFFS_KEY = ['handoffs'] as const
@@ -315,65 +306,5 @@ export function MatterHandoffBar({
         </>
       )}
     </div>
-  )
-}
-
-/** 一行通知的文字（接下 / 不接 / 退回）。 */
-export function noticeText(
-  h: HandoffView,
-  t: (k: string, v?: Record<string, string>) => string,
-): string {
-  const vars = { name: h.to_label, title: h.title }
-  if (h.handoff.state === 'accepted') return t('handoff.notice.accepted', vars)
-  if (h.handoff.state === 'returned') return t('handoff.notice.returned', vars)
-  return h.handoff.reason === undefined
-    ? t('handoff.notice.declined', vars)
-    : t('handoff.notice.declined.why', { ...vars, reason: h.handoff.reason })
-}
-
-/** 首页那几行通知（不是卡：看一眼、点掉）。没有就什么都不出。 */
-export function HandoffNotices(): React.ReactNode {
-  const { t } = useApp()
-  const client = useQueryClient()
-  const lists = useQuery({ queryKey: HANDOFFS_KEY, queryFn: () => listHandoffs(), retry: false })
-  const seen = useMutation({
-    mutationFn: (h: { kind: HandoffKind; id: string }) => seenHandoff(h.kind, h.id),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: HANDOFFS_KEY })
-    },
-  })
-  const notices = [
-    ...(lists.data?.from_me ?? []).filter((h) => h.handoff.state !== 'offered'),
-    // WP277（决策 241）：③ 里上级派给我的——直接生效，没有卡，这里一行告诉我一声
-    ...(lists.data?.dispatched ?? []),
-  ]
-  if (notices.length === 0) return null
-  return (
-    <ul className="flex flex-col gap-1" data-testid="handoff-notices">
-      {notices.map((h) => (
-        <li
-          key={`${h.kind}:${h.id}`}
-          className="flex items-center gap-2 rounded-lg bg-ws-surface px-3 py-1.5 text-[13px]"
-          data-state={h.handoff.state}
-        >
-          <span className="min-w-0 flex-1 truncate">
-            {h.handoff.dispatched === true
-              ? t('handoff.dispatched', { name: h.from_label, title: h.title })
-              : noticeText(h, t)}
-          </span>
-          <button
-            type="button"
-            aria-label={t('handoff.notice.dismiss')}
-            title={t('handoff.notice.dismiss')}
-            className="text-ws-muted-fg hover:text-foreground"
-            onClick={() => {
-              seen.mutate({ kind: h.kind, id: h.id })
-            }}
-          >
-            <X aria-hidden className="size-3.5" />
-          </button>
-        </li>
-      ))}
-    </ul>
   )
 }

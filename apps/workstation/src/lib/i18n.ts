@@ -34,6 +34,7 @@ import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { MODELS_EN, MODELS_ZH } from './i18n-models'
+import { NOTIFY_EN, NOTIFY_ZH } from './i18n-notifications'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
@@ -8932,6 +8933,8 @@ const TABLES: Record<Lang, Table> = {
     ...TABLE_FILTER_ZH,
     // WP406：岗位更新
     ...CONTENT_DIGEST_ZH,
+    // WP429：站内通知（铃铛、面板、设置 → 通知开关）
+    ...NOTIFY_ZH,
   },
   en: {
     ...en,
@@ -8982,6 +8985,7 @@ const TABLES: Record<Lang, Table> = {
     ...AMAZON_LISTING_EN,
     ...TABLE_FILTER_EN,
     ...CONTENT_DIGEST_EN,
+    ...NOTIFY_EN,
   },
 }
 
