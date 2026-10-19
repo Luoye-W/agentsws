@@ -102,6 +102,7 @@ import type {
   Halt,
   ImageProvider,
   KolChannel,
+  MatterId,
   OrganizationMode,
   Person,
   PersonaSubject,
@@ -118,6 +119,7 @@ import type {
   StartRun,
   StorefrontPlatform,
   StoreProbeResult,
+  TodoId,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
@@ -379,6 +381,7 @@ import {
   readLock,
 } from './browserskill-install.js'
 import { createReasonJudge, similarApprovals } from './card-follow.js'
+import { catalogEntry } from './catalog.js'
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
@@ -585,6 +588,15 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import {
+  CREDITS_LOW_KEY,
+  connectionBrokenNotification,
+  connectionKey,
+  createNotifications,
+  creditsLowNotification,
+  type NotificationsService,
+  runEndedNotification,
+} from './notifications.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import {
@@ -1208,6 +1220,8 @@ export interface ServerOptions {
   random?: () => number
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
+  /** WP429：换一份站内通知（测试注入）；不给按 `dbDir` 建（`notifications.db`）。 */
+  notifications?: NotificationsService
   /**
    * WP415（决策 1236）：执行兜底怎么走。`live` = 真用（没有真执行器的卡出卡就标「还没接通」，
    * 批了也照实回「没做」，绝不进内存空桩回成功）；`demo` = 演示（空桩照走、标「演示」）；
@@ -1684,6 +1698,8 @@ export interface Server {
   learning: LearningAssembly
   /** WP320：AI 随工作自动记（提示词里的「记忆」那一段 + 跑完提炼写入 + 「自动记忆」开关）。 */
   autoMemory: AutoMemory
+  /** WP429：站内通知（测试直接发 / 读；界面走 `/v1/notifications*`）。 */
+  notifications: NotificationsService
   models: ModelGatewayApi
   txn: Txn
   /** WP323：发出记录与记录去处（测试直接看它；界面走 `/v1/outbound/*`）。 */
@@ -1981,6 +1997,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
+  /*
+   * WP429：站内通知（顶栏铃铛）。一台机器一张表、每人各自的；事件日志的每一条都过一下
+   * （同事接下了 / 审批到你 / 岗位更新到了 / 模型订阅要重新登录…），别的由各装配处直接发。
+   */
+  const notifications =
+    options.notifications ??
+    createNotifications({ clock, random, dbPath: file('notifications.db') })
 
   // 21 §1：所有模块的事件都进同一条日志；请求内的 trace_id 覆盖模块自造的那个。
   const appendEvent = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void => {
@@ -1993,6 +2016,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         trace_id: traceScope.current() ?? rest.correlation.trace_id,
       },
     })
+    // WP429：该告诉谁一声的事进站内通知（不抛、不等）
+    notifications.onEvent(e)
     // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
@@ -6453,6 +6478,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(rbLoginUrl === undefined ? {} : { loginUrl: rbLoginUrl }),
             ...(rbWhoamiUrl === undefined ? {} : { whoamiUrl: rbWhoamiUrl }),
           })
+    /** WP429：上一次看到的余额是不是「快用完」（启动后第一次看到快用完也算一次变化）。 */
+    let creditsLow: boolean | undefined
     const ownCloud = createCloud({
       ...(readonlyBrowser !== undefined
         ? { readonlyBrowserStatus: () => readonlyBrowser.status() }
@@ -6476,6 +6503,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
       pricingCatalog,
+      /*
+       * WP429：积分从够用变成快用完（云钱包 `low_balance`）→ 告诉所有者一声；回到够用就收成已读。
+       * 只在「变了」那一刻发（余额每几分钟取一次，不能每次都发）。
+       */
+      onBalance: (b) => {
+        const was = creditsLow
+        creditsLow = b.low_balance
+        if (!b.low_balance) {
+          if (was === true) notifications.settle(ws, CREDITS_LOW_KEY)
+          return
+        }
+        if (was === true) return
+        void identity
+          .getWorkspace(ws)
+          .then((w) => {
+            if (w?.owner_id !== undefined)
+              notifications.notify(creditsLowNotification(ws, w.owner_id, b.available))
+          })
+          .catch(() => undefined)
+      },
       // WP194：打云时带「谁 / 哪个岗位」；公司「积分」页只给 owner / admin；改额度顺手推公司时区
       positionOf: (role_id) => cloudPositionOf(ws, role_id),
       canManage: (actor) => creditsRoleOf(actor.person_id, ws),
@@ -6625,6 +6672,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(options.runtime?.dshMode === undefined ? {} : { dshMode: options.runtime.dshMode }),
             // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
             runLimits: () => runLimitsSettings.get(),
+            // WP429：运行收尾告诉跑它的人一声（站内通知）
+            onRunEnded: (e) => {
+              const n = runEndedNotification(ws, { ...e, person_id: e.person_id as PersonId })
+              if (n !== undefined) notifications.notify(n)
+            },
             // WP320：「记忆」那一段 + 跑完自动记
             memory: {
               section: (actor, loaded) => autoMemory.section(actor, loaded),
@@ -7427,6 +7479,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections.onConnectionChange(() => {
       void storeMarkets.check()
     })
+    /*
+     * WP429：连接从「连着」变成要重连 / 停用 → 告诉工作区所有者一声（站内通知，点了到连接页）；
+     * 又连上了就把那条收成已读。启动时那一份只当底，不发。
+     */
+    {
+      const seen = new Map(connections.liveConnections().map((c) => [c.id, c.status]))
+      connections.onConnectionChange(() => {
+        const now = connections.liveConnections()
+        const broken: { id: string; label: string }[] = []
+        for (const c of now) {
+          const before = seen.get(c.id)
+          if (before === 'active' && c.status !== 'active')
+            broken.push({ id: c.id, label: catalogEntry(c.service)?.label ?? c.service })
+          if (c.status === 'active' && before !== undefined && before !== 'active')
+            notifications.settle(ws, connectionKey(c.id))
+          seen.set(c.id, c.status)
+        }
+        if (broken.length === 0) return
+        void identity
+          .getWorkspace(ws)
+          .then((w) => {
+            if (w?.owner_id === undefined) return
+            for (const c of broken)
+              notifications.notify(connectionBrokenNotification(ws, w.owner_id, c))
+          })
+          .catch(() => undefined)
+      })
+    }
     // WP324（决策 690）：连接清单变了（在连接页 / 第三栏连好了）→ 还在等的连接卡复查一遍，缺的都连上了就接着做
     connections.onConnectionChange(() => {
       void setupCardsOf(ws)
@@ -10041,6 +10121,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   const brandModules: BrandModules = brands
   /*
+   * WP429：站内通知从事件里认人、认标题——按品牌现取（名字走身份层、卡走审批总线、
+   * 交出去的那件事走那个品牌的工作模型；那个品牌还没装起来就只给标题兜底）。
+   */
+  notifications.fallback((ws) => ({
+    personName: async (id) => (await identity.getPerson(id))?.name || undefined,
+    owners: async () => {
+      const owner = (await identity.getWorkspace(ws))?.owner_id
+      return owner === undefined ? [] : [owner]
+    },
+    approval: (id) => approvals.get(id),
+    handoff: (ref) => {
+      const brandWork = brandModules.peek(ws)?.work
+      if (ref.kind === 'matter') {
+        const m = brandWork?.getMatter(ref.id as MatterId)
+        return m === undefined
+          ? undefined
+          : { title: m.title, href: `/matters/${encodeURIComponent(m.id)}` }
+      }
+      const t = brandWork?.getTodo(ref.id as TodoId)
+      if (t === undefined) return undefined
+      return {
+        title: t.title,
+        href: t.matter_id === undefined ? '/todos' : `/matters/${encodeURIComponent(t.matter_id)}`,
+      }
+    },
+  }))
+  /*
    * WP134：上次选过「用我的 DeepSeek 账号登录」就把官方模块挂回来（只读本机凭据库，不出网）。
    * WP150：挪到建品牌**之前**——运行时在建品牌那一刻问一次"有没有模型"定走 direct 还是 stub，
    * 挂回来之前问，只接了 DeepSeek 账号的机器重启后就一直是 stub（账号任务根本跑不到模型上）。
@@ -12213,6 +12320,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       tz_offset_minutes,
       // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+      // WP429：「X 回你了」「X 找你」只是告诉一声——进站内通知，不出「知道了」卡
+      notify: (n) => {
+        notifications.notify({
+          workspace_id: ws,
+          person_id: n.to,
+          category: 'team',
+          text: n.text,
+          key: n.key,
+          href: n.href,
+        })
+      },
       ...(brandDirOf(dbDir, ws, workspace.id) === undefined
         ? {}
         : { dbDir: brandDirOf(dbDir, ws, workspace.id) as string }),
@@ -15021,6 +15139,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         enabled: autoMemorySettings.set(actor.workspace_id, actor.person_id, enabled),
       }),
     },
+    // WP429：站内通知（铃铛）与「设置 → 通知」开关
+    notifications: notifications.port,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -15447,6 +15567,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills,
     learning,
     autoMemory,
+    notifications,
     models,
     txn,
     outbound: outboundLog,
@@ -15649,6 +15770,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await subscription.close()
       await deepseekAccount.close()
       outboundLog.close()
+      // WP429：注入的那一份由测试自己关
+      if (options.notifications === undefined) notifications.close()
       outboundStore.close()
       redditWatchStore.close()
       secrets.close()

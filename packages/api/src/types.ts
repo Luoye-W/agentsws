@@ -96,6 +96,7 @@ import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { MessagesPort } from './routes/messages.js'
 import type { ModelsPort } from './routes/models.js'
+import type { NotificationsPort } from './routes/notifications.js'
 import type { NpmRegistryPort } from './routes/npm-registry.js'
 import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
@@ -1106,6 +1107,8 @@ export interface GatewayDeps {
   imageHosts?: GenuiImageHostsPort
   /** WP320：「自动记忆」开关。没装配时 `/v1/settings/auto-memory` 回 not_implemented。 */
   autoMemory?: AutoMemoryPort
+  /** WP429：站内通知。没装配时 `/v1/notifications*` 回 not_implemented。 */
+  notifications?: NotificationsPort
   /**
    * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。

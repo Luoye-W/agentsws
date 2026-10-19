@@ -71,6 +71,7 @@ import { meetingRoutes } from './routes/meetings.js'
 // WP113（63）：消息——统一收件处 `/v1/messages/*`
 import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
+import { notificationsRoutes } from './routes/notifications.js'
 import { npmRegistryRoutes } from './routes/npm-registry.js'
 import { officialPluginsRoutes } from './routes/official-plugins.js'
 import { onboardingRoutes } from './routes/onboarding.js'
@@ -245,6 +246,8 @@ export function collectRoutes(): Route[] {
     ...runLimitsRoutes(),
     ...genuiImageHostsRoutes(),
     ...autoMemoryRoutes(),
+    // WP429：站内通知（铃铛）与「设置 → 通知」开关
+    ...notificationsRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）
