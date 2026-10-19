@@ -16,9 +16,9 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.queue.future': '要选以后的时间',
   'pos2.queue.cancel': '取消',
   'pos2.queue.confirm': '排上',
-  'pos2.status.new': '刚建好，还没开工 · {n} 条职责',
   'pos2.settings': '岗位设置',
-  'pos2.banner.missing': '还缺必需的连接：{names}',
+  // WP431：不再说「必需」（与 WP424 首次设置同一套说法）
+  'pos2.banner.missing': '还没连上：{names}',
   'pos2.banner.go': '去连接',
   // WP288（决策 326）：没有页签了；连接正常 = 标题旁一个绿勾（悬停这两句）
   'pos2.settings.back': '返回',
@@ -216,9 +216,8 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.queue.future': 'Pick a time in the future',
   'pos2.queue.cancel': 'Cancel',
   'pos2.queue.confirm': 'Schedule',
-  'pos2.status.new': 'Just set up, nothing started · {n} duties',
   'pos2.settings': 'Position settings',
-  'pos2.banner.missing': 'Missing a required connection: {names}',
+  'pos2.banner.missing': 'Not connected yet: {names}',
   'pos2.banner.go': 'Connect',
   'pos2.settings.back': 'Back',
   'pos2.tick.shopify': 'Shopify connected',

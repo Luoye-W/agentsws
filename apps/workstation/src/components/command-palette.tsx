@@ -17,11 +17,27 @@
  * - 最后一项「让 AI 找回『…』」：拿这句模糊的话去找归档的，给几张候选卡，**点一张才放回来**；
  * - 左栏职责行的「+」打开的是「写一句话」这一格（岗位与职责已经选好），回车就交出去。
  *   这三处都是确定的动作——⌘K 仍然不是聊天框。
+ *
+ * WP431（Luoye 10-19，照 Claude 桌面版的搜索弹窗）：左上角「搜索」图标与 ⌘K / Ctrl+K 打开的就是这里——
+ * 居中、顶上一行大输入框、下面一张列表（每行左图标 + 标题 + 右边时间）、底下一行「↵ 打开 · Esc 关闭」；
+ * **没打字时最上面是「最近」**（最近动过的事项 / 对话，同左栏原来那一串的接口 `/v1/work/rail`），
+ * 打字后对话与任务走原来的全文搜（`/v1/work/search`）。后端一个没加。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Sparkles } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Command as CommandPrimitive } from 'cmdk'
+import {
+  Archive,
+  BookOpen,
+  CornerDownLeft,
+  Home,
+  MessageCircle,
+  MessagesSquare,
+  Search,
+  Settings,
+  Sparkles,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
@@ -63,7 +79,36 @@ import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
 import { myAssignments } from '@/lib/positions'
-import { findArchivedWork, RAIL_KEY, searchWork } from '@/lib/work-archive'
+import { cn } from '@/lib/utils'
+import { findArchivedWork, getWorkRail, RAIL_KEY, searchWork } from '@/lib/work-archive'
+
+/** 右边那个时间（照 Claude：「刚刚 / 5 分钟 / 3 小时 / 2 天」，再早写月日）。 */
+export function shortAgo(
+  iso: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  lang: 'zh' | 'en',
+  now: number = Date.now(),
+): string {
+  const at = Date.parse(iso)
+  if (!Number.isFinite(at)) return ''
+  const min = Math.max(0, Math.floor((now - at) / 60_000))
+  if (min < 1) return t('ago.now')
+  if (min < 60) return t('ago.m', { n: min })
+  const h = Math.floor(min / 60)
+  if (h < 24) return t('ago.h', { n: h })
+  const d = Math.floor(h / 24)
+  if (d < 7) return t('ago.d', { n: d })
+  return new Date(at).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  })
+}
+
+/** 搜索弹窗里一行的样子（照 Claude：左图标、标题、右边灰字）。 */
+// 最后那个是 cmdk 行自带的勾（这里用不着，不占位）
+const ROW = 'gap-2.5 rounded-lg! px-2.5 py-2 text-[13.5px] [&>svg:last-child]:hidden'
+const ROW_ICON = 'size-4 shrink-0 text-ws-muted-fg'
+const ROW_RIGHT = 'ml-auto shrink-0 pl-3 text-[12px] text-ws-muted-fg'
 
 /** WP213：⌘K 里高亮的那一项，岗位 / 职责图标的点睛那一笔换品牌色（docs/36 §8.3）。 */
 const SELECTED_ACCENT = 'data-[selected=true]:[--ia:var(--ws-brand)]'
@@ -156,6 +201,31 @@ export function CommandPalette({
     queryFn: () => searchWork(debounced, 8),
     retry: false,
   })
+  // WP431：没打字时列「最近」（左栏原来那一串的同一个接口与查询键，缓存共用）
+  const recent = useQuery({
+    queryKey: RAIL_KEY,
+    queryFn: () => getWorkRail(),
+    enabled: open,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const recents = (recent.data?.positions ?? [])
+    .flatMap((p) => p.duties.flatMap((d) => d.matters))
+    .sort((a, b) => b.last_activity.localeCompare(a.last_activity))
+    .slice(0, 8)
+  /** 照 Claude：一打开高亮的是「最近」第一条（最近那一串是异步到的，到了再把高亮挪过去；人动过就不管）。 */
+  const [picked, setPicked] = useState('')
+  const seeded = useRef(false)
+  const firstRecent = recents[0] === undefined ? '' : `recent ${recents[0].id} ${recents[0].title}`
+  useEffect(() => {
+    if (!open) {
+      seeded.current = false
+      return
+    }
+    if (seeded.current || firstRecent === '' || search !== '') return
+    seeded.current = true
+    setPicked(firstRecent)
+  }, [open, firstRecent, search])
   const found = useQuery({
     queryKey: ['matter', 'recall', recall],
     enabled: open && recall !== undefined,
@@ -373,15 +443,50 @@ export function CommandPalette({
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.placeholder')}>
-      <Command>
-        <CommandInput
-          placeholder={t('command.placeholder')}
-          value={search}
-          onValueChange={setSearch}
-        />
-        <CommandList>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('command.placeholder')}
+      className="top-[14%] gap-0 sm:max-w-[640px]"
+    >
+      <Command
+        className="rounded-xl! p-0"
+        data-testid="search-dialog"
+        value={picked}
+        onValueChange={setPicked}
+      >
+        {/* 照 Claude：顶上一行大输入框（不套框），下面一条细线 */}
+        <div className="flex h-12 items-center gap-2.5 border-b border-ws-line px-4">
+          <Search aria-hidden className="size-4 shrink-0 text-ws-muted-fg" />
+          <CommandPrimitive.Input
+            data-slot="command-input"
+            placeholder={t('search.placeholder')}
+            value={search}
+            onValueChange={setSearch}
+            className="h-full w-full bg-transparent text-[15px] outline-hidden placeholder:text-ws-muted-fg"
+          />
+        </div>
+        <CommandList className="max-h-[min(60vh,440px)] p-1.5">
           <CommandEmpty>{t('command.empty')}</CommandEmpty>
+          {search.trim() !== '' || recents.length === 0 ? null : (
+            <CommandGroup heading={t('search.recent')}>
+              {recents.map((m) => (
+                <CommandItem
+                  key={m.id}
+                  value={`recent ${m.id} ${m.title}`}
+                  data-testid="command-recent"
+                  className={ROW}
+                  onSelect={() => {
+                    go(`/matters/${encodeURIComponent(m.id)}`)
+                  }}
+                >
+                  <MessagesSquare aria-hidden className={ROW_ICON} />
+                  <span className="min-w-0 truncate">{m.title}</span>
+                  <span className={ROW_RIGHT}>{shortAgo(m.last_activity, t, lang)}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           {/* WP207：对话与任务（服务端全文搜；归档的也在，标出来） */}
           {debounced.length < 2 || (works.data ?? []).length === 0 ? null : (
             <CommandGroup forceMount heading={t('command.group.work')}>
@@ -392,13 +497,17 @@ export function CommandPalette({
                   value={`work ${m.id} ${m.title}`}
                   data-testid="command-work"
                   data-archived={m.archived_at === undefined ? undefined : 'true'}
+                  className={ROW}
                   onSelect={() => {
                     go(`/matters/${encodeURIComponent(m.id)}`)
                   }}
                 >
-                  <span className="truncate">{m.title}</span>
-                  {m.archived_at === undefined ? null : (
-                    <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  <MessagesSquare aria-hidden className={ROW_ICON} />
+                  <span className="min-w-0 truncate">{m.title}</span>
+                  {m.archived_at === undefined ? (
+                    <span className={ROW_RIGHT}>{shortAgo(m.last_activity, t, lang)}</span>
+                  ) : (
+                    <span className={cn(ROW_RIGHT, 'flex items-center gap-1')}>
                       <Archive aria-hidden className="size-3" />
                       {t('archive.badge')}
                     </span>
@@ -423,17 +532,21 @@ export function CommandPalette({
             <CommandItem
               value={`${t('command.new_chat')} ${t('nav.free_chat')} new chat`}
               data-testid="command-new-chat"
+              className={ROW}
               onSelect={() => {
                 go('/assistant?new=1')
               }}
             >
+              <MessageCircle aria-hidden className={ROW_ICON} />
               {t('command.new_chat')}
             </CommandItem>
             <CommandItem
+              className={ROW}
               onSelect={() => {
                 go('/')
               }}
             >
+              <Home aria-hidden className={ROW_ICON} />
               {t('nav.home')}
             </CommandItem>
             {/* WP70：岗位排在职责前面 */}
@@ -444,7 +557,7 @@ export function CommandPalette({
                   key={p.position_id}
                   value={`${lang === 'en' ? p.name.en : p.name.zh} ${p.position_id}`}
                   data-testid="command-position"
-                  className={SELECTED_ACCENT}
+                  className={cn(ROW, SELECTED_ACCENT)}
                   onSelect={() => {
                     go(`/positions/${first}`)
                   }}
@@ -466,7 +579,7 @@ export function CommandPalette({
                     key={`${p.position_id}/${r.role_id}`}
                     value={`${r.role_name} ${r.role_id}`}
                     data-testid="command-duty"
-                    className={SELECTED_ACCENT}
+                    className={cn(ROW, SELECTED_ACCENT)}
                     onSelect={() => {
                       go(`/positions/${r.my_assignment_id as string}`)
                     }}
@@ -507,10 +620,12 @@ export function CommandPalette({
                 value={`${t(p.key)} ${p.to}`}
                 data-testid="command-page"
                 data-to={p.to}
+                className={ROW}
                 onSelect={() => {
                   go(p.to)
                 }}
               >
+                <p.icon aria-hidden className={ROW_ICON} />
                 {t(p.key)}
               </CommandItem>
             ))}
@@ -551,10 +666,12 @@ export function CommandPalette({
                 value={`${t('nav.settings')} settings`}
                 data-testid="command-setting"
                 data-to="/settings"
+                className={ROW}
                 onSelect={() => {
                   go('/settings')
                 }}
               >
+                <Settings aria-hidden className={ROW_ICON} />
                 {t('nav.settings')}
               </CommandItem>
             ) : (
@@ -565,14 +682,14 @@ export function CommandPalette({
                     value={`${i.haystack} ${sec.def.id}:${i.def.id}`}
                     data-testid="command-setting"
                     data-to={settingsHref(sec.def.id, i.def.id)}
+                    className={ROW}
                     onSelect={() => {
                       go(settingsHref(sec.def.id, i.def.id))
                     }}
                   >
-                    {i.title}
-                    {i.title === sec.title ? null : (
-                      <span className="ml-2 text-xs text-muted-foreground">{sec.title}</span>
-                    )}
+                    <Settings aria-hidden className={ROW_ICON} />
+                    <span className="min-w-0 truncate">{i.title}</span>
+                    {i.title === sec.title ? null : <span className={ROW_RIGHT}>{sec.title}</span>}
                   </CommandItem>
                 )),
               )
@@ -647,12 +764,14 @@ export function CommandPalette({
                 value={`${translate('zh', `help.${slug}.title`)} ${translate('en', `help.${slug}.title`)} ${slug}`}
                 data-testid="command-help"
                 data-slug={slug}
+                className={ROW}
                 onSelect={() => {
                   onOpenChange(false)
                   // 右栏不在（极少：单测里只渲染面板）就开不出来，跳去设置页也没意义——只关面板
                   rail.openAddress(helpAddress(slug))
                 }}
               >
+                <BookOpen aria-hidden className={ROW_ICON} />
                 {t(`help.${slug}.title`)}
               </CommandItem>
             ))}
@@ -664,11 +783,12 @@ export function CommandPalette({
                 forceMount
                 value={`recall ${search}`}
                 data-testid="command-recall-item"
+                className={ROW}
                 onSelect={() => {
                   setRecall(search.trim())
                 }}
               >
-                <Sparkles aria-hidden className="size-3.5" />
+                <Sparkles aria-hidden className={ROW_ICON} />
                 {t('command.recall', { q: search.trim() })}
               </CommandItem>
             </CommandGroup>
@@ -690,6 +810,24 @@ export function CommandPalette({
             </CommandGroup>
           )}
         </CommandList>
+        {/* 照 Claude：底下一行按键提示 */}
+        <div
+          className="flex items-center justify-end gap-3 border-t border-ws-line px-3 py-2 text-[11.5px] text-ws-muted-fg"
+          data-testid="search-footer"
+        >
+          <span className="inline-flex items-center gap-1">
+            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-ws-line px-1 font-sans">
+              <CornerDownLeft aria-hidden className="size-3" />
+            </kbd>
+            {t('search.open')}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="inline-flex h-5 items-center justify-center rounded border border-ws-line px-1 font-sans text-[10.5px]">
+              Esc
+            </kbd>
+            {t('search.close')}
+          </span>
+        </div>
       </Command>
     </CommandDialog>
   )

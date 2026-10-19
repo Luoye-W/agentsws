@@ -4,7 +4,7 @@
  * `brand-mark.test.tsx` 管的是标记本身画得对不对；这一份管的是"哪一处该出哪种姿态"。
  * 每处只有一种，写在 docs/36 §12 那张表里——摆错位置的动效比没有动效更吵。
  */
-import { act, cleanup, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
@@ -27,26 +27,57 @@ const positions: PositionSummary[] = [
   },
 ]
 
-describe('左栏顶部：标记 + 字标，点了回首页', () => {
-  it('是一条指向 / 的链接，里面一个待机标记加一个字标', () => {
+describe('左栏顶部（WP431 照 Claude）：不再有标记与字标，是左栏开关 + 搜索', () => {
+  it('两颗图标；没有「Agents 工坊」字样；点搜索打开搜索弹窗', async () => {
     renderWithProviders(
       <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <div>主区</div>
       </AppShell>,
     )
-    const home = screen.getByTestId('brand-home')
-    expect(home.getAttribute('href')).toBe('/')
-    // 读屏听到的是「Agents 工坊」，眼睛看到的是标记 + 同一个名字
-    expect(home.getAttribute('aria-label')).toBe('Agents 工坊')
-    expect(home.textContent).toBe('Agents 工坊')
+    const row = screen.getByTestId('rail-brand-row')
+    expect(row.textContent).not.toContain('Agents 工坊')
+    expect(row.querySelector('svg[data-testid="brand-mark"]')).toBeNull()
+    expect(screen.queryByTestId('brand-home')).toBeNull()
+    expect(within(row).getByTestId('sidebar-toggle').getAttribute('aria-label')).toBe('收起左栏')
+    fireEvent.click(within(row).getByTestId('shell-search'))
+    expect(await screen.findByTestId('search-dialog')).toBeTruthy()
+  })
 
-    const svg = home.querySelector('svg[data-testid="brand-mark"]')
-    expect(svg).not.toBeNull()
-    // WP195：logo 改成**待机**（Luoye 09-29「静态的 logo 其实不好看」）——大部分时间静止，隔几秒动一下
-    expect((svg as SVGElement).getAttribute('data-motion')).toBe('idle')
-    // 规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来
-    expect((svg as SVGElement).getAttribute('width')).toBe('24')
-    expect((svg as SVGElement).getAttribute('data-variant')).toBe('gradient')
+  it('左栏开关：收成图标列（不是整条消失），本机记住；两颗图标挪到顶栏最左', () => {
+    // jsdom 这一档的 localStorage 是个空对象：装一个看得见的替身
+    const box = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => box.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        box.set(k, v)
+      },
+      removeItem: (k: string) => {
+        box.delete(k)
+      },
+    })
+    const { unmount } = renderWithProviders(
+      <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
+        <div>主区</div>
+      </AppShell>,
+    )
+    fireEvent.click(screen.getByTestId('sidebar-toggle'))
+    const aside = screen.getByTestId('sidebar')
+    expect(aside.getAttribute('data-collapsed')).toBe('true')
+    expect(aside.className).toContain('w-[52px]')
+    expect(screen.getByTestId('main-nav')).toBeTruthy()
+    expect(within(screen.getByTestId('top-bar')).getByTestId('shell-search')).toBeTruthy()
+    expect(box.get('agentsws.sidebar.collapsed')).toBe('1')
+    unmount()
+    renderWithProviders(
+      <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
+        <div>主区</div>
+      </AppShell>,
+    )
+    expect(screen.getByTestId('sidebar').getAttribute('data-collapsed')).toBe('true')
+    fireEvent.click(screen.getByTestId('sidebar-toggle'))
+    expect(screen.getByTestId('sidebar').getAttribute('data-collapsed')).toBeNull()
+    expect(box.get('agentsws.sidebar.collapsed')).toBe('0')
+    vi.unstubAllGlobals()
   })
 })
 

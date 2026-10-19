@@ -179,7 +179,8 @@ const me = (owner: boolean): Me => ({
     : [],
 })
 
-function renderShell(owner = true): void {
+// WP431：右侧面板（卡片堆）只在岗位 / 职责 / 事项页上有——默认在岗位页上测
+function renderShell(owner = true, route = '/positions/asg_yt'): void {
   renderWithProviders(
     <AppShell
       positions={POSITIONS}
@@ -191,7 +192,7 @@ function renderShell(owner = true): void {
     >
       <div>主区</div>
     </AppShell>,
-    '/',
+    route,
     'asg_yt',
   )
 }
@@ -387,13 +388,14 @@ describe('WP207 ⌘K：搜到归档的、让 AI 找回', () => {
     const user = userEvent.setup()
     renderShell(true)
     fireEvent.keyDown(document, { key: 'k', metaKey: true })
-    const input = await screen.findByPlaceholderText('搜卡片、岗位、教程，或加一个数字块…')
+    const input = await screen.findByPlaceholderText('搜索事项、对话、岗位、设置…')
     await user.type(input, '红人样品')
     const works = await screen.findAllByTestId('command-work')
     // 顺序交给 cmdk 按匹配度排；这里只认「哪条标了已归档」
     const flags = Object.fromEntries(
       works.map((w) => [
-        w.textContent?.replace('已归档', '') ?? '',
+        // WP431：每行右边是时间 / 「已归档」，标题是第一个 span
+        w.querySelector('span')?.textContent ?? '',
         w.getAttribute('data-archived'),
       ]),
     )

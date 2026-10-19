@@ -57,6 +57,7 @@ import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
 import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
+import { TOPBAR_EN, TOPBAR_ZH } from './i18n-topbar'
 
 export type Lang = 'zh' | 'en'
 
@@ -8935,6 +8936,8 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_ZH,
     // WP429：站内通知（铃铛、面板、设置 → 通知开关）
     ...NOTIFY_ZH,
+    // WP431：顶栏标题下拉、左上角、搜索弹窗
+    ...TOPBAR_ZH,
   },
   en: {
     ...en,
@@ -8986,6 +8989,7 @@ const TABLES: Record<Lang, Table> = {
     ...TABLE_FILTER_EN,
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
+    ...TOPBAR_EN,
   },
 }
 

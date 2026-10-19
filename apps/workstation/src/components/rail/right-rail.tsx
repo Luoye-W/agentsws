@@ -16,6 +16,10 @@
  * WP412（决策 1035 更正）：最右是专门的**面板开关**（侧栏图标，红 / 黄点汇总挂在它上面）；「⋮」回到溢出菜单，
  * 只收不常用的工具（教程、记忆、第三方面板；窄于 900 时露出来的工具也收进来）。
  *
+ * WP431（Luoye 10-19，照 Claude 桌面版顶栏右边那一排）：从左到右——**面板开关**（开着时一块浅底；只有岗位 / 职责 /
+ * 事项页才有，别的页没有右侧面板）→ 一条很浅的细竖线 → 露出的工具（浏览器、变更审阅）→ 外壳给的插槽（WP429 的通知铃铛、
+ * 这一页的「岗位设置 / 职责设置」）→「⋮」。面板本身没有标题条、关闭叉与放大钮，开关只在顶栏。
+ *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
 import {
@@ -31,11 +35,11 @@ import {
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { NotificationBell } from '@/components/notifications/notification-bell'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
 import { RailCards } from '@/components/rail/rail-cards'
+import { railPageKind } from '@/components/rail/rail-layout'
 import { RailPanel } from '@/components/rail/rail-panel'
 import { type RailScope, type RailTier, railContextOf } from '@/components/rail/rail-scope'
 import { RAIL_CARDS, useRailState } from '@/components/rail/rail-state'
@@ -50,9 +54,10 @@ import {
   type RailPanelBodyProps,
   resolvePanelId,
 } from '@/components/rail/registry'
+import { TOPBAR_ICON, TOPBAR_ICON_ACTIVE, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { clampRailWidth, clampWideWidth, RIGHT_RAIL_WIDE_DEFAULT } from '@/lib/ui-state'
+import { clampRailWidth } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
 
 function useMedia(query: string): boolean {
@@ -136,7 +141,14 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
  *   露出来的那几个也收进来。它**不再**开关面板；
  * - 最右一个专门的**面板开关**（侧栏图标）：点它开 / 关右侧面板；任何一张卡有红 / 黄点时汇总点挂在它上面（红的压过黄的）。
  */
-export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }): ReactNode {
+export function RailTopBar({
+  instances,
+  extra,
+}: {
+  instances?: PositionInstanceData[]
+  /** WP431：外壳插进来的那几颗（通知铃铛的位置、这一页的设置按钮），排在「⋮」前面。 */
+  extra?: ReactNode
+}): ReactNode {
   ensureBuiltinPanels()
   const { t } = useApp()
   const rail = useRailState()
@@ -180,6 +192,8 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
     setMenu(false)
     rail.show(panel)
   }
+  // WP431：只有岗位 / 职责 / 事项页有右侧面板（卡片堆），别的页不出面板开关
+  const hasPanel = railPageKind(ctx.pathname) !== undefined
   return (
     <nav
       className="flex items-center gap-0.5"
@@ -187,6 +201,35 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
       data-testid="right-rail"
       data-open={rail.open ?? ''}
     >
+      {hasPanel ? (
+        <>
+          <button
+            type="button"
+            aria-label={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
+            title={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
+            aria-pressed={panelOpen}
+            data-testid="rail-toggle"
+            className={cn(ICON, panelOpen ? ICON_ACTIVE : ICON_IDLE)}
+            onClick={() => {
+              rail.show(panelOpen ? null : RAIL_CARDS)
+            }}
+          >
+            <PanelRight aria-hidden className="size-4" />
+            {/* 汇总点：每张卡各画一个在同一个位置，红的压在黄的上面——看上去只有一个点 */}
+            <span className="absolute top-1 right-1 flex size-1.5">
+              {listRailCards(rail.order).map((card) => (
+                <CardDotProbe key={card.id} card={card} body={body} />
+              ))}
+            </span>
+          </button>
+          {/* 照 Claude：面板开关和后面那几颗之间一条很浅的细竖线 */}
+          <span
+            aria-hidden
+            data-testid="top-bar-divider"
+            className="mx-1.5 h-4 w-px shrink-0 bg-ws-line"
+          />
+        </>
+      ) : null}
       {shown.map((panel) => (
         <PanelIcon
           key={panel.id}
@@ -198,8 +241,7 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
           }}
         />
       ))}
-      {/* WP429：通知铃铛——排在露出来的工具（浏览器、变更审阅）之后、「⋮」之前 */}
-      <NotificationBell />
+      {extra}
       <div ref={box} className="relative">
         <button
           type="button"
@@ -257,25 +299,6 @@ export function RailTopBar({ instances }: { instances?: PositionInstanceData[] }
           </div>
         ) : null}
       </div>
-      <button
-        type="button"
-        aria-label={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
-        title={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
-        aria-pressed={panelOpen}
-        data-testid="rail-toggle"
-        className={cn(ICON, panelOpen ? ICON_ACTIVE : ICON_IDLE)}
-        onClick={() => {
-          rail.show(panelOpen ? null : RAIL_CARDS)
-        }}
-      >
-        <PanelRight aria-hidden className="size-4" />
-        {/* 汇总点：每张卡各画一个在同一个位置，红的压在黄的上面——看上去只有一个点 */}
-        <span className="absolute top-1 right-1 flex size-1.5">
-          {listRailCards(rail.order).map((card) => (
-            <CardDotProbe key={card.id} card={card} body={body} />
-          ))}
-        </span>
-      </button>
     </nav>
   )
 }
@@ -332,9 +355,9 @@ function CardDotProbe({
   )
 }
 
-const ICON = 'relative flex size-8 items-center justify-center rounded-md transition-colors'
-const ICON_ACTIVE = 'bg-sidebar-accent text-sidebar-accent-foreground'
-const ICON_IDLE = 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
+const ICON = TOPBAR_ICON
+const ICON_ACTIVE = TOPBAR_ICON_ACTIVE
+const ICON_IDLE = TOPBAR_ICON_IDLE
 
 function noStatus(_p: RailPanelBodyProps, _d: boolean): undefined {
   return undefined
@@ -403,9 +426,11 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   useOpenBrowserOnHandover()
   const [tier, setTier] = useState<RailTier | null>(null)
   const ctx = useRailContext(instances, tier)
-  const cards = rail.open === RAIL_CARDS
+  // WP431：卡片堆只在岗位 / 职责 / 事项页上有（别的页没有右侧面板，也没有开关）；工具类的一格照旧哪儿都能开
+  const cards = rail.open === RAIL_CARDS && railPageKind(ctx.pathname) !== undefined
   // WP208：旧 id（`memory` …）先落到它现在的去处与标签（「设定」的「记忆」）
-  const resolved = rail.open === null || cards ? undefined : resolvePanelId(rail.open)
+  const resolved =
+    rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open)
   // 存坏了 / 是上一版留下的名字 / 那个应用包被卸了：当成收起
   const definition = resolved === undefined ? undefined : panelType(resolved.id)
   const sub = resolved?.sub
@@ -432,20 +457,22 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     }
   }, [rail])
 
-  /** 拖左边缘改宽度：平常夹在 320–520，加宽着夹在 560–960；**松手**才写进本机。 */
-  const { setWidth, setWide, wide } = rail
+  /**
+   * 拖左边缘改宽度（夹在 320–720）；**松手**才写进本机。
+   * WP431：面板头的「放大」钮去掉了（照 Claude：开关只在顶栏、宽度靠拖），所以拖的上限放宽；以前加宽过的那一份不再用。
+   */
+  const { setWidth } = rail
   const plain = rail.width
   useEffect(() => {
     const onMove = (e: MouseEvent): void => {
       if (!dragging.current) return
       const next = (globalThis.innerWidth ?? 0) - e.clientX
-      if (wide !== null) setWide(clampWideWidth(next))
-      else setWidth(clampRailWidth(next), false)
+      setWidth(clampRailWidth(next), false)
     }
     const onUp = (): void => {
       if (!dragging.current) return
       dragging.current = false
-      if (wide === null) setWidth(plain, true)
+      setWidth(plain, true)
     }
     globalThis.addEventListener?.('mousemove', onMove)
     globalThis.addEventListener?.('mouseup', onUp)
@@ -453,11 +480,11 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       globalThis.removeEventListener?.('mousemove', onMove)
       globalThis.removeEventListener?.('mouseup', onUp)
     }
-  }, [setWidth, setWide, wide, plain])
+  }, [setWidth, plain])
 
   if (open === null) return <ComputerUseStrip />
 
-  const width = wide ?? plain
+  const width = plain
   const scoped = cards || definition?.scoped === true
   const body: RailPanelBodyProps = {
     ...(scope === undefined ? {} : { scope }),
@@ -530,18 +557,15 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       ) : null}
       <div
         className={cn(
-          'z-40 flex shrink-0 border-l border-ws-line bg-background',
+          'z-40 flex shrink-0 border-l border-ws-line bg-ws-paper',
           narrow
             ? 'fixed top-11 right-0 bottom-0 max-w-[calc(100vw-1rem)] shadow-lg'
             : 'sticky top-11 h-[calc(100vh-2.75rem)]',
         )}
-        // 并排时面板最多占窗口的 38%（加宽时 60%），窗口窄了自己收，给对话留地方
-        style={
-          narrow ? { width } : { width, maxWidth: wide === null ? '38vw' : '60vw', minWidth: 300 }
-        }
+        // 并排时面板最多占窗口的一半，窗口窄了自己收，给对话留地方
+        style={narrow ? { width } : { width, maxWidth: '50vw', minWidth: 300 }}
         data-testid="rail-panel-frame"
         data-panel={open}
-        data-wide={wide === null ? undefined : 'true'}
       >
         {narrow ? null : (
           <button
@@ -557,8 +581,7 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
               const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
               if (step === 0) return
               e.preventDefault()
-              if (wide !== null) setWide(clampWideWidth(wide + step))
-              else setWidth(clampRailWidth(plain + step), true)
+              setWidth(clampRailWidth(plain + step), true)
             }}
           />
         )}
@@ -570,9 +593,6 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
             onTier={setTier}
             hasPosition={scoped && ctx.hasPosition}
             hasRole={scoped && ctx.hasRole}
-            onClose={() => {
-              rail.show(null)
-            }}
             {...(cards
               ? {}
               : {
@@ -580,10 +600,6 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
                     rail.show(RAIL_CARDS)
                   },
                 })}
-            wide={wide !== null}
-            onWide={() => {
-              setWide(wide === null ? RIGHT_RAIL_WIDE_DEFAULT : null)
-            }}
             testId={`rail-panel-${open}`}
           >
             {content}

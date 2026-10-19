@@ -14228,6 +14228,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connectedKinds: () => brand.connections.connectedKinds(),
       connections: () => brand.connections.liveConnections(),
       storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+      // WP431：邮件营销只有档案说过 / 官网认出用哪一家才算「要连」（与 WP424 首次设置同一套）
+      statedVendor: (field) => onboardingRef?.brandProfile(ws)[field],
       // WP238：读 Reddit 已经能经接口中台 / 本机只读浏览器取到，就不算缺 Reddit API
       readRouteLevel: readRouteLevelOf(
         brand.ownCloud,
