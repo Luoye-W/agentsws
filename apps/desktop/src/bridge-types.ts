@@ -171,6 +171,11 @@ export interface DesktopUpdateBridge {
    * 旧壳没有：先判空（没有就不出「去下载页」）。
    */
   openDownloadPage?(): Promise<boolean>
+  /**
+   * WP426：设置里「检查更新」——立刻去查一次（与托盘那一项同一个 `check`），回查完的状态。
+   * 旧壳没有：先判空（没有就不出那个按钮）。
+   */
+  check?(): Promise<DesktopUpdateStatus>
 }
 
 /** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
@@ -206,6 +211,8 @@ export const BRIDGE_CHANNELS = {
   updateCancelWait: 'agentsws:update-cancel-wait',
   /** WP409 */
   updateOpenPage: 'agentsws:update-open-page',
+  /** WP426 */
+  updateCheck: 'agentsws:update-check',
   /** WP353 */
   searchPending: 'agentsws:search-pending',
   searchChanged: 'agentsws:search-changed',

@@ -148,7 +148,7 @@ export function SkillsPanel({ scope }: { scope: RailScope }): React.ReactNode {
       })}
       <Link
         to="/skills"
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="ws-link-muted flex items-center gap-1 text-xs"
         data-testid="rail-skills-more"
       >
         <ExternalLink aria-hidden className="size-3.5" />

@@ -294,7 +294,7 @@ export function SiteChatView({
           <button
             type="button"
             data-testid="messages-source-chat"
-            className="ml-auto text-[12px] text-ws-muted-fg hover:text-foreground"
+            className="ws-link-muted ml-auto text-[12px]"
             onClick={onOfflineMessages}
           >
             {t('site_chat.offline')}
@@ -382,7 +382,7 @@ export function SiteChatView({
           <div className="flex flex-col gap-3" data-testid="chat-conversation-view">
             <button
               type="button"
-              className="flex w-fit items-center gap-1 text-[12px] text-ws-muted-fg md:hidden"
+              className="ws-link-muted flex w-fit items-center gap-1 text-[12px] md:hidden"
               onClick={() => {
                 setSelected(undefined)
               }}

@@ -7,15 +7,16 @@
  */
 import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useQuery } from '@tanstack/react-query'
+import { Loader2 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CompanyModeEntry } from '@/components/company/company-mode'
 import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { UpdateButton } from '@/components/update-button'
 import { ensureSession, listOrganizations } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { useMode } from '@/lib/mode'
+import { useAppVersion } from '@/lib/app-version'
 import { Segmented, SettingRow } from './setting-row'
 
 export function ThemeRow(): ReactNode {
@@ -105,20 +106,8 @@ export function IdentityRow(): ReactNode {
   )
 }
 
-/** 现在是哪种用法（docs/95）：只读一行；② / ③ 下面跟公司那一行与「开公司模式… / 回到同事互联…」。 */
-export function UsageModeRow(): ReactNode {
-  const { t } = useApp()
-  const { mode, known } = useMode()
-  if (!known) return null
-  return (
-    <SettingRow
-      testId="settings-usage-mode"
-      title={t('sp.mode')}
-      desc={t('sp.mode.desc')}
-      control={<span className="text-sm text-ws-body">{t(`sp.mode.${mode}`)}</span>}
-    />
-  )
-}
+/** WP426：「个人与团队」三张可选卡（在 `usage-mode.tsx`）。 */
+export { UsageModePicker as UsageModeRow } from './usage-mode'
 
 /**
  * 52 O1「公司」那一行：公司叫什么、几个品牌几个人、去「全部品牌」管；底下一行小字开 / 关公司模式（WP277）。
@@ -144,16 +133,14 @@ export function OrgSummaryRow(): ReactNode {
           </span>
         }
       />
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/settings/brands"
-          className="text-sm text-primary underline-offset-4 hover:underline"
-          data-testid="settings-org-manage"
-        >
-          {t('sp.brands')}
-        </Link>
-        <CompanyModeEntry />
-      </div>
+      {/* WP426：开 / 关公司模式挪到上面那三张卡上，这里只留去「全部品牌」 */}
+      <Link
+        to="/settings/brands"
+        className="w-fit text-sm text-primary underline-offset-4 hover:underline"
+        data-testid="settings-org-manage"
+      >
+        {t('sp.brands')}
+      </Link>
     </div>
   )
 }
@@ -183,27 +170,67 @@ export function ShortcutsList(): ReactNode {
   )
 }
 
-/** 桌面端版本号（桥上有才有）。 */
-function desktopVersion(): string | undefined {
-  const w = globalThis.window as unknown as { agentsws?: { version?: string } } | undefined
-  return w?.agentsws?.version
+/** WP426：桌面壳桥上的「检查更新」（旧壳 / 网页里没有）。 */
+function updateCheckBridge(): (() => Promise<{ state: string }>) | undefined {
+  const w = globalThis.window as unknown as
+    | { agentsws?: { update?: { check?: () => Promise<{ state: string }> } } }
+    | undefined
+  const check = w?.agentsws?.update?.check
+  return check === undefined ? undefined : () => check()
 }
 
-/** 更新：有新版时就是左下角那个「更新」钮（同一个件）；没有时写当前版本。 */
+/**
+ * 版本与更新（WP426：Luoye 问「在哪能看到我装的版本」）：当前版本常显；桌面壳里旁边一个「检查更新」，
+ * 查到新版时就是左下角那个「更新」钮（同一个件）；查完没有新版说一句「已是最新」。
+ * 网页里（没有壳）显示服务端报的版本，不给检查按钮（更新归桌面壳管）。
+ */
 export function AppUpdateRow(): ReactNode {
   const { t } = useApp()
-  const version = desktopVersion()
+  const { version } = useAppVersion()
+  const [check] = useState(updateCheckBridge)
+  const [checking, setChecking] = useState(false)
+  const [result, setResult] = useState<'none' | 'failed' | undefined>(undefined)
   return (
     <SettingRow
       testId="settings-app-update"
       title={t('sp.app_update')}
-      desc={t('sp.app_update.desc')}
+      desc={version === undefined ? t('sp.app_update.desc') : t('sp.version.current', { version })}
       control={
         <span className="flex items-center gap-2 text-xs text-ws-muted-fg">
-          {version === undefined ? null : <span className="ws-num">v{version}</span>}
-          <span className="min-w-28">
-            <UpdateButton />
-          </span>
+          {result === undefined ? null : (
+            <span data-testid="settings-update-result">
+              {result === 'none' ? t('sp.app_update.none') : t('sp.version.check_failed')}
+            </span>
+          )}
+          <UpdateButton />
+          {check === undefined ? null : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={checking}
+              data-testid="settings-update-check"
+              onClick={() => {
+                setChecking(true)
+                setResult(undefined)
+                void check()
+                  .then(
+                    (s) => {
+                      // 有新版时左下角与这里的「更新」钮自己会出来；没有就说一句
+                      if (s.state === 'idle') setResult('none')
+                    },
+                    () => {
+                      setResult('failed')
+                    },
+                  )
+                  .finally(() => {
+                    setChecking(false)
+                  })
+              }}
+            >
+              {checking ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {t('sp.version.check')}
+            </Button>
+          )}
         </span>
       }
     />

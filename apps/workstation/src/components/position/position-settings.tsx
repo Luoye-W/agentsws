@@ -454,7 +454,7 @@ function Advanced({ roles }: { roles: PositionInstanceData['roles'] }): ReactNod
           type="button"
           aria-expanded={open}
           data-testid="settings-advanced-toggle"
-          className="flex flex-1 items-center gap-1.5 text-left"
+          className="ws-disclosure -mx-1 flex flex-1 items-center gap-1.5 px-1 text-left"
           onClick={() => {
             setOpen(!open)
           }}

@@ -141,8 +141,10 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       </h4>
       {/* 一句话：现在用谁 */}
       {using === undefined ? (
-        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="models-image-none">
-          {data.unavailable_reason ?? t('models.image.no_choices')}
+        /* WP426：人已经在这一块了，「去设置 → 模型 →…」那一整段进问号，常显只留一句 */
+        <p className="flex items-center gap-1 text-xs text-ws-warn" data-testid="models-image-none">
+          {t('models.image.none_short')}
+          <Hint text={data.unavailable_reason ?? t('models.image.no_choices')} />
         </p>
       ) : (
         <p

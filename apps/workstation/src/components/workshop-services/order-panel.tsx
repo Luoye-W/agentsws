@@ -416,7 +416,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
         <section>
           <button
             type="button"
-            className="flex items-center gap-1 text-[12px] text-ws-muted-fg hover:text-ws-ink"
+            className="ws-link-muted flex items-center gap-1 text-[12px]"
             aria-expanded={ledgerOpen}
             onClick={() => setLedgerOpen((v) => !v)}
           >

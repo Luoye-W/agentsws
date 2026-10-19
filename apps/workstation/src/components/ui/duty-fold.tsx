@@ -63,7 +63,7 @@ export function DutyFold({
     <div className={cn('flex flex-col gap-1', className)}>
       <button
         type="button"
-        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="ws-link-muted flex w-fit items-center gap-1 text-xs"
         aria-expanded={open}
         data-testid={`${testId}-toggle`}
         onClick={() => {

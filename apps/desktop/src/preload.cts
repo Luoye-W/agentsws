@@ -34,6 +34,7 @@ const CHANNELS = {
   updateRestart: 'agentsws:update-restart',
   updateCancelWait: 'agentsws:update-cancel-wait',
   updateOpenPage: 'agentsws:update-open-page',
+  updateCheck: 'agentsws:update-check',
   searchPending: 'agentsws:search-pending',
   searchChanged: 'agentsws:search-changed',
   searchPlace: 'agentsws:search-place',
@@ -92,6 +93,9 @@ const bridge: DesktopBridge = {
     // WP409：下载断了时「去下载页」（地址由壳定）
     openDownloadPage: (): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.updateOpenPage) as Promise<boolean>,
+    // WP426：设置里「检查更新」
+    check: (): Promise<DesktopUpdateStatus> =>
+      ipcRenderer.invoke(CHANNELS.updateCheck) as Promise<DesktopUpdateStatus>,
   },
   // WP353：搜索要人介入的那一页（只转话；位置是几个数字，页面内容不经过这里）
   searchBrowser: {

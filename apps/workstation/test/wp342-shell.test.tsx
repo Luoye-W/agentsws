@@ -66,7 +66,8 @@ vi.mock('@/lib/api', async () => {
     getCloudCredits: async () => ({
       linked: true,
       balance: {
-        available: 96.06,
+        // WP426：快用完按「还够几轮」判（不看钱包的 low_balance）——低的那一档给 1.2（约 4 轮）
+        available: state.low ? 1.2 : 96.06,
         low_balance: state.low,
         low_balance_threshold: 100,
       },
@@ -165,8 +166,16 @@ describe('WP342 顶栏与账号菜单', () => {
     expect(await screen.findByTestId('account-low-dot')).toBeTruthy()
     fireEvent.click(screen.getByTestId('account-toggle'))
     const menu = screen.getByTestId('account-menu')
-    expect((await within(menu).findByTestId('account-balance')).textContent).toBe('96.06')
+    expect((await within(menu).findByTestId('account-balance')).textContent).toBe('1.2')
     expect(within(menu).getByTestId('account-topup').textContent).toBe('充值')
+  })
+
+  it('WP426：钱包说 low_balance（写死 50）但还够几十轮：不算快用完，头像上没有小点', async () => {
+    state.low = false
+    renderShell()
+    fireEvent.click(await screen.findByTestId('account-toggle'))
+    expect(await screen.findByTestId('account-balance')).toBeTruthy()
+    expect(screen.queryByTestId('account-low-dot')).toBeNull()
   })
 
   it('「工作内容」默认收着、展开记在本机；「设置」是一行（WP356：点了开设置弹窗）', async () => {

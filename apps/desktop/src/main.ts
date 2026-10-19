@@ -2679,6 +2679,10 @@ async function bootstrap(): Promise<void> {
     await shell.openExternal(DOWNLOAD_PAGE)
     return true
   })
+  // WP426：设置里「检查更新」（与托盘「检查更新」同一个 check）
+  ipcMain.handle(BRIDGE_CHANNELS.updateCheck, async (event) =>
+    fromLocalWindow(event) ? publicStatus(await updates.check()) : { state: 'idle' },
+  )
   // WP361：设置弹窗「这台电脑 → 桌面端」的开机自启开关（只认 true / false）
   ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginGet, (event) =>
     fromLocalWindow(event) ? launchAtLogin.get() : false,

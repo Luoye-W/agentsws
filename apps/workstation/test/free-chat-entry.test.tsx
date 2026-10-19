@@ -136,7 +136,8 @@ describe('WP188 设置 → 模型 →「Agents 工坊（用积分）」', () => 
       (c) => c.dataset.kind === 'agentsws_cloud',
     )
     if (card === undefined) throw new Error('没有积分那张卡')
-    expect(card.textContent).toContain('Agents 工坊（用积分）')
+    // WP426：「加一个 → 登录账号 / 订阅」里那一行叫「Agents 工坊积分」
+    expect(card.textContent).toContain('Agents 工坊积分')
     expect(await within(card).findByTestId('model-cloud-link-account')).toBeDefined()
     // 没有通用的「填 API key」，也没有任何输入框
     expect(card.textContent).not.toContain('填 API key')

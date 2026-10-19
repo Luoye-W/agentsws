@@ -63,6 +63,8 @@ describe('bridge-types', () => {
       updateCancelWait: 'agentsws:update-cancel-wait',
       // WP409：下载断了时「去下载页」
       updateOpenPage: 'agentsws:update-open-page',
+      // WP426：设置里「检查更新」
+      updateCheck: 'agentsws:update-check',
       // WP353：搜索要人介入的那一页
       searchPending: 'agentsws:search-pending',
       searchChanged: 'agentsws:search-changed',

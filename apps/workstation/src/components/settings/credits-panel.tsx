@@ -48,6 +48,7 @@ import {
   getTopupTiers,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { CREDITS_PER_ROUND, creditsLow, LOW_ROUNDS, roundsLeft } from '@/lib/credits-runway'
 import { useMode } from '@/lib/mode'
 import { KolCloudCard } from './kol-cloud-card'
 
@@ -395,12 +396,14 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               <span className="text-[11px] text-muted-foreground">
                 {t('credits.month', { n: num(credits.data?.month_credits ?? 0) })}
               </span>
-              {balance.low_balance ? (
+              {/* WP426：按「还够几轮」判（`credits-runway.ts`），不再用钱包写死的 50 */}
+              {creditsLow(balance.available) ? (
                 <span
-                  className="text-[11px] text-amber-600 dark:text-amber-400"
+                  className="flex items-center gap-1 text-[11px] text-ws-warn"
                   data-testid="credits-low"
                 >
-                  {t('credits.low', { n: num(balance.low_balance_threshold) })}
+                  {t('credits.low', { n: roundsLeft(balance.available) })}
+                  <Hint text={t('credits.low.hint', { per: CREDITS_PER_ROUND, min: LOW_ROUNDS })} />
                 </span>
               ) : null}
             </div>

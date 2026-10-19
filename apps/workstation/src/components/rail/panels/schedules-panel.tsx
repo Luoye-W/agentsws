@@ -130,7 +130,7 @@ function ScheduleRow({ row }: { row: ScheduledTaskRow }): ReactNode {
     >
       <button
         type="button"
-        className="flex w-full items-start gap-2 text-left"
+        className="ws-disclosure -m-1 flex w-[calc(100%+0.5rem)] items-start gap-2 p-1 text-left"
         aria-expanded={open}
         onClick={() => {
           setOpen((v) => !v)

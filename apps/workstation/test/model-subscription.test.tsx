@@ -5,7 +5,7 @@
  *    方案按 `plan_order` 排、默认选第一个；切方案只换卡里那一半，不会把别的卡带开。
  *    以前是一个方案一张卡——百炼三张并排，第一眼的问题变成"这三张有什么区别"。
  * 2. **订阅登录是卡里的一个方案**：没有表单（没有 key 可填），只有风险提示 + 登录按钮；
- *    登录途中把"去这个网址、输这串码"原样画出来；登上之后是脱敏账号 + 模型下拉 + 登出。
+ *    登录途中把"去这个网址、输这串码"原样画出来；登上之后进「正在用」：脱敏账号 + 登出（WP426：模型下拉去掉）。
  *    公司档上整块灰掉，按钮一个都不出现。
  *
  * 零泄漏照旧：整页 HTML 里搜不到任何 token 形状的东西——因为服务端压根不给。
@@ -192,8 +192,12 @@ describe('一家一张卡，点进去选方案', () => {
   it('百炼三个方案收成一张卡，默认选 Token Plan（订阅）', async () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     const cards = await screen.findAllByTestId('model-template')
-    // 五条模板 → 两张卡（bailian ×3、openai ×2）
-    expect(cards).toHaveLength(2)
+    // 五条模板 → 三行：WP426 起同一家的「登录」与「填 key」分在两组（openai 拆成两行），百炼三个方案仍是一行
+    expect(
+      cards.map(
+        (c) => `${c.getAttribute('data-group') ?? ''}:${c.getAttribute('data-vendor') ?? ''}`,
+      ),
+    ).toEqual(['login:openai', 'key:bailian', 'key:openai'])
 
     const card = await cardOf('bailian')
     expect(card.textContent).toContain('阿里云百炼')
@@ -225,13 +229,13 @@ describe('一家一张卡，点进去选方案', () => {
   })
 })
 
-describe('订阅登录：卡里的一个方案', () => {
-  it('没登录：风险提示 + 两个登录按钮，没有表单', async () => {
+describe('订阅登录：「加一个 → 登录账号 / 订阅」里的一行；登上了进「正在用」', () => {
+  it('没登录：两个登录按钮 + 风险问号（WP426：不再是黄底一条），没有表单', async () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     const card = await cardOf('openai')
     const plan = await within(card).findByTestId('subscription-plan')
-    expect(within(plan).getByTestId('subscription-risk').textContent).toContain('可能被限流或封禁')
-    // WP156：卡面上压成一句；服务端那段原话一个字不少地在问号里
+    expect(within(plan).queryByTestId('subscription-risk')).toBeNull()
+    // 服务端那段原话一个字不少地在问号里
     expect(within(plan).getByTestId('subscription-risk-full').getAttribute('data-hint')).toContain(
       '账号只属于你本人',
     )
@@ -257,7 +261,7 @@ describe('订阅登录：卡里的一个方案', () => {
     )
   })
 
-  it('已登录：脱敏账号 + 模型下拉（价目写"订阅"）+ 登出', async () => {
+  it('已登录：进「正在用」——脱敏账号 + 登出；「用哪个模型」下拉没有了（模型在默认模型下拉与 AI 钮里）', async () => {
     const user = userEvent.setup()
     state.subscription = {
       ...SIGNED_OUT,
@@ -271,16 +275,18 @@ describe('订阅登录：卡里的一个方案', () => {
     }
     vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    const card = await cardOf('openai')
-    const plan = await within(card).findByTestId('subscription-plan')
+    const row = await screen.findByTestId('model-row-subscription')
+    expect(row.textContent).toContain('ChatGPT 订阅')
+    const plan = within(row).getByTestId('subscription-plan')
+    // 「加一个」里不再重复出现订阅那一行
+    expect(
+      screen.getAllByTestId('model-template').some((c) => c.getAttribute('data-group') === 'login'),
+    ).toBe(false)
 
     expect((await within(plan).findByTestId('subscription-account')).textContent).toContain(
       'acct…cdef',
     )
-    // 价目一律"订阅"——不按 token 收钱
-    expect(plan.textContent).toContain('订阅')
-    const select = within(plan).getByTestId('subscription-model') as HTMLSelectElement
-    expect([...select.options].map((o) => o.value)).toEqual(['', 'gpt-5.4', 'gpt-5.5'])
+    expect(within(plan).queryByTestId('subscription-model')).toBeNull()
 
     await user.click(within(plan).getByTestId('subscription-signout'))
     await waitFor(() => {
@@ -306,7 +312,7 @@ describe('订阅登录：卡里的一个方案', () => {
     const plan = await within(card).findByTestId('subscription-plan')
     expect(within(plan).getByTestId('subscription-unavailable').textContent).toContain('公司档')
     expect(within(plan).queryAllByTestId('subscription-login')).toHaveLength(0)
-    // 风险提示照旧在（人得先知道这是什么东西，才看得懂为什么不给用）
-    expect(within(plan).getByTestId('subscription-risk')).toBeTruthy()
+    // 风险提示照旧在（问号里；人得先知道这是什么东西，才看得懂为什么不给用）
+    expect(within(plan).getByTestId('subscription-risk-full')).toBeTruthy()
   })
 })

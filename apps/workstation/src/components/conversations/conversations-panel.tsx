@@ -80,7 +80,7 @@ function ArchivedLink({ scope, duty }: { scope: RailScope; duty: ConvDuty }): Re
     <button
       type="button"
       data-testid="conv-archived"
-      className="flex items-center gap-1 px-1.5 text-[12px] text-ws-muted-fg hover:text-foreground"
+      className="ws-link-muted flex items-center gap-1 px-1.5 text-[12px]"
       onClick={() => {
         actions.openArchived?.({ position_id, role_id: duty.role_id })
       }}

@@ -242,7 +242,7 @@ function SortableCard({
             <button
               type="button"
               data-testid={`rail-card-more-${card.id}`}
-              className="self-start rounded px-1.5 py-0.5 text-[12px] text-ws-muted-fg hover:text-foreground"
+              className="ws-link-muted self-start px-1.5 py-0.5 text-[12px]"
               onClick={more}
             >
               {t('rail.card.more')}

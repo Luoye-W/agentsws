@@ -31,6 +31,7 @@ import {
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { CREDITS_PER_ROUND, creditsLow, LOW_ROUNDS, roundsLeft } from '@/lib/credits-runway'
 
 /**
  * 这条 provider 在 `models.json` 里的 id。
@@ -65,7 +66,9 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
       <p className="mt-0.5 text-xs text-muted-foreground">
         {template?.summary ?? t('models.cloud.summary')}
       </p>
-      <CloudPlanActions {...(assignment === undefined ? {} : { assignment })} />
+      <div className="mt-2">
+        <CloudPlanActions {...(assignment === undefined ? {} : { assignment })} />
+      </div>
     </div>
   )
 }
@@ -126,31 +129,36 @@ export function CloudPlanActions({ assignment }: { assignment?: string }): React
     onSuccess: refresh,
   })
 
-  if (providers.isPending) return <Skeleton className="mt-2 h-8 w-full" />
+  if (providers.isPending) return <Skeleton className="h-8 w-full" />
 
   const linked = credits.data?.linked === true
   const balance = credits.data?.balance
   const month = credits.data?.month_credits
   const busy = enable.isPending || disable.isPending
   const failed = enable.error ?? disable.error
+  const low = balance !== undefined && creditsLow(balance.available)
 
   return (
-    <div data-testid="model-cloud-actions" data-linked={linked}>
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+      data-testid="model-cloud-actions"
+      data-linked={linked}
+    >
       {/* 数字只在"已经在用"时出——没启用的时候摆一行 0 是噪音 */}
       {existing !== undefined && balance !== undefined ? (
         /*
-          WP214（36 §7 第四档）：余额是「积分图标 + 数字」（余额不足时是「不通」那一态），
-          本月用了多少进 tooltip
+          WP214（36 §7 第四档）：余额是「积分图标 + 数字」（快用完时是「不通」那一态），本月用了多少进 tooltip。
+          WP426：快用完按「还够几轮」判（`credits-runway.ts`），不再用钱包写死的 50。
         */
-        <div className="mt-1.5" data-testid="model-cloud-numbers">
+        <div className="contents" data-testid="model-cloud-numbers">
           <StatusIcons
             items={[
               {
                 key: 'balance',
                 label: t('models.cloud.balance'),
-                state: balance.low_balance ? 'fail' : 'ok',
-                stateText: balance.low_balance
-                  ? t('credits.low', { n: num(balance.low_balance_threshold) })
+                state: low ? 'fail' : 'ok',
+                stateText: low
+                  ? t('credits.low', { n: roundsLeft(balance.available) })
                   : t('models.cloud.balance.ok'),
                 icon: Coins,
                 value: num(balance.available),
@@ -158,37 +166,38 @@ export function CloudPlanActions({ assignment }: { assignment?: string }): React
               },
             ]}
           />
-          {/* 余额不足是「会扣钱的提示」（36 §7）：一句常显 */}
-          {balance.low_balance ? (
-            <p className="mt-1 text-[11px] text-ws-warn" data-slot="status">
-              {t('credits.low', { n: num(balance.low_balance_threshold) })}
+          {/* 快用完是「会扣钱的提示」（36 §7）：一句常显，依据进问号 */}
+          {low ? (
+            <p
+              className="order-last flex basis-full items-center gap-1 text-[11px] text-ws-warn"
+              data-slot="status"
+              data-testid="model-cloud-low"
+            >
+              {t('credits.low', { n: roundsLeft(balance.available) })}
+              <Hint text={t('credits.low.hint', { per: CREDITS_PER_ROUND, min: LOW_ROUNDS })} />
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {credits.data?.reason === undefined || linked ? null : (
-        <p
-          className="mt-1.5 text-[11px] text-muted-foreground"
-          data-slot="status"
-          data-testid="model-cloud-reason"
-        >
-          {credits.data.reason}
-        </p>
-      )}
-
       {failed === null || failed === undefined ? null : (
-        <p className="mt-1.5 text-[11px] text-destructive">{failed.message}</p>
+        <p className="order-last basis-full text-[11px] text-destructive">{failed.message}</p>
       )}
 
-      <div className="mt-2 flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {!linked ? (
-          <Button size="sm" variant="outline" asChild data-testid="model-cloud-link-account">
-            <Link to={ACCOUNT_TAB_HREF}>
-              <Cloud aria-hidden />
-              {t('models.cloud.link_first')}
-            </Link>
-          </Button>
+          <>
+            <Button size="sm" variant="outline" asChild data-testid="model-cloud-link-account">
+              <Link to={ACCOUNT_TAB_HREF}>
+                <Cloud aria-hidden />
+                {t('models.cloud.link_first')}
+              </Link>
+            </Button>
+            {/* WP426：「还没关联…去设置里关联一次」那一段进问号（按钮已经说了要做什么） */}
+            {credits.data?.reason === undefined ? null : (
+              <Hint text={credits.data.reason} testId="model-cloud-reason" />
+            )}
+          </>
         ) : existing === undefined ? (
           <Button
             size="sm"

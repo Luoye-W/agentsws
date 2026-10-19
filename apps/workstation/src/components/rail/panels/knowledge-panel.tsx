@@ -136,7 +136,7 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
       </p>
       <Link
         to="/knowledge"
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="ws-link-muted flex items-center gap-1 text-xs"
         data-testid="rail-knowledge-more"
       >
         <ExternalLink aria-hidden className="size-3.5" />

@@ -264,7 +264,7 @@ function NoticeBundles({
           type="button"
           data-testid="notice-ack-all"
           disabled={ack.isPending}
-          className="ml-auto inline-flex items-center gap-1 text-[12px] text-ws-muted-fg hover:text-foreground disabled:opacity-60"
+          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[12px]"
           onClick={() => {
             ack.mutate({})
           }}
@@ -358,7 +358,7 @@ function NoticeGroup({
           type="button"
           data-testid="notice-expand"
           aria-expanded={open}
-          className="px-1 text-[12px] text-ws-muted-fg hover:text-foreground"
+          className="ws-link-muted px-1 text-[12px]"
           onClick={() => {
             setOpen((v) => !v)
           }}
