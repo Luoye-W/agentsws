@@ -27,7 +27,7 @@ import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
 /** 这一摊共用的数：哪家公司、我是谁、用哪条分配去改（所有者那条）、能不能开 / 降。 */
-function useCompanySetup(): {
+export function useCompanySetup(): {
   orgId: string | undefined
   me: string | undefined
   assignment: string | undefined
@@ -68,7 +68,7 @@ export function CompanyModeEntry({ className }: { className?: string }): React.R
     >
       <button
         type="button"
-        className="underline-offset-2 hover:text-foreground hover:underline"
+        className="ws-link-muted"
         data-testid={closing ? 'company-close-entry' : 'company-open-entry'}
         onClick={() => {
           setOpen(true)
@@ -451,7 +451,7 @@ export function CompanyNoticeExtras(): React.ReactNode {
     >
       <button
         type="button"
-        className="underline-offset-2 hover:text-foreground hover:underline"
+        className="ws-link-muted"
         data-testid="company-notice-export"
         disabled={exported.isPending}
         onClick={() => {

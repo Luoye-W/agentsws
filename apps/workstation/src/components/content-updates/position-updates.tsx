@@ -231,7 +231,7 @@ function ItemRow({
         )}
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1 text-left text-ws-ink"
+          className="ws-disclosure -mx-1 flex min-w-0 flex-1 items-center gap-1 px-1 text-left text-ws-ink"
           onClick={() => setOpen((o) => !o)}
           data-testid="cd-expand"
         >

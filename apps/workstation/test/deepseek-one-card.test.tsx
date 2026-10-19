@@ -180,37 +180,46 @@ beforeEach(() => {
   state.tested = []
 })
 
-/** 设置页里 DeepSeek 那张卡。 */
-const deepseekCard = async (): Promise<HTMLElement> => {
+/** 设置页「加一个」里 DeepSeek 的那几行（WP426：登录一行、填 key 一行，分在两组）。 */
+const deepseekRows = async (): Promise<HTMLElement[]> => {
   await screen.findByTestId('models-panel')
-  const cards = screen
+  return screen
     .getAllByTestId('model-template')
     .filter((el) => el.getAttribute('data-vendor') === 'deepseek')
-  expect(cards).toHaveLength(1)
-  return cards[0] as HTMLElement
+}
+const rowOf = async (group: 'login' | 'key'): Promise<HTMLElement> => {
+  const hit = (await deepseekRows()).find((el) => el.getAttribute('data-group') === group)
+  if (hit === undefined) throw new Error(`没有 DeepSeek 的 ${group} 那一行`)
+  return hit
 }
 
-describe('WP152 设置页「加一个」：DeepSeek 一张卡，二选一', () => {
-  it('只剩一张「DeepSeek 官方」：官方账户登录排第一且默认选中，卡里就是原账号卡的内容', async () => {
+/*
+ * WP426（Luoye 10-19）：设置页「加一个」分「登录账号 / 订阅」与「填 API key」两组——WP152 那张
+ * 「DeepSeek 官方」二选一的卡拆成两行：「DeepSeek 账号」（登录组）与「DeepSeek 官方」（填 key 组）。
+ * 向导第 ① 步那张大卡照旧二选一（下面另一组用例）。
+ */
+describe('WP152 → WP426 设置页「加一个」：DeepSeek 拆成登录一行、填 key 一行', () => {
+  it('登录组「DeepSeek 账号」：就是原账号卡的内容（登录按钮），没有「填 API key」', async () => {
     renderWithProviders(<ModelsPanel />)
-    const card = await deepseekCard()
-    expect(card.textContent).toContain('DeepSeek 官方')
-    const plans = within(card).getAllByTestId('model-plan')
-    expect(plans.map((p) => p.textContent)).toEqual(['官方账户登录', '官方 API 接口连接'])
-    expect(plans.map((p) => p.getAttribute('data-selected'))).toEqual(['true', 'false'])
-    expect(card.getAttribute('data-kind')).toBe('deepseek_account')
-    // 原账号卡的登录按钮在卡里；没有「填 API key」
-    expect(await within(card).findByTestId('dsa-login')).toBeTruthy()
-    expect(within(card).queryByText('填 API key')).toBeNull()
+    expect((await deepseekRows()).map((r) => r.getAttribute('data-group'))).toEqual([
+      'login',
+      'key',
+    ])
+    const login = await rowOf('login')
+    expect(login.textContent).toContain('DeepSeek 账号')
+    expect(login.getAttribute('data-kind')).toBe('deepseek_account')
+    expect(within(login).queryAllByTestId('model-plan')).toHaveLength(0)
+    expect(await within(login).findByTestId('dsa-login')).toBeTruthy()
+    expect(within(login).queryByText('填 API key')).toBeNull()
     // 不再有单独那张账号卡
     expect(screen.queryByTestId('model-deepseek-account-card')).toBeNull()
   })
 
-  it('切到「官方 API 接口连接」：「填 API key」表单；步骤在教程「接 DeepSeek」里', async () => {
+  it('填 key 组「DeepSeek 官方」：「填 API key」表单；步骤在教程「接 DeepSeek」里', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel />)
-    const card = await deepseekCard()
-    await user.click(within(card).getByText('官方 API 接口连接'))
+    const card = await rowOf('key')
+    expect(card.textContent).toContain('DeepSeek 官方')
     expect(card.getAttribute('data-kind')).toBe('deepseek')
     // WP156：卡面上不再铺步骤，一个「看教程」
     expect(card.textContent).not.toContain('创建 API key')
@@ -222,16 +231,12 @@ describe('WP152 设置页「加一个」：DeepSeek 一张卡，二选一', () =
     expect(within(card).getByTestId('model-form')).toBeTruthy()
   })
 
-  it('已经配过 key（没登过账号）的人：打开时默认显示他已有的 API 那种', async () => {
-    state.providers = [API_ROW]
+  it('账号登上了：「加一个」里不再有登录那一行，账号那一块在「正在用」里', async () => {
+    state.view = { ...SIGNED_OUT, signed_in: true }
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
     renderWithProviders(<ModelsPanel />)
-    const card = await deepseekCard()
-    expect(
-      within(card)
-        .getAllByTestId('model-plan')
-        .map((p) => p.getAttribute('data-selected')),
-    ).toEqual(['false', 'true'])
-    expect(card.getAttribute('data-kind')).toBe('deepseek')
+    expect(await screen.findByTestId('model-row-account')).toBeTruthy()
+    expect((await deepseekRows()).map((r) => r.getAttribute('data-group'))).toEqual(['key'])
   })
 
   it('分组与默认方案的规则（纯函数）', () => {
@@ -260,7 +265,8 @@ describe('WP152 设置页「加一个」：DeepSeek 一张卡，二选一', () =
 })
 
 describe('WP152「已配的」：老数据里两条都在', () => {
-  it('两条都显示新叫法；账号那条不给「改」，API 那条照旧能改', async () => {
+  it('两条都在「正在用」：API 那条照旧能改；账号那条是账号那一块（没有「改」）', async () => {
+    state.view = { ...SIGNED_OUT, signed_in: true }
     state.providers = [
       { ...API_ROW, last_test: OK_TEST },
       { ...ACCOUNT_ROW, last_test: OK_TEST },
@@ -268,14 +274,12 @@ describe('WP152「已配的」：老数据里两条都在', () => {
     renderWithProviders(<ModelsPanel />)
     await screen.findByTestId('models-panel')
     const rows = screen.getAllByTestId('model-row')
-    expect(rows.map((r) => r.getAttribute('data-id'))).toEqual(['deepseek', 'deepseek-account'])
+    expect(rows.map((r) => r.getAttribute('data-id'))).toEqual(['deepseek'])
     expect(rows[0]?.textContent).toContain('DeepSeek 官方 · 官方 API 接口连接')
-    expect(rows[1]?.textContent).toContain('DeepSeek 官方 · 官方账户登录')
     expect(within(rows[0] as HTMLElement).queryByText('改')).toBeTruthy()
-    expect(within(rows[1] as HTMLElement).queryByText('改')).toBeNull()
-    // 两种都配了：卡上默认显示排第一的「官方账户登录」
-    const card = await deepseekCard()
-    expect(card.getAttribute('data-kind')).toBe('deepseek_account')
+    const account = await screen.findByTestId('model-row-account')
+    expect(account.getAttribute('data-id')).toBe('deepseek-account')
+    expect(within(account).queryByText('改')).toBeNull()
   })
 })
 

@@ -457,13 +457,20 @@ describe('设置页', () => {
     renderWithProviders(<ModelsPanel assignment="asg_1" />)
     await screen.findByTestId('models-panel')
     const cards = await screen.findAllByTestId('model-template')
-    expect(cards.map((c) => c.getAttribute('data-vendor'))).toEqual([
-      'deepseek',
-      'openai-compatible',
-      'bailian',
-      'openai',
-      // WP424：Claude 订阅接通前不显示——这份假数据里 Anthropic 只有订阅那一条，整张卡就不出
-      'agentsws-cloud',
+    // WP426：分两组——登录类（账号 / 订阅 / 工坊积分）在前，填 key 的在后；同一家拆到两组
+    // WP424：Claude 订阅接通前不显示——这份假数据里 Anthropic 只有订阅那一条，整行就不出
+    expect(
+      cards.map(
+        (c) => `${c.getAttribute('data-group') ?? ''}:${c.getAttribute('data-vendor') ?? ''}`,
+      ),
+    ).toEqual([
+      'login:deepseek',
+      'login:openai',
+      'login:agentsws-cloud',
+      'key:deepseek',
+      'key:openai-compatible',
+      'key:bailian',
+      'key:openai',
     ])
     for (const card of cards) {
       const vendor = card.getAttribute('data-vendor') ?? ''
@@ -620,20 +627,18 @@ const ROW = {
   active: true,
 }
 
-describe('WP214 第四档：配好的卡上状态用图标', () => {
-  it('上次测通了：一排三个「通」图标；「通了」整行、地址、模型 id、耗时都不在卡面上（在 tooltip 里）', async () => {
+describe('WP214 → WP426：配好的那一行，状态是一枚看得懂的标签', () => {
+  it('上次测通了：「能用 · 能看图」一枚标签；「通了」整行、地址、模型 id、耗时都不在卡面上（在 tooltip 里）', async () => {
     fourth.providers = [{ ...ROW, last_test: LAST_OK }]
     try {
       renderWithProviders(<ModelsPanel assignment="asg_1" />)
       const row = await screen.findByTestId('model-row')
-      const icons = [...row.querySelectorAll('[data-testid="status-icon"]')]
-      expect(icons.map((i) => [i.getAttribute('data-key'), i.getAttribute('data-state')])).toEqual([
-        ['connect', 'ok'],
-        ['text', 'ok'],
-        ['vision', 'ok'],
-      ])
-      // 细节（上次测 · 耗时 · token）在每个图标的 tooltip 里
-      const hint = icons[0]?.getAttribute('data-hint') ?? ''
+      const status = row.querySelector('[data-testid="model-status"]')
+      expect(status?.getAttribute('data-kind')).toBe('ok_vision')
+      expect(status?.textContent).toBe('能用 · 能看图')
+      // 三步与细节（上次测 · 耗时 · token）在 tooltip 里
+      const hint = status?.getAttribute('data-hint') ?? ''
+      expect(hint).toContain('看图：通')
       expect(hint).toContain('2099ms')
       expect(hint).toContain('434 个 token')
       // 地址进模型短标签的 tooltip
@@ -665,7 +670,7 @@ describe('WP214 第四档：配好的卡上状态用图标', () => {
     }
   })
 
-  it('没通：原因常显一句人话；三个图标卡在哪一格一眼看出', async () => {
+  it('没通：原因常显一句人话；标签直接说卡在哪（连不上）', async () => {
     fourth.providers = [
       {
         ...ROW,
@@ -686,24 +691,21 @@ describe('WP214 第四档：配好的卡上状态用图标', () => {
       renderWithProviders(<ModelsPanel assignment="asg_1" />)
       const failed = await screen.findByTestId('model-test-result')
       expect(failed.textContent).toContain('API key 不对')
-      const states = [...screen.getAllByTestId('status-icon')].map((i) =>
-        i.getAttribute('data-state'),
-      )
-      expect(states).toEqual(['fail', 'unknown', 'unknown'])
+      const status = screen.getByTestId('model-status')
+      expect(status.getAttribute('data-kind')).toBe('no_connect')
+      expect(status.textContent).toBe('连不上')
     } finally {
       fourth.providers = []
     }
   })
 
-  it('从没测过：三个「没测」', async () => {
+  it('从没测过：「还没测」，不是三个带减号的图标', async () => {
     fourth.providers = [ROW]
     try {
       renderWithProviders(<ModelsPanel assignment="asg_1" />)
       await screen.findByTestId('model-row')
-      const states = [...screen.getAllByTestId('status-icon')].map((i) =>
-        i.getAttribute('data-state'),
-      )
-      expect(states).toEqual(['unknown', 'unknown', 'unknown'])
+      expect(screen.getByTestId('model-status').textContent).toBe('还没测')
+      expect(screen.queryAllByTestId('status-icon')).toHaveLength(0)
     } finally {
       fourth.providers = []
     }

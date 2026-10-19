@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@240xu/dsh-websearch": "2.8.3",
+    "@agentsws/brand": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",

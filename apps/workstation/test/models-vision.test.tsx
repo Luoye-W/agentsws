@@ -6,7 +6,7 @@
  * 2. **老用户提示**：默认模型看不了图 / 还没验证过能不能看图时，顶部一条提示（不挡路）；
  * 3. **生图一档**：单价常显、可以不配、选一条保存即生效。
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -58,13 +58,17 @@ const state = {
   image: IMAGE_NONE as ModelImageView,
 }
 const imageSaves: { provider_id: string; model?: string; edit_model?: string }[] = []
+const tested: string[] = []
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
     listModelProviders: async () => ({ providers: state.providers, templates: [] }),
-    testModelProvider: async () => state.test,
+    testModelProvider: async (id: string) => {
+      tested.push(id)
+      return state.test
+    },
     getModelDefaults: async () => DEFAULTS,
     setModelDefaults: async () => DEFAULTS,
     getModelUsage: async () => ({
@@ -97,6 +101,7 @@ const { ModelsPanel } = await import('@/components/models/models-panel')
 
 beforeEach(() => {
   state.providers = [ACTIVE]
+  tested.length = 0
   state.test = { ok: true, reason: 'ok', checked_at: T0 }
   state.image = IMAGE_NONE
   imageSaves.length = 0
@@ -119,27 +124,37 @@ describe('WP127 验证三步：设置页那一行', () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     await user.click(await screen.findByRole('button', { name: '测试' }))
-    // WP214：三步是一排状态图标（四态），卡在「看图」那一格
+    // WP426：一枚看得懂的标签——「能用 · 看不了图」；三步各自的结果在 tooltip 里
     await screen.findByTestId('model-test-result')
-    const items = within(screen.getByTestId('model-status')).getAllByTestId('status-icon')
-    expect(items.map((i) => [i.dataset.key, i.dataset.state])).toEqual([
-      ['connect', 'ok'],
-      ['text', 'ok'],
-      ['vision', 'fail'],
-    ])
-    expect(items[2]?.getAttribute('aria-label')).toContain('看图：不通')
+    const status = screen.getByTestId('model-status')
+    expect(status.getAttribute('data-kind')).toBe('ok_no_vision')
+    expect(status.textContent).toBe('能用 · 看不了图')
+    expect(status.getAttribute('data-hint')).toContain('看图：不通')
     expect((await screen.findByTestId('model-test-result')).textContent).toContain('看不了图')
   })
 })
 
-describe('WP127 老用户：顶部一条提示（不挡路）', () => {
-  it('还没验证过能不能看图：提示去点一次测试', async () => {
+describe('WP127 → WP426 老用户：还没验证过能不能看图', () => {
+  it('不再叫人去点「测试」：工坊自己在后台测一次，测完静默更新；没测出问题就不提示', async () => {
     state.providers = [{ ...ACTIVE, vision_status: 'unchecked' }]
+    state.test = {
+      ok: true,
+      reason: 'ok',
+      checked_at: T0,
+      steps: [
+        { step: 'connect', ok: true },
+        { step: 'text', ok: true },
+        { step: 'vision', ok: true },
+      ],
+    }
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    const banner = await screen.findByTestId('models-vision-banner')
-    expect(banner.dataset.status).toBe('unchecked')
-    expect(banner.textContent).toContain('deepseek-chat')
-    expect(banner.textContent).toContain('测试')
+    await waitFor(() => {
+      expect(tested).toEqual(['deepseek'])
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('model-status').getAttribute('data-kind')).toBe('ok_vision')
+    })
+    expect(screen.queryByTestId('models-vision-banner')).toBeNull()
   })
 
   it('验证过、看不了：明说，并列几个常见能看图的型号', async () => {
@@ -153,15 +168,16 @@ describe('WP127 老用户：顶部一条提示（不挡路）', () => {
   it('能看图：不打扰', async () => {
     state.providers = [{ ...ACTIVE, vision_status: 'ok' }]
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    await screen.findByTestId('models-text-title')
+    await screen.findByTestId('models-in-use')
     expect(screen.queryByTestId('models-vision-banner')).toBeNull()
+    expect(tested).toEqual([])
   })
 })
 
 describe('WP127 生图单独一档', () => {
-  it('分两块：「文字与看图」在上，「生图」在下；单价常显', async () => {
+  it('分开：「正在用 / 加一个」在上，「生图」在下；单价常显', async () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    expect((await screen.findByTestId('models-text-title')).textContent).toContain('文字与看图')
+    expect((await screen.findByTestId('models-in-use')).textContent).toContain('正在用')
     const block = await screen.findByTestId('models-image')
     expect(block.textContent).toContain('生图')
     expect((await screen.findByTestId('models-image-price')).textContent).toContain('0.5')

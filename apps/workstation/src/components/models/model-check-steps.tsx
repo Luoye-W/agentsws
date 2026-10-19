@@ -4,8 +4,18 @@
  * 向导第 ① 步与设置页「模型」那一行**共用这一个**——同一件事两处画法不一样，
  * 用户会以为是两种检查。三个小勾叉比一句"没通"更说得清卡在哪儿（图形化、减字）。
  */
-import { Check, Eye, type LucideIcon, MessageSquareText, Minus, Plug, X } from 'lucide-react'
-import { StatusIcons, type StatusItem, type StatusState } from '@/components/design'
+import {
+  Check,
+  Eye,
+  Loader2,
+  type LucideIcon,
+  MessageSquareText,
+  Minus,
+  Plug,
+  X,
+} from 'lucide-react'
+import type { StatusItem, StatusState } from '@/components/design'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ModelCheckStepView, ModelTestResult } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -124,7 +134,50 @@ export function modelStatusItems(
   })
 }
 
-/** 已配的卡上那一排：连通 / 文字 / 看图。 */
+/**
+ * WP426（Luoye 10-19）：已配那一行的状态改成**一枚看得懂的标签**——原来是插头 / 对话 / 眼睛三个
+ * 小图标，没测过时各带一道减号，没人猜得出意思。现在一句人话（「能用 · 能看图」「还没测」「连不上」），
+ * 颜色跟着好坏走；三步各自的结果、上次测 · 耗时 · token 进 tooltip（hover / 键盘聚焦都出）。
+ *
+ * 名字沿用 `ModelStatusIcons`（向导第 ① 步、DeepSeek 账号那一块都用它），三处一起变。
+ */
+export type ModelStatusKind =
+  | 'testing'
+  | 'untested'
+  | 'ok_vision'
+  | 'ok_no_vision'
+  | 'ok'
+  | 'no_connect'
+  | 'no_text'
+  | 'failed'
+
+export function modelStatusKind(
+  result: ModelTestResult | undefined,
+  pending = false,
+): ModelStatusKind {
+  if (pending) return 'testing'
+  if (result === undefined) return 'untested'
+  const connect = stepState(result, 'connect')
+  const text = stepState(result, 'text')
+  const vision = stepState(result, 'vision')
+  if (connect === 'fail') return 'no_connect'
+  if (text === 'fail') return 'no_text'
+  if (vision === 'ok') return 'ok_vision'
+  if (vision === 'fail') return 'ok_no_vision'
+  return result.ok || text === 'ok' ? 'ok' : 'failed'
+}
+
+const KIND_TONE: Record<ModelStatusKind, string> = {
+  testing: 'bg-ws-info-bg text-ws-info',
+  untested: 'border border-dashed border-ws-muted-fg/50 text-ws-muted-fg',
+  ok_vision: 'bg-ws-good-bg text-ws-good',
+  ok: 'bg-ws-good-bg text-ws-good',
+  ok_no_vision: 'bg-ws-warn-bg text-ws-warn',
+  no_connect: 'bg-ws-bad-bg text-ws-bad',
+  no_text: 'bg-ws-bad-bg text-ws-bad',
+  failed: 'bg-ws-bad-bg text-ws-bad',
+}
+
 export function ModelStatusIcons({
   result,
   pending = false,
@@ -135,12 +188,43 @@ export function ModelStatusIcons({
   className?: string
 }): React.ReactNode {
   const { t, lang } = useApp()
+  const kind = modelStatusKind(result, pending)
+  const steps = STEPS.map((step) => {
+    const state = pending ? 'pending' : stepState(result, step)
+    return `${t(`models.cap.${step}`)}：${t(`status.${state}`)}`
+  }).join(' · ')
+  const meta = pending ? undefined : modelTestMeta(result, t, lang)
+  const tip = meta === undefined ? steps : `${steps}\n${meta}`
+  const label = t(`models.status.${kind}`)
   return (
-    <StatusIcons
-      items={modelStatusItems(result, t, lang, pending)}
-      label={t('models.status.label')}
-      testId="model-status"
-      {...(className === undefined ? {} : { className })}
-    />
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: 只读状态也要能用键盘看 tooltip
+            tabIndex={0}
+            role="status"
+            aria-label={`${label}。${tip}`}
+            data-hint={tip}
+            data-slot="status"
+            data-testid="model-status"
+            data-kind={kind}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-4 font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              KIND_TONE[kind],
+              className,
+            )}
+          >
+            {kind === 'testing' ? (
+              <Loader2 aria-hidden className="size-3 animate-spin" />
+            ) : kind === 'untested' ? null : (
+              <span aria-hidden className="size-1.5 rounded-full bg-current" />
+            )}
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="whitespace-pre-line">{tip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }

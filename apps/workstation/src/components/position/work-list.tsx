@@ -297,7 +297,7 @@ export function WorkList({
                 type="button"
                 aria-expanded={!isClosed}
                 data-testid="work-group-toggle"
-                className="inline-flex items-center gap-1.5"
+                className="ws-disclosure -mx-1 inline-flex items-center gap-1.5 px-1"
                 onClick={() => {
                   const next = new Set(closed)
                   if (isClosed) next.delete(g.id)

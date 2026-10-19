@@ -300,7 +300,7 @@ function Body({ view, assignment }: { view: GeoWatchView; assignment: string }):
           <div className="flex flex-col gap-1">
             <button
               type="button"
-              className="flex items-center gap-1 text-xs text-ws-muted-fg hover:text-ws-ink"
+              className="ws-link-muted flex items-center gap-1 text-xs"
               aria-expanded={showCandidates}
               data-testid="geo-watch-candidates-toggle"
               onClick={() => setShowCandidates(!showCandidates)}

@@ -8399,3 +8399,11 @@ export const updateAdExperiment = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP426：设置「版本」那一行、账号菜单那一行小字——浏览器里（没有桌面壳）用服务端报的版本 ──────
+
+/** `GET /v1/health`（public）里我们只要版本号；桌面壳把安装包版本通过 `AGENTSWS_VERSION` 交给服务进程。 */
+export const getServerVersion = async (): Promise<string | undefined> => {
+  const data = await api<{ version?: unknown }>('/v1/health')
+  return typeof data.version === 'string' && data.version !== '' ? data.version : undefined
+}

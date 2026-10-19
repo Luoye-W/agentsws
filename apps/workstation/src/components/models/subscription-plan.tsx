@@ -10,25 +10,23 @@
  * | 状态 | 画什么 |
  * |---|---|
  * | 这台机器不允许（公司档 / 托管档） | 灰掉 + 服务端给的那句人话，按钮不出现 |
- * | 没登录 | 风险提示 + 一排登录按钮（这家有几种方式就有几个） |
+ * | 没登录 | 一排登录按钮（这家有几种方式就有几个）+ 风险问号 |
  * | 登录中 | "去这个网址、输这串码"（设备码）或"去浏览器完成"（浏览器流）+ 取消 |
- * | 已登录 | 账号（脱敏）、到期时间、模型下拉（价目一律"订阅"）、登出 |
+ * | 已登录 | 账号（脱敏，到期时间在 tooltip）、登出（WP426：模型下拉去掉，订阅的模型在默认模型下拉与 AI 钮里） |
  *
- * **风险那一段永远显示**，不管登没登录，而且文案来自服务端（`risk_note`）——
+ * **风险那一段永远在**（WP426 起收进问号），不管登没登录，而且文案来自服务端（`risk_note`）——
  * 前端不重写一遍，改一处就够。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Loader2, LogOut, TriangleAlert, UserRound } from 'lucide-react'
+import { ExternalLink, Loader2, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
-import { StatusIcons } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import type { SubscriptionData, SubscriptionMethod, SubscriptionProviderId } from '@/lib/api'
 import {
   answerModelSubscriptionLogin,
   getModelSubscription,
-  selectModelSubscriptionModel,
   signOutModelSubscription,
   startModelSubscriptionLogin,
 } from '@/lib/api'
@@ -123,12 +121,6 @@ export function SubscriptionPlan({
     onError: (e: Error) => setError(e.message),
   })
 
-  const chooseModel = useMutation({
-    mutationFn: (model: string) => selectModelSubscriptionModel(provider, model, assignment),
-    onSuccess: (data) => refresh(data),
-    onError: (e: Error) => setError(e.message),
-  })
-
   const signOut = useMutation({
     mutationFn: () => signOutModelSubscription(provider, assignment),
     onSuccess: () => refresh(),
@@ -142,7 +134,7 @@ export function SubscriptionPlan({
   }, [ready, onReady])
   if (data === undefined) {
     return (
-      <p className="mt-2 text-xs text-muted-foreground" data-testid="subscription-loading">
+      <p className="text-xs text-muted-foreground" data-testid="subscription-loading">
         {t('models.subscription.loading')}
       </p>
     )
@@ -151,26 +143,13 @@ export function SubscriptionPlan({
   const methodLabel = (m: SubscriptionMethod): string =>
     m === 'device' ? t('models.subscription.login.device') : t('models.subscription.login.browser')
 
-  return (
-    <div
-      className="mt-2 flex flex-col gap-2"
-      data-testid="subscription-plan"
-      data-provider={provider}
-    >
-      {/*
-        风险提示：登没登录都在。WP156（36 §7）：卡上压成一句（可见），服务端给的整段原话在问号里——
-        一个字没丢，也不再在卡上铺两行。
-      */}
-      <p
-        className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-relaxed"
-        data-slot="warning"
-        data-testid="subscription-risk"
-      >
-        <TriangleAlert className="size-3.5 shrink-0 text-amber-600" aria-hidden />
-        <span>{t('models.subscription.risk')}</span>
-        <Hint text={data.risk_note} testId="subscription-risk-full" />
-      </p>
+  /*
+   * WP426：风险那段（服务端原话）不再是一条黄底提示——收进问号，跟在动作那一行后面；登没登录都在。
+   */
+  const risk = <Hint text={data.risk_note} testId="subscription-risk-full" />
 
+  return (
+    <div className="flex flex-col gap-2" data-testid="subscription-plan" data-provider={provider}>
       {error === null ? null : (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
           {error}
@@ -178,75 +157,42 @@ export function SubscriptionPlan({
       )}
 
       {data.available ? null : (
-        <p className="text-xs text-muted-foreground" data-testid="subscription-unavailable">
+        <p
+          className="flex items-center gap-1 text-xs text-muted-foreground"
+          data-testid="subscription-unavailable"
+        >
           {data.unavailable_reason ?? t('models.subscription.unavailable')}
+          {risk}
         </p>
       )}
 
       {!data.available ? null : data.signed_in ? (
-        <div className="flex flex-col gap-2" data-testid="subscription-signed-in">
-          {/*
-            WP214（36 §7 第四档）：「已登录（账号 x）· 令牌某天到期、到期前自动续」→ 一个小图标 + 账号名；
-            到期时间进 tooltip
-          */}
-          <StatusIcons
-            testId="subscription-status"
-            items={[
-              {
-                key: 'account',
-                label: data.label,
-                state: 'ok',
-                stateText: t('dsa.signed_in.unknown'),
-                icon: UserRound,
-                value: data.account ?? '—',
-                testId: 'subscription-account',
-                ...(data.expires_at === undefined
-                  ? {}
-                  : {
-                      detail: t('models.subscription.expires', {
-                        at: new Date(data.expires_at).toLocaleString(),
-                      }).replace(/^·\s*/, ''),
-                    }),
-              },
-            ]}
-          />
-          {data.models.length === 0 ? null : (
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="text-muted-foreground">
-                {t('models.subscription.model')}
-                <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">
-                  {t('models.subscription.price')}
-                </span>
-                {provider === 'openai-codex' ? (
-                  <Hint
-                    text={t('models.subscription.selectable')}
-                    className="ml-1 align-middle"
-                    testId="subscription-selectable"
-                  />
-                ) : null}
-              </span>
-              <select
-                className="h-8 rounded-md border bg-background px-2 text-xs"
-                data-testid="subscription-model"
-                value={data.selected_model ?? ''}
-                disabled={chooseModel.isPending}
-                onChange={(e) => {
-                  if (e.target.value !== '') chooseModel.mutate(e.target.value)
-                }}
-              >
-                <option value="">{t('models.subscription.model.pick')}</option>
-                {data.models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div>
+        /*
+          WP426：登上了就是一行——账号（到期时间在 tooltip）+ 登出。「用哪个模型」下拉去掉了：
+          订阅里的几个模型直接出现在「默认模型」下拉与输入框的 AI 钮里（WP362 早就进去了）。
+        */
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+          data-testid="subscription-signed-in"
+        >
+          <span
+            className="inline-flex min-w-0 items-center gap-1.5 text-xs text-ws-body"
+            data-testid="subscription-account"
+            {...(data.expires_at === undefined
+              ? {}
+              : {
+                  title: t('models.subscription.expires', {
+                    at: new Date(data.expires_at).toLocaleString(),
+                  }).replace(/^·\s*/, ''),
+                })}
+          >
+            <UserRound aria-hidden className="size-3.5 shrink-0 text-ws-muted-fg" />
+            <span className="truncate font-mono">{data.account ?? '—'}</span>
+          </span>
+          <span className="flex items-center gap-1">
             <Button
-              size="sm"
-              variant="outline"
+              size="xs"
+              variant="ghost"
               data-testid="subscription-signout"
               disabled={signOut.isPending}
               onClick={() => {
@@ -254,10 +200,11 @@ export function SubscriptionPlan({
                 signOut.mutate()
               }}
             >
-              <LogOut className="size-3.5" aria-hidden />
+              <LogOut aria-hidden />
               {t('models.subscription.signout')}
             </Button>
-          </div>
+            {risk}
+          </span>
         </div>
       ) : data.in_flight ? (
         <div className="flex flex-col gap-2" data-testid="subscription-in-flight">
@@ -333,7 +280,7 @@ export function SubscriptionPlan({
               {data.last_error}
             </p>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {data.methods.map((m) => (
               <Button
                 key={m}
@@ -347,6 +294,7 @@ export function SubscriptionPlan({
                 {methodLabel(m)}
               </Button>
             ))}
+            {risk}
           </div>
         </div>
       )}

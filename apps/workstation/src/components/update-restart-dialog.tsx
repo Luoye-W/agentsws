@@ -64,7 +64,7 @@ export function UpdateRestartDialog({
             <button
               type="button"
               data-testid="update-restart-toggle"
-              className="flex w-fit items-center gap-1 text-[12px] text-ws-muted-fg hover:text-foreground"
+              className="ws-link-muted flex w-fit items-center gap-1 text-[12px]"
               onClick={() => {
                 setOpen((v) => !v)
               }}

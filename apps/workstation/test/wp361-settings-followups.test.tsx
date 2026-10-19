@@ -37,6 +37,8 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     listOrganizations: async () => state.orgs,
     getCloudCredits: async () => ({ linked: false }),
+    // WP426：网页里（没有壳）版本从服务端 health 来
+    getServerVersion: async () => '9.9.9-test',
     listInProgress: async () => ({ items: [], scope: 'workspace' }),
     getPositions: async () => ({
       positions: [
@@ -285,8 +287,39 @@ describe('WP361 927：开机自启开关（这台电脑 → 桌面端）', () =>
   it('旧壳（桥上没有这一项）：桌面端那一节在、没有这个开关', async () => {
     w.agentsws = { platform: 'darwin', version: '0.8.0' }
     renderSettings({ section: 'desktop' })
-    expect(await screen.findByTestId('settings-app-update')).toBeTruthy()
+    expect(await screen.findByTestId('settings-nav-desktop')).toBeTruthy()
     expect(screen.queryByTestId('settings-launch-at-login')).toBeNull()
+  })
+
+  it('WP426：版本与更新在「通用」——桌面壳里写壳的版本，有「检查更新」，查完没有新版说「已是最新」', async () => {
+    const checks: number[] = []
+    w.agentsws = {
+      platform: 'darwin',
+      version: '0.2.1-beta.3',
+      update: {
+        status: async () => ({ state: 'idle' }),
+        onChange: () => () => undefined,
+        check: async () => {
+          checks.push(1)
+          return { state: 'idle' }
+        },
+      },
+    }
+    renderSettings({ section: 'general' })
+    const row = await screen.findByTestId('settings-app-update')
+    expect(row.textContent).toContain('当前版本 0.2.1-beta.3')
+    fireEvent.click(screen.getByTestId('settings-update-check'))
+    expect((await screen.findByTestId('settings-update-result')).textContent).toBe('已是最新')
+    expect(checks).toHaveLength(1)
+  })
+
+  it('WP426：网页里（没有壳）：版本是服务端报的，没有「检查更新」', async () => {
+    renderSettings({ section: 'general' })
+    const row = await screen.findByTestId('settings-app-update')
+    await waitFor(() => {
+      expect(row.textContent).toContain('当前版本 9.9.9-test')
+    })
+    expect(screen.queryByTestId('settings-update-check')).toBeNull()
   })
 
   it('网页端：没有「桌面端」这一节', async () => {

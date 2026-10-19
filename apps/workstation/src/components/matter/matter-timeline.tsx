@@ -157,7 +157,7 @@ export function MeBubble({
         {long ? (
           <button
             type="button"
-            className="hover:text-ws-ink"
+            className="ws-link-muted"
             aria-expanded={open}
             onClick={() => {
               setOpen((v) => !v)
@@ -380,7 +380,7 @@ export function PreviewCard({
           onClick={() => {
             setDiff((v) => !v)
           }}
-          className="ml-auto inline-flex items-center gap-1 text-[12.5px] text-ws-muted-fg hover:text-ws-ink"
+          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[12.5px]"
         >
           <FileCode aria-hidden className="size-3" />
           {t('matter.preview.diff')}
@@ -795,7 +795,7 @@ export function RunningEntry({
           onClick={() => {
             setOpen((v) => !v)
           }}
-          className="inline-flex items-center gap-2 py-0.5 text-[14px] text-ws-body"
+          className="ws-disclosure -mx-1 inline-flex items-center gap-2 px-1 py-0.5 text-[14px] text-ws-body disabled:cursor-default"
         >
           <LoaderCircle
             aria-hidden

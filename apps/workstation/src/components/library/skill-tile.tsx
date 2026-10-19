@@ -110,7 +110,7 @@ export function SkillTile({
             type="button"
             aria-expanded={open}
             data-testid="skill-tile-toggle"
-            className="ml-auto inline-flex items-center gap-0.5 text-xs text-ws-muted-fg hover:text-ws-ink"
+            className="ws-link-muted ml-auto inline-flex items-center gap-0.5 text-xs"
             onClick={onToggle}
           >
             {open ? t('skills.details.close') : t('skills.details')}

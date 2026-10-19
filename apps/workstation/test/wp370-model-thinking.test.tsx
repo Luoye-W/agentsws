@@ -98,14 +98,31 @@ describe('WP370 AI 钮：思考程度（WP373 起挪成钮右边的独立小钮�
 })
 
 describe('WP370 AI 钮：显示名、能力小标、搜索', () => {
-  it('每行用目录里的显示名；订阅那行有「自带联网」「长上下文」', () => {
-    open([SUB, OWN], SUB.id)
+  it('每行用目录里的显示名；能力小标只标组里的例外（WP426：人人都有的不逐行写）', () => {
+    // 订阅组里另有一个没自带联网、上下文短的：有的那一行才标「自带联网」「长上下文」
+    const plain: FreeChatModelChoice = {
+      ...SUB,
+      id: 'openai-codex/gpt-mini',
+      name: 'GPT mini',
+      native_search: false,
+      context_window: 32_000,
+    }
+    open([SUB, plain, OWN], SUB.id)
     const rows = screen.getAllByTestId('model-pick-option')
     expect(rows[0]?.textContent).toContain('GPT-5.5')
-    expect(rows[1]?.textContent).toContain('gpt-4o-mini')
-    expect(within(rows[0] as HTMLElement).getByTestId('model-pick-cap-web')).toBeTruthy()
+    expect(rows[2]?.textContent).toContain('gpt-4o-mini')
+    expect(within(rows[0] as HTMLElement).getByTestId('model-pick-cap-web').textContent).toBe(
+      '自带联网',
+    )
     expect(within(rows[0] as HTMLElement).getByTestId('model-pick-cap-long')).toBeTruthy()
     expect(within(rows[1] as HTMLElement).queryByTestId('model-pick-cap-web')).toBeNull()
+    expect(within(rows[2] as HTMLElement).queryByTestId('model-pick-cap-web')).toBeNull()
+  })
+
+  it('WP426：组里人人都有的能力不逐行标（订阅组只有它一个）', () => {
+    open([SUB, OWN], SUB.id)
+    expect(screen.queryByTestId('model-pick-cap-web')).toBeNull()
+    expect(screen.queryByTestId('model-pick-cap-long')).toBeNull()
   })
 
   it('不多于 4 个不出搜索框', () => {

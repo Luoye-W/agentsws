@@ -14,6 +14,7 @@
  * 2. **改职责模板不会立刻生效**：提交之后只显示「已提交审批」，卡片回到首页队列里等你定。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CompanyModeEntry } from '@/components/company/company-mode'
@@ -120,7 +121,17 @@ export type OrgSection =
   | 'inprogress'
   | 'together'
 
-export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
+export function OrgPage({
+  only,
+  autoStart = false,
+}: {
+  only?: OrgSection
+  /**
+   * WP426：设置「个人与团队」里点了「和同事一起用 → 换成这个」——`together` 那一块一出来就打开
+   * （不再要再点一次那个小入口，入口也不画）。
+   */
+  autoStart?: boolean
+} = {}): React.ReactNode {
   const { t } = useApp()
   /*
    * WP271（docs/95 §2.2）：① 个人——左栏叫「岗位与品牌」，页里只留品牌 / 岗位 / 工具箱；
@@ -606,6 +617,13 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
       await client.invalidateQueries({ queryKey: ['orgs'] })
     },
   })
+  // WP426：从「个人与团队」那张卡点进来的——一出来就打开（同一个 mutation，只跑一次）
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoStart || !solo || together || autoStarted.current || orgId === undefined) return
+    autoStarted.current = true
+    startTogether.mutate()
+  }, [autoStart, solo, together, orgId, startTogether])
   /*
    * WP278（决策 276 / 277）：② 里「请同事一起做」「把发起人交给…」都要对方接下才算——发出去的是一张
    * 「交给你」的卡；这里只记着我发出去的（还在等的那一行「等 X 接 · 撤回」）。
@@ -844,7 +862,10 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
   const embedded = only !== undefined
   return (
     <div className="flex flex-col gap-4" data-org-section={only}>
-      <div className="flex items-start gap-2" hidden={embedded && only !== 'together'}>
+      <div
+        className="flex items-start gap-2"
+        hidden={(embedded && only !== 'together') || autoStart}
+      >
         {embedded ? null : (
           <div className="min-w-0 flex-1">
             <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
@@ -852,11 +873,12 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
           </div>
         )}
         {/* WP276（docs/95 §3.3，决策 234）：① 一行小入口——点了才打开局域网发现、出邀请那一块 */}
-        {solo && (!embedded || only === 'together') ? (
+        {solo && !autoStart && (!embedded || only === 'together') ? (
           <span className="flex items-center gap-1">
+            {/* WP426：原来是 ghost 钮，看着像一行字——换成有边框的按钮 + 图标 */}
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               data-testid="together-entry"
               aria-expanded={together}
               disabled={startTogether.isPending}
@@ -865,6 +887,7 @@ export function OrgPage({ only }: { only?: OrgSection } = {}): React.ReactNode {
                 else startTogether.mutate()
               }}
             >
+              <Users aria-hidden />
               {t('together.entry')}
             </Button>
             <Hint text={t('together.entry.hint')} />

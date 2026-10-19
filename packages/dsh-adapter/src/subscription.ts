@@ -33,6 +33,7 @@ import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { DshAdapterError } from './errors.js'
+import { type BrandedCallback, startBrandedCallback } from './subscription-callback.js'
 import type { GatewayBudget } from './llm.js'
 import { toChatMessages, toToolDefs } from './llm.js'
 import {
@@ -321,6 +322,11 @@ export interface SubscriptionLoginOptions {
   credentials: unknown
   /** 装配超时（毫秒）。 */
   readyTimeoutMs?: number
+  /**
+   * WP426：ChatGPT 订阅「浏览器登录」回来那一页由我们画（{@link startBrandedCallback}）。
+   * `false` = 不接管（上游原样）；给函数 = 用它占端口（测试换成假的，不碰真 1455）。
+   */
+  brandedCallback?: false | (() => Promise<BrandedCallback | undefined>)
 }
 
 /** `pi-ai` 的 `openai-codex` 在 select 里用的两个选项 id（实测，见该模块源码）。 */
@@ -404,43 +410,61 @@ export async function createSubscriptionLogin(
         )
       }
       const wanted = PI_AI_METHOD_IDS[request.method]
-      const outcome = await auth.begin({
-        key: subscriptionRecordKey(request.provider),
-        // 官方给的方法 id 是 `oauth` / `api-key`；设备码与浏览器是 pi-ai 在流**里面**
-        // 用一个 select 问的，所以那一问由下面的 `prompt` 代答（见 §说明）
-        method: 'oauth',
-        ...(request.signal === undefined ? {} : { signal: request.signal }),
-        interaction: {
-          notify: (notice: AuthorizationNotice) => {
-            request.notify({
-              message: notice.message,
-              ...(notice.url === undefined ? {} : { url: notice.url }),
-              ...(notice.code === undefined ? {} : { code: notice.code }),
-            })
+      /*
+       * WP426：浏览器登录先占住上游的回调端口——上游占不到就走它自己的「贴回来」退路，
+       * 浏览器回来落在我们画的那页上，地址由我们代贴（见 `subscription-callback.ts`）。
+       */
+      const takeover =
+        request.provider === 'openai-codex' &&
+        request.method === 'browser' &&
+        options.brandedCallback !== false
+          ? await (options.brandedCallback ?? startBrandedCallback)().catch(() => undefined)
+          : undefined
+      try {
+        const outcome = await auth.begin({
+          key: subscriptionRecordKey(request.provider),
+          // 官方给的方法 id 是 `oauth` / `api-key`；设备码与浏览器是 pi-ai 在流**里面**
+          // 用一个 select 问的，所以那一问由下面的 `prompt` 代答（见 §说明）
+          method: 'oauth',
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+          interaction: {
+            notify: (notice: AuthorizationNotice) => {
+              request.notify({
+                message: notice.message,
+                ...(notice.url === undefined ? {} : { url: notice.url }),
+                ...(notice.code === undefined ? {} : { code: notice.code }),
+              })
+            },
+            prompt: async (prompt: AuthorizationPrompt): Promise<string> => {
+              if (prompt.kind === 'select') {
+                /*
+                 * 这一问就是 pi-ai 的「Select OpenAI Codex login method」。人在设置页上
+                 * 点的是"设备码"还是"浏览器"，答案在 `request.method` 里早就有了——
+                 * 再弹一次给用户看没有任何意义。**只答它自己列出来的 id**：
+                 * 上游哪天改了选项，这里当场找不到、如实报错，而不是瞎答一个。
+                 */
+                const hit = prompt.options.find((o) => o.id === wanted)
+                if (hit !== undefined) return hit.id
+                throw new AuthorizationDeclinedError(
+                  `这一版 ${facts.label} 没有提供「${request.method === 'device' ? '设备码' : '浏览器'}」这种登录方式`,
+                )
+              }
+              const asked = request.ask({
+                kind: prompt.kind === 'secret' ? 'secret' : 'text',
+                message: prompt.message,
+                ...(prompt.placeholder === undefined ? {} : { placeholder: prompt.placeholder }),
+              })
+              // WP426：浏览器先回到我们那页就由我们代贴；人在界面上自己贴了也照样收
+              return takeover === undefined || prompt.kind === 'secret'
+                ? asked
+                : Promise.race([takeover.received, asked])
+            },
           },
-          prompt: async (prompt: AuthorizationPrompt): Promise<string> => {
-            if (prompt.kind === 'select') {
-              /*
-               * 这一问就是 pi-ai 的「Select OpenAI Codex login method」。人在设置页上
-               * 点的是"设备码"还是"浏览器"，答案在 `request.method` 里早就有了——
-               * 再弹一次给用户看没有任何意义。**只答它自己列出来的 id**：
-               * 上游哪天改了选项，这里当场找不到、如实报错，而不是瞎答一个。
-               */
-              const hit = prompt.options.find((o) => o.id === wanted)
-              if (hit !== undefined) return hit.id
-              throw new AuthorizationDeclinedError(
-                `这一版 ${facts.label} 没有提供「${request.method === 'device' ? '设备码' : '浏览器'}」这种登录方式`,
-              )
-            }
-            return request.ask({
-              kind: prompt.kind === 'secret' ? 'secret' : 'text',
-              message: prompt.message,
-              ...(prompt.placeholder === undefined ? {} : { placeholder: prompt.placeholder }),
-            })
-          },
-        },
-      })
-      return outcome.status
+        })
+        return outcome.status
+      } finally {
+        takeover?.close()
+      }
     },
 
     cancel(provider) {

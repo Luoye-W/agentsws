@@ -387,7 +387,7 @@ export function CloudAuthForm({
             {codeFor === 'signup' ? (
               <button
                 type="button"
-                className="text-ws-muted-fg hover:text-foreground"
+                className="ws-link-muted"
                 data-testid={`${p}-back`}
                 onClick={() => {
                   setStep('form')
@@ -399,7 +399,7 @@ export function CloudAuthForm({
             ) : (
               <button
                 type="button"
-                className="text-ws-muted-fg hover:text-foreground"
+                className="ws-link-muted"
                 data-testid={`${p}-resend`}
                 disabled={busy}
                 onClick={() => {
@@ -495,7 +495,7 @@ export function CloudAuthForm({
             </Button>
             <button
               type="button"
-              className="text-xs text-ws-muted-fg hover:text-foreground"
+              className="ws-link-muted text-xs"
               data-testid={`${p}-back`}
               onClick={() => {
                 setStep('form')
@@ -554,7 +554,7 @@ export function CloudAuthForm({
             {via === 'password' ? (
               <button
                 type="button"
-                className="text-xs text-ws-muted-fg hover:text-foreground"
+                className="ws-link-muted text-xs"
                 data-testid={`${p}-forgot`}
                 onClick={() => {
                   setStep('forgot')

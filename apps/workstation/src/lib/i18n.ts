@@ -33,6 +33,7 @@ import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
+import { MODELS_EN, MODELS_ZH } from './i18n-models'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OUTBOUND_EN, OUTBOUND_ZH } from './i18n-outbound'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
@@ -8917,6 +8918,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
+    ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
     ...PANEL_ZH,
     // WP395：Amazon 运营岗位面板四块
@@ -8971,6 +8974,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,
     ...AMAZON_COMPETITORS_EN,
