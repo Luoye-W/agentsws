@@ -17,6 +17,8 @@ export * from './channels/index.js'
 export * from './creative/index.js'
 // WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率，只并排显示、不改止损；毛利瀑布
 export * from './economics.js'
+// WP447（docs/109 §6.2）：六个新平台的导出报表解析与体检骨架（只读）
+export * from './exports/index.js'
 // WP314（docs/101 §5.1②）：两家官方上传表的生成、本地校验、改前改后对比、导出解析、读回核对
 export * from './sheets/index.js'
 export * from './spec.js'
