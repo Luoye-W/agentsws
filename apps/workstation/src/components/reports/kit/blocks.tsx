@@ -417,7 +417,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
                 key={c.key}
                 className={cn(
                   'border-b border-ws-line pb-2 text-[11.5px] font-medium whitespace-nowrap text-ws-muted-fg',
-                  c.align === 'right' ? 'pl-3 text-right' : 'text-left',
+                  c.align === 'right' ? 'pl-2.5 text-right' : 'text-left',
                 )}
               >
                 {c.label}
@@ -436,7 +436,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
                 if (c.format === 'spark')
                   body = Array.isArray(v) ? (
                     <span className="inline-flex justify-end">
-                      <Sparkline data={v} width={60} height={20} area={false} />
+                      <Sparkline data={v} width={48} height={20} area={false} />
                     </span>
                   ) : null
                 else if (c.format === 'delta') {
@@ -485,7 +485,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
                     key={c.key}
                     className={cn(
                       'py-[9px] text-ws-ink',
-                      right ? 'pl-3 text-right whitespace-nowrap' : 'max-w-[280px]',
+                      right ? 'pl-2.5 text-right whitespace-nowrap' : 'max-w-[220px]',
                     )}
                     data-slot="data"
                   >

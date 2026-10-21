@@ -121,7 +121,13 @@ async function main() {
           check((await page.getByTestId('battle-report').count()) === 0, '首页：复盘四格去掉了')
           check((await page.getByTestId('tile-bar').count()) === 0, '首页：按职责重复的数字去掉了')
           check((await page.getByTestId('today-timeline').count()) === 0, '首页：时间轴去掉了')
-          check((await page.getByTestId('position-card').count()) >= 2, '首页：岗位卡')
+          const cards = await page
+            .getByTestId('position-card')
+            .nth(1)
+            .waitFor({ timeout: 30_000 })
+            .then(() => true)
+            .catch(() => false)
+          check(cards, '首页：岗位卡')
         }
         if (want('home')) await shot(page, '1-home', theme)
         // ② 首页点数字 → 第三栏拉出报表
