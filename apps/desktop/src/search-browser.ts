@@ -140,6 +140,10 @@ export interface OpenRequest {
   settle_ms: number
   /** 正文最多留多少字（`page` 那种）。 */
   max_chars: number
+  /**
+   * WP454：只开不读（热身用）：等 `dom-ready` 加 `settle_ms` 就交回状态码与最后的地址，不在页面里跑脚本。
+   */
+  no_read?: boolean
 }
 
 export type OpenResult =
@@ -157,7 +161,8 @@ export interface RevealRequest {
   workspace_id: string
   /** 要人打开的那一页（被拦的那个搜索地址）。 */
   url: string
-  reason: 'captcha' | 'login'
+  /** WP454：`consent` = Google 的 cookie 同意页（人选一次，AI 不点）。 */
+  reason: 'captcha' | 'login' | 'consent'
   /** 第三栏上那一句（服务进程定，人话）。 */
   message: string
 }
@@ -167,6 +172,8 @@ export interface SearchBrowserStatus {
   revealed: boolean
   /** 人上一次点过验证、离开验证页的时刻（毫秒）。 */
   verified_at?: number
+  /** WP454：partition 里有没有 Google 的 cookie（老壳不给）。 */
+  google_cookies?: boolean
 }
 
 /**
@@ -192,6 +199,16 @@ export interface SearchBrowserDriver {
   status(workspace_id: string): SearchBrowserStatus
   /** WP394：设 Amazon「配送到」（没实现 = 这一版桌面壳不会设，服务进程照实说）。 */
   amazonDelivery?(req: AmazonDeliveryRequest): Promise<AmazonDeliveryResult>
+  /**
+   * WP454：这个品牌的搜索浏览器（partition）里有没有 Google 的 cookie——服务进程按它决定第一次搜 Google 前
+   * 要不要先热身（开一次首页）。经 `GET /status` 的 `google_cookies` 交出去。
+   */
+  googleCookies?(workspace_id: string): Promise<boolean>
+}
+
+/** WP454：cookie 的域是不是 Google 的（`google.com`、`.google.com.hk`、`www.google.de`…）。 */
+export function isGoogleCookieDomain(domain: string): boolean {
+  return /(^|\.)google\.(com|[a-z]{2})(\.[a-z]{2})?$/.test(domain.toLowerCase().replace(/^\./, ''))
 }
 
 /** 通道收到的「设配送邮编」请求：只认 Amazon 站点首页、邮编只许字母数字空格横线。 */
@@ -255,6 +272,7 @@ export function validateOpen(body: unknown): OpenRequest | string {
         : b.kind === 'html'
           ? clampInt(b.max_chars, 1_000, HTML_MAX_CHARS, HTML_MAX_CHARS)
           : clampInt(b.max_chars, 1_000, 200_000, 60_000),
+    ...(b.no_read === true ? { no_read: true } : {}),
   }
 }
 
@@ -262,7 +280,8 @@ export function validateReveal(body: unknown): RevealRequest | string {
   const b = (body ?? {}) as Record<string, unknown>
   if (!isWorkspace(b.workspace_id)) return 'workspace_id 不对'
   if (!isWebUrl(b.url)) return '只开 http / https 网址'
-  if (b.reason !== 'captcha' && b.reason !== 'login') return 'reason 只认 captcha / login'
+  if (b.reason !== 'captcha' && b.reason !== 'login' && b.reason !== 'consent')
+    return 'reason 只认 captcha / login / consent'
   const message = typeof b.message === 'string' ? b.message.slice(0, 300) : ''
   return { workspace_id: b.workspace_id, url: b.url, reason: b.reason, message }
 }
@@ -329,7 +348,11 @@ export async function startSearchBrowserChannel(input: {
         if (req.method === 'GET' && url.pathname === '/status') {
           const ws = url.searchParams.get('workspace_id')
           if (!isWorkspace(ws)) return send(res, 400, { error: 'workspace_id 不对' })
-          return send(res, 200, input.driver.status(ws))
+          const google = await input.driver.googleCookies?.(ws).catch(() => undefined)
+          return send(res, 200, {
+            ...input.driver.status(ws),
+            ...(google === undefined ? {} : { google_cookies: google }),
+          })
         }
         if (req.method === 'POST' && url.pathname === '/open') {
           const got = validateOpen(await readBody(req))

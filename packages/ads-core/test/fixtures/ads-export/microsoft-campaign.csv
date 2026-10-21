@@ -1,0 +1,16 @@
+"Report Name: Campaign performance"
+"Report Time: 10/13/2026, 10/19/2026"
+"Time Zone: (GMT-08:00) Pacific Time (US & Canada); Tijuana"
+"Last Completed Available Day: 10/19/2026 11:59:59 PM (GMT-08:00) Pacific Time (US & Canada); Tijuana"
+"Last Completed Available Hour: 10/19/2026 11:59:59 PM (GMT-08:00) Pacific Time (US & Canada); Tijuana"
+"Report Aggregation: Daily"
+"Report Filter: "
+"Potential Incomplete Data: false"
+"Rows: 3"
+
+"TimePeriod","AccountName","AccountNumber","CampaignName","CampaignId","CampaignStatus","CurrencyCode","Impressions","Clicks","Spend","Conversions","Revenue","ReturnOnAdSpend"
+"2026-10-18","Demo Store","F123ABCD","Brand Search","500001","Active","USD","4,200","180","1,050.25","14","3,150.75","300.00%"
+"2026-10-19","Demo Store","F123ABCD","Brand Search","500001","Active","USD","3,900","160","90.00","0","0.00","0.00%"
+"2026-10-19","Demo Store","F123ABCD","Shopping - All","500002","Paused","USD","1,000","22","45.50","1","60.00","131.87%"
+
+"©2026 Microsoft Corporation. All rights reserved. "

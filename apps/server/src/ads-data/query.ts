@@ -12,7 +12,7 @@ import {
   rollUpAdsRows,
   sumAdsMetrics,
 } from '@agentsws/ads-core'
-import type { AdsDataPlatform, AdsDataRow } from './store.js'
+import type { AdsDataRow, AdsStoredPlatform } from './store.js'
 
 export const ADS_PERIODS = [
   'today',
@@ -82,7 +82,7 @@ export function resolveAdsWindow(
 
 /** 一个对象在窗口里的合计（给模型看的一行）。 */
 export interface AdsEntityView {
-  platform: AdsDataPlatform
+  platform: AdsStoredPlatform
   level: AdsReportLevel
   name: string
   campaign?: string
@@ -107,8 +107,8 @@ export interface AdsEntityView {
 export function levelRows(
   rows: readonly AdsDataRow[],
   level: AdsReportLevel,
-): (AdsReportRow & { platform: AdsDataPlatform; account: string })[] {
-  const out: (AdsReportRow & { platform: AdsDataPlatform; account: string })[] = []
+): (AdsReportRow & { platform: AdsStoredPlatform; account: string })[] {
+  const out: (AdsReportRow & { platform: AdsStoredPlatform; account: string })[] = []
   for (const platform of new Set(rows.map((r) => r.platform)))
     for (const account of new Set(
       rows.filter((r) => r.platform === platform).map((r) => r.account),
@@ -136,9 +136,9 @@ export interface AdsQueryInput {
 export interface AdsQueryResult {
   level: AdsReportLevel
   /** 每家在窗口里的合计（按广告系列那一层算；币种各算各的，不跨家相加）。 */
-  totals: { platform: AdsDataPlatform; currency?: string; metrics: AdsMetrics }[]
+  totals: { platform: AdsStoredPlatform; currency?: string; metrics: AdsMetrics }[]
   /** 每家每天的合计（看走势、昨天比前天）。 */
-  by_day: { day: string; platform: AdsDataPlatform; metrics: AdsMetrics }[]
+  by_day: { day: string; platform: AdsStoredPlatform; metrics: AdsMetrics }[]
   rows: AdsEntityView[]
   /** 筛完一共几条（`rows` 只列前 `limit` 条）。 */
   count: number
@@ -168,7 +168,7 @@ export function queryAdsRows(rows: readonly AdsDataRow[], input: AdsQueryInput):
   }
   const by_day = [...dayKeys.entries()]
     .map(([k, list]) => {
-      const [day, platform] = k.split('|') as [string, AdsDataPlatform]
+      const [day, platform] = k.split('|') as [string, AdsStoredPlatform]
       return { day, platform, metrics: sumAdsMetrics(list) }
     })
     .sort((a, b) =>

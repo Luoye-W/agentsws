@@ -73,7 +73,8 @@ export function deskToolsFor(role_id: string): string[] {
   const out: string[] = []
   if (id === 'pr.press') out.push(LIST_PRESS_RELEASES_TOOL, DRAFT_PRESS_RELEASE_TOOL)
   if (id === 'pr.forums') out.push(LIST_FORUM_POSTS_TOOL, DRAFT_FORUM_POST_TOOL)
-  if (id === 'dtc.content') out.push(QUERY_SEO_TODAY_TOOL, QUERY_GEO_METRICS_TOOL)
+  // WP446：搜索判断与 GEO 归「SEO 与 GEO」
+  if (id === 'dtc.seo') out.push(QUERY_SEO_TODAY_TOOL, QUERY_GEO_METRICS_TOOL)
   if (B2B_READ_ROLES.includes(id)) out.push(LIST_B2B_RECORDS_TOOL)
   if (B2B_CONTACT_ROLES.includes(id)) out.push(SAVE_B2B_CONTACTS_TOOL)
   if (id.startsWith('design.')) out.push(LIST_DESIGN_REQUESTS_TOOL, GET_BRAND_SYSTEM_TOOL)

@@ -15,6 +15,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { SUPPORT_MAILBOX_DEFAULTS } from '@agentsws/channels'
+import {
+  type ChatAutoAnswerStrictness,
+  DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS,
+  normalizeChatAutoAnswerStrictness,
+} from '@agentsws/support-core'
 
 /** 界面上那几个开关（`folder_enabled` 不在这里：接管 = 客服岗位开没开）。 */
 export interface MailboxSwitchSettings {
@@ -29,15 +34,26 @@ export interface MailboxSwitchSettings {
    * **缺省开**：发开发信专用的那只邮箱也要开，回信会回到它那里。B2B 岗位没开时它不起作用。
    */
   b2b: boolean
+  /**
+   * WP440（docs/108 M9）：客服信「有把握就直接回」。**缺省开**（同在线客服）；
+   * 关了 = 这只邮箱的每一封客服回信都出卡等人批。
+   */
+  auto_reply: boolean
+  /** WP440：把握要多大（严格 / 适中 / 宽松，缺省适中；同在线客服那三档）。 */
+  auto_reply_strictness: ChatAutoAnswerStrictness
 }
 
 export type MailboxSwitchPatch = Partial<MailboxSwitchSettings>
 
-export const MAILBOX_SWITCH_KEYS: readonly (keyof MailboxSwitchSettings)[] = [
+/** 布尔开关那几个（档位不是开关，另存）。 */
+type BoolSwitch = Exclude<keyof MailboxSwitchSettings, 'auto_reply_strictness'>
+
+export const MAILBOX_SWITCH_KEYS: readonly BoolSwitch[] = [
   'shadow_mode',
   'move',
   'mark_read',
   'b2b',
+  'auto_reply',
 ]
 
 const DEFAULTS: MailboxSwitchSettings = {
@@ -45,6 +61,8 @@ const DEFAULTS: MailboxSwitchSettings = {
   move: SUPPORT_MAILBOX_DEFAULTS.move,
   mark_read: SUPPORT_MAILBOX_DEFAULTS.mark_read,
   b2b: true,
+  auto_reply: true,
+  auto_reply_strictness: DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS,
 }
 
 interface StateFile {
@@ -72,6 +90,10 @@ export class MailboxSwitchStore {
       move: saved.move ?? DEFAULTS.move,
       mark_read: saved.mark_read ?? DEFAULTS.mark_read,
       b2b: saved.b2b ?? DEFAULTS.b2b,
+      auto_reply: saved.auto_reply ?? DEFAULTS.auto_reply,
+      auto_reply_strictness: normalizeChatAutoAnswerStrictness(
+        saved.auto_reply_strictness ?? DEFAULTS.auto_reply_strictness,
+      ),
     }
   }
 
@@ -92,6 +114,16 @@ export class MailboxSwitchStore {
       if (typeof v !== 'boolean' || v === before[k]) continue
       after[k] = v
       changed.push(k)
+    }
+    // WP440：档位只认三种（别的值不存、不报错——界面只给三个选项）
+    const strictness = patch.auto_reply_strictness
+    if (
+      strictness !== undefined &&
+      normalizeChatAutoAnswerStrictness(strictness) === strictness &&
+      strictness !== before.auto_reply_strictness
+    ) {
+      after.auto_reply_strictness = strictness
+      changed.push('auto_reply_strictness')
     }
     if (changed.length > 0) {
       this.state = {
@@ -116,6 +148,9 @@ export class MailboxSwitchStore {
           const b = (v as Record<string, unknown>)[key]
           if (typeof b === 'boolean') row[key] = b
         }
+        const st = (v as Record<string, unknown>).auto_reply_strictness
+        if (typeof st === 'string' && normalizeChatAutoAnswerStrictness(st) === st)
+          row.auto_reply_strictness = st as ChatAutoAnswerStrictness
         mailboxes[k] = row
       }
       return { version: 1, mailboxes }

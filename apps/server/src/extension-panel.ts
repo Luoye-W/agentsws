@@ -11,6 +11,7 @@
 
 import type { ExtensionPanelFacts, ExtensionPanelPort } from '@agentsws/api'
 import type {
+  ActionJob,
   PanelPost,
   PanelProgress,
   PanelRecord,
@@ -70,6 +71,18 @@ export interface PanelWrites {
   refill(
     job_id: string,
   ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
+  /** WP432：人点「打开这一条」（老实现没有 = 侧边栏打不开，照实说）。 */
+  open?(
+    job_id: string,
+    edit?: { text?: string; title?: string },
+  ): Promise<{ ok: true; job: ActionJob; view: RedditWriteView } | { ok: false; message: string }>
+  /** WP432：不发了。 */
+  drop?(
+    job_id: string,
+    reason?: string,
+  ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
+  /** WP445：插件里等你发的几条（看板与侧边栏顶上那一行同一个数）。 */
+  inPlugin?(): number
 }
 
 /** 发出记录那一份里侧边栏用得到的（`OutboundLog` 的子集）。 */
@@ -94,6 +107,10 @@ export interface ExtensionPanelOptions {
   draftGate?(ws: WorkspaceId): Promise<PanelDraftGate | undefined>
   /** WP419（决策 1231）：交给人发的社媒帖子（与各自挂的号）。不给 = 侧边栏没有这一块。 */
   handoffs?(ws: WorkspaceId): Promise<{ post: SocialPost; account?: SocialAccount }[]>
+  /** WP432：工坊版本与插件文件夹里那一版（侧边栏底下比对用；不给 = 不说）。 */
+  versions?(): { workshop?: string; folder?: string }
+  /** WP432：这个人「等你发」那一类开没开系统通知（不给 = 开）。 */
+  notifySystem?(ws: WorkspaceId, person_id: string): Promise<boolean>
   /** WP419：人在侧边栏里回话（发好了 / 不发了）。回 `false` = 不是交给人的那一条。 */
   answerPost?(
     ws: WorkspaceId,
@@ -313,7 +330,22 @@ export function panelWriteOf(v: RedditWriteView): PanelWrite {
     ...(v.record_id === undefined ? {} : { record_id: v.record_id }),
     ...(v.can_refill === undefined ? {} : { can_refill: v.can_refill }),
     ...(v.finished_at === undefined ? {} : { finished_at: v.finished_at }),
+    kind: v.kind,
+    ...(v.text === undefined ? {} : { text: v.text }),
+    ...(v.title === undefined ? {} : { title: v.title }),
   }
+}
+
+/** WP432：品牌本地的「今天」里发出去了几条（读回确认的；发出记录里 `sent` 的）。 */
+export function sentToday(
+  records: readonly Pick<OutboundRecord, 'sent_at' | 'status'>[],
+  now: Iso8601,
+  tz_offset_minutes: number,
+): number {
+  const tz = tz_offset_minutes * 60_000
+  const day = (ms: number): number => Math.floor((ms + tz) / DAY_MS)
+  const today = day(Date.parse(now))
+  return records.filter((r) => r.status === 'sent' && day(Date.parse(r.sent_at)) === today).length
 }
 
 /**
@@ -427,6 +459,16 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
         ...(replied === 0 ? {} : { replied_before: replied }),
       }
     }
+    // WP432：今天发了几条、等你发几条（侧边栏顶上那一行）
+    const allWrites = writes?.writes() ?? []
+    // WP445：等你发 = 还没在插件里打开的卡 + 批过、等你打开的（同一张卡算一条）
+    const awaitingN = writes?.inPlugin?.() ?? allWrites.filter((w) => w.state === 'awaiting').length
+    const reddit = options.outbound.list(ws, { channel: 'reddit', limit: 200 })
+    progress = {
+      ...progress,
+      sent_today: sentToday(reddit, now, options.tzOffsetMinutes(ws)),
+      awaiting: awaitingN,
+    }
     const sinks = options.outbound.sinks(ws)
     const writesOf =
       options.outbound.writesOf === undefined
@@ -439,7 +481,8 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       ...(name === undefined ? {} : { workspace_name: name }),
       ...(posts.length === 0 ? {} : { posts }),
       progress,
-      writes: recentWrites(writes?.writes() ?? [], now),
+      writes: recentWrites(allWrites, now),
+      ...(options.versions === undefined ? {} : { versions: options.versions() }),
       records: options.outbound
         .list(ws, { channel: 'reddit', limit: PANEL_RECORDS_MAX })
         .map((r) => panelRecordOf(r, sinks, writesOf)),
@@ -472,6 +515,21 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       return done
         ? { ok: true }
         : { ok: false, message: '这一条已经回过话了（在工坊里或另一处）。' }
+    },
+    async openWrite(session, job_id, edit) {
+      const writes = await options.writes(session.workspace_id)
+      if (writes?.open === undefined) return { ok: false, message: '这个品牌没有装 Reddit 写。' }
+      const out = await writes.open(job_id, edit)
+      return out.ok ? { ok: true, job: out.job, write: panelWriteOf(out.view) } : out
+    },
+    async dropWrite(session, job_id, reason) {
+      const writes = await options.writes(session.workspace_id)
+      if (writes?.drop === undefined) return { ok: false, message: '这个品牌没有装 Reddit 写。' }
+      const out = writes.drop(job_id, reason)
+      return out.ok ? { ok: true } : out
+    },
+    async notifySystem(session) {
+      return (await options.notifySystem?.(session.workspace_id, session.person_id)) ?? true
     },
     async refill(session, job_id) {
       const writes = await options.writes(session.workspace_id)

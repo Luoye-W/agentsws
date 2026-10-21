@@ -115,6 +115,7 @@ import {
   SHOP_GET_PRODUCT_TOOL,
   SHOP_LIST_PRODUCTS_TOOL,
   SHOP_SAVE_PRODUCT_TOOL,
+  SHOP_SAVE_REDIRECTS_TOOL,
   SHOP_TOOL_DEF_BY_NAME,
   type ShopStagedData,
   type ShopStep,
@@ -2017,7 +2018,11 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
                 tool: SHOP_SAVE_PRODUCT_TOOL,
                 input: { id: p.id, title: `${p.title}（新版）` },
               })
-          } else if (step.tool === SHOP_SAVE_PRODUCT_TOOL) {
+          } else if (
+            step.tool === SHOP_SAVE_PRODUCT_TOOL ||
+            step.tool === SHOP_SAVE_REDIRECTS_TOOL
+          ) {
+            // WP446：改跳转那条剧本一步就出卡
             staged = shopStagedOf(res.data)
             if (staged?.change_id !== undefined) {
               sink({ type: 'change.staged', change_id: staged.change_id })
@@ -2209,7 +2214,8 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             money: { amount: refundAmount, currency: order.currency },
             notes: [
               `退货窗口 ${policy.days} 天内（签收 ${daysSince ?? '?'} 天）`,
-              '由 stub 运行时按政策提出',
+              // WP457：来源说人话（原来写「由 stub 运行时按政策提出」，内部词上了卡）
+              '照退货政策提出',
             ],
             ...(order.email === undefined
               ? {}

@@ -73,15 +73,16 @@ export const OWNER_ZH: Readonly<Record<GeoFixOwner | 'content', string>> = {
   site: '建站',
   'web-ops': '网站运营',
   pr: '公关',
-  content: '内容与搜索',
+  content: 'SEO 与 GEO',
 }
 
 /** 每个岗位找谁持有（按顺序找第一个有人的职责）。 */
 const OWNER_ROLES: Readonly<Record<GeoFixOwner | 'content', RoleId[]>> = {
   site: ['site.shopify-theme', 'site.shopify-build'],
-  'web-ops': ['dtc.store', 'dtc.content'],
+  'web-ops': ['dtc.store', 'dtc.seo', 'dtc.content'],
   pr: ['pr.press', 'pr.forums', 'pr.reddit'],
-  content: ['dtc.content'],
+  // WP446：「本职责改页面」那三种改法搬到了 SEO 与 GEO（`content` 这个键名对外不改，只加不删）
+  content: ['dtc.seo'],
 }
 const OWNER_TEMPLATE: Readonly<Record<GeoFixOwner | 'content', string>> = {
   site: 'site',

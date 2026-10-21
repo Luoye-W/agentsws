@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WP421（自查 general 组）：公关 / 内容与搜索 / B2B / 设计补通——端到端走一遍 + 截图（不联网：demo 的 stub 运行时、替身）。
+ * WP421（自查 general 组）：公关 / SEO 与 GEO / B2B / 设计补通——端到端走一遍 + 截图（不联网：demo 的 stub 运行时、替身）。
  *
  * 在本进程里起一个 demo（`createDemo`），用 demo 店主的身份按岗位走主流程：
  *
@@ -10,7 +10,7 @@
  * 3. `b2b-redraft-*`：回询盘卡点「改一下」→ 没接模型时原稿再出一张、照实说「请直接改」（卡不丢）；
  * 4. `b2b-import-*`：主动开发面板的「导入名单」；
  * 5. `design-request-*` / `design-queue-*`：店铺管理下一张设计需求单 → 设计岗收到（开事项 + 待办），设计岗问「有哪些单等着我」读得到；
- * 6. `content-geo-*`：内容与搜索问「AI 搜索里有没有我们」→ 读 GEO（没跑过照实说）；
+ * 6. `content-geo-*`：SEO 与 GEO问「AI 搜索里有没有我们」→ 读 GEO（没跑过照实说）；
  * 7. `claude-sub-*`：设置 → 模型里 Claude 订阅照实写暂不可用。
  *
  * 每张浅色、深色各一张，存到 `--out`（默认私有仓 `docs/assets/wp421/`；公开仓不放截图）。
@@ -176,8 +176,8 @@ async function main() {
     const queue = await ask('design.dtc', '有哪些单等着我？')
     check(queue.reply.includes('张需求单'), `设计岗：${queue.reply.slice(0, 40)}…`)
 
-    console.log('④ 内容与搜索：AI 搜索里有没有我们')
-    const geo = await ask('dtc.content', 'AI 搜索里有没有我们？')
+    console.log('④ SEO 与 GEO：AI 搜索里有没有我们')
+    const geo = await ask('dtc.seo', 'AI 搜索里有没有我们？')
     check(geo.reply !== '' && !geo.reply.includes('没有剧本'), `回话：${geo.reply.slice(0, 40)}…`)
 
     browser = await chromium.launch({ headless: true })

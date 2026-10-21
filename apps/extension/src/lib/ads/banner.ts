@@ -22,6 +22,8 @@ const CSS = `
 button { font: inherit; border: 1px solid rgba(255,255,255,.8); border-radius: 6px;
   padding: 2px 10px; cursor: pointer; background: transparent; color: #fff; }
 button.primary { background: #fff; color: #b42318; border-color: #fff; }
+.bar.assist { background: #344054; }
+.bar.assist button.primary { color: #344054; }
 `
 
 export interface BannerHandlers {
@@ -29,10 +31,21 @@ export interface BannerHandlers {
   onConfirm(answer: 'yes' | 'no'): void
 }
 
+/** WP445：Reddit / 社媒发帖填好之后横条上那一句（中性，不说「AI 正在操作」）。 */
+export const ASSIST_READY = '草稿已填好，请检查后自己点发送'
+/** 与 `runner.ts` 的 `await_sent` 那一步同一句。 */
+const SEND_STEP_LABEL = '填好了，等你点发送'
+
 /** 横条上的那一行字。 */
 export function bannerText(state: BannerState): string {
   const step = state.of > 0 && state.step > 0 ? ` · ${state.step}/${state.of}` : ''
   if (state.confirm !== undefined) return `${state.confirm}`
+  if (state.assist === true) {
+    if (state.label === SEND_STEP_LABEL) return ASSIST_READY
+    // 对不上页面那一句（等你粘贴）原样说；还在填的时候说在填草稿
+    if (state.label.startsWith('对不上页面')) return state.label
+    return `正在填草稿${step} · ${state.label}`
+  }
   return `AI 正在操作${step} · ${state.label}`
 }
 
@@ -58,7 +71,7 @@ export function renderBanner(
   const style = doc.createElement('style')
   style.textContent = CSS
   const bar = doc.createElement('div')
-  bar.className = 'bar'
+  bar.className = state.assist === true ? 'bar assist' : 'bar'
   bar.setAttribute('role', 'status')
   bar.setAttribute('data-testid', 'ads-banner')
   if (state.hidden === true) bar.hidden = true

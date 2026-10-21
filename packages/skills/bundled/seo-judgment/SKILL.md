@@ -1,11 +1,11 @@
 ---
 name: seo-judgment
-description: 内容与搜索的判断方式：排名结论怎么查、拿不到的数怎么说、挑哪些词、先修哪一页、怎么写才让人和 AI 都答得出。装在 dtc.content 职责上，按需加载。
+description: SEO 与 GEO 的判断方式：排名结论怎么查、拿不到的数怎么说、挑哪些词、先修哪一页、怎么写才让人和 AI 都答得出。装在 dtc.seo 职责上，按需加载。
 license: MIT
 tier: open
 version: 1.0.0
-display_name: 内容与搜索
-display_name_en: Content & SEO
+display_name: SEO 与 GEO
+display_name_en: SEO & GEO
 summary: 挑词、先修哪页、怎么写才答得出
 summary_en: Pick keywords, fix the right page first, write to be answered
 ---
@@ -14,7 +14,7 @@ summary_en: Pick keywords, fix the right page first, write to be answered
 
 ## 你做什么
 
-你是跨境独立站「内容与搜索」这条职责的判断手。店里卖的可能是手机壳和磁吸充电宝，可能是香薰机和收纳盒，也可能是瑜伽裤。你的活是：看懂搜索数据，决定先动哪一页，把那一句标题、那一个小节写好。
+你是跨境独立站「SEO 与 GEO」这条职责的判断手。店里卖的可能是手机壳和磁吸充电宝，可能是香薰机和收纳盒，也可能是瑜伽裤。你的活是：看懂搜索数据，决定先动哪一页，把那一句标题、那一个小节写好。
 
 数字不由你算。Search Console 的六个信号、每天那张「今天值得动的 5 件事」、按页面的点击 / 订单 / 收入，都是规则算好交给你的。你负责读懂它们、说成人话、写出改动稿。
 
@@ -144,9 +144,9 @@ summary_en: Pick keywords, fix the right page first, write to be answered
 |---|---|---|
 | 抓不到 | AI 的爬虫被挡、页面打不开 | 建站 |
 | 读不出 | 正文要等脚本跑完才出现，原始网页里是空的 | 建站 |
-| 没用 | 没有哪一页真正回答这个问题 | 内容与搜索 |
-| 过时 | 页面或 AI 说的价格、型号、政策是旧的 | 内容与搜索 / 网站运营 |
-| 没差异 | 提到了，但和竞品比时总推荐别人 | 内容与搜索 / 公关 |
+| 没用 | 没有哪一页真正回答这个问题 | SEO 与 GEO（改页）/ 内容与博客（新写） |
+| 过时 | 页面或 AI 说的价格、型号、政策是旧的 | SEO 与 GEO / 网站运营 |
+| 没差异 | 提到了，但和竞品比时总推荐别人 | SEO 与 GEO / 公关 |
 | 认不出 | AI 把品牌名、品类说错，或根本不知道我们是谁 | 建站（结构化数据）/ 公关 |
 | 说法不一致 | 官网、商品页、平台上架页、评测站各说各的 | 网站运营 / 公关 |
 | 没人佐证 | 被引用的全是站外，站外没人提我们 | 公关 |

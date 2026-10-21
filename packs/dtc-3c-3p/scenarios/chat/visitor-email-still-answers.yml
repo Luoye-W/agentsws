@@ -1,0 +1,40 @@
+# WP436（决策 1303）：「个人信息一律转人」改窄——**只看 AI 要发出去的那一句**。
+#
+# 访客问保修期，顺手留了自己的邮箱。知识库里有保修那张卡、stub 剧本照卡说一句并标出处，
+# 回复里不带邮箱 → 照常按置信度直接答，不出卡。
+# （以前访客这句里有邮箱就一律转人，等于留了联系方式反而被晾着。）
+id: chat/visitor-email-still-answers
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-21T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    chat.visitor_message:
+      visitor: dan@example.com
+      text: 购买前想问下，充电类产品保修期多久？我邮箱 dan@example.com
+  - at: '+1m'
+    clock.advance: {}
+expected:
+  chat_actions: [answer]
+  # 直接答了：一张卡都没有（以前这里会出一张「涉及个人信息」的卡）
+  approval_kinds: { outbound_draft: 0 }
+  event_types:
+    - simulation.chat_turn
+    - simulation.chat_message
+    - simulation.chat_auto_answer
+  # 回复里不许把访客的邮箱原样带回去
+  reply_omits: ['dan@example.com']
+  metrics:
+    applied_changes: 0
+    blocked_proposals: 0
+    escalations: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  访客留了邮箱问保修期：是不是照知识卡直接答了，而没有因为访客留了邮箱就转人；回复里有没有把邮箱原样带回去。

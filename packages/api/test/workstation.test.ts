@@ -211,8 +211,8 @@ describe('岗位三 Tab', () => {
     const data = await json<{
       sections: { source: string; connected: boolean; report_url?: string; blocks: unknown[] }[]
     }>(await h.get(`/v1/positions/${h.assignment.id}/view`))
-    // 售后客服的面板只有店铺后台（它的职责里没有 analytics 域）
-    expect(data.sections.map((s) => s.source)).toEqual(['shop'])
+    // 售后客服的面板只有店铺后台（它的职责里没有 analytics 域）+ 自己的回信账（WP440「今天 AI 直接回」）
+    expect(data.sections.map((s) => s.source)).toEqual(['shop', 'approvals'])
     expect(data.sections[0]?.report_url).toBe('https://admin.shopify.com')
     expect(data.sections[0]?.connected).toBe(true)
   })

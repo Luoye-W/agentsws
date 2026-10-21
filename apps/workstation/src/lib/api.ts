@@ -55,6 +55,8 @@ import type {
   ReplySuggestion,
   Review,
   SenderRule,
+  SenderRuleList,
+  TeamSubscriptionView,
   Todo,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
@@ -1894,9 +1896,13 @@ export interface MailboxSwitchesView {
   b2b?: boolean
   /** WP172：B2B 岗位开着（只读；没开时卡上不画「收 B2B 信」）。 */
   b2b_position?: boolean
+  /** WP440（docs/108 M9）：客服信「有把握就直接回」（缺省开；老服务端没有这一格 = 当开着）。 */
+  auto_reply?: boolean
+  /** WP440：把握要多大（严格 / 适中 / 宽松，缺省适中）。 */
+  auto_reply_strictness?: ChatAutoAnswerStrictnessView
 }
 
-export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read' | 'b2b'
+export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read' | 'b2b' | 'auto_reply'
 
 export const getMailboxSwitches = (id: string, assignment?: string): Promise<MailboxSwitchesView> =>
   api<MailboxSwitchesView>(
@@ -1907,7 +1913,9 @@ export const getMailboxSwitches = (id: string, assignment?: string): Promise<Mai
 /** WP167：改一个开关——立刻生效，服务端写一条事件。 */
 export const setMailboxSwitches = (
   id: string,
-  input: Partial<Record<MailboxSwitchName, boolean>>,
+  input: Partial<Record<MailboxSwitchName, boolean>> & {
+    auto_reply_strictness?: ChatAutoAnswerStrictnessView
+  },
   assignment?: string,
 ): Promise<MailboxSwitchesView> =>
   api<MailboxSwitchesView>(`/v1/connections/${encodeURIComponent(id)}/mailbox-switches`, {
@@ -4135,6 +4143,10 @@ export interface TeamLinkView {
     state:
       | 'stopped'
       | 'needs_account'
+      /** WP444：跨网那条路是增值服务，这个组织还没开通 / 已到期。 */
+      | 'needs_subscription'
+      /** WP444：运营停用了这个组织的团队通道。 */
+      | 'blocked'
       | 'registering'
       | 'connecting'
       | 'online'
@@ -4146,11 +4158,28 @@ export interface TeamLinkView {
   invite_base?: string
 }
 
+export type { TeamSubscriptionView } from '@agentsws/contracts'
+
+/** WP444：团队通道这项增值服务在本机看到的样子（云上那一份 + 没关联 / 连不上时一句人话）。 */
+export interface TeamSubscriptionLocalView {
+  linked: boolean
+  subscription?: TeamSubscriptionView
+  reason?: string
+}
+
 /** WP427：我递出去的申请（加入别人那边）。 */
 export interface TeamJoinView {
   id: string
   workspace_label: string
-  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  /** WP444：`channel_off` = 对方的团队通道未开通 / 已到期（经云那条路关了，同一个网络照常）。 */
+  status:
+    | 'pending'
+    | 'approved'
+    | 'rejected'
+    | 'superseded'
+    | 'left'
+    | 'unreachable'
+    | 'channel_off'
   via: 'lan' | 'cloud'
   created_at: string
   can_enter: boolean
@@ -4326,6 +4355,26 @@ export const listTeamJoins = (assignment?: string): Promise<TeamJoinView[]> =>
 export const enterTeamJoin = (id: string, assignment?: string): Promise<{ url: string }> =>
   api<{ url: string }>(`/v1/team/joins/${encodeURIComponent(id)}/enter`, {
     method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：团队通道（跨网那条路）这项增值服务现在怎样。 */
+export const getTeamSubscription = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：开通（没用过试用 = 7 天免费试用）/ 续费。 */
+export const subscribeTeamChannel = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：取消（当期 / 试用用完为止）。 */
+export const cancelTeamChannel = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    method: 'DELETE',
     ...(assignment === undefined ? {} : { assignment }),
   })
 
@@ -4551,7 +4600,7 @@ export const setAutopilot = (
     ...withAssignment(assignment),
   })
 
-/** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
+/** WP428：直接答的门槛「严格 / 适中 / 宽松」。 */
 export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
 
 /** WP428：「这句不该直接答」——记进学习回路，同类以后先转人。 */
@@ -6480,10 +6529,33 @@ export interface MessageAccountView {
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */
+/** WP440（docs/108 M9）：AI 按把握直接回的一封（「AI 直接回 · 出处」那一行）。 */
+export interface MessageAutoReplyMark {
+  approval_item_id: string
+  at: string
+  score: number
+  sources: { kind: string; label: string }[]
+  excerpt: string
+  flagged: boolean
+}
+
+/** WP440：「这封不该直接回」——记进学习回路，同类以后先给你批。 */
+export const flagMessageAutoReply = (
+  approval_item_id: string,
+  assignment?: string,
+): Promise<{ learned: boolean }> =>
+  api(`/v1/messages/auto-replies/${encodeURIComponent(approval_item_id)}/not-direct`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
 export interface MessageThreadView {
   thread_id: string
   subject: string
   messages: MessageRecord[]
+  /** WP440：这条会话上 AI 按把握直接回的那几封。 */
+  auto_replies?: MessageAutoReplyMark[]
   /**
    * 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
@@ -6615,6 +6687,21 @@ export const handMessageToPosition = (
     method: 'POST',
     body: { route: 'position', position_id, remember_sender },
   })
+
+/** WP439：规则清单（你教过的发件人、命中数、谁教的、刚删的）。 */
+export const listMessageSenderRules = (): Promise<SenderRuleList> => api('/v1/messages/rules')
+
+/** WP439：删一条发件人规则（当场生效：下一封那个发件人重新判）。 */
+export const deleteMessageSenderRule = (
+  id: string,
+): Promise<{ deleted: boolean; rule?: SenderRule }> =>
+  api(`/v1/messages/rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** WP439：撤回刚删的那一条。 */
+export const restoreMessageSenderRule = (
+  id: string,
+): Promise<{ restored: boolean; rule?: SenderRule }> =>
+  api(`/v1/messages/rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
 
 /** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
 export const setMessageKind = (
@@ -6958,6 +7045,8 @@ export interface ExtensionInstallView {
     stuck_on?: string
   }[]
   can_open: boolean
+  /** WP432：还没配对的插件最近一次报的版本（没配对也跟着工坊更新）。 */
+  unpaired?: { version: string; at: string }
 }
 
 export const getExtensionInstall = (assignment?: string): Promise<ExtensionInstallView> =>

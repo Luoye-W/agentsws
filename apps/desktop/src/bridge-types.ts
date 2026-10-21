@@ -98,7 +98,7 @@ export interface DesktopSessionBridge {
 /** WP353：要人介入的那一页。 */
 export interface DesktopSearchHandover {
   workspace_id: string
-  reason: 'captcha' | 'login'
+  reason: 'captcha' | 'login' | 'consent'
   /** 第三栏上那一句（服务进程定）。 */
   message: string
   url: string

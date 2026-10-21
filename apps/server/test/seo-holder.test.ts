@@ -60,9 +60,9 @@ describe('真服务进程：店主和李默都持有内容与搜索', () => {
       server.roles.assignments.create({
         ...base,
         person_id: server.bootstrap.person.id,
-        role_id: 'dtc.content',
+        role_id: 'dtc.seo',
       })
-      server.roles.assignments.create({ ...base, person_id: 'p_li', role_id: 'dtc.content' })
+      server.roles.assignments.create({ ...base, person_id: 'p_li', role_id: 'dtc.seo' })
       // 与定时任务同一条路（不经 HTTP 闸，定时那一轮本来也没有"当前用户"）
       const out = await (await server.brands.forWorkspace(ws)).seoService.daily()
       const ids = out.approval_item_id === undefined ? [] : [out.approval_item_id]

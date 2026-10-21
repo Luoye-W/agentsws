@@ -32,16 +32,19 @@ import {
   Globe,
   GraduationCap,
   Handshake,
+  ListChecks,
   MessageSquareQuote,
   MessagesSquare,
   Package,
   Plug,
+  Plus,
   ScrollText,
   SlidersHorizontal,
   Tags,
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
+import { MESSAGE_RULES_ADDRESS } from '@/components/messages/rules-address'
 import {
   useConnectionsStatus,
   useConversationsStatus,
@@ -62,6 +65,8 @@ import {
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
+import { openRightPane } from '@/components/reports/right-pane'
+import { reportScopeOf } from '@/components/reports/use-report-list'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
@@ -94,9 +99,10 @@ const OutputsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/outputs-panel')
   return { default: m.OutputsPanel }
 })
+/** WP433：「计划」的完整一格 = 定时任务 + 这一层的进度（「工作」、排期 / 流水线类看板，原在「报表」里）。 */
 const SchedulesBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/schedules-panel')
-  return { default: m.SchedulesPanel }
+  const m = await import('@/components/rail/panels/plans-panel')
+  return { default: m.PlansPanel }
 })
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
@@ -119,14 +125,24 @@ const ConversationsBody = lazy(async () => {
   const m = await import('@/components/conversations/conversations-panel')
   return { default: m.ConversationsPanel }
 })
+/** WP439：消息页右栏「规则」（你教过的发件人……）。 */
+const MessageRulesBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/message-rules-panel')
+  return { default: m.MessageRulesPanel }
+})
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
   const m = await import('@/components/reports/reports-panel')
   return { default: m.ReportsPanel }
 })
+/** int/1024：看一份报表（WP438 整份报表，或「产出」里 AI 写的报告文档）与「做一份报表」——WP437 第三栏里的两格。 */
 const ReportBody = lazy(async () => {
-  const m = await import('@/components/reports/reports-panel')
-  return { default: m.ReportPanel }
+  const m = await import('@/components/reports/report-pane-bodies')
+  return { default: m.ReportPaneBody }
+})
+const ReportComposeBody = lazy(async () => {
+  const m = await import('@/components/reports/report-pane-bodies')
+  return { default: m.ReportComposeBody }
 })
 
 /* ── 卡身体（`lazy()`：卡收着时不下载） ──────────────────────────────── */
@@ -227,6 +243,19 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('reports'),
     panel: 'reports',
     useStatus: useReportsStatus,
+    // WP438：卡头「+」= 跟 AI 说想看什么，做一份新的（第三栏开「做一份报表」）
+    action: {
+      icon: Plus,
+      label: 'reports.compose.short',
+      onClick: ({ scope }) => {
+        const where = reportScopeOf(scope)
+        openRightPane({
+          kind: 'report-compose',
+          ...(where === undefined ? {} : { position: where.position }),
+          ...(where?.duty === undefined ? {} : { duty: where.duty }),
+        })
+      },
+    },
   })
   registerRailCardBody('reports', ReportsCardBody)
   registerRailCard({
@@ -297,18 +326,30 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     card: 'reports',
   })
   registerPanelBody('reports', ReportsBody)
-  // 看一份报表（只按地址开：报表卡上点一行）
+  /*
+   * 看一份报表（只按地址开：报表卡上点一行、首页关键数字、对话里的小报表、「产出」里的报告文档）。
+   * int/1024：不标 scoped——WP438 的报表按 id 取、不靠岗位，首页（定位不到岗位）点关键数字也要开得出来。
+   */
   registerPanelType({
     id: 'report',
     label: 'rail.panel.report',
     icon: ScrollText,
     priority: 'builtin',
     group: 'layer',
-    scoped: true,
     matches: [`${REPORT_ADDRESS_PREFIX}**`],
     hidden: true,
   })
   registerPanelBody('report', ReportBody)
+  // WP437 / WP438：「跟 AI 说想看什么 → 做一份报表」那一格（`openRightPane({ kind: 'report-compose' })`）
+  registerPanelType({
+    id: 'report-compose',
+    label: 'rail.panel.report_compose',
+    icon: ScrollText,
+    priority: 'builtin',
+    group: 'layer',
+    hidden: true,
+  })
+  registerPanelBody('report-compose', ReportComposeBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',
@@ -325,7 +366,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     registerPanelAlias({ id: sub, panel: 'outputs', sub })
   registerPanelType({
     id: 'schedules',
-    label: 'rail.panel.schedules',
+    // WP433：这一格现在是「计划」整格（定时任务 + 进度），标题跟卡同名
+    label: 'rail.card.plans',
     icon: CalendarClock,
     priority: 'builtin',
     group: 'layer',
@@ -483,6 +525,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('amazon-keywords', AmazonKeywordsBody)
+  // WP439（docs/108 §5.1.5）：消息页「你教过它」的「共 N 条 →」、消息页右上那颗、铃铛里「X 删了发件人规则」都开它
+  registerPanelType({
+    id: 'message-rules',
+    label: 'rail.panel.message-rules',
+    icon: ListChecks,
+    priority: 'builtin',
+    group: 'context',
+    matches: [MESSAGE_RULES_ADDRESS],
+    hidden: true,
+  })
+  registerPanelBody('message-rules', MessageRulesBody)
   // WP398：岗位页「词库」块（WP395 的面板留的那一块）
   registerKeywordBankBlock()
 }

@@ -51,7 +51,12 @@ import type {
   Trace,
   WorkspaceId,
 } from '@agentsws/contracts'
-import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
+import type {
+  DeckCard,
+  QueryContext as DeckQueryContext,
+  ReportData as DeckReportData,
+  ReportSpec as DeckReportSpec,
+} from '@agentsws/deck'
 import type { ReasonJudgeInput, SimilarCard } from './card-follow.js'
 import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
@@ -1404,4 +1409,43 @@ export interface WorkstationPort {
     actor: WorkstationActor,
     input: { position_id: AssignmentId; tile_ids: string[]; range?: WorkstationRange },
   ): MaybePromise<PositionSummary>
+  /**
+   * WP438（决策 1336）：固定下来的 AI 报表与每份报表的快照。不实现 = 只有默认报表、没有历史（内存档的老装配）。
+   */
+  reports?: ReportStorePort
+}
+
+/** WP438：一份固定下来的报表（AI 做的；默认报表不进库，写在 deck 的表里）。 */
+export interface SavedReport {
+  workspace_id: string
+  person_id: string
+  spec: DeckReportSpec
+  /** 固定到哪个岗位（模板 id）。 */
+  position: string
+  /** 职责层也固定在这条职责上（不给 = 只在岗位层）。 */
+  duty?: string
+  pinned_at: string
+  /** 改过几次（「问 AI」接着改一次 +1）。 */
+  version: number
+}
+
+export interface ReportSnapshotMeta {
+  at: string
+  range: string
+}
+
+/**
+ * WP438（决策 1336 甲）：报表的存放处——固定的 AI 报表（活的：存规格不存图）+ 每次重算留的快照（往回翻）。
+ * 草稿（对话里刚出、还没点「固定」的那一份）只在内存里。
+ */
+export interface ReportStorePort {
+  list(workspace_id: string, person_id: string): MaybePromise<SavedReport[]>
+  get(workspace_id: string, id: string): MaybePromise<SavedReport | undefined>
+  save(report: SavedReport): MaybePromise<void>
+  remove(workspace_id: string, id: string): MaybePromise<void>
+  putDraft(workspace_id: string, spec: DeckReportSpec): void
+  draft(workspace_id: string, id: string): DeckReportSpec | undefined
+  snapshots(workspace_id: string, id: string): MaybePromise<ReportSnapshotMeta[]>
+  snapshot(workspace_id: string, id: string, at: string): MaybePromise<DeckReportData | undefined>
+  addSnapshot(workspace_id: string, data: DeckReportData): MaybePromise<void>
 }

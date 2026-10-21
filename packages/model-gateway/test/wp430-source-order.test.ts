@@ -337,3 +337,45 @@ describe('WP430 AI 来源顺序：这次选的 → 自己的其它 → 工坊积
     )
   })
 })
+
+describe('WP436（决策 1316）：自带 API key 被拒 → 发一次「key 用不了了」', () => {
+  it('key 401 / 403：接着切，发一次 key_rejected（带来源名），不发「要重新登录」；重新能用之前不重复发', async () => {
+    const { gw, rec } = setup({ ds: [http(401)] }, { keys: ['ds', 'kimi'] }, deepseek)
+    const out = await gw.complete(ask('r1'))
+    expect(out.model).toEqual(chatgpt)
+    const rejected = rec.ofType('model_source.key_rejected')
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.payload).toEqual({ provider: 'ds', label: 'DeepSeek' })
+    expect(rec.ofType('model_source.relogin_needed')).toHaveLength(0)
+    await gw.complete(ask('r2'))
+    expect(rec.ofType('model_source.key_rejected')).toHaveLength(1)
+
+    const forbidden = setup({ ds: [http(403)] }, { keys: ['ds'] }, deepseek)
+    await forbidden.gw.complete(ask())
+    expect(forbidden.rec.ofType('model_source.key_rejected')).toHaveLength(1)
+  })
+
+  it('只有这一条来源（没得切）：照实报错，但照样发提醒；额度用完 / 连不上不发', async () => {
+    const alone = { to: undefined, own: [], relogin: [], keys: ['ds'] }
+    const a = setup({ ds: [http(401)] }, alone, deepseek)
+    await expect(a.gw.complete(ask())).rejects.toBeDefined()
+    expect(a.rec.ofType('model_source.key_rejected')).toHaveLength(1)
+    const q = setup({ ds: [http(429)] }, alone, deepseek)
+    await expect(q.gw.complete(ask())).rejects.toBeDefined()
+    const d = setup({ ds: [http(503)] }, alone, deepseek)
+    await expect(d.gw.complete(ask())).rejects.toBeDefined()
+    expect([
+      ...q.rec.ofType('model_source.key_rejected'),
+      ...d.rec.ofType('model_source.key_rejected'),
+    ]).toHaveLength(0)
+  })
+
+  it('换了 key 又能用了 → 下次再被拒还会再提醒一次', async () => {
+    const alone = { to: undefined, own: [], relogin: [], keys: ['ds'] }
+    const { gw, rec } = setup({ ds: [http(401), ok, http(401)] }, alone, deepseek)
+    await expect(gw.complete(ask('r1'))).rejects.toBeDefined()
+    await gw.complete(ask('r2'))
+    await expect(gw.complete(ask('r3'))).rejects.toBeDefined()
+    expect(rec.ofType('model_source.key_rejected')).toHaveLength(2)
+  })
+})

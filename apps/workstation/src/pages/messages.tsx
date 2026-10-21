@@ -59,6 +59,7 @@ import {
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
+import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import {
   type HandNotice,
@@ -74,6 +75,7 @@ import {
 } from '@/components/messages/marketing'
 import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
+import { MessageRulesButton } from '@/components/messages/rules-button'
 import { SiteChatSourceItem, SiteChatView, useHoldsSiteChat } from '@/components/messages/site-chat'
 import { UnclaimedView } from '@/components/messages/unclaimed-view'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
@@ -625,6 +627,8 @@ export function MessagesPage(): ReactNode {
   const header = (
     <header className="flex flex-wrap items-center gap-3">
       <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
+      {/* WP439：顶栏右边「规则」（右栏规则清单） */}
+      <MessageRulesButton />
       <ViewToggle
         view={view}
         unclaimed={overview.data?.unclaimed}
@@ -1035,6 +1039,21 @@ export function MessagesPage(): ReactNode {
                         download.mutate({ id: m.id, attachment: a.id, name: a.name })
                       }}
                     />
+                  ))}
+
+                  {/* WP440：AI 按把握直接回的那几封——「AI 直接回 · 出处」+「这封不该直接回」 */}
+                  {(thread.data?.auto_replies ?? []).map((r) => (
+                    <div
+                      key={r.approval_item_id}
+                      className="rounded-xl border border-ws-line bg-ws-surface px-3 py-2"
+                    >
+                      <EmailAutoReplyMark
+                        approvalItemId={r.approval_item_id}
+                        sources={r.sources}
+                        flagged={r.flagged}
+                        excerpt={r.excerpt}
+                      />
+                    </div>
                   ))}
 
                   {/* WP208：邮件助手从第三栏搬进来——看信时才出现，一块可收起（Luoye 09-30） */}

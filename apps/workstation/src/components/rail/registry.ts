@@ -26,7 +26,7 @@
  * 它拿不到的那几个能力上。
  */
 import type { LucideIcon } from 'lucide-react'
-import type { ComponentType } from 'react'
+import { type ComponentType, useEffect } from 'react'
 import type { RailScope, RailTier } from '@/components/rail/rail-scope'
 
 /** 官方那三档，一个字不改（照抄是有意的：以后真要接官方面板，这一列不用翻译）。 */
@@ -149,6 +149,16 @@ export interface RailCardDefinition {
    * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。图标调用时 `detail` 为假：只要点，摘要要的重请求别发。
    */
   useStatus?(props: RailPanelBodyProps, detail: boolean): CardStatus | undefined
+  /**
+   * WP438：卡头右边的一个动作钮（报表卡的「+」：跟 AI 说想看什么，做一份新的）。
+   * 不给 = 没有。点它不展开 / 收起卡片。
+   */
+  action?: {
+    icon: LucideIcon
+    /** i18n 键（悬停与读屏的那一句）。 */
+    label: string
+    onClick(props: RailPanelBodyProps): void
+  }
 }
 
 /** 卡标题行的状态点：红 = 坏了要修（连接过期），黄 = 等你看。 */
@@ -162,13 +172,28 @@ export interface CardStatus {
   dotLabel?: string
 }
 
-/** 卡展开后最多列几条（决策 1004：4 条 +「显示更多」）。 */
-export const CARD_LIMIT = 4
+/**
+ * 卡展开后最多列几条（决策 1004：4 条 +「显示更多」）。
+ * WP433（Luoye 10-20 问题 7）：改成 5 条；「显示更多」只在**多于 5 条**时才出，≤ 5 条不出（卡身体用 `onTotal` 报总数）。
+ */
+export const CARD_LIMIT = 5
 
 export interface RailCardBodyProps extends RailPanelBodyProps {
   limit: number
   /** 「显示更多」：开完整列表（卡的 `panel`），由外壳给。 */
   onMore: () => void
+  /**
+   * WP433：这张卡一共有几条（完整列表里有、卡上放不下的也算）。外壳据此决定出不出「显示更多」
+   * （多于 `limit` 才出）。不报 = 不出。
+   */
+  onTotal?: (total: number) => void
+}
+
+/** WP433：卡身体报总数（渲染完再报，数一变再报一次）。 */
+export function useCardTotal(onTotal: ((total: number) => void) | undefined, total: number): void {
+  useEffect(() => {
+    onTotal?.(total)
+  }, [onTotal, total])
 }
 
 export type RailCardBody = ComponentType<RailCardBodyProps>

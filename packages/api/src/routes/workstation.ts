@@ -9,6 +9,7 @@
  */
 
 import type { RoleId } from '@agentsws/contracts'
+import { isPluginDeskCard } from '@agentsws/contracts'
 import {
   assembleHome,
   assembleView,
@@ -242,7 +243,7 @@ const HomeTilesBody = z.object({
   range: z.enum(['yesterday', 'last_7d']).optional(),
 })
 
-function workstationOf(deps: GatewayDeps): WorkstationPort {
+export function workstationOf(deps: GatewayDeps): WorkstationPort {
   const w = deps.workstation
   if (w === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配工作台面（GatewayDeps.workstation）')
@@ -313,8 +314,9 @@ async function cardsOf(
   // 到期了（定时清理还没来得及记成过期）的卡也不进牌堆——它已经点不成了
   const live = (i: { expires_at?: string }): boolean =>
     i.expires_at === undefined || Date.parse(i.expires_at) > Date.parse(now)
+  // WP445（决策 1322）：AI 起草的 Reddit 回帖 / 发帖在浏览器插件里审、发——工坊不出卡（看板上只一行「插件里 N 条等你发」）
   const items = [...own, ...extra.filter((i) => !own.some((x) => x.id === i.id))].filter(
-    (i) => can(i) && live(i),
+    (i) => can(i) && live(i) && !isPluginDeskCard(i),
   )
   return sortCards(
     items.map((i) =>
@@ -805,8 +807,17 @@ function allowed(
   source: keyof typeof SOURCE_AUTHZ,
 ): boolean {
   const spec = SOURCE_AUTHZ[source]
+  // WP438：报表按数据源判权限；表里没有的源（以后新加的）一律当没权，不当有权
+  if (spec === undefined) return false
   return deps.roles.can(assignment_id, spec.domain, 'read', {
     range: spec.range,
     sensitivity: 'internal',
   })
+}
+
+/** WP438：报表那几条路由按数据源判权限（和岗位面板同一张表）。 */
+export function sourceAllowed(deps: GatewayDeps, assignment_id: string, source: string): boolean {
+  return source in SOURCE_AUTHZ
+    ? allowed(deps, assignment_id, source as keyof typeof SOURCE_AUTHZ)
+    : false
 }

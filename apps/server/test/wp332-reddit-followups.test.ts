@@ -24,7 +24,7 @@ import { createPrService } from '../src/pr-service.js'
 import { redditParentLinker } from '../src/reddit-write/parent-link.js'
 import {
   createRedditWriteService,
-  PLUGIN_OFFLINE,
+  OPEN_IN_PLUGIN_OFFLINE,
   type RedditWriteEntry,
 } from '../src/reddit-write/service.js'
 import { applyExternalPost } from '../src/reddit-write/wire.js'
@@ -75,7 +75,15 @@ const replyWrite = {
   permalink: '/r/ivraxr/comments/abc/s/c1/',
 }
 
-/** 交一条给插件、插件领走、回一个结局。回那一件活的 id。 */
+/** WP432：人在插件侧边栏里点「打开这一条」（最新那条等你发的）——插件这才拿到那一件活。 */
+async function openLatest(m: ReturnType<typeof make>) {
+  const row = m.svc.writes().find((w) => w.state === 'awaiting')
+  if (row === undefined) return undefined
+  const got = await m.svc.open(row.job_id)
+  return got.ok ? got.job : undefined
+}
+
+/** 交一条给插件、人点开、回一个结局。回那一件活的 id。 */
 async function sendAndEnd(
   m: ReturnType<typeof make>,
   outcome: 'handover' | 'stopped' | 'failed',
@@ -89,7 +97,7 @@ async function sendAndEnd(
     record,
     label: '回复 alice（Reddit · r/ivraxr）',
   })
-  const job = (await m.actions.next(['reddit'], 0)).job
+  const job = await openLatest(m)
   m.actions.result(job?.id as string, { outcome, message, step: 6, reads: {} })
   return job?.id as string
 }
@@ -124,18 +132,18 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(out.ok).toBe(true)
     const view = (out as { view: { job_id: string; state: string; refills?: number } }).view
     expect(view.job_id).not.toBe(first)
-    expect(view).toMatchObject({ state: 'queued', refills: 1 })
+    expect(view).toMatchObject({ state: 'awaiting', refills: 1 })
     expect(m.emitted).toContain('reddit.write_refilled')
     expect(m.svc.writes()).toHaveLength(1)
     expect(redditWriteNotices(m.svc.writes(), m.iso())).toEqual([])
 
-    const job = (await m.actions.next(['reddit'], 0)).job
+    const job = await openLatest(m)
     expect(job?.id).toBe(view.job_id)
     expect(job?.approval_id).toBe('ap_1')
     expect(job?.plan.allow.values).toEqual(['Hi Alice'])
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/ivraxr/comments/abc/s/c1/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
     })
     m.actions.result(job?.id as string, {
       outcome: 'done',
@@ -151,7 +159,7 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(await m.svc.refill(view.job_id)).toMatchObject({ ok: false })
   })
 
-  it('24 小时没插件来领也能再填；插件不在线时照实说「等你打开 Chrome」', async () => {
+  it('WP432：7 天没在插件里打开也能再填；插件不在线时照实说「打开 Chrome」', async () => {
     const m = make()
     await m.svc.send({
       approval_item_id: 'ap_1',
@@ -160,13 +168,13 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
       subreddit: 'ivraxr',
       record,
     })
-    m.now.ms += 25 * 60 * 60 * 1000
+    m.now.ms += 7 * 24 * 60 * 60 * 1000
     await m.actions.sweep()
     const row = m.svc.writes()[0]
     expect(row).toMatchObject({ state: 'failed', outcome: 'expired', can_refill: true })
     const out = await m.svc.refill(row?.job_id as string)
     expect(out.ok).toBe(true)
-    expect(m.svc.writes()[0]?.message).toBe(PLUGIN_OFFLINE)
+    expect(m.svc.writes()[0]?.message).toBe(OPEN_IN_PLUGIN_OFFLINE)
   })
 
   it('收起之后不出；再填又没发出去 → 重新出，同一条只一行；七天前的不出', async () => {
@@ -175,7 +183,7 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(m.svc.dismiss(first)?.dismissed).toBe(true)
     expect(redditWriteNotices(m.svc.writes(), m.iso())).toEqual([])
     const out = await m.svc.refill(first)
-    const job = (await m.actions.next(['reddit'], 0)).job
+    const job = await openLatest(m)
     expect(job?.id).toBe((out as { view: { job_id: string } }).view.job_id)
     m.actions.result(job?.id as string, {
       outcome: 'handover',
@@ -237,11 +245,13 @@ describe('WP332 公关在别人帖子下回一条评论：带上那条评论的�
     await m.actions.next(['reddit'], 0)
     const r = await applyExternalPost(change, { writes: m.svc, post: () => post })
     expect(r?.status).toBe('ok')
-    const job = (await m.actions.next(['reddit'], 0)).job
+    // WP432：定时领活领不到
+    expect((await m.actions.next(['reddit'], 0)).job).toBeUndefined()
+    const job = await openLatest(m)
     expect(job?.plan.kind).toBe('reddit_reply')
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/smartglasses/comments/p9/fog/k7/',
+      url: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/',
     })
     m.actions.result(job?.id as string, {
       outcome: 'done',
@@ -310,7 +320,7 @@ describe('WP332 找被回那条评论的链接', () => {
     expect(
       await redditParentLinker({
         ...none,
-        mentions: () => [{ url: 'https://old.reddit.com/r/smartglasses/comments/p9/fog/k7/' }],
+        mentions: () => [{ url: 'https://www.reddit.com/r/smartglasses/comments/p9/fog/k7/' }],
       })(ask),
     ).toEqual({ ok: true, permalink: '/r/smartglasses/comments/p9/fog/k7/' })
   })

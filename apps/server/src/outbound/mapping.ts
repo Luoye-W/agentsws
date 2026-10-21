@@ -87,6 +87,9 @@ export function fieldValue(record: OutboundRecord, field: OutboundField): string
       return record.approved_at ?? ''
     case 'counterpart_text':
       return record.counterpart_deleted === true ? '' : (record.counterpart_text ?? '')
+    // WP432：票数是数（没读过留空）
+    case 'score':
+      return record.score ?? ''
     default:
       return (record[field] as string | undefined) ?? ''
   }
@@ -210,6 +213,9 @@ const SYNONYMS: ReadonlyArray<[OutboundField, readonly string[]]> = [
   ['approved_by', ['审批人', '批准人', '谁批的', '负责人', 'approver', 'approved by']],
   ['approved_at', ['批的时间', '审批时间', 'approved at']],
   ['subject', ['邮件主题', '主题', 'subject']],
+  // WP432
+  ['draft_content', ['AI 草稿', '草稿', '原草稿', 'draft']],
+  ['score', ['票数', '点赞', '赞', 'score', 'upvotes', 'votes']],
   ['tier', ['档位', '分类', '优先级', 'tier', 'category']],
   ['faq', ['faq', '依据', '引用']],
   ['follow_up_count', ['对方回复数', '后续', '回复数', 'replies']],

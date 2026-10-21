@@ -33,7 +33,7 @@ const redditPayload = (text: string) => ({
   facts: [{ id: 'fc_1', text: 'Q: glasses? A: yes, with inserts' }],
 })
 
-async function wired() {
+async function wired(opts: { workspace_name?: string } = {}) {
   const h = await harness()
   const me = h.person_id
   const other = h.other_id
@@ -85,7 +85,9 @@ async function wired() {
     facts: async (s) => {
       calls.push(`facts:${s.workspace_id}`)
       return {
-        workspace_name: 'IVRA',
+        // WP457：`<id>` = 品牌名就是工作区 id
+        workspace_name:
+          opts.workspace_name === '<id>' ? s.workspace_id : (opts.workspace_name ?? 'IVRA'),
         progress: { configured: true, reading: false, drafting: 2, pending: 3 },
         writes: [write('aj_mine', 'ap_mine', 'filling'), write('aj_other', 'ap_other', 'sent')],
         records: [
@@ -280,5 +282,27 @@ describe('WP413 侧边栏：处理（插件里批 = 工坊里批）', () => {
     const snap = await json(await w.plugin('GET', '/v1/extension/panel'))
     expect(snap.can_act).toBe(false)
     expect((await w.plugin('POST', '/v1/extension/panel/cards/ap_mine/fill', {})).status).toBe(403)
+  })
+})
+
+describe('WP457 侧边栏头部不写内部名', () => {
+  it('品牌名是占位的 default、人名是占位的 owner：两样都不发', async () => {
+    const w = await wired({ workspace_name: 'default' })
+    const identity = w.h.deps.identity
+    const real = identity.getPerson.bind(identity)
+    identity.getPerson = async (id) => {
+      const p = await real(id)
+      return p === undefined ? p : { ...p, name: 'owner' }
+    }
+    const snap = await json(await w.plugin('GET', '/v1/extension/panel'))
+    expect(snap.workspace_name).toBeUndefined()
+    expect(snap.person_name).toBeUndefined()
+  })
+
+  it('品牌名就是工作区 id 时也不发；真名照发', async () => {
+    const w = await wired({ workspace_name: '<id>' })
+    const snap = await json(await w.plugin('GET', '/v1/extension/panel'))
+    expect(snap.workspace_name).toBeUndefined()
+    expect(snap.person_name).toBe('me')
   })
 })

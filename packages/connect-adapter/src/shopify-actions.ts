@@ -368,6 +368,28 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     graphql: 'shopPolicyUpdate',
     what: '改政策页正文（退换货、隐私、服务条款）——上线检查单上的必备项之一',
   },
+  // WP446（docs/109 §4.4）：网址跳转。建 / 改 / 删都是同一种改动（撤回 = 改回卡上记着的原跳转）
+  {
+    action_id: 'shopify_admin.create_url_redirect',
+    change_kind: 'url_redirect',
+    target: 'store_config',
+    graphql: 'urlRedirectCreate',
+    what: '加一条网址跳转（旧路径 → 新路径，永久 301）',
+  },
+  {
+    action_id: 'shopify_admin.update_url_redirect',
+    change_kind: 'url_redirect',
+    target: 'store_config',
+    graphql: 'urlRedirectUpdate',
+    what: '改一条已有跳转的目标',
+  },
+  {
+    action_id: 'shopify_admin.delete_url_redirect',
+    change_kind: 'url_redirect',
+    target: 'store_config',
+    graphql: 'urlRedirectDelete',
+    what: '撤掉一条跳转（撤回加跳转那张卡时用）',
+  },
   {
     action_id: 'shopify_admin.install_theme',
     change_kind: 'theme_install',

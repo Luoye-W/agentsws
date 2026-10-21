@@ -555,7 +555,7 @@ describe('46 §3 岗位与职责 → 清单', () => {
   })
 
   // WP62 / WP63 / WP64（51 §2 / 46 §1 表 ③）
-  it('「网站运营」岗位模板：四条职责；清单里的店铺卡按平台走，选了别的平台就不出', async () => {
+  it('「网站运营」岗位模板：五条职责（WP446 加了 SEO 与 GEO）；清单里的店铺卡按平台走，选了别的平台就不出', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
 
@@ -568,6 +568,8 @@ describe('46 §3 岗位与职责 → 清单', () => {
     expect(webOps?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
       'dtc.store',
       'dtc.content',
+      // WP446：SEO 与 GEO 排在内容与博客后面、默认勾
+      'dtc.seo',
       'dtc.email-marketing',
       'dtc.fulfillment',
     ])

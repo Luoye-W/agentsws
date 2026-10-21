@@ -23,6 +23,7 @@
 import {
   normalizeSubreddit,
   Pace,
+  REDDIT_INFO_MAX,
   REDDIT_PACE_LIMITS,
   REDDIT_READ_MAX_PARTS,
   type RedditListingItem,
@@ -91,6 +92,10 @@ export type RedditSearchResult =
   | { ok: true; items: RedditItem[] }
   | { ok: false; message: string; not_configured?: boolean }
 
+/** WP432：票数那一路的键、读最近几天发出去的。 */
+const SCORES_KEY = 'scores'
+const SCORE_DAYS = 7
+
 export interface RedditWatchOptions {
   workspace_id: WorkspaceId
   store: RedditWatchStore
@@ -120,7 +125,10 @@ export interface RedditWatchOptions {
   setupCards?(): Promise<SetupCardsAssembly | undefined>
   /** 缺连接 / 缺设置的卡挂在谁名下（持有 `social.reddit` 的人）；没人持有就不出卡。 */
   actor?(): RunRequest['actor'] | undefined
-  outbound?(): Pick<OutboundLog, 'addFollowUp' | 'counterpartDeleted'> | undefined
+  outbound?():
+    | (Pick<OutboundLog, 'addFollowUp' | 'counterpartDeleted'> &
+        Partial<Pick<OutboundLog, 'setScores' | 'list'>>)
+    | undefined
   /** 审计事件（只有 id、种类、数字；不含正文）。 */
   emit?(type: string, payload: Record<string, unknown>): void
   /** Reddit 号的节奏（与 WP329 写共用一本账；不给就自己建一本）。 */
@@ -793,6 +801,21 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       for (const r of reqs) out.push(one(r))
       taken.push(sub)
     }
+    // WP432：顺手读品牌号最近 7 天发出去那几条的票数（一次一页、最多 25 条；记进发出记录、周报能用）
+    if (inbox && out.length < REDDIT_READ_MAX_PARTS) {
+      const since = nowMs() - SCORE_DAYS * 86_400_000
+      const ids = (options.outbound?.()?.list?.(ws, { channel: 'reddit', limit: 100 }) ?? [])
+        .filter(
+          (r) =>
+            r.status === 'sent' &&
+            r.external_id !== undefined &&
+            /^t[13]_[a-z0-9]{1,13}$/u.test(r.external_id) &&
+            ms(r.sent_at) >= since,
+        )
+        .map((r) => r.external_id as string)
+        .slice(0, REDDIT_INFO_MAX)
+      if (ids.length > 0) out.push({ key: SCORES_KEY, kind: 'info', ids, max_pages: 1 })
+    }
     // WP329（决策 764）：顺手读版规——自家版块与起草时要过的版，旧了（7 天）才读，一轮最多 3 个
     if (inbox || taken.some(isOwn)) {
       const wanted = store.kv<string[]>(ws, 'rules_wanted') ?? []
@@ -1003,6 +1026,18 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     // WP411：同一轮拆成几件时，前几件的数累在 kv 里
     const acc = store.kv<PartAcc | null>(ws, `acc:${run.id}`) ?? {}
     for (const part of res.parts) {
+      // WP432：票数那一路不是条目——记进发出记录就走（读不成不算这一块失败）
+      if (part.key === SCORES_KEY) {
+        if (part.ok)
+          options.outbound?.()?.setScores?.(
+            ws,
+            part.items.flatMap((it) =>
+              it.score === undefined ? [] : [{ external_id: it.name, score: it.score }],
+            ),
+            options.now(),
+          )
+        continue
+      }
       // WP329：版规那几路不是条目，记下就走（读不成不算这一块失败）
       if (part.key.startsWith('rules:')) {
         const sub = part.key.slice('rules:'.length)

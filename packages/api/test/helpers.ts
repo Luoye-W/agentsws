@@ -179,6 +179,7 @@ export interface Harness {
     body?: unknown,
     init?: RequestInit & { assignment?: string | null },
   ): Promise<Response>
+  delete(path: string, init?: RequestInit & { assignment?: string | null }): Promise<Response>
 }
 
 const ISO = (s: string): string => s
@@ -1037,5 +1038,6 @@ export async function harness(
     get: (path, init) => call('GET', path, undefined, init),
     post: (path, body, init) => call('POST', path, body, init),
     put: (path, body, init) => call('PUT', path, body, init),
+    delete: (path, init) => call('DELETE', path, undefined, init),
   }
 }

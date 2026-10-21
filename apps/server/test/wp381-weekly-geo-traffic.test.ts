@@ -14,7 +14,7 @@ const CONTENT = {
   workspace_id: 'ws_1',
   person_id: 'p_li',
   assignment_id: 'asg_content',
-  role_id: 'dtc.content',
+  role_id: 'dtc.seo',
 }
 const TRAFFIC: AiTrafficSummary = {
   measured: true,
@@ -47,7 +47,7 @@ function setup(over: Partial<SeoServiceOptions>) {
     approvals: txn.approvals,
     ledger: txn.ledger,
     actionOf: () => ({ mandate: { caps: {} }, level: 'L1' }),
-    holderOf: (role) => (role === 'dtc.content' ? CONTENT : undefined),
+    holderOf: (role) => (role === 'dtc.seo' ? CONTENT : undefined),
     thresholds: () => ({}),
     work: { createMatter: (input) => ({ id: 'mat_1', ...input }) },
     searchConsole: () => standInSearchConsole({ rows: [], pages: [] }),

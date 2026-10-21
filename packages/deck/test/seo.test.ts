@@ -43,7 +43,7 @@ function ctx(connected: string[], approvals: ApprovalItem[]): QueryContext {
     now: NOW,
     tz_offset_minutes: 480,
     base_currency: 'USD',
-    role_id: 'dtc.content',
+    role_id: 'dtc.seo',
     position_id: 'asg_1',
     orders: [],
     approvals,
@@ -61,12 +61,18 @@ const rowsOf = (name: string, c: QueryContext): Record<string, unknown>[] => {
 }
 
 describe('WP154 内容与搜索面板', () => {
-  it('GSC 原始两张表换成三块 SEO 积木（不堆数据）', () => {
-    const ids = blocksForRole('dtc.content').map((b) => b.id)
+  it('GSC 原始两张表换成三块 SEO 积木（不堆数据）；WP446 起这三块在「SEO 与 GEO」下', () => {
+    const ids = blocksForRole('dtc.seo').map((b) => b.id)
     expect(ids).toContain('seo.today')
     expect(ids).toContain('seo.page_revenue')
     expect(ids).toContain('seo.geo_visibility')
     expect(ids).not.toContain('gsc.queries')
+    // 内容与博客只剩写作那三块
+    expect(blocksForRole('dtc.content').map((b) => b.id)).toEqual([
+      'content.drafts',
+      'content.recent_posts',
+      'content.pending_publish',
+    ])
   })
 
   it('今天值得动的 5 件事：GSC 没连 = 去连接；连了读最新那张报告', () => {

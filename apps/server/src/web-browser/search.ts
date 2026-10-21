@@ -18,11 +18,12 @@
  * `web_fetch`：Reddit / LinkedIn / Quora 这类匿名抓取常被拒的站，用同一个内置浏览器打开、只读取正文；
  * 别的站照旧官方匿名抓取（分流在 dsh-adapter 里，按 {@link BrowserWebSearch.fetchHosts}）。
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { SerpQuery, SerpResult } from '@agentsws/contracts'
 import type { OpenResult, SearchBrowserChannel } from './channel.js'
-import { blockOf } from './detect.js'
+import { type Block, blockOf } from './detect.js'
 import {
   bingSearchUrl,
   googleSearchUrl,
@@ -91,8 +92,67 @@ export const HANDOVER_PAUSE_MS = 6 * 3_600_000
 const DAY = 86_400_000
 const HOUR = 3_600_000
 
-/** Google 加载等多久算「打不开」；Bing 同。 */
-export const ENGINE_TIMEOUT_MS = 8_000
+/**
+ * Google 加载等多久算「打不开」；Bing 同。WP454：8 秒 → 15 秒（走代理时偏紧）；壳那边 `dom-ready` 之后
+ * 还会再等最多 8 秒等过渡页跳到真结果页（不算在这里面）。读正文那一路不动。
+ */
+export const ENGINE_TIMEOUT_MS = 15_000
+
+/** WP454：热身开的那一页。 */
+export const GOOGLE_HOME = 'https://www.google.com/'
+
+/** WP454：第三栏那一句（Google 的 cookie 同意页）。 */
+export const CONSENT_HANDOVER_LINE =
+  'Google 要你选一次 cookie 设置：在这页上自己选（AI 不点）；选完之后搜索会自动接着用 Google。'
+export const CONSENT_MESSAGE =
+  'Google 要你选一次 cookie 设置：那一页已经放在右边「浏览器」里，需要你在那页自己选一次（AI 不点）。'
+
+/** WP454：每个品牌留多少次搜索的留痕。 */
+export const SEARCH_TRACE_MAX = 50
+
+/**
+ * WP454：一次搜索里每一步的结果。`failed` 是派工单那 7 种之外补的一种：打开时出错但不是超时（断网、壳回错）。
+ */
+export type SearchStepResult =
+  | 'ok'
+  | 'blocked'
+  | 'interstitial'
+  | 'consent'
+  | 'timeout'
+  | 'empty'
+  | 'skipped'
+  | 'failed'
+
+export interface SearchTraceStep {
+  /** 哪一步；`google_warmup` = 第一次搜 Google 前开一次首页。 */
+  via: SearchVia | 'google_warmup'
+  result: SearchStepResult
+  /** 这一步花了多久（毫秒，含排队与节流间隔）。 */
+  ms: number
+  /** 为什么没用上（人话一句）。 */
+  why?: string
+}
+
+/** WP454：一次搜索的留痕（只在本机 `web-search.json`，不上云；查询只存哈希）。 */
+export interface SearchTraceEntry {
+  at: number
+  /** 查询（含市场语言）的 sha256 前 16 位——不存原文。 */
+  query_hash: string
+  /** 最后用上的那一路；都没用上 = 没有。 */
+  via?: SearchVia
+  cached?: boolean
+  ms: number
+  steps: SearchTraceStep[]
+}
+
+/** 一步走完回什么（`result` 不给 = 由主循环按有没有结果定）。 */
+interface StepOutcome {
+  sources?: SearchSource[]
+  note?: string
+  handover?: boolean
+  result?: SearchStepResult
+  why?: string
+}
 
 export const HANDOVER_MESSAGE =
   'Google 要人机验证：那一页已经放在右边「浏览器」里，需要你在那页点一下验证（AI 不碰验证码）。'
@@ -177,6 +237,10 @@ interface StateFile {
     string,
     { at: number; via: SearchVia; native?: NativeSearchSource; sources: SearchSource[] }
   >
+  /** WP454：最近 {@link SEARCH_TRACE_MAX} 次搜索每一步的结果（新的在后）。 */
+  trace?: SearchTraceEntry[]
+  /** WP454：最近一次 Google 那一步没用上：什么时候、结果、为什么（一眼看出来用）。 */
+  google_last_miss?: { at: number; result: SearchStepResult; why?: string }
 }
 
 function loadState(file: string | undefined): StateFile {
@@ -188,6 +252,8 @@ function loadState(file: string | undefined): StateFile {
       version: 1,
       engines: raw.engines ?? {},
       cache: raw.cache ?? {},
+      ...(Array.isArray(raw.trace) ? { trace: raw.trace.slice(-SEARCH_TRACE_MAX) } : {}),
+      ...(raw.google_last_miss === undefined ? {} : { google_last_miss: raw.google_last_miss }),
     }
   } catch {
     return empty
@@ -305,18 +371,164 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
     return { until: p.until }
   }
 
+  /** WP454：这个品牌第一次搜 Google 之前要不要先热身（本进程里试过一次就不再试）。 */
+  let warmed = false
+  let warming: Promise<StepOutcome | undefined> | undefined
+
+  /** 被拦 / 过渡页 / 同意页怎么处理（搜索那一页、热身那一页共用）。 */
+  async function onBlock(
+    e: 'google' | 'bing',
+    block: Block,
+    url: string,
+  ): Promise<{ note: string; handover?: boolean; result: SearchStepResult }> {
+    const channel = o.channel
+    const now = o.now()
+    // WP454：过渡页只记一句、换下一路——不计被拦次数、不暂停、不亮给人
+    if (block.kind === 'interstitial')
+      return {
+        note: `${ENGINE_NAME[e]} 没出结果（过渡页，等了 8 秒还没跳到结果页）`,
+        result: 'interstitial',
+      }
+    const s = engine(e)
+    // WP454：cookie 同意页——不算被拦，但要人选一次（AI 不点）；人选过照 verified_at 解除
+    if (block.kind === 'consent') {
+      const shown =
+        channel === undefined
+          ? false
+          : await channel.reveal({
+              workspace_id: o.workspace_id,
+              url,
+              reason: 'consent',
+              message: CONSENT_HANDOVER_LINE,
+            })
+      const until = now + (shown ? HANDOVER_PAUSE_MS : FIRST_BLOCK_PAUSE_MS)
+      s.pause = { at: now, until, handover: shown }
+      flush()
+      return shown
+        ? { note: CONSENT_MESSAGE, handover: true, result: 'consent' }
+        : {
+            note: `${ENGINE_NAME[e]} ${block.message}，先暂停到 ${clock(until)}`,
+            result: 'consent',
+          }
+    }
+    s.hits = [...s.hits.filter((t) => t > now - DAY), now]
+    const human =
+      e === 'google' && (block.kind === 'captcha' || block.kind === 'login') && s.hits.length >= 2
+    if (human && channel !== undefined) {
+      s.pause = { at: now, until: now + HANDOVER_PAUSE_MS, handover: true }
+      flush()
+      const shown = await channel.reveal({
+        workspace_id: o.workspace_id,
+        url,
+        reason: block.kind === 'login' ? 'login' : 'captcha',
+        message: '需要你在这页点一下验证（AI 不碰验证码）；点过之后搜索会自动接着用 Google。',
+      })
+      return shown
+        ? { note: HANDOVER_MESSAGE, handover: true, result: 'blocked' }
+        : {
+            note: `${ENGINE_NAME[e]} ${block.message}，已暂停到 ${clock(now + HANDOVER_PAUSE_MS)}`,
+            result: 'blocked',
+          }
+    }
+    s.pause = { at: now, until: now + FIRST_BLOCK_PAUSE_MS, handover: false }
+    flush()
+    return {
+      note: `${ENGINE_NAME[e]} ${block.message}，先暂停到 ${clock(now + FIRST_BLOCK_PAUSE_MS)}（不绕过）`,
+      result: 'blocked',
+    }
+  }
+
+  /**
+   * WP454：第一次搜 Google 之前先开一次 Google 首页（只开不点，等 `dom-ready` 加 1.5 秒；算进每小时上限）。
+   * partition 里已经有 Google 的 cookie（壳经 `status` 的 `google_cookies` 告诉）就跳过。
+   * 回 `undefined` = 接着搜；回别的 = 这一路到此为止（热身那一页就被拦 / 要同意 / 这一小时满了）。
+   */
+  async function warmUp(
+    channel: SearchBrowserChannel,
+    url: string,
+    trace: SearchTraceStep[],
+  ): Promise<StepOutcome | undefined> {
+    if (warmed) return undefined
+    // 同时进来好几条（品牌分析会并发搜）：等同一次热身，不各开一页
+    if (warming !== undefined) return warming
+    warming = warmOnce(channel, url, trace).finally(() => {
+      warming = undefined
+    })
+    return warming
+  }
+
+  async function warmOnce(
+    channel: SearchBrowserChannel,
+    url: string,
+    trace: SearchTraceStep[],
+  ): Promise<StepOutcome | undefined> {
+    const t0 = o.now()
+    const st = await channel.status(o.workspace_id)
+    if (st?.google_cookies === true) {
+      warmed = true
+      trace.push({ via: 'google_warmup', result: 'skipped', ms: 0, why: '已经有 Google 的 cookie' })
+      return undefined
+    }
+    const got = await o.throttle.run(() =>
+      channel.open({
+        workspace_id: o.workspace_id,
+        url: GOOGLE_HOME,
+        kind: 'page',
+        timeout_ms: ENGINE_TIMEOUT_MS,
+        settle_ms: 1_500,
+        max_chars: 2_000,
+        no_read: true,
+      }),
+    )
+    const step = (result: SearchStepResult, why?: string): void => {
+      trace.push({
+        via: 'google_warmup',
+        result,
+        ms: o.now() - t0,
+        ...(why === undefined ? {} : { why }),
+      })
+    }
+    if (got === undefined) {
+      const why = `这一小时内置浏览器已经开了 ${o.throttle.maxPerHour} 页（上限）`
+      step('skipped', why)
+      return { note: `${why}，Google 这次没开`, result: 'skipped' }
+    }
+    warmed = true
+    if (!got.ok) {
+      // 首页没打开不拦着：照样去搜，搜索那一页自己会说清楚
+      step(got.reason === 'timeout' ? 'timeout' : 'failed', got.message)
+      return undefined
+    }
+    const block = blockOf(got)
+    if (block === undefined || block.kind === 'interstitial' || block.kind === 'login') {
+      step('ok')
+      return undefined
+    }
+    const out = await onBlock('google', block, url)
+    step(out.result, block.message)
+    return out
+  }
+
   /** 内置浏览器开一个搜索结果页。回：结果 / 一句为什么没用上 / 亮给人了。 */
   async function viaBrowser(
     e: 'google' | 'bing',
     query: string,
     locale: SearchLocale,
-  ): Promise<{ sources?: SearchSource[]; note?: string; handover?: boolean }> {
+    trace: SearchTraceStep[],
+  ): Promise<StepOutcome> {
     const channel = o.channel
-    if (channel === undefined) return {}
+    if (channel === undefined) return { result: 'skipped', why: '这里没有内置浏览器' }
     const p = await paused(e)
     if (p !== undefined)
-      return { note: `${ENGINE_NAME[e]} 之前被人机验证拦过，暂停到 ${clock(p.until)}` }
+      return {
+        note: `${ENGINE_NAME[e]} 之前被人机验证拦过，暂停到 ${clock(p.until)}`,
+        result: 'skipped',
+      }
     const url = e === 'google' ? googleSearchUrl(query, locale) : bingSearchUrl(query, locale)
+    if (e === 'google') {
+      const stop = await warmUp(channel, url, trace)
+      if (stop !== undefined) return stop
+    }
     const got: OpenResult | undefined = await o.throttle.run(() =>
       channel.open({
         workspace_id: o.workspace_id,
@@ -329,37 +541,24 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
     if (got === undefined)
       return {
         note: `这一小时内置浏览器已经开了 ${o.throttle.maxPerHour} 页（上限），${ENGINE_NAME[e]} 这次没开`,
+        result: 'skipped',
       }
-    if (!got.ok) return { note: `${ENGINE_NAME[e]} 这次没打开（${got.message}）` }
-    const block = blockOf(got)
-    if (block !== undefined) {
-      const s = engine(e)
-      const now = o.now()
-      s.hits = [...s.hits.filter((t) => t > now - DAY), now]
-      const human =
-        e === 'google' && (block.kind === 'captcha' || block.kind === 'login') && s.hits.length >= 2
-      if (human) {
-        s.pause = { at: now, until: now + HANDOVER_PAUSE_MS, handover: true }
-        flush()
-        const shown = await channel.reveal({
-          workspace_id: o.workspace_id,
-          url,
-          reason: block.kind === 'login' ? 'login' : 'captcha',
-          message: '需要你在这页点一下验证（AI 不碰验证码）；点过之后搜索会自动接着用 Google。',
-        })
-        return shown
-          ? { note: HANDOVER_MESSAGE, handover: true }
-          : {
-              note: `${ENGINE_NAME[e]} ${block.message}，已暂停到 ${clock(now + HANDOVER_PAUSE_MS)}`,
-            }
-      }
-      s.pause = { at: now, until: now + FIRST_BLOCK_PAUSE_MS, handover: false }
-      flush()
+    if (!got.ok)
       return {
-        note: `${ENGINE_NAME[e]} ${block.message}，先暂停到 ${clock(now + FIRST_BLOCK_PAUSE_MS)}（不绕过）`,
+        note: `${ENGINE_NAME[e]} 这次没打开（${got.message}）`,
+        result: got.reason === 'timeout' ? 'timeout' : 'failed',
       }
+    const block = blockOf(got)
+    if (block !== undefined) return { ...(await onBlock(e, block, url)), why: block.message }
+    const items = got.serp?.items ?? []
+    const seen = got.serp?.candidates ?? 0
+    return {
+      sources: items,
+      // WP454：0 条时分清「真没结果」和「页面上有结果标题、一条都没读出来」
+      ...(items.length === 0 && seen > 0
+        ? { why: `0 条结果（页面上有 ${seen} 个结果标题，一条都没读出来）` }
+        : {}),
     }
-    return { sources: got.serp?.items ?? [] }
   }
 
   async function viaCloud(
@@ -419,6 +618,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
   ): Promise<{
     sources?: SearchSource[]
     note?: string
+    result?: SearchStepResult
     usage?: BrowserSearchResult['native_usage']
   }> {
     const label = NATIVE_SEARCH_LABEL[source]
@@ -443,7 +643,10 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         )
     const got = o.nativeThrottle === undefined ? await task() : await o.nativeThrottle.run(task)
     if (got === undefined)
-      return { note: `这一小时 ${label} 已经搜了 ${o.nativeThrottle?.maxPerHour ?? 0} 次（上限）` }
+      return {
+        note: `这一小时 ${label} 已经搜了 ${o.nativeThrottle?.maxPerHour ?? 0} 次（上限）`,
+        result: 'skipped',
+      }
     if (!got.ok) {
       const why = got.e instanceof Error ? got.e.message : String(got.e)
       o.log?.(`web-search: ${label} 没搜成：${why}`)
@@ -486,7 +689,29 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       const key = `${locale.language}|${locale.market ?? ''}|${query.trim().toLowerCase()}`
       const now = o.now()
       const hit = state.cache[key]
+      // WP454：每一步留痕（只存查询哈希）
+      const trace: SearchTraceStep[] = []
+      const record = (via: SearchVia | undefined, cached = false): void => {
+        const entry: SearchTraceEntry = {
+          at: now,
+          query_hash: createHash('sha256').update(key).digest('hex').slice(0, 16),
+          ...(via === undefined ? {} : { via }),
+          ...(cached ? { cached: true } : {}),
+          ms: o.now() - now,
+          steps: trace,
+        }
+        state.trace = [...(state.trace ?? []), entry].slice(-SEARCH_TRACE_MAX)
+        const miss = trace.find((t) => t.via === 'google' && t.result !== 'ok')
+        if (miss !== undefined)
+          state.google_last_miss = {
+            at: now,
+            result: miss.result,
+            ...(miss.why === undefined ? {} : { why: miss.why }),
+          }
+        flush()
+      }
       if (hit !== undefined && hit.at > now - SEARCH_CACHE_TTL_MS) {
+        record(hit.via, true)
         return {
           sources: hit.sources.slice(0, maxResults),
           content: `${viaLine(hit.via, hit.native)}（7 天内搜过同一句，用的是上次的结果）。`,
@@ -504,10 +729,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       let nativeUsage: BrowserSearchResult['native_usage']
       // WP355（决策 937）：名单里的模型来源先走它自带的搜索，不行再走 WP353 的链
       const native = nativeSearchSourceOf(who.source)
-      const steps: [
-        SearchVia,
-        () => Promise<{ sources?: SearchSource[]; note?: string; handover?: boolean }>,
-      ][] = [
+      const steps: [SearchVia, () => Promise<StepOutcome>][] = [
         ...(native === undefined
           ? []
           : [
@@ -518,18 +740,29 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
                   nativeUsage = got.usage
                   return got
                 },
-              ] as [SearchVia, () => Promise<{ sources?: SearchSource[]; note?: string }>],
+              ] as [SearchVia, () => Promise<StepOutcome>],
             ]),
-        ['google', () => viaBrowser('google', query, locale)],
-        ['bing', () => viaBrowser('bing', query, locale)],
+        ['google', () => viaBrowser('google', query, locale, trace)],
+        ['bing', () => viaBrowser('bing', query, locale, trace)],
         ['cloud_google', () => viaCloud(query, locale)],
         ['public', () => viaPublic(query, maxResults)],
       ]
       for (const [via, step] of steps) {
+        const t0 = o.now()
         const got = await step()
+        const mark = (result: SearchStepResult, why?: string): void => {
+          trace.push({ via, result, ms: o.now() - t0, ...(why === undefined ? {} : { why }) })
+        }
         if (got.handover === true) handover = true
         if (got.note !== undefined) notes.push(got.note)
-        if (got.sources === undefined) continue
+        if (got.sources === undefined) {
+          // 没给结果的那几路：有一句话 = 试了没成；一句都没有 = 没接这一路
+          mark(
+            got.result ?? (got.note === undefined ? 'skipped' : 'failed'),
+            got.why ?? got.note ?? '没接这一路',
+          )
+          continue
+        }
         anyLoaded = true
         // `site:` 限定：不在那个站上的不算（有的引擎会无视限定、回一堆无关站）
         const sources = (
@@ -538,9 +771,16 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           .filter((s) => /^https?:\/\//.test(s.url))
           .slice(0, maxResults)
         if (sources.length === 0) {
+          mark(
+            'empty',
+            got.sources.length === 0
+              ? (got.why ?? '0 条结果')
+              : `${got.sources.length} 条都不在 ${site} 上`,
+          )
           notes.push(`${viaName(via, native)} 没搜到相关结果`)
           continue
         }
+        mark('ok')
         state.cache[key] = {
           at: o.now(),
           via,
@@ -554,7 +794,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
             .slice(0, keys.length - CACHE_MAX))
             delete state.cache[k]
         }
-        flush()
+        record(via)
         const before = notes.length === 0 ? '' : `前面没用上的：${notes.join('；')}。`
         return {
           sources,
@@ -567,6 +807,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           locale,
         }
       }
+      record(undefined)
       if (!anyLoaded && notes.length === 0)
         throw webError(
           'WEB_PROVIDER_UNAVAILABLE',

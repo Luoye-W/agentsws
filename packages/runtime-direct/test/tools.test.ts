@@ -169,7 +169,7 @@ describe('工具循环的两道门（17 §6.3、16 §3）', () => {
     expect(intent?.before).toBe(0)
     expect(intent?.after).toBe(129)
     expect(intent?.requester).toEqual({ channel: 'email', external_id: 'anna@example.com' })
-    expect(intent?.notes).toEqual(['direct-llm 运行时按政策提出'])
+    expect(intent?.notes).toEqual(['照退货政策提出'])
     expect(result.outputs).toContainEqual({ kind: 'staged_change', change_id: 'chg_1' })
     expect(eventsOf(h.events, 'change.staged')[0]?.change_id).toBe('chg_1')
   })

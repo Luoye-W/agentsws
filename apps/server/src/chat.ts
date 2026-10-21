@@ -156,7 +156,7 @@ const HELD_SHORT: Record<string, string> = {
   money: '涉及钱或改单',
   commitment: '有承诺',
   time_promise: '许了时间',
-  personal_info: '涉及个人信息',
+  personal_info: '回复里带个人信息',
   learned: '同类你说过先给你看',
   no_source: '知识库里没有',
   low_confidence: '把握不够',
@@ -164,7 +164,7 @@ const HELD_SHORT: Record<string, string> = {
 }
 
 /** 订单上的个人信息（姓名、地址、邮箱、电话）——回复里出现就转人。 */
-function privateValuesOf(value: unknown, key = '', out: string[] = []): string[] {
+export function privateValuesOf(value: unknown, key = '', out: string[] = []): string[] {
   if (out.length > 40) return out
   if (typeof value === 'string') {
     if (/(name|address|addr|email|phone|street|city|zip|postal|province)/i.test(key))
@@ -228,7 +228,7 @@ export interface ChatLaneOptions {
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
    * WP428（决策 1246 改）：**按置信度直接答**（缺省开、适中档）。答案有知识 / 订单出处、置信度过线的那一句
-   * 直接发；否则出卡转人。退款、赔偿、改单、许时间、个人信息一律转人（`scoreChatAutoAnswer`）。
+   * 直接发；否则出卡转人。退款、赔偿、改单、许时间、回复里带个人信息一律转人（`scoreChatAutoAnswer`）。
    * 每一轮现读（商家在聊天窗设置里改了下一句就跟着变）。
    */
   autoAnswer?(): { on: boolean; strictness?: ChatAutoAnswerStrictness }
@@ -354,6 +354,13 @@ export interface ChatLane {
     message_id: string
     by: PersonId
   }): Promise<{ learned: boolean } | undefined>
+  /**
+   * WP440（docs/108 M9）：学到的「不该直接答 / 回」那几条——聊天与邮件**共用这一份**
+   * （邮件那边点「这封不该直接回」也记进来，同类以后两边都转人）。
+   */
+  learnedHolds(): readonly ChatLearnedHold[]
+  /** WP440：邮件那边学到的一条（`message_id` 记那张直接回的卡 id）。 */
+  learnHold(hold: ChatLearnedHold & { message_id: string }): void
   /** WP428：这一句是不是直接答的（出处、把握、点没点过「不该直接答」）。 */
   autoAnswerOf(
     message_id: string,
@@ -968,7 +975,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     /*
      * WP428（决策 1246 改）：**按置信度直接答**。这一句有知识 / 订单出处、逐句对得上、把握过线 → 直接发，
      * 对话记录里标「AI 直接答 · 出处」；否则出卡转人（卡上就是这句回复和没直接答的理由），访客那边说
-     * 「稍等，马上帮你问」、起求助钟。退款 / 赔偿 / 改单 / 许时间 / 个人信息一律转人（`scoreChatAutoAnswer`）。
+     * 「稍等，马上帮你问」、起求助钟。退款 / 赔偿 / 改单 / 许时间 / 回复里带个人信息一律转人（`scoreChatAutoAnswer`）。
      */
     const setting = options.autoAnswer?.() ?? { on: true }
     const strictness = setting.strictness ?? DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS
@@ -1469,6 +1476,21 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           emit('chat.auto_answer_flagged', session, { message_id: record.message_id })
       }
       return { learned: true }
+    },
+
+    learnedHolds() {
+      return auto.holds
+    },
+
+    learnHold(hold) {
+      auto.holds.push({
+        tokens: hold.tokens.slice(0, 80),
+        intent: hold.intent,
+        source_ids: [...hold.source_ids],
+        at: clock.now(),
+        message_id: hold.message_id,
+      })
+      flushAuto()
     },
 
     autoAnswerOf(message_id) {

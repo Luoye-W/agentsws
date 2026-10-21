@@ -111,14 +111,18 @@ export async function replayRun(run_id: RunId, dbPath: string): Promise<ReplayRe
 }
 
 /** 列出事件日志里所有 run_id（CLI 找不到 run 时给个提示）。 */
+/**
+ * 能回放的运行（有 `simulation.run_request` 的那些）。int/1024：WP440 邮件直接回那一次轻模型起草也带 run_id
+ * （`run_email_auto_…`），但它不是一次岗位运行、没有 RunRequest，不列。
+ */
 export async function listRuns(dbPath: string, workspace_id?: string): Promise<string[]> {
   const log = new SqliteEventLog({ dbPath, clock: systemClock, random: systemRandom })
   try {
     const rows = log.database
       .prepare(
         workspace_id === undefined
-          ? 'SELECT DISTINCT run_id FROM events WHERE run_id IS NOT NULL ORDER BY run_id'
-          : 'SELECT DISTINCT run_id FROM events WHERE run_id IS NOT NULL AND workspace_id = ? ORDER BY run_id',
+          ? "SELECT DISTINCT run_id FROM events WHERE run_id IS NOT NULL AND type = 'simulation.run_request' ORDER BY run_id"
+          : "SELECT DISTINCT run_id FROM events WHERE run_id IS NOT NULL AND type = 'simulation.run_request' AND workspace_id = ? ORDER BY run_id",
       )
       .all(...(workspace_id === undefined ? [] : [workspace_id])) as { run_id: string }[]
     return rows.map((r) => r.run_id)

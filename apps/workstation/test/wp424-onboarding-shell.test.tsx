@@ -382,6 +382,14 @@ describe('WP424 桌面壳藏了标题栏：顶栏学 Claude', () => {
     expect(bar.className).toContain('ws-drag')
     expect(bar.style.paddingRight).toContain('140px')
     expect(screen.getByTestId('rail-brand-row').className).not.toContain('pl-[84px]')
+    // WP433（Luoye 10-20 问题 8 后半）：我们那排图标与系统按钮之间留一截空、立一条细竖线
+    expect(screen.getByTestId('caption-gap').className).toContain('ml-4')
+  })
+
+  it('WP433：Mac 与浏览器里没有那条隔开系统按钮的竖线', () => {
+    asDesktop('inset')
+    renderShell()
+    expect(screen.queryByTestId('caption-gap')).toBeNull()
   })
 
   it('没有外壳的那几屏顶上有一条拖动区；浏览器里没有', () => {

@@ -10,6 +10,7 @@
  */
 
 import type {
+  DeletedSenderRule,
   MaybePromise,
   MessageCorrection,
   MessageDraft,
@@ -67,6 +68,11 @@ export interface MessageStore {
   senderRules(): MaybePromise<SenderRule[]>
   putSenderRule(rule: SenderRule): MaybePromise<void>
   deleteSenderRule(id: string): MaybePromise<boolean>
+  /** WP439：刚删的发件人规则（能撤回那一格）。不实现 = 删了就没了。 */
+  deletedSenderRules?(): MaybePromise<DeletedSenderRule[]>
+  putDeletedSenderRule?(row: DeletedSenderRule): MaybePromise<void>
+  /** 撤回了 / 过期了：从「刚删的」里拿掉（按规则 id）。 */
+  dropDeletedSenderRule?(rule_id: string): MaybePromise<boolean>
 
   drafts(): MaybePromise<MessageDraft[]>
   getDraft(id: string): MaybePromise<MessageDraft | undefined>
@@ -134,6 +140,7 @@ export class MemoryMessageStore implements MessageStore {
     BUILTIN_LABELS.map((l) => [l.id, { ...l }]),
   )
   private readonly rules = new Map<string, SenderRule>()
+  private readonly deletedRules = new Map<string, DeletedSenderRule>()
   private readonly draftRows = new Map<string, MessageDraft>()
   private readonly trusted = new Set<string>()
   private readonly correctionRows = new Map<string, MessageCorrection>()
@@ -226,15 +233,27 @@ export class MemoryMessageStore implements MessageStore {
   }
 
   senderRules(): SenderRule[] {
-    return [...this.rules.values()].map((r) => ({ ...r, labels: [...r.labels] }))
+    return [...this.rules.values()].map(copyRule)
   }
 
   putSenderRule(rule: SenderRule): void {
-    this.rules.set(rule.id, { ...rule, labels: [...rule.labels] })
+    this.rules.set(rule.id, copyRule(rule))
   }
 
   deleteSenderRule(id: string): boolean {
     return this.rules.delete(id)
+  }
+
+  deletedSenderRules(): DeletedSenderRule[] {
+    return [...this.deletedRules.values()].map((d) => ({ ...d, rule: copyRule(d.rule) }))
+  }
+
+  putDeletedSenderRule(row: DeletedSenderRule): void {
+    this.deletedRules.set(row.rule.id, { ...row, rule: copyRule(row.rule) })
+  }
+
+  dropDeletedSenderRule(rule_id: string): boolean {
+    return this.deletedRules.delete(rule_id)
   }
 
   drafts(): MessageDraft[] {
@@ -296,4 +315,12 @@ function stripUndefined<T extends object>(patch: T): Partial<T> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(patch)) if (v !== undefined) out[k] = v
   return out as Partial<T>
+}
+
+function copyRule(rule: SenderRule): SenderRule {
+  return {
+    ...rule,
+    labels: [...rule.labels],
+    ...(rule.hit_days === undefined ? {} : { hit_days: { ...rule.hit_days } }),
+  }
 }

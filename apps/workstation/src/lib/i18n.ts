@@ -29,9 +29,11 @@ import {
 } from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
+import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
+import { MESSAGE_RULES_EN, MESSAGE_RULES_ZH } from './i18n-message-rules'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { MODELS_EN, MODELS_ZH } from './i18n-models'
 import { NOTIFY_EN, NOTIFY_ZH } from './i18n-notifications'
@@ -46,6 +48,7 @@ import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
+import { REPORTS_EN, REPORTS_ZH } from './i18n-reports'
 import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
@@ -1004,7 +1007,7 @@ const zh: Table = {
   'messages.ai.triage.route.support': '归客服',
   'messages.ai.triage.route.kol': '归红人营销',
   'messages.ai.triage.route.b2b': '归 B2B',
-  'messages.ai.triage.priority.high': '要紧',
+  'messages.ai.triage.priority.high': '紧急',
   'messages.ai.triage.priority.normal': '一般',
   'messages.ai.triage.priority.low': '不急',
   'messages.ai.triage.unsure': '拿不准',
@@ -1159,6 +1162,8 @@ const zh: Table = {
   'block.rerun.checklist.running': '正在检查…',
   'block.rerun.checklist.failed': '这次没检查成，再点一次',
   'help.site-health.title': '网站体检：AI 读不读得到你的店',
+  // WP447：六个新平台的报表怎么导出
+  'help.ads-export.title': '怎么导出广告报表给我',
   'card.evidence': '证据',
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
@@ -1428,6 +1433,17 @@ const zh: Table = {
   'connections.mailbox.b2b.hint':
     '询盘、老客户来信、回我们开发信的信挪进 BtoBAgents 文件夹，交给 B2B 岗位。发开发信用的那只邮箱也要开：回信会回到它那里。',
   'connections.mailbox.failed': '没改成，稍后再试一次。',
+  // WP440（docs/108 M9）：客服信有把握就直接回
+  'connections.mailbox.auto_reply': '有把握就直接回',
+  'connections.mailbox.auto_reply.hint':
+    '客服来信里问的事知识库有出处、AI 有把握的，直接回给原发件人，回完在消息里标「AI 直接回 · 出处」，不对就点「这封不该直接回」。没把握的先给你批。退款、赔偿、改单、许时间、回复里带个人信息的一律先给你批；Amazon 买家消息先不直接回。',
+  'im.mailboxes.title': '邮箱',
+  'im.mailboxes.hint':
+    '每只邮箱单独设：客服来信有把握就直接回，档位越严直接回得越少。连邮箱在「账号连接」。',
+  'messages.auto_reply.mark': 'AI 直接回',
+  'messages.auto_reply.sources': '出处：{list}',
+  'messages.auto_reply.flag': '这封不该直接回',
+  'messages.auto_reply.flagged': '记下了，同类以后先给你批',
   // ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────
   'connections.directory.title': '添加连接',
   'connections.directory.subtitle': '按分类翻一翻，或者直接搜名字。',
@@ -1597,9 +1613,17 @@ const zh: Table = {
   'connections.line.telegram_bot': '读群消息、发公告、删与禁；机器人必须是群管理员。',
   'connections.line.whatsapp_business': '要过商业验证；主动发消息只能用审批过的模板。',
   'connections.line.meta_marketing': '读投放表现、改预算与出价；与社媒那张 Meta 卡是两张。',
-  'connections.line.google_ads': '读表现、改预算与出价；developer token 要单独申请过审。',
+  'connections.line.google_ads':
+    '读表现、改预算与出价；能动哪些账户看你 Google Cloud 项目的访问级别。',
   'connections.line.x_ads': 'X 的广告接口；申请制，要广告账户与人工审核。',
   'connections.line.tiktok_ads': 'TikTok 的广告接口；要在 Business Center 授权广告账户。',
+  // WP447：六个新平台第一期不用连，导出报表拖进对话
+  'connections.line.microsoft_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.pinterest_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.reddit_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.linkedin_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.snapchat_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.apple_ads': '只推 App；这一期不用连，导出报表拖进对话就行。',
   'connections.line.google_alerts':
     '免费、不用申请：盯自家、竞品和行业，把 Google 提醒的 RSS 链接贴过来，可以很多条。',
   'connections.line.press_distribution': '一次把稿子发给一批媒体的那类服务。',
@@ -1945,6 +1969,7 @@ const zh: Table = {
   'category.page_seo': '改页面标题与开头',
   'category.page_section': '加小节',
   'category.internal_links': '调内链',
+  'category.url_redirects': '改跳转',
   'category.seo_report': '搜索报告',
   'category.weekly_review': '经营一页纸',
   // WP224：一页纸卡的五段
@@ -2328,6 +2353,9 @@ const zh: Table = {
   'calendar.month.prev': '上个月',
   'calendar.month.next': '下个月',
   'calendar.event.close': '关掉',
+  // WP457：周 / 日视图的全天区每天最多两条，多的折起来
+  'calendar.more': '还有 {n} 项',
+  'calendar.more.title': '{month} 月 {day} 日还有 {n} 项',
   'calendar.open_in_matter': '在事项里打开',
   'calendar.open_position': '去这个岗位',
   'calendar.event.source': '来源',
@@ -2743,7 +2771,7 @@ const zh: Table = {
   'data.byo.saved': '已保存，不扣积分。',
   // WP155（docs/81）：连接页「搜索数据」一行
   'search_data.title': '搜索数据',
-  'search_data.subtitle': '「内容与搜索」查搜索结果、问 AI 平台时用的数据从哪来',
+  'search_data.subtitle': '「SEO 与 GEO」查搜索结果、问 AI 平台时用的数据从哪来',
   'search_data.choice.official': '官方（用积分）',
   'search_data.choice.byo': '自带 key',
   'search_data.choice.none': '不接',
@@ -2807,7 +2835,7 @@ const zh: Table = {
   'models.purpose.web_search': '网页搜索',
   'web.search.title': '联网搜索',
   'web.search.hint':
-    '查资料的岗位（内容与搜索、B2B、红人、店铺、投放）和随便聊可以上网搜索：用工坊自己的内置浏览器搜 Google（打不开就换 Bing），在后台静默进行，不花积分。按品牌的目标市场和语言去搜当地内容。偶尔 Google 会要人机验证，那时右边「浏览器」会亮出那一页，请你自己点一下（AI 不碰验证码）。没有内置浏览器时（不是桌面版）改用云端搜索或公开搜索服务，搜索词会交给这些服务。客服岗位不上网搜。',
+    '查资料的岗位（内容与博客、SEO 与 GEO、B2B、红人、店铺、投放）和随便聊可以上网搜索：用工坊自己的内置浏览器搜 Google（打不开就换 Bing），在后台静默进行，不花积分。按品牌的目标市场和语言去搜当地内容。偶尔 Google 会要人机验证，那时右边「浏览器」会亮出那一页，请你自己点一下（AI 不碰验证码）。没有内置浏览器时（不是桌面版）改用云端搜索或公开搜索服务，搜索词会交给这些服务。客服岗位不上网搜。',
   'web.search.on': '开着：查资料的岗位会用工坊内置浏览器上网搜索。',
   'web.search.off': '关着：不上网搜索（打开指定网页照旧可以）。',
   'web.search.no_key': '开着，但这里搜不了网。',
@@ -2943,7 +2971,7 @@ const zh: Table = {
   'markets.kind.currency': '商品币种',
   'markets.cost': '多一个市场，搜索可见度的探测花费多一份',
   'markets.cost.hint':
-    '每周默认问 {q} 个 × {p} 个 AI 平台 × {m} 个市场 × 每次 {price} 积分，约 {c} 积分；每日看搜索结果页每个市场各 {serp} 次。「内容与搜索」面板里可以按市场关掉。',
+    '每周默认问 {q} 个 × {p} 个 AI 平台 × {m} 个市场 × 每次 {price} 积分，约 {c} 积分；每日看搜索结果页每个市场各 {serp} 次。「SEO 与 GEO」面板里可以按市场关掉。',
 
   // ── WP122（71）品牌设计规范 DESIGN.md ────────────────────────────
   //
@@ -3388,11 +3416,11 @@ const zh: Table = {
   'chat.window.assist_wait.option_min': '{n} 分钟',
   'chat.window.auto_answer': '有把握就直接答',
   'chat.window.auto_answer.hint':
-    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、个人信息一律先给你批。',
+    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、回复里带个人信息的一律先给你批。',
   'chat.window.auto_answer.strictness': '把握要多大',
-  'chat.window.auto_answer.strict': '严一点',
+  'chat.window.auto_answer.strict': '严格',
   'chat.window.auto_answer.balanced': '适中',
-  'chat.window.auto_answer.loose': '松一点',
+  'chat.window.auto_answer.loose': '宽松',
   'chat.action.auto_answer': 'AI 直接答',
   'chat.auto.sources': '出处：{list}',
   'chat.auto.flag': '这句不该直接答',
@@ -5533,6 +5561,7 @@ const en: Table = {
   'block.rerun.checklist.running': 'Checking…',
   'block.rerun.checklist.failed': "Check didn't finish — try again",
   'help.site-health.title': 'Site health: can AI read your store?',
+  'help.ads-export.title': 'How to export an ad report for me',
   'card.evidence': 'Evidence',
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
@@ -5786,6 +5815,17 @@ const en: Table = {
   'connections.mailbox.b2b.hint':
     'Inquiries, mail from existing buyers and replies to our cold emails go to the BtoBAgents folder and to the B2B position. Keep it on for the mailbox you send cold emails from: replies land there.',
   'connections.mailbox.failed': 'That did not save. Try again in a moment.',
+  // WP440 (docs/108 M9): support email answered directly when the AI is sure
+  'connections.mailbox.auto_reply': 'Reply directly when sure',
+  'connections.mailbox.auto_reply.hint':
+    'When a support email asks something your knowledge base covers and the AI is confident, it replies to the original sender directly and marks it "AI replied directly · Source" in Messages; tap "Should not have replied" if it was wrong. Anything less certain waits for your OK. Refunds, compensation, order changes, delivery-date promises and replies that would reveal personal details always wait for you; Amazon buyer messages are not answered directly yet.',
+  'im.mailboxes.title': 'Mailboxes',
+  'im.mailboxes.hint':
+    'Set each mailbox on its own: support emails the AI is sure about get a direct reply; a stricter level means fewer direct replies. Connect mailboxes in Accounts.',
+  'messages.auto_reply.mark': 'AI replied directly',
+  'messages.auto_reply.sources': 'Source: {list}',
+  'messages.auto_reply.flag': 'Should not have replied',
+  'messages.auto_reply.flagged': 'Noted — similar emails will wait for you',
   // ── WP83：connection directory & per-position checklist ─────────────
   'connections.directory.title': 'Add a connection',
   'connections.directory.subtitle': 'Browse by category or search by name.',
@@ -5979,10 +6019,19 @@ const en: Table = {
   'connections.line.meta_marketing':
     'Read ad results, change budgets and bids; separate from the social Meta card.',
   'connections.line.google_ads':
-    'Read results, change budgets and bids; the developer token needs its own review.',
+    'Read results, change budgets and bids; which accounts you can touch depends on your Google Cloud project’s access level.',
   'connections.line.x_ads': 'X’s ads API; by application, with an ad account and manual review.',
   'connections.line.tiktok_ads':
     'TikTok’s ads API; ad accounts must be authorized in Business Center.',
+  'connections.line.microsoft_ads':
+    'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.pinterest_ads':
+    'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.reddit_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.linkedin_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.snapchat_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.apple_ads':
+    'Apps only; nothing to connect yet — drop an exported report into the chat.',
   'connections.line.google_alerts':
     'Free, nothing to apply for: watch yourself, competitors and your industry by pasting Google Alerts RSS links — as many as you like.',
   'connections.line.press_distribution': 'Services that send one release to many outlets at once.',
@@ -6331,6 +6380,7 @@ const en: Table = {
   'category.page_seo': 'Page title & opening',
   'category.page_section': 'Add a section',
   'category.internal_links': 'Internal links',
+  'category.url_redirects': 'Redirects',
   'category.seo_report': 'Search report',
   'category.weekly_review': 'Weekly one-pager',
   'weekly.situation': 'Situation',
@@ -6710,6 +6760,8 @@ const en: Table = {
   'calendar.month.prev': 'Previous month',
   'calendar.month.next': 'Next month',
   'calendar.event.close': 'Close',
+  'calendar.more': '{n} more',
+  'calendar.more.title': '{n} more on {month}/{day}',
   'calendar.open_in_matter': 'Open in the matter',
   'calendar.open_position': 'Go to this position',
   'calendar.event.source': 'Source',
@@ -7147,7 +7199,7 @@ const en: Table = {
   'data.byo.saved': 'Saved. No credits are used.',
   // WP155 (docs/81): the "Search data" row on Connections
   'search_data.title': 'Search data',
-  'search_data.subtitle': 'Where "Content & Search" gets search results and AI answers from',
+  'search_data.subtitle': 'Where "SEO & GEO" gets search results and AI answers from',
   'search_data.choice.official': 'Official (credits)',
   'search_data.choice.byo': 'My own key',
   'search_data.choice.none': 'Off',
@@ -7346,7 +7398,7 @@ const en: Table = {
   'markets.kind.currency': 'product currency',
   'markets.cost': 'Each extra market adds one more share of search-visibility probing cost',
   'markets.cost.hint':
-    'Weekly default: {q} questions × {p} AI platforms × {m} markets × {price} credits each ≈ {c} credits; daily search-results checks: {serp} per market. You can turn a market off in the Content & Search panel.',
+    'Weekly default: {q} questions × {p} AI platforms × {m} markets × {price} credits each ≈ {c} credits; daily search-results checks: {serp} per market. You can turn a market off in the SEO & GEO panel.',
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',
@@ -7803,11 +7855,11 @@ const en: Table = {
   'chat.window.assist_wait.option_min': '{n} min',
   'chat.window.auto_answer': 'Answer directly when sure',
   'chat.window.auto_answer.hint':
-    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and personal details always wait for you.',
+    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and replies that would reveal personal details always wait for you.',
   'chat.window.auto_answer.strictness': 'How sure',
-  'chat.window.auto_answer.strict': 'Stricter',
+  'chat.window.auto_answer.strict': 'Strict',
   'chat.window.auto_answer.balanced': 'Balanced',
-  'chat.window.auto_answer.loose': 'Looser',
+  'chat.window.auto_answer.loose': 'Lenient',
   'chat.action.auto_answer': 'AI answered directly',
   'chat.auto.sources': 'Source: {list}',
   'chat.auto.flag': 'Should not have answered directly',
@@ -8936,6 +8988,8 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_ZH,
     // WP276：② 同事互联（交给对方、团队页同事、和同事一起用）
     ...PEERS_ZH,
+    // WP439：消息页右栏「规则」
+    ...MESSAGE_RULES_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -8975,6 +9029,10 @@ const TABLES: Record<Lang, Table> = {
     ...NOTIFY_ZH,
     // WP431：顶栏标题下拉、左上角、搜索弹窗
     ...TOPBAR_ZH,
+    // WP437：看板临时一眼、首页简易对话框
+    ...LAYOUT_ZH,
+    // WP438：报表
+    ...REPORTS_ZH,
   },
   en: {
     ...en,
@@ -9004,6 +9062,7 @@ const TABLES: Record<Lang, Table> = {
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,
+    ...MESSAGE_RULES_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,
@@ -9027,6 +9086,8 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
     ...TOPBAR_EN,
+    ...LAYOUT_EN,
+    ...REPORTS_EN,
   },
 }
 
@@ -9039,4 +9100,9 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   const raw = TABLES[lang][key] ?? TABLES.zh[key] ?? key
   if (vars === undefined) return raw
   return raw.replace(/\{(\w+)\}/g, (_m, name: string) => String(vars[name] ?? `{${name}}`))
+}
+
+/** WP457：整张表（只给守卫测试扫「用户看得见的字里有没有内部词」用）。 */
+export function tableOf(lang: Lang): Readonly<Record<string, string>> {
+  return TABLES[lang]
 }

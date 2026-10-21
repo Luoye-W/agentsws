@@ -42,7 +42,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf, organizationModeOf } from '@agentsws/contracts'
+import { brandNameOf, isPluginDeskCard, organizationModeOf } from '@agentsws/contracts'
 import { companyKey } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
 
@@ -276,7 +276,8 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       ...(profile?.storefront_platform === undefined
         ? {}
         : { storefront_platform: profile.storefront_platform }),
-      pending_approvals: open.length,
+      // WP445：插件里审的 Reddit 卡不算「待审」（在插件「等你发」里）
+      pending_approvals: open.filter((i) => !isPluginDeskCard(i)).length,
       alerts: alerts.length,
       ...(sales === undefined ? {} : { sales_today: sales }),
       ...(background === undefined ? {} : { background }),

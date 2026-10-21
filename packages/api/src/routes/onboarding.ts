@@ -28,6 +28,7 @@ import type {
   MembershipClaimView,
   MembershipRequestVia,
   StorefrontPlatform,
+  TeamSubscriptionView,
 } from '@agentsws/contracts'
 import { TEAM_DOOR_HEADER } from '@agentsws/contracts'
 import { z } from 'zod'
@@ -477,11 +478,16 @@ export interface TeamLinkView {
   open: boolean
   /** 同一个网络里的快路。 */
   lan: { on: boolean; url?: string; reason?: string }
-  /** 不在同一个网络时：经工坊云的通道。`needs_account` = 这台电脑还没登录工坊账号。 */
+  /**
+   * 不在同一个网络时：经工坊云的通道。`needs_account` = 这台电脑还没登录工坊账号；
+   * WP444：`needs_subscription` = 跨网通道是增值服务、这个组织还没开通 / 已到期；`blocked` = 被运营停用。
+   */
   cloud: {
     state:
       | 'stopped'
       | 'needs_account'
+      | 'needs_subscription'
+      | 'blocked'
       | 'registering'
       | 'connecting'
       | 'online'
@@ -494,12 +500,34 @@ export interface TeamLinkView {
   invite_base?: string
 }
 
+/**
+ * WP444：团队通道这项增值服务在本机看到的样子（跨网那条路要开通；同一个网络照常免费）。
+ * 没关联工坊账号：`linked: false` + 一句人话（界面上就地给登录）；云连不上：`reason`。
+ */
+export interface TeamSubscriptionLocalView {
+  linked: boolean
+  /** 云上那一份（连上了才有）。 */
+  subscription?: TeamSubscriptionView
+  /** 没关联 / 云连不上 / 这个节点没开通时的一句人话。 */
+  reason?: string
+}
+
 /** WP427：我递出去的申请（加入别人那边）。 */
 export interface TeamJoinView {
   id: string
   /** 对方自报的展示名。 */
   workspace_label: string
-  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  /**
+   * WP444：`channel_off` = 经云的那条路被关了——对方的团队通道没开通 / 已到期（同一个网络里照常能用）。
+   */
+  status:
+    | 'pending'
+    | 'approved'
+    | 'rejected'
+    | 'superseded'
+    | 'left'
+    | 'unreachable'
+    | 'channel_off'
   via: 'lan' | 'cloud'
   created_at: string
   /** 批了：能直接点「打开」。 */
@@ -561,6 +589,12 @@ export interface OnboardingPort {
   joins?(actor: OnboardingActor): MaybePromise<TeamJoinView[]>
   /** WP427：批了的那一条：换一个带一次性登录的地址（在浏览器里打开就进去了）。 */
   enterJoin?(actor: OnboardingActor, id: string): MaybePromise<{ url: string }>
+  /** WP444：团队通道订阅现在怎样（问云；人数顺手报上去）。 */
+  teamSubscription?(actor: OnboardingActor): MaybePromise<TeamSubscriptionLocalView>
+  /** WP444：开通（没用过试用 = 7 天试用）/ 续费。 */
+  subscribeTeam?(actor: OnboardingActor): MaybePromise<TeamSubscriptionLocalView>
+  /** WP444：取消（当期 / 试用用完为止）。 */
+  cancelTeam?(actor: OnboardingActor): MaybePromise<TeamSubscriptionLocalView>
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -1097,6 +1131,68 @@ export function onboardingRoutes(): Route[] {
         const port = portOf(deps)
         if (port.joins === undefined) return ok(c, [])
         return ok(c, await port.joins(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/team/subscription',
+        operationId: 'getTeamSubscription',
+        summary:
+          'WP444：团队通道（跨网那条路）这项增值服务现在怎样——没开 / 试用剩几天 / 已开 / 宽限 / 已关、当前人数档与价钱',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: () => true,
+        returns: 'TeamSubscriptionLocalView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.teamSubscription === undefined)
+          throw new ApiError('not_implemented', '这个服务没有团队通道')
+        return ok(c, await port.teamSubscription(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/team/subscription',
+        operationId: 'subscribeTeam',
+        summary:
+          'WP444：开通团队通道（没用过试用 = 7 天免费试用，试用完按人数档每月扣积分）/ 到期后续费',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        authzBypass: peersBypass,
+        returns: 'TeamSubscriptionLocalView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.subscribeTeam === undefined)
+          throw new ApiError('not_implemented', '这个服务没有团队通道')
+        return ok(c, await port.subscribeTeam(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/team/subscription',
+        operationId: 'cancelTeamSubscription',
+        summary: 'WP444：取消团队通道（当期或试用用完为止；同一个网络里照常能用）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        authzBypass: peersBypass,
+        returns: 'TeamSubscriptionLocalView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.cancelTeam === undefined)
+          throw new ApiError('not_implemented', '这个服务没有团队通道')
+        return ok(c, await port.cancelTeam(actorOf(c)))
       },
     ),
     route(

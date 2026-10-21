@@ -31,6 +31,7 @@ export const DUTY_ICONS: Record<string, DutyIconSpec> = {
   // ── 网站运营 ─────────────────────────────────────────────────────────
   'dtc.store': { glyph: 'dtc.store' },
   'dtc.content': { glyph: 'dtc.content' },
+  'dtc.seo': { glyph: 'dtc.seo' },
   'dtc.email-marketing': { glyph: 'dtc.email-marketing' },
   'dtc.fulfillment': { glyph: 'dtc.fulfillment' },
   // ── 红人营销 ─────────────────────────────────────────────────────────
@@ -59,6 +60,13 @@ export const DUTY_ICONS: Record<string, DutyIconSpec> = {
   'ads.google': { glyph: 'ads', badge: 'google_ads' },
   'ads.x': { glyph: 'ads', badge: 'x_ads' },
   'ads.tiktok': { glyph: 'ads', badge: 'tiktok_ads' },
+  // WP447：六个新平台（只读）。Reddit / LinkedIn 借官网图；其余四家用 simple-icons（CC0）/ 首字母画的本地角标
+  'ads.microsoft': { glyph: 'ads', badge: 'microsoft_ads' },
+  'ads.pinterest': { glyph: 'ads', badge: 'pinterest_ads' },
+  'ads.reddit': { glyph: 'ads', badge: 'reddit_ads' },
+  'ads.linkedin': { glyph: 'ads', badge: 'linkedin_ads' },
+  'ads.snapchat': { glyph: 'ads', badge: 'snapchat_ads' },
+  'ads.apple': { glyph: 'ads', badge: 'apple_ads' },
   // ── 建站：四条都是 Shopify，各画一枚再挂角标 ─────────────────────────
   'site.shopify-build': { glyph: 'site.shopify-build', badge: 'shopify_admin' },
   'site.shopify-theme': { glyph: 'site.shopify-theme', badge: 'shopify_admin' },

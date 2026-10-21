@@ -29,10 +29,15 @@ export type ActionPace = 'read' | 'write'
  */
 export type ActionStep =
   | { op: 'goto'; url: string }
-  | { op: 'click'; selector: string }
-  | { op: 'fill'; selector: string; value: string }
-  /** 等某个元素出现（平台生成预览要时间）。等不到 = 页面对不上，停。 */
-  | { op: 'wait'; selector: string; timeout_ms?: number }
+  /**
+   * WP432：`soft` = 对不上不停（Reddit 新版页面的选择器没对真站核过）：执行器记一笔「没填上」、跳过后面的
+   * 软步骤，直接去等人自己粘贴、点发送（侧边栏里有「复制草稿」）。**软步骤照样过白名单**。
+   */
+  | { op: 'click'; selector: string; soft?: boolean }
+  /** WP432：`highlight` = 填完把那个框描一圈、滚到眼前（人一眼看到填在哪）。 */
+  | { op: 'fill'; selector: string; value: string; soft?: boolean; highlight?: boolean }
+  /** 等某个元素出现（平台生成预览要时间）。等不到 = 页面对不上，停（`soft` 的不停）。 */
+  | { op: 'wait'; selector: string; timeout_ms?: number; soft?: boolean }
   /** 把审批绑定的那张上传表放进文件框（浏览器标准的 DataTransfer 做法）。 */
   | { op: 'upload'; selector: string }
   /** 把审批绑定的那张上传表的**文字**粘进文本框（Meta 导入框本来就支持粘贴）。 */
@@ -67,6 +72,11 @@ export type ActionStep =
       text: string
       prompt: string
       timeout_ms?: number
+      /**
+       * WP432：品牌号用户名（不带 `u/`）。人在页面上把草稿改了再发、正文对不上那一截时，
+       * 新出现的、这个号发的那一条也算（读回它真发出去的字，记进发出记录、改了多少进学习回路）。
+       */
+      author?: string
     }
 
 export type ActionStepOp = ActionStep['op']

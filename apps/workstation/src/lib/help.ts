@@ -63,6 +63,8 @@ export const HELP_SLUGS = [
   'site-health',
   // WP390：工坊服务（推荐、价目单 / 需求单、托管与验收、订单面板）
   'workshop-services',
+  // WP447：六个新平台的广告报表怎么导出（拖进对话就能看数和体检）
+  'ads-export',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -93,7 +95,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
     roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x', 'amz.support'],
   },
   'computer-use': { positions: [], roles: [] },
-  'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
   'shopify-cli': { positions: ['site'], roles: ['site.shopify-theme'] },
   'conn-shopify': {
     positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
@@ -118,7 +120,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
       'kol.youtube',
       'social.youtube',
       'dtc.analytics',
-      'dtc.content',
+      'dtc.seo',
       'pr.monitoring',
     ],
   },
@@ -169,14 +171,25 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'install-update': { positions: [], roles: [] },
   // WP323：通用
   'sent-log': { positions: [], roles: [] },
-  'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
   // WP343：通用
   'my-assistant': { positions: [], roles: [] },
   'site-health': {
     positions: ['web-ops', 'site', 'dtc-ops'],
-    roles: ['dtc.store', 'site.shopify-build', 'dtc.content'],
+    roles: ['dtc.store', 'site.shopify-build', 'dtc.seo'],
   },
   'workshop-services': { positions: [], roles: [] },
+  'ads-export': {
+    positions: ['ads'],
+    roles: [
+      'ads.microsoft',
+      'ads.pinterest',
+      'ads.reddit',
+      'ads.linkedin',
+      'ads.snapchat',
+      'ads.apple',
+    ],
+  },
 }
 
 /**
@@ -294,6 +307,13 @@ export const HELP_BY_SERVICE: Readonly<Record<string, HelpSlug>> = {
   tiktok_research: 'conn-tiktok',
   tiktok_content: 'conn-tiktok',
   tiktok_ads: 'conn-tiktok',
+  // WP447：六个新平台这一期不用连，卡上的「看教程」打开导出那一篇
+  microsoft_ads: 'ads-export',
+  pinterest_ads: 'ads-export',
+  reddit_ads: 'ads-export',
+  linkedin_ads: 'ads-export',
+  snapchat_ads: 'ads-export',
+  apple_ads: 'ads-export',
   x_api: 'conn-x',
   x_ads: 'conn-x',
   reddit: 'conn-community',

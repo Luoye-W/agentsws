@@ -8,7 +8,7 @@
  *
  * 只搜几条、只读结果页；被拦就照实记下（不点、不绕）。跑完退出，用户数据目录由外面那个脚本删。
  */
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app } from 'electron'
@@ -16,6 +16,10 @@ import { app } from 'electron'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = process.env.WP353_OUT
 const queries = JSON.parse(process.env.WP353_QUERIES ?? '[]')
+// WP454：给了就落盘（每个品牌一个目录，`web-search.json` 里有每一步的留痕）；被拦就停；不读正文
+const stateDir = process.env.WP353_STATE_DIR
+const stopOnBlock = process.env.WP353_STOP_ON_BLOCK === '1'
+const noFetch = process.env.WP353_NO_FETCH === '1'
 app.setPath('userData', process.env.WP353_USER_DATA)
 app.disableHardwareAcceleration()
 
@@ -54,6 +58,7 @@ app.whenReady().then(async () => {
     if (s === undefined) {
       s = web.createBrowserWebSearch({
         workspace_id: q.brand,
+        ...(stateDir === undefined ? {} : { dir: join(stateDir, q.brand) }),
         channel,
         throttle,
         profile: () => ({ markets: q.markets }),
@@ -66,6 +71,10 @@ app.whenReady().then(async () => {
     return s
   }
   const results = []
+  const stateOf = (brand) => {
+    const f = stateDir === undefined ? undefined : join(stateDir, brand, 'web-search.json')
+    return f !== undefined && existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : undefined
+  }
   for (const q of queries) {
     const search = brandSearch(q)
     const t = Date.now()
@@ -88,13 +97,20 @@ app.whenReady().then(async () => {
         ms: Date.now() - t,
       })
     }
+    if (stopOnBlock) {
+      const last = stateOf(q.brand)?.trace?.at(-1)
+      if (last?.steps.some((s) => s.via.startsWith('google') && s.result === 'blocked')) {
+        results.push({ stopped: 'Google 出了人机验证：记下、停（不点、不绕）' })
+        break
+      }
+    }
   }
   // 读正文一页（Reddit 走内置浏览器）
   let fetched
   const firstReddit = results
     .flatMap((r) => r.sources ?? [])
     .find((s) => /reddit\.com\/r\/.+\/comments\//.test(s.url))
-  if (firstReddit !== undefined) {
+  if (firstReddit !== undefined && !noFetch) {
     const search = brandSearch({ brand: 'brand_us', markets: ['US'] })
     try {
       const page = await search.fetch(firstReddit.url)
@@ -111,7 +127,14 @@ app.whenReady().then(async () => {
   writeFileSync(
     out,
     JSON.stringify(
-      { at: new Date().toISOString(), electron: process.versions.electron, results, fetched, log },
+      {
+        at: new Date().toISOString(),
+        electron: process.versions.electron,
+        results,
+        fetched,
+        log,
+        state: Object.fromEntries([...brands.keys()].map((b) => [b, stateOf(b)])),
+      },
       null,
       2,
     ),

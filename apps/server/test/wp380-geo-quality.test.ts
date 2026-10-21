@@ -1,5 +1,5 @@
 /**
- * WP380（决策 1066）：内容与搜索里 GEO 的第二层——服务端整条路。
+ * WP380（决策 1066）：SEO 与 GEO里 GEO 的第二层——服务端整条路。
  *
  * 上游全是替身：搜索数据口按「自带 key」那一档即时答（回答原文是录好的样本）、模型口回录好的判断回文、
  * 取网页口回夹具。不联网、不花钱。
@@ -27,10 +27,10 @@ const CONTENT = {
   workspace_id: 'ws_1',
   person_id: 'p_li',
   assignment_id: 'asg_content',
-  role_id: 'dtc.content',
+  role_id: 'dtc.seo',
 }
 const holders: Record<string, typeof CONTENT> = {
-  'dtc.content': CONTENT,
+  'dtc.seo': CONTENT,
   'site.shopify-theme': {
     ...CONTENT,
     person_id: 'p_qian',

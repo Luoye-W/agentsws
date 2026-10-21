@@ -38,7 +38,8 @@ beforeEach(async () => {
     granted_by: server.bootstrap.person.id,
     ranges: [{ kind: 'store' as const, id: 'store_1' }],
   }
-  content = server.roles.assignments.create({ ...base, role_id: 'dtc.content' })
+  // WP446：选站点那张小卡跟着 SEO 与 GEO 走
+  content = server.roles.assignments.create({ ...base, role_id: 'dtc.seo' })
   support = server.roles.assignments.create({ ...base, role_id: 'dtc.support' })
 })
 

@@ -457,6 +457,22 @@ export interface ApprovalExecutionContext {
    * `rewrite_instruction` 原样回给起草那一跳——拦下是**打回重写**，不是静默删改。
    */
   amazon_outbound?: { ok: boolean; codes?: string[]; rewrite_instruction?: string }
+  /**
+   * WP440（docs/108 M9）：邮件客服「有把握就直接回」——客服判断层已经按置信度判过了
+   * （出处、逐句核对、一律转人清单、三档门槛，`@agentsws/support-core` 的 `scoreAutoAnswer`）。
+   *
+   * 总线**只在**这几样都成立时据此自动批：`kind = outbound_draft`、等级不是 L1、额度内、
+   * 三道自主门（`gates`）全放行、收件人门禁过了、不是收件人待定。任何一样不成立 = 照常进队列等人批。
+   * 不给 = 老行为，一个字节不变。
+   */
+  confident_reply?: {
+    /** 0–1 的把握。 */
+    score: number
+    /** 档位（`strict` / `balanced` / `loose`）。 */
+    strictness: string
+    /** 用上的出处 id（知识卡 id / 订单号）。 */
+    source_ids: string[]
+  }
 }
 
 export interface ApprovalItem<P = unknown> {

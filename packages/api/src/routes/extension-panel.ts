@@ -12,22 +12,34 @@
  *
  * 「填进页面」= 批（改过就按改过的批）+ 马上交给插件动作通道，不等取消窗口——真正发出去的那一下永远是人在
  * Reddit 页面上亲手点。之后「填好了 / 读回确认已发」走原来的 `/v1/extension/actions/*`，这里只看结果。
+ *
+ * WP445（决策 1322）：AI 起草的 Reddit 回帖 / 发帖**不在工坊出卡**，卡直接在这里「等你发」（只列「插件里审」那一种：
+ * `isPluginDeskCard`；公司模式里给主管批的那张在工坊里批，这里不出）。「不发」理由可选；**写了理由才跟随同类**
+ * （同 WP414：AI 按理由逐张判同一个人、同一条职责里还没定的卡，判为是的一并不发，能撤回）。
  */
 
 import type {
   PanelCard,
   PanelFillResult,
+  PanelOpenResult,
   PanelPost,
   PanelProgress,
   PanelRecord,
   PanelSinkView,
+  PanelSkipResult,
   PanelSnapshot,
   PanelWrite,
 } from '@agentsws/browser-action'
 import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
 import type { ApprovalItem, MaybePromise } from '@agentsws/contracts'
-import { REDDIT_WRITE_FORM } from '@agentsws/contracts'
+import {
+  isPlaceholderOwnerName,
+  isPlaceholderWorkspaceName,
+  isPluginDeskCard,
+  REDDIT_WRITE_FORM,
+} from '@agentsws/contracts'
 import { z } from 'zod'
+import { followDecision } from '../card-follow.js'
 import { ApiError } from '../errors.js'
 import type { ExtensionSession } from '../extension-store.js'
 import { body, ok, param, tokenFor } from '../helpers.js'
@@ -47,6 +59,8 @@ export interface ExtensionPanelFacts {
   sinks: PanelSinkView[]
   /** WP419：交给人发的社媒帖子（`owner` = 担那条渠道的人；路由按人筛，筛完去掉这一格）。 */
   posts?: (PanelPost & { owner?: string })[]
+  /** WP432：工坊版本与插件文件夹里那一版。 */
+  versions?: { workshop?: string; folder?: string }
 }
 
 export interface ExtensionPanelPort {
@@ -64,6 +78,23 @@ export interface ExtensionPanelPort {
     session: ExtensionSession,
     job_id: string,
   ): MaybePromise<{ ok: true; write: PanelWrite } | { ok: false; message: string }>
+  /**
+   * WP432：人在侧边栏里点「打开这一条」（改过就带改过的字）——回交给插件的那一件活。
+   * 只有这一下能把「等你发」的那一件交出去（本机服务不开任何页面）。
+   */
+  openWrite?(
+    session: ExtensionSession,
+    job_id: string,
+    edit: { text?: string; title?: string },
+  ): MaybePromise<PanelOpenResult>
+  /** WP432：侧边栏里点「不发了」。 */
+  dropWrite?(
+    session: ExtensionSession,
+    job_id: string,
+    reason?: string,
+  ): MaybePromise<{ ok: true } | { ok: false; message: string }>
+  /** WP432：这个人「等你发」那一类开没开系统通知。 */
+  notifySystem?(session: ExtensionSession): MaybePromise<boolean>
   /** WP419：交给人发的那一条，人回话（发好了 / 不发了）。不是这个品牌交给人的那一条回 `ok: false`。 */
   answerPost?(
     session: ExtensionSession,
@@ -201,21 +232,30 @@ export function panelCardOf(item: ApprovalItem): PanelCard | undefined {
   }
 }
 
-/** 这张卡这个人看得见、批得动吗（与工作台「要你处理」同一把尺子）。 */
+/**
+ * 这张卡这个人看得见、批得动吗（与工作台「要你处理」同一把尺子）。WP445：只认「插件里审」的那一种——
+ * 公司模式里给主管批的那张在工坊里批，主管的插件里不出。
+ */
 function decidable(deps: GatewayDeps, session: ExtensionSession, item: ApprovalItem): boolean {
   return (
     item.workspace_id === session.workspace_id &&
     isPanelCard(item) &&
+    isPluginDeskCard(item) &&
     OPEN.has(item.state) &&
     tokenFor(item, session.person_id) !== undefined &&
     decidableBy(deps, session.person_id, session.workspace_id)(item)
   )
 }
 
-/** 这个人能看这条写 / 记录吗：卡是发给他的，或者是他批的。 */
+/**
+ * 这个人能看这条写 / 记录吗：卡是发给他的、是他批的，或者（WP445）是他发起的——主管在工坊里批了，
+ * 进的是发起人的插件「等你发」。
+ */
 const mine = (item: ApprovalItem | undefined, person: string): boolean =>
   item !== undefined &&
-  (item.routing.recipients.some((r) => r.person === person) || item.decision?.by === person)
+  (item.routing.recipients.some((r) => r.person === person) ||
+    item.decision?.by === person ||
+    (item.proposer.kind === 'person' && item.proposer.id === person))
 
 const fillSchema = z
   .object({
@@ -307,7 +347,14 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     const it = await itemOf(w.approval_item_id)
     if (it === undefined || it.workspace_id !== session.workspace_id) continue
     if (!mine(it, session.person_id)) continue
-    writes.push({ ...w, ...(it.decision?.via === 'extension' ? { via_extension: true } : {}) })
+    writes.push({
+      ...w,
+      ...(it.decision?.via === 'extension' ? { via_extension: true } : {}),
+      // WP432：等你发的那几条带上卡上的上下文（原帖、被回的那句、为什么回）——侧边栏是发帖台
+      ...(w.state === 'awaiting' || w.state === 'filling' || w.state === 'queued'
+        ? writeContextOf(it)
+        : {}),
+    })
   }
   const records: PanelRecord[] = []
   for (const { approval_item_id, ...row } of facts.records) {
@@ -320,10 +367,22 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     .filter((p) => p.owner === undefined || p.owner === session.person_id)
     .map(({ owner: _o, ...p }) => p)
   const person = await deps.identity.getPerson(session.person_id).catch(() => undefined)
+  // WP457：头部只写品牌名和人名；占位的 `default` / `owner`、工作区 id、人的 id 一律不写（没有就空着）
+  const workspace_name = facts.workspace_name?.trim()
+  const person_name = person?.name?.trim()
+  const showWorkspace =
+    workspace_name !== undefined &&
+    workspace_name !== '' &&
+    !isPlaceholderWorkspaceName(workspace_name, session.workspace_id)
+  const showPerson =
+    person_name !== undefined &&
+    person_name !== '' &&
+    person_name !== session.person_id &&
+    !isPlaceholderOwnerName(person_name)
   return {
     at: deps.clock.now(),
-    ...(facts.workspace_name === undefined ? {} : { workspace_name: facts.workspace_name }),
-    ...(person?.name === undefined || person.name === '' ? {} : { person_name: person.name }),
+    ...(showWorkspace ? { workspace_name } : {}),
+    ...(showPerson ? { person_name } : {}),
     can_act: session.scopes.includes('reddit.write'),
     progress: facts.progress,
     cards,
@@ -332,6 +391,22 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     sinks: facts.sinks,
     ...(posts.length === 0 ? {} : { posts }),
     can_post: session.scopes.includes('social.post'),
+    ...(facts.versions === undefined ? {} : { versions: facts.versions }),
+    notify_system: (await portOf(deps).notifySystem?.(session)) ?? true,
+  }
+}
+
+/** WP432：一张批过的卡 → 侧边栏发帖台上那几格上下文（只取卡上本来就有的；外部文本只当文字）。 */
+export function writeContextOf(item: ApprovalItem): Partial<PanelWrite> {
+  const card = panelCardOf(item)
+  if (card === undefined) return {}
+  return {
+    kind: card.kind,
+    ...(card.post_title === undefined ? {} : { post_title: card.post_title }),
+    ...(card.parent_author === undefined ? {} : { parent_author: card.parent_author }),
+    ...(card.parent_text === undefined ? {} : { parent_text: card.parent_text }),
+    ...(card.link === undefined ? {} : { thread_link: card.link }),
+    ...(card.reason === undefined ? {} : { reason: card.reason }),
   }
 }
 
@@ -366,7 +441,71 @@ async function answerPostOf(
     throw new ApiError('not_implemented', '这个本机服务版本还不能回发帖结果，先升级 Agents 工坊。')
   const out = await port.answerPost(session, id, answer)
   if (!out.ok) throw new ApiError('conflict', out.message)
+  await decidePostCard(deps, session, id, answer)
   return ok(c, { ok: true as const })
+}
+
+/**
+ * WP445（决策 1322）：插件里审的那一条社媒帖子（卡标 `after.desk = 'plugin'`、工坊不出卡）——人在插件里回
+ * 「发好了」就是批（`via: 'extension'`），「不发了」就是不要（带理由进学习回路）。卡已经定了 / 过期了就只记帖子那一头。
+ */
+async function decidePostCard(
+  deps: GatewayDeps,
+  session: ExtensionSession,
+  post_id: string,
+  answer: { done: true; link?: string } | { done: false; reason?: string },
+): Promise<void> {
+  try {
+    const queue = await deps.approvals.queue({
+      workspace_id: session.workspace_id,
+      person_id: session.person_id,
+      lane: 'mine',
+      kind: 'staged_change',
+      state: ['pending', 'in_review'],
+    })
+    const card = queue.find((i) => {
+      if (!isPluginDeskCard(i) || !isRecord(i.payload)) return false
+      const after = i.payload.after
+      return isRecord(after) && after.post_id === post_id
+    })
+    if (card === undefined) return
+    const token = tokenFor(card, session.person_id)
+    if (token === undefined) return
+    const reason = answer.done ? undefined : answer.reason?.trim()
+    await deps.approvals.decide(card.id, session.person_id, {
+      decision_token: token,
+      action: answer.done ? 'approve' : 'reject',
+      via: 'extension',
+      ...(answer.done
+        ? {}
+        : { reason: reason === undefined || reason === '' ? '在插件里点了不发' : reason }),
+    })
+  } catch {
+    // 卡定不上不挡帖子那一头（帖子已经记了发好了 / 没发）
+  }
+}
+
+const openSchema = z
+  .object({
+    text: z.string().max(PANEL_DRAFT_MAX).optional(),
+    title: z.string().max(PANEL_TITLE_MAX).optional(),
+  })
+  .strict()
+const dropSchema = z.object({ reason: z.string().max(300).optional() }).strict()
+const undoSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(50) }).strict()
+
+/** WP432：这一条写是这个人的（卡是发给他的 / 他批的）；别人的一律 404。 */
+async function ownWrite(
+  deps: GatewayDeps,
+  port: ExtensionPanelPort,
+  session: ExtensionSession,
+  job: string,
+): Promise<void> {
+  const facts = await port.facts(session)
+  const w = facts.writes.find((x) => x.job_id === job)
+  const it = w === undefined ? undefined : await deps.approvals.get(w.approval_item_id)
+  if (it === undefined || it.workspace_id !== session.workspace_id || !mine(it, session.person_id))
+    throw new ApiError('not_found', '没有这一条，或者它不是你批的。')
 }
 
 export function extensionPanelRoutes(): Route[] {
@@ -438,15 +577,80 @@ export function extensionPanelRoutes(): Route[] {
         const item = await openCard(deps, session, param(c, 'id'), input.version)
         const token = tokenFor(item, session.person_id)
         if (token === undefined) throw new ApiError('not_found', NOT_FOUND)
-        await deps.approvals
+        const reason = input.reason?.trim()
+        const out = await deps.approvals
           .decide(item.id, session.person_id, {
             decision_token: token,
             action: 'reject',
             via: 'extension',
-            reason: input.reason?.trim() || '在插件里点了不发',
+            reason: reason === undefined || reason === '' ? '在插件里点了不发' : reason,
           })
           .catch(decideError)
-        return ok(c, { ok: true as const })
+        /*
+         * WP445：写了理由才跟随同类（同 WP414：AI 按理由逐张判同一个人、同一条职责里还没定的卡，判为是的一并不发）。
+         * 没写理由只不发这一条。找同类出错不影响这一次「不发」。
+         */
+        const result: PanelSkipResult = { ok: true }
+        const assignment_id = item.proposer.assignment_id
+        if (reason !== undefined && reason !== '' && assignment_id !== undefined) {
+          try {
+            const follow = await followDecision(deps, {
+              item: out,
+              person_id: session.person_id,
+              assignment_id,
+              action: 'reject',
+              reason,
+              trace_id: c.get('rctx').trace_id,
+            })
+            if (follow !== undefined && follow.applied.length > 0)
+              result.followed = {
+                leader_id: item.id,
+                ids: follow.applied.map((a) => a.id),
+                titles: follow.applied.map((a) => a.title),
+              }
+          } catch {
+            // 跟随是锦上添花
+          }
+        }
+        return ok(c, result)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/cards/:id/follow/undo',
+        operationId: 'extensionPanelFollowUndo',
+        summary:
+          'WP445：撤回「按你的理由，同类的也一并不发了」那几张（放回插件「等你发」；与工坊里撤回是同一件事）',
+        tag: 'extension',
+        auth: 'public',
+        params: [{ name: 'id', in: 'path', required: true, description: '人亲手点「不发」的那张' }],
+        body: undoSchema,
+        returns: '{ restored: number }',
+      },
+      async (c, deps) => {
+        const session = actorOf(c, deps)
+        const input = await body(c, undoSchema)
+        const leader = param(c, 'id')
+        const reopen = deps.approvals.reopen
+        if (reopen === undefined) throw new ApiError('not_implemented', '这里撤不回来')
+        let restored = 0
+        for (const id of new Set(input.ids)) {
+          const it = await deps.approvals.get(id)
+          // 只认「跟着这张、由本人那一下带动」的
+          if (
+            it === undefined ||
+            it.workspace_id !== session.workspace_id ||
+            it.decision?.followed?.leader_id !== leader ||
+            it.decision.by !== session.person_id
+          )
+            continue
+          const back = await reopen.call(deps.approvals, id, session.person_id, {
+            reason: '撤回「跟着处理」',
+          })
+          if (back !== undefined) restored += 1
+        }
+        return ok(c, { restored })
       },
     ),
     route(
@@ -519,6 +723,65 @@ export function extensionPanelRoutes(): Route[] {
         const out = await portOf(deps).refill(session, job)
         const result: PanelFillResult = out.ok ? { ok: true, write: out.write } : out
         return ok(c, result)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/writes/:job/open',
+        operationId: 'extensionPanelOpen',
+        summary:
+          '人在侧边栏里点「打开这一条」（改过就带改过的字）：把批过、等你发的那一条交给插件——插件在当前窗口新开标签页填好，发送由人点',
+        tag: 'extension',
+        auth: 'public',
+        outbound: true,
+        params: [{ name: 'job', in: 'path', required: true, description: '插件动作的那一件 id' }],
+        body: openSchema,
+        returns: 'PanelOpenResult',
+      },
+      async (c, deps) => {
+        const session = actorOf(c, deps)
+        const input = await body(c, openSchema)
+        const port = portOf(deps)
+        await ownWrite(deps, port, session, param(c, 'job'))
+        if (port.openWrite === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个本机服务版本还不能在插件里打开，先升级 Agents 工坊。',
+          )
+        const edit = {
+          ...(input.text === undefined ? {} : { text: input.text }),
+          ...(input.title === undefined ? {} : { title: input.title }),
+        }
+        const out: PanelOpenResult = await port.openWrite(session, param(c, 'job'), edit)
+        return ok(c, out)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/writes/:job/drop',
+        operationId: 'extensionPanelDrop',
+        summary: '侧边栏里点「不发了」：批过、等你发的那一条不发（不再提醒）',
+        tag: 'extension',
+        auth: 'public',
+        params: [{ name: 'job', in: 'path', required: true, description: '插件动作的那一件 id' }],
+        body: dropSchema,
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => {
+        const session = actorOf(c, deps)
+        const input = await body(c, dropSchema)
+        const port = portOf(deps)
+        await ownWrite(deps, port, session, param(c, 'job'))
+        if (port.dropWrite === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个本机服务版本还不能在插件里点不发，先升级 Agents 工坊。',
+          )
+        const out = await port.dropWrite(session, param(c, 'job'), input.reason)
+        if (!out.ok) throw new ApiError('conflict', out.message)
+        return ok(c, { ok: true as const })
       },
     ),
   ]

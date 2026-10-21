@@ -149,7 +149,7 @@ export const HANDLERS = {
   adsDailyExport: 'ads.daily_export',
   /** WP418（自查 B7）：店铺管理每天的日报卡 + 异常卡（时间读职责 yml 的 `digest_schedule`）。 */
   storeDigest: 'store.daily_digest',
-  /** WP418（自查 B13）：网站体检每周一自动跑（店铺管理或内容与搜索有人担就建，不再挂在内容与搜索的周报上）。 */
+  /** WP418（自查 B13）：网站体检每周一自动跑（店铺管理或 SEO 与 GEO 有人担就建，不再挂在内容与搜索的周报上）。 */
   siteHealthWeekly: 'site.health_weekly',
 } as const
 
@@ -1412,7 +1412,7 @@ export interface SchedulePlanOptions {
      * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
      */
     social?: boolean
-    /** WP154：有人持有「内容与搜索」（`dtc.content`）才建每日读与每周小结那两条。 */
+    /** WP154：有人持有搜索那条职责（WP446 起是「SEO 与 GEO」`dtc.seo`）才建每日读与每周小结那两条。 */
     seo?: boolean
     /** WP224：有人持有「公司设置与授权」（`common.owner`）才建每周一页纸那一条。 */
     weeklyReview?: boolean
@@ -1426,9 +1426,21 @@ export interface SchedulePlanOptions {
     competitorWatch?: boolean
     /** WP418：有人担「店铺管理」才建每日日报那一条；值是 cron（职责 yml 的 `digest_schedule`）。 */
     storeDigest?: string
-    /** WP418：有人担「店铺管理」或「内容与搜索」才建每周体检那一条。 */
+    /** WP418：有人担「店铺管理」或「SEO 与 GEO」（WP446 起技术体检归它）才建每周体检那一条。 */
     siteHealthWeekly?: boolean
   }
+}
+
+/**
+ * WP446（docs/109 §4.2）：搜索那两条定时（每日读 Search Console / 每周小结）与每周体检**跟着谁担**——
+ * 每日 / 每周只认「SEO 与 GEO」（`dtc.seo`）；体检认店铺管理或 SEO 与 GEO。只担「内容与博客」的不建。
+ * 服务端建任务（`ensureBrandTasks`）与按分配即时停 / 放（`ROLE_GATED`）读同一份。
+ */
+export function seoScheduleGates(held: (role_id: string) => boolean): {
+  seo: boolean
+  siteHealthWeekly: boolean
+} {
+  return { seo: held('dtc.seo'), siteHealthWeekly: held('dtc.store') || held('dtc.seo') }
 }
 
 /** 建齐七条任务。已经存在的（用户改过时间 / 停过）不动。 */

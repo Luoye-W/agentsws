@@ -10,6 +10,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { openExternal } from '@/components/connections/bridge'
+import {
+  TeamChannelOpen,
+  teamCloudLine,
+  useTeamSubscription,
+} from '@/components/settings/team-channel'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { enterTeamJoin, getTeamLink, listTeamJoins, type TeamLinkView } from '@/lib/api'
@@ -49,8 +54,14 @@ export function TeamLinkLine({ assignment }: { assignment?: string }): React.Rea
       q.state.data !== undefined && SETTLING.has(q.state.data.cloud.state) ? 3000 : false,
   })
   const view = link.data
+  const cloud =
+    view === undefined || view.cloud.state === 'unavailable' ? undefined : view.cloud.state
+  // WP444：跨网那条路是增值服务——登录了账号就问一下订阅（没开 / 试用剩几天 / 宽限 / 已关）
+  const wantsSub = view?.open === true && cloud !== undefined && cloud !== 'needs_account'
+  const sub = useTeamSubscription(wantsSub ? assignment : undefined, wantsSub)
   if (view === undefined || !view.open) return null
-  const cloud = view.cloud.state === 'unavailable' ? undefined : view.cloud.state
+  const subView = sub.data?.subscription
+  const subLine = cloud === 'blocked' ? undefined : teamCloudLine(t, subView)
   return (
     <div className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="team-link">
       <p className="flex items-center gap-1.5" data-testid="team-link-lan">
@@ -59,19 +70,28 @@ export function TeamLinkLine({ assignment }: { assignment?: string }): React.Rea
         <Hint text={t('team.link.hint')} />
       </p>
       {cloud === undefined ? null : (
-        <p className="flex items-center gap-1.5" data-testid="team-link-cloud">
+        <p className="flex flex-wrap items-center gap-1.5" data-testid="team-link-cloud">
           <Dot on={cloud === 'online'} />
-          {t(
-            cloud === 'online'
-              ? 'team.link.cloud.online'
-              : cloud === 'needs_account'
-                ? 'team.link.cloud.needs_account'
-                : cloud === 'stopped'
-                  ? 'team.link.cloud.off'
-                  : cloud === 'backoff'
-                    ? 'team.link.cloud.backoff'
-                    : 'team.link.cloud.connecting',
-          )}
+          {subLine ??
+            t(
+              cloud === 'online'
+                ? 'team.link.cloud.online'
+                : cloud === 'needs_account'
+                  ? 'team.link.cloud.needs_account'
+                  : cloud === 'needs_subscription'
+                    ? 'team.link.cloud.needs_subscription'
+                    : cloud === 'blocked'
+                      ? 'team.link.cloud.blocked'
+                      : cloud === 'stopped'
+                        ? 'team.link.cloud.off'
+                        : cloud === 'backoff'
+                          ? 'team.link.cloud.backoff'
+                          : 'team.link.cloud.connecting',
+            )}
+          {cloud === 'blocked' ? <Hint text={t('team.link.cloud.blocked.hint')} /> : null}
+          {subView !== undefined && cloud !== 'blocked' ? (
+            <TeamChannelOpen view={subView} {...(assignment === undefined ? {} : { assignment })} />
+          ) : null}
           {cloud === 'needs_account' && !login ? (
             <Button
               size="xs"

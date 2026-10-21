@@ -116,6 +116,7 @@ import {
   AMAZON_COMPETITOR_TOOL_NAMES,
   AMAZON_KEYWORD_TOOL_NAMES,
   AMAZON_LISTING_TOOL_NAMES,
+  adsDataToolsFor,
   B2B_OUTBOUND_TOOL_NAMES,
   budgetStopReason,
   COMPETITOR_STORE_ROLES,
@@ -130,7 +131,6 @@ import {
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
-  isAdsDataRole,
   isAdsWiredRole,
   isAmazonKeywordRole,
   isAmazonListingRole,
@@ -582,7 +582,7 @@ export interface RuntimeOptions {
   setupRequestTool?: ToolExecutor
   /**
    * WP385（决策 1076）：网站运营读体检结论的只读工具 `query_site_health`（`site-health-tools.ts` 建的那一份）。
-   * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   * 只给店铺管理、SEO 与 GEO（`dtc.store` / `dtc.seo`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   siteHealthTools?: ToolExecutor
   /**
@@ -848,6 +848,12 @@ export interface DraftVerdict {
   note?: string
   /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
   gate_context: GateDecision[]
+  /**
+   * WP440（docs/108 M9）：客服邮件这一封**为什么没直接回**（「把握不够」「知识库里没有」…），
+   * 卡标题后面括号里那一句。只有客服判断层试过直接回、没过的那条线程才有；别的岗位、别的渠道永远没有，
+   * 标题一个字节不变。
+   */
+  title_note?: string
 }
 
 /**
@@ -1186,10 +1192,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         conversation_id: s.matter.id,
       },
       dedupe_key: `${workspace_id}:outbound_draft:${s.matter.id}:${s.run_id}`,
-      title:
+      title: `${
         who === undefined
           ? `回复草稿（收件人待定）：${payload.subject}`
-          : `回复 ${who}：${payload.subject}`,
+          : `回复 ${who}：${payload.subject}`
+      }${verdict?.title_note === undefined ? '' : `（${verdict.title_note}）`}`,
       summary: to === undefined ? MANUAL_SEND_SUMMARY : payload.subject,
       payload: {
         channel: payload.channel,
@@ -1357,7 +1364,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       summary:
         input.stage === 'handoff'
           ? `请你在电脑上把这一步做完（登录、密码、支付、验证码它不会替你输）。做完点「允许」，它会再用 ${cu.minutes} 分钟接着做。`
-          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行时托盘会变色，随时可以点「停止」。`,
+          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行的时候托盘会变色，随时可以点「停止」。`,
       payload,
       evidence: {
         run_id: s.run_id,
@@ -2186,9 +2193,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               )
             })),
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
-        ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
-          ? ADS_DATA_TOOL_NAMES
-          : []),
+        // WP447：只读的六个新平台只给两个只读工具（不给插件导出、不给止损）
+        ...(options.adsDataTools !== undefined ? adsDataToolsFor(config.role_id) : []),
         // WP396：Listing 体检（只给亚马逊店铺运营；服务端接了才有）
         ...(isAmazonListingRole(config.role_id) && options.amazonListingTools !== undefined
           ? AMAZON_LISTING_TOOL_NAMES

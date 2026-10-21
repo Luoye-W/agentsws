@@ -321,6 +321,8 @@ const SEED_POSITIONS: readonly {
     roles: [
       ['dtc.store', true],
       ['dtc.content', true],
+      // WP446（docs/109 S3）：SEO 与 GEO 从内容里拆出来，排在内容与博客后面、默认勾
+      ['dtc.seo', true],
       ['dtc.email-marketing', true],
       ['dtc.fulfillment', true],
       ['common.member', false],
@@ -398,6 +400,13 @@ const SEED_POSITIONS: readonly {
       ['ads.google', true],
       ['ads.x', false],
       ['ads.tiktok', false],
+      // WP447（docs/109 §6.1）：六个新平台第一期只读，全部默认不勾
+      ['ads.microsoft', false],
+      ['ads.pinterest', false],
+      ['ads.reddit', false],
+      ['ads.linkedin', false],
+      ['ads.snapchat', false],
+      ['ads.apple', false],
       ['common.member', false],
     ],
   },

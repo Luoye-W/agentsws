@@ -43,8 +43,11 @@ expected:
     n: 3
     generated: 3
     image_model: true
-    # L2：出卡给人挑，不自动
-    auto_approved: false
+    # L2：额度内出图本身自动放行（15 §5「allow 且 ≥ L2 → auto_approved」），出的是挑选卡；
+    # 视觉决定在下面那一下入库（L1）。这一格之前从没被解析过，写的 false 与 L2 的定义相反
+    auto_approved: true
+    # 钉住「升不上 L3」——自动出图并自动用上正是 04 §6 要防的
+    level: L2
   design_pick:
     staged: true
     # 报了 L3 也不许自动放行——04 §6 那条纪律不靠采纳率说话

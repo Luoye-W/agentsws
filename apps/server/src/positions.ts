@@ -59,6 +59,7 @@ import {
   settleNoHit,
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
+import { type AdsExportIntake, withIntakeNote } from './ads-data/export-intake.js'
 import { attachmentsBrief, readAssistantFile } from './assistant-files.js'
 import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
 import {
@@ -164,6 +165,11 @@ export interface PositionsOptions {
    * 回 `undefined` = 没接模型（那时按 WP287 的规则判）。`assignment_id` 是用量记在哪条分配上。
    */
   classifyComplete?(actor: { assignment_id: AssignmentId }): EntryClassifyComplete | undefined
+  /**
+   * WP447：附上的文件里有广告平台导出的报表就直接入库（`ads-data/export-intake.ts`），每份回一句写在附件文字前面。
+   * 不给 = 附件只读成文字（老口径）。
+   */
+  fileIntake?: AdsExportIntake
 }
 
 export interface OpenAtPositionInput {
@@ -745,7 +751,17 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
      * WP357：附上的资料——与助理同一套读法；路由与三分只看 `text`，事项第一句话带着附件，
      * 运行拿到「话 + 附件围起来」。
      */
-    const attachments: MatterAttachment[] = (input.files ?? []).map(readAssistantFile)
+    // WP447：拖进来的是投放平台的报表就先入库，那一句写在附件文字前面
+    const intake =
+      input.files === undefined || options.fileIntake === undefined
+        ? []
+        : options.fileIntake(input.files, {
+            position_template_id: template.id,
+            ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+          })
+    const attachments: MatterAttachment[] = (input.files ?? []).map((f, i) =>
+      withIntakeNote(readAssistantFile(f), intake[i]),
+    )
     const brief = attachments.length === 0 ? undefined : attachmentsBrief(text, attachments)
     /*
      * WP84：从快捷提示点进来的，职责是**已经定好的**，不跑路由。

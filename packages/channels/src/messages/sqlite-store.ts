@@ -17,6 +17,7 @@
 
 import type {
   Clock,
+  DeletedSenderRule,
   MessageCorrection,
   MessageDraft,
   MessageFolder,
@@ -93,6 +94,17 @@ CREATE TABLE IF NOT EXISTS message_corrections (
   json  TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS message_corrections_by_at ON message_corrections (at_ms DESC);
+`,
+  },
+  {
+    // WP439：刚删的发件人规则（规则清单里「能撤回」那一格；按规则 id 一条）
+    version: 3,
+    sql: `
+CREATE TABLE IF NOT EXISTS message_sender_rules_deleted (
+  rule_id       TEXT PRIMARY KEY NOT NULL,
+  deleted_at_ms INTEGER NOT NULL,
+  json          TEXT NOT NULL
+) STRICT;
 `,
   },
 ]
@@ -339,6 +351,29 @@ export class SqliteMessageStore implements MessageStore {
 
   deleteSenderRule(id: string): boolean {
     return this.#db.prepare('DELETE FROM message_sender_rules WHERE id = ?').run(id).changes > 0
+  }
+
+  deletedSenderRules(): DeletedSenderRule[] {
+    return this.#db
+      .prepare<[], Row>('SELECT json FROM message_sender_rules_deleted ORDER BY deleted_at_ms DESC')
+      .all()
+      .map((r) => JSON.parse(r.json) as DeletedSenderRule)
+  }
+
+  putDeletedSenderRule(row: DeletedSenderRule): void {
+    this.#db
+      .prepare(
+        `INSERT INTO message_sender_rules_deleted (rule_id, deleted_at_ms, json) VALUES (?,?,?)
+         ON CONFLICT(rule_id) DO UPDATE SET deleted_at_ms = excluded.deleted_at_ms, json = excluded.json`,
+      )
+      .run(row.rule.id, Date.parse(row.deleted_at) || 0, JSON.stringify(row))
+  }
+
+  dropDeletedSenderRule(rule_id: string): boolean {
+    return (
+      this.#db.prepare('DELETE FROM message_sender_rules_deleted WHERE rule_id = ?').run(rule_id)
+        .changes > 0
+    )
   }
 
   drafts(): MessageDraft[] {

@@ -10671,7 +10671,92 @@
     "/v1/team/tunnel": {
       "post": {
         "operationId": "postV1TeamTunnel",
-        "summary": "申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥",
+        "summary": "申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥。",
+        "description": "WP444：先查团队通道订阅——没开通 / 宽限过了回 402 `payment_required`（`details.status`，人话在 `message`）。\n正文可选：`{ members }` 顺手报一下现在几个人（老客户端不带）。",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamTunnelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamTunnelIssued"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "团队通道没开通 / 已到期（`details.status`：`none` / `suspended`）",
+            "x-error-codes": ["payment_required"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "运营停用了这个组织的团队通道（决策 1341）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/subscription": {
+      "get": {
+        "operationId": "getV1TeamSubscription",
+        "summary": "WP444：团队通道订阅现在怎样（含当前人数档与价钱；按组织一份，只有发起的组织付）",
         "tags": ["team"],
         "security": [
           {
@@ -10687,7 +10772,180 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/TeamTunnelIssued"
+                      "$ref": "#/components/schemas/TeamSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postV1TeamSubscription",
+        "summary": "WP444：开通 / 续费。没用过试用 → 先 7 天免费试用（试用完自动按人数档扣）；用过了 → 当场扣第一期。",
+        "description": "钱不够不回 402：照开、进 `grace`（照常能用 30 天），`charged` 里那一期 `ok: false`。同一期重复点只扣一次。",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamSubscribeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteV1TeamSubscription",
+        "summary": "WP444：取消——当期（或试用）用完为止，下期不扣；局域网照常",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamSubscriptionView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/subscription/members": {
+      "post": {
+        "operationId": "postV1TeamSubscriptionMembers",
+        "summary": "WP444：报人数（人数变了就报；下个月按新人数落档扣，月中加人不补差）",
+        "tags": ["team"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMembersReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TeamSubscriptionView"
                     }
                   },
                   "required": ["data"]
@@ -16704,6 +16962,167 @@
         "required": ["code"],
         "description": "同事贴了一个本机、局域网里都找不到的码：问云这是谁的。"
       },
+      "TeamMembersReport": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number"
+          }
+        },
+        "required": ["members"],
+        "description": "报人数（人数变了就报；下个月按新人数落档，月中加人不补差）。"
+      },
+      "TeamPricing": {
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamTier"
+            },
+            "description": "从小到大。"
+          },
+          "extra_per_member": {
+            "type": "number",
+            "description": "超过最大一档之后，每多 1 人加多少积分 / 月。"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": ["tiers", "extra_per_member"],
+        "description": "人数档与价钱（**运营后台可改**，客户端从云上取当前这一份显示；不写死在代码里）。"
+      },
+      "TeamSubscribeInput": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number",
+            "description": "这个组织现在实际在用的人数（含发起人）。不给 = 沿用云上记的。"
+          }
+        },
+        "description": "开通 / 续费（顺手报一下现在几个人）。"
+      },
+      "TeamSubscriptionCharge": {
+        "type": "object",
+        "properties": {
+          "cycle_start": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "credits": {
+            "type": "number"
+          }
+        },
+        "required": ["cycle_start", "ok", "credits"],
+        "description": "一次扣费的结果（只在开通 / 续费那一次回）。"
+      },
+      "TeamSubscriptionStatus": {
+        "type": "string",
+        "enum": ["none", "trial", "active", "grace", "suspended", "cancelling"],
+        "description": "团队通道订阅现在是什么状态（在通用订阅的五个状态上多一个 `trial`）。"
+      },
+      "TeamSubscriptionView": {
+        "type": "object",
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "const": "team.channel.monthly"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TeamSubscriptionStatus"
+          },
+          "usable": {
+            "type": "boolean",
+            "description": "现在跨网通道能不能用（`trial` / `active` / `cancelling` / `grace`，或者长期免费）。"
+          },
+          "comped": {
+            "type": "boolean",
+            "description": "运营给开了「长期免费」（不扣积分，状态照常显示）。"
+          },
+          "trial_available": {
+            "type": "boolean",
+            "description": "还能不能开 7 天试用（每个组织一次）。"
+          },
+          "trial_ends_at": {
+            "type": "string"
+          },
+          "cancel_at_period_end": {
+            "type": "boolean"
+          },
+          "current_cycle_end": {
+            "type": "string",
+            "description": "当期到哪天（取消后用到这天为止）。"
+          },
+          "grace_until": {
+            "type": "string",
+            "description": "宽限到哪天（过了就关跨网通道）。"
+          },
+          "members": {
+            "type": "number",
+            "description": "云上记的人数（发起人电脑报上来的，扣费按扣那一刻的人数落档）。"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/TeamTierPick"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/TeamPricing"
+          },
+          "charged": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamSubscriptionCharge"
+            },
+            "description": "只在开通 / 续费那一次回：这一次扣了哪几期。"
+          }
+        },
+        "required": [
+          "service_id",
+          "status",
+          "usable",
+          "comped",
+          "trial_available",
+          "cancel_at_period_end",
+          "members",
+          "tier",
+          "pricing"
+        ],
+        "description": "`GET / POST / DELETE /v1/team/subscription` 回的：这个组织的团队通道订阅现在怎样。"
+      },
+      "TeamTier": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number",
+            "description": "这一档最多几人（含发起人自己）。"
+          },
+          "credits": {
+            "type": "number"
+          }
+        },
+        "required": ["members", "credits"],
+        "description": "一个人数档：最多几人、每月多少积分。"
+      },
+      "TeamTierPick": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number",
+            "description": "落到的那一档的人数上限（超过最大档时是最大档的人数）。"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "extra_members": {
+            "type": "number",
+            "description": "超过最大档的人数（没超是 0）。"
+          }
+        },
+        "required": ["members", "credits", "extra_members"],
+        "description": "按人数落档：回落到哪一档、这个月多少积分、超出最大档几人。"
+      },
       "TeamTunnelClientFrame": {
         "anyOf": [
           {
@@ -16855,6 +17274,15 @@
         "type": "string",
         "enum": ["bad_secret", "version_mismatch"],
         "description": "握手被拒的原因：密钥错与通道不存在是同一句话（不让人探哪些通道在）。"
+      },
+      "TeamTunnelRequest": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number"
+          }
+        },
+        "description": "申请通道时顺手报人数（可选；老客户端不带正文）。"
       },
       "TeamTunnelServerFrame": {
         "anyOf": [

@@ -110,7 +110,8 @@ describe('Shopify 写动作对照表', () => {
     // 在表里写着 `not_stageable`，理由指向 51 §3 N2。
     for (const a of SHOPIFY_WRITE_ACTIONS.filter((a) => a.target === 'store_config')) {
       if (a.change_kind === undefined) continue
-      expect(a.change_kind, a.action_id).toBe('store_setup')
+      // WP446：网址跳转（`url_redirect`）也落在店铺设置上
+      expect(['store_setup', 'url_redirect'], a.action_id).toContain(a.change_kind)
       expect(/checkout|payment|tax/.test(a.action_id), a.action_id).toBe(false)
     }
     // 于是"改一下就影响收款"的那几个动作名连查都查不到 → 未知即拒

@@ -30,7 +30,7 @@ vi.mock('@/lib/api', async () => {
     listTeamJoins: async () => state.joins,
     enterTeamJoin: async (id: string) => {
       state.entered.push(id)
-      return { url: 'https://tabc.team.agentsws.com/#agentsws-enter=ml_x' }
+      return { url: 'https://tabc-team.agentsws.com/#agentsws-enter=ml_x' }
     },
     bootstrapHint: async () => ({ login: 'shared', team: true }),
   }
@@ -62,8 +62,8 @@ describe('WP427 同事怎么连进来', () => {
     state.link = {
       open: true,
       lan: { on: true },
-      cloud: { state: 'online', url: 'https://tabc.team.agentsws.com' },
-      invite_base: 'https://tabc.team.agentsws.com',
+      cloud: { state: 'online', url: 'https://tabc-team.agentsws.com' },
+      invite_base: 'https://tabc-team.agentsws.com',
     }
     renderWithProviders(<TeamLinkLine />, '/')
     expect((await screen.findByTestId('team-link-cloud')).textContent).toContain(
@@ -99,15 +99,15 @@ describe('WP427 同事怎么连进来', () => {
     expect(screen.getAllByTestId('team-join-enter')).toHaveLength(1)
     await user.click(screen.getByTestId('team-join-enter'))
     await waitFor(() => {
-      expect(state.opened).toEqual(['https://tabc.team.agentsws.com/#agentsws-enter=ml_x'])
+      expect(state.opened).toEqual(['https://tabc-team.agentsws.com/#agentsws-enter=ml_x'])
     })
     expect(state.entered).toEqual(['mrq_a'])
   })
 
   it('邀请链接：团队通道的地址优先；本机回环口又没有通道就不给链接', () => {
     const fallback = (code: string) => `http://127.0.0.1:4317/join/${code}`
-    expect(teamInviteLink(fallback, 'https://tabc.team.agentsws.com')?.('ABCD2345')).toBe(
-      'https://tabc.team.agentsws.com/join/ABCD2345',
+    expect(teamInviteLink(fallback, 'https://tabc-team.agentsws.com')?.('ABCD2345')).toBe(
+      'https://tabc-team.agentsws.com/join/ABCD2345',
     )
     // jsdom 的页面地址是 localhost
     expect(teamInviteLink(fallback, undefined)).toBeUndefined()

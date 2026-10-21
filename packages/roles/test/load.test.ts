@@ -253,38 +253,63 @@ describe('loadPosition (05 §2)', () => {
     expect(role.thresholds?.sales_drop_pct).toBe(30)
   })
 
-  // WP63（51 §2.2）：内容与博客 → WP154「内容与搜索」（id 不变）
-  it('`dtc.content` 内容与搜索：草稿 L2、发布 L1、每天两篇', () => {
+  // WP63（51 §2.2）：内容与博客 → WP154「内容与搜索」→ WP446「内容与博客」（id 不变，docs/109 §4）
+  it('`dtc.content` 内容与博客：草稿 L2、发布 L1、每天两篇；搜索那一半不在这里', () => {
     const role = loadBundledRole('dtc.content')
-    expect(role.name.zh).toBe('内容与搜索')
-    expect(role.description).toBe('博客与页面内容、SEO 与 AI 搜索可见度（GEO）')
-    expect(role.actions.map((a) => a.id)).toEqual([
-      'stage_publish_post',
-      'stage_listing_edit',
-      'stage_page_seo_edit',
-      'stage_page_section_add',
-      'stage_internal_link_edit',
-    ])
+    expect(role.name).toEqual({ zh: '内容与博客', en: 'Content & Blog' })
+    expect(role.version).toBe('3.0.0')
+    expect(role.actions.map((a) => a.id)).toEqual(['stage_publish_post', 'stage_listing_edit'])
     expect(role.actions[0]?.mandate.caps).toMatchObject({ max_posts_per_day: 2 })
     // 上限 L2 —— 草稿够得着自动；发布那一半由 guardrail 每次拉回人审
     expect(role.automation.stage_publish_post?.ceiling).toBe('L2')
     expect(role.actions[0]?.review_cannot_be_disabled).toBe(true)
     // 19：能读知识库，但不能写（内容可以引用事实卡，不能编数字）
     expect(role.scopes.find((s) => s.domain === 'knowledge')?.ops).toEqual(['read'])
+    expect(role.home_blocks.map((b) => b.id)).toEqual([
+      'content.drafts',
+      'content.pending_publish',
+      'content.recent_posts',
+    ])
+    expect(role.grounding?.map((g) => g.name)).toEqual(['facts_before_writing'])
+    expect(Object.keys(role.thresholds ?? {}).filter((k) => /^(seo|geo)_/.test(k))).toEqual([])
+    expect(role.skills.map((k) => k.name)).toEqual(['brand-voice'])
+    expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
   })
 
-  // WP154：连接（店铺必需 / Search Console 推荐 / GA4 可选）与三条新动作全部出卡
-  it('`dtc.content` 连接与三条改页面的动作', () => {
-    const role = loadBundledRole('dtc.content')
+  // WP446（docs/109 §4.2）：SEO 与 GEO——三条改页面的动作原样搬过来、全部出卡；连接、阈值、技能跟着走
+  it('`dtc.seo` SEO 与 GEO：连接、三条改页面的动作、阈值与技能', () => {
+    const role = loadBundledRole('dtc.seo')
+    expect(role.name).toEqual({ zh: 'SEO 与 GEO', en: 'SEO & GEO' })
     expect(role.connectors.map((c) => [c.kind, c.required, c.recommended ?? false])).toEqual([
       ['shop', true, false],
       ['search_console', false, true],
       ['ga4', false, false],
     ])
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_page_seo_edit',
+      'stage_page_section_add',
+      'stage_internal_link_edit',
+    ])
     for (const id of ['stage_page_seo_edit', 'stage_page_section_add', 'stage_internal_link_edit'])
       expect(role.automation[id]?.initial).toBe('L1')
-    expect(role.thresholds).toMatchObject({ seo_position_min: 3, seo_position_max: 20 })
+    expect(role.actions[0]?.mandate.caps).toMatchObject({ max_page_edits_per_day: 10 })
+    expect(role.actions[2]?.mandate.caps).toMatchObject({ max_links_per_change: 5 })
+    expect(role.thresholds).toMatchObject({
+      seo_position_min: 3,
+      seo_position_max: 20,
+      seo_model_drafts_per_day: 5,
+      geo_recheck_days: 14,
+      geo_consistency_days: 28,
+    })
+    expect(role.home_blocks.map((b) => b.id)).toEqual([
+      'seo.today',
+      'seo.page_revenue',
+      'seo.geo_visibility',
+    ])
+    expect(role.skills.find((k) => k.name === 'seo-judgment')?.load).toBe('on_demand')
+    expect(role.web_tools).toEqual(['web_search', 'web_fetch'])
     expect(role.persona?.zh).toContain('先修再写')
+    expect(role.persona?.zh).toContain('内容与博客')
   })
 
   // WP64（51 §2.3 / §2.4）：邮件营销与订单履约
@@ -339,6 +364,8 @@ describe('loadPosition (05 §2)', () => {
     expect(position.roles.map((r) => r.role)).toEqual([
       'dtc.store',
       'dtc.content',
+      // WP446：SEO 与 GEO 排在内容与博客后面、默认勾
+      'dtc.seo',
       'dtc.email-marketing',
       'dtc.fulfillment',
     ])

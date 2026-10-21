@@ -54,7 +54,8 @@ describe('WP360 需要插件的职责', () => {
   // 以 Reddit 为本职 = 职责 id 就是 `*.reddit`。客服的社群管理、公关的品牌监控也挂着 Reddit 连接器，
   // 但 Reddit 只是它们十几个渠道里的一个、不靠插件读写——不算（不然整个客服岗位一上来就被要求装插件）。
   it('以 Reddit 为本职的职责都声明了 reddit', () => {
-    const own = roles.filter((r) => r.id.endsWith('.reddit'))
+    // WP447：`ads.reddit`（Reddit 广告）第一期只读、数从拖进来的报表来，不靠插件——插件代点导出是 109F
+    const own = roles.filter((r) => r.id.endsWith('.reddit') && r.id !== 'ads.reddit')
     expect(own.map((r) => r.id).sort()).toEqual(['pr.reddit', 'social.reddit'])
     for (const r of own) {
       expect(r.connectors.some((c) => c.kind === 'reddit')).toBe(true)

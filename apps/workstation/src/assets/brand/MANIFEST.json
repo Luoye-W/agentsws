@@ -380,7 +380,9 @@
     "meta_marketing": "meta_ads",
     "x_ads": "x_api",
     "tiktok_content": "tiktok_research",
-    "tiktok_ads": "tiktok_research"
+    "tiktok_ads": "tiktok_research",
+    "reddit_ads": "reddit",
+    "linkedin_ads": "linkedin_api"
   },
   "fallbacks": {}
 }

@@ -53,9 +53,19 @@ export type ExtensionMessage =
   /** 侧边栏一屏（进度 / 要你处理 / 记录）。 */
   | { type: 'panel-state' }
   /** 「填进页面」：批这张卡（改过就按改过的）并马上交给插件填。 */
-  | { type: 'panel-fill'; id: string; text?: string; title?: string; version?: number }
-  /** 「不发」。 */
-  | { type: 'panel-skip'; id: string; version?: number }
+  | {
+      type: 'panel-fill'
+      id: string
+      text?: string
+      title?: string
+      version?: number
+      /** WP432：批完就在这个窗口打开（侧边栏所在的窗口）。 */
+      windowId?: number
+    }
+  /** 「不发」。WP445：理由可选（写了理由才跟随同类、进学习回路）。 */
+  | { type: 'panel-skip'; id: string; version?: number; reason?: string }
+  /** WP445：撤回「同类的也一并不发了」那几张。 */
+  | { type: 'panel-follow-undo'; leader: string; ids: string[] }
   /** 没发出去的那一条「再填一次」。 */
   | { type: 'panel-refill'; job: string }
   /** 打开设置页（侧边栏里「设置」那一下）。 */
@@ -67,6 +77,14 @@ export type ExtensionMessage =
   /** WP419：交给你发的那一条：发好了（可带链接）/ 不发了。 */
   | { type: 'panel-post-done'; id: string; link?: string }
   | { type: 'panel-post-skip'; id: string; reason?: string }
+  /* ── WP432：侧边栏是发帖台（只加）──────────────────────────────── */
+  /**
+   * 「打开这一条」：人点的这一下才把批过的那一条交给插件——在**这个窗口**新开标签页、填好、等人点发送。
+   * 改过字就带上（`windowId` = 侧边栏所在的窗口）。
+   */
+  | { type: 'panel-open'; job: string; text?: string; title?: string; windowId?: number }
+  /** 「不发了」。 */
+  | { type: 'panel-drop'; job: string; reason?: string }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

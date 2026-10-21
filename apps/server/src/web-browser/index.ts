@@ -10,7 +10,7 @@ export {
   type SearchBrowserChannel,
   searchBrowserChannelFromEnv,
 } from './channel.js'
-export { type Block, blockOf } from './detect.js'
+export { type Block, type BlockKind, blockOf } from './detect.js'
 export {
   bingSearchUrl,
   googleSearchUrl,
@@ -42,13 +42,21 @@ export {
   type BrowserSearchResult,
   type BrowserWebSearch,
   type BrowserWebSearchOptions,
+  CONSENT_HANDOVER_LINE,
+  CONSENT_MESSAGE,
   createBrowserWebSearch,
   createSearchThrottle,
+  ENGINE_TIMEOUT_MS,
   type FetchedPage,
+  GOOGLE_HOME,
   HANDOVER_MESSAGE,
   type KeylessSearch,
   SEARCH_CACHE_TTL_MS,
+  SEARCH_TRACE_MAX,
   type SearchSource,
+  type SearchStepResult,
   type SearchThrottle,
+  type SearchTraceEntry,
+  type SearchTraceStep,
   type SearchVia,
 } from './search.js'

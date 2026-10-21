@@ -49,16 +49,19 @@ export const LAYER_ICON: Record<CalendarSource, LucideIcon> = {
 /**
  * 每个图层一个颜色变量（shadcn 的 token，深浅色自己跟着换）。
  *
- * 用 `--chart-N` 与 `--destructive` 这几个既有 token，不新造一套颜色：
+ * 用 `--chart-N` 与 `--ws-*` 这几个既有 token，不新造一套颜色：
  * 新造一套的话，日历上的绿与面板上的绿会是两个绿。
+ *
+ * WP457（WP456 §3.6）：红只给出错。「卡片到期」原来是红（`--destructive`），一周到期的卡一多
+ * 日历一片红，看着像出了事——改成「要留意」的黄；原来占着黄的「定时任务」让成中性灰。
  */
 export const LAYER_COLOR: Record<CalendarSource, string> = {
   todo: 'var(--chart-2)',
   meeting: 'var(--chart-1)',
   social_post: 'var(--chart-3)',
   kol_deliverable: 'var(--chart-5)',
-  scheduled_task: 'var(--chart-4)',
-  card_due: 'var(--destructive)',
+  scheduled_task: 'var(--muted-foreground)',
+  card_due: 'var(--ws-warn)',
   standby: 'var(--muted-foreground)',
 }
 

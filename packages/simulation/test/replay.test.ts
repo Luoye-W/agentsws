@@ -24,6 +24,7 @@ describe('17 §6.1 用例 1：回放事件日志重组 prompt 与 prompt.assembl
     await runScenario(scenario, { pack: pack(), dbPath: db })
 
     const runs = await listRuns(db)
+    // WP440 起这封信先问了一次邮件直接回（带 run_id、没有 RunRequest），不算一次能回放的运行
     expect(runs).toHaveLength(2)
     for (const id of runs) {
       const result = await replayRun(id, db)

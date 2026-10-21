@@ -200,8 +200,8 @@ vi.mock('@/lib/api', async () => {
     getTeamLink: async () => ({
       open: true,
       lan: { on: true },
-      cloud: { state: 'online', url: 'https://tabc.team.agentsws.com' },
-      invite_base: 'https://tabc.team.agentsws.com',
+      cloud: { state: 'online', url: 'https://tabc-team.agentsws.com' },
+      invite_base: 'https://tabc-team.agentsws.com',
     }),
     listTeamJoins: async () => [],
     listMembershipRequests: async () => [REQUEST],

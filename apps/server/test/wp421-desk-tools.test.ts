@@ -21,7 +21,9 @@ describe('按职责给（一张表）', () => {
   it('新闻稿 / 论坛 / 内容 / B2B / 设计各拿各的；复制出来的职责按原职责给', () => {
     expect(deskToolsFor('pr.press')).toEqual(['draft_press_release', 'list_press_releases'])
     expect(deskToolsFor('pr.forums')).toEqual(['draft_forum_post', 'list_forum_posts'])
-    expect(deskToolsFor('dtc.content')).toContain('query_geo_metrics')
+    // WP446：读 GEO 归 SEO 与 GEO；向设计岗下单还在内容与博客
+    expect(deskToolsFor('dtc.seo')).toContain('query_geo_metrics')
+    expect(deskToolsFor('dtc.content')).not.toContain('query_geo_metrics')
     expect(deskToolsFor('dtc.content')).toContain('request_design')
     expect(deskToolsFor('b2b.fulfillment')).toEqual(['list_b2b_records'])
     expect(deskToolsFor('b2b.sales-custom')).toEqual(['list_b2b_records', 'save_b2b_contacts'])
@@ -176,8 +178,8 @@ describe('端到端（stub，真服务）', () => {
     expect(one.reply).toContain('Volthaus · GAN-65×2 · 已寄')
   })
 
-  it('内容与搜索：「AI 搜索里有没有我们」→ 读 GEO；没跑过照实说', async () => {
-    const content = assign('dtc.content')
+  it('SEO 与 GEO：「AI 搜索里有没有我们」→ 读 GEO；没跑过照实说', async () => {
+    const content = assign('dtc.seo')
     const { tools, reply } = await ask(content, 'AI 搜索里有没有我们？')
     expect(tools).toEqual(['query_geo_metrics'])
     expect(reply).toContain('还没跑过')

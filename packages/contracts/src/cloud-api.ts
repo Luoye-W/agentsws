@@ -149,8 +149,12 @@ import type {
   TeamCodeRegistered,
   TeamCodeResolved,
   TeamCodeResolveRequest,
+  TeamMembersReport,
+  TeamSubscribeInput,
+  TeamSubscriptionView,
   TeamTunnelClientFrame,
   TeamTunnelIssued,
+  TeamTunnelRequest,
   TeamTunnelServerFrame,
 } from './team-link.js'
 
@@ -2437,17 +2441,64 @@ interface TeamOwnerErrors {
 }
 
 /**
- * 同事打开的地址是 `https://{tunnel_id}.team.agentsws.com/*`（按 Host 分流，整条转给发起人电脑上的
+ * 同事打开的地址是 `https://{tunnel_id}-team.agentsws.com/*`（WP435：一层子域、后缀式）（按 Host 分流，整条转给发起人电脑上的
  * 「团队门」）。它是**整站反代**、不是 API，所以不在下面的表里；云上要做的只有三件：按 Host 找到那条
  * 长连接、把请求打成 `request` 帧、把 `response_*` 帧原样流回去（去掉逐跳头；请求体超过 8 MiB 回 413；
  * 那台电脑不在线回 503 人话页）。
  */
 export interface CloudTeamApi {
-  /** 申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥 */
+  /**
+   * 申请（或取回）这个组织的团队通道；再调一次换一把新的握手密钥。
+   * WP444：先查团队通道订阅——没开通 / 宽限过了回 402 `payment_required`（`details.status`，人话在 `message`）。
+   * 正文可选：`{ members }` 顺手报一下现在几个人（老客户端不带）。
+   */
   'POST /v1/team/tunnel': {
     auth: 'workspace_token'
     tag: 'team'
+    body: TeamTunnelRequest
     ok: { status: 200; body: CloudDataEnvelope<TeamTunnelIssued> }
+    errors: TeamOwnerErrors & {
+      /** 团队通道没开通 / 已到期（`details.status`：`none` / `suspended`） */
+      402: 'payment_required'
+      /** 运营停用了这个组织的团队通道（决策 1341） */
+      403: 'forbidden'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /** WP444：团队通道订阅现在怎样（含当前人数档与价钱；按组织一份，只有发起的组织付） */
+  'GET /v1/team/subscription': {
+    auth: 'workspace_token'
+    tag: 'team'
+    ok: { status: 200; body: CloudDataEnvelope<TeamSubscriptionView> }
+    errors: TeamOwnerErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * WP444：开通 / 续费。没用过试用 → 先 7 天免费试用（试用完自动按人数档扣）；用过了 → 当场扣第一期。
+   * 钱不够不回 402：照开、进 `grace`（照常能用 30 天），`charged` 里那一期 `ok: false`。同一期重复点只扣一次。
+   */
+  'POST /v1/team/subscription': {
+    auth: 'workspace_token'
+    tag: 'team'
+    body: TeamSubscribeInput
+    ok: { status: 200; body: CloudDataEnvelope<TeamSubscriptionView> }
+    errors: TeamOwnerErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** WP444：取消——当期（或试用）用完为止，下期不扣；局域网照常 */
+  'DELETE /v1/team/subscription': {
+    auth: 'workspace_token'
+    tag: 'team'
+    ok: { status: 200; body: CloudDataEnvelope<TeamSubscriptionView> }
+    errors: TeamOwnerErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** WP444：报人数（人数变了就报；下个月按新人数落档扣，月中加人不补差） */
+  'POST /v1/team/subscription/members': {
+    auth: 'workspace_token'
+    tag: 'team'
+    body: TeamMembersReport
+    ok: { status: 200; body: CloudDataEnvelope<TeamSubscriptionView> }
     errors: TeamOwnerErrors
     errorBody: CloudEntryErrorBody
   }

@@ -172,7 +172,8 @@ describe('WP75 广告库路由：库有门了', () => {
 
   it('不认识的平台名回 400 + 一句人话，不是空清单', async () => {
     await seed()
-    const res = await api('/v1/ads/accounts?platform=pinterest')
+    // WP447 起 pinterest 是认得的平台（只读），这里换一个真不认识的
+    const res = await api('/v1/ads/accounts?platform=myspace')
     expect(res.status).toBe(400)
   })
 

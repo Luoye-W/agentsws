@@ -204,6 +204,12 @@ export type ChangeKind =
    */
   | 'store_setup'
   /**
+   * WP446（docs/109 §4.4 S5）：改网址跳转（Shopify 原生 URL 跳转，`urlRedirectCreate` / `Update` / `Delete`）。
+   * 一张卡一批（`after.redirects`，条数上限进 `caps.max_redirects_per_change`），L1 起步。
+   * `before` 记每条旧路径原来跳到哪（没有 = 空），所以撤回就是把 before / after 对调再执行一次（可逆）。
+   */
+  | 'url_redirect'
+  /**
    * WP77（59 §1 整站搭建）：装一个主题（把一份新主题拉进店里）。**永远 L1**（`HARD_L1`）。
    *
    * 与 `publish_theme` 分开：发布是"把已经在店里的某份副本设成线上"，

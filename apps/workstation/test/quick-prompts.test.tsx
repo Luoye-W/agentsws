@@ -1,6 +1,9 @@
 /**
  * WP84（53 §3 / 54 §1 第 6 行）+ WP98（09-18 收口）：职责模板的快捷提示与示例任务。
  *
+ * int/1024：WP438 首页重排（决策 1332）后首页岗位卡不再挂 `···` 快捷提示（快捷按钮在岗位页底部对话框上面），
+ * 那一组用例随首页一起去掉，下面只剩指导抽屉的示例任务。以下是原说明：
+ *
  * WP98 把快捷提示从首页第一屏**折进岗位卡右上角的 `···`**（数据与路由一个字没改），
  * 所以这一组用例钉的是新结构：
  * - 菜单收起时首页上一条快捷提示都没有（第一屏还给岗位卡）；
@@ -10,9 +13,9 @@
  * - 只用**本人**那条分配：别人在做的职责连按钮都不出（借岗位扩权的口子堵死）；
  * - 指导抽屉顶部出示例任务，点一条把说法填进指导框（选择题优先，不是第二个输入口）。
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { OpenAtPositionData, PositionInstanceData } from '@/lib/api'
 import { draftCard, homeData } from './fixtures'
 import { renderWithProviders } from './helpers'
@@ -161,71 +164,7 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigate }
 })
 
-const { HomePage } = await import('@/pages/home')
 const { DeckCardView } = await import('@/components/deck/deck-card')
-
-describe('岗位卡右上角 ··· 里的快捷提示（WP84 + WP98 收口）', () => {
-  beforeEach(() => {
-    getHome.mockClear()
-    getPositions.mockClear()
-    openMatterAtPosition.mockClear()
-    navigate.mockClear()
-  })
-
-  it('WP98：收起时首页上一条快捷提示都没有——第一屏只剩岗位卡', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('quick-prompt-menu')
-    expect(screen.queryByTestId('quick-prompt-list')).toBeNull()
-    expect(screen.queryByTestId('quick-prompt')).toBeNull()
-    expect(screen.queryByText('起草退货回复')).toBeNull()
-  })
-
-  it('点开 ··· 才出，按职责分组，本人那条职责的四条全在（不再折一半）', async () => {
-    renderWithProviders(<HomePage />)
-    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
-    const group = await screen.findByTestId('quick-prompt-group')
-    expect(group.getAttribute('data-role')).toBe('dtc.support')
-    expect(screen.getAllByTestId('quick-prompt')).toHaveLength(4)
-    expect(screen.getByText('起草退货回复')).toBeDefined()
-    expect(screen.getByText('退款算一算')).toBeDefined()
-  })
-
-  it('别人在做的那条职责不出按钮（只能用本人那条分配）', async () => {
-    renderWithProviders(<HomePage />)
-    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
-    await screen.findByTestId('quick-prompt-group')
-    expect(screen.getAllByTestId('quick-prompt-group')).toHaveLength(1)
-    expect(screen.queryByText('现在等着回的')).toBeNull()
-  })
-
-  it('点一条 = 走岗位任务入口：带本人那条分配 + 那条职责，开出来的事项 entry 是 position', async () => {
-    renderWithProviders(<HomePage />)
-    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
-    await screen.findByTestId('quick-prompt-group')
-    fireEvent.click(screen.getByText('起草退货回复'))
-    await waitFor(() => {
-      expect(openMatterAtPosition).toHaveBeenCalledWith('asg_1', {
-        title: '把这封退货来信按退货政策起草一封回复',
-        role_id: 'dtc.support',
-      })
-    })
-    // WP291：先到那个岗位页（当场问答在那儿答，会话 / 任务由岗位页接着进线程）；服务端回的那条就是岗位入口（54 §2）
-    await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/positions/asg_1')
-    })
-    expect(OPENED.matter.entry).toBe('position')
-  })
-
-  it('还是没有聊天框：菜单里只有按钮，一个自由文本输入都没有（36 §3 A4）', async () => {
-    const { container } = renderWithProviders(<HomePage />)
-    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
-    await screen.findByTestId('quick-prompt-list')
-    const inputs = [
-      ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
-    ].filter((el) => !(el as HTMLInputElement).disabled)
-    expect(inputs).toHaveLength(0)
-  })
-})
 
 describe('指导抽屉顶部的示例任务（WP84）', () => {
   it('点开指导才出；点一条把说法填进指导框，不直接提交', async () => {

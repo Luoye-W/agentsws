@@ -460,7 +460,8 @@ export interface SocialPort {
    */
   redditStage?(actor: SocialActor, input: RedditStageInput): MaybePromise<RedditStageResult>
   /** WP329：最近批过的 Reddit 写做到哪了（排着 / 填好等你点发送 / 发出去了 / 没发出去 + 原因）。 */
-  redditWrites?(actor: SocialActor): MaybePromise<{ rows: RedditWriteView[] }>
+  /** WP445：`in_plugin` = 插件里等你发的几条（看板上那一行）。 */
+  redditWrites?(actor: SocialActor): MaybePromise<{ rows: RedditWriteView[]; in_plugin?: number }>
   /**
    * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件，**不用重批**；
    * 人照样自己点发送。已经发出去 / 还在插件那边 / 没记下草稿的回 `conflict` + 一句人话。

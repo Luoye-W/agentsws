@@ -9,11 +9,27 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { ActionJob } from '@agentsws/browser-action'
 import { type RedditFetched, runRedditRead } from '@agentsws/browser-action'
 import type { ApprovalItem } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import { createServer, type Server } from '../src/server.js'
+
+/** WP432：人在插件侧边栏里点「打开这一条」（最新那条等你发的）——插件这才拿到那一件活（定时领活领不到）。 */
+async function openAwaiting(b: {
+  adsActions?: { next(p: ['reddit'], w: number): Promise<{ job?: unknown }> } | undefined
+  redditWrites?: {
+    writes(): { state: string; job_id: string }[]
+    open(id: string): Promise<{ ok: true; job: ActionJob } | { ok: false; message: string }>
+  }
+}): Promise<ActionJob | undefined> {
+  expect((await b.adsActions?.next(['reddit'], 0))?.job).toBeUndefined()
+  const row = b.redditWrites?.writes().find((w) => w.state === 'awaiting')
+  if (row === undefined) return undefined
+  const got = await b.redditWrites?.open(row.job_id)
+  return got?.ok === true ? got.job : undefined
+}
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 })
 
@@ -185,9 +201,8 @@ describe('WP329 × WP328：巡查出一条要回 → 起草出卡 → 批 → �
     expect(await brand.redditWrites.sweep()).toBe(1)
     expect(await records()).toEqual([])
 
-    // ④ 插件领到、填好、人点发送、读回
-    const write = await brand.adsActions?.next(['reddit'], 0)
-    const job = write?.job
+    // ④ WP432：人在插件里点「打开这一条」→ 插件填好、人点发送、读回
+    const job = await openAwaiting(brand)
     expect(job?.plan.kind).toBe('reddit_reply')
     expect(job?.account).toEqual({ platform: 'reddit', id: 'ivra_official' })
     // 与巡查共用一本账：写活占着号时巡查领不到

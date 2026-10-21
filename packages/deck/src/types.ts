@@ -292,6 +292,11 @@ export interface DeckCard {
    * 别的卡没有它。
    */
   manual_send?: true
+  /**
+   * WP440（docs/108 M9）：邮件客服**按把握直接回了**的那一封（自动批 + 施行，没退回成卡）——
+   * 对话里那张已发的卡下面画「AI 直接回 · 出处」与「这封不该直接回」。别的卡没有它。
+   */
+  auto_reply?: { score: number; sources: { kind: string; label: string }[] }
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand
@@ -922,6 +927,48 @@ export interface AdsDeckData {
   break_even?: BreakEvenView & { fixed_line: number }
   /** WP224：两条线的对照（从合并那天起逐日记的那张表，两周后给人定）。 */
   line_compare?: AdsLineCompareView
+  /**
+   * WP447（docs/109 §6.2）：六个新平台的**账户概况**——用户拖进来的最近一份报表那几天的合计，
+   * 一家一账户一行。币种 / 时区 / 日期范围照报表写，没写就没有（卡上说「没写」）。不给 = 宿主没接看数据。
+   */
+  exports?: AdsExportOverview[]
+  /** WP447：六个新平台的体检（一家一份；Apple 没有 App 时只有 `app_only` 那一句）。 */
+  audits?: AdsExportAudit[]
+}
+
+/** WP447：一家一账户的概况（`apps/server` 的 `exportOverview`）。 */
+export interface AdsExportOverview {
+  platform: string
+  account: string
+  since?: string
+  until?: string
+  currency?: string
+  timezone?: string
+  metrics: {
+    cost?: number
+    impressions?: number
+    clicks?: number
+    conversions?: number
+    conversion_value?: number
+    roas?: number
+  }
+  campaigns: number
+  imported_at: string
+  file: string
+  summary_only?: boolean
+}
+
+/** WP447：一家的体检（`@agentsws/ads-core` 的 `runAdsAudit`）。 */
+export interface AdsExportAudit {
+  platform: string
+  app_only?: string
+  items: {
+    id: string
+    title: { zh: string; en: string }
+    status: 'ok' | 'look' | 'unknown' | 'not_applicable'
+    note: string
+    evidence: 'export' | 'backend'
+  }[]
 }
 
 export interface SocialDeckData {

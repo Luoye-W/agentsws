@@ -95,5 +95,6 @@ export function hasStateWords(text: string): boolean {
 /** 降级的理由，一句人话（进事件与界面）。 */
 export function downgradeReason(hits: readonly StateWordHit[]): string {
   const what = [...new Set(hits.map((h) => h.what))].join('、')
-  return `这句话里有${what}——那是操作层的实时状态，Wiki 存不住它，降成历史案例并记下当时的时间`
+  // WP457：理由上界面，不说「操作层」「Wiki」这类内部词
+  return `这句话里有${what}——那是店里随时在变的状态，知识库存不住它，降成历史案例并记下当时的时间`
 }

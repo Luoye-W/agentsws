@@ -1,5 +1,5 @@
 /**
- * WP428（决策 1246 改）：聊天窗设置里「有把握就直接答」缺省开 +「严一点 / 适中 / 松一点」，真服务打 HTTP。
+ * WP428（决策 1246 改）：聊天窗设置里「有把握就直接答」缺省开 +「严格 / 适中 / 宽松」，真服务打 HTTP。
  */
 import type { Assignment } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'

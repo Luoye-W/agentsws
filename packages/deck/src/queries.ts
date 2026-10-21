@@ -1551,6 +1551,114 @@ const ADS_QUERIES: QueryDef[] = [
 ]
 
 /*
+ * WP447（docs/109 §6.2）：六个新平台（只读、走导出）那两块——账户概况与体检。
+ *
+ * 都走 `ads` 这个源（我们自己的库，永远算连上）：没有报表时概况那块照实空着、体检那块每一项写「未知」并说
+ * 去哪导；Apple 没有 App 时体检整块就一行「这条只适合推 App」（不出一张全是未知的空表）。
+ */
+const AUDIT_STATUS_ZH: Record<string, string> = {
+  ok: '没问题',
+  look: '要看一眼',
+  unknown: '未知',
+  not_applicable: '不适用',
+}
+ADS_QUERIES.push(
+  {
+    /*
+     * 花费（最近一份报表那几天的合计）：岗位页数据看板那一行要一个数——只有表格的职责会被当成「还没有数」
+     * 并进一行。几个账户币种不一样时不报币种（加起来的数照给，卡上的概况表里分账户看）。
+     */
+    name: 'ads.export_spend',
+    source: 'ads',
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofPlatform(ctx.ads?.exports ?? [], ctx)
+      const spend = rows.map((r) => r.metrics.cost).filter((v): v is number => v !== undefined)
+      const currencies = [...new Set(rows.map((r) => r.currency))]
+      const one = currencies.length === 1 ? currencies[0] : undefined
+      return {
+        value: Math.round(spend.reduce((a, b) => a + b, 0) * 100) / 100,
+        previous: 0,
+        spark: spend,
+        ...(one === undefined ? {} : { currency: one }),
+      }
+    },
+  },
+  {
+    name: 'ads.export_overview',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'account', label: '账户' },
+        { key: 'range', label: '日期' },
+        // 键名不叫 `currency`：表格把那一格当金额的币种用，「没写」会让整张表画不出来
+        { key: 'currency_text', label: '币种' },
+        { key: 'timezone', label: '时区' },
+        { key: 'cost', label: '花费', align: 'right' as const },
+        { key: 'impressions', label: '展示', align: 'right' as const, format: 'count' as const },
+        { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+        { key: 'conversions', label: '转化', align: 'right' as const, format: 'count' as const },
+        { key: 'conversion_value', label: '转化金额', align: 'right' as const },
+        {
+          key: 'roas',
+          label: 'ROAS（平台口径）',
+          align: 'right' as const,
+          format: 'ratio' as const,
+        },
+        { key: 'imported_at', label: '拖进来于' },
+      ],
+      rows: ofPlatform(ctx.ads?.exports ?? [], ctx).map((r) => ({
+        account: r.account,
+        range:
+          r.since === undefined
+            ? '没写'
+            : r.since === r.until || r.until === undefined
+              ? r.since
+              : `${r.since} ~ ${r.until}`,
+        currency_text: r.currency ?? '没写',
+        timezone: r.timezone ?? '没写',
+        // 币种各家各算：花费不按工作区币种格式化（那会把欧元念成美元）
+        cost: numOrBlank(r.metrics.cost),
+        impressions: numOrBlank(r.metrics.impressions),
+        clicks: numOrBlank(r.metrics.clicks),
+        conversions: numOrBlank(r.metrics.conversions),
+        conversion_value: numOrBlank(r.metrics.conversion_value),
+        roas: numOrBlank(r.metrics.roas),
+        imported_at: r.imported_at,
+      })),
+    }),
+  },
+  {
+    name: 'ads.export_audit',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => {
+      const audit = ofPlatform(ctx.ads?.audits ?? [], ctx)[0]
+      const columns = [
+        { key: 'check', label: '查什么' },
+        { key: 'status', label: '结果' },
+        { key: 'note', label: '凭什么' },
+      ]
+      if (audit === undefined) return { columns, rows: [] }
+      if (audit.app_only !== undefined)
+        return {
+          columns,
+          rows: [{ check: 'Apple 搜索广告', status: '不适用', note: audit.app_only }],
+        }
+      return {
+        columns,
+        rows: audit.items.map((i) => ({
+          check: i.title.zh,
+          status: AUDIT_STATUS_ZH[i.status] ?? i.status,
+          note: i.note,
+        })),
+      }
+    },
+  },
+)
+
+/*
  * 平台那一侧的两块：**一个平台一个查询**，因为它们各自的"连没连"不一样
  * （同社媒那两块）。查询名带平台后缀（`ads.pixel_health.meta`），
  * 积木那一层按职责挑对应那一条。
@@ -1675,6 +1783,37 @@ const QUERY_LIST: QueryDef[] = [
         if (done !== undefined && done - at <= DAY) hits.push({ at, v: 1 })
       }
       return ratioFrom(hits, total, w)
+    },
+  },
+  {
+    /*
+     * WP440（docs/108 M9）：客服面板「今天 AI 直接回了 N 封」。数的是**今天施行成功**的那几张
+     * 「有把握就直接回」的回信卡（`payload.auto_reply` + 自动批），按工作区时区切日界；
+     * 对比 = 昨天一整天；迷你走势按天。不发铃铛——这不是要人做的事。
+     */
+    name: 'approvals.email_auto_replies_today',
+    source: 'approvals',
+    returns: 'scalar',
+    run: (ctx, w) => {
+      const at: number[] = []
+      for (const i of ctx.approvals) {
+        if (i.kind !== 'outbound_draft') continue
+        if (!(i.automation.auto_approved || i.state === 'auto_approved')) continue
+        const p = i.payload as { channel?: unknown; auto_reply?: unknown } | undefined
+        if (p?.channel !== 'email' || p.auto_reply === undefined) continue
+        const done = appliedMs(i)
+        if (done !== undefined) at.push(done)
+      }
+      const today = startOfDay(Date.parse(ctx.now), ctx.tz_offset_minutes)
+      const value = at.filter((t) => t >= today).length
+      const previous = at.filter((t) => t >= today - DAY && t < today).length
+      const spark = w.spark.map((b) => at.filter((t) => inWindow(t, b)).length)
+      return {
+        value,
+        previous,
+        ...(previous === 0 ? {} : { delta_pct: round2(((value - previous) / previous) * 100) }),
+        spark,
+      }
     },
   },
   {

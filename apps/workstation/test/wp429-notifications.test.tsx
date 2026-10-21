@@ -38,6 +38,8 @@ const state: {
     team: { inbox: true, system: true },
     task: { inbox: true, system: false },
     connection: { inbox: true, system: true },
+    // WP432：等你发
+    outbound: { inbox: true, system: true },
     credits: { inbox: true, system: true },
     update: { inbox: true, system: false },
   },

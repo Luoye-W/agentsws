@@ -8,7 +8,7 @@
  * 1. `wizard-markets-cost.png`：向导第 ② 步档案卡——选了两个市场，一句「多一个市场，搜索可见度的探测花费多一份」；
  *    `wizard-markets-cost-hint.png`：同一处问号悬停展开细节（每周默认 6 问 × 3 平台 × 2 个市场 × 0.2 积分；
  *    每日 SERP 每个市场各 5 次）；
- * 2. `seo-geo-languages.png`：「内容与搜索」面板的每周 AI 探测——每个市场旁边写用什么语言问；demo 没配模型，
+ * 2. `seo-geo-languages.png`：「SEO 与 GEO」面板的每周 AI 探测——每个市场旁边写用什么语言问；demo 没配模型，
  *    所以德国那一行注明「先按原语言问」。
  *
  * ```
@@ -166,7 +166,7 @@ async function main() {
     await w.page.click('[data-testid="intake-confirm"]')
     await w.page.waitForSelector('[data-testid="intake-confirmed"]')
 
-    // ── 「内容与搜索」面板：每个市场用什么语言问 ──────────────────
+    // ── 「SEO 与 GEO」面板：每个市场用什么语言问 ──────────────────
     const profile = (await call(owner, ownerAsg, 'GET', '/v1/onboarding/state')).profile
     await call(owner, ownerAsg, 'PUT', '/v1/workspace/profile', {
       legal_name: profile.legal_name,
@@ -174,13 +174,13 @@ async function main() {
     })
     const li = await login(CONTENT)
     const content = (await me(li)).assignments.find(
-      (a) => a.role_id === 'dtc.content' && a.revoked_at === undefined,
+      (a) => a.role_id === 'dtc.seo' && a.revoked_at === undefined,
     )
     await call(li, content.id, 'PUT', '/v1/seo/geo-questions', { settings: { max_questions: 4 } })
     const d = await browserFor(chromium, li, { width: 1360, height: 1100 })
     open.push(d.browser)
     const positionId = content.position_id ?? content.id
-    await d.page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.content`, {
+    await d.page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.seo`, {
       waitUntil: 'networkidle',
     })
     const geo = d.page.locator('[data-testid="geo-questions"]')

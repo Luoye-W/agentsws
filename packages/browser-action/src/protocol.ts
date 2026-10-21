@@ -86,6 +86,8 @@ export interface ActionJobView {
   result?: { outcome: string; message: string; step: number; finished_at: string }
   /** 排着但因为限速暂时领不走的原因。 */
   waiting?: string
+  /** WP432：等人在插件侧边栏里点「打开这一条」（定时领活领不到）。 */
+  held?: boolean
 }
 
 /**

@@ -21,11 +21,11 @@ const ROLE_FIELDS = [
 const built = existsSync(join(ROOT, 'packages/roles/dist/index.js'))
 
 describe.skipIf(!built)('extract-role-content', () => {
-  it('51 条职责 + 全部岗位，只含白名单字段，往返无差', async () => {
+  it('58 条职责 + 全部岗位，只含白名单字段，往返无差', async () => {
     const { files, problems } = await extractRoleContent()
     expect(problems).toEqual([])
     const roles = files.filter((f) => f.path.startsWith('roles/'))
-    expect(roles).toHaveLength(51)
+    expect(roles).toHaveLength(58)
     expect(files.length - roles.length).toBeGreaterThanOrEqual(11)
     for (const f of roles) {
       expect(f.data.schema).toBe('agentsws.role-content/1')
@@ -48,7 +48,7 @@ describe.skipIf(!built)('extract-role-content', () => {
         cwd: ROOT,
         encoding: 'utf8',
       })
-      expect(out).toMatch(/51 条职责/)
+      expect(out).toMatch(/58 条职责/)
       const yt = JSON.parse(readFileSync(join(dir, 'roles/kol.youtube/content.json'), 'utf8'))
       expect(yt.id).toBe('kol.youtube')
       expect(yt.content.persona.zh).toMatch(/^你是谁：/)

@@ -612,6 +612,33 @@ export function isPlaceholderOwnerEmail(email: string | undefined): boolean {
 }
 
 /**
+ * WP457：没给名字时服务进程给负责人起的名字（占位邮箱 `@` 前那一段）。和占位邮箱一样只是内部键——
+ * 插件侧边栏头部原来写着「default · owner」，就是它和 {@link PLACEHOLDER_WORKSPACE_NAME}。
+ */
+export const PLACEHOLDER_OWNER_NAME = 'owner'
+
+/** 没给 `AGENTSWS_WORKSPACE_NAME`、也还没建品牌档案时，本机工作区的名字（内部键，不上屏）。 */
+export const PLACEHOLDER_WORKSPACE_NAME = 'default'
+
+/** 这个人名是不是那个占位名（大小写、首尾空白不敏感）。 */
+export function isPlaceholderOwnerName(name: string | undefined): boolean {
+  return name !== undefined && name.trim().toLowerCase() === PLACEHOLDER_OWNER_NAME
+}
+
+/** 这个品牌 / 工作区名是不是占位名（`default`，或者干脆就是工作区 id）。 */
+export function isPlaceholderWorkspaceName(
+  name: string | undefined,
+  workspace_id?: string,
+): boolean {
+  if (name === undefined) return false
+  const n = name.trim()
+  return (
+    n.toLowerCase() === PLACEHOLDER_WORKSPACE_NAME ||
+    (workspace_id !== undefined && n === workspace_id)
+  )
+}
+
+/**
  * WP233：本机负责人的登录邮箱改了（目前只有一种：占位邮箱 → 刚关联上的云账号邮箱）。
  *
  * 与 `cloud.account_linked` 同一条纪律：**只记域名**，邮箱本地部分一个字节都不进日志（21 §1）。

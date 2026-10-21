@@ -10,9 +10,12 @@
  * 不是邮箱、或这台机器没装消息同步（接口回 404）：什么都不画。
  *
  * WP172：B2B 岗位开着时多一个「收 B2B 信」（判成 B2B 的挪进 `BtoBAgents`，缺省开）。
+ *
+ * WP440：客服接管时多一行「有把握就直接回」+ 档位（`mailbox-auto-reply.tsx`）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EyeOff } from 'lucide-react'
+import { MailboxAutoReply } from '@/components/connections/mailbox-auto-reply'
 import { Hint } from '@/components/ui/hint'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -117,6 +120,10 @@ export function MailboxSwitches({
           </li>
         ))}
       </ul>
+      {/* WP440（docs/108 M9）：客服信「有把握就直接回」+ 档位（只在客服接管时有意义） */}
+      {data.takeover ? (
+        <MailboxAutoReply connectionId={connectionId} assignment={assignment} />
+      ) : null}
       {flip.error === null ? null : (
         <p role="alert" className="text-[11px] text-destructive">
           {t('connections.mailbox.failed')}

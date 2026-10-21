@@ -87,10 +87,13 @@ export function nextLine(p: PanelProgress, now: Date = new Date()): string {
 /** 一条写现在怎样（「要你处理」里那一行的状态字）。 */
 export function writeLine(w: PanelWrite): string {
   switch (w.state) {
+    // WP432：批了，等你在这里点「打开这一条」（插件不自己开页面）
+    case 'awaiting':
+      return w.message ?? '等你打开'
     case 'queued':
       return '正在打开 Reddit…'
     case 'filling':
-      return '填好了，去页面上点 Reply'
+      return w.message ?? '填好了，看一眼，自己点发送'
     case 'sent':
       return w.record_id === undefined ? '已发' : '已发 · 已记录'
     case 'failed':

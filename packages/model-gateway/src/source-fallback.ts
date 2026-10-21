@@ -41,6 +41,11 @@ export interface SourceFallbackPolicy {
    * 网关发 `model_source.relogin_needed`（带来源名），供站内通知接；不出卡、不停下。
    */
   relogin?: string[]
+  /**
+   * WP436（决策 1316）：用户自带 API key 的来源（provider id）——key 被拒（`auth`：401 / 403）时网关发
+   * `model_source.key_rejected`（带来源名），站内通知接「你的 xxx key 用不了了，去换一把」。不出卡、不停下。
+   */
+  keys?: string[]
   /** WP430（决策 1290）：同一来源连续失败几次后冷却多久（缺省 {@link SOURCE_COOLDOWN}）。 */
   cooldown?: { failures: number; ms: number }
 }
@@ -59,6 +64,9 @@ export interface ModelSourceReloginPayload {
   provider: string
   label: string
 }
+
+/** WP436：`model_source.key_rejected` 的 payload——同样只有来源 id 与来源名，没有 key。 */
+export type ModelSourceKeyRejectedPayload = ModelSourceReloginPayload
 
 /** 开关关着、因此停下时挂在错误 `details.source_fallback` 上的那一格。 */
 export interface SourceFallbackOff {

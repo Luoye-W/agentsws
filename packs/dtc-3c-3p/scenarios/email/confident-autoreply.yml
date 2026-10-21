@@ -1,0 +1,40 @@
+# WP440（docs/108 M9，Luoye 10-21）：邮件客服也按把握直接回——照在线客服那一套。
+#
+# 客户来信问保修期，落款里留了自己的电话。剥掉签名之后问句只剩「保修期多久」；知识库里有保修那张卡，
+# stub 剧本照卡说一句并标出处、把握 90 → 同一个判定过线、三道自主门放行 → 经审批总线的自动批路径发出去，
+# 不起 Run、不出要人批的卡。回信里没有出处标记、没有自评行、没有把客户的电话带回去。
+id: email/confident-autoreply
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-21T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: cara@example.com
+      thread: new
+      subject: 保修问题
+      body: "你好，请问充电类产品保修期多久？\n\n谢谢\nCara\n电话：+1 415 555 0134"
+  - at: '+10m'
+    clock.advance: {}
+expected:
+  # 直接回的那一张是自动批的回信卡；没直接回的每封一张等人批的回信卡
+  approval_kinds: { outbound_draft: 1 }
+  event_types:
+    - simulation.email_auto_reply
+  reply_includes_any: ['24 个月']
+  reply_omits: ['415 555', '[K1]', '把握']
+  metrics:
+    outbound_sent: 1
+    applied_changes: 0
+    blocked_proposals: 0
+    escalations: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  客户问保修期：是不是照知识卡直接回了（没等人批），回信里有没有出处标记、自评行，或者把客户签名里的电话带回去。

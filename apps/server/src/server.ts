@@ -26,6 +26,7 @@ import type {
   FreeChatPort,
   PositionEntryPort,
   PrPort,
+  ReportStorePort,
   SiteThemeView,
   WorkPort,
   WorkstationPort,
@@ -83,7 +84,7 @@ import type {
   ResolveMx,
   WecomSocketFactory,
 } from '@agentsws/channels'
-import { routeOfPosition } from '@agentsws/channels'
+import { replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
@@ -141,9 +142,11 @@ import {
   contentChannelOf,
   DEFAULT_HANDOFF_RETURN_DAYS,
   fitTaskTitle,
+  isPluginDeskCard,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  marketLanguage,
   normalizeGenuiHost,
   OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
   PLACEHOLDER_OWNER_EMAIL,
@@ -199,7 +202,7 @@ import {
   stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { type AlertsTransport, createPrRedditAdapter } from '@agentsws/pr-core'
+import type { AlertsTransport } from '@agentsws/pr-core'
 import {
   changeKindOf,
   createRoleStore,
@@ -248,6 +251,7 @@ import type { ToolExecutor } from '@agentsws/stand-ins'
 import {
   chatAnswerStubScript,
   detectAnsweredBoundaries,
+  emailAnswerStubScript,
   SUPPORT_BOUNDARIES,
 } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
@@ -266,6 +270,8 @@ import {
 import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
+import { createAdsExportIntake } from './ads-data/export-intake.js'
+import { exportDeckData } from './ads-data/export-view.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
 import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
@@ -486,6 +492,7 @@ import {
   workspaceRootOf,
 } from './dsh-scenes.js'
 import { createEconomicsService } from './economics.js'
+import { createEmailAutoReply, type EmailAutoReply } from './email-auto-reply.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
 import {
@@ -496,7 +503,11 @@ import {
 } from './execution/registry.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
-import { createExtensionInstall, spawnDetached } from './extension-install.js'
+import {
+  createExtensionInstall,
+  folderVersion as extensionFolderVersion,
+  spawnDetached,
+} from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
 import {
   createExtensionPanelPort,
@@ -759,12 +770,8 @@ import {
   isRedditWriteCard,
   type RedditWriteService,
 } from './reddit-write/service.js'
-import {
-  applyExternalPost,
-  redditDirectWriter,
-  settleRedditWrite,
-  socialRedditFill,
-} from './reddit-write/wire.js'
+import { applyExternalPost, settleRedditWrite, socialRedditFill } from './reddit-write/wire.js'
+import { createReportStore, type ReportStore } from './report-store.js'
 import {
   combineWatchSources,
   createReportToolExecutor,
@@ -827,6 +834,7 @@ import {
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
+  seoScheduleGates,
   sweepStaleReviews,
 } from './schedule.js'
 import { createScopeAutoUpgrade, type ScopeAutoUpgrade } from './scope-auto-upgrade.js'
@@ -911,7 +919,7 @@ import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createStoreDigest, type StoreDigest, storeDigestCron } from './store-digest.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
-import { createScopeManagerRouter } from './supervisor.js'
+import { createScopeManagerRouter, recipientOf } from './supervisor.js'
 import { createSupportInbox, type SupportInboxPort } from './support-inbox.js'
 import {
   createSupportJudgment,
@@ -927,6 +935,7 @@ import {
   supportVoiceSection,
 } from './support-voice.js'
 import { createTeamLink, type TeamLink } from './team-link.js'
+import { createTeamSubscriptionClient, teamSubscriptionNotice } from './team-subscription.js'
 import {
   resolveTeamCode,
   TEAM_TUNNEL_SECRET_ID,
@@ -1112,6 +1121,8 @@ export const BUNDLED_ROLES = [
   'dtc.fulfillment',
   // WP63（51 §2.2）：第二条——内容与博客
   'dtc.content',
+  // WP446（docs/109 §4）：从内容里拆出来的 SEO 与 GEO
+  'dtc.seo',
   // WP67（48 §5.1）：红人营销岗位的五条渠道职责。
   // 种岗位那一步会把解析不到的职责筛掉，所以五条都得在这张表里——
   // 少一条，首次设置向导里的"红人营销"就少一个勾。
@@ -2516,7 +2527,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
+      providers: [
+        stubProvider({
+          seed: 7,
+          scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript],
+        }),
+      ],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -5025,13 +5041,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           now,
           tz_offset_minutes: baseWorkData.tz_offset_minutes,
         })
-        return adsDeckData(ads, {
-          now,
-          attribution: attribution.rows,
-          unmatched_orders: attribution.unmatched_orders,
-          break_even: breakEvenNow(),
-          line_compare: summarizeLineCompare(ads.lineCompareRows()),
-        })
+        return {
+          ...adsDeckData(ads, {
+            now,
+            attribution: attribution.rows,
+            unmatched_orders: attribution.unmatched_orders,
+            break_even: breakEvenNow(),
+            line_compare: summarizeLineCompare(ads.lineCompareRows()),
+          }),
+          // WP447：六个新平台（拖进来的报表）的账户概况与体检；托管实例没有看数据的库就不给
+          ...(adsData === undefined ? {} : exportDeckData(adsData)),
+        }
       },
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
@@ -5404,7 +5424,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
           return redditWrites.stage(actor, input)
         },
-        redditWrites: () => ({ rows: redditWrites?.writes() ?? [] }),
+        // WP445：看板上「插件里 N 条等你发」（还没在插件里审的卡 + 批过、等你打开的）
+        redditWrites: () => ({
+          rows: redditWrites?.writes() ?? [],
+          in_plugin: redditWrites?.inPlugin() ?? 0,
+        }),
         // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
         redditRefill: async (_actor, job_id) => {
           if (redditWrites === undefined)
@@ -5800,6 +5824,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     const adsDataRef = adsData
+    /** WP447：拖进对话的投放报表入库（六个新平台；岗位页 / 事项输入框两处都走它）。 */
+    const adsExportIntake =
+      adsDataRef === undefined
+        ? undefined
+        : createAdsExportIntake({
+            service: () => adsDataRef,
+            held: (p) =>
+              roles.assignments
+                .listByWorkspace(ws)
+                .some((a) => a.revoked_at === undefined && a.role_id === `ads.${p}`),
+            now: () => clock.now(),
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+          })
     /**
      * WP224（docs/91 §2.2 #1）：本周经营一页纸。面板上下文用的就是工作台那一份端口
      * （同 `workstationPortFor` 的装法，这里直接建一份，免得引用一个还没走到的定义）。
@@ -6093,7 +6130,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 插件没连、有 OAuth 应用 / 官方号浏览器登着时走那条直发（WP249 留作备用）。目录 `<品牌目录>/reddit-writes/`。
      */
     let redditDrafts = 0
-    const prRedditAdapter = createPrRedditAdapter(socialChannels.transport)
     redditWrites = createRedditWriteService({
       // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
       limits: redditLimits,
@@ -6169,12 +6205,54 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return r.ok ? r.data : undefined
       },
       ...(adsActions === undefined ? {} : { actions: adsActions }),
-      direct: redditDirectWriter({
-        adapter: () => socialChannels.adapters.reddit,
-        prAdapter: () => prRedditAdapter,
-        apiConnected: () => socialChannels.transport.connected('reddit'),
-        officialReady: () => redditOfficial?.port.ready() === true,
-      }),
+      /*
+       * WP445（决策 1322）：要不要主管先批——看这条职责里这个动作设的是谁定（回帖子 / 评论 = `reply_thread`；
+       * 发新帖：社媒 = `stage_broadcast`、公关 = `stage_external_post`）。「主管定 / 老板定」才去问岗位上级
+       * （① 个人 / ② 同事互联一律落回本人 = 不用主管批，直接进插件「等你发」）。
+       */
+      reviewer: async (actor, kind) => {
+        const action =
+          kind !== 'submit'
+            ? 'reply_thread'
+            : actor.role_id.startsWith('pr.')
+              ? 'stage_external_post'
+              : 'stage_broadcast'
+        let route: string | undefined
+        try {
+          route = roles
+            .effectiveConfig(actor.assignment_id as Assignment['id'])
+            .actions.find((a) => a.id === action)?.route_to as string | undefined
+        } catch {
+          return undefined
+        }
+        if (route !== 'scope_manager' && route !== 'owner') return undefined
+        if (!hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company')) return undefined
+        if (route === 'owner') {
+          const owner = (await identity.getWorkspace(ws))?.owner_id
+          return owner === undefined ? undefined : { person: owner, via: 'owner' as const }
+        }
+        const r = await routeScopeManager({
+          workspace_id: ws,
+          role_id: actor.role_id,
+          proposer: actor.person_id,
+        })
+        return recipientOf(r)
+      },
+      // WP445：插件里等你发的卡（工坊不出卡的那一种，还没定）
+      deskCards: () =>
+        txn.runtime.store
+          .listApprovals({
+            workspace_id: ws,
+            kind: 'outbound_draft',
+            state: ['pending', 'in_review'],
+          })
+          .filter(isPluginDeskCard),
+      // WP445：主管批过、你在插件里「不发 + 理由」→ 进学习回路（同 WP414：写了理由才学）
+      onDropped: ({ approval_item_id, reason, at }) => {
+        const item = txn.runtime.store.getApproval(approval_item_id)
+        if (item !== undefined && reason !== undefined)
+          learning.observeReject(item, { reason, at: at as never })
+      },
       // WP413：发出记录那一行补上「在哪儿批的」（在插件侧边栏里批的记 extension）
       record: (input) =>
         outboundLog.record(
@@ -6221,6 +6299,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           now: () => clock.now(),
         }),
       ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+      // WP432：批了之后人又改了字（插件里改 / 页面上改了再发）→ 进学习回路
+      onEdited: ({ approval_item_id, before, after, at }) => {
+        const item = txn.runtime.store.getApproval(approval_item_id)
+        if (item !== undefined) learning.observeEdit(item, { before, after, at: at as never })
+      },
     })
     const redditWritesSweep = setInterval(
       () => void redditWrites?.sweep().catch(() => undefined),
@@ -6328,6 +6411,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 运行时比判断层先装配好，而运行时的 `judgeDraft` 要调它——靠这个变量打断环。
      */
     let supportJudgmentRef: SupportJudgment | undefined
+    /**
+     * WP440（docs/108 M9）：邮件客服「有把握就直接回」（晚绑定：它要聊天车道的学习记录与消息那一侧的
+     * 邮箱开关，那两样比渠道、运行时都晚建）。渠道问它「这一封能不能直接回」，运行时问它「那张卡为什么没直接回」。
+     */
+    let emailAutoReplyRef: EmailAutoReply | undefined
     /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
     let supportInboxRef: SupportInboxPort | undefined
     /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
@@ -7272,13 +7360,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 body: input.body,
               })
               if (amazon !== undefined) return amazon
-              return supportJudgmentRef?.judgeDraft({
+              const thread_id = input.thread_external_id ?? input.matter.id
+              const judged = supportJudgmentRef?.judgeDraft({
                 channel: input.channel,
-                thread_id: input.thread_external_id ?? input.matter.id,
+                thread_id,
                 inbound_text: input.inbound_text,
                 reply_text: input.body,
                 generated_by: 'ai',
               })
+              // WP440：这条客服线程试过「有把握就直接回」没过——卡标题后面写为什么（别的岗位永远没有这一句）
+              const note = emailAutoReplyRef?.heldNote(thread_id)
+              return judged === undefined || note === undefined
+                ? judged
+                : { ...judged, title_note: note }
             },
             /*
              * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
@@ -7679,7 +7773,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
       holderOf,
-      thresholds: () => roles.roles.get('dtc.content')?.thresholds ?? {},
+      thresholds: () => roles.roles.get('dtc.seo')?.thresholds ?? {},
       work: {
         createMatter: (input) => work.createMatter(input),
       },
@@ -7915,6 +8009,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const positionsAssembly = createPositions({
       workspace_id: ws,
       clock,
+      // WP447：拖进来的投放报表直接入库
+      ...(adsExportIntake === undefined ? {} : { fileIntake: adsExportIntake }),
       roles,
       work,
       approvals,
@@ -8104,6 +8200,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
       // WP417（自查 A33）：回信真发出去 → 首响 SLA 停表
       noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
+      // WP440（docs/108 M9）：判断层说完、起 Run 之前——有把握就直接回（经总线自动批 + 出站门）
+      autoReply: async (input) => emailAutoReplyRef?.attempt(input),
       /**
        * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
        *
@@ -8685,6 +8783,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP440：「全部」时间线里 AI 直接回的那几封，与「这封不该直接回」
+      autoReplies: (matter_ids) => emailAutoReplyRef?.forMatters(matter_ids) ?? [],
+      flagAutoReply: (approval_item_id, by) =>
+        emailAutoReplyRef?.flag({ approval_item_id, by: by as PersonId }),
       // 没勾「以后都这样」的改判进学习回路（24 §3 的 lesson 池；技能 `message-triage` 还没有可改的段落，
       // 所以只攒不提——「你教过它」里看得见）
       onCorrection: (c) => {
@@ -8703,8 +8805,140 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           semantic_key: `message_${c.field}:${c.sender_domain}:${c.to}`,
         })
       },
+      /*
+       * WP439（docs/108 §5.7 ①）：回复建议带品牌口吻——已归某个岗位的信用那条职责的口吻段（按做那个岗位的
+       * 职责解析 `brand-voice`），没人接的用品牌口吻（不叠职责层）。这个品牌自己写过话术才有，每次现取。
+       */
+      voice: async ({ position_id }) => {
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder = duties.length === 0 ? undefined : positionFor(ws, duties)
+        const held = holder !== undefined && duties.includes(holder.role_id) ? holder : undefined
+        const role_id = held?.role_id ?? 'common.member'
+        const resolved = await skills.registry
+          .resolve(BRAND_VOICE_SKILL, {
+            person_id: held?.person_id ?? firstPositionOf(ws)?.person_id ?? person.id,
+            workspace_id: ws,
+            role_id,
+          })
+          .catch(() => undefined)
+        return supportVoiceSection(role_id, brandVoiceCard(resolved))?.text
+      },
+      // WP439（决策 336）：判不出来信语言时退回品牌默认语言——第一个目标市场的主要语言
+      brandLanguage: () => {
+        const profile = onboardingRef?.brandProfile(ws)
+        const market = profile?.markets?.[0]
+        return market === undefined ? undefined : marketLanguage(market, profile?.market_languages)
+      },
+      // WP439（决策 243）：② ③ 里规则是品牌共用的——清单写「谁教的」名字，删了通知同岗位、能撤回
+      sharedRules: async () => ((await modeOfWorkspace?.(ws)) ?? 'solo') !== 'solo',
+      personName: async (id) => (await identity.getPerson(id).catch(() => undefined))?.name,
+      notifyRuleChange: async ({ by, action, rule }) => {
+        const template =
+          rule.position === undefined
+            ? undefined
+            : org.positions().find((t) => t.id === rule.position)
+        const duties = new Set(template?.roles.map((r) => r.role) ?? [])
+        const to =
+          duties.size === 0
+            ? (await identity.members(ws))
+                .filter((m) => m.left_at === undefined)
+                .map((m) => m.person_id)
+            : roles.assignments
+                .listByWorkspace(ws)
+                .filter((a) => a.revoked_at === undefined && duties.has(a.role_id))
+                .map((a) => a.person_id)
+        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
+        const text =
+          action === 'deleted'
+            ? `${who} 删了发件人规则「${rule.sender}」，下一封会重新判`
+            : `${who} 撤回了发件人规则「${rule.sender}」的删除`
+        for (const person_id of new Set(to)) {
+          if (person_id === by) continue
+          notifications.notify({
+            workspace_id: ws,
+            person_id,
+            category: 'team',
+            text,
+            href: '/messages?panel=rules',
+            key: `sender_rule:${rule.id}`,
+          })
+        }
+      },
     })
     lateMessages.current = messages
+    /*
+     * WP440（docs/108 M9，Luoye 10-21）：**邮件客服也按把握直接回**——照在线客服 WP428 那一套。
+     * 判断层的三道自主门放行（`auto_reply`）**且**置信度过线才直接发；走审批总线的自动批路径
+     * （`confident_reply`，总线自己再核一遍），施行时出站门照旧拦，拦下就退回成卡。
+     * 学到的「不该直接回」与聊天「不该直接答」同一份（聊天车道那一份）。
+     */
+    emailAutoReplyRef = createEmailAutoReply({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      approvals,
+      applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+      models: gatewayProxy,
+      position: () => positionFor(ws, SUPPORT_DUTIES),
+      searchKnowledge: async (text, limit) => {
+        const position = positionFor(ws, SUPPORT_DUTIES)
+        if (position === undefined) return []
+        const config = roles.effectiveConfig(position.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text,
+          k: limit,
+          actor: {
+            person_id: position.person_id,
+            workspace_id: ws,
+            assignment_id: position.assignment_id,
+            role_id: position.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          statement: h.statement_redacted,
+          layer: h.layer,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        }))
+      },
+      lookupOrder: async (order_ref) => {
+        const res = await records.executeTool?.({
+          name: 'get_order',
+          input: { order_id: order_ref },
+          request: { tools: { allow: ['get_order'] } } as unknown as RunRequest,
+        })
+        return res?.status === 'ok' ? res.data : undefined
+      },
+      // 「消息渠道 → 每只邮箱」那一处：开关（缺省开）+ 档位（缺省适中）；影子模式开着不直发
+      setting: (account) => {
+        if (account === undefined) return { on: true }
+        const sw = messages.switches.get(account)
+        return {
+          on: sw.auto_reply,
+          strictness: sw.auto_reply_strictness,
+          shadow_mode: sw.shadow_mode,
+        }
+      },
+      learnedHolds: () => chat.learnedHolds(),
+      learn: (hold) => {
+        chat.learnHold(hold)
+      },
+      judgeDraft: (input) =>
+        supportJudgmentRef?.judgeDraft({
+          channel: 'email',
+          thread_id: input.thread_id,
+          inbound_text: input.inbound_text,
+          reply_text: input.reply_text,
+          generated_by: 'ai',
+        }),
+      noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
+      work,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
     routeDraftRef = async ({ matter, body, actor }) => {
       const pins = matter.context.pinned
       // 社群线程：出回帖卡（批了经这条渠道的出口发回群 / 私信；承诺话术在那里打回）
@@ -9860,6 +10094,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
       ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
+      ...(adsExportIntake === undefined ? {} : { adsExportIntake }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       // WP419：信息监控每天一份简报
@@ -10862,8 +11097,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
         // WP173：有人持有「主动开发」才建开发信序列那条定时
         b2b: held('b2b.outbound'),
-        // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
-        seo: held('dtc.content'),
+        // WP154：有人持有搜索那条职责才建每日读 Search Console 与每周小结那两条（WP446 起是「SEO 与 GEO」）
+        seo: seoScheduleGates(held).seo,
         // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
         weeklyReview: held('common.owner'),
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
@@ -10877,8 +11112,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(held('dtc.store')
           ? { storeDigest: storeDigestCron(roles.roles.get('dtc.store')?.notifications) }
           : {}),
-        // WP418（自查 B13）：店铺管理或内容与搜索有人担就每周体检
-        siteHealthWeekly: held('dtc.store') || held('dtc.content'),
+        // WP418（自查 B13）：店铺管理或 SEO 与 GEO（WP446 起技术体检归它）有人担就每周体检
+        siteHealthWeekly: seoScheduleGates(held).siteHealthWeekly,
       },
     })
   }
@@ -10939,12 +11174,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       held: (ws) => roleHeldIn(ws, 'ads.google') || roleHeldIn(ws, 'ads.meta'),
     },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
-    { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+    {
+      ids: ['sched_seo_daily', 'sched_seo_weekly'],
+      held: (ws) => seoScheduleGates((r) => roleHeldIn(ws, r)).seo,
+    },
     // WP418
     { ids: ['sched_store_digest'], held: (ws) => roleHeldIn(ws, 'dtc.store') },
     {
       ids: ['sched_site_health_weekly'],
-      held: (ws) => roleHeldIn(ws, 'dtc.store') || roleHeldIn(ws, 'dtc.content'),
+      held: (ws) => seoScheduleGates((r) => roleHeldIn(ws, r)).siteHealthWeekly,
     },
     // WP224
     { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },
@@ -11222,6 +11460,71 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ).replace(/\/+$/, '')
     return base === CLOUD_STAND_IN_BASE_URL ? undefined : base
   })()
+  /**
+   * WP427 / WP444：团队通道用哪把令牌问云——关联工坊账号时签的那把；开发期配了云替身时认 `AGENTSWS_TEAM_DEV_TOKEN`。
+   * 提到这里是因为团队通道订阅（WP444）也要它，而订阅要在 onboarding 装配时就交进去。
+   */
+  const teamDevToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
+  const teamCloudToken = (): string | undefined => {
+    if (teamOptions?.cloudToken !== undefined) return teamOptions.cloudToken()
+    try {
+      const linked = boot.secrets.available
+        ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+        : undefined
+      if (linked !== undefined && linked !== '') return linked
+    } catch {
+      // 读不出来当没关联
+    }
+    return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
+      teamDevToken !== undefined &&
+      teamDevToken !== ''
+      ? teamDevToken
+      : undefined
+  }
+  /** WP444：这里现在实际在用的人数（含发起人；离开了的不算）——按人数落档。 */
+  let teamMembersNow: number | undefined
+  const teamMembers = async (): Promise<number> => {
+    teamMembersNow = Math.max(
+      1,
+      (await identity.members(workspace.id)).filter((m) => m.left_at === undefined).length,
+    )
+    return teamMembersNow
+  }
+  /** WP444：铃铛里那一条团队通道的提醒，上一次发的是什么（同一件事不反复发、不反复加计数）。 */
+  let teamNoticeSent: string | undefined
+  const teamSubscription =
+    teamOptions === undefined
+      ? undefined
+      : createTeamSubscriptionClient({
+          cloudBase: () => teamCloudBase,
+          token: teamCloudToken,
+          members: teamMembers,
+          ...(teamOptions.fetch === undefined ? {} : { fetch: teamOptions.fetch }),
+          onView: (view) => {
+            // 开通 / 续费 / 长期免费：跨网那条路不等退避，马上重新申请
+            if (view.usable) teamRef?.retryCloud()
+            const { notice, settle } = teamSubscriptionNotice(view, Date.parse(clock.now()))
+            for (const key of settle) notifications.settle(workspace.id, key)
+            const fingerprint = notice === undefined ? undefined : `${notice.key}|${notice.text}`
+            if (fingerprint === teamNoticeSent) return
+            teamNoticeSent = fingerprint
+            if (notice === undefined) return
+            void identity
+              .getWorkspace(workspace.id)
+              .then((w) => {
+                if (w?.owner_id === undefined) return
+                notifications.notify({
+                  workspace_id: workspace.id,
+                  person_id: w.owner_id,
+                  category: 'credits',
+                  text: notice.text,
+                  href: '/settings/mode#usage-mode',
+                  key: notice.key,
+                })
+              })
+              .catch(() => undefined)
+          },
+        })
   const onboarding = createOnboarding({
     // WP276：申请卡在 ① ② 说「想一起用」，同意后不出空的并进来对照卡
     mode: async () => (await modeOfWorkspace?.(workspace.id)) ?? 'company',
@@ -11354,7 +11657,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             },
             changed: () => {
               void teamRef?.sync()
+              // WP444：人数可能变了（批进一个人）——下个月按新人数落档
+              void teamSubscription?.reportMembers().catch(() => false)
             },
+            ...(teamSubscription === undefined
+              ? {}
+              : {
+                  subscription: {
+                    view: () => teamSubscription.view(),
+                    subscribe: () => teamSubscription.subscribe(),
+                    cancel: () => teamSubscription.cancel(),
+                  },
+                }),
           },
         }),
     ...(dbDir === undefined ? {} : { dbDir }),
@@ -11414,7 +11728,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return org?.discoverable === true
   }
   if (teamOptions !== undefined) {
-    const devToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
     const memoryTunnel: { value?: import('@agentsws/contracts').TeamTunnelIssued | undefined } = {}
     teamRef = createTeamLink({
       wanted: async () => {
@@ -11438,24 +11751,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : {
             cloud: {
               base: () => teamCloudBase,
-              token:
-                teamOptions.cloudToken ??
-                (() => {
-                  try {
-                    const linked = boot.secrets.available
-                      ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
-                      : undefined
-                    if (linked !== undefined && linked !== '') return linked
-                  } catch {
-                    // 读不出来当没关联
-                  }
-                  // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认这个
-                  return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
-                    devToken !== undefined &&
-                    devToken !== ''
-                    ? devToken
-                    : undefined
-                }),
+              // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认 AGENTSWS_TEAM_DEV_TOKEN
+              token: teamCloudToken,
+              // WP444：申请通道时顺手报人数（按人数落档）
+              members: () => teamMembersNow,
               vault: {
                 get: () => {
                   if (!boot.secrets.available) return memoryTunnel.value
@@ -12866,6 +13165,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const workPorts = new Map<WorkspaceId, WorkPort>()
   const workstationPorts = new Map<WorkspaceId, WorkstationPort>()
+  // WP438：固定的 AI 报表与快照——一个品牌一个 reports.sqlite（内存档在内存里）；同步取得到（草稿要同步存）
+  const reportStores = new Map<WorkspaceId, ReportStore>()
+  const reportStoreFor = (ws: WorkspaceId): ReportStore => {
+    const cached = reportStores.get(ws)
+    if (cached !== undefined) return cached
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    const store = createReportStore(dir === undefined ? undefined : join(dir, 'reports.sqlite'))
+    reportStores.set(ws, store)
+    return store
+  }
+  const routedReports: ReportStorePort = {
+    list: (ws, person) => reportStoreFor(ws as WorkspaceId).list(ws, person),
+    get: (ws, id) => reportStoreFor(ws as WorkspaceId).get(ws, id),
+    save: (r) => reportStoreFor(r.workspace_id as WorkspaceId).save(r),
+    remove: (ws, id) => reportStoreFor(ws as WorkspaceId).remove(ws, id),
+    putDraft: (ws, spec) => {
+      reportStoreFor(ws as WorkspaceId).putDraft(ws, spec)
+    },
+    draft: (ws, id) => reportStoreFor(ws as WorkspaceId).draft(ws, id),
+    snapshots: (ws, id) => reportStoreFor(ws as WorkspaceId).snapshots(ws, id),
+    snapshot: (ws, id, at) => reportStoreFor(ws as WorkspaceId).snapshot(ws, id, at),
+    addSnapshot: (ws, data) => reportStoreFor(ws as WorkspaceId).addSnapshot(ws, data),
+  }
   const askPorts = new Map<WorkspaceId, AskPort>()
 
   const workPortFor = async (ws: WorkspaceId): Promise<WorkPort> => {
@@ -12875,6 +13198,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP447：事项里附上的投放报表直接入库
+      ...(brand.adsExportIntake === undefined ? {} : { fileIntake: brand.adsExportIntake }),
       // WP388：手动「周复盘」也取上一周（目标市场时区）
       reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个
@@ -13119,7 +13444,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const cached = workstationPorts.get(ws)
     if (cached !== undefined) return cached
     const brand = await brandModules.forWorkspace(ws)
-    const port = createWorkstationPort({ clock, roles, approvals, data: brand.workData })
+    const port = createWorkstationPort({
+      clock,
+      roles,
+      approvals,
+      data: brand.workData,
+      reports: reportStoreFor(ws),
+    })
     workstationPorts.set(ws, port)
     return port
   }
@@ -14488,7 +14819,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
 
   const workPortOf = brandWorkPort(brandModules, workPortFor)
-  const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
+  const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor, routedReports)
   const askPortOf = brandAskPort(brandModules, askPortFor)
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
@@ -15469,6 +15800,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               undefined,
             // U16：侧边栏顶上写品牌名（不写内部工作区名）
             workspaceName: async (ws) => brandNameOfWorkspace(ws),
+            // WP432：侧边栏底下写自己是哪一版、工坊是哪一版（对不上提示重新加载）
+            versions: () => {
+              const dir = env.AGENTSWS_EXTENSION_DIR
+              const folder =
+                dir === undefined || dir === '' || !existsSync(dir)
+                  ? undefined
+                  : extensionFolderVersion(dir, (path) => {
+                      try {
+                        return readFileSync(path, 'utf8')
+                      } catch {
+                        return undefined
+                      }
+                    })
+              return {
+                workshop: contentAppVersion,
+                ...(typeof folder === 'string' ? { folder } : {}),
+              }
+            },
+            // WP432：「等你发」那一类开没开系统通知（插件里弹不弹那一句）
+            notifySystem: async (ws, person_id) =>
+              notifications.prefs({ workspace_id: ws, person_id: person_id as never }).outbound
+                .system,
           }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {
@@ -15961,8 +16314,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP427：端口有了——团队通道按现在的情况开（① 个人没打开就什么都不开）；之后每分钟对一遍
       // （同事退出 / 被请离开、关联账号之后都靠这一下跟上）
       await teamRef?.sync()
+      /*
+       * WP444：团队通道开着、关联了账号时——人数变了就报（每分钟对一下，没变不打云）；每 3 小时问一次订阅
+       * （试用快结束 / 宽限中 / 已关进铃铛）。界面上打开那张卡时也会现问。
+       */
+      let teamTick = 0
+      const teamSubTick = (): void => {
+        if (teamSubscription === undefined || teamRef?.status().open !== true) return
+        if (teamCloudToken() === undefined) return
+        const full = teamTick % 180 === 0
+        teamTick += 1
+        void (full ? teamSubscription.view() : teamSubscription.reportMembers()).catch(
+          () => undefined,
+        )
+      }
+      void teamMembers().catch(() => undefined)
+      teamSubTick()
       teamTimer = setInterval(() => {
         void teamRef?.sync()
+        teamSubTick()
       }, 60_000)
       teamTimer.unref?.()
       if (options.quiet !== true) {
@@ -16021,6 +16391,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       for (const one of secretaries.values()) one.close()
       // WP188：随便聊的会话库（每个品牌一个）
       for (const store of freeChatStores) store.close()
+      for (const store of reportStores.values()) store.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）
       await brandModules.dispose()
       await devMcp?.close()

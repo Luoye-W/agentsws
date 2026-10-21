@@ -59,7 +59,7 @@ describe('47 J2 状态词判据', () => {
       expect(rule.what.length).toBeGreaterThan(0)
       expect(rule.category.length).toBeGreaterThan(0)
     }
-    expect(downgradeReason(detectStateWords('订单 #1001 已退款'))).toContain('操作层')
+    expect(downgradeReason(detectStateWords('订单 #1001 已退款'))).toContain('随时在变')
   })
 
   it('话术层不降：模板里的金额是占位不是状态', () => {

@@ -1,3 +1,4 @@
+import type { ActionJob } from '@agentsws/browser-action'
 /**
  * WP332 端到端（起真进程 → 打 HTTP；插件一侧直接调本机那一份动作通道 = 替身插件，**不起浏览器、不碰 reddit.com**）。
  *
@@ -9,6 +10,21 @@ import type { Assignment, OutboundRecord, RedditWriteView } from '@agentsws/cont
 import { redditWriteNotices } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
+
+/** WP432：人在插件侧边栏里点「打开这一条」（最新那条等你发的）——插件这才拿到那一件活（定时领活领不到）。 */
+async function openAwaiting(b: {
+  adsActions?: { next(p: ['reddit'], w: number): Promise<{ job?: unknown }> } | undefined
+  redditWrites?: {
+    writes(): { state: string; job_id: string }[]
+    open(id: string): Promise<{ ok: true; job: ActionJob } | { ok: false; message: string }>
+  }
+}): Promise<ActionJob | undefined> {
+  expect((await b.adsActions?.next(['reddit'], 0))?.job).toBeUndefined()
+  const row = b.redditWrites?.writes().find((w) => w.state === 'awaiting')
+  if (row === undefined) return undefined
+  const got = await b.redditWrites?.open(row.job_id)
+  return got?.ok === true ? got.job : undefined
+}
 
 const T0 = '2026-10-15T09:00:00.000Z'
 const SECRETS_KEY = 'e'.repeat(64)
@@ -94,7 +110,7 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
     await approve(staged.approval_item_id)
     t += 125_000
     expect(await b.redditWrites.sweep()).toBe(1)
-    const first = (await b.adsActions?.next(['reddit'], 0))?.job
+    const first = await openAwaiting(b)
     b.adsActions?.result(first?.id as string, {
       outcome: 'stopped',
       message: '你点了停止，已停下。',
@@ -111,11 +127,11 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
     const res = await post(`/v1/social/reddit/writes/${first?.id}/refill`)
     expect(res.status).toBe(200)
     const view = await data<RedditWriteView>(res)
-    expect(view).toMatchObject({ state: 'queued', refills: 1 })
+    expect(view).toMatchObject({ state: 'awaiting', refills: 1 })
     expect(server.txn.runtime.store.listApprovals({ kind: 'outbound_draft' })).toHaveLength(
       cardsBefore,
     )
-    const again = (await b.adsActions?.next(['reddit'], 0))?.job
+    const again = await openAwaiting(b)
     expect(again?.id).toBe(view.job_id)
     expect(again?.approval_id).toBe(staged.approval_item_id)
     expect(again?.plan.allow.values).toEqual([text])
@@ -141,7 +157,7 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
     await approve(staged.approval_item_id)
     t += 125_000
     await b.redditWrites.sweep()
-    const job = (await b.adsActions?.next(['reddit'], 0))?.job
+    const job = await openAwaiting(b)
     b.adsActions?.result(job?.id as string, {
       outcome: 'handover',
       message: 'Chrome 里的 Reddit 没登录（或登录掉了）。',

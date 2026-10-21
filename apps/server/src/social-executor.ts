@@ -260,6 +260,11 @@ export function createSocialExecutor(options: SocialExecutorOptions): SocialExec
       if (filled !== undefined)
         return filled.status === 'ok' ? filled : fail(filled.error?.message ?? '没发出去。')
     }
+    // WP445（决策 1324）：Reddit 的写只有插件 + 人点发送这一条路——插件填不了的（私信 / 没有链接）不走接口直发
+    if (thread.channel === 'reddit')
+      return fail(
+        'Reddit 只在浏览器插件里由你自己点发送；这一条插件填不了（私信或没有链接），没发。去 Reddit 上自己回。',
+      )
     const adapter = options.adapter(thread.channel)
     if (adapter?.reply === undefined)
       return fail(`${label(thread.channel)} 还没有能回帖的出口，这一条没发。`)

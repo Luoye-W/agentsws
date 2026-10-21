@@ -2,39 +2,47 @@
  * WP372（决策 1004 / 1019）：右侧面板里**报表 / 产出 / 计划 / 连接 / 设定**五张卡展开后的样子。
  * （「对话」那张在 `components/conversations/conversations-panel.tsx`。）
  *
- * 规矩照决策 1004：展开后最多 4 条（`limit`），**要处理的排最上面**；完整列表在卡底「显示更多」（外壳画）。
+ * 规矩照决策 1004：展开后最多 `limit` 条（WP433 起 5 条），**要处理的排最上面**；完整列表在卡底「显示更多」
+ * （外壳画；WP433：卡身体用 `onTotal` 报总数，多于 5 条才出）。
  * 这一个文件整体 `lazy()`：没有任何一张卡展开之前一个字节都不下载。
  */
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronRight } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
-import { MentionsTable } from '@/components/pr/mentions-table'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
 import { ExtensionRows, useScopeExtension } from '@/components/rail/cards/extension-rows'
 import { useRailState } from '@/components/rail/rail-state'
-import type { RailCardBodyProps } from '@/components/rail/registry'
+import { type RailCardBodyProps, useCardTotal } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import {
-  CompetitorChangesTable,
   CompetitorWatchConnectionRow,
   CompetitorWatchPlanRow,
   competitorAssignmentOf,
 } from '@/components/reports/competitor-watch'
+import { ReportRow } from '@/components/reports/kit/report-row'
 import {
   reportAddress,
   scopeAssignments,
+  scopeMayHaveReportBoards,
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
+import { openRightPane, useRightPane } from '@/components/reports/right-pane'
+import { useReportList } from '@/components/reports/use-report-list'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
-import { getMySchedules, getPositionRecords, type ScheduledTaskRow } from '@/lib/api'
+import {
+  getMySchedules,
+  getPositionRecords,
+  getPositionWork,
+  type ScheduledTaskRow,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { getFreeChatModels } from '@/lib/free-chat'
 import type { PrWatchView } from '@/lib/pr-watch-api'
@@ -57,57 +65,82 @@ function Meta({ children }: { children: ReactNode }): ReactNode {
 
 /* ── 报表 ───────────────────────────────────────────────────────────── */
 
-export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+/**
+ * WP438（WP434 设计 §3.2，决策 1334）：一行一份报表——名字（AI 做的挂「AI」标）+ 头条数 + 涨跌 + 小走势；
+ * 点一行在第三栏拉出整页（决策 1335 改）。最多固定 5 份，超过的进「全部报表」（卡底「显示更多」）。
+ * 卡底一行「跟 AI 说想看什么，做一份新的」，和卡头「+」是同一个入口。
+ *
+ * 不是报表的东西各回各处：AI 写的日报 / 周报正文归「产出」；竞品变化表、提及表进「全部报表」那一页。
+ */
+export function ReportsCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
-  const rail = useRailState()
-  const { reports, ready } = useScopeReports(scope)
-  // WP392：担竞品监控的这一层，卡里再放竞品变化表（按竞品 / 种类筛；价格带走势）
-  const competitor =
-    competitorAssignmentOf(scope) === undefined ? null : (
-      <CompetitorChangesTable scope={scope} limit={limit} />
-    )
-  // WP419（自查 P5）：担信息监控的这一层，卡里放拉回来的提及表（按组 / 情绪 / 来源筛）
-  const mentions = <MentionsTable scope={scope} {...(limit === undefined ? {} : { limit })} />
+  const { list, ready, where } = useReportList(scope)
+  const pane = useRightPane()
+  const rows = (list?.reports ?? []).slice(0, Math.min(limit, list?.limit ?? 5))
+  /*
+   * int/1024（WP433 × WP438）：「显示更多」多于 5 份才出；但竞品变化表、提及表、看数的看板只在「全部报表」那一页，
+   * 这一层有它们时也算「还有更多」，不然就找不到了。
+   */
   const monitored = useScopeMonitor(scope) !== undefined
-  if (reports.length === 0)
-    return (
-      <div className="flex flex-col gap-2">
-        {ready && !monitored ? <Empty text={t('reports.empty')} /> : null}
-        {competitor}
-        {mentions}
-      </div>
-    )
+  const extra =
+    scopeMayHaveReportBoards(scope) || competitorAssignmentOf(scope) !== undefined || monitored
+  useCardTotal(onTotal, (list?.reports.length ?? 0) + (extra ? limit + 1 : 0))
+  const openId = pane.pane?.kind === 'report' ? pane.pane.id : undefined
   return (
-    <div className="flex flex-col gap-2">
-      <ul className="flex flex-col gap-px" data-testid="reports-card">
-        {reports.slice(0, limit).map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className={ROW}
-              data-testid="report-row"
-              data-id={r.id}
-              onClick={() => {
-                rail.openAddress(reportAddress(r.id))
+    <div className="flex flex-col" data-testid="reports-card">
+      {rows.length === 0 ? (
+        ready ? (
+          <Empty text={t('reports.empty')} />
+        ) : null
+      ) : (
+        <ul className="-mx-0.5 flex flex-col">
+          {rows.map((r) => (
+            <ReportRow
+              key={r.id}
+              report={r}
+              open={openId === r.id}
+              fresh={pane.pinned === r.id}
+              onOpen={() => {
+                if (where === undefined) return
+                openRightPane({
+                  kind: 'report',
+                  id: r.id,
+                  position: where.position,
+                  ...(where.duty === undefined ? {} : { duty: where.duty }),
+                })
               }}
-            >
-              <span className="min-w-0 truncate">{r.title}</span>
-              <Meta>{shortDate(r.at)}</Meta>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {competitor}
-      {mentions}
+            />
+          ))}
+        </ul>
+      )}
+      {where === undefined ? null : (
+        <button
+          type="button"
+          data-testid="reports-compose"
+          className="mt-0.5 flex items-center gap-1.5 rounded-[8px] px-2 pt-2 pb-0.5 text-left text-[12.5px] text-ws-muted-fg hover:text-ws-brand-ink"
+          onClick={() => {
+            openRightPane({
+              kind: 'report-compose',
+              position: where.position,
+              ...(where.duty === undefined ? {} : { duty: where.duty }),
+            })
+          }}
+        >
+          <Sparkles aria-hidden className="size-3.5" />
+          {t('reports.compose')}
+        </button>
+      )}
     </div>
   )
 }
 
 /* ── 产出 ───────────────────────────────────────────────────────────── */
 
-export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+export function OutputsCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
+  // WP438（WP434 §3.1）：AI 写的日报 / 周报 / 经营一页纸是文档，归「产出」（不算报表）
+  const docs = useScopeReports(scope)
   const records = useQueries({
     queries: scopeAssignments(scope).map((a) => ({
       queryKey: ['records', a],
@@ -124,11 +157,32 @@ export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
       return true
     })
     .sort((a, b) => b.at.localeCompare(a.at))
-  if (rows.length === 0)
-    return records.some((r) => r.isPending) ? null : <Empty text={t('outputs.empty')} />
+  // WP433：卡身体报总数（WP438 起 AI 写的报告文档也在这张卡上）
+  useCardTotal(onTotal, rows.length + docs.reports.length)
+  if (rows.length === 0 && docs.reports.length === 0)
+    return records.some((r) => r.isPending) || !docs.ready ? null : (
+      <Empty text={t('outputs.empty')} />
+    )
+  const docRows = docs.reports.slice(0, limit)
   return (
     <ul className="flex flex-col gap-px" data-testid="outputs-card">
-      {rows.slice(0, limit).map((row) => (
+      {docRows.map((r) => (
+        <li key={r.id}>
+          <button
+            type="button"
+            className={ROW}
+            data-testid="output-doc-row"
+            data-id={r.id}
+            onClick={() => {
+              rail.openAddress(reportAddress(r.id))
+            }}
+          >
+            <span className="min-w-0 truncate">{r.title}</span>
+            <Meta>{shortDate(r.at)}</Meta>
+          </button>
+        </li>
+      ))}
+      {rows.slice(0, Math.max(0, limit - docRows.length)).map((row) => (
         <li key={row.id}>
           <button
             type="button"
@@ -158,22 +212,97 @@ function byPlan(a: ScheduledTaskRow, b: ScheduledTaskRow): number {
   return (a.next_fire_at ?? '~').localeCompare(b.next_fire_at ?? '~')
 }
 
-export function PlansCard({ scope, limit }: RailCardBodyProps): ReactNode {
+/**
+ * WP433：这条职责在「计划 → 显示更多」里有没有进度看板（社媒排期 / 群发、B2B、投放素材流水线）。
+ * 和 `scope-boards.tsx` 的 `dutyHasWorkBoards` 同一份名单（不 import 那个大文件，卡身体要轻）。
+ */
+export function dutyMayHaveWorkBoards(role_id: string): boolean {
+  return (
+    role_id.startsWith('social.') ||
+    role_id === 'b2b.outbound' ||
+    role_id === 'b2b.sales' ||
+    role_id === 'ads.google' ||
+    role_id === 'ads.meta'
+  )
+}
+
+/**
+ * WP433（问题 8）：「计划」卡最上面一行「进度」——岗位层带上「进行中 N · 卡住了 M」（数与「工作」同一份），
+ * 职责层是那条职责的排期 / 流水线；点了开「计划」的完整一格（原来这些摊在「报表」里）。
+ */
+function ProgressRow({ scope }: { scope: NonNullable<RailCardBodyProps['scope']> }): ReactNode {
+  const { t } = useApp()
+  const rail = useRailState()
+  const id = scope.tier === 'position' ? (scope.assignment ?? '') : ''
+  const work = useQuery({
+    queryKey: ['position-work', id],
+    queryFn: () => getPositionWork(id),
+    enabled: id !== '',
+    retry: false,
+  })
+  const counts = work.data?.counts
+  const stuck = counts?.stuck ?? 0
+  const doing = counts?.doing ?? 0
+  // 有在做 / 卡住的就说这两个数（为 0 的那一半不说）；都没有就说一共几件
+  const meta =
+    counts === undefined
+      ? ''
+      : doing + stuck > 0
+        ? [
+            doing > 0 ? t('plans.work.doing', { n: doing }) : '',
+            stuck > 0 ? t('plans.work.stuck', { n: stuck }) : '',
+          ]
+            .filter((x) => x !== '')
+            .join(' · ')
+        : (work.data?.items.length ?? 0) > 0
+          ? t('plans.work.items', { n: work.data?.items.length ?? 0 })
+          : ''
+  return (
+    <li>
+      <button
+        type="button"
+        className={ROW}
+        data-testid="plan-row-progress"
+        data-stuck={stuck > 0 ? 'true' : undefined}
+        onClick={() => {
+          rail.show('schedules')
+        }}
+      >
+        {stuck > 0 ? <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" /> : null}
+        <span className="min-w-0 truncate">{t('plans.progress')}</span>
+        <Meta>{meta}</Meta>
+      </button>
+    </li>
+  )
+}
+
+export function PlansCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const list = useQuery({ queryKey: SCHEDULES_KEY, queryFn: getMySchedules, retry: false })
   // WP386：信息监控下一次什么时候拉（系统自带的那条定时一小时一拍，人看的是「明早 9:00」）
   const monitorNext = useScopeMonitor(scope)?.view?.next_run_at
-  if (scope === undefined) return null
-  const rows = (list.data ?? [])
-    .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
-    .sort(byPlan)
+  const rows =
+    scope === undefined
+      ? []
+      : (list.data ?? [])
+          .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
+          .sort(byPlan)
   // WP392：竞品监控的下次读（不是一条定时任务，是按到点规则算出来的）
   const competitor = competitorAssignmentOf(scope) !== undefined
-  if (rows.length === 0 && monitorNext === undefined && !competitor)
+  const progress =
+    scope?.assignment !== undefined &&
+    (scope.tier === 'position' || dutyMayHaveWorkBoards(scope.scope_id))
+  useCardTotal(
+    onTotal,
+    rows.length + (progress ? 1 : 0) + (competitor ? 1 : 0) + (monitorNext === undefined ? 0 : 1),
+  )
+  if (scope === undefined) return null
+  if (rows.length === 0 && monitorNext === undefined && !competitor && !progress)
     return list.isPending ? null : <Empty text={t('plans.empty')} />
   return (
     <ul className="flex flex-col gap-px" data-testid="plans-card">
+      {progress ? <ProgressRow scope={scope} /> : null}
       {competitor ? <CompetitorWatchPlanRow scope={scope} /> : null}
       {monitorNext === undefined ? null : (
         <li>
@@ -223,7 +352,7 @@ const ConnectBody = lazy(async () => {
 })
 
 export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
-  const { scope, limit, address } = props
+  const { scope, limit, address, onTotal } = props
   const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const { items, ready } = useScopeConnections(scope)
@@ -238,6 +367,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   const sorted = [...items].sort(
     (a, b) => Number(connectionNeedsYou(b)) - Number(connectionNeedsYou(a)),
   )
+  useCardTotal(onTotal, sorted.length)
   // WP386：信息监控的监控源（一行汇总；拉不到的亮红点，点开就地看 / 贴）
   const monitor = useScopeMonitor(scope)
   // WP420：要插件的这一层，先列插件那几行（配对、后台在插件里连上没有）
@@ -365,7 +495,7 @@ function MonitorRow({
 
 /* ── 设定 ───────────────────────────────────────────────────────────── */
 
-export function SettingsCard({ limit, tier }: RailCardBodyProps): ReactNode {
+export function SettingsCard({ limit, tier, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const models = useQuery({ queryKey: MODEL_CHOICES_KEY, queryFn: getFreeChatModels, retry: false })
@@ -396,6 +526,7 @@ export function SettingsCard({ limit, tier }: RailCardBodyProps): ReactNode {
       },
     })),
   ]
+  useCardTotal(onTotal, rows.length)
   return (
     <ul className="flex flex-col gap-px" data-testid="settings-card">
       {rows.slice(0, limit).map((r) => (

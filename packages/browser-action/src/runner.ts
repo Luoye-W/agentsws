@@ -35,7 +35,8 @@ export interface ActionPage {
   look(): Promise<PageLook>
   waitFor(selector: string, timeoutMs: number): Promise<boolean>
   click(selector: string): Promise<DomOpResult>
-  fill(selector: string, value: string): Promise<DomOpResult>
+  /** WP432：`highlight` = 填完把框描一圈、滚到眼前。 */
+  fill(selector: string, value: string, options?: { highlight?: boolean }): Promise<DomOpResult>
   setFile(selector: string, file: SheetFile): Promise<DomOpResult>
   paste(selector: string, text: string): Promise<DomOpResult>
   text(selector: string): Promise<string>
@@ -55,7 +56,13 @@ export interface ActionPage {
    * WP329：页面上正文含这段字的那几条（`await_sent` 用；页面换了 / 还在加载时回空数组，不抛）。
    * 没实现 = 这只手认不了「发出去的那一条」，`await_sent` 照实失败。
    */
-  findPosted?(selector: string, body: string, text: string): Promise<PostedHit[]>
+  findPosted?(
+    selector: string,
+    body: string,
+    text: string,
+    /** WP432：这个号发的也算（人改了字再发）。 */
+    author?: string,
+  ): Promise<PostedHit[]>
 }
 
 export interface SheetFile {
@@ -127,6 +134,12 @@ export function stepLabel(step: ActionStep): string {
   }
 }
 
+/** WP432：软步骤对不上时横条上那一句（不乱点，交给人粘贴）。 */
+export const SOFT_MISS_LABEL = '对不上页面：草稿在侧边栏里点「复制草稿」，自己粘贴、点发送'
+
+const isSoft = (step: ActionStep): boolean =>
+  (step.op === 'wait' || step.op === 'click' || step.op === 'fill') && step.soft === true
+
 const DEFAULT_WAIT_MS = 30_000
 
 /** 一条认出来的「发出去的那一条」的键（编号优先，没有编号用链接）。 */
@@ -175,12 +188,23 @@ export async function runAction(
   const takeBaseline = async (): Promise<Set<string>> =>
     sendStep === undefined || page.findPosted === undefined
       ? new Set()
-      : new Set((await page.findPosted(sendStep.selector, sendStep.body, sendStep.text)).map(keyOf))
+      : new Set(
+          (
+            await page.findPosted(sendStep.selector, sendStep.body, sendStep.text, sendStep.author)
+          ).map(keyOf),
+        )
+  /** WP432：软步骤对不上了——后面的软步骤都跳过，直接等人粘贴、点发送。 */
+  let softMissed = false
 
   for (const [index, step] of plan.steps.entries()) {
     at = index + 1
     if (hooks.stopped()) return end('stopped', '你点了停止，已停下。')
-    const remote = await hooks.progress({ step: at, of, label: stepLabel(step) })
+    if (softMissed && isSoft(step)) continue
+    const remote = await hooks.progress({
+      step: at,
+      of,
+      label: softMissed && step.op === 'await_sent' ? SOFT_MISS_LABEL : stepLabel(step),
+    })
     if (remote.stop || hooks.stopped()) return end('stopped', '你点了停止，已停下。')
 
     const allowed = checkStep(step, plan.allow, plan.kind)
@@ -196,7 +220,17 @@ export async function runAction(
       if (step.op === 'fill' && sendStep !== undefined && sentBaseline === undefined)
         sentBaseline = await takeBaseline()
       const out = await doStep(step)
-      if (out !== undefined) return out
+      if (out !== undefined) {
+        // WP432：软步骤对不上（不是停 / 被拦 / 跳走）——不乱点、不停，记一笔，去等人自己粘贴
+        if (isSoft(step) && out.outcome === 'handover' && !hooks.stopped()) {
+          const stop = await pageCheck()
+          if (stop !== undefined) return stop
+          softMissed = true
+          reads.fill_missed = '1'
+          continue
+        }
+        return out
+      }
     } catch (err) {
       return end(
         'failed',
@@ -221,7 +255,13 @@ export async function runAction(
       case 'click':
         return fromDom(await page.click(step.selector))
       case 'fill':
-        return fromDom(await page.fill(step.selector, step.value))
+        return fromDom(
+          await page.fill(
+            step.selector,
+            step.value,
+            step.highlight === true ? { highlight: true } : undefined,
+          ),
+        )
       case 'wait': {
         const ok = await page.waitFor(
           step.selector,
@@ -306,12 +346,14 @@ export async function runAction(
     const pollMs = hooks.sendPollMs ?? SEND_POLL_MS
     for (let looks = 1, waited = 0; ; looks += 1, waited += pollMs) {
       if (hooks.stopped()) return end('stopped', '你点了停止，已停下。草稿留在页面上，没发。')
-      const hit = (await page.findPosted(step.selector, step.body, step.text)).find(
+      const hit = (await page.findPosted(step.selector, step.body, step.text, step.author)).find(
         (h) => !seen.has(keyOf(h)),
       )
       if (hit !== undefined) {
         if (hit.fullname !== undefined) reads.fullname = hit.fullname
         if (hit.permalink !== undefined) reads.permalink = hit.permalink
+        // WP432：真发出去的字（人可能改过）——记进发出记录、改了多少进学习回路
+        if (hit.text !== undefined && hit.text !== '') reads.sent_text = hit.text.slice(0, 10_000)
         return undefined
       }
       if (looks % SEND_CHECK_EVERY === 0) {

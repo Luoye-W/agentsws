@@ -12,7 +12,14 @@
 import type { Iso8601, PersonId, WorkspaceId } from './common.js'
 
 /** 通知的几类（设置 → 通知里一类一行）。 */
-export type NotificationCategory = 'team' | 'task' | 'connection' | 'credits' | 'update'
+export type NotificationCategory =
+  | 'team'
+  | 'task'
+  | 'connection'
+  | 'credits'
+  | 'update'
+  /** WP432：批过的 Reddit 回复 / 帖子等你在浏览器插件里打开、自己点发送（插件图标上也有数字）。 */
+  | 'outbound'
 
 export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'team',
@@ -20,6 +27,7 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'connection',
   'credits',
   'update',
+  'outbound',
 ]
 
 /** 保留多少天（按最后一次更新算）。 */
@@ -80,6 +88,8 @@ export const DEFAULT_NOTIFICATION_PREFS: Readonly<NotificationPrefs> = {
   connection: { inbox: true, system: true },
   credits: { inbox: true, system: true },
   update: { inbox: true, system: false },
+  // WP432：等你发——有东西在等你亲手点发送，默认系统通知也开（插件里也弹一句）
+  outbound: { inbox: true, system: true },
 }
 
 /** 合并默认值与人改过的（缺的类别用默认；站内关了系统也算关）。 */

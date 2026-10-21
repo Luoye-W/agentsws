@@ -39,6 +39,8 @@ export interface TeamLinkOptions {
     vault: TunnelVault
     fetch?: TunnelFetch
     socketFactory?: TunnelSocketFactory
+    /** WP444：这里现在几个人（申请通道时顺手报给云，按人数落档）。 */
+    members?(): number | undefined
   }
   /** 还活着的邀请码（通道刚连上时把它们登记到云上）。 */
   liveInvites(): { code: string; expires_at: string }[]
@@ -59,6 +61,8 @@ export interface TeamLink {
   registerCode(code: string, expires_at: string): void
   /** 测试用：等云那条路连上。 */
   whenCloudOnline(timeoutMs?: number): Promise<boolean>
+  /** WP444：刚开通 / 续费了团队通道：云那条路不等，马上重新申请。 */
+  retryCloud(): void
   close(): Promise<void>
 }
 
@@ -102,6 +106,7 @@ export function createTeamLink(options: TeamLinkOptions): TeamLink {
           ...(options.cloud.socketFactory === undefined
             ? {}
             : { socketFactory: options.cloud.socketFactory }),
+          ...(options.cloud.members === undefined ? {} : { members: options.cloud.members }),
           onEvent: (e) => {
             options.onEvent?.(e)
             // 刚连上：把还活着的码登记一遍（之前发的码那会儿还没地方登记）
@@ -216,6 +221,9 @@ export function createTeamLink(options: TeamLinkOptions): TeamLink {
       void tunnel.registerCode(code, expires_at)
     },
     whenCloudOnline: (timeoutMs) => tunnel?.whenOnline(timeoutMs) ?? Promise.resolve(false),
+    retryCloud() {
+      tunnel?.retryNow()
+    },
     async close() {
       closed = true
       tunnel?.stop()

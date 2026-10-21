@@ -92,12 +92,13 @@ describe('左栏（WP43 §1 图标）', () => {
    * 钉两件事：顺序是 首页 / 消息 / 待办 / 日历，而且 `/goals` **不在左栏里**了
    * （路由还在、⌘K 还搜得到、待办页有一个 tab——那几条各自有自己的用例）。
    */
-  it('左栏顺序：我的助理 / 首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
+  it('左栏顺序：首页 / 我的助理 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     // WP188（Luoye 09-29）：「随便聊」在最上面；WP343 改名「我的助理」（`/assistant`）
-    expect(hrefs.slice(0, 5)).toEqual(['/assistant', '/', '/messages', '/todos', '/calendar'])
+    // WP433（Luoye 10-20 问题 1）：「首页」放到最上面
+    expect(hrefs.slice(0, 5)).toEqual(['/', '/assistant', '/messages', '/todos', '/calendar'])
     expect(screen.getByTestId('nav-free-chat').textContent).toBe('助理')
     expect(hrefs).not.toContain('/goals')
   })

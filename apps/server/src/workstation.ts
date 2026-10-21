@@ -7,11 +7,13 @@
  */
 import type {
   PositionSummary,
+  ReportStorePort,
   WorkstationActor,
   WorkstationPort,
   WorkstationRange,
 } from '@agentsws/api'
 import type { ApprovalBus, ApprovalItem, Clock, ObjectRef } from '@agentsws/contracts'
+import { isPluginDeskCard } from '@agentsws/contracts'
 import type {
   AdsDeckData,
   B2bDeckData,
@@ -162,6 +164,8 @@ export interface WorkstationPortOptions {
   data: WorkstationDataSource
   /** 用户挑过的数字块与时间范围（v1 内存；换机迁移时随个人设置走） */
   preferences?: Map<string, { tile_ids: string[]; range: WorkstationRange }>
+  /** WP438：固定的 AI 报表与快照（不给 = 只有默认报表、没有历史）。 */
+  reports?: ReportStorePort
 }
 
 export function createWorkstationPort(options: WorkstationPortOptions): WorkstationPort {
@@ -210,7 +214,9 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
   return {
     positions,
 
-    items: (actor, position) => itemsFor(actor, position, OPEN_STATES),
+    // WP445（决策 1322）：插件里审的 Reddit 卡不进工坊牌堆 / 待审数（在浏览器插件「等你发」里）
+    items: async (actor, position) =>
+      (await itemsFor(actor, position, OPEN_STATES)).filter((i) => !isPluginDeskCard(i)),
 
     // WP278（决策 284）：发给本人、挂在底座职责上的卡（不按他持有哪条分配筛）
     async baseItems(actor) {
@@ -273,6 +279,8 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
     },
 
     systemCards: (actor) => options.data.systemCards?.(actor) ?? { alerts: [] },
+
+    ...(options.reports === undefined ? {} : { reports: options.reports }),
 
     label: (ref) => options.data.label(ref),
 

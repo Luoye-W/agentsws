@@ -386,4 +386,35 @@ describe('账本其他行为（15 §1 §4 §5）', () => {
     expect(reversal.before).toEqual({ price: 90 })
     expect((await h.txn.ledger.get(price.change.id))?.status).toBe('reversed')
   })
+
+  it('WP446：改跳转是可逆 kind——撤回那一条把「原来跳到哪」换回 after（执行器再执行一次就回去了）', async () => {
+    const h = harness()
+    const REDIRECT: ObjectRef = { type: 'url_redirect', id: '/pages/old-faq' }
+    const card = await h.txn.ledger.stage(
+      refundStage({
+        kind: 'url_redirect',
+        target: REDIRECT,
+        field: 'redirects',
+        change_set_id: 'cs_redirect',
+        before: { _redirects: [{ path: '/pages/old-faq', target: '' }] },
+        after: { _redirects: [{ path: '/pages/old-faq', target: '/pages/faq' }], count: 1 },
+        money: undefined,
+        record_version: undefined,
+        provenance: { ...prov([REDIRECT]), read_full: ['url_redirect:/pages/old-faq'] },
+        mandate: { caps: { max_redirects_per_change: 20 } },
+      }),
+    )
+    if (!card.ok) throw new Error(card.message)
+    await h.txn.approvals.decide(card.approval.id, 'p_wang', {
+      decision_token: tokenOf(card.approval),
+      action: 'approve',
+      via: 'workstation',
+    })
+    h.clock.advance(121_000)
+    await h.txn.executor.apply(card.change.id)
+    const reversal = await h.txn.ledger.reverse(card.change.id, 'p_wang')
+    expect(reversal.reversal_of).toBe(card.change.id)
+    expect(reversal.after).toEqual({ _redirects: [{ path: '/pages/old-faq', target: '' }] })
+    expect((await h.txn.ledger.get(card.change.id))?.status).toBe('reversed')
+  })
 })

@@ -1,5 +1,5 @@
 /**
- * `@agentsws/seo-core`（WP154「内容与搜索」）：`dtc.content` 那条职责里 SEO 与 GEO 的**判断**。
+ * `@agentsws/seo-core`（WP154「内容与搜索」）：`dtc.seo`「SEO 与 GEO」（WP446 从 `dtc.content` 拆出）那条职责里 SEO 与 GEO 的**判断**。
  *
  * 纯逻辑 + 注入 IO：没有 `Date.now()`、没有 `fetch`、没有模型调用、碰不到一个凭据。
  * 出卡、开事项、定时这些副作用在服务端（`apps/server/src/seo-service.ts`）。

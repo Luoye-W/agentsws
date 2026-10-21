@@ -473,6 +473,10 @@ export function installDesign(world: World): DesignLoop {
       // 58 §3 第四张卡：一份品牌系统都没有的时候出它（**不挡路**，但把代价说清楚）
       brand_system_missing: record.brand_system_missing,
       ...(record.brand_system_missing ? { card: brandSystemMissingCard().kind } : {}),
+      // 断言看**这一张** brief 自己的审批，而不是这一轮随便哪张卡
+      staged: briefStaged.ok,
+      auto_approved: record.brief_auto_approved,
+      ...(record.brief_level === undefined ? {} : { level: record.brief_level }),
     })
     requests.push(record)
     return record
@@ -550,6 +554,8 @@ export function installDesign(world: World): DesignLoop {
       image_model: available,
       ...(available ? {} : { reason }),
       staged: staged.ok,
+      auto_approved: record.auto_approved,
+      ...(record.level === undefined ? {} : { level: record.level }),
     })
     variantRuns.push(record)
     return record
@@ -593,6 +599,7 @@ export function installDesign(world: World): DesignLoop {
       asset_id,
       staged: staged.ok,
       auto_approved: record.auto_approved,
+      ...(record.level === undefined ? {} : { level: record.level }),
       ...(staged.ok ? {} : { reason: staged.message }),
     })
     picks.push(record)

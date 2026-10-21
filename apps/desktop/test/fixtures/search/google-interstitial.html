@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- WP454 夹具：Google 对没有 cookie 的新浏览器先回的「过渡页」最小结构（10-21 实测的样子，手写，不是抓的原文）。
+     页面脚本跑完会带 &sei=… 再请求一次才是真结果页；noscript 里是 enablejs 重试地址。 -->
+<html><head><title>Google Search</title>
+<noscript><meta content="0;url=/httpservice/retry/enablejs?sei=abc123" http-equiv="refresh"></noscript>
+<script nonce="x">(function(){var u='/search?q=smart+glasses&sei=abc123';setTimeout(function(){},0)})();</script>
+</head><body>
+<div id="yvlrue">Please click <a href="/search?q=smart+glasses&amp;sei=abc123">here</a> if you are not redirected within a few seconds.</div>
+<div>If you're having trouble accessing Google Search, please <a href="/search?q=smart+glasses&amp;emsg=SG_REL&amp;sei=abc123">click here</a>, or send <a href="https://support.google.com/websearch">feedback</a>.</div>
+</body></html>

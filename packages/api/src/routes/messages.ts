@@ -46,6 +46,7 @@ import type {
   PersonId,
   ReplySuggestion,
   SenderRule,
+  SenderRuleList,
   Todo,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -131,6 +132,25 @@ export interface MessageThreadView {
   /** WP212：没人接时 AI 挑的主按钮。 */
   suggest?: MessageSuggest
   kind?: MessageKind
+  /**
+   * WP440（docs/108 M9）：这条会话上 AI **按把握直接回**的那几封——
+   * 「全部」时间线里那一行「AI 直接回 · 出处：…」，旁边「这封不该直接回」。
+   */
+  auto_replies?: MessageAutoReplyMark[]
+}
+
+/** WP440：AI 按把握直接回的一封（只有出处与分数，不含来信原文）。 */
+export interface MessageAutoReplyMark {
+  /** 那张自动批了的回信卡（「这封不该直接回」按它点）。 */
+  approval_item_id: string
+  at: string
+  /** 0–1 的把握。 */
+  score: number
+  sources: { kind: string; label: string }[]
+  /** 发出去的那封开头一段（对得上是哪一封）。 */
+  excerpt: string
+  /** 人已经点过「这封不该直接回」。 */
+  flagged: boolean
 }
 
 /** 右栏 `mail-assistant` 那一格要的东西（一次取全，前端不发第二个请求）。 */
@@ -231,8 +251,18 @@ export interface MessagesPort {
     into: string,
   ): MaybePromise<{ moved: number; labels: MessageLabel[] }>
 
-  senderRules(actor: MessageActor): MaybePromise<{ rules: SenderRule[] }>
-  deleteSenderRule(actor: MessageActor, id: string): MaybePromise<{ deleted: boolean }>
+  /** WP439：规则清单（命中数、谁教的、刚删的几条）。老实现只回 `rules` 也认。 */
+  senderRules(actor: MessageActor): MaybePromise<SenderRuleList>
+  /** 删一条：当场生效。WP439：回删掉的那一条（「已删 · 撤回」要它）。 */
+  deleteSenderRule(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ deleted: boolean; rule?: SenderRule }>
+  /** WP439：撤回刚删的那一条。不实现 = 这台机器删了就没了（路由回 501）。 */
+  restoreSenderRule?(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ restored: boolean; rule?: SenderRule }>
 
   drafts(actor: MessageActor): MaybePromise<{ drafts: MessageDraft[] }>
   saveDraft(actor: MessageActor, input: MessageDraftInput): MaybePromise<{ draft: MessageDraft }>
@@ -264,6 +294,15 @@ export interface MessagesPort {
     actor: MessageActor,
     input: MessageNoticeAckInput,
   ): MaybePromise<{ acked: number; writeback?: MessageWriteback }>
+
+  /**
+   * WP440（docs/108 M9）：人点「这封不该直接回」→ 记进学习回路（与在线客服「这句不该直接答」同一份），
+   * 同类以后转人。不是 AI 直接回的那一封回 `undefined`（404）。不实现 = 这台机器没有邮件直接回（501）。
+   */
+  flagAutoReply?(
+    actor: MessageActor,
+    approval_item_id: string,
+  ): MaybePromise<{ learned: boolean } | undefined>
 
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
@@ -570,12 +609,12 @@ export function messageRoutes(): Route[] {
         method: 'get',
         path: '/v1/messages/rules',
         operationId: 'listMessageSenderRules',
-        summary: '你教过的发件人规则（"以后这个发件人都这样"）',
+        summary: '你教过的发件人规则（"以后这个发件人都这样"）：命中数、谁教的、刚删的几条',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: '{ rules: SenderRule[] }',
+        returns: 'SenderRuleList',
       },
       async (c, deps) => ok(c, await portOf(deps).senderRules(actorOf(c))),
     ),
@@ -584,14 +623,33 @@ export function messageRoutes(): Route[] {
         method: 'delete',
         path: '/v1/messages/rules/:id',
         operationId: 'deleteMessageSenderRule',
-        summary: '撤掉一条发件人规则',
+        summary: '撤掉一条发件人规则（当场生效：下一封那个发件人重新判）',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
-        returns: '{ deleted: boolean }',
+        returns: '{ deleted: boolean; rule?: SenderRule }',
       },
       async (c, deps) => ok(c, await portOf(deps).deleteSenderRule(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/rules/:id/restore',
+        operationId: 'restoreMessageSenderRule',
+        summary: '撤回刚删的一条发件人规则（WP439，决策 243：删了能撤回）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ restored: boolean; rule?: SenderRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.restoreSenderRule === undefined)
+          throw new ApiError('not_implemented', '这台机器上删掉的规则撤不回来')
+        return ok(c, await port.restoreSenderRule(actorOf(c), param(c, 'id')))
+      },
     ),
     route(
       {
@@ -908,6 +966,29 @@ export function messageRoutes(): Route[] {
           'content-length': String(out.bytes.byteLength),
           'x-content-type-options': 'nosniff',
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/auto-replies/:id/not-direct',
+        operationId: 'flagMessageAutoReply',
+        summary: '「这封不该直接回」：AI 按把握直接回的那封记进学习回路，同类以后先给人批',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        // 只会让 AI 更保守（同类以后转人），看得见这条会话的人就能点（同聊天那一颗）
+        authz: READ,
+        returns: '{ learned }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.flagAutoReply === undefined)
+          throw new ApiError('not_implemented', '这台机器没有邮件「有把握就直接回」')
+        const out = await port.flagAutoReply(actorOf(c), param(c, 'id'))
+        if (out === undefined)
+          throw new ApiError('not_found', '这封不是 AI 直接回的（或已经找不到了）')
+        return ok(c, out)
       },
     ),
     route(

@@ -102,8 +102,14 @@
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
+    "packages/roles/roles/ads/apple.yml",
     "packages/roles/roles/ads/google.yml",
+    "packages/roles/roles/ads/linkedin.yml",
     "packages/roles/roles/ads/meta.yml",
+    "packages/roles/roles/ads/microsoft.yml",
+    "packages/roles/roles/ads/pinterest.yml",
+    "packages/roles/roles/ads/reddit.yml",
+    "packages/roles/roles/ads/snapchat.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/store.yml",
@@ -125,6 +131,7 @@
     "packages/roles/roles/dtc/email-marketing.yml",
     "packages/roles/roles/dtc/fulfillment.yml",
     "packages/roles/roles/dtc/live-chat.yml",
+    "packages/roles/roles/dtc/seo.yml",
     "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/kol/facebook.yml",
@@ -154,7 +161,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a47a88aee0090b50f5cfc601a55e48ba",
+  "source_digest": "0381d22006b46dd8f9bbba956ba7f9b5",
   "objects": [
     {
       "id": "ad",
@@ -247,6 +254,9 @@
         "ads.cpa",
         "ads.ctr",
         "ads.daily_report",
+        "ads.export_audit",
+        "ads.export_overview",
+        "ads.export_spend",
         "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",
@@ -792,6 +802,7 @@
         }
       ],
       "read_via": [
+        "approvals.email_auto_replies_today",
         "approvals.pending_replies",
         "approvals.refund_requests",
         "approvals.reply_rate_24h",
@@ -5926,7 +5937,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "ad_account",
@@ -6350,7 +6361,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "article",
@@ -6382,7 +6393,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.proposer.assignment_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "assignment",
@@ -6422,7 +6433,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_account",
@@ -6470,7 +6481,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_list",
@@ -6518,7 +6529,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_quote",
@@ -6558,7 +6569,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_sample",
@@ -6622,7 +6633,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "campaign",
@@ -6662,7 +6673,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "collaboration",
@@ -6726,7 +6737,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "collection",
@@ -6758,7 +6769,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "community_member",
@@ -6790,7 +6801,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "community_thread",
@@ -6878,7 +6889,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "creator_contact",
@@ -6918,7 +6929,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "customer",
@@ -6950,7 +6961,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "deliverable",
@@ -6990,7 +7001,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_asset",
@@ -7030,7 +7041,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_brief",
@@ -7070,7 +7081,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_request",
@@ -7126,7 +7137,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "discount",
@@ -7158,7 +7169,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "email_template",
@@ -7190,7 +7201,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "export_shipment",
@@ -7230,7 +7241,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "external_post",
@@ -7326,7 +7337,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "inventory_item",
@@ -7358,7 +7369,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.matter_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "matter",
@@ -7414,7 +7425,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "media_contact",
@@ -7526,7 +7537,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "mention",
@@ -7566,7 +7577,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "order",
@@ -7606,7 +7617,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "page",
@@ -7662,7 +7673,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "policy",
@@ -7734,7 +7745,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "press_release",
@@ -7774,7 +7785,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "product",
@@ -7822,7 +7833,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "review",
@@ -7830,7 +7841,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "approval_item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "review",
@@ -7894,7 +7905,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "shop_app",
@@ -7934,7 +7945,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "social_account",
@@ -8006,7 +8017,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "approval.item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "staged_change",
@@ -8622,7 +8633,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "store_config",
@@ -8654,7 +8665,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "theme",
@@ -8686,7 +8697,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.todo_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "todo",
@@ -8758,7 +8769,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "tracked_link",
@@ -8798,7 +8809,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "trade_show",
@@ -8846,7 +8857,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "trade_show_lead",
@@ -8886,7 +8897,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "variant",
@@ -8918,7 +8929,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.work_item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "work_item",
@@ -9270,7 +9281,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.workspace_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "workspace",
@@ -10991,7 +11002,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage internal link edit"
     },
     {
@@ -11074,7 +11085,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage page section add"
     },
     {
@@ -11086,7 +11097,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage page seo edit"
     },
     {
@@ -11371,6 +11382,18 @@
       "route_to": "role_holder",
       "roles": ["dtc.store"],
       "what": "把商品撤下（永远人审）"
+    },
+    {
+      "id": "stage_url_redirect",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "url_redirect",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.shopify-build"],
+      "what": "改网址跳转（建站，可撤回）"
     }
   ]
 }

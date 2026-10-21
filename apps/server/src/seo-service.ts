@@ -1,5 +1,7 @@
 /**
- * WP154「内容与搜索」：`dtc.content` 那条职责里 SEO 与 GEO 的**副作用**那一层（每个品牌一份）。
+ * WP154「内容与搜索」→ WP446「SEO 与 GEO」（`dtc.seo`，docs/109 §4）：SEO 与 GEO 的**副作用**那一层（每个品牌一份）。
+ * 定时、出卡、关注设置都用「SEO 与 GEO」的担当人；新页面选题批了，「写这一页」的事项派给「内容与博客」
+ * （`dtc.content`）的担当人，没人担才派回 SEO 与 GEO 自己（{@link topicWriter}）。
  *
  * 判断全在 `@agentsws/seo-core`（纯函数）；这里只做接线：
  *
@@ -16,7 +18,7 @@
  * 3. **发布前质检**（`gatePublish`）：账本 stage 之前的改写口——没过就改回草稿、拉回 L1、
  *    卡上逐句说明。
  *
- * 纪律：定时那一轮用**真持有内容与搜索**的那个人的分配去提（定时任务没有"当前用户"）；
+ * 纪律：定时那一轮用**真持有 SEO 与 GEO**的那个人的分配去提（定时任务没有"当前用户"）；
  * 没人持有就什么都不做（不替没人管的职责出卡）。搜索数据接口（WP155）没接时 SERP 与 GEO
  * 跳过、卡上一句人话，其余照跑。本文件不打一跳网络——两个口都是注入的。
  */
@@ -440,6 +442,25 @@ export interface ClaimRulesInput {
 }
 
 /** 状态文件（品牌目录下）。 */
+/** WP446（docs/109 §4）：SEO 与 GEO 那条职责（定时、出卡、关注设置都按它的担当人）。 */
+export const SEO_ROLE: RoleId = 'dtc.seo' as RoleId
+/** WP446：写这一页的那条职责（内容与博客）。 */
+export const CONTENT_ROLE: RoleId = 'dtc.content' as RoleId
+
+/**
+ * WP446（docs/109 §4.2 交接）：新页面选题批了，「写这一页」派给谁——内容与博客有人担就派给他，
+ * 没人担就派回 SEO 与 GEO 自己的担当人（一个人开店时两条都在他身上，等于没变）；都没人 = 只开事项不派人。
+ */
+export function topicWriter(holderOf: (role_id: RoleId) => SeoActor | undefined): {
+  role_id: RoleId
+  actor?: SeoActor
+} {
+  const writer = holderOf(CONTENT_ROLE)
+  if (writer !== undefined) return { role_id: CONTENT_ROLE, actor: writer }
+  const seo = holderOf(SEO_ROLE)
+  return seo === undefined ? { role_id: CONTENT_ROLE } : { role_id: SEO_ROLE, actor: seo }
+}
+
 const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
@@ -1087,7 +1108,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           pinned: pinOf(pick.page, page),
           position_id: actor.assignment_id,
           entry: 'role',
-          role_id: 'dtc.content',
+          role_id: SEO_ROLE,
           participants: [actor.person_id],
         })
         return id === undefined
@@ -1145,7 +1166,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         const id = openMatter(`site|${pick.page ?? pick.query}`, {
           kind: 'project',
           title: `交建站：${page?.title ?? pick.page ?? pick.query}${INDEX_WORDS[page?.index_status ?? ''] ?? ''}`,
-          summary: `内容与搜索每日判断转来：${body}\n需要处理跳转 / 规范网址 / 收录（301 或 308，不用 307），处理完在 Search Console 请求重新收录。`,
+          summary: `SEO 与 GEO 每日判断转来：${body}\n需要处理跳转 / 规范网址 / 收录（301 或 308，不用 307），处理完在 Search Console 请求重新收录。`,
           pinned: pinOf(pick.page, page),
           entry: 'position',
           position_template_id: 'site',
@@ -1163,7 +1184,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         const id = openMatter(`pr|${pick.query}`, {
           kind: 'project',
           title: `交公关：让站外提到「${pick.query}」`,
-          summary: `内容与搜索每日判断转来：${body}\n需要的是站外被提及（Reddit / 论坛 / 评测 / 新闻稿），链接指向 ${pick.page ?? '我们的相关页面'}。`,
+          summary: `SEO 与 GEO 每日判断转来：${body}\n需要的是站外被提及（Reddit / 论坛 / 评测 / 新闻稿），链接指向 ${pick.page ?? '我们的相关页面'}。`,
           pinned: pinOf(pick.page, page),
           entry: 'position',
           position_template_id: 'pr',
@@ -1238,11 +1259,11 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   }
 
   const date = (): string => clock.now().slice(0, 10)
-  const skipped = '没人持有「内容与搜索」这条职责，这一轮不跑'
+  const skipped = '没人持有「SEO 与 GEO」这条职责，这一轮不跑'
 
   /* ── WP321：监测（关注设置、每周一轮、指标、变化大才出卡）——引擎在 `./geo-monitor.ts` ── */
 
-  const watchActor = (): SeoActor | undefined => options.holderOf('dtc.content')
+  const watchActor = (): SeoActor | undefined => options.holderOf(SEO_ROLE)
   /** WP392：品牌档案里的竞品问过哪几家（geo_meta；问过不再问）。 */
   const PROFILE_RIVALS_ASKED_KEY = 'profile_competitors_asked'
   const monitor = createGeoMonitor({
@@ -1548,7 +1569,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         title,
         summary,
         entry: 'role',
-        role_id: 'dtc.content',
+        role_id: SEO_ROLE,
         ...(page === undefined
           ? {}
           : {
@@ -1808,7 +1829,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
 
   return {
     async daily() {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       if (actor === undefined) return { skipped, picks: 0, changes: 0, topics: 0, matters: 0 }
       // WP321：上周排队档没回来的顺手收（收完一轮就出它的报告卡）；收不成不挡每日判断
       await collectAndReport(actor).catch(() => undefined)
@@ -1869,7 +1890,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     async weeklyRevenue() {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       if (actor === undefined) return { skipped, rows: 0 }
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
@@ -1938,7 +1959,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     async weeklyGeo(trigger = 'scheduled') {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       if (actor === undefined) return { skipped, gaps: 0 }
       // 上一轮排队档没回来的先收（收完一轮就出它的报告卡）
       await collectAndReport(actor)
@@ -2040,7 +2061,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const { all, probing, from } = await probeMarketsOf()
       // WP169：每个市场用什么语言问；要翻却没模型、也没翻过的，面板上注明「先按原语言问」
       const brand = await options.brand()
-      const holder = options.holderOf('dtc.content')
+      const holder = options.holderOf(SEO_ROLE)
       const canTranslate =
         holder !== undefined &&
         options.translator?.({ actor: holder, run_id: 'run_seo_view' }) !== undefined
@@ -2124,7 +2145,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
 
     watchView: () => monitor.view(),
     async watchSuggest(input) {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       if (input?.card === true && actor !== undefined) {
         const card = await createSetupCard(actor, !(await monitor.setupDone()))
         return { strategy: card.strategy, estimate: card.estimate, approval_item_id: card.id }
@@ -2218,7 +2239,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       return monitor.view()
     },
     async watchRun(input) {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       const estimate = await monitor.estimate()
       const store = await geoHistory()
       const kinds = input.kinds ?? ['geo', 'rank']
@@ -2260,19 +2281,19 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     watchMetrics: (input) => monitor.metrics(input ?? {}),
     watchAnswer: (id) => monitor.answer(id),
     async watchCollect() {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       return actor === undefined ? monitor.collect() : collectAndReport(actor)
     },
 
     watchFacts: () => monitor.officialFacts(),
     watchSetFacts: (patch) => monitor.setFacts(patch),
     async watchConsistency(input) {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       return actor === undefined ? undefined : quality.runConsistency(actor, input ?? {})
     },
     watchRecheck: (input) => quality.registerRecheck({ ...input, source: 'human' }),
     async watchRecheckDue() {
-      const actor = options.holderOf('dtc.content')
+      const actor = options.holderOf(SEO_ROLE)
       return actor === undefined ? [] : quality.processDue(actor)
     },
 
@@ -2385,13 +2406,15 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       if (item.kind !== 'seo_topic' || item.workspace_id !== workspace_id) return
       if (item.state !== 'approved' && item.state !== 'approved_edited') return
       const p = item.payload as SeoTopicPayload
-      const actor = options.holderOf('dtc.content')
+      // WP446（docs/109 §4.2 交接）：写这一页归「内容与博客」的担当人；没人担就派回 SEO 与 GEO 自己的担当人
+      const writer = topicWriter(options.holderOf)
+      const actor = writer.actor
       openMatter(`topic|${p.query}`, {
         kind: 'project',
         title: `写一页新的：${p.query}`,
         summary: `${p.why}\n${p.serp.reason}\n写好后发布照每天 2 篇的额度分批发；发布前自动质检。${p.ranking_page === undefined ? '' : `\n发出去之后从 ${p.ranking_page} 链过来。`}`,
         entry: 'role',
-        role_id: 'dtc.content',
+        role_id: writer.role_id,
         ...(actor === undefined
           ? {}
           : { position_id: actor.assignment_id, participants: [actor.person_id] }),

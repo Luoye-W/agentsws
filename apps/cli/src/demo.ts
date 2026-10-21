@@ -30,6 +30,7 @@ import type {
   RangeRef,
   RunEvent,
   SearchDataPort,
+  SenderRule,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
@@ -75,6 +76,7 @@ import { DEMO_AMAZON_LISTINGS, demoAmazonAutocompleteReader } from './demo-amazo
 import { demoListingReader } from './demo-amazon-listing.js'
 import { DEMO_COMPETITORS, DEMO_OWN_PRODUCTS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
+import { demoOrderHistory } from './demo-report-history.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
 /** WP346：demo 里品牌分析 AI 归纳那一步的写死回复（演示品牌：给露营的人做便携电源与营地灯）。 */
@@ -198,6 +200,11 @@ export interface DemoOptions {
    */
   execution?: 'live' | 'demo'
   /**
+   * WP438：补 120 天演示订单历史（带来源与商品明细），报表的 30 / 90 天图才看得出样子。
+   * **默认不造**：demo 的本分是演一件真事，摆拍历史会冲掉首页那几个数。
+   */
+  reportHistory?: boolean
+  /**
    * WP100：把"今天"定在哪一刻（毫秒）。**只给测试用**；不给就是启动的这一刻。
    *
    * 有了它，"demo 的钟锚在启动那天"这件事才测得出来——否则用例只能拿 `Date.now()`
@@ -300,7 +307,21 @@ function postsOf(world: World, now: Iso8601): PostRow[] {
   }))
 }
 
-function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
+function dataSourceOf(
+  world: World,
+  pack: Pack,
+  options: { reportHistory?: boolean } = {},
+): WorkstationDataSource {
+  // WP438：`--report-history` 时补 120 天演示订单（只为报表截图；按世界启动那一刻算一次）
+  const history =
+    options.reportHistory === true
+      ? demoOrderHistory({
+          now: world.clock.now(),
+          tz_offset_minutes: 480,
+          currency: pack.workspace.base_currency,
+          products: world.connect.state.products,
+        })
+      : []
   const sources: DataSourceStatus[] = [
     // 店铺后台 = mock OpenConnector，接上了；其余三个 demo 里都没连
     { id: 'shop', label: '店铺后台', connected: true },
@@ -324,7 +345,7 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
   ]
   const alerts: DeckCard[] = []
   return {
-    orders: () => ordersOf(world),
+    orders: () => [...history, ...ordersOf(world)],
     inventory: () => inventoryOf(world),
     // 评价应用没接：一条评价都没有，差评那一块出的是"还没连"不是空表
     reviews: () => [],
@@ -692,11 +713,11 @@ async function seedCardGallery(world: World): Promise<void> {
     ...routed(at('dtc.store')), // 路由拿不准的那件事是店铺管理引出来的
     dedupe_key: `gallery_ai_question:${world.workspace_id}:1`,
     title: '这件事像两条职责，你定',
-    summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与搜索。',
+    summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与博客。',
     payload: {
       options: [
         { id: 'store', label: '店铺管理 · 命中 改价 · 商品' },
-        { id: 'content', label: '内容与搜索 · 命中 页面 · 文案' },
+        { id: 'content', label: '内容与博客 · 命中 页面 · 文案' },
       ],
     },
   })
@@ -805,7 +826,7 @@ async function seedCardGallery(world: World): Promise<void> {
     dedupe_key: `gallery_computer_use:${world.workspace_id}:1`,
     title: '让它在接下来 10 分钟操作这台电脑？',
     summary:
-      '它想：在 Keynote 里把新品发布的封面页导出成 PNG。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行时托盘会变色，随时可以点「停止」。',
+      '它想：在 Keynote 里把新品发布的封面页导出成 PNG。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行的时候托盘会变色，随时可以点「停止」。',
     payload: {
       stage: 'authorize',
       run_id: 'run_gallery_cu',
@@ -1359,6 +1380,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   for (const role of [
     'dtc.store',
     'dtc.content',
+    // WP446：SEO 与 GEO 从内容里拆出来
+    'dtc.seo',
     'kol.youtube',
     'kol.instagram',
     'kol.tiktok',
@@ -1432,7 +1455,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     })),
     roles: world.roles,
     approvals: world.txn.approvals,
-    data: dataSourceOf(world, pack),
+    data: dataSourceOf(world, pack, {
+      ...(options.reportHistory === true ? { reportHistory: true } : {}),
+    }),
     // 21 §1：世界的事件日志与服务进程的合一，首页四格战报才有真数
     eventLog: world.kernel.eventLog,
   }
@@ -2297,6 +2322,54 @@ async function seedMessages(server: Server, world: World): Promise<void> {
   ]
 
   for (const row of rows) await store.put(row)
+
+  /*
+   * WP439：你教过的三个发件人（右栏「规则」那一页有东西可看）——命中账按天摊在最近几天。
+   * 只在第一次种：人删过 / 改过的不再种回来。
+   */
+  if ((await store.senderRules()).length === 0) {
+    const day = (daysAgo: number): string =>
+      new Date(nowMs - daysAgo * 86_400_000).toISOString().slice(0, 10)
+    const taught: SenderRule[] = [
+      {
+        id: 'rule_demo_shipfast',
+        sender: '@shipfast.example',
+        labels: ['orders'],
+        kind: 'logistics',
+        route: 'inbox',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 12),
+        source: 'user',
+        hit_days: { [day(0)]: 3, [day(1)]: 4, [day(3)]: 2, [day(6)]: 3 },
+        last_hit_at: at(90),
+      },
+      {
+        id: 'rule_demo_packaging_weekly',
+        sender: 'news@packaging-weekly.example',
+        labels: ['newsletters'],
+        kind: 'marketing',
+        route: 'inbox',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 20),
+        source: 'user',
+        hit_days: { [day(2)]: 1, [day(9)]: 1, [day(16)]: 1, [day(23)]: 1 },
+        last_hit_at: at(60 * 24 * 2),
+      },
+      {
+        id: 'rule_demo_mia',
+        sender: 'mia@creator.example',
+        labels: ['partnership'],
+        kind: 'creator_reply',
+        position: 'kol-marketing',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 5),
+        source: 'user',
+        hit_days: { [day(1)]: 1, [day(4)]: 2 },
+        last_hit_at: at(60 * 24),
+      },
+    ]
+    for (const rule of taught) await store.putSenderRule(rule)
+  }
 
   // WP172：挪进 BtoBAgents 的那封在 B2B 库里落成了一条询盘（真路径见 `b2b-mail.ts`）
   const inquiry = rows.find((r) => r.id === 'm110')

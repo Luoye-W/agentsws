@@ -154,6 +154,51 @@ const REPORT_CARD = {
   },
 }
 
+/** WP438：看板「报表」卡的一行（AI 做的那份，固定在这条职责上）。 */
+const REDDIT_REPORT = {
+  id: 'rpt_1',
+  title: 'Reddit 运营报表',
+  position: 'reddit-ops',
+  origin: 'ai',
+  refresh: 'weekly',
+  headline_label: '近 30 天品牌被提到',
+  headline: {
+    key: 'mentions',
+    label: '品牌被提到',
+    format: 'count',
+    source: 'pr',
+    status: 'ok',
+    value: 138,
+    previous: 105,
+    delta: 31.4,
+    delta_unit: 'pct',
+  },
+  spark: [1, 3, 2, 5],
+}
+
+vi.mock('@/lib/reports-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/reports-api')>('@/lib/reports-api')
+  return {
+    ...actual,
+    listReports: async (input: { position: string; duty?: string }) => ({
+      reports: input.duty === 'social.reddit' ? [REDDIT_REPORT] : [],
+      limit: 5,
+      examples: [],
+    }),
+    getReport: async () => ({
+      id: 'rpt_1',
+      title: 'Reddit 运营报表',
+      position: 'reddit-ops',
+      origin: 'ai',
+      refresh: 'weekly',
+      range: '30d',
+      period: { from: '2026-09-21', to: '2026-10-20', compare_from: '', compare_to: '' },
+      computed_at: '2026-10-21T01:00:00.000Z',
+      blocks: [],
+    }),
+  }
+})
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -299,19 +344,9 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('help')
   })
 
-  it('连接没连上：面板开关上亮汇总的红点（红压过黄），「连接」卡标题后同一个点', async () => {
+  it('连接没连上：「连接」卡标题后亮红点（WP433：顶栏不再有面板开关与汇总点）', async () => {
     renderShell()
-    await waitFor(() => {
-      const dots = screen.getAllByTestId('rail-toggle-dot')
-      expect(dots.map((d) => d.getAttribute('data-card')).sort()).toEqual([
-        'connections',
-        'conversations',
-      ])
-    })
-    const red = screen
-      .getAllByTestId('rail-toggle-dot')
-      .find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
-    expect(red.className).toContain('z-10')
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
     const card = await openRailCard('connections')
     expect(within(card).getByTestId('rail-card-dot-connections').getAttribute('data-dot')).toBe(
       'alert',
@@ -323,7 +358,7 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
 })
 
 describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
-  it('职责页默认开成卡片堆：默认展开对话与计划、其余收起带摘要；报表摘要是名字与日期，点一份在面板里看', async () => {
+  it('职责页默认开成卡片堆：默认展开对话与计划、其余收起带摘要；报表一行一份（WP438），AI 写的周报在「产出」里', async () => {
     renderShell()
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
@@ -340,25 +375,33 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect((await screen.findByTestId('rail-card-summary-connections')).textContent).toBe(
       '1 个要处理',
     )
-    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe(
-      '周报 · 10-12',
-    )
-    // 报表：展开、点一份在面板里看
+    // WP438：报表卡收着时写「几份」；卡头有「+」
+    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe('1 份')
+    expect(screen.getByTestId('rail-card-action-reports')).toBeTruthy()
+    // 展开：一行 = 名字 + AI 标 + 头条数 + 涨跌；点了在第三栏拉出整页
     fireEvent.click(screen.getByTestId('rail-card-toggle-reports'))
     const row = await screen.findByTestId('report-row', {}, { timeout: 5000 })
-    expect(row.textContent).toContain('周报')
-    expect(row.textContent).toContain('10-12')
-    fireEvent.click(row)
+    expect(row.textContent).toContain('Reddit 运营报表')
+    expect(row.textContent).toContain('138')
+    expect(row.textContent).toContain('↑31.4%')
+    expect(within(row).getByTestId('report-ai-tag')).toBeTruthy()
+    fireEvent.click(within(row).getAllByRole('button')[0] as HTMLElement)
+    expect(await screen.findByTestId('report-page', {}, { timeout: 5000 })).toBeTruthy()
+    // AI 写的周报正文不算报表，归「产出」
+    fireEvent.click(screen.getByTestId('rail-card-toggle-outputs'))
+    const doc = await screen.findByTestId('output-doc-row', {}, { timeout: 5000 })
+    expect(doc.textContent).toContain('周报')
+    fireEvent.click(doc)
     const view = await screen.findByTestId('report-view')
     expect(view.textContent).toContain('新帖 12 条')
   })
 
-  it('对话卡：最多 4 条、等你看的排最上（黄点）、在做的转圈；「显示更多」= 按今天 / 本周 / 更早分组', async () => {
+  it('对话卡：最多 5 条（WP433）、等你看的排最上（黄点）、在做的转圈；「显示更多」= 按今天 / 本周 / 更早分组', async () => {
     renderShell()
     const box = await openRailCard('conversations')
     const card = await within(box).findByTestId('conv-card')
     const rows = await within(card).findAllByTestId('conv-link')
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(5)
     expect(rows[0]?.textContent).toBe('置顶帖草稿')
     expect(
       within(rows[0] as HTMLElement)
@@ -427,7 +470,9 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     const plus = screen.getAllByTestId('rail-new-matter')[1] as HTMLElement
     fireEvent.click(plus)
     expect(await screen.findByTestId('conv-compose-input')).toBeTruthy()
-    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('cards')
+    // WP433：卡片列属于中栏；第三栏没开
+    expect(screen.getByTestId('rail-board')).toBeTruthy()
+    expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
   it('连接卡（决策 690）弹出：展开「连接」并把那一条放在最上面，不被新布局挡住', async () => {
@@ -436,7 +481,7 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     const card = await screen.findByTestId('rail-card-connections')
     expect(card.getAttribute('data-open')).toBe('true')
     expect(await within(card).findByTestId('connections-live')).toBeTruthy()
-    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('cards')
+    expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
   it('展开态按作用域记住；卡顺序按人记住（全部岗位一份）', async () => {
@@ -459,20 +504,25 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect(handle.getAttribute('aria-label')).toContain('拖动「计划」')
   })
 
-  it('WP431：面板没有放大钮与关闭叉（照 Claude，开关只在顶栏）；宽度靠拖左边缘，键盘也调得动，记住', async () => {
+  it('WP433：「显示更多」开在卡片列右边的第三栏——右上 × 收起、没有放大钮；宽度靠拖左边缘，键盘也调得动，记住', async () => {
     const box = stubStorage()
     renderShell()
-    await openRailCard('reports')
-    fireEvent.click(await screen.findByTestId('rail-card-more-reports'))
+    // WP433：「显示更多」只在多于 5 条时出——拿「设定」（6 行）进一格
+    await openRailCard('settings')
+    fireEvent.click(await screen.findByTestId('rail-card-more-settings'))
     await screen.findByTestId('rail-panel-frame')
     expect(screen.queryByTestId('rail-panel-wide')).toBeNull()
-    expect(screen.queryByTestId('rail-panel-close')).toBeNull()
-    // 「显示更多」那一格有一行细的「← 名字」回到卡片堆
-    expect(screen.getByTestId('rail-panel-back')).toBeTruthy()
+    // 卡片列还在（属于中栏），第三栏开在它右边
+    expect(screen.getByTestId('rail-cards')).toBeTruthy()
     const handle = screen.getByTestId('rail-resize')
     for (let i = 0; i < 20; i += 1) fireEvent.keyDown(handle, { key: 'ArrowLeft' })
     expect(screen.getByTestId('rail-panel-frame').style.width).toBe('720px')
     expect(box.get('agentsws.rightrail.layout')).toContain('720')
+    fireEvent.click(screen.getByTestId('rail-panel-close'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+    })
+    expect(screen.getByTestId('rail-cards')).toBeTruthy()
   })
 })
 

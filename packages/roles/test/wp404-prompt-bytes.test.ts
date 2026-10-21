@@ -1,7 +1,7 @@
 /**
  * WP404（docs/107 §12 一期 A）：**内容外置前后，喂给模型的字节一个都不许变**。
  *
- * 全部内置职责（51 条）× 中英：装出来的 persona 那几节（岗位 → 职责 → 回复语言 → 说话规矩，
+ * 全部内置职责（58 条；WP446 加了 dtc.seo、WP447 加了六条投放新平台）× 中英：装出来的 persona 那几节（岗位 → 职责 → 回复语言 → 说话规矩，
  * 与 `assemblePrompt` 同一种拼法）逐字节取哈希，和外置之前记下的那一份比。另外三样一起钉：
  * 职责的「内容」字段、整份定义（骨架一个值都不许动）、岗位模板整份。
  *
@@ -89,7 +89,7 @@ describe('WP404 喂给模型的字节（外置前后逐字节相同）', () => {
       writeFileSync(FIXTURE, `${JSON.stringify(now, null, 2)}\n`, 'utf8')
     }
     const was = JSON.parse(readFileSync(FIXTURE, 'utf8')) as Record<string, unknown>
-    expect(Object.keys(now.roles as object)).toHaveLength(51)
+    expect(Object.keys(now.roles as object)).toHaveLength(58)
     expect(now).toEqual(was)
   })
 })

@@ -35,9 +35,9 @@ When something doesn't match, the check opens a task for Website operations with
 **Ready for ChatGPT shopping?**
 Checks your product data field by field against OpenAI's public product feed spec: required fields such as title, description, link, brand, image, availability and price, plus the privacy policy and terms needed for checkout. **Assessment only — we don't connect you.**
 
-## Visits and sales from AI (Content & search)
+## Visits and sales from AI (SEO & GEO)
 
-The Content & search duty page gets one more block: sales and revenue from ChatGPT, Perplexity, Gemini, Copilot, Claude and others in the last 7 days, marked **measured** — Shopify's own record of where shoppers came from, not an estimate. The weekly AI answer tracking report shows the same line next to "did AI mention you".
+The SEO & GEO duty page gets one more block: sales and revenue from ChatGPT, Perplexity, Gemini, Copilot, Claude and others in the last 7 days, marked **measured** — Shopify's own record of where shoppers came from, not an estimate. The weekly AI answer tracking report shows the same line next to "did AI mention you".
 
 - Each order counts once: the AI of the last visit before buying, otherwise the first visit;
 - **Visits** need the "Reports" permission in your store authorization; without it only sales are counted, and the footer says so.
@@ -46,7 +46,7 @@ The Content & search duty page gets one more block: sales and revenue from ChatG
 
 The AI crawler and AI source lists are data and are updated with the app. By default we compare the product page, the structured data and your store's public product data; your product feed and marketplace listings are compared only once their addresses are added — until then they're skipped, never counted as "missing".
 
-**Just say it in the chat**: in a Website operations or Content & search conversation, say something like "our Google product feed is https://…", "our Amazon listing is https://…, it's power-bank-20000 in our store", "stop checking GPTBot" or "count Kimi as an AI source". A card shows just what will change; click "Looks good" to save it, and the site is checked again with the new settings.
+**Just say it in the chat**: in a Website operations or SEO & GEO conversation, say something like "our Google product feed is https://…", "our Amazon listing is https://…, it's power-bank-20000 in our store", "stop checking GPTBot" or "count Kimi as an AI source". A card shows just what will change; click "Looks good" to save it, and the site is checked again with the new settings.
 
 To ask "can AI get into our site?" or "how many orders did AI bring last week?", just ask in the chat — the assistant reads the latest check to answer.
 

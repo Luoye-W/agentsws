@@ -37,20 +37,43 @@ import type { Iso8601, WorkspaceId } from './common.js'
  * **每个平台是一个独立的花钱账户、独立的计费与风控**，额度必须按账户设。
  * 一条"投放"职责下面管着四个账户，等于四个钱包共用一把锁。
  */
-export type AdsPlatform = 'meta' | 'google' | 'x' | 'tiktok'
+export type AdsPlatform =
+  | 'meta'
+  | 'google'
+  | 'x'
+  | 'tiktok'
+  // WP447（docs/109 §6，Luoye 10-21「全部补」）：六个新平台，第一期只读（看数 + 体检）
+  | 'microsoft'
+  | 'pinterest'
+  | 'reddit'
+  | 'linkedin'
+  | 'snapchat'
+  | 'apple'
 
 /**
  * 这个平台的接口现实（57 §1：写进连接卡的准备说明）。
  *
  * - `official`：官方 API，拿到 token 就能用（Meta Marketing API，权限要 App Review）；
- * - `developer_token`：要先申请一个 developer token 并过审（Google Ads）；
+ * - `developer_token`：要先申请一个 developer token 并过审。**已没有平台用它**：Google 2026-09-09
+ *   取消了 developer token（WP447 改成 `cloud_project`）；只加不删，名字留着；
  * - `apply`：申请制（X Ads API）；
- * - `business_center`：要先在 Business Center 里授权（TikTok Ads）。
+ * - `business_center`：要先在 Business Center 里授权（TikTok Ads）；
+ * - `cloud_project`（WP447）：访问级别挂在**生成 OAuth 凭据的 Google Cloud 项目**上——在 Cloud
+ *   控制台启用 API 就有测试级，要动真账户再在同一个项目里申请更高一级（Google Ads，官方
+ *   「Developer token and API access levels」页 2026-10-19 版）；
+ * - `export_only`（WP447）：第一期只读——用户从平台后台点官方「导出」，把报表交给我们读，
+ *   不连接口、不碰账户（docs/109 §6.2 六个新平台）。
  *
  * 界面上据此说人话："这个接口要先申请 developer token"比"连接失败"有用得多
  * （同 `SocialApiAccess` / `KolApiAccess`）。
  */
-export type AdsApiAccess = 'official' | 'developer_token' | 'apply' | 'business_center'
+export type AdsApiAccess =
+  | 'official'
+  | 'developer_token'
+  | 'apply'
+  | 'business_center'
+  | 'cloud_project'
+  | 'export_only'
 
 export interface AdsPlatformSpec {
   id: AdsPlatform
@@ -66,6 +89,13 @@ export interface AdsPlatformSpec {
   connector_kind: string
   /** 这个平台的适配器在 `@agentsws/ads-core` 里有没有真调用（WP75 只做 Meta / Google）。 */
   implemented: boolean
+  /**
+   * WP447：这条职责**只读**（没有任何写动作，连止损暂停都没有）。第一期的六个新平台都是 `true`；
+   * 不写 = 能改（老四条）。将来加写动作时去掉它，花费照样并进岗位级 `max_daily_spend` 总闸。
+   */
+  read_only?: true
+  /** WP447：这个平台只适合推 App（Apple Ads）。品牌没有 App 时体检直接说「这条只适合推 App」。 */
+  app_only?: true
 }
 
 /**
@@ -99,8 +129,12 @@ export const ADS_PLATFORMS: readonly AdsPlatformSpec[] = [
     zh: 'Google Ads',
     en: 'Google Ads',
     icon: 'google',
-    // developer token 要申请并过审；OAuth 之外还要一个 `developer-token` 头
-    api_access: 'developer_token',
+    /*
+     * WP447：官方「Developer token and API access levels」页（2026-10-19 版）写明 developer token
+     * 2026-09-09 已取消——请求头里还能带，但服务端忽略；访问级别改挂在生成 OAuth 凭据的那个
+     * Google Cloud 项目上。原来这里是 `developer_token`。
+     */
+    api_access: 'cloud_project',
     connector_kind: 'google_ads',
     implemented: true,
   },
@@ -125,7 +159,84 @@ export const ADS_PLATFORMS: readonly AdsPlatformSpec[] = [
     connector_kind: 'tiktok_ads',
     implemented: false,
   },
+  /*
+   * ── WP447（docs/109 §6.1）：六个新平台。全部默认不勾、第一期只读（`export_only` + `read_only`）。
+   * 顺序照 §6.1 那张表（Microsoft 最先做：能从 Google 导入同一套广告，表格结构几乎一样）。
+   */
+  {
+    id: 'microsoft',
+    role_id: 'ads.microsoft',
+    zh: 'Microsoft 广告（Bing）',
+    en: 'Microsoft Ads (Bing)',
+    icon: 'microsoft_ads',
+    api_access: 'export_only',
+    connector_kind: 'microsoft_ads',
+    implemented: false,
+    read_only: true,
+  },
+  {
+    id: 'pinterest',
+    role_id: 'ads.pinterest',
+    zh: 'Pinterest 广告',
+    en: 'Pinterest Ads',
+    icon: 'pinterest',
+    api_access: 'export_only',
+    connector_kind: 'pinterest_ads',
+    implemented: false,
+    read_only: true,
+  },
+  {
+    id: 'reddit',
+    role_id: 'ads.reddit',
+    zh: 'Reddit 广告',
+    en: 'Reddit Ads',
+    icon: 'reddit',
+    api_access: 'export_only',
+    connector_kind: 'reddit_ads',
+    implemented: false,
+    read_only: true,
+  },
+  {
+    id: 'linkedin',
+    role_id: 'ads.linkedin',
+    zh: 'LinkedIn 广告',
+    en: 'LinkedIn Ads',
+    icon: 'linkedin',
+    api_access: 'export_only',
+    connector_kind: 'linkedin_ads',
+    implemented: false,
+    read_only: true,
+  },
+  {
+    id: 'snapchat',
+    role_id: 'ads.snapchat',
+    zh: 'Snapchat 广告',
+    en: 'Snapchat Ads',
+    icon: 'snapchat',
+    api_access: 'export_only',
+    connector_kind: 'snapchat_ads',
+    implemented: false,
+    read_only: true,
+  },
+  {
+    id: 'apple',
+    role_id: 'ads.apple',
+    zh: 'Apple 搜索广告',
+    en: 'Apple Ads',
+    icon: 'apple_ads',
+    api_access: 'export_only',
+    connector_kind: 'apple_ads',
+    implemented: false,
+    read_only: true,
+    // docs/109 §6.3：只推 App（为 App / 虚拟产品推广留的口）
+    app_only: true,
+  },
 ]
+
+/** WP447：只读的那几条（第一期的六个新平台）。 */
+export const ADS_READ_ONLY_PLATFORM_IDS: readonly AdsPlatform[] = ADS_PLATFORMS.filter(
+  (p) => p.read_only === true,
+).map((p) => p.id)
 
 /** 平台 id → 规格；不认识的回 `undefined`（不编造一条）。 */
 export function adsPlatformSpec(id: string): AdsPlatformSpec | undefined {

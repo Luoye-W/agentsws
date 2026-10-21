@@ -12,8 +12,7 @@
  * 白名单只放几个合法的写法（邮箱域名那种），不放任何内部值。
  */
 import type { BlockData, DeckCard } from '@agentsws/deck'
-import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { BlockBody } from '@/components/blocks/block-view'
@@ -208,19 +207,11 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(screenText(container)).not.toContain('common.owner')
   })
 
-  it('首页：页头、报表块、牌堆里每一张卡、卡型下拉、紧凑列表', async () => {
-    const user = userEvent.setup()
+  it('首页（WP438 四块）：页头、要你定、关键数字、岗位卡', async () => {
     const { container } = renderWithProviders(<HomePage />)
-    const deck = await screen.findByTestId('deck-section')
-    await screen.findByTestId('deck-card')
-    const seen: string[] = []
-    for (let i = 0; i < home.queue.length; i += 1) {
-      seen.push(...rawTokens(screenText(container)))
-      await user.click(within(deck).getByTestId('deck-next'))
-    }
-    await user.click(within(deck).getByTestId('deck-list-toggle'))
-    seen.push(...rawTokens(screenText(container)))
-    expect([...new Set(seen)]).toEqual([])
+    await screen.findByTestId('home-decide')
+    await screen.findAllByTestId('home-decide-row')
+    expect(rawTokens(screenText(container))).toEqual([])
   })
 
   it('报表块：日报列头是人话', () => {

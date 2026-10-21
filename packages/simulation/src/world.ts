@@ -303,6 +303,7 @@ import {
   classifyText,
   describeAmazonDetection,
   detectAmazonChannel,
+  emailAnswerStubScript,
   evaluateAmazonOutbound,
   evaluateAutonomyGates,
   hasRewritableAmazonViolation,
@@ -2045,6 +2046,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP63 把 15 人 pack 自带的那份副本删了——两份真源迟早会各改各的。
     loadBundledRole('dtc.store'),
     loadBundledRole('dtc.content'),
+    // WP446（docs/109 §4）：SEO 与 GEO 从内容里拆出来；每日 5 件事与 GEO 走它的分配
+    loadBundledRole('dtc.seo'),
     // WP67（48 §5.1）：红人营销岗位的五条渠道职责。3 人 pack 里"运营"挂着
     // `kol.youtube`（`assignments.yml`），另外四条躺在库里——躺着不产生任何行为，
     // 装它们是为了首次设置向导里"红人营销"那个岗位显示五条而不是一条
@@ -2098,6 +2101,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('ads.google'),
     loadBundledRole('ads.x'),
     loadBundledRole('ads.tiktok'),
+    // WP447（docs/109 §6）：六条只读的新平台职责，同样躺在库里给向导显示
+    loadBundledRole('ads.microsoft'),
+    loadBundledRole('ads.pinterest'),
+    loadBundledRole('ads.reddit'),
+    loadBundledRole('ads.linkedin'),
+    loadBundledRole('ads.snapchat'),
+    loadBundledRole('ads.apple'),
     // WP78（60 §1）：公共关系岗位的四条职责。3 人 pack 里店主真挂着
     // `pr.monitoring`（`assignments.yml`）；另外三条躺在库里——躺着不产生任何
     // 行为，装它们是为了首次设置向导里"公共关系"那个岗位显示四条而不是一条
@@ -2342,7 +2352,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     out: Awaited<ReturnType<ModelProvider['complete']>>,
   ): Awaited<ReturnType<ModelProvider['complete']>> => {
     if (opts.model !== undefined) return out
-    const text = chatAnswerStubScript(req.messages)
+    // WP440：邮件直接回那一次起草也走 stub 剧本（三个运行时同一份）
+    const text = chatAnswerStubScript(req.messages) ?? emailAnswerStubScript(req.messages)
     return text === undefined ? out : { ...out, text }
   }
   const gatedProvider: ModelProvider = {
@@ -2403,7 +2414,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           status: secondMode.code,
         })
       }
-      return base.complete(req)
+      // WP440：「同一个确定性替身」——聊天 / 邮件直接回那一次起草的 stub 剧本这里也套上（以前漏了，
+      // 切到第二条之后那一次起草就成了没剧本的替身话，三个运行时对不齐）
+      return scripted(req, await base.complete(req))
     },
   }
   let currentBudget: ModelGatewayPolicy['budget']
@@ -3195,7 +3208,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       dedupe_key: `${workspace_id}:knowledge_update:stale:${hit.fact_card_id}`,
       title: '这条知识可能过时了',
       summary:
-        '检索到的是一条历史案例（记的是当时的状态）。回答已经以操作层的当前状态为准；' +
+        '检索到的是一条历史案例（记的是当时的状态）。回答已经按店里现在的状态来；' +
         '这条要不要更新或退休，你定。',
       payload: {
         form: 'knowledge_update',
@@ -5345,7 +5358,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
      * 报告卡并记一条 `digest.seo_daily`（卡上几件、各走哪条车道、读进几行、卡上几行）。
      */
     async seoDaily({ who }) {
-      const asg = assignmentFor(who, 'dtc.content')
+      const asg = assignmentFor(who, 'dtc.seo')
       const at = now(clock)
       const date = at.slice(0, 10)
       const payload = await buildSeoDaily({
@@ -5409,7 +5422,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     async geoQuality({ who }) {
-      const asg = assignmentFor(who, 'dtc.content')
+      const asg = assignmentFor(who, 'dtc.seo')
       const at = now(clock)
       const week = at.slice(0, 10)
       // ① 录好的回答 + 录好的判断回文 → 比较胜率、描述准确度（原话对不上的不算）

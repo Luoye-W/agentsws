@@ -239,6 +239,7 @@ describe('写入点', () => {
     expect(recordsFromChange({ ...change, kind: 'refund' as ChangeKind })).toEqual([])
   })
 
+  // int/1024：WP445（决策 1324）起 Reddit 不走接口直发，这条改用 X 钉「发出去了 → 一行带平台 id」
   it('社媒回帖发出去了 → 一行带平台 id（之后挂后续用）', async () => {
     const WS = 'ws_1' as WorkspaceId
     const NOW = '2026-10-14T03:00:00.000Z'
@@ -246,17 +247,17 @@ describe('写入点', () => {
     store.saveAccount({
       id: 'sa_r',
       workspace_id: WS,
-      channel: 'reddit',
+      channel: 'x',
       handle: 'ivra_official',
-      display_name: 'r/ivraxr',
-      url: 'https://www.reddit.com/r/ivraxr',
+      display_name: '@ivra_official',
+      url: 'https://x.com/ivra_official',
       external_id: 'ivraxr',
       observed_at: NOW,
     } as never)
     const thread: CommunityThread = {
       id: 'ct_1',
       account_id: 'sa_r',
-      channel: 'reddit',
+      channel: 'x',
       external_id: 't3_abc',
       surface: 'thread',
       author_external_id: 'u_1',
@@ -282,12 +283,12 @@ describe('写入点', () => {
       workspace_id: WS,
       kind: 'outbound_draft',
       state: 'approved',
-      role_id: 'social.reddit',
+      role_id: 'social.x',
       subject: { object: { type: 'community_thread', id: 'ct_1' } },
       payload: {
         form: SOCIAL_REPLY_FORM,
         thread_id: 'ct_1',
-        channel: 'reddit',
+        channel: 'x',
         body: { text: 'About 3h.' },
       },
       decision: { by: 'mandate', at: NOW },
@@ -296,9 +297,9 @@ describe('写入点', () => {
     expect(sent).toEqual([
       expect.objectContaining({
         source_key: 'approval:ap_1',
-        channel: 'reddit',
+        channel: 'x',
         action: 'reply',
-        destination: 'r/ivraxr',
+        destination: '@ivra_official',
         counterpart: 'u/alice',
         content: 'About 3h.',
         external_id: 't1_reply',
