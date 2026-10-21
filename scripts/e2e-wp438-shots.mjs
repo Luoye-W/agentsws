@@ -209,6 +209,9 @@ async function main() {
         const card = page.getByTestId('rail-card-reports')
         if ((await card.getAttribute('data-open')) !== 'true')
           await page.getByTestId('rail-card-toggle-reports').click()
+        // int/1024：WP433 起卡片列常驻、报表卡默认展开，不再先点卡头——先把鼠标移进卡里，「+」才让开拖动把手
+        await page.getByTestId('rail-card-toggle-reports').hover()
+        await page.waitForTimeout(400)
         await page.getByTestId('rail-card-action-reports').click()
         await page.getByTestId('report-compose').waitFor({ timeout: 30_000 })
         await page.getByTestId('compose-examples').getByRole('button').first().click()
@@ -223,6 +226,11 @@ async function main() {
         if (want('ai-pin')) await shot(page, '7-ai-pin', theme)
         await page.getByTestId('pin-confirm').click()
         await page.getByTestId('pin-toast').waitFor({ timeout: 30_000 })
+        // int/1024：1440 宽开着「做一份报表」时看板让位（决策 1343）——点顶栏「看一眼」把看板浮出来再看那一行
+        if ((await page.getByTestId('board-peek').count()) === 1) {
+          await page.getByTestId('board-peek').click()
+          await page.getByTestId('rail-board-peek').waitFor({ timeout: 10_000 })
+        }
         await card.locator('[data-origin="ai"]').first().waitFor({ timeout: 30_000 })
         if (theme === 'light')
           check(

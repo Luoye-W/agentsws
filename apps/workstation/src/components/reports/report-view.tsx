@@ -10,7 +10,7 @@
  */
 import type { ReportData, ReportRange } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { History, MoreHorizontal, Pin, PinOff, Send, Sparkles, X } from 'lucide-react'
+import { History, MoreHorizontal, Pin, PinOff, Send, Sparkles } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { askAtPosition } from '@/components/position/quick-answer-store'
@@ -312,18 +312,9 @@ export function ReportView({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="report-page" data-id={id}>
-      {/* 顶上那一条：关闭、岗位名、同岗位报表页签；右边问 AI / 图钉 / ⋯ */}
+      {/* 顶上那一条：岗位名、同岗位报表页签；右边问 AI / 图钉 / ⋯ */}
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ws-line px-3">
-        <button
-          type="button"
-          aria-label={t('report.pane.close')}
-          title={t('report.pane.close')}
-          data-testid="report-close"
-          className="grid size-7 shrink-0 place-items-center rounded-[7px] text-ws-muted-fg hover:bg-ws-secondary hover:text-ws-ink"
-          onClick={closeRightPane}
-        >
-          <X aria-hidden className="size-4" />
-        </button>
+        {/* int/1024：收起用第三栏宿主头上那颗 ×（WP437），这里不再另放一颗 */}
         {info.name === undefined ? null : (
           <span className="shrink-0 px-1 text-[12.5px] text-ws-muted-fg">{info.name}</span>
         )}

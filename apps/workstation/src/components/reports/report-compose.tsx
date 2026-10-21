@@ -7,10 +7,10 @@
  * 4. 固定以后：顶上一句「已固定到『网站运营 · 报表』，每周一更新 · 撤销」，看板那张卡最上面多这一份、亮一下。
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Send, X } from 'lucide-react'
+import { Check, Send } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 import { MiniReport } from '@/components/reports/kit/mini-report'
-import { closeRightPane, markPinned, openRightPane } from '@/components/reports/right-pane'
+import { markPinned, openRightPane } from '@/components/reports/right-pane'
 import { usePositionInfo } from '@/components/reports/use-position-info'
 import { useApp } from '@/lib/app-context'
 import {
@@ -203,17 +203,7 @@ export function ReportCompose({
   }
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="report-compose">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ws-line px-3">
-        <button
-          type="button"
-          aria-label={t('report.pane.close')}
-          className="grid size-7 place-items-center rounded-[7px] text-ws-muted-fg hover:bg-ws-secondary hover:text-ws-ink"
-          onClick={closeRightPane}
-        >
-          <X aria-hidden className="size-4" />
-        </button>
-        <span className="text-[13.5px] font-semibold">{t('report.compose.title')}</span>
-      </div>
+      {/* int/1024：标题与 × 用第三栏宿主头上那一行（WP437「做一份报表」），这里不再另画一行 */}
       {pinned === undefined ? null : (
         <div
           role="status"
