@@ -75,6 +75,8 @@ export const PANEL_ZH: Record<string, string> = {
 
   'plans.next': '下次 {when}',
   'plans.empty': '还没有计划',
+  'plans.progress': '进度',
+  'plans.work.counts': '进行中 {doing} · 卡住了 {stuck}',
   'plans.paused': '暂停了',
   'plans.dot.waiting': '{n} 个计划等你点头',
   'plans.today': '今天 {time}',
@@ -178,6 +180,8 @@ export const PANEL_EN: Record<string, string> = {
 
   'plans.next': 'Next {when}',
   'plans.empty': 'No plans yet',
+  'plans.progress': 'Progress',
+  'plans.work.counts': '{doing} in progress · {stuck} stuck',
   'plans.paused': 'Paused',
   'plans.dot.waiting': '{n} plans waiting for your OK',
   'plans.today': 'today {time}',

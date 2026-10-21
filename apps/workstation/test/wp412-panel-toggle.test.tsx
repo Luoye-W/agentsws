@@ -4,6 +4,8 @@
  * - 右上角：露出来的工具（浏览器、变更审阅）→「⋮」溢出菜单（教程、记忆……，不开关面板）→ 最右专门的面板开关；
  * - 进岗位 / 职责 / 事项页面板默认打开；人手动关了按页面类型记住（别的岗位页也关着，职责页另记）；
  * - 别处自动弹开（`openCard`）只开这一次，不改记住的那一份；窗口窄于 900 时没记过的先收着。
+ *
+ * WP433（Luoye 10-20 问题 5）：面板开关去掉，岗位 / 职责 / 事项页上面板一直在（窄于 900 时挪到主区下面）。
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -199,78 +201,68 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
     expect((await screen.findByTestId('rail-menu-role')).textContent).toBe('职责定义')
   })
 
-  it('面板开关有自己的图标与读屏说法，开 / 关跟着变', async () => {
-    // WP431：面板开关只在岗位 / 职责 / 事项页上有；岗位页默认开着
+  it('WP433：顶栏不再有面板开关（面板一直在）', async () => {
     renderRail(PAGES[0] as string)
-    const toggle = screen.getByTestId('rail-toggle')
-    expect(toggle.querySelector('svg')?.getAttribute('class')).toContain('panel-right')
-    expect(toggle.getAttribute('aria-pressed')).toBe('true')
-    expect(toggle.getAttribute('aria-label')).toBe('收起右侧面板')
-    fireEvent.click(toggle)
-    await waitFor(() => {
-      expect(screen.getByTestId('rail-toggle').getAttribute('aria-label')).toBe('打开右侧面板')
-    })
-    fireEvent.click(screen.getByTestId('rail-toggle'))
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
+    expect(screen.queryByTestId('top-bar-divider')).toBeNull()
   })
 })
 
-describe('岗位 / 职责 / 事项页面板默认打开（决策 1035 更正）', () => {
+describe('WP433：岗位 / 职责 / 事项页面板一直在（Luoye 10-20 问题 5）', () => {
   it.each(PAGES.slice(0, 3))('进 %s：面板开着，开成卡片（默认展开对话、计划）', async (route) => {
     renderRail(route)
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    expect(screen.getByTestId('rail-toggle').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
+    expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
   })
 
-  it('别的页（首页）照旧收着；从首页进岗位页就打开', async () => {
+  it('别的页（首页）照旧没有面板；从首页进岗位页就有', async () => {
     renderRail('/')
     expect(panelOpen()).toBe(false)
     fireEvent.click(screen.getByTestId('go:/positions/asg_sup'))
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
   })
 
-  it('手动关了按页面类型记住：职责页关了，别的职责页也关着；岗位页另记、照旧打开', async () => {
-    renderRail('/positions/asg_sup/duties/dtc.support')
-    await screen.findByTestId('rail-cards')
-    fireEvent.click(screen.getByTestId('rail-toggle'))
-    expect(panelOpen()).toBe(false)
-    expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ role: false })
-    fireEvent.click(screen.getByTestId('go:/positions/asg_sup'))
+  it('以前（WP412）记过「关着」也不管：照样开着；那份本机记录不再写', async () => {
+    box.set(RIGHT_RAIL_PAGE_OPEN_KEY, JSON.stringify({ position: false, role: false }))
+    renderRail('/positions/asg_sup')
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
     fireEvent.click(screen.getByTestId('go:/positions/asg_sup/duties/dtc.support'))
-    await waitFor(() => {
-      expect(panelOpen()).toBe(false)
+    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({
+      position: false,
+      role: false,
     })
   })
 
-  it('关过再手动打开：这一类页又回到默认打开', async () => {
-    box.set(RIGHT_RAIL_PAGE_OPEN_KEY, JSON.stringify({ position: false }))
-    renderRail('/positions/asg_sup')
-    expect(panelOpen()).toBe(false)
-    fireEvent.click(screen.getByTestId('rail-toggle'))
-    expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ position: true })
-  })
-
-  it('WP431：面板没有自己的 ×（照 Claude）；顶栏面板开关收起也算手动关', async () => {
+  it('`]` 与「收起」在这几页上都只是回到卡片堆', async () => {
     renderRail('/matters/mat_1')
     await screen.findByTestId('rail-cards')
     expect(screen.queryByTestId('rail-panel-close')).toBeNull()
-    fireEvent.click(screen.getByTestId('rail-toggle'))
-    expect(panelOpen()).toBe(false)
-    expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ matter: false })
-  })
-
-  it('别处自动弹开（连接卡）只开这一次，不改记住的「关着」', async () => {
-    box.set(RIGHT_RAIL_PAGE_OPEN_KEY, JSON.stringify({ role: false }))
-    renderRail('/positions/asg_sup/duties/dtc.support')
-    expect(panelOpen()).toBe(false)
-    fireEvent.click(screen.getByTestId('auto-open'))
+    fireEvent.keyDown(document.body, { key: ']' })
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    expect(JSON.parse(box.get(RIGHT_RAIL_PAGE_OPEN_KEY) ?? '{}')).toEqual({ role: false })
+    // 开一格工具（浏览器），再点一次它的图标 = 回卡片堆，不是收起
+    fireEvent.click(screen.getByTestId('rail-icon-browser'))
+    await waitFor(() => {
+      expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('browser')
+    })
+    fireEvent.click(screen.getByTestId('rail-icon-browser'))
+    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    fireEvent.keyDown(document.body, { key: ']' })
+    expect(await screen.findByTestId('rail-cards')).toBeDefined()
   })
 
-  it('窗口 900–1199：面板默认开着、并排占一栏，不盖在对话上（Luoye 10-19）', async () => {
+  it('别处自动弹开（连接卡）= 展开那张卡', async () => {
+    renderRail('/positions/asg_sup/duties/dtc.support')
+    await screen.findByTestId('rail-cards')
+    fireEvent.click(screen.getByTestId('auto-open'))
+    await waitFor(() => {
+      expect(screen.getByTestId('rail-card-connections').getAttribute('data-open')).toBe('true')
+    })
+  })
+
+  it('窗口 900–1199：面板并排占一栏，不盖在对话上（Luoye 10-19）', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('1199px'),
       addEventListener: () => {},
@@ -280,22 +272,41 @@ describe('岗位 / 职责 / 事项页面板默认打开（决策 1035 更正）'
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
     expect(screen.queryByTestId('rail-scrim')).toBeNull()
     const frame = screen.getByTestId('rail-panel-frame')
+    expect(frame.getAttribute('data-layout')).toBe('docked')
     expect(frame.className).toContain('sticky')
     expect(frame.className).not.toContain('fixed')
   })
 
-  it('窗口窄于 900：没记过的先收着，露出来的工具也收进「⋮」', async () => {
+  it('窗口窄于 900：面板挪到主区下面（不盖、不收、没有遮罩），露出来的工具收进「⋮」', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('899px') || q.includes('1199px'),
       addEventListener: () => {},
       removeEventListener: () => {},
     }))
     renderRail('/positions/asg_sup')
-    expect(panelOpen()).toBe(false)
+    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    const frame = screen.getByTestId('rail-panel-frame')
+    expect(frame.getAttribute('data-layout')).toBe('stacked')
+    expect(frame.className).not.toContain('fixed')
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
     expect(screen.queryByTestId('rail-icon-browser')).toBeNull()
     fireEvent.click(screen.getByTestId('rail-overflow'))
     const menu = await screen.findByTestId('rail-menu')
     expect(within(menu).getByTestId('rail-menu-browser')).toBeDefined()
     expect(within(menu).getByTestId('rail-menu-changes')).toBeDefined()
+  })
+
+  it('窗口窄于 900、别的页开着工具：照旧盖在主区上，点遮罩收起', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('899px') || q.includes('1199px'),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    renderRail('/')
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-browser'))
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-layout')).toBe('overlay')
+    fireEvent.click(screen.getByTestId('rail-scrim'))
+    expect(panelOpen()).toBe(false)
   })
 })

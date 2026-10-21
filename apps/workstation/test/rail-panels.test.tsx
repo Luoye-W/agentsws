@@ -220,7 +220,7 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('WP375 / WP412 / WP431：岗位页面板默认开成卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；点开关收起', async () => {
+  it('WP375 / WP412 / WP431 / WP433：岗位页面板一直开着卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 完整列表，「←」回卡片；没有开关', async () => {
     renderRail()
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
     expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
@@ -229,15 +229,13 @@ describe('第三栏骨架（36 §9）', () => {
 
     fireEvent.click(screen.getByTestId('rail-card-toggle-settings'))
     expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('true')
-    fireEvent.click(screen.getByTestId('rail-card-more-settings'))
+    // 设定 7 行，多于 5 行才有「显示更多」（WP433）
+    fireEvent.click(await screen.findByTestId('rail-card-more-settings'))
     expect(await screen.findByTestId('rail-panel-settings')).toBeDefined()
     fireEvent.click(screen.getByTestId('rail-panel-back'))
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
-
-    fireEvent.click(screen.getByTestId('rail-toggle'))
-    await waitFor(() => {
-      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
-    })
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
+    expect(screen.queryByTestId('rail-tier-switch')).toBeNull()
   })
 
   it('WP208：五个「这一层的设置」合成「设定」，旧的五个图标都不在了（WP375 起卡片也不占右上角）', () => {

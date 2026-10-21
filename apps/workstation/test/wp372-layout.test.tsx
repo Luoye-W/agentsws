@@ -299,19 +299,9 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('help')
   })
 
-  it('连接没连上：面板开关上亮汇总的红点（红压过黄），「连接」卡标题后同一个点', async () => {
+  it('连接没连上：「连接」卡标题后亮红点（WP433：顶栏不再有面板开关与汇总点）', async () => {
     renderShell()
-    await waitFor(() => {
-      const dots = screen.getAllByTestId('rail-toggle-dot')
-      expect(dots.map((d) => d.getAttribute('data-card')).sort()).toEqual([
-        'connections',
-        'conversations',
-      ])
-    })
-    const red = screen
-      .getAllByTestId('rail-toggle-dot')
-      .find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
-    expect(red.className).toContain('z-10')
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
     const card = await openRailCard('connections')
     expect(within(card).getByTestId('rail-card-dot-connections').getAttribute('data-dot')).toBe(
       'alert',
@@ -353,12 +343,12 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect(view.textContent).toContain('新帖 12 条')
   })
 
-  it('对话卡：最多 4 条、等你看的排最上（黄点）、在做的转圈；「显示更多」= 按今天 / 本周 / 更早分组', async () => {
+  it('对话卡：最多 5 条（WP433）、等你看的排最上（黄点）、在做的转圈；「显示更多」= 按今天 / 本周 / 更早分组', async () => {
     renderShell()
     const box = await openRailCard('conversations')
     const card = await within(box).findByTestId('conv-card')
     const rows = await within(card).findAllByTestId('conv-link')
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(5)
     expect(rows[0]?.textContent).toBe('置顶帖草稿')
     expect(
       within(rows[0] as HTMLElement)
@@ -462,8 +452,9 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
   it('WP431：面板没有放大钮与关闭叉（照 Claude，开关只在顶栏）；宽度靠拖左边缘，键盘也调得动，记住', async () => {
     const box = stubStorage()
     renderShell()
-    await openRailCard('reports')
-    fireEvent.click(await screen.findByTestId('rail-card-more-reports'))
+    // WP433：「显示更多」只在多于 5 条时出——拿「设定」（6 行）进一格
+    await openRailCard('settings')
+    fireEvent.click(await screen.findByTestId('rail-card-more-settings'))
     await screen.findByTestId('rail-panel-frame')
     expect(screen.queryByTestId('rail-panel-wide')).toBeNull()
     expect(screen.queryByTestId('rail-panel-close')).toBeNull()

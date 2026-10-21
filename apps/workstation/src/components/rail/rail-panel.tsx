@@ -10,6 +10,8 @@
  * - 卡片堆（{@link RailPanel} 不给 `onBack`）：顶上只有一个轻的「岗位层 / 职责层」分段切换（两层都有时），
  *   下面直接是一张张卡；
  * - 从卡里「显示更多」进来的一格：一行细的「← 名字 · 哪一层」，点「←」回到卡片堆。
+ *
+ * WP433（Luoye 10-20 问题 6）：「岗位层 / 职责层」切换去掉——岗位页就是岗位层的卡，职责页就是职责层的卡，不能切。
  */
 import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -18,51 +20,10 @@ import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
-/** 「岗位层 / 职责层」分段切换（只有一层可选时整条不出——没得选的开关只是噪音）。 */
-function TierSwitch({
-  tier,
-  onTier,
-}: {
-  tier: RailTier
-  onTier: (tier: RailTier) => void
-}): ReactNode {
-  const { t } = useApp()
-  return (
-    <fieldset
-      aria-label={t('rail.tier.label')}
-      className="m-0 inline-flex shrink-0 items-center gap-0.5 rounded-lg border-0 bg-muted/70 p-0.5"
-      data-testid="rail-tier-switch"
-    >
-      {(['position', 'role'] as const).map((value) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={tier === value}
-          data-testid={`rail-tier-${value}`}
-          className={cn(
-            'rounded-md px-2.5 py-0.5 text-[12px] transition-colors',
-            tier === value
-              ? 'bg-background font-medium text-foreground shadow-xs'
-              : 'text-ws-muted-fg hover:text-foreground',
-          )}
-          onClick={() => {
-            onTier(value)
-          }}
-        >
-          {t(`rail.tier.${value}`)}
-        </button>
-      ))}
-    </fieldset>
-  )
-}
-
 export function RailPanel({
   title,
   scope,
   tier,
-  onTier,
-  hasPosition,
-  hasRole,
   children,
   testId,
   onBack,
@@ -72,25 +33,15 @@ export function RailPanel({
   /** 现在看的是哪一层；没有就说明这一页还定位不到岗位。 */
   scope?: RailScope
   tier: RailTier
-  onTier: (tier: RailTier) => void
-  hasPosition: boolean
-  hasRole: boolean
   children: ReactNode
   testId: string
   /** WP372：回到卡片堆（从一张卡「显示更多」进来的那一格）。不给 = 这就是卡片堆。 */
   onBack?: () => void
 }): ReactNode {
   const { t } = useApp()
-  const both = hasPosition && hasRole
   return (
     <section className="flex h-full min-h-0 flex-col" data-testid={testId} data-tier={tier}>
-      {onBack === undefined ? (
-        both ? (
-          <div className="flex items-center px-3 pt-3">
-            <TierSwitch tier={tier} onTier={onTier} />
-          </div>
-        ) : null
-      ) : (
+      {onBack === undefined ? null : (
         <header className="flex h-10 shrink-0 items-center gap-1.5 px-2">
           <button
             type="button"
@@ -114,7 +65,6 @@ export function RailPanel({
           >
             {scope === undefined ? title : `${title} · ${scope.name}`}
           </h2>
-          {both ? <TierSwitch tier={tier} onTier={onTier} /> : null}
         </header>
       )}
       <div

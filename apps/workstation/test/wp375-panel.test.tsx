@@ -7,7 +7,7 @@
  * - 右上角没有卡片图标，只有工具 +「⋮」；「⋮」开 / 关面板，任何卡有红 / 黄点时上面亮一个汇总点（红压过黄）。
  *   WP412（决策 1035 更正）：开 / 关与汇总点挪到专门的面板开关（`rail-toggle`），「⋮」回到溢出菜单；职责页默认开着。
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import type { WorkRail } from '@/lib/work-archive'
@@ -211,52 +211,29 @@ describe('默认展开「对话」「计划」（决策 1035）', () => {
   })
 })
 
-describe('右上角：没有卡片图标；面板开关开 / 关面板并亮汇总点（决策 1035 → WP412 更正）', () => {
-  it('露出的工具 +「⋮」+ 最右的面板开关；职责页默认开着，点开关收起、再点打开', async () => {
+describe('右上角：没有卡片图标（决策 1035）；WP433 起也没有面板开关', () => {
+  it('露出的工具 +「⋮」；职责页面板一直开着', async () => {
     renderRail()
     const bar = screen.getByTestId('right-rail')
     expect(
       within(bar)
         .getAllByRole('button')
         .map((b) => b.getAttribute('data-testid')),
-      // WP431（照 Claude）：面板开关挪到最左，后面一条细竖线
-    ).toEqual(['rail-toggle', 'rail-icon-browser', 'rail-icon-changes', 'rail-overflow'])
+    ).toEqual(['rail-icon-browser', 'rail-icon-changes', 'rail-overflow'])
     expect(await screen.findByTestId('rail-cards')).toBeTruthy()
-    const toggle = screen.getByTestId('rail-toggle')
-    expect(toggle.getAttribute('aria-pressed')).toBe('true')
-    expect(toggle.getAttribute('aria-label')).toBe('收起右侧面板')
-    fireEvent.click(toggle)
-    await waitFor(() => {
-      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
-    })
-    expect(screen.getByTestId('rail-toggle').getAttribute('aria-label')).toBe('打开右侧面板')
-    fireEvent.click(screen.getByTestId('rail-toggle'))
-    expect(await screen.findByTestId('rail-cards')).toBeTruthy()
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
   })
 
-  it('没事的时候面板开关上不亮点', async () => {
-    renderRail()
-    await waitFor(() => {
-      expect(screen.getByTestId('rail-toggle')).toBeTruthy()
-    })
-    expect(screen.queryByTestId('rail-toggle-dot')).toBeNull()
-  })
-
-  it('黄 + 红：两个点叠在同一个位置，红的在上', async () => {
+  it('黄 + 红：各亮在自己那张卡的标题行上（顶栏不再汇总）', async () => {
     h.waiting = true
     h.connected = false
     renderRail()
     await waitFor(() => {
-      expect(screen.getAllByTestId('rail-toggle-dot')).toHaveLength(2)
+      expect(screen.getByTestId('rail-card-dot-connections').getAttribute('data-dot')).toBe('alert')
     })
-    const dots = screen.getAllByTestId('rail-toggle-dot')
-    const red = dots.find((d) => d.getAttribute('data-dot') === 'alert') as HTMLElement
-    const yellow = dots.find((d) => d.getAttribute('data-dot') === 'attention') as HTMLElement
-    expect(red.getAttribute('data-card')).toBe('connections')
-    expect(yellow.getAttribute('data-card')).toBe('conversations')
-    expect(red.className).toContain('z-10')
-    expect(yellow.className).not.toContain('z-10')
-    expect(red.parentElement).toBe(yellow.parentElement)
-    expect(red.closest('[data-testid="rail-toggle"]')).toBeTruthy()
+    expect(screen.getByTestId('rail-card-dot-conversations').getAttribute('data-dot')).toBe(
+      'attention',
+    )
+    expect(screen.queryByTestId('rail-toggle-dot')).toBeNull()
   })
 })

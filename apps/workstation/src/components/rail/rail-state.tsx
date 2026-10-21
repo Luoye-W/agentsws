@@ -23,6 +23,8 @@
  * 这个桶上次开的是某一格就开那一格）；人手动开 / 关过（右上角面板开关、面板头 ×、`]`、窄屏遮罩）就**按页面类型记住**——
  * 在一个岗位页关了，进别的岗位页也是关着；职责页、事项页各记各的。窗口窄于 900 时没记过的一律先收着（不挡主区）。
  * 别处自动弹开（连接卡、浏览器要人点、快捷按钮开报表）只开这一次，不改记住的那一份。
+ *
+ * WP433（Luoye 10-20 问题 5）：上面那条「按页面类型记住开没开」撤掉——岗位 / 职责 / 事项页上面板一直在，没有开关。
  */
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -37,12 +39,10 @@ import {
   readRailCardFlags,
   readRailCardOrder,
   readRailLayout,
-  readRailPageOpen,
   readRailWide,
   writeRailCardFlags,
   writeRailCardOrder,
   writeRailLayout,
-  writeRailPageOpen,
   writeRailWide,
 } from '@/lib/ui-state'
 
@@ -127,29 +127,14 @@ interface BucketState {
 }
 
 /**
- * WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。
- * Luoye 10-19：900 以上面板一律并排占一栏、默认开着（不再画成浮层），所以「默认收着」与「浮层」同一条线 900
- * （WP421 曾把这条线提到 1200，按这一条撤回）。
- */
-const NARROW_DEFAULT = '(max-width: 899px)'
-
-function narrowWindow(): boolean {
-  try {
-    return globalThis.matchMedia?.(NARROW_DEFAULT).matches ?? false
-  } catch {
-    return false
-  }
-}
-
-/**
- * WP412（决策 1035 更正）：进岗位 / 职责 / 事项页时面板开没开——人按页面类型记过的为准，
- * 没记过 = 打开（窄窗收着）。开着时开的是这个桶上次那一格，没有就开卡片。
+ * WP433（Luoye 10-20 问题 5：「这不是一个可以收起来的面板」）：岗位 / 职责 / 事项页上右侧面板**一直在**——
+ * 没有开 / 关这回事。这个桶上次开的是某一格就开那一格，否则是卡片堆；「收起」（`show(null)`、`]`、
+ * 再点一次浏览器图标）在这几页上一律落回卡片堆。WP412 的「按页面类型记住开没开」不再用（那份本机记录不读也不写）。
+ * 别的页（首页、知识库……）没有卡片堆，照旧：工具类的一格开了能收。
  */
 function withPageDefault(layout: RailLayoutEntry, kind: RailPageKind | undefined): RailLayoutEntry {
-  if (kind === undefined) return layout
-  const open = readRailPageOpen()[kind] ?? !narrowWindow()
-  const panel = open ? (layout.open_panel_id ?? RAIL_CARDS) : null
-  return panel === layout.open_panel_id ? layout : { ...layout, open_panel_id: panel }
+  if (kind === undefined || layout.open_panel_id !== null) return layout
+  return { ...layout, open_panel_id: RAIL_CARDS }
 }
 
 const readBucket = (bucket: string, kind: RailPageKind | undefined): BucketState => ({
@@ -186,36 +171,35 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
 
   const setOpen = useCallback((panel: string | null) => {
     setState((prev) => {
-      const next = { ...prev.layout, open_panel_id: panel }
+      // WP433：岗位 / 职责 / 事项页上面板收不起来——「收起」就是回到卡片堆
+      const next = withPageDefault({ ...prev.layout, open_panel_id: panel }, prev.kind)
       writeRailLayout(prev.bucket, next)
       return { ...prev, layout: next }
     })
   }, [])
 
-  /**
-   * WP412：人手动开 / 关（右上角面板开关、面板头 ×、`]`、遮罩、工具图标）——在岗位 / 职责 / 事项页上
-   * 按页面类型记住开没开。别处自动弹开走 `openCard` / `openAddress`，不经过这里。
-   */
+  /** 开一格 / 收起（岗位 / 职责 / 事项页上「收起」= 回到卡片堆，见 {@link withPageDefault}）。 */
   const show = useCallback(
     (panel: string | null) => {
       setAddress(null)
       setFocus(null)
-      if (current.kind !== undefined) writeRailPageOpen(current.kind, panel !== null)
       setOpen(panel)
     },
-    [setOpen, current.kind],
+    [setOpen],
   )
 
   const toggle = useCallback((panel: string) => {
     setAddress(null)
     setFocus(null)
     setState((prev) => {
-      const next = {
-        ...prev.layout,
-        open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
-      }
+      const next = withPageDefault(
+        {
+          ...prev.layout,
+          open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
+        },
+        prev.kind,
+      )
       writeRailLayout(prev.bucket, next)
-      if (prev.kind !== undefined) writeRailPageOpen(prev.kind, next.open_panel_id !== null)
       return { ...prev, layout: next }
     })
   }, [])
@@ -256,12 +240,14 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   const toggleCard = useCallback(
     (id: string) => {
       if (layout.open_panel_id === RAIL_CARDS && cardOpen(current.cards, id)) {
-        show(null)
+        // WP433：面板收不起来了——在卡片堆上再点一次 = 收起这张卡
+        if (current.kind !== undefined) setCardOpen(id, false)
+        else show(null)
         return
       }
       openCard(id)
     },
-    [layout.open_panel_id, current.cards, show, openCard],
+    [layout.open_panel_id, current.cards, current.kind, show, openCard, setCardOpen],
   )
 
   const setOrder = useCallback((next: readonly string[]) => {

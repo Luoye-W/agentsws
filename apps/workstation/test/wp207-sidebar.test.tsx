@@ -334,29 +334,33 @@ describe('WP259 一句话交给职责：长文本照收（WP372 起在右侧面�
   })
 })
 
-/** WP372：对话不挂左栏了——在右侧面板「对话」卡里，卡底「显示更多」是完整列表。WP412：面板收着才点开关。 */
+/** WP372：对话不挂左栏了——在右侧面板「对话」卡里，卡底「显示更多」是完整列表。WP433：面板一直在，没有开关。 */
 async function openConversations(more = false): Promise<HTMLElement> {
-  if (screen.queryByTestId('rail-cards') === null)
-    fireEvent.click(screen.getByTestId('rail-toggle'))
   const card = await screen.findByTestId('conv-card')
   if (!more) return card
-  fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
+  fireEvent.click(await screen.findByTestId('rail-card-more-conversations'))
   return screen.findByTestId('conv-panel')
 }
 
 describe('WP207 职责下的对话 / 任务（WP372 起在右侧面板「对话」）', () => {
-  it('卡上最多 4 条、等你看的排最上；完整列表每条都在、按职责分组，「已归档 n」在组底下；左栏不挂', async () => {
+  it('卡上最多 5 条（WP433）、等你看的排最上；完整列表每条都在、按职责分组，「已归档 n」在组底下；左栏不挂', async () => {
     renderShell(true)
     expect(screen.queryByTestId('rail-matter')).toBeNull()
     const card = await openConversations()
     const rows = await within(card).findAllByTestId('conv-link')
-    expect(rows.map((r) => r.textContent)).toEqual(['等你批的', '做完待看', '在跑的那件', '第四件'])
+    expect(rows.map((r) => r.textContent)).toEqual([
+      '等你批的',
+      '做完待看',
+      '在跑的那件',
+      '第四件',
+      '第五件',
+    ])
     const marks = within(card).getAllByTestId('conv-marker')
     expect(marks.map((d) => d.getAttribute('aria-label'))).toEqual(['等你看', '等你看', '正在做'])
     expect(rows[2]?.getAttribute('href')).toBe('/matters/mat_1')
     // WP351（决策 906）：岗位行不挂数字
     expect(screen.queryByTestId('nav-position-pending')).toBeNull()
-    fireEvent.click(screen.getByTestId('rail-card-more-conversations'))
+    fireEvent.click(await screen.findByTestId('rail-card-more-conversations'))
     const panel = await screen.findByTestId('conv-panel')
     await waitFor(() => {
       expect(within(panel).getAllByTestId('conv-link')).toHaveLength(6)

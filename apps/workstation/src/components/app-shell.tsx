@@ -498,6 +498,7 @@ export function AppShell({
   /** WP431：左栏收成图标列（本机记住）；窗口窄于 768 时一律只是图标列（不再整条藏掉）。 */
   const [collapsed, setCollapsed] = useState(() => readString(SIDEBAR_COLLAPSED_KEY) === '1')
   const narrow = useMedia('(max-width: 767px)')
+  const stackRail = useMedia('(max-width: 899px)')
   const iconRail = collapsed || narrow
   const toggleSidebar = useCallback(() => {
     setCollapsed((prev) => {
@@ -615,11 +616,11 @@ export function AppShell({
                     aria-label={t('nav.main')}
                     data-testid="main-nav"
                   >
-                    <IconNavLink to="/assistant" label={t('nav.free_chat')} testId="nav-free-chat">
-                      <NavIcon icon={MessageCircle} />
-                    </IconNavLink>
                     <IconNavLink to="/" end label={t('nav.home')}>
                       <NavIcon icon={Home} />
+                    </IconNavLink>
+                    <IconNavLink to="/assistant" label={t('nav.free_chat')} testId="nav-free-chat">
+                      <NavIcon icon={MessageCircle} />
                     </IconNavLink>
                     <IconNavLink to="/messages" label={t('nav.messages')} testId="nav-messages">
                       <NavIcon icon={Inbox} />
@@ -664,14 +665,15 @@ export function AppShell({
               WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
               不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
               WP343（决策 334 / 859）：改名「我的助理」（并进了「我的代理」），仍在最上面。
+              WP433（Luoye 10-20 问题 1）：「首页」放到最上面，「助理」排第二（图标列同一个顺序）。
             */}
+                    <NavLink to="/" end className={navClass} data-testid="nav-home">
+                      <NavIcon icon={Home} />
+                      {t('nav.home')}
+                    </NavLink>
                     <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
                       <NavIcon icon={MessageCircle} />
                       {t('nav.free_chat')}
-                    </NavLink>
-                    <NavLink to="/" end className={navClass}>
-                      <NavIcon icon={Home} />
-                      {t('nav.home')}
                     </NavLink>
                     {/*
               WP113（63 §1）：这一格原来是「目标」。Luoye 定：换成**消息**——
@@ -894,9 +896,25 @@ export function AppShell({
                         </>
                       }
                     />
+                    {/*
+                      WP433（Luoye 10-20 问题 8 后半）：Windows 上三个系统按钮（最小化 / 最大化 / 关闭）叠在右上，
+                      紧挨着我们那排图标显得挤成一团。照 VS Code / Slack / Notion 在 Windows 上的做法：
+                      我们的图标与系统按钮之间留一截空、立一条细竖线，把「这一页的动作」和「窗口的按钮」分成两组。
+                    */}
+                    {chrome === 'overlay' ? (
+                      <span
+                        aria-hidden
+                        data-testid="caption-gap"
+                        className="mr-1 ml-3 h-5 w-px shrink-0 bg-ws-line"
+                      />
+                    ) : null}
                   </div>
                 </header>
-                <div className="flex min-w-0 flex-1">
+                {/* WP433：窄于 900 时主区与右侧面板竖着排（岗位 / 职责 / 事项页的面板挪到主区下面，不盖、不收） */}
+                <div
+                  className={cn('flex min-w-0 flex-1', stackRail && 'flex-col')}
+                  data-testid="shell-body"
+                >
                   <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
                     {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
                     <ErrorBoundary scope="page" resetKey={pathname}>

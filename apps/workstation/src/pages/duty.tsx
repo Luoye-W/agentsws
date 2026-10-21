@@ -38,7 +38,7 @@ import { InfoTip } from '@/components/design'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
-import { dutyHasBoards } from '@/components/reports/scope-boards'
+import { dutyHasBoards, dutyHasWorkBoards } from '@/components/reports/scope-boards'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import {
   TitleMenu,
@@ -313,7 +313,11 @@ export function DutyPage(): React.ReactNode {
       </TopBarAction>
 
       {view === 'about' ? (
-        <DutyAbout role_id={role_id} onBoards={() => rail.show('reports')} />
+        <DutyAbout
+          role_id={role_id}
+          // WP433：排期 / 流水线类看板在「计划」里，看数的那几块在「报表」里
+          onBoards={() => rail.show(dutyHasWorkBoards(role_id) ? 'schedules' : 'reports')}
+        />
       ) : (
         /*
           WP372（决策 1019）→ WP412（#12）：中间栏 = 标题 + 对话框 + 快捷按钮 +「要你拍板」的卡，

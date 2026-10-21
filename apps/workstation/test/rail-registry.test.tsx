@@ -454,7 +454,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     ...over,
   })
 
-  it('只看这一层的：等你点头的亮黄点（面板开关上汇总亮同一个点），摘要说下一次；默认展开、等点头的排最上', async () => {
+  it('只看这一层的：等你点头的亮黄点（卡标题行上；WP433 起顶栏没有汇总点），摘要说下一次；默认展开、等点头的排最上', async () => {
     getMySchedules.mockResolvedValue([
       row({ next_fire_at: '2030-01-02T01:00:00.000Z' }),
       row({ state: 'paused' }),
@@ -470,8 +470,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     ])
     // WP431：岗位页上面板默认开着（首页没有面板开关）
     renderRail('/positions/asg_store')
-    const dot = await screen.findByTestId('rail-toggle-dot')
-    expect(dot.getAttribute('data-card')).toBe('plans')
+    const dot = await screen.findByTestId('rail-card-dot-plans')
     expect(dot.getAttribute('data-dot')).toBe('attention')
     expect(dot.getAttribute('aria-label')).toBe('2 个计划等你点头')
     const summary = await screen.findByTestId('rail-card-summary-plans')
@@ -486,7 +485,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     getMySchedules.mockResolvedValue([])
   })
 
-  it('这一层一个要你点头的计划都没有：面板开关上不亮点', async () => {
+  it('这一层一个要你点头的计划都没有：不亮点', async () => {
     getMySchedules.mockResolvedValueOnce([
       row({
         assignment_id: 'asg_content',
@@ -498,7 +497,7 @@ describe('WP208 → WP372 → WP375：「计划」卡（定时任务）的摘要
     await waitFor(() => {
       expect(getMySchedules).toHaveBeenCalled()
     })
-    expect(screen.queryByTestId('rail-toggle-dot')).toBeNull()
+    expect(screen.queryByTestId('rail-card-dot-plans')).toBeNull()
   })
 })
 

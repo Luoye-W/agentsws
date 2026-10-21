@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, type RenderResult, render, screen } from '@testing-library/react'
+import { fireEvent, type RenderResult, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import type { SettingsTarget } from '@/components/settings-panel/route'
@@ -52,18 +52,37 @@ export async function openRailPanel(id: string): Promise<void> {
     return
   }
   await openRailCard(card)
-  fireEvent.click(await screen.findByTestId(`rail-card-more-${card}`))
+  // WP433：「显示更多」只在多于 5 条时出；条数少的卡从卡里那一行进（产出 → 记录、计划 → 定时任务、设定 → 那一格）
+  const more = await screen
+    .findByTestId(`rail-card-more-${card}`, {}, { timeout: 1500 })
+    .catch(() => null)
+  if (more !== null) {
+    fireEvent.click(more)
+    return
+  }
+  const row = CARD_ROW[card]
+  if (row === undefined) throw new Error(`「${card}」卡不到 5 条，没有「显示更多」`)
+  const box = screen.getByTestId(`rail-card-${card}`)
+  fireEvent.click((await within(box).findAllByTestId(row))[0] as HTMLElement)
+}
+
+/** WP433：条数少、没有「显示更多」时，从卡里哪一行进完整那一格。 */
+const CARD_ROW: Record<string, string> = {
+  outputs: 'output-row',
+  plans: 'plan-row-progress',
+  settings: 'settings-row',
 }
 
 /**
  * WP375（决策 1035）：右上角不再有卡片图标，卡没展开就点它的标题行展开。
  * WP412（决策 1035 更正）：面板由右上角专门的开关（`rail-toggle`）开；岗位 / 职责 / 事项页默认就开着。
+ * WP433：开关去掉了，这几页面板一直在；只剩「←」回卡片堆。
  */
 export async function openRailCard(card: string): Promise<HTMLElement> {
   if (screen.queryByTestId('rail-cards') === null) {
     // 开着某一格（「显示更多」进去的）就「←」回卡片；面板收着就点面板开关打开
     const back = screen.queryByTestId('rail-panel-back')
-    fireEvent.click(back ?? screen.getByTestId('rail-toggle'))
+    if (back !== null) fireEvent.click(back)
   }
   const box = await screen.findByTestId(`rail-card-${card}`)
   if (box.getAttribute('data-open') !== 'true')

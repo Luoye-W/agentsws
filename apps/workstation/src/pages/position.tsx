@@ -145,7 +145,7 @@ export function PositionPage(): React.ReactNode {
       })
     return out
   }, [view, here])
-  // 卡片流翻到哪张（右侧面板「报表 → 工作」行尾「N 张卡等你」点过来的，WP372 起隔着一栏传）
+  // 卡片流翻到哪张（右侧面板「计划 → 工作」行尾「N 张卡等你」点过来的，WP372 起隔着一栏传）
   const [focus, setFocus] = useState<{ card_id: string; nonce: number } | undefined>(undefined)
   const deckRef = useRef<HTMLDivElement | null>(null)
   const jump = useCardJumpRequest(id)
@@ -176,9 +176,10 @@ export function PositionPage(): React.ReactNode {
       { replace: true },
     )
   }, [rawTab, rail, setSearch])
-  // WP372：老地址 `?tab=view`（看板 / 红人工作台那几条链接）→ 右侧面板「报表」（看板在它下半截）
+  // WP372：老地址 `?tab=view`（看板 / 红人工作台那几条链接）→ 右侧面板里的看板
+  // WP433：「工作」与快捷视图（红人工作台……）挪去「计划」的完整一格
   useEffect(() => {
-    if (rawTab === 'view') rail.show('reports')
+    if (rawTab === 'view') rail.show('schedules')
   }, [rawTab, rail])
 
   const counts = work.data?.counts
@@ -192,7 +193,7 @@ export function PositionPage(): React.ReactNode {
   const fresh =
     view !== undefined && work.data !== undefined && work.data.items.length === 0 && pending === 0
 
-  /** 卡住了 / 今天的待办：有才出（点了打开右侧「报表」，「工作」筛到那一组）。 */
+  /** 卡住了 / 今天的待办：有才出（点了打开右侧「计划」，「工作」筛到那一组）。 */
   const stuck = counts?.stuck ?? 0
   const today = counts?.todos_today ?? 0
   const name =
@@ -200,7 +201,8 @@ export function PositionPage(): React.ReactNode {
   const filterWork = (filters: WorkPrefs['filters']): void => {
     setTab('work')
     requestWorkFilter(id, filters)
-    rail.show('reports')
+    // WP433：「工作」在「计划」的完整一格里（原在「报表」）
+    rail.show('schedules')
   }
 
   return (

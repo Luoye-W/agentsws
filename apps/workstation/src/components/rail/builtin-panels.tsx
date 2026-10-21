@@ -94,9 +94,10 @@ const OutputsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/outputs-panel')
   return { default: m.OutputsPanel }
 })
+/** WP433：「计划」的完整一格 = 定时任务 + 这一层的进度（「工作」、排期 / 流水线类看板，原在「报表」里）。 */
 const SchedulesBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/schedules-panel')
-  return { default: m.SchedulesPanel }
+  const m = await import('@/components/rail/panels/plans-panel')
+  return { default: m.PlansPanel }
 })
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
