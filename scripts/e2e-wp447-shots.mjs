@@ -197,9 +197,9 @@ async function main() {
         console.log(
           '  debug',
           await toggle.getAttribute('aria-expanded'),
-          await page.locator('[data-testid="data-charts"]').evaluateAll((els) =>
-            els.map((e) => e.getAttribute('data-role')),
-          ),
+          await page
+            .locator('[data-testid="data-charts"]')
+            .evaluateAll((els) => els.map((e) => e.getAttribute('data-role'))),
         )
       const charts = page.locator('[data-testid="data-charts"][data-role="ads.pinterest"]').first()
       await charts.waitFor({ timeout: 60_000 })
