@@ -428,7 +428,7 @@ describe('WP208：邮件助手搬进消息页的阅读区', () => {
     const triage = within(block).getByTestId('mail-ai-triage')
     expect(triage.getAttribute('data-route')).toBe('support')
     expect(triage.textContent).toContain('归客服')
-    expect(triage.textContent).toContain('要紧')
+    expect(triage.textContent).toContain('紧急')
     // 为什么这么分进问号
     expect(within(block).getByTestId('mail-ai-triage-why').getAttribute('data-hint')).toContain(
       'In-Reply-To 命中客服线程',
