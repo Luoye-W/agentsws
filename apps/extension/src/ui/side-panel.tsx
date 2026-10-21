@@ -102,6 +102,10 @@ export function SidePanel(props: {
       alive.current = false
     }
   }, [refresh])
+  // WP432：一打开侧边栏就问一次「工坊换了新版插件没有」（不等每分钟那一拍；换了就等空闲重载）
+  useEffect(() => {
+    void send({ type: 'update-check' })
+  }, [send])
 
   const snap = state?.kind === 'ok' ? state.snapshot : undefined
   const fast = snap !== undefined && busyWrites(snap)
