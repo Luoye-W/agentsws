@@ -145,3 +145,181 @@ export interface MembershipClaimView {
   login_token?: string
   expires_at?: Iso8601
 }
+
+/* ------------------------------------------------------------------ */
+/* WP444：团队通道做成增值服务（决策 1377–1381，Luoye 10-21；1378 当天改成人数档）            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 团队通道这项增值服务的 id（同时是价目表里那条能力的名字）。
+ *
+ * 只有**跨网**那条路（经工坊云）收费：本机能跑的（个人、局域网同事互联、公司模式本机功能）一律不收（决策 1377）。
+ * 按组织订：只有发起开通道的那个组织付，加入进来的同事不付（决策 1378）。
+ */
+export const TEAM_SERVICE_ID = 'team.channel.monthly'
+
+/** 每个组织一次的免费试用天数（决策 1379）。 */
+export const TEAM_TRIAL_DAYS = 7
+
+/**
+ * 团队通道的通知类别 key（客户端铃铛里用；同一件事合并）：试用快结束 / 宽限中 / 已关。
+ * 前缀 `team_sub:`，后面跟状态，回到能用时客户端把这几条收成已读。
+ */
+export const TEAM_SUB_NOTICE_KEYS = {
+  trialEnding: 'team_sub:trial_ending',
+  grace: 'team_sub:grace',
+  off: 'team_sub:off',
+} as const
+
+/** 一个人数档：最多几人、每月多少积分。 */
+export interface TeamTier {
+  /** 这一档最多几人（含发起人自己）。 */
+  members: number
+  credits: number
+}
+
+/**
+ * 人数档与价钱（**运营后台可改**，客户端从云上取当前这一份显示；不写死在代码里）。
+ *
+ * 决策 1378（10-21 改）：四档 3 / 5 / 8 / 10 人；超过最大档的，按最大档 + 每多 1 人加 `extra_per_member`。
+ */
+export interface TeamPricing {
+  /** 从小到大。 */
+  tiers: TeamTier[]
+  /** 超过最大一档之后，每多 1 人加多少积分 / 月。 */
+  extra_per_member: number
+  updated_at?: Iso8601
+}
+
+/** 云上还没在后台改过时用的那一份（Luoye 10-21 定：3 人 45、5 人 68、8 人 98、10 人 120，超过 10 人每人 +12）。 */
+export const DEFAULT_TEAM_PRICING: TeamPricing = {
+  tiers: [
+    { members: 3, credits: 45 },
+    { members: 5, credits: 68 },
+    { members: 8, credits: 98 },
+    { members: 10, credits: 120 },
+  ],
+  extra_per_member: 12,
+}
+
+/** 按人数落档：回落到哪一档、这个月多少积分、超出最大档几人。 */
+export interface TeamTierPick {
+  /** 落到的那一档的人数上限（超过最大档时是最大档的人数）。 */
+  members: number
+  credits: number
+  /** 超过最大档的人数（没超是 0）。 */
+  extra_members: number
+}
+
+/** 人数 → 档位与价钱。人数小于 1 按 1 算；比最小档还少落最小档。 */
+export function teamTierOf(pricing: TeamPricing, members: number): TeamTierPick {
+  const n = Math.max(1, Math.floor(Number.isFinite(members) ? members : 1))
+  const tiers = [...pricing.tiers].sort((a, b) => a.members - b.members)
+  for (const t of tiers) if (n <= t.members) return { ...t, extra_members: 0 }
+  const top = tiers[tiers.length - 1] ?? { members: 1, credits: 0 }
+  const extra = n - top.members
+  return {
+    members: top.members,
+    credits: top.credits + extra * pricing.extra_per_member,
+    extra_members: extra,
+  }
+}
+
+/** 一份人数档能不能用（后台保存前核一遍）：至少一档、人数严格递增、价钱不为负。回第一处不对的人话。 */
+export function teamPricingProblem(p: TeamPricing): string | undefined {
+  if (!Array.isArray(p.tiers) || p.tiers.length === 0) return '至少要有一档'
+  if (p.tiers.length > 12) return '最多 12 档'
+  let last = 0
+  for (const t of p.tiers) {
+    if (!Number.isInteger(t.members) || t.members < 1 || t.members > 10_000)
+      return '每档人数要是 1 以上的整数'
+    if (t.members <= last) return '档位人数要从小到大、不重复'
+    if (!Number.isFinite(t.credits) || t.credits < 0 || t.credits > 100_000)
+      return '每档积分要是 0 以上的数'
+    last = t.members
+  }
+  if (!Number.isFinite(p.extra_per_member) || p.extra_per_member < 0 || p.extra_per_member > 10_000)
+    return '超出部分每人加价要是 0 以上的数'
+  return undefined
+}
+
+/**
+ * 团队通道订阅现在是什么状态（在通用订阅的五个状态上多一个 `trial`）。
+ *
+ * - `trial`：7 天免费试用中（`trial_ends_at` 那一刻起按月扣）；
+ * - `grace`：到期 / 积分不够没扣上——**照常能用** 30 天，铃铛提醒（决策 1380；与红人 / 客服「宽限即暂停」不同）；
+ * - `suspended`：宽限过了还没充上：跨网通道关掉，局域网照常，数据不动；
+ * - `cancelling`：点了取消，当期（或试用）用完为止。
+ */
+export type TeamSubscriptionStatus =
+  | 'none'
+  | 'trial'
+  | 'active'
+  | 'grace'
+  | 'suspended'
+  | 'cancelling'
+
+/** 这个状态下跨网通道能不能用（长期免费另算，见 {@link TeamSubscriptionView.comped}）。 */
+export function teamChannelUsable(status: TeamSubscriptionStatus): boolean {
+  return status === 'trial' || status === 'active' || status === 'cancelling' || status === 'grace'
+}
+
+/** 一次扣费的结果（只在开通 / 续费那一次回）。 */
+export interface TeamSubscriptionCharge {
+  cycle_start: Iso8601
+  ok: boolean
+  credits: number
+}
+
+/**
+ * `GET / POST / DELETE /v1/team/subscription` 回的：这个组织的团队通道订阅现在怎样。
+ *
+ * 开通时钱不够**不回 402**：试用期内本来就不扣；试用过了要扣而扣不上，照开、进 `grace`（照常能用 30 天）。
+ */
+export interface TeamSubscriptionView {
+  service_id: typeof TEAM_SERVICE_ID
+  status: TeamSubscriptionStatus
+  /** 现在跨网通道能不能用（`trial` / `active` / `cancelling` / `grace`，或者长期免费）。 */
+  usable: boolean
+  /** 运营给开了「长期免费」（不扣积分，状态照常显示）。 */
+  comped: boolean
+  /** 还能不能开 7 天试用（每个组织一次）。 */
+  trial_available: boolean
+  trial_ends_at?: Iso8601
+  cancel_at_period_end: boolean
+  /** 当期到哪天（取消后用到这天为止）。 */
+  current_cycle_end?: Iso8601
+  /** 宽限到哪天（过了就关跨网通道）。 */
+  grace_until?: Iso8601
+  /** 云上记的人数（发起人电脑报上来的，扣费按扣那一刻的人数落档）。 */
+  members: number
+  /** 按这个人数落到的档、每月多少积分。 */
+  tier: TeamTierPick
+  /** 当前的人数档与价钱（后台可改）。 */
+  pricing: TeamPricing
+  /** 只在开通 / 续费那一次回：这一次扣了哪几期。 */
+  charged?: TeamSubscriptionCharge[]
+}
+
+/** 开通 / 续费（顺手报一下现在几个人）。 */
+export interface TeamSubscribeInput {
+  /** 这个组织现在实际在用的人数（含发起人）。不给 = 沿用云上记的。 */
+  members?: number
+}
+
+/** 报人数（人数变了就报；下个月按新人数落档，月中加人不补差）。 */
+export interface TeamMembersReport {
+  members: number
+}
+
+/** 申请通道时顺手报人数（可选；老客户端不带正文）。 */
+export interface TeamTunnelRequest {
+  members?: number
+}
+
+/**
+ * 通道地址上回 503 时带的头：`subscription` = 对方的团队通道没开通 / 已到期；`offline` = 对方电脑不在线；
+ * `blocked` = 运营停了这条通道。同事那边的工坊据此说人话。
+ */
+export const TEAM_OFF_HEADER = 'x-agentsws-team-off'
+export type TeamOffReason = 'subscription' | 'offline' | 'blocked'
