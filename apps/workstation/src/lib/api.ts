@@ -55,6 +55,7 @@ import type {
   ReplySuggestion,
   Review,
   SenderRule,
+  TeamSubscriptionView,
   Todo,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
@@ -4135,6 +4136,10 @@ export interface TeamLinkView {
     state:
       | 'stopped'
       | 'needs_account'
+      /** WP444：跨网那条路是增值服务，这个组织还没开通 / 已到期。 */
+      | 'needs_subscription'
+      /** WP444：运营停用了这个组织的团队通道。 */
+      | 'blocked'
       | 'registering'
       | 'connecting'
       | 'online'
@@ -4146,11 +4151,28 @@ export interface TeamLinkView {
   invite_base?: string
 }
 
+export type { TeamSubscriptionView } from '@agentsws/contracts'
+
+/** WP444：团队通道这项增值服务在本机看到的样子（云上那一份 + 没关联 / 连不上时一句人话）。 */
+export interface TeamSubscriptionLocalView {
+  linked: boolean
+  subscription?: TeamSubscriptionView
+  reason?: string
+}
+
 /** WP427：我递出去的申请（加入别人那边）。 */
 export interface TeamJoinView {
   id: string
   workspace_label: string
-  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'left' | 'unreachable'
+  /** WP444：`channel_off` = 对方的团队通道未开通 / 已到期（经云那条路关了，同一个网络照常）。 */
+  status:
+    | 'pending'
+    | 'approved'
+    | 'rejected'
+    | 'superseded'
+    | 'left'
+    | 'unreachable'
+    | 'channel_off'
   via: 'lan' | 'cloud'
   created_at: string
   can_enter: boolean
@@ -4326,6 +4348,26 @@ export const listTeamJoins = (assignment?: string): Promise<TeamJoinView[]> =>
 export const enterTeamJoin = (id: string, assignment?: string): Promise<{ url: string }> =>
   api<{ url: string }>(`/v1/team/joins/${encodeURIComponent(id)}/enter`, {
     method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：团队通道（跨网那条路）这项增值服务现在怎样。 */
+export const getTeamSubscription = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：开通（没用过试用 = 7 天免费试用）/ 续费。 */
+export const subscribeTeamChannel = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** WP444：取消（当期 / 试用用完为止）。 */
+export const cancelTeamChannel = (assignment?: string): Promise<TeamSubscriptionLocalView> =>
+  api<TeamSubscriptionLocalView>('/v1/team/subscription', {
+    method: 'DELETE',
     ...(assignment === undefined ? {} : { assignment }),
   })
 

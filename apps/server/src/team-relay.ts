@@ -15,10 +15,18 @@
 import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import {
+  DEFAULT_TEAM_PRICING,
+  TEAM_OFF_HEADER,
+  TEAM_SERVICE_ID,
+  TEAM_TRIAL_DAYS,
   TEAM_TUNNEL_MAX_BODY_BYTES,
   TEAM_TUNNEL_PROTOCOL_VERSION,
+  type TeamSubscriptionStatus,
+  type TeamSubscriptionView,
   type TeamTunnelClientFrame,
   type TeamTunnelServerFrame,
+  teamChannelUsable,
+  teamTierOf,
 } from '@agentsws/contracts'
 import { type WebSocket, WebSocketServer } from 'ws'
 
@@ -29,6 +37,8 @@ interface Tunnel {
   /** 哪把令牌申请的（替身里「组织」= 令牌）。 */
   owner: string
   socket?: WebSocket | undefined
+  /** WP444：订阅关了（同事看到「未开通 / 已到期」）。 */
+  off?: boolean
 }
 
 interface Pending {
@@ -44,7 +54,20 @@ export interface TeamRelayStandIn {
   online(): number
   /** 测试用：把某条通道的长连接掐断（模拟发起人电脑掉线）。 */
   drop(tunnel_id: string): void
+  /**
+   * WP444 测试用：把某把令牌（替身里的「组织」）的团队通道订阅改成某个状态（模拟试用到期、宽限过了）。
+   * 改成不能用的：那条通道断开、同事打开看到「未开通 / 已到期」。
+   */
+  setSubscription(token: string, status: TeamSubscriptionStatus): void
   close(): Promise<void>
+}
+
+/** WP444：替身里的订阅（按令牌）。 */
+interface StandInSub {
+  status: TeamSubscriptionStatus
+  trial_used: boolean
+  trial_ends_at?: string
+  members: number
 }
 
 const HOP = new Set([
@@ -86,9 +109,39 @@ const sendJson = (res: ServerResponse, status: number, body: unknown): void => {
 }
 
 export async function startTeamRelayStandIn(
-  options: { port?: number; hosts?: string[] } = {},
+  options: {
+    port?: number
+    hosts?: string[]
+    /**
+     * WP444：跨网通道要不要先开通。不给 / `free` = 一律当作能用（老测试与手动走一遍不用先开通）；
+     * `required` = 照真云：没开通申请通道回 402。
+     */
+    subscriptions?: 'free' | 'required'
+  } = {},
 ): Promise<TeamRelayStandIn> {
   const tunnels = new Map<string, Tunnel>()
+  const subs = new Map<string, StandInSub>()
+  const required = options.subscriptions === 'required'
+  const subOf = (token: string): StandInSub =>
+    subs.get(token) ?? { status: 'none', trial_used: false, members: 1 }
+  const usable = (token: string): boolean => !required || teamChannelUsable(subOf(token).status)
+  const viewOf = (token: string): TeamSubscriptionView => {
+    const sub = subOf(token)
+    return {
+      service_id: TEAM_SERVICE_ID,
+      status: required ? sub.status : 'active',
+      usable: usable(token),
+      comped: false,
+      trial_available: !sub.trial_used,
+      ...(sub.trial_ends_at === undefined ? {} : { trial_ends_at: sub.trial_ends_at }),
+      cancel_at_period_end: sub.status === 'cancelling',
+      members: sub.members,
+      tier: teamTierOf(DEFAULT_TEAM_PRICING, sub.members),
+      pricing: DEFAULT_TEAM_PRICING,
+    }
+  }
+  const membersOf = (raw: unknown): number | undefined =>
+    typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 10_000 ? raw : undefined
   const byOwner = new Map<string, string>()
   const codes = new Map<string, { tunnel_id: string; expires_at: string }>()
   const pending = new Map<string, Pending>()
@@ -105,10 +158,56 @@ export async function startTeamRelayStandIn(
   }
 
   async function control(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    // WP444：团队通道订阅（替身：按令牌一份；试用直接开，不扣钱）
+    if (path === '/v1/team/subscription' || path === '/v1/team/subscription/members') {
+      const token = bearer(req)
+      if (token === undefined)
+        return sendJson(res, 401, { code: 'unauthenticated', message: '没令牌' })
+      const raw = req.method === 'GET' || req.method === 'DELETE' ? '' : await readBody(req, 4096)
+      let body: { members?: unknown } = {}
+      try {
+        body =
+          raw === '' || raw === 'too_large' ? {} : (JSON.parse(raw.toString('utf8')) as typeof body)
+      } catch {
+        body = {}
+      }
+      const sub = subOf(token)
+      const members = membersOf(body.members)
+      if (members !== undefined) sub.members = members
+      if (path === '/v1/team/subscription/members') {
+        if (members === undefined)
+          return sendJson(res, 400, { code: 'invalid_input', message: '人数要是 1 以上的整数' })
+      } else if (req.method === 'POST') {
+        if (sub.status === 'none' && !sub.trial_used) {
+          sub.status = 'trial'
+          sub.trial_used = true
+          sub.trial_ends_at = new Date(Date.now() + TEAM_TRIAL_DAYS * 86_400_000).toISOString()
+        } else sub.status = 'active'
+      } else if (req.method === 'DELETE') {
+        if (sub.status !== 'none') sub.status = 'cancelling'
+      } else if (req.method !== 'GET')
+        return sendJson(res, 404, { code: 'not_found', message: '替身里没有这一条' })
+      subs.set(token, sub)
+      if (usable(token)) {
+        const id = byOwner.get(token)
+        const t = id === undefined ? undefined : tunnels.get(id)
+        if (t !== undefined) t.off = false
+      }
+      return sendJson(res, 200, { data: viewOf(token) })
+    }
     if (req.method === 'POST' && path === '/v1/team/tunnel') {
       const token = bearer(req)
       if (token === undefined)
         return sendJson(res, 401, { code: 'unauthenticated', message: '没令牌' })
+      if (!usable(token))
+        return sendJson(res, 402, {
+          code: 'payment_required',
+          message:
+            subOf(token).status === 'suspended'
+              ? '团队通道已到期（宽限 30 天也过了），跨网的同事暂时连不进来；同一个网络里照常用。续费后马上恢复。'
+              : '不在同一个网络的同事要经工坊云连进来，这项是增值服务：先开通（7 天免费试用）。同一个网络里照常免费。',
+          details: { status: subOf(token).status, service_id: TEAM_SERVICE_ID },
+        })
       let id = byOwner.get(token)
       if (id === undefined) {
         id = `t${randomBytes(6).toString('hex')}`
@@ -168,8 +267,21 @@ export async function startTeamRelayStandIn(
     tunnel: Tunnel | undefined,
   ): Promise<void> {
     const socket = tunnel?.socket
+    if (tunnel?.off === true) {
+      res.writeHead(503, {
+        'content-type': 'text/html; charset=utf-8',
+        [TEAM_OFF_HEADER]: 'subscription',
+      })
+      res.end(
+        '<p>对方的团队通道未开通或已到期，不在同一个网络时暂时连不进来。请对方在工坊「设置 → 个人与团队」里开通；在同一个网络里照常能用。</p>',
+      )
+      return
+    }
     if (tunnel === undefined || socket === undefined) {
-      res.writeHead(503, { 'content-type': 'text/html; charset=utf-8' })
+      res.writeHead(503, {
+        'content-type': 'text/html; charset=utf-8',
+        [TEAM_OFF_HEADER]: 'offline',
+      })
       res.end('<p>对方的电脑现在不在线（工坊没开，或者睡着了）。等他打开工坊再试。</p>')
       return
     }
@@ -288,7 +400,7 @@ export async function startTeamRelayStandIn(
           return ws.close()
         }
         const t = tunnels.get(frame.tunnel_id)
-        if (t === undefined || t.secret !== frame.secret) {
+        if (t === undefined || t.secret !== frame.secret || t.off === true) {
           ws.send(
             JSON.stringify({
               type: 'rejected',
@@ -363,6 +475,17 @@ export async function startTeamRelayStandIn(
     online: () => [...tunnels.values()].filter((t) => t.socket !== undefined).length,
     drop(tunnel_id) {
       tunnels.get(tunnel_id)?.socket?.terminate()
+    },
+    setSubscription(token, status) {
+      const sub = subOf(token)
+      sub.status = status
+      if (status === 'trial') sub.trial_used = true
+      subs.set(token, sub)
+      const id = byOwner.get(token)
+      const t = id === undefined ? undefined : tunnels.get(id)
+      if (t === undefined) return
+      t.off = !usable(token)
+      if (t.off) t.socket?.terminate()
     },
     async close() {
       for (const t of tunnels.values()) t.socket?.terminate()

@@ -49,6 +49,10 @@ export type TeamTunnelState =
   | 'online'
   /** 断了 / 没申请下来：等一会儿再试。 */
   | 'backoff'
+  /** WP444：跨网通道是增值服务——这个组织还没开通 / 已到期（云回 402）。开通后马上重试。 */
+  | 'needs_subscription'
+  /** WP444（决策 1341）：运营停用了这个组织的团队通道（云回 403）。 */
+  | 'blocked'
 
 /** 本机加密库里存通道的那一格（字段：`tunnel_id` / `url` / `secret`）。 */
 export const TEAM_TUNNEL_SECRET_ID = 'team.tunnel'
@@ -71,6 +75,10 @@ export interface TeamTunnelOptions {
   onEvent?(event: { type: string; detail?: string }): void
   heartbeatMs?: number
   maxBackoffMs?: number
+  /** WP444：申请通道时顺手报一下现在几个人（按人数落档）。 */
+  members?(): number | undefined
+  /** WP444：没开通 / 被停用之后隔多久再问一次（默认 10 分钟；开通后由 {@link TeamTunnel.retryNow} 立刻重试）。 */
+  idleRetryMs?: number
 }
 
 export interface TeamTunnel {
@@ -86,9 +94,13 @@ export interface TeamTunnel {
   registerCode(code: string, expires_at: string): Promise<boolean>
   /** 等到 online（测试与诊断用；超时回 false）。 */
   whenOnline(timeoutMs?: number): Promise<boolean>
+  /** WP444：刚开通 / 续费了：不等退避，马上重新申请。 */
+  retryNow(): void
 }
 
 const MAX_BACKOFF_MS = 60_000
+/** WP444：没开通 / 被停用时，隔多久再问一次（运营开了长期免费、别的电脑上续了费也能自己恢复）。 */
+const IDLE_RETRY_MS = 10 * 60_000
 
 /**
  * `https://host` → `wss://host/v1/team/tunnel/connect`。
@@ -167,6 +179,9 @@ export function createTeamTunnel(options: TeamTunnelOptions): TeamTunnel {
     options.socketFactory ?? ((url) => new WebSocket(url) as unknown as TunnelSocket)
   const heartbeatMs = options.heartbeatMs ?? TEAM_TUNNEL_HEARTBEAT_MS
   const maxBackoff = options.maxBackoffMs ?? MAX_BACKOFF_MS
+  const idleRetry = options.idleRetryMs ?? IDLE_RETRY_MS
+  /** WP444：最近一次申请被云挡下来的原因（402 没开通 / 403 被停用）。 */
+  let refused: 'needs_subscription' | 'blocked' | undefined
 
   let state: TeamTunnelState = 'stopped'
   let wanted = false
@@ -204,12 +219,29 @@ export function createTeamTunnel(options: TeamTunnelOptions): TeamTunnel {
   async function register(): Promise<TeamTunnelIssued | undefined> {
     const token = options.token()
     if (token === undefined) return undefined
+    refused = undefined
     try {
+      const members = options.members?.()
       const res = await doFetch(`${options.cloudBase().replace(/\/+$/, '')}/v1/team/tunnel`, {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify(members === undefined ? {} : { members }),
       })
+      if (res.status === 402 || res.status === 403) {
+        // WP444：没开通 / 已到期 / 被停用——云那句人话原样给界面
+        refused = res.status === 402 ? 'needs_subscription' : 'blocked'
+        try {
+          const body = JSON.parse(await res.text()) as { message?: unknown }
+          lastReason = typeof body.message === 'string' ? body.message : undefined
+        } catch {
+          lastReason = undefined
+        }
+        lastReason ??=
+          res.status === 402
+            ? '不在同一个网络的同事要先开通团队通道。'
+            : '这个组织的团队通道被停用了。'
+        return undefined
+      }
       if (!res.ok) {
         lastReason =
           res.status === 401
@@ -337,6 +369,16 @@ export function createTeamTunnel(options: TeamTunnelOptions): TeamTunnel {
       issued = await register()
       if (!wanted) return
       if (issued === undefined) {
+        if (refused !== undefined) {
+          // WP444：不是网络问题，退避重试没用——停在这一态，隔一会儿再问（开通后 retryNow 立刻再试）
+          setState(refused)
+          retry = setTimeout(() => {
+            retry = undefined
+            void connect()
+          }, idleRetry)
+          retry.unref?.()
+          return
+        }
         scheduleRetry()
         return
       }
@@ -473,6 +515,14 @@ export function createTeamTunnel(options: TeamTunnelOptions): TeamTunnel {
       } catch {
         return false
       }
+    },
+    retryNow() {
+      if (!wanted) return
+      if (state !== 'needs_subscription' && state !== 'blocked' && state !== 'backoff') return
+      if (retry !== undefined) clearTimeout(retry)
+      retry = undefined
+      attempt = 0
+      void connect()
     },
     whenOnline(timeoutMs = 10_000) {
       if (state === 'online') return Promise.resolve(true)

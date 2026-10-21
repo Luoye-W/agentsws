@@ -927,6 +927,7 @@ import {
   supportVoiceSection,
 } from './support-voice.js'
 import { createTeamLink, type TeamLink } from './team-link.js'
+import { createTeamSubscriptionClient, teamSubscriptionNotice } from './team-subscription.js'
 import {
   resolveTeamCode,
   TEAM_TUNNEL_SECRET_ID,
@@ -11222,6 +11223,71 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ).replace(/\/+$/, '')
     return base === CLOUD_STAND_IN_BASE_URL ? undefined : base
   })()
+  /**
+   * WP427 / WP444：团队通道用哪把令牌问云——关联工坊账号时签的那把；开发期配了云替身时认 `AGENTSWS_TEAM_DEV_TOKEN`。
+   * 提到这里是因为团队通道订阅（WP444）也要它，而订阅要在 onboarding 装配时就交进去。
+   */
+  const teamDevToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
+  const teamCloudToken = (): string | undefined => {
+    if (teamOptions?.cloudToken !== undefined) return teamOptions.cloudToken()
+    try {
+      const linked = boot.secrets.available
+        ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+        : undefined
+      if (linked !== undefined && linked !== '') return linked
+    } catch {
+      // 读不出来当没关联
+    }
+    return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
+      teamDevToken !== undefined &&
+      teamDevToken !== ''
+      ? teamDevToken
+      : undefined
+  }
+  /** WP444：这里现在实际在用的人数（含发起人；离开了的不算）——按人数落档。 */
+  let teamMembersNow: number | undefined
+  const teamMembers = async (): Promise<number> => {
+    teamMembersNow = Math.max(
+      1,
+      (await identity.members(workspace.id)).filter((m) => m.left_at === undefined).length,
+    )
+    return teamMembersNow
+  }
+  /** WP444：铃铛里那一条团队通道的提醒，上一次发的是什么（同一件事不反复发、不反复加计数）。 */
+  let teamNoticeSent: string | undefined
+  const teamSubscription =
+    teamOptions === undefined
+      ? undefined
+      : createTeamSubscriptionClient({
+          cloudBase: () => teamCloudBase,
+          token: teamCloudToken,
+          members: teamMembers,
+          ...(teamOptions.fetch === undefined ? {} : { fetch: teamOptions.fetch }),
+          onView: (view) => {
+            // 开通 / 续费 / 长期免费：跨网那条路不等退避，马上重新申请
+            if (view.usable) teamRef?.retryCloud()
+            const { notice, settle } = teamSubscriptionNotice(view, Date.parse(clock.now()))
+            for (const key of settle) notifications.settle(workspace.id, key)
+            const fingerprint = notice === undefined ? undefined : `${notice.key}|${notice.text}`
+            if (fingerprint === teamNoticeSent) return
+            teamNoticeSent = fingerprint
+            if (notice === undefined) return
+            void identity
+              .getWorkspace(workspace.id)
+              .then((w) => {
+                if (w?.owner_id === undefined) return
+                notifications.notify({
+                  workspace_id: workspace.id,
+                  person_id: w.owner_id,
+                  category: 'credits',
+                  text: notice.text,
+                  href: '/settings/mode#usage-mode',
+                  key: notice.key,
+                })
+              })
+              .catch(() => undefined)
+          },
+        })
   const onboarding = createOnboarding({
     // WP276：申请卡在 ① ② 说「想一起用」，同意后不出空的并进来对照卡
     mode: async () => (await modeOfWorkspace?.(workspace.id)) ?? 'company',
@@ -11354,7 +11420,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             },
             changed: () => {
               void teamRef?.sync()
+              // WP444：人数可能变了（批进一个人）——下个月按新人数落档
+              void teamSubscription?.reportMembers().catch(() => false)
             },
+            ...(teamSubscription === undefined
+              ? {}
+              : {
+                  subscription: {
+                    view: () => teamSubscription.view(),
+                    subscribe: () => teamSubscription.subscribe(),
+                    cancel: () => teamSubscription.cancel(),
+                  },
+                }),
           },
         }),
     ...(dbDir === undefined ? {} : { dbDir }),
@@ -11414,7 +11491,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return org?.discoverable === true
   }
   if (teamOptions !== undefined) {
-    const devToken = env.AGENTSWS_TEAM_DEV_TOKEN?.trim()
     const memoryTunnel: { value?: import('@agentsws/contracts').TeamTunnelIssued | undefined } = {}
     teamRef = createTeamLink({
       wanted: async () => {
@@ -11438,24 +11514,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : {
             cloud: {
               base: () => teamCloudBase,
-              token:
-                teamOptions.cloudToken ??
-                (() => {
-                  try {
-                    const linked = boot.secrets.available
-                      ? boot.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
-                      : undefined
-                    if (linked !== undefined && linked !== '') return linked
-                  } catch {
-                    // 读不出来当没关联
-                  }
-                  // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认这个
-                  return env.AGENTSWS_TEAM_CLOUD_URL !== undefined &&
-                    devToken !== undefined &&
-                    devToken !== ''
-                    ? devToken
-                    : undefined
-                }),
+              // 开发期在一台电脑上配云替身走一遍：只有显式换了云地址才认 AGENTSWS_TEAM_DEV_TOKEN
+              token: teamCloudToken,
+              // WP444：申请通道时顺手报人数（按人数落档）
+              members: () => teamMembersNow,
               vault: {
                 get: () => {
                   if (!boot.secrets.available) return memoryTunnel.value
@@ -15961,8 +16023,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP427：端口有了——团队通道按现在的情况开（① 个人没打开就什么都不开）；之后每分钟对一遍
       // （同事退出 / 被请离开、关联账号之后都靠这一下跟上）
       await teamRef?.sync()
+      /*
+       * WP444：团队通道开着、关联了账号时——人数变了就报（每分钟对一下，没变不打云）；每 3 小时问一次订阅
+       * （试用快结束 / 宽限中 / 已关进铃铛）。界面上打开那张卡时也会现问。
+       */
+      let teamTick = 0
+      const teamSubTick = (): void => {
+        if (teamSubscription === undefined || teamRef?.status().open !== true) return
+        if (teamCloudToken() === undefined) return
+        const full = teamTick % 180 === 0
+        teamTick += 1
+        void (full ? teamSubscription.view() : teamSubscription.reportMembers()).catch(
+          () => undefined,
+        )
+      }
+      void teamMembers().catch(() => undefined)
+      teamSubTick()
       teamTimer = setInterval(() => {
         void teamRef?.sync()
+        teamSubTick()
       }, 60_000)
       teamTimer.unref?.()
       if (options.quiet !== true) {
