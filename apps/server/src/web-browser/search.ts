@@ -373,6 +373,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
 
   /** WP454：这个品牌第一次搜 Google 之前要不要先热身（本进程里试过一次就不再试）。 */
   let warmed = false
+  let warming: Promise<StepOutcome | undefined> | undefined
 
   /** 被拦 / 过渡页 / 同意页怎么处理（搜索那一页、热身那一页共用）。 */
   async function onBlock(
@@ -448,6 +449,19 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
     trace: SearchTraceStep[],
   ): Promise<StepOutcome | undefined> {
     if (warmed) return undefined
+    // 同时进来好几条（品牌分析会并发搜）：等同一次热身，不各开一页
+    if (warming !== undefined) return warming
+    warming = warmOnce(channel, url, trace).finally(() => {
+      warming = undefined
+    })
+    return warming
+  }
+
+  async function warmOnce(
+    channel: SearchBrowserChannel,
+    url: string,
+    trace: SearchTraceStep[],
+  ): Promise<StepOutcome | undefined> {
     const t0 = o.now()
     const st = await channel.status(o.workspace_id)
     if (st?.google_cookies === true) {

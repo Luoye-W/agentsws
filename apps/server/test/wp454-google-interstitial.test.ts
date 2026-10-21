@@ -253,6 +253,16 @@ describe('首次热身', () => {
     expect(steps).toEqual([['google_warmup:ok', 'google:ok'], ['google:ok']])
   })
 
+  it('同时进来好几条：只热身一次', async () => {
+    const shell = fakeShell((o) => (o.url === GOOGLE_HOME ? HOME : serp(['https://g.example/1'])), {
+      google_cookies: false,
+    })
+    const { search } = setup(shell.channel)
+    const got = await Promise.all([search.search('desk a'), search.search('desk b')])
+    expect(got.map((r) => r.via)).toEqual(['google', 'google'])
+    expect(shell.opened.filter((o) => o.url === GOOGLE_HOME)).toHaveLength(1)
+  })
+
   it('已经有 Google 的 cookie：跳过热身（留痕记 skipped）', async () => {
     const shell = fakeShell(() => serp(['https://g.example/1']), { google_cookies: true })
     const { search, file } = setup(shell.channel)
