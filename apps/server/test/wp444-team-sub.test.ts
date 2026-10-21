@@ -171,7 +171,12 @@ describe('WP444 同事那边：对方的团队通道没开通 / 到期', () => {
     const { createInvites } = await import('../src/invites.js')
     let t = Date.parse('2026-10-21T02:00:00.000Z')
     const invites = createInvites({
-      clock: { now: () => new Date((t += 1000)).toISOString() },
+      clock: {
+        now: () => {
+          t += 1000
+          return new Date(t).toISOString()
+        },
+      },
       random: () => 0.42,
       workspace_id: 'ws_b',
       owner: 'per_b',
