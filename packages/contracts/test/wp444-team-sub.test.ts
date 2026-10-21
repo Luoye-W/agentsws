@@ -51,3 +51,10 @@ describe('WP444 团队通道人数档', () => {
     expect(teamChannelUsable('none')).toBe(false)
   })
 })
+
+describe('WP444 团队通道的月费归「其它」', () => {
+  it('team.channel.monthly → other', async () => {
+    const { allocationBucketOf } = await import('../src/cloud-allocation.js')
+    expect(allocationBucketOf('team.channel.monthly')).toBe('other')
+  })
+})
