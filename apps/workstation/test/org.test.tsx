@@ -361,7 +361,8 @@ describe('公司页：岗位', () => {
     expect(within(support).getAllByText('独立站售后客服').length).toBeGreaterThan(0)
     expect(within(support).getByTestId('position-duty-count').textContent).toBe('2 条职责')
     expect(within(support).getByTestId('position-holders').textContent).toContain('王岚')
-    expect(within(support).getByTestId('position-holders').textContent).toContain('store_main')
+    // WP457：范围只写名字；`store_main` 是内部键，不上屏
+    expect(within(support).getByTestId('position-holders').textContent).not.toContain('store_main')
     // 收着的时候一条职责都看不见
     expect(within(support).queryByTestId('position-duty')).toBeNull()
     expect(within(support).queryByText('售后（本公司）')).toBeNull()

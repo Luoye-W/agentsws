@@ -22,7 +22,7 @@ import {
   updateMyProfile,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { rangeText } from '@/lib/ranges'
+import { rangesText } from '@/lib/ranges'
 
 const LEVELS: DisclosureLevel[] = ['self', 'colleagues', 'workspace']
 
@@ -84,11 +84,8 @@ export function ProfileForm({
       <div className="flex flex-col gap-1">
         <span className="text-muted-foreground text-xs">{t('secretary.profile.ranges')}</span>
         <span>
-          {profile.ranges.length === 0
-            ? '—'
-            : profile.ranges
-                .map((r) => (r.kind === 'brand' ? rangeText(r, t) : `${r.kind} ${r.id}`))
-                .join('、')}
+          {/* WP457：只写名字（原来写「store store_main」） */}
+          {rangesText(profile.ranges, t) || '—'}
         </span>
       </div>
 

@@ -30,7 +30,7 @@ import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 import { inUseCount, splitPositions } from '@/lib/org-positions'
-import { rangeText } from '@/lib/ranges'
+import { rangesText } from '@/lib/ranges'
 import { cn } from '@/lib/utils'
 
 /** 持有人一枚：一个首字的圆头像 + 名字（+ 他管的范围）（+ WP235：他在这个岗位里做的那几条）。 */
@@ -44,6 +44,8 @@ function Holder({
   duties?: string[]
 }): React.ReactNode {
   const { t } = useApp()
+  // WP457：范围只写名字；一个名字都没有（`store_main` 这类内部键）就整段不写
+  const where = rangesText(ranges, t)
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2 pl-0.5 text-xs">
       <span
@@ -53,9 +55,9 @@ function Holder({
         {name.slice(0, 1)}
       </span>
       {name}
-      {ranges.length === 0 ? null : (
-        <span className="text-muted-foreground">
-          （{ranges.map((r) => rangeText(r, t)).join('、')}）
+      {where === '' ? null : (
+        <span className="text-muted-foreground" data-testid="position-holder-ranges">
+          （{where}）
         </span>
       )}
       {duties.length === 0 ? null : (
