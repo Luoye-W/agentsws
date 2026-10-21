@@ -10738,6 +10738,17 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "运营停用了这个组织的团队通道（决策 1341）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
           }
         }
       }

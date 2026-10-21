@@ -2460,6 +2460,8 @@ export interface CloudTeamApi {
     errors: TeamOwnerErrors & {
       /** 团队通道没开通 / 已到期（`details.status`：`none` / `suspended`） */
       402: 'payment_required'
+      /** 运营停用了这个组织的团队通道（决策 1341） */
+      403: 'forbidden'
     }
     errorBody: CloudEntryErrorBody
   }
