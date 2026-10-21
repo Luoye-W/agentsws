@@ -69,6 +69,8 @@ export type ShopOp =
   | 'automatic_discount_create'
   | 'fulfillment_create'
   | 'tracking_update'
+  // WP446（docs/109 §4.4）：网址跳转（建站）
+  | 'url_redirect'
 
 /** 卡上 `after._via` 写这个，执行器才认（别的来路的同一类卡不归这里）。 */
 export const SHOP_VIA = 'shop_admin'
@@ -108,9 +110,11 @@ const MACHINE_KEYS = new Set([
   'by_fo',
   'fulfillment_id',
   'policy_type',
+  // WP446：一批跳转的原样（`{ path, target }[]`）；卡面看 `redirect` 那一行人话
+  'redirects',
 ])
 /** 只给卡面看的摘要（执行器不认，还原时丢掉）。 */
-const SUMMARY_KEYS = new Set(['count', 'pictures', 'menu', 'spec', 'added', 'removed'])
+const SUMMARY_KEYS = new Set(['count', 'pictures', 'menu', 'spec', 'added', 'removed', 'redirect'])
 
 const titlesOfItems = (items: unknown): string[] =>
   Array.isArray(items)
@@ -133,6 +137,17 @@ export function toCard(x: Record<string, unknown>): Record<string, unknown> {
     } else out[k] = v
   }
   if (Array.isArray(x.products)) out.count = x.products.length
+  // WP446：跳转一批几条 + 一行「旧 → 新」（目标为空 = 撤掉这条跳转）
+  if (Array.isArray(x.redirects)) {
+    out.count = x.redirects.length
+    out.redirect = x.redirects
+      .map((r) => {
+        const one = r !== null && typeof r === 'object' ? (r as Record<string, unknown>) : {}
+        const to = typeof one.target === 'string' && one.target !== '' ? one.target : '（不跳）'
+        return `${String(one.path ?? '')} → ${to}`
+      })
+      .join('；')
+  }
   if (Array.isArray(x.images))
     out.pictures = x.images
       .map((i) => {
@@ -225,6 +240,8 @@ const ACTION_OF: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     shop_save_menu: 'stage_store_setup',
     // WP418（自查 A13）
     shop_save_policy: 'stage_store_setup',
+    // WP446（docs/109 §4.4）：改网址跳转
+    shop_save_redirects: 'stage_url_redirect',
   },
   // WP418（自查 B10）
   'dtc.fulfillment': {

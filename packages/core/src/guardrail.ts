@@ -95,6 +95,8 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   // 但做错了改得回来。邮件模板按 medium：草稿改不坏任何东西，启用那一下的门
   // 在下面的 switch 里（按 `after.enabled` 分档）。上线检查单按 low：只读巡检。
   store_setup: 'medium',
+  // WP446：改跳转按 medium——改的是整家店的网址骨架（跳错了搜索流量直接掉），但改得回来（before 有原跳转）
+  url_redirect: 'medium',
   theme_install: 'high',
   launch_check: 'low',
   email_template_edit: 'medium',
@@ -1515,6 +1517,39 @@ export function evaluateGuardrail(
      * 名单在 {@link STORE_SETUP_FORBIDDEN_FIELD_PREFIXES}，命中就 block——
      * 不给"人在一张设置批的卡上顺手点了一下税率"这条路径。
      */
+    /**
+     * WP446（docs/109 §4.4）：改网址跳转。形状判断：
+     *
+     * - 至少一条；每条旧路径必须是站内路径（`/` 开头），目标是站内路径或 `https://` 网址；
+     * - 跳到自己 → block（原地打转）；同一批里一条的目标是另一条的旧路径 → block（跳转链，搜索引擎会丢权重）；
+     * - 条数超过 `max_redirects_per_change` → 转人审。
+     *
+     * 撤回（目标为空 = 删掉这条跳转）是合法的一条。条目在卡上是 `_redirects`（给执行器用的那一格），
+     * 也认没改名的 `redirects`。
+     */
+    case 'url_redirect': {
+      const raw = Array.isArray(after._redirects)
+        ? after._redirects
+        : Array.isArray(after.redirects)
+          ? after.redirects
+          : []
+      const list = raw.map(rec)
+      if (list.length === 0) block('url_redirect_empty')
+      const paths = new Set(list.map((r) => (typeof r.path === 'string' ? r.path : '')))
+      for (const r of list) {
+        const path = typeof r.path === 'string' ? r.path : ''
+        const target = typeof r.target === 'string' ? r.target : ''
+        if (!path.startsWith('/')) block('url_redirect_path_relative', '/…', path)
+        if (target !== '' && !target.startsWith('/') && !/^https:\/\//i.test(target))
+          block('url_redirect_target_shape', '/… | https://…', target)
+        if (target !== '' && target === path) block('url_redirect_self', path, target)
+        if (target !== '' && paths.has(target)) block('url_redirect_chain', path, target)
+      }
+      const cap = capNumber(mandate, 'max_redirects_per_change')
+      if (cap !== undefined && list.length > cap)
+        review('max_redirects_per_change', cap, list.length)
+      break
+    }
     case 'store_setup': {
       const forbidden = (name: string): boolean =>
         STORE_SETUP_FORBIDDEN_FIELD_PREFIXES.some((p) => name.toLowerCase().startsWith(p))

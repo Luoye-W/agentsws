@@ -86,12 +86,14 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   shop_save_page: '页面改动卡',
   shop_save_menu: '菜单改动卡',
   shop_create_discount: '折扣码卡',
+  // WP446：建站改网址跳转
+  shop_save_redirects: '跳转改动卡',
   // WP385：读网站体检结论（只读）
   query_site_health: '网站体检结论',
   // WP390：工坊服务
   find_service: '工坊服务目录',
   draft_service_order: '工坊服务的卡',
-  // WP421：公关 / 内容与搜索 / B2B / 设计
+  // WP421：公关 / SEO 与 GEO / B2B / 设计
   list_press_releases: '新闻稿清单',
   draft_press_release: '新闻稿草稿卡',
   search_facts: '事实卡',

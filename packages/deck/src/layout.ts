@@ -203,6 +203,8 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   kol_tracked_link: 'change',
   kol_deliverable_review: 'change',
   store_setup: 'change',
+  // WP446：改跳转——人要看的是「旧路径 → 新路径」那一列
+  url_redirect: 'change',
   theme_install: 'change',
   app_config: 'change',
   app_install: 'change',
