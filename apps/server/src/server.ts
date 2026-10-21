@@ -2526,7 +2526,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
       providers: [
-        stubProvider({ seed: 7, scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript] }),
+        stubProvider({
+          seed: 7,
+          scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript],
+        }),
       ],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
