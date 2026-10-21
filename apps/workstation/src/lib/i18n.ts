@@ -9040,3 +9040,8 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   if (vars === undefined) return raw
   return raw.replace(/\{(\w+)\}/g, (_m, name: string) => String(vars[name] ?? `{${name}}`))
 }
+
+/** WP457：整张表（只给守卫测试扫「用户看得见的字里有没有内部词」用）。 */
+export function tableOf(lang: Lang): Readonly<Record<string, string>> {
+  return TABLES[lang]
+}
