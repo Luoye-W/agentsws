@@ -137,8 +137,8 @@ async function main() {
         if (theme === 'light') {
           check(true, '首页点关键数字：第三栏拉出那份报表')
           check(
-            (await page.getByTestId('right-pane').getAttribute('data-layout')) === 'side',
-            '首页、1440 宽：第三栏和中栏并排（不盖中栏）',
+            (await page.getByTestId('rail-panel-frame').getAttribute('data-layout')) === 'docked',
+            '首页、1440 宽：第三栏和中栏并排（不盖中栏；WP437 宿主，报表 ≥ 1400 并排）',
           )
         }
         if (want('home-report')) await shot(page, '2-home-report', theme)
@@ -182,14 +182,18 @@ async function main() {
             (await page.getByTestId('report-missing').count()) >= 1,
             '整份报表：缺数据源的块原位占位',
           )
+          // int/1024：统一口径（决策 1343）——报表 ≥ 1400 并排，放不下看板时看板让位（顶栏「看一眼」）
+          const frame = page.getByTestId('rail-panel-frame')
           check(
-            (await page.getByTestId('right-pane').getAttribute('data-layout')) === 'over',
-            '有看板的页、1440 宽：第三栏盖在中栏上（不把中栏挤成一条）',
+            (await frame.getAttribute('data-layout')) === 'docked' &&
+              (await frame.getAttribute('data-board')) === 'hidden' &&
+              (await page.getByTestId('board-peek').count()) === 1,
+            '有看板的页、1440 宽：报表并排、看板让位（顶栏出「看一眼」）',
           )
         }
         if (want('business-report')) {
           // 整页：把第三栏的滚动区展开成全高再拍
-          const pane = page.getByTestId('right-pane')
+          const pane = page.getByTestId('rail-panel-frame')
           await page.setViewportSize({ width: 1440, height: 2300 })
           await page.waitForTimeout(800)
           await shot(page, '4-business-report', theme, pane)
@@ -261,7 +265,7 @@ async function main() {
         if (want('reddit-report')) {
           await page.setViewportSize({ width: 1440, height: 2000 })
           await page.waitForTimeout(800)
-          await shot(page, '10-reddit-report', theme, page.getByTestId('right-pane'))
+          await shot(page, '10-reddit-report', theme, page.getByTestId('rail-panel-frame'))
         }
         await context.close()
       }
@@ -274,9 +278,9 @@ async function main() {
         await page.getByTestId('report-page').waitFor({ timeout: 30_000 })
         if (theme === 'light')
           check(
-            (await page.getByTestId('right-pane').getAttribute('data-layout')) === 'over' &&
-              (await page.getByTestId('right-pane-scrim').count()) === 1,
-            '窄窗（< 1280）：第三栏盖在中栏上、带遮罩',
+            (await page.getByTestId('rail-panel-frame').getAttribute('data-layout')) ===
+              'overlay' && (await page.getByTestId('rail-scrim').count()) === 1,
+            '窄窗（< 1400）：报表盖在中栏上、带遮罩',
           )
         await shot(page, '12-narrow', theme)
         await context.close()

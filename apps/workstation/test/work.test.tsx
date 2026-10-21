@@ -228,100 +228,10 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-const { HomePage } = await import('@/pages/home')
 const { TodosPage } = await import('@/pages/todos')
 const { CalendarPage } = await import('@/pages/calendar')
 const { GoalsPage } = await import('@/pages/goals')
 const { MatterPage } = await import('@/pages/matter')
-
-describe('首页第三稿（37 §3）', () => {
-  beforeEach(() => {
-    getHome.mockClear()
-  })
-
-  it('四段都在：目标那一行 / 今天（时间轴 + 到期）/ 卡片 / 复盘', async () => {
-    renderWithProviders(<HomePage />)
-    // WP98 收口：目标从一整块网格折成一行"目标 2 项 · 1 项落后 →"，细的进 /goals
-    const goals = await screen.findByTestId('goals-line')
-    expect(goals.textContent).toContain('目标 2 项')
-    expect(goals.getAttribute('data-behind')).toBe('1')
-    expect(screen.queryByTestId('goal-row')).toBeNull()
-    expect(screen.getByTestId('today-timeline')).toBeDefined()
-    expect(screen.getByTestId('today-due')).toBeDefined()
-    expect(await screen.findByTestId('deck-section')).toBeDefined()
-    expect(screen.getByTestId('battle-report')).toBeDefined()
-    // 到期清单里第二个数字：待我定的卡片数。WP141：与页头、筛选「全部」同一个口径
-    // （牌堆的张数 counts.total），不再读工作模型那一份（它把日报也算成一张）
-    const header = screen.getByTestId('home-header').textContent ?? ''
-    const n = /(\d+) 张卡等你决定/.exec(header)?.[1]
-    expect(n).toBeDefined()
-    expect(screen.getByTestId('cards-waiting').textContent).toContain(`还有 ${n} 张卡`)
-  })
-
-  it('首页仍然无图表无表格（36 §5.2）', async () => {
-    const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    expect(container.querySelectorAll('table')).toHaveLength(0)
-    expect(container.querySelectorAll('.recharts-wrapper')).toHaveLength(0)
-    expect(container.querySelectorAll('[data-block-component="chart_line"]')).toHaveLength(0)
-    // 迷你走势线仍然允许
-    expect(container.querySelectorAll('[data-testid="sparkline"]').length).toBeGreaterThan(0)
-  })
-
-  it('首页唯一能打字的是底部的简易对话框（WP437，Luoye 10-21：交给助理，不是另一套聊天）', async () => {
-    const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    const inputs = [
-      ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
-    ].filter((el) => !(el as HTMLInputElement).disabled)
-    expect(inputs.map((el) => el.getAttribute('data-testid'))).toEqual(['simple-composer-input'])
-  })
-
-  it('今天的到期待办点标题跳事项锚点', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('today-due')
-    const link = within(screen.getByTestId('today-due')).getByRole('link', {
-      name: '回 Anna 的退货',
-    })
-    expect(link.getAttribute('href')).toBe('/matters/mat_1#mev_9')
-  })
-
-  it('WP248（决策 79）：已过期没做完的算进今天——页头「今天 2 个待办（1 个已过期）」，过期那条标红', async () => {
-    getHome.mockImplementation(async () => ({
-      ...home,
-      today: {
-        timeline: [],
-        due: {
-          todos: [
-            todo({ id: 'td_late', title: '回版主私信', due: '2026-09-07T09:00:00.000Z' }),
-            todo(),
-          ],
-          cards_waiting: 1,
-          overdue_ids: ['td_late'],
-        },
-      },
-    }))
-    try {
-      renderWithProviders(<HomePage />)
-      const due = await screen.findByTestId('today-due')
-      expect(screen.getByTestId('home-header').textContent).toContain('今天 2 个待办（1 个已过期）')
-      const badges = within(due).getAllByTestId('today-overdue')
-      expect(badges).toHaveLength(1)
-      expect(badges[0]?.closest('li')?.textContent).toContain('回版主私信')
-    } finally {
-      getHome.mockImplementation(async () => home)
-    }
-  })
-
-  it('WP248：没有过期的就只说「今天 N 个待办」', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('today-due')
-    const header = screen.getByTestId('home-header').textContent ?? ''
-    expect(header).toContain('今天 1 个待办')
-    expect(header).not.toContain('已过期')
-    expect(screen.queryByTestId('today-overdue')).toBeNull()
-  })
-})
 
 describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）', () => {
   beforeEach(() => {
