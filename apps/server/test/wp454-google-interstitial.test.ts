@@ -63,7 +63,13 @@ const HOME: OpenResult = {
   page: { signals: SIG, text: 'Google', truncated: false },
 }
 
-type Opened = { url: string; kind: string; timeout_ms: number; settle_ms?: number }
+type Opened = {
+  url: string
+  kind: string
+  timeout_ms: number
+  settle_ms?: number
+  no_read?: boolean
+}
 
 function fakeShell(script: (o: Opened) => OpenResult, opts: { google_cookies?: boolean } = {}) {
   const opened: Opened[] = []
@@ -77,6 +83,7 @@ function fakeShell(script: (o: Opened) => OpenResult, opts: { google_cookies?: b
         kind: i.kind,
         timeout_ms: i.timeout_ms,
         ...(i.settle_ms === undefined ? {} : { settle_ms: i.settle_ms }),
+        ...(i.no_read === undefined ? {} : { no_read: i.no_read }),
       }
       opened.push(o)
       // 开过 Google 的任何一页，partition 里就有了 Google 的 cookie
@@ -238,7 +245,8 @@ describe('首次热身', () => {
       ['page', 'https://www.google.com/'],
       ['google', 'https://www.google.com/search?'],
     ])
-    expect(shell.opened[0]).toMatchObject({ settle_ms: 1_500, timeout_ms: 15_000 })
+    expect(shell.opened[0]).toMatchObject({ settle_ms: 1_500, timeout_ms: 15_000, no_read: true })
+    expect(shell.opened[1]?.no_read).toBeUndefined()
     await search.search('standing desk mat')
     expect(shell.opened.filter((o) => o.url === GOOGLE_HOME)).toHaveLength(1)
     const steps = file().trace.map((e) => e.steps.map((s) => `${s.via}:${s.result}`))
@@ -318,6 +326,29 @@ describe('首次热身', () => {
 })
 
 describe('每步留痕（web-search.json）', () => {
+  it('0 条结果时分清：页面上有结果标题、一条都没读出来（10-21 真机那种）', async () => {
+    const shell = fakeShell(
+      (o) =>
+        o.kind === 'google'
+          ? {
+              ok: true,
+              status: 200,
+              final_url: 'https://www.google.com/search?q=x',
+              serp: { signals: SIG, items: [], candidates: 9 },
+            }
+          : serp(['https://b.example/1']),
+      { google_cookies: true },
+    )
+    const { search, file } = setup(shell.channel)
+    await search.search('portable monitor')
+    expect(file().trace[0]?.steps[1]).toMatchObject({
+      via: 'google',
+      result: 'empty',
+      why: '0 条结果（页面上有 9 个结果标题，一条都没读出来）',
+    })
+    expect(file().google_last_miss?.why).toContain('一条都没读出来')
+  })
+
   it('只存查询哈希、不存原文；最近 50 次；缓存命中也记；0 条记 empty', async () => {
     let n = 0
     const shell = fakeShell(

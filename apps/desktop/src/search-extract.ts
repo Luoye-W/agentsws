@@ -56,6 +56,11 @@ export interface SerpProbe {
 export interface SerpExtract {
   signals: PageSignals
   items: SerpItem[]
+  /**
+   * WP454：页面上看到几个「结果标题」（Google `a h3`、Bing `li.b_algo`）——0 条结果时用来分清
+   * 「真没结果」和「有结果但没读出来」（留痕里那一句）。
+   */
+  candidates?: number
 }
 
 export interface ReadableExtract {
@@ -86,8 +91,11 @@ export function extractSerp(args: { engine: 'google' | 'bing'; limit: number }):
     }
     const host = u.hostname.replace(/^www\./, '')
     if (/^google\./.test(host) && u.pathname === '/url') {
-      const q = u.searchParams.get('q') ?? u.searchParams.get('url')
-      return q !== null && /^https?:\/\//.test(q) ? q : ''
+      // WP454：`/url?sa=t&q=&url=https…` 这种 q 是空的、目标在 url 里——哪个是网址取哪个
+      const q = [u.searchParams.get('q'), u.searchParams.get('url')].find(
+        (v) => v !== null && /^https?:\/\//.test(v),
+      )
+      return q ?? ''
     }
     if (host === 'bing.com' && u.pathname.startsWith('/ck/a')) {
       const raw = u.searchParams.get('u')
@@ -119,6 +127,7 @@ export function extractSerp(args: { engine: 'google' | 'bing'; limit: number }):
     }
   }
   const items: SerpItem[] = []
+  let candidates = 0
   const seen = new Set<string>()
   const push = (url: string, title: string, snippet: string): void => {
     if (url === '' || title === '' || seen.has(url) || own(url)) return
@@ -126,23 +135,36 @@ export function extractSerp(args: { engine: 'google' | 'bing'; limit: number }):
     items.push({ url, title, ...(snippet === '' ? {} : { snippet }) })
   }
   if (args.engine === 'google') {
-    const root = document.querySelector('#search') ?? document.querySelector('#rso') ?? document
-    for (const h3 of Array.from(root.querySelectorAll('a h3'))) {
-      if (items.length >= args.limit) break
-      const a = h3.closest('a')
-      if (a === null) continue
-      // 广告块（「赞助商」）不收
-      if (a.closest('#tads, #bottomads, [data-text-ad]') !== null) continue
-      const box =
-        a.closest('div.g, div.MjjYud, div[data-hveid], div[data-sokoban-container]') ??
-        a.parentElement
-      const snip =
-        box?.querySelector('.VwiC3b, [data-sncf], div[style*="-webkit-line-clamp"]')?.textContent ??
-        ''
-      push(target(a.getAttribute('href') ?? ''), clean(h3.textContent, 300), clean(snip, 500))
+    // WP454：先在 #search 里找；一条都没有再看 #rso、整页（结果容器的位置随 Google 改版会变）
+    const roots = [document.querySelector('#search'), document.querySelector('#rso'), document]
+    for (const root of roots) {
+      if (root === null || items.length > 0) continue
+      const heads = Array.from(root.querySelectorAll('a h3'))
+      candidates = Math.max(candidates, heads.length)
+      for (const h3 of heads) {
+        if (items.length >= args.limit) break
+        const a = h3.closest('a')
+        if (a === null) continue
+        // 广告块（「赞助商」）不收
+        if (a.closest('#tads, #bottomads, [data-text-ad]') !== null) continue
+        const box =
+          a.closest('div.g, div.MjjYud, div[data-hveid], div[data-sokoban-container]') ??
+          a.parentElement
+        const snip =
+          box?.querySelector('.VwiC3b, [data-sncf], div[style*="-webkit-line-clamp"]')
+            ?.textContent ?? ''
+        // WP454：href 不是网址（`#`、脚本）时看 data-href、ping（`/url?…&url=` 里有目标）
+        const url =
+          ['href', 'data-href', 'ping']
+            .map((attr) => target(a.getAttribute(attr) ?? ''))
+            .find((u) => u !== '' && !own(u)) ?? ''
+        push(url, clean(h3.textContent, 300), clean(snip, 500))
+      }
     }
   } else {
-    for (const li of Array.from(document.querySelectorAll('#b_results li.b_algo'))) {
+    const lis = Array.from(document.querySelectorAll('#b_results li.b_algo'))
+    candidates = lis.length
+    for (const li of lis) {
       if (items.length >= args.limit) break
       const a = li.querySelector('h2 a')
       if (a === null) continue
@@ -167,6 +189,7 @@ export function extractSerp(args: { engine: 'google' | 'bing'; limit: number }):
         document.querySelector('#search, #rso') === null,
     },
     items,
+    candidates,
   }
 }
 

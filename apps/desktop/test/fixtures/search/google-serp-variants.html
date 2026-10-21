@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- WP454 夹具（手写）：几种在 WP353 的提取里会读丢的写法——
+     1) /url?sa=t&q=&url=https…（q 是空的、目标在 url 里）；2) href 是 #、目标只在 ping 里；
+     3) data-href；4) 结果在 #rso 里、#search 是个空壳；外加一个 Google 自家链接（不收）。 -->
+<html><head><title>portable monitor - Google Search</title></head><body>
+<div id="search"></div>
+<div id="rso">
+  <div class="MjjYud"><a href="/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;url=https%3A%2F%2Fwww.example-monitors.com%2Freview&amp;ved=x"><h3>Portable monitor review</h3></a><div class="VwiC3b">We tested 12 portable monitors.</div></div>
+  <div class="MjjYud"><a href="#" ping="/url?sa=t&amp;source=web&amp;rct=j&amp;url=https://shop.example.org/p/156&amp;ved=y"><h3>15.6 inch portable monitor</h3></a></div>
+  <div class="MjjYud"><a data-href="https://forum.example.net/t/portable-monitors"><h3>Forum thread</h3></a></div>
+  <div class="MjjYud"><a href="https://www.google.com/search?q=portable+monitor&amp;tbm=isch"><h3>Images for portable monitor</h3></a></div>
+</div>
+</body></html>

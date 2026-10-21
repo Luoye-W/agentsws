@@ -16,6 +16,7 @@ import {
   isGoogleCookieDomain,
   type SearchBrowserDriver,
   startSearchBrowserChannel,
+  validateOpen,
   validateReveal,
 } from '../src/search-browser.js'
 import { extractSerp, type SerpProbe, type SerpState, serpState } from '../src/search-extract.js'
@@ -41,6 +42,29 @@ function classify(file: string, url: string) {
   const serp = extractSerp({ engine: 'google', limit: 10 })
   return { serp, block: blockOf({ ok: true, status: 200, final_url: url, serp }) }
 }
+
+describe('结果页的几种写法都读得出来（10-21 真机：页面上有结果标题、一条都没读出来）', () => {
+  it('/url?q=&url=、href=# 只有 ping、data-href、结果在 #rso 而 #search 是空壳；Google 自家链接不收；带回看到几个标题', () => {
+    const url = 'https://www.google.com.hk/search?q=portable+monitor'
+    onFixture('google-serp-variants.html', url)
+    expect(serpState({ engine: 'google' }).state).toBe('results')
+    const got = extractSerp({ engine: 'google', limit: 10 })
+    expect(got.items.map((i) => i.url)).toEqual([
+      'https://www.example-monitors.com/review',
+      'https://shop.example.org/p/156',
+      'https://forum.example.net/t/portable-monitors',
+    ])
+    expect(got.items[0]?.snippet).toBe('We tested 12 portable monitors.')
+    expect(got.candidates).toBe(4)
+    expect(blockOf({ ok: true, status: 200, final_url: url, serp: got })).toBeUndefined()
+  })
+
+  it('Bing 也带回看到几个结果', () => {
+    onFixture('bing-serp.html', 'https://www.bing.com/search?q=x')
+    const got = extractSerp({ engine: 'bing', limit: 10 })
+    expect(got.candidates).toBeGreaterThanOrEqual(got.items.length)
+  })
+})
 
 describe('四份夹具：页面探针 + detect.ts 分类', () => {
   it('过渡页：探针说 interstitial；读出 0 条、带过渡页迹象；分类 interstitial（不是被拦）', () => {
@@ -317,6 +341,12 @@ describe('热身判法与通道（WP454）', () => {
       expect(isGoogleCookieDomain(d)).toBe(true)
     for (const d of ['.youtube.com', 'notgoogle.com', 'google.example.org', ''])
       expect(isGoogleCookieDomain(d)).toBe(false)
+  })
+
+  it('open 认 no_read（热身只开不读）；别的值不当真', () => {
+    const base = { workspace_id: 'ws_1', url: 'https://www.google.com/', kind: 'page' }
+    expect(validateOpen({ ...base, no_read: true })).toMatchObject({ no_read: true })
+    expect(validateOpen({ ...base, no_read: 'yes' })).not.toHaveProperty('no_read')
   })
 
   it('reveal 认 consent；status 带上 google_cookies（壳不给就不带）', async () => {

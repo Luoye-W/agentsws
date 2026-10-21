@@ -140,6 +140,10 @@ export interface OpenRequest {
   settle_ms: number
   /** 正文最多留多少字（`page` 那种）。 */
   max_chars: number
+  /**
+   * WP454：只开不读（热身用）：等 `dom-ready` 加 `settle_ms` 就交回状态码与最后的地址，不在页面里跑脚本。
+   */
+  no_read?: boolean
 }
 
 export type OpenResult =
@@ -268,6 +272,7 @@ export function validateOpen(body: unknown): OpenRequest | string {
         : b.kind === 'html'
           ? clampInt(b.max_chars, 1_000, HTML_MAX_CHARS, HTML_MAX_CHARS)
           : clampInt(b.max_chars, 1_000, 200_000, 60_000),
+    ...(b.no_read === true ? { no_read: true } : {}),
   }
 }
 

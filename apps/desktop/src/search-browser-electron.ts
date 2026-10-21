@@ -162,14 +162,24 @@ export function createElectronSearchBrowser(deps: {
             ready: {
               max_wait_ms: SERP_READY_WAIT_MS,
               interval_ms: 250,
+              // WP454：探针走主框架那一口——`webContents.executeJavaScript*` 要等整页停止加载才执行
+              // （10-21 真机：Google 结果页常要 40–50 秒才停，等到通道超时）；探针只读、只回一个状态，
+              // 读结果仍在隔离世界里跑
               probe: () =>
-                wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [
-                  { code: pageScript(serpState, { engine: serp }) },
-                ]) as Promise<SerpProbe>,
+                wc.mainFrame.executeJavaScript(
+                  pageScript(serpState, { engine: serp }),
+                ) as Promise<SerpProbe>,
             },
           })
     if (!got.ok) return got
+    // WP454：热身只开不读（看地址认 /sorry、同意页就够）——不跑脚本，也就不用等整页停止加载
+    if (req.no_read === true) {
+      if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
+      return { ok: true, status: got.status, final_url: wc.getURL() }
+    }
     if (serp !== undefined) {
+      // 结果已经在 DOM 里了：剩下的图片、脚本不等，停下加载好让隔离世界的读取马上跑
+      if (wc.isLoadingMainFrame()) wc.stop()
       if (!probeLogged && got.probe !== undefined) {
         probeLogged = true
         deps.log('搜索浏览器：页面看到的可见性与视口（WP454 核实）', {

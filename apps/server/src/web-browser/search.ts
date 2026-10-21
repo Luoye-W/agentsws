@@ -463,6 +463,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         timeout_ms: ENGINE_TIMEOUT_MS,
         settle_ms: 1_500,
         max_chars: 2_000,
+        no_read: true,
       }),
     )
     const step = (result: SearchStepResult, why?: string): void => {
@@ -535,7 +536,15 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       }
     const block = blockOf(got)
     if (block !== undefined) return { ...(await onBlock(e, block, url)), why: block.message }
-    return { sources: got.serp?.items ?? [] }
+    const items = got.serp?.items ?? []
+    const seen = got.serp?.candidates ?? 0
+    return {
+      sources: items,
+      // WP454：0 条时分清「真没结果」和「页面上有结果标题、一条都没读出来」
+      ...(items.length === 0 && seen > 0
+        ? { why: `0 条结果（页面上有 ${seen} 个结果标题，一条都没读出来）` }
+        : {}),
+    }
   }
 
   async function viaCloud(
@@ -750,7 +759,9 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         if (sources.length === 0) {
           mark(
             'empty',
-            got.sources.length === 0 ? '0 条结果' : `${got.sources.length} 条都不在 ${site} 上`,
+            got.sources.length === 0
+              ? (got.why ?? '0 条结果')
+              : `${got.sources.length} 条都不在 ${site} 上`,
           )
           notes.push(`${viaName(via, native)} 没搜到相关结果`)
           continue

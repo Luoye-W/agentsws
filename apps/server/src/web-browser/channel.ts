@@ -21,7 +21,12 @@ export type OpenResult =
       ok: true
       status: number
       final_url: string
-      serp?: { signals: PageSignals; items: { url: string; title: string; snippet?: string }[] }
+      serp?: {
+        signals: PageSignals
+        items: { url: string; title: string; snippet?: string }[]
+        /** WP454：页面上看到几个结果标题（老壳不给）。 */
+        candidates?: number
+      }
       page?: { signals: PageSignals; text: string; truncated: boolean }
     }
   | { ok: false; reason: 'timeout' | 'failed' | 'revealed' | 'unreachable'; message: string }
@@ -38,6 +43,8 @@ export interface SearchBrowserChannel {
     timeout_ms: number
     settle_ms?: number
     max_chars?: number
+    /** WP454：只开不读（热身用；老壳不认就照常读一遍）。 */
+    no_read?: boolean
   }): Promise<OpenResult>
   reveal(input: {
     workspace_id: string
