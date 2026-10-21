@@ -172,9 +172,9 @@ function fakeCard(total: number): void {
       }, [onTotal])
       return (
         <ul>
-          {Array.from({ length: Math.min(total, limit) }, (_, i) => (
-            <li key={i} data-testid="fake-row">
-              {i}
+          {Array.from({ length: Math.min(total, limit) }, (_, i) => `row-${i}`).map((id) => (
+            <li key={id} data-testid="fake-row">
+              {id}
             </li>
           ))}
         </ul>

@@ -198,6 +198,21 @@ function ProgressRow({ scope }: { scope: NonNullable<RailCardBodyProps['scope']>
   })
   const counts = work.data?.counts
   const stuck = counts?.stuck ?? 0
+  const doing = counts?.doing ?? 0
+  // 有在做 / 卡住的就说这两个数（为 0 的那一半不说）；都没有就说一共几件
+  const meta =
+    counts === undefined
+      ? ''
+      : doing + stuck > 0
+        ? [
+            doing > 0 ? t('plans.work.doing', { n: doing }) : '',
+            stuck > 0 ? t('plans.work.stuck', { n: stuck }) : '',
+          ]
+            .filter((x) => x !== '')
+            .join(' · ')
+        : (work.data?.items.length ?? 0) > 0
+          ? t('plans.work.items', { n: work.data?.items.length ?? 0 })
+          : ''
   return (
     <li>
       <button
@@ -211,9 +226,7 @@ function ProgressRow({ scope }: { scope: NonNullable<RailCardBodyProps['scope']>
       >
         {stuck > 0 ? <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" /> : null}
         <span className="min-w-0 truncate">{t('plans.progress')}</span>
-        <Meta>
-          {counts === undefined ? '' : t('plans.work.counts', { doing: counts.doing, stuck })}
-        </Meta>
+        <Meta>{meta}</Meta>
       </button>
     </li>
   )

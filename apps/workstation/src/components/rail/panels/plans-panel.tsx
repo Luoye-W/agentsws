@@ -18,7 +18,12 @@ export function PlansPanel(props: RailPanelBodyProps): ReactNode {
   const { t } = useApp()
   return (
     <div className="flex flex-col gap-5" data-testid="plans-panel">
-      <SchedulesPanel {...props} />
+      <section className="flex flex-col gap-2" data-testid="plans-schedules">
+        <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+          {t('rail.panel.schedules')}
+        </h3>
+        <SchedulesPanel {...props} />
+      </section>
       {props.scope?.assignment === undefined ? null : (
         <section className="flex flex-col gap-2" data-testid="plans-boards">
           <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">

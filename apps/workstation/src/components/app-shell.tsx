@@ -905,7 +905,7 @@ export function AppShell({
                       <span
                         aria-hidden
                         data-testid="caption-gap"
-                        className="mr-1 ml-3 h-5 w-px shrink-0 bg-ws-line"
+                        className="mr-2 ml-4 h-5 w-px shrink-0 bg-ws-line"
                       />
                     ) : null}
                   </div>

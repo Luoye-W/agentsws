@@ -326,7 +326,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     registerPanelAlias({ id: sub, panel: 'outputs', sub })
   registerPanelType({
     id: 'schedules',
-    label: 'rail.panel.schedules',
+    // WP433：这一格现在是「计划」整格（定时任务 + 进度），标题跟卡同名
+    label: 'rail.card.plans',
     icon: CalendarClock,
     priority: 'builtin',
     group: 'layer',
