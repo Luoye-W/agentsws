@@ -38,6 +38,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { useRailState } from '@/components/rail/rail-state'
+import { ReportGenuiNode } from '@/components/reports/report-genui-node'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { runGenuiSetup, runGenuiTool } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -50,6 +51,8 @@ import './genui-view.css'
 
 registerHostGenuiComponent('ws-secret', SecretNode)
 registerHostGenuiComponent('ws-media', MediaGateNode)
+// WP438：对话里的小报表（只带 id，数按 id 从服务端取）
+registerHostGenuiComponent('ws-report', ReportGenuiNode)
 // WP401：每张表外面包一层筛选（`table-filter-node.tsx`）
 registerHostGenuiComponent(TABLE_HOST_TYPE, TableFilterNode)
 

@@ -74,6 +74,8 @@ export const GENUI_ALLOWED_TYPES = [
   // 宿主自己画的两种（过滤时由别的组件换过来，模型直接写的不认）
   'ws-secret',
   'ws-media',
+  // WP438：对话里的小报表（只带报表 id；数由宿主按 id 从服务端取，不经模型手）
+  'ws-report',
 ] as const
 
 export type GenuiAllowedType = (typeof GENUI_ALLOWED_TYPES)[number]
@@ -90,7 +92,7 @@ export const GENUI_ECHART_PRESETS = [
 ] as const
 
 /** 宿主自己画的组件（不是插件的）：口令格、「点开看」的外部图片 / 媒体。模型写了也不认。 */
-export const GENUI_HOST_TYPES = ['ws-secret', 'ws-media'] as const
+export const GENUI_HOST_TYPES = ['ws-secret', 'ws-media', 'ws-report'] as const
 
 /** 一个节点：`type` 在白名单里，其余字段是按类型过滤后的那几格。 */
 export interface GenuiNodeLite {
@@ -792,6 +794,13 @@ function formFieldsOf(
           ? x.service
           : undefined
       return pick({ id: fieldId(x.id), label, service })
+    }
+    case 'ws-report': {
+      // WP438：只认报表 id（草稿 `draft_…` / 固定的 `rpt_…` / 默认报表 `web-ops.business`）；别的字段一律不要
+      const id = typeof x.id === 'string' ? x.id : ''
+      if (!/^(?:(?:draft|rpt)_[0-9a-f]{12}|[a-z][a-z-]{1,30}\.[a-z][a-z-]{1,30})$/u.test(id))
+        return undefined
+      return { id }
     }
     case 'ws-media': {
       const media = oneOf(x.media, ['image', 'audio', 'video'] as const)

@@ -36,6 +36,7 @@ import type {
   ModelsPort,
   PositionEntryPort,
   PrPort,
+  ReportStorePort,
   SecretaryPort,
   SitePort,
   SocialPort,
@@ -331,8 +332,11 @@ export function brandCloudPort(brands: BrandModules): CloudPort {
 export function brandWorkstationPort(
   brands: BrandModules,
   make: (workspace_id: WorkspaceId) => Promise<WorkstationPort>,
+  /** WP438：报表存放处（方法第一个参数就是工作区，自己按品牌分，不走代理）。 */
+  reports?: ReportStorePort,
 ): WorkstationPort {
   return scopedPort<WorkstationPort>(make, () => brands.bootstrap, {
+    ...(reports === undefined ? {} : { reports }),
     label: (ref: ObjectRef): string | undefined =>
       brands.peek(brands.bootstrap)?.workData.label(ref),
     /*

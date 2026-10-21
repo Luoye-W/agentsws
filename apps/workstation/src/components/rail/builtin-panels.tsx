@@ -36,6 +36,7 @@ import {
   MessagesSquare,
   Package,
   Plug,
+  Plus,
   ScrollText,
   SlidersHorizontal,
   Tags,
@@ -62,6 +63,8 @@ import {
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
+import { openRightPane } from '@/components/reports/right-pane'
+import { reportScopeOf } from '@/components/reports/use-report-list'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
@@ -125,9 +128,14 @@ const ReportsBody = lazy(async () => {
   const m = await import('@/components/reports/reports-panel')
   return { default: m.ReportsPanel }
 })
+/** int/1024：看一份报表（WP438 整份报表，或「产出」里 AI 写的报告文档）与「做一份报表」——WP437 第三栏里的两格。 */
 const ReportBody = lazy(async () => {
-  const m = await import('@/components/reports/reports-panel')
-  return { default: m.ReportPanel }
+  const m = await import('@/components/reports/report-pane-bodies')
+  return { default: m.ReportPaneBody }
+})
+const ReportComposeBody = lazy(async () => {
+  const m = await import('@/components/reports/report-pane-bodies')
+  return { default: m.ReportComposeBody }
 })
 
 /* ── 卡身体（`lazy()`：卡收着时不下载） ──────────────────────────────── */
@@ -228,6 +236,19 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('reports'),
     panel: 'reports',
     useStatus: useReportsStatus,
+    // WP438：卡头「+」= 跟 AI 说想看什么，做一份新的（第三栏开「做一份报表」）
+    action: {
+      icon: Plus,
+      label: 'reports.compose.short',
+      onClick: ({ scope }) => {
+        const where = reportScopeOf(scope)
+        openRightPane({
+          kind: 'report-compose',
+          ...(where === undefined ? {} : { position: where.position }),
+          ...(where?.duty === undefined ? {} : { duty: where.duty }),
+        })
+      },
+    },
   })
   registerRailCardBody('reports', ReportsCardBody)
   registerRailCard({
@@ -298,22 +319,21 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     card: 'reports',
   })
   registerPanelBody('reports', ReportsBody)
-  // 看一份报表（只按地址开：报表卡上点一行）
+  /*
+   * 看一份报表（只按地址开：报表卡上点一行、首页关键数字、对话里的小报表、「产出」里的报告文档）。
+   * int/1024：不标 scoped——WP438 的报表按 id 取、不靠岗位，首页（定位不到岗位）点关键数字也要开得出来。
+   */
   registerPanelType({
     id: 'report',
     label: 'rail.panel.report',
     icon: ScrollText,
     priority: 'builtin',
     group: 'layer',
-    scoped: true,
     matches: [`${REPORT_ADDRESS_PREFIX}**`],
     hidden: true,
   })
   registerPanelBody('report', ReportBody)
-  /*
-   * WP437：「跟 AI 说想看什么 → 做一份报表」那一格（`openRightPane({ kind: 'report-compose' })`）。
-   * 这里只登记类型（第三栏宿主认得它、算宽度按报表那一档）；身体由 WP438 集成时挂上（`registerPanelBody('report-compose', …)`）。
-   */
+  // WP437 / WP438：「跟 AI 说想看什么 → 做一份报表」那一格（`openRightPane({ kind: 'report-compose' })`）
   registerPanelType({
     id: 'report-compose',
     label: 'rail.panel.report_compose',
@@ -322,6 +342,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     group: 'layer',
     hidden: true,
   })
+  registerPanelBody('report-compose', ReportComposeBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',

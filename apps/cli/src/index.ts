@@ -218,6 +218,8 @@ export function buildProgram(
     .option('--card-gallery', '再种十一张卡（十一种排版各一张）')
     // WP415：用演示数据看生产里的样子（没接通的卡标「还没接通」、批不了）
     .option('--execution <mode>', '执行兜底：demo（默认，标「演示」）/ live（照生产：还没接通）')
+    // WP438：报表截图用的 120 天演示订单历史
+    .option('--report-history', '补 120 天演示订单（报表的 30 / 90 天图才看得出样子）')
     .action(async (opts: Record<string, unknown>) => {
       const root = opts.root === undefined ? baseDir() : fromCwd(String(opts.root))
       const demo = await createDemo({
@@ -226,6 +228,7 @@ export function buildProgram(
         quiet: true,
         ...(opts.twoBrands === true ? { twoBrands: true } : {}),
         ...(opts.cardGallery === true ? { cardGallery: true } : {}),
+        ...(opts.reportHistory === true ? { reportHistory: true } : {}),
         ...(opts.execution === 'live' || opts.execution === 'demo'
           ? { execution: opts.execution }
           : {}),

@@ -26,6 +26,7 @@ import type {
   FreeChatPort,
   PositionEntryPort,
   PrPort,
+  ReportStorePort,
   SiteThemeView,
   WorkPort,
   WorkstationPort,
@@ -767,6 +768,7 @@ import {
   type RedditWriteService,
 } from './reddit-write/service.js'
 import { applyExternalPost, settleRedditWrite, socialRedditFill } from './reddit-write/wire.js'
+import { createReportStore, type ReportStore } from './report-store.js'
 import {
   combineWatchSources,
   createReportToolExecutor,
@@ -13070,6 +13072,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const workPorts = new Map<WorkspaceId, WorkPort>()
   const workstationPorts = new Map<WorkspaceId, WorkstationPort>()
+  // WP438：固定的 AI 报表与快照——一个品牌一个 reports.sqlite（内存档在内存里）；同步取得到（草稿要同步存）
+  const reportStores = new Map<WorkspaceId, ReportStore>()
+  const reportStoreFor = (ws: WorkspaceId): ReportStore => {
+    const cached = reportStores.get(ws)
+    if (cached !== undefined) return cached
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    const store = createReportStore(dir === undefined ? undefined : join(dir, 'reports.sqlite'))
+    reportStores.set(ws, store)
+    return store
+  }
+  const routedReports: ReportStorePort = {
+    list: (ws, person) => reportStoreFor(ws as WorkspaceId).list(ws, person),
+    get: (ws, id) => reportStoreFor(ws as WorkspaceId).get(ws, id),
+    save: (r) => reportStoreFor(r.workspace_id as WorkspaceId).save(r),
+    remove: (ws, id) => reportStoreFor(ws as WorkspaceId).remove(ws, id),
+    putDraft: (ws, spec) => {
+      reportStoreFor(ws as WorkspaceId).putDraft(ws, spec)
+    },
+    draft: (ws, id) => reportStoreFor(ws as WorkspaceId).draft(ws, id),
+    snapshots: (ws, id) => reportStoreFor(ws as WorkspaceId).snapshots(ws, id),
+    snapshot: (ws, id, at) => reportStoreFor(ws as WorkspaceId).snapshot(ws, id, at),
+    addSnapshot: (ws, data) => reportStoreFor(ws as WorkspaceId).addSnapshot(ws, data),
+  }
   const askPorts = new Map<WorkspaceId, AskPort>()
 
   const workPortFor = async (ws: WorkspaceId): Promise<WorkPort> => {
@@ -13323,7 +13349,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const cached = workstationPorts.get(ws)
     if (cached !== undefined) return cached
     const brand = await brandModules.forWorkspace(ws)
-    const port = createWorkstationPort({ clock, roles, approvals, data: brand.workData })
+    const port = createWorkstationPort({
+      clock,
+      roles,
+      approvals,
+      data: brand.workData,
+      reports: reportStoreFor(ws),
+    })
     workstationPorts.set(ws, port)
     return port
   }
@@ -14692,7 +14724,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
 
   const workPortOf = brandWorkPort(brandModules, workPortFor)
-  const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
+  const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor, routedReports)
   const askPortOf = brandAskPort(brandModules, askPortFor)
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
@@ -16264,6 +16296,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       for (const one of secretaries.values()) one.close()
       // WP188：随便聊的会话库（每个品牌一个）
       for (const store of freeChatStores) store.close()
+      for (const store of reportStores.values()) store.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）
       await brandModules.dispose()
       await devMcp?.close()

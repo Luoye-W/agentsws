@@ -75,6 +75,7 @@ import { DEMO_AMAZON_LISTINGS, demoAmazonAutocompleteReader } from './demo-amazo
 import { demoListingReader } from './demo-amazon-listing.js'
 import { DEMO_COMPETITORS, DEMO_OWN_PRODUCTS, demoShopAdapter } from './demo-competitors.js'
 import { demoGoogleReads } from './demo-google.js'
+import { demoOrderHistory } from './demo-report-history.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
 /** WP346：demo 里品牌分析 AI 归纳那一步的写死回复（演示品牌：给露营的人做便携电源与营地灯）。 */
@@ -198,6 +199,11 @@ export interface DemoOptions {
    */
   execution?: 'live' | 'demo'
   /**
+   * WP438：补 120 天演示订单历史（带来源与商品明细），报表的 30 / 90 天图才看得出样子。
+   * **默认不造**：demo 的本分是演一件真事，摆拍历史会冲掉首页那几个数。
+   */
+  reportHistory?: boolean
+  /**
    * WP100：把"今天"定在哪一刻（毫秒）。**只给测试用**；不给就是启动的这一刻。
    *
    * 有了它，"demo 的钟锚在启动那天"这件事才测得出来——否则用例只能拿 `Date.now()`
@@ -300,7 +306,21 @@ function postsOf(world: World, now: Iso8601): PostRow[] {
   }))
 }
 
-function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
+function dataSourceOf(
+  world: World,
+  pack: Pack,
+  options: { reportHistory?: boolean } = {},
+): WorkstationDataSource {
+  // WP438：`--report-history` 时补 120 天演示订单（只为报表截图；按世界启动那一刻算一次）
+  const history =
+    options.reportHistory === true
+      ? demoOrderHistory({
+          now: world.clock.now(),
+          tz_offset_minutes: 480,
+          currency: pack.workspace.base_currency,
+          products: world.connect.state.products,
+        })
+      : []
   const sources: DataSourceStatus[] = [
     // 店铺后台 = mock OpenConnector，接上了；其余三个 demo 里都没连
     { id: 'shop', label: '店铺后台', connected: true },
@@ -324,7 +344,7 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
   ]
   const alerts: DeckCard[] = []
   return {
-    orders: () => ordersOf(world),
+    orders: () => [...history, ...ordersOf(world)],
     inventory: () => inventoryOf(world),
     // 评价应用没接：一条评价都没有，差评那一块出的是"还没连"不是空表
     reviews: () => [],
@@ -1432,7 +1452,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     })),
     roles: world.roles,
     approvals: world.txn.approvals,
-    data: dataSourceOf(world, pack),
+    data: dataSourceOf(world, pack, {
+      ...(options.reportHistory === true ? { reportHistory: true } : {}),
+    }),
     // 21 §1：世界的事件日志与服务进程的合一，首页四格战报才有真数
     eventLog: world.kernel.eventLog,
   }

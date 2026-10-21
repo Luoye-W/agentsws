@@ -210,12 +210,30 @@ function SortableCard({
         />
         <StatusDot status={status} testId={`rail-card-dot-${card.id}`} />
         <span
-          className="ml-auto min-w-0 truncate pl-2 text-[12px] text-ws-muted-fg transition-opacity group-focus-within/card:opacity-0 group-hover/card:opacity-0"
+          className={cn(
+            'ml-auto min-w-0 truncate pl-2 text-[12px] text-ws-muted-fg transition-opacity group-focus-within/card:opacity-0 group-hover/card:opacity-0',
+            card.action !== undefined && 'pr-7',
+          )}
           data-testid={`rail-card-summary-${card.id}`}
         >
           {status?.summary ?? ''}
         </span>
       </button>
+      {/* WP438：卡头右边的动作钮（报表卡的「+」）；鼠标移上来时让给拖动手柄左边一格 */}
+      {card.action === undefined ? null : (
+        <button
+          type="button"
+          aria-label={t(card.action.label)}
+          title={t(card.action.label)}
+          data-testid={`rail-card-action-${card.id}`}
+          className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-md text-ws-muted-fg transition-[right] group-hover/card:right-9 hover:bg-sidebar-accent hover:text-ws-ink focus-visible:outline-2 focus-visible:outline-ring"
+          onClick={() => {
+            card.action?.onClick(body)
+          }}
+        >
+          <card.action.icon aria-hidden className="size-3.5" />
+        </button>
+      )}
       {/* 决策 1005 / 1035：六点手柄只在鼠标移到卡上（或键盘落到它）时出现在最右；Tab 照样落得到 */}
       <button
         type="button"

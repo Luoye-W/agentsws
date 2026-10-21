@@ -49,6 +49,16 @@
   /* 柱状图的第二根柱（"上周同时"）与进度条底槽 */
   --ws-brand-soft: #cfebdd;
   --ws-surface: #f7f9f6;
+  /* WP438：报表图表配色（WP434 设计稿，dataviz 校验器浅色全过）——一条线用 single，多条用 s1–s4 */
+  --ws-faint: #9aa29d;
+  --ws-secondary: #edf0eb;
+  --ws-chart-1: #008a6c;
+  --ws-chart-2: #2a78d6;
+  --ws-chart-3: #eb6834;
+  --ws-chart-4: #6250d6;
+  --ws-chart-single: #007b67;
+  --ws-chart-grid: #eef1ed;
+  --ws-chart-axis: #8d958f;
   /* 卡：圆角 16、无边框、两层浅阴影 */
   --ws-radius-card: 16px;
   --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
@@ -156,6 +166,16 @@
   --ws-info-bg: #1a2436;
   --ws-brand-soft: #2c5c3b;
   --ws-surface: #1c201d;
+  /* WP438：报表图表配色（深色：多条线时第一色从霓虹绿压到 #34A96A，dataviz 校验器深色全过） */
+  --ws-faint: #6c756f;
+  --ws-secondary: #1f2320;
+  --ws-chart-1: #34a96a;
+  --ws-chart-2: #3987e5;
+  --ws-chart-3: #d95926;
+  --ws-chart-4: #9085e9;
+  --ws-chart-single: #76fb91;
+  --ws-chart-grid: #222624;
+  --ws-chart-axis: #7c857f;
   --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
   --ws-shadow-hover: 0 16px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.36);
   --ws-glow: 0 0 0 1px rgba(118, 251, 145, 0.32), 0 0 12px 2px rgba(118, 251, 145, 0.14);
@@ -275,6 +295,11 @@
   --color-ws-brand-soft: var(--ws-brand-soft);
   --color-ws-tint: var(--ws-tint);
   --color-ws-surface: var(--ws-surface);
+  --color-ws-faint: var(--ws-faint);
+  --color-ws-secondary: var(--ws-secondary);
+  --color-ws-chart-1: var(--ws-chart-1);
+  --color-ws-chart-2: var(--ws-chart-2);
+  --color-ws-chart-single: var(--ws-chart-single);
   --color-ws-good: var(--ws-good);
   --color-ws-good-bg: var(--ws-good-bg);
   --color-ws-warn: var(--ws-warn);
