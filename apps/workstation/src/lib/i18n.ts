@@ -33,6 +33,7 @@ import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
+import { MESSAGE_RULES_EN, MESSAGE_RULES_ZH } from './i18n-message-rules'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { MODELS_EN, MODELS_ZH } from './i18n-models'
 import { NOTIFY_EN, NOTIFY_ZH } from './i18n-notifications'
@@ -8960,6 +8961,8 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_ZH,
     // WP276：② 同事互联（交给对方、团队页同事、和同事一起用）
     ...PEERS_ZH,
+    // WP439：消息页右栏「规则」
+    ...MESSAGE_RULES_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9032,6 +9035,7 @@ const TABLES: Record<Lang, Table> = {
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,
+    ...MESSAGE_RULES_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

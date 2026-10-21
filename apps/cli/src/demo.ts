@@ -30,6 +30,7 @@ import type {
   RangeRef,
   RunEvent,
   SearchDataPort,
+  SenderRule,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
@@ -2319,6 +2320,54 @@ async function seedMessages(server: Server, world: World): Promise<void> {
   ]
 
   for (const row of rows) await store.put(row)
+
+  /*
+   * WP439：你教过的三个发件人（右栏「规则」那一页有东西可看）——命中账按天摊在最近几天。
+   * 只在第一次种：人删过 / 改过的不再种回来。
+   */
+  if ((await store.senderRules()).length === 0) {
+    const day = (daysAgo: number): string =>
+      new Date(nowMs - daysAgo * 86_400_000).toISOString().slice(0, 10)
+    const taught: SenderRule[] = [
+      {
+        id: 'rule_demo_shipfast',
+        sender: '@shipfast.example',
+        labels: ['orders'],
+        kind: 'logistics',
+        route: 'inbox',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 12),
+        source: 'user',
+        hit_days: { [day(0)]: 3, [day(1)]: 4, [day(3)]: 2, [day(6)]: 3 },
+        last_hit_at: at(90),
+      },
+      {
+        id: 'rule_demo_packaging_weekly',
+        sender: 'news@packaging-weekly.example',
+        labels: ['newsletters'],
+        kind: 'marketing',
+        route: 'inbox',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 20),
+        source: 'user',
+        hit_days: { [day(2)]: 1, [day(9)]: 1, [day(16)]: 1, [day(23)]: 1 },
+        last_hit_at: at(60 * 24 * 2),
+      },
+      {
+        id: 'rule_demo_mia',
+        sender: 'mia@creator.example',
+        labels: ['partnership'],
+        kind: 'creator_reply',
+        position: 'kol-marketing',
+        by: world.roleHolder,
+        created_at: at(60 * 24 * 5),
+        source: 'user',
+        hit_days: { [day(1)]: 1, [day(4)]: 2 },
+        last_hit_at: at(60 * 24),
+      },
+    ]
+    for (const rule of taught) await store.putSenderRule(rule)
+  }
 
   // WP172：挪进 BtoBAgents 的那封在 B2B 库里落成了一条询盘（真路径见 `b2b-mail.ts`）
   const inquiry = rows.find((r) => r.id === 'm110')

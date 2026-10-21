@@ -33,7 +33,13 @@ export interface SuggestRequest {
   /** 知识库命中的那几条：`text` 进提示词，`source_id` / `title` 原样带回出处。 */
   knowledge: { source_id: string; title: string; text: string }[]
   kinds: readonly ReplySuggestionKind[]
-  lang: 'zh' | 'en'
+  /**
+   * 回信用什么语言写（ISO 639-1 小写：`zh` / `en` / `es`……）。WP439（决策 336）：**按来信语言**——
+   * 宿主按来信正文判，判不出退回品牌默认语言，再不行中文。
+   */
+  lang: string
+  /** WP439：三条建议的**标题**用什么语言（界面语言，和回信语言无关）。缺省中文。 */
+  ui_lang?: 'zh' | 'en'
 }
 
 export interface SuggestModel {
@@ -93,7 +99,7 @@ export class ReplySuggester {
       .map((r, i) => ({
         id: `sug_${message_id}_${i}`,
         kind: r.kind,
-        title: TITLES[r.kind]?.[req.lang] ?? r.kind,
+        title: TITLES[r.kind]?.[req.ui_lang ?? 'zh'] ?? r.kind,
         text: r.text.trim(),
         citations,
       }))
@@ -105,4 +111,52 @@ export class ReplySuggester {
   invalidate(message_id: string): void {
     this.cache.delete(message_id)
   }
+}
+
+/* ── WP439：stub 剧本（没接真模型时三条建议怎么写） ───────────────────── */
+
+/** 宿主的建议提示词里带这一句，stub 剧本据此认出「回复建议」那一次调用。 */
+export const SUGGEST_PROMPT_MARKER = '你在帮一个人回一封邮件。'
+
+const STUB_SUGGESTIONS: Readonly<Record<string, Record<ReplySuggestionKind, string>>> = {
+  zh: {
+    short: '收到，我们看一下，今天内回复你。',
+    detailed:
+      '感谢来信。我们已经在核对你提到的情况，确认后会把结果和下一步一起发给你，今天内会有回复。',
+    decline: '感谢联系。这件事我们这边暂时没法安排，抱歉帮不上忙。',
+  },
+  en: {
+    short: 'Thanks for reaching out. We are looking into it and will get back to you today.',
+    detailed:
+      'Thank you for your message. We are checking the details you mentioned and will send you the result and next steps today.',
+    decline:
+      "Thanks for getting in touch. Unfortunately we can't take this on right now — sorry we can't help.",
+  },
+}
+
+/**
+ * 认得出「回复建议」那一次（系统提示词里有 {@link SUGGEST_PROMPT_MARKER}）才回话，别的一律 `undefined`。
+ * 按请求里的 `lang` 写（只备了中文与英文；别的语言按英文）。
+ */
+export function replySuggestStubScript(
+  messages: readonly { role: string; content: unknown }[],
+): string | undefined {
+  const system = messages.find((m) => m.role === 'system')?.content
+  if (typeof system !== 'string' || !system.includes(SUGGEST_PROMPT_MARKER)) return undefined
+  const user = messages.find((m) => m.role === 'user')?.content
+  let req: { lang?: unknown; kinds?: unknown } = {}
+  try {
+    req = JSON.parse(typeof user === 'string' ? user : '{}') as typeof req
+  } catch {
+    req = {}
+  }
+  const lang = typeof req.lang === 'string' ? req.lang : 'zh'
+  const book =
+    STUB_SUGGESTIONS[lang] ?? (lang.startsWith('zh') ? STUB_SUGGESTIONS.zh : STUB_SUGGESTIONS.en)
+  const kinds = Array.isArray(req.kinds) ? req.kinds : SUGGESTION_KINDS
+  return JSON.stringify(
+    kinds
+      .filter((k): k is ReplySuggestionKind => SUGGESTION_KINDS.includes(k as ReplySuggestionKind))
+      .map((kind) => ({ kind, text: book?.[kind] ?? '' })),
+  )
 }

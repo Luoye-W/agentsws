@@ -88542,7 +88542,7 @@
     "/v1/messages/rules": {
       "get": {
         "operationId": "listMessageSenderRules",
-        "summary": "你教过的发件人规则（\"以后这个发件人都这样\"）",
+        "summary": "你教过的发件人规则（\"以后这个发件人都这样\"）：命中数、谁教的、刚删的几条",
         "tags": ["messages"],
         "parameters": [
           {
@@ -88557,7 +88557,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ rules: SenderRule[] }",
+            "description": "SenderRuleList",
             "content": {
               "application/json": {
                 "schema": {
@@ -88638,13 +88638,13 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ rules: SenderRule[] }"
+        "x-returns": "SenderRuleList"
       }
     },
     "/v1/messages/rules/{id}": {
       "delete": {
         "operationId": "deleteMessageSenderRule",
-        "summary": "撤掉一条发件人规则",
+        "summary": "撤掉一条发件人规则（当场生效：下一封那个发件人重新判）",
         "tags": ["messages"],
         "parameters": [
           {
@@ -88668,7 +88668,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ deleted: boolean }",
+            "description": "{ deleted: boolean; rule?: SenderRule }",
             "content": {
               "application/json": {
                 "schema": {
@@ -88759,7 +88759,147 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ deleted: boolean }"
+        "x-returns": "{ deleted: boolean; rule?: SenderRule }"
+      }
+    },
+    "/v1/messages/rules/{id}/restore": {
+      "post": {
+        "operationId": "restoreMessageSenderRule",
+        "summary": "撤回刚删的一条发件人规则（WP439，决策 243：删了能撤回）",
+        "tags": ["messages"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ restored: boolean; rule?: SenderRule }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "stage",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ restored: boolean; rule?: SenderRule }"
       }
     },
     "/v1/messages/drafts": {

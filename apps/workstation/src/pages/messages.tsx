@@ -75,6 +75,7 @@ import {
 } from '@/components/messages/marketing'
 import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
+import { MessageRulesButton } from '@/components/messages/rules-button'
 import { SiteChatSourceItem, SiteChatView, useHoldsSiteChat } from '@/components/messages/site-chat'
 import { UnclaimedView } from '@/components/messages/unclaimed-view'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
@@ -626,6 +627,8 @@ export function MessagesPage(): ReactNode {
   const header = (
     <header className="flex flex-wrap items-center gap-3">
       <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
+      {/* WP439：顶栏右边「规则」（右栏规则清单） */}
+      <MessageRulesButton />
       <ViewToggle
         view={view}
         unclaimed={overview.data?.unclaimed}
