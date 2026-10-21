@@ -249,6 +249,62 @@ const MCP_FIELDS: readonly ConnectionFieldSpec[] = [
  *
  * 顺序 = 连接页"添加连接"里的出场顺序（先分类、类内按重要性）。
  */
+/** WP447：六个只读新平台的目录项（`ADS_PLATFORMS` 里 `api_access: 'export_only'` 那六条的连接器）。 */
+const EXPORT_ONLY_ADS_DIRECTORY: readonly ConnectionDirectoryEntry[] = (
+  [
+    [
+      'microsoft_ads',
+      'Microsoft 广告（Bing）',
+      'Microsoft Ads (Bing)',
+      'https://help.ads.microsoft.com/#apex/ads/en/50833/2',
+    ],
+    [
+      'pinterest_ads',
+      'Pinterest 广告',
+      'Pinterest Ads',
+      'https://help.pinterest.com/en/ad-reporting',
+    ],
+    [
+      'reddit_ads',
+      'Reddit 广告',
+      'Reddit Ads',
+      'https://business.reddithelp.com/s/article/the-report-manager',
+    ],
+    [
+      'linkedin_ads',
+      'LinkedIn 广告',
+      'LinkedIn Ads',
+      'https://www.linkedin.com/help/lms/answer/a441785',
+    ],
+    [
+      'snapchat_ads',
+      'Snapchat 广告',
+      'Snapchat Ads',
+      'https://businesshelp.snapchat.com/s/article/export-reports?language=en_US',
+    ],
+    [
+      'apple_ads',
+      'Apple 搜索广告',
+      'Apple Ads',
+      'https://ads.apple.com/app-store/help/reporting/0026-create-custom-reports',
+    ],
+  ] as const
+).map(([kind, zh, en, docs_url]) => ({
+  kind,
+  name: { zh, en },
+  category: 'ads' as const,
+  auth: 'none' as const,
+  mode: 'openconnector_provider' as const,
+  fields: [],
+  side_effect: 'read_external' as const,
+  docs_url,
+  status: 'planned' as const,
+  note: {
+    zh: '这一期不用连：在它后台点「导出」，把报表拖进对话就能看数和体检。改广告还不做。',
+    en: 'Nothing to connect this phase: export a report from the ad manager and drop it into the chat to see numbers and run a check-up. Editing ads is not available yet.',
+  },
+}))
+
 export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
   // ── 店铺后台 ────────────────────────────────────────────────────────
   {
@@ -447,7 +503,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
    *
    * Meta / Google **可连**（`@agentsws/ads-core` 里有真调用），X / TikTok
    * 照 WP64 骨架卡的老规矩标着"还没接"、点不动——每一条的 `note` 写的是
-   * **接口现实**（申请制 / developer token / Business Center 授权），
+   * **接口现实**（申请制 / Cloud 项目访问级别 / Business Center 授权），
    * 说在前面，比让人填完之后撞一堵墙强。
    */
   {
@@ -507,17 +563,6 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
         kind: 'password',
       },
       {
-        name: 'developer_token',
-        label: { zh: 'Developer token', en: 'Developer token' },
-        secret: true,
-        required: true,
-        kind: 'password',
-        hint: {
-          zh: '在 Google Ads 后台的 API Center 单独申请并过审（基础访问权限够用）。**与 OAuth 授权是两件事**——缺它的时候上游回 401，但"重新连一次"解决不了。',
-          en: 'Applied for separately in the Ads API Center. Missing it returns 401, and re-authorising will not fix that.',
-        },
-      },
-      {
         name: 'customer_id',
         label: { zh: '客户 id', en: 'Customer id' },
         secret: false,
@@ -545,8 +590,9 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: 'https://developers.google.com/google-ads/api/docs/start',
     status: 'available',
     note: {
-      zh: '三样东西缺一不可：OAuth 令牌、**developer token**（要单独申请过审）、客户 id。Merchant Center 的商品 feed 也归这条职责，但那一侧还没接。',
-      en: 'Three things are required: the OAuth token, a reviewed developer token, and the customer id. Merchant Center feeds belong to this role but are not wired yet.',
+      // WP447：developer token 已取消（官方页 2026-10-19 版）；能动哪些账户看生成授权的那个 Cloud 项目的访问级别
+      zh: '要两样：OAuth 令牌和客户 id。能动哪些账户看**生成这把授权的 Google Cloud 项目**的访问级别（刚启用时只能动测试账户，要动真账户在 Cloud 控制台里再申请一级）。Merchant Center 的商品 feed 也归这条职责，但那一侧还没接。',
+      en: 'Two things: the OAuth token and the customer id. Which accounts you can touch depends on the access level of the Google Cloud project that issued the OAuth credentials (test accounts only at first; apply for a higher level in the Cloud console). Merchant Center feeds belong to this role but are not wired yet.',
     },
   },
   {
@@ -597,6 +643,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'Requires Business Center authorisation of a reviewed developer app, separately from the Content Posting API. Spark Ads needs one more grant from the organic account.',
     },
   },
+  // WP447（docs/109 §6.2）：六个新平台第一期只读、不连接口——卡照列（找得到这一家），照实说导出报表拖进对话就行
+  ...EXPORT_ONLY_ADS_DIRECTORY,
   // ── 社媒与红人（48 §5.1 五条渠道）────────────────────────────────────
   {
     kind: 'youtube_data',

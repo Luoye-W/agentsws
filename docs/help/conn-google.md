@@ -12,7 +12,7 @@ roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.content, pr.
 | Google Analytics 4 | 网站的分析数据 | 不属于受限权限，不用安全评估 |
 | Google Search Console | 网站在 Google 搜索里的表现 | 和 GA4 共用一个项目，多启用一个 API |
 | YouTube Data API | 按关键词搜频道、读订阅数与主题 | 一把 API 密钥就行；全站一天 10000 单位配额 |
-| Google Ads API | 广告表现、改预算与出价、暂停 | developer token 要等审核 |
+| Google Ads API | 广告表现、改预算与出价、暂停 | 能动真账户要在 Cloud 项目里申请访问级别 |
 | Google Alerts（信息监控） | 自家、竞品、行业在新闻、博客、论坛里的提及 | 免费、不用申请、不要 key |
 
 只想收发邮件？不用走 Gmail 这条，看 [连邮箱](help:conn-email)，填一个授权码就行。
@@ -103,19 +103,24 @@ Gmail 的读写属于 Google 的「受限权限」：经第三方服务器访问
 
 管搜索、购物、PMax、YouTube 广告：读表现、改预算与出价、暂停。
 
-**三样东西缺一不可**：OAuth 令牌、developer token、客户 id。读数据走 GAQL，改东西要带 updateMask——这些我们都处理好了，你只要把这三格填对。
+**要两样**：OAuth 令牌和客户 id。读数据走 GAQL，改东西要带 updateMask——这些我们都处理好了，你只要把这两格填对。
+
+以前还要去 Google Ads 后台的 API Center 申请一个 developer token，**现在不用了**：Google 已经取消了 developer token，能动哪些账户改看**生成这把授权的那个 Google Cloud 项目**的访问级别。刚启用 API 时只能动测试账户，要动你真实的广告账户，得在同一个项目里再申请一级。
 
 **怎么做**
 
-1. 在 Google Cloud 建一个项目，启用 Google Ads API，并做 OAuth 授权。
-2. 在 Google Ads 后台 → 工具 → API Center 申请 developer token（基础访问权限就够用），**然后等审核**。
-3. 抄下 Google Ads 后台右上角那串十位客户 id，去掉横杠。
-4. 把三格填进表单。它们只存在这台电脑上。
+1. 在 Google Cloud 控制台建一个项目，启用 Google Ads API。
+2. 在同一个项目的 Google Ads API 页申请更高一级的访问（要动真账户就要它）。
+3. 用这个项目做 OAuth 授权，拿到访问令牌。
+4. 抄下 Google Ads 后台右上角那串十位客户 id，去掉横杠。
+5. 把两格填进表单。它们只存在这台电脑上。
+
+连上之后如果报 403，多半是这个项目的访问级别还不够，回第 2 步看一眼。
 
 **链接**
 
 - [Google Ads API 快速开始](https://developers.google.com/google-ads/api/docs/start)
-- [API Center（申请 developer token）](https://ads.google.com)
+- [访问级别说明（Google 官方）](https://developers.google.com/google-ads/api/docs/api-policy/developer-token)
 
 **现在管到哪**
 

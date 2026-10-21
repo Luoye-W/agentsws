@@ -8,7 +8,7 @@ What each of the six Google connections does and how to set it up. The first one
 | Google Analytics 4 | Your site's analytics | Not restricted, no security assessment |
 | Google Search Console | How your site does in Google Search | Same project as GA4, one more API to enable |
 | YouTube Data API | Search channels by keyword, read subscribers and topics | Just an API key; 10,000 units a day for the whole site |
-| Google Ads API | Ad performance, budgets and bids, pausing | The developer token needs review |
+| Google Ads API | Ad performance, budgets and bids, pausing | Real accounts need an access level on your Cloud project |
 | Google Alerts (information monitoring) | Mentions of you, competitors and your industry in news, blogs and forums | Free, no application, no key |
 
 Only need to read and send email? Skip Gmail and see [Connect a mailbox](help:conn-email) — one app password does it.
@@ -99,19 +99,24 @@ The creator job still works: you find people by importing your own list and from
 
 Covers Search, Shopping, PMax and YouTube ads: read performance, change budgets and bids, pause.
 
-**You need all three**: an OAuth token, a developer token and a customer ID. Reads go through GAQL and writes need an updateMask — we handle all that; you just fill the three fields correctly.
+**You need two things**: an OAuth token and a customer ID. Reads go through GAQL and writes need an updateMask — we handle all that; you just fill the two fields correctly.
+
+You used to need a developer token from the API Center in Google Ads. **Not any more**: Google has retired developer tokens, and which accounts you can touch now depends on the access level of **the Google Cloud project that issued your OAuth credentials**. A freshly enabled project can only touch test accounts; to work on your real ad accounts, apply for a higher level in the same project.
 
 **How**
 
-1. Create a project in Google Cloud, enable the Google Ads API, and complete OAuth authorization.
-2. In Google Ads → Tools → API Center, apply for a developer token (Basic access is enough), **then wait for review**.
-3. Copy the ten-digit customer ID in the top-right corner of Google Ads, without the dashes.
-4. Enter all three in the form. They stay on this computer only.
+1. Create a project in the Google Cloud console and enable the Google Ads API.
+2. On the Google Ads API page of that project, apply for a higher access level (needed for real accounts).
+3. Complete OAuth with that project to get an access token.
+4. Copy the ten-digit customer ID in the top-right corner of Google Ads, without the dashes.
+5. Enter both in the form. They stay on this computer only.
+
+If you get a 403 after connecting, the project's access level is usually not high enough yet — check step 2.
 
 **Links**
 
 - [Google Ads API quick start](https://developers.google.com/google-ads/api/docs/start)
-- [API Center (apply for a developer token)](https://ads.google.com)
+- [Access levels (Google)](https://developers.google.com/google-ads/api/docs/api-policy/developer-token)
 
 **What it covers today**
 

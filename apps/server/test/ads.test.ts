@@ -129,7 +129,7 @@ describe('57 §3 面板投影：数字不编、总闸不夹', () => {
   })
 })
 
-describe('57 §1 四张连接卡', () => {
+describe('57 §1 投放的连接卡（WP447 起十张）', () => {
   it('契约那张平台表里每个平台的 `connector_kind` 在目录里都有一张卡', () => {
     for (const spec of ADS_PLATFORMS) {
       const entry = catalogEntry(spec.connector_kind)
@@ -147,14 +147,32 @@ describe('57 §1 四张连接卡', () => {
     expect(catalogEntry('tiktok_ads')?.fields).toEqual([])
   })
 
+  it('WP447：六个新平台的卡点不动、没有表单，那句话说的是「导出报表拖进对话」', () => {
+    for (const s of [
+      'microsoft_ads',
+      'pinterest_ads',
+      'reddit_ads',
+      'linkedin_ads',
+      'snapchat_ads',
+      'apple_ads',
+    ]) {
+      const e = catalogEntry(s)
+      expect(e?.fields, s).toEqual([])
+      expect(e?.planned, s).toContain('导出')
+      expect(e?.setup_guide?.summary, s).toContain('拖进对话')
+    }
+  })
+
   it('准备说明里**先说代价**（57 §1 末行）', () => {
     // Meta：与社媒那张卡是两张，要的权限不一样
     // WP141：卡面默认露出的这句不印权限名（权限名在「要准备什么」的步骤里）
     expect(catalogEntry('meta_marketing')?.setup_guide?.summary).toContain('管理广告')
     expect(catalogEntry('meta_marketing')?.setup_guide?.summary).not.toContain('ads_management')
     expect(catalogEntry('meta_marketing')?.setup_guide?.steps.join('')).toContain('ads_management')
-    // Google：developer token 要单独申请过审
-    expect(catalogEntry('google_ads')?.setup_guide?.summary).toContain('developer token')
+    // Google：WP447 起不再提 developer token（官方 2026-09-09 已取消），说的是 Cloud 项目的访问级别
+    const google = catalogEntry('google_ads')
+    expect(google?.setup_guide?.summary).toContain('Google Cloud 项目')
+    expect(JSON.stringify(google)).not.toMatch(/developer token|developer_token|API Center/i)
     expect(catalogEntry('x_ads')?.setup_guide?.summary).toContain('申请制')
     expect(catalogEntry('tiktok_ads')?.setup_guide?.summary).toContain('Business Center')
   })

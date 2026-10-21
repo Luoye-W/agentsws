@@ -902,12 +902,22 @@ export const PR_CONNECTORS: readonly CatalogEntry[] = [
  *
  * 与社媒那八张同一条路：凭据原生表单直填，只存在这台电脑的加密库里（31 §3 / 07 P1）。
  * 每一张的准备说明里**先说代价**：Meta 要 `ads_management`（与主页管理是两件事）、
- * Google 要单独申请一个 developer token、X 是申请制、TikTok 要 Business Center 授权。
+ * Google 看生成授权的那个 Cloud 项目的访问级别（WP447：developer token 已取消）、X 是申请制、
+ * TikTok 要 Business Center 授权。WP447 的六个新平台这一期不用连：导出报表拖进对话。
  *
  * **Meta / Google 可连**（`@agentsws/ads-core` 里有真调用）；X / TikTok 照 WP64
  * 骨架卡的老规矩标着"还没接"、点不动——给一张能填的表单、填完撞一堵墙，
  * 比明说"还没接"糟得多。
  */
+/** WP447：六个只读新平台的卡共用的两步与那句灰字（每家只差名字与官方报表帮助页）。 */
+const EXPORT_ONLY_STEPS = [
+  '在它后台导出报表（帮助里「怎么导出报表给我」有每家几步）',
+  '把文件拖进投放岗位的对话',
+]
+const EXPORT_ONLY_PLANNED = '这一期不用连接口：在后台点导出、把报表拖进对话就能看数和体检（只读）。'
+const exportOnlySummary = (name: string): string =>
+  `这一期不用连：在 ${name} 后台点「导出」，把报表拖进对话，就能看数和体检。改广告还不做。`
+
 export const ADS_CONNECTORS: readonly CatalogEntry[] = [
   {
     service: 'meta_marketing',
@@ -964,14 +974,6 @@ export const ADS_CONNECTORS: readonly CatalogEntry[] = [
     fields: [
       { name: 'access_token', label: '访问令牌', secret: true, required: true, kind: 'password' },
       {
-        name: 'developer_token',
-        label: 'Developer token',
-        secret: true,
-        required: true,
-        kind: 'password',
-        hint: '在 Google Ads 后台的 API Center 单独申请并过审。与 OAuth 授权是两件事——缺它的时候上游回 401，但"重新连一次"解决不了',
-      },
-      {
         name: 'customer_id',
         label: '客户 id',
         secret: false,
@@ -990,20 +992,28 @@ export const ADS_CONNECTORS: readonly CatalogEntry[] = [
       },
     ],
     setup_guide: {
+      /*
+       * WP447：官方「Developer token and API access levels」页（2026-10-19 版）写明 developer token
+       * 已取消，访问级别改挂在生成 OAuth 凭据的那个 Google Cloud 项目上。这里原来要人去 API Center 申请
+       * developer token、等审核——那一步现在是错的路。
+       */
       summary:
-        '搜索 / 购物 / PMax / YouTube 广告：读表现、改预算与出价、暂停。**三样东西缺一不可**：OAuth 令牌、developer token、客户 id。读走 GAQL，写要带 updateMask——这些我们都处理好了，你只要把三格填对。',
+        '搜索 / 购物 / PMax / YouTube 广告：读表现、改预算与出价、暂停。要两样：OAuth 令牌和客户 id。能动哪些账户看**生成这把授权的 Google Cloud 项目**的访问级别——刚启用时只能动测试账户。',
       steps: [
-        '在 Google Cloud 建一个项目，启用 Google Ads API 并做 OAuth 授权',
-        '在 Google Ads 后台 → 工具 → API Center 申请 developer token（基础访问权限够用），**等审核**',
-        '抄下右上角那串十位客户 id（去掉横杠）',
-        '三格填进下面的表单——只存在这台电脑上',
+        '在 Google Cloud 控制台建一个项目，启用 Google Ads API',
+        '在同一个项目的 Google Ads API 页申请更高一级访问（要动真账户就要它）',
+        '用这个项目做 OAuth 授权，换一个访问令牌；再抄下 Google Ads 右上角那串十位客户 id（去掉横杠）',
+        '两格填进下面的表单——只存在这台电脑上',
       ],
       links: [
         {
           label: 'Google Ads API 快速开始',
           url: 'https://developers.google.com/google-ads/api/docs/start',
         },
-        { label: 'API Center（申请 developer token）', url: 'https://ads.google.com' },
+        {
+          label: '访问级别说明',
+          url: 'https://developers.google.com/google-ads/api/docs/api-policy/developer-token',
+        },
       ],
     },
     data_note:
@@ -1045,6 +1055,115 @@ export const ADS_CONNECTORS: readonly CatalogEntry[] = [
       '还没接：连接目录、职责、额度与面板骨架已经就位，真调用还没做。' +
       'Spark Ads（投自己发过的视频）还要有机账号那一侧再给一次授权码，' +
       '所以它接上那天要与 `social.tiktok` 一起做。',
+  },
+  // WP447（docs/109 §6.2）：六个新平台第一期只读、**不连接口**——卡照出（用户在连接页上找得到这一家），
+  // 照实说「这一期不用连：导出报表拖进对话」，点不动、没有表单（插件代点导出是 109F）。
+  {
+    service: 'microsoft_ads',
+    upstream: 'local',
+    label: 'Microsoft 广告（Bing）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('Microsoft 广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [
+        { label: '官方报表帮助', url: 'https://help.ads.microsoft.com/#apex/ads/en/50833/2' },
+      ],
+    },
+    planned: EXPORT_ONLY_PLANNED,
+  },
+  {
+    service: 'pinterest_ads',
+    upstream: 'local',
+    label: 'Pinterest 广告',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('Pinterest 广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [{ label: '官方报表帮助', url: 'https://help.pinterest.com/en/ad-reporting' }],
+    },
+    planned: EXPORT_ONLY_PLANNED,
+  },
+  {
+    service: 'reddit_ads',
+    upstream: 'local',
+    label: 'Reddit 广告',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('Reddit 广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [
+        {
+          label: '官方报表帮助',
+          url: 'https://business.reddithelp.com/s/article/the-report-manager',
+        },
+      ],
+    },
+    planned: EXPORT_ONLY_PLANNED,
+  },
+  {
+    service: 'linkedin_ads',
+    upstream: 'local',
+    label: 'LinkedIn 广告',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('LinkedIn 广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [{ label: '官方报表帮助', url: 'https://www.linkedin.com/help/lms/answer/a441785' }],
+    },
+    planned: EXPORT_ONLY_PLANNED,
+  },
+  {
+    service: 'snapchat_ads',
+    upstream: 'local',
+    label: 'Snapchat 广告',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('Snapchat 广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [
+        {
+          label: '官方报表帮助',
+          url: 'https://businesshelp.snapchat.com/s/article/export-reports?language=en_US',
+        },
+      ],
+    },
+    planned: EXPORT_ONLY_PLANNED,
+  },
+  {
+    service: 'apple_ads',
+    upstream: 'local',
+    label: 'Apple 搜索广告',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: [],
+    fields: [],
+    setup_guide: {
+      summary: exportOnlySummary('Apple 搜索广告'),
+      steps: EXPORT_ONLY_STEPS,
+      links: [
+        {
+          label: '官方报表帮助',
+          url: 'https://ads.apple.com/app-store/help/reporting/0026-create-custom-reports',
+        },
+      ],
+    },
+    planned: EXPORT_ONLY_PLANNED,
   },
 ]
 
