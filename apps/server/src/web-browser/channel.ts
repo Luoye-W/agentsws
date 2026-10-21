@@ -12,6 +12,8 @@ export interface PageSignals {
   text: string
   captcha: boolean
   passwordInputs: number
+  /** WP454：壳认出的 Google 过渡页迹象（HTML 里有 `enablejs`；老壳不给）。 */
+  interstitial?: boolean
 }
 
 export type OpenResult =
@@ -40,10 +42,14 @@ export interface SearchBrowserChannel {
   reveal(input: {
     workspace_id: string
     url: string
-    reason: 'captcha' | 'login'
+    /** WP454：`consent` = Google 的 cookie 同意页。 */
+    reason: 'captcha' | 'login' | 'consent'
     message: string
   }): Promise<boolean>
-  status(workspace_id: string): Promise<{ revealed: boolean; verified_at?: number } | undefined>
+  /** WP454：`google_cookies` = 这个品牌的内置浏览器里有没有 Google 的 cookie（老壳不给）。 */
+  status(
+    workspace_id: string,
+  ): Promise<{ revealed: boolean; verified_at?: number; google_cookies?: boolean } | undefined>
   /**
    * WP394（docs/104 §2.3）：把这个品牌内置浏览器里 Amazon 某站的「配送到」设成一个邮编（不登录，只是地址 cookie）。
    * 老的桌面壳没有这一口：回 `{ ok: false }`，调用方照实说。
@@ -139,7 +145,7 @@ export function searchBrowserChannelFromEnv(
           `/status?workspace_id=${encodeURIComponent(workspace_id)}`,
           { method: 'GET' },
           5_000,
-        )) as { revealed: boolean; verified_at?: number }
+        )) as { revealed: boolean; verified_at?: number; google_cookies?: boolean }
       } catch {
         return undefined
       }

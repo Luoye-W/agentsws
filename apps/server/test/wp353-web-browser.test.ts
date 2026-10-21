@@ -41,8 +41,14 @@ const SORRY: OpenResult = {
   },
 }
 
-/** 替身桌面壳：按脚本回每一次 open；记下开过的网址与亮给人的那一页。 */
-function fakeShell(script: (url: string, kind: string) => OpenResult) {
+/**
+ * 替身桌面壳：按脚本回每一次 open；记下开过的网址与亮给人的那一页。
+ * WP454：默认说「已经有 Google 的 cookie」（不热身），热身那几条测试另给 `google_cookies: false`。
+ */
+function fakeShell(
+  script: (url: string, kind: string) => OpenResult,
+  opts: { google_cookies?: boolean } = { google_cookies: true },
+) {
   const opened: string[] = []
   const revealed: string[] = []
   let verified_at: number | undefined
@@ -58,6 +64,7 @@ function fakeShell(script: (url: string, kind: string) => OpenResult) {
     status: async () => ({
       revealed: revealed.length > 0,
       ...(verified_at === undefined ? {} : { verified_at }),
+      ...(opts.google_cookies === undefined ? {} : { google_cookies: opts.google_cookies }),
     }),
   }
   return {
