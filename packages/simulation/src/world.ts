@@ -3199,7 +3199,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       dedupe_key: `${workspace_id}:knowledge_update:stale:${hit.fact_card_id}`,
       title: '这条知识可能过时了',
       summary:
-        '检索到的是一条历史案例（记的是当时的状态）。回答已经以操作层的当前状态为准；' +
+        '检索到的是一条历史案例（记的是当时的状态）。回答已经按店里现在的状态来；' +
         '这条要不要更新或退休，你定。',
       payload: {
         form: 'knowledge_update',

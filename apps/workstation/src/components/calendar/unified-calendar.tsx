@@ -37,11 +37,13 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getCalendar, rescheduleSocialPost, scheduleTodo } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { foldAllDay, MORE_ID_PREFIX, moreDayOf } from '@/lib/calendar-allday'
 import { dispatchDrag, dragVerdict } from '@/lib/calendar-drag'
 import {
   type CalendarView,
   filterByLayers,
   LAYER_COLOR,
+  LAYER_ICON,
   LAYERS,
   serializeLayers,
 } from '@/lib/calendar-layers'
@@ -65,6 +67,13 @@ const VIEW_NAME: Record<CalendarView, string> = {
 }
 
 const DAY_MS = 86_400_000
+
+/**
+ * WP457（WP456 §3.6）：小时格每格 52px，08:00–20:00 一共 12 格。
+ * 原来是库的缺省 1600px（每格 133px），一屏只看得见三四个钟点。
+ */
+const HOUR_PX = 52
+const DAY_HOURS = 12
 
 /** 这一屏要问服务端的窗口：把当前视图前后各放宽一点，翻一页不必立刻再请求。 */
 export function windowFor(view: CalendarView, anchor: Date): { from: Date; to: Date } {
@@ -162,6 +171,26 @@ function layerPalette(layer: CalendarSource): {
   return { colorName: layer, lightColors: colors, darkColors: colors }
 }
 
+/** 「还有 N 项」那一条：不是一个图层，没有底色，只是一行灰字（样式在 `unified-calendar.css`）。 */
+const MORE_PALETTE = {
+  colorName: 'more',
+  lightColors: { main: 'transparent', container: 'transparent', onContainer: 'var(--ws-muted-fg)' },
+  darkColors: { main: 'transparent', container: 'transparent', onContainer: 'var(--ws-muted-fg)' },
+}
+
+/** 那一天（`YYYY-MM-DD`）→ 「还有 N 项」那一条事件。拖不动、改不了长短。 */
+function moreEvent(day: string, title: string): CalendarEvent {
+  const d = Temporal.PlainDate.from(day)
+  return {
+    id: `${MORE_ID_PREFIX}${day}`,
+    title,
+    calendarId: 'more',
+    start: d,
+    end: d,
+    _options: { disableDND: true, disableResize: true },
+  }
+}
+
 export function UnifiedCalendar({
   layers,
   fetchLayers,
@@ -178,6 +207,8 @@ export function UnifiedCalendar({
   const tz = useMemo(() => browserTz(), [])
   const [note, setNote] = useState<string | undefined>(undefined)
   const [picked, setPicked] = useState<CalendarItem | undefined>(undefined)
+  /** 点开了哪一天的「还有 N 项」（`YYYY-MM-DD`） */
+  const [moreDay, setMoreDay] = useState<string | undefined>(undefined)
 
   const range = windowFor(view, anchor)
   const sources = fetchLayers === undefined ? undefined : serializeLayers(fetchLayers)
@@ -196,6 +227,17 @@ export function UnifiedCalendar({
         : all.filter((i) => i.source !== 'social_post' || i.channel === channel)
     return filterByLayers(byChannel, layers)
   }, [calendar.data, channel, layers])
+
+  /**
+   * WP457：日 / 周视图的全天区每天最多画 2 条，多的折成「还有 N 项」（月格库自己会折，议程是列表）。
+   */
+  const fold = useMemo(
+    () =>
+      view === 'day' || view === 'week'
+        ? foldAllDay(items, (iso) => toPlainDate(iso, tz).toString())
+        : { shown: items, hidden: new Map<string, CalendarItem[]>() },
+    [items, view, tz],
+  )
 
   /** 事件 id → 那一条（拖拽回调里只拿得到事件，判据在这一份上）。 */
   const byId = useRef(new Map<string, CalendarItem>())
@@ -247,8 +289,8 @@ export function UnifiedCalendar({
   })
 
   /** 回调里要读最新的 state / mutation，但日历只建一次，所以统统走 ref。 */
-  const handlers = useRef({ moveTodo, moveSocial, setNote, setPicked, t, onPickDate })
-  handlers.current = { moveTodo, moveSocial, setNote, setPicked, t, onPickDate }
+  const handlers = useRef({ moveTodo, moveSocial, setNote, setPicked, setMoreDay, t, onPickDate })
+  handlers.current = { moveTodo, moveSocial, setNote, setPicked, setMoreDay, t, onPickDate }
 
   const controls = useMemo(() => createCalendarControlsPlugin(), [])
 
@@ -268,12 +310,26 @@ export function UnifiedCalendar({
        * 边界那一格，不会丢。
        */
       dayBoundaries: { start: '08:00', end: '20:00' },
+      // WP457：每格 52px；钟点写「9:00」（原来是「9时」，又灰到看不清）
+      weekOptions: {
+        gridHeight: HOUR_PX * DAY_HOURS,
+        timeAxisFormatOptions: { hour: 'numeric', minute: '2-digit', hourCycle: 'h23' },
+      },
       isDark: theme === 'dark',
       events: [],
       // 七个图层各一个 shadcn token：深浅色由浏览器在上色那一刻算，不在这里监听主题
-      calendars: Object.fromEntries(LAYERS.map((l) => [l, layerPalette(l)])),
+      calendars: {
+        ...Object.fromEntries(LAYERS.map((l) => [l, layerPalette(l)])),
+        more: MORE_PALETTE,
+      },
       callbacks: {
         onEventClick: (event) => {
+          const day = moreDayOf(String(event.id))
+          if (day !== undefined) {
+            handlers.current.setPicked(undefined)
+            handlers.current.setMoreDay(day)
+            return
+          }
           const item = byId.current.get(String(event.id))
           if (item !== undefined) handlers.current.setPicked(item)
         },
@@ -322,8 +378,14 @@ export function UnifiedCalendar({
 
   // 事件变了：换一份进去（不重建日历，否则滚动位置与正在拖的那一下都没了）
   useEffect(() => {
-    app?.events.set(items.map((i) => toEvent(i, tz)))
-  }, [app, items, tz])
+    app?.events.set([
+      ...fold.shown.map((i) => toEvent(i, tz)),
+      ...[...fold.hidden].map(([day, rest]) =>
+        moreEvent(day, t('calendar.more', { n: rest.length })),
+      ),
+    ])
+  }, [app, fold, tz, t])
+  const hiddenOfDay = moreDay === undefined ? undefined : fold.hidden.get(moreDay)
 
   // 视图 / 定位日 / 主题变了：走 controls，同样不重建
   useEffect(() => {
@@ -373,6 +435,20 @@ export function UnifiedCalendar({
         </p>
       )}
 
+      {moreDay === undefined || hiddenOfDay === undefined ? null : (
+        <MoreCard
+          day={moreDay}
+          items={hiddenOfDay}
+          onPick={(item) => {
+            setMoreDay(undefined)
+            setPicked(item)
+          }}
+          onClose={() => {
+            setMoreDay(undefined)
+          }}
+        />
+      )}
+
       {picked === undefined ? null : (
         <EventCard
           item={picked}
@@ -382,6 +458,63 @@ export function UnifiedCalendar({
         />
       )}
     </div>
+  )
+}
+
+/**
+ * WP457：点「还有 N 项」出来的那张小卡——那一天折起来的几条，一行一条（图层色点 + 图标 + 标题），
+ * 点一条就换成那一条的小卡（{@link EventCard}）。
+ */
+function MoreCard({
+  day,
+  items,
+  onPick,
+  onClose,
+}: {
+  day: string
+  items: readonly CalendarItem[]
+  onPick(item: CalendarItem): void
+  onClose(): void
+}): React.ReactNode {
+  const { t } = useApp()
+  const d = Temporal.PlainDate.from(day)
+  return (
+    <WsCard data-testid="calendar-more-card" className="flex flex-col gap-1.5 p-4 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold">
+          {t('calendar.more.title', { month: d.month, day: d.day, n: items.length })}
+        </span>
+        <span className="flex-1" />
+        <Button size="xs" variant="ghost" onClick={onClose} aria-label={t('calendar.event.close')}>
+          ✕
+        </Button>
+      </div>
+      <ul className="flex flex-col">
+        {items.map((item) => {
+          const Icon = LAYER_ICON[item.source]
+          return (
+            <li key={item.id}>
+              <button
+                type="button"
+                data-testid="calendar-more-item"
+                className="flex w-full items-center gap-2 rounded-[8px] px-1.5 py-1 text-left hover:bg-ws-surface"
+                onClick={() => {
+                  onPick(item)
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-[3px]"
+                  style={{ background: LAYER_COLOR[item.source] }}
+                />
+                <Icon className="size-3.5 shrink-0 text-ws-muted-fg" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </WsCard>
   )
 }
 

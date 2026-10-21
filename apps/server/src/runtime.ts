@@ -1364,7 +1364,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       summary:
         input.stage === 'handoff'
           ? `请你在电脑上把这一步做完（登录、密码、支付、验证码它不会替你输）。做完点「允许」，它会再用 ${cu.minutes} 分钟接着做。`
-          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行时托盘会变色，随时可以点「停止」。`,
+          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行的时候托盘会变色，随时可以点「停止」。`,
       payload,
       evidence: {
         run_id: s.run_id,

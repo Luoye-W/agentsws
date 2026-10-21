@@ -2342,6 +2342,9 @@ const zh: Table = {
   'calendar.month.prev': '上个月',
   'calendar.month.next': '下个月',
   'calendar.event.close': '关掉',
+  // WP457：周 / 日视图的全天区每天最多两条，多的折起来
+  'calendar.more': '还有 {n} 项',
+  'calendar.more.title': '{month} 月 {day} 日还有 {n} 项',
   'calendar.open_in_matter': '在事项里打开',
   'calendar.open_position': '去这个岗位',
   'calendar.event.source': '来源',
@@ -6735,6 +6738,8 @@ const en: Table = {
   'calendar.month.prev': 'Previous month',
   'calendar.month.next': 'Next month',
   'calendar.event.close': 'Close',
+  'calendar.more': '{n} more',
+  'calendar.more.title': '{n} more on {month}/{day}',
   'calendar.open_in_matter': 'Open in the matter',
   'calendar.open_position': 'Go to this position',
   'calendar.event.source': 'Source',
@@ -9073,4 +9078,9 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   const raw = TABLES[lang][key] ?? TABLES.zh[key] ?? key
   if (vars === undefined) return raw
   return raw.replace(/\{(\w+)\}/g, (_m, name: string) => String(vars[name] ?? `{${name}}`))
+}
+
+/** WP457：整张表（只给守卫测试扫「用户看得见的字里有没有内部词」用）。 */
+export function tableOf(lang: Lang): Readonly<Record<string, string>> {
+  return TABLES[lang]
 }

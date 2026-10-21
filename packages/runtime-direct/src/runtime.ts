@@ -436,7 +436,8 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             amount,
             currency: typeof input.currency === 'string' ? input.currency : order.currency,
           },
-          notes: notes.length > 0 ? notes : ['direct-llm 运行时按政策提出'],
+          // WP457：来源说人话，不写运行时的名字
+          notes: notes.length > 0 ? notes : ['照退货政策提出'],
           ...(order.email === undefined
             ? {}
             : { requester: { channel: 'email', external_id: order.email } }),

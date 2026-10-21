@@ -206,15 +206,23 @@ export function SidePanel(props: {
   }, [tab, snap, opening])
   const current: Tab = tab ?? opening
 
+  const who =
+    snap === undefined
+      ? ''
+      : [snap.workspace_name, snap.person_name]
+          .filter((x): x is string => x !== undefined && x.trim() !== '')
+          .join(' · ')
+
   return (
     <div className="ws-side" data-testid="ws-side">
       <header className="ws-top">
         <BrandMark />
         <div className="ws-top-text">
           <b>Agents 工坊</b>
-          {snap === undefined ? null : (
+          {/* WP457：「品牌名 · 人名」，两样都没有就整行不画（服务端已经不发占位的 default / owner） */}
+          {who === '' ? null : (
             <span className="ws-muted ws-clamp-1" data-testid="ws-who">
-              {[snap.workspace_name, snap.person_name].filter((x) => x !== undefined).join(' · ')}
+              {who}
             </span>
           )}
         </div>

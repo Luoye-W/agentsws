@@ -266,7 +266,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             ? args.notes
             : [
                 `退货窗口 ${scratch.windowDays} 天内（签收 ${sinceDelivery(order) ?? '?'} 天）`,
-                args.reason ?? '由 dsh 运行时按政策提出',
+                args.reason ?? '照退货政策提出',
               ]
         return {
           request: req,
