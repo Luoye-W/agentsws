@@ -312,3 +312,83 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     })
   })
 })
+
+describe('WP432 发出去之后：巡查顺手读回票数，记进发出记录', () => {
+  it('品牌号最近 7 天发出去的那几条：巡查时一起查票数（只读一页），记进那一行', async () => {
+    const token = await pairPlugin()
+    const b = await brand()
+    const rw = b.redditWatch
+    if (rw === undefined) throw new Error('没装 Reddit 巡查')
+    rw.updateSettings({ own_subreddits: ['ivraxr'], brand_username: 'ivra_official' })
+    await b.adsActions?.next(['reddit'], 0)
+    await stageAndSend()
+    const w = (await snapshot(token)).writes[0]
+    const opened = await data<{ job?: ActionJob }>(
+      await call(`/v1/extension/panel/writes/${w?.job_id}/open`, {
+        method: 'POST',
+        plugin: token,
+        body: '{}',
+      }),
+    )
+    b.adsActions?.result(opened.job?.id as string, {
+      outcome: 'done',
+      message: '做完了。',
+      step: 6,
+      reads: { fullname: 't1_new1', permalink: '/r/ivraxr/comments/abc/comment/new1/' },
+    })
+    t += 60 * 60 * 1000
+    const listing = (children: unknown[]) => ({ kind: 'Listing', data: { after: null, children } })
+    const ROUTES: Record<string, unknown> = {
+      '/api/me.json': { kind: 't2', data: { name: 'ivra_official' } },
+      '/message/inbox/.json': listing([]),
+      '/r/ivraxr/new/.json': listing([]),
+      '/r/ivraxr/comments/.json': listing([]),
+      '/api/info.json': listing([
+        {
+          kind: 't1',
+          data: {
+            id: 'new1',
+            name: 't1_new1',
+            author: 'ivra_official',
+            body: DRAFT,
+            subreddit: 'ivraxr',
+            score: 7,
+            created_utc: Math.floor(t / 1000) - 3600,
+            permalink: '/r/ivraxr/comments/abc/comment/new1/',
+          },
+        },
+      ]),
+    }
+    const asked: string[] = []
+    const fakeFetch = async (url: string) => {
+      asked.push(url)
+      const body = ROUTES[new URL(url).pathname]
+      return body === undefined
+        ? { status: 404, url, content_type: 'application/json', body: '{}' }
+        : { status: 200, url, content_type: 'application/json', body: JSON.stringify(body) }
+    }
+    const { runRedditRead } = await import('@agentsws/browser-action')
+    let got = rw.next({ connected: true })
+    for (let i = 0; i < 50 && got.job === undefined; i += 1) {
+      if (i === 5) await rw.runNow()
+      await new Promise((r) => setTimeout(r, 20))
+      got = rw.next({ connected: true })
+    }
+    if (got.job === undefined) throw new Error('没领到巡查的活')
+    expect(got.job.reads.find((r) => r.kind === 'info')).toMatchObject({
+      key: 'scores',
+      ids: ['t1_new1'],
+      max_pages: 1,
+    })
+    const read = await runRedditRead(got.job, {
+      fetch: fakeFetch,
+      sleep: async () => {},
+      stopped: () => false,
+      gapMs: 0,
+    })
+    await rw.result(got.job.id, read)
+    expect(asked.some((u) => u.includes('/api/info.json?') && u.includes('id=t1_new1'))).toBe(true)
+    const records = await data<OutboundRecord[]>(await call('/v1/outbound/records'))
+    expect(records[0]).toMatchObject({ external_id: 't1_new1', score: 7 })
+  })
+})

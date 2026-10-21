@@ -13,6 +13,7 @@ import {
   ActionQueue,
   buildRedditJob,
   checkPlanSteps,
+  checkRedditReadRequest,
   FILL_HIGHLIGHT,
   HELD_TTL_MS,
   needsHumanOpen,
@@ -20,6 +21,7 @@ import {
   REDDIT_WRITE_SELECTORS_NEW,
   type RedditWriteAction,
   type RunHooks,
+  redditReadUrl,
   redditSiteOf,
   redditWritePlan,
   resolveOne,
@@ -252,5 +254,20 @@ describe('WP432 在假新版 Reddit 上走一遍', () => {
     expect(r.reads.fullname).toBe('t3_new1')
     expect(page.state.sent[0]?.text).toBe('Weekly Q&A thread')
     expect(page.visited[0]).toBe(`${NEW}/r/ivraxr/submit/?type=TEXT`)
+  })
+})
+
+describe('WP432 巡查顺手读回票数（只读）', () => {
+  it('info：只读 /api/info.json、一次 1–25 条、编号要对、只读一页', () => {
+    const ok = { key: 'scores', kind: 'info' as const, ids: ['t1_abc', 't3_xyz'], max_pages: 1 }
+    expect(checkRedditReadRequest(ok)).toBeUndefined()
+    expect(redditReadUrl(ok)).toContain('/api/info.json?')
+    expect(redditReadUrl(ok)).toContain('id=t1_abc%2Ct3_xyz')
+    expect(checkRedditReadRequest({ ...ok, ids: [] })).toBeDefined()
+    expect(checkRedditReadRequest({ ...ok, ids: ['t4_dm'] })).toBeDefined()
+    expect(
+      checkRedditReadRequest({ ...ok, ids: Array.from({ length: 26 }, (_, i) => `t1_a${i}`) }),
+    ).toBeDefined()
+    expect(checkRedditReadRequest({ ...ok, max_pages: 2 })).toBeDefined()
   })
 })
