@@ -496,7 +496,11 @@ import {
 } from './execution/registry.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
-import { createExtensionInstall, spawnDetached } from './extension-install.js'
+import {
+  createExtensionInstall,
+  folderVersion as extensionFolderVersion,
+  spawnDetached,
+} from './extension-install.js'
 import { createExtensionOnboarding, type ExtensionOnboarding } from './extension-onboarding.js'
 import {
   createExtensionPanelPort,
@@ -6221,6 +6225,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           now: () => clock.now(),
         }),
       ...(dir === undefined ? {} : { dir: join(dir, 'reddit-writes') }),
+      // WP432：批了之后人又改了字（插件里改 / 页面上改了再发）→ 进学习回路
+      onEdited: ({ approval_item_id, before, after, at }) => {
+        const item = txn.runtime.store.getApproval(approval_item_id)
+        if (item !== undefined) learning.observeEdit(item, { before, after, at: at as never })
+      },
     })
     const redditWritesSweep = setInterval(
       () => void redditWrites?.sweep().catch(() => undefined),
@@ -15469,6 +15478,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               undefined,
             // U16：侧边栏顶上写品牌名（不写内部工作区名）
             workspaceName: async (ws) => brandNameOfWorkspace(ws),
+            // WP432：侧边栏底下写自己是哪一版、工坊是哪一版（对不上提示重新加载）
+            versions: () => {
+              const dir = env.AGENTSWS_EXTENSION_DIR
+              const folder =
+                dir === undefined || dir === '' || !existsSync(dir)
+                  ? undefined
+                  : extensionFolderVersion(dir, (path) => {
+                      try {
+                        return readFileSync(path, 'utf8')
+                      } catch {
+                        return undefined
+                      }
+                    })
+              return {
+                workshop: contentAppVersion,
+                ...(typeof folder === 'string' ? { folder } : {}),
+              }
+            },
+            // WP432：「等你发」那一类开没开系统通知（插件里弹不弹那一句）
+            notifySystem: async (ws, person_id) =>
+              notifications.prefs({ workspace_id: ws, person_id: person_id as never }).outbound
+                .system,
           }),
           // WP328：Reddit 每日巡查 `/v1/extension/reddit/*`（插件只读）、`/v1/reddit-watch*`（工作台）
           redditWatch: redditWatchPort(async (ws) => {

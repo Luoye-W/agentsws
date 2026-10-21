@@ -367,6 +367,11 @@ export interface LearningAssembly {
   }): void
   /** 把审批总线包一层：决定之后抽 lesson + 按 kind 施行。 */
   wrap(bus: ApprovalBus): ApprovalBus
+  /**
+   * WP432：卡批了之后人又改了字（Reddit：在插件侧边栏里改、或在页面上改了再发）——
+   * 和「改了再批」一样当一次人的修改进池（批的那一版 → 真发出去的那一版）。
+   */
+  observeEdit(item: ApprovalItem, edit: { before: string; after: string; at: Iso8601 }): void
   /** 已有的提案卡（工作台技能页的"待审提案数"）。 */
   pendingProposals(skill?: string): Promise<ApprovalItem[]>
   /** 24 §5 `GET /lessons`：池里那些，投影成契约的 `LessonRecord`。 */
@@ -587,6 +592,46 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
           signal: pooled.signal,
           hits: pooled.hits,
           confidence: pooled.confidence,
+        },
+        undefined,
+        ws,
+      )
+    }
+  }
+
+  /** WP432：批了之后又改过字（真发出去的和批的不一样）：当一次「改了再批」进池。 */
+  const observeEdit = (
+    item: ApprovalItem,
+    edit: { before: string; after: string; at: Iso8601 },
+  ): void => {
+    if (CARD_KINDS.has(item.kind) || edit.before.trim() === edit.after.trim()) return
+    const ws = item.workspace_id
+    const assignment_id = item.proposer.assignment_id ?? targetOf(ws)?.ownerAssignment.id
+    if (assignment_id === undefined) return
+    const decision: HumanDecision = {
+      approval_item_id: item.id,
+      action: 'approve_edited',
+      at: edit.at,
+      edit_diff: { before: edit.before, after: edit.after },
+    }
+    for (const lesson of extractLessons({
+      workspace_id: ws,
+      assignment_id,
+      run_id: item.evidence.run_id ?? `card_${item.id}`,
+      at: edit.at,
+      applies_to: { skill: skillOf(item) },
+      decisions: [decision],
+    })) {
+      const pooled = learning.pool.pool(lesson)
+      emit(
+        'lesson.pooled',
+        {
+          lesson_id: pooled.id,
+          skill: pooled.applies_to.skill,
+          signal: pooled.signal,
+          hits: pooled.hits,
+          confidence: pooled.confidence,
+          after_send: true,
         },
         undefined,
         ws,
@@ -1645,6 +1690,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       })
       for (const l of lessons) learning.pool.pool(l)
     },
+    observeEdit,
     wrap(bus) {
       // 用 Proxy 而不是展开：总线是个类实例，方法在原型上，`{...bus}` 会把它们全丢掉。
       return new Proxy(bus, {

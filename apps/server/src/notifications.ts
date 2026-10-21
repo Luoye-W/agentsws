@@ -206,6 +206,13 @@ const short = (t: string, n = 40): string => (t.length > n ? `${t.slice(0, n)}�
 /** WP430（决策 1289）：模型订阅过期 / 登录失效、当下的事已自动换别的 AI 接着做。 */
 export const RELOGIN_NEEDED_EVENT = 'model_source.relogin_needed'
 
+/**
+ * WP432：Reddit 的写批了、等你在浏览器插件里打开发（插件图标上也有数字）。
+ * 发出去了 / 没发出去 / 不发了，那条就收成已读。
+ */
+export const REDDIT_AWAITING_EVENT = 'reddit.write_awaiting'
+const REDDIT_SETTLED = new Set(['reddit.write_sent', 'reddit.write_failed', 'reddit.write_dropped'])
+
 /** 卡的地址。 */
 export const cardHref = (id: string): string => `/cards/${encodeURIComponent(id)}`
 
@@ -306,6 +313,23 @@ export async function notificationsOfEvent(
       category: 'team' as const,
       text: `${who} 把这里改回了同事互联`,
       key: `mode:${str(p.organization_id) ?? ws}`,
+    }))
+  }
+
+  if (e.type === REDDIT_AWAITING_EVENT) {
+    const id = str(p.approval_item_id)
+    if (id === undefined) return []
+    const item = await ctx.approval?.(id)
+    // 谁批的告诉谁（批的人就是要去点发送的人）；翻不出来告诉所有者
+    const by = item?.decision?.by
+    const people = by !== undefined && by !== 'mandate' ? [by as PersonId] : await ctx.owners()
+    const what = short(str(p.label) ?? item?.title ?? `r/${str(p.subreddit) ?? ''}`, 60)
+    return people.map((person_id) => ({
+      workspace_id: ws,
+      person_id,
+      category: 'outbound' as const,
+      text: `等你在浏览器插件里发：${what}`,
+      key: `outbound:${id}`,
     }))
   }
 
@@ -508,6 +532,12 @@ export function createNotifications(options: NotificationsOptions): Notification
       settle(e.workspace_id, `card:${e.subject.id}`)
       return
     }
+    // WP432：等你发的那一条有了结局 → 那条通知收成已读
+    if (REDDIT_SETTLED.has(e.type)) {
+      const id = str((e.payload as Record<string, unknown> | undefined)?.approval_item_id)
+      if (id !== undefined) settle(e.workspace_id, `outbound:${id}`)
+      return
+    }
     const ctx = resolvers.get(e.workspace_id) ?? makeResolver?.(e.workspace_id)
     if (ctx === undefined) return
     for (const n of await notificationsOfEvent(e, ctx)) {
@@ -530,6 +560,8 @@ export function createNotifications(options: NotificationsOptions): Notification
     'approval.delivered',
     'organization.mode_changed',
     RELOGIN_NEEDED_EVENT,
+    REDDIT_AWAITING_EVENT,
+    ...REDDIT_SETTLED,
     ...CARD_SETTLED,
   ])
 

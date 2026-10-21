@@ -199,7 +199,12 @@ export interface RedditWritePayload {
 
 /** 插件那边这一条做到哪了（工作台看）。 */
 export type RedditWriteState =
-  /** 批了、排着等插件来领（Chrome 没开就一直等，24 小时没人领作废）。 */
+  /**
+   * WP432：批了，**等你在浏览器插件侧边栏里点「打开这一条」**（插件不自己开页面；7 天没打开作废）。
+   * 之后的「填好了等你点发送 / 已发」照旧。
+   */
+  | 'awaiting'
+  /** 批了、排着等插件来领（Chrome 没开就一直等，24 小时没人领作废）。WP432 起 Reddit 的写不再走这一档。 */
   | 'queued'
   /** 插件填好了，等人点发送。 */
   | 'filling'
@@ -232,6 +237,15 @@ export interface RedditWriteView {
   refills?: number
   /** WP332：人看过、收起了提醒（再填一次之后又没发出去会重新出）。 */
   dismissed?: boolean
+  /** WP432：批过的草稿（等你发的那几条在插件侧边栏里显示、还能改）。发新帖时 `title` 是标题。 */
+  text?: string
+  title?: string
+  /** WP432：读回的真发出去的字（人在页面上改过时与 `text` 不一样）。 */
+  sent_text?: string
+  /** WP432：批了之后人又改过字（侧边栏里改、或在 Reddit 页面上改了再发）。 */
+  edited?: boolean
+  /** WP432：在页面上没认出框（新版改版了），是人自己粘贴发的。 */
+  pasted?: boolean
 }
 
 /** WP332：没发出去的提醒在岗位页留多久（天）；更早的进度里还在，不再占一行。 */

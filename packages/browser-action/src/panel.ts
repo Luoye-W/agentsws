@@ -278,6 +278,8 @@ export interface PanelSnapshot {
    * 不是桌面版（没有固定文件夹）就没有 `folder`。
    */
   versions?: { workshop?: string; folder?: string }
+  /** WP432：插件在新版（默认）还是旧版 Reddit 上帮你填（侧边栏设置里改）。 */
+  site?: import('./reddit/write.js').RedditSite
   /** WP432：「等你发」要不要弹系统通知（工坊设置 → 通知「等你发」那一类的「系统」开关）。 */
   notify_system?: boolean
 }

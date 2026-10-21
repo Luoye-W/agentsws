@@ -192,7 +192,7 @@ describe('WP329 交出去', () => {
     expect(m.records).toEqual([])
   })
 
-  it('插件最近来过：开关开着也不走直发，交给插件；24 小时没人领 → 作废、照实说', async () => {
+  it('插件最近来过：开关开着也不走直发，交给插件等你打开；WP432：7 天没打开 → 作废、照实说', async () => {
     const m = make({ direct: true })
     m.svc.setSettings({ direct_fallback: true })
     await m.actions.next(['reddit'], 0)
@@ -204,15 +204,19 @@ describe('WP329 交出去', () => {
       record,
     })
     expect(r.execution_id).toMatch(/^reddit_fill_/u)
+    expect(m.svc.writes()[0]?.state).toBe('awaiting')
     m.now.ms += 25 * 60 * 60 * 1000
     await m.actions.sweep()
+    expect(m.svc.writes()[0]?.state).toBe('awaiting')
+    m.now.ms += 6 * 24 * 60 * 60 * 1000
+    await m.actions.sweep()
     expect(m.svc.writes()[0]?.state).toBe('failed')
-    expect(m.svc.writes()[0]?.message).toContain('24 小时')
+    expect(m.svc.writes()[0]?.message).toContain('7 天没打开')
     expect(m.settled[0]?.state).toBe('failed')
     expect(m.records).toEqual([])
   })
 
-  it('Reddit 的活不要广告那份风险告知；插件领到的就是这一件', async () => {
+  it('Reddit 的活不要广告那份风险告知；WP432：定时领活领不到，人点「打开这一条」才拿到这一件', async () => {
     const m = make()
     await m.svc.send({
       approval_item_id: 'ap_1',
@@ -223,8 +227,16 @@ describe('WP329 交出去', () => {
     })
     const got = await m.actions.next(['reddit'], 0)
     expect(got.needs_consent).toBeUndefined()
-    expect(got.job?.plan.platform).toBe('reddit')
+    expect(got.job).toBeUndefined()
     expect(m.actions.lastSeen('reddit')).toBe(T0)
+    const job_id = m.svc.writes()[0]?.job_id as string
+    const opened = await m.svc.open(job_id)
+    expect(opened.ok && opened.job.plan.platform).toBe('reddit')
+    // 默认新版 www.reddit.com
+    expect(opened.ok && opened.job.plan.steps[0]).toEqual({
+      op: 'goto',
+      url: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
+    })
   })
 })
 
@@ -284,11 +296,13 @@ describe('WP329 社媒线程 / 公关外部帖', () => {
     await m.actions.next(['reddit'], 0)
     const r = await applyExternalPost(change, { writes: m.svc, post: () => post })
     expect(r?.status).toBe('ok')
-    const job = (await m.actions.next(['reddit'], 0)).job
+    expect((await m.actions.next(['reddit'], 0)).job).toBeUndefined()
+    const opened = await m.svc.open(m.svc.writes()[0]?.job_id as string)
+    const job = opened.ok ? opened.job : undefined
     expect(job?.plan.kind).toBe('reddit_submit')
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/BuyItForLife/submit?selftext=true',
+      url: 'https://www.reddit.com/r/BuyItForLife/submit/?type=TEXT',
     })
     expect(job?.plan.allow.values).toEqual(['Ten years with the same glasses', 'Long story…'])
     m.actions.result(job?.id as string, {

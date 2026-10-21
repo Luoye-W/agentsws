@@ -212,7 +212,7 @@ describe('几句短话', () => {
   it('写：排着 / 填好了等你点 / 已发 · 已记录 / 没发出去照实说', () => {
     const w = { job_id: 'a', approval_item_id: 'b', subreddit: 'x', queued_at: '' }
     expect(writeLine({ ...w, state: 'queued' })).toBe('正在打开 Reddit…')
-    expect(writeLine({ ...w, state: 'filling' })).toBe('填好了，去页面上点 Reply')
+    expect(writeLine({ ...w, state: 'filling' })).toBe('填好了，看一眼，自己点发送')
     expect(writeLine({ ...w, state: 'sent', record_id: 'ob_1' })).toBe('已发 · 已记录')
     expect(writeLine({ ...w, state: 'failed', message: '没登录 Reddit' })).toBe('没登录 Reddit')
   })

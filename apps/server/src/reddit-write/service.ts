@@ -12,6 +12,12 @@
  * → 读回确认才算发出去：本地发出记录多一行（WP323，带编号与链接，之后对方的回复按编号挂回这一行）；
  *    没确认到（没点 / 被拦 / 没登录 / 停了 / 作废）就照实说原因，**不自动重试**。
  *
+ * WP432（Luoye 10-20 反馈 9）：**批了不自动开页面**——交给插件的活进队就是「等你在插件里打开」（`awaiting`），
+ * 插件的定时领活领不到；人在插件侧边栏里点「打开这一条」（{@link RedditWriteService.open}，可以先改字）才交出去，
+ * 插件在当前窗口新开标签页填好、人自己点发送。「不发了」（{@link RedditWriteService.drop}）也在侧边栏里。
+ * 默认在新版 www.reddit.com 上填，设置里选了旧版才走 old.reddit。读回的真发出去的字与批的那一版不一样（人改过）
+ * 就记进发出记录（`draft_content` / `content`），差进学习回路（`onEdited`）。
+ *
  * 交给插件那一刻，卡的施行结果记 `ok`（`outcome_ref.type = 'reddit_fill'`，与「人自己发」的 `manual_send`
  * 同一个意思：系统这一侧做完了，剩下那一下是人点）；真发没发出去看 {@link RedditWriteService.writes}。
  */
@@ -20,10 +26,15 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path'
 import type { SocialActor } from '@agentsws/api'
 import {
+  type ActionJob,
   buildRedditJob,
+  postedKey,
   RedditPlanError,
+  type RedditSite,
   type RedditWrite,
+  redditWriteOrigin,
   redditWritePlan,
+  SOFT_MISS_LABEL,
 } from '@agentsws/browser-action'
 import type {
   ApprovalBus,
@@ -104,6 +115,8 @@ export interface RedditWriteEntry extends RedditWriteView {
   title?: string
   /** 之前几次交给插件的活（再填一次换了新的 `job_id`）。 */
   previous_jobs?: string[]
+  /** WP432：批的那一版（批了之后人在侧边栏里改过字才记；`text` 是改过的）。 */
+  draft_text?: string
 }
 
 export interface RedditWriteServiceOptions {
@@ -130,8 +143,9 @@ export interface RedditWriteServiceOptions {
   persona?(): RedditPersona | undefined
   /** 这个版的版规原文（读不到 = undefined；读不到就不放进提示词，不替用户判能不能推广）。 */
   rules?(subreddit: string): Promise<string[] | undefined>
-  /** 插件动作通道（每品牌一份；托管实例没有）。 */
-  actions?: Pick<AdsActionsService, 'enqueue' | 'lastSeen' | 'jobs'>
+  /** 插件动作通道（每品牌一份；托管实例没有）。WP432：`open` / `stop` 是侧边栏「打开这一条 / 不发了」。 */
+  actions?: Pick<AdsActionsService, 'enqueue' | 'lastSeen' | 'jobs'> &
+    Partial<Pick<AdsActionsService, 'open' | 'stop'>>
   /** 插件用不了时的直发；这条路不通回 `undefined`。 */
   direct?(input: RedditDirectWrite): Promise<RedditDirectResult | undefined>
   /** 发出去了：记进发出记录（WP323）。 */
@@ -152,6 +166,11 @@ export interface RedditWriteServiceOptions {
   dir?: string
   /** 测试指向本地假 old.reddit。 */
   origin?: string
+  /**
+   * WP432：批了之后人又改了字（侧边栏里改、或在 Reddit 页面上改了再发）——批的那一版与真发出去的那一版，
+   * 进学习回路（与卡上「改了再批」同一条路）。
+   */
+  onEdited?(input: { approval_item_id: string; before: string; after: string; at: string }): void
 }
 
 /** 一次写交进来要的（卡、社媒回帖、公关外部帖三条路都汇到这里）。 */
@@ -198,6 +217,19 @@ export interface RedditWriteService {
   ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
   /** WP332：人看过、收起岗位页那一行提醒（这一条再填一次又没发出去时重新出）。 */
   dismiss(job_id: string): RedditWriteView | undefined
+  /**
+   * WP432：人在插件侧边栏里点「打开这一条」（改过就带改过的字）——只有这一下能把等你发的那一件交给插件；
+   * 回交出去的那一件活（插件在当前窗口新开标签页填好、等人点发送）。
+   */
+  open(
+    job_id: string,
+    edit?: { text?: string; title?: string },
+  ): Promise<{ ok: true; job: ActionJob; view: RedditWriteView } | { ok: false; message: string }>
+  /** WP432：侧边栏里点「不发了」（批过的这一条不发；不再提醒）。 */
+  drop(
+    job_id: string,
+    reason?: string,
+  ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
   writes(): RedditWriteView[]
   /** 插件最近一周来过、连着 Reddit。 */
   extensionReady(): boolean
@@ -278,13 +310,30 @@ interface StateFile {
   seq: number
   /** 决策 761：插件不在线时要不要走程序直发（OAuth 应用 / 官方号浏览器）。默认关。 */
   direct_fallback?: boolean
+  /** WP432：在旧版 old.reddit 上填（默认新版，只有选了旧版才记）。 */
+  site?: RedditSite
 }
 
 /** Reddit 写的设置（决策 761）。 */
 export interface RedditWriteSettings {
   /** 插件不在线时走程序直发（不是人点）。默认关：等插件、等你打开 Chrome。 */
   direct_fallback: boolean
+  /** WP432：插件在新版（www.reddit.com，默认）还是旧版（old.reddit.com）上帮你填。 */
+  site: RedditSite
 }
+
+/** WP432：两段字去掉 Markdown 记号与空白后一样吗（页面上读回来的是渲染后的字）。 */
+export function sameSentText(a: string, b: string): boolean {
+  const plain = (s: string): string =>
+    postedKey(s.replace(/!?\[([^\]]*)\]\([^)]*\)/gu, '$1').replace(/[*_~`>#|]/gu, ' '))
+  return plain(a) === plain(b)
+}
+
+/** WP432：等你在插件里发的那一句（插件最近没来过时）。 */
+export const OPEN_IN_PLUGIN_OFFLINE = '插件不在线：打开 Chrome，在插件侧边栏里点开这一条。'
+
+/** WP432：认不出框、等人自己粘贴时，进度里那一句。 */
+export const PASTE_YOURSELF = '页面对不上：在插件侧边栏里点「复制草稿」，自己粘贴、点发送'
 
 /** WP332：能不能「再填一次」：走插件的、记着草稿的（直发那条路不再填：761 默认关）。 */
 const canRefill = (e: RedditWriteEntry): boolean =>
@@ -308,6 +357,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   const entries: RedditWriteEntry[] = [...(loaded?.entries ?? [])]
   let seq = loaded?.seq ?? 0
   let directFallback = loaded?.direct_fallback === true
+  let site: RedditSite = loaded?.site === 'old' ? 'old' : 'new'
   /** 起草时查到的知识卡（出卡时按 id 带上那句话；只在内存里留最近的）。 */
   const factCache = new Map<string, RedditDraftFact>()
 
@@ -327,6 +377,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         entries,
         seq,
         ...(directFallback ? { direct_fallback: true } : {}),
+        ...(site === 'old' ? { site: 'old' as const } : {}),
       } satisfies StateFile),
     )
     renameSync(tmp, stateFile)
@@ -351,17 +402,52 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     }
   }
 
-  /** 发出去了：记一行发出记录（带编号与链接）。 */
-  const markSent = (entry: RedditWriteEntry, fullname?: string, path?: string): void => {
+  /**
+   * 发出去了：记一行发出记录（带编号与链接）。WP432：`sent_text` = 页面上读回的真发出去的字——
+   * 和批的那一版不一样（人改过）就按真发的记，批的那一版记进 `draft_content`，差进学习回路。
+   */
+  const markSent = (
+    entry: RedditWriteEntry,
+    fullname?: string,
+    path?: string,
+    readback: { sent_text?: string; pasted?: boolean } = {},
+  ): void => {
     const link = redditLink(path)
     entry.state = 'sent'
     entry.finished_at = now()
     if (fullname !== undefined && fullname !== '') entry.fullname = fullname
     if (link !== undefined) entry.link = link
     delete entry.message
+    if (readback.pasted === true) entry.pasted = true
+    const approved = entry.text ?? entry.record.content
+    const draft = entry.draft_text ?? approved
+    const sent = readback.sent_text?.trim()
+    if (sent !== undefined && sent !== '' && entry.write?.kind !== 'submit') {
+      entry.sent_text = sent
+      if (!sameSentText(sent, approved)) entry.edited = true
+    }
+    const finalText =
+      entry.sent_text !== undefined && !sameSentText(entry.sent_text, approved)
+        ? entry.sent_text
+        : approved
+    const changed = !sameSentText(finalText, draft)
+    if (changed) {
+      try {
+        options.onEdited?.({
+          approval_item_id: entry.approval_item_id,
+          before: draft,
+          after: finalText,
+          at: entry.finished_at,
+        })
+      } catch {
+        // 学不到不挡「发出去了」
+      }
+    }
     try {
       const row = options.record({
         ...entry.record,
+        content: finalText,
+        ...(changed ? { draft_content: draft } : {}),
         ...(entry.fullname === undefined ? {} : { external_id: entry.fullname }),
         ...(link === undefined ? {} : { link }),
         sent_at: entry.finished_at,
@@ -404,19 +490,33 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         ok: false,
         why: 'Reddit 还没接上：在 Chrome 的「Agents 工坊助手」插件里连接 Reddit（或填已有的 OAuth 开发者应用）。',
       }
+    const account = options.account?.()
     const job = buildRedditJob({
       id: nextId('rdw'),
       workspace_id: ws,
-      account_id: options.account?.() ?? `ws:${ws}`,
+      account_id: account ?? `ws:${ws}`,
       action: { write: input.write, text: input.text },
       approval_id: input.approval_item_id,
       approval_level: 'L1',
       ...(input.label === undefined ? {} : { title: input.label }),
       created_at: now(),
-      ...(options.origin === undefined ? {} : { origin: options.origin }),
+      origin: options.origin ?? redditWriteOrigin(site),
+      ...(account === undefined ? {} : { author: account }),
     })
-    const queued = await actions.enqueue(job)
+    // WP432：等你在插件里点开（插件的定时领活领不到它）
+    const queued = await actions.enqueue(job, undefined, { hold: true })
     return queued.ok ? { ok: true, job } : queued
+  }
+
+  /** WP432：等你在插件里发了（插件图标上的数字、通知「等你发」都从这一条来）。 */
+  const awaiting = (entry: RedditWriteEntry): void => {
+    options.emit('reddit.write_awaiting', 'system', {
+      approval_item_id: entry.approval_item_id,
+      job_id: entry.job_id,
+      kind: entry.kind,
+      subreddit: entry.subreddit,
+      ...(entry.label === undefined ? {} : { label: entry.label }),
+    })
   }
 
   const send = async (input: RedditSendInput): Promise<RedditWriteResult> => {
@@ -472,9 +572,10 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     const entry: RedditWriteEntry = {
       ...base,
       job_id: job.id,
-      state: 'queued',
+      // WP432：批了 = 等你在插件里打开（不自己开页面）
+      state: 'awaiting',
       via: 'extension',
-      ...(extensionReady() ? {} : { message: PLUGIN_OFFLINE }),
+      ...(extensionReady() ? {} : { message: OPEN_IN_PLUGIN_OFFLINE }),
       write: input.write,
       text: input.text,
       ...(input.title === undefined ? {} : { title: input.title }),
@@ -487,6 +588,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       job_id: job.id,
       kind: input.write.kind,
     })
+    awaiting(entry)
     return {
       status: 'ok',
       execution_id: `reddit_fill_${job.id}`,
@@ -522,11 +624,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   const service: RedditWriteService = {
     extensionReady,
     send,
-    settings: () => ({ direct_fallback: directFallback }),
+    settings: () => ({ direct_fallback: directFallback, site }),
     setSettings(patch) {
       if (patch.direct_fallback !== undefined) directFallback = patch.direct_fallback
+      if (patch.site === 'new' || patch.site === 'old') site = patch.site
       save()
-      return { direct_fallback: directFallback }
+      return { direct_fallback: directFallback, site }
     },
 
     async onDecided(item) {
@@ -878,7 +981,10 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       if (event.type === 'expired') {
         markFailed(
           entry,
-          '24 小时没有插件来领：Chrome 没开，或插件没连 Reddit。这一条没发。',
+          // WP432：等你在插件里打开的那一件 7 天没打开才作废（老的排队活仍是 24 小时）
+          entry.state === 'awaiting'
+            ? '等你在插件里打开，7 天没打开，这一条没发。'
+            : '24 小时没有插件来领：Chrome 没开，或插件没连 Reddit。这一条没发。',
           'expired',
         )
         return
@@ -886,7 +992,10 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       if (event.type !== 'finished') return
       const result = event.result
       if (result?.outcome === 'done') {
-        markSent(entry, result.reads.fullname, result.reads.permalink)
+        markSent(entry, result.reads.fullname, result.reads.permalink, {
+          ...(result.reads.sent_text === undefined ? {} : { sent_text: result.reads.sent_text }),
+          ...(result.reads.fill_missed === '1' ? { pasted: true } : {}),
+        })
         return
       }
       markFailed(
@@ -916,15 +1025,17 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       if (!queued.ok) return { ok: false, message: queued.why }
       entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
       entry.job_id = queued.job.id
-      entry.state = 'queued'
+      // WP432：再填一次也是「等你在插件里打开」
+      entry.state = 'awaiting'
       entry.queued_at = now()
       entry.refills = (entry.refills ?? 0) + 1
       delete entry.finished_at
       delete entry.outcome
       delete entry.dismissed
       if (extensionReady()) delete entry.message
-      else entry.message = PLUGIN_OFFLINE
+      else entry.message = OPEN_IN_PLUGIN_OFFLINE
       save()
+      awaiting(entry)
       options.emit('reddit.write_refilled', 'system', {
         approval_item_id: entry.approval_item_id,
         job_id: entry.job_id,
@@ -932,6 +1043,107 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         refills: entry.refills,
       })
       const view = service.writes().find((w) => w.job_id === entry.job_id)
+      return view === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view }
+    },
+
+    async open(job_id, edit) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return { ok: false, message: '找不到这一条。' }
+      if (entry.state !== 'awaiting' && entry.state !== 'queued')
+        return {
+          ok: false,
+          message:
+            entry.state === 'sent'
+              ? '这一条已经发出去了。'
+              : entry.state === 'filling'
+                ? '这一条已经打开了，在那个标签页里。'
+                : '这一条没发出去：点「再填一次」重新交给插件。',
+        }
+      const actions = options.actions
+      if (actions?.open === undefined || entry.write === undefined || entry.text === undefined)
+        return { ok: false, message: '这一条不能在插件里打开（没记下草稿）。' }
+      // 侧边栏里改过字：按改过的重新拼一件（白名单只认这一段字），老的那件作废
+      const text = edit?.text?.trim()
+      const title = edit?.title?.trim()
+      const changedText = text !== undefined && text !== '' && text !== entry.text
+      const changedTitle =
+        entry.write.kind === 'submit' &&
+        title !== undefined &&
+        title !== '' &&
+        title !== entry.write.title
+      if (changedText || changedTitle) {
+        const write: RedditWrite =
+          changedTitle && entry.write.kind === 'submit'
+            ? { ...entry.write, title: title as string }
+            : entry.write
+        const nextText = changedText ? (text as string) : entry.text
+        try {
+          redditWritePlan({ write, text: nextText }, options.origin)
+        } catch (err) {
+          return { ok: false, message: err instanceof Error ? err.message : String(err) }
+        }
+        const scan = checkOutbound(`${write.kind === 'submit' ? write.title : ''}\n${nextText}`)
+        if (!scan.ok) return { ok: false, message: replyBlockedReason(scan) }
+        const queued = await toPlugin({
+          write,
+          text: nextText,
+          approval_item_id: entry.approval_item_id,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+        })
+        if (!queued.ok) return { ok: false, message: queued.why }
+        actions.stop?.(entry.job_id)
+        entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
+        entry.job_id = queued.job.id
+        entry.draft_text ??= entry.text
+        entry.text = nextText
+        entry.write = write
+        if (write.kind === 'submit') {
+          entry.title = write.title
+          entry.record = { ...entry.record, subject: write.title }
+        }
+        entry.record = { ...entry.record, content: nextText }
+        entry.edited = true
+      }
+      const got = actions.open(entry.job_id)
+      if (!got.ok) {
+        save()
+        return { ok: false, message: got.why }
+      }
+      entry.state = 'queued'
+      delete entry.message
+      save()
+      options.emit('reddit.write_opened', 'system', {
+        approval_item_id: entry.approval_item_id,
+        job_id: entry.job_id,
+        kind: entry.kind,
+        ...(entry.edited === true ? { edited: true } : {}),
+      })
+      const view = service.writes().find((w) => w.job_id === entry.job_id)
+      return view === undefined
+        ? { ok: false, message: '找不到这一条。' }
+        : { ok: true, job: got.job, view }
+    },
+
+    drop(job_id, reason) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return { ok: false, message: '找不到这一条。' }
+      if (entry.state !== 'awaiting')
+        return {
+          ok: false,
+          message:
+            entry.state === 'sent'
+              ? '这一条已经发出去了。'
+              : '这一条已经打开了，在那个标签页里关掉就行。',
+        }
+      options.actions?.stop?.(entry.job_id)
+      entry.dismissed = true
+      markFailed(entry, reason?.trim() || '你在插件里点了不发。', 'dropped')
+      options.emit('reddit.write_dropped', 'system', {
+        approval_item_id: entry.approval_item_id,
+        job_id: entry.job_id,
+        kind: entry.kind,
+      })
+      const view = service.writes().find((w) => w.job_id === job_id)
       return view === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view }
     },
 
@@ -946,20 +1158,26 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     },
 
     writes() {
-      const running = new Map((options.actions?.jobs() ?? []).map((j) => [j.id, j.status] as const))
+      const running = new Map((options.actions?.jobs() ?? []).map((j) => [j.id, j] as const))
       return [...entries].reverse().map((e): RedditWriteView => {
-        const st = running.get(e.job_id)
+        const job = running.get(e.job_id)
+        const st = job?.status
         const state =
           e.state === 'queued' && (st === 'running' || st === 'waiting_confirm')
             ? 'filling'
             : e.state
+        // WP432：新版页面对不上、在等人自己粘贴——照实说
+        const message =
+          state === 'filling' && job?.progress?.label === SOFT_MISS_LABEL
+            ? PASTE_YOURSELF
+            : e.message
         return {
           approval_item_id: e.approval_item_id,
           job_id: e.job_id,
           kind: e.kind,
           subreddit: e.subreddit,
           state,
-          ...(e.message === undefined ? {} : { message: e.message }),
+          ...(message === undefined ? {} : { message }),
           ...(e.outcome === undefined || e.state !== 'failed' ? {} : { outcome: e.outcome }),
           ...(e.label === undefined ? {} : { label: e.label }),
           ...(e.state === 'failed' && canRefill(e) ? { can_refill: true } : {}),
@@ -967,6 +1185,11 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           ...(e.dismissed === true ? { dismissed: true } : {}),
           ...(e.link === undefined ? {} : { link: e.link }),
           ...(e.record_id === undefined ? {} : { record_id: e.record_id }),
+          ...(e.text === undefined ? {} : { text: e.text }),
+          ...(e.write?.kind === 'submit' ? { title: e.write.title } : {}),
+          ...(e.sent_text === undefined ? {} : { sent_text: e.sent_text }),
+          ...(e.edited === true ? { edited: true } : {}),
+          ...(e.pasted === true ? { pasted: true } : {}),
           queued_at: e.queued_at,
           ...(e.finished_at === undefined ? {} : { finished_at: e.finished_at }),
         }

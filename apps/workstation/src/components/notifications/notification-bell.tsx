@@ -15,6 +15,7 @@ import {
   Coins,
   type LucideIcon,
   RefreshCw,
+  SendHorizontal,
   Settings2,
   Unplug,
   Users,
@@ -48,6 +49,8 @@ export const CATEGORY_LOOK: Record<NotificationCategory, { icon: LucideIcon; ton
   connection: { icon: Unplug, tone: 'bg-ws-bad-bg text-ws-bad' },
   credits: { icon: Coins, tone: 'bg-ws-warn-bg text-ws-warn' },
   update: { icon: RefreshCw, tone: 'bg-ws-brand-soft text-ws-brand' },
+  // WP432：等你在插件里发
+  outbound: { icon: SendHorizontal, tone: 'bg-ws-warn-bg text-ws-warn' },
 }
 
 /** 「刚刚 / 5 分钟前 / 3 小时前 / 昨天 / 4 天前」。 */

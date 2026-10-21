@@ -166,6 +166,12 @@ const LAUNCH_FAILED = '没打开 Chrome：自己打开它，在地址栏粘贴 c
 
 export function createExtensionInstall(options: ExtensionInstallOptions): ExtensionInstallPort {
   const running = new Map<string, ExtensionRunningVersion & { workspace_id: WorkspaceId }>()
+  /** WP432：没配对的插件最近一次报的版本（不分品牌：没配对就不知道是谁的）。 */
+  let unpaired: { version: string; at: ExtensionRunningVersion['at'] } | undefined
+  const folderVer = (): string | undefined => {
+    const dir = folder()
+    return dir === undefined ? undefined : folderVersion(dir, options.readText)
+  }
 
   const folder = (): string | undefined =>
     options.dir !== undefined && options.exists(options.dir) ? options.dir : undefined
@@ -185,7 +191,14 @@ export function createExtensionInstall(options: ExtensionInstallOptions): Extens
           .filter((r) => r.workspace_id === workspace_id)
           .map(({ workspace_id: _ws, ...view }) => view),
         can_open: dir !== undefined,
+        ...(unpaired === undefined ? {} : { unpaired: { ...unpaired } }),
       }
+    },
+
+    probe(input) {
+      unpaired = { version: input.version, at: options.now() as ExtensionRunningVersion['at'] }
+      const version = folderVer()
+      return version === undefined ? {} : { folder_version: version }
     },
 
     async open(target): Promise<ExtensionOpenResult> {
