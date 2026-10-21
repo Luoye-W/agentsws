@@ -20,6 +20,13 @@
  * 事项页才有，别的页没有右侧面板）→ 一条很浅的细竖线 → 露出的工具（浏览器、变更审阅）→ 外壳给的插槽（WP429 的通知铃铛、
  * 这一页的「岗位设置 / 职责设置」）→「⋮」。面板本身没有标题条、关闭叉与放大钮，开关只在顶栏。
  *
+ * WP433（Luoye 10-20 问题 5 / 6）：右侧面板在岗位 / 职责 / 事项页上**一直在**，不是能收起来的抽屉——顶栏那颗面板开关
+ * （和挂在它上面的汇总点、后面那条细竖线）去掉；各卡自己的红 / 黄点照旧亮在卡的标题行上。面板顶上的「岗位层 / 职责层」
+ * 切换也去掉：岗位页看岗位层，职责页看职责层。
+ *
+ * WP433（Luoye 10-21 澄清）：那一列卡**属于中栏**（常驻、不能收、不像侧栏；窗口太窄时自动隐藏）；真正的**第三栏**是
+ * 点了才弹出、能开能关的那一格（浏览器、变更审阅、「显示更多」、看一份报表），出现在卡片列的再右边。
+ *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
 import {
@@ -27,14 +34,15 @@ import {
   Brain,
   Gauge,
   IdCard,
+  LayoutDashboard,
   type LucideIcon,
   MoreVertical,
-  PanelRight,
   Wrench,
 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { type ColumnsLayout, columnsLayout, useShellSize } from '@/components/rail/board-fit'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
@@ -44,16 +52,15 @@ import { RailPanel } from '@/components/rail/rail-panel'
 import { type RailScope, type RailTier, railContextOf } from '@/components/rail/rail-scope'
 import { RAIL_CARDS, useRailState } from '@/components/rail/rail-state'
 import {
-  listRailCards,
   menuPanels,
   type PanelTypeDefinition,
   panelBody,
   panelType,
   pinnedItems,
-  type RailCardDefinition,
   type RailPanelBodyProps,
   resolvePanelId,
 } from '@/components/rail/registry'
+import { paneWidth } from '@/components/rail/right-pane'
 import { TOPBAR_ICON, TOPBAR_ICON_ACTIVE, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -78,8 +85,8 @@ function useMedia(query: string): boolean {
 }
 
 /**
- * 只有窗口窄于 900（接近手机宽）面板才盖在主区上；900 以上一律并排占一栏，和 Claude 的右侧面板一样
- * （Luoye 10-19：状态卡默认一直显示、占右栏，不浮在对话上）。窄一些的窗口靠下面的 `maxWidth` 让面板让位。
+ * 第三栏（浏览器、变更审阅、「显示更多」那一格……）：窗口窄于 900（接近手机宽）才盖在主区上、点遮罩收起；
+ * 900 以上并排占一栏。窄一些的窗口靠 `maxWidth` 让它让位。
  */
 const NARROW = '(max-width: 899px)'
 /**
@@ -97,31 +104,49 @@ const SETTINGS_SHORTCUTS: readonly { id: string; icon: LucideIcon }[] = [
 /** WP412：窗口窄于 900 时，露在右上角的工具也收进「⋮」。 */
 const COMPACT = '(max-width: 899px)'
 
-/** 这一页的两层范围与默认层（顶栏图标与面板都要）。 */
-function useRailContext(
-  instances: PositionInstanceData[] | undefined,
-  tier: RailTier | null,
-): {
+/**
+ * 这一页看哪一层（顶栏图标与面板都要）。
+ *
+ * WP433（Luoye 10-20 问题 6）：**不能切**——岗位页就是岗位层，职责页就是职责层（事项页照旧看岗位层）。
+ * 原来面板顶上那个「岗位层 / 职责层」分段切换去掉；职责页要回岗位，走左栏岗位行或顶栏标题里的岗位名。
+ */
+function useRailContext(instances: PositionInstanceData[] | undefined): {
   scope?: RailScope
   tier: RailTier
   pathname: string
-  hasPosition: boolean
-  hasRole: boolean
 } {
   const { lang, position } = useApp()
   const { pathname } = useLocation()
   const context = railContextOf(pathname, instances, position, lang)
-  // 地址栏换了一层（进 / 出职责页）就跟着换；人手切过之后以人的选择为准
-  const effective: RailTier =
-    tier ?? (context.preferred === 'role' && context.role !== undefined ? 'role' : 'position')
-  const scope = effective === 'role' ? context.role : context.position
+  const tier: RailTier =
+    context.preferred === 'role' && context.role !== undefined ? 'role' : 'position'
+  const scope = tier === 'role' ? context.role : context.position
   return {
     ...(scope === undefined ? {} : { scope }),
-    tier: effective,
+    tier,
     pathname,
-    hasPosition: context.position !== undefined,
-    hasRole: context.role !== undefined,
   }
+}
+
+/**
+ * WP437：这一页三栏怎么摆（看板放不放得下、第三栏并排还是盖上去）——顶栏（看板「临时一眼」那颗图标）和
+ * 宿主（看板、第三栏）各自算，用的是同一份宽度与同一个函数（`board-fit.ts`）。
+ */
+function useColumns(): ColumnsLayout & { workPage: boolean } {
+  const rail = useRailState()
+  const size = useShellSize()
+  const narrow = useMedia(NARROW)
+  const { pathname } = useLocation()
+  const openId =
+    rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open).id
+  const thirdOpen = openId !== undefined && panelType(openId) !== undefined
+  // 报表那两格至少 560 宽（right-pane.ts），按它要的宽度算挤不挤得下
+  const layout = columnsLayout({
+    size,
+    third: thirdOpen ? paneWidth(openId, rail.width) : null,
+    narrow,
+  })
+  return { ...layout, workPage: railPageKind(pathname) !== undefined }
 }
 
 export function RightRail({ instances }: { instances?: PositionInstanceData[] }): ReactNode {
@@ -152,8 +177,9 @@ export function RailTopBar({
   ensureBuiltinPanels()
   const { t } = useApp()
   const rail = useRailState()
-  const ctx = useRailContext(instances, null)
+  const ctx = useRailContext(instances)
   const compact = useMedia(COMPACT)
+  const cols = useColumns()
   const [menu, setMenu] = useState(false)
   const box = useRef<HTMLDivElement | null>(null)
   const body: RailPanelBodyProps = {
@@ -187,13 +213,10 @@ export function RailTopBar({
   // 窄窗：露出来的那几个也收进「⋮」
   const shown = compact ? [] : pinned
   const overflow = [...(compact ? pinned : []), ...menuPanels()]
-  const panelOpen = rail.open !== null
   const pick = (panel: string): void => {
     setMenu(false)
     rail.show(panel)
   }
-  // WP431：只有岗位 / 职责 / 事项页有右侧面板（卡片堆），别的页不出面板开关
-  const hasPanel = railPageKind(ctx.pathname) !== undefined
   return (
     <nav
       className="flex items-center gap-0.5"
@@ -201,34 +224,25 @@ export function RailTopBar({
       data-testid="right-rail"
       data-open={rail.open ?? ''}
     >
-      {hasPanel ? (
-        <>
-          <button
-            type="button"
-            aria-label={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
-            title={t(panelOpen ? 'rail.toggle.close' : 'rail.toggle.open')}
-            aria-pressed={panelOpen}
-            data-testid="rail-toggle"
-            className={cn(ICON, panelOpen ? ICON_ACTIVE : ICON_IDLE)}
-            onClick={() => {
-              rail.show(panelOpen ? null : RAIL_CARDS)
-            }}
-          >
-            <PanelRight aria-hidden className="size-4" />
-            {/* 汇总点：每张卡各画一个在同一个位置，红的压在黄的上面——看上去只有一个点 */}
-            <span className="absolute top-1 right-1 flex size-1.5">
-              {listRailCards(rail.order).map((card) => (
-                <CardDotProbe key={card.id} card={card} body={body} />
-              ))}
-            </span>
-          </button>
-          {/* 照 Claude：面板开关和后面那几颗之间一条很浅的细竖线 */}
-          <span
-            aria-hidden
-            data-testid="top-bar-divider"
-            className="mx-1.5 h-4 w-px shrink-0 bg-ws-line"
-          />
-        </>
+      {/*
+        WP437：看板因为中栏太窄自动隐藏了，才出这一颗——点了看板浮在内容上看一眼，点外面收回。
+        它不是「收起面板」的开关：宽度够了看板自己回来，这颗也就不见了。
+      */}
+      {cols.workPage && !cols.board ? (
+        <button
+          type="button"
+          aria-pressed={rail.peek}
+          aria-label={t('rail.board.peek')}
+          title={t('rail.board.peek')}
+          data-testid="board-peek"
+          data-board-peek=""
+          className={cn(ICON, rail.peek ? ICON_ACTIVE : ICON_IDLE)}
+          onClick={() => {
+            rail.setPeek(!rail.peek)
+          }}
+        >
+          <LayoutDashboard aria-hidden className="size-4" />
+        </button>
       ) : null}
       {shown.map((panel) => (
         <PanelIcon
@@ -328,40 +342,9 @@ function MenuItem({
   )
 }
 
-/** 一张卡的状态点，画在面板开关右上角（只要点，不取摘要）。 */
-function CardDotProbe({
-  card,
-  body,
-}: {
-  card: RailCardDefinition
-  body: RailPanelBodyProps
-}): ReactNode {
-  const useStatus = card.useStatus ?? noStatus
-  const status = useStatus(body, false)
-  if (status?.dot === undefined) return null
-  return (
-    <i
-      role="img"
-      aria-label={status.dotLabel ?? ''}
-      title={status.dotLabel}
-      data-testid="rail-toggle-dot"
-      data-card={card.id}
-      data-dot={status.dot}
-      className={cn(
-        'absolute inset-0 rounded-full',
-        status.dot === 'alert' ? 'z-10 bg-ws-bad' : 'bg-ws-warn',
-      )}
-    />
-  )
-}
-
 const ICON = TOPBAR_ICON
 const ICON_ACTIVE = TOPBAR_ICON_ACTIVE
 const ICON_IDLE = TOPBAR_ICON_IDLE
-
-function noStatus(_p: RailPanelBodyProps, _d: boolean): undefined {
-  return undefined
-}
 
 function noBadge(_props: RailPanelBodyProps): undefined {
   return undefined
@@ -420,42 +403,45 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   // 幂等：内置面板与第三方面板走同一条注册路，这里只保证那条路跑过一次
   ensureBuiltinPanels()
   const { t } = useApp()
-  const narrow = useMedia(NARROW)
   const rail = useRailState()
+  const cols = useColumns()
   // WP353：联网搜索被人机验证拦下、要人点时，自动打开「浏览器」（平时静默，不弹）
   useOpenBrowserOnHandover()
-  const [tier, setTier] = useState<RailTier | null>(null)
-  const ctx = useRailContext(instances, tier)
-  // WP431：卡片堆只在岗位 / 职责 / 事项页上有（别的页没有右侧面板，也没有开关）；工具类的一格照旧哪儿都能开
-  const cards = rail.open === RAIL_CARDS && railPageKind(ctx.pathname) !== undefined
+  const ctx = useRailContext(instances)
+  /**
+   * WP431：卡片列只在岗位 / 职责 / 事项页上有；第三栏（浏览器、变更审阅、「显示更多」那一格……）哪儿都能开。
+   * WP433：卡片列属于中栏、常驻；`rail.open` 只管第三栏开着哪一格（`null` / 卡片 = 第三栏收着）。
+   * 存坏了 / 上一版留下的名字 / 应用包被卸了的那一格当成收着。
+   */
+  const workPage = cols.workPage
   // WP208：旧 id（`memory` …）先落到它现在的去处与标签（「设定」的「记忆」）
   const resolved =
     rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open)
-  // 存坏了 / 是上一版留下的名字 / 那个应用包被卸了：当成收起
   const definition = resolved === undefined ? undefined : panelType(resolved.id)
-  const sub = resolved?.sub
-  const open = cards ? RAIL_CARDS : (definition?.id ?? null)
+  const sub = definition === undefined ? undefined : resolved?.sub
   const dragging = useRef(false)
   const scope = ctx.scope
 
-  /** `]` 收起之后再按一次，开回刚才那个（没有就开卡片）。 */
-  const last = useRef<string>(RAIL_CARDS)
-  if (open !== null && rail.open !== null) last.current = rail.open
+  /** `]` 收起第三栏；再按一次开回刚才那一格。 */
+  const last = useRef<string | null>(null)
+  if (definition !== undefined && rail.open !== null) last.current = rail.open
+  const thirdOpen = definition !== undefined
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== ']' || e.metaKey || e.ctrlKey || e.altKey) return
       const el = e.target as HTMLElement | null
-      const tag = el?.tagName.toLowerCase()
+      const tag = el?.tagName?.toLowerCase()
       if (tag === 'input' || tag === 'textarea' || el?.isContentEditable === true) return
       e.preventDefault()
-      rail.show(rail.open === null ? last.current : null)
+      if (thirdOpen) rail.show(null)
+      else if (last.current !== null) rail.show(last.current)
     }
     globalThis.addEventListener?.('keydown', onKey)
     return () => {
       globalThis.removeEventListener?.('keydown', onKey)
     }
-  }, [rail])
+  }, [rail, thirdOpen])
 
   /**
    * 拖左边缘改宽度（夹在 320–720）；**松手**才写进本机。
@@ -482,10 +468,9 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     }
   }, [setWidth, plain])
 
-  if (open === null) return <ComputerUseStrip />
-
-  const width = plain
-  const scoped = cards || definition?.scoped === true
+  // WP437：报表那两格至少 560 宽（人拖得更宽照旧）
+  const width = paneWidth(definition?.id, plain)
+  const scoped = definition?.scoped === true
   const body: RailPanelBodyProps = {
     ...(scope === undefined ? {} : { scope }),
     tier: ctx.tier,
@@ -493,16 +478,14 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     ...(rail.address === null ? {} : { address: rail.address }),
     ...(sub === undefined ? {} : { sub }),
   }
+  const cardsBody: RailPanelBodyProps = {
+    ...(scope === undefined ? {} : { scope }),
+    tier: ctx.tier,
+    pathname: ctx.pathname,
+    ...(rail.address === null ? {} : { address: rail.address }),
+  }
   const Body = definition === undefined ? undefined : panelBody(definition.id)
   const content = ((): ReactNode => {
-    if (cards)
-      return scope === undefined ? (
-        <p className="text-muted-foreground" data-testid="rail-no-scope">
-          {t('rail.no_scope')}
-        </p>
-      ) : (
-        <RailCards {...body} />
-      )
     if (definition === undefined) return null
     // 注册了类型、还没注册身体 = 占位面板：照实说"还没做"
     if (Body === undefined)
@@ -537,75 +520,177 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       </ErrorBoundary>
     )
   })()
-  const title = cards ? t('rail.cards') : definition === undefined ? '' : t(definition.label)
+
+  /*
+   * WP433（Luoye 10-21 澄清）：岗位 / 职责 / 事项页右边那一列卡（对话 / 报表 / 产出 / 计划 / 连接 / 设定）
+   * **属于中栏**——和中间内容一起、只是摆在右边，常驻、不能收，也不像侧栏（没有拖宽把手、没有分隔竖线、宽度随窗口）。
+   *
+   * WP437（Luoye 10-21 补充「中栏宽度优先」）：中栏可用宽度（窗口 − 左栏 − 并排开着的第三栏）放不下
+   * 「核心内容区最小宽度 600 + 看板」时看板**自动隐藏**，放得下了自己回来（`board-fit.ts`）；打开第三栏挤窄时同样算。
+   * 隐藏时顶栏多一颗小图标，点了看板浮在内容上看一眼（{@link BoardPeek}），点外面收回。
+   */
+  const cards = (
+    <section className="flex flex-col text-sm" data-testid="rail-panel-cards" data-tier={ctx.tier}>
+      {scope === undefined ? (
+        <p className="text-muted-foreground" data-testid="rail-no-scope">
+          {t('rail.no_scope')}
+        </p>
+      ) : (
+        <RailCards {...cardsBody} />
+      )}
+    </section>
+  )
+  const board = !workPage ? null : cols.board ? (
+    <div
+      className="sticky top-11 h-[calc(100vh-2.75rem)] shrink-0 overflow-y-auto bg-ws-paper pt-4 pr-4 pb-6 md:pt-7 md:pr-7"
+      style={{ width: cols.boardWidth }}
+      data-testid="rail-board"
+    >
+      {cards}
+    </div>
+  ) : rail.peek ? (
+    <BoardPeek
+      width={cols.boardWidth}
+      right={cols.third}
+      onClose={() => {
+        rail.setPeek(false)
+      }}
+    >
+      {cards}
+    </BoardPeek>
+  ) : null
+
+  /*
+   * 真正的**右栏 / 第三栏**：点了才弹出、能开能关的那一格——浏览器、变更审阅（顶栏图标开关）、卡里「显示更多」的完整列表、
+   * 看一份报表……出现在看板的再右边，可以拖宽（记住）。
+   * WP437：并排之后核心内容区连最小宽度都保不住（或窗口窄于 900）时，改成盖在中栏上，点遮罩 / × 收起。
+   */
+  const overlay = cols.overlay
+  const panel =
+    definition === undefined ? null : (
+      <>
+        {overlay ? (
+          <button
+            type="button"
+            aria-label={t('rail.close')}
+            data-testid="rail-scrim"
+            className="fixed inset-x-0 top-11 bottom-0 z-40 bg-black/20"
+            onClick={() => {
+              rail.show(null)
+            }}
+          />
+        ) : null}
+        <div
+          className={cn(
+            'flex shrink-0 border-l border-ws-line bg-ws-paper',
+            overlay
+              ? 'fixed top-11 right-0 bottom-0 z-40 max-w-[calc(100vw-1rem)] shadow-lg'
+              : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
+          )}
+          // 并排时最多占窗口的一半，窗口窄了自己收，给对话留地方
+          style={
+            overlay
+              ? { width, maxWidth: 'calc(100vw - 3rem)' }
+              : { width, maxWidth: '50vw', minWidth: 300 }
+          }
+          data-testid="rail-panel-frame"
+          data-panel={definition.id}
+          data-layout={overlay ? 'overlay' : 'docked'}
+          data-board={workPage ? (cols.board ? 'shown' : 'hidden') : undefined}
+        >
+          {overlay ? null : (
+            <button
+              type="button"
+              aria-label={t('rail.resize')}
+              data-testid="rail-resize"
+              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
+              onMouseDown={() => {
+                dragging.current = true
+              }}
+              onKeyDown={(e) => {
+                // 键盘也调得动：左右箭头一次 20px
+                const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
+                if (step === 0) return
+                e.preventDefault()
+                setWidth(clampRailWidth(plain + step), true)
+              }}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <RailPanel
+              title={t(definition.label)}
+              {...(scoped && scope !== undefined ? { scope } : {})}
+              tier={ctx.tier}
+              onClose={() => {
+                rail.show(null)
+              }}
+              testId={`rail-panel-${definition.id}`}
+            >
+              {content}
+            </RailPanel>
+          </div>
+        </div>
+      </>
+    )
+
+  // WP437：看板回来了（宽度够了）或这一页没有看板，临时一眼自己收
+  const peekStale = rail.peek && (cols.board || !workPage)
+  useEffect(() => {
+    if (peekStale) rail.setPeek(false)
+  }, [peekStale, rail])
 
   return (
     <>
       {/* WP144（docs/80 §5）：AI 正在操作这台电脑时的那一行（没在操作时不占地方） */}
       <ComputerUseStrip />
-      {/* 窄屏：面板盖在主区上，背景遮罩点一下收起（与 `]` 同一件事） */}
-      {narrow ? (
-        <button
-          type="button"
-          aria-label={t('rail.close')}
-          data-testid="rail-scrim"
-          className="fixed inset-x-0 top-11 bottom-0 z-40 bg-black/20"
-          onClick={() => {
-            rail.show(null)
-          }}
-        />
-      ) : null}
-      <div
-        className={cn(
-          'z-40 flex shrink-0 border-l border-ws-line bg-ws-paper',
-          narrow
-            ? 'fixed top-11 right-0 bottom-0 max-w-[calc(100vw-1rem)] shadow-lg'
-            : 'sticky top-11 h-[calc(100vh-2.75rem)]',
-        )}
-        // 并排时面板最多占窗口的一半，窗口窄了自己收，给对话留地方
-        style={narrow ? { width } : { width, maxWidth: '50vw', minWidth: 300 }}
-        data-testid="rail-panel-frame"
-        data-panel={open}
-      >
-        {narrow ? null : (
-          <button
-            type="button"
-            aria-label={t('rail.resize')}
-            data-testid="rail-resize"
-            className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
-            onMouseDown={() => {
-              dragging.current = true
-            }}
-            onKeyDown={(e) => {
-              // 键盘也调得动：左右箭头一次 20px
-              const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
-              if (step === 0) return
-              e.preventDefault()
-              setWidth(clampRailWidth(plain + step), true)
-            }}
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <RailPanel
-            title={title}
-            {...(scoped && scope !== undefined ? { scope } : {})}
-            tier={ctx.tier}
-            onTier={setTier}
-            hasPosition={scoped && ctx.hasPosition}
-            hasRole={scoped && ctx.hasRole}
-            {...(cards
-              ? {}
-              : {
-                  onBack: () => {
-                    rail.show(RAIL_CARDS)
-                  },
-                })}
-            testId={`rail-panel-${open}`}
-          >
-            {content}
-          </RailPanel>
-        </div>
-      </div>
+      {board}
+      {panel}
     </>
+  )
+}
+
+/**
+ * WP437：看板自动隐藏时的「临时一眼」——看板浮在内容上（贴着右边；第三栏并排开着时贴在它左边），
+ * 点外面 / Esc 收回。顶栏那颗图标自己管开关（点它不算「点外面」）。
+ */
+function BoardPeek({
+  width,
+  right,
+  onClose,
+  children,
+}: {
+  width: number
+  /** 右边让出多少（并排开着的第三栏的宽度）。 */
+  right: number
+  onClose: () => void
+  children: ReactNode
+}): ReactNode {
+  const box = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const onDown = (e: MouseEvent): void => {
+      const target = e.target as Element | null
+      if (box.current?.contains(target as Node) === true) return
+      if (target?.closest?.('[data-board-peek]') != null) return
+      onClose()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    globalThis.addEventListener?.('mousedown', onDown)
+    globalThis.addEventListener?.('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener?.('mousedown', onDown)
+      globalThis.removeEventListener?.('keydown', onKey)
+    }
+  }, [onClose])
+  return (
+    <div
+      ref={box}
+      className="fixed top-11 bottom-0 z-40 max-w-[calc(100vw-1rem)] overflow-y-auto border-l border-ws-line bg-ws-paper p-4 shadow-xl md:p-5"
+      style={{ width, right }}
+      data-testid="rail-board-peek"
+    >
+      {children}
+    </div>
   )
 }

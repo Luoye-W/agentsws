@@ -1,5 +1,5 @@
 /**
- * WP372（决策 1001 / 1004）：右侧面板「对话」——卡（最多 4 条，要你看的排最上）与完整列表（「显示更多」）。
+ * WP372（决策 1001 / 1004）：右侧面板「对话」——卡（最多 5 条，要你看的排最上）与完整列表（「显示更多」，WP433 起多于 5 条才出）。
  *
  * - 职责层：这条职责的对话按「今天 / 本周 / 更早」分组；
  * - 岗位层（岗位总览）：按职责分组列全部；
@@ -23,7 +23,11 @@ import {
 } from '@/components/conversations/conversation-list'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
-import type { RailCardBodyProps, RailPanelBodyProps } from '@/components/rail/registry'
+import {
+  type RailCardBodyProps,
+  type RailPanelBodyProps,
+  useCardTotal,
+} from '@/components/rail/registry'
 import { useApp } from '@/lib/app-context'
 
 /** 新对话交给谁：职责层 = 这条职责（跳过岗位内路由）；岗位层 = 岗位自己分。 */
@@ -91,12 +95,14 @@ function ArchivedLink({ scope, duty }: { scope: RailScope; duty: ConvDuty }): Re
   )
 }
 
-/** 卡身体：新对话 + 最多 4 条（要你看的排最上）。 */
-export function ConversationsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+/** 卡身体：新对话 + 最多 5 条（要你看的排最上）。 */
+export function ConversationsCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const { duties, ready } = useScopeConversations(scope)
-  if (scope === undefined) return null
   const all = duties.flatMap((d) => d.matters).sort(byAttention)
+  // WP433：卡上放不下的（更早的、已归档的）也算——完整一格里才看得到它们
+  useCardTotal(onTotal, all.length + duties.reduce((n, d) => n + d.more + d.archived, 0))
+  if (scope === undefined) return null
   return (
     <div className="flex flex-col gap-1.5" data-testid="conv-card">
       <ComposeBar scope={scope} />

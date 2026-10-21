@@ -2,7 +2,8 @@
  * WP372（决策 1004 / 1019）：右侧面板里**报表 / 产出 / 计划 / 连接 / 设定**五张卡展开后的样子。
  * （「对话」那张在 `components/conversations/conversations-panel.tsx`。）
  *
- * 规矩照决策 1004：展开后最多 4 条（`limit`），**要处理的排最上面**；完整列表在卡底「显示更多」（外壳画）。
+ * 规矩照决策 1004：展开后最多 `limit` 条（WP433 起 5 条），**要处理的排最上面**；完整列表在卡底「显示更多」
+ * （外壳画；WP433：卡身体用 `onTotal` 报总数，多于 5 条才出）。
  * 这一个文件整体 `lazy()`：没有任何一张卡展开之前一个字节都不下载。
  */
 import { useQueries, useQuery } from '@tanstack/react-query'
@@ -17,7 +18,7 @@ import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
 import { ExtensionRows, useScopeExtension } from '@/components/rail/cards/extension-rows'
 import { useRailState } from '@/components/rail/rail-state'
-import type { RailCardBodyProps } from '@/components/rail/registry'
+import { type RailCardBodyProps, useCardTotal } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import {
   CompetitorChangesTable,
@@ -28,13 +29,19 @@ import {
 import {
   reportAddress,
   scopeAssignments,
+  scopeMayHaveReportBoards,
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
-import { getMySchedules, getPositionRecords, type ScheduledTaskRow } from '@/lib/api'
+import {
+  getMySchedules,
+  getPositionRecords,
+  getPositionWork,
+  type ScheduledTaskRow,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { getFreeChatModels } from '@/lib/free-chat'
 import type { PrWatchView } from '@/lib/pr-watch-api'
@@ -57,10 +64,12 @@ function Meta({ children }: { children: ReactNode }): ReactNode {
 
 /* ── 报表 ───────────────────────────────────────────────────────────── */
 
-export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+export function ReportsCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const { reports, ready } = useScopeReports(scope)
+  // WP433：完整一格里还有看数的看板（投放「今天」、Amazon 运营……）时，也算「还有更多」
+  useCardTotal(onTotal, reports.length + (scopeMayHaveReportBoards(scope) ? limit + 1 : 0))
   // WP392：担竞品监控的这一层，卡里再放竞品变化表（按竞品 / 种类筛；价格带走势）
   const competitor =
     competitorAssignmentOf(scope) === undefined ? null : (
@@ -105,7 +114,7 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
 
 /* ── 产出 ───────────────────────────────────────────────────────────── */
 
-export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+export function OutputsCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const records = useQueries({
@@ -124,6 +133,7 @@ export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
       return true
     })
     .sort((a, b) => b.at.localeCompare(a.at))
+  useCardTotal(onTotal, rows.length)
   if (rows.length === 0)
     return records.some((r) => r.isPending) ? null : <Empty text={t('outputs.empty')} />
   return (
@@ -158,22 +168,97 @@ function byPlan(a: ScheduledTaskRow, b: ScheduledTaskRow): number {
   return (a.next_fire_at ?? '~').localeCompare(b.next_fire_at ?? '~')
 }
 
-export function PlansCard({ scope, limit }: RailCardBodyProps): ReactNode {
+/**
+ * WP433：这条职责在「计划 → 显示更多」里有没有进度看板（社媒排期 / 群发、B2B、投放素材流水线）。
+ * 和 `scope-boards.tsx` 的 `dutyHasWorkBoards` 同一份名单（不 import 那个大文件，卡身体要轻）。
+ */
+export function dutyMayHaveWorkBoards(role_id: string): boolean {
+  return (
+    role_id.startsWith('social.') ||
+    role_id === 'b2b.outbound' ||
+    role_id === 'b2b.sales' ||
+    role_id === 'ads.google' ||
+    role_id === 'ads.meta'
+  )
+}
+
+/**
+ * WP433（问题 8）：「计划」卡最上面一行「进度」——岗位层带上「进行中 N · 卡住了 M」（数与「工作」同一份），
+ * 职责层是那条职责的排期 / 流水线；点了开「计划」的完整一格（原来这些摊在「报表」里）。
+ */
+function ProgressRow({ scope }: { scope: NonNullable<RailCardBodyProps['scope']> }): ReactNode {
+  const { t } = useApp()
+  const rail = useRailState()
+  const id = scope.tier === 'position' ? (scope.assignment ?? '') : ''
+  const work = useQuery({
+    queryKey: ['position-work', id],
+    queryFn: () => getPositionWork(id),
+    enabled: id !== '',
+    retry: false,
+  })
+  const counts = work.data?.counts
+  const stuck = counts?.stuck ?? 0
+  const doing = counts?.doing ?? 0
+  // 有在做 / 卡住的就说这两个数（为 0 的那一半不说）；都没有就说一共几件
+  const meta =
+    counts === undefined
+      ? ''
+      : doing + stuck > 0
+        ? [
+            doing > 0 ? t('plans.work.doing', { n: doing }) : '',
+            stuck > 0 ? t('plans.work.stuck', { n: stuck }) : '',
+          ]
+            .filter((x) => x !== '')
+            .join(' · ')
+        : (work.data?.items.length ?? 0) > 0
+          ? t('plans.work.items', { n: work.data?.items.length ?? 0 })
+          : ''
+  return (
+    <li>
+      <button
+        type="button"
+        className={ROW}
+        data-testid="plan-row-progress"
+        data-stuck={stuck > 0 ? 'true' : undefined}
+        onClick={() => {
+          rail.show('schedules')
+        }}
+      >
+        {stuck > 0 ? <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" /> : null}
+        <span className="min-w-0 truncate">{t('plans.progress')}</span>
+        <Meta>{meta}</Meta>
+      </button>
+    </li>
+  )
+}
+
+export function PlansCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const list = useQuery({ queryKey: SCHEDULES_KEY, queryFn: getMySchedules, retry: false })
   // WP386：信息监控下一次什么时候拉（系统自带的那条定时一小时一拍，人看的是「明早 9:00」）
   const monitorNext = useScopeMonitor(scope)?.view?.next_run_at
-  if (scope === undefined) return null
-  const rows = (list.data ?? [])
-    .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
-    .sort(byPlan)
+  const rows =
+    scope === undefined
+      ? []
+      : (list.data ?? [])
+          .filter((r) => isListedSchedule(r) && scheduleInScope(r, scope))
+          .sort(byPlan)
   // WP392：竞品监控的下次读（不是一条定时任务，是按到点规则算出来的）
   const competitor = competitorAssignmentOf(scope) !== undefined
-  if (rows.length === 0 && monitorNext === undefined && !competitor)
+  const progress =
+    scope?.assignment !== undefined &&
+    (scope.tier === 'position' || dutyMayHaveWorkBoards(scope.scope_id))
+  useCardTotal(
+    onTotal,
+    rows.length + (progress ? 1 : 0) + (competitor ? 1 : 0) + (monitorNext === undefined ? 0 : 1),
+  )
+  if (scope === undefined) return null
+  if (rows.length === 0 && monitorNext === undefined && !competitor && !progress)
     return list.isPending ? null : <Empty text={t('plans.empty')} />
   return (
     <ul className="flex flex-col gap-px" data-testid="plans-card">
+      {progress ? <ProgressRow scope={scope} /> : null}
       {competitor ? <CompetitorWatchPlanRow scope={scope} /> : null}
       {monitorNext === undefined ? null : (
         <li>
@@ -223,7 +308,7 @@ const ConnectBody = lazy(async () => {
 })
 
 export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
-  const { scope, limit, address } = props
+  const { scope, limit, address, onTotal } = props
   const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const { items, ready } = useScopeConnections(scope)
@@ -238,6 +323,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   const sorted = [...items].sort(
     (a, b) => Number(connectionNeedsYou(b)) - Number(connectionNeedsYou(a)),
   )
+  useCardTotal(onTotal, sorted.length)
   // WP386：信息监控的监控源（一行汇总；拉不到的亮红点，点开就地看 / 贴）
   const monitor = useScopeMonitor(scope)
   // WP420：要插件的这一层，先列插件那几行（配对、后台在插件里连上没有）
@@ -365,7 +451,7 @@ function MonitorRow({
 
 /* ── 设定 ───────────────────────────────────────────────────────────── */
 
-export function SettingsCard({ limit, tier }: RailCardBodyProps): ReactNode {
+export function SettingsCard({ limit, tier, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
   const models = useQuery({ queryKey: MODEL_CHOICES_KEY, queryFn: getFreeChatModels, retry: false })
@@ -396,6 +482,7 @@ export function SettingsCard({ limit, tier }: RailCardBodyProps): ReactNode {
       },
     })),
   ]
+  useCardTotal(onTotal, rows.length)
   return (
     <ul className="flex flex-col gap-px" data-testid="settings-card">
       {rows.slice(0, limit).map((r) => (

@@ -57,6 +57,7 @@ import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { type ComposeTarget, type Handoff, PaletteProvider } from '@/components/palette-context'
+import { type ShellSize, ShellSizeContext } from '@/components/rail/board-fit'
 import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
 import { RailHost, RailTopBar } from '@/components/rail/right-rail'
 import { PositionIcon } from '@/components/role-icons/role-icon'
@@ -312,6 +313,35 @@ function MessagesUnread(): ReactNode {
   )
 }
 
+/**
+ * WP437：量 `shell-body`（窗口 − 左栏）有多宽，连同窗口宽度一起给看板 / 第三栏算三栏怎么摆（`board-fit.ts`）。
+ * 量不到（jsdom 里宽度是 0）时给 0，那边当作放得下。
+ */
+function useShellBodySize(): [(el: HTMLDivElement | null) => void, ShellSize] {
+  const [el, setEl] = useState<HTMLDivElement | null>(null)
+  const [size, setSize] = useState<ShellSize>({ body: 0, viewport: 0 })
+  useEffect(() => {
+    if (el === null) return
+    const measure = (): void => {
+      const body = Math.round(el.getBoundingClientRect().width)
+      const viewport = Math.round(globalThis.innerWidth ?? 0)
+      setSize((prev) =>
+        prev.body === body && prev.viewport === viewport ? prev : { body, viewport },
+      )
+    }
+    measure()
+    const Observer = globalThis.ResizeObserver
+    const ro = Observer === undefined ? undefined : new Observer(measure)
+    ro?.observe(el)
+    globalThis.addEventListener?.('resize', measure)
+    return () => {
+      ro?.disconnect()
+      globalThis.removeEventListener?.('resize', measure)
+    }
+  }, [el])
+  return [setEl, size]
+}
+
 function useMedia(query: string): boolean {
   const [hit, setHit] = useState(() => {
     try {
@@ -506,6 +536,8 @@ export function AppShell({
     })
   }, [])
   const topBar = useTopBarSlotState()
+  /** WP437：中栏 + 第三栏能用多宽（看板放不放得下、第三栏并排还是盖上去按它算）。 */
+  const [shellBody, shellSize] = useShellBodySize()
   const pageName = pageNameKey(pathname)
   const [creating, setCreating] = useState(false)
   const [archived, setArchived] = useState<ArchivedScope | undefined>(undefined)
@@ -615,11 +647,11 @@ export function AppShell({
                     aria-label={t('nav.main')}
                     data-testid="main-nav"
                   >
-                    <IconNavLink to="/assistant" label={t('nav.free_chat')} testId="nav-free-chat">
-                      <NavIcon icon={MessageCircle} />
-                    </IconNavLink>
                     <IconNavLink to="/" end label={t('nav.home')}>
                       <NavIcon icon={Home} />
+                    </IconNavLink>
+                    <IconNavLink to="/assistant" label={t('nav.free_chat')} testId="nav-free-chat">
+                      <NavIcon icon={MessageCircle} />
                     </IconNavLink>
                     <IconNavLink to="/messages" label={t('nav.messages')} testId="nav-messages">
                       <NavIcon icon={Inbox} />
@@ -664,14 +696,15 @@ export function AppShell({
               WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
               不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
               WP343（决策 334 / 859）：改名「我的助理」（并进了「我的代理」），仍在最上面。
+              WP433（Luoye 10-20 问题 1）：「首页」放到最上面，「助理」排第二（图标列同一个顺序）。
             */}
+                    <NavLink to="/" end className={navClass} data-testid="nav-home">
+                      <NavIcon icon={Home} />
+                      {t('nav.home')}
+                    </NavLink>
                     <NavLink to="/assistant" className={navClass} data-testid="nav-free-chat">
                       <NavIcon icon={MessageCircle} />
                       {t('nav.free_chat')}
-                    </NavLink>
-                    <NavLink to="/" end className={navClass}>
-                      <NavIcon icon={Home} />
-                      {t('nav.home')}
                     </NavLink>
                     {/*
               WP113（63 §1）：这一格原来是「目标」。Luoye 定：换成**消息**——
@@ -813,8 +846,9 @@ export function AppShell({
                 </div>
               </aside>
 
-              <div className="flex min-w-0 flex-1 flex-col">
-                {/*
+              <ShellSizeContext.Provider value={shellSize}>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  {/*
             WP372（决策 1001 / 1002，Luoye 10-17，学 Claude 桌面版）：顶栏 = **窗口右上角那一排**。
             左边只剩几条整个工作区的状态（演示数据 / 值守中 / 还没接 AI / 余额不足），右边是六张卡的图标
             与「⋮」（`RailTopBar`；WP412 起：露出的工具 →「⋮」溢出菜单 → 最右专门的面板开关）。原来中间那个「交给某个岗位一件事… ⌘K」搜索框去掉了——派活由助理做（WP343），
@@ -822,91 +856,105 @@ export function AppShell({
             WP424 起桌面壳藏了系统标题栏（`desktopChrome()`）：这一排就是标题栏——Mac 红绿灯在左栏顶部，
             Windows 窗口按钮叠在右上（右边按 `env(titlebar-area-*)` 让出那一截）。
           */}
-                {/*
+                  {/*
                 WP424：桌面壳藏了系统标题栏之后，这一排就是窗口的标题栏——空白处能拖动窗口（上面的按钮不能）。
                 Mac：窄窗左栏收起时左边让出红绿灯那一截；Windows：右边让出三个系统按钮（壳没给 env 时按 140px 让）。
               */}
-                <header
-                  className={cn(
-                    'sticky top-0 z-50 flex h-11 shrink-0 items-center gap-1 border-b border-ws-line bg-ws-paper',
-                    chrome !== undefined && 'ws-drag',
-                    // WP424 / WP431：左栏收成图标列时 Mac 红绿灯伸到顶栏这边来（52 + 34 ≥ 84），左边让出那一截
-                    chrome === 'inset' && iconRail ? 'pl-[34px]' : 'pl-3',
-                  )}
-                  style={{
-                    paddingRight:
-                      chrome === 'overlay'
-                        ? 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))))'
-                        : 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
-                  }}
-                  data-testid="top-bar"
-                  data-chrome={chrome}
-                >
-                  {iconRail ? (
-                    <>
-                      <ShellCorner
-                        collapsed
-                        {...(narrow ? {} : { onToggle: toggleSidebar })}
-                        onSearch={() => {
-                          palette.open()
-                        }}
-                      />
-                      <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-ws-line" />
-                    </>
-                  ) : null}
-                  {/* WP431：这一页的标题（岗位 / 职责 / 事项页自己放进来）；没有就按地址写页名 */}
-                  <div
-                    ref={topBar.setTitle}
-                    className="flex min-w-0 items-center"
-                    data-testid="top-bar-title-slot"
-                  />
-                  {topBar.claimed || pageName === undefined ? null : (
-                    <span
-                      className="truncate px-1.5 text-[13.5px] font-medium"
-                      data-testid="top-bar-page-name"
-                    >
-                      {t(pageName)}
-                    </span>
-                  )}
-                  {/* WP125：合成世界的「演示数据」标记——不显眼但始终在 */}
-                  <span className="ml-1 flex shrink-0 items-center gap-2">
-                    <DemoBadge />
-                    <StandbyBadge />
-                    {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
-                    {onboarding ? null : <NoModelBanner variant="chip" />}
-                    {onboarding ? null : <QuotaChip />}
-                  </span>
-                  <div className="ml-auto flex shrink-0 items-center">
-                    <RailTopBar
-                      {...(instances === undefined ? {} : { instances })}
-                      extra={
-                        <>
-                          {/* WP429：通知铃铛（变更审阅之后、这一页的设置之前） */}
-                          <span className="contents" data-testid="top-bar-bell-slot">
-                            <NotificationBell />
-                          </span>
-                          {/* 这一页的设置（岗位设置 / 职责设置的滑杆），页面自己放进来 */}
-                          <span
-                            ref={topBar.setAction}
-                            className="contents"
-                            data-testid="top-bar-action-slot"
-                          />
-                        </>
-                      }
+                  <header
+                    className={cn(
+                      'sticky top-0 z-50 flex h-11 shrink-0 items-center gap-1 border-b border-ws-line bg-ws-paper',
+                      chrome !== undefined && 'ws-drag',
+                      // WP424 / WP431：左栏收成图标列时 Mac 红绿灯伸到顶栏这边来（52 + 34 ≥ 84），左边让出那一截
+                      chrome === 'inset' && iconRail ? 'pl-[34px]' : 'pl-3',
+                    )}
+                    style={{
+                      paddingRight:
+                        chrome === 'overlay'
+                          ? 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))))'
+                          : 'max(0.5rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
+                    }}
+                    data-testid="top-bar"
+                    data-chrome={chrome}
+                  >
+                    {iconRail ? (
+                      <>
+                        <ShellCorner
+                          collapsed
+                          {...(narrow ? {} : { onToggle: toggleSidebar })}
+                          onSearch={() => {
+                            palette.open()
+                          }}
+                        />
+                        <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-ws-line" />
+                      </>
+                    ) : null}
+                    {/* WP431：这一页的标题（岗位 / 职责 / 事项页自己放进来）；没有就按地址写页名 */}
+                    <div
+                      ref={topBar.setTitle}
+                      className="flex min-w-0 items-center"
+                      data-testid="top-bar-title-slot"
                     />
+                    {topBar.claimed || pageName === undefined ? null : (
+                      <span
+                        className="truncate px-1.5 text-[13.5px] font-medium"
+                        data-testid="top-bar-page-name"
+                      >
+                        {t(pageName)}
+                      </span>
+                    )}
+                    {/* WP125：合成世界的「演示数据」标记——不显眼但始终在 */}
+                    <span className="ml-1 flex shrink-0 items-center gap-2">
+                      <DemoBadge />
+                      <StandbyBadge />
+                      {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
+                      {onboarding ? null : <NoModelBanner variant="chip" />}
+                      {onboarding ? null : <QuotaChip />}
+                    </span>
+                    <div className="ml-auto flex shrink-0 items-center">
+                      <RailTopBar
+                        {...(instances === undefined ? {} : { instances })}
+                        extra={
+                          <>
+                            {/* WP429：通知铃铛（变更审阅之后、这一页的设置之前） */}
+                            <span className="contents" data-testid="top-bar-bell-slot">
+                              <NotificationBell />
+                            </span>
+                            {/* 这一页的设置（岗位设置 / 职责设置的滑杆），页面自己放进来 */}
+                            <span
+                              ref={topBar.setAction}
+                              className="contents"
+                              data-testid="top-bar-action-slot"
+                            />
+                          </>
+                        }
+                      />
+                      {/*
+                      WP433（Luoye 10-20 问题 8 后半）：Windows 上三个系统按钮（最小化 / 最大化 / 关闭）叠在右上，
+                      紧挨着我们那排图标显得挤成一团。照 VS Code / Slack / Notion 在 Windows 上的做法：
+                      我们的图标与系统按钮之间留一截空、立一条细竖线，把「这一页的动作」和「窗口的按钮」分成两组。
+                    */}
+                      {chrome === 'overlay' ? (
+                        <span
+                          aria-hidden
+                          data-testid="caption-gap"
+                          className="mr-2 ml-4 h-5 w-px shrink-0 bg-ws-line"
+                        />
+                      ) : null}
+                    </div>
+                  </header>
+                  {/* WP433：主区 + 卡片列（属于中栏）+ 第三栏（点了才弹出的那一格），横着排 */}
+                  <div ref={shellBody} className="flex min-w-0 flex-1" data-testid="shell-body">
+                    <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
+                      {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
+                      <ErrorBoundary scope="page" resetKey={pathname}>
+                        {children}
+                      </ErrorBoundary>
+                    </main>
+                    {/* WP372：右侧面板（六张卡 / 一格）；宽屏挤在主区右边，< 1200 盖在主区上 */}
+                    <RailHost {...(instances === undefined ? {} : { instances })} />
                   </div>
-                </header>
-                <div className="flex min-w-0 flex-1">
-                  <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
-                    {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
-                    <ErrorBoundary scope="page" resetKey={pathname}>
-                      {children}
-                    </ErrorBoundary>
-                  </main>
-                  {/* WP372：右侧面板（六张卡 / 一格）；宽屏挤在主区右边，< 1200 盖在主区上 */}
-                  <RailHost {...(instances === undefined ? {} : { instances })} />
                 </div>
-              </div>
+              </ShellSizeContext.Provider>
 
               {/* WP320：「记住了：……」小提醒（点了跳到那条记忆） */}
               <MemoryNotice {...(instances === undefined ? {} : { instances })} />

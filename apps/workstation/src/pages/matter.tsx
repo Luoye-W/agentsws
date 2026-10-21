@@ -51,6 +51,7 @@ import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { MatterHandoffBar } from '@/components/peers/handoff-strip'
 import { isSetupCard } from '@/components/setup/setup-deck-body'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
+import { ComposerDock, DOCK_PAGE } from '@/components/shell/composer-dock'
 import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { archiveBlock } from '@/components/sidebar/matter-menu'
 import { Button } from '@/components/ui/button'
@@ -80,6 +81,7 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import type { FreeChatFile, ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
+import { cn } from '@/lib/utils'
 import {
   archiveMatter,
   getWorkRail,
@@ -648,7 +650,7 @@ export function MatterPage(): ReactNode {
   return (
     <GenuiHostProvider value={genuiHost}>
       <div
-        className="mx-auto flex min-h-full w-full max-w-[760px] flex-col"
+        className={cn(DOCK_PAGE, 'mx-auto w-full max-w-[760px]')}
         data-testid="matter"
         data-matter={view.matter.id}
       >
@@ -817,71 +819,84 @@ export function MatterPage(): ReactNode {
           ) : null}
         </section>
 
-        <MatterComposer
-          value={text}
-          onChange={setText}
-          onSend={send}
-          onStop={() => {
-            stop.mutate()
-          }}
-          running={running}
-          closed={closed}
-          suggestion={suggestion}
-          sending={false}
-          modelSlot={
-            <ComposerModelPicker
-              value={
-                (pickEffort.isPending ? pickEffort.variables?.model : undefined) ??
-                (pickModel.isError ? undefined : pickModel.variables) ??
-                view?.matter.model
-              }
-              onChange={(next) => {
-                pickModel.mutate(next)
-              }}
-              effort={
-                (pickEffort.isPending ? pickEffort.variables?.effort : undefined) ??
-                (pickModel.isPending ? undefined : view?.matter.model_effort)
-              }
-              onEffortChange={(effort, model) => {
-                pickEffort.mutate({ model, effort })
-              }}
-            />
-          }
-          attachments={attached.map((a) => ({
-            id: a.id,
-            url: a.url,
-            masked: a.mask !== undefined,
-          }))}
-          attaching={attaching}
-          onAttach={(files) => {
-            setAttaching(true)
-            void Promise.all(
-              files
-                .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
-                .map((f) => uploadBrandAsset(f, { matter_id: id })),
+        {/* WP437：完整对话框在中栏底部居中、悬浮在内容之上（与岗位 / 职责页同一个底座） */}
+        <ComposerDock
+          testId="matter-dock"
+          above={
+            say.error === null ? null : (
+              <p role="alert" className="text-center text-[12.5px] text-destructive">
+                {say.error.message}
+              </p>
             )
-              .then((rows) => {
-                setAttached((xs) => [
-                  ...xs,
-                  ...rows.map((r) => ({ id: r.asset.id, url: r.asset.file_url })),
-                ])
-                if (rows.length > 0) setCanMask(rows.every((r) => r.edit_mask === true))
-              })
-              .catch(() => undefined)
-              .finally(() => {
-                setAttaching(false)
-              })
-          }}
-          onDetach={(aid) => {
-            setAttached((xs) => xs.filter((x) => x.id !== aid))
-          }}
-          {...(canMask ? { onMask: setMasking } : {})}
-          // WP357：附资料（拖进来 / 「+」/ 粘贴文件），与助理同一套
-          docs={docs.docs}
-          onAttachDocs={docs.add}
-          onDetachDoc={docs.remove}
-          docProblem={docs.problem}
-        />
+          }
+        >
+          <MatterComposer
+            docked={false}
+            value={text}
+            onChange={setText}
+            onSend={send}
+            onStop={() => {
+              stop.mutate()
+            }}
+            running={running}
+            closed={closed}
+            suggestion={suggestion}
+            sending={false}
+            modelSlot={
+              <ComposerModelPicker
+                value={
+                  (pickEffort.isPending ? pickEffort.variables?.model : undefined) ??
+                  (pickModel.isError ? undefined : pickModel.variables) ??
+                  view?.matter.model
+                }
+                onChange={(next) => {
+                  pickModel.mutate(next)
+                }}
+                effort={
+                  (pickEffort.isPending ? pickEffort.variables?.effort : undefined) ??
+                  (pickModel.isPending ? undefined : view?.matter.model_effort)
+                }
+                onEffortChange={(effort, model) => {
+                  pickEffort.mutate({ model, effort })
+                }}
+              />
+            }
+            attachments={attached.map((a) => ({
+              id: a.id,
+              url: a.url,
+              masked: a.mask !== undefined,
+            }))}
+            attaching={attaching}
+            onAttach={(files) => {
+              setAttaching(true)
+              void Promise.all(
+                files
+                  .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
+                  .map((f) => uploadBrandAsset(f, { matter_id: id })),
+              )
+                .then((rows) => {
+                  setAttached((xs) => [
+                    ...xs,
+                    ...rows.map((r) => ({ id: r.asset.id, url: r.asset.file_url })),
+                  ])
+                  if (rows.length > 0) setCanMask(rows.every((r) => r.edit_mask === true))
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                  setAttaching(false)
+                })
+            }}
+            onDetach={(aid) => {
+              setAttached((xs) => xs.filter((x) => x.id !== aid))
+            }}
+            {...(canMask ? { onMask: setMasking } : {})}
+            // WP357：附资料（拖进来 / 「+」/ 粘贴文件），与助理同一套
+            docs={docs.docs}
+            onAttachDocs={docs.add}
+            onDetachDoc={docs.remove}
+            docProblem={docs.problem}
+          />
+        </ComposerDock>
         <MaskDialog
           src={attached.find((a) => a.id === masking)?.url}
           busy={savingMask}
@@ -905,11 +920,6 @@ export function MatterPage(): ReactNode {
               })
           }}
         />
-        {say.error === null ? null : (
-          <p role="alert" className="text-center text-[12.5px] text-destructive">
-            {say.error.message}
-          </p>
-        )}
       </div>
     </GenuiHostProvider>
   )

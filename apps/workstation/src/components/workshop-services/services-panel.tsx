@@ -16,7 +16,11 @@ import { Handshake } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRailState } from '@/components/rail/rail-state'
-import type { RailCardBodyProps, RailPanelBodyProps } from '@/components/rail/registry'
+import {
+  type RailCardBodyProps,
+  type RailPanelBodyProps,
+  useCardTotal,
+} from '@/components/rail/registry'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { getPositions } from '@/lib/api'
@@ -228,7 +232,7 @@ export function WorkshopServicesPanel(_props: RailPanelBodyProps): ReactNode {
 }
 
 /** 右栏那张卡：岗位页 = 这个岗位能用的服务（最多三项）+ 在做的单；别处 = 在做的单。 */
-export function WorkshopServicesCard({ scope, limit }: RailCardBodyProps): ReactNode {
+export function WorkshopServicesCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const catalog = useWorkshopServices()
   const orders = useWorkshopOrders('open')
@@ -238,6 +242,8 @@ export function WorkshopServicesCard({ scope, limit }: RailCardBodyProps): React
   const rows = (orders.data?.orders ?? []).filter(
     (r) => position === undefined || r.position_id === undefined || r.position_id === position,
   )
+  // WP433：卡上只截在做的单（能用的服务全列），「显示更多」按单数算
+  useCardTotal(onTotal, rows.length)
   if (catalog.data !== undefined && (!catalog.data.linked || catalog.data.reauth === true))
     return (
       <CatalogNotice

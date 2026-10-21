@@ -268,13 +268,13 @@ describe('首页第三稿（37 §3）', () => {
     expect(container.querySelectorAll('[data-testid="sparkline"]').length).toBeGreaterThan(0)
   })
 
-  it('首页仍然没有全局聊天框（对话只在卡片指导 / 问 AI / ⌘K / 事项页）', async () => {
+  it('首页唯一能打字的是底部的简易对话框（WP437，Luoye 10-21：交给助理，不是另一套聊天）', async () => {
     const { container } = renderWithProviders(<HomePage />)
     await screen.findByTestId('queue')
     const inputs = [
       ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
     ].filter((el) => !(el as HTMLInputElement).disabled)
-    expect(inputs).toHaveLength(0)
+    expect(inputs.map((el) => el.getAttribute('data-testid'))).toEqual(['simple-composer-input'])
   })
 
   it('今天的到期待办点标题跳事项锚点', async () => {

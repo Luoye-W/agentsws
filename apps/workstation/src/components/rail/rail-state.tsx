@@ -23,11 +23,32 @@
  * 这个桶上次开的是某一格就开那一格）；人手动开 / 关过（右上角面板开关、面板头 ×、`]`、窄屏遮罩）就**按页面类型记住**——
  * 在一个岗位页关了，进别的岗位页也是关着；职责页、事项页各记各的。窗口窄于 900 时没记过的一律先收着（不挡主区）。
  * 别处自动弹开（连接卡、浏览器要人点、快捷按钮开报表）只开这一次，不改记住的那一份。
+ *
+ * WP433（Luoye 10-20 问题 5）：上面那条「按页面类型记住开没开」撤掉——岗位 / 职责 / 事项页上面板一直在，没有开关。
+ *
+ * WP437：第三栏宿主的统一入口 {@link RailState.openRightPane}（`{ kind: 'report', id }` 等）与看板「临时一眼」的开关。
  */
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useLocation } from 'react-router-dom'
 import { railLayoutBucket, railPageKind } from '@/components/rail/rail-layout'
-import { resolvePanel } from '@/components/rail/registry'
+import { resolvePanel, resolvePanelId } from '@/components/rail/registry'
+import {
+  bindRightPaneHost,
+  closeRightPane as closePane,
+  currentPane,
+  forgetRightPane,
+  openRightPane as openPane,
+  type RightPane,
+  rightPaneRoute,
+} from '@/components/rail/right-pane'
 import { useApp } from '@/lib/app-context'
 import {
   clampRailWidth,
@@ -37,12 +58,10 @@ import {
   readRailCardFlags,
   readRailCardOrder,
   readRailLayout,
-  readRailPageOpen,
   readRailWide,
   writeRailCardFlags,
   writeRailCardOrder,
   writeRailLayout,
-  writeRailPageOpen,
   writeRailWide,
 } from '@/lib/ui-state'
 
@@ -114,6 +133,20 @@ export interface RailState {
   /** WP372（决策 1019）：临时加宽后的宽度；`null` = 平常宽度。全部岗位一份，记住。 */
   wide: number | null
   setWide(width: number | null): void
+  /**
+   * WP437：**第三栏宿主的统一入口**——浏览器、变更审阅、看一份报表、卡里「显示更多」那一格……都从这里开。
+   * 同一时间只开一格；开着别的就换成这一格。回 `false` = 没有面板认得它（调用方走自己的兜底）。
+   * 与模块级的 `openRightPane`（`right-pane.ts`，WP438 用的那个）是同一个东西。
+   */
+  openRightPane(pane: RightPane): boolean
+  /** WP437：收起第三栏（岗位 / 职责 / 事项页上看板照旧在）。 */
+  closeRightPane(): void
+  /**
+   * WP437：看板被自动隐藏时，顶栏那颗小图标点开的**临时一眼**（看板浮在内容上，点外面收回）。
+   * 只在内存里；宽度够了看板回来时自己收。不是「收起面板」的开关。
+   */
+  peek: boolean
+  setPeek(open: boolean): void
 }
 
 const Ctx = createContext<RailState | null>(null)
@@ -127,29 +160,14 @@ interface BucketState {
 }
 
 /**
- * WP412：窗口窄于 900 时，没记过开关的页先收着（面板会盖住主区）。
- * Luoye 10-19：900 以上面板一律并排占一栏、默认开着（不再画成浮层），所以「默认收着」与「浮层」同一条线 900
- * （WP421 曾把这条线提到 1200，按这一条撤回）。
- */
-const NARROW_DEFAULT = '(max-width: 899px)'
-
-function narrowWindow(): boolean {
-  try {
-    return globalThis.matchMedia?.(NARROW_DEFAULT).matches ?? false
-  } catch {
-    return false
-  }
-}
-
-/**
- * WP412（决策 1035 更正）：进岗位 / 职责 / 事项页时面板开没开——人按页面类型记过的为准，
- * 没记过 = 打开（窄窗收着）。开着时开的是这个桶上次那一格，没有就开卡片。
+ * WP433（Luoye 10-20 问题 5：「这不是一个可以收起来的面板」）：岗位 / 职责 / 事项页上右侧面板**一直在**——
+ * 没有开 / 关这回事。这个桶上次开的是某一格就开那一格，否则是卡片堆；「收起」（`show(null)`、`]`、
+ * 再点一次浏览器图标）在这几页上一律落回卡片堆。WP412 的「按页面类型记住开没开」不再用（那份本机记录不读也不写）。
+ * 别的页（首页、知识库……）没有卡片堆，照旧：工具类的一格开了能收。
  */
 function withPageDefault(layout: RailLayoutEntry, kind: RailPageKind | undefined): RailLayoutEntry {
-  if (kind === undefined) return layout
-  const open = readRailPageOpen()[kind] ?? !narrowWindow()
-  const panel = open ? (layout.open_panel_id ?? RAIL_CARDS) : null
-  return panel === layout.open_panel_id ? layout : { ...layout, open_panel_id: panel }
+  if (kind === undefined || layout.open_panel_id !== null) return layout
+  return { ...layout, open_panel_id: RAIL_CARDS }
 }
 
 const readBucket = (bucket: string, kind: RailPageKind | undefined): BucketState => ({
@@ -179,6 +197,13 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   const [focus, setFocus] = useState<string | null>(null)
   const [intent, setIntent] = useState<string | null>(null)
   const [wide, setWideState] = useState<number | null>(() => readRailWide())
+  /** WP437：看板自动隐藏时的「临时一眼」（只在内存里；换页就收）。 */
+  const [peek, setPeek] = useState(false)
+  const [peekPath, setPeekPath] = useState(location.pathname)
+  if (peekPath !== location.pathname) {
+    setPeekPath(location.pathname)
+    if (peek) setPeek(false)
+  }
   const setWide = useCallback((next: number | null) => {
     writeRailWide(next)
     setWideState(next)
@@ -186,36 +211,35 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
 
   const setOpen = useCallback((panel: string | null) => {
     setState((prev) => {
-      const next = { ...prev.layout, open_panel_id: panel }
+      // WP433：岗位 / 职责 / 事项页上面板收不起来——「收起」就是回到卡片堆
+      const next = withPageDefault({ ...prev.layout, open_panel_id: panel }, prev.kind)
       writeRailLayout(prev.bucket, next)
       return { ...prev, layout: next }
     })
   }, [])
 
-  /**
-   * WP412：人手动开 / 关（右上角面板开关、面板头 ×、`]`、遮罩、工具图标）——在岗位 / 职责 / 事项页上
-   * 按页面类型记住开没开。别处自动弹开走 `openCard` / `openAddress`，不经过这里。
-   */
+  /** 开一格 / 收起（岗位 / 职责 / 事项页上「收起」= 回到卡片堆，见 {@link withPageDefault}）。 */
   const show = useCallback(
     (panel: string | null) => {
       setAddress(null)
       setFocus(null)
-      if (current.kind !== undefined) writeRailPageOpen(current.kind, panel !== null)
       setOpen(panel)
     },
-    [setOpen, current.kind],
+    [setOpen],
   )
 
   const toggle = useCallback((panel: string) => {
     setAddress(null)
     setFocus(null)
     setState((prev) => {
-      const next = {
-        ...prev.layout,
-        open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
-      }
+      const next = withPageDefault(
+        {
+          ...prev.layout,
+          open_panel_id: prev.layout.open_panel_id === panel ? null : panel,
+        },
+        prev.kind,
+      )
       writeRailLayout(prev.bucket, next)
-      if (prev.kind !== undefined) writeRailPageOpen(prev.kind, next.open_panel_id !== null)
       return { ...prev, layout: next }
     })
   }, [])
@@ -256,12 +280,14 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   const toggleCard = useCallback(
     (id: string) => {
       if (layout.open_panel_id === RAIL_CARDS && cardOpen(current.cards, id)) {
-        show(null)
+        // WP433：面板收不起来了——在卡片堆上再点一次 = 收起这张卡
+        if (current.kind !== undefined) setCardOpen(id, false)
+        else show(null)
         return
       }
       openCard(id)
     },
-    [layout.open_panel_id, current.cards, show, openCard],
+    [layout.open_panel_id, current.cards, current.kind, show, openCard, setCardOpen],
   )
 
   const setOrder = useCallback((next: readonly string[]) => {
@@ -304,6 +330,38 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
     })
   }, [])
 
+  /*
+   * WP437：把外壳的第三栏接到模块级的 `openRightPane` / `closeRightPane` 上（`right-pane.ts`，WP438 的报表从那里开）。
+   * 第三栏换成别的格子 / 被收起时，那一次带的参数（报表 id……）跟着清掉。
+   */
+  useEffect(
+    () =>
+      bindRightPaneHost({
+        open: (route) => {
+          if ('address' in route) return openAddress(route.address)
+          show(route.panel)
+          return true
+        },
+        close: () => {
+          show(null)
+        },
+      }),
+    [openAddress, show],
+  )
+  const openPanel = layout.open_panel_id
+  useEffect(() => {
+    const { pane } = currentPane()
+    if (pane === null) return
+    const route = rightPaneRoute(pane)
+    const want = 'panel' in route ? route.panel : resolvePanel({ address: route.address })?.id
+    const now = openPanel === null || openPanel === RAIL_CARDS ? undefined : openPanel
+    if (
+      now === undefined ||
+      (want !== undefined && resolvePanelId(now).id !== resolvePanelId(want).id)
+    )
+      forgetRightPane()
+  }, [openPanel])
+
   const value = useMemo<RailState>(
     () => ({
       open: layout.open_panel_id,
@@ -325,6 +383,10 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       clearIntent,
       wide,
       setWide,
+      openRightPane: openPane,
+      closeRightPane: closePane,
+      peek,
+      setPeek,
     }),
     [
       layout.open_panel_id,
@@ -346,6 +408,7 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       clearIntent,
       wide,
       setWide,
+      peek,
     ],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
@@ -383,6 +446,10 @@ export function useRailState(): RailState {
       clearIntent: noop,
       wide: null,
       setWide: noop,
+      openRightPane: () => false,
+      closeRightPane: noop,
+      peek: false,
+      setPeek: noop,
     }
   )
 }

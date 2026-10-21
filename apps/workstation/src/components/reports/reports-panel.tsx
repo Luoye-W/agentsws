@@ -1,6 +1,7 @@
 /**
  * WP372（决策 1019）：右侧面板里的「报表」——看一份（`ReportPanel`，按 `agentsws://report/<卡 id>` 开）
- * 与全部（`ReportsPanel`，卡底「显示更多」开：全部报表 + 这一层的看板）。
+ * 与全部（`ReportsPanel`，卡底「显示更多」开：全部报表 + 这一层看数的看板）。
+ * WP433：「工作」（进行中 / 卡住了…）与排期、流水线类看板挪去「计划」，数据看板先不挂（WP434 接）。
  *
  * 报表正文用原来那几个组件画（AI 发布的报告 `ReportBody`、经营一页纸 `WeeklyReviewBody`，其余标题 + 几个数），
  * 中间栏不再有报表区。面板可以临时加宽（面板头的「加宽」钮或拖左边，宽度记住）。
@@ -14,17 +15,19 @@ import { useRailState } from '@/components/rail/rail-state'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { CompetitorChangesTable } from '@/components/reports/competitor-watch'
 import {
+  dutyMayHaveBoards,
   type ReportItem,
   reportAddress,
   reportIdOf,
+  scopeMayHaveReportBoards,
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
 import { useApp } from '@/lib/app-context'
 import { matterUrl } from '@/lib/work'
 
-const ScopeBoards = lazy(async () => ({
-  default: (await import('@/components/reports/scope-boards')).ScopeBoards,
+const ScopeReportBoards = lazy(async () => ({
+  default: (await import('@/components/reports/scope-boards')).ScopeReportBoards,
 }))
 
 function ReportView({ item }: { item: ReportItem }): ReactNode {
@@ -71,21 +74,8 @@ export function ReportPanel({ scope, address }: RailPanelBodyProps): ReactNode {
   return <ReportView item={item} />
 }
 
-/**
- * WP420（自查 U9）：这条职责下面有没有看板（有就不说「还没有报表」）。和 `scope-boards.tsx` 的 `dutyHasBoards`
- * 同一份名单，但不 import 那个文件——它连着社媒日历、B2B、投放素材一大串，挂进报表面板会拖慢懒加载。
- */
-export function dutyMayHaveBoards(role_id: string): boolean {
-  return (
-    role_id.startsWith('social.') ||
-    role_id === 'b2b.outbound' ||
-    role_id === 'b2b.sales' ||
-    role_id === 'ads.google' ||
-    role_id === 'ads.meta' ||
-    role_id === 'dtc.content' ||
-    role_id === 'amz.store'
-  )
-}
+/** WP433：名单挪到 `report-data.ts`（卡身体也要用，不该为它把这个面板拉进来）；这里照旧导出。 */
+export { dutyMayHaveBoards, scopeMayHaveReportBoards }
 
 /** 全部（「显示更多」）：报表一行一份，点了看那一份；下面是这一层的看板。 */
 export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
@@ -93,9 +83,7 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
   const rail = useRailState()
   const { reports, ready } = useScopeReports(props.scope)
   const scope = props.scope
-  const hasBoards =
-    scope?.assignment !== undefined &&
-    (scope.tier === 'position' || dutyMayHaveBoards(scope.scope_id))
+  const hasBoards = scopeMayHaveReportBoards(scope)
   return (
     <div className="flex flex-col gap-5" data-testid="reports-panel">
       <section className="flex flex-col gap-1">
@@ -129,14 +117,17 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
       </section>
       {/* WP392：竞品变化表（整张；按竞品 / 种类筛） */}
       <CompetitorChangesTable scope={props.scope} />
-      <section className="flex flex-col gap-2" data-testid="reports-boards">
-        <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
-          {t('reports.boards')}
-        </h3>
-        <Suspense fallback={null}>
-          <ScopeBoards {...props} />
-        </Suspense>
-      </section>
+      {/* WP433：只剩看数的那几块；「工作」（进行中 / 卡住了…）挪去「计划」，数据看板等 WP434 做成一份报表 */}
+      {hasBoards ? (
+        <section className="flex flex-col gap-2" data-testid="reports-boards">
+          <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+            {t('reports.boards')}
+          </h3>
+          <Suspense fallback={null}>
+            <ScopeReportBoards {...props} />
+          </Suspense>
+        </section>
+      ) : null}
     </div>
   )
 }

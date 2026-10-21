@@ -766,6 +766,38 @@
       0 0 0 1px color-mix(in srgb, var(--ws-ink) 34%, transparent),
       0 12px 32px rgba(0, 0, 0, 0.5);
   }
+  /*
+   * WP437（Luoye 10-21）：首页的简易对话框——半透明悬浮小窗（照 Claude「Start new chat」那种带点透明的样子）：
+   * 底色是卡片色压到 72%，后面的内容模糊着透出来；一圈细边 + 柔和阴影让它浮起来。深色同一套、阴影更沉。
+   */
+  .ws-composer-glass {
+    background: color-mix(in srgb, var(--ws-card) 72%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 12%, transparent),
+      0 2px 6px rgba(20, 40, 30, 0.05),
+      0 14px 36px rgba(20, 40, 30, 0.12);
+  }
+  .ws-composer-glass:focus-within {
+    background: color-mix(in srgb, var(--ws-card) 86%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 26%, transparent),
+      0 2px 6px rgba(20, 40, 30, 0.06),
+      0 16px 40px rgba(20, 40, 30, 0.15);
+  }
+  .dark .ws-composer-glass {
+    background: color-mix(in srgb, var(--ws-card) 66%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 16%, transparent),
+      0 14px 36px rgba(0, 0, 0, 0.5);
+  }
+  .dark .ws-composer-glass:focus-within {
+    background: color-mix(in srgb, var(--ws-card) 82%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 32%, transparent),
+      0 16px 40px rgba(0, 0, 0, 0.55);
+  }
   .ws-shimmer {
     background: linear-gradient(
       90deg,

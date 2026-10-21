@@ -29,6 +29,7 @@ import {
 } from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
+import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
@@ -8997,6 +8998,8 @@ const TABLES: Record<Lang, Table> = {
     ...NOTIFY_ZH,
     // WP431：顶栏标题下拉、左上角、搜索弹窗
     ...TOPBAR_ZH,
+    // WP437：看板临时一眼、首页简易对话框
+    ...LAYOUT_ZH,
   },
   en: {
     ...en,
@@ -9049,6 +9052,7 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
     ...TOPBAR_EN,
+    ...LAYOUT_EN,
   },
 }
 

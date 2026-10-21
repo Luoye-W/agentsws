@@ -2,7 +2,7 @@
  * WP372（决策 1004 / 1005 / 1019，Luoye 10-17，学 Claude 桌面版右侧那一栏）：右侧面板的**卡片堆**。
  *
  * - 六张卡纵向排：标题行（图标、名字、状态点；收起时右边一句摘要）点一下展开 / 收起，按作用域记住；
- * - 展开后最多 4 条，卡底「显示更多」开完整列表（卡的 `panel`）或那一页（`moreHref`）；
+ * - 展开后最多 5 条（WP433：原来 4 条），多于 5 条时卡底才有「显示更多」，开完整列表（卡的 `panel`）或那一页（`moreHref`）；
  * - **拖动排序**（决策 1005）：鼠标移到卡片右上角出六点手柄 ⠿，按住拖；键盘落到手柄上按空格拿起、
  *   方向键挪、再按空格放下（dnd-kit 自带的键盘传感器与读屏播报）。顺序按人记住、全部岗位一份；
  * - 被点名的那张（右上角图标、连接卡弹出）滚到可见处。
@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
-import { type ReactNode, Suspense, useEffect, useRef } from 'react'
+import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { cardOpen, useRailState } from '@/components/rail/rail-state'
@@ -161,6 +161,9 @@ function SortableCard({
     if (focused) box.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [focused])
   const Chevron = open ? ChevronDown : ChevronRight
+  // WP433（问题 7）：卡身体报上来的总条数；多于 CARD_LIMIT 才出「显示更多」
+  const [total, setTotal] = useState<number | undefined>(undefined)
+  const hasMore = total !== undefined && total > CARD_LIMIT
   const more = (): void => {
     if (card.panel !== undefined) rail.show(card.panel)
     else if (card.moreHref !== undefined) void navigate(card.moreHref)
@@ -234,11 +237,11 @@ function SortableCard({
           {Body === undefined ? null : (
             <ErrorBoundary scope="panel" label={`card:${card.id}`} resetKey={card.id}>
               <Suspense fallback={null}>
-                <Body {...body} limit={CARD_LIMIT} onMore={more} />
+                <Body {...body} limit={CARD_LIMIT} onMore={more} onTotal={setTotal} />
               </Suspense>
             </ErrorBoundary>
           )}
-          {card.panel === undefined && card.moreHref === undefined ? null : (
+          {!hasMore || (card.panel === undefined && card.moreHref === undefined) ? null : (
             <button
               type="button"
               data-testid={`rail-card-more-${card.id}`}

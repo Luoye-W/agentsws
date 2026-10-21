@@ -216,14 +216,14 @@ describe('岗位卡右上角 ··· 里的快捷提示（WP84 + WP98 收口）',
     expect(OPENED.matter.entry).toBe('position')
   })
 
-  it('还是没有聊天框：菜单里只有按钮，一个自由文本输入都没有（36 §3 A4）', async () => {
+  it('菜单里只有按钮；页面上唯一能打字的是底部的简易对话框（WP437，交给助理）', async () => {
     const { container } = renderWithProviders(<HomePage />)
     fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
     await screen.findByTestId('quick-prompt-list')
     const inputs = [
       ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
     ].filter((el) => !(el as HTMLInputElement).disabled)
-    expect(inputs).toHaveLength(0)
+    expect(inputs.map((el) => el.getAttribute('data-testid'))).toEqual(['simple-composer-input'])
   })
 })
 

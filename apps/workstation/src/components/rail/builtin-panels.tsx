@@ -94,9 +94,10 @@ const OutputsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/outputs-panel')
   return { default: m.OutputsPanel }
 })
+/** WP433：「计划」的完整一格 = 定时任务 + 这一层的进度（「工作」、排期 / 流水线类看板，原在「报表」里）。 */
 const SchedulesBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/schedules-panel')
-  return { default: m.SchedulesPanel }
+  const m = await import('@/components/rail/panels/plans-panel')
+  return { default: m.PlansPanel }
 })
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
@@ -309,6 +310,18 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('report', ReportBody)
+  /*
+   * WP437：「跟 AI 说想看什么 → 做一份报表」那一格（`openRightPane({ kind: 'report-compose' })`）。
+   * 这里只登记类型（第三栏宿主认得它、算宽度按报表那一档）；身体由 WP438 集成时挂上（`registerPanelBody('report-compose', …)`）。
+   */
+  registerPanelType({
+    id: 'report-compose',
+    label: 'rail.panel.report_compose',
+    icon: ScrollText,
+    priority: 'builtin',
+    group: 'layer',
+    hidden: true,
+  })
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',
@@ -325,7 +338,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     registerPanelAlias({ id: sub, panel: 'outputs', sub })
   registerPanelType({
     id: 'schedules',
-    label: 'rail.panel.schedules',
+    // WP433：这一格现在是「计划」整格（定时任务 + 进度），标题跟卡同名
+    label: 'rail.card.plans',
     icon: CalendarClock,
     priority: 'builtin',
     group: 'layer',

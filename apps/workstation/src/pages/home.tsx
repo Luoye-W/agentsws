@@ -12,6 +12,9 @@
  *
  * 硬约束照旧：**首页无图表无表格**（36 §5.2），数字全从服务端来（29 原则 ③），
  * 没有全局聊天框（对话只在卡片指导、问 AI、⌘K、事项页四处）。
+ *
+ * WP437（Luoye 10-21）：首页顶上那颗「有什么要我做的？」换成**底部居中的简易对话框**（半透明悬浮，
+ * `SimpleComposer`）——问一句简单的、或交代一件事，回车交给「我的助理」接着办。WP438 重排首页时这块位置不动。
  */
 import type { CalendarItem, CalendarSource, GoalProgress, Todo } from '@agentsws/contracts'
 import type { PositionTiles, RangeName } from '@agentsws/deck'
@@ -24,7 +27,6 @@ import {
   HandHeart,
   ListTodo,
   type LucideIcon,
-  MessageCircle,
   MoreHorizontal,
   Target,
   Users,
@@ -34,7 +36,9 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { BrandMark, PositionCard, type Tone, WsCard } from '@/components/design'
+import { SimpleComposer } from '@/components/free-chat/simple-composer'
 import { askAtPosition } from '@/components/position/quick-answer-store'
+import { ComposerDock, DOCK_PAGE } from '@/components/shell/composer-dock'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,6 +58,7 @@ import { LAYER_ICON } from '@/lib/calendar-layers'
 import { formatValue } from '@/lib/format'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
+import { cn } from '@/lib/utils'
 import { hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
@@ -529,7 +534,7 @@ export function HomePage(): React.ReactNode {
   const today = data.today
 
   return (
-    <div className="flex flex-col gap-6" data-testid="home">
+    <div className={cn(DOCK_PAGE, 'gap-6')} data-testid="home">
       {/*
         ① WP96（09-18 画布《首页 · 新风格》）：一句话开头。
         标题是 Outfit 的大字，下面那行回答"今天还剩多少事"——
@@ -553,15 +558,7 @@ export function HomePage(): React.ReactNode {
             )}
           </p>
         </div>
-        {/* WP188：一句话进随便聊（少字：一个图标 + 一句问句） */}
-        <Link
-          to="/assistant"
-          data-testid="home-free-chat"
-          className="ml-auto flex items-center gap-2 rounded-full bg-ws-card px-3.5 py-2 text-[13px] text-ws-muted-fg shadow-ws transition-shadow hover:text-foreground hover:shadow-ws-hover"
-        >
-          <MessageCircle aria-hidden className="size-4" />
-          {t('home.free_chat')}
-        </Link>
+        {/* WP437：原来这里一颗「有什么要我做的？」进助理——换成页面底部的简易对话框 */}
       </header>
 
       {/* ② WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
@@ -732,6 +729,10 @@ export function HomePage(): React.ReactNode {
           )}
         </div>
       </div>
+      {/* WP437：简易对话框——底部居中、半透明悬浮；回车交给「我的助理」 */}
+      <ComposerDock variant="simple" testId="home-composer">
+        <SimpleComposer />
+      </ComposerDock>
     </div>
   )
 }
