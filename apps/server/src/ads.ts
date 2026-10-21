@@ -39,7 +39,14 @@ import type {
   PixelHealth,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { ADS_PLATFORM_IDS } from '@agentsws/contracts'
+import { ADS_PLATFORM_IDS, ADS_READ_ONLY_PLATFORM_IDS } from '@agentsws/contracts'
+
+/**
+ * WP447：日花费总闸默认算哪几家——**不含只读的六个新平台**（docs/109 §6.2：它们这一期不改账户，
+ * 花费等加写动作那期再并进总闸）。不然面板上「哪几个平台今天还没拉到数」会多出六家根本没在管的。
+ */
+const GATE_PLATFORM_IDS = ADS_PLATFORM_IDS.filter((p) => !ADS_READ_ONLY_PLATFORM_IDS.includes(p))
+
 import type { AdsDeckData } from '@agentsws/deck'
 import type BetterSqlite3 from 'better-sqlite3'
 
@@ -297,7 +304,7 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
         .map(({ id: _id, ...rest }) => rest),
 
     spendToday: (opts) => {
-      const platforms = opts?.platforms ?? ADS_PLATFORM_IDS
+      const platforms = opts?.platforms ?? GATE_PLATFORM_IDS
       const accounts = backend.all<AdAccount>('ad_account')
       const campaigns = backend
         .all<AdCampaign>('ad_campaign')
@@ -326,7 +333,8 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
           (c) => c.platform === platform && c.metrics?.spend !== undefined,
         )
         if (rows.length === 0) {
-          if (mine.length > 0 || platforms.length <= ADS_PLATFORM_IDS.length) missing.push(platform)
+          if (mine.length > 0 || platforms.length <= GATE_PLATFORM_IDS.length)
+            missing.push(platform)
           by_platform.push({ platform, spend: 0 })
           continue
         }
