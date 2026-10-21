@@ -1004,7 +1004,7 @@ const zh: Table = {
   'messages.ai.triage.route.support': '归客服',
   'messages.ai.triage.route.kol': '归红人营销',
   'messages.ai.triage.route.b2b': '归 B2B',
-  'messages.ai.triage.priority.high': '要紧',
+  'messages.ai.triage.priority.high': '紧急',
   'messages.ai.triage.priority.normal': '一般',
   'messages.ai.triage.priority.low': '不急',
   'messages.ai.triage.unsure': '拿不准',
