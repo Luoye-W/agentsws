@@ -34,6 +34,8 @@ const releaseVersion = process.env.AGENTSWS_EXTENSION_VERSION?.trim()
  *    只用来借你已登录的会话读品牌号自己的收件箱与自家版块的 `.json`（只读、不改已读）。
  * 7. WP413（侧边栏）：`sidePanel` 由 WXT 按 `entrypoints/sidepanel/` 自动加进清单（`side_panel.default_path`），
  *    这个权限没有任何安装提示；侧边栏页面和设置页一样只跟本插件的后台说话，后台只打 `127.0.0.1`。
+ * 8. WP432：`notifications`——批过的 Reddit 回复等你在侧边栏里发时弹一句（工坊设置 → 通知「等你发」可关）；
+ *    已解压插件重载后直接生效、不弹窗。
  */
 export default defineConfig({
   // WXT 把 `@` 指向 srcDir，所以 srcDir 就是 `src/`——这样 `@/lib/*`、`@/ui/*`
@@ -49,12 +51,12 @@ export default defineConfig({
       : { version_name: releaseVersion }),
     short_name: '工坊助手',
     description:
-      '在 YouTube / Instagram / TikTok 页面上即时体检红人、一键收进本机红人库；连接广告后台后，替你执行批过的广告动作；连接 Reddit 后，把批过的回复填进页面，由你点发送。',
+      '在 YouTube / Instagram / TikTok 页面上即时体检红人、一键收进本机红人库；连接广告后台后，替你执行批过的广告动作；连接 Reddit 后，在侧边栏里打开批过的回复，插件填好、由你自己点发送。',
     // 没有 `default_locale`：这一版只有中文，而声明了 `default_locale` 就必须带
     // `_locales/<lang>/messages.json`，否则 Chrome 连装都装不上。
     // `alarms` 是给「应用刚打开，把排着的补上去」那个 5 分钟定时用的；
     // 没有它 service worker 一被回收，队列就要等用户下次点按钮才动。
-    permissions: ['storage', 'activeTab', 'alarms', 'scripting'],
+    permissions: ['storage', 'activeTab', 'alarms', 'scripting', 'notifications'],
     // WP313：连接时才申请（见上面第 5 条）
     optional_permissions: ['downloads'],
     optional_host_permissions: [

@@ -15,6 +15,7 @@ import type { PanelState } from '@/lib/panel/broker'
 import { requestReddit } from '@/lib/reddit/permissions'
 import { BrandMark } from './brand-mark'
 import { type CardActions, PanelCards } from './panel-cards'
+import { type DeskActions, PanelDesk, PanelFoot, PanelStatusStrip } from './panel-desk'
 import { IconGear } from './panel-icons'
 import type { PostActions } from './panel-posts'
 import { PanelProgressView } from './panel-progress'
@@ -26,6 +27,48 @@ type Tab = 'todo' | 'progress' | 'records'
 const busyWrites = (s: PanelSnapshot): boolean =>
   s.writes.some((w) => w.state === 'queued' || w.state === 'filling')
 
+/** WP432：「稍后」收起多久（本插件页面自己记；过了又回到「等你发」里）。 */
+export const LATER_MS = 2 * 60 * 60 * 1000
+const LATER_KEY = 'agentsws.panel.later'
+
+function readLater(now: number): Record<string, number> {
+  try {
+    const raw = JSON.parse(globalThis.localStorage?.getItem(LATER_KEY) ?? '{}') as Record<
+      string,
+      number
+    >
+    return Object.fromEntries(Object.entries(raw).filter(([, until]) => until > now))
+  } catch {
+    return {}
+  }
+}
+function writeLater(v: Record<string, number>): void {
+  try {
+    globalThis.localStorage?.setItem(LATER_KEY, JSON.stringify(v))
+  } catch {
+    // 存不下：这一次打开里照样收起
+  }
+}
+
+/** 侧边栏所在的窗口（「打开这一条」在这个窗口里开新标签页）。 */
+async function currentWindowId(): Promise<number | undefined> {
+  try {
+    return (await chrome.windows.getCurrent()).id
+  } catch {
+    return undefined
+  }
+}
+
+/** 正在跑的插件版本（`version_name` 优先）。 */
+function runningVersion(): string {
+  try {
+    const m = chrome.runtime.getManifest()
+    return m.version_name !== undefined && m.version_name !== '' ? m.version_name : m.version
+  } catch {
+    return '?'
+  }
+}
+
 /** 有正在填的那条时多久问一次。 */
 export const PANEL_FAST_REFRESH_MS = 2_000
 
@@ -34,10 +77,15 @@ export function SidePanel(props: {
   refreshMs?: number
   /** 测试里不弹权限窗。 */
   connectReddit?: () => Promise<boolean>
+  /** WP432：测试里换掉（窗口 id、复制、版本）。 */
+  windowId?: () => Promise<number | undefined>
+  copy?: (text: string) => Promise<boolean>
+  version?: string
 }): React.ReactNode {
   const send = props.send ?? defaultSend
   const [state, setState] = useState<PanelState | undefined>(undefined)
   const [tab, setTab] = useState<Tab | undefined>(undefined)
+  const [later, setLater] = useState<Record<string, number>>(() => readLater(Date.now()))
   const alive = useRef(true)
 
   const refresh = useCallback(async () => {
@@ -77,24 +125,59 @@ export function SidePanel(props: {
     },
     [send, refresh],
   )
+  const winOf = props.windowId ?? currentWindowId
   const actions: CardActions = {
-    fill: (c: PanelCard, d) =>
-      act({
+    fill: async (c: PanelCard, d) => {
+      const windowId = await winOf()
+      return act({
         type: 'panel-fill',
         id: c.id,
         version: c.version,
         ...(d.text === c.draft.text ? {} : { text: d.text }),
         ...(d.title === undefined || d.title === c.draft.title ? {} : { title: d.title }),
-      }),
+        ...(windowId === undefined ? {} : { windowId }),
+      })
+    },
     skip: (c) => act({ type: 'panel-skip', id: c.id, version: c.version }),
     refill: (job) => act({ type: 'panel-refill', job }),
   }
 
+  // WP432：发帖台——等你发的那几条
+  const desk: DeskActions = {
+    open: async (w, edit) => {
+      const windowId = await winOf()
+      return act({
+        type: 'panel-open',
+        job: w.job_id,
+        ...edit,
+        ...(windowId === undefined ? {} : { windowId }),
+      })
+    },
+    drop: (w) => act({ type: 'panel-drop', job: w.job_id }),
+    later: (w) => {
+      const next = { ...readLater(Date.now()), [w.job_id]: Date.now() + LATER_MS }
+      writeLater(next)
+      setLater(next)
+    },
+    copy:
+      props.copy ??
+      (async (text) => {
+        try {
+          await navigator.clipboard.writeText(text)
+          return true
+        } catch {
+          return false
+        }
+      }),
+  }
+  const awaiting = snap?.writes.filter((w) => w.state === 'awaiting') ?? []
+  const others = snap?.writes.filter((w) => w.state !== 'awaiting') ?? []
   // WP419：等你定口吻那一张（在工坊里）也算一件要你处理的
   const todoCount =
     snap === undefined
       ? 0
-      : snap.cards.length +
+      : awaiting.length +
+        snap.cards.length +
         (snap.posts?.length ?? 0) +
         (snap.progress.stage?.card_id === undefined ? 0 : 1)
   // WP419（决策 1231）：交给你发的社媒帖子
@@ -154,6 +237,7 @@ export function SidePanel(props: {
               onDone={() => void refresh()}
             />
           )}
+          <PanelStatusStrip progress={snap.progress} />
           <div className="ws-tabs" role="tablist">
             {(
               [
@@ -179,9 +263,23 @@ export function SidePanel(props: {
             ))}
           </div>
           {current === 'todo' ? (
+            <PanelDesk
+              writes={awaiting}
+              actions={desk}
+              canAct={snap.can_act}
+              later={new Set(Object.keys(later))}
+              showLater={() => {
+                writeLater({})
+                setLater({})
+              }}
+            />
+          ) : null}
+          {current === 'todo' ? (
             <PanelCards
               cards={snap.cards}
-              writes={snap.writes}
+              writes={others}
+              hideEmpty={awaiting.length > 0}
+              copy={desk.copy}
               actions={actions}
               canAct={snap.can_act}
               {...(snap.progress.stage === undefined ? {} : { stage: snap.progress.stage })}
@@ -197,6 +295,14 @@ export function SidePanel(props: {
           {current === 'records' ? (
             <PanelRecords records={snap.records} sinks={snap.sinks} />
           ) : null}
+          <PanelFoot
+            running={props.version ?? runningVersion()}
+            {...(snap.versions === undefined ? {} : { versions: snap.versions })}
+            {...(snap.site === undefined ? {} : { site: snap.site })}
+            canAct={snap.can_act}
+            setSite={(site) => void act({ type: 'panel-site', site })}
+            checkUpdate={() => void send({ type: 'update-check' })}
+          />
         </>
       ) : null}
     </div>

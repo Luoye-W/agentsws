@@ -28,10 +28,13 @@ import type {
   AdsActionSettings,
   PanelFillInput,
   PanelFillResult,
+  PanelOpenInput,
+  PanelOpenResult,
   PanelSkipInput,
   PanelSnapshot,
   RedditReadNextResponse,
   RedditReadResultInput,
+  RedditSite,
 } from '@agentsws/browser-action'
 import { formatAdsAccountHints } from '@agentsws/browser-action'
 import type {
@@ -71,7 +74,7 @@ interface Envelope {
 async function call<T>(
   options: LocalClientOptions,
   path: string,
-  init: { method: 'GET' | 'POST'; body?: unknown },
+  init: { method: 'GET' | 'POST' | 'PUT'; body?: unknown },
 ): Promise<LocalCallResult<T>> {
   const doFetch = options.fetch ?? globalThis.fetch
   const controller = new AbortController()
@@ -136,6 +139,20 @@ export function reportVersion(
   return call<{ folder_version?: string }>(options, '/v1/extension/version', {
     method: 'POST',
     body: input,
+  })
+}
+
+/**
+ * WP432：**没配对**也问一声工坊文件夹里是哪一版（不带令牌，只回版本号）——没配上也跟着工坊更新。
+ * 老的本机服务没有这一条：当成「不是桌面版」，什么都不做。
+ */
+export function probeVersion(
+  options: Omit<LocalClientOptions, 'token'>,
+  version: string,
+): Promise<LocalCallResult<{ folder_version?: string }>> {
+  return call<{ folder_version?: string }>(options, '/v1/extension/version/probe', {
+    method: 'POST',
+    body: { version },
   })
 }
 
@@ -328,4 +345,42 @@ export function panelRefill(
     `/v1/extension/panel/writes/${encodeURIComponent(job)}/refill`,
     { method: 'POST', body: {} },
   )
+}
+
+/**
+ * WP432：人在侧边栏里点「打开这一条」（改过就带改过的字）——回交给插件的那一件活（插件在当前窗口新开标签页填好）。
+ */
+export function panelOpen(
+  options: LocalClientOptions,
+  job: string,
+  input: PanelOpenInput,
+): Promise<LocalCallResult<PanelOpenResult>> {
+  return call<PanelOpenResult>(
+    options,
+    `/v1/extension/panel/writes/${encodeURIComponent(job)}/open`,
+    { method: 'POST', body: input },
+  )
+}
+
+/** WP432：侧边栏里点「不发了」。 */
+export function panelDrop(
+  options: LocalClientOptions,
+  job: string,
+  reason?: string,
+): Promise<LocalCallResult<{ ok: true }>> {
+  return call<{ ok: true }>(options, `/v1/extension/panel/writes/${encodeURIComponent(job)}/drop`, {
+    method: 'POST',
+    body: reason === undefined ? {} : { reason },
+  })
+}
+
+/** WP432：在新版 / 旧版 Reddit 上填。 */
+export function panelSite(
+  options: LocalClientOptions,
+  site: RedditSite,
+): Promise<LocalCallResult<{ site: RedditSite }>> {
+  return call<{ site: RedditSite }>(options, '/v1/extension/panel/settings', {
+    method: 'PUT',
+    body: { site },
+  })
 }

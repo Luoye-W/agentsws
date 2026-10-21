@@ -1,7 +1,8 @@
 /**
- * WP413 侧边栏 ② 要你处理：「发出去」类卡在这里看、改、不发、填进页面。
- * 点「填进页面」= 批这张卡（插件里批 = 工坊里批），插件新开一个标签页跳到那个帖子、把草稿填好；
- * **你自己在 Reddit 上点 Reply**，插件读回确认后这一条变成「已发 · 已记录」。工坊那边是同一张卡、同一份记录。
+ * WP413 侧边栏 ② 要你处理：「发出去」类卡在这里看、改、不发、批了打开。
+ * 点「批准并打开」= 批这张卡（插件里批 = 工坊里批）并且就是你这一下点的「打开」——插件在这个窗口新开一个标签页
+ * 跳到那个帖子、把草稿填好；**你自己在 Reddit 上点发送**，插件读回确认后这一条变成「已发 · 已记录」。
+ * WP432：工坊里批过的在上面「等你发」里（插件不自己开页面）。
  */
 import type { PanelCard, PanelPost, PanelStage, PanelWrite } from '@agentsws/browser-action'
 import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
@@ -28,7 +29,13 @@ function cardHead(c: PanelCard): string {
   return `${KIND_VERB[c.kind]}${c.kind === 'submit' ? '' : who} · r/${c.subreddit}`
 }
 
-export function WriteRow(props: { write: PanelWrite; actions: CardActions; canAct: boolean }) {
+export function WriteRow(props: {
+  write: PanelWrite
+  actions: CardActions
+  canAct: boolean
+  /** WP432：填好了但页面对不上（等你粘贴）时，「复制草稿」。 */
+  copy?: (text: string) => Promise<boolean>
+}) {
   const w = props.write
   const tone = writeTone(w)
   const [msg, setMsg] = useState<string | undefined>(undefined)
@@ -53,6 +60,18 @@ export function WriteRow(props: { write: PanelWrite; actions: CardActions; canAc
           <IconExternal />
         </a>
       )}
+      {w.state === 'filling' && w.text !== undefined && props.copy !== undefined ? (
+        <button
+          type="button"
+          className="ws-btn ws-btn--ghost ws-btn--sm"
+          data-testid="ws-write-copy"
+          onClick={() => {
+            void props.copy?.(w.text ?? '').then((ok) => setMsg(ok ? '草稿已复制' : '没复制上'))
+          }}
+        >
+          复制草稿
+        </button>
+      ) : null}
       {w.state === 'failed' && w.can_refill === true && props.canAct ? (
         <button
           type="button"
@@ -191,10 +210,10 @@ export function CardItem(props: {
               className="ws-btn ws-btn--primary"
               data-testid="ws-fill"
               disabled={!props.canAct || busy !== undefined || text.trim() === ''}
-              title="批这张卡，插件新开一页填好草稿；Reply 由你自己点"
+              title="批这张卡，插件在这个窗口新开一页填好草稿；发送由你自己点"
               onClick={() => run('fill')}
             >
-              {busy === 'fill' ? '正在填…' : '填进页面'}
+              {busy === 'fill' ? '正在打开…' : '批准并打开'}
             </button>
             <button
               type="button"
@@ -225,6 +244,9 @@ export function PanelCards(props: {
   posts?: PanelPost[]
   postActions?: PostActions
   canPost?: boolean
+  /** WP432：上面「等你发」里有东西时，不说「没有要你处理的」。 */
+  hideEmpty?: boolean
+  copy?: (text: string) => Promise<boolean>
 }): React.ReactNode {
   const posts = props.posts ?? []
   const [openId, setOpenId] = useState<string | undefined>(props.cards[0]?.id)
@@ -240,7 +262,13 @@ export function PanelCards(props: {
       {props.writes.length === 0 ? null : (
         <ul className="ws-writes" data-testid="ws-writes">
           {props.writes.map((w) => (
-            <WriteRow key={w.job_id} write={w} actions={props.actions} canAct={props.canAct} />
+            <WriteRow
+              key={w.job_id}
+              write={w}
+              actions={props.actions}
+              canAct={props.canAct}
+              {...(props.copy === undefined ? {} : { copy: props.copy })}
+            />
           ))}
         </ul>
       )}
@@ -252,7 +280,8 @@ export function PanelCards(props: {
       {props.postActions === undefined ? null : (
         <PanelPosts posts={posts} actions={props.postActions} canAct={props.canPost === true} />
       )}
-      {props.cards.length === 0 && posts.length > 0 ? null : props.cards.length === 0 ? (
+      {props.cards.length === 0 && (posts.length > 0 || props.hideEmpty === true) ? null : props
+          .cards.length === 0 ? (
         <p className="ws-empty" data-testid="ws-todo-empty">
           <IconCheck className="ws-ico" /> 没有要你处理的
         </p>

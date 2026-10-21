@@ -9,7 +9,15 @@ import type { PanelSnapshot } from '@agentsws/browser-action'
 import { describe, expect, it, vi } from 'vitest'
 import { isKolPage, onActionClick } from '../src/lib/action-click'
 import type { PermissionsLike } from '../src/lib/ads/permissions'
-import { panelFillCard, panelSkipCard, panelState } from '../src/lib/panel/broker'
+import {
+  ONE_AT_A_TIME,
+  panelDropWrite,
+  panelFillCard,
+  panelOpenWrite,
+  panelSetSite,
+  panelSkipCard,
+  panelState,
+} from '../src/lib/panel/broker'
 import { clock, nextLine, partLine, progressHead, writeLine } from '../src/lib/panel/format'
 import { memoryStore, SETTINGS_KEY } from '../src/lib/storage'
 
@@ -130,18 +138,23 @@ describe('侧边栏后台', () => {
     expect(out).toEqual({ kind: 'ok', snapshot, reddit_here: false })
     expect(l.calls[0]?.auth).toBe('Bearer tok_1')
   })
-  it('填进页面：成功马上去领活；本机回 409 原话照印、不去领', async () => {
+  it('WP432 批准并打开：批了就是人这一下点的「打开」——从本机拿那一件、在这个窗口开；不去定时领活；409 原话照印', async () => {
     const write = {
       job_id: 'aj_1',
       approval_item_id: 'ap_1',
-      state: 'queued',
+      state: 'awaiting',
       subreddit: 'x',
       queued_at: '',
     }
+    const job = { id: 'aj_1', plan: { platform: 'reddit' } }
     const l = local({
       'POST /v1/extension/panel/cards/ap_1/fill': {
         status: 200,
         body: { ok: true, data: { ok: true, write } },
+      },
+      'POST /v1/extension/panel/writes/aj_1/open': {
+        status: 200,
+        body: { ok: true, data: { ok: true, job, write: { ...write, state: 'queued' } } },
       },
       'POST /v1/extension/panel/cards/ap_2/fill': {
         status: 409,
@@ -156,20 +169,58 @@ describe('侧边栏后台', () => {
       },
     })
     const pollNow = vi.fn()
-    const d = { store: paired(), perms: perms(true), fetch: l.fetch, pollNow }
-    expect(await panelFillCard(d, 'ap_1', { text: 'edited', version: 1 })).toEqual({
+    const runJob = vi.fn(async () => ({ ok: true }))
+    const d = { store: paired(), perms: perms(true), fetch: l.fetch, pollNow, runJob }
+    expect(await panelFillCard(d, 'ap_1', { text: 'edited', version: 1 }, 7)).toEqual({
       ok: true,
-      write,
+      write: { ...write, state: 'queued' },
     })
     expect(l.calls[0]?.body).toEqual({ text: 'edited', version: 1 })
-    expect(pollNow).toHaveBeenCalledTimes(1)
+    expect(runJob).toHaveBeenCalledWith(job, 7)
+    expect(pollNow).not.toHaveBeenCalled()
     expect(await panelFillCard(d, 'ap_2', {})).toEqual({
       ok: false,
       message: '这张卡已经处理过了（在工坊里或另一处）。',
     })
-    expect(pollNow).toHaveBeenCalledTimes(1)
+    expect(runJob).toHaveBeenCalledTimes(1)
     expect(await panelSkipCard(d, 'ap_1', 3)).toEqual({ ok: true })
     expect(l.calls.at(-1)?.body).toEqual({ version: 3 })
+  })
+
+  it('WP432 打开这一条：上一条还开着就不去本机拿（不让那一件卡在「开着」）；不发了 / 新版旧版照实回', async () => {
+    const l = local({
+      'POST /v1/extension/panel/writes/aj_1/open': {
+        status: 200,
+        body: { ok: true, data: { ok: true, job: { id: 'aj_1' } } },
+      },
+      'POST /v1/extension/panel/writes/aj_1/drop': {
+        status: 200,
+        body: { ok: true, data: { ok: true } },
+      },
+      'PUT /v1/extension/panel/settings': {
+        status: 200,
+        body: { ok: true, data: { site: 'old' } },
+      },
+    })
+    const runJob = vi.fn(async () => ({ ok: true }))
+    const busy = { now: true }
+    const d = {
+      store: paired(),
+      perms: perms(true),
+      fetch: l.fetch,
+      pollNow: () => {},
+      runJob,
+      busy: () => busy.now,
+    }
+    expect(await panelOpenWrite(d, 'aj_1', {}, 3)).toEqual({ ok: false, message: ONE_AT_A_TIME })
+    expect(l.calls).toEqual([])
+    busy.now = false
+    expect(await panelOpenWrite(d, 'aj_1', { text: 'edited' }, 3)).toEqual({ ok: true })
+    expect(l.calls[0]?.body).toEqual({ text: 'edited' })
+    expect(runJob).toHaveBeenCalledWith({ id: 'aj_1' }, 3)
+    expect(await panelDropWrite(d, 'aj_1')).toEqual({ ok: true })
+    expect(await panelSetSite(d, 'old')).toEqual({ ok: true })
+    expect(l.calls.at(-1)?.body).toEqual({ site: 'old' })
   })
 })
 

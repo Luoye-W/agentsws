@@ -12,6 +12,9 @@
  * - WP313：广告动作通道——连上了广告后台（可选权限）才每分钟问一次本机「有没有批好的活」，
  *   问到了就在看得见的广告后台标签页上做；页面顶上的横条点了停止 / 确认，消息回到这里。
  * - WP345：跟着工坊更新——每分钟（和起来时）问一次本机「插件文件夹里是哪一版」，不一样就等空闲后自己重载。
+ *   WP432：没配对也问（只问版本号）。
+ * - WP432（Luoye 10-20 反馈 9）：**插件不自己开 Reddit 页面**——批过的回复在侧边栏里等你点「打开这一条」，
+ *   点了才在这个窗口新开标签页、填好、等你自己点发送；图标上出「等你发」的数字，新来的弹一句通知。
  */
 
 import { defineBackground } from 'wxt/utils/define-background'
@@ -19,18 +22,23 @@ import { onActionClick } from '@/lib/action-click'
 import { adsPanelStatus, recordAdsConsent } from '@/lib/ads/broker'
 import { noteActionClick } from '@/lib/ads/capture-grant'
 import type { RunControl } from '@/lib/ads/executor'
-import { openAdsTab, seenAdsAccounts } from '@/lib/ads/open-tab'
+import { executeJob } from '@/lib/ads/executor'
+import { openAdsTab, openRedditTab, seenAdsAccounts } from '@/lib/ads/open-tab'
 import { chromePermissions } from '@/lib/ads/permissions'
 import { pollAdsOnce } from '@/lib/ads/poller'
-import { syncPairedBadge } from '@/lib/badge'
 import type { BrokerDeps } from '@/lib/broker'
 import { flush, observe, pair, status, unpair } from '@/lib/broker'
+import { registerBusy } from '@/lib/idle-gate'
+import { actionResult } from '@/lib/local-client'
 import type { ExtensionMessage, ExtensionResponse } from '@/lib/messages'
 import {
   type PanelBrokerDeps,
   panelAnswerPost,
+  panelDropWrite,
   panelFillCard,
+  panelOpenWrite,
   panelRefillWrite,
+  panelSetSite,
   panelSkipCard,
   panelState,
 } from '@/lib/panel/broker'
@@ -40,6 +48,7 @@ import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
 import { checkForUpdate, runningVersion } from '@/lib/self-update'
 import { chromeStore, clearQueue, readSettings, writeSettings } from '@/lib/storage'
+import { refreshWaiting } from '@/lib/waiting'
 
 /** 多久试一次补传。5 分钟：够快，也不至于在应用没开时一直空打。 */
 const FLUSH_ALARM = 'agentsws-flush'
@@ -58,12 +67,32 @@ export default defineBackground(() => {
   const deps: BrokerDeps = { store: chromeStore(), now: () => new Date().toISOString() }
 
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES })
-  // WP409：图标角标跟着配对状态走（配上了绿勾）——起来时、配上 / 解除时、每次补传时各对一次
+  // WP409：图标角标跟着配对状态走（配上了绿勾）；WP432：有等你发的就出数字、新来的弹一句通知
   const badge = (): Promise<unknown> =>
-    readSettings(deps.store)
-      .then((s) => syncPairedBadge(chrome.action, s.token !== undefined))
-      .catch(() => undefined)
+    refreshWaiting({
+      store: deps.store,
+      action: chrome.action,
+      notify: (item, total) => {
+        void chrome.notifications
+          ?.create(`agentsws-waiting:${item.id}`, {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icon/128.png'),
+            title: total > 1 ? `${total} 条等你发` : '有一条等你发',
+            message: `${item.label}\n点工具栏上的插件图标，在侧边栏里打开、自己点发送。`,
+          })
+          .catch(() => undefined)
+      },
+    }).catch(() => undefined)
   void badge()
+  // 点通知：把侧边栏打开（Chrome 认这一下是用户手势就开，不认就只把窗口叫到前面）
+  chrome.notifications?.onClicked.addListener((id) => {
+    if (!id.startsWith('agentsws-waiting:')) return
+    void chrome.windows
+      .getLastFocused()
+      .then((w) => (w.id === undefined ? undefined : chrome.sidePanel.open({ windowId: w.id })))
+      .catch(() => undefined)
+    void chrome.notifications.clear(id).catch(() => undefined)
+  })
   // WP313：广告动作通道
   const perms = chromePermissions()
   const control: RunControl = { stop: false }
@@ -107,6 +136,7 @@ export default defineBackground(() => {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === UPDATE_ALARM) {
       void checkUpdate()
+      void badge()
       return
     }
     if (alarm.name === ADS_ALARM) {
@@ -142,11 +172,50 @@ export default defineBackground(() => {
     })
   })
   // WP413：侧边栏要的那几件（看 / 填进页面 / 不发 / 再填一次），填完马上去领活
+  // WP432：人在侧边栏里点了「打开这一条」——在那个窗口新开标签页、填好、等人点发送（同一时刻只开一条）
+  let sideRunning = false
+  registerBusy('side', () => sideRunning)
   const panelDeps: PanelBrokerDeps = {
     store: deps.store,
     perms,
     pollNow: () => {
       void pollAds()
+    },
+    busy: () => sideRunning,
+    runJob: async (job, windowId) => {
+      if (job.plan.platform !== 'reddit') return { ok: false, message: '这一条不在这里打开。' }
+      const s = await readSettings(deps.store)
+      if (s.token === undefined) return { ok: false, message: '还没配对。' }
+      const tab = await openRedditTab(job, windowId).catch(() => ({
+        why: '没能打开 Reddit 那个标签页。',
+      }))
+      const client = { port: s.port, token: s.token }
+      if ('why' in tab) {
+        await actionResult(client, job.id, {
+          outcome: 'handover',
+          message: tab.why,
+          step: 0,
+          reads: {},
+        })
+        return { ok: false, message: tab.why }
+      }
+      sideRunning = true
+      control.stop = false
+      control.answer = undefined
+      void executeJob(job, {
+        client,
+        driver: tab,
+        control,
+        now: deps.now,
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          sideRunning = false
+          void badge()
+        })
+      void badge()
+      return { ok: true }
     },
   }
 
@@ -230,14 +299,49 @@ export default defineBackground(() => {
             void checkUpdate()
             reply({ type: 'ack' })
             return
-          case 'panel-state':
-            reply({ type: 'panel-state', state: await panelState(panelDeps) })
-            return
-          case 'panel-fill': {
-            const { type: _t, id, ...input } = message
-            reply({ type: 'panel-act', ...(await panelFillCard(panelDeps, id, input)) })
+          case 'panel-state': {
+            const state = await panelState(panelDeps)
+            // WP432：侧边栏刷新时顺手对一下图标上的数字
+            if (state.kind === 'ok')
+              void refreshWaiting(
+                { store: deps.store, action: chrome.action, notify: () => undefined },
+                state.snapshot,
+              ).catch(() => undefined)
+            reply({ type: 'panel-state', state })
             return
           }
+          case 'panel-fill': {
+            const { type: _t, id, windowId, ...input } = message
+            reply({ type: 'panel-act', ...(await panelFillCard(panelDeps, id, input, windowId)) })
+            return
+          }
+          case 'panel-open': {
+            const { job, windowId, text, title } = message
+            reply({
+              type: 'panel-act',
+              ...(await panelOpenWrite(
+                panelDeps,
+                job,
+                {
+                  ...(text === undefined ? {} : { text }),
+                  ...(title === undefined ? {} : { title }),
+                },
+                windowId,
+              )),
+            })
+            void badge()
+            return
+          }
+          case 'panel-drop':
+            reply({
+              type: 'panel-act',
+              ...(await panelDropWrite(panelDeps, message.job, message.reason)),
+            })
+            void badge()
+            return
+          case 'panel-site':
+            reply({ type: 'panel-act', ...(await panelSetSite(panelDeps, message.site)) })
+            return
           case 'panel-skip':
             reply({
               type: 'panel-act',
