@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   globToRegExp,
@@ -372,6 +373,66 @@ invariants: [prompt_replayable]
     expect(bad('{ tiers: [boss] }')).toThrow(ScenarioSchemaError)
     expect(bad('{ tiers: [owner], who: p_wang }')).toThrow(ScenarioSchemaError)
     expect(bad('{ added: [p_wang] }')).toThrow(ScenarioSchemaError)
+  })
+
+  it('WP76：design_request / design_variants / design_pick 真抄进 expected（之前被静默丢掉）', () => {
+    const base = MINIMAL.replace('invariants: [prompt_replayable]', '')
+    const s = parseScenario(
+      `${base}expected:
+  design_request:
+    routed_to: design.dtc
+    brief_drafted: true
+    brief_auto_approved: true
+    brief_level: L3
+    questions_at_least: 1
+    brand_system_missing: false
+  design_variants: { n: 3, generated: 0, image_model: false, reason_stated: true, auto_approved: false }
+  design_pick: { staged: true, auto_approved: false, level: L1, blocked: false }
+invariants: [prompt_replayable]
+`,
+      't.yml',
+    )
+    expect(s.expected.design_request).toEqual({
+      routed_to: 'design.dtc',
+      brief_drafted: true,
+      brief_auto_approved: true,
+      brief_level: 'L3',
+      questions_at_least: 1,
+      brand_system_missing: false,
+    })
+    expect(s.expected.design_variants).toEqual({
+      n: 3,
+      generated: 0,
+      image_model: false,
+      reason_stated: true,
+      auto_approved: false,
+    })
+    expect(s.expected.design_pick).toEqual({
+      staged: true,
+      auto_approved: false,
+      level: 'L1',
+      blocked: false,
+    })
+    const bad = (body: string) => () =>
+      parseScenario(`${base}expected:\n  ${body}\ninvariants: [prompt_replayable]\n`, 't.yml')
+    // 拼错字段名、类型不对、判定那边精确比的数字写成比较式——都当场顶回来
+    expect(bad('design_request: { routed: design.dtc }')).toThrow(ScenarioSchemaError)
+    expect(bad('design_request: { brief_drafted: 1 }')).toThrow(ScenarioSchemaError)
+    expect(bad("design_variants: { n: '>=3' }")).toThrow(ScenarioSchemaError)
+    expect(bad('design_pick: { picked: true }')).toThrow(ScenarioSchemaError)
+  })
+
+  it('EXPECTED_KEYS 里每个键 parseExpected 都真的读了（WP72、WP76 两次漏在同一个地方）', () => {
+    // 键在白名单里 → `known()` 放行；parseExpected 不读它 → 场景里写的被静默丢掉，断言等于没写
+    const src = readFileSync(new URL('../src/scenario/parse.ts', import.meta.url), 'utf8')
+    const list = src.slice(src.indexOf('const EXPECTED_KEYS'))
+    const keys = [...list.slice(0, list.indexOf('\n]')).matchAll(/^\s+'([a-z0-9_]+)',?$/gm)].map(
+      (m) => m[1] as string,
+    )
+    expect(keys.length).toBeGreaterThan(50)
+    const body = src.slice(src.indexOf('function parseExpected('))
+    const unread = keys.filter((k) => !new RegExp(`raw\\.${k}\\b|\\n\\s+${k}: [{']`).test(body))
+    expect(unread).toEqual([])
   })
 
   it('matchNumeric', () => {
