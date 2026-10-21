@@ -257,7 +257,11 @@ describe('WP353 品牌分析联网查走工坊内置浏览器（服务端装配�
     expect(saved.status, saved.message).toBe(200)
     const run = await b.analyze()
     expect(run.web?.status).not.toBe('off')
-    const google = opened.map((u) => new URL(u)).filter((u) => u.hostname === 'www.google.com')
+    // WP454：第一次搜 Google 前先开一次首页热身（壳没说有 cookie）；搜索页才带 gl / hl
+    expect(opened.filter((u) => u === 'https://www.google.com/')).toHaveLength(1)
+    const google = opened
+      .map((u) => new URL(u))
+      .filter((u) => u.hostname === 'www.google.com' && u.pathname === '/search')
     expect(google.length).toBeGreaterThan(0)
     expect(
       google.every((u) => u.searchParams.get('gl') === 'de' && u.searchParams.get('hl') === 'de'),

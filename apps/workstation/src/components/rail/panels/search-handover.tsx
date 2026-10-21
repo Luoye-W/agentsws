@@ -14,7 +14,7 @@ import { useApp } from '@/lib/app-context'
 /** 桌面壳给的那一页（形状与 `@agentsws/desktop/bridge` 的 `DesktopSearchHandover` 一致）。 */
 export interface SearchHandover {
   workspace_id: string
-  reason: 'captcha' | 'login'
+  reason: 'captcha' | 'login' | 'consent'
   message: string
   url: string
 }
