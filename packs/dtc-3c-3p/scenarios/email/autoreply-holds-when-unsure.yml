@@ -1,0 +1,42 @@
+# WP440（docs/108 M9）：没把握的照旧出卡。
+#
+# ① 一封问了两件事：保修期知识库里有，周末客服几点上班没有 → stub 剧本那一件写「要跟同事确认」、不标出处 →
+#    逐句有出处不过 → 整封不直接回，照旧起 Run、出一张要人批的回信卡。
+# ② 要退款 → 同一个涉钱词表一律转人，连模型都不问，照旧起 Run 出卡。
+# 两封都没人点头，什么都没发出去。
+id: email/autoreply-holds-when-unsure
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-21T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: 两个问题
+      body: "充电类产品保修期多久？另外你们周末客服几点上班？"
+  - at: '+5m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: 退款
+      body: "订单 #1001 的耳机坏了，我想退款。"
+  - at: '+10m'
+    clock.advance: {}
+expected:
+  # 直接回的那一张是自动批的回信卡；没直接回的每封一张等人批的回信卡
+  approval_kinds: { outbound_draft: 2 }
+  event_types:
+    - simulation.email_auto_reply
+  metrics:
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  一封里有一件知识库答不了，是不是整封没直接回、而是起草后等人批；要退款的那封是不是一律转人、没有承诺退款。

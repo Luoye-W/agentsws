@@ -331,7 +331,39 @@ export interface ChannelsOptions {
     subject?: string
     from?: string
   }): Promise<SupportInboundVerdict | undefined> | SupportInboundVerdict | undefined
+  /**
+   * WP440（docs/108 M9）：客服邮件**有把握就直接回**。判断层说完话、起 Run 之前问一句：
+   * 三道自主门放行（`auto_reply`）且置信度过线 → 经审批总线的自动批路径直接发（出站门照旧），
+   * 回 `sent: true`，这一封**不再起 Run**；任一不过回 `sent: false`（照旧起 Run、出卡，`note` 是为什么）。
+   *
+   * 不接 / 回 `undefined` = 老行为，一个字节不变。
+   */
+  autoReply?(input: EmailAutoReplyRequest): Promise<EmailAutoReplyOutcome | undefined>
 }
+
+/** WP440：问「这一封能不能直接回」时给的那几样（来信原文只读不存）。 */
+export interface EmailAutoReplyRequest {
+  matter: Matter
+  thread_id: string
+  /** 收信那只邮箱（按它查「有把握就直接回」开关与档位）。 */
+  account?: string
+  /** 来信正文（给人看的那一份，围栏标记已去）。 */
+  text: string
+  subject?: string
+  /** 发件人显示名（称呼用）。 */
+  from_display?: string
+  /** 发件人解析成的联系人（只回原会话里的原发件人；认不出 = 收件人待定，不直发）。 */
+  contact?: ObjectRef
+  /** 渠道细分（`amazon` …；排除项见 `EMAIL_AUTO_REPLY_EXCLUDED_SUB_CHANNELS`）。 */
+  sub_channel?: string
+  /** 客服判断层的结论。 */
+  inbound_action: SupportInboundVerdict['action']
+}
+
+export type EmailAutoReplyOutcome =
+  | { sent: true; approval_item_id: string; note: string }
+  /** 没直接回。`card_id` 有值 = 这一层已经出了卡（出站门拦下退回成卡），不再起 Run 重复出一张。 */
+  | { sent: false; kind: string; note?: string; card_id?: string }
 
 /**
  * WP125：判断层对一封来信的结论（形状与 `support-judgment.ts` 的 `InboundJudgment`
@@ -812,15 +844,49 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         actor: { kind: 'system', id: `channel:${event.channel}` },
       })
     }
+    /*
+     * WP440（docs/108 M9）：**有把握就直接回**。判断层说 `auto_reply` 且置信度过线 → 经总线自动批、
+     * 过出站门直接发，这一封不再起 Run；任一不过照旧起 Run 出卡（卡标题后写为什么）。
+     * 这一跳自己炸了按 fail-closed：照常起 Run，一封都不替人发。
+     */
+    let auto: EmailAutoReplyOutcome | undefined
+    if (verdict !== undefined && verdict.action !== 'handoff' && options.autoReply !== undefined) {
+      const thread = event.thread?.external_id ?? matter.id
+      try {
+        const channel = event.thread === undefined ? undefined : await pick(channels, thread)
+        const record = await channel?.adapter.threads.get(thread)
+        const contact = event.actor?.resolved
+        auto = await options.autoReply({
+          matter,
+          thread_id: thread,
+          ...(channel === undefined ? {} : { account: channel.account.address }),
+          // 要整封（带换行）：剥引用与签名靠行；围栏标记去掉，打码与围栏由起草那一跳重做
+          text: body.replace(/<\/?external_data>/g, '').trim(),
+          ...(record?.subject === undefined ? {} : { subject: record.subject }),
+          ...(event.actor?.display === undefined ? {} : { from_display: event.actor.display }),
+          ...(contact === undefined ? {} : { contact }),
+          ...(event.sub_channel === undefined ? {} : { sub_channel: event.sub_channel }),
+          inbound_action: verdict.action,
+        })
+      } catch (e) {
+        work.appendEvent(matter.id, {
+          kind: 'status',
+          text: `「有把握就直接回」没跑起来（${e instanceof Error ? e.message : String(e)}），这一封照旧出卡。`,
+          actor: { kind: 'system', id: `channel:${event.channel}` },
+        })
+      }
+    }
     if (verdict !== undefined) {
       work.appendEvent(matter.id, {
         kind: 'note',
-        text: verdict.note,
+        text: auto?.note ?? verdict.note,
         actor: { kind: 'system', id: `channel:${event.channel}` },
       })
       // `handoff` = 这一封要人先看一眼：材料都在事项里，但**不起 Run**
       // （与上面渠道判定里的 `needs_human_review` 是同一条纪律的两面）
       if (verdict.action === 'handoff') return
+      // WP440：已经按把握直接回了（或拦下后已退回成卡）——不再起 Run（再起一次只会多出一张重复的回信卡）
+      if (auto?.sent === true || (auto?.sent === false && auto.card_id !== undefined)) return
     }
     // WP417（自查 A15）：起 Run 用路由算出来的那条职责，不是「第一条岗位」
     const position = options.position?.(event.routing.role_id)

@@ -429,6 +429,13 @@ export type KnownEventType =
   // 正文、relay 地址、凭据永不进日志。
   /** Amazon 24h 响应线的三档（提醒 / 升级 / 闭账）。 */
   | 'support.amazon_sla'
+  /**
+   * WP440（docs/108 M9）：邮件客服按把握直接回了一封（payload：卡 id、分数、档位、出处 id）；
+   * 没直接回、照旧出卡（payload：原因类别、分数）；人说「这封不该直接回」（payload：卡 id）。正文不进日志。
+   */
+  | 'support.email_auto_replied'
+  | 'support.email_auto_reply_held'
+  | 'support.email_auto_reply_flagged'
   /** 三道门的结论（只记门名与 pass / fail / gate_error，不记被扫的文本）。 */
   | 'guardrail.gate_decided'
   /** 出站 outbox 的状态迁移（prepared → sending → accepted → confirmed / …）。 */

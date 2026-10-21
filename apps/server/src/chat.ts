@@ -164,7 +164,7 @@ const HELD_SHORT: Record<string, string> = {
 }
 
 /** 订单上的个人信息（姓名、地址、邮箱、电话）——回复里出现就转人。 */
-function privateValuesOf(value: unknown, key = '', out: string[] = []): string[] {
+export function privateValuesOf(value: unknown, key = '', out: string[] = []): string[] {
   if (out.length > 40) return out
   if (typeof value === 'string') {
     if (/(name|address|addr|email|phone|street|city|zip|postal|province)/i.test(key))
@@ -354,6 +354,13 @@ export interface ChatLane {
     message_id: string
     by: PersonId
   }): Promise<{ learned: boolean } | undefined>
+  /**
+   * WP440（docs/108 M9）：学到的「不该直接答 / 回」那几条——聊天与邮件**共用这一份**
+   * （邮件那边点「这封不该直接回」也记进来，同类以后两边都转人）。
+   */
+  learnedHolds(): readonly ChatLearnedHold[]
+  /** WP440：邮件那边学到的一条（`message_id` 记那张直接回的卡 id）。 */
+  learnHold(hold: ChatLearnedHold & { message_id: string }): void
   /** WP428：这一句是不是直接答的（出处、把握、点没点过「不该直接答」）。 */
   autoAnswerOf(
     message_id: string,
@@ -1469,6 +1476,21 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           emit('chat.auto_answer_flagged', session, { message_id: record.message_id })
       }
       return { learned: true }
+    },
+
+    learnedHolds() {
+      return auto.holds
+    },
+
+    learnHold(hold) {
+      auto.holds.push({
+        tokens: hold.tokens.slice(0, 80),
+        intent: hold.intent,
+        source_ids: [...hold.source_ids],
+        at: clock.now(),
+        message_id: hold.message_id,
+      })
+      flushAuto()
     },
 
     autoAnswerOf(message_id) {

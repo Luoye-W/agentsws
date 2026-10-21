@@ -1678,6 +1678,37 @@ const QUERY_LIST: QueryDef[] = [
     },
   },
   {
+    /*
+     * WP440（docs/108 M9）：客服面板「今天 AI 直接回了 N 封」。数的是**今天施行成功**的那几张
+     * 「有把握就直接回」的回信卡（`payload.auto_reply` + 自动批），按工作区时区切日界；
+     * 对比 = 昨天一整天；迷你走势按天。不发铃铛——这不是要人做的事。
+     */
+    name: 'approvals.email_auto_replies_today',
+    source: 'approvals',
+    returns: 'scalar',
+    run: (ctx, w) => {
+      const at: number[] = []
+      for (const i of ctx.approvals) {
+        if (i.kind !== 'outbound_draft') continue
+        if (!(i.automation.auto_approved || i.state === 'auto_approved')) continue
+        const p = i.payload as { channel?: unknown; auto_reply?: unknown } | undefined
+        if (p?.channel !== 'email' || p.auto_reply === undefined) continue
+        const done = appliedMs(i)
+        if (done !== undefined) at.push(done)
+      }
+      const today = startOfDay(Date.parse(ctx.now), ctx.tz_offset_minutes)
+      const value = at.filter((t) => t >= today).length
+      const previous = at.filter((t) => t >= today - DAY && t < today).length
+      const spark = w.spark.map((b) => at.filter((t) => inWindow(t, b)).length)
+      return {
+        value,
+        previous,
+        ...(previous === 0 ? {} : { delta_pct: round2(((value - previous) / previous) * 100) }),
+        spark,
+      }
+    },
+  },
+  {
     name: 'approvals.refund_requests',
     source: 'approvals',
     returns: 'scalar',

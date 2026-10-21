@@ -551,6 +551,7 @@ export type {
   MailAssistantView,
   MessageAccountView,
   MessageActor,
+  MessageAutoReplyMark,
   MessagesPort,
   MessageThreadView,
 } from './routes/messages.js'

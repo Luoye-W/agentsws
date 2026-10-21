@@ -600,7 +600,16 @@ const QUEUE_BLOCKS = (): BlockDef[] => [
 const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   // 售后客服的职责里没有 analytics 域（05 §5），所以它的面板只有店铺后台——
   // 无权的数据源连「去连接」都不该出（19 §3 过滤下推：不是先给再脱敏）。
-  'dtc.support': () => SHOP_BLOCKS(),
+  // WP440（docs/108 M9）：多一个数「今天 AI 直接回」（邮件客服有把握就直接回的那几封）
+  'dtc.support': () => [
+    ...SHOP_BLOCKS(),
+    block(
+      'support.auto_replies_today',
+      'stat_tile',
+      '今天 AI 直接回',
+      'approvals.email_auto_replies_today',
+    ),
+  ],
   /*
    * WP224（docs/91 §7 #2）：老板那一面多一块「两条止损线对照」——从合并那天起逐日记，
    * 两周后照这张表定止损线（现在的固定线 vs 按毛利率算的盈亏线）。只看、不改止损。

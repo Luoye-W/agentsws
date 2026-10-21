@@ -402,6 +402,10 @@ export interface MailboxSwitchesView {
   b2b?: boolean
   /** WP172：B2B 岗位开着（只读；没开时「收 B2B 信」不起作用）。 */
   b2b_position?: boolean
+  /** WP440（docs/108 M9）：客服信「有把握就直接回」。缺省开。 */
+  auto_reply?: boolean
+  /** WP440：把握要多大（严格 / 适中 / 宽松），缺省适中。 */
+  auto_reply_strictness?: 'strict' | 'balanced' | 'loose'
 }
 
 export interface MailboxSwitchesInput {
@@ -409,6 +413,10 @@ export interface MailboxSwitchesInput {
   move?: boolean
   mark_read?: boolean
   b2b?: boolean
+  /** WP440：「有把握就直接回」开关。 */
+  auto_reply?: boolean
+  /** WP440：档位（只认三种）。 */
+  auto_reply_strictness?: 'strict' | 'balanced' | 'loose'
 }
 
 /** 一条死信在界面上的样子。正文不进这里——只有"是谁、什么时候、为什么"。 */
@@ -447,6 +455,9 @@ const MailboxSwitchesBody = z
     move: z.boolean().optional(),
     mark_read: z.boolean().optional(),
     b2b: z.boolean().optional(),
+    // WP440（docs/108 M9）：有把握就直接回 + 档位（不让填数字）
+    auto_reply: z.boolean().optional(),
+    auto_reply_strictness: z.enum(['strict', 'balanced', 'loose']).optional(),
   })
   .strict()
 
@@ -846,7 +857,8 @@ export function connectionRoutes(): Route[] {
         method: 'get',
         path: '/v1/connections/:id/mailbox-switches',
         operationId: 'getMailboxSwitches',
-        summary: '这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读，外加只读的「接管」',
+        summary:
+          '这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读 / 有把握就直接回（与档位），外加只读的「接管」',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -892,6 +904,10 @@ export function connectionRoutes(): Route[] {
             ...(input.move === undefined ? {} : { move: input.move }),
             ...(input.mark_read === undefined ? {} : { mark_read: input.mark_read }),
             ...(input.b2b === undefined ? {} : { b2b: input.b2b }),
+            ...(input.auto_reply === undefined ? {} : { auto_reply: input.auto_reply }),
+            ...(input.auto_reply_strictness === undefined
+              ? {}
+              : { auto_reply_strictness: input.auto_reply_strictness }),
           }),
         )
       },

@@ -131,6 +131,25 @@ export interface MessageThreadView {
   /** WP212：没人接时 AI 挑的主按钮。 */
   suggest?: MessageSuggest
   kind?: MessageKind
+  /**
+   * WP440（docs/108 M9）：这条会话上 AI **按把握直接回**的那几封——
+   * 「全部」时间线里那一行「AI 直接回 · 出处：…」，旁边「这封不该直接回」。
+   */
+  auto_replies?: MessageAutoReplyMark[]
+}
+
+/** WP440：AI 按把握直接回的一封（只有出处与分数，不含来信原文）。 */
+export interface MessageAutoReplyMark {
+  /** 那张自动批了的回信卡（「这封不该直接回」按它点）。 */
+  approval_item_id: string
+  at: string
+  /** 0–1 的把握。 */
+  score: number
+  sources: { kind: string; label: string }[]
+  /** 发出去的那封开头一段（对得上是哪一封）。 */
+  excerpt: string
+  /** 人已经点过「这封不该直接回」。 */
+  flagged: boolean
 }
 
 /** 右栏 `mail-assistant` 那一格要的东西（一次取全，前端不发第二个请求）。 */
@@ -264,6 +283,15 @@ export interface MessagesPort {
     actor: MessageActor,
     input: MessageNoticeAckInput,
   ): MaybePromise<{ acked: number; writeback?: MessageWriteback }>
+
+  /**
+   * WP440（docs/108 M9）：人点「这封不该直接回」→ 记进学习回路（与在线客服「这句不该直接答」同一份），
+   * 同类以后转人。不是 AI 直接回的那一封回 `undefined`（404）。不实现 = 这台机器没有邮件直接回（501）。
+   */
+  flagAutoReply?(
+    actor: MessageActor,
+    approval_item_id: string,
+  ): MaybePromise<{ learned: boolean } | undefined>
 
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
@@ -908,6 +936,29 @@ export function messageRoutes(): Route[] {
           'content-length': String(out.bytes.byteLength),
           'x-content-type-options': 'nosniff',
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/auto-replies/:id/not-direct',
+        operationId: 'flagMessageAutoReply',
+        summary: '「这封不该直接回」：AI 按把握直接回的那封记进学习回路，同类以后先给人批',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        // 只会让 AI 更保守（同类以后转人），看得见这条会话的人就能点（同聊天那一颗）
+        authz: READ,
+        returns: '{ learned }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.flagAutoReply === undefined)
+          throw new ApiError('not_implemented', '这台机器没有邮件「有把握就直接回」')
+        const out = await port.flagAutoReply(actorOf(c), param(c, 'id'))
+        if (out === undefined)
+          throw new ApiError('not_found', '这封不是 AI 直接回的（或已经找不到了）')
+        return ok(c, out)
       },
     ),
     route(

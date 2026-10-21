@@ -54,8 +54,11 @@ describe('组件注册表（29 §7 用例 1）', () => {
 })
 
 describe('岗位面板（36 §3 按数据源分块）', () => {
-  it('售后客服只有店铺后台（它的职责里没有 analytics 域）', () => {
-    expect(assembleView('dtc.support', queryContext()).map((s) => s.source)).toEqual(['shop'])
+  it('售后客服只有店铺后台（它的职责里没有 analytics 域）+ 自己的回信账（WP440「今天 AI 直接回」）', () => {
+    expect(assembleView('dtc.support', queryContext()).map((s) => s.source)).toEqual([
+      'shop',
+      'approvals',
+    ])
   })
 
   it('独立站运营有店铺后台 / GA4 / Search Console 三块', () => {

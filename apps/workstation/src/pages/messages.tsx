@@ -59,6 +59,7 @@ import {
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
+import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import {
   type HandNotice,
@@ -1035,6 +1036,21 @@ export function MessagesPage(): ReactNode {
                         download.mutate({ id: m.id, attachment: a.id, name: a.name })
                       }}
                     />
+                  ))}
+
+                  {/* WP440：AI 按把握直接回的那几封——「AI 直接回 · 出处」+「这封不该直接回」 */}
+                  {(thread.data?.auto_replies ?? []).map((r) => (
+                    <div
+                      key={r.approval_item_id}
+                      className="rounded-xl border border-ws-line bg-ws-surface px-3 py-2"
+                    >
+                      <EmailAutoReplyMark
+                        approvalItemId={r.approval_item_id}
+                        sources={r.sources}
+                        flagged={r.flagged}
+                        excerpt={r.excerpt}
+                      />
+                    </div>
                   ))}
 
                   {/* WP208：邮件助手从第三栏搬进来——看信时才出现，一块可收起（Luoye 09-30） */}

@@ -42,6 +42,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { isThemeChoicePayload, ThemeChoiceBody } from '@/components/deck/theme-choice-body'
+import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { Button } from '@/components/ui/button'
@@ -974,6 +975,32 @@ export function InlineCard({
         <p className="text-[13px] text-ws-muted-fg" data-testid="matter-card-missing">
           {loading ? t('matter.card.loading') : `${event.text} · ${t('matter.card.gone')}`}
         </p>
+      </AiShell>
+    )
+  // WP440（docs/108 M9）：AI 按把握直接回了的那封——「AI 直接回 · 出处」+「这封不该直接回」
+  if (!WAITING.has(card.status) && card.auto_reply !== undefined)
+    return (
+      <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
+        <div
+          className="flex max-w-[520px] flex-col gap-1 rounded-2xl border border-ws-line bg-ws-surface px-3.5 py-2.5"
+          data-testid="matter-card-auto-reply"
+          data-status={card.status}
+        >
+          <div className="flex items-center gap-2">
+            {card.status === 'applied' ? (
+              <CircleCheck aria-hidden className="size-3.5 text-ws-good" />
+            ) : (
+              <CircleX aria-hidden className="size-3.5 text-ws-muted-fg" />
+            )}
+            <span className="min-w-0 truncate text-[13px] font-medium text-ws-body">
+              {card.title}
+            </span>
+            <span className="ml-auto shrink-0 text-[12px] text-ws-muted-fg">
+              {clockOf(event.at, lang)}
+            </span>
+          </div>
+          <EmailAutoReplyMark approvalItemId={card.id} sources={card.auto_reply.sources} />
+        </div>
       </AiShell>
     )
   if (!WAITING.has(card.status)) {

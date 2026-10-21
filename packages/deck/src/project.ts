@@ -831,6 +831,24 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   // WP232：收件人待定的草稿（系统不发，人复制去发）——与 txn 的 `isManualSendDraft` 同一判据
   const manualSend =
     kind === 'outbound_draft' && payload.manual_send === true && payload.to === undefined
+  // WP440（docs/108 M9）：邮件客服按把握**直接回了**的那一封（自动批、没被退回成卡）
+  const autoReplyRaw = payload.auto_reply as
+    | { held?: unknown; score?: unknown; sources?: unknown }
+    | undefined
+  const autoReply =
+    kind === 'outbound_draft' &&
+    item.automation.auto_approved &&
+    autoReplyRaw !== undefined &&
+    typeof autoReplyRaw === 'object' &&
+    autoReplyRaw.held === undefined
+      ? {
+          score: typeof autoReplyRaw.score === 'number' ? autoReplyRaw.score : 0,
+          sources: (Array.isArray(autoReplyRaw.sources) ? autoReplyRaw.sources : [])
+            .map((x) => (x as { kind?: unknown; label?: unknown }) ?? {})
+            .filter((x) => typeof x.label === 'string')
+            .map((x) => ({ kind: String(x.kind ?? ''), label: String(x.label) })),
+        }
+      : undefined
 
   return {
     id: item.id,
@@ -848,6 +866,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
       ? { change_kind: str(payload.kind) as string }
       : {}),
     ...(manualSend ? { manual_send: true as const } : {}),
+    ...(autoReply === undefined ? {} : { auto_reply: autoReply }),
     status: item.state,
     priority_band: priorityBandOf(item, risk, ctx.now),
     priority: item.priority,
