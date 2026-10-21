@@ -102,8 +102,14 @@
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
+    "packages/roles/roles/ads/apple.yml",
     "packages/roles/roles/ads/google.yml",
+    "packages/roles/roles/ads/linkedin.yml",
     "packages/roles/roles/ads/meta.yml",
+    "packages/roles/roles/ads/microsoft.yml",
+    "packages/roles/roles/ads/pinterest.yml",
+    "packages/roles/roles/ads/reddit.yml",
+    "packages/roles/roles/ads/snapchat.yml",
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/store.yml",
@@ -154,7 +160,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a47a88aee0090b50f5cfc601a55e48ba",
+  "source_digest": "c479e8b05e56219f9b48134436652f43",
   "objects": [
     {
       "id": "ad",
@@ -247,6 +253,8 @@
         "ads.cpa",
         "ads.ctr",
         "ads.daily_report",
+        "ads.export_audit",
+        "ads.export_overview",
         "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",
