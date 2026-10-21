@@ -44,6 +44,7 @@ import { requestWorkFilter, useCardJumpRequest } from '@/components/reports/posi
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { settingsHref } from '@/components/settings-panel/route'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
+import { DOCK_PAGE } from '@/components/shell/composer-dock'
 import {
   TitleMenu,
   TitleMenuItem,
@@ -207,7 +208,7 @@ export function PositionPage(): React.ReactNode {
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[780px] flex-col gap-4"
+      className={cn(DOCK_PAGE, 'mx-auto w-full max-w-[780px] gap-4')}
       data-testid="position-page"
       data-position={id}
       data-view={tab}
@@ -399,9 +400,7 @@ export function PositionPage(): React.ReactNode {
       {tab === 'settings' ? (
         <PositionSettings id={id} view={view} />
       ) : (
-        <div className="flex flex-col gap-7">
-          {view === undefined ? null : <PositionHandoff id={id} view={view} hero={fresh} />}
-
+        <div className="flex flex-1 flex-col gap-7">
           <div
             ref={deckRef}
             className="flex scroll-mt-4 flex-col gap-2"
@@ -450,6 +449,8 @@ export function PositionPage(): React.ReactNode {
               />
             )}
           </div>
+          {/* WP437：对话框在中栏底部居中、悬浮在内容之上（放在内容最后） */}
+          {view === undefined ? null : <PositionHandoff id={id} view={view} hero={fresh} />}
         </div>
       )}
     </div>

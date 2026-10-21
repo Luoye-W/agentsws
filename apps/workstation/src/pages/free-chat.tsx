@@ -26,6 +26,7 @@ import { MemoryButton, PeersButton, Suggestions } from '@/components/free-chat/a
 import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
 import { AssistantMessage, UserBubble } from '@/components/free-chat/message'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
+import { takePendingAsk } from '@/components/free-chat/pending-ask'
 import {
   DayDivider,
   dayOf,
@@ -337,6 +338,23 @@ function AssistantThreadPage(): React.ReactNode {
       await run(session_id, input)
     },
   })
+
+  /*
+   * WP437：首页简易对话框交过来的那一句（和附上的资料）——拿到这条对话就发出去，只发一次。
+   * 之后照助理原来的逻辑：能答就答，要做的事交给岗位（「已交给 X」）。
+   */
+  const askReady = thread.isFetched && (id === undefined || messages.data !== undefined)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在对话拿到的那一下看一次
+  useEffect(() => {
+    if (!askReady) return
+    const ask = takePendingAsk()
+    if (ask === undefined) return
+    send.mutate({
+      text: ask.text,
+      images: [],
+      ...(ask.files.length === 0 ? {} : { files: ask.files }),
+    })
+  }, [askReady])
 
   const stop = (): void => {
     const session_id = live?.session_id

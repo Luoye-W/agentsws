@@ -16,6 +16,8 @@
  *
  * **WP412（真机 10-18 #12）**：职责页也用这一个对话框（给 `role_id`）——发出去钉到这条职责
  * （服务端照样三分），快捷按钮只取这条职责的提示，当场回答只出在这条职责上问的。
+ *
+ * **WP437（Luoye 10-21）**：挪到中栏底部居中、悬浮在内容之上——页面把它放在内容最后（根加 `DOCK_PAGE`）。
  */
 import { Send } from 'lucide-react'
 import { useState } from 'react'
@@ -23,6 +25,7 @@ import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
 import { useAttachedDocs } from '@/components/matter/use-attached-docs'
 import { DutyIcon } from '@/components/role-icons/role-icon'
+import { ComposerDock } from '@/components/shell/composer-dock'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { HandoffError } from '@/components/work/handoff-error'
@@ -119,101 +122,112 @@ export function PositionHandoff({
     )
   }
 
+  const composer = (
+    <MatterComposer
+      value={text}
+      onChange={(v) => {
+        setText(v.slice(0, TASK_TEXT_MAX))
+        clearError()
+      }}
+      onSend={submit}
+      onStop={() => undefined}
+      running={false}
+      closed={false}
+      // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
+      suggestion={suggestions[0]?.prompt}
+      sending={false}
+      docked={false}
+      placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
+      label={t(role_id === undefined ? 'position.entry.title' : 'duty.entry.title')}
+      testId="position-entry-input"
+      modelSlot={
+        <ComposerModelPicker
+          value={model}
+          onChange={(next) => {
+            setModel(next)
+            setEffort(undefined)
+          }}
+          effort={effort}
+          onEffortChange={(next, picked) => {
+            setModel(picked)
+            setEffort(next)
+          }}
+        />
+      }
+      // WP357：附资料（拖进来 / 「+」/ 粘贴文件）
+      docs={attached.docs}
+      onAttachDocs={attached.add}
+      onDetachDoc={attached.remove}
+      docProblem={attached.problem}
+    />
+  )
+
+  /*
+   * WP437（Luoye 10-21）：对话框挪到**中栏底部居中**、悬浮在内容之上（`ComposerDock`）；这个组件放在页面内容的最后。
+   * 框上面贴着：当场回答（问了一句就在框上面答，能滚、右上角关）、老服务端的「走哪条职责」、
+   * 快捷按钮（开始对话后收起）、没发出去那句话。新岗位（`hero`）那句「先交给它第一件事」也在框上面。
+   */
   return (
-    <section
-      data-testid="position-handoff"
-      data-hero={hero ? 'true' : 'false'}
-      data-role={role_id}
-      className={
-        hero
-          ? 'flex flex-col gap-3 rounded-2xl border bg-card p-6 shadow-sm'
-          : 'flex flex-col gap-2'
+    <ComposerDock
+      testId="position-handoff"
+      data={{ 'data-hero': hero ? 'true' : 'false', 'data-role': role_id }}
+      above={
+        <>
+          {/* WP291：当场回答（会话 / 任务这里不画，直接进线程） */}
+          <div
+            className="max-h-[45vh] overflow-y-auto rounded-2xl ws-composer-glass p-2 empty:hidden"
+            data-testid="position-answer-slot"
+          >
+            <QuickAnswer position={id} {...pin} />
+          </div>
+          {/* 老服务端还可能回一张「走哪条职责」——那时把候选摆出来（新服务端不再出） */}
+          {choice === undefined ? null : (
+            <fieldset className="rounded-xl ws-composer-glass p-3" data-testid="route-choice">
+              <p className="flex items-center gap-1 text-sm" data-slot="status">
+                {choice.reason}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {choice.candidates.map((c) => (
+                  <Button
+                    key={c.role_id}
+                    size="xs"
+                    variant="outline"
+                    data-testid="route-choice-option"
+                    disabled={pick.isPending}
+                    onClick={() => {
+                      pick.mutate({ matter_id: choice.matter.id, role_id: c.role_id })
+                    }}
+                  >
+                    <DutyIcon role_id={c.role_id} size={14} />
+                    {c.role_name}
+                  </Button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {hero ? (
+            <div className="flex flex-col gap-1 px-1" data-testid="position-handoff-hero">
+              <h2 className="ws-display flex items-center gap-2 text-[17px]">
+                <Send className="size-4 text-ws-brand" aria-hidden />
+                {t('pos2.handoff.first')}
+              </h2>
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                {t('pos2.handoff.first.note')}
+                <Hint text={t('position.entry.hint')} />
+              </p>
+            </div>
+          ) : null}
+          {/*
+            WP372（决策 1019）：快捷按钮按状态现出（看新报表 / 等你的对话 / 去连接 + 这个岗位自己的提示），
+            最多 6 个，点了直接打开那张卡或直接发出去；开始对话后收起。
+          */}
+          {started ? null : <LandingActions actions={actions} />}
+          {/* WP259：没发出去就在框上说一句（含服务端那句话），不再静默 */}
+          <HandoffError error={error} />
+        </>
       }
     >
-      {hero ? (
-        <h2 className="ws-display flex items-center gap-2 text-[19px]">
-          <Send className="size-4 text-ws-brand" aria-hidden />
-          {t('pos2.handoff.first')}
-        </h2>
-      ) : null}
-      <MatterComposer
-        value={text}
-        onChange={(v) => {
-          setText(v.slice(0, TASK_TEXT_MAX))
-          clearError()
-        }}
-        onSend={submit}
-        onStop={() => undefined}
-        running={false}
-        closed={false}
-        // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
-        suggestion={suggestions[0]?.prompt}
-        sending={false}
-        docked={false}
-        placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
-        label={t(role_id === undefined ? 'position.entry.title' : 'duty.entry.title')}
-        testId="position-entry-input"
-        modelSlot={
-          <ComposerModelPicker
-            value={model}
-            onChange={(next) => {
-              setModel(next)
-              setEffort(undefined)
-            }}
-            effort={effort}
-            onEffortChange={(next, picked) => {
-              setModel(picked)
-              setEffort(next)
-            }}
-          />
-        }
-        // WP357：附资料（拖进来 / 「+」/ 粘贴文件）
-        docs={attached.docs}
-        onAttachDocs={attached.add}
-        onDetachDoc={attached.remove}
-        docProblem={attached.problem}
-      />
-      {/* WP259：没发出去就在框下说一句（含服务端那句话），不再静默 */}
-      <HandoffError error={error} />
-      {/*
-        WP372（决策 1019）：快捷按钮按状态现出（看新报表 / 等你的对话 / 去连接 + 这个岗位自己的提示），
-        最多 6 个，点了直接打开那张卡或直接发出去；开始对话后收起。
-      */}
-      {started ? null : <LandingActions actions={actions} />}
-      {/* WP291：当场回答（输入框之下、要你处理之上）；会话 / 任务这里不画，直接进线程 */}
-      <QuickAnswer position={id} {...pin} />
-      {hero ? (
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          {t('pos2.handoff.first.note')}
-          <Hint text={t('position.entry.hint')} />
-        </p>
-      ) : null}
-
-      {/* 老服务端还可能回一张「走哪条职责」——那时把候选摆出来（新服务端不再出） */}
-      {choice === undefined ? null : (
-        <fieldset className="rounded-md border p-3" data-testid="route-choice">
-          <p className="flex items-center gap-1 text-sm" data-slot="status">
-            {choice.reason}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {choice.candidates.map((c) => (
-              <Button
-                key={c.role_id}
-                size="xs"
-                variant="outline"
-                data-testid="route-choice-option"
-                disabled={pick.isPending}
-                onClick={() => {
-                  pick.mutate({ matter_id: choice.matter.id, role_id: c.role_id })
-                }}
-              >
-                <DutyIcon role_id={c.role_id} size={14} />
-                {c.role_name}
-              </Button>
-            ))}
-          </div>
-        </fieldset>
-      )}
-    </section>
+      {composer}
+    </ComposerDock>
   )
 }

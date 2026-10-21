@@ -40,6 +40,7 @@ import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 import { dutyHasBoards, dutyHasWorkBoards } from '@/components/reports/scope-boards'
 import { DutyIcon } from '@/components/role-icons/role-icon'
+import { DOCK_PAGE } from '@/components/shell/composer-dock'
 import {
   TitleMenu,
   TitleMenuItem,
@@ -214,7 +215,7 @@ export function DutyPage(): React.ReactNode {
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[780px] flex-col gap-4"
+      className={cn(DOCK_PAGE, 'mx-auto w-full max-w-[780px] gap-4')}
       data-testid="duty-page"
       data-duty={role_id}
       data-view={view}
@@ -321,14 +322,10 @@ export function DutyPage(): React.ReactNode {
       ) : (
         /*
           WP372（决策 1019）→ WP412（#12）：中间栏 = 标题 + 对话框 + 快捷按钮 +「要你拍板」的卡，
-          对话框就是岗位页那一个（钉到这条职责）。
+          对话框就是岗位页那一个（钉到这条职责）。WP437：对话框挪到底部居中悬浮（内容最后）。
         */
-        <div className="flex flex-col gap-7" data-testid="duty-body">
-          {instance === undefined ? (
-            <Skeleton className="h-24 w-full" />
-          ) : (
-            <PositionHandoff id={assignment} view={instance} role_id={role_id} />
-          )}
+        <div className="flex flex-1 flex-col gap-7" data-testid="duty-body">
+          {instance === undefined ? <Skeleton className="h-24 w-full" /> : null}
           {assignment === '' ? null : (
             <DeckSection
               positionId={here?.my_assignment_id ?? assignment}
@@ -344,6 +341,10 @@ export function DutyPage(): React.ReactNode {
                 </h3>
               }
             />
+          )}
+          {/* WP437：对话框在中栏底部居中、悬浮在内容之上（放在内容最后） */}
+          {instance === undefined ? null : (
+            <PositionHandoff id={assignment} view={instance} role_id={role_id} />
           )}
         </div>
       )}

@@ -8,7 +8,8 @@
  */
 
 import type { GoalProgress } from '@agentsws/contracts'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import { homeData } from './fixtures'
@@ -171,15 +172,49 @@ describe('首页（36 §3 三区）', () => {
     expect(container.querySelectorAll('[data-testid="sparkline"]').length).toBeGreaterThan(0)
   })
 
-  it('首页没有全局聊天输入框（36 §3 A4；对话入口只有指导 / 问 AI / ⌘K）', async () => {
+  it('WP437（Luoye 10-21）：首页只有底部那个简易对话框（半透明悬浮），顶上那颗「有什么要我做的？」没了', async () => {
     const { container } = renderWithProviders(<HomePage />)
     await screen.findByTestId('queue')
-    // 收起状态下，页面上一个可用的自由文本输入都没有
+    expect(screen.queryByTestId('home-free-chat')).toBeNull()
+    // 页面上唯一一个能打字的地方就是它
     const inputs = [
       ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
     ].filter((el) => !(el as HTMLInputElement).disabled)
-    expect(inputs).toHaveLength(0)
-    expect(screen.queryByPlaceholderText(/(问点什么|说点什么|Ask anything|Message)/)).toBeNull()
+    expect(inputs).toHaveLength(1)
+    const dock = screen.getByTestId('home-composer')
+    expect(dock.getAttribute('data-variant')).toBe('simple')
+    expect(dock.className).toContain('sticky')
+    expect(dock.className).toContain('bottom-0')
+    // 在页面内容最后（悬浮在底部，内容不被挡）
+    expect(screen.getByTestId('home').lastElementChild).toBe(dock)
+    const form = within(dock).getByTestId('simple-composer')
+    expect(form.className).toContain('ws-composer-glass')
+    expect(within(dock).getByTestId('simple-composer-attach')).toBeDefined()
+    expect(within(dock).getByTestId('simple-composer-input').getAttribute('placeholder')).toBe(
+      '有什么要我做的？',
+    )
+    // 没有模型 / 思考档 / 快捷按钮（那些在完整对话框里）
+    expect(dock.querySelector('[data-testid^="model-pick"]')).toBeNull()
+    expect(within(dock).queryByTestId('landing-actions')).toBeNull()
+  })
+
+  it('WP437：简易对话框回车 = 交给「我的助理」（带着这句话跳过去，助理页接着问）', async () => {
+    const { takePendingAsk } = await import('@/components/free-chat/pending-ask')
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/assistant" element={<p data-testid="assistant-page">assistant</p>} />
+      </Routes>,
+    )
+    await screen.findByTestId('queue')
+    const input = screen.getByTestId('simple-composer-input')
+    expect(screen.getByTestId('simple-composer-send').hasAttribute('disabled')).toBe(true)
+    fireEvent.change(input, { target: { value: '昨天的退款有几单？' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(await screen.findByTestId('assistant-page')).toBeDefined()
+    expect(takePendingAsk()).toEqual({ text: '昨天的退款有几单？', files: [] })
+    // 取一次就没了
+    expect(takePendingAsk()).toBeUndefined()
   })
 
   it('时间范围切到近 7 天会重新取数（数在服务端算）', async () => {

@@ -80,6 +80,7 @@ vi.mock('@/lib/api', async () => {
 
 const { RightRail } = await import('@/components/rail/right-rail')
 const { RailStateProvider, useRailState } = await import('@/components/rail/rail-state')
+const { ShellSizeContext } = await import('@/components/rail/board-fit')
 const { RIGHT_RAIL_PAGE_OPEN_KEY } = await import('@/lib/ui-state')
 
 let box = new Map<string, string>()
@@ -291,16 +292,20 @@ describe('WP433：岗位 / 职责 / 事项页卡片列一直在（Luoye 10-20 �
     expect(board.className).not.toContain('fixed')
   })
 
-  it('WP433（Luoye 10-21）：窗口窄于 1024（放不下对话区最小宽度 + 卡片列）：卡片列自动隐藏，不盖、不留开关', async () => {
-    vi.stubGlobal('matchMedia', (q: string) => ({
-      matches: q.includes('1023px'),
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }))
-    renderRail('/positions/asg_sup')
+  it('WP433 → WP437：中栏放不下「核心区最小宽度 + 看板」时看板自动隐藏，不盖、不留开关（只多一颗「看一眼」）', async () => {
+    renderWithProviders(
+      <ShellSizeContext.Provider value={{ body: 760, viewport: 1000 }}>
+        <RailStateProvider>
+          <RightRail instances={[INSTANCE]} />
+        </RailStateProvider>
+      </ShellSizeContext.Provider>,
+      '/positions/asg_sup',
+      'asg_sup',
+    )
     await waitFor(() => {
-      expect(screen.queryByTestId('rail-board')).toBeNull()
+      expect(screen.getByTestId('board-peek')).toBeDefined()
     })
+    expect(screen.queryByTestId('rail-board')).toBeNull()
     expect(screen.queryByTestId('rail-scrim')).toBeNull()
     expect(screen.queryByTestId('rail-toggle')).toBeNull()
   })
