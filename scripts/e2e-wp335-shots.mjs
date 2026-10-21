@@ -5,7 +5,7 @@
  * 在本进程里起一个 demo（演示世界，内存里，跑完即停），往这个品牌的 `geo.sqlite` 里写四周**现编**的
  * 回答与引用（NordVolt 与两个竞品，域名都是 `.example` 或公开大站名，没有任何真实店铺数据），再拍：
  *
- * 1. `1-geo-board`：「内容与搜索」职责页最上面的看板（数字 ×4、趋势、方格、关注词排名、被引用最多的站、对比）；
+ * 1. `1-geo-board`：「SEO 与 GEO」职责页最上面的看板（数字 ×4、趋势、方格、关注词排名、被引用最多的站、对比）；
  * 2. `2-geo-answer`：点方格一格 → 第三栏「一条回答」（折叠、高亮、编号引用、时间线）；
  * 3. `3-geo-answer-compare`：勾上「和上周比」；
  * 4. `4-geo-watch-settings`：「设定 → 关注设置」；
@@ -275,7 +275,7 @@ async function main() {
       await (await fetch(`${BASE}/v1/me`, { headers: { authorization: `Bearer ${li}` } })).json()
     ).data
     const content = me.assignments.find(
-      (a) => a.role_id === 'dtc.content' && a.revoked_at === undefined,
+      (a) => a.role_id === 'dtc.seo' && a.revoked_at === undefined,
     )
     const positionId = content.position_id ?? content.id
     // 关注设置：两个竞品、五条问题、四家 AI、三个关注词（走界面用的同一条接口）
@@ -313,7 +313,7 @@ async function main() {
     }, li)
     const page = await context.newPage()
     page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
-    await page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.content`, {
+    await page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.seo`, {
       waitUntil: 'networkidle',
     })
     const board = page.locator('[data-testid="geo-board"]')

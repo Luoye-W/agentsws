@@ -115,20 +115,20 @@
       "def": "16f7bd12ac4544a5"
     },
     "dtc.content": {
-      "zh": "e43efc0a512a8bb5",
-      "en": "015b067f205c757e",
-      "content": "669f4ea889f256ca",
-      "def": "ede5439433823e82"
+      "zh": "1fe57d15e681c81b",
+      "en": "6aa5b0c5ab9a0501",
+      "content": "8976594e050128d6",
+      "def": "e3f9d5830ee88c1f"
     },
     "dtc.email-marketing": {
-      "zh": "7f824de093ab4f3b",
-      "en": "ca8db98c59d19e2e",
+      "zh": "b224509a3fa76d77",
+      "en": "39e9ab6549ab94e2",
       "content": "ffaea70426d2040f",
       "def": "85f9b683b4f11d72"
     },
     "dtc.fulfillment": {
-      "zh": "6ef651654c7ff204",
-      "en": "bf31d22a6aaf236c",
+      "zh": "493a7bbb61b1c8f5",
+      "en": "206475de510cffd0",
       "content": "8c69bd5252eec28f",
       "def": "4260ab36eb5740cf"
     },
@@ -138,9 +138,15 @@
       "content": "0f944613672597de",
       "def": "99e9e66d6e994a8e"
     },
+    "dtc.seo": {
+      "zh": "5e26c8c71bb2b647",
+      "en": "b4f98521485b26aa",
+      "content": "f263b13a7b9cedf1",
+      "def": "23a5926eda2943da"
+    },
     "dtc.store": {
-      "zh": "ac2cec4f74cfbec7",
-      "en": "7476cb2f9cdd9892",
+      "zh": "412fbfd377a13394",
+      "en": "c879f6d1f06d3487",
       "content": "3e6d1cc3a9f5c00f",
       "def": "2ccc6e995484ead9"
     },
@@ -211,10 +217,10 @@
       "def": "f7201bf2713e9270"
     },
     "site.shopify-build": {
-      "zh": "3ea591a84a2466ad",
-      "en": "2ff5de5889ccffcb",
-      "content": "3b9f07a0fef74fcb",
-      "def": "ca448e2e6cb4f151"
+      "zh": "5c2331f32f3dd223",
+      "en": "bb499cf892de7c03",
+      "content": "49413d23221b0864",
+      "def": "e5beb4656c61d9e5"
     },
     "site.shopify-email": {
       "zh": "7456fad9d016718f",
@@ -318,6 +324,6 @@
     "pr": "f0f54b5884c4a7e0",
     "site": "71b9666f662bfee8",
     "social-media": "c80364238231011b",
-    "web-ops": "e3fd05eeb69581f2"
+    "web-ops": "01ced72b1205aeb0"
   }
 }

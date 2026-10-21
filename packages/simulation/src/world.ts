@@ -2045,6 +2045,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP63 把 15 人 pack 自带的那份副本删了——两份真源迟早会各改各的。
     loadBundledRole('dtc.store'),
     loadBundledRole('dtc.content'),
+    // WP446（docs/109 §4）：SEO 与 GEO 从内容里拆出来；每日 5 件事与 GEO 走它的分配
+    loadBundledRole('dtc.seo'),
     // WP67（48 §5.1）：红人营销岗位的五条渠道职责。3 人 pack 里"运营"挂着
     // `kol.youtube`（`assignments.yml`），另外四条躺在库里——躺着不产生任何行为，
     // 装它们是为了首次设置向导里"红人营销"那个岗位显示五条而不是一条
@@ -5345,7 +5347,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
      * 报告卡并记一条 `digest.seo_daily`（卡上几件、各走哪条车道、读进几行、卡上几行）。
      */
     async seoDaily({ who }) {
-      const asg = assignmentFor(who, 'dtc.content')
+      const asg = assignmentFor(who, 'dtc.seo')
       const at = now(clock)
       const date = at.slice(0, 10)
       const payload = await buildSeoDaily({
@@ -5409,7 +5411,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     async geoQuality({ who }) {
-      const asg = assignmentFor(who, 'dtc.content')
+      const asg = assignmentFor(who, 'dtc.seo')
       const at = now(clock)
       const week = at.slice(0, 10)
       // ① 录好的回答 + 录好的判断回文 → 比较胜率、描述准确度（原话对不上的不算）

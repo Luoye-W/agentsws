@@ -195,12 +195,15 @@ describe('51 §2.2 内容与博客的三块', () => {
     expect(rowsOf(r.data)[0]?.clicks).toBe('—')
   })
 
-  it('面板里有那三块，且流量那一块归 Search Console（没连就明说）', () => {
+  it('面板里有那三块；Search Console 那一格（没连就明说）WP446 起跟着「SEO 与 GEO」走', () => {
     const ids = blocksForRole('dtc.content').map((b) => b.id)
     expect(ids).toContain('content.drafts')
     expect(ids).toContain('content.pending_publish')
     expect(ids).toContain('content.recent_posts')
-    const gsc = assembleView('dtc.content', ctx).find((s) => s.source === 'gsc')
+    expect(assembleView('dtc.content', ctx).find((s) => s.source === 'gsc')).toBeUndefined()
+    const gsc = assembleView('dtc.seo', { ...ctx, role_id: 'dtc.seo' }).find(
+      (s) => s.source === 'gsc',
+    )
     expect(gsc?.connected).toBe(false)
   })
 })

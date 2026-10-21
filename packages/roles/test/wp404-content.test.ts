@@ -34,9 +34,9 @@ const scrambled = <T extends Record<string, unknown>>(def: T, fields: readonly s
 }
 
 describe('WP404 内容层往返：抽出来再套回去，和原 yml 加载结果逐字段相等', () => {
-  it('全部 51 条内置职责', () => {
+  it('全部 52 条内置职责（WP446 加了 dtc.seo）', () => {
     const roles = loadBundledRoles()
-    expect(roles).toHaveLength(51)
+    expect(roles).toHaveLength(52)
     for (const role of roles) {
       const file = bundledRoleFile(role.id)
       const raw = parseYaml(readFileSync(file, 'utf8')) as Record<string, unknown>

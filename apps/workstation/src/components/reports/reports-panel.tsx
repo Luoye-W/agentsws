@@ -82,7 +82,7 @@ export function dutyMayHaveBoards(role_id: string): boolean {
     role_id === 'b2b.sales' ||
     role_id === 'ads.google' ||
     role_id === 'ads.meta' ||
-    role_id === 'dtc.content' ||
+    role_id === 'dtc.seo' ||
     role_id === 'amz.store'
   )
 }

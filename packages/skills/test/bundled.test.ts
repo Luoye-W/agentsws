@@ -164,7 +164,7 @@ describe('自带技能：格式（24 §1 Agent Skills）', () => {
         const resolved = await skills.registry.resolve(name, {
           person_id: 'p_1',
           workspace_id: 'ws_1',
-          role_id: 'dtc.content',
+          role_id: 'dtc.seo',
         })
         expect(resolved?.layers_applied).toEqual(['package'])
         const { body } = splitFrontmatter(skill.markdown)

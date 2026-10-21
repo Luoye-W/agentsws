@@ -1,0 +1,234 @@
+# WP446（docs/109 §4，Luoye 10-21 定 S1–S5）：网站运营岗位的 **SEO 与 GEO**。
+#
+# 从「内容与搜索」（`dtc.content`，WP154）里拆出来的那一半：搜索判断、改哪页、写什么题、
+# Search Console、关注设置、整套 GEO。写文章、发布、发布前质检留在「内容与博客」。
+# 为什么拆（docs/50 §0 职责按「人」切）：跨境中小卖家里 SEO 常外包给代理商 / 自由职业者，
+# 写文章却是自己写或另找写手——同一摊活常交给另一个人，就该是两条。GEO 不单拆：同一个人做、
+# 共用 Search Console、补法一样（改页面 / 交公关）。
+#
+# 四件事值得说清楚（原样从 WP154 搬过来，逻辑一行不改）：
+#
+# 1. **SEO 难的是判断，不是写字**。每天早上读一遍 Search Console，只算六个信号，
+#    其余不上卡；每天一张「今天值得动的 5 件事」，**先修再写**（能改现有页面的排前面）。
+#    判断是 `@agentsws/seo-core` 里的规则，数字一个不经模型手；模型只写那句标题、那个小节。
+# 2. **改现有页面的三种改法仍由这里出卡**（改标题与开头 / 加小节 / 调内链）：写的是一句标题、
+#    一个小节、几条链接，量小；判断才是活。额度与 L1 起步原样搬。
+# 3. **新页面这里只出选题卡**（`seo_topic`）：批了开一件「写这一页」的事项，派给「内容与博客」
+#    的担当人；没人担就派给这条职责自己的担当人（一个人开店时两条都在他身上，等于没变）。
+# 4. **不归我改的交出去**：模板、跳转、结构化数据 → 建站（建站有 `stage_url_redirect`）；
+#    站外提及 → 公关。开一件事项 + 说明，不越界去改。
+id: dtc.seo
+version: 1.0.0
+domain: dtc
+name: { zh: SEO 与 GEO, en: SEO & GEO }
+description: Search Console 与搜索判断、改哪页、写什么题、技术体检与改版回归、排名与收录、AI 搜索可见度（GEO）
+
+scopes:
+  # 改页面标题 / 小节 / 内链都落在 content 域（stage）；新写整页不在这里（交内容与博客）
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 商品只读：判断哪页该修要看它挂着哪些商品
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
+  # 改动稿里的数字只引事实卡
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 六个信号、按页面收入、AI 来源流量（GSC / GA4 没连就照 36 §3 明说）
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # 按页面并排点击 / 订单 / 收入——订单只读（Shopify `landing_site` 归因要它）
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 改页面要读写内容（文章与页面住在店铺后台里）
+  - { kind: shop, required: true, grants: [read_content, write_content], ownership: workspace }
+  # Search Console：**推荐**连。没连照样能看 GEO，但「今天值得动的 5 件事」要靠它
+  - {
+      kind: search_console,
+      required: false,
+      recommended: true,
+      grants: [read_analytics],
+      ownership: workspace,
+    }
+  # GA4：可选。接了才在「按页面收入」旁边补落地页转化率
+  - { kind: ga4, required: false, grants: [read_analytics], ownership: workspace }
+
+actions:
+  # ── 改现有页面的三种改法（先修再写的那个"修"，WP154 原样搬）──────────────
+  #
+  # 为什么不都塞进 `listing_edit`：那样一天改 50 页正文与一天改 50 页标题共用一个额度，
+  # 而它们的风险与节奏不一样。三条各有自己的 kind，**全部出卡**（initial L1），
+  # 采纳率够了再升 L2。`before` 都是那一页的原文（改前必读），改错了改得回来。
+  #
+  # 改页面标题 / 搜索结果描述 / H1 / 开头两句：把那个查询原样放进这几处，答案放在头两行
+  - id: stage_page_seo_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_page_edits_per_day: 10 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  # 加一个小节（H2 + 一段）：接住这页已经排上、但没真正回答的那组查询
+  - id: stage_page_section_add
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_page_edits_per_day: 10 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  # 调整内链：让排得好的那页链一下卡住的那页；一次最多动 5 条链接
+  - id: stage_internal_link_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_links_per_change: 5 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+
+automation:
+  stage_page_seo_edit:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_page_section_add:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_internal_link_edit:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+# SEO 判断的规则在 `@agentsws/seo-core`（数不经模型手），技能包 `seo-judgment` 只管
+# "怎么把那句标题、那个小节写好"；写改动稿要品牌口吻，`brand-voice` 按需
+skills:
+  - { name: seo-judgment, tier: open, load: on_demand }
+  - { name: brand-voice, tier: open, load: on_demand }
+
+# WP154 §2：六个信号的阈值（默认就是文章里那几个数；工作区可改）
+thresholds:
+  seo_position_min: 3
+  seo_position_max: 20
+  seo_no_clicks_impressions: 500
+  # 点击率阈值写成百分数（0.5 = 0.5%）
+  seo_no_clicks_ctr_pct: 0.5
+  seo_decay_pct: 30
+  seo_ai_mode_words: 7
+  # §4：点击至少这么多还没订单 = 漏；点击不超过这么多却出订单 = 宝
+  seo_leak_min_clicks: 100
+  seo_gem_max_clicks: 50
+  # WP159：每天最多让模型写几份改动卡初稿（超了用规则版兜底；0 = 不用模型）
+  seo_model_drafts_per_day: 5
+  # WP380：GEO 改动几天后复查（本职责改页面 14 天；交公关 / 对外说法要等站外改，28 天）；
+  # 对外说法一致性检查多久跑一次（跟着每周那一轮看到期没有）
+  geo_recheck_days: 14
+  geo_recheck_days_offsite: 28
+  geo_consistency_days: 28
+home_blocks:
+  # WP154 §3：今天值得动的 5 件事（GSC 没连就明说「接上才看得到」）
+  - {
+      id: seo.today,
+      placement: role_view,
+      component: table,
+      query: seo.today,
+      default_order: 5,
+      pinnable: true,
+      adaptive: false,
+    }
+  # WP154 §4：按页面并排点击 / 订单 / 收入，「点击多没订单」「点击少出订单」单独标
+  - {
+      id: seo.page_revenue,
+      placement: role_view,
+      component: table,
+      query: seo.page_revenue,
+      default_order: 21,
+      pinnable: true,
+      adaptive: false,
+    }
+  # WP154 §5：AI 平台可见度（每周一次；搜索数据接口没接就明说）
+  - {
+      id: seo.geo_visibility,
+      placement: role_view,
+      component: table,
+      query: seo.geo_visibility,
+      default_order: 22,
+      pinnable: true,
+      adaptive: false,
+    }
+notifications: []
+grounding:
+  # 派活意图词（docs/109 §4.2）：排名、Search Console、收录、AI 搜索、GEO、选题 → 这条
+  - {
+      name: search_judgment,
+      intent_terms:
+        [
+          排名,
+          Search Console,
+          收录,
+          AI 搜索,
+          GEO,
+          选题,
+          SEO,
+          关键词,
+          搜索词,
+          点击率,
+          内链,
+          AI 回答,
+          ranking,
+          rankings,
+          indexing,
+          keyword,
+          AI answers,
+        ],
+      cue_terms: [掉了, 下降, 涨, 哪页, 哪些词, 有没有我们, dropped, which page],
+      tool: query_seo_today,
+      prefetch: false,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []
+
+quick_prompts:
+  - id: today_five
+    label: { zh: "今天值得动的 5 件事", en: "Today's 5 things" }
+    prompt: "把今天那张「值得动的 5 件事」讲给我听：每件是什么信号、证据数字是多少、建议怎么动、归谁动"
+    kind: ask
+  - id: leaks
+    label: { zh: "哪些页点击多没订单", en: "Pages with clicks but no orders" }
+    prompt: "按页面把点击、订单、收入并排列出来，把「点击多没订单」和「点击少出订单」两类单独标出来"
+    kind: ask
+  - id: ai_visibility
+    label: { zh: "AI 搜索里有没有我们", en: "Are we in AI answers" }
+    prompt: "上周各 AI 平台回答买家问题时，有没有提到我们、引用了哪些站、提到了哪些竞品；缺位的该改哪页还是交公关"
+    kind: ask
+  - id: ranking_drop
+    label: { zh: "哪些词排名掉了", en: "Which rankings dropped" }
+    prompt: "近一周哪些词排名或点击掉得最多、掉在哪一页；该修页面、交建站还是先观察"
+    kind: ask
+
+task_examples:
+  - id: fix_before_write
+    title: { zh: "先把排上的页修好", en: "Fix what already ranks" }
+    description: "Search Console 里有一堆词排在第二页，不知道先动哪个。"
+    expected_output: "每天早上一张「今天值得动的 5 件事」：每件带证据数字与建议；能改现有页面的排前面，改标题、加小节、调内链各出一张改动卡等你点。"
+  - id: revenue_by_page
+    title: { zh: "哪些页真带来订单", en: "Which pages bring orders" }
+    description: "页面有点击，但不知道有没有人买。"
+    expected_output: "按页面并排的点击 / 订单 / 收入表，点击多没订单与点击少出订单两类单独标出，每周一张小结。"
+  - id: ai_answers
+    title: { zh: "AI 回答里有没有我们", en: "Show up in AI answers" }
+    description: "买家开始用 ChatGPT 之类问「买哪个好」，想知道我们在不在答案里。"
+    expected_output: "每周一份 AI 平台可见度：哪些问题提到了我们、引用了哪些站、缺位的该改哪页还是交公关；改完到期自动复查。"
+
+# WP179：官方网页搜索与抓公开网页（看谁排在前面、核对引用）
+web_tools: [web_search, web_fetch]
+
+# ── WP120（69 §2）：**角色定位**。六段骨架一段不许少（docs/109 §4.3 草稿）──────────
+persona:
+  zh: |
+    你是谁：网站运营岗位里管 SEO 与 GEO 的人。
+    你负责：每日搜索判断、改哪页写什么题、标题小节内链改动稿、技术体检、改版回归、排名与 AI 可见度。
+    你不负责：写整篇文章→内容与博客；模板、跳转、结构化数据→建站；站外提及→公关；改价促销→店铺管理；客户问题→客服。
+    怎么做：SEO 难在判断不在写字：只看六个信号，先修再写；新写前看谁排前面；点击也看订单。数字只引事实卡与算好的数。
+    口气：先说证据数字，不许诺排名与AI引用。
+    必须出卡：改标题开头、加小节、调内链、新页面选题、交建站的改动、GEO 关注设置。

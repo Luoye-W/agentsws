@@ -15,7 +15,12 @@ import {
 } from '@agentsws/seo-core'
 import { createTxn } from '@agentsws/txn'
 import { describe, expect, it } from 'vitest'
-import { createSeoService, draftTitle, type SeoServiceOptions } from '../src/seo-service.js'
+import {
+  createSeoService,
+  draftTitle,
+  type SeoServiceOptions,
+  topicWriter,
+} from '../src/seo-service.js'
 
 const NOW = '2026-09-28T00:00:00.000Z'
 
@@ -33,6 +38,10 @@ const CONTENT = {
   assignment_id: 'asg_content',
   role_id: 'dtc.content',
 }
+/** WP446：SEO 与 GEO 的担当人（同一个人挂着两条，分配不同）。 */
+const SEO = { ...CONTENT, assignment_id: 'asg_seo', role_id: 'dtc.seo' }
+/** WP446：内容与博客另有一位写手（选题批了，写这一页派给他）。 */
+const WRITER = { ...CONTENT, person_id: 'p_zhao', assignment_id: 'asg_writer' }
 const SITE = {
   ...CONTENT,
   person_id: 'p_wang',
@@ -63,7 +72,13 @@ function setup(over: Partial<SeoServiceOptions> = {}) {
         ? { mandate: { caps: { max_links_per_change: 5 } }, level: 'L1' }
         : { mandate: { caps: { max_page_edits_per_day: 10 } }, level: 'L1' },
     holderOf: (role) =>
-      role === 'dtc.content' ? CONTENT : role === 'site.shopify-build' ? SITE : undefined,
+      role === 'dtc.seo'
+        ? SEO
+        : role === 'dtc.content'
+          ? WRITER
+          : role === 'site.shopify-build'
+            ? SITE
+            : undefined,
     thresholds: () => ({ seo_position_min: 3, seo_position_max: 20 }),
     work: {
       createMatter: (input) => {
@@ -127,9 +142,7 @@ describe('每日：今天值得动的 5 件事落成什么', () => {
     expect(site?.role_id).toBe('site.shopify-build')
     expect(site?.title).toContain('在跳转')
     // 加小节那件开给本职责自己
-    expect(matters.some((m) => m.role_id === 'dtc.content' && m.title.includes('braided'))).toBe(
-      true,
-    )
+    expect(matters.some((m) => m.role_id === 'dtc.seo' && m.title.includes('braided'))).toBe(true)
   })
 
   it('同一件事两周内不重复交出去', async () => {
@@ -197,10 +210,34 @@ describe('每日：今天值得动的 5 件事落成什么', () => {
       via: 'web',
     })
     await service.onDecided(decided)
-    expect(matters.some((m) => m.title === '写一页新的：gan vs silicon charger')).toBe(true)
+    // WP446（docs/109 §4.2 交接）：写这一页落到内容与博客的担当人
+    const write = matters.find((m) => m.title === '写一页新的：gan vs silicon charger') as
+      | { role_id?: string; participants?: string[]; position_id?: string }
+      | undefined
+    expect(write?.role_id).toBe('dtc.content')
+    expect(write?.participants).toEqual(['p_zhao'])
+    expect(write?.position_id).toBe('asg_writer')
   })
 
-  it('没人持有内容与搜索：不跑', async () => {
+  it('WP446：没人担内容与博客时，写这一页派回 SEO 与 GEO 自己的担当人', () => {
+    expect(topicWriter((role) => (role === 'dtc.seo' ? (SEO as never) : undefined))).toMatchObject({
+      role_id: 'dtc.seo',
+      actor: { assignment_id: 'asg_seo' },
+    })
+    expect(
+      topicWriter((role) => (role === 'dtc.content' ? (WRITER as never) : undefined)),
+    ).toMatchObject({ role_id: 'dtc.content', actor: { person_id: 'p_zhao' } })
+    expect(topicWriter(() => undefined)).toEqual({ role_id: 'dtc.content' })
+  })
+
+  it('WP446：只挂内容与博客、不挂 SEO 与 GEO：每日判断不跑', async () => {
+    const { service } = setup({
+      holderOf: (role) => (role === 'dtc.content' ? (WRITER as never) : undefined),
+    })
+    expect((await service.daily()).skipped).toContain('SEO 与 GEO')
+  })
+
+  it('没人持有 SEO 与 GEO：不跑', async () => {
     const { service } = setup({ holderOf: () => undefined })
     expect((await service.daily()).skipped).toContain('没人持有')
   })

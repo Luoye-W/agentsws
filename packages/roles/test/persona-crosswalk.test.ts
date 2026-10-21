@@ -154,6 +154,11 @@ describe('路由那一半：每个岗位一句典型任务落到对的职责上�
     ['kol-marketing', '在油管上找 20 个粉丝一万到十万的频道，按匹配度排给我', 'kol.youtube'],
     ['customer-care', '客服邮箱里有一笔拒付争议，帮我准备材料', 'dtc.support'],
     ['web-ops', '把 A 商品降价 10%', 'dtc.store'],
+    // WP446（docs/109 §4.2）：SEO 与 GEO 拆出来之后，搜索那一半与写作那一半各落各的
+    ['web-ops', '排名掉了，看看是哪几页', 'dtc.seo'],
+    ['web-ops', '我们在 AI 搜索里有没有被提到', 'dtc.seo'],
+    ['web-ops', 'Search Console 里哪些词该先修', 'dtc.seo'],
+    ['web-ops', '写一篇博客讲磁吸充电宝怎么选', 'dtc.content'],
     // WP191：Meta 拆开之后这句落在 IG 那条上（之前是 `social.meta`）
     ['social-media', '给我们自己的 Instagram 账号排一条本周的帖子', 'social.instagram'],
     ['social-media', '给 FB 主页排一条周四的直播预告', 'social.facebook'],

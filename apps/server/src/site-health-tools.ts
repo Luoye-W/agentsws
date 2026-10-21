@@ -175,7 +175,7 @@ export function createSiteHealthToolExecutor(options: SiteHealthToolsOptions): T
       return { status: 'error', reason: `unsupported_tool：${call.name}` }
     const req = call.request
     if (!isSiteHealthRole(req.actor.role_id))
-      return { status: 'blocked', reason: '体检结论只给网站运营（店铺管理、内容与搜索）。' }
+      return { status: 'blocked', reason: '体检结论只给网站运营（店铺管理、SEO 与 GEO）。' }
     const svc = await options.service(req.workspace_id)
     if (svc === undefined) return { status: 'error', reason: '这个品牌没装网站体检。' }
     const raw = typeof call.input.part === 'string' ? call.input.part.trim() : 'all'

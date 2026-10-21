@@ -1,6 +1,6 @@
 ---
 positions: [web-ops, dtc-ops, ads, pr]
-roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.content, pr.monitoring]
+roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.seo, pr.monitoring]
 ---
 # Google 家的几个连接
 
@@ -74,7 +74,7 @@ Gmail 的读写属于 Google 的「受限权限」：经第三方服务器访问
 
 **连上之后**
 
-在「内容与搜索」面板上选一下是哪个站点（域名属性、网址前缀都行；只有一个就自动选好）。之后每天早上读一次：「今天值得动的 5 件事」、查询词与落地页都是真数。
+在「SEO 与 GEO」面板上选一下是哪个站点（域名属性、网址前缀都行；只有一个就自动选好）。之后每天早上读一次：「今天值得动的 5 件事」、查询词与落地页都是真数。
 
 ## YouTube Data API
 

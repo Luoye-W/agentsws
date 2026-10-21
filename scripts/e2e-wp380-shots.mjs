@@ -6,7 +6,7 @@
  * （`@agentsws/seo-core` 的 GEO_SAMPLE_*：NordVolt 与两个竞品，`.example` 域名，没有任何真实店铺数据）
  * 与当时模型的判断，再拍（浅 / 深各一张）：
  *
- * 1. `1-quality-{light,dark}`：「内容与搜索」看板最下面「说得对不对 · 比得过谁」那一块；
+ * 1. `1-quality-{light,dark}`：「SEO 与 GEO」看板最下面「说得对不对 · 比得过谁」那一块；
  * 2. `2-consistency-card-{light,dark}`：对外说法分派卡（官方事实对 demo 夹具页：结构化数据 → 建站、
  *    页面里的旧说法 → 公关——demo 店的自家域名是 shop.example，夹具页按站外页算）；
  * 3. `3-recheck-card-{light,dark}`：到期复查的建议卡（前 → 后、扩大）。
@@ -202,7 +202,7 @@ async function main() {
       await (await fetch(`${BASE}/v1/me`, { headers: { authorization: `Bearer ${li}` } })).json()
     ).data
     const content = me.assignments.find(
-      (a) => a.role_id === 'dtc.content' && a.revoked_at === undefined,
+      (a) => a.role_id === 'dtc.seo' && a.revoked_at === undefined,
     )
     const positionId = content.position_id ?? content.id
     const view = await call(li, content.id, 'PUT', '/v1/seo/watch', {
@@ -295,7 +295,7 @@ async function main() {
       )
       const page = await context.newPage()
       page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
-      await page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.content`, {
+      await page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.seo`, {
         waitUntil: 'networkidle',
       })
       // WP372 起职责自己的看板在右侧面板「报表」下半截：点小链接打开，再「显示更多」加宽

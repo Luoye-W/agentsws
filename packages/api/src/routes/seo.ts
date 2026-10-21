@@ -14,7 +14,7 @@
  *   `GET /v1/seo/watch/metrics`：「GEO 关注设置」读写、AI 按品牌档案给策略（可同时出设定卡）、
  *   现在跑一轮（Claude 单格 ≥ 1 积分先回估算、带 `confirm` 才跑）、看板要的数（O3 画）。
  *
- * 闸：`content` 域（`dtc.content` 的 scopes 里有 read / stage）。别的职责进不来，
+ * 闸：`content` 域（`dtc.seo` / `dtc.content` 的 scopes 里都有 read / stage）。别的职责进不来，
  * 路由里一行 if 都不用写（同 `pr.ts` 文件头第 1 条）。判断与出卡全在服务端的
  * `seo-service.ts`，这里只收发。
  */
@@ -242,7 +242,7 @@ function portOf(deps: GatewayDeps): SeoPort {
   if (p === undefined)
     throw new ApiError(
       'not_implemented',
-      '这个服务进程没有装配内容与搜索那一层（GatewayDeps.seo）。',
+      '这个服务进程没有装配 SEO 与 GEO 那一层（GatewayDeps.seo）。',
     )
   return p
 }
@@ -810,7 +810,7 @@ export function seoRoutes(): Route[] {
           actorOf(c),
           plain<{ urls?: string[] }>(await body(c, WatchConsistencyBody)),
         )
-        if (run === undefined) throw new ApiError('conflict', '没人持有「内容与搜索」这条职责')
+        if (run === undefined) throw new ApiError('conflict', '没人持有「SEO 与 GEO」这条职责')
         return ok(c, run)
       },
     ),

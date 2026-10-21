@@ -1,6 +1,6 @@
 # Search data APIs
 
-When the "Content & Search" duty checks search result pages (where you rank on Google / Bing, whether the AI overview mentions you) or asks AI platforms (do ChatGPT, Gemini, Claude or Google AI Overviews mention you), it needs third-party search data. The "Connections → Search data" row decides where it comes from — three options:
+When the "SEO & GEO" duty checks search result pages (where you rank on Google / Bing, whether the AI overview mentions you) or asks AI platforms (do ChatGPT, Gemini, Claude or Google AI Overviews mention you), it needs third-party search data. The "Connections → Search data" row decides where it comes from — three options:
 
 | Option | Who pays | In one line |
 |---|---|---|

@@ -1945,6 +1945,7 @@ const zh: Table = {
   'category.page_seo': '改页面标题与开头',
   'category.page_section': '加小节',
   'category.internal_links': '调内链',
+  'category.url_redirects': '改跳转',
   'category.seo_report': '搜索报告',
   'category.weekly_review': '经营一页纸',
   // WP224：一页纸卡的五段
@@ -2743,7 +2744,7 @@ const zh: Table = {
   'data.byo.saved': '已保存，不扣积分。',
   // WP155（docs/81）：连接页「搜索数据」一行
   'search_data.title': '搜索数据',
-  'search_data.subtitle': '「内容与搜索」查搜索结果、问 AI 平台时用的数据从哪来',
+  'search_data.subtitle': '「SEO 与 GEO」查搜索结果、问 AI 平台时用的数据从哪来',
   'search_data.choice.official': '官方（用积分）',
   'search_data.choice.byo': '自带 key',
   'search_data.choice.none': '不接',
@@ -2807,7 +2808,7 @@ const zh: Table = {
   'models.purpose.web_search': '网页搜索',
   'web.search.title': '联网搜索',
   'web.search.hint':
-    '查资料的岗位（内容与搜索、B2B、红人、店铺、投放）和随便聊可以上网搜索：用工坊自己的内置浏览器搜 Google（打不开就换 Bing），在后台静默进行，不花积分。按品牌的目标市场和语言去搜当地内容。偶尔 Google 会要人机验证，那时右边「浏览器」会亮出那一页，请你自己点一下（AI 不碰验证码）。没有内置浏览器时（不是桌面版）改用云端搜索或公开搜索服务，搜索词会交给这些服务。客服岗位不上网搜。',
+    '查资料的岗位（内容与博客、SEO 与 GEO、B2B、红人、店铺、投放）和随便聊可以上网搜索：用工坊自己的内置浏览器搜 Google（打不开就换 Bing），在后台静默进行，不花积分。按品牌的目标市场和语言去搜当地内容。偶尔 Google 会要人机验证，那时右边「浏览器」会亮出那一页，请你自己点一下（AI 不碰验证码）。没有内置浏览器时（不是桌面版）改用云端搜索或公开搜索服务，搜索词会交给这些服务。客服岗位不上网搜。',
   'web.search.on': '开着：查资料的岗位会用工坊内置浏览器上网搜索。',
   'web.search.off': '关着：不上网搜索（打开指定网页照旧可以）。',
   'web.search.no_key': '开着，但这里搜不了网。',
@@ -2943,7 +2944,7 @@ const zh: Table = {
   'markets.kind.currency': '商品币种',
   'markets.cost': '多一个市场，搜索可见度的探测花费多一份',
   'markets.cost.hint':
-    '每周默认问 {q} 个 × {p} 个 AI 平台 × {m} 个市场 × 每次 {price} 积分，约 {c} 积分；每日看搜索结果页每个市场各 {serp} 次。「内容与搜索」面板里可以按市场关掉。',
+    '每周默认问 {q} 个 × {p} 个 AI 平台 × {m} 个市场 × 每次 {price} 积分，约 {c} 积分；每日看搜索结果页每个市场各 {serp} 次。「SEO 与 GEO」面板里可以按市场关掉。',
 
   // ── WP122（71）品牌设计规范 DESIGN.md ────────────────────────────
   //
@@ -6331,6 +6332,7 @@ const en: Table = {
   'category.page_seo': 'Page title & opening',
   'category.page_section': 'Add a section',
   'category.internal_links': 'Internal links',
+  'category.url_redirects': 'Redirects',
   'category.seo_report': 'Search report',
   'category.weekly_review': 'Weekly one-pager',
   'weekly.situation': 'Situation',
@@ -7147,7 +7149,7 @@ const en: Table = {
   'data.byo.saved': 'Saved. No credits are used.',
   // WP155 (docs/81): the "Search data" row on Connections
   'search_data.title': 'Search data',
-  'search_data.subtitle': 'Where "Content & Search" gets search results and AI answers from',
+  'search_data.subtitle': 'Where "SEO & GEO" gets search results and AI answers from',
   'search_data.choice.official': 'Official (credits)',
   'search_data.choice.byo': 'My own key',
   'search_data.choice.none': 'Off',
@@ -7346,7 +7348,7 @@ const en: Table = {
   'markets.kind.currency': 'product currency',
   'markets.cost': 'Each extra market adds one more share of search-visibility probing cost',
   'markets.cost.hint':
-    'Weekly default: {q} questions × {p} AI platforms × {m} markets × {price} credits each ≈ {c} credits; daily search-results checks: {serp} per market. You can turn a market off in the Content & Search panel.',
+    'Weekly default: {q} questions × {p} AI platforms × {m} markets × {price} credits each ≈ {c} credits; daily search-results checks: {serp} per market. You can turn a market off in the SEO & GEO panel.',
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',

@@ -31,11 +31,11 @@ export function isSettingsTab(value: string | undefined): value is SettingsTab {
 }
 
 /**
- * WP335：只在某条职责层多出来的标签（「内容与搜索」的「关注设置」）。别的层不出这个标签；
+ * WP335：只在某条职责层多出来的标签（「SEO 与 GEO」的「关注设置」；WP446 从内容与搜索搬过来）。别的层不出这个标签；
  * 从别处 `show('geo-watch')` 开到不是那条职责时，落回第一个标签。
  */
 export const DUTY_TABS: Readonly<Record<string, readonly string[]>> = {
-  'dtc.content': ['geo-watch'],
+  'dtc.seo': ['geo-watch'],
 }
 
 type TabId = SettingsTab | 'geo-watch' | 'updates'

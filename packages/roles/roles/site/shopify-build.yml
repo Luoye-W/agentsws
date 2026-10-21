@@ -14,10 +14,10 @@
 # 它们的缺项列出来，但那几行的"怎么补"写的是"去后台自己点"——说得出缺什么、
 # 补不了，这两件事在卡面上要分得开。
 id: site.shopify-build
-version: 1.0.0
+version: 1.1.0
 domain: dev
 name: { zh: Shopify 整站搭建, en: Shopify Store Build }
-description: 新店从零到能开门：导航与页面结构、政策页、上线检查单（店名、联系邮箱、地址这类基础信息还没接通，请在后台改）。管的是**结构**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事；结账 / 支付 / 税没有写动作，检查单只说得出缺什么。
+description: 新店从零到能开门：导航与页面结构、政策页、网址跳转、上线检查单（店名、联系邮箱、地址这类基础信息还没接通，请在后台改）。管的是**结构**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事；结账 / 支付 / 税没有写动作，检查单只说得出缺什么。
 
 scopes:
   # 店铺设置、导航、页面结构都算 store_config 与 content；商品只读（改价不是这个岗位的事）
@@ -57,6 +57,15 @@ actions:
     mandate: { caps: {}, window: { max_count: 5, per: day } }
     review_cannot_be_disabled: true
     route_to: owner
+  # WP446（docs/109 §4.4 S5）：改网址跳转（Shopify 原生 URL 跳转，`shop_save_redirects`）。
+  # 技术 SEO 的体检归「SEO 与 GEO」（只读），要改的跳转交到这里出卡。L1 起步；一张卡一批，
+  # 条数上限进 `caps`（超了转人审）；`before` 记每条旧路径原来跳到哪，撤回就是改回去。
+  - id: stage_url_redirect
+    target: store_config
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_redirects_per_change: 20 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
   # 跑一次上线检查单。只读巡检，什么都不改，所以可以到 L3；
   # 它仍然建一条审批记录（14：所有改变都进同一条队列），只是不进人的待办。
   - id: run_launch_checklist
@@ -77,6 +86,11 @@ automation:
     hard_ceiling: true
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
+  stage_url_redirect:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
   run_launch_checklist:
     ceiling: L3
     initial: L2
@@ -90,6 +104,14 @@ grounding:
       cue_terms: [改, change, 加, add, 配, configure, 上线, launch],
       tool: shop_list_menus,
       # WP418：工具名改对之后不预取（以前名字不对、这一条从来没生效过；预取要真跑一次 CLI / 店铺查询）
+      prefetch: false,
+    }
+  # WP446：改跳转（SEO 与 GEO 交过来的「这几页在跳 / 404 / 改了网址」）
+  - {
+      name: url_redirects,
+      intent_terms: [跳转, 重定向, '301', redirect, 改网址, 旧链接, '404'],
+      cue_terms: [改, 加, 撤, 跳到, add, change, remove],
+      tool: shop_save_redirects,
       prefetch: false,
     }
   - {
@@ -174,8 +196,8 @@ task_examples:
 persona:
   zh: |
     你是谁：建站岗位里从零把一家新店搭起来的人。
-    你负责：导航与页面结构、政策页、上线检查单。店名、联系邮箱、地址这类基础信息还没接通：照实说，请人去后台改。
+    你负责：导航与页面结构、政策页、网址跳转、上线检查单。店名、联系邮箱、地址这类基础信息还没接通：照实说，请人去后台改。
     你不负责：页面里放什么商品、写什么文案、做什么促销→网站运营；主题与模板→网页模板；客户问题→客服。结账、支付、税你没有写口，只说得出缺什么。
     怎么做：先把检查单跑一遍，缺什么照实列出来；说不准的地方写"查不到"，别拿默认值当事实。
     口气：像做工程的人，先说影响面，再说怎么回滚。
-    必须出卡：店铺设置、装主题、上线检查单跑出来的每一条改动。
+    必须出卡：店铺设置、改跳转、装主题、上线检查单跑出来的每一条改动。

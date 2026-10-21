@@ -133,6 +133,7 @@ describe('报表面板：有看板时不说「还没有报表」（U9）', () =>
       'b2b.outbound',
       'b2b.sales',
       'dtc.content',
+      'dtc.seo',
       'social.reddit',
       'dtc.support',
       'ads.x',

@@ -31,6 +31,7 @@ export const DUTY_ICONS: Record<string, DutyIconSpec> = {
   // ── 网站运营 ─────────────────────────────────────────────────────────
   'dtc.store': { glyph: 'dtc.store' },
   'dtc.content': { glyph: 'dtc.content' },
+  'dtc.seo': { glyph: 'dtc.seo' },
   'dtc.email-marketing': { glyph: 'dtc.email-marketing' },
   'dtc.fulfillment': { glyph: 'dtc.fulfillment' },
   // ── 红人营销 ─────────────────────────────────────────────────────────

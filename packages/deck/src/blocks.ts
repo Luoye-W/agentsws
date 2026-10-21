@@ -646,9 +646,12 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
    * AI 可见度。原来那两张查询词 / 落地页的原始表**不再放这条职责的面板**——
    * 不堆数据（文章："flags only what's worth acting on"）；它们还在数据分析那条职责里。
    */
-  'dtc.content': () => [
-    ...CONTENT_BLOCKS(),
-    ...CONTENT_QUEUE_BLOCKS(),
+  'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS()],
+  /*
+   * WP446（docs/109 §4.2）：SEO 与 GEO 从内容里拆出来，搜索那几块跟着搬过来——
+   * 今天值得动的 5 件事、按页面收入、AI 可见度，加 WP381 的 AI 来源流量（实测）。
+   */
+  'dtc.seo': () => [
     ...SEO_BLOCKS(),
     // WP381：AI 来源流量（实测），和上面 AI 平台里的引用并排
     block('seo.ai_orders', 'stat_tile', 'AI 带来的成交（实测）', 'seo.ai_orders'),

@@ -9,7 +9,12 @@ import type { Assignment, WorkspaceId } from '@agentsws/contracts'
 import type { QueryContext } from '@agentsws/deck'
 import { createScheduler } from '@agentsws/schedule'
 import { describe, expect, it } from 'vitest'
-import { ensureSystemTasks, HANDLERS, SITE_HEALTH_WEEKLY_CRON } from '../src/schedule.js'
+import {
+  ensureSystemTasks,
+  HANDLERS,
+  SITE_HEALTH_WEEKLY_CRON,
+  seoScheduleGates,
+} from '../src/schedule.js'
 import {
   createStoreDigest,
   STORE_DIGEST_DEFAULT_CRON,
@@ -168,5 +173,31 @@ describe('定时只在有人担时建（自查 B7 / B13）', () => {
     await ensureSystemTasks(empty, plan({}) as never)
     expect(empty.get('sched_store_digest')).toBeUndefined()
     expect(empty.get('sched_site_health_weekly')).toBeUndefined()
+  })
+})
+
+describe('WP446：搜索那两条定时跟着「SEO 与 GEO」走（docs/109 §4.2）', () => {
+  it('只担内容与博客：不建每日 / 每周搜索，也不建体检；担了 SEO 与 GEO 才建', async () => {
+    const only = (roles: string[]) => seoScheduleGates((r) => roles.includes(r))
+    expect(only(['dtc.content'])).toEqual({ seo: false, siteHealthWeekly: false })
+    expect(only(['dtc.content', 'dtc.seo'])).toEqual({ seo: true, siteHealthWeekly: true })
+    expect(only(['dtc.store'])).toEqual({ seo: false, siteHealthWeekly: true })
+    const plan = (has: Record<string, unknown>) => ({
+      workspace_id: WS,
+      owner: 'p_owner',
+      role_id: 'dtc.content',
+      assignment_id: 'asg_content',
+      tz: '+08:00',
+      positions: [],
+      has,
+    })
+    const s = createScheduler({ clock: { now: () => NOW } })
+    await ensureSystemTasks(s, plan(only(['dtc.content'])) as never)
+    expect(s.get('sched_seo_daily')).toBeUndefined()
+    expect(s.get('sched_seo_weekly')).toBeUndefined()
+    const t = createScheduler({ clock: { now: () => NOW } })
+    await ensureSystemTasks(t, plan(only(['dtc.seo'])) as never)
+    expect(t.get('sched_seo_daily')).toBeDefined()
+    expect(t.get('sched_seo_weekly')).toBeDefined()
   })
 })
