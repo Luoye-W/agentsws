@@ -1,3 +1,4 @@
+import type { ActionJob } from '@agentsws/browser-action'
 /**
  * WP329 端到端（起真进程 → 打 HTTP；插件一侧直接调本机那一份动作通道，**不起浏览器、不碰 reddit.com**）。
  *
@@ -13,6 +14,21 @@
 import type { Assignment, OutboundRecord, RedditWriteView } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
+
+/** WP432：人在插件侧边栏里点「打开这一条」（最新那条等你发的）——插件这才拿到那一件活（定时领活领不到）。 */
+async function openAwaiting(b: {
+  adsActions?: { next(p: ['reddit'], w: number): Promise<{ job?: unknown }> } | undefined
+  redditWrites?: {
+    writes(): { state: string; job_id: string }[]
+    open(id: string): Promise<{ ok: true; job: ActionJob } | { ok: false; message: string }>
+  }
+}): Promise<ActionJob | undefined> {
+  expect((await b.adsActions?.next(['reddit'], 0))?.job).toBeUndefined()
+  const row = b.redditWrites?.writes().find((w) => w.state === 'awaiting')
+  if (row === undefined) return undefined
+  const got = await b.redditWrites?.open(row.job_id)
+  return got?.ok === true ? got.job : undefined
+}
 
 const T0 = '2026-10-14T09:00:00.000Z'
 const SECRETS_KEY = 'e'.repeat(64)
@@ -150,13 +166,12 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     expect(await data<OutboundRecord[]>(await api('/v1/outbound/records'))).toEqual([])
 
     const b = await brand()
-    const got = await b.adsActions?.next(['reddit'], 0)
-    const job = got?.job
+    const job = await openAwaiting(b)
     expect(job?.plan).toMatchObject({ platform: 'reddit', kind: 'reddit_reply', pace: 'write' })
     expect(job?.approval_id).toBe(id)
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
     })
     expect(job?.plan.allow.values).toEqual([text])
     expect(job?.plan.allow.click.join(' ')).not.toMatch(/save|submit/u)
@@ -204,7 +219,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     await pluginSeen()
     await stageAndApprove('Hi Alice, IVRA here. The anti-fog insert in the box helps.')
     const b = await brand()
-    const job = (await b.adsActions?.next(['reddit'], 0))?.job
+    const job = await openAwaiting(b)
     b.adsActions?.result(job?.id as string, {
       outcome: 'handover',
       message: '等了 30 分钟没看到发出去的那一条（没点发送，或者被拦了）。已停下；这一条不算发出。',
@@ -217,10 +232,10 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     expect(await data<OutboundRecord[]>(await api('/v1/outbound/records'))).toEqual([])
   })
 
-  it('插件从没连过：不走程序直发（决策 761 关），排着等插件，进度里说插件不在线', async () => {
+  it('插件从没连过：不走程序直发（决策 761 关），等你在插件里打开，进度里说插件不在线', async () => {
     await stageAndApprove('Hi Alice, IVRA here. The anti-fog insert in the box helps.')
     const writes = await data<{ rows: RedditWriteView[] }>(await api('/v1/social/reddit/writes'))
-    expect(writes.rows[0]?.state).toBe('queued')
+    expect(writes.rows[0]?.state).toBe('awaiting')
     expect(writes.rows[0]?.message).toContain('插件不在线')
   })
 
@@ -305,7 +320,7 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     await approve(staged.approval_item_id)
     t += 125_000
     await b.socialService.publishDue()
-    const job = (await b.adsActions?.next(['reddit'], 0))?.job
+    const job = await openAwaiting(b)
     expect(job?.plan.kind).toBe('reddit_reply')
     b.adsActions?.result(job?.id as string, {
       outcome: 'done',

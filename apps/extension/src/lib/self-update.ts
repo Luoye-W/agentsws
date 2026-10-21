@@ -12,11 +12,13 @@
  * - 重载了还是旧版（多半是从别的文件夹加载的）：带上「放弃了」，**这一版不再重试**（不然每分钟重载一次），
  *   工作台的连接卡照实说一句。
  *
- * 没配对时不问（这条通道要令牌）；本机没开 / 老版本本机服务（没有这条路由）：什么都不做。
+ * WP432：**没配对也问**（`POST /v1/extension/version/probe`，不带令牌、只回版本号）——10-20 Windows 上那个
+ * 插件一直是旧版、点了没反应，没配上的插件以前从不来问，就一直不换。没配对时只是不报「从哪版换来」。
+ * 本机没开 / 老版本本机服务（没有这条路由）：什么都不做。
  */
 
 import { actionsBusy, holdActions } from './idle-gate'
-import { reportVersion } from './local-client'
+import { probeVersion, reportVersion } from './local-client'
 import type { KeyValueStore } from './storage'
 import { readSettings } from './storage'
 
@@ -79,8 +81,8 @@ export async function checkForUpdate(deps: SelfUpdateDeps): Promise<SelfUpdateOu
 
 async function check(deps: SelfUpdateDeps): Promise<SelfUpdateOutcome> {
   const settings = await readSettings(deps.store)
-  if (settings.token === undefined) return 'unpaired'
   const state = await readState(deps.store)
+  if (settings.token === undefined) return checkUnpaired(deps, settings.port, state)
   const input: { version: string; reloaded_from?: string; gave_up?: string } = {
     version: deps.running,
   }
@@ -115,7 +117,16 @@ async function check(deps: SelfUpdateDeps): Promise<SelfUpdateOutcome> {
     return 'gave_up'
   }
 
-  // 要换：先关闸，等手上的做完
+  // 要换：先关闸，等手上的做完（等的时候碰一下扩展接口：service worker 别被当成闲着回收）
+  return reloadInto(deps, folder, next)
+}
+
+/** 关闸、等手上的做完，写下「从哪版换到哪版」，重载。等不到就下一分钟再试。 */
+async function reloadInto(
+  deps: SelfUpdateDeps,
+  folder: string,
+  next: UpdateState,
+): Promise<SelfUpdateOutcome> {
   holdActions(true)
   const max = deps.maxWaitMs ?? 40_000
   for (let waited = 0; actionsBusy(); waited += 1000) {
@@ -124,7 +135,6 @@ async function check(deps: SelfUpdateDeps): Promise<SelfUpdateOutcome> {
       return 'waiting'
     }
     await deps.sleep(1000)
-    // 碰一下扩展接口：service worker 在等的时候别被当成闲着回收
     await deps.store.get([UPDATE_KEY])
   }
   await deps.store.set({
@@ -132,4 +142,34 @@ async function check(deps: SelfUpdateDeps): Promise<SelfUpdateOutcome> {
   })
   deps.reload()
   return 'reloading'
+}
+
+/**
+ * WP432：没配对的插件也跟着工坊换新版（只问版本号，不报别的）。一样 / 本机没开 → `unpaired`；
+ * 重载过一次还是旧版（多半从别的文件夹加载）→ 这一版不再重试。
+ */
+async function checkUnpaired(
+  deps: SelfUpdateDeps,
+  port: number,
+  state: UpdateState,
+): Promise<SelfUpdateOutcome> {
+  let gaveUp = state.gave_up
+  if (state.reloading !== undefined && state.reloading.from === deps.running)
+    gaveUp = state.reloading.to
+  const got = await probeVersion(
+    { port, ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }) },
+    deps.running,
+  )
+  const folder = got.ok ? got.data.folder_version : undefined
+  const next: UpdateState = gaveUp === undefined ? {} : { gave_up: gaveUp }
+  if (folder === undefined || folder === deps.running) {
+    holdActions(false)
+    if (got.ok) await deps.store.set({ [UPDATE_KEY]: {} })
+    return 'unpaired'
+  }
+  if (gaveUp === folder) {
+    await deps.store.set({ [UPDATE_KEY]: next })
+    return 'gave_up'
+  }
+  return reloadInto(deps, folder, next)
 }

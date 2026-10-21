@@ -4,8 +4,9 @@
  * - 被回的那句话（外部文本，原样显示、不渲染 markdown）；版块与回复谁在卡的标题里，这里不再写一遍；
  * - **卡上能改字**：标题（发帖才有）+ 正文；改过就带着改过的那一版批（`approve_edited`）；
  * - 依据：用上的 FAQ 卡、版规条数（说明进问号，界面少字）；
- * - 主按钮「发送」在卡身里（同连接卡的做法，卡底那排不再出一个）：批了两分钟后插件把它填进 Reddit 页面，
- *   **你自己点发送**。
+ * - 主按钮在卡身里（同连接卡的做法，卡底那排不再出一个）：**点了就是批准，不自动开任何页面**（WP432）。
+ *   WP445（决策 1322）：AI 起草的 Reddit 回帖 / 发帖平时**不在工坊出卡**（在浏览器插件「等你发」里审、发）；工坊里
+ *   只剩公司模式「主管先批」的那一种——按钮叫「批准」，批完进发起人的插件「等你发」，由他点「打开这一条」、自己点发送。
  * - WP411（#11）：品牌号在这串里已经说过的（「你 10-12 已回：……」）放在被回那句下面；几道检查没过的
  *   （和已说过的对不上 / 没依据已换掉 / 口吻不符 / 整串没现读成）一条一行标黄，细节进问号。
  */
@@ -183,6 +184,11 @@ export function RedditWriteBody({
             {t('redditw.send')}
           </Button>
           <Hint text={t('redditw.send.hint')} />
+          {send.isSuccess ? (
+            <span className="text-xs text-ws-muted-fg" data-testid="reddit-write-awaiting-note">
+              {t('redditw.sent.awaiting')}
+            </span>
+          ) : null}
           {send.isError ? (
             <span className="text-xs text-ws-bad">
               {t('redditw.failed', {

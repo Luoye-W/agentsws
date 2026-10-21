@@ -38,6 +38,14 @@ export type RedditReadKind =
    * 借品牌号会话只读，不扣积分；Reddit 的搜索只给帖子（评论搜不到）。
    */
   | 'search'
+  /**
+   * WP432：品牌号发出去的那几条现在怎样（票数）——`/api/info.json?id=t1_…,t3_…`，一次最多 25 条，只读。
+   * 巡查时顺手读，记进发出记录（周报能用）。
+   */
+  | 'info'
+
+/** WP432：`info` 一次最多查几条。 */
+export const REDDIT_INFO_MAX = 25
 
 export interface RedditReadRequest {
   /** 这一路的键（本机服务按它记「上次读到哪」）：`inbox`、`sub_new:ivraxr`… */
@@ -51,6 +59,8 @@ export interface RedditReadRequest {
   query?: string
   /** WP411：`search` 的时间档（Reddit 的 `t`；不给 = week）。 */
   time?: RedditSearchTime
+  /** WP432：`info` 要：查哪几条（全名 `t1_…` / `t3_…`）。 */
+  ids?: string[]
   /** 读到这一条（全名 `t1_xxx`）就停，不再往后翻。 */
   stop_at?: string
   /** 比这个时间（秒）更早的不要（第一次读时防止把几个月前的老帖当新的）。 */
@@ -117,6 +127,10 @@ export function redditReadUrl(req: RedditReadRequest, after?: string): string {
       q.set('sort', 'new')
       q.set('t', req.time ?? 'week')
       break
+    case 'info':
+      path = '/api/info.json'
+      q.set('id', (req.ids ?? []).join(','))
+      break
   }
   return `${REDDIT_READ_ORIGIN}${path}?${q.toString()}`
 }
@@ -134,6 +148,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   /^\/api\/me\.json$/u,
   // WP411：全站搜帖子（只读）
   /^\/search\.json$/u,
+  // WP432：发出去那几条的票数（只读）
+  /^\/api\/info\.json$/u,
 ]
 
 /**
@@ -168,6 +184,12 @@ export function checkRedditReadRequest(req: RedditReadRequest): string | undefin
     const q = (req.query ?? '').trim()
     if (q === '' || q.length > 200) return '搜索词要 1–200 个字。'
     if (req.time !== undefined && !SEARCH_TIMES.includes(req.time)) return '搜索时间档不对。'
+  }
+  if (req.kind === 'info') {
+    const ids = req.ids ?? []
+    if (ids.length === 0 || ids.length > REDDIT_INFO_MAX) return `一次查 1–${REDDIT_INFO_MAX} 条。`
+    if (!ids.every((id) => /^t[13]_[a-z0-9]{1,13}$/u.test(id))) return '要查的编号不对。'
+    if (req.max_pages !== 1) return '查票数只读一页。'
   }
   if (req.stop_at !== undefined && !FULLNAME.test(req.stop_at)) return '「读到哪」的编号不对。'
   if (!Number.isInteger(req.max_pages) || req.max_pages < 1 || req.max_pages > REDDIT_MAX_PAGES)

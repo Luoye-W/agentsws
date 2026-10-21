@@ -4,7 +4,11 @@
  * 守的是：插件只填草稿、不点发送；人点了、页面上出现新的那一条才回「做完」并带回编号与链接；
  * 发新帖时页面会自己换（脚本被扔掉）也认得出来；连上 Reddit（给了站点权限）才去问 Reddit 的活。
  */
-import { buildRedditJob, REDDIT_WRITE_SELECTORS } from '@agentsws/browser-action'
+import {
+  buildRedditJob,
+  REDDIT_WRITE_SELECTORS,
+  REDDIT_WRITE_SELECTORS_NEW,
+} from '@agentsws/browser-action'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
 import type { AdsDomRequest, BannerState } from '../src/lib/ads/dom-messages'
@@ -41,7 +45,7 @@ class FakeRedditTab {
     this.url = url
     const u = new URL(url)
     let body = ''
-    if (u.pathname.endsWith('/submit'))
+    if (/\/submit\/?$/u.test(u.pathname))
       body = `<div id="title-field"><textarea name="title"></textarea></div><div id="text-field"><textarea name="text"></textarea></div><button name="submit">submit</button>`
     else if (u.pathname.startsWith('/r/ivraxr/comments/new'))
       body = `<div id="siteTable"><div class="thing link" data-fullname="t3_new1" data-permalink="${u.pathname}"><div class="entry"><a class="title">${this.posted[0]?.text ?? ''}</a></div></div></div>`
@@ -162,7 +166,12 @@ describe('WP329 插件填草稿、人点发送', () => {
       fullname: 't1_r1',
       permalink: '/r/ivraxr/comments/abc/s/r1/',
     })
-    expect(tab.clicks).toEqual([REDDIT_WRITE_SELECTORS.replyLink('t1_c1')])
+    // WP445：一律新版 www.reddit.com；这一页是旧版样子（品牌号设了旧版界面）→ 新版找不到、按旧版兜底
+    expect(tab.url.startsWith('https://www.reddit.com/')).toBe(true)
+    expect(tab.clicks).toEqual([
+      `${REDDIT_WRITE_SELECTORS_NEW.replyLink('t1_c1')} || ${REDDIT_WRITE_SELECTORS.replyLink('t1_c1')}`,
+    ])
+    expect(result.reads.fill_missed).toBeUndefined()
     // 横条上说了「填好了，等你点发送」
     expect(tab.banners.some((b) => b?.label === '填好了，等你点发送')).toBe(true)
     const sent = local.calls.find((c) => c.path.endsWith('/result'))
@@ -177,6 +186,7 @@ describe('WP329 插件填草稿、人点发送', () => {
       2,
     )
     expect(result.outcome).toBe('done')
+    expect(result.reads.fill_missed).toBeUndefined()
     expect(result.reads.fullname).toBe('t3_new1')
     expect(tab.injected).toBeGreaterThan(1)
   })

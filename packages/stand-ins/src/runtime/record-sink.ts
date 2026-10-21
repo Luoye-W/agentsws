@@ -25,7 +25,7 @@ const FIELD_HINT =
   '标准字段（只能从这里选）：sent_at 发出时间、sent_date 发出日期、channel 渠道、action 动作、destination 发到哪、' +
   'thread_title 原帖标题、thread_url 原帖链接、counterpart 对方、counterpart_text 对方原话、subject 主题、' +
   'content 我们发的内容、link 我们发的链接、status 状态、approved_by 谁批的、approved_at 批的时间、tier AI 判的档位、' +
-  'faq 用到的 FAQ、follow_up_count 对方回了几条、record_id 记录编号。'
+  'faq 用到的 FAQ、follow_up_count 对方回了几条、record_id 记录编号、draft_content AI 草稿（人改过才有）、score 票数。'
 
 export const RECORD_SINK_TOOL_DEFS: readonly ToolDef[] = [
   {

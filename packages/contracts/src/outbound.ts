@@ -86,6 +86,15 @@ export interface OutboundRecord {
   verified?: boolean
   /** 失败时的原话。 */
   failure?: string
+  /**
+   * WP432（只加）：AI 起草、人批的那一版——批了之后人又改过（在插件里改、或在页面上改了再发）才有；
+   * `content` 永远是真发出去的那一版。两版的差进学习回路。
+   */
+  draft_content?: string
+  /** WP432（只加）：这一条现在的票数（巡查时读回；没读过就没有）。 */
+  score?: number
+  /** WP432：票数是什么时候读的。 */
+  score_at?: Iso8601
   follow_ups: OutboundFollowUp[]
 }
 
@@ -122,6 +131,9 @@ export const OUTBOUND_FIELDS = [
   { id: 'faq', zh: '用到的 FAQ' },
   { id: 'follow_up_count', zh: '对方回了几条' },
   { id: 'record_id', zh: '记录编号' },
+  // WP432（只加）：人改过时 AI 起草的那一版、读回的票数
+  { id: 'draft_content', zh: 'AI 草稿（人改过才有）' },
+  { id: 'score', zh: '票数' },
 ] as const
 
 export type OutboundField = (typeof OUTBOUND_FIELDS)[number]['id']

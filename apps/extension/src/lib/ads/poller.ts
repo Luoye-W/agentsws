@@ -73,6 +73,10 @@ export type PollOutcome =
   /** WP345：要重载了，这一轮不领新活。 */
   | 'held'
 
+/** WP432：定时领活领到了 Reddit 的写（老本机服务）——不开页面，交回去这一句。 */
+export const REDDIT_NOT_AUTO =
+  '插件不自己开 Reddit 页面：在插件侧边栏里点「打开这一条」，填好后由你自己点发送。'
+
 let running = false
 // WP345：重载前等它空下来（正在挂着的长轮询、正在做的那一件）
 registerBusy('ads', () => running)
@@ -119,6 +123,20 @@ async function pollLoop(deps: PollerDeps): Promise<PollOutcome> {
     })
     const job = got.data.job
     if (job === undefined) return ran > 0 ? 'ran' : 'idle'
+    /*
+     * WP432（Luoye 10-20 反馈 9）：Reddit 的写**插件绝不自己开页面**——只在人点侧边栏「打开这一条」时开。
+     * 本机服务本来就不会从这条路交出来（排队里那一道底）；万一交出来了（老的本机服务），不开、照实交回去。
+     */
+    if (job.plan.platform === 'reddit') {
+      await actionResult(client, job.id, {
+        outcome: 'handover',
+        message: REDDIT_NOT_AUTO,
+        step: 0,
+        reads: {},
+      })
+      ran += 1
+      continue
+    }
 
     deps.control.stop = false
     deps.control.answer = undefined

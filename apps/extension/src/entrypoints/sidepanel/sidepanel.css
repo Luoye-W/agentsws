@@ -657,3 +657,51 @@ body {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ── WP432：发帖台 ─────────────────────────────────────────────── */
+
+/* 顶上一行实时状况（巡查到第几块 / 今天发了几条 / 等你发几条 / 卡在哪） */
+.ws-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ws-strip .ws-chip {
+  flex: 0 1 auto;
+  padding: 4px 10px;
+}
+
+.ws-chip--warn {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+/* 「等你发」那一块 */
+.ws-desk-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ws-card);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: inset 0 0 0 1px var(--ws-warn-bg);
+}
+
+.ws-actions--minor {
+  justify-content: flex-end;
+}
+
+/* WP445：「不发」下面那一排理由（可不选） */
+.ws-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--ws-line);
+  border-radius: 10px;
+}
+
+.ws-wrap {
+  flex-wrap: wrap;
+}

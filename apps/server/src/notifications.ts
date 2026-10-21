@@ -24,6 +24,7 @@ import {
   CONTENT_DIGEST_CARD_KIND,
   type EventEnvelope,
   type InboxNotification,
+  isPluginDeskCard,
   NOTIFICATION_CATEGORIES,
   NOTIFICATION_MAX_PER_PERSON,
   NOTIFICATION_RETENTION_DAYS,
@@ -225,6 +226,13 @@ export function keySourceName(label: string): string {
 /** 状态类提醒（要重新登录 / key 用不了了）：同一来源还没读时再来不加计数。 */
 const STATE_EVENTS = new Set([RELOGIN_NEEDED_EVENT, KEY_REJECTED_EVENT])
 
+/**
+ * WP432：Reddit 的写批了、等你在浏览器插件里打开发（插件图标上也有数字）。
+ * 发出去了 / 没发出去 / 不发了，那条就收成已读。
+ */
+export const REDDIT_AWAITING_EVENT = 'reddit.write_awaiting'
+const REDDIT_SETTLED = new Set(['reddit.write_sent', 'reddit.write_failed', 'reddit.write_dropped'])
+
 /** 卡的地址。 */
 export const cardHref = (id: string): string => `/cards/${encodeURIComponent(id)}`
 
@@ -290,6 +298,8 @@ export async function notificationsOfEvent(
     const item = await ctx.approval(id)
     if (item === undefined) return []
     const form = (item.payload as { form?: unknown } | undefined)?.form
+    // WP445：插件里审的卡不在工坊出、也不在铃铛里说「等你批」（插件「等你发」那一路已经说了）
+    if (isPluginDeskCard(item)) return []
     const base = {
       workspace_id: ws,
       person_id: to as PersonId,
@@ -325,6 +335,30 @@ export async function notificationsOfEvent(
       category: 'team' as const,
       text: `${who} 把这里改回了同事互联`,
       key: `mode:${str(p.organization_id) ?? ws}`,
+    }))
+  }
+
+  if (e.type === REDDIT_AWAITING_EVENT) {
+    const id = str(p.approval_item_id)
+    if (id === undefined) return []
+    const item = await ctx.approval?.(id)
+    // WP445：告诉发起人（要去插件里点发送的人；主管在工坊里批了的也是发起人去发）；不是人发起的告诉批的人，
+    // 都翻不出来告诉所有者
+    const proposer = item?.proposer.kind === 'person' ? item.proposer.id : undefined
+    const by = item?.decision?.by
+    const people =
+      proposer !== undefined
+        ? [proposer as PersonId]
+        : by !== undefined && by !== 'mandate'
+          ? [by as PersonId]
+          : await ctx.owners()
+    const what = short(str(p.label) ?? item?.title ?? `r/${str(p.subreddit) ?? ''}`, 60)
+    return people.map((person_id) => ({
+      workspace_id: ws,
+      person_id,
+      category: 'outbound' as const,
+      text: `等你在浏览器插件里发：${what}`,
+      key: `outbound:${id}`,
     }))
   }
 
@@ -543,6 +577,21 @@ export function createNotifications(options: NotificationsOptions): Notification
   ): Promise<void> => {
     if (CARD_SETTLED.has(e.type) && e.subject?.id !== undefined) {
       settle(e.workspace_id, `card:${e.subject.id}`)
+      // WP445：插件里审的那张卡不发了 / 撤了 / 过期了 → 「等你发」那条也收成已读（批了的接着等你打开、发出去才收）
+      const state = str((e.payload as Record<string, unknown> | undefined)?.state)
+      const gone =
+        e.type === 'approval.decided'
+          ? state !== 'approved' && state !== 'approved_edited'
+          : e.type === 'approval.withdrawn' ||
+            e.type === 'approval.expired' ||
+            e.type === 'approval.superseded'
+      if (gone) settle(e.workspace_id, `outbound:${e.subject.id}`)
+      return
+    }
+    // WP432：等你发的那一条有了结局 → 那条通知收成已读
+    if (REDDIT_SETTLED.has(e.type)) {
+      const id = str((e.payload as Record<string, unknown> | undefined)?.approval_item_id)
+      if (id !== undefined) settle(e.workspace_id, `outbound:${id}`)
       return
     }
     const ctx = resolvers.get(e.workspace_id) ?? makeResolver?.(e.workspace_id)
@@ -553,7 +602,8 @@ export function createNotifications(options: NotificationsOptions): Notification
        * 网关那一跳和摘账号那一路各发一条 `model_source.relogin_needed`）不加计数，铃铛里只有一条、没有 ×2。
        * WP436：「key 用不了了」同一口径。
        */
-      if (STATE_EVENTS.has(e.type) && n.key !== undefined) {
+      // WP445：同一条「等你发」（插件里批了又进「等你打开」）还没读时不再加一条
+      if ((STATE_EVENTS.has(e.type) || e.type === REDDIT_AWAITING_EVENT) && n.key !== undefined) {
         const prev = backend.byKey(n.workspace_id, n.person_id, n.key)
         if (prev !== undefined && prev.read_at === undefined) continue
       }
@@ -569,6 +619,8 @@ export function createNotifications(options: NotificationsOptions): Notification
     'organization.mode_changed',
     RELOGIN_NEEDED_EVENT,
     KEY_REJECTED_EVENT,
+    REDDIT_AWAITING_EVENT,
+    ...REDDIT_SETTLED,
     ...CARD_SETTLED,
   ])
 

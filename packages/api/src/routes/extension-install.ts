@@ -54,6 +54,11 @@ export interface ExtensionInstallView {
   running: ExtensionRunningVersion[]
   /** 这台电脑上能不能打开文件夹 / Chrome 扩展页（有固定文件夹 = 服务就在这台电脑上）。 */
   can_open: boolean
+  /**
+   * WP432：还没配对的插件最近一次来问「文件夹里是哪一版」时报的版本（没配对也会跟着工坊更新）。
+   * 本机重启后要等它下一次来问才有。
+   */
+  unpaired?: { version: string; at: Iso8601 }
 }
 
 export type ExtensionOpenTarget = 'folder' | 'chrome'
@@ -92,6 +97,11 @@ export interface ExtensionInstallPort {
     session: ExtensionSession,
     input: ExtensionVersionReport,
   ): MaybePromise<ExtensionVersionReply>
+  /**
+   * WP432：**没配对的插件**也问一声文件夹里是哪一版（不要令牌；只回一个版本号，不回别的）——
+   * 这样插件没配上也跟着工坊更新（10-20：Windows 上的插件一直是旧版，点了没反应）。
+   */
+  probe?(input: { version: string }): MaybePromise<ExtensionVersionReply>
 }
 
 /** 读与连接页同一把闸；「打开」与发配对码同一把（装插件和授权连接器是同一类事）。 */
@@ -123,6 +133,7 @@ const VERSION = z
   .regex(/^[0-9A-Za-z.+-]+$/, '版本号只认数字、字母与 . + -')
 
 const openSchema = z.object({ target: z.enum(['folder', 'chrome']) }).strict()
+const probeSchema = z.object({ version: VERSION }).strict()
 const reportSchema = z
   .object({
     version: VERSION,
@@ -180,6 +191,24 @@ export function extensionInstallRoutes(): Route[] {
         const session = extensionSessionOf(c, deps)
         const input = await body(c, reportSchema)
         return ok(c, await portOf(deps).report(session, input as ExtensionVersionReport))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/version/probe',
+        operationId: 'extensionVersionProbe',
+        summary:
+          '还没配对的插件问一声工坊文件夹里是哪一版（不要令牌，只回版本号）——没配上也跟着工坊更新',
+        tag: 'extension',
+        auth: 'public',
+        body: probeSchema,
+        returns: 'ExtensionVersionReply',
+      },
+      async (c, deps) => {
+        const input = await body(c, probeSchema)
+        const port = portOf(deps)
+        return ok(c, port.probe === undefined ? {} : await port.probe({ version: input.version }))
       },
     ),
   ]

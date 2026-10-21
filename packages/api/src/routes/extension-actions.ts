@@ -188,7 +188,8 @@ const resultSchema = z
     outcome: z.enum(['done', 'failed', 'handover', 'stopped', 'rejected']),
     message: z.string().max(600),
     step: z.number().int().min(0).max(500),
-    reads: z.record(z.string().max(60), z.string().max(600)),
+    // WP432：`sent_text`（读回人真发出去的那段字）最长一条评论那么长
+    reads: z.record(z.string().max(60), z.string().max(10_000)),
   })
   .strict()
 

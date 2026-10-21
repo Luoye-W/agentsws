@@ -135,7 +135,13 @@ export interface AdsActionsService {
   enqueue(
     job: ActionJob,
     sheet_bytes?: Uint8Array,
+    /** WP432：等人在插件里点「打开这一条」（Reddit 的写不管给没给都是）。 */
+    options?: { hold?: boolean },
   ): Promise<{ ok: true; job: ActionJobView } | { ok: false; why: string }>
+  /**
+   * WP432：人在插件侧边栏里点了「打开这一条」——把等人的那一件交给插件（只有这一下能拿到它）。
+   */
+  open(id: string): { ok: true; job: ActionJob } | { ok: false; why: string }
   /** 到点清理（作废、断了音讯的记失败、截图过期）。服务端定时调。 */
   sweep(): Promise<void>
   /** WP329：插件最近一次带着这家来领活的时间（毫秒；没来过 = undefined）。 */
@@ -171,6 +177,7 @@ function viewOf(row: QueuedJob, waiting?: string): ActionJobView {
           },
         }),
     ...(waiting === undefined ? {} : { waiting }),
+    ...(row.held === true && row.status === 'queued' ? { held: true } : {}),
   }
 }
 
@@ -452,7 +459,17 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
       return row === undefined ? undefined : viewOf(row)
     },
 
-    async enqueue(job, sheet_bytes) {
+    open(id) {
+      const now = options.nowMs()
+      const got = queue.open(id, now)
+      if ('why' in got) return { ok: false, why: got.why }
+      // 人点开了 = 插件在线、连着这一家
+      seen[got.job.plan.platform] = now
+      save()
+      return { ok: true, job: got.job }
+    },
+
+    async enqueue(job, sheet_bytes, more) {
       if (job.workspace_id !== options.workspace_id)
         return { ok: false, why: '这件活不是这个品牌的。' }
       const checked = validateJob(job, { zones })
@@ -463,7 +480,11 @@ export function createAdsActionsService(options: AdsActionsServiceOptions): AdsA
           return { ok: false, why: '上传表和审批时绑的不是同一份（指纹对不上），不进队。' }
         putSheet(job.id, sheet_bytes)
       }
-      const row = queue.enqueue(checked.job, options.nowMs())
+      const row = queue.enqueue(
+        checked.job,
+        options.nowMs(),
+        more?.hold === true ? { hold: true } : undefined,
+      )
       save()
       wake()
       return { ok: true, job: viewOf(row) }

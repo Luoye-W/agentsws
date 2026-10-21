@@ -36,10 +36,24 @@ export async function openAdsTab(job: ActionJob): Promise<TabDriver | { why: str
   return openNewTab(job)
 }
 
-async function openNewTab(job: ActionJob): Promise<TabDriver | { why: string }> {
+/**
+ * WP432：人在侧边栏里点了「打开这一条」——在**侧边栏所在的窗口**新开一个标签页（切过去），不抢用户正在看的那一页。
+ */
+export function openRedditTab(
+  job: ActionJob,
+  windowId: number | undefined,
+): Promise<TabDriver | { why: string }> {
+  return openNewTab(job, windowId)
+}
+
+async function openNewTab(job: ActionJob, windowId?: number): Promise<TabDriver | { why: string }> {
   const url = firstUrl(job)
   if (url === undefined) return { why: '这件活没写从哪一页开始。' }
-  const made = await chrome.tabs.create({ url, active: true })
+  const made = await chrome.tabs.create({
+    url,
+    active: true,
+    ...(windowId === undefined ? {} : { windowId }),
+  })
   if (made.id === undefined) return { why: '没能打开要操作的那个标签页。' }
   return chromeTabDriver(made.id)
 }

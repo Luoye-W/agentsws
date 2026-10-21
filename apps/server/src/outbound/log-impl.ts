@@ -229,6 +229,18 @@ export function createOutboundLog(options: OutboundLogOptions): OutboundLog {
     return changed
   }
 
+  const setScores: NonNullable<OutboundLog['setScores']> = (ws, scores, at) => {
+    let changed = 0
+    for (const s of scores) {
+      const row = store.byExternal(ws, s.external_id)
+      if (row === undefined || row.score === s.score) continue
+      store.put({ ...row, score: s.score, score_at: at ?? options.now() })
+      changed += 1
+    }
+    if (changed > 0) emit(ws, 'outbound.scores', { rows: changed })
+    return changed
+  }
+
   const exportRecords: OutboundLog['export'] = (ws, format, query) => {
     const rows = store.list(ws, { ...query, limit: query?.limit ?? 5000 })
     const day = options.now().slice(0, 10)
@@ -268,6 +280,7 @@ export function createOutboundLog(options: OutboundLogOptions): OutboundLog {
     export: exportRecords,
     addFollowUp,
     counterpartDeleted,
+    setScores,
     ...sinkSide.api,
     flush,
     start(intervalMs = 60_000) {

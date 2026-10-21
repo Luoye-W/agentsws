@@ -1,5 +1,6 @@
 /**
- * WP329：Reddit 写的单元那一层（起草提示、整理草稿、直发备用、作废、公关外部帖、社媒线程怎么变成一次写）。
+ * WP329：Reddit 写的单元那一层（起草提示、整理草稿、作废、公关外部帖、社媒线程怎么变成一次写）。
+ * WP445（决策 1324）：直发备用那条路删了。
  * 不联网、不起浏览器；插件动作通道是本机那一份（内存）。
  */
 import type {
@@ -26,7 +27,7 @@ import { applyExternalPost, settleRedditWrite, writeOfThread } from '../src/redd
 const WS = 'ws_r' as never
 const T0 = Date.parse('2026-10-14T09:00:00.000Z')
 
-function make(o: { direct?: boolean; directFails?: boolean; seen?: boolean } = {}) {
+function make() {
   const now = { ms: T0 }
   const events: AdsActionEvent[] = []
   const records: OutboundRecordInput[] = []
@@ -50,14 +51,6 @@ function make(o: { direct?: boolean; directFails?: boolean; seen?: boolean } = {
     emit: (type) => emitted.push(type),
     brand: () => 'IVRA',
     actions,
-    ...(o.direct === true
-      ? {
-          direct: async () =>
-            o.directFails === true
-              ? { ok: false as const, message: 'Reddit 说太快了' }
-              : { ok: true as const, external_id: 't1_d1', url: '/r/ivraxr/comments/abc/s/d1/' },
-        }
-      : {}),
     record: (input) => {
       records.push(input)
       return { id: `ob_${records.length}` } as never
@@ -141,9 +134,10 @@ describe('WP329 起草提示', () => {
 })
 
 describe('WP329 交出去', () => {
-  it('决策 761：直发默认关——插件没来过也不走程序直发，排着等插件', async () => {
-    const m = make({ direct: true })
-    expect(m.svc.settings().direct_fallback).toBe(false)
+  it('决策 1324（WP445）：没有程序直发——插件没来过也只排着等你在插件里打开；没有直发开关', async () => {
+    const m = make()
+    expect('settings' in m.svc).toBe(false)
+    expect('setSettings' in m.svc).toBe(false)
     const r = await m.svc.send({
       approval_item_id: 'ap_1',
       write: replyWrite,
@@ -152,49 +146,13 @@ describe('WP329 交出去', () => {
       record,
     })
     expect(r.execution_id).toMatch(/^reddit_fill_/u)
+    expect(m.svc.writes()[0]).toMatchObject({ state: 'awaiting' })
     expect(m.svc.writes()[0]?.message).toContain('插件不在线')
     expect(m.records).toEqual([])
   })
 
-  it('开关打开后：插件没来过、有直发的路就直发，记发出记录（带编号与链接）', async () => {
-    const m = make({ direct: true })
-    m.svc.setSettings({ direct_fallback: true })
-    const r = await m.svc.send({
-      approval_item_id: 'ap_1',
-      write: replyWrite,
-      text: 'Hi Alice',
-      subreddit: 'ivraxr',
-      record,
-    })
-    expect(r.status).toBe('ok')
-    expect(r.execution_id).toMatch(/^reddit_direct_/u)
-    expect(m.records[0]).toMatchObject({
-      external_id: 't1_d1',
-      link: 'https://www.reddit.com/r/ivraxr/comments/abc/s/d1/',
-    })
-    expect(m.svc.writes()[0]).toMatchObject({ state: 'sent', record_id: 'ob_1' })
-  })
-
-  it('直发失败：照实回失败、不重试、不记发出记录', async () => {
-    const m = make({ direct: true, directFails: true })
-    m.svc.setSettings({ direct_fallback: true })
-    const r = await m.svc.send({
-      approval_item_id: 'ap_1',
-      write: replyWrite,
-      text: 'Hi Alice',
-      subreddit: 'ivraxr',
-      record,
-    })
-    expect(r).toMatchObject({
-      status: 'failed',
-      error: { message: 'Reddit 说太快了', retryable: false },
-    })
-    expect(m.records).toEqual([])
-  })
-
-  it('插件最近来过：开关开着也不走直发，交给插件；24 小时没人领 → 作废、照实说', async () => {
-    const m = make({ direct: true })
-    m.svc.setSettings({ direct_fallback: true })
+  it('插件最近来过：交给插件等你打开；WP432：7 天没打开 → 作废、照实说', async () => {
+    const m = make()
     await m.actions.next(['reddit'], 0)
     const r = await m.svc.send({
       approval_item_id: 'ap_1',
@@ -204,15 +162,19 @@ describe('WP329 交出去', () => {
       record,
     })
     expect(r.execution_id).toMatch(/^reddit_fill_/u)
+    expect(m.svc.writes()[0]?.state).toBe('awaiting')
     m.now.ms += 25 * 60 * 60 * 1000
     await m.actions.sweep()
+    expect(m.svc.writes()[0]?.state).toBe('awaiting')
+    m.now.ms += 6 * 24 * 60 * 60 * 1000
+    await m.actions.sweep()
     expect(m.svc.writes()[0]?.state).toBe('failed')
-    expect(m.svc.writes()[0]?.message).toContain('24 小时')
+    expect(m.svc.writes()[0]?.message).toContain('7 天没打开')
     expect(m.settled[0]?.state).toBe('failed')
     expect(m.records).toEqual([])
   })
 
-  it('Reddit 的活不要广告那份风险告知；插件领到的就是这一件', async () => {
+  it('Reddit 的活不要广告那份风险告知；WP432：定时领活领不到，人点「打开这一条」才拿到这一件', async () => {
     const m = make()
     await m.svc.send({
       approval_item_id: 'ap_1',
@@ -223,8 +185,16 @@ describe('WP329 交出去', () => {
     })
     const got = await m.actions.next(['reddit'], 0)
     expect(got.needs_consent).toBeUndefined()
-    expect(got.job?.plan.platform).toBe('reddit')
+    expect(got.job).toBeUndefined()
     expect(m.actions.lastSeen('reddit')).toBe(T0)
+    const job_id = m.svc.writes()[0]?.job_id as string
+    const opened = await m.svc.open(job_id)
+    expect(opened.ok && opened.job.plan.platform).toBe('reddit')
+    // 默认新版 www.reddit.com
+    expect(opened.ok && opened.job.plan.steps[0]).toEqual({
+      op: 'goto',
+      url: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
+    })
   })
 })
 
@@ -284,11 +254,13 @@ describe('WP329 社媒线程 / 公关外部帖', () => {
     await m.actions.next(['reddit'], 0)
     const r = await applyExternalPost(change, { writes: m.svc, post: () => post })
     expect(r?.status).toBe('ok')
-    const job = (await m.actions.next(['reddit'], 0)).job
+    expect((await m.actions.next(['reddit'], 0)).job).toBeUndefined()
+    const opened = await m.svc.open(m.svc.writes()[0]?.job_id as string)
+    const job = opened.ok ? opened.job : undefined
     expect(job?.plan.kind).toBe('reddit_submit')
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/BuyItForLife/submit?selftext=true',
+      url: 'https://www.reddit.com/r/BuyItForLife/submit/?type=TEXT&selftext=true',
     })
     expect(job?.plan.allow.values).toEqual(['Ten years with the same glasses', 'Long story…'])
     m.actions.result(job?.id as string, {

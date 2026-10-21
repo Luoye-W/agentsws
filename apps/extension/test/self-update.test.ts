@@ -84,11 +84,32 @@ describe('版本', () => {
 })
 
 describe('问一次「工坊换了新版没有」', () => {
-  it('没配对：不问', async () => {
-    const l = local('2')
+  it('WP432：没配对也问（不带令牌、只问版本号）；一样就不动', async () => {
+    const l = local('1')
     const { d, reloads } = deps(memoryStore(), '1', l.fetch)
     expect(await checkForUpdate(d)).toBe('unpaired')
-    expect(l.calls).toEqual([])
+    expect(l.calls).toEqual([
+      { url: 'http://127.0.0.1:4317/v1/extension/version/probe', version: '1' },
+    ])
+    expect(reloads).toEqual([])
+  })
+
+  it('WP432：没配对、工坊换了新版 → 等空闲后自己重载；重载了还是旧版 → 这一版不再重试', async () => {
+    const l = local('2')
+    const store = memoryStore()
+    const first = deps(store, '1', l.fetch)
+    expect(await checkForUpdate(first.d)).toBe('reloading')
+    expect(first.reloads).toEqual([1])
+    // 重载后还是 1（多半从别的文件夹加载的）
+    const again = deps(store, '1', l.fetch)
+    expect(await checkForUpdate(again.d)).toBe('gave_up')
+    expect(again.reloads).toEqual([])
+  })
+
+  it('WP432：没配对、本机没开 → 什么都不做', async () => {
+    const l = local('2', { down: true })
+    const { d, reloads } = deps(memoryStore(), '1', l.fetch)
+    expect(await checkForUpdate(d)).toBe('unpaired')
     expect(reloads).toEqual([])
   })
 

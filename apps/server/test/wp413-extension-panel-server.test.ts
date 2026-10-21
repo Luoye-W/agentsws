@@ -170,13 +170,22 @@ describe('WP413 插件侧边栏 × 真服务', () => {
         }),
       }),
     )
-    expect(filled).toMatchObject({ ok: true, write: { state: 'queued' } })
+    // WP432：批了 = 等你在插件里打开（插件不自己开页面）
+    expect(filled).toMatchObject({ ok: true, write: { state: 'awaiting' } })
     const item = await server.txn.approvals.get(id)
     expect(item?.decision).toMatchObject({ via: 'extension', by: server.bootstrap.person.id })
     expect(item?.state).toBe('applied')
 
-    // ③ 插件马上领得到（没等 120 秒）——填的是改过的那一版
-    const job = (await b.adsActions?.next(['reddit'], 0))?.job
+    // ③ WP432：定时领活领不到；人点「打开这一条」才拿到（没等 120 秒）——填的是改过的那一版
+    expect((await b.adsActions?.next(['reddit'], 0))?.job).toBeUndefined()
+    const opened = await data<{ ok: boolean; job?: { id: string; plan: unknown } }>(
+      await call(`/v1/extension/panel/writes/${filled.write?.job_id}/open`, {
+        method: 'POST',
+        plugin: token,
+        body: '{}',
+      }),
+    )
+    const job = opened.job
     expect(job?.id).toBe(filled.write?.job_id)
     expect(JSON.stringify(job?.plan)).toContain('edited in Chrome')
     const mid = await data<PanelSnapshot>(await call('/v1/extension/panel', { plugin: token }))

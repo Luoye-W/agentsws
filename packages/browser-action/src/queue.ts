@@ -21,6 +21,21 @@ export const QUEUE_TTL_MS = 24 * 60 * 60 * 1000
 /** 领走后多久没回音算「断了」。上传 + 平台出预览 + 人再确认一次，给足 45 分钟。 */
 export const CLAIM_LEASE_MS = 45 * 60 * 1000
 
+/**
+ * WP432：「等你在插件里打开」的那几件留多久（7 天，与侧边栏留写的天数同一个数）。
+ * 过了没打开就作废（照实说），不会自己开页面。
+ */
+export const HELD_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * WP432（Luoye 10-20 反馈 9）：**Reddit 的写一律等人在插件侧边栏里点「打开这一条」才开页面**——
+ * 批了只是批了，插件的定时领活永远领不到它（{@link ActionQueue.claim} 跳过），只有 {@link ActionQueue.open}
+ * （人点的那一下）能把它交出去。这是公共模块里的一道底：本机服务忘了标也一样。
+ */
+export function needsHumanOpen(job: Pick<ActionJob, 'plan'>): boolean {
+  return job.plan.platform === 'reddit' && job.plan.pace === 'write'
+}
+
 export interface JobProgress {
   step: number
   of: number
@@ -36,6 +51,10 @@ export interface QueuedJob {
   touched_at_ms?: number
   progress?: JobProgress
   stop_requested?: boolean
+  /** WP432：等人在插件侧边栏里点「打开这一条」（定时领活领不到）。打开之后去掉。 */
+  held?: boolean
+  /** WP432：人点「打开这一条」的那一刻。 */
+  opened_at_ms?: number
   /** 人在工坊卡上点了「确认提交」（横条上点的由插件自己知道）。 */
   confirmed?: boolean
   result?: ActionResult & { finished_at_ms: number }
@@ -78,6 +97,7 @@ export class ActionQueue {
   private readonly pace: Pace
   private readonly paceFor: ((job: ActionJob) => Pace | undefined) | undefined
   private readonly ttlMs: number
+  private readonly heldTtlMs: number
   private readonly leaseMs: number
 
   constructor(options: {
@@ -89,12 +109,14 @@ export class ActionQueue {
     paceFor?: (job: ActionJob) => Pace | undefined
     state?: QueueState
     ttlMs?: number
+    heldTtlMs?: number
     leaseMs?: number
   }) {
     this.jobs = structuredClone(options.state ?? [])
     this.pace = options.pace
     this.paceFor = options.paceFor
     this.ttlMs = options.ttlMs ?? QUEUE_TTL_MS
+    this.heldTtlMs = options.heldTtlMs ?? HELD_TTL_MS
     this.leaseMs = options.leaseMs ?? CLAIM_LEASE_MS
   }
 
@@ -102,12 +124,44 @@ export class ActionQueue {
     return this.paceFor?.(job) ?? this.pace
   }
 
-  /** 进队。同一个 id 不进两次（审批执行器重放时不会排出两件）。 */
-  enqueue(job: ActionJob, nowMs: number): QueuedJob {
+  /**
+   * 进队。同一个 id 不进两次（审批执行器重放时不会排出两件）。
+   * WP432：`hold` = 等人在插件里点开（Reddit 的写不管给没给都是）。
+   */
+  enqueue(job: ActionJob, nowMs: number, options?: { hold?: boolean }): QueuedJob {
     const hit = this.jobs.find((j) => j.job.id === job.id)
     if (hit !== undefined) return hit
-    const row: QueuedJob = { job, status: 'queued', enqueued_at_ms: nowMs }
+    const held = options?.hold === true || needsHumanOpen(job)
+    const row: QueuedJob = {
+      job,
+      status: 'queued',
+      enqueued_at_ms: nowMs,
+      ...(held ? { held: true } : {}),
+    }
     this.jobs.push(row)
+    return row
+  }
+
+  /**
+   * WP432：人在插件侧边栏里点了「打开这一条」——只有这一下能把等人的那件交出去（占住账户、记一次数）。
+   * 不是等人的、已经开过的、限速领不走的回一句人话。
+   */
+  open(id: string, nowMs: number): QueuedJob | { why: string } {
+    this.sweep(nowMs)
+    const row = this.get(id)
+    if (row === undefined) return { why: '找不到这一条。' }
+    if (row.status !== 'queued')
+      return {
+        why: isFinal(row.status) ? '这一条已经结束了。' : '这一条已经打开了，在那个标签页里。',
+      }
+    if (row.held !== true && !needsHumanOpen(row.job)) return { why: '这一条不用在插件里打开。' }
+    const v = this.paceOf(row.job).begin(row.job.account, row.job.plan.pace, row.job.id, nowMs)
+    if (!v.ok) return { why: v.why }
+    delete row.held
+    row.status = 'running'
+    row.opened_at_ms = nowMs
+    row.claimed_at_ms = nowMs
+    row.touched_at_ms = nowMs
     return row
   }
 
@@ -118,6 +172,19 @@ export class ActionQueue {
   sweep(nowMs: number): QueuedJob[] {
     const changed: QueuedJob[] = []
     for (const row of this.jobs) {
+      if (row.status === 'queued' && (row.held === true || needsHumanOpen(row.job))) {
+        if (nowMs - row.enqueued_at_ms < this.heldTtlMs) continue
+        row.status = 'expired'
+        row.result = {
+          outcome: 'failed',
+          message: '等你在插件里打开，7 天没打开，这一条作废了（没发）。',
+          step: 0,
+          reads: {},
+          finished_at_ms: nowMs,
+        }
+        changed.push(row)
+        continue
+      }
       if (row.status === 'queued' && nowMs - row.enqueued_at_ms >= this.ttlMs) {
         row.status = 'expired'
         row.result = {
@@ -158,6 +225,8 @@ export class ActionQueue {
     this.sweep(nowMs)
     for (const row of this.jobs) {
       if (row.status !== 'queued') continue
+      // WP432：等人点开的那几件，定时领活永远领不到（Reddit 的写再加一道底）
+      if (row.held === true || needsHumanOpen(row.job)) continue
       if (!platforms.includes(row.job.plan.platform)) continue
       const v = this.paceOf(row.job).begin(row.job.account, row.job.plan.pace, row.job.id, nowMs)
       if (!v.ok) continue
@@ -173,7 +242,7 @@ export class ActionQueue {
   waiting(nowMs: number): { id: string; why: string }[] {
     const out: { id: string; why: string }[] = []
     for (const row of this.jobs) {
-      if (row.status !== 'queued') continue
+      if (row.status !== 'queued' || row.held === true || needsHumanOpen(row.job)) continue
       const v = this.paceOf(row.job).check(row.job.account, row.job.plan.pace, nowMs)
       if (!v.ok) out.push({ id: row.job.id, why: v.why })
     }

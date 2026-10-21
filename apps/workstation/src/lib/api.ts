@@ -6987,6 +6987,8 @@ export interface ExtensionInstallView {
     stuck_on?: string
   }[]
   can_open: boolean
+  /** WP432：还没配对的插件最近一次报的版本（没配对也跟着工坊更新）。 */
+  unpaired?: { version: string; at: string }
 }
 
 export const getExtensionInstall = (assignment?: string): Promise<ExtensionInstallView> =>
