@@ -11,6 +11,11 @@
  * WP419：WP411 之后自动起草前要**先读整串、先定品牌号口吻**——这里照真流程走：插件把整串也读了、口吻没定时
  * 侧边栏照实说「等你先定品牌号怎么说话」（带「去定」），定了才出卡；卡上带「品牌号在这串里说过」。
  *
+ * WP432（Luoye 10-20 反馈 9）：**批了不自动开页面**——侧边栏里「批准并打开」是人这一下点的；工坊里批的那一张
+ * 进侧边栏「等你发」、插件图标出数字、**定时领活不开任何页面**；人点「打开这一条」才在这个窗口新开标签页，
+ * 默认**新版 www.reddit.com**（替身页面是 shreddit 组件的样子），草稿填进富文本框并描一圈；「人」在页面上又改了字
+ * 再点 Comment → 插件按品牌号认出、读回真发出去的字 → 工坊记「已发」，发出记录按真发的记、AI 草稿另存一格。
+ *
  * 用法（先 `npx tsc -b` 与 `pnpm -F @agentsws/extension build`）：
  *   node scripts/e2e-wp413-sidepanel.mjs [--headed] [--keep] [--shots=<目录>] [--port=<本机端口>]
  *   （`--shots` 把侧边栏浅 / 深两套与替身 Reddit 页截到那个目录；截图放私有文档仓，不进本仓）
@@ -142,24 +147,30 @@ const shell = (title, body, script = '') =>
   textarea{display:block;width:520px;height:90px;margin:6px 0}button{padding:4px 12px}</style></head>
   <body>${body}<div class="side"><span class="user">u/ivra_official（本地替身页面）</span></div>
   <script>const report=(trusted,text)=>fetch('/__fake/sent',{method:'POST',body:JSON.stringify({trusted,text})});${script}</script></body></html>`
-const comment = (id, author, text, child = '') =>
-  `<div class="thing comment" id="thing_t1_${id}" data-fullname="t1_${id}" data-permalink="/r/ivraxr/comments/abc/slug/${id}/">
-    <div class="entry"><p class="tagline">${author}</p><form class="usertext"><div class="usertext-body"><div class="md"><p>${text}</p></div></div></form>
-    <ul class="flat-list buttons"><li class="reply-button"><a href="javascript:void(0)">reply</a></li></ul></div>
-    <div class="child">${child}</div></div>`
-const threadPage = () =>
+// WP432：新版 Reddit（shreddit 组件的样子）——一条评论 + 它的 Reply、收起的「Join the conversation」
+const scomment = (id, author, text, parent, depth, post) =>
+  `<shreddit-comment thingid="t1_${id}" author="${author}" parentid="${parent}" depth="${depth}" permalink="/r/ivraxr/comments/${post}/comment/${id}/">
+     <div slot="comment"><p>${text}</p></div>
+     <shreddit-comment-action-row slot="actionRow"><button slot="comment-reply">Reply</button></shreddit-comment-action-row>
+   </shreddit-comment>`
+const COMPOSER =
+  '<shreddit-composer><div contenteditable="true" role="textbox" style="min-height:60px;border:1px solid #ccc;padding:6px"></div><button class="human-send" type="button">Comment</button></shreddit-composer>'
+const threadPage = (post, title) =>
   shell(
-    'Does the Air3 work with glasses?（替身）',
-    `<div id="siteTable"><div class="thing link" data-fullname="t3_abc"><div class="entry"><a class="title">Does the Air3 work with glasses?</a></div></div></div>
-     <div class="commentarea"><form class="usertext"><textarea name="text"></textarea><button class="save" type="button">save</button></form>
-     <div class="sitetable nestedlisting">${comment('c1', 'alice', 'Mine fogs up a bit when I wear glasses. Does the Air3 work with prescription frames?')}</div></div>`,
-    `document.querySelector('#thing_t1_c1 .reply-button a').addEventListener('click',()=>{
-       const child=document.querySelector('#thing_t1_c1 > .child')
-       child.insertAdjacentHTML('afterbegin','<form class="usertext"><textarea name="text"></textarea><button class="save" type="button">save</button></form>')
-       child.querySelector('button.save').addEventListener('click',async e=>{
-         const box=child.querySelector('textarea');await report(e.isTrusted,box.value)
-         child.querySelector('form').remove()
-         child.insertAdjacentHTML('beforeend','<div class="sitetable">'+${JSON.stringify(comment('new1', 'ivra_official', '__TEXT__'))}.replace('__TEXT__',box.value.replace(/</g,'&lt;'))+'</div>')})})`,
+    `${title}（替身）`,
+    `<shreddit-post id="t3_${post}" author="carol" permalink="/r/ivraxr/comments/${post}/x/"><h1 slot="title">${title}</h1></shreddit-post>
+     <comment-composer-host><faceplate-textarea-input data-testid="trigger-button">Join the conversation</faceplate-textarea-input></comment-composer-host>
+     <shreddit-comment-tree>${post === 'abc' ? scomment('c1', 'alice', 'Mine fogs up a bit when I wear glasses. Does the Air3 work with prescription frames?', 't3_abc', 0, 'abc') : ''}</shreddit-comment-tree>`,
+    `const COMPOSER=${JSON.stringify(COMPOSER)};let n=0
+     const wire=(host,parent,depth)=>{const b=host.querySelector('button.human-send');b.addEventListener('click',async e=>{
+       const box=host.querySelector('[contenteditable]');const text=box.textContent;await report(e.isTrusted,text)
+       host.remove();n+=1
+       document.querySelector('shreddit-comment-tree').insertAdjacentHTML('beforeend',${JSON.stringify(scomment('__ID__', 'ivra_official', '__TEXT__', '__PARENT__', '__DEPTH__', post))}
+         .replace(/__ID__/g,'new'+n).replace('__TEXT__',text.replace(/</g,'&lt;')).replace('__PARENT__',parent).replace('__DEPTH__',String(depth)))})}
+     document.querySelector('shreddit-comment[thingid="t1_c1"] button[slot="comment-reply"]')?.addEventListener('click',()=>{
+       const c=document.querySelector('shreddit-comment[thingid="t1_c1"]');c.insertAdjacentHTML('beforeend',COMPOSER);wire(c.querySelector('shreddit-composer'),'t1_c1',1)})
+     document.querySelector('comment-composer-host faceplate-textarea-input').addEventListener('click',()=>{
+       const h=document.querySelector('comment-composer-host');h.insertAdjacentHTML('beforeend',COMPOSER);wire(h.querySelector('shreddit-composer'),'t3_${post}',0)})`,
   )
 
 // ── 真本机服务（临时目录；没有模型 → 草稿是模板那一句，正好拿来演「改草稿」）─────────────
@@ -335,7 +346,13 @@ try {
         return route.fulfill({
           status: 200,
           contentType: 'text/html; charset=utf-8',
-          body: threadPage(),
+          body: threadPage('abc', 'Does the Air3 work with glasses?'),
+        })
+      if (u.pathname.startsWith('/r/ivraxr/comments/p9/'))
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: threadPage('p9', 'Battery life after the 2.1 update?'),
         })
       leaked.push(u.href)
       return route.fulfill({ status: 404, body: '' })
@@ -429,13 +446,16 @@ try {
   )
   await shot(panel, '2b-card-checks-light')
   await alice.locator('[data-testid="ws-draft"]').fill(EDITED)
+  // WP432：「批准并打开」——人这一下点的就是「打开」：在这个窗口新开新版 Reddit 的标签页、填好、描一圈
   await alice.locator('[data-testid="ws-fill"]').click()
   let pg
   let reloaded = false
+  const boxOf = (p, sel) => p.locator(sel)
+  const replyBox = 'shreddit-comment[thingid="t1_c1"] shreddit-composer div[contenteditable="true"]'
   const filled = await until(async () => {
     pg = context
       .pages()
-      .find((x) => x.url().startsWith('https://old.reddit.com/r/ivraxr/comments/abc/'))
+      .find((x) => x.url().startsWith('https://www.reddit.com/r/ivraxr/comments/abc/'))
     if (pg === undefined) return false
     // WP419：插件新开的标签页偶尔先于截取生效（打到了解析不到的真站）——不是替身页就重载一次（这时截取已挂上）
     const title = await pg.title().catch(() => '')
@@ -444,17 +464,22 @@ try {
       await pg.reload().catch(() => undefined)
       return false
     }
-    const v = await pg
-      .locator('#thing_t1_c1 > .child textarea')
-      .inputValue()
+    const v = await boxOf(pg, replyBox)
+      .textContent()
+      .catch(() => '')
+    const outline = await boxOf(pg, replyBox)
+      .evaluate((el) => el.style.outline)
       .catch(() => '')
     const banner = await pg
       .locator('#agentsws-ads-banner [data-testid="ads-banner"]')
       .textContent()
       .catch(() => '')
-    return v === EDITED && (banner ?? '').includes('等你点发送')
+    return v === EDITED && outline !== '' && (banner ?? '').includes('等你点发送')
   })
-  check('点「填进页面」→ 马上（不等 2 分钟）新开标签页，改过的草稿填进回复框，等人点', filled)
+  check(
+    '点「批准并打开」→ 马上（不等 2 分钟）在新版 Reddit 新开标签页，改过的草稿填进回复框并描一圈，等人点',
+    filled,
+  )
   check('插件没点发送', sends.length === 0)
   const item = server.txn.runtime.store
     .listApprovals({ workspace_id: ws, kind: 'outbound_draft' })
@@ -478,8 +503,9 @@ try {
   await shot(panel, '4-filling-light')
   if (pg !== undefined) await shot(pg, '5-reddit-filled')
 
-  // ② 人在 Reddit 页面上点 save → 插件读回 → 侧边栏「已发 · 已记录」
-  if (pg !== undefined && filled) await pg.locator('#thing_t1_c1 > .child button.save').click()
+  // ② 人在 Reddit 页面上点 Comment → 插件读回 → 侧边栏「已发 · 已记录」
+  if (pg !== undefined && filled)
+    await pg.locator('shreddit-comment[thingid="t1_c1"] button.human-send').click()
   const sentOk = await until(async () =>
     (
       (await panel
@@ -490,7 +516,7 @@ try {
   )
   check('人点了发送 → 插件读回 → 侧边栏这一条「已发 · 已记录」', sentOk)
   check(
-    '那一下 save 是人点的（isTrusted）',
+    '那一下发送是人点的（isTrusted）',
     sends.length === 1 && sends[0].trusted === true && sends[0].text === EDITED,
     JSON.stringify(sends),
   )
@@ -529,19 +555,102 @@ try {
   ).filter((c) => c.payload?.form === 'reddit_write')
   check('工坊「要你处理」里那张卡收起了，另一张还在', left.length === 1 && left[0]?.id !== item?.id)
 
-  // ④ 另一张在工坊里批了 → 侧边栏那张自己收起（谁先处理算谁的）
+  // ④ WP432：另一张在工坊里点「发送」（批）→ 过了取消窗口 → **不自动开任何页面**：侧边栏那张卡收起、进「等你发」，
+  //    图标出数字；定时领活领不到；人点「打开这一条」才开
   const other = left[0]
   const token = other?.deliveries.find((d) => d.to === me && d.status === 'sent')?.decision_token
-  if (other !== undefined && token !== undefined)
+  if (other !== undefined && token !== undefined) {
     await server.approvals.decide(other.id, me, {
-      action: 'reject',
-      reason: '工坊里不发',
+      action: 'approve',
       decision_token: token,
       via: 'workstation',
     })
+    // 取消窗口（120 秒）这里不真等：直接施行（与过了窗口的补扫同一条路）
+    await server.txn.executor.applyApproval(other.id, { skip_cancel_window: true })
+  }
   await panel.locator('[data-testid="ws-tab-todo"]').click()
-  const gone = await until(async () => (await cards.count()) === 0, 15_000)
-  check('另一张在工坊里处理了 → 侧边栏那张自己收起', gone)
+  const desk = panel.locator('[data-testid="ws-desk"]')
+  const inDesk = await until(
+    async () => (await cards.count()) === 0 && (await desk.count()) === 1,
+    15_000,
+  )
+  check('工坊里批了 → 侧边栏那张卡收起，进「等你发」（帖子、版块、为什么回、草稿全文）', inDesk)
+  const pagesBefore = context.pages().filter((x) => x.url().includes('reddit.com')).length
+  // 让插件马上去领一次（不等每分钟那一拍）——领不到 Reddit 的写，不开页面
+  await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'ads-poll' }))
+  await new Promise((r) => setTimeout(r, 4000))
+  const pagesAfter = context.pages().filter((x) => x.url().includes('reddit.com')).length
+  check('批了之后插件没有自己开任何 Reddit 页面（定时领活也领不到）', pagesAfter === pagesBefore)
+  const badgeOk = await until(
+    async () => (await sw.evaluate(() => chrome.action.getBadgeText({}))) === '1',
+    15_000,
+  )
+  check('插件图标上出「等你发」的数字 1', badgeOk)
+  const strip = (await panel.locator('[data-testid="ws-strip"]').textContent()) ?? ''
+  check(
+    '侧边栏顶上照实说：等你发 1 条、今天发了 1 条',
+    strip.includes('等你发 1 条') && strip.includes('今天发了 1 条'),
+    strip,
+  )
+  await shot(panel, '8a-desk-light')
+  await panel.emulateMedia({ colorScheme: 'dark' })
+  await shot(panel, '8a-desk-dark')
+  await panel.emulateMedia({ colorScheme: 'light' })
+
+  // 人点「打开这一条」→ 新版 Reddit 帖子页、点开「Join the conversation」、草稿填好；人改了一句才点 Comment
+  await desk.locator('[data-testid="ws-desk-open"]').click()
+  const topBox = 'comment-composer-host shreddit-composer div[contenteditable="true"]'
+  let pg2
+  let reloaded2 = false
+  const filled2 = await until(async () => {
+    pg2 = context
+      .pages()
+      .find((x) => x.url().startsWith('https://www.reddit.com/r/ivraxr/comments/p9/'))
+    if (pg2 === undefined) return false
+    const title = await pg2.title().catch(() => '')
+    if (!title.includes('替身') && !reloaded2) {
+      reloaded2 = true
+      await pg2.reload().catch(() => undefined)
+      return false
+    }
+    const v = await pg2
+      .locator(topBox)
+      .textContent()
+      .catch(() => '')
+    return (v ?? '').startsWith('Thanks Bob')
+  })
+  check('点「打开这一条」→ 新开新版 Reddit 帖子页，草稿填进评论框', filled2)
+  if (pg2 !== undefined) await shot(pg2, '8b-reddit-filled-new')
+  const HUMAN = 'Thanks Bob! Which mode were you in? We are collecting 2.1 battery reports.'
+  if (pg2 !== undefined && filled2) {
+    await pg2.locator(topBox).fill(HUMAN)
+    await pg2.locator('comment-composer-host button.human-send').click()
+  }
+  const sent2 = await until(async () => {
+    const rows = await http('/v1/outbound/records')
+    return rows.some((r) => r.approval_item_id === other?.id)
+  })
+  const rows2 = await http('/v1/outbound/records')
+  const row2 = rows2.find((r) => r.approval_item_id === other?.id)
+  check(
+    '人在页面上改了字再发 → 插件按品牌号认出、读回真发出去的字；发出记录按真发的记、AI 草稿另存',
+    sent2 &&
+      row2?.content === HUMAN &&
+      typeof row2?.draft_content === 'string' &&
+      row2.draft_content.startsWith('Thanks Bob — could you share'),
+    JSON.stringify({ content: row2?.content, draft: row2?.draft_content }),
+  )
+  check(
+    '那一下 Comment 是人点的（isTrusted）',
+    sends.length === 2 && sends[1].trusted === true && sends[1].text === HUMAN,
+  )
+  const badgeGone = await until(
+    async () => (await sw.evaluate(() => chrome.action.getBadgeText({}))) !== '1',
+    20_000,
+  )
+  check('发出去之后图标上的数字收掉', badgeGone)
+  await panel.bringToFront()
+  await shot(panel, '8c-desk-sent-light')
 
   // ⑤ WP419（决策 1231）：社媒发帖不要开发者应用——到点了交给你：侧边栏「等你发的帖子」、打开发帖页、发好了
   const fbAsg = server.roles.assignments.create({
