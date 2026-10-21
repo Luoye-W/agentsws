@@ -125,7 +125,12 @@ export class TabPage implements ActionPage {
    * WP329：页面上正文含这段字的那几条（等人点发送时一直在看）。页面正在换（脚本被扔掉了）就回空，
    * 等它加载完把脚本放回去，下一眼接着看——**这里不点任何东西**。
    */
-  async findPosted(selector: string, body: string, text: string): Promise<PostedHit[]> {
+  async findPosted(
+    selector: string,
+    body: string,
+    text: string,
+    author?: string,
+  ): Promise<PostedHit[]> {
     try {
       const out = await this.o.driver.dom({
         type: 'ads-dom',
@@ -133,6 +138,7 @@ export class TabPage implements ActionPage {
         selector,
         body,
         text,
+        ...(author === undefined ? {} : { author }),
       })
       return Array.isArray(out) ? (out as PostedHit[]) : []
     } catch {
@@ -155,12 +161,17 @@ export class TabPage implements ActionPage {
     return (await this.o.driver.dom({ type: 'ads-dom', op: 'click', selector })) as DomOpResult
   }
 
-  async fill(selector: string, value: string): Promise<DomOpResult> {
+  async fill(
+    selector: string,
+    value: string,
+    options?: { highlight?: boolean },
+  ): Promise<DomOpResult> {
     return (await this.o.driver.dom({
       type: 'ads-dom',
       op: 'fill',
       selector,
       value,
+      ...(options?.highlight === true ? { highlight: true } : {}),
     })) as DomOpResult
   }
 

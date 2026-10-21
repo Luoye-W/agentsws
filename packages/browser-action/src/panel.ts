@@ -13,6 +13,8 @@
  * - 第一版只做 Reddit（决策 d）；广告后台、红人收录以后套用同一个侧边栏（`kind` 多一种即可）。
  */
 
+import type { ActionJob } from './types.js'
+
 /** 巡查的一块（与 `RedditWatchPart` 同名同义）。 */
 export type PanelReadPart = 'inbox' | 'own_sub' | 'watch_sub' | 'external'
 
@@ -96,6 +98,10 @@ export interface PanelProgress {
   stage?: PanelStage
   /** WP419：最近 7 天品牌号已经回过、没再起草的几条（WP411）。 */
   replied_before?: number
+  /** WP432：今天（品牌本地日）已经发出去几条（读回确认的）。 */
+  sent_today?: number
+  /** WP432：批了、等你在插件里打开发的几条。 */
+  awaiting?: number
 }
 
 /** ② 要你处理：一张「发出去」卡（只给这个人收得到、有权批的）。 */
@@ -134,8 +140,11 @@ export interface PanelCard {
   created_at: string
 }
 
-/** 交给插件之后这一条做到哪了（与 `RedditWriteState` 同名同义）。 */
-export type PanelWriteState = 'queued' | 'filling' | 'sent' | 'failed'
+/**
+ * 交给插件之后这一条做到哪了（与 `RedditWriteState` 同名同义）。
+ * WP432：`awaiting` = 批了，等你在侧边栏里点「打开这一条」（插件不自己开页面）。
+ */
+export type PanelWriteState = 'awaiting' | 'queued' | 'filling' | 'sent' | 'failed'
 
 /** 批过的一条写（「已发 · 已记录」/ 填好了等你点 / 没发出去 · 再填一次）。 */
 export interface PanelWrite {
@@ -157,6 +166,19 @@ export interface PanelWrite {
   finished_at?: string
   /** 是在插件里批的（不是 = 在工坊里批的）。 */
   via_extension?: boolean
+  /** WP432：写哪种（侧边栏发帖台上「回复 / 回帖 / 发帖」）。 */
+  kind?: 'reply' | 'comment' | 'submit'
+  /** WP432：批过的草稿全文（等你发的那几条；在侧边栏里还能改）。发新帖时 `title` 是标题。 */
+  text?: string
+  title?: string
+  /** WP432：原帖标题、被回的那个人与那句话（外部文本，只当文字）。 */
+  post_title?: string
+  parent_author?: string
+  parent_text?: string
+  /** WP432：原帖 / 被回那一条的链接（不是发出去那一条：那个是 `link`）。 */
+  thread_link?: string
+  /** WP432：为什么回这条。 */
+  reason?: string
 }
 
 /** 一个记录去处写这一行的结果。 */
@@ -251,7 +273,34 @@ export interface PanelSnapshot {
   posts?: PanelPost[]
   /** WP419：这把配对能不能回「发好了 / 不发了」（有 `social.post`）。 */
   can_post?: boolean
+  /**
+   * WP432：工坊版本与工坊插件文件夹里那一版（侧边栏底下写自己是哪一版，对不上就提示重新加载）。
+   * 不是桌面版（没有固定文件夹）就没有 `folder`。
+   */
+  versions?: { workshop?: string; folder?: string }
+  /** WP432：「等你发」要不要弹系统通知（工坊设置 → 通知「等你发」那一类的「系统」开关）。 */
+  notify_system?: boolean
 }
+
+/** WP432：`POST /v1/extension/panel/writes/:job/open`：人点「打开这一条」（改过就带改过的字）。 */
+export interface PanelOpenInput {
+  text?: string
+  /** 发新帖的标题（改过才给）。 */
+  title?: string
+}
+
+/** WP432：`POST /v1/extension/panel/writes/:job/drop`：不发了。 */
+export interface PanelDropInput {
+  reason?: string
+}
+
+/**
+ * WP432：「打开这一条」的回执——交给插件的那一件活（插件在当前窗口新开标签页、填好、等人点）。
+ * 本机服务不开任何页面；只有人点的这一下能拿到它。
+ */
+export type PanelOpenResult =
+  | { ok: true; job: ActionJob; write?: PanelWrite }
+  | { ok: false; message: string }
 
 /** `POST /v1/extension/panel/cards/:id/fill`：批（改过就按改过的）并马上交给插件填进页面。 */
 export interface PanelFillInput {

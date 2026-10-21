@@ -24,10 +24,25 @@ import {
 export type AdsDomRequest =
   | { type: 'ads-dom'; op: 'look' }
   | { type: 'ads-dom'; op: 'count' | 'text' | 'click'; selector: string }
-  | { type: 'ads-dom'; op: 'fill' | 'paste'; selector: string; value: string }
+  | {
+      type: 'ads-dom'
+      op: 'fill' | 'paste'
+      selector: string
+      value: string
+      /** WP432：填完描一圈、滚到眼前。 */
+      highlight?: boolean
+    }
   | { type: 'ads-dom'; op: 'file'; selector: string; name: string; mime: string; base64: string }
   /** WP329：认「人点发送之后新出现的那一条」（Reddit 写的读回）。 */
-  | { type: 'ads-dom'; op: 'find-posted'; selector: string; body: string; text: string }
+  | {
+      type: 'ads-dom'
+      op: 'find-posted'
+      selector: string
+      body: string
+      text: string
+      /** WP432：品牌号（人改了字再发也认得出）。 */
+      author?: string
+    }
 
 export type AdsDomResponse = PageLook | DomOpResult | number | string | PostedHit[]
 
@@ -60,11 +75,16 @@ export function handleDomRequest(doc: Document, url: string, req: AdsDomRequest)
     case 'click':
       return domClick(doc, req.selector)
     case 'fill':
-      return domFill(doc, req.selector, req.value)
+      return domFill(
+        doc,
+        req.selector,
+        req.value,
+        req.highlight === true ? { highlight: true } : undefined,
+      )
     case 'paste':
       return domPaste(doc, req.selector, req.value)
     case 'find-posted':
-      return domFindPosted(doc, req.selector, req.body, req.text)
+      return domFindPosted(doc, req.selector, req.body, req.text, req.author)
     case 'file':
       return domSetFile(doc, req.selector, {
         name: req.name,

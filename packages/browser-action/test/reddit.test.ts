@@ -139,7 +139,7 @@ describe('WP329 Reddit 写的计划', () => {
       `<div class="thing" data-fullname="t1_z" data-permalink="/p/"><div class="entry"><div class="usertext-body"><p>Hi Alice, IVRA here — the <strong>Air3</strong> has an anti-fog insert in the box.</p></div></div></div>`,
       'text/html',
     )
-    expect(domFindPosted(doc, '.thing', REDDIT_WRITE_SELECTORS.commentBody, DRAFT)).toEqual([
+    expect(domFindPosted(doc, '.thing', REDDIT_WRITE_SELECTORS.commentBody, DRAFT)).toMatchObject([
       { fullname: 't1_z', permalink: '/p/' },
     ])
   })
