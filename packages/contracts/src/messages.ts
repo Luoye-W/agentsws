@@ -489,6 +489,53 @@ export interface SenderRule {
   kind?: MessageKind
   /** WP212：教过的岗位（岗位模板 id）：下次同一发件人「交给 X」直接是主按钮。 */
   position?: string
+  /**
+   * WP439（docs/108 §6）：谁定下的这条——`user` = 人教的（勾「以后都这样」），`ai` = AI 判稳了
+   * 自己记的（docs/108 §5.2，后续那单写）。缺省按 `user`。
+   */
+  source?: 'user' | 'ai'
+  /** WP439：最近 30 天命中几次（列规则清单时按 {@link SenderRule.hit_days} 现算）。 */
+  hits_30d?: number
+  /** WP439：最近一次命中（分拣按这条规则直达的那一封）。 */
+  last_hit_at?: Iso8601
+  /**
+   * WP439：命中账——按天记几次（`YYYY-MM-DD` → 次数，只留最近 30 天）。{@link SenderRule.hits_30d}
+   * 从它算；界面不用读它。
+   */
+  hit_days?: Record<string, number>
+}
+
+/** WP439：规则清单里的一行（发件人规则 + 给人看的名字）。 */
+export interface SenderRuleView extends SenderRule {
+  /** 谁教的那个人的名字（同事 / 公司模式才给；个人模式就是你自己）。 */
+  by_name?: string
+  /** 是看清单的这个人自己教的（界面写「你」）。 */
+  by_me?: boolean
+}
+
+/** WP439：刚删掉的一条发件人规则（同事 / 公司模式「能撤回」那一格，留 {@link SENDER_RULE_UNDO_DAYS} 天）。 */
+export interface DeletedSenderRule {
+  rule: SenderRule
+  deleted_by: PersonId
+  deleted_by_name?: string
+  /** 是看清单的这个人自己删的。 */
+  deleted_by_me?: boolean
+  deleted_at: Iso8601
+}
+
+/** WP439：删掉的发件人规则留几天可撤回。 */
+export const SENDER_RULE_UNDO_DAYS = 7
+
+/** WP439：`GET /v1/messages/rules` 回的样子（规则清单那一页）。 */
+export interface SenderRuleList {
+  rules: SenderRuleView[]
+  /**
+   * 品牌共用（同事 / 公司模式）：谁都能删、留名、通知同岗位、能撤回（决策 243）。
+   * 个人模式不给（`false`）——「谁教的」那一格不写名字。
+   */
+  shared?: boolean
+  /** 刚删的几条（新的在前；过了 {@link SENDER_RULE_UNDO_DAYS} 天就不在了）。 */
+  recently_deleted?: DeletedSenderRule[]
 }
 
 /* ── 草稿与回复建议 ───────────────────────────────────────────────────── */
