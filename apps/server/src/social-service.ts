@@ -509,11 +509,19 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     })
 
   /**
-   * WP445（决策 1322）：这一条会不会「交给你发」（内容账号组、这条渠道没有官方发布接口 → 到点交给插件，人点发布）。
+   * WP445（决策 1322）：这一条会不会「交给你发」——内容账号组、这条渠道没有官方发布接口或没接上（决策 1231 之后
+   * 默认就是这样）→ 到点交给插件，人点发布。
    */
-  const handsOff = (channel: SocialChannel): boolean =>
-    socialChannelSpec(channel)?.group === 'content' &&
-    options.channels?.adapters[channel]?.publish === undefined
+  const handsOff = (channel: SocialChannel): boolean => {
+    if (socialChannelSpec(channel)?.group !== 'content') return false
+    const ch = options.channels
+    if (ch?.adapters[channel]?.publish === undefined) return true
+    try {
+      return !ch.transport.connected(channel)
+    } catch {
+      return true
+    }
+  }
 
   /**
    * 提一张发布卡（`social_post` 在 `HARD_L1` 里，**永远人审**）。

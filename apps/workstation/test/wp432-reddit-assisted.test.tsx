@@ -21,11 +21,16 @@ const longAgo = (): string => new Date(Date.now() - 2 * EXT_FRESH_MS).toISOStrin
 const state = {
   rows: [] as RedditWriteView[],
   view: undefined as ExtensionInstallView | undefined,
+  /** WP445：服务端数的「插件里 N 条等你发」（不给 = 老服务，前端自己数批过的）。 */
+  inPlugin: undefined as number | undefined,
 }
 
 vi.mock('@/lib/reddit-write-api', () => ({
   REDDIT_WRITES_KEY: ['reddit-writes'],
-  listRedditWrites: async () => ({ rows: state.rows }),
+  listRedditWrites: async () => ({
+    rows: state.rows,
+    ...(state.inPlugin === undefined ? {} : { in_plugin: state.inPlugin }),
+  }),
   refillRedditWrite: async () => ({}),
   dismissRedditWrite: async () => ({}),
 }))
@@ -72,6 +77,7 @@ const duties = [{ role_id: 'social.reddit', assignment_id: 'asg_reddit' }]
 beforeEach(() => {
   state.rows = []
   state.view = undefined
+  state.inPlugin = undefined
 })
 
 describe('WP432 要不要提示重新加载', () => {
@@ -95,7 +101,7 @@ describe('WP432 要不要提示重新加载', () => {
 })
 
 describe('WP432 社媒岗位页：等你在插件里发', () => {
-  it('批了的两张卡（其中一张再填过）→「2 条已批，等你在浏览器插件里发」；插件是旧版 → 就地提示怎么重新加载', async () => {
+  it('批了的两张卡（其中一张再填过）→「插件里 2 条等你发」（WP445）；插件是旧版 → 就地提示怎么重新加载', async () => {
     state.rows = [
       row(),
       row({ job_id: 'rdw_0', state: 'failed', approval_item_id: 'ap_1' }),
@@ -105,7 +111,7 @@ describe('WP432 社媒岗位页：等你在插件里发', () => {
     state.view = view({ running: [run('0.2.1-beta.3')] })
     renderWithProviders(<RedditWriteNotice duties={duties} />)
     const line = await screen.findByTestId('reddit-write-awaiting')
-    expect(line.textContent).toContain('2 条已批，等你在浏览器插件里发')
+    expect(line.textContent).toContain('插件里 2 条等你发')
     const prompt = await screen.findByTestId('extension-reload')
     expect(prompt.getAttribute('data-kind')).toBe('stale')
     expect(prompt.textContent).toContain('插件要重新加载一下')
@@ -123,6 +129,21 @@ describe('WP432 社媒岗位页：等你在插件里发', () => {
     renderWithProviders(<RedditWriteNotice duties={duties} />)
     await screen.findByTestId('reddit-write-awaiting')
     await waitFor(() => expect(screen.queryByTestId('extension-reload')).toBeNull())
+  })
+
+  it('WP445：数字按服务端的「插件里 N 条等你发」（还没审的卡也算）；不是卡，点了提示去浏览器插件里发', async () => {
+    state.rows = []
+    state.inPlugin = 3
+    state.view = view({ running: [run('0.2.1-beta.5')] })
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    const line = await screen.findByTestId('reddit-write-awaiting')
+    expect(line.textContent).toContain('插件里 3 条等你发')
+    expect(screen.queryByTestId('deck-reddit-write')).toBeNull()
+    expect(screen.queryByTestId('reddit-write-awaiting-tip')).toBeNull()
+    ;(await screen.findByTestId('reddit-write-awaiting-go')).click()
+    expect((await screen.findByTestId('reddit-write-awaiting-tip')).textContent).toContain(
+      'Agents 工坊助手',
+    )
   })
 
   it('没有等你发的：不出这一行，也不出重新加载提示', async () => {

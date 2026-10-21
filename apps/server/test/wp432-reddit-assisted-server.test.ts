@@ -287,7 +287,9 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     })
     // 每一步先按新版找、找不到再按旧版（www 被跳到 old.reddit 时也填得进去）
     const fill = opened.job?.plan.steps.find((x) => x.op === 'fill')
-    expect(fill?.op === 'fill' ? fill.selector : '').toMatch(/shreddit-comment.* \|\| #thing_t1_c1/u)
+    expect(fill?.op === 'fill' ? fill.selector : '').toMatch(
+      /shreddit-comment.* \|\| #thing_t1_c1/u,
+    )
     expect(opened.job?.plan.allow.hosts).toEqual(
       expect.arrayContaining(['www.reddit.com', 'old.reddit.com']),
     )

@@ -565,7 +565,10 @@ export function createNotifications(options: NotificationsOptions): Notification
        * 网关那一跳和摘账号那一路各发一条 `model_source.relogin_needed`）不加计数，铃铛里只有一条、没有 ×2。
        */
       // WP445：同一条「等你发」（插件里批了又进「等你打开」）还没读时不再加一条
-      if ((e.type === RELOGIN_NEEDED_EVENT || e.type === REDDIT_AWAITING_EVENT) && n.key !== undefined) {
+      if (
+        (e.type === RELOGIN_NEEDED_EVENT || e.type === REDDIT_AWAITING_EVENT) &&
+        n.key !== undefined
+      ) {
         const prev = backend.byKey(n.workspace_id, n.person_id, n.key)
         if (prev !== undefined && prev.read_at === undefined) continue
       }

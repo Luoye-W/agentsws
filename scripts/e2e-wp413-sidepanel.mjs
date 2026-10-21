@@ -16,6 +16,11 @@
  * 默认**新版 www.reddit.com**（替身页面是 shreddit 组件的样子），草稿填进富文本框并描一圈；「人」在页面上又改了字
  * 再点 Comment → 插件按品牌号认出、读回真发出去的字 → 工坊记「已发」，发出记录按真发的记、AI 草稿另存一格。
  *
+ * WP445（决策 1322–1324，Luoye 10-21）：**审与发在插件里一步完成**——AI 起草的卡**不在工坊出**（岗位牌堆里没有、
+ * 看板上只一行「插件里 N 条等你发」），直接在侧边栏「等你发」里：改字点「打开这一条」= 批 + 打开；横条是中性的
+ * 「草稿已填好，请检查后自己点发送」；主管在工坊里批过的那一条也进「等你发」；「不发 + 理由」→ 同类的一并不发、能撤回；
+ * 侧边栏底下那一栏没了（新版旧版开关一起去掉）；社媒「交给你发」的帖子也不用先在工坊批。
+ *
  * 用法（先 `npx tsc -b` 与 `pnpm -F @agentsws/extension build`）：
  *   node scripts/e2e-wp413-sidepanel.mjs [--headed] [--keep] [--shots=<目录>] [--port=<本机端口>]
  *   （`--shots` 把侧边栏浅 / 深两套与替身 Reddit 页截到那个目录；截图放私有文档仓，不进本仓）
@@ -414,9 +419,24 @@ try {
   const autoCard = await until(() => autoCards().length > 0, 15_000)
   check('定了口吻 → 巡查读到 alice 的回复自动起草出一张「发出去」卡', autoCard)
 
-  const cards = panel.locator('[data-testid="ws-card"]')
+  const cards = panel.locator('[data-testid="ws-desk"][data-from="card"]')
   await until(async () => (await cards.count()) === 2, 15_000)
-  check('「要你处理」里是这个人的两张卡', (await cards.count()) === 2)
+  check('WP445：两张卡都直接在插件「等你发」里', (await cards.count()) === 2)
+  // WP445：工坊不出卡——岗位牌堆里没有这两张；看板上一行「插件里 2 条等你发」
+  const deckNow = await http(`/v1/positions/${reddit.id}/cards`, {}, reddit.id)
+  const ids = autoCards().map((c) => c.id)
+  check(
+    'WP445：工坊不出卡（岗位牌堆里没有），看板数「插件里 2 条等你发」',
+    ids.length === 2 &&
+      ids.every((id) => !JSON.stringify(deckNow).includes(id)) &&
+      (await http('/v1/social/reddit/writes', {}, reddit.id)).in_plugin === 2,
+  )
+  check(
+    'WP445（决策 1323）：侧边栏底下那一栏没了（没有新版旧版开关）；版本一致时顶上不出提示',
+    (await panel.locator('[data-testid="ws-foot"]').count()) === 0 &&
+      (await panel.locator('[data-testid="ws-site"]').count()) === 0 &&
+      (await panel.locator('[data-testid="ws-version-warn"]').count()) === 0,
+  )
   await shot(panel, '2-todo-light')
   await panel.locator('[data-testid="ws-tab-progress"]').click()
   const head = (await panel.locator('[data-testid="ws-progress-head"]').textContent()) ?? ''
@@ -445,9 +465,9 @@ try {
     ).includes('说过 1 次'),
   )
   await shot(panel, '2b-card-checks-light')
-  await alice.locator('[data-testid="ws-draft"]').fill(EDITED)
-  // WP432：「批准并打开」——人这一下点的就是「打开」：在这个窗口新开新版 Reddit 的标签页、填好、描一圈
-  await alice.locator('[data-testid="ws-fill"]').click()
+  await alice.locator('[data-testid="ws-desk-draft"]').fill(EDITED)
+  // WP445：「打开这一条」= 批 + 打开——人这一下点的：在这个窗口新开新版 Reddit 的标签页、填好、描一圈
+  await alice.locator('[data-testid="ws-desk-open"]').click()
   let pg
   let reloaded = false
   const boxOf = (p, sel) => p.locator(sel)
@@ -474,10 +494,15 @@ try {
       .locator('#agentsws-ads-banner [data-testid="ads-banner"]')
       .textContent()
       .catch(() => '')
-    return v === EDITED && outline !== '' && (banner ?? '').includes('等你点发送')
+    return (
+      v === EDITED &&
+      outline !== '' &&
+      (banner ?? '').includes('草稿已填好，请检查后自己点发送') &&
+      !(banner ?? '').includes('AI 正在操作')
+    )
   })
   check(
-    '点「批准并打开」→ 马上（不等 2 分钟）在新版 Reddit 新开标签页，改过的草稿填进回复框并描一圈，等人点',
+    '点「打开这一条」→ 马上在新版 Reddit 新开标签页，改过的草稿填进回复框并描一圈；横条是中性的「草稿已填好，请检查后自己点发送」',
     filled,
   )
   check('插件没点发送', sends.length === 0)
@@ -555,8 +580,8 @@ try {
   ).filter((c) => c.payload?.form === 'reddit_write')
   check('工坊「要你处理」里那张卡收起了，另一张还在', left.length === 1 && left[0]?.id !== item?.id)
 
-  // ④ WP432：另一张在工坊里点「发送」（批）→ 过了取消窗口 → **不自动开任何页面**：侧边栏那张卡收起、进「等你发」，
-  //    图标出数字；定时领活领不到；人点「打开这一条」才开
+  // ④ WP432 / WP445：另一张在工坊里批（公司模式「主管先批」那一种：主管批了）→ **不自动开任何页面**：
+  //    进发起人插件的「等你发」，图标出数字；定时领活领不到；人点「打开这一条」才开
   const other = left[0]
   const token = other?.deliveries.find((d) => d.to === me && d.status === 'sent')?.decision_token
   if (other !== undefined && token !== undefined) {
@@ -569,12 +594,12 @@ try {
     await server.txn.executor.applyApproval(other.id, { skip_cancel_window: true })
   }
   await panel.locator('[data-testid="ws-tab-todo"]').click()
-  const desk = panel.locator('[data-testid="ws-desk"]')
+  const desk = panel.locator('[data-testid="ws-desk"][data-from="write"]')
   const inDesk = await until(
     async () => (await cards.count()) === 0 && (await desk.count()) === 1,
     15_000,
   )
-  check('工坊里批了 → 侧边栏那张卡收起，进「等你发」（帖子、版块、为什么回、草稿全文）', inDesk)
+  check('工坊里批了 → 同一个样子留在「等你发」（帖子、版块、为什么回、草稿全文）', inDesk)
   const pagesBefore = context.pages().filter((x) => x.url().includes('reddit.com')).length
   // 让插件马上去领一次（不等每分钟那一拍）——领不到 Reddit 的写，不开页面
   await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'ads-poll' }))
@@ -652,6 +677,66 @@ try {
   await panel.bringToFront()
   await shot(panel, '8c-desk-sent-light')
 
+  // ⑤ WP445：「不发 + 理由」——同一个帖子下另外两张同类的卡，按理由一并不发；能撤回；没写理由只不发这一张
+  for (const [who, text] of [
+    ['dave', 'Same here, battery drains fast after 2.1.'],
+    ['erin', 'Battery is worse since the update for me too.'],
+  ])
+    await http(
+      '/v1/social/reddit/stage',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          target: {
+            kind: 'comment',
+            subreddit: 'ivraxr',
+            parent_fullname: 't3_p9',
+            permalink: '/r/ivraxr/comments/p9/battery/',
+            post_title: 'Battery life after the 2.1 update?',
+            post_text: text,
+            parent_author: who,
+          },
+          text: `Thanks ${who}, which mode were you in?`,
+          reason: '用户在问固件更新后的续航',
+        }),
+      },
+      reddit.id,
+    )
+  await until(async () => (await cards.count()) === 2, 15_000)
+  const first = cards.first()
+  if ((await first.getAttribute('data-open')) !== '1') await first.locator('.ws-card-head').click()
+  await first.locator('[data-testid="ws-desk-skip"]').click()
+  await shot(panel, '9a-skip-reasons-light')
+  await panel.emulateMedia({ colorScheme: 'dark' })
+  await shot(panel, '9a-skip-reasons-dark')
+  await panel.emulateMedia({ colorScheme: 'light' })
+  await first.locator('[data-testid="ws-skip-reason"]', { hasText: '不相关' }).click()
+  const followShown = await until(
+    async () =>
+      (
+        (await panel
+          .locator('[data-testid="ws-follow"]')
+          .textContent()
+          .catch(() => '')) ?? ''
+      ).includes('同类的也不发了'),
+    15_000,
+  )
+  const decidedSkips = autoCards().filter((c) => c.state === 'rejected')
+  check(
+    '「不发 + 理由」→ 这一张不发（理由进账、via=extension），同类那一张按理由一并不发，顶上一行能撤回',
+    followShown &&
+      decidedSkips.length === 2 &&
+      decidedSkips.some((c) => c.decision?.reason === '不相关' && c.decision?.via === 'extension'),
+    JSON.stringify(decidedSkips.map((c) => c.decision?.reason)),
+  )
+  await shot(panel, '9b-followed-light')
+  await panel.emulateMedia({ colorScheme: 'dark' })
+  await shot(panel, '9b-followed-dark')
+  await panel.emulateMedia({ colorScheme: 'light' })
+  await panel.locator('[data-testid="ws-follow-undo"]').click()
+  const undone = await until(async () => (await cards.count()) === 1, 15_000)
+  check('撤回 → 跟着不发的那一张回到「等你发」', undone)
+
   // ⑤ WP419（决策 1231）：社媒发帖不要开发者应用——到点了交给你：侧边栏「等你发的帖子」、打开发帖页、发好了
   const fbAsg = server.roles.assignments.create({
     person_id: me,
@@ -679,19 +764,18 @@ try {
     body: 'Weekend camping checklist: what we pack and why.',
     scheduled_at: new Date(Date.now() + 1500).toISOString(),
   })
+  // WP445：社媒「交给你发」的这一条也不在工坊出卡——不用先批，到点直接进插件
   const postCard =
     made.staged.approval_item_id === undefined
       ? undefined
       : await server.txn.approvals.get(made.staged.approval_item_id)
-  const postTok = postCard?.deliveries.find(
-    (d) => d.to === me && d.status === 'sent',
-  )?.decision_token
-  if (postCard !== undefined && postTok !== undefined)
-    await server.approvals.decide(postCard.id, me, {
-      action: 'approve',
-      decision_token: postTok,
-      via: 'workstation',
-    })
+  check(
+    'WP445：社媒「交给你发」的帖子卡标「插件里审」（工坊不出卡）',
+    postCard?.payload?.after?.desk === 'plugin' &&
+      !JSON.stringify(await http(`/v1/positions/${fbAsg.id}/cards`, {}, fbAsg.id)).includes(
+        postCard?.id ?? '-',
+      ),
+  )
   await new Promise((r) => setTimeout(r, 2000))
   for (let i = 0; i < 20 && brand.socialService.handoffs().length === 0; i += 1) {
     await brand.socialService.publishDue()
@@ -717,6 +801,14 @@ try {
     '点「发好了」带链接 → 帖子记已发、读回确认（插件不点发布）',
     published && after?.published_via === 'extension' && after?.readback === 'link',
     JSON.stringify({ status: after?.status, via: after?.published_via, readback: after?.readback }),
+  )
+  const postDecided =
+    postCard === undefined ? undefined : await server.txn.approvals.get(postCard.id)
+  check(
+    'WP445：插件里点「发好了」就是批（via=extension）',
+    postDecided?.decision?.via === 'extension' &&
+      ['approved', 'approved_edited', 'applying', 'applied'].includes(postDecided?.state ?? ''),
+    JSON.stringify({ state: postDecided?.state, via: postDecided?.decision?.via }),
   )
   await panel.emulateMedia({ colorScheme: 'dark' })
   await shot(panel, '2-todo-dark-after')

@@ -49,6 +49,8 @@ const job = (action: RedditWriteAction, id = 'job_1') =>
     approval_id: `ap_${id}`,
     approval_level: 'L1',
     created_at: '2026-10-14T00:00:00.000Z',
+    // WP445 起默认新版 www.reddit.com；这一份钉的是旧版页面那一套（兜底用的就是它）
+    origin: 'https://old.reddit.com',
   })
 
 /** 「人」在第 `sendAt` 次等的时候点发送（不给就一直不点）。 */
@@ -122,7 +124,8 @@ describe('WP329 Reddit 写的计划', () => {
       redditWritePlan({ ...comment, write: { kind: 'comment', post: 'abc' } }).steps[0],
     ).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/comments/abc/',
+      // WP445：一律新版 www.reddit.com
+      url: 'https://www.reddit.com/comments/abc/',
     })
   })
 

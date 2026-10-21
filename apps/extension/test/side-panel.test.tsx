@@ -122,14 +122,14 @@ afterEach(() => {
 })
 
 describe('WP413 侧边栏', () => {
-  it('有卡默认停在「要你处理」：原帖、理由、草稿都在；改草稿 → 填进页面带改过的字与版本 → 读回后「已发 · 已记录」', async () => {
+  it('有卡默认停在「要你处理」：卡在「等你发」里（WP445）原帖、理由、草稿都在；改草稿 → 打开这一条（= 批）带改过的字与版本 → 读回后「已发 · 已记录」', async () => {
     state = { kind: 'ok', snapshot: base(), reddit_here: true }
     await mount()
     expect(q('ws-who')?.textContent).toBe('IVRA · Luoye')
     expect(q('ws-tab-todo')?.getAttribute('aria-selected')).toBe('true')
-    expect(q('ws-quote')?.textContent).toContain('fogs up')
-    expect(q('ws-reason')?.textContent).toContain('兼容性')
-    const draft = q('ws-draft') as HTMLTextAreaElement
+    expect(q('ws-desk-quote')?.textContent).toContain('fogs up')
+    expect(q('ws-desk-reason')?.textContent).toContain('兼容性')
+    const draft = q('ws-desk-draft') as HTMLTextAreaElement
     expect(draft.value).toBe('It fits over most frames.')
     await type(draft, 'Edited in the side panel.')
     state = {
@@ -152,7 +152,7 @@ describe('WP413 侧边栏', () => {
       }),
       reddit_here: true,
     }
-    await click(q('ws-fill'))
+    await click(q('ws-desk-open'))
     expect(sent.find((m) => m.type === 'panel-fill')).toEqual({
       type: 'panel-fill',
       id: 'ap_1',
@@ -167,14 +167,16 @@ describe('WP413 侧边栏', () => {
     state = { kind: 'ok', snapshot: base(), reddit_here: true }
     await mount()
     actReply = { type: 'panel-act', ok: false, message: '这张卡已经处理过了（在工坊里或另一处）。' }
-    await click(q('ws-fill'))
+    await click(q('ws-desk-open'))
     expect(sent.find((m) => m.type === 'panel-fill')).toEqual({
       type: 'panel-fill',
       id: 'ap_1',
       version: 2,
     })
     expect(host.textContent).toContain('已经处理过了')
-    await click(q('ws-skip'))
+    // WP445：「不发」理由可选——不写理由也一下就不发
+    await click(q('ws-desk-skip'))
+    await click(q('ws-desk-skip-now'))
     expect(sent.find((m) => m.type === 'panel-skip')).toEqual({
       type: 'panel-skip',
       id: 'ap_1',
@@ -245,7 +247,7 @@ describe('WP413 侧边栏', () => {
         return true
       },
     })
-    expect((q('ws-fill') as HTMLButtonElement).disabled).toBe(true)
+    expect((q('ws-desk-open') as HTMLButtonElement).disabled).toBe(true)
     await click(q('ws-connect-reddit')?.querySelector('button') ?? null)
     expect(asked).toBe(1)
     expect(sent.map((m) => m.type)).toEqual(expect.arrayContaining(['reddit-poll', 'ads-poll']))

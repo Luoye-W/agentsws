@@ -234,9 +234,24 @@ describe('WP445 审与发在插件里一步完成', () => {
 
   it('不发：没写理由只不发这一张；写了理由 → 同类的一并不发（能撤回）、理由进学习回路', async () => {
     const token = await pairPlugin()
-    const a = await stage('c1', 'alice', 'Hi Alice, the insert helps with fog.', 'Fogs up with glasses.')
-    const b = await stage('c2', 'bob', 'Hi Bob, the insert helps with fog.', 'Fogs up with glasses too.')
-    const c = await stage('c3', 'carol', 'Hi Carol, the insert helps with fog.', 'Same fog problem here.')
+    const a = await stage(
+      'c1',
+      'alice',
+      'Hi Alice, the insert helps with fog.',
+      'Fogs up with glasses.',
+    )
+    const b = await stage(
+      'c2',
+      'bob',
+      'Hi Bob, the insert helps with fog.',
+      'Fogs up with glasses too.',
+    )
+    const c = await stage(
+      'c3',
+      'carol',
+      'Hi Carol, the insert helps with fog.',
+      'Same fog problem here.',
+    )
     const lone = await stage('c4', 'dan', 'Hi Dan, thanks!', 'Love it.')
     expect(await inPlugin()).toBe(4)
 
@@ -306,11 +321,11 @@ describe('WP445 审与发在插件里一步完成', () => {
     const { desk: _d, ...payload } = item.payload as Record<string, unknown>
     server.txn.runtime.store.putApproval({ ...item, payload })
     const old = server.txn.runtime.store.getApproval(id)
-    expect((old?.payload as { desk?: string }).desk).toBeUndefined()
+    expect((old?.payload as { desk?: string } | undefined)?.desk).toBeUndefined()
     expect(old !== undefined && isPluginDeskCard(old)).toBe(true)
     expect((await snapshot(token)).cards.map((c) => c.id)).toEqual([id])
-    expect(JSON.stringify(await data(await call(`/v1/positions/${reddit.id}/cards`)))).not.toContain(
-      id,
-    )
+    expect(
+      JSON.stringify(await data(await call(`/v1/positions/${reddit.id}/cards`))),
+    ).not.toContain(id)
   })
 })

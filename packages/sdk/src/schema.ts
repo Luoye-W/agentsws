@@ -10192,6 +10192,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/extension/panel/cards/{id}/follow/undo': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP445：撤回「按你的理由，同类的也一并不发了」那几张（放回插件「等你发」；与工坊里撤回是同一件事） */
+    post: operations['extensionPanelFollowUndo']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/extension/panel/posts/{id}/done': {
     parameters: {
       query?: never
@@ -10271,23 +10288,6 @@ export interface paths {
     put?: never
     /** 侧边栏里点「不发了」：批过、等你发的那一条不发（不再提醒） */
     post: operations['extensionPanelDrop']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/v1/extension/panel/settings': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    /** 侧边栏设置：插件在新版（www.reddit.com，默认）还是旧版（old.reddit.com）上帮你填 */
-    put: operations['extensionPanelSettings']
-    post?: never
     delete?: never
     options?: never
     head?: never
@@ -75635,6 +75635,74 @@ export interface operations {
       }
     }
   }
+  extensionPanelFollowUndo: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 人亲手点「不发」的那张 */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          ids: string[]
+        }
+      }
+    }
+    responses: {
+      /** @description { restored: number } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   extensionPanelPostDone: {
     parameters: {
       query?: never
@@ -75970,51 +76038,6 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       409: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      500: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-    }
-  }
-  extensionPanelSettings: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': {
-          /** @enum {string} */
-          site: 'new' | 'old'
-        }
-      }
-    }
-    responses: {
-      /** @description { site: RedditSite } */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Envelope']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      400: {
         headers: {
           [name: string]: unknown
         }

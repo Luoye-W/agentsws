@@ -764,11 +764,7 @@ import {
   isRedditWriteCard,
   type RedditWriteService,
 } from './reddit-write/service.js'
-import {
-  applyExternalPost,
-  settleRedditWrite,
-  socialRedditFill,
-} from './reddit-write/wire.js'
+import { applyExternalPost, settleRedditWrite, socialRedditFill } from './reddit-write/wire.js'
 import {
   combineWatchSources,
   createReportToolExecutor,

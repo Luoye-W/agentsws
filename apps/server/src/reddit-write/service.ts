@@ -360,10 +360,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     while (entries.length > KEEP) entries.shift()
     mkdirSync(options.dir, { recursive: true })
     const tmp = `${stateFile}.tmp`
-    writeFileSync(
-      tmp,
-      JSON.stringify({ version: 1, entries, seq } satisfies StateFile),
-    )
+    writeFileSync(tmp, JSON.stringify({ version: 1, entries, seq } satisfies StateFile))
     renameSync(tmp, stateFile)
   }
 

@@ -94,8 +94,12 @@ export function PanelCards(props: {
   copy?: (text: string) => Promise<boolean>
 }): React.ReactNode {
   const posts = props.posts ?? []
-  const empty =
-    props.writes.length === 0 && posts.length === 0 && props.hideEmpty !== true
+  // 下面那几行是「做到哪了」，不算要你处理的
+  const empty = posts.length === 0 && props.hideEmpty !== true
+  const stageWarn = props.stage !== undefined && stageTone(props.stage.kind) === 'warn'
+  // 什么都没有要画的（上面「等你发」里有东西）：不留一个空框
+  if (!empty && !stageWarn && props.writes.length === 0 && posts.length === 0 && props.canAct)
+    return null
   return (
     <section className="ws-sec" data-testid="ws-todo">
       {props.stage === undefined || stageTone(props.stage.kind) !== 'warn' ? null : (

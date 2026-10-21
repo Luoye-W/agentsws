@@ -166,7 +166,7 @@ function SkipReasons(props: {
             key={r}
             type="button"
             className="ws-btn ws-btn--ghost ws-btn--sm"
-            data-testid="ws-desk-reason"
+            data-testid="ws-skip-reason"
             disabled={props.busy}
             onClick={() => props.onPick(r)}
           >

@@ -54,7 +54,8 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.awaiting': '{n} waiting to send in the extension',
   'redditw.awaiting.hint':
     'AI-drafted Reddit replies and posts skip the app’s cards and go straight to the browser extension. Click the Agents Workshop icon in the Chrome toolbar to open the side panel; under “Waiting to send”, review, edit, click “Open this one” and send it yourself, or click “Don’t send”.',
-  'redditw.awaiting.go': 'Send it from the browser extension: click the Agents Workshop icon in the Chrome toolbar.',
+  'redditw.awaiting.go':
+    'Send it from the browser extension: click the Agents Workshop icon in the Chrome toolbar.',
   'extreload.title': 'Reload the extension',
   'extreload.stale': 'The extension in Chrome is {running}; the app ships {folder}.',
   'extreload.unseen':

@@ -374,7 +374,8 @@ function newRedditPlan(
         w,
         o,
         [
-          { op: 'goto', url: `${o}/r/${sub}/submit/?type=TEXT` },
+          // `selftext=true` 是旧版的「文字帖」那一栏（www 被跳到 old.reddit 时也停在文字帖上）
+          { op: 'goto', url: `${o}/r/${sub}/submit/?type=TEXT&selftext=true` },
           { op: 'wait', selector: S.submitTitle, timeout_ms: 20_000, soft: true },
           { op: 'fill', selector: S.submitTitle, value: title, soft: true, highlight: true },
           { op: 'fill', selector: S.submitText, value: text, soft: true, highlight: true },

@@ -18,11 +18,7 @@ import type {
   StagedChange,
 } from '@agentsws/contracts'
 import { redditFullname } from '@agentsws/social-core'
-import type {
-  RedditWriteEntry,
-  RedditWriteResult,
-  RedditWriteService,
-} from './service.js'
+import type { RedditWriteEntry, RedditWriteResult, RedditWriteService } from './service.js'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

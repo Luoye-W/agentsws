@@ -208,7 +208,9 @@ describe('WP432 在假新版 Reddit 上走一遍', () => {
     expect(r.reads.permalink).toBe('/r/ivraxr/comments/abc/comment/new1/')
     expect(r.reads.sent_text).toBe(edited)
     expect(r.reads.fill_missed).toBeUndefined()
-    expect(page.clicks).toEqual([REDDIT_WRITE_SELECTORS_NEW.replyLink('t1_c1')])
+    // WP445：新版找不到再按旧版兜底（` || ` 接着旧版那一条）
+    expect(page.clicks[0]?.startsWith(REDDIT_WRITE_SELECTORS_NEW.replyLink('t1_c1'))).toBe(true)
+    expect(page.clicks).toHaveLength(1)
   })
 
   it('页面改版认不出 Reply：不乱点、横条说「草稿在侧边栏里复制」，人自己粘贴发出去照样读回', async () => {
@@ -253,7 +255,7 @@ describe('WP432 在假新版 Reddit 上走一遍', () => {
     expect(r.outcome).toBe('done')
     expect(r.reads.fullname).toBe('t3_new1')
     expect(page.state.sent[0]?.text).toBe('Weekly Q&A thread')
-    expect(page.visited[0]).toBe(`${NEW}/r/ivraxr/submit/?type=TEXT`)
+    expect(page.visited[0]).toBe(`${NEW}/r/ivraxr/submit/?type=TEXT&selftext=true`)
   })
 })
 

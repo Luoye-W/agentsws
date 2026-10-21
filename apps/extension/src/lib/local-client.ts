@@ -386,4 +386,3 @@ export function panelDrop(
     body: reason === undefined ? {} : { reason },
   })
 }
-

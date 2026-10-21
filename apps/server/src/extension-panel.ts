@@ -462,8 +462,7 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
     // WP432：今天发了几条、等你发几条（侧边栏顶上那一行）
     const allWrites = writes?.writes() ?? []
     // WP445：等你发 = 还没在插件里打开的卡 + 批过、等你打开的（同一张卡算一条）
-    const awaitingN =
-      writes?.inPlugin?.() ?? allWrites.filter((w) => w.state === 'awaiting').length
+    const awaitingN = writes?.inPlugin?.() ?? allWrites.filter((w) => w.state === 'awaiting').length
     const reddit = options.outbound.list(ws, { channel: 'reddit', limit: 200 })
     progress = {
       ...progress,

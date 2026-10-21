@@ -260,7 +260,7 @@ describe('WP329 社媒线程 / 公关外部帖', () => {
     expect(job?.plan.kind).toBe('reddit_submit')
     expect(job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://www.reddit.com/r/BuyItForLife/submit/?type=TEXT',
+      url: 'https://www.reddit.com/r/BuyItForLife/submit/?type=TEXT&selftext=true',
     })
     expect(job?.plan.allow.values).toEqual(['Ten years with the same glasses', 'Long story…'])
     m.actions.result(job?.id as string, {

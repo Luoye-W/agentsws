@@ -94945,6 +94945,111 @@
         }
       }
     },
+    "/v1/extension/panel/cards/{id}/follow/undo": {
+      "post": {
+        "operationId": "extensionPanelFollowUndo",
+        "summary": "WP445：撤回「按你的理由，同类的也一并不发了」那几张（放回插件「等你发」；与工坊里撤回是同一件事）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "人亲手点「不发」的那张",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ restored: number }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ restored: number }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": ["ids"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/extension/panel/posts/{id}/done": {
       "post": {
         "operationId": "extensionPanelPostDone",
@@ -95441,67 +95546,6 @@
                     "maxLength": 300
                   }
                 },
-                "additionalProperties": false
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/extension/panel/settings": {
-      "put": {
-        "operationId": "extensionPanelSettings",
-        "summary": "侧边栏设置：插件在新版（www.reddit.com，默认）还是旧版（old.reddit.com）上帮你填",
-        "tags": ["extension"],
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "{ site: RedditSite }",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "统一错误信封（28 §2）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "统一错误信封（28 §2）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [],
-        "x-returns": "{ site: RedditSite }",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "type": "object",
-                "properties": {
-                  "site": {
-                    "type": "string",
-                    "enum": ["new", "old"]
-                  }
-                },
-                "required": ["site"],
                 "additionalProperties": false
               }
             }
