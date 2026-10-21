@@ -165,3 +165,43 @@ describe('WP444 团队通道进铃铛（类别「积分」）', () => {
     ).toBeUndefined()
   })
 })
+
+describe('WP444 同事那边：对方的团队通道没开通 / 到期', () => {
+  it('贴码经云递申请撞上「未开通 / 已到期」：说清楚，不说成「连不上」', async () => {
+    const { createInvites } = await import('../src/invites.js')
+    let t = Date.parse('2026-10-21T02:00:00.000Z')
+    const invites = createInvites({
+      clock: { now: () => new Date((t += 1000)).toISOString() },
+      random: () => 0.42,
+      workspace_id: 'ws_b',
+      owner: 'per_b',
+      appendEvent: () => undefined,
+      roles: {
+        roles: { get: () => undefined },
+        assignments: { listByPerson: () => [], create: () => undefined },
+      } as unknown as Parameters<typeof createInvites>[0]['roles'],
+      approvals: {
+        create: async () => ({ id: 'ap_1', state: 'pending' }),
+      } as unknown as Parameters<typeof createInvites>[0]['approvals'],
+      identity: {
+        personByEmail: () => undefined,
+        createPerson: async () => ({ id: 'per_new' }),
+        addMember: async () => undefined,
+      },
+      members: async () => [],
+      companyKey: () => 'key',
+      peerId: () => 'b',
+      peerAddress: () => undefined,
+      peerIds: () => [],
+      resolveCode: async () => 'http://tabc-team.localhost:4655',
+      post: async () => ({ ok: false, status: 503, off: 'subscription' }),
+    } as unknown as Parameters<typeof createInvites>[0])
+    try {
+      await expect(
+        invites.request({ code: 'ABCD2345', name: '林峰', email: 'lin@example.com' }),
+      ).rejects.toThrow('对方的团队通道未开通或已到期')
+    } finally {
+      invites.close()
+    }
+  })
+})

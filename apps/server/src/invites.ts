@@ -517,6 +517,12 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       ticket_hash: ticketHashOf(ticket),
     })
     if (!out.ok || out.data === undefined) {
+      // WP444：经云的那条路被关了——对方的团队通道没开通 / 已到期（不是「连不上」）
+      if (out.status === 503 && out.off === 'subscription')
+        throw new OnboardingError(
+          'conflict',
+          '对方的团队通道未开通或已到期，不在同一个网络时暂时递不过去。请对方开通；同一个网络里照常能用。',
+        )
       // 对方明说不收（邮箱已经在那边了 / 公司对不上）：把那句话原样告诉申请人
       if (out.status === 409 || out.status === 403)
         throw new OnboardingError(
