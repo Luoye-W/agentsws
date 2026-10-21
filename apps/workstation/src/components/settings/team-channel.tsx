@@ -196,48 +196,53 @@ export function TeamChannelOpen({
         </Button>
       ) : null}
       {open ? (
-        <span
-          className="mt-1 flex basis-full flex-col gap-2 rounded-md border bg-card p-2.5 text-xs text-foreground sm:max-w-sm"
-          data-testid="team-sub-confirm"
-        >
-          <span className="flex items-center gap-1 font-medium">
-            {teamSubPrice(t, view)}
-            <Hint text={teamSubHint(t, view)} />
-          </span>
-          {view.status === 'none' && view.trial_available ? (
-            <span className="text-muted-foreground">{t('team.sub.note.none')}</span>
-          ) : null}
-          <span className="flex items-center gap-1.5">
-            <Button
-              size="xs"
-              disabled={subscribe.isPending}
-              data-testid="team-sub-confirm-yes"
-              onClick={() => {
-                subscribe.mutate(undefined, {
-                  onSuccess: () => {
-                    setOpen(false)
-                  },
-                })
-              }}
-            >
-              {view.status === 'none' ? t('team.sub.confirm') : (label ?? t('team.sub.confirm'))}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={subscribe.isPending}
-              onClick={() => {
-                setOpen(false)
-              }}
-            >
-              {t('team.sub.later')}
-            </Button>
-          </span>
-          {subscribe.isError ? (
-            <span role="alert" className="text-destructive">
-              {subscribe.error instanceof Error ? subscribe.error.message : String(subscribe.error)}
+        // 占满一行的外框：小卡自己限宽（max-width 会让 flex 不换行，所以分两层）
+        <span className="mt-1 basis-full">
+          <span
+            className="flex flex-col gap-2 rounded-md border bg-card p-2.5 text-xs text-foreground sm:max-w-sm"
+            data-testid="team-sub-confirm"
+          >
+            <span className="flex items-center gap-1 font-medium">
+              {teamSubPrice(t, view)}
+              <Hint text={teamSubHint(t, view)} />
             </span>
-          ) : null}
+            {view.status === 'none' && view.trial_available ? (
+              <span className="text-muted-foreground">{t('team.sub.note.none')}</span>
+            ) : null}
+            <span className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                disabled={subscribe.isPending}
+                data-testid="team-sub-confirm-yes"
+                onClick={() => {
+                  subscribe.mutate(undefined, {
+                    onSuccess: () => {
+                      setOpen(false)
+                    },
+                  })
+                }}
+              >
+                {view.status === 'none' ? t('team.sub.confirm') : (label ?? t('team.sub.confirm'))}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={subscribe.isPending}
+                onClick={() => {
+                  setOpen(false)
+                }}
+              >
+                {t('team.sub.later')}
+              </Button>
+            </span>
+            {subscribe.isError ? (
+              <span role="alert" className="text-destructive">
+                {subscribe.error instanceof Error
+                  ? subscribe.error.message
+                  : String(subscribe.error)}
+              </span>
+            ) : null}
+          </span>
         </span>
       ) : null}
       {note !== undefined && !open ? (
