@@ -181,9 +181,17 @@ describe('BrandIcon', () => {
    * 唯一的例外是「任意邮箱」：它是协议不是一家公司，没有官网可取（docs/36 §8）。
    */
   it('连接目录里每一家都戴官网 favicon（缺一家就红）', () => {
+    /*
+     * WP447：投放那四张「这一期不用连」的新平台卡照派工单先用许可清楚的现成图标集（simple-icons，CC0）；
+     * Microsoft 在 simple-icons 里没有，走首字母徽标。要不要也去抓官网图（`pnpm icons:fetch`，人看过再提交）
+     * 是一条留给 Luoye 定的事——这里点名列出来，不是放水：别的卡缺官网图照样红。
+     */
+    const CC0_FOR_NOW = ['microsoft_ads', 'pinterest_ads', 'snapchat_ads', 'apple_ads']
     const missing = catalogServices().filter(
-      (service) => service !== 'imap_smtp' && !hasOfficialIcon(service),
+      (service) =>
+        service !== 'imap_smtp' && !CC0_FOR_NOW.includes(service) && !hasOfficialIcon(service),
     )
+    for (const service of CC0_FOR_NOW) expect(catalogServices()).toContain(service)
     expect(missing, `这几家还没有官网图标，跑 pnpm icons:fetch：${missing.join('、')}`).toEqual([])
     expect(hasOfficialIcon('track17')).toBe(true)
     expect(hasOfficialIcon('youtube_data')).toBe(true)
@@ -214,6 +222,18 @@ describe('BrandIcon', () => {
     const icon = screen.getByTestId('brand-icon')
     expect(icon.tagName).toBe('IMG')
     expect(icon.getAttribute('data-provider')).toBe('meta_marketing')
+  })
+
+  it('WP447：Apple 的官方标志是单色——跟着主题（深色模式下不会是一个看不见的黑苹果）；Pinterest 照官方红', () => {
+    const { unmount } = render(<BrandIcon provider="apple_ads" />)
+    expect(screen.getByTestId('brand-icon').querySelector('path')?.getAttribute('fill')).toBe(
+      'currentColor',
+    )
+    unmount()
+    render(<BrandIcon provider="pinterest_ads" />)
+    expect(screen.getByTestId('brand-icon').querySelector('path')?.getAttribute('fill')).toBe(
+      '#BD081C',
+    )
   })
 
   it('认不出的 id 回落到通用插头', () => {

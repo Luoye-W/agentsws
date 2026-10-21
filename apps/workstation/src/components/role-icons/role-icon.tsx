@@ -15,7 +15,7 @@
  * 图标一律 `aria-hidden`：旁边永远有一行字。
  */
 import { type ReactNode, useId } from 'react'
-import { officialIconUrl } from '@/components/brand-icons'
+import { badgeIconUrl } from '@/components/brand-icons'
 import { cn } from '@/lib/utils'
 import { DUTY_ICONS, type DutyIconSpec, POSITION_GLYPH_BY_ID } from './duty-icons'
 import { badgeGeometry, GLYPHS, type GlyphEl } from './glyphs'
@@ -50,7 +50,7 @@ export function RoleGlyph({
   const maskId = `ri-${useId().replace(/:/g, '')}`
   const id = GLYPHS[glyph] === undefined ? 'generic' : glyph
   const parts = (GLYPHS[id] ?? []).map(el)
-  const url = badge === undefined ? undefined : officialIconUrl(badge)
+  const url = badge === undefined ? undefined : badgeIconUrl(badge)
   const b = badgeGeometry(size)
   return (
     <svg
