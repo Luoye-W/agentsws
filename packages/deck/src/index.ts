@@ -133,6 +133,7 @@ export {
   formatReportValue,
   type KpisPayload,
   kpiKeys,
+  metricSpark,
   ORDER_CHANNEL_LABELS,
   type OrderChannel,
   orderChannel,

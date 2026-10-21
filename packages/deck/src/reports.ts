@@ -21,9 +21,14 @@ const DAY = 86_400_000
 // ── 基本类型 ──────────────────────────────────────────────────────────
 
 /** 报表页右上角那三档（7 / 30 / 90 天，全是**完整的自然日**，到昨天为止）。 */
-export type ReportRange = '7d' | '30d' | '90d'
+export type ReportRange = '1d' | '7d' | '30d' | '90d'
 export const REPORT_RANGES: readonly ReportRange[] = ['7d', '30d', '90d']
-export const RANGE_DAYS: Readonly<Record<ReportRange, number>> = { '7d': 7, '30d': 30, '90d': 90 }
+export const RANGE_DAYS: Readonly<Record<ReportRange, number>> = {
+  '1d': 1,
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+}
 
 export type ReportFormat = 'currency' | 'count' | 'percent' | 'hours' | 'position' | 'decimal'
 
@@ -1114,7 +1119,7 @@ function weeksBack(ctx: QueryContext, n: number): ReportWindow[] {
 
 /** 新老客按周（7 天那一档按天）。 */
 function bucketsFor(ctx: QueryContext, wins: ReportWindows): ReportWindow[] {
-  if (wins.range === '7d') return wins.daily
+  if (wins.range === '7d' || wins.range === '1d') return wins.daily
   return weeksBack(ctx, wins.range === '30d' ? 8 : 13)
 }
 
@@ -1869,10 +1874,23 @@ export function computeReport(
   }
 }
 
+/** 近 N 天每天一格的值（首页关键数字那条两周小走势）；算不出每天的回 `undefined`。 */
+export function metricSpark(key: string, ctx: QueryContext, days = 14): number[] | undefined {
+  const def = METRIC_BY_KEY.get(key)
+  const run = def?.value
+  if (def === undefined || run === undefined || !connected(ctx, def.source)) return undefined
+  const today = startOfDay(Date.parse(ctx.now), ctx.tz_offset_minutes)
+  const out: number[] = []
+  for (let i = days; i >= 1; i -= 1)
+    out.push(run(ctx, { from: today - i * DAY, to: today - (i - 1) * DAY }) ?? 0)
+  return out
+}
+
 /** 看板那一行：头条数（近 30 天）+ 每天的小走势。 */
 export function summarizeReport(spec: ReportSpec, ctx: QueryContext): ReportSummary {
   const wins = reportWindows('30d', ctx.now, ctx.tz_offset_minutes)
-  const headline = computeMetric(spec.headline, ctx, wins)
+  const { spark: _drop, ...headline } = computeMetric(spec.headline, ctx, wins)
+  const spark = _drop
   const def = METRIC_BY_KEY.get(spec.headline)
   const hasDaily = def?.value !== undefined && def.stock === undefined
   return {
@@ -1884,7 +1902,7 @@ export function summarizeReport(spec: ReportSpec, ctx: QueryContext): ReportSumm
     headline_label:
       spec.headline_label ?? (hasDaily ? `近 30 天${headline.label}` : headline.label),
     headline,
-    ...(headline.spark === undefined ? {} : { spark: headline.spark }),
+    ...(spark === undefined ? {} : { spark }),
     ...(spec.created === undefined ? {} : { created: spec.created }),
   }
 }

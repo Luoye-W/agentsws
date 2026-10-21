@@ -242,7 +242,7 @@ const HomeTilesBody = z.object({
   range: z.enum(['yesterday', 'last_7d']).optional(),
 })
 
-function workstationOf(deps: GatewayDeps): WorkstationPort {
+export function workstationOf(deps: GatewayDeps): WorkstationPort {
   const w = deps.workstation
   if (w === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配工作台面（GatewayDeps.workstation）')
@@ -805,8 +805,17 @@ function allowed(
   source: keyof typeof SOURCE_AUTHZ,
 ): boolean {
   const spec = SOURCE_AUTHZ[source]
+  // WP438：报表按数据源判权限；表里没有的源（以后新加的）一律当没权，不当有权
+  if (spec === undefined) return false
   return deps.roles.can(assignment_id, spec.domain, 'read', {
     range: spec.range,
     sensitivity: 'internal',
   })
+}
+
+/** WP438：报表那几条路由按数据源判权限（和岗位面板同一张表）。 */
+export function sourceAllowed(deps: GatewayDeps, assignment_id: string, source: string): boolean {
+  return source in SOURCE_AUTHZ
+    ? allowed(deps, assignment_id, source as keyof typeof SOURCE_AUTHZ)
+    : false
 }

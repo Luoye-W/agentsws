@@ -88,6 +88,7 @@ import { privacyRoutes } from './routes/privacy.js'
 import { readRoutesRoutes } from './routes/read-routes.js'
 // WP328：Reddit 每日巡查（插件只读 `/v1/extension/reddit/*` 与工作台 `/v1/reddit-watch*`）
 import { redditWatchRoutes } from './routes/reddit-watch.js'
+import { reportRoutes } from './routes/reports.js'
 import { roleRuleRoutes } from './routes/role-rules.js'
 import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
@@ -228,6 +229,8 @@ export function collectRoutes(): Route[] {
     ...wsRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id
     ...workstationRoutes(),
+    // WP438：报表（看板那几行、一整份、快照、跟 AI 说想看什么 → 固定）
+    ...reportRoutes(),
     // WP52（47 J1）数据地图：`/v1/positions/:id/ontology`。排在 workstationRoutes 之后——
     // 它们共用 `/v1/positions/:id` 前缀，`ontology` 是定值段，与那边的段都不撞
     ...ontologyRoutes(),

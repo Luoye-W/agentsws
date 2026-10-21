@@ -7,6 +7,7 @@
  */
 import type {
   PositionSummary,
+  ReportStorePort,
   WorkstationActor,
   WorkstationPort,
   WorkstationRange,
@@ -162,6 +163,8 @@ export interface WorkstationPortOptions {
   data: WorkstationDataSource
   /** 用户挑过的数字块与时间范围（v1 内存；换机迁移时随个人设置走） */
   preferences?: Map<string, { tile_ids: string[]; range: WorkstationRange }>
+  /** WP438：固定的 AI 报表与快照（不给 = 只有默认报表、没有历史）。 */
+  reports?: ReportStorePort
 }
 
 export function createWorkstationPort(options: WorkstationPortOptions): WorkstationPort {
@@ -273,6 +276,8 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
     },
 
     systemCards: (actor) => options.data.systemCards?.(actor) ?? { alerts: [] },
+
+    ...(options.reports === undefined ? {} : { reports: options.reports }),
 
     label: (ref) => options.data.label(ref),
 
