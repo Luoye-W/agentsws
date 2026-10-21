@@ -28,6 +28,13 @@ function onPage(html: string, url: string): void {
   const dom = new JSDOM(html, { url })
   Object.assign(globalThis, { document: dom.window.document, location: dom.window.location })
 }
+/** 页面加载完了没有（探针在整页加载完之前就在跑；jsdom 自己的 readyState 不好控）。 */
+const loaded = (done: boolean): void => {
+  Object.defineProperty(globalThis.document, 'readyState', {
+    value: done ? 'complete' : 'interactive',
+    configurable: true,
+  })
+}
 const onFixture = (file: string, url: string): void =>
   onPage(readFileSync(join(FIX, file), 'utf8'), url)
 
@@ -139,9 +146,10 @@ describe('四份夹具：页面探针 + detect.ts 分类', () => {
 
   it('只有结果容器、没有「没搜到」卡片：页面加载完了才算 no_results；没有 body 的页面不出错', () => {
     onPage('<html><body><div id="search"></div></body></html>', 'https://www.google.com/search?q=x')
-    expect(serpState({ engine: 'google' }).state).toBe(
-      document.readyState === 'complete' ? 'no_results' : 'pending',
-    )
+    loaded(false)
+    expect(serpState({ engine: 'google' }).state).toBe('pending')
+    loaded(true)
+    expect(serpState({ engine: 'google' }).state).toBe('no_results')
     const dom = new JSDOM('<feed xmlns="http://www.w3.org/2005/Atom"/>', {
       url: 'https://www.google.com/search?q=x',
       contentType: 'application/xml',
@@ -150,13 +158,16 @@ describe('四份夹具：页面探针 + detect.ts 分类', () => {
     expect(serpState({ engine: 'google' }).state).toBe('pending')
   })
 
-  it('Bing：有结果 results、明说没有 no_results、还没出来 pending；不认过渡页', () => {
+  it('Bing：有结果 results；加载完了还没结果才算 no_results（dom-ready 那一刻没有不算）；不认过渡页', () => {
     onFixture('bing-serp.html', 'https://www.bing.com/search?q=x')
     expect(serpState({ engine: 'bing' }).state).toBe('results')
     onPage(
       '<html><body><ol id="b_results"><li class="b_no">There are no results</li></ol></body></html>',
       'https://www.bing.com/search?q=x',
     )
+    loaded(false)
+    expect(serpState({ engine: 'bing' }).state).toBe('pending')
+    loaded(true)
     expect(serpState({ engine: 'bing' }).state).toBe('no_results')
     onPage('<html><body></body></html>', 'https://www.bing.com/search?q=x')
     expect(serpState({ engine: 'bing' }).state).toBe('pending')

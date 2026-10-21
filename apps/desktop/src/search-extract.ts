@@ -236,20 +236,19 @@ export function serpState(args: { engine: 'google' | 'bing' }): SerpProbe {
       text.includes('having trouble accessing google search')
     )
       return done('interstitial')
+    // 探针在整页加载完之前就在跑：只有明说「没搜到」才马上算；别的要等页面加载完、结果容器在却没结果才算
     if (
-      document.querySelector('#topstuff .card-section, #botstuff') !== null ||
-      ((document.querySelector('#search, #rso, #res') !== null ||
-        text.includes('did not match any documents')) &&
-        document.readyState === 'complete')
+      text.includes('did not match any documents') ||
+      (document.readyState === 'complete' &&
+        document.querySelector('#topstuff .card-section, #search, #rso, #res') !== null)
     )
       return done('no_results')
     return done('pending')
   }
   if (document.querySelector('#b_results li.b_algo') !== null) return done('results')
-  if (
-    document.querySelector('#b_results .b_no') !== null ||
-    (document.querySelector('#b_results') !== null && document.readyState === 'complete')
-  )
+  // Bing 第一次访问时结果可能晚一步才有（10-21 真机：dom-ready 那一刻 #b_results 里还没有结果）——
+  // 页面加载完了还没有才算没结果
+  if (document.readyState === 'complete' && document.querySelector('#b_results') !== null)
     return done('no_results')
   return done('pending')
 }
