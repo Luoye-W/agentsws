@@ -5,12 +5,13 @@
  * 本进程里起一个 demo（真服务进程 + 演示世界 + stub 运行时，内存里，跑完即停），加一条「Reddit 运营」职责，用 Playwright 查：
  * 左栏「首页」在最上面；岗位 / 职责页右侧面板一直在、顶栏没有面板开关、面板顶上没有「岗位层 / 职责层」切换；
  * 职责页的卡是职责层的；卡里条数 ≤ 5 时没有「显示更多」；「计划」卡最上面一行「进度」，点开是「工作」（进行中 / 卡住了…），
- * 「报表」里不再有「工作」与数据看板；窄于 900 时面板在主区下面；Windows（模拟叠加系统按钮）时右上有隔开的细竖线。
+ * 「报表」里不再有「工作」与数据看板；「显示更多」开在卡片列右边的第三栏、卡片列还在；窄于 1024 时卡片列自动隐藏；
+ * Windows（模拟叠加系统按钮）时右上有隔开的细竖线。
  * 不通过就退出码 1。
  *
  * 截图（`--out` 目录；审稿截图放私有仓，别提交进公开仓），浅 / 深各一套：
  * position、duty、reddit（岗位页）、reddit-plans（「计划」完整一格）、reddit-duty-plans（Reddit 职责页「计划」）、
- * reddit-reports（报表卡）、narrow（860 宽整页）、topbar-windows-before / -after（模拟 Windows 叠加按钮）、topbar-mac。
+ * reddit-reports（报表卡）、narrow（1000 宽：卡片列自动隐藏）、topbar-windows-before / -after（模拟 Windows 叠加按钮）、topbar-mac。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
@@ -271,9 +272,9 @@ async function main() {
       if ((await reports.getAttribute('data-open')) !== 'true')
         await page.getByTestId('rail-card-toggle-reports').click()
       await page.waitForTimeout(800)
-      const panel = page.getByTestId('rail-panel-frame')
+      const board = page.getByTestId('rail-board')
       await shot(page, `${theme}-4-reddit-reports`, {
-        clip: (await panel.boundingBox()) ?? undefined,
+        clip: (await board.boundingBox()) ?? undefined,
       })
       // 「计划 → 进度」：「工作」在这里
       await page.getByTestId('plan-row-progress').click()
@@ -283,7 +284,14 @@ async function main() {
         .waitFor({ timeout: 20_000 })
         .then(() => true)
         .catch(() => false)
-      if (theme === 'light') check(work, '「计划」那一格里是「工作」（进行中 / 卡住了…）')
+      if (theme === 'light') {
+        check(work, '「计划」那一格里是「工作」（进行中 / 卡住了…）')
+        check(
+          (await page.getByTestId('rail-cards').count()) === 1 &&
+            (await page.getByTestId('rail-panel-frame').getAttribute('data-panel')) === 'schedules',
+          '「计划」整格开在卡片列右边的第三栏，卡片列还在',
+        )
+      }
       await page.getByTestId('plans-boards').scrollIntoViewIfNeeded()
       await shot(page, `${theme}-5-reddit-plans`)
       // Reddit 职责页的「计划」：排期与群发
@@ -310,12 +318,17 @@ async function main() {
     }
 
     for (const theme of ['light', 'dark']) {
-      const { context, page } = await open(theme, { width: 860, height: 900 })
+      const { context, page } = await open(theme, { width: 1000, height: 800 })
       await page.goto(positionUrl, { waitUntil: 'load', timeout: 90_000 })
-      await cardsShown(page)
-      const layout = await page.getByTestId('rail-panel-frame').getAttribute('data-layout')
-      if (theme === 'light') check(layout === 'stacked', '窄于 900：面板挪到主区下面（不盖、不收）')
-      await shot(page, `${theme}-7-narrow`, { fullPage: true })
+      // WP433（Luoye 10-21）：放不下「对话区最小宽度 + 卡片列」时卡片列自动隐藏
+      await page.getByTestId('position-page').waitFor({ timeout: 20_000 })
+      await page.waitForTimeout(800)
+      if (theme === 'light')
+        check(
+          (await page.getByTestId('rail-board').count()) === 0,
+          '窄于 1024：卡片列自动隐藏（不盖、不留开关）',
+        )
+      await shot(page, `${theme}-7-narrow`)
       await context.close()
     }
 

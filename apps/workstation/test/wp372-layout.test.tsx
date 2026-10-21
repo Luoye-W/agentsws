@@ -417,7 +417,9 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     const plus = screen.getAllByTestId('rail-new-matter')[1] as HTMLElement
     fireEvent.click(plus)
     expect(await screen.findByTestId('conv-compose-input')).toBeTruthy()
-    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('cards')
+    // WP433：卡片列属于中栏；第三栏没开
+    expect(screen.getByTestId('rail-board')).toBeTruthy()
+    expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
   it('连接卡（决策 690）弹出：展开「连接」并把那一条放在最上面，不被新布局挡住', async () => {
@@ -426,7 +428,7 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     const card = await screen.findByTestId('rail-card-connections')
     expect(card.getAttribute('data-open')).toBe('true')
     expect(await within(card).findByTestId('connections-live')).toBeTruthy()
-    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('cards')
+    expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
   it('展开态按作用域记住；卡顺序按人记住（全部岗位一份）', async () => {
@@ -449,7 +451,7 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect(handle.getAttribute('aria-label')).toContain('拖动「计划」')
   })
 
-  it('WP431：面板没有放大钮与关闭叉（照 Claude，开关只在顶栏）；宽度靠拖左边缘，键盘也调得动，记住', async () => {
+  it('WP433：「显示更多」开在卡片列右边的第三栏——右上 × 收起、没有放大钮；宽度靠拖左边缘，键盘也调得动，记住', async () => {
     const box = stubStorage()
     renderShell()
     // WP433：「显示更多」只在多于 5 条时出——拿「设定」（6 行）进一格
@@ -457,13 +459,17 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     fireEvent.click(await screen.findByTestId('rail-card-more-settings'))
     await screen.findByTestId('rail-panel-frame')
     expect(screen.queryByTestId('rail-panel-wide')).toBeNull()
-    expect(screen.queryByTestId('rail-panel-close')).toBeNull()
-    // 「显示更多」那一格有一行细的「← 名字」回到卡片堆
-    expect(screen.getByTestId('rail-panel-back')).toBeTruthy()
+    // 卡片列还在（属于中栏），第三栏开在它右边
+    expect(screen.getByTestId('rail-cards')).toBeTruthy()
     const handle = screen.getByTestId('rail-resize')
     for (let i = 0; i < 20; i += 1) fireEvent.keyDown(handle, { key: 'ArrowLeft' })
     expect(screen.getByTestId('rail-panel-frame').style.width).toBe('720px')
     expect(box.get('agentsws.rightrail.layout')).toContain('720')
+    fireEvent.click(screen.getByTestId('rail-panel-close'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+    })
+    expect(screen.getByTestId('rail-cards')).toBeTruthy()
   })
 })
 

@@ -22,7 +22,10 @@
  *
  * WP433（Luoye 10-20 问题 5 / 6）：右侧面板在岗位 / 职责 / 事项页上**一直在**，不是能收起来的抽屉——顶栏那颗面板开关
  * （和挂在它上面的汇总点、后面那条细竖线）去掉；各卡自己的红 / 黄点照旧亮在卡的标题行上。面板顶上的「岗位层 / 职责层」
- * 切换也去掉：岗位页看岗位层，职责页看职责层。窄于 900 时面板挪到主区下面（不盖、不收）。
+ * 切换也去掉：岗位页看岗位层，职责页看职责层。
+ *
+ * WP433（Luoye 10-21 澄清）：那一列卡**属于中栏**（常驻、不能收、不像侧栏；窗口太窄时自动隐藏）；真正的**第三栏**是
+ * 点了才弹出、能开能关的那一格（浏览器、变更审阅、「显示更多」、看一份报表），出现在卡片列的再右边。
  *
  * {@link RightRail} 两样一起画（老测试与只渲染右栏的地方用）；外壳把两样分开摆。
  */
@@ -71,10 +74,15 @@ function useMedia(query: string): boolean {
 }
 
 /**
- * 只有窗口窄于 900（接近手机宽）面板才盖在主区上；900 以上一律并排占一栏，和 Claude 的右侧面板一样
- * （Luoye 10-19：状态卡默认一直显示、占右栏，不浮在对话上）。窄一些的窗口靠下面的 `maxWidth` 让面板让位。
+ * 第三栏（浏览器、变更审阅、「显示更多」那一格……）：窗口窄于 900（接近手机宽）才盖在主区上、点遮罩收起；
+ * 900 以上并排占一栏。窄一些的窗口靠 `maxWidth` 让它让位。
  */
 const NARROW = '(max-width: 899px)'
+/**
+ * WP433（Luoye 10-21）：窗口窄于这个宽度，中栏放不下「对话区最小宽度 + 卡片列」（左栏 240 + 对话区 ~480 + 卡片列 300），
+ * 卡片列自动隐藏。WP437 会按中栏实际宽度（含第三栏开着时）算，这里先按窗口宽度。
+ */
+const BOARD_HIDDEN = '(max-width: 1023px)'
 /**
  * WP412（Luoye 10-19）：「⋮」里先列「设定」卡的几个标签——岗位定义（职责页叫职责定义）、技能、知识、记忆、额度，
  * 顺序照 Luoye 给的；`id` 就是 `registerPanelAlias` 的那几个 sub。
@@ -348,44 +356,45 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   ensureBuiltinPanels()
   const { t } = useApp()
   const narrow = useMedia(NARROW)
+  const hideBoard = useMedia(BOARD_HIDDEN)
   const rail = useRailState()
   // WP353：联网搜索被人机验证拦下、要人点时，自动打开「浏览器」（平时静默，不弹）
   useOpenBrowserOnHandover()
   const ctx = useRailContext(instances)
   /**
-   * WP431：卡片堆只在岗位 / 职责 / 事项页上有（别的页没有右侧面板）；工具类的一格照旧哪儿都能开。
-   * WP433：这几页上面板一直在——存坏了 / 上一版留下的名字 / 应用包被卸了的那一格，也落回卡片堆（别的页当成收起）。
+   * WP431：卡片列只在岗位 / 职责 / 事项页上有；第三栏（浏览器、变更审阅、「显示更多」那一格……）哪儿都能开。
+   * WP433：卡片列属于中栏、常驻；`rail.open` 只管第三栏开着哪一格（`null` / 卡片 = 第三栏收着）。
+   * 存坏了 / 上一版留下的名字 / 应用包被卸了的那一格当成收着。
    */
   const workPage = railPageKind(ctx.pathname) !== undefined
   // WP208：旧 id（`memory` …）先落到它现在的去处与标签（「设定」的「记忆」）
   const resolved =
     rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open)
-  const known = resolved === undefined ? undefined : panelType(resolved.id)
-  const cards = workPage && (rail.open === RAIL_CARDS || known === undefined)
-  const definition = cards ? undefined : known
+  const definition = resolved === undefined ? undefined : panelType(resolved.id)
   const sub = definition === undefined ? undefined : resolved?.sub
-  const open = cards ? RAIL_CARDS : (definition?.id ?? null)
   const dragging = useRef(false)
   const scope = ctx.scope
 
-  /** `]` 收起之后再按一次，开回刚才那个（没有就开卡片）。 */
-  const last = useRef<string>(RAIL_CARDS)
-  if (open !== null && rail.open !== null) last.current = rail.open
+  /** `]` 收起第三栏；再按一次开回刚才那一格。 */
+  const last = useRef<string | null>(null)
+  if (definition !== undefined && rail.open !== null) last.current = rail.open
+  const thirdOpen = definition !== undefined
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== ']' || e.metaKey || e.ctrlKey || e.altKey) return
       const el = e.target as HTMLElement | null
-      const tag = el?.tagName.toLowerCase()
+      const tag = el?.tagName?.toLowerCase()
       if (tag === 'input' || tag === 'textarea' || el?.isContentEditable === true) return
       e.preventDefault()
-      rail.show(rail.open === null ? last.current : null)
+      if (thirdOpen) rail.show(null)
+      else if (last.current !== null) rail.show(last.current)
     }
     globalThis.addEventListener?.('keydown', onKey)
     return () => {
       globalThis.removeEventListener?.('keydown', onKey)
     }
-  }, [rail])
+  }, [rail, thirdOpen])
 
   /**
    * 拖左边缘改宽度（夹在 320–720）；**松手**才写进本机。
@@ -412,10 +421,8 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     }
   }, [setWidth, plain])
 
-  if (open === null) return <ComputerUseStrip />
-
   const width = plain
-  const scoped = cards || definition?.scoped === true
+  const scoped = definition?.scoped === true
   const body: RailPanelBodyProps = {
     ...(scope === undefined ? {} : { scope }),
     tier: ctx.tier,
@@ -423,16 +430,14 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     ...(rail.address === null ? {} : { address: rail.address }),
     ...(sub === undefined ? {} : { sub }),
   }
+  const cardsBody: RailPanelBodyProps = {
+    ...(scope === undefined ? {} : { scope }),
+    tier: ctx.tier,
+    pathname: ctx.pathname,
+    ...(rail.address === null ? {} : { address: rail.address }),
+  }
   const Body = definition === undefined ? undefined : panelBody(definition.id)
   const content = ((): ReactNode => {
-    if (cards)
-      return scope === undefined ? (
-        <p className="text-muted-foreground" data-testid="rail-no-scope">
-          {t('rail.no_scope')}
-        </p>
-      ) : (
-        <RailCards {...body} />
-      )
     if (definition === undefined) return null
     // 注册了类型、还没注册身体 = 占位面板：照实说"还没做"
     if (Body === undefined)
@@ -467,85 +472,108 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       </ErrorBoundary>
     )
   })()
-  const title = cards ? t('rail.cards') : definition === undefined ? '' : t(definition.label)
 
   /*
-   * WP433（问题 5 · 窄窗）：窗口窄于 900 时——
-   * - 岗位 / 职责 / 事项页：面板**不盖在主区上、也不收起**，挪到主区下面占满一行（外壳那时把主区与面板竖着排），
-   *   往下滚就是这几张卡；
-   * - 别的页开着的工具（浏览器……）照旧盖在主区上，点遮罩收起。
+   * WP433（Luoye 10-21 澄清）：岗位 / 职责 / 事项页右边那一列卡（对话 / 报表 / 产出 / 计划 / 连接 / 设定）
+   * **属于中栏**——和中间内容一起、只是摆在右边，常驻、不能收，也不像侧栏（没有拖宽把手、没有分隔竖线、宽度随窗口）。
+   * 窗口窄到放不下「对话区最小宽度 + 卡片列」时卡片列**自动隐藏**（保证对话区够宽），宽了自己回来；
+   * 第三栏开着时挤窄、隐藏时的临时查看入口等 WP437 做全。
    */
-  const stacked = narrow && workPage
-  const overlay = narrow && !workPage
+  const board =
+    workPage && !hideBoard ? (
+      <div
+        className="sticky top-11 h-[calc(100vh-2.75rem)] w-[clamp(300px,26vw,400px)] shrink-0 overflow-y-auto bg-ws-paper pt-4 pr-4 pb-6 md:pt-7 md:pr-7"
+        data-testid="rail-board"
+      >
+        <section
+          className="flex flex-col text-sm"
+          data-testid="rail-panel-cards"
+          data-tier={ctx.tier}
+        >
+          {scope === undefined ? (
+            <p className="text-muted-foreground" data-testid="rail-no-scope">
+              {t('rail.no_scope')}
+            </p>
+          ) : (
+            <RailCards {...cardsBody} />
+          )}
+        </section>
+      </div>
+    ) : null
+
+  /*
+   * 真正的**右栏 / 第三栏**：点了才弹出、能开能关的那一格——浏览器、变更审阅（顶栏图标开关）、卡里「显示更多」的完整列表、
+   * 看一份报表……出现在卡片列的再右边，可以拖宽。窄于 900 时盖在主区上，点遮罩收起。
+   */
+  const overlay = narrow
+  const panel =
+    definition === undefined ? null : (
+      <>
+        {overlay ? (
+          <button
+            type="button"
+            aria-label={t('rail.close')}
+            data-testid="rail-scrim"
+            className="fixed inset-x-0 top-11 bottom-0 z-40 bg-black/20"
+            onClick={() => {
+              rail.show(null)
+            }}
+          />
+        ) : null}
+        <div
+          className={cn(
+            'flex shrink-0 border-l border-ws-line bg-ws-paper',
+            overlay
+              ? 'fixed top-11 right-0 bottom-0 z-40 max-w-[calc(100vw-1rem)] shadow-lg'
+              : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
+          )}
+          // 并排时最多占窗口的一半，窗口窄了自己收，给对话留地方
+          style={overlay ? { width } : { width, maxWidth: '50vw', minWidth: 300 }}
+          data-testid="rail-panel-frame"
+          data-panel={definition.id}
+          data-layout={overlay ? 'overlay' : 'docked'}
+        >
+          {overlay ? null : (
+            <button
+              type="button"
+              aria-label={t('rail.resize')}
+              data-testid="rail-resize"
+              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
+              onMouseDown={() => {
+                dragging.current = true
+              }}
+              onKeyDown={(e) => {
+                // 键盘也调得动：左右箭头一次 20px
+                const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
+                if (step === 0) return
+                e.preventDefault()
+                setWidth(clampRailWidth(plain + step), true)
+              }}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <RailPanel
+              title={t(definition.label)}
+              {...(scoped && scope !== undefined ? { scope } : {})}
+              tier={ctx.tier}
+              onClose={() => {
+                rail.show(null)
+              }}
+              testId={`rail-panel-${definition.id}`}
+            >
+              {content}
+            </RailPanel>
+          </div>
+        </div>
+      </>
+    )
+
   return (
     <>
       {/* WP144（docs/80 §5）：AI 正在操作这台电脑时的那一行（没在操作时不占地方） */}
       <ComputerUseStrip />
-      {/* 窄屏、不是干活的页：面板盖在主区上，背景遮罩点一下收起（与 `]` 同一件事） */}
-      {overlay ? (
-        <button
-          type="button"
-          aria-label={t('rail.close')}
-          data-testid="rail-scrim"
-          className="fixed inset-x-0 top-11 bottom-0 z-40 bg-black/20"
-          onClick={() => {
-            rail.show(null)
-          }}
-        />
-      ) : null}
-      <div
-        className={cn(
-          'flex shrink-0 bg-ws-paper',
-          stacked
-            ? 'w-full border-t border-ws-line'
-            : overlay
-              ? 'fixed top-11 right-0 bottom-0 z-40 max-w-[calc(100vw-1rem)] border-l border-ws-line shadow-lg'
-              : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)] border-l border-ws-line',
-        )}
-        // 并排时面板最多占窗口的一半，窗口窄了自己收，给对话留地方
-        style={
-          stacked ? undefined : overlay ? { width } : { width, maxWidth: '50vw', minWidth: 300 }
-        }
-        data-testid="rail-panel-frame"
-        data-panel={open}
-        data-layout={stacked ? 'stacked' : overlay ? 'overlay' : 'docked'}
-      >
-        {narrow ? null : (
-          <button
-            type="button"
-            aria-label={t('rail.resize')}
-            data-testid="rail-resize"
-            className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
-            onMouseDown={() => {
-              dragging.current = true
-            }}
-            onKeyDown={(e) => {
-              // 键盘也调得动：左右箭头一次 20px
-              const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
-              if (step === 0) return
-              e.preventDefault()
-              setWidth(clampRailWidth(plain + step), true)
-            }}
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <RailPanel
-            title={title}
-            {...(scoped && scope !== undefined ? { scope } : {})}
-            tier={ctx.tier}
-            {...(cards
-              ? {}
-              : {
-                  onBack: () => {
-                    rail.show(RAIL_CARDS)
-                  },
-                })}
-            testId={`rail-panel-${open}`}
-          >
-            {content}
-          </RailPanel>
-        </div>
-      </div>
+      {board}
+      {panel}
     </>
   )
 }

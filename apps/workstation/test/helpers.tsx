@@ -76,14 +76,10 @@ const CARD_ROW: Record<string, string> = {
 /**
  * WP375（决策 1035）：右上角不再有卡片图标，卡没展开就点它的标题行展开。
  * WP412（决策 1035 更正）：面板由右上角专门的开关（`rail-toggle`）开；岗位 / 职责 / 事项页默认就开着。
- * WP433：开关去掉了，这几页面板一直在；只剩「←」回卡片堆。
+ * WP433：开关去掉了，卡片列属于中栏、一直在；「显示更多」开在它右边的第三栏里（右上角 × 收起）。
  */
 export async function openRailCard(card: string): Promise<HTMLElement> {
-  if (screen.queryByTestId('rail-cards') === null) {
-    // 开着某一格（「显示更多」进去的）就「←」回卡片；面板收着就点面板开关打开
-    const back = screen.queryByTestId('rail-panel-back')
-    if (back !== null) fireEvent.click(back)
-  }
+  // WP433：卡片列属于中栏、一直在（第三栏开着也不挡它）
   const box = await screen.findByTestId(`rail-card-${card}`)
   if (box.getAttribute('data-open') !== 'true')
     fireEvent.click(screen.getByTestId(`rail-card-toggle-${card}`))

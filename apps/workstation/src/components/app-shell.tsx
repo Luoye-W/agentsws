@@ -498,7 +498,6 @@ export function AppShell({
   /** WP431：左栏收成图标列（本机记住）；窗口窄于 768 时一律只是图标列（不再整条藏掉）。 */
   const [collapsed, setCollapsed] = useState(() => readString(SIDEBAR_COLLAPSED_KEY) === '1')
   const narrow = useMedia('(max-width: 767px)')
-  const stackRail = useMedia('(max-width: 899px)')
   const iconRail = collapsed || narrow
   const toggleSidebar = useCallback(() => {
     setCollapsed((prev) => {
@@ -910,11 +909,8 @@ export function AppShell({
                     ) : null}
                   </div>
                 </header>
-                {/* WP433：窄于 900 时主区与右侧面板竖着排（岗位 / 职责 / 事项页的面板挪到主区下面，不盖、不收） */}
-                <div
-                  className={cn('flex min-w-0 flex-1', stackRail && 'flex-col')}
-                  data-testid="shell-body"
-                >
+                {/* WP433：主区 + 卡片列（属于中栏）+ 第三栏（点了才弹出的那一格），横着排 */}
+                <div className="flex min-w-0 flex-1" data-testid="shell-body">
                   <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
                     {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
                     <ErrorBoundary scope="page" resetKey={pathname}>

@@ -209,7 +209,7 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
   })
 })
 
-describe('WP433：岗位 / 职责 / 事项页面板一直在（Luoye 10-20 问题 5）', () => {
+describe('WP433：岗位 / 职责 / 事项页卡片列一直在（Luoye 10-20 问题 5、10-21 澄清）', () => {
   it.each(PAGES.slice(0, 3))('进 %s：面板开着，开成卡片（默认展开对话、计划）', async (route) => {
     renderRail(route)
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
@@ -236,21 +236,41 @@ describe('WP433：岗位 / 职责 / 事项页面板一直在（Luoye 10-20 问�
     })
   })
 
-  it('`]` 与「收起」在这几页上都只是回到卡片堆', async () => {
+  it('卡片列属于中栏、一直在；浏览器这类开在它右边的第三栏，图标 / `]` / × 开关的只是第三栏', async () => {
     renderRail('/matters/mat_1')
     await screen.findByTestId('rail-cards')
-    expect(screen.queryByTestId('rail-panel-close')).toBeNull()
+    expect(panelOpen()).toBe(false)
+    expect(screen.getByTestId('rail-board').className).not.toContain('border-l')
+    expect(screen.queryByTestId('rail-board-resize')).toBeNull()
     fireEvent.keyDown(document.body, { key: ']' })
-    expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    // 开一格工具（浏览器），再点一次它的图标 = 回卡片堆，不是收起
+    expect(screen.getByTestId('rail-cards')).toBeDefined()
     fireEvent.click(screen.getByTestId('rail-icon-browser'))
     await waitFor(() => {
       expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('browser')
     })
+    expect(screen.getByTestId('rail-cards')).toBeDefined()
+    // 再点一次图标：第三栏收起，卡片列不动
     fireEvent.click(screen.getByTestId('rail-icon-browser'))
-    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    await waitFor(() => {
+      expect(panelOpen()).toBe(false)
+    })
+    expect(screen.getByTestId('rail-cards')).toBeDefined()
+    // `]` 开回刚才那一格，再按收起
     fireEvent.keyDown(document.body, { key: ']' })
-    expect(await screen.findByTestId('rail-cards')).toBeDefined()
+    await waitFor(() => {
+      expect(panelOpen()).toBe(true)
+    })
+    fireEvent.keyDown(document.body, { key: ']' })
+    await waitFor(() => {
+      expect(panelOpen()).toBe(false)
+    })
+    // × 也是收起第三栏
+    fireEvent.click(screen.getByTestId('rail-icon-browser'))
+    fireEvent.click(await screen.findByTestId('rail-panel-close'))
+    await waitFor(() => {
+      expect(panelOpen()).toBe(false)
+    })
+    expect(screen.getByTestId('rail-cards')).toBeDefined()
   })
 
   it('别处自动弹开（连接卡）= 展开那张卡', async () => {
@@ -262,33 +282,36 @@ describe('WP433：岗位 / 职责 / 事项页面板一直在（Luoye 10-20 问�
     })
   })
 
-  it('窗口 900–1199：面板并排占一栏，不盖在对话上（Luoye 10-19）', async () => {
-    vi.stubGlobal('matchMedia', (q: string) => ({
-      matches: q.includes('1199px'),
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }))
+  it('窗口 1024 以上：卡片列并排在对话右边，不盖在对话上', async () => {
     renderRail('/positions/asg_sup')
     expect(await screen.findByTestId('rail-cards')).toBeDefined()
     expect(screen.queryByTestId('rail-scrim')).toBeNull()
-    const frame = screen.getByTestId('rail-panel-frame')
-    expect(frame.getAttribute('data-layout')).toBe('docked')
-    expect(frame.className).toContain('sticky')
-    expect(frame.className).not.toContain('fixed')
+    const board = screen.getByTestId('rail-board')
+    expect(board.className).toContain('sticky')
+    expect(board.className).not.toContain('fixed')
   })
 
-  it('窗口窄于 900：面板挪到主区下面（不盖、不收、没有遮罩），露出来的工具收进「⋮」', async () => {
+  it('WP433（Luoye 10-21）：窗口窄于 1024（放不下对话区最小宽度 + 卡片列）：卡片列自动隐藏，不盖、不留开关', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
-      matches: q.includes('899px') || q.includes('1199px'),
+      matches: q.includes('1023px'),
       addEventListener: () => {},
       removeEventListener: () => {},
     }))
     renderRail('/positions/asg_sup')
-    expect(await screen.findByTestId('rail-cards')).toBeDefined()
-    const frame = screen.getByTestId('rail-panel-frame')
-    expect(frame.getAttribute('data-layout')).toBe('stacked')
-    expect(frame.className).not.toContain('fixed')
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-board')).toBeNull()
+    })
     expect(screen.queryByTestId('rail-scrim')).toBeNull()
+    expect(screen.queryByTestId('rail-toggle')).toBeNull()
+  })
+
+  it('窗口窄于 900：露出来的工具收进「⋮」', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('899px') || q.includes('1023px'),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    renderRail('/positions/asg_sup')
     expect(screen.queryByTestId('rail-icon-browser')).toBeNull()
     fireEvent.click(screen.getByTestId('rail-overflow'))
     const menu = await screen.findByTestId('rail-menu')
@@ -296,7 +319,7 @@ describe('WP433：岗位 / 职责 / 事项页面板一直在（Luoye 10-20 问�
     expect(within(menu).getByTestId('rail-menu-changes')).toBeDefined()
   })
 
-  it('窗口窄于 900、别的页开着工具：照旧盖在主区上，点遮罩收起', async () => {
+  it('窗口窄于 900：第三栏（浏览器……）盖在主区上，点遮罩收起', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('899px') || q.includes('1199px'),
       addEventListener: () => {},

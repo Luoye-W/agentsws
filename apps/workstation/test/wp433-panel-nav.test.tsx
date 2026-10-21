@@ -79,6 +79,7 @@ vi.mock('@/lib/api', async () => {
       position_id: 'support',
       generated_at: '2026-10-20T00:00:00.000Z',
       items: [],
+      duties: [],
       counts: { doing: 2, queued: 0, waiting: 0, done: 0, stuck: 1, cards: 0, todos_today: 0 },
     }),
   }
