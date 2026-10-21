@@ -9,7 +9,19 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.text': '正文',
   'redditw.send': '发送',
   'redditw.send.hint':
-    '批了两分钟后，Chrome 里的「Agents 工坊助手」新开一个 Reddit 标签页把这段填好，你看一眼、自己点发送。发出去才记进发出记录。',
+    '点了就是批准，不会自己打开任何页面。到 Chrome 工具栏上的「Agents 工坊助手」侧边栏里点「打开这一条」，插件把这段填好，你看一眼、自己点发送。发出去才记进发出记录。',
+  // WP432：批了 = 等你在插件里发
+  'redditw.sent.awaiting': '已批，等你在浏览器插件里发',
+  'redditw.awaiting': '{n} 条已批，等你在浏览器插件里发',
+  'redditw.awaiting.hint':
+    '点 Chrome 工具栏上的插件图标打开侧边栏，点「打开这一条」：插件在新标签页里填好，你自己点发送。插件不会自己打开页面。',
+  'extreload.title': '插件要重新加载一下',
+  'extreload.stale': 'Chrome 里的插件还是 {running}，工坊带的是 {folder}。',
+  'extreload.unseen': '这几分钟没看到 Chrome 里的插件（Chrome 没开，或者插件还是旧版）。',
+  'extreload.steps':
+    '打开 chrome://extensions，找到「Agents 工坊助手」，点它卡片上的 ↻（重新加载）。之后插件会自己跟着工坊更新。',
+  'extreload.copy': '复制 chrome://extensions',
+  'extreload.copied': '已复制，粘到 Chrome 地址栏回车',
   'redditw.facts': '依据',
   'redditw.rules': '版规 {n} 条',
   'redditw.failed': '没交出去：{message}',
@@ -35,7 +47,19 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.text': 'Text',
   'redditw.send': 'Send',
   'redditw.send.hint':
-    'Two minutes after you approve, the Agents Workshop helper in Chrome opens a Reddit tab and fills this in. You review it and click send yourself. It is logged once it is posted.',
+    'This approves it; nothing opens on its own. In the Agents Workshop side panel in Chrome, click “Open this one”: the extension fills it in and you click send yourself. It is logged once it is posted.',
+  'redditw.sent.awaiting': 'Approved: send it from the browser extension',
+  'redditw.awaiting': '{n} approved, waiting for you to send from the browser extension',
+  'redditw.awaiting.hint':
+    'Click the extension icon in the Chrome toolbar to open the side panel, then “Open this one”: it fills a new tab and you click send yourself. The extension never opens pages on its own.',
+  'extreload.title': 'Reload the extension',
+  'extreload.stale': 'The extension in Chrome is {running}; the app ships {folder}.',
+  'extreload.unseen':
+    'Haven’t heard from the extension in Chrome for a few minutes (Chrome is closed, or the extension is outdated).',
+  'extreload.steps':
+    'Open chrome://extensions, find “Agents 工坊助手” and click ↻ (reload) on its card. After that it updates with the app by itself.',
+  'extreload.copy': 'Copy chrome://extensions',
+  'extreload.copied': 'Copied: paste it into Chrome’s address bar and press Enter',
   'redditw.facts': 'Based on',
   'redditw.rules': '{n} sub rules',
   'redditw.failed': 'Not handed over: {message}',

@@ -4,12 +4,16 @@
  *
  * 出现规则（docs/96 提醒条）：只在出问题时出；同一条写只一行（再填一次不另起一行）；人收起了不再出，
  * 再填又没发出去会重新出；七天前的不出（进度里还在）。正常时一个字都不画。
+ *
+ * WP432：批过、等你在浏览器插件里发的，顶上一行「N 条已批，等你在浏览器插件里发」（插件不自己开页面）；
+ * 浏览器里的插件不是新版 / 这几分钟没看到它，就地出「插件要重新加载一下」。
  */
 
 import { redditWriteNotices } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RotateCcw, SendHorizontal, X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { ExtensionReloadPrompt } from '@/components/connections/extension-reload'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
@@ -61,12 +65,28 @@ export function RedditWriteNotice({
   })
   if (assignment === undefined || writes.data === undefined) return null
   const rows = redditWriteNotices(writes.data.rows, new Date().toISOString())
-  if (rows.length === 0) return null
+  // WP432：批了、等你在插件里发的（同一张卡只算一条）
+  const awaiting = new Set(
+    writes.data.rows.filter((w) => w.state === 'awaiting').map((w) => w.approval_item_id),
+  ).size
+  if (rows.length === 0 && awaiting === 0) return null
 
   const label = (w: RedditWriteView): string =>
     w.label ?? t(`redditw.notice.kind.${w.kind}`, { sub: w.subreddit })
   return (
     <div className="flex flex-col gap-1" data-testid="reddit-write-notice">
+      {awaiting === 0 ? null : (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-lg bg-ws-surface px-3 py-2 text-sm"
+          data-testid="reddit-write-awaiting"
+          data-slot="status"
+        >
+          <SendHorizontal className="size-4 shrink-0 text-ws-brand" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t('redditw.awaiting', { n: awaiting })}</span>
+          <Hint text={t('redditw.awaiting.hint')} />
+        </div>
+      )}
+      {awaiting === 0 ? null : <ExtensionReloadPrompt waiting />}
       {rows.slice(0, MAX_ROWS).map((w) => (
         <div
           key={w.approval_item_id}

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { getExtensionInstall, openExtensionInstall } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { reloadNeed } from './extension-reload'
 
 const copy = (text: string): void => {
   void globalThis.navigator?.clipboard?.writeText(text).catch(() => undefined)
@@ -58,7 +59,10 @@ export function ExtensionInstall(props: {
 
   const failed = v.sync?.status === 'failed'
   const stuck = v.running.find((r) => r.stuck_on !== undefined && r.version !== v.folder_version)
-  if (props.paired && !failed && stuck === undefined) return null
+  // WP432：浏览器里的插件这几分钟报的是旧版、又没卡在「换不成」——多半是还没重新加载过（老插件不会自己换）
+  const need = reloadNeed(v, Date.now())
+  const stale = stuck === undefined && need?.kind === 'stale' ? need : undefined
+  if (props.paired && !failed && stuck === undefined && stale === undefined) return null
 
   const openFolder = (): void => {
     // 路径顺手复制：Chrome 的选择窗口里 Mac 按 ⌘⇧G 粘贴、Windows 粘贴到地址栏
@@ -79,6 +83,12 @@ export function ExtensionInstall(props: {
           })}
         </p>
       ) : null}
+      {stale === undefined ? null : (
+        <p className="text-sm text-[var(--ws-warn)]" data-testid="extension-install-stale">
+          {t('extreload.stale', { running: stale.running, folder: stale.folder })}{' '}
+          {t('extreload.steps')}
+        </p>
+      )}
       {stuck === undefined ? null : (
         <p className="text-sm text-[var(--ws-warn)]" data-testid="extension-install-stuck">
           {t('extinstall.stuck', { running: stuck.version, folder: v.folder_version ?? '' })}
