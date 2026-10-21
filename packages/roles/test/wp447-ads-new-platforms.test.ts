@@ -29,7 +29,12 @@ describe('六条新平台职责', () => {
       expect(role.actions, id).toEqual([])
       expect(Object.keys(role.automation), id).toEqual([])
       for (const s of role.scopes) expect(s.ops, `${id} ${s.domain}`).toEqual(['read'])
-      expect(role.scopes.map((s) => s.domain).sort()).toEqual(['ad_account', 'analytics'])
+      // approval 只读本人的：不读它连一件事都开不了（岗位页开事项要它）
+      expect(role.scopes.map((s) => s.domain).sort()).toEqual([
+        'ad_account',
+        'analytics',
+        'approval',
+      ])
     }
   })
 

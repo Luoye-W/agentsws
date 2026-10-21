@@ -21,6 +21,8 @@ scopes:
   # 只读：广告数据（拖进来的报表入的那个库）与 analytics。没有 stage——这一期什么都不提
   - { domain: ad_account, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # 自己名下的卡与事项要读得到（不读 approval 连一件事都开不了——岗位页开事项要它）；只读，不批任何东西
+  - { domain: approval, ops: [read], range: own, max_sensitivity: internal }
 
 connectors:
   # 这一期不连接口（`api_access: export_only`）。卡还在目录里，照实说「这一期不用连：导出报表拖进来」；
