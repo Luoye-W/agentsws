@@ -51,6 +51,7 @@ import { useApp } from '@/lib/app-context'
 import { CREDITS_PER_ROUND, creditsLow, LOW_ROUNDS, roundsLeft } from '@/lib/credits-runway'
 import { useMode } from '@/lib/mode'
 import { KolCloudCard } from './kol-cloud-card'
+import { TeamChannelCard } from './team-channel'
 
 type Group = 'capability' | 'workspace' | 'day'
 
@@ -334,6 +335,8 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                 <Separator />
                 {/* ⑤b 增值服务卡：没关联时它自己说「先关联」 */}
                 <KolCloudCard assignment={assignment} onLinkFirst={linkFirst} />
+                {/* WP444：团队通道（跨网那条路）——和红人营销增值服务同一个样式 */}
+                <TeamChannelCard assignment={assignment} onLinkFirst={linkFirst} />
               </>
             ) : null}
           </>
@@ -506,6 +509,8 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
              * **现在是什么状态**，两个问题不同，所以两处都在。
              */}
             {canTopup ? <KolCloudCard assignment={assignment} /> : null}
+            {/* WP444：团队通道（跨网那条路按月收积分；同一个网络照常免费） */}
+            {canTopup ? <TeamChannelCard assignment={assignment} /> : null}
           </>
         )}
 

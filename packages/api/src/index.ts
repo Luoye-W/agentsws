@@ -635,6 +635,7 @@ export type {
   SupersedeInput,
   TeamJoinView,
   TeamLinkView,
+  TeamSubscriptionLocalView,
   VerticalChoiceView,
   WorkspaceProfileInput,
   WorkspaceProfileView,

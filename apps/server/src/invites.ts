@@ -46,7 +46,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
+import { isPlaceholderOwnerEmail, TEAM_OFF_HEADER } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
@@ -235,7 +235,7 @@ export interface InvitesOptions {
   post?: (
     url: string,
     body: unknown,
-  ) => Promise<{ ok: boolean; data?: unknown; status?: number; message?: string }>
+  ) => Promise<{ ok: boolean; data?: unknown; status?: number; message?: string; off?: string }>
   /**
    * 20 §4 的 Join 入口（WP50）。**懒取**：Join 装在 onboarding 之后，
    * 直接传值会拿到 undefined；这里在 `decide` 那一刻才去要它。
@@ -290,7 +290,7 @@ export interface InvitesAssembly {
 async function defaultPost(
   url: string,
   body: unknown,
-): Promise<{ ok: boolean; data?: unknown; status?: number; message?: string }> {
+): Promise<{ ok: boolean; data?: unknown; status?: number; message?: string; off?: string }> {
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -305,11 +305,14 @@ async function defaultPost(
     } catch {
       parsed = {}
     }
+    // WP444：经云的通道地址回 503 时带一个头说为什么（对方的团队通道没开通 / 已到期、不在线、被停用）
+    const off = res.headers.get(TEAM_OFF_HEADER)
     return {
       ok: res.ok,
       status: res.status,
       data: parsed.data,
       ...(typeof parsed.message === 'string' ? { message: parsed.message } : {}),
+      ...(off === null ? {} : { off }),
     }
   } catch {
     return { ok: false }
@@ -514,6 +517,12 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       ticket_hash: ticketHashOf(ticket),
     })
     if (!out.ok || out.data === undefined) {
+      // WP444：经云的那条路被关了——对方的团队通道没开通 / 已到期（不是「连不上」）
+      if (out.status === 503 && out.off === 'subscription')
+        throw new OnboardingError(
+          'conflict',
+          '对方的团队通道未开通或已到期，不在同一个网络时暂时递不过去。请对方开通；同一个网络里照常能用。',
+        )
       // 对方明说不收（邮箱已经在那边了 / 公司对不上）：把那句话原样告诉申请人
       if (out.status === 409 || out.status === 403)
         throw new OnboardingError(
@@ -561,13 +570,14 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
   async function ask(
     row: RequestRow,
     login: boolean,
-  ): Promise<MembershipClaimView | 'unreachable' | 'gone'> {
+  ): Promise<MembershipClaimView | 'unreachable' | 'channel_off' | 'gone'> {
     const remote = row.remote
     if (remote === undefined) return 'gone'
     const out = await post(
       `${remote.base}/v1/memberships/requests/${encodeURIComponent(remote.request_id)}/claim`,
       { ticket: remote.ticket, login },
     )
+    if (!out.ok && out.status === 503 && out.off === 'subscription') return 'channel_off'
     if (!out.ok) return out.status === undefined || out.status >= 500 ? 'unreachable' : 'gone'
     return out.data as MembershipClaimView
   }
@@ -911,14 +921,16 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
           if (remote.status === 'rejected' || remote.status === 'superseded') return
           const said = await ask(row, false)
           const status: TeamJoinView['status'] =
-            said === 'unreachable'
-              ? remote.status === 'approved'
-                ? 'approved'
-                : 'unreachable'
-              : said === 'gone'
-                ? 'rejected'
-                : said.status
-          const label = said !== 'unreachable' && said !== 'gone' ? said.workspace_label : undefined
+            said === 'channel_off'
+              ? 'channel_off'
+              : said === 'unreachable'
+                ? remote.status === 'approved'
+                  ? 'approved'
+                  : 'unreachable'
+                : said === 'gone'
+                  ? 'rejected'
+                  : said.status
+          const label = typeof said === 'object' ? said.workspace_label : undefined
           const next: RequestRow = {
             ...row,
             ...(status === 'approved' || status === 'rejected' || status === 'superseded'
@@ -939,6 +951,11 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
         .find((r) => r.id === id && r.direction === 'outbound' && r.remote !== undefined)
       if (row?.remote === undefined) throw new OnboardingError('not_found', `没有这条申请：${id}`)
       const said = await ask(row, true)
+      if (said === 'channel_off')
+        throw new OnboardingError(
+          'conflict',
+          '对方的团队通道未开通或已到期，不在同一个网络时暂时进不去。请对方开通；同一个网络里照常能用。',
+        )
       if (said === 'unreachable')
         throw new OnboardingError('not_found', '对方的电脑这会儿连不上（工坊没开，或者睡着了）')
       if (said === 'gone' || said.status !== 'approved' || said.login_token === undefined)

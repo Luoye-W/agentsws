@@ -39,6 +39,7 @@ import type {
   OnboardingSkillItem,
   OnboardingStateView,
   TeamLinkView,
+  TeamSubscriptionLocalView,
   WorkspaceProfileInput,
   WorkspaceProfileView,
 } from '@agentsws/api'
@@ -420,6 +421,12 @@ export interface OnboardingOptions {
     issueLogin(person_id: PersonId): Promise<{ token: string; expires_at: string } | undefined>
     /** 开关 / 人数变了：团队通道按新情况开或关。 */
     changed?(): void
+    /** WP444：团队通道（跨网那条路）这项增值服务——问云 / 开通（含 7 天试用）/ 取消。 */
+    subscription?: {
+      view(): Promise<TeamSubscriptionLocalView>
+      subscribe(): Promise<TeamSubscriptionLocalView>
+      cancel(): Promise<TeamSubscriptionLocalView>
+    }
   }
   /** 测试注入的假 mDNS；不给就用 `bonjour-service`。 */
   mdns?: MdnsFactory
@@ -1558,6 +1565,24 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 
     enterJoin(_actor, id) {
       return invites.enter(id)
+    },
+
+    teamSubscription(_actor) {
+      const sub = options.team?.subscription
+      if (sub === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
+      return sub.view()
+    },
+
+    subscribeTeam(_actor) {
+      const sub = options.team?.subscription
+      if (sub === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
+      return sub.subscribe()
+    },
+
+    cancelTeam(_actor) {
+      const sub = options.team?.subscription
+      if (sub === undefined) throw new OnboardingError('not_implemented', '这个服务没有团队通道')
+      return sub.cancel()
     },
   }
 
