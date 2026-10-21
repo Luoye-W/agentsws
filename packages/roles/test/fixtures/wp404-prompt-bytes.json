@@ -1,16 +1,52 @@
 {
   "roles": {
+    "ads.apple": {
+      "zh": "3c243b0ae229f178",
+      "en": "2d905fc1bd193813",
+      "content": "7d6ea6471505ad33",
+      "def": "e55782b0b21ce901"
+    },
     "ads.google": {
       "zh": "eb17dcc6b25a89bd",
       "en": "8f65221d8f02008e",
       "content": "67f0ade4ecf68945",
       "def": "bb0895e6b75bbc22"
     },
+    "ads.linkedin": {
+      "zh": "8a3e3de17df427cd",
+      "en": "ef7d524f67ed37d0",
+      "content": "3ec8873a6b080b5f",
+      "def": "84947eda8a7c01c1"
+    },
     "ads.meta": {
       "zh": "acc11f649e8391e8",
       "en": "458dd2a81627cd72",
       "content": "106ed88902fe7641",
       "def": "1d876e69cb7b523f"
+    },
+    "ads.microsoft": {
+      "zh": "de4ea1d5fc3062c9",
+      "en": "3a2b116eeceb3c3a",
+      "content": "a70e0526656b330a",
+      "def": "0470a4f43390669b"
+    },
+    "ads.pinterest": {
+      "zh": "1e1b1475aafb09c0",
+      "en": "a8b86a6437323edf",
+      "content": "4708ccf6a9e4db45",
+      "def": "224ee2f5debd8251"
+    },
+    "ads.reddit": {
+      "zh": "16881e073ef9c1bf",
+      "en": "a1fe871fcc9ba1f5",
+      "content": "db86433352d9dc8a",
+      "def": "4af2a0263975b8e9"
+    },
+    "ads.snapchat": {
+      "zh": "092ca154bac2701f",
+      "en": "5210c5565db85570",
+      "content": "3c4d37d7c3540652",
+      "def": "04e04c2f5d0c0f55"
     },
     "ads.tiktok": {
       "zh": "8c0b55c6ebde25b6",
@@ -308,7 +344,7 @@
     }
   },
   "positions": {
-    "ads": "de4829ec7fc2db48",
+    "ads": "8bbe43b462635dbe",
     "amazon-ops": "899c6afa4681fbcc",
     "b2b": "351dee74496ff3a2",
     "customer-care": "33f1ff1992779f4b",
