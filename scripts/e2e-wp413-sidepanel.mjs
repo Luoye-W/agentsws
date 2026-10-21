@@ -431,6 +431,11 @@ try {
       ids.every((id) => !JSON.stringify(deckNow).includes(id)) &&
       (await http('/v1/social/reddit/writes', {}, reddit.id)).in_plugin === 2,
   )
+  const badge2 = await until(
+    async () => (await sw.evaluate(() => chrome.action.getBadgeText({}))) === '2',
+    15_000,
+  )
+  check('WP445：AI 起草出来就在插件图标上出数字 2（不用先在工坊批）', badge2)
   check(
     'WP445（决策 1323）：侧边栏底下那一栏没了（没有新版旧版开关）；版本一致时顶上不出提示',
     (await panel.locator('[data-testid="ws-foot"]').count()) === 0 &&
@@ -564,6 +569,10 @@ try {
   await panel.emulateMedia({ colorScheme: 'light' })
   const rows = await http('/v1/outbound/records')
   const row = rows.find((r) => r.approval_item_id === item?.id)
+  check(
+    'WP445：发出去之后看板数跟着变（插件里 1 条等你发）',
+    (await http('/v1/social/reddit/writes', {}, reddit.id)).in_plugin === 1,
+  )
   check(
     '工坊的发出记录里同一行：approved_via=extension、正文是改过的那一版',
     row?.approved_via === 'extension' && row?.content === EDITED,
