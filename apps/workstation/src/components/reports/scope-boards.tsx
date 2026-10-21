@@ -269,7 +269,7 @@ export function dutyHasWorkBoards(role_id: string): boolean {
 export function dutyHasReportBoards(role_id: string): boolean {
   return (
     adCreativePlatformOf(role_id) !== undefined ||
-    role_id === 'dtc.content' ||
+    role_id === 'dtc.seo' ||
     role_id === AMAZON_STORE_ROLE
   )
 }
@@ -331,7 +331,8 @@ export function DutyReportBoards({
     <div className="flex flex-col gap-4" data-testid="duty-report-boards" data-duty={role_id}>
       {platform === undefined ? null : <AdsOverview assignment={assignment} />}
       {role_id === AMAZON_STORE_ROLE ? <AmazonOpsBoard assignment={assignment} /> : null}
-      {role_id === 'dtc.content' ? (
+      {/* WP446：Search Console / GA4 选站点与 GEO 看板跟着 SEO 与 GEO 走 */}
+      {role_id === 'dtc.seo' ? (
         <>
           <GoogleSourcePicker assignment={assignment} source="gsc" />
           <GoogleSourcePicker assignment={assignment} source="ga4" />

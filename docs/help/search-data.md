@@ -1,10 +1,10 @@
 ---
 positions: [web-ops, dtc-ops]
-roles: [dtc.content]
+roles: [dtc.seo]
 ---
 # 搜索数据接口
 
-「内容与搜索」职责查搜索结果页（看你在 Google / Bing 上排第几、AI 概览里有没有你）和问 AI 平台（ChatGPT、Gemini、Claude、Google AI 概览答题时提不提你）时，要用第三方的搜索数据。「连接 → 搜索数据」那一行决定数据从哪来，三档：
+「SEO 与 GEO」职责查搜索结果页（看你在 Google / Bing 上排第几、AI 概览里有没有你）和问 AI 平台（ChatGPT、Gemini、Claude、Google AI 概览答题时提不提你）时，要用第三方的搜索数据。「连接 → 搜索数据」那一行决定数据从哪来，三档：
 
 | 档 | 谁付钱 | 一句话 |
 |---|---|---|

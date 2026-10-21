@@ -832,6 +832,7 @@ import {
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
+  seoScheduleGates,
   sweepStaleReviews,
 } from './schedule.js'
 import { createScopeAutoUpgrade, type ScopeAutoUpgrade } from './scope-auto-upgrade.js'
@@ -1118,6 +1119,8 @@ export const BUNDLED_ROLES = [
   'dtc.fulfillment',
   // WP63（51 §2.2）：第二条——内容与博客
   'dtc.content',
+  // WP446（docs/109 §4）：从内容里拆出来的 SEO 与 GEO
+  'dtc.seo',
   // WP67（48 §5.1）：红人营销岗位的五条渠道职责。
   // 种岗位那一步会把解析不到的职责筛掉，所以五条都得在这张表里——
   // 少一条，首次设置向导里的"红人营销"就少一个勾。
@@ -7748,7 +7751,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
       holderOf,
-      thresholds: () => roles.roles.get('dtc.content')?.thresholds ?? {},
+      thresholds: () => roles.roles.get('dtc.seo')?.thresholds ?? {},
       work: {
         createMatter: (input) => work.createMatter(input),
       },
@@ -11069,8 +11072,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
         // WP173：有人持有「主动开发」才建开发信序列那条定时
         b2b: held('b2b.outbound'),
-        // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
-        seo: held('dtc.content'),
+        // WP154：有人持有搜索那条职责才建每日读 Search Console 与每周小结那两条（WP446 起是「SEO 与 GEO」）
+        seo: seoScheduleGates(held).seo,
         // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
         weeklyReview: held('common.owner'),
         adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
@@ -11084,8 +11087,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(held('dtc.store')
           ? { storeDigest: storeDigestCron(roles.roles.get('dtc.store')?.notifications) }
           : {}),
-        // WP418（自查 B13）：店铺管理或内容与搜索有人担就每周体检
-        siteHealthWeekly: held('dtc.store') || held('dtc.content'),
+        // WP418（自查 B13）：店铺管理或 SEO 与 GEO（WP446 起技术体检归它）有人担就每周体检
+        siteHealthWeekly: seoScheduleGates(held).siteHealthWeekly,
       },
     })
   }
@@ -11146,12 +11149,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       held: (ws) => roleHeldIn(ws, 'ads.google') || roleHeldIn(ws, 'ads.meta'),
     },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
-    { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+    {
+      ids: ['sched_seo_daily', 'sched_seo_weekly'],
+      held: (ws) => seoScheduleGates((r) => roleHeldIn(ws, r)).seo,
+    },
     // WP418
     { ids: ['sched_store_digest'], held: (ws) => roleHeldIn(ws, 'dtc.store') },
     {
       ids: ['sched_site_health_weekly'],
-      held: (ws) => roleHeldIn(ws, 'dtc.store') || roleHeldIn(ws, 'dtc.content'),
+      held: (ws) => seoScheduleGates((r) => roleHeldIn(ws, r)).siteHealthWeekly,
     },
     // WP224
     { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },

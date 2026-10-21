@@ -125,6 +125,7 @@
     "packages/roles/roles/dtc/email-marketing.yml",
     "packages/roles/roles/dtc/fulfillment.yml",
     "packages/roles/roles/dtc/live-chat.yml",
+    "packages/roles/roles/dtc/seo.yml",
     "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/kol/facebook.yml",
@@ -154,7 +155,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "830782f5d75fe3725e79cef09de4400d",
+  "source_digest": "596d052de885ea5c5d8fe291bc38b598",
   "objects": [
     {
       "id": "ad",
@@ -10991,7 +10992,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage internal link edit"
     },
     {
@@ -11074,7 +11075,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage page section add"
     },
     {
@@ -11086,7 +11087,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.content"],
+      "roles": ["dtc.seo"],
       "what": "stage page seo edit"
     },
     {
@@ -11371,6 +11372,18 @@
       "route_to": "role_holder",
       "roles": ["dtc.store"],
       "what": "把商品撤下（永远人审）"
+    },
+    {
+      "id": "stage_url_redirect",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "url_redirect",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.shopify-build"],
+      "what": "改网址跳转（建站，可撤回）"
     }
   ]
 }

@@ -115,6 +115,7 @@ import {
   SHOP_GET_PRODUCT_TOOL,
   SHOP_LIST_PRODUCTS_TOOL,
   SHOP_SAVE_PRODUCT_TOOL,
+  SHOP_SAVE_REDIRECTS_TOOL,
   SHOP_TOOL_DEF_BY_NAME,
   type ShopStagedData,
   type ShopStep,
@@ -2017,7 +2018,11 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
                 tool: SHOP_SAVE_PRODUCT_TOOL,
                 input: { id: p.id, title: `${p.title}（新版）` },
               })
-          } else if (step.tool === SHOP_SAVE_PRODUCT_TOOL) {
+          } else if (
+            step.tool === SHOP_SAVE_PRODUCT_TOOL ||
+            step.tool === SHOP_SAVE_REDIRECTS_TOOL
+          ) {
+            // WP446：改跳转那条剧本一步就出卡
             staged = shopStagedOf(res.data)
             if (staged?.change_id !== undefined) {
               sink({ type: 'change.staged', change_id: staged.change_id })

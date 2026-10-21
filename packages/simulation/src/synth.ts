@@ -265,6 +265,8 @@ const PEOPLE_3: PersonTemplate[] = [
     extra: [
       'dtc.store',
       'dtc.content',
+      // WP446：SEO 与 GEO 从内容里拆出来，同一个人挂着
+      'dtc.seo',
       'dtc.email-marketing',
       'dtc.fulfillment',
       'kol.youtube',

@@ -12,7 +12,8 @@ import { BUNDLED_ROLES_DIR, loadBundledRole, loadBundledRoles } from '../src/ind
 const BUNDLED_SKILLS_DIR = join(BUNDLED_ROLES_DIR, '..', '..', 'skills', 'bundled')
 
 const EXPECTED: Record<string, string[]> = {
-  'dtc.content': ['seo-judgment'],
+  // WP446：seo-judgment 跟着搜索判断搬去了 SEO 与 GEO
+  'dtc.seo': ['seo-judgment'],
   'ads.meta': ['ad-copywriting', 'audience-research'],
   'ads.google': ['ad-copywriting', 'audience-research'],
   'ads.tiktok': ['ad-copywriting', 'audience-research'],

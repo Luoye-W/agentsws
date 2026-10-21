@@ -1,6 +1,6 @@
 ---
 positions: [web-ops, site, dtc-ops]
-roles: [dtc.store, site.shopify-build, dtc.content]
+roles: [dtc.store, site.shopify-build, dtc.seo]
 ---
 # 网站体检：AI 读不读得到你的店
 
@@ -39,9 +39,9 @@ roles: [dtc.store, site.shopify-build, dtc.content]
 **能否进 ChatGPT 购物**
 照 OpenAI 公开的商品 feed 规范，逐项看你的商品数据够不够：标题、描述、链接、品牌、图片、库存、价格这些必填项，以及开结账要的隐私政策、服务条款。**只评估，不替你对接**。
 
-## AI 带来的访问与成交（内容与搜索）
+## AI 带来的访问与成交（SEO 与 GEO）
 
-「内容与搜索」职责页上多一块：近 7 天从 ChatGPT、Perplexity、Gemini、Copilot、Claude 等来的成交与金额，标「实测」——是 Shopify 自己记的进店来源，不是估的。每周的 AI 回答监测周报里也并排写这一行，和「AI 提没提到你」一起看。
+「SEO 与 GEO」职责页上多一块：近 7 天从 ChatGPT、Perplexity、Gemini、Copilot、Claude 等来的成交与金额，标「实测」——是 Shopify 自己记的进店来源，不是估的。每周的 AI 回答监测周报里也并排写这一行，和「AI 提没提到你」一起看。
 
 - 一单只算一次：最后一次进店来自哪个 AI 就算它，否则看第一次进店；
 - **访问数**要店铺授权里有「店铺报表」这一项才读得到；没有时只算成交，页脚会写。
@@ -50,7 +50,7 @@ roles: [dtc.store, site.shopify-build, dtc.content]
 
 AI 爬虫与 AI 来源两张清单是数据，随版本更新。默认对比商品页、结构化数据和店铺公开的商品数据；商品 feed 与其他平台上架页要先有地址才对比，没填就不比，也不算「缺」。
 
-**在对话里说一句就配好**：在网站运营或内容与搜索的对话里直接说，比如「我们的 Google 商品 feed 是 https://…」「Amazon 上架页是 https://…，对应店里的 power-bank-20000」「别查 GPTBot 了」「把 Kimi 算进 AI 来源」。下面会出一张「我打算改成这样」的卡，只列要改的那几项；点「就这样」就存好，并按新设置重新体检一次。
+**在对话里说一句就配好**：在网站运营或「SEO 与 GEO」的对话里直接说，比如「我们的 Google 商品 feed 是 https://…」「Amazon 上架页是 https://…，对应店里的 power-bank-20000」「别查 GPTBot 了」「把 Kimi 算进 AI 来源」。下面会出一张「我打算改成这样」的卡，只列要改的那几项；点「就这样」就存好，并按新设置重新体检一次。
 
 想知道「我们站 AI 进得来吗」「上周 AI 带来几单」，在对话里直接问，AI 会读最近一次体检结论回答。
 

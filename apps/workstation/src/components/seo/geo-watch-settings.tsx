@@ -554,7 +554,7 @@ export function GeoWatchSettings({ assignment }: { assignment: string }): ReactN
 /** 「设定」里那个标签（职责层才有分配；拿不到就说一句）。 */
 export function GeoWatchSettingsPanel({ scope }: { scope: RailScope }): ReactNode {
   const { t } = useApp()
-  if (scope.tier !== 'role' || scope.scope_id !== 'dtc.content' || scope.assignment === undefined)
+  if (scope.tier !== 'role' || scope.scope_id !== 'dtc.seo' || scope.assignment === undefined)
     return <p className="text-sm text-ws-muted-fg">{t('geo.watch.only_duty')}</p>
   return <GeoWatchSettings assignment={scope.assignment} />
 }

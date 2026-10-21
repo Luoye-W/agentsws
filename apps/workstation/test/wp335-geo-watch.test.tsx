@@ -137,8 +137,9 @@ describe('WP335 关注设置', () => {
     await waitFor(() => expect(suggestGeoWatch).toHaveBeenCalled())
   })
 
-  it('「关注设置」标签只在「内容与搜索」职责层出', () => {
-    expect(tabsOf({ tier: 'role', scope_id: 'dtc.content', name: '内容与搜索' })).toContain(
+  it('「关注设置」标签只在「SEO 与 GEO」职责层出（WP446 从内容那条搬过来）', () => {
+    expect(tabsOf({ tier: 'role', scope_id: 'dtc.seo', name: 'SEO 与 GEO' })).toContain('geo-watch')
+    expect(tabsOf({ tier: 'role', scope_id: 'dtc.content', name: '内容与博客' })).not.toContain(
       'geo-watch',
     )
     expect(tabsOf({ tier: 'role', scope_id: 'dtc.support', name: '客服' })).not.toContain(

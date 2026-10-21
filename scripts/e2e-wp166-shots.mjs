@@ -8,7 +8,7 @@
  * 1. `wizard-markets.png`：向导第 ② 步档案卡——市场是从官网配送政策推出来的，可增删，出处在问号里（悬停展开）；
  * 2. `wizard-markets-edited.png`：去掉一个、加上美国之后（问号改说「你自己选的」）；
  * 3. `settings-markets.png`：设置页「公司档案」——同一份市场，同一个选择器；
- * 4. `seo-geo-markets.png`：「内容与搜索」面板的每周 AI 探测——3 个市场、花费乘 3、每个市场一个勾；
+ * 4. `seo-geo-markets.png`：「SEO 与 GEO」面板的每周 AI 探测——3 个市场、花费乘 3、每个市场一个勾；
  * 5. `seo-geo-visibility.png`：同一页「AI 平台可见度」按市场分开（多一列「市场」）。
  *
  * ```
@@ -170,7 +170,7 @@ async function main() {
     await company.screenshot({ path: join(SHOTS, 'settings-markets.png') })
     console.log('  📷 settings-markets.png')
 
-    // ── 「内容与搜索」面板：每个市场分别探 ────────────────────────
+    // ── 「SEO 与 GEO」面板：每个市场分别探 ────────────────────────
     // 卖三个市场（像用户在设置页里改的那样，走同一条接口）
     const profile = (await call(owner, ownerAsg, 'GET', '/v1/onboarding/state')).profile
     await call(owner, ownerAsg, 'PUT', '/v1/workspace/profile', {
@@ -179,14 +179,14 @@ async function main() {
     })
     const li = await login(CONTENT)
     const content = (await me(li)).assignments.find(
-      (a) => a.role_id === 'dtc.content' && a.revoked_at === undefined,
+      (a) => a.role_id === 'dtc.seo' && a.revoked_at === undefined,
     )
     await call(li, content.id, 'PUT', '/v1/seo/geo-questions', { settings: { max_questions: 4 } })
     await call(li, content.id, 'POST', '/v1/seo/run', { what: 'weekly' })
     const d = await browserFor(chromium, li, { width: 1360, height: 1100 })
     open.push(d.browser)
     const positionId = content.position_id ?? content.id
-    await d.page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.content`, {
+    await d.page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}/duties/dtc.seo`, {
       waitUntil: 'networkidle',
     })
     const geo = d.page.locator('[data-testid="geo-questions"]')

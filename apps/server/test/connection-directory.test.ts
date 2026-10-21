@@ -294,14 +294,14 @@ describe('54 §4 第二层：GET /v1/positions/:id/connections', () => {
     const assignment = ctx.server.roles.assignments.create({
       person_id: ctx.server.bootstrap.person.id,
       workspace_id: ctx.server.bootstrap.workspace.id,
-      role_id: 'dtc.content',
+      role_id: 'dtc.seo',
       granted_by: ctx.server.bootstrap.person.id,
     })
     const view = await data<PositionConnectionsView>(
       await api(`/v1/positions/${assignment.id}/connections`),
     )
     expect(view.position_id).toBe('web-ops')
-    // `dtc.content` 要 Search Console（职责模板写 `search_console`）——目录里查得到名字
+    // `dtc.seo` 要 Search Console（WP446 从内容那条搬过来）（职责模板写 `search_console`）——目录里查得到名字
     const gsc = view.items.find((i) => i.kind === 'search_console')
     expect(gsc?.name.zh).toBe('Google Search Console')
     expect(gsc?.connect_service).toBe('gsc')

@@ -6,7 +6,7 @@
  * 现编的几页（`apps/cli/src/demo.ts` 的 `DEMO_SITE_HEALTH_PAGES`），渲染后那一份也是替身。拍浅 / 深两套：
  *
  * 1. `1-store-health-<theme>`：网站运营岗位的体检四块（商品信息、ChatGPT 购物、AI 爬虫、不开 JS）；
- * 2. `2-content-ai-traffic-<theme>`：内容与搜索职责的「AI 带来的访问与成交」。
+ * 2. `2-content-ai-traffic-<theme>`：SEO 与 GEO职责的「AI 带来的访问与成交」。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
@@ -187,7 +187,7 @@ async function main() {
       domain: 'nordvolt.example',
     })
     const store = await ensureAssignment(token, owner, me, 'dtc.store')
-    const content = await ensureAssignment(token, owner, me, 'dtc.content')
+    const content = await ensureAssignment(token, owner, me, 'dtc.seo')
     await authorizeShop(token, store)
     const view = await call(token, store, 'POST', '/v1/site-health/run', {})
     console.log(
@@ -212,7 +212,7 @@ async function main() {
         browser,
         token,
         theme,
-        `/positions/${encodeURIComponent(content)}/duties/dtc.content`,
+        `/positions/${encodeURIComponent(content)}/duties/dtc.seo`,
         ['seo.ai_traffic'],
         '2-content-ai-traffic',
       )

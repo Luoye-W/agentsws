@@ -102,8 +102,8 @@ async function main() {
     const amz = (me.assignments ?? []).find((a) => a.role_id === 'amz.store')?.id
     check(amz !== undefined, '有亚马逊店铺运营那条分配')
     // 自家两款写进关注设置那一格（和 WP396 同一格；demo 里是编的 ASIN）
-    // 关注设置那一格要「内容与搜索」那条分配来写（demo 里负责人自己担着）
-    assignment = (me.assignments ?? []).find((a) => a.role_id === 'dtc.content')?.id ?? amz
+    // 关注设置那一格要「SEO 与 GEO」那条分配来写（demo 里负责人自己担着）
+    assignment = (me.assignments ?? []).find((a) => a.role_id === 'dtc.seo')?.id ?? amz
     await call('GET', '/v1/seo/watch', owner).catch(() => undefined)
     await call('PUT', '/v1/seo/watch', owner, {
       brand_amazon: [

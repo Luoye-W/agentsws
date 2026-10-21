@@ -234,7 +234,7 @@ describe('本周经营一页纸', () => {
       }),
     })
     const content = queryContext({
-      role_id: 'dtc.content',
+      role_id: 'dtc.seo',
       approvals: [
         report([{ page: 'https://x.test/blogs/a', revenue: 300, orders: 2, clicks: 50 }]),
       ],
@@ -244,7 +244,7 @@ describe('本周经营一页纸', () => {
       brand: '测试品牌',
       base,
       content,
-      held: ['common.owner', 'ads.meta', 'dtc.content'],
+      held: ['common.owner', 'ads.meta', 'dtc.seo'],
     })
     expect(p.kind).toBe('weekly_review')
     expect(p.situation).toContain('测试品牌')

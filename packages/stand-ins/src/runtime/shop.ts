@@ -21,6 +21,7 @@
  * | `shop_save_page` | 建 / 改页面 | 出卡 |
  * | `shop_save_menu` | 建 / 改菜单（整份菜单项） | 出卡 |
  * | `shop_create_discount` | 建折扣码 | 出卡 |
+ * | `shop_save_redirects` | 改网址跳转（建站；目标空 = 撤掉这条） | 出卡 |
  *
  * 工具面按两件事出现：这条职责登记了哪几个（{@link SHOP_TOOLS_BY_ROLE}）× 店铺授权里有没有那一项权限
  * （{@link SHOP_TOOL_SCOPE}）。没授权 / 过期 = 一个都不出（岗位页引导去授权）。
@@ -58,6 +59,8 @@ export const SHOP_CREATE_PROMOTION_TOOL = 'shop_create_automatic_discount'
 export const SHOP_GET_ORDER_TOOL = 'shop_get_order'
 /** WP418（自查 B10）：标发货 + 回填单号（只发其中几件 = 拆单先发有货的）。 */
 export const SHOP_FULFILL_ORDER_TOOL = 'shop_fulfill_order'
+/** WP446（docs/109 §4.4）：改网址跳转（Shopify 原生 URL 跳转；一张卡一批，目标空 = 撤掉这条）。 */
+export const SHOP_SAVE_REDIRECTS_TOOL = 'shop_save_redirects'
 /** WP418（自查 A8）：跑一遍上线检查单（只读，不出卡）。 */
 export const SITE_CHECKLIST_TOOL = 'site_checklist_run'
 /** WP418（自查 A16）：插件这条职责看「装了哪些 App、目录里推荐哪些」（只读本机建站库）。 */
@@ -91,6 +94,7 @@ export const SHOP_WRITE_TOOL_NAMES: readonly string[] = [
   SHOP_CREATE_PROMOTION_TOOL,
   SHOP_FULFILL_ORDER_TOOL,
   SHOP_SAVE_POLICY_TOOL,
+  SHOP_SAVE_REDIRECTS_TOOL,
   SHOP_ADD_IMAGES_TOOL,
   SHOP_CREATE_DISCOUNT_TOOL,
   SHOP_SAVE_COLLECTION_TOOL,
@@ -140,6 +144,7 @@ export const SHOP_TOOL_SCOPE: Readonly<Record<string, string>> = {
   [SHOP_CREATE_PROMOTION_TOOL]: 'write_discounts',
   [SHOP_GET_ORDER_TOOL]: 'read_merchant_managed_fulfillment_orders',
   [SHOP_FULFILL_ORDER_TOOL]: 'write_merchant_managed_fulfillment_orders',
+  [SHOP_SAVE_REDIRECTS_TOOL]: 'write_online_store_navigation',
 }
 
 /** WP417：客服两条职责（网站客服、社群管理）能用的店铺改动：退款 / 改地址 / 补发 / 发折扣码。 */
@@ -198,6 +203,8 @@ export const SHOP_TOOLS_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
     SHOP_LIST_PRODUCTS_TOOL,
     SHOP_SAVE_MENU_TOOL,
     SHOP_SAVE_PAGE_TOOL,
+    // WP446（docs/109 §4.4）：改网址跳转
+    SHOP_SAVE_REDIRECTS_TOOL,
   ].sort(),
   // WP418（自查 A16）：插件 / 邮件模板两条职责以前 grounding 写的工具全仓没有执行器
   'site.shopify-apps': [SITE_APPS_TOOL],
@@ -629,6 +636,31 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
     },
   },
   {
+    name: SHOP_SAVE_REDIRECTS_TOOL,
+    description:
+      '**不会直接改。** 出一张卡：改网址跳转（Shopify 的「网址跳转」，永久 301）。一批写进 redirects：' +
+      '旧路径（站内，/ 开头）→ 新路径或 https:// 网址；target 留空 = 撤掉这条跳转。出卡时会现读每条旧路径原来跳到哪、记在卡上，' +
+      '撤回就是改回去。别把一条的目标写成另一条的旧路径（跳转链）。人批了才改，改完读回核对。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        redirects: {
+          type: 'array',
+          description: '要改的跳转（一张卡最多 50 条；超过职责额度会转人审）',
+          items: {
+            type: 'object',
+            properties: {
+              path: STR('旧路径（如 /pages/old-faq、/products/old-handle）'),
+              target: STR('跳到哪（如 /pages/faq；留空 = 撤掉这条跳转）'),
+            },
+            required: ['path'],
+          },
+        },
+      },
+      required: ['redirects'],
+    },
+  },
+  {
     name: SITE_APPS_TOOL,
     description:
       '看这家店装了哪些 App、装了却还没连上的是哪几个，以及目录里按类别推荐的那几个（收不收钱、干什么）。只读。' +
@@ -684,8 +716,25 @@ export interface ShopStep {
   input: Record<string, unknown>
 }
 
+const REDIRECT = /跳转|重定向|redirect/i
+/** 话里写到的站内路径（`/pages/old-faq`）。 */
+const PATHS = /(?:^|[\s「『"'（(：:，,])(\/[A-Za-z0-9._~%/-]+)/g
+
+/**
+ * WP446（docs/109 §4.4）：改跳转的剧本——话里说了「跳转」、工具面里有 `shop_save_redirects`：
+ * 话里写了两条路径就是「前一条 → 后一条」；没写就演一条演示店里的（旧 FAQ 页 → 新 FAQ 页）。
+ */
+export function redirectBranch(req: RunRequest, text: string): ShopStep[] | undefined {
+  if (!req.tools.allow.includes(SHOP_SAVE_REDIRECTS_TOOL) || !REDIRECT.test(text)) return undefined
+  const paths = [...text.matchAll(PATHS)].map((m) => m[1] as string)
+  const [path, target] = paths.length >= 2 ? paths : ['/pages/old-faq', '/pages/faq']
+  return [{ tool: SHOP_SAVE_REDIRECTS_TOOL, input: { redirects: [{ path, target }] } }]
+}
+
 /** stub 的岔口：工具面里有改商品的工具、而且说的是改商品，才走这一边；否则照旧。 */
 export function shopBranch(req: RunRequest, text: string): ShopStep[] | undefined {
+  const redirect = redirectBranch(req, text)
+  if (redirect !== undefined) return redirect
   const has = (n: string): boolean => req.tools.allow.includes(n)
   if (!has(SHOP_SAVE_PRODUCT_TOOL) || !has(SHOP_LIST_PRODUCTS_TOOL)) return undefined
   if (!PRODUCT.test(text) || !EDIT.test(text)) return undefined

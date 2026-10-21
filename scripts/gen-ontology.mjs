@@ -428,6 +428,7 @@ const WHAT = {
   stage_unpublish_product: '把商品撤下（永远人审）',
   stage_collection_edit: '往集合里加 / 删商品',
   stage_inventory_adjust: '调库存（直接设定永远人审）',
+  stage_url_redirect: '改网址跳转（建站，可撤回）',
   stage_discount_code: '建 / 改一个优惠码（营销发码）',
   stage_promotion: '建 / 改全站活动（永远人审）',
   stage_review_reply: '起草一条评价回复',

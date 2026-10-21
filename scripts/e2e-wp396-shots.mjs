@@ -101,7 +101,7 @@ async function main() {
     })
     const me2 = await call('GET', '/v1/me', owner)
     const store = (me2.assignments ?? []).find((a) => a.role_id === 'amz.store')?.id
-    const content = (me2.assignments ?? []).find((a) => a.role_id === 'dtc.content')?.id
+    const content = (me2.assignments ?? []).find((a) => a.role_id === 'dtc.seo')?.id
     check(store !== undefined, '负责人担着亚马逊店铺运营')
     // 自家 ASIN：唯一一份在关注设置（WP392 `brand_amazon`）
     assignment = content ?? assignment

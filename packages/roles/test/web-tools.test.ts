@@ -47,6 +47,8 @@ const WITH_WEB = [
   'b2b.outbound',
   'b2b.sales',
   'dtc.content',
+  // WP446：SEO 与 GEO 要看谁排在前面、核对引用
+  'dtc.seo',
   'dtc.store',
   'kol.facebook',
   'kol.instagram',

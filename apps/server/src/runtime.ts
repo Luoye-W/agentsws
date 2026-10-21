@@ -582,7 +582,7 @@ export interface RuntimeOptions {
   setupRequestTool?: ToolExecutor
   /**
    * WP385（决策 1076）：网站运营读体检结论的只读工具 `query_site_health`（`site-health-tools.ts` 建的那一份）。
-   * 只给店铺管理、内容与搜索（`dtc.store` / `dtc.content`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   * 只给店铺管理、SEO 与 GEO（`dtc.store` / `dtc.seo`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   siteHealthTools?: ToolExecutor
   /**

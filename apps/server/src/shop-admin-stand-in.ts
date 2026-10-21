@@ -73,6 +73,8 @@ export interface FakeShop {
   autoDiscounts?: { id: string; title: string; status: string }[]
   /** WP418：订单的发货情况（没给 = 用 {@link demoFulfillmentOrders}；与 WP417 客服那份 `orders` 分开放）。 */
   fulfillment_orders?: FakeFulfillmentOrder[]
+  /** WP446：网址跳转（`urlRedirects`；没给 = 演示店里有一条旧 FAQ 页的跳转）。 */
+  redirects?: { id: string; path: string; target: string }[]
 }
 
 /** WP417：假店里的一单（形状只够客服那几条操作）。 */
@@ -385,6 +387,17 @@ const productNode = (p: FakeProduct): Obj => ({
   variantsCount: { count: p.variants.length },
 })
 
+/** WP446：演示店里已经有的一条跳转（改版前的旧博客页 → 新博客页）。 */
+export function demoRedirects(): { id: string; path: string; target: string }[] {
+  return [
+    {
+      id: 'gid://shopify/UrlRedirect/9001',
+      path: '/blogs/news/old-guide',
+      target: '/blogs/news/guide',
+    },
+  ]
+}
+
 /** 按操作名回数据（只认 `shop-graphql.ts` 那几条）。 */
 export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | undefined {
   const id = (): string => {
@@ -686,6 +699,62 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
       return { onlineStore: { passwordProtection: { enabled: shop.password_enabled === true } } }
     case 'AgentswsSitePayments':
       return { shopifyPaymentsAccount: { activated: true } }
+    // WP446：网址跳转（按 path 精确找；建 / 改 / 删）
+    case 'AgentswsUrlRedirects': {
+      shop.redirects ??= demoRedirects()
+      const m = /^path:"?([^"]*)"?$/.exec(String(vars.query ?? ''))
+      const want = m?.[1]
+      return {
+        urlRedirects: {
+          nodes: shop.redirects
+            .filter((r) => want === undefined || r.path === want)
+            .map((r) => ({ ...r })),
+        },
+      }
+    }
+    case 'AgentswsUrlRedirectCreate': {
+      shop.redirects ??= demoRedirects()
+      const input = vars.urlRedirect as Obj
+      const path = String(input.path ?? '')
+      if (shop.redirects.some((r) => r.path === path))
+        return {
+          urlRedirectCreate: {
+            urlRedirect: null,
+            userErrors: [{ field: ['path'], message: 'Path has already been taken' }],
+          },
+        }
+      const row = { id: `gid://shopify/UrlRedirect/${id()}`, path, target: String(input.target) }
+      shop.redirects.push(row)
+      return { urlRedirectCreate: { urlRedirect: { ...row }, userErrors: [] } }
+    }
+    case 'AgentswsUrlRedirectUpdate': {
+      shop.redirects ??= demoRedirects()
+      const row = shop.redirects.find((r) => r.id === vars.id)
+      if (row === undefined)
+        return {
+          urlRedirectUpdate: {
+            urlRedirect: null,
+            userErrors: [{ field: ['id'], message: 'Redirect not found' }],
+          },
+        }
+      const input = vars.urlRedirect as Obj
+      if (typeof input.path === 'string') row.path = input.path
+      if (typeof input.target === 'string') row.target = input.target
+      return { urlRedirectUpdate: { urlRedirect: { ...row }, userErrors: [] } }
+    }
+    case 'AgentswsUrlRedirectDelete': {
+      shop.redirects ??= demoRedirects()
+      const before = shop.redirects.length
+      shop.redirects = shop.redirects.filter((r) => r.id !== vars.id)
+      return before === shop.redirects.length
+        ? {
+            urlRedirectDelete: {
+              deletedUrlRedirectId: null,
+              userErrors: [{ field: ['id'], message: 'Redirect not found' }],
+            },
+          }
+        : { urlRedirectDelete: { deletedUrlRedirectId: vars.id, userErrors: [] } }
+    }
     // WP418：政策 / 库存 / 全站自动折扣 / 订单发货
     case 'AgentswsPolicyUpdate': {
       const input = vars.shopPolicy as Obj

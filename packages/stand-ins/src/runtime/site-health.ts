@@ -18,9 +18,9 @@ export const SITE_HEALTH_SETUP_TARGET = 'site.health'
 /** 一个工具（`tools.allow` 要字节稳定）。 */
 export const SITE_HEALTH_TOOL_NAMES: readonly string[] = [QUERY_SITE_HEALTH_TOOL]
 
-/** 网站运营那两条职责：店铺管理、内容与搜索。 */
+/** 网站运营那两条职责：店铺管理、SEO 与 GEO（WP446 起技术体检归它）。 */
 export function isSiteHealthRole(role_id: string): boolean {
-  return role_id === 'dtc.store' || role_id === 'dtc.content'
+  return role_id === 'dtc.store' || role_id === 'dtc.seo'
 }
 
 const PARTS = [

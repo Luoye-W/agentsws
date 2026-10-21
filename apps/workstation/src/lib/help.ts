@@ -93,7 +93,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
     roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x', 'amz.support'],
   },
   'computer-use': { positions: [], roles: [] },
-  'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
   'shopify-cli': { positions: ['site'], roles: ['site.shopify-theme'] },
   'conn-shopify': {
     positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
@@ -118,7 +118,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
       'kol.youtube',
       'social.youtube',
       'dtc.analytics',
-      'dtc.content',
+      'dtc.seo',
       'pr.monitoring',
     ],
   },
@@ -169,12 +169,12 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'install-update': { positions: [], roles: [] },
   // WP323：通用
   'sent-log': { positions: [], roles: [] },
-  'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
   // WP343：通用
   'my-assistant': { positions: [], roles: [] },
   'site-health': {
     positions: ['web-ops', 'site', 'dtc-ops'],
-    roles: ['dtc.store', 'site.shopify-build', 'dtc.content'],
+    roles: ['dtc.store', 'site.shopify-build', 'dtc.seo'],
   },
   'workshop-services': { positions: [], roles: [] },
 }

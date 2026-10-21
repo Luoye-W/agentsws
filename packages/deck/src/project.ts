@@ -368,6 +368,7 @@ function siteHighlights(item: ApprovalItem): DeckHighlight[] {
   const SITE_KINDS = [
     'launch_check',
     'store_setup',
+    'url_redirect',
     'theme_install',
     'publish_theme',
     'email_template_edit',

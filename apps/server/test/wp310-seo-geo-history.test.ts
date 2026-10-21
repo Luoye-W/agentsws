@@ -1,5 +1,5 @@
 /**
- * WP310：内容与搜索服务里的 GEO 历史——第一次用时把 `seo-state.json` 里的问题清单与开关搬进
+ * WP310：SEO 与 GEO服务里的 GEO 历史——第一次用时把 `seo-state.json` 里的问题清单与开关搬进
  * 品牌目录的 `geo.sqlite`（老文件原样不动、只搬一次），导出 / 删除走同一份。
  * 替身沿用 seo-markets 那一组（官方数据接口的替身，不联网）。
  */
@@ -18,7 +18,7 @@ const CONTENT = {
   workspace_id: 'ws_1',
   person_id: 'p_li',
   assignment_id: 'asg_content',
-  role_id: 'dtc.content',
+  role_id: 'dtc.seo',
 }
 
 function seeded(seed = 7): () => number {
@@ -77,7 +77,7 @@ function setup(markets: string[] | undefined, over: Partial<SeoServiceOptions> =
     approvals: txn.approvals,
     ledger: txn.ledger,
     actionOf: () => ({ mandate: { caps: {} }, level: 'L1' }),
-    holderOf: (role) => (role === 'dtc.content' ? CONTENT : undefined),
+    holderOf: (role) => (role === 'dtc.seo' ? CONTENT : undefined),
     thresholds: () => ({}),
     searchConsole: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     searchData: () => o.port as never,

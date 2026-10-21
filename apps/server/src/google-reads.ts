@@ -71,7 +71,7 @@ export const GSC_SERVICES = new Set(['gsc', 'google_search_console'])
 export const GA4_SERVICES = new Set(['ga4', 'google_analytics'])
 
 export const GSC_PICK_SITE =
-  'Search Console 连上了，还没选是哪个站点：在「内容与搜索」面板上选一下，选好立刻读。'
+  'Search Console 连上了，还没选是哪个站点：在「SEO 与 GEO」面板上选一下，选好立刻读。'
 export const GA4_PICK_PROPERTY = 'GA4 连上了，还没选是哪个媒体资源：在面板上选一下，选好立刻读。'
 
 /** 执行只读 Action 要的那一小块连接器面（同 `site.ts` 的 `SiteConnectLike`，多一个吊销）。 */

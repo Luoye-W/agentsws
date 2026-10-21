@@ -2,11 +2,11 @@
 /**
  * WP158（Search Console / GA4 真读数）：截图的可重跑出处。存到 `docs/assets/wp158/*.png`。
  *
- * `gsc-pick-site.png`：「内容与搜索」职责页上那张「选一下是哪个站点」的小卡；
+ * `gsc-pick-site.png`：「SEO 与 GEO」职责页上那张「选一下是哪个站点」的小卡；
  * 之后替它选一个，断言小卡收起（不另外截图）。
  *
  * **不联网、不用真账号**：demo 里 Search Console 读数层配的是替身连接器（`apps/cli/src/demo-google.ts`），
- * 两个站点属性、合成那一周的查询词。用李默（持有「内容与搜索」）登录。
+ * 两个站点属性、合成那一周的查询词。用李默（持有「SEO 与 GEO」）登录。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
@@ -85,15 +85,15 @@ async function main() {
   try {
     await waitForDemo(log)
     const token = await login()
-    // `/v1/me` 带着这个人名下的分配；「内容与搜索」那一条就是职责页要的 assignment
+    // `/v1/me` 带着这个人名下的分配；「SEO 与 GEO」那一条就是职责页要的 assignment
     const me = await (
       await fetch(`${BASE}/v1/me`, { headers: { authorization: `Bearer ${token}` } })
     ).json()
     const content = (me.data?.assignments ?? []).find(
-      (a) => a.role_id === 'dtc.content' && a.revoked_at === undefined,
+      (a) => a.role_id === 'dtc.seo' && a.revoked_at === undefined,
     )
     if (content === undefined)
-      throw new Error(`李默名下没有「内容与搜索」：${JSON.stringify(me).slice(0, 300)}`)
+      throw new Error(`李默名下没有「SEO 与 GEO」：${JSON.stringify(me).slice(0, 300)}`)
     // 职责页挂在岗位下面：岗位 id = 这条分配所在的岗位（demo 里岗位与分配同 id 时直接用它）
     const positionId = content.position_id ?? content.id
     browser = await chromium.launch({ headless: true })
@@ -107,7 +107,7 @@ async function main() {
     }, token)
     const p = await context.newPage()
     p.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
-    const duty = `/positions/${encodeURIComponent(positionId)}/duties/dtc.content`
+    const duty = `/positions/${encodeURIComponent(positionId)}/duties/dtc.seo`
     await p.goto(`${BASE}${duty}`, { waitUntil: 'networkidle' })
     const card = p.locator('[data-testid="google-source-picker-gsc"]')
     await card.waitFor({ timeout: 20_000 })

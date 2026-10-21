@@ -48,8 +48,15 @@ describe('建站岗位（59 §1 / 54）', () => {
     expect(role.actions.map((a) => a.id)).toEqual([
       'stage_store_setup',
       'stage_theme_install',
+      // WP446（docs/109 §4.4）：改网址跳转，L1 起步、条数上限进 caps
+      'stage_url_redirect',
       'run_launch_checklist',
     ])
+    expect(role.automation.stage_url_redirect?.initial).toBe('L1')
+    expect(role.automation.stage_url_redirect?.ceiling).toBe('L2')
+    expect(role.actions.find((a) => a.id === 'stage_url_redirect')?.mandate.caps).toMatchObject({
+      max_redirects_per_change: 20,
+    })
     expect(role.automation.stage_store_setup?.ceiling).toBe('L2')
     expect(role.automation.stage_theme_install?.ceiling).toBe('L1')
     expect(role.automation.stage_theme_install?.hard_ceiling).toBe(true)

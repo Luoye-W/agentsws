@@ -40,6 +40,8 @@ const REVERSIBLE: ChangeKind[] = [
   'listing_edit',
   'bid_change',
   'budget_change',
+  // WP446：改跳转的 before 记着原跳转（没有 = 空），对调再执行一次就回去了
+  'url_redirect',
 ]
 
 const num = (v: unknown): number | undefined =>

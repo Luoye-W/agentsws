@@ -1,5 +1,6 @@
 /**
- * WP418（自查 A13 / B4 / B5 / B10）：独立站运营**补的那几样**——政策、库存、全站自动折扣、订单发货 / 回填单号。
+ * WP418（自查 A13 / B4 / B5 / B10）：独立站运营**补的那几样**——政策、库存、全站自动折扣、订单发货 / 回填单号；
+ * WP446（docs/109 §4.4）：建站的网址跳转（`shop_save_redirects` → `url_redirect`，可撤回）。
  *
  * 与 `shop-ops.ts` / `shop-propose.ts` / `shop-apply.ts` 同一套三步（单独一个文件，免得和别的单抢那几个大文件）：
  *
@@ -77,6 +78,23 @@ export const FULFILLMENT_CREATE = `mutation AgentswsFulfillmentCreate($fulfillme
     fulfillment { id status trackingInfo(first: 3) { number company url } }
     userErrors { field message }
   }
+}`
+
+// WP446（docs/109 §4.4）：网址跳转（Shopify 原生 URL 跳转；要 `write_online_store_navigation`）
+export const URL_REDIRECTS = `query AgentswsUrlRedirects($query: String!) {
+  urlRedirects(first: 5, query: $query) { nodes { id path target } }
+}`
+
+export const URL_REDIRECT_CREATE = `mutation AgentswsUrlRedirectCreate($urlRedirect: UrlRedirectInput!) {
+  urlRedirectCreate(urlRedirect: $urlRedirect) { urlRedirect { id path target } userErrors { field message } }
+}`
+
+export const URL_REDIRECT_UPDATE = `mutation AgentswsUrlRedirectUpdate($id: ID!, $urlRedirect: UrlRedirectInput!) {
+  urlRedirectUpdate(id: $id, urlRedirect: $urlRedirect) { urlRedirect { id path target } userErrors { field message } }
+}`
+
+export const URL_REDIRECT_DELETE = `mutation AgentswsUrlRedirectDelete($id: ID!) {
+  urlRedirectDelete(id: $id) { deletedUrlRedirectId userErrors { field message } }
 }`
 
 export const TRACKING_UPDATE = `mutation AgentswsTrackingUpdate($fulfillmentId: ID!, $trackingInfoInput: FulfillmentTrackingInput!, $notifyCustomer: Boolean) {
@@ -679,6 +697,179 @@ async function applyFulfillment(ctx: ApplyContext, a: Obj): Promise<Applied> {
   }
 }
 
+// ── 网址跳转（WP446，docs/109 §4.4） ─────────────────────────────────────
+
+/** 一张卡最多几条（硬上限；额度 `max_redirects_per_change` 在职责 yml 里，超了转人审）。 */
+export const MAX_REDIRECTS_PER_CARD = 50
+
+interface RedirectRow {
+  path: string
+  /** 空 = 没有跳转（出卡时 = 撤掉这条）。 */
+  target: string
+}
+
+/** 店里现在这条旧路径的跳转（精确对得上 path 的那一条；没有 = `undefined`）。 */
+async function readRedirect(
+  reader: ShopifyAdminReader,
+  path: string,
+): Promise<{ id: string; target: string } | undefined> {
+  const data = o(
+    await reader.query({
+      name: 'url_redirects',
+      document: URL_REDIRECTS,
+      variables: { query: `path:${JSON.stringify(path)}` },
+    }),
+  )
+  const hit = nodes(data.urlRedirects).find((n) => s(n.path) === path)
+  const id = s(hit?.id)
+  return id === undefined ? undefined : { id, target: s(hit?.target) ?? '' }
+}
+
+function redirectPath(v: unknown): string {
+  const p = str(v, 255)
+  if (p === undefined || !p.startsWith('/'))
+    throw new ShopOpsError(
+      'invalid_input',
+      `旧路径要写成站内路径（/ 开头，如 /pages/old-faq）：${String(v)}`,
+    )
+  return p
+}
+
+function redirectTarget(v: unknown): string {
+  if (v === undefined || v === null || v === '') return ''
+  const t = str(v, 512)
+  if (t === undefined) return ''
+  if (!t.startsWith('/') && !/^https:\/\//i.test(t))
+    throw new ShopOpsError('invalid_input', `目标要是站内路径（/ 开头）或 https:// 网址：${t}`)
+  return t
+}
+
+async function saveRedirects(ctx: ProposeContext, input: Obj): Promise<ShopDraft> {
+  const raw = Array.isArray(input.redirects) ? (input.redirects as unknown[]) : []
+  if (raw.length === 0)
+    throw new ShopOpsError(
+      'invalid_input',
+      '要给 redirects：[{ path, target }]（target 空 = 撤掉这条跳转）',
+    )
+  if (raw.length > MAX_REDIRECTS_PER_CARD)
+    throw new ShopOpsError('invalid_input', `一张卡最多 ${MAX_REDIRECTS_PER_CARD} 条`)
+  const want = new Map<string, string>()
+  for (const r of raw) {
+    const one = o(r)
+    want.set(redirectPath(one.path), redirectTarget(one.target))
+  }
+  const before: RedirectRow[] = []
+  const after: RedirectRow[] = []
+  for (const [path, target] of want) {
+    if (target === path) throw new ShopOpsError('invalid_input', `${path} 跳到自己了`)
+    // 改前必读：这一刻现读店里这条旧路径原来跳到哪（「原来」就是读到的，撤回靠它）
+    const now = await readRedirect(ctx.reader, path)
+    if ((now?.target ?? '') === target) continue
+    if (target === '' && now === undefined) continue
+    before.push({ path, target: now?.target ?? '' })
+    after.push({ path, target })
+  }
+  if (after.length === 0)
+    throw new ShopOpsError('invalid_input', '店里这几条跳转已经是这样了，不用出卡')
+  const label = (r: RedirectRow) => `${r.path} → ${r.target === '' ? '（不跳）' : r.target}`
+  const first = after[0] as RedirectRow
+  return {
+    op: 'url_redirect',
+    target: {
+      type: 'url_redirect',
+      id: after
+        .map((r) => r.path)
+        .join(',')
+        .slice(0, 200),
+    },
+    field: 'redirects',
+    before: { ...base(ctx.access.store, 'url_redirect'), redirects: before },
+    after: { ...base(ctx.access.store, 'url_redirect'), redirects: after },
+    title:
+      after.length === 1
+        ? first.target === ''
+          ? `撤掉跳转：${first.path}`
+          : `改跳转：${label(first)}`
+        : `改跳转 ${after.length} 条（${label(first)} 等）`,
+    notes: [
+      ...after.slice(0, 10).map((r, i) => {
+        const was = before[i]?.target ?? ''
+        return `${label(r)}（原来：${was === '' ? '没有跳转' : was}）`
+      }),
+      ...(after.length > 10 ? [`还有 ${after.length - 10} 条见卡上`] : []),
+      'Shopify 的网址跳转是永久跳转（301），批了马上生效；原来跳到哪记在卡上，撤回就是改回去。',
+    ],
+    // 这一刻真读过店里的跳转（「原来」就是读到的）
+    synthetic: true,
+  }
+}
+
+async function applyRedirects(ctx: ApplyContext, a: Obj, before: Obj): Promise<Applied> {
+  const want = arr(a.redirects).map((r) => ({ path: s(r.path) ?? '', target: s(r.target) ?? '' }))
+  const was = new Map(arr(before.redirects).map((r) => [s(r.path) ?? '', s(r.target) ?? '']))
+  if (want.length === 0) throw new ShopApplyError('卡上没有要改的跳转')
+  // 先全部核对一遍「原来」（有一条在卡出来之后被人改过就一条都不动）
+  const now = new Map<string, { id: string; target: string } | undefined>()
+  for (const r of want) {
+    const cur = await readRedirect(ctx.admin, r.path)
+    if ((cur?.target ?? '') !== (was.get(r.path) ?? '')) stale(`跳转 ${r.path}`)
+    now.set(r.path, cur)
+  }
+  let done = 0
+  for (const r of want) {
+    const cur = now.get(r.path)
+    try {
+      if (r.target === '') {
+        if (cur !== undefined)
+          await mutate(
+            ctx,
+            'url_redirect_delete',
+            URL_REDIRECT_DELETE,
+            { id: cur.id },
+            'urlRedirectDelete',
+          )
+      } else if (cur !== undefined) {
+        await mutate(
+          ctx,
+          'url_redirect_update',
+          URL_REDIRECT_UPDATE,
+          { id: cur.id, urlRedirect: { path: r.path, target: r.target } },
+          'urlRedirectUpdate',
+        )
+      } else {
+        await mutate(
+          ctx,
+          'url_redirect_create',
+          URL_REDIRECT_CREATE,
+          { urlRedirect: { path: r.path, target: r.target } },
+          'urlRedirectCreate',
+        )
+      }
+    } catch (e) {
+      if (done === 0) throw e
+      throw new ShopApplyError(
+        `前 ${done} 条已经改了，第 ${done + 1} 条（${r.path}）没改成：${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+    done += 1
+  }
+  const wrong: string[] = []
+  for (const r of want)
+    if (((await readRedirect(ctx.admin, r.path))?.target ?? '') !== r.target) wrong.push(r.path)
+  const ok = wrong.length === 0
+  return {
+    ref: {
+      type: 'url_redirect',
+      id: want
+        .map((r) => r.path)
+        .join(',')
+        .slice(0, 200),
+    },
+    verified: ok,
+    ...(ok ? {} : { note: `跳转读回来对不上：${wrong.join('、')}` }),
+  }
+}
+
 // ── 分发 ─────────────────────────────────────────────────────────────────
 
 export const EXTRA_WRITE_TOOLS: readonly string[] = [
@@ -686,6 +877,7 @@ export const EXTRA_WRITE_TOOLS: readonly string[] = [
   'shop_adjust_inventory',
   'shop_create_automatic_discount',
   'shop_fulfill_order',
+  'shop_save_redirects',
 ]
 
 export async function draftExtra(
@@ -702,6 +894,8 @@ export async function draftExtra(
       return createPromotion(ctx, input)
     case 'shop_fulfill_order':
       return fulfillOrder(ctx, input)
+    case 'shop_save_redirects':
+      return saveRedirects(ctx, input)
     default:
       return undefined
   }
@@ -723,6 +917,8 @@ export async function applyExtra(
     case 'fulfillment_create':
     case 'tracking_update':
       return applyFulfillment(ctx, a)
+    case 'url_redirect':
+      return applyRedirects(ctx, a, before)
     default:
       return undefined
   }

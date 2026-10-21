@@ -340,6 +340,7 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   kol_tracked_link: 'tracked_link',
   kol_deliverable_review: 'deliverable_review',
   store_setup: 'store_setup',
+  url_redirect: 'url_redirects',
   theme_install: 'theme_install',
   app_config: 'app_config',
   app_install: 'app_install',

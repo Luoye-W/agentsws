@@ -1,6 +1,6 @@
 /**
  * WP385：`query_site_health` 在三个运行时（stub / direct / dsh）下都摆得出来、调得通，而且**只读**：
- * 不出审批卡、不产生 staged / applied。只给店铺管理、内容与搜索；别的职责工具面里没有它。
+ * 不出审批卡、不产生 staged / applied。只给店铺管理、SEO 与 GEO；别的职责工具面里没有它。
  * 上游模型是替身（direct / dsh 第一轮回一个工具调用，第二轮回一段话），不联网、不花钱。
  */
 import type { Clock, Completion, Matter, ModelRef } from '@agentsws/contracts'
@@ -119,7 +119,7 @@ async function runOnce(mode: Mode, role_id: string) {
 
 describe('WP385 query_site_health：三个运行时', () => {
   it('stub：问「AI 爬虫进得来吗」→ 读体检结论、照实说；只读不出卡', async () => {
-    const { prompts, executed, create, said } = await runOnce('stub', 'dtc.content')
+    const { prompts, executed, create, said } = await runOnce('stub', 'dtc.seo')
     expect(prompts).toEqual([])
     expect(executed).toHaveBeenCalledTimes(1)
     expect(create).not.toHaveBeenCalled()

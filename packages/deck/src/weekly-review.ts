@@ -33,7 +33,10 @@ export interface WeeklyReviewInput {
    * 从它读。
    */
   base: QueryContext
-  /** 「内容与搜索」（`dtc.content`）担着的人那一面：按页收入那张周报卡只发给他。 */
+  /**
+   * 「SEO 与 GEO」（`dtc.seo`，WP446 起；之前是内容与搜索）担着的人那一面：按页收入那张周报卡只发给他。
+   * 字段名 `content` 不改（只加不删）。
+   */
   content?: QueryContext
   /** 客服（`dtc.support`）担着的人那一面：回信草稿只在他的队列里。 */
   support?: QueryContext
@@ -171,8 +174,8 @@ function readAds(input: WeeklyReviewInput): Reading[] {
 }
 
 function readContent(input: WeeklyReviewInput): Reading {
-  if (!input.held.includes('dtc.content') || input.content === undefined)
-    return gap('content_revenue', '没人担「内容与搜索」')
+  if (!input.held.includes('dtc.seo') || input.content === undefined)
+    return gap('content_revenue', '没人担「SEO 与 GEO」')
   const t = tableOf(input.content, 'seo.page_revenue')
   if (t === undefined) return gap('content_revenue', '店铺没连')
   if (t.rows.length === 0) return gap('content_revenue', '还没出过按页收入周报')
@@ -186,7 +189,7 @@ function readContent(input: WeeklyReviewInput): Reading {
         top === undefined || num(top.revenue) === 0 ? '' : `，最多的是 ${String(top.page)}`
       }`,
       value: money(revenue, cur),
-      source: '内容与搜索 · 按页收入（最近一张周报）',
+      source: 'SEO 与 GEO · 按页收入（最近一张周报）',
     },
   }
 }

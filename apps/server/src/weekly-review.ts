@@ -95,7 +95,8 @@ export function createWeeklyReviewService(
         : { ...ctx, now, tz_offset_minutes: last.offset_minutes }
     const base = shift(await contextOf(port, owner))
     if (base === undefined) return undefined
-    const content = shift(await contextOf(port, holderOf('dtc.content')))
+    // WP446：按页收入那张周报卡发给「SEO 与 GEO」的担当人
+    const content = shift(await contextOf(port, holderOf('dtc.seo')))
     const support = shift(await contextOf(port, holderOf('dtc.support')))
     const brand = options.brandName()
     const payload = composeWeeklyReview({

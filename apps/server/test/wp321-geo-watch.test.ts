@@ -1,5 +1,5 @@
 /**
- * WP321（docs/99 §7 O2）：内容与搜索里的 GEO / SEO 监测——策略设定卡、每周一轮写历史（排队档批量 /
+ * WP321（docs/99 §7 O2）：SEO 与 GEO里的 GEO / SEO 监测——策略设定卡、每周一轮写历史（排队档批量 /
  * Claude / 关注词排名 / 品牌词周数据）、指标、变化大才出卡、迁移（决策 532）、自带 key 查模型清单（534）。
  * 上游全是替身：搜索数据口、数据能力口、模型口都不联网、不花钱。
  */
@@ -27,7 +27,7 @@ const CONTENT = {
   workspace_id: 'ws_1',
   person_id: 'p_li',
   assignment_id: 'asg_content',
-  role_id: 'dtc.content',
+  role_id: 'dtc.seo',
 }
 const PR = { ...CONTENT, person_id: 'p_zhao', assignment_id: 'asg_pr', role_id: 'pr.forums' }
 
@@ -325,7 +325,7 @@ function setup(w: ReturnType<typeof world>, over: Partial<SeoServiceOptions> = {
     approvals: txn.approvals,
     ledger: txn.ledger,
     actionOf: () => ({ mandate: { caps: {} }, level: 'L1' }),
-    holderOf: (role) => (role === 'dtc.content' ? CONTENT : role === 'pr.forums' ? PR : undefined),
+    holderOf: (role) => (role === 'dtc.seo' ? CONTENT : role === 'pr.forums' ? PR : undefined),
     thresholds: () => ({}),
     work: {
       createMatter: (input) => {
@@ -719,8 +719,7 @@ describe('WP392 品牌档案里新查到的竞品：沿用「要不要加进竞�
     const w = world()
     const STORE = { ...CONTENT, assignment_id: 'asg_store', role_id: 'dtc.store' }
     const { service, cards, decide } = setup(w, {
-      holderOf: (role) =>
-        role === 'dtc.store' ? STORE : role === 'dtc.content' ? CONTENT : undefined,
+      holderOf: (role) => (role === 'dtc.store' ? STORE : role === 'dtc.seo' ? CONTENT : undefined),
       brand: () => ({
         name: 'NordVolt',
         language: 'en',

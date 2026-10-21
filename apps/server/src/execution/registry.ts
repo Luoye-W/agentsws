@@ -223,10 +223,14 @@ export const CHANGE_EXECUTORS: readonly ChangeExecutorSpec[] = [
       'inventory_adjust',
       'promotion',
       'create_fulfillment',
+      // WP446（docs/109 §4.4）：建站改网址跳转
+      'url_redirect',
     ],
     readback: 'verified',
     // 只有经店铺工具出的卡（带 `via: shop_admin`）才走 Shopify 后台；别的路出的同类卡没有去处
-    accepts: (c) => rec(c.after).via === SHOP_VIA,
+    // WP446：卡上那一格是 `_via`（`shop-ops.ts` 的 `toCard` 把给执行器的键改名成 `_` 开头）——两种都认，
+    // 只认 `via` 时经店铺工具出的真卡全被判成「还没接通」
+    accepts: (c) => rec(c.after).via === SHOP_VIA || rec(c.after)._via === SHOP_VIA,
     label: 'Shopify 后台：改完读回核对',
   },
 ]

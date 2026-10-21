@@ -29,7 +29,7 @@ export const DEFAULT_REPORTS: readonly ReportSpec[] = [
     title: '网站经营数据报表',
     position: 'web-ops',
     duties: ['dtc.store'],
-    compute_roles: ['dtc.store', 'common.owner', 'dtc.content', 'dtc.fulfillment'],
+    compute_roles: ['dtc.store', 'common.owner', 'dtc.seo', 'dtc.content', 'dtc.fulfillment'],
     headline: 'sales',
     watch: ['sales', 'orders', 'aov', 'conversion', 'new_share'],
     actions: {
@@ -101,8 +101,8 @@ export const DEFAULT_REPORTS: readonly ReportSpec[] = [
     id: 'web-ops.traffic',
     title: '流量报表',
     position: 'web-ops',
-    duties: ['dtc.store', 'dtc.content'],
-    compute_roles: ['dtc.store', 'dtc.content', 'common.owner'],
+    duties: ['dtc.store', 'dtc.seo'],
+    compute_roles: ['dtc.store', 'dtc.seo', 'common.owner'],
     headline: 'visitors',
     blocks: [
       {
@@ -147,8 +147,8 @@ export const DEFAULT_REPORTS: readonly ReportSpec[] = [
     id: 'web-ops.seo',
     title: 'SEO 与 AI 搜索',
     position: 'web-ops',
-    duties: ['dtc.content'],
-    compute_roles: ['dtc.content', 'dtc.store', 'common.owner'],
+    duties: ['dtc.seo'],
+    compute_roles: ['dtc.seo', 'dtc.store', 'common.owner'],
     headline: 'gsc_clicks',
     blocks: [
       {
@@ -580,7 +580,7 @@ export const REPORT_RECIPES: readonly ReportRecipe[] = [
       wide: true,
     },
     position: 'web-ops',
-    duty: 'dtc.content',
+    duty: 'dtc.seo',
     refresh: 'daily',
   },
   {
@@ -591,7 +591,7 @@ export const REPORT_RECIPES: readonly ReportRecipe[] = [
     metrics: ['gsc_clicks', 'gsc_impressions', 'gsc_position'],
     chart: { id: 'chart', kind: 'table', title: '搜索词', dataset: 'gsc.queries', wide: true },
     position: 'web-ops',
-    duty: 'dtc.content',
+    duty: 'dtc.seo',
     refresh: 'daily',
   },
   {

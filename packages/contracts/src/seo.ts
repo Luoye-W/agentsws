@@ -1,5 +1,5 @@
 /**
- * WP154「内容与搜索」：`dtc.content` 那条职责里 SEO 与 GEO 的几个形状（Luoye 09-26 定：
+ * WP154「内容与搜索」：`dtc.seo`「SEO 与 GEO」（WP446 从 `dtc.content` 拆出）那条职责里 SEO 与 GEO 的几个形状（Luoye 09-26 定：
  * SEO / GEO 不新建职责，并进内容那一条——中小公司里写内容的人就是顺手做 SEO 的人）。
  *
  * 一条纪律贯穿全文件：**不堆数据**。Search Console 每天给几千行，卡上只出六个信号挑出来的

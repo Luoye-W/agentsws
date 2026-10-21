@@ -94,6 +94,8 @@ export const DEFAULT_HOME_TILES: Readonly<Record<RoleId, readonly string[]>> = {
   'dtc.store': ['sales_total', 'orders_count', 'conversion_rate', 'low_stock_count'],
   // WP63（51 §2.2）：内容与博客盯的是"有几篇压着没发"与它们带来的流量
   'dtc.content': ['pending_posts', 'active_users'],
+  // WP446：SEO 与 GEO 盯的是流量（今天那 5 件事在面板里，不是数字块）
+  'dtc.seo': ['active_users'],
 }
 
 export function defaultTilesFor(role_id: RoleId): string[] {

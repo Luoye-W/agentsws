@@ -88,13 +88,13 @@ export function shortDate(iso: string): string {
 /**
  * WP420（自查 U9）：这条职责下面有没有看板（有就不说「还没有报表」）。和 `scope-boards.tsx` 的 `dutyHasReportBoards`
  * 同一份名单，但不 import 那个文件——它连着社媒日历、B2B、投放素材一大串，挂进报表面板会拖慢懒加载。
- * WP433：报表里只剩「看数」那一类看板（投放「今天」、Amazon 运营、内容与搜索）；排期 / 群发 / 开发信 / 素材流水线挪去「计划」。
+ * WP433：报表里只剩「看数」那一类看板（投放「今天」、Amazon 运营、SEO 与 GEO）；排期 / 群发 / 开发信 / 素材流水线挪去「计划」。
  */
 export function dutyMayHaveBoards(role_id: string): boolean {
   return (
     role_id === 'ads.google' ||
     role_id === 'ads.meta' ||
-    role_id === 'dtc.content' ||
+    role_id === 'dtc.seo' ||
     role_id === 'amz.store'
   )
 }

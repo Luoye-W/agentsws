@@ -262,6 +262,7 @@ describe('问题 8：报表里只放报表', () => {
       'b2b.outbound',
       'b2b.sales',
       'dtc.content',
+      'dtc.seo',
       'social.reddit',
       'social.facebook_group',
       'dtc.support',
