@@ -8,12 +8,14 @@
 
 import type { AdsPlatform } from '@agentsws/contracts'
 import { ADS_PLATFORM_IDS } from '@agentsws/contracts'
+import { createExportOnlyAdapter } from './export-only.js'
 import { createGoogleAdsAdapter } from './google.js'
 import { createMetaAdsAdapter } from './meta.js'
 import { createTiktokAdsAdapter } from './tiktok.js'
 import type { AdsChannelAdapter, AdsTransport } from './types.js'
 import { createXAdsAdapter } from './x.js'
 
+export * from './export-only.js'
 export * from './google.js'
 export * from './meta.js'
 export * from './tiktok.js'
@@ -25,9 +27,16 @@ const FACTORIES: Record<AdsPlatform, (t: AdsTransport) => AdsChannelAdapter> = {
   google: createGoogleAdsAdapter,
   x: createXAdsAdapter,
   tiktok: createTiktokAdsAdapter,
+  // WP447：六个新平台第一期只读，同一个「导出报表给我」的适配器
+  microsoft: (t) => createExportOnlyAdapter('microsoft', t),
+  pinterest: (t) => createExportOnlyAdapter('pinterest', t),
+  reddit: (t) => createExportOnlyAdapter('reddit', t),
+  linkedin: (t) => createExportOnlyAdapter('linkedin', t),
+  snapchat: (t) => createExportOnlyAdapter('snapchat', t),
+  apple: (t) => createExportOnlyAdapter('apple', t),
 }
 
-/** 建齐四条（顺序 = `ADS_PLATFORMS`）。 */
+/** 建齐全部平台（顺序 = `ADS_PLATFORMS`）。 */
 export function createAdsAdapters(transport: AdsTransport): Record<AdsPlatform, AdsChannelAdapter> {
   const out = {} as Record<AdsPlatform, AdsChannelAdapter>
   for (const id of ADS_PLATFORM_IDS) out[id] = FACTORIES[id](transport)

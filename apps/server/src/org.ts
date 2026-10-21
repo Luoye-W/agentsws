@@ -400,6 +400,13 @@ const SEED_POSITIONS: readonly {
       ['ads.google', true],
       ['ads.x', false],
       ['ads.tiktok', false],
+      // WP447（docs/109 §6.1）：六个新平台第一期只读，全部默认不勾
+      ['ads.microsoft', false],
+      ['ads.pinterest', false],
+      ['ads.reddit', false],
+      ['ads.linkedin', false],
+      ['ads.snapchat', false],
+      ['ads.apple', false],
       ['common.member', false],
     ],
   },

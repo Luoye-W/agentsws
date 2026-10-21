@@ -1,4 +1,4 @@
-# WP75（57 §1 / 27 §1 / 54）：**投放**岗位 = 四条平台职责。
+# WP75（57 §1 / 27 §1 / 54）：**投放**岗位 = 四条平台职责（WP447 起再加六条只读的新平台，见下面 roles）。
 #
 # 四条的顺序 = 契约里 `ADS_PLATFORMS` 的顺序（默认勾的两条在前）。
 # 那张表是全仓唯一一份平台清单，这里不另排一遍。
@@ -35,6 +35,14 @@ roles:
   # 申请下来了在向导里勾上
   - { role: ads.x, default: false }
   - { role: ads.tiktok, default: false }
+  # WP447（docs/109 §6.1）：六个新平台，第一期只读（看数 + 体检，不碰账户）。全部默认不勾——
+  # 在投哪家就在岗位设定里勾哪家（Apple 只推 App；LinkedIn 是 B2B 用的）
+  - { role: ads.microsoft, default: false }
+  - { role: ads.pinterest, default: false }
+  - { role: ads.reddit, default: false }
+  - { role: ads.linkedin, default: false }
+  - { role: ads.snapchat, default: false }
+  - { role: ads.apple, default: false }
 
 # ── WP120（69 §2）：**这个岗位的角色定位**，装配时排在职责 persona 前面 ──────────
 # 岗位这一段说「这个岗位在公司里是干什么的、什么活不归它」；

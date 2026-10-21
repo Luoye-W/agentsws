@@ -81,6 +81,13 @@ const HELP_BY_SERVICE: Record<string, string> = {
   tiktok_research: 'conn-tiktok',
   tiktok_content: 'conn-tiktok',
   tiktok_ads: 'conn-tiktok',
+  // WP447：六个新平台这一期不用连，卡上的「看教程」打开导出那一篇
+  microsoft_ads: 'ads-export',
+  pinterest_ads: 'ads-export',
+  reddit_ads: 'ads-export',
+  linkedin_ads: 'ads-export',
+  snapchat_ads: 'ads-export',
+  apple_ads: 'ads-export',
   x_api: 'conn-x',
   x_ads: 'conn-x',
   reddit: 'conn-community',

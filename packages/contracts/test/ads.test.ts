@@ -12,6 +12,7 @@ import {
   ADS_DEFAULT_CAPS,
   ADS_PLATFORM_IDS,
   ADS_PLATFORMS,
+  ADS_READ_ONLY_PLATFORM_IDS,
   ADS_ROLE_IDS,
   adsPlatformOfRole,
   adsPlatformSpec,
@@ -19,18 +20,31 @@ import {
 } from '../src/index.js'
 
 describe('ADS_PLATFORMS', () => {
-  it('四个平台，顺序 = 岗位模板里的摆法（默认勾的两条在前）', () => {
-    expect(ADS_PLATFORM_IDS).toEqual(['meta', 'google', 'x', 'tiktok'])
+  it('十个平台，顺序 = 岗位模板里的摆法（默认勾的两条在前，WP447 的六个在最后）', () => {
+    expect(ADS_PLATFORM_IDS).toEqual([
+      'meta',
+      'google',
+      'x',
+      'tiktok',
+      'microsoft',
+      'pinterest',
+      'reddit',
+      'linkedin',
+      'snapchat',
+      'apple',
+    ])
   })
 
   it('职责 id 由表给，不由调用方现拼', () => {
-    expect(ADS_ROLE_IDS).toEqual(['ads.meta', 'ads.google', 'ads.x', 'ads.tiktok'])
+    expect(ADS_ROLE_IDS.slice(0, 4)).toEqual(['ads.meta', 'ads.google', 'ads.x', 'ads.tiktok'])
+    expect(ADS_ROLE_IDS).toContain('ads.microsoft')
+    expect(ADS_ROLE_IDS).toContain('ads.apple')
     expect(adsPlatformOfRole('ads.google')?.id).toBe('google')
     expect(adsPlatformOfRole('social.meta')).toBeUndefined()
   })
 
   it('不认识的平台回 undefined —— 不编造一条', () => {
-    expect(adsPlatformSpec('pinterest')).toBeUndefined()
+    expect(adsPlatformSpec('amazon')).toBeUndefined()
   })
 
   it('Meta 的投放连接器与社媒那张 `meta_graph` 是两张卡（要的权限不一样）', () => {
@@ -40,6 +54,29 @@ describe('ADS_PLATFORMS', () => {
   it('WP75 只做 Meta / Google 真实现（57 §2）', () => {
     const done = ADS_PLATFORMS.filter((p) => p.implemented).map((p) => p.id)
     expect(done).toEqual(['meta', 'google'])
+  })
+
+  it('WP447：Google 的访问口径是 Cloud 项目（developer token 2026-09-09 已取消）', () => {
+    expect(adsPlatformSpec('google')?.api_access).toBe('cloud_project')
+    expect(ADS_PLATFORMS.some((p) => p.api_access === 'developer_token')).toBe(false)
+  })
+
+  it('WP447：六个新平台只读、只走导出；Apple 只推 App', () => {
+    expect(ADS_READ_ONLY_PLATFORM_IDS).toEqual([
+      'microsoft',
+      'pinterest',
+      'reddit',
+      'linkedin',
+      'snapchat',
+      'apple',
+    ])
+    for (const id of ADS_READ_ONLY_PLATFORM_IDS) {
+      expect(adsPlatformSpec(id)?.api_access).toBe('export_only')
+      expect(adsPlatformSpec(id)?.implemented).toBe(false)
+    }
+    expect(ADS_PLATFORMS.filter((p) => p.app_only).map((p) => p.id)).toEqual(['apple'])
+    expect(adsPlatformSpec('microsoft')?.zh).toBe('Microsoft 广告（Bing）')
+    expect(adsPlatformSpec('apple')?.zh).toBe('Apple 搜索广告')
   })
 
   it('每个平台各有各的连接器 kind —— 没有两条共用一张卡', () => {

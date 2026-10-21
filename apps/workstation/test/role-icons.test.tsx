@@ -74,7 +74,10 @@ describe('岗位与职责图标（WP213）', () => {
   it('角标都能在官网图库里找到，渲染出来的是本地图、不是外站地址', () => {
     const badges = [...new Set(Object.values(DUTY_ICONS).flatMap((s) => s.badge ?? []))]
     expect(badges).toContain('amazon')
-    for (const b of badges) expect(hasOfficialIcon(b), `${b} 没有官网图`).toBe(true)
+    // WP447：投放那四个新平台还没抓官网图，角标用 simple-icons（CC0）/ 首字母画的本地图——点名列出，别的照旧要官网图
+    const CC0_BADGES = ['microsoft_ads', 'pinterest_ads', 'snapchat_ads', 'apple_ads']
+    for (const b of badges)
+      expect(hasOfficialIcon(b) || CC0_BADGES.includes(b), `${b} 没有官网图`).toBe(true)
     for (const [id, spec] of Object.entries(DUTY_ICONS)) {
       const { container, unmount } = render(<DutyIcon role_id={id} />)
       const svg = container.querySelector('svg') as SVGSVGElement

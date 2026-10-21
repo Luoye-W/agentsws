@@ -6,11 +6,11 @@
  *
  * 形状上要留意的五件事，都在下面标了：
  *
- * 1. **三样东西缺一不可**：OAuth access token（`Authorization`）、
- *    **developer token**（`developer-token` 头，要单独申请并过审）、
- *    以及 `login-customer-id`（用 MCC 管别人账户时）。缺 developer token 时
- *    上游回 401 / 403，我们翻成 `needs_developer_token` 而不是"连接失败"——
- *    这两句话要做的事完全不同（57 §1）。
+ * 1. **两样东西**：OAuth access token（`Authorization`）与客户 id，外加 `login-customer-id`
+ *    （用 MCC 管别人账户时）。**developer token 不再要**（WP447）：官方「Developer token and
+ *    API access levels」页（2026-10-19 版）写明它 2026-09-09 已取消——头里带了也被忽略、将来的
+ *    大版本会拒收，所以我们**不发**；访问级别改挂在生成 OAuth 凭据的那个 Google Cloud 项目上
+ *    （测试级只能动测试账户）。所以 403 的那句话指向「这个 Cloud 项目的访问级别」，不是 API Center。
  * 2. **读走 GAQL**（`searchStream`，POST 一段 SQL 样子的查询）。没有 REST 风格的
  *    "列一下 campaign"这回事——这是 Google Ads API 与别家最不一样的地方。
  * 3. **钱是「微」**（micros，1 元 = 1_000_000）。传错六个零，一条日预算就从
@@ -83,30 +83,35 @@ const str = (row: Record<string, unknown> | undefined, key: string): string | un
   return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined
 }
 
+/**
+ * WP447：403 换一句指向「Cloud 项目访问级别」的话。developer token 取消之后，访问级别挂在生成 OAuth
+ * 凭据的那个 Google Cloud 项目上：刚启用 API 只有测试级（只能动测试账户），动真账户要在同一个项目里
+ * 再申请一级。401 还是老那句（授权过期，去重连）。
+ */
+export function accessLevelHint(err: AdsError): AdsError {
+  if (err.status !== 403) return err
+  return {
+    ...err,
+    message:
+      'Google Ads 回了 403。多半是生成这把授权的 Google Cloud 项目访问级别还不够（刚启用时只能动测试账户），要在 Cloud 控制台的 Google Ads API 页里申请更高一级——**不是**这条广告有问题。',
+  }
+}
+
 export function createGoogleAdsAdapter(transport: AdsTransport): AdsChannelAdapter {
   const off = () => guardConnected(transport, PLATFORM, LABEL)
   const at = () => transport.now()
 
   /**
-   * 三个头一起给（文件头第 1 条）。`developer_token` 一格没填就**一跳都不打**——
-   * 打出去必然是 401，而那句"连接失败"会把人送去重连 OAuth（错的地方）。
+   * 请求头（文件头第 1 条）。WP447：不再要、也不再发 `developer-token`——老连接里存着的那一格
+   * 照样留在加密库里，这里不读它。
    */
   const headers = async (): Promise<{ ok: true; head: Record<string, string> } | AdsError> => {
     const cred = await transport.credential(PLATFORM)
-    const dev = cred.developer_token ?? ''
-    if (dev === '')
-      return {
-        ok: false,
-        reason: 'needs_developer_token',
-        message:
-          'Google Ads 还差一个 developer token。它要在 Google Ads API Center 单独申请并过审（基础访问权限够用），与 OAuth 授权是两件事——重连一次授权解决不了这个。',
-      }
     const login = cred.login_customer_id ?? cred.manager_customer_id
     return {
       ok: true,
       head: {
         Authorization: `Bearer ${cred.access_token ?? cred.token ?? ''}`,
-        'developer-token': dev,
         'content-type': 'application/json',
         ...(login === undefined || login === ''
           ? {}
@@ -128,7 +133,7 @@ export function createGoogleAdsAdapter(transport: AdsTransport): AdsChannelAdapt
       `${GOOGLE_ADS_BASE}/customers/${normalizeCustomerId(customer_id)}/googleAds:searchStream`,
       { method: 'POST', headers: head.head, body: JSON.stringify({ query }) },
     )
-    if (!res.ok) return res
+    if (!res.ok) return accessLevelHint(res)
     const chunks = Array.isArray(res.data) ? res.data : [res.data]
     return { ok: true, rows: chunks.flatMap((c) => c.results ?? []) }
   }
@@ -325,13 +330,15 @@ export function createGoogleAdsAdapter(transport: AdsTransport): AdsChannelAdapt
       const mutate = async (
         resource: 'campaigns' | 'adGroups' | 'campaignBudgets' | 'ads',
         operations: unknown[],
-      ) =>
-        callJson<{ results?: { resourceName?: string }[] }>(
+      ) => {
+        const res = await callJson<{ results?: { resourceName?: string }[] }>(
           transport,
           LABEL,
           `${GOOGLE_ADS_BASE}/customers/${customer}/${resource}:mutate`,
           { method: 'POST', headers: h, body: JSON.stringify({ operations }) },
         )
+        return res.ok ? res : accessLevelHint(res)
+      }
 
       switch (input.kind) {
         case 'create_campaign': {

@@ -10,23 +10,61 @@
  * | `query_ads_data` | 查已入库的广告数据：时间窗、平台、层级（广告系列 / 广告组 / 广告 / 关键词 / 搜索字词）、排序；合计、按天、今天离总闸还有多少、止损判据 |
  * | `fetch_ads_data_now` | 让插件现在去后台导一次（每个账户每天最多读 2 次）；等一会儿，导进来了就回 |
  * | `stage_ads_stop_loss` | 按止损规矩提一张「暂停」卡（判据成立才自动停，不成立转人审） |
+ *
+ * WP447（docs/109 §6.2）：六个新平台（Microsoft / Pinterest / Reddit / LinkedIn / Snapchat / Apple）第一期只读，
+ * 数从用户拖进来的报表来——它们只有下面两个**只读**工具，上面三个一个都不给（没有插件导出、没有止损）：
+ *
+ * | 工具 | 干什么 |
+ * |---|---|
+ * | `read_ads_export` | 看最近一份报表：账户概况（花费、转化、ROAS、币种、时区、日期范围）与广告系列表 |
+ * | `run_ads_audit` | 按这家的体检骨架跑一遍：拿报表能判的照数判，后台那几项标「未知」并说去哪看 |
  */
 import type { ToolDef } from '@agentsws/contracts'
+import { ADS_READ_ONLY_PLATFORM_IDS, adsPlatformOfRole } from '@agentsws/contracts'
 
 export const QUERY_ADS_DATA_TOOL = 'query_ads_data'
 export const FETCH_ADS_DATA_TOOL = 'fetch_ads_data_now'
 export const STAGE_ADS_STOP_LOSS_TOOL = 'stage_ads_stop_loss'
+/** WP447：六个新平台的两个只读工具。 */
+export const READ_ADS_EXPORT_TOOL = 'read_ads_export'
+export const RUN_ADS_AUDIT_TOOL = 'run_ads_audit'
 
-/** 三个工具（排好序：`tools.allow` 要字节稳定）。 */
-export const ADS_DATA_TOOL_NAMES: readonly string[] = [
+/** Google / Meta 那几条（插件导出、查数、止损）用的三个（排好序：`tools.allow` 要字节稳定）。 */
+export const ADS_WIRED_DATA_TOOL_NAMES: readonly string[] = [
   FETCH_ADS_DATA_TOOL,
   QUERY_ADS_DATA_TOOL,
   STAGE_ADS_STOP_LOSS_TOOL,
 ].sort()
 
+/** WP447：六个新平台（只读）用的两个。 */
+export const ADS_EXPORT_TOOL_NAMES: readonly string[] = [
+  READ_ADS_EXPORT_TOOL,
+  RUN_ADS_AUDIT_TOOL,
+].sort()
+
+/** 这一族全部工具名（执行器分派、工具登记用；**哪条职责给哪几个看 `adsDataToolsFor`**）。 */
+export const ADS_DATA_TOOL_NAMES: readonly string[] = [
+  ...ADS_WIRED_DATA_TOOL_NAMES,
+  ...ADS_EXPORT_TOOL_NAMES,
+].sort()
+
 /** 投放那几条职责（`ads.meta` / `ads.google` …）才有。 */
 export function isAdsDataRole(role_id: string): boolean {
   return role_id.startsWith('ads.')
+}
+
+/** WP447：这条是不是只读的新平台职责（`ads.microsoft` …）。 */
+export function isAdsExportRole(role_id: string): boolean {
+  const p = adsPlatformOfRole(role_id)
+  return p !== undefined && ADS_READ_ONLY_PLATFORM_IDS.includes(p.id)
+}
+
+/**
+ * 这条职责给哪几个：只读的新平台只给两个只读工具（**不给止损**）；其余投放职责照旧三个；不是投放职责一个都不给。
+ */
+export function adsDataToolsFor(role_id: string): readonly string[] {
+  if (!isAdsDataRole(role_id)) return []
+  return isAdsExportRole(role_id) ? ADS_EXPORT_TOOL_NAMES : ADS_WIRED_DATA_TOOL_NAMES
 }
 
 const PLATFORM = {
@@ -98,6 +136,31 @@ export const ADS_DATA_TOOL_DEFS: readonly ToolDef[] = [
   },
 ]
 
+/** WP447：六个新平台的两个只读工具（平台不用给：这条职责是哪一家就看哪一家）。 */
+export const ADS_EXPORT_TOOL_DEFS: readonly ToolDef[] = [
+  {
+    name: READ_ADS_EXPORT_TOOL,
+    description:
+      '看这家平台最近一份报表（用户从平台后台导出、拖进对话的那份）：账户概况（花费、展示、点击、转化、转化金额、ROAS）、' +
+      '报表上写的币种 / 时区 / 日期范围，以及按花费排好的广告系列表。只读；数字照抄，没写的说没写，没数的格子是没数不是 0。' +
+      '一份都没有时回怎么导出的提示——照着告诉用户，别编数。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: '广告系列列几条（默认 20，最多 100）' },
+      },
+    },
+  },
+  {
+    name: RUN_ADS_AUDIT_TOOL,
+    description:
+      '按这家平台的体检骨架跑一遍账户体检：拿报表能判的（数新不新、写没写币种时区、花了钱有没有转化、转化带没带金额、' +
+      '哪几条花了钱一单没有）照数判；要去后台看的那几项（像素 / 转化 API、审核、预算受限…）一律「未知」并说去哪看——' +
+      '没证据就是未知，不要替它下结论。Apple 搜索广告只推 App：品牌没 App 时整份就一句「这条只适合推 App」。只读。',
+    input_schema: { type: 'object', properties: {} },
+  },
+]
+
 export const ADS_DATA_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
-  ADS_DATA_TOOL_DEFS.map((d) => [d.name, d]),
+  [...ADS_DATA_TOOL_DEFS, ...ADS_EXPORT_TOOL_DEFS].map((d) => [d.name, d]),
 )

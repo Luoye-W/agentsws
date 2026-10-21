@@ -181,17 +181,31 @@ describe('Meta Ads 适配器', () => {
 describe('Google Ads 适配器', () => {
   const cred = { access_token: TOKEN, developer_token: 'dev-123', customer_id: '123-456-7890' }
 
-  it('缺 developer token 就**一跳都不打**，而且那句话指向 API Center 不是重连授权', async () => {
-    const { calls, transport } = harness({ credential: { access_token: TOKEN, customer_id: '1' } })
+  it('WP447：developer token 已取消——没有它照样打，也**不发**那个头', async () => {
+    const { calls, transport } = harness({
+      credential: { access_token: TOKEN, customer_id: '1', developer_token: 'old-dev' },
+      reply: () => ({ ok: true, status: 200, text: '[]' }),
+    })
+    const out = await createGoogleAdsAdapter(transport).campaigns('1')
+    expect(out.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(JSON.stringify(calls[0])).not.toContain('developer-token')
+    expect(JSON.stringify(calls[0])).not.toContain('old-dev')
+  })
+
+  it('WP447：403 指向 Cloud 项目的访问级别，不是 API Center', async () => {
+    const { transport } = harness({
+      credential: { access_token: TOKEN, customer_id: '1' },
+      reply: () => ({ ok: false, status: 403, text: '{}' }),
+    })
     const out = await createGoogleAdsAdapter(transport).campaigns('1')
     expect(out.ok).toBe(false)
     if (out.ok) return
-    expect(out.reason).toBe('needs_developer_token')
-    expect(out.message).toContain('API Center')
-    expect(calls).toHaveLength(0)
+    expect(out.message).toContain('Google Cloud 项目')
+    expect(out.message).not.toContain('API Center')
   })
 
-  it('读走 GAQL（POST `searchStream`），三个头一起给', async () => {
+  it('读走 GAQL（POST `searchStream`），授权与经理账户两个头一起给', async () => {
     const { calls, transport } = harness({
       credential: { ...cred, login_customer_id: '999-888-7777' },
       reply: () => ({
@@ -215,7 +229,7 @@ describe('Google Ads 适配器', () => {
     expect(out.data[0]).toMatchObject({ external_id: '55', status: 'active', daily_budget: 100 })
     expect(calls[0]?.url).toContain('/customers/1234567890/googleAds:searchStream')
     expect(calls[0]?.method).toBe('POST')
-    expect(calls[0]?.headers['developer-token']).toBe('dev-123')
+    expect(calls[0]?.headers['developer-token']).toBeUndefined()
     expect(calls[0]?.headers['login-customer-id']).toBe('9998887777')
     expect(calls[0]?.body).toContain('FROM campaign')
   })
@@ -336,11 +350,49 @@ describe('X / TikTok：还没接（57 §2）', () => {
 })
 
 describe('createAdsAdapters', () => {
-  it('四条齐了，顺序按契约那张表', () => {
+  it('全部平台齐了，顺序按契约那张表（WP447 加六个只读的）', () => {
     const { transport } = harness({})
     const all = createAdsAdapters(transport)
-    expect(Object.keys(all)).toEqual(['meta', 'google', 'x', 'tiktok'])
+    expect(Object.keys(all)).toEqual([
+      'meta',
+      'google',
+      'x',
+      'tiktok',
+      'microsoft',
+      'pinterest',
+      'reddit',
+      'linkedin',
+      'snapchat',
+      'apple',
+    ])
     const implemented = (Object.keys(all) as AdsPlatform[]).filter((k) => all[k].implemented)
     expect(implemented).toEqual(['meta', 'google'])
+  })
+})
+
+describe('WP447：六个新平台第一期只读', () => {
+  it('读的口子指向「导出报表给我」，写的口子说「这一期只读」，一跳都不打', async () => {
+    const { calls, transport } = harness({})
+    const all = createAdsAdapters(transport)
+    for (const id of [
+      'microsoft',
+      'pinterest',
+      'reddit',
+      'linkedin',
+      'snapchat',
+      'apple',
+    ] as const) {
+      const a = all[id]
+      expect(a.implemented).toBe(false)
+      const read = await a.campaigns('1')
+      if (read.ok) throw new Error('该是失败')
+      expect(read.reason).toBe('not_implemented')
+      expect(read.message).toContain('导出')
+      expect(read.message).not.toContain('审批')
+      const write = await a.applyChange({} as never)
+      if (write.ok) throw new Error('该是失败')
+      expect(write.message).toContain('只读')
+    }
+    expect(calls).toHaveLength(0)
   })
 })

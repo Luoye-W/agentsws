@@ -203,10 +203,11 @@ const block = (
   component: ComponentName,
   title: string,
   query: string,
-  options: { hide_when_empty?: boolean; rerun?: BlockDef['rerun'] } = {},
+  options: { hide_when_empty?: boolean; rerun?: BlockDef['rerun']; report_url?: string } = {},
 ): BlockDef => {
   const def = queryDef(query)
-  const report_url = SOURCE_REPORT_URLS[def.source]
+  // WP447：同一个源（`ads`）下不同平台的块，「查看完整报告」要指到那一家的后台，不是 Meta 的
+  const report_url = options.report_url ?? SOURCE_REPORT_URLS[def.source]
   return {
     id,
     placement: 'role_view',
@@ -311,6 +312,34 @@ const ADS_POSITION_BLOCKS = (platform: string): BlockDef[] => [
   block(`ads.${platform}.pixels`, 'table', '像素健康', `ads.pixel_health.${platform}`),
   block(`ads.${platform}.daily_report`, 'table', '日报', 'ads.daily_report'),
 ]
+
+/**
+ * WP447（docs/109 §6.2）：六个新平台第一期只读——面板只有两块：账户概况（拖进来的报表）与体检。
+ * 没有今日花费 / 总闸 / 止损 / 待审那几块：这六条没有写动作，也不并进总闸（将来加写动作那期再并）。
+ */
+const ADS_EXPORT_HOME: Readonly<Record<string, string>> = {
+  microsoft: 'https://ads.microsoft.com',
+  pinterest: 'https://ads.pinterest.com',
+  reddit: 'https://ads.reddit.com',
+  linkedin: 'https://www.linkedin.com/campaignmanager',
+  snapchat: 'https://ads.snapchat.com',
+  apple: 'https://ads.apple.com',
+}
+const ADS_EXPORT_BLOCKS = (platform: string): BlockDef[] => {
+  const home = ADS_EXPORT_HOME[platform]
+  const opts = home === undefined ? {} : { report_url: home }
+  return [
+    block(
+      `ads.${platform}.export_spend`,
+      'stat_tile',
+      '花费（最近一份报表）',
+      'ads.export_spend',
+      opts,
+    ),
+    block(`ads.${platform}.export_overview`, 'table', '账户概况', 'ads.export_overview', opts),
+    block(`ads.${platform}.export_audit`, 'table', '体检', 'ads.export_audit', opts),
+  ]
+}
 
 /** WP64（51 §2.3）：邮件营销面板——待审发送、自动流状态、近 30 天效果。 */
 const EMAIL_BLOCKS = (): BlockDef[] => [
@@ -631,6 +660,13 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'ads.google': () => [...ADS_POSITION_BLOCKS('google'), ...GA4_BLOCKS()],
   'ads.x': () => ADS_POSITION_BLOCKS('x'),
   'ads.tiktok': () => ADS_POSITION_BLOCKS('tiktok'),
+  // WP447：六个新平台（只读）
+  'ads.microsoft': () => ADS_EXPORT_BLOCKS('microsoft'),
+  'ads.pinterest': () => ADS_EXPORT_BLOCKS('pinterest'),
+  'ads.reddit': () => ADS_EXPORT_BLOCKS('reddit'),
+  'ads.linkedin': () => ADS_EXPORT_BLOCKS('linkedin'),
+  'ads.snapchat': () => ADS_EXPORT_BLOCKS('snapchat'),
+  'ads.apple': () => ADS_EXPORT_BLOCKS('apple'),
   // WP64（51 §2.3 / §2.4）：两条新职责各自的面板。
   //
   // 邮件营销看得到店铺后台（弃购挽回要知道购物车里是什么），但看不到 GA4 / 广告——

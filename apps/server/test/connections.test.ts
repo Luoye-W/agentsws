@@ -224,6 +224,13 @@ describe('WP20 §A 连接清单与目录', () => {
       'google_ads',
       'x_ads',
       'tiktok_ads',
+      // WP447（docs/109 §6）：六个新平台第一期不用连（卡照出，照实说导出报表拖进对话）
+      'microsoft_ads',
+      'pinterest_ads',
+      'reddit_ads',
+      'linkedin_ads',
+      'snapchat_ads',
+      'apple_ads',
       // WP78（60 §5）：品牌监控那一张。Reddit 不在这里——公关用的就是上面
       // 那张 `reddit`（一把 key 管两条职责）；新闻稿分发是"待增加"，在下面那条用例里
       'google_alerts',
@@ -318,6 +325,13 @@ describe('WP20 §A 连接清单与目录', () => {
       'google_ads',
       'x_ads',
       'tiktok_ads',
+      // WP447（docs/109 §6）：六个新平台第一期不用连（卡照出，照实说导出报表拖进对话）
+      'microsoft_ads',
+      'pinterest_ads',
+      'reddit_ads',
+      'linkedin_ads',
+      'snapchat_ads',
+      'apple_ads',
       // WP78（60 §5）：品牌监控那一张，与店铺平台无关，换成 Woo 也照出
       'google_alerts',
     ])

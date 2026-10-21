@@ -1,0 +1,105 @@
+# WP447（docs/109 §6.1 / §6.2）：投放岗位的新平台职责 **Apple 搜索广告**。
+#
+# **只推 App**（docs/109 §6.3 给 App / 虚拟产品推广留的口）：品牌没有 App 时体检直接说「这条只适合推 App」。
+#
+# **第一期只读**（docs/109 §6.2，Luoye 10-21「全部补」）：看数 + 体检，不碰账户。
+# - 数从哪来：用户在平台后台点官方「导出」，把报表拖进对话（`apps/server/src/ads-data/export-intake.ts`
+#   认出是这一家就进看数据的库）；插件代点导出是 109F（私有插件仓）。
+# - **一条写动作都没有**——连止损暂停（`pause_ads`）都不给：只读就是只读，口径清楚。将来加写动作那期
+#   再补，花费照样并进岗位级 `max_daily_spend` 总闸。
+# - 工具只有两个只读的：`read_ads_export`（账户概况与广告系列表）、`run_ads_audit`（体检骨架，
+#   `@agentsws/ads-core` 的 `exports/audit-skeleton.ts`）。
+#
+# 岗位模板里**默认不勾**（docs/109 §6.1）。
+id: ads.apple
+version: 1.0.0
+domain: ads
+name: { zh: Apple 搜索广告, en: Apple Ads }
+description: Apple 搜索广告（App Store 搜索结果里的广告）：只推 App。看数与账户体检；这一期只读——数从你在后台导出、拖进来的报表来，改广告还不做
+
+scopes:
+  # 只读：广告数据（拖进来的报表入的那个库）与 analytics。没有 stage——这一期什么都不提
+  - { domain: ad_account, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # 自己名下的卡与事项要读得到（不读 approval 连一件事都开不了——岗位页开事项要它）；只读，不批任何东西
+  - { domain: approval, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  # 这一期不连接口（`api_access: export_only`）。卡还在目录里，照实说「这一期不用连：导出报表拖进来」；
+  # 109F 插件代点导出那天才真用到它
+  - { kind: apple_ads, required: false, grants: [read_insights], ownership: workspace }
+
+# 一条写动作都没有（docs/109 §9 第 4 条：连「暂停」都不给）
+actions: []
+
+automation: {}
+
+skills:
+  # 盈亏线 ROAS = 1 / 毛利率（只并排显示，看数时用得上）
+  - { name: unit-economics, tier: open, load: on_demand }
+
+home_blocks:
+  # 一格花费 + 一张账户概况（拖进来的最近一份报表那几天的合计，币种 / 时区 / 日期范围照报表写）+ 体检
+  - { id: ads.apple.export_spend, placement: focus, component: stat_tile, query: ads.export_spend, default_order: 5, pinnable: true, adaptive: true }
+  - { id: ads.apple.export_overview, placement: focus, component: table, query: ads.export_overview, default_order: 10, pinnable: true, adaptive: true }
+  - { id: ads.apple.export_audit, placement: role_view, component: table, query: ads.export_audit, default_order: 20, pinnable: true, adaptive: false }
+
+grounding:
+  # 54 §2：投放岗位里十条职责的数据域差不多，**意图词是分得开它们的东西**——按平台分开写
+  - {
+      name: apple_ads_intent,
+      intent_terms: [Apple, 苹果, Apple Ads, Apple Search Ads, Search Ads, App Store, 应用商店, iOS 推广],
+      cue_terms: [投放, 广告, 花费, 花了多少, 多少, 带回, 报表, 导出, ROAS, CPA, 转化, 账户],
+      tool: read_ads_export,
+      prefetch: false,
+    }
+  - {
+      name: apple_ads_audit,
+      intent_terms: [体检, 账户体检, 健康检查, 查一遍, audit, health check],
+      cue_terms: [账户, 广告, 像素, 标签, 转化, 追踪, 审核],
+      tool: run_ads_audit,
+      prefetch: false,
+    }
+
+notifications: []
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: account_audit
+    label: { zh: "账户体检", en: "Account check-up" }
+    prompt: "给 Apple 搜索广告账户做一次体检：报表能判的照数说，后台那几项告诉我去哪看；还没有报表就告诉我怎么导出"
+    kind: ask
+  - id: last_week
+    label: { zh: "上周花了多少带回多少", en: "Last week: spend and return" }
+    prompt: "上周 Apple 搜索广告花了多少、带回多少安装？币种、时区、日期范围照报表写，没写的就说没写"
+    kind: ask
+  - id: campaigns_to_watch
+    label: { zh: "哪些系列该看", en: "Campaigns to watch" }
+    prompt: "Apple 搜索广告哪几条广告系列该看一眼？花了钱没效果的、最差的那几条列出来，说清凭的是哪份报表"
+    kind: ask
+
+task_examples:
+  - id: read_export
+    title: { zh: "看一份报表", en: "Read an export" }
+    description: "刚从 Apple 搜索广告后台导出了一份上周的报表，拖进来了。"
+    expected_output: "一张账户概况：花费、转化、ROAS，币种、时区、日期范围照报表写，没写的照实说没写；再列出花了钱没效果的那几条。改广告这一期不做，要改的写成建议请你去后台改。"
+  - id: audit_round
+    title: { zh: "账户体检", en: "Account check-up" }
+    description: "想知道 Apple 搜索广告这个账户有没有明显的漏洞。"
+    expected_output: "一张体检表：每一项写结果和凭什么。报表能判的照数判；像素、转化接口、审核这些要去后台看的标「未知」，并说去哪一页看。品牌没有 App 时整张就一句「这条只适合推 App」。"
+
+# ── 角色定位（WP120 六段骨架，一段不许少）──────────────────────────────
+persona:
+  zh: |
+    你是谁：投放岗位里看 Apple 搜索广告（只推 App）的人。
+    你负责：这个账户的数（花费、转化、ROAS）和账户体检。
+    你不负责：改广告（这一期只读，要改请人去后台自己改）；自家账号发帖→社媒运营；出图→设计岗；客户问题→客服。
+    怎么做：数从用户导出、拖进对话的报表来，先看报表再体检；没有报表就告诉他去后台哪里点导出；品牌没有 App 就直说这条用不上；币种、时区、日期照报表说，没写就说没写，没证据标未知。
+    口气：像盯盘的人，直说数字，不夸效果。
+    必须出卡：这一期不改账户，不出卡；要改的写成建议。

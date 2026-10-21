@@ -116,6 +116,7 @@ import {
   AMAZON_COMPETITOR_TOOL_NAMES,
   AMAZON_KEYWORD_TOOL_NAMES,
   AMAZON_LISTING_TOOL_NAMES,
+  adsDataToolsFor,
   B2B_OUTBOUND_TOOL_NAMES,
   budgetStopReason,
   COMPETITOR_STORE_ROLES,
@@ -130,7 +131,6 @@ import {
   humanizeToolNames,
   IMAGE_TOOL_NAMES,
   imageWorkSection,
-  isAdsDataRole,
   isAdsWiredRole,
   isAmazonKeywordRole,
   isAmazonListingRole,
@@ -2193,9 +2193,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               )
             })),
         // WP315：投放岗看数据（只给 `ads.*`；服务端接了才有）
-        ...(isAdsDataRole(config.role_id) && options.adsDataTools !== undefined
-          ? ADS_DATA_TOOL_NAMES
-          : []),
+        // WP447：只读的六个新平台只给两个只读工具（不给插件导出、不给止损）
+        ...(options.adsDataTools !== undefined ? adsDataToolsFor(config.role_id) : []),
         // WP396：Listing 体检（只给亚马逊店铺运营；服务端接了才有）
         ...(isAmazonListingRole(config.role_id) && options.amazonListingTools !== undefined
           ? AMAZON_LISTING_TOOL_NAMES

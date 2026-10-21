@@ -6,19 +6,25 @@
  * - `fetch_ads_data_now`：让插件现在导一次（`AdsDataService.fetchNow`）。
  * - `stage_ads_stop_loss`：经广告库那一面的 `pauseCampaign` 提卡（判据成立 L3 自动、不成立转人审）——这里不判、不改后台。
  */
-import { daySpendGate, resolveAdsCaps, stopLossVerdict } from '@agentsws/ads-core'
+import { daySpendGate, isExportPlatform, resolveAdsCaps, stopLossVerdict } from '@agentsws/ads-core'
 import type { AdsActor, AdsPort } from '@agentsws/api'
 import type { AdsCaps, RunRequest } from '@agentsws/contracts'
+import { adsPlatformOfRole } from '@agentsws/contracts'
 import {
+  adsDataToolsFor,
   FETCH_ADS_DATA_TOOL,
   isAdsDataRole,
   QUERY_ADS_DATA_TOOL,
+  READ_ADS_EXPORT_TOOL,
+  RUN_ADS_AUDIT_TOOL,
   STAGE_ADS_STOP_LOSS_TOOL,
   type ToolExecution,
   type ToolExecutor,
 } from '@agentsws/stand-ins'
 import type { AdsStore } from '../ads.js'
 import { ADS_ACCOUNTS_TARGET } from './accounts.js'
+import { exportPlatformLabel } from './export-ingest.js'
+import { exportAudit, exportCampaigns, exportOverview } from './export-view.js'
 import { type AdsSort, queryAdsRows, resolveAdsWindow } from './query.js'
 import type { AdsDataService } from './service.js'
 import { dayBefore, yesterdayBasis } from './stop-loss.js'
@@ -37,6 +43,8 @@ export interface AdsDataToolsOptions {
    * 不给就退回工具回 `needs_connection: 'extension'`（运行时出插件配对卡）。回出没出卡。
    */
   askConnect?(req: RunRequest, why: string): Promise<boolean>
+  /** WP447：品牌有没有 App（Apple 那条体检用；品牌档案还没有这一格时不给）。 */
+  hasApp?(): boolean | undefined
 }
 
 /** 连接卡上这一样的 kind（服务端复查认它：插件里连上了担着的那几家后台没有）。 */
@@ -94,7 +102,7 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
         until: window.until,
         ...(platform === undefined ? {} : { platform }),
       })
-      .filter((r) => wanted.includes(r.platform))
+      .filter((r) => wanted.includes(r.platform as AdsDataPlatform))
     const status = svc.status().filter((s) => platform === undefined || s.platform === platform)
     const caps = resolveAdsCaps(options.caps(req.actor.assignment_id))
     const ads = options.ads()
@@ -184,6 +192,37 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
     const svc = await options.service()
     if (svc === undefined)
       return { status: 'error', reason: '这台机器没装看数据（托管实例没有插件）。' }
+    // WP447：只读的新平台只认两个只读工具（模型照着别的职责的样子调止损也调不动）
+    if (!adsDataToolsFor(req.actor.role_id).includes(name))
+      return { status: 'blocked', reason: '这条职责这一期只读，没有这个工具。' }
+    const exportPlatform = adsPlatformOfRole(req.actor.role_id)?.id
+    if (name === READ_ADS_EXPORT_TOOL || name === RUN_ADS_AUDIT_TOOL) {
+      if (exportPlatform === undefined || !isExportPlatform(exportPlatform))
+        return { status: 'blocked', reason: '这两个工具只给只读的新平台那几条职责。' }
+      const label = exportPlatformLabel(exportPlatform)
+      if (name === RUN_ADS_AUDIT_TOOL) {
+        const hasApp = options.hasApp?.()
+        return ok({
+          ok: true,
+          ...exportAudit(svc, exportPlatform, hasApp === undefined ? {} : { has_app: hasApp }),
+        })
+      }
+      const overview = exportOverview(svc, exportPlatform)
+      if (overview.length === 0)
+        return ok({
+          ok: false,
+          platform: exportPlatform,
+          message: `还没有${label}的报表：在它后台点「导出」，把文件拖进这条对话就行（帮助里「怎么导出报表给我」有每家几步）。`,
+        })
+      const limit = Math.min(Math.max(Math.floor(Number(call.input.limit ?? 20)) || 20, 1), 100)
+      return ok({
+        ok: true,
+        platform: exportPlatform,
+        overview,
+        campaigns: exportCampaigns(svc, exportPlatform, limit),
+        latest_import: svc.imports({ platform: exportPlatform, limit: 1 })[0],
+      })
+    }
     if (name === QUERY_ADS_DATA_TOOL) return query(svc, req, call.input)
     if (name === FETCH_ADS_DATA_TOOL) {
       const p = str(call.input.platform) as AdsDataPlatform | undefined

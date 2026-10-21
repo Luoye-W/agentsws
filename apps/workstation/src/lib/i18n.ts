@@ -1162,6 +1162,8 @@ const zh: Table = {
   'block.rerun.checklist.running': '正在检查…',
   'block.rerun.checklist.failed': '这次没检查成，再点一次',
   'help.site-health.title': '网站体检：AI 读不读得到你的店',
+  // WP447：六个新平台的报表怎么导出
+  'help.ads-export.title': '怎么导出广告报表给我',
   'card.evidence': '证据',
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
@@ -1611,9 +1613,17 @@ const zh: Table = {
   'connections.line.telegram_bot': '读群消息、发公告、删与禁；机器人必须是群管理员。',
   'connections.line.whatsapp_business': '要过商业验证；主动发消息只能用审批过的模板。',
   'connections.line.meta_marketing': '读投放表现、改预算与出价；与社媒那张 Meta 卡是两张。',
-  'connections.line.google_ads': '读表现、改预算与出价；developer token 要单独申请过审。',
+  'connections.line.google_ads':
+    '读表现、改预算与出价；能动哪些账户看你 Google Cloud 项目的访问级别。',
   'connections.line.x_ads': 'X 的广告接口；申请制，要广告账户与人工审核。',
   'connections.line.tiktok_ads': 'TikTok 的广告接口；要在 Business Center 授权广告账户。',
+  // WP447：六个新平台第一期不用连，导出报表拖进对话
+  'connections.line.microsoft_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.pinterest_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.reddit_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.linkedin_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.snapchat_ads': '这一期不用连：导出报表拖进对话就能看数和体检。',
+  'connections.line.apple_ads': '只推 App；这一期不用连，导出报表拖进对话就行。',
   'connections.line.google_alerts':
     '免费、不用申请：盯自家、竞品和行业，把 Google 提醒的 RSS 链接贴过来，可以很多条。',
   'connections.line.press_distribution': '一次把稿子发给一批媒体的那类服务。',
@@ -5551,6 +5561,7 @@ const en: Table = {
   'block.rerun.checklist.running': 'Checking…',
   'block.rerun.checklist.failed': "Check didn't finish — try again",
   'help.site-health.title': 'Site health: can AI read your store?',
+  'help.ads-export.title': 'How to export an ad report for me',
   'card.evidence': 'Evidence',
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
@@ -6008,10 +6019,19 @@ const en: Table = {
   'connections.line.meta_marketing':
     'Read ad results, change budgets and bids; separate from the social Meta card.',
   'connections.line.google_ads':
-    'Read results, change budgets and bids; the developer token needs its own review.',
+    'Read results, change budgets and bids; which accounts you can touch depends on your Google Cloud project’s access level.',
   'connections.line.x_ads': 'X’s ads API; by application, with an ad account and manual review.',
   'connections.line.tiktok_ads':
     'TikTok’s ads API; ad accounts must be authorized in Business Center.',
+  'connections.line.microsoft_ads':
+    'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.pinterest_ads':
+    'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.reddit_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.linkedin_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.snapchat_ads': 'Nothing to connect yet: drop an exported report into the chat.',
+  'connections.line.apple_ads':
+    'Apps only; nothing to connect yet — drop an exported report into the chat.',
   'connections.line.google_alerts':
     'Free, nothing to apply for: watch yourself, competitors and your industry by pasting Google Alerts RSS links — as many as you like.',
   'connections.line.press_distribution': 'Services that send one release to many outlets at once.',

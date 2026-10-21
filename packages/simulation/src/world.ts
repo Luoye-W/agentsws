@@ -2101,6 +2101,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('ads.google'),
     loadBundledRole('ads.x'),
     loadBundledRole('ads.tiktok'),
+    // WP447（docs/109 §6）：六条只读的新平台职责，同样躺在库里给向导显示
+    loadBundledRole('ads.microsoft'),
+    loadBundledRole('ads.pinterest'),
+    loadBundledRole('ads.reddit'),
+    loadBundledRole('ads.linkedin'),
+    loadBundledRole('ads.snapchat'),
+    loadBundledRole('ads.apple'),
     // WP78（60 §1）：公共关系岗位的四条职责。3 人 pack 里店主真挂着
     // `pr.monitoring`（`assignments.yml`）；另外三条躺在库里——躺着不产生任何
     // 行为，装它们是为了首次设置向导里"公共关系"那个岗位显示四条而不是一条
