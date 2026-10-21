@@ -15,7 +15,7 @@ const CONTENT = {
   workspace_id: 'ws_1',
   person_id: 'p_li',
   assignment_id: 'asg_content',
-  role_id: 'dtc.content',
+  role_id: 'dtc.seo',
 }
 
 function seeded(seed = 7): () => number {
@@ -87,7 +87,7 @@ async function setup(markets: string[] | undefined, over: Partial<SeoServiceOpti
     approvals: txn.approvals,
     ledger: txn.ledger,
     actionOf: () => ({ mandate: { caps: {} }, level: 'L1' }),
-    holderOf: (role) => (role === 'dtc.content' ? CONTENT : undefined),
+    holderOf: (role) => (role === 'dtc.seo' ? CONTENT : undefined),
     thresholds: () => ({}),
     searchConsole: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     searchData: () => o.port as never,

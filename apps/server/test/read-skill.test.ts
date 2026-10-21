@@ -206,9 +206,12 @@ describe('WP162 端到端：挂了 email-sms 的职责（direct 替身上游）'
     expect(gateway.seen[1]?.messages.map(textOf).join('\n')).toContain('周末不群发。')
   })
 
-  it('常驻 + 按需都挂的职责（内容与搜索）：brand-voice 整本在 persona，seo-judgment 在索引', async () => {
+  it('常驻 + 按需都挂（内容与博客的 brand-voice 常驻 + SEO 与 GEO 的 seo-judgment 按需）：brand-voice 整本在 persona，seo-judgment 在索引', async () => {
+    // WP446：「内容与搜索」拆成两条之后，内置职责里没有一条同时挂这两本——拼一份来钉同一件事
     const content = loadBundledRole('dtc.content')
-    const { gateway } = await runOnce({ role_id: content.id, skills: content.skills, calls: [] })
+    const seo = loadBundledRole('dtc.seo')
+    const skills = [...content.skills, ...seo.skills.filter((s) => s.name === 'seo-judgment')]
+    const { gateway } = await runOnce({ role_id: content.id, skills, calls: [] })
     const persona = textOf(gateway.seen[0]?.messages[0] as ChatMessage)
     expect(persona).toContain('## skill_brand-voice brand-voice')
     expect(persona).toContain('## 数字与承诺')

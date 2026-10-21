@@ -4,7 +4,7 @@
  * - 配置卡目标 `site.health`：几种人话写法解析得对（feed、上架页、爬虫 / 来源的加减）、写不对说哪里不对、
  *   已经生效的建议值去掉（不出「什么都没变」的卡）、存好就重新体检一次；
  * - `request_setup`：设好了、AI 又带了一模一样的值 → 说「已经是这样了」，不出卡、不记卡住；
- * - `query_site_health`：只给店铺管理 / 内容与搜索；没体检过照实说；挑给模型的几格；体检正在跑就等它跑完；
+ * - `query_site_health`：只给店铺管理 / SEO 与 GEO；没体检过照实说；挑给模型的几格；体检正在跑就等它跑完；
  * - 体检服务：同一时间只跑一次；填了上架页的商品不在最近更新的几件里也补读。
  */
 import type { Clock, RunRequest } from '@agentsws/contracts'
@@ -236,21 +236,21 @@ describe('WP385 request_setup 撞上「已经是这样了」', () => {
 })
 
 describe('WP385 query_site_health', () => {
-  const run = (svc: SiteHealthService, role = 'dtc.content', input: Record<string, unknown> = {}) =>
+  const run = (svc: SiteHealthService, role = 'dtc.seo', input: Record<string, unknown> = {}) =>
     createSiteHealthToolExecutor({ service: () => svc, waitMs: 2_000 })({
       name: 'query_site_health',
       input,
       request: req(role),
     })
 
-  it('只给店铺管理 / 内容与搜索；没体检过照实说；设置原样给', async () => {
+  it('只给店铺管理 / SEO 与 GEO；没体检过照实说；设置原样给', async () => {
     const svc = service()
     svc.saveSettings({
       feed_url: 'https://feeds.nordvolt.example/g.xml',
       crawlers_remove: ['GPTBot'],
     })
     expect((await run(svc, 'support.inbox')).status).toBe('blocked')
-    const res = await run(svc, 'dtc.content')
+    const res = await run(svc, 'dtc.seo')
     expect(res.status).toBe('ok')
     expect(res.data).toMatchObject({
       ok: true,
