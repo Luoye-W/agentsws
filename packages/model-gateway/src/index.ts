@@ -234,6 +234,7 @@ export type { StubAsrProviderOptions } from './providers/stub-asr.js'
 export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'
 // WP425：AI 来源顺序——自己的用不了时切到工坊积分
 export type {
+  ModelSourceKeyRejectedPayload,
   ModelSourceReloginPayload,
   SourceFallbackOff,
   SourceFallbackPolicy,

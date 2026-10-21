@@ -407,7 +407,7 @@ class Gateway implements ModelGatewayApi {
     { fails: number; until?: number; reason: ModelSourceSwitchReason }
   >()
 
-  /** WP430：已经发过「要重新登录」的来源（重新能用之前不再发）。 */
+  /** WP430 / WP436：已经发过「要重新登录」/「key 用不了了」的来源（重新能用之前不再发）。 */
   private readonly reloginSent = new Set<string>()
 
   private nowMs(): number {
@@ -439,21 +439,49 @@ class Gateway implements ModelGatewayApi {
     this.reloginSent.delete(provider)
   }
 
-  /** WP430（决策 1289）：登录类来源登录失效——发一次「要重新登录」，站内通知接。 */
+  /**
+   * WP430（决策 1289）：登录类来源登录失效——发一次「要重新登录」；
+   * WP436（决策 1316）：自带 API key 被拒——发一次「key 用不了了」。站内通知都接。
+   */
   private maybeRelogin(
     fb: SourceFallbackPolicy,
     req: CompleteRequest,
     ref: ModelRef,
     reason: ModelSourceSwitchReason,
   ): void {
-    if (reason !== 'auth' || !(fb.relogin ?? []).includes(ref.provider)) return
-    if (this.reloginSent.has(ref.provider)) return
+    if (reason !== 'auth') return
+    const type = (fb.relogin ?? []).includes(ref.provider)
+      ? ('model_source.relogin_needed' as const)
+      : (fb.keys ?? []).includes(ref.provider)
+        ? ('model_source.key_rejected' as const)
+        : undefined
+    if (type === undefined || this.reloginSent.has(ref.provider)) return
     this.reloginSent.add(ref.provider)
     const payload: ModelSourceReloginPayload = {
       provider: ref.provider,
       label: sourceLabelOf(fb, ref),
     }
-    this.emit('model_source.relogin_needed', ctxOf(req.meta), payload)
+    this.emit(type, ctxOf(req.meta), payload)
+  }
+
+  /**
+   * 没得切（只有这一条）时也要认出「登录失效 / key 被拒」——照实报错之前先发提醒（WP436：以前这一路直接调，
+   * 自带 key 失效了只有这一条来源的人收不到任何提醒）。
+   */
+  private async completeAlone(
+    fb: SourceFallbackPolicy,
+    req: CompleteRequest,
+    ref: ModelRef,
+  ): Promise<Completion> {
+    try {
+      const out = await this.completeOn(req, ref)
+      this.noteSourceOk(ref.provider)
+      return out
+    } catch (e) {
+      if (!isAborted(req.signal) && sourceSwitchReasonOf(e) === 'auth')
+        this.maybeRelogin(fb, req, ref, 'auth')
+      throw e
+    }
   }
 
   async complete(req: CompleteRequest): Promise<Completion> {
@@ -462,7 +490,7 @@ class Gateway implements ModelGatewayApi {
     const fb = this.sourceFallbackFor(req)
     if (fb === undefined) return this.completeOn(req, primary)
     const { chain, cloudOff } = this.sourceChain(fb, primary)
-    if (chain.length === 1 && !cloudOff) return this.completeOn(req, primary)
+    if (chain.length === 1 && !cloudOff) return this.completeAlone(fb, req, primary)
     const runId = req.meta.run_id
     // 一轮里切过就用到底（不来回切）；下一轮 run_id 不同，自然先试原选
     const sticky = this.switchedRuns.get(runId)

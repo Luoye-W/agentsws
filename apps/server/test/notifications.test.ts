@@ -9,6 +9,8 @@ import {
   connectionBrokenNotification,
   createNotifications,
   creditsLowNotification,
+  KEY_REJECTED_EVENT,
+  keySourceName,
   type NotificationResolver,
   notificationsOfEvent,
   RELOGIN_NEEDED_EVENT,
@@ -302,6 +304,51 @@ describe('从事件认出来的', () => {
       ['你的 ChatGPT 要重新登录', 1],
       ['你的 DeepSeek 账号要重新登录', 1],
     ])
+  })
+
+  it('WP436（决策 1316）：自带 API key 被拒 →「你的 xxx key 用不了了，去换一把」，到设置 → 模型；连接与登录类、弹系统通知；同一来源没读时再来不加计数', async () => {
+    const { svc } = make()
+    svc.register(WS, resolver())
+    const at = (payload: Record<string, unknown>) => ({
+      ...ev(KEY_REJECTED_EVENT, payload),
+      schema_version: 1,
+      correlation: { trace_id: 't' },
+    })
+    svc.onEvent(at({ provider: 'deepseek', label: 'DeepSeek 官方 · 官方 API 接口连接' }))
+    svc.onEvent(at({ provider: 'deepseek', label: 'DeepSeek 官方 · 官方 API 接口连接' }))
+    svc.onEvent(at({ provider: 'openai', label: 'OpenAI（API key，按量计费）' }))
+    await svc.flush()
+    const list = svc.list(me, { view: 'unread', limit: 5 })
+    expect(list.items.map((n) => [n.text, n.count]).sort()).toEqual([
+      ['你的 DeepSeek 官方 key 用不了了，去换一把', 1],
+      ['你的 OpenAI key 用不了了，去换一把', 1],
+    ])
+    for (const n of list.items)
+      expect(n).toMatchObject({ href: '/settings/models', category: 'connection', system: true })
+    // 读过了之后又被拒：重新算一条未读
+    svc.markAllRead(me)
+    svc.onEvent(at({ provider: 'deepseek', label: 'DeepSeek 官方 · 官方 API 接口连接' }))
+    await svc.flush()
+    expect(svc.list(me, { view: 'unread', limit: 5 }).items.map((n) => n.text)).toEqual([
+      '你的 DeepSeek 官方 key 用不了了，去换一把',
+    ])
+  })
+
+  it('WP436：key 的名字去掉括号说明与「 · 」后半截；名字缺了说「你的 API key」', async () => {
+    expect(keySourceName('Moonshot / Kimi')).toBe('Moonshot / Kimi')
+    expect(keySourceName('Google Gemini（API key，按量计费）')).toBe('Google Gemini')
+    expect(keySourceName('（自定义）')).toBe('（自定义）')
+    const { svc } = make()
+    svc.register(WS, resolver())
+    svc.onEvent({
+      ...ev(KEY_REJECTED_EVENT, {}),
+      schema_version: 1,
+      correlation: { trace_id: 't' },
+    })
+    await svc.flush()
+    expect(svc.list(me, { view: 'unread', limit: 5 }).items[0]?.text).toBe(
+      '你的 API key 用不了了，去换一把',
+    )
   })
 
   it('卡定了 / 撤了：它那条通知收成已读', async () => {

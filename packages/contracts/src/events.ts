@@ -100,6 +100,12 @@ export type KnownEventType =
    */
   | 'model_source.relogin_needed'
   /**
+   * WP436（决策 1316）：用户自带的 API key 被拒（401 / 403、key 失效 / 被吊销），要人去换一把。
+   * 有别的来源时这一轮照样按 AI 来源顺序接着做；站内通知（WP429）接这条提醒人去「设置 → 模型」换 key。
+   * payload 只有来源 id 与来源名（`{ provider, label }`），没有 key。同一来源在重新能用之前只发一次。
+   */
+  | 'model_source.key_rejected'
+  /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */
