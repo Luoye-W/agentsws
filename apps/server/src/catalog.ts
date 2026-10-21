@@ -1469,12 +1469,12 @@ export function needsConnectRuntime(entry: CatalogEntry): boolean {
 
 /** 连接页上那句话。**「（可选）」三个字是重点**——不装不影响别的。 */
 export const DOCKER_OPTIONAL_REASON =
-  '这张需要 Docker（可选）：它的账号凭据存在本机的连接器 runtime 里，' +
+  '这张需要 Docker（可选）：它的账号凭据存在本机的连接器里，' +
   '那一份要用 Docker 起。不装也没关系——模型、邮箱、红人、社媒这些都不经它。'
 
 /** runtime 起着但没加固：这一条比"没装"更要紧，不能含糊成同一句话。 */
 export const RUNTIME_UNHARDENED_REASON =
-  '本机的连接器 runtime 起着，但鉴权或静态加密没开——这种状态下不能往里放凭据（08 §5）。'
+  '本机的连接器起着，但鉴权或静态加密没开——这种状态下不能往里放凭据。'
 
 export type ConnectRuntimeState = 'ready' | 'absent' | 'unhardened' | 'stand_in'
 

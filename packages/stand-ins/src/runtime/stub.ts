@@ -2209,7 +2209,8 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             money: { amount: refundAmount, currency: order.currency },
             notes: [
               `退货窗口 ${policy.days} 天内（签收 ${daysSince ?? '?'} 天）`,
-              '由 stub 运行时按政策提出',
+              // WP457：来源说人话（原来写「由 stub 运行时按政策提出」，内部词上了卡）
+              '照退货政策提出',
             ],
             ...(order.email === undefined
               ? {}

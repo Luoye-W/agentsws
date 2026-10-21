@@ -208,7 +208,7 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
               currency: order.currency,
               notes: [
                 `退货窗口 ${policy.days} 天内（签收 ${daysSince ?? '?'} 天）`,
-                '由 direct-llm 运行时按政策提出',
+                '照退货政策提出',
               ],
             },
           },
