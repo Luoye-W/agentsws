@@ -120,7 +120,9 @@ async function main() {
           await p.getByTestId('rail-card-toggle-reports').click()
         await p.getByTestId('rail-card-more-reports').click()
         await p.getByTestId('reports-panel').waitFor({ timeout: 20_000 })
-        await p.getByTestId('rail-panel-wide').click()
+        // WP431 之后「加宽」不一定在（右栏照 Claude 改过）；有就点
+        const wide = p.getByTestId('rail-panel-wide')
+        if ((await wide.count()) > 0) await wide.first().click()
         await p.waitForTimeout(1500)
         await p.screenshot({ path: join(SHOTS, `2-seo-duty-${theme}.png`) })
         console.log(`  📷 2-seo-duty-${theme}.png`)
