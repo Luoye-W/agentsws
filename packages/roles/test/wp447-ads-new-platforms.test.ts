@@ -55,6 +55,7 @@ describe('六条新平台职责', () => {
         'campaigns_to_watch',
       ])
       expect(role.home_blocks.map((b) => b.query)).toEqual([
+        'ads.export_spend',
         'ads.export_overview',
         'ads.export_audit',
       ])

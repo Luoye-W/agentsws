@@ -107,10 +107,31 @@ async function main() {
     const asked = await call('POST', `/v1/positions/${pin}/matters`, owner, {
       title: '这是上周的 Pinterest 报表，看看花了多少带回多少',
       role_id: 'ads.pinterest',
-      mode: 'chat',
+      // 当一件任务开（工作里有一件，岗位页的数据看板才出；当场问答不算开工）
+      mode: 'task',
       files: [{ name: 'pinterest-campaign.csv', data }],
     })
     check(asked !== undefined, '附上报表开了一件事')
+    // 看板接口：Pinterest 那条职责有「账户概况」与「体检」两块，概况里有刚入库的数
+    const blk = await call(
+      'GET',
+      '/v1/blocks/ads.pinterest.export_overview/data?range=last_7d',
+      owner,
+    )
+    const rows = blk?.payload?.rows ?? []
+    check(
+      blk?.status === 'ok' && rows.length === 1 && rows[0].currency_text === '没写',
+      `账户概况出数：${JSON.stringify(rows[0] ?? {}).slice(0, 160)}`,
+    )
+    const audit = await call(
+      'GET',
+      '/v1/blocks/ads.pinterest.export_audit/data?range=last_7d',
+      owner,
+    )
+    check(
+      (audit?.payload?.rows ?? []).some((r) => r.status === '未知'),
+      '体检：后台那几项标「未知」',
+    )
     const prov = await call('GET', '/v1/connections/providers', owner)
     const list = prov.providers ?? prov
     const google = list.find((p) => p.service === 'google_ads')
@@ -150,6 +171,12 @@ async function main() {
       )
       const page = await context.newPage()
       page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
+      page.on('response', (r) => {
+        if (r.status() === 403) console.error(`  ⚠️ 403：${r.url().replace(BASE, '')}`)
+      })
+      page.on('console', (m) => {
+        if (m.type() === 'error') console.error(`  ⚠️ 控制台：${m.text().slice(0, 400)}`)
+      })
       await page.goto(`${BASE}/`, { waitUntil: 'load' })
       const adsNav = page.getByTestId('nav-position').filter({ hasText: '投放' }).first()
       await adsNav.waitFor({ timeout: 60_000 })
@@ -157,12 +184,30 @@ async function main() {
       await page.waitForURL(/\/positions\/[^/?]+/, { timeout: 30_000 })
       await page.goto(`${page.url().split('?')[0]}?tab=view`, { waitUntil: 'load' })
       await page.waitForTimeout(4000)
-      const overview = page.getByText('账户概况').first()
-      if ((await overview.count()) > 0) {
-        await overview.scrollIntoViewIfNeeded()
-        check(true, `报表里看得到「账户概况」（${theme}）`)
-      } else console.log(`  （${theme}：报表里没找到「账户概况」，照样拍整页）`)
       await shot(page, `wp447-1-ads-position-${theme}`)
+      // 数据看板「看图表」：Pinterest 那一行展开就是账户概况与体检两张表
+      const toggle = page.locator('[data-testid="data-charts-toggle"]:visible').first()
+      await toggle.waitFor({ timeout: 60_000 })
+      await toggle.scrollIntoViewIfNeeded()
+      for (let i = 0; i < 4 && (await toggle.getAttribute('aria-expanded')) !== 'true'; i++) {
+        await toggle.click()
+        await page.waitForTimeout(2500)
+      }
+      if (process.env.WP447_DEBUG === '1')
+        console.log(
+          '  debug',
+          await toggle.getAttribute('aria-expanded'),
+          await page.locator('[data-testid="data-charts"]').evaluateAll((els) =>
+            els.map((e) => e.getAttribute('data-role')),
+          ),
+        )
+      const charts = page.locator('[data-testid="data-charts"][data-role="ads.pinterest"]').first()
+      await charts.waitFor({ timeout: 60_000 })
+      await page.getByText('账户概况').first().waitFor({ timeout: 60_000 })
+      await page.waitForTimeout(2500)
+      check(true, `看图表：Pinterest 那一行展开出账户概况与体检（${theme}）`)
+      await page.getByText('账户概况').first().scrollIntoViewIfNeeded()
+      await shot(page, `wp447-3-pinterest-charts-${theme}`)
       await page.goto(`${BASE}/connections`, { waitUntil: 'load' })
       await page.waitForTimeout(3000)
       const card = page.getByText('Pinterest 广告').first()

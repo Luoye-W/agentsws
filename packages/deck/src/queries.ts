@@ -1564,6 +1564,27 @@ const AUDIT_STATUS_ZH: Record<string, string> = {
 }
 ADS_QUERIES.push(
   {
+    /*
+     * 花费（最近一份报表那几天的合计）：岗位页数据看板那一行要一个数——只有表格的职责会被当成「还没有数」
+     * 并进一行。几个账户币种不一样时不报币种（加起来的数照给，卡上的概况表里分账户看）。
+     */
+    name: 'ads.export_spend',
+    source: 'ads',
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofPlatform(ctx.ads?.exports ?? [], ctx)
+      const spend = rows.map((r) => r.metrics.cost).filter((v): v is number => v !== undefined)
+      const currencies = [...new Set(rows.map((r) => r.currency))]
+      const one = currencies.length === 1 ? currencies[0] : undefined
+      return {
+        value: Math.round(spend.reduce((a, b) => a + b, 0) * 100) / 100,
+        previous: 0,
+        spark: spend,
+        ...(one === undefined ? {} : { currency: one }),
+      }
+    },
+  },
+  {
     name: 'ads.export_overview',
     source: 'ads',
     returns: 'table',
@@ -1571,7 +1592,8 @@ ADS_QUERIES.push(
       columns: [
         { key: 'account', label: '账户' },
         { key: 'range', label: '日期' },
-        { key: 'currency', label: '币种' },
+        // 键名不叫 `currency`：表格把那一格当金额的币种用，「没写」会让整张表画不出来
+        { key: 'currency_text', label: '币种' },
         { key: 'timezone', label: '时区' },
         { key: 'cost', label: '花费', align: 'right' as const },
         { key: 'impressions', label: '展示', align: 'right' as const, format: 'count' as const },
@@ -1594,7 +1616,7 @@ ADS_QUERIES.push(
             : r.since === r.until || r.until === undefined
               ? r.since
               : `${r.since} ~ ${r.until}`,
-        currency: r.currency ?? '没写',
+        currency_text: r.currency ?? '没写',
         timezone: r.timezone ?? '没写',
         // 币种各家各算：花费不按工作区币种格式化（那会把欧元念成美元）
         cost: numOrBlank(r.metrics.cost),

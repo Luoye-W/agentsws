@@ -160,7 +160,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "329ebeb0e833bd9bbfd6baee2a12215f",
+  "source_digest": "8e136f3b912b636de961a05de8eb0258",
   "objects": [
     {
       "id": "ad",
@@ -255,6 +255,7 @@
         "ads.daily_report",
         "ads.export_audit",
         "ads.export_overview",
+        "ads.export_spend",
         "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",

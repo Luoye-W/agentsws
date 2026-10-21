@@ -203,10 +203,11 @@ const block = (
   component: ComponentName,
   title: string,
   query: string,
-  options: { hide_when_empty?: boolean; rerun?: BlockDef['rerun'] } = {},
+  options: { hide_when_empty?: boolean; rerun?: BlockDef['rerun']; report_url?: string } = {},
 ): BlockDef => {
   const def = queryDef(query)
-  const report_url = SOURCE_REPORT_URLS[def.source]
+  // WP447：同一个源（`ads`）下不同平台的块，「查看完整报告」要指到那一家的后台，不是 Meta 的
+  const report_url = options.report_url ?? SOURCE_REPORT_URLS[def.source]
   return {
     id,
     placement: 'role_view',
@@ -316,10 +317,29 @@ const ADS_POSITION_BLOCKS = (platform: string): BlockDef[] => [
  * WP447（docs/109 §6.2）：六个新平台第一期只读——面板只有两块：账户概况（拖进来的报表）与体检。
  * 没有今日花费 / 总闸 / 止损 / 待审那几块：这六条没有写动作，也不并进总闸（将来加写动作那期再并）。
  */
-const ADS_EXPORT_BLOCKS = (platform: string): BlockDef[] => [
-  block(`ads.${platform}.export_overview`, 'table', '账户概况', 'ads.export_overview'),
-  block(`ads.${platform}.export_audit`, 'table', '体检', 'ads.export_audit'),
-]
+const ADS_EXPORT_HOME: Readonly<Record<string, string>> = {
+  microsoft: 'https://ads.microsoft.com',
+  pinterest: 'https://ads.pinterest.com',
+  reddit: 'https://ads.reddit.com',
+  linkedin: 'https://www.linkedin.com/campaignmanager',
+  snapchat: 'https://ads.snapchat.com',
+  apple: 'https://ads.apple.com',
+}
+const ADS_EXPORT_BLOCKS = (platform: string): BlockDef[] => {
+  const home = ADS_EXPORT_HOME[platform]
+  const opts = home === undefined ? {} : { report_url: home }
+  return [
+    block(
+      `ads.${platform}.export_spend`,
+      'stat_tile',
+      '花费（最近一份报表）',
+      'ads.export_spend',
+      opts,
+    ),
+    block(`ads.${platform}.export_overview`, 'table', '账户概况', 'ads.export_overview', opts),
+    block(`ads.${platform}.export_audit`, 'table', '体检', 'ads.export_audit', opts),
+  ]
+}
 
 /** WP64（51 §2.3）：邮件营销面板——待审发送、自动流状态、近 30 天效果。 */
 const EMAIL_BLOCKS = (): BlockDef[] => [

@@ -39,7 +39,8 @@ skills:
   - { name: unit-economics, tier: open, load: on_demand }
 
 home_blocks:
-  # 一张账户概况（拖进来的最近一份报表那几天的合计，币种 / 时区 / 日期范围照报表写）+ 体检
+  # 一格花费 + 一张账户概况（拖进来的最近一份报表那几天的合计，币种 / 时区 / 日期范围照报表写）+ 体检
+  - { id: ads.snapchat.export_spend, placement: focus, component: stat_tile, query: ads.export_spend, default_order: 5, pinnable: true, adaptive: true }
   - { id: ads.snapchat.export_overview, placement: focus, component: table, query: ads.export_overview, default_order: 10, pinnable: true, adaptive: true }
   - { id: ads.snapchat.export_audit, placement: role_view, component: table, query: ads.export_audit, default_order: 20, pinnable: true, adaptive: false }
 
