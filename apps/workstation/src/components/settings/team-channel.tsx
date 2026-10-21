@@ -180,7 +180,8 @@ export function TeamChannelOpen({
   const label = teamSubAction(t, view)
   if (label === undefined && note === undefined) return null
   return (
-    <span className="inline-flex flex-col gap-1.5" data-testid="team-sub-open">
+    // `contents`：按钮跟在那一行字后面，小卡与回执占满一行、换到下一行（不把那一行字撑高）
+    <span className="contents" data-testid="team-sub-open">
       {label !== undefined && !open ? (
         <Button
           size="xs"
@@ -196,7 +197,7 @@ export function TeamChannelOpen({
       ) : null}
       {open ? (
         <span
-          className="flex flex-col gap-2 rounded-md border bg-card p-2.5 text-xs text-foreground"
+          className="mt-1 flex basis-full flex-col gap-2 rounded-md border bg-card p-2.5 text-xs text-foreground sm:max-w-sm"
           data-testid="team-sub-confirm"
         >
           <span className="flex items-center gap-1 font-medium">
@@ -240,7 +241,11 @@ export function TeamChannelOpen({
         </span>
       ) : null}
       {note !== undefined && !open ? (
-        <span role="status" className="text-muted-foreground" data-testid="team-sub-note-line">
+        <span
+          role="status"
+          className="basis-full text-muted-foreground"
+          data-testid="team-sub-note-line"
+        >
           {note}
         </span>
       ) : null}

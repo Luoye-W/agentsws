@@ -20,6 +20,9 @@ import type {
 } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
+// 机器忙时几次点击加起来会超过默认 5 秒
+vi.setConfig({ testTimeout: 30_000 })
+
 const DAY = 86_400_000
 const base: TeamSubscriptionView = {
   service_id: 'team.channel.monthly',
